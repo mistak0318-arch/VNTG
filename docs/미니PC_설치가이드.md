@@ -182,15 +182,15 @@ curl.exe http://localhost:4000/api/health
 ### 한 번만 하는 설정 — GitHub 비공개 저장소
 
 1. GitHub에서 **Private** 저장소 생성 (예: `vntg-hts`)
-2. 메인 PC에서:
+2. 메인 PC에서 (원격은 이미 연결돼 있습니다):
 ```powershell
 cd "K:\0000 3740 프로젝트 (경제적자유)\00. 주식\2 AI 프롬프트\260810_클로드작업"
-git remote add origin https://github.com/<계정>/vntg-hts.git
+git remote add origin https://github.com/mistak0318-arch/VNTG.git
 git push -u origin master
 ```
 3. 미니PC에서 최초 1회:
 ```powershell
-git clone https://github.com/<계정>/vntg-hts.git C:\vntg-hts
+git clone https://github.com/mistak0318-arch/VNTG.git C:\vntg-hts
 ```
 
 > 비공개 저장소를 쓰세요. 코드에 키는 없지만(.env 제외) 굳이 공개할 이유가 없습니다.
