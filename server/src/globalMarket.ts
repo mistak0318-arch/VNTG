@@ -22,18 +22,25 @@ export interface GlobalQuote {
 }
 
 const TARGETS: { key: string; label: string; group: string; symbol: string; isRate?: boolean }[] = [
+  // 순서는 인베스팅닷컴 관심목록 배열을 그대로 따른다 (사용자가 보던 순서)
   { key: "usdkrw", label: "달러/원", group: "환율", symbol: "KRW=X" },
   { key: "wti", label: "WTI유", group: "원자재", symbol: "CL=F" },
-  { key: "gold", label: "금", group: "원자재", symbol: "GC=F" },
-  { key: "dji", label: "다우 (US30)", group: "미국지수", symbol: "^DJI" },
-  { key: "gspc", label: "S&P500 (US500)", group: "미국지수", symbol: "^GSPC" },
-  { key: "ixic", label: "나스닥 (Tech100)", group: "미국지수", symbol: "^IXIC" },
-  { key: "rut", label: "러셀2000 (US2000)", group: "미국지수", symbol: "^RUT" },
-  { key: "vix", label: "S&P500 VIX", group: "변동성", symbol: "^VIX" },
-  { key: "tnx", label: "미국 10년물", group: "금리", symbol: "^TNX", isRate: true },
-  { key: "tyx", label: "미국 30년물", group: "금리", symbol: "^TYX", isRate: true },
+  { key: "dji", label: "US 30", group: "미국지수", symbol: "^DJI" },
+  { key: "gspc", label: "US 500", group: "미국지수", symbol: "^GSPC" },
+  { key: "ixic", label: "US Tech 100", group: "미국지수", symbol: "^IXIC" },
+  { key: "rut", label: "US 2000", group: "미국지수", symbol: "^RUT" },
+  { key: "vix", label: "S&P 500 VIX", group: "변동성", symbol: "^VIX" },
+  { key: "tnx", label: "미국 10년 국채 금리", group: "금리", symbol: "^TNX", isRate: true },
+  { key: "tyx", label: "미국 30년", group: "금리", symbol: "^TYX", isRate: true },
   { key: "btc", label: "비트코인", group: "암호화폐", symbol: "BTC-USD" },
-  { key: "n225", label: "닛케이225", group: "아시아", symbol: "^N225" },
+  { key: "eth", label: "이더리움", group: "암호화폐", symbol: "ETH-USD" },
+  { key: "gold", label: "금", group: "원자재", symbol: "GC=F" },
+  { key: "silver", label: "은", group: "원자재", symbol: "SI=F" },
+  { key: "copper", label: "구리", group: "원자재", symbol: "HG=F" },
+  { key: "natgas", label: "천연가스", group: "원자재", symbol: "NG=F" },
+  { key: "ks11", label: "코스피지수", group: "아시아", symbol: "^KS11" },
+  { key: "kq11", label: "코스닥지수", group: "아시아", symbol: "^KQ11" },
+  { key: "n225", label: "닛케이", group: "아시아", symbol: "^N225" },
   { key: "hsi", label: "항셍", group: "아시아", symbol: "^HSI" },
 ];
 
