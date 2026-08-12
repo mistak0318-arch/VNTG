@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "server",
+      "runtimeExecutable": "server\\run-dev.cmd",
+      "runtimeArgs": [],
+      "port": 4000,
+      "url": "http://localhost:4000/"
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "web\\run-dev.cmd",
+      "runtimeArgs": [],
+      "port": 5173
+    }
+  ]
+}

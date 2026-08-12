@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0e1116"/>
+  <!-- 상승 캔들 -->
+  <rect x="132" y="286" width="34" height="104" rx="6" fill="#f0555f"/>
+  <rect x="145" y="258" width="8" height="160" rx="4" fill="#f0555f"/>
+  <!-- 중간 캔들 -->
+  <rect x="239" y="212" width="34" height="118" rx="6" fill="#c8a24a"/>
+  <rect x="252" y="184" width="8" height="174" rx="4" fill="#c8a24a"/>
+  <!-- 마지막 상승 캔들 -->
+  <rect x="346" y="140" width="34" height="126" rx="6" fill="#f0555f"/>
+  <rect x="359" y="112" width="8" height="182" rx="4" fill="#f0555f"/>
+  <!-- 추세선 -->
+  <path d="M132 372 L256 268 L380 158" stroke="#e4e8ee" stroke-width="14"
+        stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
+</svg>

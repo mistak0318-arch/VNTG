@@ -1,0 +1,155 @@
+import { useEffect, useState } from "react";
+import { api, fmtNum, signClass, type TrackedStock } from "../api";
+import { RefreshBar } from "../components/RefreshBar";
+import { SortableTh, useSortableTable } from "../useSortableTable";
+import { useWatchedCodes } from "../useWatchedCodes";
+
+function fmtPct(v: number | null): string {
+  if (v === null || !Number.isFinite(v)) return "-";
+  return `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
+  const [items, setItems] = useState<TrackedStock[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const watchedCodes = useWatchedCodes();
+  const sort = useSortableTable(items);
+
+  async function load(force = false) {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.watchlistTracking(force);
+      setItems(res.items);
+      setUpdatedAt(new Date());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "알 수 없는 오류");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function remove(code: string) {
+    try {
+      await api.watchlistRemove(code);
+      setItems((prev) => prev.filter((i) => i.code !== code));
+      watchedCodes.markRemoved(code);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "삭제 실패");
+    }
+  }
+
+  // 요약: 수급이 살아있는 종목이 몇 개인지
+  const foreignBuying = items.filter((i) => i.foreign5 > 0).length;
+  const instBuying = items.filter((i) => i.inst5 > 0).length;
+  const trendOk = items.filter((i) => i.trendPass === true).length;
+  const profitable = items.filter((i) => (i.returnRate ?? 0) > 0).length;
+
+  return (
+    <div>
+      <RefreshBar onRefresh={() => load(true)} loading={loading} updatedAt={updatedAt} />
+
+      {error && <div className="error-banner">{error}</div>}
+
+      <section className="card">
+        <h2>관심종목 요약 ({items.length})</h2>
+        <div className="summary-grid">
+          <div className="summary-item">
+            <div className="label">수익 중</div>
+            <div className="value">
+              {profitable} / {items.length}
+            </div>
+          </div>
+          <div className="summary-item">
+            <div className="label">정배열</div>
+            <div className="value">
+              {trendOk} / {items.length}
+            </div>
+          </div>
+          <div className="summary-item">
+            <div className="label">외인 5일 순매수</div>
+            <div className="value positive">{foreignBuying}</div>
+          </div>
+          <div className="summary-item">
+            <div className="label">기관 5일 순매수</div>
+            <div className="value positive">{instBuying}</div>
+          </div>
+        </div>
+      </section>
+
+      {loading && items.length === 0 && <div className="empty">불러오는 중...</div>}
+
+      {!loading && items.length === 0 && (
+        <div className="page-note">
+          관심종목이 없습니다. 시황·거래상위·알고리즘 탭에서 종목을 열고 ☆ 버튼을 눌러 추가하세요.
+        </div>
+      )}
+
+      {items.length > 0 && (
+        <div className="data-table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <SortableTh columnKey="name" label="종목명" accessor={(r: TrackedStock) => r.name} sort={sort} className="sticky-col" />
+                <SortableTh columnKey="addedAt" label="편입일" accessor={(r: TrackedStock) => r.addedAt} sort={sort} />
+                <SortableTh columnKey="addedPrice" label="편입가" accessor={(r: TrackedStock) => r.addedPrice} sort={sort} />
+                <SortableTh columnKey="price" label="현재가" accessor={(r: TrackedStock) => r.price} sort={sort} />
+                <SortableTh columnKey="returnRate" label="수익률" accessor={(r: TrackedStock) => r.returnRate ?? 0} sort={sort} />
+                <SortableTh columnKey="changeRate" label="당일" accessor={(r: TrackedStock) => r.changeRate} sort={sort} />
+                <SortableTh columnKey="foreign5" label="외인5일" accessor={(r: TrackedStock) => r.foreign5} sort={sort} />
+                <SortableTh columnKey="foreign20" label="외인20일" accessor={(r: TrackedStock) => r.foreign20} sort={sort} />
+                <SortableTh columnKey="inst5" label="기관5일" accessor={(r: TrackedStock) => r.inst5} sort={sort} />
+                <SortableTh columnKey="inst20" label="기관20일" accessor={(r: TrackedStock) => r.inst20} sort={sort} />
+                <SortableTh columnKey="trend" label="정배열" accessor={(r: TrackedStock) => (r.trendPass ? 1 : 0)} sort={sort} />
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sort.sorted.map((r) => (
+                <tr key={r.code} className="clickable-row" onClick={() => onSelectStock(r.code, r.name)}>
+                  <td className="sticky-col">{r.name}</td>
+                  <td>{fmtDate(r.addedAt)}</td>
+                  <td>{fmtNum(r.addedPrice)}</td>
+                  <td>{fmtNum(r.price)}</td>
+                  <td className={signClass(r.returnRate)}>{fmtPct(r.returnRate)}</td>
+                  <td className={signClass(r.changeRate)}>{fmtPct(r.changeRate)}</td>
+                  <td className={signClass(r.foreign5)}>{fmtNum(r.foreign5)}</td>
+                  <td className={signClass(r.foreign20)}>{fmtNum(r.foreign20)}</td>
+                  <td className={signClass(r.inst5)}>{fmtNum(r.inst5)}</td>
+                  <td className={signClass(r.inst20)}>{fmtNum(r.inst20)}</td>
+                  <td>{r.trendPass === null ? "-" : r.trendPass ? "O" : ""}</td>
+                  <td>
+                    <button
+                      className="row-del-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        remove(r.code);
+                      }}
+                      title="관심종목에서 제거"
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="table-note">
+            수익률은 편입가 대비 · 순매매 단위는 백만원 · 정배열은 현재가≥5일≥20일≥60일≥120일선
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

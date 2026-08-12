@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시황 — 레이아웃 목업</title>
+<style>
+:root{
+  --bg:#0e1116;
+  --panel:#161b22;
+  --panel-2:#1c232c;
+  --line:#252d38;
+  --line-soft:#1e252e;
+  --txt:#e4e8ee;
+  --txt-2:#8b96a5;
+  --txt-3:#5b6675;
+  --up:#f0555f;
+  --down:#4a8bf5;
+  --flat:#8b96a5;
+  --accent:#c8a24a;
+  --radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--bg);color:var(--txt);
+  font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  font-size:14px;line-height:1.45;
+  padding-bottom:40px;
+}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";letter-spacing:-0.01em}
+.up{color:var(--up)}.down{color:var(--down)}.flat{color:var(--flat)}
+
+/* ---------- 상단 바 ---------- */
+.topbar{
+  position:sticky;top:0;z-index:30;
+  background:rgba(14,17,22,.94);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+.topbar-in{
+  max-width:1440px;margin:0 auto;padding:10px 14px;
+  display:flex;align-items:center;gap:14px;
+}
+.brand{font-weight:700;font-size:15px;letter-spacing:-0.02em}
+.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{
+  padding:5px 11px;border-radius:6px;color:var(--txt-3);
+  font-size:13px;white-space:nowrap;cursor:pointer;border:none;background:none;
+}
+.tab.on{background:var(--panel-2);color:var(--txt);font-weight:600}
+.mkt-state{
+  margin-left:auto;display:flex;align-items:center;gap:6px;
+  font-size:11px;color:var(--txt-2);white-space:nowrap;
+}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--up);box-shadow:0 0 0 3px rgba(240,85,95,.15)}
+
+/* ---------- 모바일 서브탭 ---------- */
+.subtabs{
+  display:flex;gap:0;border-bottom:1px solid var(--line);
+  background:var(--bg);position:sticky;top:45px;z-index:20;
+  max-width:1440px;margin:0 auto;
+}
+.subtab{
+  flex:1;padding:11px 4px;text-align:center;font-size:13px;
+  color:var(--txt-3);border:none;background:none;cursor:pointer;
+  border-bottom:2px solid transparent;
+}
+.subtab.on{color:var(--txt);font-weight:600;border-bottom-color:var(--accent)}
+
+/* ---------- 레이아웃 ---------- */
+.wrap{max-width:1440px;margin:0 auto;padding:12px}
+.grid{display:grid;gap:10px;grid-template-columns:1fr}
+
+.card{
+  background:var(--panel);border:1px solid var(--line-soft);
+  border-radius:var(--radius);overflow:hidden;
+}
+.card-h{
+  display:flex;align-items:baseline;gap:8px;
+  padding:11px 13px 9px;border-bottom:1px solid var(--line-soft);
+}
+.card-t{font-size:13px;font-weight:600;letter-spacing:-0.01em}
+.card-sub{font-size:11px;color:var(--txt-3);margin-left:auto;font-variant-numeric:tabular-nums}
+.card-b{padding:11px 13px}
+
+/* ---------- 지수 카드 ---------- */
+.idx-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line-soft)}
+.idx{background:var(--panel);padding:11px 12px}
+.idx-name{font-size:11px;color:var(--txt-2);margin-bottom:3px}
+.idx-val{font-size:21px;font-weight:700;letter-spacing:-0.03em;line-height:1.1}
+.idx-chg{font-size:11px;margin-top:2px}
+.spark{height:26px;margin:7px 0 6px;opacity:.75}
+.idx-flow{display:flex;gap:9px;font-size:10px;border-top:1px solid var(--line-soft);padding-top:6px}
+.idx-flow div{flex:1}
+.idx-flow .lbl{color:var(--txt-3);display:block;font-size:9px;margin-bottom:1px}
+
+/* ---------- 수급 바 ---------- */
+.flow-row{
+  display:grid;grid-template-columns:64px 1fr 68px;
+  align-items:center;gap:9px;padding:5px 0;
+}
+.flow-row .nm{font-size:12px;color:var(--txt-2)}
+.flow-row .nm.sub{padding-left:9px;font-size:11px;color:var(--txt-3)}
+.flow-row .val{text-align:right;font-size:12px;font-weight:600}
+.bar{height:16px;position:relative;background:var(--panel-2);border-radius:3px}
+.bar i{position:absolute;top:0;bottom:0;display:block;border-radius:2px}
+.bar .mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line);z-index:1}
+.grp-line{border-top:1px solid var(--line-soft);margin:7px 0}
+
+/* ---------- 표 ---------- */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{
+  font-size:10px;color:var(--txt-3);font-weight:500;
+  padding:0 0 7px;text-align:right;
+}
+th:first-child{text-align:left}
+td{padding:6px 0;text-align:right;font-weight:600;border-top:1px solid var(--line-soft)}
+td:first-child{text-align:left;color:var(--txt-2);font-weight:500}
+
+/* ---------- 리스트 ---------- */
+.seg{display:flex;gap:2px;padding:9px 13px 0}
+.seg button{
+  flex:1;padding:5px;font-size:11px;border-radius:5px;cursor:pointer;
+  background:var(--panel-2);color:var(--txt-3);border:1px solid transparent;
+}
+.seg button.on{color:var(--txt);border-color:var(--line);font-weight:600}
+.li{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 13px;border-top:1px solid var(--line-soft);cursor:pointer;
+}
+.li:hover{background:var(--panel-2)}
+.li .rank{font-size:10px;color:var(--txt-3);width:12px;flex:none;font-variant-numeric:tabular-nums}
+.li .nm{flex:1;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.li .px{font-size:12px;font-weight:600;text-align:right}
+.li .pct{font-size:12px;font-weight:600;width:56px;text-align:right}
+.more{
+  display:block;width:100%;padding:9px;text-align:center;
+  font-size:11px;color:var(--txt-3);background:none;border:none;
+  border-top:1px solid var(--line-soft);cursor:pointer;
+}
+.more:hover{color:var(--txt-2)}
+
+/* ---------- 글로벌 ---------- */
+.g-row{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 0;border-top:1px solid var(--line-soft);
+}
+.g-row:first-child{border-top:none}
+.g-nm{flex:1;font-size:12.5px}
+.g-tk{font-size:9.5px;color:var(--txt-3);margin-left:5px}
+.g-px{font-size:12.5px;font-weight:600;text-align:right}
+.g-pct{font-size:11.5px;width:74px;text-align:right}
+
+/* ---------- 반응형 ---------- */
+@media (min-width:700px){
+  .grid{grid-template-columns:1fr 1fr}
+  .subtabs{display:none}
+  .sec{display:block !important}
+  .wrap{padding:14px}
+  .grid{gap:12px}
+}
+@media (min-width:1100px){
+  .grid{grid-template-columns:repeat(3,1fr);align-items:start}
+  .span2{grid-column:span 2}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <span class="brand">시황</span>
+    <div class="tabs">
+      <button class="tab on">시황</button>
+      <button class="tab">관심</button>
+      <button class="tab">종목</button>
+      <button class="tab">차트</button>
+      <button class="tab">잔고</button>
+    </div>
+    <span class="mkt-state"><span class="dot"></span>장중 · 09:27</span>
+  </div>
+</div>
+
+<!-- 모바일 전용 서브탭 -->
+<div class="subtabs">
+  <button class="subtab on" data-sec="summary">요약</button>
+  <button class="subtab" data-sec="flow">수급</button>
+  <button class="subtab" data-sec="rank">순위</button>
+</div>
+
+<div class="wrap">
+  <div class="grid">
+
+    <!-- ============ 요약 ============ -->
+    <div class="card sec" data-sec="summary">
+      <div class="card-h"><span class="card-t">국내 지수</span><span class="card-sub">09:27:14</span></div>
+      <div class="idx-grid">
+        <div class="idx">
+          <div class="idx-name">KOSPI</div>
+          <div class="idx-val down num">6,224.65</div>
+          <div class="idx-chg down num">▼ 75.01 −1.19%</div>
+          <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none"><polyline fill="none" stroke="#4a8bf5" stroke-width="1.2" points="0,8 8,6 16,13 24,20 32,11 40,15 48,9 56,14 64,10 72,12 80,16 88,21 100,23"/></svg>
+          <div class="idx-flow num">
+            <div><span class="lbl">외국인</span><span class="up">+1,010</span></div>
+            <div><span class="lbl">기관</span><span class="down">−480</span></div>
+            <div><span class="lbl">개인</span><span class="down">−356</span></div>
+          </div>
+        </div>
+        <div class="idx">
+          <div class="idx-name">KOSDAQ</div>
+          <div class="idx-val down num">851.34</div>
+          <div class="idx-chg down num">▼ 3.13 −0.37%</div>
+          <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none"><polyline fill="none" stroke="#4a8bf5" stroke-width="1.2" points="0,14 8,11 16,17 24,22 32,9 40,5 48,7 56,4 64,6 72,10 80,13 88,17 100,18"/></svg>
+          <div class="idx-flow num">
+            <div><span class="lbl">외국인</span><span class="up">+1,494</span></div>
+            <div><span class="lbl">기관</span><span class="down">−304</span></div>
+            <div><span class="lbl">개인</span><span class="up">+1,811</span></div>
+          </div>
+        </div>
+        <div class="idx">
+          <div class="idx-name">코스피200</div>
+          <div class="idx-val down num">965.57</div>
+          <div class="idx-chg down num">▼ 12.27 −1.25%</div>
+          <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none"><polyline fill="none" stroke="#4a8bf5" stroke-width="1.2" points="0,7 8,5 16,12 24,19 32,10 40,14 48,8 56,13 64,9 72,11 80,15 88,20 100,22"/></svg>
+          <div class="idx-flow num">
+            <div><span class="lbl">외국인</span><span class="up">+1,133</span></div>
+            <div><span class="lbl">기관</span><span class="down">−675</span></div>
+            <div><span class="lbl">개인</span><span class="down">−448</span></div>
+          </div>
+        </div>
+        <div class="idx">
+          <div class="idx-name">코스피200 선물</div>
+          <div class="idx-val down num">967.40</div>
+          <div class="idx-chg down num">▼ 11.60 −1.18%</div>
+          <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none"><polyline fill="none" stroke="#4a8bf5" stroke-width="1.2" points="0,6 8,4 16,11 24,18 32,9 40,13 48,7 56,12 64,19 72,25 80,14 88,17 100,21"/></svg>
+          <div class="idx-flow num">
+            <div><span class="lbl">외국인</span><span class="up">+529</span></div>
+            <div><span class="lbl">기관</span><span class="down">−514</span></div>
+            <div><span class="lbl">개인</span><span class="down">−76</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card sec" data-sec="summary">
+      <div class="card-h"><span class="card-t">글로벌</span><span class="card-sub">09:27:17</span></div>
+      <div class="card-b">
+        <div class="g-row"><span class="g-nm">달러/원</span><span class="g-px num">1,416.88</span><span class="g-pct down num">−0.63 (−0.04%)</span></div>
+        <div class="g-row"><span class="g-nm">WTI유<span class="g-tk">CL</span></span><span class="g-px num">82.25</span><span class="g-pct up num">+0.12 (+0.15%)</span></div>
+        <div class="g-row"><span class="g-nm">US 30<span class="g-tk">US30</span></span><span class="g-px num">53,919.6</span><span class="g-pct down num">−56.0 (−0.10%)</span></div>
+        <div class="g-row"><span class="g-nm">US 500<span class="g-tk">US500</span></span><span class="g-px num">7,753.9</span><span class="g-pct up num">+0.9 (+0.01%)</span></div>
+        <div class="g-row"><span class="g-nm">US Tech 100<span class="g-tk">USTECH</span></span><span class="g-px num">29,646.4</span><span class="g-pct up num">+24.6 (+0.08%)</span></div>
+        <div class="g-row"><span class="g-nm">US 2000<span class="g-tk">US2000</span></span><span class="g-px num">3,016.9</span><span class="g-pct down num">−0.5 (−0.02%)</span></div>
+        <div class="g-row"><span class="g-nm">S&amp;P 500 VIX<span class="g-tk">VX</span></span><span class="g-px num">16.98</span><span class="g-pct up num">+0.02 (+0.12%)</span></div>
+        <div class="g-row"><span class="g-nm">미국 10년물<span class="g-tk">US10YT</span></span><span class="g-px num">4.710</span><span class="g-pct up num">+0.011 (+0.23%)</span></div>
+        <div class="g-row"><span class="g-nm">미국 30년물<span class="g-tk">US30YT</span></span><span class="g-px num">5.250</span><span class="g-pct up num">+0.007 (+0.13%)</span></div>
+        <div class="g-row"><span class="g-nm">비트코인<span class="g-tk">BTC/USD</span></span><span class="g-px num">63,984.6</span><span class="g-pct down num">−969.1 (−1.49%)</span></div>
+      </div>
+    </div>
+
+    <div class="card sec" data-sec="summary">
+      <div class="card-h"><span class="card-t">종목등락현황</span></div>
+      <div class="card-b">
+        <table class="num">
+          <tr><th>구분</th><th class="up">상한</th><th class="up">상승</th><th>보합</th><th class="down">하락</th><th class="down">하한</th></tr>
+          <tr><td>코스피</td><td class="up">1</td><td class="up">493</td><td class="flat">54</td><td class="down">350</td><td class="down">0</td></tr>
+          <tr><td>코스닥</td><td class="up">4</td><td class="up">783</td><td class="flat">91</td><td class="down">833</td><td class="down">0</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="card sec" data-sec="summary">
+      <div class="card-h"><span class="card-t">증시주변자금</span><span class="card-sub">08/07 기준 · 억원</span></div>
+      <div class="card-b">
+        <table class="num">
+          <tr><td>고객예탁금</td><td>1,042,064</td><td class="up" style="width:78px">+1,352</td></tr>
+          <tr><td>미수금</td><td>10,034</td><td class="down">−590</td></tr>
+          <tr><td>신용잔고</td><td>292,304</td><td class="up">+4,364</td></tr>
+          <tr><td>선물예수금</td><td>434,720</td><td class="down">−20,463</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============ 수급 ============ -->
+    <div class="card sec span2" data-sec="flow" style="display:none">
+      <div class="card-h"><span class="card-t">투자자별 수급</span><span class="card-sub">코스피 · 억원</span></div>
+      <div class="seg">
+        <button class="on">코스피</button><button>코스닥</button><button>선물</button>
+      </div>
+      <div class="card-b">
+        <div class="flow-row"><span class="nm">개인</span><span class="bar"><span class="mid"></span><i style="background:var(--down);right:50%;width:9%"></i></span><span class="val down num">−356</span></div>
+        <div class="flow-row"><span class="nm">외국인</span><span class="bar"><span class="mid"></span><i style="background:var(--up);left:50%;width:25%"></i></span><span class="val up num">+1,010</span></div>
+        <div class="grp-line"></div>
+        <div class="flow-row"><span class="nm">기관 합계</span><span class="bar"><span class="mid"></span><i style="background:var(--down);right:50%;width:12%"></i></span><span class="val down num">−480</span></div>
+        <div class="flow-row"><span class="nm sub">금융투자</span><span class="bar"><span class="mid"></span><i style="background:var(--down);opacity:.65;right:50%;width:16%"></i></span><span class="val down num">−642</span></div>
+        <div class="flow-row"><span class="nm sub">투신</span><span class="bar"><span class="mid"></span><i style="background:var(--up);opacity:.65;left:50%;width:5%"></i></span><span class="val up num">+188</span></div>
+        <div class="flow-row"><span class="nm sub">연기금</span><span class="bar"><span class="mid"></span><i style="background:var(--up);opacity:.65;left:50%;width:8%"></i></span><span class="val up num">+327</span></div>
+        <div class="flow-row"><span class="nm sub">사모펀드</span><span class="bar"><span class="mid"></span><i style="background:var(--down);opacity:.65;right:50%;width:9%"></i></span><span class="val down num">−353</span></div>
+        <div class="grp-line"></div>
+        <div class="flow-row"><span class="nm">기타법인</span><span class="bar"><span class="mid"></span><i style="background:var(--down);opacity:.5;right:50%;width:3%"></i></span><span class="val down num">−174</span></div>
+      </div>
+    </div>
+
+    <div class="card sec" data-sec="flow" style="display:none">
+      <div class="card-h"><span class="card-t">외국인 5일 누적</span><span class="card-sub">코스피 · 억원</span></div>
+      <div class="card-b">
+        <table class="num">
+          <tr><td>08/11</td><td class="up">+1,010</td></tr>
+          <tr><td>08/08</td><td class="up">+2,340</td></tr>
+          <tr><td>08/07</td><td class="down">−890</td></tr>
+          <tr><td>08/06</td><td class="up">+1,552</td></tr>
+          <tr><td>08/05</td><td class="up">+430</td></tr>
+          <tr><td style="color:var(--txt)">5일 누적</td><td class="up">+4,442</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- ============ 순위 ============ -->
+    <div class="card sec" data-sec="rank" style="display:none">
+      <div class="card-h"><span class="card-t">등락률 순위</span></div>
+      <div class="seg">
+        <button class="on">상승</button><button>하락</button><button>상한</button><button>하한</button>
+      </div>
+      <div style="margin-top:8px">
+        <div class="li"><span class="rank num">1</span><span class="nm">티웨이홀딩스</span><span class="px up num">1,354</span><span class="pct up num">+10.98%</span></div>
+        <div class="li"><span class="rank num">2</span><span class="nm">두산퓨얼셀</span><span class="px up num">35,800</span><span class="pct up num">+7.35%</span></div>
+        <div class="li"><span class="rank num">3</span><span class="nm">까뮤이앤씨</span><span class="px up num">1,656</span><span class="pct up num">+4.02%</span></div>
+        <div class="li"><span class="rank num">4</span><span class="nm">삼영무역</span><span class="px up num">24,150</span><span class="pct up num">+2.55%</span></div>
+        <div class="li"><span class="rank num">5</span><span class="nm">한창제지</span><span class="px up num">3,310</span><span class="pct up num">+2.00%</span></div>
+      </div>
+      <button class="more">더보기 ›</button>
+    </div>
+
+    <div class="card sec" data-sec="rank" style="display:none">
+      <div class="card-h"><span class="card-t">테마</span></div>
+      <div class="seg"><button class="on">상위</button><button>하위</button></div>
+      <div style="margin-top:8px">
+        <div class="li"><span class="nm">정유</span><span class="pct up num">+4.81%</span></div>
+        <div class="li"><span class="nm">국내 상장 중국기업</span><span class="pct up num">+4.22%</span></div>
+        <div class="li"><span class="nm">윤활유</span><span class="pct up num">+3.19%</span></div>
+        <div class="li"><span class="nm">낙태/피임</span><span class="pct up num">+3.15%</span></div>
+        <div class="li"><span class="nm">건설 중소형</span><span class="pct up num">+2.97%</span></div>
+      </div>
+      <button class="more">더보기 ›</button>
+    </div>
+
+    <div class="card sec" data-sec="rank" style="display:none">
+      <div class="card-h"><span class="card-t">업종</span></div>
+      <div class="seg"><button class="on">코스피</button><button>코스닥</button></div>
+      <div style="margin-top:8px">
+        <div class="li"><span class="nm">화학</span><span class="pct up num">+1.41%</span></div>
+        <div class="li"><span class="nm">제약</span><span class="pct up num">+1.23%</span></div>
+        <div class="li"><span class="nm">부동산</span><span class="pct up num">+1.12%</span></div>
+        <div class="li"><span class="nm">운수장비</span><span class="pct down num">−0.84%</span></div>
+        <div class="li"><span class="nm">전기전자</span><span class="pct down num">−1.92%</span></div>
+      </div>
+      <button class="more">더보기 ›</button>
+    </div>
+
+    <div class="card sec" data-sec="rank" style="display:none">
+      <div class="card-h"><span class="card-t">250일 신고가 / 신저가</span></div>
+      <div class="seg"><button class="on">신고가</button><button>신저가</button></div>
+      <div style="margin-top:8px">
+        <div class="li"><span class="nm">삼영무역</span><span class="px up num">24,150</span><span class="pct up num">+2.55%</span></div>
+        <div class="li"><span class="nm">TIGER 머니마켓액티브</span><span class="px up num">103,300</span><span class="pct flat num">0.00%</span></div>
+        <div class="li"><span class="nm">RISE 단기특수은행채</span><span class="px flat num">50,910</span><span class="pct flat num">0.00%</span></div>
+        <div class="li"><span class="nm">한창제지</span><span class="px up num">3,310</span><span class="pct up num">+2.00%</span></div>
+      </div>
+      <button class="more">더보기 ›</button>
+    </div>
+
+    <div class="card sec" data-sec="rank" style="display:none">
+      <div class="card-h"><span class="card-t">변동성 완화 (VI)</span></div>
+      <div class="seg"><button class="on">코스피</button><button>코스닥</button></div>
+      <div style="margin-top:8px">
+        <div class="li"><span class="nm">두산퓨얼셀</span><span class="px up num">35,800</span><span class="pct up num">+7.35%</span></div>
+        <div class="li"><span class="nm">한세엠케이</span><span class="px down num">1,308</span><span class="pct down num">−3.11%</span></div>
+        <div class="li"><span class="nm">하나 레버리지 K방산</span><span class="px down num">15,125</span><span class="pct down num">−0.23%</span></div>
+        <div class="li"><span class="nm">티웨이홀딩스</span><span class="px up num">1,354</span><span class="pct up num">+10.98%</span></div>
+      </div>
+      <button class="more">더보기 ›</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// 모바일 서브탭 전환 (PC에서는 CSS가 전부 표시)
+const subtabs = document.querySelectorAll('.subtab');
+const secs = document.querySelectorAll('.sec');
+function show(name){
+  secs.forEach(s => s.style.display = (s.dataset.sec === name ? '' : 'none'));
+  subtabs.forEach(b => b.classList.toggle('on', b.dataset.sec === name));
+}
+subtabs.forEach(b => b.addEventListener('click', () => show(b.dataset.sec)));
+
+// 세그먼트 토글 (목업 동작만)
+document.querySelectorAll('.seg').forEach(seg => {
+  seg.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      seg.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+    });
+  });
+});
+
+// 데스크탑에서 서브탭 필터 해제
+const mq = window.matchMedia('(min-width:700px)');
+function sync(){ if(mq.matches) secs.forEach(s => s.style.display=''); else show(document.querySelector('.subtab.on').dataset.sec); }
+mq.addEventListener('change', sync);
+sync();
+</script>
+</body>
+</html>

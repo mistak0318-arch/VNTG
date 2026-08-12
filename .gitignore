@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+*.log
+
+# 관심종목 등 로컬 데이터 (기기마다 다름)
+server/data/
