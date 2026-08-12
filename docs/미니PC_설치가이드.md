@@ -171,22 +171,55 @@ curl.exe http://localhost:4000/api/health
 
 ---
 
-## 앞으로 코드를 고쳤을 때
+## 개발/배포 워크플로
 
-지금 PC에서 작업 → 미니PC로 파일 복사 → 미니PC에서:
+**개발은 메인 PC(JAEMIN-KIM-PC)에서, 미니PC는 실행만** 합니다.
+미니PC 사양에 구애받지 않고, 작업 중 실수로 서비스를 멈출 일도 없습니다.
 
+프로젝트는 이미 git 저장소로 만들어져 있습니다 (`.env`, `node_modules`, `dist`,
+`server/data`는 제외되도록 `.gitignore` 설정 완료).
+
+### 한 번만 하는 설정 — GitHub 비공개 저장소
+
+1. GitHub에서 **Private** 저장소 생성 (예: `vntg-hts`)
+2. 메인 PC에서:
 ```powershell
-cd C:\vntg-hts\server; npm run build
+cd "K:\0000 3740 프로젝트 (경제적자유)\00. 주식\2 AI 프롬프트\260810_클로드작업"
+git remote add origin https://github.com/<계정>/vntg-hts.git
+git push -u origin master
 ```
+3. 미니PC에서 최초 1회:
 ```powershell
-cd C:\vntg-hts\web; npm run build
-```
-```powershell
-Stop-ScheduledTask -TaskName "VNTG HTS"; Start-ScheduledTask -TaskName "VNTG HTS"
+git clone https://github.com/<계정>/vntg-hts.git C:\vntg-hts
 ```
 
-> 나중에 편해지려면 이 폴더를 git 저장소로 만들어서 `git pull` 하는 게 낫습니다.
-> (`.gitignore`에 `.env`가 이미 들어 있어서 키는 안 올라갑니다)
+> 비공개 저장소를 쓰세요. 코드에 키는 없지만(.env 제외) 굳이 공개할 이유가 없습니다.
+
+### 코드를 고칠 때마다
+
+**메인 PC** — 작업 후:
+```powershell
+git add -A; git commit -m "무엇을 고쳤는지"; git push
+```
+
+**미니PC** — 반영:
+```powershell
+cd C:\vntg-hts; git pull; cd server; npm run build; cd ..\web; npm run build; cd ..; Stop-ScheduledTask -TaskName "VNTG HTS"; Start-ScheduledTask -TaskName "VNTG HTS"
+```
+
+이 한 줄을 `update.cmd`로 만들어두면 더블클릭 한 번으로 끝납니다.
+
+> `npm install`은 package.json이 바뀐 경우에만 추가로 실행하면 됩니다.
+
+### ⚠ git으로 안 넘어가는 것 (수동으로 한 번 옮기세요)
+
+| 항목 | 경로 | 비고 |
+|---|---|---|
+| API 키 | `server\.env` | 보안상 제외. STEP 3에서 직접 작성 |
+| 관심종목·API사용량 | `server\data\` | 기기마다 다른 데이터라 제외 |
+
+**AI_HTS 관심종목을 미니PC로 가져가려면** `server\data\` 폴더를 한 번 복사해야 합니다.
+안 하면 관심종목이 빈 상태로 시작합니다.
 
 ---
 
