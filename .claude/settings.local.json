@@ -107,7 +107,8 @@
       "Bash(git config *)",
       "Bash(git commit *)",
       "Bash(git grep *)",
-      "Bash(python -)"
+      "Bash(python -)",
+      "Bash(git -c core.hooksPath=/dev/null commit -q -m \"텔레그램 봇 설계서 추가 + 미니PC 이전 완료 반영\")"
     ]
   }
 }
