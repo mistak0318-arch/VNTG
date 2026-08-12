@@ -105,7 +105,8 @@
       "Bash(grep -i \"\\\\.env$\")",
       "Bash(git commit -q -m '@ *)",
       "Bash(git config *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git grep *)"
     ]
   }
 }
