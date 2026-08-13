@@ -26,13 +26,29 @@
  * ────────────────────────────────────────────────────────────
  */
 import { config } from "dotenv";
+import { readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stdin, stdout } from "node:process";
 
 const serverRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-config({ path: join(serverRoot, ".env") });
+const envPath = join(serverRoot, ".env");
+config({ path: envPath });
+
+/**
+ * 세션을 .env 에 직접 써넣는다.
+ * 화면에 찍어놓고 사람이 복사하게 하면 (1) 창을 닫아서 날리거나
+ * (2) 계정 전체 권한인 문자열을 엉뚱한 데 붙여넣기 십상이다.
+ */
+async function writeSessionToEnv(session) {
+  const raw = await readFile(envPath, "utf-8");
+  const line = `TELEGRAM_SESSION=${session}`;
+  const next = /^TELEGRAM_SESSION=.*$/m.test(raw)
+    ? raw.replace(/^TELEGRAM_SESSION=.*$/m, line)
+    : `${raw.trimEnd()}\n${line}\n`;
+  await writeFile(envPath, next, "utf-8");
+}
 
 const apiId = Number(process.env.TELEGRAM_API_ID);
 const apiHash = process.env.TELEGRAM_API_HASH?.trim();
@@ -66,9 +82,22 @@ const me = await client.getMe();
 const session = client.session.save();
 
 console.log("\n로그인 성공:", me.username ? "@" + me.username : me.firstName);
-console.log("\n아래 한 줄을 server/.env 에 추가하세요:\n");
-console.log("TELEGRAM_SESSION=" + session);
-console.log("\n⚠ 이 문자열은 계정 전체 권한입니다. 채팅창·커밋에 올리지 마세요.");
+
+try {
+  await writeSessionToEnv(session);
+  console.log("\n✅ 세션을 server/.env 의 TELEGRAM_SESSION 에 저장했습니다.");
+  console.log("   (복사할 필요 없습니다. 이 창은 그냥 닫으셔도 됩니다.)");
+  console.log("\n다음: 서버를 재시작해야 .env 를 다시 읽습니다.");
+  console.log("   PowerShell 관리자 권한으로");
+  console.log("   Stop-ScheduledTask -TaskName 'VNTG HTS'; Start-ScheduledTask -TaskName 'VNTG HTS'");
+} catch (err) {
+  // 자동 저장이 실패하면 그때만 화면에 보여준다
+  console.error("\n.env 자동 저장 실패:", err.message);
+  console.log("아래 한 줄을 server/.env 에 직접 추가하세요:\n");
+  console.log("TELEGRAM_SESSION=" + session);
+}
+
+console.log("\n⚠ 세션은 계정 전체 권한입니다. 채팅창·커밋에 올리지 마세요.");
 console.log("   유출 시 my.telegram.org 의 활성 세션에서 즉시 종료할 수 있습니다.\n");
 
 await client.disconnect();
