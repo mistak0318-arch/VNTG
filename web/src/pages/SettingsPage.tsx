@@ -3,6 +3,7 @@ import { FONTS, FONT_SCALES, useAppearance } from "../useAppearance";
 import { api, fmtNum, type ProviderUsage } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { AlertConfigPanel } from "../components/AlertConfigPanel";
+import { CollapsibleCard } from "../components/CollapsibleCard";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { SignalConfigPanel } from "../components/SignalConfigPanel";
 
@@ -55,35 +56,48 @@ export function SettingsPage() {
 
   return (
     <div>
-      <section className="card">
-        <h2>구독 채널 수집 (텔레그램)</h2>
+      <CollapsibleCard
+        id="channels"
+        title="구독 채널 수집 (텔레그램)"
+        hint="구독 채널을 읽어 여러 채널이 동시에 말하는 것을 뽑아냅니다."
+      >
         <p className="page-note">
           내가 구독 중인 텔레그램 채널을 읽어서 <b>여러 채널이 동시에 말하고 있는 것</b>을
           뽑아냅니다. 채널 하나가 떠드는 건 노이즈지만, 열 개가 같은 종목을 말하면 신호입니다.
         </p>
         <ChannelCollectPanel />
-      </section>
+      </CollapsibleCard>
 
-      <section className="card">
-        <h2>관심종목 시그널 (텔레그램)</h2>
+      <CollapsibleCard
+        id="alerts"
+        title="관심종목 시그널 (텔레그램)"
+        hint="장중에 관심종목이 조건에 걸리면 시그널 방으로 알립니다."
+      >
         <p className="page-note">
           장중에 관심종목이 조건에 걸리면 텔레그램 시그널 방으로 알립니다.
           알림은 많아지면 무시하게 되므로, 기준값을 올려 <b>덜 울리게</b> 맞추는 게 요령입니다.
         </p>
         <AlertConfigPanel />
-      </section>
+      </CollapsibleCard>
 
-      <section className="card">
-        <h2>신호등 기준</h2>
+      <CollapsibleCard
+        id="signal"
+        title="신호등 기준"
+        hint="종목명 옆 신호등이 켜지는 기준을 내 매매 기준에 맞춥니다."
+      >
         <p className="page-note">
           종목명 옆 신호등이 어떤 기준으로 켜지는지 정합니다. 내 매매 기준을 여기에 적어두고,
           맞지 않으면 계속 고쳐가면서 쓰는 것이 이 기능의 목적입니다.
         </p>
         <SignalConfigPanel />
-      </section>
+      </CollapsibleCard>
 
-      <section className="card">
-        <h2>화면 설정</h2>
+      <CollapsibleCard
+        id="appearance"
+        title="화면 설정"
+        hint="테마 · 글꼴 · 글자 크기"
+        defaultOpen
+      >
 
         <div className="appearance-row">
           <span className="appearance-label">테마</span>
@@ -139,14 +153,17 @@ export function SettingsPage() {
           <span className="num negative">-1.23%</span> · 거래대금 <span className="num">6,282</span>억
         </div>
         <div className="table-note">이 설정은 이 기기(브라우저)에만 저장됩니다.</div>
-      </section>
+      </CollapsibleCard>
 
       <RefreshBar onRefresh={load} loading={loading} />
 
       {error && <div className="error-banner">{error}</div>}
 
-      <section className="card">
-        <h2>API 사용량 {day && `(${day})`}</h2>
+      <CollapsibleCard
+        id="usage"
+        title={`API 사용량${day ? ` (${day})` : ""}`}
+        hint="키움 · DART · 네이버 · Claude 호출량과 추정 비용"
+      >
         <div className="usage-grid">
           {usage.map((p) => (
             <div className="usage-card" key={p.provider}>
@@ -223,11 +240,10 @@ export function SettingsPage() {
             </div>
           ))}
         </div>
-      </section>
+      </CollapsibleCard>
 
       {history.length > 0 && (
-        <section className="card">
-          <h2>최근 호출 추이</h2>
+        <CollapsibleCard id="history" title="최근 호출 추이" hint="최근 14일 일별 호출 수">
           <div className="data-table-wrap">
             <table className="data-table">
               <thead>
@@ -255,11 +271,10 @@ export function SettingsPage() {
               </tbody>
             </table>
           </div>
-        </section>
+        </CollapsibleCard>
       )}
 
-      <section className="card">
-        <h2>API 키 설정 상태</h2>
+      <CollapsibleCard id="keys" title="API 키 설정 상태" hint="키 설정 여부와 거래 모드">
         <div className="key-list">
           {keys.map((k) => (
             <div className="key-row" key={k.name}>
@@ -277,7 +292,7 @@ export function SettingsPage() {
         <div className="table-note">
           키 값은 서버 밖으로 나가지 않습니다. 설정 여부만 표시합니다 · 값 변경은 server/.env 파일에서 직접
         </div>
-      </section>
+      </CollapsibleCard>
     </div>
   );
 }
