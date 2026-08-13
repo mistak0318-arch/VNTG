@@ -81,14 +81,25 @@ function extractFields(body) {
   }
 }
 
-/** 공공데이터포털의 표준 오류 메시지를 읽기 좋게 */
-function readError(body) {
+/**
+ * 공공데이터포털은 성공도 `<resultMsg>` 로 알린다 — "정상서비스." 가 성공 메시지다.
+ * 그래서 메시지를 뽑되 성공 문구는 오류로 취급하지 않는다.
+ */
+const OK_MSG = /정상|NORMAL|SUCCESS/i;
+
+function readMessage(body) {
   const m =
     /<returnAuthMsg>([^<]+)</.exec(body) ??
     /<errMsg>([^<]+)</.exec(body) ??
     /<resultMsg>([^<]+)</.exec(body) ??
-    /<returnReasonCode>([^<]+)</.exec(body);
-  return m ? m[1] : null;
+    /"resultMsg"\s*:\s*"([^"]+)"/.exec(body);
+  return m ? m[1].trim() : null;
+}
+
+function readError(body) {
+  const msg = readMessage(body);
+  if (!msg) return null;
+  return OK_MSG.test(msg) ? null : msg;
 }
 
 console.log(`후보 ${targets.length}개를 확인합니다.\n`);
@@ -127,14 +138,16 @@ for (const base of targets) {
       break;
     }
 
-    if (res.ok && !err && body.length > 120) {
+    if (res.ok && !err) {
       const fields = extractFields(body);
+      const msg = readMessage(body);
       // 껍데기만 오는 경우와 실제 데이터가 있는 경우를 구분
       const hasData = fields.length > 6;
-      console.log(`${hasData ? "✅" : "△"} ${base}`);
+      console.log(`${hasData ? "✅ 성공" : "△ 응답은 오나 데이터 없음"}: ${base}`);
       console.log(`   파라미터: ${paramDesc}`);
-      console.log(`   응답 필드(${fields.length}): ${fields.slice(0, 30).join(", ")}`);
-      console.log(`   원본 앞부분:\n   ${body.slice(0, 400).replace(/\n/g, "\n   ")}\n`);
+      if (msg) console.log(`   메시지: ${msg}`);
+      console.log(`   응답 필드(${fields.length}): ${fields.join(", ")}`);
+      console.log(`\n   ── 원본 (앞 1800자) ──\n${body.slice(0, 1800)}\n`);
       if (hasData) {
         found = true;
         break;

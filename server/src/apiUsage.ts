@@ -19,6 +19,7 @@ export type ApiProvider =
   | "anthropic"
   | "gemini"
   | "openai"
+  | "dataGoKr"
   | "telegram"
   | "mail";
 
@@ -91,6 +92,11 @@ export const DAILY_LIMITS: Record<ApiProvider, { label: string; limit: number | 
     label: "OpenAI API",
     limit: null,
     note: "종량제. 이미지 분석 대체 경로입니다",
+  },
+  dataGoKr: {
+    label: "공공데이터포털 (관세청)",
+    limit: 10000,
+    note: "개발계정 일 10,000건. 수출입 통계는 월 단위 갱신이라 12시간 캐시를 둡니다",
   },
   telegram: {
     label: "텔레그램 봇",
