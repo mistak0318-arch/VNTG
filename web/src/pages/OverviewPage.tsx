@@ -187,39 +187,6 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
         {show("summary") && (
-          <OverviewCard title="글로벌" updatedAt={global.updatedAt} loading={global.loading} error={global.error}>
-            <div className="ov-card-b">
-              {(global.data ?? []).map((g) => (
-                <div className="ov-g-row" key={g.key}>
-                  <span className="ov-g-nm">
-                    {g.label}
-                    <span className="ov-g-tk">{g.symbol}</span>
-                  </span>
-                  {g.error ? (
-                    <span className="ov-g-pct" style={{ color: "var(--flat)" }}>
-                      조회 실패
-                    </span>
-                  ) : (
-                    <>
-                      <span className="ov-g-px num">
-                        {g.price === null ? "-" : fmtNum(Number(g.price.toFixed(g.isRate ? 3 : 2)))}
-                      </span>
-                      <span className={`ov-g-pct num ${signCls(g.changeRate ?? 0)}`}>
-                        {g.change === null
-                          ? "-"
-                          : `${g.change > 0 ? "+" : ""}${g.change.toFixed(g.isRate ? 3 : 2)} (${fmtPct(
-                              g.changeRate ?? 0,
-                            )})`}
-                      </span>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          </OverviewCard>
-        )}
-
-        {show("summary") && (
           <OverviewCard
             title="종목등락현황"
             updatedAt={indices.updatedAt}
@@ -254,6 +221,39 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                   )}
                 </tbody>
               </table>
+            </div>
+          </OverviewCard>
+        )}
+
+        {show("summary") && (
+          <OverviewCard title="글로벌" updatedAt={global.updatedAt} loading={global.loading} error={global.error}>
+            <div className="ov-card-b">
+              {(global.data ?? []).map((g) => (
+                <div className="ov-g-row" key={g.key}>
+                  <span className="ov-g-nm">
+                    {g.label}
+                    <span className="ov-g-tk">{g.symbol}</span>
+                  </span>
+                  {g.error ? (
+                    <span className="ov-g-pct" style={{ color: "var(--flat)" }}>
+                      조회 실패
+                    </span>
+                  ) : (
+                    <>
+                      <span className="ov-g-px num">
+                        {g.price === null ? "-" : fmtNum(Number(g.price.toFixed(g.isRate ? 3 : 2)))}
+                      </span>
+                      <span className={`ov-g-pct num ${signCls(g.changeRate ?? 0)}`}>
+                        {g.change === null
+                          ? "-"
+                          : `${g.change > 0 ? "+" : ""}${g.change.toFixed(g.isRate ? 3 : 2)} (${fmtPct(
+                              g.changeRate ?? 0,
+                            )})`}
+                      </span>
+                    </>
+                  )}
+                </div>
+              ))}
             </div>
           </OverviewCard>
         )}

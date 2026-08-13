@@ -5,6 +5,7 @@ import { AlgoPicksPage } from "./pages/AlgoPicksPage";
 import { ContinuousTradePage } from "./pages/ContinuousTradePage";
 import { DailyReportPage } from "./pages/DailyReportPage";
 import { KiwoomWatchlistPage } from "./pages/KiwoomWatchlistPage";
+import { ManualAccountPage } from "./pages/ManualAccountPage";
 import { MapPage } from "./pages/MapPage";
 import { MyPage } from "./pages/MyPage";
 import { NewsPage } from "./pages/NewsPage";
@@ -30,6 +31,7 @@ type Tab =
   | "continuous"
   | "algo"
   | "account"
+  | "manualAccount"
   | "settings";
 
 /** 사이드바 메뉴 구조. 그룹 아래에 항목을 추가하는 식으로 기능을 늘려간다. */
@@ -63,7 +65,10 @@ const MENU: { group: string; items: { key: Tab; label: string }[] }[] = [
   },
   {
     group: "계좌",
-    items: [{ key: "account", label: "계좌정보" }],
+    items: [
+      { key: "account", label: "연동 계좌 (키움)" },
+      { key: "manualAccount", label: "수동 계좌" },
+    ],
   },
   {
     group: "설정",
@@ -157,6 +162,7 @@ export default function App() {
           {tab === "continuous" && <ContinuousTradePage onSelectStock={onSelectStock} />}
           {tab === "algo" && <AlgoPicksPage onSelectStock={onSelectStock} />}
           {tab === "account" && <AccountInfoPage onSelectStock={onSelectStock} />}
+          {tab === "manualAccount" && <ManualAccountPage onSelectStock={onSelectStock} />}
           {tab === "settings" && <SettingsPage />}
         </div>
       </div>

@@ -99,6 +99,16 @@ export const api = {
   accountSummary: () => getJson("/api/account/summary"),
   accountDeposit: () => getJson("/api/account/deposit"),
   holdings: () => getJson("/api/account/holdings"),
+  manualBrokers: () => getJson<{ brokers: string[] }>("/api/account/manual/brokers"),
+  manualAccounts: () => getJson<{ accounts: EvaluatedAccount[] }>("/api/account/manual"),
+  manualAccountAdd: (broker: string, name: string) =>
+    postJson<{ accounts: EvaluatedAccount[] }>("/api/account/manual", { broker, name }),
+  manualAccountRemove: (id: string) =>
+    deleteJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}`),
+  manualHoldingAdd: (id: string, h: { code: string; name: string; avgPrice: number; qty: number }) =>
+    postJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings`, h),
+  manualHoldingRemove: (id: string, code: string) =>
+    deleteJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings/${code}`),
   stockInfo: (code: string) => getJson(`/api/market/info/${code}`),
   quote: (code: string) => getJson(`/api/market/quote/${code}`),
   dailyChart: (code: string) => getJson(`/api/market/chart/daily/${code}`),
@@ -257,6 +267,30 @@ export interface MarketFlow {
 }
 
 /** 시가총액(marketCap)은 억원 단위. 상장주식수를 못 찾으면 null */
+export interface EvaluatedHolding {
+  code: string;
+  name: string;
+  avgPrice: number;
+  qty: number;
+  price: number;
+  changeRate: number;
+  value: number;
+  cost: number;
+  profit: number;
+  returnRate: number | null;
+}
+
+export interface EvaluatedAccount {
+  id: string;
+  broker: string;
+  name: string;
+  holdings: EvaluatedHolding[];
+  totalCost: number;
+  totalValue: number;
+  totalProfit: number;
+  totalReturnRate: number | null;
+}
+
 export interface StockRow {
   marketCap?: number | null;
   code: string;
