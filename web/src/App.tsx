@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MarketFlowPage } from "./pages/MarketFlowPage";
 import { StockDetail } from "./components/StockDetail";
 import { AccountInfoPage } from "./pages/AccountInfoPage";
 import { AlgoPicksPage } from "./pages/AlgoPicksPage";
@@ -27,6 +28,7 @@ type Tab =
   | "watchAi"
   | "watchKiwoom"
   | "calendar"
+  | "marketFlow"
   | "stockAnalysis"
   | "volume"
   | "sameNet"
@@ -53,6 +55,7 @@ const MENU: { group: string; items: { key: Tab; label: string }[] }[] = [
     items: [
       { key: "watchAi", label: "관심종목 (AI_HTS)" },
       { key: "watchKiwoom", label: "관심종목 (키움_HTS)" },
+      { key: "marketFlow", label: "시장 흐름 분석" },
       { key: "calendar", label: "캘린더" },
     ],
   },
@@ -157,6 +160,7 @@ export default function App() {
           {tab === "news" && <NewsPage onSelectStock={onSelectStock} />}
           {tab === "watchAi" && <MyPage onSelectStock={onSelectStock} />}
           {tab === "watchKiwoom" && <KiwoomWatchlistPage onSelectStock={onSelectStock} />}
+          {tab === "marketFlow" && <MarketFlowPage />}
           {tab === "calendar" && <CalendarPage />}
           {tab === "stockAnalysis" && (
             <StockAnalysisPage stock={selected} onSelectStock={openAnalysis} />

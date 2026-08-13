@@ -252,7 +252,7 @@ export function DailyReportPage({
         </div>
       </header>
 
-      <AiSummaryCard />
+      <AiSummaryCard edition={edition} />
 
       {/* 1. 국내외 주요 지수 */}
       <Section no={1} title="국내외 주요 지수">

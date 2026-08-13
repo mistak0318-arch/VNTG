@@ -182,6 +182,21 @@ export const api = {
     if (o.hours) q.set("hours", String(o.hours));
     return postJson<ChannelReport>(`/api/channels/report${q.toString() ? "?" + q : ""}`);
   },
+  calendarVisionStatus: () =>
+    getJson<{ ready: boolean; providers: string[] }>("/api/calendar-vision/status"),
+  calendarVisionParse: (image: string, mimeType: string) =>
+    postJson<{
+      events: ParsedEvent[];
+      provider: string | null;
+      model: string | null;
+      inputTokens: number;
+      outputTokens: number;
+      error?: string;
+    }>("/api/calendar-vision/parse", { image, mimeType }),
+  calendarVisionCommit: (events: ParsedEvent[], fileName: string) =>
+    postJson<{ added: number }>("/api/calendar-vision/commit", { events, fileName }),
+  channelReports: (limit = 10) =>
+    getJson<{ reports: ChannelReport[] }>(`/api/channels/reports?limit=${limit}`),
   alertConfig: () =>
     getJson<{ config: AlertConfig; defaults: AlertConfig; channels: TelegramChannelStatus[] }>(
       "/api/alert/config",
@@ -395,6 +410,14 @@ export interface EvaluatedAccount {
   totalReturnRate: number | null;
 }
 
+export interface ParsedEvent {
+  date: string;
+  time?: string;
+  title: string;
+  kind: string;
+  memo?: string;
+}
+
 export interface ChannelEntry {
   id: string;
   name: string;
@@ -469,6 +492,12 @@ export interface BreadthPoint {
   highLowDiff: number;
   kospiRate: number;
   kosdaqRate: number;
+  foreign: number;
+  institution: number;
+  individual: number;
+  foreignCum: number;
+  instCum: number;
+  individualCum: number;
 }
 
 export type SignalLevel = "green" | "yellow" | "red" | "unknown";

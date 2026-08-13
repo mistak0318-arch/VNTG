@@ -78,7 +78,13 @@ export async function listBreadth(days?: number): Promise<BreadthDay[]> {
 
 // ---------------------------------------------------------------- 수집
 
-function todayKst(): { date: string; at: string; afterClose: boolean } {
+function todayKst(): {
+  date: string;
+  at: string;
+  afterClose: boolean;
+  beforeOpen: boolean;
+  weekend: boolean;
+} {
   // 서버가 어느 타임존이든 한국 장 기준으로 판단해야 한다
   const now = new Date();
   const kst = new Date(now.getTime() + (9 * 60 + now.getTimezoneOffset()) * 60_000);
@@ -86,7 +92,14 @@ function todayKst(): { date: string; at: string; afterClose: boolean } {
     kst.getDate(),
   ).padStart(2, "0")}`;
   const minutes = kst.getHours() * 60 + kst.getMinutes();
-  return { date, at: now.toISOString(), afterClose: minutes >= 15 * 60 + 30 };
+  const day = kst.getDay();
+  return {
+    date,
+    at: now.toISOString(),
+    afterClose: minutes >= 15 * 60 + 30,
+    beforeOpen: minutes < 9 * 60,
+    weekend: day === 0 || day === 6,
+  };
 }
 
 function pickIndex(cards: IndexCard[], name: string): IndexCard | undefined {
@@ -122,7 +135,18 @@ export async function captureBreadth(
   client: KiwoomClient,
   opts: { force?: boolean } = {},
 ): Promise<{ saved: boolean; reason?: string; row?: BreadthDay }> {
-  const { date, at, afterClose } = todayKst();
+  const { date, at, afterClose, beforeOpen, weekend } = todayKst();
+
+  /*
+   * 장이 안 열린 시각에는 저장하지 않는다.
+   * 키움 API는 개장 전·주말에도 **직전 거래일 값을 그대로** 돌려주므로,
+   * 그걸 오늘치로 남기면 같은 수치가 하루 더 쌓여 누적 차트가 왜곡된다.
+   * 평일 개장 후에는 장중 값이라도 그날 실제 수치이므로 저장해도 된다.
+   */
+  if (!opts.force && (weekend || beforeOpen)) {
+    return { saved: false, reason: weekend ? "휴장일 — 저장하지 않음" : "개장 전 — 저장하지 않음" };
+  }
+
   const rows = await readAll();
   const existing = rows.find((r) => r.date === date);
 
@@ -181,6 +205,14 @@ export interface BreadthPoint {
   highLowDiff: number;
   kospiRate: number;
   kosdaqRate: number;
+  /** 당일 투자자 순매수 (코스피+코스닥 합산) */
+  foreign: number;
+  institution: number;
+  individual: number;
+  /** 누적 순매수 — 방향이 바뀌는 지점이 자금 흐름의 변곡점이다 */
+  foreignCum: number;
+  instCum: number;
+  individualCum: number;
 }
 
 /**
@@ -189,6 +221,9 @@ export interface BreadthPoint {
  */
 export function toPoints(rows: BreadthDay[]): BreadthPoint[] {
   let adLine = 0;
+  let foreignCum = 0;
+  let instCum = 0;
+  let individualCum = 0;
   return rows.map((r) => {
     const rising = r.kospi.rising + r.kosdaq.rising;
     const falling = r.kospi.falling + r.kosdaq.falling;
@@ -196,6 +231,14 @@ export function toPoints(rows: BreadthDay[]): BreadthPoint[] {
     const total = rising + falling + flat;
     const advanceDecline = rising - falling;
     adLine += advanceDecline;
+
+    const foreign = r.kospi.foreign + r.kosdaq.foreign;
+    const institution = r.kospi.institution + r.kosdaq.institution;
+    const individual = r.kospi.individual + r.kosdaq.individual;
+    foreignCum += foreign;
+    instCum += institution;
+    individualCum += individual;
+
     return {
       date: r.date,
       advanceDecline,
@@ -206,6 +249,12 @@ export function toPoints(rows: BreadthDay[]): BreadthPoint[] {
       highLowDiff: r.newHigh - r.newLow,
       kospiRate: r.kospi.changeRate,
       kosdaqRate: r.kosdaq.changeRate,
+      foreign,
+      institution,
+      individual,
+      foreignCum,
+      instCum,
+      individualCum,
     };
   });
 }

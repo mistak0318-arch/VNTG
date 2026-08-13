@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type CalendarEvent, type EventKind } from "../api";
+import { CalendarImageImport } from "../components/CalendarImageImport";
 import { RefreshBar } from "../components/RefreshBar";
 
 /**
@@ -324,6 +325,15 @@ export function CalendarPage() {
           선물옵션 동시만기·휴장일은 처음 실행할 때 자동으로 들어갑니다. 구글 캘린더 연동은 추후
           iCal 읽기 방식으로 붙일 예정입니다.
         </div>
+      </section>
+
+      <section className="card">
+        <h2>이미지에서 일정 가져오기</h2>
+        <p className="page-note">
+          증권사 리포트 캡처, 카톡으로 받은 일정표, 손으로 적은 메모 사진을 그대로 올리면
+          날짜와 제목을 뽑아냅니다. <b>확인 후 추가</b>하는 방식이라 잘못 인식된 건 빼거나 고칠 수 있습니다.
+        </p>
+        <CalendarImageImport onImported={load} />
       </section>
 
       <section className="card">

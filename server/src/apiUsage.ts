@@ -11,7 +11,16 @@ const DATA_FILE = resolve(__dirname, "..", "data", "apiUsage.json");
  * 날짜별 · 서비스별 · 엔드포인트별로 성공/실패 횟수를 센다.
  */
 
-export type ApiProvider = "kiwoom" | "dart" | "naver" | "yahoo" | "anthropic" | "telegram" | "mail";
+export type ApiProvider =
+  | "kiwoom"
+  | "dart"
+  | "naver"
+  | "yahoo"
+  | "anthropic"
+  | "gemini"
+  | "openai"
+  | "telegram"
+  | "mail";
 
 interface DayStat {
   /** 엔드포인트(또는 TR ID)별 호출 수 */
@@ -29,15 +38,19 @@ interface DayStat {
  * Claude 모델별 100만 토큰당 단가(USD).
  * 비용을 "대략 얼마 나가고 있는지" 감 잡는 용도라 정확한 청구액과는 다를 수 있다.
  */
-const CLAUDE_PRICING: Record<string, { input: number; output: number }> = {
+/** 100만 토큰당 USD. 공개 단가 기준이며 바뀔 수 있다 */
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "claude-opus-5": { input: 5, output: 25 },
   "claude-sonnet-5": { input: 3, output: 15 },
   "claude-haiku-4-5-20251001": { input: 1, output: 5 },
+  "gemini-2.5-flash": { input: 0.3, output: 2.5 },
+  "gemini-2.5-flash-lite": { input: 0.1, output: 0.4 },
+  "gpt-4o-mini": { input: 0.15, output: 0.6 },
 };
 
-/** 모델명이 사전에 없으면 sonnet 단가로 추정 */
+/** 모델명이 사전에 없으면 sonnet 단가로 추정 (과소평가보다 과대평가가 안전하다) */
 function priceFor(model: string): { input: number; output: number } {
-  return CLAUDE_PRICING[model] ?? CLAUDE_PRICING["claude-sonnet-5"];
+  return MODEL_PRICING[model] ?? MODEL_PRICING["claude-sonnet-5"];
 }
 
 type UsageData = Record<string, Record<ApiProvider, DayStat>>; // { "2026-08-12": { kiwoom: {...} } }
@@ -68,6 +81,16 @@ export const DAILY_LIMITS: Record<ApiProvider, { label: string; limit: number | 
     label: "Claude API",
     limit: null,
     note: "종량제 — 호출 수가 아니라 토큰이 비용입니다. 아래 토큰·추정비용을 보세요",
+  },
+  gemini: {
+    label: "Gemini API",
+    limit: null,
+    note: "종량제. 이미지 분석 등 가벼운 작업에 씁니다 (Claude보다 저렴)",
+  },
+  openai: {
+    label: "OpenAI API",
+    limit: null,
+    note: "종량제. 이미지 분석 대체 경로입니다",
   },
   telegram: {
     label: "텔레그램 봇",
@@ -183,7 +206,7 @@ export async function getUsage(day = today()): Promise<{ day: string; providers:
       .slice(0, 10);
     // 엔드포인트 이름이 곧 모델명이므로, 모델별 단가로 나눠 계산한다
     let tokens: ProviderUsage["tokens"] = null;
-    if (p === "anthropic") {
+    if (p === "anthropic" || p === "gemini" || p === "openai") {
       const input = stat.inputTokens ?? 0;
       const output = stat.outputTokens ?? 0;
       const modelNames = Object.keys(stat.calls);

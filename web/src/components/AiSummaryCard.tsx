@@ -49,7 +49,12 @@ function render(text: string): React.ReactNode[] {
   return out;
 }
 
-export function AiSummaryCard() {
+/**
+ * @param edition 상단 조간/장중/석간 탭이 정한 판.
+ *   판 선택은 화면 상단이 이미 하고 있으므로 여기서 또 고르게 하면 두 곳이 어긋난다.
+ *   이 카드의 드롭박스는 **지난 날짜**만 고르는 용도로 좁힌다.
+ */
+export function AiSummaryCard({ edition }: { edition?: string }) {
   const [res, setRes] = useState<PublishedReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -68,10 +73,12 @@ export function AiSummaryCard() {
     }
   }
 
+  // 상단 탭에서 판이 바뀌면 날짜 선택을 버리고 그 판의 최신분을 불러온다
   useEffect(() => {
-    load({});
+    setPick({});
+    load({ edition });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [edition]);
 
   /** 아직 발행 전이거나 실패했을 때만 수동 발행 (AI 호출 = 비용 발생) */
   async function publishNow() {
@@ -108,6 +115,14 @@ export function AiSummaryCard() {
   }
 
   const report = res?.report ?? null;
+  // 지금 보고 있는 판 (상단 탭 값이 없으면 서버가 정해준 값)
+  const currentEdition = edition ?? res?.requested.edition;
+  // 같은 판으로 발행된 날짜들 — 최신순
+  const pastDates = [
+    ...new Set(
+      (res?.recent ?? []).filter((r) => r.edition === currentEdition).map((r) => r.date),
+    ),
+  ].sort((a, b) => b.localeCompare(a));
   const s = report?.summary;
   const cost = s ? (s.inputTokens / 1e6) * 3 + (s.outputTokens / 1e6) * 15 : 0;
   const publishedLabel = report
@@ -127,26 +142,23 @@ export function AiSummaryCard() {
         {report && <span className="ai-model">{report.label} · {publishedLabel} 발행</span>}
         {!report && <span className="ai-model">미발행</span>}
 
-        {/* 지난 발행분 골라보기 */}
-        {res && res.recent.length > 0 && (
+        {/* 같은 판의 지난 날짜만 — 판 자체는 상단 탭이 정한다 */}
+        {pastDates.length > 1 && (
           <select
             className="group-select"
-            style={{ maxWidth: 160 }}
-            value={`${res.requested.date}|${res.requested.edition}`}
+            style={{ maxWidth: 140 }}
+            value={res?.requested.date ?? ""}
             onChange={(e) => {
-              const [date, edition] = e.target.value.split("|");
-              setPick({ date, edition });
-              load({ date, edition });
+              const date = e.target.value;
+              setPick({ date, edition: currentEdition });
+              load({ date, edition: currentEdition });
             }}
           >
-            {res.recent.map((r) => {
-              const label = res.editions.find((x) => x.key === r.edition)?.label ?? r.edition;
-              return (
-                <option key={`${r.date}|${r.edition}`} value={`${r.date}|${r.edition}`}>
-                  {r.date} {label}
-                </option>
-              );
-            })}
+            {pastDates.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
           </select>
         )}
       </div>
