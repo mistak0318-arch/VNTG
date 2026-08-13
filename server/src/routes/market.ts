@@ -269,6 +269,23 @@ export function createMarketRouter(client: KiwoomClient): Router {
     }
   });
 
+  /**
+   * 업종(지수) 분봉 — ka20005. 지수의 장중 흐름을 그리는 데 쓴다.
+   * inds_cd: 001 코스피 / 101 코스닥 / 201 코스피200
+   */
+  router.get("/index-intraday/:code", async (req, res, next) => {
+    try {
+      const tic = typeof req.query.tic === "string" ? req.query.tic : "5";
+      const { data } = await client.request(CHART_RESOURCE, "ka20005", {
+        inds_cd: req.params.code,
+        tic_scope: tic,
+      });
+      res.json(data);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // 업종·테마 분위기 — 이 종목이 속한 섹터가 오늘 오르고 있는지
   router.get("/sector-mood/:code", async (req, res, next) => {
     try {

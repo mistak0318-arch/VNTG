@@ -1,7 +1,10 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getSection } from "./marketOverview.js";
-import type { IndexCard, MarketFlow, StockRow, Themes, Sectors } from "./marketOverview.js";
+import type { IndexCard, MarketFlow, StockRow, HighLow } from "./marketOverview.js";
+import type { GlobalQuote } from "./globalMarket.js";
 import { sectorNews } from "./newsDisclosure.js";
+import { upcomingEvents } from "./calendar.js";
+import { getTrackedWatchlist } from "./watchTracking.js";
 import { buildMarketDrivers } from "./reportBuilder.js";
 import { isClaudeConfigured, summarize } from "./summarize.js";
 import { listWatchlist } from "./watchlist.js";
@@ -55,13 +58,18 @@ function edition(now = new Date()): string {
 async function buildDigest(client: KiwoomClient): Promise<string> {
   const watchNames = (await listWatchlist().catch(() => [])).map((w) => w.name);
 
-  const [idxSec, flowSec, moverSec, drivers, news] = await Promise.all([
-    getSection("indices", client).catch(() => null),
-    getSection("flow", client).catch(() => null),
-    getSection("movers", client).catch(() => null),
-    buildMarketDrivers(client, { topN: 5 }).catch(() => null),
-    sectorNews({ majorOnly: true, perSector: 6, watchNames }).catch(() => null),
-  ]);
+  const [idxSec, flowSec, moverSec, hiLoSec, globalSec, drivers, news, events, tracked] =
+    await Promise.all([
+      getSection("indices", client).catch(() => null),
+      getSection("flow", client).catch(() => null),
+      getSection("movers", client).catch(() => null),
+      getSection("highLow", client).catch(() => null),
+      getSection("global", client).catch(() => null),
+      buildMarketDrivers(client, { topN: 5 }).catch(() => null),
+      sectorNews({ majorOnly: true, perSector: 6, watchNames }).catch(() => null),
+      upcomingEvents(7).catch(() => []),
+      getTrackedWatchlist(client).catch(() => []),
+    ]);
 
   const lines: string[] = [];
 
@@ -69,42 +77,76 @@ async function buildDigest(client: KiwoomClient): Promise<string> {
   if (indices.length > 0) {
     lines.push("[지수]");
     for (const i of indices) {
-      lines.push(`${i.name} ${fmt(i.price)} ${pct(i.changeRate)} (상승 ${i.rising} / 하락 ${i.falling})`);
+      // 상승/하락 종목 수까지 넣어야 "지수는 올랐는데 개별주는 죽었다"를 판단할 수 있다
+      lines.push(
+        `${i.name} ${fmt(i.price)} ${pct(i.changeRate)} (상승 ${i.rising} / 하락 ${i.falling} / 상한 ${i.upperLimit} / 하한 ${i.lowerLimit})`,
+      );
+      // 장중 흐름 — 4개 지점으로 압축해서 "초반 강세 후 밀림" 같은 패턴을 읽게 한다
+      if (i.sparkline.length >= 6) {
+        const sp = i.sparkline;
+        const seg = Math.floor(sp.length / 3);
+        const at = (n: number) => sp[Math.min(n, sp.length - 1)];
+        lines.push(`  장중: ${fmt(at(0))} → ${fmt(at(seg))} → ${fmt(at(seg * 2))} → ${fmt(sp[sp.length - 1])}`);
+      }
     }
+  }
+
+  const global = (globalSec?.data ?? []) as GlobalQuote[];
+  if (global.length > 0) {
+    lines.push("\n[글로벌·원자재·환율]");
+    lines.push(
+      global.filter((g) => g.changeRate !== null).map((g) => `${g.label} ${pct(g.changeRate as number)}`).join(", "),
+    );
   }
 
   const flow = (flowSec?.data ?? null) as MarketFlow | null;
   if (flow) {
     lines.push("\n[투자자 순매수, 억원]");
-    lines.push(
-      `코스피: 외국인 ${fmt(flow.kospi.foreign)} / 기관 ${fmt(flow.kospi.institution)} / 개인 ${fmt(flow.kospi.individual)}`,
-    );
-    lines.push(
-      `  (기관 세부) 금융투자 ${fmt(flow.kospi.financialInvestment)} / 투신 ${fmt(flow.kospi.investmentTrust)} / 연기금 ${fmt(flow.kospi.pensionFund)}`,
-    );
-    lines.push(
-      `코스닥: 외국인 ${fmt(flow.kosdaq.foreign)} / 기관 ${fmt(flow.kosdaq.institution)} / 개인 ${fmt(flow.kosdaq.individual)}`,
-    );
+    lines.push(`코스피: 외국인 ${fmt(flow.kospi.foreign)} / 기관 ${fmt(flow.kospi.institution)} / 개인 ${fmt(flow.kospi.individual)}`);
+    lines.push(`  (기관 세부) 금융투자 ${fmt(flow.kospi.financialInvestment)} / 투신 ${fmt(flow.kospi.investmentTrust)} / 연기금 ${fmt(flow.kospi.pensionFund)} / 사모 ${fmt(flow.kospi.privateFund)} / 보험 ${fmt(flow.kospi.insurance)}`);
+    lines.push(`코스닥: 외국인 ${fmt(flow.kosdaq.foreign)} / 기관 ${fmt(flow.kosdaq.institution)} / 개인 ${fmt(flow.kosdaq.individual)}`);
   }
 
   if (drivers) {
     lines.push("\n[강한 테마]");
     for (const t of drivers.themes.up) {
-      lines.push(`${t.name} ${pct(t.changeRate)} (${t.mainStock})`);
+      const why = t.reasons.length > 0 ? ` ← ${t.reasons[0].title}` : "";
+      lines.push(`${t.name} ${pct(t.changeRate)} (${t.mainStock})${why}`);
     }
     lines.push("\n[약한 테마]");
     for (const t of drivers.themes.down) lines.push(`${t.name} ${pct(t.changeRate)}`);
-
     lines.push("\n[강한 업종]");
-    for (const s of drivers.sectors) lines.push(`${s.market} ${s.name} ${pct(s.changeRate)}`);
+    for (const sec of drivers.sectors) lines.push(`${sec.market} ${sec.name} ${pct(sec.changeRate)}`);
   }
 
   const movers = (moverSec?.data ?? null) as { rising: StockRow[]; falling: StockRow[] } | null;
   if (movers) {
     lines.push("\n[급등 상위]");
-    lines.push(movers.rising.slice(0, 8).map((s) => `${s.name} ${pct(s.changeRate)}`).join(", "));
+    lines.push(movers.rising.slice(0, 8).map((x) => `${x.name} ${pct(x.changeRate)}`).join(", "));
     lines.push("[급락 상위]");
-    lines.push(movers.falling.slice(0, 8).map((s) => `${s.name} ${pct(s.changeRate)}`).join(", "));
+    lines.push(movers.falling.slice(0, 8).map((x) => `${x.name} ${pct(x.changeRate)}`).join(", "));
+  }
+
+  const hiLo = (hiLoSec?.data ?? null) as HighLow | null;
+  if (hiLo) {
+    // 신고가가 많으면 상승이 특정 종목에 그치지 않고 퍼졌다는 뜻
+    lines.push("\n[250일 신고가/신저가]");
+    lines.push(`신고가 ${hiLo.high.length}종목: ${hiLo.high.slice(0, 6).map((x) => x.name).join(", ")}`);
+    lines.push(`신저가 ${hiLo.low.length}종목: ${hiLo.low.slice(0, 6).map((x) => x.name).join(", ")}`);
+  }
+
+  // 사용자 자신의 포지션 — 가장 중요한 맥락
+  if (tracked.length > 0) {
+    lines.push("\n[사용자 관심종목 현황]");
+    for (const t of tracked.slice(0, 12)) {
+      const ret = t.returnRate === null ? "-" : pct(t.returnRate);
+      lines.push(`${t.name} ${pct(t.changeRate)} (편입가 대비 ${ret}) 외인5일 ${fmt(t.foreign5)} / 기관5일 ${fmt(t.inst5)}${t.trendPass ? " 정배열" : ""}`);
+    }
+  }
+
+  if (events.length > 0) {
+    lines.push("\n[다가오는 일정 7일]");
+    for (const e of events.slice(0, 8)) lines.push(`${e.date}${e.time ? " " + e.time : ""} ${e.title}`);
   }
 
   if (news) {
@@ -115,10 +157,6 @@ async function buildDigest(client: KiwoomClient): Promise<string> {
     }
   }
 
-  if (watchNames.length > 0) {
-    lines.push(`\n[사용자 관심종목] ${watchNames.join(", ")}`);
-  }
-
   return lines.join("\n");
 }
 
@@ -127,20 +165,31 @@ const SYSTEM_RULES = `너는 한국 주식시장 데이터를 정리해 주는 �
 - 주어진 데이터에 있는 사실만 쓴다. 없는 수치를 지어내지 마라.
 - **특정 종목 매수/매도를 권하지 마라.** "무엇을 사라/팔아라"는 쓰지 않는다.
   대신 "무슨 일이 있었고, 돈이 어디로 움직였는가"를 설명한다.
-- 한국어로, 군더더기 없이. 아래 4개 항목만 쓴다.
+- 지수 등락만 보지 말고 **상승/하락 종목 수, 신고가 종목 수**로 상승이 퍼진 것인지
+  소수 대형주만 끌어올린 것인지 반드시 구분해라.
+- **장중 흐름**(4개 지점)이 있으면 초반·중반·후반 중 어디서 힘이 실렸는지 짚어라.
+- 한국어로, 군더더기 없이. 아래 5개 항목만 쓴다.
 
 ## 오늘 시장 한 줄
 (지수 방향과 원인을 한 문장)
 
 ## 자금 흐름
-(외국인·기관·개인이 어느 시장에서 무엇을 했는지. 코스피와 코스닥이 다르면 그 대비를 짚어라.
-기관 세부 주체(금융투자/투신/연기금)에 특징이 있으면 언급한다)
+(외국인·기관·개인이 어느 시장에서 무엇을 했는지. 코스피와 코스닥 대비를 짚어라.
+기관 세부 주체(금융투자/투신/연기금/사모/보험)에 특징이 있으면 언급한다.
+환율·글로벌 지표가 수급에 주는 함의가 있으면 함께 쓴다)
+
+## 시장의 폭
+(상승 대 하락 종목 수, 신고가/신저가 종목 수로 이 상승(하락)이 얼마나 퍼져 있는지 판단.
+지수와 개별주의 온도차가 있으면 반드시 지적한다)
 
 ## 주도 섹터
-(강한 테마·업종 2~3개와 그 배경. 뉴스 헤드라인에서 근거를 찾아 연결하라)
+(강한 테마·업종 2~3개와 그 배경. 뉴스 헤드라인에서 근거를 찾아 연결하라.
+약한 쪽도 한 줄 언급해 자금이 어디서 어디로 이동했는지 보여라)
 
-## 체크포인트
-(내일 또는 다음 장에서 확인할 것 2~3개. 데이터에서 읽히는 위험 신호나 확인 필요 사항)`;
+## 관심종목 & 체크포인트
+(사용자 관심종목이 있으면 그 종목들의 오늘 움직임과 수급을 먼저 정리한다.
+이어서 다가오는 일정과 데이터에서 읽히는 확인 사항 2~3개)`;
+
 
 export async function getAiSummary(
   client: KiwoomClient,
