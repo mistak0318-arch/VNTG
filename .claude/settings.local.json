@@ -168,7 +168,9 @@
       "Bash(node ./render-icon.mjs \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/83918202-8479-4b3c-adbe-6520c4c841d3/scratchpad/icon-v3.png\")",
       "Bash(node ./render-icon.mjs \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/83918202-8479-4b3c-adbe-6520c4c841d3/scratchpad/icon-vntg.png\")",
       "Bash(node ./render-icon.mjs \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/83918202-8479-4b3c-adbe-6520c4c841d3/scratchpad/icon-vntg2.png\")",
-      "Bash(node build-icons.mjs)"
+      "Bash(node build-icons.mjs)",
+      "Bash(grep -Ei \"tsbuildinfo|\\\\.log$|dist/|node_modules\")",
+      "Bash(git rm *)"
     ]
   }
 }
