@@ -66,6 +66,11 @@ export interface ChannelReport {
   error?: string;
   /** 읽지 못한 채널 (FLOOD_WAIT 등) */
   skipped: string[];
+  /** 몇 시간치를 훑었는지 */
+  windowHours?: number;
+  /** 실제로 잡힌 메시지의 시각 범위 — "언제 것을 정리한 건가"를 화면에서 바로 알 수 있게 */
+  oldestAt?: string | null;
+  newestAt?: string | null;
 }
 
 async function readAll(): Promise<ChannelReport[]> {
@@ -97,9 +102,20 @@ export async function listChannelReports(limit = 10): Promise<ChannelReport[]> {
  * @param useAi false면 수집·점수화까지만 하고 AI를 호출하지 않는다 (비용 없이 필터 확인용)
  */
 export async function buildChannelReport(
-  opts: { send?: boolean; useAi?: boolean; sinceHours?: number; limit?: number } = {},
+  opts: {
+    send?: boolean;
+    useAi?: boolean;
+    sinceHours?: number;
+    limit?: number;
+    /**
+     * 채널별 "읽은 위치"를 쓸지.
+     * 정기 발행(스케줄러)은 true — 같은 메시지를 두 번 요약하지 않기 위해서.
+     * 수동 실행은 false — 버튼을 누른 시점의 최근 sinceHours 전체를 다시 본다.
+     */
+    useOffsets?: boolean;
+  } = {},
 ): Promise<ChannelReport> {
-  const { send = false, useAi = true, sinceHours = 12, limit = 60 } = opts;
+  const { send = false, useAi = true, sinceHours = 12, limit = 60, useOffsets = true } = opts;
   const now = new Date();
   const date = new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -114,15 +130,20 @@ export async function buildChannelReport(
     inputTokens: 0,
     outputTokens: 0,
     skipped: [],
+    windowHours: sinceHours,
+    oldestAt: null,
+    newestAt: null,
   };
 
   if (!isReaderConfigured()) {
     return { ...base, error: "텔레그램 세션 미설정 — scripts/telegram-login.mjs 를 먼저 실행하세요" };
   }
 
-  const { messages, channels, skipped } = await fetchNewMessages({ sinceHours });
+  const { messages, channels, skipped } = await fetchNewMessages({ sinceHours, useOffsets });
   const watchNames = (await listWatchlist().catch(() => [])).map((w) => w.name);
   const items = scoreMessages(messages, watchNames, limit);
+
+  const times = messages.map((m) => m.at).sort();
 
   const report: ChannelReport = {
     ...base,
@@ -131,6 +152,8 @@ export async function buildChannelReport(
     usedCount: items.length,
     items,
     skipped,
+    oldestAt: times[0] ?? null,
+    newestAt: times[times.length - 1] ?? null,
   };
 
   if (items.length === 0) {
@@ -139,7 +162,11 @@ export async function buildChannelReport(
   }
   if (!useAi) return report;
 
-  const prompt = `${SYSTEM_RULES}\n\n---\n수집 시각: ${now.toLocaleString("ko-KR")}\n대상 채널 ${channels}개 · 원본 ${messages.length}건 중 ${items.length}건 선별\n\n${toDigestText(items)}`;
+  const span =
+    report.oldestAt && report.newestAt
+      ? `${new Date(report.oldestAt).toLocaleString("ko-KR")} ~ ${new Date(report.newestAt).toLocaleString("ko-KR")}`
+      : "(범위 불명)";
+  const prompt = `${SYSTEM_RULES}\n\n---\n지금 시각: ${now.toLocaleString("ko-KR")}\n수집 구간: 최근 ${sinceHours}시간 (${span})\n대상 채널 ${channels}개 · 원본 ${messages.length}건 중 ${items.length}건 선별\n\n${toDigestText(items)}`;
 
   const res = await summarize(prompt, 2500, "channel");
   report.summary = res.text;

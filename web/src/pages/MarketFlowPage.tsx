@@ -164,11 +164,17 @@ function MoneyFlowTab() {
   );
 }
 
+/** 몇 시간치를 훑을지. 채널이 조용한 날엔 넓게 봐야 건질 게 나온다 */
+const WINDOWS = [6, 12, 24, 48];
+
 function ChannelTab() {
   const [reports, setReports] = useState<ChannelReport[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [open, setOpen] = useState(0);
+  const [hours, setHours] = useState(12);
+  /** 방금 실행한 결과 — 저장 안 되는 경우(0건·미리보기)에도 화면에 보여준다 */
+  const [fresh, setFresh] = useState<ChannelReport | null>(null);
 
   function load() {
     api
@@ -182,8 +188,10 @@ function ChannelTab() {
   async function run(kind: "preview" | "ai") {
     setBusy(kind);
     setNote(null);
+    setFresh(null);
     try {
-      const r = await api.channelsReport({ ai: kind === "ai" });
+      const r = await api.channelsReport({ ai: kind === "ai", hours });
+      setFresh(r);
       if (kind === "ai") {
         load();
         setOpen(0);
@@ -201,6 +209,11 @@ function ChannelTab() {
 
   const current = reports[open];
 
+  // 보고 있는 정리본이 오늘 것이 아니면 분명히 알린다.
+  // 이걸 안 보여주면 어제 리포트를 오늘 상황으로 착각하게 된다.
+  const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  const stale = current ? current.date !== todayKst : false;
+
   return (
     <>
       <div className="filter-row">
@@ -210,8 +223,40 @@ function ChannelTab() {
         <button className="filter-btn" disabled={busy !== null} onClick={() => run("preview")}>
           {busy === "preview" ? "수집 중…" : "선별만 보기 (비용 없음)"}
         </button>
+        <span className="news-scope-sep" />
+        {WINDOWS.map((h) => (
+          <button
+            key={h}
+            className={`filter-btn ${hours === h ? "active" : ""}`}
+            onClick={() => setHours(h)}
+            disabled={busy !== null}
+            title={`최근 ${h}시간에 올라온 메시지만 훑습니다`}
+          >
+            {h}시간
+          </button>
+        ))}
       </div>
       {note && <div className="alert-note">{note}</div>}
+
+      {fresh && (
+        <div className="page-note">
+          방금 실행 — 최근 <b>{fresh.windowHours ?? hours}시간</b> · 채널 {fresh.channels}개 · 원본{" "}
+          {fresh.rawCount}건 → 선별 {fresh.usedCount}건
+          {fresh.newestAt && (
+            <>
+              {" "}
+              · 가장 최근 메시지 <b>{fresh.newestAt.slice(5, 16).replace("T", " ")}</b>
+            </>
+          )}
+        </div>
+      )}
+
+      {stale && (
+        <div className="alert-note">
+          지금 보고 있는 정리본은 <b>{current.date}</b>에 만든 것입니다. 오늘 것을 보려면 위의
+          「지금 AI로 정리」를 누르세요.
+        </div>
+      )}
 
       {reports.length === 0 ? (
         <div className="page-note">
@@ -235,10 +280,18 @@ function ChannelTab() {
           {current && (
             <>
               <div className="chan-report-meta">
-                채널 {current.channels}개 · 원본 {current.rawCount}건 → 선별 {current.usedCount}건 ·
-                토큰 {current.inputTokens}/{current.outputTokens}
+                <b>{current.generatedAt.slice(0, 16).replace("T", " ")}</b> 생성 · 채널{" "}
+                {current.channels}개 · 원본 {current.rawCount}건 → 선별 {current.usedCount}건 · 토큰{" "}
+                {current.inputTokens}/{current.outputTokens}
                 {current.skipped.length > 0 && ` · 건너뜀 ${current.skipped.length}개`}
               </div>
+              {current.newestAt && (
+                <div className="chan-report-meta">
+                  정리한 메시지 구간 {current.oldestAt?.slice(5, 16).replace("T", " ")} ~{" "}
+                  {current.newestAt.slice(5, 16).replace("T", " ")}
+                  {current.windowHours ? ` (최근 ${current.windowHours}시간 훑음)` : ""}
+                </div>
+              )}
 
               {current.summary ? (
                 <pre className="alert-preview">{current.summary}</pre>

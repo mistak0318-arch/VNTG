@@ -242,6 +242,24 @@ export const api = {
       configured: boolean;
       error?: string;
     }>(`/api/trade${force ? "?force=1" : ""}`),
+  customThemes: (force = false) =>
+    getJson<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }>(
+      `/api/custom-themes${force ? "?force=1" : ""}`,
+    ),
+  customThemeCreate: (t: {
+    name: string;
+    memo?: string;
+    codes?: string[];
+    source?: "manual" | "infostock";
+  }) =>
+    postJson<{ themes: unknown[] }>("/api/custom-themes", t),
+  customThemeUpdate: (id: string, patch: { name?: string; memo?: string; codes?: string[] }) =>
+    patchJson<{ themes: unknown[] }>(`/api/custom-themes/${id}`, patch),
+  customThemeRemove: (id: string) => deleteJson<{ themes: unknown[] }>(`/api/custom-themes/${id}`),
+  customThemeToggleStock: (id: string, code: string) =>
+    postJson<{ themes: unknown[] }>(`/api/custom-themes/${id}/stocks/${code}`),
+  customThemeFromWatchlist: (name: string, group?: string, memo?: string) =>
+    postJson<{ themes: unknown[] }>("/api/custom-themes/from-watchlist", { name, group, memo }),
   tradeStocks: (key: string) =>
     getJson<{
       stocks: { code: string; name: string; changeRate: number; marketCap?: number | null }[];
@@ -326,7 +344,7 @@ export const api = {
   indexIntraday: (code: string, tic = "5") =>
     getJson(`/api/market/index-intraday/${code}?tic=${tic}`),
   marketDrivers: (top = 5) => getJson<MarketDriverReport>(`/api/report/drivers?top=${top}`),
-  newsSectors: (scope: "major" | "all" = "major", per = 8, sort: "importance" | "recent" = "importance") =>
+  newsSectors: (scope: "major" | "all" = "major", per = 20, sort: "importance" | "recent" = "importance") =>
     getJson<{ sectors: { key: string; label: string; items: ScoredNews[] }[]; fetchedAt: string }>(
       `/api/feed/news/sectors?scope=${scope}&per=${per}&sort=${sort}`,
     ),
@@ -522,6 +540,11 @@ export interface ChannelReport {
   outputTokens: number;
   error?: string;
   skipped: string[];
+  /** 몇 시간치를 훑었는지 */
+  windowHours?: number;
+  /** 실제로 잡힌 메시지의 시각 범위 */
+  oldestAt?: string | null;
+  newestAt?: string | null;
 }
 
 export interface AlertRule {
@@ -553,6 +576,32 @@ export interface FiredAlert {
   price: number;
   changeRate: number;
   context: string[];
+}
+
+export interface EvaluatedTheme {
+  id: string;
+  name: string;
+  memo: string;
+  codes: string[];
+  color: string;
+  createdAt: string;
+  /** 시총 가중평균 등락률 */
+  changeRate: number | null;
+  /** 단순평균 — 가중과 크게 다르면 대형주가 끌고 있다는 뜻 */
+  simpleRate: number | null;
+  stocks: {
+    code: string;
+    name: string;
+    changeRate: number;
+    marketCap: number | null;
+    weight: number | null;
+    found: boolean;
+  }[];
+  risingCount: number;
+  fallingCount: number;
+  missing: number;
+  /** manual = 내가 만든 것, infostock = 인포스탁 테마표에서 옮겨온 것 */
+  source?: "manual" | "infostock";
 }
 
 export interface TradeSummary {

@@ -467,8 +467,11 @@ function eventSignature(title: string): string | null {
   if (!dir) return null;
   // "3.56%" / "3%대" → 3 (반올림 아닌 정수부. 매체마다 소수점 표기가 달라서)
   const pct = /(\d+(?:\.\d+)?)\s*%/.exec(title);
-  const bucket = pct ? String(Math.floor(Number(pct[1]))) : "-";
-  return `${subject}|${dir}|${bucket}`;
+  // 등락률이 없으면 서명을 만들지 않는다.
+  // 예전엔 "코스피|up|-" 로 뭉뚱그려서 코스피 상승 기사가 전부 한 덩어리가 됐고,
+  // 그 바람에 볼 만한 기사가 통째로 사라졌다. 숫자가 있어야 같은 사건이라고 말할 수 있다.
+  if (!pct) return null;
+  return `${subject}|${dir}|${Math.floor(Number(pct[1]))}`;
 }
 
 /** 제목을 단어 집합으로 — 서명이 안 나올 때 쓰는 보조 판정 */
@@ -513,11 +516,15 @@ function cluster(items: NewsItem[]): { rep: NewsItem; members: NewsItem[] }[] {
     const tk = tokenSet(it.title);
 
     // 1순위: 사건 서명이 같으면 같은 사건
-    // 2순위: 서명이 없으면 단어 겹침으로 (작은 쪽 기준 55% 이상 & 3단어 이상)
+    // 2순위: 서명이 없으면 단어 겹침으로
+    //
+    // 임계를 55%/3단어로 뒀더니 짧은 제목이 긴 제목에 자꾸 흡수돼서
+    // 서로 다른 기사가 한 덩어리가 됐다. 목록에 볼 게 없어진 주된 원인이라 기준을 올렸다.
+    // 중복을 조금 남기는 편이, 읽을거리를 지워버리는 것보다 낫다.
     const hit = groups.find((g) => {
       if (sig && g.sig) return g.sig === sig;
       const o = overlap(g.tokens, tk);
-      return o.ratio >= 0.55 && o.count >= 3;
+      return o.ratio >= 0.72 && o.count >= 4;
     });
 
     if (hit) {
@@ -547,11 +554,53 @@ function recencyFactor(iso: string, halfLifeHours = 6): number {
   return 1 / (1 + hours / halfLifeHours);
 }
 
+/**
+ * 기사 묶음을 점수화해 정렬한다. 섹터 배타 배정과 무관하게 쓸 수 있도록 떼어놨다.
+ */
+function scoreGroups(
+  items: NewsItem[],
+  watchNames: string[],
+  halfLife: number,
+  limit: number,
+): ScoredNews[] {
+  const scored: ScoredNews[] = cluster(items).map((g) => {
+    const presses = [...new Set(g.members.map((m) => m.press).filter(Boolean))];
+    const mentions = watchNames.filter((n) => g.rep.title.includes(n));
+
+    // 보도량은 로그로 눌러서 "한 사건이 화면을 독점"하지 않게
+    const coverageScore = Math.log2(presses.length + 1) * 4;
+    const impact = impactScore(g.rep.title);
+    const watchBonus = mentions.length > 0 ? 12 : 0; // 내 종목 얘기는 최우선
+    const majorBonus = g.rep.major ? 2 : 0;
+    const score =
+      (coverageScore + impact + majorBonus + watchBonus) * recencyFactor(g.rep.publishedAt, halfLife);
+
+    return {
+      ...g.rep,
+      coverage: presses.length,
+      alsoPress: presses.filter((p) => p !== g.rep.press).slice(0, 4),
+      mentions,
+      score: Math.round(score * 10) / 10,
+    };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+}
+
 export async function sectorNews(
   opts: {
     majorOnly?: boolean;
     perSector?: number;
     watchNames?: string[];
+    /**
+     * 종목명으로 직접 검색해 "내 종목" 탭을 만든다.
+     *
+     * 분야별 질의(코스피 마감 시황 등)는 개별 기업 기사를 거의 못 잡는다.
+     * 종목 상세 화면이 훨씬 신선해 보였던 이유가 이것이라, 같은 축을 뉴스 탭에도 둔다.
+     * 이 탭은 섹터 배타 배정을 받지 않는다 — 내 종목 기사는 다른 분야에도 나와야 한다.
+     */
+    stockNames?: string[];
     /**
      * importance: 오늘 중요했던 것 (리포트용)
      * recent: 최신 위주로 보되 중요도도 반영 (뉴스 탭용)
@@ -559,9 +608,36 @@ export async function sectorNews(
     sort?: "importance" | "recent";
   } = {},
 ): Promise<{ sectors: SectorNews[]; fetchedAt: string }> {
-  const { majorOnly = true, perSector = 25, watchNames = [], sort = "importance" } = opts;
+  const {
+    majorOnly = true,
+    perSector = 25,
+    watchNames = [],
+    stockNames = [],
+    sort = "importance",
+  } = opts;
   // 최신 위주로 볼 땐 감쇠를 세게 줘서 몇 시간 지난 기사가 위로 못 올라오게 한다
   const halfLife = sort === "recent" ? 1.5 : 6;
+
+  // 내 종목은 분야 배정과 별개로 먼저 모은다
+  const minePromise = (async (): Promise<SectorNews | null> => {
+    if (stockNames.length === 0) return null;
+    const lists = await Promise.all(
+      stockNames.map((n) => searchNews(n, { majorOnly, limit: 30 }).catch(() => [] as NewsItem[])),
+    );
+    const seen = new Set<string>();
+    const flat: NewsItem[] = [];
+    for (const it of lists.flat()) {
+      const key = normalizeTitle(it.title);
+      if (key && seen.has(key)) continue;
+      seen.add(key);
+      flat.push(it);
+    }
+    return {
+      key: "mine",
+      label: "내 종목",
+      items: scoreGroups(flat, watchNames, halfLife, perSector),
+    };
+  })();
 
   const raw = await Promise.all(
     NEWS_SECTORS.map(async (sec) => {
@@ -594,34 +670,16 @@ export async function sectorNews(
     }
   }
 
-  const sectors: SectorNews[] = raw.map(({ sec, items }) => {
-    const mine = items.filter((it) => claimed.get(normalizeTitle(it.title)) === sec.key);
-    const groups = cluster(mine);
-
-    const scored: ScoredNews[] = groups.map((g) => {
-      const presses = [...new Set(g.members.map((m) => m.press).filter(Boolean))];
-      const mentions = watchNames.filter((n) => g.rep.title.includes(n));
-
-      // 보도량은 로그로 눌러서 "한 사건이 화면을 독점"하지 않게
-      const coverageScore = Math.log2(presses.length + 1) * 4;
-      const impact = impactScore(g.rep.title);
-      const watchBonus = mentions.length > 0 ? 12 : 0; // 내 종목 얘기는 최우선
-      const majorBonus = g.rep.major ? 2 : 0;
-      const score =
-        (coverageScore + impact + majorBonus + watchBonus) * recencyFactor(g.rep.publishedAt, halfLife);
-
-      return {
-        ...g.rep,
-        coverage: presses.length,
-        alsoPress: presses.filter((p) => p !== g.rep.press).slice(0, 4),
-        mentions,
-        score: Math.round(score * 10) / 10,
-      };
-    });
-
-    scored.sort((a, b) => b.score - a.score);
-    return { key: sec.key, label: sec.label, items: scored.slice(0, perSector) };
-  });
+  const sectors: SectorNews[] = raw.map(({ sec, items }) => ({
+    key: sec.key,
+    label: sec.label,
+    items: scoreGroups(
+      items.filter((it) => claimed.get(normalizeTitle(it.title)) === sec.key),
+      watchNames,
+      halfLife,
+      perSector,
+    ),
+  }));
 
   /**
    * "핵심" — 분야를 가리지 않고 오늘 가장 중요한 것만 모은다.
@@ -633,9 +691,15 @@ export async function sectorNews(
     .sort((a, b) => b.score - a.score)
     .slice(0, perSector);
 
+  const mine = await minePromise;
+
   return {
-    sectors: [{ key: "top", label: "핵심", items: top }, ...sectors],
+    // 내 종목이 있으면 핵심 바로 뒤에 — 가장 자주 볼 탭이다
+    sectors: [
+      { key: "top", label: "핵심", items: top },
+      ...(mine && mine.items.length > 0 ? [mine] : []),
+      ...sectors,
+    ],
     fetchedAt: new Date().toISOString(),
   };
-
 }

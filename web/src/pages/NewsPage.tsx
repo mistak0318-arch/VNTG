@@ -98,7 +98,7 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
           </nav>
 
           {srcTab === "sector" ? (
-            <SectorNews perSector={30} defaultSort="recent" />
+            <SectorNews perSector={50} defaultSort="recent" />
           ) : (
             <NaverFinanceFrame />
           )}

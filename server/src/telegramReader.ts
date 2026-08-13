@@ -181,19 +181,30 @@ export async function refreshChannels(): Promise<ChannelEntry[]> {
 }
 
 /**
- * 켜져 있는 채널들의 새 메시지를 읽는다.
+ * 켜져 있는 채널들의 메시지를 읽는다.
+ *
+ * 읽는 방식이 두 가지다. 섞으면 안 된다:
+ *
+ *   useOffsets=true  (스케줄러용) — 채널별 "마지막으로 읽은 id" 다음부터. 같은 메시지를
+ *                     두 번 요약하지 않으므로 07/12/18시 정기 발행에 맞다.
+ *   useOffsets=false (수동 실행용) — 오프셋을 보지도 쓰지도 않고 **최근 sinceHours 전체**를
+ *                     다시 읽는다. 사용자가 버튼을 누르는 이유는 "지금 이 시점의 최신"을
+ *                     보고 싶어서지, "지난번 이후 새로 온 것"을 보려는 게 아니다.
+ *
+ * 수동 실행이 오프셋을 올려버리면 그 다음 정기 발행이 빈 채로 나가므로,
+ * 수동 모드에서는 오프셋 파일을 건드리지 않는다.
  *
  * @param maxPerChannel 채널당 최대 건수. 오래 안 돌렸다고 수천 건을 한 번에 끌어오면
  *                      AI 비용이 터지므로 상한을 둔다.
  */
 export async function fetchNewMessages(
-  opts: { maxPerChannel?: number; sinceHours?: number } = {},
+  opts: { maxPerChannel?: number; sinceHours?: number; useOffsets?: boolean } = {},
 ): Promise<{ messages: ChannelMessage[]; channels: number; skipped: string[] }> {
-  const { maxPerChannel = 40, sinceHours = 24 } = opts;
+  const { maxPerChannel = 40, sinceHours = 24, useOffsets = true } = opts;
   const c = await getClient();
 
   const targets = (await listChannels()).filter((ch) => ch.enabled);
-  const offsets = await readOffsets();
+  const offsets = useOffsets ? await readOffsets() : {};
   const cutoff = Date.now() - sinceHours * 3600_000;
 
   const messages: ChannelMessage[] = [];
@@ -203,7 +214,7 @@ export async function fetchNewMessages(
     try {
       const history = await c.getMessages(ch.id, {
         limit: maxPerChannel,
-        minId: offsets[ch.id] ?? 0,
+        ...(useOffsets ? { minId: offsets[ch.id] ?? 0 } : {}),
       });
       void recordApiCall("telegram", "getMessages", "ok");
 
@@ -222,7 +233,7 @@ export async function fetchNewMessages(
           text,
         });
       }
-      offsets[ch.id] = maxId;
+      if (useOffsets) offsets[ch.id] = maxId;
     } catch (err) {
       // FLOOD_WAIT 등 — 이 회차만 건너뛴다. 오프셋을 안 올렸으므로 다음에 다시 읽는다.
       const msg = err instanceof Error ? err.message : String(err);
@@ -235,6 +246,8 @@ export async function fetchNewMessages(
     await new Promise((r) => setTimeout(r, 350));
   }
 
-  await writeOffsets(offsets);
+  if (useOffsets) await writeOffsets(offsets);
+  // 최신 메시지가 위로 오게 — 화면에서도 요약에서도 "지금"이 먼저다
+  messages.sort((a, b) => b.at.localeCompare(a.at));
   return { messages, channels: targets.length, skipped };
 }

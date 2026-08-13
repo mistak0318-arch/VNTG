@@ -58,7 +58,7 @@ export function NewsRow({ item, compact = false }: { item: ScoredNews; compact?:
 }
 
 export function SectorNews({
-  perSector = 8,
+  perSector = 20,
   defaultSort = "importance",
   onFetched,
 }: {
@@ -109,9 +109,10 @@ export function SectorNews({
   const current = sectors.find((s) => s.key === tab)?.items ?? [];
 
   // 3단 계층: 헤드라인(요약 포함) / 주요(제목만) / 나머지(접기)
-  const headline = current.slice(0, 3);
-  const major = current.slice(3, 12);
-  const rest = current.slice(12);
+  // 예전엔 12건 뒤를 전부 접어놔서 목록이 실제보다 훨씬 빈약해 보였다.
+  const headline = current.slice(0, 5);
+  const major = current.slice(5, 30);
+  const rest = current.slice(30);
 
 
   return (

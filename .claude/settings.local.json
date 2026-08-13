@@ -154,7 +154,14 @@
       "Bash(curl.exe -s \"http://localhost:4000/api/trade\" --max-time 300)",
       "Bash(curl.exe -s http://localhost:4000/api/trade --max-time 300 -o __TRACKED_VAR__/trade.json)",
       "Bash(curl.exe -s \"http://localhost:4000/api/market/sector-mood/000660\" --max-time 90)",
-      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(d\\);console.log\\('업종:',j.sector?.name,'| 등락',j.sector?.changeRate+'%','| 수출YoY:',j.sector?.exportYoy===null?'없음':\\(j.sector?.exportYoy?.toFixed\\(1\\)+'%'\\)\\);}catch\\(e\\){console.log\\(d.slice\\(0,200\\)\\)}}\\)\")"
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(d\\);console.log\\('업종:',j.sector?.name,'| 등락',j.sector?.changeRate+'%','| 수출YoY:',j.sector?.exportYoy===null?'없음':\\(j.sector?.exportYoy?.toFixed\\(1\\)+'%'\\)\\);}catch\\(e\\){console.log\\(d.slice\\(0,200\\)\\)}}\\)\")",
+      "PowerShell(try { $r = Invoke-RestMethod -Uri \"http://localhost:4000/api/custom-themes\" -TimeoutSec 60; $r.themes | ForEach-Object { \"$\\($_.name\\) [$\\($_.codes.Count\\)]\" } } catch { \"서버 응답 없음: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(node \"C:\\\\Users\\\\JAEMIN~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\K--0000-3740--------------00-----2-AI------260810------\\\\83918202-8479-4b3c-adbe-6520c4c841d3\\\\scratchpad\\\\seed-themes.mjs\")",
+      "PowerShell(foreach \\($q in @\\(\"HD현대미포\",\"현대미포\"\\)\\) { \"-- $q\"; \\(Invoke-RestMethod -Uri \"http://localhost:4000/api/market/search?q=$\\([uri]::EscapeDataString\\($q\\)\\)\"\\).results | Select-Object -First 5 | ForEach-Object { \"   $\\($_.name\\) / $\\($_.code\\) / $\\($_.marketName\\)\" } })",
+      "PowerShell(foreach \\($q in @\\(\"미포\",\"조선\",\"한화엔진\"\\)\\) { \"-- $q\"; \\(Invoke-RestMethod -Uri \"http://localhost:4000/api/market/search?q=$\\([uri]::EscapeDataString\\($q\\)\\)\"\\).results | Select-Object -First 6 | ForEach-Object { \"   $\\($_.name\\) / $\\($_.code\\)\" } })",
+      "PowerShell(foreach \\($q in @\\(\"HD현대미포\",\"미포\",\"HD현대\"\\)\\) { \"-- $q\"; $r = \\(Invoke-RestMethod -Uri \"http://localhost:4000/api/market/search?q=$\\([uri]::EscapeDataString\\($q\\)\\)\" -TimeoutSec 30\\).results; if \\($r\\) { $r | Select-Object -First 8 | ForEach-Object { \"   $\\($_.name\\) / $\\($_.code\\)\" } } else { \"   \\(없음\\)\" } })",
+      "PowerShell(node \"C:\\\\Users\\\\JAEMIN~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\K--0000-3740--------------00-----2-AI------260810------\\\\83918202-8479-4b3c-adbe-6520c4c841d3\\\\scratchpad\\\\infostock-themes.mjs\")",
+      "PowerShell(foreach \\($q in @\\(\"앤톤\",\"한올\",\"소재과학\",\"한올소재\"\\)\\) { \"-- $q\"; $r=\\(Invoke-RestMethod -Uri \"http://localhost:4000/api/market/search?q=$\\([uri]::EscapeDataString\\($q\\)\\)\" -TimeoutSec 30\\).results; if\\($r\\){$r|Select-Object -First 5|ForEach-Object{\"   $\\($_.name\\) / $\\($_.code\\)\"}}else{\"   \\(없음\\)\"} })"
     ]
   }
 }

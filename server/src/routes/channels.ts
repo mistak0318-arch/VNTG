@@ -42,6 +42,10 @@ export function createChannelsRouter(): Router {
    * 채널 정리 실행.
    * `?ai=0` 이면 AI를 호출하지 않고 필터 결과만 본다 — 비용 없이 선별 품질을 확인할 때.
    * `?send=1` 일 때만 텔레그램으로 보낸다.
+   *
+   * 여기로 들어오는 건 전부 사람이 버튼을 눌러 실행하는 경우다. 그래서 채널별 "읽은 위치"를
+   * 무시하고 최근 N시간을 다시 훑는다 — 누른 시점의 최신을 보려는 것이지, 지난 실행 이후
+   * 새로 온 것만 보려는 게 아니기 때문이다. 정기 발행(스케줄러)만 읽은 위치를 쓴다.
    */
   router.post("/report", async (req, res, next) => {
     try {
@@ -49,6 +53,7 @@ export function createChannelsRouter(): Router {
         useAi: req.query.ai !== "0",
         send: req.query.send === "1",
         sinceHours: Math.min(Math.max(Number(req.query.hours) || 12, 1), 72),
+        useOffsets: false,
       });
       res.json(report);
     } catch (err) {
