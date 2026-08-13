@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, normalizeStockCode, type StockSearchResult } from "../api";
 import { DisclosureList, NewsList } from "../components/NewsDisclosurePanel";
-
-/** 검색 안 했을 때 보여줄 기본 증권 뉴스 키워드 */
-const DEFAULT_QUERY = "증시";
+import { SectorNews } from "../components/SectorNews";
 
 export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const [query, setQuery] = useState("");
@@ -80,8 +78,8 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
         </>
       ) : (
         <>
-          <h3 className="feed-heading">증권 주요뉴스</h3>
-          <NewsList query={DEFAULT_QUERY} />
+          <h3 className="feed-heading">분야별 주요뉴스</h3>
+          <SectorNews perSector={10} />
         </>
       )}
 

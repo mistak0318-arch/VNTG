@@ -195,6 +195,10 @@ export const api = {
     getJson<{ items: NewsItem[]; counts: { major: number; all: number } }>(
       `/api/feed/news?q=${encodeURIComponent(q)}&display=${opts.display ?? 30}&scope=${opts.scope ?? "major"}`,
     ),
+  newsSectors: (scope: "major" | "all" = "major", per = 8) =>
+    getJson<{ sectors: { key: string; label: string; items: NewsItem[] }[]; fetchedAt: string }>(
+      `/api/feed/news/sectors?scope=${scope}&per=${per}`,
+    ),
   finance: (code: string) => getJson<FinanceResult>(`/api/feed/finance/${code}`),
   disclosures: (code: string, days = 180) =>
     getJson<{ items: DisclosureItem[] }>(`/api/feed/disclosures/${code}?days=${days}`),
@@ -435,6 +439,7 @@ export interface NewsItem {
   originalLink: string;
   publishedAt: string;
   major: boolean;
+  summary: string;
 }
 
 export interface DisclosureItem {

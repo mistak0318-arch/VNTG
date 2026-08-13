@@ -2149,3 +2149,48 @@ body {
   .cal-cell { min-height: 58px; }
   .cal-chip { font-size: 9px; }
 }
+
+/* 데일리 리포트 — 기준시각 배지 / 섹터 뉴스 */
+.report-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.report-stamp b { color: var(--text); }
+.news-sector-tabs { margin-bottom: 8px; }
+.news-item {
+  display: block;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+.news-item:last-child { border-bottom: none; }
+.news-item:hover { background: var(--panel-2); }
+.news-title { font-size: 13.5px; line-height: 1.4; }
+.news-summary {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 3px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.news-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.news-meta .press-major { color: var(--text); font-weight: 600; }
+.news-scope-sep { flex: 1; min-width: 8px; }

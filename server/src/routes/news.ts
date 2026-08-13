@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getFinance } from "../dartFinance.js";
-import { getDisclosures, newsCounts, searchNews } from "../newsDisclosure.js";
+import { getDisclosures, newsCounts, searchNews, sectorNews } from "../newsDisclosure.js";
 
 export function createNewsRouter(): Router {
   const router = Router();
@@ -21,6 +21,17 @@ export function createNewsRouter(): Router {
         newsCounts(q),
       ]);
       res.json({ items, counts });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 섹터별 뉴스 — 데일리 리포트용. 증시/글로벌/정책/산업/부동산으로 나눠서 준다 */
+  router.get("/news/sectors", async (req, res, next) => {
+    try {
+      const majorOnly = req.query.scope !== "all";
+      const perSector = Math.min(Number(req.query.per) || 8, 20);
+      res.json(await sectorNews({ majorOnly, perSector }));
     } catch (err) {
       next(err);
     }

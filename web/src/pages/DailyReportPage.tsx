@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   api,
   fmtNum,
@@ -11,7 +11,7 @@ import {
   type StockRow,
   type ThemeRow,
 } from "../api";
-import { NewsList } from "../components/NewsDisclosurePanel";
+import { SectorNews } from "../components/SectorNews";
 import { RefreshBar } from "../components/RefreshBar";
 import { useSection } from "../useSection";
 import { WatchStar } from "../useWatchedCodes";
@@ -85,6 +85,7 @@ export function DailyReportPage({
   onSelectStock: (code: string, name: string) => void;
 }) {
   const [edition, setEdition] = useState<Edition>("closing");
+  const [newsAt, setNewsAt] = useState<string>("");
 
   // 시황 대시보드와 같은 섹션 캐시를 공유한다 (추가 호출 없음)
   const indices = useSection<IndexCard[]>("indices", 60_000);
@@ -98,6 +99,19 @@ export function DailyReportPage({
   function reloadAll() {
     for (const s of [indices, flow, movers, sectors, themes, highLow, global]) s.refresh();
   }
+
+  /** 리포트 전체의 "언제 기준" — 각 섹션 갱신시각 중 가장 오래된 것 */
+  const stampMs = [indices.updatedAt, flow.updatedAt, themes.updatedAt, global.updatedAt]
+    .filter((t): t is number => typeof t === "number");
+  const oldest = stampMs.length > 0 ? Math.min(...stampMs) : null;
+  const fmtStamp = (ms: number) =>
+    new Date(ms).toLocaleString("ko-KR", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
 
   const today = new Date().toLocaleDateString("ko-KR", {
     year: "numeric",
@@ -133,6 +147,10 @@ export function DailyReportPage({
         <div className="report-sub">
           {today} · {EDITIONS.find((e) => e.key === edition)?.label} —{" "}
           {EDITIONS.find((e) => e.key === edition)?.desc}
+        </div>
+        <div className="report-stamp">
+          ⏱ 기준시각 <b>{oldest ? fmtStamp(oldest) : "불러오는 중"}</b>
+          {newsAt && <> · 뉴스 <b>{fmtStamp(new Date(newsAt).getTime())}</b></>}
         </div>
       </header>
 
@@ -283,9 +301,9 @@ export function DailyReportPage({
         </div>
       </Section>
 
-      {/* 7. 뉴스 클리핑 */}
+      {/* 7. 뉴스 클리핑 — 분야별 (뉴스·공시 탭과 같은 컴포넌트) */}
       <Section no={7} title="주요 뉴스 클리핑">
-        <NewsList query="증시" />
+        <SectorNews perSector={8} onFetched={setNewsAt} />
       </Section>
 
       <div className="table-note report-footer">

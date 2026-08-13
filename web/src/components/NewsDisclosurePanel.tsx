@@ -92,6 +92,7 @@ export function NewsList({ query }: { query: string }) {
               rel="noreferrer noopener"
             >
               <div className="feed-title">{n.title}</div>
+              {n.summary && <div className="news-summary">{n.summary}</div>}
               <div className="feed-meta">
                 {n.press && <span className={n.major ? "press-major" : ""}>{n.press}</span>}
                 <span>{fmtDateTime(n.publishedAt)}</span>

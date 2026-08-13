@@ -20,6 +20,8 @@ export interface NewsItem {
   originalLink: string;
   publishedAt: string; // ISO
   major: boolean; // 주요 언론사 여부
+  /** 기사 요약 미리보기 (네이버가 주는 발췌문. 저작권 때문에 본문 전체는 쓰지 않는다) */
+  summary: string;
 }
 
 export interface DisclosureItem {
@@ -209,6 +211,7 @@ async function fetchNewsRaw(query: string): Promise<NewsItem[]> {
       link: it.link || it.originallink || "",
       originalLink: it.originallink ?? "",
       publishedAt: it.pubDate ? new Date(it.pubDate).toISOString() : "",
+      summary: stripTags(it.description ?? ""),
     };
   });
 
@@ -362,4 +365,114 @@ export async function getDisclosures(stockCode: string, days = 180): Promise<Dis
 
   disclosureCache.set(key, { data: items, at: Date.now() });
   return items;
+}
+
+
+// ---------------------------------------------------------------- 섹터별 뉴스
+
+/**
+ * 인포스탁처럼 분야를 나눠서 가져온다.
+ *
+ * 네이버 검색 API는 질의어 하나만 받으므로, 섹터마다 별도 질의를 던지고
+ * 섹터 간 중복 기사를 제거한다. 섹터 수만큼 호출이 늘지만 5분 캐싱이 걸려 있고
+ * 일 한도(25,000건)에 비하면 미미하다.
+ */
+export interface NewsSector {
+  key: string;
+  label: string;
+  /** 이 섹터로 인정할 질의어 */
+  query: string;
+  /** 제목에 이 단어가 있으면 이 섹터로 우선 배정 (섹터 간 중복 정리용) */
+  hints: string[];
+}
+
+export const NEWS_SECTORS: NewsSector[] = [
+  {
+    key: "market",
+    label: "증시",
+    query: "코스피 코스닥 증시 마감",
+    hints: ["코스피", "코스닥", "증시", "지수", "상한가", "특징주", "외국인", "기관"],
+  },
+  {
+    key: "global",
+    label: "글로벌",
+    query: "뉴욕증시 나스닥 다우",
+    hints: ["뉴욕", "나스닥", "다우", "S&P", "연준", "FOMC", "월가", "일본", "중국", "유럽"],
+  },
+  {
+    key: "policy",
+    label: "정책·금융",
+    query: "금융위원회 한국은행 기준금리 정책",
+    hints: ["금융위", "금감원", "한국은행", "기준금리", "정부", "규제", "세제", "국회"],
+  },
+  {
+    key: "industry",
+    label: "산업·기업",
+    query: "기업 실적 반도체 수출",
+    hints: ["실적", "영업이익", "수주", "공급", "반도체", "수출", "신제품", "인수"],
+  },
+  {
+    key: "realestate",
+    label: "부동산",
+    query: "부동산 아파트 분양 전세",
+    hints: ["부동산", "아파트", "분양", "전세", "청약", "재건축", "임대"],
+  },
+];
+
+/** 제목이 어느 섹터에 더 어울리는지 (힌트 단어가 많이 맞는 쪽) */
+function bestSector(title: string, fallback: string): string {
+  let best = fallback;
+  let bestScore = 0;
+  for (const sec of NEWS_SECTORS) {
+    const score = sec.hints.filter((h) => title.includes(h)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = sec.key;
+    }
+  }
+  return best;
+}
+
+export interface SectorNews {
+  key: string;
+  label: string;
+  items: NewsItem[];
+}
+
+export async function sectorNews(
+  opts: { majorOnly?: boolean; perSector?: number } = {},
+): Promise<{ sectors: SectorNews[]; fetchedAt: string }> {
+  const { majorOnly = true, perSector = 8 } = opts;
+
+  // 섹터별로 넉넉히 받아온 뒤 중복을 정리한다
+  const raw = await Promise.all(
+    NEWS_SECTORS.map(async (sec) => {
+      try {
+        return { sec, items: await searchNews(sec.query, { majorOnly, limit: perSector * 3 }) };
+      } catch {
+        return { sec, items: [] as NewsItem[] };
+      }
+    }),
+  );
+
+  // 같은 기사가 여러 섹터에 걸리면 힌트 점수가 높은 섹터 하나에만 남긴다
+  const claimed = new Map<string, string>(); // 정규화 제목 -> 섹터 key
+  for (const { sec, items } of raw) {
+    for (const it of items) {
+      const key = normalizeTitle(it.title);
+      if (!key) continue;
+      const target = bestSector(it.title, sec.key);
+      if (!claimed.has(key)) claimed.set(key, target);
+    }
+  }
+
+  const sectors: SectorNews[] = raw.map(({ sec, items }) => ({
+    key: sec.key,
+    label: sec.label,
+    items: items
+      .filter((it) => claimed.get(normalizeTitle(it.title)) === sec.key)
+      .slice(0, perSector),
+  }));
+
+  return { sectors, fetchedAt: new Date().toISOString() };
 }
