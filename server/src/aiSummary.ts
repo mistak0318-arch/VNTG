@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { getTradeStats, toTradeDigest } from "./tradeStats.js";
 import { runWebResearch, toResearchDigest } from "./webResearch.js";
 import { describeBreadth, listBreadth, toPoints } from "./breadthStore.js";
 import { getSection } from "./marketOverview.js";

@@ -235,6 +235,13 @@ export const api = {
     postJson<{ alerts: FiredAlert[]; sent: boolean; error?: string; preview: string }>(
       `/api/alert/scan${send ? "?send=1" : ""}`,
     ),
+  trade: (force = false) =>
+    getJson<{
+      items: TradeSummary[];
+      fetchedAt: string;
+      configured: boolean;
+      error?: string;
+    }>(`/api/trade${force ? "?force=1" : ""}`),
   breadth: (days = 60) =>
     getJson<{ days: number; points: BreadthPoint[]; summary: string }>(
       `/api/breadth?days=${days}`,
@@ -540,6 +547,23 @@ export interface FiredAlert {
   price: number;
   changeRate: number;
   context: string[];
+}
+
+export interface TradeSummary {
+  key: string;
+  label: string;
+  hs: string;
+  sectors: string[];
+  note: string;
+  /** 이 품목에서 봐야 할 쪽. 원유처럼 사오기만 하는 품목은 수입을 본다 */
+  watch: "export" | "import";
+  month: string;
+  exportUsd: number;
+  importUsd: number;
+  balanceUsd: number;
+  exportYoy: number | null;
+  importYoy: number | null;
+  top: { name: string; exportUsd: number; yoy: number | null }[];
 }
 
 export interface BreadthPoint {

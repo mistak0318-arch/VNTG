@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { exportYoyForSector, getTradeStats } from "./tradeStats.js";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getFinance } from "./dartFinance.js";
@@ -26,7 +27,8 @@ export type CheckKey =
   | "profitGrowth"
   | "sectorStrength"
   | "marketCap"
-  | "volume";
+  | "volume"
+  | "exportGrowth";
 
 export interface CheckConfig {
   key: CheckKey;
@@ -113,6 +115,14 @@ export const DEFAULT_CONFIG: SignalConfig = {
       weight: 1,
       threshold: 3000,
       hint: "시가총액이 기준값(억원) 이상",
+    },
+    {
+      key: "exportGrowth",
+      label: "업종 수출 증가",
+      enabled: false,
+      weight: 1,
+      threshold: 0,
+      hint: "소속 업종의 관세청 수출 증감률이 기준값(%) 이상 (수출입 API 키 필요)",
     },
     {
       key: "volume",
@@ -320,6 +330,23 @@ export async function evaluateSignal(
         const calc = Math.round((entry.shares * price) / 100_000_000);
         pass = calc >= c.threshold;
         value = `${calc.toLocaleString("ko-KR")}억`;
+      }
+    } else if (c.key === "exportGrowth") {
+      /*
+       * 업종 수출 증감률. 관세청 데이터는 12시간 캐시라 종목마다 새로 부르지 않는다.
+       * 수출 지표가 없는 업종(금융·서비스 등)은 판단 불가로 남긴다 —
+       * 억지로 0으로 채우면 그 업종 종목이 부당하게 감점된다.
+       */
+      const sector = mood?.sector?.name;
+      if (sector) {
+        const trade = await getTradeStats().catch(() => null);
+        const g = trade ? exportYoyForSector(trade.items, sector) : null;
+        if (g !== null) {
+          pass = g >= c.threshold;
+          value = `${sector} 수출 ${g > 0 ? "+" : ""}${g.toFixed(1)}%`;
+        } else {
+          value = `${sector} — 수출 지표 없음`;
+        }
       }
     } else if (c.key === "volume") {
       // 거래량 × 현재가로 대략의 거래대금 (억원)

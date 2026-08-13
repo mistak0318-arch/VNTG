@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { exportYoyForSector, getTradeStats } from "./tradeStats.js";
 import { getSection } from "./marketOverview.js";
 import type { Sectors } from "./marketOverview.js";
 import { findStock } from "./stockListCache.js";
@@ -25,6 +26,13 @@ export interface SectorMood {
   market: "코스피" | "코스닥";
   /** 구성종목 조회 시 넘길 시장 구분 */
   marketKey: "kospi" | "kosdaq";
+  /**
+   * 이 업종의 관세청 수출 증감률(%, 전년 동월).
+   * 오늘 등락률만 보면 왜 오르는지 모른다 — 수출이 같이 늘고 있으면 근거가 있는 강세고,
+   * 수출이 꺾이는데 지수만 오르면 짚어야 할 신호다.
+   * 수출 지표가 없는 업종(금융·서비스)이나 API 키가 없으면 null.
+   */
+  exportYoy?: number | null;
 }
 
 export interface ThemeMood {
@@ -108,6 +116,14 @@ export async function getSectorMood(client: KiwoomClient, code: string): Promise
     themes,
     note: themes.length === 0 ? "이 종목이 편입된 키움 테마가 없습니다." : undefined,
   };
+  // 수출 증감률을 붙인다. 12시간 캐시라 종목마다 새로 부르지 않는다.
+  if (result.sector) {
+    const trade = await getTradeStats().catch(() => null);
+    result.sector.exportYoy = trade
+      ? exportYoyForSector(trade.items, result.sector.name)
+      : null;
+  }
+
   moodCache.set(code, { data: result, at: Date.now() });
   return result;
 }

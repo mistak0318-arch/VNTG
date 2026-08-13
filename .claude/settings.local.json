@@ -152,7 +152,9 @@
       "Read(//k/0000 3740 프로젝트 \\\\\\(경제적자유\\\\\\)/00. 주식/2 AI 프롬프트/**)",
       "Bash(node -e \"console.log\\(/정상|NORMAL|SUCCESS/i.test\\('정상서비스.'\\) ? '성공 판정 OK' : '실패'\\)\")",
       "Bash(curl.exe -s \"http://localhost:4000/api/trade\" --max-time 300)",
-      "Bash(curl.exe -s http://localhost:4000/api/trade --max-time 300 -o __TRACKED_VAR__/trade.json)"
+      "Bash(curl.exe -s http://localhost:4000/api/trade --max-time 300 -o __TRACKED_VAR__/trade.json)",
+      "Bash(curl.exe -s \"http://localhost:4000/api/market/sector-mood/000660\" --max-time 90)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(d\\);console.log\\('업종:',j.sector?.name,'| 등락',j.sector?.changeRate+'%','| 수출YoY:',j.sector?.exportYoy===null?'없음':\\(j.sector?.exportYoy?.toFixed\\(1\\)+'%'\\)\\);}catch\\(e\\){console.log\\(d.slice\\(0,200\\)\\)}}\\)\")"
     ]
   }
 }

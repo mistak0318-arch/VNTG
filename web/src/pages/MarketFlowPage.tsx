@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, fmtNum, type BreadthPoint, type ChannelReport } from "../api";
 import { BreadthPanel } from "../components/BreadthPanel";
+import { TradePanel } from "../components/TradePanel";
 import { RefreshBar } from "../components/RefreshBar";
 
 /**
@@ -16,10 +17,11 @@ import { RefreshBar } from "../components/RefreshBar";
  * 숫자와 이야기를 같은 화면에 두면 "왜 이렇게 움직였나"를 붙여 읽을 수 있다.
  */
 
-type FlowTab = "money" | "channel";
+type FlowTab = "money" | "trade" | "channel";
 
 const TABS: { key: FlowTab; label: string }[] = [
   { key: "money", label: "자금 흐름" },
+  { key: "trade", label: "수출 동향" },
   { key: "channel", label: "채널 정리" },
 ];
 
@@ -300,7 +302,9 @@ export function MarketFlowPage() {
       </nav>
 
       <div key={`${tab}-${reloadKey}`}>
-        {tab === "money" ? <MoneyFlowTab /> : <ChannelTab />}
+        {tab === "money" && <MoneyFlowTab />}
+        {tab === "trade" && <TradePanel />}
+        {tab === "channel" && <ChannelTab />}
       </div>
     </div>
   );
