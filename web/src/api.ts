@@ -159,6 +159,31 @@ export const api = {
   kiwoomGroups: () => getJson<{ groups: KiwoomGroup[] }>("/api/watchlist/kiwoom/groups"),
   kiwoomGroupStocks: (code: string) =>
     getJson<{ items: KiwoomGroupStock[] }>(`/api/watchlist/kiwoom/groups/${code}`),
+  calendarList: (month?: string) =>
+    getJson<{ events: CalendarEvent[] }>(`/api/calendar${month ? `?month=${month}` : ""}`),
+  calendarUpcoming: (days = 14) =>
+    getJson<{ events: CalendarEvent[] }>(`/api/calendar/upcoming?days=${days}`),
+  calendarAdd: (e: Omit<CalendarEvent, "id">) =>
+    postJson<{ events: CalendarEvent[] }>("/api/calendar", e),
+  calendarSubs: () =>
+    getJson<{ subs: { label: string; masked: string; url: string; count: number }[] }>(
+      "/api/calendar/subs",
+    ),
+  calendarSubAdd: (url: string, label: string) =>
+    postJson<{ added: number; events: CalendarEvent[] }>("/api/calendar/subs", { url, label }),
+  calendarSubRemove: (url: string) =>
+    deleteJson<{ events: CalendarEvent[] }>(`/api/calendar/subs?url=${encodeURIComponent(url)}`),
+  calendarSync: () =>
+    postJson<{ results: { label: string; added: number; error?: string }[]; events: CalendarEvent[] }>(
+      "/api/calendar/sync",
+    ),
+  calendarImport: (filename: string, text: string, kind: EventKind) =>
+    postJson<{ added: number; replaced: number; events: CalendarEvent[] }>("/api/calendar/import", {
+      filename,
+      text,
+      kind,
+    }),
+  calendarRemove: (id: string) => deleteJson<{ events: CalendarEvent[] }>(`/api/calendar/${id}`),
   apiUsage: () => getJson<{ day: string; providers: ProviderUsage[] }>("/api/settings/usage"),
   apiUsageHistory: (days = 14) =>
     getJson<{ history: { day: string; counts: Record<string, number> }[] }>(
@@ -289,6 +314,17 @@ export interface EvaluatedAccount {
   totalValue: number;
   totalProfit: number;
   totalReturnRate: number | null;
+}
+
+export type EventKind = "market" | "personal" | "earnings" | "holiday";
+
+export interface CalendarEvent {
+  id: string;
+  date: string;
+  time?: string;
+  title: string;
+  kind: EventKind;
+  memo?: string;
 }
 
 export interface StockRow {

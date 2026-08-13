@@ -14,6 +14,7 @@ dotenv.config({ path: path.join(serverRoot, ".env") });
 import { createKiwoomClientFromEnv, KiwoomApiError } from "./kiwoomClient.js";
 import { createAccountRouter } from "./routes/account.js";
 import { createAlgoRouter } from "./routes/algo.js";
+import { createCalendarRouter } from "./routes/calendar.js";
 import { createMarketRouter } from "./routes/market.js";
 import { createNewsRouter } from "./routes/news.js";
 import { createOverviewRouter } from "./routes/overview.js";
@@ -61,6 +62,7 @@ app.use("/api/overview", createOverviewRouter(client));
 app.use("/api/watchlist", createWatchlistRouter(client));
 app.use("/api/feed", createNewsRouter());
 app.use("/api/settings", createSettingsRouter());
+app.use("/api/calendar", createCalendarRouter());
 
 /**
  * 프로덕션(미니PC)에서는 web을 빌드한 결과(web/dist)를 이 서버가 같이 서빙한다.

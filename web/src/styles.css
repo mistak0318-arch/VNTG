@@ -2058,3 +2058,94 @@ body {
 .font-preview .num {
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------- 캘린더 ---------------- */
+.cal-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cal-month {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 4px;
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cal-wd {
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 11.5px;
+  text-align: center;
+  padding: 6px 0;
+}
+.cal-wd.sun { color: var(--red); }
+.cal-wd.sat { color: var(--blue); }
+.cal-cell {
+  background: var(--panel);
+  border: none;
+  min-height: 78px;
+  padding: 5px 5px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+}
+.cal-cell.empty { background: var(--panel-2); cursor: default; }
+.cal-cell.today { box-shadow: inset 0 0 0 1px var(--blue); }
+.cal-cell.selected { background: var(--panel-2); box-shadow: inset 0 0 0 2px var(--blue); }
+.cal-day { font-size: 12px; font-variant-numeric: tabular-nums; }
+.cal-day.sun { color: var(--red); }
+.cal-day.sat { color: var(--blue); }
+.cal-events { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.cal-chip {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-left: 2px solid;
+}
+.cal-chip.market   { background: rgba(76,141,255,.16);  border-color: var(--blue); }
+.cal-chip.earnings { background: rgba(245,197,66,.16);  border-color: #f5c542; }
+.cal-chip.holiday  { background: rgba(255,92,92,.16);   border-color: var(--red); }
+.cal-chip.personal { background: rgba(53,196,106,.16);  border-color: var(--green); }
+.cal-more { font-size: 9.5px; color: var(--muted); }
+.cal-list { display: flex; flex-direction: column; }
+.cal-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.cal-item:last-child { border-bottom: none; }
+.cal-item-title { flex: 1; }
+.cal-badge {
+  font-size: 10.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex: none;
+}
+.cal-badge.market   { background: rgba(76,141,255,.2);  color: var(--blue); }
+.cal-badge.earnings { background: rgba(245,197,66,.2);  color: #f5c542; }
+.cal-badge.holiday  { background: rgba(255,92,92,.2);   color: var(--red); }
+.cal-badge.personal { background: rgba(53,196,106,.2);  color: var(--green); }
+
+@media (max-width: 640px) {
+  .cal-cell { min-height: 58px; }
+  .cal-chip { font-size: 9px; }
+}
