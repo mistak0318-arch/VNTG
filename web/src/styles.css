@@ -4,6 +4,10 @@
 
 :root {
   color-scheme: dark;
+  /* useAppearance.tsx가 <html>에 직접 써넣는 값. 없으면 아래 기본값 */
+  --app-font:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --app-font-size: 15px;
   --bg: #0b0f14;
   --panel: #131a22;
   --panel-2: #1a232d;
@@ -13,6 +17,20 @@
   --red: #ff5c5c;
   --blue: #4c8dff;
   --green: #35c46a;
+}
+
+/* ===== 라이트 테마 ===== */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f5f7fa;
+  --panel: #ffffff;
+  --panel-2: #eef2f7;
+  --border: #d7dee7;
+  --text: #1b2430;
+  --muted: #5b6673;
+  --red: #e03131;
+  --blue: #1c6dd0;
+  --green: #1f9254;
 }
 
 html,
@@ -25,10 +43,8 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic",
-    sans-serif;
-  font-size: 15px;
+  font-family: var(--app-font);
+  font-size: var(--app-font-size);
 }
 
 .app {
@@ -2015,3 +2031,30 @@ body {
   margin-right: 8px;
 }
 .ma-name { font-size: 15px; font-weight: 700; }
+
+
+/* ===== 외관 설정 (테마/폰트) ===== */
+.appearance-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.appearance-row:last-child { border-bottom: none; }
+.appearance-label {
+  font-size: 13px;
+  min-width: 90px;
+}
+.font-preview {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: var(--app-font-size);
+}
+.font-preview .num {
+  font-variant-numeric: tabular-nums;
+}

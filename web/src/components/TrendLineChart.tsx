@@ -1,5 +1,6 @@
 import { createChart, ColorType, LineStyle, type BusinessDay } from "lightweight-charts";
 import { useEffect, useRef } from "react";
+import { chartColors, useAppearance } from "../useAppearance";
 
 export interface TrendSeries {
   label: string;
@@ -17,19 +18,21 @@ export interface TrendSeries {
  */
 export function TrendLineChart({ series, height = 240 }: { series: TrendSeries[]; height?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { theme } = useAppearance();
 
   useEffect(() => {
+    const c = chartColors(theme);
     const el = containerRef.current;
     if (!el || series.every((s) => s.data.length === 0)) return;
 
     const chart = createChart(el, {
       width: el.clientWidth,
       height,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8b96a5" },
-      grid: { vertLines: { color: "#1a232d" }, horzLines: { color: "#1a232d" } },
-      rightPriceScale: { borderColor: "#223040" },
-      leftPriceScale: { borderColor: "#223040", visible: series.some((s) => s.axis === "left") },
-      timeScale: { borderColor: "#223040" },
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: c.text },
+      grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
+      rightPriceScale: { borderColor: c.border },
+      leftPriceScale: { borderColor: c.border, visible: series.some((s) => s.axis === "left") },
+      timeScale: { borderColor: c.border },
       crosshair: { horzLine: { style: LineStyle.Dotted }, vertLine: { style: LineStyle.Dotted } },
     });
 
@@ -57,7 +60,7 @@ export function TrendLineChart({ series, height = 240 }: { series: TrendSeries[]
       window.removeEventListener("resize", resize);
       chart.remove();
     };
-  }, [series, height]);
+  }, [series, height, theme]);
 
   if (series.every((s) => s.data.length === 0)) {
     return <div className="empty">데이터 없음</div>;

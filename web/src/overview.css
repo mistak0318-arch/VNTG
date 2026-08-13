@@ -361,3 +361,19 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
   .ov-grid { grid-template-columns: repeat(3, 1fr); align-items: start; }
   .ov-span2 { grid-column: span 2; }
 }
+
+/* ===== 라이트 테마: 시황 카드 색상 오버라이드 =====
+   overview.css는 자체 변수(--ov-*)를 쓰므로 여기서 값만 갈아끼운다. */
+:root[data-theme="light"] .ov {
+  --up: #e03131;
+  --down: #1c6dd0;
+  --flat: #6b7684;
+  --accent: #a67c1f;
+  --ov-panel: #ffffff;
+  --ov-panel-2: #f2f5f9;
+  --ov-line: #d7dee7;
+  --ov-line-soft: #e8ecf1;
+  --ov-txt: #1b2430;
+  --ov-txt-2: #5b6673;
+  --ov-txt-3: #8b96a5;
+}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FONTS, FONT_SCALES, useAppearance } from "../useAppearance";
 import { api, fmtNum, type ProviderUsage } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 
@@ -16,6 +17,8 @@ function rateColor(rate: number | null): string {
 }
 
 export function SettingsPage() {
+  const appearance = useAppearance();
+
   const [usage, setUsage] = useState<ProviderUsage[]>([]);
   const [day, setDay] = useState("");
   const [history, setHistory] = useState<{ day: string; counts: Record<string, number> }[]>([]);
@@ -49,6 +52,65 @@ export function SettingsPage() {
 
   return (
     <div>
+      <section className="card">
+        <h2>화면 설정</h2>
+
+        <div className="appearance-row">
+          <span className="appearance-label">테마</span>
+          <div className="filter-row" style={{ margin: 0 }}>
+            {([
+              { key: "dark" as const, label: "다크" },
+              { key: "light" as const, label: "라이트" },
+            ]).map((t) => (
+              <button
+                key={t.key}
+                className={`filter-btn ${appearance.theme === t.key ? "active" : ""}`}
+                onClick={() => appearance.set({ theme: t.key })}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="appearance-row">
+          <span className="appearance-label">글꼴</span>
+          <select
+            className="group-select"
+            style={{ maxWidth: 180 }}
+            value={appearance.font}
+            onChange={(e) => appearance.set({ font: e.target.value as typeof appearance.font })}
+          >
+            {FONTS.map((f) => (
+              <option key={f.key} value={f.key}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="appearance-row">
+          <span className="appearance-label">글자 크기</span>
+          <div className="filter-row" style={{ margin: 0 }}>
+            {FONT_SCALES.map((sc) => (
+              <button
+                key={sc}
+                className={`filter-btn ${appearance.fontScale === sc ? "active" : ""}`}
+                onClick={() => appearance.set({ fontScale: sc })}
+              >
+                {sc}%
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="font-preview">
+          미리보기 — 삼성전자 <span className="num positive">+6.68%</span> / SK하이닉스{" "}
+          <span className="num negative">-1.23%</span> · 거래대금 <span className="num">6,282</span>억
+        </div>
+        <div className="table-note">이 설정은 이 기기(브라우저)에만 저장됩니다.</div>
+      </section>
+
       <RefreshBar onRefresh={load} loading={loading} />
 
       {error && <div className="error-banner">{error}</div>}

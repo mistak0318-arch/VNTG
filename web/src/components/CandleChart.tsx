@@ -7,6 +7,7 @@ import {
   type Time,
 } from "lightweight-charts";
 import { useEffect, useRef } from "react";
+import { chartColors, useAppearance } from "../useAppearance";
 
 export interface Candle {
   /** 일/주/월봉은 BusinessDay, 분봉은 UTCTimestamp(초) */
@@ -78,19 +79,21 @@ export function CandleChart({
   showExtremes?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { theme } = useAppearance();
 
   useEffect(() => {
+    const c = chartColors(theme);
     const el = containerRef.current;
     if (!el || candles.length === 0) return;
 
     const chart = createChart(el, {
       width: el.clientWidth,
       height: 320,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8b98a5" },
-      grid: { vertLines: { color: "#1a232d" }, horzLines: { color: "#1a232d" } },
-      rightPriceScale: { borderColor: "#223040" },
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: c.text },
+      grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
+      rightPriceScale: { borderColor: c.border },
       // 분봉은 시:분까지 보여야 한다
-      timeScale: { borderColor: "#223040", timeVisible: intraday, secondsVisible: false },
+      timeScale: { borderColor: c.border, timeVisible: intraday, secondsVisible: false },
     });
 
     const candleSeries = chart.addCandlestickSeries({
@@ -118,7 +121,7 @@ export function CandleChart({
     const volumeSeries = chart.addHistogramSeries({
       priceScaleId: "volume",
       priceFormat: { type: "volume" },
-      color: "#3a4553",
+      color: c.volume,
       priceLineVisible: false,
       lastValueVisible: false,
     });
@@ -212,7 +215,7 @@ export function CandleChart({
       window.removeEventListener("resize", resize);
       chart.remove();
     };
-  }, [candles, intraday, showExtremes]);
+  }, [candles, intraday, showExtremes, theme]);
 
   if (candles.length === 0) {
     return <div className="empty">차트 데이터 없음</div>;
