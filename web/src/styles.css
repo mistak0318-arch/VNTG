@@ -2194,3 +2194,17 @@ body {
 }
 .news-meta .press-major { color: var(--text); font-weight: 600; }
 .news-scope-sep { flex: 1; min-width: 8px; }
+.report-pending {
+  margin-left: 8px;
+  padding: 1px 7px;
+  background: rgba(245, 197, 66, 0.18);
+  color: #f5c542;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.report-substamp {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

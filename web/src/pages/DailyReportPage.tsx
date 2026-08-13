@@ -26,11 +26,41 @@ import { WatchStar } from "../useWatchedCodes";
 
 type Edition = "morning" | "midday" | "closing";
 
-const EDITIONS: { key: Edition; label: string; desc: string }[] = [
-  { key: "morning", label: "조간", desc: "밤사이 해외 흐름과 오늘 볼 것" },
-  { key: "midday", label: "장중", desc: "오전장 지수·테마·특징주" },
-  { key: "closing", label: "석간", desc: "마감 시황과 수급 정리" },
+/**
+ * 리포트는 정해진 시각에 발행되는 스냅샷이다.
+ * 나중에 미니PC 스케줄러가 이 시각에 리포트를 만들어 메일·텔레그램으로 보낸다.
+ * 지금은 웹에서 실시간으로 조립하지만, 화면에는 "어느 판인지"를 기준으로 표시한다.
+ */
+const EDITIONS: { key: Edition; label: string; desc: string; hour: number }[] = [
+  { key: "morning", label: "조간", desc: "밤사이 해외 흐름과 오늘 볼 것", hour: 7 },
+  { key: "midday", label: "장중", desc: "오전장 지수·테마·특징주", hour: 12 },
+  { key: "closing", label: "석간", desc: "마감 시황과 수급 정리", hour: 18 },
 ];
+
+/** 지금 시각에 해당하는 판 — 07시 전이면 아직 조간 전이므로 전날 석간을 본다 */
+function currentEdition(now: Date): Edition {
+  const h = now.getHours();
+  if (h < 7) return "closing";
+  if (h < 12) return "morning";
+  if (h < 18) return "midday";
+  return "closing";
+}
+
+/**
+ * 이 판의 발행 시각. 오늘 그 시각이 아직 안 지났으면 전날 발행분을 가리킨다.
+ * (07시 전에 석간을 보면 어제 18시가 맞다)
+ */
+function publishedAt(edition: Edition, now: Date): { at: Date; pending: boolean } {
+  const hour = EDITIONS.find((e) => e.key === edition)!.hour;
+  const at = new Date(now);
+  at.setHours(hour, 0, 0, 0);
+  if (at.getTime() > now.getTime()) {
+    // 아직 발행 시각이 안 됐으면 전날 것
+    at.setDate(at.getDate() - 1);
+    return { at, pending: true };
+  }
+  return { at, pending: false };
+}
 
 function pct(v: number): string {
   return `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
@@ -84,7 +114,7 @@ export function DailyReportPage({
 }: {
   onSelectStock: (code: string, name: string) => void;
 }) {
-  const [edition, setEdition] = useState<Edition>("closing");
+  const [edition, setEdition] = useState<Edition>(() => currentEdition(new Date()));
   const [newsAt, setNewsAt] = useState<string>("");
 
   // 시황 대시보드와 같은 섹션 캐시를 공유한다 (추가 호출 없음)
@@ -113,11 +143,17 @@ export function DailyReportPage({
       hour12: false,
     });
 
-  const today = new Date().toLocaleDateString("ko-KR", {
+  const now = new Date();
+  const pub = publishedAt(edition, now);
+  const editionMeta = EDITIONS.find((e) => e.key === edition)!;
+  const pubLabel = pub.at.toLocaleString("ko-KR", {
     year: "numeric",
     month: "long",
     day: "numeric",
     weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   });
 
   const g = global.data ?? [];
@@ -145,12 +181,16 @@ export function DailyReportPage({
       <header className="report-header">
         <h2>VNTG 데일리 리포트</h2>
         <div className="report-sub">
-          {today} · {EDITIONS.find((e) => e.key === edition)?.label} —{" "}
-          {EDITIONS.find((e) => e.key === edition)?.desc}
+          {editionMeta.label} — {editionMeta.desc}
         </div>
         <div className="report-stamp">
-          ⏱ 기준시각 <b>{oldest ? fmtStamp(oldest) : "불러오는 중"}</b>
-          {newsAt && <> · 뉴스 <b>{fmtStamp(new Date(newsAt).getTime())}</b></>}
+          📰 발행 <b>{pubLabel}</b>
+          {pub.pending && <span className="report-pending">오늘 {editionMeta.hour}시 발행 예정</span>}
+        </div>
+        <div className="report-substamp">
+          이 화면은 지금 시점 데이터로 미리 조립한 것입니다 · 시세 수집{" "}
+          {oldest ? fmtStamp(oldest) : "…"}
+          {newsAt && <> · 뉴스 수집 {fmtStamp(new Date(newsAt).getTime())}</>}
         </div>
       </header>
 
