@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type CalendarEvent, type EventKind } from "../api";
 import { CalendarImageImport } from "../components/CalendarImageImport";
+import { EconomicCalendarCard } from "../components/EconomicCalendarCard";
 import { RefreshBar } from "../components/RefreshBar";
 
 /**
@@ -325,6 +326,11 @@ export function CalendarPage() {
           선물옵션 동시만기·휴장일은 처음 실행할 때 자동으로 들어갑니다. 구글 캘린더 연동은 추후
           iCal 읽기 방식으로 붙일 예정입니다.
         </div>
+      </section>
+
+      <section className="card">
+        <h2>경제 캘린더</h2>
+        <EconomicCalendarCard onInstalled={load} />
       </section>
 
       <section className="card">

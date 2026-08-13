@@ -197,6 +197,12 @@ export const api = {
       fallback: string | null;
     }>("/api/ai/config"),
   aiConfigSave: (config: AiConfig) => putJson<{ config: AiConfig }>("/api/ai/config", config),
+  calendarEconomic: () =>
+    getJson<{ verifiedAt: string; events: { date: string; title: string }[] }>(
+      "/api/calendar/economic",
+    ),
+  calendarEconomicInstall: () =>
+    postJson<{ added: number; replaced: number; verifiedAt: string }>("/api/calendar/economic"),
   calendarVisionStatus: () =>
     getJson<{ ready: boolean; providers: string[]; models: VisionModelOption[] }>(
       "/api/calendar-vision/status",

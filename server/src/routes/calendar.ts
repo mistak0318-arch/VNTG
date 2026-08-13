@@ -1,4 +1,10 @@
 import { Router } from "express";
+import {
+  ECONOMIC_SOURCE,
+  VERIFIED_AT,
+  economicEvents,
+  installEconomicCalendar,
+} from "../economicCalendar.js";
 import { addSub, listSubs, maskUrl, removeSub } from "../calendarSubscription.js";
 import { fetchIcs, parseCsv, parseIcs } from "../calendarImport.js";
 import {
@@ -139,6 +145,19 @@ export function createCalendarRouter(): Router {
   });
 
   /** 파일 업로드 — 프론트에서 텍스트로 읽어 보낸다 (multer 불필요) */
+  /** 경제 캘린더(FOMC·CPI·금통위·옵션만기) 내장 시드 설치 */
+  router.get("/economic", (_req, res) => {
+    res.json({ verifiedAt: VERIFIED_AT, events: economicEvents(), source: ECONOMIC_SOURCE });
+  });
+
+  router.post("/economic", async (_req, res, next) => {
+    try {
+      res.json(await installEconomicCalendar());
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/import", async (req, res, next) => {
     try {
       const text = String(req.body?.text ?? "");

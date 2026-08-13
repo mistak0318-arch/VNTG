@@ -142,7 +142,14 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(d\\);const w=\\(j.data||[]\\).filter\\(x=>['es','nq','sox'].includes\\(x.key\\)\\);w.forEach\\(x=>console.log\\(x.label,'|',x.price,'|',x.changeRate+'%'\\)\\);if\\(!w.length\\)console.log\\('아직 갱신 전\\(캐시\\)'\\);}catch\\(e\\){console.log\\('확인 실패'\\)}}\\)\")",
       "Bash(curl.exe -sI \"https://finance.naver.com/news/mainnews.naver\" --max-time 20)",
       "Bash(curl.exe -s \"https://finance.naver.com/robots.txt\" --max-time 20)",
-      "Bash(curl.exe -s -X POST \"http://localhost:4000/api/ask\" -H \"content-type: application/json\" --max-time 300 -d \"{\\\\\"question\\\\\":\\\\\"간밤 미국 시장 어땠어? 필라델피아 반도체 지수 중심으로 짧게.\\\\\"}\")"
+      "Bash(curl.exe -s -X POST \"http://localhost:4000/api/ask\" -H \"content-type: application/json\" --max-time 300 -d \"{\\\\\"question\\\\\":\\\\\"간밤 미국 시장 어땠어? 필라델피아 반도체 지수 중심으로 짧게.\\\\\"}\")",
+      "WebFetch(domain:www.federalreserve.gov)",
+      "WebFetch(domain:www.bls.gov)",
+      "WebFetch(domain:www.usinflationcalculator.com)",
+      "WebFetch(domain:www.bok.or.kr)",
+      "Bash(curl.exe -s \"http://localhost:4000/api/calendar/economic\" --max-time 60)",
+      "WebFetch(domain:www.data.go.kr)",
+      "Read(//k/0000 3740 프로젝트 \\\\\\(경제적자유\\\\\\)/00. 주식/2 AI 프롬프트/**)"
     ]
   }
 }
