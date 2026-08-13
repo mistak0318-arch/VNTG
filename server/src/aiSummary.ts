@@ -57,6 +57,22 @@ function edition(now = new Date()): string {
  * 리포트 데이터를 사람이 읽는 짧은 텍스트로 압축한다.
  * 이게 곧 프롬프트 본문이라, 여기서 토큰이 결정된다.
  */
+/**
+ * 오늘 장이 이미 열렸는가.
+ *
+ * 키움은 장 시작 전에도 응답을 주는데, 등락률·상승종목수가 전부 0으로 온다.
+ * 그걸 그대로 넘기면 AI가 "오늘 상승 0 / 하락 0"을 사실로 읽고
+ * **"데이터가 없어 판단 불가"라는 문장을 성실하게 써낸다.** 실제로 조간 리포트의
+ * 한 섹션이 통째로 그 말로 채워졌다.
+ *
+ * 그래서 시각으로 짐작하지 않고 **받은 데이터로 판정한다** — 지수가 전부 0이면
+ * 아직 거래가 없는 것이다. 공휴일에도 자동으로 맞는다.
+ */
+function hasTradedToday(indices: IndexCard[]): boolean {
+  if (indices.length === 0) return false;
+  return indices.some((i) => i.changeRate !== 0 || i.rising > 0 || i.falling > 0);
+}
+
 /** 시황 질문하기(askMarket)도 같은 다이제스트를 쓴다 */
 export async function buildDigest(client: KiwoomClient): Promise<string> {
   const watchNames = (await listWatchlist().catch(() => [])).map((w) => w.name);
@@ -77,20 +93,36 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
   const lines: string[] = [];
 
   const indices = (idxSec?.data ?? []) as IndexCard[];
+  const traded = hasTradedToday(indices);
+
   if (indices.length > 0) {
-    lines.push("[지수]");
-    for (const i of indices) {
-      // 상승/하락 종목 수까지 넣어야 "지수는 올랐는데 개별주는 죽었다"를 판단할 수 있다
-      lines.push(
-        `${i.name} ${fmt(i.price)} ${pct(i.changeRate)} (상승 ${i.rising} / 하락 ${i.falling} / 상한 ${i.upperLimit} / 하한 ${i.lowerLimit})`,
-      );
-      // 장중 흐름 — 4개 지점으로 압축해서 "초반 강세 후 밀림" 같은 패턴을 읽게 한다
-      if (i.sparkline.length >= 6) {
-        const sp = i.sparkline;
-        const seg = Math.floor(sp.length / 3);
-        const at = (n: number) => sp[Math.min(n, sp.length - 1)];
-        lines.push(`  장중: ${fmt(at(0))} → ${fmt(at(seg))} → ${fmt(at(seg * 2))} → ${fmt(sp[sp.length - 1])}`);
+    if (traded) {
+      lines.push("[지수]");
+      for (const i of indices) {
+        // 상승/하락 종목 수까지 넣어야 "지수는 올랐는데 개별주는 죽었다"를 판단할 수 있다
+        lines.push(
+          `${i.name} ${fmt(i.price)} ${pct(i.changeRate)} (상승 ${i.rising} / 하락 ${i.falling} / 상한 ${i.upperLimit} / 하한 ${i.lowerLimit})`,
+        );
+        // 장중 흐름 — 4개 지점으로 압축해서 "초반 강세 후 밀림" 같은 패턴을 읽게 한다
+        if (i.sparkline.length >= 6) {
+          const sp = i.sparkline;
+          const seg = Math.floor(sp.length / 3);
+          const at = (n: number) => sp[Math.min(n, sp.length - 1)];
+          lines.push(`  장중: ${fmt(at(0))} → ${fmt(at(seg))} → ${fmt(at(seg * 2))} → ${fmt(sp[sp.length - 1])}`);
+        }
       }
+    } else {
+      /*
+       * 아직 거래 전. 등락률·상승종목수는 전부 0이라 넘겨봐야 해가 되므로 종가만 준다.
+       * "오늘 데이터가 없다"는 사실을 프롬프트가 아니라 여기서 확실히 못박아야
+       * AI가 0을 사실로 오해하지 않는다.
+       */
+      lines.push("[지수 — 직전 거래일 종가. 오늘은 아직 거래 전이라 당일 등락 데이터가 없다]");
+      for (const i of indices) lines.push(`${i.name} ${fmt(i.price)}`);
+      lines.push(
+        "※ 오늘의 상승/하락 종목 수, 신고가/신저가, 당일 테마 등락률은 존재하지 않는다.",
+        "  그 항목들을 언급하거나 '데이터가 없어 판단 불가'라고 쓰지 마라. 아예 다루지 마라.",
+      );
     }
   }
 
@@ -103,7 +135,7 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
   }
 
   const flow = (flowSec?.data ?? null) as MarketFlow | null;
-  if (flow) {
+  if (flow && traded) {
     lines.push("\n[투자자 순매수, 억원]");
     lines.push(`코스피: 외국인 ${fmt(flow.kospi.foreign)} / 기관 ${fmt(flow.kospi.institution)} / 개인 ${fmt(flow.kospi.individual)}`);
     lines.push(`  (기관 세부) 금융투자 ${fmt(flow.kospi.financialInvestment)} / 투신 ${fmt(flow.kospi.investmentTrust)} / 연기금 ${fmt(flow.kospi.pensionFund)} / 사모 ${fmt(flow.kospi.privateFund)} / 보험 ${fmt(flow.kospi.insurance)}`);
@@ -119,7 +151,8 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
   const flowDigest = toSectorFlowDigest(flowDays);
   if (flowDigest) lines.push(flowDigest);
 
-  if (drivers) {
+  // 테마·급등락·신고저는 전부 "당일" 값이라 거래 전에는 0이다. 넣으면 해만 된다.
+  if (drivers && traded) {
     lines.push("\n[강한 테마]");
     for (const t of drivers.themes.up) {
       const why = t.reasons.length > 0 ? ` ← ${t.reasons[0].title}` : "";
@@ -132,7 +165,7 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
   }
 
   const movers = (moverSec?.data ?? null) as { rising: StockRow[]; falling: StockRow[] } | null;
-  if (movers) {
+  if (movers && traded) {
     lines.push("\n[급등 상위]");
     lines.push(movers.rising.slice(0, 8).map((x) => `${x.name} ${pct(x.changeRate)}`).join(", "));
     lines.push("[급락 상위]");
@@ -140,7 +173,7 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
   }
 
   const hiLo = (hiLoSec?.data ?? null) as HighLow | null;
-  if (hiLo) {
+  if (hiLo && traded) {
     // 신고가가 많으면 상승이 특정 종목에 그치지 않고 퍼졌다는 뜻
     lines.push("\n[250일 신고가/신저가]");
     lines.push(`신고가 ${hiLo.high.length}종목: ${hiLo.high.slice(0, 6).map((x) => x.name).join(", ")}`);
@@ -206,6 +239,45 @@ const SYSTEM_RULES = `너는 한국 주식시장 데이터를 정리해 주는 �
 
 
 /**
+ * 조간 규칙.
+ *
+ * 조간은 07시, **장이 열리기 두 시간 전**에 나간다. 그런데 평일 틀을 그대로 쓰면
+ * "오늘 상승/하락 종목 수"를 다루려다 전부 0이라 "판단 불가"만 늘어놓게 된다.
+ * 실제로 그렇게 나갔다 — 다섯 섹션 중 하나가 통째로 그 말이었다.
+ *
+ * 개장 전에 알고 싶은 건 딱 셋이다.
+ *   간밤 해외에서 무슨 일이 있었나 / 그게 오늘 우리 장에 뭘 의미하나 / 오늘 뭘 봐야 하나
+ * 그래서 항목을 그 셋으로 갈아끼우고, 오늘 시세를 말하지 말라고 명시한다.
+ */
+const MORNING_RULES = `너는 한국 주식시장 개장 전 브리핑을 쓰는 애널리스트다.
+
+**지금은 장이 열리기 전이다.** 따라서:
+- **오늘의 지수 등락, 상승/하락 종목 수, 신고가/신저가, 당일 테마 등락률은 존재하지 않는다.**
+  그 항목을 언급하지도, "데이터가 없어 판단할 수 없다"고 쓰지도 마라. 아예 다루지 마라.
+- 국내 수치를 인용할 땐 반드시 **"전일"** 또는 **"직전 거래일"** 임을 밝혀라.
+- 간밤 해외 시장과 뉴스가 이 브리핑의 본체다. 거기에 지면을 써라.
+- 주어진 데이터에 있는 사실만 쓴다. 없는 수치를 지어내지 마라.
+- **특정 종목 매수/매도를 권하지 마라.** 목표주가를 제시하지 마라.
+- 한국어로, 전체 한글 1,000~1,400자.
+
+## 간밤 해외
+(미국·유럽·아시아 지수와 그 원인. 유가·금리·환율에 특징이 있으면 함께.
+어떤 업종·테마가 움직였는지까지 짚어라 — 그게 오늘 우리 장의 출발점이다)
+
+## 오늘 국내 시장에 주는 함의
+(간밤 해외 흐름이 어느 업종·테마로 연결되는지. 전일 수급 흐름이 이어질지 끊길지의 근거.
+연결이 약하면 약하다고 쓰고 억지로 이어붙이지 마라)
+
+## 관심종목 체크
+(사용자 관심종목 각각에 대해 간밤 해외·뉴스에서 관련된 것이 있으면 짚는다.
+전일 수급과 편입가 대비 수익률을 함께. 관련 소식이 없는 종목은 굳이 언급하지 마라)
+
+## 오늘 확인할 것
+(다가오는 일정과 뉴스에서 나오는 확인 사항 3~4개.
+"무엇을 보면 무엇을 알 수 있는가" 형태로 구체적으로 써라.
+예: "개장 후 외국인이 전기전자에서 순매수를 이어가는지 — 끊기면 전일 급등이 일회성")`;
+
+/**
  * 주말판 규칙.
  *
  * 장이 안 열렸으므로 지수·수급·장중흐름을 말할 게 없다. 그런데도 평일 틀을 그대로 쓰면
@@ -253,6 +325,7 @@ export async function buildAiSummary(
   }
 
   const weekend = editionKey === "weekend";
+  const morning = editionKey === "morning";
   const digest = await buildDigest(client);
 
   /*
@@ -260,9 +333,10 @@ export async function buildAiSummary(
    * 웹 검색을 붙여 간밤 미국장과 시장이 주목하는 주제를 직접 확인하게 한다.
    * 검색은 회당 $0.01이라 상한(max_uses)으로 비용을 막는다.
    */
+  // 조간은 간밤 해외가 본체인데 우리가 가진 해외 데이터는 지수 몇 개뿐이라 검색을 더 준다
   const research = process.env.RESEARCH_ENABLED === "0"
     ? null
-    : await runWebResearch(weekend ? 4 : 6).catch(() => null);
+    : await runWebResearch(weekend ? 4 : morning ? 8 : 6).catch(() => null);
   const label = editionKey
     ? {
         morning: "조간(장 시작 전)",
@@ -272,7 +346,16 @@ export async function buildAiSummary(
       }[editionKey] ?? edition(now)
     : edition(now);
 
-  const prompt = `${weekend ? WEEKEND_RULES : SYSTEM_RULES}
+  /*
+   * 판마다 알고 싶은 게 다르다.
+   *   조간 — 간밤 해외와 오늘 볼 것 (오늘 시세는 아직 없다)
+   *   장중·석간 — 오늘 실제로 무슨 일이 있었나
+   *   주말 — 뉴스만
+   * 하나의 틀로 세 판을 다 쓰면 조간이 "데이터 없음"으로 채워진다.
+   */
+  const rules = weekend ? WEEKEND_RULES : morning ? MORNING_RULES : SYSTEM_RULES;
+
+  const prompt = `${rules}
 
 지금은 ${now.toLocaleString("ko-KR", { hour12: false })} (${label}) 기준이다.
 

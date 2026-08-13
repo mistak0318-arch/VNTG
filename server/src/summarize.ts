@@ -80,6 +80,7 @@ export async function summarize(
     const body = (await res.json()) as {
       content?: { type: string; text?: string }[];
       usage?: { input_tokens?: number; output_tokens?: number };
+      stop_reason?: string;
       error?: { message?: string };
     };
 
@@ -102,6 +103,21 @@ export async function summarize(
       .map((c) => c.text ?? "")
       .join("")
       .trim();
+
+    /*
+     * 출력 상한에 걸려 문장 중간에서 끊긴 응답이 그대로 발행된 적이 있다
+     * ("...닛케이는 +1." 에서 끝남). 조용히 나가면 잘린 줄도 모르므로 반드시 알린다.
+     * 텍스트는 살려서 돌려준다 — 잘렸어도 앞부분은 쓸 만하다.
+     */
+    if (body.stop_reason === "max_tokens") {
+      return {
+        text: text || null,
+        inputTokens,
+        outputTokens,
+        usedModel,
+        error: `출력 상한(${maxTokens} 토큰)에 걸려 문장이 잘렸습니다. 분량을 줄이거나 상한을 올리세요.`,
+      };
+    }
 
     return { text: text || null, inputTokens, outputTokens, usedModel };
   } catch (err) {
