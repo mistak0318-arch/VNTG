@@ -1,5 +1,6 @@
 import { buildAiSummary } from "./aiSummary.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { captureBreadth } from "./breadthStore.js";
 import { deliverReport } from "./reportDelivery.js";
 import {
   EDITIONS,
@@ -58,6 +59,14 @@ async function tick(client: KiwoomClient): Promise<void> {
   if (publishing) return;
   const now = new Date();
   if (isWeekend(now)) return;
+
+  // 시장 폭은 리포트와 무관하게 매 tick 시도한다.
+  // 소급 조회가 불가능한 데이터라 하루라도 빠지면 영영 메울 수 없다 —
+  // 리포트 발행이 실패하는 날에도 이건 남아야 하므로 위에 둔다.
+  await captureBreadth(client).catch((err: unknown) => {
+    console.error("[breadth] 저장 실패:", err instanceof Error ? err.message : err);
+    return null;
+  });
 
   const date = todayStr(now);
   for (const e of EDITIONS) {

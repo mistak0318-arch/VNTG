@@ -170,6 +170,10 @@ export const api = {
   kiwoomGroups: () => getJson<{ groups: KiwoomGroup[] }>("/api/watchlist/kiwoom/groups"),
   kiwoomGroupStocks: (code: string) =>
     getJson<{ items: KiwoomGroupStock[] }>(`/api/watchlist/kiwoom/groups/${code}`),
+  breadth: (days = 60) =>
+    getJson<{ days: number; points: BreadthPoint[]; summary: string }>(
+      `/api/breadth?days=${days}`,
+    ),
   signal: (code: string, force = false) =>
     getJson<SignalResult>(`/api/signal/${code}${force ? "?force=1" : ""}`),
   signalBatch: (codes: string[]) =>
@@ -367,6 +371,18 @@ export interface EvaluatedAccount {
   totalValue: number;
   totalProfit: number;
   totalReturnRate: number | null;
+}
+
+export interface BreadthPoint {
+  date: string;
+  advanceDecline: number;
+  adLine: number;
+  risingPct: number;
+  newHigh: number;
+  newLow: number;
+  highLowDiff: number;
+  kospiRate: number;
+  kosdaqRate: number;
 }
 
 export type SignalLevel = "green" | "yellow" | "red" | "unknown";

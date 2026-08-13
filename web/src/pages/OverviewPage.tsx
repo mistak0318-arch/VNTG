@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { BreadthPanel } from "../components/BreadthPanel";
 import {
   api,
   fmtNum,
@@ -221,6 +222,14 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                   )}
                 </tbody>
               </table>
+            </div>
+          </OverviewCard>
+        )}
+
+        {show("summary") && (
+          <OverviewCard title="시장 폭 추이">
+            <div className="ov-card-b">
+              <BreadthPanel />
             </div>
           </OverviewCard>
         )}

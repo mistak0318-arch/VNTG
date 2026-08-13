@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { describeBreadth, listBreadth, toPoints } from "./breadthStore.js";
 import { getSection } from "./marketOverview.js";
 import type { IndexCard, MarketFlow, StockRow, HighLow } from "./marketOverview.js";
 import type { GlobalQuote } from "./globalMarket.js";
