@@ -159,6 +159,17 @@ export const api = {
   kiwoomGroups: () => getJson<{ groups: KiwoomGroup[] }>("/api/watchlist/kiwoom/groups"),
   kiwoomGroupStocks: (code: string) =>
     getJson<{ items: KiwoomGroupStock[] }>(`/api/watchlist/kiwoom/groups/${code}`),
+  notes: (code: string) => getJson<{ name: string; notes: StockNote[] }>(`/api/notes/${code}`),
+  notesRecent: (limit = 30) =>
+    getJson<{ items: { code: string; name: string; note: StockNote }[] }>(
+      `/api/notes/recent?limit=${limit}`,
+    ),
+  noteAdd: (code: string, name: string, text: string) =>
+    postJson<{ name: string; notes: StockNote[] }>(`/api/notes/${code}`, { name, text }),
+  noteUpdate: (code: string, id: string, text: string) =>
+    patchJson<{ name: string; notes: StockNote[] }>(`/api/notes/${code}/${id}`, { text }),
+  noteRemove: (code: string, id: string) =>
+    deleteJson<{ name: string; notes: StockNote[] }>(`/api/notes/${code}/${id}`),
   calendarList: (month?: string) =>
     getJson<{ events: CalendarEvent[] }>(`/api/calendar${month ? `?month=${month}` : ""}`),
   calendarUpcoming: (days = 14) =>
@@ -335,6 +346,14 @@ export interface EvaluatedAccount {
   totalValue: number;
   totalProfit: number;
   totalReturnRate: number | null;
+}
+
+export interface StockNote {
+  id: string;
+  at: string;
+  price: number;
+  changeRate: number;
+  text: string;
 }
 
 export type EventKind = "market" | "personal" | "earnings" | "holiday";

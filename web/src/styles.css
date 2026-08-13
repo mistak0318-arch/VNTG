@@ -2345,3 +2345,46 @@ body {
   cursor: pointer;
 }
 .news-more:hover { color: var(--blue); border-color: var(--blue); }
+.driver-item.clickable .driver-head { cursor: pointer; }
+.driver-item.clickable:hover { background: var(--panel-2); }
+.driver-open { font-size: 11px; color: var(--blue); margin-left: 8px; white-space: nowrap; }
+
+/* ---------------- 종목 메모 ---------------- */
+.note-input { margin-bottom: 12px; }
+.note-textarea {
+  width: 100%;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 13.5px;
+  font-family: inherit;
+  line-height: 1.55;
+  resize: vertical;
+  margin-bottom: 8px;
+}
+.note-textarea:focus { outline: none; border-color: var(--blue); }
+.note-list { display: flex; flex-direction: column; gap: 8px; }
+.note-item {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.note-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--muted);
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.note-when em { font-style: normal; opacity: 0.75; margin-left: 4px; }
+.note-price b { color: var(--text); font-variant-numeric: tabular-nums; }
+.note-return { font-weight: 700; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.note-actions { margin-left: auto; display: flex; gap: 2px; }
+.note-body { font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; }

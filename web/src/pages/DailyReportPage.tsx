@@ -12,6 +12,7 @@ import {
   type ThemeRow,
 } from "../api";
 import { AiSummaryCard } from "../components/AiSummaryCard";
+import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { FlowBars } from "../components/overview/FlowBars";
 import { type MarketDriverReport, type ScoredNews } from "../api";
 import { SectorNews } from "../components/SectorNews";
@@ -88,18 +89,22 @@ function DriverItem({
   rate,
   sub,
   reasons,
+  onOpen,
 }: {
   name: string;
   rate: number;
   sub: string;
   reasons: ScoredNews[];
+  /** 구성종목 보기 */
+  onOpen?: () => void;
 }) {
   return (
-    <div className="driver-item">
-      <div className="driver-head">
+    <div className={`driver-item${onOpen ? " clickable" : ""}`}>
+      <div className="driver-head" onClick={onOpen} role={onOpen ? "button" : undefined}>
         <span className="driver-name">{name}</span>
         <span className={`driver-rate ${signClass(rate)}`}>{pct(rate)}</span>
         <span className="driver-sub">{sub}</span>
+        {onOpen && <span className="driver-open">구성종목 ›</span>}
       </div>
       {reasons.length > 0 ? (
         <div className="driver-reasons">
@@ -161,6 +166,7 @@ export function DailyReportPage({
   const [edition, setEdition] = useState<Edition>(() => currentEdition(new Date()));
   const [newsAt, setNewsAt] = useState<string>("");
   const [drivers, setDrivers] = useState<MarketDriverReport | null>(null);
+  const [target, setTarget] = useState<ConstituentTarget | null>(null);
 
   useEffect(() => {
     api
@@ -333,6 +339,7 @@ export function DailyReportPage({
               rate={t.changeRate}
               sub={`${t.stockCount}종목 · ${t.mainStock}`}
               reasons={t.reasons}
+              onOpen={() => setTarget({ kind: "theme", code: t.code, name: t.name })}
             />
           ))}
           {!drivers && <div className="empty">테마 분석 불러오는 중...</div>}
@@ -349,6 +356,7 @@ export function DailyReportPage({
               rate={t.changeRate}
               sub={`${t.stockCount}종목 · ${t.mainStock}`}
               reasons={t.reasons}
+              onOpen={() => setTarget({ kind: "theme", code: t.code, name: t.name })}
             />
           ))}
         </div>
@@ -364,6 +372,17 @@ export function DailyReportPage({
               rate={sec.changeRate}
               sub={sec.market}
               reasons={sec.reasons}
+              onOpen={
+                sec.code
+                  ? () =>
+                      setTarget({
+                        kind: "sector",
+                        code: sec.code,
+                        name: sec.name,
+                        market: sec.market === "코스피" ? "kospi" : "kosdaq",
+                      })
+                  : undefined
+              }
             />
           ))}
           {!drivers && <div className="empty">업종 분석 불러오는 중...</div>}
@@ -402,6 +421,17 @@ export function DailyReportPage({
       <Section no={7} title="주요 뉴스 클리핑">
         <SectorNews perSector={20} onFetched={setNewsAt} />
       </Section>
+
+      {target && (
+        <ConstituentSheet
+          target={target}
+          onClose={() => setTarget(null)}
+          onSelectStock={(c, n) => {
+            setTarget(null);
+            onSelectStock(c, n);
+          }}
+        />
+      )}
 
       <div className="table-note report-footer">
         데이터: 키움 REST API · DART · 네이버 검색 API · Yahoo Finance ·

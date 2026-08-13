@@ -35,7 +35,8 @@ export function ConstituentSheet({
         : api.sectorStocks(target.market ?? "kospi", target.code);
     req
       .then((res) => {
-        if (!cancelled) setItems(res.items);
+        // 시총이 큰 종목일수록 테마·업종을 실제로 끌고 가는 힘이 크므로 기본 정렬을 시총순으로
+        if (!cancelled) setItems([...res.items].sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)));
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -108,7 +109,7 @@ export function ConstituentSheet({
               </tbody>
             </table>
             <div className="table-note">
-              {items.length}개 종목 · 시가총액 = 상장주식수 × 현재가 (억원) · 종목을 누르면 상세로
+              {items.length}개 종목 · 시가총액 큰 순 · 시가총액 = 상장주식수 × 현재가 (억원) · 종목을 누르면 상세로
               이동합니다
             </div>
           </div>

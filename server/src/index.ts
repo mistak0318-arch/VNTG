@@ -17,6 +17,7 @@ import { createAlgoRouter } from "./routes/algo.js";
 import { createCalendarRouter } from "./routes/calendar.js";
 import { createMarketRouter } from "./routes/market.js";
 import { createNewsRouter } from "./routes/news.js";
+import { createNotesRouter } from "./routes/notes.js";
 import { createOverviewRouter } from "./routes/overview.js";
 import { createRankingRouter } from "./routes/ranking.js";
 import { createReportRouter } from "./routes/report.js";
@@ -65,6 +66,7 @@ app.use("/api/watchlist", createWatchlistRouter(client));
 app.use("/api/feed", createNewsRouter());
 app.use("/api/settings", createSettingsRouter());
 app.use("/api/calendar", createCalendarRouter());
+app.use("/api/notes", createNotesRouter(client));
 app.use("/api/report", createReportRouter(client));
 
 // 07/12/18시에 리포트를 발행한다 (AI 요약은 이때만 생성)
