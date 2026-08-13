@@ -119,7 +119,8 @@
       "Bash(cd \"K:/0000 *)",
       "Bash(awk -F= '/^TELEGRAM|^NAVER_MAIL|^MAIL_TO|^ANTHROPIC/ {print $1\": \"\\(length\\($2\\)>0 ? \"설정됨\\(\"length\\($2\\)\"자\\)\" : \"비어있음\"\\)}' server/.env)",
       "Bash(curl.exe -s --max-time 8 \"http://localhost:4000/api/signal/config\" -o /dev/null -w \"%{http_code}\\\\n\")",
-      "Bash(npx tsx -e ' *)"
+      "Bash(npx tsx -e ' *)",
+      "Bash(다음작업_TODO.md)"
     ]
   }
 }
