@@ -126,15 +126,45 @@ export async function disconnectReader(): Promise<void> {
   }
 }
 
+/**
+ * 우리가 알림을 보내는 방들의 id.
+ *
+ * 이걸 수집 대상에서 빼지 않으면 봇이 보낸 리포트·시그널을 다음 회차에 다시 읽어들이고,
+ * 그게 또 요약에 들어가 다음 리포트에 반영되는 되먹임이 생긴다.
+ * 텔레그램 id는 앞에 -100 이 붙는 형태가 섞여 있어 숫자 부분만 비교한다.
+ */
+function ownChatIds(): Set<string> {
+  const keys = [
+    "TELEGRAM_CHAT_ID",
+    "TELEGRAM_CHAT_ID_REPORT",
+    "TELEGRAM_CHAT_ID_SIGNAL",
+    "TELEGRAM_CHAT_ID_LOG",
+    "TELEGRAM_CHAT_ID_CHANNEL",
+  ];
+  const out = new Set<string>();
+  for (const k of keys) {
+    const v = process.env[k]?.trim();
+    if (v) out.add(v.replace(/^-100/, "").replace(/^-/, ""));
+  }
+  return out;
+}
+
+function isOwnChat(id: string, own: Set<string>): boolean {
+  return own.has(String(id).replace(/^-100/, "").replace(/^-/, ""));
+}
+
 /** 구독 목록을 새로 읽어 기존 선택(enabled)은 유지한 채 병합한다 */
 export async function refreshChannels(): Promise<ChannelEntry[]> {
   const c = await getClient();
   const dialogs = await c.getDialogs({ limit: 500 });
   void recordApiCall("telegram", "getDialogs", "ok");
 
+  const own = ownChatIds();
   const prev = new Map((await listChannels()).map((p) => [p.id, p]));
   const rows: ChannelEntry[] = dialogs
     .filter((d: any) => d.isChannel || d.isGroup)
+    // 우리가 쓰는 알림방은 목록에서 아예 뺀다 (되먹임 방지)
+    .filter((d: any) => !isOwnChat(String(d.id), own))
     .map((d: any) => ({
       id: String(d.id),
       name: d.title ?? d.name ?? "(이름 없음)",
