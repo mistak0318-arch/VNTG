@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type NewsItem } from "../api";
+import { api, type ScoredNews } from "../api";
 
 /**
  * 분야별 뉴스 (증시 / 글로벌 / 정책·금융 / 산업·기업 / 부동산).
@@ -25,15 +25,25 @@ export function fmtNewsTime(iso: string): string {
   });
 }
 
-/** 기사 한 줄 — 제목 + 요약 2줄 + 언론사/시각 */
-export function NewsRow({ item }: { item: NewsItem }) {
+/** 기사 한 줄 — 제목(강조) + 요약 + 언론사/시각/보도량 */
+export function NewsRow({ item }: { item: ScoredNews }) {
+  const hot = item.coverage >= 4;
   return (
     <a className="news-item" href={item.link} target="_blank" rel="noreferrer noopener">
-      <div className="news-title">{item.title}</div>
+      <div className="news-title">
+        {item.mentions.length > 0 && <span className="news-tag watch">★ {item.mentions[0]}</span>}
+        {hot && <span className="news-tag hot">주목</span>}
+        {item.title}
+      </div>
       {item.summary && <div className="news-summary">{item.summary}</div>}
       <div className="news-meta">
         <span className={item.major ? "press-major" : ""}>{item.press}</span>
         <span>{fmtNewsTime(item.publishedAt)}</span>
+        {item.coverage > 1 && (
+          <span className="news-coverage" title={item.alsoPress.join(", ")}>
+            {item.coverage}개 매체
+          </span>
+        )}
       </div>
     </a>
   );
@@ -47,7 +57,7 @@ export function SectorNews({
   /** 상위 화면이 기준시각을 표시할 수 있게 알려준다 */
   onFetched?: (iso: string) => void;
 }) {
-  const [sectors, setSectors] = useState<{ key: string; label: string; items: NewsItem[] }[]>([]);
+  const [sectors, setSectors] = useState<{ key: string; label: string; items: ScoredNews[] }[]>([]);
   const [tab, setTab] = useState("market");
   const [scope, setScope] = useState<"major" | "all">("major");
   const [loading, setLoading] = useState(true);

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getFinance } from "../dartFinance.js";
 import { getDisclosures, newsCounts, searchNews, sectorNews } from "../newsDisclosure.js";
+import { listWatchlist } from "../watchlist.js";
 
 export function createNewsRouter(): Router {
   const router = Router();
@@ -31,7 +32,9 @@ export function createNewsRouter(): Router {
     try {
       const majorOnly = req.query.scope !== "all";
       const perSector = Math.min(Number(req.query.per) || 8, 20);
-      res.json(await sectorNews({ majorOnly, perSector }));
+      // 관심종목이 언급된 기사를 위로 올리기 위해 종목명을 넘긴다
+      const watchNames = (await listWatchlist().catch(() => [])).map((w) => w.name);
+      res.json(await sectorNews({ majorOnly, perSector, watchNames }));
     } catch (err) {
       next(err);
     }

@@ -371,18 +371,18 @@ export async function getDisclosures(stockCode: string, days = 180): Promise<Dis
 // ---------------------------------------------------------------- 섹터별 뉴스
 
 /**
- * 인포스탁처럼 분야를 나눠서 가져온다.
+ * 투자자 관점으로 뉴스를 고른다.
  *
- * 네이버 검색 API는 질의어 하나만 받으므로, 섹터마다 별도 질의를 던지고
- * 섹터 간 중복 기사를 제거한다. 섹터 수만큼 호출이 늘지만 5분 캐싱이 걸려 있고
- * 일 한도(25,000건)에 비하면 미미하다.
+ * 단순 최신순은 쓸모가 없다. 실제로 판단에 쓰이는 건
+ *  (1) 시장을 움직이는 사건이냐  (2) 여러 매체가 동시에 다뤘느냐
+ *  (3) 내가 들고 있는 종목 얘기냐  — 이 셋이다.
+ * 그래서 점수를 매겨 정렬하고, 중복 기사는 지우는 대신 "보도량"으로 환산한다.
  */
 export interface NewsSector {
   key: string;
   label: string;
-  /** 이 섹터로 인정할 질의어 */
-  query: string;
-  /** 제목에 이 단어가 있으면 이 섹터로 우선 배정 (섹터 간 중복 정리용) */
+  /** 여러 질의를 던져 합친다. 한 단어로는 원하는 기사가 안 걸린다. */
+  queries: string[];
   hints: string[];
 }
 
@@ -390,89 +390,223 @@ export const NEWS_SECTORS: NewsSector[] = [
   {
     key: "market",
     label: "증시",
-    query: "코스피 코스닥 증시 마감",
-    hints: ["코스피", "코스닥", "증시", "지수", "상한가", "특징주", "외국인", "기관"],
+    queries: ["코스피 마감 시황", "특징주 급등", "외국인 기관 순매수"],
+    hints: ["코스피", "코스닥", "증시", "지수", "상한가", "특징주", "외국인", "기관", "수급"],
   },
   {
     key: "global",
     label: "글로벌",
-    query: "뉴욕증시 나스닥 다우",
-    hints: ["뉴욕", "나스닥", "다우", "S&P", "연준", "FOMC", "월가", "일본", "중국", "유럽"],
+    queries: ["뉴욕증시 마감", "연준 FOMC 금리", "환율 달러"],
+    hints: ["뉴욕", "나스닥", "다우", "S&P", "연준", "FOMC", "월가", "환율", "달러", "엔화", "위안"],
   },
   {
     key: "policy",
     label: "정책·금융",
-    query: "금융위원회 한국은행 기준금리 정책",
-    hints: ["금융위", "금감원", "한국은행", "기준금리", "정부", "규제", "세제", "국회"],
+    queries: ["한국은행 기준금리", "금융위원회 규제", "정부 지원 대책"],
+    hints: ["금융위", "금감원", "한국은행", "기준금리", "정부", "규제", "세제", "국회", "대책"],
   },
   {
     key: "industry",
     label: "산업·기업",
-    query: "기업 실적 반도체 수출",
-    hints: ["실적", "영업이익", "수주", "공급", "반도체", "수출", "신제품", "인수"],
+    queries: ["기업 실적 발표 영업이익", "반도체 수주 계약", "신규 투자 증설"],
+    hints: ["실적", "영업이익", "수주", "계약", "공급", "반도체", "수출", "증설", "인수", "합병"],
   },
   {
     key: "realestate",
     label: "부동산",
-    query: "부동산 아파트 분양 전세",
-    hints: ["부동산", "아파트", "분양", "전세", "청약", "재건축", "임대"],
+    queries: ["부동산 대책 아파트", "분양 청약 시장"],
+    hints: ["부동산", "아파트", "분양", "전세", "청약", "재건축", "임대", "주택"],
   },
 ];
 
-/** 제목이 어느 섹터에 더 어울리는지 (힌트 단어가 많이 맞는 쪽) */
-function bestSector(title: string, fallback: string): string {
-  let best = fallback;
-  let bestScore = 0;
-  for (const sec of NEWS_SECTORS) {
-    const score = sec.hints.filter((h) => title.includes(h)).length;
-    if (score > bestScore) {
-      bestScore = score;
-      best = sec.key;
-    }
-  }
-  return best;
+/**
+ * 제목에 등장하면 주가에 직접 영향이 큰 단어들.
+ * 값이 클수록 "장 열리면 바로 반응할" 사건에 가깝다.
+ */
+const IMPACT_WEIGHTS: [RegExp, number][] = [
+  [/상한가|하한가|급등|급락|폭등|폭락/, 6],
+  [/신고가|신저가|52주/, 5],
+  [/어닝\s*서프라이즈|호실적|실적\s*(개선|쇼크)|영업이익.*(증가|감소|흑자|적자)/, 5],
+  [/수주|공급\s*계약|대규모\s*계약|납품/, 5],
+  [/유상증자|무상증자|자사주|배당|액면분할|주식병합/, 4],
+  [/인수|합병|매각|지분\s*(취득|매입)/, 4],
+  [/목표주가|투자의견|상향|하향/, 4],
+  [/기준금리|금리\s*(인상|인하|동결)/, 4],
+  [/FOMC|CPI|고용지표|물가/, 3],
+  [/외국인.*순매수|기관.*순매수|프로그램.*순매수/, 3],
+  [/공매도|대차잔고/, 3],
+  [/상장|IPO|공모/, 2],
+  [/실적\s*발표|컨센서스/, 2],
+];
+
+function impactScore(title: string): number {
+  let score = 0;
+  for (const [re, w] of IMPACT_WEIGHTS) if (re.test(title)) score += w;
+  return score;
+}
+
+/**
+ * 같은 사건인지 판정하기 위한 "사건 서명".
+ *
+ * 한국어 헤드라인은 표현이 제각각이라 단어 겹침만으로는 안 묶인다.
+ * (예: "코스피 3.56% 급등, 6800선 회복" vs "[마감시황] 코스피, 외국인 순매수에 3%대 상승")
+ * 그래서 주체(코스피/코스닥/종목명) + 방향(급등/급락) + 등락률 정수부를 뽑아 서명으로 쓴다.
+ */
+const SUBJECTS = ["코스피", "코스닥", "나스닥", "다우", "S&P", "환율", "국제유가", "금값", "비트코인"];
+const DIRECTIONS: [RegExp, string][] = [
+  [/급등|폭등|강세|상승|오름|반등|회복/, "up"],
+  [/급락|폭락|약세|하락|내림|조정/, "down"],
+  [/순매수/, "buy"],
+  [/순매도/, "sell"],
+];
+
+function eventSignature(title: string): string | null {
+  const subject = SUBJECTS.find((x) => title.includes(x));
+  if (!subject) return null;
+  const dir = DIRECTIONS.find(([re]) => re.test(title))?.[1];
+  if (!dir) return null;
+  // "3.56%" / "3%대" → 3 (반올림 아닌 정수부. 매체마다 소수점 표기가 달라서)
+  const pct = /(\d+(?:\.\d+)?)\s*%/.exec(title);
+  const bucket = pct ? String(Math.floor(Number(pct[1]))) : "-";
+  return `${subject}|${dir}|${bucket}`;
+}
+
+/** 제목을 단어 집합으로 — 서명이 안 나올 때 쓰는 보조 판정 */
+function tokenSet(title: string): Set<string> {
+  const cleaned = title.replace(/\[[^\]]*\]/g, " ").replace(/[^가-힣a-zA-Z0-9]/g, " ");
+  return new Set(cleaned.split(/\s+/).filter((t) => t.length >= 2));
+}
+
+/** 길이 차이에 덜 민감한 겹침 비율 (작은 쪽 기준) */
+function overlap(a: Set<string>, b: Set<string>): { ratio: number; count: number } {
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter += 1;
+  const min = Math.min(a.size, b.size);
+  return { ratio: min === 0 ? 0 : inter / min, count: inter };
+}
+
+export interface ScoredNews extends NewsItem {
+  /** 같은 사건을 다룬 매체 수 — 많을수록 시장이 주목한 뉴스 */
+  coverage: number;
+  /** 함께 보도한 다른 언론사 */
+  alsoPress: string[];
+  /** 내 관심종목 중 이 기사에 언급된 것 */
+  mentions: string[];
+  score: number;
 }
 
 export interface SectorNews {
   key: string;
   label: string;
-  items: NewsItem[];
+  items: ScoredNews[];
+}
+
+/**
+ * 비슷한 기사를 한 덩어리로 묶는다.
+ * 대표 기사는 주요 언론사 > 제목이 구체적인 것(길이) 순으로 고른다.
+ */
+function cluster(items: NewsItem[]): { rep: NewsItem; members: NewsItem[] }[] {
+  const groups: { rep: NewsItem; sig: string | null; tokens: Set<string>; members: NewsItem[] }[] = [];
+
+  for (const it of items) {
+    const sig = eventSignature(it.title);
+    const tk = tokenSet(it.title);
+
+    // 1순위: 사건 서명이 같으면 같은 사건
+    // 2순위: 서명이 없으면 단어 겹침으로 (작은 쪽 기준 55% 이상 & 3단어 이상)
+    const hit = groups.find((g) => {
+      if (sig && g.sig) return g.sig === sig;
+      const o = overlap(g.tokens, tk);
+      return o.ratio >= 0.55 && o.count >= 3;
+    });
+
+    if (hit) {
+      hit.members.push(it);
+      const better =
+        (it.major && !hit.rep.major) ||
+        (it.major === hit.rep.major && it.title.length > hit.rep.title.length);
+      if (better) {
+        hit.rep = it;
+        hit.tokens = tk;
+      }
+    } else {
+      groups.push({ rep: it, sig, tokens: tk, members: [it] });
+    }
+  }
+  return groups.map((g) => ({ rep: g.rep, members: g.members }));
+}
+
+/** 발행이 오래될수록 점수를 깎는다 (6시간 지나면 절반) */
+function recencyFactor(iso: string): number {
+  if (!iso) return 0.5;
+  const hours = (Date.now() - new Date(iso).getTime()) / 3600_000;
+  if (hours < 0) return 1;
+  return 1 / (1 + hours / 6);
 }
 
 export async function sectorNews(
-  opts: { majorOnly?: boolean; perSector?: number } = {},
+  opts: { majorOnly?: boolean; perSector?: number; watchNames?: string[] } = {},
 ): Promise<{ sectors: SectorNews[]; fetchedAt: string }> {
-  const { majorOnly = true, perSector = 8 } = opts;
+  const { majorOnly = true, perSector = 8, watchNames = [] } = opts;
 
-  // 섹터별로 넉넉히 받아온 뒤 중복을 정리한다
   const raw = await Promise.all(
     NEWS_SECTORS.map(async (sec) => {
-      try {
-        return { sec, items: await searchNews(sec.query, { majorOnly, limit: perSector * 3 }) };
-      } catch {
-        return { sec, items: [] as NewsItem[] };
-      }
+      // 질의 여러 개를 합친다. 캐시가 질의 단위라 재호출 부담은 크지 않다.
+      const lists = await Promise.all(
+        sec.queries.map((q) =>
+          searchNews(q, { majorOnly, limit: 40 }).catch(() => [] as NewsItem[]),
+        ),
+      );
+      return { sec, items: lists.flat() };
     }),
   );
 
-  // 같은 기사가 여러 섹터에 걸리면 힌트 점수가 높은 섹터 하나에만 남긴다
-  const claimed = new Map<string, string>(); // 정규화 제목 -> 섹터 key
+  // 어느 섹터에 넣을지 먼저 확정 (힌트 점수)
+  const claimed = new Map<string, string>();
   for (const { sec, items } of raw) {
     for (const it of items) {
       const key = normalizeTitle(it.title);
-      if (!key) continue;
-      const target = bestSector(it.title, sec.key);
-      if (!claimed.has(key)) claimed.set(key, target);
+      if (!key || claimed.has(key)) continue;
+      let best = sec.key;
+      let bestScore = 0;
+      for (const s of NEWS_SECTORS) {
+        const sc = s.hints.filter((h) => it.title.includes(h)).length;
+        if (sc > bestScore) {
+          bestScore = sc;
+          best = s.key;
+        }
+      }
+      claimed.set(key, best);
     }
   }
 
-  const sectors: SectorNews[] = raw.map(({ sec, items }) => ({
-    key: sec.key,
-    label: sec.label,
-    items: items
-      .filter((it) => claimed.get(normalizeTitle(it.title)) === sec.key)
-      .slice(0, perSector),
-  }));
+  const sectors: SectorNews[] = raw.map(({ sec, items }) => {
+    const mine = items.filter((it) => claimed.get(normalizeTitle(it.title)) === sec.key);
+    const groups = cluster(mine);
+
+    const scored: ScoredNews[] = groups.map((g) => {
+      const presses = [...new Set(g.members.map((m) => m.press).filter(Boolean))];
+      const mentions = watchNames.filter((n) => g.rep.title.includes(n));
+
+      // 보도량은 로그로 눌러서 "한 사건이 화면을 독점"하지 않게
+      const coverageScore = Math.log2(presses.length + 1) * 4;
+      const impact = impactScore(g.rep.title);
+      const watchBonus = mentions.length > 0 ? 12 : 0; // 내 종목 얘기는 최우선
+      const majorBonus = g.rep.major ? 2 : 0;
+      const score = (coverageScore + impact + majorBonus + watchBonus) * recencyFactor(g.rep.publishedAt);
+
+      return {
+        ...g.rep,
+        coverage: presses.length,
+        alsoPress: presses.filter((p) => p !== g.rep.press).slice(0, 4),
+        mentions,
+        score: Math.round(score * 10) / 10,
+      };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return { key: sec.key, label: sec.label, items: scored.slice(0, perSector) };
+  });
 
   return { sectors, fetchedAt: new Date().toISOString() };
 }

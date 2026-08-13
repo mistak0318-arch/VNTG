@@ -11,6 +11,7 @@ import {
   type StockRow,
   type ThemeRow,
 } from "../api";
+import { FlowBars } from "../components/overview/FlowBars";
 import { SectorNews } from "../components/SectorNews";
 import { RefreshBar } from "../components/RefreshBar";
 import { useSection } from "../useSection";
@@ -231,28 +232,42 @@ export function DailyReportPage({
         </div>
       </Section>
 
-      {/* 2. 투자자 수급 */}
+      {/* 2. 투자자 수급 — 시황 대시보드와 같은 막대 그래프를 시장별로 */}
       <Section no={2} title="투자자별 매매 동향">
         {f ? (
-          <div className="summary-grid">
-            {[
-              { label: "외국인", value: f.kospi.foreign + f.kosdaq.foreign },
-              { label: "기관", value: f.kospi.institution + f.kosdaq.institution },
-              { label: "개인", value: f.kospi.individual + f.kosdaq.individual },
-            ].map((it) => (
-              <div className="summary-item" key={it.label}>
-                <div className="label">{it.label}</div>
-                <div className={`value ${signClass(it.value)}`}>
-                  {it.value > 0 ? "+" : ""}
-                  {fmtNum(it.value)}
-                </div>
+          <>
+            <div className="report-two-col">
+              <div className="ov">
+                <h4 className="report-subheading">코스피</h4>
+                <FlowBars flow={f.kospi} />
               </div>
-            ))}
-          </div>
+              <div className="ov">
+                <h4 className="report-subheading">코스닥</h4>
+                <FlowBars flow={f.kosdaq} />
+              </div>
+            </div>
+            <div className="summary-grid" style={{ marginTop: 10 }}>
+              {[
+                { label: "외국인", value: f.kospi.foreign + f.kosdaq.foreign },
+                { label: "기관", value: f.kospi.institution + f.kosdaq.institution },
+                { label: "개인", value: f.kospi.individual + f.kosdaq.individual },
+              ].map((it) => (
+                <div className="summary-item" key={it.label}>
+                  <div className="label">{it.label} 합계</div>
+                  <div className={`value ${signClass(it.value)}`}>
+                    {it.value > 0 ? "+" : ""}
+                    {fmtNum(it.value)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         ) : (
           <div className="empty">수급 데이터 불러오는 중...</div>
         )}
-        <div className="table-note">단위: 억원 · 코스피/코스닥 합산</div>
+        <div className="table-note">
+          단위: 억원 · 매수는 오른쪽(빨강) / 매도는 왼쪽(파랑) · 막대 길이는 항목 중 최댓값 기준
+        </div>
       </Section>
 
       {/* 3. 특징 테마 */}

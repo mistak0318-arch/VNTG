@@ -2175,11 +2175,20 @@ body {
 }
 .news-item:last-child { border-bottom: none; }
 .news-item:hover { background: var(--panel-2); }
-.news-title { font-size: 13.5px; line-height: 1.4; }
+.news-title {
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 600;
+  color: var(--text);
+}
+.news-item:hover .news-title { color: var(--blue); }
 .news-summary {
   font-size: 11.5px;
   color: var(--muted);
-  margin-top: 3px;
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+  line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -2207,4 +2216,22 @@ body {
   font-size: 11px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* 뉴스 배지 */
+.news-tag {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.news-tag.watch { background: rgba(245, 197, 66, 0.2); color: #f5c542; }
+.news-tag.hot { background: rgba(255, 92, 92, 0.18); color: var(--red); }
+.news-coverage {
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
 }

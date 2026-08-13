@@ -196,7 +196,7 @@ export const api = {
       `/api/feed/news?q=${encodeURIComponent(q)}&display=${opts.display ?? 30}&scope=${opts.scope ?? "major"}`,
     ),
   newsSectors: (scope: "major" | "all" = "major", per = 8) =>
-    getJson<{ sectors: { key: string; label: string; items: NewsItem[] }[]; fetchedAt: string }>(
+    getJson<{ sectors: { key: string; label: string; items: ScoredNews[] }[]; fetchedAt: string }>(
       `/api/feed/news/sectors?scope=${scope}&per=${per}`,
     ),
   finance: (code: string) => getJson<FinanceResult>(`/api/feed/finance/${code}`),
@@ -440,6 +440,14 @@ export interface NewsItem {
   publishedAt: string;
   major: boolean;
   summary: string;
+}
+
+/** 섹터 뉴스는 점수·보도량 정보가 더 붙는다 */
+export interface ScoredNews extends NewsItem {
+  coverage: number;
+  alsoPress: string[];
+  mentions: string[];
+  score: number;
 }
 
 export interface DisclosureItem {
