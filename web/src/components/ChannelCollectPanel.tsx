@@ -21,11 +21,20 @@ function fmtWhen(iso: string | null): string {
   return d.toISOString().slice(0, 10);
 }
 
+type SortKey = "members" | "recent" | "name";
+
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "members", label: "구독자순" },
+  { key: "recent", label: "최근 활동순" },
+  { key: "name", label: "이름순" },
+];
+
 export function ChannelCollectPanel() {
   const [configured, setConfigured] = useState(true);
   const [channels, setChannels] = useState<ChannelEntry[]>([]);
   const [filter, setFilter] = useState("");
   const [onlyOn, setOnlyOn] = useState(false);
+  const [sort, setSort] = useState<SortKey>("members");
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [report, setReport] = useState<ChannelReport | null>(null);
@@ -46,12 +55,21 @@ export function ChannelCollectPanel() {
 
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    return channels.filter((c) => {
+    const rows = channels.filter((c) => {
       if (onlyOn && !c.enabled) return false;
       if (!q) return true;
       return c.name.toLowerCase().includes(q) || (c.username ?? "").toLowerCase().includes(q);
     });
-  }, [channels, filter, onlyOn]);
+
+    // 구독자 수를 모르는 채널(비공개 등)은 0으로 보고 뒤로 보낸다
+    const members = (c: ChannelEntry) => c.participants ?? 0;
+
+    return [...rows].sort((a, b) => {
+      if (sort === "members") return members(b) - members(a) || a.name.localeCompare(b.name, "ko");
+      if (sort === "recent") return (b.lastAt ?? "").localeCompare(a.lastAt ?? "");
+      return a.name.localeCompare(b.name, "ko");
+    });
+  }, [channels, filter, onlyOn, sort]);
 
   const onCount = channels.filter((c) => c.enabled).length;
 
@@ -180,6 +198,16 @@ export function ChannelCollectPanel() {
         >
           켠 것만
         </button>
+        <span className="news-scope-sep" />
+        {SORTS.map((s) => (
+          <button
+            key={s.key}
+            className={`filter-btn ${sort === s.key ? "active" : ""}`}
+            onClick={() => setSort(s.key)}
+          >
+            {s.label}
+          </button>
+        ))}
         <span className="breadth-count">
           수집 {onCount} / 전체 {channels.length}
         </span>
