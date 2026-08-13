@@ -19,9 +19,6 @@ import { listWatchlist } from "./watchlist.js";
  *     "무엇을 사라"가 아니라 "무슨 일이 있었고 돈이 어디로 움직였나"를 요구한다.
  */
 
-const CACHE_TTL_MS = 10 * 60_000;
-let cache: { key: string; data: AiSummary; at: number } | null = null;
-
 export interface AiSummary {
   text: string | null;
   /** 요약을 만들 때 쓴 데이터의 기준 시각 */
@@ -169,6 +166,8 @@ const SYSTEM_RULES = `너는 한국 주식시장 데이터를 정리해 주는 �
   소수 대형주만 끌어올린 것인지 반드시 구분해라.
 - **장중 흐름**(4개 지점)이 있으면 초반·중반·후반 중 어디서 힘이 실렸는지 짚어라.
 - 한국어로, 군더더기 없이. 아래 5개 항목만 쓴다.
+- **전체 분량은 한글 1,200~1,600자를 넘기지 마라.** 각 항목은 3~5문장 또는 3~4개 항목으로 끝낸다.
+  길게 늘어놓지 말고 판단에 필요한 것만 남겨라.
 
 ## 오늘 시장 한 줄
 (지수 방향과 원인을 한 문장)
@@ -191,18 +190,17 @@ const SYSTEM_RULES = `너는 한국 주식시장 데이터를 정리해 주는 �
 이어서 다가오는 일정과 데이터에서 읽히는 확인 사항 2~3개)`;
 
 
-export async function getAiSummary(
+/**
+ * AI 요약을 새로 만든다. **발행 시각에만 호출된다** (reportScheduler).
+ * 화면이 열릴 때마다 부르면 비용이 예측 불가능해지고 같은 판인데 내용이 달라진다.
+ */
+export async function buildAiSummary(
   client: KiwoomClient,
-  opts: { force?: boolean } = {},
+  editionKey?: string,
 ): Promise<AiSummary> {
   const now = new Date();
-  const key = `${now.toISOString().slice(0, 13)}:${edition(now)}`;
-
-  if (!opts.force && cache && cache.key === key && Date.now() - cache.at < CACHE_TTL_MS) {
-    return cache.data;
-  }
-
   const basedOn = now.toISOString();
+
   if (!isClaudeConfigured()) {
     return {
       text: null,
@@ -215,15 +213,20 @@ export async function getAiSummary(
   }
 
   const digest = await buildDigest(client);
+  const label = editionKey
+    ? { morning: "조간(장 시작 전)", midday: "장중", closing: "석간(장 마감 후)" }[editionKey] ??
+      edition(now)
+    : edition(now);
+
   const prompt = `${SYSTEM_RULES}
 
-지금은 ${now.toLocaleString("ko-KR", { hour12: false })} (${edition(now)}) 기준이다.
+지금은 ${now.toLocaleString("ko-KR", { hour12: false })} (${label}) 기준이다.
 
 === 시장 데이터 ===
 ${digest}`;
 
-  const r = await summarize(prompt, 2200);
-  const data: AiSummary = {
+  const r = await summarize(prompt, 4000);
+  return {
     text: r.text,
     basedOn,
     model: process.env.CLAUDE_MODEL?.trim() || "claude-sonnet-5",
@@ -232,8 +235,4 @@ ${digest}`;
     error: r.error,
     digest,
   };
-
-  // 실패한 응답은 캐싱하지 않는다 (다음 요청에서 다시 시도하도록)
-  if (r.text) cache = { key, data, at: Date.now() };
-  return data;
 }

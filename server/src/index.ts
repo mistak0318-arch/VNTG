@@ -20,6 +20,7 @@ import { createNewsRouter } from "./routes/news.js";
 import { createOverviewRouter } from "./routes/overview.js";
 import { createRankingRouter } from "./routes/ranking.js";
 import { createReportRouter } from "./routes/report.js";
+import { startReportScheduler } from "./reportScheduler.js";
 import { createSettingsRouter } from "./routes/settings.js";
 import { createWatchlistRouter } from "./routes/watchlist.js";
 
@@ -65,6 +66,9 @@ app.use("/api/feed", createNewsRouter());
 app.use("/api/settings", createSettingsRouter());
 app.use("/api/calendar", createCalendarRouter());
 app.use("/api/report", createReportRouter(client));
+
+// 07/12/18시에 리포트를 발행한다 (AI 요약은 이때만 생성)
+startReportScheduler(client);
 
 /**
  * 프로덕션(미니PC)에서는 web을 빌드한 결과(web/dist)를 이 서버가 같이 서빙한다.

@@ -1,7 +1,10 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
-import { getAiSummary } from "../aiSummary.js";
+
 import { buildMarketDrivers } from "../reportBuilder.js";
+import { deliverReport } from "../reportDelivery.js";
+import { publishEdition } from "../reportScheduler.js";
+import { EDITIONS, latestEdition, listReports, loadReport, type EditionKey } from "../reportStore.js";
 
 /**
  * 리포트 전용 라우트.
@@ -20,10 +23,50 @@ export function createReportRouter(client: KiwoomClient): Router {
     }
   });
 
-  /** AI 시장 정리 — 리포트 최상단. 10분 캐싱되고 force=1로 강제 갱신 */
-  router.get("/ai-summary", async (req, res, next) => {
+  /**
+   * 발행된 리포트 조회. 화면은 **저장된 것만** 읽는다 (여기서 AI를 부르지 않는다).
+   * 파라미터 없으면 지금 시점의 최신 판.
+   */
+  router.get("/published", async (req, res, next) => {
     try {
-      res.json(await getAiSummary(client, { force: req.query.force === "1" }));
+      const latest = latestEdition();
+      const date = typeof req.query.date === "string" ? req.query.date : latest.date;
+      const edition = (typeof req.query.edition === "string" ? req.query.edition : latest.edition) as EditionKey;
+
+      const report = await loadReport(date, edition);
+      res.json({
+        report,
+        requested: { date, edition },
+        editions: EDITIONS,
+        recent: await listReports(20),
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 수동 발행 — 아직 발행 시각이 안 됐거나 실패했을 때 쓴다 */
+  router.post("/publish", async (req, res, next) => {
+    try {
+      const edition = (String(req.body?.edition ?? latestEdition().edition)) as EditionKey;
+      res.json({ report: await publishEdition(client, edition) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 저장된 리포트를 다시 보낸다 (AI 재호출 없음 → 비용 0) */
+  router.post("/deliver", async (req, res, next) => {
+    try {
+      const latest = latestEdition();
+      const date = String(req.body?.date ?? latest.date);
+      const edition = String(req.body?.edition ?? latest.edition) as EditionKey;
+      const report = await loadReport(date, edition);
+      if (!report) {
+        res.status(404).json({ error: "해당 판이 아직 발행되지 않았습니다." });
+        return;
+      }
+      res.json(await deliverReport(report));
     } catch (err) {
       next(err);
     }

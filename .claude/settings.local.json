@@ -113,7 +113,9 @@
       "Bash(curl -s --max-time 60 -X POST \"http://localhost:4000/api/settings/claude/test\")",
       "Bash(curl -s --max-time 30 \"http://localhost:4000/api/settings/usage\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const a=j.providers.find\\(p=>p.provider==='anthropic'\\);console.log\\(JSON.stringify\\(a,null,1\\)\\)}\\)\")",
-      "Bash(node --input-type=module -e ' *)"
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(curl -s --max-time 240 -X POST \"http://localhost:4000/api/report/publish\" -H \"Content-Type: application/json\" -d '{\"edition\":\"closing\"}' -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/83918202-8479-4b3c-adbe-6520c4c841d3/scratchpad/pub.json\")",
+      "Bash(curl -s --max-time 240 -X POST \"http://localhost:4000/api/report/publish\" -H \"Content-Type: application/json\" -d '{\"edition\":\"closing\"}' -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/83918202-8479-4b3c-adbe-6520c4c841d3/scratchpad/pub2.json\")"
     ]
   }
 }

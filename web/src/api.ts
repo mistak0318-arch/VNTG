@@ -195,8 +195,22 @@ export const api = {
     getJson<{ items: NewsItem[]; counts: { major: number; all: number } }>(
       `/api/feed/news?q=${encodeURIComponent(q)}&display=${opts.display ?? 30}&scope=${opts.scope ?? "major"}`,
     ),
-  aiSummary: (force = false) =>
-    getJson<AiSummary>(`/api/report/ai-summary${force ? "?force=1" : ""}`),
+  publishedReport: (date?: string, edition?: string) => {
+    const q = new URLSearchParams();
+    if (date) q.set("date", date);
+    if (edition) q.set("edition", edition);
+    const qs = q.toString();
+    return getJson<PublishedReportResponse>(`/api/report/published${qs ? `?${qs}` : ""}`);
+  },
+  reportPublish: (edition: string) =>
+    postJson<{ report: PublishedReport }>("/api/report/publish", { edition }),
+  reportDeliver: (date: string, edition: string) =>
+    postJson<{ telegram: { ok: boolean; error?: string }; mail: { ok: boolean; error?: string } }>(
+      "/api/report/deliver",
+      { date, edition },
+    ),
+  indexIntraday: (code: string, tic = "5") =>
+    getJson(`/api/market/index-intraday/${code}?tic=${tic}`),
   marketDrivers: (top = 5) => getJson<MarketDriverReport>(`/api/report/drivers?top=${top}`),
   newsSectors: (scope: "major" | "all" = "major", per = 8) =>
     getJson<{ sectors: { key: string; label: string; items: ScoredNews[] }[]; fetchedAt: string }>(
@@ -342,6 +356,21 @@ export interface AiSummary {
   outputTokens: number;
   error?: string;
   digest?: string;
+}
+
+export interface PublishedReport {
+  date: string;
+  edition: string;
+  label: string;
+  publishedAt: string;
+  summary: AiSummary;
+}
+
+export interface PublishedReportResponse {
+  report: PublishedReport | null;
+  requested: { date: string; edition: string };
+  editions: { key: string; label: string; hour: number }[];
+  recent: { date: string; edition: string }[];
 }
 
 export interface ThemeWithReason {
