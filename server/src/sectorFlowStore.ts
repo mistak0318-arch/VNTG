@@ -167,6 +167,18 @@ function fingerprint(day: SectorFlowDay): string {
   return total ? `${total.changeRate}|${total.v.join(",")}` : "";
 }
 
+/**
+ * 아직 거래가 없는 날인가.
+ *
+ * 장 시작 전에 오늘 날짜로 조회하면 모든 수치가 0으로 온다. 그걸 하루치로 저장하면
+ * 5일 누적이 0 하나로 희석되고, "마지막 날이 0이면 연속 아님"이라 연속 지표가 통째로 사라진다.
+ * 실제로 07시대에 스케줄러가 0짜리 하루를 남겨 지표가 다 비었다.
+ */
+function hasNoTrading(day: SectorFlowDay): boolean {
+  const total = day.kospi.find((r) => TOTAL_CODES.has(r.code));
+  return !total || total.v.every((n) => n === 0);
+}
+
 function ymd(d: Date): string {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -212,7 +224,9 @@ export async function backfillSectorFlow(
               fetchDay(client, "kospi", d),
               fetchDay(client, "kosdaq", d),
             ]);
-            return kospi.length > 0 ? { date: dashed(d), kospi, kosdaq } : null;
+            const day = { date: dashed(d), kospi, kosdaq };
+            // 장 시작 전에 오늘을 조회하면 전부 0으로 온다 — 그런 하루는 남기지 않는다
+            return kospi.length > 0 && !hasNoTrading(day) ? day : null;
           } catch {
             return null;
           }
@@ -229,6 +243,11 @@ export async function backfillSectorFlow(
   let skipped = 0;
   let prev = "";
   for (const day of merged) {
+    // 예전에 저장해 둔 0짜리 하루도 이참에 걷어낸다
+    if (hasNoTrading(day)) {
+      skipped += 1;
+      continue;
+    }
     const fp = fingerprint(day);
     if (fp && fp === prev) {
       skipped += 1;
@@ -239,7 +258,11 @@ export async function backfillSectorFlow(
   }
 
   await writeAll(kept);
-  return { added: kept.length - existing.length, skipped, total: kept.length };
+  // 새로 받아 남은 것만 "추가"로 센다. 기존 오염분을 걷어내면 총 일수가 줄 수도 있어서
+  // 단순히 전후 개수를 빼면 음수가 나온다.
+  const keptDates = new Set(kept.map((d) => d.date));
+  const added = fetched.filter((d) => keptDates.has(d.date) && !have.has(d.date)).length;
+  return { added, skipped, total: kept.length };
 }
 
 /** 오늘치 한 줄. 스케줄러가 부른다 */

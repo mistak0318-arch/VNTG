@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, fmtNum, type SectorFlowResult } from "../api";
+import { api, fmtNum, normalizeStockCode, type SectorFlowResult } from "../api";
 
 /**
  * 업종별 자금 흐름.
@@ -8,21 +8,114 @@ import { api, fmtNum, type SectorFlowResult } from "../api";
  * **어디서 빼서 어디로 넣었는지**를 말해주지 않는다. 같은 +2.3조라도 반도체 한 곳에
  * 몰린 날과 전 업종에 고르게 퍼진 날은 완전히 다른 장이다.
  *
- * 그래서 세 가지를 같이 본다.
- *   누적 순매수 — 하루치는 노이즈라 기본 5일
- *   순위 변화   — 절대 금액보다 순위가 바뀌는 게 로테이션의 신호다
- *   연속 일수   — 며칠째 같은 방향인지
+ * 업종 줄을 누르면 **그 자리에서** 구성종목이 펼쳐진다. "화학에 3,244억"을 보고 나면
+ * 곧바로 "그래서 어느 종목이냐"가 궁금해지는데, 다른 화면으로 옮겨가게 하면 흐름이 끊긴다.
  */
 
 const WINDOWS = [1, 5, 10, 20];
 
-/** 막대 길이는 그 화면에서 가장 큰 값 기준 — 절대 규모는 숫자로 읽고 막대는 비교용이다 */
-function bar(value: number, max: number): string {
-  if (max <= 0) return "0%";
-  return `${Math.min((Math.abs(value) / max) * 100, 100).toFixed(1)}%`;
+type Stock = { code: string; name: string; price: number; changeRate: number };
+
+function pct(n: number): string {
+  return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 
-export function SectorFlowPanel() {
+function cls(n: number): string {
+  return n > 0 ? "positive" : n < 0 ? "negative" : "";
+}
+
+/** 업종 한 줄 + 펼쳤을 때의 구성종목 */
+function SectorRow({
+  stat,
+  max,
+  onSelectStock,
+}: {
+  stat: SectorFlowResult["stats"][number];
+  max: number;
+  onSelectStock?: (code: string, name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [stocks, setStocks] = useState<Stock[] | null>(null);
+  const [beforeTrading, setBeforeTrading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    // 펼칠 때만 부른다 — 화면을 열었다고 업종 60개를 조회하면 안 된다
+    if (next && stocks === null && !loading) {
+      setLoading(true);
+      api
+        .sectorFlowStocks(stat.market, stat.code)
+        .then((r) => {
+          setStocks(r.stocks);
+          setBeforeTrading(r.beforeTrading);
+        })
+        .catch((err: Error) => setError(err.message))
+        .finally(() => setLoading(false));
+    }
+  }
+
+  const width = max > 0 ? `${Math.min((Math.abs(stat.sum) / max) * 100, 100).toFixed(1)}%` : "0%";
+  const up = stat.sum > 0;
+
+  return (
+    <div className={`sf-item${open ? " open" : ""}`}>
+      <button className="sf-row" onClick={toggle} title="누르면 구성종목이 펼쳐집니다">
+        <span className="sf-caret">{open ? "▾" : "▸"}</span>
+        <span className="sf-name">{stat.name}</span>
+        <span className={`sf-market ${stat.market}`}>{stat.market === "kospi" ? "코스피" : "코스닥"}</span>
+        <span className="sf-bar">
+          <span className={`sf-fill ${up ? "positive" : "negative"}`} style={{ width }} />
+        </span>
+        <span className={`sf-val ${up ? "positive" : "negative"}`}>{fmtNum(Math.round(stat.sum))}</span>
+        <span className="sf-rank">
+          {stat.rankChange !== null && stat.rankChange !== 0 ? (
+            <b className={stat.rankChange > 0 ? "positive" : "negative"}>
+              {stat.rankChange > 0 ? "▲" : "▼"}
+              {Math.abs(stat.rankChange)}
+            </b>
+          ) : (
+            ""
+          )}
+        </span>
+      </button>
+
+      {open && (
+        <div className="sf-stocks">
+          {loading && <div className="empty">구성종목 불러오는 중…</div>}
+          {error && <div className="error-banner">{error}</div>}
+          {stocks && stocks.length === 0 && <div className="empty">구성종목을 못 받았습니다.</div>}
+          {stocks?.slice(0, 20).map((s) => (
+            <button
+              key={s.code}
+              className="sf-stock"
+              onClick={() => onSelectStock?.(normalizeStockCode(s.code), s.name)}
+            >
+              <span className="sf-stock-name">{s.name}</span>
+              <span className="num">{fmtNum(s.price)}</span>
+              <span className={`num ${cls(s.changeRate)}`}>{pct(s.changeRate)}</span>
+            </button>
+          ))}
+          {stocks && stocks.length > 0 && (
+            <div className="sf-stocks-note">
+              {beforeTrading
+                ? "아직 장이 열리지 않아 등락률이 0입니다 · 시가총액 순 · 종목을 누르면 상세로 이동합니다"
+                : "등락률 높은 순 · 종목을 누르면 상세로 이동합니다"}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SectorFlowPanel({
+  onSelectStock,
+}: {
+  onSelectStock?: (code: string, name: string) => void;
+}) {
   const [data, setData] = useState<SectorFlowResult | null>(null);
   const [subject, setSubject] = useState("foreign");
   const [window, setWindow] = useState(5);
@@ -55,8 +148,7 @@ export function SectorFlowPanel() {
     try {
       const r = await api.sectorFlowBackfill(120);
       setNote(`${r.added}일 채움 · 휴장일 ${r.skipped}일 제외 · 보유 ${r.total}일`);
-      const fresh = await api.sectorFlow(subject, window);
-      setData(fresh);
+      setData(await api.sectorFlow(subject, window));
     } catch (err) {
       setNote(err instanceof Error ? err.message : "실패");
     } finally {
@@ -72,6 +164,8 @@ export function SectorFlowPanel() {
   const top = data.stats.slice(0, 10);
   const bottom = data.stats.slice(-10).reverse();
   const max = Math.max(...data.stats.map((s) => Math.abs(s.sum)), 1);
+  const buys = data.streaks.filter((s) => s.streak > 0).slice(0, 6);
+  const sells = data.streaks.filter((s) => s.streak < 0).slice(0, 6);
 
   return (
     <>
@@ -114,93 +208,106 @@ export function SectorFlowPanel() {
       ) : (
         <>
           <div className="flow-two-col">
-            <section>
-              <h4 className="feed-heading">
-                {data.subjectLabel}이 담은 업종 ({data.window}일 누적)
+            <section className="sf-block">
+              <h4 className="sf-block-title buy">
+                {data.subjectLabel}이 담은 업종<span>{data.window}일 누적 · 억원</span>
               </h4>
               {top.map((s) => (
-                <div className="sf-row" key={s.code}>
-                  <span className="sf-name">{s.label}</span>
-                  <span className="sf-bar">
-                    <span className="sf-fill positive" style={{ width: bar(s.sum, max) }} />
-                  </span>
-                  <span className="sf-val positive">{fmtNum(Math.round(s.sum))}</span>
-                  {s.rankChange !== null && s.rankChange !== 0 && (
-                    <span className={`sf-rank ${s.rankChange > 0 ? "positive" : "negative"}`}>
-                      {s.rankChange > 0 ? "▲" : "▼"}
-                      {Math.abs(s.rankChange)}
-                    </span>
-                  )}
-                </div>
+                <SectorRow key={s.code} stat={s} max={max} onSelectStock={onSelectStock} />
               ))}
             </section>
 
-            <section>
-              <h4 className="feed-heading">
-                {data.subjectLabel}이 던진 업종 ({data.window}일 누적)
+            <section className="sf-block">
+              <h4 className="sf-block-title sell">
+                {data.subjectLabel}이 던진 업종<span>{data.window}일 누적 · 억원</span>
               </h4>
               {bottom.map((s) => (
-                <div className="sf-row" key={s.code}>
-                  <span className="sf-name">{s.label}</span>
-                  <span className="sf-bar">
-                    <span className="sf-fill negative" style={{ width: bar(s.sum, max) }} />
-                  </span>
-                  <span className="sf-val negative">{fmtNum(Math.round(s.sum))}</span>
-                </div>
+                <SectorRow key={s.code} stat={s} max={max} onSelectStock={onSelectStock} />
               ))}
             </section>
           </div>
 
           <div className="table-note">
-            ▲▼는 <b>직전 같은 기간 대비 순위 변화</b>입니다. 금액보다 순위가 크게 움직인 업종이
-            자금이 새로 들어오거나 빠져나가는 곳입니다. 단위는 억원.
+            업종을 누르면 <b>구성종목이 그 자리에서 펼쳐집니다.</b> ▲▼는 직전 같은 기간 대비{" "}
+            <b>순위 변화</b>로, 금액보다 순위가 크게 움직인 업종이 자금이 새로 들어오거나 빠져나가는
+            곳입니다.
           </div>
 
           {data.sizes.length > 0 && (
             <>
-              <h4 className="feed-heading">규모별 (코스피)</h4>
-              <div className="filter-row">
-                {data.sizes.map((s) => (
-                  <span className="breadth-count" key={s.label}>
-                    {s.label} 외국인{" "}
-                    <b className={s.foreign > 0 ? "positive" : "negative"}>
-                      {fmtNum(Math.round(s.foreign))}
-                    </b>{" "}
-                    / 기관{" "}
-                    <b className={s.institution > 0 ? "positive" : "negative"}>
-                      {fmtNum(Math.round(s.institution))}
-                    </b>
-                  </span>
-                ))}
+              <h4 className="section-heading">규모별 자금 배분 (코스피)</h4>
+              <div className="data-table-wrap">
+                <table className="data-table num">
+                  <thead>
+                    <tr>
+                      <th className="sticky-col">구분</th>
+                      <th>외국인</th>
+                      <th>기관</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.sizes.map((s) => (
+                      <tr key={s.label}>
+                        <td className="sticky-col">{s.label}</td>
+                        <td className={cls(s.foreign)}>{fmtNum(Math.round(s.foreign))}</td>
+                        <td className={cls(s.institution)}>{fmtNum(Math.round(s.institution))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
               <div className="table-note">
-                대형주에서 중소형으로 옮겨가는 구간은 장의 성격이 바뀌는 지점입니다.
+                {data.window}일 누적 · 억원. 자금이 <b>대형주에서 중소형으로 옮겨가는 구간</b>은 장의
+                성격이 바뀌는 지점입니다 — 지수는 쉬는데 개별 종목이 움직이기 시작합니다.
               </div>
             </>
           )}
 
-          {data.streaks.length > 0 && (
+          {(buys.length > 0 || sells.length > 0) && (
             <>
-              <h4 className="feed-heading">연속 {data.subjectLabel} 순매수·순매도</h4>
-              <div className="filter-row">
-                {data.streaks.map((s) => (
-                  <span className="breadth-count" key={s.code}>
-                    {s.label}{" "}
-                    <b className={s.streak > 0 ? "positive" : "negative"}>
-                      {Math.abs(s.streak)}일 {s.streak > 0 ? "매수" : "매도"}
-                    </b>
-                  </span>
-                ))}
+              <h4 className="section-heading">연속 {data.subjectLabel} 순매수·순매도</h4>
+              <div className="flow-two-col">
+                <div className="sf-streak-col">
+                  <div className="sf-streak-head buy">연속 순매수</div>
+                  {buys.length === 0 && <div className="empty">없음</div>}
+                  {buys.map((s) => (
+                    <div className="sf-streak" key={s.code}>
+                      <span className="sf-streak-name">{s.label}</span>
+                      <span className="sf-streak-dots">
+                        {Array.from({ length: Math.min(Math.abs(s.streak), 10) }).map((_, i) => (
+                          <i className="positive" key={i} />
+                        ))}
+                      </span>
+                      <b className="positive">{Math.abs(s.streak)}일</b>
+                    </div>
+                  ))}
+                </div>
+                <div className="sf-streak-col">
+                  <div className="sf-streak-head sell">연속 순매도</div>
+                  {sells.length === 0 && <div className="empty">없음</div>}
+                  {sells.map((s) => (
+                    <div className="sf-streak" key={s.code}>
+                      <span className="sf-streak-name">{s.label}</span>
+                      <span className="sf-streak-dots">
+                        {Array.from({ length: Math.min(Math.abs(s.streak), 10) }).map((_, i) => (
+                          <i className="negative" key={i} />
+                        ))}
+                      </span>
+                      <b className="negative">{Math.abs(s.streak)}일</b>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="table-note">
-                하루치 순매수는 노이즈지만 <b>며칠 연속인지는 신호</b>입니다.
+                점 하나가 하루입니다. 하루치 순매수는 노이즈지만{" "}
+                <b>며칠 연속인지는 신호</b>입니다 — 방향을 정해놓고 사는 주체가 있다는 뜻입니다.
               </div>
             </>
           )}
 
           {data.splits.length > 0 && (
             <>
-              <h4 className="feed-heading">기관 내부 이견 — 연기금 vs 투신</h4>
+              <h4 className="section-heading">기관 내부 이견 — 연기금 vs 투신</h4>
               <div className="data-table-wrap">
                 <table className="data-table num">
                   <thead>
@@ -214,12 +321,8 @@ export function SectorFlowPanel() {
                     {data.splits.map((s) => (
                       <tr key={s.code}>
                         <td className="sticky-col">{s.label}</td>
-                        <td className={s.pension > 0 ? "positive" : "negative"}>
-                          {fmtNum(Math.round(s.pension))}
-                        </td>
-                        <td className={s.trust > 0 ? "positive" : "negative"}>
-                          {fmtNum(Math.round(s.trust))}
-                        </td>
+                        <td className={cls(s.pension)}>{fmtNum(Math.round(s.pension))}</td>
+                        <td className={cls(s.trust)}>{fmtNum(Math.round(s.trust))}</td>
                       </tr>
                     ))}
                   </tbody>

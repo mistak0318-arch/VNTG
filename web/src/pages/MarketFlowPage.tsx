@@ -79,7 +79,7 @@ function CumulativeFlowChart({ points }: { points: BreadthPoint[] }) {
   );
 }
 
-function MoneyFlowTab() {
+function MoneyFlowTab({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
   const [points, setPoints] = useState<BreadthPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -160,7 +160,7 @@ function MoneyFlowTab() {
       )}
 
       <h3 className="section-heading">업종별 자금 흐름</h3>
-      <SectorFlowPanel />
+      <SectorFlowPanel onSelectStock={onSelectStock} />
 
       <h3 className="section-heading">시장 폭</h3>
       <BreadthPanel />
@@ -359,7 +359,7 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
       </nav>
 
       <div key={`${tab}-${reloadKey}`}>
-        {tab === "money" && <MoneyFlowTab />}
+        {tab === "money" && <MoneyFlowTab onSelectStock={onSelectStock} />}
         {tab === "trade" && <TradePanel onSelectStock={onSelectStock} />}
         {tab === "channel" && <ChannelTab />}
       </div>

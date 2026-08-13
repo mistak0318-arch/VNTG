@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
+import { getSectorStocks } from "../marketOverview.js";
 import {
   backfillSectorFlow,
   institutionSplits,
@@ -44,6 +45,37 @@ export function createSectorFlowRouter(client: KiwoomClient): Router {
         sizes: sizeRotation(days, window),
         subjects: SUBJECTS.map((s) => ({ key: s, label: SUBJECT_LABEL[s] })),
       });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 업종 구성종목.
+   *
+   * "화학에 외국인이 3,244억 들어왔다"를 보고 나면 곧바로 **그래서 어느 종목이냐**가 궁금해진다.
+   * 그때 다른 화면으로 옮겨가게 만들면 흐름이 끊기므로 같은 자리에서 펼쳐 보게 한다.
+   * 펼칠 때만 부르므로 화면을 열었다고 호출이 늘지는 않는다.
+   */
+  router.get("/stocks", async (req, res, next) => {
+    try {
+      const market = req.query.market === "kosdaq" ? "kosdaq" : "kospi";
+      const code = String(req.query.code ?? "").trim();
+      if (!code) {
+        res.status(400).json({ error: "업종코드(code)가 필요합니다." });
+        return;
+      }
+      const rows = await getSectorStocks(client, market, code);
+      /*
+       * 등락률 높은 순 — 그 업종을 무엇이 끌었는지가 먼저 보여야 한다.
+       * 다만 장 시작 전에는 전 종목 등락률이 0으로 오므로 그때는 정렬이 무의미해진다.
+       * 그래서 시가총액을 2순위로 둔다 — 최소한 큰 종목부터 보이게.
+       */
+      const stocks = [...rows]
+        .sort((a, b) => b.changeRate - a.changeRate || (b.marketCap ?? 0) - (a.marketCap ?? 0))
+        .slice(0, 30);
+      // 전 종목이 0이면 아직 거래 전이라는 뜻 — 화면에서 그렇게 말해줘야 오해가 없다
+      res.json({ stocks, beforeTrading: stocks.every((s) => s.changeRate === 0) });
     } catch (err) {
       next(err);
     }

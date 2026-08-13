@@ -248,6 +248,12 @@ export const api = {
     ),
   sectorFlow: (subject = "foreign", window = 5) =>
     getJson<SectorFlowResult>(`/api/sector-flow?subject=${subject}&window=${window}`),
+  sectorFlowStocks: (market: string, code: string) =>
+    getJson<{
+      stocks: { code: string; name: string; price: number; changeRate: number }[];
+      /** 전 종목 등락률이 0 — 아직 장이 열리지 않았다는 뜻 */
+      beforeTrading: boolean;
+    }>(`/api/sector-flow/stocks?market=${market}&code=${code}`),
   sectorFlowBackfill: (days = 60) =>
     postJson<{ added: number; skipped: number; total: number }>(
       `/api/sector-flow/backfill?days=${days}`,

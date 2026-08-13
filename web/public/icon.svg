@@ -1,15 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="VNTG HTS">
+  <!--
+    VNTG 워드마크.
+
+    글자는 폰트가 아니라 선(path)으로 그렸다 — 파비콘은 브라우저·OS·빌드 도구가
+    제각각 렌더링하는데, 폰트에 기대면 환경마다 다른 모양이 나온다.
+    획을 두껍게(28) 두고 둥근 끝을 써서 작은 크기에서도 뭉개지지 않게 했다.
+
+    아래 붉은 사선은 우상향 — 이 앱이 무엇을 보는 도구인지 한 획으로 남긴 것이다.
+  -->
+  <!--
+    gradientUnits="userSpaceOnUse" 가 중요하다.
+    기본값(objectBoundingBox)으로 두면 T의 가로획처럼 **높이가 0인** 도형은
+    바운딩 박스가 퇴화해 그라디언트를 못 만들고, 그 획이 통째로 렌더링되지 않는다.
+    (실제로 그렇게 만들었다가 T가 통째로 사라졌다.)
+  -->
+  <defs>
+    <linearGradient id="ink" gradientUnits="userSpaceOnUse" x1="0" y1="192" x2="0" y2="320">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#b9c9de"/>
+    </linearGradient>
+    <linearGradient id="rise" gradientUnits="userSpaceOnUse" x1="60" y1="0" x2="452" y2="0">
+      <stop offset="0" stop-color="#d93a48"/>
+      <stop offset="1" stop-color="#ff8a72"/>
+    </linearGradient>
+  </defs>
+
   <rect width="512" height="512" rx="112" fill="#0e1116"/>
-  <!-- 상승 캔들 -->
-  <rect x="132" y="286" width="34" height="104" rx="6" fill="#f0555f"/>
-  <rect x="145" y="258" width="8" height="160" rx="4" fill="#f0555f"/>
-  <!-- 중간 캔들 -->
-  <rect x="239" y="212" width="34" height="118" rx="6" fill="#c8a24a"/>
-  <rect x="252" y="184" width="8" height="174" rx="4" fill="#c8a24a"/>
-  <!-- 마지막 상승 캔들 -->
-  <rect x="346" y="140" width="34" height="126" rx="6" fill="#f0555f"/>
-  <rect x="359" y="112" width="8" height="182" rx="4" fill="#f0555f"/>
-  <!-- 추세선 -->
-  <path d="M132 372 L256 268 L380 158" stroke="#e4e8ee" stroke-width="14"
-        stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
+
+  <g fill="none" stroke="url(#ink)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <!-- V -->
+    <path d="M52 206 L94 306 L136 206"/>
+    <!-- N -->
+    <path d="M160 306 L160 206 L244 306 L244 206"/>
+    <!-- T -->
+    <path d="M268 206 L352 206"/>
+    <path d="M310 206 L310 306"/>
+    <!-- G -->
+    <path d="M450 224 A42 50 0 1 0 450 288 L450 262 L420 262"/>
+  </g>
+
+  <!-- 우상향 -->
+  <path d="M60 372 L452 340" stroke="url(#rise)" stroke-width="16" stroke-linecap="round"/>
 </svg>

@@ -325,13 +325,12 @@
     "codes": [
       "001820",
       "009150",
-      "126730",
-      "005070",
-      "149950"
+      "005070"
     ],
     "color": "#f5c542",
     "createdAt": "2026-08-13T18:40:44.553Z",
-    "source": "infostock"
+    "source": "infostock",
+    "updatedAt": "2026-08-13T19:07:55.310Z"
   },
   {
     "id": "ct_msrv5wb5ilath",
