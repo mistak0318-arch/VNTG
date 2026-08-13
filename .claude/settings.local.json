@@ -123,7 +123,16 @@
       "Bash(다음작업_TODO.md)",
       "Bash(curl.exe -s -X POST \"http://localhost:4000/api/breadth/capture\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('저장:',j.saved,j.reason||''\\);if\\(j.row\\)console.log\\(JSON.stringify\\(j.row,null,1\\)\\);}\\)\")",
-      "Bash(curl.exe -s \"http://localhost:4000/api/breadth?days=60&raw=1\")"
+      "Bash(curl.exe -s \"http://localhost:4000/api/breadth?days=60&raw=1\")",
+      "Bash(curl.exe -s -X POST \"http://localhost:4000/api/alert/scan\" --max-time 300)",
+      "Bash(curl.exe -s -X POST \"http://localhost:4000/api/alert/scan?send=1\" --max-time 300)",
+      "Bash(curl.exe -s http://localhost:4000/api/signal/config)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('maLines:',JSON.stringify\\(j.config.maLines\\)\\);}\\)\")",
+      "Bash(npm.cmd install *)",
+      "Bash(node -e \"console.log\\(require\\('fs'\\).existsSync\\('node_modules/telegram'\\) ? '설치 완료' : '아직 설치 중'\\)\")",
+      "Bash(node -e \"console.log\\(require\\('fs'\\).existsSync\\('node_modules/telegram'\\) ? '설치 완료' : '아직'\\)\")",
+      "Bash(curl.exe -s \"http://localhost:4000/api/channels\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('세션 설정됨:',j.configured,'| 채널 목록:',j.channels.length,'개'\\);}\\)\")"
     ]
   }
 }

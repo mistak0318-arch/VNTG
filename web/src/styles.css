@@ -2529,3 +2529,80 @@ body {
 @media (min-width: 900px) {
   .breadth-charts { display: grid; grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ------------- 관심종목 시그널 설정 ------------- */
+.alert-master {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  margin-bottom: 10px;
+}
+.alert-master > label:last-child {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.alert-master input[type="number"] {
+  width: 60px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 4px 7px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.sig-config-rows.off { opacity: .5; pointer-events: none; }
+.alert-note { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.alert-preview {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/* ------------- 구독 채널 수집 ------------- */
+.chan-list {
+  max-height: 340px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 8px;
+}
+.chan-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 11px;
+  font-size: 12.5px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.chan-row:last-child { border-bottom: none; }
+.chan-row.on { background: var(--panel-2); }
+.chan-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chan-meta { flex: none; font-size: 11px; color: var(--muted); }
+.chan-items { display: flex; flex-direction: column; gap: 7px; }
+.chan-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: var(--panel-2);
+}
+.chan-item-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.chan-item-time { margin-left: auto; font-size: 11px; color: var(--muted); }
+.chan-item-text { font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; }
+.chan-item-src { margin-top: 4px; font-size: 11px; color: var(--muted); }

@@ -23,7 +23,10 @@ import { createRankingRouter } from "./routes/ranking.js";
 import { createReportRouter } from "./routes/report.js";
 import { startReportScheduler } from "./reportScheduler.js";
 import { createSettingsRouter } from "./routes/settings.js";
+import { startAlertScheduler } from "./alertScheduler.js";
+import { createAlertRouter } from "./routes/alert.js";
 import { createBreadthRouter } from "./routes/breadth.js";
+import { createChannelsRouter } from "./routes/channels.js";
 import { createSignalRouter } from "./routes/signal.js";
 import { createWatchlistRouter } from "./routes/watchlist.js";
 
@@ -71,10 +74,13 @@ app.use("/api/calendar", createCalendarRouter());
 app.use("/api/notes", createNotesRouter(client));
 app.use("/api/signal", createSignalRouter(client));
 app.use("/api/breadth", createBreadthRouter(client));
+app.use("/api/alert", createAlertRouter(client));
+app.use("/api/channels", createChannelsRouter());
 app.use("/api/report", createReportRouter(client));
 
 // 07/12/18시에 리포트를 발행한다 (AI 요약은 이때만 생성)
 startReportScheduler(client);
+startAlertScheduler(client);
 
 /**
  * 프로덕션(미니PC)에서는 web을 빌드한 결과(web/dist)를 이 서버가 같이 서빙한다.

@@ -1,0 +1,80 @@
+import { formatAlerts, getAlertConfig, scanAlerts, type FiredAlert } from "./alertRules.js";
+import type { KiwoomClient } from "./kiwoomClient.js";
+import { sendTelegram } from "./telegram.js";
+import { listWatchlist } from "./watchlist.js";
+
+/**
+ * 관심종목 시그널 스케줄러.
+ *
+ * 장중에만 돈다. 장 끝난 뒤에 "급등했습니다"를 받아봐야 쓸모가 없고,
+ * 밤새 같은 알림이 반복되면 그 방을 안 보게 된다.
+ *
+ * 검사 간격은 설정값(기본 10분)을 따르되 tick 자체는 1분마다 돌면서
+ * "마지막 검사 후 간격이 지났나"만 본다. 설정을 바꿔도 재시작이 필요 없게.
+ */
+
+const TICK_MS = 60_000;
+
+let timer: ReturnType<typeof setInterval> | null = null;
+let lastScanAt = 0;
+let scanning = false;
+
+/** 한국 시각 기준 장중인가 — 09:00~15:30 평일 */
+function isMarketHours(now = new Date()): boolean {
+  const kst = new Date(now.getTime() + (9 * 60 + now.getTimezoneOffset()) * 60_000);
+  const day = kst.getDay();
+  if (day === 0 || day === 6) return false;
+  const minutes = kst.getHours() * 60 + kst.getMinutes();
+  return minutes >= 9 * 60 && minutes <= 15 * 60 + 30;
+}
+
+/**
+ * 한 번 검사하고, 발동한 게 있으면 시그널 방으로 보낸다.
+ * 수동 실행(설정 화면의 "지금 검사")도 이 함수를 쓴다.
+ */
+export async function runAlertScan(
+  client: KiwoomClient,
+  opts: { dryRun?: boolean; send?: boolean } = {},
+): Promise<{ alerts: FiredAlert[]; sent: boolean; error?: string }> {
+  const watch = await listWatchlist();
+  const alerts = await scanAlerts(
+    client,
+    watch.map((w) => ({ code: w.code, name: w.name })),
+    { dryRun: opts.dryRun },
+  );
+  if (alerts.length === 0) return { alerts, sent: false };
+
+  if (opts.send === false) return { alerts, sent: false };
+
+  const res = await sendTelegram(formatAlerts(alerts), "signal");
+  return { alerts, sent: res.ok, error: res.error };
+}
+
+async function tick(client: KiwoomClient): Promise<void> {
+  if (scanning) return;
+  if (!isMarketHours()) return;
+
+  const cfg = await getAlertConfig();
+  if (!cfg.enabled) return;
+  if (Date.now() - lastScanAt < cfg.intervalMin * 60_000) return;
+
+  scanning = true;
+  lastScanAt = Date.now();
+  try {
+    const { alerts, sent, error } = await runAlertScan(client);
+    if (alerts.length > 0) {
+      console.log(`[alert] 시그널 ${alerts.length}건 ${sent ? "발송" : `발송 실패: ${error}`}`);
+    }
+  } catch (err) {
+    // 시그널 실패가 서버를 죽이면 안 된다. 다음 tick에서 다시 시도한다.
+    console.error("[alert] 검사 실패:", err instanceof Error ? err.message : err);
+  } finally {
+    scanning = false;
+  }
+}
+
+export function startAlertScheduler(client: KiwoomClient): void {
+  if (timer) return;
+  timer = setInterval(() => void tick(client), TICK_MS);
+  console.log("[alert] 관심종목 시그널 스케줄러 시작 (장중 09:00~15:30)");
+}

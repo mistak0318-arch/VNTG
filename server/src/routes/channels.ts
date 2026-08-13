@@ -1,0 +1,68 @@
+import { Router } from "express";
+import { buildChannelReport, listChannelReports } from "../channelReport.js";
+import {
+  isReaderConfigured,
+  listChannels,
+  refreshChannels,
+  setChannelEnabled,
+} from "../telegramReader.js";
+
+export function createChannelsRouter(): Router {
+  const router = Router();
+
+  /** 구독 채널 목록 + 세션 설정 여부 */
+  router.get("/", async (_req, res, next) => {
+    try {
+      res.json({ configured: isReaderConfigured(), channels: await listChannels() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 텔레그램에서 구독 목록을 다시 읽어온다 (기존 on/off 선택은 유지) */
+  router.post("/refresh", async (_req, res, next) => {
+    try {
+      res.json({ channels: await refreshChannels() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 수집 대상 on/off */
+  router.put("/enabled", async (req, res, next) => {
+    try {
+      const updates = (req.body?.updates ?? []) as { id: string; enabled: boolean }[];
+      res.json({ channels: await setChannelEnabled(updates) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 채널 정리 실행.
+   * `?ai=0` 이면 AI를 호출하지 않고 필터 결과만 본다 — 비용 없이 선별 품질을 확인할 때.
+   * `?send=1` 일 때만 텔레그램으로 보낸다.
+   */
+  router.post("/report", async (req, res, next) => {
+    try {
+      const report = await buildChannelReport({
+        useAi: req.query.ai !== "0",
+        send: req.query.send === "1",
+        sinceHours: Math.min(Math.max(Number(req.query.hours) || 12, 1), 72),
+      });
+      res.json(report);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/reports", async (req, res, next) => {
+    try {
+      res.json({ reports: await listChannelReports(Number(req.query.limit) || 10) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  return router;
+}

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { FONTS, FONT_SCALES, useAppearance } from "../useAppearance";
 import { api, fmtNum, type ProviderUsage } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
+import { AlertConfigPanel } from "../components/AlertConfigPanel";
+import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { SignalConfigPanel } from "../components/SignalConfigPanel";
 
 interface KeyInfo {
@@ -53,6 +55,24 @@ export function SettingsPage() {
 
   return (
     <div>
+      <section className="card">
+        <h2>구독 채널 수집 (텔레그램)</h2>
+        <p className="page-note">
+          내가 구독 중인 텔레그램 채널을 읽어서 <b>여러 채널이 동시에 말하고 있는 것</b>을
+          뽑아냅니다. 채널 하나가 떠드는 건 노이즈지만, 열 개가 같은 종목을 말하면 신호입니다.
+        </p>
+        <ChannelCollectPanel />
+      </section>
+
+      <section className="card">
+        <h2>관심종목 시그널 (텔레그램)</h2>
+        <p className="page-note">
+          장중에 관심종목이 조건에 걸리면 텔레그램 시그널 방으로 알립니다.
+          알림은 많아지면 무시하게 되므로, 기준값을 올려 <b>덜 울리게</b> 맞추는 게 요령입니다.
+        </p>
+        <AlertConfigPanel />
+      </section>
+
       <section className="card">
         <h2>신호등 기준</h2>
         <p className="page-note">

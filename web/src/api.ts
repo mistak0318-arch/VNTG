@@ -170,6 +170,28 @@ export const api = {
   kiwoomGroups: () => getJson<{ groups: KiwoomGroup[] }>("/api/watchlist/kiwoom/groups"),
   kiwoomGroupStocks: (code: string) =>
     getJson<{ items: KiwoomGroupStock[] }>(`/api/watchlist/kiwoom/groups/${code}`),
+  channels: () =>
+    getJson<{ configured: boolean; channels: ChannelEntry[] }>("/api/channels"),
+  channelsRefresh: () => postJson<{ channels: ChannelEntry[] }>("/api/channels/refresh"),
+  channelsSetEnabled: (updates: { id: string; enabled: boolean }[]) =>
+    putJson<{ channels: ChannelEntry[] }>("/api/channels/enabled", { updates }),
+  channelsReport: (o: { ai?: boolean; send?: boolean; hours?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (o.ai === false) q.set("ai", "0");
+    if (o.send) q.set("send", "1");
+    if (o.hours) q.set("hours", String(o.hours));
+    return postJson<ChannelReport>(`/api/channels/report${q.toString() ? "?" + q : ""}`);
+  },
+  alertConfig: () =>
+    getJson<{ config: AlertConfig; defaults: AlertConfig; channels: TelegramChannelStatus[] }>(
+      "/api/alert/config",
+    ),
+  alertConfigSave: (config: AlertConfig) =>
+    putJson<{ config: AlertConfig }>("/api/alert/config", config),
+  alertScan: (send = false) =>
+    postJson<{ alerts: FiredAlert[]; sent: boolean; error?: string; preview: string }>(
+      `/api/alert/scan${send ? "?send=1" : ""}`,
+    ),
   breadth: (days = 60) =>
     getJson<{ days: number; points: BreadthPoint[]; summary: string }>(
       `/api/breadth?days=${days}`,
@@ -371,6 +393,70 @@ export interface EvaluatedAccount {
   totalValue: number;
   totalProfit: number;
   totalReturnRate: number | null;
+}
+
+export interface ChannelEntry {
+  id: string;
+  name: string;
+  username: string | null;
+  broadcast: boolean;
+  participants: number | null;
+  lastAt: string | null;
+  enabled: boolean;
+}
+
+export interface ScoredChannelItem {
+  text: string;
+  at: string;
+  channels: string[];
+  coverage: number;
+  mentions: string[];
+  score: number;
+}
+
+export interface ChannelReport {
+  date: string;
+  generatedAt: string;
+  channels: number;
+  rawCount: number;
+  usedCount: number;
+  items: ScoredChannelItem[];
+  summary: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  error?: string;
+  skipped: string[];
+}
+
+export interface AlertRule {
+  key: string;
+  label: string;
+  enabled: boolean;
+  threshold: number;
+  hint: string;
+}
+
+export interface AlertConfig {
+  enabled: boolean;
+  intervalMin: number;
+  rules: AlertRule[];
+}
+
+export interface TelegramChannelStatus {
+  channel: "report" | "signal" | "log";
+  chatId: string;
+  dedicated: boolean;
+}
+
+export interface FiredAlert {
+  code: string;
+  name: string;
+  rule: string;
+  ruleLabel: string;
+  detail: string;
+  price: number;
+  changeRate: number;
+  context: string[];
 }
 
 export interface BreadthPoint {

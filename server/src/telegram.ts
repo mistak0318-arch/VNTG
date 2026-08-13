@@ -18,12 +18,13 @@ import { recordApiCall } from "./apiUsage.js";
 
 const LIMIT = 3900; // 텔레그램 한도 4096자. 여유를 둔다.
 
-export type TelegramChannel = "report" | "signal" | "log";
+export type TelegramChannel = "report" | "signal" | "log" | "channel";
 
 const CHANNEL_ENV: Record<TelegramChannel, string> = {
   report: "TELEGRAM_CHAT_ID_REPORT",
   signal: "TELEGRAM_CHAT_ID_SIGNAL",
   log: "TELEGRAM_CHAT_ID_LOG",
+  channel: "TELEGRAM_CHAT_ID_CHANNEL",
 };
 
 /** 채널 전용 방이 있으면 그쪽으로, 없으면 기본 방으로 */
