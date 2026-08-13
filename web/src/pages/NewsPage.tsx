@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { api, normalizeStockCode, type StockSearchResult } from "../api";
 import { DisclosureList, NewsList } from "../components/NewsDisclosurePanel";
+import { NaverFinanceFrame } from "../components/NaverFinanceFrame";
 import { SectorNews } from "../components/SectorNews";
 
 export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [picked, setPicked] = useState<{ code: string; name: string } | null>(null);
+  const [srcTab, setSrcTab] = useState<"sector" | "naver">("sector");
 
   // 종목명이 겹칠 수 있으므로 후보를 보여주고 고르게 한다
   useEffect(() => {
@@ -79,7 +81,28 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
       ) : (
         <>
           <h3 className="feed-heading">분야별 주요뉴스</h3>
-          <SectorNews perSector={30} defaultSort="recent" />
+          <>
+          <nav className="detail-tabs">
+            <button
+              className={`detail-tab${srcTab === "sector" ? " active" : ""}`}
+              onClick={() => setSrcTab("sector")}
+            >
+              분야별 뉴스
+            </button>
+            <button
+              className={`detail-tab${srcTab === "naver" ? " active" : ""}`}
+              onClick={() => setSrcTab("naver")}
+            >
+              네이버 증권
+            </button>
+          </nav>
+
+          {srcTab === "sector" ? (
+            <SectorNews perSector={30} defaultSort="recent" />
+          ) : (
+            <NaverFinanceFrame />
+          )}
+        </>
         </>
       )}
 

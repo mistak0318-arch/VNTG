@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
 import { StockDetail } from "./components/StockDetail";
 import { AccountInfoPage } from "./pages/AccountInfoPage";
@@ -29,6 +30,7 @@ type Tab =
   | "watchKiwoom"
   | "calendar"
   | "marketFlow"
+  | "ask"
   | "stockAnalysis"
   | "volume"
   | "sameNet"
@@ -48,6 +50,7 @@ const MENU: { group: string; items: { key: Tab; label: string }[] }[] = [
       { key: "map", label: "테마/업종 MAP" },
       { key: "program", label: "프로그램 매매" },
       { key: "news", label: "뉴스·공시" },
+      { key: "ask", label: "시황 질문하기" },
     ],
   },
   {
@@ -161,6 +164,7 @@ export default function App() {
           {tab === "watchAi" && <MyPage onSelectStock={onSelectStock} />}
           {tab === "watchKiwoom" && <KiwoomWatchlistPage onSelectStock={onSelectStock} />}
           {tab === "marketFlow" && <MarketFlowPage />}
+          {tab === "ask" && <AskPage />}
           {tab === "calendar" && <CalendarPage />}
           {tab === "stockAnalysis" && (
             <StockAnalysisPage stock={selected} onSelectStock={openAnalysis} />

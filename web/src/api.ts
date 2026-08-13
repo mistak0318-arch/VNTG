@@ -182,6 +182,12 @@ export const api = {
     if (o.hours) q.set("hours", String(o.hours));
     return postJson<ChannelReport>(`/api/channels/report${q.toString() ? "?" + q : ""}`);
   },
+  askStatus: () => getJson<{ ready: boolean }>("/api/ask/status"),
+  ask: (
+    question: string,
+    history: AskTurn[] = [],
+    opts: { useSearch?: boolean; useMarketData?: boolean } = {},
+  ) => postJson<AskResult>("/api/ask", { question, history, ...opts }),
   aiConfig: () =>
     getJson<{
       config: AiConfig;
@@ -424,6 +430,21 @@ export interface EvaluatedAccount {
   totalValue: number;
   totalProfit: number;
   totalReturnRate: number | null;
+}
+
+export interface AskTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface AskResult {
+  text: string | null;
+  searches: string[];
+  sources: { title: string; url: string }[];
+  inputTokens: number;
+  outputTokens: number;
+  model: string;
+  error?: string;
 }
 
 export interface AiChoice {

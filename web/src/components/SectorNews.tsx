@@ -78,6 +78,8 @@ export function SectorNews({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [fetchedAt, setFetchedAt] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +91,7 @@ export function SectorNews({
         if (cancelled) return;
         setSectors(r.sectors);
         setExpanded(false);
+        setFetchedAt(r.fetchedAt);
         onFetched?.(r.fetchedAt);
       })
       .catch((err: Error) => {
@@ -101,7 +104,7 @@ export function SectorNews({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, perSector, sort]);
+  }, [scope, perSector, sort, reloadKey]);
 
   const current = sectors.find((s) => s.key === tab)?.items ?? [];
 
@@ -151,6 +154,17 @@ export function SectorNews({
           onClick={() => setScope("all")}
         >
           전체
+        </button>
+        <span className="news-fetched">
+          {fetchedAt ? `${fmtNewsTime(fetchedAt)} 수집` : ""}
+        </span>
+        <button
+          className="filter-btn"
+          onClick={() => setReloadKey((k) => k + 1)}
+          disabled={loading}
+          title="서버가 5분간 캐시하므로, 그 안에 다시 눌러도 같은 결과가 나옵니다"
+        >
+          {loading ? "…" : "↻ 새로고침"}
         </button>
       </div>
 

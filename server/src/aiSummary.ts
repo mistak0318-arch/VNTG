@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { runWebResearch, toResearchDigest } from "./webResearch.js";
 import { describeBreadth, listBreadth, toPoints } from "./breadthStore.js";
 import { getSection } from "./marketOverview.js";
 import type { IndexCard, MarketFlow, StockRow, HighLow } from "./marketOverview.js";
@@ -53,7 +54,8 @@ function edition(now = new Date()): string {
  * 리포트 데이터를 사람이 읽는 짧은 텍스트로 압축한다.
  * 이게 곧 프롬프트 본문이라, 여기서 토큰이 결정된다.
  */
-async function buildDigest(client: KiwoomClient): Promise<string> {
+/** 시황 질문하기(askMarket)도 같은 다이제스트를 쓴다 */
+export async function buildDigest(client: KiwoomClient): Promise<string> {
   const watchNames = (await listWatchlist().catch(() => [])).map((w) => w.name);
 
   const [idxSec, flowSec, moverSec, hiLoSec, globalSec, drivers, news, events, tracked] =
@@ -240,6 +242,15 @@ export async function buildAiSummary(
 
   const weekend = editionKey === "weekend";
   const digest = await buildDigest(client);
+
+  /*
+   * 우리가 조회한 데이터만 넘기면 우리가 안 받아온 건 AI도 모른다.
+   * 웹 검색을 붙여 간밤 미국장과 시장이 주목하는 주제를 직접 확인하게 한다.
+   * 검색은 회당 $0.01이라 상한(max_uses)으로 비용을 막는다.
+   */
+  const research = process.env.RESEARCH_ENABLED === "0"
+    ? null
+    : await runWebResearch(weekend ? 4 : 6).catch(() => null);
   const label = editionKey
     ? {
         morning: "조간(장 시작 전)",
@@ -254,7 +265,7 @@ export async function buildAiSummary(
 지금은 ${now.toLocaleString("ko-KR", { hour12: false })} (${label}) 기준이다.
 
 === 시장 데이터 ===
-${digest}`;
+${digest}${research ? toResearchDigest(research) : ""}`;
 
   // 주말판은 분량이 짧으므로 상한도 낮춘다
   const r = await summarize(prompt, weekend ? 2500 : 4000, "report");

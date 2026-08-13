@@ -28,6 +28,11 @@ const TARGETS: { key: string; label: string; group: string; symbol: string; isRa
   { key: "dji", label: "US 30", group: "미국지수", symbol: "^DJI" },
   { key: "gspc", label: "US 500", group: "미국지수", symbol: "^GSPC" },
   { key: "ixic", label: "US Tech 100", group: "미국지수", symbol: "^IXIC" },
+  // 선물은 현물 지수와 달리 야간에도 움직인다 — 개장 전에 밤사이 방향을 보려면 이쪽이다
+  { key: "es", label: "S&P500 선물", group: "미국선물", symbol: "ES=F" },
+  { key: "nq", label: "나스닥100 선물", group: "미국선물", symbol: "NQ=F" },
+  // 국내 반도체와 가장 직접적으로 연동되는 지수
+  { key: "sox", label: "필라델피아 반도체", group: "미국지수", symbol: "^SOX" },
   { key: "rut", label: "US 2000", group: "미국지수", symbol: "^RUT" },
   { key: "vix", label: "S&P 500 VIX", group: "변동성", symbol: "^VIX" },
   { key: "tnx", label: "미국 10년 국채 금리", group: "금리", symbol: "^TNX", isRate: true },
