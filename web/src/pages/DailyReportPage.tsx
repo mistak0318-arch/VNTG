@@ -400,7 +400,7 @@ export function DailyReportPage({
 
       {/* 7. 뉴스 클리핑 — 분야별 (뉴스·공시 탭과 같은 컴포넌트) */}
       <Section no={7} title="주요 뉴스 클리핑">
-        <SectorNews perSector={8} onFetched={setNewsAt} />
+        <SectorNews perSector={20} onFetched={setNewsAt} />
       </Section>
 
       <div className="table-note report-footer">

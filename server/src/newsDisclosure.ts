@@ -547,7 +547,7 @@ function recencyFactor(iso: string): number {
 export async function sectorNews(
   opts: { majorOnly?: boolean; perSector?: number; watchNames?: string[] } = {},
 ): Promise<{ sectors: SectorNews[]; fetchedAt: string }> {
-  const { majorOnly = true, perSector = 8, watchNames = [] } = opts;
+  const { majorOnly = true, perSector = 25, watchNames = [] } = opts;
 
   const raw = await Promise.all(
     NEWS_SECTORS.map(async (sec) => {
@@ -608,5 +608,19 @@ export async function sectorNews(
     return { key: sec.key, label: sec.label, items: scored.slice(0, perSector) };
   });
 
-  return { sectors, fetchedAt: new Date().toISOString() };
+  /**
+   * "핵심" — 분야를 가리지 않고 오늘 가장 중요한 것만 모은다.
+   * 분야별로 나눠 보면 정작 제일 중요한 기사가 다른 탭에 묻히는 문제가 있어서
+   * 전 분야를 점수순으로 합친 목록을 맨 앞에 둔다.
+   */
+  const top = sectors
+    .flatMap((s) => s.items)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, perSector);
+
+  return {
+    sectors: [{ key: "top", label: "핵심", items: top }, ...sectors],
+    fetchedAt: new Date().toISOString(),
+  };
+
 }

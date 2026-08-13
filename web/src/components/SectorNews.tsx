@@ -25,17 +25,25 @@ export function fmtNewsTime(iso: string): string {
   });
 }
 
-/** 기사 한 줄 — 제목(강조) + 요약 + 언론사/시각/보도량 */
-export function NewsRow({ item }: { item: ScoredNews }) {
+/**
+ * 기사 한 줄.
+ * compact=true면 요약을 감춰서 목록을 촘촘하게 (하위 티어용).
+ */
+export function NewsRow({ item, compact = false }: { item: ScoredNews; compact?: boolean }) {
   const hot = item.coverage >= 4;
   return (
-    <a className="news-item" href={item.link} target="_blank" rel="noreferrer noopener">
+    <a
+      className={`news-item${compact ? " compact" : ""}`}
+      href={item.link}
+      target="_blank"
+      rel="noreferrer noopener"
+    >
       <div className="news-title">
         {item.mentions.length > 0 && <span className="news-tag watch">★ {item.mentions[0]}</span>}
         {hot && <span className="news-tag hot">주목</span>}
         {item.title}
       </div>
-      {item.summary && <div className="news-summary">{item.summary}</div>}
+      {!compact && item.summary && <div className="news-summary">{item.summary}</div>}
       <div className="news-meta">
         <span className={item.major ? "press-major" : ""}>{item.press}</span>
         <span>{fmtNewsTime(item.publishedAt)}</span>
@@ -62,6 +70,7 @@ export function SectorNews({
   const [scope, setScope] = useState<"major" | "all">("major");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +81,7 @@ export function SectorNews({
       .then((r) => {
         if (cancelled) return;
         setSectors(r.sectors);
+        setExpanded(false);
         onFetched?.(r.fetchedAt);
       })
       .catch((err: Error) => {
@@ -87,6 +97,12 @@ export function SectorNews({
   }, [scope, perSector]);
 
   const current = sectors.find((s) => s.key === tab)?.items ?? [];
+
+  // 3단 계층: 헤드라인(요약 포함) / 주요(제목만) / 나머지(접기)
+  const headline = current.slice(0, 3);
+  const major = current.slice(3, 12);
+  const rest = current.slice(12);
+
 
   return (
     <div>
@@ -119,14 +135,42 @@ export function SectorNews({
       {loading && <div className="empty">뉴스 불러오는 중...</div>}
       {error && <div className="error-banner">{error}</div>}
 
-      {!loading && !error && (
-        <div className="report-lines">
-          {current.map((n, i) => (
-            <NewsRow key={`${n.link}-${i}`} item={n} />
-          ))}
-          {current.length === 0 && <div className="empty">이 분야 기사가 없습니다.</div>}
-        </div>
+      {!loading && !error && current.length > 0 && (
+        <>
+          <div className="report-lines">
+            {headline.map((n, i) => (
+              <NewsRow key={`h-${n.link}-${i}`} item={n} />
+            ))}
+          </div>
+
+          {major.length > 0 && (
+            <div className="report-lines news-tier">
+              {major.map((n, i) => (
+                <NewsRow key={`m-${n.link}-${i}`} item={n} compact />
+              ))}
+            </div>
+          )}
+
+          {rest.length > 0 && (
+            <>
+              {expanded && (
+                <div className="report-lines news-tier">
+                  {rest.map((n, i) => (
+                    <NewsRow key={`r-${n.link}-${i}`} item={n} compact />
+                  ))}
+                </div>
+              )}
+              <button className="news-more" onClick={() => setExpanded((v) => !v)}>
+                {expanded ? "접기" : `기사 ${rest.length}건 더 보기`}
+              </button>
+            </>
+          )}
+        </>
       )}
+
+      {!loading && !error && current.length === 0 && (
+        <div className="empty">이 분야 기사가 없습니다.</div>
+            )}
     </div>
   );
 }
