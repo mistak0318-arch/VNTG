@@ -3,6 +3,7 @@ import { evaluateThemes, toCustomThemeDigest } from "./customThemes.js";
 import { getTradeStats, toTradeDigest } from "./tradeStats.js";
 import { runWebResearch, toResearchDigest } from "./webResearch.js";
 import { describeBreadth, listBreadth, toPoints } from "./breadthStore.js";
+import { listSectorFlow, toSectorFlowDigest } from "./sectorFlowStore.js";
 import { getSection } from "./marketOverview.js";
 import type { IndexCard, MarketFlow, StockRow, HighLow } from "./marketOverview.js";
 import type { GlobalQuote } from "./globalMarket.js";
@@ -108,6 +109,15 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
     lines.push(`  (기관 세부) 금융투자 ${fmt(flow.kospi.financialInvestment)} / 투신 ${fmt(flow.kospi.investmentTrust)} / 연기금 ${fmt(flow.kospi.pensionFund)} / 사모 ${fmt(flow.kospi.privateFund)} / 보험 ${fmt(flow.kospi.insurance)}`);
     lines.push(`코스닥: 외국인 ${fmt(flow.kosdaq.foreign)} / 기관 ${fmt(flow.kosdaq.institution)} / 개인 ${fmt(flow.kosdaq.individual)}`);
   }
+
+  /**
+   * 총액 다음에 바로 업종별 이동을 붙인다.
+   * "외국인 +2.3조"만 있으면 규모밖에 모르지만, 어느 업종에서 빼서 어디로 넣었는지가 붙으면
+   * 같은 총액도 완전히 다르게 읽힌다.
+   */
+  const flowDays = await listSectorFlow(14).catch(() => []);
+  const flowDigest = toSectorFlowDigest(flowDays);
+  if (flowDigest) lines.push(flowDigest);
 
   if (drivers) {
     lines.push("\n[강한 테마]");

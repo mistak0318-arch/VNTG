@@ -161,7 +161,8 @@
       "PowerShell(foreach \\($q in @\\(\"미포\",\"조선\",\"한화엔진\"\\)\\) { \"-- $q\"; \\(Invoke-RestMethod -Uri \"http://localhost:4000/api/market/search?q=$\\([uri]::EscapeDataString\\($q\\)\\)\"\\).results | Select-Object -First 6 | ForEach-Object { \"   $\\($_.name\\) / $\\($_.code\\)\" } })",
       "PowerShell(foreach \\($q in @\\(\"HD현대미포\",\"미포\",\"HD현대\"\\)\\) { \"-- $q\"; $r = \\(Invoke-RestMethod -Uri \"http://localhost:4000/api/market/search?q=$\\([uri]::EscapeDataString\\($q\\)\\)\" -TimeoutSec 30\\).results; if \\($r\\) { $r | Select-Object -First 8 | ForEach-Object { \"   $\\($_.name\\) / $\\($_.code\\)\" } } else { \"   \\(없음\\)\" } })",
       "PowerShell(node \"C:\\\\Users\\\\JAEMIN~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\K--0000-3740--------------00-----2-AI------260810------\\\\83918202-8479-4b3c-adbe-6520c4c841d3\\\\scratchpad\\\\infostock-themes.mjs\")",
-      "PowerShell(foreach \\($q in @\\(\"앤톤\",\"한올\",\"소재과학\",\"한올소재\"\\)\\) { \"-- $q\"; $r=\\(Invoke-RestMethod -Uri \"http://localhost:4000/api/market/search?q=$\\([uri]::EscapeDataString\\($q\\)\\)\" -TimeoutSec 30\\).results; if\\($r\\){$r|Select-Object -First 5|ForEach-Object{\"   $\\($_.name\\) / $\\($_.code\\)\"}}else{\"   \\(없음\\)\"} })"
+      "PowerShell(foreach \\($q in @\\(\"앤톤\",\"한올\",\"소재과학\",\"한올소재\"\\)\\) { \"-- $q\"; $r=\\(Invoke-RestMethod -Uri \"http://localhost:4000/api/market/search?q=$\\([uri]::EscapeDataString\\($q\\)\\)\" -TimeoutSec 30\\).results; if\\($r\\){$r|Select-Object -First 5|ForEach-Object{\"   $\\($_.name\\) / $\\($_.code\\)\"}}else{\"   \\(없음\\)\"} })",
+      "Bash(git check-ignore *)"
     ]
   }
 }

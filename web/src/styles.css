@@ -2870,3 +2870,24 @@ body {
 }
 .ct-remove:hover { color: var(--red); }
 .ct-add { display: flex; gap: 8px; margin-top: 10px; align-items: flex-start; }
+
+/* 업종별 자금 흐름 — 담은 쪽/던진 쪽을 나란히 두고 막대로 규모를 비교한다 */
+.flow-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 8px; }
+@media (max-width: 860px) {
+  .flow-two-col { grid-template-columns: 1fr; }
+}
+.sf-row {
+  display: grid;
+  grid-template-columns: 122px 1fr 74px 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.sf-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
+.sf-bar { background: var(--panel-2); border-radius: 3px; height: 9px; overflow: hidden; }
+.sf-fill { display: block; height: 100%; border-radius: 3px; }
+.sf-fill.positive { background: var(--red); }
+.sf-fill.negative { background: var(--blue); }
+.sf-val { text-align: right; font-variant-numeric: tabular-nums; }
+.sf-rank { text-align: right; font-size: 11px; }

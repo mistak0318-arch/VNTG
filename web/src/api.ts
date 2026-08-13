@@ -246,6 +246,12 @@ export const api = {
     getJson<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }>(
       `/api/custom-themes${force ? "?force=1" : ""}`,
     ),
+  sectorFlow: (subject = "foreign", window = 5) =>
+    getJson<SectorFlowResult>(`/api/sector-flow?subject=${subject}&window=${window}`),
+  sectorFlowBackfill: (days = 60) =>
+    postJson<{ added: number; skipped: number; total: number }>(
+      `/api/sector-flow/backfill?days=${days}`,
+    ),
   customThemeCreate: (t: {
     name: string;
     memo?: string;
@@ -602,6 +608,33 @@ export interface EvaluatedTheme {
   missing: number;
   /** manual = 내가 만든 것, infostock = 인포스탁 테마표에서 옮겨온 것 */
   source?: "manual" | "infostock";
+}
+
+export interface SectorFlowStat {
+  code: string;
+  name: string;
+  /** "코스피 전기/전자" */
+  label: string;
+  market: "kospi" | "kosdaq";
+  /** 기간 누적 순매수(억원) */
+  sum: number;
+  today: number;
+  delta: number;
+  rank: number;
+  /** 직전 기간 대비 순위 변화. +면 올라온 것 */
+  rankChange: number | null;
+}
+
+export interface SectorFlowResult {
+  subject: string;
+  subjectLabel: string;
+  window: number;
+  dates: string[];
+  stats: SectorFlowStat[];
+  streaks: { code: string; name: string; label: string; streak: number; sum: number }[];
+  splits: { code: string; name: string; label: string; pension: number; trust: number }[];
+  sizes: { label: string; foreign: number; institution: number }[];
+  subjects: { key: string; label: string }[];
 }
 
 export interface TradeSummary {

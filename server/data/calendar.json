@@ -1,0 +1,357 @@
+[
+  {
+    "id": "seed_2026-03-12_선물옵션 동시만기",
+    "date": "2026-03-12",
+    "title": "선물옵션 동시만기",
+    "kind": "market",
+    "memo": "변동성이 커지는 날"
+  },
+  {
+    "id": "seed_2026-06-11_선물옵션 동시만기",
+    "date": "2026-06-11",
+    "title": "선물옵션 동시만기",
+    "kind": "market",
+    "memo": "변동성이 커지는 날"
+  },
+  {
+    "id": "seed_2026-09-10_선물옵션 동시만기",
+    "date": "2026-09-10",
+    "title": "선물옵션 동시만기",
+    "kind": "market",
+    "memo": "변동성이 커지는 날"
+  },
+  {
+    "id": "seed_2026-12-10_선물옵션 동시만기",
+    "date": "2026-12-10",
+    "title": "선물옵션 동시만기",
+    "kind": "market",
+    "memo": "변동성이 커지는 날"
+  },
+  {
+    "id": "seed_2026-01-01_신정 휴장",
+    "date": "2026-01-01",
+    "title": "신정 휴장",
+    "kind": "holiday",
+    "memo": ""
+  },
+  {
+    "id": "seed_2026-05-01_근로자의날 휴장",
+    "date": "2026-05-01",
+    "title": "근로자의날 휴장",
+    "kind": "holiday",
+    "memo": ""
+  },
+  {
+    "id": "seed_2026-12-31_연말 휴장",
+    "date": "2026-12-31",
+    "title": "연말 휴장",
+    "kind": "holiday",
+    "memo": ""
+  },
+  {
+    "date": "2026-08-20",
+    "time": "03:00",
+    "title": "FOMC 회의록 공개",
+    "kind": "market",
+    "memo": "새벽",
+    "id": "ev_msr1hcign97a"
+  },
+  {
+    "date": "2026-08-20",
+    "title": "삼성전자 실적발표",
+    "kind": "earnings",
+    "id": "ev_msr1hcixrtsz"
+  },
+  {
+    "date": "2026-01-08",
+    "title": "옵션 만기일",
+    "kind": "market",
+    "source": "economic:2026",
+    "memo": "월물 옵션 만기. 만기일 전후 프로그램 매매 확인",
+    "id": "ev_msrsgsn3royd"
+  },
+  {
+    "date": "2026-01-13",
+    "title": "미국 CPI (12월분)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3bf49"
+  },
+  {
+    "date": "2026-01-15",
+    "title": "한국은행 금통위 (기준금리)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3x1lp"
+  },
+  {
+    "date": "2026-01-28",
+    "title": "FOMC 결과 발표",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3cn7j"
+  },
+  {
+    "date": "2026-02-12",
+    "title": "옵션 만기일",
+    "kind": "market",
+    "source": "economic:2026",
+    "memo": "월물 옵션 만기. 만기일 전후 프로그램 매매 확인",
+    "id": "ev_msrsgsn3eyuj"
+  },
+  {
+    "date": "2026-02-13",
+    "title": "미국 CPI (1월분)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn30ut9"
+  },
+  {
+    "date": "2026-02-26",
+    "title": "한국은행 금통위 (기준금리)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3v4u4"
+  },
+  {
+    "date": "2026-03-11",
+    "title": "미국 CPI (2월분)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn39yo5"
+  },
+  {
+    "date": "2026-03-12",
+    "title": "선물·옵션 동시만기 (네 마녀의 날)",
+    "kind": "market",
+    "source": "economic:2026",
+    "memo": "지수선물·지수옵션·개별주식선물·개별주식옵션 동시 만기. 만기 전후 프로그램 매매 급증",
+    "id": "ev_msrsgsn3c911"
+  },
+  {
+    "date": "2026-03-18",
+    "title": "FOMC 결과 발표 (점도표 공개)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3faq5"
+  },
+  {
+    "date": "2026-04-09",
+    "title": "옵션 만기일",
+    "kind": "market",
+    "source": "economic:2026",
+    "memo": "월물 옵션 만기. 만기일 전후 프로그램 매매 확인",
+    "id": "ev_msrsgsn3b3n0"
+  },
+  {
+    "date": "2026-04-10",
+    "title": "미국 CPI (3월분)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3al9i"
+  },
+  {
+    "date": "2026-04-10",
+    "title": "한국은행 금통위 (기준금리)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3p9ku"
+  },
+  {
+    "date": "2026-04-29",
+    "title": "FOMC 결과 발표",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn37jj5"
+  },
+  {
+    "date": "2026-05-12",
+    "title": "미국 CPI (4월분)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3lhxz"
+  },
+  {
+    "date": "2026-05-14",
+    "title": "옵션 만기일",
+    "kind": "market",
+    "source": "economic:2026",
+    "memo": "월물 옵션 만기. 만기일 전후 프로그램 매매 확인",
+    "id": "ev_msrsgsn367pj"
+  },
+  {
+    "date": "2026-05-28",
+    "title": "한국은행 금통위 (기준금리)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3cxbn"
+  },
+  {
+    "date": "2026-06-10",
+    "title": "미국 CPI (5월분)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn316fr"
+  },
+  {
+    "date": "2026-06-11",
+    "title": "선물·옵션 동시만기 (네 마녀의 날)",
+    "kind": "market",
+    "source": "economic:2026",
+    "memo": "지수선물·지수옵션·개별주식선물·개별주식옵션 동시 만기. 만기 전후 프로그램 매매 급증",
+    "id": "ev_msrsgsn3luce"
+  },
+  {
+    "date": "2026-06-17",
+    "title": "FOMC 결과 발표 (점도표 공개)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3xssj"
+  },
+  {
+    "date": "2026-07-09",
+    "title": "옵션 만기일",
+    "kind": "market",
+    "source": "economic:2026",
+    "memo": "월물 옵션 만기. 만기일 전후 프로그램 매매 확인",
+    "id": "ev_msrsgsn3uvt2"
+  },
+  {
+    "date": "2026-07-14",
+    "title": "미국 CPI (6월분)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn341ee"
+  },
+  {
+    "date": "2026-07-16",
+    "title": "한국은행 금통위 (기준금리)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3jcnn"
+  },
+  {
+    "date": "2026-07-29",
+    "title": "FOMC 결과 발표",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3a1gy"
+  },
+  {
+    "date": "2026-08-12",
+    "title": "미국 CPI (7월분)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3j0nb"
+  },
+  {
+    "date": "2026-08-13",
+    "title": "옵션 만기일",
+    "kind": "market",
+    "source": "economic:2026",
+    "memo": "월물 옵션 만기. 만기일 전후 프로그램 매매 확인",
+    "id": "ev_msrsgsn3n5hv"
+  },
+  {
+    "date": "2026-08-27",
+    "title": "한국은행 금통위 (기준금리)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3fx75"
+  },
+  {
+    "date": "2026-09-10",
+    "title": "선물·옵션 동시만기 (네 마녀의 날)",
+    "kind": "market",
+    "source": "economic:2026",
+    "memo": "지수선물·지수옵션·개별주식선물·개별주식옵션 동시 만기. 만기 전후 프로그램 매매 급증",
+    "id": "ev_msrsgsn3h5ic"
+  },
+  {
+    "date": "2026-09-11",
+    "title": "미국 CPI (8월분)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3j9te"
+  },
+  {
+    "date": "2026-09-16",
+    "title": "FOMC 결과 발표 (점도표 공개)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3yvy7"
+  },
+  {
+    "date": "2026-10-08",
+    "title": "옵션 만기일",
+    "kind": "market",
+    "source": "economic:2026",
+    "memo": "월물 옵션 만기. 만기일 전후 프로그램 매매 확인",
+    "id": "ev_msrsgsn3i4wg"
+  },
+  {
+    "date": "2026-10-14",
+    "title": "미국 CPI (9월분)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn35uzs"
+  },
+  {
+    "date": "2026-10-22",
+    "title": "한국은행 금통위 (기준금리)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3ydrn"
+  },
+  {
+    "date": "2026-10-28",
+    "title": "FOMC 결과 발표",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3jprw"
+  },
+  {
+    "date": "2026-11-10",
+    "title": "미국 CPI (10월분)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn348wv"
+  },
+  {
+    "date": "2026-11-12",
+    "title": "옵션 만기일",
+    "kind": "market",
+    "source": "economic:2026",
+    "memo": "월물 옵션 만기. 만기일 전후 프로그램 매매 확인",
+    "id": "ev_msrsgsn3v3pc"
+  },
+  {
+    "date": "2026-11-26",
+    "title": "한국은행 금통위 (기준금리)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3r8fx"
+  },
+  {
+    "date": "2026-12-09",
+    "title": "FOMC 결과 발표 (점도표 공개)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn3xs2g"
+  },
+  {
+    "date": "2026-12-10",
+    "title": "미국 CPI (11월분)",
+    "kind": "market",
+    "source": "economic:2026",
+    "id": "ev_msrsgsn38ev2"
+  },
+  {
+    "date": "2026-12-10",
+    "title": "선물·옵션 동시만기 (네 마녀의 날)",
+    "kind": "market",
+    "source": "economic:2026",
+    "memo": "지수선물·지수옵션·개별주식선물·개별주식옵션 동시 만기. 만기 전후 프로그램 매매 급증",
+    "id": "ev_msrsgsn3dspc"
+  }
+]

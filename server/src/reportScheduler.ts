@@ -1,6 +1,7 @@
 import { buildAiSummary } from "./aiSummary.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { captureBreadth } from "./breadthStore.js";
+import { captureSectorFlow } from "./sectorFlowStore.js";
 import { deliverReport } from "./reportDelivery.js";
 import {
   EDITIONS,
@@ -73,6 +74,13 @@ async function tick(client: KiwoomClient): Promise<void> {
   if (!weekend) {
     await captureBreadth(client).catch((err: unknown) => {
       console.error("[breadth] 저장 실패:", err instanceof Error ? err.message : err);
+      return null;
+    });
+
+    // 업종별 수급도 같이 남긴다. 이쪽은 base_dt로 소급이 되므로 하루 빠져도 메울 수 있지만,
+    // 매일 받아두면 백필을 다시 돌릴 일이 없다 (하루치 2호출).
+    await captureSectorFlow(client).catch((err: unknown) => {
+      console.error("[sectorFlow] 저장 실패:", err instanceof Error ? err.message : err);
       return null;
     });
   }

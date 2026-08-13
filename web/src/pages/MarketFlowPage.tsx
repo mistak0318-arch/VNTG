@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, fmtNum, type BreadthPoint, type ChannelReport } from "../api";
 import { BreadthPanel } from "../components/BreadthPanel";
+import { SectorFlowPanel } from "../components/SectorFlowPanel";
 import { TradePanel } from "../components/TradePanel";
 import { RefreshBar } from "../components/RefreshBar";
 
@@ -157,6 +158,9 @@ function MoneyFlowTab() {
           </div>
         </>
       )}
+
+      <h3 className="section-heading">업종별 자금 흐름</h3>
+      <SectorFlowPanel />
 
       <h3 className="section-heading">시장 폭</h3>
       <BreadthPanel />

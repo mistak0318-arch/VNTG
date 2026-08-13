@@ -3,5 +3,17 @@ dist/
 .env
 *.log
 
-# 관심종목 등 로컬 데이터 (기기마다 다름)
-server/data/
+# 로컬 데이터 (기기마다 다름 — 수집 이력, 캐시, 사용량)
+#
+# 디렉터리 자체를 제외하면 git이 안으로 들어가지 않아 아래 `!` 되살리기가 안 먹는다.
+# 그래서 "안의 것 전부"를 제외하고 필요한 파일만 되살린다.
+server/data/*
+!server/data/.gitkeep
+
+# "내가 만든 것"은 기기 상태가 아니라 자산이라 기기를 따라다녀야 한다.
+# 메인PC에서 만든 테마가 미니PC에 없으면 처음부터 다시 만들어야 한다.
+!server/data/customThemes.json
+!server/data/watchlist.json
+!server/data/watchGroups.json
+!server/data/stockNotes.json
+!server/data/calendar.json
