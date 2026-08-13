@@ -38,11 +38,17 @@ export interface TradeTarget {
    * 원유·반도체장비처럼 우리가 사오기만 하는 품목은 수출이 0이라 수입을 봐야 한다.
    */
   watch: "export" | "import";
+  /**
+   * 관련 종목을 찾을 때 쓸 키움 테마 검색어. 앞에 있는 것부터 시도한다.
+   * 테마를 못 찾으면 업종 구성종목으로 떨어진다.
+   */
+  themes?: string[];
 }
 
 export const TRADE_TARGETS: TradeTarget[] = [
   {
     key: "ic",
+    themes: ["반도체_생산", "반도체_시스템반도체"],
     watch: "export",
     label: "반도체 (집적회로)",
     hs: "8542",
@@ -51,6 +57,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "semi_device",
+    themes: ["반도체_전공정소재", "반도체_시스템반도체"],
     watch: "export",
     label: "반도체 소자",
     hs: "8541",
@@ -59,6 +66,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "semi_equip",
+    themes: ["반도체_전공정장비", "반도체_후공정장비"],
     watch: "import",
     label: "반도체 장비",
     hs: "8486",
@@ -67,6 +75,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "car",
+    themes: ["자동차_전장화 수혜", "그린카_하이브리드카/전기차"],
     watch: "export",
     label: "승용차",
     hs: "8703",
@@ -75,6 +84,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "carpart",
+    themes: ["자동차_차량경량화 수혜", "자동차_전장화 수혜"],
     watch: "export",
     label: "자동차 부품",
     hs: "8708",
@@ -83,6 +93,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "phone",
+    themes: ["스마트폰_삼성전자관련주", "휴대폰_RF부품"],
     watch: "export",
     label: "무선통신기기",
     hs: "8517",
@@ -91,6 +102,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "crude",
+    themes: ["LPG(액화석유가스)", "자원개발 E&P"],
     watch: "import",
     label: "원유",
     hs: "2709",
@@ -99,6 +111,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "petro",
+    themes: ["LPG(액화석유가스)", "합성수지"],
     watch: "export",
     label: "석유제품",
     hs: "2710",
@@ -107,6 +120,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "ship",
+    themes: ["조선_해양플랜트", "조선_Eco선"],
     watch: "export",
     label: "선박",
     hs: "8901",
@@ -115,6 +129,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "steel",
+    themes: ["강관", "합금철"],
     watch: "export",
     label: "철강 (판재)",
     hs: "7208",
@@ -123,6 +138,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "battery",
+    themes: ["2차전지_완제품", "2차전지_소재(양극화물질등)"],
     watch: "export",
     label: "이차전지",
     hs: "8507",
@@ -131,6 +147,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "dram_module",
+    themes: ["반도체_생산", "반도체_후공정"],
     watch: "export",
     label: "디램 모듈·CPU",
     hs: "8473",
@@ -139,6 +156,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "display",
+    themes: ["AMOLED_소재", "LCD_부품"],
     watch: "export",
     label: "평판디스플레이 모듈",
     hs: "8524",
@@ -147,6 +165,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "polarizer",
+    themes: ["LCD_소재", "AMOLED_소재"],
     watch: "export",
     label: "편광판·광학필름",
     hs: "9001",
@@ -155,6 +174,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "transformer",
+    themes: ["스마트 그리드", "화력_발전기자재"],
     watch: "export",
     label: "초고압 변압기",
     hs: "8504",
@@ -163,6 +183,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "switchgear",
+    themes: ["스마트 그리드", "원자력_기자재"],
     watch: "export",
     label: "배전반·제어반",
     hs: "8537",
@@ -171,6 +192,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "connector",
+    themes: ["PCB(인쇄회로기판)", "FPCB(연성회로기판)"],
     watch: "export",
     label: "커넥터·개폐기",
     hs: "8536",
@@ -179,6 +201,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "wiring",
+    themes: ["자동차_전장화 수혜", "자동차_차량경량화 수혜"],
     watch: "export",
     label: "자동차 와이어링",
     hs: "8544",
@@ -187,6 +210,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "tire",
+    themes: ["타이어"],
     watch: "export",
     label: "타이어",
     hs: "4011",
@@ -195,6 +219,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "bio",
+    themes: ["바이오_바이오시밀러/베터", "바이오_진단/백신"],
     watch: "export",
     label: "바이오의약품",
     hs: "3002",
@@ -203,6 +228,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "medicine",
+    themes: ["신약개발/기술수출", "바이오_바이오시밀러/베터"],
     watch: "import",
     label: "의약품 (완제)",
     hs: "3004",
@@ -211,6 +237,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "medical_device",
+    themes: ["의료기기"],
     watch: "import",
     label: "의료기기",
     hs: "9018",
@@ -219,6 +246,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "polycarbonate",
+    themes: ["엔지니어링 플라스틱", "합성수지"],
     watch: "export",
     label: "폴리카보네이트·수지",
     hs: "3907",
@@ -227,6 +255,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "polypropylene",
+    themes: ["합성수지", "합성섬유_원료"],
     watch: "export",
     label: "폴리프로필렌",
     hs: "3902",
@@ -235,6 +264,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "aluminum",
+    themes: ["비철금속주", "희소금속"],
     watch: "import",
     label: "알루미늄",
     hs: "7601",
@@ -243,6 +273,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "copper",
+    themes: ["비철금속주", "희소금속"],
     watch: "import",
     label: "구리",
     hs: "7403",
@@ -251,6 +282,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "excavator",
+    themes: ["기계_건설기계", "기계_공작기계"],
     watch: "export",
     label: "굴착기·불도저",
     hs: "8429",
@@ -259,6 +291,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "valve",
+    themes: ["기계_공작기계", "조선_해양플랜트기자재"],
     watch: "export",
     label: "밸브",
     hs: "8481",
@@ -267,6 +300,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "noodle",
+    themes: ["라면", "제과스낵"],
     watch: "export",
     label: "면류 (라면)",
     hs: "1902",
@@ -275,6 +309,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "aircraft",
+    themes: ["운송_항공", "우주항공"],
     watch: "import",
     label: "항공기·엔진",
     hs: "8802",
@@ -283,6 +318,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "cosmetic",
+    themes: ["화장품"],
     watch: "export",
     label: "화장품",
     hs: "3304",

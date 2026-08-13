@@ -281,7 +281,7 @@ function ChannelTab() {
   );
 }
 
-export function MarketFlowPage() {
+export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
   const [tab, setTab] = useState<FlowTab>("money");
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -303,7 +303,7 @@ export function MarketFlowPage() {
 
       <div key={`${tab}-${reloadKey}`}>
         {tab === "money" && <MoneyFlowTab />}
-        {tab === "trade" && <TradePanel />}
+        {tab === "trade" && <TradePanel onSelectStock={onSelectStock} />}
         {tab === "channel" && <ChannelTab />}
       </div>
     </div>

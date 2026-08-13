@@ -82,7 +82,7 @@ app.use("/api/breadth", createBreadthRouter(client));
 app.use("/api/alert", createAlertRouter(client));
 app.use("/api/ai", createAiRouter());
 app.use("/api/ask", createAskRouter(client));
-app.use("/api/trade", createTradeRouter());
+app.use("/api/trade", createTradeRouter(client));
 app.use("/api/channels", createChannelsRouter());
 app.use("/api/calendar-vision", createCalendarVisionRouter());
 app.use("/api/report", createReportRouter(client));

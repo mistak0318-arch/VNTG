@@ -63,6 +63,31 @@ function normalizeSectorName(name: string): string {
   return name.replace(/[^가-힣a-zA-Z0-9]/g, "").toLowerCase();
 }
 
+/**
+ * 업종명으로 업종지수를 찾는다 (수출입 관련 종목 조회용).
+ * 코스피를 먼저 보고 없으면 코스닥에서 찾는다 — 같은 이름 업종이 양쪽에 있으면
+ * 대표성이 큰 코스피 쪽이 맞다.
+ */
+export async function findSectorByName(
+  client: KiwoomClient,
+  name: string,
+): Promise<{ market: "kospi" | "kosdaq"; code: string; name: string } | null> {
+  const section = await getSection("sectors", client).catch(() => null);
+  const sectors = (section?.data ?? null) as Sectors | null;
+  if (!sectors) return null;
+
+  const target = normalizeSectorName(name);
+  for (const market of ["kospi", "kosdaq"] as const) {
+    const list = market === "kospi" ? sectors.kospi : sectors.kosdaq;
+    const found = list?.find((sec) => {
+      const n = normalizeSectorName(sec.name);
+      return n === target || n.includes(target) || target.includes(n);
+    });
+    if (found?.code) return { market, code: found.code, name: found.name };
+  }
+  return null;
+}
+
 const moodCache = new Map<string, { data: MoodResult; at: number }>();
 const MOOD_TTL_MS = 3 * 60_000;
 

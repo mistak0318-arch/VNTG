@@ -242,6 +242,12 @@ export const api = {
       configured: boolean;
       error?: string;
     }>(`/api/trade${force ? "?force=1" : ""}`),
+  tradeStocks: (key: string) =>
+    getJson<{
+      stocks: { code: string; name: string; changeRate: number; marketCap?: number | null }[];
+      from: "theme" | "sector" | "none";
+      label: string;
+    }>(`/api/trade/${key}/stocks`),
   breadth: (days = 60) =>
     getJson<{ days: number; points: BreadthPoint[]; summary: string }>(
       `/api/breadth?days=${days}`,

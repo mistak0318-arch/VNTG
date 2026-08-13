@@ -2795,3 +2795,29 @@ body {
 .trade-top-row { display: flex; gap: 12px; font-size: 12.5px; align-items: baseline; }
 .trade-top-name { flex: 1; }
 .trade-top-row .num { flex: none; width: 78px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.trade-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: 10px 0 5px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.trade-sub:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.trade-stocks { display: flex; flex-wrap: wrap; gap: 6px; }
+.trade-stock {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  padding: 6px 11px;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.trade-stock:hover { border-color: var(--blue); }
+.trade-stock-name { font-weight: 500; }
+.trade-stock .num { font-size: 11.5px; font-variant-numeric: tabular-nums; }

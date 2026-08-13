@@ -163,7 +163,7 @@ export default function App() {
           {tab === "news" && <NewsPage onSelectStock={onSelectStock} />}
           {tab === "watchAi" && <MyPage onSelectStock={onSelectStock} />}
           {tab === "watchKiwoom" && <KiwoomWatchlistPage onSelectStock={onSelectStock} />}
-          {tab === "marketFlow" && <MarketFlowPage />}
+          {tab === "marketFlow" && <MarketFlowPage onSelectStock={onSelectStock} />}
           {tab === "ask" && <AskPage />}
           {tab === "calendar" && <CalendarPage />}
           {tab === "stockAnalysis" && (
