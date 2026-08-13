@@ -1818,3 +1818,164 @@ body {
 .intraday-session.main {
   color: var(--text);
 }
+
+/* Claude API 토큰·비용 (호출 수보다 이게 중요) */
+.token-box {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.token-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 2px 0;
+}
+.token-row .num {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.token-row.cost {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}
+.token-row.cost .num {
+  color: #f5c542;
+}
+
+/* ---------------- 데일리 리포트 ---------------- */
+.report-header {
+  border-bottom: 2px solid var(--blue);
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+}
+.report-header h2 {
+  font-size: 20px;
+  margin: 0;
+}
+.report-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.report-section {
+  margin-top: 22px;
+}
+.report-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  margin: 0 0 10px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+}
+.report-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  flex: none;
+}
+.report-subheading {
+  font-size: 12.5px;
+  margin: 0 0 6px;
+  color: var(--muted);
+}
+.report-two-col {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 900px) {
+  .report-two-col {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.report-lines {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.report-line {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.report-line.static {
+  cursor: default;
+}
+.report-line:last-child {
+  border-bottom: none;
+}
+.report-line:not(.static):hover {
+  background: var(--panel-2);
+}
+.rl-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rl-sub {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rl-price,
+.rl-rate {
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+}
+.rl-rate {
+  min-width: 58px;
+  text-align: right;
+  font-weight: 600;
+}
+.report-footer {
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* 관심종목 그룹 */
+.group-tabs {
+  align-items: center;
+}
+.filter-btn.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+.group-select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+  max-width: 110px;
+}

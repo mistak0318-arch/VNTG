@@ -2,7 +2,16 @@ import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
 import { getTrackedWatchlist, invalidateTrackingCache } from "../watchTracking.js";
-import { addWatchItem, listWatchlist, removeWatchItem, updateWatchItem } from "../watchlist.js";
+import {
+  addGroup,
+  addWatchItem,
+  listGroups,
+  listWatchlist,
+  removeGroup,
+  removeWatchItem,
+  renameGroup,
+  updateWatchItem,
+} from "../watchlist.js";
 
 export function createWatchlistRouter(client: KiwoomClient): Router {
   const router = Router();
@@ -17,7 +26,7 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
 
   router.post("/", async (req, res, next) => {
     try {
-      const { code, name, addedPrice, memo } = req.body ?? {};
+      const { code, name, addedPrice, memo, group } = req.body ?? {};
       if (typeof code !== "string" || !code) {
         res.status(400).json({ error: "code는 필수입니다." });
         return;
@@ -27,6 +36,7 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
         name: typeof name === "string" ? name : code,
         addedPrice: Number(addedPrice) || 0,
         memo: typeof memo === "string" ? memo : "",
+        group: typeof group === "string" ? group : undefined,
       });
       invalidateTrackingCache();
       res.json({ items });
@@ -47,10 +57,11 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
 
   router.patch("/:code", async (req, res, next) => {
     try {
-      const { memo, addedPrice } = req.body ?? {};
+      const { memo, addedPrice, group } = req.body ?? {};
       const items = await updateWatchItem(req.params.code, {
         memo: typeof memo === "string" ? memo : undefined,
         addedPrice: addedPrice === undefined ? undefined : Number(addedPrice),
+        group: typeof group === "string" ? group : undefined,
       });
       invalidateTrackingCache();
       res.json({ items });
@@ -81,6 +92,44 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
     try {
       const force = req.query.force === "1";
       res.json({ items: await getTrackedWatchlist(client, force) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ---------------- 관심종목 그룹 ----------------
+
+  router.get("/groups", async (_req, res, next) => {
+    try {
+      res.json({ groups: await listGroups() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/groups", async (req, res, next) => {
+    try {
+      const name = typeof req.body?.name === "string" ? req.body.name : "";
+      res.json({ groups: await addGroup(name) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.patch("/groups/:name", async (req, res, next) => {
+    try {
+      const to = typeof req.body?.name === "string" ? req.body.name : "";
+      res.json({ groups: await renameGroup(decodeURIComponent(req.params.name), to) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.delete("/groups/:name", async (req, res, next) => {
+    try {
+      const groups = await removeGroup(decodeURIComponent(req.params.name));
+      invalidateTrackingCache();
+      res.json({ groups });
     } catch (err) {
       next(err);
     }

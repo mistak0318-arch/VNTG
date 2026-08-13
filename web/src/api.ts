@@ -24,6 +24,17 @@ async function postJson<T = RawRecord>(path: string, body?: unknown): Promise<T>
   return parsed;
 }
 
+async function patchJson<T = RawRecord>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  const parsed = (await res.json()) as T & { error?: string };
+  if (!res.ok) throw new Error((parsed as { error?: string }).error ?? `요청 실패 (${res.status})`);
+  return parsed;
+}
+
 async function deleteJson<T = RawRecord>(path: string): Promise<T> {
   const res = await fetch(path, { method: "DELETE" });
   const parsed = (await res.json()) as T & { error?: string };
@@ -122,8 +133,16 @@ export const api = {
   marketStatus: () => getJson<MarketStatus>("/api/overview/status"),
   overviewSection: <T>(name: string) => getJson<SectionResult<T>>(`/api/overview/section/${name}`),
   watchlist: () => getJson<{ items: WatchItem[] }>("/api/watchlist"),
-  watchlistAdd: (item: { code: string; name: string; addedPrice: number; memo?: string }) =>
+  watchGroups: () => getJson<{ groups: string[] }>("/api/watchlist/groups"),
+  watchGroupAdd: (name: string) => postJson<{ groups: string[] }>("/api/watchlist/groups", { name }),
+  watchGroupRename: (from: string, name: string) =>
+    patchJson<{ groups: string[] }>(`/api/watchlist/groups/${encodeURIComponent(from)}`, { name }),
+  watchGroupRemove: (name: string) =>
+    deleteJson<{ groups: string[] }>(`/api/watchlist/groups/${encodeURIComponent(name)}`),
+  watchlistAdd: (item: { code: string; name: string; addedPrice: number; memo?: string; group?: string }) =>
     postJson<{ items: WatchItem[] }>("/api/watchlist", item),
+  watchlistSetGroup: (code: string, group: string) =>
+    patchJson<{ items: WatchItem[] }>(`/api/watchlist/${code}`, { group }),
   watchlistRemove: (code: string) => deleteJson<{ items: WatchItem[] }>(`/api/watchlist/${code}`),
   watchlistTracking: (force = false) =>
     getJson<{ items: TrackedStock[] }>(`/api/watchlist/tracking${force ? "?force=1" : ""}`),
@@ -157,6 +176,7 @@ export interface WatchItem {
   addedAt: string;
   addedPrice: number;
   memo: string;
+  group?: string;
 }
 
 export interface KiwoomGroup {
@@ -283,6 +303,8 @@ export interface ProviderUsage {
   rateLimited: number;
   usageRate: number | null;
   topEndpoints: { endpoint: string; count: number }[];
+  /** Claude 전용 — 토큰과 추정 비용(USD) */
+  tokens: { input: number; output: number; estimatedUsd: number } | null;
 }
 
 export interface FinancialPeriod {

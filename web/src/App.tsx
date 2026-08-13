@@ -3,6 +3,7 @@ import { StockDetail } from "./components/StockDetail";
 import { AccountInfoPage } from "./pages/AccountInfoPage";
 import { AlgoPicksPage } from "./pages/AlgoPicksPage";
 import { ContinuousTradePage } from "./pages/ContinuousTradePage";
+import { DailyReportPage } from "./pages/DailyReportPage";
 import { KiwoomWatchlistPage } from "./pages/KiwoomWatchlistPage";
 import { MapPage } from "./pages/MapPage";
 import { MyPage } from "./pages/MyPage";
@@ -17,6 +18,7 @@ import { useHashRoute } from "./useHashRoute";
 
 type Tab =
   | "overview"
+  | "report"
   | "map"
   | "program"
   | "news"
@@ -36,6 +38,7 @@ const MENU: { group: string; items: { key: Tab; label: string }[] }[] = [
     group: "시황",
     items: [
       { key: "overview", label: "시황 대시보드" },
+      { key: "report", label: "데일리 리포트" },
       { key: "map", label: "테마/업종 MAP" },
       { key: "program", label: "프로그램 매매" },
       { key: "news", label: "뉴스·공시" },
@@ -140,6 +143,7 @@ export default function App() {
 
         <div className="main-inner">
           {tab === "overview" && <OverviewPage onSelectStock={onSelectStock} />}
+          {tab === "report" && <DailyReportPage onSelectStock={onSelectStock} />}
           {tab === "map" && <MapPage onSelectStock={onSelectStock} />}
           {tab === "program" && <ProgramTradePage />}
           {tab === "news" && <NewsPage onSelectStock={onSelectStock} />}

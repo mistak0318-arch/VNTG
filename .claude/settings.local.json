@@ -109,7 +109,11 @@
       "Bash(git grep *)",
       "Bash(python -)",
       "Bash(git -c core.hooksPath=/dev/null commit -q -m \"텔레그램 봇 설계서 추가 + 미니PC 이전 완료 반영\")",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(curl -s --max-time 60 -X POST \"http://localhost:4000/api/settings/claude/test\")",
+      "Bash(curl -s --max-time 30 \"http://localhost:4000/api/settings/usage\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const a=j.providers.find\\(p=>p.provider==='anthropic'\\);console.log\\(JSON.stringify\\(a,null,1\\)\\)}\\)\")",
+      "Bash(node --input-type=module -e ' *)"
     ]
   }
 }

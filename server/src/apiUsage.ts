@@ -11,7 +11,7 @@ const DATA_FILE = resolve(__dirname, "..", "data", "apiUsage.json");
  * 날짜별 · 서비스별 · 엔드포인트별로 성공/실패 횟수를 센다.
  */
 
-export type ApiProvider = "kiwoom" | "dart" | "naver" | "yahoo";
+export type ApiProvider = "kiwoom" | "dart" | "naver" | "yahoo" | "anthropic" | "telegram" | "mail";
 
 interface DayStat {
   /** 엔드포인트(또는 TR ID)별 호출 수 */
@@ -20,6 +20,24 @@ interface DayStat {
   failed: number;
   /** 한도 초과(429 등) 횟수 — 별도로 세면 한도에 걸렸는지 바로 보인다 */
   rateLimited: number;
+  /** Claude API 전용 — 다른 API와 달리 토큰이 곧 비용이라 따로 누적한다 */
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+/**
+ * Claude 모델별 100만 토큰당 단가(USD).
+ * 비용을 "대략 얼마 나가고 있는지" 감 잡는 용도라 정확한 청구액과는 다를 수 있다.
+ */
+const CLAUDE_PRICING: Record<string, { input: number; output: number }> = {
+  "claude-opus-5": { input: 5, output: 25 },
+  "claude-sonnet-5": { input: 3, output: 15 },
+  "claude-haiku-4-5-20251001": { input: 1, output: 5 },
+};
+
+/** 모델명이 사전에 없으면 sonnet 단가로 추정 */
+function priceFor(model: string): { input: number; output: number } {
+  return CLAUDE_PRICING[model] ?? CLAUDE_PRICING["claude-sonnet-5"];
 }
 
 type UsageData = Record<string, Record<ApiProvider, DayStat>>; // { "2026-08-12": { kiwoom: {...} } }
@@ -45,6 +63,21 @@ export const DAILY_LIMITS: Record<ApiProvider, { label: string; limit: number | 
     label: "Yahoo Finance",
     limit: null,
     note: "공식 한도 미공개. 과도하게 호출하면 차단될 수 있어 1분 캐싱을 둡니다",
+  },
+  anthropic: {
+    label: "Claude API",
+    limit: null,
+    note: "종량제 — 호출 수가 아니라 토큰이 비용입니다. 아래 토큰·추정비용을 보세요",
+  },
+  telegram: {
+    label: "텔레그램 봇",
+    limit: null,
+    note: "무료. 초당 약 30건 제한이 있어 알림이 몰리면 나눠 보냅니다",
+  },
+  mail: {
+    label: "네이버 메일(SMTP)",
+    limit: null,
+    note: "네이버 정책상 일일 발송 제한이 있습니다. 하루 3회 리포트라 여유롭습니다",
   },
 };
 
@@ -90,6 +123,8 @@ export async function recordApiCall(
   provider: ApiProvider,
   endpoint: string,
   outcome: "ok" | "failed" | "rateLimited",
+  /** Claude 호출일 때 응답의 usage를 그대로 넘기면 토큰이 누적된다 */
+  tokens?: { inputTokens?: number; outputTokens?: number },
 ): Promise<void> {
   const data = await load();
   const day = today();
@@ -98,6 +133,10 @@ export async function recordApiCall(
 
   const stat = data[day][provider];
   stat.calls[endpoint] = (stat.calls[endpoint] ?? 0) + 1;
+  if (tokens) {
+    stat.inputTokens = (stat.inputTokens ?? 0) + (tokens.inputTokens ?? 0);
+    stat.outputTokens = (stat.outputTokens ?? 0) + (tokens.outputTokens ?? 0);
+  }
   if (outcome === "ok") stat.ok += 1;
   else if (outcome === "failed") stat.failed += 1;
   else {
@@ -126,6 +165,8 @@ export interface ProviderUsage {
   rateLimited: number;
   usageRate: number | null; // 한도 대비 %
   topEndpoints: { endpoint: string; count: number }[];
+  /** Claude 전용 — 토큰과 추정 비용(USD). 다른 provider는 null */
+  tokens: { input: number; output: number; estimatedUsd: number } | null;
 }
 
 export async function getUsage(day = today()): Promise<{ day: string; providers: ProviderUsage[] }> {
@@ -140,6 +181,17 @@ export async function getUsage(day = today()): Promise<{ day: string; providers:
       .map(([endpoint, count]) => ({ endpoint, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
+    // 엔드포인트 이름이 곧 모델명이므로, 모델별 단가로 나눠 계산한다
+    let tokens: ProviderUsage["tokens"] = null;
+    if (p === "anthropic") {
+      const input = stat.inputTokens ?? 0;
+      const output = stat.outputTokens ?? 0;
+      const modelNames = Object.keys(stat.calls);
+      const price = priceFor(modelNames[0] ?? "");
+      const estimatedUsd = (input / 1_000_000) * price.input + (output / 1_000_000) * price.output;
+      tokens = { input, output, estimatedUsd };
+    }
+
     return {
       provider: p,
       label: meta.label,
@@ -151,6 +203,7 @@ export async function getUsage(day = today()): Promise<{ day: string; providers:
       rateLimited: stat.rateLimited,
       usageRate: meta.limit ? (total / meta.limit) * 100 : null,
       topEndpoints,
+      tokens,
     };
   });
 

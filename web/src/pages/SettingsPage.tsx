@@ -85,6 +85,24 @@ export function SettingsPage() {
                 <div className="usage-rate">일일 총량 제한 없음</div>
               )}
 
+              {/* Claude는 호출 수가 아니라 토큰이 비용이므로 따로 강조해서 보여준다 */}
+              {p.tokens && (
+                <div className="token-box">
+                  <div className="token-row">
+                    <span>입력 토큰</span>
+                    <span className="num">{fmtNum(p.tokens.input)}</span>
+                  </div>
+                  <div className="token-row">
+                    <span>출력 토큰</span>
+                    <span className="num">{fmtNum(p.tokens.output)}</span>
+                  </div>
+                  <div className="token-row cost">
+                    <span>추정 비용</span>
+                    <span className="num">${p.tokens.estimatedUsd.toFixed(4)}</span>
+                  </div>
+                </div>
+              )}
+
               <div className="usage-stats">
                 <span>성공 {fmtNum(p.ok)}</span>
                 <span className={p.failed > 0 ? "negative" : ""}>실패 {fmtNum(p.failed)}</span>

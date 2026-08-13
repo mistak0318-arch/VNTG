@@ -14,13 +14,63 @@ function fmtDate(iso: string): string {
   return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
 }
 
+const ALL = "__all__";
+const DEFAULT_GROUP = "기본";
+
 export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const [items, setItems] = useState<TrackedStock[]>([]);
+  const [groups, setGroups] = useState<string[]>([DEFAULT_GROUP]);
+  const [activeGroup, setActiveGroup] = useState<string>(ALL);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const watchedCodes = useWatchedCodes();
-  const sort = useSortableTable(items);
+
+  // 그룹 필터를 먼저 적용한 뒤 정렬한다
+  const visible =
+    activeGroup === ALL ? items : items.filter((i) => (i.group || DEFAULT_GROUP) === activeGroup);
+  const sort = useSortableTable(visible);
+
+  async function loadGroups() {
+    try {
+      setGroups((await api.watchGroups()).groups);
+    } catch {
+      // 그룹 조회 실패가 목록 표시를 막지 않게 한다
+    }
+  }
+
+  async function createGroup() {
+    const name = window.prompt("새 그룹 이름")?.trim();
+    if (!name) return;
+    try {
+      setGroups((await api.watchGroupAdd(name)).groups);
+      setActiveGroup(name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "그룹 추가 실패");
+    }
+  }
+
+  async function removeGroupNow() {
+    if (activeGroup === ALL || activeGroup === DEFAULT_GROUP) return;
+    if (!window.confirm(`'${activeGroup}' 그룹을 삭제할까요?
+소속 종목은 기본 그룹으로 이동합니다.`)) return;
+    try {
+      setGroups((await api.watchGroupRemove(activeGroup)).groups);
+      setActiveGroup(ALL);
+      await load(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "그룹 삭제 실패");
+    }
+  }
+
+  async function moveToGroup(code: string, group: string) {
+    try {
+      await api.watchlistSetGroup(code, group);
+      setItems((prev) => prev.map((i) => (i.code === code ? { ...i, group } : i)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "그룹 이동 실패");
+    }
+  }
 
   async function load(force = false) {
     setLoading(true);
@@ -38,6 +88,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
 
   useEffect(() => {
     load();
+    loadGroups();
   }, []);
 
   async function remove(code: string) {
@@ -61,6 +112,35 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       <RefreshBar onRefresh={() => load(true)} loading={loading} updatedAt={updatedAt} />
 
       {error && <div className="error-banner">{error}</div>}
+
+      <div className="filter-row group-tabs">
+        <button
+          className={`filter-btn ${activeGroup === ALL ? "active" : ""}`}
+          onClick={() => setActiveGroup(ALL)}
+        >
+          전체 ({items.length})
+        </button>
+        {groups.map((g) => {
+          const n = items.filter((i) => (i.group || DEFAULT_GROUP) === g).length;
+          return (
+            <button
+              key={g}
+              className={`filter-btn ${activeGroup === g ? "active" : ""}`}
+              onClick={() => setActiveGroup(g)}
+            >
+              {g} ({n})
+            </button>
+          );
+        })}
+        <button className="filter-btn" onClick={createGroup} title="새 그룹 만들기">
+          + 그룹
+        </button>
+        {activeGroup !== ALL && activeGroup !== DEFAULT_GROUP && (
+          <button className="filter-btn danger" onClick={removeGroupNow} title="이 그룹 삭제">
+            그룹 삭제
+          </button>
+        )}
+      </div>
 
       <section className="card">
         <h2>관심종목 요약 ({items.length})</h2>
@@ -90,18 +170,23 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
 
       {loading && items.length === 0 && <div className="empty">불러오는 중...</div>}
 
+      {!loading && items.length > 0 && visible.length === 0 && (
+        <div className="page-note">이 그룹에 담긴 종목이 없습니다.</div>
+      )}
+
       {!loading && items.length === 0 && (
         <div className="page-note">
           관심종목이 없습니다. 시황·거래상위·알고리즘 탭에서 종목을 열고 ☆ 버튼을 눌러 추가하세요.
         </div>
       )}
 
-      {items.length > 0 && (
+      {visible.length > 0 && (
         <div className="data-table-wrap">
           <table className="data-table">
             <thead>
               <tr>
                 <SortableTh columnKey="name" label="종목명" accessor={(r: TrackedStock) => r.name} sort={sort} className="sticky-col" />
+                <SortableTh columnKey="group" label="그룹" accessor={(r: TrackedStock) => r.group || DEFAULT_GROUP} sort={sort} />
                 <SortableTh columnKey="addedAt" label="편입일" accessor={(r: TrackedStock) => r.addedAt} sort={sort} />
                 <SortableTh columnKey="addedPrice" label="편입가" accessor={(r: TrackedStock) => r.addedPrice} sort={sort} />
                 <SortableTh columnKey="price" label="현재가" accessor={(r: TrackedStock) => r.price} sort={sort} />
@@ -119,6 +204,20 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
               {sort.sorted.map((r) => (
                 <tr key={r.code} className="clickable-row" onClick={() => onSelectStock(r.code, r.name)}>
                   <td className="sticky-col">{r.name}</td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <select
+                      className="group-select"
+                      value={r.group || DEFAULT_GROUP}
+                      onChange={(e) => moveToGroup(r.code, e.target.value)}
+                      title="그룹 변경"
+                    >
+                      {groups.map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
                   <td>{fmtDate(r.addedAt)}</td>
                   <td>{fmtNum(r.addedPrice)}</td>
                   <td>{fmtNum(r.price)}</td>
