@@ -12,6 +12,7 @@ import {
   type ThemeRow,
 } from "../api";
 import { FlowBars } from "../components/overview/FlowBars";
+import { type MarketDriverReport, type ScoredNews } from "../api";
 import { SectorNews } from "../components/SectorNews";
 import { RefreshBar } from "../components/RefreshBar";
 import { useSection } from "../useSection";
@@ -80,6 +81,47 @@ function Section({ no, title, children }: { no: number; title: string; children:
   );
 }
 
+/** 강한 테마·업종 한 줄 + 그렇게 움직인 이유(관련 기사) */
+function DriverItem({
+  name,
+  rate,
+  sub,
+  reasons,
+}: {
+  name: string;
+  rate: number;
+  sub: string;
+  reasons: ScoredNews[];
+}) {
+  return (
+    <div className="driver-item">
+      <div className="driver-head">
+        <span className="driver-name">{name}</span>
+        <span className={`driver-rate ${signClass(rate)}`}>{pct(rate)}</span>
+        <span className="driver-sub">{sub}</span>
+      </div>
+      {reasons.length > 0 ? (
+        <div className="driver-reasons">
+          {reasons.map((r) => (
+            <a
+              key={r.link}
+              className="driver-reason"
+              href={r.link}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              <span className="rp">{r.press}</span>
+              {r.title}
+            </a>
+          ))}
+        </div>
+      ) : (
+        <div className="driver-none">관련 기사를 찾지 못했습니다</div>
+      )}
+    </div>
+  );
+}
+
 /** 종목 여러 개를 한 줄씩 나열 */
 function StockLines({
   rows,
@@ -117,6 +159,14 @@ export function DailyReportPage({
 }) {
   const [edition, setEdition] = useState<Edition>(() => currentEdition(new Date()));
   const [newsAt, setNewsAt] = useState<string>("");
+  const [drivers, setDrivers] = useState<MarketDriverReport | null>(null);
+
+  useEffect(() => {
+    api
+      .marketDrivers(5)
+      .then(setDrivers)
+      .catch(() => setDrivers(null));
+  }, []);
 
   // 시황 대시보드와 같은 섹션 캐시를 공유한다 (추가 호출 없음)
   const indices = useSection<IndexCard[]>("indices", 60_000);
@@ -270,61 +320,50 @@ export function DailyReportPage({
         </div>
       </Section>
 
-      {/* 3. 특징 테마 */}
-      <Section no={3} title="특징 테마 및 테마별 등락률">
-        <div className="report-two-col">
-          <div>
-            <h4 className="report-subheading positive">상승 테마</h4>
-            <div className="report-lines">
-              {(th?.top ?? []).slice(0, 10).map((t) => (
-                <div className="report-line static" key={t.code}>
-                  <span className="rl-name">{t.name}</span>
-                  <span className="rl-sub">{t.mainStock}</span>
-                  <span className={`rl-rate ${signClass(t.changeRate)}`}>{pct(t.changeRate)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h4 className="report-subheading negative">하락 테마</h4>
-            <div className="report-lines">
-              {(th?.bottom ?? []).slice(0, 10).map((t) => (
-                <div className="report-line static" key={t.code}>
-                  <span className="rl-name">{t.name}</span>
-                  <span className="rl-sub">{t.mainStock}</span>
-                  <span className={`rl-rate ${signClass(t.changeRate)}`}>{pct(t.changeRate)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* 3. 특징 테마 — 왜 올랐는지 관련 기사까지 */}
+      <Section no={3} title="특징 테마 (상승 이유 포함)">
+        <div className="report-lines">
+          {(drivers?.themes.up ?? []).map((t) => (
+            <DriverItem
+              key={t.code}
+              name={t.name}
+              rate={t.changeRate}
+              sub={`${t.stockCount}종목 · ${t.mainStock}`}
+              reasons={t.reasons}
+            />
+          ))}
+          {!drivers && <div className="empty">테마 분석 불러오는 중...</div>}
+        </div>
+
+        <h4 className="report-subheading negative" style={{ marginTop: 14 }}>
+          하락 테마
+        </h4>
+        <div className="report-lines">
+          {(drivers?.themes.down ?? []).map((t) => (
+            <DriverItem
+              key={t.code}
+              name={t.name}
+              rate={t.changeRate}
+              sub={`${t.stockCount}종목 · ${t.mainStock}`}
+              reasons={t.reasons}
+            />
+          ))}
         </div>
       </Section>
 
-      {/* 4. 업종별 등락 */}
-      <Section no={4} title="업종별 등락률">
-        <div className="report-two-col">
-          <div>
-            <h4 className="report-subheading">코스피 상위</h4>
-            <div className="report-lines">
-              {(sec?.kospi ?? []).slice(0, 8).map((s) => (
-                <div className="report-line static" key={s.code}>
-                  <span className="rl-name">{s.name}</span>
-                  <span className={`rl-rate ${signClass(s.changeRate)}`}>{pct(s.changeRate)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h4 className="report-subheading">코스닥 상위</h4>
-            <div className="report-lines">
-              {(sec?.kosdaq ?? []).slice(0, 8).map((s) => (
-                <div className="report-line static" key={s.code}>
-                  <span className="rl-name">{s.name}</span>
-                  <span className={`rl-rate ${signClass(s.changeRate)}`}>{pct(s.changeRate)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* 4. 강한 업종 — 이유 포함 */}
+      <Section no={4} title="강한 업종 (상승 이유 포함)">
+        <div className="report-lines">
+          {(drivers?.sectors ?? []).map((sec) => (
+            <DriverItem
+              key={`${sec.market}-${sec.code}`}
+              name={sec.name}
+              rate={sec.changeRate}
+              sub={sec.market}
+              reasons={sec.reasons}
+            />
+          ))}
+          {!drivers && <div className="empty">업종 분석 불러오는 중...</div>}
         </div>
       </Section>
 

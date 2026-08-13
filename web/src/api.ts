@@ -195,6 +195,7 @@ export const api = {
     getJson<{ items: NewsItem[]; counts: { major: number; all: number } }>(
       `/api/feed/news?q=${encodeURIComponent(q)}&display=${opts.display ?? 30}&scope=${opts.scope ?? "major"}`,
     ),
+  marketDrivers: (top = 5) => getJson<MarketDriverReport>(`/api/report/drivers?top=${top}`),
   newsSectors: (scope: "major" | "all" = "major", per = 8) =>
     getJson<{ sectors: { key: string; label: string; items: ScoredNews[] }[]; fetchedAt: string }>(
       `/api/feed/news/sectors?scope=${scope}&per=${per}`,
@@ -329,6 +330,30 @@ export interface CalendarEvent {
   title: string;
   kind: EventKind;
   memo?: string;
+}
+
+export interface ThemeWithReason {
+  code: string;
+  name: string;
+  changeRate: number;
+  stockCount: number;
+  mainStock: string;
+  reasons: ScoredNews[];
+}
+
+export interface SectorWithReason {
+  code: string;
+  name: string;
+  changeRate: number;
+  market: "코스피" | "코스닥";
+  reasons: ScoredNews[];
+}
+
+/** 웹·메일·텔레그램이 공유하는 리포트 조립 결과 */
+export interface MarketDriverReport {
+  fetchedAt: string;
+  themes: { up: ThemeWithReason[]; down: ThemeWithReason[] };
+  sectors: SectorWithReason[];
 }
 
 export interface StockRow {
