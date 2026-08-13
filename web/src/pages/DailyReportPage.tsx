@@ -11,6 +11,7 @@ import {
   type StockRow,
   type ThemeRow,
 } from "../api";
+import { AiSummaryCard } from "../components/AiSummaryCard";
 import { FlowBars } from "../components/overview/FlowBars";
 import { type MarketDriverReport, type ScoredNews } from "../api";
 import { SectorNews } from "../components/SectorNews";
@@ -244,6 +245,8 @@ export function DailyReportPage({
           {newsAt && <> · 뉴스 수집 {fmtStamp(new Date(newsAt).getTime())}</>}
         </div>
       </header>
+
+      <AiSummaryCard />
 
       {/* 1. 국내외 주요 지수 */}
       <Section no={1} title="국내외 주요 지수">

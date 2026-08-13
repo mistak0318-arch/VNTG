@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
+import { getAiSummary } from "../aiSummary.js";
 import { buildMarketDrivers } from "../reportBuilder.js";
 
 /**
@@ -14,6 +15,15 @@ export function createReportRouter(client: KiwoomClient): Router {
     try {
       const topN = Math.min(Number(req.query.top) || 5, 15);
       res.json(await buildMarketDrivers(client, { topN }));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** AI 시장 정리 — 리포트 최상단. 10분 캐싱되고 force=1로 강제 갱신 */
+  router.get("/ai-summary", async (req, res, next) => {
+    try {
+      res.json(await getAiSummary(client, { force: req.query.force === "1" }));
     } catch (err) {
       next(err);
     }

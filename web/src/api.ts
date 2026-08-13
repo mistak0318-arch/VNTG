@@ -195,6 +195,8 @@ export const api = {
     getJson<{ items: NewsItem[]; counts: { major: number; all: number } }>(
       `/api/feed/news?q=${encodeURIComponent(q)}&display=${opts.display ?? 30}&scope=${opts.scope ?? "major"}`,
     ),
+  aiSummary: (force = false) =>
+    getJson<AiSummary>(`/api/report/ai-summary${force ? "?force=1" : ""}`),
   marketDrivers: (top = 5) => getJson<MarketDriverReport>(`/api/report/drivers?top=${top}`),
   newsSectors: (scope: "major" | "all" = "major", per = 8) =>
     getJson<{ sectors: { key: string; label: string; items: ScoredNews[] }[]; fetchedAt: string }>(
@@ -330,6 +332,16 @@ export interface CalendarEvent {
   title: string;
   kind: EventKind;
   memo?: string;
+}
+
+export interface AiSummary {
+  text: string | null;
+  basedOn: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  error?: string;
+  digest?: string;
 }
 
 export interface ThemeWithReason {
