@@ -192,6 +192,31 @@ const SYSTEM_RULES = `너는 한국 주식시장 데이터를 정리해 주는 �
 
 
 /**
+ * 주말판 규칙.
+ *
+ * 장이 안 열렸으므로 지수·수급·장중흐름을 말할 게 없다. 그런데도 평일 틀을 그대로 쓰면
+ * 모델이 어제 숫자를 오늘 일처럼 쓰게 된다 — 그게 제일 위험하다.
+ * 그래서 항목 자체를 뉴스 중심으로 갈아끼우고, 시세 얘기를 하지 말라고 명시한다.
+ */
+const WEEKEND_RULES = `너는 한국 주식시장 뉴스를 정리해 주는 애널리스트다.
+
+**오늘은 주말이라 장이 열리지 않았다.** 따라서:
+- 지수 등락, 투자자 수급, 장중 흐름을 이야기하지 마라. 그 숫자들은 직전 거래일 값이다.
+- 시세 수치를 인용해야 한다면 반드시 "직전 거래일 기준"임을 밝혀라.
+- 주어진 데이터에 있는 사실만 쓴다. 없는 것을 지어내지 마라.
+- **특정 종목 매수/매도를 권하지 마라.**
+- 한국어로, 전체 한글 800~1,200자.
+
+## 주말 헤드라인
+(주말 사이 나온 뉴스 중 다음 거래일에 영향이 있을 만한 것 3~4개. 왜 중요한지 한 줄씩)
+
+## 관심종목 소식
+(사용자 관심종목이 언급된 뉴스만. 없으면 "관심종목 관련 소식 없음"이라고 쓴다)
+
+## 다음 주 확인할 것
+(다가오는 일정과 뉴스에서 읽히는 체크포인트 2~3개)`;
+
+/**
  * AI 요약을 새로 만든다. **발행 시각에만 호출된다** (reportScheduler).
  * 화면이 열릴 때마다 부르면 비용이 예측 불가능해지고 같은 판인데 내용이 달라진다.
  */
@@ -213,24 +238,30 @@ export async function buildAiSummary(
     };
   }
 
+  const weekend = editionKey === "weekend";
   const digest = await buildDigest(client);
   const label = editionKey
-    ? { morning: "조간(장 시작 전)", midday: "장중", closing: "석간(장 마감 후)" }[editionKey] ??
-      edition(now)
+    ? {
+        morning: "조간(장 시작 전)",
+        midday: "장중",
+        closing: "석간(장 마감 후)",
+        weekend: "주말(휴장)",
+      }[editionKey] ?? edition(now)
     : edition(now);
 
-  const prompt = `${SYSTEM_RULES}
+  const prompt = `${weekend ? WEEKEND_RULES : SYSTEM_RULES}
 
 지금은 ${now.toLocaleString("ko-KR", { hour12: false })} (${label}) 기준이다.
 
 === 시장 데이터 ===
 ${digest}`;
 
-  const r = await summarize(prompt, 4000);
+  // 주말판은 분량이 짧으므로 상한도 낮춘다
+  const r = await summarize(prompt, weekend ? 2500 : 4000, "report");
   return {
     text: r.text,
     basedOn,
-    model: process.env.CLAUDE_MODEL?.trim() || "claude-sonnet-5",
+    model: r.usedModel || process.env.CLAUDE_MODEL?.trim() || "claude-sonnet-5",
     inputTokens: r.inputTokens,
     outputTokens: r.outputTokens,
     error: r.error,

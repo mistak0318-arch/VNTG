@@ -1,0 +1,71 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { availableTextModels, type VisionProvider } from "./vision.js";
+
+/**
+ * 용도별 AI 모델 선택.
+ *
+ * 하나의 모델로 전부 돌릴 이유가 없다. 용도마다 요구가 다르고, 무엇보다
+ * **호출 빈도가 달라서 같은 모델이라도 월 비용이 몇 배씩 벌어진다.**
+ *
+ *   report   하루 3~4회. 시장 데이터를 해석해야 하므로 품질이 중요하다
+ *   channel  하루 3회. 입력이 크고(선별 60건) 정리 성격이라 싼 모델도 쓸 만하다
+ *
+ * .env 로 하지 않고 파일에 둔 이유: 바꿔가며 결과를 비교해야 하는 값이라
+ * 서버 재시작 없이 화면에서 고를 수 있어야 한다.
+ */
+
+const here = dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = join(here, "..", "data");
+const FILE = join(DATA_DIR, "aiConfig.json");
+
+export type AiPurpose = "report" | "channel";
+
+export interface AiChoice {
+  provider: VisionProvider;
+  model: string;
+}
+
+export interface AiConfig {
+  report: AiChoice | null;
+  channel: AiChoice | null;
+}
+
+/** null 이면 기존 동작(ANTHROPIC_API_KEY + CLAUDE_MODEL)을 그대로 쓴다 */
+export const DEFAULT_AI_CONFIG: AiConfig = { report: null, channel: null };
+
+export const PURPOSE_LABEL: Record<AiPurpose, string> = {
+  report: "데일리 리포트",
+  channel: "구독 채널 요약",
+};
+
+let cache: AiConfig | null = null;
+
+export async function getAiConfig(): Promise<AiConfig> {
+  if (cache) return cache;
+  try {
+    const saved = JSON.parse(await readFile(FILE, "utf-8")) as AiConfig;
+    cache = { ...DEFAULT_AI_CONFIG, ...saved };
+  } catch {
+    cache = DEFAULT_AI_CONFIG;
+  }
+  return cache;
+}
+
+/** 고른 모델이 실제로 쓸 수 있는 것인지 확인해서 저장한다 */
+export async function saveAiConfig(input: AiConfig): Promise<AiConfig> {
+  const usable = new Set(availableTextModels().map((m) => m.model));
+  const clean = (c: AiChoice | null | undefined): AiChoice | null =>
+    c && usable.has(c.model) ? { provider: c.provider, model: c.model } : null;
+
+  const next: AiConfig = { report: clean(input.report), channel: clean(input.channel) };
+  cache = next;
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(FILE, JSON.stringify(next, null, 2), "utf-8");
+  return next;
+}
+
+export async function choiceFor(purpose: AiPurpose): Promise<AiChoice | null> {
+  return (await getAiConfig())[purpose];
+}

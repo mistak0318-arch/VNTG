@@ -59,6 +59,8 @@ export interface ChannelReport {
   usedCount: number;
   items: ScoredChannelItem[];
   summary: string | null;
+  /** 어떤 모델로 정리했는지 */
+  model?: string | null;
   inputTokens: number;
   outputTokens: number;
   error?: string;
@@ -139,8 +141,9 @@ export async function buildChannelReport(
 
   const prompt = `${SYSTEM_RULES}\n\n---\n수집 시각: ${now.toLocaleString("ko-KR")}\n대상 채널 ${channels}개 · 원본 ${messages.length}건 중 ${items.length}건 선별\n\n${toDigestText(items)}`;
 
-  const res = await summarize(prompt, 2500);
+  const res = await summarize(prompt, 2500, "channel");
   report.summary = res.text;
+  report.model = res.usedModel ?? null;
   report.inputTokens = res.inputTokens;
   report.outputTokens = res.outputTokens;
   if (res.error) report.error = res.error;

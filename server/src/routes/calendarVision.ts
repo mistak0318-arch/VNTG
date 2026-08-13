@@ -5,13 +5,21 @@ import {
   visionReady,
   type ParsedEvent,
 } from "../calendarVision.js";
-import { availableVisionProviders, type VisionProvider } from "../vision.js";
+import {
+  availableVisionModels,
+  availableVisionProviders,
+  type VisionProvider,
+} from "../vision.js";
 
 export function createCalendarVisionRouter(): Router {
   const router = Router();
 
   router.get("/status", (_req, res) => {
-    res.json({ ready: visionReady(), providers: availableVisionProviders() });
+    res.json({
+      ready: visionReady(),
+      providers: availableVisionProviders(),
+      models: availableVisionModels(),
+    });
   });
 
   /**
@@ -24,8 +32,9 @@ export function createCalendarVisionRouter(): Router {
       const image = String(req.body?.image ?? "");
       const mimeType = String(req.body?.mimeType ?? "image/png");
       const prefer = req.body?.provider as VisionProvider | undefined;
+      const model = req.body?.model ? String(req.body.model) : undefined;
       if (!image) throw new Error("이미지가 없습니다.");
-      res.json(await parseCalendarImage(image, mimeType, prefer));
+      res.json(await parseCalendarImage(image, mimeType, prefer, model));
     } catch (err) {
       next(err);
     }

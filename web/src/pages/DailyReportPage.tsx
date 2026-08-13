@@ -28,7 +28,7 @@ import { WatchStar } from "../useWatchedCodes";
  * 데이터는 전부 기존 시황 섹션 캐시를 쓰므로 추가 API 호출이 없다.
  */
 
-type Edition = "morning" | "midday" | "closing";
+type Edition = "morning" | "midday" | "closing" | "weekend";
 
 /**
  * 리포트는 정해진 시각에 발행되는 스냅샷이다.
@@ -41,8 +41,25 @@ const EDITIONS: { key: Edition; label: string; desc: string; hour: number }[] = 
   { key: "closing", label: "석간", desc: "마감 시황과 수급 정리", hour: 18 },
 ];
 
+/**
+ * 주말판. 장이 안 열리므로 지수·수급 대신 뉴스만 담는다.
+ * 평일에는 탭에 나오지 않고, 토·일에만 목록을 이걸로 바꾼다.
+ */
+const WEEKEND_EDITION: { key: Edition; label: string; desc: string; hour: number } = {
+  key: "weekend",
+  label: "주말",
+  desc: "주말 뉴스와 관심종목 소식",
+  hour: 9,
+};
+
+function isWeekendDay(d: Date): boolean {
+  const day = d.getDay();
+  return day === 0 || day === 6;
+}
+
 /** 지금 시각에 해당하는 판 — 07시 전이면 아직 조간 전이므로 전날 석간을 본다 */
 function currentEdition(now: Date): Edition {
+  if (isWeekendDay(now)) return "weekend";
   const h = now.getHours();
   if (h < 7) return "closing";
   if (h < 12) return "morning";
@@ -55,7 +72,7 @@ function currentEdition(now: Date): Edition {
  * (07시 전에 석간을 보면 어제 18시가 맞다)
  */
 function publishedAt(edition: Edition, now: Date): { at: Date; pending: boolean } {
-  const hour = EDITIONS.find((e) => e.key === edition)!.hour;
+  const hour = [...EDITIONS, WEEKEND_EDITION].find((e) => e.key === edition)?.hour ?? 7;
   const at = new Date(now);
   at.setHours(hour, 0, 0, 0);
   if (at.getTime() > now.getTime()) {
@@ -203,7 +220,9 @@ export function DailyReportPage({
 
   const now = new Date();
   const pub = publishedAt(edition, now);
-  const editionMeta = EDITIONS.find((e) => e.key === edition)!;
+  const editionList = isWeekendDay(now) ? [WEEKEND_EDITION] : EDITIONS;
+  const editionMeta =
+    [...EDITIONS, WEEKEND_EDITION].find((e) => e.key === edition) ?? EDITIONS[0];
   const pubLabel = pub.at.toLocaleString("ko-KR", {
     year: "numeric",
     month: "long",
@@ -224,7 +243,7 @@ export function DailyReportPage({
     <div className="report">
       <RefreshBar onRefresh={reloadAll} updatedAt={indices.updatedAt}>
         <div className="filter-row" style={{ margin: 0 }}>
-          {EDITIONS.map((e) => (
+          {editionList.map((e) => (
             <button
               key={e.key}
               className={`filter-btn ${edition === e.key ? "active" : ""}`}

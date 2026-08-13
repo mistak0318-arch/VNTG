@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FONTS, FONT_SCALES, useAppearance } from "../useAppearance";
 import { api, fmtNum, type ProviderUsage } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
+import { AiModelPanel } from "../components/AiModelPanel";
 import { AlertConfigPanel } from "../components/AlertConfigPanel";
 import { CollapsibleCard } from "../components/CollapsibleCard";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
@@ -56,6 +57,18 @@ export function SettingsPage() {
 
   return (
     <div>
+      <CollapsibleCard
+        id="aiModels"
+        title="AI 모델"
+        hint="데일리 리포트·채널 요약에 어떤 모델을 쓸지 고릅니다."
+      >
+        <p className="page-note">
+          용도마다 <b>호출 빈도가 달라서</b> 같은 모델이라도 월 비용이 몇 배씩 벌어집니다.
+          품질이 중요한 것만 좋은 모델을 쓰고 나머지는 저렴한 쪽으로 두는 게 요령입니다.
+        </p>
+        <AiModelPanel />
+      </CollapsibleCard>
+
       <CollapsibleCard
         id="channels"
         title="구독 채널 수집 (텔레그램)"

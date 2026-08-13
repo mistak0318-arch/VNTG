@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type ParsedEvent } from "../api";
+import { api, type ParsedEvent, type VisionModelOption } from "../api";
 
 /**
  * 이미지에서 일정 가져오기.
@@ -36,7 +36,11 @@ function toBase64(file: File): Promise<string> {
 
 export function CalendarImageImport({ onImported }: { onImported?: () => void }) {
   const [ready, setReady] = useState(true);
-  const [providers, setProviders] = useState<string[]>([]);
+  const [models, setModels] = useState<VisionModelOption[]>([]);
+  // 어떤 모델이 자기 자료에 맞는지는 써봐야 안다. 고른 걸 기억해둔다.
+  const [chosen, setChosen] = useState<string>(
+    () => localStorage.getItem("vntg.calendar.visionModel") ?? "",
+  );
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
   const [events, setEvents] = useState<ParsedEvent[]>([]);
@@ -50,7 +54,11 @@ export function CalendarImageImport({ onImported }: { onImported?: () => void })
       .calendarVisionStatus()
       .then((r) => {
         setReady(r.ready);
-        setProviders(r.providers);
+        setModels(r.models);
+        // 저장해둔 모델이 더 이상 못 쓰는 것이면(키를 뺐다든지) 첫 번째로 되돌린다
+        setChosen((prev) =>
+          r.models.some((m) => m.model === prev) ? prev : (r.models[0]?.model ?? ""),
+        );
       })
       .catch(() => setReady(false));
   }, []);
@@ -74,7 +82,8 @@ export function CalendarImageImport({ onImported }: { onImported?: () => void })
 
     try {
       const base64 = await toBase64(file);
-      const r = await api.calendarVisionParse(base64, file.type);
+      const picked = models.find((m) => m.model === chosen);
+      const r = await api.calendarVisionParse(base64, file.type, picked?.provider, picked?.model);
       setEvents(r.events);
       setPicked(new Set(r.events.map((_, i) => i)));
       if (r.events.length === 0) {
@@ -153,12 +162,33 @@ export function CalendarImageImport({ onImported }: { onImported?: () => void })
           }}
         />
         {busy === "parse" && <span className="breadth-count">분석 중…</span>}
-        {providers.length > 0 && (
-          <span className="breadth-count">
-            {PROVIDER_LABEL[providers[0]] ?? providers[0]} 사용
-          </span>
-        )}
       </div>
+
+      {models.length > 0 && (
+        <div className="filter-row cal-model-row">
+          <label className="cal-model-label">
+            분석 모델
+            <select
+              className="group-select"
+              value={chosen}
+              disabled={busy !== null}
+              onChange={(e) => {
+                setChosen(e.target.value);
+                localStorage.setItem("vntg.calendar.visionModel", e.target.value);
+              }}
+            >
+              {models.map((m) => (
+                <option key={m.model} value={m.model}>
+                  {PROVIDER_LABEL[m.provider] ?? m.provider} · {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="breadth-count">
+            {models.find((m) => m.model === chosen)?.hint ?? ""}
+          </span>
+        </div>
+      )}
 
       {note && <div className="alert-note">{note}</div>}
 
@@ -220,7 +250,9 @@ export function CalendarImageImport({ onImported }: { onImported?: () => void })
 
           <div className="table-note">
             인식이 틀릴 수 있으니 <b>날짜와 제목을 확인하고 추가하세요.</b> 표에서 바로 고칠 수
-            있고, 체크를 풀면 그 항목은 들어가지 않습니다.
+            있고, 체크를 풀면 그 항목은 들어가지 않습니다. 결과가 엉성하면 위에서{" "}
+            <b>더 좋은 모델로 바꿔 다시 올려보세요</b> — 표가 복잡하거나 손글씨면 저렴한 모델이
+            날짜를 밀려 읽는 경우가 있습니다.
           </div>
         </>
       )}

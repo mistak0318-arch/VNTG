@@ -14,13 +14,22 @@ const DIR = resolve(__dirname, "..", "data", "reports");
  * 화면은 저장된 것을 읽기만 한다. 나중에 메일·텔레그램도 이 저장분을 그대로 보낸다.
  */
 
-export type EditionKey = "morning" | "midday" | "closing";
+export type EditionKey = "morning" | "midday" | "closing" | "weekend";
 
 export const EDITIONS: { key: EditionKey; label: string; hour: number }[] = [
   { key: "morning", label: "조간", hour: 7 },
   { key: "midday", label: "장중", hour: 12 },
   { key: "closing", label: "석간", hour: 18 },
 ];
+
+/**
+ * 주말판.
+ *
+ * 장이 안 열리니 지수·수급·장중흐름은 전부 어제 값이라 쓸 게 없다.
+ * 대신 뉴스는 주말에도 계속 나오고, 오히려 평일에 묻혔던 것이 주말에 정리돼 나오기도 한다.
+ * 그래서 주말에는 **뉴스와 관심종목 소식만** 담은 판을 하루 한 번 낸다.
+ */
+export const WEEKEND_EDITION = { key: "weekend" as EditionKey, label: "주말", hour: 9 };
 
 export interface PublishedReport {
   /** YYYY-MM-DD */

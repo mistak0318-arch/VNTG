@@ -109,8 +109,9 @@ export async function parseCalendarImage(
   imageBase64: string,
   mimeType: string,
   prefer?: VisionProvider,
+  model?: string,
 ): Promise<ParseResult> {
-  const res = await readImage(PROMPT, imageBase64, mimeType, prefer);
+  const res = await readImage(PROMPT, imageBase64, mimeType, prefer, model);
 
   if (!res.text) {
     return {

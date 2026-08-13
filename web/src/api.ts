@@ -182,9 +182,25 @@ export const api = {
     if (o.hours) q.set("hours", String(o.hours));
     return postJson<ChannelReport>(`/api/channels/report${q.toString() ? "?" + q : ""}`);
   },
+  aiConfig: () =>
+    getJson<{
+      config: AiConfig;
+      defaults: AiConfig;
+      models: VisionModelOption[];
+      purposes: Record<string, string>;
+      fallback: string | null;
+    }>("/api/ai/config"),
+  aiConfigSave: (config: AiConfig) => putJson<{ config: AiConfig }>("/api/ai/config", config),
   calendarVisionStatus: () =>
-    getJson<{ ready: boolean; providers: string[] }>("/api/calendar-vision/status"),
-  calendarVisionParse: (image: string, mimeType: string) =>
+    getJson<{ ready: boolean; providers: string[]; models: VisionModelOption[] }>(
+      "/api/calendar-vision/status",
+    ),
+  calendarVisionParse: (
+    image: string,
+    mimeType: string,
+    provider?: string,
+    model?: string,
+  ) =>
     postJson<{
       events: ParsedEvent[];
       provider: string | null;
@@ -192,7 +208,7 @@ export const api = {
       inputTokens: number;
       outputTokens: number;
       error?: string;
-    }>("/api/calendar-vision/parse", { image, mimeType }),
+    }>("/api/calendar-vision/parse", { image, mimeType, provider, model }),
   calendarVisionCommit: (events: ParsedEvent[], fileName: string) =>
     postJson<{ added: number }>("/api/calendar-vision/commit", { events, fileName }),
   channelReports: (limit = 10) =>
@@ -408,6 +424,23 @@ export interface EvaluatedAccount {
   totalValue: number;
   totalProfit: number;
   totalReturnRate: number | null;
+}
+
+export interface AiChoice {
+  provider: string;
+  model: string;
+}
+
+export interface AiConfig {
+  report: AiChoice | null;
+  channel: AiChoice | null;
+}
+
+export interface VisionModelOption {
+  provider: string;
+  model: string;
+  label: string;
+  hint: string;
 }
 
 export interface ParsedEvent {

@@ -4,6 +4,7 @@ import { captureBreadth } from "./breadthStore.js";
 import { deliverReport } from "./reportDelivery.js";
 import {
   EDITIONS,
+  WEEKEND_EDITION,
   loadReport,
   saveReport,
   todayStr,
@@ -38,7 +39,12 @@ export async function publishEdition(
   date = todayStr(),
   deliver = true,
 ): Promise<PublishedReport> {
-  const meta = EDITIONS.find((e) => e.key === edition)!;
+  // 주말판은 EDITIONS에 없으므로 같이 찾는다 (없으면 키를 그대로 라벨로)
+  const meta = [...EDITIONS, WEEKEND_EDITION].find((e) => e.key === edition) ?? {
+    key: edition,
+    label: edition,
+    hour: 0,
+  };
   const summary = await buildAiSummary(client, edition);
   const report: PublishedReport = {
     date,
@@ -58,18 +64,30 @@ export async function publishEdition(
 async function tick(client: KiwoomClient): Promise<void> {
   if (publishing) return;
   const now = new Date();
-  if (isWeekend(now)) return;
+  const weekend = isWeekend(now);
 
   // 시장 폭은 리포트와 무관하게 매 tick 시도한다.
   // 소급 조회가 불가능한 데이터라 하루라도 빠지면 영영 메울 수 없다 —
   // 리포트 발행이 실패하는 날에도 이건 남아야 하므로 위에 둔다.
-  await captureBreadth(client).catch((err: unknown) => {
-    console.error("[breadth] 저장 실패:", err instanceof Error ? err.message : err);
-    return null;
-  });
+  // 주말엔 breadthStore가 자체적으로 저장을 막지만, 호출 자체를 아낀다
+  if (!weekend) {
+    await captureBreadth(client).catch((err: unknown) => {
+      console.error("[breadth] 저장 실패:", err instanceof Error ? err.message : err);
+      return null;
+    });
+  }
 
   const date = todayStr(now);
-  for (const e of EDITIONS) {
+
+  /*
+   * 주말은 판 구성이 다르다.
+   * 장이 안 열려 지수·수급은 전부 직전 거래일 값이므로 하루 3판을 낼 이유가 없고,
+   * 그 숫자로 시황을 쓰면 어제 일을 오늘 일처럼 말하게 된다.
+   * 대신 뉴스는 주말에도 나오므로 **뉴스 중심 한 판**만 낸다.
+   */
+  const plan = weekend ? [WEEKEND_EDITION] : EDITIONS;
+
+  for (const e of plan) {
     // 발행 시각이 지났는데 아직 저장분이 없으면 만든다
     if (now.getHours() < e.hour) continue;
     const existing = await loadReport(date, e.key);
