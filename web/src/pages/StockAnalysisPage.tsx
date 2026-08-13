@@ -6,6 +6,8 @@ import { InvestorTrendTable } from "../components/InvestorTrendTable";
 import { PriceHeader } from "../components/PriceHeader";
 import { RefreshBar } from "../components/RefreshBar";
 import { SectorMoodPanel } from "../components/SectorMoodPanel";
+import { SignalPanel } from "../components/SignalLight";
+import { StockNotes } from "../components/StockNotes";
 import { SupplyMiniCharts } from "../components/SupplyDetailPanel";
 import {
   BrokerPanel,
@@ -31,7 +33,8 @@ type AnalysisTab =
   | "program"
   | "credit"
   | "strength"
-  | "daily";
+  | "daily"
+  | "notes";
 
 const TABS: { key: AnalysisTab; label: string }[] = [
   { key: "chart", label: "종합" },
@@ -42,6 +45,7 @@ const TABS: { key: AnalysisTab; label: string }[] = [
   { key: "credit", label: "신용" },
   { key: "strength", label: "체결강도" },
   { key: "daily", label: "일별상세" },
+  { key: "notes", label: "메모" },
 ];
 
 export function StockAnalysisPage({
@@ -172,6 +176,7 @@ export function StockAnalysisPage({
             {/* 차트 탭은 "오늘 이 종목이 어땠나"를 위에서 아래로 훑는 종합 화면 */}
             {tab === "chart" && (
               <>
+                <SignalPanel code={stock.code} onSelectStock={onSelectStock} />
                 <QuoteSummary code={stock.code} />
                 <IntradayFlow code={stock.code} basePrice={Math.abs(Number(info?.base_pric)) || 0} />
                 <ChartPanel code={stock.code} />
@@ -189,6 +194,13 @@ export function StockAnalysisPage({
             {tab === "credit" && <CreditPanel code={stock.code} />}
             {tab === "strength" && <StrengthPanel code={stock.code} />}
             {tab === "daily" && <DailyDetailPanel code={stock.code} />}
+            {tab === "notes" && (
+              <StockNotes
+                code={stock.code}
+                name={stock.name}
+                currentPrice={Math.abs(Number(info?.cur_prc)) || undefined}
+              />
+            )}
           </div>
         </>
       )}

@@ -79,7 +79,7 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
       ) : (
         <>
           <h3 className="feed-heading">분야별 주요뉴스</h3>
-          <SectorNews perSector={30} />
+          <SectorNews perSector={30} defaultSort="recent" />
         </>
       )}
 

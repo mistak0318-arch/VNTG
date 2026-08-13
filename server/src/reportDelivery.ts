@@ -65,7 +65,7 @@ export async function deliverReport(r: PublishedReport): Promise<DeliveryResult>
 
   // 한쪽이 실패해도 다른 쪽은 나가야 한다
   const [telegram, mail] = await Promise.all([
-    sendTelegram(tgBody).catch((e) => ({ ok: false, error: String(e) })),
+    sendTelegram(tgBody, "report").catch((e) => ({ ok: false, error: String(e) })),
     sendMail(`[VNTG] ${r.date} ${r.label} 리포트`, mailHtml(r)).catch((e) => ({
       ok: false,
       error: String(e),

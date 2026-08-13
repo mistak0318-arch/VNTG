@@ -35,6 +35,17 @@ async function patchJson<T = RawRecord>(path: string, body?: unknown): Promise<T
   return parsed;
 }
 
+async function putJson<T = RawRecord>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  const parsed = (await res.json()) as T & { error?: string };
+  if (!res.ok) throw new Error((parsed as { error?: string }).error ?? `요청 실패 (${res.status})`);
+  return parsed;
+}
+
 async function deleteJson<T = RawRecord>(path: string): Promise<T> {
   const res = await fetch(path, { method: "DELETE" });
   const parsed = (await res.json()) as T & { error?: string };
@@ -159,6 +170,16 @@ export const api = {
   kiwoomGroups: () => getJson<{ groups: KiwoomGroup[] }>("/api/watchlist/kiwoom/groups"),
   kiwoomGroupStocks: (code: string) =>
     getJson<{ items: KiwoomGroupStock[] }>(`/api/watchlist/kiwoom/groups/${code}`),
+  signal: (code: string, force = false) =>
+    getJson<SignalResult>(`/api/signal/${code}${force ? "?force=1" : ""}`),
+  signalBatch: (codes: string[]) =>
+    getJson<{ results: Record<string, SignalResult> }>(
+      `/api/signal/batch?codes=${codes.join(",")}`,
+    ),
+  signalConfig: () =>
+    getJson<{ config: SignalConfig; defaults: SignalConfig }>("/api/signal/config"),
+  signalConfigSave: (config: SignalConfig) =>
+    putJson<{ config: SignalConfig }>("/api/signal/config", config),
   notes: (code: string) => getJson<{ name: string; notes: StockNote[] }>(`/api/notes/${code}`),
   notesRecent: (limit = 30) =>
     getJson<{ items: { code: string; name: string; note: StockNote }[] }>(
@@ -223,9 +244,9 @@ export const api = {
   indexIntraday: (code: string, tic = "5") =>
     getJson(`/api/market/index-intraday/${code}?tic=${tic}`),
   marketDrivers: (top = 5) => getJson<MarketDriverReport>(`/api/report/drivers?top=${top}`),
-  newsSectors: (scope: "major" | "all" = "major", per = 8) =>
+  newsSectors: (scope: "major" | "all" = "major", per = 8, sort: "importance" | "recent" = "importance") =>
     getJson<{ sectors: { key: string; label: string; items: ScoredNews[] }[]; fetchedAt: string }>(
-      `/api/feed/news/sectors?scope=${scope}&per=${per}`,
+      `/api/feed/news/sectors?scope=${scope}&per=${per}&sort=${sort}`,
     ),
   finance: (code: string) => getJson<FinanceResult>(`/api/feed/finance/${code}`),
   disclosures: (code: string, days = 180) =>
@@ -346,6 +367,42 @@ export interface EvaluatedAccount {
   totalValue: number;
   totalProfit: number;
   totalReturnRate: number | null;
+}
+
+export type SignalLevel = "green" | "yellow" | "red" | "unknown";
+
+export interface SignalCheck {
+  key: string;
+  label: string;
+  pass: boolean | null;
+  value: string;
+  weight: number;
+  link?: { kind: "sector" | "theme"; code: string; name: string };
+}
+
+export interface SignalResult {
+  code: string;
+  level: SignalLevel;
+  score: number;
+  checks: SignalCheck[];
+  evaluatedAt: string;
+}
+
+export interface SignalCheckConfig {
+  key: string;
+  label: string;
+  enabled: boolean;
+  weight: number;
+  threshold: number;
+  hint: string;
+}
+
+export interface SignalConfig {
+  checks: SignalCheckConfig[];
+  greenAt: number;
+  yellowAt: number;
+  flowDays: 5 | 10 | 20;
+  maLines: number[];
 }
 
 export interface StockNote {

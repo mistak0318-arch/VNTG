@@ -2388,3 +2388,123 @@ body {
 .note-return { font-weight: 700; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .note-actions { margin-left: auto; display: flex; gap: 2px; }
 .note-body { font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; }
+
+/* ---------------- 신호등 ---------------- */
+.sig-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+  flex: none;
+}
+.sig-dot.green { background: var(--green); box-shadow: 0 0 0 2px rgba(53,196,106,.2); }
+.sig-dot.yellow { background: #f5c542; box-shadow: 0 0 0 2px rgba(245,197,66,.2); }
+.sig-dot.red { background: var(--red); box-shadow: 0 0 0 2px rgba(255,92,92,.2); }
+.sig-dot.unknown, .sig-dot.loading { background: var(--muted); opacity: .5; }
+.sig-dot.big { width: 16px; height: 16px; margin-right: 8px; }
+
+.sig-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.sig-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.sig-level { font-size: 15px; font-weight: 700; }
+.sig-score { font-size: 12.5px; color: var(--muted); margin-right: auto; }
+.sig-checks { display: grid; grid-template-columns: 1fr; gap: 4px; }
+@media (min-width: 700px) { .sig-checks { grid-template-columns: 1fr 1fr; } }
+.sig-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  background: var(--panel-2);
+}
+.sig-mark { font-weight: 700; width: 12px; flex: none; }
+.sig-check.ok .sig-mark { color: var(--green); }
+.sig-check.no .sig-mark { color: var(--red); }
+.sig-check.na { opacity: .55; }
+.sig-label { flex: none; }
+.sig-value { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sig-weight { font-size: 10px; color: var(--blue); flex: none; }
+
+/* ------------- 신호등 기준 설정 ------------- */
+.sig-config-rows { display: flex; flex-direction: column; gap: 6px; }
+.sig-config-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.sig-config-row.off { opacity: .45; }
+.sig-config-name { display: flex; align-items: center; gap: 9px; flex: 1 1 220px; cursor: pointer; }
+.sig-config-name b { display: block; font-size: 13.5px; }
+.sig-config-name small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+.sig-config-inputs { display: flex; gap: 10px; align-items: center; flex: none; }
+.sig-config-inputs label,
+.sig-config-thresholds label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.sig-config-inputs input { width: 66px; }
+.sig-config-inputs input,
+.sig-config-thresholds input,
+.sig-config-thresholds select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 4px 7px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.sig-config-thresholds input { width: 60px; }
+.sig-unit { font-size: 11px; }
+.sig-config-thresholds {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.sig-config-actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.sig-saved { font-size: 12px; color: var(--green); }
+.sig-error { font-size: 12px; color: var(--red); }
+.sig-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--blue);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.sig-link:hover { text-decoration: underline; }
+
+/* 정배열 이평선 선택 */
+.sig-ma-picker { display: flex; gap: 4px; flex: none; }
+.sig-ma-btn {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  padding: 4px 9px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sig-ma-btn.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+.sig-ma-btn:disabled { cursor: default; opacity: .6; }

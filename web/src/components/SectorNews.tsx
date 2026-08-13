@@ -59,15 +59,22 @@ export function NewsRow({ item, compact = false }: { item: ScoredNews; compact?:
 
 export function SectorNews({
   perSector = 8,
+  defaultSort = "importance",
   onFetched,
 }: {
   perSector?: number;
+  /**
+   * importance: 오늘 하루 중요했던 것 (데일리 리포트)
+   * recent: 방금 나온 것 위주 (뉴스·공시 탭)
+   */
+  defaultSort?: "importance" | "recent";
   /** 상위 화면이 기준시각을 표시할 수 있게 알려준다 */
   onFetched?: (iso: string) => void;
 }) {
   const [sectors, setSectors] = useState<{ key: string; label: string; items: ScoredNews[] }[]>([]);
   const [tab, setTab] = useState("market");
   const [scope, setScope] = useState<"major" | "all">("major");
+  const [sort, setSort] = useState<"importance" | "recent">(defaultSort);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -77,7 +84,7 @@ export function SectorNews({
     setLoading(true);
     setError(null);
     api
-      .newsSectors(scope, perSector)
+      .newsSectors(scope, perSector, sort)
       .then((r) => {
         if (cancelled) return;
         setSectors(r.sectors);
@@ -94,7 +101,7 @@ export function SectorNews({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, perSector]);
+  }, [scope, perSector, sort]);
 
   const current = sectors.find((s) => s.key === tab)?.items ?? [];
 
@@ -116,6 +123,21 @@ export function SectorNews({
             {s.label} ({s.items.length})
           </button>
         ))}
+        <span className="news-scope-sep" />
+        <button
+          className={`filter-btn ${sort === "recent" ? "active" : ""}`}
+          onClick={() => setSort("recent")}
+          title="방금 나온 기사 위주 — 보도량이 많아도 오래된 기사는 뒤로 밀린다"
+        >
+          최신순
+        </button>
+        <button
+          className={`filter-btn ${sort === "importance" ? "active" : ""}`}
+          onClick={() => setSort("importance")}
+          title="오늘 하루 시장이 크게 다룬 기사 위주"
+        >
+          중요도순
+        </button>
         <span className="news-scope-sep" />
         <button
           className={`filter-btn ${scope === "major" ? "active" : ""}`}

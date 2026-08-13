@@ -8,6 +8,7 @@ import { InvestorTrendTable } from "./InvestorTrendTable";
 import { NewsDisclosurePanel } from "./NewsDisclosurePanel";
 import { PriceHeader } from "./PriceHeader";
 import { SectorMoodPanel } from "./SectorMoodPanel";
+import { SignalPanel } from "./SignalLight";
 import { StockNotes } from "./StockNotes";
 import { SupplyDetailPanel } from "./SupplyDetailPanel";
 import { RawJson } from "./RawJson";
@@ -193,6 +194,7 @@ export function StockDetail({
 
             {detailTab === "chart" && (
               <>
+                <SignalPanel code={code} onSelectStock={onSelectStock} />
                 <IntradayFlow code={code} basePrice={Math.abs(Number(info?.base_pric)) || 0} />
                 <ChartPanel code={code} />
               </>

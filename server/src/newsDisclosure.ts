@@ -536,18 +536,32 @@ function cluster(items: NewsItem[]): { rep: NewsItem; members: NewsItem[] }[] {
   return groups.map((g) => ({ rep: g.rep, members: g.members }));
 }
 
-/** 발행이 오래될수록 점수를 깎는다 (6시간 지나면 절반) */
-function recencyFactor(iso: string): number {
+/**
+ * 발행이 오래될수록 점수를 깎는다.
+ * halfLife가 작을수록 최신 기사에 유리하다 — 화면 성격에 따라 다르게 준다.
+ */
+function recencyFactor(iso: string, halfLifeHours = 6): number {
   if (!iso) return 0.5;
   const hours = (Date.now() - new Date(iso).getTime()) / 3600_000;
   if (hours < 0) return 1;
-  return 1 / (1 + hours / 6);
+  return 1 / (1 + hours / halfLifeHours);
 }
 
 export async function sectorNews(
-  opts: { majorOnly?: boolean; perSector?: number; watchNames?: string[] } = {},
+  opts: {
+    majorOnly?: boolean;
+    perSector?: number;
+    watchNames?: string[];
+    /**
+     * importance: 오늘 중요했던 것 (리포트용)
+     * recent: 최신 위주로 보되 중요도도 반영 (뉴스 탭용)
+     */
+    sort?: "importance" | "recent";
+  } = {},
 ): Promise<{ sectors: SectorNews[]; fetchedAt: string }> {
-  const { majorOnly = true, perSector = 25, watchNames = [] } = opts;
+  const { majorOnly = true, perSector = 25, watchNames = [], sort = "importance" } = opts;
+  // 최신 위주로 볼 땐 감쇠를 세게 줘서 몇 시간 지난 기사가 위로 못 올라오게 한다
+  const halfLife = sort === "recent" ? 1.5 : 6;
 
   const raw = await Promise.all(
     NEWS_SECTORS.map(async (sec) => {
@@ -593,7 +607,8 @@ export async function sectorNews(
       const impact = impactScore(g.rep.title);
       const watchBonus = mentions.length > 0 ? 12 : 0; // 내 종목 얘기는 최우선
       const majorBonus = g.rep.major ? 2 : 0;
-      const score = (coverageScore + impact + majorBonus + watchBonus) * recencyFactor(g.rep.publishedAt);
+      const score =
+        (coverageScore + impact + majorBonus + watchBonus) * recencyFactor(g.rep.publishedAt, halfLife);
 
       return {
         ...g.rep,

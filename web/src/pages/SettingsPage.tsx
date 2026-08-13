@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FONTS, FONT_SCALES, useAppearance } from "../useAppearance";
 import { api, fmtNum, type ProviderUsage } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
+import { SignalConfigPanel } from "../components/SignalConfigPanel";
 
 interface KeyInfo {
   name: string;
@@ -52,6 +53,15 @@ export function SettingsPage() {
 
   return (
     <div>
+      <section className="card">
+        <h2>신호등 기준</h2>
+        <p className="page-note">
+          종목명 옆 신호등이 어떤 기준으로 켜지는지 정합니다. 내 매매 기준을 여기에 적어두고,
+          맞지 않으면 계속 고쳐가면서 쓰는 것이 이 기능의 목적입니다.
+        </p>
+        <SignalConfigPanel />
+      </section>
+
       <section className="card">
         <h2>화면 설정</h2>
 
