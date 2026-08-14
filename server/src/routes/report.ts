@@ -41,7 +41,20 @@ export function createReportRouter(client: KiwoomClient): Router {
       const date = typeof req.query.date === "string" ? req.query.date : latest.date;
       const edition = (typeof req.query.edition === "string" ? req.query.edition : latest.edition) as EditionKey;
 
-      const report = await loadReport(date, edition);
+      let report = await loadReport(date, edition);
+
+      /*
+       * 판을 콕 집어 요청했는데 그 날짜에 없으면 최근 목록에서 찾아 준다.
+       *
+       * latestEdition() 은 새벽 시간대를 "전일"로 본다(07시 전이면 아직 조간이 안 나왔으니
+       * 전날 석간이 최신이 맞다). 그런데 00:28 에 「지금 발행」하면 파일은 오늘 날짜로
+       * 저장되므로, 어제 날짜에서 now-0028 을 찾다가 못 찾고 빈 화면이 됐다.
+       */
+      if (!report && typeof req.query.edition === "string" && !req.query.date) {
+        const hit = (await listReports(30)).find((r) => r.edition === edition);
+        if (hit) report = await loadReport(hit.date, hit.edition);
+      }
+
       res.json({
         report,
         requested: { date, edition },

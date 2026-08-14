@@ -117,12 +117,20 @@ export function AiSummaryCard({ edition }: { edition?: string }) {
   const report = res?.report ?? null;
   // 지금 보고 있는 판 (상단 탭 값이 없으면 서버가 정해준 값)
   const currentEdition = edition ?? res?.requested.edition;
-  // 같은 판으로 발행된 날짜들 — 최신순
-  const pastDates = [
-    ...new Set(
-      (res?.recent ?? []).filter((r) => r.edition === currentEdition).map((r) => r.date),
-    ),
-  ].sort((a, b) => b.localeCompare(a));
+  /*
+   * 지난 리포트 전체 — 날짜만이 아니라 **판까지** 고른다.
+   *
+   * 예전엔 "같은 판의 지난 날짜"만 줬는데, 그러면 즉시발행(now-HHMM)이 목록에 아예
+   * 안 나온다. 방금 눌러 만든 걸 다시 볼 방법이 없었다.
+   * 복기 노트·신호등 찾기와 같은 방식으로 맞춘다 — 하나의 드롭박스에서 전부 고른다.
+   */
+  const editionLabel = (e: string) => {
+    if (e.startsWith("now-")) return `즉시 ${e.slice(4, 6)}:${e.slice(6, 8)}`;
+    return { morning: "조간", midday: "장중", closing: "석간", weekend: "주말" }[e] ?? e;
+  };
+  const history = (res?.recent ?? [])
+    .slice()
+    .sort((a, b) => b.date.localeCompare(a.date) || b.edition.localeCompare(a.edition));
   const s = report?.summary;
   const cost = s ? (s.inputTokens / 1e6) * 3 + (s.outputTokens / 1e6) * 15 : 0;
   const publishedLabel = report
@@ -142,21 +150,21 @@ export function AiSummaryCard({ edition }: { edition?: string }) {
         {report && <span className="ai-model">{report.label} · {publishedLabel} 발행</span>}
         {!report && <span className="ai-model">미발행</span>}
 
-        {/* 같은 판의 지난 날짜만 — 판 자체는 상단 탭이 정한다 */}
-        {pastDates.length > 1 && (
+        {/* 지난 리포트 — 날짜와 판을 한 곳에서 고른다 */}
+        {history.length > 1 && (
           <select
             className="group-select"
-            style={{ maxWidth: 140 }}
-            value={res?.requested.date ?? ""}
+            style={{ maxWidth: 210 }}
+            value={`${res?.requested.date ?? ""}|${res?.requested.edition ?? ""}`}
             onChange={(e) => {
-              const date = e.target.value;
-              setPick({ date, edition: currentEdition });
-              load({ date, edition: currentEdition });
+              const [date, ed] = e.target.value.split("|");
+              setPick({ date, edition: ed });
+              load({ date, edition: ed });
             }}
           >
-            {pastDates.map((d) => (
-              <option key={d} value={d}>
-                {d}
+            {history.map((r) => (
+              <option key={`${r.date}|${r.edition}`} value={`${r.date}|${r.edition}`}>
+                {r.date.slice(5)} {editionLabel(r.edition)}
               </option>
             ))}
           </select>

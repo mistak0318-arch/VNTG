@@ -82,7 +82,8 @@ export async function listReports(limit = 30): Promise<{ date: string; edition: 
         const [date, rest] = f.replace(/\.json$/, "").split("_");
         return { date, edition: rest as EditionKey };
       })
-      .sort((a, b) => b.date.localeCompare(a.date))
+      // 같은 날 안에서는 발행 시각순으로 — 즉시발행(now-HHMM)이 정기판 사이에 끼어야 한다
+      .sort((a, b) => b.date.localeCompare(a.date) || b.edition.localeCompare(a.edition))
       .slice(0, limit);
   } catch {
     return [];
