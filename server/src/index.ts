@@ -39,6 +39,7 @@ import { createBreadthRouter } from "./routes/breadth.js";
 import { createChannelsRouter } from "./routes/channels.js";
 import { createCalendarVisionRouter } from "./routes/calendarVision.js";
 import { createSignalRouter } from "./routes/signal.js";
+import { createPaperRouter } from "./routes/paper.js";
 import { createWatchlistRouter } from "./routes/watchlist.js";
 
 const app = express();
@@ -84,6 +85,7 @@ app.use("/api/settings", createSettingsRouter());
 app.use("/api/calendar", createCalendarRouter());
 app.use("/api/notes", createNotesRouter(client));
 app.use("/api/signal", createSignalRouter(client));
+app.use("/api/paper", createPaperRouter(client));
 app.use("/api/breadth", createBreadthRouter(client));
 app.use("/api/alert", createAlertRouter(client));
 app.use("/api/ai", createAiRouter());

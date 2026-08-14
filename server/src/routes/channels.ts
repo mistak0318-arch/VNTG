@@ -59,7 +59,14 @@ export function createChannelsRouter(): Router {
       const report = await buildChannelReport({
         useAi: req.query.ai !== "0",
         send: req.query.send === "1",
-        sinceHours: Math.min(Math.max(Number(req.query.hours) || 12, 1), 72),
+        /*
+         * 분 단위로 받는다. 텔레그램은 신속성이 무기인데 최소 단위가 1시간이면
+         * "방금 뭐 돌았나"를 볼 수가 없다. 옛 hours 파라미터도 계속 받아 준다.
+         */
+        sinceMinutes: Math.min(
+          Math.max(Number(req.query.minutes) || Number(req.query.hours) * 60 || 60, 5),
+          72 * 60,
+        ),
         useOffsets: false,
       });
       res.json(report);

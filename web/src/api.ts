@@ -177,11 +177,11 @@ export const api = {
   channelsRefresh: () => postJson<{ channels: ChannelEntry[] }>("/api/channels/refresh"),
   channelsSetEnabled: (updates: { id: string; enabled: boolean }[]) =>
     putJson<{ channels: ChannelEntry[] }>("/api/channels/enabled", { updates }),
-  channelsReport: (o: { ai?: boolean; send?: boolean; hours?: number } = {}) => {
+  channelsReport: (o: { ai?: boolean; send?: boolean; minutes?: number } = {}) => {
     const q = new URLSearchParams();
     if (o.ai === false) q.set("ai", "0");
     if (o.send) q.set("send", "1");
-    if (o.hours) q.set("hours", String(o.hours));
+    if (o.minutes) q.set("minutes", String(o.minutes));
     return postJson<ChannelReport>(`/api/channels/report${q.toString() ? "?" + q : ""}`);
   },
   askStatus: () => getJson<{ ready: boolean }>("/api/ask/status"),
@@ -248,11 +248,25 @@ export const api = {
     getJson<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }>(
       `/api/custom-themes${force ? "?force=1" : ""}`,
     ),
+  paperTrades: () => getJson<PaperResult>("/api/paper"),
+  paperTradeAdd: (t: { code: string; name: string; entryPrice: number; qty: number; thesis?: string }) =>
+    postJson<PaperResult>("/api/paper", t),
+  paperTradeClose: (id: string, exitPrice: number, exitNote?: string) =>
+    postJson<PaperResult>(`/api/paper/${id}/close`, { exitPrice, exitNote }),
+  paperTradeRemove: (id: string) => deleteJson<PaperResult>(`/api/paper/${id}`),
+  marketSignal: (force = false) =>
+    getJson<MarketSignal>(`/api/signal/market${force ? "?force=1" : ""}`),
   signalScreenStart: (market: string, level: "green" | "yellow", limit: number) =>
     postJson<{ jobId: string }>(
       `/api/signal/screen/start?market=${market}&level=${level}&limit=${limit}`,
     ),
   signalScreenStatus: (jobId: string) => getJson<ScreenJob>(`/api/signal/screen/${jobId}`),
+  signalScreenRuns: () => getJson<{ runs: ScreenRunSummary[] }>("/api/signal/screen/runs"),
+  signalScreenRun: (id: string) => getJson<ScreenRun>(`/api/signal/screen/runs/${id}`),
+  signalScreenDiff: (from: string, to: string) =>
+    getJson<{ added: ScreenHit[]; removed: ScreenHit[]; stayed: ScreenHit[] }>(
+      `/api/signal/screen/diff?from=${from}&to=${to}`,
+    ),
   reviewableReports: () =>
     getJson<{ reports: ReviewableReport[] }>("/api/report/reviewable"),
   reviewReport: (date: string, edition: string) =>
@@ -265,11 +279,10 @@ export const api = {
     ),
   reportScheduleSave: (slots: EditionSlot[]) =>
     putJson<{ schedule: { slots: EditionSlot[] } }>("/api/report/schedule", { slots }),
+  /** 곧바로 jobId 를 돌려준다. 진행 상황은 reportPublishStatus 로 폴링한다 */
   reportPublishNow: (deliver = false) =>
-    postJson<{ report: { date: string; edition: string; label: string } }>(
-      "/api/report/publish-now",
-      { deliver },
-    ),
+    postJson<{ jobId: string }>("/api/report/publish-now", { deliver }),
+  reportPublishStatus: (jobId: string) => getJson<PublishJob>(`/api/report/publish/${jobId}`),
   exchangeQuotes: (code: string) =>
     getJson<{ code: string; exchanges: ExchangeQuote[] }>(`/api/market/exchanges/${code}`),
   channelConfig: () =>
@@ -586,8 +599,14 @@ export interface ScoredChannelItem {
   text: string;
   at: string;
   channels: string[];
+  channelName?: string;
+  link?: string;
   coverage: number;
   mentions: string[];
+  /** 본문에서 찾아낸 종목 (관심종목 + 내 테마 종목). 비어 있으면 못 찾은 것 */
+  stocks?: string[];
+  /** 그 종목들이 속한 내 테마 */
+  themes?: string[];
   score: number;
 }
 
@@ -604,7 +623,7 @@ export interface ChannelReport {
   error?: string;
   skipped: string[];
   /** 몇 시간치를 훑었는지 */
-  windowHours?: number;
+  windowMinutes?: number;
   /** 실제로 잡힌 메시지의 시각 범위 */
   oldestAt?: string | null;
   newestAt?: string | null;
@@ -690,6 +709,19 @@ export interface ScreenJob {
   minLevel: string;
   startedAt: string;
   error?: string;
+}
+
+export interface ScreenRunSummary {
+  id: string;
+  at: string;
+  market: string;
+  minLevel: string;
+  total: number;
+  hits: number;
+}
+
+export interface ScreenRun extends ScreenRunSummary {
+  results: ScreenHit[];
 }
 
 export interface ReviewableReport {
@@ -1267,4 +1299,99 @@ export function pickList(record: RawRecord | undefined, keys: string[]): RawReco
 export function normalizeStockCode(code: string): string {
   const withoutSuffix = code.replace(/_(AL|NX)$/, "");
   return /^[A-Z]\d{6}$/.test(withoutSuffix) ? withoutSuffix.slice(1) : withoutSuffix;
+}
+
+/** 발행 진행 상황 — 서버가 단계별로 채운다 */
+export interface ProgressStep {
+  key: string;
+  label: string;
+  state: "pending" | "running" | "done" | "failed" | "skipped";
+  note?: string;
+  ms?: number;
+}
+
+export interface PublishJob {
+  status: "running" | "done" | "error";
+  label: string;
+  steps: ProgressStep[];
+  startedAt: string;
+  report?: { date: string; edition: string; label: string };
+  error?: string;
+}
+
+
+/** 시장 전체 신호등 */
+export interface MarketCheck {
+  key: string;
+  label: string;
+  pass: boolean | null;
+  value: string;
+  why: string;
+  weight: number;
+}
+
+export interface MarketSignal {
+  level: "green" | "yellow" | "red" | "unknown";
+  score: number;
+  checks: MarketCheck[];
+  summary: string;
+  evaluatedAt: string;
+}
+
+
+/** 모의투자 */
+export interface EntryEvidence {
+  level: "green" | "yellow" | "red" | "unknown";
+  score: number;
+  checks: { key: string; label: string; pass: boolean | null; value: string }[];
+  market: { level: string; score: number; summary: string } | null;
+  themes: { name: string; changeRate: number | null }[];
+  sector: { name: string; foreign5: number; inst5: number } | null;
+  marketBreadth: string | null;
+}
+
+export interface EvaluatedTrade {
+  id: string;
+  code: string;
+  name: string;
+  entryAt: string;
+  entryPrice: number;
+  qty: number;
+  thesis: string;
+  evidence: EntryEvidence;
+  exitAt?: string | null;
+  exitPrice?: number | null;
+  exitNote?: string | null;
+  price: number;
+  pnl: number;
+  returnRate: number;
+  open: boolean;
+  holdingDays: number;
+}
+
+export interface EvidenceEdge {
+  key: string;
+  label: string;
+  withCount: number;
+  withWinRate: number | null;
+  withAvgReturn: number | null;
+  withoutCount: number;
+  withoutWinRate: number | null;
+  withoutAvgReturn: number | null;
+  edge: number | null;
+}
+
+export interface PaperResult {
+  trades: EvaluatedTrade[];
+  stats: {
+    invested: number;
+    value: number;
+    pnl: number;
+    returnRate: number;
+    openCount: number;
+    closedCount: number;
+    winRate: number | null;
+    avgReturn: number | null;
+  };
+  edges: EvidenceEdge[];
 }

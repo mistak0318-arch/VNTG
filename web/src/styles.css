@@ -1369,6 +1369,12 @@ body {
   gap: 12px;
   flex-wrap: wrap;
 }
+.ph-main-label {
+  flex: 0 0 100%;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 1px;
+}
 .ph-price {
   font-size: 28px;
   font-weight: 700;
@@ -1389,21 +1395,31 @@ body {
   padding-top: 10px;
   border-top: 1px solid var(--border);
 }
+/*
+ * 한 줄에 라벨과 값을 좌우로 밀어 넣던 구조였는데, 거래소 배지가 붙자 값이 밀려
+ * 잘렸다("275,000 +2..."). **가격은 절대 잘리면 안 된다** — 잘린 숫자는 안 보이는 것보다
+ * 나쁘다. 그래서 라벨을 한 줄 위로 올리고, 거래소마다 한 줄씩 쌓는다.
+ */
 .ph-cell {
   display: flex;
-  justify-content: space-between;
-  gap: 6px;
+  flex-direction: column;
+  gap: 1px;
   font-size: 13px;
   min-width: 0;
 }
 .ph-label {
   color: var(--muted);
   white-space: nowrap;
+  font-size: 11px;
+}
+.ph-row {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
 }
 .ph-value {
   font-variant-numeric: tabular-nums;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* ---------------- 개별종목분석 페이지 ---------------- */
@@ -3272,3 +3288,102 @@ body {
 .cost-day-label { font-size: 9px; color: var(--muted); white-space: nowrap; }
 
 .usage-model { color: var(--muted); font-size: 11px; }
+
+/* 텔레그램 동향 — 조작부를 축별로 묶는다 */
+.tg-controls { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.tg-ctl { display: flex; align-items: baseline; gap: 10px; }
+.tg-ctl-label { flex: 0 0 62px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.tg-ctl-body { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tg-ctl-hint { font-size: 11px; color: var(--muted); margin-left: 2px; }
+.tg-select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-size: 12px; max-width: 320px; }
+@media (max-width: 640px) {
+  .tg-ctl { flex-direction: column; align-items: stretch; gap: 4px; }
+  .tg-ctl-label { flex: none; }
+}
+
+/* 채널 항목 태그 — 웹은 색을 쓸 수 있다 (텔레그램은 아이콘으로 대신) */
+.chan-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+.chan-tag { font-size: 11px; padding: 2px 7px; border-radius: 10px; border: 1px solid transparent; }
+.chan-tag.stock { background: rgba(76,141,255,.12); border-color: rgba(76,141,255,.35); color: #4c8dff; }
+.chan-tag.theme { background: rgba(169,123,214,.12); border-color: rgba(169,123,214,.35); color: #a97bd6; }
+
+/* 발행 진행 상황 */
+.pub-progress { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; background: var(--panel-2); }
+.pub-progress-head { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 6px; }
+.pub-progress-count { color: var(--muted); font-size: 12px; }
+.pub-spinner { width: 11px; height: 11px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: pub-spin .8s linear infinite; }
+@keyframes pub-spin { to { transform: rotate(360deg); } }
+.pub-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.pub-step { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--muted); }
+.pub-step-mark { width: 14px; text-align: center; flex: none; }
+.pub-step.running { color: var(--text); font-weight: 600; }
+.pub-step.running .pub-step-mark { color: var(--blue); animation: pub-pulse 1s ease-in-out infinite; }
+@keyframes pub-pulse { 50% { opacity: .3; } }
+.pub-step.done .pub-step-mark { color: var(--green); }
+.pub-step.failed { color: var(--red); }
+.pub-step-note { color: var(--muted); font-size: 11px; }
+.pub-step-ms { margin-left: auto; color: var(--muted); font-size: 11px; }
+
+/* 시장 전체 신호등 */
+.msig { border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; background: var(--panel); }
+.msig-green { border-left-color: var(--green); }
+.msig-yellow { border-left-color: #f5c542; }
+.msig-red { border-left-color: var(--red); }
+.msig-unknown { border-left-color: var(--muted); }
+.msig-head { display: flex; align-items: center; gap: 10px; }
+.msig-title { display: flex; flex-direction: column; gap: 1px; }
+.msig-title b { font-size: 15px; }
+.msig-note { font-size: 11px; color: var(--muted); }
+.msig-score { margin-left: auto; font-size: 20px; font-weight: 700; }
+.msig-summary { font-size: 12px; color: var(--muted); margin: 8px 0 10px; }
+.msig-checks { display: grid; gap: 3px; }
+.msig-check-row { display: flex; align-items: baseline; gap: 8px; font-size: 12px; padding: 3px 0; border-top: 1px solid var(--border); }
+.msig-mark { flex: none; width: 42px; text-align: center; font-size: 10px; padding: 1px 0; border-radius: 3px; }
+.msig-mark.ok { background: rgba(53,196,106,.15); color: var(--green); }
+.msig-mark.bad { background: rgba(255,92,92,.15); color: var(--red); }
+.msig-mark.mid { background: var(--panel-2); color: var(--muted); }
+.msig-check-label { flex: 0 0 76px; font-weight: 600; }
+.msig-check-value { flex: 1; color: var(--muted); }
+.msig-why-btn { flex: none; background: none; border: none; color: var(--blue); font-size: 11px; cursor: pointer; padding: 0 2px; }
+.msig-why { font-size: 11px; color: var(--muted); line-height: 1.6; margin: 2px 0 6px 50px; padding: 6px 8px; background: var(--panel-2); border-radius: 5px; }
+@media (max-width: 640px) {
+  .msig-check-row { flex-wrap: wrap; }
+  .msig-check-label { flex: 0 0 auto; }
+  .msig-why { margin-left: 0; }
+}
+
+/* 모의투자 */
+.pt-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; background: var(--panel); }
+.pt-sum-cell { display: flex; flex-direction: column; gap: 2px; }
+.pt-sum-label { font-size: 11px; color: var(--muted); }
+.pt-sum-value { font-size: 16px; font-weight: 700; }
+.pt-sum-sub { font-size: 11px; font-weight: 400; color: var(--muted); }
+.pt-entry { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; background: var(--panel-2); }
+.pt-entry-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+.pt-input { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 12px; width: 110px; }
+.pt-input.short { width: 70px; }
+.pt-input.wide { width: 100%; }
+.pt-search { position: relative; }
+.pt-results { position: absolute; z-index: 20; top: 100%; left: 0; min-width: 200px; margin: 2px 0 0; padding: 4px; list-style: none; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; max-height: 220px; overflow-y: auto; }
+.pt-results button { display: block; width: 100%; text-align: left; background: none; border: none; color: var(--text); font-size: 12px; padding: 4px 6px; cursor: pointer; border-radius: 4px; }
+.pt-results button:hover { background: var(--panel-2); }
+.pt-picked { font-size: 12px; font-weight: 600; }
+.pt-n { color: var(--muted); font-size: 11px; }
+.pt-actions { display: flex; gap: 4px; white-space: nowrap; }
+.pt-evidence-cell { background: var(--panel-2); padding: 10px 12px !important; }
+.pt-evidence { font-size: 12px; text-align: left; }
+.pt-ev-head { color: var(--muted); font-size: 11px; margin-bottom: 6px; }
+.pt-thesis { text-align: left; font-weight: 700; color: var(--blue); margin-bottom: 8px; padding: 8px 10px; background: var(--panel); border-left: 3px solid var(--blue); border-radius: 3px; }
+.pt-thesis.exit { border-left-color: var(--red); color: var(--red); margin-top: 8px; margin-bottom: 0; }
+.pt-ev-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 720px) { .pt-ev-grid { grid-template-columns: 1fr; } }
+.pt-ev-title { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 3px; }
+.pt-ev-row { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; }
+.pt-ev-label { flex: 0 0 88px; }
+.pt-ev-value { color: var(--muted); }
+.pt-ev-none { color: var(--muted); font-size: 11px; }
+.mo-group-row { background: var(--panel-2); }
+
+/* 거래소 구분 — 어느 거래소 값인지 안 적으면 두 값이 다를 때 오독한다 */
+.ph-ex { flex: none; font-style: normal; font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 3px; background: var(--panel-2); color: var(--muted); }
+.ph-ex.nxt { background: rgba(169,123,214,.18); color: #a97bd6; }

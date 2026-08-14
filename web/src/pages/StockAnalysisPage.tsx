@@ -199,7 +199,7 @@ export function StockAnalysisPage({
           </div>
 
           {error && <div className="error-banner">{error}</div>}
-          <PriceHeader info={info} />
+          <PriceHeader info={info} code={stock.code} />
 
           <SectorMoodPanel
             code={stock.code}

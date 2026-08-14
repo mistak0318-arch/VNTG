@@ -12,6 +12,7 @@ import {
   saveSchedule,
 } from "../reportSchedule.js";
 import { latestEdition, listReports, loadReport, type EditionKey } from "../reportStore.js";
+import { createJob, getJob, reporterFor } from "../reportProgress.js";
 
 /**
  * 리포트 전용 라우트.
@@ -91,12 +92,41 @@ export function createReportRouter(client: KiwoomClient): Router {
       const label = `즉시 ${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}`;
       const deliver = req.body?.deliver === true;
 
-      res.json({
-        report: await publishAdhoc(client, { id, label, kind, deliver }),
-      });
+      /*
+       * 곧바로 jobId 를 돌려주고 뒤에서 돈다.
+       *
+       * 예전엔 이 POST 하나가 1~3분을 물고 있어서 화면이 아무것도 못 보여줬다 —
+       * 멈춘 건지 도는 건지 알 수가 없었다. 스크리너·알고리즘 스캔과 같은 방식으로 맞춘다.
+       */
+      const { id: jobId, job } = createJob(label);
+      const reporter = reporterFor(job);
+
+      void publishAdhoc(client, { id, label, kind, deliver }, reporter)
+        .then((report) => {
+          job.report = report;
+          job.status = "done";
+        })
+        .catch((err: unknown) => {
+          job.status = "error";
+          job.error = err instanceof Error ? err.message : "발행 실패";
+          // 돌던 단계를 실패로 닫아야 화면이 영영 "진행 중"으로 남지 않는다
+          for (const s of job.steps) if (s.state === "running") s.state = "failed";
+        });
+
+      res.json({ jobId });
     } catch (err) {
       next(err);
     }
+  });
+
+  /** 발행 진행 상황 폴링 */
+  router.get("/publish/:jobId", (req, res) => {
+    const job = getJob(req.params.jobId);
+    if (!job) {
+      res.status(404).json({ error: "작업을 찾을 수 없습니다 (서버 재시작 시 사라집니다)" });
+      return;
+    }
+    res.json(job);
   });
 
   /**

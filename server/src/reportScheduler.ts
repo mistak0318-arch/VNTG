@@ -1,3 +1,5 @@
+import { noopProgress, type ProgressReporter } from "./reportProgress.js";
+import { warmResearch } from "./webResearch.js";
 import { buildAiSummary } from "./aiSummary.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { captureBreadth } from "./breadthStore.js";
@@ -67,9 +69,10 @@ export async function publishEdition(
 export async function publishAdhoc(
   client: KiwoomClient,
   opts: { id: string; label: string; kind: string; deliver?: boolean },
+  progress: ProgressReporter = noopProgress,
 ): Promise<PublishedReport> {
   const date = todayStr();
-  const summary = await buildAiSummary(client, opts.kind);
+  const summary = await buildAiSummary(client, opts.kind, progress);
   const report: PublishedReport = {
     date,
     edition: opts.id,
@@ -77,9 +80,11 @@ export async function publishAdhoc(
     publishedAt: new Date().toISOString(),
     summary,
   };
+  progress.start("save");
   await saveReport(report);
   console.log(`[report] ${date} ${opts.label} 즉시발행 (토큰 ${summary.inputTokens}/${summary.outputTokens})`);
   if (opts.deliver) await deliverReport(report).catch(() => undefined);
+  progress.done("save", opts.deliver ? "저장·발송 완료" : "저장 완료");
   return report;
 }
 
@@ -135,11 +140,38 @@ async function tick(client: KiwoomClient): Promise<void> {
   }
 }
 
+/**
+ * 정기 발행 15분 전에 웹 리서치를 미리 채운다.
+ *
+ * 리서치는 몇 분이 걸린다. 발행 시각에 시작하면 리포트가 그만큼 늦고, 발행 경로는
+ * 이제 기다리지 않으므로 **아예 리서치 없이 나가 버린다.** 미리 데워 두면 정기 발행은
+ * 항상 캐시를 받는다. 캐시가 아직 신선하면 warmResearch 가 아무것도 안 하므로
+ * 호출이 늘지 않는다.
+ */
+async function warmTick(): Promise<void> {
+  if (process.env.RESEARCH_ENABLED === "0") return;
+  const schedule = await getSchedule().catch(() => null);
+  if (!schedule) return;
+
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const due = schedule.slots.some((slot) => {
+    if (!slot.enabled) return false;
+    const lead = slot.hour * 60 + slot.minute - 15;
+    return mins >= lead && mins < lead + 5; // 5분 창 — CHECK_INTERVAL 보다 넓게
+  });
+  if (!due) return;
+
+  // 조간은 간밤 해외가 본체라 검색을 더 준다
+  await warmResearch(now.getHours() < 9 ? 5 : 3);
+}
+
 export function startReportScheduler(client: KiwoomClient): void {
   if (timer) return;
   // 서버가 막 뜬 직후엔 시세 캐시가 비어 있으므로 조금 기다렸다가 시작한다
   setTimeout(() => void tick(client), 30_000);
   timer = setInterval(() => void tick(client), CHECK_INTERVAL_MS);
+  setInterval(() => void warmTick().catch(() => undefined), CHECK_INTERVAL_MS);
   void getSchedule().then((s) => {
     const on = s.slots.filter((x) => x.enabled);
     const times = on.map((x) => `${x.label} ${x.hour}:${String(x.minute).padStart(2, "0")}`).join(", ");

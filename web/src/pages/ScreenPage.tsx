@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, fmtNum, type ScreenHit, type ScreenJob } from "../api";
+import { api, fmtNum, type ScreenHit, type ScreenJob, type ScreenRunSummary } from "../api";
 import { useWatchedCodes } from "../useWatchedCodes";
 
 /**
@@ -12,6 +12,10 @@ import { useWatchedCodes } from "../useWatchedCodes";
  * 거래대금이 없는 종목은 신호가 맞아도 못 산다 — 돈이 몰린 곳에서 고르는 게 맞다.
  *
  * 기준은 「설정 > 신호등 기준」을 그대로 쓴다. 여기서 따로 정하게 하면 두 곳이 어긋난다.
+ *
+ * 결과는 **디스크에 남긴다.** 매번 새로 돌려야 하면 어제 뭐가 걸렸는지 볼 수가 없는데,
+ * 이 화면의 값어치는 오늘 목록보다 오히려 흐름에 있다 — 사흘째 계속 걸리는 종목과
+ * 오늘 처음 뜬 종목은 전혀 다른 얘기다.
  */
 
 const MARKETS = [
@@ -36,6 +40,48 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const watched = useWatchedCodes();
 
+  /** 지난 회차 */
+  const [runs, setRuns] = useState<ScreenRunSummary[]>([]);
+  const [viewing, setViewing] = useState<string>(""); // "" = 방금 돌린 것
+  const [diff, setDiff] = useState<{ added: ScreenHit[]; removed: ScreenHit[] } | null>(null);
+
+  function loadRuns() {
+    api
+      .signalScreenRuns()
+      .then((r) => setRuns(r.runs))
+      .catch(() => undefined);
+  }
+
+  useEffect(loadRuns, []);
+
+  /** 지난 회차를 불러 화면에 띄운다 (재조회 없음) */
+  async function openRun(id: string) {
+    setViewing(id);
+    setDiff(null);
+    if (!id) return;
+    try {
+      const run = await api.signalScreenRun(id);
+      setJob({
+        status: "done",
+        total: run.total,
+        done: run.total,
+        results: run.results,
+        market: run.market,
+        minLevel: run.minLevel,
+        startedAt: run.at,
+      });
+      // 바로 앞 회차와 견줘서 "새로 들어온 것"을 같이 보여준다
+      const idx = runs.findIndex((r) => r.id === id);
+      const prev = runs[idx + 1];
+      if (prev) {
+        const d = await api.signalScreenDiff(prev.id, id).catch(() => null);
+        if (d) setDiff({ added: d.added, removed: d.removed });
+      }
+    } catch {
+      /* 못 불러와도 화면은 그대로 둔다 */
+    }
+  }
+
   // 화면을 떠나면 폴링을 멈춘다 (작업은 서버에서 계속 돈다)
   useEffect(() => () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -44,6 +90,8 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
   async function start() {
     setError(null);
     setJob(null);
+    setViewing("");
+    setDiff(null);
     if (timerRef.current) clearInterval(timerRef.current);
     try {
       const { jobId } = await api.signalScreenStart(market, level, limit);
@@ -51,7 +99,10 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
         try {
           const j = await api.signalScreenStatus(jobId);
           setJob(j);
-          if (j.status !== "running" && timerRef.current) clearInterval(timerRef.current);
+          if (j.status !== "running" && timerRef.current) {
+            clearInterval(timerRef.current);
+            loadRuns(); // 끝나면 기록에 남으므로 목록을 새로 받는다
+          }
         } catch {
           /* 한 번 실패해도 다음 폴링에서 다시 시도 */
         }
@@ -134,6 +185,39 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
       {running && (
         <div className="progress-bar" style={{ marginBottom: 10 }}>
           <div className="progress-bar-fill" style={{ width: `${progress}%`, background: "var(--blue)" }} />
+        </div>
+      )}
+
+      {runs.length > 0 && (
+        <div className="filter-row">
+          <span className="tg-ctl-label">지난 기록</span>
+          <select className="tg-select" value={viewing} onChange={(e) => void openRun(e.target.value)}>
+            <option value="">방금 돌린 것</option>
+            {runs.map((r) => (
+              <option key={r.id} value={r.id}>
+                {new Date(new Date(r.at).getTime() + 9 * 3600_000)
+                  .toISOString()
+                  .slice(5, 16)
+                  .replace("T", " ")}{" "}
+                · {r.hits}종목 / {r.total}검사 ·{" "}
+                {r.market === "001" ? "코스피" : r.market === "101" ? "코스닥" : "전체"}
+              </option>
+            ))}
+          </select>
+          <span className="tg-ctl-hint">최근 {runs.length}회 보관 · 다시 조회하지 않습니다</span>
+        </div>
+      )}
+
+      {diff && (
+        <div className="page-note">
+          <b>직전 회차 대비</b> — 새로 들어옴{" "}
+          <b className="positive">
+            {diff.added.length > 0 ? diff.added.map((x) => x.name).join(", ") : "없음"}
+          </b>
+          {" / "}빠짐{" "}
+          <b className="negative">
+            {diff.removed.length > 0 ? diff.removed.map((x) => x.name).join(", ") : "없음"}
+          </b>
         </div>
       )}
 

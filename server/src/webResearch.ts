@@ -86,6 +86,51 @@ export function researchCacheStatus(): { at: number; expiresAt: number } | null 
   return researchCache ? { at: researchCache.at, expiresAt: researchCache.at + RESEARCH_TTL_MS } : null;
 }
 
+/** 지금 캐시가 쓸 만한가 */
+function cacheFresh(maxSearches: number): boolean {
+  return Boolean(
+    researchCache &&
+      Date.now() - researchCache.at < RESEARCH_TTL_MS &&
+      maxSearches <= researchCache.searches,
+  );
+}
+
+let warming: Promise<unknown> | null = null;
+
+/**
+ * 캐시만 쓰고 **절대 기다리지 않는** 경로.
+ *
+ * 발행 화면에 단계 표시를 붙이고 나서야 보였는데, 앞의 여섯 단계는 10초 안에 끝나고
+ * 나머지 몇 분이 전부 이 리서치였다. 검색이 느린 건 어쩔 수 없지만, 그것 때문에
+ * **리포트 전체가 인질이 될 이유는 없다.**
+ *
+ * 그래서 발행은 있는 것만 쓴다. 없으면 뒤에서 채우기 시작하고 이번 판은 리서치 없이 낸다 —
+ * 다음 판이 그걸 받는다. 정기 발행은 아래 warmResearch 가 미리 채워 두므로 거의 항상 있다.
+ */
+export function peekWebResearch(maxSearches = 6): WebResearchResult | null {
+  if (cacheFresh(maxSearches)) return { ...researchCache!.data, cached: true };
+  if (!warming && isWebResearchConfigured()) {
+    warming = runWebResearch(maxSearches).finally(() => {
+      warming = null;
+    });
+  }
+  return null;
+}
+
+/** 정기 발행 직전에 미리 채운다. 이미 신선하면 아무것도 안 한다 */
+export async function warmResearch(maxSearches = 6): Promise<void> {
+  if (cacheFresh(maxSearches) || warming) return;
+  warming = runWebResearch(maxSearches).finally(() => {
+    warming = null;
+  });
+  await warming.catch(() => undefined);
+}
+
+/** 지금 리서치가 돌고 있는가 — 화면에 "준비 중"이라고 알리려고 */
+export function isResearchWarming(): boolean {
+  return warming !== null;
+}
+
 export async function runWebResearch(
   maxSearches = 6,
   opts: { force?: boolean } = {},

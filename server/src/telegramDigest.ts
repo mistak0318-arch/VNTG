@@ -94,7 +94,50 @@ export interface ScoredChannelItem {
   coverage: number;
   /** 언급된 관심종목 */
   mentions: string[];
+  /**
+   * 본문에서 찾아낸 종목 — 관심종목뿐 아니라 **내 테마에 담긴 종목**까지 본다.
+   * 비어 있으면 못 찾은 것이다 (화면에서 "알 수 없음"으로 표시한다).
+   */
+  stocks: string[];
+  /** 위 종목들이 속한 내 테마 이름 */
+  themes: string[];
   score: number;
+}
+
+/**
+ * 메시지에서 종목·테마를 알아보기 위한 사전.
+ *
+ * 텔레그램 메시지는 "누가 언제"만으로는 판단이 안 된다. **무엇에 대한 얘기인지**가
+ * 붙어야 읽을지 말지가 정해진다. 그런데 그 정보는 이미 우리 손에 있다 —
+ * 내 테마에 어떤 종목이 담겼는지 우리가 정의해 뒀으니까.
+ */
+export interface TagIndex {
+  /** 찾을 종목 이름들 (긴 것부터 — "삼성전자우"가 "삼성전자"보다 먼저 걸려야 한다) */
+  names: string[];
+  /** 종목 이름 → 그 종목이 속한 내 테마 이름들 */
+  themeOf: Map<string, string[]>;
+}
+
+export function buildTagIndex(
+  themes: { name: string; codes: string[] }[],
+  nameOfCode: Map<string, string>,
+): TagIndex {
+  const themeOf = new Map<string, string[]>();
+  for (const t of themes) {
+    for (const code of t.codes) {
+      const name = nameOfCode.get(code);
+      if (!name || name.length < 2) continue;
+      const arr = themeOf.get(name);
+      if (arr) {
+        if (!arr.includes(t.name)) arr.push(t.name);
+      } else {
+        themeOf.set(name, [t.name]);
+      }
+    }
+  }
+  // 긴 이름부터 매칭해야 "삼성전자우"를 "삼성전자"로 잘못 잡지 않는다
+  const names = [...themeOf.keys()].sort((a, b) => b.length - a.length);
+  return { names, themeOf };
 }
 
 /**
@@ -129,6 +172,8 @@ export function scoreMessages(
   messages: ChannelMessage[],
   watchNames: string[] = [],
   limit = 60,
+  /** 내 테마 사전. 안 주면 종목·테마 표기 없이 예전처럼 동작한다 */
+  tags: TagIndex = { names: [], themeOf: new Map() },
 ): ScoredChannelItem[] {
   // 1) 쓰레기 걸러내기
   const clean = messages.filter((m) => !isSpam(m.text) && !isNoise(m.text));
@@ -174,13 +219,32 @@ export function scoreMessages(
     const mentions = watchNames.filter((n) => n.length >= 2 && text.includes(n));
     const watchBonus = mentions.length > 0 ? 12 : 0;
 
+    /*
+     * 내 테마에 담긴 종목까지 찾는다. 관심종목은 이미 담은 것이고, 테마 종목은
+     * **아직 안 담았지만 내가 보고 있는 판**이다 — 그쪽 소식이 오히려 새롭다.
+     * 긴 이름부터 훑고 이미 잡힌 이름에 포함되는 건 건너뛴다("삼성전자"가
+     * "삼성전자우"를 잡아낸 뒤 또 걸리지 않게).
+     */
+    const stocks: string[] = [];
+    for (const name of tags.names) {
+      if (!text.includes(name)) continue;
+      if (stocks.some((s) => s.includes(name))) continue;
+      stocks.push(name);
+      if (stocks.length >= 4) break;
+    }
+    for (const m of mentions) if (!stocks.some((s) => s.includes(m))) stocks.push(m);
+
+    const themes = [...new Set(stocks.flatMap((s) => tags.themeOf.get(s) ?? []))].slice(0, 3);
+    // 내 테마가 걸리면 관심종목만큼은 아니어도 올려준다
+    const themeBonus = themes.length > 0 ? 6 : 0;
+
     // 여러 채널이 동시에 다루면 크게 가산 — 로그를 써서 10개와 20개 차이가 과대평가되지 않게
     const coverageScore = Math.log2(coverage + 1) * 5;
 
-    const score = (coverageScore + impact + watchBonus) * recencyFactor(g.rep.at);
+    const score = (coverageScore + impact + watchBonus + themeBonus) * recencyFactor(g.rep.at);
 
     // 아무 신호도 없는 글은 버린다 — 채널 하나에만 뜬 잡담
-    if (coverage === 1 && impact === 0 && mentions.length === 0) continue;
+    if (coverage === 1 && impact === 0 && mentions.length === 0 && themes.length === 0) continue;
 
     items.push({
       text: text.slice(0, 400), // 긴 글은 잘라서 토큰을 아낀다
@@ -191,6 +255,8 @@ export function scoreMessages(
       channels: [...g.channels].slice(0, 5),
       coverage,
       mentions,
+      stocks: stocks.slice(0, 4),
+      themes,
       score,
     });
   }

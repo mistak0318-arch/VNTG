@@ -177,7 +177,7 @@ export function StockDetail({
 
         {!loading && !error && (
           <>
-            <PriceHeader info={info} />
+            <PriceHeader info={info} code={code} />
 
             {onOpenAnalysis && (
               <button className="analysis-link" onClick={() => onOpenAnalysis(code, name)}>
