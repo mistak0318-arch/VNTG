@@ -137,6 +137,8 @@ export function ManualAccountPage({
   const [accounts, setAccounts] = useState<EvaluatedAccount[]>([]);
   const [brokers, setBrokers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cashDraft, setCashDraft] = useState<Record<string, string>>({});
+  const [cashBusy, setCashBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [newBroker, setNewBroker] = useState("");
@@ -175,6 +177,25 @@ export function ManualAccountPage({
       setNewName("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "계좌 추가 실패");
+    }
+  }
+
+  /** 예수금 저장 — 입력 중인 값은 계좌별로 따로 들고 있는다 */
+  async function saveCash(id: string) {
+    const raw = cashDraft[id];
+    if (raw === undefined) return;
+    setCashBusy(id);
+    try {
+      setAccounts((await api.manualAccountCash(id, Number(raw))).accounts);
+      setCashDraft((p) => {
+        const next = { ...p };
+        delete next[id];
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "예수금 저장 실패");
+    } finally {
+      setCashBusy(null);
     }
   }
 
@@ -263,6 +284,44 @@ export function ManualAccountPage({
               <div className="label">수익률</div>
               <div className={`value ${signClass(a.totalReturnRate)}`}>{pct(a.totalReturnRate)}</div>
             </div>
+            <div className="summary-item">
+              <div className="label">예수금</div>
+              <div className="value">{fmtNum(Math.round(a.cash))}</div>
+            </div>
+            <div className="summary-item strong">
+              <div className="label">총자산</div>
+              <div className="value">{fmtNum(Math.round(a.totalAssets))}</div>
+            </div>
+          </div>
+
+          {/*
+            예수금은 받아올 수가 없어 직접 적는다.
+            주식 평가액만 보면 같은 계좌라도 전액 매수한 상태인지 절반이 현금인지 구분이 안 된다.
+          */}
+          <div className="ma-cash">
+            <span className="ma-cash-label">예수금</span>
+            <input
+              className="search-input"
+              type="number"
+              min={0}
+              step={10000}
+              value={cashDraft[a.id] ?? String(a.cash)}
+              onChange={(e) => setCashDraft((p) => ({ ...p, [a.id]: e.target.value }))}
+              onKeyDown={(e) => e.key === "Enter" && void saveCash(a.id)}
+            />
+            <button
+              className="filter-btn"
+              onClick={() => void saveCash(a.id)}
+              disabled={cashBusy === a.id || (cashDraft[a.id] ?? String(a.cash)) === String(a.cash)}
+            >
+              {cashBusy === a.id ? "저장 중…" : "저장"}
+            </button>
+            {a.stockRatio !== null && (
+              <span className="ma-cash-note">
+                주식 {a.stockRatio.toFixed(0)}% · 현금 {(100 - a.stockRatio).toFixed(0)}%
+                {a.cashUpdatedAt && ` · ${a.cashUpdatedAt.slice(5, 10)} 입력`}
+              </span>
+            )}
           </div>
 
           {a.holdings.length > 0 && (

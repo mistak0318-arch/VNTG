@@ -6,6 +6,7 @@ import {
   listAccounts,
   removeAccount,
   removeHolding,
+  setCash,
   upsertHolding,
 } from "../manualAccounts.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -83,6 +84,16 @@ export function createAccountRouter(client: KiwoomClient): Router {
   router.delete("/manual/:id", async (req, res, next) => {
     try {
       await removeAccount(req.params.id);
+      res.json({ accounts: await evaluateAccounts(client) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 예수금 입력 — 수동 계좌는 현금을 받아올 방법이 없어 직접 적는다 */
+  router.put("/manual/:id/cash", async (req, res, next) => {
+    try {
+      await setCash(req.params.id, Number(req.body?.cash));
       res.json({ accounts: await evaluateAccounts(client) });
     } catch (err) {
       next(err);

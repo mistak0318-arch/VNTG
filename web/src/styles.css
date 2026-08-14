@@ -3022,3 +3022,44 @@ body {
 .rs-cap { font-size: 11px; color: var(--muted); }
 .rs-check { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-dim); }
 .rs-hint { font-size: 11px; color: var(--muted); flex: 1; min-width: 140px; }
+
+/* 수동 계좌 예수금 — 주식 평가액만으로는 총 잔고를 알 수 없다 */
+.ma-cash { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+.ma-cash-label { font-size: 12px; color: var(--muted); }
+.ma-cash input { width: 150px; text-align: right; }
+.ma-cash-note { font-size: 11px; color: var(--muted); }
+.summary-item.strong { border-color: var(--blue); }
+.summary-item.strong .value { font-weight: 700; }
+
+/* ===== 시세분석 =====
+   왼쪽 트리에서 고르고 오른쪽에 표. 항목이 계속 늘어날 것이므로 목록형으로 둔다 */
+.screener { display: grid; grid-template-columns: 178px 1fr; gap: 16px; align-items: start; }
+@media (max-width: 860px) { .screener { grid-template-columns: 1fr; } }
+
+.scr-tree {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 6px 0; position: sticky; top: 12px;
+}
+@media (max-width: 860px) { .scr-tree { position: static; } }
+.scr-group { padding: 6px 0; }
+.scr-group + .scr-group { border-top: 1px solid var(--border); }
+.scr-group-name {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+  color: var(--muted); padding: 0 12px 5px;
+}
+.scr-item {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  border-left: 3px solid transparent; color: var(--muted);
+  font-size: 12.5px; padding: 6px 12px; cursor: pointer;
+}
+.scr-item:hover { color: var(--text); background: var(--panel-2); }
+.scr-item.active {
+  color: var(--text); background: var(--panel-2);
+  border-left-color: var(--green); font-weight: 600;
+}
+.scr-main { min-width: 0; }
+.link-btn {
+  background: none; border: none; padding: 0; color: var(--text);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.link-btn:hover { color: var(--blue); text-decoration: underline; }

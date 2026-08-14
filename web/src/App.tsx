@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { CustomThemePage } from "./pages/CustomThemePage";
+import { ScreenerPage } from "./pages/ScreenerPage";
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
 import { StockDetail } from "./components/StockDetail";
@@ -34,6 +35,7 @@ type Tab =
   | "customTheme"
   | "ask"
   | "stockAnalysis"
+  | "screener"
   | "volume"
   | "sameNet"
   | "continuous"
@@ -83,6 +85,7 @@ const MENU: {
     accent: "#35c46a",
     items: [
       { key: "stockAnalysis", label: "개별종목분석", icon: "🔍" },
+      { key: "screener", label: "시세분석", icon: "📡" },
       { key: "volume", label: "거래상위", icon: "🔥" },
       { key: "sameNet", label: "동일순매매순위", icon: "🤝" },
       { key: "continuous", label: "연속매매현황", icon: "📈" },
@@ -193,6 +196,7 @@ export default function App() {
           {tab === "marketFlow" && <MarketFlowPage onSelectStock={onSelectStock} />}
           {tab === "ask" && <AskPage />}
           {tab === "calendar" && <CalendarPage />}
+          {tab === "screener" && <ScreenerPage onSelectStock={onSelectStock} />}
           {tab === "stockAnalysis" && (
             <StockAnalysisPage stock={selected} onSelectStock={openAnalysis} />
           )}

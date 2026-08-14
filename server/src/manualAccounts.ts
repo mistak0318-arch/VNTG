@@ -45,6 +45,16 @@ export interface ManualAccount {
   /** 계좌 별칭 (예: 연금저축, ISA) */
   name: string;
   holdings: ManualHolding[];
+  /**
+   * 예수금(현금).
+   *
+   * 주식 평가액만 있으면 **총 잔고를 알 수 없다.** 같은 1억 계좌라도 전액 매수한 것과
+   * 절반이 현금인 것은 완전히 다른 상태인데, 그 차이가 화면에 아예 안 보였다.
+   * 수동 계좌라 자동으로 받아올 방법이 없으므로 직접 적는다.
+   */
+  cash?: number;
+  /** 예수금을 마지막으로 손댄 시각 — 오래된 값을 그대로 믿지 않도록 */
+  cashUpdatedAt?: string;
 }
 
 let cache: ManualAccount[] | null = null;
@@ -79,6 +89,25 @@ export async function addAccount(broker: string, name: string): Promise<ManualAc
   if (!broker.trim()) throw new Error("증권사를 선택하세요.");
   const items = await load();
   const next = [...items, { id: newId(), broker: broker.trim(), name: name.trim() || broker.trim(), holdings: [] }];
+  await persist(next);
+  return next;
+}
+
+/**
+ * 예수금을 적어 둔다.
+ * 수동 계좌는 시세를 받아올 수 없으니 현금도 사람이 직접 넣는 수밖에 없다.
+ * 대신 마지막으로 손댄 시각을 남겨 화면에서 "언제 적은 값인지"를 알 수 있게 한다.
+ */
+export async function setCash(id: string, cash: number): Promise<ManualAccount[]> {
+  const items = await load();
+  const target = items.find((a) => a.id === id);
+  if (!target) throw new Error("계좌를 찾을 수 없습니다.");
+  const value = Number(cash);
+  if (!Number.isFinite(value) || value < 0) throw new Error("예수금은 0 이상의 숫자여야 합니다.");
+
+  const next = items.map((a) =>
+    a.id === id ? { ...a, cash: Math.round(value), cashUpdatedAt: new Date().toISOString() } : a,
+  );
   await persist(next);
   return next;
 }
@@ -135,9 +164,16 @@ export interface EvaluatedHolding extends ManualHolding {
 export interface EvaluatedAccount extends Omit<ManualAccount, "holdings"> {
   holdings: EvaluatedHolding[];
   totalCost: number;
+  /** 주식 평가금액 */
   totalValue: number;
   totalProfit: number;
   totalReturnRate: number | null;
+  /** 예수금 (없으면 0) */
+  cash: number;
+  /** 주식 평가금액 + 예수금 — 이게 실제 계좌 잔고다 */
+  totalAssets: number;
+  /** 총자산 대비 주식 비중(%). 낮으면 현금을 들고 있는 것 */
+  stockRatio: number | null;
 }
 
 function toNum(v: unknown): number {
@@ -189,6 +225,8 @@ export async function evaluateAccounts(client: KiwoomClient): Promise<EvaluatedA
     const totalCost = holdings.reduce((s, h) => s + h.cost, 0);
     const totalValue = holdings.reduce((s, h) => s + h.value, 0);
     const totalProfit = totalValue - totalCost;
+    const cash = Math.max(a.cash ?? 0, 0);
+    const totalAssets = totalValue + cash;
     return {
       ...a,
       holdings,
@@ -196,6 +234,10 @@ export async function evaluateAccounts(client: KiwoomClient): Promise<EvaluatedA
       totalValue,
       totalProfit,
       totalReturnRate: totalCost > 0 ? (totalProfit / totalCost) * 100 : null,
+      cash,
+      totalAssets,
+      // 총자산이 0이면 비중을 낼 수 없다 (0으로 나누면 안 되고, 0%도 사실이 아니다)
+      stockRatio: totalAssets > 0 ? (totalValue / totalAssets) * 100 : null,
     };
   });
 }

@@ -116,6 +116,8 @@ export const api = {
     postJson<{ accounts: EvaluatedAccount[] }>("/api/account/manual", { broker, name }),
   manualAccountRemove: (id: string) =>
     deleteJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}`),
+  manualAccountCash: (id: string, cash: number) =>
+    putJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/cash`, { cash }),
   manualHoldingAdd: (id: string, h: { code: string; name: string; avgPrice: number; qty: number }) =>
     postJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings`, h),
   manualHoldingRemove: (id: string, code: string) =>
@@ -257,6 +259,9 @@ export const api = {
       "/api/report/publish-now",
       { deliver },
     ),
+  rankSpecs: () => getJson<{ groups: RankSpecGroup[] }>("/api/rank/specs"),
+  rank: (key: string, market = "000", exchange = "3") =>
+    getJson<RankResult>(`/api/rank/${key}?market=${market}&exchange=${exchange}`),
   sectorFlow: (subject = "foreign", window = 5) =>
     getJson<SectorFlowResult>(`/api/sector-flow?subject=${subject}&window=${window}`),
   sectorFlowStocks: (market: string, code: string) =>
@@ -487,9 +492,17 @@ export interface EvaluatedAccount {
   name: string;
   holdings: EvaluatedHolding[];
   totalCost: number;
+  /** 주식 평가금액 */
   totalValue: number;
   totalProfit: number;
   totalReturnRate: number | null;
+  /** 예수금 */
+  cash: number;
+  /** 주식 + 예수금 = 실제 잔고 */
+  totalAssets: number;
+  /** 총자산 대비 주식 비중(%) */
+  stockRatio: number | null;
+  cashUpdatedAt?: string;
 }
 
 export interface AskTurn {
@@ -639,6 +652,25 @@ export interface EditionSlot {
   days: "weekday" | "weekend" | "always";
   /** 발행 후 텔레그램·메일로 보낼지 */
   deliver: boolean;
+}
+
+export interface RankSpecGroup {
+  group: string;
+  items: { key: string; label: string }[];
+}
+
+export interface RankResult {
+  spec: {
+    key: string;
+    label: string;
+    columns: { key: string; label: string; type?: "text" | "price" | "num" | "pct" }[];
+    exchange: boolean;
+    note: string;
+  };
+  market: string;
+  exchange: string;
+  /** code·name 은 항상 있고, 나머지는 명세의 컬럼 키로 들어온다 */
+  rows: (Record<string, unknown> & { code: string; name: string })[];
 }
 
 export interface SectorFlowStat {
