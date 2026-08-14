@@ -184,7 +184,14 @@
       "Bash(node scripts/tradeval-probe.mjs)",
       "Bash(sed -i 's/createKiwoomClient/createKiwoomClientFromEnv/g' scripts/morning-digest-probe.ts)",
       "Bash(rm -f scripts/digest-dump.ts)",
-      "Bash(curl -s \"http://localhost:4000/api/settings/usage/totals\")"
+      "Bash(curl -s \"http://localhost:4000/api/settings/usage/totals\")",
+      "Bash(curl -s \"http://localhost:4000/api/report/published\")",
+      "Bash(curl -s http://localhost:4000/api/report/published)",
+      "Bash(curl -s \"http://localhost:4000/api/report/publish/pub_mst1wdivkfo7\")",
+      "Bash(python -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('status:',d['status'], d.get\\('error',''\\)\\); [print\\(' ',s['state'],s['label'],'—',s.get\\('note',''\\), \\(str\\(round\\(s['ms']/1000,1\\)\\)+'s' if s.get\\('ms'\\) else ''\\)\\) for s in d['steps']]\")",
+      "Bash(PYTHONIOENCODING=utf-8 curl -s \"http://localhost:4000/api/report/publish/pub_mst1wdivkfo7\")",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(curl -s http://localhost:4000/api/paper)"
     ]
   }
 }

@@ -4,10 +4,15 @@ import { SortableTh, useSortableTable } from "../../useSortableTable";
 import { WatchStar } from "../../useWatchedCodes";
 
 export interface ConstituentTarget {
-  kind: "theme" | "sector";
+  kind: "theme" | "sector" | "custom";
   code: string;
   name: string;
   market?: "kospi" | "kosdaq"; // 업종일 때만
+  /**
+   * 내 테마일 때 구성종목을 그대로 넘긴다.
+   * 이미 손에 있는 걸 다시 조회할 이유가 없다 — 테마 평가에서 받아온 그 값이다.
+   */
+  stocks?: StockRow[];
 }
 
 /** 테마/업종 구성종목 목록 시트 */
@@ -29,6 +34,14 @@ export function ConstituentSheet({
     let cancelled = false;
     setLoading(true);
     setError(null);
+
+    // 내 테마는 이미 받아온 구성종목을 그대로 쓴다 (조회 0회)
+    if (target.stocks) {
+      setItems([...target.stocks].sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)));
+      setLoading(false);
+      return;
+    }
+
     const req =
       target.kind === "theme"
         ? api.themeStocks(target.code)
@@ -47,7 +60,7 @@ export function ConstituentSheet({
     return () => {
       cancelled = true;
     };
-  }, [target.kind, target.code, target.market]);
+  }, [target.kind, target.code, target.market, target.stocks]);
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -55,7 +68,9 @@ export function ConstituentSheet({
         <div className="sheet-header">
           <h2>
             {target.name}
-            <span className="sheet-sub">{target.kind === "theme" ? "테마" : "업종"} 구성종목</span>
+            <span className="sheet-sub">
+              {target.kind === "custom" ? "내 테마" : target.kind === "theme" ? "테마" : "업종"} 구성종목
+            </span>
           </h2>
           <button className="close-btn" onClick={onClose}>
             ✕

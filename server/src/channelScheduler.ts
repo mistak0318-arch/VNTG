@@ -71,7 +71,7 @@ async function tickPickAuto(): Promise<void> {
     const report = await buildChannelReport({
       useAi: false,
       send: false, // 발송은 아래에서 설정대로 나눠 보낸다
-      sinceHours: cfg.windowHours,
+      sinceMinutes: cfg.windowHours * 60,
       useOffsets: true,
     });
     lastPickAt = Date.now();
@@ -140,10 +140,11 @@ function kstNow(now = new Date()): { date: string; hour: number } {
  * 처음 돌리는 거면 12시간으로 시작하고, 너무 오래 쉬었으면 72시간으로 자른다
  * (며칠 치를 한꺼번에 끌어오면 AI 비용이 터진다).
  */
-function sinceHoursFrom(lastRunAt?: string): number {
-  if (!lastRunAt) return 12;
-  const hours = (Date.now() - new Date(lastRunAt).getTime()) / 3600_000;
-  return Math.min(Math.max(Math.ceil(hours), 1), 72);
+/** 마지막 발행 이후 지난 만큼을 훑는다. 첫 실행이면 12시간 */
+function sinceMinutesFrom(lastRunAt?: string): number {
+  if (!lastRunAt) return 12 * 60;
+  const minutes = (Date.now() - new Date(lastRunAt).getTime()) / 60_000;
+  return Math.min(Math.max(Math.ceil(minutes), 5), 72 * 60);
 }
 
 async function tick(): Promise<void> {
@@ -165,7 +166,7 @@ async function tick(): Promise<void> {
       const report = await buildChannelReport({
         send: true,
         useAi: true,
-        sinceHours: sinceHoursFrom(state.lastRunAt),
+        sinceMinutes: sinceMinutesFrom(state.lastRunAt),
       });
 
       if (report.summary) {

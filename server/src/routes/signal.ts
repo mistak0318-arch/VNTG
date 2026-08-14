@@ -1,5 +1,11 @@
 import { Router } from "express";
-import { getScreenJob, startScreen } from "../signalScreen.js";
+import {
+  diffScreenRuns,
+  getScreenJob,
+  getScreenRun,
+  listScreenRuns,
+  startScreen,
+} from "../signalScreen.js";
 import { evaluateMarket } from "../marketSignal.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
@@ -68,6 +74,42 @@ export function createSignalRouter(client: KiwoomClient): Router {
    * 스크리너 — 거래대금 상위에서 내 신호등 기준에 맞는 종목을 찾는다.
    * 종목당 여러 TR을 부르므로 job 방식으로 돌리고 진행 상황을 폴링한다.
    */
+  /** 지난 스크리닝 회차 목록 — `/screen/:jobId` 보다 먼저 등록해야 한다 */
+  router.get("/screen/runs", async (_req, res, next) => {
+    try {
+      res.json({ runs: await listScreenRuns() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/screen/runs/:id", async (req, res, next) => {
+    try {
+      const run = await getScreenRun(req.params.id);
+      if (!run) {
+        res.status(404).json({ error: "그 회차 기록이 없습니다." });
+        return;
+      }
+      res.json(run);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 두 회차 비교 — 새로 들어온 종목과 빠진 종목 */
+  router.get("/screen/diff", async (req, res, next) => {
+    try {
+      const d = await diffScreenRuns(String(req.query.from ?? ""), String(req.query.to ?? ""));
+      if (!d) {
+        res.status(404).json({ error: "비교할 회차를 찾을 수 없습니다." });
+        return;
+      }
+      res.json(d);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/screen/start", (req, res, next) => {
     try {
       const id = startScreen(client, {

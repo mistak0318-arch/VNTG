@@ -1,3 +1,6 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { evaluateSignal, type Level, type SignalResult } from "./signalLight.js";
 import { getCommonStockCodes } from "./stockListCache.js";
@@ -17,6 +20,10 @@ import { getCommonStockCodes } from "./stockListCache.js";
  */
 
 const RKINFO = "/api/dostk/rkinfo";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = join(here, "..", "data");
+const HISTORY_FILE = join(DATA_DIR, "screenHistory.json");
 
 export interface ScreenHit {
   code: string;
@@ -135,6 +142,87 @@ export function getScreenJob(id: string): ScreenJob | undefined {
 }
 
 /**
+ * 지난 스크리닝 결과.
+ *
+ * 매번 새로 돌려야 하면 **어제 뭐가 걸렸는지 볼 수가 없다.** 그런데 이 화면의 값어치는
+ * 오늘 목록보다 오히려 흐름에 있다 — 사흘째 계속 걸리는 종목과 오늘 처음 뜬 종목은
+ * 전혀 다른 얘기다. 그래서 끝난 작업은 디스크에 남긴다.
+ *
+ * 결과만 남기고 작업 상태는 버린다. 다시 열 때 필요한 건 "그때 뭐가 걸렸나"뿐이다.
+ */
+export interface ScreenRun {
+  id: string;
+  at: string;
+  market: string;
+  minLevel: Level;
+  /** 검사한 종목 수 */
+  total: number;
+  results: ScreenHit[];
+}
+
+const KEEP_RUNS = 40;
+
+async function readHistory(): Promise<ScreenRun[]> {
+  try {
+    const parsed = JSON.parse(await readFile(HISTORY_FILE, "utf-8")) as ScreenRun[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveRun(run: ScreenRun): Promise<void> {
+  const rows = await readHistory();
+  rows.push(run);
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(HISTORY_FILE, JSON.stringify(rows.slice(-KEEP_RUNS)), "utf-8");
+}
+
+/** 최신순 목록. 본문(results)까지 주면 무거우므로 요약만 */
+export async function listScreenRuns(): Promise<
+  { id: string; at: string; market: string; minLevel: Level; total: number; hits: number }[]
+> {
+  const rows = await readHistory();
+  return rows
+    .map((r) => ({
+      id: r.id,
+      at: r.at,
+      market: r.market,
+      minLevel: r.minLevel,
+      total: r.total,
+      hits: r.results.length,
+    }))
+    .sort((a, b) => b.at.localeCompare(a.at));
+}
+
+export async function getScreenRun(id: string): Promise<ScreenRun | null> {
+  return (await readHistory()).find((r) => r.id === id) ?? null;
+}
+
+/**
+ * 두 회차를 견줘 **새로 들어온 종목과 빠진 종목**을 낸다.
+ *
+ * 목록을 나란히 놓고 사람이 눈으로 맞춰 보는 건 못 할 일이다.
+ * 오늘 처음 뜬 종목이 어느 것인지가 이 화면에서 제일 알고 싶은 것이다.
+ */
+export async function diffScreenRuns(
+  fromId: string,
+  toId: string,
+): Promise<{ added: ScreenHit[]; removed: ScreenHit[]; stayed: ScreenHit[] } | null> {
+  const rows = await readHistory();
+  const a = rows.find((r) => r.id === fromId);
+  const b = rows.find((r) => r.id === toId);
+  if (!a || !b) return null;
+  const before = new Set(a.results.map((r) => r.code));
+  const after = new Set(b.results.map((r) => r.code));
+  return {
+    added: b.results.filter((r) => !before.has(r.code)),
+    removed: a.results.filter((r) => !after.has(r.code)),
+    stayed: b.results.filter((r) => before.has(r.code)),
+  };
+}
+
+/**
  * 스크리닝 시작. 곧바로 jobId 를 돌려주고 뒤에서 계속 돈다.
  *
  * @param market 000 전체 / 001 코스피 / 101 코스닥
@@ -189,6 +277,15 @@ export function startScreen(
         await new Promise((r) => setTimeout(r, 260));
       }
       job.status = "done";
+      // 결과가 없어도 남긴다 — "이날은 아무것도 안 걸렸다"도 정보다
+      await saveRun({
+        id,
+        at: job.startedAt,
+        market,
+        minLevel,
+        total: job.total,
+        results: job.results,
+      }).catch(() => undefined);
     } catch (err) {
       job.status = "error";
       job.error = err instanceof Error ? err.message : "스크리닝 실패";

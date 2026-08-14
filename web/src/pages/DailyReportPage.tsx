@@ -14,7 +14,7 @@ import {
 import { AiSummaryCard } from "../components/AiSummaryCard";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { FlowBars } from "../components/overview/FlowBars";
-import { type MarketDriverReport, type ScoredNews } from "../api";
+import { type MarketDriverReport, type PublishJob, type ScoredNews } from "../api";
 import { SectorNews } from "../components/SectorNews";
 import { RefreshBar } from "../components/RefreshBar";
 import { ReviewPanel } from "../components/ReviewPanel";
@@ -191,6 +191,7 @@ export function DailyReportPage({
   const [drivers, setDrivers] = useState<MarketDriverReport | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishNote, setPublishNote] = useState<string | null>(null);
+  const [job, setJob] = useState<PublishJob | null>(null);
   const [target, setTarget] = useState<ConstituentTarget | null>(null);
 
   useEffect(() => {
@@ -222,14 +223,50 @@ export function DailyReportPage({
   async function publishNow() {
     setPublishing(true);
     setPublishNote(null);
+    setJob(null);
     try {
-      const r = await api.reportPublishNow(false);
-      setEdition(r.report.edition as Edition);
-      setPublishNote(`${r.report.label} 발행 완료 — 아래 AI 정리가 방금 만든 것입니다.`);
-      reloadAll();
+      const { jobId } = await api.reportPublishNow(false);
+      /*
+       * 서버는 곧바로 jobId 만 주고 뒤에서 돈다. 2초마다 물어보면서
+       * 지금 어느 단계인지 보여준다 — 1~3분을 아무 표시 없이 기다리게 하지 않는다.
+       */
+      /*
+       * 연속 실패를 센다. 서버가 재시작하면 작업이 메모리에서 사라져 404 가 오는데,
+       * 그걸 그냥 삼키면 화면이 **영원히 "진행 중"** 으로 남는다 —
+       * 진행 표시를 붙여 놓고 정작 같은 증상을 만드는 셈이다.
+       * 한 번쯤은 네트워크가 흔들릴 수 있으니 세 번 연속일 때만 포기한다.
+       */
+      let misses = 0;
+      const timer = setInterval(async () => {
+        try {
+          const j = await api.reportPublishStatus(jobId);
+          misses = 0;
+          setJob(j);
+          if (j.status !== "running") {
+            clearInterval(timer);
+            setPublishing(false);
+            if (j.status === "done" && j.report) {
+              setEdition(j.report.edition as Edition);
+              setPublishNote(`${j.report.label} 발행 완료 — 아래 AI 정리가 방금 만든 것입니다.`);
+              reloadAll();
+            } else {
+              setPublishNote(j.error ?? "발행 실패");
+            }
+          }
+        } catch {
+          misses += 1;
+          if (misses >= 3) {
+            clearInterval(timer);
+            setPublishing(false);
+            setJob(null);
+            setPublishNote(
+              "진행 상황을 잃었습니다 (서버가 재시작되었을 수 있습니다). 발행 자체는 끝났을 수 있으니 새로고침 후 확인하세요.",
+            );
+          }
+        }
+      }, 2000);
     } catch (err) {
       setPublishNote(err instanceof Error ? err.message : "발행 실패");
-    } finally {
       setPublishing(false);
     }
   }
@@ -294,6 +331,45 @@ export function DailyReportPage({
       </RefreshBar>
 
       {publishNote && <div className="alert-note">{publishNote}</div>}
+
+      {/*
+        발행 진행 상황. 단계를 처음부터 전부 깔아 두고 상태만 바꾼다 —
+        하나씩 나타나면 몇 개가 남았는지 알 수 없다.
+      */}
+      {job && (
+        <div className="pub-progress">
+          <div className="pub-progress-head">
+            <b>{job.label}</b>
+            <span className="pub-progress-count">
+              {job.steps.filter((s) => s.state === "done" || s.state === "skipped").length}/
+              {job.steps.length}
+            </span>
+            {job.status === "running" && <span className="pub-spinner" aria-hidden="true" />}
+          </div>
+          <ol className="pub-steps">
+            {job.steps.map((s) => (
+              <li key={s.key} className={`pub-step ${s.state}`}>
+                <span className="pub-step-mark" aria-hidden="true">
+                  {s.state === "done"
+                    ? "✓"
+                    : s.state === "running"
+                      ? "●"
+                      : s.state === "failed"
+                        ? "✕"
+                        : s.state === "skipped"
+                          ? "–"
+                          : "○"}
+                </span>
+                <span className="pub-step-label">{s.label}</span>
+                {s.note && <span className="pub-step-note">{s.note}</span>}
+                {s.ms !== undefined && s.ms > 900 && (
+                  <span className="pub-step-ms">{(s.ms / 1000).toFixed(1)}s</span>
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       <header className="report-header">
         <h2>VNTG 데일리 리포트</h2>

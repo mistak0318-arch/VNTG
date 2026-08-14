@@ -4,8 +4,16 @@ import { fileURLToPath } from "node:url";
 import { summarize } from "./summarize.js";
 import { sendTelegram } from "./telegram.js";
 import { fetchNewMessages, isReaderConfigured } from "./telegramReader.js";
-import { hhmmKst, scoreMessages, toDigestText, type ScoredChannelItem } from "./telegramDigest.js";
+import {
+  buildTagIndex,
+  hhmmKst,
+  scoreMessages,
+  toDigestText,
+  type ScoredChannelItem,
+} from "./telegramDigest.js";
 import { listWatchlist } from "./watchlist.js";
+import { listThemes } from "./customThemes.js";
+import { peekSnapshot } from "./marketSnapshot.js";
 
 /**
  * 구독 채널 요약 리포트.
@@ -47,6 +55,14 @@ const SYSTEM_RULES = `당신은 한국 주식시장 정보를 정리하는 애�
 ## 눈에 띄는 단발 정보
 채널 하나에만 나왔지만 사실이라면 중요한 것. 반드시 미확인임을 밝힐 것.`;
 
+/** 60분 → "1시간", 90분 → "1시간 30분". 프롬프트와 화면이 같은 말을 쓰게 한다 */
+export function describeWindow(minutes: number): string {
+  if (minutes < 60) return `${minutes}분`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h}시간` : `${h}시간 ${m}분`;
+}
+
 export interface ChannelReport {
   /** YYYY-MM-DD */
   date: string;
@@ -66,8 +82,8 @@ export interface ChannelReport {
   error?: string;
   /** 읽지 못한 채널 (FLOOD_WAIT 등) */
   skipped: string[];
-  /** 몇 시간치를 훑었는지 */
-  windowHours?: number;
+  /** 몇 분치를 훑었는지 */
+  windowMinutes?: number;
   /** 실제로 잡힌 메시지의 시각 범위 — "언제 것을 정리한 건가"를 화면에서 바로 알 수 있게 */
   oldestAt?: string | null;
   newestAt?: string | null;
@@ -105,12 +121,12 @@ export async function buildChannelReport(
   opts: {
     send?: boolean;
     useAi?: boolean;
-    sinceHours?: number;
+    sinceMinutes?: number;
     limit?: number;
     /**
      * 채널별 "읽은 위치"를 쓸지.
      * 정기 발행(스케줄러)은 true — 같은 메시지를 두 번 요약하지 않기 위해서.
-     * 수동 실행은 false — 버튼을 누른 시점의 최근 sinceHours 전체를 다시 본다.
+     * 수동 실행은 false — 버튼을 누른 시점의 최근 sinceMinutes 전체를 다시 본다.
      */
     useOffsets?: boolean;
   } = {},
@@ -122,7 +138,7 @@ export async function buildChannelReport(
    * 점수 순으로 자르는 것이라 뒤쪽은 이미 "채널 하나가 한 번 말한 것"이다.
    * 40건이면 하루 세 판에서 놓치는 게 없고 입력 토큰은 3분의 1이 준다.
    */
-  const { send = false, useAi = true, sinceHours = 12, limit = 40, useOffsets = true } = opts;
+  const { send = false, useAi = true, sinceMinutes = 60, limit = 40, useOffsets = true } = opts;
   const now = new Date();
   const date = new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -137,7 +153,7 @@ export async function buildChannelReport(
     inputTokens: 0,
     outputTokens: 0,
     skipped: [],
-    windowHours: sinceHours,
+    windowMinutes: sinceMinutes,
     oldestAt: null,
     newestAt: null,
   };
@@ -146,9 +162,26 @@ export async function buildChannelReport(
     return { ...base, error: "텔레그램 세션 미설정 — scripts/telegram-login.mjs 를 먼저 실행하세요" };
   }
 
-  const { messages, channels, skipped } = await fetchNewMessages({ sinceHours, useOffsets });
+  const { messages, channels, skipped } = await fetchNewMessages({ sinceMinutes, useOffsets });
   const watchNames = (await listWatchlist().catch(() => [])).map((w) => w.name);
-  const items = scoreMessages(messages, watchNames, limit);
+
+  /*
+   * 종목·테마 사전을 만든다.
+   *
+   * 스냅샷은 **있으면 쓰고 없으면 넘어간다** — peekSnapshot 은 캐시만 본다.
+   * 여기서 getMarketSnapshot 을 부르면 65회 조회가 걸리는데, 이 경로는 5분마다
+   * 도는 자동 발송이 함께 쓴다. 태그 하나 붙이자고 그걸 물릴 수는 없다.
+   */
+  const snap = peekSnapshot();
+  const nameOfCode = new Map<string, string>();
+  if (snap) for (const s of snap.byCode.values()) nameOfCode.set(s.code, s.name);
+  const myThemes = await listThemes().catch(() => []);
+  const tags = buildTagIndex(
+    myThemes.map((t) => ({ name: t.name, codes: t.codes })),
+    nameOfCode,
+  );
+
+  const items = scoreMessages(messages, watchNames, limit, tags);
 
   const times = messages.map((m) => m.at).sort();
 
@@ -210,7 +243,7 @@ export async function buildChannelReport(
     report.oldestAt && report.newestAt
       ? `${new Date(report.oldestAt).toLocaleString("ko-KR")} ~ ${new Date(report.newestAt).toLocaleString("ko-KR")}`
       : "(범위 불명)";
-  const prompt = `${SYSTEM_RULES}\n\n---\n지금 시각: ${now.toLocaleString("ko-KR")}\n수집 구간: 최근 ${sinceHours}시간 (${span})\n대상 채널 ${channels}개 · 원본 ${messages.length}건 중 ${items.length}건 선별\n\n${toDigestText(items)}`;
+  const prompt = `${SYSTEM_RULES}\n\n---\n지금 시각: ${now.toLocaleString("ko-KR")}\n수집 구간: 최근 ${describeWindow(sinceMinutes)} (${span})\n대상 채널 ${channels}개 · 원본 ${messages.length}건 중 ${items.length}건 선별\n\n${toDigestText(items)}`;
 
   const res = await summarize(prompt, 2500, "channel");
   report.summary = res.text;
@@ -251,22 +284,42 @@ function esc(s: string): string {
  *   본문
  *   끝에 **원문 보기** 링크 — 관심 있으면 바로 그 대화방으로 간다
  */
+/**
+ * 건별 메시지의 머리글.
+ *
+ * **텔레그램은 글자색을 못 준다.** Bot API 가 허용하는 서식은 b/i/u/s/code/pre/
+ * blockquote/a 뿐이라 CSS 색상이 통하지 않는다. 그래서 색 대신
+ *   - 줄머리 아이콘으로 정보 종류를 구분하고 (누가 / 무엇을 / 어느 판)
+ *   - 가로줄로 머리글과 본문을 갈라
+ * 훑을 때 눈이 걸리게 만든다. 아이콘은 종류마다 고정이라 위치를 외우게 된다.
+ *
+ * 종목·테마는 **알 때만** 쓴다. 못 찾았으면 "알 수 없음"이라고 적는다 —
+ * 빈칸으로 두면 태그가 없는 건지 붙이다 만 건지 구분이 안 된다.
+ */
+function pickedHead(it: ScoredChannelItem): string {
+  const lines = [`📡 <b>${esc(it.channelName)}</b> · ${hhmmKst(it.at)}`];
+
+  const stock = it.stocks.length > 0 ? it.stocks.join(", ") : "알 수 없음";
+  lines.push(`🏷 종목 <b>${esc(stock)}</b>`);
+
+  const theme = it.themes.length > 0 ? it.themes.join(", ") : "미정";
+  lines.push(`🎯 테마 <b>${esc(theme)}</b>`);
+
+  const marks = [
+    it.coverage > 1 ? `🔥 ${it.coverage}개 채널` : "",
+    it.mentions.length > 0 ? `⭐ 관심종목 ${it.mentions.join(", ")}` : "",
+  ].filter(Boolean);
+  if (marks.length > 0) lines.push(`<i>${esc(marks.join(" · "))}</i>`);
+
+  return lines.join("\n");
+}
+
 export function toPickedMessages(r: ChannelReport, limit = 15): string[] {
   return r.items.slice(0, limit).map((it) => {
-    const tags = [
-      it.coverage > 1 ? `${it.coverage}개 채널` : "",
-      it.mentions.length > 0 ? `★ ${it.mentions.join(", ")}` : "",
-    ]
-      .filter(Boolean)
-      .join(" · ");
-
-    const head =
-      `<b>${esc(it.channelName)}</b> · ${hhmmKst(it.at)}` +
-      (tags ? `\n<i>${esc(tags)}</i>` : "");
     // 링크가 붙으므로 본문은 조금 넉넉히 둔다. 빈 줄이 셋 이상이면 둘로 줄인다
     const body = esc(it.text.replace(/\n{3,}/g, "\n\n").slice(0, 700));
-    const link = it.link ? `\n\n<a href="${it.link}">원문 보기 →</a>` : "";
-    return `${head}\n\n${body}${link}`;
+    const link = it.link ? `\n\n🔗 <a href="${it.link}">원문 보기 →</a>` : "";
+    return `${pickedHead(it)}\n━━━━━━━━━━━━\n${body}${link}`;
   });
 }
 

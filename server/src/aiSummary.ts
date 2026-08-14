@@ -1,7 +1,7 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { evaluateThemes, toCustomThemeDigest } from "./customThemes.js";
 import { getTradeStats, toTradeDigest } from "./tradeStats.js";
-import { runWebResearch, toResearchDigest } from "./webResearch.js";
+import { peekWebResearch, runWebResearch, toResearchDigest } from "./webResearch.js";
 import { describeBreadth, listBreadth, toPoints } from "./breadthStore.js";
 import { listSectorFlow, toSectorFlowDigest } from "./sectorFlowStore.js";
 import { evaluateLinks, toUsKrDigest } from "./usKrLinks.js";
@@ -16,6 +16,7 @@ import { buildMarketDrivers } from "./reportBuilder.js";
 import { isClaudeConfigured, summarize } from "./summarize.js";
 import { listWatchlist } from "./watchlist.js";
 import { CHECKPOINT_RULE, parseCheckpoints, stripCheckpointSection, type Checkpoint } from "./checkpoints.js";
+import { noopProgress, type ProgressReporter } from "./reportProgress.js";
 
 /**
  * 데일리 리포트 최상단의 "AI 정리".
@@ -82,7 +83,11 @@ function hasTradedToday(indices: IndexCard[]): boolean {
 }
 
 /** 시황 질문하기(askMarket)도 같은 다이제스트를 쓴다 */
-export async function buildDigest(client: KiwoomClient): Promise<string> {
+export async function buildDigest(
+  client: KiwoomClient,
+  progress: ProgressReporter = noopProgress,
+): Promise<string> {
+  progress.start("market");
   const watchNames = (await listWatchlist().catch(() => [])).map((w) => w.name);
 
   const [idxSec, flowSec, moverSec, hiLoSec, globalSec, drivers, news, events, tracked] =
@@ -97,6 +102,10 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
       upcomingEvents(7).catch(() => []),
       getTrackedWatchlist(client).catch(() => []),
     ]);
+
+  progress.done("market", `지수 ${(idxSec?.data as unknown[] | undefined)?.length ?? 0}건`);
+  // 뉴스도 위 Promise.all 에서 같이 받아 왔다. 따로 돌지 않으므로 여기서 닫는다
+  progress.done("news", news ? `${news.sectors.length}개 분야` : "없음");
 
   const lines: string[] = [];
 
@@ -156,28 +165,34 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
    * "외국인 +2.3조"만 있으면 규모밖에 모르지만, 어느 업종에서 빼서 어디로 넣었는지가 붙으면
    * 같은 총액도 완전히 다르게 읽힌다.
    */
+  progress.start("sector");
   const flowDays = await listSectorFlow(14).catch(() => []);
   const flowDigest = toSectorFlowDigest(flowDays);
   if (flowDigest) lines.push(flowDigest);
+  progress.done("sector", `${flowDays.length}일 누적`);
 
   /*
    * 시장 전체 신호등. 개별 수치보다 먼저 "지금이 살 자리인가"를 한 줄로 준다.
    * 아래 항목들이 전부 이 판정의 근거이므로 여기 놓아야 읽는 순서가 맞다.
    */
+  progress.start("signal");
   const marketSig = await evaluateMarket(client).catch(() => null);
   if (marketSig) {
     const sigDigest = toMarketSignalDigest(marketSig);
     if (sigDigest) lines.push(sigDigest);
   }
+  progress.done("signal", marketSig ? `${marketSig.level} ${marketSig.score}점` : "판정 불가");
 
   /*
    * 밤사이 미국이 어느 국내 테마로 이어지는지.
    * "나스닥 +0.8%"만 있으면 사람이 머릿속으로 이어야 하는데, 그 연결을 붙여서 준다.
    * 아직 상관계수 검증 전이라 프롬프트에 "가설"이라고 못박아 둔다.
    */
+  progress.start("usKr");
   const usKr = await evaluateLinks(client).then((r) => r.links).catch(() => []);
   const usKrDigest = toUsKrDigest(usKr, { premarket: !traded });
   if (usKrDigest) lines.push(usKrDigest);
+  progress.done("usKr", `연결 ${usKr.length}개`);
 
   /*
    * 내가 만든 테마를 **키움 테마보다 먼저** 넣는다.
@@ -194,7 +209,9 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
    *
    * 다만 기준일이 다르므로 헤더에 "직전 거래일 종가 기준"을 못박아 넘긴다.
    */
+  progress.start("theme");
   const custom = await evaluateThemes(client).catch(() => null);
+  progress.done("theme", custom ? `테마 ${custom.themes.length}개` : "없음");
   if (custom?.traded) {
     // traded 는 지수 기준(오늘 거래 여부), custom.traded 는 스냅샷 기준(값이 살아 있는지)
     const customDigest = toCustomThemeDigest(custom.themes, { previousClose: !traded });
@@ -394,6 +411,7 @@ ${CHECKPOINT_RULE}`;
 export async function buildAiSummary(
   client: KiwoomClient,
   editionKey?: string,
+  progress: ProgressReporter = noopProgress,
 ): Promise<AiSummary> {
   const now = new Date();
   const basedOn = now.toISOString();
@@ -416,7 +434,7 @@ export async function buildAiSummary(
    */
   const weekend = editionKey === "weekend";
   const morning = editionKey === "morning";
-  const digest = await buildDigest(client);
+  const digest = await buildDigest(client, progress);
 
   /*
    * 우리가 조회한 데이터만 넘기면 우리가 안 받아온 건 AI도 모른다.
@@ -433,9 +451,21 @@ export async function buildAiSummary(
    * 조간에만 넉넉히 준다 — 간밤 해외가 본체인데 우리가 가진 해외 데이터는 지수 몇 개뿐이다.
    * 장중·석간은 국내 시세가 이미 손에 있으므로 검색이 덜 아쉽다.
    */
-  const research = process.env.RESEARCH_ENABLED === "0"
-    ? null
-    : await runWebResearch(weekend ? 2 : morning ? 5 : 3).catch(() => null);
+  const searchBudget = weekend ? 2 : morning ? 5 : 3;
+  let research = null as Awaited<ReturnType<typeof runWebResearch>> | null;
+  if (process.env.RESEARCH_ENABLED === "0") {
+    progress.skip("research", "꺼져 있음");
+  } else {
+    progress.start("research");
+    /*
+     * **기다리지 않는다.** 앞의 여섯 단계는 10초 안에 끝나는데 이것 하나가 몇 분을
+     * 잡아먹어서, 발행 전체가 멈춘 것처럼 보였다. 있는 것만 쓰고 없으면 뒤에서
+     * 채우기 시작한 뒤 이번 판은 리서치 없이 낸다.
+     */
+    research = peekWebResearch(searchBudget);
+    if (research) progress.done("research", research.cached ? "직전 결과 재사용 (비용 0)" : `검색 ${research.searchCount}회`);
+    else progress.skip("research", "준비 중 — 이번 판은 없이 냅니다 (다음 판에 반영)");
+  }
   const label = editionKey
     ? {
         morning: "조간(장 시작 전)",
@@ -466,7 +496,10 @@ ${digest}${research ? toResearchDigest(research) : ""}`;
    * 항목을 6개로 늘리고 분량을 1,600~2,200자로 올렸더니 4,000 토큰에 걸려 문장이 잘렸다.
    * 한글은 토큰 효율이 나빠 2,200자면 3,000~4,000 토큰을 쓴다 — 여유를 둬야 한다.
    */
+  progress.start("ai");
   const r = await summarize(prompt, weekend ? 3000 : 7000, "report");
+  if (r.error) progress.fail("ai", r.error);
+  else progress.done("ai", `${r.outputTokens.toLocaleString("ko-KR")} 토큰 생성`);
 
   /*
    * 체크포인트를 본문에서 뽑아 구조화해 저장한다.

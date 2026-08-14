@@ -203,7 +203,7 @@ export async function refreshChannels(): Promise<ChannelEntry[]> {
  *
  *   useOffsets=true  (스케줄러용) — 채널별 "마지막으로 읽은 id" 다음부터. 같은 메시지를
  *                     두 번 요약하지 않으므로 07/12/18시 정기 발행에 맞다.
- *   useOffsets=false (수동 실행용) — 오프셋을 보지도 쓰지도 않고 **최근 sinceHours 전체**를
+ *   useOffsets=false (수동 실행용) — 오프셋을 보지도 쓰지도 않고 **최근 sinceMinutes 전체**를
  *                     다시 읽는다. 사용자가 버튼을 누르는 이유는 "지금 이 시점의 최신"을
  *                     보고 싶어서지, "지난번 이후 새로 온 것"을 보려는 게 아니다.
  *
@@ -214,14 +214,14 @@ export async function refreshChannels(): Promise<ChannelEntry[]> {
  *                      AI 비용이 터지므로 상한을 둔다.
  */
 export async function fetchNewMessages(
-  opts: { maxPerChannel?: number; sinceHours?: number; useOffsets?: boolean } = {},
+  opts: { maxPerChannel?: number; sinceMinutes?: number; useOffsets?: boolean } = {},
 ): Promise<{ messages: ChannelMessage[]; channels: number; fetched: number; skipped: string[] }> {
-  const { maxPerChannel = 40, sinceHours = 24, useOffsets = true } = opts;
+  const { maxPerChannel = 40, sinceMinutes = 60, useOffsets = true } = opts;
   const c = await getClient();
 
   const enabled = (await listChannels()).filter((ch) => ch.enabled);
   const offsets = useOffsets ? await readOffsets() : {};
-  const cutoff = Date.now() - sinceHours * 3600_000;
+  const cutoff = Date.now() - sinceMinutes * 60_000;
 
   /*
    * **어느 채널에 새 글이 있는지 먼저 한 번에 알아낸다.**

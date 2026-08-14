@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MarketSignalPanel } from "../components/MarketSignalPanel";
 import { api, fmtNum, type BreadthPoint, type ChannelReport } from "../api";
 import { BreadthPanel } from "../components/BreadthPanel";
 import { SectorFlowPanel } from "../components/SectorFlowPanel";
@@ -177,6 +178,9 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
   return (
     <div>
       <RefreshBar onRefresh={() => setReloadKey((k) => k + 1)} />
+
+      {/* 탭 위에 둔다 — 어느 탭을 보든 "지금 시장이 어떤 상태인가"가 먼저 와야 한다 */}
+      <MarketSignalPanel />
 
       <nav className="detail-tabs">
         {TABS.map((t) => (

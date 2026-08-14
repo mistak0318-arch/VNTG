@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { CustomThemePage } from "./pages/CustomThemePage";
 import { ScreenerPage } from "./pages/ScreenerPage";
 import { ScreenPage } from "./pages/ScreenPage";
+import { PaperTradePage } from "./pages/PaperTradePage";
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
 import { StockDetail } from "./components/StockDetail";
@@ -47,6 +48,7 @@ type Tab =
   | "algo"
   | "account"
   | "manualAccount"
+  | "paper"
   | "settings";
 
 /**
@@ -75,6 +77,18 @@ const MENU: {
     ],
   },
   {
+    group: "종목 분석",
+    accent: "#35c46a",
+    items: [
+      { key: "stockAnalysis", label: "개별종목분석", icon: "🔍" },
+      { key: "screener", label: "시세분석", icon: "🔬" },
+      { key: "volume", label: "거래상위", icon: "🔥" },
+      { key: "sameNet", label: "동일순매매순위", icon: "🤝" },
+      { key: "continuous", label: "연속매매현황", icon: "📈" },
+      { key: "algo", label: "내 알고리즘", icon: "🧮" },
+    ],
+  },
+  {
     group: "마이페이지",
     accent: "#f5c542",
     items: [
@@ -88,21 +102,11 @@ const MENU: {
     ],
   },
   {
-    group: "종목 분석",
-    accent: "#35c46a",
-    items: [
-      { key: "stockAnalysis", label: "개별종목분석", icon: "🔍" },
-      { key: "screener", label: "시세분석", icon: "🔬" },
-      { key: "volume", label: "거래상위", icon: "🔥" },
-      { key: "sameNet", label: "동일순매매순위", icon: "🤝" },
-      { key: "continuous", label: "연속매매현황", icon: "📈" },
-      { key: "algo", label: "내 알고리즘", icon: "🧮" },
-    ],
-  },
-  {
     group: "계좌",
     accent: "#a97bd6",
     items: [
+      // 모의투자를 맨 위에 — 실제 잔고보다 이쪽이 알고리즘을 증명하는 자리다
+      { key: "paper", label: "모의투자", icon: "🧪" },
       { key: "account", label: "연동 계좌 (키움)", icon: "💳" },
       { key: "manualAccount", label: "수동 계좌", icon: "✏️" },
     ],
@@ -231,6 +235,7 @@ export default function App() {
           {tab === "sameNet" && <SameNetTradeRankingPage onSelectStock={onSelectStock} />}
           {tab === "continuous" && <ContinuousTradePage onSelectStock={onSelectStock} />}
           {tab === "algo" && <AlgoPicksPage onSelectStock={onSelectStock} />}
+          {tab === "paper" && <PaperTradePage onSelectStock={onSelectStock} />}
           {tab === "account" && <AccountInfoPage onSelectStock={onSelectStock} />}
           {tab === "manualAccount" && <ManualAccountPage onSelectStock={onSelectStock} />}
           {tab === "settings" && <SettingsPage />}
