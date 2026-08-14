@@ -324,6 +324,11 @@ export async function buildAiSummary(
     };
   }
 
+  /*
+   * editionKey 로 받던 것을 kind 로 바꿨다. 사용자가 판을 직접 만들 수 있게 되면서
+   * id("pre-open" 같은)로는 어떤 프롬프트를 쓸지 알 수 없기 때문이다.
+   * 예전 id 들도 그대로 동작하도록 같은 이름을 kind 로 쓴다.
+   */
   const weekend = editionKey === "weekend";
   const morning = editionKey === "morning";
   const digest = await buildDigest(client);

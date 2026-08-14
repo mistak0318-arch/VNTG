@@ -3,8 +3,14 @@ import type { KiwoomClient } from "../kiwoomClient.js";
 
 import { buildMarketDrivers } from "../reportBuilder.js";
 import { deliverReport } from "../reportDelivery.js";
-import { publishEdition } from "../reportScheduler.js";
-import { EDITIONS, latestEdition, listReports, loadReport, type EditionKey } from "../reportStore.js";
+import { publishAdhoc, publishEdition } from "../reportScheduler.js";
+import {
+  DEFAULT_SCHEDULE,
+  currentSlot,
+  getSchedule,
+  saveSchedule,
+} from "../reportSchedule.js";
+import { latestEdition, listReports, loadReport, type EditionKey } from "../reportStore.js";
 
 /**
  * 리포트 전용 라우트.
@@ -37,7 +43,7 @@ export function createReportRouter(client: KiwoomClient): Router {
       res.json({
         report,
         requested: { date, edition },
-        editions: EDITIONS,
+        editions: (await getSchedule()).slots,
         recent: await listReports(20),
       });
     } catch (err) {
@@ -48,8 +54,62 @@ export function createReportRouter(client: KiwoomClient): Router {
   /** 수동 발행 — 아직 발행 시각이 안 됐거나 실패했을 때 쓴다 */
   router.post("/publish", async (req, res, next) => {
     try {
-      const edition = (String(req.body?.edition ?? latestEdition().edition)) as EditionKey;
-      res.json({ report: await publishEdition(client, edition) });
+      const schedule = await getSchedule();
+      const fallback = currentSlot(schedule, new Date())?.id ?? "midday";
+      const edition = String(req.body?.edition ?? fallback);
+      // 정기 발행분을 손으로 다시 만드는 것이므로 전송 여부는 그 판의 설정을 따른다
+      const slot = schedule.slots.find((s) => s.id === edition);
+      res.json({ report: await publishEdition(client, edition, undefined, slot?.deliver ?? false) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 즉시 발행 — 지금 이 순간의 시장을 바로 본다.
+   *
+   * 정기 판과 파일을 다투면 안 되므로 `now-HHMM` 이라는 별도 id로 저장한다.
+   * 조간을 눌러놓고 오후에 즉시발행을 하면 조간 파일이 오후 내용으로 덮여버리기 때문이다.
+   * 시각에 따라 프롬프트(kind)를 자동으로 고른다 — 장 전이면 개장 전 브리핑이 맞다.
+   */
+  router.post("/publish-now", async (req, res, next) => {
+    try {
+      const now = new Date();
+      const day = now.getDay();
+      const mins = now.getHours() * 60 + now.getMinutes();
+      const kind =
+        day === 0 || day === 6
+          ? "weekend"
+          : mins < 9 * 60
+            ? "morning"
+            : mins < 15 * 60 + 40
+              ? "intraday"
+              : "closing";
+
+      const id = `now-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+      const label = `즉시 ${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const deliver = req.body?.deliver === true;
+
+      res.json({
+        report: await publishAdhoc(client, { id, label, kind, deliver }),
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 발행 일정 설정 */
+  router.get("/schedule", async (_req, res, next) => {
+    try {
+      res.json({ schedule: await getSchedule(), defaults: DEFAULT_SCHEDULE });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/schedule", async (req, res, next) => {
+    try {
+      res.json({ schedule: await saveSchedule(req.body) });
     } catch (err) {
       next(err);
     }

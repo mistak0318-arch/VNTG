@@ -28,7 +28,12 @@ import { WatchStar } from "../useWatchedCodes";
  * 데이터는 전부 기존 시황 섹션 캐시를 쓰므로 추가 API 호출이 없다.
  */
 
-type Edition = "morning" | "midday" | "closing" | "weekend";
+/**
+ * 판 식별자.
+ * 발행 일정을 설정에서 정하게 되면서 사용자가 만든 판("pre-open")이나
+ * 즉시발행("now-1432")도 값이 될 수 있어 문자열로 열었다.
+ */
+type Edition = string;
 
 /**
  * 리포트는 정해진 시각에 발행되는 스냅샷이다.
@@ -183,6 +188,8 @@ export function DailyReportPage({
   const [edition, setEdition] = useState<Edition>(() => currentEdition(new Date()));
   const [newsAt, setNewsAt] = useState<string>("");
   const [drivers, setDrivers] = useState<MarketDriverReport | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishNote, setPublishNote] = useState<string | null>(null);
   const [target, setTarget] = useState<ConstituentTarget | null>(null);
 
   useEffect(() => {
@@ -203,6 +210,27 @@ export function DailyReportPage({
 
   function reloadAll() {
     for (const s of [indices, flow, movers, sectors, themes, highLow, global]) s.refresh();
+  }
+
+  /**
+   * 지금 발행.
+   *
+   * 정기 판(조간/장중/석간)과 파일이 겹치면 안 되므로 서버가 `now-HHMM` 이라는 별도 id로
+   * 저장한다. 오후에 눌렀다고 아침 조간이 오후 내용으로 덮이면 안 되기 때문이다.
+   */
+  async function publishNow() {
+    setPublishing(true);
+    setPublishNote(null);
+    try {
+      const r = await api.reportPublishNow(false);
+      setEdition(r.report.edition as Edition);
+      setPublishNote(`${r.report.label} 발행 완료 — 아래 AI 정리가 방금 만든 것입니다.`);
+      reloadAll();
+    } catch (err) {
+      setPublishNote(err instanceof Error ? err.message : "발행 실패");
+    } finally {
+      setPublishing(false);
+    }
   }
 
   /** 리포트 전체의 "언제 기준" — 각 섹션 갱신시각 중 가장 오래된 것 */
@@ -252,8 +280,19 @@ export function DailyReportPage({
               {e.label}
             </button>
           ))}
+          <span className="news-scope-sep" />
+          <button
+            className="primary-btn"
+            disabled={publishing}
+            onClick={() => void publishNow()}
+            title="지금 이 순간의 시장으로 리포트를 새로 만듭니다 (AI 호출 1회)"
+          >
+            {publishing ? "발행 중…" : "지금 발행"}
+          </button>
         </div>
       </RefreshBar>
+
+      {publishNote && <div className="alert-note">{publishNote}</div>}
 
       <header className="report-header">
         <h2>VNTG 데일리 리포트</h2>

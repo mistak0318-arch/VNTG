@@ -3,9 +3,8 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { captureBreadth } from "./breadthStore.js";
 import { captureSectorFlow } from "./sectorFlowStore.js";
 import { deliverReport } from "./reportDelivery.js";
+import { getSchedule, slotsForDay } from "./reportSchedule.js";
 import {
-  EDITIONS,
-  WEEKEND_EDITION,
   loadReport,
   saveReport,
   todayStr,
@@ -40,13 +39,12 @@ export async function publishEdition(
   date = todayStr(),
   deliver = true,
 ): Promise<PublishedReport> {
-  // 주말판은 EDITIONS에 없으므로 같이 찾는다 (없으면 키를 그대로 라벨로)
-  const meta = [...EDITIONS, WEEKEND_EDITION].find((e) => e.key === edition) ?? {
-    key: edition,
-    label: edition,
-    hour: 0,
-  };
-  const summary = await buildAiSummary(client, edition);
+  // 판 정보는 설정에서 찾는다. 없는 id로 불려도(즉시발행 등) 키를 라벨로 써서 진행한다.
+  const schedule = await getSchedule();
+  const slot = schedule.slots.find((s) => s.id === edition);
+  const meta = { key: edition, label: slot?.label ?? edition };
+  // 프롬프트는 kind가 정한다 — 사용자가 만든 판도 넷 중 하나로 매핑된다
+  const summary = await buildAiSummary(client, slot?.kind ?? "intraday");
   const report: PublishedReport = {
     date,
     edition,
@@ -59,6 +57,29 @@ export async function publishEdition(
 
   // 발행 직후 텔레그램·메일로 전송. 실패해도 저장분은 남으므로 나중에 재발송할 수 있다.
   if (deliver) await deliverReport(report).catch(() => undefined);
+  return report;
+}
+
+/**
+ * 설정에 없는 일회성 판을 발행한다 (즉시발행).
+ * 정기 판과 파일이 겹치지 않도록 호출자가 id를 정해 넘긴다.
+ */
+export async function publishAdhoc(
+  client: KiwoomClient,
+  opts: { id: string; label: string; kind: string; deliver?: boolean },
+): Promise<PublishedReport> {
+  const date = todayStr();
+  const summary = await buildAiSummary(client, opts.kind);
+  const report: PublishedReport = {
+    date,
+    edition: opts.id,
+    label: opts.label,
+    publishedAt: new Date().toISOString(),
+    summary,
+  };
+  await saveReport(report);
+  console.log(`[report] ${date} ${opts.label} 즉시발행 (토큰 ${summary.inputTokens}/${summary.outputTokens})`);
+  if (opts.deliver) await deliverReport(report).catch(() => undefined);
   return report;
 }
 
@@ -88,22 +109,22 @@ async function tick(client: KiwoomClient): Promise<void> {
   const date = todayStr(now);
 
   /*
-   * 주말은 판 구성이 다르다.
-   * 장이 안 열려 지수·수급은 전부 직전 거래일 값이므로 하루 3판을 낼 이유가 없고,
-   * 그 숫자로 시황을 쓰면 어제 일을 오늘 일처럼 말하게 된다.
-   * 대신 뉴스는 주말에도 나오므로 **뉴스 중심 한 판**만 낸다.
+   * 어떤 판을 언제 낼지는 이제 설정에서 온다 (data/reportSchedule.json).
+   * 요일 조건(평일/주말/매일)도 설정에 있으므로 여기서 주말을 따로 가르지 않는다.
    */
-  const plan = weekend ? [WEEKEND_EDITION] : EDITIONS;
+  const schedule = await getSchedule();
+  const plan = slotsForDay(schedule, now);
+  const mins = now.getHours() * 60 + now.getMinutes();
 
   for (const e of plan) {
     // 발행 시각이 지났는데 아직 저장분이 없으면 만든다
-    if (now.getHours() < e.hour) continue;
-    const existing = await loadReport(date, e.key);
+    if (mins < e.hour * 60 + e.minute) continue;
+    const existing = await loadReport(date, e.id);
     if (existing) continue;
 
     publishing = true;
     try {
-      await publishEdition(client, e.key, date);
+      await publishEdition(client, e.id, date, e.deliver);
     } catch (err) {
       // 발행 실패가 서버를 죽이면 안 된다. 다음 tick에서 다시 시도한다.
       console.error(`[report] ${e.label} 발행 실패:`, err instanceof Error ? err.message : err);
@@ -119,5 +140,9 @@ export function startReportScheduler(client: KiwoomClient): void {
   // 서버가 막 뜬 직후엔 시세 캐시가 비어 있으므로 조금 기다렸다가 시작한다
   setTimeout(() => void tick(client), 30_000);
   timer = setInterval(() => void tick(client), CHECK_INTERVAL_MS);
-  console.log("[report] 발행 스케줄러 시작 (07/12/18시)");
+  void getSchedule().then((s) => {
+    const on = s.slots.filter((x) => x.enabled);
+    const times = on.map((x) => `${x.label} ${x.hour}:${String(x.minute).padStart(2, "0")}`).join(", ");
+    console.log(`[report] 발행 스케줄러 시작 — ${on.length}판 (${times || "없음"})`);
+  });
 }

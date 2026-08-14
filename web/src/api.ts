@@ -246,6 +246,17 @@ export const api = {
     getJson<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }>(
       `/api/custom-themes${force ? "?force=1" : ""}`,
     ),
+  reportSchedule: () =>
+    getJson<{ schedule: { slots: EditionSlot[] }; defaults: { slots: EditionSlot[] } }>(
+      "/api/report/schedule",
+    ),
+  reportScheduleSave: (slots: EditionSlot[]) =>
+    putJson<{ schedule: { slots: EditionSlot[] } }>("/api/report/schedule", { slots }),
+  reportPublishNow: (deliver = false) =>
+    postJson<{ report: { date: string; edition: string; label: string } }>(
+      "/api/report/publish-now",
+      { deliver },
+    ),
   sectorFlow: (subject = "foreign", window = 5) =>
     getJson<SectorFlowResult>(`/api/sector-flow?subject=${subject}&window=${window}`),
   sectorFlowStocks: (market: string, code: string) =>
@@ -614,6 +625,20 @@ export interface EvaluatedTheme {
   missing: number;
   /** manual = 내가 만든 것, infostock = 인포스탁 테마표에서 옮겨온 것 */
   source?: "manual" | "infostock";
+}
+
+/** 리포트 발행 판 하나 */
+export interface EditionSlot {
+  id: string;
+  label: string;
+  hour: number;
+  minute: number;
+  /** 어떤 프롬프트를 쓸지 */
+  kind: "morning" | "intraday" | "closing" | "weekend";
+  enabled: boolean;
+  days: "weekday" | "weekend" | "always";
+  /** 발행 후 텔레그램·메일로 보낼지 */
+  deliver: boolean;
 }
 
 export interface SectorFlowStat {

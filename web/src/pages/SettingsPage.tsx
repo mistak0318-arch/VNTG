@@ -5,6 +5,7 @@ import { RefreshBar } from "../components/RefreshBar";
 import { AiModelPanel } from "../components/AiModelPanel";
 import { AlertConfigPanel } from "../components/AlertConfigPanel";
 import { CollapsibleCard } from "../components/CollapsibleCard";
+import { ReportSchedulePanel } from "../components/ReportSchedulePanel";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { SignalConfigPanel } from "../components/SignalConfigPanel";
 
@@ -57,6 +58,14 @@ export function SettingsPage() {
 
   return (
     <div>
+      <CollapsibleCard
+        id="reportSchedule"
+        title="리포트 발행 일정"
+        hint="언제 몇 판을 낼지 직접 정합니다. 판을 추가·삭제할 수 있습니다."
+      >
+        <ReportSchedulePanel />
+      </CollapsibleCard>
+
       <CollapsibleCard
         id="aiModels"
         title="AI 모델"

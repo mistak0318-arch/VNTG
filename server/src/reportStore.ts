@@ -14,7 +14,14 @@ const DIR = resolve(__dirname, "..", "data", "reports");
  * 화면은 저장된 것을 읽기만 한다. 나중에 메일·텔레그램도 이 저장분을 그대로 보낸다.
  */
 
-export type EditionKey = "morning" | "midday" | "closing" | "weekend";
+/**
+ * 판 식별자. 파일명에 그대로 쓰인다.
+ *
+ * 예전엔 네 개 리터럴 유니온이었는데, 발행 시각·개수를 설정에서 정하게 되면서
+ * 사용자가 만든 판(예: "pre-open")도 값이 될 수 있어 문자열로 열었다.
+ * 대신 reportSchedule 쪽에서 영문/숫자/하이픈만 남기도록 걸러 경로 이탈을 막는다.
+ */
+export type EditionKey = string;
 
 export const EDITIONS: { key: EditionKey; label: string; hour: number }[] = [
   { key: "morning", label: "조간", hour: 7 },

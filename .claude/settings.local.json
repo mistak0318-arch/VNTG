@@ -171,7 +171,8 @@
       "Bash(node build-icons.mjs)",
       "Bash(grep -Ei \"tsbuildinfo|\\\\.log$|dist/|node_modules\")",
       "Bash(git rm *)",
-      "Bash(node scripts/summarize-probe.mjs)"
+      "Bash(node scripts/summarize-probe.mjs)",
+      "Bash(node scripts/schedule-probe.mjs)"
     ]
   }
 }
