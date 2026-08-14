@@ -44,8 +44,14 @@ const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
 const FILE = join(DATA_DIR, "marketSnapshot.json");
 
-/** 장중에는 시세가 계속 바뀌므로 짧게 */
-const INTRADAY_TTL_MS = 5 * 60_000;
+/**
+ * 장중 캐시 수명.
+ *
+ * 65업종을 훑는 데 15초쯤 걸린다. 그래서 만료된 뒤 화면에 들어가면 그 15초를 기다리게 된다 —
+ * 내 테마 메뉴를 열 때마다 로딩이 걸리던 게 그것이다.
+ * 아래 스케줄러가 **만료되기 전에 미리** 갱신해 두므로, 화면은 항상 완성된 캐시를 받는다.
+ */
+const INTRADAY_TTL_MS = 10 * 60_000;
 
 let cache: MarketSnapshot | null = null;
 /** 만드는 중이면 같은 약속을 돌려줘서 65회 조회가 겹치지 않게 한다 */
@@ -211,6 +217,32 @@ export async function getMarketSnapshot(
     });
 
   return building;
+}
+
+/**
+ * 백그라운드 갱신.
+ *
+ * 캐시가 만료되고 나서 사용자가 들어오면 15초를 기다려야 한다. 그래서 만료 **직전에**
+ * 서버가 알아서 다시 만들어 둔다. 화면은 늘 만들어져 있는 캐시를 즉시 받는다.
+ * 장이 안 열렸으면 값이 안 바뀌므로 돌지 않는다 (expiryOf 가 다음 개장까지로 잡아준다).
+ */
+export function startSnapshotRefresher(client: KiwoomClient): void {
+  const tick = () => {
+    if (building) return;
+    // 만료 1분 전부터 미리 채운다
+    const due = !cache || Date.now() > expiryOf(cache.at) - 60_000;
+    if (!due) return;
+    /*
+     * force 로 부른다. 아직 만료 전이라 그냥 부르면 getMarketSnapshot 이
+     * "신선하다"고 판단해 캐시를 그대로 돌려주고 갱신이 일어나지 않는다.
+     */
+    void getMarketSnapshot(client, true).catch((err: unknown) => {
+      console.error("[snapshot] 갱신 실패:", err instanceof Error ? err.message : err);
+    });
+  };
+  setTimeout(tick, 20_000); // 서버가 뜨자마자 몰리지 않게 조금 늦춘다
+  setInterval(tick, 60_000);
+  console.log("[snapshot] 전종목 스냅샷 백그라운드 갱신 시작 (장중 10분 주기)");
 }
 
 /** 캐시에 있으면 준다. 없으면 null — 조회를 기다릴 수 없는 자리에서 쓴다 */

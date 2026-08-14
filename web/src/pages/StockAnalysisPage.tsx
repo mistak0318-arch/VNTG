@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, normalizeStockCode, pickList, type RawRecord, type StockSearchResult } from "../api";
 import { ChartPanel } from "../components/ChartPanel";
-import { ExchangeSplit } from "../components/ExchangeSplit";
 import { IntradayFlow, ProgramFlowBars } from "../components/IntradayPanels";
 import { InvestorTrendTable } from "../components/InvestorTrendTable";
 import { PriceHeader } from "../components/PriceHeader";
@@ -20,6 +19,7 @@ import {
   StrengthPanel,
 } from "../components/StockDepthPanels";
 import { useWatchedCodes } from "../useWatchedCodes";
+import { useLive } from "../useLive";
 
 /**
  * 개별종목분석 — 키움 앱에서 종목 하나를 파고들 때 쓰는 화면들을 한 페이지에 모았다.
@@ -59,7 +59,6 @@ export function StockAnalysisPage({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [tab, setTab] = useState<AnalysisTab>("chart");
-  const [info, setInfo] = useState<RawRecord | null>(null);
   const [investorChart, setInvestorChart] = useState<RawRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -80,19 +79,29 @@ export function StockAnalysisPage({
     return () => clearTimeout(timer);
   }, [query]);
 
-  // 시세 헤더 + 투자자 수급은 페이지 진입 시 한 번 받아둔다
+  /*
+   * 시세 헤더는 장중에 5초마다 조용히 갱신된다.
+   * 아래 시가·고가·저가는 갱신되는데 맨 위 현재가만 멈춰 있으면 오히려 헷갈린다.
+   * 투자자 수급은 일별이라 자주 부를 이유가 없어 진입할 때만 받는다.
+   */
+  const live = useLive(
+    () => (stock ? api.stockInfo(stock.code) : Promise.resolve(null)),
+    [stock?.code, reloadKey],
+    5000,
+  );
+  const info = (live.data ?? null) as RawRecord | null;
+
   useEffect(() => {
     if (!stock) {
-      setInfo(null);
+      setInvestorChart(null);
       return;
     }
     let cancelled = false;
     setError(null);
-    Promise.all([api.stockInfo(stock.code), api.investorChart(stock.code)])
-      .then(([i, v]) => {
-        if (cancelled) return;
-        setInfo(i as RawRecord);
-        setInvestorChart(v as RawRecord);
+    api
+      .investorChart(stock.code)
+      .then((v) => {
+        if (!cancelled) setInvestorChart(v as RawRecord);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -179,8 +188,6 @@ export function StockAnalysisPage({
               <>
                 <SignalPanel code={stock.code} onSelectStock={onSelectStock} />
                 <QuoteSummary code={stock.code} />
-                <h3 className="section-heading">거래소별 시세 (KRX / NXT)</h3>
-                <ExchangeSplit code={stock.code} />
                 <IntradayFlow code={stock.code} basePrice={Math.abs(Number(info?.base_pric)) || 0} />
                 <ChartPanel code={stock.code} name={stock.name} />
                 <h3 className="section-heading">투자자 수급</h3>

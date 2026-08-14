@@ -22,6 +22,7 @@ import { createOverviewRouter } from "./routes/overview.js";
 import { createRankingRouter } from "./routes/ranking.js";
 import { createReportRouter } from "./routes/report.js";
 import { startReportScheduler } from "./reportScheduler.js";
+import { startSnapshotRefresher } from "./marketSnapshot.js";
 import { createSettingsRouter } from "./routes/settings.js";
 import { startAlertScheduler } from "./alertScheduler.js";
 import { startChannelScheduler } from "./channelScheduler.js";
@@ -97,6 +98,7 @@ app.use("/api/report", createReportRouter(client));
 
 // 07/12/18시에 리포트를 발행한다 (AI 요약은 이때만 생성)
 startReportScheduler(client);
+startSnapshotRefresher(client);
 startAlertScheduler(client);
 startChannelScheduler();
 

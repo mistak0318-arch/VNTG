@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, fmtAbsNum, fmtNum, pickList, type RawRecord } from "../api";
 import { fmtDt, fmtTm, num, SeriesTable, signOf, type SeriesColumn } from "./SeriesTable";
+import { useLive } from "../useLive";
 
 /**
  * 키움 앱에서 개별 종목을 볼 때 자주 쓰는 화면들을 옮겨온 패널 모음.
@@ -55,6 +56,13 @@ function bidField(side: "sel" | "buy", rank: number, kind: "bid" | "req"): strin
 export function QuoteSummary({ code }: { code: string }) {
   const snap = useFetch(() => api.snapshot(code), [code]);
   const str = useFetch(() => api.strength(code, "time"), [code]);
+  /*
+   * 여기 시가·고가·저가는 KRX 기준이다. 같은 종목이라도 NXT에서 더 높이/낮게 찍히는 날이
+   * 있어서 옆에 괄호로 같이 보여준다 — 표를 따로 두는 것보다 이 자리에서 바로 비교하는 게 낫다.
+   * 장중에는 5초마다 조용히 갱신된다.
+   */
+  const ex = useLive(() => api.exchangeQuotes(code), [code], 5000);
+  const nxt = (ex.data?.exchanges ?? []).find((x) => x.key === "nxt") ?? null;
 
   if (snap.loading) return <div className="empty">시세 불러오는 중...</div>;
   if (snap.error) return <div className="error-banner">{snap.error}</div>;
@@ -62,21 +70,37 @@ export function QuoteSummary({ code }: { code: string }) {
 
   // ka10046은 최신순이라 첫 행이 가장 최근 체결강도
   const latest = pickList(str.data ?? undefined, ["cntr_str_tm"])[0];
-  return <SummaryGrid snap={snap.data} strength={latest ? String(latest.cntr_str ?? "") : ""} />;
+  return (
+    <SummaryGrid
+      snap={snap.data}
+      strength={latest ? String(latest.cntr_str ?? "") : ""}
+      nxt={nxt}
+    />
+  );
 }
 
-function SummaryGrid({ snap, strength }: { snap: RawRecord; strength?: string }) {
+function SummaryGrid({
+  snap,
+  strength,
+  nxt,
+}: {
+  snap: RawRecord;
+  strength?: string;
+  nxt?: { open: number | null; high: number | null; low: number | null } | null;
+}) {
   const base = Math.abs(num(snap.pred_close_pric));
   return (
     <div className="summary-grid quote-summary">
       {[
-        { label: "시가", value: snap.open_pric },
-        { label: "고가", value: snap.high_pric },
-        { label: "저가", value: snap.low_pric },
+        { label: "시가", value: snap.open_pric, nxtValue: nxt?.open ?? null },
+        { label: "고가", value: snap.high_pric, nxtValue: nxt?.high ?? null },
+        { label: "저가", value: snap.low_pric, nxtValue: nxt?.low ?? null },
       ].map((it) => {
         const price = Math.abs(num(it.value));
         // 전일종가 대비 등락률을 같이 보여줘야 가격의 의미가 바로 읽힌다
         const rate = base > 0 && price > 0 ? ((price - base) / base) * 100 : null;
+        // 값이 같으면 굳이 괄호를 달지 않는다 — 다를 때만 눈에 띄어야 한다
+        const showNxt = it.nxtValue !== null && it.nxtValue > 0 && it.nxtValue !== price;
         return (
           <div className="summary-item" key={it.label}>
             <div className="label">{it.label}</div>
@@ -89,6 +113,11 @@ function SummaryGrid({ snap, strength }: { snap: RawRecord; strength?: string })
                 </em>
               )}
             </div>
+            {showNxt && (
+              <div className="qs-nxt" title="넥스트레이드(대체거래소) 기준">
+                NXT {fmtNum(it.nxtValue as number)}
+              </div>
+            )}
           </div>
         );
       })}

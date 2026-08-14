@@ -3177,3 +3177,6 @@ body {
 
 /* 거래소별 시세 — 통합 행을 강조해 "그날 진짜 고가"가 어디인지 드러나게 */
 .data-table tr.ex-total td { font-weight: 600; border-top: 1px solid var(--blue); }
+
+/* 시가·고가·저가 아래 NXT 값 — 거래소마다 체결가가 갈릴 때만 보인다 */
+.qs-nxt { font-size: 10.5px; color: var(--muted); margin-top: 2px; }

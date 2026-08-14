@@ -126,6 +126,15 @@ export function CandleChart({
   dataRef.current = candles;
   /** 첫 데이터에서만 화면을 맞춘다. 갱신 때 fitContent 하면 확대가 풀린다 */
   const fitted = useRef(false);
+  /**
+   * 최고/최저 가로선.
+   *
+   * effect 안의 지역변수로 두면 폴링으로 effect 가 다시 돌 때마다 새 클로저가 생겨
+   * **이전에 그린 선을 못 지운다.** 그래서 갱신할 때마다 라벨이 하나씩 쌓였다.
+   * 컴포넌트 수명 동안 유지되는 ref 에 담아 항상 직전 것을 지우고 다시 그린다.
+   */
+  const hiLineRef = useRef<IPriceLine | null>(null);
+  const loLineRef = useRef<IPriceLine | null>(null);
 
   // ── 차트 생성 (테마·분봉 여부가 바뀔 때만) ────────────────────────────
   useEffect(() => {
@@ -244,6 +253,8 @@ export function CandleChart({
     window.addEventListener("resize", resize);
 
     fitted.current = false;
+    hiLineRef.current = null;
+    loLineRef.current = null;
     return () => {
       window.removeEventListener("resize", resize);
       chart.remove();
@@ -292,9 +303,6 @@ export function CandleChart({
     };
     const won = (v: number) => v.toLocaleString("ko-KR");
 
-    let hiLine: IPriceLine | null = null;
-    let loLine: IPriceLine | null = null;
-
     const refresh = () => {
       const range = chart.timeScale().getVisibleLogicalRange();
       if (!range) return;
@@ -304,10 +312,10 @@ export function CandleChart({
       if (to <= from) return;
 
       const { hi, lo } = extremes(candles.slice(from, to + 1));
-      if (hiLine) candleSeries.removePriceLine(hiLine);
-      if (loLine) candleSeries.removePriceLine(loLine);
+      if (hiLineRef.current) candleSeries.removePriceLine(hiLineRef.current);
+      if (loLineRef.current) candleSeries.removePriceLine(loLineRef.current);
 
-      hiLine = candleSeries.createPriceLine({
+      hiLineRef.current = candleSeries.createPriceLine({
         price: hi.high,
         color: "#ff5c5c",
         lineWidth: 1,
@@ -315,7 +323,7 @@ export function CandleChart({
         axisLabelVisible: true,
         title: `최고 ${won(hi.high)} (${pct(hi.high)}, ${labelDate(hi.time)})`,
       });
-      loLine = candleSeries.createPriceLine({
+      loLineRef.current = candleSeries.createPriceLine({
         price: lo.low,
         color: "#4c8dff",
         lineWidth: 1,
