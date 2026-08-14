@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { recordApiCall } from "./apiUsage.js";
+import { choiceFor } from "./aiConfig.js";
 
 /**
  * AI 웹 리서치.
@@ -82,6 +83,30 @@ function model(): string {
 const RESEARCH_TTL_MS = 90 * 60_000;
 let researchCache: { at: number; searches: number; data: WebResearchResult } | null = null;
 
+/**
+ * 하루 호출 상한.
+ *
+ * 캐시를 넣어도 「지금 발행」을 여러 번 누르면 그때마다 캐시가 만료돼 있을 수 있고,
+ * 그러면 다시 샌다. 실제로 하루에 $5.64 가 이렇게 나갔다 — 8회 발행 × 회당 $0.3~0.7.
+ * 캐시가 "덜 부르게" 하는 장치라면 이건 **못 부르게** 하는 장치다. 둘 다 필요하다.
+ */
+const DAILY_LIMIT = Number(process.env.RESEARCH_DAILY_LIMIT) || 4;
+let spent = { day: "", count: 0 };
+
+function kstDay(): string {
+  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+}
+
+/** 오늘 몇 번 썼나 / 몇 번 남았나 — 화면에 보여주려고 */
+export function researchBudget(): { used: number; limit: number; enabled: boolean } {
+  const day = kstDay();
+  return {
+    used: spent.day === day ? spent.count : 0,
+    limit: DAILY_LIMIT,
+    enabled: process.env.RESEARCH_ENABLED !== "0",
+  };
+}
+
 export function researchCacheStatus(): { at: number; expiresAt: number } | null {
   return researchCache ? { at: researchCache.at, expiresAt: researchCache.at + RESEARCH_TTL_MS } : null;
 }
@@ -131,6 +156,91 @@ export function isResearchWarming(): boolean {
   return warming !== null;
 }
 
+/**
+ * Gemini + Google 검색 그라운딩.
+ *
+ * 검색 결과가 토큰으로 안 잡히므로 입력이 프롬프트 길이만큼만 든다.
+ * 출처는 groundingMetadata 에서 꺼낸다 — 무엇을 보고 썼는지는 남아야 한다.
+ */
+async function geminiResearch(modelName: string, maxSearches: number): Promise<WebResearchResult> {
+  const empty: WebResearchResult = {
+    text: null,
+    searches: [],
+    sources: [],
+    searchCount: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    model: modelName,
+  };
+  const key = process.env.GEMINI_API_KEY?.trim();
+  if (!key) return { ...empty, error: "GEMINI_API_KEY 미설정" };
+
+  try {
+    const now = new Date().toLocaleString("ko-KR", { hour12: false });
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${RESEARCH_PROMPT}
+
+지금은 한국 시각 ${now} 입니다.` }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { temperature: 0, maxOutputTokens: 2000 },
+        }),
+      },
+    );
+    const j = (await res.json()) as {
+      error?: { message?: string };
+      candidates?: {
+        content?: { parts?: { text?: string }[] };
+        groundingMetadata?: {
+          webSearchQueries?: string[];
+          groundingChunks?: { web?: { uri?: string; title?: string } }[];
+        };
+      }[];
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+    };
+    if (j.error) {
+      void recordApiCall("gemini", modelName, "failed", { feature: "research" });
+      return { ...empty, error: j.error.message ?? "Gemini 오류" };
+    }
+
+    const cand = j.candidates?.[0];
+    const text = (cand?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
+    const gm = cand?.groundingMetadata;
+    const searches = gm?.webSearchQueries ?? [];
+    const sources = (gm?.groundingChunks ?? [])
+      .map((c) => ({ title: c.web?.title ?? c.web?.uri ?? "", url: c.web?.uri ?? "" }))
+      .filter((x) => x.url);
+
+    const inputTokens = j.usageMetadata?.promptTokenCount ?? 0;
+    const outputTokens = j.usageMetadata?.candidatesTokenCount ?? 0;
+    void recordApiCall("gemini", modelName, text ? "ok" : "failed", {
+      inputTokens,
+      outputTokens,
+      // 그라운딩 검색은 건당 과금이 따로 없다(요금은 토큰으로만) — 0으로 둔다
+      feature: "research",
+    });
+
+    const result: WebResearchResult = {
+      text: text || null,
+      searches,
+      sources: [...new Map(sources.map((s) => [s.url, s])).values()].slice(0, 12),
+      searchCount: searches.length,
+      inputTokens,
+      outputTokens,
+      model: modelName,
+    };
+    if (result.text) researchCache = { at: Date.now(), searches: maxSearches, data: result };
+    return result;
+  } catch (err) {
+    void recordApiCall("gemini", modelName, "failed", { feature: "research" });
+    return { ...empty, error: err instanceof Error ? err.message : "리서치 실패" };
+  }
+}
+
 export async function runWebResearch(
   maxSearches = 6,
   opts: { force?: boolean } = {},
@@ -153,6 +263,32 @@ export async function runWebResearch(
     if (maxSearches <= researchCache.searches) {
       return { ...researchCache.data, cached: true };
     }
+  }
+
+  // 상한을 넘으면 아예 안 부른다. 캐시가 있으면 위에서 이미 돌려줬다
+  const day = kstDay();
+  if (spent.day !== day) spent = { day, count: 0 };
+  if (spent.count >= DAILY_LIMIT) {
+    return { ...empty, error: `오늘 웹 리서치 상한(${DAILY_LIMIT}회)을 다 썼습니다` };
+  }
+  if (process.env.RESEARCH_ENABLED === "0") {
+    return { ...empty, error: "웹 리서치가 꺼져 있습니다" };
+  }
+  spent.count += 1;
+
+  /*
+   * 설정에서 리서치용 모델을 골랐으면 그쪽으로 보낸다.
+   *
+   * **Gemini 로 돌리면 입력 토큰이 사실상 사라진다.** 실측:
+   *   Claude web_search      입력 107,000 토큰 (+ 검색 건당 $0.01)
+   *   gemini-3.5-flash-lite  입력      39 토큰
+   * 같은 질문에 같은 답이 나왔다. Google 그라운딩은 검색 결과를 서버에 두고 요약만
+   * 돌려주므로, 결과가 대화에 쌓여 매 턴 재전송되는 일이 없다. 이 앱에서 제일 큰
+   * 비용 항목이 여기 하나로 정리된다.
+   */
+  const choice = await choiceFor("research").catch(() => null);
+  if (choice?.provider === "gemini") {
+    return geminiResearch(choice.model, maxSearches);
   }
 
   if (!isWebResearchConfigured()) {

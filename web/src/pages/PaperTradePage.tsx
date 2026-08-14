@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   api,
   fmtNum,
@@ -369,8 +369,9 @@ function TradeTable({
         </thead>
         <tbody>
           {rows.map((t) => (
-            <>
-              <tr key={t.id}>
+            // 축약형 <>…</> 는 key 를 못 받는다. 배열 안이므로 Fragment 를 써야 한다
+            <Fragment key={t.id}>
+              <tr>
                 <td className="sticky-col">
                   <button className="link-btn" onClick={() => onSelectStock(t.code, t.name)}>
                     {t.name}
@@ -407,13 +408,13 @@ function TradeTable({
                 </td>
               </tr>
               {openId === t.id && (
-                <tr key={`${t.id}-ev`}>
+                <tr>
                   <td colSpan={9} className="pt-evidence-cell">
                     <Evidence t={t} />
                   </td>
                 </tr>
               )}
-            </>
+            </Fragment>
           ))}
         </tbody>
       </table>

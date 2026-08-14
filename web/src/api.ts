@@ -177,12 +177,22 @@ export const api = {
   channelsRefresh: () => postJson<{ channels: ChannelEntry[] }>("/api/channels/refresh"),
   channelsSetEnabled: (updates: { id: string; enabled: boolean }[]) =>
     putJson<{ channels: ChannelEntry[] }>("/api/channels/enabled", { updates }),
+  channelsReportStatus: (jobId: string) => getJson<PublishJob>(`/api/channels/report/${jobId}`),
+  /** 끝날 때까지 기다리는 옛 방식 — 진행 표시가 필요 없는 짧은 확인용 */
+  channelsReportSync: (o: { ai?: boolean; send?: boolean; minutes?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (o.ai === false) q.set("ai", "0");
+    if (o.send) q.set("send", "1");
+    if (o.minutes) q.set("minutes", String(o.minutes));
+    return postJson<ChannelReport>(`/api/channels/report-sync${q.toString() ? "?" + q : ""}`);
+  },
+  /** 곧바로 jobId 를 돌려준다. 진행은 channelsReportStatus 로 폴링 */
   channelsReport: (o: { ai?: boolean; send?: boolean; minutes?: number } = {}) => {
     const q = new URLSearchParams();
     if (o.ai === false) q.set("ai", "0");
     if (o.send) q.set("send", "1");
     if (o.minutes) q.set("minutes", String(o.minutes));
-    return postJson<ChannelReport>(`/api/channels/report${q.toString() ? "?" + q : ""}`);
+    return postJson<{ jobId: string }>(`/api/channels/report${q.toString() ? "?" + q : ""}`);
   },
   askStatus: () => getJson<{ ready: boolean }>("/api/ask/status"),
   ask: (
@@ -248,6 +258,9 @@ export const api = {
     getJson<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }>(
       `/api/custom-themes${force ? "?force=1" : ""}`,
     ),
+  journal: () => getJson<JournalData>("/api/journal"),
+  journalSave: (e: Partial<JournalEntry> & { date: string }) =>
+    putJson<{ entries: JournalEntry[]; stats: JournalStats }>("/api/journal", e),
   paperTrades: () => getJson<PaperResult>("/api/paper"),
   paperTradeAdd: (t: { code: string; name: string; entryPrice: number; qty: number; thesis?: string }) =>
     postJson<PaperResult>("/api/paper", t),
@@ -1394,4 +1407,66 @@ export interface PaperResult {
     avgReturn: number | null;
   };
   edges: EvidenceEdge[];
+}
+
+
+/** 복기 노트 */
+export interface DayContext {
+  marketLevel: string;
+  marketScore: number;
+  marketSummary: string;
+  breadth: string | null;
+  trend: string | null;
+  topThemes: { name: string; changeRate: number }[];
+  bottomThemes: { name: string; changeRate: number }[];
+}
+
+export interface JournalTrade {
+  id: string;
+  kind: "buy" | "sell";
+  code: string;
+  name: string;
+  price: number;
+  qty: number;
+  note: string;
+  level?: string;
+  score?: number;
+  passed?: string[];
+}
+
+export interface JournalEntry {
+  date: string;
+  updatedAt: string;
+  what: string;
+  why: string;
+  followedRules: boolean | null;
+  brokenRule: string;
+  trades: JournalTrade[];
+  mistakes: string[];
+  mood: string;
+  lesson: string;
+  tomorrow: string;
+  context: DayContext | null;
+}
+
+export interface JournalStats {
+  days: number;
+  streak: number;
+  ruleRate: number | null;
+  mistakes: { key: string; label: string; count: number }[];
+  moods: { key: string; label: string; count: number; ruleRate: number | null }[];
+  ruleEdge: {
+    keptDays: number;
+    keptAvgReturn: number | null;
+    brokeDays: number;
+    brokeAvgReturn: number | null;
+  };
+  lessons: { date: string; lesson: string }[];
+}
+
+export interface JournalData {
+  entries: JournalEntry[];
+  stats: JournalStats;
+  mistakeTags: { key: string; label: string; hint: string }[];
+  moodTags: { key: string; label: string }[];
 }

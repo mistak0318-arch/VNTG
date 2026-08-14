@@ -140,7 +140,7 @@ export function ChannelCollectPanel() {
           disabled={busy !== null || onCount === 0}
           onClick={() =>
             run("preview", async () => {
-              const r = await api.channelsReport({ ai: false });
+              const r = await api.channelsReportSync({ ai: false });
               setReport(r);
               setNote(
                 `원본 ${r.rawCount}건 → 선별 ${r.usedCount}건 (AI 미호출 · 비용 없음)` +
@@ -156,7 +156,7 @@ export function ChannelCollectPanel() {
           disabled={busy !== null || onCount === 0}
           onClick={() =>
             run("ai", async () => {
-              const r = await api.channelsReport({ ai: true });
+              const r = await api.channelsReportSync({ ai: true });
               setReport(r);
               setNote(
                 `정리 완료 · 토큰 ${r.inputTokens}/${r.outputTokens}` +
@@ -172,7 +172,7 @@ export function ChannelCollectPanel() {
           disabled={busy !== null || !report?.summary}
           onClick={() =>
             run("send", async () => {
-              const r = await api.channelsReport({ ai: true, send: true });
+              const r = await api.channelsReportSync({ ai: true, send: true });
               setReport(r);
               setNote("채널요약 방으로 발송했습니다.");
             })

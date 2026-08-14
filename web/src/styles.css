@@ -3387,3 +3387,58 @@ body {
 /* 거래소 구분 — 어느 거래소 값인지 안 적으면 두 값이 다를 때 오독한다 */
 .ph-ex { flex: none; font-style: normal; font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 3px; background: var(--panel-2); color: var(--muted); }
 .ph-ex.nxt { background: rgba(169,123,214,.18); color: #a97bd6; }
+
+/* 복기 노트 */
+.jn-editor { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; background: var(--panel); }
+.jn-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.jn-streak { font-size: 12px; color: var(--muted); }
+.jn-saved { font-size: 12px; color: var(--green); }
+.jn-ctx { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); padding: 7px 9px; background: var(--panel-2); border-radius: 6px; margin-bottom: 10px; }
+.jn-ctx-main { color: var(--text); font-weight: 600; }
+.jn-ctx-sub::before { content: "·"; margin-right: 6px; }
+.jn-field { display: block; margin-bottom: 10px; }
+.jn-label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+.jn-hint { font-style: normal; font-weight: 400; font-size: 11px; color: var(--muted); margin-left: 5px; }
+.jn-text { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 12px; font-family: inherit; resize: vertical; }
+.jn-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.jn-tag { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); border-radius: 12px; padding: 3px 10px; font-size: 11px; cursor: pointer; }
+.jn-tag.on { background: rgba(255,92,92,.15); border-color: var(--red); color: var(--red); font-weight: 600; }
+.jn-tag.mood.on { background: rgba(76,141,255,.15); border-color: var(--blue); color: var(--blue); }
+.jn-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 14px; }
+.jn-stat-block { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.jn-big { font-size: 26px; font-weight: 700; }
+.jn-stat-note { font-size: 11px; color: var(--muted); line-height: 1.6; }
+.jn-warn { color: #f5c542; }
+.jn-lessons { display: grid; gap: 4px; margin-bottom: 14px; }
+.jn-lesson { display: flex; gap: 8px; font-size: 12px; padding: 5px 8px; background: var(--panel-2); border-radius: 5px; }
+.jn-lesson-date { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.ph-when { font-style: normal; font-size: 10px; color: var(--muted); }
+.ph-main-label { letter-spacing: 0; }
+
+/* 복기 노트 — 당일 매매현황 */
+.jn-trades { display: grid; gap: 4px; }
+.jn-trade { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 12px; padding: 6px 9px; border-radius: 6px; background: var(--panel-2); border-left: 3px solid var(--border); }
+.jn-trade.buy { border-left-color: var(--red); }
+.jn-trade.sell { border-left-color: var(--blue); }
+.jn-trade-kind { flex: none; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
+.jn-trade-kind.buy { background: rgba(240,85,95,.15); color: var(--red); }
+.jn-trade-kind.sell { background: rgba(74,139,245,.15); color: var(--blue); }
+.jn-trade-name { font-weight: 600; }
+.jn-trade-price, .jn-trade-sig { color: var(--muted); }
+.jn-trade-note { flex-basis: 100%; color: var(--blue); font-weight: 600; }
+.jn-trade-passed { flex-basis: 100%; font-size: 11px; color: var(--muted); }
+
+.jn-add { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.jn-trade-kind { cursor: pointer; border: none; }
+
+/* 메뉴 구성 — 끌어다 놓기 */
+.mo-row { transition: background .12s, opacity .12s; }
+.mo-row.over { outline: 2px dashed var(--blue); outline-offset: -2px; }
+.mo-row.dragging { opacity: .45; }
+.mo-grip { cursor: grab; color: var(--muted); font-size: 13px; user-select: none; }
+.mo-row[draggable="true"] { cursor: grab; }
+.mo-name { flex: 1; text-align: left; background: none; border: none; color: var(--text); font-size: 12px; cursor: text; padding: 2px 4px; border-radius: 4px; }
+.mo-name:hover { background: var(--panel-2); }
+.mo-orig { font-style: normal; color: var(--muted); font-size: 11px; }
+.mo-rename { flex: 1; background: var(--panel); color: var(--text); border: 1px solid var(--blue); border-radius: 4px; padding: 2px 6px; font-size: 12px; }

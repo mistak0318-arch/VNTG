@@ -17,21 +17,35 @@ import { useEffect, useState } from "react";
 const KEY = "vntg.menu.order.v1";
 
 export interface MenuPrefs {
-  /** 항목 키를 원하는 순서대로 */
+  /** 항목 키를 원하는 순서대로 (그룹 이름도 같은 배열에 섞여 들어간다) */
   order: string[];
   /** 숨긴 항목 키 */
   hidden: string[];
+  /**
+   * 이름 바꾸기. 키(또는 그룹 이름) → 내가 쓸 이름.
+   * 코드가 붙인 이름이 내 머릿속 이름과 다를 수 있다 — "시세분석"을 "스크리너"라고
+   * 부르는 사람에게는 그게 맞는 이름이다.
+   */
+  labels: Record<string, string>;
+  /** 항목을 다른 그룹으로 옮긴다. 항목 키 → 그룹 이름 */
+  groupOf: Record<string, string>;
+  /** 내가 만든 그룹 이름들 — 기본 그룹 외에 더 만들 수 있다 */
+  extraGroups: string[];
 }
 
-const EMPTY: MenuPrefs = { order: [], hidden: [] };
+const EMPTY: MenuPrefs = { order: [], hidden: [], labels: {}, groupOf: {}, extraGroups: [] };
 
 function read(): MenuPrefs {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "null") as MenuPrefs | null;
     if (!raw) return EMPTY;
+    // 필드가 늘기 전에 저장된 것도 그대로 읽힌다
     return {
       order: Array.isArray(raw.order) ? raw.order.map(String) : [],
       hidden: Array.isArray(raw.hidden) ? raw.hidden.map(String) : [],
+      labels: raw.labels && typeof raw.labels === "object" ? raw.labels : {},
+      groupOf: raw.groupOf && typeof raw.groupOf === "object" ? raw.groupOf : {},
+      extraGroups: Array.isArray(raw.extraGroups) ? raw.extraGroups.map(String) : [],
     };
   } catch {
     return EMPTY;

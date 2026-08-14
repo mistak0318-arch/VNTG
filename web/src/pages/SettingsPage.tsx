@@ -24,8 +24,24 @@ function rateColor(rate: number | null): string {
   return "var(--green)";
 }
 
+/**
+ * 설정 탭.
+ *
+ * 카드 열한 개가 한 화면에 쌓여 있으니 찾는 게 일이었다. 성격이 전혀 다른 것들이
+ * 섞여 있었다 — 화면 꾸미기와 API 비용을 같은 목록에서 스크롤로 찾을 이유가 없다.
+ */
+type SettingsTab = "display" | "analysis" | "publish" | "cost";
+
+const SETTINGS_TABS: { key: SettingsTab; label: string; hint: string }[] = [
+  { key: "display", label: "화면", hint: "메뉴 순서 · 테마 · 글꼴" },
+  { key: "analysis", label: "분석 기준", hint: "신호등 기준 · AI 모델" },
+  { key: "publish", label: "발행·알림", hint: "리포트 일정 · 채널 수집 · 시그널" },
+  { key: "cost", label: "비용·상태", hint: "AI 비용 · API 사용량 · 키 상태" },
+];
+
 export function SettingsPage() {
   const appearance = useAppearance();
+  const [tab, setTab] = useState<SettingsTab>("display");
 
   const [usage, setUsage] = useState<ProviderUsage[]>([]);
   const [day, setDay] = useState("");
@@ -67,6 +83,21 @@ export function SettingsPage() {
 
   return (
     <div>
+      <nav className="detail-tabs">
+        {SETTINGS_TABS.map((t) => (
+          <button
+            key={t.key}
+            className={`detail-tab${tab === t.key ? " active" : ""}`}
+            onClick={() => setTab(t.key)}
+            title={t.hint}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+      <p className="page-note">{SETTINGS_TABS.find((t) => t.key === tab)?.hint}</p>
+
+      {tab === "display" && (
       <CollapsibleCard
         id="menuOrder"
         title="메뉴 순서·표시"
@@ -74,7 +105,9 @@ export function SettingsPage() {
       >
         <MenuOrderPanel items={MENU_ITEMS} />
       </CollapsibleCard>
+      )}
 
+      {tab === "publish" && (
       <CollapsibleCard
         id="reportSchedule"
         title="리포트 발행 일정"
@@ -82,7 +115,9 @@ export function SettingsPage() {
       >
         <ReportSchedulePanel />
       </CollapsibleCard>
+      )}
 
+      {tab === "analysis" && (
       <CollapsibleCard
         id="aiModels"
         title="AI 모델"
@@ -94,7 +129,9 @@ export function SettingsPage() {
         </p>
         <AiModelPanel />
       </CollapsibleCard>
+      )}
 
+      {tab === "publish" && (
       <CollapsibleCard
         id="channels"
         title="구독 채널 수집 (텔레그램)"
@@ -106,7 +143,9 @@ export function SettingsPage() {
         </p>
         <ChannelCollectPanel />
       </CollapsibleCard>
+      )}
 
+      {tab === "publish" && (
       <CollapsibleCard
         id="alerts"
         title="관심종목 시그널 (텔레그램)"
@@ -118,7 +157,9 @@ export function SettingsPage() {
         </p>
         <AlertConfigPanel />
       </CollapsibleCard>
+      )}
 
+      {tab === "analysis" && (
       <CollapsibleCard
         id="signal"
         title="신호등 기준"
@@ -130,7 +171,9 @@ export function SettingsPage() {
         </p>
         <SignalConfigPanel />
       </CollapsibleCard>
+      )}
 
+      {tab === "display" && (
       <CollapsibleCard
         id="appearance"
         title="화면 설정"
@@ -193,12 +236,13 @@ export function SettingsPage() {
         </div>
         <div className="table-note">이 설정은 이 기기(브라우저)에만 저장됩니다.</div>
       </CollapsibleCard>
+      )}
 
-      <RefreshBar onRefresh={load} loading={loading} />
+      {tab === "cost" && <RefreshBar onRefresh={load} loading={loading} />}
 
       {error && <div className="error-banner">{error}</div>}
 
-      {totals && (
+      {tab === "cost" && totals && (
         <CollapsibleCard
           id="aiCost"
           title={`AI 비용 (최근 ${totals.days}일)`}
@@ -288,6 +332,7 @@ export function SettingsPage() {
         </CollapsibleCard>
       )}
 
+      {tab === "cost" && (
       <CollapsibleCard
         id="usage"
         title={`API 사용량${day ? ` (${day})` : ""}`}
@@ -395,8 +440,9 @@ export function SettingsPage() {
           ))}
         </div>
       </CollapsibleCard>
+      )}
 
-      {history.length > 0 && (
+      {tab === "cost" && history.length > 0 && (
         <CollapsibleCard id="history" title="최근 호출 추이" hint="최근 14일 일별 호출 수">
           <div className="data-table-wrap">
             <table className="data-table">
@@ -428,6 +474,7 @@ export function SettingsPage() {
         </CollapsibleCard>
       )}
 
+      {tab === "cost" && (
       <CollapsibleCard id="keys" title="API 키 설정 상태" hint="키 설정 여부와 거래 모드">
         <div className="key-list">
           {keys.map((k) => (
@@ -447,6 +494,7 @@ export function SettingsPage() {
           키 값은 서버 밖으로 나가지 않습니다. 설정 여부만 표시합니다 · 값 변경은 server/.env 파일에서 직접
         </div>
       </CollapsibleCard>
+      )}
     </div>
   );
 }

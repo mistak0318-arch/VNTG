@@ -20,7 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
 const FILE = join(DATA_DIR, "aiConfig.json");
 
-export type AiPurpose = "report" | "channel";
+export type AiPurpose = "report" | "channel" | "research";
 
 export interface AiChoice {
   provider: VisionProvider;
@@ -30,14 +30,23 @@ export interface AiChoice {
 export interface AiConfig {
   report: AiChoice | null;
   channel: AiChoice | null;
+  /**
+   * 웹 리서치 — **입력이 제일 큰 자리**다.
+   *
+   * 실측으로 호출당 입력 107,000 토큰이 나왔다. 리포트 본문(8,300)의 열세 배다.
+   * 우리가 정제를 안 해서가 아니라 검색 결과가 대화에 쌓여 매 턴 재전송되기 때문인데,
+   * 그래서 **여기야말로 싼 모델로 갈아 끼울 값어치가 있다.**
+   */
+  research: AiChoice | null;
 }
 
 /** null 이면 기존 동작(ANTHROPIC_API_KEY + CLAUDE_MODEL)을 그대로 쓴다 */
-export const DEFAULT_AI_CONFIG: AiConfig = { report: null, channel: null };
+export const DEFAULT_AI_CONFIG: AiConfig = { report: null, channel: null, research: null };
 
 export const PURPOSE_LABEL: Record<AiPurpose, string> = {
   report: "데일리 리포트",
   channel: "구독 채널 요약",
+  research: "웹 리서치 (입력 정제)",
 };
 
 let cache: AiConfig | null = null;
@@ -59,7 +68,11 @@ export async function saveAiConfig(input: AiConfig): Promise<AiConfig> {
   const clean = (c: AiChoice | null | undefined): AiChoice | null =>
     c && usable.has(c.model) ? { provider: c.provider, model: c.model } : null;
 
-  const next: AiConfig = { report: clean(input.report), channel: clean(input.channel) };
+  const next: AiConfig = {
+    report: clean(input.report),
+    channel: clean(input.channel),
+    research: clean(input.research),
+  };
   cache = next;
   await mkdir(DATA_DIR, { recursive: true });
   await writeFile(FILE, JSON.stringify(next, null, 2), "utf-8");

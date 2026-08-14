@@ -48,11 +48,38 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
 
   if (!info) return null;
 
-  // 마감(15:40) 이후면 지금 값이 그날 종가다. 주말·휴장도 마감으로 본다
+  /*
+   * 지금이 어느 국면인가.
+   *
+   * KRX 는 15:30 에 끝나지만 NXT 는 20:00 까지 돈다. 그 사이에 KRX 값을 "종가"라고
+   * 부르는 건 맞지만, **큰 숫자까지 종가라고 하면 안 된다** — 그 시간대에 실제로
+   * 움직이는 값은 NXT 쪽이기 때문이다.
+   * 그래서 큰 숫자는 언제나 "지금 값"으로 두고, 어디가 만든 값인지를 옆에 적는다.
+   * (정규장 09:00~15:30 · NXT 프리 08:00~ · NXT 애프터 ~20:00 — 당일 흐름 차트와 같은 기준)
+   */
   const kst = new Date(Date.now() + 9 * 3600_000);
   const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
   const weekday = kst.getUTCDay() !== 0 && kst.getUTCDay() !== 6;
-  const closed = !weekday || mins >= 15 * 60 + 40 || mins < 9 * 60;
+  const phase: "pre" | "regular" | "after" | "closed" = !weekday
+    ? "closed"
+    : mins < 8 * 60
+      ? "closed"
+      : mins < 9 * 60
+        ? "pre"
+        : mins <= 15 * 60 + 30
+          ? "regular"
+          : mins < 20 * 60
+            ? "after"
+            : "closed";
+  const closed = phase === "closed";
+  const PHASE_LABEL: Record<typeof phase, string> = {
+    pre: "NXT 프리마켓",
+    regular: "정규장",
+    after: "NXT 애프터마켓",
+    closed: "장 마감",
+  };
+  /** KRX 는 정규장 끝나면 그 값이 종가다 */
+  const krxDone = phase === "after" || phase === "closed";
 
   const sig = String(info.pre_sig ?? "");
   const sign = sigClass(sig);
@@ -63,11 +90,7 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
     <div className="price-header">
       <div className="ph-main">
         <div className="ph-main-label">
-          {/*
-            장중엔 종가가 없다 — 지금 값은 현재가다. 마감 뒤에는 같은 숫자가 그날 종가다.
-            둘을 같은 말로 부르면 "이게 확정값인가"를 알 수 없어서 시각으로 갈라 적는다.
-          */}
-          {closed ? "종가" : "현재가"} <em className="ph-ex">KRX</em>
+          {closed ? "종가" : "현재가"} · {PHASE_LABEL[phase]}
         </div>
         <div className={`ph-price ${sign}`}>{fmtAbsNum(info.cur_prc)}</div>
         <div className={`ph-change ${sign}`}>
@@ -108,6 +131,33 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
             </div>
           );
         })}
+        {/*
+          거래소별 지금 값. KRX 는 15:30 이후면 그게 종가이고, NXT 는 20:00 까지 움직인다.
+          같은 칸에 나란히 둬야 "어느 쪽 숫자를 보고 있는지"가 헷갈리지 않는다.
+        */}
+        <div className="ph-cell">
+          <span className="ph-label">{krxDone ? "종가" : "현재가"} · 거래소별</span>
+          <span className="ph-row">
+            <em className="ph-ex">KRX</em>
+            <b className={`ph-value ${sign}`}>{fmtAbsNum(info.cur_prc)}</b>
+            <em className="ph-when">{krxDone ? "15:30 마감" : "거래 중"}</em>
+          </span>
+          {nxt?.price != null && nxt.price > 0 && (
+            <span className="ph-row">
+              <em className="ph-ex nxt">NXT</em>
+              <b
+                className={`ph-value ${nxt.changeRate > 0 ? "positive" : nxt.changeRate < 0 ? "negative" : ""}`}
+              >
+                {fmtNum(nxt.price)}
+              </b>
+              <em className={`ph-pct ${nxt.changeRate > 0 ? "positive" : nxt.changeRate < 0 ? "negative" : ""}`}>
+                {nxt.changeRate > 0 ? "+" : ""}
+                {nxt.changeRate.toFixed(2)}%
+              </em>
+              <em className="ph-when">{phase === "closed" ? "20:00 마감" : "거래 중"}</em>
+            </span>
+          )}
+        </div>
         <div className="ph-cell">
           {/* 전일종가는 두 거래소가 같다 — 정규장 종가를 기준값으로 쓰기 때문 */}
           <span className="ph-label">전일종가</span>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type ChannelReport } from "../api";
+import { api, type ChannelReport, type PublishJob } from "../api";
+import { ProgressSteps } from "./ProgressSteps";
 
 /**
  * 구독 채널 동향.
@@ -53,6 +54,8 @@ export function ChannelDigestPanel() {
   const [mode, setMode] = useState<"pick" | "ai">("pick");
   /** 방금 실행한 결과 — 저장 안 되는 경우(0건·미리보기)에도 화면에 보여준다 */
   const [fresh, setFresh] = useState<ChannelReport | null>(null);
+  /** 진행 상황 — 채널 200개를 읽는 동안 얼마나 남았는지 보여준다 */
+  const [job, setJob] = useState<PublishJob | null>(null);
 
   function load() {
     api
@@ -68,25 +71,51 @@ export function ChannelDigestPanel() {
     setBusy(send ? "send" : "view");
     setNote(null);
     setFresh(null);
+    setJob(null);
     try {
-      const r = await api.channelsReport({ ai, send, minutes });
-      setFresh(r);
-      if (ai) {
-        load();
-        setOpen(0);
-        setNote(
-          `정리 완료 · 토큰 ${r.inputTokens}/${r.outputTokens}${send ? " · 텔레그램 발송" : ""}`,
-        );
-      } else {
-        setNote(
-          `원본 ${r.rawCount}건 → 선별 ${r.usedCount}건 (AI 미호출 · 비용 없음)` +
-            (send ? " · 텔레그램 발송" : ""),
-        );
-      }
-      if (r.error) setNote((n) => `${n ?? ""} · ${r.error}`);
+      const { jobId } = await api.channelsReport({ ai, send, minutes });
+      // 리포트 발행과 같은 방식 — 곧바로 jobId 를 받고 2초마다 단계를 물어본다
+      let misses = 0;
+      const timer = setInterval(async () => {
+        try {
+          const j = await api.channelsReportStatus(jobId);
+          misses = 0;
+          setJob(j);
+          if (j.status === "running") return;
+          clearInterval(timer);
+          setBusy(null);
+          const r = j.report as ChannelReport | undefined;
+          if (j.status === "error" || !r) {
+            setNote(j.error ?? "실패");
+            return;
+          }
+          setFresh(r);
+          if (ai) {
+            load();
+            setOpen(0);
+            setNote(
+              `정리 완료 · 토큰 ${r.inputTokens}/${r.outputTokens}${send ? " · 텔레그램 발송" : ""}`,
+            );
+          } else {
+            setNote(
+              `원본 ${r.rawCount}건 → 선별 ${r.usedCount}건 (AI 미호출 · 비용 없음)` +
+                (send ? " · 텔레그램 발송" : ""),
+            );
+          }
+          if (r.error) setNote((n) => `${n ?? ""} · ${r.error}`);
+        } catch {
+          // 서버가 재시작하면 작업이 사라진다. 삼키면 영영 "진행 중"으로 남으므로 끊는다
+          misses += 1;
+          if (misses >= 3) {
+            clearInterval(timer);
+            setBusy(null);
+            setJob(null);
+            setNote("진행 상황을 잃었습니다 (서버 재시작?). 새로고침 후 확인하세요.");
+          }
+        }
+      }, 2000);
     } catch (err) {
       setNote(err instanceof Error ? err.message : "실패");
-    } finally {
       setBusy(null);
     }
   }
@@ -163,6 +192,7 @@ export function ChannelDigestPanel() {
       </div>
 
       {note && <div className="alert-note">{note}</div>}
+      {job && <ProgressSteps job={job} />}
 
       {fresh && (
         <div className="page-note">

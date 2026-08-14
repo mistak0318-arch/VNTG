@@ -3,6 +3,7 @@ import { CustomThemePage } from "./pages/CustomThemePage";
 import { ScreenerPage } from "./pages/ScreenerPage";
 import { ScreenPage } from "./pages/ScreenPage";
 import { PaperTradePage } from "./pages/PaperTradePage";
+import { JournalPage } from "./pages/JournalPage";
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
 import { StockDetail } from "./components/StockDetail";
@@ -38,6 +39,7 @@ type Tab =
   | "marketFlow"
   | "customTheme"
   | "signalScreen"
+  | "journal"
   | "ask"
   | "telegram"
   | "stockAnalysis"
@@ -96,6 +98,7 @@ const MENU: {
       { key: "watchKiwoom", label: "관심종목 (키움_HTS)", icon: "🔖" },
       { key: "customTheme", label: "내 테마", icon: "🎯" },
       { key: "signalScreen", label: "신호등 찾기", icon: "🚦" },
+      { key: "journal", label: "복기 노트", icon: "📓" },
       { key: "marketFlow", label: "시장 흐름 분석", icon: "🌊" },
       { key: "telegram", label: "텔레그램 동향", icon: "📡" },
       { key: "calendar", label: "캘린더", icon: "📅" },
@@ -138,13 +141,37 @@ export default function App() {
    * 설정에서 정한 순서·숨김을 입힌다.
    * 숨긴 항목은 사이드바에서만 빠지고 주소로는 여전히 열린다 — 숨겼다고 기능을 막을 이유는 없다.
    */
+  const label = (key: string, fallback: string) => prefs.labels[key]?.trim() || fallback;
+
+  /*
+   * 항목을 내가 지정한 영역으로 옮기고, 영역·이름도 내가 정한 것으로 갈아끼운다.
+   * 새로 만든 영역은 MENU 에 없으므로 여기서 만들어 준다 — 없으면 그리로 옮긴 메뉴가
+   * 사이드바에서 통째로 사라진다.
+   */
+  const flat = MENU.flatMap((g) =>
+    g.items.map((i) => ({ ...i, group: prefs.groupOf[i.key] ?? g.group, accent: g.accent })),
+  );
+  const groupNames = [
+    ...new Set([...MENU.map((g) => g.group), ...prefs.extraGroups, ...Object.values(prefs.groupOf)]),
+  ];
+  const accentOf = new Map(MENU.map((g) => [g.group, g.accent]));
+
   const menu = applyOrder(
-    MENU.map((g) => ({ key: g.group, ...g })),
+    groupNames.map((g) => ({ key: g })),
     prefs.order,
-  ).map((g) => ({
-    ...g,
-    items: applyOrder(g.items, prefs.order).filter((i) => !prefs.hidden.includes(i.key)),
-  })).filter((g) => g.items.length > 0);
+  )
+    .map((g) => ({
+      group: g.key,
+      label: label(g.key, g.key),
+      accent: accentOf.get(g.key) ?? "#8b98a5",
+      items: applyOrder(
+        flat.filter((i) => i.group === g.key),
+        prefs.order,
+      )
+        .filter((i) => !prefs.hidden.includes(i.key))
+        .map((i) => ({ ...i, label: label(i.key, i.label) })),
+    }))
+    .filter((g) => g.items.length > 0);
 
   // 주소창에 이상한 값이 들어와도 화면이 비지 않도록 방어
   const tab = (VALID_TABS.has(route.tab as Tab) ? route.tab : "overview") as Tab;
@@ -185,7 +212,7 @@ export default function App() {
               key={g.group}
               style={{ "--accent": g.accent } as CSSProperties}
             >
-              <div className="nav-group-label">{g.group}</div>
+              <div className="nav-group-label">{g.label}</div>
               {g.items.map((item) => (
                 <button
                   key={item.key}
@@ -223,6 +250,7 @@ export default function App() {
           {tab === "watchKiwoom" && <KiwoomWatchlistPage onSelectStock={onSelectStock} />}
           {tab === "customTheme" && <CustomThemePage onSelectStock={onSelectStock} />}
           {tab === "signalScreen" && <ScreenPage onSelectStock={onSelectStock} />}
+          {tab === "journal" && <JournalPage />}
           {tab === "marketFlow" && <MarketFlowPage onSelectStock={onSelectStock} />}
           {tab === "ask" && <AskPage />}
           {tab === "calendar" && <CalendarPage />}
