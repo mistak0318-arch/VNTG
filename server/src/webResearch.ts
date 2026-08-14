@@ -50,6 +50,8 @@ export interface WebResearchResult {
   inputTokens: number;
   outputTokens: number;
   model: string;
+  /** 앞선 발행의 결과를 그대로 쓴 것인가 — 화면에 밝혀야 오해가 없다 */
+  cached?: boolean;
   error?: string;
 }
 
@@ -66,7 +68,28 @@ function model(): string {
  *
  * @param maxSearches 검색 횟수 상한. 이게 곧 비용 상한이다.
  */
-export async function runWebResearch(maxSearches = 6): Promise<WebResearchResult> {
+/**
+ * 리서치 결과 캐시.
+ *
+ * 이게 이 앱에서 **가장 비싼 호출**이다. 서버사이드 web_search 는 검색 결과가 대화에
+ * 쌓이고 매 턴 통째로 재전송돼서 입력 토큰이 기하급수로 붇는다 — 실측으로 한 번에
+ * 입력 96,000 토큰이 나왔다. 여기에 검색 건당 $0.01 이 따로 붙는다.
+ *
+ * 그런데 발행할 때마다 새로 돌리고 있었다. 조간·장중·석간 세 판이 각각 6~8회씩
+ * 검색하는데, **간밤 미국장은 하루에 한 번 끝난다.** 30분 안에 다시 물어봐야 같은 답이
+ * 온다. 그래서 판이 달라도 같은 창 안이면 앞의 결과를 그대로 쓴다.
+ */
+const RESEARCH_TTL_MS = 90 * 60_000;
+let researchCache: { at: number; searches: number; data: WebResearchResult } | null = null;
+
+export function researchCacheStatus(): { at: number; expiresAt: number } | null {
+  return researchCache ? { at: researchCache.at, expiresAt: researchCache.at + RESEARCH_TTL_MS } : null;
+}
+
+export async function runWebResearch(
+  maxSearches = 6,
+  opts: { force?: boolean } = {},
+): Promise<WebResearchResult> {
   const empty: WebResearchResult = {
     text: null,
     searches: [],
@@ -76,6 +99,16 @@ export async function runWebResearch(maxSearches = 6): Promise<WebResearchResult
     outputTokens: 0,
     model: model(),
   };
+
+  /*
+   * 앞 결과가 아직 유효하면 그대로 쓴다. 다만 이번에 검색을 **더** 하겠다고 요청했으면
+   * (장중 6회 → 조간 8회) 다시 돈다 — 조간은 간밤 해외가 본체라 얕게 보면 안 된다.
+   */
+  if (!opts.force && researchCache && Date.now() - researchCache.at < RESEARCH_TTL_MS) {
+    if (maxSearches <= researchCache.searches) {
+      return { ...researchCache.data, cached: true };
+    }
+  }
 
   if (!isWebResearchConfigured()) {
     return { ...empty, error: "ANTHROPIC_API_KEY 미설정" };
@@ -134,9 +167,17 @@ export async function runWebResearch(maxSearches = 6): Promise<WebResearchResult
 
     const inputTokens = response.usage.input_tokens ?? 0;
     const outputTokens = response.usage.output_tokens ?? 0;
-    void recordApiCall("anthropic", usedModel, "ok", { inputTokens, outputTokens });
+    void recordApiCall("anthropic", usedModel, "ok", {
+      inputTokens,
+      outputTokens,
+      // 웹 검색은 토큰과 별도로 건당 과금된다. 안 세면 리서치 비용이 통째로 빠진다
+      webSearches: searchCount,
+      cacheWriteTokens: (response.usage as { cache_creation_input_tokens?: number }).cache_creation_input_tokens ?? 0,
+      cacheReadTokens: (response.usage as { cache_read_input_tokens?: number }).cache_read_input_tokens ?? 0,
+      feature: "research",
+    });
 
-    return {
+    const result: WebResearchResult = {
       // 인용이 붙으면 한 문장이 여러 text 블록으로 쪼개진다.
       // 줄바꿈으로 이으면 문장 중간이 끊기므로 그대로 이어붙인다.
       text: texts.join("").trim() || null,
@@ -149,6 +190,11 @@ export async function runWebResearch(maxSearches = 6): Promise<WebResearchResult
       model: usedModel,
       error: toolError,
     };
+    // 쓸 만한 결과만 캐시에 넣는다 — 실패한 걸 90분 물고 있으면 그게 더 나쁘다
+    if (result.text && !toolError) {
+      researchCache = { at: Date.now(), searches: maxSearches, data: result };
+    }
+    return result;
   } catch (err) {
     void recordApiCall("anthropic", usedModel, "failed");
     return { ...empty, error: err instanceof Error ? err.message : "리서치 실패" };

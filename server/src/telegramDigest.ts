@@ -219,7 +219,8 @@ export function toDigestText(items: ScoredChannelItem[]): string {
         new Date(it.at).getTime() - new Date(it.firstAt).getTime() > 30 * 60_000
           ? `(${hhmmKst(it.firstAt)}부터)`
           : "";
-      return `${time}${since} ${head}${mark} ${it.text.replace(/\n+/g, " ").slice(0, 220)}`;
+      // 220 → 180자. 텔레그램 메시지는 앞머리에 요지가 오므로 뒤쪽은 대개 부연이다
+      return `${time}${since} ${head}${mark} ${it.text.replace(/\n+/g, " ").slice(0, 180)}`;
     })
     .join("\n");
 }

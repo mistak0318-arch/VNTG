@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getScreenJob, startScreen } from "../signalScreen.js";
+import { evaluateMarket } from "../marketSignal.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
   DEFAULT_CONFIG,
@@ -38,6 +39,18 @@ export function createSignalRouter(client: KiwoomClient): Router {
         .filter(Boolean)
         .slice(0, 40); // 과도한 호출 방지
       res.json({ results: await evaluateMany(client, codes) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 시장 전체 신호등.
+   * `/:code` 보다 **먼저** 등록해야 한다 — 아래 있으면 "market"이 종목코드로 먹힌다.
+   */
+  router.get("/market", async (req, res, next) => {
+    try {
+      res.json(await evaluateMarket(client, req.query.force === "1"));
     } catch (err) {
       next(err);
     }

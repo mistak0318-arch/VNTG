@@ -371,6 +371,7 @@ export const api = {
     }),
   calendarRemove: (id: string) => deleteJson<{ events: CalendarEvent[] }>(`/api/calendar/${id}`),
   apiUsage: () => getJson<{ day: string; providers: ProviderUsage[] }>("/api/settings/usage"),
+  apiUsageTotals: (days = 30) => getJson<UsageTotals>(`/api/settings/usage/totals?days=${days}`),
   apiUsageHistory: (days = 14) =>
     getJson<{ history: { day: string; counts: Record<string, number> }[] }>(
       `/api/settings/usage/history?days=${days}`,
@@ -1075,8 +1076,38 @@ export interface ProviderUsage {
   rateLimited: number;
   usageRate: number | null;
   topEndpoints: { endpoint: string; count: number }[];
-  /** Claude 전용 — 토큰과 추정 비용(USD) */
-  tokens: { input: number; output: number; estimatedUsd: number } | null;
+  /** AI provider 전용 — 토큰과 추정 비용(USD) */
+  tokens: {
+    input: number;
+    output: number;
+    cacheWrite: number;
+    cacheRead: number;
+    webSearches: number;
+    estimatedUsd: number;
+    byModel: { model: string; calls: number; input: number; output: number; usd: number }[];
+    byFeature: { feature: string; label: string; calls: number; usd: number }[];
+    detail: {
+      feature: string;
+      label: string;
+      model: string;
+      calls: number;
+      input: number;
+      output: number;
+      usd: number;
+    }[];
+    hasLegacy: boolean;
+  } | null;
+}
+
+export interface UsageTotals {
+  from: string;
+  to: string;
+  days: number;
+  estimatedUsd: number;
+  byFeature: { feature: string; label: string; calls: number; usd: number }[];
+  byModel: { model: string; calls: number; input: number; output: number; usd: number }[];
+  byDay: { day: string; usd: number }[];
+  hasLegacy: boolean;
 }
 
 export interface FinancialPeriod {

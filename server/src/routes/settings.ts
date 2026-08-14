@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getHistory, getUsage } from "../apiUsage.js";
+import { getHistory, getTotals, getUsage } from "../apiUsage.js";
 import { summarize } from "../summarize.js";
 
 export function createSettingsRouter(): Router {
@@ -9,6 +9,16 @@ export function createSettingsRouter(): Router {
     try {
       const day = typeof req.query.day === "string" ? req.query.day : undefined;
       res.json(await getUsage(day));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 보관 기간 전체의 AI 비용 — 하루치만 보면 "얼마 썼나"에 답을 못 한다 */
+  router.get("/usage/totals", async (req, res, next) => {
+    try {
+      const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 30);
+      res.json(await getTotals(days));
     } catch (err) {
       next(err);
     }

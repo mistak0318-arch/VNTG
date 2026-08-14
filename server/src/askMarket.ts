@@ -152,7 +152,7 @@ export async function askMarket(
 
     const inputTokens = response.usage.input_tokens ?? 0;
     const outputTokens = response.usage.output_tokens ?? 0;
-    void recordApiCall("anthropic", usedModel, "ok", { inputTokens, outputTokens });
+    void recordApiCall("anthropic", usedModel, "ok", { inputTokens, outputTokens, feature: "ask" });
 
     return {
       // 인용이 붙으면 한 문장이 여러 text 블록으로 쪼개진다.

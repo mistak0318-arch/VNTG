@@ -115,7 +115,14 @@ export async function buildChannelReport(
     useOffsets?: boolean;
   } = {},
 ): Promise<ChannelReport> {
-  const { send = false, useAi = true, sinceHours = 12, limit = 60, useOffsets = true } = opts;
+  /*
+   * 선별 상한을 60 → 40 으로 줄였다.
+   *
+   * 이게 곧 프롬프트 길이다. 그런데 61번째로 중요한 소식이 리포트를 바꾸는 일은 없다 —
+   * 점수 순으로 자르는 것이라 뒤쪽은 이미 "채널 하나가 한 번 말한 것"이다.
+   * 40건이면 하루 세 판에서 놓치는 게 없고 입력 토큰은 3분의 1이 준다.
+   */
+  const { send = false, useAi = true, sinceHours = 12, limit = 40, useOffsets = true } = opts;
   const now = new Date();
   const date = new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -175,6 +182,27 @@ export async function buildChannelReport(
         await new Promise((r) => setTimeout(r, 400));
       }
     }
+    return report;
+  }
+
+  /*
+   * 건수가 적으면 AI를 부르지 않는다.
+   *
+   * 선별이 8건이면 그건 이미 사람이 훑을 분량이다. 거기에 요약을 붙여 봐야
+   * 같은 말을 짧게 옮겨 적는 것뿐이고, **원문 링크가 붙은 선별 목록이 오히려 낫다.**
+   * 조용한 새벽 판에서 매번 호출되던 것을 여기서 끊는다.
+   */
+  const AI_MIN_ITEMS = 8;
+  if (items.length < AI_MIN_ITEMS) {
+    if (send) {
+      await sendTelegram(toPickedHeader(report), "channel").catch(() => undefined);
+      for (const msg of toPickedMessages(report, 15)) {
+        await sendTelegram(msg, "channel").catch(() => undefined);
+        await new Promise((r) => setTimeout(r, 400));
+      }
+    }
+    report.error = `선별 ${items.length}건 — ${AI_MIN_ITEMS}건 미만이라 AI 정리 없이 원문만 보냅니다`;
+    await append(report);
     return report;
   }
 

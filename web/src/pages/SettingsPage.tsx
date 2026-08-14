@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FONTS, FONT_SCALES, useAppearance } from "../useAppearance";
-import { api, fmtNum, type ProviderUsage } from "../api";
+import { api, fmtNum, type ProviderUsage, type UsageTotals } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { AiModelPanel } from "../components/AiModelPanel";
 import { AlertConfigPanel } from "../components/AlertConfigPanel";
@@ -30,6 +30,7 @@ export function SettingsPage() {
   const [usage, setUsage] = useState<ProviderUsage[]>([]);
   const [day, setDay] = useState("");
   const [history, setHistory] = useState<{ day: string; counts: Record<string, number> }[]>([]);
+  const [totals, setTotals] = useState<UsageTotals | null>(null);
   const [keys, setKeys] = useState<KeyInfo[]>([]);
   const [isMock, setIsMock] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -39,10 +40,16 @@ export function SettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [u, h, k] = await Promise.all([api.apiUsage(), api.apiUsageHistory(14), api.apiKeys()]);
+      const [u, h, k, t] = await Promise.all([
+        api.apiUsage(),
+        api.apiUsageHistory(14),
+        api.apiKeys(),
+        api.apiUsageTotals(30).catch(() => null),
+      ]);
       setUsage(u.providers);
       setDay(u.day);
       setHistory(h.history);
+      setTotals(t);
       setKeys(k.keys);
       setIsMock(k.isMock);
     } catch (err) {
@@ -191,6 +198,96 @@ export function SettingsPage() {
 
       {error && <div className="error-banner">{error}</div>}
 
+      {totals && (
+        <CollapsibleCard
+          id="aiCost"
+          title={`AI 비용 (최근 ${totals.days}일)`}
+          hint="어느 메뉴가 얼마를 쓰는지 · 모델별 내역"
+        >
+          <div className="cost-head">
+            <span className="cost-total num">${totals.estimatedUsd.toFixed(2)}</span>
+            <span className="cost-range">
+              {totals.from} ~ {totals.to}
+            </span>
+          </div>
+
+          <p className="page-note">
+            공개 단가로 계산한 <b>추정치</b>입니다. 캐시 토큰(쓰기 1.25배 · 읽기 0.1배)과
+            웹 검색 건당 요금까지 반영하지만, 실제 청구액은 Anthropic Console에서 확인하세요.
+            잔여 크레딧은 어떤 API로도 조회되지 않습니다.
+            {totals.hasLegacy && (
+              <>
+                {" "}
+                <b>
+                  ⚠ 기능별 집계가 생기기 전에 쌓인 기록이 섞여 있어 그만큼은 「기타」로 잡힙니다.
+                </b>{" "}
+                지금부터 쌓이는 호출은 메뉴별로 갈립니다.
+              </>
+            )}
+          </p>
+
+          <div className="cost-cols">
+            <div>
+              <div className="cost-sub">메뉴별</div>
+              {totals.byFeature.length === 0 && <div className="empty">기록 없음</div>}
+              {totals.byFeature.map((f) => (
+                <div className="cost-row" key={f.feature}>
+                  <span className="cost-name">{f.label}</span>
+                  <span className="cost-bar-wrap">
+                    <span
+                      className="cost-bar"
+                      style={{
+                        width: `${totals.estimatedUsd > 0 ? (f.usd / totals.estimatedUsd) * 100 : 0}%`,
+                      }}
+                    />
+                  </span>
+                  <span className="num cost-usd">${f.usd.toFixed(2)}</span>
+                  <span className="num cost-calls">{f.calls > 0 ? `${f.calls}회` : "-"}</span>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <div className="cost-sub">모델별</div>
+              {totals.byModel.map((m) => (
+                <div className="cost-row" key={m.model}>
+                  <span className="cost-name">{m.model}</span>
+                  <span className="cost-bar-wrap">
+                    <span
+                      className="cost-bar alt"
+                      style={{
+                        width: `${totals.estimatedUsd > 0 ? (m.usd / totals.estimatedUsd) * 100 : 0}%`,
+                      }}
+                    />
+                  </span>
+                  <span className="num cost-usd">${m.usd.toFixed(2)}</span>
+                  <span className="num cost-calls">
+                    {fmtNum(Math.round((m.input + m.output) / 1000))}K
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="cost-sub" style={{ marginTop: 12 }}>
+            일별
+          </div>
+          <div className="cost-days">
+            {totals.byDay.map((d) => (
+              <div className="cost-day" key={d.day} title={`${d.day} · $${d.usd.toFixed(4)}`}>
+                <span
+                  className="cost-day-bar"
+                  style={{
+                    height: `${Math.max(2, (d.usd / Math.max(...totals.byDay.map((x) => x.usd), 0.0001)) * 40)}px`,
+                  }}
+                />
+                <span className="cost-day-label">{d.day.slice(5)}</span>
+              </div>
+            ))}
+          </div>
+        </CollapsibleCard>
+      )}
+
       <CollapsibleCard
         id="usage"
         title={`API 사용량${day ? ` (${day})` : ""}`}
@@ -252,22 +349,47 @@ export function SettingsPage() {
 
               <div className="usage-note">{p.note}</div>
 
-              {p.topEndpoints.length > 0 && (
+              {/*
+                AI provider 는 모델명만 나열하면 소용이 없다 — "claude-sonnet-5 20회"만
+                봐서는 리포트가 쓴 건지 채널 요약이 쓴 건지 알 수 없다. 어느 메뉴가
+                불렀는지를 앞세우고 모델은 옆에 붙인다.
+              */}
+              {p.tokens && p.tokens.detail.length > 0 ? (
                 <details className="usage-detail">
-                  <summary>호출 내역 (상위 {p.topEndpoints.length})</summary>
+                  <summary>호출 내역 — 메뉴별 ({p.tokens.detail.length})</summary>
                   <table className="data-table" style={{ width: "100%" }}>
                     <tbody>
-                      {p.topEndpoints.map((e) => (
-                        <tr key={e.endpoint}>
+                      {p.tokens.detail.map((d) => (
+                        <tr key={`${d.feature}|${d.model}`}>
                           <td className="sticky-col" style={{ position: "static" }}>
-                            {e.endpoint}
+                            <b>{d.label}</b>
+                            <span className="usage-model"> {d.model}</span>
                           </td>
-                          <td>{fmtNum(e.count)}</td>
+                          <td className="num">{fmtNum(d.calls)}회</td>
+                          <td className="num">${d.usd.toFixed(4)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </details>
+              ) : (
+                p.topEndpoints.length > 0 && (
+                  <details className="usage-detail">
+                    <summary>호출 내역 (상위 {p.topEndpoints.length})</summary>
+                    <table className="data-table" style={{ width: "100%" }}>
+                      <tbody>
+                        {p.topEndpoints.map((e) => (
+                          <tr key={e.endpoint}>
+                            <td className="sticky-col" style={{ position: "static" }}>
+                              {e.endpoint}
+                            </td>
+                            <td>{fmtNum(e.count)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </details>
+                )
               )}
             </div>
           ))}

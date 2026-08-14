@@ -1,4 +1,4 @@
-import { recordApiCall } from "./apiUsage.js";
+import { recordApiCall, type UsageFeature } from "./apiUsage.js";
 
 /**
  * 이미지에서 텍스트를 읽어 구조화하는 계층.
@@ -291,6 +291,8 @@ export async function readImage(
   prefer?: VisionProvider,
   model?: string,
   maxTokens = 4000,
+  /** 어느 메뉴가 부른 건지 — 비용을 기능별로 가르는 데 쓴다 */
+  feature: UsageFeature = "vision",
 ): Promise<VisionResult> {
   const order = prefer
     ? [prefer, ...availableVisionProviders().filter((p) => p !== prefer)]
@@ -315,6 +317,7 @@ export async function readImage(
     try {
       const r = await fn(prompt, imageBase64, mimeType, useModel, maxTokens);
       void recordApiCall(p, r.model ?? p, r.text ? "ok" : "failed", {
+        feature,
         inputTokens: r.inputTokens,
         outputTokens: r.outputTokens,
       });
@@ -377,11 +380,19 @@ export function availableTextModels(): VisionModelOption[] {
   return TEXT_MODELS.filter((m) => ok.has(m.provider));
 }
 
+/**
+ * 이미지 없이 텍스트만 생성. 설정에서 용도별 모델을 고르면 이 경로로 온다.
+ *
+ * readImage 와 같은 함수를 쓰므로 **기능을 넘겨야 한다.** 안 넘기면 리포트를
+ * Gemini 로 돌렸을 때 그 비용이 "이미지 인식"으로 잡힌다 — 어느 메뉴가 돈을 쓰는지
+ * 보려고 만든 집계가 거꾸로 거짓말을 하게 된다.
+ */
 export async function generateText(
   prompt: string,
   maxTokens = 2500,
   provider?: VisionProvider,
   model?: string,
+  feature: UsageFeature = "other",
 ): Promise<VisionResult> {
-  return readImage(prompt, "", "", provider, model, maxTokens);
+  return readImage(prompt, "", "", provider, model, maxTokens, feature);
 }

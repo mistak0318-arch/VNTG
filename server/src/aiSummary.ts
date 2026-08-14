@@ -5,6 +5,7 @@ import { runWebResearch, toResearchDigest } from "./webResearch.js";
 import { describeBreadth, listBreadth, toPoints } from "./breadthStore.js";
 import { listSectorFlow, toSectorFlowDigest } from "./sectorFlowStore.js";
 import { evaluateLinks, toUsKrDigest } from "./usKrLinks.js";
+import { evaluateMarket, toMarketSignalDigest } from "./marketSignal.js";
 import { getSection } from "./marketOverview.js";
 import type { IndexCard, MarketFlow, StockRow, HighLow } from "./marketOverview.js";
 import type { GlobalQuote } from "./globalMarket.js";
@@ -160,6 +161,16 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
   if (flowDigest) lines.push(flowDigest);
 
   /*
+   * 시장 전체 신호등. 개별 수치보다 먼저 "지금이 살 자리인가"를 한 줄로 준다.
+   * 아래 항목들이 전부 이 판정의 근거이므로 여기 놓아야 읽는 순서가 맞다.
+   */
+  const marketSig = await evaluateMarket(client).catch(() => null);
+  if (marketSig) {
+    const sigDigest = toMarketSignalDigest(marketSig);
+    if (sigDigest) lines.push(sigDigest);
+  }
+
+  /*
    * 밤사이 미국이 어느 국내 테마로 이어지는지.
    * "나스닥 +0.8%"만 있으면 사람이 머릿속으로 이어야 하는데, 그 연결을 붙여서 준다.
    * 아직 상관계수 검증 전이라 프롬프트에 "가설"이라고 못박아 둔다.
@@ -253,8 +264,12 @@ const SYSTEM_RULES = `너는 한국 주식시장 데이터를 정리해 주는 �
   소수 대형주만 끌어올린 것인지 반드시 구분해라.
 - **장중 흐름**(4개 지점)이 있으면 초반·중반·후반 중 어디서 힘이 실렸는지 짚어라.
 - 한국어로, 군더더기 없이. 아래 항목만, 이 순서로 쓴다.
-- **전체 분량은 한글 1,600~2,200자.** 항목마다 3~5문장.
+- **분량 제한은 반드시 지켜라. 항목마다 최대 5문장, 전체 한글 2,200자를 넘기지 마라.**
+  넘길 것 같으면 항목을 줄이지 말고 **문장을 줄여라.** 마지막 체크포인트 구획까지
+  반드시 다 쓰고 끝내야 한다 — 중간에 잘리면 그 리포트는 쓸 수 없다.
   데이터가 많아졌으므로 나열하지 말고 **연결해라** — 같은 사실을 두 항목에서 반복하지 마라.
+- 수치를 그대로 옮겨 적지 마라. 표에 있는 숫자는 화면에 이미 있다.
+  **그 숫자가 무엇을 뜻하는지**만 쓴다.
 
 <우선순위>
 데이터에 [내가 만든 테마]가 있으면 **그것을 [강한 테마]보다 먼저, 더 비중 있게** 다뤄라.
@@ -408,10 +423,19 @@ export async function buildAiSummary(
    * 웹 검색을 붙여 간밤 미국장과 시장이 주목하는 주제를 직접 확인하게 한다.
    * 검색은 회당 $0.01이라 상한(max_uses)으로 비용을 막는다.
    */
-  // 조간은 간밤 해외가 본체인데 우리가 가진 해외 데이터는 지수 몇 개뿐이라 검색을 더 준다
+  /*
+   * 검색 횟수를 줄였다 (조간 8→5 / 장중·석간 6→3 / 주말 4→2).
+   *
+   * 검색 한 번은 $0.01 이지만 진짜 비용은 토큰이다. 검색 결과가 대화에 쌓이고 매 턴
+   * 재전송되므로 **횟수를 줄이면 입력 토큰이 그보다 빠르게 준다.** 실측으로 이 호출
+   * 하나가 입력 96,000 토큰을 썼다.
+   *
+   * 조간에만 넉넉히 준다 — 간밤 해외가 본체인데 우리가 가진 해외 데이터는 지수 몇 개뿐이다.
+   * 장중·석간은 국내 시세가 이미 손에 있으므로 검색이 덜 아쉽다.
+   */
   const research = process.env.RESEARCH_ENABLED === "0"
     ? null
-    : await runWebResearch(weekend ? 4 : morning ? 8 : 6).catch(() => null);
+    : await runWebResearch(weekend ? 2 : morning ? 5 : 3).catch(() => null);
   const label = editionKey
     ? {
         morning: "조간(장 시작 전)",
