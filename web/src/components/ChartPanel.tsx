@@ -1,5 +1,6 @@
 import type { BusinessDay, UTCTimestamp } from "lightweight-charts";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useLive } from "../useLive";
 import { api, pickList, type RawRecord } from "../api";
 import { CandleChart, type Candle } from "./CandleChart";
 
@@ -82,31 +83,20 @@ export function ChartPanel({
   initialPeriod?: Period;
 }) {
   const [period, setPeriod] = useState<Period>(initialPeriod);
-  const [chart, setChart] = useState<RawRecord | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    PERIOD_CONFIG[period]
-      .fetch(code)
-      .then((res) => {
-        if (!cancelled) setChart(res);
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [code, period]);
-
   const isIntraday = PERIOD_CONFIG[period].intraday === true;
+
+  /*
+   * 장중에는 조용히 갱신된다. 주기는 봉 단위에 맞춘다 —
+   * 일봉은 하루에 한 번만 값이 바뀌므로 자주 부를 이유가 없고(마지막 봉의 종가만 움직인다),
+   * 분봉은 자주 갱신돼야 의미가 있다. CandleChart 가 차트를 다시 만들지 않고
+   * 데이터만 갈아끼우므로 확대해 둔 구간은 그대로 유지된다.
+   */
+  const { data: chart, loading, error } = useLive<RawRecord>(
+    () => PERIOD_CONFIG[period].fetch(code),
+    [code, period],
+    isIntraday ? 10_000 : 60_000,
+  );
+
   const candles = toCandles(chart, period);
 
   return (

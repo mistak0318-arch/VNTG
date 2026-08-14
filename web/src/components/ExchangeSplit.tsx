@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
 import { api, fmtNum, type ExchangeQuote } from "../api";
+import { useLive } from "../useLive";
 
 /**
  * 거래소별 시세 — KRX / NXT / 통합.
@@ -16,25 +16,16 @@ function pct(n: number): string {
 }
 
 export function ExchangeSplit({ code }: { code: string }) {
-  const [rows, setRows] = useState<ExchangeQuote[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // 장중에는 5초마다 조용히 갱신된다 (거래소 3곳 = 호출 3회)
+  const { data, loading, error, updatedAt } = useLive(
+    () => api.exchangeQuotes(code),
+    [code],
+    5000,
+  );
+  const rows = data?.exchanges ?? [];
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    api
-      .exchangeQuotes(code)
-      .then((r) => !cancelled && setRows(r.exchanges))
-      .catch((e: Error) => !cancelled && setError(e.message))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [code]);
-
-  if (loading) return <div className="empty">거래소별 시세 불러오는 중…</div>;
-  if (error) return <div className="error-banner">{error}</div>;
+  if (loading && rows.length === 0) return <div className="empty">거래소별 시세 불러오는 중…</div>;
+  if (error && rows.length === 0) return <div className="error-banner">{error}</div>;
   if (rows.length === 0) return null;
 
   const krx = rows.find((r) => r.key === "krx");
@@ -80,6 +71,11 @@ export function ExchangeSplit({ code }: { code: string }) {
         </table>
       </div>
       <div className="table-note">
+        {updatedAt && (
+          <>
+            {new Date(updatedAt).toLocaleTimeString("ko-KR", { hour12: false })} 기준 ·{" "}
+          </>
+        )}
         같은 종목이라도 거래소마다 체결가가 달라 <b>고가·저가가 갈립니다</b>
         {best("high") && best("high") !== "동일" && <> — 오늘 고가는 <b>{best("high")}</b>에서 찍혔습니다</>}.
         <b> 통합</b>은 두 곳을 합친 값이라 그날의 실제 고가·저가와 총 거래량이 여기 있습니다.

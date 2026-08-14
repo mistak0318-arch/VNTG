@@ -2,7 +2,9 @@ import {
   createChart,
   ColorType,
   LineStyle,
+  type IChartApi,
   type IPriceLine,
+  type ISeriesApi,
   type SeriesMarker,
   type Time,
 } from "lightweight-charts";
@@ -88,6 +90,14 @@ function labelDate(time: Time): string {
   return String(time);
 }
 
+/**
+ * 캔들 차트.
+ *
+ * **차트 생성과 데이터 갱신을 분리했다.** 장중에 몇 초마다 시세를 새로 받는데,
+ * 그때마다 차트를 통째로 다시 만들면 사용자가 확대해 둔 구간과 스크롤 위치가
+ * 매번 초기화된다 — 보고 있던 자리가 사라지므로 갱신이 방해가 된다.
+ * 그래서 차트는 한 번만 만들고, 새 데이터는 series 에 setData 로 갈아끼운다.
+ */
 export function CandleChart({
   candles,
   intraday = false,
@@ -107,10 +117,21 @@ export function CandleChart({
   const tipRef = useRef<HTMLDivElement>(null);
   const { theme } = useAppearance();
 
+  const chartRef = useRef<IChartApi | null>(null);
+  const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const maRefs = useRef<ISeriesApi<"Line">[]>([]);
+  const volRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  /** 최신 캔들 — 크로스헤어 핸들러가 항상 최신 배열을 보게 한다 */
+  const dataRef = useRef<Candle[]>(candles);
+  dataRef.current = candles;
+  /** 첫 데이터에서만 화면을 맞춘다. 갱신 때 fitContent 하면 확대가 풀린다 */
+  const fitted = useRef(false);
+
+  // ── 차트 생성 (테마·분봉 여부가 바뀔 때만) ────────────────────────────
   useEffect(() => {
     const c = chartColors(theme);
     const el = containerRef.current;
-    if (!el || candles.length === 0) return;
+    if (!el) return;
 
     const chart = createChart(el, {
       width: el.clientWidth,
@@ -121,6 +142,7 @@ export function CandleChart({
       // 분봉은 시:분까지 보여야 한다
       timeScale: { borderColor: c.border, timeVisible: intraday, secondsVisible: false },
     });
+    chartRef.current = chart;
 
     const candleSeries = chart.addCandlestickSeries({
       upColor: "#ff5c5c",
@@ -130,19 +152,11 @@ export function CandleChart({
       wickDownColor: "#4c8dff",
     });
     candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.3 } });
-    candleSeries.setData(
-      candles.map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })),
-    );
+    candleRef.current = candleSeries;
 
-    for (const { period, color } of MA_LINES) {
-      const line = chart.addLineSeries({
-        color,
-        lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: false,
-      });
-      line.setData(sma(candles, period));
-    }
+    maRefs.current = MA_LINES.map(({ color }) =>
+      chart.addLineSeries({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false }),
+    );
 
     const volumeSeries = chart.addHistogramSeries({
       priceScaleId: "volume",
@@ -152,86 +166,7 @@ export function CandleChart({
       lastValueVisible: false,
     });
     volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.72, bottom: 0.05 }, visible: false });
-    volumeSeries.setData(
-      candles.map((c) => ({
-        time: c.time,
-        value: c.volume,
-        color: c.close >= c.open ? "rgba(255,92,92,0.5)" : "rgba(76,141,255,0.5)",
-      })),
-    );
-
-    /**
-     * HTS처럼 최고/최저를 가로선 + 마커로 표시.
-     * 전체 기간이 아니라 "지금 화면에 보이는 구간" 기준이라, 확대·이동하면 그 구간의
-     * 고점/저점으로 다시 계산된다.
-     */
-    if (showExtremes && candles.length > 1) {
-      const last = candles[candles.length - 1].close;
-      const pct = (v: number) => {
-        const r = ((last - v) / v) * 100;
-        return `${r > 0 ? "+" : ""}${r.toFixed(2)}%`;
-      };
-      const won = (v: number) => v.toLocaleString("ko-KR");
-
-      let hiLine: IPriceLine | null = null;
-      let loLine: IPriceLine | null = null;
-
-      const refresh = () => {
-        const range = chart.timeScale().getVisibleLogicalRange();
-        if (!range) return;
-        // 논리 범위는 소수·범위 밖 값이 올 수 있어 배열 인덱스로 잘라 쓴다
-        const from = Math.max(0, Math.ceil(range.from));
-        const to = Math.min(candles.length - 1, Math.floor(range.to));
-        if (to <= from) return;
-
-        const { hi, lo } = extremes(candles.slice(from, to + 1));
-        if (hiLine) candleSeries.removePriceLine(hiLine);
-        if (loLine) candleSeries.removePriceLine(loLine);
-
-        hiLine = candleSeries.createPriceLine({
-          price: hi.high,
-          color: "#ff5c5c",
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-          axisLabelVisible: true,
-          title: `최고 ${won(hi.high)} (${pct(hi.high)}, ${labelDate(hi.time)})`,
-        });
-        loLine = candleSeries.createPriceLine({
-          price: lo.low,
-          color: "#4c8dff",
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-          axisLabelVisible: true,
-          title: `최저 ${won(lo.low)} (${pct(lo.low)}, ${labelDate(lo.time)})`,
-        });
-
-        const markers: SeriesMarker<Time>[] = [
-          {
-            time: hi.time,
-            position: "aboveBar",
-            color: "#ff5c5c",
-            shape: "arrowDown",
-            text: `최고 ${won(hi.high)}`,
-          },
-          {
-            time: lo.time,
-            position: "belowBar",
-            color: "#4c8dff",
-            shape: "arrowUp",
-            text: `최저 ${won(lo.low)}`,
-          },
-        ];
-        // setMarkers는 시간 오름차순을 요구한다. 같은 봉이면 겹치므로 하나만.
-        candleSeries.setMarkers(
-          timeValue(hi.time) === timeValue(lo.time)
-            ? [markers[0]]
-            : [...markers].sort((a, b) => timeValue(a.time) - timeValue(b.time)),
-        );
-      };
-
-      chart.timeScale().subscribeVisibleLogicalRangeChange(refresh);
-      refresh();
-    }
+    volRef.current = volumeSeries;
 
     /**
      * 봉 위에 올렸을 때 그 봉의 정보를 띄운다 (키움 차트와 같은 방식).
@@ -240,15 +175,6 @@ export function CandleChart({
      * 이동평균은 값과 함께 `(MA − 종가) / 종가` 이격을 보여준다. 종가가 이평선에서
      * 얼마나 떨어져 있는지가 이평선 값 자체보다 판단에 쓰인다.
      */
-    const maSeries = MA_LINES.map((m) => ({ ...m, data: sma(candles, m.period) }));
-    const indexOfTime = new Map<number, number>();
-    candles.forEach((c, i) => indexOfTime.set(timeValue(c.time), i));
-    const maAt = maSeries.map((m) => {
-      const byTime = new Map<number, number>();
-      for (const p of m.data) byTime.set(timeValue(p.time), p.value);
-      return { period: m.period, color: m.color, byTime };
-    });
-
     const won = (v: number) => Math.round(v).toLocaleString("ko-KR");
     const rate = (v: number, base: number) => {
       if (!base) return "";
@@ -257,20 +183,21 @@ export function CandleChart({
     };
     const rateCls = (v: number, base: number) => (v > base ? "up" : v < base ? "down" : "");
 
-    const tip = tipRef.current;
     const onMove = (param: { time?: Time; point?: { x: number; y: number } }) => {
+      const tip = tipRef.current;
       if (!tip) return;
-      if (!param.time || !param.point) {
+      const rows = dataRef.current;
+      if (!param.time || !param.point || rows.length === 0) {
         tip.style.display = "none";
         return;
       }
-      const i = indexOfTime.get(timeValue(param.time));
-      if (i === undefined) {
+      const i = rows.findIndex((r) => timeValue(r.time) === timeValue(param.time as Time));
+      if (i < 0) {
         tip.style.display = "none";
         return;
       }
-      const cur = candles[i];
-      const prev = candles[i - 1];
+      const cur = rows[i];
+      const prev = rows[i - 1];
       // 첫 봉은 비교 대상이 없다 — 시가를 기준으로 삼는다 (0으로 나누는 것보다 낫다)
       const base = prev ? prev.close : cur.open;
 
@@ -278,21 +205,21 @@ export function CandleChart({
         `<div class="ct-row"><span>${label}</span><b class="${rateCls(value, base)}">${won(value)}</b>` +
         `<i class="${rateCls(value, base)}">${rate(value, base)}</i></div>`;
 
-      const volRate = prev && prev.volume > 0
-        ? `${cur.volume >= prev.volume ? "+" : ""}${(((cur.volume - prev.volume) / prev.volume) * 100).toFixed(2)}%`
-        : "";
+      const volRate =
+        prev && prev.volume > 0
+          ? `${cur.volume >= prev.volume ? "+" : ""}${(((cur.volume - prev.volume) / prev.volume) * 100).toFixed(2)}%`
+          : "";
 
-      const maRows = maAt
-        .map((m) => {
-          const v = m.byTime.get(timeValue(cur.time));
-          if (v === undefined) return "";
-          const gap = ((v - cur.close) / cur.close) * 100;
-          return (
-            `<div class="ct-row"><span><i class="ct-dot" style="background:${m.color}"></i>${m.period}</span>` +
-            `<b>${won(v)}</b><i>${gap > 0 ? "+" : ""}${gap.toFixed(2)}%</i></div>`
-          );
-        })
-        .join("");
+      const maRows = MA_LINES.map((m) => {
+        const series = sma(rows, m.period);
+        const hit = series.find((p) => timeValue(p.time) === timeValue(cur.time));
+        if (!hit) return "";
+        const gap = ((hit.value - cur.close) / cur.close) * 100;
+        return (
+          `<div class="ct-row"><span><i class="ct-dot" style="background:${m.color}"></i>${m.period}</span>` +
+          `<b>${won(hit.value)}</b><i>${gap > 0 ? "+" : ""}${gap.toFixed(2)}%</i></div>`
+        );
+      }).join("");
 
       tip.innerHTML =
         (name ? `<div class="ct-name">${name}${code ? `(${code})` : ""}</div>` : "") +
@@ -309,20 +236,112 @@ export function CandleChart({
       const w = tip.offsetWidth;
       const left = param.point.x + 16 + w > el.clientWidth ? param.point.x - w - 16 : param.point.x + 16;
       tip.style.left = `${Math.max(4, left)}px`;
-      tip.style.top = `8px`;
+      tip.style.top = "8px";
     };
-
     chart.subscribeCrosshairMove(onMove);
-
-    chart.timeScale().fitContent();
 
     const resize = () => chart.applyOptions({ width: el.clientWidth });
     window.addEventListener("resize", resize);
+
+    fitted.current = false;
     return () => {
       window.removeEventListener("resize", resize);
       chart.remove();
+      chartRef.current = null;
+      candleRef.current = null;
+      maRefs.current = [];
+      volRef.current = null;
     };
-  }, [candles, intraday, showExtremes, theme]);
+  }, [intraday, theme, name, code]);
+
+  // ── 데이터 갱신 (차트는 그대로 두고 값만) ─────────────────────────────
+  useEffect(() => {
+    const chart = chartRef.current;
+    const candleSeries = candleRef.current;
+    if (!chart || !candleSeries || candles.length === 0) return;
+
+    candleSeries.setData(
+      candles.map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })),
+    );
+    maRefs.current.forEach((line, i) => line.setData(sma(candles, MA_LINES[i].period)));
+    volRef.current?.setData(
+      candles.map((c) => ({
+        time: c.time,
+        value: c.volume,
+        color: c.close >= c.open ? "rgba(255,92,92,0.5)" : "rgba(76,141,255,0.5)",
+      })),
+    );
+
+    // 처음 한 번만 화면을 맞춘다 — 갱신 때마다 하면 사용자가 확대해 둔 구간이 풀린다
+    if (!fitted.current) {
+      chart.timeScale().fitContent();
+      fitted.current = true;
+    }
+
+    /**
+     * HTS처럼 최고/최저를 가로선 + 마커로 표시.
+     * 전체 기간이 아니라 "지금 화면에 보이는 구간" 기준이라, 확대·이동하면 그 구간의
+     * 고점/저점으로 다시 계산된다.
+     */
+    if (!showExtremes || candles.length < 2) return;
+
+    const last = candles[candles.length - 1].close;
+    const pct = (v: number) => {
+      const r = ((last - v) / v) * 100;
+      return `${r > 0 ? "+" : ""}${r.toFixed(2)}%`;
+    };
+    const won = (v: number) => v.toLocaleString("ko-KR");
+
+    let hiLine: IPriceLine | null = null;
+    let loLine: IPriceLine | null = null;
+
+    const refresh = () => {
+      const range = chart.timeScale().getVisibleLogicalRange();
+      if (!range) return;
+      // 논리 범위는 소수·범위 밖 값이 올 수 있어 배열 인덱스로 잘라 쓴다
+      const from = Math.max(0, Math.ceil(range.from));
+      const to = Math.min(candles.length - 1, Math.floor(range.to));
+      if (to <= from) return;
+
+      const { hi, lo } = extremes(candles.slice(from, to + 1));
+      if (hiLine) candleSeries.removePriceLine(hiLine);
+      if (loLine) candleSeries.removePriceLine(loLine);
+
+      hiLine = candleSeries.createPriceLine({
+        price: hi.high,
+        color: "#ff5c5c",
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `최고 ${won(hi.high)} (${pct(hi.high)}, ${labelDate(hi.time)})`,
+      });
+      loLine = candleSeries.createPriceLine({
+        price: lo.low,
+        color: "#4c8dff",
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: `최저 ${won(lo.low)} (${pct(lo.low)}, ${labelDate(lo.time)})`,
+      });
+
+      const markers: SeriesMarker<Time>[] = [
+        { time: hi.time, position: "aboveBar", color: "#ff5c5c", shape: "arrowDown", text: `최고 ${won(hi.high)}` },
+        { time: lo.time, position: "belowBar", color: "#4c8dff", shape: "arrowUp", text: `최저 ${won(lo.low)}` },
+      ];
+      // setMarkers는 시간 오름차순을 요구한다. 같은 봉이면 겹치므로 하나만.
+      candleSeries.setMarkers(
+        timeValue(hi.time) === timeValue(lo.time)
+          ? [markers[0]]
+          : [...markers].sort((a, b) => timeValue(a.time) - timeValue(b.time)),
+      );
+    };
+
+    chart.timeScale().subscribeVisibleLogicalRangeChange(refresh);
+    refresh();
+    return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(refresh);
+    };
+  }, [candles, showExtremes]);
 
   if (candles.length === 0) {
     return <div className="empty">차트 데이터 없음</div>;
