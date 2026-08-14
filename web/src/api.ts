@@ -259,6 +259,7 @@ export const api = {
       "/api/report/publish-now",
       { deliver },
     ),
+  usKr: () => getJson<{ links: EvaluatedLink[]; themeNames: string[]; at: string }>("/api/us-kr"),
   rankSpecs: () => getJson<{ groups: RankSpecGroup[] }>("/api/rank/specs"),
   rank: (key: string, market = "000", exchange = "3") =>
     getJson<RankResult>(`/api/rank/${key}?market=${market}&exchange=${exchange}`),
@@ -652,6 +653,27 @@ export interface EditionSlot {
   days: "weekday" | "weekend" | "always";
   /** 발행 후 텔레그램·메일로 보낼지 */
   deliver: boolean;
+}
+
+export interface UsQuote {
+  symbol: string;
+  name: string;
+  price: number | null;
+  changeRate: number | null;
+  error: string | null;
+}
+
+export interface EvaluatedLink {
+  label: string;
+  us: string[];
+  kr: string[];
+  memo?: string;
+  usQuotes: UsQuote[];
+  usAvg: number | null;
+  krThemes: { name: string; changeRate: number | null; found: boolean }[];
+  krAvg: number | null;
+  /** 미국 대비 국내가 얼마나 따라왔는가(%p) */
+  gap: number | null;
 }
 
 export interface RankSpecGroup {

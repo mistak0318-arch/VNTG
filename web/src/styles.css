@@ -3130,3 +3130,47 @@ body {
 .candle-tip .up { color: var(--red); }
 .candle-tip .down { color: var(--blue); }
 .candle-tip .ct-dot { width: 7px; height: 2px; border-radius: 1px; display: inline-block; }
+
+/* ===== 미국 ↔ 국내 테마 연동 =====
+   왼쪽 미국 / 오른쪽 국내를 나란히. 연결은 가설이므로 단정적으로 보이지 않게 둔다 */
+.uk-card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; margin-bottom: 8px; overflow: hidden;
+}
+.uk-card.open { border-color: var(--blue); }
+.uk-head {
+  display: grid;
+  grid-template-columns: 14px minmax(84px, 1.1fr) 92px 18px 92px auto;
+  align-items: center; gap: 8px;
+  width: 100%; padding: 9px 12px;
+  background: none; border: none; color: var(--text);
+  font-size: 12.5px; text-align: left; cursor: pointer;
+}
+.uk-head:hover { background: var(--panel-2); }
+.uk-caret { color: var(--muted); font-size: 10px; }
+.uk-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uk-side { display: flex; align-items: baseline; gap: 5px; justify-content: flex-end; }
+.uk-cap { font-size: 10px; color: var(--muted); }
+.uk-side b { font-variant-numeric: tabular-nums; }
+.uk-arrow { color: var(--muted); text-align: center; }
+.uk-gap { font-size: 10.5px; text-align: right; }
+
+.uk-body {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  padding: 10px 12px 12px; border-top: 1px solid var(--border);
+}
+@media (max-width: 720px) { .uk-body { grid-template-columns: 1fr; } }
+.uk-col-name { font-size: 10.5px; color: var(--muted); margin-bottom: 5px; }
+.uk-row {
+  display: grid; grid-template-columns: 52px minmax(0, 1fr) 62px;
+  align-items: center; gap: 6px; padding: 3px 0; font-size: 11.5px;
+}
+.uk-row.missing { opacity: 0.5; }
+.uk-sym { font-weight: 600; }
+.uk-nm { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uk-nm.wide { grid-column: 1 / 3; }
+.uk-row .num { text-align: right; font-variant-numeric: tabular-nums; }
+.uk-memo {
+  grid-column: 1 / -1; font-size: 11px; color: var(--muted);
+  border-top: 1px dashed var(--border); padding-top: 7px;
+}

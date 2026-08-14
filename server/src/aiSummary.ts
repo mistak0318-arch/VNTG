@@ -4,6 +4,7 @@ import { getTradeStats, toTradeDigest } from "./tradeStats.js";
 import { runWebResearch, toResearchDigest } from "./webResearch.js";
 import { describeBreadth, listBreadth, toPoints } from "./breadthStore.js";
 import { listSectorFlow, toSectorFlowDigest } from "./sectorFlowStore.js";
+import { evaluateLinks, toUsKrDigest } from "./usKrLinks.js";
 import { getSection } from "./marketOverview.js";
 import type { IndexCard, MarketFlow, StockRow, HighLow } from "./marketOverview.js";
 import type { GlobalQuote } from "./globalMarket.js";
@@ -150,6 +151,15 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
   const flowDays = await listSectorFlow(14).catch(() => []);
   const flowDigest = toSectorFlowDigest(flowDays);
   if (flowDigest) lines.push(flowDigest);
+
+  /*
+   * 밤사이 미국이 어느 국내 테마로 이어지는지.
+   * "나스닥 +0.8%"만 있으면 사람이 머릿속으로 이어야 하는데, 그 연결을 붙여서 준다.
+   * 아직 상관계수 검증 전이라 프롬프트에 "가설"이라고 못박아 둔다.
+   */
+  const usKr = await evaluateLinks(client).then((r) => r.links).catch(() => []);
+  const usKrDigest = toUsKrDigest(usKr);
+  if (usKrDigest) lines.push(usKrDigest);
 
   // 테마·급등락·신고저는 전부 "당일" 값이라 거래 전에는 0이다. 넣으면 해만 된다.
   if (drivers && traded) {
