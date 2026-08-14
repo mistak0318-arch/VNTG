@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type CalendarEvent, type EventKind } from "../api";
+import { DartTodayPanel } from "../components/DartTodayPanel";
 import { CalendarImageImport } from "../components/CalendarImageImport";
 import { EconomicCalendarCard } from "../components/EconomicCalendarCard";
 import { RefreshBar } from "../components/RefreshBar";
@@ -208,6 +209,11 @@ export function CalendarPage() {
       <RefreshBar onRefresh={load} loading={loading} />
       {error && <div className="error-banner">{error}</div>}
 
+      {/* 이미 벌어진 일이 예정된 일보다 급하다 — 달력보다 위에 둔다 */}
+      <h3 className="section-heading">오늘 공시</h3>
+      <DartTodayPanel />
+
+      <h3 className="section-heading">일정</h3>
       <div className="cal-toolbar">
         <button className="filter-btn" onClick={() => shiftMonth(-1)}>
           ‹ 이전

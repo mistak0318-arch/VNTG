@@ -73,23 +73,6 @@ export function ChannelDigestPanel() {
     setFresh(null);
     setJob(null);
     try {
-<<<<<<< HEAD
-      const r = await api.channelsReport({ ai, send, minutes });
-      setFresh(r);
-      if (ai) {
-        load();
-        setOpen(0);
-        setNote(
-          `정리 완료 · 토큰 ${r.inputTokens}/${r.outputTokens}${send ? " · 텔레그램 발송" : ""}`,
-        );
-      } else {
-        setNote(
-          `원본 ${r.rawCount}건 → 선별 ${r.usedCount}건 (AI 미호출 · 비용 없음)` +
-            (send ? " · 텔레그램 발송" : ""),
-        );
-      }
-      if (r.error) setNote((n) => `${n ?? ""} · ${r.error}`);
-=======
       const { jobId } = await api.channelsReport({ ai, send, minutes });
       // 리포트 발행과 같은 방식 — 곧바로 jobId 를 받고 2초마다 단계를 물어본다
       let misses = 0;
@@ -131,7 +114,6 @@ export function ChannelDigestPanel() {
           }
         }
       }, 2000);
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
     } catch (err) {
       setNote(err instanceof Error ? err.message : "실패");
       setBusy(null);

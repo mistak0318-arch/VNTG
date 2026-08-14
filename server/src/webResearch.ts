@@ -156,8 +156,6 @@ export function isResearchWarming(): boolean {
   return warming !== null;
 }
 
-<<<<<<< HEAD
-=======
 /**
  * Gemini + Google 검색 그라운딩.
  *
@@ -243,7 +241,6 @@ async function geminiResearch(modelName: string, maxSearches: number): Promise<W
   }
 }
 
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
 export async function runWebResearch(
   maxSearches = 6,
   opts: { force?: boolean } = {},

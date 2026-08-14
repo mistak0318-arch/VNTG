@@ -3,10 +3,7 @@ import { CustomThemePage } from "./pages/CustomThemePage";
 import { ScreenerPage } from "./pages/ScreenerPage";
 import { ScreenPage } from "./pages/ScreenPage";
 import { PaperTradePage } from "./pages/PaperTradePage";
-<<<<<<< HEAD
-=======
 import { JournalPage } from "./pages/JournalPage";
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
 import { StockDetail } from "./components/StockDetail";
@@ -101,10 +98,7 @@ const MENU: {
       { key: "watchKiwoom", label: "관심종목 (키움_HTS)", icon: "🔖" },
       { key: "customTheme", label: "내 테마", icon: "🎯" },
       { key: "signalScreen", label: "신호등 찾기", icon: "🚦" },
-<<<<<<< HEAD
-=======
       { key: "journal", label: "복기 노트", icon: "📓" },
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
       { key: "marketFlow", label: "시장 흐름 분석", icon: "🌊" },
       { key: "telegram", label: "텔레그램 동향", icon: "📡" },
       { key: "calendar", label: "캘린더", icon: "📅" },

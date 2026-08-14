@@ -11,6 +11,7 @@ import type { IndexCard, MarketFlow, StockRow, HighLow } from "./marketOverview.
 import type { GlobalQuote } from "./globalMarket.js";
 import { sectorNews } from "./newsDisclosure.js";
 import { upcomingEvents } from "./calendar.js";
+import { todayDartEvents, toDartDigest } from "./dartEvents.js";
 import { getTrackedWatchlist } from "./watchTracking.js";
 import { buildMarketDrivers } from "./reportBuilder.js";
 import { isClaudeConfigured, summarize } from "./summarize.js";

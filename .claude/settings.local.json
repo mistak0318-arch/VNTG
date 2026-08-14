@@ -191,9 +191,6 @@
       "Bash(python -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('status:',d['status'], d.get\\('error',''\\)\\); [print\\(' ',s['state'],s['label'],'—',s.get\\('note',''\\), \\(str\\(round\\(s['ms']/1000,1\\)\\)+'s' if s.get\\('ms'\\) else ''\\)\\) for s in d['steps']]\")",
       "Bash(PYTHONIOENCODING=utf-8 curl -s \"http://localhost:4000/api/report/publish/pub_mst1wdivkfo7\")",
       "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
-<<<<<<< HEAD
-      "Bash(curl -s http://localhost:4000/api/paper)"
-=======
       "Bash(curl -s http://localhost:4000/api/paper)",
       "Bash(grep -n \"tab === \\\\\"cost\\\\\"\\\\|^        }$\\\\|^        \\)}$\\\\|^      \\)}$\" pages/SettingsPage.tsx)",
       "Bash(npx esbuild *)",
@@ -203,8 +200,10 @@
       "Bash(curl -s -X PUT -H \"Content-Type: application/json\" -d '{\"report\":null,\"channel\":null,\"research\":{\"provider\":\"gemini\",\"model\":\"gemini-3.5-flash-lite\"}}' http://localhost:4000/api/settings/ai-models)",
       "Bash(curl -s -X PUT -H \"Content-Type: application/json\" -d '{\"report\":null,\"channel\":null,\"research\":{\"provider\":\"gemini\",\"model\":\"gemini-3.5-flash-lite\"}}' http://localhost:4000/api/ai/config)",
       "Bash(curl -s -X POST \"http://localhost:4000/api/report/publish-now\" -H \"Content-Type: application/json\" -d '{}')",
-      "Bash(curl -s \"http://localhost:4000/api/settings/usage/totals?days=1\")"
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
+      "Bash(curl -s \"http://localhost:4000/api/settings/usage/totals?days=1\")",
+      "Bash(git fetch *)",
+      "Bash(git stash *)",
+      "Bash(git merge *)"
     ]
   }
 }

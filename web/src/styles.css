@@ -3387,8 +3387,6 @@ body {
 /* 거래소 구분 — 어느 거래소 값인지 안 적으면 두 값이 다를 때 오독한다 */
 .ph-ex { flex: none; font-style: normal; font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 3px; background: var(--panel-2); color: var(--muted); }
 .ph-ex.nxt { background: rgba(169,123,214,.18); color: #a97bd6; }
-<<<<<<< HEAD
-=======
 
 /* 복기 노트 */
 .jn-editor { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; background: var(--panel); }
@@ -3444,4 +3442,13 @@ body {
 .mo-name:hover { background: var(--panel-2); }
 .mo-orig { font-style: normal; color: var(--muted); font-size: 11px; }
 .mo-rename { flex: 1; background: var(--panel); color: var(--text); border: 1px solid var(--blue); border-radius: 4px; padding: 2px 6px; font-size: 12px; }
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
+
+/* 오늘 공시 */
+.dart-list { display: grid; gap: 3px; }
+.dart-row { padding: 6px 9px; border-radius: 6px; background: var(--panel-2); border-left: 3px solid transparent; }
+.dart-row.hot { border-left-color: var(--red); }
+.dart-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 2px; }
+.dart-name { font-weight: 600; font-size: 12px; }
+.dart-amend { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: rgba(245,197,66,.18); color: #f5c542; }
+.dart-title { display: block; font-size: 12px; color: var(--text); text-decoration: none; }
+.dart-title:hover { color: var(--blue); text-decoration: underline; }

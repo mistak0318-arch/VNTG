@@ -48,13 +48,6 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
 
   if (!info) return null;
 
-<<<<<<< HEAD
-  // 마감(15:40) 이후면 지금 값이 그날 종가다. 주말·휴장도 마감으로 본다
-  const kst = new Date(Date.now() + 9 * 3600_000);
-  const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
-  const weekday = kst.getUTCDay() !== 0 && kst.getUTCDay() !== 6;
-  const closed = !weekday || mins >= 15 * 60 + 40 || mins < 9 * 60;
-=======
   /*
    * 지금이 어느 국면인가.
    *
@@ -87,7 +80,6 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
   };
   /** KRX 는 정규장 끝나면 그 값이 종가다 */
   const krxDone = phase === "after" || phase === "closed";
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
 
   const sig = String(info.pre_sig ?? "");
   const sign = sigClass(sig);
@@ -98,15 +90,7 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
     <div className="price-header">
       <div className="ph-main">
         <div className="ph-main-label">
-<<<<<<< HEAD
-          {/*
-            장중엔 종가가 없다 — 지금 값은 현재가다. 마감 뒤에는 같은 숫자가 그날 종가다.
-            둘을 같은 말로 부르면 "이게 확정값인가"를 알 수 없어서 시각으로 갈라 적는다.
-          */}
-          {closed ? "종가" : "현재가"} <em className="ph-ex">KRX</em>
-=======
           {closed ? "종가" : "현재가"} · {PHASE_LABEL[phase]}
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
         </div>
         <div className={`ph-price ${sign}`}>{fmtAbsNum(info.cur_prc)}</div>
         <div className={`ph-change ${sign}`}>
@@ -152,8 +136,6 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           같은 칸에 나란히 둬야 "어느 쪽 숫자를 보고 있는지"가 헷갈리지 않는다.
         */}
         <div className="ph-cell">
-<<<<<<< HEAD
-=======
           <span className="ph-label">{krxDone ? "종가" : "현재가"} · 거래소별</span>
           <span className="ph-row">
             <em className="ph-ex">KRX</em>
@@ -177,7 +159,6 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           )}
         </div>
         <div className="ph-cell">
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
           {/* 전일종가는 두 거래소가 같다 — 정규장 종가를 기준값으로 쓰기 때문 */}
           <span className="ph-label">전일종가</span>
           <span className="ph-row">

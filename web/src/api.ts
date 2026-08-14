@@ -177,20 +177,13 @@ export const api = {
   channelsRefresh: () => postJson<{ channels: ChannelEntry[] }>("/api/channels/refresh"),
   channelsSetEnabled: (updates: { id: string; enabled: boolean }[]) =>
     putJson<{ channels: ChannelEntry[] }>("/api/channels/enabled", { updates }),
-<<<<<<< HEAD
-  channelsReport: (o: { ai?: boolean; send?: boolean; minutes?: number } = {}) => {
-=======
   channelsReportStatus: (jobId: string) => getJson<PublishJob>(`/api/channels/report/${jobId}`),
   /** 끝날 때까지 기다리는 옛 방식 — 진행 표시가 필요 없는 짧은 확인용 */
   channelsReportSync: (o: { ai?: boolean; send?: boolean; minutes?: number } = {}) => {
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
     const q = new URLSearchParams();
     if (o.ai === false) q.set("ai", "0");
     if (o.send) q.set("send", "1");
     if (o.minutes) q.set("minutes", String(o.minutes));
-<<<<<<< HEAD
-    return postJson<ChannelReport>(`/api/channels/report${q.toString() ? "?" + q : ""}`);
-=======
     return postJson<ChannelReport>(`/api/channels/report-sync${q.toString() ? "?" + q : ""}`);
   },
   /** 곧바로 jobId 를 돌려준다. 진행은 channelsReportStatus 로 폴링 */
@@ -200,7 +193,6 @@ export const api = {
     if (o.send) q.set("send", "1");
     if (o.minutes) q.set("minutes", String(o.minutes));
     return postJson<{ jobId: string }>(`/api/channels/report${q.toString() ? "?" + q : ""}`);
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
   },
   askStatus: () => getJson<{ ready: boolean }>("/api/ask/status"),
   ask: (
@@ -266,12 +258,11 @@ export const api = {
     getJson<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }>(
       `/api/custom-themes${force ? "?force=1" : ""}`,
     ),
-<<<<<<< HEAD
-=======
+  dartToday: (force = false) =>
+    getJson<{ day: string; events: DartEvent[] }>(`/api/dart/today${force ? "?force=1" : ""}`),
   journal: () => getJson<JournalData>("/api/journal"),
   journalSave: (e: Partial<JournalEntry> & { date: string }) =>
     putJson<{ entries: JournalEntry[]; stats: JournalStats }>("/api/journal", e),
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
   paperTrades: () => getJson<PaperResult>("/api/paper"),
   paperTradeAdd: (t: { code: string; name: string; entryPrice: number; qty: number; thesis?: string }) =>
     postJson<PaperResult>("/api/paper", t),
@@ -1419,8 +1410,6 @@ export interface PaperResult {
   };
   edges: EvidenceEdge[];
 }
-<<<<<<< HEAD
-=======
 
 
 /** 복기 노트 */
@@ -1483,4 +1472,18 @@ export interface JournalData {
   mistakeTags: { key: string; label: string; hint: string }[];
   moodTags: { key: string; label: string }[];
 }
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
+
+
+/** 오늘 공시 (DART) */
+export interface DartEvent {
+  corpName: string;
+  stockCode: string;
+  market: string;
+  title: string;
+  date: string;
+  url: string;
+  weight: number;
+  watched: boolean;
+  themes: string[];
+  amended: boolean;
+}

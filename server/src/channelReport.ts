@@ -13,10 +13,7 @@ import {
 } from "./telegramDigest.js";
 import { listWatchlist } from "./watchlist.js";
 import { listThemes } from "./customThemes.js";
-<<<<<<< HEAD
-=======
 import { noopProgress, type ProgressReporter } from "./reportProgress.js";
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
 import { peekSnapshot } from "./marketSnapshot.js";
 
 /**
@@ -144,9 +141,6 @@ export async function buildChannelReport(
    * 점수 순으로 자르는 것이라 뒤쪽은 이미 "채널 하나가 한 번 말한 것"이다.
    * 40건이면 하루 세 판에서 놓치는 게 없고 입력 토큰은 3분의 1이 준다.
    */
-<<<<<<< HEAD
-  const { send = false, useAi = true, sinceMinutes = 60, limit = 40, useOffsets = true } = opts;
-=======
   const {
     send = false,
     useAi = true,
@@ -155,7 +149,6 @@ export async function buildChannelReport(
     useOffsets = true,
     progress = noopProgress,
   } = opts;
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
   const now = new Date();
   const date = new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -181,14 +174,10 @@ export async function buildChannelReport(
     return { ...base, error: "텔레그램 세션 미설정 — scripts/telegram-login.mjs 를 먼저 실행하세요" };
   }
 
-<<<<<<< HEAD
-  const { messages, channels, skipped } = await fetchNewMessages({ sinceMinutes, useOffsets });
-=======
   progress.start("read");
   const { messages, channels, skipped } = await fetchNewMessages({ sinceMinutes, useOffsets });
   progress.done("read", `채널 ${channels}개 · 원본 ${messages.length}건`);
   progress.start("tag");
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
   const watchNames = (await listWatchlist().catch(() => [])).map((w) => w.name);
 
   /*
@@ -207,14 +196,10 @@ export async function buildChannelReport(
     nameOfCode,
   );
 
-<<<<<<< HEAD
-  const items = scoreMessages(messages, watchNames, limit, tags);
-=======
   progress.done("tag", `내 테마 종목 ${tags.names.length}개 사전`);
   progress.start("pick");
   const items = scoreMessages(messages, watchNames, limit, tags);
   progress.done("pick", `선별 ${items.length}건`);
->>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
 
   const times = messages.map((m) => m.at).sort();
 
