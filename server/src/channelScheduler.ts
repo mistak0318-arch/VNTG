@@ -1,7 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildChannelReport } from "./channelReport.js";
+import { buildChannelReport, toPickedHtml } from "./channelReport.js";
+import { getChannelConfig, withinWindow } from "./channelConfig.js";
+import { sendMail } from "./mailer.js";
+import { sendTelegram } from "./telegram.js";
 import { isReaderConfigured } from "./telegramReader.js";
 
 /**
@@ -38,6 +41,53 @@ interface ScheduleState {
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
+/** 선별 자동 발송을 마지막으로 보낸 시각 */
+let lastPickAt = 0;
+let pickBusy = false;
+
+/**
+ * 선별 자동 발송.
+ *
+ * AI를 쓰지 않으므로 **토큰 비용이 0**이다. 그래서 자주 돌려도 되는데, 관건은 텔레그램
+ * 호출량이었다 — getDialogs 로 새 글이 있는 채널만 읽도록 바꾼 뒤로는 5분 주기도 감당된다.
+ *
+ * 오프셋을 쓴다(useOffsets=true). 5분마다 같은 메시지를 다시 보내면 알림이 무의미해지므로
+ * **지난번 이후 새로 온 것만** 보내야 한다.
+ */
+async function tickPickAuto(): Promise<void> {
+  if (pickBusy) return;
+  const { pickAuto: cfg } = await getChannelConfig();
+  if (!cfg.enabled || !isReaderConfigured()) return;
+  if (!withinWindow(cfg)) return;
+  if (Date.now() - lastPickAt < cfg.intervalMin * 60_000) return;
+
+  pickBusy = true;
+  try {
+    const report = await buildChannelReport({
+      useAi: false,
+      send: false, // 발송은 아래에서 설정대로 나눠 보낸다
+      sinceHours: cfg.windowHours,
+      useOffsets: true,
+    });
+    lastPickAt = Date.now();
+
+    // 새로 걸린 게 없으면 조용히 넘어간다 — 빈 알림이 오면 그때부터 안 보게 된다
+    if (report.items.length === 0) return;
+
+    const html = toPickedHtml(report);
+    if (cfg.telegram) await sendTelegram(html, "channel").catch(() => undefined);
+    if (cfg.mail) {
+      // 텔레그램 HTML 은 줄바꿈이 그대로지만 메일은 <br/> 이어야 한다
+      const mailHtml = html.replace(/\n/g, "<br/>");
+      await sendMail(`[VNTG] 채널 선별 ${report.usedCount}건`, mailHtml).catch(() => undefined);
+    }
+    console.log(`[channel] 선별 자동 발송 ${report.usedCount}건 (원본 ${report.rawCount})`);
+  } catch (err) {
+    console.error("[channel] 선별 자동 발송 실패:", err instanceof Error ? err.message : err);
+  } finally {
+    pickBusy = false;
+  }
+}
 let running = false;
 
 async function readState(): Promise<ScheduleState> {
@@ -127,7 +177,13 @@ async function tick(): Promise<void> {
 export function startChannelScheduler(): void {
   if (timer) return;
   // 서버가 막 뜬 직후엔 텔레그램 연결이 아직이므로 조금 기다린다
-  setTimeout(() => void tick(), 45_000);
-  timer = setInterval(() => void tick(), TICK_MS);
-  console.log("[channel] 구독 채널 요약 스케줄러 시작 (07/12/18시)");
+  setTimeout(() => {
+    void tick();
+    void tickPickAuto();
+  }, 45_000);
+  timer = setInterval(() => {
+    void tick();
+    void tickPickAuto();
+  }, TICK_MS);
+  console.log("[channel] 구독 채널 스케줄러 시작 (AI 정리 07/12/18시 · 선별 자동발송은 설정에 따름)");
 }

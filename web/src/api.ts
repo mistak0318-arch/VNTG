@@ -261,6 +261,15 @@ export const api = {
     ),
   exchangeQuotes: (code: string) =>
     getJson<{ code: string; exchanges: ExchangeQuote[] }>(`/api/market/exchanges/${code}`),
+  channelConfig: () =>
+    getJson<{
+      config: { pickAuto: PickAutoConfig };
+      defaults: { pickAuto: PickAutoConfig };
+      intervals: number[];
+      mailConfigured: boolean;
+    }>("/api/channels/config"),
+  channelConfigSave: (config: { pickAuto: PickAutoConfig }) =>
+    putJson<{ config: { pickAuto: PickAutoConfig } }>("/api/channels/config", config),
   usKr: () => getJson<{ links: EvaluatedLink[]; themeNames: string[]; at: string }>("/api/us-kr"),
   usKrCorrelation: () => getJson<{ result: CorrelationResult | null }>("/api/us-kr/correlation"),
   usKrCorrelate: (days = 60) =>
@@ -658,6 +667,19 @@ export interface EditionSlot {
   days: "weekday" | "weekend" | "always";
   /** 발행 후 텔레그램·메일로 보낼지 */
   deliver: boolean;
+}
+
+export interface PickAutoConfig {
+  enabled: boolean;
+  /** 발송 주기(분) */
+  intervalMin: number;
+  /** 몇 시간치를 훑을지 */
+  windowHours: number;
+  telegram: boolean;
+  mail: boolean;
+  weekdayOnly: boolean;
+  startHour: number;
+  endHour: number;
 }
 
 export interface ExchangeQuote {

@@ -21,32 +21,56 @@ export interface GlobalQuote {
   error: string | null;
 }
 
+/**
+ * 조회 대상.
+ *
+ * **인베스팅 관심종목 목록과 같은 구성·순서**로 맞췄다 (사용자 요청).
+ * 티커는 전부 실측으로 확인했다 — 니켈(LME), 금/달러, KOSPI 변동성은 야후에 없어 뺐다.
+ * 알루미늄은 선물(ALI=F), 홍콩 H는 항셍중국기업지수(^HSCE)로 대응한다.
+ *
+ * 필라델피아 반도체(^SOX)와 미국 선물은 인베스팅 목록엔 없지만
+ * **미국↔국내 연동과 조간 리포트가 쓰고 있어** 뒤에 남겼다.
+ */
 const TARGETS: { key: string; label: string; group: string; symbol: string; isRate?: boolean }[] = [
-  // 순서는 인베스팅닷컴 관심목록 배열을 그대로 따른다 (사용자가 보던 순서)
+  // ── 환율·원자재 (인베스팅 순서)
   { key: "usdkrw", label: "달러/원", group: "환율", symbol: "KRW=X" },
   { key: "wti", label: "WTI유", group: "원자재", symbol: "CL=F" },
+
+  // ── 미국 지수
   { key: "dji", label: "US 30", group: "미국지수", symbol: "^DJI" },
   { key: "gspc", label: "US 500", group: "미국지수", symbol: "^GSPC" },
   { key: "ixic", label: "US Tech 100", group: "미국지수", symbol: "^IXIC" },
-  // 선물은 현물 지수와 달리 야간에도 움직인다 — 개장 전에 밤사이 방향을 보려면 이쪽이다
-  { key: "es", label: "S&P500 선물", group: "미국선물", symbol: "ES=F" },
-  { key: "nq", label: "나스닥100 선물", group: "미국선물", symbol: "NQ=F" },
-  // 국내 반도체와 가장 직접적으로 연동되는 지수
-  { key: "sox", label: "필라델피아 반도체", group: "미국지수", symbol: "^SOX" },
   { key: "rut", label: "US 2000", group: "미국지수", symbol: "^RUT" },
   { key: "vix", label: "S&P 500 VIX", group: "변동성", symbol: "^VIX" },
+
+  // ── 금리
   { key: "tnx", label: "미국 10년 국채 금리", group: "금리", symbol: "^TNX", isRate: true },
   { key: "tyx", label: "미국 30년", group: "금리", symbol: "^TYX", isRate: true },
+
+  // ── 암호화폐
   { key: "btc", label: "비트코인", group: "암호화폐", symbol: "BTC-USD" },
   { key: "eth", label: "이더리움", group: "암호화폐", symbol: "ETH-USD" },
+
+  // ── 원자재
   { key: "gold", label: "금", group: "원자재", symbol: "GC=F" },
   { key: "silver", label: "은", group: "원자재", symbol: "SI=F" },
   { key: "copper", label: "구리", group: "원자재", symbol: "HG=F" },
   { key: "natgas", label: "천연가스", group: "원자재", symbol: "NG=F" },
+  { key: "alum", label: "알루미늄", group: "원자재", symbol: "ALI=F" },
+
+  // ── 아시아
   { key: "ks11", label: "코스피지수", group: "아시아", symbol: "^KS11" },
+  { key: "ks200", label: "코스피200", group: "아시아", symbol: "^KS200" },
   { key: "kq11", label: "코스닥지수", group: "아시아", symbol: "^KQ11" },
+  { key: "kodexkq150", label: "KODEX 코스닥150", group: "아시아", symbol: "229200.KS" },
   { key: "n225", label: "닛케이", group: "아시아", symbol: "^N225" },
   { key: "hsi", label: "항셍", group: "아시아", symbol: "^HSI" },
+  { key: "hsce", label: "홍콩 H", group: "아시아", symbol: "^HSCE" },
+
+  // ── 우리가 따로 쓰는 것 (인베스팅 목록엔 없음)
+  { key: "sox", label: "필라델피아 반도체", group: "미국지수", symbol: "^SOX" },
+  { key: "es", label: "S&P500 선물", group: "미국선물", symbol: "ES=F" },
+  { key: "nq", label: "나스닥100 선물", group: "미국선물", symbol: "NQ=F" },
 ];
 
 const YAHOO_BASE = "https://query1.finance.yahoo.com/v8/finance/chart";

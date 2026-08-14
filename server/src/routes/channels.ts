@@ -1,6 +1,13 @@
 import { Router } from "express";
 import { buildChannelReport, listChannelReports } from "../channelReport.js";
 import {
+  DEFAULT_CONFIG,
+  INTERVAL_CHOICES,
+  getChannelConfig,
+  saveChannelConfig,
+} from "../channelConfig.js";
+import { isMailConfigured } from "../mailer.js";
+import {
   isReaderConfigured,
   listChannels,
   refreshChannels,
@@ -64,6 +71,28 @@ export function createChannelsRouter(): Router {
   router.get("/reports", async (req, res, next) => {
     try {
       res.json({ reports: await listChannelReports(Number(req.query.limit) || 10) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 텔레그램 동향 설정 (AI 관리 · 선별 관리) */
+  router.get("/config", async (_req, res, next) => {
+    try {
+      res.json({
+        config: await getChannelConfig(),
+        defaults: DEFAULT_CONFIG,
+        intervals: INTERVAL_CHOICES,
+        mailConfigured: isMailConfigured(),
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/config", async (req, res, next) => {
+    try {
+      res.json({ config: await saveChannelConfig(req.body) });
     } catch (err) {
       next(err);
     }

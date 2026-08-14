@@ -3199,3 +3199,7 @@ body {
 .mo-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mo-group { font-size: 10.5px; color: var(--muted); text-align: right; }
 .mo-row .filter-btn { padding: 3px 6px; font-size: 11px; }
+
+/* 선별 자동 발송 설정 */
+.pa-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.pa-hour { width: 62px; text-align: center; }

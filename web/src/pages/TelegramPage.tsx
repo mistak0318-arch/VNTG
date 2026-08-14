@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
+import { PickAutoPanel } from "../components/PickAutoPanel";
+import { AiModelPanel } from "../components/AiModelPanel";
 
 /**
  * 텔레그램 동향.
@@ -13,11 +15,13 @@ import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
  *   채널 — 어디를 읽을 것인가 (구독 목록 켜고 끄기)
  */
 
-type Tab = "digest" | "channels";
+type Tab = "digest" | "channels" | "pick" | "ai";
 
 const TABS: { key: Tab; label: string; hint: string }[] = [
   { key: "digest", label: "동향", hint: "지금 채널들이 무슨 말을 하고 있는지" },
   { key: "channels", label: "채널 관리", hint: "어느 채널을 읽을지 고릅니다" },
+  { key: "pick", label: "선별 관리", hint: "AI 없이 원문 그대로 자동 발송 (비용 없음)" },
+  { key: "ai", label: "AI 관리", hint: "AI 정리를 어떤 모델로 할지" },
 ];
 
 export function TelegramPage() {
@@ -38,7 +42,18 @@ export function TelegramPage() {
         ))}
       </nav>
 
-      {tab === "digest" ? <ChannelDigestPanel /> : <ChannelCollectPanel />}
+      {tab === "digest" && <ChannelDigestPanel />}
+      {tab === "channels" && <ChannelCollectPanel />}
+      {tab === "pick" && <PickAutoPanel />}
+      {tab === "ai" && (
+        <>
+          <p className="page-note">
+            AI 정리는 <b>호출당 비용</b>이 있어 자동 발송을 걸지 않았습니다. 정기 발행(07/12/18시)과
+            「AI로 정리」 버튼으로만 돕니다. 어떤 모델을 쓸지는 아래에서 고릅니다.
+          </p>
+          <AiModelPanel />
+        </>
+      )}
     </div>
   );
 }
