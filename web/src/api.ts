@@ -259,6 +259,8 @@ export const api = {
       "/api/report/publish-now",
       { deliver },
     ),
+  exchangeQuotes: (code: string) =>
+    getJson<{ code: string; exchanges: ExchangeQuote[] }>(`/api/market/exchanges/${code}`),
   usKr: () => getJson<{ links: EvaluatedLink[]; themeNames: string[]; at: string }>("/api/us-kr"),
   rankSpecs: () => getJson<{ groups: RankSpecGroup[] }>("/api/rank/specs"),
   rank: (key: string, market = "000", exchange = "3") =>
@@ -653,6 +655,18 @@ export interface EditionSlot {
   days: "weekday" | "weekend" | "always";
   /** 발행 후 텔레그램·메일로 보낼지 */
   deliver: boolean;
+}
+
+export interface ExchangeQuote {
+  key: "krx" | "nxt" | "all";
+  label: string;
+  price: number | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+  changeRate: number;
+  error: string | null;
 }
 
 export interface UsQuote {

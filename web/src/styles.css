@@ -3174,3 +3174,6 @@ body {
   grid-column: 1 / -1; font-size: 11px; color: var(--muted);
   border-top: 1px dashed var(--border); padding-top: 7px;
 }
+
+/* 거래소별 시세 — 통합 행을 강조해 "그날 진짜 고가"가 어디인지 드러나게 */
+.data-table tr.ex-total td { font-weight: 600; border-top: 1px solid var(--blue); }

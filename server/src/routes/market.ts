@@ -195,6 +195,70 @@ export function createMarketRouter(client: KiwoomClient): Router {
     }
   });
 
+  /**
+   * 거래소별 시세 — KRX / NXT / 통합.
+   *
+   * 키움은 **종목코드 접미사로 거래소를 가른다** (실측 확인):
+   *   005930     → KRX      고가 275,500  거래량 11,158,647
+   *   005930_NX  → NXT      고가 278,000  거래량 11,553,547
+   *   005930_AL  → 통합     고가 278,000  거래량 22,712,194  (= KRX + NXT)
+   *
+   * 지금까지 화면의 고가·저가는 KRX만 본 값이었다. NXT에서 더 높이 찍힌 걸 놓치고 있었으므로
+   * 둘을 나란히 준다. `_AL` 은 두 곳을 합친 값이라 "그날 진짜 고가"가 여기 있다.
+   */
+  router.get("/exchanges/:code", async (req, res, next) => {
+    try {
+      // 이미 접미사가 붙어 오면 떼고 다시 붙인다 (화면마다 코드 형태가 달라서)
+      const bare = String(req.params.code).replace(/_(AL|NX)$/i, "");
+      const targets = [
+        { key: "krx", label: "KRX", code: bare },
+        { key: "nxt", label: "NXT", code: `${bare}_NX` },
+        { key: "all", label: "통합", code: `${bare}_AL` },
+      ];
+
+      const num = (v: unknown) => {
+        const n = Number(String(v ?? "").replace(/[+,\s]/g, ""));
+        return Number.isFinite(n) ? Math.abs(n) : null;
+      };
+
+      // 초당 5회 제한 안쪽이라 한 번에 보낸다
+      const rows = await Promise.all(
+        targets.map(async (t) => {
+          try {
+            const { data } = await client.request<Record<string, unknown>>(
+              STKINFO_RESOURCE,
+              "ka10001",
+              { stk_cd: t.code },
+            );
+            return {
+              key: t.key,
+              label: t.label,
+              price: num(data.cur_prc),
+              open: num(data.open_pric),
+              high: num(data.high_pric),
+              low: num(data.low_pric),
+              volume: num(data.trde_qty),
+              // 등락률은 부호가 의미를 가지므로 절댓값을 취하지 않는다
+              changeRate: Number(String(data.flu_rt ?? "").replace(/[+,\s]/g, "")) || 0,
+              error: null as string | null,
+            };
+          } catch (err) {
+            return {
+              key: t.key,
+              label: t.label,
+              price: null, open: null, high: null, low: null, volume: null, changeRate: 0,
+              error: err instanceof Error ? err.message : "조회 실패",
+            };
+          }
+        }),
+      );
+
+      res.json({ code: bare, exchanges: rows });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // 신용매매동향 (ka10013) - 융자 신규/상환/잔고, 잔고율
   router.get("/credit/:code", async (req, res, next) => {
     try {

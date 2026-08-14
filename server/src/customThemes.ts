@@ -265,9 +265,11 @@ export function toCustomThemeDigest(themes: EvaluatedTheme[]): string {
       .slice(0, 3)
       .map((s) => `${s.name} ${s.changeRate > 0 ? "+" : ""}${s.changeRate.toFixed(1)}%`)
       .join(", ");
-    const memo = t.memo ? ` — ${t.memo}` : "";
-    return `${t.name} ${rate} (▲${t.risingCount}/▼${t.fallingCount}) ${lead}${memo}`;
+    // 옮겨온 테마가 "내가 만든 것"인 척하면 AI가 무게를 잘못 준다
+    const src = (t.source ?? "manual") === "manual" ? "" : " [출처: 인포스탁]";
+    const memo = t.memo && (t.source ?? "manual") === "manual" ? ` — ${t.memo}` : "";
+    return `${t.name} ${rate} (▲${t.risingCount}/▼${t.fallingCount}) ${lead}${src}${memo}`;
   });
 
-  return `\n[내가 만든 테마 — 사용자가 직접 정의한 관점이므로 우선해서 다룰 것]\n${lines.join("\n")}`;
+  return `\n[내가 만든 테마 — 사용자가 직접 정의한 관점이므로 키움 테마보다 우선해서 다룰 것]\n${lines.join("\n")}`;
 }

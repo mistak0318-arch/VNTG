@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, normalizeStockCode, pickList, type RawRecord, type StockSearchResult } from "../api";
 import { ChartPanel } from "../components/ChartPanel";
+import { ExchangeSplit } from "../components/ExchangeSplit";
 import { IntradayFlow, ProgramFlowBars } from "../components/IntradayPanels";
 import { InvestorTrendTable } from "../components/InvestorTrendTable";
 import { PriceHeader } from "../components/PriceHeader";
@@ -178,6 +179,8 @@ export function StockAnalysisPage({
               <>
                 <SignalPanel code={stock.code} onSelectStock={onSelectStock} />
                 <QuoteSummary code={stock.code} />
+                <h3 className="section-heading">거래소별 시세 (KRX / NXT)</h3>
+                <ExchangeSplit code={stock.code} />
                 <IntradayFlow code={stock.code} basePrice={Math.abs(Number(info?.base_pric)) || 0} />
                 <ChartPanel code={stock.code} name={stock.name} />
                 <h3 className="section-heading">투자자 수급</h3>
