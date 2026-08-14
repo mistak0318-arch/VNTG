@@ -86,6 +86,10 @@ export interface ScoredChannelItem {
   firstAt: string;
   /** 이 내용을 다룬 채널들 */
   channels: string[];
+  /** 대표 메시지가 올라온 채널 */
+  channelName: string;
+  /** 원문으로 가는 링크 (없을 수 있다) */
+  link: string;
   /** 몇 개 채널이 다뤘는지 — 이게 가장 강한 신호 */
   coverage: number;
   /** 언급된 관심종목 */
@@ -182,6 +186,8 @@ export function scoreMessages(
       text: text.slice(0, 400), // 긴 글은 잘라서 토큰을 아낀다
       at: g.rep.at,
       firstAt: g.firstAt,
+      channelName: g.rep.channelName,
+      link: g.rep.link,
       channels: [...g.channels].slice(0, 5),
       coverage,
       mentions,

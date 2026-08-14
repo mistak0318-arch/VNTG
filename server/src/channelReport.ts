@@ -167,7 +167,14 @@ export async function buildChannelReport(
    * 원문 그대로가 더 나을 때가 있고, AI 비용을 안 쓰고 싶을 때도 있다.
    */
   if (!useAi) {
-    if (send) await sendTelegram(toPickedHtml(report), "channel").catch(() => undefined);
+    // 텔레그램은 건별로 — 한 덩어리로 붙이면 읽히지 않고 원문 링크도 못 단다
+    if (send) {
+      await sendTelegram(toPickedHeader(report), "channel").catch(() => undefined);
+      for (const msg of toPickedMessages(report, 15)) {
+        await sendTelegram(msg, "channel").catch(() => undefined);
+        await new Promise((r) => setTimeout(r, 400));
+      }
+    }
     return report;
   }
 
@@ -205,35 +212,50 @@ function esc(s: string): string {
  * 필터가 걸러낸 것만 그대로 보고 싶을 때가 있어서 이 경로를 따로 둔다.
  * 여러 채널이 동시에 다룬 것과 관심종목이 걸린 것이 먼저 오도록 표시만 손본다.
  */
-export function toPickedHtml(r: ChannelReport): string {
+/**
+ * 선별 결과를 **메시지 하나씩** 만든다.
+ *
+ * 예전엔 25건을 한 덩어리로 붙여 보냈는데, 텔레그램에서 그건 벽이다 —
+ * 스크롤하며 어디서 끊기는지 찾아야 하고, 원문으로 갈 방법도 없었다.
+ *
+ * 그래서 건마다 따로 보낸다:
+ *   머리글에 **채널명 · 시각** — 누가 언제 한 말인지가 먼저 보여야 판단이 된다
+ *   본문
+ *   끝에 **원문 보기** 링크 — 관심 있으면 바로 그 대화방으로 간다
+ */
+export function toPickedMessages(r: ChannelReport, limit = 15): string[] {
+  return r.items.slice(0, limit).map((it) => {
+    const tags = [
+      it.coverage > 1 ? `${it.coverage}개 채널` : "",
+      it.mentions.length > 0 ? `★ ${it.mentions.join(", ")}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    const head =
+      `<b>${esc(it.channelName)}</b> · ${hhmmKst(it.at)}` +
+      (tags ? `\n<i>${esc(tags)}</i>` : "");
+    // 링크가 붙으므로 본문은 조금 넉넉히 둔다. 빈 줄이 셋 이상이면 둘로 줄인다
+    const body = esc(it.text.replace(/\n{3,}/g, "\n\n").slice(0, 700));
+    const link = it.link ? `\n\n<a href="${it.link}">원문 보기 →</a>` : "";
+    return `${head}\n\n${body}${link}`;
+  });
+}
+
+/** 발송 묶음의 머리말 — 몇 건이 왜 왔는지 한 줄로 */
+export function toPickedHeader(r: ChannelReport): string {
   const span =
-    r.oldestAt && r.newestAt
-      ? `${r.oldestAt.slice(5, 16).replace("T", " ")} ~ ${r.newestAt.slice(5, 16).replace("T", " ")}`
-      : "";
-  const head =
-    `<b>구독 채널 선별</b> (AI 정리 없음)\n` +
-    `채널 ${r.channels}개 · 원본 ${r.rawCount}건 → 선별 ${r.usedCount}건` +
-    (span ? `\n수집 구간 ${span}` : "") +
-    `\n`;
+    r.oldestAt && r.newestAt ? ` · ${hhmmKst(r.oldestAt)}~${hhmmKst(r.newestAt)}` : "";
+  return `<b>채널 선별 ${r.usedCount}건</b> (원본 ${r.rawCount} · 채널 ${r.channels}개${span})`;
+}
 
-  if (r.items.length === 0) return `${head}\n선별된 내용이 없습니다.`;
-
-  const body = r.items
-    .slice(0, 25)
-    .map((it) => {
-      const time = hhmmKst(it.at);
-      const tags = [
-        it.coverage > 1 ? `${it.coverage}개 채널` : "",
-        it.mentions.length > 0 ? `관심: ${it.mentions.join(", ")}` : "",
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      const text = esc(it.text.replace(/\n+/g, " ").slice(0, 180));
-      return `\n<b>${time}</b>${tags ? ` <i>${esc(tags)}</i>` : ""}\n${text}`;
-    })
-    .join("\n");
-
-  return `${head}${body}`;
+/**
+ * 한 덩어리로 보는 형태 — 메일과 화면 미리보기용.
+ * 텔레그램은 위의 `toPickedMessages` 로 건별 발송한다.
+ */
+export function toPickedHtml(r: ChannelReport): string {
+  if (r.items.length === 0) return `${toPickedHeader(r)}\n\n선별된 내용이 없습니다.`;
+  return [toPickedHeader(r), ...toPickedMessages(r, 25)].join("\n\n———\n\n");
 }
 
 export function toChannelHtml(r: ChannelReport): string {

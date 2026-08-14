@@ -20,6 +20,7 @@ import {
 } from "../components/StockDepthPanels";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { useLive } from "../useLive";
+import { useRecentStocks } from "../useRecentStocks";
 
 /**
  * 개별종목분석 — 키움 앱에서 종목 하나를 파고들 때 쓰는 화면들을 한 페이지에 모았다.
@@ -63,6 +64,7 @@ export function StockAnalysisPage({
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const watched = useWatchedCodes();
+  const recent = useRecentStocks();
 
   useEffect(() => {
     const q = query.trim();
@@ -114,10 +116,21 @@ export function StockAnalysisPage({
   const investorRows = pickList(investorChart ?? undefined, ["stk_invsr_orgn_chart"]);
 
   function pickResult(r: StockSearchResult) {
-    onSelectStock(normalizeStockCode(r.code), r.name);
+    const code = normalizeStockCode(r.code);
+    recent.push(code, r.name);
+    onSelectStock(code, r.name);
     setQuery("");
     setResults([]);
   }
+
+  /*
+   * 주소로 바로 들어온 경우(관심종목 클릭, 링크 공유)도 최근 목록에 남긴다.
+   * 검색으로 고른 것만 기억하면 정작 자주 오가는 종목이 목록에 안 쌓인다.
+   */
+  useEffect(() => {
+    if (stock?.code && stock.name) recent.push(stock.code, stock.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stock?.code]);
 
   return (
     <div>
@@ -143,6 +156,30 @@ export function StockAnalysisPage({
           </div>
         )}
       </div>
+
+      {recent.recent.length > 0 && (
+        <div className="recent-row">
+          <span className="recent-cap">최근</span>
+          {recent.recent.map((r) => (
+            <span
+              className={`recent-chip${stock?.code === r.code ? " active" : ""}`}
+              key={r.code}
+            >
+              <button onClick={() => onSelectStock(r.code, r.name)}>{r.name}</button>
+              <button
+                className="recent-x"
+                onClick={() => recent.remove(r.code)}
+                title="목록에서 제거"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+          <button className="recent-clear" onClick={recent.clear} title="최근 목록 비우기">
+            지우기
+          </button>
+        </div>
+      )}
 
       {!stock && (
         <div className="page-note">

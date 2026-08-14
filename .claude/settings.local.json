@@ -178,7 +178,9 @@
       "Bash(node scripts/rank-probe2.mjs)",
       "Bash(node scripts/nxt-probe.mjs)",
       "Bash(node scripts/rank-fields.mjs)",
-      "Bash(curl -s http://localhost:4000/api/overview/status)"
+      "Bash(curl -s http://localhost:4000/api/overview/status)",
+      "Bash(xargs -n1 basename)",
+      "Bash(awk '{printf \"%-28s %8.1fKB\\\\n\", $9, $5/1024}')"
     ]
   }
 }

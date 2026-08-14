@@ -3203,3 +3203,21 @@ body {
 /* 선별 자동 발송 설정 */
 .pa-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .pa-hour { width: 62px; text-align: center; }
+
+/* 최근 본 종목 — 검색창 아래 칩 */
+.recent-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0 4px; }
+.recent-cap { font-size: 10.5px; color: var(--muted); }
+.recent-chip {
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--panel); overflow: hidden;
+}
+.recent-chip.active { border-color: var(--blue); background: var(--panel-2); }
+.recent-chip > button {
+  background: none; border: none; color: var(--text);
+  font-size: 12px; padding: 4px 4px 4px 10px; cursor: pointer;
+}
+.recent-chip .recent-x { color: var(--muted); padding: 4px 8px 4px 2px; font-size: 10px; }
+.recent-chip .recent-x:hover { color: var(--red); }
+.recent-chip > button:first-child:hover { color: var(--blue); }
+.recent-clear { background: none; border: none; color: var(--muted); font-size: 10.5px; cursor: pointer; }

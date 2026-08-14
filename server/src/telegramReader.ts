@@ -38,6 +38,22 @@ export interface ChannelMessage {
   messageId: number;
   at: string;
   text: string;
+  /** 원문으로 바로 가는 t.me 링크 (만들 수 없으면 빈 문자열) */
+  link: string;
+}
+
+/**
+ * 메시지 원문 링크.
+ *
+ * 공개 채널은 `t.me/이름/글번호`, 비공개는 `t.me/c/내부id/글번호` 형식이다.
+ * 비공개 쪽 내부 id 는 앞의 `-100` 을 뗀 숫자다 — 안 떼면 링크가 열리지 않는다.
+ * 내가 구독 중인 채널이어야 열리므로 남에게 공유하는 용도로는 못 쓴다.
+ */
+function messageLink(ch: ChannelEntry, messageId: number): string {
+  if (!messageId) return "";
+  if (ch.username) return `https://t.me/${ch.username}/${messageId}`;
+  const inner = String(ch.id).replace(/^-100/, "").replace(/^-/, "");
+  return /^\d+$/.test(inner) ? `https://t.me/c/${inner}/${messageId}` : "";
 }
 
 export function isReaderConfigured(): boolean {
@@ -264,6 +280,7 @@ export async function fetchNewMessages(
           messageId: m.id,
           at: new Date(at).toISOString(),
           text,
+          link: messageLink(ch, m.id),
         });
       }
       if (useOffsets) offsets[ch.id] = maxId;

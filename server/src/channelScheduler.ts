@@ -1,7 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildChannelReport, toPickedHtml } from "./channelReport.js";
+import {
+  buildChannelReport,
+  toPickedHeader,
+  toPickedHtml,
+  toPickedMessages,
+} from "./channelReport.js";
 import { getChannelConfig, withinWindow } from "./channelConfig.js";
 import { sendMail } from "./mailer.js";
 import { sendTelegram } from "./telegram.js";
@@ -74,8 +79,19 @@ async function tickPickAuto(): Promise<void> {
     // 새로 걸린 게 없으면 조용히 넘어간다 — 빈 알림이 오면 그때부터 안 보게 된다
     if (report.items.length === 0) return;
 
+    /*
+     * 텔레그램은 **건별로** 보낸다. 25건을 한 덩어리로 붙이면 벽이 되어 읽히지 않고,
+     * 원문으로 갈 방법도 없다. 머리글(채널·시각) + 본문 + 원문 링크로 하나씩 보낸다.
+     * 연달아 쏘면 텔레그램이 막으므로 사이에 간격을 둔다.
+     */
+    if (cfg.telegram) {
+      await sendTelegram(toPickedHeader(report), "channel").catch(() => undefined);
+      for (const msg of toPickedMessages(report, 15)) {
+        await sendTelegram(msg, "channel").catch(() => undefined);
+        await new Promise((r) => setTimeout(r, 400));
+      }
+    }
     const html = toPickedHtml(report);
-    if (cfg.telegram) await sendTelegram(html, "channel").catch(() => undefined);
     if (cfg.mail) {
       // 텔레그램 HTML 은 줄바꿈이 그대로지만 메일은 <br/> 이어야 한다
       const mailHtml = html.replace(/\n/g, "<br/>");
