@@ -196,7 +196,7 @@ export function StockDetail({
               <>
                 <SignalPanel code={code} onSelectStock={onSelectStock} />
                 <IntradayFlow code={code} basePrice={Math.abs(Number(info?.base_pric)) || 0} />
-                <ChartPanel code={code} />
+                <ChartPanel code={code} name={name} />
               </>
             )}
 

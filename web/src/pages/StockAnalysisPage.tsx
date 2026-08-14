@@ -179,7 +179,7 @@ export function StockAnalysisPage({
                 <SignalPanel code={stock.code} onSelectStock={onSelectStock} />
                 <QuoteSummary code={stock.code} />
                 <IntradayFlow code={stock.code} basePrice={Math.abs(Number(info?.base_pric)) || 0} />
-                <ChartPanel code={stock.code} />
+                <ChartPanel code={stock.code} name={stock.name} />
                 <h3 className="section-heading">투자자 수급</h3>
                 <InvestorTrendTable rows={investorRows} />
                 <h3 className="section-heading">프로그램 수급</h3>

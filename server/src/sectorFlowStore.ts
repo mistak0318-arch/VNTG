@@ -387,6 +387,7 @@ export interface SectorStreak {
   code: string;
   name: string;
   label: string;
+  market: Market;
   /** 연속 일수. 양수면 연속 순매수, 음수면 연속 순매도 */
   streak: number;
   sum: number;
@@ -398,17 +399,17 @@ export interface SectorStreak {
  */
 export function sectorStreaks(days: SectorFlowDay[], subject: Subject = "foreign"): SectorStreak[] {
   if (days.length === 0) return [];
-  const byCode = new Map<string, { name: string; label: string; series: number[] }>();
+  const byCode = new Map<string, { name: string; label: string; market: Market; series: number[] }>();
   for (const day of days) {
     for (const row of sectorsOf(day)) {
-      const cur = byCode.get(row.code) ?? { name: row.name, label: row.label, series: [] };
+      const cur = byCode.get(row.code) ?? { name: row.name, label: row.label, market: row.market, series: [] };
       cur.series.push(valueOf(row, subject));
       byCode.set(row.code, cur);
     }
   }
 
   const out: SectorStreak[] = [];
-  for (const [code, { name, label, series }] of byCode) {
+  for (const [code, { name, label, market, series }] of byCode) {
     const last = series[series.length - 1] ?? 0;
     if (last === 0) continue;
     const sign = Math.sign(last);
@@ -419,7 +420,7 @@ export function sectorStreaks(days: SectorFlowDay[], subject: Subject = "foreign
       streak += 1;
       sum += series[i];
     }
-    out.push({ code, name, label, streak: streak * sign, sum });
+    out.push({ code, name, label, market, streak: streak * sign, sum });
   }
   return out.sort((a, b) => Math.abs(b.streak) - Math.abs(a.streak) || Math.abs(b.sum) - Math.abs(a.sum));
 }
@@ -428,6 +429,7 @@ export interface SectorConsensus {
   code: string;
   name: string;
   label: string;
+  market: Market;
   /** 주체별 기간 누적 (SUBJECTS 순서) */
   values: number[];
   /** 같은 방향으로 움직인 주체 수 */
@@ -458,12 +460,12 @@ export function sectorConsensus(
   const recent = days.slice(-window);
   if (recent.length === 0) return [];
 
-  const acc = new Map<string, { name: string; label: string; sums: number[] }>();
+  const acc = new Map<string, { name: string; label: string; market: Market; sums: number[] }>();
   for (const day of recent) {
     for (const row of sectorsOf(day)) {
       const cur =
         acc.get(row.code) ??
-        { name: row.name, label: row.label, sums: CONSENSUS_SUBJECTS.map(() => 0) };
+        { name: row.name, label: row.label, market: row.market, sums: CONSENSUS_SUBJECTS.map(() => 0) };
       CONSENSUS_SUBJECTS.forEach((s, i) => {
         cur.sums[i] += valueOf(row, s);
       });
@@ -482,7 +484,7 @@ export function sectorConsensus(
     if (side && dir !== side) continue;
 
     const total = x.sums.filter((v) => (dir === 1 ? v > 0 : v < 0)).reduce((a, b) => a + b, 0);
-    out.push({ code, name: x.name, label: x.label, values: x.sums, agree, side: dir, total });
+    out.push({ code, name: x.name, label: x.label, market: x.market, values: x.sums, agree, side: dir, total });
   }
 
   // 합의 주체가 많은 순 → 금액이 큰 순
@@ -496,6 +498,7 @@ export interface SectorSplit {
   code: string;
   name: string;
   label: string;
+  market: Market;
   pension: number;
   trust: number;
 }
@@ -514,7 +517,8 @@ export function institutionSplits(days: SectorFlowDay[], window = 5): SectorSpli
   for (const day of recent) {
     for (const row of sectorsOf(day)) {
       const cur =
-        acc.get(row.code) ?? { code: row.code, name: row.name, label: row.label, pension: 0, trust: 0 };
+        acc.get(row.code) ??
+        { code: row.code, name: row.name, label: row.label, market: row.market, pension: 0, trust: 0 };
       cur.pension += valueOf(row, "pension");
       cur.trust += valueOf(row, "trust");
       acc.set(row.code, cur);

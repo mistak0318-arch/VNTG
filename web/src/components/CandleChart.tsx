@@ -56,6 +56,26 @@ function timeValue(time: Time): number {
   return typeof time === "number" ? time : 0;
 }
 
+const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
+
+/**
+ * 툴팁 머리글 — 일봉은 `2026/06/11(목)`, 분봉은 `06/11 13:45`.
+ * 요일까지 넣는 이유는 월요일 갭이나 금요일 마감 같은 패턴이 눈에 들어오기 때문이다.
+ */
+function tooltipDate(time: Time, intraday: boolean): string {
+  if (typeof time === "object" && "year" in time) {
+    const d = new Date(Date.UTC(time.year, time.month - 1, time.day));
+    return `${time.year}/${String(time.month).padStart(2, "0")}/${String(time.day).padStart(2, "0")}(${WEEKDAY[d.getUTCDay()]})`;
+  }
+  if (typeof time === "number") {
+    const d = new Date(time * 1000);
+    const md = `${String(d.getUTCMonth() + 1).padStart(2, "0")}/${String(d.getUTCDate()).padStart(2, "0")}`;
+    if (!intraday) return md;
+    return `${md} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+  }
+  return String(time);
+}
+
 /** BusinessDay 또는 UTCTimestamp를 "05/06" 형태로 */
 function labelDate(time: Time): string {
   if (typeof time === "object" && "month" in time) {
@@ -72,13 +92,19 @@ export function CandleChart({
   candles,
   intraday = false,
   showExtremes = true,
+  name,
+  code,
 }: {
   candles: Candle[];
   intraday?: boolean;
   /** HTS처럼 기간 최고/최저를 선과 말풍선으로 표시 */
   showExtremes?: boolean;
+  /** 툴팁 머리에 표시할 종목명·코드 (없으면 생략) */
+  name?: string;
+  code?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
   const { theme } = useAppearance();
 
   useEffect(() => {
@@ -207,6 +233,87 @@ export function CandleChart({
       refresh();
     }
 
+    /**
+     * 봉 위에 올렸을 때 그 봉의 정보를 띄운다 (키움 차트와 같은 방식).
+     *
+     * 등락률은 전부 **직전 봉 종가 대비**다 — 키움 툴팁의 수치를 역산해 맞췄다.
+     * 이동평균은 값과 함께 `(MA − 종가) / 종가` 이격을 보여준다. 종가가 이평선에서
+     * 얼마나 떨어져 있는지가 이평선 값 자체보다 판단에 쓰인다.
+     */
+    const maSeries = MA_LINES.map((m) => ({ ...m, data: sma(candles, m.period) }));
+    const indexOfTime = new Map<number, number>();
+    candles.forEach((c, i) => indexOfTime.set(timeValue(c.time), i));
+    const maAt = maSeries.map((m) => {
+      const byTime = new Map<number, number>();
+      for (const p of m.data) byTime.set(timeValue(p.time), p.value);
+      return { period: m.period, color: m.color, byTime };
+    });
+
+    const won = (v: number) => Math.round(v).toLocaleString("ko-KR");
+    const rate = (v: number, base: number) => {
+      if (!base) return "";
+      const r = ((v - base) / base) * 100;
+      return `${r > 0 ? "+" : ""}${r.toFixed(2)}%`;
+    };
+    const rateCls = (v: number, base: number) => (v > base ? "up" : v < base ? "down" : "");
+
+    const tip = tipRef.current;
+    const onMove = (param: { time?: Time; point?: { x: number; y: number } }) => {
+      if (!tip) return;
+      if (!param.time || !param.point) {
+        tip.style.display = "none";
+        return;
+      }
+      const i = indexOfTime.get(timeValue(param.time));
+      if (i === undefined) {
+        tip.style.display = "none";
+        return;
+      }
+      const cur = candles[i];
+      const prev = candles[i - 1];
+      // 첫 봉은 비교 대상이 없다 — 시가를 기준으로 삼는다 (0으로 나누는 것보다 낫다)
+      const base = prev ? prev.close : cur.open;
+
+      const row = (label: string, value: number) =>
+        `<div class="ct-row"><span>${label}</span><b class="${rateCls(value, base)}">${won(value)}</b>` +
+        `<i class="${rateCls(value, base)}">${rate(value, base)}</i></div>`;
+
+      const volRate = prev && prev.volume > 0
+        ? `${cur.volume >= prev.volume ? "+" : ""}${(((cur.volume - prev.volume) / prev.volume) * 100).toFixed(2)}%`
+        : "";
+
+      const maRows = maAt
+        .map((m) => {
+          const v = m.byTime.get(timeValue(cur.time));
+          if (v === undefined) return "";
+          const gap = ((v - cur.close) / cur.close) * 100;
+          return (
+            `<div class="ct-row"><span><i class="ct-dot" style="background:${m.color}"></i>${m.period}</span>` +
+            `<b>${won(v)}</b><i>${gap > 0 ? "+" : ""}${gap.toFixed(2)}%</i></div>`
+          );
+        })
+        .join("");
+
+      tip.innerHTML =
+        (name ? `<div class="ct-name">${name}${code ? `(${code})` : ""}</div>` : "") +
+        `<div class="ct-date">${tooltipDate(cur.time, intraday)}</div>` +
+        row("시가", cur.open) +
+        row("고가", cur.high) +
+        row("저가", cur.low) +
+        row("종가", cur.close) +
+        `<div class="ct-row"><span>거래량</span><b>${won(cur.volume)}</b><i>${volRate}</i></div>` +
+        (maRows ? `<div class="ct-sub">가격 이동평균</div>${maRows}` : "");
+
+      tip.style.display = "block";
+      // 커서 오른쪽에 두되, 오른쪽 끝에서는 왼쪽으로 넘긴다
+      const w = tip.offsetWidth;
+      const left = param.point.x + 16 + w > el.clientWidth ? param.point.x - w - 16 : param.point.x + 16;
+      tip.style.left = `${Math.max(4, left)}px`;
+      tip.style.top = `8px`;
+    };
+
+    chart.subscribeCrosshairMove(onMove);
+
     chart.timeScale().fitContent();
 
     const resize = () => chart.applyOptions({ width: el.clientWidth });
@@ -231,7 +338,10 @@ export function CandleChart({
           </span>
         ))}
       </div>
-      <div ref={containerRef} style={{ width: "100%" }} />
+      <div className="candle-host">
+        <div ref={containerRef} style={{ width: "100%" }} />
+        <div ref={tipRef} className="candle-tip" />
+      </div>
     </div>
   );
 }

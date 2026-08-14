@@ -71,7 +71,16 @@ export function toCandles(chart: RawRecord | null, period: Period): Candle[] {
   return out.reverse();
 }
 
-export function ChartPanel({ code, initialPeriod = "day" }: { code: string; initialPeriod?: Period }) {
+export function ChartPanel({
+  code,
+  name,
+  initialPeriod = "day",
+}: {
+  code: string;
+  /** 툴팁 머리에 쓸 종목명 */
+  name?: string;
+  initialPeriod?: Period;
+}) {
   const [period, setPeriod] = useState<Period>(initialPeriod);
   const [chart, setChart] = useState<RawRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -117,7 +126,7 @@ export function ChartPanel({ code, initialPeriod = "day" }: { code: string; init
       {error && <div className="error-banner">{error}</div>}
       {!loading && !error && (
         <div className="chart-wrap">
-          <CandleChart candles={candles} intraday={isIntraday} />
+          <CandleChart candles={candles} intraday={isIntraday} name={name} code={code} />
         </div>
       )}
     </>

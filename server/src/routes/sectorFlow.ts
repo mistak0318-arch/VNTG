@@ -73,12 +73,14 @@ export function createSectorFlowRouter(client: KiwoomClient): Router {
       }
       const rows = await getSectorStocks(client, market, code);
       /*
-       * 등락률 높은 순 — 그 업종을 무엇이 끌었는지가 먼저 보여야 한다.
-       * 다만 장 시작 전에는 전 종목 등락률이 0으로 오므로 그때는 정렬이 무의미해진다.
-       * 그래서 시가총액을 2순위로 둔다 — 최소한 큰 종목부터 보이게.
+       * 시가총액 순.
+       *
+       * 처음엔 등락률 순으로 뒀는데, 그러면 시총 300억짜리가 맨 위에 오고 그 업종을
+       * 실제로 움직이는 대형주는 한참 아래에 묻힌다. "이 업종에 돈이 들어왔다"를 보고
+       * 펼치는 자리이므로 **덩치 큰 것부터** 보는 게 맞다.
        */
       const stocks = [...rows]
-        .sort((a, b) => b.changeRate - a.changeRate || (b.marketCap ?? 0) - (a.marketCap ?? 0))
+        .sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0))
         .slice(0, 30);
       // 전 종목이 0이면 아직 거래 전이라는 뜻 — 화면에서 그렇게 말해줘야 오해가 없다
       res.json({ stocks, beforeTrading: stocks.every((s) => s.changeRate === 0) });
