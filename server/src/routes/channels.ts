@@ -13,6 +13,7 @@ import {
   refreshChannels,
   setChannelEnabled,
 } from "../telegramReader.js";
+import { CHANNEL_STEPS, createJob, getJob, reporterFor } from "../reportProgress.js";
 
 export function createChannelsRouter(): Router {
   const router = Router();
@@ -54,7 +55,52 @@ export function createChannelsRouter(): Router {
    * 무시하고 최근 N시간을 다시 훑는다 — 누른 시점의 최신을 보려는 것이지, 지난 실행 이후
    * 새로 온 것만 보려는 게 아니기 때문이다. 정기 발행(스케줄러)만 읽은 위치를 쓴다.
    */
+  /**
+   * 곧바로 jobId 를 돌려주고 뒤에서 돈다.
+   * 채널 200개를 읽는 동안 「발송 중…」만 떠 있어서 얼마나 기다려야 하는지 알 수 없었다.
+   */
   router.post("/report", async (req, res, next) => {
+    try {
+      const useAi = req.query.ai !== "0";
+      const send = req.query.send === "1";
+      const sinceMinutes = Math.min(
+        Math.max(Number(req.query.minutes) || Number(req.query.hours) * 60 || 60, 5),
+        72 * 60,
+      );
+      const { id: jobId, job } = createJob(
+        `${useAi ? "AI 정리" : "선별"}${send ? " + 발송" : ""}`,
+        CHANNEL_STEPS,
+      );
+      const reporter = reporterFor(job);
+
+      void buildChannelReport({ useAi, send, sinceMinutes, useOffsets: false, progress: reporter })
+        .then((report) => {
+          job.report = report;
+          job.status = "done";
+        })
+        .catch((err: unknown) => {
+          job.status = "error";
+          job.error = err instanceof Error ? err.message : "실패";
+          for (const s of job.steps) if (s.state === "running") s.state = "failed";
+        });
+
+      res.json({ jobId });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 진행 상황 폴링 — 리포트와 같은 job 저장소를 쓴다 */
+  router.get("/report/:jobId", (req, res) => {
+    const job = getJob(req.params.jobId);
+    if (!job) {
+      res.status(404).json({ error: "작업을 찾을 수 없습니다 (서버 재시작 시 사라집니다)" });
+      return;
+    }
+    res.json(job);
+  });
+
+  router.post("/report-sync", async (req, res, next) => {
     try {
       const report = await buildChannelReport({
         useAi: req.query.ai !== "0",

@@ -48,6 +48,23 @@ export const PUBLISH_STEPS: { key: string; label: string }[] = [
   { key: "save", label: "저장·발송" },
 ];
 
+<<<<<<< HEAD
+=======
+/**
+ * 텔레그램 채널 정리·발송이 거치는 단계.
+ *
+ * 채널 200개를 읽는 데 시간이 걸리는데 「발송 중…」 한 마디만 떠 있어서 얼마나
+ * 기다려야 하는지 알 수 없었다. 리포트와 같은 방식으로 어느 단계인지 보여준다.
+ */
+export const CHANNEL_STEPS: { key: string; label: string }[] = [
+  { key: "read", label: "채널 읽기" },
+  { key: "pick", label: "선별·점수화" },
+  { key: "tag", label: "종목·테마 태그" },
+  { key: "ai", label: "AI 정리" },
+  { key: "send", label: "텔레그램 발송" },
+];
+
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
 const jobs = new Map<string, PublishJob>();
 
 function prune(): void {
@@ -58,12 +75,23 @@ function prune(): void {
   for (const [id] of old) jobs.delete(id);
 }
 
+<<<<<<< HEAD
 export function createJob(label: string): { id: string; job: PublishJob } {
+=======
+export function createJob(
+  label: string,
+  steps: { key: string; label: string }[] = PUBLISH_STEPS,
+): { id: string; job: PublishJob } {
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
   const id = `pub_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const job: PublishJob = {
     status: "running",
     label,
+<<<<<<< HEAD
     steps: PUBLISH_STEPS.map((s) => ({ ...s, state: "pending" })),
+=======
+    steps: steps.map((s) => ({ ...s, state: "pending" })),
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
     startedAt: new Date().toISOString(),
   };
   jobs.set(id, job);

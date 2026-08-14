@@ -73,6 +73,9 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "claude-haiku-4-5-20251001": { input: 1, output: 5 },
   "gemini-2.5-flash": { input: 0.3, output: 2.5 },
   "gemini-2.5-flash-lite": { input: 0.1, output: 0.4 },
+  // 공개 단가는 바뀔 수 있다. 정확한 청구는 Google Cloud 결제 콘솔에서 본다
+  "gemini-3.5-flash-lite": { input: 0.1, output: 0.4 },
+  "gemini-3.5-flash": { input: 0.3, output: 2.5 },
   "gpt-4o-mini": { input: 0.15, output: 0.6 },
 };
 
@@ -93,7 +96,8 @@ function priceFor(model: string, day?: string): { input: number; output: number 
     if (model === "claude-sonnet-5" && day && day > SONNET5_INTRO_UNTIL) return SONNET5_LIST;
     return hit;
   }
-  if (model.startsWith("gemini")) return MODEL_PRICING["gemini-2.5-flash"];
+  if (/lite/.test(model) && model.startsWith("gemini")) return MODEL_PRICING["gemini-3.5-flash-lite"];
+  if (model.startsWith("gemini")) return MODEL_PRICING["gemini-3.5-flash"];
   if (model.startsWith("gpt")) return MODEL_PRICING["gpt-4o-mini"];
   if (model.includes("opus")) return MODEL_PRICING["claude-opus-5"];
   if (model.includes("haiku")) return MODEL_PRICING["claude-haiku-4-5-20251001"];

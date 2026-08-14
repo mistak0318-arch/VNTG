@@ -347,11 +347,21 @@ export async function readImage(
  * 이미지 경로와 같은 코드를 쓰되 이미지 파트만 빼서, 제공자별 예외 처리를 두 벌 만들지 않는다.
  */
 export const TEXT_MODELS: VisionModelOption[] = [
+  /*
+   * gemini-2.5-flash 는 목록에는 남아 있지만 실제로 부르면 404 가 온다
+   * ("no longer available to new users"). 실측으로 확인하고 갈아끼웠다.
+   */
   {
     provider: "gemini",
-    model: "gemini-2.5-flash",
-    label: "Gemini 2.5 Flash",
-    hint: "가장 저렴 · 요약에 무난",
+    model: "gemini-3.5-flash-lite",
+    label: "Gemini 3.5 Flash Lite",
+    hint: "가장 저렴 · 검색 그라운딩 됨 · 생각 토큰 안 씀",
+  },
+  {
+    provider: "gemini",
+    model: "gemini-3.5-flash",
+    label: "Gemini 3.5 Flash",
+    hint: "조금 비싸지만 정리 품질이 낫다",
   },
   {
     provider: "gemini",

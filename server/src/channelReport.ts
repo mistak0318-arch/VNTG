@@ -13,6 +13,10 @@ import {
 } from "./telegramDigest.js";
 import { listWatchlist } from "./watchlist.js";
 import { listThemes } from "./customThemes.js";
+<<<<<<< HEAD
+=======
+import { noopProgress, type ProgressReporter } from "./reportProgress.js";
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
 import { peekSnapshot } from "./marketSnapshot.js";
 
 /**
@@ -129,6 +133,8 @@ export async function buildChannelReport(
      * 수동 실행은 false — 버튼을 누른 시점의 최근 sinceMinutes 전체를 다시 본다.
      */
     useOffsets?: boolean;
+    /** 진행 상황 알림. 화면이 없는 경로(정기 발행)는 안 넘기면 된다 */
+    progress?: ProgressReporter;
   } = {},
 ): Promise<ChannelReport> {
   /*
@@ -138,7 +144,18 @@ export async function buildChannelReport(
    * 점수 순으로 자르는 것이라 뒤쪽은 이미 "채널 하나가 한 번 말한 것"이다.
    * 40건이면 하루 세 판에서 놓치는 게 없고 입력 토큰은 3분의 1이 준다.
    */
+<<<<<<< HEAD
   const { send = false, useAi = true, sinceMinutes = 60, limit = 40, useOffsets = true } = opts;
+=======
+  const {
+    send = false,
+    useAi = true,
+    sinceMinutes = 60,
+    limit = 40,
+    useOffsets = true,
+    progress = noopProgress,
+  } = opts;
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
   const now = new Date();
   const date = new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
 
@@ -159,10 +176,19 @@ export async function buildChannelReport(
   };
 
   if (!isReaderConfigured()) {
+    // 단계를 pending 으로 두고 끝내면 화면이 "아직 도는 중"처럼 보인다. 이유를 남긴다
+    for (const k of ["read", "pick", "tag", "ai", "send"]) progress.skip(k, "세션 미설정");
     return { ...base, error: "텔레그램 세션 미설정 — scripts/telegram-login.mjs 를 먼저 실행하세요" };
   }
 
+<<<<<<< HEAD
   const { messages, channels, skipped } = await fetchNewMessages({ sinceMinutes, useOffsets });
+=======
+  progress.start("read");
+  const { messages, channels, skipped } = await fetchNewMessages({ sinceMinutes, useOffsets });
+  progress.done("read", `채널 ${channels}개 · 원본 ${messages.length}건`);
+  progress.start("tag");
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
   const watchNames = (await listWatchlist().catch(() => [])).map((w) => w.name);
 
   /*
@@ -181,7 +207,14 @@ export async function buildChannelReport(
     nameOfCode,
   );
 
+<<<<<<< HEAD
   const items = scoreMessages(messages, watchNames, limit, tags);
+=======
+  progress.done("tag", `내 테마 종목 ${tags.names.length}개 사전`);
+  progress.start("pick");
+  const items = scoreMessages(messages, watchNames, limit, tags);
+  progress.done("pick", `선별 ${items.length}건`);
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
 
   const times = messages.map((m) => m.at).sort();
 
@@ -197,6 +230,8 @@ export async function buildChannelReport(
   };
 
   if (items.length === 0) {
+    progress.skip("ai", "선별 0건");
+    progress.skip("send", "보낼 것 없음");
     report.error = "정리할 만한 메시지가 없습니다 (필터 통과 0건)";
     return report;
   }
@@ -207,13 +242,24 @@ export async function buildChannelReport(
    * 원문 그대로가 더 나을 때가 있고, AI 비용을 안 쓰고 싶을 때도 있다.
    */
   if (!useAi) {
+    progress.skip("ai", "선별만 보기 (비용 0)");
     // 텔레그램은 건별로 — 한 덩어리로 붙이면 읽히지 않고 원문 링크도 못 단다
     if (send) {
+      progress.start("send");
+      const msgs = toPickedMessages(report, 15);
       await sendTelegram(toPickedHeader(report), "channel").catch(() => undefined);
-      for (const msg of toPickedMessages(report, 15)) {
+      let sent = 0;
+      for (const msg of msgs) {
         await sendTelegram(msg, "channel").catch(() => undefined);
+        sent += 1;
+        // 건마다 알린다 — 15건을 0.4초 간격으로 보내므로 진행이 보여야 한다
+        progress.start("send");
+        progress.done("send", `${sent}/${msgs.length}건 발송`);
         await new Promise((r) => setTimeout(r, 400));
       }
+      progress.done("send", `${msgs.length}건 발송 완료`);
+    } else {
+      progress.skip("send", "화면에서만 보기");
     }
     return report;
   }
@@ -245,7 +291,10 @@ export async function buildChannelReport(
       : "(범위 불명)";
   const prompt = `${SYSTEM_RULES}\n\n---\n지금 시각: ${now.toLocaleString("ko-KR")}\n수집 구간: 최근 ${describeWindow(sinceMinutes)} (${span})\n대상 채널 ${channels}개 · 원본 ${messages.length}건 중 ${items.length}건 선별\n\n${toDigestText(items)}`;
 
+  progress.start("ai");
   const res = await summarize(prompt, 2500, "channel");
+  if (res.error) progress.fail("ai", res.error);
+  else progress.done("ai", `${res.outputTokens.toLocaleString("ko-KR")} 토큰`);
   report.summary = res.text;
   report.model = res.usedModel ?? null;
   report.inputTokens = res.inputTokens;
@@ -255,8 +304,12 @@ export async function buildChannelReport(
   await append(report);
 
   if (send && report.summary) {
+    progress.start("send");
     const html = toChannelHtml(report);
     await sendTelegram(html, "channel").catch(() => undefined);
+    progress.done("send", "정리본 발송 완료");
+  } else {
+    progress.skip("send", send ? "요약이 없어 못 보냄" : "화면에서만 보기");
   }
 
   return report;

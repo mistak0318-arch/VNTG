@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { useEffect, useState } from "react";
+=======
+import { Fragment, useEffect, useState } from "react";
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
 import {
   api,
   fmtNum,
@@ -369,8 +373,14 @@ function TradeTable({
         </thead>
         <tbody>
           {rows.map((t) => (
+<<<<<<< HEAD
             <>
               <tr key={t.id}>
+=======
+            // 축약형 <>…</> 는 key 를 못 받는다. 배열 안이므로 Fragment 를 써야 한다
+            <Fragment key={t.id}>
+              <tr>
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
                 <td className="sticky-col">
                   <button className="link-btn" onClick={() => onSelectStock(t.code, t.name)}>
                     {t.name}
@@ -407,13 +417,21 @@ function TradeTable({
                 </td>
               </tr>
               {openId === t.id && (
+<<<<<<< HEAD
                 <tr key={`${t.id}-ev`}>
+=======
+                <tr>
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
                   <td colSpan={9} className="pt-evidence-cell">
                     <Evidence t={t} />
                   </td>
                 </tr>
               )}
+<<<<<<< HEAD
             </>
+=======
+            </Fragment>
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
           ))}
         </tbody>
       </table>

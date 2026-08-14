@@ -40,6 +40,10 @@ import { createChannelsRouter } from "./routes/channels.js";
 import { createCalendarVisionRouter } from "./routes/calendarVision.js";
 import { createSignalRouter } from "./routes/signal.js";
 import { createPaperRouter } from "./routes/paper.js";
+<<<<<<< HEAD
+=======
+import { createJournalRouter } from "./routes/journal.js";
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
 import { createWatchlistRouter } from "./routes/watchlist.js";
 
 const app = express();
@@ -86,6 +90,10 @@ app.use("/api/calendar", createCalendarRouter());
 app.use("/api/notes", createNotesRouter(client));
 app.use("/api/signal", createSignalRouter(client));
 app.use("/api/paper", createPaperRouter(client));
+<<<<<<< HEAD
+=======
+app.use("/api/journal", createJournalRouter(client));
+>>>>>>> a515a0e3aa60d068114fb1dd4a9674f785b8118e
 app.use("/api/breadth", createBreadthRouter(client));
 app.use("/api/alert", createAlertRouter(client));
 app.use("/api/ai", createAiRouter());
