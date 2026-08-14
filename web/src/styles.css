@@ -3180,3 +3180,9 @@ body {
 
 /* 시가·고가·저가 아래 NXT 값 — 거래소마다 체결가가 갈릴 때만 보인다 */
 .qs-nxt { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.qs-nxt em { font-style: normal; }
+.qs-nxt em.positive { color: var(--red); }
+.qs-nxt em.negative { color: var(--blue); }
+/* 차트 거래소 선택 — 기간 버튼과 시각적으로 구분 */
+.period-btn.venue { font-size: 11px; }
+.period-sep { display: inline-block; width: 1px; height: 16px; background: var(--border); margin: 0 6px; vertical-align: middle; }

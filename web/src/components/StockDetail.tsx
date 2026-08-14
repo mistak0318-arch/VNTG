@@ -7,6 +7,7 @@ import { FinancePanel } from "./FinancePanel";
 import { InvestorTrendTable } from "./InvestorTrendTable";
 import { NewsDisclosurePanel } from "./NewsDisclosurePanel";
 import { PriceHeader } from "./PriceHeader";
+import { useLive } from "../useLive";
 import { SectorMoodPanel } from "./SectorMoodPanel";
 import { SignalPanel } from "./SignalLight";
 import { StockNotes } from "./StockNotes";
@@ -73,11 +74,18 @@ export function StockDetail({
   /** 업종·테마 구성종목에서 다른 종목으로 갈아타기 */
   onSelectStock?: (code: string, name: string) => void;
 }) {
-  const [info, setInfo] = useState<RawRecord | null>(null);
   const [investorChart, setInvestorChart] = useState<RawRecord | null>(null);
   const [dailyForReturns, setDailyForReturns] = useState<RawRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  /*
+   * 현재가는 장중에 5초마다 조용히 갱신된다.
+   * 이 모달은 관심종목·순위 화면에서 바로 열리는 자리라 개별종목분석만큼 자주 쓰이는데,
+   * 열어둔 채로 값이 멈춰 있으면 지난 시세를 보고 판단하게 된다.
+   */
+  const live = useLive(() => api.stockInfo(code), [code], 5000);
+  const info = (live.data ?? null) as RawRecord | null;
   const [watchBusy, setWatchBusy] = useState(false);
   const [detailTab, setDetailTab] = useState<DetailTab>("chart");
   const watchedCodes = useWatchedCodes();
@@ -88,10 +96,10 @@ export function StockDetail({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([api.stockInfo(code), api.investorChart(code), api.dailyChart(code)])
-      .then(([infoRes, investorRes, dailyRes]) => {
+    // 수급·일봉은 일별 데이터라 자주 부를 이유가 없다 (현재가만 폴링한다)
+    Promise.all([api.investorChart(code), api.dailyChart(code)])
+      .then(([investorRes, dailyRes]) => {
         if (cancelled) return;
-        setInfo(infoRes as RawRecord);
         setInvestorChart(investorRes as RawRecord);
         setDailyForReturns(dailyRes as RawRecord);
       })
@@ -147,6 +155,17 @@ export function StockDetail({
             title={watched ? "관심종목에서 제거" : "관심종목에 추가"}
           >
             {watched ? "★" : "☆"}
+          </button>
+          <button
+            className="watch-btn"
+            onClick={() => live.refresh()}
+            title={
+              live.updatedAt
+                ? `${new Date(live.updatedAt).toLocaleTimeString("ko-KR", { hour12: false })} 기준 · 장중에는 5초마다 자동 갱신됩니다`
+                : "지금 시세를 다시 받아옵니다"
+            }
+          >
+            ↻
           </button>
           <button className="close-btn" onClick={onClose}>
             ✕

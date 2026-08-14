@@ -99,8 +99,14 @@ function SummaryGrid({
         const price = Math.abs(num(it.value));
         // 전일종가 대비 등락률을 같이 보여줘야 가격의 의미가 바로 읽힌다
         const rate = base > 0 && price > 0 ? ((price - base) / base) * 100 : null;
-        // 값이 같으면 굳이 괄호를 달지 않는다 — 다를 때만 눈에 띄어야 한다
-        const showNxt = it.nxtValue !== null && it.nxtValue > 0 && it.nxtValue !== price;
+        /*
+         * NXT 값은 **항상** 보여준다. 같은 날은 같다는 사실 자체가 정보이고,
+         * 어떤 날은 나오고 어떤 날은 안 나오면 "저가는 왜 없지?"라고 헷갈린다.
+         * 등락률은 KRX와 같은 기준(전일종가)으로 재야 두 값을 나란히 비교할 수 있다.
+         */
+        const nxtPrice = it.nxtValue;
+        const showNxt = nxtPrice !== null && nxtPrice > 0;
+        const nxtRate = showNxt && base > 0 ? ((nxtPrice - base) / base) * 100 : null;
         return (
           <div className="summary-item" key={it.label}>
             <div className="label">{it.label}</div>
@@ -115,7 +121,14 @@ function SummaryGrid({
             </div>
             {showNxt && (
               <div className="qs-nxt" title="넥스트레이드(대체거래소) 기준">
-                NXT {fmtNum(it.nxtValue as number)}
+                NXT {fmtNum(nxtPrice)}
+                {nxtRate !== null && (
+                  <em className={signOf(nxtPrice - base)}>
+                    {" "}
+                    {nxtRate > 0 ? "+" : ""}
+                    {nxtRate.toFixed(2)}%
+                  </em>
+                )}
               </div>
             )}
           </div>

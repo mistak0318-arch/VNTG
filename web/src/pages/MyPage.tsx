@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { api, fmtNum, signClass, type TrackedStock } from "../api";
+import {
+  api,
+  fmtNum,
+  normalizeStockCode,
+  signClass,
+  type StockSearchResult,
+  type TrackedStock,
+} from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useWatchedCodes } from "../useWatchedCodes";
@@ -24,6 +31,10 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  // 종목 추가 — 이름으로 찾아 고르게 한다 (코드를 손으로 적으면 틀린다)
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<StockSearchResult[]>([]);
+  const [adding, setAdding] = useState(false);
   const watchedCodes = useWatchedCodes();
 
   // 그룹 필터를 먼저 적용한 뒤 정렬한다
@@ -91,6 +102,51 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     loadGroups();
   }, []);
 
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      api
+        .searchStocks(q)
+        .then((r) => setResults(r.results))
+        .catch(() => setResults([]));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  /**
+   * 관심종목에 담는다.
+   *
+   * 편입가는 **지금 현재가**로 잡는다. 사용자가 직접 적게 하면 매번 입력하기 번거롭고,
+   * 여기서 재는 것은 매수 단가가 아니라 "지켜보기 시작한 시점 대비 얼마나 움직였나"이므로
+   * 담은 순간의 가격이 기준으로 맞다. (실제 매수 단가는 계좌 화면이 따로 본다)
+   */
+  async function addStock(r: StockSearchResult) {
+    setAdding(true);
+    setError(null);
+    try {
+      const code = normalizeStockCode(r.code);
+      const info = (await api.stockInfo(code)) as Record<string, unknown>;
+      const price = Math.abs(Number(String(info.cur_prc ?? "").replace(/[+,]/g, ""))) || 0;
+      await api.watchlistAdd({
+        code,
+        name: r.name,
+        addedPrice: price,
+        group: activeGroup === ALL ? DEFAULT_GROUP : activeGroup,
+      });
+      setQuery("");
+      setResults([]);
+      await load(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "관심종목 추가 실패");
+    } finally {
+      setAdding(false);
+    }
+  }
+
   async function remove(code: string) {
     try {
       await api.watchlistRemove(code);
@@ -112,6 +168,39 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       <RefreshBar onRefresh={() => load(true)} loading={loading} updatedAt={updatedAt} />
 
       {error && <div className="error-banner">{error}</div>}
+
+      <div className="search-box">
+        <input
+          className="search-input"
+          type="text"
+          inputMode="search"
+          placeholder={`종목명·코드로 검색해서 ${activeGroup === ALL ? DEFAULT_GROUP : activeGroup} 그룹에 추가`}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          disabled={adding}
+        />
+        {query.trim() && results.length > 0 && (
+          <div className="search-dropdown">
+            {results.map((r) => {
+              const already = items.some((i) => i.code === normalizeStockCode(r.code));
+              return (
+                <button
+                  key={r.code}
+                  className="search-result-row"
+                  disabled={already || adding}
+                  onClick={() => void addStock(r)}
+                >
+                  <span className="name">{r.name}</span>
+                  <span className="sub">
+                    {r.code} · {r.marketName}
+                    {already && " · 이미 담김"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <div className="filter-row group-tabs">
         <button

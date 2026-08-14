@@ -72,6 +72,14 @@ export function toCandles(chart: RawRecord | null, period: Period): Candle[] {
   return out.reverse();
 }
 
+type Venue = "krx" | "nxt" | "all";
+
+const VENUES: { key: Venue; label: string; hint: string }[] = [
+  { key: "krx", label: "KRX", hint: "한국거래소 체결만 — 봉이 가장 안정적입니다" },
+  { key: "nxt", label: "NXT", hint: "넥스트레이드 체결만" },
+  { key: "all", label: "통합", hint: "두 거래소를 합친 체결 — 고가·저가가 벌어질 수 있습니다" },
+];
+
 export function ChartPanel({
   code,
   name,
@@ -83,7 +91,15 @@ export function ChartPanel({
   initialPeriod?: Period;
 }) {
   const [period, setPeriod] = useState<Period>(initialPeriod);
+  const [venue, setVenue] = useState<Venue>("krx");
   const isIntraday = PERIOD_CONFIG[period].intraday === true;
+
+  /*
+   * 키움은 종목코드 접미사로 거래소를 가른다 — 005930(KRX) / _NX(NXT) / _AL(통합).
+   * 통합은 두 거래소 체결을 합친 것이라 봉의 고가·저가가 벌어지고, NXT는 거래가 얕은 종목에서
+   * 봉이 튄다. 그래서 **기본은 KRX**로 두고 필요할 때만 바꿔 보게 한다.
+   */
+  const chartCode = venue === "krx" ? code : `${code}_${venue === "nxt" ? "NX" : "AL"}`;
 
   /*
    * 장중에는 조용히 갱신된다. 주기는 봉 단위에 맞춘다 —
@@ -92,8 +108,8 @@ export function ChartPanel({
    * 데이터만 갈아끼우므로 확대해 둔 구간은 그대로 유지된다.
    */
   const { data: chart, loading, error } = useLive<RawRecord>(
-    () => PERIOD_CONFIG[period].fetch(code),
-    [code, period],
+    () => PERIOD_CONFIG[period].fetch(chartCode),
+    [chartCode, period],
     isIntraday ? 10_000 : 60_000,
   );
 
@@ -102,6 +118,17 @@ export function ChartPanel({
   return (
     <>
       <div className="period-toggle">
+        {VENUES.map((v) => (
+          <button
+            key={v.key}
+            className={`period-btn venue ${v.key === venue ? "active" : ""}`}
+            onClick={() => setVenue(v.key)}
+            title={v.hint}
+          >
+            {v.label}
+          </button>
+        ))}
+        <span className="period-sep" />
         {(Object.keys(PERIOD_CONFIG) as Period[]).map((p) => (
           <button
             key={p}
@@ -116,7 +143,12 @@ export function ChartPanel({
       {error && <div className="error-banner">{error}</div>}
       {!loading && !error && (
         <div className="chart-wrap">
-          <CandleChart candles={candles} intraday={isIntraday} name={name} code={code} />
+          <CandleChart
+            candles={candles}
+            intraday={isIntraday}
+            name={name ? `${name} · ${VENUES.find((v) => v.key === venue)?.label}` : undefined}
+            code={code}
+          />
         </div>
       )}
     </>

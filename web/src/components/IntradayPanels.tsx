@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLive } from "../useLive";
 import { api, fmtNum, pickList, type RawRecord } from "../api";
 import { num, signOf } from "./SeriesTable";
 
@@ -41,33 +42,20 @@ function fmtHm(hhmm: string): string {
  * 그 위/아래 어디에 있었는지 한눈에 보이게 한다.
  */
 export function IntradayFlow({ code, basePrice }: { code: string; basePrice: number }) {
-  const [chart, setChart] = useState<RawRecord | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  /*
+   * 3분봉이라 장중에는 계속 새 봉이 붙는다. 30초마다 조용히 갱신한다 —
+   * 5초로 잡아봐야 3분봉은 그대로라 호출만 늘어난다.
+   * _AL(통합)로 요청해야 NXT 프리마켓(08:00~)·애프터마켓(~20:00)까지 들어온다.
+   */
+  const bare = code.replace(/_(AL|NX)$/, "");
+  const { data: chart, loading, error } = useLive<RawRecord>(
+    () => api.minuteChart(`${bare}_AL`, "3") as Promise<RawRecord>,
+    [bare],
+    30_000,
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    // _AL(통합)로 요청해야 NXT 프리마켓(08:00~)·애프터마켓(~20:00)까지 들어온다
-    api
-      .minuteChart(`${code.replace(/_(AL|NX)$/, "")}_AL`, "3")
-      .then((res) => {
-        if (!cancelled) setChart(res as RawRecord);
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [code]);
-
-  if (loading) return <div className="empty">당일 흐름 불러오는 중...</div>;
-  if (error) return <div className="error-banner">{error}</div>;
+  if (loading && !chart) return <div className="empty">당일 흐름 불러오는 중...</div>;
+  if (error && !chart) return <div className="error-banner">{error}</div>;
 
   const points = todayPoints(chart);
   if (points.length < 2) return <div className="empty">당일 분봉 데이터가 없습니다.</div>;

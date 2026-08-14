@@ -121,20 +121,71 @@ async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedS
 }
 
 let cache: { data: TrackedStock[]; at: number } | null = null;
-const TTL_MS = 60_000;
+/** 만드는 중이면 같은 약속을 돌려줘 중복 조회를 막는다 */
+let building: Promise<TrackedStock[]> | null = null;
+
+/**
+ * 캐시 수명.
+ *
+ * 종목마다 차트·수급을 조회하고 초당 제한 때문에 사이에 간격을 두므로,
+ * 종목이 10개면 만드는 데 몇 초가 걸린다. TTL이 1분이었을 때는 잠깐만 지나도
+ * **관심종목 화면에 들어갈 때마다 그 시간을 기다려야 했다.**
+ *
+ * 장중에는 10분, 장이 닫혀 있으면 값이 안 바뀌므로 다음 개장까지 유지한다.
+ * 아래 갱신기가 만료 전에 미리 채워두므로 화면은 늘 완성된 캐시를 받는다.
+ */
+const INTRADAY_TTL_MS = 10 * 60_000;
+
+function expiryOf(at: number): number {
+  const d = new Date(at);
+  const kst = new Date(d.getTime() + (9 * 60 + d.getTimezoneOffset()) * 60_000);
+  const minutes = kst.getHours() * 60 + kst.getMinutes();
+  const weekday = kst.getDay() !== 0 && kst.getDay() !== 6;
+  if (weekday && minutes >= 9 * 60 && minutes < 15 * 60 + 40) return at + INTRADAY_TTL_MS;
+
+  const next = new Date(kst);
+  next.setHours(9, 0, 0, 0);
+  if (next.getTime() <= kst.getTime()) next.setDate(next.getDate() + 1);
+  while (next.getDay() === 0 || next.getDay() === 6) next.setDate(next.getDate() + 1);
+  return at + (next.getTime() - kst.getTime());
+}
 
 export async function getTrackedWatchlist(client: KiwoomClient, force = false): Promise<TrackedStock[]> {
-  if (!force && cache && Date.now() - cache.at < TTL_MS) {
-    return cache.data;
-  }
-  const items = await listWatchlist();
-  const results: TrackedStock[] = [];
-  for (const item of items) {
-    results.push(await trackOne(client, item));
-    await sleep(220);
-  }
-  cache = { data: results, at: Date.now() };
-  return results;
+  if (!force && cache && Date.now() < expiryOf(cache.at)) return cache.data;
+  if (building) return building;
+
+  building = (async () => {
+    const items = await listWatchlist();
+    const results: TrackedStock[] = [];
+    for (const item of items) {
+      results.push(await trackOne(client, item));
+      await sleep(220);
+    }
+    cache = { data: results, at: Date.now() };
+    return results;
+  })().finally(() => {
+    building = null;
+  });
+
+  return building;
+}
+
+/**
+ * 백그라운드 갱신.
+ * 만료된 뒤 사용자가 들어오면 그때부터 만들기 시작해 기다리게 된다.
+ * 만료 1분 전에 미리 채워 둔다 — 아직 만료 전이므로 반드시 force 로 불러야 실제로 갱신된다.
+ */
+export function startTrackingRefresher(client: KiwoomClient): void {
+  const tick = () => {
+    if (building) return;
+    if (cache && Date.now() < expiryOf(cache.at) - 60_000) return;
+    void getTrackedWatchlist(client, true).catch((err: unknown) => {
+      console.error("[watch] 관심종목 갱신 실패:", err instanceof Error ? err.message : err);
+    });
+  };
+  setTimeout(tick, 25_000);
+  setInterval(tick, 60_000);
+  console.log("[watch] 관심종목 백그라운드 갱신 시작 (장중 10분 주기)");
 }
 
 /** 관심종목이 바뀌면 다음 조회 때 새로 집계하도록 캐시를 비운다 */
