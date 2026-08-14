@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recordApiCall } from "./apiUsage.js";
 import { evaluateThemes } from "./customThemes.js";
+import { loadCorrelations } from "./usKrCorrelation.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 
 /**
@@ -201,6 +202,17 @@ async function quotesFor(symbols: string[]): Promise<Map<string, UsQuote>> {
 
 // ---------------------------------------------------------------- 나란히 보기
 
+export interface LinkStat {
+  /** 이 연결에서 가장 연동이 강한 미국 티커 */
+  us: string;
+  kr: string;
+  /** 미국 D일 → 국내 D+1일 상관계수 */
+  corr: number;
+  /** 미국이 1% 움직이면 국내는 평균 몇 % */
+  beta: number;
+  samples: number;
+}
+
 export interface EvaluatedLink extends UsKrLink {
   usQuotes: UsQuote[];
   /** 미국 쪽 단순평균 등락률 (지수와 개별종목을 섞어 쓰므로 가중은 의미가 없다) */
@@ -210,6 +222,15 @@ export interface EvaluatedLink extends UsKrLink {
   krAvg: number | null;
   /** 미국 대비 국내가 얼마나 따라왔는가(%p). 음수면 덜 반영된 것 */
   gap: number | null;
+  /** 검증된 연동 강도 (2단계). 아직 계산 전이면 null */
+  stat: LinkStat | null;
+  /**
+   * 평소 연동을 감안한 오늘의 기대 등락률.
+   * 미국 평균 × 기울기 — "평소대로면 국내가 이만큼은 갔어야 한다"
+   */
+  expected: number | null;
+  /** 기대 대비 실제(%p). 음수면 아직 덜 반영된 것 */
+  surprise: number | null;
 }
 
 export async function evaluateLinks(client: KiwoomClient): Promise<{
@@ -221,10 +242,25 @@ export async function evaluateLinks(client: KiwoomClient): Promise<{
   const links = await listLinks();
   const symbols = [...new Set(links.flatMap((l) => l.us))];
 
-  const [quotes, themes] = await Promise.all([
+  const [quotes, themes, corr] = await Promise.all([
     quotesFor(symbols),
     evaluateThemes(client).then((r) => r.themes).catch(() => []),
+    loadCorrelations().catch(() => null),
   ]);
+
+  /**
+   * 연결마다 **가장 강하게 연동되는 쌍 하나**만 대표로 쓴다.
+   * 쌍을 전부 보여주면 표가 넘치고, 판단에 쓰이는 건 "가장 잘 따라가는 축" 하나다.
+   * 표본이 적으면(20일 미만) 우연일 수 있어 버린다.
+   */
+  const statOf = (label: string): LinkStat | null => {
+    const rows = (corr?.pairs ?? []).filter(
+      (p) => p.label === label && p.nextDay !== null && p.beta !== null && p.samples >= 20,
+    );
+    if (rows.length === 0) return null;
+    const best = rows.reduce((a, b) => (Math.abs(b.nextDay!) > Math.abs(a.nextDay!) ? b : a));
+    return { us: best.us, kr: best.kr, corr: best.nextDay!, beta: best.beta!, samples: best.samples };
+  };
 
   const byName = new Map(themes.map((t) => [t.name, t]));
   const avg = (xs: (number | null)[]) => {
@@ -240,6 +276,10 @@ export async function evaluateLinks(client: KiwoomClient): Promise<{
     });
     const usAvg = avg(usQuotes.map((q) => q.changeRate));
     const krAvg = avg(krThemes.map((t) => t.changeRate));
+    const stat = statOf(l.label);
+    // 대표 쌍의 미국 등락률을 기준으로 기대치를 낸다 (평균이 아니라 그 티커여야 맞다)
+    const leadRate = stat ? (quotes.get(stat.us)?.changeRate ?? null) : null;
+    const expected = stat && leadRate !== null ? leadRate * stat.beta : null;
     return {
       ...l,
       usQuotes,
@@ -247,6 +287,9 @@ export async function evaluateLinks(client: KiwoomClient): Promise<{
       krThemes,
       krAvg,
       gap: usAvg !== null && krAvg !== null ? krAvg - usAvg : null,
+      stat,
+      expected,
+      surprise: expected !== null && krAvg !== null ? krAvg - expected : null,
     };
   });
 
@@ -267,23 +310,46 @@ export function toUsKrDigest(links: EvaluatedLink[]): string {
     .sort((a, b) => Math.abs(b.usAvg ?? 0) - Math.abs(a.usAvg ?? 0))
     .slice(0, 6)
     .map((l) => {
-      const us = l.usQuotes
-        .filter((q) => q.changeRate !== null)
-        .map((q) => `${q.symbol} ${fmt(q.changeRate)}`)
-        .join(", ");
       const kr = l.krThemes
         .filter((t) => t.found)
         .map((t) => `${t.name} ${fmt(t.changeRate)}`)
         .join(", ");
-      const gap =
-        l.gap === null
-          ? ""
-          : ` [국내가 ${l.gap >= 0 ? "더" : "덜"} 반영 ${Math.abs(l.gap).toFixed(1)}%p]`;
-      return `${l.label}: 미국 ${us} → 국내 ${kr}${gap}`;
+
+      /*
+       * 검증된 연동이 있으면 **기대치와 비교**해서 준다.
+       * "SOX +3.2% → 반도체 (연동 0.72, 기대 +1.8%, 실제 +0.4% → 덜 반영)"
+       * 이렇게 줘야 AI가 "미국이 올랐으니 국내도 오를 것"이라는 빈말 대신
+       * 평소 대비 오늘이 어땠는지를 말할 수 있다.
+       */
+      if (l.stat && l.expected !== null) {
+        const lead = l.usQuotes.find((q) => q.symbol === l.stat!.us);
+        const verdict =
+          l.surprise === null
+            ? ""
+            : l.surprise < -0.5
+              ? " → 덜 반영됨"
+              : l.surprise > 0.5
+                ? " → 더 반영됨"
+                : " → 대체로 예상대로";
+        return (
+          `${l.label}: ${l.stat.us} ${fmt(lead?.changeRate ?? null)} ` +
+          `(연동 ${l.stat.corr.toFixed(2)}, ${l.stat.samples}일 표본) → ` +
+          `기대 ${fmt(l.expected)} / 실제 ${fmt(l.krAvg)}${verdict}  [${kr}]`
+        );
+      }
+
+      // 아직 상관계수를 안 냈으면 나란히만
+      const us = l.usQuotes
+        .filter((q) => q.changeRate !== null)
+        .map((q) => `${q.symbol} ${fmt(q.changeRate)}`)
+        .join(", ");
+      return `${l.label}: 미국 ${us} → 국내 ${kr} (연동 미검증)`;
     });
 
-  return (
-    `\n[미국↔국내 테마 연동 — 사람이 적은 가설이며 상관계수 검증 전이다. 참고용으로만 쓰고 단정하지 말 것]\n` +
-    lines.join("\n")
-  );
+  const verified = usable.some((l) => l.stat);
+  const head = verified
+    ? "[밤사이 미국 → 오늘 볼 것 — 연동 계수는 최근 60일 실측이다. 상관관계는 변하므로 참고 지표로만 쓰고 매매 신호로 단정하지 말 것]"
+    : "[미국↔국내 테마 연동 — 사람이 적은 가설이며 상관계수 검증 전이다. 참고용으로만 쓰고 단정하지 말 것]";
+
+  return `\n${head}\n${lines.join("\n")}`;
 }

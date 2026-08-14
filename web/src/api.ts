@@ -262,6 +262,9 @@ export const api = {
   exchangeQuotes: (code: string) =>
     getJson<{ code: string; exchanges: ExchangeQuote[] }>(`/api/market/exchanges/${code}`),
   usKr: () => getJson<{ links: EvaluatedLink[]; themeNames: string[]; at: string }>("/api/us-kr"),
+  usKrCorrelation: () => getJson<{ result: CorrelationResult | null }>("/api/us-kr/correlation"),
+  usKrCorrelate: (days = 60) =>
+    postJson<{ result: CorrelationResult }>(`/api/us-kr/correlation?days=${days}`),
   rankSpecs: () => getJson<{ groups: RankSpecGroup[] }>("/api/rank/specs"),
   rank: (key: string, market = "000", exchange = "3") =>
     getJson<RankResult>(`/api/rank/${key}?market=${market}&exchange=${exchange}`),
@@ -677,6 +680,28 @@ export interface UsQuote {
   error: string | null;
 }
 
+export interface LinkStat {
+  us: string;
+  kr: string;
+  /** 미국 D일 → 국내 D+1일 상관계수 */
+  corr: number;
+  /** 미국 1% 당 국내 평균 % */
+  beta: number;
+  samples: number;
+}
+
+export interface CorrelationResult {
+  at: string;
+  days: number;
+  pairs: {
+    label: string; us: string; kr: string;
+    sameDay: number | null; nextDay: number | null;
+    samples: number; beta: number | null;
+  }[];
+  krFetched: number;
+  krFailed: number;
+}
+
 export interface EvaluatedLink {
   label: string;
   us: string[];
@@ -688,6 +713,12 @@ export interface EvaluatedLink {
   krAvg: number | null;
   /** 미국 대비 국내가 얼마나 따라왔는가(%p) */
   gap: number | null;
+  /** 검증된 연동 강도. 아직 계산 전이면 null */
+  stat: LinkStat | null;
+  /** 평소 연동대로면 국내가 갔어야 할 등락률 */
+  expected: number | null;
+  /** 기대 대비 실제(%p) */
+  surprise: number | null;
 }
 
 export interface RankSpecGroup {

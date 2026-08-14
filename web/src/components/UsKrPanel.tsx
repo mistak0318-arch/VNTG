@@ -39,10 +39,17 @@ function LinkCard({ link }: { link: EvaluatedLink }) {
           <span className="uk-cap">국내</span>
           <b className={cls(link.krAvg)}>{pct(link.krAvg)}</b>
         </span>
-        {gap !== null && (
-          <span className={`uk-gap ${gap >= 0 ? "positive" : "negative"}`}>
-            {gap >= 0 ? "더" : "덜"} 반영 {Math.abs(gap).toFixed(1)}%p
+        {link.stat ? (
+          <span className={`uk-gap ${(link.surprise ?? 0) >= 0 ? "positive" : "negative"}`}>
+            기대 {pct(link.expected)} · {(link.surprise ?? 0) >= 0 ? "더" : "덜"} 반영{" "}
+            {Math.abs(link.surprise ?? 0).toFixed(1)}%p
           </span>
+        ) : (
+          gap !== null && (
+            <span className={`uk-gap ${gap >= 0 ? "positive" : "negative"}`}>
+              {gap >= 0 ? "더" : "덜"} 반영 {Math.abs(gap).toFixed(1)}%p
+            </span>
+          )
         )}
       </button>
 
@@ -72,6 +79,14 @@ function LinkCard({ link }: { link: EvaluatedLink }) {
               </div>
             ))}
           </div>
+          {link.stat && (
+            <div className="uk-memo">
+              <b>연동 {link.stat.corr.toFixed(2)}</b> ({link.stat.us} → {link.stat.kr}, 최근{" "}
+              {link.stat.samples}거래일). 미국이 1% 움직이면 국내는 평균{" "}
+              <b>{link.stat.beta.toFixed(2)}%</b> 따라갔습니다.
+              {Math.abs(link.stat.corr) < 0.3 && " 연동이 약하니 이 연결은 의심해 보세요."}
+            </div>
+          )}
           {link.memo && <div className="uk-memo">{link.memo}</div>}
         </div>
       )}
@@ -84,6 +99,23 @@ export function UsKrPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [at, setAt] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  /** 무거운 계산(구성종목 일봉 136회)이라 사용자가 누를 때만 돈다 */
+  async function correlate() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await api.usKrCorrelate(60);
+      setNote(`${r.result.days}일 기준 재계산 · 국내 ${r.result.krFetched}종목 · 쌍 ${r.result.pairs.length}개`);
+      load();
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : "계산 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function load() {
     setLoading(true);
@@ -110,8 +142,16 @@ export function UsKrPanel() {
   return (
     <>
       <div className="filter-row">
-        <button className="filter-btn" onClick={load} disabled={loading}>
+        <button className="filter-btn" onClick={load} disabled={loading || busy}>
           {loading ? "…" : "↻ 새로고침"}
+        </button>
+        <button
+          className="filter-btn"
+          onClick={() => void correlate()}
+          disabled={busy}
+          title="테마 구성종목 일봉을 받아 최근 60일 상관계수를 다시 계산합니다 (30초쯤)"
+        >
+          {busy ? "계산 중… (30초)" : "연동 다시 계산"}
         </button>
         {at && (
           <span className="breadth-count">
@@ -121,11 +161,13 @@ export function UsKrPanel() {
       </div>
 
       <p className="page-note">
-        밤사이 미국이 어느 국내 테마로 이어지는지 나란히 봅니다. <b>「덜 반영」</b>은 미국은
-        움직였는데 국내가 아직 따라가지 않았다는 뜻입니다 — 다만{" "}
-        <b>이 연결은 사람이 적어 넣은 가설이고 상관계수 검증 전</b>입니다. 참고로만 쓰고
-        단정하지 마세요.
+        밤사이 미국이 어느 국내 테마로 이어지는지 나란히 봅니다. <b>「기대」</b>는 최근 60일
+        실측 연동(미국 D일 → 국내 D+1일)으로 계산한 값으로, 평소대로면 오늘 국내가 이만큼
+        갔어야 한다는 뜻입니다. 실제와의 차이가 <b>덜/더 반영</b>입니다.{" "}
+        <b>상관관계는 변합니다</b> — 참고 지표이지 매매 신호가 아닙니다.
       </p>
+
+      {note && <div className="alert-note">{note}</div>}
 
       {sorted.map((l) => (
         <LinkCard key={l.label} link={l} />
