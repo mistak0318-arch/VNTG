@@ -38,6 +38,14 @@ export interface MarketSnapshot {
   /** 조회에 실패한 업종 수 — 스냅샷이 얼마나 온전한지 판단용 */
   failedSectors: number;
   totalSectors: number;
+  /**
+   * 거래가 반영된 스냅샷인가.
+   *
+   * 개장 전에 부르면 키움은 전일 종가를 주면서 등락률만 전부 0으로 준다. 그걸 그대로
+   * 저장하면 "전 테마 0.00%"가 되고, 조간 리포트에서 내 테마가 통째로 쓸모없어진다.
+   * 그래서 만들 때 판정해 두고, **0짜리가 멀쩡한 직전 종가 스냅샷을 덮어쓰지 못하게** 한다.
+   */
+  traded: boolean;
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -58,6 +66,8 @@ let cache: MarketSnapshot | null = null;
 let building: Promise<MarketSnapshot> | null = null;
 /** 디스크에서 한 번만 읽어오면 되므로 */
 let restored = false;
+/** 개장 전 0짜리라 버린 시각 — 1분마다 65회 조회를 되풀이하지 않으려고 */
+let rejectedAt = 0;
 
 /**
  * 스냅샷이 언제까지 쓸 만한가.
@@ -97,6 +107,7 @@ interface StoredSnapshot {
   at: number;
   failedSectors: number;
   totalSectors: number;
+  traded?: boolean;
   stocks: SnapshotStock[];
 }
 
@@ -109,6 +120,7 @@ async function persist(snap: MarketSnapshot): Promise<void> {
     at: snap.at,
     failedSectors: snap.failedSectors,
     totalSectors: snap.totalSectors,
+    traded: snap.traded,
     stocks: [...snap.byCode.values()],
   };
   await mkdir(DATA_DIR, { recursive: true });
@@ -124,6 +136,10 @@ async function restore(): Promise<MarketSnapshot | null> {
       at: stored.at,
       failedSectors: stored.failedSectors ?? 0,
       totalSectors: stored.totalSectors ?? 0,
+      // 이 필드가 생기기 전에 저장된 파일은 실제 등락률로 되짚는다
+      traded:
+        stored.traded ??
+        stored.stocks.filter((s) => s.changeRate !== 0).length > stored.stocks.length * 0.1,
     };
   } catch {
     return null;
@@ -185,7 +201,20 @@ async function build(client: KiwoomClient): Promise<MarketSnapshot> {
     if (i + 5 < targets.length) await new Promise((r) => setTimeout(r, 1100));
   }
 
-  return { byCode, at: Date.now(), failedSectors: failed, totalSectors: targets.length };
+  /*
+   * 거래 반영 여부. 개장 전에는 전 종목이 0으로 오므로 한 종목이라도 움직였는지로 본다.
+   * 시각으로 짐작하지 않으므로 공휴일에도 자동으로 맞는다.
+   */
+  const moved = [...byCode.values()].filter((s) => s.changeRate !== 0).length;
+
+  return {
+    byCode,
+    at: Date.now(),
+    failedSectors: failed,
+    totalSectors: targets.length,
+    // 소수 종목만 0이 아닌 건 시간외 단일가 같은 잡음이라 거래로 보지 않는다
+    traded: byCode.size > 0 && moved > byCode.size * 0.1,
+  };
 }
 
 export async function getMarketSnapshot(
@@ -208,6 +237,18 @@ export async function getMarketSnapshot(
     .then(async (snap) => {
       // 절반도 못 받았으면 이전 스냅샷을 유지한다 — 반쪽 데이터로 테마 등락률을 내면 틀린다
       if (cache && snap.byCode.size < cache.byCode.size / 2) return cache;
+      /*
+       * 개장 전 0짜리로 직전 거래일 종가를 덮지 않는다.
+       *
+       * 갱신 스케줄러는 만료 1분 전(= 개장 1분 전 08:59)에 미리 채우는데, 그때는 아직
+       * 거래가 없어 전 종목 0으로 온다. 그걸 저장하면 디스크 파일까지 0으로 덮여서
+       * 그 사이 재시작하면 하루치 전종목 시세를 잃는다. 0은 직전 종가가 담고 있지 않은
+       * 정보가 없으므로 버려도 손해가 없다.
+       */
+      if (!snap.traded && cache?.traded) {
+        rejectedAt = Date.now();
+        return cache;
+      }
       cache = snap;
       await persist(snap).catch(() => undefined);
       return snap;
@@ -232,6 +273,12 @@ export function startSnapshotRefresher(client: KiwoomClient): void {
     // 만료 1분 전부터 미리 채운다
     const due = !cache || Date.now() > expiryOf(cache.at) - 60_000;
     if (!due) return;
+    /*
+     * 방금 0짜리를 받아 버렸다면 잠깐 쉰다. 만료 시각이 개장 09:00 이라 08:59부터 due 가
+     * 계속 참이고, 버린 스냅샷은 cache.at 을 갱신하지 않으므로 그냥 두면 1분마다
+     * 65회 조회를 되풀이한다.
+     */
+    if (Date.now() - rejectedAt < 5 * 60_000) return;
     /*
      * force 로 부른다. 아직 만료 전이라 그냥 부르면 getMarketSnapshot 이
      * "신선하다"고 판단해 캐시를 그대로 돌려주고 갱신이 일어나지 않는다.

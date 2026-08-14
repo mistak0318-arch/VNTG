@@ -223,7 +223,7 @@ function evaluate(theme: CustomTheme, byCode: Map<string, SnapshotStock>): Evalu
 export async function evaluateThemes(
   client: KiwoomClient,
   force = false,
-): Promise<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }> {
+): Promise<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string; traded: boolean }> {
   const [themes, snap] = await Promise.all([load(), getMarketSnapshot(client, force)]);
   const evaluated = themes
     .map((t) => evaluate(t, snap.byCode))
@@ -233,6 +233,8 @@ export async function evaluateThemes(
     themes: evaluated,
     snapshotAt: snap.at,
     coverage: `${snap.totalSectors - snap.failedSectors}/${snap.totalSectors} 업종 · ${snap.byCode.size}종목`,
+    // 개장 전이면 이 등락률은 직전 거래일 종가 기준이다 — 리포트가 그걸 밝혀야 한다
+    traded: snap.traded,
   };
 }
 
@@ -240,7 +242,10 @@ export async function evaluateThemes(
  * AI 리포트에 넣을 형태.
  * 키움 테마보다 **앞에** 놓는다 — 내 관점으로 시장을 보게 하는 게 이 기능의 목적이다.
  */
-export function toCustomThemeDigest(themes: EvaluatedTheme[]): string {
+export function toCustomThemeDigest(
+  themes: EvaluatedTheme[],
+  opts: { previousClose?: boolean } = {},
+): string {
   const usable = themes.filter((t) => t.changeRate !== null && t.stocks.length > 0);
   if (usable.length === 0) return "";
 
@@ -271,5 +276,13 @@ export function toCustomThemeDigest(themes: EvaluatedTheme[]): string {
     return `${t.name} ${rate} (▲${t.risingCount}/▼${t.fallingCount}) ${lead}${src}${memo}`;
   });
 
-  return `\n[내가 만든 테마 — 사용자가 직접 정의한 관점이므로 키움 테마보다 우선해서 다룰 것]\n${lines.join("\n")}`;
+  /*
+   * 개장 전에는 등락률이 직전 거래일 종가 기준이다. 그 사실을 헤더에 못박지 않으면
+   * 모델이 "오늘 반도체 테마가 +3% 올랐다"고 써 버린다 — 장이 열리지도 않았는데.
+   */
+  const header = opts.previousClose
+    ? "[내가 만든 테마 — **직전 거래일 종가 기준**. 오늘 값이 아니므로 인용할 때 반드시 '전일'이라고 밝힐 것. 사용자가 직접 정의한 관점이므로 키움 테마보다 우선해서 다룰 것]"
+    : "[내가 만든 테마 — 사용자가 직접 정의한 관점이므로 키움 테마보다 우선해서 다룰 것]";
+
+  return `\n${header}\n${lines.join("\n")}`;
 }

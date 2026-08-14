@@ -300,7 +300,10 @@ export async function evaluateLinks(client: KiwoomClient): Promise<{
  * 조간 리포트에 넣을 형태.
  * "나스닥 +0.8%"만 있으면 사람이 머릿속으로 국내 테마와 이어야 한다. 그걸 붙여서 준다.
  */
-export function toUsKrDigest(links: EvaluatedLink[]): string {
+export function toUsKrDigest(
+  links: EvaluatedLink[],
+  opts: { premarket?: boolean } = {},
+): string {
   const usable = links.filter((l) => l.usAvg !== null && l.krThemes.some((t) => t.found));
   if (usable.length === 0) return "";
 
@@ -323,6 +326,20 @@ export function toUsKrDigest(links: EvaluatedLink[]): string {
        */
       if (l.stat && l.expected !== null) {
         const lead = l.usQuotes.find((q) => q.symbol === l.stat!.us);
+        const head =
+          `${l.label}: ${l.stat.us} ${fmt(lead?.changeRate ?? null)} ` +
+          `(연동 ${l.stat.corr.toFixed(2)}, ${l.stat.samples}일 표본) → 기대 ${fmt(l.expected)}`;
+
+        /*
+         * 개장 전에는 "실제"가 없다.
+         *
+         * 이 연동은 **간밤 미국 → 오늘 국내**(nextDay 상관)라서, 개장 전에 손에 있는
+         * 국내 등락률은 간밤보다 **먼저 끝난** 직전 거래일 값이다. 그걸 "실제"라고 붙이면
+         * 하루 어긋난 비교가 되고, 모델은 그걸 근거로 "덜 반영됐으니 오늘 오른다"는
+         * 결론까지 써낸다. 그래서 조간에는 기대치만 주고 판정을 붙이지 않는다.
+         */
+        if (opts.premarket) return `${head} (오늘 개장 후 확인)  [${kr} — 전일 종가 기준]`;
+
         const verdict =
           l.surprise === null
             ? ""
@@ -331,11 +348,7 @@ export function toUsKrDigest(links: EvaluatedLink[]): string {
               : l.surprise > 0.5
                 ? " → 더 반영됨"
                 : " → 대체로 예상대로";
-        return (
-          `${l.label}: ${l.stat.us} ${fmt(lead?.changeRate ?? null)} ` +
-          `(연동 ${l.stat.corr.toFixed(2)}, ${l.stat.samples}일 표본) → ` +
-          `기대 ${fmt(l.expected)} / 실제 ${fmt(l.krAvg)}${verdict}  [${kr}]`
-        );
+        return `${head} / 실제 ${fmt(l.krAvg)}${verdict}  [${kr}]`;
       }
 
       // 아직 상관계수를 안 냈으면 나란히만
@@ -343,13 +356,17 @@ export function toUsKrDigest(links: EvaluatedLink[]): string {
         .filter((q) => q.changeRate !== null)
         .map((q) => `${q.symbol} ${fmt(q.changeRate)}`)
         .join(", ");
+      if (opts.premarket) return `${l.label}: 미국 ${us} → 국내 ${kr} (전일 종가 기준, 연동 미검증)`;
       return `${l.label}: 미국 ${us} → 국내 ${kr} (연동 미검증)`;
     });
 
   const verified = usable.some((l) => l.stat);
+  const premarketNote = opts.premarket
+    ? " **아직 개장 전이라 국내 '실제'는 존재하지 않는다** — 대괄호 안 국내 등락률은 직전 거래일 값이니 오늘 결과인 것처럼 쓰지 마라."
+    : "";
   const head = verified
-    ? "[밤사이 미국 → 오늘 볼 것 — 연동 계수는 최근 60일 실측이다. 상관관계는 변하므로 참고 지표로만 쓰고 매매 신호로 단정하지 말 것]"
-    : "[미국↔국내 테마 연동 — 사람이 적은 가설이며 상관계수 검증 전이다. 참고용으로만 쓰고 단정하지 말 것]";
+    ? `[밤사이 미국 → 오늘 볼 것 — 연동 계수는 최근 60일 실측이다. 상관관계는 변하므로 참고 지표로만 쓰고 매매 신호로 단정하지 말 것.${premarketNote}]`
+    : `[미국↔국내 테마 연동 — 사람이 적은 가설이며 상관계수 검증 전이다. 참고용으로만 쓰고 단정하지 말 것.${premarketNote}]`;
 
   return `\n${head}\n${lines.join("\n")}`;
 }

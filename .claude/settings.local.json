@@ -181,7 +181,9 @@
       "Bash(curl -s http://localhost:4000/api/overview/status)",
       "Bash(xargs -n1 basename)",
       "Bash(awk '{printf \"%-28s %8.1fKB\\\\n\", $9, $5/1024}')",
-      "Bash(node scripts/tradeval-probe.mjs)"
+      "Bash(node scripts/tradeval-probe.mjs)",
+      "Bash(sed -i 's/createKiwoomClient/createKiwoomClientFromEnv/g' scripts/morning-digest-probe.ts)",
+      "Bash(rm -f scripts/digest-dump.ts)"
     ]
   }
 }

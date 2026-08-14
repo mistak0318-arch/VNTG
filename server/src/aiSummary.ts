@@ -127,8 +127,9 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
       lines.push("[지수 — 직전 거래일 종가. 오늘은 아직 거래 전이라 당일 등락 데이터가 없다]");
       for (const i of indices) lines.push(`${i.name} ${fmt(i.price)}`);
       lines.push(
-        "※ 오늘의 상승/하락 종목 수, 신고가/신저가, 당일 테마 등락률은 존재하지 않는다.",
+        "※ 오늘의 상승/하락 종목 수, 신고가/신저가는 존재하지 않는다.",
         "  그 항목들을 언급하거나 '데이터가 없어 판단 불가'라고 쓰지 마라. 아예 다루지 마라.",
+        "※ 아래 국내 테마·수급 등락률은 전부 직전 거래일 값이다. 인용할 때마다 '전일'임을 밝혀라.",
       );
     }
   }
@@ -164,7 +165,7 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
    * 아직 상관계수 검증 전이라 프롬프트에 "가설"이라고 못박아 둔다.
    */
   const usKr = await evaluateLinks(client).then((r) => r.links).catch(() => []);
-  const usKrDigest = toUsKrDigest(usKr);
+  const usKrDigest = toUsKrDigest(usKr, { premarket: !traded });
   if (usKrDigest) lines.push(usKrDigest);
 
   /*
@@ -175,11 +176,17 @@ export async function buildDigest(client: KiwoomClient): Promise<string> {
    * **호출된 적이 없었다.** 설계만 하고 배선이 빠진 채로 계속 발행돼서, 리포트에 내 테마가
    * 한 번도 들어가지 않았다.
    *
-   * 거래 전에는 스냅샷 등락률이 전부 0이라 넣으면 "전 테마 0.00%"가 되므로 그때는 건너뛴다.
+   * 개장 전에도 **넣는다.** 전에는 "스냅샷이 전부 0"이라고 보고 건너뛰었는데, 스냅샷은
+   * 다음 개장까지 유지되므로 조간 시각에는 직전 거래일 종가와 실제 등락률을 이미 갖고 있다.
+   * 데이터가 있는데 안 쓰고 있었던 것이다. (0짜리로 덮이는 경로는 marketSnapshot 에서 막았고,
+   * 그래도 0이면 snap.traded 가 false 로 와서 아래에서 걸러진다)
+   *
+   * 다만 기준일이 다르므로 헤더에 "직전 거래일 종가 기준"을 못박아 넘긴다.
    */
-  if (traded) {
-    const custom = await evaluateThemes(client).catch(() => null);
-    const customDigest = custom ? toCustomThemeDigest(custom.themes) : "";
+  const custom = await evaluateThemes(client).catch(() => null);
+  if (custom?.traded) {
+    // traded 는 지수 기준(오늘 거래 여부), custom.traded 는 스냅샷 기준(값이 살아 있는지)
+    const customDigest = toCustomThemeDigest(custom.themes, { previousClose: !traded });
     if (customDigest) lines.push(customDigest);
   }
 
@@ -304,17 +311,26 @@ ${CHECKPOINT_RULE}`;
 const MORNING_RULES = `너는 한국 주식시장 개장 전 브리핑을 쓰는 애널리스트다.
 
 **지금은 장이 열리기 전이다.** 따라서:
-- **오늘의 지수 등락, 상승/하락 종목 수, 신고가/신저가, 당일 테마 등락률은 존재하지 않는다.**
+- **오늘의 지수 등락, 상승/하락 종목 수, 신고가/신저가는 존재하지 않는다.**
   그 항목을 언급하지도, "데이터가 없어 판단할 수 없다"고 쓰지도 마라. 아예 다루지 마라.
-- 국내 수치를 인용할 땐 반드시 **"전일"** 또는 **"직전 거래일"** 임을 밝혀라.
+- 데이터에 있는 국내 테마·수급 등락률은 **전부 직전 거래일 값이다.** 써도 되지만
+  인용할 때마다 **"전일"** 또는 **"직전 거래일"** 임을 반드시 밝혀라.
+  오늘의 결과인 것처럼 쓰면 안 된다.
 - 간밤 해외 시장과 뉴스가 이 브리핑의 본체다. 거기에 지면을 써라.
 - 주어진 데이터에 있는 사실만 쓴다. 없는 수치를 지어내지 마라.
 - **특정 종목 매수/매도를 권하지 마라.** 목표주가를 제시하지 마라.
-- 한국어로, 전체 한글 1,000~1,400자.
+- 한국어로, 전체 한글 1,300~1,800자.
 
 ## 간밤 해외
 (미국·유럽·아시아 지수와 그 원인. 유가·금리·환율에 특징이 있으면 함께.
 어떤 업종·테마가 움직였는지까지 짚어라 — 그게 오늘 우리 장의 출발점이다)
+
+## 내 테마 점검
+(**이 항목을 먼저 쓴다.** 사용자가 직접 만든 테마 각각에 대해, 간밤 미국·뉴스가
+그 테마로 이어지는지 짚어라. '미국↔국내 테마 연동'의 기대치가 있으면 그 숫자를 인용하되
+**아직 개장 전이므로 결과가 아니라 기대치임을 분명히** 하라.
+테마의 등락률을 인용할 땐 반드시 "전일" 이라고 밝혀라 — 오늘 값이 아니다.
+간밤 재료가 없는 테마는 굳이 언급하지 마라. 내가 만든 테마가 없으면 이 항목을 생략한다)
 
 ## 오늘 국내 시장에 주는 함의
 (간밤 해외 흐름이 어느 업종·테마로 연결되는지. 전일 수급 흐름이 이어질지 끊길지의 근거.
