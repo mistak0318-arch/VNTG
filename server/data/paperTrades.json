@@ -1,0 +1,194 @@
+[
+  {
+    "id": "pt_mst2bp9ttsx",
+    "code": "005930",
+    "name": "삼성전자",
+    "entryAt": "2026-08-14T14:48:59.825Z",
+    "entryPrice": 274500,
+    "qty": 1,
+    "thesis": "",
+    "evidence": {
+      "level": "green",
+      "score": 100,
+      "checks": [
+        {
+          "key": "trend",
+          "label": "정배열",
+          "pass": true,
+          "value": "정배열 (5일≥20일)"
+        },
+        {
+          "key": "foreignFlow",
+          "label": "외국인 수급",
+          "pass": true,
+          "value": "5일 +2,289,966"
+        },
+        {
+          "key": "instFlow",
+          "label": "기관 수급",
+          "pass": true,
+          "value": "5일 +1,408,481"
+        },
+        {
+          "key": "profitGrowth",
+          "label": "영업이익 증가",
+          "pass": true,
+          "value": "+33.2%"
+        },
+        {
+          "key": "sectorStrength",
+          "label": "섹터 강세",
+          "pass": true,
+          "value": "전기/전자 +2.68%"
+        },
+        {
+          "key": "marketCap",
+          "label": "시가총액",
+          "pass": true,
+          "value": "16,048,035억"
+        },
+        {
+          "key": "volume",
+          "label": "거래대금",
+          "pass": true,
+          "value": "59,483억"
+        }
+      ],
+      "market": {
+        "level": "yellow",
+        "score": 100,
+        "summary": "100점이지만 지수 추세가 확인되지 않아 노랑 — 우호: 시장 폭·업종 확산·외국인 수급·기관 수급"
+      },
+      "themes": [
+        {
+          "name": "HBM 밸류체인",
+          "changeRate": 1.3579999999999999
+        },
+        {
+          "name": "반도체 대표주(생산)",
+          "changeRate": 3.33
+        },
+        {
+          "name": "소캠(SOCAMM)",
+          "changeRate": 1.13
+        },
+        {
+          "name": "CXL(컴퓨트익스프레스링크)",
+          "changeRate": 1.835
+        },
+        {
+          "name": "HBM(고대역폭메모리)",
+          "changeRate": 0.81625
+        },
+        {
+          "name": "갤럭시 부품주",
+          "changeRate": -1.6857142857142857
+        },
+        {
+          "name": "폴더블폰",
+          "changeRate": -0.4985714285714286
+        },
+        {
+          "name": "5G(5세대 이동통신)",
+          "changeRate": 3.0766666666666667
+        }
+      ],
+      "sector": {
+        "name": "전기/전자",
+        "foreign5": 27990,
+        "inst5": 34829
+      },
+      "marketBreadth": "상승 1317 / 하락 738 (상승비율 58%)"
+    }
+  },
+  {
+    "id": "pt_mst2cv2s54k",
+    "code": "000660",
+    "name": "SK하이닉스",
+    "entryAt": "2026-08-14T14:49:54.004Z",
+    "entryPrice": 1645000,
+    "qty": 1,
+    "thesis": "시장이 대형 반도체 위주로 다시금 흘러가고 있는걸로 보임",
+    "evidence": {
+      "level": "green",
+      "score": 80,
+      "checks": [
+        {
+          "key": "trend",
+          "label": "정배열",
+          "pass": false,
+          "value": "역배열/혼조 (5일≥20일)"
+        },
+        {
+          "key": "foreignFlow",
+          "label": "외국인 수급",
+          "pass": true,
+          "value": "5일 +2,447,635"
+        },
+        {
+          "key": "instFlow",
+          "label": "기관 수급",
+          "pass": true,
+          "value": "5일 +203,327"
+        },
+        {
+          "key": "profitGrowth",
+          "label": "영업이익 증가",
+          "pass": true,
+          "value": "+101.2%"
+        },
+        {
+          "key": "sectorStrength",
+          "label": "섹터 강세",
+          "pass": true,
+          "value": "전기/전자 +2.68%"
+        },
+        {
+          "key": "marketCap",
+          "label": "시가총액",
+          "pass": true,
+          "value": "12,016,599억"
+        },
+        {
+          "key": "volume",
+          "label": "거래대금",
+          "pass": true,
+          "value": "74,370억"
+        }
+      ],
+      "market": {
+        "level": "yellow",
+        "score": 100,
+        "summary": "100점이지만 지수 추세가 확인되지 않아 노랑 — 우호: 시장 폭·업종 확산·외국인 수급·기관 수급"
+      },
+      "themes": [
+        {
+          "name": "HBM 밸류체인",
+          "changeRate": 1.3579999999999999
+        },
+        {
+          "name": "반도체 대표주(생산)",
+          "changeRate": 3.33
+        },
+        {
+          "name": "소캠(SOCAMM)",
+          "changeRate": 1.13
+        },
+        {
+          "name": "CXL(컴퓨트익스프레스링크)",
+          "changeRate": 1.835
+        },
+        {
+          "name": "HBM(고대역폭메모리)",
+          "changeRate": 0.81625
+        }
+      ],
+      "sector": {
+        "name": "전기/전자",
+        "foreign5": 27990,
+        "inst5": 34829
+      },
+      "marketBreadth": "상승 1317 / 하락 738 (상승비율 58%)"
+    }
+  }
+]

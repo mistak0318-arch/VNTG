@@ -21,3 +21,7 @@ server/data/*
 !server/data/watchGroups.json
 !server/data/stockNotes.json
 !server/data/calendar.json
+# 복기 노트와 모의투자 기록도 자산이다. 석 달 쌓아서 "내가 어떤 사람인지"를 보는 게
+# 목적인데, 기기마다 반쪽씩 남으면 그 집계가 성립하지 않는다.
+!server/data/journal.json
+!server/data/paperTrades.json

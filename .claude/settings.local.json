@@ -203,7 +203,8 @@
       "Bash(curl -s \"http://localhost:4000/api/settings/usage/totals?days=1\")",
       "Bash(git fetch *)",
       "Bash(git stash *)",
-      "Bash(git merge *)"
+      "Bash(git merge *)",
+      "Bash(curl -s -X DELETE http://localhost:4000/api/journal/2026-08-15)"
     ]
   }
 }
