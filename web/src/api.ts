@@ -688,6 +688,18 @@ export interface SectorFlowStat {
   rankChange: number | null;
 }
 
+export interface SectorConsensus {
+  code: string;
+  name: string;
+  label: string;
+  /** consensusSubjects 순서대로의 기간 누적 */
+  values: number[];
+  /** 같은 방향으로 움직인 주체 수 */
+  agree: number;
+  side: 1 | -1;
+  total: number;
+}
+
 export interface SectorFlowResult {
   subject: string;
   subjectLabel: string;
@@ -696,6 +708,11 @@ export interface SectorFlowResult {
   stats: SectorFlowStat[];
   streaks: { code: string; name: string; label: string; streak: number; sum: number }[];
   splits: { code: string; name: string; label: string; pension: number; trust: number }[];
+  /** 여러 주체가 같은 방향으로 움직인 업종 */
+  consensusBuy: SectorConsensus[];
+  consensusSell: SectorConsensus[];
+  /** values 배열의 순서와 이름 */
+  consensusSubjects: { key: string; label: string }[];
   sizes: { label: string; foreign: number; institution: number }[];
   subjects: { key: string; label: string }[];
 }

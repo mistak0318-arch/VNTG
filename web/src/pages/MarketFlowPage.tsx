@@ -189,19 +189,24 @@ function ChannelTab() {
 
   useEffect(load, []);
 
-  async function run(kind: "preview" | "ai") {
+  async function run(kind: "preview" | "ai" | "aiSend" | "pickSend") {
     setBusy(kind);
     setNote(null);
     setFresh(null);
     try {
-      const r = await api.channelsReport({ ai: kind === "ai", hours });
+      const ai = kind === "ai" || kind === "aiSend";
+      const send = kind === "aiSend" || kind === "pickSend";
+      const r = await api.channelsReport({ ai, send, hours });
       setFresh(r);
-      if (kind === "ai") {
+      if (ai) {
         load();
         setOpen(0);
-        setNote(`정리 완료 · 토큰 ${r.inputTokens}/${r.outputTokens}`);
+        setNote(`정리 완료 · 토큰 ${r.inputTokens}/${r.outputTokens}${send ? " · 텔레그램 발송" : ""}`);
       } else {
-        setNote(`원본 ${r.rawCount}건 → 선별 ${r.usedCount}건 (AI 미호출 · 비용 없음)`);
+        setNote(
+          `원본 ${r.rawCount}건 → 선별 ${r.usedCount}건 (AI 미호출 · 비용 없음)` +
+            (send ? " · 텔레그램 발송" : ""),
+        );
       }
       if (r.error) setNote((n) => `${n ?? ""} · ${r.error}`);
     } catch (err) {
@@ -222,10 +227,27 @@ function ChannelTab() {
     <>
       <div className="filter-row">
         <button className="primary-btn" disabled={busy !== null} onClick={() => run("ai")}>
-          {busy === "ai" ? "정리 중…" : "지금 AI로 정리"}
+          {busy === "ai" ? "정리 중…" : "AI로 정리"}
         </button>
+        <button
+          className="filter-btn"
+          disabled={busy !== null}
+          onClick={() => run("aiSend")}
+          title="AI 정리본을 텔레그램으로 보냅니다"
+        >
+          {busy === "aiSend" ? "발송 중…" : "AI 정리 + 발송"}
+        </button>
+        <span className="news-scope-sep" />
         <button className="filter-btn" disabled={busy !== null} onClick={() => run("preview")}>
-          {busy === "preview" ? "수집 중…" : "선별만 보기 (비용 없음)"}
+          {busy === "preview" ? "수집 중…" : "선별만 보기"}
+        </button>
+        <button
+          className="filter-btn"
+          disabled={busy !== null}
+          onClick={() => run("pickSend")}
+          title="AI를 거치지 않고 선별된 원문 그대로 텔레그램으로 보냅니다 (비용 없음)"
+        >
+          {busy === "pickSend" ? "발송 중…" : "선별 + 발송 (비용 없음)"}
         </button>
         <span className="news-scope-sep" />
         {WINDOWS.map((h) => (

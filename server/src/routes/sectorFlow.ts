@@ -3,7 +3,9 @@ import type { KiwoomClient } from "../kiwoomClient.js";
 import { getSectorStocks } from "../marketOverview.js";
 import {
   backfillSectorFlow,
+  CONSENSUS_LABELS,
   institutionSplits,
+  sectorConsensus,
   listSectorFlow,
   sectorFlowStats,
   sectorStreaks,
@@ -42,6 +44,10 @@ export function createSectorFlowRouter(client: KiwoomClient): Router {
           .filter((s) => Math.abs(s.streak) >= 2)
           .slice(0, 12),
         splits: institutionSplits(days, window).slice(0, 8),
+        // 여러 주체가 같은 방향으로 움직인 업종 — 매수 합의와 매도 합의를 나눠서
+        consensusBuy: sectorConsensus(days, { window, minAgree: 3, side: 1 }).slice(0, 8),
+        consensusSell: sectorConsensus(days, { window, minAgree: 3, side: -1 }).slice(0, 8),
+        consensusSubjects: CONSENSUS_LABELS,
         sizes: sizeRotation(days, window),
         subjects: SUBJECTS.map((s) => ({ key: s, label: SUBJECT_LABEL[s] })),
       });

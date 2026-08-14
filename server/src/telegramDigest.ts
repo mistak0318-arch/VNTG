@@ -80,7 +80,10 @@ const IMPACT_WEIGHTS: [RegExp, number][] = [
 export interface ScoredChannelItem {
   /** 대표 메시지 */
   text: string;
+  /** 가장 최근에 언급된 시각 — 화면과 감쇠는 이걸 쓴다 */
   at: string;
+  /** 이 얘기가 처음 돈 시각. at 과 벌어져 있으면 계속 회자되는 중이라는 뜻 */
+  firstAt: string;
   /** 이 내용을 다룬 채널들 */
   channels: string[];
   /** 몇 개 채널이 다뤘는지 — 이게 가장 강한 신호 */
@@ -112,18 +115,32 @@ export function scoreMessages(
   // 1) 쓰레기 걸러내기
   const clean = messages.filter((m) => !isSpam(m.text) && !isNoise(m.text));
 
-  // 2) 같은 내용 묶기
-  const groups = new Map<string, { rep: ChannelMessage; channels: Set<string> }>();
+  /*
+   * 2) 같은 내용 묶기.
+   *
+   * 대표를 "가장 이른 것"으로 잡았더니 신선도가 망가졌다. 00:55에 한 번 돌고
+   * 09:30에 다시 돈 얘기가 00:55로 표시되고, 감쇠 계산도 그 시각으로 해서
+   * 클러스터 전체가 낡은 것으로 깎였다 — 오전 10시에 열어도 새벽 것만 보였다.
+   *
+   * 그래서 시각을 둘로 나눈다.
+   *   firstAt — 처음 돈 시각 (언제부터 있던 얘기인지)
+   *   at      — 가장 최근 언급 (화면 표시와 감쇠는 이쪽)
+   * 본문은 가장 최근 것을 쓴다. 같은 사건이라도 나중 글에 진행 상황이 더 담긴다.
+   */
+  const groups = new Map<
+    string,
+    { rep: ChannelMessage; firstAt: string; channels: Set<string> }
+  >();
   for (const m of clean) {
     const key = fingerprint(m.text);
     if (!key) continue;
     const g = groups.get(key);
     if (g) {
       g.channels.add(m.channelName);
-      // 더 이른 것을 대표로 — 누가 먼저 말했는지가 원본에 가깝다
-      if (m.at < g.rep.at) g.rep = m;
+      if (m.at > g.rep.at) g.rep = m;
+      if (m.at < g.firstAt) g.firstAt = m.at;
     } else {
-      groups.set(key, { rep: m, channels: new Set([m.channelName]) });
+      groups.set(key, { rep: m, firstAt: m.at, channels: new Set([m.channelName]) });
     }
   }
 
@@ -150,6 +167,7 @@ export function scoreMessages(
     items.push({
       text: text.slice(0, 400), // 긴 글은 잘라서 토큰을 아낀다
       at: g.rep.at,
+      firstAt: g.firstAt,
       channels: [...g.channels].slice(0, 5),
       coverage,
       mentions,
@@ -157,7 +175,15 @@ export function scoreMessages(
     });
   }
 
-  return items.sort((a, b) => b.score - a.score).slice(0, limit);
+  /*
+   * 점수순으로 상위를 고르되, **내보낼 때는 최신순으로 다시 세운다.**
+   * 무엇을 넣을지는 중요도가 정하고, 어떤 순서로 읽을지는 시간이 정하는 게 맞다.
+   * 점수순 그대로 두면 오전에 열어도 새벽 글이 맨 위에 온다.
+   */
+  return items
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .sort((a, b) => b.at.localeCompare(a.at));
 }
 
 /** AI 프롬프트에 넣을 텍스트로 — 토큰을 아끼려고 압축한다 */
@@ -168,7 +194,12 @@ export function toDigestText(items: ScoredChannelItem[]): string {
       const head = it.coverage > 1 ? `[${it.coverage}개 채널]` : "";
       const mark = it.mentions.length > 0 ? `[관심:${it.mentions.join(",")}]` : "";
       const time = it.at.slice(11, 16);
-      return `${time} ${head}${mark} ${it.text.replace(/\n+/g, " ").slice(0, 220)}`;
+      // 처음 돈 시각과 30분 이상 벌어져 있으면 계속 회자되는 중이라는 뜻이라 같이 준다
+      const since =
+        new Date(it.at).getTime() - new Date(it.firstAt).getTime() > 30 * 60_000
+          ? `(${it.firstAt.slice(11, 16)}부터)`
+          : "";
+      return `${time}${since} ${head}${mark} ${it.text.replace(/\n+/g, " ").slice(0, 220)}`;
     })
     .join("\n");
 }

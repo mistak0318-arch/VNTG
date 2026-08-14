@@ -160,7 +160,16 @@ export async function buildChannelReport(
     report.error = "정리할 만한 메시지가 없습니다 (필터 통과 0건)";
     return report;
   }
-  if (!useAi) return report;
+
+  /*
+   * AI를 안 쓰는 경로도 발송이 되어야 한다.
+   * 예전엔 요약이 있어야만 보냈기 때문에 "선별만 보기"는 화면에서만 볼 수 있었다.
+   * 원문 그대로가 더 나을 때가 있고, AI 비용을 안 쓰고 싶을 때도 있다.
+   */
+  if (!useAi) {
+    if (send) await sendTelegram(toPickedHtml(report), "channel").catch(() => undefined);
+    return report;
+  }
 
   const span =
     report.oldestAt && report.newestAt
@@ -187,6 +196,44 @@ export async function buildChannelReport(
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * AI를 거치지 않고 **선별 결과만** 보내는 형태.
+ *
+ * AI 정리는 편하지만 두 가지가 아쉽다 — 비용이 들고, 요약 과정에서 원문의 뉘앙스가 날아간다.
+ * 필터가 걸러낸 것만 그대로 보고 싶을 때가 있어서 이 경로를 따로 둔다.
+ * 여러 채널이 동시에 다룬 것과 관심종목이 걸린 것이 먼저 오도록 표시만 손본다.
+ */
+export function toPickedHtml(r: ChannelReport): string {
+  const span =
+    r.oldestAt && r.newestAt
+      ? `${r.oldestAt.slice(5, 16).replace("T", " ")} ~ ${r.newestAt.slice(5, 16).replace("T", " ")}`
+      : "";
+  const head =
+    `<b>구독 채널 선별</b> (AI 정리 없음)\n` +
+    `채널 ${r.channels}개 · 원본 ${r.rawCount}건 → 선별 ${r.usedCount}건` +
+    (span ? `\n수집 구간 ${span}` : "") +
+    `\n`;
+
+  if (r.items.length === 0) return `${head}\n선별된 내용이 없습니다.`;
+
+  const body = r.items
+    .slice(0, 25)
+    .map((it) => {
+      const time = it.at.slice(11, 16);
+      const tags = [
+        it.coverage > 1 ? `${it.coverage}개 채널` : "",
+        it.mentions.length > 0 ? `관심: ${it.mentions.join(", ")}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      const text = esc(it.text.replace(/\n+/g, " ").slice(0, 180));
+      return `\n<b>${time}</b>${tags ? ` <i>${esc(tags)}</i>` : ""}\n${text}`;
+    })
+    .join("\n");
+
+  return `${head}${body}`;
 }
 
 export function toChannelHtml(r: ChannelReport): string {

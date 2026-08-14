@@ -305,6 +305,50 @@ export function SectorFlowPanel({
             </>
           )}
 
+          {(data.consensusBuy.length > 0 || data.consensusSell.length > 0) && (
+            <>
+              <h4 className="section-heading">주체 합의 — 여러 주체가 같은 방향</h4>
+              <div className="data-table-wrap">
+                <table className="data-table num">
+                  <thead>
+                    <tr>
+                      <th className="sticky-col">업종</th>
+                      <th>합의</th>
+                      {data.consensusSubjects.map((s) => (
+                        <th key={s.key}>{s.label}</th>
+                      ))}
+                      <th>합계</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...data.consensusBuy, ...data.consensusSell].map((c) => (
+                      <tr key={`${c.side}-${c.code}`}>
+                        <td className="sticky-col">{c.label}</td>
+                        <td className={c.side > 0 ? "positive" : "negative"}>
+                          {c.agree}/{data.consensusSubjects.length} {c.side > 0 ? "매수" : "매도"}
+                        </td>
+                        {c.values.map((v, i) => (
+                          <td key={i} className={cls(v)}>
+                            {fmtNum(Math.round(v))}
+                          </td>
+                        ))}
+                        <td className={cls(c.total)}>
+                          <b>{fmtNum(Math.round(c.total))}</b>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="table-note">
+                {data.window}일 누적 · 억원. 한 주체만 사는 것과 <b>여러 주체가 같이 사는 것</b>은
+                무게가 다릅니다 — 하나는 하루아침에 방향을 바꿀 수 있지만, 셋 이상이 같은 곳을
+                보고 있다면 개별 판단이 아니라 흐름에 가깝습니다. <b>개인은 제외</b>했습니다
+                (기관·외국인이 사면 개인은 자동으로 반대편이 되어 합의라는 말이 성립하지 않습니다).
+              </div>
+            </>
+          )}
+
           {data.splits.length > 0 && (
             <>
               <h4 className="section-heading">기관 내부 이견 — 연기금 vs 투신</h4>
