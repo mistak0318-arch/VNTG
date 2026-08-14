@@ -7,6 +7,7 @@ import {
   type EvaluatedAccount,
   type StockSearchResult,
 } from "../api";
+import { CollapsibleCard } from "../components/CollapsibleCard";
 import { RefreshBar } from "../components/RefreshBar";
 
 /**
@@ -222,8 +223,11 @@ export function ManualAccountPage({
 
       {error && <div className="error-banner">{error}</div>}
 
-      <section className="card">
-        <h2>수동 계좌 추가</h2>
+      <CollapsibleCard
+        id="manualAdd"
+        title="수동 계좌 추가"
+        hint="키움 외 증권사 보유분을 직접 등록합니다."
+      >
         <div className="ma-form-row">
           <select className="group-select" value={newBroker} onChange={(e) => setNewBroker(e.target.value)}>
             {brokers.map((b) => (
@@ -246,19 +250,25 @@ export function ManualAccountPage({
           키움 외 증권사 보유분을 직접 적어두는 곳입니다. 현재가는 키움 시세로 자동 계산되며,
           주문 기능은 없습니다.
         </div>
-      </section>
+      </CollapsibleCard>
 
       {!loading && accounts.length === 0 && (
         <div className="page-note">등록된 수동 계좌가 없습니다. 위에서 증권사를 골라 추가하세요.</div>
       )}
 
       {accounts.map((a) => (
-        <section className="card ma-account" key={a.id}>
+        <CollapsibleCard
+          key={a.id}
+          id={`manualAcct-${a.id}`}
+          title={`${a.broker} ${a.name}`}
+          badge={
+            <span className={signClass(a.totalProfit)}>
+              {fmtNum(Math.round(a.totalAssets))} · {pct(a.totalReturnRate)}
+            </span>
+          }
+          hint={`총자산 ${fmtNum(Math.round(a.totalAssets))} · 주식 ${fmtNum(Math.round(a.totalValue))} · 예수금 ${fmtNum(Math.round(a.cash))}`}
+        >
           <div className="ma-head">
-            <div>
-              <span className="ma-broker">{a.broker}</span>
-              <span className="ma-name">{a.name}</span>
-            </div>
             <button className="row-del-btn" onClick={() => deleteAccount(a.id, `${a.broker} ${a.name}`)}>
               계좌 삭제
             </button>
@@ -378,7 +388,7 @@ export function ManualAccountPage({
           )}
 
           <AddHoldingForm accountId={a.id} onDone={setAccounts} />
-        </section>
+        </CollapsibleCard>
       ))}
     </div>
   );

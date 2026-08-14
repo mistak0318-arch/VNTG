@@ -21,6 +21,8 @@ import { SameNetTradeRankingPage } from "./pages/SameNetTradeRankingPage";
 import { StockAnalysisPage } from "./pages/StockAnalysisPage";
 import { VolumeRankingPage } from "./pages/VolumeRankingPage";
 import { useHashRoute } from "./useHashRoute";
+import { applyOrder, useMenuPrefs } from "./useMenuOrder";
+import { TelegramPage } from "./pages/TelegramPage";
 
 type Tab =
   | "overview"
@@ -34,6 +36,7 @@ type Tab =
   | "marketFlow"
   | "customTheme"
   | "ask"
+  | "telegram"
   | "stockAnalysis"
   | "screener"
   | "volume"
@@ -77,6 +80,7 @@ const MENU: {
       { key: "watchKiwoom", label: "관심종목 (키움_HTS)", icon: "🔖" },
       { key: "customTheme", label: "내 테마", icon: "🎯" },
       { key: "marketFlow", label: "시장 흐름 분석", icon: "🌊" },
+      { key: "telegram", label: "텔레그램 동향", icon: "📡" },
       { key: "calendar", label: "캘린더", icon: "📅" },
     ],
   },
@@ -85,7 +89,7 @@ const MENU: {
     accent: "#35c46a",
     items: [
       { key: "stockAnalysis", label: "개별종목분석", icon: "🔍" },
-      { key: "screener", label: "시세분석", icon: "📡" },
+      { key: "screener", label: "시세분석", icon: "🔬" },
       { key: "volume", label: "거래상위", icon: "🔥" },
       { key: "sameNet", label: "동일순매매순위", icon: "🤝" },
       { key: "continuous", label: "연속매매현황", icon: "📈" },
@@ -107,6 +111,11 @@ const MENU: {
   },
 ];
 
+/** 설정 화면이 메뉴 순서를 편집할 수 있도록 평평하게 내보낸다 */
+export const MENU_ITEMS = MENU.flatMap((g) =>
+  g.items.map((i) => ({ key: i.key as string, label: i.label, icon: i.icon, group: g.group })),
+);
+
 const TAB_LABELS = Object.fromEntries(
   MENU.flatMap((g) => g.items).map((i) => [i.key, `${i.icon} ${i.label}`]),
 ) as Record<Tab, string>;
@@ -116,6 +125,19 @@ const VALID_TABS = new Set(MENU.flatMap((g) => g.items).map((i) => i.key));
 export default function App() {
   const { route, navigate } = useHashRoute("overview");
   const [navOpen, setNavOpen] = useState(false);
+  const { prefs } = useMenuPrefs();
+
+  /*
+   * 설정에서 정한 순서·숨김을 입힌다.
+   * 숨긴 항목은 사이드바에서만 빠지고 주소로는 여전히 열린다 — 숨겼다고 기능을 막을 이유는 없다.
+   */
+  const menu = applyOrder(
+    MENU.map((g) => ({ key: g.group, ...g })),
+    prefs.order,
+  ).map((g) => ({
+    ...g,
+    items: applyOrder(g.items, prefs.order).filter((i) => !prefs.hidden.includes(i.key)),
+  })).filter((g) => g.items.length > 0);
 
   // 주소창에 이상한 값이 들어와도 화면이 비지 않도록 방어
   const tab = (VALID_TABS.has(route.tab as Tab) ? route.tab : "overview") as Tab;
@@ -150,7 +172,7 @@ export default function App() {
       <aside className={`sidebar${navOpen ? " open" : ""}`}>
         <div className="sidebar-brand">VNTG HTS</div>
         <nav className="sidebar-nav">
-          {MENU.map((g) => (
+          {menu.map((g) => (
             <div
               className="nav-group"
               key={g.group}
@@ -196,6 +218,7 @@ export default function App() {
           {tab === "marketFlow" && <MarketFlowPage onSelectStock={onSelectStock} />}
           {tab === "ask" && <AskPage />}
           {tab === "calendar" && <CalendarPage />}
+          {tab === "telegram" && <TelegramPage />}
           {tab === "screener" && <ScreenerPage onSelectStock={onSelectStock} />}
           {tab === "stockAnalysis" && (
             <StockAnalysisPage stock={selected} onSelectStock={openAnalysis} />

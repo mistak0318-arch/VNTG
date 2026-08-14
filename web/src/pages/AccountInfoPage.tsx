@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, normalizeStockCode, pick, pickList, type RawRecord, type StockSearchResult } from "../api";
 import { RawJson } from "../components/RawJson";
+import { CollapsibleCard } from "../components/CollapsibleCard";
 import { RefreshBar } from "../components/RefreshBar";
 
 // 아래 필드명은 키움 REST API 공식 문서(kt00018 계좌평가잔고내역요청) 기준으로 확인된 값.
@@ -123,8 +124,7 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
       </div>
 
       <div className="account-grid">
-      <section className="card">
-        <h2>계좌 요약</h2>
+      <CollapsibleCard id="acctSummary" title="계좌 요약" hint="예수금 · 평가금액 · 손익" defaultOpen>
         {loading && !holdings ? (
           <div className="empty">불러오는 중...</div>
         ) : (
@@ -152,10 +152,9 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
           </div>
         )}
         {deposit && holdings && <RawJson data={{ deposit, holdings }} />}
-      </section>
+      </CollapsibleCard>
 
-      <section className="card">
-        <h2>보유종목 ({rows.length})</h2>
+      <CollapsibleCard id="acctHoldings" title={`보유종목 (${rows.length})`} hint="종목별 평가손익" defaultOpen>
         {rows.length === 0 && !loading && <div className="empty">보유종목이 없습니다.</div>}
         {rows.map((row, i) => {
           const code = normalizeStockCode(pick(row, CODE_KEYS));
@@ -182,7 +181,7 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
             </button>
           );
         })}
-      </section>
+      </CollapsibleCard>
       </div>
     </div>
   );

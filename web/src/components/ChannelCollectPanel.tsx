@@ -251,7 +251,7 @@ export function ChannelCollectPanel() {
                   {it.mentions.length > 0 && (
                     <span className="news-tag watch">★ {it.mentions.join(", ")}</span>
                   )}
-                  <span className="chan-item-time">{it.at.slice(11, 16)}</span>
+                  <span className="chan-item-time">{new Date(it.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
                 </div>
                 <div className="chan-item-text">{it.text}</div>
                 <div className="chan-item-src">{it.channels.join(" · ")}</div>

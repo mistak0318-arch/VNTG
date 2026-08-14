@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { summarize } from "./summarize.js";
 import { sendTelegram } from "./telegram.js";
 import { fetchNewMessages, isReaderConfigured } from "./telegramReader.js";
-import { scoreMessages, toDigestText, type ScoredChannelItem } from "./telegramDigest.js";
+import { hhmmKst, scoreMessages, toDigestText, type ScoredChannelItem } from "./telegramDigest.js";
 import { listWatchlist } from "./watchlist.js";
 
 /**
@@ -221,7 +221,7 @@ export function toPickedHtml(r: ChannelReport): string {
   const body = r.items
     .slice(0, 25)
     .map((it) => {
-      const time = it.at.slice(11, 16);
+      const time = hhmmKst(it.at);
       const tags = [
         it.coverage > 1 ? `${it.coverage}개 채널` : "",
         it.mentions.length > 0 ? `관심: ${it.mentions.join(", ")}` : "",

@@ -3186,3 +3186,16 @@ body {
 /* 차트 거래소 선택 — 기간 버튼과 시각적으로 구분 */
 .period-btn.venue { font-size: 11px; }
 .period-sep { display: inline-block; width: 1px; height: 16px; background: var(--border); margin: 0 6px; vertical-align: middle; }
+
+/* 메뉴 순서 설정 */
+.mo-list { display: grid; gap: 4px; margin-bottom: 10px; }
+.mo-row {
+  display: grid; grid-template-columns: 22px minmax(0,1fr) 78px 34px 34px 52px;
+  align-items: center; gap: 6px;
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--panel); font-size: 12.5px;
+}
+.mo-row.off { opacity: 0.45; }
+.mo-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mo-group { font-size: 10.5px; color: var(--muted); text-align: right; }
+.mo-row .filter-btn { padding: 3px 6px; font-size: 11px; }

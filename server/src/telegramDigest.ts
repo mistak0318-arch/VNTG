@@ -93,6 +93,20 @@ export interface ScoredChannelItem {
   score: number;
 }
 
+/**
+ * ISO 시각을 **한국 시각 HH:MM** 으로.
+ *
+ * `at` 은 toISOString() 으로 만든 UTC 문자열이라 `slice(11,16)` 하면 UTC 시:분이 나온다.
+ * 그래서 13:31 에 올라온 메시지가 화면에 04:31 로 찍혔고, 새벽 것만 보인다고 오해하게 됐다.
+ */
+export function hhmmKst(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const kst = new Date(d.getTime() + 9 * 3600_000);
+  return `${String(kst.getUTCHours()).padStart(2, "0")}:${String(kst.getUTCMinutes()).padStart(2, "0")}`;
+}
+
 /** 발행이 오래될수록 깎는다 (기본 반감기 3시간) */
 function recencyFactor(iso: string, halfLifeHours = 3): number {
   if (!iso) return 0.5;
@@ -193,11 +207,11 @@ export function toDigestText(items: ScoredChannelItem[]): string {
     .map((it) => {
       const head = it.coverage > 1 ? `[${it.coverage}개 채널]` : "";
       const mark = it.mentions.length > 0 ? `[관심:${it.mentions.join(",")}]` : "";
-      const time = it.at.slice(11, 16);
+      const time = hhmmKst(it.at);
       // 처음 돈 시각과 30분 이상 벌어져 있으면 계속 회자되는 중이라는 뜻이라 같이 준다
       const since =
         new Date(it.at).getTime() - new Date(it.firstAt).getTime() > 30 * 60_000
-          ? `(${it.firstAt.slice(11, 16)}부터)`
+          ? `(${hhmmKst(it.firstAt)}부터)`
           : "";
       return `${time}${since} ${head}${mark} ${it.text.replace(/\n+/g, " ").slice(0, 220)}`;
     })

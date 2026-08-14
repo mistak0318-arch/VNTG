@@ -6,6 +6,8 @@ import { AiModelPanel } from "../components/AiModelPanel";
 import { AlertConfigPanel } from "../components/AlertConfigPanel";
 import { CollapsibleCard } from "../components/CollapsibleCard";
 import { ReportSchedulePanel } from "../components/ReportSchedulePanel";
+import { MenuOrderPanel } from "../components/MenuOrderPanel";
+import { MENU_ITEMS } from "../App";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { SignalConfigPanel } from "../components/SignalConfigPanel";
 
@@ -58,6 +60,14 @@ export function SettingsPage() {
 
   return (
     <div>
+      <CollapsibleCard
+        id="menuOrder"
+        title="메뉴 순서·표시"
+        hint="사이드바 메뉴를 원하는 순서로 바꾸고 안 쓰는 것은 숨깁니다."
+      >
+        <MenuOrderPanel items={MENU_ITEMS} />
+      </CollapsibleCard>
+
       <CollapsibleCard
         id="reportSchedule"
         title="리포트 발행 일정"

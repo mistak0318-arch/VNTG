@@ -199,13 +199,46 @@ export async function refreshChannels(): Promise<ChannelEntry[]> {
  */
 export async function fetchNewMessages(
   opts: { maxPerChannel?: number; sinceHours?: number; useOffsets?: boolean } = {},
-): Promise<{ messages: ChannelMessage[]; channels: number; skipped: string[] }> {
+): Promise<{ messages: ChannelMessage[]; channels: number; fetched: number; skipped: string[] }> {
   const { maxPerChannel = 40, sinceHours = 24, useOffsets = true } = opts;
   const c = await getClient();
 
-  const targets = (await listChannels()).filter((ch) => ch.enabled);
+  const enabled = (await listChannels()).filter((ch) => ch.enabled);
   const offsets = useOffsets ? await readOffsets() : {};
   const cutoff = Date.now() - sinceHours * 3600_000;
+
+  /*
+   * **어느 채널에 새 글이 있는지 먼저 한 번에 알아낸다.**
+   *
+   * 채널마다 getMessages 를 부르면 73개 채널 = 73회 호출이고, 간격까지 두면 한 회차에 26초다.
+   * 5분마다 돌리면 하루 2만 회가 넘어 FLOOD_WAIT 이 걸린다.
+   *
+   * getDialogs 는 **한 번의 호출로** 모든 대화의 마지막 메시지 id를 준다. 그걸 저장해 둔
+   * 오프셋과 비교하면 조회할 채널이 보통 한 자릿수로 줄어든다.
+   * 실패하면 예전처럼 전수 조회로 넘어간다 — 덜 효율적일 뿐 결과는 같다.
+   */
+  let targets = enabled;
+  if (useOffsets) {
+    try {
+      const dialogs = await c.getDialogs({ limit: 500 });
+      void recordApiCall("telegram", "getDialogs", "ok");
+      const topId = new Map<string, number>();
+      for (const d of dialogs) {
+        const id = Number(d.message?.id ?? 0);
+        if (id > 0) topId.set(String(d.id), id);
+      }
+      // 마지막 글 id 를 아는 채널 중, 우리가 읽은 위치보다 뒤에 있는 것만
+      const fresh = enabled.filter((ch) => {
+        const top = topId.get(ch.id);
+        if (top === undefined) return true; // 모르면 확인해 본다
+        return top > (offsets[ch.id] ?? 0);
+      });
+      targets = fresh;
+    } catch {
+      void recordApiCall("telegram", "getDialogs", "failed");
+      // 대화 목록을 못 받으면 전수 조회로 (안전한 쪽)
+    }
+  }
 
   const messages: ChannelMessage[] = [];
   const skipped: string[] = [];
@@ -249,5 +282,6 @@ export async function fetchNewMessages(
   if (useOffsets) await writeOffsets(offsets);
   // 최신 메시지가 위로 오게 — 화면에서도 요약에서도 "지금"이 먼저다
   messages.sort((a, b) => b.at.localeCompare(a.at));
-  return { messages, channels: targets.length, skipped };
+  // channels 는 "대상 채널 수"라 켜둔 전체를 알려주는 게 맞다 (조회한 수는 fetched)
+  return { messages, channels: enabled.length, fetched: targets.length, skipped };
 }
