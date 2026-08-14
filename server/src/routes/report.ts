@@ -4,6 +4,7 @@ import type { KiwoomClient } from "../kiwoomClient.js";
 import { buildMarketDrivers } from "../reportBuilder.js";
 import { deliverReport } from "../reportDelivery.js";
 import { publishAdhoc, publishEdition } from "../reportScheduler.js";
+import { listReviewable, reviewReport } from "../reportReview.js";
 import {
   DEFAULT_SCHEDULE,
   currentSlot,
@@ -93,6 +94,32 @@ export function createReportRouter(client: KiwoomClient): Router {
       res.json({
         report: await publishAdhoc(client, { id, label, kind, deliver }),
       });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 복기 — 지난 리포트의 체크포인트를 실제 결과와 대조한다.
+   * 채점은 기계가 하므로 AI 비용이 없다.
+   */
+  router.get("/reviewable", async (_req, res, next) => {
+    try {
+      res.json({ reports: await listReviewable(30) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/review", async (req, res, next) => {
+    try {
+      const date = String(req.query.date ?? "");
+      const edition = String(req.query.edition ?? "");
+      if (!date || !edition) {
+        res.status(400).json({ error: "date 와 edition 이 필요합니다." });
+        return;
+      }
+      res.json({ result: await reviewReport(client, date, edition) });
     } catch (err) {
       next(err);
     }

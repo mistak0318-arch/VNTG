@@ -14,6 +14,7 @@ import { getTrackedWatchlist } from "./watchTracking.js";
 import { buildMarketDrivers } from "./reportBuilder.js";
 import { isClaudeConfigured, summarize } from "./summarize.js";
 import { listWatchlist } from "./watchlist.js";
+import { CHECKPOINT_RULE, parseCheckpoints, stripCheckpointSection, type Checkpoint } from "./checkpoints.js";
 
 /**
  * 데일리 리포트 최상단의 "AI 정리".
@@ -35,6 +36,11 @@ export interface AiSummary {
   error?: string;
   /** 프롬프트에 실제로 들어간 요약본 — 무엇을 보고 판단했는지 확인용 */
   digest?: string;
+  /**
+   * 며칠 뒤 실제 결과와 대조할 예측.
+   * 본문에서 뽑아 구조화해 둔다 — 자유 텍스트로 두면 기계가 채점할 수 없다.
+   */
+  checkpoints?: Checkpoint[];
 }
 
 function fmt(n: number): string {
@@ -280,7 +286,8 @@ const SYSTEM_RULES = `너는 한국 주식시장 데이터를 정리해 주는 �
 
 ## 관심종목 & 체크포인트
 (사용자 관심종목이 있으면 그 종목들의 오늘 움직임과 수급을 먼저 정리한다.
-이어서 확인 사항 3~4개. **"무엇을 보면 무엇을 알 수 있는가"** 형태로 구체적으로 써라)`;
+이어서 확인 사항 3~4개. **"무엇을 보면 무엇을 알 수 있는가"** 형태로 구체적으로 써라)
+${CHECKPOINT_RULE}`;
 
 
 /**
@@ -320,7 +327,8 @@ const MORNING_RULES = `너는 한국 주식시장 개장 전 브리핑을 쓰는
 ## 오늘 확인할 것
 (다가오는 일정과 뉴스에서 나오는 확인 사항 3~4개.
 "무엇을 보면 무엇을 알 수 있는가" 형태로 구체적으로 써라.
-예: "개장 후 외국인이 전기전자에서 순매수를 이어가는지 — 끊기면 전일 급등이 일회성")`;
+예: "개장 후 외국인이 전기전자에서 순매수를 이어가는지 — 끊기면 전일 급등이 일회성")
+${CHECKPOINT_RULE}`;
 
 /**
  * 주말판 규칙.
@@ -345,7 +353,8 @@ const WEEKEND_RULES = `너는 한국 주식시장 뉴스를 정리해 주는 애
 (사용자 관심종목이 언급된 뉴스만. 없으면 "관심종목 관련 소식 없음"이라고 쓴다)
 
 ## 다음 주 확인할 것
-(다가오는 일정과 뉴스에서 읽히는 체크포인트 2~3개)`;
+(다가오는 일정과 뉴스에서 읽히는 체크포인트 2~3개)
+${CHECKPOINT_RULE}`;
 
 /**
  * AI 요약을 새로 만든다. **발행 시각에만 호출된다** (reportScheduler).
@@ -418,8 +427,16 @@ ${digest}${research ? toResearchDigest(research) : ""}`;
    * 한글은 토큰 효율이 나빠 2,200자면 3,000~4,000 토큰을 쓴다 — 여유를 둬야 한다.
    */
   const r = await summarize(prompt, weekend ? 3000 : 7000, "report");
+
+  /*
+   * 체크포인트를 본문에서 뽑아 구조화해 저장한다.
+   * 본문에서는 걷어낸다 — 화면과 텔레그램에서는 표로 따로 보여주는 게 읽기 낫고,
+   * 그대로 두면 형식 문자열이 그대로 노출된다.
+   */
+  const checkpoints = r.text ? parseCheckpoints(r.text) : [];
   return {
-    text: r.text,
+    text: r.text ? stripCheckpointSection(r.text) : r.text,
+    checkpoints,
     basedOn,
     model: r.usedModel || process.env.CLAUDE_MODEL?.trim() || "claude-sonnet-5",
     inputTokens: r.inputTokens,

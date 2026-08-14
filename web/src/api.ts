@@ -248,6 +248,17 @@ export const api = {
     getJson<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }>(
       `/api/custom-themes${force ? "?force=1" : ""}`,
     ),
+  signalScreenStart: (market: string, level: "green" | "yellow", limit: number) =>
+    postJson<{ jobId: string }>(
+      `/api/signal/screen/start?market=${market}&level=${level}&limit=${limit}`,
+    ),
+  signalScreenStatus: (jobId: string) => getJson<ScreenJob>(`/api/signal/screen/${jobId}`),
+  reviewableReports: () =>
+    getJson<{ reports: ReviewableReport[] }>("/api/report/reviewable"),
+  reviewReport: (date: string, edition: string) =>
+    getJson<{ result: ReviewResult | null }>(
+      `/api/report/review?date=${date}&edition=${encodeURIComponent(edition)}`,
+    ),
   reportSchedule: () =>
     getJson<{ schedule: { slots: EditionSlot[] }; defaults: { slots: EditionSlot[] } }>(
       "/api/report/schedule",
@@ -656,6 +667,64 @@ export interface EvaluatedTheme {
 }
 
 /** 리포트 발행 판 하나 */
+export interface ScreenHit {
+  code: string;
+  name: string;
+  price: number;
+  changeRate: number;
+  /** 거래대금(백만원) */
+  tradeValue: number;
+  level: "green" | "yellow" | "red" | "unknown";
+  score: number;
+  passed: string[];
+  failed: string[];
+}
+
+export interface ScreenJob {
+  status: "running" | "done" | "error";
+  total: number;
+  done: number;
+  results: ScreenHit[];
+  market: string;
+  minLevel: string;
+  startedAt: string;
+  error?: string;
+}
+
+export interface ReviewableReport {
+  date: string;
+  edition: string;
+  label: string;
+  publishedAt: string;
+  count: number;
+}
+
+export interface ScoredCheckpoint {
+  kind: "stock" | "theme" | "market";
+  key: string;
+  label: string;
+  direction: "up" | "down" | "flat";
+  reason: string;
+  basePrice: number | null;
+  lastPrice: number | null;
+  /** 실제 등락률(%) */
+  actual: number | null;
+  verdict: "hit" | "miss" | "partial" | "pending" | "unknown";
+  note: string;
+}
+
+export interface ReviewResult {
+  date: string;
+  edition: string;
+  label: string;
+  publishedAt: string;
+  elapsedDays: number;
+  items: ScoredCheckpoint[];
+  hit: number;
+  miss: number;
+  partial: number;
+}
+
 export interface EditionSlot {
   id: string;
   label: string;

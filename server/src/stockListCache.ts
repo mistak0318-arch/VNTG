@@ -71,6 +71,34 @@ export async function getSharesMap(client: KiwoomClient): Promise<Map<string, nu
   return map;
 }
 
+/**
+ * ETF·ETN·리츠·우선주를 뺀 **보통주 코드 집합**.
+ *
+ * 순위 TR(거래대금상위 등)은 ETF를 걸러 주지 않는다 — ka10032 는 다른 순위 TR이 쓰는
+ * stk_cnd=16(ETF+ETN 제외)을 받아도 무시한다(실측). 그래서 여기서 직접 거른다.
+ *
+ * 판별 근거는 ka10099 의 두 필드다:
+ *   - marketName 이 "거래소"/"코스닥" 인 것만 남긴다.
+ *     (전체 4,296건 중 ETF 1,163 · ETN 370 · 리츠 23 · 뮤추얼펀드/인프라 3 이 여기서 빠진다)
+ *   - 코드 끝자리가 0 이 아니면 우선주다. 거래소·코스닥 범위에서 끝자리≠0 인 446건은
+ *     전부 우선주였다(끝자리≠0 인데 우선주가 아닌 8건은 모두 ETN이라 위 조건에서 이미 빠진다).
+ *
+ * 거래대금 상위에는 KODEX 200·TIGER 200·삼성전자우가 늘 올라오는데, 이들은
+ * "정배열 + 수급"만으로 신호등 만점이 나온다. 종목을 찾으려고 만든 화면이 지수 ETF로
+ * 채워지면 쓸모가 없다.
+ */
+export async function getCommonStockCodes(client: KiwoomClient): Promise<Set<string>> {
+  const list = await ensureCache(client);
+  const set = new Set<string>();
+  for (const item of list) {
+    if (item.marketName !== "거래소" && item.marketName !== "코스닥") continue;
+    const bare = item.code.replace(/_(AL|NX)$/, "");
+    if (!bare.endsWith("0")) continue;
+    set.add(bare);
+  }
+  return set;
+}
+
 /** 종목코드로 목록 항목(업종명 포함)을 찾는다. 접미사(_AL/_NX)는 무시 */
 export async function findStock(client: KiwoomClient, code: string): Promise<StockEntry | undefined> {
   const bare = code.replace(/_(AL|NX)$/, "");

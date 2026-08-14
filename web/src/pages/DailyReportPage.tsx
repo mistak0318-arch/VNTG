@@ -17,6 +17,7 @@ import { FlowBars } from "../components/overview/FlowBars";
 import { type MarketDriverReport, type ScoredNews } from "../api";
 import { SectorNews } from "../components/SectorNews";
 import { RefreshBar } from "../components/RefreshBar";
+import { ReviewPanel } from "../components/ReviewPanel";
 import { useSection } from "../useSection";
 import { WatchStar } from "../useWatchedCodes";
 
@@ -311,6 +312,10 @@ export function DailyReportPage({
       </header>
 
       <AiSummaryCard edition={edition} />
+
+      <Section no={0} title="복기 — 지난 예측과 실제 결과">
+        <ReviewPanel />
+      </Section>
 
       {/* 1. 국내외 주요 지수 */}
       <Section no={1} title="국내외 주요 지수">

@@ -3221,3 +3221,33 @@ body {
 .recent-chip .recent-x:hover { color: var(--red); }
 .recent-chip > button:first-child:hover { color: var(--blue); }
 .recent-clear { background: none; border: none; color: var(--muted); font-size: 10.5px; cursor: pointer; }
+
+/* 복기 — 예측과 실제를 나란히 */
+.rv-list { display: grid; gap: 8px; margin: 10px 0; }
+.rv-item {
+  background: var(--panel); border: 1px solid var(--border);
+  border-left: 3px solid var(--border); border-radius: 8px; padding: 9px 12px;
+}
+.rv-item.hit { border-left-color: var(--red); }
+.rv-item.miss { border-left-color: var(--blue); }
+.rv-item.partial { border-left-color: #f5c542; }
+.rv-item.pending { opacity: 0.6; }
+.rv-head {
+  display: grid; grid-template-columns: 38px minmax(0,1fr) 66px 82px 54px;
+  align-items: center; gap: 8px; font-size: 12.5px;
+}
+@media (max-width: 720px) { .rv-head { grid-template-columns: 38px 1fr 60px; } .rv-head .rv-actual { grid-column: 2; } }
+.rv-kind {
+  font-size: 10px; text-align: center; padding: 2px 0; border-radius: 3px;
+  background: var(--panel-2); color: var(--muted);
+}
+.rv-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-pred { font-size: 11px; color: var(--muted); text-align: right; }
+.rv-actual { text-align: right; font-variant-numeric: tabular-nums; }
+.rv-verdict { text-align: right; font-size: 11.5px; font-weight: 600; }
+.rv-reason { font-size: 11.5px; color: var(--text-dim); margin-top: 5px; line-height: 1.5; }
+.rv-note { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+
+/* 신호등 스크리너 — 점 모양은 기존 .sig-dot 을 그대로 쓴다 */
+.scr-passed { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.scr-added { font-size: 11px; color: var(--muted); }

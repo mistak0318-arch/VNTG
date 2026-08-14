@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getScreenJob, startScreen } from "../signalScreen.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
   DEFAULT_CONFIG,
@@ -48,6 +49,32 @@ export function createSignalRouter(client: KiwoomClient): Router {
     } catch (err) {
       next(err);
     }
+  });
+
+  /**
+   * 스크리너 — 거래대금 상위에서 내 신호등 기준에 맞는 종목을 찾는다.
+   * 종목당 여러 TR을 부르므로 job 방식으로 돌리고 진행 상황을 폴링한다.
+   */
+  router.post("/screen/start", (req, res, next) => {
+    try {
+      const id = startScreen(client, {
+        market: typeof req.query.market === "string" ? req.query.market : undefined,
+        minLevel: req.query.level === "yellow" ? "yellow" : "green",
+        limit: Number(req.query.limit) || 100,
+      });
+      res.json({ jobId: id });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/screen/:jobId", (req, res) => {
+    const job = getScreenJob(req.params.jobId);
+    if (!job) {
+      res.status(404).json({ error: "없는 작업입니다 (서버가 재시작되면 사라집니다)." });
+      return;
+    }
+    res.json(job);
   });
 
   return router;
