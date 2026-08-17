@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmtAbsNum, fmtNum, type ExchangeQuote, type RawRecord } from "../api";
+import { PeriodReturns } from "./PeriodReturns";
 
 /**
  * 종목 상세 맨 위에 항상 붙는 시세 요약.
@@ -178,6 +179,8 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           </span>
         </div>
       </div>
+      {/* 오늘 하루만 보면 흐름을 못 읽는다 — 아래에 기간별 상승률을 붙인다 */}
+      {code && <PeriodReturns code={code} />}
     </div>
   );
 }
