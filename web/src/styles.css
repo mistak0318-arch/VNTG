@@ -3482,3 +3482,9 @@ body {
 .mg-chips { display: flex; flex-wrap: wrap; gap: 3px; max-width: 210px; }
 .mg-chip { font-size: 10px; padding: 2px 6px; border-radius: 9px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .mg-chip.on { background: rgba(76,141,255,.16); border-color: var(--blue); color: var(--blue); font-weight: 600; }
+
+.wl-pass { font-weight: 700; font-size: 12px; padding: 1px 6px; border-radius: 9px; }
+.wl-pass.good { background: rgba(53,196,106,.18); color: var(--green); }
+.wl-pass.mid { background: rgba(245,197,66,.18); color: #f5c542; }
+.wl-pass.bad { background: rgba(255,92,92,.15); color: var(--red); }
+.wl-candle { font-size: 11px; color: var(--muted); }

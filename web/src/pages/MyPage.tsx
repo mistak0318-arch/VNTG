@@ -24,6 +24,30 @@ function fmtDate(iso: string): string {
 const ALL = "__all__";
 const DEFAULT_GROUP = "기본";
 
+
+/** 통과=O, 미달=빈칸, 모름=- . 빈칸이 낫다 — X 가 많으면 눈이 그리로 쏠린다 */
+function mark(v: boolean | null) {
+  return v === null ? "-" : v ? <b className="positive">O</b> : "";
+}
+
+/**
+ * 추세 표시. 공매도·대차는 **줄어야 좋다** — 늘면 빨강, 줄면 파랑.
+ * 등락률 색과 반대라 헷갈리기 쉬워서 화살표를 같이 둔다.
+ */
+function trendMark(v: number | null, lowerIsBetter: boolean) {
+  if (v === null) return "-";
+  if (v === 0) return <span className="pt-n">–</span>;
+  const good = lowerIsBetter ? v < 0 : v > 0;
+  return <b className={good ? "positive" : "negative"}>{v > 0 ? "▲" : "▼"}</b>;
+}
+
+/** 충족 비율로 색을 준다 — 70% 넘으면 초록, 40% 아래면 빨강 */
+function passClass(r: TrackedStock): string {
+  if (r.passTotal === 0) return "";
+  const p = r.passCount / r.passTotal;
+  return p >= 0.7 ? "good" : p >= 0.4 ? "mid" : "bad";
+}
+
 export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const [items, setItems] = useState<TrackedStock[]>([]);
   const [groups, setGroups] = useState<string[]>([DEFAULT_GROUP]);
@@ -289,13 +313,22 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                 <SortableTh columnKey="addedAt" label="편입일" accessor={(r: TrackedStock) => r.addedAt} sort={sort} />
                 <SortableTh columnKey="addedPrice" label="편입가" accessor={(r: TrackedStock) => r.addedPrice} sort={sort} />
                 <SortableTh columnKey="price" label="현재가" accessor={(r: TrackedStock) => r.price} sort={sort} />
+                {/* 조건충족수를 수익률 앞에 — 열세 칸을 가로로 훑으며 세는 건 사람이 할 일이 아니다 */}
+                <SortableTh columnKey="pass" label="충족" accessor={(r: TrackedStock) => r.passCount} sort={sort} />
                 <SortableTh columnKey="returnRate" label="수익률" accessor={(r: TrackedStock) => r.returnRate ?? 0} sort={sort} />
                 <SortableTh columnKey="changeRate" label="당일" accessor={(r: TrackedStock) => r.changeRate} sort={sort} />
-                <SortableTh columnKey="foreign5" label="외인5일" accessor={(r: TrackedStock) => r.foreign5} sort={sort} />
-                <SortableTh columnKey="foreign20" label="외인20일" accessor={(r: TrackedStock) => r.foreign20} sort={sort} />
-                <SortableTh columnKey="inst5" label="기관5일" accessor={(r: TrackedStock) => r.inst5} sort={sort} />
-                <SortableTh columnKey="inst20" label="기관20일" accessor={(r: TrackedStock) => r.inst20} sort={sort} />
+                <SortableTh columnKey="foreign5" label="외인5" accessor={(r: TrackedStock) => r.foreign5} sort={sort} />
+                <SortableTh columnKey="foreign10" label="외인10" accessor={(r: TrackedStock) => r.foreign10} sort={sort} />
+                <SortableTh columnKey="foreign20" label="외인20" accessor={(r: TrackedStock) => r.foreign20} sort={sort} />
+                <SortableTh columnKey="inst5" label="기관5" accessor={(r: TrackedStock) => r.inst5} sort={sort} />
+                <SortableTh columnKey="inst20" label="기관20" accessor={(r: TrackedStock) => r.inst20} sort={sort} />
+                <SortableTh columnKey="inst60" label="기관60" accessor={(r: TrackedStock) => r.inst60} sort={sort} />
                 <SortableTh columnKey="trend" label="정배열" accessor={(r: TrackedStock) => (r.trendPass ? 1 : 0)} sort={sort} />
+                <th title="종가가 5일선·20일선 위에 있는가">캔들</th>
+                <th title="최근 3일 공매도 추세 — 줄어야 좋다">공매도</th>
+                <th title="최근 3일 대차잔고 추세 — 줄어야 좋다">대차</th>
+                <th title="최근 분기 영업이익 증가">영익</th>
+                <th title="속한 업종이 시장 대비 강한가">섹터</th>
                 <th></th>
               </tr>
             </thead>
@@ -327,13 +360,30 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                   <td>{fmtDate(r.addedAt)}</td>
                   <td>{fmtNum(r.addedPrice)}</td>
                   <td>{fmtNum(r.price)}</td>
+                  <td>
+                    <span className={`wl-pass ${passClass(r)}`}>
+                      {r.passCount}/{r.passTotal}
+                    </span>
+                  </td>
                   <td className={signClass(r.returnRate)}>{fmtPct(r.returnRate)}</td>
                   <td className={signClass(r.changeRate)}>{fmtPct(r.changeRate)}</td>
                   <td className={signClass(r.foreign5)}>{fmtNum(r.foreign5)}</td>
+                  <td className={signClass(r.foreign10)}>{fmtNum(r.foreign10)}</td>
                   <td className={signClass(r.foreign20)}>{fmtNum(r.foreign20)}</td>
                   <td className={signClass(r.inst5)}>{fmtNum(r.inst5)}</td>
                   <td className={signClass(r.inst20)}>{fmtNum(r.inst20)}</td>
-                  <td>{r.trendPass === null ? "-" : r.trendPass ? "O" : ""}</td>
+                  <td className={signClass(r.inst60)}>{fmtNum(r.inst60)}</td>
+                  <td>{mark(r.trendPass)}</td>
+                  {/* 5일선·20일선 위 여부를 한 칸에 — 둘 다 위면 "5·20" */}
+                  <td className="wl-candle">
+                    {r.above5 === null && r.above20 === null
+                      ? "-"
+                      : [r.above5 ? "5" : null, r.above20 ? "20" : null].filter(Boolean).join("·") || "↓"}
+                  </td>
+                  <td>{trendMark(r.shortTrend, true)}</td>
+                  <td>{trendMark(r.lendingTrend, true)}</td>
+                  <td>{mark(r.profitUp)}</td>
+                  <td>{mark(r.sectorStrong)}</td>
                   <td>
                     <button
                       className="row-del-btn"
@@ -351,7 +401,9 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
             </tbody>
           </table>
           <div className="table-note">
-            수익률은 편입가 대비 · 순매매 단위는 백만원 · 정배열은 현재가≥5일≥20일≥60일≥120일선
+            수익률은 편입가 대비 · 순매매 단위는 백만원 · 정배열은 현재가≥5일≥20일≥60일≥120일선 ·
+            캔들은 종가가 어느 선 위인지 · <b>공매도·대차는 줄어야(▼) 좋습니다</b> ·
+            충족은 판단 가능한 항목만 셉니다(데이터가 없으면 분모에서도 뺍니다)
           </div>
         </div>
       )}

@@ -510,8 +510,21 @@ export interface TrackedStock extends WatchItem {
   changeRate: number;
   returnRate: number | null;
   foreign5: number;
+  foreign10: number;
   foreign20: number;
   inst5: number;
+  inst60: number;
+  /** 종가가 5일선/20일선 위인가 */
+  above5: boolean | null;
+  above20: boolean | null;
+  /** 최근 3일 추세 +1 늘었다 / -1 줄었다 / 0 그대로 / null 모름 */
+  shortTrend: number | null;
+  lendingTrend: number | null;
+  profitUp: boolean | null;
+  sectorStrong: boolean | null;
+  /** 조건 충족 수 / 판단 가능한 수 */
+  passCount: number;
+  passTotal: number;
   inst20: number;
   trendPass: boolean | null;
   ma5: number | null;

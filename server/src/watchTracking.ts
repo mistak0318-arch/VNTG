@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { evaluateSignal } from "./signalLight.js";
 import { listWatchlist, type WatchItem } from "./watchlist.js";
 
 /**
@@ -11,17 +12,36 @@ export interface TrackedStock extends WatchItem {
   price: number; // 현재가
   changeRate: number; // 당일 등락률
   returnRate: number | null; // 편입가 대비 수익률
-  // 외국인/기관 순매매 (백만원)
+  // 외국인/기관 순매매 (백만원). 10일·60일은 같은 응답에서 창만 달리 잘라 낸 것이라 조회가 안 는다
   foreign5: number;
+  foreign10: number;
   foreign20: number;
   inst5: number;
   inst20: number;
+  inst60: number;
   // 정배열 여부 (데이터 부족 시 null)
   trendPass: boolean | null;
   ma5: number | null;
   ma20: number | null;
   ma60: number | null;
   ma120: number | null;
+  /** 종가가 5일선 위인가 / 20일선 위인가 — "지금 어디에 서 있나" */
+  above5: boolean | null;
+  above20: boolean | null;
+  /**
+   * 최근 3일 추세. +1 늘었다 / -1 줄었다 / 0 그대로 / null 모름.
+   *
+   * 공매도가 **줄고** 있으면 눌림이 풀리는 신호이고, 대차잔고가 **늘고** 있으면
+   * 공매도로 이어질 재고가 쌓이는 것이다. 방향이 값 자체보다 중요해서 추세로 낸다.
+   */
+  shortTrend: number | null;
+  lendingTrend: number | null;
+  /** 신호등에서 가져온다 (자체 15분 캐시를 타므로 추가 부담이 작다) */
+  profitUp: boolean | null;
+  sectorStrong: boolean | null;
+  /** 위 조건 중 몇 개를 만족했나 — 수익률 앞에 세워 한눈에 보게 */
+  passCount: number;
+  passTotal: number;
   error: string | null;
 }
 
@@ -56,14 +76,24 @@ async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedS
     changeRate: 0,
     returnRate: null,
     foreign5: 0,
+    foreign10: 0,
     foreign20: 0,
     inst5: 0,
     inst20: 0,
+    inst60: 0,
     trendPass: null,
     ma5: null,
     ma20: null,
     ma60: null,
     ma120: null,
+    above5: null,
+    above20: null,
+    shortTrend: null,
+    lendingTrend: null,
+    profitUp: null,
+    sectorStrong: null,
+    passCount: 0,
+    passTotal: 0,
     error: null,
   };
 
@@ -94,6 +124,9 @@ async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedS
         base.trendPass =
           base.price >= base.ma5 && base.ma5 >= base.ma20 && base.ma20 >= base.ma60 && base.ma60 >= base.ma120;
       }
+      // 캔들 위치는 이동평균만 있으면 나온다 — 120일치가 없어도 5·20일선은 잡힌다
+      if (closes.length >= 5) base.above5 = base.price >= avg(closes.slice(0, 5));
+      if (closes.length >= 20) base.above20 = base.price >= avg(closes.slice(0, 20));
     }
 
     await sleep(220); // TR당 초당 5회 제한을 여유 있게 지킨다
@@ -110,14 +143,114 @@ async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedS
     const foreign = flowRows.map((r) => toNum(r.frgnr_invsr));
     const inst = flowRows.map((r) => toNum(r.orgn));
     base.foreign5 = sum(foreign, 5);
+    base.foreign10 = sum(foreign, 10);
     base.foreign20 = sum(foreign, 20);
     base.inst5 = sum(inst, 5);
     base.inst20 = sum(inst, 20);
+    base.inst60 = sum(inst, 60);
+    await sleep(220);
+
+    /*
+     * 공매도·대차잔고는 **방향만** 본다.
+     *
+     * 잔고 절대값은 종목마다 규모가 달라 비교가 안 되지만, 사흘 연속 늘었는지 줄었는지는
+     * 어느 종목에서나 같은 뜻이다. 공매도가 줄면 눌림이 풀리는 것이고, 대차잔고가 늘면
+     * 공매도로 이어질 재고가 쌓이는 것이다.
+     */
+    base.shortTrend = await trendOf(client, "/api/dostk/shsa", "ka10014", {
+      stk_cd: item.code,
+      tm_tp: "1",
+      strt_dt: daysAgoYyyymmdd(10),
+      end_dt: todayYyyymmdd(),
+    }, "shrts_qty").catch(() => null);
+    await sleep(220);
+    base.lendingTrend = await trendOf(client, "/api/dostk/slb", "ka20068", {
+      stk_cd: item.code,
+      strt_dt: daysAgoYyyymmdd(10),
+      end_dt: todayYyyymmdd(),
+      all_tp: "0",
+    }, "rmnd").catch(() => null);
   } catch (err) {
     base.error = err instanceof Error ? err.message : "조회 실패";
   }
 
+  /*
+   * 영업이익·섹터는 신호등이 이미 계산한다. 여기서 다시 재무·업종을 부르면 같은 일을
+   * 두 번 하는 셈이라, 신호등을 그대로 쓴다 — 자체 15분 캐시가 있어 부담이 작고,
+   * 무엇보다 **두 화면의 판정이 어긋나지 않는다.**
+   */
+  try {
+    const sig = await evaluateSignal(client, item.code);
+    base.profitUp = sig.checks.find((c) => c.key === "profitGrowth")?.pass ?? null;
+    base.sectorStrong = sig.checks.find((c) => c.key === "sectorStrength")?.pass ?? null;
+  } catch {
+    /* 신호등이 실패해도 나머지 지표는 살린다 */
+  }
+
+  /*
+   * 조건충족수 — 이 표의 요약이다.
+   *
+   * 열두 칸을 가로로 훑으며 세는 건 사람이 할 일이 아니다. 판단 못 한 항목(null)은
+   * 분모에서도 빼서, 데이터가 없는 걸 미달로 세지 않는다.
+   */
+  const checks: (boolean | null)[] = [
+    base.foreign5 > 0,
+    base.foreign10 > 0,
+    base.foreign20 > 0,
+    base.inst5 > 0,
+    base.inst20 > 0,
+    base.inst60 > 0,
+    base.trendPass,
+    base.above5,
+    base.above20,
+    base.shortTrend === null ? null : base.shortTrend < 0, // 공매도는 줄어야 좋다
+    base.lendingTrend === null ? null : base.lendingTrend < 0,
+    base.profitUp,
+    base.sectorStrong,
+  ];
+  base.passTotal = checks.filter((c) => c !== null).length;
+  base.passCount = checks.filter((c) => c === true).length;
+
   return base;
+}
+
+/**
+ * 최근 3일이 늘었나 줄었나. +1 늘었다 / -1 줄었다 / 0 그대로 / null 모름.
+ *
+ * TR 을 직접 부른다. 처음엔 우리 서버의 라우트를 HTTP 로 부르려 했는데 그건 나쁘다 —
+ * 포트를 가정해야 하고, 왕복이 한 번 더 늘고, 부하가 몰리면 자기 자신을 기다리게 된다.
+ *
+ * 응답 배열의 키가 TR 마다 다르므로 **배열인 첫 필드**를 찾아 쓴다. 잔고 필드도
+ * 이름이 여러 가지라 후보를 훑는다 — 못 찾으면 null 이고, 그건 "모름"으로 표시된다.
+ */
+async function trendOf(
+  client: KiwoomClient,
+  uri: string,
+  apiId: string,
+  params: Record<string, string>,
+  /**
+   * 볼 필드. TR 마다 뜻이 달라 밖에서 지정해야 한다 — 실측으로 확인했다.
+   *   ka10014 shrts_qty = 그날 공매도 **수량** (잔고가 아니다)
+   *   ka20068 rmnd      = 대차 **잔고**
+   */
+  field: string,
+): Promise<number | null> {
+  const { data } = await client.request<Record<string, unknown>>(uri, apiId, params);
+  const list = Object.values(data).find((v): v is Row[] => Array.isArray(v) && v.length > 0);
+  if (!list) return null;
+
+  const rows = list
+    .slice(0, 3)
+    .map((r) => (r[field] === undefined ? null : toNum(r[field])))
+    .filter((n): n is number => n !== null);
+  if (rows.length < 2) return null;
+  const diff = rows[0] - rows[rows.length - 1]; // 최신이 앞
+  return diff > 0 ? 1 : diff < 0 ? -1 : 0;
+}
+
+function daysAgoYyyymmdd(days: number): string {
+  const d = new Date(Date.now() - days * 86400_000);
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
 }
 
 let cache: { data: TrackedStock[]; at: number } | null = null;
