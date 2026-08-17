@@ -35,3 +35,8 @@ server/data/*
 # server/data/watchGroups.json
 # server/data/journal.json
 # server/data/paperTrades.json
+
+# 미니PC 로컬 백업 — 저장소에 올릴 것이 아니다
+data-backup/
+server/data/*.backup-*.json
+server/data/*.mine.json

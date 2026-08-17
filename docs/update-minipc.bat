@@ -1,0 +1,66 @@
+@echo off
+REM 미니PC 전용 — 최신 코드를 받아 빌드하고 서비스를 재시작한다.
+REM 메인 PC에서 git push 한 뒤 미니PC에서 이 파일을 더블클릭하면 끝.
+REM
+REM [0/5] 가 새로 붙었다. watchlist / journal / paperTrades 는 git 추적에서 뺐으므로
+REM       이제 원격에 백업본이 없다 — 디스크가 죽으면 그대로 사라진다.
+REM       그래서 pull 하기 전에 날짜별로 복사해 둔다. 30일치만 남긴다.
+setlocal enabledelayedexpansion
+set "PATH=C:\Program Files\nodejs;C:\Program Files\Git\cmd;%PATH%"
+cd /d "%~dp0"
+
+echo [0/5] 데이터 백업...
+for /f "tokens=1-3 delims=-/ " %%a in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "TODAY=%%a"
+set "BK=data-backup\%TODAY%"
+if not exist "%BK%" mkdir "%BK%" >nul 2>&1
+copy /Y "server\data\*.json" "%BK%\" >nul 2>&1
+echo       %BK% 에 저장했습니다.
+REM 30일보다 오래된 백업 폴더는 치운다
+forfiles /p data-backup /d -30 /c "cmd /c if @isdir==TRUE rd /s /q @path" >nul 2>&1
+
+echo [1/5] 최신 코드 받는 중...
+git pull || goto :fail
+
+REM pull 이 데이터 파일을 지웠으면 방금 백업한 것으로 되살린다.
+REM 추적 해제 커밋을 처음 받을 때 꼭 필요하고, 그 뒤에는 아무 일도 하지 않는다.
+for %%F in (watchlist watchGroups journal paperTrades) do (
+  if not exist "server\data\%%F.json" (
+    if exist "%BK%\%%F.json" (
+      copy /Y "%BK%\%%F.json" "server\data\%%F.json" >nul
+      echo       복원: %%F.json
+    )
+  )
+)
+
+echo [2/5] 서버 빌드...
+cd server
+call npm install --no-audit --no-fund || goto :fail
+call npm run build || goto :fail
+cd ..
+
+echo [3/5] 웹 빌드...
+cd web
+call npm install --no-audit --no-fund || goto :fail
+call npm run build || goto :fail
+cd ..
+
+echo [4/5] 서비스 재시작...
+schtasks /End /TN "VNTG HTS" >nul 2>&1
+schtasks /Run /TN "VNTG HTS" >nul 2>&1
+
+echo [5/5] 확인...
+timeout /t 5 /nobreak >nul
+curl -s http://localhost:4000/api/health
+echo.
+node -e "const w=require('./server/data/watchlist.json');console.log('관심종목 '+w.length+'개')" 2>nul
+node -e "const t=require('./server/data/customThemes.json');console.log('내 테마 '+t.length+'개')" 2>nul
+echo.
+pause
+exit /b 0
+
+:fail
+echo.
+echo *** 실패했습니다. 위 메시지를 확인하세요. ***
+echo *** 데이터는 %BK% 에 백업돼 있습니다. ***
+pause
+exit /b 1
