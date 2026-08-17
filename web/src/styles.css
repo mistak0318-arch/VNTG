@@ -3493,3 +3493,6 @@ body {
 .mg-edit { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; padding: 0 2px; }
 .mg-edit:hover { color: var(--blue); }
 .mg-picker { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; padding: 5px; background: var(--panel-2); border-radius: 5px; max-width: 260px; }
+
+/* 합계 줄이 넷이 되니 일별 줄과 구분이 필요하다 */
+.totals-row + tr:not(.totals-row) td { border-top: 2px solid var(--border); }

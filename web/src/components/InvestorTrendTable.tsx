@@ -39,6 +39,7 @@ function changeRate(row: RawRecord): number | null {
 }
 
 export function InvestorTrendTable({ rows }: { rows: RawRecord[] }) {
+  /** 일별 목록을 몇 줄까지 볼지. 합계는 아래에서 네 기간을 한꺼번에 보여준다 */
   const [period, setPeriod] = useState(20);
   const visible = rows.slice(0, period);
 
@@ -46,15 +47,30 @@ export function InvestorTrendTable({ rows }: { rows: RawRecord[] }) {
     return <div className="empty">투자자별 매매동향 데이터 없음</div>;
   }
 
-  const totals: Record<string, number> = {};
-  for (const col of COLUMNS) {
-    totals[col.key] = visible.reduce((sum, r) => sum + (Number(r[col.key]) || 0), 0);
-  }
+  /*
+   * 5·10·20·60일 합계를 **한 번에** 보여준다.
+   *
+   * 예전엔 드롭다운으로 기간을 하나 골라야 했는데, 수급은 **기간을 견주는 게 본체**다.
+   * "5일은 사는데 20일은 파는" 상태가 그 반대와 완전히 다른 뜻이라, 하나씩 바꿔 가며
+   * 보게 하면 머릿속에서 이어 붙여야 한다.
+   *
+   * 데이터가 모자란 기간은 실제 일수를 적는다 — 60일을 요구했는데 40일뿐이면
+   * "60일 합계"라고 부르면 안 된다.
+   */
+  const SUM_PERIODS = [5, 10, 20, 60];
+  const summaries = SUM_PERIODS.map((p) => {
+    const slice = rows.slice(0, p);
+    const t: Record<string, number> = {};
+    for (const col of COLUMNS) {
+      t[col.key] = slice.reduce((sum, r) => sum + (Number(r[col.key]) || 0), 0);
+    }
+    return { label: p, days: slice.length, totals: t };
+  }).filter((x) => x.days > 0);
 
   return (
     <div>
       <div className="table-toolbar">
-        <label htmlFor="investor-period">합계 기간</label>
+        <label htmlFor="investor-period">일별 표시</label>
         <select
           id="investor-period"
           value={period}
@@ -80,16 +96,22 @@ export function InvestorTrendTable({ rows }: { rows: RawRecord[] }) {
             </tr>
           </thead>
           <tbody>
-            <tr className="totals-row">
-              <td className="sticky-col">최근 {visible.length}일 합계</td>
-              <td>-</td>
-              <td>-</td>
-              {COLUMNS.map((c) => (
-                <td key={c.key} className={signClass(totals[c.key])}>
-                  {fmtNum(totals[c.key])}
+            {summaries.map((sm) => (
+              <tr className="totals-row" key={sm.label}>
+                <td className="sticky-col">
+                  최근 {sm.label}일
+                  {/* 요구한 기간보다 데이터가 짧으면 실제 일수를 밝힌다 */}
+                  {sm.days < sm.label && <span className="pt-n"> (실제 {sm.days}일)</span>}
                 </td>
-              ))}
-            </tr>
+                <td>-</td>
+                <td>-</td>
+                {COLUMNS.map((c) => (
+                  <td key={c.key} className={signClass(sm.totals[c.key])}>
+                    {fmtNum(sm.totals[c.key])}
+                  </td>
+                ))}
+              </tr>
+            ))}
             {visible.map((r, i) => {
               const rate = changeRate(r);
               return (
