@@ -3,6 +3,7 @@ import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
 import { PickAutoPanel } from "../components/PickAutoPanel";
 import { AiModelPanel } from "../components/AiModelPanel";
+import { KeywordAlertPanel } from "../components/KeywordAlertPanel";
 
 /**
  * 텔레그램 동향.
@@ -15,10 +16,11 @@ import { AiModelPanel } from "../components/AiModelPanel";
  *   채널 — 어디를 읽을 것인가 (구독 목록 켜고 끄기)
  */
 
-type Tab = "digest" | "channels" | "pick" | "ai";
+type Tab = "digest" | "keyword" | "channels" | "pick" | "ai";
 
 const TABS: { key: Tab; label: string; hint: string }[] = [
   { key: "digest", label: "동향", hint: "지금 채널들이 무슨 말을 하고 있는지" },
+  { key: "keyword", label: "내 관심 키워드", hint: "내 종목·키워드가 걸리면 바로 알립니다" },
   { key: "channels", label: "채널 관리", hint: "어느 채널을 읽을지 고릅니다" },
   { key: "pick", label: "선별 관리", hint: "AI 없이 원문 그대로 자동 발송 (비용 없음)" },
   { key: "ai", label: "AI 관리", hint: "AI 정리를 어떤 모델로 할지" },
@@ -43,6 +45,7 @@ export function TelegramPage() {
       </nav>
 
       {tab === "digest" && <ChannelDigestPanel />}
+      {tab === "keyword" && <KeywordAlertPanel />}
       {tab === "channels" && <ChannelCollectPanel />}
       {tab === "pick" && <PickAutoPanel />}
       {tab === "ai" && (

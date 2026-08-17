@@ -43,6 +43,8 @@ import { createPaperRouter } from "./routes/paper.js";
 import { createJournalRouter } from "./routes/journal.js";
 import { createDartRouter } from "./routes/dart.js";
 import { createUsWatchRouter } from "./routes/usWatch.js";
+import { createKeywordRouter } from "./routes/keyword.js";
+import { startKeywordScheduler } from "./keywordAlert.js";
 import { createWatchlistRouter } from "./routes/watchlist.js";
 
 const app = express();
@@ -92,6 +94,7 @@ app.use("/api/paper", createPaperRouter(client));
 app.use("/api/journal", createJournalRouter(client));
 app.use("/api/dart", createDartRouter());
 app.use("/api/us-watch", createUsWatchRouter());
+app.use("/api/keyword", createKeywordRouter());
 app.use("/api/breadth", createBreadthRouter(client));
 app.use("/api/alert", createAlertRouter(client));
 app.use("/api/ai", createAiRouter());
@@ -111,6 +114,7 @@ startSnapshotRefresher(client);
 startTrackingRefresher(client);
 startAlertScheduler(client);
 startChannelScheduler();
+  startKeywordScheduler();
 
 /**
  * 프로덕션(미니PC)에서는 web을 빌드한 결과(web/dist)를 이 서버가 같이 서빙한다.

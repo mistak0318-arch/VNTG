@@ -258,6 +258,12 @@ export const api = {
     getJson<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }>(
       `/api/custom-themes${force ? "?force=1" : ""}`,
     ),
+  keywordConfig: () =>
+    getJson<{ config: KeywordConfig; keywords: KeywordSource[]; intervals: number[] }>("/api/keyword"),
+  keywordSave: (config: KeywordConfig) =>
+    putJson<{ config: KeywordConfig; keywords: KeywordSource[] }>("/api/keyword", config),
+  keywordRun: (send: boolean) =>
+    postJson<KeywordRunResult>(`/api/keyword/run${send ? "?send=1" : ""}`),
   usWatch: (force = false) => getJson<UsWatchResult>(`/api/us-watch${force ? "?force=1" : ""}`),
   usWatchSearch: (q: string) =>
     getJson<{ results: UsSearchResult[] }>(`/api/us-watch/search?q=${encodeURIComponent(q)}`),
@@ -1538,4 +1544,41 @@ export interface UsWatchResult {
   quotedAt: number | null;
   /** 우리가 받아온 시각(ms) */
   fetchedAt: number;
+}
+
+
+/** 내 관심 키워드 */
+export interface KeywordConfig {
+  enabled: boolean;
+  intervalMin: number;
+  keywords: string[];
+  useWatchlist: boolean;
+  useThemes: boolean;
+  weekdayOnly: boolean;
+  startHour: number;
+  endHour: number;
+  maxPerRun: number;
+}
+
+export interface KeywordSource {
+  word: string;
+  from: string;
+}
+
+export interface KeywordHit {
+  key: string;
+  channelName: string;
+  at: string;
+  text: string;
+  link: string;
+  words: string[];
+}
+
+export interface KeywordRunResult {
+  scanned: number;
+  matched: number;
+  sent: number;
+  skipped: number;
+  hits: KeywordHit[];
+  error?: string;
 }

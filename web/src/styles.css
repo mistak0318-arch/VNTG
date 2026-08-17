@@ -3463,3 +3463,8 @@ body {
 .uw-stamp { font-size: 11px; color: var(--muted); margin-bottom: 8px; padding: 6px 9px; background: var(--panel-2); border-radius: 6px; }
 .uw-stamp b { color: var(--text); }
 .uw-stamp-note { display: block; margin-top: 2px; }
+
+/* 내 관심 키워드 */
+.kw-hit { padding: 7px 9px; border-radius: 6px; background: var(--panel-2); border-left: 3px solid #f5c542; }
+.kw-hit-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 3px; }
+.kw-word { font-size: 12px; font-weight: 700; color: #f5c542; }
