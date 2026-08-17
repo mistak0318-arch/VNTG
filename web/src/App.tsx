@@ -4,6 +4,7 @@ import { ScreenerPage } from "./pages/ScreenerPage";
 import { ScreenPage } from "./pages/ScreenPage";
 import { PaperTradePage } from "./pages/PaperTradePage";
 import { JournalPage } from "./pages/JournalPage";
+import { UsWatchPage } from "./pages/UsWatchPage";
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
 import { StockDetail } from "./components/StockDetail";
@@ -40,6 +41,7 @@ type Tab =
   | "customTheme"
   | "signalScreen"
   | "journal"
+  | "usWatch"
   | "ask"
   | "telegram"
   | "stockAnalysis"
@@ -96,6 +98,7 @@ const MENU: {
     items: [
       { key: "watchAi", label: "관심종목 (AI_HTS)", icon: "⭐" },
       { key: "watchKiwoom", label: "관심종목 (키움_HTS)", icon: "🔖" },
+      { key: "usWatch", label: "관심종목 (미국)", icon: "🇺🇸" },
       { key: "customTheme", label: "내 테마", icon: "🎯" },
       { key: "signalScreen", label: "신호등 찾기", icon: "🚦" },
       { key: "journal", label: "복기 노트", icon: "📓" },
@@ -251,6 +254,7 @@ export default function App() {
           {tab === "customTheme" && <CustomThemePage onSelectStock={onSelectStock} />}
           {tab === "signalScreen" && <ScreenPage onSelectStock={onSelectStock} />}
           {tab === "journal" && <JournalPage />}
+          {tab === "usWatch" && <UsWatchPage />}
           {tab === "marketFlow" && <MarketFlowPage onSelectStock={onSelectStock} />}
           {tab === "ask" && <AskPage />}
           {tab === "calendar" && <CalendarPage />}

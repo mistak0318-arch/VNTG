@@ -42,6 +42,7 @@ import { createSignalRouter } from "./routes/signal.js";
 import { createPaperRouter } from "./routes/paper.js";
 import { createJournalRouter } from "./routes/journal.js";
 import { createDartRouter } from "./routes/dart.js";
+import { createUsWatchRouter } from "./routes/usWatch.js";
 import { createWatchlistRouter } from "./routes/watchlist.js";
 
 const app = express();
@@ -90,6 +91,7 @@ app.use("/api/signal", createSignalRouter(client));
 app.use("/api/paper", createPaperRouter(client));
 app.use("/api/journal", createJournalRouter(client));
 app.use("/api/dart", createDartRouter());
+app.use("/api/us-watch", createUsWatchRouter());
 app.use("/api/breadth", createBreadthRouter(client));
 app.use("/api/alert", createAlertRouter(client));
 app.use("/api/ai", createAiRouter());

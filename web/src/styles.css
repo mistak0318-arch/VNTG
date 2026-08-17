@@ -3452,3 +3452,10 @@ body {
 .dart-amend { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: rgba(245,197,66,.18); color: #f5c542; }
 .dart-title { display: block; font-size: 12px; color: var(--text); text-decoration: none; }
 .dart-title:hover { color: var(--blue); text-decoration: underline; }
+
+/* 관심종목 (미국) */
+.uw-grate { font-size: 11px; font-weight: 700; }
+.uw-grate.big { font-size: 16px; margin-left: 8px; }
+.uw-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 10px 0 8px; }
+.uw-head b { font-size: 15px; }
+.uw-err { font-size: 11px; color: var(--red); }

@@ -258,6 +258,17 @@ export const api = {
     getJson<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }>(
       `/api/custom-themes${force ? "?force=1" : ""}`,
     ),
+  usWatch: () => getJson<{ groups: UsWatchGroup[] }>("/api/us-watch"),
+  usWatchSearch: (q: string) =>
+    getJson<{ results: UsSearchResult[] }>(`/api/us-watch/search?q=${encodeURIComponent(q)}`),
+  usWatchGroupAdd: (name: string, memo = "") =>
+    postJson<{ groups: UsWatchGroup[] }>("/api/us-watch/groups", { name, memo }),
+  usWatchGroupRemove: (id: string) =>
+    deleteJson<{ groups: UsWatchGroup[] }>(`/api/us-watch/groups/${id}`),
+  usWatchStockAdd: (groupId: string, symbol: string, name: string) =>
+    postJson<{ groups: UsWatchGroup[] }>(`/api/us-watch/groups/${groupId}/stocks`, { symbol, name }),
+  usWatchStockRemove: (groupId: string, symbol: string) =>
+    deleteJson<{ groups: UsWatchGroup[] }>(`/api/us-watch/groups/${groupId}/stocks/${symbol}`),
   dartToday: (force = false) =>
     getJson<{ day: string; events: DartEvent[] }>(`/api/dart/today${force ? "?force=1" : ""}`),
   journal: () => getJson<JournalData>("/api/journal"),
@@ -1486,4 +1497,35 @@ export interface DartEvent {
   watched: boolean;
   themes: string[];
   amended: boolean;
+}
+
+
+/** 관심종목 (미국) */
+export interface UsSearchResult {
+  symbol: string;
+  name: string;
+  exchange: string;
+  type: string;
+}
+
+export interface UsQuoteRow {
+  symbol: string;
+  name: string;
+  price: number | null;
+  changeRate: number | null;
+  returnRate: number | null;
+  addedPrice: number | null;
+  memo: string;
+  marketState: string | null;
+  error: string | null;
+}
+
+export interface UsWatchGroup {
+  id: string;
+  name: string;
+  memo: string;
+  changeRate: number | null;
+  rising: number;
+  falling: number;
+  stocks: UsQuoteRow[];
 }
