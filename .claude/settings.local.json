@@ -205,7 +205,12 @@
       "Bash(git stash *)",
       "Bash(git merge *)",
       "Bash(curl -s -X DELETE http://localhost:4000/api/journal/2026-08-15)",
-      "Bash(curl -s \"http://localhost:4000/api/report/published?edition=now-0028\")"
+      "Bash(curl -s \"http://localhost:4000/api/report/published?edition=now-0028\")",
+      "Bash(cp data/customThemes.json \"data/customThemes.backup-$\\(date +%Y%m%d-%H%M%S\\).json\")",
+      "Bash(node scripts/rebuild-themes.mjs)",
+      "Bash(curl -s http://localhost:4000/api/health)",
+      "Bash(node scripts/rebuild-themes.mjs --write)",
+      "Bash(curl -s \"http://localhost:4000/api/custom-themes?force=1\")"
     ]
   }
 }
