@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, fmtNum, type ScreenHit, type ScreenJob, type ScreenRunSummary } from "../api";
 import { useWatchedCodes } from "../useWatchedCodes";
+import { WatchAddSheet, type WatchAddTarget } from "../components/WatchAddSheet";
 
 /**
  * 신호등 스크리너.
@@ -39,6 +40,7 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
   const [adding, setAdding] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const watched = useWatchedCodes();
+  const [addTarget, setAddTarget] = useState<WatchAddTarget | null>(null);
 
   /** 지난 회차 */
   const [runs, setRuns] = useState<ScreenRunSummary[]>([]);
@@ -112,12 +114,20 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
     }
   }
 
-  /** 찾은 종목을 바로 관심종목에 담는다 — 편입가는 지금 현재가 */
+  /**
+   * 찾은 종목을 관심종목에 담는다 — 편입가는 지금 현재가.
+   * 그룹이 있으면 **어디에 넣을지 묻는다.** 없으면 묻지 않고 바로 담는다.
+   */
   async function addToWatch(hit: ScreenHit) {
     setAdding(hit.code);
     try {
-      await api.watchlistAdd({ code: hit.code, name: hit.name, addedPrice: hit.price });
-      watched.markAdded(hit.code); // 전역 집합에 바로 반영 — 다시 조회할 필요 없다
+      const { groups } = await api.watchGroups().catch(() => ({ groups: [] as string[] }));
+      if (groups.length === 0) {
+        await api.watchlistAdd({ code: hit.code, name: hit.name, addedPrice: hit.price });
+        watched.markAdded(hit.code); // 전역 집합에 바로 반영 — 다시 조회할 필요 없다
+      } else {
+        setAddTarget({ code: hit.code, name: hit.name, addedPrice: hit.price });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "관심종목 추가 실패");
     } finally {
@@ -287,6 +297,8 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
           )}
         </>
       )}
+
+      {addTarget && <WatchAddSheet target={addTarget} onClose={() => setAddTarget(null)} />}
 
       {!job && (
         <div className="page-note">

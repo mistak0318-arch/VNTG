@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, pick, pickList, type RawRecord } from "../api";
 import { ChartPanel } from "./ChartPanel";
+import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
 import { IntradayFlow } from "./IntradayPanels";
 import { CompanySnapshot, type PeriodReturns } from "./CompanySnapshot";
 import { FinancePanel } from "./FinancePanel";
@@ -87,6 +88,7 @@ export function StockDetail({
   const live = useLive(() => api.stockInfo(code), [code], 5000);
   const info = (live.data ?? null) as RawRecord | null;
   const [watchBusy, setWatchBusy] = useState(false);
+  const [addTarget, setAddTarget] = useState<WatchAddTarget | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("chart");
   const watchedCodes = useWatchedCodes();
   const watched = watchedCodes.isWatched(code);
@@ -114,6 +116,13 @@ export function StockDetail({
     };
   }, [code]);
 
+  /**
+   * 별을 누르면 담거나 뺀다.
+   *
+   * 담을 때는 **어느 그룹에 넣을지 묻는다.** 그냥 담아 버리면 담은 뒤에 옮겨야 하고,
+   * 그 일은 안 하게 되어 결국 전부 기본 그룹에 쌓인다.
+   * 다만 그룹이 없으면 고를 게 없으므로 묻지 않고 바로 담는다 — 빈 창은 방해다.
+   */
   async function toggleWatch() {
     if (watchBusy) return;
     setWatchBusy(true);
@@ -121,11 +130,17 @@ export function StockDetail({
       if (watched) {
         await api.watchlistRemove(code);
         watchedCodes.markRemoved(code);
-      } else {
-        // 등록 시점의 현재가를 편입가로 기록
-        const price = Math.abs(Number(pick(info ?? undefined, CUR_PRICE_KEYS))) || 0;
+        setWatchBusy(false);
+        return;
+      }
+      // 등록 시점의 현재가를 편입가로 기록
+      const price = Math.abs(Number(pick(info ?? undefined, CUR_PRICE_KEYS))) || 0;
+      const { groups } = await api.watchGroups().catch(() => ({ groups: [] as string[] }));
+      if (groups.length === 0) {
         await api.watchlistAdd({ code, name, addedPrice: price });
         watchedCodes.markAdded(code);
+      } else {
+        setAddTarget({ code, name, addedPrice: price });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "관심종목 처리 실패");
@@ -229,6 +244,11 @@ export function StockDetail({
           </>
         )}
       </div>
+
+      {/* 그룹을 고르고 담는다. 담기 전엔 별이 안 켜진다 */}
+      {addTarget && (
+        <WatchAddSheet target={addTarget} onClose={() => setAddTarget(null)} />
+      )}
     </div>
   );
 }

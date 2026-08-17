@@ -10,6 +10,7 @@ import {
 import { RefreshBar } from "../components/RefreshBar";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useWatchedCodes, WatchStar } from "../useWatchedCodes";
+import { WatchAddSheet, type WatchAddTarget } from "../components/WatchAddSheet";
 
 /** 키움 MTS/HTS에 등록해둔 관심종목 그룹을 그대로 조회 (읽기 전용) */
 export function KiwoomWatchlistPage({
@@ -20,6 +21,7 @@ export function KiwoomWatchlistPage({
   const [groups, setGroups] = useState<KiwoomGroup[]>([]);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [items, setItems] = useState<KiwoomGroupStock[]>([]);
+  const [addTarget, setAddTarget] = useState<WatchAddTarget | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
@@ -73,6 +75,11 @@ export function KiwoomWatchlistPage({
     const code = normalizeStockCode(stock.code);
     setAdding(stock.code);
     try {
+      const { groups } = await api.watchGroups().catch(() => ({ groups: [] as string[] }));
+      if (groups.length > 0) {
+        setAddTarget({ code, name: stock.name, addedPrice: stock.price });
+        return;
+      }
       await api.watchlistAdd({ code, name: stock.name, addedPrice: stock.price });
       watchedCodes.markAdded(code);
     } catch (err) {
@@ -158,6 +165,8 @@ export function KiwoomWatchlistPage({
           </div>
         </div>
       )}
+
+      {addTarget && <WatchAddSheet target={addTarget} onClose={() => setAddTarget(null)} />}
     </div>
   );
 }
