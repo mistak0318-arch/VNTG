@@ -162,8 +162,20 @@ export const api = {
     patchJson<{ groups: string[] }>(`/api/watchlist/groups/${encodeURIComponent(from)}`, { name }),
   watchGroupRemove: (name: string) =>
     deleteJson<{ groups: string[] }>(`/api/watchlist/groups/${encodeURIComponent(name)}`),
-  watchlistAdd: (item: { code: string; name: string; addedPrice: number; memo?: string; group?: string }) =>
-    postJson<{ items: WatchItem[] }>("/api/watchlist", item),
+  watchlistAdd: (item: {
+    code: string;
+    name: string;
+    addedPrice: number;
+    memo?: string;
+    group?: string;
+    /** 한 종목을 여러 그룹에 담을 수 있다 */
+    groups?: string[];
+  }) => postJson<{ items: WatchItem[] }>("/api/watchlist", item),
+  /** 그룹 하나를 넣거나 뺀다 — 표에서 칩을 눌러 토글 */
+  watchGroupToggle: (code: string, group: string) =>
+    postJson<{ items: WatchItem[] }>(
+      `/api/watchlist/${code}/groups/${encodeURIComponent(group)}`,
+    ),
   watchlistSetGroup: (code: string, group: string) =>
     patchJson<{ items: WatchItem[] }>(`/api/watchlist/${code}`, { group }),
   watchlistRemove: (code: string) => deleteJson<{ items: WatchItem[] }>(`/api/watchlist/${code}`),
@@ -472,7 +484,10 @@ export interface WatchItem {
   addedAt: string;
   addedPrice: number;
   memo: string;
+  /** @deprecated 한 그룹만 담던 옛 필드 */
   group?: string;
+  /** 소속 그룹들 — 한 종목이 여러 그룹에 담긴다 */
+  groups: string[];
 }
 
 export interface KiwoomGroup {

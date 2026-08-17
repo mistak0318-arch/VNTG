@@ -10,6 +10,7 @@ import {
   removeGroup,
   removeWatchItem,
   renameGroup,
+  toggleWatchGroup,
   updateWatchItem,
 } from "../watchlist.js";
 
@@ -130,6 +131,15 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
       const groups = await removeGroup(decodeURIComponent(req.params.name));
       invalidateTrackingCache();
       res.json({ groups });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 그룹 하나를 넣거나 뺀다 (표에서 칩 토글) */
+  router.post("/:code/groups/:group", async (req, res, next) => {
+    try {
+      res.json({ items: await toggleWatchGroup(req.params.code, decodeURIComponent(req.params.group)) });
     } catch (err) {
       next(err);
     }

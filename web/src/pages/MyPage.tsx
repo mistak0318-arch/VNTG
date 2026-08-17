@@ -39,7 +39,10 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
 
   // 그룹 필터를 먼저 적용한 뒤 정렬한다
   const visible =
-    activeGroup === ALL ? items : items.filter((i) => (i.group || DEFAULT_GROUP) === activeGroup);
+    activeGroup === ALL
+      ? items
+      // 한 종목이 여러 그룹에 담기므로 "포함하는가"로 거른다
+      : items.filter((i) => (i.groups ?? [DEFAULT_GROUP]).includes(activeGroup));
   const sort = useSortableTable(visible);
 
   async function loadGroups() {
@@ -74,12 +77,19 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     }
   }
 
-  async function moveToGroup(code: string, group: string) {
+  /**
+   * 그룹 하나를 넣거나 뺀다.
+   *
+   * 서버가 갱신된 전체 목록을 돌려주므로 그걸 그대로 쓴다 — 화면이 계산해서 맞추면
+   * 두 창을 띄웠을 때 서로 어긋난다.
+   */
+  async function toggleGroup(code: string, group: string) {
     try {
-      await api.watchlistSetGroup(code, group);
-      setItems((prev) => prev.map((i) => (i.code === code ? { ...i, group } : i)));
+      await api.watchGroupToggle(code, group);
+      // 표는 시세까지 붙은 TrackedStock 이라 서버 목록을 그대로 못 쓴다. 다시 받는다
+      await load(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "그룹 이동 실패");
+      setError(err instanceof Error ? err.message : "그룹 변경 실패");
     }
   }
 
@@ -210,7 +220,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
           전체 ({items.length})
         </button>
         {groups.map((g) => {
-          const n = items.filter((i) => (i.group || DEFAULT_GROUP) === g).length;
+          const n = items.filter((i) => (i.groups ?? [DEFAULT_GROUP]).includes(g)).length;
           return (
             <button
               key={g}
@@ -275,7 +285,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
             <thead>
               <tr>
                 <SortableTh columnKey="name" label="종목명" accessor={(r: TrackedStock) => r.name} sort={sort} className="sticky-col" />
-                <SortableTh columnKey="group" label="그룹" accessor={(r: TrackedStock) => r.group || DEFAULT_GROUP} sort={sort} />
+                <th>그룹</th>
                 <SortableTh columnKey="addedAt" label="편입일" accessor={(r: TrackedStock) => r.addedAt} sort={sort} />
                 <SortableTh columnKey="addedPrice" label="편입가" accessor={(r: TrackedStock) => r.addedPrice} sort={sort} />
                 <SortableTh columnKey="price" label="현재가" accessor={(r: TrackedStock) => r.price} sort={sort} />
@@ -293,19 +303,26 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
               {sort.sorted.map((r) => (
                 <tr key={r.code} className="clickable-row" onClick={() => onSelectStock(r.code, r.name)}>
                   <td className="sticky-col">{r.name}</td>
+                  {/*
+                    드롭다운은 하나만 고를 수 있어서 다중 그룹을 못 담는다.
+                    칩을 눌러 넣고 뺀다 — 담긴 것만 진하게, 나머지는 흐리게.
+                  */}
                   <td onClick={(e) => e.stopPropagation()}>
-                    <select
-                      className="group-select"
-                      value={r.group || DEFAULT_GROUP}
-                      onChange={(e) => moveToGroup(r.code, e.target.value)}
-                      title="그룹 변경"
-                    >
-                      {groups.map((g) => (
-                        <option key={g} value={g}>
-                          {g}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="mg-chips">
+                      {groups.map((g) => {
+                        const on = (r.groups ?? [DEFAULT_GROUP]).includes(g);
+                        return (
+                          <button
+                            key={g}
+                            className={`mg-chip${on ? " on" : ""}`}
+                            onClick={() => void toggleGroup(r.code, g)}
+                            title={on ? `「${g}」에서 빼기` : `「${g}」에 넣기`}
+                          >
+                            {g}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </td>
                   <td>{fmtDate(r.addedAt)}</td>
                   <td>{fmtNum(r.addedPrice)}</td>

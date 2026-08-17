@@ -3476,3 +3476,9 @@ body {
 .wa-group:hover { border-color: var(--blue); }
 .wa-group.on { background: rgba(76,141,255,.14); border-color: var(--blue); font-weight: 600; }
 .wa-group-count { color: var(--muted); font-size: 11px; flex: none; }
+
+.wa-check { flex: none; color: var(--blue); font-size: 14px; }
+
+.mg-chips { display: flex; flex-wrap: wrap; gap: 3px; max-width: 210px; }
+.mg-chip { font-size: 10px; padding: 2px 6px; border-radius: 9px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.mg-chip.on { background: rgba(76,141,255,.16); border-color: var(--blue); color: var(--blue); font-weight: 600; }

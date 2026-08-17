@@ -12,8 +12,19 @@ export interface WatchItem {
   addedAt: string; // ISO 8601
   addedPrice: number; // 편입가
   memo: string;
-  /** 소속 그룹. 기존 데이터 호환을 위해 없으면 기본 그룹으로 본다 */
+  /**
+   * @deprecated 한 그룹만 담던 옛 필드. 읽기만 하고 새로 쓰지 않는다.
+   * groups 로 옮기는 마이그레이션에만 쓴다.
+   */
   group?: string;
+  /**
+   * 소속 그룹들 — **한 종목이 여러 그룹에 담긴다.**
+   *
+   * 한 종목은 성격이 하나가 아니다. 삼성전자는 반도체이면서 대형주이고 배당주다.
+   * 그걸 한 그룹에만 넣게 하면 어느 관점으로 볼지를 담을 때 미리 정해야 하는데,
+   * 그 결정은 담는 시점에 할 수 있는 게 아니다.
+   */
+  groups: string[];
 }
 
 export const DEFAULT_GROUP = "기본";
@@ -28,9 +39,20 @@ async function load(): Promise<WatchItem[]> {
   try {
     const raw = await readFile(DATA_FILE, "utf-8");
     const parsed = JSON.parse(raw) as unknown;
-    // 그룹 개념 도입 전 데이터는 group이 없으므로 기본 그룹으로 채운다
+    /*
+     * 두 번의 구조 변경을 다 받아 준다.
+     *   group 없음        → 기본 그룹 (그룹 개념 도입 전)
+     *   group 만 있음     → groups 로 옮긴다 (다중 그룹 도입 전)
+     * 옛 파일을 그대로 열어도 종목이 사라지지 않아야 한다.
+     */
     cache = Array.isArray(parsed)
-      ? (parsed as WatchItem[]).map((w) => ({ ...w, group: w.group || DEFAULT_GROUP }))
+      ? (parsed as WatchItem[]).map((w) => ({
+          ...w,
+          groups:
+            Array.isArray(w.groups) && w.groups.length > 0
+              ? w.groups
+              : [w.group?.trim() || DEFAULT_GROUP],
+        }))
       : [];
   } catch {
     // 파일이 아직 없으면 빈 목록으로 시작
@@ -55,7 +77,9 @@ export async function addWatchItem(item: {
   name: string;
   addedPrice: number;
   memo?: string;
+  /** 하나만 줘도 되고 여러 개를 줘도 된다 */
   group?: string;
+  groups?: string[];
 }): Promise<WatchItem[]> {
   const items = await load();
   if (items.some((w) => w.code === item.code)) {
@@ -69,7 +93,7 @@ export async function addWatchItem(item: {
       addedAt: new Date().toISOString(),
       addedPrice: item.addedPrice,
       memo: item.memo ?? "",
-      group: item.group?.trim() || DEFAULT_GROUP,
+      groups: normalizeGroups(item.groups ?? (item.group ? [item.group] : [])),
     },
   ];
   await persist(next);
@@ -85,7 +109,7 @@ export async function removeWatchItem(code: string): Promise<WatchItem[]> {
 
 export async function updateWatchItem(
   code: string,
-  patch: { memo?: string; addedPrice?: number; group?: string },
+  patch: { memo?: string; addedPrice?: number; group?: string; groups?: string[] },
 ): Promise<WatchItem[]> {
   const items = await load();
   const next = items.map((w) =>
@@ -94,12 +118,42 @@ export async function updateWatchItem(
           ...w,
           memo: patch.memo ?? w.memo,
           addedPrice: patch.addedPrice ?? w.addedPrice,
-          group: patch.group?.trim() || w.group || DEFAULT_GROUP,
+          groups:
+            patch.groups !== undefined
+              ? normalizeGroups(patch.groups)
+              : patch.group !== undefined
+                ? normalizeGroups([patch.group])
+                : w.groups,
         }
       : w,
   );
   await persist(next);
   return next;
+}
+
+/**
+ * 그룹 하나를 넣거나 뺀다.
+ *
+ * 표에서 칩 하나를 눌러 토글하는 자리에 쓴다 — 전체 목록을 다시 보내게 하면
+ * 화면이 최신 상태를 들고 있어야 해서, 두 창을 띄워 놓으면 서로 덮어쓴다.
+ */
+export async function toggleWatchGroup(code: string, group: string): Promise<WatchItem[]> {
+  const g = group.trim();
+  if (!g) return load();
+  const items = await load();
+  const next = items.map((w) => {
+    if (w.code !== code) return w;
+    const has = w.groups.includes(g);
+    return { ...w, groups: normalizeGroups(has ? w.groups.filter((x) => x !== g) : [...w.groups, g]) };
+  });
+  await persist(next);
+  return next;
+}
+
+/** 빈 배열이면 기본 그룹으로 — 어디에도 안 속한 종목은 목록에서 사라진다 */
+function normalizeGroups(input: string[]): string[] {
+  const out = [...new Set(input.map((g) => g.trim()).filter(Boolean))];
+  return out.length > 0 ? out : [DEFAULT_GROUP];
 }
 
 
@@ -129,7 +183,7 @@ async function persistGroups(groups: string[]): Promise<void> {
 /** 저장된 그룹 + 실제 종목이 쓰고 있는 그룹을 합쳐서 반환 (기본 그룹은 항상 맨 앞) */
 export async function listGroups(): Promise<string[]> {
   const [groups, items] = await Promise.all([loadGroups(), load()]);
-  const used = new Set(items.map((w) => w.group || DEFAULT_GROUP));
+  const used = new Set(items.flatMap((w) => w.groups));
   const merged = new Set<string>([DEFAULT_GROUP, ...groups, ...used]);
   return [...merged];
 }
@@ -152,7 +206,9 @@ export async function renameGroup(from: string, to: string): Promise<string[]> {
 
   // 그 그룹에 속한 종목도 같이 옮긴다
   const items = await load();
-  await persist(items.map((w) => (w.group === from ? { ...w, group: clean } : w)));
+  await persist(
+    items.map((w) => ({ ...w, groups: normalizeGroups(w.groups.map((g) => (g === from ? clean : g))) })),
+  );
   return listGroups();
 }
 
@@ -163,6 +219,9 @@ export async function removeGroup(name: string): Promise<string[]> {
   await persistGroups(groups.filter((g) => g !== name));
 
   const items = await load();
-  await persist(items.map((w) => (w.group === name ? { ...w, group: DEFAULT_GROUP } : w)));
+  // 그룹을 지우면 그 그룹만 빠진다. 다른 그룹에도 담겨 있으면 종목은 남는다
+  await persist(
+    items.map((w) => ({ ...w, groups: normalizeGroups(w.groups.filter((g) => g !== name)) })),
+  );
   return listGroups();
 }

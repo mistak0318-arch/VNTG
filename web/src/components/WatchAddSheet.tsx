@@ -30,7 +30,8 @@ export function WatchAddSheet({
 }) {
   const [groups, setGroups] = useState<string[]>([]);
   const [items, setItems] = useState<WatchItem[]>([]);
-  const [pick, setPick] = useState<string>("");
+  /** 여러 그룹에 동시에 담는다 — 한 종목은 성격이 하나가 아니다 */
+  const [picked, setPicked] = useState<string[]>([]);
   const [memo, setMemo] = useState("");
   const [newGroup, setNewGroup] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,13 +43,13 @@ export function WatchAddSheet({
       .then(([g, w]) => {
         setGroups(g.groups);
         setItems(w.items);
-        setPick(g.groups[0] ?? "");
+        setPicked(g.groups[0] ? [g.groups[0]] : []);
       })
       .catch((e: Error) => setError(e.message));
   }, []);
 
   /** 그룹마다 몇 개 담겨 있는지 — 키움처럼 옆에 세워 두면 고르기 쉽다 */
-  const countOf = (g: string) => items.filter((i) => (i.group || "") === g).length;
+  const countOf = (g: string) => items.filter((i) => (i.groups ?? []).includes(g)).length;
 
   async function addGroup() {
     const name = newGroup.trim();
@@ -57,7 +58,7 @@ export function WatchAddSheet({
     try {
       const r = await api.watchGroupAdd(name);
       setGroups(r.groups);
-      setPick(name);
+      setPicked((p) => [...p, name]);
       setNewGroup("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "그룹 추가 실패");
@@ -73,7 +74,7 @@ export function WatchAddSheet({
         name: target.name,
         addedPrice: target.addedPrice,
         memo: memo.trim() || undefined,
-        group: pick || undefined,
+        groups: picked,
       });
       watched.markAdded(target.code);
       onDone?.();
@@ -102,7 +103,8 @@ export function WatchAddSheet({
         {error && <div className="error-banner">{error}</div>}
 
         <p className="page-note">
-          담을 그룹을 고르세요. 편입가는 <b>{target.addedPrice.toLocaleString("ko-KR")}원</b>(지금
+          담을 그룹을 <b>여러 개</b> 고를 수 있습니다 — 한 종목은 성격이 하나가 아닙니다.
+          편입가는 <b>{target.addedPrice.toLocaleString("ko-KR")}원</b>(지금
           가격)으로 기록되고, 그때부터 수익률이 추적됩니다.
         </p>
 
@@ -113,9 +115,12 @@ export function WatchAddSheet({
           {groups.map((g) => (
             <button
               key={g}
-              className={`wa-group${pick === g ? " on" : ""}`}
-              onClick={() => setPick(g)}
+              className={`wa-group${picked.includes(g) ? " on" : ""}`}
+              onClick={() =>
+                setPicked((p) => (p.includes(g) ? p.filter((x) => x !== g) : [...p, g]))
+              }
             >
+              <span className="wa-check">{picked.includes(g) ? "☑" : "☐"}</span>
               <span className="wa-group-name">{g}</span>
               <span className="wa-group-count">{countOf(g)}종목</span>
             </button>
@@ -145,7 +150,13 @@ export function WatchAddSheet({
 
         <div className="filter-row" style={{ marginTop: 10 }}>
           <button className="algo-run-btn" onClick={() => void submit()} disabled={busy}>
-            {busy ? "담는 중…" : pick ? `「${pick}」에 담기` : "담기"}
+            {busy
+              ? "담는 중…"
+              : picked.length === 0
+                ? "담기 (기본 그룹)"
+                : picked.length === 1
+                  ? `「${picked[0]}」에 담기`
+                  : `${picked.length}개 그룹에 담기`}
           </button>
           <button className="filter-btn" onClick={onClose}>
             취소
