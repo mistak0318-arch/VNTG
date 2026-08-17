@@ -258,7 +258,7 @@ export const api = {
     getJson<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }>(
       `/api/custom-themes${force ? "?force=1" : ""}`,
     ),
-  usWatch: () => getJson<{ groups: UsWatchGroup[] }>("/api/us-watch"),
+  usWatch: (force = false) => getJson<UsWatchResult>(`/api/us-watch${force ? "?force=1" : ""}`),
   usWatchSearch: (q: string) =>
     getJson<{ results: UsSearchResult[] }>(`/api/us-watch/search?q=${encodeURIComponent(q)}`),
   usWatchGroupAdd: (name: string, memo = "") =>
@@ -1517,6 +1517,8 @@ export interface UsQuoteRow {
   addedPrice: number | null;
   memo: string;
   marketState: string | null;
+  /** Yahoo 가 알려준 체결 시각(ms) */
+  quotedAt: number | null;
   error: string | null;
 }
 
@@ -1528,4 +1530,12 @@ export interface UsWatchGroup {
   rising: number;
   falling: number;
   stocks: UsQuoteRow[];
+}
+
+export interface UsWatchResult {
+  groups: UsWatchGroup[];
+  /** 거래소 마지막 체결 시각(ms) */
+  quotedAt: number | null;
+  /** 우리가 받아온 시각(ms) */
+  fetchedAt: number;
 }

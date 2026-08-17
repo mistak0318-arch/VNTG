@@ -22,18 +22,30 @@ function cls(n: number | null): string {
   return n > 0 ? "positive" : n < 0 ? "negative" : "";
 }
 
-/** 미국 시장은 우리 밤에 열린다 — 지금 열려 있는지 알려줘야 값이 언제 것인지 안다 */
-const STATE_LABEL: Record<string, string> = {
-  REGULAR: "정규장",
-  PRE: "프리마켓",
-  POST: "애프터마켓",
-  PREPRE: "장전",
-  POSTPOST: "마감",
-  CLOSED: "마감",
-};
+/**
+ * "실시간이야?" 에 답하려면 두 시각이 다 있어야 한다.
+ *   체결  = 거래소에서 마지막으로 거래된 시각 (Yahoo 가 알려준 것)
+ *   조회  = 우리가 그걸 받아온 시각
+ * 둘이 붙어 있으면 장중 실시간에 가깝고, 벌어져 있으면 장이 닫힌 것이다.
+ * marketState 는 안 올 때가 많아서 그것만 믿지 않는다.
+ */
+function ago(ms: number): string {
+  const m = Math.floor((Date.now() - ms) / 60_000);
+  if (m < 1) return "방금";
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}시간 전`;
+  return `${Math.floor(h / 24)}일 전`;
+}
+
+function stampKst(ms: number): string {
+  return new Date(ms + 9 * 3600_000).toISOString().slice(5, 16).replace("T", " ");
+}
 
 export function UsWatchPage() {
   const [groups, setGroups] = useState<UsWatchGroup[]>([]);
+  const [quotedAt, setQuotedAt] = useState<number | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -44,12 +56,14 @@ export function UsWatchPage() {
   const [results, setResults] = useState<UsSearchResult[]>([]);
   const [newGroup, setNewGroup] = useState("");
 
-  async function load() {
+  async function load(force = false) {
     setLoading(true);
     setError(null);
     try {
-      const r = await api.usWatch();
+      const r = await api.usWatch(force);
       setGroups(r.groups);
+      setQuotedAt(r.quotedAt);
+      setFetchedAt(r.fetchedAt);
       if (!openGroup && r.groups.length > 0) setOpenGroup(r.groups[0].id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오기 실패");
@@ -89,12 +103,27 @@ export function UsWatchPage() {
   }
 
   const current = groups.find((g) => g.id === openGroup) ?? groups[0] ?? null;
-  const marketState = current?.stocks.find((s) => s.marketState)?.marketState ?? null;
 
   return (
     <div>
-      <RefreshBar onRefresh={load} loading={loading} />
+      <RefreshBar onRefresh={() => load(true)} loading={loading} />
       {error && <div className="error-banner">{error}</div>}
+
+      {/* 어느 시점 값인지 못 박는다 — "실시간이야?" 를 화면이 스스로 답해야 한다 */}
+      <div className="uw-stamp">
+        {quotedAt ? (
+          <>
+            시세 기준 <b>{stampKst(quotedAt)}</b> (한국시각) · <b>{ago(quotedAt)}</b> 체결
+          </>
+        ) : (
+          <>시세 기준 불명</>
+        )}
+        {fetchedAt && <> · 조회 {ago(fetchedAt)}</>}
+        <span className="uw-stamp-note">
+          Yahoo Finance · 실시간이 아닐 수 있고 서버에서 1분 캐시합니다. ↻ 를 누르면 캐시를
+          무시하고 새로 받습니다.
+        </span>
+      </div>
 
       {/* 그룹 — 등락률까지 붙여서, 어느 판이 도는지 목록에서 바로 보이게 */}
       <div className="filter-row">
@@ -115,11 +144,7 @@ export function UsWatchPage() {
         >
           {editing ? "편집 끝" : "✏ 편집"}
         </button>
-        {marketState && (
-          <span className="tg-ctl-hint">
-            미국장 {STATE_LABEL[marketState] ?? marketState}
-          </span>
-        )}
+
       </div>
 
       {editing && (
@@ -262,7 +287,7 @@ export function UsWatchPage() {
           </div>
 
           <div className="table-note">
-            시세는 Yahoo Finance 기준이며 <b>실시간이 아닙니다</b>(1분 캐시). 그룹 등락률은
+            그룹 등락률은
             구성종목의 <b>단순평균</b>입니다 — 미국은 시가총액을 받아오지 않아 가중을 줄 수
             없습니다. 「편입 대비」는 담은 시점 가격 대비 수익률입니다.
           </div>

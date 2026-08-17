@@ -17,9 +17,9 @@ import {
 export function createUsWatchRouter(): Router {
   const router = Router();
 
-  router.get("/", async (_req, res, next) => {
+  router.get("/", async (req, res, next) => {
     try {
-      res.json({ groups: await evaluateGroups() });
+      res.json(await evaluateGroups(req.query.force === "1"));
     } catch (err) {
       next(err);
     }
@@ -58,7 +58,7 @@ export function createUsWatchRouter(): Router {
         return;
       }
       await addGroup(name, String(req.body?.memo ?? ""));
-      res.json({ groups: await evaluateGroups() });
+      res.json(await evaluateGroups());
     } catch (err) {
       next(err);
     }
@@ -67,7 +67,7 @@ export function createUsWatchRouter(): Router {
   router.patch("/groups/:id", async (req, res, next) => {
     try {
       await updateGroup(req.params.id, req.body ?? {});
-      res.json({ groups: await evaluateGroups() });
+      res.json(await evaluateGroups());
     } catch (err) {
       next(err);
     }
@@ -76,7 +76,7 @@ export function createUsWatchRouter(): Router {
   router.delete("/groups/:id", async (req, res, next) => {
     try {
       await removeGroup(req.params.id);
-      res.json({ groups: await evaluateGroups() });
+      res.json(await evaluateGroups());
     } catch (err) {
       next(err);
     }
@@ -85,7 +85,7 @@ export function createUsWatchRouter(): Router {
   router.put("/groups/order", async (req, res, next) => {
     try {
       await reorderGroups(Array.isArray(req.body?.ids) ? req.body.ids.map(String) : []);
-      res.json({ groups: await evaluateGroups() });
+      res.json(await evaluateGroups());
     } catch (err) {
       next(err);
     }
@@ -110,7 +110,7 @@ export function createUsWatchRouter(): Router {
         addedPrice,
         memo: String(req.body?.memo ?? ""),
       });
-      res.json({ groups: await evaluateGroups() });
+      res.json(await evaluateGroups());
     } catch (err) {
       next(err);
     }
@@ -119,7 +119,7 @@ export function createUsWatchRouter(): Router {
   router.patch("/groups/:id/stocks/:symbol", async (req, res, next) => {
     try {
       await updateStock(req.params.id, req.params.symbol, req.body ?? {});
-      res.json({ groups: await evaluateGroups() });
+      res.json(await evaluateGroups());
     } catch (err) {
       next(err);
     }
@@ -128,7 +128,7 @@ export function createUsWatchRouter(): Router {
   router.delete("/groups/:id/stocks/:symbol", async (req, res, next) => {
     try {
       await removeStock(req.params.id, req.params.symbol);
-      res.json({ groups: await evaluateGroups() });
+      res.json(await evaluateGroups());
     } catch (err) {
       next(err);
     }

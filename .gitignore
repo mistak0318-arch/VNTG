@@ -25,3 +25,5 @@ server/data/*
 # 목적인데, 기기마다 반쪽씩 남으면 그 집계가 성립하지 않는다.
 !server/data/journal.json
 !server/data/paperTrades.json
+# 미국 관심종목도 내가 짠 그룹이다 — 기기마다 따로 만들 이유가 없다
+!server/data/usWatchlist.json

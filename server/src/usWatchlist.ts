@@ -198,6 +198,8 @@ export interface UsQuoteRow {
   memo: string;
   /** 정규장 전/중/후 — Yahoo 가 알려주는 시장 상태 */
   marketState: string | null;
+  /** Yahoo 가 알려준 체결 시각(ms) */
+  quotedAt: number | null;
   error: string | null;
 }
 
@@ -208,7 +210,16 @@ export interface UsQuoteRow {
  * **동시에 6개씩** 묶어 돌려서 전체 대기 시간을 줄인다. 하나 실패해도 나머지는 나온다 —
  * 미국 시세는 없는 종목·상장폐지가 섞이기 쉬워서 전부 아니면 무로 두면 화면이 자주 빈다.
  */
-async function quoteOne(symbol: string): Promise<{ price: number | null; changeRate: number | null; state: string | null; error: string | null }> {
+interface Quote {
+  price: number | null;
+  changeRate: number | null;
+  state: string | null;
+  /** Yahoo 가 알려주는 **체결 시각**(ms). "이 값이 언제 것인가"의 답 */
+  quotedAt: number | null;
+  error: string | null;
+}
+
+async function quoteOne(symbol: string): Promise<Quote> {
   try {
     const res = await fetch(`${CHART}/${encodeURIComponent(symbol)}?range=1d&interval=1d`, {
       headers: { "User-Agent": "Mozilla/5.0" },
@@ -222,31 +233,56 @@ async function quoteOne(symbol: string): Promise<{ price: number | null; changeR
             chartPreviousClose?: number;
             previousClose?: number;
             marketState?: string;
+            regularMarketTime?: number;
           };
         }[];
       };
     };
     const m = j.chart?.result?.[0]?.meta;
-    if (!m?.regularMarketPrice) return { price: null, changeRate: null, state: null, error: "시세 없음" };
+    if (!m?.regularMarketPrice) {
+      return { price: null, changeRate: null, state: null, quotedAt: null, error: "시세 없음" };
+    }
     const prev = m.chartPreviousClose ?? m.previousClose ?? null;
     return {
       price: m.regularMarketPrice,
       changeRate: prev ? ((m.regularMarketPrice - prev) / prev) * 100 : null,
+      // marketState 는 안 올 때가 많다. 없으면 없는 대로 두고 시각으로 판단하게 한다
       state: m.marketState ?? null,
+      quotedAt: m.regularMarketTime ? m.regularMarketTime * 1000 : null,
       error: null,
     };
   } catch {
     void recordApiCall("yahoo", "chart", "failed");
-    return { price: null, changeRate: null, state: null, error: "조회 실패" };
+    return { price: null, changeRate: null, state: null, quotedAt: null, error: "조회 실패" };
   }
 }
 
-const cache = new Map<string, { at: number; data: Awaited<ReturnType<typeof quoteOne>> }>();
+const cache = new Map<string, { at: number; data: Quote }>();
 const TTL_MS = 60_000;
 
-export async function evaluateGroups(): Promise<
-  { id: string; name: string; memo: string; changeRate: number | null; rising: number; falling: number; stocks: UsQuoteRow[] }[]
-> {
+export interface UsWatchResult {
+  groups: {
+    id: string;
+    name: string;
+    memo: string;
+    changeRate: number | null;
+    rising: number;
+    falling: number;
+    stocks: UsQuoteRow[];
+  }[];
+  /**
+   * 이 화면 전체의 기준.
+   *
+   * "실시간인가"에 답하려면 두 시각이 다 있어야 한다 —
+   *   quotedAt  = 거래소에서 마지막으로 체결된 시각 (Yahoo 가 알려준 것)
+   *   fetchedAt = 우리가 그걸 받아온 시각
+   * 둘이 벌어져 있으면 장이 닫혔거나 지연된 것이다.
+   */
+  quotedAt: number | null;
+  fetchedAt: number;
+}
+
+export async function evaluateGroups(force = false): Promise<UsWatchResult> {
   const groups = await readAll();
   const symbols = [...new Set(groups.flatMap((g) => g.stocks.map((s) => s.symbol)))];
 
@@ -256,7 +292,7 @@ export async function evaluateGroups(): Promise<
     const got = await Promise.all(
       chunk.map(async (sym) => {
         const hit = cache.get(sym);
-        if (hit && Date.now() - hit.at < TTL_MS) return [sym, hit.data] as const;
+        if (!force && hit && Date.now() - hit.at < TTL_MS) return [sym, hit.data] as const;
         const q = await quoteOne(sym);
         cache.set(sym, { at: Date.now(), data: q });
         return [sym, q] as const;
@@ -265,7 +301,7 @@ export async function evaluateGroups(): Promise<
     for (const [sym, q] of got) quotes.set(sym, q);
   }
 
-  return groups.map((g) => {
+  const evaluated = groups.map((g) => {
     const stocks: UsQuoteRow[] = g.stocks.map((s) => {
       const q = quotes.get(s.symbol);
       return {
@@ -278,6 +314,7 @@ export async function evaluateGroups(): Promise<
         addedPrice: s.addedPrice,
         memo: s.memo,
         marketState: q?.state ?? null,
+        quotedAt: q?.quotedAt ?? null,
         error: q?.error ?? null,
       };
     });
@@ -293,6 +330,14 @@ export async function evaluateGroups(): Promise<
       stocks,
     };
   });
+
+  // 가장 최근 체결 시각을 화면 전체의 기준으로 삼는다
+  const times = [...quotes.values()].map((q) => q.quotedAt).filter((x): x is number => x !== null);
+  return {
+    groups: evaluated,
+    quotedAt: times.length > 0 ? Math.max(...times) : null,
+    fetchedAt: Date.now(),
+  };
 }
 
 /** 지금 가격 하나만 — 담을 때 편입가를 채우려고 */

@@ -210,7 +210,8 @@
       "Bash(node scripts/rebuild-themes.mjs)",
       "Bash(curl -s http://localhost:4000/api/health)",
       "Bash(node scripts/rebuild-themes.mjs --write)",
-      "Bash(curl -s \"http://localhost:4000/api/custom-themes?force=1\")"
+      "Bash(curl -s \"http://localhost:4000/api/custom-themes?force=1\")",
+      "Bash(curl -s \"https://query1.finance.yahoo.com/v8/finance/chart/NVDA?range=1d&interval=1d\" -H \"User-Agent: Mozilla/5.0\")"
     ]
   }
 }

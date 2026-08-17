@@ -3459,3 +3459,7 @@ body {
 .uw-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 10px 0 8px; }
 .uw-head b { font-size: 15px; }
 .uw-err { font-size: 11px; color: var(--red); }
+
+.uw-stamp { font-size: 11px; color: var(--muted); margin-bottom: 8px; padding: 6px 9px; background: var(--panel-2); border-radius: 6px; }
+.uw-stamp b { color: var(--text); }
+.uw-stamp-note { display: block; margin-top: 2px; }
