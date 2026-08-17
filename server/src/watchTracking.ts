@@ -157,19 +157,32 @@ async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedS
      * 어느 종목에서나 같은 뜻이다. 공매도가 줄면 눌림이 풀리는 것이고, 대차잔고가 늘면
      * 공매도로 이어질 재고가 쌓이는 것이다.
      */
-    base.shortTrend = await trendOf(client, "/api/dostk/shsa", "ka10014", {
+    /*
+     * 공매도·대차는 **일별 데이터**라 장중에 바뀌지 않는다. 그런데 시세 갱신(10분)마다
+     * 같이 불러서 종목당 2회가 매번 나갔다 — 200종목이면 400회를 10분마다 헛돈다.
+     * 하루에 한 번만 받고 그 뒤엔 기억한 값을 쓴다.
+     */
+    const dayKey = todayYyyymmdd();
+    const cachedTrend = trendCache.get(item.code);
+    if (cachedTrend && cachedTrend.day === dayKey) {
+      base.shortTrend = cachedTrend.short;
+      base.lendingTrend = cachedTrend.lending;
+    } else {
+      base.shortTrend = await trendOf(client, "/api/dostk/shsa", "ka10014", {
       stk_cd: item.code,
       tm_tp: "1",
       strt_dt: daysAgoYyyymmdd(10),
       end_dt: todayYyyymmdd(),
-    }, "shrts_qty").catch(() => null);
-    await sleep(220);
-    base.lendingTrend = await trendOf(client, "/api/dostk/slb", "ka20068", {
+      }, "shrts_qty").catch(() => null);
+      await sleep(220);
+      base.lendingTrend = await trendOf(client, "/api/dostk/slb", "ka20068", {
       stk_cd: item.code,
       strt_dt: daysAgoYyyymmdd(10),
       end_dt: todayYyyymmdd(),
       all_tp: "0",
-    }, "rmnd").catch(() => null);
+      }, "rmnd").catch(() => null);
+      trendCache.set(item.code, { day: dayKey, short: base.shortTrend, lending: base.lendingTrend });
+    }
   } catch (err) {
     base.error = err instanceof Error ? err.message : "조회 실패";
   }
@@ -253,6 +266,9 @@ function daysAgoYyyymmdd(days: number): string {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** 공매도·대차 추세는 하루 한 번만 받는다 (일별 데이터라 장중에 안 바뀐다) */
+const trendCache = new Map<string, { day: string; short: number | null; lending: number | null }>();
+
 let cache: { data: TrackedStock[]; at: number } | null = null;
 /** 만드는 중이면 같은 약속을 돌려줘 중복 조회를 막는다 */
 let building: Promise<TrackedStock[]> | null = null;
@@ -285,14 +301,40 @@ function expiryOf(at: number): number {
 
 export async function getTrackedWatchlist(client: KiwoomClient, force = false): Promise<TrackedStock[]> {
   if (!force && cache && Date.now() < expiryOf(cache.at)) return cache.data;
-  if (building) return building;
 
+  /*
+   * **낡은 값이라도 먼저 준다.**
+   *
+   * 종목이 늘수록 다 만드는 데 오래 걸린다(200종목이면 몇 분). 그동안 화면을 비워 두면
+   * 관심종목에 들어갈 때마다 기다려야 하는데, 10분 지난 값이라도 있는 게 낫다.
+   * 갱신은 뒤에서 돌고, 다음에 들어오면 새 값을 받는다.
+   */
+  if (!force && cache) {
+    if (!building) void rebuild(client);
+    return cache.data;
+  }
+  if (building) return building;
+  return rebuild(client);
+}
+
+/**
+ * 실제로 만드는 곳.
+ *
+ * **동시에 넷씩** 돌린다. 예전엔 종목을 하나씩 순서대로 처리하면서 사이에 220ms 를
+ * 쉬어서, 종목당 1초 가까이 걸렸다 — 33종목에 30초, 200종목이면 3분이다.
+ * 키움의 초당 5회 제한은 TR 단위라, 서로 다른 종목을 넷씩 묶어 돌려도 같은 TR 은
+ * 초당 4회를 넘지 않는다.
+ */
+async function rebuild(client: KiwoomClient): Promise<TrackedStock[]> {
+  if (building) return building;
   building = (async () => {
     const items = await listWatchlist();
     const results: TrackedStock[] = [];
-    for (const item of items) {
-      results.push(await trackOne(client, item));
-      await sleep(220);
+    const CONCURRENCY = 4;
+    for (let i = 0; i < items.length; i += CONCURRENCY) {
+      const chunk = items.slice(i, i + CONCURRENCY);
+      results.push(...(await Promise.all(chunk.map((it) => trackOne(client, it)))));
+      if (i + CONCURRENCY < items.length) await sleep(300);
     }
     cache = { data: results, at: Date.now() };
     return results;

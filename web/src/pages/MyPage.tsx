@@ -51,6 +51,8 @@ function passClass(r: TrackedStock): string {
 export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const [items, setItems] = useState<TrackedStock[]>([]);
   const [groups, setGroups] = useState<string[]>([DEFAULT_GROUP]);
+  /** 그룹 편집을 펼친 행 — 한 번에 하나만 */
+  const [editGroups, setEditGroups] = useState<string | null>(null);
   const [activeGroup, setActiveGroup] = useState<string>(ALL);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -340,22 +342,43 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                     드롭다운은 하나만 고를 수 있어서 다중 그룹을 못 담는다.
                     칩을 눌러 넣고 뺀다 — 담긴 것만 진하게, 나머지는 흐리게.
                   */}
+                  {/*
+                    담긴 그룹만 보여준다.
+                    처음엔 모든 그룹을 칩으로 깔고 켜고 끄게 했는데, 그룹이 일곱 개가 되니
+                    행마다 다섯 줄이 됐다 — 그룹은 계속 늘어나므로 이 방식은 무너진다.
+                    편집은 ✎ 를 눌렀을 때만 펼친다.
+                  */}
                   <td onClick={(e) => e.stopPropagation()}>
-                    <div className="mg-chips">
-                      {groups.map((g) => {
-                        const on = (r.groups ?? [DEFAULT_GROUP]).includes(g);
-                        return (
-                          <button
-                            key={g}
-                            className={`mg-chip${on ? " on" : ""}`}
-                            onClick={() => void toggleGroup(r.code, g)}
-                            title={on ? `「${g}」에서 빼기` : `「${g}」에 넣기`}
-                          >
-                            {g}
-                          </button>
-                        );
-                      })}
+                    <div className="mg-cell">
+                      {(r.groups ?? [DEFAULT_GROUP]).map((g) => (
+                        <span className="mg-chip on" key={g}>
+                          {g}
+                        </span>
+                      ))}
+                      <button
+                        className="mg-edit"
+                        onClick={() => setEditGroups(editGroups === r.code ? null : r.code)}
+                        title="그룹 편집"
+                      >
+                        ✎
+                      </button>
                     </div>
+                    {editGroups === r.code && (
+                      <div className="mg-picker">
+                        {groups.map((g) => {
+                          const on = (r.groups ?? [DEFAULT_GROUP]).includes(g);
+                          return (
+                            <button
+                              key={g}
+                              className={`mg-chip${on ? " on" : ""}`}
+                              onClick={() => void toggleGroup(r.code, g)}
+                            >
+                              {on ? "☑" : "☐"} {g}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </td>
                   <td>{fmtDate(r.addedAt)}</td>
                   <td>{fmtNum(r.addedPrice)}</td>

@@ -3488,3 +3488,8 @@ body {
 .wl-pass.mid { background: rgba(245,197,66,.18); color: #f5c542; }
 .wl-pass.bad { background: rgba(255,92,92,.15); color: var(--red); }
 .wl-candle { font-size: 11px; color: var(--muted); }
+
+.mg-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; max-width: 190px; }
+.mg-edit { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; padding: 0 2px; }
+.mg-edit:hover { color: var(--blue); }
+.mg-picker { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; padding: 5px; background: var(--panel-2); border-radius: 5px; max-width: 260px; }
