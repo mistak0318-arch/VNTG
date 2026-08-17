@@ -44,6 +44,8 @@ import { createJournalRouter } from "./routes/journal.js";
 import { createDartRouter } from "./routes/dart.js";
 import { createUsWatchRouter } from "./routes/usWatch.js";
 import { createKeywordRouter } from "./routes/keyword.js";
+import { createDisclosureRouter } from "./routes/disclosure.js";
+import { startDisclosureScheduler } from "./disclosureAlert.js";
 import { startKeywordScheduler } from "./keywordAlert.js";
 import { createWatchlistRouter } from "./routes/watchlist.js";
 
@@ -95,6 +97,7 @@ app.use("/api/journal", createJournalRouter(client));
 app.use("/api/dart", createDartRouter());
 app.use("/api/us-watch", createUsWatchRouter());
 app.use("/api/keyword", createKeywordRouter());
+app.use("/api/disclosure-alert", createDisclosureRouter());
 app.use("/api/breadth", createBreadthRouter(client));
 app.use("/api/alert", createAlertRouter(client));
 app.use("/api/ai", createAiRouter());
@@ -115,6 +118,7 @@ startTrackingRefresher(client);
 startAlertScheduler(client);
 startChannelScheduler();
   startKeywordScheduler();
+  startDisclosureScheduler();
 
 /**
  * 프로덕션(미니PC)에서는 web을 빌드한 결과(web/dist)를 이 서버가 같이 서빙한다.

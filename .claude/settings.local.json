@@ -213,7 +213,12 @@
       "Bash(curl -s \"http://localhost:4000/api/custom-themes?force=1\")",
       "Bash(curl -s \"https://query1.finance.yahoo.com/v8/finance/chart/NVDA?range=1d&interval=1d\" -H \"User-Agent: Mozilla/5.0\")",
       "Bash(curl -s -X PUT -H \"Content-Type: application/json\" -d '{\"enabled\":true,\"intervalMin\":5,\"keywords\":[\"밸류업\",\"젠슨황\"],\"useWatchlist\":true,\"useThemes\":true,\"weekdayOnly\":true,\"startHour\":8,\"endHour\":20,\"maxPerRun\":8}' http://localhost:4000/api/keyword)",
-      "Bash(curl -s -X POST \"http://localhost:4000/api/keyword/run\")"
+      "Bash(curl -s -X POST \"http://localhost:4000/api/keyword/run\")",
+      "Bash(curl -s \"http://localhost:4000/api/overview/section/global\")",
+      "Bash(curl -s \"http://localhost:4000/api/overview/section/global?force=1\")",
+      "Bash(sed -i 's/export type TelegramChannel = \"report\" | \"signal\" | \"log\" | \"channel\";/export type TelegramChannel = \"report\" | \"signal\" | \"log\" | \"channel\" | \"disclosure\";/' src/telegram.ts)",
+      "Bash(curl -s \"http://localhost:4000/api/disclosure-alert\")",
+      "Bash(curl -s -X POST \"http://localhost:4000/api/disclosure-alert/run\")"
     ]
   }
 }

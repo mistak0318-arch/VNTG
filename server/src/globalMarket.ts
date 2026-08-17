@@ -18,6 +18,16 @@ export interface GlobalQuote {
   changeRate: number | null;
   /** 금리는 %p 표기라 등락률보다 절대 변화가 의미 있음 */
   isRate: boolean;
+  /**
+   * 선물인가 현물인가.
+   *
+   * 이걸 안 적어 두면 화면이 거짓말을 한다. 미국 **현물** 지수는 우리 시간 05:30 에
+   * 닫혀서 낮에는 전일 종가에 멈춰 있는데, 인베스팅은 거의 24시간 도는 **선물**을
+   * 보여준다. 같은 "US 500" 인데 값이 다른 이유가 그것이다.
+   */
+  kind: "선물" | "현물" | "";
+  /** Yahoo 가 알려준 체결 시각(ms) — "언제 값인가"의 답 */
+  quotedAt: number | null;
   error: string | null;
 }
 
@@ -31,21 +41,48 @@ export interface GlobalQuote {
  * 필라델피아 반도체(^SOX)와 미국 선물은 인베스팅 목록엔 없지만
  * **미국↔국내 연동과 조간 리포트가 쓰고 있어** 뒤에 남겼다.
  */
-const TARGETS: { key: string; label: string; group: string; symbol: string; isRate?: boolean }[] = [
+const TARGETS: {
+  key: string;
+  label: string;
+  group: string;
+  symbol: string;
+  isRate?: boolean;
+  kind?: "선물" | "현물";
+}[] = [
   // ── 환율·원자재 (인베스팅 순서)
   { key: "usdkrw", label: "달러/원", group: "환율", symbol: "KRW=X" },
   { key: "wti", label: "WTI유", group: "원자재", symbol: "CL=F" },
 
   // ── 미국 지수
-  { key: "dji", label: "US 30", group: "미국지수", symbol: "^DJI" },
-  { key: "gspc", label: "US 500", group: "미국지수", symbol: "^GSPC" },
-  { key: "ixic", label: "US Tech 100", group: "미국지수", symbol: "^IXIC" },
-  { key: "rut", label: "US 2000", group: "미국지수", symbol: "^RUT" },
-  { key: "vix", label: "S&P 500 VIX", group: "변동성", symbol: "^VIX" },
+  /*
+   * 미국 지수 — **선물을 먼저** 놓는다.
+   *
+   * 인베스팅에서 보시는 게 선물(Derived)이고, 우리 시간 낮에 실제로 움직이는 것도
+   * 선물이다. 현물은 전일 종가에 멈춰 있으므로 아래에 따로 둔다.
+   *
+   * 예전에 ^IXIC(나스닥 **종합**)에 "US Tech 100"이라는 이름을 붙여 놨었다.
+   * 나스닥 100 은 ^NDX / NQ=F 다 — 26,768 과 30,181 로 3,400 포인트가 달랐다.
+   */
+  { key: "ymF", label: "US 30", group: "미국 지수선물", symbol: "YM=F", kind: "선물" },
+  { key: "esF", label: "US 500", group: "미국 지수선물", symbol: "ES=F", kind: "선물" },
+  { key: "nqF", label: "US Tech 100", group: "미국 지수선물", symbol: "NQ=F", kind: "선물" },
+  { key: "rtyF", label: "US 2000", group: "미국 지수선물", symbol: "RTY=F", kind: "선물" },
+
+  { key: "dji", label: "다우존스", group: "미국 현물지수", symbol: "^DJI", kind: "현물" },
+  { key: "gspc", label: "S&P 500", group: "미국 현물지수", symbol: "^GSPC", kind: "현물" },
+  { key: "ndx", label: "나스닥 100", group: "미국 현물지수", symbol: "^NDX", kind: "현물" },
+  { key: "ixic", label: "나스닥 종합", group: "미국 현물지수", symbol: "^IXIC", kind: "현물" },
+  { key: "rut", label: "러셀 2000", group: "미국 현물지수", symbol: "^RUT", kind: "현물" },
+
+  /*
+   * VIX 선물(VX=F)과 국채 금리(US10YT=X)는 야후에 없다 — 실측으로 확인했다.
+   * 인베스팅은 자체 데이터라 되지만 우리는 현물로 대신하고, 그 사실을 표시한다.
+   */
+  { key: "vix", label: "S&P 500 VIX", group: "변동성", symbol: "^VIX", kind: "현물" },
 
   // ── 금리
-  { key: "tnx", label: "미국 10년 국채 금리", group: "금리", symbol: "^TNX", isRate: true },
-  { key: "tyx", label: "미국 30년", group: "금리", symbol: "^TYX", isRate: true },
+  { key: "tnx", label: "미국 10년 국채 금리", group: "금리", symbol: "^TNX", isRate: true, kind: "현물" },
+  { key: "tyx", label: "미국 30년", group: "금리", symbol: "^TYX", isRate: true, kind: "현물" },
 
   // ── 암호화폐
   { key: "btc", label: "비트코인", group: "암호화폐", symbol: "BTC-USD" },
@@ -92,6 +129,8 @@ async function fetchOne(target: (typeof TARGETS)[number]): Promise<GlobalQuote> 
     change: null,
     changeRate: null,
     isRate: target.isRate ?? false,
+    kind: target.kind ?? "",
+    quotedAt: null,
     error: null,
   };
 
@@ -121,6 +160,9 @@ async function fetchOne(target: (typeof TARGETS)[number]): Promise<GlobalQuote> 
       base.change = price - prev;
       base.changeRate = ((price - prev) / prev) * 100;
     }
+    // 체결 시각 — 현물은 낮에 멈춰 있고 선물은 계속 움직인다. 그걸 화면이 보여줘야 한다
+    const t = Number(meta.regularMarketTime);
+    if (Number.isFinite(t) && t > 0) base.quotedAt = t * 1000;
   } catch (err) {
     base.error = err instanceof Error ? err.message : "조회 실패";
   }

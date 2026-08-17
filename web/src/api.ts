@@ -258,6 +258,14 @@ export const api = {
     getJson<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }>(
       `/api/custom-themes${force ? "?force=1" : ""}`,
     ),
+  disclosureAlert: () =>
+    getJson<{ config: DisclosureAlertConfig; intervals: number[]; telegramReady: boolean }>(
+      "/api/disclosure-alert",
+    ),
+  disclosureAlertSave: (config: DisclosureAlertConfig) =>
+    putJson<{ config: DisclosureAlertConfig }>("/api/disclosure-alert", config),
+  disclosureAlertRun: (send: boolean) =>
+    postJson<DisclosureRunResult>(`/api/disclosure-alert/run${send ? "?send=1" : ""}`),
   keywordConfig: () =>
     getJson<{ config: KeywordConfig; keywords: KeywordSource[]; intervals: number[] }>("/api/keyword"),
   keywordSave: (config: KeywordConfig) =>
@@ -1580,5 +1588,33 @@ export interface KeywordRunResult {
   sent: number;
   skipped: number;
   hits: KeywordHit[];
+  error?: string;
+}
+
+
+/** 관심종목 공시 알림 */
+export interface DisclosureAlertConfig {
+  enabled: boolean;
+  intervalMin: number;
+  watchedOnly: boolean;
+  includeThemes: boolean;
+  marketWeightMin: number;
+  weekdayOnly: boolean;
+  startHour: number;
+  endHour: number;
+  maxPerRun: number;
+}
+
+export interface DisclosureHit {
+  event: DartEvent;
+  reason: string;
+}
+
+export interface DisclosureRunResult {
+  scanned: number;
+  matched: number;
+  sent: number;
+  skipped: number;
+  hits: DisclosureHit[];
   error?: string;
 }
