@@ -1,4 +1,5 @@
 import { getGlobalMarket } from "./globalMarket.js";
+import { kospi200Futures, type FuturesQuote } from "./kospiFutures.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getSharesMap } from "./stockListCache.js";
 
@@ -73,6 +74,14 @@ function toAbsNum(v: unknown): number {
 // ---------------------------------------------------------------- 지수 + 등락현황
 
 export interface IndexCard {
+  /*
+   * 코스피200 에만 붙는다 — 그 옆의 선물.
+   *
+   * 둘의 차이(베이시스)가 핵심이다. 선물이 현물보다 더 빠지면 백워데이션이고
+   * 프로그램 매도가 붙기 쉽다. 키움 HTS 가 두 칸을 나란히 놓은 이유가 그것이다.
+   * 한투 키가 없으면 null 이고, 화면은 예전처럼 현물만 보여 준다.
+   */
+  futures?: FuturesQuote | null;
   code: string;
   name: string;
   price: number;
@@ -122,6 +131,11 @@ async function fetchIndices(client: KiwoomClient): Promise<IndexCard[]> {
       lowerLimit: toNum(data.lst),
     });
   }
+
+  // 코스피200 옆에 선물을 붙인다. 실패해도 나머지 지수는 그대로 나온다
+  const k200 = results.find((r) => r.code === "201");
+  if (k200) k200.futures = await kospi200Futures(k200.price);
+
   return results;
 }
 

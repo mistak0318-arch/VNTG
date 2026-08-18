@@ -23,13 +23,23 @@ git pull || goto :fail
 
 REM pull 이 데이터 파일을 지웠으면 방금 백업한 것으로 되살린다.
 REM 추적 해제 커밋을 처음 받을 때 꼭 필요하고, 그 뒤에는 아무 일도 하지 않는다.
-for %%F in (watchlist watchGroups journal paperTrades) do (
+for %%F in (watchlist watchGroups journal paperTrades usWatchlist) do (
   if not exist "server\data\%%F.json" (
     if exist "%BK%\%%F.json" (
       copy /Y "%BK%\%%F.json" "server\data\%%F.json" >nul
       echo       복원: %%F.json
     )
   )
+)
+
+REM 해외 관심종목이 아직 한 번도 없으면 씨앗을 깐다.
+REM 이 파일은 git 으로 안 보낸다 — 양쪽에서 고치는 파일이라 pull 이 막히기 때문이다.
+REM 그래서 "처음 한 번"만 여기서 만들어 주고, 그 뒤로는 이 PC 것을 그대로 둔다.
+if not exist "server\data\usWatchlist.json" (
+  echo       해외 관심종목이 없습니다 - 씨앗을 깝니다...
+  cd server
+  node scripts\seed-us-watch-2.mjs --write
+  cd ..
 )
 
 echo [2/5] 서버 빌드...

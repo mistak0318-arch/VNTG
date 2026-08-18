@@ -155,6 +155,36 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                       {fmtSigned(c.change)} {fmtPct(c.changeRate)}
                     </div>
                     <Sparkline values={c.sparkline} up={c.changeRate >= 0} />
+                    {/*
+                      코스피200 옆의 선물. 둘의 차이(베이시스)가 핵심이라 붙여 놓는다 —
+                      선물이 현물보다 더 빠지면 백워데이션이고 프로그램 매도가 붙기 쉽다.
+                      한투 키가 없으면 안 뜨고, 화면은 예전대로다.
+                    */}
+                    {c.futures && c.futures.price != null && (
+                      <div className="ov-fut">
+                        <span className="ov-fut-lbl">선물 {c.futures.name}</span>
+                        <span className={`ov-fut-val num ${signCls(c.futures.changeRate ?? 0)}`}>
+                          {fmtNum(c.futures.price)}
+                        </span>
+                        <span className={`num ${signCls(c.futures.changeRate ?? 0)}`}>
+                          {fmtSigned(c.futures.change ?? 0)} {fmtPct(c.futures.changeRate ?? 0)}
+                        </span>
+                        {c.futures.basis != null && (
+                          <span
+                            className={`ov-basis ${c.futures.basis < 0 ? "negative" : "positive"}`}
+                            title="선물 − 현물. 음수면 백워데이션 — 프로그램 매도가 붙기 쉽습니다"
+                          >
+                            베이시스 {c.futures.basis > 0 ? "+" : ""}
+                            {c.futures.basis.toFixed(2)}
+                          </span>
+                        )}
+                        {c.futures.openInterest != null && (
+                          <span className="pt-n" title="미결제약정">
+                            미결제 {fmtNum(c.futures.openInterest)}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {f && (
                       <div className="ov-idx-flow num">
                         <div>

@@ -3610,3 +3610,13 @@ body {
 .uw-ord .row-del-btn:disabled { opacity: 0.25; cursor: default; }
 
 .uw-flag { margin-right: 3px; }
+
+/* 코스피200 옆 선물 — 베이시스가 핵심이라 같이 붙인다 */
+.ov-fut {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border);
+  font-size: 11.5px;
+}
+.ov-fut-lbl { color: var(--muted); }
+.ov-fut-val { font-size: 13px; font-variant-numeric: tabular-nums; }
+.ov-basis { padding: 1px 5px; border-radius: 4px; background: var(--panel-2); }

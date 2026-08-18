@@ -68,11 +68,15 @@ const TARGETS: {
   { key: "nqF", label: "US Tech 100", group: "미국 지수선물", symbol: "NQ=F", kind: "선물" },
   { key: "rtyF", label: "US 2000", group: "미국 지수선물", symbol: "RTY=F", kind: "선물" },
 
-  { key: "dji", label: "다우존스", group: "미국 현물지수", symbol: "^DJI", kind: "현물" },
-  { key: "gspc", label: "S&P 500", group: "미국 현물지수", symbol: "^GSPC", kind: "현물" },
-  { key: "ndx", label: "나스닥 100", group: "미국 현물지수", symbol: "^NDX", kind: "현물" },
-  { key: "ixic", label: "나스닥 종합", group: "미국 현물지수", symbol: "^IXIC", kind: "현물" },
-  { key: "rut", label: "러셀 2000", group: "미국 현물지수", symbol: "^RUT", kind: "현물" },
+  /*
+   * 미국 **현물** 지수(^DJI·^GSPC·^NDX·^IXIC·^RUT)는 여기서 뺐다.
+   *
+   * 선물과 나란히 놓으니 같은 지수가 두 줄씩 떠서 어느 게 지금 값인지 헷갈렸다 —
+   * S&P 만 해도 "US 500 7,725.75" 와 "S&P 500 7,745.06" 이 나란히 있었다.
+   * 게다가 현물은 우리 시간 05:30 에 닫혀 낮에는 전일 종가에 멈춰 있다.
+   *
+   * 이 화면은 **지금 움직이는 것**만 본다. 현물은 따로 자리를 만들어 거기서 본다.
+   */
 
   /*
    * VIX 선물(VX=F)과 국채 금리(US10YT=X)는 야후에 없다 — 실측으로 확인했다.

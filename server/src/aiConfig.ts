@@ -20,7 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
 const FILE = join(DATA_DIR, "aiConfig.json");
 
-export type AiPurpose = "report" | "channel" | "research";
+export type AiPurpose = "report" | "channel" | "research" | "ask";
 
 export interface AiChoice {
   provider: VisionProvider;
@@ -38,15 +38,24 @@ export interface AiConfig {
    * 그래서 **여기야말로 싼 모델로 갈아 끼울 값어치가 있다.**
    */
   research: AiChoice | null;
+  /**
+   * 시황 질문하기.
+   *
+   * **여기는 Anthropic 만 고를 수 있다.** 웹 검색을 붙여 답하는데 그 도구가
+   * Anthropic SDK 쪽에 붙어 있어서, 다른 provider 를 고르면 검색 없이 답하게 된다.
+   * 화면에서도 Claude 모델만 보여 준다.
+   */
+  ask: AiChoice | null;
 }
 
 /** null 이면 기존 동작(ANTHROPIC_API_KEY + CLAUDE_MODEL)을 그대로 쓴다 */
-export const DEFAULT_AI_CONFIG: AiConfig = { report: null, channel: null, research: null };
+export const DEFAULT_AI_CONFIG: AiConfig = { report: null, channel: null, research: null, ask: null };
 
 export const PURPOSE_LABEL: Record<AiPurpose, string> = {
   report: "데일리 리포트",
   channel: "구독 채널 요약",
   research: "웹 리서치 (입력 정제)",
+  ask: "시황 질문하기 (Claude 만)",
 };
 
 let cache: AiConfig | null = null;
@@ -72,6 +81,11 @@ export async function saveAiConfig(input: AiConfig): Promise<AiConfig> {
     report: clean(input.report),
     channel: clean(input.channel),
     research: clean(input.research),
+    // 질문하기는 Anthropic 만 — 검색 도구가 거기 붙어 있다
+    ask: (() => {
+      const c = clean(input.ask);
+      return c && c.provider === "anthropic" ? c : null;
+    })(),
   };
   cache = next;
   await mkdir(DATA_DIR, { recursive: true });

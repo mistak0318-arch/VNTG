@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { getAiConfig } from "./aiConfig.js";
 import { recordApiCall } from "./apiUsage.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { buildDigest } from "./aiSummary.js";
@@ -65,7 +66,16 @@ export function isAskConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY?.trim());
 }
 
-function model(): string {
+/**
+ * 쓸 모델. 설정 화면에서 고른 것이 먼저고, 없으면 .env, 그것도 없으면 기본값이다.
+ *
+ * **Anthropic 것만 받는다.** 이 함수는 웹 검색 도구를 같이 태우는데 그건 Anthropic
+ * SDK 쪽 기능이라, 다른 provider 를 골라도 여기선 못 쓴다 — 조용히 검색 없이 답하는
+ * 것보다 기본 모델로 제대로 답하는 편이 낫다.
+ */
+async function model(): Promise<string> {
+  const choice = (await getAiConfig()).ask;
+  if (choice && choice.provider === "anthropic" && choice.model.trim()) return choice.model.trim();
   return process.env.ASK_MODEL?.trim() || "claude-sonnet-5";
 }
 
@@ -79,7 +89,7 @@ export async function askMarket(
   opts: { useSearch?: boolean; useMarketData?: boolean } = {},
 ): Promise<AskResult> {
   const { useSearch = true, useMarketData = true } = opts;
-  const usedModel = model();
+  const usedModel = await model();
   const empty: AskResult = {
     text: null,
     searches: [],

@@ -598,6 +598,21 @@ export interface IndexCard {
   flat: number;
   falling: number;
   lowerLimit: number;
+  /** 코스피200 에만 붙는다 — 그 옆의 선물 (한국투자증권) */
+  futures?: FuturesQuote | null;
+}
+
+export interface FuturesQuote {
+  code: string;
+  name: string;
+  price: number | null;
+  change: number | null;
+  changeRate: number | null;
+  theoretical: number | null;
+  openInterest: number | null;
+  volume: number | null;
+  /** 선물 − 현물. 음수면 백워데이션이고 프로그램 매도가 붙기 쉽다 */
+  basis: number | null;
 }
 
 export interface InvestorFlow {

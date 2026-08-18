@@ -245,7 +245,13 @@
       "Bash(echo \"exit=$?\")",
       "Bash(timeout 60 git rm --cached server/data/usWatchlist.json -q)",
       "Bash(timeout 30 git ls-files server/data/)",
-      "Bash(curl -s --max-time 60 http://localhost:4000/api/us-watch -o u3.json)"
+      "Bash(curl -s --max-time 60 http://localhost:4000/api/us-watch -o u3.json)",
+      "Bash(curl -s --max-time 120 \"http://localhost:4000/api/overview/section/indices\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/42e00671-3282-40e1-a05a-90181fec3c36/scratchpad/idx.json\")",
+      "Bash(curl -s --max-time 10 -o /dev/null -w \"health %{http_code}\\\\n\" http://localhost:4000/api/health)",
+      "Bash(curl -s --max-time 30 \"http://localhost:4000/api/market/info/035420\")",
+      "Bash(curl -s --max-time 30 http://localhost:4000/api/ai/config)",
+      "Bash(curl -s --max-time 20 -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:4000/api/ask/history)",
+      "Bash(curl -s --max-time 60 \"http://localhost:4000/api/overview/section/global\")"
     ]
   }
 }
