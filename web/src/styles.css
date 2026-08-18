@@ -3638,3 +3638,17 @@ body {
 }
 .fi-legend i { display: inline-block; width: 9px; height: 3px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
 .fi-legend b { margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+/* 돌고 있는 작업 띠 — 어느 화면에 있든 뜬다 */
+.rj-bar { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; }
+.rj-item { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; }
+.rj-head { display: flex; align-items: center; gap: 7px; font-size: 12.5px; }
+.rj-head .rj-x { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; }
+.rj-spin {
+  width: 10px; height: 10px; border-radius: 50%; flex: none;
+  border: 2px solid var(--border); border-top-color: var(--blue);
+  animation: rj-turn 0.8s linear infinite;
+}
+@keyframes rj-turn { to { transform: rotate(360deg); } }
+.rj-track { height: 3px; background: var(--border); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.rj-track i { display: block; height: 100%; background: var(--blue); transition: width 0.3s ease; }

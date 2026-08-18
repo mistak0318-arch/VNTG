@@ -342,6 +342,8 @@ export const api = {
   reportPublishNow: (deliver = false) =>
     postJson<{ jobId: string }>("/api/report/publish-now", { deliver }),
   reportPublishStatus: (jobId: string) => getJson<PublishJob>(`/api/report/publish/${jobId}`),
+  /** 지금 돌고 있는 작업 — 페이지를 옮겨도 진행 상황을 되찾으려고 */
+  activeJobs: () => getJson<{ jobs: { id: string; job: PublishJob }[] }>("/api/report/jobs/active"),
   exchangeQuotes: (code: string) =>
     getJson<{ code: string; exchanges: ExchangeQuote[] }>(`/api/market/exchanges/${code}`),
   channelConfig: () =>

@@ -12,7 +12,7 @@ import {
   saveSchedule,
 } from "../reportSchedule.js";
 import { latestEdition, listReports, loadReport, type EditionKey } from "../reportStore.js";
-import { createJob, getJob, reporterFor } from "../reportProgress.js";
+import { activeJobs, createJob, getJob, reporterFor } from "../reportProgress.js";
 
 /**
  * 리포트 전용 라우트.
@@ -133,6 +133,13 @@ export function createReportRouter(client: KiwoomClient): Router {
   });
 
   /** 발행 진행 상황 폴링 */
+  /*
+   * 진행 중인 작업 목록. **페이지를 옮겨도 진행 상황을 되찾으려고** 있다.
+   * 서버는 어차피 계속 돌고 있었는데, 화면이 jobId 를 잃어버려 볼 수가 없었다.
+   */
+  router.get("/jobs/active", (_req, res) => {
+    res.json({ jobs: activeJobs() });
+  });
   router.get("/publish/:jobId", (req, res) => {
     const job = getJob(req.params.jobId);
     if (!job) {

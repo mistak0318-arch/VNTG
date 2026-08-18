@@ -93,6 +93,21 @@ export function getJob(id: string): PublishJob | undefined {
 }
 
 /**
+ * 지금 돌고 있는 작업들.
+ *
+ * 서버는 요청이 끝나도 작업을 계속한다 — 끊기는 건 **화면이 그걸 놓치는 것**이다.
+ * 리포트를 발행하고 다른 메뉴로 가면 jobId 를 들고 있던 화면이 사라져서, 돌아와도
+ * 진행 상황을 볼 방법이 없었다.
+ *
+ * 화면이 이걸 물어보면 **어느 페이지에서든 진행 중인 작업을 되찾을 수 있다.**
+ */
+export function activeJobs(): { id: string; job: PublishJob }[] {
+  return [...jobs.entries()]
+    .filter(([, j]) => j.status === "running")
+    .map(([id, job]) => ({ id, job }));
+}
+
+/**
  * 진행 상황을 알리는 손잡이. 다이제스트를 만드는 쪽에 이것만 넘긴다.
  *
  * 진행 보고가 본 기능을 망가뜨리면 안 되므로 **아무것도 던지지 않는다.**

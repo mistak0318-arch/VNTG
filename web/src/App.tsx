@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { RunningJobsBar } from "./components/RunningJobsBar";
 import { CustomThemePage } from "./pages/CustomThemePage";
 import { ScreenerPage } from "./pages/ScreenerPage";
 import { ScreenPage } from "./pages/ScreenPage";
@@ -244,6 +245,9 @@ export default function App() {
         </header>
 
         <div className="main-inner">
+          {/* 돌고 있는 작업 — 어느 화면에 있든 뜬다 */}
+          <RunningJobsBar />
+
           {tab === "overview" && <OverviewPage onSelectStock={onSelectStock} />}
           {tab === "report" && <DailyReportPage onSelectStock={onSelectStock} />}
           {tab === "map" && <MapPage onSelectStock={onSelectStock} />}
