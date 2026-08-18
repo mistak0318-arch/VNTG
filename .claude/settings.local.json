@@ -253,7 +253,9 @@
       "Bash(curl -s --max-time 20 -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:4000/api/ask/history)",
       "Bash(curl -s --max-time 60 \"http://localhost:4000/api/overview/section/global\")",
       "Bash(curl -s --max-time 120 \"http://localhost:4000/api/overview/section/indices\")",
-      "Bash(/api/)"
+      "Bash(/api/)",
+      "Bash(timeout 40 git log --oneline -3)",
+      "Bash(timeout 40 git status --short)"
     ]
   }
 }

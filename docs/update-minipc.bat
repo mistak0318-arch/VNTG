@@ -36,10 +36,26 @@ REM 해외 관심종목이 아직 한 번도 없으면 씨앗을 깐다.
 REM 실제로 쓰는 usWatchlist.json 은 git 으로 안 보낸다 — 양쪽 PC 가 고치는 파일이라
 REM pull 이 막히기 때문이다. 대신 usWatchlist.seed.json 을 보내고 여기서 한 번만 복사한다.
 REM 그 뒤로는 이 PC 것을 그대로 둔다.
+REM 파일이 없으면 그냥 깐다.
 if not exist "server\data\usWatchlist.json" (
   if exist "server\data\usWatchlist.seed.json" (
     copy /Y "server\data\usWatchlist.seed.json" "server\data\usWatchlist.json" >nul
     echo       해외 관심종목 씨앗을 깔았습니다.
+  )
+) else (
+  REM 이미 있으면 덮어쓰지 않는다 — 이 PC 에서 편집한 것일 수 있다.
+  REM 다만 **조용히 넘어가지는 않는다.** 예전엔 그래서 새 목록이 안 넘어온 걸
+  REM 한참 모르고 있었다. 씨앗과 다르면 어떻게 가져오는지 알려 준다.
+  fc /b "server\data\usWatchlist.json" "server\data\usWatchlist.seed.json" >nul 2>&1
+  if errorlevel 1 (
+    echo.
+    echo       [알림] 해외 관심종목이 씨앗과 다릅니다.
+    echo              이 PC 에서 편집한 것이면 그대로 두시면 됩니다.
+    echo              메인PC 목록으로 맞추려면 아래를 실행하세요:
+    echo.
+    echo              copy /Y server\data\usWatchlist.json server\data\usWatchlist.bak.json
+    echo              copy /Y server\data\usWatchlist.seed.json server\data\usWatchlist.json
+    echo.
   )
 )
 
