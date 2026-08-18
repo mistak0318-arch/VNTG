@@ -3545,3 +3545,17 @@ body {
 }
 .op-label { font-size: 11px; color: var(--muted); }
 .op-big { font-size: 18px; font-variant-numeric: tabular-nums; }
+
+/* 값이 바뀐 칸을 잠깐 반짝인다 — HTS 의 틱 표시 */
+.tickable { transition: background-color 0.25s ease-out; }
+.tickable.up { background: rgba(255, 92, 92, 0.28); }
+.tickable.down { background: rgba(76, 141, 255, 0.28); }
+
+/* 52주 구간 위치 막대 */
+.uw-52 { position: relative; display: inline-block; width: 52px; height: 14px;
+  border-radius: 3px; background: var(--border); overflow: hidden; vertical-align: middle; }
+.uw-52 i { position: absolute; inset: 0 auto 0 0; background: rgba(255, 92, 92, 0.45); }
+.uw-52 em { position: relative; font-size: 10px; font-style: normal; line-height: 14px;
+  display: block; text-align: center; }
+
+.uw-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type UsSearchResult, type UsWatchGroup } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 
@@ -49,6 +49,7 @@ export function UsWatchPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   // 종목 추가
@@ -56,9 +57,18 @@ export function UsWatchPage() {
   const [results, setResults] = useState<UsSearchResult[]>([]);
   const [newGroup, setNewGroup] = useState("");
 
-  async function load(force = false) {
-    setLoading(true);
-    setError(null);
+  /*
+   * **조용히 갱신한다.**
+   *
+   * 예전엔 갱신할 때마다 loading 을 켜서 표가 "불러오는 중"으로 바뀌었다가 돌아왔다.
+   * HTS 는 그러지 않는다 — 숫자만 제자리에서 바뀐다.
+   *
+   * 그래서 `quiet` 갱신에서는 loading 을 건드리지 않는다. React 는 key 가 같은 행을
+   * 다시 그리지 않고 바뀐 칸만 손대므로, 화면이 깜빡이지 않고 값만 움직인다.
+   */
+  async function load(force = false, quiet = false) {
+    if (!quiet) setLoading(true);
+    if (!quiet) setError(null);
     try {
       const r = await api.usWatch(force);
       setGroups(r.groups);
@@ -66,9 +76,10 @@ export function UsWatchPage() {
       setFetchedAt(r.fetchedAt);
       if (!openGroup && r.groups.length > 0) setOpenGroup(r.groups[0].id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "불러오기 실패");
+      // 조용한 갱신이 실패하면 조용히 넘어간다 — 잘 뜨던 값을 지우면 안 된다
+      if (!quiet) setError(e instanceof Error ? e.message : "불러오기 실패");
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }
 
@@ -76,6 +87,51 @@ export function UsWatchPage() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /*
+   * 자동 갱신 주기.
+   *
+   * 한투가 `state` 로 장 상태를 알려 주므로(“장중(실시간)” 등) **장이 열려 있을 때만
+   * 자주** 부른다. 닫혀 있는데 5초마다 부르는 건 같은 값을 받아 오는 낭비다.
+   *
+   * 탭이 뒤에 있으면 아예 쉰다 — 안 보는 화면 때문에 한도를 쓰지 않는다.
+   */
+  const openMarket = groups.some((g) => g.stocks.some((s) => (s.state ?? "").includes("실시간")));
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const period = openMarket ? 5_000 : 60_000;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void load(true, true);
+    }, period);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh, openMarket]);
+
+  /*
+   * 값이 움직인 칸을 잠깐 반짝인다 — HTS 의 틱 표시.
+   *
+   * 숫자만 조용히 바뀌면 **바뀐 줄을 놓친다.** 111종목이 한 화면에 있으면 더 그렇다.
+   * 오른 것은 붉게, 내린 것은 푸르게 0.7초.
+   */
+  const prevPrices = useRef<Map<string, number>>(new Map());
+  const [ticks, setTicks] = useState<Map<string, "up" | "down">>(new Map());
+  useEffect(() => {
+    const next = new Map<string, "up" | "down">();
+    for (const g of groups) {
+      for (const s of g.stocks) {
+        if (s.price === null) continue;
+        const before = prevPrices.current.get(s.symbol);
+        if (before !== undefined && before !== s.price) {
+          next.set(s.symbol, s.price > before ? "up" : "down");
+        }
+        prevPrices.current.set(s.symbol, s.price);
+      }
+    }
+    if (next.size === 0) return;
+    setTicks(next);
+    const t = setTimeout(() => setTicks(new Map()), 700);
+    return () => clearTimeout(t);
+  }, [groups]);
 
   // 검색은 늦춰서 — 타이핑마다 Yahoo 를 부르지 않는다
   useEffect(() => {
@@ -106,7 +162,17 @@ export function UsWatchPage() {
 
   return (
     <div>
-      <RefreshBar onRefresh={() => load(true)} loading={loading} />
+      <div className="uw-bar">
+        <RefreshBar onRefresh={() => load(true)} loading={loading} />
+        {/* 자동 갱신은 끌 수 있어야 한다 — 값이 계속 움직이면 읽기 어려운 때가 있다 */}
+        <button
+          className={`filter-btn ${autoRefresh ? "active" : ""}`}
+          onClick={() => setAutoRefresh((v) => !v)}
+          title={openMarket ? "장중에는 5초마다" : "장이 닫혀 있어 1분마다"}
+        >
+          {autoRefresh ? `자동 ${openMarket ? "5초" : "1분"}` : "자동 꺼짐"}
+        </button>
+      </div>
       {error && <div className="error-banner">{error}</div>}
 
       {/* 어느 시점 값인지 못 박는다 — "실시간이야?" 를 화면이 스스로 답해야 한다 */}
@@ -250,6 +316,10 @@ export function UsWatchPage() {
                   <th className="sticky-col">종목</th>
                   <th>현재가</th>
                   <th>등락률</th>
+                  <th title="원화 환산가 — 한국투자증권이 계산해 준다">원화</th>
+                  <th title="52주 구간에서 지금 위치 (0=저가, 100=고가)">52주</th>
+                  <th title="오늘 거래량 ÷ 전일 거래량">거래량</th>
+                  <th title="체결강도 — 100보다 크면 사는 쪽이 세다">강도</th>
                   <th>편입가</th>
                   <th>편입 대비</th>
                   {editing && <th></th>}
@@ -265,8 +335,30 @@ export function UsWatchPage() {
                         <span className="pt-n"> {s.name}</span>
                         {s.error && <span className="uw-err"> {s.error}</span>}
                       </td>
-                      <td className="num">{s.price === null ? "-" : s.price.toFixed(2)}</td>
+                      <td className={`num tickable ${ticks.get(s.symbol) ?? ""}`}>
+                        {s.price === null ? "-" : s.price.toFixed(2)}
+                      </td>
                       <td className={`num ${cls(s.changeRate)}`}>{pct(s.changeRate)}</td>
+                      <td className="num pt-n">
+                        {s.wonPrice == null ? "-" : s.wonPrice.toLocaleString("ko-KR")}
+                      </td>
+                      {/* 52주 구간 위치를 막대로 — 신고가 근처인지 바닥인지가 숫자보다 빨리 읽힌다 */}
+                      <td className="num">
+                        {s.pos52 == null ? (
+                          "-"
+                        ) : (
+                          <span className="uw-52" title={`${s.low52} ~ ${s.high52}`}>
+                            <i style={{ width: `${Math.min(100, Math.max(0, s.pos52))}%` }} />
+                            <em>{s.pos52.toFixed(0)}</em>
+                          </span>
+                        )}
+                      </td>
+                      <td className={`num ${s.volumeVsPrev != null && s.volumeVsPrev >= 150 ? "positive" : ""}`}>
+                        {s.volumeVsPrev == null ? "-" : `${s.volumeVsPrev.toFixed(0)}%`}
+                      </td>
+                      <td className={`num ${s.power != null && s.power >= 100 ? "positive" : ""}`}>
+                        {s.power == null ? "-" : s.power.toFixed(0)}
+                      </td>
                       <td className="num">{s.addedPrice === null ? "-" : s.addedPrice.toFixed(2)}</td>
                       <td className={`num ${cls(s.returnRate)}`}>{pct(s.returnRate)}</td>
                       {editing && (

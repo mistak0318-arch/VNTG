@@ -34,6 +34,14 @@ export function TrendLineChart({ series, height = 240 }: { series: TrendSeries[]
       leftPriceScale: { borderColor: c.border, visible: series.some((s) => s.axis === "left") },
       timeScale: { borderColor: c.border },
       crosshair: { horzLine: { style: LineStyle.Dotted }, vertLine: { style: LineStyle.Dotted } },
+      // 세로 조작 잠금 — 캔들 차트와 같은 이유다 (CandleChart 주석 참고)
+      handleScroll: { vertTouchDrag: false, horzTouchDrag: true, pressedMouseMove: true, mouseWheel: true },
+      handleScale: {
+        pinch: true,
+        mouseWheel: true,
+        axisDoubleClickReset: true,
+        axisPressedMouseMove: { time: true, price: false },
+      },
     });
 
     for (const s of series) {

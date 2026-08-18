@@ -1600,6 +1600,22 @@ export interface UsQuoteRow {
   /** Yahoo 가 알려준 체결 시각(ms) */
   quotedAt: number | null;
   error: string | null;
+  /** 원화 환산가 (한국투자증권) */
+  wonPrice: number | null;
+  /** 오늘 거래량 ÷ 전일 거래량 × 100 */
+  volumeVsPrev: number | null;
+  /** 52주 구간에서 지금 위치 (0=저가, 100=고가) */
+  pos52: number | null;
+  high52: number | null;
+  low52: number | null;
+  /** 체결강도 — 100 보다 크면 사는 쪽이 세다 */
+  power: number | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  /** 한투가 알려준 장 상태 */
+  state: string | null;
+  source: "hantoo" | "yahoo";
 }
 
 export interface UsWatchGroup {

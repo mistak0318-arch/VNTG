@@ -147,9 +147,33 @@ export function CandleChart({
       height: 320,
       layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: c.text },
       grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
-      rightPriceScale: { borderColor: c.border },
+      // autoScale 을 켜 두면 보이는 구간에 맞춰 세로 범위가 늘 스스로 맞는다.
+      // 세로 조작을 막았으므로 이게 없으면 봉이 화면 밖으로 나가도 되돌릴 방법이 없다
+      rightPriceScale: { borderColor: c.border, autoScale: true },
       // 분봉은 시:분까지 보여야 한다
       timeScale: { borderColor: c.border, timeVisible: intraday, secondsVisible: false },
+      /*
+       * **세로 조작을 잠근다.**
+       *
+       * 손가락으로 훑으면 가로로 넘길 생각이었는데 조금만 비스듬해도 차트가 위아래로
+       * 끌려갔다. 터치는 정확히 수평으로 긋기가 어려워서 만질 때마다 어긋난다.
+       *
+       * 세로로 움직여서 얻는 건 없다 — 가격 범위는 autoScale 이 알아서 맞춘다.
+       * 남기는 건 **가로 이동**과 **확대·축소**뿐이다.
+       */
+      handleScroll: {
+        vertTouchDrag: false, // 손가락 세로 드래그 (이게 오동작의 원인)
+        horzTouchDrag: true, // 가로로 넘기기는 남긴다
+        pressedMouseMove: true, // 마우스로 끌기 — 가로만 먹는다
+        mouseWheel: true,
+      },
+      handleScale: {
+        pinch: true, // 두 손가락 확대·축소
+        mouseWheel: true,
+        axisDoubleClickReset: true, // 축을 두 번 누르면 처음 배율로
+        // 가격축을 끌어 세로로 늘이는 것도 막는다. 시간축 배율은 남긴다
+        axisPressedMouseMove: { time: true, price: false },
+      },
     });
     chartRef.current = chart;
 

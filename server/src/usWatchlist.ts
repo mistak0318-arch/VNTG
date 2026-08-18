@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recordApiCall } from "./apiUsage.js";
+import { hantooUsQuotes } from "./usQuotesHantoo.js";
 
 /**
  * 미국 관심종목.
@@ -201,6 +202,25 @@ export interface UsQuoteRow {
   /** Yahoo 가 알려준 체결 시각(ms) */
   quotedAt: number | null;
   error: string | null;
+  // ---- 아래는 한국투자증권만 주는 값이다 (야후엔 없다) ----
+  /** 원화 환산가 */
+  wonPrice: number | null;
+  /** 오늘 거래량 ÷ 전일 거래량 × 100 */
+  volumeVsPrev: number | null;
+  /** 52주 구간에서 지금 위치 (0=저가, 100=고가) */
+  pos52: number | null;
+  high52: number | null;
+  low52: number | null;
+  /** 체결강도 — 100 보다 크면 사는 쪽이 세다 */
+  power: number | null;
+  /** 시가·고가·저가 */
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  /** 한투가 알려준 장 상태 ("장중(실시간)" 등) */
+  state: string | null;
+  /** 어디서 받은 값인가 */
+  source: "hantoo" | "yahoo";
 }
 
 /**
@@ -282,13 +302,89 @@ export interface UsWatchResult {
   fetchedAt: number;
 }
 
+/** 한투가 준 값 중 화면에 쓸 것만 골라 담는다 */
+function toExtra(h: {
+  wonPrice: number | null;
+  volume: number | null;
+  prevVolume: number | null;
+  pos52: number | null;
+  high52: number | null;
+  low52: number | null;
+  power: number | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  state: string | null;
+}) {
+  return {
+    wonPrice: h.wonPrice,
+    // 오늘이 평소보다 붐비는지. 100이면 어제와 같다
+    volumeVsPrev:
+      h.volume !== null && h.prevVolume !== null && h.prevVolume > 0
+        ? (h.volume / h.prevVolume) * 100
+        : null,
+    pos52: h.pos52,
+    high52: h.high52,
+    low52: h.low52,
+    power: h.power,
+    open: h.open,
+    high: h.high,
+    low: h.low,
+    state: h.state,
+    source: "hantoo" as const,
+  };
+}
+
+const EMPTY_EXTRA = {
+  wonPrice: null,
+  volumeVsPrev: null,
+  pos52: null,
+  high52: null,
+  low52: null,
+  power: null,
+  open: null,
+  high: null,
+  low: null,
+  state: null,
+  source: "yahoo" as const,
+};
+
 export async function evaluateGroups(force = false): Promise<UsWatchResult> {
   const groups = await readAll();
   const symbols = [...new Set(groups.flatMap((g) => g.stocks.map((s) => s.symbol)))];
 
+  /*
+   * **한투를 먼저 쓰고, 안 되는 것만 야후로 메운다.**
+   *
+   * 한투는 한 번에 10종목이라 40종목이 4번이면 끝난다(야후는 40번이었다). 게다가
+   * 원화환산가·52주·체결강도처럼 야후가 안 주던 값이 같이 온다.
+   *
+   * 그래도 야후를 지우진 않는다 — 한투에 없는 티커(신규 상장, ADR 일부)가 있고,
+   * 키가 안 꽂힌 상태에서도 화면이 살아 있어야 한다.
+   */
+  const hantoo = await hantooUsQuotes(symbols).catch(() => new Map());
+  const extra = new Map<string, ReturnType<typeof toExtra>>();
   const quotes = new Map<string, Awaited<ReturnType<typeof quoteOne>>>();
-  for (let i = 0; i < symbols.length; i += 6) {
-    const chunk = symbols.slice(i, i + 6);
+
+  const missing: string[] = [];
+  for (const sym of symbols) {
+    const h = hantoo.get(sym);
+    if (h && h.price !== null) {
+      quotes.set(sym, {
+        price: h.price,
+        changeRate: h.changeRate,
+        state: h.state,
+        quotedAt: null,
+        error: null,
+      });
+      extra.set(sym, toExtra(h));
+    } else {
+      missing.push(sym);
+    }
+  }
+
+  for (let i = 0; i < missing.length; i += 6) {
+    const chunk = missing.slice(i, i + 6);
     const got = await Promise.all(
       chunk.map(async (sym) => {
         const hit = cache.get(sym);
@@ -316,6 +412,7 @@ export async function evaluateGroups(force = false): Promise<UsWatchResult> {
         marketState: q?.state ?? null,
         quotedAt: q?.quotedAt ?? null,
         error: q?.error ?? null,
+        ...(extra.get(s.symbol) ?? EMPTY_EXTRA),
       };
     });
     const rates = stocks.map((s) => s.changeRate).filter((x): x is number => x !== null);
