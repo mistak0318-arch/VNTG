@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
+import { flowIntradayDates, listFlowIntraday } from "../flowIntraday.js";
 import {
   getProgramTrades,
   getSection,
@@ -40,6 +41,19 @@ export function createOverviewRouter(client: KiwoomClient): Router {
       res.json(result);
     } catch (err) {
       res.status(502).json({ error: err instanceof Error ? err.message : "알 수 없는 오류" });
+    }
+  });
+
+  /*
+   * 장중 수급 변화. 하루 누적 숫자만 보면 오전에 팔다 오후에 산 날과
+   * 하루 종일 판 날이 똑같이 생긴다.
+   */
+  router.get("/flow-intraday", async (req, res, next) => {
+    try {
+      const date = typeof req.query.date === "string" ? req.query.date : undefined;
+      res.json({ day: await listFlowIntraday(date), dates: await flowIntradayDates() });
+    } catch (err) {
+      next(err);
     }
   });
 

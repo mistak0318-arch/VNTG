@@ -1,5 +1,6 @@
 import { getGlobalMarket } from "./globalMarket.js";
 import { usMajorIndices } from "./usMajor.js";
+import { recordFlow } from "./flowIntraday.js";
 import { kospi200Futures, type FuturesQuote } from "./kospiFutures.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getSharesMap } from "./stockListCache.js";
@@ -236,10 +237,18 @@ async function fetchFlow(client: KiwoomClient): Promise<MarketFlow> {
   const kospiRows = Array.isArray(kospiRes.data.inds_netprps) ? (kospiRes.data.inds_netprps as Row[]) : [];
   const kosdaqRows = Array.isArray(kosdaqRes.data.inds_netprps) ? (kosdaqRes.data.inds_netprps as Row[]) : [];
 
-  return {
+  const flow = {
     kospi: mapFlow(pickTotalRow(kospiRows, "001")),
     kosdaq: mapFlow(pickTotalRow(kosdaqRows, "101")),
   };
+
+  /*
+   * 장중 변화를 쌓는다. **추가 호출이 아니다** — 방금 받은 값을 시각과 함께 적어 둘 뿐이다.
+   * ka10051 은 누적만 주므로 시계열은 이렇게밖에 못 만든다.
+   */
+  void recordFlow(flow.kospi, flow.kosdaq);
+
+  return flow;
 }
 
 // ---------------------------------------------------------------- 등락률 순위

@@ -156,6 +156,10 @@ export const api = {
   algoScanStatus: (jobId: string) => getJson<AlgoJob>(`/api/algo/scan/status/${jobId}`),
   marketStatus: () => getJson<MarketStatus>("/api/overview/status"),
   overviewSection: <T>(name: string) => getJson<SectionResult<T>>(`/api/overview/section/${name}`),
+  flowIntraday: (date?: string) =>
+    getJson<{ day: FlowIntradayDay | null; dates: string[] }>(
+      `/api/overview/flow-intraday${date ? `?date=${date}` : ""}`,
+    ),
   watchlist: () => getJson<{ items: WatchItem[] }>("/api/watchlist"),
   watchGroups: () => getJson<{ groups: string[] }>("/api/watchlist/groups"),
   watchGroupAdd: (name: string) => postJson<{ groups: string[] }>("/api/watchlist/groups", { name }),
@@ -613,6 +617,20 @@ export interface FuturesQuote {
   volume: number | null;
   /** 선물 − 현물. 음수면 백워데이션이고 프로그램 매도가 붙기 쉽다 */
   basis: number | null;
+}
+
+export interface FlowSample {
+  /** HHmm (한국시간) */
+  t: string;
+  foreign: number;
+  institution: number;
+  individual: number;
+}
+
+export interface FlowIntradayDay {
+  date: string;
+  kospi: FlowSample[];
+  kosdaq: FlowSample[];
 }
 
 export interface UsMajorRow {

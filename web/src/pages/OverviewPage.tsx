@@ -16,6 +16,7 @@ import {
 } from "../api";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { FlowBars } from "../components/overview/FlowBars";
+import { FlowIntradayChart } from "../components/overview/FlowIntradayChart";
 import { OverviewCard } from "../components/overview/OverviewCard";
 import { RankList, SegmentToggle } from "../components/overview/RankList";
 import { RefreshBar } from "../components/RefreshBar";
@@ -371,6 +372,11 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
               onChange={setFlowMarket}
             />
             {flow.data && <FlowBars flow={flow.data[flowMarket]} />}
+            {/*
+              누적 막대 밑에 장중 변화. 막대만 보면 오전에 팔다 오후에 산 날과
+              하루 종일 판 날이 똑같이 생긴다 — 방향이 바뀐 지점이 보여야 한다.
+            */}
+            <FlowIntradayChart market={flowMarket} />
           </OverviewCard>
         )}
 

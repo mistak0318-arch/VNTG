@@ -55,3 +55,4 @@ server/data/hantooToken.json
 
 server/data/usWatchCache.json
 server/data/askHistory.json
+server/data/flowIntraday.json
