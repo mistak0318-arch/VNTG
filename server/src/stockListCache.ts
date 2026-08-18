@@ -106,10 +106,60 @@ export async function findStock(client: KiwoomClient, code: string): Promise<Sto
   return list.find((item) => item.code.replace(/_(AL|NX)$/, "") === bare);
 }
 
+/**
+ * 한글 초성 19자. 유니코드 한글 음절은 이 순서로 조합된다.
+ * (음절 코드 − 0xAC00) ÷ 588 이 초성 번호다.
+ */
+const CHOSEONG = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
+
+/** "삼성전자" → "ㅅㅅㅈㅈ". 한글이 아닌 글자는 그대로 둔다 */
+function toChoseong(text: string): string {
+  let out = "";
+  for (const ch of text) {
+    const c = ch.charCodeAt(0);
+    if (c >= 0xac00 && c <= 0xd7a3) out += CHOSEONG[Math.floor((c - 0xac00) / 588)];
+    else out += ch;
+  }
+  return out;
+}
+
+/**
+ * 입력이 **초성만**인가.
+ *
+ * 초성 검색은 입력이 초성뿐일 때만 켠다. "삼ㅅ" 처럼 섞이면 일반 검색이 맞고,
+ * 무엇보다 "ㄱ" 한 글자로 초성 검색을 돌리면 수백 종목이 걸려 쓸모가 없다.
+ */
+function isChoseongQuery(q: string): boolean {
+  return q.length > 0 && [...q].every((ch) => CHOSEONG.includes(ch));
+}
+
 export async function searchStocks(client: KiwoomClient, query: string): Promise<StockEntry[]> {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const list = await ensureCache(client);
+
+  /*
+   * 초성 검색. "ㅅㅅㅈㅈ" 로 삼성전자를 찾는다.
+   *
+   * 종목명을 외우고 있어도 **타이핑이 길다** — 「한화에어로스페이스」를 다 치느니
+   * ㅎㅎㅇㅇㄹㅅㅍㅇㅅ 가 빠르고, 무엇보다 모바일에서 오타가 안 난다.
+   *
+   * 앞에서부터 맞는 것을 먼저 올린다. "ㅅㅅㅈㅈ" 면 삼성전자가 삼성에스디에스보다 위다.
+   */
+  if (isChoseongQuery(q)) {
+    const hit = list
+      .map((item) => ({ item, cho: toChoseong(item.name) }))
+      .filter((x) => x.cho.includes(q));
+    hit.sort((a, b) => {
+      const ai = a.cho.startsWith(q) ? 0 : 1;
+      const bi = b.cho.startsWith(q) ? 0 : 1;
+      if (ai !== bi) return ai - bi;
+      // 같으면 이름이 짧은 쪽 — 「삼성전자」가 「삼성전자우」보다 위다
+      return a.item.name.length - b.item.name.length;
+    });
+    return hit.slice(0, 20).map((x) => x.item);
+  }
+
   return list
     .filter((item) => item.code.toLowerCase().includes(q) || item.name.toLowerCase().includes(q))
     .slice(0, 20);
