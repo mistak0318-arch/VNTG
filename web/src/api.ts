@@ -615,6 +615,27 @@ export interface FuturesQuote {
   basis: number | null;
 }
 
+export interface UsMajorRow {
+  key: string;
+  label: string;
+  symbol: string;
+  price: number | null;
+  change: number | null;
+  changeRate: number | null;
+  /** 금리는 값 자체가 % 다 */
+  isRate: boolean;
+  digits: number;
+  quotedAt: number | null;
+  error: string | null;
+}
+
+export interface UsMajorResult {
+  rows: UsMajorRow[];
+  /** 코스피 야간선물 — 이것만 지금 움직인다 */
+  nightFutures: UsMajorRow | null;
+  fetchedAt: number;
+}
+
 export interface InvestorFlow {
   individual: number;
   foreign: number;

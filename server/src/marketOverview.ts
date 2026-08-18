@@ -1,4 +1,5 @@
 import { getGlobalMarket } from "./globalMarket.js";
+import { usMajorIndices } from "./usMajor.js";
 import { kospi200Futures, type FuturesQuote } from "./kospiFutures.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getSharesMap } from "./stockListCache.js";
@@ -31,6 +32,11 @@ const SECTION_TTL_MS = {
   highLow: 300_000, // 250일 신고저가
   vi: 60_000, // VI 발동
   global: 60_000, // 글로벌 (외부 API라 과호출 주의)
+  /*
+   * 미장 주요지수 — 미국 **현물**은 우리 시간 05:30 에 닫혀 낮에는 아예 안 움직인다.
+   * 자주 부를 이유가 없다. (「글로벌 시황지수」의 선물이 움직이는 쪽이다)
+   */
+  usMajor: 60_000,
 } as const;
 
 export type SectionName = keyof typeof SECTION_TTL_MS;
@@ -441,6 +447,7 @@ const FETCHERS: Record<SectionName, (client: KiwoomClient) => Promise<unknown>> 
   highLow: fetchHighLow,
   vi: fetchVi,
   global: () => getGlobalMarket(),
+  usMajor: () => usMajorIndices(),
 };
 
 async function refresh(section: SectionName, client: KiwoomClient): Promise<void> {

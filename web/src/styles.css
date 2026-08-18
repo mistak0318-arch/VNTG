@@ -3624,3 +3624,6 @@ body {
 /* 거래량 밑의 거래대금 — 한 칸 안에 두 줄 */
 .ph-sublabel { font-size: 10.5px; color: var(--muted); font-style: normal; margin-right: 4px; }
 .ph-value.sub { font-size: 12.5px; }
+
+/* 미장 주요지수 — 야간선물만 지금 움직이는 값이라 줄을 나눈다 */
+.ov-night td { border-bottom: 1px solid var(--border); font-weight: 600; }

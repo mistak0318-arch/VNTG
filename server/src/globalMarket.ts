@@ -123,7 +123,29 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function fetchOne(target: (typeof TARGETS)[number]): Promise<GlobalQuote> {
+/**
+ * 심볼 하나를 야후에서 받는다.
+ *
+ * 「미장 주요지수」가 이 함수를 그대로 쓴다 — 같은 야후 응답을 두 군데서 다르게 읽으면
+ * 언젠가 값이 어긋난다. 목록만 다르고 읽는 방식은 하나여야 한다.
+ */
+export async function fetchQuotes(symbols: string[]): Promise<Map<string, GlobalQuote>> {
+  const out = new Map<string, GlobalQuote>();
+  for (const symbol of symbols) {
+    out.set(symbol, await fetchOne({ key: symbol, label: symbol, group: "", symbol }));
+    await sleep(120);
+  }
+  return out;
+}
+
+async function fetchOne(target: {
+  key: string;
+  label: string;
+  group: string;
+  symbol: string;
+  isRate?: boolean;
+  kind?: "선물" | "현물";
+}): Promise<GlobalQuote> {
   const base: GlobalQuote = {
     key: target.key,
     label: target.label,

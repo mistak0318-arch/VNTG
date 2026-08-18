@@ -257,7 +257,14 @@
       "Bash(timeout 40 git log --oneline -3)",
       "Bash(timeout 40 git status --short)",
       "Bash(curl -s --max-time 30 \"http://localhost:4000/api/market/snapshot/035420\")",
-      "Bash(curl -s --max-time 40 \"http://localhost:4000/api/market/chart/daily/035420\")"
+      "Bash(curl -s --max-time 40 \"http://localhost:4000/api/market/chart/daily/035420\")",
+      "Bash(curl -s --max-time 180 \"http://localhost:4000/api/overview/section/usMajor\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/42e00671-3282-40e1-a05a-90181fec3c36/scratchpad/um.json\")",
+      "Bash(curl -s --max-time 200 \"http://localhost:4000/api/overview/section/usMajor?force=1\" -o /dev/null)",
+      "Bash(curl -s --max-time 200 \"http://localhost:4000/api/overview/section/usMajor\")",
+      "Bash(printf '\\\\n/* 미장 주요지수 — 야간선물만 지금 움직이는 값이라 줄을 나눈다 */\\\\n.ov-night td { border-bottom: 1px solid var\\(--border\\); font-weight: 600; }\\\\n')",
+      "Bash(timeout 40 git log --oneline -2)",
+      "Bash(timeout 60 git status -sb)",
+      "PowerShell($m = \"글로벌 시황지수에서 뺀 미국 현물이 갈 자리다. S&P500·나스닥100 열 줄. 배치는 국내 지수 → 종목등락현황 → 미장 주요지수.\"; Write-Output \"LEN=$\\($m.Length\\)\"; Write-Output $m)"
     ]
   }
 }

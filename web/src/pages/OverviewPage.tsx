@@ -12,6 +12,7 @@ import {
   type StockRow,
   type ThemeRow,
   type ViRow,
+  type UsMajorResult,
 } from "../api";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { FlowBars } from "../components/overview/FlowBars";
@@ -55,6 +56,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const highLow = useSection<{ high: StockRow[]; low: StockRow[] }>("highLow", 300_000);
   const vi = useSection<ViRow[]>("vi", 60_000);
   const global = useSection<GlobalQuote[]>("global", 60_000);
+  const usMajor = useSection<UsMajorResult>("usMajor", 60_000);
 
   const [flowMarket, setFlowMarket] = useState<"kospi" | "kosdaq">("kospi");
   const [moverDir, setMoverDir] = useState<"rising" | "falling">("rising");
@@ -241,6 +243,71 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                   )}
                 </tbody>
               </table>
+            </div>
+          </OverviewCard>
+        )}
+
+        {/*
+          미장 주요지수 — 국내 지수 → 종목등락현황 **다음** 자리다.
+          아침에 "밤사이 무슨 일이 있었나"를 한 표로 읽는 곳이라, 국내를 본 직후에 와야 한다.
+        */}
+        {show("summary") && (
+          <OverviewCard
+            title="미장 주요지수"
+            updatedAt={usMajor.updatedAt}
+            loading={usMajor.loading}
+            error={usMajor.error}
+          >
+            <div className="ov-card-b">
+              <table className="ov-table num">
+                <thead>
+                  <tr>
+                    <th>구분</th>
+                    <th>종가</th>
+                    <th>대비</th>
+                    <th>등락률</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usMajor.data?.nightFutures && (
+                    /* 야간선물만 지금 움직이는 값이라 맨 위에 두고 줄을 나눈다 */
+                    <tr className="ov-night">
+                      <td>{usMajor.data.nightFutures.label}</td>
+                      <td className={signCls(usMajor.data.nightFutures.changeRate ?? 0)}>
+                        {usMajor.data.nightFutures.price?.toFixed(2)}
+                      </td>
+                      <td className={signCls(usMajor.data.nightFutures.changeRate ?? 0)}>
+                        {fmtSigned(usMajor.data.nightFutures.change ?? 0)}
+                      </td>
+                      <td className={signCls(usMajor.data.nightFutures.changeRate ?? 0)}>
+                        {fmtPct(usMajor.data.nightFutures.changeRate ?? 0)}
+                      </td>
+                    </tr>
+                  )}
+                  {(usMajor.data?.rows ?? []).map((r) => (
+                    <tr key={r.key}>
+                      <td>{r.label}</td>
+                      <td className={signCls(r.changeRate ?? 0)}>
+                        {r.price == null
+                          ? "-"
+                          : r.price.toLocaleString("ko-KR", {
+                              minimumFractionDigits: r.digits,
+                              maximumFractionDigits: r.digits,
+                            })}
+                        {/* 금리는 값 자체가 % 라 단위를 붙여야 오해가 없다 */}
+                        {r.isRate && "%"}
+                      </td>
+                      <td className={signCls(r.changeRate ?? 0)}>{fmtSigned(r.change ?? 0)}</td>
+                      <td className={signCls(r.changeRate ?? 0)}>{fmtPct(r.changeRate ?? 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="table-note">
+                야간선물을 뺀 나머지는 <b>전일 마감값</b>입니다 — 미국 현물은 우리 시간 05:30 에
+                닫혀 낮에는 움직이지 않습니다. 지금 움직이는 걸 보시려면 「글로벌 시황지수」의
+                선물을 보세요.
+              </div>
             </div>
           </OverviewCard>
         )}
