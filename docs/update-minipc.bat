@@ -33,13 +33,14 @@ for %%F in (watchlist watchGroups journal paperTrades usWatchlist) do (
 )
 
 REM 해외 관심종목이 아직 한 번도 없으면 씨앗을 깐다.
-REM 이 파일은 git 으로 안 보낸다 — 양쪽에서 고치는 파일이라 pull 이 막히기 때문이다.
-REM 그래서 "처음 한 번"만 여기서 만들어 주고, 그 뒤로는 이 PC 것을 그대로 둔다.
+REM 실제로 쓰는 usWatchlist.json 은 git 으로 안 보낸다 — 양쪽 PC 가 고치는 파일이라
+REM pull 이 막히기 때문이다. 대신 usWatchlist.seed.json 을 보내고 여기서 한 번만 복사한다.
+REM 그 뒤로는 이 PC 것을 그대로 둔다.
 if not exist "server\data\usWatchlist.json" (
-  echo       해외 관심종목이 없습니다 - 씨앗을 깝니다...
-  cd server
-  node scripts\seed-us-watch-2.mjs --write
-  cd ..
+  if exist "server\data\usWatchlist.seed.json" (
+    copy /Y "server\data\usWatchlist.seed.json" "server\data\usWatchlist.json" >nul
+    echo       해외 관심종목 씨앗을 깔았습니다.
+  )
 )
 
 echo [2/5] 서버 빌드...

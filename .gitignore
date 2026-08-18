@@ -19,6 +19,10 @@ server/data/*
 # 이쪽은 **이 PC에서 만들어 미니PC로 보내는 것**이다. 한 번 짜서 내려보내면 끝이라
 # 양쪽이 동시에 고칠 일이 없다.
 !server/data/customThemes.json
+# 해외 관심종목의 **씨앗**. 실제로 쓰는 usWatchlist.json 은 양쪽 PC 가 고치므로 추적하지
+# 않지만, 그러면 새 PC 에 최초 한 번이 안 넘어간다. 그래서 씨앗만 따로 보낸다 —
+# 이건 메인PC 에서만 갱신하므로 충돌하지 않는다.
+!server/data/usWatchlist.seed.json
 !server/data/calendar.json
 !server/data/stockNotes.json
 

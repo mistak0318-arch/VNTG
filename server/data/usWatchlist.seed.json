@@ -1,0 +1,1241 @@
+[
+  {
+    "id": "빅테크",
+    "name": "빅테크",
+    "memo": "ACE 미국빅테크TOP7Plus",
+    "stocks": [
+      {
+        "symbol": "NVDA",
+        "name": "엔비디아",
+        "addedPrice": 219.69,
+        "addedAt": "2026-08-18T15:34:00.388Z",
+        "memo": ""
+      },
+      {
+        "symbol": "GOOGL",
+        "name": "알파벳 A",
+        "addedPrice": 342.65,
+        "addedAt": "2026-08-18T15:34:03.786Z",
+        "memo": ""
+      },
+      {
+        "symbol": "AMZN",
+        "name": "아마존닷컴",
+        "addedPrice": 260.07,
+        "addedAt": "2026-08-18T15:34:05.711Z",
+        "memo": ""
+      },
+      {
+        "symbol": "AAPL",
+        "name": "애플",
+        "addedPrice": 310.18,
+        "addedAt": "2026-08-18T15:34:06.143Z",
+        "memo": ""
+      },
+      {
+        "symbol": "MSFT",
+        "name": "마이크로소프트",
+        "addedPrice": 482.18,
+        "addedAt": "2026-08-18T15:34:06.584Z",
+        "memo": ""
+      },
+      {
+        "symbol": "AVGO",
+        "name": "브로드컴",
+        "addedPrice": 380.33,
+        "addedAt": "2026-08-18T15:34:07.047Z",
+        "memo": ""
+      },
+      {
+        "symbol": "META",
+        "name": "메타 플랫폼스(페이스북)",
+        "addedPrice": 551.64,
+        "addedAt": "2026-08-18T15:34:07.501Z",
+        "memo": ""
+      },
+      {
+        "symbol": "NFLX",
+        "name": "넷플릭스",
+        "addedPrice": 78.555,
+        "addedAt": "2026-08-18T15:34:07.954Z",
+        "memo": ""
+      },
+      {
+        "symbol": "TSLA",
+        "name": "테슬라",
+        "addedPrice": 337.56,
+        "addedAt": "2026-08-18T15:34:08.427Z",
+        "memo": ""
+      },
+      {
+        "symbol": "PLTR",
+        "name": "팔란티어 테크",
+        "addedPrice": 172.15,
+        "addedAt": "2026-08-18T15:34:12.025Z",
+        "memo": ""
+      }
+    ]
+  },
+  {
+    "id": "시장주도주",
+    "name": "시장 주도주",
+    "memo": "KoAct 미국나스닥성장기업액티브",
+    "stocks": [
+      {
+        "symbol": "MU",
+        "name": "마이크론 테크놀로지",
+        "addedPrice": 943.56,
+        "addedAt": "2026-08-18T15:34:12.434Z",
+        "memo": ""
+      },
+      {
+        "symbol": "CRWV",
+        "name": "코어위브",
+        "addedPrice": 97.335,
+        "addedAt": "2026-08-18T15:34:14.444Z",
+        "memo": ""
+      },
+      {
+        "symbol": "BE",
+        "name": "블룸 에너지",
+        "addedPrice": 208.7268,
+        "addedAt": "2026-08-18T15:34:16.432Z",
+        "memo": ""
+      },
+      {
+        "symbol": "OKLO",
+        "name": "오클로",
+        "addedPrice": 41.45,
+        "addedAt": "2026-08-18T15:34:18.407Z",
+        "memo": ""
+      },
+      {
+        "symbol": "SMR",
+        "name": "뉴스케일 파워",
+        "addedPrice": 8.68,
+        "addedAt": "2026-08-18T15:34:20.388Z",
+        "memo": ""
+      },
+      {
+        "symbol": "VRT",
+        "name": "버티브 홀딩스",
+        "addedPrice": 273.17,
+        "addedAt": "2026-08-18T15:34:22.365Z",
+        "memo": ""
+      },
+      {
+        "symbol": "GEV",
+        "name": "GE베르노바",
+        "addedPrice": 1023.475,
+        "addedAt": "2026-08-18T15:34:24.341Z",
+        "memo": ""
+      },
+      {
+        "symbol": "LITE",
+        "name": "루멘텀 홀딩스",
+        "addedPrice": 880.65,
+        "addedAt": "2026-08-18T15:34:26.338Z",
+        "memo": ""
+      },
+      {
+        "symbol": "COHR",
+        "name": "코히어런트",
+        "addedPrice": 310.76,
+        "addedAt": "2026-08-18T15:34:28.308Z",
+        "memo": ""
+      },
+      {
+        "symbol": "SNDK",
+        "name": "샌디스크",
+        "addedPrice": 1643.46,
+        "addedAt": "2026-08-18T15:34:28.731Z",
+        "memo": ""
+      },
+      {
+        "symbol": "INTC",
+        "name": "인텔",
+        "addedPrice": 96.18,
+        "addedAt": "2026-08-18T15:34:29.185Z",
+        "memo": ""
+      },
+      {
+        "symbol": "WDC",
+        "name": "웨스턴 디지털",
+        "addedPrice": 498.69,
+        "addedAt": "2026-08-18T15:34:29.637Z",
+        "memo": ""
+      },
+      {
+        "symbol": "AAOI",
+        "name": "어플라이드 옵토일렉트로닉스",
+        "addedPrice": 136.325,
+        "addedAt": "2026-08-18T15:34:31.631Z",
+        "memo": ""
+      },
+      {
+        "symbol": "CIEN",
+        "name": "시에나",
+        "addedPrice": 399.56,
+        "addedAt": "2026-08-18T15:34:32.058Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ASML",
+        "name": "ASML 홀딩(ADR)",
+        "addedPrice": 1784.605,
+        "addedAt": "2026-08-18T15:34:32.512Z",
+        "memo": ""
+      },
+      {
+        "symbol": "MRVL",
+        "name": "마벨 테크놀로지 그룹",
+        "addedPrice": 215.24,
+        "addedAt": "2026-08-18T15:34:34.524Z",
+        "memo": ""
+      },
+      {
+        "symbol": "LRCX",
+        "name": "램 리서치",
+        "addedPrice": 322.915,
+        "addedAt": "2026-08-18T15:34:36.505Z",
+        "memo": ""
+      },
+      {
+        "symbol": "GLW",
+        "name": "코닝",
+        "addedPrice": 160.212,
+        "addedAt": "2026-08-18T15:34:38.489Z",
+        "memo": ""
+      },
+      {
+        "symbol": "RDDT",
+        "name": "레딧",
+        "addedPrice": 161.48,
+        "addedAt": "2026-08-18T15:34:38.916Z",
+        "memo": ""
+      }
+    ]
+  },
+  {
+    "id": "반도체",
+    "name": "반도체",
+    "memo": "KODEX 미국반도체",
+    "stocks": [
+      {
+        "symbol": "NVDA",
+        "name": "엔비디아",
+        "addedPrice": 219.69,
+        "addedAt": "2026-08-18T15:34:38.916Z",
+        "memo": ""
+      },
+      {
+        "symbol": "MU",
+        "name": "마이크론 테크놀로지",
+        "addedPrice": 943.56,
+        "addedAt": "2026-08-18T15:34:38.916Z",
+        "memo": ""
+      },
+      {
+        "symbol": "SNDK",
+        "name": "샌디스크",
+        "addedPrice": 1643.46,
+        "addedAt": "2026-08-18T15:34:38.916Z",
+        "memo": ""
+      },
+      {
+        "symbol": "LRCX",
+        "name": "램 리서치",
+        "addedPrice": 322.915,
+        "addedAt": "2026-08-18T15:34:38.916Z",
+        "memo": ""
+      },
+      {
+        "symbol": "AMAT",
+        "name": "어플라이드 머티어리얼즈",
+        "addedPrice": 506.15,
+        "addedAt": "2026-08-18T15:34:39.371Z",
+        "memo": ""
+      },
+      {
+        "symbol": "TSM",
+        "name": "TSMC(ADR)",
+        "addedPrice": 413.27,
+        "addedAt": "2026-08-18T15:34:39.823Z",
+        "memo": ""
+      },
+      {
+        "symbol": "MRVL",
+        "name": "마벨 테크놀로지 그룹",
+        "addedPrice": 215.24,
+        "addedAt": "2026-08-18T15:34:39.823Z",
+        "memo": ""
+      },
+      {
+        "symbol": "AVGO",
+        "name": "브로드컴",
+        "addedPrice": 380.33,
+        "addedAt": "2026-08-18T15:34:39.823Z",
+        "memo": ""
+      },
+      {
+        "symbol": "QCOM",
+        "name": "퀄컴",
+        "addedPrice": 158.225,
+        "addedAt": "2026-08-18T15:34:43.391Z",
+        "memo": ""
+      },
+      {
+        "symbol": "AMD",
+        "name": "AMD",
+        "addedPrice": 480.74,
+        "addedAt": "2026-08-18T15:34:45.426Z",
+        "memo": ""
+      },
+      {
+        "symbol": "KLAC",
+        "name": "케이엘에이",
+        "addedPrice": 194.13,
+        "addedAt": "2026-08-18T15:34:45.816Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ASML",
+        "name": "ASML 홀딩(ADR)",
+        "addedPrice": 1784.605,
+        "addedAt": "2026-08-18T15:34:45.816Z",
+        "memo": ""
+      },
+      {
+        "symbol": "SKHY",
+        "name": "SK hynix Inc.",
+        "addedPrice": 158.1,
+        "addedAt": "2026-08-18T16:01:29.748Z",
+        "memo": ""
+      },
+      {
+        "symbol": "TXN",
+        "name": "텍사스 인스트루먼츠",
+        "addedPrice": 271.07,
+        "addedAt": "2026-08-18T15:34:47.819Z",
+        "memo": ""
+      },
+      {
+        "symbol": "SNPS",
+        "name": "시놉시스",
+        "addedPrice": 405.185,
+        "addedAt": "2026-08-18T15:34:48.239Z",
+        "memo": ""
+      },
+      {
+        "symbol": "INTC",
+        "name": "인텔",
+        "addedPrice": 96.18,
+        "addedAt": "2026-08-18T15:34:48.239Z",
+        "memo": ""
+      },
+      {
+        "symbol": "DELL",
+        "name": "델 테크놀로지스",
+        "addedPrice": 466.27,
+        "addedAt": "2026-08-18T15:34:48.697Z",
+        "memo": ""
+      },
+      {
+        "symbol": "IBM",
+        "name": "IBM",
+        "addedPrice": 230.8788,
+        "addedAt": "2026-08-18T15:34:50.706Z",
+        "memo": ""
+      }
+    ]
+  },
+  {
+    "id": "원자력SMR",
+    "name": "원자력SMR",
+    "memo": "ACE 미국SMR원자력TOP10",
+    "stocks": [
+      {
+        "symbol": "OKLO",
+        "name": "오클로",
+        "addedPrice": 41.45,
+        "addedAt": "2026-08-18T15:34:50.706Z",
+        "memo": ""
+      },
+      {
+        "symbol": "SMR",
+        "name": "뉴스케일 파워",
+        "addedPrice": 8.68,
+        "addedAt": "2026-08-18T15:34:50.706Z",
+        "memo": ""
+      },
+      {
+        "symbol": "CCJ",
+        "name": "카메코",
+        "addedPrice": 94.65,
+        "addedAt": "2026-08-18T15:34:51.135Z",
+        "memo": ""
+      },
+      {
+        "symbol": "LEU",
+        "name": "센트러스 에너지",
+        "addedPrice": 175.4,
+        "addedAt": "2026-08-18T15:34:51.592Z",
+        "memo": ""
+      },
+      {
+        "symbol": "GEV",
+        "name": "GE베르노바",
+        "addedPrice": 1023.475,
+        "addedAt": "2026-08-18T15:34:51.592Z",
+        "memo": ""
+      },
+      {
+        "symbol": "CEG",
+        "name": "컨스털레이션 에너지",
+        "addedPrice": 277.2,
+        "addedAt": "2026-08-18T15:34:53.598Z",
+        "memo": ""
+      },
+      {
+        "symbol": "VST",
+        "name": "비스트라 에너지",
+        "addedPrice": 144.19,
+        "addedAt": "2026-08-18T15:34:55.577Z",
+        "memo": ""
+      },
+      {
+        "symbol": "BWXT",
+        "name": "BWX 테크놀로지스",
+        "addedPrice": 167.525,
+        "addedAt": "2026-08-18T15:34:57.586Z",
+        "memo": ""
+      },
+      {
+        "symbol": "UUUU",
+        "name": "에너지 퓨얼스",
+        "addedPrice": 13.93,
+        "addedAt": "2026-08-18T15:34:58.004Z",
+        "memo": ""
+      },
+      {
+        "symbol": "UEC",
+        "name": "우라늄 에너지",
+        "addedPrice": 10.65,
+        "addedAt": "2026-08-18T15:34:58.459Z",
+        "memo": ""
+      }
+    ]
+  },
+  {
+    "id": "전력인프라",
+    "name": "전력인프라",
+    "memo": "SOL 미국AI전력인프라",
+    "stocks": [
+      {
+        "symbol": "VRT",
+        "name": "버티브 홀딩스",
+        "addedPrice": 273.17,
+        "addedAt": "2026-08-18T15:34:58.459Z",
+        "memo": ""
+      },
+      {
+        "symbol": "OKLO",
+        "name": "오클로",
+        "addedPrice": 41.45,
+        "addedAt": "2026-08-18T15:34:58.459Z",
+        "memo": ""
+      },
+      {
+        "symbol": "GEV",
+        "name": "GE베르노바",
+        "addedPrice": 1023.475,
+        "addedAt": "2026-08-18T15:34:58.459Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ETN",
+        "name": "이턴 코퍼레이션",
+        "addedPrice": 430.94,
+        "addedAt": "2026-08-18T15:35:00.463Z",
+        "memo": ""
+      },
+      {
+        "symbol": "PWR",
+        "name": "콴타 서비시스",
+        "addedPrice": 701.42,
+        "addedAt": "2026-08-18T15:35:00.876Z",
+        "memo": ""
+      },
+      {
+        "symbol": "CEG",
+        "name": "컨스털레이션 에너지",
+        "addedPrice": 277.2,
+        "addedAt": "2026-08-18T15:35:00.876Z",
+        "memo": ""
+      },
+      {
+        "symbol": "BE",
+        "name": "블룸 에너지",
+        "addedPrice": 208.7268,
+        "addedAt": "2026-08-18T15:35:00.876Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ETR",
+        "name": "엔터지",
+        "addedPrice": 109.06,
+        "addedAt": "2026-08-18T15:35:01.347Z",
+        "memo": ""
+      },
+      {
+        "symbol": "VST",
+        "name": "비스트라 에너지",
+        "addedPrice": 144.19,
+        "addedAt": "2026-08-18T15:35:01.347Z",
+        "memo": ""
+      },
+      {
+        "symbol": "CCJ",
+        "name": "카메코",
+        "addedPrice": 94.65,
+        "addedAt": "2026-08-18T15:35:01.347Z",
+        "memo": ""
+      }
+    ]
+  },
+  {
+    "id": "우주항공",
+    "name": "우주항공",
+    "memo": "TIGER 미국우주테크",
+    "stocks": [
+      {
+        "symbol": "RDW",
+        "name": "레드와이어",
+        "addedPrice": 12.93,
+        "addedAt": "2026-08-18T15:35:03.359Z",
+        "memo": ""
+      },
+      {
+        "symbol": "LUNR",
+        "name": "인튜이티브 머신스",
+        "addedPrice": 19.74,
+        "addedAt": "2026-08-18T15:35:05.344Z",
+        "memo": ""
+      },
+      {
+        "symbol": "RKLB",
+        "name": "로켓 랩",
+        "addedPrice": 79.44,
+        "addedAt": "2026-08-18T15:35:07.325Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ASTS",
+        "name": "AST 스페이스모바일",
+        "addedPrice": 67.35,
+        "addedAt": "2026-08-18T15:35:07.742Z",
+        "memo": ""
+      },
+      {
+        "symbol": "PL",
+        "name": "플래닛 랩스",
+        "addedPrice": 23.3846,
+        "addedAt": "2026-08-18T15:35:09.742Z",
+        "memo": ""
+      },
+      {
+        "symbol": "VSAT",
+        "name": "비아샛",
+        "addedPrice": 77.61,
+        "addedAt": "2026-08-18T15:35:14.836Z",
+        "memo": ""
+      },
+      {
+        "symbol": "GSAT",
+        "name": "글로벌스타",
+        "addedPrice": 82.895,
+        "addedAt": "2026-08-18T15:35:15.281Z",
+        "memo": ""
+      },
+      {
+        "symbol": "MDA.TO",
+        "name": "MDA 스페이스",
+        "addedPrice": null,
+        "addedAt": "2026-08-18T15:35:15.281Z",
+        "memo": ""
+      },
+      {
+        "symbol": "BKSY",
+        "name": "블랙스카이 테크놀로지",
+        "addedPrice": 29.74,
+        "addedAt": "2026-08-18T15:35:17.289Z",
+        "memo": ""
+      }
+    ]
+  },
+  {
+    "id": "로봇",
+    "name": "로봇",
+    "memo": "KoAct 미국로봇피지컬AI액티브",
+    "stocks": [
+      {
+        "symbol": "TSLA",
+        "name": "테슬라",
+        "addedPrice": 337.56,
+        "addedAt": "2026-08-18T15:35:17.289Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ISRG",
+        "name": "인튜이티브 서지컬",
+        "addedPrice": 397.79,
+        "addedAt": "2026-08-18T15:35:17.717Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ADI",
+        "name": "애널로그 디바이시스",
+        "addedPrice": 373.225,
+        "addedAt": "2026-08-18T15:35:18.171Z",
+        "memo": ""
+      },
+      {
+        "symbol": "TER",
+        "name": "테라다인",
+        "addedPrice": 400.91,
+        "addedAt": "2026-08-18T15:35:18.625Z",
+        "memo": ""
+      },
+      {
+        "symbol": "FLEX",
+        "name": "플렉스",
+        "addedPrice": 121.23,
+        "addedAt": "2026-08-18T15:35:19.082Z",
+        "memo": ""
+      },
+      {
+        "symbol": "CAT",
+        "name": "캐터필러",
+        "addedPrice": 839.7125,
+        "addedAt": "2026-08-18T15:35:19.535Z",
+        "memo": ""
+      },
+      {
+        "symbol": "OUST",
+        "name": "아우스터",
+        "addedPrice": 43.8,
+        "addedAt": "2026-08-18T15:35:21.550Z",
+        "memo": ""
+      },
+      {
+        "symbol": "SERV",
+        "name": "서브 로보틱스",
+        "addedPrice": 4.505,
+        "addedAt": "2026-08-18T15:35:23.527Z",
+        "memo": ""
+      },
+      {
+        "symbol": "TKR",
+        "name": "팀켄",
+        "addedPrice": 129.01,
+        "addedAt": "2026-08-18T15:35:26.217Z",
+        "memo": ""
+      }
+    ]
+  },
+  {
+    "id": "양자",
+    "name": "양자",
+    "memo": "PLUS 미국양자컴퓨팅TOP10",
+    "stocks": [
+      {
+        "symbol": "IBM",
+        "name": "IBM",
+        "addedPrice": 230.8788,
+        "addedAt": "2026-08-18T15:35:26.217Z",
+        "memo": ""
+      },
+      {
+        "symbol": "IONQ",
+        "name": "아이온큐",
+        "addedPrice": 44.7201,
+        "addedAt": "2026-08-18T15:35:29.413Z",
+        "memo": ""
+      },
+      {
+        "symbol": "QUBT",
+        "name": "퀀텀 컴퓨팅",
+        "addedPrice": 8.585,
+        "addedAt": "2026-08-18T15:35:31.401Z",
+        "memo": ""
+      },
+      {
+        "symbol": "RGTI",
+        "name": "리게티 컴퓨팅",
+        "addedPrice": 17.7982,
+        "addedAt": "2026-08-18T15:35:31.827Z",
+        "memo": ""
+      }
+    ]
+  },
+  {
+    "id": "리튬2차전지",
+    "name": "리튬·2차전지",
+    "memo": "",
+    "stocks": [
+      {
+        "symbol": "RIO",
+        "name": "리오 틴토(ADR)",
+        "addedPrice": 96.49,
+        "addedAt": "2026-08-18T15:35:33.844Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ENS",
+        "name": "에너시스",
+        "addedPrice": 197.74,
+        "addedAt": "2026-08-18T15:35:35.821Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ALB",
+        "name": "알버말",
+        "addedPrice": 130.8,
+        "addedAt": "2026-08-18T15:35:36.251Z",
+        "memo": ""
+      },
+      {
+        "symbol": "FLNC",
+        "name": "플루언스 에너지",
+        "addedPrice": 11.76,
+        "addedAt": "2026-08-18T15:35:36.703Z",
+        "memo": ""
+      },
+      {
+        "symbol": "TSLA",
+        "name": "테슬라",
+        "addedPrice": 337.56,
+        "addedAt": "2026-08-18T15:35:36.703Z",
+        "memo": ""
+      }
+    ]
+  },
+  {
+    "id": "바이오",
+    "name": "바이오",
+    "memo": "KoAct 미국바이오헬스케어액티브",
+    "stocks": [
+      {
+        "symbol": "MRK",
+        "name": "머크",
+        "addedPrice": 136.112,
+        "addedAt": "2026-08-18T15:35:38.768Z",
+        "memo": ""
+      },
+      {
+        "symbol": "HALO",
+        "name": "할로자임 테라퓨틱스",
+        "addedPrice": 103.915,
+        "addedAt": "2026-08-18T15:35:39.139Z",
+        "memo": ""
+      },
+      {
+        "symbol": "GILD",
+        "name": "길리어드 사이언스",
+        "addedPrice": 143.13,
+        "addedAt": "2026-08-18T15:35:39.595Z",
+        "memo": ""
+      },
+      {
+        "symbol": "VRTX",
+        "name": "버텍스 파머슈티컬",
+        "addedPrice": 527.79,
+        "addedAt": "2026-08-18T15:35:40.049Z",
+        "memo": ""
+      },
+      {
+        "symbol": "AMGN",
+        "name": "암젠",
+        "addedPrice": 423.49,
+        "addedAt": "2026-08-18T15:35:40.500Z",
+        "memo": ""
+      },
+      {
+        "symbol": "RVMD",
+        "name": "레볼루션 메디신",
+        "addedPrice": 212.5,
+        "addedAt": "2026-08-18T15:35:42.509Z",
+        "memo": ""
+      },
+      {
+        "symbol": "BIIB",
+        "name": "바이오젠",
+        "addedPrice": 213,
+        "addedAt": "2026-08-18T15:35:42.947Z",
+        "memo": ""
+      },
+      {
+        "symbol": "NTRA",
+        "name": "나테라",
+        "addedPrice": 312.575,
+        "addedAt": "2026-08-18T15:35:43.405Z",
+        "memo": ""
+      },
+      {
+        "symbol": "MRNA",
+        "name": "모더나",
+        "addedPrice": 63.03,
+        "addedAt": "2026-08-18T15:35:45.407Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ALNY",
+        "name": "앨나일램 파머슈티컬스",
+        "addedPrice": 228.14,
+        "addedAt": "2026-08-18T15:35:47.402Z",
+        "memo": ""
+      },
+      {
+        "symbol": "BNTX",
+        "name": "바이오엔테크(ADR)",
+        "addedPrice": 92.01,
+        "addedAt": "2026-08-18T15:35:47.829Z",
+        "memo": ""
+      },
+      {
+        "symbol": "INCY",
+        "name": "인사이트",
+        "addedPrice": 124.36,
+        "addedAt": "2026-08-18T15:35:49.837Z",
+        "memo": ""
+      },
+      {
+        "symbol": "GMAB",
+        "name": "젠맵(ADR)",
+        "addedPrice": 32.77,
+        "addedAt": "2026-08-18T15:35:51.818Z",
+        "memo": ""
+      },
+      {
+        "symbol": "SMMT",
+        "name": "서밋 테라퓨틱스",
+        "addedPrice": 12.76,
+        "addedAt": "2026-08-18T15:35:52.243Z",
+        "memo": ""
+      }
+    ]
+  },
+  {
+    "id": "유럽방산",
+    "name": "유럽 방산",
+    "memo": "",
+    "stocks": [
+      {
+        "symbol": "RHM.DE",
+        "name": "라인메탈",
+        "addedPrice": null,
+        "addedAt": "2026-08-18T15:35:52.243Z",
+        "memo": ""
+      },
+      {
+        "symbol": "BA.L",
+        "name": "BAE 시스템스",
+        "addedPrice": null,
+        "addedAt": "2026-08-18T15:35:52.243Z",
+        "memo": ""
+      },
+      {
+        "symbol": "HO.PA",
+        "name": "탈레스",
+        "addedPrice": null,
+        "addedAt": "2026-08-18T15:35:52.243Z",
+        "memo": ""
+      },
+      {
+        "symbol": "LDO.MI",
+        "name": "레오나르도",
+        "addedPrice": null,
+        "addedAt": "2026-08-18T15:35:52.243Z",
+        "memo": ""
+      },
+      {
+        "symbol": "SAAB-B.ST",
+        "name": "사브",
+        "addedPrice": null,
+        "addedAt": "2026-08-18T15:35:52.243Z",
+        "memo": ""
+      },
+      {
+        "symbol": "AM.PA",
+        "name": "다쏘 항공",
+        "addedPrice": null,
+        "addedAt": "2026-08-18T15:35:52.243Z",
+        "memo": ""
+      },
+      {
+        "symbol": "KOG.OL",
+        "name": "콩스베르그",
+        "addedPrice": null,
+        "addedAt": "2026-08-18T15:35:52.243Z",
+        "memo": ""
+      },
+      {
+        "symbol": "HAG.DE",
+        "name": "헨솔트",
+        "addedPrice": null,
+        "addedAt": "2026-08-18T15:35:52.243Z",
+        "memo": ""
+      }
+    ]
+  },
+  {
+    "id": "지수ETF",
+    "name": "지수·ETF",
+    "memo": "",
+    "stocks": [
+      {
+        "symbol": "SPY",
+        "name": "S&P 500 SPDR ETF",
+        "addedPrice": 767.73,
+        "addedAt": "2026-08-18T15:35:52.697Z",
+        "memo": ""
+      },
+      {
+        "symbol": "QQQ",
+        "name": "QQQ 인베스코 ETF",
+        "addedPrice": 717.55,
+        "addedAt": "2026-08-18T15:35:54.708Z",
+        "memo": ""
+      },
+      {
+        "symbol": "EWY",
+        "name": "MSCI 한국 아이셰어즈 ETF",
+        "addedPrice": 171.77,
+        "addedAt": "2026-08-18T15:35:56.690Z",
+        "memo": ""
+      },
+      {
+        "symbol": "SOXX",
+        "name": "반도체 아이셰어즈 ETF",
+        "addedPrice": 527.48,
+        "addedAt": "2026-08-18T15:35:58.675Z",
+        "memo": ""
+      },
+      {
+        "symbol": "CHAT",
+        "name": "ROUNDHILL MEMORY",
+        "addedPrice": 89.1899,
+        "addedAt": "2026-08-18T15:36:00.652Z",
+        "memo": ""
+      },
+      {
+        "symbol": "XLU",
+        "name": "S&P 500 유틸리티 SPDR ETF",
+        "addedPrice": 44.42,
+        "addedAt": "2026-08-18T15:36:02.629Z",
+        "memo": ""
+      },
+      {
+        "symbol": "IGV",
+        "name": "소프트웨어 아이셰어즈 ETF",
+        "addedPrice": 102.1,
+        "addedAt": "2026-08-18T15:36:04.617Z",
+        "memo": ""
+      },
+      {
+        "symbol": "BOTZ",
+        "name": "로봇공학 및 인공지능 글로벌엑스 ETF",
+        "addedPrice": 36.6,
+        "addedAt": "2026-08-18T15:36:08.166Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ITA",
+        "name": "항공우주 및 방산주 아이셰어즈 ETF",
+        "addedPrice": 251.36,
+        "addedAt": "2026-08-18T15:36:08.596Z",
+        "memo": ""
+      },
+      {
+        "symbol": "IDRV",
+        "name": "자율주행 아이셰어즈 ETF",
+        "addedPrice": 36.44,
+        "addedAt": "2026-08-18T15:36:10.611Z",
+        "memo": ""
+      },
+      {
+        "symbol": "AMLP",
+        "name": "에너지 인프라주 알레리안 ETF",
+        "addedPrice": 55.295,
+        "addedAt": "2026-08-18T15:36:12.593Z",
+        "memo": ""
+      },
+      {
+        "symbol": "XLE",
+        "name": "에너지 SPDR ETF",
+        "addedPrice": 63.48,
+        "addedAt": "2026-08-18T15:36:13.017Z",
+        "memo": ""
+      },
+      {
+        "symbol": "IUSG",
+        "name": "미국 성장주 아이셰어즈 ETF",
+        "addedPrice": 191.035,
+        "addedAt": "2026-08-18T15:36:13.473Z",
+        "memo": ""
+      },
+      {
+        "symbol": "IUSV",
+        "name": "MSCI 미국 가치주 아이셰어즈 ETF",
+        "addedPrice": 114.825,
+        "addedAt": "2026-08-18T15:36:15.493Z",
+        "memo": ""
+      },
+      {
+        "symbol": "VYM",
+        "name": "고배당수익률 뱅가드 ETF",
+        "addedPrice": 165.625,
+        "addedAt": "2026-08-18T15:36:15.907Z",
+        "memo": ""
+      },
+      {
+        "symbol": "VIG",
+        "name": "미국 배당 성장주 뱅가드 ETF",
+        "addedPrice": 244.54,
+        "addedAt": "2026-08-18T15:36:16.340Z",
+        "memo": ""
+      },
+      {
+        "symbol": "VGT",
+        "name": "미국 IT 뱅가드 ETF",
+        "addedPrice": 119.6,
+        "addedAt": "2026-08-18T15:36:16.808Z",
+        "memo": ""
+      },
+      {
+        "symbol": "FDN",
+        "name": "인터넷 기업 퍼스트 트러스트 ETF",
+        "addedPrice": 285.13,
+        "addedAt": "2026-08-18T15:36:18.814Z",
+        "memo": ""
+      },
+      {
+        "symbol": "XLC",
+        "name": "통신 미디어 서비스 SPDR ETF",
+        "addedPrice": 110.975,
+        "addedAt": "2026-08-18T15:36:19.237Z",
+        "memo": ""
+      },
+      {
+        "symbol": "XBI",
+        "name": "S&P 바이오 SPDR ETF",
+        "addedPrice": 159.14,
+        "addedAt": "2026-08-18T15:36:19.695Z",
+        "memo": ""
+      },
+      {
+        "symbol": "XLV",
+        "name": "헬스케어 SPDR ETF",
+        "addedPrice": 169.92,
+        "addedAt": "2026-08-18T15:36:20.148Z",
+        "memo": ""
+      },
+      {
+        "symbol": "IBB",
+        "name": "바이오테크 아이셰어즈 ETF",
+        "addedPrice": 203.18,
+        "addedAt": "2026-08-18T15:36:20.591Z",
+        "memo": ""
+      },
+      {
+        "symbol": "IHI",
+        "name": "미국 의료기기 아이셰어즈 ETF",
+        "addedPrice": 55.83,
+        "addedAt": "2026-08-18T15:36:21.061Z",
+        "memo": ""
+      },
+      {
+        "symbol": "XLP",
+        "name": "미국 필수 소비재 SPDR ETF",
+        "addedPrice": 85.865,
+        "addedAt": "2026-08-18T15:36:21.517Z",
+        "memo": ""
+      },
+      {
+        "symbol": "XLY",
+        "name": "임의 소비재 SPDR ETF",
+        "addedPrice": 117.07,
+        "addedAt": "2026-08-18T15:36:23.520Z",
+        "memo": ""
+      },
+      {
+        "symbol": "XLF",
+        "name": "금융주 SPDR ETF",
+        "addedPrice": 57.785,
+        "addedAt": "2026-08-18T15:36:23.952Z",
+        "memo": ""
+      },
+      {
+        "symbol": "VNQ",
+        "name": "미국 부동산 뱅가드 ETF",
+        "addedPrice": 98.125,
+        "addedAt": "2026-08-18T15:36:24.407Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ITB",
+        "name": "미국 주택건설 아이셰어즈 ETF",
+        "addedPrice": 97.15,
+        "addedAt": "2026-08-18T15:36:26.388Z",
+        "memo": ""
+      },
+      {
+        "symbol": "PAVE",
+        "name": "미국 인프라 개발 글로벌엑스 ETF",
+        "addedPrice": 57.43,
+        "addedAt": "2026-08-18T15:36:28.371Z",
+        "memo": ""
+      },
+      {
+        "symbol": "XLI",
+        "name": "미국 산업재 SPDR ETF",
+        "addedPrice": 184.01,
+        "addedAt": "2026-08-18T15:36:30.356Z",
+        "memo": ""
+      },
+      {
+        "symbol": "XLB",
+        "name": "S&P 500 원자재 SPDR ETF",
+        "addedPrice": 51.865,
+        "addedAt": "2026-08-18T15:36:32.335Z",
+        "memo": ""
+      },
+      {
+        "symbol": "XME",
+        "name": "S&P 금속 및 광업주 SPDR ETF",
+        "addedPrice": 113.34,
+        "addedAt": "2026-08-18T15:36:34.344Z",
+        "memo": ""
+      },
+      {
+        "symbol": "HYG",
+        "name": "하이일드 회사채 아이셰어즈 ETF",
+        "addedPrice": 79.47,
+        "addedAt": "2026-08-18T15:36:36.323Z",
+        "memo": ""
+      }
+    ]
+  },
+  {
+    "id": "액티브테마",
+    "name": "액티브·테마",
+    "memo": "",
+    "stocks": [
+      {
+        "symbol": "ARKK",
+        "name": "이노베이션 액티브 아크 ETF",
+        "addedPrice": 79.4,
+        "addedAt": "2026-08-18T15:36:36.744Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ARKG",
+        "name": "유전공학 아크 ETF",
+        "addedPrice": 43.115,
+        "addedAt": "2026-08-18T15:36:37.198Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ARKW",
+        "name": "ARK NEXT GENERATION INTERNET",
+        "addedPrice": 149.29,
+        "addedAt": "2026-08-18T15:36:37.649Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ARKF",
+        "name": "ARK FINTECH INNOVATION",
+        "addedPrice": 42.7815,
+        "addedAt": "2026-08-18T15:36:38.099Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ARKQ",
+        "name": "자율주행 및 로봇공학 아크 ETF",
+        "addedPrice": 126.98,
+        "addedAt": "2026-08-18T15:36:38.556Z",
+        "memo": ""
+      },
+      {
+        "symbol": "LIT",
+        "name": "리튬 배터리 글로벌엑스 ETF",
+        "addedPrice": 73.97,
+        "addedAt": "2026-08-18T15:36:40.581Z",
+        "memo": ""
+      },
+      {
+        "symbol": "SKYY",
+        "name": "클라우드 컴퓨팅 퍼스트 트러스트 ETF",
+        "addedPrice": 161.685,
+        "addedAt": "2026-08-18T15:36:41.006Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ROBO",
+        "name": "로봇공학 엠플리파이 ETF",
+        "addedPrice": 81.995,
+        "addedAt": "2026-08-18T15:36:41.462Z",
+        "memo": ""
+      },
+      {
+        "symbol": "BLOK",
+        "name": "블록체인 엠플리파이 ETF",
+        "addedPrice": 59.585,
+        "addedAt": "2026-08-18T15:36:41.915Z",
+        "memo": ""
+      },
+      {
+        "symbol": "BITQ",
+        "name": "가상화폐 산업 혁신 비트와이즈 ETF",
+        "addedPrice": 22.695,
+        "addedAt": "2026-08-18T15:36:42.370Z",
+        "memo": ""
+      },
+      {
+        "symbol": "ARKX",
+        "name": "우주 혁신 아크 ETF",
+        "addedPrice": 34.01,
+        "addedAt": "2026-08-18T15:36:42.841Z",
+        "memo": ""
+      },
+      {
+        "symbol": "VNQI",
+        "name": "글로벌 부동산 뱅가드 ETF",
+        "addedPrice": 45.0711,
+        "addedAt": "2026-08-18T15:36:44.829Z",
+        "memo": ""
+      },
+      {
+        "symbol": "QCLN",
+        "name": "나스닥 청정 에너지 퍼스트 트러스트 ETF",
+        "addedPrice": 50.71,
+        "addedAt": "2026-08-18T15:36:45.261Z",
+        "memo": ""
+      },
+      {
+        "symbol": "PHO",
+        "name": "미국 수자원 인베스코 ETF",
+        "addedPrice": 71.115,
+        "addedAt": "2026-08-18T15:36:45.730Z",
+        "memo": ""
+      },
+      {
+        "symbol": "MSOS",
+        "name": "미국 대마초 어드바이저셰어즈 ETF",
+        "addedPrice": 4.465,
+        "addedAt": "2026-08-18T15:36:46.177Z",
+        "memo": ""
+      }
+    ]
+  }
+]
