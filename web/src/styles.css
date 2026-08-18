@@ -3523,3 +3523,25 @@ body {
 .pr-short { color: var(--muted); opacity: 0.8; }
 .pr-value { font-size: 14px; font-variant-numeric: tabular-nums; }
 .pr-note { font-size: 11px; color: var(--muted); margin-left: auto; }
+
+/* 목표주가 — 의견 변경이 맨 위, 컨센서스가 그 다음 */
+.op-changes { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.op-change {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px; border-radius: 8px; font-size: 13px;
+  border-left: 3px solid transparent;
+}
+.op-change.up { background: rgba(214, 48, 49, 0.08); border-left-color: #d63031; }
+.op-change.down { background: rgba(9, 102, 194, 0.08); border-left-color: #0966c2; }
+.op-arrow { font-weight: 600; font-size: 12px; }
+.op-change.up .op-arrow { color: #d63031; }
+.op-change.down .op-arrow { color: #0966c2; }
+.op-goal { font-variant-numeric: tabular-nums; }
+
+.op-consensus { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.op-box {
+  flex: 1 1 130px; display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+}
+.op-label { font-size: 11px; color: var(--muted); }
+.op-big { font-size: 18px; font-variant-numeric: tabular-nums; }

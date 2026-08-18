@@ -331,6 +331,13 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                 <th title="최근 3일 대차잔고 추세 — 줄어야 좋다">대차</th>
                 <th title="최근 분기 영업이익 증가">영익</th>
                 <th title="속한 업종이 시장 대비 강한가">섹터</th>
+                <SortableTh
+                  columnKey="upside"
+                  label="목표가"
+                  accessor={(r: TrackedStock) => r.upside ?? -999}
+                  sort={sort}
+                />
+                <th title="최근 60일 증권사 의견 변경 — 괄호는 커버 증권사 수">의견</th>
                 <th></th>
               </tr>
             </thead>
@@ -407,6 +414,21 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                   <td>{trendMark(r.lendingTrend, true)}</td>
                   <td>{mark(r.profitUp)}</td>
                   <td>{mark(r.sectorStrong)}</td>
+                  {/* 목표가는 금액이 아니라 남은 폭으로 — 금액은 종목마다 자릿수가 달라 못 견준다 */}
+                  <td className={r.upside == null ? "" : r.upside > 0 ? "positive" : "negative"}>
+                    {r.upside == null ? "-" : `${r.upside > 0 ? "+" : ""}${r.upside.toFixed(0)}%`}
+                  </td>
+                  <td>
+                    {r.opinionMove == null ? (
+                      "-"
+                    ) : (
+                      <span className={r.opinionMove > 0 ? "positive" : r.opinionMove < 0 ? "negative" : ""}>
+                        {r.opinionMove > 0 ? "▲상향" : r.opinionMove < 0 ? "▼하향" : "유지"}
+                        {/* 한 곳뿐이면 컨센서스가 아니다 — 세어서 보여 준다 */}
+                        <span className="pt-n"> ({r.brokerCount ?? 0})</span>
+                      </span>
+                    )}
+                  </td>
                   <td>
                     <button
                       className="row-del-btn"

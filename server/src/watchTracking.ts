@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { opinionBrief } from "./analystOpinion.js";
 import { evaluateSignal } from "./signalLight.js";
 import { listWatchlist, type WatchItem } from "./watchlist.js";
 
@@ -42,6 +43,12 @@ export interface TrackedStock extends WatchItem {
   /** 위 조건 중 몇 개를 만족했나 — 수익률 앞에 세워 한눈에 보게 */
   passCount: number;
   passTotal: number;
+  /** 목표가(컨센서스 중앙값)까지 남은 폭 % — 한국투자증권 */
+  upside: number | null;
+  /** 최근 60일 의견 변경: +1 상향, -1 하향, 0 없음 */
+  opinionMove: number | null;
+  /** 커버하는 증권사 수 — 1곳이면 컨센서스가 아니다 */
+  brokerCount: number | null;
   error: string | null;
 }
 
@@ -94,6 +101,9 @@ async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedS
     sectorStrong: null,
     passCount: 0,
     passTotal: 0,
+    upside: null,
+    opinionMove: null,
+    brokerCount: null,
     error: null,
   };
 
@@ -201,6 +211,17 @@ async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedS
   }
 
   /*
+   * 증권사 목표주가 (한국투자증권). 키가 없으면 null 을 돌려주고 조용히 넘어간다 —
+   * 이 한 칸 때문에 표 전체가 멈추면 안 된다. 종목별 6시간 캐시가 안에 있다.
+   */
+  const brief = await opinionBrief(item.code, base.price || null);
+  if (brief) {
+    base.upside = brief.upside;
+    base.opinionMove = brief.recentMove;
+    base.brokerCount = brief.brokerCount;
+  }
+
+  /*
    * 조건충족수 — 이 표의 요약이다.
    *
    * 열두 칸을 가로로 훑으며 세는 건 사람이 할 일이 아니다. 판단 못 한 항목(null)은
@@ -220,6 +241,10 @@ async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedS
     base.lendingTrend === null ? null : base.lendingTrend < 0,
     base.profitUp,
     base.sectorStrong,
+    // 목표가까지 10% 이상 남았나 — 커버하는 곳이 없으면 판단하지 않는다(null)
+    base.upside === null ? null : base.upside >= 10,
+    // 최근 60일 안에 의견이 내려간 적 없나. 상향은 가점, 하향은 감점
+    base.opinionMove === null ? null : base.opinionMove >= 0,
   ];
   base.passTotal = checks.filter((c) => c !== null).length;
   base.passCount = checks.filter((c) => c === true).length;

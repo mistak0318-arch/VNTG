@@ -40,3 +40,6 @@ server/data/*
 data-backup/
 server/data/*.backup-*.json
 server/data/*.mine.json
+
+# 한투 접근토큰 — 자격증명이다. 절대 올리지 않는다
+server/data/hantooToken.json

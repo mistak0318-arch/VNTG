@@ -226,7 +226,10 @@
       "Bash(curl -s \"http://localhost:4000/api/market/lending/005930?days=10\")",
       "Bash(time curl -s \"http://localhost:4000/api/watchlist/tracking?force=1\" -o /dev/null)",
       "Bash(cd \"K:/0000 3740 프로젝트 \\(경제적자유\\)/00. 주식/2 AI 프롬프트/260810_클로드작업/web/src\" && grep -rln \"전일比 거래량\" . && echo --- && grep -rn \"일봉\\\\|daily\\\\|ka10081\" ../../server/src/routes* 2>/dev/null | head -5)",
-      "Read(//c/Users/Jaemin Kim/Downloads/**)"
+      "Read(//c/Users/Jaemin Kim/Downloads/**)",
+      "Bash(taskkill //PID 37920 //F)",
+      "Bash(taskkill //PID 39772 //F)",
+      "Bash(taskkill //F //IM node.exe)"
     ]
   }
 }

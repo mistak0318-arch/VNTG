@@ -8,6 +8,7 @@ import { FinancePanel } from "./FinancePanel";
 import { InvestorTrendTable } from "./InvestorTrendTable";
 import { NewsDisclosurePanel } from "./NewsDisclosurePanel";
 import { PriceHeader } from "./PriceHeader";
+import { OpinionPanel } from "./OpinionPanel";
 import { useLive } from "../useLive";
 import { SectorMoodPanel } from "./SectorMoodPanel";
 import { SignalPanel } from "./SignalLight";
@@ -42,7 +43,7 @@ const CUR_PRICE_KEYS = ["cur_prc"];
 const INVESTOR_LIST_KEYS = ["stk_invsr_orgn_chart"];
 
 /** 종목 상세 상단 가로 탭. 기능이 늘어나면 여기에 항목을 추가한다. */
-type DetailTab = "summary" | "notes" | "sector" | "finance" | "chart" | "investor" | "supply" | "feed" | "raw";
+type DetailTab = "summary" | "opinion" | "notes" | "sector" | "finance" | "chart" | "investor" | "supply" | "feed" | "raw";
 
 /**
  * 탭 순서는 "실제 매매에 바로 쓰는 것"이 앞이다.
@@ -51,6 +52,7 @@ type DetailTab = "summary" | "notes" | "sector" | "finance" | "chart" | "investo
 const DETAIL_TABS: { key: DetailTab; label: string }[] = [
   { key: "chart", label: "종합" },
   { key: "investor", label: "투자자 수급" },
+  { key: "opinion", label: "목표주가" },
   { key: "supply", label: "외국인·공매도·대차" },
   { key: "notes", label: "메모" },
   { key: "sector", label: "업종·테마" },
@@ -213,6 +215,8 @@ export function StockDetail({
             </nav>
 
             {detailTab === "summary" && <CompanySnapshot info={info} returns={returns} />}
+
+            {detailTab === "opinion" && <OpinionPanel code={code} />}
 
             {detailTab === "notes" && (
               <StockNotes

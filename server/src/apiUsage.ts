@@ -13,6 +13,7 @@ const DATA_FILE = resolve(__dirname, "..", "data", "apiUsage.json");
 
 export type ApiProvider =
   | "kiwoom"
+  | "hantoo"
   | "dart"
   | "naver"
   | "yahoo"
@@ -132,6 +133,11 @@ export const DAILY_LIMITS: Record<ApiProvider, { label: string; limit: number | 
     label: "키움 REST API",
     limit: null,
     note: "일일 총량 제한은 없으나 TR당 초당 5회 제한이 있습니다",
+  },
+  hantoo: {
+    label: "한국투자증권 OpenAPI",
+    limit: null,
+    note: "키움에 없는 목표주가·해외주식·선물옵션에만 씁니다. 접근토큰은 하루 한 번 발급 원칙이라 파일에 캐싱합니다",
   },
   dart: {
     label: "DART OpenAPI",

@@ -125,6 +125,7 @@ export const api = {
   stockInfo: (code: string) => getJson(`/api/market/info/${code}`),
   quote: (code: string) => getJson(`/api/market/quote/${code}`),
   dailyChart: (code: string) => getJson(`/api/market/chart/daily/${code}`),
+  opinion: (code: string) => getJson<OpinionSummary>(`/api/market/opinion/${code}`),
   weeklyChart: (code: string) => getJson(`/api/market/chart/weekly/${code}`),
   monthlyChart: (code: string) => getJson(`/api/market/chart/monthly/${code}`),
   minuteChart: (code: string, tic: string) =>
@@ -478,6 +479,38 @@ export const api = {
     getJson<{ items: StockRow[] }>(`/api/overview/sector/${market}/${code}/stocks`),
 };
 
+/** 증권사 투자의견 한 건 (한국투자증권) */
+export interface OpinionItem {
+  date: string;
+  broker: string;
+  opinionRaw: string;
+  stance: "매수" | "중립" | "매도" | "기타";
+  prevStance: "매수" | "중립" | "매도" | "기타";
+  /** 직전 대비 상향(+1)·하향(-1)·유지(0) */
+  move: number;
+  goalPrice: number | null;
+  prevGoalPrice: number | null;
+  /** 같은 증권사의 직전 목표가 대비 % */
+  goalChange: number | null;
+}
+
+export interface OpinionSummary {
+  code: string;
+  items: OpinionItem[];
+  brokerCount: number;
+  goalMedian: number | null;
+  goalMin: number | null;
+  goalMax: number | null;
+  upside: number | null;
+  price: number | null;
+  stanceCount: { 매수: number; 중립: number; 매도: number; 기타: number };
+  goalTrend: number | null;
+  truncated: boolean;
+  upgrades: OpinionItem[];
+  downgrades: OpinionItem[];
+  fetchedAt: string;
+}
+
 export interface WatchItem {
   code: string;
   name: string;
@@ -525,6 +558,11 @@ export interface TrackedStock extends WatchItem {
   /** 조건 충족 수 / 판단 가능한 수 */
   passCount: number;
   passTotal: number;
+  /** 목표가(컨센서스 중앙값)까지 남은 폭 % */
+  upside: number | null;
+  /** 최근 60일 의견 변경: +1 상향, -1 하향, 0 없음 */
+  opinionMove: number | null;
+  brokerCount: number | null;
   inst20: number;
   trendPass: boolean | null;
   ma5: number | null;

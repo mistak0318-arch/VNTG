@@ -2,6 +2,8 @@ import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { getSectorMood } from "../sectorMood.js";
 import { searchStocks } from "../stockListCache.js";
+import { analystOpinion } from "../analystOpinion.js";
+import { hantooReady } from "../hantooClient.js";
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
@@ -369,6 +371,36 @@ export function createMarketRouter(client: KiwoomClient): Router {
         upd_stkpc_tp: "1",
       });
       res.json(data);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 증권사 목표주가·투자의견 (한국투자증권). 키움에 없는 값이다.
+   *
+   * 현재가는 여기서 키움으로 받아 넘긴다 — 한투가 주는 건 의견을 낸 날의 전일종가라
+   * 그걸로 괴리율을 재면 며칠 묵은 값이 나온다.
+   */
+  router.get("/opinion/:code", async (req, res, next) => {
+    try {
+      if (!hantooReady()) {
+        res.status(503).json({ error: "한국투자증권 API 키가 설정되지 않았습니다" });
+        return;
+      }
+      let price: number | null = null;
+      try {
+        const { data } = await client.request<{ stk_prpr?: string }>(
+          STKINFO_RESOURCE,
+          "ka10001",
+          { stk_cd: req.params.code },
+        );
+        const p = Math.abs(Number(data.stk_prpr));
+        if (Number.isFinite(p) && p > 0) price = p;
+      } catch {
+        // 현재가를 못 받아도 의견은 보여 준다 — 괴리율만 묵은 값이 된다
+      }
+      res.json(await analystOpinion(req.params.code, price));
     } catch (err) {
       next(err);
     }
