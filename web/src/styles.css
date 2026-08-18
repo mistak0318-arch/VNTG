@@ -3652,3 +3652,7 @@ body {
 @keyframes rj-turn { to { transform: rotate(360deg); } }
 .rj-track { height: 3px; background: var(--border); border-radius: 2px; margin-top: 6px; overflow: hidden; }
 .rj-track i { display: block; height: 100%; background: var(--blue); transition: width 0.3s ease; }
+
+/* 자주 쓰는 메뉴 — 그룹을 무시하고 맨 위에 */
+.nav-fav { --accent: #f5c542; }
+.nav-fav .nav-group-label::before { content: "★ "; }

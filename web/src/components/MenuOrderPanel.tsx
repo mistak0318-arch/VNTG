@@ -112,6 +112,14 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
     save({ ...prefs, hidden });
   }
 
+  /** 자주 쓰는 메뉴에 올리고 내린다. 순서는 올린 순서다 */
+  function toggleFav(key: string) {
+    const favorites = prefs.favorites.includes(key)
+      ? prefs.favorites.filter((k) => k !== key)
+      : [...prefs.favorites, key];
+    save({ ...prefs, favorites });
+  }
+
   function addGroup() {
     const name = newGroup.trim();
     if (!name || groups.includes(name)) return;
@@ -122,6 +130,7 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
   const dirty =
     prefs.order.length > 0 ||
     prefs.hidden.length > 0 ||
+    prefs.favorites.length > 0 ||
     Object.keys(prefs.labels).length > 0 ||
     Object.keys(prefs.groupOf).length > 0 ||
     prefs.extraGroups.length > 0;
@@ -243,6 +252,17 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
                     >
                       {hidden ? "숨김" : "표시"}
                     </button>
+                    {/*
+                      자주 쓰는 메뉴로 올리기. 올려도 원래 자리에서 사라지지 않는다 —
+                      찾을 때 "여기 있었는데" 하고 헤매면 안 된다.
+                    */}
+                    <button
+                      className={`filter-btn${prefs.favorites.includes(it.key) ? " active" : ""}`}
+                      onClick={() => toggleFav(it.key)}
+                      title="맨 위 「자주 쓰는 메뉴」에 올립니다"
+                    >
+                      {prefs.favorites.includes(it.key) ? "★" : "☆"}
+                    </button>
                   </div>
                 );
               })}
@@ -264,7 +284,7 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
         <span className="tg-ctl-hint">만든 뒤 메뉴를 끌어다 놓으세요</span>
         <button
           className="filter-btn danger"
-          onClick={() => save({ order: [], hidden: [], labels: {}, groupOf: {}, extraGroups: [] })}
+          onClick={() => save({ order: [], hidden: [], labels: {}, groupOf: {}, extraGroups: [], favorites: [] })}
           disabled={!dirty}
         >
           기본으로 되돌리기

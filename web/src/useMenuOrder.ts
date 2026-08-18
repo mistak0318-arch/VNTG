@@ -31,9 +31,17 @@ export interface MenuPrefs {
   groupOf: Record<string, string>;
   /** 내가 만든 그룹 이름들 — 기본 그룹 외에 더 만들 수 있다 */
   extraGroups: string[];
+  /**
+   * 자주 쓰는 메뉴.
+   *
+   * 메뉴가 스물다섯을 넘으면서 매번 목록을 훑게 됐다. 순서를 바꿔 봐야 자주 쓰는 게
+   * 대여섯인데 그것들이 그룹마다 흩어져 있어 소용이 없었다.
+   * **그룹을 무시하고 맨 위에 따로** 세운다. 순서는 여기 적힌 순서다.
+   */
+  favorites: string[];
 }
 
-const EMPTY: MenuPrefs = { order: [], hidden: [], labels: {}, groupOf: {}, extraGroups: [] };
+const EMPTY: MenuPrefs = { order: [], hidden: [], labels: {}, groupOf: {}, extraGroups: [], favorites: [] };
 
 function read(): MenuPrefs {
   try {
@@ -46,6 +54,7 @@ function read(): MenuPrefs {
       labels: raw.labels && typeof raw.labels === "object" ? raw.labels : {},
       groupOf: raw.groupOf && typeof raw.groupOf === "object" ? raw.groupOf : {},
       extraGroups: Array.isArray(raw.extraGroups) ? raw.extraGroups.map(String) : [],
+      favorites: Array.isArray(raw.favorites) ? raw.favorites.map(String) : [],
     };
   } catch {
     return EMPTY;

@@ -177,6 +177,18 @@ export default function App() {
     }))
     .filter((g) => g.items.length > 0);
 
+  /*
+   * 자주 쓰는 메뉴.
+   *
+   * 메뉴가 스물다섯을 넘으면서 매번 목록을 훑게 됐다. 순서를 바꿔 봐야 자주 쓰는 건
+   * 대여섯인데 그것들이 그룹마다 흩어져 있어 소용이 없었다.
+   * **그룹을 무시하고 맨 위에** 세운다 — 아래 원래 자리에도 그대로 남는다(찾을 때 헷갈리면 안 된다).
+   */
+  const favorites = prefs.favorites
+    .map((key) => flat.find((i) => i.key === key))
+    .filter((i): i is (typeof flat)[number] => Boolean(i))
+    .map((i) => ({ ...i, label: label(i.key, i.label) }));
+
   // 주소창에 이상한 값이 들어와도 화면이 비지 않도록 방어
   const tab = (VALID_TABS.has(route.tab as Tab) ? route.tab : "overview") as Tab;
   const selected = route.stock;
@@ -210,6 +222,21 @@ export default function App() {
       <aside className={`sidebar${navOpen ? " open" : ""}`}>
         <div className="sidebar-brand">VNTG HTS</div>
         <nav className="sidebar-nav">
+          {favorites.length > 0 && (
+            <div className="nav-group nav-fav">
+              <div className="nav-group-label">자주 쓰는 메뉴</div>
+              {favorites.map((item) => (
+                <button
+                  key={`fav-${item.key}`}
+                  className={`nav-item${tab === item.key ? " active" : ""}`}
+                  onClick={() => go(item.key)}
+                >
+                  <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
           {menu.map((g) => (
             <div
               className="nav-group"
