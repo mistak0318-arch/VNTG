@@ -132,9 +132,32 @@ async function fetchIndices(client: KiwoomClient): Promise<IndexCard[]> {
     });
   }
 
-  // 코스피200 옆에 선물을 붙인다. 실패해도 나머지 지수는 그대로 나온다
+  /*
+   * 선물을 **네 번째 카드**로 세운다.
+   *
+   * 처음엔 코스피200 밑에 한 줄로 붙였는데 그게 틀렸다 — 선물을 보는 이유는 장중에
+   * 현물보다 먼저 움직이는 걸 보려는 것인데, 한 줄짜리로는 **차트도 수급도 못 본다.**
+   * 키움 HTS 가 코스피·코스닥·코스피200 과 나란히 같은 크기로 놓는 이유가 그것이다.
+   */
   const k200 = results.find((r) => r.code === "201");
-  if (k200) k200.futures = await kospi200Futures(k200.price);
+  const fut = await kospi200Futures(k200?.price ?? null);
+  if (fut && fut.price !== null) {
+    results.push({
+      code: "F",
+      name: "선물",
+      price: fut.price,
+      change: fut.change ?? 0,
+      changeRate: fut.changeRate ?? 0,
+      sparkline: fut.sparkline,
+      // 선물엔 종목등락현황이 없다 — 지수가 아니라 하나의 계약이다
+      upperLimit: 0,
+      rising: 0,
+      flat: 0,
+      falling: 0,
+      lowerLimit: 0,
+      futures: fut,
+    });
+  }
 
   return results;
 }

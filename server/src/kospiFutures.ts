@@ -13,6 +13,8 @@ import { hantooGet, hantooReady } from "./hantooClient.js";
 
 const BOARD = "/uapi/domestic-futureoption/v1/quotations/display-board-futures";
 const BOARD_TR = "FHPIF05030200";
+const CHART = "/uapi/domestic-futureoption/v1/quotations/inquire-time-fuopchartprice";
+const CHART_TR = "FHKIF03020200";
 
 export interface FuturesQuote {
   /** 종목코드 (예: A01609) — 월물마다 바뀐다 */
@@ -29,6 +31,45 @@ export interface FuturesQuote {
   volume: number | null;
   /** 선물 − 현물. 음수면 백워데이션이고 프로그램 매도가 붙기 쉽다 */
   basis: number | null;
+  /** 장중 흐름 — 코스피·코스닥 카드와 같은 모양으로 그리려면 이게 있어야 한다 */
+  sparkline: number[];
+}
+
+/**
+ * 장중 흐름.
+ *
+ * 선물을 코스피200 밑에 한 줄로 붙였더니 **차트도 수급도 볼 수가 없었다.** 선물을 보는
+ * 이유가 장중에 현물보다 먼저 움직이는 걸 보려는 것인데, 숫자만 있으면 그 흐름이 안 보인다.
+ * 그래서 코스피·코스닥과 **같은 카드**로 만들고 스파크라인을 붙인다.
+ *
+ * 분봉은 날짜를 반드시 줘야 한다 — 비워 두면 `INVALID FID_INPUT_DATE_1` 이 난다.
+ */
+async function futuresSparkline(code: string): Promise<number[]> {
+  try {
+    const now = new Date();
+    const d = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+    const body = await hantooGet<{ output2?: Record<string, unknown>[] }>(
+      CHART,
+      CHART_TR,
+      {
+        FID_COND_MRKT_DIV_CODE: "F",
+        FID_INPUT_ISCD: code,
+        FID_HOUR_CLS_CODE: "60", // 60초봉
+        FID_PW_DATA_INCU_YN: "Y",
+        FID_FAKE_TICK_INCU_YN: "N",
+        FID_INPUT_DATE_1: d,
+        FID_INPUT_HOUR_1: "160000",
+      },
+      "코스피200 선물",
+    );
+    // 최신순으로 오므로 뒤집어 시간순으로 만든다
+    return (body.output2 ?? [])
+      .map((r) => Number(r.futs_prpr))
+      .filter((n) => Number.isFinite(n) && n > 0)
+      .reverse();
+  } catch {
+    return [];
+  }
 }
 
 function num(v: unknown): number | null {
@@ -80,6 +121,7 @@ export async function kospi200Futures(spot?: number | null): Promise<FuturesQuot
       openInterest: num(o.hts_otst_stpl_qty),
       volume: num(o.acml_vol),
       basis: spot != null && spot > 0 ? price - spot : null,
+      sparkline: await futuresSparkline(code),
     };
   } catch {
     // 선물 하나 때문에 대시보드가 멈추면 안 된다
