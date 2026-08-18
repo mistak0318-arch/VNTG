@@ -236,7 +236,16 @@
       "Bash(node scripts/seed-us-watch-2.mjs --write)",
       "Bash(curl -s --max-time 300 http://localhost:4000/api/us-watch -o us2.json)",
       "Bash(curl -s --max-time 550 http://localhost:4000/api/us-watch -o us2.json)",
-      "Bash(cd \"K:/0000 3740 프로젝트 \\(경제적자유\\)/00. 주식/2 AI 프롬프트/260810_클로드작업/web/src\" && grep -rn \"keyword\\\\|disclosure\" components/KeywordAlertPanel.tsx | grep -i \"telegram\\\\|방\\\\|채널\" | head -3; cd ../.. && grep -rn '\"disclosure\"' web/src/components/*.tsx | head -2)"
+      "Bash(cd \"K:/0000 3740 프로젝트 \\(경제적자유\\)/00. 주식/2 AI 프롬프트/260810_클로드작업/web/src\" && grep -rn \"keyword\\\\|disclosure\" components/KeywordAlertPanel.tsx | grep -i \"telegram\\\\|방\\\\|채널\" | head -3; cd ../.. && grep -rn '\"disclosure\"' web/src/components/*.tsx | head -2)",
+      "Bash(curl -s --max-time 8 -o /dev/null -w \"health %{http_code}\\\\n\" http://localhost:4000/api/health)",
+      "Bash(netstat -ano)",
+      "Bash(curl -s --max-time 120 \"http://localhost:4000/api/watchlist/tracking\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/42e00671-3282-40e1-a05a-90181fec3c36/scratchpad/wt.json\")",
+      "Bash(echo \"rm=$?\")",
+      "Bash(timeout 40 git ls-files server/data/)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(timeout 60 git rm --cached server/data/usWatchlist.json -q)",
+      "Bash(timeout 30 git ls-files server/data/)",
+      "Bash(curl -s --max-time 60 http://localhost:4000/api/us-watch -o u3.json)"
     ]
   }
 }

@@ -394,7 +394,7 @@ const EMPTY_EXTRA = {
   source: "yahoo" as const,
 };
 
-export async function evaluateGroups(force = false): Promise<UsWatchResult> {
+async function buildGroups(force: boolean): Promise<UsWatchResult> {
   const groups = await readAll();
   const symbols = [...new Set(groups.flatMap((g) => g.stocks.map((s) => s.symbol)))];
 
@@ -480,6 +480,85 @@ export async function evaluateGroups(force = false): Promise<UsWatchResult> {
     quotedAt: times.length > 0 ? Math.max(...times) : null,
     fetchedAt: Date.now(),
   };
+}
+
+/*
+ * ─────────────────────────────────────────────────────────────────────────
+ * 캐시 — 이게 없어서 화면이 17초·71초·37초씩 걸렸다.
+ *
+ * 원인이 둘 겹쳤다.
+ *
+ *   1) **캐시가 아예 없었다.** 메뉴에 들어갈 때마다 163종목을 처음부터 다 받았다.
+ *      한투는 초당 2.5건이라 10종목씩 14묶음이면 그것만 6초, 야후 32종목이 더 붙는다.
+ *   2) **그게 겹쳐서 쌓였다.** 5초마다 자동 갱신이 도는데 한 바퀴가 6초 넘게 걸리니,
+ *      끝나기 전에 다음 것이 또 들어와 유량 대기줄에 줄줄이 밀렸다. 두 번째 요청이
+ *      71초가 된 이유다 — 앞의 것들이 다 빠질 때까지 기다린 것이다.
+ *
+ * 그래서 관심종목 표(watchTracking)와 같은 방식으로 바꾼다.
+ *
+ *   · **낡은 값이라도 먼저 준다** — 화면은 기다리지 않는다
+ *   · **한 번에 한 바퀴만 돈다** — 이미 돌고 있으면 새로 시작하지 않는다
+ *   · **디스크에 남긴다** — 서버를 재시작해도 처음부터 다시 받지 않는다
+ */
+
+const CACHE_FILE = join(DATA_DIR, "usWatchCache.json");
+/*
+ * 이보다 오래되면 뒤에서 새로 받는다.
+ *
+ * 163종목이면 한 바퀴가 6~8초다(한투 초당 2.5건이 한계). 그보다 짧게 잡아 봐야
+ * 한 번에 한 바퀴만 도니 의미가 없고, 길게 잡으면 장중에 값이 늙는다. 딱 그 언저리로 둔다.
+ */
+const FRESH_MS = 8_000;
+
+let shot: { at: number; data: UsWatchResult } | null = null;
+let building: Promise<UsWatchResult> | null = null;
+
+async function loadCache(): Promise<void> {
+  if (shot) return;
+  try {
+    const raw = JSON.parse(await readFile(CACHE_FILE, "utf-8")) as { at: number; data: UsWatchResult };
+    if (raw?.data?.groups) shot = raw;
+  } catch {
+    /* 없으면 처음부터 받는다 */
+  }
+}
+
+function rebuild(force: boolean): Promise<UsWatchResult> {
+  if (building) return building;
+  building = buildGroups(force)
+    .then(async (data) => {
+      shot = { at: Date.now(), data };
+      await mkdir(DATA_DIR, { recursive: true }).catch(() => undefined);
+      await writeFile(CACHE_FILE, JSON.stringify(shot), "utf-8").catch(() => undefined);
+      return data;
+    })
+    .finally(() => {
+      building = null;
+    });
+  return building;
+}
+
+export async function evaluateGroups(force = false): Promise<UsWatchResult> {
+  await loadCache();
+
+  // 새로고침 버튼을 누른 건 기다려 줘야 한다 — 사용자가 방금 시킨 일이다
+  if (force) return rebuild(true);
+
+  if (shot) {
+    // 낡았으면 뒤에서 새로 받되, **기다리지 않고** 지금 있는 걸 준다
+    if (Date.now() - shot.at > FRESH_MS) void rebuild(false).catch(() => undefined);
+    return shot.data;
+  }
+  // 처음 한 번은 어쩔 수 없이 기다린다
+  return rebuild(false);
+}
+
+/**
+ * 종목을 넣거나 뺀 뒤에는 캐시를 버려야 한다 —
+ * 안 그러면 방금 담은 종목이 20초 동안 화면에 안 뜬다.
+ */
+export function invalidateUsCache(): void {
+  shot = null;
 }
 
 /** 지금 가격 하나만 — 담을 때 편입가를 채우려고 */

@@ -3,6 +3,7 @@ import {
   addGroup,
   addStock,
   evaluateGroups,
+  invalidateUsCache,
   listGroups,
   quoteSymbol,
   removeGroup,
@@ -59,6 +60,8 @@ export function createUsWatchRouter(): Router {
         return;
       }
       await addGroup(name, String(req.body?.memo ?? ""));
+      // 방금 고쳤으니 캐시를 버린다 — 안 그러면 담은 종목이 한동안 안 뜬다
+      invalidateUsCache();
       res.json(await evaluateGroups());
     } catch (err) {
       next(err);
@@ -68,6 +71,8 @@ export function createUsWatchRouter(): Router {
   router.patch("/groups/:id", async (req, res, next) => {
     try {
       await updateGroup(req.params.id, req.body ?? {});
+      // 방금 고쳤으니 캐시를 버린다 — 안 그러면 담은 종목이 한동안 안 뜬다
+      invalidateUsCache();
       res.json(await evaluateGroups());
     } catch (err) {
       next(err);
@@ -77,6 +82,8 @@ export function createUsWatchRouter(): Router {
   router.delete("/groups/:id", async (req, res, next) => {
     try {
       await removeGroup(req.params.id);
+      // 방금 고쳤으니 캐시를 버린다 — 안 그러면 담은 종목이 한동안 안 뜬다
+      invalidateUsCache();
       res.json(await evaluateGroups());
     } catch (err) {
       next(err);
@@ -86,6 +93,8 @@ export function createUsWatchRouter(): Router {
   router.put("/groups/order", async (req, res, next) => {
     try {
       await reorderGroups(Array.isArray(req.body?.ids) ? req.body.ids.map(String) : []);
+      // 방금 고쳤으니 캐시를 버린다 — 안 그러면 담은 종목이 한동안 안 뜬다
+      invalidateUsCache();
       res.json(await evaluateGroups());
     } catch (err) {
       next(err);
@@ -98,6 +107,8 @@ export function createUsWatchRouter(): Router {
         req.params.id,
         Array.isArray(req.body?.symbols) ? req.body.symbols.map(String) : [],
       );
+      // 방금 고쳤으니 캐시를 버린다 — 안 그러면 담은 종목이 한동안 안 뜬다
+      invalidateUsCache();
       res.json(await evaluateGroups());
     } catch (err) {
       next(err);
@@ -123,6 +134,8 @@ export function createUsWatchRouter(): Router {
         addedPrice,
         memo: String(req.body?.memo ?? ""),
       });
+      // 방금 고쳤으니 캐시를 버린다 — 안 그러면 담은 종목이 한동안 안 뜬다
+      invalidateUsCache();
       res.json(await evaluateGroups());
     } catch (err) {
       next(err);
@@ -132,6 +145,8 @@ export function createUsWatchRouter(): Router {
   router.patch("/groups/:id/stocks/:symbol", async (req, res, next) => {
     try {
       await updateStock(req.params.id, req.params.symbol, req.body ?? {});
+      // 방금 고쳤으니 캐시를 버린다 — 안 그러면 담은 종목이 한동안 안 뜬다
+      invalidateUsCache();
       res.json(await evaluateGroups());
     } catch (err) {
       next(err);
@@ -141,6 +156,8 @@ export function createUsWatchRouter(): Router {
   router.delete("/groups/:id/stocks/:symbol", async (req, res, next) => {
     try {
       await removeStock(req.params.id, req.params.symbol);
+      // 방금 고쳤으니 캐시를 버린다 — 안 그러면 담은 종목이 한동안 안 뜬다
+      invalidateUsCache();
       res.json(await evaluateGroups());
     } catch (err) {
       next(err);
