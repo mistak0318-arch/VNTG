@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmtAbsNum, fmtNum, type ExchangeQuote, type RawRecord } from "../api";
-import { PeriodReturns } from "./PeriodReturns";
+import { PeriodReturns, type LastSession } from "./PeriodReturns";
 
 /**
  * 종목 상세 맨 위에 항상 붙는 시세 요약.
@@ -31,6 +31,17 @@ function vsBase(value: unknown, base: number): { cls: string; rate: string } {
 }
 
 export function PriceHeader({ info, code }: { info: RawRecord | null; code?: string }) {
+  /*
+   * 거래가 있었던 마지막 날의 값. 아래 「기간 상승률」이 받는 일봉에서 올려 준다.
+   * ka10001 이 개장 전에 0 을 주는 자리를 이걸로 메운다 — 새벽에 "거래량 0" 이 뜨던 문제.
+   */
+  const [last, setLast] = useState<LastSession | null>(null);
+  /** ka10001 값이 0 이면 일봉 값으로 대신한다 */
+  const fill = (v: unknown, alt: number | null | undefined) => {
+    const n = Math.abs(Number(v));
+    return Number.isFinite(n) && n > 0 ? n : (alt ?? 0);
+  };
+
   const [nxt, setNxt] = useState<ExchangeQuote | null>(null);
 
   useEffect(() => {
@@ -84,7 +95,15 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
 
   const sig = String(info.pre_sig ?? "");
   const sign = sigClass(sig);
-  const base = Math.abs(Number(info.base_pric));
+  /*
+   * 등락률의 기준값.
+   *
+   * 개장 전에는 시가·고가·저가를 **마지막 거래일** 것으로 메우는데, 그때 기준값까지
+   * 오늘 전일종가로 두면 엉뚱한 퍼센트가 나온다 — NAVER 08/18 시가 225,500 이
+   * -1.10% 대신 +3.92% 로 찍혔다. 메운 값에는 **그날의** 전일종가를 쓴다.
+   */
+  const filled = Math.abs(Number(info.open_pric)) === 0 && last?.base != null;
+  const base = filled ? last!.base! : Math.abs(Number(info.base_pric));
   const fluRt = Number(String(info.flu_rt ?? "").replace(/\+/g, ""));
 
   return (
@@ -105,9 +124,10 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
       </div>
       <div className="ph-grid">
         {[
-          { label: "시가", value: info.open_pric, nxtValue: nxt?.open ?? null },
-          { label: "고가", value: info.high_pric, nxtValue: nxt?.high ?? null },
-          { label: "저가", value: info.low_pric, nxtValue: nxt?.low ?? null },
+          // 개장 전에는 ka10001 이 0 을 주므로 마지막 거래일 값으로 메운다
+          { label: "시가", value: fill(info.open_pric, last?.open), nxtValue: nxt?.open ?? null },
+          { label: "고가", value: fill(info.high_pric, last?.high), nxtValue: nxt?.high ?? null },
+          { label: "저가", value: fill(info.low_pric, last?.low), nxtValue: nxt?.low ?? null },
         ].map((it) => {
           const v = vsBase(it.value, base);
           const nv = vsBase(it.nxtValue, base);
@@ -169,7 +189,17 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
         <div className="ph-cell">
           <span className="ph-label">거래량</span>
           <span className="ph-row">
-            <span className="ph-value">{fmtNum(info.trde_qty)}</span>
+            <span className="ph-value">{fmtNum(fill(info.trde_qty, last?.volume))}</span>
+          </span>
+          {/*
+            거래량 바로 밑에 거래대금. 주식 수만 보면 감이 안 온다 —
+            80만주가 1,800억인 종목과 8억인 종목이 화면에서 똑같이 생겼다.
+          */}
+          <span className="ph-row">
+            <em className="ph-sublabel">거래대금</em>
+            <span className="ph-value sub">
+              {last?.value == null ? "-" : `${Math.round(last.value / 100).toLocaleString("ko-KR")}억`}
+            </span>
           </span>
         </div>
         <div className="ph-cell">
@@ -180,7 +210,7 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
         </div>
       </div>
       {/* 오늘 하루만 보면 흐름을 못 읽는다 — 아래에 기간별 상승률을 붙인다 */}
-      {code && <PeriodReturns code={code} />}
+      {code && <PeriodReturns code={code} onTradeValue={setLast} />}
     </div>
   );
 }

@@ -23,6 +23,27 @@ const PERIODS = [
   { days: 120, label: "120일" },
 ];
 
+/**
+ * 거래가 있었던 가장 최근 날의 값.
+ *
+ * `ka10001` 은 **개장 전에 당일 행을 0 으로 준다** — 새벽에 열면 시가·고가·저가·거래량이
+ * 전부 0 이고 종가만 남는다. 그런데 종가는 전일 것이라, 화면이 "종가 217,000 / 거래량 0"
+ * 처럼 짝이 안 맞는 말을 하게 된다.
+ *
+ * 일봉에서 **실제로 거래가 있었던 마지막 날**을 골라 그 값으로 메운다.
+ */
+export interface LastSession {
+  date: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+  /** 거래대금 (백만원) */
+  value: number | null;
+  /** **그날의** 전일종가. 시가·고가·저가 등락률은 이걸 기준으로 재야 한다 */
+  base: number | null;
+}
+
 interface Point {
   days: number;
   label: string;
@@ -31,7 +52,22 @@ interface Point {
   actual: number;
 }
 
-export function PeriodReturns({ code }: { code: string }) {
+export function PeriodReturns({
+  code,
+  onTradeValue,
+}: {
+  code: string;
+  /*
+   * 거래대금을 위쪽 시세 요약으로 올려 준다.
+   *
+   * 거래대금은 일봉에만 있는데(`trde_prica`, 백만원), 그 일봉을 이미 여기서 받고 있다.
+   * 위에서 따로 부르면 같은 응답을 두 번 받게 되므로 받은 김에 넘긴다.
+   *
+   * ka10001 의 `sale_amt` 를 쓰면 안 된다 — 이름만 비슷하고 값이 다르다.
+   * NAVER 08/18 기준 sale_amt 는 120,350 인데 실제 거래대금은 181,268(백만원)이다.
+   */
+  onTradeValue?: (v: LastSession | null) => void;
+}) {
   const [points, setPoints] = useState<Point[] | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -49,6 +85,28 @@ export function PeriodReturns({ code }: { code: string }) {
         const closes = rows
           .map((r) => Math.abs(Number(r.cur_prc)))
           .filter((n) => Number.isFinite(n) && n > 0);
+
+        /*
+         * 거래대금은 **거래가 있었던 가장 최근 날**의 것을 쓴다.
+         * 개장 전에는 그날 행이 0 으로 먼저 생기는데, 그걸 그대로 쓰면 "0원"이 뜬다.
+         * 위쪽 거래량도 같은 이유로 전일 값을 보여 주므로 둘이 맞아떨어진다.
+         */
+        const withTrade = rows.find((r) => Math.abs(Number(r.trde_qty)) > 0);
+        onTradeValue?.(
+          withTrade
+            ? {
+                date: String(withTrade.dt ?? ""),
+                open: Math.abs(Number(withTrade.open_pric)) || null,
+                high: Math.abs(Number(withTrade.high_pric)) || null,
+                low: Math.abs(Number(withTrade.low_pric)) || null,
+                volume: Math.abs(Number(withTrade.trde_qty)) || null,
+                value: Math.abs(Number(withTrade.trde_prica)) || null,
+                // 그날 종가 − 그날 전일대비 = 그날의 전일종가
+                base:
+                  Math.abs(Number(withTrade.cur_prc)) - Number(withTrade.pred_pre) || null,
+              }
+            : null,
+        );
 
         if (closes.length < 2) {
           setFailed(true);

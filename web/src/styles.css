@@ -3620,3 +3620,7 @@ body {
 .ov-fut-lbl { color: var(--muted); }
 .ov-fut-val { font-size: 13px; font-variant-numeric: tabular-nums; }
 .ov-basis { padding: 1px 5px; border-radius: 4px; background: var(--panel-2); }
+
+/* 거래량 밑의 거래대금 — 한 칸 안에 두 줄 */
+.ph-sublabel { font-size: 10.5px; color: var(--muted); font-style: normal; margin-right: 4px; }
+.ph-value.sub { font-size: 12.5px; }

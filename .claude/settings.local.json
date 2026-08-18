@@ -255,7 +255,9 @@
       "Bash(curl -s --max-time 120 \"http://localhost:4000/api/overview/section/indices\")",
       "Bash(/api/)",
       "Bash(timeout 40 git log --oneline -3)",
-      "Bash(timeout 40 git status --short)"
+      "Bash(timeout 40 git status --short)",
+      "Bash(curl -s --max-time 30 \"http://localhost:4000/api/market/snapshot/035420\")",
+      "Bash(curl -s --max-time 40 \"http://localhost:4000/api/market/chart/daily/035420\")"
     ]
   }
 }
