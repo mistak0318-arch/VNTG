@@ -231,7 +231,12 @@
       "Bash(taskkill //PID 39772 //F)",
       "Bash(taskkill //F //IM node.exe)",
       "Bash(time curl -s --max-time 180 http://localhost:4000/api/us-watch -o /tmp/us.json)",
-      "Bash(curl -s --max-time 180 http://localhost:4000/api/us-watch -o us.json)"
+      "Bash(curl -s --max-time 180 http://localhost:4000/api/us-watch -o us.json)",
+      "Bash(node scripts/seed-us-watch-2.mjs)",
+      "Bash(node scripts/seed-us-watch-2.mjs --write)",
+      "Bash(curl -s --max-time 300 http://localhost:4000/api/us-watch -o us2.json)",
+      "Bash(curl -s --max-time 550 http://localhost:4000/api/us-watch -o us2.json)",
+      "Bash(cd \"K:/0000 3740 프로젝트 \\(경제적자유\\)/00. 주식/2 AI 프롬프트/260810_클로드작업/web/src\" && grep -rn \"keyword\\\\|disclosure\" components/KeywordAlertPanel.tsx | grep -i \"telegram\\\\|방\\\\|채널\" | head -3; cd ../.. && grep -rn '\"disclosure\"' web/src/components/*.tsx | head -2)"
     ]
   }
 }

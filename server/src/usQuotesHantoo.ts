@@ -25,12 +25,29 @@ const MULT = "/uapi/overseas-price/v1/quotations/multprice";
 const MULT_TR = "HHDFS76220000";
 
 /**
- * 찾아볼 거래소. 미국만 본다.
+ * 찾아볼 거래소.
  *
- * `BAQ`/`BAY`/`BAA` 는 **주간거래**(한국시간 낮)라 미국 정규장이 아니다. 같은 티커가
- * 양쪽에 다 있어서, 순서를 잘못 잡으면 정규장 대신 주간 시세를 물어 오게 된다.
+ * 한투는 미국 말고도 일본·홍콩·중국·베트남을 준다. **미국반도체와 일본반도체를 한 그룹에
+ * 넣고 같이 보려면** 나라를 가리지 않아야 한다.
+ *
+ * 미국을 앞에 두는 건 티커가 겹칠 때 미국을 먼저 잡기 위해서다. `BAQ`/`BAY`/`BAA` 는
+ * **주간거래**(한국시간 낮)라 정규장이 아니므로 아예 빼 둔다 — 같은 티커가 양쪽에 다 있어서
+ * 넣어 두면 정규장 대신 주간 시세를 물어 오게 된다.
  */
-const US_EXCHANGES = ["NAS", "NYS", "AMS"] as const;
+const EXCHANGES = ["NAS", "NYS", "AMS", "TSE", "HKS", "SHS", "SZS", "HSX", "HNX"] as const;
+
+/** 거래소가 어느 나라 것인가 — 화면에 국기를 붙이고 통화를 밝히는 데 쓴다 */
+export const EXCHANGE_INFO: Record<string, { country: string; flag: string; currency: string }> = {
+  NAS: { country: "미국", flag: "🇺🇸", currency: "USD" },
+  NYS: { country: "미국", flag: "🇺🇸", currency: "USD" },
+  AMS: { country: "미국", flag: "🇺🇸", currency: "USD" },
+  TSE: { country: "일본", flag: "🇯🇵", currency: "JPY" },
+  HKS: { country: "홍콩", flag: "🇭🇰", currency: "HKD" },
+  SHS: { country: "중국", flag: "🇨🇳", currency: "CNY" },
+  SZS: { country: "중국", flag: "🇨🇳", currency: "CNY" },
+  HSX: { country: "베트남", flag: "🇻🇳", currency: "VND" },
+  HNX: { country: "베트남", flag: "🇻🇳", currency: "VND" },
+};
 
 export interface UsHantooQuote {
   symbol: string;
@@ -60,6 +77,10 @@ export interface UsHantooQuote {
   state: string | null;
   /** 한국시간 기준 마지막 체결 시각 (HHMMSS) */
   koreanTime: string | null;
+  /** 통화 — 나라가 섞이면 78.89 가 달러인지 엔인지 알 수 없다 */
+  currency: string | null;
+  country: string | null;
+  flag: string | null;
   error: string | null;
 }
 
@@ -114,15 +135,26 @@ async function multRaw(pairs: { excd: string; symbol: string }[]): Promise<Recor
  *
  * 한 번 알아내면 파일에 적어 둔다. 상장 거래소는 바뀌지 않는다.
  */
+/**
+ * **한투가 못 주는 티커는 아예 물어보지 않는다.**
+ *
+ * 유럽은 한투 해외주식에 없다 — 거래소 목록이 미국·일본·홍콩·중국·베트남뿐이다.
+ * 유럽 종목은 야후 방식대로 `RHM.DE`(라인메탈)·`BA.L`(BAE)처럼 **점 붙은 티커**로 담기니,
+ * 점이 보이면 한투를 건너뛰고 야후로 넘긴다. 아홉 거래소를 헛되이 훑지 않는다.
+ */
+function hantooCanHave(symbol: string): boolean {
+  return !symbol.includes(".");
+}
+
 async function resolveExcd(symbols: string[]): Promise<void> {
   const map = await loadExcd();
-  const unknown = symbols.filter((s) => !map[s]);
+  const unknown = symbols.filter((s) => !map[s] && hantooCanHave(s));
   if (unknown.length === 0) return;
 
-  // 한 번에 세 종목씩 (거래소 3곳 × 3종목 = 9칸)
-  for (let i = 0; i < unknown.length; i += 3) {
-    const batch = unknown.slice(i, i + 3);
-    const pairs = batch.flatMap((symbol) => US_EXCHANGES.map((excd) => ({ excd, symbol })));
+  // 거래소가 아홉이라 한 번에 한 종목씩 (10칸 한도)
+  for (let i = 0; i < unknown.length; i += 1) {
+    const batch = unknown.slice(i, i + 1);
+    const pairs = batch.flatMap((symbol) => EXCHANGES.map((excd) => ({ excd, symbol })));
     try {
       const rows = await multRaw(pairs);
       for (const r of rows) {
@@ -150,6 +182,7 @@ export async function hantooUsQuotes(symbols: string[]): Promise<Map<string, UsH
   const known = symbols.filter((s) => map[s]);
   for (const s of symbols) {
     if (!map[s]) {
+      // 못 찾은 건 야후가 받아 간다. 유럽은 처음부터 이쪽이다
       out.set(s, {
         symbol: s,
         excd: "",
@@ -170,7 +203,10 @@ export async function hantooUsQuotes(symbols: string[]): Promise<Map<string, UsH
         power: null,
         state: null,
         koreanTime: null,
-        error: "미국 거래소에서 찾지 못했습니다",
+        currency: null,
+        country: null,
+        flag: null,
+        error: "어느 거래소에서도 찾지 못했습니다",
       });
     }
   }
@@ -209,6 +245,9 @@ export async function hantooUsQuotes(symbols: string[]): Promise<Map<string, UsH
           power: num(r.powx),
           state: String(r.stat2 ?? "").trim() || null,
           koreanTime: String(r.khms ?? "").trim() || null,
+          currency: String(r.curr ?? "").trim() || null,
+          country: EXCHANGE_INFO[String(r.excd ?? "").trim()]?.country ?? null,
+          flag: EXCHANGE_INFO[String(r.excd ?? "").trim()]?.flag ?? null,
           error: null,
         });
       }
@@ -236,6 +275,9 @@ export async function hantooUsQuotes(symbols: string[]): Promise<Map<string, UsH
             power: null,
             state: null,
             koreanTime: null,
+            currency: null,
+            country: null,
+            flag: null,
             error: msg,
           });
         }

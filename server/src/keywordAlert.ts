@@ -262,7 +262,14 @@ export async function runKeywordScan(
   let sentCount = 0;
   if (send) {
     for (const h of picked) {
-      await sendTelegram(toMessage(h), "channel").catch(() => undefined);
+      /*
+       * 키워드 알림은 **따로 받는 방**으로 보낸다.
+       *
+       * 「구독 채널 요약」과 같은 방을 쓰고 있었는데, 성격이 다르다 — 채널 요약은 하루
+       * 몇 번 몰아 읽는 것이고 키워드는 뜨는 즉시 봐야 하는 것이다. 한 방에 섞이면
+       * 급한 게 묻힌다. TELEGRAM_CHAT_ID_KEYWORD 가 없으면 예전처럼 기본 방으로 간다.
+       */
+      await sendTelegram(toMessage(h), "keyword").catch(() => undefined);
       store.sent.push(h.key);
       sentCount += 1;
       await new Promise((r) => setTimeout(r, 400));

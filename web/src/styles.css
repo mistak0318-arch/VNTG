@@ -1094,11 +1094,29 @@ body {
   line-height: 1;
 }
 
+/*
+ * 차트 옵션 바.
+ *
+ * 거래소 3개 + 기간 7개라 좁은 화면에 안 들어간다. 그런데 flex 는 안 들어가면
+ * **부모를 밀어 버려서** 페이지 전체가 옆으로 밀렸다 — 모바일에서 "월봉"이 잘리고
+ * 본문이 통째로 흔들렸다.
+ *
+ * 넘치는 건 **이 줄 안에서만** 굴러야 한다. 버튼은 줄이지 않고(글자가 "3/분" 으로
+ * 쪼개졌다) 가로 스크롤로 넘긴다.
+ */
 .period-toggle {
   display: flex;
   gap: 6px;
   padding: 0 4px 8px;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  max-width: 100%;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.period-toggle::-webkit-scrollbar { display: none; }
+.period-toggle > * { flex: none; }
+.period-btn { white-space: nowrap; }
 
 .period-btn {
   background: var(--panel-2);
@@ -2142,7 +2160,14 @@ body {
 }
 .cal-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  /*
+   * **minmax(0, 1fr) 이어야 한다.**
+   *
+   * 그냥 `1fr` 은 `minmax(auto, 1fr)` 이고, auto 의 최소폭은 min-content 다. 그래서
+   * "[증시일정] 韓 반도체특별법, 1~10일" 같은 긴 제목이 그 칸의 최소폭이 되어 버려,
+   * 7칸이 화면의 세 배로 벌어졌다 — 모바일에서 일·월·화만 보이고 나머지는 밖으로 나갔다.
+   */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 1px;
   background: var(--border);
   border: 1px solid var(--border);
@@ -2171,6 +2196,7 @@ body {
   text-align: left;
   color: var(--text);
 }
+.cal-cell { min-width: 0; overflow: hidden; }
 .cal-cell.empty { background: var(--panel-2); cursor: default; }
 .cal-cell.today { box-shadow: inset 0 0 0 1px var(--blue); }
 .cal-cell.selected { background: var(--panel-2); box-shadow: inset 0 0 0 2px var(--blue); }
@@ -2215,8 +2241,28 @@ body {
 .cal-badge.personal { background: rgba(53,196,106,.2);  color: var(--green); }
 
 @media (max-width: 640px) {
-  .cal-cell { min-height: 58px; }
-  .cal-chip { font-size: 9px; }
+  /*
+   * 좁은 화면에서는 **제목을 아예 안 쓴다.**
+   *
+   * 한 칸이 45px 남짓인데 거기 글자를 우겨넣으면 한 글자도 못 읽으면서 자리만 먹는다.
+   * 달력이 달력 노릇을 하려면 **어느 날에 무엇이 있나**만 보이면 되고, 무엇인지는
+   * 날짜를 눌렀을 때 아래 「○○ 일정」에서 읽으면 된다. 휴대폰 달력들이 다 그렇게 한다.
+   */
+  .cal-cell { min-height: 44px; padding: 4px 2px; }
+  .cal-events { flex-direction: row; flex-wrap: wrap; gap: 3px; justify-content: center; }
+  .cal-chip {
+    width: 6px;
+    height: 6px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;          /* 글자를 지운다 — 점만 남는다 */
+    overflow: hidden;
+    flex: none;
+  }
+  .cal-more { font-size: 8.5px; line-height: 6px; }
+  .cal-day { font-size: 12px; }
+  /* 요일 머리글도 한 글자라 좁혀도 된다 */
+  .cal-wd { font-size: 10px; padding: 4px 0; }
 }
 
 /* 데일리 리포트 — 기준시각 배지 / 섹터 뉴스 */
@@ -3559,3 +3605,8 @@ body {
   display: block; text-align: center; }
 
 .uw-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.uw-ord { white-space: nowrap; }
+.uw-ord .row-del-btn:disabled { opacity: 0.25; cursor: default; }
+
+.uw-flag { margin-right: 3px; }

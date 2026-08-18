@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type UsSearchResult, type UsWatchGroup } from "../api";
+import { api, type UsSearchResult, type UsWatchGroup , type UsQuoteRow } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 
 /**
@@ -42,6 +42,26 @@ function stampKst(ms: number): string {
   return new Date(ms + 9 * 3600_000).toISOString().slice(5, 16).replace("T", " ");
 }
 
+/**
+ * 정렬. **기본은 내가 넣은 순서**(서버가 준 배열 그대로)다.
+ * 정렬을 걸면 원본 배열을 건드리지 않도록 복사해서 정렬한다.
+ */
+function sortStocks(stocks: UsQuoteRow[], by: "mine" | "rate" | "name" | "power"): UsQuoteRow[] {
+  if (by === "mine") return stocks;
+  const copy = [...stocks];
+  if (by === "rate") copy.sort((a, b) => (b.changeRate ?? -999) - (a.changeRate ?? -999));
+  else if (by === "power") copy.sort((a, b) => (b.power ?? -999) - (a.power ?? -999));
+  else copy.sort((a, b) => a.symbol.localeCompare(b.symbol));
+  return copy;
+}
+
+const SORTS: { key: "mine" | "rate" | "name" | "power"; label: string }[] = [
+  { key: "mine", label: "내 순서" },
+  { key: "rate", label: "등락률" },
+  { key: "power", label: "체결강도" },
+  { key: "name", label: "티커" },
+];
+
 export function UsWatchPage() {
   const [groups, setGroups] = useState<UsWatchGroup[]>([]);
   const [quotedAt, setQuotedAt] = useState<number | null>(null);
@@ -50,6 +70,15 @@ export function UsWatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  /*
+   * **기본은 내가 넣은 순서다.**
+   *
+   * 예전엔 늘 등락률로 정렬했다. 그런데 5초마다 갱신되니 **줄이 계속 뒤바뀌어서**
+   * 방금 보던 종목이 어디로 갔는지 알 수가 없었다. 키움 HTS 도 내가 넣은 순서를 지킨다.
+   *
+   * 등락률 정렬이 필요한 때가 있으니 고를 수 있게만 남긴다.
+   */
+  const [sortBy, setSortBy] = useState<"mine" | "rate" | "name" | "power">("mine");
   const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   // 종목 추가
@@ -133,6 +162,18 @@ export function UsWatchPage() {
     return () => clearTimeout(t);
   }, [groups]);
 
+  /** 이 종목이 방금 움직였나 — 값이 딸린 칸마다 붙인다 */
+  const tick = (symbol: string) => ticks.get(symbol) ?? "";
+
+  /** 한 칸 위·아래로. 서버에 새 순서를 통째로 보낸다 */
+  function moveStock(arr: UsQuoteRow[], symbol: string, delta: number) {
+    const order = arr.map((x) => x.symbol);
+    const at = order.indexOf(symbol);
+    const to = at + delta;
+    order.splice(to, 0, ...order.splice(at, 1));
+    return api.usWatchStockOrder(openGroup ?? "", order);
+  }
+
   // 검색은 늦춰서 — 타이핑마다 Yahoo 를 부르지 않는다
   useEffect(() => {
     const q = query.trim();
@@ -165,6 +206,15 @@ export function UsWatchPage() {
       <div className="uw-bar">
         <RefreshBar onRefresh={() => load(true)} loading={loading} />
         {/* 자동 갱신은 끌 수 있어야 한다 — 값이 계속 움직이면 읽기 어려운 때가 있다 */}
+        {SORTS.map((o) => (
+          <button
+            key={o.key}
+            className={`filter-btn ${sortBy === o.key ? "active" : ""}`}
+            onClick={() => setSortBy(o.key)}
+          >
+            {o.label}
+          </button>
+        ))}
         <button
           className={`filter-btn ${autoRefresh ? "active" : ""}`}
           onClick={() => setAutoRefresh((v) => !v)}
@@ -326,20 +376,32 @@ export function UsWatchPage() {
                 </tr>
               </thead>
               <tbody>
-                {[...current.stocks]
-                  .sort((a, b) => (b.changeRate ?? -999) - (a.changeRate ?? -999))
-                  .map((s) => (
+                {sortStocks(current.stocks, sortBy).map((s, i, arr) => (
                     <tr key={s.symbol}>
                       <td className="sticky-col">
-                        <b>{s.symbol}</b>
+                        {/* 나라가 섞이니 국기를 앞에 — 78.89 가 달러인지 엔인지 알아야 한다 */}
+                        <span className="uw-flag">{s.flag ?? (s.symbol.includes(".") ? "🇪🇺" : "")}</span>
+                        <b>{s.symbol.split(".")[0]}</b>
                         <span className="pt-n"> {s.name}</span>
                         {s.error && <span className="uw-err"> {s.error}</span>}
                       </td>
-                      <td className={`num tickable ${ticks.get(s.symbol) ?? ""}`}>
-                        {s.price === null ? "-" : s.price.toFixed(2)}
+                      {/*
+                        현재가·등락률·원화·편입대비는 **같이 움직인다.** 하나만 반짝이면
+                        나머지는 조용히 바뀌어서, 오히려 안 바뀐 것처럼 보인다.
+                        움직인 칸은 다 같이 반짝여야 한 사건으로 읽힌다.
+                      */}
+                      {/* 엔·원처럼 소수점을 안 쓰는 통화는 반올림해서 보여 준다 */}
+                      <td className={`num tickable ${tick(s.symbol)}`} title={s.currency ?? ""}>
+                        {s.price === null
+                          ? "-"
+                          : s.currency === "JPY" || s.currency === "VND" || s.currency === "KRW"
+                            ? Math.round(s.price).toLocaleString("ko-KR")
+                            : s.price.toFixed(2)}
                       </td>
-                      <td className={`num ${cls(s.changeRate)}`}>{pct(s.changeRate)}</td>
-                      <td className="num pt-n">
+                      <td className={`num tickable ${cls(s.changeRate)} ${tick(s.symbol)}`}>
+                        {pct(s.changeRate)}
+                      </td>
+                      <td className={`num pt-n tickable ${tick(s.symbol)}`}>
                         {s.wonPrice == null ? "-" : s.wonPrice.toLocaleString("ko-KR")}
                       </td>
                       {/* 52주 구간 위치를 막대로 — 신고가 근처인지 바닥인지가 숫자보다 빨리 읽힌다 */}
@@ -360,9 +422,32 @@ export function UsWatchPage() {
                         {s.power == null ? "-" : s.power.toFixed(0)}
                       </td>
                       <td className="num">{s.addedPrice === null ? "-" : s.addedPrice.toFixed(2)}</td>
-                      <td className={`num ${cls(s.returnRate)}`}>{pct(s.returnRate)}</td>
+                      <td className={`num tickable ${cls(s.returnRate)} ${tick(s.symbol)}`}>
+                        {pct(s.returnRate)}
+                      </td>
                       {editing && (
-                        <td>
+                        <td className="uw-ord">
+                          {/* 순서 바꾸기는 내 순서로 볼 때만 뜻이 있다 */}
+                          {sortBy === "mine" && (
+                            <>
+                              <button
+                                className="row-del-btn"
+                                disabled={i === 0}
+                                onClick={() => void run(() => moveStock(arr, s.symbol, -1))}
+                                title="위로"
+                              >
+                                ▲
+                              </button>
+                              <button
+                                className="row-del-btn"
+                                disabled={i === arr.length - 1}
+                                onClick={() => void run(() => moveStock(arr, s.symbol, 1))}
+                                title="아래로"
+                              >
+                                ▼
+                              </button>
+                            </>
+                          )}
                           <button
                             className="row-del-btn"
                             onClick={() => void run(() => api.usWatchStockRemove(current.id, s.symbol))}

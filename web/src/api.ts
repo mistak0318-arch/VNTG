@@ -294,6 +294,8 @@ export const api = {
     deleteJson<{ groups: UsWatchGroup[] }>(`/api/us-watch/groups/${id}`),
   usWatchStockAdd: (groupId: string, symbol: string, name: string) =>
     postJson<{ groups: UsWatchGroup[] }>(`/api/us-watch/groups/${groupId}/stocks`, { symbol, name }),
+  usWatchStockOrder: (groupId: string, symbols: string[]) =>
+    putJson<{ groups: UsWatchGroup[] }>(`/api/us-watch/groups/${groupId}/stocks/order`, { symbols }),
   usWatchStockRemove: (groupId: string, symbol: string) =>
     deleteJson<{ groups: UsWatchGroup[] }>(`/api/us-watch/groups/${groupId}/stocks/${symbol}`),
   dartToday: (force = false) =>
@@ -1615,6 +1617,10 @@ export interface UsQuoteRow {
   low: number | null;
   /** 한투가 알려준 장 상태 */
   state: string | null;
+  /** 통화 — 나라가 섞이면 78.89 가 달러인지 엔인지 알 수 없다 */
+  currency: string | null;
+  country: string | null;
+  flag: string | null;
   source: "hantoo" | "yahoo";
 }
 

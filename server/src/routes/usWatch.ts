@@ -8,6 +8,7 @@ import {
   removeGroup,
   removeStock,
   reorderGroups,
+  reorderStocks,
   searchUs,
   updateGroup,
   updateStock,
@@ -85,6 +86,18 @@ export function createUsWatchRouter(): Router {
   router.put("/groups/order", async (req, res, next) => {
     try {
       await reorderGroups(Array.isArray(req.body?.ids) ? req.body.ids.map(String) : []);
+      res.json(await evaluateGroups());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/groups/:id/stocks/order", async (req, res, next) => {
+    try {
+      await reorderStocks(
+        req.params.id,
+        Array.isArray(req.body?.symbols) ? req.body.symbols.map(String) : [],
+      );
       res.json(await evaluateGroups());
     } catch (err) {
       next(err);

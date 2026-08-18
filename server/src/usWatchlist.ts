@@ -99,6 +99,24 @@ export async function reorderGroups(ids: string[]): Promise<UsGroup[]> {
   return rows;
 }
 
+/**
+ * 그룹 안 종목 순서 바꾸기.
+ *
+ * 화면이 등락률로 자동 정렬하던 걸 걷어 냈다 — **매 갱신마다 줄이 뒤바뀌어서** 방금 보던
+ * 종목이 어디로 갔는지 알 수 없었다. 이제 여기 적힌 순서가 화면 순서다.
+ */
+export async function reorderStocks(groupId: string, symbols: string[]): Promise<UsGroup[]> {
+  const rows = await readAll();
+  const g = rows.find((x) => x.id === groupId);
+  if (g) {
+    const rank = new Map(symbols.map((sym, i) => [sym, i]));
+    // 목록에 없는 종목은 뒤로 밀되 서로의 순서는 지킨다
+    g.stocks.sort((a, b) => (rank.get(a.symbol) ?? 999) - (rank.get(b.symbol) ?? 999));
+  }
+  await writeAll(rows);
+  return rows;
+}
+
 export async function addStock(
   groupId: string,
   s: { symbol: string; name: string; addedPrice?: number | null; memo?: string },
@@ -159,7 +177,21 @@ export interface UsSearchResult {
  * 다만 Yahoo 는 같은 회사의 **해외 상장분**(프랑크푸르트·부에노스아이레스 등)까지
  * 섞어 주므로, 미국 거래소 것만 남긴다 — 우리가 보려는 건 미국 시장 시세다.
  */
-const US_EXCHANGES = new Set(["NMS", "NYQ", "NGM", "NCM", "PCX", "ASE", "BTS", "NYS"]);
+/*
+ * 검색에 걸러 낼 거래소.
+ *
+ * 처음엔 미국만 뒀는데 **유럽 방산·일본 반도체를 같이 보고 싶다**는 요구가 나왔다.
+ * 한투는 미국·일본·홍콩·중국·베트남만 주고 **유럽이 없다** — 유럽은 야후로 받는다.
+ * 그래서 검색은 넓게 열고, 시세는 한투가 아는 것만 한투로 간다.
+ */
+const OK_EXCHANGES = new Set([
+  // 미국
+  "NMS", "NYQ", "NGM", "NCM", "PCX", "ASE", "BTS", "NYS",
+  // 유럽 — 독일(라인메탈)·영국(BAE)·프랑스(탈레스)·이탈리아(레오나르도)·스웨덴(사브)
+  "GER", "FRA", "LSE", "PAR", "MIL", "STO", "AMS", "SWX", "EBS", "CPH", "OSL", "MCE",
+  // 아시아
+  "JPX", "TYO", "HKG", "SHH", "SHZ", "TAI", "KSC", "KOE",
+]);
 
 export async function searchUs(query: string): Promise<UsSearchResult[]> {
   const q = query.trim();
@@ -174,7 +206,7 @@ export async function searchUs(query: string): Promise<UsSearchResult[]> {
       quotes?: { symbol?: string; shortname?: string; longname?: string; exchange?: string; quoteType?: string }[];
     };
     return (j.quotes ?? [])
-      .filter((x) => x.symbol && US_EXCHANGES.has(String(x.exchange)))
+      .filter((x) => x.symbol && OK_EXCHANGES.has(String(x.exchange)))
       .map((x) => ({
         symbol: String(x.symbol),
         name: String(x.shortname ?? x.longname ?? x.symbol),
@@ -219,6 +251,10 @@ export interface UsQuoteRow {
   low: number | null;
   /** 한투가 알려준 장 상태 ("장중(실시간)" 등) */
   state: string | null;
+  /** 통화 — 나라가 섞이면 78.89 가 달러인지 엔인지 알 수 없다 */
+  currency: string | null;
+  country: string | null;
+  flag: string | null;
   /** 어디서 받은 값인가 */
   source: "hantoo" | "yahoo";
 }
@@ -315,6 +351,9 @@ function toExtra(h: {
   high: number | null;
   low: number | null;
   state: string | null;
+  currency: string | null;
+  country: string | null;
+  flag: string | null;
 }) {
   return {
     wonPrice: h.wonPrice,
@@ -331,6 +370,9 @@ function toExtra(h: {
     high: h.high,
     low: h.low,
     state: h.state,
+    currency: h.currency,
+    country: h.country,
+    flag: h.flag,
     source: "hantoo" as const,
   };
 }
@@ -346,6 +388,9 @@ const EMPTY_EXTRA = {
   high: null,
   low: null,
   state: null,
+  currency: null,
+  country: null,
+  flag: null,
   source: "yahoo" as const,
 };
 
