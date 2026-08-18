@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recordApiCall } from "./apiUsage.js";
@@ -510,13 +510,34 @@ const CACHE_FILE = join(DATA_DIR, "usWatchCache.json");
  */
 const FRESH_MS = 8_000;
 
-let shot: { at: number; data: UsWatchResult } | null = null;
+/**
+ * 캐시에 **원본 파일의 수정시각**을 같이 적어 둔다.
+ *
+ * 처음엔 화면에서 종목을 담고 뺄 때만 캐시를 버렸는데, 그게 모자랐다 —
+ * **파일이 밖에서 바뀌는 경우**를 빠뜨렸다. 미니PC 에 새 목록을 파일로 깔았더니
+ * 디스크에 남은 옛 캐시가 계속 나왔고, 서버를 재시작해도 그대로였다(디스크에 남으니까).
+ *
+ * 이제 파일의 mtime 이 캐시가 만들어질 때와 다르면 낡은 것으로 본다.
+ */
+let shot: { at: number; mtime: number; data: UsWatchResult } | null = null;
+
+async function watchlistMtime(): Promise<number> {
+  try {
+    return (await stat(FILE)).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
 let building: Promise<UsWatchResult> | null = null;
 
 async function loadCache(): Promise<void> {
   if (shot) return;
   try {
-    const raw = JSON.parse(await readFile(CACHE_FILE, "utf-8")) as { at: number; data: UsWatchResult };
+    const raw = JSON.parse(await readFile(CACHE_FILE, "utf-8")) as {
+      at: number;
+      mtime: number;
+      data: UsWatchResult;
+    };
     if (raw?.data?.groups) shot = raw;
   } catch {
     /* 없으면 처음부터 받는다 */
@@ -527,7 +548,7 @@ function rebuild(force: boolean): Promise<UsWatchResult> {
   if (building) return building;
   building = buildGroups(force)
     .then(async (data) => {
-      shot = { at: Date.now(), data };
+      shot = { at: Date.now(), mtime: await watchlistMtime(), data };
       await mkdir(DATA_DIR, { recursive: true }).catch(() => undefined);
       await writeFile(CACHE_FILE, JSON.stringify(shot), "utf-8").catch(() => undefined);
       return data;
@@ -545,6 +566,8 @@ export async function evaluateGroups(force = false): Promise<UsWatchResult> {
   if (force) return rebuild(true);
 
   if (shot) {
+    // 파일이 밖에서 바뀌었으면 캐시를 믿을 수 없다 — 기다려서라도 새로 받는다
+    if ((await watchlistMtime()) !== shot.mtime) return rebuild(false);
     // 낡았으면 뒤에서 새로 받되, **기다리지 않고** 지금 있는 걸 준다
     if (Date.now() - shot.at > FRESH_MS) void rebuild(false).catch(() => undefined);
     return shot.data;
