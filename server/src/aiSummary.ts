@@ -1,6 +1,6 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { usMajorIndices } from "./usMajor.js";
-import { evaluateThemes, toCustomThemeDigest } from "./customThemes.js";
+import { evaluateThemes, listThemes, toCustomThemeDigest } from "./customThemes.js";
 import { getTradeStats, toTradeDigest } from "./tradeStats.js";
 import { peekWebResearch, runWebResearch, toResearchDigest } from "./webResearch.js";
 import { describeBreadth, listBreadth, toPoints } from "./breadthStore.js";
@@ -17,7 +17,13 @@ import { getTrackedWatchlist } from "./watchTracking.js";
 import { buildMarketDrivers } from "./reportBuilder.js";
 import { isClaudeConfigured, summarize } from "./summarize.js";
 import { listWatchlist } from "./watchlist.js";
-import { CHECKPOINT_RULE, parseCheckpoints, stripCheckpointSection, type Checkpoint } from "./checkpoints.js";
+import {
+  CHECKPOINT_RULE,
+  checkpointRule,
+  parseCheckpoints,
+  stripCheckpointSection,
+  type Checkpoint,
+} from "./checkpoints.js";
 import { noopProgress, type ProgressReporter } from "./reportProgress.js";
 
 /**
@@ -518,7 +524,23 @@ export async function buildAiSummary(
    *   주말 — 뉴스만
    * 하나의 틀로 세 판을 다 쓰면 조간이 "데이터 없음"으로 채워진다.
    */
-  const rules = weekend ? WEEKEND_RULES : morning ? MORNING_RULES : SYSTEM_RULES;
+  const baseRules = weekend ? WEEKEND_RULES : morning ? MORNING_RULES : SYSTEM_RULES;
+
+  /*
+   * 테마 체크포인트는 **「내 테마」 이름만** 쓰게 한다.
+   *
+   * 예전엔 AI 가 본문에 나온 아무 테마나 찍었는데, 채점은 그 이름을 「내 테마」에서 찾아
+   * 하므로 목록에 없으면 **영원히 채점 불가**로 남았다. 목록을 주면 채점도 되고,
+   * 무엇보다 **내가 짜 둔 분류로** 예측하게 된다 — 남의 테마 이름으로 맞았다 틀렸다
+   * 해 봐야 내 판단에 쌓이지 않는다.
+   */
+  let themeNames: string[] = [];
+  try {
+    themeNames = (await listThemes()).map((t) => t.name).filter(Boolean);
+  } catch {
+    // 못 읽어도 리포트는 나간다 — 그때는 테마 예측을 안 쓰게 된다
+  }
+  const rules = baseRules.replace(CHECKPOINT_RULE, checkpointRule(themeNames));
 
   const prompt = `${rules}
 

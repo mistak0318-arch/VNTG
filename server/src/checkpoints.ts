@@ -88,6 +88,29 @@ export function stripCheckpointSection(text: string): string {
 }
 
 /** 프롬프트에 붙일 지시문 — 판마다 같은 형식을 쓰게 한다 */
+/**
+ * 테마 체크포인트는 **「내 테마」 이름만** 쓰게 한다.
+ *
+ * 예전엔 AI 가 본문에 나온 아무 테마나 찍었다. 그런데 채점은 그 이름을 「내 테마」에서
+ * 찾아 구성종목 평균으로 하므로, 목록에 없는 이름이면 **영원히 채점 불가**다.
+ * 실제로 「AI 서버 기판·패키징」이 며칠째 그렇게 남아 있었다.
+ *
+ * 목록을 주면 두 가지가 같이 해결된다 — 채점이 되고, **내가 짜 둔 분류로** 예측하게 된다.
+ * 남의 테마 이름으로 맞았다 틀렸다 해 봐야 내 판단에 쌓이지 않는다.
+ *
+ * @param themeNames 「내 테마」이름들. 비어 있으면 테마 예측을 아예 쓰지 말라고 한다
+ */
+export function checkpointRule(themeNames: string[] = []): string {
+  const themeLine =
+    themeNames.length > 0
+      ? `- [테마|테마이름] 방향 | 근거
+  **테마 이름은 반드시 아래 목록에서 그대로 골라라** (없는 이름을 지어내면 채점되지 않는다):
+  ${themeNames.join(" · ")}`
+      : `(테마 예측은 쓰지 마라 — 「내 테마」가 비어 있어 채점할 수 없다)`;
+
+  return CHECKPOINT_RULE.replace("- [테마|테마이름] 방향 | 근거", themeLine);
+}
+
 export const CHECKPOINT_RULE = `
 ## 체크포인트
 (**형식을 정확히 지켜라.** 나중에 실제 결과와 대조해 복기하는 데 쓰인다.
