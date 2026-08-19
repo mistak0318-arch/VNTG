@@ -4395,7 +4395,15 @@ th.est-col { color: var(--blue); }
 /* 도구줄이 길어 폰에서 두 줄이 되면 차트가 밀린다. 가로로 굴린다 */
 .chart-full .period-toggle { flex-wrap: nowrap; overflow-x: auto; }
 
-/* 원래 자리에 남기는 자국 — 없으면 닫을 때 화면이 튄다 */
+/*
+ * 원래 자리에 남기는 자국 — 없으면 닫을 때 화면이 튄다.
+ *
+ * ⚠️ `[hidden]` 규칙을 지우지 마라. `hidden` 속성은 **명시적 display 에 눌린다** —
+ * 아래에서 `display: flex` 를 주는 순간 `hidden` 이 무시돼서, 전체화면이 아닐 때도
+ * 「크게 보는 중…」 박스가 차트 위에 남았다. 실제로 화면이 그렇게 망가졌다.
+ */
+.chart-placeholder[hidden] { display: none; }
+
 .chart-placeholder {
   height: 320px;
   display: flex;

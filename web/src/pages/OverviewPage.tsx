@@ -52,17 +52,27 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const [status, setStatus] = useState<MarketStatus | null>(null);
   const [now, setNow] = useState(new Date());
 
-  const indices = useSection<IndexCard[]>("indices", 10_000);
-  const flow = useSection<MarketFlow>("flow", 60_000);
-  const movers = useSection<{ rising: StockRow[]; falling: StockRow[] }>("movers", 60_000);
-  const sectors = useSection<{ kospi: SectorRow[]; kosdaq: SectorRow[] }>("sectors", 180_000);
-  const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 180_000);
-  const highLow = useSection<{ high: StockRow[]; low: StockRow[] }>("highLow", 300_000);
-  const vi = useSection<ViRow[]>("vi", 60_000);
-  const global = useSection<GlobalQuote[]>("global", 60_000);
-  const usMajor = useSection<UsMajorResult>("usMajor", 60_000);
-  const rates = useSection<RateRow[]>("rates", 60_000);
-  const topTraders = useSection<TopTraderRow[]>("topTraders", 300_000);
+  /*
+   * 갱신 주기.
+   *
+   * **여기 적힌 숫자는 외부 API 호출 주기가 아니다.** 화면은 우리 서버의 캐시만 두들기고,
+   * 키움·야후·한투를 실제로 부르는 주기는 서버의 `SECTION_TTL_MS` 가 정한다.
+   * 그래서 이 값을 줄이는 건 **거의 공짜**다 — 서버가 새로 받아 둔 값을 더 빨리 집어 올 뿐이다.
+   *
+   * 서버 TTL 의 **절반쯤**으로 둔다. 그래야 서버가 값을 갈아끼운 직후에 화면이 집어 온다.
+   * 두 배 이상 느리게 두면 새 값이 있는데도 한참 옛 값을 보고 있게 된다.
+   */
+  const indices = useSection<IndexCard[]>("indices", 5_000);
+  const flow = useSection<MarketFlow>("flow", 20_000);
+  const movers = useSection<{ rising: StockRow[]; falling: StockRow[] }>("movers", 20_000);
+  const sectors = useSection<{ kospi: SectorRow[]; kosdaq: SectorRow[] }>("sectors", 60_000);
+  const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 60_000);
+  const highLow = useSection<{ high: StockRow[]; low: StockRow[] }>("highLow", 120_000);
+  const vi = useSection<ViRow[]>("vi", 20_000);
+  const global = useSection<GlobalQuote[]>("global", 15_000);
+  const usMajor = useSection<UsMajorResult>("usMajor", 15_000);
+  const rates = useSection<RateRow[]>("rates", 30_000);
+  const topTraders = useSection<TopTraderRow[]>("topTraders", 120_000);
 
   const [flowMarket, setFlowMarket] = useState<"kospi" | "kosdaq">("kospi");
   const [moverDir, setMoverDir] = useState<"rising" | "falling">("rising");
