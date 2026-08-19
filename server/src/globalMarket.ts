@@ -177,9 +177,17 @@ const TARGETS: {
    * 거기는 **장단기 역전**까지 봐 주는데 여기 두 줄은 그냥 숫자였다. 겹치면 거기가 낫다.
    */
 
-  // ── 암호화폐
-  { key: "btc", label: "비트코인", group: "암호화폐", symbol: "BTC-USD" },
-  { key: "eth", label: "이더리움", group: "암호화폐", symbol: "ETH-USD" },
+  /*
+   * ── 아시아
+   *
+   * **국내 지수는 뺐다** — 코스피·코스닥·코스피200·KODEX 코스닥150 넷 다
+   * 맨 위 「국내 지수」 카드에 이미 있고, 거기가 키움 실시간이라 더 정확하다.
+   * 야후로 한 번 더 받으면 같은 값이 두 번 뜨는 데다 조회만 넷 늘어난다.
+   * 여기 남기는 건 **우리가 다른 데서 안 보는 아시아**뿐이다.
+   */
+  { key: "n225", label: "닛케이", group: "아시아", symbol: "^N225" },
+  { key: "hsi", label: "항셍", group: "아시아", symbol: "^HSI" },
+  { key: "hsce", label: "홍콩 H", group: "아시아", symbol: "^HSCE" },
 
   // ── 원자재
   { key: "gold", label: "금", group: "원자재", symbol: "GC=F" },
@@ -188,14 +196,10 @@ const TARGETS: {
   { key: "natgas", label: "천연가스", group: "원자재", symbol: "NG=F" },
   { key: "alum", label: "알루미늄", group: "원자재", symbol: "ALI=F" },
 
-  // ── 아시아
-  { key: "ks11", label: "코스피지수", group: "아시아", symbol: "^KS11" },
-  { key: "ks200", label: "코스피200", group: "아시아", symbol: "^KS200" },
-  { key: "kq11", label: "코스닥지수", group: "아시아", symbol: "^KQ11" },
-  { key: "kodexkq150", label: "KODEX 코스닥150", group: "아시아", symbol: "229200.KS" },
-  { key: "n225", label: "닛케이", group: "아시아", symbol: "^N225" },
-  { key: "hsi", label: "항셍", group: "아시아", symbol: "^HSI" },
-  { key: "hsce", label: "홍콩 H", group: "아시아", symbol: "^HSCE" },
+  // ── 암호화폐
+  { key: "btc", label: "비트코인", group: "암호화폐", symbol: "BTC-USD" },
+  { key: "eth", label: "이더리움", group: "암호화폐", symbol: "ETH-USD" },
+
 
   /*
    * ^SOX·ES=F·NQ=F 도 뺐다. 셋 다 두 번씩 뜨고 있었다 —
@@ -295,16 +299,50 @@ async function fetchOne(target: {
   return base;
 }
 
+/** 한 번에 몇 개씩 받을지. 야후에 예의는 지키되 줄줄이 세우지는 않는다 */
+const BATCH = 5;
+
+/**
+ * 같은 순간에 두 번 부르지 않게 하는 자물쇠.
+ *
+ * 시황을 열면 여러 카드가 동시에 뜨는데, 캐시가 비어 있으면 **저마다 전체를 받으러 간다.**
+ * 야후를 그만큼 더 두들기고 시간도 그대로 걸린다. 먼저 온 요청 하나만 일하고
+ * 나머지는 그 결과를 같이 받는다.
+ */
+let inflight: Promise<GlobalQuote[]> | null = null;
+
+async function fetchAll(): Promise<GlobalQuote[]> {
+  /*
+   * **묶어서 받는다.**
+   *
+   * 예전엔 열아홉 개를 하나씩 받으며 사이에 120ms 씩 쉬었다 — 실측 **6.3초**였다.
+   * 서버가 새로 뜬 뒤 첫 방문(즉 배포할 때마다)이 그걸 그대로 기다렸다.
+   *
+   * 다섯씩 묶으면 네 번이면 끝난다. 쉬는 것도 묶음 사이에만 둔다 —
+   * 야후에 한꺼번에 열아홉을 던지지는 않으므로 예의는 그대로다.
+   */
+  const results: GlobalQuote[] = [];
+  for (let i = 0; i < TARGETS.length; i += BATCH) {
+    const batch = TARGETS.slice(i, i + BATCH);
+    // 한 종목이 실패해도 나머지는 정상 표시되도록 개별 처리한다(fetchOne 이 스스로 삼킨다)
+    results.push(...(await Promise.all(batch.map((t) => fetchOne(t)))));
+    if (i + BATCH < TARGETS.length) await sleep(120);
+  }
+  return results;
+}
+
 export async function getGlobalMarket(force = false): Promise<GlobalQuote[]> {
   if (!force && cache && Date.now() - cache.at < TTL_MS) return cache.data;
+  if (inflight) return inflight;
 
-  const results: GlobalQuote[] = [];
-  // 한 종목이 실패해도 나머지는 정상 표시되도록 개별 처리한다
-  for (const t of TARGETS) {
-    results.push(await fetchOne(t));
-    await sleep(120);
-  }
-
-  cache = { data: results, at: Date.now() };
-  return results;
+  inflight = (async () => {
+    try {
+      const results = await fetchAll();
+      cache = { data: results, at: Date.now() };
+      return results;
+    } finally {
+      inflight = null;
+    }
+  })();
+  return inflight;
 }

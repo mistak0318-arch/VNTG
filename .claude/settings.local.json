@@ -332,7 +332,10 @@
       "Bash(awk 'NR>=286 && NR<=294' web/src/pages/OverviewPage.tsx)",
       "Bash(awk 'NR>=448 && NR<=456' web/src/pages/OverviewPage.tsx)",
       "Bash(awk 'NR>=492 && NR<=500' web/src/pages/OverviewPage.tsx)",
-      "Bash(awk 'NR>=500 && NR<=510' web/src/pages/OverviewPage.tsx)"
+      "Bash(awk 'NR>=500 && NR<=510' web/src/pages/OverviewPage.tsx)",
+      "Bash(time curl -s -o /dev/null \"http://localhost:4000/api/overview/section/global?force=1\")",
+      "Bash(time curl -s \"http://localhost:4000/api/overview/section/global\" -o /dev/null)",
+      "Bash(python -c \"import sys,json,io; d=json.load\\(sys.stdin\\)['data']; seen=[]; [seen.append\\(r['group']\\) for r in d if r['group'] not in seen]; io.open\\('/dev/stdout','w',encoding='utf-8'\\).write\\('묶음 순서: ' + ' > '.join\\(seen\\) + '\\\\n줄 수: ' + str\\(len\\(d\\)\\) + '\\\\n국내지수 남아있나: ' + str\\([r['label'] for r in d if '코스피' in r['label'] or '코스닥' in r['label']]\\) + '\\\\n'\\)\")"
     ]
   }
 }
