@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { marketPulse, pulseBrief } from "../marketPulse.js";
+import { getLeaderConfig, leaderScan, saveLeaderConfig } from "../leaderScan.js";
 
 /**
  * 시장 맥박.
@@ -23,6 +24,36 @@ export function createPulseRouter(client: KiwoomClient): Router {
   router.get("/brief", async (req, res, next) => {
     try {
       res.json(await pulseBrief(client, req.query.force === "1"));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 주도주 탐색기.
+   *
+   * 뉴스는 **따로 끈다.** 섹터마다 네이버를 부르므로, 화면을 열 때마다 돌면
+   * 하루 할당량이 금방 녹는다. 숫자만 볼 때는 `news=0` 으로 부른다.
+   */
+  router.get("/leaders", async (req, res, next) => {
+    try {
+      res.json(await leaderScan(client, { withNews: req.query.news !== "0" }));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/leaders/config", async (_req, res, next) => {
+    try {
+      res.json(await getLeaderConfig());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/leaders/config", async (req, res, next) => {
+    try {
+      res.json(await saveLeaderConfig(req.body ?? {}));
     } catch (err) {
       next(err);
     }

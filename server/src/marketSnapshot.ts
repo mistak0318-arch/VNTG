@@ -31,6 +31,47 @@ export interface SnapshotStock {
   market: "kospi" | "kosdaq";
 }
 
+/**
+ * 산업 업종이 아닌 「업종」 코드.
+ *
+ * 키움 업종 목록 65개를 전부 뽑아 보니 **19개가 산업이 아니었다.**
+ *
+ *   지수·규모  001 종합(KOSPI) · 002 대형주 · 003 중형주 · 004 소형주 · 101 종합(KOSDAQ)
+ *              138 KOSDAQ 100 · 139 MID 300 · 140 SMALL · 150 KOSDAQ 150 · 151 코스닥글로벌
+ *   스타일     603 변동성지수 · 604 코스피고배당50 · 605 코스피배당성장50
+ *   등급       142 우량기업 · 143 벤처기업 · 144 중견기업 · 145 신성장기업
+ *   선물       160 F-KOSDAQ150 · 165 F-KOSDAQ150인버스   ← 종목이 아니다
+ *
+ * **이름이 아니라 코드로 거른다.** 이름은 「코스닥 우량기업」처럼 제각각이라 규칙으로
+ * 잡기 어렵고 바뀔 수도 있지만, 코드는 안 바뀐다.
+ *
+ * ## 왜 이게 문제였나
+ *
+ * 종목은 **산업과 규모·지수 묶음에 동시에 들어간다.** 그래서 먼저 훑은 쪽이 이기면
+ * SK하이닉스 업종이 「종합(KOSPI)」로 굳는다. 실제로 주도 섹터를 세어 보니
+ * **「오늘 강한 섹터 1위: 대형주」**가 나왔다 — 아무 말도 아닌 결과다.
+ *
+ * 덤으로 **조회가 19회 줄어든다**(65 → 46). 스냅샷 만드는 시간도 그만큼 짧아진다.
+ */
+const NON_SECTOR_CODES = new Set([
+  // KOSPI
+  "001", "002", "003", "004", "603", "604", "605",
+  // KOSDAQ
+  "101", "138", "139", "140", "142", "143", "144", "145", "150", "151", "160", "165",
+]);
+
+export function isRealSectorCode(code: string): boolean {
+  return !NON_SECTOR_CODES.has(String(code).trim());
+}
+
+/** 이름만 있을 때 쓰는 예비 판정 — 저장된 옛 스냅샷을 읽을 때가 있다 */
+export function isRealSector(name: string): boolean {
+  if (!name) return false;
+  return !/^종합|^대형주$|^중형주$|^소형주$|KOSDAQ\s|KOSPI\s*\d|코스닥\s|코스피고배당|코스피배당|변동성지수|F-KOSDAQ/.test(
+    name,
+  );
+}
+
 export interface MarketSnapshot {
   /** 6자리 종목코드 → 시세. `_AL` 접미사는 떼서 넣는다 */
   byCode: Map<string, SnapshotStock>;
@@ -158,7 +199,8 @@ async function build(client: KiwoomClient): Promise<MarketSnapshot> {
   const targets: { market: "kospi" | "kosdaq"; code: string; name: string }[] = [];
   for (const market of ["kospi", "kosdaq"] as const) {
     for (const s of (market === "kospi" ? sectors?.kospi : sectors?.kosdaq) ?? []) {
-      if (s.code) targets.push({ market, code: s.code, name: s.name });
+      // 산업이 아닌 것은 **아예 안 부른다** — 조회도 아끼고 업종 배정도 안 더럽힌다
+      if (s.code && isRealSectorCode(s.code)) targets.push({ market, code: s.code, name: s.name });
     }
   }
 
@@ -184,8 +226,14 @@ async function build(client: KiwoomClient): Promise<MarketSnapshot> {
       for (const r of rows) {
         const code = bareCode(r.code);
         if (!code) continue;
-        // 같은 종목이 두 업종에 나오는 일은 없지만, 나와도 먼저 것을 유지한다
-        if (byCode.has(code)) continue;
+        /*
+         * 같은 종목이 **두 업종에 다 나온다.** 산업 업종과 「대형주」·「종합(KOSPI)」 같은
+         * 규모·지수 묶음에 동시에 속하기 때문이다.
+         * 먼저 온 것을 유지하면 SK하이닉스 업종이 「종합(KOSPI)」로 굳어버린다 —
+         * **산업 쪽을 이긴 것으로 친다.**
+         */
+        const had = byCode.get(code);
+        if (had && (isRealSector(had.sector) || !isRealSector(t.name))) continue;
         byCode.set(code, {
           code,
           name: r.name,
