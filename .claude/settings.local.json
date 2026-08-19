@@ -328,7 +328,11 @@
       "Bash(sed -n '/export interface MarketSignal/,/^}/p' server/src/marketSignal.ts)",
       "Bash(sed -n '/export interface FuturesQuote/,/^}/p' web/src/api.ts)",
       "Bash(sed -n '/export const PURPOSE_LABEL/,/};/p' server/src/aiConfig.ts)",
-      "Bash(sed -n '/^export interface AiConfig/,/^}/p' server/src/aiConfig.ts)"
+      "Bash(sed -n '/^export interface AiConfig/,/^}/p' server/src/aiConfig.ts)",
+      "Bash(awk 'NR>=286 && NR<=294' web/src/pages/OverviewPage.tsx)",
+      "Bash(awk 'NR>=448 && NR<=456' web/src/pages/OverviewPage.tsx)",
+      "Bash(awk 'NR>=492 && NR<=500' web/src/pages/OverviewPage.tsx)",
+      "Bash(awk 'NR>=500 && NR<=510' web/src/pages/OverviewPage.tsx)"
     ]
   }
 }

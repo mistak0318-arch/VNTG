@@ -106,21 +106,57 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
   const base = filled ? last!.base! : Math.abs(Number(info.base_pric));
   const fluRt = Number(String(info.flu_rt ?? "").replace(/\+/g, ""));
 
+  /*
+   * 큰 숫자는 **언제나 정규장(KRX) 값**이다.
+   *
+   * 예전엔 정규장 안팎을 가리지 않고 KRX 와 NXT 를 나란히 늘어놓아서 어느 쪽을 보고
+   * 있는지 헷갈렸다. 이제 국면으로 가른다 —
+   *
+   *   · 정규장 중        큰 숫자 = 지금 KRX 값. **NXT 는 아예 안 띄운다**
+   *   · 개장 전(NXT 프리) 큰 숫자 = **전날 정규장 종가**. KRX 는 아직 거래가 없다
+   *   · 마감 후(NXT 애프터) 큰 숫자 = **오늘 정규장 종가**
+   *
+   * 정규장 밖에서는 그 밑에 NXT 를 **작게** 붙인다. 그 시간에 실제로 움직이는 건 NXT 이지만
+   * 기준이 되는 값은 정규장 종가이므로, 크기로 둘의 무게를 갈라 놓는다.
+   */
+  const preOpen = phase === "pre";
+  // 개장 전에는 KRX 가 아직 안 움직였다. 「현재가」라고 부르면 거짓말이 된다
+  const mainPrice = preOpen ? info.base_pric : info.cur_prc;
+  const mainLabel = preOpen ? "전날 종가" : krxDone ? "종가" : "현재가";
+  /** 정규장 중에는 NXT 를 숨긴다 — 헷갈리기만 한다 */
+  const showNxtLine =
+    phase !== "regular" && nxt?.price != null && nxt.price > 0 && Number.isFinite(nxt.changeRate);
+  const nxtCls = !nxt ? "" : nxt.changeRate > 0 ? "positive" : nxt.changeRate < 0 ? "negative" : "";
+
   return (
     <div className="price-header">
       <div className="ph-main">
         <div className="ph-main-label">
-          {closed ? "종가" : "현재가"} · {PHASE_LABEL[phase]}
+          {mainLabel} · {PHASE_LABEL[phase]}
         </div>
-        <div className={`ph-price ${sign}`}>{fmtAbsNum(info.cur_prc)}</div>
-        <div className={`ph-change ${sign}`}>
-          {Number(info.pred_pre) > 0 ? "▲" : Number(info.pred_pre) < 0 ? "▼" : ""}
-          {fmtAbsNum(info.pred_pre)}
-          <span className="ph-rate">
-            {Number.isFinite(fluRt) && fluRt > 0 ? "+" : ""}
-            {Number.isFinite(fluRt) ? fluRt.toFixed(2) : "-"}%
-          </span>
-        </div>
+        <div className={`ph-price ${preOpen ? "" : sign}`}>{fmtAbsNum(mainPrice)}</div>
+        {/* 개장 전 KRX 등락은 늘 0 이라 적을 이유가 없다 */}
+        {!preOpen && (
+          <div className={`ph-change ${sign}`}>
+            {Number(info.pred_pre) > 0 ? "▲" : Number(info.pred_pre) < 0 ? "▼" : ""}
+            {fmtAbsNum(info.pred_pre)}
+            <span className="ph-rate">
+              {Number.isFinite(fluRt) && fluRt > 0 ? "+" : ""}
+              {Number.isFinite(fluRt) ? fluRt.toFixed(2) : "-"}%
+            </span>
+          </div>
+        )}
+        {showNxtLine && nxt && (
+          <div className={`ph-nxt ${nxtCls}`}>
+            <em className="ph-ex nxt">NXT</em>
+            <b>{fmtNum(nxt.price)}</b>
+            <span className="ph-nxt-rate">
+              {nxt.changeRate > 0 ? "+" : ""}
+              {nxt.changeRate.toFixed(2)}%
+            </span>
+            <span className="ph-when">{phase === "closed" ? "20:00 마감" : "거래 중"}</span>
+          </div>
+        )}
       </div>
       <div className="ph-grid">
         {[
@@ -133,7 +169,10 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           const nv = vsBase(it.nxtValue, base);
           // KRX 와 같은 값이면 굳이 두 번 적지 않는다 — 다를 때만 눈에 띄어야 한다
           const showNxt =
-            it.nxtValue !== null && it.nxtValue > 0 && it.nxtValue !== Math.abs(Number(it.value));
+            phase !== "regular" &&
+            it.nxtValue !== null &&
+            it.nxtValue > 0 &&
+            it.nxtValue !== Math.abs(Number(it.value));
           return (
             <div className="ph-cell" key={it.label}>
               <span className="ph-label">{it.label}</span>
@@ -163,7 +202,8 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
             <b className={`ph-value ${sign}`}>{fmtAbsNum(info.cur_prc)}</b>
             <em className="ph-when">{krxDone ? "15:30 마감" : "거래 중"}</em>
           </span>
-          {nxt?.price != null && nxt.price > 0 && (
+          {/* 위 큰 숫자와 같은 규칙 — 정규장 중에는 NXT 를 띄우지 않는다 */}
+          {showNxtLine && nxt && (
             <span className="ph-row">
               <em className="ph-ex nxt">NXT</em>
               <b

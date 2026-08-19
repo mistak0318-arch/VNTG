@@ -286,6 +286,67 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
         {/*
+          글로벌 — **종목등락현황 바로 밑**이다.
+
+          국내 지수 → 종목등락현황으로 "우리 시장이 지금 어떤가"를 본 직후,
+          "그 힘이 어디서 왔나"를 이어서 본다. 예전엔 업종 뒤에 있어서 국내를 다 훑고
+          한참 내려가야 나왔는데, 그러면 국내와 견주는 일이 안 된다.
+        */}
+        {show("summary") && (
+          <OverviewCard title="글로벌" updatedAt={global.updatedAt} loading={global.loading} error={global.error}>
+            <div className="ov-card-b">
+              {/*
+                섹터별로 묶는다. 스무 줄을 그냥 나열하면 **어디까지가 원자재이고
+                어디부터가 아시아 지수인지** 알 수 없다 — 서버는 이미 group 을 주는데
+                화면이 그걸 버리고 있었다.
+              */}
+              {[...new Set((global.data ?? []).map((g) => g.group))].map((grp) => {
+                // 색은 서버가 정한다 — 리포트도 같은 색을 쓴다
+                const color = (global.data ?? []).find((g) => g.group === grp)?.color ?? "#8b98a5";
+                return (
+                <div className="ov-g-sec" key={grp} style={{ ["--g" as string]: color }}>
+                  <div className="ov-g-sec-h">{grp}</div>
+                  {(global.data ?? [])
+                    .filter((g) => g.group === grp)
+                    .map((g) => (
+                <div className="ov-g-row" key={g.key}>
+                  {/* 미장 주요지수와 같은 신호등. 판단할 게 없으면 자리만 비워 둔다 */}
+                  <span
+                    className={`ov-g-sig${g.signal ? ` ${g.signal.level}` : ""}`}
+                    title={g.signal?.why}
+                  />
+                  <span className="ov-g-nm">
+                    {g.label}
+                    <span className="ov-g-tk">{g.symbol}</span>
+                  </span>
+                  {g.error ? (
+                    <span className="ov-g-pct" style={{ color: "var(--flat)" }}>
+                      조회 실패
+                    </span>
+                  ) : (
+                    <>
+                      <span className="ov-g-px num">
+                        {g.price === null ? "-" : fmtNum(Number(g.price.toFixed(g.isRate ? 3 : 2)))}
+                      </span>
+                      <span className={`ov-g-pct num ${signCls(g.changeRate ?? 0)}`}>
+                        {g.change === null
+                          ? "-"
+                          : `${g.change > 0 ? "+" : ""}${g.change.toFixed(g.isRate ? 3 : 2)} (${fmtPct(
+                              g.changeRate ?? 0,
+                            )})`}
+                      </span>
+                    </>
+                  )}
+                </div>
+                    ))}
+                </div>
+                );
+              })}
+            </div>
+          </OverviewCard>
+        )}
+
+        {/*
           미장 주요지수 — 국내 지수 → 종목등락현황 **다음** 자리다.
           아침에 "밤사이 무슨 일이 있었나"를 한 표로 읽는 곳이라, 국내를 본 직후에 와야 한다.
         */}
@@ -450,59 +511,6 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
 
-        {show("summary") && (
-          <OverviewCard title="글로벌" updatedAt={global.updatedAt} loading={global.loading} error={global.error}>
-            <div className="ov-card-b">
-              {/*
-                섹터별로 묶는다. 스무 줄을 그냥 나열하면 **어디까지가 원자재이고
-                어디부터가 아시아 지수인지** 알 수 없다 — 서버는 이미 group 을 주는데
-                화면이 그걸 버리고 있었다.
-              */}
-              {[...new Set((global.data ?? []).map((g) => g.group))].map((grp) => {
-                // 색은 서버가 정한다 — 리포트도 같은 색을 쓴다
-                const color = (global.data ?? []).find((g) => g.group === grp)?.color ?? "#8b98a5";
-                return (
-                <div className="ov-g-sec" key={grp} style={{ ["--g" as string]: color }}>
-                  <div className="ov-g-sec-h">{grp}</div>
-                  {(global.data ?? [])
-                    .filter((g) => g.group === grp)
-                    .map((g) => (
-                <div className="ov-g-row" key={g.key}>
-                  {/* 미장 주요지수와 같은 신호등. 판단할 게 없으면 자리만 비워 둔다 */}
-                  <span
-                    className={`ov-g-sig${g.signal ? ` ${g.signal.level}` : ""}`}
-                    title={g.signal?.why}
-                  />
-                  <span className="ov-g-nm">
-                    {g.label}
-                    <span className="ov-g-tk">{g.symbol}</span>
-                  </span>
-                  {g.error ? (
-                    <span className="ov-g-pct" style={{ color: "var(--flat)" }}>
-                      조회 실패
-                    </span>
-                  ) : (
-                    <>
-                      <span className="ov-g-px num">
-                        {g.price === null ? "-" : fmtNum(Number(g.price.toFixed(g.isRate ? 3 : 2)))}
-                      </span>
-                      <span className={`ov-g-pct num ${signCls(g.changeRate ?? 0)}`}>
-                        {g.change === null
-                          ? "-"
-                          : `${g.change > 0 ? "+" : ""}${g.change.toFixed(g.isRate ? 3 : 2)} (${fmtPct(
-                              g.changeRate ?? 0,
-                            )})`}
-                      </span>
-                    </>
-                  )}
-                </div>
-                    ))}
-                </div>
-                );
-              })}
-            </div>
-          </OverviewCard>
-        )}
 
         {/* ---------------- 수급 ---------------- */}
         {show("flow") && (

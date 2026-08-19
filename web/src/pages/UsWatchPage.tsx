@@ -407,14 +407,15 @@ export function UsWatchPage() {
               <thead>
                 <tr>
                   <th className="sticky-col">종목</th>
-                  <th>현재가</th>
-                  <th>등락률</th>
                   {/*
-                    미국 주간거래. 국내장이 열려 있는 동안 움직이는 유일한 미국 가격이라
-                    등락률 바로 옆에 둔다 — 오늘 미국이 어디로 가는지의 예고편이다.
+                    주간거래를 **괄호로 바로 옆에** 붙인다. 뒤쪽에 열로 두니 폰에서 잘려 안 보였다 —
+                    이 값은 정규장과 **견줘야** 뜻이 생기므로 떨어뜨려 놓으면 쓸모가 없다.
                   */}
-                  <th title="미국 주간거래(오버나이트) 등락률. 미 동부 프리마켓이 아니라 한국 낮에 열리는 세션입니다">
-                    주간거래
+                  <th title="괄호는 미국 주간거래(오버나이트) — 한국 낮에 열리는 세션입니다">
+                    현재가 <span className="uw-day-h">(주간)</span>
+                  </th>
+                  <th title="괄호는 미국 주간거래 등락률">
+                    등락률 <span className="uw-day-h">(주간)</span>
                   </th>
                   <th title="원화 환산가 — 한국투자증권이 계산해 준다">원화</th>
                   <th title="52주 구간에서 지금 위치 (0=저가, 100=고가)">52주</th>
@@ -447,20 +448,22 @@ export function UsWatchPage() {
                           : s.currency === "JPY" || s.currency === "VND" || s.currency === "KRW"
                             ? Math.round(s.price).toLocaleString("ko-KR")
                             : s.price.toFixed(2)}
+                        {/*
+                          거래량이 0이면 아직 아무도 안 샀다는 뜻이라 그 가격은 정규장 종가 그대로다 —
+                          지금 움직임이 아니므로 값을 띄우지 않는다.
+                        */}
+                        {s.dayPrice !== null && !!s.dayVolume && (
+                          <span className="uw-day"> ({s.dayPrice.toFixed(2)})</span>
+                        )}
                       </td>
                       <td className={`num tickable ${cls(s.changeRate)} ${tick(s.symbol)}`}>
                         {pct(s.changeRate)}
-                      </td>
-                      {/*
-                        거래량이 0이면 아직 아무도 안 샀다는 뜻이다 — 그때의 가격과 등락률은
-                        정규장 종가 그대로라 「지금 움직임」이 아니다. 값을 띄우면 안 된다.
-                      */}
-                      <td className={`num ${s.dayVolume ? cls(s.dayChangeRate) : "pt-n"}`}>
-                        {s.dayPrice == null
-                          ? "-"
-                          : !s.dayVolume
-                            ? "거래 전"
-                            : `${s.dayPrice.toFixed(2)} ${pct(s.dayChangeRate)}`}
+                        {s.dayPrice !== null && !!s.dayVolume && (
+                          <span className={`uw-day ${cls(s.dayChangeRate)}`}>
+                            {" "}
+                            ({pct(s.dayChangeRate)})
+                          </span>
+                        )}
                       </td>
                       <td className={`num pt-n tickable ${tick(s.symbol)}`}>
                         {s.wonPrice == null ? "-" : s.wonPrice.toLocaleString("ko-KR")}
