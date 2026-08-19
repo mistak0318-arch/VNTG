@@ -153,9 +153,26 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           <OverviewCard title="국내 지수" updatedAt={indices.updatedAt} loading={indices.loading} error={indices.error}>
             <div className="ov-idx-grid">
               {idx.map((c) => {
-                // 코스피200은 별도 수급 집계가 없어 코스피 수급을 함께 보여준다
-                // 코스피200·선물은 별도 수급 집계가 없어 코스피 수급을 함께 보여준다
-                const f = c.code === "101" ? flow.data?.kosdaq : flow.data?.kospi;
+                /*
+                 * **선물에는 수급을 붙이지 않는다.**
+                 *
+                 * 여기 수급은 `ka10051` 주식시장 투자자 순매수다. 선물은 완전히 다른
+                 * 시장이라 그 값을 갖다 붙이면 **틀린 값을 보여주는 것**이 된다 —
+                 * 키움 화면의 선물 수급(외국인 2,240 / 기관 6,152)과 숫자가 전혀 다르다.
+                 * 없는 것보다 틀린 게 나쁘다.
+                 *
+                 * 코스피200 은 코스피 구성종목의 부분집합이라 참고로 붙여 둔다.
+                 *
+                 * 한투 339개 API 에 선물 투자자별 매매동향이 없다(투자자 매매동향 7개가
+                 * 전부 국내주식이고, 「시장별」도 KSP/KSQ 만 받는다). 키움에 있는지는
+                 * 아직 확인 못 했다 — 찾으면 여기에 붙인다.
+                 */
+                const f =
+                  c.code === "F"
+                    ? null
+                    : c.code === "101"
+                      ? flow.data?.kosdaq
+                      : flow.data?.kospi;
                 /*
                   코스피·코스닥은 눌러서 상세로 간다. 코스피200·선물은 아직 상세가 없어
                   누르는 시늉만 하면 안 되므로 그대로 둔다.
@@ -191,6 +208,9 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                         )}
                         <span className="pt-n">{c.futures.name}</span>
                       </div>
+                    )}
+                    {c.code === "F" && (
+                      <div className="ov-idx-note">선물 수급은 아직 받을 데가 없습니다</div>
                     )}
                     {f && (
                       <div className="ov-idx-flow num">
