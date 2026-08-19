@@ -4170,3 +4170,17 @@ body {
 
 .sig-config-thresholds.risk { border-top: 1px dashed rgba(255,92,92,.35); padding-top: 10px; }
 .sig-block-toggle { display: flex; align-items: center; gap: 6px; }
+
+/* 화면이 터졌을 때 보여 주는 원인 — 검은 화면보다는 이게 낫다 */
+.err-detail {
+  margin: 10px 0;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.7333rem;
+  color: var(--red);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}

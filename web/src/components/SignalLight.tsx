@@ -104,7 +104,13 @@ export function SignalPanel({
         위험 축은 눈금 방향이 반대다 — 길수록 나쁘다.
       */}
       <div className="sig-axes">
-        {data.axes.map((a) => (
+        {/*
+          `?? []` 를 지우지 마라. 서버가 아직 옛 코드로 돌고 있으면 `axes` 가 아예 없다 —
+          웹만 새로 배포되고 서버가 재시작되지 않은 창(窓)이 실제로 있었다.
+          그때 여기서 터지면 신호등 한 칸이 아니라 **화면 전체가 까매진다.**
+          신호등은 종목발굴 맨 위 블록이라 페이지를 열자마자 그렇게 됐다.
+        */}
+        {(data.axes ?? []).map((a) => (
           <div className={`sig-axis ${a.level}`} key={a.key}>
             <div className="sig-axis-head">
               <span className="sig-axis-label">

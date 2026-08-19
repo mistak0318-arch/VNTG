@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { RunningJobsBar } from "./components/RunningJobsBar";
 import { CustomThemePage } from "./pages/CustomThemePage";
 import { ScreenerPage } from "./pages/ScreenerPage";
@@ -279,6 +280,15 @@ export default function App() {
           {/* 돌고 있는 작업 — 어느 화면에 있든 뜬다 */}
           <RunningJobsBar />
 
+          {/*
+            화면 하나가 터져도 앱이 통째로 내려앉지 않게 감싼다.
+            미니PC 에서 종목발굴이 검은 화면이 됐을 때, 원인은 신호등 응답의 필드 하나였는데
+            그 예외가 React 트리를 전부 걷어내 body 배경만 남았다.
+            서버와 웹은 따로 배포되므로 둘이 어긋나는 창은 배포할 때마다 열린다 —
+            그때 보이는 게 검은 화면이면 무엇이 잘못됐는지 알 길이 없다.
+            탭을 옮기면 resetKey 가 바뀌어 다시 그려 본다.
+          */}
+          <ErrorBoundary where={TAB_LABELS[tab] ?? tab} resetKey={tab}>
           {tab === "overview" && <OverviewPage onSelectStock={onSelectStock} />}
           {tab === "report" && <DailyReportPage onSelectStock={onSelectStock} />}
           {tab === "map" && <MapPage onSelectStock={onSelectStock} />}
@@ -307,11 +317,13 @@ export default function App() {
           {tab === "account" && <AccountInfoPage onSelectStock={onSelectStock} />}
           {tab === "manualAccount" && <ManualAccountPage onSelectStock={onSelectStock} />}
           {tab === "settings" && <SettingsPage />}
+          </ErrorBoundary>
         </div>
       </div>
 
       {/* 개별종목분석 탭은 종목을 페이지 안에서 직접 보여주므로 모달을 띄우지 않는다 */}
       {selected && tab !== "stockAnalysis" && (
+        <ErrorBoundary where="종목 상세" resetKey={selected.code}>
         <StockDetail
           code={selected.code}
           name={selected.name}
@@ -319,6 +331,7 @@ export default function App() {
           onOpenAnalysis={openAnalysis}
           onSelectStock={onSelectStock}
         />
+        </ErrorBoundary>
       )}
     </div>
   );
