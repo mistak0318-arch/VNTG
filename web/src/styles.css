@@ -4456,3 +4456,46 @@ th.est-col { color: var(--blue); }
   opacity: .82;
 }
 .chart-expand:hover { opacity: 1; color: var(--text); }
+
+/* ==================================================================
+   글로벌 — 묶음 색과 줄 신호등
+   ------------------------------------------------------------------
+   스무 줄이 같은 색으로 늘어서면 어디까지가 원자재이고 어디부터가 아시아인지
+   글자를 읽어야 안다. 색은 서버가 정해서 시황과 리포트가 같은 것을 쓴다.
+   ================================================================== */
+
+/* 묶음 머리 — 색 막대를 왼쪽에 세우고 글자에도 그 색을 준다 */
+.ov-g-sec-h {
+  border-left: 3px solid var(--g, var(--border));
+  padding-left: 8px;
+  color: var(--g, var(--muted));
+}
+/* 묶음에 속한 줄은 옅은 세로선으로 이어 둔다 — 어디까지가 한 덩어리인지 보인다 */
+.ov-g-sec .ov-g-row {
+  border-left: 3px solid color-mix(in srgb, var(--g, var(--border)) 30%, transparent);
+  padding-left: 8px;
+}
+
+/* 줄 신호등 — 미장 주요지수와 같은 크기·같은 색 */
+.ov-g-sig {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: transparent;
+}
+.ov-g-sig.danger { background: var(--red); box-shadow: 0 0 0 2px rgba(255,92,92,.2); }
+.ov-g-sig.warn { background: #f5c542; box-shadow: 0 0 0 2px rgba(245,197,66,.2); }
+.ov-g-sig.ok { background: var(--green); box-shadow: 0 0 0 2px rgba(53,196,106,.2); }
+/* 표 안에서는 인라인이라 자리를 잡아 준다 */
+td .ov-g-sig { display: inline-block; vertical-align: middle; }
+
+/* 리포트 표 — 같은 색을 왼쪽 막대로 */
+.rp-g-sec td {
+  border-left: 3px solid var(--g, var(--border));
+  color: var(--g, var(--muted));
+}
+.rp-g-row > td:first-child {
+  border-left: 3px solid color-mix(in srgb, var(--g, var(--border)) 30%, transparent);
+}

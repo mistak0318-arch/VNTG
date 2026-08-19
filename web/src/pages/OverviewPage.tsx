@@ -458,13 +458,21 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                 어디부터가 아시아 지수인지** 알 수 없다 — 서버는 이미 group 을 주는데
                 화면이 그걸 버리고 있었다.
               */}
-              {[...new Set((global.data ?? []).map((g) => g.group))].map((grp) => (
-                <div className="ov-g-sec" key={grp}>
+              {[...new Set((global.data ?? []).map((g) => g.group))].map((grp) => {
+                // 색은 서버가 정한다 — 리포트도 같은 색을 쓴다
+                const color = (global.data ?? []).find((g) => g.group === grp)?.color ?? "#8b98a5";
+                return (
+                <div className="ov-g-sec" key={grp} style={{ ["--g" as string]: color }}>
                   <div className="ov-g-sec-h">{grp}</div>
                   {(global.data ?? [])
                     .filter((g) => g.group === grp)
                     .map((g) => (
                 <div className="ov-g-row" key={g.key}>
+                  {/* 미장 주요지수와 같은 신호등. 판단할 게 없으면 자리만 비워 둔다 */}
+                  <span
+                    className={`ov-g-sig${g.signal ? ` ${g.signal.level}` : ""}`}
+                    title={g.signal?.why}
+                  />
                   <span className="ov-g-nm">
                     {g.label}
                     <span className="ov-g-tk">{g.symbol}</span>
@@ -490,7 +498,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                 </div>
                     ))}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </OverviewCard>
         )}

@@ -490,9 +490,13 @@ export function DailyReportPage({
                 섹터별로 묶는다. 시황 대시보드와 같은 방식이다 — 두 화면이 같은 값을
                 다르게 늘어놓으면 하나를 보고 다른 하나를 찾을 때 헷갈린다.
               */}
-              {[...new Set(g.map((q) => q.group))].map((grp) => (
+              {[...new Set(g.map((q) => q.group))].map((grp) => {
+                // 시황과 **같은 색**을 쓴다. 서버가 정해 준 것을 그대로 받는다 —
+                // 두 화면이 같은 값을 다른 색으로 칠하면 하나 보고 다른 하나를 못 찾는다
+                const color = g.find((q) => q.group === grp)?.color ?? "#8b98a5";
+                return (
                 <Fragment key={grp}>
-                  <tr className="rp-g-sec">
+                  <tr className="rp-g-sec" style={{ ["--g" as string]: color }}>
                     <td className="sticky-col" colSpan={4}>
                       {grp}
                     </td>
@@ -500,8 +504,12 @@ export function DailyReportPage({
                   {g
                     .filter((q) => q.group === grp)
                     .map((q) => (
-                      <tr key={q.key}>
+                      <tr key={q.key} style={{ ["--g" as string]: color }} className="rp-g-row">
                         <td className="sticky-col">
+                          <span
+                            className={`ov-g-sig${q.signal ? ` ${q.signal.level}` : ""}`}
+                            title={q.signal?.why}
+                          />
                           {q.label}
                           <span className="rl-sub"> {q.symbol}</span>
                         </td>
@@ -515,7 +523,8 @@ export function DailyReportPage({
                       </tr>
                     ))}
                 </Fragment>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

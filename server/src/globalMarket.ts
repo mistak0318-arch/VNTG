@@ -1,6 +1,20 @@
 import { recordApiCall } from "./apiUsage.js";
 
 /**
+ * 줄 단위 경고.
+ *
+ * `usMajor` 에도 같은 모양이 있지만 **거기서 가져오지 않는다** — usMajor 가 이 파일의
+ * `fetchQuotes` 를 쓰므로 서로를 부르는 고리가 된다. 타입 하나라 여기 따로 둔다.
+ */
+export type RowLevel = "danger" | "warn" | "ok";
+
+export interface RowSignal {
+  level: RowLevel;
+  /** 왜 그렇게 봤는지 한 줄 — 색만 있으면 왜 빨간지 모른다 */
+  why: string;
+}
+
+/**
  * 글로벌 시황 (환율·원자재·미국지수·금리·암호화폐).
  * 키움 REST API는 국내 시장 중심이라 이 항목들을 제공하지 않아 Yahoo Finance를 쓴다.
  *
@@ -12,6 +26,14 @@ export interface GlobalQuote {
   key: string;
   label: string;
   group: string;
+  /**
+   * 묶음 색.
+   *
+   * 스무 줄이 같은 색으로 늘어서면 어디까지가 원자재이고 어디부터가 아시아인지
+   * 글자를 읽어야 안다. **서버가 정해서 내려보낸다** — 시황과 리포트가 같은 값을
+   * 다른 색으로 칠하면 하나를 보고 다른 하나를 찾을 때 헷갈린다.
+   */
+  color: string;
   symbol: string;
   price: number | null;
   change: number | null;
@@ -28,7 +50,72 @@ export interface GlobalQuote {
   kind: "선물" | "현물" | "";
   /** Yahoo 가 알려준 체결 시각(ms) — "언제 값인가"의 답 */
   quotedAt: number | null;
+  /**
+   * 줄 단위 경고. 미장 주요지수와 같은 방식이다 —
+   * 색만 칠하면 왜 빨간지 모르므로 **이유를 문장으로** 같이 낸다.
+   */
+  signal: RowSignal | null;
   error: string | null;
+}
+
+/**
+ * 묶음별 색.
+ *
+ * 성격이 다른 것끼리 확실히 갈리게 고른다 — 환율(외국인 수급의 전제)과
+ * 미국 선물(개장가의 예고)이 판단에 제일 자주 쓰이므로 눈에 띄는 색을 준다.
+ */
+const GROUP_COLOR: Record<string, string> = {
+  환율: "#f5c542",
+  "미국 지수선물": "#4c8dff",
+  아시아: "#35c46a",
+  원자재: "#c0813a",
+  암호화폐: "#a97bd6",
+};
+
+/**
+ * 줄 하나가 위험한가.
+ *
+ * 문턱을 묶음마다 다르게 둔다 — **같은 3% 가 뜻하는 게 다르기 때문이다.**
+ * 비트코인 3% 는 흔한 날이고 달러/원 3% 는 사고다.
+ */
+function signalOf(group: string, label: string, rate: number | null): RowSignal | null {
+  if (rate === null || !Number.isFinite(rate)) return null;
+  const a = Math.abs(rate);
+
+  if (group === "환율") {
+    // 원화 약세(상승)가 문제다. 외국인은 환차손을 먼저 본다
+    if (rate >= 1.5) return { level: "danger", why: "원화가 크게 약해졌다 — 외국인이 팔 이유가 된다" };
+    if (rate >= 0.8) return { level: "warn", why: "원화 약세 — 외국인 수급에 부담이다" };
+    if (rate <= -0.8) return { level: "ok", why: "원화 강세 — 외국인이 들어오기 좋은 쪽이다" };
+    return null;
+  }
+  if (group === "암호화폐") {
+    // 변동성이 원래 크다. 문턱을 높게 둬야 늘 빨갛지 않다
+    if (a >= 7) return { level: rate > 0 ? "ok" : "danger", why: "하루 7% 이상 — 위험자산 심리가 크게 움직였다" };
+    return null;
+  }
+  if (group === "원자재") {
+    if (a >= 4) return { level: "warn", why: `${label} 4% 이상 — 물가와 원가에 그대로 온다` };
+    return null;
+  }
+  /*
+   * 지수·선물.
+   *
+   * 이유 문장을 묶음마다 다르게 쓴다. 예전엔 하나로 썼는데 **코스피지수에도
+   * 「국내 개장가가 그대로 받는다」가 붙었다** — 코스피 본인한테 할 말이 아니다.
+   * 미국 선물은 우리 개장 전에 움직이므로 예고가 맞지만, 아시아는 우리와 같이 도는 판이다.
+   */
+  const lead =
+    group === "미국 지수선물"
+      ? " — 국내 개장가가 그대로 받는다"
+      : group === "아시아"
+        ? " — 아시아가 같이 밀리는 판이다"
+        : "";
+  const leadUp = group === "미국 지수선물" ? " — 국내 개장가에 좋게 온다" : "";
+  if (rate <= -2) return { level: "danger", why: `2% 이상 하락${lead}` };
+  if (rate <= -1) return { level: "warn", why: `1% 이상 하락${lead}` };
+  if (rate >= 2) return { level: "ok", why: `2% 이상 상승${leadUp}` };
+  return null;
 }
 
 /**
@@ -164,7 +251,10 @@ async function fetchOne(target: {
     changeRate: null,
     isRate: target.isRate ?? false,
     kind: target.kind ?? "",
+    // 묶음에 없는 이름이면 회색 — 색이 없다고 줄이 사라지면 안 된다
+    color: GROUP_COLOR[target.group] ?? "#8b98a5",
     quotedAt: null,
+    signal: null,
     error: null,
   };
 
@@ -197,6 +287,8 @@ async function fetchOne(target: {
     // 체결 시각 — 현물은 낮에 멈춰 있고 선물은 계속 움직인다. 그걸 화면이 보여줘야 한다
     const t = Number(meta.regularMarketTime);
     if (Number.isFinite(t) && t > 0) base.quotedAt = t * 1000;
+    // 금리 줄은 등락률로 판단하면 안 된다(%p 로 읽어야 한다) — 그래서 빼 둔다
+    if (!base.isRate) base.signal = signalOf(target.group, target.label, base.changeRate);
   } catch (err) {
     base.error = err instanceof Error ? err.message : "조회 실패";
   }

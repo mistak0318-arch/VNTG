@@ -1413,6 +1413,10 @@ export interface GlobalQuote {
   changeRate: number | null;
   isRate: boolean;
   error: string | null;
+  /** 묶음 색 — 서버가 정한다. 시황과 리포트가 같은 색을 쓰게 하려는 것이다 */
+  color: string;
+  /** 줄 단위 경고. 색만 있으면 왜 빨간지 모르므로 why 를 같이 준다 */
+  signal: RowSignal | null;
 }
 
 export interface ProviderUsage {
