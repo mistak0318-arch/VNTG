@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { notifyJobStarted } from "./RunningJobsBar";
 import { api, type ChannelReport, type PublishJob } from "../api";
 import { ProgressSteps } from "./ProgressSteps";
 
@@ -74,6 +75,8 @@ export function ChannelDigestPanel() {
     setJob(null);
     try {
       const { jobId } = await api.channelsReport({ ai, send, minutes });
+      // 작업 띠가 바로 뜨게 한다
+      notifyJobStarted();
       // 리포트 발행과 같은 방식 — 곧바로 jobId 를 받고 2초마다 단계를 물어본다
       let misses = 0;
       const timer = setInterval(async () => {

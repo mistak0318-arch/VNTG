@@ -27,6 +27,14 @@ export interface ProgressStep {
 
 export interface PublishJob {
   status: "running" | "done" | "error";
+  /**
+   * 어느 화면이 시작한 작업인가.
+   *
+   * id 는 둘 다 `pub_` 로 시작해서 구분이 안 된다. 페이지를 옮겼다 돌아왔을 때
+   * **자기 작업을 되찾으려면** 이게 있어야 한다 — 리포트 화면이 채널 요약 작업에
+   * 붙어 버리면 엉뚱한 진행 상황을 보게 된다.
+   */
+  kind: "report" | "channel";
   label: string;
   steps: ProgressStep[];
   startedAt: string;
@@ -75,10 +83,12 @@ function prune(): void {
 export function createJob(
   label: string,
   steps: { key: string; label: string }[] = PUBLISH_STEPS,
+  kind: PublishJob["kind"] = "report",
 ): { id: string; job: PublishJob } {
   const id = `pub_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const job: PublishJob = {
     status: "running",
+    kind,
     label,
     steps: steps.map((s) => ({ ...s, state: "pending" })),
     startedAt: new Date().toISOString(),

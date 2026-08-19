@@ -1466,6 +1466,8 @@ export function normalizeStockCode(code: string): string {
 }
 
 /** 발행 진행 상황 — 서버가 단계별로 채운다 */
+export type JobKind = "report" | "channel";
+
 export interface ProgressStep {
   key: string;
   label: string;
@@ -1476,6 +1478,8 @@ export interface ProgressStep {
 
 export interface PublishJob {
   status: "running" | "done" | "error";
+  /** 어느 화면이 시작한 작업인가 — 돌아왔을 때 자기 작업을 되찾는 데 쓴다 */
+  kind: JobKind;
   label: string;
   steps: ProgressStep[];
   startedAt: string;

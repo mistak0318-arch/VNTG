@@ -10,12 +10,30 @@ import { api, type PublishJob } from "../api";
  *
  * 그래서 이 띠는 **어느 화면에 있든** 뜬다. 작업이 없으면 아무것도 그리지 않는다.
  *
- * 폴링은 3초. 작업이 하나도 없으면 20초로 늦춘다 — 대부분의 시간은 아무 작업도 없다.
+ * 폴링은 작업이 있으면 2초, 없으면 5초다.
+ *
+ * 처음엔 놀 때 20초로 뒀는데 그게 틀렸다. 작업이 20초 안에 끝나면 **띠가 한 번도
+ * 안 뜬다** — 실제로 발행이 그렇게 끝나서 "안 보인다"는 말이 나왔다.
+ * 게다가 07:00 정기 발행은 **서버가 시작하므로 알려 줄 쪽이 없다.** 폴링이 유일한
+ * 눈이라 촘촘해야 한다. 목록을 훑는 것뿐이라 값도 거의 안 든다.
  */
 
 interface Active {
   id: string;
   job: PublishJob;
+}
+
+/*
+ * 작업이 막 시작됐다고 알린다.
+ *
+ * 폴링만으로는 **최대 20초 늦게** 뜬다. 발행이 30~60초에 끝나니 띠가 늦게 떴다가
+ * 금방 사라지거나, 아예 못 보고 지나간다 — "안 보인다"는 게 그거였다.
+ * 발행 버튼을 누른 쪽이 이걸 부르면 바로 뜬다.
+ */
+const listeners = new Set<() => void>();
+
+export function notifyJobStarted(): void {
+  for (const fn of listeners) fn();
 }
 
 export function RunningJobsBar() {
@@ -27,6 +45,11 @@ export function RunningJobsBar() {
     let timer: number | undefined;
 
     const tick = async () => {
+      // 탭이 뒤에 있으면 물어보지 않는다 — 안 보는 화면 때문에 계속 부를 이유가 없다
+      if (document.visibilityState !== "visible") {
+        timer = window.setTimeout(tick, 5000);
+        return;
+      }
       try {
         const r = await api.activeJobs();
         if (!alive) return;
@@ -34,14 +57,23 @@ export function RunningJobsBar() {
         // 끝난 작업은 숨김 목록에서도 지운다 — 다음에 같은 id 가 다시 날 일은 없지만
         // 목록이 계속 자라는 걸 막는다
         setHidden((h) => h.filter((id) => r.jobs.some((j) => j.id === id)));
-        timer = window.setTimeout(tick, r.jobs.length > 0 ? 3000 : 20000);
+        timer = window.setTimeout(tick, r.jobs.length > 0 ? 2000 : 5000);
       } catch {
-        timer = window.setTimeout(tick, 20000);
+        timer = window.setTimeout(tick, 10000);
       }
     };
     void tick();
+
+    // 작업이 시작됐다는 신호를 받으면 기다리지 않고 바로 물어본다
+    const wake = () => {
+      if (timer) clearTimeout(timer);
+      void tick();
+    };
+    listeners.add(wake);
+
     return () => {
       alive = false;
+      listeners.delete(wake);
       if (timer) clearTimeout(timer);
     };
   }, []);

@@ -70,6 +70,7 @@ export function createChannelsRouter(): Router {
       const { id: jobId, job } = createJob(
         `${useAi ? "AI 정리" : "선별"}${send ? " + 발송" : ""}`,
         CHANNEL_STEPS,
+        "channel",
       );
       const reporter = reporterFor(job);
 

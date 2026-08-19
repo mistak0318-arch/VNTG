@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { notifyJobStarted } from "../components/RunningJobsBar";
 import {
   api,
   fmtNum,
@@ -226,6 +227,24 @@ export function DailyReportPage({
     setJob(null);
     try {
       const { jobId } = await api.reportPublishNow(false);
+      // 위쪽 작업 띠가 20초를 기다리지 않고 바로 뜨게 한다
+      notifyJobStarted();
+      follow(jobId);
+    } catch (err) {
+      setPublishNote(err instanceof Error ? err.message : "발행 실패");
+      setPublishing(false);
+    }
+  }
+
+  /**
+   * 발행 작업을 따라간다.
+   *
+   * `publish()` 안에만 있던 걸 밖으로 뺐다 — **페이지를 옮겼다 돌아왔을 때도** 같은
+   * 방식으로 다시 붙어야 하기 때문이다. 예전엔 화면이 사라지면서 jobId 도 같이 사라져,
+   * 돌아오면 아무 일도 없었던 것처럼 보였다.
+   */
+  function follow(jobId: string) {
+    try {
       /*
        * 서버는 곧바로 jobId 만 주고 뒤에서 돈다. 2초마다 물어보면서
        * 지금 어느 단계인지 보여준다 — 1~3분을 아무 표시 없이 기다리게 하지 않는다.
@@ -270,6 +289,31 @@ export function DailyReportPage({
       setPublishing(false);
     }
   }
+
+  /*
+   * 돌아왔을 때 진행 중인 발행이 있으면 다시 붙는다.
+   *
+   * 서버는 계속 돌고 있었는데 화면만 jobId 를 잃어서, 돌아오면 아무 일도 없었던 것처럼
+   * 보였다. `kind` 로 **내 작업만** 고른다 — 채널 요약 작업에 붙으면 엉뚱한 걸 보게 된다.
+   */
+  useEffect(() => {
+    let alive = true;
+    api
+      .activeJobs()
+      .then((r) => {
+        if (!alive) return;
+        const mine = r.jobs.find((j) => j.job.kind === "report");
+        if (!mine) return;
+        setPublishing(true);
+        setJob(mine.job);
+        follow(mine.id);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** 리포트 전체의 "언제 기준" — 각 섹션 갱신시각 중 가장 오래된 것 */
   const stampMs = [indices.updatedAt, flow.updatedAt, themes.updatedAt, global.updatedAt]
