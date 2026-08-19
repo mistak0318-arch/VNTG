@@ -1,6 +1,7 @@
 import { getGlobalMarket } from "./globalMarket.js";
 import { usMajorIndices } from "./usMajor.js";
 import { topTraders } from "./topTraders.js";
+import { rateBoard } from "./rateBoard.js";
 import { recordFlow } from "./flowIntraday.js";
 import { kospi200Futures, type FuturesQuote } from "./kospiFutures.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -44,6 +45,8 @@ const SECTION_TTL_MS = {
    * 참고 자료라 굳이 자주 부를 이유도 없다.
    */
   topTraders: 300_000,
+  /* 금리 — 하루에 몇 번 안 바뀐다 */
+  rates: 60_000,
 } as const;
 
 export type SectionName = keyof typeof SECTION_TTL_MS;
@@ -464,6 +467,7 @@ const FETCHERS: Record<SectionName, (client: KiwoomClient) => Promise<unknown>> 
   global: () => getGlobalMarket(),
   usMajor: () => usMajorIndices(),
   topTraders: (c: KiwoomClient) => topTraders(c),
+  rates: () => rateBoard(),
 };
 
 async function refresh(section: SectionName, client: KiwoomClient): Promise<void> {

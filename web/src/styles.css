@@ -3734,3 +3734,18 @@ body {
 .rv-detail { margin-top: 8px; }
 .rv-detail > summary { cursor: pointer; font-size: 0.8rem; color: var(--muted); padding: 4px 0; }
 .rv-detail[open] > summary { margin-bottom: 6px; }
+
+/* 미장 주요지수 — 줄 단위 경고 */
+.um-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+.um-dot.danger { background: #ff5c5c; }
+.um-dot.warn { background: #f5c542; }
+.um-dot.ok { background: #35c46a; }
+.um-why { font-size: 0.7rem; color: var(--muted); margin-top: 1px; white-space: normal; }
+
+/* 금리 표 */
+.rt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.rt-h { font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-bottom: 3px; }
+.rt-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: baseline;
+  padding: 3px 0; border-bottom: 1px solid var(--border); font-size: 0.84rem; }
+.rt-row b { font-variant-numeric: tabular-nums; }
+.rt-row em { font-style: normal; font-size: 0.75rem; min-width: 62px; text-align: right; }

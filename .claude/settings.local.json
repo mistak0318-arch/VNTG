@@ -295,7 +295,11 @@
       "Bash(curl -s --max-time 40 \"http://localhost:4000/api/market/chart/daily/000660\")",
       "Bash(curl -s --max-time 40 \"http://localhost:4000/api/market/chart/daily/005930\")",
       "Bash(curl -s --max-time 90 \"http://localhost:4000/api/report/review?date=2026-08-17&edition=morning\")",
-      "Bash(curl -s --max-time 60 \"http://localhost:4000/api/report/reviewable\")"
+      "Bash(curl -s --max-time 60 \"http://localhost:4000/api/report/reviewable\")",
+      "Bash(curl -s --max-time 120 \"http://localhost:4000/api/overview/section/usMajor?force=1\" -o /dev/null)",
+      "Bash(curl -s --max-time 120 \"http://localhost:4000/api/overview/section/usMajor\")",
+      "Bash(curl -s --max-time 120 \"http://localhost:4000/api/overview/section/usMajor\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/um2.json\")",
+      "Bash(curl -s --max-time 90 \"http://localhost:4000/api/overview/section/rates\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/rate.json\")"
     ]
   }
 }

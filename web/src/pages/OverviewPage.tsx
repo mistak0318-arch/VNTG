@@ -13,6 +13,7 @@ import {
   type ThemeRow,
   type ViRow,
   type UsMajorResult,
+  type RateRow,
   type TopTraderRow,
 } from "../api";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
@@ -60,6 +61,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const vi = useSection<ViRow[]>("vi", 60_000);
   const global = useSection<GlobalQuote[]>("global", 60_000);
   const usMajor = useSection<UsMajorResult>("usMajor", 60_000);
+  const rates = useSection<RateRow[]>("rates", 60_000);
   const topTraders = useSection<TopTraderRow[]>("topTraders", 300_000);
 
   const [flowMarket, setFlowMarket] = useState<"kospi" | "kosdaq">("kospi");
@@ -323,9 +325,15 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                   {(usMajor.data?.rows ?? []).map((r) => (
                     <tr key={r.key}>
                       <td>
+                        {/*
+                          색만 있으면 왜 빨간지 모른다. 점 옆에 이유를 한 줄로 붙인다 —
+                          숫자는 경험칙이라 사람이 "이번엔 아니다" 라고 판단할 여지를 남긴다.
+                        */}
+                        {r.signal && <span className={`um-dot ${r.signal.level}`} />}
                         {r.label}
                         {/* 야후가 막혀 한투로 메운 줄은 밝힌다 — 두 출처가 섞이니까 */}
                         {r.source === "hantoo" && <span className="pt-n"> 한투</span>}
+                        {r.signal && <div className="um-why">{r.signal.why}</div>}
                       </td>
                       <td className={signCls(r.changeRate ?? 0)}>
                         {r.price == null
@@ -343,11 +351,58 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                   ))}
                 </tbody>
               </table>
+              {/* 장단기 금리차는 어느 줄에도 안 들어가는 값이라 따로 둔다 */}
+              {usMajor.data?.curveNote && (
+                <div className="alert-note">{usMajor.data.curveNote}</div>
+              )}
               <div className="table-note">
                 야간선물을 뺀 나머지는 <b>전일 마감값</b>입니다. 기본은 야후이고, 못 받은 줄만
                 한투로 메웁니다(그 줄엔 「한투」라고 적습니다). — 미국 현물은 우리 시간 05:30 에
                 닫혀 낮에는 움직이지 않습니다. 지금 움직이는 걸 보시려면 「글로벌 시황지수」의
                 선물을 보세요.
+              </div>
+            </div>
+          </OverviewCard>
+        )}
+
+        {/*
+          금리 — 야후는 미국 것만 준다(일본·한국은 심볼 자체가 없다). 한투가 국내
+          국고채부터 일본 10년까지 한 번에 준다. 요즘 시장을 흔드는 건 일본 금리라
+          미장 바로 뒤에 둔다 — 엔 캐리가 풀리면 전 세계 위험자산에서 돈이 빠진다.
+        */}
+        {show("summary") && (
+          <OverviewCard
+            title="금리"
+            updatedAt={rates.updatedAt}
+            loading={rates.loading}
+            error={rates.error}
+          >
+            <div className="ov-card-b">
+              <div className="rt-grid">
+                {(["국내", "해외"] as const).map((g) => (
+                  <div key={g}>
+                    <div className="rt-h">{g}</div>
+                    {(rates.data ?? [])
+                      .filter((r) => r.group === g)
+                      .map((r) => (
+                        <div className="rt-row" key={r.code}>
+                          <span>{r.name}</span>
+                          <b className="num">{r.rate?.toFixed(3)}%</b>
+                          {/* 금리는 변화폭(%p)으로 읽는다 — 등락률로 보면 감이 안 온다 */}
+                          <em className={`num ${signCls(r.change ?? 0)}`}>
+                            {(r.change ?? 0) > 0 ? "+" : ""}
+                            {(r.change ?? 0).toFixed(3)}%p
+                          </em>
+                        </div>
+                      ))}
+                  </div>
+                ))}
+              </div>
+              <div className="table-note">
+                <b>%p</b> 는 등락률이 아니라 <b>변화폭</b>입니다 — 4.71% 가 4.72% 로 가는 건
+                등락률로는 0.2% 지만 시장이 반응하는 건 0.01%p 라는 폭 자체입니다.
+                <b>일본 10년</b>은 엔 캐리와 붙어 있어, 오르면 전 세계 위험자산에서 돈이
+                빠집니다. 한국투자증권 제공.
               </div>
             </div>
           </OverviewCard>

@@ -31,12 +31,24 @@ const TARGETS: Target[] = [
   { key: "ndx", label: "나스닥 100", symbol: "^NDX" },
   { key: "rut", label: "러셀 2000", symbol: "^RUT" },
   { key: "sox", label: "필라델피아 반도체", symbol: "^SOX" },
+  // 금리 곡선을 보려면 짧은 쪽도 있어야 한다 — 장단기 역전은 둘을 견줘야 나온다
+  { key: "irx", label: "미국 3개월", symbol: "^IRX", isRate: true, digits: 3 },
+  { key: "fvx", label: "미국 5년물", symbol: "^FVX", isRate: true, digits: 3 },
   { key: "tnx", label: "미국 10년물", symbol: "^TNX", isRate: true, digits: 3 },
   { key: "tyx", label: "미국 30년물", symbol: "^TYX", isRate: true, digits: 3 },
   { key: "vix", label: "VIX", symbol: "^VIX", digits: 2 },
   { key: "wti", label: "WTI", symbol: "CL=F", digits: 2 },
   { key: "brent", label: "브렌트", symbol: "BZ=F", digits: 2 },
 ];
+
+/** 줄 단위 경고 — 시장 신호등(green/yellow/red)과는 다른 개념이다 */
+export type RowLevel = "danger" | "warn" | "ok";
+
+export interface RowSignal {
+  level: RowLevel;
+  /** 왜 그렇게 봤는지 한 줄 — 색만 있으면 왜 빨간지 모른다 */
+  why: string;
+}
 
 export interface UsMajorRow {
   key: string;
@@ -51,6 +63,8 @@ export interface UsMajorRow {
   quotedAt: number | null;
   /** 어디서 받은 값인가. 두 출처가 섞이므로 화면에 밝힌다 */
   source: "yahoo" | "hantoo";
+  /** 이 줄이 지금 눈여겨볼 상태인가 (없으면 평범한 것) */
+  signal: RowSignal | null;
   error: string | null;
 }
 
@@ -58,6 +72,8 @@ export interface UsMajorResult {
   rows: UsMajorRow[];
   /** 코스피 야간선물 — 한투에서만 온다 */
   nightFutures: UsMajorRow | null;
+  /** 장단기 금리차 한 줄 — 표 어디에도 안 들어가는 값이라 따로 준다 */
+  curveNote: string | null;
   fetchedAt: number;
 }
 
@@ -97,6 +113,7 @@ async function nightFutures(): Promise<UsMajorRow | null> {
       digits: 2,
       quotedAt: null,
       source: "hantoo",
+      signal: null,
       error: null,
     };
   } catch {
@@ -151,6 +168,87 @@ async function kisIndex(iscd: string): Promise<{ price: number; changeRate: numb
   }
 }
 
+/*
+ * 신호등.
+ *
+ * 표에 열두 줄이 있으면 **어디를 봐야 할지 모른다.** 오늘 무엇이 평소와 다른지를
+ * 색으로 먼저 말해 주고, 왜 그런지 한 줄로 붙인다.
+ *
+ * 기준은 "이 값이 국내 증시에 얼마나 직접 닿는가"로 잡았다.
+ *
+ *   · **금리** — 절대 변화폭(%p)으로 본다. 4.7% 에서 4.8% 로 가는 건 등락률로는 2% 지만
+ *     시장이 반응하는 건 **0.1%p 라는 폭** 자체다. 하루 0.10%p 넘으면 성장주가 흔들린다.
+ *   · **VIX** — 수준과 변화를 같이 본다. 20 은 불안의 문턱, 30 은 공포다.
+ *   · **필라델피아 반도체** — 국내 지수와 가장 직접 붙어 있다. -3% 면 다음 날 국내
+ *     반도체가 그대로 받는다.
+ *   · **지수·유가** — 하루 폭만 본다.
+ *
+ * 숫자는 경험칙이지 법칙이 아니다. 그래서 색과 **함께 이유를 적는다** — 사람이
+ * "이번엔 아니다"라고 판단할 여지를 남겨야 한다.
+ */
+function signalOf(key: string, price: number | null, rate: number | null): RowSignal | null {
+  if (price === null || rate === null) return null;
+
+  if (key === "tnx" || key === "tyx" || key === "fvx" || key === "irx") {
+    // 등락률(%)을 절대 변화폭(%p)으로 되돌린다 — 4.706 의 +2% 는 +0.094%p 다
+    const move = (price * rate) / 100;
+    if (Math.abs(move) >= 0.1) {
+      return {
+        level: "danger",
+        why: `하루 ${move > 0 ? "+" : ""}${move.toFixed(3)}%p — 0.1%p 넘는 움직임은 성장주 밸류에이션을 직접 흔든다`,
+      };
+    }
+    if (Math.abs(move) >= 0.05) {
+      return { level: "warn", why: `하루 ${move > 0 ? "+" : ""}${move.toFixed(3)}%p 이동` };
+    }
+    return null;
+  }
+
+  if (key === "vix") {
+    if (price >= 30) return { level: "danger", why: "30 이상 — 공포 구간. 이런 날은 수급이 방향을 잃는다" };
+    if (price >= 20) return { level: "warn", why: "20 이상 — 불안이 값에 반영되기 시작하는 문턱" };
+    if (rate >= 20) return { level: "warn", why: `하루 +${rate.toFixed(1)}% 급등 — 수준은 낮아도 방향이 급하다` };
+    return null;
+  }
+
+  if (key === "sox") {
+    if (rate <= -3) return { level: "danger", why: "-3% 이상 하락 — 국내 반도체가 다음 날 그대로 받는다" };
+    if (rate >= 3) return { level: "ok", why: "+3% 이상 상승 — 국내 반도체에 우호적" };
+    return null;
+  }
+
+  if (key === "wti" || key === "brent") {
+    if (Math.abs(rate) >= 4) return { level: "warn", why: `하루 ${rate > 0 ? "+" : ""}${rate.toFixed(1)}% — 정유·화학·항공에 바로 닿는다` };
+    return null;
+  }
+
+  // 지수
+  if (rate <= -2) return { level: "danger", why: `${rate.toFixed(1)}% — 하루 2% 넘는 하락` };
+  if (rate <= -1) return { level: "warn", why: `${rate.toFixed(1)}% 하락` };
+  if (rate >= 2) return { level: "ok", why: `+${rate.toFixed(1)}% — 하루 2% 넘는 상승` };
+  return null;
+}
+
+/**
+ * 장단기 금리 역전.
+ *
+ * 10년물이 3개월물보다 **낮으면** 역전이다. 역사적으로 침체에 앞서 나타났고, 무엇보다
+ * **은행 수익성**에 직접 닿아 금융주가 먼저 반응한다. 한 줄이라 표 아래에 붙인다.
+ */
+function curveNote(rows: UsMajorRow[]): string | null {
+  const ten = rows.find((r) => r.key === "tnx")?.price ?? null;
+  const three = rows.find((r) => r.key === "irx")?.price ?? null;
+  if (ten === null || three === null) return null;
+  const spread = ten - three;
+  if (spread < 0) {
+    return `장단기 역전 — 10년물이 3개월물보다 ${Math.abs(spread).toFixed(2)}%p 낮습니다. 침체 신호로 읽히고 은행 수익성에 직접 닿습니다.`;
+  }
+  if (spread < 0.2) {
+    return `장단기 금리차 ${spread.toFixed(2)}%p — 거의 붙어 있습니다. 역전에 가까운 구간입니다.`;
+  }
+  return null;
+}
+
 /** 60초면 충분하다 — 미국 현물은 낮에 아예 안 움직인다 */
 const TTL_MS = 60_000;
 let cache: { at: number; data: UsMajorResult } | null = null;
@@ -176,6 +274,7 @@ export async function usMajorIndices(force = false): Promise<UsMajorResult> {
       digits: t.digits ?? 2,
       quotedAt: q?.quotedAt ?? null,
       source: "yahoo" as const,
+      signal: signalOf(t.key, q?.price ?? null, q?.changeRate ?? null),
       error: q?.error ?? null,
     };
   });
@@ -196,7 +295,12 @@ export async function usMajorIndices(force = false): Promise<UsMajorResult> {
     }
   }
 
-  const data: UsMajorResult = { rows, nightFutures: night, fetchedAt: Date.now() };
+  const data: UsMajorResult = {
+    rows,
+    nightFutures: night,
+    curveNote: curveNote(rows),
+    fetchedAt: Date.now(),
+  };
   cache = { at: Date.now(), data };
   return data;
 }

@@ -706,6 +706,24 @@ export interface TopTraderRow {
   profitRate: number;
 }
 
+export interface RateRow {
+  code: string;
+  name: string;
+  /** 금리 (%) */
+  rate: number | null;
+  /** 전일대비 (%p) — 등락률이 아니다 */
+  change: number | null;
+  group: "국내" | "해외";
+}
+
+/** 미장 표의 줄 단위 경고 — 신호등(green/yellow/red)과는 다른 개념이다 */
+export type RowLevel = "danger" | "warn" | "ok";
+
+export interface RowSignal {
+  level: RowLevel;
+  why: string;
+}
+
 export interface UsMajorRow {
   key: string;
   label: string;
@@ -719,6 +737,8 @@ export interface UsMajorRow {
   quotedAt: number | null;
   /** 어디서 받은 값인가 — 야후가 막히면 한투로 메운다 */
   source: "yahoo" | "hantoo";
+  /** 지금 눈여겨볼 상태인가 (없으면 평범한 것) */
+  signal: RowSignal | null;
   error: string | null;
 }
 
@@ -726,6 +746,8 @@ export interface UsMajorResult {
   rows: UsMajorRow[];
   /** 코스피 야간선물 — 이것만 지금 움직인다 */
   nightFutures: UsMajorRow | null;
+  /** 장단기 금리차 한 줄 */
+  curveNote: string | null;
   fetchedAt: number;
 }
 
