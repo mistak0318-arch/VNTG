@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   api,
   fmtNum,
@@ -820,25 +820,56 @@ export function MarketNewsSection({ edition }: { edition: string }) {
  */
 export function PinnedChannelSection({ edition }: { edition: string }) {
   const [posts, setPosts] = useState<PinnedPost[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(
+    (force: boolean) => {
+      setBusy(true);
+      setError(null);
+      if (force) setPosts(null);
+      api
+        .channelPinned(edition, 3, force)
+        .then((r) => setPosts(r.posts))
+        .catch((e: Error) => {
+          /*
+           * **실패를 말한다.**
+           * 예전엔 조용히 빈 목록을 넣어서, 못 받은 건지 원래 글이 없는 건지 알 수 없었다.
+           */
+          setError(e.message || "불러오지 못했습니다");
+          setPosts([]);
+        })
+        .finally(() => setBusy(false));
+    },
+    [edition],
+  );
 
   useEffect(() => {
-    let alive = true;
     setPosts(null);
-    api
-      .channelPinned(edition, 3)
-      .then((r) => alive && setPosts(r.posts))
-      .catch(() => alive && setPosts([]));
-    return () => {
-      alive = false;
-    };
-  }, [edition]);
+    load(false);
+  }, [load]);
 
   if (posts === null) return <div className="page-note">불러오는 중…</div>;
+
+  if (error) {
+    return (
+      <div className="error-banner">
+        {error}
+        <button className="filter-btn" onClick={() => load(true)} disabled={busy}>
+          다시 받기
+        </button>
+      </div>
+    );
+  }
+
   if (posts.length === 0) {
     return (
       <div className="empty">
         고정한 채널의 글이 없습니다. 「텔레그램 동향 &gt; 선별 자동발송」에서 채널을 고정하면
         여기에 원문이 올라옵니다.
+        <button className="filter-btn" onClick={() => load(true)} disabled={busy}>
+          다시 받기
+        </button>
       </div>
     );
   }
@@ -862,7 +893,11 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
       ))}
       <div className="table-note">
         고정 채널은 <b>선별도 AI 요약도 거치지 않은 원문</b>입니다. 이미 정리된 글이라
-        다시 요약하면 정보만 잃습니다.
+        다시 요약하면 정보만 잃습니다. 한 번 받은 판은 <b>그날치로 저장</b>되어, 나중에 열어도
+        아침에 본 그 글이 그대로 있습니다.
+        <button className="filter-btn" onClick={() => load(true)} disabled={busy}>
+          {busy ? "…" : "다시 받기"}
+        </button>
       </div>
     </>
   );

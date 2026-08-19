@@ -133,7 +133,9 @@ export function createChannelsRouter(): Router {
       const edition = (["morning", "intraday", "closing", "weekend"] as const).includes(e as never)
         ? (e as Edition)
         : "morning";
-      res.json({ posts: await pinnedPosts(edition, Number(req.query.limit) || 3) });
+      res.json({
+        posts: await pinnedPosts(edition, Number(req.query.limit) || 3, req.query.force === "1"),
+      });
     } catch (err) {
       next(err);
     }

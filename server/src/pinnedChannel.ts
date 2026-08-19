@@ -1,5 +1,11 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getChannelConfig } from "./channelConfig.js";
 import { fetchNewMessages, listChannels, type ChannelMessage } from "./telegramReader.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SNAP_FILE = resolve(__dirname, "..", "data", "pinnedSnapshot.json");
 
 /**
  * 고정 채널 원문.
@@ -39,11 +45,82 @@ function windowHours(edition: Edition): number {
   return 8;
 }
 
+/*
+ * ──────────────────────────────────────────────────────────────────
+ * 스냅샷
+ *
+ * **리포트는 그날 아침의 기록이다. 열 때마다 달라지면 안 된다.**
+ *
+ * 예전엔 화면을 열 때마다 텔레그램에 새로 물었다. 그래서 세 가지가 났다.
+ *   1. 조회 창이 「지금 기준」이라 시간이 가면 아침 글이 밀려나 **사라졌다**
+ *   2. 조회가 실패하면 catch 가 조용히 빈 배열을 줘서 **섹션이 그냥 없어졌다**
+ *   3. 조회가 응답 없이 매달리면 화면이 **「불러오는 중…」에서 안 넘어갔다**
+ *
+ * 한 번 받은 판은 파일에 적어 두고 그다음부터는 그걸 준다.
+ * 하루 한 편만 올리는 채널이라 이게 맞다 — 새 글은 다음 판에서 잡힌다.
+ * ──────────────────────────────────────────────────────────────────
+ */
+
+type Snapshot = Record<string, { at: string; posts: PinnedPost[] }>;
+
+/** 한국 날짜 — 판을 하루 단위로 가른다 */
+function kstDate(): string {
+  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+}
+
+async function readSnap(): Promise<Snapshot> {
+  try {
+    return JSON.parse(await readFile(SNAP_FILE, "utf-8")) as Snapshot;
+  } catch {
+    return {};
+  }
+}
+
+async function writeSnap(snap: Snapshot): Promise<void> {
+  // 오래된 판은 버린다 — 60일이면 충분하고, 안 버리면 파일이 계속 자란다
+  const cut = new Date(Date.now() - 60 * 24 * 3600_000).toISOString().slice(0, 10);
+  for (const k of Object.keys(snap)) if (k.slice(0, 10) < cut) delete snap[k];
+  await mkdir(dirname(SNAP_FILE), { recursive: true });
+  await writeFile(SNAP_FILE, JSON.stringify(snap, null, 2), "utf-8");
+}
+
+/**
+ * 매달리지 않게 시간을 끊는다.
+ *
+ * 텔레그램 조회는 응답이 안 올 때가 있다. 그러면 화면이 「불러오는 중…」에서
+ * 영영 안 넘어간다 — **못 받은 것보다 안 끝나는 게 나쁘다.**
+ */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, rej) => setTimeout(() => rej(new Error("텔레그램 조회 시간 초과")), ms)),
+  ]);
+}
+
 /**
  * @param edition 어느 판인가 — 보는 창이 달라진다
  * @param limit   몇 편까지
+ * @param force   저장된 판을 무시하고 다시 받는다
  */
-export async function pinnedPosts(edition: Edition, limit = 3): Promise<PinnedPost[]> {
+export async function pinnedPosts(
+  edition: Edition,
+  limit = 3,
+  force = false,
+): Promise<PinnedPost[]> {
+  const key = `${kstDate()}|${edition}`;
+  const snap = await readSnap();
+  // 저장된 판이 있으면 그걸 준다 — 리포트는 그날의 기록이다
+  if (!force && snap[key]?.posts?.length) return snap[key].posts.slice(0, limit);
+
+  const fresh = await fetchPinned(edition, limit);
+  if (fresh.length > 0) {
+    snap[key] = { at: new Date().toISOString(), posts: fresh };
+    await writeSnap(snap).catch(() => undefined);
+  }
+  return fresh;
+}
+
+async function fetchPinned(edition: Edition, limit: number): Promise<PinnedPost[]> {
   const { pinned } = await getChannelConfig();
   if (pinned.length === 0) return [];
 
@@ -62,11 +139,14 @@ export async function pinnedPosts(edition: Edition, limit = 3): Promise<PinnedPo
      * **오프셋을 쓰지 않는다.** 선별 스캐너가 이미 읽어 간 글이면 오프셋이 앞서 있어
      * 아무것도 안 나온다. 고정 채널은 "새 글"이 아니라 "그 시간대의 글"을 봐야 한다.
      */
-    const { messages } = await fetchNewMessages({
-      sinceMinutes: windowHours(edition) * 60,
-      maxPerChannel: 20,
-      useOffsets: false,
-    });
+    const { messages } = await withTimeout(
+      fetchNewMessages({
+        sinceMinutes: windowHours(edition) * 60,
+        maxPerChannel: 20,
+        useOffsets: false,
+      }),
+      20_000,
+    );
 
     return messages
       .filter((m: ChannelMessage) => byId.has(m.channelId))

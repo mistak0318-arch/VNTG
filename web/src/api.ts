@@ -400,9 +400,9 @@ export const api = {
       config,
     ),
   /** 고정 채널 원문 — 선별·AI 를 안 거친다 */
-  channelPinned: (edition: string, limit = 3) =>
+  channelPinned: (edition: string, limit = 3, force = false) =>
     getJson<{ posts: PinnedPost[] }>(
-      `/api/channels/pinned?edition=${edition}&limit=${limit}`,
+      `/api/channels/pinned?edition=${edition}&limit=${limit}${force ? "&force=1" : ""}`,
     ),
   pulse: (force = false) => getJson<MarketPulse>(`/api/pulse${force ? "?force=1" : ""}`),
   pulseBrief: (force = false) =>
