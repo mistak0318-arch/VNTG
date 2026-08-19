@@ -665,6 +665,22 @@ export interface IndexDetailData {
   flows: IndexFlowRow[];
 }
 
+export interface TopTraderRow {
+  rank: number;
+  code: string;
+  name: string;
+  price: number;
+  changeRate: number;
+  /** 순매수 금액 (억원) */
+  netAmount: number;
+  netQty: number;
+  /** 이 종목을 들고 있는 상위 계좌 수 */
+  accounts: number;
+  avgBuyPrice: number;
+  /** 그 계좌들의 수익률(%) */
+  profitRate: number;
+}
+
 export interface UsMajorRow {
   key: string;
   label: string;

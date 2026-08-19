@@ -13,6 +13,7 @@ import {
   type ThemeRow,
   type ViRow,
   type UsMajorResult,
+  type TopTraderRow,
 } from "../api";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { FlowBars } from "../components/overview/FlowBars";
@@ -59,6 +60,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const vi = useSection<ViRow[]>("vi", 60_000);
   const global = useSection<GlobalQuote[]>("global", 60_000);
   const usMajor = useSection<UsMajorResult>("usMajor", 60_000);
+  const topTraders = useSection<TopTraderRow[]>("topTraders", 300_000);
 
   const [flowMarket, setFlowMarket] = useState<"kospi" | "kosdaq">("kospi");
   const [moverDir, setMoverDir] = useState<"rising" | "falling">("rising");
@@ -519,6 +521,72 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
 
 
       </div>
+
+      {/*
+        수익률 상위 고객 매매동향 — **맨 아래**다.
+
+        키움에서 실제로 잘 벌고 있는 계좌들이 무엇을 사는지 보여 준다. 외국인·기관은
+        규모가 커서 방향이 굼뜨고 개인 수급은 방향이 없는데, 이건 그 사이다 —
+        개인이되 **결과로 걸러진** 개인이다.
+
+        맨 아래인 이유는 **참고 자료**이기 때문이다. 이걸 보고 따라 사는 건 이 프로젝트가
+        하려는 일이 아니라, 앞의 지표들을 다 보고 난 뒤 곁눈질하는 자리에 둔다.
+      */}
+      {show("summary") && (
+        <OverviewCard
+          title="수익률 상위 고객 매매동향"
+          updatedAt={topTraders.updatedAt}
+          loading={topTraders.loading}
+          error={topTraders.error}
+        >
+          <div className="ov-card-b">
+            <div className="data-table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th className="sticky-col">종목</th>
+                    <th>현재가</th>
+                    <th>등락률</th>
+                    <th title="상위 계좌들의 순매수 금액">순매수</th>
+                    <th title="이 종목을 들고 있는 상위 계좌 수 — 한 계좌의 몰빵인지 여럿이 보는지">
+                      계좌
+                    </th>
+                    <th>평균단가</th>
+                    <th title="그 계좌들의 이 종목 수익률">수익률</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(topTraders.data ?? []).slice(0, 20).map((r) => (
+                    <tr
+                      key={r.code}
+                      className="clickable-row"
+                      onClick={() => onSelectStock(normalizeStockCode(r.code), r.name)}
+                    >
+                      <td className="sticky-col">{r.name}</td>
+                      <td className="num">{fmtNum(r.price)}</td>
+                      <td className={`num ${signCls(r.changeRate)}`}>{fmtPct(r.changeRate)}</td>
+                      <td className={`num ${signCls(r.netAmount)}`}>
+                        {Math.round(r.netAmount).toLocaleString("ko-KR")}억
+                      </td>
+                      <td className="num">{r.accounts}</td>
+                      <td className="num pt-n">{fmtNum(r.avgBuyPrice)}</td>
+                      <td className={`num ${signCls(r.profitRate)}`}>
+                        {r.profitRate > 0 ? "+" : ""}
+                        {r.profitRate.toFixed(0)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="table-note">
+              키움 <b>수익률 상위 고객</b> 계좌들의 매매입니다(상위 20종목). 금액은 억원.
+              <b>계좌 수</b>를 같이 보세요 — 한 계좌가 크게 담은 것과 여럿이 함께 담은 것은
+              뜻이 다릅니다. <b>참고 자료</b>이지 매매 근거가 아닙니다.
+            </div>
+          </div>
+        </OverviewCard>
+      )}
 
       {/*
         지표 설명은 **맨 아래**다. 원래 시장 폭 그래프 바로 밑에 있었는데 설명이 길어서

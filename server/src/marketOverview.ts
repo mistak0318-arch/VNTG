@@ -1,5 +1,6 @@
 import { getGlobalMarket } from "./globalMarket.js";
 import { usMajorIndices } from "./usMajor.js";
+import { topTraders } from "./topTraders.js";
 import { recordFlow } from "./flowIntraday.js";
 import { kospi200Futures, type FuturesQuote } from "./kospiFutures.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -38,6 +39,11 @@ const SECTION_TTL_MS = {
    * 자주 부를 이유가 없다. (「글로벌 시황지수」의 선물이 움직이는 쪽이다)
    */
   usMajor: 60_000,
+  /*
+   * 수익률 상위 고객 매매동향 — 계좌 집계라 자주 안 바뀐다.
+   * 참고 자료라 굳이 자주 부를 이유도 없다.
+   */
+  topTraders: 300_000,
 } as const;
 
 export type SectionName = keyof typeof SECTION_TTL_MS;
@@ -457,6 +463,7 @@ const FETCHERS: Record<SectionName, (client: KiwoomClient) => Promise<unknown>> 
   vi: fetchVi,
   global: () => getGlobalMarket(),
   usMajor: () => usMajorIndices(),
+  topTraders: (c: KiwoomClient) => topTraders(c),
 };
 
 async function refresh(section: SectionName, client: KiwoomClient): Promise<void> {
