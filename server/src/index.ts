@@ -89,7 +89,7 @@ app.use("/api/ranking", createRankingRouter(client));
 app.use("/api/algo", createAlgoRouter(client));
 app.use("/api/overview", createOverviewRouter(client));
 app.use("/api/watchlist", createWatchlistRouter(client));
-app.use("/api/feed", createNewsRouter());
+app.use("/api/feed", createNewsRouter(client));
 app.use("/api/settings", createSettingsRouter());
 app.use("/api/calendar", createCalendarRouter());
 app.use("/api/notes", createNotesRouter(client));

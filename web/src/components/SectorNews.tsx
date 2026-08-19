@@ -72,7 +72,14 @@ export function SectorNews({
   onFetched?: (iso: string) => void;
 }) {
   const [sectors, setSectors] = useState<{ key: string; label: string; items: ScoredNews[] }[]>([]);
-  const [tab, setTab] = useState("market");
+  /*
+   * 처음 보이는 건 **브리핑**이다.
+   *
+   * 예전엔 「증시」 탭이 먼저 열렸다. 그런데 뉴스를 열 때 하고 싶은 건 분야를 고르는 게
+   * 아니라 **위에서 아래로 훑는 것**이다 — 오늘 시장이 크게 다룬 것 → 내 종목 → 전반 시황.
+   * 탭은 그 다음에 파고들 때 쓴다.
+   */
+  const [tab, setTab] = useState("brief");
   const [scope, setScope] = useState<"major" | "all">("major");
   const [sort, setSort] = useState<"importance" | "recent">(defaultSort);
   const [loading, setLoading] = useState(true);
@@ -80,6 +87,7 @@ export function SectorNews({
   const [expanded, setExpanded] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [fetchedAt, setFetchedAt] = useState("");
+  const [mineSources, setMineSources] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +98,7 @@ export function SectorNews({
       .then((r) => {
         if (cancelled) return;
         setSectors(r.sectors);
+        setMineSources(r.mineSources ?? []);
         setExpanded(false);
         setFetchedAt(r.fetchedAt);
         onFetched?.(r.fetchedAt);
@@ -107,6 +116,7 @@ export function SectorNews({
   }, [scope, perSector, sort, reloadKey]);
 
   const current = sectors.find((s) => s.key === tab)?.items ?? [];
+  const pick = (key: string) => sectors.find((s) => s.key === key)?.items ?? [];
 
   // 3단 계층: 헤드라인(요약 포함) / 주요(제목만) / 나머지(접기)
   // 예전엔 12건 뒤를 전부 접어놔서 목록이 실제보다 훨씬 빈약해 보였다.
@@ -118,6 +128,12 @@ export function SectorNews({
   return (
     <div>
       <div className="filter-row news-sector-tabs">
+        <button
+          className={`filter-btn ${tab === "brief" ? "active" : ""}`}
+          onClick={() => setTab("brief")}
+        >
+          브리핑
+        </button>
         {sectors.map((s) => (
           <button
             key={s.key}
@@ -172,7 +188,46 @@ export function SectorNews({
       {loading && <div className="empty">뉴스 불러오는 중...</div>}
       {error && <div className="error-banner">{error}</div>}
 
-      {!loading && !error && current.length > 0 && (
+      {/*
+        브리핑 — 위에서 아래로 한 번에 훑는 자리.
+        「분야를 골라서 보라」고 하면 결국 아무것도 안 읽게 된다.
+      */}
+      {!loading && !error && tab === "brief" && (
+        <div className="nb">
+          <NewsBlock
+            title="오늘 시장이 크게 다룬 것"
+            /*
+             * **여러 매체가 함께 다룬 것만** 올린다.
+             * 조회수는 네이버 검색 API 가 주지 않는다. 대신 쓸 수 있는 가장 가까운 값이
+             * 「같은 사건을 몇 개 매체가 썼나」다 — 한 곳만 쓴 기사는 아직 이슈가 아니다.
+             */
+            items={pick("top").filter((n) => n.coverage >= 2).slice(0, 6)}
+            fallback={pick("top").slice(0, 6)}
+            note="여러 매체가 함께 다룬 순입니다. 한 곳만 쓴 기사는 아직 이슈가 아닙니다."
+            onMore={() => setTab("top")}
+          />
+          <NewsBlock
+            title="내 관심종목"
+            items={pick("mine").slice(0, 8)}
+            note={
+              mineSources.length > 0
+                ? `${mineSources.join(" · ")} 종목을 하나씩 검색했습니다.`
+                : "관심종목이 없어 검색할 종목이 없습니다."
+            }
+            onMore={() => setTab("mine")}
+          />
+          <NewsBlock
+            title="전반 시황"
+            items={[...pick("market"), ...pick("global")]
+              .sort((a, b) => b.score - a.score)
+              .slice(0, 8)}
+            note="증시·글로벌을 합쳐 점수순으로 보여줍니다."
+            onMore={() => setTab("market")}
+          />
+        </div>
+      )}
+
+      {!loading && !error && tab !== "brief" && current.length > 0 && (
         <>
           <div className="report-lines">
             {headline.map((n, i) => (
@@ -209,5 +264,49 @@ export function SectorNews({
         <div className="empty">이 분야 기사가 없습니다.</div>
             )}
     </div>
+  );
+}
+
+
+/**
+ * 브리핑의 한 단.
+ *
+ * `fallback` 이 있는 이유: 「여러 매체가 함께 다룬 것」으로 거르면 장 초반이나
+ * 한산한 날에는 한 건도 안 남을 수 있다. **빈 칸을 보여주느니** 거르기 전 것을 쓴다 —
+ * 없는 것보다 덜 중요한 게 낫다.
+ */
+function NewsBlock({
+  title,
+  items,
+  fallback,
+  note,
+  onMore,
+}: {
+  title: string;
+  items: ScoredNews[];
+  fallback?: ScoredNews[];
+  note: string;
+  onMore: () => void;
+}) {
+  const list = items.length > 0 ? items : (fallback ?? []);
+  return (
+    <section className="nb-block">
+      <h3 className="nb-title">
+        {title}
+        <button className="nb-more" onClick={onMore}>
+          더 보기 →
+        </button>
+      </h3>
+      {list.length === 0 ? (
+        <div className="page-note">해당하는 기사가 없습니다.</div>
+      ) : (
+        <div className="report-lines">
+          {list.map((n, i) => (
+            <NewsRow key={`${title}-${n.link}-${i}`} item={n} />
+          ))}
+        </div>
+      )}
+      <div className="table-note">{note}</div>
+    </section>
   );
 }

@@ -520,7 +520,13 @@ export const api = {
     getJson(`/api/market/index-intraday/${code}?tic=${tic}`),
   marketDrivers: (top = 5) => getJson<MarketDriverReport>(`/api/report/drivers?top=${top}`),
   newsSectors: (scope: "major" | "all" = "major", per = 20, sort: "importance" | "recent" = "importance") =>
-    getJson<{ sectors: { key: string; label: string; items: ScoredNews[] }[]; fetchedAt: string }>(
+    getJson<{
+      sectors: { key: string; label: string; items: ScoredNews[] }[];
+      fetchedAt: string;
+      /** 어느 목록에서 종목을 뽑아 검색했는지 — 안 밝히면 왜 이 기사가 떴는지 모른다 */
+      mineSources?: string[];
+      mineNames?: string[];
+    }>(
       `/api/feed/news/sectors?scope=${scope}&per=${per}&sort=${sort}`,
     ),
   finance: (code: string) => getJson<FinanceResult>(`/api/feed/finance/${code}`),

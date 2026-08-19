@@ -4956,3 +4956,33 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   color: var(--muted);
   font-size: 0.9rem;
 }
+
+/* ------------------------------------------------------------------ */
+/* 뉴스 브리핑                                                          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * 위에서 아래로 한 번에 훑는 자리.
+ * 「분야를 골라서 보라」고 하면 결국 아무것도 안 읽게 된다.
+ */
+.nb-block {
+  margin-top: 1.2rem;
+}
+.nb-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.4rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 2px solid var(--border);
+  font-size: 1.05rem;
+}
+.nb-more {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: var(--blue);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+}

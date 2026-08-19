@@ -6,6 +6,8 @@ import { quarterFinance } from "../quarterFinance.js";
 import { peekSnapshot } from "../marketSnapshot.js";
 import { getDisclosures, newsCounts, searchNews, sectorNews } from "../newsDisclosure.js";
 import { listWatchlist } from "../watchlist.js";
+import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
+import type { KiwoomClient } from "../kiwoomClient.js";
 
 /**
  * 질의 하나가 네이버 호출 하나다. 종목을 무한정 넣으면 하루 할당량이 녹는다.
@@ -13,34 +15,76 @@ import { listWatchlist } from "../watchlist.js";
  */
 const MAX_STOCK_QUERIES = 12;
 
-async function mineQueryNames(watchNames: string[]): Promise<string[]> {
+/**
+ * 어느 종목으로 뉴스를 검색할까.
+ *
+ * **내가 실제로 보고 있는 종목**이어야 한다. 분야별 질의(「코스피 마감 시황」 등)는
+ * 개별 기업 기사를 거의 못 잡아서, 그것만으로는 「쓸 만한 걸 퍼온다」는 느낌이 안 났다.
+ *
+ * 두 곳을 정해 두고 그 순서로 채운다.
+ *   1. **관심종목 (AI_HTS)** — 내가 직접 담은 것
+ *   2. **키움_HTS 첫 번째 그룹** — 키움에서 늘 맨 앞에 두는 그 묶음
+ *
+ * 자리가 남으면 내 테마 구성종목으로 채운다. 「위주로」이지 「만」은 아니다.
+ */
+async function mineQueryNames(
+  client: KiwoomClient,
+  watchNames: string[],
+): Promise<{ names: string[]; sources: string[] }> {
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const n of watchNames) {
-    if (!n || seen.has(n)) continue;
+  const sources: string[] = [];
+  const push = (n: string) => {
+    if (!n || seen.has(n)) return;
     seen.add(n);
     out.push(n);
-  }
-  if (out.length >= MAX_STOCK_QUERIES) return out.slice(0, MAX_STOCK_QUERIES);
+  };
 
-  // 내 테마 구성종목 — 코드→이름은 전종목 스냅샷에서 본다.
-  // 스냅샷이 아직 없으면 이 단계는 그냥 건너뛴다 (뉴스 때문에 65회 조회를 유발하지 않는다).
-  const snap = peekSnapshot();
-  if (!snap) return out;
+  for (const n of watchNames) push(n);
+  if (out.length > 0) sources.push(`관심종목 ${out.length}`);
 
-  for (const t of await listThemes().catch(() => [])) {
-    for (const code of t.codes) {
-      const name = snap.byCode.get(code)?.name;
-      if (!name || seen.has(name)) continue;
-      seen.add(name);
-      out.push(name);
-      if (out.length >= MAX_STOCK_QUERIES) return out;
+  // 키움 첫 번째 그룹 — 목록의 맨 앞이 늘 내가 제일 자주 보는 묶음이다
+  if (out.length < MAX_STOCK_QUERIES) {
+    try {
+      const groups = await listKiwoomGroups(client);
+      const first = groups[0];
+      if (first) {
+        const stocks = await getKiwoomGroupStocks(client, first.code);
+        const before = out.length;
+        for (const st of stocks) {
+          if (out.length >= MAX_STOCK_QUERIES) break;
+          push(st.name);
+        }
+        if (out.length > before) sources.push(`${first.name} ${out.length - before}`);
+      }
+    } catch {
+      // 키움이 막혀도 관심종목만으로 돈다 — 뉴스가 통째로 비면 안 된다
     }
   }
-  return out;
+
+  // 남는 자리만 내 테마 종목으로.
+  // 코드→이름은 전종목 스냅샷에서 본다. 스냅샷이 없으면 건너뛴다
+  // (뉴스 때문에 65회 조회를 유발하지 않는다).
+  if (out.length < MAX_STOCK_QUERIES) {
+    const snap = peekSnapshot();
+    if (snap) {
+      const before = out.length;
+      for (const t of await listThemes().catch(() => [])) {
+        for (const code of t.codes) {
+          if (out.length >= MAX_STOCK_QUERIES) break;
+          const name = snap.byCode.get(code)?.name;
+          if (name) push(name);
+        }
+        if (out.length >= MAX_STOCK_QUERIES) break;
+      }
+      if (out.length > before) sources.push(`내 테마 ${out.length - before}`);
+    }
+  }
+
+  return { names: out.slice(0, MAX_STOCK_QUERIES), sources };
 }
 
-export function createNewsRouter(): Router {
+export function createNewsRouter(client: KiwoomClient): Router {
   const router = Router();
 
   // 뉴스 검색 — 종목명이나 임의 키워드
@@ -78,10 +122,16 @@ export function createNewsRouter(): Router {
        * 관심종목을 먼저 넣고, 남는 자리를 내가 만든 테마의 구성종목으로 채운다.
        * 질의 하나가 네이버 호출 하나라서 상한을 둔다 (5분 캐시가 있어 반복 조회 부담은 적다).
        */
-      const stockNames = req.query.mine === "0" ? [] : await mineQueryNames(watchNames);
+      const mine =
+        req.query.mine === "0"
+          ? { names: [] as string[], sources: [] as string[] }
+          : await mineQueryNames(client, watchNames);
+      const stockNames = mine.names;
 
       const sort = req.query.sort === "recent" ? "recent" : "importance";
-      res.json(await sectorNews({ majorOnly, perSector, watchNames, stockNames, sort }));
+      const out = await sectorNews({ majorOnly, perSector, watchNames, stockNames, sort });
+      // 어디서 온 종목으로 검색했는지 화면에 밝힌다 — 안 밝히면 왜 이 기사가 떴는지 모른다
+      res.json({ ...out, mineSources: mine.sources, mineNames: stockNames });
     } catch (err) {
       next(err);
     }
