@@ -149,6 +149,8 @@ export function SignalTrackPanel({
                 </b>{" "}
                 종목 ({pctDone}%) · 담김 {job.added}
                 {job.skippedDuplicate > 0 && ` · 중복 건너뜀 ${job.skippedDuplicate}`}
+                {/* 실패가 쌓이면 그 자리에서 보여야 한다 — 다 끝난 뒤 「0건」만 보면 원인을 모른다 */}
+                {job.failed > 0 && <span className="negative"> · 조회 실패 {job.failed}</span>}
                 {job.current && <span className="pt-n"> · {job.current}</span>}
               </>
             ) : (

@@ -69,14 +69,6 @@ export function createSignalRouter(client: KiwoomClient): Router {
     }
   });
 
-  router.get("/:code", async (req, res, next) => {
-    try {
-      res.json(await evaluateSignal(client, req.params.code, req.query.force === "1"));
-    } catch (err) {
-      next(err);
-    }
-  });
-
   /**
    * 스크리너 — 거래대금 상위에서 내 신호등 기준에 맞는 종목을 찾는다.
    * 종목당 여러 TR을 부르므로 job 방식으로 돌리고 진행 상황을 폴링한다.
@@ -175,6 +167,22 @@ export function createSignalRouter(client: KiwoomClient): Router {
   router.put("/track/config", async (req, res, next) => {
     try {
       res.json(await saveTrackConfig(req.body ?? {}));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 종목 하나 평가 — **반드시 맨 끝이다.**
+   *
+   * `/:code` 는 한 칸짜리 주소를 전부 삼킨다. 이게 위에 있으면 `/track` 이 종목코드
+   * 「track」으로 읽혀 추적기 목록이 신호등 판정으로 바뀐다. 실제로 그렇게 돼서
+   * 추적기가 늘 비어 보였다 — 화면은 `entries` 가 없으니 조용히 「담긴 것 없음」을 그렸다.
+   * 새 주소를 붙일 때는 **이 줄 위에** 붙일 것.
+   */
+  router.get("/:code", async (req, res, next) => {
+    try {
+      res.json(await evaluateSignal(client, req.params.code, req.query.force === "1"));
     } catch (err) {
       next(err);
     }

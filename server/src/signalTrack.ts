@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { evaluateSignal, getConfig, type Axis } from "./signalLight.js";
+import { tradeValueTop } from "./signalScreen.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FILE = resolve(__dirname, "..", "data", "signalTrack.json");
@@ -199,6 +200,16 @@ export interface EnrollReport {
   added: number;
   skippedDuplicate: number;
   byTier: Record<string, number>;
+  /**
+   * 평가 자체가 실패한 종목 수.
+   *
+   * **이게 없어서 한참 헤맸다.** 예전엔 `evaluateSignal(...).catch(() => null)` 로
+   * 조용히 넘겨서, 호출이 전부 막혀도 화면에는 「81종목을 평가해 0건 담았습니다」라고만
+   * 나왔다. 0건이 「조건에 맞는 게 없었다」인지 「아예 못 물어봤다」인지 구분이 안 됐다.
+   */
+  failed: number;
+  /** 문턱에 못 미쳐서 안 담은 것 — 0건일 때 이유가 되는 숫자다 */
+  belowTier: number;
   note: string;
 }
 
@@ -222,26 +233,24 @@ export async function enrollToday(
       scanned: 0,
       added: 0,
       skippedDuplicate: 0,
+      failed: 0,
+      belowTier: 0,
       byTier: {},
       note: "오늘은 이미 담았습니다.",
     };
   }
 
-  const rank = await client.request<Record<string, unknown>>("/api/dostk/rkinfo", "ka10032", {
-    mrkt_tp: cfg.market,
-    mang_stk_incls: "0",
-    stex_tp: "3",
-  });
-  const rows = (rank.data?.trde_prica_upper ?? []) as Record<string, unknown>[];
-  const universe = rows
-    .slice(0, cfg.universe)
-    .map((r) => ({
-      code: String(r.stk_cd ?? "").replace(/[^0-9A-Za-z]/g, ""),
-      name: String(r.stk_nm ?? ""),
-      // trde_prica 는 백만원 단위다 (화면 곳곳에서 /100 해서 억으로 쓴다)
-      tradeValue: Math.round((Number(String(r.trde_prica ?? "").replace(/[+,-]/g, "")) || 0) / 100),
-    }))
-    .filter((x) => x.code && x.tradeValue >= cfg.minTradeValue);
+  /*
+   * 모집단은 **「신호등 찾기」와 같은 것**을 쓴다.
+   *
+   * 예전엔 여기서 ka10032 첫 장을 그대로 잘라 썼다. 그러면 KODEX 같은 ETF·ETN·리츠·
+   * 우선주가 상위를 채워, 「상위 100」이라 해놓고 실제 종목은 예순 남짓만 보게 된다.
+   * 두 화면의 모집단이 다르면 추적기가 검증하는 건 신호등이 아니라 **모집단 차이**다.
+   */
+  const universe = (await tradeValueTop(client, cfg.market, cfg.universe)).filter(
+    // trde_prica 는 백만원 단위다 (화면 곳곳에서 /100 해서 억으로 쓴다)
+    (u) => Math.round(u.tradeValue / 100) >= cfg.minTradeValue,
+  );
 
   const hash = await configFingerprint();
   const byTier: Record<string, number> = {};
@@ -254,14 +263,38 @@ export async function enrollToday(
     job.done = 0;
   }
 
+  let failed = 0;
+  let belowTier = 0;
+
   for (const u of universe) {
     if (job) job.current = u.name || u.code;
-    const sig = await evaluateSignal(client, u.code).catch(() => null);
+    let sig: Awaited<ReturnType<typeof evaluateSignal>> | null = null;
+    try {
+      sig = await evaluateSignal(client, u.code);
+    } catch (err) {
+      failed += 1;
+      if (job) {
+        job.failed = failed;
+        // 첫 실패의 이유는 남겨 둔다 — 전부 실패했을 때 무엇이 막혔는지 알아야 한다
+        if (!job.firstError) job.firstError = err instanceof Error ? err.message : String(err);
+      }
+    }
     if (job) job.done += 1;
+    /*
+     * **종목 사이에 간격을 둔다.**
+     *
+     * 신호등 하나가 차트·수급·재무로 여러 TR 을 부른다. 키움은 TR 당 초당 5건이라
+     * 쉬지 않고 돌리면 곧 전부 막힌다 — 「신호등 찾기」가 260ms 를 두는 이유가 그것이고,
+     * 여기에 그게 없어서 **한 건도 못 담았다.**
+     */
+    await new Promise((r) => setTimeout(r, 260));
     if (!sig) continue;
     // 켠 문턱 중 높은 것부터 — 90점이면 90 으로 담는다(70 으로 중복해서 담지 않는다)
-    const tier = [...cfg.tiers].sort((a, b) => b - a).find((t) => sig.score >= t);
-    if (!tier) continue;
+    const tier = [...cfg.tiers].sort((a, b) => b - a).find((t) => sig!.score >= t);
+    if (!tier) {
+      belowTier += 1;
+      continue;
+    }
 
     // 위험 축이 막은 종목을 뺄지는 설정이다. 담아 두면 「그 차단이 옳았나」를 나중에 물을 수 있다
     if (sig.riskCapped && !cfg.includeRiskCapped) continue;
@@ -306,13 +339,25 @@ export async function enrollToday(
   store.lastRunDate = date;
   await save(store);
   const marketName = cfg.market === "001" ? "코스피" : cfg.market === "101" ? "코스닥" : "전체";
+  /*
+   * 0건일 때 **왜 0건인지**를 문장에 넣는다.
+   * 「평가해 0건」만 적어 두면 조건이 빡빡한 건지 호출이 막힌 건지 알 수가 없다.
+   */
+  const why: string[] = [];
+  if (belowTier > 0) why.push(`${belowTier}종목은 ${Math.min(...cfg.tiers)}점 미만`);
+  if (skippedDuplicate > 0) why.push(`${skippedDuplicate}종목은 이미 추적 중`);
+  if (failed > 0) why.push(`${failed}종목은 조회 실패`);
   return {
     date,
     scanned: universe.length,
     added,
     skippedDuplicate,
+    failed,
+    belowTier,
     byTier,
-    note: `${marketName} 거래대금 상위 ${universe.length}종목을 평가해 ${added}건 담았습니다.`,
+    note:
+      `${marketName} 거래대금 상위 ${universe.length}종목을 평가해 ${added}건 담았습니다.` +
+      (why.length > 0 ? ` (${why.join(" · ")})` : ""),
   };
 }
 
@@ -331,6 +376,7 @@ export function startEnroll(client: KiwoomClient, force: boolean): TrackJob {
     current: "",
     added: 0,
     skippedDuplicate: 0,
+    failed: 0,
     startedAt: new Date().toISOString(),
   };
   const mine = job;
@@ -577,6 +623,10 @@ export interface TrackJob {
   current: string;
   added: number;
   skippedDuplicate: number;
+  /** 평가가 실패한 종목 수 — 0건일 때 이유를 가르는 숫자다 */
+  failed: number;
+  /** 첫 실패의 이유. 전부 막혔을 때 무엇이 막았는지 봐야 한다 */
+  firstError?: string;
   startedAt: string;
   report?: EnrollReport;
   error?: string;

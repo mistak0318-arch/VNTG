@@ -128,3 +128,80 @@ export async function kospi200Futures(spot?: number | null): Promise<FuturesQuot
     return null;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 일봉                                                                */
+/* ------------------------------------------------------------------ */
+
+const DAILY = "/uapi/domestic-futureoption/v1/quotations/inquire-daily-fuopchartprice";
+const DAILY_TR = "FHKIF03020100";
+
+export interface FuturesCandle {
+  t: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+/**
+ * 선물 일·주·월봉.
+ *
+ * 전광판의 야간선물은 숫자 한 줄뿐이라 **「어디쯤인가」를 모른다.** 눌러서 이걸 연다.
+ *
+ * `FID_COND_MRKT_DIV_CODE` 에 `CM`(야간선물)을 넣는다 — 참고 문서에 적힌 조합이다.
+ * 낮 선물은 `F` 다. 같은 TR 로 시장만 갈아 끼운다.
+ */
+export async function futuresCandles(
+  code: string,
+  market: "F" | "CM" = "CM",
+  period: "D" | "W" | "M" = "D",
+  days = 120,
+): Promise<{ candles: FuturesCandle[]; error: string | null }> {
+  if (!hantooReady()) return { candles: [], error: "한투 API 미설정" };
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const to = new Date();
+  const from = new Date(to.getTime() - days * 24 * 3600_000);
+
+  try {
+    const body = await hantooGet<{ output2?: Record<string, unknown>[] }>(
+      DAILY,
+      DAILY_TR,
+      {
+        FID_COND_MRKT_DIV_CODE: market,
+        FID_INPUT_ISCD: code,
+        FID_INPUT_DATE_1: fmt(from),
+        FID_INPUT_DATE_2: fmt(to),
+        FID_PERIOD_DIV_CODE: period,
+      },
+      "야간선물 차트",
+    );
+    const rows = Array.isArray(body.output2) ? body.output2 : [];
+    const n = (v: unknown) => {
+      const x = Number(String(v ?? "").replace(/[+,\s]/g, ""));
+      return Number.isFinite(x) ? x : 0;
+    };
+    const candles = rows
+      .map((r) => {
+        const d = String(r.stck_bsop_date ?? "");
+        const close = n(r.futs_prpr);
+        return {
+          t: d.length === 8 ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : d,
+          open: n(r.futs_oprc) || close,
+          high: n(r.futs_hgpr) || close,
+          low: n(r.futs_lwpr) || close,
+          close,
+          volume: n(r.acml_vol),
+        };
+      })
+      // 종가가 0 인 칸은 버린다 — 0 으로 두면 차트가 바닥까지 떨어진다
+      .filter((c) => c.close > 0 && c.t)
+      // 한투는 최신순으로 준다. 차트는 오래된 것부터다
+      .sort((a, b) => a.t.localeCompare(b.t));
+    return { candles, error: candles.length === 0 ? "봉이 하나도 없습니다" : null };
+  } catch (err) {
+    return { candles: [], error: err instanceof Error ? err.message : "차트 조회 실패" };
+  }
+}

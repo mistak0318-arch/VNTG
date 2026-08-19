@@ -10,6 +10,7 @@ import {
   type UsSearchResult,
 } from "../../api";
 import { useSection } from "../../useSection";
+import { YahooChartSheet, type ChartTarget } from "./YahooChartSheet";
 import { showDayQuote } from "../../usSession";
 
 /**
@@ -61,6 +62,8 @@ export function UsBoardPanel() {
   const commodities = COMMODITY_KEYS.map((k) => rows.find((r) => r.key === k)).filter(
     (r): r is NonNullable<typeof r> => Boolean(r),
   );
+  /* 눌러서 차트 — 숫자 한 줄만으로는 「어디쯤인가」를 모른다 */
+  const [chart, setChart] = useState<ChartTarget | null>(null);
   const usRates = (rates.data ?? []).filter((r) => r.group === "해외");
 
   return (
@@ -87,7 +90,15 @@ export function UsBoardPanel() {
           ) : (
             <div className="usb-boxes">
               {boxes.map((b) => (
-                <div className={`usb-box${b.signal ? ` sig-${b.signal.level}` : ""}`} key={b.key}>
+                <button
+                  type="button"
+                  className={`usb-box clickable${b.signal ? ` sig-${b.signal.level}` : ""}`}
+                  key={b.key}
+                  onClick={() =>
+                    setChart({ symbol: b.symbol, label: b.label, digits: b.digits })
+                  }
+                  title="눌러서 차트 보기"
+                >
                   <div className="usb-box-nm">{b.label}</div>
                   <div className={`usb-box-px ${cls(b.changeRate)}`}>
                     {b.price === null ? "-" : fmtNum(Number(b.price.toFixed(b.digits)))}
@@ -100,7 +111,7 @@ export function UsBoardPanel() {
                   </div>
                   {/* 왜 눈에 띄는지 한 줄. 색만 있으면 이유를 모른다 */}
                   {b.signal && <div className="usb-box-why">{b.signal.why}</div>}
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -163,7 +174,15 @@ export function UsBoardPanel() {
           ) : (
             <div className="usb-boxes">
               {commodities.map((b) => (
-                <div className={`usb-box${b.signal ? ` sig-${b.signal.level}` : ""}`} key={b.key}>
+                <button
+                  type="button"
+                  className={`usb-box clickable${b.signal ? ` sig-${b.signal.level}` : ""}`}
+                  key={b.key}
+                  onClick={() =>
+                    setChart({ symbol: b.symbol, label: b.label, digits: b.digits })
+                  }
+                  title="눌러서 차트 보기"
+                >
                   <div className="usb-box-nm">{b.label}</div>
                   <div className={`usb-box-px ${cls(b.changeRate)}`}>
                     {b.price === null ? "-" : fmtNum(Number(b.price.toFixed(b.digits)))}
@@ -175,7 +194,7 @@ export function UsBoardPanel() {
                     {pct(b.changeRate)}
                   </div>
                   {b.signal && <div className="usb-box-why">{b.signal.why}</div>}
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -200,7 +219,19 @@ export function UsBoardPanel() {
           {!night ? (
             <div className="empty">야간선물 값이 아직 없습니다.</div>
           ) : (
-            <div className="usb-night">
+            <button
+              type="button"
+              className="usb-night clickable"
+              onClick={() =>
+                setChart({
+                  kind: "futures",
+                  symbol: night.symbol,
+                  label: "코스피 야간선물",
+                  digits: night.digits,
+                })
+              }
+              title="눌러서 차트 보기"
+            >
               <div className={`usb-night-px ${cls(night.changeRate)}`}>
                 {night.price === null ? "-" : fmtNum(Number(night.price.toFixed(night.digits)))}
               </div>
@@ -210,16 +241,19 @@ export function UsBoardPanel() {
                   : `${night.change > 0 ? "▲" : "▼"}${Math.abs(night.change).toFixed(night.digits)}`}{" "}
                 {pct(night.changeRate)}
               </div>
-            </div>
+            </button>
           )}
           <div className="table-note">
             미국장이 열려 있는 동안 움직이는 값이라 <b>내일 개장가의 예고편</b>입니다.
+            눌러서 흐름을 볼 수 있습니다 — 월물은 3개월마다 바뀌므로 그 이전 구간은 없습니다.
           </div>
         </div>
       </section>
 
       {/* ---------------- 관심종목 ---------------- */}
       <UsBoardWatch />
+
+      {chart && <YahooChartSheet target={chart} onClose={() => setChart(null)} />}
     </div>
   );
 }

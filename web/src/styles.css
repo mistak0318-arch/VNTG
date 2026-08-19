@@ -4806,3 +4806,101 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .st-empty {
   color: var(--muted);
 }
+
+/* ------------------------------------------------------------------ */
+/* 시황 카드 배치                                                       */
+/* ------------------------------------------------------------------ */
+
+/*
+ * 끌어 옮기기 대신 화살표를 쓴다. 격자에서 카드는 왼쪽→오른쪽으로 흐르므로
+ * 위/아래가 아니라 **앞/뒤**다.
+ */
+.ov-move {
+  display: flex;
+  gap: 0.2rem;
+}
+.ov-arrange.on {
+  outline: 1px solid var(--blue);
+}
+.ov-arrange-note {
+  margin: 0.4rem 0 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--panel-2);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.ov-arrange-reset {
+  margin-left: 0.5rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* 지수·원자재 차트                                                     */
+/* ------------------------------------------------------------------ */
+
+.yc {
+  max-width: 46rem;
+}
+.yc-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 0.6rem 0 0.2rem;
+}
+.yc-px {
+  font-size: 1.4rem;
+}
+.yc-rate {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+/*
+ * 캔버스가 아니라 SVG 다 — viewBox 라 폭이 얼마든 같은 그림이 나온다.
+ * `preserveAspectRatio="none"` 이라 가로로 늘어나도 세로 비율은 유지된다.
+ */
+.yc-svg {
+  width: 100%;
+  height: 15rem;
+  display: block;
+}
+.yc-line {
+  fill: none;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+.yc-line.up { stroke: var(--red); }
+.yc-line.down { stroke: var(--blue); }
+.yc-area { stroke: none; opacity: 0.14; }
+.yc-area.up { fill: var(--red); }
+.yc-area.down { fill: var(--blue); }
+.yc-base {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+.yc-tick {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+/* 누를 수 있는 전광판 상자 — 버튼이지만 생김새는 그대로 둔다 */
+.usb-box.clickable {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+/* 야간선물 카드도 눌러서 차트를 연다 */
+.usb-night.clickable {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+  padding: 0;
+}

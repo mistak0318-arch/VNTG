@@ -329,6 +329,19 @@ export const api = {
       `/api/signal/screen/start?market=${market}&level=${level}&limit=${limit}`,
     ),
   signalScreenStatus: (jobId: string) => getJson<ScreenJob>(`/api/signal/screen/${jobId}`),
+  yahooChart: (symbol: string, range: string) =>
+    getJson<YahooChart>(
+      `/api/market/yahoo-chart?symbol=${encodeURIComponent(symbol)}&range=${range}`,
+    ),
+  futuresChart: (code: string, period: "D" | "W" | "M", days: number) =>
+    getJson<{
+      code: string;
+      candles: { t: string; open: number; high: number; low: number; close: number; volume: number }[];
+      error: string | null;
+    }>(`/api/market/futures-chart?code=${encodeURIComponent(code)}&period=${period}&days=${days}`),
+  cardOrder: () => getJson<Record<string, string[]>>("/api/settings/cards"),
+  cardOrderSave: (o: Record<string, string[]>) =>
+    putJson<Record<string, string[]>>("/api/settings/cards", o),
   /** `saved` 는 서버에 한 번이라도 저장된 적이 있는지 — 첫 이사 때 필요하다 */
   menuPrefs: () => getJson<MenuPrefsDto & { saved: boolean }>("/api/settings/menu"),
   menuPrefsSave: (p: MenuPrefsDto) => putJson<MenuPrefsDto>("/api/settings/menu", p),
@@ -2136,14 +2149,30 @@ export interface TrackJob {
   current: string;
   added: number;
   skippedDuplicate: number;
+  /** 평가 자체가 실패한 종목 수 — 0건일 때 이유를 가르는 숫자다 */
+  failed: number;
+  firstError?: string;
   startedAt: string;
   report?: {
     date: string;
     scanned: number;
     added: number;
     skippedDuplicate: number;
+    failed: number;
+    belowTier: number;
     byTier: Record<string, number>;
     note: string;
   };
   error?: string;
+}
+
+
+/** 야후 심볼 봉 데이터 — 전광판의 지수·원자재를 눌렀을 때 */
+export interface YahooChart {
+  symbol: string;
+  range: string;
+  interval: string;
+  candles: { t: string; open: number; high: number; low: number; close: number; volume: number }[];
+  prevClose: number | null;
+  error: string | null;
 }

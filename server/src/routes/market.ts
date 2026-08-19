@@ -6,6 +6,8 @@ import { analystOpinion } from "../analystOpinion.js";
 import { hantooReady } from "../hantooClient.js";
 import { stockProfile } from "../stockProfile.js";
 import { tradeSizeMix } from "../tradeSizeMix.js";
+import { CHART_RANGES, yahooChart } from "../yahooChart.js";
+import { futuresCandles } from "../kospiFutures.js";
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
@@ -464,6 +466,45 @@ export function createMarketRouter(client: KiwoomClient): Router {
         // 현재가를 못 받아도 의견은 보여 준다 — 괴리율만 묵은 값이 된다
       }
       res.json(await analystOpinion(req.params.code, price));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 야후 심볼 차트 — 전광판의 미국 지수·원자재를 눌렀을 때.
+   * 숫자 한 줄만 보면 「어디쯤인가」를 모른다.
+   */
+  router.get("/yahoo-chart", async (req, res, next) => {
+    try {
+      const symbol = String(req.query.symbol ?? "").trim();
+      if (!symbol) {
+        res.status(400).json({ error: "symbol 이 필요합니다" });
+        return;
+      }
+      const range = CHART_RANGES.includes(String(req.query.range))
+        ? String(req.query.range)
+        : "6mo";
+      res.json(await yahooChart(symbol, range));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* 야간선물 차트 — 전광판의 그 줄을 눌렀을 때 */
+  router.get("/futures-chart", async (req, res, next) => {
+    try {
+      const code = String(req.query.code ?? "").trim();
+      if (!code) {
+        res.status(400).json({ error: "code 가 필요합니다" });
+        return;
+      }
+      const market = req.query.market === "F" ? "F" : "CM";
+      const period = ["D", "W", "M"].includes(String(req.query.period))
+        ? (String(req.query.period) as "D" | "W" | "M")
+        : "D";
+      const days = Math.min(Math.max(Number(req.query.days) || 120, 10), 800);
+      res.json({ code, market, period, ...(await futuresCandles(code, market, period, days)) });
     } catch (err) {
       next(err);
     }

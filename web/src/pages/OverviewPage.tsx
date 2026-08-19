@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BreadthHelp, BreadthPanel } from "../components/BreadthPanel";
 import {
   api,
@@ -27,6 +27,7 @@ import { RankList, SegmentToggle } from "../components/overview/RankList";
 import { RefreshBar } from "../components/RefreshBar";
 import { Sparkline } from "../components/overview/Sparkline";
 import { useSection } from "../useSection";
+import { useCardOrder } from "../useCardOrder";
 import { WatchStar } from "../useWatchedCodes";
 
 type SubTab = "summary" | "flow" | "rank" | "us";
@@ -109,6 +110,35 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   }, []);
 
   // 데스크톱(700px~)에서는 서브탭 없이 전 섹션을 보여준다
+  /*
+   * 카드 배치.
+   *
+   * 키는 **여기 적힌 순서가 기본값**이다 — 저장된 배치가 없으면 이 차례로 나온다.
+   * 카드를 새로 만들면 이 배열에도 넣어야 화면에 뜬다.
+   */
+  const cardKeys = useMemo(
+    () => ({
+      summary: ["indices", "updown", "global", "usMajor", "rates", "breadth", "sectors"],
+      flow: ["flow"],
+      rank: ["topTraders", "movers", "themes", "highLow", "vi"],
+    }),
+    [],
+  );
+  const keysHere = sub === "us" ? [] : (cardKeys[sub as "summary" | "flow" | "rank"] ?? []);
+  const cards = useCardOrder(`overview.${sub}`, keysHere);
+  const [arranging, setArranging] = useState(false);
+  /** 배치 모드일 때 카드에 넘길 것들. 아닐 땐 undefined 라 손잡이가 안 뜬다 */
+  const moveOf = (key: string) =>
+    arranging
+      ? {
+          onBack: () => cards.move(key, -1),
+          onFwd: () => cards.move(key, 1),
+          onFront: () => cards.toFront(key),
+          first: cards.isFirst(key),
+          last: cards.isLast(key),
+        }
+      : undefined;
+
   const [wide, setWide] = useState(() => window.matchMedia("(min-width:700px)").matches);
   useEffect(() => {
     const mq = window.matchMedia("(min-width:700px)");
@@ -179,7 +209,29 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
             {t.label}
           </button>
         ))}
+        {/* 카드가 둘 이상일 때만 — 한 장짜리 탭에서 옮길 데가 없다 */}
+        {keysHere.length > 1 && (
+          <button
+            className={`ov-subtab ov-arrange${arranging ? " on" : ""}`}
+            onClick={() => setArranging((v) => !v)}
+            title="카드 자리 바꾸기"
+          >
+            {arranging ? "배치 끝" : "배치"}
+          </button>
+        )}
       </div>
+
+      {arranging && (
+        <div className="ov-arrange-note">
+          카드 제목 옆 <b>◀ ▶</b> 로 앞뒤로 옮기고, <b>⤒</b> 로 맨 앞에 둡니다. 바꾸면 바로
+          저장되어 <b>다른 기기에서도 같은 배치</b>로 열립니다.
+          {cards.customized && (
+            <button className="filter-btn ov-arrange-reset" onClick={cards.reset}>
+              원래대로
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="ov-grid">
         {/* ---------------- 요약 ---------------- */}
@@ -201,7 +253,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
         {show("summary") && (
-          <OverviewCard title="국내 지수" updatedAt={indices.updatedAt} loading={indices.loading} error={indices.error}>
+          <OverviewCard title="국내 지수" order={cards.orderOf("indices")} move={moveOf("indices")} updatedAt={indices.updatedAt} loading={indices.loading} error={indices.error}>
             <div className="ov-idx-grid">
               {idx.map((c) => {
                 /*
@@ -297,6 +349,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
 
         {show("summary") && (
           <OverviewCard
+            order={cards.orderOf("updown")}
+            move={moveOf("updown")}
             title="종목등락현황"
             updatedAt={indices.updatedAt}
             loading={indices.loading}
@@ -342,7 +396,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           한참 내려가야 나왔는데, 그러면 국내와 견주는 일이 안 된다.
         */}
         {show("summary") && (
-          <OverviewCard title="글로벌" updatedAt={global.updatedAt} loading={global.loading} error={global.error}>
+          <OverviewCard title="글로벌" order={cards.orderOf("global")} move={moveOf("global")} updatedAt={global.updatedAt} loading={global.loading} error={global.error}>
             <div className="ov-card-b">
               {/*
                 섹터별로 묶는다. 스무 줄을 그냥 나열하면 **어디까지가 원자재이고
@@ -401,6 +455,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         */}
         {show("summary") && (
           <OverviewCard
+            order={cards.orderOf("usMajor")}
+            move={moveOf("usMajor")}
             title="미장 주요지수"
             updatedAt={usMajor.updatedAt}
             loading={usMajor.loading}
@@ -482,6 +538,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         */}
         {show("summary") && (
           <OverviewCard
+            order={cards.orderOf("rates")}
+            move={moveOf("rates")}
             title="금리"
             updatedAt={rates.updatedAt}
             loading={rates.loading}
@@ -519,7 +577,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
         {show("summary") && (
-          <OverviewCard title="시장 폭 추이">
+          <OverviewCard title="시장 폭 추이" order={cards.orderOf("breadth")} move={moveOf("breadth")}>
             <div className="ov-card-b">
               <BreadthPanel />
             </div>
@@ -532,7 +590,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         */}
 
         {show("summary") && (
-          <OverviewCard title="업종" updatedAt={sectors.updatedAt} loading={sectors.loading} error={sectors.error}>
+          <OverviewCard title="업종" order={cards.orderOf("sectors")} move={moveOf("sectors")} updatedAt={sectors.updatedAt} loading={sectors.loading} error={sectors.error}>
             <SegmentToggle
               options={[
                 { key: "kospi" as const, label: "코스피" },
@@ -594,6 +652,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         */}
         {show("rank") && (
           <OverviewCard
+            order={cards.orderOf("topTraders")}
+            move={moveOf("topTraders")}
             title="수익률 상위 고객 매매동향"
           updatedAt={topTraders.updatedAt}
           loading={topTraders.loading}
@@ -649,7 +709,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
       )}
 
         {show("rank") && (
-          <OverviewCard title="등락률 순위" updatedAt={movers.updatedAt} loading={movers.loading} error={movers.error}>
+          <OverviewCard title="등락률 순위" order={cards.orderOf("movers")} move={moveOf("movers")} updatedAt={movers.updatedAt} loading={movers.loading} error={movers.error}>
             <SegmentToggle
               options={[
                 { key: "rising" as const, label: "상승" },
@@ -663,7 +723,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
         {show("rank") && (
-          <OverviewCard title="테마" updatedAt={themes.updatedAt} loading={themes.loading} error={themes.error}>
+          <OverviewCard title="테마" order={cards.orderOf("themes")} move={moveOf("themes")} updatedAt={themes.updatedAt} loading={themes.loading} error={themes.error}>
             <SegmentToggle
               options={[
                 { key: "top" as const, label: "상위" },
@@ -700,6 +760,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         */}
         {show("rank") && (
           <OverviewCard
+            order={cards.orderOf("highLow")}
+            move={moveOf("highLow")}
             title="250일 신고가 / 신저가"
             updatedAt={highLow.updatedAt}
             loading={highLow.loading}
@@ -718,7 +780,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
         {show("rank") && (
-          <OverviewCard title="변동성 완화 (VI)" updatedAt={vi.updatedAt} loading={vi.loading} error={vi.error}>
+          <OverviewCard title="변동성 완화 (VI)" order={cards.orderOf("vi")} move={moveOf("vi")} updatedAt={vi.updatedAt} loading={vi.loading} error={vi.error}>
             <RankList
               items={vi.data ?? []}
               emptyText="발동 종목 없음"

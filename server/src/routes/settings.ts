@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getHistory, getTotals, getUsage } from "../apiUsage.js";
 import { summarize } from "../summarize.js";
 import { getMenuPrefs, saveMenuPrefs } from "../menuPrefs.js";
+import { getCardOrder, saveCardOrder } from "../cardOrder.js";
 
 export function createSettingsRouter(): Router {
   const router = Router();
@@ -78,6 +79,23 @@ export function createSettingsRouter(): Router {
   router.put("/menu", async (req, res, next) => {
     try {
       res.json(await saveMenuPrefs(req.body));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* 화면 카드 배치 — 즐겨찾기와 같은 이유로 서버에 둔다 */
+  router.get("/cards", async (_req, res, next) => {
+    try {
+      res.json(await getCardOrder());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/cards", async (req, res, next) => {
+    try {
+      res.json(await saveCardOrder(req.body));
     } catch (err) {
       next(err);
     }

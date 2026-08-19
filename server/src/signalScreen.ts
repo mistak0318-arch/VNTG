@@ -62,7 +62,7 @@ function bare(code: unknown): string {
   return String(code ?? "").replace(/_AL$/, "").trim();
 }
 
-interface Candidate {
+export interface Candidate {
   code: string;
   name: string;
   price: number;
@@ -76,7 +76,14 @@ interface Candidate {
  * 한 번에 100건씩 오므로 필요하면 이어받는다. **ETF·ETN·우선주를 빼고 나서** 세므로
  * "상위 100종목"은 실제 종목 100개를 뜻한다. (거래대금 상위 100건 중 30~40건이 ETF다)
  */
-async function tradeValueTop(
+/**
+ * 거래대금 상위 **실제 종목**.
+ *
+ * 추적기도 같은 것을 쓴다 — 「신호등 찾기」와 모집단이 다르면 같은 종목을 두고
+ * 한쪽은 담고 한쪽은 안 담는다. 그러면 추적기가 검증하는 게 신호등이 아니라
+ * **두 모집단의 차이**가 된다.
+ */
+export async function tradeValueTop(
   client: KiwoomClient,
   market: string,
   limit: number,
