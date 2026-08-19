@@ -300,7 +300,9 @@
       "Bash(curl -s --max-time 120 \"http://localhost:4000/api/overview/section/usMajor\")",
       "Bash(curl -s --max-time 120 \"http://localhost:4000/api/overview/section/usMajor\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/um2.json\")",
       "Bash(curl -s --max-time 90 \"http://localhost:4000/api/overview/section/rates\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/rate.json\")",
-      "Bash(curl -s --max-time 60 \"http://localhost:4000/api/ranking/volume?market=000&sort=1\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/vr.json\")"
+      "Bash(curl -s --max-time 60 \"http://localhost:4000/api/ranking/volume?market=000&sort=1\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/vr.json\")",
+      "Bash(timeout 60 git status --short)",
+      "Bash(timeout 60 git log --oneline -8)"
     ]
   }
 }
