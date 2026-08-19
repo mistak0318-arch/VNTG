@@ -48,6 +48,7 @@ import { createKeywordRouter } from "./routes/keyword.js";
 import { createDisclosureRouter } from "./routes/disclosure.js";
 import { startDisclosureScheduler } from "./disclosureAlert.js";
 import { startKeywordScheduler } from "./keywordAlert.js";
+import { startSignalTrackScheduler } from "./signalTrack.js";
 import { createWatchlistRouter } from "./routes/watchlist.js";
 
 const app = express();
@@ -120,6 +121,7 @@ startTrackingRefresher(client);
 startAlertScheduler(client);
 startChannelScheduler();
   startKeywordScheduler();
+startSignalTrackScheduler(client);
   startDisclosureScheduler();
 
 /**

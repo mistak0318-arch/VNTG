@@ -329,6 +329,17 @@ export const api = {
       `/api/signal/screen/start?market=${market}&level=${level}&limit=${limit}`,
     ),
   signalScreenStatus: (jobId: string) => getJson<ScreenJob>(`/api/signal/screen/${jobId}`),
+  signalTrack: () => getJson<TrackSummary>("/api/signal/track"),
+  signalTrackRun: (limit?: number) =>
+    postJson<{
+      date: string;
+      scanned: number;
+      added: number;
+      skippedDuplicate: number;
+      byTier: Record<string, number>;
+      note: string;
+      updated: { updated: number; closed: number };
+    }>(`/api/signal/track/run${limit ? `?limit=${limit}` : ""}`),
   signalScreenRuns: () => getJson<{ runs: ScreenRunSummary[] }>("/api/signal/screen/runs"),
   signalScreenRun: (id: string) => getJson<ScreenRun>(`/api/signal/screen/runs/${id}`),
   signalScreenDiff: (from: string, to: string) =>
@@ -2042,4 +2053,57 @@ export interface PulseBrief {
   outputTokens: number;
   at: string;
   error: string | null;
+}
+
+
+/* ------------------------------------------------------------------ */
+/* 신호등 추적기 — 신호등이 정말 맞는지 스스로 검증한다                  */
+/* ------------------------------------------------------------------ */
+
+export interface TrackResult {
+  days: number;
+  price: number;
+  /** 편입가 대비 (%) */
+  rate: number;
+  at: string;
+}
+
+export interface TrackEntry {
+  id: string;
+  code: string;
+  name: string;
+  /** 어느 문턱(70·80·90)으로 들어왔나 */
+  tier: number;
+  date: string;
+  score: number;
+  level: string;
+  /** 편입 당시 축별 점수 */
+  axes: Partial<Record<"trend" | "flow" | "value" | "risk", number | null>>;
+  riskCapped: boolean;
+  basePrice: number;
+  /** 그때의 신호등 기준 지문 — 기준이 바뀌면 같은 90점도 다른 뜻이다 */
+  configHash: string;
+  results: TrackResult[];
+  closed: boolean;
+}
+
+export interface TrackSummary {
+  entries: TrackEntry[];
+  tiers: {
+    tier: number;
+    count: number;
+    pending: number;
+    byHorizon: {
+      days: number;
+      n: number;
+      winRate: number;
+      avg: number;
+      median: number;
+      best: number;
+      worst: number;
+    }[];
+  }[];
+  currentConfig: string;
+  mixedConfig: boolean;
+  lastRunDate: string | null;
 }

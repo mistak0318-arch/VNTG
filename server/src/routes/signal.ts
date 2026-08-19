@@ -16,6 +16,7 @@ import {
   saveConfig,
   type SignalConfig,
 } from "../signalLight.js";
+import { enrollToday, trackSummary, updateResults } from "../signalTrack.js";
 
 export function createSignalRouter(client: KiwoomClient): Router {
   const router = Router();
@@ -130,6 +131,31 @@ export function createSignalRouter(client: KiwoomClient): Router {
       return;
     }
     res.json(job);
+  });
+
+  /* ---------------- 추적기 ---------------- */
+
+  router.get("/track", async (_req, res, next) => {
+    try {
+      res.json(await trackSummary());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 손으로 돌리기. 평소엔 스케줄러가 15:40 에 알아서 하지만,
+   * **처음 켰을 때 하루를 기다리게 하면 안 된다** — 눌러서 지금 담을 수 있어야 한다.
+   */
+  router.post("/track/run", async (req, res, next) => {
+    try {
+      const limit = Number(req.query.limit) || undefined;
+      const report = await enrollToday(client, { limit, force: req.query.force === "1" });
+      const updated = await updateResults(client);
+      res.json({ ...report, updated });
+    } catch (err) {
+      next(err);
+    }
   });
 
   return router;

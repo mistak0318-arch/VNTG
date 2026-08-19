@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { SignalTrackPanel } from "../components/SignalTrackPanel";
 import { api, fmtNum, type ScreenHit, type ScreenJob, type ScreenRunSummary } from "../api";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { WatchAddSheet, type WatchAddTarget } from "../components/WatchAddSheet";
@@ -31,7 +32,15 @@ function pct(n: number): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 
+type ScreenTab = "find" | "track";
+
 export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
+  /*
+   * 두 자리다.
+   *   찾기 — 내가 눌러서 지금 훑는다
+   *   추적기 — 서버가 장 마감 뒤 알아서 담고 따라간다. **신호등이 맞는지 검증하는 자리**
+   */
+  const [screenTab, setScreenTab] = useState<ScreenTab>("find");
   const [market, setMarket] = useState("000");
   const [level, setLevel] = useState<"green" | "yellow">("green");
   const [limit, setLimit] = useState(100);
@@ -139,6 +148,25 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
   const progress = job && job.total > 0 ? Math.round((job.done / job.total) * 100) : 0;
 
   return (
+    <div>
+      <nav className="detail-tabs">
+        {([
+          { key: "find" as const, label: "신호등 찾기" },
+          { key: "track" as const, label: "추적기" },
+        ]).map((t) => (
+          <button
+            key={t.key}
+            className={`detail-tab${screenTab === t.key ? " active" : ""}`}
+            onClick={() => setScreenTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      {screenTab === "track" ? (
+        <SignalTrackPanel onSelectStock={onSelectStock} />
+      ) : (
     <div>
       <div className="filter-row">
         {MARKETS.map((m) => (
@@ -305,6 +333,8 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
           「찾기」를 누르면 시작합니다. 결과에서 <b>+ 관심</b>을 누르면 바로 관심종목에 담겨
           그때부터 수익률과 수급이 추적됩니다.
         </div>
+      )}
+    </div>
       )}
     </div>
   );

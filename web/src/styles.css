@@ -4554,11 +4554,18 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   white-space: nowrap;
 }
 
-/* 리포트 투자자 수급 — 합계 칸을 눈에 띄게 */
-.rp-flow-sum { background: var(--panel-2); }
-.rp-flow th.rp-flow-sum { color: var(--text); }
-.rp-flow-bars { margin-top: 10px; }
-.rp-flow-bars > summary { font-size: 0.7333rem; color: var(--muted); cursor: pointer; }
+/*
+ * 리포트 투자자 수급 표.
+ *
+ * ⚠️ 클래스 이름을 `rp-flow` 로 쓰면 안 된다 — **이미 있는 이름이고 그건 `display: grid` 다.**
+ * 표에 그 이름을 붙였더니 tbody 가 격자 칸이 되어 머리줄과 몸통이 따로 놀았다.
+ * 새 클래스를 만들 때는 반드시 먼저 찾아볼 것.
+ */
+.rp-flowtbl { width: 100%; }
+.rp-flowtbl-sum { background: var(--panel-2); }
+.rp-flowtbl th.rp-flowtbl-sum { color: var(--text); }
+.rp-flowtbl-bars { margin-top: 10px; }
+.rp-flowtbl-bars > summary { font-size: 0.7333rem; color: var(--muted); cursor: pointer; }
 
 /* 지수 수급 합산 — 쌓인 날이 모자란 줄은 흐리게 둔다 */
 .idx-sum-short { opacity: .45; }
@@ -4691,3 +4698,39 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 
 /* 국내 신호등도 격자 폭을 다 쓴다 */
 .ov-span-all { grid-column: 1 / -1; }
+
+/* ==================================================================
+   리포트 맨 위 — 오늘 일정
+   ------------------------------------------------------------------
+   오늘 무엇이 열리는지를 모르고 지수부터 보면 순서가 거꾸로다.
+   FOMC 가 있는 날과 없는 날은 같은 −1% 도 뜻이 다르다.
+   ================================================================== */
+
+.rp-cal-today { display: flex; flex-direction: column; gap: 6px; }
+
+.rp-cal-item {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 8px 10px; border-radius: 8px;
+  background: var(--panel-2); border-left: 3px solid var(--muted);
+}
+/* 성격마다 색을 달리 — 휴장일과 실적발표를 같은 색으로 두면 훑을 때 안 갈린다 */
+.rp-cal-item.kind-market { border-left-color: var(--blue); }
+.rp-cal-item.kind-earnings { border-left-color: var(--green); }
+.rp-cal-item.kind-holiday { border-left-color: var(--red); }
+.rp-cal-item.kind-personal { border-left-color: #f5c542; }
+
+.rp-cal-kind {
+  flex: 0 0 auto; font-size: 0.6667rem; font-weight: 700; color: var(--muted);
+  padding: 2px 7px; border-radius: 999px; background: var(--panel);
+}
+.rp-cal-time { flex: 0 0 auto; font-size: 0.7333rem; font-variant-numeric: tabular-nums; color: var(--text-dim); }
+.rp-cal-title { flex: 1 1 12rem; min-width: 0; font-size: 0.8667rem; font-weight: 600; }
+.rp-cal-memo { flex: 1 1 100%; font-size: 0.6667rem; color: var(--muted); }
+
+.rp-cal-soon {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border);
+}
+.rp-cal-soon-h { font-size: 0.6667rem; color: var(--muted); font-weight: 700; }
+.rp-cal-chip { font-size: 0.7333rem; color: var(--text-dim); }
+.rp-cal-chip b { color: var(--text); font-variant-numeric: tabular-nums; }

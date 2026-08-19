@@ -122,7 +122,15 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
    * 넓은 화면에서는 국내 카드가 한꺼번에 뜬다. 다만 **미국 전광판을 보고 있을 때는
    * 국내 카드를 전부 내린다** — 섞어 두면 「미국장 도는 동안 보는 자리」라는 뜻이 사라진다.
    */
-  const show = (sec: SubTab) => sub !== "us" && (wide || sub === sec);
+  /*
+   * 어떤 카드를 보일지.
+   *
+   * **넓은 화면에서도 탭을 따른다.** 예전엔 `wide` 면 요약·수급·순위를 한꺼번에 띄웠는데,
+   * PC 에서 카드 열넷이 한 화면에 쏟아져 무엇을 보러 왔는지 잃는다 —
+   * 폰에서는 셋으로 나뉘어 있던 것이 PC 에서만 뒤죽박죽이었다.
+   * 폰과 PC 가 같은 구조여야 오갈 때 헤매지 않는다.
+   */
+  const show = (sec: SubTab) => sub === sec;
 
   const idx = indices.data ?? [];
   const kospiCard = idx.find((i) => i.code === "001");
@@ -162,13 +170,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         예전엔 넓은 화면에서 탭 바를 통째로 숨겼는데, 그러면 미국으로 갈 방법이 없다.
       */}
       <div className="ov-subtabs">
-        {(wide
-          ? ([
-              { key: "summary", label: "국내 전광판" },
-              { key: "us", label: "미국 전광판" },
-            ] as { key: SubTab; label: string }[])
-          : SUBTABS
-        ).map((t) => (
+        {SUBTABS.map((t) => (
           <button
             key={t.key}
             className={`ov-subtab${sub === t.key ? " on" : ""}`}
@@ -192,7 +194,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           두 판을 오가며 볼 때 눈이 같은 곳을 찾게 해야 한다.
           좁은 화면에서는 요약 탭에만 띄운다(수급·순위 탭에서는 자리만 먹는다).
         */}
-        {sub !== "us" && (wide || sub === "summary") && (
+        {sub === "summary" && (
           <div className="ov-span-all">
             <MarketSignalPanel />
           </div>

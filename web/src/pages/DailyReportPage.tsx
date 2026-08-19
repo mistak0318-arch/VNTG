@@ -14,6 +14,7 @@ import {
 import { notifyJobStarted } from "../components/RunningJobsBar";
 import {
   api,
+  type CalendarEvent,
   fmtNum,
   normalizeStockCode,
   signClass,
@@ -445,7 +446,17 @@ export function DailyReportPage({
 
       <AiSummaryCard edition={edition} />
 
-      <Section no={0} title="복기 — 지난 예측과 실제 결과">
+      {/*
+        일정이 맨 위다.
+
+        오늘 무엇이 열리는지를 모르고 지수부터 보면 순서가 거꾸로다 — FOMC 가 있는 날과
+        없는 날은 같은 −1% 도 뜻이 다르다. **오늘 것을 먼저**, 다가오는 것은 그 아래 몇 줄.
+      */}
+      <Section no={0} title="오늘 일정">
+        <TodayCalendarSection />
+      </Section>
+
+      <Section no={1} title="복기 — 지난 예측과 실제 결과">
         <ReviewPanel />
       </Section>
 
@@ -457,16 +468,16 @@ export function DailyReportPage({
         리포트를 여는 이유가 대개 이 글이다. 이미 한 편으로 정리된 시황이라
         선별에 넣으면 점수 싸움에 밀리고, AI 로 다시 요약하면 그 정리가 사라진다.
       */}
-      <Section no={1} title="고정 채널 시황 (원문)">
+      <Section no={2} title="고정 채널 시황 (원문)">
         <PinnedChannelSection edition={edition} />
       </Section>
 
-      <Section no={2} title="코스피 야간선물 · 환율">
+      <Section no={3} title="코스피 야간선물 · 환율">
         <NightFuturesSection />
       </Section>
 
       {/* 2. 국내외 주요 지수 */}
-      <Section no={3} title="국내외 주요 지수">
+      <Section no={4} title="국내외 주요 지수">
         <div className="data-table-wrap">
           <table className="data-table">
             <thead>
@@ -535,11 +546,11 @@ export function DailyReportPage({
         숫자만으로는 "오늘 -1.5%" 가 어디쯤에서 난 하락인지 모른다.
         고점에서 흘러내리는 중인지 바닥에서 튀는 중인지가 판단을 가른다.
       */}
-      <Section no={4} title="코스피 · 코스닥 추이 (60거래일)">
+      <Section no={5} title="코스피 · 코스닥 추이 (60거래일)">
         <IndexTrendSection />
       </Section>
 
-      <Section no={5} title="투자자별 매매 동향">
+      <Section no={6} title="투자자별 매매 동향">
         {/*
           **표 하나로 줄였다.**
 
@@ -553,13 +564,13 @@ export function DailyReportPage({
         {f ? (
           <>
             <div className="data-table-wrap">
-              <table className="data-table num rp-flow">
+              <table className="data-table num rp-flowtbl">
                 <thead>
                   <tr>
                     <th className="sticky-col">주체</th>
                     <th>코스피</th>
                     <th>코스닥</th>
-                    <th className="rp-flow-sum">합계</th>
+                    <th className="rp-flowtbl-sum">합계</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -580,7 +591,7 @@ export function DailyReportPage({
                         <td className="sticky-col">{it.label}</td>
                         <td>{cell(it.ks)}</td>
                         <td>{cell(it.kq)}</td>
-                        <td className="rp-flow-sum">
+                        <td className="rp-flowtbl-sum">
                           <b>{cell(sum)}</b>
                         </td>
                       </tr>
@@ -589,7 +600,7 @@ export function DailyReportPage({
                 </tbody>
               </table>
             </div>
-            <details className="rp-flow-bars">
+            <details className="rp-flowtbl-bars">
               <summary>막대로 보기</summary>
               <div className="report-two-col">
                 <div className="ov">
@@ -614,7 +625,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 3. 특징 테마 — 왜 올랐는지 관련 기사까지 */}
-      <Section no={6} title="시장 자금 흐름 (업종별 5일 누적)">
+      <Section no={7} title="시장 자금 흐름 (업종별 5일 누적)">
         <MoneyFlowSection />
       </Section>
 
@@ -622,15 +633,15 @@ export function DailyReportPage({
         밤사이 미국에서 무엇이 돌았나가 오늘 국내 무엇이 도는지를 상당 부분 정한다.
         반도체가 밤에 빠졌으면 아침에 국내 반도체도 빠진 채로 시작한다.
       */}
-      <Section no={7} title="미국 테마 MAP">
+      <Section no={8} title="미국 테마 MAP">
         <UsThemeMapSection />
       </Section>
 
-      <Section no={8} title="국내 테마 MAP">
+      <Section no={9} title="국내 테마 MAP">
         <KrThemeMapSection />
       </Section>
 
-      <Section no={9} title="특징 테마 (상승 이유 포함)">
+      <Section no={10} title="특징 테마 (상승 이유 포함)">
         <div className="report-lines">
           {(drivers?.themes.up ?? []).map((t) => (
             <DriverItem
@@ -663,7 +674,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 4. 강한 업종 — 이유 포함 */}
-      <Section no={10} title="강한 업종 (상승 이유 포함)">
+      <Section no={11} title="강한 업종 (상승 이유 포함)">
         <div className="report-lines">
           {(drivers?.sectors ?? []).map((sec) => (
             <DriverItem
@@ -690,7 +701,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 5. 특징 종목 */}
-      <Section no={11} title="특징 종목 (급등/급락)">
+      <Section no={12} title="특징 종목 (급등/급락)">
         <div className="report-two-col">
           <div>
             <h4 className="report-subheading positive">상승률 상위</h4>
@@ -704,7 +715,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 6. 신고가/신저가 */}
-      <Section no={12} title="52주(250일) 신고가 · 신저가">
+      <Section no={13} title="52주(250일) 신고가 · 신저가">
         <div className="report-two-col">
           <div>
             <h4 className="report-subheading positive">신고가</h4>
@@ -726,15 +737,15 @@ export function DailyReportPage({
         리포트가 시장 전체를 아무리 잘 정리해도 내가 든 종목이 어떤지가 없으면
         결국 다른 화면을 열게 된다. 여기서 끝나야 한다.
       */}
-      <Section no={13} title="내 관심종목">
+      <Section no={14} title="내 관심종목">
         <MyStocksSection onSelectStock={onSelectStock} />
       </Section>
 
-      <Section no={14} title="특징주">
+      <Section no={15} title="특징주">
         <FeaturedSection onSelectStock={onSelectStock} />
       </Section>
 
-      <Section no={15} title="주요 뉴스 클리핑 (종목·테마)">
+      <Section no={16} title="주요 뉴스 클리핑 (종목·테마)">
         <SectorNews perSector={20} onFetched={setNewsAt} />
       </Section>
 
@@ -742,7 +753,7 @@ export function DailyReportPage({
         AI 정리에 이미 녹아 있지만 원문도 같이 둔다 — 요약이 무엇을 보고 그렇게 말했는지
         확인할 데가 있어야 요약을 믿거나 의심할 수 있다.
       */}
-      <Section no={16} title="텔레그램 채널 요약">
+      <Section no={17} title="텔레그램 채널 요약">
         <ChannelDigestSection />
       </Section>
 
@@ -750,7 +761,7 @@ export function DailyReportPage({
         위 클리핑은 종목·테마에 붙은 뉴스고 이건 시장 전체 뉴스다 — 겹쳐 보여도
         둘 다 있는 게 낫다는 판단이다.
       */}
-      <Section no={17} title="국내외 주요 뉴스">
+      <Section no={18} title="국내외 주요 뉴스">
         <MarketNewsSection edition={edition} />
       </Section>
 
@@ -772,3 +783,83 @@ export function DailyReportPage({
     </div>
   );
 }
+
+/**
+ * 오늘 일정 — 리포트 맨 위.
+ *
+ * 오늘 무엇이 열리는지를 모르고 지수부터 보면 순서가 거꾸로다.
+ * **FOMC 가 있는 날과 없는 날은 같은 −1% 도 뜻이 다르다.**
+ *
+ * 오늘 것을 크게 두고, 다가오는 것은 그 아래에 며칠 남았는지와 함께 몇 줄만 둔다 —
+ * 2주치를 다 늘어놓으면 정작 오늘 것이 묻힌다.
+ */
+function TodayCalendarSection() {
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api
+      .calendarUpcoming(14)
+      .then((r) => setEvents(r.events))
+      .catch(() => undefined)
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="empty">일정 불러오는 중…</div>;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const mine = events.filter((e) => e.date === today);
+  const soon = events.filter((e) => e.date > today).slice(0, 6);
+
+  const dday = (date: string) => {
+    const d = Math.round(
+      (new Date(date + "T00:00:00").getTime() - new Date(today + "T00:00:00").getTime()) / 86400_000,
+    );
+    return d === 0 ? "오늘" : `D-${d}`;
+  };
+
+  if (mine.length === 0 && soon.length === 0) {
+    return (
+      <div className="page-note">
+        등록된 일정이 없습니다. <b>캘린더</b> 메뉴에서 넣거나 경제 일정을 가져오세요.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rp-cal">
+      {mine.length === 0 ? (
+        <div className="page-note">오늘 잡힌 일정은 없습니다.</div>
+      ) : (
+        <div className="rp-cal-today">
+          {mine.map((e) => (
+            <div className={`rp-cal-item kind-${e.kind}`} key={e.id}>
+              <span className="rp-cal-kind">{KIND_LABEL[e.kind] ?? e.kind}</span>
+              {e.time && <span className="rp-cal-time">{e.time}</span>}
+              <span className="rp-cal-title">{e.title}</span>
+              {e.memo && <span className="rp-cal-memo">{e.memo}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {soon.length > 0 && (
+        <div className="rp-cal-soon">
+          <span className="rp-cal-soon-h">다가오는 일정</span>
+          {soon.map((e) => (
+            <span className="rp-cal-chip" key={e.id}>
+              <b>{dday(e.date)}</b> {e.title}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const KIND_LABEL: Record<string, string> = {
+  market: "증시",
+  earnings: "실적",
+  holiday: "휴장",
+  personal: "개인",
+};
