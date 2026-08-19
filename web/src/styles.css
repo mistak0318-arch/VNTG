@@ -3749,3 +3749,11 @@ body {
   padding: 3px 0; border-bottom: 1px solid var(--border); font-size: 0.84rem; }
 .rt-row b { font-variant-numeric: tabular-nums; }
 .rt-row em { font-style: normal; font-size: 0.75rem; min-width: 62px; text-align: right; }
+
+/* 글로벌 — 섹터별 묶음 */
+.ov-g-sec + .ov-g-sec { margin-top: 8px; }
+.ov-g-sec-h { font-size: 0.72rem; color: var(--muted); font-weight: 600;
+  padding: 4px 0 2px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+/* 리포트 표 안의 섹터 구분줄 */
+.rp-g-sec td { background: var(--panel-2); font-size: 0.72rem; color: var(--muted);
+  font-weight: 600; padding: 3px 6px; }

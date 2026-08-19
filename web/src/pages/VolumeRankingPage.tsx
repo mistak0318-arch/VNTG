@@ -7,6 +7,15 @@ import { WatchStar } from "../useWatchedCodes";
 // ka10030(당일거래량상위요청) 공식 문서 기준 확인된 필드명
 const LIST_KEYS = ["tdy_trde_qty_upper"];
 
+/**
+ * 키움이 거래량을 32비트로 잘라 주는 자리.
+ *
+ * 오늘 KODEX 200선물인버스2X 의 거래량이 정확히 4,294,967,295 로 왔다 — 2^32-1 이다.
+ * 실제 거래량이 그 값일 리 없고, 같은 줄의 거래대금은 멀쩡하다.
+ * **없는 숫자를 그럴듯하게 보여주느니** 초과라고 밝힌다.
+ */
+const UINT32_MAX = 4294967295;
+
 const MARKETS: { key: string; label: string }[] = [
   { key: "000", label: "전체" },
   { key: "001", label: "코스피" },
@@ -102,16 +111,24 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
                   accessor={(r: RawRecord) => Number(r.flu_rt) || 0}
                   sort={sort}
                 />
+                {/*
+                  거래대금을 등락률 바로 뒤로 올린다. 이 화면의 기본 정렬이 거래대금순인데
+                  정작 그 값이 거래량 뒤에 있어 모바일에서 잘렸다 — 정렬 기준은 보여야 한다.
+
+                  게다가 거래량은 믿을 수 없는 줄이 있다. 키움이 32비트를 넘기면
+                  4,294,967,295(2^32-1)로 잘라 준다 — 오늘 KODEX 200선물인버스2X 가 그렇다.
+                  같은 줄의 거래대금(6,182억)은 멀쩡하다.
+                */}
+                <SortableTh
+                  columnKey="amt"
+                  label="거래대금(억)"
+                  accessor={(r: RawRecord) => Number(r.trde_amt) || 0}
+                  sort={sort}
+                />
                 <SortableTh
                   columnKey="qty"
                   label="거래량"
                   accessor={(r: RawRecord) => Number(r.trde_qty) || 0}
-                  sort={sort}
-                />
-                <SortableTh
-                  columnKey="amt"
-                  label="거래대금(백만)"
-                  accessor={(r: RawRecord) => Number(r.trde_amt) || 0}
                   sort={sort}
                 />
                 <SortableTh
@@ -135,8 +152,19 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
                     </td>
                     <td className={signClass(r.pred_pre)}>{fmtAbsNum(r.cur_prc)}</td>
                     <td className={signClass(r.flu_rt)}>{fmtNum(r.flu_rt)}%</td>
-                    <td>{fmtNum(r.trde_qty)}</td>
-                    <td>{fmtNum(r.trde_amt)}</td>
+                    {/* 백만원으로 오므로 100 으로 나눠 억원으로 — 검산해서 확인했다 */}
+                    <td className="num">
+                      {fmtNum(Math.round((Number(r.trde_amt) || 0) / 100))}
+                    </td>
+                    <td className="num">
+                      {UINT32_MAX === Number(r.trde_qty) ? (
+                        <span className="pt-n" title="키움이 32비트를 넘기면 이 값으로 잘라 줍니다">
+                          집계 초과
+                        </span>
+                      ) : (
+                        fmtNum(r.trde_qty)
+                      )}
+                    </td>
                     <td>{fmtNum(r.trde_tern_rt)}</td>
                   </tr>
                 );

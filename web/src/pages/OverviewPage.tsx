@@ -496,7 +496,17 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         {show("summary") && (
           <OverviewCard title="글로벌" updatedAt={global.updatedAt} loading={global.loading} error={global.error}>
             <div className="ov-card-b">
-              {(global.data ?? []).map((g) => (
+              {/*
+                섹터별로 묶는다. 스무 줄을 그냥 나열하면 **어디까지가 원자재이고
+                어디부터가 아시아 지수인지** 알 수 없다 — 서버는 이미 group 을 주는데
+                화면이 그걸 버리고 있었다.
+              */}
+              {[...new Set((global.data ?? []).map((g) => g.group))].map((grp) => (
+                <div className="ov-g-sec" key={grp}>
+                  <div className="ov-g-sec-h">{grp}</div>
+                  {(global.data ?? [])
+                    .filter((g) => g.group === grp)
+                    .map((g) => (
                 <div className="ov-g-row" key={g.key}>
                   <span className="ov-g-nm">
                     {g.label}
@@ -520,6 +530,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                       </span>
                     </>
                   )}
+                </div>
+                    ))}
                 </div>
               ))}
             </div>

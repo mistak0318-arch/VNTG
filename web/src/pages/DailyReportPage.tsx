@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   FeaturedSection,
   IndexTrendSection,
@@ -486,16 +486,35 @@ export function DailyReportPage({
                   <td className={signClass(c.changeRate)}>{pct(c.changeRate)}</td>
                 </tr>
               ))}
-              {g.map((q) => (
-                <tr key={q.key}>
-                  <td className="sticky-col">
-                    {q.label}
-                    <span className="rl-sub"> {q.group}</span>
-                  </td>
-                  <td>{q.price === null ? "-" : fmtNum(q.price)}</td>
-                  <td className={signClass(q.change)}>{q.change === null ? "-" : fmtNum(q.change)}</td>
-                  <td className={signClass(q.changeRate)}>{q.changeRate === null ? "-" : pct(q.changeRate)}</td>
-                </tr>
+              {/*
+                섹터별로 묶는다. 시황 대시보드와 같은 방식이다 — 두 화면이 같은 값을
+                다르게 늘어놓으면 하나를 보고 다른 하나를 찾을 때 헷갈린다.
+              */}
+              {[...new Set(g.map((q) => q.group))].map((grp) => (
+                <Fragment key={grp}>
+                  <tr className="rp-g-sec">
+                    <td className="sticky-col" colSpan={4}>
+                      {grp}
+                    </td>
+                  </tr>
+                  {g
+                    .filter((q) => q.group === grp)
+                    .map((q) => (
+                      <tr key={q.key}>
+                        <td className="sticky-col">
+                          {q.label}
+                          <span className="rl-sub"> {q.symbol}</span>
+                        </td>
+                        <td>{q.price === null ? "-" : fmtNum(q.price)}</td>
+                        <td className={signClass(q.change)}>
+                          {q.change === null ? "-" : fmtNum(q.change)}
+                        </td>
+                        <td className={signClass(q.changeRate)}>
+                          {q.changeRate === null ? "-" : pct(q.changeRate)}
+                        </td>
+                      </tr>
+                    ))}
+                </Fragment>
               ))}
             </tbody>
           </table>
