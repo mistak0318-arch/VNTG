@@ -335,6 +335,12 @@ export const api = {
     getJson<YahooChart>(
       `/api/market/yahoo-chart?symbol=${encodeURIComponent(symbol)}&range=${range}`,
     ),
+  usDetail: (symbol: string) => getJson<UsDetail>(`/api/market/us-detail/${encodeURIComponent(symbol)}`),
+  usChart: (symbol: string, period: "D" | "W" | "M") =>
+    getJson<{
+      candles: { t: string; open: number; high: number; low: number; close: number; volume: number }[];
+      error: string | null;
+    }>(`/api/market/us-chart/${encodeURIComponent(symbol)}?period=${period}`),
   futuresChart: (code: string, period: "D" | "W" | "M", days: number) =>
     getJson<{
       code: string;
@@ -2214,4 +2220,37 @@ export interface TradeHorizonStat {
   avgEdge: number;
   best: number;
   worst: number;
+}
+
+
+/**
+ * 해외종목 상세 (한투).
+ * ⚠️ **종목명은 안 온다** — 부르는 쪽이 이미 아는 이름을 쓴다. 재무제표·수급도 없다.
+ */
+export interface UsDetail {
+  symbol: string;
+  excd: string | null;
+  sector: string;
+  price: number | null;
+  base: number | null;
+  change: number | null;
+  changeRate: number | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+  prevVolume: number | null;
+  high52: number | null;
+  low52: number | null;
+  marketCap: number | null;
+  per: number | null;
+  pbr: number | null;
+  eps: number | null;
+  bps: number | null;
+  shares: number | null;
+  currency: string;
+  wonPrice: number | null;
+  fxRate: number | null;
+  tradable: string;
+  error: string | null;
 }

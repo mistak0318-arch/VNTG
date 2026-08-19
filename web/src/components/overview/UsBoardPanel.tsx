@@ -251,7 +251,7 @@ export function UsBoardPanel() {
       </section>
 
       {/* ---------------- 관심종목 ---------------- */}
-      <UsBoardWatch />
+      <UsBoardWatch onOpen={(symbol, label) => setChart({ kind: "usStock", symbol, label })} />
 
       {chart && <YahooChartSheet target={chart} onClose={() => setChart(null)} />}
     </div>
@@ -267,7 +267,7 @@ export function UsBoardPanel() {
  */
 const GROUP_KEY = "vntg.usboard.group";
 
-function UsBoardWatch() {
+function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => void }) {
   const [groups, setGroups] = useState<UsWatchGroup[]>([]);
   const [openId, setOpenId] = useState<string>(() => localStorage.getItem(GROUP_KEY) ?? "");
   const [editing, setEditing] = useState(false);
@@ -432,6 +432,7 @@ function UsBoardWatch() {
                 last={i === current.stocks.length - 1}
                 onMove={(d) => void move(s.symbol, d)}
                 onRemove={() => void run(() => api.usWatchStockRemove(current.id, s.symbol))}
+                onOpen={() => onOpen(s.symbol, s.name || s.symbol)}
               />
             ))}
           </div>
@@ -439,6 +440,7 @@ function UsBoardWatch() {
 
         <div className="table-note">
           <b>관심종목(해외)</b> 와 같은 목록입니다 — 여기서 넣고 빼면 거기서도 바뀝니다.
+          종목을 누르면 <b>상세</b>가 열립니다.
           괄호는 <b>미국 주간거래</b>(한국 낮에 열리는 세션)이며, <b>정규장이 열리면 사라집니다</b> —
           그때부터 지금 값은 정규장 하나뿐입니다.
         </div>
@@ -454,6 +456,7 @@ function UsBoardRow({
   last,
   onMove,
   onRemove,
+  onOpen,
 }: {
   row: UsQuoteRow;
   editing: boolean;
@@ -461,6 +464,7 @@ function UsBoardRow({
   last: boolean;
   onMove: (d: -1 | 1) => void;
   onRemove: () => void;
+  onOpen: () => void;
 }) {
   return (
     <div className="usb-row">
@@ -474,10 +478,11 @@ function UsBoardRow({
           </button>
         </span>
       )}
-      <span className="usb-sym">
+      {/* 종목을 누르면 상세가 열린다 — 예전엔 표에서 끊겼다 */}
+      <button type="button" className="usb-sym usb-open" onClick={onOpen} title="눌러서 상세 보기">
         {row.flag} {row.symbol}
         <span className="usb-nm">{row.name}</span>
-      </span>
+      </button>
       <span className="usb-px">
         {row.price === null ? "-" : row.price.toFixed(2)}
         {/* 정규장이 열리면 주간거래 괄호는 지운다 — 가격이 두 개면 어느 쪽이 지금 값인지 헷갈린다 */}

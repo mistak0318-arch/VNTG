@@ -4986,3 +4986,31 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   font: inherit;
   font-size: 0.9rem;
 }
+
+/* 해외종목 상세 숫자판 */
+.usd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.3rem 1rem;
+  margin: 0.6rem 0;
+}
+.usd-cell {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.usd-k { color: var(--muted); }
+.usd-v { font-weight: 600; text-align: right; }
+
+/* 전광판 관심종목 줄 — 눌러서 상세 */
+.usb-open {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  color: inherit;
+}

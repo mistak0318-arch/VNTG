@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type YahooChart } from "../../api";
+import { api, fmtNum, type UsDetail, type YahooChart } from "../../api";
 
 /**
  * 지수·원자재 차트.
@@ -37,6 +37,13 @@ const FUTURES_RANGES: { key: string; label: string }[] = [
   { key: "3y", label: "3년" },
 ];
 
+/** 해외종목 — 한투 기간별시세는 일/주/월이다 */
+const US_RANGES: { key: string; label: string }[] = [
+  { key: "D", label: "일봉" },
+  { key: "W", label: "주봉" },
+  { key: "M", label: "월봉" },
+];
+
 const FUTURES_SPEC: Record<string, { days: number; period: "D" | "W" | "M" }> = {
   "3mo": { days: 120, period: "D" },
   "1y": { days: 400, period: "D" },
@@ -48,8 +55,9 @@ export interface ChartTarget {
    * 어디서 받아오나.
    *   yahoo   미국 지수·원자재 (`^NDX`, `CL=F`)
    *   futures 야간선물 — 한투 기간별시세(`FHKIF03020100`, 시장 `CM`)
+   *   usStock 해외종목 — 한투 price-detail + dailyprice
    */
-  kind?: "yahoo" | "futures";
+  kind?: "yahoo" | "futures" | "usStock";
   /** 야후 심볼 또는 선물 월물코드 */
   symbol: string;
   label: string;
@@ -69,16 +77,44 @@ export function YahooChartSheet({
   onClose: () => void;
 }) {
   const futures = target.kind === "futures";
-  const ranges = futures ? FUTURES_RANGES : YAHOO_RANGES;
-  const [range, setRange] = useState(futures ? "3mo" : "6mo");
+  const usStock = target.kind === "usStock";
+  const ranges = usStock ? US_RANGES : futures ? FUTURES_RANGES : YAHOO_RANGES;
+  const [range, setRange] = useState(usStock ? "D" : futures ? "3mo" : "6mo");
   const [data, setData] = useState<YahooChart | null>(null);
+  const [detail, setDetail] = useState<UsDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // 상세 숫자는 기간을 바꿔도 그대로다 — 한 번만 받는다
+  useEffect(() => {
+    if (!usStock) return;
+    let alive = true;
+    api
+      .usDetail(target.symbol)
+      .then((d) => {
+        if (alive) setDetail(d);
+      })
+      .catch(() => {
+        if (alive) setDetail(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [usStock, target.symbol]);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     const spec = FUTURES_SPEC[range] ?? FUTURES_SPEC["3mo"];
-    const req = futures
+    const req = usStock
+      ? api.usChart(target.symbol, range as "D" | "W" | "M").then((r) => ({
+          symbol: target.symbol,
+          range,
+          interval: range === "D" ? "일봉" : range === "W" ? "주봉" : "월봉",
+          candles: r.candles,
+          prevClose: null,
+          error: r.error,
+        }))
+      : futures
       ? api.futuresChart(target.symbol, spec.period, spec.days).then((r) => ({
           symbol: target.symbol,
           range,
@@ -102,7 +138,7 @@ export function YahooChartSheet({
     return () => {
       alive = false;
     };
-  }, [target.symbol, range, futures]);
+  }, [target.symbol, range, futures, usStock]);
 
   const digits = target.digits ?? 2;
   const candles = useMemo(() => data?.candles ?? [], [data]);
@@ -226,6 +262,8 @@ export function YahooChartSheet({
               </span>
             </div>
 
+            {detail && !detail.error && <UsFigures d={detail} />}
+
             <svg className="yc-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img">
               {/* 기준선 — 「1일」에서 이게 없으면 오른 건지 내린 건지 안 보인다 */}
               {view.baseY !== null && (
@@ -270,5 +308,66 @@ export function YahooChartSheet({
         )}
       </div>
     </div>
+  );
+}
+
+
+/**
+ * 해외종목 숫자판.
+ *
+ * **없는 것은 안 그린다.** 한투 해외주식에는 재무제표도 수급도 없다 — 국내 상세와
+ * 같은 모양으로 맞추겠다고 빈 칸을 늘어놓으면, 값이 없는 건지 0인 건지 알 수 없어진다.
+ */
+function UsFigures({ d }: { d: UsDetail }) {
+  const pos52 =
+    d.price !== null && d.high52 !== null && d.low52 !== null && d.high52 > d.low52
+      ? ((d.price - d.low52) / (d.high52 - d.low52)) * 100
+      : null;
+  const volRatio = d.volume !== null && d.prevVolume ? d.volume / d.prevVolume : null;
+
+  const rows: { k: string; v: string; hint?: string }[] = [];
+  if (d.open !== null) rows.push({ k: "시/고/저", v: `${d.open} / ${d.high} / ${d.low}` });
+  if (pos52 !== null)
+    rows.push({
+      k: "52주 자리",
+      v: `${pos52.toFixed(0)}% (${d.low52} ~ ${d.high52})`,
+      hint: "0%가 52주 최저, 100%가 최고입니다",
+    });
+  if (volRatio !== null)
+    rows.push({
+      k: "거래량",
+      v: `${fmtNum(d.volume ?? 0)} · 전일比 ${volRatio.toFixed(2)}배`,
+      hint: "1배보다 크면 평소보다 붐빈다는 뜻입니다",
+    });
+  if (d.marketCap !== null)
+    rows.push({ k: "시가총액", v: `${(d.marketCap / 1e9).toFixed(1)}십억 ${d.currency}` });
+  if (d.per !== null || d.pbr !== null)
+    rows.push({ k: "PER / PBR", v: `${d.per ?? "-"} / ${d.pbr ?? "-"}` });
+  if (d.eps !== null || d.bps !== null)
+    rows.push({ k: "EPS / BPS", v: `${d.eps ?? "-"} / ${d.bps ?? "-"}` });
+  if (d.wonPrice !== null)
+    rows.push({
+      k: "원화 환산",
+      v: `${d.wonPrice.toLocaleString("ko-KR")}원${d.fxRate ? ` (환율 ${d.fxRate})` : ""}`,
+      hint: "환율까지 얹힌 값이라 실제 체감에 가깝습니다",
+    });
+  if (d.sector) rows.push({ k: "업종", v: d.sector });
+  if (d.tradable) rows.push({ k: "매매", v: d.tradable });
+
+  return (
+    <>
+      <div className="usd-grid">
+        {rows.map((r) => (
+          <div className="usd-cell" key={r.k} title={r.hint}>
+            <span className="usd-k">{r.k}</span>
+            <span className="usd-v">{r.v}</span>
+          </div>
+        ))}
+      </div>
+      <div className="table-note">
+        한국투자증권 해외주식 시세입니다. <b>재무제표와 수급은 없습니다</b> — 해외 종목에는
+        DART 같은 자리가 없고, 외국인·기관 순매수는 국내 시장의 개념입니다.
+      </div>
+    </>
   );
 }

@@ -170,6 +170,20 @@ async function resolveExcd(symbols: string[]): Promise<void> {
   await saveExcd();
 }
 
+/**
+ * 이 티커의 거래소코드. 모르면 한 번 찾아보고 적어 둔다.
+ *
+ * 종목 상세가 이걸 쓴다 — 상세는 한 종목만 부르는데, 그 한 종목의 거래소를 모르면
+ * 조회 자체가 안 된다.
+ */
+export async function excdOf(symbol: string): Promise<string | null> {
+  const map = await loadExcd();
+  if (map[symbol]) return map[symbol];
+  if (!hantooCanHave(symbol)) return null;
+  await resolveExcd([symbol]);
+  return (await loadExcd())[symbol] ?? null;
+}
+
 // ------------------------------------------------------------------ 시세 받기
 
 export async function hantooUsQuotes(symbols: string[]): Promise<Map<string, UsHantooQuote>> {

@@ -8,6 +8,7 @@ import { stockProfile } from "../stockProfile.js";
 import { tradeSizeMix } from "../tradeSizeMix.js";
 import { CHART_RANGES, yahooChart } from "../yahooChart.js";
 import { futuresCandles } from "../kospiFutures.js";
+import { usCandles, usDetail } from "../usDetail.js";
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
@@ -505,6 +506,29 @@ export function createMarketRouter(client: KiwoomClient): Router {
         : "D";
       const days = Math.min(Math.max(Number(req.query.days) || 120, 10), 800);
       res.json({ code, market, period, ...(await futuresCandles(code, market, period, days)) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 해외종목 상세 — 관심종목(해외)·전광판·미국 테마 MAP 에서 종목을 눌렀을 때.
+   * 국내는 누르면 열리는데 해외는 표에서 끊겼다.
+   */
+  router.get("/us-detail/:symbol", async (req, res, next) => {
+    try {
+      res.json(await usDetail(String(req.params.symbol).trim().toUpperCase()));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/us-chart/:symbol", async (req, res, next) => {
+    try {
+      const period = ["D", "W", "M"].includes(String(req.query.period))
+        ? (String(req.query.period) as "D" | "W" | "M")
+        : "D";
+      res.json(await usCandles(String(req.params.symbol).trim().toUpperCase(), period));
     } catch (err) {
       next(err);
     }
