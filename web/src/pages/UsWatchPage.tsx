@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type UsSearchResult, type UsWatchGroup , type UsQuoteRow } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { showDayQuote } from "../usSession";
+import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
 
 /**
  * 관심종목 (해외).
@@ -74,6 +75,8 @@ export function UsWatchPage() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  /** 눌러서 여는 해외종목 상세 */
+  const [detail, setDetail] = useState<ChartTarget | null>(null);
   /*
    * **기본은 내가 넣은 순서다.**
    *
@@ -444,8 +447,22 @@ export function UsWatchPage() {
                       <td className="sticky-col">
                         {/* 나라가 섞이니 국기를 앞에 — 78.89 가 달러인지 엔인지 알아야 한다 */}
                         <span className="uw-flag">{s.flag ?? (s.symbol.includes(".") ? "🇪🇺" : "")}</span>
-                        <b>{s.symbol.split(".")[0]}</b>
-                        <span className="pt-n"> {s.name}</span>
+                        {/* 눌러서 상세 — 예전엔 표에서 끊겼다 */}
+                        <button
+                          type="button"
+                          className="usb-open"
+                          onClick={() =>
+                            setDetail({
+                              kind: "usStock",
+                              symbol: s.symbol,
+                              label: s.name || s.symbol,
+                            })
+                          }
+                          title="눌러서 상세 보기"
+                        >
+                          <b>{s.symbol.split(".")[0]}</b>
+                          <span className="pt-n"> {s.name}</span>
+                        </button>
                         {s.error && <span className="uw-err"> {s.error}</span>}
                       </td>
                       {/*
@@ -546,6 +563,8 @@ export function UsWatchPage() {
           </div>
         </>
       )}
+
+      {detail && <YahooChartSheet target={detail} onClose={() => setDetail(null)} />}
     </div>
   );
 }

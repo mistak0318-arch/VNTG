@@ -21,6 +21,7 @@ import { CandleChart } from "../CandleChart";
 import { useSection } from "../../useSection";
 import { useWatchGroupTiles } from "../../useWatchGroupTiles";
 import { ConstituentSheet, type ConstituentTarget } from "../overview/ConstituentSheet";
+import { YahooChartSheet, type ChartTarget } from "../overview/YahooChartSheet";
 
 /**
  * 데일리 리포트에 새로 들어가는 네 섹션.
@@ -325,6 +326,11 @@ export function UsThemeMapSection({
 } = {}) {
   const { tiles, loading } = useWatchGroupTiles("watchUs");
   const [target, setTarget] = useState<ConstituentTarget | null>(null);
+  /*
+   * 여기 종목은 **해외 티커**다.
+   * 국내 상세로 보내면 `NVDA` 를 종목코드로 찾다가 아무것도 못 찾는다.
+   */
+  const [usDetail, setUsDetail] = useState<ChartTarget | null>(null);
 
   if (loading) return <div className="page-note">불러오는 중…</div>;
   return (
@@ -359,10 +365,11 @@ export function UsThemeMapSection({
           onClose={() => setTarget(null)}
           onSelectStock={(c, n) => {
             setTarget(null);
-            onSelectStock?.(c, n);
+            setUsDetail({ kind: "usStock", symbol: c, label: n || c });
           }}
         />
       )}
+      {usDetail && <YahooChartSheet target={usDetail} onClose={() => setUsDetail(null)} />}
       <div className="table-note">
         내 <b>해외 관심종목</b> 그룹입니다. <b>밤사이 무엇이 돌았나</b>가 오늘 국내 무엇이 도는지를
         상당 부분 정합니다. ▲/▼ 는 그 그룹에서 오른/내린 종목 수입니다.
