@@ -857,7 +857,7 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
             )}
           </div>
           {/* 원문이라 줄바꿈을 그대로 살린다 — 문단이 무너지면 읽기가 어려워진다 */}
-          <div className="rp-pinned-body">{p.text}</div>
+          <div className="rp-pinned-body">{renderPinned(p.text)}</div>
         </div>
       ))}
       <div className="table-note">
@@ -866,4 +866,33 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
       </div>
     </>
   );
+}
+
+
+/**
+ * 원문을 **줄 단위로** 그린다.
+ *
+ * 글자는 하나도 안 바꾼다 — 요약도 재작성도 아니다. `◎` 로 시작하는 줄만 큰 묶음 제목으로
+ * 세워서 **어디서 화제가 바뀌는지** 보이게 한다.
+ *
+ * 채널 글은 원래 층이 있다.
+ *   ◎ 해외 증시            ← 큰 묶음
+ *   국채 금리 하락에 반등    ← 요지
+ *     LPL. 반창고 역할      ← 근거·인용 (들여쓰기)
+ * 그 층을 살리는 것만으로 「나열식이라 중요도를 모르겠다」가 상당히 풀린다.
+ * 없는 중요도를 만들어 내는 게 아니라, **원문에 이미 있는 것을 안 지우는** 것이다.
+ */
+function renderPinned(text: string) {
+  return text.split(/\r?\n/).map((line, i) => {
+    const t = line.trim();
+    if (t.startsWith("◎") || t.startsWith("■") || t.startsWith("【")) {
+      return (
+        <b className="rp-pinned-sec" key={i}>
+          {t}
+        </b>
+      );
+    }
+    // 줄바꿈은 CSS(white-space: pre-wrap)가 살린다 — 여기서 <br> 을 넣으면 두 번 띄어진다
+    return <span key={i}>{line}{"\n"}</span>;
+  });
 }
