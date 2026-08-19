@@ -11,16 +11,53 @@ import {
   type SectionName,
 } from "../marketOverview.js";
 
-/** 장 상태 판정 (한국 시간 기준, 공휴일은 판별하지 않음) */
-function marketStatus(): { state: "pre" | "open" | "closed" | "holiday"; label: string } {
+/**
+ * 장 상태 판정 (한국 시간 기준, 공휴일은 판별하지 않음).
+ *
+ * ## 「거래가 도는 시간」은 정규장보다 넓다
+ *
+ * 넥스트레이드(NXT)가 **08:00~09:00 프리마켓**과 **15:30~20:00 애프터마켓**에 돈다.
+ * 그런데 예전엔 정규장(09:00~15:30)만 `open` 으로 봤고, 화면의 실시간 갱신은
+ * `state === "open"` 일 때만 돌았다. 그래서 **NXT 시간에는 값이 안 움직였다** —
+ * 종목 창을 열어 놔도 멈춰 있고, 새로고침을 눌러도 그때 한 번만 받고 끝났다.
+ *
+ * `live` 를 따로 둔다. **「지금 체결이 나고 있나」**는 「정규장인가」와 다른 질문이다.
+ * `state` 는 그대로 둬서 기존 화면(장전/장중/장마감 표시)이 안 바뀌게 한다.
+ */
+function marketStatus(): {
+  state: "pre" | "open" | "closed" | "holiday";
+  label: string;
+  /** 지금 체결이 도는가 — NXT 시간외를 포함한다. 실시간 갱신은 이걸 본다 */
+  live: boolean;
+  /** 어느 판인가 */
+  venue: "none" | "nxt" | "krx";
+} {
   const now = new Date();
   const day = now.getDay();
-  if (day === 0 || day === 6) return { state: "holiday", label: "휴장" };
+  if (day === 0 || day === 6)
+    return { state: "holiday", label: "휴장", live: false, venue: "none" };
 
   const minutes = now.getHours() * 60 + now.getMinutes();
-  if (minutes < 9 * 60) return { state: "pre", label: "장전" };
-  if (minutes <= 15 * 60 + 30) return { state: "open", label: "장중" };
-  return { state: "closed", label: "장마감" };
+  // NXT 프리마켓 08:00~09:00 · 정규장 09:00~15:30 · NXT 애프터마켓 15:30~20:00
+  const nxtPre = minutes >= 8 * 60 && minutes < 9 * 60;
+  const regular = minutes >= 9 * 60 && minutes <= 15 * 60 + 30;
+  const nxtPost = minutes > 15 * 60 + 30 && minutes <= 20 * 60;
+
+  if (minutes < 9 * 60) {
+    return {
+      state: "pre",
+      label: nxtPre ? "장전 (NXT)" : "장전",
+      live: nxtPre,
+      venue: nxtPre ? "nxt" : "none",
+    };
+  }
+  if (regular) return { state: "open", label: "장중", live: true, venue: "krx" };
+  return {
+    state: "closed",
+    label: nxtPost ? "장마감 (NXT)" : "장마감",
+    live: nxtPost,
+    venue: nxtPost ? "nxt" : "none",
+  };
 }
 
 export function createOverviewRouter(client: KiwoomClient): Router {

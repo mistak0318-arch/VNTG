@@ -87,7 +87,17 @@ export function StockDetail({
    * 이 모달은 관심종목·순위 화면에서 바로 열리는 자리라 개별종목분석만큼 자주 쓰이는데,
    * 열어둔 채로 값이 멈춰 있으면 지난 시세를 보고 판단하게 된다.
    */
-  const live = useLive(() => api.stockInfo(code), [code], 5000);
+  /*
+   * **1초 갱신.**
+   *
+   * 키움 제한은 「전체 초당 몇 건」이 아니라 **TR 하나당 초당 5건**이다.
+   * 종목 창은 한 번에 하나만 열리고, 이 패널이 부르는 TR 도 하나다 —
+   * 1초에 한 번이면 한도의 20% 다. 5초로 잡아 둘 이유가 없었다.
+   *
+   * 분봉 차트는 그대로 30초다. 3분봉은 3분에 한 번 바뀌는데 1초로 당겨 봐야
+   * **같은 값을 서른 번 더 받을 뿐**이다.
+   */
+  const live = useLive(() => api.stockInfo(code), [code], 1000);
   const info = (live.data ?? null) as RawRecord | null;
   const [watchBusy, setWatchBusy] = useState(false);
   const [addTarget, setAddTarget] = useState<WatchAddTarget | null>(null);

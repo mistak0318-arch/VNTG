@@ -646,6 +646,9 @@ export interface TrackedStock extends WatchItem {
 export interface MarketStatus {
   state: "pre" | "open" | "closed" | "holiday";
   label: string;
+  /** 지금 체결이 도는가 — NXT 시간외(08:00~09:00, 15:30~20:00)를 포함한다 */
+  live?: boolean;
+  venue?: "none" | "nxt" | "krx";
 }
 
 export interface SectionResult<T> {

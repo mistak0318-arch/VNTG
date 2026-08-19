@@ -14,7 +14,13 @@ import { api } from "./api";
  *   - 이전 요청이 아직 안 끝났을 때 — 느린 응답이 쌓이면 순서가 뒤집힌다
  */
 
-/** 장 상태. 1분마다 확인한다 — 개장·마감 순간을 놓치지 않을 정도면 충분하다 */
+/**
+ * **지금 체결이 도는가.** 1분마다 확인한다.
+ *
+ * 예전엔 정규장(`state === "open"`)만 봤다. 그런데 넥스트레이드가 08:00~09:00 과
+ * 15:30~20:00 에도 도는데, 그 시간엔 폴링이 아예 안 걸려서 **종목 창이 멈춰 있었다.**
+ * 서버가 주는 `live` 는 NXT 시간외를 포함한다.
+ */
 export function useMarketOpen(): boolean {
   const [open, setOpen] = useState(false);
 
@@ -23,7 +29,8 @@ export function useMarketOpen(): boolean {
     const check = () => {
       api
         .marketStatus()
-        .then((s) => !cancelled && setOpen(s.state === "open"))
+        // 옛 서버는 live 를 안 준다 — 그때는 예전처럼 정규장만 본다
+        .then((s) => !cancelled && setOpen(s.live ?? s.state === "open"))
         .catch(() => undefined); // 상태를 못 받으면 폴링하지 않는 쪽(false 유지)이 안전하다
     };
     check();

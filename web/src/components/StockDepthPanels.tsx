@@ -61,7 +61,17 @@ export function QuoteSummary({ code }: { code: string }) {
    * 있어서 옆에 괄호로 같이 보여준다 — 표를 따로 두는 것보다 이 자리에서 바로 비교하는 게 낫다.
    * 장중에는 5초마다 조용히 갱신된다.
    */
-  const ex = useLive(() => api.exchangeQuotes(code), [code], 5000);
+  /*
+   * **1초 갱신.**
+   *
+   * 키움 제한은 「전체 초당 몇 건」이 아니라 **TR 하나당 초당 5건**이다.
+   * 종목 창은 한 번에 하나만 열리고, 이 패널이 부르는 TR 도 하나다 —
+   * 1초에 한 번이면 한도의 20% 다. 5초로 잡아 둘 이유가 없었다.
+   *
+   * 분봉 차트는 그대로 30초다. 3분봉은 3분에 한 번 바뀌는데 1초로 당겨 봐야
+   * **같은 값을 서른 번 더 받을 뿐**이다.
+   */
+  const ex = useLive(() => api.exchangeQuotes(code), [code], 1000);
   const nxt = (ex.data?.exchanges ?? []).find((x) => x.key === "nxt") ?? null;
 
   if (snap.loading) return <div className="empty">시세 불러오는 중...</div>;
