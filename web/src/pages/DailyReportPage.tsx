@@ -1,4 +1,10 @@
 import { useEffect, useState } from "react";
+import {
+  FeaturedSection,
+  IndexTrendSection,
+  MoneyFlowSection,
+  NightFuturesSection,
+} from "../components/report/ReportSections";
 import { notifyJobStarted } from "../components/RunningJobsBar";
 import {
   api,
@@ -437,8 +443,16 @@ export function DailyReportPage({
         <ReviewPanel />
       </Section>
 
-      {/* 1. 국내외 주요 지수 */}
-      <Section no={1} title="국내외 주요 지수">
+      {/*
+        조간에 가장 먼저 봐야 할 값이다. 미국 현물은 05:30 에 닫혀 이미 굳었지만
+        야간선물은 그 결과를 한국 지수로 환산해 준다 — 오늘 개장가의 예고편이다.
+      */}
+      <Section no={1} title="코스피 야간선물 · 환율">
+        <NightFuturesSection />
+      </Section>
+
+      {/* 2. 국내외 주요 지수 */}
+      <Section no={2} title="국내외 주요 지수">
         <div className="data-table-wrap">
           <table className="data-table">
             <thead>
@@ -475,7 +489,15 @@ export function DailyReportPage({
       </Section>
 
       {/* 2. 투자자 수급 — 시황 대시보드와 같은 막대 그래프를 시장별로 */}
-      <Section no={2} title="투자자별 매매 동향">
+      {/*
+        숫자만으로는 "오늘 -1.5%" 가 어디쯤에서 난 하락인지 모른다.
+        고점에서 흘러내리는 중인지 바닥에서 튀는 중인지가 판단을 가른다.
+      */}
+      <Section no={3} title="코스피 · 코스닥 추이 (60거래일)">
+        <IndexTrendSection />
+      </Section>
+
+      <Section no={4} title="투자자별 매매 동향">
         {f ? (
           <>
             <div className="report-two-col">
@@ -513,7 +535,11 @@ export function DailyReportPage({
       </Section>
 
       {/* 3. 특징 테마 — 왜 올랐는지 관련 기사까지 */}
-      <Section no={3} title="특징 테마 (상승 이유 포함)">
+      <Section no={5} title="시장 자금 흐름 (업종별 5일 누적)">
+        <MoneyFlowSection />
+      </Section>
+
+      <Section no={6} title="특징 테마 (상승 이유 포함)">
         <div className="report-lines">
           {(drivers?.themes.up ?? []).map((t) => (
             <DriverItem
@@ -546,7 +572,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 4. 강한 업종 — 이유 포함 */}
-      <Section no={4} title="강한 업종 (상승 이유 포함)">
+      <Section no={7} title="강한 업종 (상승 이유 포함)">
         <div className="report-lines">
           {(drivers?.sectors ?? []).map((sec) => (
             <DriverItem
@@ -573,7 +599,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 5. 특징 종목 */}
-      <Section no={5} title="특징 종목 (급등/급락)">
+      <Section no={8} title="특징 종목 (급등/급락)">
         <div className="report-two-col">
           <div>
             <h4 className="report-subheading positive">상승률 상위</h4>
@@ -587,7 +613,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 6. 신고가/신저가 */}
-      <Section no={6} title="52주(250일) 신고가 · 신저가">
+      <Section no={9} title="52주(250일) 신고가 · 신저가">
         <div className="report-two-col">
           <div>
             <h4 className="report-subheading positive">신고가</h4>
@@ -601,7 +627,15 @@ export function DailyReportPage({
       </Section>
 
       {/* 7. 뉴스 클리핑 — 분야별 (뉴스·공시 탭과 같은 컴포넌트) */}
-      <Section no={7} title="주요 뉴스 클리핑">
+      {/*
+        오늘 볼 만한 종목. 세 갈래는 성격이 다르다 — 신호등은 조건을 갖춘 것,
+        신고가는 이미 올라간 것, 급등은 오늘 움직인 것. 섞으면 뭘 보는지 모르게 된다.
+      */}
+      <Section no={10} title="특징주">
+        <FeaturedSection onSelectStock={onSelectStock} />
+      </Section>
+
+      <Section no={11} title="주요 뉴스 클리핑">
         <SectorNews perSector={20} onFetched={setNewsAt} />
       </Section>
 

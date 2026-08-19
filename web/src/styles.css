@@ -3667,3 +3667,17 @@ body {
 .ov-idx.clickable:hover { background: var(--panel-2); }
 .idx-sheet { max-width: 760px; }
 .idx-h3 { font-size: 13px; margin: 14px 0 6px; }
+
+/* 데일리 리포트 새 섹션들 */
+.rp-kv { display: flex; gap: 16px; flex-wrap: wrap; align-items: baseline; }
+.rp-kv-item { display: flex; align-items: baseline; gap: 6px; }
+.rp-kv-label { font-size: 12px; color: var(--muted); }
+.rp-kv-val { font-size: 20px; font-variant-numeric: tabular-nums; }
+.rp-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.rp-chart-title { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.rp-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.rp-flow-h { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.rp-flow-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px;
+  border-bottom: 1px solid var(--border); }
+.rp-flow-row b { font-variant-numeric: tabular-nums; }
+.rp-featured { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
