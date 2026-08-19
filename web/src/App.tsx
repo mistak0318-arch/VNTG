@@ -99,7 +99,7 @@ const MENU: {
     items: [
       { key: "watchAi", label: "관심종목 (AI_HTS)", icon: "⭐" },
       { key: "watchKiwoom", label: "관심종목 (키움_HTS)", icon: "🔖" },
-      { key: "usWatch", label: "관심종목 (미국)", icon: "🇺🇸" },
+      { key: "usWatch", label: "관심종목 (해외)", icon: "🌏" },
       { key: "customTheme", label: "내 테마", icon: "🎯" },
       { key: "signalScreen", label: "신호등 찾기", icon: "🚦" },
       { key: "journal", label: "복기 노트", icon: "📓" },

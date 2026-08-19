@@ -584,6 +584,37 @@ export function invalidateUsCache(): void {
   shot = null;
 }
 
+/**
+ * 순서만 바꿨을 때 — **시세를 다시 받지 않는다.**
+ *
+ * 예전엔 순서 변경도 캐시를 버렸다. 그러면 164종목 시세를 처음부터 다시 받느라
+ * **▲ 한 번 누를 때마다 6~8초**를 기다려야 했다. 그런데 순서를 바꾼다고 가격이
+ * 변하지는 않는다 — 손에 있는 값을 그대로 두고 **줄 순서만** 고쳐 주면 된다.
+ *
+ * 캐시가 없으면 아무것도 안 한다. 다음 조회가 어차피 새로 받는다.
+ */
+export async function reorderCachedGroup(groupId: string, symbols: string[]): Promise<void> {
+  if (!shot) return;
+  const g = shot.data.groups.find((x) => x.id === groupId);
+  if (!g) return;
+  const rank = new Map(symbols.map((sym, i) => [sym, i]));
+  g.stocks = [...g.stocks].sort(
+    (a, b) => (rank.get(a.symbol) ?? 999) - (rank.get(b.symbol) ?? 999),
+  );
+
+  /*
+   * **파일 수정시각을 캐시에 다시 새긴다.**
+   *
+   * 이게 없으면 순서 변경이 여전히 느리다. 순서를 바꾸면 `usWatchlist.json` 을 쓰는데,
+   * 「파일이 밖에서 바뀌면 캐시를 버린다」는 규칙이 그걸 **외부 변경으로 오해**해
+   * 164종목을 다시 받는다 — 실측 18초였다.
+   *
+   * 방금 바꾼 건 우리 자신이고 그 결과를 이미 캐시에 반영했으므로, 새 mtime 을
+   * 인정해 주면 된다. (그 규칙은 미니PC 에 새 목록을 파일로 깔았을 때를 위한 것이다)
+   */
+  shot.mtime = await watchlistMtime();
+}
+
 /** 지금 가격 하나만 — 담을 때 편입가를 채우려고 */
 export async function quoteSymbol(symbol: string): Promise<number | null> {
   return (await quoteOne(symbol)).price;

@@ -4,6 +4,7 @@ import {
   addStock,
   evaluateGroups,
   invalidateUsCache,
+  reorderCachedGroup,
   listGroups,
   quoteSymbol,
   removeGroup,
@@ -103,12 +104,14 @@ export function createUsWatchRouter(): Router {
 
   router.put("/groups/:id/stocks/order", async (req, res, next) => {
     try {
-      await reorderStocks(
-        req.params.id,
-        Array.isArray(req.body?.symbols) ? req.body.symbols.map(String) : [],
-      );
-      // 방금 고쳤으니 캐시를 버린다 — 안 그러면 담은 종목이 한동안 안 뜬다
-      invalidateUsCache();
+      const symbols = Array.isArray(req.body?.symbols) ? req.body.symbols.map(String) : [];
+      await reorderStocks(req.params.id, symbols);
+      /*
+       * **캐시를 버리지 않는다.** 순서를 바꾼다고 가격이 변하지는 않는다.
+       * 버리면 164종목 시세를 다시 받느라 ▲ 한 번에 6~8초가 걸린다 —
+       * 손에 있는 값의 줄 순서만 고쳐 주면 즉시 끝난다.
+       */
+      await reorderCachedGroup(req.params.id, symbols);
       res.json(await evaluateGroups());
     } catch (err) {
       next(err);

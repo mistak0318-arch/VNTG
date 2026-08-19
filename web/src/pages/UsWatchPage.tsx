@@ -3,7 +3,10 @@ import { api, type UsSearchResult, type UsWatchGroup , type UsQuoteRow } from ".
 import { RefreshBar } from "../components/RefreshBar";
 
 /**
- * 관심종목 (미국).
+ * 관심종목 (해외).
+ *
+ * 처음엔 미국만 담으려고 만들었는데 일본·홍콩·중국·베트남(한투)과 유럽(야후)까지
+ * 붙으면서 이름이 실제와 어긋났다 — 유럽 방산 8종목이 「미국」 안에 있었다.
  *
  * 국내 테마는 키움이 시세를 주지만 미국은 안 준다. 그런데 **밤사이 미국이 오늘 국내를
  * 정한다** — 미국↔국내 테마 연동에서 이미 확인한 것이고, 그래서 미국 쪽도 내가 짠

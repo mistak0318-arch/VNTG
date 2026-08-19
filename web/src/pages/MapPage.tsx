@@ -28,7 +28,7 @@ type Mode = "mine" | "watchAi" | "watchKiwoom" | "watchUs" | "theme" | "sector";
 const WATCH_MODES: { key: Mode; label: string; source: GroupSource }[] = [
   { key: "watchAi", label: "관심종목 (AI_HTS)", source: "watchAi" },
   { key: "watchKiwoom", label: "관심종목 (키움_HTS)", source: "watchKiwoom" },
-  { key: "watchUs", label: "관심종목 (미국)", source: "watchUs" },
+  { key: "watchUs", label: "관심종목 (해외)", source: "watchUs" },
 ];
 
 /** 등락률에 따라 타일 배경색 강도를 정한다 (한국식: 상승 빨강 / 하락 파랑) */
