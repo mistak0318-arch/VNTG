@@ -112,6 +112,21 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
     save({ ...prefs, hidden });
   }
 
+  /**
+   * 즐겨찾기 순서 옮기기.
+   *
+   * 사이드바 맨 위 줄은 이 배열 순서를 그대로 쓴다. 예전엔 **올린 순서**로만 늘어서서
+   * 나중에 올린 게 늘 뒤로 갔다 — 정작 제일 자주 쓰는 걸 앞으로 못 옮겼다.
+   * 여기서도 끌어 옮기기 대신 화살표를 쓴다. 폰에서 드래그는 스크롤과 싸운다.
+   */
+  function moveFav(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= prefs.favorites.length) return;
+    const next = [...prefs.favorites];
+    [next[i], next[j]] = [next[j], next[i]];
+    save({ ...prefs, favorites: next });
+  }
+
   /** 자주 쓰는 메뉴에 올리고 내린다. 순서는 올린 순서다 */
   function toggleFav(key: string) {
     const favorites = prefs.favorites.includes(key)
@@ -135,8 +150,52 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
     Object.keys(prefs.groupOf).length > 0 ||
     prefs.extraGroups.length > 0;
 
+  /** 즐겨찾기에 올라간 항목들을 순서대로 — 없는 키는 걸러낸다 */
+  const favItems = prefs.favorites
+    .map((k) => items.find((i) => i.key === k))
+    .filter((i): i is (typeof items)[number] => Boolean(i));
+
   return (
     <>
+      {/*
+        즐겨찾기 순서. 사이드바 맨 위 줄이 이 순서 그대로다.
+        아래 목록에서 ☆ 로 올리고 내리며, **순서는 여기서만** 바꾼다 —
+        아래 목록은 영역별로 나뉘어 있어 즐겨찾기 줄의 순서를 거기서 읽을 수 없다.
+      */}
+      {favItems.length > 0 && (
+        <section className="mo-fav">
+          <div className="mo-fav-h">
+            <b>자주 쓰는 메뉴 순서</b>
+            <small>사이드바 맨 위에 이 순서대로 뜹니다</small>
+          </div>
+          <div className="mo-fav-list">
+            {favItems.map((it, i) => (
+              <span className="gt-item" key={it.key}>
+                <button
+                  className="gt-move"
+                  onClick={() => moveFav(i, -1)}
+                  disabled={i === 0}
+                  title="앞으로"
+                >
+                  ◀
+                </button>
+                <span className="mo-fav-chip">
+                  {it.icon} {prefs.labels[it.key]?.trim() || it.label}
+                </span>
+                <button
+                  className="gt-move"
+                  onClick={() => moveFav(i, 1)}
+                  disabled={i >= favItems.length - 1}
+                  title="뒤로"
+                >
+                  ▶
+                </button>
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
       <p className="page-note">
         <b>끌어다 놓아</b> 순서를 바꾸고, 다른 영역 머리 위에 놓으면 그 영역으로 옮겨집니다.
         이름을 누르면 내가 부르는 이름으로 고칠 수 있습니다. 이 설정은 <b>이 기기에만</b>{" "}

@@ -43,10 +43,23 @@ export function WatchAddSheet({
       .then(([g, w]) => {
         setGroups(g.groups);
         setItems(w.items);
-        setPicked(g.groups[0] ? [g.groups[0]] : []);
+        /*
+         * **미리 골라 두지 않는다.**
+         *
+         * 예전엔 첫 그룹(기본)을 켜 둔 채로 열었다. 그러면 다른 그룹을 고르고도
+         * 기본이 같이 켜져 있는 걸 못 보고 담게 되어, 결국 전부 기본에 쌓였다.
+         *
+         * 다만 **이미 담긴 종목이면 지금 속한 그룹을 켜서 연다** — 그래야 무엇이
+         * 더해지고 무엇이 빠지는지가 보인다. 이 창은 「담기」이자 「그룹 고치기」다.
+         */
+        const already = w.items.find((i) => i.code === target.code);
+        setPicked(already?.groups ?? []);
       })
       .catch((e: Error) => setError(e.message));
-  }, []);
+  }, [target.code]);
+
+  /** 이미 담긴 종목인가 — 창의 말투가 「담기」에서 「고치기」로 바뀐다 */
+  const isAlready = items.some((i) => i.code === target.code);
 
   /** 그룹마다 몇 개 담겨 있는지 — 키움처럼 옆에 세워 두면 고르기 쉽다 */
   const countOf = (g: string) => items.filter((i) => (i.groups ?? []).includes(g)).length;
@@ -69,14 +82,23 @@ export function WatchAddSheet({
     setBusy(true);
     setError(null);
     try {
-      await api.watchlistAdd({
-        code: target.code,
-        name: target.name,
-        addedPrice: target.addedPrice,
-        memo: memo.trim() || undefined,
-        groups: picked,
-      });
-      watched.markAdded(target.code);
+      /*
+       * 아무 그룹도 안 고르고 담으면 서버가 기본 그룹으로 넣는다.
+       * 이미 담긴 종목에서 전부 껐다면 그건 **빼겠다는 뜻**이므로 그렇게 다룬다.
+       */
+      if (isAlready && picked.length === 0) {
+        await api.watchlistRemove(target.code);
+        watched.markRemoved(target.code);
+      } else {
+        await api.watchlistAdd({
+          code: target.code,
+          name: target.name,
+          addedPrice: target.addedPrice,
+          memo: memo.trim() || undefined,
+          groups: picked,
+        });
+        watched.markAdded(target.code);
+      }
       onDone?.();
       onClose();
     } catch (e) {
@@ -90,7 +112,7 @@ export function WatchAddSheet({
       <div className="sheet wa-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-header">
           <h2>
-            관심종목 담기
+            {isAlready ? "관심종목 그룹 고치기" : "관심종목 담기"}
             <span className="sheet-sub">
               {target.name} ({target.code})
             </span>
@@ -103,9 +125,19 @@ export function WatchAddSheet({
         {error && <div className="error-banner">{error}</div>}
 
         <p className="page-note">
-          담을 그룹을 <b>여러 개</b> 고를 수 있습니다 — 한 종목은 성격이 하나가 아닙니다.
-          편입가는 <b>{target.addedPrice.toLocaleString("ko-KR")}원</b>(지금
-          가격)으로 기록되고, 그때부터 수익률이 추적됩니다.
+          {isAlready ? (
+            <>
+              이미 담긴 종목입니다. 지금 속한 그룹이 <b>켜진 채로</b> 열립니다 —
+              더 담을 그룹을 켜거나, 뺄 그룹을 끄세요.{" "}
+              <b>전부 끄고 저장하면 관심종목에서 빠집니다.</b> 편입가는 그대로 둡니다.
+            </>
+          ) : (
+            <>
+              담을 그룹을 <b>여러 개</b> 고를 수 있습니다 — 한 종목은 성격이 하나가 아닙니다.
+              편입가는 <b>{target.addedPrice.toLocaleString("ko-KR")}원</b>(지금 가격)으로
+              기록되고, 그때부터 수익률이 추적됩니다.
+            </>
+          )}
         </p>
 
         <div className="wa-groups">
@@ -150,13 +182,16 @@ export function WatchAddSheet({
 
         <div className="filter-row" style={{ marginTop: 10 }}>
           <button className="algo-run-btn" onClick={() => void submit()} disabled={busy}>
+            {/* 누르면 무슨 일이 일어나는지를 버튼에 그대로 적는다 */}
             {busy
-              ? "담는 중…"
-              : picked.length === 0
-                ? "담기 (기본 그룹)"
-                : picked.length === 1
-                  ? `「${picked[0]}」에 담기`
-                  : `${picked.length}개 그룹에 담기`}
+              ? "저장 중…"
+              : isAlready && picked.length === 0
+                ? "관심종목에서 빼기"
+                : picked.length === 0
+                  ? "담기 (기본 그룹)"
+                  : picked.length === 1
+                    ? `「${picked[0]}」${isAlready ? "만 남기기" : "에 담기"}`
+                    : `${picked.length}개 그룹${isAlready ? "으로 저장" : "에 담기"}`}
           </button>
           <button className="filter-btn" onClick={onClose}>
             취소

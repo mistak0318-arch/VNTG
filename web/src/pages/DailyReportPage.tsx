@@ -540,39 +540,76 @@ export function DailyReportPage({
       </Section>
 
       <Section no={5} title="투자자별 매매 동향">
+        {/*
+          **표 하나로 줄였다.**
+
+          예전엔 막대 그래프 둘이 나란히 자리를 크게 먹고, 정작 궁금한 합계는 맨 밑에 있었다.
+          숫자를 보러 온 자리인데 숫자가 제일 뒤였다.
+
+          이제 한 표다 — 줄이 주체(외국인·기관·개인), 칸이 시장(코스피·코스닥·합계).
+          **합계를 오른쪽 끝에 두고 굵게** 둔다. 시장별로 나뉘어 있으니 어디서 나온 돈인지도 보인다.
+          막대는 접어 뒀다. 모양으로 훑고 싶을 때만 편다.
+        */}
         {f ? (
           <>
-            <div className="report-two-col">
-              <div className="ov">
-                <h4 className="report-subheading">코스피</h4>
-                <FlowBars flow={f.kospi} />
-              </div>
-              <div className="ov">
-                <h4 className="report-subheading">코스닥</h4>
-                <FlowBars flow={f.kosdaq} />
-              </div>
+            <div className="data-table-wrap">
+              <table className="data-table num rp-flow">
+                <thead>
+                  <tr>
+                    <th className="sticky-col">주체</th>
+                    <th>코스피</th>
+                    <th>코스닥</th>
+                    <th className="rp-flow-sum">합계</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { label: "외국인", ks: f.kospi.foreign, kq: f.kosdaq.foreign },
+                    { label: "기관", ks: f.kospi.institution, kq: f.kosdaq.institution },
+                    { label: "개인", ks: f.kospi.individual, kq: f.kosdaq.individual },
+                  ].map((it) => {
+                    const sum = it.ks + it.kq;
+                    const cell = (v: number) => (
+                      <span className={signClass(v)}>
+                        {v > 0 ? "+" : ""}
+                        {fmtNum(v)}
+                      </span>
+                    );
+                    return (
+                      <tr key={it.label}>
+                        <td className="sticky-col">{it.label}</td>
+                        <td>{cell(it.ks)}</td>
+                        <td>{cell(it.kq)}</td>
+                        <td className="rp-flow-sum">
+                          <b>{cell(sum)}</b>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            <div className="summary-grid" style={{ marginTop: 10 }}>
-              {[
-                { label: "외국인", value: f.kospi.foreign + f.kosdaq.foreign },
-                { label: "기관", value: f.kospi.institution + f.kosdaq.institution },
-                { label: "개인", value: f.kospi.individual + f.kosdaq.individual },
-              ].map((it) => (
-                <div className="summary-item" key={it.label}>
-                  <div className="label">{it.label} 합계</div>
-                  <div className={`value ${signClass(it.value)}`}>
-                    {it.value > 0 ? "+" : ""}
-                    {fmtNum(it.value)}
-                  </div>
+            <details className="rp-flow-bars">
+              <summary>막대로 보기</summary>
+              <div className="report-two-col">
+                <div className="ov">
+                  <h4 className="report-subheading">코스피</h4>
+                  <FlowBars flow={f.kospi} />
                 </div>
-              ))}
-            </div>
+                <div className="ov">
+                  <h4 className="report-subheading">코스닥</h4>
+                  <FlowBars flow={f.kosdaq} />
+                </div>
+              </div>
+            </details>
           </>
         ) : (
           <div className="empty">수급 데이터 불러오는 중...</div>
         )}
         <div className="table-note">
-          단위: 억원 · 매수는 오른쪽(빨강) / 매도는 왼쪽(파랑) · 막대 길이는 항목 중 최댓값 기준
+          단위 <b>억원</b> · 양수가 순매수입니다. 셋을 더하면 대체로 0 근처인데,
+          <b> 한쪽이 사면 다른 쪽이 판 것</b>이기 때문입니다 — 그래서 누가 누구에게
+          넘겼는지를 보는 표입니다.
         </div>
       </Section>
 

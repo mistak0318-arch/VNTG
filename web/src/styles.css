@@ -4531,3 +4531,31 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 }
 .ph-nxt b { font-weight: 700; }
 .ph-nxt-rate { font-size: 0.7333rem; }
+
+/* 즐겨찾기 순서 — 사이드바 맨 위 줄이 이 순서 그대로다 */
+.mo-fav {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--panel-2);
+}
+.mo-fav-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.mo-fav-h b { font-size: 0.8rem; }
+.mo-fav-h small { font-size: 0.6667rem; color: var(--muted); }
+.mo-fav-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.mo-fav-chip {
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 0.7333rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 리포트 투자자 수급 — 합계 칸을 눈에 띄게 */
+.rp-flow-sum { background: var(--panel-2); }
+.rp-flow th.rp-flow-sum { color: var(--text); }
+.rp-flow-bars { margin-top: 10px; }
+.rp-flow-bars > summary { font-size: 0.7333rem; color: var(--muted); cursor: pointer; }

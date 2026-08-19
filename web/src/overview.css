@@ -1,3 +1,12 @@
+/*
+ * ⚠️ **글자 크기는 rem 으로만 적는다.**
+ *
+ * 설정의 「글자 크기」는 `html { font-size: var(--app-font-size) }` 로 동작한다 —
+ * px 로 박아 두면 그 설정이 이 파일에만 안 먹는다. 실제로 그랬다:
+ * styles.css 를 rem 으로 옮길 때 **이 파일을 못 보고 지나쳐서**, 시황 대시보드만
+ * 글자 크기가 안 바뀌었다(미장 주요지수·국내 지수 전부 여기 스타일이다).
+ * 기준은 15px = 1rem 이다.
+ */
 /* 시황 탭 — docs/시황탭_목업.html의 디자인 토큰을 따름 */
 .ov {
   --up: #f0555f;
@@ -27,7 +36,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 0.7333rem;
   color: var(--ov-txt-2);
   padding: 0 2px 8px;
 }
@@ -52,7 +61,7 @@
   flex: 1;
   padding: 11px 4px;
   text-align: center;
-  font-size: 13px;
+  font-size: 0.8667rem;
   color: var(--ov-txt-3);
   border: none;
   background: none;
@@ -85,12 +94,12 @@
   border-bottom: 1px solid var(--ov-line-soft);
 }
 .ov-card-t {
-  font-size: 13px;
+  font-size: 0.8667rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 .ov-card-sub {
-  font-size: 11px;
+  font-size: 0.7333rem;
   color: var(--ov-txt-3);
   margin-left: auto;
   font-variant-numeric: tabular-nums;
@@ -99,12 +108,12 @@
 
 .ov-error {
   color: var(--up);
-  font-size: 12px;
+  font-size: 0.8rem;
   word-break: break-all;
 }
 .ov-empty {
   color: var(--ov-txt-3);
-  font-size: 12px;
+  font-size: 0.8rem;
   text-align: center;
 }
 .ov-skel {
@@ -136,17 +145,17 @@
   padding: 11px 12px;
 }
 .ov-idx-name {
-  font-size: 11px;
+  font-size: 0.7333rem;
   color: var(--ov-txt-2);
   margin-bottom: 3px;
 }
 .ov-idx-val {
-  font-size: 21px;
+  font-size: 1.4rem;
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.1;
 }
-.ov-idx-chg { font-size: 11px; margin-top: 2px; }
+.ov-idx-chg { font-size: 0.7333rem; margin-top: 2px; }
 .ov-spark {
   height: 26px;
   width: 100%;
@@ -158,7 +167,7 @@
 .ov-idx-flow {
   display: flex;
   gap: 9px;
-  font-size: 10px;
+  font-size: 0.6667rem;
   border-top: 1px solid var(--ov-line-soft);
   padding-top: 6px;
   margin-top: 4px;
@@ -172,7 +181,7 @@
 .ov-idx-flow .lbl {
   color: var(--ov-txt-3);
   display: block;
-  font-size: 9px;
+  font-size: 0.6rem;
   margin-bottom: 1px;
 }
 
@@ -191,24 +200,24 @@
 
 .ov-g-nm {
   flex: 1;
-  font-size: 12.5px;
+  font-size: 0.8333rem;
   min-width: 0;
 }
 
 .ov-g-tk {
-  font-size: 9.5px;
+  font-size: 0.6333rem;
   color: var(--ov-txt-3);
   margin-left: 5px;
 }
 
 .ov-g-px {
-  font-size: 12.5px;
+  font-size: 0.8333rem;
   font-weight: 600;
   text-align: right;
 }
 
 .ov-g-pct {
-  font-size: 11.5px;
+  font-size: 0.7667rem;
   width: 110px;
   text-align: right;
   flex: none;
@@ -222,9 +231,9 @@
   gap: 9px;
   padding: 5px 0;
 }
-.ov-flow-nm { font-size: 12px; color: var(--ov-txt-2); }
-.ov-flow-nm.sub { padding-left: 9px; font-size: 11px; color: var(--ov-txt-3); }
-.ov-flow-val { text-align: right; font-size: 12px; font-weight: 600; }
+.ov-flow-nm { font-size: 0.8rem; color: var(--ov-txt-2); }
+.ov-flow-nm.sub { padding-left: 9px; font-size: 0.7333rem; color: var(--ov-txt-3); }
+.ov-flow-val { text-align: right; font-size: 0.8rem; font-weight: 600; }
 .ov-bar {
   height: 16px;
   position: relative;
@@ -257,10 +266,10 @@
 .ov-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 .ov-table th {
-  font-size: 10px;
+  font-size: 0.6667rem;
   color: var(--ov-txt-3);
   font-weight: 500;
   padding: 0 0 7px;
@@ -288,7 +297,7 @@
 .ov-seg button {
   flex: 1;
   padding: 5px;
-  font-size: 11px;
+  font-size: 0.7333rem;
   border-radius: 5px;
   background: var(--ov-panel-2);
   color: var(--ov-txt-3);
@@ -319,33 +328,33 @@ button.ov-li { cursor: pointer; }
 button.ov-li:hover { background: var(--ov-panel-2); }
 button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ov-rank {
-  font-size: 10px;
+  font-size: 0.6667rem;
   color: var(--ov-txt-3);
   width: 14px;
   flex: none;
 }
 .ov-nm {
   flex: 1;
-  font-size: 12.5px;
+  font-size: 0.8333rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .ov-sub-nm {
   display: block;
-  font-size: 10px;
+  font-size: 0.6667rem;
   color: var(--ov-txt-3);
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ov-px { font-size: 12px; font-weight: 600; text-align: right; }
-.ov-pct { font-size: 12px; font-weight: 600; width: 60px; text-align: right; flex: none; }
+.ov-px { font-size: 0.8rem; font-weight: 600; text-align: right; }
+.ov-pct { font-size: 0.8rem; font-weight: 600; width: 60px; text-align: right; flex: none; }
 .ov-more {
   display: block;
   width: 100%;
   padding: 9px;
   text-align: center;
-  font-size: 11px;
+  font-size: 0.7333rem;
   color: var(--ov-txt-3);
   background: none;
   border: none;

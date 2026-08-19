@@ -115,7 +115,8 @@ export function ProgramTradePage() {
             </div>
             <div className="summary-item">
               <div className="label">해석</div>
-              <div className="value" style={{ fontSize: 13 }}>
+              {/* px 를 박으면 설정의 글자 크기가 안 먹는다 */}
+              <div className="value" style={{ fontSize: "0.8667rem" }}>
                 {latest.nonArbNet > 0 ? "실매수 유입" : latest.nonArbNet < 0 ? "실매도 이탈" : "중립"}
               </div>
             </div>

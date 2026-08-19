@@ -119,26 +119,23 @@ export function StockDetail({
   }, [code]);
 
   /**
-   * 별을 누르면 담거나 뺀다.
+   * 별을 누르면 **그룹 고르는 창**을 연다.
    *
-   * 담을 때는 **어느 그룹에 넣을지 묻는다.** 그냥 담아 버리면 담은 뒤에 옮겨야 하고,
-   * 그 일은 안 하게 되어 결국 전부 기본 그룹에 쌓인다.
-   * 다만 그룹이 없으면 고를 게 없으므로 묻지 않고 바로 담는다 — 빈 창은 방해다.
+   * 예전엔 이미 담긴 종목이면 곧바로 지웠다. 한 종목이 여러 그룹에 담기게 된 뒤로는
+   * 그게 틀렸다 — **다른 그룹에 하나 더 담으려고 눌렀는데 있던 것까지 사라졌다.**
+   * 이제 담겼든 아니든 창을 연다. 창이 지금 속한 그룹을 켠 채로 열리므로
+   * 더할지 뺄지를 거기서 정한다(전부 끄고 저장하면 빠진다).
+   *
+   * 그룹이 하나도 없을 때만 묻지 않고 바로 담는다 — 빈 창은 방해다.
    */
   async function toggleWatch() {
     if (watchBusy) return;
     setWatchBusy(true);
     try {
-      if (watched) {
-        await api.watchlistRemove(code);
-        watchedCodes.markRemoved(code);
-        setWatchBusy(false);
-        return;
-      }
       // 등록 시점의 현재가를 편입가로 기록
       const price = Math.abs(Number(pick(info ?? undefined, CUR_PRICE_KEYS))) || 0;
       const { groups } = await api.watchGroups().catch(() => ({ groups: [] as string[] }));
-      if (groups.length === 0) {
+      if (groups.length === 0 && !watched) {
         await api.watchlistAdd({ code, name, addedPrice: price });
         watchedCodes.markAdded(code);
       } else {
@@ -169,7 +166,7 @@ export function StockDetail({
             className={`watch-btn${watched ? " on" : ""}`}
             onClick={toggleWatch}
             disabled={watchBusy}
-            title={watched ? "관심종목에서 제거" : "관심종목에 추가"}
+            title={watched ? "그룹 고치기 (담긴 그룹 확인·추가·제거)" : "관심종목에 추가"}
           >
             {watched ? "★" : "☆"}
           </button>
