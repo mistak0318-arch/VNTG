@@ -23,11 +23,29 @@ export function PickAutoPanel() {
       .channelConfig()
       .then((r) => {
         setCfg(r.config.pickAuto);
+        setPinned(r.config.pinned ?? []);
         setIntervals(r.intervals);
         setMailReady(r.mailConfigured);
       })
       .catch(() => undefined);
   }, []);
+
+  /*
+   * 고정 채널 — 선별을 거치지 않고 원문 그대로 리포트 맨 위에 올릴 채널.
+   *
+   * 정해진 시각에 완결된 시황을 올리는 채널은 다른 채널의 조각 정보와 같은 저울에
+   * 올리면 안 된다. 점수가 낮다고 잘려 나가면 정작 제일 읽을 만한 글을 놓친다.
+   */
+  const [pinned, setPinned] = useState<string[]>([]);
+  const [pinInput, setPinInput] = useState("");
+
+  function addPin() {
+    const v = pinInput.trim().replace(/^@/, "").replace(/^https?:\/\/t\.me\//, "").toLowerCase();
+    if (!v || pinned.includes(v)) return;
+    setPinned((p) => [...p, v]);
+    setPinInput("");
+    setDirty(true);
+  }
 
   function patch(next: Partial<PickAutoConfig>) {
     setCfg((p) => (p ? { ...p, ...next } : p));
@@ -39,8 +57,10 @@ export function PickAutoPanel() {
     if (!cfg) return;
     setSaving(true);
     try {
-      const r = await api.channelConfigSave({ pickAuto: cfg });
+      // 고정 채널은 이 패널이 안 건드린다 — 받은 그대로 돌려줘야 안 지워진다
+      const r = await api.channelConfigSave({ pickAuto: cfg, pinned });
       setCfg(r.config.pickAuto);
+      setPinned(r.config.pinned);
       setDirty(false);
       setNote("저장했습니다.");
     } catch (e) {
@@ -149,6 +169,45 @@ export function PickAutoPanel() {
             {h}시간
           </button>
         ))}
+      </div>
+
+      {/*
+        고정 채널. 정해진 시각에 완결된 시황을 올리는 채널은 다른 채널의 조각 정보와
+        같은 저울에 올리면 안 된다 — 점수가 낮다고 잘려 나가면 제일 읽을 만한 글을 놓친다.
+      */}
+      <div className="tg-ctl">
+        <span className="tg-ctl-label">고정 채널</span>
+        <div className="tg-ctl-body">
+          {pinned.map((u) => (
+            <span className="pin-chip" key={u}>
+              @{u}
+              <button
+                onClick={() => {
+                  setPinned((p) => p.filter((x) => x !== u));
+                  setDirty(true);
+                }}
+                title="빼기"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+          <input
+            className="pt-input short"
+            placeholder="ehdwl 또는 t.me 주소"
+            value={pinInput}
+            onChange={(e) => setPinInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addPin()}
+          />
+          <button className="filter-btn" onClick={addPin} disabled={!pinInput.trim()}>
+            + 고정
+          </button>
+        </div>
+      </div>
+      <div className="table-note">
+        고정한 채널의 글은 <b>선별도 AI 요약도 거치지 않고</b> 데일리 리포트 맨 위에 원문
+        그대로 올라갑니다. 이미 사람이 정리해 둔 글을 다시 요약하면 정보만 잃습니다.
+        판마다 보는 창이 다릅니다 — 조간은 밤사이 12시간, 장중·석간은 직전 8시간.
       </div>
 
       <div className="filter-row">

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { buildChannelReport, listChannelReports } from "../channelReport.js";
+import { pinnedPosts, type Edition } from "../pinnedChannel.js";
 import {
   DEFAULT_CONFIG,
   INTERVAL_CHOICES,
@@ -117,6 +118,22 @@ export function createChannelsRouter(): Router {
         useOffsets: false,
       });
       res.json(report);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 고정 채널 원문. 선별·AI 를 거치지 않고 그대로 준다 —
+   * 이미 사람이 정리해 둔 글을 다시 요약하면 정보만 잃는다.
+   */
+  router.get("/pinned", async (req, res, next) => {
+    try {
+      const e = String(req.query.edition ?? "morning");
+      const edition = (["morning", "intraday", "closing", "weekend"] as const).includes(e as never)
+        ? (e as Edition)
+        : "morning";
+      res.json({ posts: await pinnedPosts(edition, Number(req.query.limit) || 3) });
     } catch (err) {
       next(err);
     }

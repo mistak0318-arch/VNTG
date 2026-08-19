@@ -38,9 +38,24 @@ export interface PickAutoConfig {
 
 export interface ChannelConfig {
   pickAuto: PickAutoConfig;
+  /**
+   * 고정 채널 — 선별을 거치지 않고 **원문 그대로** 리포트 맨 위에 올린다.
+   *
+   * 어떤 채널은 성격이 다르다. 정해진 시각에 **한 편의 완결된 시황**을 올리는 곳은
+   * 다른 채널의 조각 정보와 같은 저울에 올리면 안 된다 — 점수가 낮다고 잘려 나가면
+   * 정작 제일 읽을 만한 글을 놓친다.
+   *
+   * **AI 를 거치지 않는다.** 이미 사람이 정리해 둔 글을 다시 요약하면 정보만 잃고
+   * 토큰만 쓴다. 이 채널의 값어치는 "이미 정리돼 있다"는 것 자체다.
+   *
+   * 값은 **@username**(예: `ehdwl`)을 쓴다. 채널 id 는 숫자라 사람이 못 알아보고,
+   * 세션을 다시 만들면 헷갈린다. username 은 안 바뀐다.
+   */
+  pinned: string[];
 }
 
 export const DEFAULT_CONFIG: ChannelConfig = {
+  pinned: [],
   pickAuto: {
     enabled: false,
     intervalMin: 10,
@@ -63,11 +78,21 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
 }
 
 function normalize(input: unknown): ChannelConfig {
-  const p = (input as ChannelConfig)?.pickAuto;
-  if (!p) return DEFAULT_CONFIG;
+  const raw = input as ChannelConfig | undefined;
+  /*
+   * 고정 채널은 `@` 를 떼고 소문자로 맞춰 둔다 — 화면에서 `@ehdwl` 로 적든
+   * `ehdwl` 로 적든 같은 채널이어야 한다.
+   */
+  const pinned = Array.isArray(raw?.pinned)
+    ? [...new Set(raw.pinned.map((x) => String(x).trim().replace(/^@/, "").toLowerCase()).filter(Boolean))]
+    : [];
+
+  const p = raw?.pickAuto;
+  if (!p) return { ...DEFAULT_CONFIG, pinned };
   const d = DEFAULT_CONFIG.pickAuto;
   const interval = clampInt(p.intervalMin, 5, 240, d.intervalMin);
   return {
+    pinned,
     pickAuto: {
       enabled: p.enabled === true,
       // 목록에 없는 값이 들어오면 가장 가까운 것으로 맞춘다

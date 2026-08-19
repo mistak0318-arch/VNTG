@@ -13,6 +13,7 @@ import {
   type DartEvent,
   type ChannelReport,
   type NewsItem,
+  type PinnedPost,
   type UsMajorResult,
 } from "../../api";
 import { TrendLineChart } from "../TrendLineChart";
@@ -655,6 +656,67 @@ export function MarketNewsSection({ edition }: { edition: string }) {
           {n.press && <em className="pt-n">{n.press}</em>}
         </a>
       ))}
+    </>
+  );
+}
+
+/* ───────────────────────────────── D1. 고정 채널 원문 */
+
+/**
+ * 고정 채널의 그 시간대 글 — **원문 그대로**.
+ *
+ * 새벽에 전일 미장 시황을, 장중에 브리핑을 올리는 채널이 있다. 이런 글은 다른 채널의
+ * 조각 정보와 성격이 다르다 — **이미 한 편으로 정리돼 있다.** 선별에 넣으면 점수 싸움에
+ * 밀려 잘려 나가고, AI 로 다시 요약하면 그 정리가 사라진다.
+ *
+ * 그래서 맨 위에 원문 그대로 놓는다. 리포트를 여는 이유가 대개 이 글이다.
+ */
+export function PinnedChannelSection({ edition }: { edition: string }) {
+  const [posts, setPosts] = useState<PinnedPost[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setPosts(null);
+    api
+      .channelPinned(edition, 3)
+      .then((r) => alive && setPosts(r.posts))
+      .catch(() => alive && setPosts([]));
+    return () => {
+      alive = false;
+    };
+  }, [edition]);
+
+  if (posts === null) return <div className="page-note">불러오는 중…</div>;
+  if (posts.length === 0) {
+    return (
+      <div className="empty">
+        고정한 채널의 글이 없습니다. 「텔레그램 동향 &gt; 선별 자동발송」에서 채널을 고정하면
+        여기에 원문이 올라옵니다.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {posts.map((p) => (
+        <div className="rp-pinned" key={`${p.at}-${p.link}`}>
+          <div className="rp-pinned-h">
+            <b>{p.channelName}</b>
+            <span className="pt-n">{new Date(p.at).toLocaleString("ko-KR").slice(5, 16)}</span>
+            {p.link && (
+              <a href={p.link} target="_blank" rel="noreferrer" className="pt-n">
+                원문 →
+              </a>
+            )}
+          </div>
+          {/* 원문이라 줄바꿈을 그대로 살린다 — 문단이 무너지면 읽기가 어려워진다 */}
+          <div className="rp-pinned-body">{p.text}</div>
+        </div>
+      ))}
+      <div className="table-note">
+        고정 채널은 <b>선별도 AI 요약도 거치지 않은 원문</b>입니다. 이미 정리된 글이라
+        다시 요약하면 정보만 잃습니다.
+      </div>
     </>
   );
 }

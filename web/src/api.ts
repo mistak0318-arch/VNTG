@@ -350,13 +350,21 @@ export const api = {
     getJson<{ code: string; exchanges: ExchangeQuote[] }>(`/api/market/exchanges/${code}`),
   channelConfig: () =>
     getJson<{
-      config: { pickAuto: PickAutoConfig };
-      defaults: { pickAuto: PickAutoConfig };
+      config: { pickAuto: PickAutoConfig; pinned: string[] };
+      defaults: { pickAuto: PickAutoConfig; pinned: string[] };
       intervals: number[];
       mailConfigured: boolean;
     }>("/api/channels/config"),
-  channelConfigSave: (config: { pickAuto: PickAutoConfig }) =>
-    putJson<{ config: { pickAuto: PickAutoConfig } }>("/api/channels/config", config),
+  channelConfigSave: (config: { pickAuto: PickAutoConfig; pinned: string[] }) =>
+    putJson<{ config: { pickAuto: PickAutoConfig; pinned: string[] } }>(
+      "/api/channels/config",
+      config,
+    ),
+  /** 고정 채널 원문 — 선별·AI 를 안 거친다 */
+  channelPinned: (edition: string, limit = 3) =>
+    getJson<{ posts: PinnedPost[] }>(
+      `/api/channels/pinned?edition=${edition}&limit=${limit}`,
+    ),
   usKr: () => getJson<{ links: EvaluatedLink[]; themeNames: string[]; at: string }>("/api/us-kr"),
   usKrCorrelation: () => getJson<{ result: CorrelationResult | null }>("/api/us-kr/correlation"),
   usKrCorrelate: (days = 60) =>
@@ -803,6 +811,14 @@ export interface ChannelEntry {
   participants: number | null;
   lastAt: string | null;
   enabled: boolean;
+}
+
+export interface PinnedPost {
+  channelName: string;
+  username: string | null;
+  at: string;
+  text: string;
+  link: string;
 }
 
 export interface ScoredChannelItem {

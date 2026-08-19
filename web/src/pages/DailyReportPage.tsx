@@ -4,6 +4,7 @@ import {
   IndexTrendSection,
   KrThemeMapSection,
   ChannelDigestSection,
+  PinnedChannelSection,
   MarketNewsSection,
   MoneyFlowSection,
   MyStocksSection,
@@ -452,12 +453,20 @@ export function DailyReportPage({
         조간에 가장 먼저 봐야 할 값이다. 미국 현물은 05:30 에 닫혀 이미 굳었지만
         야간선물은 그 결과를 한국 지수로 환산해 준다 — 오늘 개장가의 예고편이다.
       */}
-      <Section no={1} title="코스피 야간선물 · 환율">
+      {/*
+        리포트를 여는 이유가 대개 이 글이다. 이미 한 편으로 정리된 시황이라
+        선별에 넣으면 점수 싸움에 밀리고, AI 로 다시 요약하면 그 정리가 사라진다.
+      */}
+      <Section no={1} title="고정 채널 시황 (원문)">
+        <PinnedChannelSection edition={edition} />
+      </Section>
+
+      <Section no={2} title="코스피 야간선물 · 환율">
         <NightFuturesSection />
       </Section>
 
       {/* 2. 국내외 주요 지수 */}
-      <Section no={2} title="국내외 주요 지수">
+      <Section no={3} title="국내외 주요 지수">
         <div className="data-table-wrap">
           <table className="data-table">
             <thead>
@@ -498,11 +507,11 @@ export function DailyReportPage({
         숫자만으로는 "오늘 -1.5%" 가 어디쯤에서 난 하락인지 모른다.
         고점에서 흘러내리는 중인지 바닥에서 튀는 중인지가 판단을 가른다.
       */}
-      <Section no={3} title="코스피 · 코스닥 추이 (60거래일)">
+      <Section no={4} title="코스피 · 코스닥 추이 (60거래일)">
         <IndexTrendSection />
       </Section>
 
-      <Section no={4} title="투자자별 매매 동향">
+      <Section no={5} title="투자자별 매매 동향">
         {f ? (
           <>
             <div className="report-two-col">
@@ -540,7 +549,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 3. 특징 테마 — 왜 올랐는지 관련 기사까지 */}
-      <Section no={5} title="시장 자금 흐름 (업종별 5일 누적)">
+      <Section no={6} title="시장 자금 흐름 (업종별 5일 누적)">
         <MoneyFlowSection />
       </Section>
 
@@ -548,15 +557,15 @@ export function DailyReportPage({
         밤사이 미국에서 무엇이 돌았나가 오늘 국내 무엇이 도는지를 상당 부분 정한다.
         반도체가 밤에 빠졌으면 아침에 국내 반도체도 빠진 채로 시작한다.
       */}
-      <Section no={6} title="미국 테마 MAP">
+      <Section no={7} title="미국 테마 MAP">
         <UsThemeMapSection />
       </Section>
 
-      <Section no={7} title="국내 테마 MAP">
+      <Section no={8} title="국내 테마 MAP">
         <KrThemeMapSection />
       </Section>
 
-      <Section no={8} title="특징 테마 (상승 이유 포함)">
+      <Section no={9} title="특징 테마 (상승 이유 포함)">
         <div className="report-lines">
           {(drivers?.themes.up ?? []).map((t) => (
             <DriverItem
@@ -589,7 +598,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 4. 강한 업종 — 이유 포함 */}
-      <Section no={9} title="강한 업종 (상승 이유 포함)">
+      <Section no={10} title="강한 업종 (상승 이유 포함)">
         <div className="report-lines">
           {(drivers?.sectors ?? []).map((sec) => (
             <DriverItem
@@ -616,7 +625,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 5. 특징 종목 */}
-      <Section no={10} title="특징 종목 (급등/급락)">
+      <Section no={11} title="특징 종목 (급등/급락)">
         <div className="report-two-col">
           <div>
             <h4 className="report-subheading positive">상승률 상위</h4>
@@ -630,7 +639,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 6. 신고가/신저가 */}
-      <Section no={11} title="52주(250일) 신고가 · 신저가">
+      <Section no={12} title="52주(250일) 신고가 · 신저가">
         <div className="report-two-col">
           <div>
             <h4 className="report-subheading positive">신고가</h4>
@@ -652,15 +661,15 @@ export function DailyReportPage({
         리포트가 시장 전체를 아무리 잘 정리해도 내가 든 종목이 어떤지가 없으면
         결국 다른 화면을 열게 된다. 여기서 끝나야 한다.
       */}
-      <Section no={12} title="내 관심종목">
+      <Section no={13} title="내 관심종목">
         <MyStocksSection onSelectStock={onSelectStock} />
       </Section>
 
-      <Section no={13} title="특징주">
+      <Section no={14} title="특징주">
         <FeaturedSection onSelectStock={onSelectStock} />
       </Section>
 
-      <Section no={14} title="주요 뉴스 클리핑 (종목·테마)">
+      <Section no={15} title="주요 뉴스 클리핑 (종목·테마)">
         <SectorNews perSector={20} onFetched={setNewsAt} />
       </Section>
 
@@ -668,7 +677,7 @@ export function DailyReportPage({
         AI 정리에 이미 녹아 있지만 원문도 같이 둔다 — 요약이 무엇을 보고 그렇게 말했는지
         확인할 데가 있어야 요약을 믿거나 의심할 수 있다.
       */}
-      <Section no={15} title="텔레그램 채널 요약">
+      <Section no={16} title="텔레그램 채널 요약">
         <ChannelDigestSection />
       </Section>
 
@@ -676,7 +685,7 @@ export function DailyReportPage({
         위 클리핑은 종목·테마에 붙은 뉴스고 이건 시장 전체 뉴스다 — 겹쳐 보여도
         둘 다 있는 게 낫다는 판단이다.
       */}
-      <Section no={16} title="국내외 주요 뉴스">
+      <Section no={17} title="국내외 주요 뉴스">
         <MarketNewsSection edition={edition} />
       </Section>
 
