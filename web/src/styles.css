@@ -4263,3 +4263,24 @@ body {
   /* 모바일 머리의 ☰ 도 같은 쪽으로 */
   :root[data-nav="right"] .mobile-header { flex-direction: row-reverse; }
 }
+
+/* 분기 실적 막대 — 숫자 세 줄 읽는 것보다 눈으로 훑는 게 빠르다 */
+.qf-bar-cell { width: 5.5rem; }
+.qf-bar { display: block; height: 8px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.qf-fill { display: block; height: 100%; background: var(--red); border-radius: 3px; }
+.qf-fill.neg { background: var(--blue); }
+
+/* 추정 열은 확정 실적과 섞여 보이면 안 된다 */
+.est-col { background: rgba(76,141,255,.07); }
+th.est-col { color: var(--blue); }
+.est-op {
+  margin-left: 8px; padding: 2px 8px; border-radius: 999px;
+  font-size: 0.6667rem; font-weight: 700;
+  background: rgba(53,196,106,.15); color: var(--green); border: 1px solid rgba(53,196,106,.4);
+}
+
+/* 표준산업분류 — 업종보다 자세하지만 지수가 없어 이름만 쓴다 */
+.mood-industry {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 8px; font-size: 0.7333rem; color: var(--text-dim);
+}

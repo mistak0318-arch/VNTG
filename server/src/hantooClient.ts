@@ -165,38 +165,97 @@ export async function hantooGet<T = Record<string, unknown>>(
   const token = await getToken();
   const url = `${BASE}${path}?${new URLSearchParams(params).toString()}`;
 
+  /** 유량에 걸린 것. 쉬면 풀린다 */
+  const throttled = (e: unknown) =>
+    e instanceof HantooError && /초당|유량|EGW00201/.test(e.message + e.code);
+
   const once = async (): Promise<T & { rt_cd?: string; msg1?: string; msg_cd?: string }> => {
     await slot();
-    const res = await fetch(url, {
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        authorization: `Bearer ${token}`,
-        appkey: c.key,
-        appsecret: c.secret,
-        tr_id: trId,
-        custtype: "P",
-      },
-    });
-    void recordApiCall("hantoo", feature, res.ok ? "ok" : "failed");
-    const body = (await res.json()) as T & { rt_cd?: string; msg1?: string; msg_cd?: string };
-    if (!res.ok) throw new HantooError(String(res.status), body.msg1 ?? `HTTP ${res.status}`);
-    // rt_cd 는 0 이 정상이다. HTTP 200 이어도 여기가 0 이 아니면 실패다
-    if (body.rt_cd !== undefined && body.rt_cd !== "0") {
-      throw new HantooError(body.msg_cd ?? "ERR", body.msg1 ?? "조회 실패");
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          authorization: `Bearer ${token}`,
+          appkey: c.key,
+          appsecret: c.secret,
+          tr_id: trId,
+          custtype: "P",
+        },
+      });
+    } catch (err) {
+      // 네트워크가 끊긴 것. 요청이 서버에 닿지도 않았으므로 다시 부르면 된다
+      void recordApiCall("hantoo", feature, "failed", undefined, "네트워크 오류");
+      throw new HantooError("NETWORK", err instanceof Error ? err.message : "네트워크 오류");
     }
+
+    const body = (await res.json().catch(() => ({}))) as T & {
+      rt_cd?: string;
+      msg1?: string;
+      msg_cd?: string;
+    };
+
+    if (!res.ok) {
+      void recordApiCall(
+        "hantoo",
+        feature,
+        res.status === 429 ? "rateLimited" : "failed",
+        undefined,
+        `HTTP ${res.status}`,
+      );
+      throw new HantooError(String(res.status), body.msg1 ?? `HTTP ${res.status}`);
+    }
+
+    /*
+     * rt_cd 는 0 이 정상이다. HTTP 200 이어도 여기가 0 이 아니면 실패다.
+     *
+     * **예전엔 이걸 「성공」으로 세고 있었다.** 위에서 `res.ok` 만 보고 기록한 뒤
+     * 여기서 던졌기 때문이다 — 화면의 성공 건수가 실제보다 부풀어 있었다.
+     * 한투가 유량 초과를 HTTP 200 + rt_cd 로 주기도 해서, 그것도 여기서 갈라 센다.
+     */
+    if (body.rt_cd !== undefined && body.rt_cd !== "0") {
+      const err = new HantooError(body.msg_cd ?? "ERR", body.msg1 ?? "조회 실패");
+      void recordApiCall(
+        "hantoo",
+        feature,
+        throttled(err) ? "rateLimited" : "failed",
+        undefined,
+        // 메시지가 곧 사유다 — 「기간이 올바르지 않습니다」 처럼 고칠 수 있는 것이 대부분이다
+        `${err.code} ${err.message}`,
+      );
+      throw err;
+    }
+
+    void recordApiCall("hantoo", feature, "ok");
     return body;
   };
 
-  // 유량에 걸린 건 쉬면 풀린다. 그 밖의 실패는 다시 불러도 같으니 바로 던진다
-  const throttled = (e: unknown) =>
-    e instanceof HantooError && /초당|유량|EGW00201/.test(e.message + e.code);
+  /*
+   * 다시 불러 볼 값어치가 있는 실패.
+   *
+   * 예전엔 **유량만** 다시 불렀다. 그런데 하루 실패가 3,700건인데 유량은 0 이었다 —
+   * 즉 그 실패들은 한 번도 재시도되지 않았다는 뜻이다.
+   * 네트워크가 끊긴 것과 서버 쪽 5xx·429 는 **같은 요청이 다음엔 될 수 있다.**
+   * 종목이 없다거나 파라미터가 틀린 것(그 밖의 rt_cd)은 다시 불러도 같으므로 그대로 던진다.
+   */
+  const retryable = (e: unknown) =>
+    e instanceof HantooError &&
+    (throttled(e) || e.code === "NETWORK" || e.code === "429" || /^5\d\d$/.test(e.code));
 
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await once();
     } catch (err) {
-      if (attempt >= 2 || !throttled(err)) throw err;
-      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      if (attempt >= 2 || !retryable(err)) {
+        if (attempt > 0 && err instanceof HantooError) {
+          console.error(`[hantoo] ${feature} 재시도 ${attempt}회 후에도 실패: ${err.code} ${err.message}`);
+        }
+        throw err;
+      }
+      // 유량은 좀 더 쉬고, 그 밖의 일시 오류는 짧게 쉰다
+      const wait = throttled(err) ? 1500 * (attempt + 1) : 600 * (attempt + 1);
+      await new Promise((r) => setTimeout(r, wait));
     }
   }
 }

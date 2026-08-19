@@ -55,6 +55,14 @@ interface DayStat {
   failed: number;
   /** 한도 초과(429 등) 횟수 — 별도로 세면 한도에 걸렸는지 바로 보인다 */
   rateLimited: number;
+  /**
+   * 실패 사유별 횟수.
+   *
+   * 실패 개수만 세면 **무엇이 잘못됐는지 알 수가 없다** — 한투가 하루 3,700건씩
+   * 실패하는데 그게 종목이 없어서인지, 토큰이 만료돼서인지, 유량인지 구분이 안 됐다.
+   * 사유를 같이 세면 고칠 수 있는 것과 어쩔 수 없는 것이 갈린다.
+   */
+  reasons?: Record<string, number>;
   /** @deprecated 모델을 안 가리고 더하던 옛 필드. 읽기만 하고 새로 쓰지 않는다 */
   inputTokens?: number;
   outputTokens?: number;
@@ -261,6 +269,8 @@ export async function recordApiCall(
   outcome: "ok" | "failed" | "rateLimited",
   /** Claude 호출일 때 응답의 usage를 그대로 넘기면 토큰이 누적된다 */
   tokens?: CallTokens,
+  /** 실패했을 때 왜 실패했는지 (짧게). 사유별로 세어 화면에 보여 준다 */
+  reason?: string,
 ): Promise<void> {
   const data = await load();
   const day = today();
@@ -288,6 +298,13 @@ export async function recordApiCall(
     stat.failed += 1;
   }
 
+  if (outcome !== "ok") {
+    // 사유가 안 넘어오면 뭉뚱그린다 — 그래도 「알 수 없음」이 몇 건인지는 보인다
+    const key = (reason ?? "알 수 없음").slice(0, 60);
+    stat.reasons ??= {};
+    stat.reasons[key] = (stat.reasons[key] ?? 0) + 1;
+  }
+
   // 30일치만 보관
   const days = Object.keys(data).sort();
   while (days.length > 30) {
@@ -309,6 +326,8 @@ export interface ProviderUsage {
   rateLimited: number;
   usageRate: number | null; // 한도 대비 %
   topEndpoints: { endpoint: string; count: number }[];
+  /** 실패 사유별 — 실패 건수만 보면 무엇을 고쳐야 할지 알 수 없다 */
+  failReasons: { reason: string; count: number }[];
   /** AI provider 전용 — 토큰과 추정 비용(USD). 그 밖에는 null */
   tokens: {
     input: number;
@@ -440,6 +459,10 @@ export async function getUsage(day = today()): Promise<{ day: string; providers:
       .map(([endpoint, count]) => ({ endpoint, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
+    const failReasons = Object.entries(stat.reasons ?? {})
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
     let tokens: ProviderUsage["tokens"] = null;
     if (p === "anthropic" || p === "gemini" || p === "openai") {
       tokens = summarizeBuckets(stat, day);
@@ -456,6 +479,7 @@ export async function getUsage(day = today()): Promise<{ day: string; providers:
       rateLimited: stat.rateLimited,
       usageRate: meta.limit ? (total / meta.limit) * 100 : null,
       topEndpoints,
+      failReasons,
       tokens,
     };
   });

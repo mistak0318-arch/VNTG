@@ -422,9 +422,36 @@ export function SettingsPage() {
 
               <div className="usage-stats">
                 <span>성공 {fmtNum(p.ok)}</span>
-                <span className={p.failed > 0 ? "negative" : ""}>실패 {fmtNum(p.failed)}</span>
-                <span className={p.rateLimited > 0 ? "positive" : ""}>한도초과 {fmtNum(p.rateLimited)}</span>
+                <span className={p.failed > 0 ? "negative" : ""}>
+                  실패 {fmtNum(p.failed)}
+                  {/* 비율이 붙어야 심각한지 아닌지가 보인다. 3,700건이 27%인지 3%인지는 다른 얘기다 */}
+                  {p.total > 0 && p.failed > 0 && ` (${((p.failed / p.total) * 100).toFixed(0)}%)`}
+                </span>
+                <span className={p.rateLimited > 0 ? "negative" : ""}>
+                  한도초과 {fmtNum(p.rateLimited)}
+                </span>
               </div>
+
+              {/*
+                실패 사유. 개수만 세면 **무엇을 고쳐야 할지 알 수가 없다** —
+                한투가 하루 3,700건씩 실패했는데 그게 종목이 없어서인지 토큰이
+                만료돼서인지 유량인지 구분이 안 됐다.
+              */}
+              {(p.failReasons ?? []).length > 0 && (
+                <details className="usage-detail">
+                  <summary>실패 사유 ({p.failReasons.length})</summary>
+                  <table className="data-table" style={{ width: "100%" }}>
+                    <tbody>
+                      {p.failReasons.map((f) => (
+                        <tr key={f.reason}>
+                          <td>{f.reason}</td>
+                          <td className="num">{fmtNum(f.count)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </details>
+              )}
 
               <div className="usage-note">{p.note}</div>
 

@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { listThemes } from "../customThemes.js";
 import { getFinance } from "../dartFinance.js";
+import { estimatePerform } from "../estimatePerform.js";
+import { quarterFinance } from "../quarterFinance.js";
 import { peekSnapshot } from "../marketSnapshot.js";
 import { getDisclosures, newsCounts, searchNews, sectorNews } from "../newsDisclosure.js";
 import { listWatchlist } from "../watchlist.js";
@@ -95,10 +97,22 @@ export function createNewsRouter(): Router {
     }
   });
 
-  // 재무제표 3년치 + 배당 (DART)
+  /*
+   * 재무제표 3년치 + 배당 (DART) + **분기 손익 (한투)**.
+   *
+   * DART 는 사업보고서라 마지막 줄이 작년이다 — 8월에도 작년이 마지막이라
+   * "지금 벌고 있나"를 볼 수 없었다. 한투 분기를 같이 실어 보낸다.
+   * 한투 키가 없거나 실패하면 분기만 빈 채로 나가고 연간은 그대로 나온다.
+   */
   router.get("/finance/:code", async (req, res, next) => {
     try {
-      res.json(await getFinance(req.params.code));
+      const [annual, quarters, estimate] = await Promise.all([
+        getFinance(req.params.code),
+        quarterFinance(req.params.code, Math.min(Number(req.query.limit) || 8, 24)).catch(() => []),
+        // 160여 개 대형주만 있다 — 없으면 null 이고 그건 오류가 아니다
+        estimatePerform(req.params.code).catch(() => null),
+      ]);
+      res.json({ ...annual, quarters, estimate });
     } catch (err) {
       next(err);
     }

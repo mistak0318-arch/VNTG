@@ -68,6 +68,17 @@ export function SectorMoodPanel({
 
   return (
     <div className="mood-panel">
+      {/*
+        표준산업분류(한투). 키움 업종은 「전기/전자」 하나로 삼성전자·SK하이닉스·포스코퓨처엠을
+        같이 묶는데, 이건 통신방송장비 / 반도체 / 이차전지로 갈린다.
+        **등락률은 없다** — 지수가 없는 분류라 이름만 쓴다. 그래서 업종을 대체하지 않고 옆에 붙인다.
+      */}
+      {data.industry && (
+        <div className="mood-industry">
+          <span className="mood-tag">산업분류</span>
+          <span>{data.industry}</span>
+        </div>
+      )}
       {sector && (
         <button
           className={`mood-sector${sectorClickable ? " clickable" : ""}`}

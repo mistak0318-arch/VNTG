@@ -321,7 +321,9 @@
       "WebFetch(domain:hyunsoft.tistory.com)",
       "Bash(awk 'NR>=353 && NR<=400 && /\\\\}, \\\\[/' web/src/components/CandleChart.tsx)",
       "Bash(echo \"tsc=$?\")",
-      "Bash(grep -n 'OverviewCard$\\\\|title=\"' web/src/pages/OverviewPage.tsx)"
+      "Bash(grep -n 'OverviewCard$\\\\|title=\"' web/src/pages/OverviewPage.tsx)",
+      "Bash(sed -n '/export interface FinanceResult/,/^}/p' web/src/api.ts)",
+      "Bash(sed -n '/export interface FinancePeriod/,/^}/p' web/src/api.ts)"
     ]
   }
 }

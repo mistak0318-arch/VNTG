@@ -4,6 +4,7 @@ import { getSectorMood } from "../sectorMood.js";
 import { searchStocks } from "../stockListCache.js";
 import { analystOpinion } from "../analystOpinion.js";
 import { hantooReady } from "../hantooClient.js";
+import { stockProfile } from "../stockProfile.js";
 import { tradeSizeMix } from "../tradeSizeMix.js";
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
@@ -167,6 +168,41 @@ export function createMarketRouter(client: KiwoomClient): Router {
         stk_cd: req.params.code,
       });
       res.json(data);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 업종 분류 비교 — 키움 vs 한투.
+   *
+   * 바꾸기 전에 **실제로 나은지 눈으로 보려고** 둔다. 업종은 신호등의 「섹터 강세」와
+   * 테마/업종 MAP 이 같이 쓰는 값이라 바꿔 놓고 나빠지면 되돌리기가 번거롭다.
+   */
+  router.get("/sector-compare", async (req, res, next) => {
+    try {
+      const codes = String(req.query.codes ?? "")
+        .split(",")
+        .map((c) => c.trim())
+        .filter(Boolean)
+        .slice(0, 20);
+      const rows = [];
+      for (const code of codes) {
+        const [mood, profile] = await Promise.all([
+          getSectorMood(client, code).catch(() => null),
+          stockProfile(code).catch(() => null),
+        ]);
+        rows.push({
+          code,
+          name: profile?.name ?? "",
+          kiwoom: mood?.sector?.name ?? null,
+          hantooLarge: profile?.sectorLarge ?? null,
+          hantooMid: profile?.sectorMid ?? null,
+          hantooSmall: profile?.sectorSmall ?? null,
+          hantooIndustry: profile?.industry ?? null,
+        });
+      }
+      res.json({ rows });
     } catch (err) {
       next(err);
     }
@@ -356,7 +392,21 @@ export function createMarketRouter(client: KiwoomClient): Router {
   // 업종·테마 분위기 — 이 종목이 속한 섹터가 오늘 오르고 있는지
   router.get("/sector-mood/:code", async (req, res, next) => {
     try {
-      res.json(await getSectorMood(client, req.params.code));
+      /*
+       * 업종 등락률은 **키움**이다. 한투 지수업종은 쓸 수 없다 —
+       * 대분류가 「시가총액규모대/중/소」라 업종이 아니고, 중분류는 셀트리온·포스코퓨처엠을
+       * 「증권」으로 넣는다(실측). 게다가 등락률을 내려면 업종**지수**가 있어야 하는데
+       * 표준산업분류에는 지수가 없다.
+       *
+       * 대신 **표준산업분류를 같이 실어 보낸다.** 이건 키움보다 확실히 자세하다 —
+       * 키움이 「전기/전자」 하나로 묶는 삼성전자·SK하이닉스·포스코퓨처엠이
+       * 통신방송장비 / 반도체 / 이차전지로 갈린다.
+       */
+      const [mood, profile] = await Promise.all([
+        getSectorMood(client, req.params.code),
+        stockProfile(req.params.code).catch(() => null),
+      ]);
+      res.json({ ...mood, industry: profile?.industry ?? null });
     } catch (err) {
       next(err);
     }

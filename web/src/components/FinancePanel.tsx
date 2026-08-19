@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { api, fmtNum, signClass, type FinancialPeriod, type FinanceResult } from "../api";
+import {
+  api,
+  fmtNum,
+  signClass,
+  type FinancialPeriod,
+  type FinanceResult,
+  type EstimateResult,
+  type QuarterRow,
+} from "../api";
 
 /** 원 단위 금액을 억원으로 */
 function toEok(v: number | null): number | null {
@@ -101,17 +109,42 @@ export function FinancePanel({ code }: { code: string }) {
   if (loading) return <div className="empty">재무 정보 불러오는 중...</div>;
   if (error) return <div className="error-banner">{error}</div>;
   if (!data) return null;
-  if (data.note || data.periods.length === 0) {
+  // 연간이 없어도 분기가 있으면 그건 보여 준다 — 요즘 벌고 있나가 더 급한 정보다
+  if (
+    (data.note || data.periods.length === 0) &&
+    (data.quarters ?? []).length === 0 &&
+    !data.estimate
+  ) {
     return <div className="page-note">{data.note ?? "재무 데이터가 없습니다."}</div>;
   }
 
+  const quarters = data.quarters ?? [];
   const periods = data.periods;
+  if (periods.length === 0) {
+    return (
+      <div>
+        <EstimateTable est={data.estimate} />
+        <QuarterTable quarters={quarters} />
+      </div>
+    );
+  }
   const latest = periods[periods.length - 1];
   const prev = periods[periods.length - 2] ?? null;
   const d = data.dividend;
 
   return (
     <div>
+      {/*
+        분기를 **연간보다 먼저** 둔다. DART 사업보고서는 8월에도 마지막 줄이 작년이라
+        "지금 벌고 있나"에 답을 못 한다. 판단에 쓰이는 건 최근 분기다.
+      */}
+      {/*
+        추정을 **맨 위**에 둔다. 지나간 실적보다 앞으로가 먼저다 —
+        1분기 숫자를 8월에 보고 있으면 이미 늦다.
+      */}
+      <EstimateTable est={data.estimate} />
+      <QuarterTable quarters={quarters} />
+
       <section className="card">
         <h2>
           최근 실적 ({latest.label}) · {data.basis}기준
@@ -205,5 +238,146 @@ export function FinancePanel({ code }: { code: string }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * 분기 손익.
+ *
+ * 한투가 주는 값은 **연단위 누적**이라 서버에서 직전 분기를 빼 단일 분기로 되돌린다.
+ * 되돌리지 않으면 실적이 반토막 난 회사도 매 분기 우상향하는 그래프가 된다.
+ *
+ * 단위가 **억원**이다 — 위 연간 표(DART, 원 단위)와 다르니 섞어 읽으면 안 된다.
+ */
+function QuarterTable({ quarters }: { quarters: QuarterRow[] }) {
+  if (quarters.length === 0) return null;
+  const max = Math.max(...quarters.map((q) => Math.abs(q.operatingProfit ?? 0)), 1);
+
+  return (
+    <section className="card">
+      <h2>분기 실적 (최근 {quarters.length}분기)</h2>
+      <div className="data-table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>분기</th>
+              <th>매출</th>
+              <th>영업이익</th>
+              <th title="영업이익 ÷ 매출">이익률</th>
+              <th title="직전 분기 대비 영업이익">QoQ</th>
+              <th title="1년 전 같은 분기 대비 영업이익 — 계절성이 있는 업종은 이쪽을 봐야 한다">YoY</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {quarters.map((q) => (
+              <tr key={q.period}>
+                <td>{q.label}</td>
+                <td className="num">{q.revenue === null ? "-" : fmtNum(Math.round(q.revenue))}</td>
+                <td className={`num ${signClass(q.operatingProfit ?? 0)}`}>
+                  {q.operatingProfit === null ? "-" : fmtNum(Math.round(q.operatingProfit))}
+                </td>
+                <td className="num">{q.margin === null ? "-" : `${q.margin.toFixed(1)}%`}</td>
+                <td className={`num ${q.qoq === null ? "" : signClass(q.qoq)}`}>
+                  {q.qoq === null ? "-" : `${q.qoq > 0 ? "+" : ""}${q.qoq.toFixed(0)}%`}
+                </td>
+                <td className={`num ${q.yoy === null ? "" : signClass(q.yoy)}`}>
+                  {q.yoy === null ? "-" : `${q.yoy > 0 ? "+" : ""}${q.yoy.toFixed(0)}%`}
+                </td>
+                {/* 막대는 눈으로 훑기 위한 것 — 숫자를 세 줄 읽는 것보다 빠르다 */}
+                <td className="qf-bar-cell">
+                  <span className="qf-bar">
+                    <span
+                      className={`qf-fill ${(q.operatingProfit ?? 0) < 0 ? "neg" : ""}`}
+                      style={{ width: `${(Math.abs(q.operatingProfit ?? 0) / max) * 100}%` }}
+                    />
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="table-note">
+        단위 <b>억원</b> · 한국투자증권. 한투는 분기를 <b>연초부터 누적</b>해서 주므로
+        직전 분기를 빼 <b>그 분기만의 값</b>으로 되돌렸습니다 — 되돌리지 않으면 실적이 꺾인
+        회사도 매 분기 오르는 그래프가 됩니다.
+      </div>
+    </section>
+  );
+}
+
+/**
+ * 애널리스트 추정 실적.
+ *
+ * **지나간 실적보다 이게 먼저다.** 실적은 이미 주가에 들어가 있고, 사람들이 사고파는 건
+ * 앞으로의 숫자다. `2026.12E` 처럼 **E** 가 붙은 열이 추정이다.
+ *
+ * 160여 개 대형주만 있다(한투 리서치가 다루는 범위). 없으면 아무것도 그리지 않는다 —
+ * 「추정 없음」을 띄우면 화면만 시끄럽고 알려 주는 게 없다.
+ */
+function EstimateTable({ est }: { est: EstimateResult | null }) {
+  if (!est || est.columns.length === 0) return null;
+
+  const rows: { label: string; get: (c: EstimateResult["columns"][number]) => string; cls?: (c: EstimateResult["columns"][number]) => string }[] = [
+    { label: "매출", get: (c) => (c.revenue === null ? "-" : fmtNum(Math.round(c.revenue))) },
+    {
+      label: "매출 증감",
+      get: (c) => (c.revenueGrowth === null ? "-" : `${c.revenueGrowth > 0 ? "+" : ""}${c.revenueGrowth.toFixed(1)}%`),
+      cls: (c) => (c.revenueGrowth === null ? "" : signClass(c.revenueGrowth)),
+    },
+    { label: "영업이익", get: (c) => (c.operatingProfit === null ? "-" : fmtNum(Math.round(c.operatingProfit))) },
+    {
+      label: "영익 증감",
+      get: (c) => (c.operatingGrowth === null ? "-" : `${c.operatingGrowth > 0 ? "+" : ""}${c.operatingGrowth.toFixed(1)}%`),
+      cls: (c) => (c.operatingGrowth === null ? "" : signClass(c.operatingGrowth)),
+    },
+    { label: "ROE", get: (c) => (c.roe === null ? "-" : `${c.roe.toFixed(1)}%`) },
+    { label: "부채비율", get: (c) => (c.debtRatio === null ? "-" : `${c.debtRatio.toFixed(1)}%`) },
+    { label: "PER", get: (c) => (c.per === null ? "-" : `${c.per.toFixed(1)}배`) },
+  ];
+
+  return (
+    <section className="card">
+      <h2>
+        실적 추정 {est.opinion && <span className="est-op">애널리스트 의견 {est.opinion}</span>}
+      </h2>
+      <div className="data-table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th></th>
+              {est.columns.map((c) => (
+                /* E 가 붙은 열은 추정이다. 확정 실적과 섞여 보이면 안 된다 */
+                <th key={c.period} className={/E$/.test(c.period) ? "est-col" : ""}>
+                  {c.period}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.label}>
+                <td>{r.label}</td>
+                {est.columns.map((c) => (
+                  <td
+                    key={c.period}
+                    className={`num ${r.cls?.(c) ?? ""} ${/E$/.test(c.period) ? "est-col" : ""}`}
+                  >
+                    {r.get(c)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="table-note">
+        단위 <b>억원</b> · 한국투자증권 리서치. <b>E</b> 가 붙은 열이 추정입니다.
+        {est.estimatedAt && ` 추정 기준 ${est.estimatedAt.slice(0, 4)}-${est.estimatedAt.slice(4, 6)}-${est.estimatedAt.slice(6, 8)}.`}{" "}
+        추정은 <b>당월 초 기준</b>이라 이달 나온 소식은 아직 안 들어가 있을 수 있고,
+        리서치가 다루는 <b>160여 개 종목</b>에만 있습니다.
+      </div>
+    </section>
   );
 }

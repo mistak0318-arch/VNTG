@@ -1414,6 +1414,8 @@ export interface ProviderUsage {
   rateLimited: number;
   usageRate: number | null;
   topEndpoints: { endpoint: string; count: number }[];
+  /** 실패 사유별 — 실패 건수만 보면 무엇을 고쳐야 할지 알 수 없다 */
+  failReasons: { reason: string; count: number }[];
   /** AI provider 전용 — 토큰과 추정 비용(USD) */
   tokens: {
     input: number;
@@ -1465,9 +1467,53 @@ export interface DividendInfo {
   eps: number | null;
 }
 
+export interface QuarterRow {
+  period: string;
+  /** 2026 3Q */
+  label: string;
+  /** **그 분기만의** 값 (한투가 주는 누적을 되돌린 것). 단위 억원 */
+  revenue: number | null;
+  operatingProfit: number | null;
+  netIncome: number | null;
+  /** 영업이익률 (%) */
+  margin: number | null;
+  /** 직전 분기 대비 영업이익 증감률 (%) */
+  qoq: number | null;
+  /** 1년 전 같은 분기 대비 (%) */
+  yoy: number | null;
+}
+
+export interface EstimateColumn {
+  /** 2026.12E 처럼 뒤에 E 가 붙으면 추정치다 */
+  period: string;
+  revenue: number | null;
+  revenueGrowth: number | null;
+  operatingProfit: number | null;
+  operatingGrowth: number | null;
+  netIncome: number | null;
+  netGrowth: number | null;
+  roe: number | null;
+  debtRatio: number | null;
+  per: number | null;
+  eps: number | null;
+}
+
+export interface EstimateResult {
+  code: string;
+  name: string;
+  opinion: string | null;
+  estimatedAt: string | null;
+  columns: EstimateColumn[];
+}
+
 export interface FinanceResult {
   basis: "연결" | "별도" | null;
+  /** DART 연간 — 단위는 **원**이다 */
   periods: FinancialPeriod[];
+  /** 한투 분기 — 단위는 **억원**이다. 연간과 단위가 다르니 섞어 쓰면 안 된다 */
+  quarters: QuarterRow[];
+  /** 애널리스트 추정 (한투). 160여 개 대형주만 있고 없으면 null 이다 */
+  estimate: EstimateResult | null;
   dividend: DividendInfo | null;
   note: string | null;
 }
@@ -1497,6 +1543,8 @@ export interface MoodResult {
   sector: SectorMood | null;
   themes: ThemeMood[];
   note?: string;
+  /** 표준산업분류 (한투). 키움 업종보다 자세하다 — 등락률은 없고 이름만 있다 */
+  industry?: string | null;
 }
 
 export interface NewsItem {
