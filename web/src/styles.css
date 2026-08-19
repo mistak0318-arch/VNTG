@@ -3757,3 +3757,190 @@ body {
 /* 리포트 표 안의 섹터 구분줄 */
 .rp-g-sec td { background: var(--panel-2); font-size: 0.72rem; color: var(--muted);
   font-weight: 600; padding: 3px 6px; }
+
+/* ==================================================================
+   종목발굴 (StockDiscoveryPage)
+   ------------------------------------------------------------------
+   한 종목을 펼쳐 놓고 훑는 화면. 이 화면의 중심은 종목이 아니라 **넘기기**라
+   넘기는 바를 위에 붙박아 둔다 — 스크롤을 한참 내려도 손이 닿아야 한다.
+   ================================================================== */
+
+/* 넘기기 바 ------------------------------------------------------- */
+
+.sd-nav {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  padding: 8px 0;
+  margin-bottom: 10px;
+  /* 아래 카드가 비쳐 지나가면 글자가 겹쳐 읽힌다. 배경을 깔아 덮는다 */
+  background: var(--bg);
+}
+
+.sd-move {
+  flex: 0 0 auto;
+  width: 46px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.sd-move:disabled { opacity: .3; }
+
+.sd-cur {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: var(--text);
+  text-align: left;
+}
+
+.sd-pos {
+  flex: 0 0 auto;
+  font-size: 0.7333rem;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sd-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.sd-rate {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sd-caret { flex: 0 0 auto; color: var(--muted); font-size: 0.7333rem; }
+
+/* 목록 ------------------------------------------------------------ */
+
+.sd-list-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+/* 백 종목을 다 펼치면 화면을 덮는다. 잘라서 안에서 구르게 한다 */
+.sd-list-body { max-height: 420px; overflow-y: auto; }
+
+.sd-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-align: left;
+  font-size: 0.8rem;
+}
+
+.sd-list-row.active { background: var(--panel-2); box-shadow: inset 3px 0 0 var(--blue); }
+.sd-list-rank { flex: 0 0 2.2em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sd-list-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.sd-list-price,
+.sd-list-rate,
+.sd-list-amt,
+.sd-list-score { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.sd-list-price { color: var(--text-dim); }
+.sd-list-rate { min-width: 4.2em; text-align: right; font-weight: 700; }
+.sd-list-amt { min-width: 5em; text-align: right; color: var(--muted); font-size: 0.7333rem; }
+.sd-list-score { color: var(--blue); font-weight: 700; font-size: 0.7333rem; }
+
+.sd-search { margin-bottom: 12px; }
+
+/* 종목 머리 -------------------------------------------------------- */
+
+.sd-head-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sd-head-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.sd-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.7333rem;
+  font-weight: 700;
+  border: 1px solid var(--border);
+}
+.sd-badge.green { background: rgba(53,196,106,.15); color: var(--green); border-color: rgba(53,196,106,.4); }
+.sd-badge.yellow { background: rgba(245,197,66,.15); color: #f5c542; border-color: rgba(245,197,66,.4); }
+.sd-badge.red { background: rgba(255,92,92,.15); color: var(--red); border-color: rgba(255,92,92,.4); }
+.sd-badge.unknown { background: var(--panel-2); color: var(--muted); }
+
+.sd-session { margin-top: 10px; font-size: 0.7333rem; color: var(--muted); }
+
+/* 블록 격자 -------------------------------------------------------- */
+
+/*
+ * 모바일은 한 줄, 태블릿 둘, PC 셋.
+ * `1fr` 이 아니라 `minmax(0,1fr)` 인 이유 — `1fr` 은 `minmax(auto,1fr)` 이라
+ * 안쪽 표가 넓으면 칸이 그만큼 벌어져 화면이 옆으로 밀린다. 캘린더에서 겪었다.
+ */
+.sd-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+/*
+ * 800px 에서 두 열로 간다. 아이패드 세로(810·834)를 잡고 미니 세로(768)는 한 열로 남긴다.
+ * 더 내리면 한 칸이 350px 밑으로 떨어지는데, 투자자별 매매동향은 열이 열 개라
+ * 그 폭에서는 표가 안에서 옆으로 굴러야 한다 — 두 열로 만든 보람이 없어진다.
+ */
+@media (min-width: 800px) {
+  .sd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1440px) {
+  .sd-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.sd-block { margin-bottom: 0; min-width: 0; overflow: hidden; }
+.sd-block.wide { grid-column: 1 / -1; }
+
+/*
+ * 안쪽 내용이 길면 카드가 세로로 한없이 늘어난다 — 증권사 의견은 혼자 1,700px 이 됐다.
+ * 그러면 옆 칸이 텅 빈 채로 따라 늘어나 격자가 무너진다. 블록마다 잘라서 안에서 구르게 한다.
+ */
+.sd-block .sd-lazy { max-height: 520px; overflow-y: auto; }
+.sd-block.wide .sd-lazy { max-height: 680px; }
+.sd-block .data-table-wrap { max-height: 460px; overflow: auto; }
+
+.sd-placeholder {
+  padding: 28px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.7333rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.sd-blockpick { margin-bottom: 12px; }
+.sd-preset { margin-bottom: 10px; }
+.sd-foot { margin-top: 12px; }

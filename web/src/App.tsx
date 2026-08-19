@@ -24,6 +24,7 @@ import { ProgramTradePage } from "./pages/ProgramTradePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SameNetTradeRankingPage } from "./pages/SameNetTradeRankingPage";
 import { StockAnalysisPage } from "./pages/StockAnalysisPage";
+import { StockDiscoveryPage } from "./pages/StockDiscoveryPage";
 import { VolumeRankingPage } from "./pages/VolumeRankingPage";
 import { useHashRoute } from "./useHashRoute";
 import { applyOrder, useMenuPrefs } from "./useMenuOrder";
@@ -35,6 +36,7 @@ type Tab =
   | "map"
   | "program"
   | "news"
+  | "discovery"
   | "watchAi"
   | "watchKiwoom"
   | "calendar"
@@ -97,6 +99,8 @@ const MENU: {
     group: "마이페이지",
     accent: "#f5c542",
     items: [
+      // 발굴을 맨 위에 — 관심종목은 이미 고른 것이고, 이건 고르는 자리다
+      { key: "discovery", label: "종목발굴", icon: "⛏️" },
       { key: "watchAi", label: "관심종목 (AI_HTS)", icon: "⭐" },
       { key: "watchKiwoom", label: "관심종목 (키움_HTS)", icon: "🔖" },
       { key: "usWatch", label: "관심종목 (해외)", icon: "🌏" },
@@ -280,6 +284,7 @@ export default function App() {
           {tab === "map" && <MapPage onSelectStock={onSelectStock} />}
           {tab === "program" && <ProgramTradePage />}
           {tab === "news" && <NewsPage onSelectStock={onSelectStock} />}
+          {tab === "discovery" && <StockDiscoveryPage onSelectStock={onSelectStock} />}
           {tab === "watchAi" && <MyPage onSelectStock={onSelectStock} />}
           {tab === "watchKiwoom" && <KiwoomWatchlistPage onSelectStock={onSelectStock} />}
           {tab === "customTheme" && <CustomThemePage onSelectStock={onSelectStock} />}
