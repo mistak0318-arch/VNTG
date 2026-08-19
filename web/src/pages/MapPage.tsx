@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useWatchGroupTiles, type GroupSource } from "../useWatchGroupTiles";
 import { api, type EvaluatedTheme, type SectorRow, type ThemeRow } from "../api";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { RefreshBar } from "../components/RefreshBar";
@@ -14,7 +15,21 @@ import { useSection } from "../useSection";
  *
  * 키움 테마·업종도 그대로 남겨 둔다 — 내가 안 만든 판이 뜨는 날을 놓치면 안 되니까.
  */
-type Mode = "mine" | "theme" | "sector";
+/*
+ * MAP 이 하는 일은 **"어느 묶음이 오늘 도는가"** 를 한 눈에 보는 것이다.
+ * 그 묶음이 꼭 테마일 이유가 없다 — 내가 짜 둔 관심종목 그룹이야말로 내가 실제로
+ * 보고 있는 묶음인데, 그건 표로만 볼 수 있었다. 그래서 세 개를 모드로 올린다.
+ *
+ * 「내가 만든 것만 / 옮겨온 것 포함」 토글은 그대로 둔다 — 인포스탁 테마를 「내 테마」
+ * 안에 그대로 두기로 했으니, 그걸 걸러 볼 수단이 없으면 지도가 인포스탁으로 뒤덮인다.
+ */
+type Mode = "mine" | "watchAi" | "watchKiwoom" | "watchUs" | "theme" | "sector";
+
+const WATCH_MODES: { key: Mode; label: string; source: GroupSource }[] = [
+  { key: "watchAi", label: "관심종목 (AI_HTS)", source: "watchAi" },
+  { key: "watchKiwoom", label: "관심종목 (키움_HTS)", source: "watchKiwoom" },
+  { key: "watchUs", label: "관심종목 (미국)", source: "watchUs" },
+];
 
 /** 등락률에 따라 타일 배경색 강도를 정한다 (한국식: 상승 빨강 / 하락 파랑) */
 function tileStyle(rate: number): React.CSSProperties {
@@ -75,9 +90,25 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
     return [...merged.values()].sort((a, b) => b.changeRate - a.changeRate);
   })();
 
+  /** 관심종목 그룹 타일 — 세 출처가 같은 방식으로 계산돼야 견줄 수 있다 */
+  const watchSource = WATCH_MODES.find((m) => m.key === mode)?.source ?? null;
+  const watch = useWatchGroupTiles(watchSource);
+
   const sectorTiles = sectors.data?.[sectorMarket] ?? [];
-  const loading = mode === "mine" ? mineLoading : mode === "theme" ? themes.loading : sectors.loading;
-  const error = mode === "mine" ? mineError : mode === "theme" ? themes.error : sectors.error;
+  const loading = watchSource
+    ? watch.loading
+    : mode === "mine"
+      ? mineLoading
+      : mode === "theme"
+        ? themes.loading
+        : sectors.loading;
+  const error = watchSource
+    ? watch.error
+    : mode === "mine"
+      ? mineError
+      : mode === "theme"
+        ? themes.error
+        : sectors.error;
 
   return (
     <div>
@@ -94,6 +125,15 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
         <button className={`filter-btn ${mode === "mine" ? "active" : ""}`} onClick={() => setMode("mine")}>
           내 테마
         </button>
+        {WATCH_MODES.map((m) => (
+          <button
+            key={m.key}
+            className={`filter-btn ${mode === m.key ? "active" : ""}`}
+            onClick={() => setMode(m.key)}
+          >
+            {m.label}
+          </button>
+        ))}
         <button className={`filter-btn ${mode === "theme" ? "active" : ""}`} onClick={() => setMode("theme")}>
           키움 테마
         </button>
@@ -144,7 +184,35 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
       {!loading && !error && (
         <>
           <div className="map-grid">
-            {mode === "mine"
+            {/*
+              관심종목 그룹 타일. 테마 타일과 같은 모양이라 나란히 견줄 수 있다 —
+              "내 그룹이 테마보다 잘 도는가" 가 바로 읽힌다.
+            */}
+            {watchSource
+              ? watch.tiles.map((t) => (
+                  <button
+                    key={t.id}
+                    className="map-tile"
+                    style={tileStyle(t.changeRate)}
+                    onClick={() =>
+                      setConstituent({
+                        kind: "custom",
+                        code: t.id,
+                        name: t.name,
+                        // 이미 손에 있는 구성종목을 그대로 넘긴다
+                        stocks: t.stocks,
+                      })
+                    }
+                    title={t.name}
+                  >
+                    <span className="map-tile-name">{t.name}</span>
+                    <span className="map-tile-pct num">{fmtPct(t.changeRate)}</span>
+                    <span className="map-tile-sub">
+                      ▲{t.risingCount}/▼{t.fallingCount}
+                    </span>
+                  </button>
+                ))
+              : mode === "mine"
               ? mineTiles.map((t) => (
                   <button
                     key={t.id}
@@ -212,6 +280,7 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
           </div>
           <div className="table-note">
             색이 진할수록 등락폭이 큽니다 (5% 기준) · 타일을 누르면 구성종목이 열립니다
+            {watchSource && ` · ${watch.tiles.length}개 그룹 · ▲/▼ 는 그 그룹에서 오른/내린 종목 수`}
             {mode === "mine" && ` · ${mineTiles.length}개 · ▲/▼ 는 그 테마에서 오른/내린 종목 수`}
             {mode === "theme" && ` · ${themeTiles.length}개 테마`}
           </div>
