@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getHistory, getTotals, getUsage } from "../apiUsage.js";
 import { summarize } from "../summarize.js";
+import { getMenuPrefs, saveMenuPrefs } from "../menuPrefs.js";
 
 export function createSettingsRouter(): Router {
   const router = Router();
@@ -57,6 +58,26 @@ export function createSettingsRouter(): Router {
     try {
       const r = await summarize("'연결 성공'이라고만 답해줘.", 50);
       res.json({ ok: r.text !== null, ...r });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 사이드바 메뉴 설정 — 서버에 둔다.
+   * 미니PC 에서 정한 즐겨찾기를 폰에서도 그대로 봐야 한다.
+   */
+  router.get("/menu", async (_req, res, next) => {
+    try {
+      res.json(await getMenuPrefs());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/menu", async (req, res, next) => {
+    try {
+      res.json(await saveMenuPrefs(req.body));
     } catch (err) {
       next(err);
     }

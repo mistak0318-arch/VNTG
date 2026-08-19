@@ -38,6 +38,39 @@ const FILE = resolve(__dirname, "..", "data", "signalTrack.json");
 export const TIERS = [70, 80, 90] as const;
 export type Tier = (typeof TIERS)[number];
 
+/**
+ * 추적기 설정.
+ *
+ * **무엇을 담을지 눈에 보여야 한다.** 안 보이면 나중에 나온 숫자가 무엇을 검증한 건지
+ * 알 수 없다 — 「90점이 잘 맞더라」가 코스닥만 본 결과인지 전체를 본 결과인지 모르면
+ * 그 숫자는 쓸모가 없다.
+ */
+export interface TrackConfig {
+  /** 쓸 문턱. 켠 것만 담는다 */
+  tiers: Tier[];
+  /** 모집단 — 거래대금 상위 몇 종목까지 */
+  universe: number;
+  /** 시장 — 000 전체 / 001 코스피 / 101 코스닥 */
+  market: "000" | "001" | "101";
+  /** 최소 거래대금(억원). 거래가 얕은 종목의 신호는 검증할 값어치가 없다 */
+  minTradeValue: number;
+  /**
+   * 위험 축 때문에 초록이 막힌 종목도 담을지.
+   *
+   * 담아 두면 **「위험 차단이 옳았나」**를 나중에 물을 수 있다 — 막은 것들이 실제로
+   * 안 올랐다면 그 규칙이 일을 한 것이다. 그래서 기본은 켬이다.
+   */
+  includeRiskCapped: boolean;
+}
+
+export const DEFAULT_TRACK_CONFIG: TrackConfig = {
+  tiers: [70, 80, 90],
+  universe: 60,
+  market: "000",
+  minTradeValue: 100,
+  includeRiskCapped: true,
+};
+
 /** 며칠 뒤를 볼지 (거래일) */
 export const HORIZONS = [1, 5, 20, 60] as const;
 export type Horizon = (typeof HORIZONS)[number];
@@ -80,9 +113,10 @@ interface Store {
   entries: TrackEntry[];
   /** 마지막으로 편입을 돌린 날 — 하루 한 번만 담는다 */
   lastRunDate: string | null;
+  config: TrackConfig;
 }
 
-const EMPTY: Store = { entries: [], lastRunDate: null };
+const EMPTY: Store = { entries: [], lastRunDate: null, config: { ...DEFAULT_TRACK_CONFIG } };
 
 async function load(): Promise<Store> {
   try {
@@ -90,6 +124,8 @@ async function load(): Promise<Store> {
     return {
       entries: Array.isArray(raw.entries) ? raw.entries : [],
       lastRunDate: typeof raw.lastRunDate === "string" ? raw.lastRunDate : null,
+      // 설정이 늘어나도 예전 저장분이 깨지지 않게 기본값과 합친다
+      config: { ...DEFAULT_TRACK_CONFIG, ...(raw.config ?? {}) },
     };
   } catch {
     return { ...EMPTY };
@@ -174,10 +210,10 @@ export interface EnrollReport {
  */
 export async function enrollToday(
   client: KiwoomClient,
-  opts: { limit?: number; force?: boolean } = {},
+  opts: { force?: boolean } = {},
 ): Promise<EnrollReport> {
-  const limit = Math.min(Math.max(opts.limit ?? 60, 10), 200);
   const store = await load();
+  const cfg = store.config;
   const date = todayStr();
 
   if (!opts.force && store.lastRunDate === date) {
@@ -192,30 +228,43 @@ export async function enrollToday(
   }
 
   const rank = await client.request<Record<string, unknown>>("/api/dostk/rkinfo", "ka10032", {
-    mrkt_tp: "000",
+    mrkt_tp: cfg.market,
     mang_stk_incls: "0",
     stex_tp: "3",
   });
   const rows = (rank.data?.trde_prica_upper ?? []) as Record<string, unknown>[];
   const universe = rows
-    .slice(0, limit)
+    .slice(0, cfg.universe)
     .map((r) => ({
       code: String(r.stk_cd ?? "").replace(/[^0-9A-Za-z]/g, ""),
       name: String(r.stk_nm ?? ""),
+      // trde_prica 는 백만원 단위다 (화면 곳곳에서 /100 해서 억으로 쓴다)
+      tradeValue: Math.round((Number(String(r.trde_prica ?? "").replace(/[+,-]/g, "")) || 0) / 100),
     }))
-    .filter((x) => x.code);
+    .filter((x) => x.code && x.tradeValue >= cfg.minTradeValue);
 
   const hash = await configFingerprint();
   const byTier: Record<string, number> = {};
   let added = 0;
   let skippedDuplicate = 0;
 
+  // 진행 상황 — 몇 분 걸리는 일이라 화면이 얼마나 남았는지 알아야 한다
+  if (job) {
+    job.total = universe.length;
+    job.done = 0;
+  }
+
   for (const u of universe) {
+    if (job) job.current = u.name || u.code;
     const sig = await evaluateSignal(client, u.code).catch(() => null);
+    if (job) job.done += 1;
     if (!sig) continue;
-    // 높은 문턱부터 — 90점이면 90 으로 담는다(70 으로 중복해서 담지 않는다)
-    const tier = [...TIERS].reverse().find((t) => sig.score >= t);
+    // 켠 문턱 중 높은 것부터 — 90점이면 90 으로 담는다(70 으로 중복해서 담지 않는다)
+    const tier = [...cfg.tiers].sort((a, b) => b - a).find((t) => sig.score >= t);
     if (!tier) continue;
+
+    // 위험 축이 막은 종목을 뺄지는 설정이다. 담아 두면 「그 차단이 옳았나」를 나중에 물을 수 있다
+    if (sig.riskCapped && !cfg.includeRiskCapped) continue;
 
     /*
      * 같은 종목·같은 문턱이 아직 추적 중이면 건너뛴다.
@@ -224,6 +273,7 @@ export async function enrollToday(
     const open = store.entries.some((e) => e.code === u.code && e.tier === tier && !e.closed);
     if (open) {
       skippedDuplicate += 1;
+      if (job) job.skippedDuplicate += 1;
       continue;
     }
 
@@ -249,19 +299,53 @@ export async function enrollToday(
       closed: false,
     });
     added += 1;
+    if (job) job.added += 1;
     byTier[String(tier)] = (byTier[String(tier)] ?? 0) + 1;
   }
 
   store.lastRunDate = date;
   await save(store);
+  const marketName = cfg.market === "001" ? "코스피" : cfg.market === "101" ? "코스닥" : "전체";
   return {
     date,
     scanned: universe.length,
     added,
     skippedDuplicate,
     byTier,
-    note: `거래대금 상위 ${universe.length}종목을 평가해 ${added}건 담았습니다.`,
+    note: `${marketName} 거래대금 상위 ${universe.length}종목을 평가해 ${added}건 담았습니다.`,
   };
+}
+
+/**
+ * 편입 + 결과 갱신을 한 번에, 진행 상황을 남기며 돌린다.
+ *
+ * 화면은 이걸 부르고 곧바로 돌아간 뒤 진행 상황만 물어본다 — 몇 분짜리 요청을
+ * 붙들고 있으면 프록시가 먼저 끊는다.
+ */
+export function startEnroll(client: KiwoomClient, force: boolean): TrackJob {
+  if (job?.status === "running") return job;
+  job = {
+    status: "running",
+    total: 0,
+    done: 0,
+    current: "",
+    added: 0,
+    skippedDuplicate: 0,
+    startedAt: new Date().toISOString(),
+  };
+  const mine = job;
+  void (async () => {
+    try {
+      const report = await enrollToday(client, { force });
+      await updateResults(client);
+      mine.report = report;
+      mine.status = "done";
+    } catch (err) {
+      mine.error = err instanceof Error ? err.message : "실행 실패";
+      mine.status = "error";
+    }
+  })();
+  return job;
 }
 
 async function lastClose(client: KiwoomClient, code: string): Promise<number> {
@@ -429,13 +513,13 @@ export function startSignalTrackScheduler(client: KiwoomClient): void {
 
     running = true;
     try {
-      const r = await enrollToday(client);
-      if (r.added > 0 || r.scanned > 0) {
+      // 손으로 누른 것과 같은 통로로 돈다 — 겹쳐 돌지 않고, 진행 막대도 그대로 보인다
+      const j = startEnroll(client, false);
+      while (j.status === "running") await new Promise((r) => setTimeout(r, 2000));
+      if (j.error) throw new Error(j.error);
+      const r = j.report;
+      if (r && (r.added > 0 || r.scanned > 0)) {
         console.log(`[signalTrack] ${r.date} — ${r.note} (중복 건너뜀 ${r.skippedDuplicate})`);
-      }
-      const u = await updateResults(client);
-      if (u.updated > 0) {
-        console.log(`[signalTrack] 결과 ${u.updated}건 갱신, ${u.closed}건 종료`);
       }
     } catch (err) {
       console.error("[signalTrack] 실패:", err);
@@ -447,4 +531,65 @@ export function startSignalTrackScheduler(client: KiwoomClient): void {
   void tick();
   setInterval(() => void tick(), CHECK_MS);
   console.log("[signalTrack] 신호등 추적기 시작 — 평일 15:40 편입·갱신");
+}
+
+/* ------------------------------------------------------------------ */
+/* 설정                                                                */
+/* ------------------------------------------------------------------ */
+
+export async function getTrackConfig(): Promise<TrackConfig> {
+  return (await load()).config;
+}
+
+export async function saveTrackConfig(input: Partial<TrackConfig>): Promise<TrackConfig> {
+  const store = await load();
+  const tiers = Array.isArray(input.tiers)
+    ? (input.tiers.filter((t) => (TIERS as readonly number[]).includes(t)) as Tier[])
+    : store.config.tiers;
+  store.config = {
+    // 문턱을 하나도 안 고르면 담을 게 없다 — 그건 설정이 아니라 사고다
+    tiers: tiers.length > 0 ? [...new Set(tiers)].sort((a, b) => a - b) : store.config.tiers,
+    universe: Math.min(Math.max(Number(input.universe ?? store.config.universe) || 60, 10), 200),
+    market: (["000", "001", "101"] as const).includes(input.market as "000")
+      ? (input.market as TrackConfig["market"])
+      : store.config.market,
+    minTradeValue: Math.max(Number(input.minTradeValue ?? store.config.minTradeValue) || 0, 0),
+    includeRiskCapped:
+      typeof input.includeRiskCapped === "boolean"
+        ? input.includeRiskCapped
+        : store.config.includeRiskCapped,
+  };
+  await save(store);
+  return store.config;
+}
+
+/* ------------------------------------------------------------------ */
+/* 진행 상황                                                            */
+/* ------------------------------------------------------------------ */
+
+export interface TrackJob {
+  status: "running" | "done" | "error";
+  /** 몇 종목을 볼 예정인가 */
+  total: number;
+  /** 몇 종목까지 봤나 */
+  done: number;
+  /** 지금 보고 있는 종목 */
+  current: string;
+  added: number;
+  skippedDuplicate: number;
+  startedAt: string;
+  report?: EnrollReport;
+  error?: string;
+}
+
+/**
+ * 한 번에 하나만 돈다.
+ *
+ * 몇 분이 걸리는 일이라 두 개가 겹치면 키움 호출이 두 배가 되고 결과도 엉킨다.
+ * 이미 돌고 있으면 그 진행 상황을 그대로 돌려준다.
+ */
+let job: TrackJob | null = null;
+
+export function trackJob(): TrackJob | null {
+  return job;
 }

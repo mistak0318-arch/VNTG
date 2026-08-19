@@ -16,7 +16,13 @@ import {
   saveConfig,
   type SignalConfig,
 } from "../signalLight.js";
-import { enrollToday, trackSummary, updateResults } from "../signalTrack.js";
+import {
+  getTrackConfig,
+  saveTrackConfig,
+  startEnroll,
+  trackJob,
+  trackSummary,
+} from "../signalTrack.js";
 
 export function createSignalRouter(client: KiwoomClient): Router {
   const router = Router();
@@ -146,13 +152,29 @@ export function createSignalRouter(client: KiwoomClient): Router {
   /*
    * 손으로 돌리기. 평소엔 스케줄러가 15:40 에 알아서 하지만,
    * **처음 켰을 때 하루를 기다리게 하면 안 된다** — 눌러서 지금 담을 수 있어야 한다.
+   *
+   * 몇 분짜리 일이라 **붙들고 기다리지 않는다.** 시작만 시키고 진행 상황은 /track/job 으로 묻는다.
    */
-  router.post("/track/run", async (req, res, next) => {
+  router.post("/track/run", (req, res) => {
+    res.json(startEnroll(client, req.query.force === "1"));
+  });
+
+  /** 진행 상황 — 화면의 진행 막대가 이걸 읽는다 */
+  router.get("/track/job", (_req, res) => {
+    res.json(trackJob());
+  });
+
+  router.get("/track/config", async (_req, res, next) => {
     try {
-      const limit = Number(req.query.limit) || undefined;
-      const report = await enrollToday(client, { limit, force: req.query.force === "1" });
-      const updated = await updateResults(client);
-      res.json({ ...report, updated });
+      res.json(await getTrackConfig());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/track/config", async (req, res, next) => {
+    try {
+      res.json(await saveTrackConfig(req.body ?? {}));
     } catch (err) {
       next(err);
     }

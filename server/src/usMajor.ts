@@ -39,6 +39,8 @@ const TARGETS: Target[] = [
   { key: "vix", label: "VIX", symbol: "^VIX", digits: 2 },
   { key: "wti", label: "WTI", symbol: "CL=F", digits: 2 },
   { key: "brent", label: "브렌트", symbol: "BZ=F", digits: 2 },
+  // 유가만 두면 「원자재」라기엔 반쪽이다. 금은 금리·달러의 반대편을 읽는 자리다
+  { key: "gold", label: "금", symbol: "GC=F", digits: 2 },
 ];
 
 /** 줄 단위 경고 — 시장 신호등(green/yellow/red)과는 다른 개념이다 */

@@ -44,7 +44,12 @@ export function useSignals(codes: string[]): Record<string, SignalResult> {
 /** 점 하나짜리 배지 — 목록에서 종목명 옆에 */
 export function SignalDot({ signal }: { signal?: SignalResult }) {
   if (!signal) return <span className="sig-dot loading" title="평가 중" />;
-  const tip = `${LEVEL_LABEL[signal.level]} ${signal.score}점\n${signal.checks
+  /*
+   * 서버 응답이 옛 모양이면 checks 가 배열이 아닐 수 있다 — 미니PC 가 아직 pull 안 한 경우다.
+   * 배지 하나 때문에 화면 전체가 죽는 건 말이 안 된다.
+   */
+  const list = Array.isArray(signal.checks) ? signal.checks : [];
+  const tip = `${LEVEL_LABEL[signal.level]} ${signal.score}점\n${list
     .map((c) => `${c.pass === null ? "?" : c.pass ? "O" : "X"} ${c.label} ${c.value}`)
     .join("\n")}`;
   return <span className={`sig-dot ${signal.level}`} title={tip} />;

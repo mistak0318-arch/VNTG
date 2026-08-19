@@ -329,17 +329,17 @@ export const api = {
       `/api/signal/screen/start?market=${market}&level=${level}&limit=${limit}`,
     ),
   signalScreenStatus: (jobId: string) => getJson<ScreenJob>(`/api/signal/screen/${jobId}`),
+  /** `saved` 는 서버에 한 번이라도 저장된 적이 있는지 — 첫 이사 때 필요하다 */
+  menuPrefs: () => getJson<MenuPrefsDto & { saved: boolean }>("/api/settings/menu"),
+  menuPrefsSave: (p: MenuPrefsDto) => putJson<MenuPrefsDto>("/api/settings/menu", p),
   signalTrack: () => getJson<TrackSummary>("/api/signal/track"),
-  signalTrackRun: (limit?: number) =>
-    postJson<{
-      date: string;
-      scanned: number;
-      added: number;
-      skippedDuplicate: number;
-      byTier: Record<string, number>;
-      note: string;
-      updated: { updated: number; closed: number };
-    }>(`/api/signal/track/run${limit ? `?limit=${limit}` : ""}`),
+  /** 시작만 시킨다 — 몇 분짜리 일이라 붙들고 기다리면 프록시가 먼저 끊는다 */
+  signalTrackRun: (force = false) =>
+    postJson<TrackJob>(`/api/signal/track/run${force ? "?force=1" : ""}`),
+  signalTrackJob: () => getJson<TrackJob | null>("/api/signal/track/job"),
+  signalTrackConfig: () => getJson<TrackConfig>("/api/signal/track/config"),
+  signalTrackConfigSave: (c: TrackConfig) =>
+    putJson<TrackConfig>("/api/signal/track/config", c),
   signalScreenRuns: () => getJson<{ runs: ScreenRunSummary[] }>("/api/signal/screen/runs"),
   signalScreenRun: (id: string) => getJson<ScreenRun>(`/api/signal/screen/runs/${id}`),
   signalScreenDiff: (from: string, to: string) =>
@@ -2106,4 +2106,44 @@ export interface TrackSummary {
   currentConfig: string;
   mixedConfig: boolean;
   lastRunDate: string | null;
+}
+
+
+/** 사이드바 메뉴 설정 — 서버에 둔다(기기가 달라도 같은 메뉴여야 한다) */
+export interface MenuPrefsDto {
+  order: string[];
+  hidden: string[];
+  labels: Record<string, string>;
+  groupOf: Record<string, string>;
+  extraGroups: string[];
+  favorites: string[];
+}
+
+
+/** 추적기 편입 조건 — 무엇을 담았는지 눈에 보여야 나중 숫자를 믿을 수 있다 */
+export interface TrackConfig {
+  tiers: number[];
+  universe: number;
+  market: "000" | "001" | "101";
+  minTradeValue: number;
+  includeRiskCapped: boolean;
+}
+
+export interface TrackJob {
+  status: "running" | "done" | "error";
+  total: number;
+  done: number;
+  current: string;
+  added: number;
+  skippedDuplicate: number;
+  startedAt: string;
+  report?: {
+    date: string;
+    scanned: number;
+    added: number;
+    skippedDuplicate: number;
+    byTier: Record<string, number>;
+    note: string;
+  };
+  error?: string;
 }

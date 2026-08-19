@@ -638,7 +638,7 @@ export function DailyReportPage({
       </Section>
 
       <Section no={9} title="국내 테마 MAP">
-        <KrThemeMapSection />
+        <KrThemeMapSection onSelectStock={onSelectStock} />
       </Section>
 
       <Section no={10} title="특징 테마 (상승 이유 포함)">

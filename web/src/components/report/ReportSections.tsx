@@ -19,6 +19,7 @@ import {
 import { CandleChart } from "../CandleChart";
 import { useSection } from "../../useSection";
 import { useWatchGroupTiles } from "../../useWatchGroupTiles";
+import { ConstituentSheet, type ConstituentTarget } from "../overview/ConstituentSheet";
 
 /**
  * 데일리 리포트에 새로 들어가는 네 섹션.
@@ -259,19 +260,49 @@ interface MiniTile {
   name: string;
   rate: number;
   sub?: string;
+  /** 눌렀을 때 열 구성종목. 없으면 못 누르는 타일이다 */
+  open?: ConstituentTarget;
 }
 
-function MapMini({ tiles, empty }: { tiles: MiniTile[]; empty: string }) {
+/**
+ * 테마 판.
+ *
+ * **누르면 그 안에 뭐가 들었는지 보여야 한다.** 「반도체 +2.9%」만 보고 끝나면
+ * 그래서 무엇을 봐야 하는지 모른 채 다른 화면을 열게 된다.
+ */
+function MapMini({
+  tiles,
+  empty,
+  onOpen,
+}: {
+  tiles: MiniTile[];
+  empty: string;
+  onOpen?: (t: ConstituentTarget) => void;
+}) {
   if (tiles.length === 0) return <div className="empty">{empty}</div>;
   return (
     <div className="rp-map">
-      {tiles.map((t) => (
-        <div className="rp-map-tile" style={tileStyle(t.rate)} key={t.key} title={t.name}>
-          <span className="rp-map-name">{t.name}</span>
-          <span className="rp-map-pct num">{pct(t.rate)}</span>
-          {t.sub && <span className="rp-map-sub">{t.sub}</span>}
-        </div>
-      ))}
+      {tiles.map((t) =>
+        t.open && onOpen ? (
+          <button
+            className="rp-map-tile clickable"
+            style={tileStyle(t.rate)}
+            key={t.key}
+            title={`${t.name} — 눌러서 구성종목 보기`}
+            onClick={() => onOpen(t.open!)}
+          >
+            <span className="rp-map-name">{t.name}</span>
+            <span className="rp-map-pct num">{pct(t.rate)}</span>
+            {t.sub && <span className="rp-map-sub">{t.sub}</span>}
+          </button>
+        ) : (
+          <div className="rp-map-tile" style={tileStyle(t.rate)} key={t.key} title={t.name}>
+            <span className="rp-map-name">{t.name}</span>
+            <span className="rp-map-pct num">{pct(t.rate)}</span>
+            {t.sub && <span className="rp-map-sub">{t.sub}</span>}
+          </div>
+        ),
+      )}
     </div>
   );
 }
@@ -314,7 +345,12 @@ export function UsThemeMapSection() {
  * 키움 테마 순위를 쓴다. 상승·하락을 **한 판에 같이** 놓는 게 중요하다 —
  * 오른 것만 보면 "장이 좋다"고 착각하는데, 실제로는 돈이 옮겨 다닌 것뿐인 날이 많다.
  */
-export function KrThemeMapSection() {
+export function KrThemeMapSection({
+  onSelectStock,
+}: {
+  onSelectStock?: (code: string, name: string) => void;
+} = {}) {
+  const [target, setTarget] = useState<ConstituentTarget | null>(null);
   const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 180_000);
   const merged = (() => {
     const m = new Map<string, ThemeRow>();
@@ -326,9 +362,25 @@ export function KrThemeMapSection() {
   return (
     <>
       <MapMini
-        tiles={merged.map((t) => ({ key: t.code, name: t.name, rate: t.changeRate }))}
+        tiles={merged.map((t) => ({
+          key: t.code,
+          name: t.name,
+          rate: t.changeRate,
+          open: { kind: "theme" as const, code: t.code, name: t.name },
+        }))}
         empty="테마 데이터가 없습니다."
+        onOpen={setTarget}
       />
+      {target && (
+        <ConstituentSheet
+          target={target}
+          onClose={() => setTarget(null)}
+          onSelectStock={(c, n) => {
+            setTarget(null);
+            onSelectStock?.(c, n);
+          }}
+        />
+      )}
       <div className="table-note">
         키움 테마 분류입니다. 오른 것과 내린 것을 <b>한 판에 같이</b> 놓았습니다 — 오른 것만
         보면 장이 좋다고 착각하는데, 돈이 옮겨 다닌 것뿐인 날이 많습니다.

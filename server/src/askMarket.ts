@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { getAiConfig } from "./aiConfig.js";
+import { generateText } from "./vision.js";
+import { choiceFor, getAiConfig } from "./aiConfig.js";
 import { recordApiCall } from "./apiUsage.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { buildDigest } from "./aiSummary.js";
@@ -103,6 +104,8 @@ export async function askMarket(
   if (!question.trim()) return { ...empty, error: "질문이 비어 있습니다" };
 
   const anthropic = new Anthropic();
+  // catch 에서 다른 모델로 다시 물어보려면 여기 있어야 한다
+  let messages: Anthropic.MessageParam[] = [];
 
   try {
     // 시장 데이터는 첫 질문에만 붙인다 — 매 턴 붙이면 토큰이 배로 든다
@@ -114,7 +117,7 @@ export async function askMarket(
       if (watch.length > 0) context += `\n\n[사용자 관심종목] ${watch.join(", ")}`;
     }
 
-    const messages: Anthropic.MessageParam[] = [
+    messages = [
       ...history.slice(-MAX_HISTORY).map((t) => ({
         role: t.role,
         content: t.text,
@@ -177,6 +180,76 @@ export async function askMarket(
     };
   } catch (err) {
     void recordApiCall("anthropic", usedModel, "failed");
-    return { ...empty, error: err instanceof Error ? err.message : "질문 처리 실패" };
+
+    /*
+     * 한도에 걸리면 **다른 모델로라도 답한다.**
+     *
+     * 예전엔 Anthropic SDK 가 던진 것을 그대로 화면에 뿌렸다. 사용자가 본 건
+     * `400 {"type":"error",...}` 라는 JSON 한 덩어리였고, 읽어도 언제 풀리는지
+     * 알 수가 없었다. 게다가 답을 아예 못 받았다 — 「내 시장 데이터」만으로 답할 수 있는
+     * 질문까지 같이 막힌 것이다.
+     *
+     * 웹 검색은 Anthropic 쪽에만 붙어 있어 대신할 수 없다. 그러니 **검색 없이**
+     * 리포트가 쓰는 모델로 한 번 더 물어보고, 검색이 빠졌다는 사실을 같이 알린다.
+     */
+    const limited = isUsageLimit(err);
+    if (limited) {
+      const alt = await choiceFor("report");
+      if (alt) {
+        const prompt = [
+          SYSTEM,
+          "=== 질문 ===",
+          ...messages.map((m) => `[${m.role}] ${String(m.content)}`),
+        ].join("\n\n");
+        const r = await generateText(
+          prompt,
+          4000,
+          alt.provider,
+          alt.model,
+          "ask",
+        ).catch(() => null);
+        if (r?.text) {
+          return {
+            ...empty,
+            text: r.text,
+            model: r.model ?? alt.model,
+            inputTokens: r.inputTokens,
+            outputTokens: r.outputTokens,
+            error: `Claude 사용 한도에 걸려 ${alt.model} 로 답했습니다 — 웹 검색은 빠졌습니다.`,
+          };
+        }
+      }
+    }
+    return { ...empty, error: humanError(err) };
   }
+}
+
+/** Anthropic 한도 초과인가 — 그때만 다른 모델로 넘어간다 */
+function isUsageLimit(err: unknown): boolean {
+  const m = err instanceof Error ? err.message : String(err);
+  return /usage limit|rate_limit|invalid_request_error/i.test(m) && /usage limits?/i.test(m);
+}
+
+/**
+ * 오류를 사람이 읽을 문장으로.
+ *
+ * SDK 는 상태코드 뒤에 JSON 을 통째로 붙여 던진다. 그걸 그대로 보여 주면
+ * 「뭘 어쩌라는 건지」 알 수 없다 — 특히 **언제 풀리는지**가 JSON 안에 묻힌다.
+ */
+function humanError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const m = raw.match(/"message"\s*:\s*"([^"]+)"/);
+  const inner = m?.[1] ?? raw;
+
+  const until = inner.match(/regain access on (\d{4}-\d{2}-\d{2}) at (\d{2}:\d{2}) UTC/);
+  if (until) {
+    // UTC 를 한국시간으로 바꿔 준다 — 한국 시각으로 봐야 언제인지 감이 온다
+    const kst = new Date(`${until[1]}T${until[2]}:00Z`);
+    const when = kst.toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false });
+    return `Claude API 사용 한도에 걸렸습니다. 한국시간 ${when} 에 풀립니다. 그전까지 「시황 질문하기」는 설정에서 고른 다른 모델로 답하며, 웹 검색은 쓸 수 없습니다.`;
+  }
+  if (/usage limits?/i.test(inner)) return `Claude API 사용 한도에 걸렸습니다. ${inner}`;
+  if (/401|authentication/i.test(raw)) return "Claude API 키가 올바르지 않습니다.";
+  if (/429/.test(raw)) return "요청이 너무 잦습니다. 잠시 뒤 다시 물어보세요.";
+  return inner;
 }

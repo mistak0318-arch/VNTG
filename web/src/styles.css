@@ -4734,3 +4734,75 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .rp-cal-soon-h { font-size: 0.6667rem; color: var(--muted); font-weight: 700; }
 .rp-cal-chip { font-size: 0.7333rem; color: var(--text-dim); }
 .rp-cal-chip b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* 테마 타일 — 누를 수 있는 것은 그렇게 보여야 한다 */
+.rp-map-tile.clickable { border: none; cursor: pointer; text-align: left; font: inherit; }
+.rp-map-tile.clickable:hover { outline: 1px solid var(--text-dim); }
+
+/* ------------------------------------------------------------------ */
+/* 신호등 추적기                                                        */
+/* ------------------------------------------------------------------ */
+
+/*
+ * 진행 막대. 편입은 종목마다 신호등을 통째로 계산해서 몇 분이 걸린다 —
+ * 그동안 「담는 중…」 한 줄만 있으면 멈춘 건지 도는 건지 알 수가 없다.
+ */
+.st-prog {
+  margin: 0.5rem 0 0.75rem;
+}
+.st-prog-bar {
+  height: 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--border);
+  overflow: hidden;
+}
+.st-prog-fill {
+  height: 100%;
+  background: var(--blue);
+  /* 이 화면은 전환 애니메이션이 미덥지 않아 폭만 바꾼다 */
+}
+.st-prog-txt {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.st-cfg-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+.st-cfg-k {
+  min-width: 7rem;
+  font-weight: 600;
+}
+.st-cfg-row input[type="number"] {
+  width: 5rem;
+}
+.st-cfg-chk {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+.st-cfg-note {
+  margin: 0.3rem 0 0 7.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+@media (max-width: 40rem) {
+  .st-cfg-note {
+    margin-left: 0;
+  }
+}
+
+/* 60일까지 다 본 것 — 기록은 남기되 눈에서는 한 걸음 물린다 */
+.st-closed {
+  opacity: 0.6;
+}
+.st-empty {
+  color: var(--muted);
+}

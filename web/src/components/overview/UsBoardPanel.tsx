@@ -10,6 +10,7 @@ import {
   type UsSearchResult,
 } from "../../api";
 import { useSection } from "../../useSection";
+import { showDayQuote } from "../../usSession";
 
 /**
  * 미국 전광판.
@@ -27,7 +28,16 @@ import { useSection } from "../../useSection";
  */
 
 /** 위에 큰 상자로 세울 지수 — 국내 지수 카드와 같은 모양 */
-const BOX_KEYS = ["gspc", "ndx", "rut", "sox"] as const;
+/*
+ * VIX 를 지수와 같은 줄에 둔다.
+ *
+ * 지수 넷만 보면 「올랐다/내렸다」는 알아도 **그게 편안한 상승인지 불안한 상승인지**를
+ * 모른다. VIX 는 그 한 칸을 채운다. 값이 오르는 게 나쁜 쪽이라 색은 거꾸로 읽어야 하는데,
+ * 그건 서버가 붙여 주는 판정 줄(why)이 말해 준다.
+ */
+const BOX_KEYS = ["gspc", "ndx", "rut", "sox", "vix"] as const;
+/** 원자재 — 국채금리 아래 따로. 지수와 단위가 달라 같은 줄에 섞으면 못 읽는다 */
+const COMMODITY_KEYS = ["wti", "brent", "gold"] as const;
 
 function pct(v: number | null): string {
   if (v === null || !Number.isFinite(v)) return "-";
@@ -48,6 +58,9 @@ export function UsBoardPanel() {
     (r): r is NonNullable<typeof r> => Boolean(r),
   );
   const night = usMajor.data?.nightFutures ?? null;
+  const commodities = COMMODITY_KEYS.map((k) => rows.find((r) => r.key === k)).filter(
+    (r): r is NonNullable<typeof r> => Boolean(r),
+  );
   const usRates = (rates.data ?? []).filter((r) => r.group === "해외");
 
   return (
@@ -101,6 +114,12 @@ export function UsBoardPanel() {
       <section className="ov-card">
         <div className="ov-card-h">
           <span className="ov-card-t">미국 국채금리</span>
+          {/* 갱신 시각을 적어 둔다 — 안 적으면 「이거 살아 있나」를 매번 의심하게 된다 */}
+          <span className="ov-card-sub">
+            {rates.updatedAt
+              ? new Date(rates.updatedAt).toLocaleTimeString("ko-KR", { hour12: false })
+              : ""}
+          </span>
         </div>
         <div className="ov-card-b">
           {usRates.length === 0 ? (
@@ -128,10 +147,54 @@ export function UsBoardPanel() {
         </div>
       </section>
 
+      {/* ---------------- 원자재 ---------------- */}
+      <section className="ov-card">
+        <div className="ov-card-h">
+          <span className="ov-card-t">원자재</span>
+          <span className="ov-card-sub">
+            {usMajor.data?.fetchedAt
+              ? new Date(usMajor.data.fetchedAt).toLocaleTimeString("ko-KR", { hour12: false })
+              : ""}
+          </span>
+        </div>
+        <div className="ov-card-b">
+          {commodities.length === 0 ? (
+            <div className="empty">불러오는 중…</div>
+          ) : (
+            <div className="usb-boxes">
+              {commodities.map((b) => (
+                <div className={`usb-box${b.signal ? ` sig-${b.signal.level}` : ""}`} key={b.key}>
+                  <div className="usb-box-nm">{b.label}</div>
+                  <div className={`usb-box-px ${cls(b.changeRate)}`}>
+                    {b.price === null ? "-" : fmtNum(Number(b.price.toFixed(b.digits)))}
+                  </div>
+                  <div className={`usb-box-chg ${cls(b.changeRate)}`}>
+                    {b.change === null
+                      ? ""
+                      : `${b.change > 0 ? "▲" : b.change < 0 ? "▼" : ""}${Math.abs(b.change).toFixed(b.digits)}`}{" "}
+                    {pct(b.changeRate)}
+                  </div>
+                  {b.signal && <div className="usb-box-why">{b.signal.why}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="table-note">
+            유가는 <b>정유·화학·항공</b>에 바로 닿습니다. 금은 금리·달러의 반대편이라 같이 보면
+            지금 시장이 <b>위험을 사는지 피하는지</b>가 읽힙니다. WTI·브렌트는 선물(근월물)입니다.
+          </div>
+        </div>
+      </section>
+
       {/* ---------------- 야간선물 ---------------- */}
       <section className="ov-card">
         <div className="ov-card-h">
           <span className="ov-card-t">코스피 야간선물</span>
+          <span className="ov-card-sub">
+            {usMajor.data?.fetchedAt
+              ? new Date(usMajor.data.fetchedAt).toLocaleTimeString("ko-KR", { hour12: false })
+              : ""}
+          </span>
         </div>
         <div className="ov-card-b">
           {!night ? (
@@ -178,11 +241,14 @@ function UsBoardWatch() {
   const [found, setFound] = useState<UsSearchResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** 마지막으로 값을 받은 시각 — 안 적어 두면 살아 있는지 의심하게 된다 */
+  const [at, setAt] = useState<number | null>(null);
 
   const load = useCallback(async (quiet = false) => {
     try {
       const r = await api.usWatch();
       setGroups(r.groups);
+      setAt(Date.now());
       setError(null);
     } catch (e) {
       if (!quiet) setError(e instanceof Error ? e.message : "불러오지 못했습니다");
@@ -253,7 +319,10 @@ function UsBoardWatch() {
     <section className="ov-card">
       <div className="ov-card-h">
         <span className="ov-card-t">관심종목</span>
-        <span className="ov-card-sub">{current ? `${current.stocks.length}종목` : ""}</span>
+        <span className="ov-card-sub">
+          {current ? `${current.stocks.length}종목` : ""}
+          {at && ` · ${new Date(at).toLocaleTimeString("ko-KR", { hour12: false })}`}
+        </span>
       </div>
       <div className="ov-card-b">
         {error && <div className="error-banner">{error}</div>}
@@ -336,7 +405,8 @@ function UsBoardWatch() {
 
         <div className="table-note">
           <b>관심종목(해외)</b> 와 같은 목록입니다 — 여기서 넣고 빼면 거기서도 바뀝니다.
-          괄호는 <b>미국 주간거래</b>(한국 낮에 열리는 세션)입니다.
+          괄호는 <b>미국 주간거래</b>(한국 낮에 열리는 세션)이며, <b>정규장이 열리면 사라집니다</b> —
+          그때부터 지금 값은 정규장 하나뿐입니다.
         </div>
       </div>
     </section>
@@ -376,14 +446,14 @@ function UsBoardRow({
       </span>
       <span className="usb-px">
         {row.price === null ? "-" : row.price.toFixed(2)}
-        {/* 거래량이 0이면 아직 아무도 안 산 것 — 정규장 종가 그대로라 띄우지 않는다 */}
-        {row.dayPrice !== null && !!row.dayVolume && (
-          <span className="uw-day"> ({row.dayPrice.toFixed(2)})</span>
+        {/* 정규장이 열리면 주간거래 괄호는 지운다 — 가격이 두 개면 어느 쪽이 지금 값인지 헷갈린다 */}
+        {showDayQuote(row) && (
+          <span className="uw-day"> ({row.dayPrice!.toFixed(2)})</span>
         )}
       </span>
       <span className={`usb-rt ${cls(row.changeRate)}`}>
         {pct(row.changeRate)}
-        {row.dayPrice !== null && !!row.dayVolume && (
+        {showDayQuote(row) && (
           <span className={`uw-day ${cls(row.dayChangeRate)}`}> ({pct(row.dayChangeRate)})</span>
         )}
       </span>

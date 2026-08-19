@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { api } from "./api";
 
 /**
  * 사이드바 메뉴 순서·표시 여부.
@@ -6,8 +7,13 @@ import { useEffect, useState } from "react";
  * 메뉴가 스무 개를 넘으면서 **자주 쓰는 것이 사람마다 다르다**. 어떤 날은 시장 흐름만 보고,
  * 어떤 날은 시세분석만 파는데 매번 같은 자리에서 찾아 내려가는 건 낭비다.
  *
- * 서버에 둘 이유가 없어 localStorage 에만 저장한다 — 기기마다 다른 게 오히려 자연스럽고
- * (미니PC는 상시 대시보드, 휴대폰은 관심종목 위주), 저장 실패해도 기본 순서로 돌아가면 그만이다.
+ * **서버에 저장한다.** 예전엔 localStorage 뿐이었고 "기기마다 다른 게 자연스럽다"고 적어 뒀는데
+ * 써 보니 아니었다 — 미니PC 에서 즐겨찾기를 정해 놓고 폰으로 열면 처음부터 다시 정해야 했다.
+ * 한 사람이 여러 기기로 같은 서버를 보는 구조라 설정도 서버에 있는 게 맞다.
+ *
+ * localStorage 는 **첫 화면을 즉시 그리기 위한 사본**으로만 남긴다. 서버 응답을 기다리는
+ * 동안 메뉴가 기본 순서로 번쩍였다가 바뀌면 그게 더 나쁘다.
+ * (화면 외관 — 테마·글꼴·글자 크기 — 은 그대로 기기별이다. 그건 화면 크기에 딸린 값이다)
  *
  * **저장된 순서는 절대 기준이 아니다.** 코드에 메뉴가 새로 추가되면 저장분에 없으므로,
  * 저장된 것을 먼저 놓고 **모르는 항목은 원래 자리 순서대로 뒤에 붙인다.** 그래야 기능을
@@ -61,29 +67,66 @@ function read(): MenuPrefs {
   }
 }
 
+/** 사본에 적어 둔다 — 다음에 열 때 첫 화면을 곧바로 그리려는 것이다 */
+function cache(p: MenuPrefs): void {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(p));
+  } catch {
+    /* 사본을 못 남겨도 서버에 있으면 된다 */
+  }
+}
+
 export function useMenuPrefs() {
-  const [prefs, setPrefs] = useState<MenuPrefs>(EMPTY);
+  // 사본을 먼저 그린다. 서버를 기다리며 기본 순서로 번쩍이면 그게 더 나쁘다
+  const [prefs, setPrefs] = useState<MenuPrefs>(read);
 
   useEffect(() => {
-    setPrefs(read());
-    // 다른 탭·창에서 바꾸면 따라간다
+    let alive = true;
+    api
+      .menuPrefs()
+      .then((server) => {
+        if (!alive) return;
+        /*
+         * **처음 한 번의 이사.**
+         *
+         * 예전 설정은 이 기기의 localStorage 에만 있었다. 서버가 아직 한 번도 저장된 적이
+         * 없는데 빈 값을 받아 덮어쓰면 쓰던 즐겨찾기가 그 자리에서 사라진다.
+         * 그럴 때는 반대로 **내 것을 서버로 올린다.**
+         */
+        if (!server.saved) {
+          const mine = read();
+          if (mine.favorites.length > 0 || mine.order.length > 0 || mine.hidden.length > 0) {
+            void api.menuPrefsSave(mine).catch(() => {});
+            return;
+          }
+        }
+        setPrefs(server);
+        cache(server);
+      })
+      .catch(() => {
+        /* 서버를 못 읽으면 사본으로 계속 쓴다 — 메뉴가 사라지면 안 된다 */
+      });
+
+    // 같은 창의 다른 컴포넌트(사이드바)도 즉시 반영되도록
     const onStorage = (e: StorageEvent) => {
       if (e.key === KEY) setPrefs(read());
     };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    return () => {
+      alive = false;
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
-  function save(next: MenuPrefs) {
+  const save = useCallback((next: MenuPrefs) => {
+    // 화면을 먼저 바꾼다 — 서버 왕복을 기다리면 누른 느낌이 늦다
     setPrefs(next);
-    try {
-      localStorage.setItem(KEY, JSON.stringify(next));
-    } catch {
-      /* 저장 못 해도 이번 세션에는 적용된다 */
-    }
-    // 같은 창의 다른 컴포넌트(사이드바)도 즉시 반영되도록
+    cache(next);
     window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
-  }
+    void api.menuPrefsSave(next).catch(() => {
+      /* 서버에 못 올려도 이번 기기에는 적용돼 있다. 다음에 켤 때 다시 올라간다 */
+    });
+  }, []);
 
   return { prefs, save };
 }

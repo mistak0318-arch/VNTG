@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, fmtNum, signClass, type TrackEntry, type TrackSummary } from "../api";
+import {
+  api,
+  fmtNum,
+  signClass,
+  type TrackConfig,
+  type TrackEntry,
+  type TrackJob,
+  type TrackSummary,
+} from "../api";
 
 /**
  * 신호등 추적기 — **신호등이 정말 맞는지 스스로 검증하는 자리.**
@@ -7,7 +15,8 @@ import { api, fmtNum, signClass, type TrackEntry, type TrackSummary } from "../a
  * 장이 끝나면 서버가 그날 점수가 높았던 종목을 자동으로 담고 며칠을 따라간다.
  * 사람이 고르지 않는다 — 사람이 고르면 **맞은 것만 기억하게 된다.**
  *
- * 화면은 두 층이다.
+ * 화면은 세 층이다.
+ *   설정: **무엇을 담을지** — 이게 없으면 아래 숫자가 무엇을 검증한 건지 알 수 없다
  *   위: 문턱(70·80·90)별로 **얼마나 맞았나** — 이게 본론이다
  *   아래: 담긴 것들의 목록 — 왜 그런 숫자가 나왔는지 확인하는 자리
  */
@@ -27,6 +36,9 @@ export function SignalTrackPanel({
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [tierFilter, setTierFilter] = useState<number | 0>(0);
+  const [job, setJob] = useState<TrackJob | null>(null);
+  const [cfg, setCfg] = useState<TrackConfig | null>(null);
+  const [cfgOpen, setCfgOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -42,32 +54,79 @@ export function SignalTrackPanel({
 
   useEffect(() => {
     void load();
+    api.signalTrackConfig().then(setCfg).catch(() => setCfg(null));
+    // 새로고침해도 돌던 일은 서버에서 계속 돈다 — 다시 붙는다
+    api
+      .signalTrackJob()
+      .then((j) => {
+        if (j?.status === "running") {
+          setJob(j);
+          setRunning(true);
+        }
+      })
+      .catch(() => {});
   }, [load]);
 
+  /*
+   * 진행 상황 물어보기.
+   *
+   * 편입은 종목마다 신호등을 통째로 계산해서 **몇 분**이 걸린다. 그동안 화면이
+   * 「담는 중…」 한 줄이면 멈춘 건지 도는 건지 알 수가 없다.
+   */
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => {
+      void api
+        .signalTrackJob()
+        .then((j) => {
+          setJob(j);
+          if (!j || j.status === "running") return;
+          setRunning(false);
+          if (j.status === "error") setError(j.error ?? "실행 실패");
+          else if (j.report) setNote(j.report.note);
+          void load();
+        })
+        .catch(() => {});
+    }, 2000);
+    return () => clearInterval(t);
+  }, [running, load]);
+
+  /** 설정은 누르는 즉시 저장한다 — 「저장」 버튼을 또 찾게 만들지 않는다 */
+  function saveCfg(patch: Partial<TrackConfig>) {
+    if (!cfg) return;
+    const next = { ...cfg, ...patch };
+    setCfg(next);
+    void api.signalTrackConfigSave(next).then(setCfg).catch(() => {});
+  }
+
   async function runNow() {
-    setRunning(true);
     setNote(null);
     setError(null);
     try {
-      const r = await api.signalTrackRun();
-      setNote(`${r.note} 결과 ${r.updated.updated}건 갱신.`);
-      await load();
+      const j = await api.signalTrackRun(true);
+      setJob(j);
+      setRunning(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "실행 실패");
-    } finally {
-      setRunning(false);
     }
   }
 
   if (loading && !data) return <div className="empty">추적 기록 불러오는 중…</div>;
 
   const entries = (data?.entries ?? []).filter((e) => tierFilter === 0 || e.tier === tierFilter);
+  const pctDone = job && job.total > 0 ? Math.round((job.done / job.total) * 100) : 0;
 
   return (
     <div className="st">
       <div className="filter-row">
         <button className="primary-btn" onClick={() => void runNow()} disabled={running}>
-          {running ? "담는 중… (몇 분 걸립니다)" : "지금 담기"}
+          {running ? "담는 중…" : "지금 담기"}
+        </button>
+        <button
+          className={`filter-btn ${cfgOpen ? "active" : ""}`}
+          onClick={() => setCfgOpen((v) => !v)}
+        >
+          편입 조건
         </button>
         <span className="pt-n">
           평일 <b>15:40</b> 에 자동으로 담습니다
@@ -75,8 +134,144 @@ export function SignalTrackPanel({
         </span>
       </div>
 
+      {/* 진행 막대 — 종목마다 신호등을 통째로 계산해서 몇 분 걸린다 */}
+      {running && job && (
+        <div className="st-prog">
+          <div className="st-prog-bar">
+            {/* 목록을 받는 동안엔 총 개수를 아직 모른다. 3% 를 채워 「살아 있다」만 알린다 */}
+            <div className="st-prog-fill" style={{ width: `${job.total > 0 ? pctDone : 3}%` }} />
+          </div>
+          <div className="st-prog-txt">
+            {job.total > 0 ? (
+              <>
+                <b>
+                  {job.done} / {job.total}
+                </b>{" "}
+                종목 ({pctDone}%) · 담김 {job.added}
+                {job.skippedDuplicate > 0 && ` · 중복 건너뜀 ${job.skippedDuplicate}`}
+                {job.current && <span className="pt-n"> · {job.current}</span>}
+              </>
+            ) : (
+              "거래대금 상위 목록을 받는 중…"
+            )}
+          </div>
+        </div>
+      )}
+
       {error && <div className="error-banner">{error}</div>}
       {note && <div className="alert-note">{note}</div>}
+
+      {/* ---------------- 편입 조건 ---------------- */}
+      {cfgOpen && cfg && (
+        <section className="card st-cfg">
+          <h2>편입 조건</h2>
+          <p className="page-note">
+            <b>무엇을 담았는지가 곧 검증의 의미</b>입니다. 「90점이 잘 맞더라」가 코스닥만 본
+            결과인지 전체를 본 결과인지 모르면 그 숫자는 쓸 수 없습니다. 바꾸면{" "}
+            <b>다음 편입부터</b> 적용되고 이미 담긴 것은 그대로 둡니다.
+          </p>
+
+          <div className="st-cfg-row">
+            <span className="st-cfg-k">문턱</span>
+            <span className="filter-row">
+              {[70, 80, 90].map((t) => (
+                <button
+                  key={t}
+                  className={`filter-btn ${cfg.tiers.includes(t) ? "active" : ""}`}
+                  onClick={() =>
+                    saveCfg({
+                      tiers: cfg.tiers.includes(t)
+                        ? cfg.tiers.filter((x) => x !== t)
+                        : [...cfg.tiers, t].sort((a, b) => a - b),
+                    })
+                  }
+                >
+                  {t}점+
+                </button>
+              ))}
+            </span>
+          </div>
+          <div className="st-cfg-note">
+            켠 문턱만 담습니다. 한 종목은 <b>가장 높은 문턱 하나로만</b> 들어갑니다 — 90점짜리를
+            70·80·90 에 세 번 담으면 같은 종목이 통계를 세 번 흔듭니다.
+          </div>
+
+          <div className="st-cfg-row">
+            <span className="st-cfg-k">시장</span>
+            <span className="filter-row">
+              {(
+                [
+                  ["000", "전체"],
+                  ["001", "코스피"],
+                  ["101", "코스닥"],
+                ] as const
+              ).map(([v, l]) => (
+                <button
+                  key={v}
+                  className={`filter-btn ${cfg.market === v ? "active" : ""}`}
+                  onClick={() => saveCfg({ market: v })}
+                >
+                  {l}
+                </button>
+              ))}
+            </span>
+          </div>
+
+          <div className="st-cfg-row">
+            <span className="st-cfg-k">모집단</span>
+            <span>
+              거래대금 상위{" "}
+              <input
+                type="number"
+                min={10}
+                max={200}
+                step={10}
+                value={cfg.universe}
+                onChange={(e) => saveCfg({ universe: Number(e.target.value) })}
+              />{" "}
+              종목
+            </span>
+          </div>
+          <div className="st-cfg-note">
+            전 종목을 평가하면 몇 시간이 걸립니다. 늘릴수록 오래 걸립니다 —{" "}
+            <b>종목당 대략 2~3초</b>. 60종목이면 3분쯤입니다.
+          </div>
+
+          <div className="st-cfg-row">
+            <span className="st-cfg-k">최소 거래대금</span>
+            <span>
+              <input
+                type="number"
+                min={0}
+                step={50}
+                value={cfg.minTradeValue}
+                onChange={(e) => saveCfg({ minTradeValue: Number(e.target.value) })}
+              />{" "}
+              억원 이상
+            </span>
+          </div>
+          <div className="st-cfg-note">
+            거래가 얕은 종목의 신호는 검증할 값어치가 없습니다 — <b>사고팔 수 없는 것</b>을
+            맞혔다고 해봐야 소용없습니다.
+          </div>
+
+          <div className="st-cfg-row">
+            <span className="st-cfg-k">위험 차단분</span>
+            <label className="st-cfg-chk">
+              <input
+                type="checkbox"
+                checked={cfg.includeRiskCapped}
+                onChange={(e) => saveCfg({ includeRiskCapped: e.target.checked })}
+              />
+              위험 축 때문에 초록이 막힌 종목도 담기
+            </label>
+          </div>
+          <div className="st-cfg-note">
+            담아 두면 <b>「위험 차단이 옳았나」</b>를 나중에 물을 수 있습니다 — 막은 것들이 실제로
+            안 올랐다면 그 규칙이 일을 한 겁니다. 목록에서 <b>⚠</b> 로 표시됩니다.
+          </div>
+        </section>
+      )}
 
       {/*
         기준이 섞였으면 먼저 말한다.
@@ -227,7 +422,10 @@ function Row({
   };
 
   return (
-    <tr className={`clickable-row${e.closed ? " st-closed" : ""}`} onClick={() => onSelectStock(e.code, e.name)}>
+    <tr
+      className={`clickable-row${e.closed ? " st-closed" : ""}`}
+      onClick={() => onSelectStock(e.code, e.name)}
+    >
       <td className="sticky-col">{e.name}</td>
       <td>{e.date.slice(5)}</td>
       <td>
@@ -255,7 +453,10 @@ function Row({
           </td>
         );
       })}
-      <td className="pt-n" title={e.configHash === current ? "지금 기준과 같음" : "지금과 다른 기준"}>
+      <td
+        className="pt-n"
+        title={e.configHash === current ? "지금 기준과 같음" : "지금과 다른 기준"}
+      >
         {e.configHash === current ? "지금" : e.configHash}
       </td>
     </tr>

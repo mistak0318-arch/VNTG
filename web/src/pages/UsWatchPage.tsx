@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type UsSearchResult, type UsWatchGroup , type UsQuoteRow } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
+import { showDayQuote } from "../usSession";
 
 /**
  * 관심종목 (해외).
@@ -460,16 +461,16 @@ export function UsWatchPage() {
                             ? Math.round(s.price).toLocaleString("ko-KR")
                             : s.price.toFixed(2)}
                         {/*
-                          거래량이 0이면 아직 아무도 안 샀다는 뜻이라 그 가격은 정규장 종가 그대로다 —
-                          지금 움직임이 아니므로 값을 띄우지 않는다.
+                          주간거래 괄호는 **정규장이 열리면 지운다** — 가격이 두 개 보이면
+                          어느 쪽이 지금 값인지 헷갈린다. showDayQuote 가 그 판단을 한다.
                         */}
-                        {s.dayPrice !== null && !!s.dayVolume && (
-                          <span className="uw-day"> ({s.dayPrice.toFixed(2)})</span>
+                        {showDayQuote(s) && (
+                          <span className="uw-day"> ({s.dayPrice!.toFixed(2)})</span>
                         )}
                       </td>
                       <td className={`num tickable ${cls(s.changeRate)} ${tick(s.symbol)}`}>
                         {pct(s.changeRate)}
-                        {s.dayPrice !== null && !!s.dayVolume && (
+                        {showDayQuote(s) && (
                           <span className={`uw-day ${cls(s.dayChangeRate)}`}>
                             {" "}
                             ({pct(s.dayChangeRate)})
