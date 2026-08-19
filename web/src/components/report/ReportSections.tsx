@@ -7,9 +7,15 @@ import {
   type ScreenHit,
   type SectorFlowResult,
   type StockRow,
+  type ThemeRow,
+  type TrackedStock,
+  type KiwoomGroupStock,
+  type DartEvent,
   type UsMajorResult,
 } from "../../api";
 import { TrendLineChart } from "../TrendLineChart";
+import { useSection } from "../../useSection";
+import { useWatchGroupTiles } from "../../useWatchGroupTiles";
 
 /**
  * 데일리 리포트에 새로 들어가는 네 섹션.
@@ -226,6 +232,214 @@ export function MoneyFlowSection() {
       <div className="table-note">
         총액이 아니라 <b>어디서 빼서 어디로 넣었나</b>를 봅니다. 같은 +800억이라도 반도체에서
         빼서 방산으로 옮긴 날과 전 업종을 고르게 산 날은 완전히 다른 장입니다.
+      </div>
+    </>
+  );
+}
+
+/* ───────────────────────────────── D6·D7. 테마 MAP */
+
+/** MAP 페이지와 같은 색 규칙 — 두 화면에서 같은 등락률이 다른 색이면 안 된다 */
+function tileStyle(rate: number): React.CSSProperties {
+  const capped = Math.min(Math.abs(rate), 5) / 5; // 5% 이상은 최대 강도
+  const alpha = 0.12 + capped * 0.55;
+  if (rate > 0) return { background: `rgba(240, 85, 95, ${alpha})` };
+  if (rate < 0) return { background: `rgba(74, 139, 245, ${alpha})` };
+  return { background: "rgba(139, 150, 165, 0.12)" };
+}
+
+interface MiniTile {
+  key: string;
+  name: string;
+  rate: number;
+  sub?: string;
+}
+
+function MapMini({ tiles, empty }: { tiles: MiniTile[]; empty: string }) {
+  if (tiles.length === 0) return <div className="empty">{empty}</div>;
+  return (
+    <div className="rp-map">
+      {tiles.map((t) => (
+        <div className="rp-map-tile" style={tileStyle(t.rate)} key={t.key} title={t.name}>
+          <span className="rp-map-name">{t.name}</span>
+          <span className="rp-map-pct num">{pct(t.rate)}</span>
+          {t.sub && <span className="rp-map-sub">{t.sub}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 미국 테마 MAP.
+ *
+ * **밤사이 미국에서 무엇이 돌았나**가 오늘 국내 무엇이 도는지를 상당 부분 정한다.
+ * 반도체가 밤에 빠졌으면 아침에 국내 반도체도 빠진 채로 시작한다 — 그걸 개장 전에
+ * 알고 들어가는 것과 모르고 들어가는 것은 다르다.
+ *
+ * 내가 짜 둔 미국 관심종목 그룹을 그대로 쓴다. 남의 분류가 아니라 **내 분류**여야
+ * 국내 종목과 머릿속에서 이어진다.
+ */
+export function UsThemeMapSection() {
+  const { tiles, loading } = useWatchGroupTiles("watchUs");
+  if (loading) return <div className="page-note">불러오는 중…</div>;
+  return (
+    <>
+      <MapMini
+        tiles={tiles.map((t) => ({
+          key: t.id,
+          name: t.name,
+          rate: t.changeRate,
+          sub: `▲${t.risingCount}/▼${t.fallingCount}`,
+        }))}
+        empty="미국 관심종목 그룹이 없습니다."
+      />
+      <div className="table-note">
+        내 미국 관심종목 그룹입니다. <b>밤사이 무엇이 돌았나</b>가 오늘 국내 무엇이 도는지를
+        상당 부분 정합니다. ▲/▼ 는 그 그룹에서 오른/내린 종목 수입니다.
+      </div>
+    </>
+  );
+}
+
+/**
+ * 국내 테마 MAP.
+ *
+ * 키움 테마 순위를 쓴다. 상승·하락을 **한 판에 같이** 놓는 게 중요하다 —
+ * 오른 것만 보면 "장이 좋다"고 착각하는데, 실제로는 돈이 옮겨 다닌 것뿐인 날이 많다.
+ */
+export function KrThemeMapSection() {
+  const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 180_000);
+  const merged = (() => {
+    const m = new Map<string, ThemeRow>();
+    for (const t of [...(themes.data?.top ?? []), ...(themes.data?.bottom ?? [])]) m.set(t.code, t);
+    return [...m.values()].sort((a, b) => b.changeRate - a.changeRate);
+  })();
+
+  if (themes.loading) return <div className="page-note">불러오는 중…</div>;
+  return (
+    <>
+      <MapMini
+        tiles={merged.map((t) => ({ key: t.code, name: t.name, rate: t.changeRate }))}
+        empty="테마 데이터가 없습니다."
+      />
+      <div className="table-note">
+        키움 테마 분류입니다. 오른 것과 내린 것을 <b>한 판에 같이</b> 놓았습니다 — 오른 것만
+        보면 장이 좋다고 착각하는데, 돈이 옮겨 다닌 것뿐인 날이 많습니다.
+      </div>
+    </>
+  );
+}
+
+/* ───────────────────────────────── D8. 내 관심종목 */
+
+/**
+ * 내 종목이 오늘 어떤가.
+ *
+ * 리포트가 시장 전체를 아무리 잘 정리해도 **내가 든 종목이 어떤지**가 없으면
+ * 결국 다른 화면을 열게 된다. 아침에 한 번 훑고 판단을 시작하는 자리라면
+ * 여기서 끝나야 한다.
+ *
+ * 두 묶음을 나란히 둔다 — AI_HTS(내가 짠 것)와 키움 첫 그룹(원래 보던 것).
+ * 그리고 **오늘 공시가 뜬 종목은 따로 모은다.** 등락률만 보면 왜 움직였는지 모르는데,
+ * 공시 한 줄이 그 답인 경우가 많다.
+ */
+export function MyStocksSection({
+  onSelectStock,
+}: {
+  onSelectStock: (code: string, name: string) => void;
+}) {
+  const [mine, setMine] = useState<TrackedStock[] | null>(null);
+  const [kiwoom, setKiwoom] = useState<{ name: string; items: KiwoomGroupStock[] } | null>(null);
+  const [dart, setDart] = useState<DartEvent[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .watchlistTracking()
+      .then((r) => alive && setMine(r.items))
+      .catch(() => alive && setMine([]));
+
+    api
+      .kiwoomGroups()
+      .then(async (r) => {
+        // "첫번째 관심종목 그룹" — 키움에서 맨 위에 둔 것이 가장 자주 보는 것이다
+        const first = r.groups[0];
+        if (!first || !alive) return;
+        const { items } = await api.kiwoomGroupStocks(first.code);
+        if (alive) setKiwoom({ name: first.name, items });
+      })
+      .catch(() => undefined);
+
+    api
+      .dartToday()
+      .then((r) => alive && setDart((r.events ?? []).filter((e) => e.watched)))
+      .catch(() => undefined);
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const line = (code: string, name: string, price: number, rate: number, extra?: string) => (
+    <button className="ov-li" key={code} onClick={() => onSelectStock(code, name)}>
+      <span className="ov-nm">{name}</span>
+      <span className={`ov-px num ${cls(rate)}`}>{fmtNum(price)}</span>
+      <span className={`ov-pct num ${cls(rate)}`}>{pct(rate)}</span>
+      {extra && <span className="pt-n">{extra}</span>}
+    </button>
+  );
+
+  // 많이 움직인 것부터 — 안 움직인 종목을 위에 둘 이유가 없다
+  const sorted = [...(mine ?? [])].sort((a, b) => Math.abs(b.changeRate) - Math.abs(a.changeRate));
+
+  return (
+    <>
+      {dart.length > 0 && (
+        <div className="rp-issue">
+          <div className="rp-flow-h">오늘 공시 — 내 종목 {dart.length}건</div>
+          {dart.slice(0, 6).map((e) => (
+            <a className="rp-issue-row" href={e.url} target="_blank" rel="noreferrer" key={e.url}>
+              <b>{e.corpName}</b>
+              <span>{e.title}</span>
+              {e.amended && <em className="dart-amend">정정</em>}
+            </a>
+          ))}
+        </div>
+      )}
+
+      <div className="rp-featured">
+        <div>
+          <div className="rp-flow-h">
+            관심종목 (AI_HTS)
+            {mine && <span className="pt-n"> · {mine.length}종목</span>}
+          </div>
+          {mine === null && <div className="page-note">불러오는 중…</div>}
+          {mine?.length === 0 && <div className="empty">담은 종목이 없습니다.</div>}
+          {sorted
+            .slice(0, 12)
+            .map((s) =>
+              line(s.code, s.name, s.price, s.changeRate, `${s.passCount}/${s.passTotal}`),
+            )}
+        </div>
+
+        <div>
+          <div className="rp-flow-h">
+            키움 {kiwoom?.name ?? "관심종목"}
+            {kiwoom && <span className="pt-n"> · {kiwoom.items.length}종목</span>}
+          </div>
+          {!kiwoom && <div className="page-note">불러오는 중…</div>}
+          {kiwoom?.items
+            .slice()
+            .sort((a, b) => Math.abs(b.changeRate) - Math.abs(a.changeRate))
+            .slice(0, 12)
+            .map((s) => line(s.code, s.name, s.price, s.changeRate))}
+        </div>
+      </div>
+
+      <div className="table-note">
+        많이 <b>움직인 순</b>입니다 — 안 움직인 종목을 위에 둘 이유가 없습니다. AI_HTS 옆 숫자는
+        조건충족수입니다. 공시는 <b>내 종목 것만</b> 걸렀습니다.
       </div>
     </>
   );

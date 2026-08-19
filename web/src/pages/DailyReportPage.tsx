@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import {
   FeaturedSection,
   IndexTrendSection,
+  KrThemeMapSection,
   MoneyFlowSection,
+  MyStocksSection,
   NightFuturesSection,
+  UsThemeMapSection,
 } from "../components/report/ReportSections";
 import { notifyJobStarted } from "../components/RunningJobsBar";
 import {
@@ -539,7 +542,19 @@ export function DailyReportPage({
         <MoneyFlowSection />
       </Section>
 
-      <Section no={6} title="특징 테마 (상승 이유 포함)">
+      {/*
+        밤사이 미국에서 무엇이 돌았나가 오늘 국내 무엇이 도는지를 상당 부분 정한다.
+        반도체가 밤에 빠졌으면 아침에 국내 반도체도 빠진 채로 시작한다.
+      */}
+      <Section no={6} title="미국 테마 MAP">
+        <UsThemeMapSection />
+      </Section>
+
+      <Section no={7} title="국내 테마 MAP">
+        <KrThemeMapSection />
+      </Section>
+
+      <Section no={8} title="특징 테마 (상승 이유 포함)">
         <div className="report-lines">
           {(drivers?.themes.up ?? []).map((t) => (
             <DriverItem
@@ -572,7 +587,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 4. 강한 업종 — 이유 포함 */}
-      <Section no={7} title="강한 업종 (상승 이유 포함)">
+      <Section no={9} title="강한 업종 (상승 이유 포함)">
         <div className="report-lines">
           {(drivers?.sectors ?? []).map((sec) => (
             <DriverItem
@@ -599,7 +614,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 5. 특징 종목 */}
-      <Section no={8} title="특징 종목 (급등/급락)">
+      <Section no={10} title="특징 종목 (급등/급락)">
         <div className="report-two-col">
           <div>
             <h4 className="report-subheading positive">상승률 상위</h4>
@@ -613,7 +628,7 @@ export function DailyReportPage({
       </Section>
 
       {/* 6. 신고가/신저가 */}
-      <Section no={9} title="52주(250일) 신고가 · 신저가">
+      <Section no={11} title="52주(250일) 신고가 · 신저가">
         <div className="report-two-col">
           <div>
             <h4 className="report-subheading positive">신고가</h4>
@@ -631,11 +646,19 @@ export function DailyReportPage({
         오늘 볼 만한 종목. 세 갈래는 성격이 다르다 — 신호등은 조건을 갖춘 것,
         신고가는 이미 올라간 것, 급등은 오늘 움직인 것. 섞으면 뭘 보는지 모르게 된다.
       */}
-      <Section no={10} title="특징주">
+      {/*
+        리포트가 시장 전체를 아무리 잘 정리해도 내가 든 종목이 어떤지가 없으면
+        결국 다른 화면을 열게 된다. 여기서 끝나야 한다.
+      */}
+      <Section no={12} title="내 관심종목">
+        <MyStocksSection onSelectStock={onSelectStock} />
+      </Section>
+
+      <Section no={13} title="특징주">
         <FeaturedSection onSelectStock={onSelectStock} />
       </Section>
 
-      <Section no={11} title="주요 뉴스 클리핑">
+      <Section no={14} title="주요 뉴스 클리핑">
         <SectorNews perSector={20} onFetched={setNewsAt} />
       </Section>
 
