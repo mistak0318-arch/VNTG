@@ -68,8 +68,26 @@ export interface UsMajorRow {
   error: string | null;
 }
 
+export interface UsBoardSignal {
+  level: "green" | "yellow" | "red";
+  /** 한 줄 요약 — 화면·리포트가 그대로 쓴다 */
+  summary: string;
+  /** 무엇 때문에 그런지 — 색만 있으면 이유를 모른다 */
+  reasons: string[];
+}
+
 export interface UsMajorResult {
   rows: UsMajorRow[];
+  /**
+   * 미국 전광판 신호등.
+   *
+   * 줄마다 붙은 경고를 **한 덩어리로 굴린 것**이다. 열 줄을 눈으로 훑어서
+   * "오늘 미국이 괜찮은가"를 세는 건 사람이 할 일이 아니다.
+   *
+   * 판정을 서버에서 하는 이유는 국내 신호등과 같다 — 화면에서 굴리면 리포트가
+   * 같은 판정을 다시 짜야 하고, 두 곳이 다른 말을 하면 그때부터 무엇도 못 믿는다.
+   */
+  boardSignal: UsBoardSignal;
   /** 코스피 야간선물 — 한투에서만 온다 */
   nightFutures: UsMajorRow | null;
   /** 장단기 금리차 한 줄 — 표 어디에도 안 들어가는 값이라 따로 준다 */
@@ -249,6 +267,53 @@ function curveNote(rows: UsMajorRow[]): string | null {
   return null;
 }
 
+/**
+ * 줄 경고들을 한 신호등으로 굴린다.
+ *
+ * 규칙은 단순하게 둔다 — **하나라도 빨강이면 빨강.** 미국 쪽 위험은 다음 날 국내 개장가로
+ * 그대로 넘어오므로, 평균을 내서 희석하면 안 된다. 장단기 금리 역전도 빨강으로 친다.
+ *
+ * 좋은 쪽(ok)만 있고 나쁜 게 하나도 없을 때만 초록이다. 아무 일도 없으면 노랑이 아니라
+ * **초록**이다 — 「특별히 나쁜 게 없다」가 곧 무난하다는 뜻이기 때문이다.
+ */
+function boardSignalOf(rows: UsMajorRow[], curve: string | null): UsBoardSignal {
+  const danger = rows.filter((r) => r.signal?.level === "danger");
+  const warn = rows.filter((r) => r.signal?.level === "warn");
+  const ok = rows.filter((r) => r.signal?.level === "ok");
+
+  const reasons = [
+    ...danger.map((r) => `${r.label}: ${r.signal!.why}`),
+    ...(curve ? [curve] : []),
+    ...warn.map((r) => `${r.label}: ${r.signal!.why}`),
+  ];
+
+  if (danger.length > 0 || curve) {
+    return {
+      level: "red",
+      summary:
+        danger.length > 0
+          ? `${danger.map((r) => r.label).join("·")} — 다음 날 국내가 그대로 받는 자리`
+          : "장단기 금리 역전",
+      reasons,
+    };
+  }
+  if (warn.length > 0) {
+    return {
+      level: "yellow",
+      summary: `${warn.map((r) => r.label).join("·")} 주의`,
+      reasons,
+    };
+  }
+  return {
+    level: "green",
+    summary:
+      ok.length > 0
+        ? `${ok.map((r) => r.label).join("·")} 강세 — 눈에 띄는 위험은 없습니다`
+        : "눈에 띄는 위험은 없습니다",
+    reasons: ok.map((r) => `${r.label}: ${r.signal!.why}`),
+  };
+}
+
 /** 60초면 충분하다 — 미국 현물은 낮에 아예 안 움직인다 */
 const TTL_MS = 60_000;
 let cache: { at: number; data: UsMajorResult } | null = null;
@@ -299,6 +364,7 @@ export async function usMajorIndices(force = false): Promise<UsMajorResult> {
     rows,
     nightFutures: night,
     curveNote: curveNote(rows),
+    boardSignal: boardSignalOf(rows, curveNote(rows)),
     fetchedAt: Date.now(),
   };
   cache = { at: Date.now(), data };

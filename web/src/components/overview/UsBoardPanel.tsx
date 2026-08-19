@@ -3,6 +3,7 @@ import {
   api,
   fmtNum,
   type RateRow,
+  type UsBoardSignal,
   type UsMajorResult,
   type UsQuoteRow,
   type UsWatchGroup,
@@ -51,6 +52,12 @@ export function UsBoardPanel() {
 
   return (
     <div className="usb">
+      {/*
+        신호등이 맨 위다. 열 줄을 훑어서 「오늘 미국이 괜찮은가」를 세는 건 사람이 할 일이 아니다.
+        판정은 서버가 한다 — 화면에서 굴리면 리포트가 같은 판정을 다시 짜야 한다.
+      */}
+      {usMajor.data?.boardSignal && <BoardLight sig={usMajor.data.boardSignal} />}
+
       {/* ---------------- 지수 ---------------- */}
       <section className="ov-card">
         <div className="ov-card-h">
@@ -386,5 +393,33 @@ function UsBoardRow({
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * 전광판 맨 위 신호등.
+ *
+ * 색 하나로 끝내지 않고 **왜 그런지**를 같이 낸다. 「빨강」만 있으면 무엇을 봐야 할지 모른다.
+ */
+function BoardLight({ sig }: { sig: UsBoardSignal }) {
+  const label = sig.level === "red" ? "주의" : sig.level === "yellow" ? "보통" : "무난";
+  return (
+    <section className={`ov-card usb-light ${sig.level}`}>
+      <div className="ov-card-b usb-light-b">
+        <span className={`sig-dot big ${sig.level}`} />
+        <span className="usb-light-lv">{label}</span>
+        <span className="usb-light-sum">{sig.summary}</span>
+        {sig.reasons.length > 0 && (
+          <details className="usb-light-why">
+            <summary>이유 {sig.reasons.length}</summary>
+            <ul>
+              {sig.reasons.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
+    </section>
   );
 }

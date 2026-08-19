@@ -749,7 +749,15 @@ export interface UsMajorRow {
   error: string | null;
 }
 
+export interface UsBoardSignal {
+  level: "green" | "yellow" | "red";
+  summary: string;
+  reasons: string[];
+}
+
 export interface UsMajorResult {
+  /** 줄 경고들을 한 덩어리로 굴린 판정. 판정은 서버에서만 한다 */
+  boardSignal: UsBoardSignal;
   rows: UsMajorRow[];
   /** 코스피 야간선물 — 이것만 지금 움직인다 */
   nightFutures: UsMajorRow | null;

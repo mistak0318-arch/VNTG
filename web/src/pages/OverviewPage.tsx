@@ -20,6 +20,7 @@ import { ConstituentSheet, type ConstituentTarget } from "../components/overview
 import { FlowBars } from "../components/overview/FlowBars";
 import { FlowIntradayChart } from "../components/overview/FlowIntradayChart";
 import { IndexDetailSheet } from "../components/overview/IndexDetailSheet";
+import { MarketSignalPanel } from "../components/MarketSignalPanel";
 import { UsBoardPanel } from "../components/overview/UsBoardPanel";
 import { OverviewCard } from "../components/overview/OverviewCard";
 import { RankList, SegmentToggle } from "../components/overview/RankList";
@@ -163,7 +164,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
       <div className="ov-subtabs">
         {(wide
           ? ([
-              { key: "summary", label: "국내" },
+              { key: "summary", label: "국내 전광판" },
               { key: "us", label: "미국 전광판" },
             ] as { key: SubTab; label: string }[])
           : SUBTABS
@@ -185,6 +186,17 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           국내 카드 사이에 섞으면 「미국장 도는 동안 보는 자리」라는 뜻이 사라진다.
         */}
         {sub === "us" && <UsBoardPanel />}
+
+        {/*
+          국내 시장 신호등도 맨 위다. 미국 전광판과 같은 자리에 같은 모양으로 둔다 —
+          두 판을 오가며 볼 때 눈이 같은 곳을 찾게 해야 한다.
+          좁은 화면에서는 요약 탭에만 띄운다(수급·순위 탭에서는 자리만 먹는다).
+        */}
+        {sub !== "us" && (wide || sub === "summary") && (
+          <div className="ov-span-all">
+            <MarketSignalPanel />
+          </div>
+        )}
 
         {show("summary") && (
           <OverviewCard title="국내 지수" updatedAt={indices.updatedAt} loading={indices.loading} error={indices.error}>

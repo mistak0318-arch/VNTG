@@ -94,8 +94,20 @@ export class KiwoomClient {
     body: Record<string, unknown> = {},
     opts: { contYn?: string; nextKey?: string } = {},
   ): Promise<{ data: T; contYn: string; nextKey: string }> {
-    const token = await this.getToken();
+    let token = await this.getToken();
     const maxRetries = 6;
+    /*
+     * 토큰을 다시 받아 본 횟수.
+     *
+     * **키움은 앱키 하나에 토큰 하나만 유효하다.** 어딘가에서 같은 앱키로 토큰을 새로 받으면
+     * 이쪽이 들고 있던 토큰이 소리 없이 죽는다 — 그때 `8005 Token이 유효하지 않습니다` 가 온다.
+     * 예전엔 이걸 다른 오류와 똑같이 곧바로 던졌다. 그러면 **토큰이 자연 만료될 때까지
+     * 모든 호출이 실패한다**(최대 하루). 서버를 다시 켜야만 풀렸다.
+     *
+     * 한 번만 다시 받아 본다. 두 번 이상 하면 다른 쪽과 서로 토큰을 뺏는 핑퐁이 된다 —
+     * 그건 코드로 풀 문제가 아니라 앱키를 나눠 쓰는 것 자체가 문제다.
+     */
+    let reissued = 0;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const res = await fetch(`${this.baseUrl}${resourceUrl}`, {
@@ -120,8 +132,8 @@ export class KiwoomClient {
       }
 
       if (!res.ok) {
-        void recordApiCall("kiwoom", apiId, "failed");
         const text = await res.text();
+        void recordApiCall("kiwoom", apiId, "failed", undefined, `HTTP ${res.status}`);
         throw new Error(`키움 API 호출 실패 (${apiId}): HTTP ${res.status} ${text}`);
       }
 
@@ -136,8 +148,21 @@ export class KiwoomClient {
           continue;
         }
       }
+      // 토큰이 죽었다 — 버리고 새로 받아 한 번 더 해 본다
+      if (returnCode === 8005 && reissued === 0) {
+        reissued += 1;
+        void recordApiCall("kiwoom", apiId, "failed", undefined, "8005 토큰 무효 — 재발급");
+        console.error(
+          "[kiwoom] 토큰이 무효가 됐습니다(8005). 다시 받습니다. " +
+            "같은 앱키로 다른 곳에서 토큰을 받으면 이쪽이 죽습니다 — 개발PC와 미니PC가 같은 키를 쓰고 있지 않은지 확인하세요.",
+        );
+        this.tokenState = null;
+        token = await this.getToken();
+        continue;
+      }
+
       if (returnCode !== 0) {
-        void recordApiCall("kiwoom", apiId, "failed");
+        void recordApiCall("kiwoom", apiId, "failed", undefined, `${returnCode} ${data.return_msg ?? ""}`);
         throw new KiwoomApiError(returnCode, String(data.return_msg ?? "알 수 없는 오류"), data);
       }
 
