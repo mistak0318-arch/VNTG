@@ -4559,3 +4559,74 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .rp-flow th.rp-flow-sum { color: var(--text); }
 .rp-flow-bars { margin-top: 10px; }
 .rp-flow-bars > summary { font-size: 0.7333rem; color: var(--muted); cursor: pointer; }
+
+/* 지수 수급 합산 — 쌓인 날이 모자란 줄은 흐리게 둔다 */
+.idx-sum-short { opacity: .45; }
+
+/* ==================================================================
+   미국 전광판
+   ------------------------------------------------------------------
+   국내 시황 카드들 사이에 흩어져 있던 미국 값을 한 화면에 세로로 쌓는다 —
+   지수 → 국채금리 → 야간선물 → 관심종목.
+   ================================================================== */
+
+.usb { display: flex; flex-direction: column; gap: 12px; }
+.usb .ov-card { margin: 0; }
+
+/* 지수 상자 — 국내 지수 카드와 같은 모양 */
+.usb-boxes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (min-width: 720px) { .usb-boxes { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.usb-box {
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+/* 눈여겨볼 줄은 테두리로 — 배경을 칠하면 숫자가 안 읽힌다 */
+.usb-box.sig-danger { border-color: rgba(255,92,92,.5); }
+.usb-box.sig-warn { border-color: rgba(245,197,66,.5); }
+.usb-box.sig-ok { border-color: rgba(53,196,106,.5); }
+
+.usb-box-nm { font-size: 0.6667rem; color: var(--muted); font-weight: 700; }
+.usb-box-px { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.usb-box-chg { font-size: 0.7333rem; font-variant-numeric: tabular-nums; }
+.usb-box-why { font-size: 0.6667rem; color: var(--muted); margin-top: 4px; }
+
+.usb-curve { margin-top: 8px; font-size: 0.7333rem; color: var(--red); }
+
+/* 금리 */
+.usb-rates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+@media (min-width: 720px) { .usb-rates { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.usb-rate {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 8px 10px; border-radius: 8px; background: var(--panel-2); min-width: 0;
+}
+.usb-rate-nm { font-size: 0.6667rem; color: var(--muted); }
+.usb-rate-v { font-size: 0.9333rem; font-variant-numeric: tabular-nums; }
+.usb-rate-d { font-size: 0.6667rem; font-variant-numeric: tabular-nums; }
+
+/* 야간선물 */
+.usb-night { display: flex; align-items: baseline; gap: 10px; }
+.usb-night-px { font-size: 1.4667rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.usb-night-chg { font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+
+/* 관심종목 */
+.usb-add { margin: 8px 0; }
+.usb-list { display: flex; flex-direction: column; }
+.usb-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 4px; border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+.usb-move { display: flex; flex-direction: column; gap: 1px; }
+.usb-move .gt-move { padding: 1px 4px; line-height: 1.1; }
+.usb-sym { flex: 1 1 auto; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usb-nm { margin-left: 6px; font-size: 0.6667rem; color: var(--muted); font-weight: 400; }
+.usb-px { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.usb-rt { flex: 0 0 auto; min-width: 5.5em; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }

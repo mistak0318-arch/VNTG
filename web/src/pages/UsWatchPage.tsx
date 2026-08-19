@@ -145,18 +145,29 @@ export function UsWatchPage() {
    * 숫자만 조용히 바뀌면 **바뀐 줄을 놓친다.** 111종목이 한 화면에 있으면 더 그렇다.
    * 오른 것은 붉게, 내린 것은 푸르게 0.7초.
    */
-  const prevPrices = useRef<Map<string, number>>(new Map());
+  /*
+   * **화면에 보이는 등락률**을 기준으로 잡는다.
+   *
+   * 예전엔 가격이 조금이라도 바뀌면 깜빡였고, 그것도 현재가·등락률·원화·편입대비
+   * **네 칸이 한꺼번에** 번쩍였다. 111종목이면 화면 절반이 매 갱신마다 물결쳤다 —
+   * 무엇이 바뀌었는지 알리려던 것이 오히려 아무것도 못 읽게 만들었다.
+   *
+   * 이제 소수 둘째 자리까지 **찍히는 값이 달라졌을 때만**, **등락률 칸에만** 붙인다.
+   * 눈에 안 보이는 자릿수가 움직인 것으로 깜빡이면 그건 거짓 신호다.
+   */
+  const prevRates = useRef<Map<string, string>>(new Map());
   const [ticks, setTicks] = useState<Map<string, "up" | "down">>(new Map());
   useEffect(() => {
     const next = new Map<string, "up" | "down">();
     for (const g of groups) {
       for (const s of g.stocks) {
-        if (s.price === null) continue;
-        const before = prevPrices.current.get(s.symbol);
-        if (before !== undefined && before !== s.price) {
-          next.set(s.symbol, s.price > before ? "up" : "down");
+        if (s.changeRate === null) continue;
+        const shown = s.changeRate.toFixed(2);
+        const before = prevRates.current.get(s.symbol);
+        if (before !== undefined && before !== shown) {
+          next.set(s.symbol, Number(shown) > Number(before) ? "up" : "down");
         }
-        prevPrices.current.set(s.symbol, s.price);
+        prevRates.current.set(s.symbol, shown);
       }
     }
     if (next.size === 0) return;
@@ -165,7 +176,7 @@ export function UsWatchPage() {
     return () => clearTimeout(t);
   }, [groups]);
 
-  /** 이 종목이 방금 움직였나 — 값이 딸린 칸마다 붙인다 */
+  /** 이 종목의 등락률이 방금 바뀌었나 — **등락률 칸에만** 붙인다 */
   const tick = (symbol: string) => ticks.get(symbol) ?? "";
 
   /** 한 칸 위·아래로. 서버에 새 순서를 통째로 보낸다 */
@@ -442,7 +453,7 @@ export function UsWatchPage() {
                         움직인 칸은 다 같이 반짝여야 한 사건으로 읽힌다.
                       */}
                       {/* 엔·원처럼 소수점을 안 쓰는 통화는 반올림해서 보여 준다 */}
-                      <td className={`num tickable ${tick(s.symbol)}`} title={s.currency ?? ""}>
+                      <td className="num" title={s.currency ?? ""}>
                         {s.price === null
                           ? "-"
                           : s.currency === "JPY" || s.currency === "VND" || s.currency === "KRW"
@@ -465,7 +476,7 @@ export function UsWatchPage() {
                           </span>
                         )}
                       </td>
-                      <td className={`num pt-n tickable ${tick(s.symbol)}`}>
+                      <td className="num pt-n">
                         {s.wonPrice == null ? "-" : s.wonPrice.toLocaleString("ko-KR")}
                       </td>
                       {/* 52주 구간 위치를 막대로 — 신고가 근처인지 바닥인지가 숫자보다 빨리 읽힌다 */}
@@ -486,7 +497,7 @@ export function UsWatchPage() {
                         {s.power == null ? "-" : s.power.toFixed(0)}
                       </td>
                       <td className="num">{s.addedPrice === null ? "-" : s.addedPrice.toFixed(2)}</td>
-                      <td className={`num tickable ${cls(s.returnRate)} ${tick(s.symbol)}`}>
+                      <td className={`num ${cls(s.returnRate)}`}>
                         {pct(s.returnRate)}
                       </td>
                       {editing && (

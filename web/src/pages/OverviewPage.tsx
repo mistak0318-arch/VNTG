@@ -20,6 +20,7 @@ import { ConstituentSheet, type ConstituentTarget } from "../components/overview
 import { FlowBars } from "../components/overview/FlowBars";
 import { FlowIntradayChart } from "../components/overview/FlowIntradayChart";
 import { IndexDetailSheet } from "../components/overview/IndexDetailSheet";
+import { UsBoardPanel } from "../components/overview/UsBoardPanel";
 import { OverviewCard } from "../components/overview/OverviewCard";
 import { RankList, SegmentToggle } from "../components/overview/RankList";
 import { RefreshBar } from "../components/RefreshBar";
@@ -27,12 +28,14 @@ import { Sparkline } from "../components/overview/Sparkline";
 import { useSection } from "../useSection";
 import { WatchStar } from "../useWatchedCodes";
 
-type SubTab = "summary" | "flow" | "rank";
+type SubTab = "summary" | "flow" | "rank" | "us";
 
 const SUBTABS: { key: SubTab; label: string }[] = [
   { key: "summary", label: "요약" },
   { key: "flow", label: "수급" },
   { key: "rank", label: "순위" },
+  // 미국 전광판 — 미국장이 열려 있는 동안 보는 자리
+  { key: "us", label: "미국" },
 ];
 
 function signCls(v: number): string {
@@ -113,7 +116,12 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  const show = (sec: SubTab) => wide || sub === sec;
+  /*
+   * 어떤 카드를 보일지.
+   * 넓은 화면에서는 국내 카드가 한꺼번에 뜬다. 다만 **미국 전광판을 보고 있을 때는
+   * 국내 카드를 전부 내린다** — 섞어 두면 「미국장 도는 동안 보는 자리」라는 뜻이 사라진다.
+   */
+  const show = (sec: SubTab) => sub !== "us" && (wide || sub === sec);
 
   const idx = indices.data ?? [];
   const kospiCard = idx.find((i) => i.code === "001");
@@ -145,22 +153,39 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         </span>
       </RefreshBar>
 
-      {!wide && (
-        <div className="ov-subtabs">
-          {SUBTABS.map((t) => (
-            <button
-              key={t.key}
-              className={`ov-subtab${sub === t.key ? " on" : ""}`}
-              onClick={() => setSub(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {/*
+        탭 바.
+        좁은 화면에서는 넷을 다 보여 카드를 나눠 본다.
+        **넓은 화면에서는 국내/미국 둘뿐이다** — 거기서는 국내 카드가 어차피 한꺼번에
+        뜨므로 요약·수급·순위를 나누는 게 뜻이 없고, 미국 전광판만 갈아 끼우면 된다.
+        예전엔 넓은 화면에서 탭 바를 통째로 숨겼는데, 그러면 미국으로 갈 방법이 없다.
+      */}
+      <div className="ov-subtabs">
+        {(wide
+          ? ([
+              { key: "summary", label: "국내" },
+              { key: "us", label: "미국 전광판" },
+            ] as { key: SubTab; label: string }[])
+          : SUBTABS
+        ).map((t) => (
+          <button
+            key={t.key}
+            className={`ov-subtab${sub === t.key ? " on" : ""}`}
+            onClick={() => setSub(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
       <div className="ov-grid">
         {/* ---------------- 요약 ---------------- */}
+        {/*
+          미국 전광판. 다른 탭과 달리 **넓은 화면에서도 따로 둔다**(`show` 를 안 쓴다) —
+          국내 카드 사이에 섞으면 「미국장 도는 동안 보는 자리」라는 뜻이 사라진다.
+        */}
+        {sub === "us" && <UsBoardPanel />}
+
         {show("summary") && (
           <OverviewCard title="국내 지수" updatedAt={indices.updatedAt} loading={indices.loading} error={indices.error}>
             <div className="ov-idx-grid">
