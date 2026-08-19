@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { usMajorIndices } from "./usMajor.js";
 import { evaluateThemes, toCustomThemeDigest } from "./customThemes.js";
 import { getTradeStats, toTradeDigest } from "./tradeStats.js";
 import { peekWebResearch, runWebResearch, toResearchDigest } from "./webResearch.js";
@@ -151,6 +152,37 @@ export async function buildDigest(
     lines.push(
       global.filter((g) => g.changeRate !== null).map((g) => `${g.label} ${pct(g.changeRate as number)}`).join(", "),
     );
+  }
+
+  /*
+   * 밤사이 미국 마감과 코스피 야간선물.
+   *
+   * 위 [글로벌] 은 **지수선물**이라 우리 시간 낮에도 움직인다. 그런데 조간에 답해야 할
+   * 질문은 "밤사이 무슨 일이 있었나"이고, 그 답은 **미국 현물 마감값**과
+   * **코스피 야간선물**이다 — 야간선물은 그 결과를 한국 지수로 환산해 준 값이라
+   * 오늘 개장가의 예고편이다. 둘 다 지금까지 요약 입력에 없었다.
+   *
+   * 몇 줄이라 토큰 부담이 거의 없다.
+   */
+  try {
+    const um = await usMajorIndices();
+    if (um.nightFutures) {
+      lines.push("\n[코스피 야간선물 — 미국장 시간대에 움직인 값. 오늘 개장가의 예고편]");
+      lines.push(
+        `${um.nightFutures.price?.toFixed(2)} (${pct(um.nightFutures.changeRate ?? 0)})`,
+      );
+    }
+    const rows = um.rows.filter((r) => r.price !== null);
+    if (rows.length > 0) {
+      lines.push("\n[미국 전일 마감 — 현물 지수·금리·유가]");
+      lines.push(
+        rows
+          .map((r) => `${r.label} ${r.price}${r.isRate ? "%" : ""} (${pct(r.changeRate ?? 0)})`)
+          .join(", "),
+      );
+    }
+  } catch {
+    // 이 블록이 없어도 요약은 나온다
   }
 
   const flow = (flowSec?.data ?? null) as MarketFlow | null;

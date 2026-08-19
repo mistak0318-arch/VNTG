@@ -281,7 +281,10 @@
       "Bash(curl -s --max-time 60 \"http://localhost:4000/api/overview/section/topTraders\")",
       "Bash(curl -s --max-time 40 http://localhost:4000/api/channels -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/42e00671-3282-40e1-a05a-90181fec3c36/scratchpad/ch.json\")",
       "Bash(cd \"K:/0000 3740 프로젝트 \\(경제적자유\\)/00. 주식/2 AI 프롬프트/260810_클로드작업/server/src\" && cat data/../channelConfig.ts 2>/dev/null | head -30 || sed -n '1,40p' channelConfig.ts)",
-      "Bash(grep -n \"replace\\(/\\\\^https\" components/PickAutoPanel.tsx)"
+      "Bash(grep -n \"replace\\(/\\\\^https\" components/PickAutoPanel.tsx)",
+      "Bash(grep -n \"lines.push\\\\|// \\\\|/\\\\*\")",
+      "Bash(grep -n 'lines.push\\(\"\\\\|lines.push\\(`\\\\[')",
+      "Bash(curl -s --max-time 60 \"http://localhost:4000/api/ai/usage?days=14\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/42e00671-3282-40e1-a05a-90181fec3c36/scratchpad/u.json\")"
     ]
   }
 }
