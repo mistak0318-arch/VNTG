@@ -1,57 +1,74 @@
 @echo off
-REM ë¯¸ë‹ˆPC ì „ìš© â€” ìµœì‹  ì½”ë“œë¥¼ ë°›ì•„ ë¹Œë“œí•˜ê³  ì„œë¹„ìŠ¤ë¥¼ ìž¬ì‹œìž‘í•œë‹¤.
-REM ë©”ì¸ PCì—ì„œ git push í•œ ë’¤ ë¯¸ë‹ˆPCì—ì„œ ì´ íŒŒì¼ì„ ë”ë¸”í´ë¦­í•˜ë©´ ë.
+REM ¹Ì´ÏPC Àü¿ë - ÃÖ½Å ÄÚµå¸¦ ¹Þ¾Æ ºôµåÇÏ°í ¼­ºñ½º¸¦ Àç½ÃÀÛÇÑ´Ù.
+REM ¸ÞÀÎ PC¿¡¼­ git push ÇÑ µÚ ¹Ì´ÏPC¿¡¼­ ÀÌ ÆÄÀÏÀ» ´õºíÅ¬¸¯ÇÏ¸é ³¡.
 REM
-REM [0/5] ê°€ ìƒˆë¡œ ë¶™ì—ˆë‹¤. watchlist / journal / paperTrades ëŠ” git ì¶”ì ì—ì„œ ëºìœ¼ë¯€ë¡œ
-REM       ì´ì œ ì›ê²©ì— ë°±ì—…ë³¸ì´ ì—†ë‹¤ â€” ë””ìŠ¤í¬ê°€ ì£½ìœ¼ë©´ ê·¸ëŒ€ë¡œ ì‚¬ë¼ì§„ë‹¤.
-REM       ê·¸ëž˜ì„œ pull í•˜ê¸° ì „ì— ë‚ ì§œë³„ë¡œ ë³µì‚¬í•´ ë‘”ë‹¤. 30ì¼ì¹˜ë§Œ ë‚¨ê¸´ë‹¤.
+REM ÀÌ ÆÄÀÏÀº docs\ ¾È¿¡ ÀÖÁö¸¸ ÀúÀå¼Ò »Ñ¸®¿¡¼­ µ¹¾Æ¾ß ÇÑ´Ù. ±×·¡¼­ %~dp0.. ·Î ¿Ã¶ó°£´Ù.
+REM ¿¹Àü¿£ %~dp0 ¸¸ ½á¼­ docs ¾È¿¡¼­ package.json À» Ã£´Ù°¡ Á×¾ú´Ù.
+REM
+REM ÀÌ ÆÄÀÏÀº cp949(ANSI ÇÑ±¹¾î) + CRLF ·Î ÀúÀåÇÑ´Ù. UTF-8 ·Î µÎ¸é cmd °¡
+REM ÇÑ±ÛÀ» ±ú¼­ ÀÐ°í, LF ·Î µÎ¸é °ýÈ£ ºí·Ï ¾ÈÀÇ ÁÙÀ» Àß¸ø ²÷´Â´Ù. µÑ ´Ù °Þ¾ú´Ù.
+REM
+REM [0/5] ¹é¾÷: µ¥ÀÌÅÍ ÆÄÀÏÀº git ÃßÀû¿¡¼­ »°À¸¹Ç·Î ¿ø°Ý¿¡ »çº»ÀÌ ¾ø´Ù.
+REM       µð½ºÅ©°¡ Á×À¸¸é ±×´ë·Î »ç¶óÁø´Ù. ±×·¡¼­ pull Àü¿¡ ³¯Â¥º°·Î º¹»çÇØ µÐ´Ù.
 setlocal enabledelayedexpansion
 set "PATH=C:\Program Files\nodejs;C:\Program Files\Git\cmd;%PATH%"
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
-echo [0/5] ë°ì´í„° ë°±ì—…...
-for /f "tokens=1-3 delims=-/ " %%a in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "TODAY=%%a"
+REM ¿©±â¼­ºÎÅÍ »ó´ë°æ·Î´Â ÀüºÎ ÀúÀå¼Ò »Ñ¸® ±âÁØÀÌ´Ù. »Ñ¸®°¡ ¸Â´ÂÁö È®ÀÎÇÏ°í ½ÃÀÛÇÑ´Ù.
+if not exist "server\package.json" (
+  echo *** ÀúÀå¼Ò »Ñ¸®¸¦ ¸ø Ã£¾Ò½À´Ï´Ù: %CD%
+  echo *** ÀÌ ÆÄÀÏÀº vntg-hts\docs\ ¾È¿¡ ÀÖ¾î¾ß ÇÕ´Ï´Ù.
+  pause
+  exit /b 1
+)
+
+echo [0/5] µ¥ÀÌÅÍ ¹é¾÷...
+REM delims ¸¦ ºñ¿ö ³¯Â¥ ÇÑ ÁÙÀ» ÅëÂ°·Î ¹Þ´Â´Ù.
+REM ¿¹Àü¿£ delims=- ·Î ÂÉ°³°í Ã¹ Åä¸·¸¸ ½á¼­ Æú´õ ÀÌ¸§ÀÌ ÇØ¸¶´Ù ÇÏ³ª¿´´Ù.
+for /f "delims=" %%a in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "TODAY=%%a"
 set "BK=data-backup\%TODAY%"
 if not exist "%BK%" mkdir "%BK%" >nul 2>&1
 copy /Y "server\data\*.json" "%BK%\" >nul 2>&1
-echo       %BK% ì— ì €ìž¥í–ˆìŠµë‹ˆë‹¤.
-REM 30ì¼ë³´ë‹¤ ì˜¤ëž˜ëœ ë°±ì—… í´ë”ëŠ” ì¹˜ìš´ë‹¤
+echo       %BK% ¿¡ ÀúÀåÇß½À´Ï´Ù.
+REM 30ÀÏº¸´Ù ¿À·¡µÈ ¹é¾÷ Æú´õ´Â Ä¡¿î´Ù
 forfiles /p data-backup /d -30 /c "cmd /c if @isdir==TRUE rd /s /q @path" >nul 2>&1
 
-echo [1/5] ìµœì‹  ì½”ë“œ ë°›ëŠ” ì¤‘...
+echo [1/5] ÃÖ½Å ÄÚµå ¹Þ´Â Áß...
 git pull || goto :fail
 
-REM pull ì´ ë°ì´í„° íŒŒì¼ì„ ì§€ì› ìœ¼ë©´ ë°©ê¸ˆ ë°±ì—…í•œ ê²ƒìœ¼ë¡œ ë˜ì‚´ë¦°ë‹¤.
-REM ì¶”ì  í•´ì œ ì»¤ë°‹ì„ ì²˜ìŒ ë°›ì„ ë•Œ ê¼­ í•„ìš”í•˜ê³ , ê·¸ ë’¤ì—ëŠ” ì•„ë¬´ ì¼ë„ í•˜ì§€ ì•ŠëŠ”ë‹¤.
-for %%F in (watchlist watchGroups journal paperTrades usWatchlist) do (
+REM pull ÀÌ µ¥ÀÌÅÍ ÆÄÀÏÀ» Áö¿üÀ¸¸é ¹æ±Ý ¹é¾÷ÇÑ °ÍÀ¸·Î µÇ»ì¸°´Ù.
+REM ÃßÀû ÇØÁ¦ Ä¿¹ÔÀ» Ã³À½ ¹ÞÀ» ¶§ ²À ÇÊ¿äÇÏ°í, ±× µÚ¿¡´Â ¾Æ¹« ÀÏµµ ÇÏÁö ¾Ê´Â´Ù.
+for %%F in (watchlist watchGroups journal paperTrades usWatchlist calendar stockNotes) do (
   if not exist "server\data\%%F.json" (
     if exist "%BK%\%%F.json" (
       copy /Y "%BK%\%%F.json" "server\data\%%F.json" >nul
-      echo       ë³µì›: %%F.json
+      echo       º¹¿ø: %%F.json
     )
   )
 )
 
-REM í•´ì™¸ ê´€ì‹¬ì¢…ëª©ì´ ì•„ì§ í•œ ë²ˆë„ ì—†ìœ¼ë©´ ì”¨ì•—ì„ ê¹ë‹¤.
-REM ì‹¤ì œë¡œ ì“°ëŠ” usWatchlist.json ì€ git ìœ¼ë¡œ ì•ˆ ë³´ë‚¸ë‹¤ â€” ì–‘ìª½ PC ê°€ ê³ ì¹˜ëŠ” íŒŒì¼ì´ë¼
-REM pull ì´ ë§‰ížˆê¸° ë•Œë¬¸ì´ë‹¤. ëŒ€ì‹  usWatchlist.seed.json ì„ ë³´ë‚´ê³  ì—¬ê¸°ì„œ í•œ ë²ˆë§Œ ë³µì‚¬í•œë‹¤.
-REM ê·¸ ë’¤ë¡œëŠ” ì´ PC ê²ƒì„ ê·¸ëŒ€ë¡œ ë‘”ë‹¤.
-REM íŒŒì¼ì´ ì—†ìœ¼ë©´ ê·¸ëƒ¥ ê¹ë‹¤.
-if not exist "server\data\usWatchlist.json" (
-  if exist "server\data\usWatchlist.seed.json" (
-    copy /Y "server\data\usWatchlist.seed.json" "server\data\usWatchlist.json" >nul
-    echo       í•´ì™¸ ê´€ì‹¬ì¢…ëª© ì”¨ì•—ì„ ê¹”ì•˜ìŠµë‹ˆë‹¤.
+REM ¾ÆÁ÷ ÇÑ ¹øµµ ¾ø´Â ÆÄÀÏÀÌ¸é ¾¾¾ÑÀ» ±ñ´Ù.
+REM ½ÇÁ¦·Î ¾²´Â ÆÄÀÏÀº git À¸·Î ¾È º¸³½´Ù - ¾çÂÊ PC °¡ °íÄ¡´Â ÆÄÀÏÀÌ¶ó pull ÀÌ ¸·Èù´Ù.
+REM ´ë½Å .seed.json À» º¸³»°í ¿©±â¼­ ÃÖÃÊ 1È¸¸¸ º¹»çÇÑ´Ù. ±× µÚ·Î´Â ÀÌ PC °ÍÀ» ±×´ë·Î µÐ´Ù.
+for %%F in (usWatchlist calendar stockNotes) do (
+  if not exist "server\data\%%F.json" (
+    if exist "server\data\%%F.seed.json" (
+      copy /Y "server\data\%%F.seed.json" "server\data\%%F.json" >nul
+      echo       ¾¾¾Ñ ¼³Ä¡: %%F.json
+    )
   )
-) else (
-  REM ì´ë¯¸ ìžˆìœ¼ë©´ ë®ì–´ì“°ì§€ ì•ŠëŠ”ë‹¤ â€” ì´ PC ì—ì„œ íŽ¸ì§‘í•œ ê²ƒì¼ ìˆ˜ ìžˆë‹¤.
-  REM ë‹¤ë§Œ **ì¡°ìš©ížˆ ë„˜ì–´ê°€ì§€ëŠ” ì•ŠëŠ”ë‹¤.** ì˜ˆì „ì—” ê·¸ëž˜ì„œ ìƒˆ ëª©ë¡ì´ ì•ˆ ë„˜ì–´ì˜¨ ê±¸
-  REM í•œì°¸ ëª¨ë¥´ê³  ìžˆì—ˆë‹¤. ì”¨ì•—ê³¼ ë‹¤ë¥´ë©´ ì–´ë–»ê²Œ ê°€ì ¸ì˜¤ëŠ”ì§€ ì•Œë ¤ ì¤€ë‹¤.
+)
+
+REM ÇØ¿Ü °ü½ÉÁ¾¸ñ¸¸Àº ÀÌ¹Ì ÀÖ¾îµµ Á¶¿ëÈ÷ ³Ñ¾î°¡Áö ¾Ê´Â´Ù. ¿¹Àü¿¡ ±×·¡¼­
+REM »õ ¸ñ·ÏÀÌ ¾È ³Ñ¾î¿Â °É ÇÑÂü ¸ð¸£°í ÀÖ¾ú´Ù. ¾¾¾Ñ°ú ´Ù¸£¸é °¡Á®¿À´Â ¹ýÀ» ¾Ë·Á ÁØ´Ù.
+REM Ä¶¸°´õ¿Í Á¾¸ñ¸Þ¸ð´Â ¹Ì´ÏPC °¡ ½º½º·Î Ã¤¿ì´Â ÆÄÀÏÀÌ¶ó ¾Ë¸®Áö ¾Ê´Â´Ù.
+if exist "server\data\usWatchlist.seed.json" (
   fc /b "server\data\usWatchlist.json" "server\data\usWatchlist.seed.json" >nul 2>&1
   if errorlevel 1 (
     echo.
-    echo       [ì•Œë¦¼] í•´ì™¸ ê´€ì‹¬ì¢…ëª©ì´ ì”¨ì•—ê³¼ ë‹¤ë¦…ë‹ˆë‹¤.
-    echo              ì´ PC ì—ì„œ íŽ¸ì§‘í•œ ê²ƒì´ë©´ ê·¸ëŒ€ë¡œ ë‘ì‹œë©´ ë©ë‹ˆë‹¤.
-    echo              ë©”ì¸PC ëª©ë¡ìœ¼ë¡œ ë§žì¶”ë ¤ë©´ ì•„ëž˜ë¥¼ ì‹¤í–‰í•˜ì„¸ìš”:
+    echo       [¾Ë¸²] ÇØ¿Ü °ü½ÉÁ¾¸ñÀÌ ¾¾¾Ñ°ú ´Ù¸¨´Ï´Ù.
+    echo              ÀÌ PC ¿¡¼­ ÆíÁýÇÑ °ÍÀÌ¸é ±×´ë·Î µÎ½Ã¸é µË´Ï´Ù.
+    echo              ¸ÞÀÎPC ¸ñ·ÏÀ¸·Î ¸ÂÃß·Á¸é ¾Æ·¡¸¦ ½ÇÇàÇÏ¼¼¿ä:
     echo.
     echo              copy /Y server\data\usWatchlist.json server\data\usWatchlist.bak.json
     echo              copy /Y server\data\usWatchlist.seed.json server\data\usWatchlist.json
@@ -59,35 +76,35 @@ if not exist "server\data\usWatchlist.json" (
   )
 )
 
-echo [2/5] ì„œë²„ ë¹Œë“œ...
-cd server
+echo [2/5] ¼­¹ö ºôµå...
+pushd server
 call npm install --no-audit --no-fund || goto :fail
 call npm run build || goto :fail
-cd ..
+popd
 
-echo [3/5] ì›¹ ë¹Œë“œ...
-cd web
+echo [3/5] À¥ ºôµå...
+pushd web
 call npm install --no-audit --no-fund || goto :fail
 call npm run build || goto :fail
-cd ..
+popd
 
-echo [4/5] ì„œë¹„ìŠ¤ ìž¬ì‹œìž‘...
+echo [4/5] ¼­ºñ½º Àç½ÃÀÛ...
 schtasks /End /TN "VNTG HTS" >nul 2>&1
 schtasks /Run /TN "VNTG HTS" >nul 2>&1
 
-echo [5/5] í™•ì¸...
+echo [5/5] È®ÀÎ...
 timeout /t 5 /nobreak >nul
 curl -s http://localhost:4000/api/health
 echo.
-node -e "const w=require('./server/data/watchlist.json');console.log('ê´€ì‹¬ì¢…ëª© '+w.length+'ê°œ')" 2>nul
-node -e "const t=require('./server/data/customThemes.json');console.log('ë‚´ í…Œë§ˆ '+t.length+'ê°œ')" 2>nul
+node -e "const w=require('./server/data/watchlist.json');console.log('°ü½ÉÁ¾¸ñ '+w.length+'°³')" 2>nul
+node -e "const t=require('./server/data/customThemes.json');console.log('³» Å×¸¶ '+t.length+'°³')" 2>nul
 echo.
 pause
 exit /b 0
 
 :fail
 echo.
-echo *** ì‹¤íŒ¨í–ˆìŠµë‹ˆë‹¤. ìœ„ ë©”ì‹œì§€ë¥¼ í™•ì¸í•˜ì„¸ìš”. ***
-echo *** ë°ì´í„°ëŠ” %BK% ì— ë°±ì—…ë¼ ìžˆìŠµë‹ˆë‹¤. ***
+echo *** ½ÇÆÐÇß½À´Ï´Ù. À§ ¸Þ½ÃÁö¸¦ È®ÀÎÇÏ¼¼¿ä. ***
+echo *** µ¥ÀÌÅÍ´Â %BK% ¿¡ ¹é¾÷µÅ ÀÖ½À´Ï´Ù. ***
 pause
 exit /b 1
