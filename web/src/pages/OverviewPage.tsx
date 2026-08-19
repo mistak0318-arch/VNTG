@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BreadthPanel } from "../components/BreadthPanel";
+import { BreadthHelp, BreadthPanel } from "../components/BreadthPanel";
 import {
   api,
   fmtNum,
@@ -497,6 +497,18 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           </OverviewCard>
         )}
       </div>
+
+      {/*
+        지표 설명은 **맨 아래**다. 원래 시장 폭 그래프 바로 밑에 있었는데 설명이 길어서
+        본문을 밀어냈다 — 세 지표를 보러 왔다가 다음 카드까지 한참 스크롤해야 했다.
+        처음 몇 번만 읽으면 되는 것이라 뒤로 뺀다.
+      */}
+      {show("summary") && (
+        <details className="ov-help">
+          <summary>시장 폭 지표는 어떻게 읽나</summary>
+          <BreadthHelp />
+        </details>
+      )}
 
       {constituent && (
         <ConstituentSheet

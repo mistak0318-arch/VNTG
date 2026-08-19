@@ -154,7 +154,22 @@ export function BreadthPanel() {
             />
           </div>
 
-          <div className="metric-help">
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 시장 폭 지표 설명.
+ *
+ * 원래 그래프 바로 밑에 붙어 있었는데 **설명이 본문을 밀어냈다** — 세 지표를 보러 왔다가
+ * 스크롤을 한참 내려야 다음 카드가 나왔다. 설명은 처음 몇 번만 읽으면 되는 것이라
+ * **페이지 맨 아래**로 뺀다. 지우지는 않는다 — 이 지표들은 설명 없이 못 읽는다.
+ */
+export function BreadthHelp() {
+  return (
+    <div className="metric-help">
             <div className="metric-help-item">
               <b>상승 종목 비율</b>
               <p>
@@ -195,8 +210,5 @@ export function BreadthPanel() {
               </p>
             </div>
           </div>
-        </>
-      )}
-    </div>
   );
 }

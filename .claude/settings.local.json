@@ -273,7 +273,8 @@
       "Bash(curl -s --max-time 20 -X POST -H \"content-type: application/json\" -d '{\"deliver\":false}' http://localhost:4000/api/report/publish-now)",
       "Bash(curl -s --max-time 20 http://localhost:4000/api/report/jobs/active)",
       "Bash(curl -s --max-time 30 -X POST -H \"content-type: application/json\" -d '{\"ai\":true,\"send\":false,\"minutes\":360}' http://localhost:4000/api/channels/report)",
-      "Bash(curl -s --max-time 20 http://localhost:4000/api/channels/report/pub_mszc1lcklbul)"
+      "Bash(curl -s --max-time 20 http://localhost:4000/api/channels/report/pub_mszc1lcklbul)",
+      "Bash(grep -n \"</div>\\\\s*$\" pages/OverviewPage.tsx)"
     ]
   }
 }

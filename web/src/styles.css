@@ -3656,3 +3656,8 @@ body {
 /* 자주 쓰는 메뉴 — 그룹을 무시하고 맨 위에 */
 .nav-fav { --accent: #f5c542; }
 .nav-fav .nav-group-label::before { content: "★ "; }
+
+/* 지표 설명 — 맨 아래, 접어 둔다 */
+.ov-help { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+.ov-help > summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 4px 0; }
+.ov-help[open] > summary { margin-bottom: 6px; }
