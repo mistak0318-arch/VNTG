@@ -449,49 +449,6 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           </OverviewCard>
         )}
 
-        {show("summary") && (
-          <OverviewCard
-            title="250일 신고가 / 신저가"
-            updatedAt={highLow.updatedAt}
-            loading={highLow.loading}
-            error={highLow.error}
-          >
-            <SegmentToggle
-              options={[
-                { key: "high" as const, label: "신고가" },
-                { key: "low" as const, label: "신저가" },
-              ]}
-              value={hlDir}
-              onChange={setHlDir}
-            />
-            <RankList items={highLow.data?.[hlDir] ?? []} renderItem={stockRow} />
-          </OverviewCard>
-        )}
-
-        {show("summary") && (
-          <OverviewCard title="변동성 완화 (VI)" updatedAt={vi.updatedAt} loading={vi.loading} error={vi.error}>
-            <RankList
-              items={vi.data ?? []}
-              emptyText="발동 종목 없음"
-              renderItem={(v: ViRow, i) => (
-                <button
-                  key={`${v.code}-${i}`}
-                  className="ov-li"
-                  onClick={() => onSelectStock(normalizeStockCode(v.code), v.name)}
-                >
-                  <span className="ov-nm">
-                    <WatchStar code={normalizeStockCode(v.code)} />
-                    {v.name}
-                    <span className="ov-sub-nm">{v.motionCount}회 발동</span>
-                  </span>
-                  <span className="ov-px num">{fmtNum(v.motionPrice)}</span>
-                  <span className={`ov-pct num ${signCls(v.openChangeRate)}`}>{fmtPct(v.openChangeRate)}</span>
-                </button>
-              )}
-            />
-          </OverviewCard>
-        )}
-
 
         {show("summary") && (
           <OverviewCard title="글로벌" updatedAt={global.updatedAt} loading={global.loading} error={global.error}>
@@ -664,6 +621,54 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                     </span>
                   </span>
                   <span className={`ov-pct num ${signCls(t.changeRate)}`}>{fmtPct(t.changeRate)}</span>
+                </button>
+              )}
+            />
+          </OverviewCard>
+        )}
+
+        {/*
+          250일 신고가·VI 는 **순위**다. 시황이 아니다 —
+          시황은 시장이 어디로 가는지를 보는 자리이고, 이 둘은 종목을 고르는 자리다.
+          요약 탭에 섞여 있으니 지수·수급·금리를 훑는 흐름이 끊겼다. 순위 맨 아래로 옮긴다.
+        */}
+        {show("rank") && (
+          <OverviewCard
+            title="250일 신고가 / 신저가"
+            updatedAt={highLow.updatedAt}
+            loading={highLow.loading}
+            error={highLow.error}
+          >
+            <SegmentToggle
+              options={[
+                { key: "high" as const, label: "신고가" },
+                { key: "low" as const, label: "신저가" },
+              ]}
+              value={hlDir}
+              onChange={setHlDir}
+            />
+            <RankList items={highLow.data?.[hlDir] ?? []} renderItem={stockRow} />
+          </OverviewCard>
+        )}
+
+        {show("rank") && (
+          <OverviewCard title="변동성 완화 (VI)" updatedAt={vi.updatedAt} loading={vi.loading} error={vi.error}>
+            <RankList
+              items={vi.data ?? []}
+              emptyText="발동 종목 없음"
+              renderItem={(v: ViRow, i) => (
+                <button
+                  key={`${v.code}-${i}`}
+                  className="ov-li"
+                  onClick={() => onSelectStock(normalizeStockCode(v.code), v.name)}
+                >
+                  <span className="ov-nm">
+                    <WatchStar code={normalizeStockCode(v.code)} />
+                    {v.name}
+                    <span className="ov-sub-nm">{v.motionCount}회 발동</span>
+                  </span>
+                  <span className="ov-px num">{fmtNum(v.motionPrice)}</span>
+                  <span className={`ov-pct num ${signCls(v.openChangeRate)}`}>{fmtPct(v.openChangeRate)}</span>
                 </button>
               )}
             />

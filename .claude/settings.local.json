@@ -320,7 +320,8 @@
       "WebFetch(domain:datawith.tistory.com)",
       "WebFetch(domain:hyunsoft.tistory.com)",
       "Bash(awk 'NR>=353 && NR<=400 && /\\\\}, \\\\[/' web/src/components/CandleChart.tsx)",
-      "Bash(echo \"tsc=$?\")"
+      "Bash(echo \"tsc=$?\")",
+      "Bash(grep -n 'OverviewCard$\\\\|title=\"' web/src/pages/OverviewPage.tsx)"
     ]
   }
 }

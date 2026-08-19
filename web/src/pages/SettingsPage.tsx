@@ -188,7 +188,7 @@ export function SettingsPage() {
       <CollapsibleCard
         id="appearance"
         title="화면 설정"
-        hint="테마 · 글꼴 · 글자 크기"
+        hint="테마 · 글꼴 · 글자 크기 · 메뉴바 위치"
         defaultOpen
       >
 
@@ -239,6 +239,29 @@ export function SettingsPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="appearance-row">
+          <span className="appearance-label">메뉴바 위치</span>
+          <div className="filter-row" style={{ margin: 0 }}>
+            {([
+              { key: "left" as const, label: "왼쪽" },
+              { key: "right" as const, label: "오른쪽" },
+            ]).map((t) => (
+              <button
+                key={t.key}
+                className={`filter-btn ${appearance.navSide === t.key ? "active" : ""}`}
+                onClick={() => appearance.set({ navSide: t.key })}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* 왜 있는 기능인지 적어 둔다 — 취향이 아니라 한 손 조작 때문이다 */}
+        <div className="table-note">
+          한 손으로 폰을 쥐면 엄지가 닿는 쪽이 정해져 있습니다. 오른쪽으로 옮기면
+          드로어가 열리는 방향과 ☰ 버튼 자리도 같이 넘어갑니다.
         </div>
 
         <div className="font-preview">

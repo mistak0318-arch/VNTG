@@ -2,7 +2,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recordApiCall } from "./apiUsage.js";
-import { hantooUsQuotes } from "./usQuotesHantoo.js";
+import { hantooUsDayQuotes, hantooUsQuotes } from "./usQuotesHantoo.js";
 
 /**
  * 미국 관심종목.
@@ -251,6 +251,18 @@ export interface UsQuoteRow {
   low: number | null;
   /** 한투가 알려준 장 상태 ("장중(실시간)" 등) */
   state: string | null;
+  /*
+   * 미국 주간거래(오버나이트).
+   *
+   * **프리마켓이 아니다.** 미 동부 프리마켓(04:00~09:30 ET)은 한국 밤이라 우리가 볼 때는
+   * 이미 끝나 있다. 이건 **한국 낮에 열리는 세션**이고, 국내장이 돌아가는 동안 움직이는
+   * 미국 가격은 이것뿐이다 — 그래서 "지금 미국이 어디로 가나"를 보려면 이걸 봐야 한다.
+   * 미국 종목만 있다(일본·홍콩·유럽은 이런 세션이 없다).
+   */
+  dayPrice: number | null;
+  dayChangeRate: number | null;
+  /** 주간거래 거래량. 0이면 아직 아무도 안 샀다는 뜻이라 값을 믿으면 안 된다 */
+  dayVolume: number | null;
   /** 통화 — 나라가 섞이면 78.89 가 달러인지 엔인지 알 수 없다 */
   currency: string | null;
   country: string | null;
@@ -411,6 +423,15 @@ async function buildGroups(force: boolean): Promise<UsWatchResult> {
   const extra = new Map<string, ReturnType<typeof toExtra>>();
   const quotes = new Map<string, Awaited<ReturnType<typeof quoteOne>>>();
 
+  /*
+   * 미국 주간거래(오버나이트)를 같이 받는다.
+   *
+   * 정규장 조회 **뒤에** 부른다 — 티커가 어느 거래소 것인지 그때 채워지고,
+   * 주간거래 거래소(BAQ·BAY·BAA)는 그 지도를 보고 정한다.
+   * 실패해도 그냥 비워 둔다. 있으면 좋은 값이지 없으면 안 되는 값이 아니다.
+   */
+  const dayQuotes = await hantooUsDayQuotes(symbols).catch(() => new Map());
+
   const missing: string[] = [];
   for (const sym of symbols) {
     const h = hantoo.get(sym);
@@ -458,6 +479,9 @@ async function buildGroups(force: boolean): Promise<UsWatchResult> {
         quotedAt: q?.quotedAt ?? null,
         error: q?.error ?? null,
         ...(extra.get(s.symbol) ?? EMPTY_EXTRA),
+        dayPrice: dayQuotes.get(s.symbol)?.price ?? null,
+        dayChangeRate: dayQuotes.get(s.symbol)?.changeRate ?? null,
+        dayVolume: dayQuotes.get(s.symbol)?.volume ?? null,
       };
     });
     const rates = stocks.map((s) => s.changeRate).filter((x): x is number => x !== null);

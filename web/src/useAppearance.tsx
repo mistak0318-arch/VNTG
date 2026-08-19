@@ -10,12 +10,22 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 
 export type ThemeName = "dark" | "light";
 export type FontName = "system" | "pretendard" | "noto" | "gothic" | "mono";
+/** 메뉴바를 어느 쪽에 둘지 */
+export type NavSide = "left" | "right";
 
 export interface Appearance {
   theme: ThemeName;
   font: FontName;
   /** 기본 15px 기준 배율(%) */
   fontScale: number;
+  /**
+   * 메뉴바 위치.
+   *
+   * 한 손으로 폰을 쥐면 엄지가 닿는 쪽이 정해져 있다 — 왼쪽에 고정해 두면
+   * 오른손잡이는 메뉴를 열 때마다 손을 고쳐 쥐어야 한다.
+   * PC 에서도 넓은 화면에서는 오른쪽이 편한 사람이 있다.
+   */
+  navSide: NavSide;
 }
 
 export const FONTS: { key: FontName; label: string; stack: string }[] = [
@@ -35,7 +45,7 @@ export const FONT_SCALES = [85, 92, 100, 110, 120];
 
 const STORAGE_KEY = "vntg.appearance";
 
-const DEFAULTS: Appearance = { theme: "dark", font: "system", fontScale: 100 };
+const DEFAULTS: Appearance = { theme: "dark", font: "system", fontScale: 100, navSide: "left" };
 
 function read(): Appearance {
   try {
@@ -58,6 +68,8 @@ function apply(a: Appearance): void {
   root.style.setProperty("--app-font-size", `${(15 * a.fontScale) / 100}px`);
   // 차트 라이브러리는 CSS 변수를 못 읽으므로 색상 스키마도 알려준다
   root.style.colorScheme = a.theme;
+  // 메뉴바 좌우는 CSS 가 이 속성을 보고 방향을 뒤집는다
+  root.dataset.nav = a.navSide;
 }
 
 interface AppearanceContext extends Appearance {

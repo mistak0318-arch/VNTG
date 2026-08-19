@@ -4236,3 +4236,30 @@ body {
 .cc-inline { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 0.7333rem; }
 .cc-inline label { display: flex; align-items: center; gap: 5px; }
 .cc-inline input[type="number"] { width: 4.2em; }
+
+/* ==================================================================
+   메뉴바 오른쪽 배치
+   ------------------------------------------------------------------
+   한 손으로 폰을 쥐면 엄지가 닿는 쪽이 정해져 있다. 왼쪽 고정이면
+   오른손잡이는 메뉴를 열 때마다 손을 고쳐 쥐어야 한다.
+   ================================================================== */
+
+:root[data-nav="right"] .layout { flex-direction: row-reverse; }
+
+/* 테두리도 같이 넘어가야 한다 — 안 그러면 본문과 붙은 쪽에 선이 없다 */
+:root[data-nav="right"] .sidebar {
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+
+@media (max-width: 899px) {
+  /* 드로어가 여는 방향도 뒤집는다. 왼쪽에서 밀려 나오면 오른쪽 배치가 무의미하다 */
+  :root[data-nav="right"] .sidebar {
+    left: auto;
+    right: 0;
+    transform: translateX(100%);
+  }
+  :root[data-nav="right"] .sidebar.open { transform: translateX(0); }
+  /* 모바일 머리의 ☰ 도 같은 쪽으로 */
+  :root[data-nav="right"] .mobile-header { flex-direction: row-reverse; }
+}

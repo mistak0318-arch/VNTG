@@ -51,7 +51,10 @@ const TARGETS: {
 }[] = [
   // ── 환율·원자재 (인베스팅 순서)
   { key: "usdkrw", label: "달러/원", group: "환율", symbol: "KRW=X" },
-  { key: "wti", label: "WTI유", group: "원자재", symbol: "CL=F" },
+  /*
+   * WTI 는 뺐다 — 「미장 주요지수」 카드가 WTI 와 브렌트를 같이 준다.
+   * 한 화면에 같은 값이 두 번 뜨면 어느 쪽이 지금 값인지 확인하게 되고, 그게 시간을 먹는다.
+   */
 
   // ── 미국 지수
   /*
@@ -82,11 +85,10 @@ const TARGETS: {
    * VIX 선물(VX=F)과 국채 금리(US10YT=X)는 야후에 없다 — 실측으로 확인했다.
    * 인베스팅은 자체 데이터라 되지만 우리는 현물로 대신하고, 그 사실을 표시한다.
    */
-  { key: "vix", label: "S&P 500 VIX", group: "변동성", symbol: "^VIX", kind: "현물" },
-
-  // ── 금리
-  { key: "tnx", label: "미국 10년 국채 금리", group: "금리", symbol: "^TNX", isRate: true, kind: "현물" },
-  { key: "tyx", label: "미국 30년", group: "금리", symbol: "^TYX", isRate: true, kind: "현물" },
+  /*
+   * VIX·미국 금리도 뺐다. 「미장 주요지수」가 VIX 와 3개월·5년·10년·30년을 다 준다 —
+   * 거기는 **장단기 역전**까지 봐 주는데 여기 두 줄은 그냥 숫자였다. 겹치면 거기가 낫다.
+   */
 
   // ── 암호화폐
   { key: "btc", label: "비트코인", group: "암호화폐", symbol: "BTC-USD" },
@@ -108,10 +110,16 @@ const TARGETS: {
   { key: "hsi", label: "항셍", group: "아시아", symbol: "^HSI" },
   { key: "hsce", label: "홍콩 H", group: "아시아", symbol: "^HSCE" },
 
-  // ── 우리가 따로 쓰는 것 (인베스팅 목록엔 없음)
-  { key: "sox", label: "필라델피아 반도체", group: "미국지수", symbol: "^SOX" },
-  { key: "es", label: "S&P500 선물", group: "미국선물", symbol: "ES=F" },
-  { key: "nq", label: "나스닥100 선물", group: "미국선물", symbol: "NQ=F" },
+  /*
+   * ^SOX·ES=F·NQ=F 도 뺐다. 셋 다 두 번씩 뜨고 있었다 —
+   *   · ^SOX 는 「미장 주요지수」에 있다
+   *   · ES=F 는 바로 위 `esF`(US 500), NQ=F 는 `nqF`(US Tech 100) 와 **같은 심볼**이다.
+   *     그룹 이름만 달라서 「미국 지수선물」과 「미국선물」에 같은 값이 한 줄씩 있었다.
+   *
+   * 예전 주석에 "미국↔국내 연동과 조간 리포트가 쓰고 있어 남겼다"고 적혀 있었는데
+   * **지금은 아니다.** `usKrLinks` 는 자기가 직접 야후를 부르고(TARGETS 를 안 본다),
+   * `aiSummary` 는 목록 전체를 이름으로 훑을 뿐 특정 key 를 찾지 않는다. 확인하고 지웠다.
+   */
 ];
 
 const YAHOO_BASE = "https://query1.finance.yahoo.com/v8/finance/chart";

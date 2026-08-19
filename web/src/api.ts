@@ -1805,6 +1805,14 @@ export interface UsQuoteRow {
   quotedAt: number | null;
   error: string | null;
   /** 원화 환산가 (한국투자증권) */
+  /*
+   * 미국 주간거래(오버나이트) — **프리마켓이 아니다.**
+   * 미 동부 프리마켓은 한국 밤이라 우리가 볼 때는 이미 끝나 있다.
+   * 이건 한국 낮에 열리는 세션이고, 국내장이 도는 동안 움직이는 미국 가격은 이것뿐이다.
+   */
+  dayPrice: number | null;
+  dayChangeRate: number | null;
+  dayVolume: number | null;
   wonPrice: number | null;
   /** 오늘 거래량 ÷ 전일 거래량 × 100 */
   volumeVsPrev: number | null;

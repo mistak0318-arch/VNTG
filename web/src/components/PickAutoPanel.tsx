@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type PickAutoConfig } from "../api";
+import { api, type ChannelEntry, type PickAutoConfig } from "../api";
 
 /**
  * 선별 자동 발송 설정.
@@ -38,6 +38,21 @@ export function PickAutoPanel() {
    */
   const [pinned, setPinned] = useState<string[]>([]);
   const [pinInput, setPinInput] = useState("");
+  /*
+   * 고를 수 있는 채널 목록.
+   *
+   * 예전엔 아이디를 손으로 적어야 했다. 그런데 **내가 들어가 있는 대화방 아이디를
+   * 다 알 리가 없다** — 이름은 아는데 @아이디는 모르는 방이 대부분이다.
+   * 「채널 관리」가 이미 목록을 들고 있으므로 그걸 그대로 가져와 고르게 한다.
+   * 직접 입력도 남긴다 — 목록에 안 잡히는 방이 있다.
+   */
+  const [known, setKnown] = useState<ChannelEntry[]>([]);
+  useEffect(() => {
+    api
+      .channels()
+      .then((r) => setKnown(r.channels))
+      .catch(() => undefined);
+  }, []);
 
   function addPin() {
     const v = pinInput.trim().replace(/^@/, "").replace(/^https?:\/\/t\.me\//, "").toLowerCase();
@@ -180,7 +195,8 @@ export function PickAutoPanel() {
         <div className="tg-ctl-body">
           {pinned.map((u) => (
             <span className="pin-chip" key={u}>
-              @{u}
+              {/* 이름을 같이 보여 준다. @아이디만 있으면 어느 방인지 알아보기 어렵다 */}
+              {known.find((c) => c.username?.toLowerCase() === u)?.name ?? ""} @{u}
               <button
                 onClick={() => {
                   setPinned((p) => p.filter((x) => x !== u));
@@ -192,9 +208,42 @@ export function PickAutoPanel() {
               </button>
             </span>
           ))}
+          {/*
+            목록에서 고르기. 이름으로 찾을 수 있어야 한다 — 아이디는 대개 모른다.
+            아이디가 없는 방(비공개)은 고정할 수 없으므로 목록에서 뺀다.
+          */}
+          <select
+            className="pt-input short"
+            value=""
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v && !pinned.includes(v)) {
+                setPinned((p) => [...p, v]);
+                setDirty(true);
+              }
+            }}
+          >
+            {/*
+              목록이 비면 고장 난 것처럼 보인다. 왜 비었는지 말해 준다 —
+              대개 「채널 관리」에서 아직 목록을 받아오지 않았거나, 텔레그램 세션이
+              이 기기에 없는 경우다(세션은 미니PC 한 대에서만 돈다).
+            */}
+            <option value="">
+              {known.length === 0
+                ? "채널 목록이 비어 있습니다 — 「채널 관리」에서 먼저 갱신하세요"
+                : "채널 목록에서 고르기…"}
+            </option>
+            {known
+              .filter((c) => c.username && !pinned.includes(c.username.toLowerCase()))
+              .map((c) => (
+                <option key={c.id} value={c.username!.toLowerCase()}>
+                  {c.name} (@{c.username})
+                </option>
+              ))}
+          </select>
           <input
             className="pt-input short"
-            placeholder="ehdwl 또는 t.me 주소"
+            placeholder="목록에 없으면 직접 (ehdwl 또는 t.me 주소)"
             value={pinInput}
             onChange={(e) => setPinInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addPin()}
