@@ -39,7 +39,17 @@ export function ReviewPanel() {
       .reviewableReports()
       .then((r) => {
         setList(r.reports);
-        if (r.reports.length > 0) setPicked(r.reports[0]);
+        /*
+         * **오늘 것을 기본으로 두면 안 된다.**
+         *
+         * 오늘 발행한 리포트는 정의상 채점이 불가능하다. 그런데 그게 기본 선택이라
+         * 열 때마다 "아직 비교할 거래일이 없습니다" 만 보게 됐다 — 기능이 있는데도
+         * 없는 것처럼 느껴진 이유다.
+         *
+         * **채점이 가능한 가장 최근 것**을 고른다. 어제 것이 있으면 어제 것을.
+         */
+        const today = new Date().toISOString().slice(0, 10);
+        setPicked(r.reports.find((x) => x.date < today) ?? r.reports[0] ?? null);
       })
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -70,41 +80,49 @@ export function ReviewPanel() {
 
   return (
     <>
+      {/*
+        칩을 열 개 깔면 두 줄 반을 먹는다. 발행일은 **고르는 값**이지 훑는 값이 아니라
+        드롭다운이 맞다 — 화면은 한 줄로 줄고, 대신 30건까지 고를 수 있게 됐다.
+      */}
       <div className="filter-row">
-        {list.slice(0, 10).map((r) => (
-          <button
-            key={`${r.date}-${r.edition}`}
-            className={`filter-btn ${picked?.date === r.date && picked?.edition === r.edition ? "active" : ""}`}
-            onClick={() => setPicked(r)}
-          >
-            {r.date.slice(5)} {r.label} ({r.count})
-          </button>
-        ))}
+        <label htmlFor="review-pick" className="pt-n">
+          발행
+        </label>
+        <select
+          id="review-pick"
+          className="pt-input"
+          value={picked ? `${picked.date}|${picked.edition}` : ""}
+          onChange={(e) => {
+            const [d, ed] = e.target.value.split("|");
+            setPicked(list.find((x) => x.date === d && x.edition === ed) ?? null);
+          }}
+        >
+          {list.map((r) => (
+            <option key={`${r.date}-${r.edition}`} value={`${r.date}|${r.edition}`}>
+              {r.date.slice(5)} {r.label} · {r.count}건
+            </option>
+          ))}
+        </select>
+        {result && (
+          /* 한 줄 요약 — 매일 필요한 건 이것뿐이다 */
+          <span className="rv-line">
+            경과 {result.elapsedDays}일 · 적중{" "}
+            <b className="positive">{result.hit}</b> · 애매 {result.partial} · 빗나감{" "}
+            <b className="negative">{result.miss}</b>
+          </span>
+        )}
       </div>
 
       {error && <div className="error-banner">{error}</div>}
       {loading && !result && <div className="empty">채점 중… (종목별 일봉을 확인합니다)</div>}
 
+      {/*
+        상세는 접어 둔다. 매일 필요한 건 위의 한 줄이고, 무엇이 왜 틀렸는지는
+        궁금할 때만 편다 — 화면을 많이 차지한다는 게 이 기능의 실제 문제였다.
+      */}
       {result && (
-        <>
-          <div className="summary-grid">
-            <div className="summary-item">
-              <div className="label">경과</div>
-              <div className="value">{result.elapsedDays}일</div>
-            </div>
-            <div className="summary-item">
-              <div className="label">적중</div>
-              <div className="value positive">{result.hit}</div>
-            </div>
-            <div className="summary-item">
-              <div className="label">애매</div>
-              <div className="value">{result.partial}</div>
-            </div>
-            <div className="summary-item">
-              <div className="label">빗나감</div>
-              <div className="value negative">{result.miss}</div>
-            </div>
-          </div>
+        <details className="rv-detail">
+          <summary>항목별로 보기 ({result.items.length}건)</summary>
 
           {result.elapsedDays === 0 && (
             <div className="alert-note">
@@ -136,11 +154,11 @@ export function ReviewPanel() {
 
           <div className="table-note">
             <b>±1% 안쪽 움직임은 중립</b>으로 봅니다 — 0.2% 움직인 것을 "상승 적중"이라고 세면
-            적중률이 부풀려져 복기가 무의미해집니다. 테마는 구성종목 단순평균, 시장은 지수 ETF
-            기준입니다. <b>적중률을 재는 도구가 아닙니다</b> — 위의 「근거」 중 어떤 것이 실제로
+            적중률이 부풀려져 복기가 무의미해집니다. 테마는 구성종목 단순평균, 시장은
+            <b>업종일봉</b> 기준입니다(예전엔 ETF 를 대용으로 썼는데 지수와 따로 놀았습니다). <b>적중률을 재는 도구가 아닙니다</b> — 위의 「근거」 중 어떤 것이 실제로
             통했는지 보는 게 목적입니다.
           </div>
-        </>
+        </details>
       )}
     </>
   );

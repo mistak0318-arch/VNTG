@@ -288,7 +288,14 @@
       "Bash(curl -s --max-time 90 \"http://localhost:4000/api/overview/section/usMajor\")",
       "Bash(rm -f server/.kw.tmp)",
       "Bash(curl -s --max-time 60 \"http://localhost:4000/api/market/trade-size/005930\")",
-      "Bash(curl -s --max-time 20 -o /dev/null -w \"health %{http_code}\\\\n\" http://localhost:4000/api/health)"
+      "Bash(curl -s --max-time 20 -o /dev/null -w \"health %{http_code}\\\\n\" http://localhost:4000/api/health)",
+      "Bash(curl -s --max-time 40 \"http://localhost:4000/api/overview/section/global\")",
+      "Bash(curl -s --max-time 60 \"http://localhost:4000/api/report/review?date=2026-08-17&edition=morning\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/rv.json\")",
+      "Bash(curl -s --max-time 60 \"http://localhost:4000/api/report/review?date=2026-08-17&edition=morning\")",
+      "Bash(curl -s --max-time 40 \"http://localhost:4000/api/market/chart/daily/000660\")",
+      "Bash(curl -s --max-time 40 \"http://localhost:4000/api/market/chart/daily/005930\")",
+      "Bash(curl -s --max-time 90 \"http://localhost:4000/api/report/review?date=2026-08-17&edition=morning\")",
+      "Bash(curl -s --max-time 60 \"http://localhost:4000/api/report/reviewable\")"
     ]
   }
 }

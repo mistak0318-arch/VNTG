@@ -74,6 +74,33 @@ async function dailyCloses(
 }
 
 /**
+ * 지수 일봉 (`ka20006`).
+ *
+ * **지수를 100배로 준다** — 686983 이 6,869.83 이다. 등락률만 쓰므로 배율이 상쇄되긴
+ * 하지만, 나중에 값을 그대로 쓰게 될 때를 대비해 여기서 나눠 둔다.
+ */
+async function indexCloses(
+  client: KiwoomClient,
+  indsCode: string,
+): Promise<{ date: string; close: number }[]> {
+  const { data } = await client.request<{ inds_dt_pole_qry?: Record<string, unknown>[] }>(
+    "/api/dostk/chart",
+    "ka20006",
+    { inds_cd: indsCode, base_dt: ymd(new Date()) },
+  );
+  const rows = Array.isArray(data.inds_dt_pole_qry) ? data.inds_dt_pole_qry : [];
+  return rows
+    .map((r) => {
+      const raw = String(r.dt ?? "");
+      return {
+        date: `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`,
+        close: toNum(r.cur_prc) / 100,
+      };
+    })
+    .filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.close > 0);
+}
+
+/**
  * 발행일 이후의 등락률.
  * 발행일에 거래가 없었으면(주말·휴장) 그 **이전 가장 가까운 거래일**을 기준으로 삼는다.
  */
@@ -149,7 +176,23 @@ export async function reviewReport(
         rate = r.rate;
       } else if (cp.kind === "theme") {
         const t = themes.find((x) => x.name === cp.key);
-        if (t) {
+        /*
+         * 「내 테마」에 없는 이름이면 채점할 방법이 없다. 예전엔 조용히 넘어가서
+         * **영원히 "대기"** 로 남았다 — 며칠이 지나도 안 바뀌니 화면만 차지했다.
+         * 채점 불가는 대기와 다르다. 그렇게 밝힌다.
+         */
+        if (!t) {
+          items.push({
+            ...cp,
+            basePrice: null,
+            lastPrice: null,
+            actual: null,
+            verdict: "unknown",
+            note: `「내 테마」에 «${cp.key}» 가 없어 채점할 수 없습니다`,
+          });
+          continue;
+        }
+        {
           const rates: number[] = [];
           // 테마 하나에 열 종목이면 열 번 조회다. 초당 5회 제한을 지킨다
           for (const code of t.codes.slice(0, 10)) {
@@ -160,9 +203,16 @@ export async function reviewReport(
           if (rates.length > 0) rate = rates.reduce((a, b) => a + b, 0) / rates.length;
         }
       } else {
-        // 시장 — 지수를 대표하는 ETF 로 대신한다 (키움이 지수 일봉을 종목처럼 주지 않아서)
-        const proxy = cp.key.toUpperCase().includes("KOSDAQ") ? "229200" : "069500";
-        const r = changeSince(await dailyCloses(client, proxy), date);
+        /*
+         * 시장 — **업종일봉(`ka20006`)** 을 쓴다.
+         *
+         * 예전엔 ETF(069500·229200)를 지수 대용으로 삼았는데 그게 틀렸다.
+         * 069500 은 하루 등락폭이 20% 씩 벌어지고 회전율이 17% 나 되는 날이 있어
+         * 지수와 전혀 다른 값이 나온다 — 지수가 -1% 인 날 대용치는 -8% 였다.
+         * 지수 채점을 지수가 아닌 것으로 하고 있었던 셈이다.
+         */
+        const idxCode = cp.key.toUpperCase().includes("KOSDAQ") ? "101" : "001";
+        const r = changeSince(await indexCloses(client, idxCode), date);
         base = r.base;
         last = r.last;
         rate = r.rate;
@@ -194,12 +244,22 @@ export async function reviewReport(
 }
 
 /** 체크포인트가 있는 리포트 목록 — 복기 화면이 고를 수 있도록 */
+/**
+ * 복기할 수 있는 리포트 목록.
+ *
+ * **「즉시 발행」은 뺀다.** 저장된 28건 중 14건이 `now-` 였는데, 그건 개발하며 눌러 본
+ * 것이라 복기 대상이 아니다. 목록의 절반이 테스트로 차 있으면 정작 볼 것을 못 찾는다.
+ *
+ * 정기 발행(조간·장중·석간·주말)만 남기면 하루 3~4건이라 **한 달치가 100건 안쪽**이다.
+ */
 export async function listReviewable(limit = 30): Promise<
   { date: string; edition: string; label: string; publishedAt: string; count: number }[]
 > {
-  const rows = await listReports(limit);
+  const rows = await listReports(limit * 2);
   const out: { date: string; edition: string; label: string; publishedAt: string; count: number }[] = [];
   for (const r of rows) {
+    // `now-HHMM` 은 즉시 발행이다. 정기 판은 morning/intraday/closing/weekend
+    if (r.edition.startsWith("now")) continue;
     const full = await loadReport(r.date, r.edition);
     const n = full?.summary.checkpoints?.length ?? 0;
     if (n > 0 && full) {
@@ -211,6 +271,7 @@ export async function listReviewable(limit = 30): Promise<
         count: n,
       });
     }
+    if (out.length >= limit) break;
   }
   return out;
 }
