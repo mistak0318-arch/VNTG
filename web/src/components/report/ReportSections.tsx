@@ -11,6 +11,8 @@ import {
   type TrackedStock,
   type KiwoomGroupStock,
   type DartEvent,
+  type ChannelReport,
+  type NewsItem,
   type UsMajorResult,
 } from "../../api";
 import { TrendLineChart } from "../TrendLineChart";
@@ -535,5 +537,124 @@ export function FeaturedSection({
         {rising.map((s) => row(s.code, s.name, s.price, s.changeRate))}
       </div>
     </div>
+  );
+}
+
+/* ───────────────────────────────── D9. 텔레그램 채널 요약 */
+
+/**
+ * 마지막으로 만든 채널 요약.
+ *
+ * **여기서 새로 돌리지 않는다.** 채널 수집은 텔레그램 세션을 쓰고 AI 호출도 붙는데,
+ * 리포트를 열 때마다 그게 돌면 화면 하나 여는 값이 너무 비싸다. 「텔레그램 동향」에서
+ * 만든 것을 그대로 가져와 보여 준다.
+ *
+ * AI 정리에 이미 이 내용이 녹아 있지만 **원문도 같이** 둔다 — 요약이 무엇을 보고
+ * 그렇게 말했는지 확인할 데가 있어야 요약을 믿거나 의심할 수 있다.
+ */
+export function ChannelDigestSection() {
+  const [report, setReport] = useState<ChannelReport | null | undefined>(undefined);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .channelReports(1)
+      .then((r) => alive && setReport(r.reports[0] ?? null))
+      .catch(() => alive && setReport(null));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (report === undefined) return <div className="page-note">불러오는 중…</div>;
+  if (!report) {
+    return (
+      <div className="empty">
+        아직 만든 채널 요약이 없습니다. 「텔레그램 동향」에서 한 번 돌리면 여기에 뜹니다.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="pt-n" style={{ marginBottom: 6 }}>
+        {new Date(report.generatedAt).toLocaleString("ko-KR").slice(5, 16)} 기준 · 채널{" "}
+        {report.channels}개 · 원문 {report.rawCount}건 중 {report.usedCount}건 선별
+      </div>
+
+      {report.summary && <div className="report-ai-body">{report.summary}</div>}
+
+      {report.items.length > 0 && (
+        <details className="ov-help">
+          <summary>선별된 원문 {report.items.length}건</summary>
+          {report.items.slice(0, 20).map((it, i) => (
+            <div className="rp-issue-row" key={`${it.at}-${i}`}>
+              <b>{hhmm(it.at)}</b>
+              <span>{it.text.slice(0, 140)}</span>
+              {it.stocks && it.stocks.length > 0 && (
+                <em className="pt-n">{it.stocks.slice(0, 3).join(", ")}</em>
+              )}
+            </div>
+          ))}
+        </details>
+      )}
+    </>
+  );
+}
+
+function hhmm(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/* ───────────────────────────────── D10. 국내외 주요뉴스 종합 */
+
+/**
+ * 시간대별 주요 뉴스.
+ *
+ * 위의 「주요 뉴스 클리핑」은 종목·테마에 붙은 뉴스다. 이건 **시장 전체** 뉴스라
+ * 성격이 다르다 — 겹쳐 보여도 둘 다 있는 게 낫다는 판단이다.
+ *
+ * 조간은 직전 6시간, 장중은 아침~점심, 석간은 점심~저녁을 본다. 지금 판이 무엇인지에
+ * 따라 창이 달라지므로 **무엇을 보고 있는지 화면에 밝힌다.**
+ */
+export function MarketNewsSection({ edition }: { edition: string }) {
+  const [items, setItems] = useState<NewsItem[] | null>(null);
+
+  const window =
+    edition === "morning"
+      ? "직전 6시간"
+      : edition === "intraday"
+        ? "아침 ~ 점심"
+        : edition === "closing"
+          ? "점심 ~ 저녁"
+          : "최근";
+
+  useEffect(() => {
+    let alive = true;
+    // 시장 전체를 훑는 검색어. 종목명을 넣으면 그 종목 뉴스만 나와 성격이 달라진다
+    api
+      .news("증시 코스피 코스닥", { scope: "major", display: 20 })
+      .then((r) => alive && setItems(r.items))
+      .catch(() => alive && setItems([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return (
+    <>
+      <div className="pt-n" style={{ marginBottom: 6 }}>
+        {window} 기준 · 주요 매체
+      </div>
+      {items === null && <div className="page-note">불러오는 중…</div>}
+      {items?.length === 0 && <div className="empty">가져온 뉴스가 없습니다.</div>}
+      {items?.slice(0, 12).map((n) => (
+        <a className="rp-issue-row" href={n.link} target="_blank" rel="noreferrer" key={n.link}>
+          <span>{n.title}</span>
+          {n.press && <em className="pt-n">{n.press}</em>}
+        </a>
+      ))}
+    </>
   );
 }

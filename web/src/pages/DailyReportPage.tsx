@@ -3,6 +3,8 @@ import {
   FeaturedSection,
   IndexTrendSection,
   KrThemeMapSection,
+  ChannelDigestSection,
+  MarketNewsSection,
   MoneyFlowSection,
   MyStocksSection,
   NightFuturesSection,
@@ -658,8 +660,24 @@ export function DailyReportPage({
         <FeaturedSection onSelectStock={onSelectStock} />
       </Section>
 
-      <Section no={14} title="주요 뉴스 클리핑">
+      <Section no={14} title="주요 뉴스 클리핑 (종목·테마)">
         <SectorNews perSector={20} onFetched={setNewsAt} />
+      </Section>
+
+      {/*
+        AI 정리에 이미 녹아 있지만 원문도 같이 둔다 — 요약이 무엇을 보고 그렇게 말했는지
+        확인할 데가 있어야 요약을 믿거나 의심할 수 있다.
+      */}
+      <Section no={15} title="텔레그램 채널 요약">
+        <ChannelDigestSection />
+      </Section>
+
+      {/*
+        위 클리핑은 종목·테마에 붙은 뉴스고 이건 시장 전체 뉴스다 — 겹쳐 보여도
+        둘 다 있는 게 낫다는 판단이다.
+      */}
+      <Section no={16} title="국내외 주요 뉴스">
+        <MarketNewsSection edition={edition} />
       </Section>
 
       {target && (
