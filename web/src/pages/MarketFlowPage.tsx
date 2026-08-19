@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MarketPulsePanel } from "../components/MarketPulsePanel";
 import { MarketSignalPanel } from "../components/MarketSignalPanel";
 import { api, fmtNum, type BreadthPoint, type ChannelReport } from "../api";
 import { BreadthPanel } from "../components/BreadthPanel";
@@ -21,9 +22,11 @@ import { RefreshBar } from "../components/RefreshBar";
  * 채널 정리는 「텔레그램 동향」 대메뉴로 옮겼다 — 그건 숫자가 아니라 독립된 정보원이다.
  */
 
-type FlowTab = "money" | "usKr" | "trade";
+type FlowTab = "pulse" | "money" | "usKr" | "trade";
 
 const TABS: { key: FlowTab; label: string }[] = [
+  // 맥박이 첫 탭이다 — 나머지는 근거이고 이건 결론이다
+  { key: "pulse", label: "맥박" },
   { key: "money", label: "자금 흐름" },
   { key: "usKr", label: "미국↔국내" },
   { key: "trade", label: "수출 동향" },
@@ -172,15 +175,18 @@ function MoneyFlowTab({ onSelectStock }: { onSelectStock?: (code: string, name: 
 }
 
 export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
-  const [tab, setTab] = useState<FlowTab>("money");
+  const [tab, setTab] = useState<FlowTab>("pulse");
   const [reloadKey, setReloadKey] = useState(0);
 
   return (
     <div>
       <RefreshBar onRefresh={() => setReloadKey((k) => k + 1)} />
 
-      {/* 탭 위에 둔다 — 어느 탭을 보든 "지금 시장이 어떤 상태인가"가 먼저 와야 한다 */}
-      <MarketSignalPanel />
+      {/*
+        신호등은 맥박 탭 안에 들어갔다(위험 카드). 여기서 또 띄우면 같은 값이 두 번 보인다.
+        다른 탭에서는 여전히 「지금 시장이 어떤 상태인가」가 먼저 와야 하므로 그때만 띄운다.
+      */}
+      {tab !== "pulse" && <MarketSignalPanel />}
 
       <nav className="detail-tabs">
         {TABS.map((t) => (
@@ -195,6 +201,7 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
       </nav>
 
       <div key={`${tab}-${reloadKey}`}>
+        {tab === "pulse" && <MarketPulsePanel />}
         {tab === "money" && <MoneyFlowTab onSelectStock={onSelectStock} />}
         {tab === "usKr" && <UsKrPanel />}
         {tab === "trade" && <TradePanel onSelectStock={onSelectStock} />}

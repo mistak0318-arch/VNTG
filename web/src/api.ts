@@ -368,6 +368,9 @@ export const api = {
     getJson<{ posts: PinnedPost[] }>(
       `/api/channels/pinned?edition=${edition}&limit=${limit}`,
     ),
+  pulse: (force = false) => getJson<MarketPulse>(`/api/pulse${force ? "?force=1" : ""}`),
+  pulseBrief: (force = false) =>
+    getJson<PulseBrief>(`/api/pulse/brief${force ? "?force=1" : ""}`),
   usKr: () => getJson<{ links: EvaluatedLink[]; themeNames: string[]; at: string }>("/api/us-kr"),
   usKrCorrelation: () => getJson<{ result: CorrelationResult | null }>("/api/us-kr/correlation"),
   usKrCorrelate: (days = 60) =>
@@ -827,6 +830,11 @@ export interface AiChoice {
 export interface AiConfig {
   report: AiChoice | null;
   channel: AiChoice | null;
+  research: AiChoice | null;
+  /** 시황 질문하기 — Claude 만 고를 수 있다 */
+  ask: AiChoice | null;
+  /** 시장 흐름 요약. 안 고르면 report 를 따라간다 */
+  pulse: AiChoice | null;
 }
 
 export interface VisionModelOption {
@@ -1963,4 +1971,59 @@ export interface DisclosureRunResult {
   skipped: number;
   hits: DisclosureHit[];
   error?: string;
+}
+
+
+/* ------------------------------------------------------------------ */
+/* 시장 맥박 — 돈이 어디로 가고 있나                                    */
+/* ------------------------------------------------------------------ */
+
+export type PhaseKey =
+  | "foreignLed"
+  | "instLed"
+  | "bothIn"
+  | "retailOnly"
+  | "bothOut"
+  | "mixed";
+
+export interface PulseFlow {
+  /** 5일 누적 순매수 (억원) */
+  foreign5: number;
+  inst5: number;
+  individual5: number;
+  foreign20: number;
+  inst20: number;
+  individual20: number;
+  /** 양수면 연속 순매수 일수, 음수면 연속 순매도 일수 */
+  foreignStreak: number;
+  instStreak: number;
+}
+
+export interface MarketPulse {
+  /** 며칠치가 쌓였나. 적으면 아래 판정은 전부 잠정이다 */
+  days: number;
+  phase: { key: PhaseKey; label: string; note: string };
+  flow: PulseFlow;
+  divergence: {
+    warning: boolean;
+    indexMove: number | null;
+    breadthMove: number | null;
+    note: string;
+  };
+  /** 누적과 최근 방향이 어긋나는가 — 변곡점 */
+  turn: { turning: boolean; who: string | null; note: string };
+  signal: { level: string; score: number; summary: string } | null;
+  basis: number | null;
+  risks: { key: string; label: string; detail: string; level: "warn" | "danger" }[];
+  external: { label: string; value: string; changeRate: number | null; note?: string }[];
+  at: string;
+}
+
+export interface PulseBrief {
+  text: string | null;
+  model: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  at: string;
+  error: string | null;
 }

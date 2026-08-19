@@ -238,6 +238,7 @@ export type UsageFeature =
   | "ask"
   | "channel"
   | "research"
+  | "pulse"
   | "vision"
   | "other";
 
@@ -246,6 +247,7 @@ export const FEATURE_LABEL: Record<UsageFeature, string> = {
   ask: "시황 질문하기",
   channel: "텔레그램 채널 요약",
   research: "웹 리서치",
+  pulse: "시장 흐름 요약",
   vision: "이미지 인식(캘린더)",
   other: "기타",
 };

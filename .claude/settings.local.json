@@ -323,7 +323,12 @@
       "Bash(echo \"tsc=$?\")",
       "Bash(grep -n 'OverviewCard$\\\\|title=\"' web/src/pages/OverviewPage.tsx)",
       "Bash(sed -n '/export interface FinanceResult/,/^}/p' web/src/api.ts)",
-      "Bash(sed -n '/export interface FinancePeriod/,/^}/p' web/src/api.ts)"
+      "Bash(sed -n '/export interface FinancePeriod/,/^}/p' web/src/api.ts)",
+      "Bash(sed -n '/export interface BreadthPoint/,/^}/p' web/src/api.ts)",
+      "Bash(sed -n '/export interface MarketSignal/,/^}/p' server/src/marketSignal.ts)",
+      "Bash(sed -n '/export interface FuturesQuote/,/^}/p' web/src/api.ts)",
+      "Bash(sed -n '/export const PURPOSE_LABEL/,/};/p' server/src/aiConfig.ts)",
+      "Bash(sed -n '/^export interface AiConfig/,/^}/p' server/src/aiConfig.ts)"
     ]
   }
 }

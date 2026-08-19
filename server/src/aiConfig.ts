@@ -20,7 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
 const FILE = join(DATA_DIR, "aiConfig.json");
 
-export type AiPurpose = "report" | "channel" | "research" | "ask";
+export type AiPurpose = "report" | "channel" | "research" | "ask" | "pulse";
 
 export interface AiChoice {
   provider: VisionProvider;
@@ -46,16 +46,31 @@ export interface AiConfig {
    * 화면에서도 Claude 모델만 보여 준다.
    */
   ask: AiChoice | null;
+  /**
+   * 시장 흐름 요약.
+   *
+   * 입력이 **숫자 몇십 줄뿐**이라 리포트보다 훨씬 작다(검색도 안 붙는다).
+   * 화면을 열 때마다 도는 자리이므로 **싼 모델이 맞다** — 기본은 리포트와 같은 것을 쓰되
+   * 따로 고를 수 있게 뒀다.
+   */
+  pulse: AiChoice | null;
 }
 
 /** null 이면 기존 동작(ANTHROPIC_API_KEY + CLAUDE_MODEL)을 그대로 쓴다 */
-export const DEFAULT_AI_CONFIG: AiConfig = { report: null, channel: null, research: null, ask: null };
+export const DEFAULT_AI_CONFIG: AiConfig = {
+  report: null,
+  channel: null,
+  research: null,
+  ask: null,
+  pulse: null,
+};
 
 export const PURPOSE_LABEL: Record<AiPurpose, string> = {
   report: "데일리 리포트",
   channel: "구독 채널 요약",
   research: "웹 리서치 (입력 정제)",
   ask: "시황 질문하기 (Claude 만)",
+  pulse: "시장 흐름 요약",
 };
 
 let cache: AiConfig | null = null;
@@ -81,6 +96,7 @@ export async function saveAiConfig(input: AiConfig): Promise<AiConfig> {
     report: clean(input.report),
     channel: clean(input.channel),
     research: clean(input.research),
+    pulse: clean(input.pulse),
     // 질문하기는 Anthropic 만 — 검색 도구가 거기 붙어 있다
     ask: (() => {
       const c = clean(input.ask);

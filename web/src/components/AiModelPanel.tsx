@@ -29,6 +29,8 @@ const PURPOSE_NOTE: Record<string, string> = {
     "입력이 제일 큰 자리입니다. 검색 결과가 대화에 쌓여 매 턴 다시 실리기 때문인데, 그래서 여기야말로 싼 모델로 바꿀 값어치가 있습니다.",
   ask:
     "물을 때마다 한 번. 웹 검색을 붙여 답하는데 그 도구가 Anthropic 쪽에 있어서 Claude 만 고를 수 있습니다 — 다른 걸 고르면 저장되지 않고 기본값으로 돕니다.",
+  pulse:
+    "「시장 흐름 분석」 맨 위 판독. 입력이 숫자 몇십 줄뿐이라 아주 쌉니다(실측 입력 770·출력 274 토큰). 안 고르면 데일리 리포트에 고른 모델을 그대로 씁니다.",
 };
 
 export function AiModelPanel() {
@@ -109,7 +111,13 @@ export function AiModelPanel() {
                   onChange={(e) => pick(key, e.target.value)}
                 >
                   <option value="">
-                    기본 ({fallback ?? "설정된 키 없음"})
+                    {/*
+                      「기본」이 무엇인지 자리마다 다르다. 맥박은 리포트에 고른 것을 따라가므로
+                      그렇게 적어야 한다 — 안 그러면 왜 이 모델이 도는지 알 수 없다.
+                    */}
+                    {key === "pulse"
+                      ? `기본 (데일리 리포트와 같게)`
+                      : `기본 (${fallback ?? "설정된 키 없음"})`}
                   </option>
                   {models.map((m) => (
                     <option key={m.model} value={m.model}>

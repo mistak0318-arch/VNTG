@@ -4284,3 +4284,80 @@ th.est-col { color: var(--blue); }
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-bottom: 8px; font-size: 0.7333rem; color: var(--text-dim);
 }
+
+/* ==================================================================
+   시장 맥박 (MarketPulsePanel)
+   ------------------------------------------------------------------
+   다른 화면은 무엇이 올랐나를 본다. 여기는 돈이 어디로 옮겨가는가다.
+   ================================================================== */
+
+.mp-brief { border-color: rgba(76,141,255,.45); }
+.mp-brief-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.mp-brief-head h2 { margin: 0; font-size: 0.9333rem; color: var(--text); }
+.mp-brief-actions { display: flex; align-items: center; gap: 8px; }
+
+.mp-brief-body { margin: 12px 0 4px; }
+.mp-brief-body p { margin: 0 0 10px; font-size: 0.8667rem; line-height: 1.6; }
+.mp-brief-body p:last-child { margin-bottom: 0; }
+.mp-brief-body b { color: var(--text); }
+
+/* 자금 국면 ------------------------------------------------------- */
+
+.mp-phase { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+
+.mp-phase-tag {
+  padding: 5px 14px; border-radius: 999px;
+  font-size: 0.8667rem; font-weight: 700; border: 1px solid var(--border);
+}
+.mp-phase-tag.good { background: rgba(255,92,92,.15); color: var(--red); border-color: rgba(255,92,92,.4); }
+.mp-phase-tag.mid { background: var(--panel-2); color: var(--muted); }
+.mp-phase-tag.bad { background: rgba(76,141,255,.15); color: var(--blue); border-color: rgba(76,141,255,.4); }
+.mp-phase-note { font-size: 0.7333rem; color: var(--text-dim); flex: 1 1 14rem; min-width: 0; }
+
+.mp-turn { margin-bottom: 10px; }
+
+.mp-flow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mp-flow-item {
+  padding: 10px; border-radius: 10px;
+  background: var(--panel-2); border: 1px solid var(--border); min-width: 0;
+}
+.mp-flow-who { font-size: 0.6667rem; color: var(--muted); font-weight: 700; margin-bottom: 3px; }
+.mp-flow-5 { font-size: 0.9333rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mp-flow-sub { font-size: 0.6667rem; color: var(--muted); margin-top: 2px; }
+.mp-flow-streak { font-size: 0.6667rem; color: var(--text-dim); margin-top: 4px; }
+
+.mp-diverge { font-size: 0.7333rem; color: var(--text-dim); margin-bottom: 8px; }
+
+/* 위험 ------------------------------------------------------------ */
+
+.mp-risks { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.mp-risk {
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+  padding: 8px 10px; border-radius: 8px;
+  background: var(--panel-2); border-left: 3px solid var(--muted);
+}
+.mp-risk.warn { border-left-color: #f5c542; }
+.mp-risk.danger { border-left-color: var(--red); }
+.mp-risk-label { font-size: 0.7333rem; font-weight: 700; flex: 0 0 auto; }
+.mp-risk-detail { font-size: 0.7333rem; color: var(--text-dim); flex: 1 1 12rem; min-width: 0; }
+
+.mp-signal { display: flex; align-items: center; gap: 6px; font-size: 0.7333rem; }
+
+/* 바깥 ------------------------------------------------------------ */
+
+.mp-ext { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 800px) { .mp-ext { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.mp-ext-item {
+  padding: 9px 10px; border-radius: 10px;
+  background: var(--panel-2); border: 1px solid var(--border); min-width: 0;
+}
+.mp-ext-label { font-size: 0.6667rem; color: var(--muted); font-weight: 700; }
+.mp-ext-value { font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mp-ext-rate { margin-left: 6px; font-size: 0.7333rem; }
+.mp-ext-note { font-size: 0.6667rem; color: var(--muted); margin-top: 3px; }
