@@ -3714,3 +3714,17 @@ body {
 .pin-chip button { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0; }
 
 .ov-idx-note { font-size: 0.7333rem; color: var(--muted); margin-top: 4px; }
+
+/* 체결금액대별 매매비중 — 순매수 막대를 가운데 0 기준으로 좌우로 편다 */
+.ts-list { display: flex; flex-direction: column; gap: 4px; }
+.ts-row { display: grid; grid-template-columns: 62px 1fr 92px auto; align-items: center; gap: 8px;
+  font-size: 0.8rem; }
+.ts-band { color: var(--muted); }
+.ts-bar { position: relative; height: 14px; background: var(--panel-2); border-radius: 3px; }
+/* 가운데 0 선 — 어느 쪽으로 기울었는지가 숫자보다 먼저 보여야 한다 */
+.ts-bar::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0;
+  width: 1px; background: var(--border); }
+.ts-bar i { position: absolute; top: 2px; bottom: 2px; border-radius: 2px; }
+.ts-bar i.buy { background: rgba(240, 85, 95, 0.65); }
+.ts-bar i.sell { background: rgba(74, 139, 245, 0.65); }
+.ts-net { text-align: right; font-variant-numeric: tabular-nums; }

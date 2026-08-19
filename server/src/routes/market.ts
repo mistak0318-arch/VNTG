@@ -4,6 +4,7 @@ import { getSectorMood } from "../sectorMood.js";
 import { searchStocks } from "../stockListCache.js";
 import { analystOpinion } from "../analystOpinion.js";
 import { hantooReady } from "../hantooClient.js";
+import { tradeSizeMix } from "../tradeSizeMix.js";
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
@@ -382,6 +383,18 @@ export function createMarketRouter(client: KiwoomClient): Router {
    * 현재가는 여기서 키움으로 받아 넘긴다 — 한투가 주는 건 의견을 낸 날의 전일종가라
    * 그걸로 괴리율을 재면 며칠 묵은 값이 나온다.
    */
+  /*
+   * 체결금액대별 매매비중 — 하루 거래를 체결 한 건의 금액 크기별로 쪼갠다.
+   * 소액 구간이 사고 고액 구간이 팔면 개인이 받고 큰손이 던지는 중이다.
+   */
+  router.get("/trade-size/:code", async (req, res, next) => {
+    try {
+      res.json({ rows: await tradeSizeMix(client, req.params.code) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/opinion/:code", async (req, res, next) => {
     try {
       if (!hantooReady()) {

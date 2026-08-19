@@ -285,7 +285,10 @@
       "Bash(grep -n \"lines.push\\\\|// \\\\|/\\\\*\")",
       "Bash(grep -n 'lines.push\\(\"\\\\|lines.push\\(`\\\\[')",
       "Bash(curl -s --max-time 60 \"http://localhost:4000/api/ai/usage?days=14\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/42e00671-3282-40e1-a05a-90181fec3c36/scratchpad/u.json\")",
-      "Bash(curl -s --max-time 90 \"http://localhost:4000/api/overview/section/usMajor\")"
+      "Bash(curl -s --max-time 90 \"http://localhost:4000/api/overview/section/usMajor\")",
+      "Bash(rm -f server/.kw.tmp)",
+      "Bash(curl -s --max-time 60 \"http://localhost:4000/api/market/trade-size/005930\")",
+      "Bash(curl -s --max-time 20 -o /dev/null -w \"health %{http_code}\\\\n\" http://localhost:4000/api/health)"
     ]
   }
 }

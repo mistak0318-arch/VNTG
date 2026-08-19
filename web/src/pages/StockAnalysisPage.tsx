@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TradeSizePanel } from "../components/TradeSizePanel";
 import { api, normalizeStockCode, pickList, type RawRecord, type StockSearchResult } from "../api";
 import { ChartPanel } from "../components/ChartPanel";
 import { IntradayFlow, ProgramFlowBars } from "../components/IntradayPanels";
@@ -35,6 +36,7 @@ type AnalysisTab =
   | "program"
   | "credit"
   | "strength"
+  | "tradeSize"
   | "daily"
   | "notes";
 
@@ -46,6 +48,7 @@ const TABS: { key: AnalysisTab; label: string }[] = [
   { key: "program", label: "프로그램" },
   { key: "credit", label: "신용" },
   { key: "strength", label: "체결강도" },
+  { key: "tradeSize", label: "체결금액대" },
   { key: "daily", label: "일별상세" },
   { key: "notes", label: "메모" },
 ];
@@ -240,6 +243,11 @@ export function StockAnalysisPage({
             {tab === "program" && <StockProgramPanel code={stock.code} />}
             {tab === "credit" && <CreditPanel code={stock.code} />}
             {tab === "strength" && <StrengthPanel code={stock.code} />}
+            {/*
+              체결 한 건의 금액 크기별 분포. 체결강도 바로 옆에 둔다 —
+              둘 다 "체결을 어떻게 쪼개 보나"라 같이 읽힌다.
+            */}
+            {tab === "tradeSize" && <TradeSizePanel code={stock.code} />}
             {tab === "daily" && <DailyDetailPanel code={stock.code} />}
             {tab === "notes" && (
               <StockNotes

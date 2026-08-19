@@ -125,6 +125,9 @@ export const api = {
   stockInfo: (code: string) => getJson(`/api/market/info/${code}`),
   quote: (code: string) => getJson(`/api/market/quote/${code}`),
   dailyChart: (code: string) => getJson(`/api/market/chart/daily/${code}`),
+  /** 체결금액대별 매매비중 — 소액이 사고 고액이 팔면 개인이 받는 중이다 */
+  tradeSize: (code: string) =>
+    getJson<{ rows: TradeSizeRow[] }>(`/api/market/trade-size/${code}`),
   opinion: (code: string) => getJson<OpinionSummary>(`/api/market/opinion/${code}`),
   weeklyChart: (code: string) => getJson(`/api/market/chart/weekly/${code}`),
   monthlyChart: (code: string) => getJson(`/api/market/chart/monthly/${code}`),
@@ -671,6 +674,20 @@ export interface IndexDetailData {
   range: IndexRange;
   candles: IndexCandle[];
   flows: IndexFlowRow[];
+}
+
+export interface TradeSizeRow {
+  /** "3백이하", "5억초과" 같은 구간 이름 */
+  band: string;
+  buyQty: number;
+  sellQty: number;
+  totalQty: number;
+  netQty: number;
+  buyRate: number;
+  sellRate: number;
+  netRate: number;
+  buyAvgPrice: number;
+  sellAvgPrice: number;
 }
 
 export interface TopTraderRow {
