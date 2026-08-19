@@ -109,9 +109,15 @@ export function YahooChartSheet({
 
   const view = useMemo(() => {
     if (candles.length < 2) return null;
-    const closes = candles.map((c) => c.close);
-    let lo = Math.min(...closes);
-    let hi = Math.max(...closes);
+
+    /*
+     * 눈금은 **고가·저가**로 잡는다.
+     *
+     * 선 그래프였을 때는 종가만 봐도 됐지만 봉은 위아래로 꼬리가 뻗는다.
+     * 종가 범위로 눈금을 잡으면 꼬리가 차트 밖으로 잘려 나간다.
+     */
+    let lo = Math.min(...candles.map((c) => c.low));
+    let hi = Math.max(...candles.map((c) => c.high));
     /*
      * 「1일」에서는 전일 종가도 눈금 안에 넣는다.
      * 기준선이 화면 밖으로 나가면 **오늘 오른 건지 내린 건지가 안 보인다.**
@@ -121,36 +127,57 @@ export function YahooChartSheet({
       lo = Math.min(lo, base);
       hi = Math.max(hi, base);
     }
-    // 위아래가 딱 붙으면 선이 테두리에 닿는다
+    // 위아래가 딱 붙으면 봉이 테두리에 닿는다
     const pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.01 || 1;
     lo -= pad;
     hi += pad;
 
     const iw = W - PAD.l - PAD.r;
     const ih = H - PAD.t - PAD.b;
-    const x = (i: number) => PAD.l + (i / (candles.length - 1)) * iw;
     const y = (v: number) => PAD.t + ih - ((v - lo) / (hi - lo)) * ih;
 
-    const line = candles.map((c, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(c.close).toFixed(1)}`).join("");
-    const area = `${line}L${x(candles.length - 1).toFixed(1)},${(PAD.t + ih).toFixed(1)}L${PAD.l},${(PAD.t + ih).toFixed(1)}Z`;
+    /*
+     * 봉 하나가 차지하는 칸과 몸통 너비.
+     *
+     * 기간마다 봉 수가 크게 다르다 — 5분봉 51개, 일봉 126개, 주봉이면 260개다.
+     * 260개를 이 폭에 그리면 칸이 2.7px 라, 비율로만 깎으면 몸통이 사라진다.
+     * **최소 1px 은 보장한다.** 안 보이는 봉은 없는 봉이다.
+     */
+    const slot = iw / candles.length;
+    const bodyW = Math.max(1, slot * 0.68);
+    const cx = (i: number) => PAD.l + slot * (i + 0.5);
 
-    const first = closes[0];
+    const bars = candles.map((c, i) => {
+      const oy = y(c.open);
+      const cy = y(c.close);
+      return {
+        key: c.t,
+        x: cx(i),
+        // 종가가 시가보다 높으면 양봉이다 (국내 관행: 상승 빨강 · 하락 파랑)
+        up: c.close >= c.open,
+        highY: y(c.high),
+        lowY: y(c.low),
+        bodyY: Math.min(oy, cy),
+        // 시가와 종가가 같으면 몸통 높이가 0 이라 아무것도 안 그려진다 — 1px 을 준다
+        bodyH: Math.max(1, Math.abs(cy - oy)),
+      };
+    });
+
+    const closes = candles.map((c) => c.close);
     const last = closes[closes.length - 1];
     /*
      * 기간 등락률의 기준.
      * 「1일」은 전일 종가가 기준이다 — 그날 첫 봉과 견주면 **갭이 통째로 빠진다.**
      */
-    const from = base ?? first;
+    const from = base ?? candles[0].open;
     return {
-      line,
-      area,
+      bars,
+      bodyW,
       baseY: base === null ? null : y(base),
-      lo,
-      hi,
       last,
       rate: from > 0 ? ((last - from) / from) * 100 : 0,
-      loLabel: Math.min(...closes),
-      hiLabel: Math.max(...closes),
+      loLabel: Math.min(...candles.map((c) => c.low)),
+      hiLabel: Math.max(...candles.map((c) => c.high)),
       firstT: candles[0].t,
       lastT: candles[candles.length - 1].t,
     };
@@ -210,8 +237,22 @@ export function YahooChartSheet({
                   y2={view.baseY}
                 />
               )}
-              <path className={`yc-area ${up ? "up" : "down"}`} d={view.area} />
-              <path className={`yc-line ${up ? "up" : "down"}`} d={view.line} />
+              {/*
+                봉 하나 = 꼬리(고가~저가) + 몸통(시가~종가).
+                꼬리를 몸통보다 먼저 그려야 몸통이 위에 온다.
+              */}
+              {view.bars.map((b) => (
+                <g className={`yc-c ${b.up ? "up" : "down"}`} key={b.key}>
+                  <line className="yc-wick" x1={b.x} x2={b.x} y1={b.highY} y2={b.lowY} />
+                  <rect
+                    className="yc-body"
+                    x={b.x - view.bodyW / 2}
+                    y={b.bodyY}
+                    width={view.bodyW}
+                    height={b.bodyH}
+                  />
+                </g>
+              ))}
               {/* 고·저 눈금은 오른쪽에. 값을 읽으려고 여는 창이 아니라 모양을 보려는 창이다 */}
               <text className="yc-tick" x={W - PAD.r + 6} y={PAD.t + 10}>
                 {view.hiLabel.toLocaleString("ko-KR", { maximumFractionDigits: digits })}

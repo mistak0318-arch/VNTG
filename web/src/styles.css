@@ -4819,21 +4819,35 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   display: flex;
   gap: 0.2rem;
 }
-.ov-arrange.on {
-  outline: 1px solid var(--blue);
+/* 설정 > 시황 카드 순서 */
+.cop-sub {
+  margin-top: 1rem;
 }
-.ov-arrange-note {
-  margin: 0.4rem 0 0.6rem;
-  padding: 0.5rem 0.7rem;
+.cop-sub h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+.cop-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: 0.4rem;
-  background: var(--panel-2);
-  font-size: 0.9rem;
-  line-height: 1.6;
+  overflow: hidden;
 }
-.ov-arrange-reset {
-  margin-left: 0.5rem;
+.cop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--border);
 }
+.cop-row:last-child { border-bottom: none; }
+.cop-move { display: flex; gap: 0.2rem; }
 
 /* ------------------------------------------------------------------ */
 /* 지수·원자재 차트                                                     */
@@ -4864,16 +4878,19 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   height: 15rem;
   display: block;
 }
-.yc-line {
-  fill: none;
-  stroke-width: 1.6;
+/*
+ * 봉. 국내 관행대로 **상승 빨강 · 하락 파랑**이다.
+ * 꼬리는 viewBox 가 가로로 늘어나도 굵기가 일정해야 해서 non-scaling-stroke 를 준다.
+ */
+.yc-c.up .yc-wick { stroke: var(--red); }
+.yc-c.up .yc-body { fill: var(--red); }
+.yc-c.down .yc-wick { stroke: var(--blue); }
+.yc-c.down .yc-body { fill: var(--blue); }
+.yc-wick {
+  stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
-.yc-line.up { stroke: var(--red); }
-.yc-line.down { stroke: var(--blue); }
-.yc-area { stroke: none; opacity: 0.14; }
-.yc-area.up { fill: var(--red); }
-.yc-area.down { fill: var(--blue); }
+.yc-body { stroke: none; }
 .yc-base {
   stroke: var(--muted);
   stroke-width: 1;

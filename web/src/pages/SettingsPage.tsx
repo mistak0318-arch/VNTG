@@ -8,6 +8,7 @@ import { CollapsibleCard } from "../components/CollapsibleCard";
 import { ReportSchedulePanel } from "../components/ReportSchedulePanel";
 import { ChartConfigPanel } from "../components/ChartConfigPanel";
 import { MenuOrderPanel } from "../components/MenuOrderPanel";
+import { CardOrderPanel } from "../components/CardOrderPanel";
 import { MENU_ITEMS } from "../App";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { SignalConfigPanel } from "../components/SignalConfigPanel";
@@ -105,6 +106,21 @@ export function SettingsPage() {
         hint="사이드바 메뉴를 원하는 순서로 바꾸고 안 쓰는 것은 숨깁니다."
       >
         <MenuOrderPanel items={MENU_ITEMS} />
+      </CollapsibleCard>
+      )}
+
+      {/*
+        카드 배치는 여기 있어야 한다.
+        예전엔 대시보드 탭 바에 「배치」 버튼이 늘 붙어 있었는데, 한 번 정하면 끝나는 값이
+        매일 보는 화면의 맨 윗줄을 차지할 이유가 없다.
+      */}
+      {tab === "display" && (
+      <CollapsibleCard
+        id="cardOrder"
+        title="시황 카드 순서"
+        hint="시황 대시보드의 카드를 원하는 차례로 놓습니다."
+      >
+        <CardOrderPanel />
       </CollapsibleCard>
       )}
 
