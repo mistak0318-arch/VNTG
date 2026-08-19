@@ -334,6 +334,83 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           </OverviewCard>
         )}
 
+        {/*
+          여기가 ⑤ 증시주변자금 동향 자리다 — 고객예탁금·미수금·신용잔고·선물예수금.
+          키움에도 한투에도 없어서 공공데이터포털 키가 생겨야 붙는다. 그때 여기 끼운다.
+        */}
+
+        {show("rank") && (
+          <OverviewCard title="업종" updatedAt={sectors.updatedAt} loading={sectors.loading} error={sectors.error}>
+            <SegmentToggle
+              options={[
+                { key: "kospi" as const, label: "코스피" },
+                { key: "kosdaq" as const, label: "코스닥" },
+              ]}
+              value={sectorMarket}
+              onChange={setSectorMarket}
+            />
+            <RankList
+              items={sectors.data?.[sectorMarket] ?? []}
+              renderItem={(s: SectorRow, i) => (
+                <button
+                  className="ov-li"
+                  key={`${s.code}-${i}`}
+                  onClick={() =>
+                    setConstituent({ kind: "sector", code: s.code, name: s.name, market: sectorMarket })
+                  }
+                >
+                  <span className="ov-nm">{s.name}</span>
+                  <span className={`ov-pct num ${signCls(s.changeRate)}`}>{fmtPct(s.changeRate)}</span>
+                </button>
+              )}
+            />
+          </OverviewCard>
+        )}
+
+        {show("rank") && (
+          <OverviewCard
+            title="250일 신고가 / 신저가"
+            updatedAt={highLow.updatedAt}
+            loading={highLow.loading}
+            error={highLow.error}
+          >
+            <SegmentToggle
+              options={[
+                { key: "high" as const, label: "신고가" },
+                { key: "low" as const, label: "신저가" },
+              ]}
+              value={hlDir}
+              onChange={setHlDir}
+            />
+            <RankList items={highLow.data?.[hlDir] ?? []} renderItem={stockRow} />
+          </OverviewCard>
+        )}
+
+        {show("rank") && (
+          <OverviewCard title="변동성 완화 (VI)" updatedAt={vi.updatedAt} loading={vi.loading} error={vi.error}>
+            <RankList
+              items={vi.data ?? []}
+              emptyText="발동 종목 없음"
+              renderItem={(v: ViRow, i) => (
+                <button
+                  key={`${v.code}-${i}`}
+                  className="ov-li"
+                  onClick={() => onSelectStock(normalizeStockCode(v.code), v.name)}
+                >
+                  <span className="ov-nm">
+                    <WatchStar code={normalizeStockCode(v.code)} />
+                    {v.name}
+                    <span className="ov-sub-nm">{v.motionCount}회 발동</span>
+                  </span>
+                  <span className="ov-px num">{fmtNum(v.motionPrice)}</span>
+                  <span className={`ov-pct num ${signCls(v.openChangeRate)}`}>{fmtPct(v.openChangeRate)}</span>
+                </button>
+              )}
+            />
+          </OverviewCard>
+        )}
+
+
         {show("summary") && (
           <OverviewCard title="글로벌" updatedAt={global.updatedAt} loading={global.loading} error={global.error}>
             <div className="ov-card-b">
@@ -439,76 +516,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           </OverviewCard>
         )}
 
-        {show("rank") && (
-          <OverviewCard title="업종" updatedAt={sectors.updatedAt} loading={sectors.loading} error={sectors.error}>
-            <SegmentToggle
-              options={[
-                { key: "kospi" as const, label: "코스피" },
-                { key: "kosdaq" as const, label: "코스닥" },
-              ]}
-              value={sectorMarket}
-              onChange={setSectorMarket}
-            />
-            <RankList
-              items={sectors.data?.[sectorMarket] ?? []}
-              renderItem={(s: SectorRow, i) => (
-                <button
-                  className="ov-li"
-                  key={`${s.code}-${i}`}
-                  onClick={() =>
-                    setConstituent({ kind: "sector", code: s.code, name: s.name, market: sectorMarket })
-                  }
-                >
-                  <span className="ov-nm">{s.name}</span>
-                  <span className={`ov-pct num ${signCls(s.changeRate)}`}>{fmtPct(s.changeRate)}</span>
-                </button>
-              )}
-            />
-          </OverviewCard>
-        )}
 
-        {show("rank") && (
-          <OverviewCard
-            title="250일 신고가 / 신저가"
-            updatedAt={highLow.updatedAt}
-            loading={highLow.loading}
-            error={highLow.error}
-          >
-            <SegmentToggle
-              options={[
-                { key: "high" as const, label: "신고가" },
-                { key: "low" as const, label: "신저가" },
-              ]}
-              value={hlDir}
-              onChange={setHlDir}
-            />
-            <RankList items={highLow.data?.[hlDir] ?? []} renderItem={stockRow} />
-          </OverviewCard>
-        )}
 
-        {show("rank") && (
-          <OverviewCard title="변동성 완화 (VI)" updatedAt={vi.updatedAt} loading={vi.loading} error={vi.error}>
-            <RankList
-              items={vi.data ?? []}
-              emptyText="발동 종목 없음"
-              renderItem={(v: ViRow, i) => (
-                <button
-                  key={`${v.code}-${i}`}
-                  className="ov-li"
-                  onClick={() => onSelectStock(normalizeStockCode(v.code), v.name)}
-                >
-                  <span className="ov-nm">
-                    <WatchStar code={normalizeStockCode(v.code)} />
-                    {v.name}
-                    <span className="ov-sub-nm">{v.motionCount}회 발동</span>
-                  </span>
-                  <span className="ov-px num">{fmtNum(v.motionPrice)}</span>
-                  <span className={`ov-pct num ${signCls(v.openChangeRate)}`}>{fmtPct(v.openChangeRate)}</span>
-                </button>
-              )}
-            />
-          </OverviewCard>
-        )}
       </div>
 
       {/*
