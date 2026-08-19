@@ -303,6 +303,8 @@ export const api = {
     postJson<{ groups: UsWatchGroup[] }>("/api/us-watch/groups", { name, memo }),
   usWatchGroupRemove: (id: string) =>
     deleteJson<{ groups: UsWatchGroup[] }>(`/api/us-watch/groups/${id}`),
+  usWatchGroupOrder: (ids: string[]) =>
+    putJson<UsWatchResult>("/api/us-watch/groups/order", { ids }),
   usWatchStockAdd: (groupId: string, symbol: string, name: string) =>
     postJson<{ groups: UsWatchGroup[] }>(`/api/us-watch/groups/${groupId}/stocks`, { symbol, name }),
   usWatchStockOrder: (groupId: string, symbols: string[]) =>

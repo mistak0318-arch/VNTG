@@ -4433,3 +4433,26 @@ th.est-col { color: var(--blue); }
 }
 .gt-move:disabled { opacity: .25; }
 .gt-pen { font-size: 0.6667rem; opacity: .7; }
+
+/*
+ * 크게 보기 버튼.
+ * 도구줄에 두면 안 된다 — 그 줄은 가로로 굴러가서 맨 끝 버튼이 화면 밖으로 나간다.
+ * 차트 모서리에 붙박아 늘 같은 자리에 두고, 차트를 가리지 않게 반투명으로 둔다.
+ */
+.chart-wrap { position: relative; }
+
+.chart-expand {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 5;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 0.7333rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  opacity: .82;
+}
+.chart-expand:hover { opacity: 1; color: var(--text); }

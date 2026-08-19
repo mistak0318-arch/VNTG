@@ -202,6 +202,22 @@ export function UsWatchPage() {
     }
   }
 
+  /**
+   * 그룹 순서 옮기기.
+   *
+   * 화면을 **먼저** 바꾸고 서버에 보낸다 — 서버 응답이 시세를 다시 붙여 오느라 한 박자 늦는데,
+   * 그때까지 버튼이 안 먹은 것처럼 보이면 두 번 누르게 된다.
+   * 실패하면 서버가 돌려준 것으로 되돌린다.
+   */
+  async function moveGroup(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= groups.length) return;
+    const next = [...groups];
+    [next[i], next[j]] = [next[j], next[i]];
+    setGroups(next);
+    await run(() => api.usWatchGroupOrder(next.map((g) => g.id)));
+  }
+
   const current = groups.find((g) => g.id === openGroup) ?? groups[0] ?? null;
 
   return (
@@ -244,18 +260,42 @@ export function UsWatchPage() {
         </span>
       </div>
 
-      {/* 그룹 — 등락률까지 붙여서, 어느 판이 도는지 목록에서 바로 보이게 */}
-      <div className="filter-row">
-        {groups.map((g) => (
-          <button
-            key={g.id}
-            className={`filter-btn ${current?.id === g.id ? "active" : ""}`}
-            onClick={() => setOpenGroup(g.id)}
-            title={g.memo}
-          >
-            {g.name}
-            <span className={`uw-grate ${cls(g.changeRate)}`}> {pct(g.changeRate)}</span>
-          </button>
+      {/*
+        그룹 — 등락률까지 붙여서 어느 판이 도는지 목록에서 바로 보이게.
+        편집을 켜면 ◀ ▶ 가 붙어 순서를 옮긴다. 끌어 옮기기는 폰에서 안 되므로 쓰지 않는다.
+      */}
+      <div className="filter-row group-tabs">
+        {groups.map((g, i) => (
+          <span className="gt-item" key={g.id}>
+            {editing && (
+              <button
+                className="gt-move"
+                onClick={() => void moveGroup(i, -1)}
+                disabled={i === 0}
+                title="앞으로"
+              >
+                ◀
+              </button>
+            )}
+            <button
+              className={`filter-btn ${current?.id === g.id ? "active" : ""}`}
+              onClick={() => setOpenGroup(g.id)}
+              title={g.memo}
+            >
+              {g.name}
+              <span className={`uw-grate ${cls(g.changeRate)}`}> {pct(g.changeRate)}</span>
+            </button>
+            {editing && (
+              <button
+                className="gt-move"
+                onClick={() => void moveGroup(i, 1)}
+                disabled={i >= groups.length - 1}
+                title="뒤로"
+              >
+                ▶
+              </button>
+            )}
+          </span>
         ))}
         <button
           className={`filter-btn ${editing ? "active" : ""}`}

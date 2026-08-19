@@ -190,9 +190,14 @@ export function ChartPanel({
           {PERIOD_CONFIG[p].label}
         </button>
       ))}
-      <span className="period-sep" />
-      {full ? (
+      {/*
+        전체화면일 때만 여기 둔다. 「크게」 버튼은 도구줄에 두면 안 된다 —
+        이 줄은 가로로 굴러가고(모바일 가로밀림을 막느라 그렇게 했다) 맨 끝 버튼은
+        화면 밖으로 나가 **아예 안 보인다.** 그래서 차트 모서리에 따로 띄운다.
+      */}
+      {full && (
         <>
+          <span className="period-sep" />
           <button
             className={`period-btn ${fullInsights ? "active" : ""}`}
             onClick={() => setFullInsights((v) => !v)}
@@ -204,10 +209,6 @@ export function ChartPanel({
             ✕ 닫기
           </button>
         </>
-      ) : (
-        <button className="period-btn" onClick={() => void enterFull()} title="크게 보기">
-          ⤢ 크게
-        </button>
       )}
     </div>
   );
@@ -230,6 +231,15 @@ export function ChartPanel({
       {error && <div className="error-banner">{error}</div>}
       {!loading && !error && (
         <div className="chart-wrap">
+          {/*
+            차트 오른쪽 위에 붙박는다. 도구줄이 굴러가도 이건 늘 같은 자리에 있다.
+            전체화면 안에서는 도구줄에 닫기가 있으므로 띄우지 않는다.
+          */}
+          {!full && (
+            <button className="chart-expand" onClick={() => void enterFull()} title="크게 보기">
+              ⤢ 크게
+            </button>
+          )}
           <CandleChart
             candles={candles}
             intraday={isIntraday}
