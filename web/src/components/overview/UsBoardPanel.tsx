@@ -11,7 +11,7 @@ import {
 } from "../../api";
 import { useSection } from "../../useSection";
 import { YahooChartSheet, type ChartTarget } from "./YahooChartSheet";
-import { showDayQuote } from "../../usSession";
+import { sideQuote } from "../../usSession";
 
 /**
  * 미국 전광판.
@@ -441,8 +441,8 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
         <div className="table-note">
           <b>관심종목(해외)</b> 와 같은 목록입니다 — 여기서 넣고 빼면 거기서도 바뀝니다.
           종목을 누르면 <b>상세</b>가 열립니다.
-          괄호는 <b>미국 주간거래</b>(한국 낮에 열리는 세션)이며, <b>정규장이 열리면 사라집니다</b> —
-          그때부터 지금 값은 정규장 하나뿐입니다.
+          괄호는 <b>지금 도는 다른 세션</b>입니다 — 정규장 마감 후엔 <b>애프터장</b>,
+          한국 낮엔 <b>주간거래</b>. 정규장 중에는 사라집니다(그때는 지금 값이 곧 정규장입니다).
         </div>
       </div>
     </section>
@@ -466,6 +466,7 @@ function UsBoardRow({
   onRemove: () => void;
   onOpen: () => void;
 }) {
+  const side = sideQuote(row);
   return (
     <div className="usb-row">
       {editing && (
@@ -485,15 +486,21 @@ function UsBoardRow({
       </button>
       <span className="usb-px">
         {row.price === null ? "-" : row.price.toFixed(2)}
-        {/* 정규장이 열리면 주간거래 괄호는 지운다 — 가격이 두 개면 어느 쪽이 지금 값인지 헷갈린다 */}
-        {showDayQuote(row) && (
-          <span className="uw-day"> ({row.dayPrice!.toFixed(2)})</span>
+        {/* 괄호는 지금 도는 다른 세션 — 마감 후엔 애프터장, 한국 낮엔 주간거래 */}
+        {side && (
+          <span className="uw-day" title={side.label}>
+            {" "}
+            ({side.price.toFixed(2)})
+          </span>
         )}
       </span>
       <span className={`usb-rt ${cls(row.changeRate)}`}>
         {pct(row.changeRate)}
-        {showDayQuote(row) && (
-          <span className={`uw-day ${cls(row.dayChangeRate)}`}> ({pct(row.dayChangeRate)})</span>
+        {side && (
+          <span className={`uw-day ${cls(side.changeRate)}`} title={side.label}>
+            {" "}
+            ({pct(side.changeRate)})
+          </span>
         )}
       </span>
       {editing && (

@@ -39,16 +39,45 @@ export function usRegularOpen(now = new Date()): boolean {
 }
 
 /**
- * 주간거래 값을 지금 보여줄 것인가.
+ * 괄호에 무엇을 넣을 것인가.
  *
- * 두 가지를 다 만족해야 한다.
- *   1. 정규장이 닫혀 있을 것 — 열려 있으면 최신 값은 정규장이다
- *   2. 그 세션에 **실제 거래가 있을 것** — 거래량 0 은 아직 아무도 안 샀다는 뜻이라
- *      가격이 있어도 믿을 값이 아니다
+ * 괄호는 **「지금 도는 다른 세션」**이다. 미국 종목은 하루에 세 판이 돌기 때문에
+ * 「현재가」 하나로는 어느 판의 값인지 알 수가 없다.
+ *
+ *   정규장 중        괄호 없음 — 지금 값이 곧 정규장 값이다
+ *   정규장 마감 후   **애프터장** (미 동부 16:00~20:00)
+ *   한국 낮          **주간거래** (오버나이트 세션)
+ *
+ * 애프터장이 먼저다. 마감 직후에는 애프터장이 돌고 주간거래는 아직 안 열렸는데,
+ * 그때 주간거래 자리에 남아 있는 건 **어제 값**이라 보여주면 거짓말이 된다.
  */
-export function showDayQuote(
-  row: { dayPrice: number | null; dayVolume: number | null },
-  now = new Date(),
-): boolean {
-  return row.dayPrice !== null && !!row.dayVolume && !usRegularOpen(now);
+export interface SessionQuote {
+  afterPrice: number | null;
+  afterChangeRate: number | null;
+  dayPrice: number | null;
+  dayChangeRate: number | null;
+  dayVolume: number | null;
+}
+
+export interface SideQuote {
+  label: string;
+  price: number;
+  changeRate: number | null;
+}
+
+export function sideQuote(row: SessionQuote, now = new Date()): SideQuote | null {
+  // 정규장이 열려 있으면 괄호를 띄우지 않는다 — 가격이 두 개면 어느 쪽이 지금 값인지 헷갈린다
+  if (usRegularOpen(now)) return null;
+
+  if (row.afterPrice !== null) {
+    return { label: "애프터장", price: row.afterPrice, changeRate: row.afterChangeRate };
+  }
+  /*
+   * 주간거래는 **거래가 실제로 있을 때만.**
+   * 거래량 0 은 아직 아무도 안 샀다는 뜻이라 가격이 있어도 정규장 종가 그대로다.
+   */
+  if (row.dayPrice !== null && row.dayVolume) {
+    return { label: "주간거래", price: row.dayPrice, changeRate: row.dayChangeRate };
+  }
+  return null;
 }

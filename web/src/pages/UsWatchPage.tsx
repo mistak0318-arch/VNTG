@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type UsSearchResult, type UsWatchGroup , type UsQuoteRow } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
-import { showDayQuote } from "../usSession";
+import { sideQuote } from "../usSession";
 import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
 
 /**
@@ -478,21 +478,30 @@ export function UsWatchPage() {
                             ? Math.round(s.price).toLocaleString("ko-KR")
                             : s.price.toFixed(2)}
                         {/*
-                          주간거래 괄호는 **정규장이 열리면 지운다** — 가격이 두 개 보이면
-                          어느 쪽이 지금 값인지 헷갈린다. showDayQuote 가 그 판단을 한다.
+                          괄호는 **지금 도는 다른 세션**이다 — 마감 후엔 애프터장,
+                          한국 낮엔 주간거래. 정규장 중에는 안 띄운다.
                         */}
-                        {showDayQuote(s) && (
-                          <span className="uw-day"> ({s.dayPrice!.toFixed(2)})</span>
-                        )}
+                        {(() => {
+                          const side = sideQuote(s);
+                          return side ? (
+                            <span className="uw-day" title={side.label}>
+                              {" "}
+                              ({side.price.toFixed(2)})
+                            </span>
+                          ) : null;
+                        })()}
                       </td>
                       <td className={`num tickable ${cls(s.changeRate)} ${tick(s.symbol)}`}>
                         {pct(s.changeRate)}
-                        {showDayQuote(s) && (
-                          <span className={`uw-day ${cls(s.dayChangeRate)}`}>
-                            {" "}
-                            ({pct(s.dayChangeRate)})
-                          </span>
-                        )}
+                        {(() => {
+                          const side = sideQuote(s);
+                          return side ? (
+                            <span className={`uw-day ${cls(side.changeRate)}`} title={side.label}>
+                              {" "}
+                              ({pct(side.changeRate)})
+                            </span>
+                          ) : null;
+                        })()}
                       </td>
                       <td className="num pt-n">
                         {s.wonPrice == null ? "-" : s.wonPrice.toLocaleString("ko-KR")}

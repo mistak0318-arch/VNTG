@@ -259,6 +259,15 @@ export interface UsQuoteRow {
    * 미국 가격은 이것뿐이다 — 그래서 "지금 미국이 어디로 가나"를 보려면 이걸 봐야 한다.
    * 미국 종목만 있다(일본·홍콩·유럽은 이런 세션이 없다).
    */
+  /**
+   * 애프터장(미 동부 16:00~20:00) 체결가.
+   *
+   * 한투가 정규장 마감 뒤에도 갱신해 주는 그 값이다. 예전엔 이걸 **주 등락률 자리**에
+   * 그냥 써서, 화면 숫자가 그날의 정규장 등락률이 아니었다. 이제 자리를 옮겨
+   * 괄호에 따로 보여 준다 — 괄호는 **지금 도는 다른 세션**을 뜻한다.
+   */
+  afterPrice: number | null;
+  afterChangeRate: number | null;
   dayPrice: number | null;
   dayChangeRate: number | null;
   /** 주간거래 거래량. 0이면 아직 아무도 안 샀다는 뜻이라 값을 믿으면 안 된다 */
@@ -327,6 +336,71 @@ async function quoteOne(symbol: string): Promise<Quote> {
 
 const cache = new Map<string, { at: number; data: Quote }>();
 const TTL_MS = 60_000;
+
+/**
+ * 미국 정규장이 열려 있나 (평일 09:30~16:00 ET).
+ * 서머타임은 직접 세지 않는다 — 시간대 데이터가 대신 계산해 준다.
+ */
+function usRegularOpen(now = new Date()): boolean {
+  const f = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = Object.fromEntries(f.formatToParts(now).map((p) => [p.type, p.value]));
+  const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(String(parts.weekday));
+  if (day === 0 || day === 6) return false;
+  const mins = (Number(parts.hour) % 24) * 60 + Number(parts.minute);
+  return mins >= 9 * 60 + 30 && mins < 16 * 60;
+}
+
+/*
+ * 정규장 종가 캐시.
+ *
+ * **장이 닫힌 뒤엔 이 값이 안 변한다.** 그런데 일반 시세 캐시(60초)를 쓰면 111종목을
+ * 1분마다 다시 받게 된다. 따로 두고 길게 잡는다.
+ */
+const closeCache = new Map<string, { at: number; price: number; rate: number | null }>();
+const CLOSE_TTL_MS = 15 * 60_000;
+
+/**
+ * 마지막 **정규장 종가**를 야후에서 받는다.
+ *
+ * ## 왜 필요한가 (2026-08-20 실측)
+ *
+ * 한투는 정규장이 끝난 뒤에도 `last` 를 **애프터장 체결가**로 계속 갱신한다.
+ * 그 값을 전일 종가와 견주면 화면에 뜨는 등락률이 **그날의 정규장 등락률이 아니다.**
+ *
+ *   NVDA  전일 219.74 · 정규장 종가 217.56 · 한투 218.70
+ *         정규장 등락 −0.99% 인데 화면엔 −0.47% 로 떴다
+ *   AMZN  정규장 +2.46% 인데 화면엔 +2.98%
+ *
+ * 야후 `regularMarketPrice` 는 이름 그대로 정규장 값이라 여기서만 쓴다.
+ * **장 중에는 부르지 않는다** — 그때는 한투 값이 곧 정규장 값이다.
+ */
+async function regularCloses(symbols: string[]): Promise<Map<string, { price: number; rate: number | null }>> {
+  const out = new Map<string, { price: number; rate: number | null }>();
+  const need: string[] = [];
+  for (const sym of symbols) {
+    const hit = closeCache.get(sym);
+    if (hit && Date.now() - hit.at < CLOSE_TTL_MS) out.set(sym, { price: hit.price, rate: hit.rate });
+    else need.push(sym);
+  }
+  for (let i = 0; i < need.length; i += 6) {
+    const chunk = need.slice(i, i + 6);
+    await Promise.all(
+      chunk.map(async (sym) => {
+        const q = await quoteOne(sym).catch(() => null);
+        if (!q || q.price === null) return;
+        closeCache.set(sym, { at: Date.now(), price: q.price, rate: q.changeRate });
+        out.set(sym, { price: q.price, rate: q.changeRate });
+      }),
+    );
+  }
+  return out;
+}
 
 export interface UsWatchResult {
   groups: {
@@ -432,17 +506,38 @@ async function buildGroups(force: boolean): Promise<UsWatchResult> {
    */
   const dayQuotes = await hantooUsDayQuotes(symbols).catch(() => new Map());
 
+  /*
+   * 정규장이 닫혀 있으면 **정규장 종가를 따로 받는다.**
+   * 한투 `last` 는 그 시간엔 애프터장 체결가라 「오늘 등락률」 자리에 쓸 수 없다.
+   */
+  const closed = !usRegularOpen();
+  const closes = closed ? await regularCloses(symbols).catch(() => new Map()) : new Map();
+
+  const after = new Map<string, { price: number; rate: number | null }>();
   const missing: string[] = [];
   for (const sym of symbols) {
     const h = hantoo.get(sym);
     if (h && h.price !== null) {
-      quotes.set(sym, {
-        price: h.price,
-        changeRate: h.changeRate,
-        state: h.state,
-        quotedAt: null,
-        error: null,
-      });
+      const rc = closes.get(sym);
+      if (rc) {
+        // 한투가 준 값은 정규장이 아니라 시간외다 — 자리를 옮겨 따로 보여 준다
+        if (Math.abs(h.price - rc.price) > 1e-9) after.set(sym, { price: h.price, rate: h.changeRate });
+        quotes.set(sym, {
+          price: rc.price,
+          changeRate: rc.rate,
+          state: h.state,
+          quotedAt: null,
+          error: null,
+        });
+      } else {
+        quotes.set(sym, {
+          price: h.price,
+          changeRate: h.changeRate,
+          state: h.state,
+          quotedAt: null,
+          error: null,
+        });
+      }
       extra.set(sym, toExtra(h));
     } else {
       missing.push(sym);
@@ -479,6 +574,8 @@ async function buildGroups(force: boolean): Promise<UsWatchResult> {
         quotedAt: q?.quotedAt ?? null,
         error: q?.error ?? null,
         ...(extra.get(s.symbol) ?? EMPTY_EXTRA),
+        afterPrice: after.get(s.symbol)?.price ?? null,
+        afterChangeRate: after.get(s.symbol)?.rate ?? null,
         dayPrice: dayQuotes.get(s.symbol)?.price ?? null,
         dayChangeRate: dayQuotes.get(s.symbol)?.changeRate ?? null,
         dayVolume: dayQuotes.get(s.symbol)?.volume ?? null,

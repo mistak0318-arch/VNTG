@@ -1920,6 +1920,9 @@ export interface UsQuoteRow {
    * 미 동부 프리마켓은 한국 밤이라 우리가 볼 때는 이미 끝나 있다.
    * 이건 한국 낮에 열리는 세션이고, 국내장이 도는 동안 움직이는 미국 가격은 이것뿐이다.
    */
+  /** 애프터장 (미 동부 16:00~20:00) — 괄호에 들어간다 */
+  afterPrice: number | null;
+  afterChangeRate: number | null;
   dayPrice: number | null;
   dayChangeRate: number | null;
   dayVolume: number | null;
