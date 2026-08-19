@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmtNum, type IndexDetailData, type IndexRange } from "../../api";
-import { TrendLineChart } from "../TrendLineChart";
+import { CandleChart } from "../CandleChart";
 
 /**
  * 코스피·코스닥 상세.
@@ -83,25 +83,29 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
 
         {!data && !error && <div className="page-note">불러오는 중…</div>}
 
+        {/*
+          **봉차트**다. 종가만 이으면 흐름은 보여도 **꼬리가 안 보인다** —
+          아래로 길게 찔렀다 올라온 날과 그냥 오른 날은 완전히 다른 뜻인데
+          선차트에서는 똑같이 생긴다. 개별 종목과 같은 컴포넌트를 쓴다.
+
+          지수엔 거래량이 없어 0 을 넣는다 — 거래량 막대는 그려지지 않는다.
+        */}
         {candles.length > 1 && (
-          <TrendLineChart
-            height={220}
-            series={[
-              {
-                label: data?.name ?? "지수",
-                color: "#4c8dff",
-                axis: "right",
-                // lightweight-charts 는 {year, month, day} 형태를 받는다
-                data: candles.map((c) => ({
-                  time: {
-                    year: Number(c.dt.slice(0, 4)),
-                    month: Number(c.dt.slice(4, 6)),
-                    day: Number(c.dt.slice(6, 8)),
-                  },
-                  value: c.close,
-                })),
+          <CandleChart
+            name={data?.name}
+            showExtremes
+            candles={candles.map((c) => ({
+              time: {
+                year: Number(c.dt.slice(0, 4)),
+                month: Number(c.dt.slice(4, 6)),
+                day: Number(c.dt.slice(6, 8)),
               },
-            ]}
+              open: c.open,
+              high: c.high,
+              low: c.low,
+              close: c.close,
+              volume: 0,
+            }))}
           />
         )}
 

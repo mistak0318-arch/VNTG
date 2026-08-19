@@ -302,7 +302,15 @@
       "Bash(curl -s --max-time 90 \"http://localhost:4000/api/overview/section/rates\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/rate.json\")",
       "Bash(curl -s --max-time 60 \"http://localhost:4000/api/ranking/volume?market=000&sort=1\" -o \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/vr.json\")",
       "Bash(timeout 60 git status --short)",
-      "Bash(timeout 60 git log --oneline -8)"
+      "Bash(timeout 60 git log --oneline -8)",
+      "Bash(cp server/data/calendar.json server/data/calendar.seed.json)",
+      "Bash(cp server/data/stockNotes.json server/data/stockNotes.seed.json)",
+      "Bash(timeout 60 git rm --cached server/data/calendar.json server/data/stockNotes.json -q)",
+      "Bash(timeout 60 git add -f server/data/calendar.seed.json server/data/stockNotes.seed.json)",
+      "Bash(timeout 50 git ls-files server/data/)",
+      "Bash(timeout 100 git status --short)",
+      "Bash(timeout 90 git log --oneline -3)",
+      "Bash(rm -f .claude/settings.local.json.tmp.*)"
     ]
   }
 }

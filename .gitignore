@@ -23,8 +23,12 @@ server/data/*
 # 않지만, 그러면 새 PC 에 최초 한 번이 안 넘어간다. 그래서 씨앗만 따로 보낸다 —
 # 이건 메인PC 에서만 갱신하므로 충돌하지 않는다.
 !server/data/usWatchlist.seed.json
-!server/data/calendar.json
-!server/data/stockNotes.json
+# calendar.json / stockNotes.json 도 usWatchlist 와 같은 이유로 추적하지 않는다.
+# **미니PC 가 자동으로 채운다** — calendarImport·calendarVision·economicCalendar 가
+# 일정을 쌓고, 종목메모는 사람이 적는다. 양쪽이 같은 파일을 쓰면 pull 이 막힌다.
+# 씨앗만 보내고, 실제 파일은 각 PC 것을 쓴다.
+!server/data/calendar.seed.json
+!server/data/stockNotes.seed.json
 
 # usWatchlist.json 은 처음엔 위쪽(내려보내는 것)에 뒀는데 그게 틀렸다.
 # **미니PC 화면에서도 그룹을 고친다** — 담고, 빼고, 순서를 바꾼다. 그래서 양쪽이 같은

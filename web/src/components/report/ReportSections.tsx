@@ -16,7 +16,7 @@ import {
   type PinnedPost,
   type UsMajorResult,
 } from "../../api";
-import { TrendLineChart } from "../TrendLineChart";
+import { CandleChart } from "../CandleChart";
 import { useSection } from "../../useSection";
 import { useWatchGroupTiles } from "../../useWatchGroupTiles";
 
@@ -122,23 +122,26 @@ function IndexChart({ code, label }: { code: string; label: string }) {
         {label}
         <b className="pt-n"> {candles[candles.length - 1].close.toFixed(2)}</b>
       </div>
-      <TrendLineChart
-        height={150}
-        series={[
-          {
-            label,
-            color: code === "101" ? "#f5c542" : "#4c8dff",
-            axis: "right",
-            data: candles.map((c) => ({
-              time: {
-                year: Number(c.dt.slice(0, 4)),
-                month: Number(c.dt.slice(4, 6)),
-                day: Number(c.dt.slice(6, 8)),
-              },
-              value: c.close,
-            })),
+      {/*
+        봉차트다. 종가만 이으면 **꼬리가 안 보인다** — 아래로 길게 찔렀다 올라온 날과
+        그냥 오른 날은 완전히 다른 뜻인데 선차트에서는 똑같이 생긴다.
+        리포트는 좁으니 기간 최고/최저 말풍선은 끈다.
+      */}
+      <CandleChart
+        name={label}
+        showExtremes={false}
+        candles={candles.map((c) => ({
+          time: {
+            year: Number(c.dt.slice(0, 4)),
+            month: Number(c.dt.slice(4, 6)),
+            day: Number(c.dt.slice(6, 8)),
           },
-        ]}
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: 0,
+        }))}
       />
     </div>
   );
