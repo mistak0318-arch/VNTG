@@ -4570,16 +4570,33 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
    지수 → 국채금리 → 야간선물 → 관심종목.
    ================================================================== */
 
-.usb { display: flex; flex-direction: column; gap: 12px; }
+/*
+ * **격자 전체를 쓴다.**
+ *
+ * 시황은 `.ov-grid` 가 넓은 화면에서 2~3열로 갈린다. 전광판을 그냥 두면 **칸 하나**로
+ * 들어가 왼쪽 한 줄만 쓰고 오른쪽이 통째로 빈다 — 글자를 키우면 그 한 줄이 더 좁아져
+ * 지수 상자가 2×2 로 접히고 「미국 기준금리」 같은 이름이 줄바꿈된다.
+ * 이건 한 화면을 통째로 쓰는 자리이므로 열 수와 상관없이 끝에서 끝까지 편다.
+ */
+.usb {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .usb .ov-card { margin: 0; }
 
 /* 지수 상자 — 국내 지수 카드와 같은 모양 */
+/*
+ * 상자 수를 화면 폭이 아니라 **글자 크기에 맞춰** 정한다.
+ * `min-width` 를 px 로 재는 미디어쿼리는 글자를 키워도 그대로라, 큰 글자에서 이름이
+ * 줄바꿈됐다. `auto-fit` + rem 최소폭이면 글자가 커질수록 알아서 줄을 나눈다.
+ */
 .usb-boxes {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
   gap: 8px;
 }
-@media (min-width: 720px) { .usb-boxes { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 .usb-box {
   padding: 10px;
@@ -4593,7 +4610,13 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .usb-box.sig-warn { border-color: rgba(245,197,66,.5); }
 .usb-box.sig-ok { border-color: rgba(53,196,106,.5); }
 
-.usb-box-nm { font-size: 0.6667rem; color: var(--muted); font-weight: 700; }
+.usb-box-nm {
+  font-size: 0.6667rem;
+  color: var(--muted);
+  font-weight: 700;
+  /* 「필라델피아 반도체」처럼 긴 이름이 줄바꿈해도 아래 값 자리가 안 밀리게 */
+  min-height: 2.2em;
+}
 .usb-box-px { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .usb-box-chg { font-size: 0.7333rem; font-variant-numeric: tabular-nums; }
 .usb-box-why { font-size: 0.6667rem; color: var(--muted); margin-top: 4px; }
@@ -4601,8 +4624,7 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .usb-curve { margin-top: 8px; font-size: 0.7333rem; color: var(--red); }
 
 /* 금리 */
-.usb-rates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-@media (min-width: 720px) { .usb-rates { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.usb-rates { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 6px; }
 .usb-rate {
   display: flex; flex-direction: column; gap: 1px;
   padding: 8px 10px; border-radius: 8px; background: var(--panel-2); min-width: 0;
