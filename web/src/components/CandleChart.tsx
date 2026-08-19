@@ -363,6 +363,18 @@ export function CandleChart({
     const el = containerRef.current;
     if (!chartRef.current || !el) return;
     chartRef.current.applyOptions({ width: el.clientWidth, height });
+
+    /*
+     * 폭이 0 이면 아무것도 안 그려진다 — **까만 화면이 된다.**
+     *
+     * 전체화면으로 들어가는 순간처럼 자리가 아직 안 잡힌 때가 있다. 그때 한 번 더 잰다.
+     * 타이머를 쓴다 — ResizeObserver 나 rAF 는 그리지 않는 탭에서 굶는다(겪었다).
+     */
+    const t = window.setTimeout(() => {
+      const w = containerRef.current?.clientWidth ?? 0;
+      if (w > 0) chartRef.current?.applyOptions({ width: w, height });
+    }, 80);
+    return () => clearTimeout(t);
   }, [height]);
 
   // ── 데이터 갱신 (차트는 그대로 두고 값만) ─────────────────────────────

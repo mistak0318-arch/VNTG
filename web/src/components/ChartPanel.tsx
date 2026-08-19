@@ -104,21 +104,37 @@ export function ChartPanel({
     setFull(false);
   }, []);
 
-  async function enterFull() {
+  /*
+   * 전체화면 요청은 **여기서 하지 않는다.**
+   *
+   * `setFull(true)` 은 곧바로 반영되지 않는다. 바로 뒤에서 `requestFullscreen()` 을 부르면
+   * 그 시점의 `hostRef` 는 **아직 옛 요소**다 — 브라우저가 그걸 전체화면으로 만들고 나면
+   * 화면에는 아무것도 안 나온다. 실제로 「크게 보는 중…」만 뜨고 까매졌다.
+   * 그래서 상태만 켜고, 실제 요청은 아래 effect 가 **다시 그린 뒤에** 한다.
+   */
+  function enterFull() {
     setFull(true);
-    try {
-      await hostRef.current?.requestFullscreen?.();
-    } catch {
-      // iOS 사파리는 video 가 아니면 안 준다. 오버레이만으로도 화면은 꽉 찬다
-    }
-    try {
-      await (
-        screen.orientation as { lock?: (o: string) => Promise<void> } | undefined
-      )?.lock?.("landscape");
-    } catch {
-      // 안드로이드 크롬에서만 된다. 안 되면 사용자가 폰을 돌리면 그만이다
-    }
   }
+
+  useEffect(() => {
+    if (!full) return;
+    const el = hostRef.current;
+    if (!el) return;
+    void (async () => {
+      try {
+        await el.requestFullscreen?.();
+      } catch {
+        // iOS 사파리는 video 가 아니면 안 준다. 오버레이만으로도 화면은 꽉 찬다
+      }
+      try {
+        await (
+          screen.orientation as { lock?: (o: string) => Promise<void> } | undefined
+        )?.lock?.("landscape");
+      } catch {
+        // 안드로이드 크롬에서만 된다. 안 되면 사용자가 폰을 돌리면 그만이다
+      }
+    })();
+  }, [full]);
 
   // 화면 크기·방향이 바뀌면 차트 높이를 다시 잰다
   useEffect(() => {
@@ -252,28 +268,36 @@ export function ChartPanel({
     </>
   );
 
-  if (full) {
-    return (
-      <>
-        {/* 원래 자리에는 빈 자국을 남긴다 — 안 그러면 닫을 때 화면이 튄다 */}
-        <div className="chart-placeholder">크게 보는 중…</div>
-        <div className={`chart-full${compact ? " compact" : ""}`} ref={hostRef}>
-          {!compact && (
-            <div className="chart-full-head">
-              <span className="chart-full-name">
-                {name ?? code}
-                <span className="pt-n"> {code}</span>
-              </span>
-              <span className="pt-n chart-full-hint">
-                가로로 돌리면 더 넓게 봅니다 · ESC 로 닫기
-              </span>
-            </div>
-          )}
-          {body}
-        </div>
-      </>
-    );
-  }
-
-  return <div ref={hostRef}>{body}</div>;
+  /*
+   * **트리 모양을 바꾸지 않는다.**
+   *
+   * 예전엔 전체화면일 때 다른 구조를 돌려줬는데(div 하나 → 형제 둘),
+   * 그러면 React 가 차트를 통째로 버리고 새로 만든다. 그 순간 아직 폭이 0 이라
+   * 아무것도 안 그려진 채로 남았다 — 까맣게 보인 두 번째 이유다.
+   *
+   * 늘 같은 두 형제를 두고 **클래스만 바꾼다.** 차트는 한 번 만들어진 채로 크기만 달라진다.
+   */
+  return (
+    <>
+      {/* 원래 자리에 남기는 자국 — 없으면 닫을 때 화면이 튄다 */}
+      <div className="chart-placeholder" hidden={!full}>
+        크게 보는 중…
+      </div>
+      <div
+        className={full ? `chart-full${compact ? " compact" : ""}` : undefined}
+        ref={hostRef}
+      >
+        {full && !compact && (
+          <div className="chart-full-head">
+            <span className="chart-full-name">
+              {name ?? code}
+              <span className="pt-n"> {code}</span>
+            </span>
+            <span className="pt-n chart-full-hint">가로로 돌리면 더 넓게 봅니다 · ESC 로 닫기</span>
+          </div>
+        )}
+        {body}
+      </div>
+    </>
+  );
 }
