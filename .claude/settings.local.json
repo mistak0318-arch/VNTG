@@ -316,7 +316,11 @@
       "Bash(echo \"typecheck exit=$?\")",
       "Bash(python -c \"import pypdf; print\\('pypdf', pypdf.__version__\\)\")",
       "Bash(python -c \"import fitz; print\\('pymupdf ok'\\)\")",
-      "Bash(python -c \"import pdfplumber; print\\('pdfplumber ok'\\)\")"
+      "Bash(python -c \"import pdfplumber; print\\('pdfplumber ok'\\)\")",
+      "WebFetch(domain:datawith.tistory.com)",
+      "WebFetch(domain:hyunsoft.tistory.com)",
+      "Bash(awk 'NR>=353 && NR<=400 && /\\\\}, \\\\[/' web/src/components/CandleChart.tsx)",
+      "Bash(echo \"tsc=$?\")"
     ]
   }
 }

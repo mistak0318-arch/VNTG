@@ -286,3 +286,70 @@ export async function hantooUsQuotes(symbols: string[]): Promise<Map<string, UsH
   }
   return out;
 }
+
+/* ------------------------------------------------------------------ */
+/* 미국 주간거래 (오버나이트)                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 정규장 거래소 → **주간거래** 거래소.
+ *
+ * 한투가 `BAQ`(나스닥 주간)·`BAY`(뉴욕 주간)·`BAA`(아멕스 주간)를 준다.
+ * **이미 쓰는 multprice 그대로**이고 거래소 코드만 바꾸면 된다 — 새 API 가 아니다.
+ */
+const DAY_EXCD: Record<string, string> = { NAS: "BAQ", NYS: "BAY", AMS: "BAA" };
+
+export interface UsDayQuote {
+  symbol: string;
+  /** 주간거래 현재가 */
+  price: number | null;
+  /** 등락률(%) — 정규장 종가 대비 */
+  changeRate: number | null;
+  /** 기준가(정규장 종가) */
+  base: number | null;
+  /** 주간거래 거래량. 0 이면 아직 거래가 없다는 뜻이라 값을 믿으면 안 된다 */
+  volume: number | null;
+}
+
+/**
+ * 미국 주간거래 시세.
+ *
+ * **이름을 정확히 쓴다.** 이건 미 동부 프리마켓(04:00~09:30 ET, 한국 밤)이 **아니다.**
+ * 한국 낮에 열리는 **오버나이트 세션**이다. 그런데 국내장이 열려 있는 동안 움직이는
+ * 미국 가격은 이것뿐이라, "미국이 지금 어디로 가는가"를 보려면 이걸 봐야 한다.
+ * 화면에도 「프리장」이 아니라 「미국 주간거래」로 적는다 — 나중에 헷갈리면 판단이 틀어진다.
+ *
+ * 미국 종목만 대상이다. 일본·홍콩·유럽은 주간거래가 없어 아예 부르지 않는다.
+ */
+export async function hantooUsDayQuotes(symbols: string[]): Promise<Map<string, UsDayQuote>> {
+  const out = new Map<string, UsDayQuote>();
+  if (!hantooReady() || symbols.length === 0) return out;
+
+  const map = await loadExcd();
+  // 거래소를 아는 미국 종목만. 모르는 건 정규장 조회가 먼저 채워 준다
+  const pairs = symbols
+    .filter((s) => map[s] && DAY_EXCD[map[s]])
+    .map((symbol) => ({ excd: DAY_EXCD[map[symbol]], symbol }));
+  if (pairs.length === 0) return out;
+
+  for (let i = 0; i < pairs.length; i += 10) {
+    try {
+      const rows = await multRaw(pairs.slice(i, i + 10));
+      for (const r of rows) {
+        const symbol = String(r.symb ?? "").trim();
+        if (!symbol) continue;
+        const volume = num(r.tvol);
+        out.set(symbol, {
+          symbol,
+          price: num(r.last),
+          changeRate: Number.isFinite(Number(r.rate)) ? Number(r.rate) : null,
+          base: num(r.base),
+          volume,
+        });
+      }
+    } catch {
+      // 주간거래는 있으면 좋은 값이다. 실패해도 정규장 시세를 막지 않는다
+    }
+  }
+  return out;
+}

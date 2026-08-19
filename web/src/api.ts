@@ -997,6 +997,8 @@ export interface ReviewableReport {
   label: string;
   publishedAt: string;
   count: number;
+  /** 발행 후 며칠 지났나. 0이면 아직 채점할 수 없다 */
+  elapsedDays: number;
 }
 
 export interface ScoredCheckpoint {

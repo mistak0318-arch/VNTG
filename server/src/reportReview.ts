@@ -253,10 +253,24 @@ export async function reviewReport(
  * 정기 발행(조간·장중·석간·주말)만 남기면 하루 3~4건이라 **한 달치가 100건 안쪽**이다.
  */
 export async function listReviewable(limit = 30): Promise<
-  { date: string; edition: string; label: string; publishedAt: string; count: number }[]
+  {
+    date: string;
+    edition: string;
+    label: string;
+    publishedAt: string;
+    count: number;
+    elapsedDays: number;
+  }[]
 > {
   const rows = await listReports(limit * 2);
-  const out: { date: string; edition: string; label: string; publishedAt: string; count: number }[] = [];
+  const out: {
+    date: string;
+    edition: string;
+    label: string;
+    publishedAt: string;
+    count: number;
+    elapsedDays: number;
+  }[] = [];
   for (const r of rows) {
     // `now-HHMM` 은 즉시 발행이다. 정기 판은 morning/intraday/closing/weekend
     if (r.edition.startsWith("now")) continue;
@@ -269,6 +283,18 @@ export async function listReviewable(limit = 30): Promise<
         label: full.label,
         publishedAt: full.publishedAt,
         count: n,
+        /*
+         * 경과일을 목록에도 실어 보낸다.
+         *
+         * 화면이 「채점할 수 있는 것 중 가장 최근」을 고르려면 이게 있어야 한다.
+         * 예전엔 화면이 `날짜 < 오늘` 로 어림잡았는데, 그건 **오늘 발행분을 고르는 걸 막을 뿐**
+         * 채점 가능한지는 말해 주지 않는다. 실제로 복기를 열면 늘 「대기」만 보였다.
+         * 채점 쪽과 같은 식을 쓴다 — 두 곳이 다르면 목록과 결과가 어긋난다.
+         */
+        elapsedDays: Math.max(
+          0,
+          Math.round((Date.now() - new Date(full.publishedAt).getTime()) / 86400_000),
+        ),
       });
     }
     if (out.length >= limit) break;

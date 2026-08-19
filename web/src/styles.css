@@ -4060,6 +4060,11 @@ body {
 
 /* 값이 백만 단위까지 가므로 넉넉히 — 좁으면 자릿수가 줄바꿈된다 */
 .ci-bar-price { flex: 0 0 5.4em; text-align: right; color: var(--muted); }
+/* 현재가에서 몇 % 떨어진 칸인가 — 위는 저항, 아래는 지지라 색을 갈라 둔다 */
+.ci-bar-gap { flex: 0 0 3.6em; text-align: right; }
+.ci-bar-gap.up { color: var(--red); }
+.ci-bar-gap.down { color: var(--blue); }
+
 .ci-bar-track { flex: 1 1 auto; height: 9px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
 .ci-bar-fill { display: block; height: 100%; background: var(--muted); opacity: .55; border-radius: 3px; }
 .ci-bar-share { flex: 0 0 2.4em; text-align: right; color: var(--muted); }
@@ -4184,3 +4189,50 @@ body {
   word-break: break-word;
   overflow-x: auto;
 }
+
+/* ==================================================================
+   차트 설정 (ChartConfigPanel)
+   ================================================================== */
+
+.cc-group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--panel-2);
+}
+
+.cc-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.cc-title b { font-size: 0.8rem; }
+.cc-title small { font-size: 0.6667rem; color: var(--muted); flex: 1 1 12rem; min-width: 0; }
+
+.cc-ma-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(0, 9rem));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.cc-ma-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  min-width: 0;
+}
+.cc-ma-row.off { opacity: .45; }
+.cc-ma-name { display: flex; align-items: center; gap: 5px; flex: 1 1 auto; min-width: 0; font-size: 0.7333rem; }
+
+/* 색 고르는 칸은 브라우저 기본 모양이 제각각이라 크기만 맞춰 둔다 */
+.cc-color { width: 26px; height: 20px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: none; }
+.cc-del { background: none; border: none; color: var(--muted); font-size: 0.7333rem; }
+
+.cc-add { display: flex; gap: 6px; align-items: center; }
+.cc-add input { width: 11rem; }
+
+.cc-inline { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 0.7333rem; }
+.cc-inline label { display: flex; align-items: center; gap: 5px; }
+.cc-inline input[type="number"] { width: 4.2em; }

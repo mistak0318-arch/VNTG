@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, fmtNum, type RawRecord } from "../api";
 import type { Candle } from "./CandleChart";
+import { useChartPrefs } from "../useChartPrefs";
 import { toCandles } from "./chartCandles";
 
 /**
@@ -15,8 +16,6 @@ import { toCandles } from "./chartCandles";
  * 주봉으로 재면 5주선이 되기 때문이다.
  */
 
-/** 매물대를 볼 기간. 차트에서 눈에 들어오는 구간과 맞춘다 */
-const PROFILE_DAYS = 120;
 /** 가격대를 몇 칸으로 자를지 */
 const BANDS = 14;
 
@@ -70,7 +69,7 @@ function sma(values: number[], n: number, end: number): number | null {
   return sum / n;
 }
 
-function compute(candles: Candle[]): Insights | null {
+function compute(candles: Candle[], profileDays: number): Insights | null {
   if (candles.length === 0) return null;
   const closes = candles.map((c) => c.close);
   const last = candles.length - 1;
@@ -137,7 +136,7 @@ function compute(candles: Candle[]): Insights | null {
    * 위아래로 크게 흔든 날의 물량이 실제로 손바뀜한 구간을 못 잡는다.
    * 체결 단위 자료가 아니므로 근사지만, 어느 가격대가 두꺼운지를 보는 데는 충분하다.
    */
-  const win = candles.slice(-PROFILE_DAYS);
+  const win = candles.slice(-profileDays);
   const lo = Math.min(...win.map((c) => c.low));
   const hi = Math.max(...win.map((c) => c.high));
   const bands: Band[] = [];
@@ -215,6 +214,7 @@ export function ChartInsights({
    */
   candles?: Candle[];
 }) {
+  const { prefs } = useChartPrefs();
   const [own, setOwn] = useState<Candle[] | null>(null);
   const need = candles === undefined;
 
@@ -236,7 +236,7 @@ export function ChartInsights({
   }, [need, code]);
 
   const rows = candles ?? own;
-  const ins = rows ? compute(rows) : null;
+  const ins = rows ? compute(rows, prefs.profileDays) : null;
   if (!ins) return null;
 
   const orderLabel =
@@ -302,10 +302,10 @@ export function ChartInsights({
       </div>
 
       {/* ---- 매물대 ---- */}
-      {ins.heaviest && (
+      {prefs.profileOn && ins.heaviest && (
         <div className="ci-col ci-profile">
           <div className="ci-head">
-            <span className="ci-title">매물대 {PROFILE_DAYS}일</span>
+            <span className="ci-title">매물대 {prefs.profileDays}일</span>
             {ins.overhead !== null && (
               <span
                 className={`ci-overhead ${ins.overhead >= 0.5 ? "heavy" : ins.overhead <= 0.2 ? "light" : ""}`}
@@ -329,6 +329,14 @@ export function ChartInsights({
                   className={`ci-bar-row${top ? " top" : ""}${wall ? " wall" : ""}${here ? " here" : ""}`}
                 >
                   <span className="ci-bar-price">{fmtNum(Math.round(b.to))}</span>
+                  {/*
+                    칸마다 현재가에서 몇 % 떨어져 있는지. 가격만 있으면 그때그때 암산해야 한다 —
+                    「1,740,714」보다 「+10.9%」가 먼저 읽힌다.
+                    칸의 가운데를 기준으로 잰다(위아래 끝을 쓰면 같은 칸인데 값이 달라진다).
+                  */}
+                  <span className={`ci-bar-gap ${(b.from + b.to) / 2 >= ins.price ? "up" : "down"}`}>
+                    {gap(ins.price, (b.from + b.to) / 2)}
+                  </span>
                   <span className="ci-bar-track">
                     <span
                       className="ci-bar-fill"

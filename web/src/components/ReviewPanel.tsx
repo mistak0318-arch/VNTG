@@ -42,14 +42,17 @@ export function ReviewPanel() {
         /*
          * **오늘 것을 기본으로 두면 안 된다.**
          *
-         * 오늘 발행한 리포트는 정의상 채점이 불가능하다. 그런데 그게 기본 선택이라
+         * 오늘 발행한 리포트는 정의상 채점이 불가능하다. 그게 기본 선택이라
          * 열 때마다 "아직 비교할 거래일이 없습니다" 만 보게 됐다 — 기능이 있는데도
          * 없는 것처럼 느껴진 이유다.
          *
-         * **채점이 가능한 가장 최근 것**을 고른다. 어제 것이 있으면 어제 것을.
+         * 예전엔 `날짜 < 오늘` 로 어림잡았는데 그건 **오늘 것을 피할 뿐** 채점이 되는지는
+         * 말해 주지 않는다. 이제 서버가 `elapsedDays` 를 같이 보내므로 그걸 그대로 쓴다 —
+         * 채점 쪽과 같은 식이라 목록과 결과가 어긋나지 않는다.
+         *
+         * 목록은 발행 시각 내림차순이므로 **처음 걸리는 것이 곧 가장 최근**이다.
          */
-        const today = new Date().toISOString().slice(0, 10);
-        setPicked(r.reports.find((x) => x.date < today) ?? r.reports[0] ?? null);
+        setPicked(r.reports.find((x) => x.elapsedDays >= 1) ?? r.reports[0] ?? null);
       })
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -68,6 +71,8 @@ export function ReviewPanel() {
       cancelled = true;
     };
   }, [picked?.date, picked?.edition]);
+
+  const scorable = list.filter((r) => r.elapsedDays >= 1).length;
 
   if (list.length === 0) {
     return (
@@ -100,6 +105,8 @@ export function ReviewPanel() {
           {list.map((r) => (
             <option key={`${r.date}-${r.edition}`} value={`${r.date}|${r.edition}`}>
               {r.date.slice(5)} {r.label} · {r.count}건
+              {/* 채점이 되는지 목록에서 바로 알 수 있게 — 골라 보고 나서 「대기」를 만나면 늦다 */}
+              {r.elapsedDays < 1 ? " · 채점 전" : ` · ${r.elapsedDays}일 경과`}
             </option>
           ))}
         </select>
@@ -115,6 +122,23 @@ export function ReviewPanel() {
 
       {error && <div className="error-banner">{error}</div>}
       {loading && !result && <div className="empty">채점 중… (종목별 일봉을 확인합니다)</div>}
+
+      {/*
+        「대기」만 보이는 이유를 **접힌 곳 밖에서** 말해 준다.
+        예전엔 이 안내가 `details` 안에 있어서, 펴 보지 않으면 왜 아무것도 없는지 알 수 없었다.
+      */}
+      {scorable === 0 && (
+        <div className="alert-note">
+          아직 채점할 수 있는 리포트가 없습니다. 발행된 것이 전부 오늘 것이라 비교할 거래일이
+          없습니다 — <b>다음 거래일이 지나면</b> 여기에 결과가 찹니다.
+        </div>
+      )}
+      {scorable > 0 && result?.elapsedDays === 0 && (
+        <div className="alert-note">
+          고른 것이 오늘 발행분이라 아직 채점할 수 없습니다. 위 목록에서{" "}
+          <b>「N일 경과」</b>가 붙은 것을 고르세요.
+        </div>
+      )}
 
       {/*
         상세는 접어 둔다. 매일 필요한 건 위의 한 줄이고, 무엇이 왜 틀렸는지는

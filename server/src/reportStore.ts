@@ -72,7 +72,26 @@ export async function loadReport(
   }
 }
 
-/** 최근 발행분 목록 (날짜 내림차순) */
+/**
+ * 판이 하루 중 몇 시에 나온 것인지 분으로 돌려준다.
+ *
+ * 정렬에 쓴다. 예전엔 `edition.localeCompare` 로 문자 비교를 했는데,
+ * 알파벳 순은 시간 순이 아니다 — `morning` > `midday` > `closing` 이라
+ * 조간·장중·석간이 **거꾸로** 늘어섰다. 복기 목록 맨 위가 그날의 마지막 판이 아니라
+ * 첫 판이었고, 그래서 "방금 발행했는데 옛날 게 선택된다"는 말이 나왔다.
+ */
+export function editionMinutes(edition: EditionKey): number {
+  // 즉시 발행은 이름에 시각이 들어 있다 — now-1435
+  const now = /^now-(\d{2})(\d{2})$/.exec(edition);
+  if (now) return Number(now[1]) * 60 + Number(now[2]);
+  if (edition === WEEKEND_EDITION.key) return WEEKEND_EDITION.hour * 60;
+  const found = EDITIONS.find((e) => e.key === edition);
+  if (found) return found.hour * 60;
+  // 사용자가 만든 판은 시각을 모른다. 맨 뒤로 보낸다
+  return -1;
+}
+
+/** 최근 발행분 목록 (발행 시각 내림차순 — 가장 최근 것이 맨 앞) */
 export async function listReports(limit = 30): Promise<{ date: string; edition: EditionKey }[]> {
   try {
     const files = await readdir(DIR);
@@ -82,8 +101,12 @@ export async function listReports(limit = 30): Promise<{ date: string; edition: 
         const [date, rest] = f.replace(/\.json$/, "").split("_");
         return { date, edition: rest as EditionKey };
       })
-      // 같은 날 안에서는 발행 시각순으로 — 즉시발행(now-HHMM)이 정기판 사이에 끼어야 한다
-      .sort((a, b) => b.date.localeCompare(a.date) || b.edition.localeCompare(a.edition))
+      // 같은 날 안에서는 **발행 시각** 순으로 — 즉시발행(now-HHMM)이 정기판 사이에 끼어야 한다.
+      // 문자 비교로는 안 된다(morning > midday > closing 이라 거꾸로 선다)
+      .sort(
+        (a, b) =>
+          b.date.localeCompare(a.date) || editionMinutes(b.edition) - editionMinutes(a.edition),
+      )
       .slice(0, limit);
   } catch {
     return [];

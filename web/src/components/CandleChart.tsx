@@ -10,6 +10,7 @@ import {
 } from "lightweight-charts";
 import { useEffect, useRef } from "react";
 import { chartColors, useAppearance } from "../useAppearance";
+import { useChartPrefs } from "../useChartPrefs";
 
 export interface Candle {
   /** 일/주/월봉은 BusinessDay, 분봉은 UTCTimestamp(초) */
@@ -21,12 +22,11 @@ export interface Candle {
   volume: number;
 }
 
-const MA_LINES: { period: number; color: string }[] = [
-  { period: 5, color: "#f5c542" },
-  { period: 10, color: "#4ade80" },
-  { period: 20, color: "#c084fc" },
-  { period: 60, color: "#38bdf8" },
-];
+/*
+ * 이동평균은 이제 **설정에서 정한다**(설정 > 화면 > 차트). 무엇을 볼지는 사람마다 달라
+ * 13일선을 쓰는 사람도 있고 볼린저만 보는 사람도 있다 — 코드에 박아 두면 그때마다 나를 불러야 한다.
+ * 기본값과 색은 `useChartPrefs` 에 있고 키움 HTS 와 같은 색으로 맞춰 뒀다.
+ */
 
 function sma(candles: Candle[], period: number): { time: Time; value: number }[] {
   const closes = candles.map((c) => c.close);
@@ -37,6 +37,33 @@ function sma(candles: Candle[], period: number): { time: Time; value: number }[]
     out.push({ time: candles[i].time, value: avg });
   }
   return out;
+}
+
+/**
+ * 볼린저 밴드 — 이동평균 ± 표준편차×배수.
+ *
+ * 가운데 선은 이동평균과 같으므로 **그리지 않는다.** 이평선을 이미 켜 두는 사람이 많아
+ * 겹쳐 그리면 차트만 지저분해진다. 위·아래 띠만 그린다.
+ */
+function bollinger(
+  rows: Candle[],
+  period: number,
+  mult: number,
+): { upper: { time: Time; value: number }[]; lower: { time: Time; value: number }[] } {
+  const upper: { time: Time; value: number }[] = [];
+  const lower: { time: Time; value: number }[] = [];
+  if (period < 2) return { upper, lower };
+  for (let i = period - 1; i < rows.length; i++) {
+    let sum = 0;
+    for (let k = i - period + 1; k <= i; k++) sum += rows[k].close;
+    const mean = sum / period;
+    let sq = 0;
+    for (let k = i - period + 1; k <= i; k++) sq += (rows[k].close - mean) ** 2;
+    const sd = Math.sqrt(sq / period);
+    upper.push({ time: rows[i].time, value: mean + sd * mult });
+    lower.push({ time: rows[i].time, value: mean - sd * mult });
+  }
+  return { upper, lower };
 }
 
 /** 캔들 배열에서 기간 최고/최저를 낸다 (HTS의 최고/최저 표시용) */
@@ -116,10 +143,19 @@ export function CandleChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const { theme } = useAppearance();
+  const { prefs } = useChartPrefs();
+  /** 켜 둔 이평선만. 설정이 바뀌면 이 배열이 바뀌고 차트를 다시 만든다 */
+  const maLines = prefs.ma.filter((m) => m.on);
+  /** effect 의존성으로 쓸 지문 — 배열은 매 렌더 새 객체라 그대로는 못 쓴다 */
+  const maKey = maLines.map((m) => `${m.period}:${m.color}`).join(",");
 
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const maRefs = useRef<ISeriesApi<"Line">[]>([]);
+  const bbRefs = useRef<ISeriesApi<"Line">[]>([]);
+  /** 크로스헤어 핸들러가 늘 최신 설정을 보게 한다 */
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
   const volRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   /** 최신 캔들 — 크로스헤어 핸들러가 항상 최신 배열을 보게 한다 */
   const dataRef = useRef<Candle[]>(candles);
@@ -187,9 +223,22 @@ export function CandleChart({
     candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.3 } });
     candleRef.current = candleSeries;
 
-    maRefs.current = MA_LINES.map(({ color }) =>
+    maRefs.current = maLines.map(({ color }) =>
       chart.addLineSeries({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false }),
     );
+
+    // 볼린저는 위·아래 두 줄. 점선으로 둬야 이평선과 구분된다
+    bbRefs.current = prefs.bbOn
+      ? [0, 1].map(() =>
+          chart.addLineSeries({
+            color: c.border,
+            lineWidth: 1,
+            lineStyle: LineStyle.Dashed,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          }),
+        )
+      : [];
 
     const volumeSeries = chart.addHistogramSeries({
       priceScaleId: "volume",
@@ -243,25 +292,36 @@ export function CandleChart({
           ? `${cur.volume >= prev.volume ? "+" : ""}${(((cur.volume - prev.volume) / prev.volume) * 100).toFixed(2)}%`
           : "";
 
-      const maRows = MA_LINES.map((m) => {
+      const pf = prefsRef.current;
+      const maRows = (pf.tip.includes("ma") ? pf.ma.filter((m) => m.on) : []).map((m) => {
         const series = sma(rows, m.period);
         const hit = series.find((p) => timeValue(p.time) === timeValue(cur.time));
         if (!hit) return "";
         const gap = ((hit.value - cur.close) / cur.close) * 100;
         return (
           `<div class="ct-row"><span><i class="ct-dot" style="background:${m.color}"></i>${m.period}</span>` +
-          `<b>${won(hit.value)}</b><i>${gap > 0 ? "+" : ""}${gap.toFixed(2)}%</i></div>`
+          `<b>${won(hit.value)}</b>` +
+          // 이격도는 따로 끌 수 있다 — 값만 보고 싶은 사람이 있다
+          (pf.tip.includes("gap") ? `<i>${gap > 0 ? "+" : ""}${gap.toFixed(2)}%</i>` : "") +
+          `</div>`
         );
       }).join("");
 
+      /*
+       * 말풍선에 무엇을 넣을지는 설정에서 고른다.
+       * 다 켜면 열 줄이 넘어 봉을 가린다 — 필요한 것만 남기는 게 낫다.
+       */
       tip.innerHTML =
         (name ? `<div class="ct-name">${name}${code ? `(${code})` : ""}</div>` : "") +
         `<div class="ct-date">${tooltipDate(cur.time, intraday)}</div>` +
-        row("시가", cur.open) +
-        row("고가", cur.high) +
-        row("저가", cur.low) +
+        (pf.tip.includes("ohlc")
+          ? row("시가", cur.open) + row("고가", cur.high) + row("저가", cur.low)
+          : "") +
+        // 종가는 늘 보인다. 이것까지 끄면 말풍선을 띄울 이유가 없다
         row("종가", cur.close) +
-        `<div class="ct-row"><span>거래량</span><b>${won(cur.volume)}</b><i>${volRate}</i></div>` +
+        (pf.tip.includes("volume")
+          ? `<div class="ct-row"><span>거래량</span><b>${won(cur.volume)}</b><i>${volRate}</i></div>`
+          : "") +
         (maRows ? `<div class="ct-sub">가격 이동평균</div>${maRows}` : "");
 
       tip.style.display = "block";
@@ -287,7 +347,8 @@ export function CandleChart({
       maRefs.current = [];
       volRef.current = null;
     };
-  }, [intraday, theme, name, code]);
+    // maKey·볼린저 설정이 바뀌면 시리즈 구성이 달라지므로 차트를 다시 만든다
+  }, [intraday, theme, name, code, maKey, prefs.bbOn]);
 
   // ── 데이터 갱신 (차트는 그대로 두고 값만) ─────────────────────────────
   useEffect(() => {
@@ -298,7 +359,15 @@ export function CandleChart({
     candleSeries.setData(
       candles.map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })),
     );
-    maRefs.current.forEach((line, i) => line.setData(sma(candles, MA_LINES[i].period)));
+    maRefs.current.forEach((line, i) => {
+      const m = maLines[i];
+      if (m) line.setData(sma(candles, m.period));
+    });
+    if (prefs.bbOn && bbRefs.current.length === 2) {
+      const bb = bollinger(candles, prefs.bbPeriod, prefs.bbStdDev);
+      bbRefs.current[0].setData(bb.upper);
+      bbRefs.current[1].setData(bb.lower);
+    }
     volRef.current?.setData(
       candles.map((c) => ({
         time: c.time,
@@ -373,7 +442,12 @@ export function CandleChart({
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(refresh);
     };
-  }, [candles, showExtremes]);
+    /*
+     * 설정이 바뀌면 위 effect 가 차트를 **새로 만든다.** 그때 이 effect 가 다시 돌지 않으면
+     * 새로 만든 이평선·볼린저 시리즈가 빈 채로 남아 선이 사라진 것처럼 보인다.
+     * 그래서 차트를 다시 만드는 조건을 여기에도 그대로 적는다.
+     */
+  }, [candles, showExtremes, maKey, prefs.bbOn, prefs.bbPeriod, prefs.bbStdDev]);
 
   if (candles.length === 0) {
     return <div className="empty">차트 데이터 없음</div>;
@@ -382,7 +456,7 @@ export function CandleChart({
   return (
     <div>
       <div className="chart-legend">
-        {MA_LINES.map((m) => (
+        {maLines.map((m) => (
           <span className="legend-item" key={m.period}>
             <i style={{ background: m.color }} />
             MA{m.period}

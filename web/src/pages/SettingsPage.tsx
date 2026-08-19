@@ -6,6 +6,7 @@ import { AiModelPanel } from "../components/AiModelPanel";
 import { AlertConfigPanel } from "../components/AlertConfigPanel";
 import { CollapsibleCard } from "../components/CollapsibleCard";
 import { ReportSchedulePanel } from "../components/ReportSchedulePanel";
+import { ChartConfigPanel } from "../components/ChartConfigPanel";
 import { MenuOrderPanel } from "../components/MenuOrderPanel";
 import { MENU_ITEMS } from "../App";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
@@ -104,6 +105,16 @@ export function SettingsPage() {
         hint="사이드바 메뉴를 원하는 순서로 바꾸고 안 쓰는 것은 숨깁니다."
       >
         <MenuOrderPanel items={MENU_ITEMS} />
+      </CollapsibleCard>
+      )}
+
+      {tab === "display" && (
+      <CollapsibleCard
+        id="chartConfig"
+        title="차트"
+        hint="이동평균선·볼린저 밴드·매물대·말풍선을 내 방식대로 맞춥니다."
+      >
+        <ChartConfigPanel />
       </CollapsibleCard>
       )}
 

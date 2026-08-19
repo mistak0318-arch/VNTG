@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLive } from "../useLive";
 import type { RawRecord } from "../api";
 import { CandleChart } from "./CandleChart";
+import { useChartPrefs } from "../useChartPrefs";
 import { ChartInsights } from "./ChartInsights";
 import { PERIOD_CONFIG, toCandles, type Period } from "./chartCandles";
 
@@ -33,6 +34,7 @@ export function ChartPanel({
   /** 차트 위 판독 줄(이동평균·매물대)을 붙일지 */
   insights?: boolean;
 }) {
+  const { prefs } = useChartPrefs();
   const [period, setPeriod] = useState<Period>(initialPeriod);
   const [venue, setVenue] = useState<Venue>("krx");
   const isIntraday = PERIOD_CONFIG[period].intraday === true;
@@ -87,7 +89,7 @@ export function ChartPanel({
         지금 보고 있는 게 KRX 일봉이면 받아 둔 배열을 그대로 넘기고(같은 걸 두 번 받지 않는다),
         다른 봉이나 다른 거래소를 보고 있으면 넘기지 않아 판독 줄이 일봉을 따로 받는다.
       */}
-      {insights && (
+      {insights && prefs.insightsOn && (
         <ChartInsights
           code={code}
           candles={period === "day" && venue === "krx" && !loading ? candles : undefined}
