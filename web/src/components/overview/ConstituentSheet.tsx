@@ -13,6 +13,13 @@ export interface ConstituentTarget {
    * 이미 손에 있는 걸 다시 조회할 이유가 없다 — 테마 평가에서 받아온 그 값이다.
    */
   stocks?: StockRow[];
+  /**
+   * 제목에 붙일 이름표. 안 주면 `kind` 로 정한다.
+   *
+   * `custom` 이 「내 테마」만 뜻하지 않게 됐다 — 리포트의 **미국 테마 MAP** 도
+   * 이걸 쓰는데 그건 해외 관심종목 그룹이다. 「내 테마 구성종목」이라고 뜨면 거짓말이다.
+   */
+  label?: string;
 }
 
 /** 테마/업종 구성종목 목록 시트 */
@@ -69,7 +76,9 @@ export function ConstituentSheet({
           <h2>
             {target.name}
             <span className="sheet-sub">
-              {target.kind === "custom" ? "내 테마" : target.kind === "theme" ? "테마" : "업종"} 구성종목
+              {target.label ??
+                (target.kind === "custom" ? "내 테마" : target.kind === "theme" ? "테마" : "업종")}{" "}
+              구성종목
             </span>
           </h2>
           <button className="close-btn" onClick={onClose}>
@@ -111,8 +120,13 @@ export function ConstituentSheet({
                         <WatchStar code={code} />
                         {s.name}
                       </td>
-                      <td>{fmtNum(s.price)}</td>
-                      <td className={signClass(s.change)}>{fmtNum(s.change)}</td>
+                      {/*
+                        넘겨받은 구성종목에는 현재가·전일대비가 없을 수 있다(테마 평가는
+                        등락률만 쓴다). 그때 0 을 찍으면 **값이 0원인 것처럼 보인다** —
+                        모르는 것은 「-」로 둔다.
+                      */}
+                      <td>{s.price ? fmtNum(s.price) : "-"}</td>
+                      <td className={signClass(s.change)}>{s.price ? fmtNum(s.change) : "-"}</td>
                       <td className={signClass(s.changeRate)}>
                         {s.changeRate > 0 ? "+" : ""}
                         {s.changeRate.toFixed(2)}%

@@ -15,6 +15,7 @@ import {
   type NewsItem,
   type PinnedPost,
   type UsMajorResult,
+  type EvaluatedTheme,
 } from "../../api";
 import { CandleChart } from "../CandleChart";
 import { useSection } from "../../useSection";
@@ -317,8 +318,14 @@ function MapMini({
  * 내가 짜 둔 해외 관심종목 그룹을 그대로 쓴다. 남의 분류가 아니라 **내 분류**여야
  * 국내 종목과 머릿속에서 이어진다.
  */
-export function UsThemeMapSection() {
+export function UsThemeMapSection({
+  onSelectStock,
+}: {
+  onSelectStock?: (code: string, name: string) => void;
+} = {}) {
   const { tiles, loading } = useWatchGroupTiles("watchUs");
+  const [target, setTarget] = useState<ConstituentTarget | null>(null);
+
   if (loading) return <div className="page-note">불러오는 중…</div>;
   return (
     <>
@@ -328,47 +335,22 @@ export function UsThemeMapSection() {
           name: t.name,
           rate: t.changeRate,
           sub: `▲${t.risingCount}/▼${t.fallingCount}`,
+          /*
+           * 구성종목을 **그대로 넘긴다.**
+           *
+           * 국내 테마는 코드로 조회하지만 여기 타일은 내 해외 관심종목 그룹이라
+           * 「구성종목 엔드포인트」가 따로 없다. 그런데 종목 목록은 그리려고 이미 받아 놨다 —
+           * 있는 걸 다시 부를 이유가 없다.
+           */
+          open: {
+            kind: "custom" as const,
+            code: t.id,
+            name: t.name,
+            label: "관심종목 그룹",
+            stocks: t.stocks,
+          },
         }))}
         empty="해외 관심종목 그룹이 없습니다."
-      />
-      <div className="table-note">
-        내 <b>해외 관심종목</b> 그룹입니다. <b>밤사이 무엇이 돌았나</b>가 오늘 국내 무엇이 도는지를
-        상당 부분 정합니다. ▲/▼ 는 그 그룹에서 오른/내린 종목 수입니다.
-      </div>
-    </>
-  );
-}
-
-/**
- * 국내 테마 MAP.
- *
- * 키움 테마 순위를 쓴다. 상승·하락을 **한 판에 같이** 놓는 게 중요하다 —
- * 오른 것만 보면 "장이 좋다"고 착각하는데, 실제로는 돈이 옮겨 다닌 것뿐인 날이 많다.
- */
-export function KrThemeMapSection({
-  onSelectStock,
-}: {
-  onSelectStock?: (code: string, name: string) => void;
-} = {}) {
-  const [target, setTarget] = useState<ConstituentTarget | null>(null);
-  const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 180_000);
-  const merged = (() => {
-    const m = new Map<string, ThemeRow>();
-    for (const t of [...(themes.data?.top ?? []), ...(themes.data?.bottom ?? [])]) m.set(t.code, t);
-    return [...m.values()].sort((a, b) => b.changeRate - a.changeRate);
-  })();
-
-  if (themes.loading) return <div className="page-note">불러오는 중…</div>;
-  return (
-    <>
-      <MapMini
-        tiles={merged.map((t) => ({
-          key: t.code,
-          name: t.name,
-          rate: t.changeRate,
-          open: { kind: "theme" as const, code: t.code, name: t.name },
-        }))}
-        empty="테마 데이터가 없습니다."
         onOpen={setTarget}
       />
       {target && (
@@ -382,8 +364,111 @@ export function KrThemeMapSection({
         />
       )}
       <div className="table-note">
-        키움 테마 분류입니다. 오른 것과 내린 것을 <b>한 판에 같이</b> 놓았습니다 — 오른 것만
-        보면 장이 좋다고 착각하는데, 돈이 옮겨 다닌 것뿐인 날이 많습니다.
+        내 <b>해외 관심종목</b> 그룹입니다. <b>밤사이 무엇이 돌았나</b>가 오늘 국내 무엇이 도는지를
+        상당 부분 정합니다. ▲/▼ 는 그 그룹에서 오른/내린 종목 수입니다.
+        칸을 누르면 그 그룹의 종목이 보입니다.
+      </div>
+    </>
+  );
+}
+
+/**
+ * 국내 테마 MAP — **내 테마 기준.**
+ *
+ * 예전엔 키움 테마 순위를 썼다. 그런데 **증권사가 나눠 준 테마와 실제로 시장이 도는
+ * 묶음은 다르다.** 키움 분류는 「반도체_후공정」·「휴대폰_RF부품」처럼 잘게 쪼개져 있어서,
+ * 바로 위 미국 MAP 의 「원자력SMR」·「양자」와 **짝을 지어 볼 수가 없었다.**
+ *
+ * 이 두 판을 나란히 놓는 목적이 그것이다 — **밤사이 미국에서 돈 것이 오늘 국내 어디로
+ * 오는가.** 견주려면 양쪽이 같은 언어로 묶여 있어야 하고, 그 언어는 내가 정한 것이어야 한다.
+ *
+ * 상승·하락을 **한 판에 같이** 놓는 건 그대로다 — 오른 것만 보면 "장이 좋다"고 착각하는데,
+ * 실제로는 돈이 옮겨 다닌 것뿐인 날이 많다.
+ *
+ * **키움 테마를 버린 게 아니다.** 바로 아래 「특징 테마(상승 이유 포함)」가 그걸 쓴다.
+ */
+export function KrThemeMapSection({
+  onSelectStock,
+}: {
+  onSelectStock?: (code: string, name: string) => void;
+} = {}) {
+  const [target, setTarget] = useState<ConstituentTarget | null>(null);
+  const [themes, setThemes] = useState<EvaluatedTheme[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .customThemes()
+      .then((r) => {
+        if (alive) setThemes(r.themes);
+      })
+      .catch(() => {
+        if (alive) setThemes([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (themes === null) return <div className="page-note">불러오는 중…</div>;
+
+  /*
+   * 종목이 하나도 안 잡힌 테마는 뺀다 — 등락률이 null 이라 칸만 차지한다.
+   * 정렬은 등락률 내림차순: 오른 것이 왼쪽, 내린 것이 오른쪽으로 한 판에 늘어선다.
+   */
+  const usable = themes
+    .filter((t) => t.changeRate !== null && t.stocks.length > 0)
+    .sort((a, b) => (b.changeRate ?? 0) - (a.changeRate ?? 0));
+
+  return (
+    <>
+      <MapMini
+        tiles={usable.map((t) => ({
+          key: t.id,
+          name: t.name,
+          rate: t.changeRate ?? 0,
+          sub: `▲${t.risingCount}/▼${t.fallingCount}`,
+          /*
+           * 구성종목은 이미 손에 있다 — 다시 조회할 이유가 없다.
+           * 다만 테마 평가가 주는 모양엔 현재가·전일대비가 없어서(등락률만 쓴다)
+           * 0 으로 채운다. 「내 테마」 화면도 같은 방식이다.
+           */
+          open: {
+            kind: "custom" as const,
+            code: t.id,
+            name: t.name,
+            stocks: t.stocks
+              .filter((x) => x.found)
+              .map((x) => ({
+                code: x.code,
+                name: x.name,
+                price: 0,
+                change: 0,
+                changeRate: x.changeRate,
+                marketCap: x.marketCap,
+              })),
+          },
+        }))}
+        empty="「내 테마」가 없습니다. 마이페이지 > 내 테마에서 만들어 주세요."
+        onOpen={setTarget}
+      />
+      {target && (
+        <ConstituentSheet
+          target={target}
+          onClose={() => setTarget(null)}
+          onSelectStock={(c, n) => {
+            setTarget(null);
+            onSelectStock?.(c, n);
+          }}
+        />
+      )}
+      <div className="table-note">
+        <b>내가 정한 테마</b>입니다 — 증권사가 나눠 준 분류와 실제로 시장이 도는 묶음은
+        다릅니다. 바로 위 <b>미국 테마 MAP</b> 과 같은 언어로 묶여 있어야
+        「밤사이 돈 것이 오늘 어디로 오는가」를 견줄 수 있습니다.
+        오른 것과 내린 것을 <b>한 판에 같이</b> 놓았습니다 — 오른 것만 보면 장이 좋다고
+        착각하는데, 돈이 옮겨 다닌 것뿐인 날이 많습니다.
+        칸을 누르면 구성종목이 보입니다. (키움 테마는 아래 <b>특징 테마</b>에 그대로 있습니다)
       </div>
     </>
   );

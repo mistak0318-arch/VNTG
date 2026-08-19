@@ -634,7 +634,7 @@ export function DailyReportPage({
         반도체가 밤에 빠졌으면 아침에 국내 반도체도 빠진 채로 시작한다.
       */}
       <Section no={8} title="미국 테마 MAP">
-        <UsThemeMapSection />
+        <UsThemeMapSection onSelectStock={onSelectStock} />
       </Section>
 
       <Section no={9} title="국내 테마 MAP">

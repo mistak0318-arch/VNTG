@@ -15,6 +15,10 @@ export interface TrendSeries {
 /**
  * 추이 비교용 라인/히스토그램 차트.
  * 외국인 지분율, 공매도량, 대차잔고처럼 "주가와 함께 보는 보조지표"에 쓴다.
+ *
+ * **여기는 봉으로 안 바꾼다.** 다른 차트는 전부 봉으로 통일했지만(2026-08-20),
+ * 이 값들은 하루에 숫자가 **하나뿐**이다 — 지분율에 시가·고가·저가가 없다.
+ * OHLC 가 없는 걸 봉으로 그리려면 없는 값을 지어내야 한다. 확인하고 선으로 남겼다.
  */
 export function TrendLineChart({ series, height = 240 }: { series: TrendSeries[]; height?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
