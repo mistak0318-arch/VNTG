@@ -314,6 +314,8 @@ export const api = {
   dartToday: (force = false) =>
     getJson<{ day: string; events: DartEvent[] }>(`/api/dart/today${force ? "?force=1" : ""}`),
   journal: () => getJson<JournalData>("/api/journal"),
+  /** 내 판단 추적 — 종목마다 일봉을 받아 몇 십 초 걸릴 수 있다 */
+  journalTrack: () => getJson<TradeTrackResult>("/api/journal/track"),
   journalSave: (e: Partial<JournalEntry> & { date: string }) =>
     putJson<{ entries: JournalEntry[]; stats: JournalStats }>("/api/journal", e),
   paperTrades: () => getJson<PaperResult>("/api/paper"),
@@ -2175,4 +2177,35 @@ export interface YahooChart {
   candles: { t: string; open: number; high: number; low: number; close: number; volume: number }[];
   prevClose: number | null;
   error: string | null;
+}
+
+
+/** 내 매매 판단 추적 — 매도는 부호가 뒤집힌다(팔고 내렸으면 잘 판 것) */
+export interface TradeTrackResult {
+  trades: {
+    id: string;
+    date: string;
+    kind: "buy" | "sell";
+    code: string;
+    name: string;
+    price: number;
+    qty: number;
+    note: string;
+    outcomes: { days: number; price: number; move: number; edge: number }[];
+    error?: string;
+  }[];
+  buy: TradeHorizonStat[];
+  sell: TradeHorizonStat[];
+  soldTooEarly: { date: string; name: string; days: number; move: number; note: string }[];
+  fetched: number;
+  failed: number;
+}
+
+export interface TradeHorizonStat {
+  days: number;
+  n: number;
+  hitRate: number;
+  avgEdge: number;
+  best: number;
+  worst: number;
 }

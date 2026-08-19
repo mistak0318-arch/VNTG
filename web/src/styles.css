@@ -4921,3 +4921,38 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   width: 100%;
   padding: 0;
 }
+
+/* ------------------------------------------------------------------ */
+/* 내 판단 추적 (복기 노트)                                             */
+/* ------------------------------------------------------------------ */
+
+.tt h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.tt-toggle { margin-left: auto; }
+
+/*
+ * 팔고 나서 오른 것 — 이 화면의 본론이라 눈에 띄어야 한다.
+ * 실현손익 어디에도 안 남는 값이다.
+ */
+.tt-early {
+  margin: 0.6rem 0 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--red);
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+.tt-early h3 { margin: 0 0 0.3rem; font-size: 1rem; }
+.tt-early-list { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+.tt-early-list li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.tt-early-list li:last-child { border-bottom: none; }
+.tt-early-note {
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}

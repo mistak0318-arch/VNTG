@@ -299,7 +299,7 @@ export default function App() {
           {tab === "watchKiwoom" && <KiwoomWatchlistPage onSelectStock={onSelectStock} />}
           {tab === "customTheme" && <CustomThemePage onSelectStock={onSelectStock} />}
           {tab === "signalScreen" && <ScreenPage onSelectStock={onSelectStock} />}
-          {tab === "journal" && <JournalPage />}
+          {tab === "journal" && <JournalPage onSelectStock={onSelectStock} />}
           {tab === "usWatch" && <UsWatchPage />}
           {tab === "marketFlow" && <MarketFlowPage onSelectStock={onSelectStock} />}
           {tab === "ask" && <AskPage />}

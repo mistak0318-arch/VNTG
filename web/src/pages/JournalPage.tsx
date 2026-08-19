@@ -8,6 +8,7 @@ import {
   type StockSearchResult,
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
+import { TradeTrackPanel } from "../components/TradeTrackPanel";
 
 /**
  * 복기 노트.
@@ -30,7 +31,11 @@ function pct(n: number | null): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 
-export function JournalPage() {
+export function JournalPage({
+  onSelectStock,
+}: {
+  onSelectStock?: (code: string, name: string) => void;
+} = {}) {
   const [data, setData] = useState<JournalData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -458,6 +463,13 @@ export function JournalPage() {
           </div>
         </>
       )}
+
+      {/*
+        ── 내 판단 추적 ──
+        「쌓인 나」 바로 뒤다. 위 통계가 **번 돈**을 세는 자리라면, 여기는
+        **그 판단이 옳았나**를 세는 자리다 — 판 뒤에 오른 종목은 위쪽 어디에도 안 남는다.
+      */}
+      <TradeTrackPanel onSelectStock={onSelectStock} />
 
       {/* ── 지난 기록 ── */}
       {data.entries.length > 0 && (
