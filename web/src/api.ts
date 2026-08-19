@@ -700,6 +700,8 @@ export interface UsMajorRow {
   isRate: boolean;
   digits: number;
   quotedAt: number | null;
+  /** 어디서 받은 값인가 — 야후가 막히면 한투로 메운다 */
+  source: "yahoo" | "hantoo";
   error: string | null;
 }
 

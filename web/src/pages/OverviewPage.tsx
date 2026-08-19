@@ -302,7 +302,11 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                   )}
                   {(usMajor.data?.rows ?? []).map((r) => (
                     <tr key={r.key}>
-                      <td>{r.label}</td>
+                      <td>
+                        {r.label}
+                        {/* 야후가 막혀 한투로 메운 줄은 밝힌다 — 두 출처가 섞이니까 */}
+                        {r.source === "hantoo" && <span className="pt-n"> 한투</span>}
+                      </td>
                       <td className={signCls(r.changeRate ?? 0)}>
                         {r.price == null
                           ? "-"
@@ -320,7 +324,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                 </tbody>
               </table>
               <div className="table-note">
-                야간선물을 뺀 나머지는 <b>전일 마감값</b>입니다 — 미국 현물은 우리 시간 05:30 에
+                야간선물을 뺀 나머지는 <b>전일 마감값</b>입니다. 기본은 야후이고, 못 받은 줄만
+                한투로 메웁니다(그 줄엔 「한투」라고 적습니다). — 미국 현물은 우리 시간 05:30 에
                 닫혀 낮에는 움직이지 않습니다. 지금 움직이는 걸 보시려면 「글로벌 시황지수」의
                 선물을 보세요.
               </div>
