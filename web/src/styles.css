@@ -3661,3 +3661,9 @@ body {
 .ov-help { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
 .ov-help > summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 4px 0; }
 .ov-help[open] > summary { margin-bottom: 6px; }
+
+/* 지수 카드 — 눌러서 상세로 */
+.ov-idx.clickable { cursor: pointer; }
+.ov-idx.clickable:hover { background: var(--panel-2); }
+.idx-sheet { max-width: 760px; }
+.idx-h3 { font-size: 13px; margin: 14px 0 6px; }

@@ -17,6 +17,7 @@ import {
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { FlowBars } from "../components/overview/FlowBars";
 import { FlowIntradayChart } from "../components/overview/FlowIntradayChart";
+import { IndexDetailSheet } from "../components/overview/IndexDetailSheet";
 import { OverviewCard } from "../components/overview/OverviewCard";
 import { RankList, SegmentToggle } from "../components/overview/RankList";
 import { RefreshBar } from "../components/RefreshBar";
@@ -65,6 +66,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const [themeDir, setThemeDir] = useState<"top" | "bottom">("top");
   const [hlDir, setHlDir] = useState<"high" | "low">("high");
   const [constituent, setConstituent] = useState<ConstituentTarget | null>(null);
+  /** 눌러서 연 지수 상세 (001 코스피 / 101 코스닥) */
+  const [indexDetail, setIndexDetail] = useState<string | null>(null);
 
   /** 모든 섹션을 한 번에 다시 불러온다 */
   function refreshAll() {
@@ -151,8 +154,18 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                 // 코스피200은 별도 수급 집계가 없어 코스피 수급을 함께 보여준다
                 // 코스피200·선물은 별도 수급 집계가 없어 코스피 수급을 함께 보여준다
                 const f = c.code === "101" ? flow.data?.kosdaq : flow.data?.kospi;
+                /*
+                  코스피·코스닥은 눌러서 상세로 간다. 코스피200·선물은 아직 상세가 없어
+                  누르는 시늉만 하면 안 되므로 그대로 둔다.
+                */
+                const openable = c.code === "001" || c.code === "101";
                 return (
-                  <div className="ov-idx" key={c.code}>
+                  <div
+                    className={`ov-idx${openable ? " clickable" : ""}`}
+                    key={c.code}
+                    onClick={openable ? () => setIndexDetail(c.code) : undefined}
+                    title={openable ? "눌러서 추이·일별 수급 보기" : undefined}
+                  >
                     <div className="ov-idx-name">{c.name}</div>
                     <div className={`ov-idx-val num ${signCls(c.changeRate)}`}>{fmtNum(c.price)}</div>
                     <div className={`ov-idx-chg num ${signCls(c.changeRate)}`}>
@@ -508,6 +521,10 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           <summary>시장 폭 지표는 어떻게 읽나</summary>
           <BreadthHelp />
         </details>
+      )}
+
+      {indexDetail && (
+        <IndexDetailSheet code={indexDetail} onClose={() => setIndexDetail(null)} />
       )}
 
       {constituent && (

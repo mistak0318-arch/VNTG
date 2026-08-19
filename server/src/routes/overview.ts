@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { flowIntradayDates, listFlowIntraday } from "../flowIntraday.js";
+import { indexDetail } from "../indexDetail.js";
 import {
   getProgramTrades,
   getSection,
@@ -52,6 +53,20 @@ export function createOverviewRouter(client: KiwoomClient): Router {
     try {
       const date = typeof req.query.date === "string" ? req.query.date : undefined;
       res.json({ day: await listFlowIntraday(date), dates: await flowIntradayDates() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 코스피·코스닥 상세 — 지수 추이(일/주/월) + 일별 수급.
+   * 개별 종목엔 있던 게 정작 지수엔 없었다.
+   */
+  router.get("/index/:code", async (req, res, next) => {
+    try {
+      const r = req.query.range;
+      const range = r === "week" || r === "month" ? r : "day";
+      res.json(await indexDetail(client, req.params.code, range));
     } catch (err) {
       next(err);
     }

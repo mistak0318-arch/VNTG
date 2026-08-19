@@ -156,6 +156,8 @@ export const api = {
   algoScanStatus: (jobId: string) => getJson<AlgoJob>(`/api/algo/scan/status/${jobId}`),
   marketStatus: () => getJson<MarketStatus>("/api/overview/status"),
   overviewSection: <T>(name: string) => getJson<SectionResult<T>>(`/api/overview/section/${name}`),
+  indexDetail: (code: string, range: IndexRange) =>
+    getJson<IndexDetailData>(`/api/overview/index/${code}?range=${range}`),
   flowIntraday: (date?: string) =>
     getJson<{ day: FlowIntradayDay | null; dates: string[] }>(
       `/api/overview/flow-intraday${date ? `?date=${date}` : ""}`,
@@ -633,6 +635,34 @@ export interface FlowIntradayDay {
   date: string;
   kospi: FlowSample[];
   kosdaq: FlowSample[];
+}
+
+export type IndexRange = "day" | "week" | "month";
+
+export interface IndexCandle {
+  dt: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+export interface IndexFlowRow {
+  date: string;
+  changeRate: number;
+  foreign: number;
+  institution: number;
+  individual: number;
+  pension: number;
+  trust: number;
+}
+
+export interface IndexDetailData {
+  code: string;
+  name: string;
+  range: IndexRange;
+  candles: IndexCandle[];
+  flows: IndexFlowRow[];
 }
 
 export interface UsMajorRow {

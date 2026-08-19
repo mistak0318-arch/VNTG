@@ -274,7 +274,9 @@
       "Bash(curl -s --max-time 20 http://localhost:4000/api/report/jobs/active)",
       "Bash(curl -s --max-time 30 -X POST -H \"content-type: application/json\" -d '{\"ai\":true,\"send\":false,\"minutes\":360}' http://localhost:4000/api/channels/report)",
       "Bash(curl -s --max-time 20 http://localhost:4000/api/channels/report/pub_mszc1lcklbul)",
-      "Bash(grep -n \"</div>\\\\s*$\" pages/OverviewPage.tsx)"
+      "Bash(grep -n \"</div>\\\\s*$\" pages/OverviewPage.tsx)",
+      "Bash(curl -s --max-time 60 \"http://localhost:4000/api/overview/index/001?range=day\")",
+      "Bash(curl -s --max-time 40 \"http://localhost:4000/api/overview/section/indices\")"
     ]
   }
 }
