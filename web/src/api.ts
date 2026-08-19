@@ -170,6 +170,8 @@ export const api = {
   watchGroupAdd: (name: string) => postJson<{ groups: string[] }>("/api/watchlist/groups", { name }),
   watchGroupRename: (from: string, name: string) =>
     patchJson<{ groups: string[] }>(`/api/watchlist/groups/${encodeURIComponent(from)}`, { name }),
+  watchGroupReorder: (order: string[]) =>
+    putJson<{ groups: string[] }>("/api/watchlist/groups/reorder", { order }),
   watchGroupRemove: (name: string) =>
     deleteJson<{ groups: string[] }>(`/api/watchlist/groups/${encodeURIComponent(name)}`),
   watchlistAdd: (item: {

@@ -212,6 +212,35 @@ export async function renameGroup(from: string, to: string): Promise<string[]> {
   return listGroups();
 }
 
+/**
+ * 그룹 순서 바꾸기.
+ *
+ * 그룹이 늘면 자주 보는 게 뒤로 밀린다 — 만든 순서대로 늘어서기 때문이다.
+ * 화면에서 끌어 옮길 수 있어야 하는데, **순서는 저장돼야** 다음에 열어도 그대로다.
+ *
+ * 화면이 보낸 순서를 그대로 믿지 않는다. 화면이 모르는 그룹(다른 창에서 방금 만든 것)이
+ * 있을 수 있으므로 **보내온 것 먼저, 빠진 것은 뒤에** 붙인다 — 그래야 그룹이 사라지지 않는다.
+ * 기본 그룹은 늘 맨 앞이다.
+ */
+export async function reorderGroups(order: string[]): Promise<string[]> {
+  const current = await listGroups();
+  const known = new Set(current);
+  const seen = new Set<string>();
+  const next: string[] = [];
+  for (const g of order) {
+    if (g === DEFAULT_GROUP || !known.has(g) || seen.has(g)) continue;
+    seen.add(g);
+    next.push(g);
+  }
+  // 화면이 몰랐던 그룹은 뒤에 남긴다
+  for (const g of current) {
+    if (g === DEFAULT_GROUP || seen.has(g)) continue;
+    next.push(g);
+  }
+  await persistGroups(next);
+  return listGroups();
+}
+
 /** 그룹을 지우면 소속 종목은 기본 그룹으로 옮긴다 (종목이 사라지지 않게) */
 export async function removeGroup(name: string): Promise<string[]> {
   if (name === DEFAULT_GROUP) throw new Error("기본 그룹은 삭제할 수 없습니다.");

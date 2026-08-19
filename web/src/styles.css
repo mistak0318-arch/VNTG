@@ -4361,3 +4361,75 @@ th.est-col { color: var(--blue); }
 .mp-ext-value { font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .mp-ext-rate { margin-left: 6px; font-size: 0.7333rem; }
 .mp-ext-note { font-size: 0.6667rem; color: var(--muted); margin-top: 3px; }
+
+/* ==================================================================
+   차트 크게 보기
+   ------------------------------------------------------------------
+   폰에서 320px 차트로는 밑꼬리도 이평선 교차도 안 보인다.
+   오버레이가 본체이고 Fullscreen API 는 되면 얹는다 —
+   iOS 사파리는 video 가 아닌 요소에 전체화면을 안 준다.
+   ================================================================== */
+
+.chart-full {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px 10px;
+  overflow: hidden;
+}
+
+.chart-full-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.chart-full-name { font-size: 0.8667rem; font-weight: 700; }
+.chart-full-hint { font-size: 0.6667rem; }
+
+/* 도구줄이 길어 폰에서 두 줄이 되면 차트가 밀린다. 가로로 굴린다 */
+.chart-full .period-toggle { flex-wrap: nowrap; overflow-x: auto; }
+
+/* 원래 자리에 남기는 자국 — 없으면 닫을 때 화면이 튄다 */
+.chart-placeholder {
+  height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 0.7333rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+/* 눕힌 폰 — 여백까지 줄여 차트에 넘긴다 */
+.chart-full.compact { padding: 4px 6px 6px; }
+.chart-full.compact .period-toggle { margin-bottom: 4px; }
+
+/* 관심종목 그룹 바 — 고르는 자리와 정리하는 자리를 나눈다 */
+.gt-item { display: inline-flex; align-items: center; gap: 2px; }
+
+/* 개수는 이름보다 흐리게. 이름이 먼저 읽혀야 한다 */
+.gt-n {
+  font-size: 0.7333rem;
+  opacity: .65;
+  font-variant-numeric: tabular-nums;
+}
+.filter-btn.active .gt-n { opacity: .85; }
+
+.gt-move {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.6667rem;
+  padding: 4px 5px;
+  line-height: 1;
+}
+.gt-move:disabled { opacity: .25; }
+.gt-pen { font-size: 0.6667rem; opacity: .7; }

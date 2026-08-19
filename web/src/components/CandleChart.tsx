@@ -131,9 +131,12 @@ export function CandleChart({
   showExtremes = true,
   name,
   code,
+  height = 320,
 }: {
   candles: Candle[];
   intraday?: boolean;
+  /** 차트 높이(px). 전체화면에서 화면 높이만큼 키운다 */
+  height?: number;
   /** HTS처럼 기간 최고/최저를 선과 말풍선으로 표시 */
   showExtremes?: boolean;
   /** 툴팁 머리에 표시할 종목명·코드 (없으면 생략) */
@@ -180,7 +183,7 @@ export function CandleChart({
 
     const chart = createChart(el, {
       width: el.clientWidth,
-      height: 320,
+      height,
       layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: c.text },
       grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
       // autoScale 을 켜 두면 보이는 구간에 맞춰 세로 범위가 늘 스스로 맞는다.
@@ -333,7 +336,7 @@ export function CandleChart({
     };
     chart.subscribeCrosshairMove(onMove);
 
-    const resize = () => chart.applyOptions({ width: el.clientWidth });
+    const resize = () => chart.applyOptions({ width: el.clientWidth, height });
     window.addEventListener("resize", resize);
 
     fitted.current = false;
@@ -349,6 +352,18 @@ export function CandleChart({
     };
     // maKey·볼린저 설정이 바뀌면 시리즈 구성이 달라지므로 차트를 다시 만든다
   }, [intraday, theme, name, code, maKey, prefs.bbOn]);
+
+  /*
+   * 높이만 바뀌었을 때.
+   *
+   * 차트를 다시 만들면 확대해 둔 구간과 스크롤 자리가 풀린다 — 전체화면으로 들어갔다
+   * 나올 때마다 보던 자리를 잃으면 전체화면이 방해가 된다. 옵션만 갈아끼운다.
+   */
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!chartRef.current || !el) return;
+    chartRef.current.applyOptions({ width: el.clientWidth, height });
+  }, [height]);
 
   // ── 데이터 갱신 (차트는 그대로 두고 값만) ─────────────────────────────
   useEffect(() => {

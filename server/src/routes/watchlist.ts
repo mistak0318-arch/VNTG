@@ -10,6 +10,7 @@ import {
   removeGroup,
   removeWatchItem,
   renameGroup,
+  reorderGroups,
   toggleWatchGroup,
   updateWatchItem,
 } from "../watchlist.js";
@@ -112,6 +113,21 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
     try {
       const name = typeof req.body?.name === "string" ? req.body.name : "";
       res.json({ groups: await addGroup(name) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 순서 바꾸기. `/groups/:name` 보다 **먼저** 등록해야 한다 —
+   * 아래 patch 가 `:name` 을 무엇이든 받으므로 "reorder" 를 그룹 이름으로 먹어 버린다.
+   */
+  router.put("/groups/reorder", async (req, res, next) => {
+    try {
+      const order = Array.isArray(req.body?.order)
+        ? (req.body.order as unknown[]).filter((x): x is string => typeof x === "string")
+        : [];
+      res.json({ groups: await reorderGroups(order) });
     } catch (err) {
       next(err);
     }

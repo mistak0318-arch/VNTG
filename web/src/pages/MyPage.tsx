@@ -54,6 +54,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
   /** 그룹 편집을 펼친 행 — 한 번에 하나만 */
   const [editGroups, setEditGroups] = useState<string | null>(null);
   const [activeGroup, setActiveGroup] = useState<string>(ALL);
+  /** 그룹 정리 모드 — 평소엔 고르는 자리이고, 켤 때만 옮기고 이름을 바꾼다 */
+  const [editGroupBar, setEditGroupBar] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
@@ -87,6 +89,42 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       setActiveGroup(name);
     } catch (err) {
       setError(err instanceof Error ? err.message : "그룹 추가 실패");
+    }
+  }
+
+  /**
+   * 그룹 순서 바꾸기.
+   *
+   * 끌어 옮기기(drag)를 쓰지 않았다. **폰에서 안 되기 때문이다** —
+   * 이 앱은 폰으로 보는 시간이 더 길고, 터치 드래그는 스크롤과 싸운다.
+   * ◀ ▶ 두 칸이면 어디서든 되고 한 칸씩 정확히 움직인다.
+   */
+  async function moveGroup(name: string, dir: -1 | 1) {
+    const movable = groups.filter((g) => g !== DEFAULT_GROUP);
+    const i = movable.indexOf(name);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= movable.length) return;
+    const next = [...movable];
+    [next[i], next[j]] = [next[j], next[i]];
+    // 화면을 먼저 바꾼다 — 서버를 기다리면 누른 느낌이 늦다
+    setGroups([DEFAULT_GROUP, ...next]);
+    try {
+      setGroups((await api.watchGroupReorder(next)).groups);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "순서 변경 실패");
+      await loadGroups();
+    }
+  }
+
+  async function renameGroupNow(name: string) {
+    const to = window.prompt("새 그룹 이름", name)?.trim();
+    if (!to || to === name) return;
+    try {
+      setGroups((await api.watchGroupRename(name, to)).groups);
+      if (activeGroup === name) setActiveGroup(to);
+      await load(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "이름 변경 실패");
     }
   }
 
@@ -238,34 +276,82 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
         )}
       </div>
 
+      {/*
+        그룹 바.
+        예전엔 이름과 개수만 있는 버튼 줄이었다. 그룹이 늘면 **만든 순서대로** 늘어서
+        자주 보는 게 뒤로 밀렸고, 옮길 방법이 없었다.
+
+        평소에는 고르는 자리로 두고, 「정리」를 켰을 때만 옮기고 이름을 바꾼다 —
+        늘 화살표가 붙어 있으면 고르려다 잘못 눌러 순서가 바뀐다.
+      */}
       <div className="filter-row group-tabs">
         <button
           className={`filter-btn ${activeGroup === ALL ? "active" : ""}`}
           onClick={() => setActiveGroup(ALL)}
         >
-          전체 ({items.length})
+          전체 <span className="gt-n">{items.length}</span>
         </button>
-        {groups.map((g) => {
+        {groups.map((g, gi) => {
           const n = items.filter((i) => (i.groups ?? [DEFAULT_GROUP]).includes(g)).length;
+          const movable = groups.filter((x) => x !== DEFAULT_GROUP);
+          const mi = movable.indexOf(g);
           return (
-            <button
-              key={g}
-              className={`filter-btn ${activeGroup === g ? "active" : ""}`}
-              onClick={() => setActiveGroup(g)}
-            >
-              {g} ({n})
-            </button>
+            <span className={`gt-item${activeGroup === g ? " active" : ""}`} key={g}>
+              {editGroupBar && g !== DEFAULT_GROUP && (
+                <button
+                  className="gt-move"
+                  onClick={() => void moveGroup(g, -1)}
+                  disabled={mi <= 0}
+                  title="앞으로"
+                >
+                  ◀
+                </button>
+              )}
+              <button
+                className={`filter-btn ${activeGroup === g ? "active" : ""}`}
+                onClick={() => (editGroupBar && g !== DEFAULT_GROUP ? renameGroupNow(g) : setActiveGroup(g))}
+                title={editGroupBar && g !== DEFAULT_GROUP ? "눌러서 이름 바꾸기" : undefined}
+              >
+                {g} <span className="gt-n">{n}</span>
+                {editGroupBar && g !== DEFAULT_GROUP && <span className="gt-pen"> ✎</span>}
+              </button>
+              {editGroupBar && g !== DEFAULT_GROUP && (
+                <button
+                  className="gt-move"
+                  onClick={() => void moveGroup(g, 1)}
+                  disabled={mi < 0 || mi >= movable.length - 1}
+                  title="뒤로"
+                >
+                  ▶
+                </button>
+              )}
+              {/* gi 는 키 경고를 피하려고 받는다 — 실제 순서는 서버가 들고 있다 */}
+              <span hidden>{gi}</span>
+            </span>
           );
         })}
         <button className="filter-btn" onClick={createGroup} title="새 그룹 만들기">
           + 그룹
         </button>
-        {activeGroup !== ALL && activeGroup !== DEFAULT_GROUP && (
+        <button
+          className={`filter-btn ${editGroupBar ? "active" : ""}`}
+          onClick={() => setEditGroupBar((v) => !v)}
+          title="그룹 순서·이름 바꾸기"
+        >
+          {editGroupBar ? "정리 끝" : "정리"}
+        </button>
+        {editGroupBar && activeGroup !== ALL && activeGroup !== DEFAULT_GROUP && (
           <button className="filter-btn danger" onClick={removeGroupNow} title="이 그룹 삭제">
-            그룹 삭제
+            «{activeGroup}» 삭제
           </button>
         )}
       </div>
+      {editGroupBar && (
+        <div className="table-note">
+          ◀ ▶ 로 순서를 옮기고, 그룹 이름을 누르면 이름을 바꿉니다. 순서는 저장되어 다음에도
+          그대로입니다. <b>기본 그룹은 늘 맨 앞</b>이라 옮길 수 없습니다.
+        </div>
+      )}
 
       <section className="card">
         <h2>관심종목 요약 ({items.length})</h2>
