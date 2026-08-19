@@ -1227,30 +1227,57 @@ export interface BreadthPoint {
 
 export type SignalLevel = "green" | "yellow" | "red" | "unknown";
 
+export type SignalAxis = "trend" | "flow" | "value" | "risk";
+
 export interface SignalCheck {
   key: string;
   label: string;
+  axis: SignalAxis;
+  /** 0 · 50 · 100. 판단 불가면 null */
+  grade: number | null;
+  /**
+   * 통과 여부. 일반 기준은 grade >= 50, **위험 기준은 반대로** grade < 50(안전)이 통과다.
+   * 그래서 위험 기준의 이름은 「매물 부담 낮음」처럼 안전한 상태로 적혀 있다.
+   */
   pass: boolean | null;
   value: string;
   weight: number;
   link?: { kind: "sector" | "theme"; code: string; name: string };
 }
 
+export interface SignalAxisResult {
+  key: SignalAxis;
+  label: string;
+  /** 0~100. 위험 축은 **위험도**(높을수록 나쁘다), 나머지는 높을수록 좋다 */
+  score: number | null;
+  level: SignalLevel;
+}
+
 export interface SignalResult {
   code: string;
   level: SignalLevel;
+  /** 추세·수급·실적 세 축의 가중평균. 위험은 섞지 않는다 */
   score: number;
   checks: SignalCheck[];
+  axes: SignalAxisResult[];
+  /** 위험이 빨강이라 초록이 막혔나 */
+  riskCapped: boolean;
   evaluatedAt: string;
 }
 
 export interface SignalCheckConfig {
   key: string;
   label: string;
+  axis: SignalAxis;
   enabled: boolean;
   weight: number;
+  /** 50점 선 */
   threshold: number;
+  /** 100점 선 */
+  strongAt: number;
   hint: string;
+  /** 켜면 종목당 조회가 몇 번 더 나가나 — 「신호등 찾기」 100종목이면 그 100배다 */
+  cost: number;
 }
 
 export interface SignalConfig {
@@ -1259,6 +1286,14 @@ export interface SignalConfig {
   yellowAt: number;
   flowDays: 5 | 10 | 20;
   maLines: number[];
+  /** 축끼리의 가중치 */
+  axisWeights: Record<"trend" | "flow" | "value", number>;
+  /** 위험도가 이 이상이면 노랑 */
+  riskYellowAt: number;
+  /** 위험도가 이 이상이면 빨강 */
+  riskRedAt: number;
+  /** 위험이 빨강이면 종합을 초록으로 올리지 않는다 */
+  riskBlocksGreen: boolean;
 }
 
 export interface StockNote {

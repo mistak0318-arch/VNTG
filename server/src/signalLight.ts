@@ -13,41 +13,92 @@ const CONFIG_FILE = resolve(__dirname, "..", "data", "signalConfig.json");
 /**
  * 종목 신호등.
  *
- * 종목을 고를 때 매번 확인하는 것들(정배열인가, 수급이 붙었나, 이익이 늘고 있나,
- * 섹터가 뜨고 있나, 규모는 되나)을 기준으로 만들어 초록/노랑/빨강으로 압축한다.
- * 기준과 임계치는 전부 사용자가 바꿀 수 있다 — 사람마다 보는 기준이 다르기 때문이다.
+ * 종목을 고를 때 매번 확인하는 것들을 하나로 압축한다. 기준과 임계치는 전부 사용자가 바꾼다 —
+ * 사람마다 보는 기준이 다르기 때문이다.
+ *
+ * ## 왜 축으로 나눴나 (2026-08-19 개편)
+ *
+ * 예전엔 여덟 기준을 가중평균해 한 점수로 냈다. 두 가지가 잘못됐다.
+ *
+ * **첫째, 70점이 무엇인지 알 수 없었다.** 실적이 좋고 수급이 최악인 종목과 그 반대가
+ * 같은 점수로 나온다. 살 이유와 팔 이유가 평균에서 상쇄돼 버린다.
+ * 그래서 **추세·수급·실적을 따로 낸다.**
+ *
+ * **둘째, 위험을 깎을 수단이 아예 없었다.** 공매도가 늘든 위에 매물이 잔뜩 걸렸든
+ * 감점할 곳이 없어서, 위험한 종목이 초록으로 나올 수 있었다.
+ * 그래서 **위험 축을 따로 두고 평균에 섞지 않는다.** 앞의 셋이 아무리 좋아도
+ * 위험이 빨강이면 초록을 주지 않는다(`riskBlocksGreen`). 치명적인 위험이
+ * 좋은 추세에 씻겨 나가면 안 된다.
+ *
+ * ## O/X 대신 세 단계
+ *
+ * 예전엔 `합계 >= 기준값` 한 줄이라 외국인 순매수 +1백만원과 +5,000억이 **같은 1점**이었다.
+ * 크기를 통째로 버린 셈이다. 이제 기준마다 선이 둘이다 — `threshold`(50점)와
+ * `strongAt`(100점). 판단 불가는 여전히 null 이고 분모에서 뺀다.
+ *
+ * ## 기존 코드와의 약속
+ *
+ * `CheckResult.pass` 는 **그대로 남긴다.** watchTracking·paperTrade·tradeJournal·
+ * signalScreen 넷이 이 값을 쓴다. `grade >= 50` 이면 통과다.
+ * 위험 기준만 반대로 — `grade < 50`(안전) 이 통과다. 그래서 위험 기준의 이름은
+ * 「매물 부담 낮음」처럼 **안전한 상태**로 적는다. 그래야 통과/미달 목록이 바로 읽힌다.
  *
  * 종목당 API 호출이 여러 번이라 결과를 캐싱한다.
  */
 
+export type Axis = "trend" | "flow" | "value" | "risk";
+
+export const AXES: { key: Axis; label: string; hint: string }[] = [
+  { key: "trend", label: "추세", hint: "지금 올라가는 자리인가" },
+  { key: "flow", label: "수급", hint: "누가 사고 있나" },
+  { key: "value", label: "실적·가치", hint: "회사가 벌고 있나" },
+  { key: "risk", label: "위험", hint: "깨질 구석이 있나 — 높을수록 위험" },
+];
+
 export type CheckKey =
   | "trend"
+  | "nearHigh"
+  | "sectorStrength"
   | "foreignFlow"
   | "instFlow"
-  | "profitGrowth"
-  | "sectorStrength"
-  | "marketCap"
+  | "flowStreak"
   | "volume"
-  | "exportGrowth";
+  | "profitGrowth"
+  | "marketCap"
+  | "exportGrowth"
+  | "overhead"
+  | "disparity"
+  | "shortSaleUp"
+  | "lendingUp";
 
 export interface CheckConfig {
   key: CheckKey;
   label: string;
+  /** 어느 축에 들어가나 */
+  axis: Axis;
   /** 이 기준을 쓸지 */
   enabled: boolean;
-  /** 가중치 — 중요하게 보는 기준에 더 준다 */
+  /** 축 안에서의 가중치 */
   weight: number;
-  /** 기준값 (기준마다 의미가 다르다) */
+  /** 50점 선 */
   threshold: number;
+  /** 100점 선 */
+  strongAt: number;
   /** 화면에 보여줄 설명 */
   hint: string;
+  /**
+   * 이 기준을 켜면 **종목당 조회가 몇 번 더** 나가나.
+   * 「신호등 찾기」는 100종목을 도는데, 여기 1이 붙은 걸 켜면 100번이 더 나간다.
+   * 설정 화면이 이걸 읽어 미리 알려 준다.
+   */
+  cost: number;
 }
 
 export interface SignalConfig {
   checks: CheckConfig[];
-  /** 초록이 되려면 필요한 점수 비율(%) */
+  /** 초록이 되려면 필요한 점수 */
   greenAt: number;
-  /** 노랑이 되려면 필요한 점수 비율(%). 미만이면 빨강 */
+  /** 노랑이 되려면 필요한 점수. 미만이면 빨강 */
   yellowAt: number;
   /** 수급을 볼 기간(일) */
   flowDays: 5 | 10 | 20;
@@ -57,6 +108,14 @@ export interface SignalConfig {
    * 2개 이상 골라야 의미가 있다.
    */
   maLines: number[];
+  /** 축끼리의 가중치 — 무엇을 더 중요하게 볼지 */
+  axisWeights: Record<"trend" | "flow" | "value", number>;
+  /** 위험도가 이 이상이면 노랑 */
+  riskYellowAt: number;
+  /** 위험도가 이 이상이면 빨강 */
+  riskRedAt: number;
+  /** 위험이 빨강이면 종합을 초록으로 올리지 않는다 */
+  riskBlocksGreen: boolean;
 }
 
 /** 정배열 판정에 고를 수 있는 이동평균선 */
@@ -67,70 +126,168 @@ export const DEFAULT_CONFIG: SignalConfig = {
   yellowAt: 40,
   flowDays: 5,
   maLines: [5, 20, 60],
+  axisWeights: { trend: 1, flow: 1, value: 1 },
+  riskYellowAt: 40,
+  riskRedAt: 70,
+  riskBlocksGreen: true,
   checks: [
+    // ---------------- 추세 ----------------
     {
       key: "trend",
       label: "정배열",
+      axis: "trend",
       enabled: true,
       weight: 2,
       threshold: 0,
-      hint: "현재가 ≥ 짧은 이평선 ≥ 긴 이평선 (아래에서 선 선택)",
+      strongAt: 0,
+      hint: "현재가 ≥ 짧은 이평선 ≥ 긴 이평선 (아래에서 선 선택). 완전 정배열 100, 가장 짧은 선 위 50",
+      cost: 0,
     },
     {
-      key: "foreignFlow",
-      label: "외국인 수급",
-      enabled: true,
-      weight: 2,
-      threshold: 0,
-      hint: "설정 기간 외국인 순매수 합계가 기준값 이상(백만원)",
-    },
-    {
-      key: "instFlow",
-      label: "기관 수급",
+      key: "nearHigh",
+      label: "고점 근접",
+      axis: "trend",
       enabled: true,
       weight: 1,
-      threshold: 0,
-      hint: "설정 기간 기관 순매수 합계가 기준값 이상(백만원)",
-    },
-    {
-      key: "profitGrowth",
-      label: "영업이익 증가",
-      enabled: true,
-      weight: 2,
-      threshold: 0,
-      hint: "최근 사업연도 영업이익이 전년 대비 기준값(%) 이상 증가",
+      threshold: 80,
+      strongAt: 95,
+      hint: "현재가가 52주 고가의 몇 %인가. 신고가 부근일수록 높다",
+      cost: 0,
     },
     {
       key: "sectorStrength",
       label: "섹터 강세",
+      axis: "trend",
       enabled: true,
       weight: 1,
       threshold: 0,
-      hint: "소속 업종 등락률이 기준값(%) 이상",
+      strongAt: 1.5,
+      hint: "소속 업종 등락률(%)",
+      cost: 0,
+    },
+    // ---------------- 수급 ----------------
+    {
+      key: "foreignFlow",
+      label: "외국인 수급",
+      axis: "flow",
+      enabled: true,
+      weight: 2,
+      threshold: 0,
+      strongAt: 10000,
+      hint: "설정 기간 외국인 순매수 합계(백만원). 종목 규모와 무관한 절대금액이라 대형주에 유리하다",
+      cost: 0,
     },
     {
-      key: "marketCap",
-      label: "시가총액",
+      key: "instFlow",
+      label: "기관 수급",
+      axis: "flow",
       enabled: true,
       weight: 1,
-      threshold: 3000,
-      hint: "시가총액이 기준값(억원) 이상",
+      threshold: 0,
+      strongAt: 10000,
+      hint: "설정 기간 기관 순매수 합계(백만원)",
+      cost: 0,
     },
     {
-      key: "exportGrowth",
-      label: "업종 수출 증가",
-      enabled: false,
+      key: "flowStreak",
+      label: "외인 연속 순매수",
+      axis: "flow",
+      enabled: true,
       weight: 1,
-      threshold: 0,
-      hint: "소속 업종의 관세청 수출 증감률이 기준값(%) 이상 (수출입 API 키 필요)",
+      threshold: 2,
+      strongAt: 5,
+      hint: "외국인이 며칠 연속 순매수했나. 하루치 큰 금액보다 이어지는 게 낫다",
+      cost: 0,
     },
     {
       key: "volume",
       label: "거래대금",
+      axis: "flow",
       enabled: false,
       weight: 1,
       threshold: 100,
-      hint: "당일 거래대금이 기준값(억원) 이상",
+      strongAt: 500,
+      hint: "당일 거래대금(억원)",
+      cost: 0,
+    },
+    // ---------------- 실적·가치 ----------------
+    {
+      key: "profitGrowth",
+      label: "영업이익 증가",
+      axis: "value",
+      enabled: true,
+      weight: 2,
+      threshold: 0,
+      strongAt: 20,
+      hint: "최근 사업연도 영업이익 전년 대비 증가율(%)",
+      cost: 0,
+    },
+    {
+      key: "marketCap",
+      label: "시가총액",
+      axis: "value",
+      enabled: true,
+      weight: 1,
+      threshold: 3000,
+      strongAt: 10000,
+      hint: "시가총액(억원)",
+      cost: 0,
+    },
+    {
+      key: "exportGrowth",
+      label: "업종 수출 증가",
+      axis: "value",
+      enabled: false,
+      weight: 1,
+      threshold: 0,
+      strongAt: 10,
+      hint: "소속 업종의 관세청 수출 증감률(%) (수출입 API 키 필요)",
+      cost: 0,
+    },
+    // ---------------- 위험 (값이 클수록 위험하다) ----------------
+    {
+      key: "overhead",
+      label: "매물 부담 낮음",
+      axis: "risk",
+      enabled: true,
+      weight: 2,
+      threshold: 40,
+      strongAt: 65,
+      hint: "최근 120일 매물 중 현재가 **위에** 쌓인 비중(%). 높을수록 오를 때 팔 사람이 많다",
+      cost: 0,
+    },
+    {
+      key: "disparity",
+      label: "이격도 정상",
+      axis: "risk",
+      enabled: true,
+      weight: 1,
+      threshold: 15,
+      strongAt: 25,
+      hint: "현재가가 20일선보다 몇 % 위인가. 너무 벌어지면 되돌림이 온다",
+      cost: 0,
+    },
+    {
+      key: "shortSaleUp",
+      label: "공매도 안정",
+      axis: "risk",
+      enabled: false,
+      weight: 1,
+      threshold: 5,
+      strongAt: 10,
+      hint: "최근 5일 평균 공매도 거래비중(%)",
+      cost: 1,
+    },
+    {
+      key: "lendingUp",
+      label: "대차 안정",
+      axis: "risk",
+      enabled: false,
+      weight: 1,
+      threshold: 5,
+      strongAt: 15,
+      hint: "대차잔고가 5거래일 전 대비 몇 % 늘었나. 빌려 간 주식은 결국 팔린다",
+      cost: 1,
     },
   ],
 };
@@ -147,19 +304,42 @@ function normalizeMaLines(input: unknown): number[] {
 
 let configCache: SignalConfig | null = null;
 
+/**
+ * 저장본과 기본값을 합친다.
+ *
+ * **통째로 덮어쓰면 안 된다.** 예전 저장본에는 `axis` 도 `strongAt` 도 없다 —
+ * 저장된 항목을 그대로 쓰면 축이 없는 기준이 생겨 화면이 무너진다.
+ * 그래서 **뼈대는 기본값에서, 사용자가 정한 값(켬/끔·가중치·기준값)만 저장본에서** 가져온다.
+ */
+function mergeConfig(saved: Partial<SignalConfig> | null): SignalConfig {
+  const savedChecks = new Map(
+    (saved?.checks ?? []).map((c) => [c.key, c as Partial<CheckConfig>]),
+  );
+  return {
+    ...DEFAULT_CONFIG,
+    ...saved,
+    axisWeights: { ...DEFAULT_CONFIG.axisWeights, ...(saved?.axisWeights ?? {}) },
+    checks: DEFAULT_CONFIG.checks.map((d) => {
+      const s = savedChecks.get(d.key);
+      if (!s) return d;
+      return {
+        ...d,
+        enabled: typeof s.enabled === "boolean" ? s.enabled : d.enabled,
+        weight: Number.isFinite(s.weight) ? Number(s.weight) : d.weight,
+        threshold: Number.isFinite(s.threshold) ? Number(s.threshold) : d.threshold,
+        // strongAt 은 예전 저장본에 없다. 없으면 기본값을 쓴다
+        strongAt: Number.isFinite(s.strongAt) ? Number(s.strongAt) : d.strongAt,
+      };
+    }),
+    maLines: normalizeMaLines(saved?.maLines ?? DEFAULT_CONFIG.maLines),
+  };
+}
+
 export async function getConfig(): Promise<SignalConfig> {
   if (configCache) return configCache;
   try {
-    const saved = JSON.parse(await readFile(CONFIG_FILE, "utf-8")) as SignalConfig;
-    // 기준이 나중에 추가돼도 저장본이 깨지지 않도록 기본값과 합친다
-    const merged: SignalConfig = {
-      ...DEFAULT_CONFIG,
-      ...saved,
-      checks: DEFAULT_CONFIG.checks.map(
-        (d) => saved.checks?.find((s) => s.key === d.key) ?? d,
-      ),
-    };
-    configCache = merged;
+    const saved = JSON.parse(await readFile(CONFIG_FILE, "utf-8")) as Partial<SignalConfig>;
+    configCache = mergeConfig(saved);
   } catch {
     configCache = DEFAULT_CONFIG;
   }
@@ -167,7 +347,7 @@ export async function getConfig(): Promise<SignalConfig> {
 }
 
 export async function saveConfig(input: SignalConfig): Promise<SignalConfig> {
-  const cfg: SignalConfig = { ...input, maLines: normalizeMaLines(input.maLines) };
+  const cfg = mergeConfig(input);
   configCache = cfg;
   await mkdir(dirname(CONFIG_FILE), { recursive: true });
   await writeFile(CONFIG_FILE, JSON.stringify(cfg, null, 2), "utf-8");
@@ -182,7 +362,13 @@ export type Level = "green" | "yellow" | "red" | "unknown";
 export interface CheckResult {
   key: CheckKey;
   label: string;
-  /** true=통과, false=미달, null=판단 불가(데이터 없음) */
+  axis: Axis;
+  /** 0 · 50 · 100. 판단 불가면 null */
+  grade: number | null;
+  /**
+   * 통과 여부. 일반 기준은 `grade >= 50`, **위험 기준은 반대로** `grade < 50`(안전)이 통과다.
+   * 기존 화면과 기록이 이 값을 쓰므로 없애지 않는다.
+   */
   pass: boolean | null;
   /** 실제 값 (화면 표시용) */
   value: string;
@@ -191,18 +377,35 @@ export interface CheckResult {
   weight: number;
 }
 
+export interface AxisResult {
+  key: Axis;
+  label: string;
+  /** 0~100. 위험 축은 **위험도**(높을수록 나쁘다), 나머지는 높을수록 좋다. 판단 불가면 null */
+  score: number | null;
+  level: Level;
+}
+
 export interface SignalResult {
   code: string;
   level: Level;
-  /** 통과 가중치 / 전체 가중치 × 100 */
+  /** 추세·수급·실적 세 축의 가중평균 (위험은 섞지 않는다) */
   score: number;
   checks: CheckResult[];
+  axes: AxisResult[];
+  /** 위험 때문에 초록이 막혔나 — 화면이 이유를 말해 줄 수 있게 */
+  riskCapped: boolean;
   evaluatedAt: string;
 }
 
 /** 키움 차트 TR은 기준일이 비어 있으면 데이터를 주지 않는다 */
 function todayYyyymmdd(): string {
   const d = new Date();
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function daysAgoYyyymmdd(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
 }
 
@@ -220,6 +423,59 @@ function sma(closes: number[], period: number): number | null {
   return closes.slice(0, period).reduce((a, b) => a + b, 0) / period;
 }
 
+/**
+ * 값을 0·50·100 으로 자른다.
+ *
+ * 위험 기준도 같은 식을 쓴다 — 값이 클수록 큰 숫자가 나오는데, 위험 축에서는
+ * 그 큰 숫자가 「위험하다」는 뜻이다.
+ * 사용자가 두 선을 거꾸로 넣어도 무너지지 않게 크기로 정렬해 둔다.
+ */
+function grade(value: number, c: CheckConfig): number {
+  const hi = Math.max(c.threshold, c.strongAt);
+  const lo = Math.min(c.threshold, c.strongAt);
+  if (value >= hi) return 100;
+  if (value >= lo) return 50;
+  return 0;
+}
+
+/** 매물대 — 현재가 위에 쌓인 비중(%). 일봉을 그대로 쓰므로 추가 조회가 없다 */
+function overheadPct(rows: Record<string, unknown>[]): number | null {
+  const win = rows.slice(0, 120);
+  if (win.length < 20) return null;
+  const bars = win.map((r) => ({
+    high: Math.abs(toNum(r.high_pric)),
+    low: Math.abs(toNum(r.low_pric)),
+    vol: Math.abs(toNum(r.trde_qty)),
+  }));
+  const price = Math.abs(toNum(win[0].cur_prc));
+  const hi = Math.max(...bars.map((b) => b.high));
+  const lo = Math.min(...bars.map((b) => b.low));
+  if (!(price > 0) || !(hi > lo)) return null;
+
+  const BANDS = 20;
+  const step = (hi - lo) / BANDS;
+  const vol = new Array<number>(BANDS).fill(0);
+  for (const b of bars) {
+    // 하루 거래량을 그날 고가~저가에 고르게 흩는다. 종가 한 점에 몰면
+    // 크게 흔든 날 실제로 손바뀜한 구간을 못 잡는다
+    const from = Math.min(BANDS - 1, Math.max(0, Math.floor((b.low - lo) / step)));
+    const to = Math.min(BANDS - 1, Math.max(0, Math.floor((b.high - lo) / step)));
+    const each = b.vol / (to - from + 1);
+    for (let i = from; i <= to; i++) vol[i] += each;
+  }
+  const total = vol.reduce((s, v) => s + v, 0);
+  if (!(total > 0)) return null;
+
+  let above = 0;
+  for (let i = 0; i < BANDS; i++) {
+    const from = lo + step * i;
+    const to = lo + step * (i + 1);
+    if (from >= price) above += vol[i];
+    else if (to > price) above += (vol[i] * (to - price)) / (to - from);
+  }
+  return (above / total) * 100;
+}
+
 export async function evaluateSignal(
   client: KiwoomClient,
   code: string,
@@ -233,13 +489,16 @@ export async function evaluateSignal(
   const need = new Set(enabled.map((c) => c.key));
 
   // 필요한 것만 조회한다 (기준을 꺼두면 호출도 안 한다)
-  const wantChart = need.has("trend");
-  const wantFlow = need.has("foreignFlow") || need.has("instFlow");
+  const wantChart =
+    need.has("trend") || need.has("nearHigh") || need.has("overhead") || need.has("disparity");
+  const wantFlow = need.has("foreignFlow") || need.has("instFlow") || need.has("flowStreak");
   const wantFinance = need.has("profitGrowth");
-  const wantSector = need.has("sectorStrength");
+  const wantSector = need.has("sectorStrength") || need.has("exportGrowth");
   const wantInfo = need.has("marketCap") || need.has("volume");
+  const wantShort = need.has("shortSaleUp");
+  const wantLending = need.has("lendingUp");
 
-  const [chart, flow, finance, mood, entry, info] = await Promise.all([
+  const [chart, flow, finance, mood, entry, info, shortSale, lending] = await Promise.all([
     wantChart
       ? client
           .request<Record<string, unknown>>("/api/dostk/chart", "ka10081", {
@@ -268,36 +527,90 @@ export async function evaluateSignal(
           .request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10001", { stk_cd: code })
           .catch(() => null)
       : null,
+    wantShort
+      ? client
+          .request<Record<string, unknown>>("/api/dostk/shsa", "ka10014", {
+            stk_cd: code,
+            tm_tp: "1",
+            strt_dt: daysAgoYyyymmdd(30),
+            end_dt: todayYyyymmdd(),
+          })
+          .catch(() => null)
+      : null,
+    wantLending
+      ? client
+          .request<Record<string, unknown>>("/api/dostk/slb", "ka20068", {
+            strt_dt: daysAgoYyyymmdd(30),
+            end_dt: todayYyyymmdd(),
+            all_tp: "0",
+            stk_cd: code,
+          })
+          .catch(() => null)
+      : null,
   ]);
+
+  const chartRows = (chart?.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
+  const closes = chartRows.map((r) => Math.abs(toNum(r.cur_prc))).filter((n) => n > 0);
+  const cur = closes[0];
+  const flowRows = (flow?.data?.stk_invsr_orgn_chart ?? []) as Record<string, unknown>[];
 
   const checks: CheckResult[] = [];
 
   for (const c of enabled) {
-    let pass: boolean | null = null;
+    /** 판단 불가면 null 로 남긴다 — 데이터가 없다고 감점하면 억울하다 */
+    let g: number | null = null;
     let link: CheckResult["link"];
     let value = "-";
 
     if (c.key === "trend") {
-      const rows = (chart?.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
-      const closes = rows.map((r) => Math.abs(toNum(r.cur_prc))).filter((n) => n > 0);
       const lines = [...cfg.maLines].sort((a, b) => a - b);
       const mas = lines.map((n) => sma(closes, n));
-      const cur = closes[0];
-      // 하나라도 계산이 안 되면(상장 기간 부족 등) 판단 불가로 남긴다
       if (cur && lines.length >= 2 && mas.every((m): m is number => !!m)) {
-        // 현재가 → 짧은 선 → 긴 선 순으로 계속 내려가야 정배열
         const seq = [cur, ...mas];
-        pass = seq.every((v, i) => i === 0 || seq[i - 1] >= v);
+        const full = seq.every((v, i) => i === 0 || seq[i - 1] >= v);
         const label = lines.map((n) => `${n}일`).join("≥");
-        value = pass ? `정배열 (${label})` : `역배열/혼조 (${label})`;
+        // 완전 정배열이 아니어도 가장 짧은 선 위면 절반은 준다 — 막 돌아서는 자리다
+        g = full ? 100 : cur >= mas[0] ? 50 : 0;
+        value = full
+          ? `정배열 (${label})`
+          : cur >= mas[0]
+            ? `${lines[0]}일선 위 (완전 정배열은 아님)`
+            : `역배열/혼조 (${label})`;
+      }
+    } else if (c.key === "nearHigh") {
+      const win = chartRows.slice(0, 250);
+      const high = win.length > 0 ? Math.max(...win.map((r) => Math.abs(toNum(r.high_pric)))) : 0;
+      if (cur && high > 0) {
+        const pct = (cur / high) * 100;
+        g = grade(pct, c);
+        value = `52주 고가의 ${pct.toFixed(0)}%`;
+      }
+    } else if (c.key === "sectorStrength") {
+      if (mood?.sector) {
+        g = grade(mood.sector.changeRate, c);
+        value = `${mood.sector.name} ${mood.sector.changeRate > 0 ? "+" : ""}${mood.sector.changeRate.toFixed(2)}%`;
+        // 업종지수 코드를 찾은 경우에만 구성종목을 열 수 있다
+        if (mood.sector.code) {
+          link = { kind: "sector", code: mood.sector.code, name: mood.sector.name };
+        }
       }
     } else if (c.key === "foreignFlow" || c.key === "instFlow") {
-      const rows = (flow?.data?.stk_invsr_orgn_chart ?? []) as Record<string, unknown>[];
-      if (rows.length > 0) {
+      if (flowRows.length > 0) {
         const field = c.key === "foreignFlow" ? "frgnr_invsr" : "orgn";
-        const sum = rows.slice(0, cfg.flowDays).reduce((s, r) => s + toNum(r[field]), 0);
-        pass = sum >= c.threshold;
+        const sum = flowRows.slice(0, cfg.flowDays).reduce((s, r) => s + toNum(r[field]), 0);
+        g = grade(sum, c);
         value = `${cfg.flowDays}일 ${sum > 0 ? "+" : ""}${Math.round(sum).toLocaleString("ko-KR")}`;
+      }
+    } else if (c.key === "flowStreak") {
+      if (flowRows.length > 0) {
+        // 최신부터 연속으로 순매수인 날을 센다
+        let streak = 0;
+        for (const r of flowRows) {
+          if (toNum(r.frgnr_invsr) > 0) streak += 1;
+          else break;
+        }
+        g = grade(streak, c);
+        value = `${streak}일 연속`;
       }
     } else if (c.key === "profitGrowth") {
       const periods = finance?.periods ?? [];
@@ -305,31 +618,21 @@ export async function evaluateSignal(
         const latest = periods[periods.length - 1].operatingProfit;
         const prev = periods[periods.length - 2].operatingProfit;
         if (latest !== null && prev !== null && prev !== 0) {
-          const g = ((latest - prev) / Math.abs(prev)) * 100;
-          pass = g >= c.threshold;
-          value = `${g > 0 ? "+" : ""}${g.toFixed(1)}%`;
-        }
-      }
-    } else if (c.key === "sectorStrength") {
-      if (mood?.sector) {
-        pass = mood.sector.changeRate >= c.threshold;
-        value = `${mood.sector.name} ${mood.sector.changeRate > 0 ? "+" : ""}${mood.sector.changeRate.toFixed(2)}%`;
-        // 업종지수 코드를 찾은 경우에만 구성종목을 열 수 있다
-        if (mood.sector.code) {
-          link = { kind: "sector", code: mood.sector.code, name: mood.sector.name };
+          const growth = ((latest - prev) / Math.abs(prev)) * 100;
+          g = grade(growth, c);
+          value = `${growth > 0 ? "+" : ""}${growth.toFixed(1)}%`;
         }
       }
     } else if (c.key === "marketCap") {
       // ka10001의 mac은 억원 단위
-      const cap = toNum(info?.data?.mac);
-      if (cap > 0) {
-        pass = cap >= c.threshold;
-        value = `${Math.round(cap).toLocaleString("ko-KR")}억`;
-      } else if (entry?.shares) {
+      let cap = toNum(info?.data?.mac);
+      if (!(cap > 0) && entry?.shares) {
         const price = Math.abs(toNum(info?.data?.cur_prc));
-        const calc = Math.round((entry.shares * price) / 100_000_000);
-        pass = calc >= c.threshold;
-        value = `${calc.toLocaleString("ko-KR")}억`;
+        cap = Math.round((entry.shares * price) / 100_000_000);
+      }
+      if (cap > 0) {
+        g = grade(cap, c);
+        value = `${Math.round(cap).toLocaleString("ko-KR")}억`;
       }
     } else if (c.key === "exportGrowth") {
       /*
@@ -340,10 +643,10 @@ export async function evaluateSignal(
       const sector = mood?.sector?.name;
       if (sector) {
         const trade = await getTradeStats().catch(() => null);
-        const g = trade ? exportYoyForSector(trade.items, sector) : null;
-        if (g !== null) {
-          pass = g >= c.threshold;
-          value = `${sector} 수출 ${g > 0 ? "+" : ""}${g.toFixed(1)}%`;
+        const yoy = trade ? exportYoyForSector(trade.items, sector) : null;
+        if (yoy !== null) {
+          g = grade(yoy, c);
+          value = `${sector} 수출 ${yoy > 0 ? "+" : ""}${yoy.toFixed(1)}%`;
         } else {
           value = `${sector} — 수출 지표 없음`;
         }
@@ -354,28 +657,105 @@ export async function evaluateSignal(
       const price = Math.abs(toNum(info?.data?.cur_prc));
       if (qty > 0 && price > 0) {
         const amount = Math.round((qty * price) / 100_000_000);
-        pass = amount >= c.threshold;
+        g = grade(amount, c);
         value = `${amount.toLocaleString("ko-KR")}억`;
+      }
+    } else if (c.key === "overhead") {
+      const pct = overheadPct(chartRows);
+      if (pct !== null) {
+        g = grade(pct, c);
+        value = `위쪽 매물 ${pct.toFixed(0)}%`;
+      }
+    } else if (c.key === "disparity") {
+      const ma20 = sma(closes, 20);
+      if (cur && ma20) {
+        const away = ((cur - ma20) / ma20) * 100;
+        // 아래로 벌어진 건 과열이 아니다. 위로 벌어진 것만 위험으로 친다
+        g = grade(Math.max(0, away), c);
+        value = `20일선 ${away > 0 ? "+" : ""}${away.toFixed(1)}%`;
+      }
+    } else if (c.key === "shortSaleUp") {
+      const rows = (shortSale?.data?.shrts_trnsn ?? []) as Record<string, unknown>[];
+      const win = rows.slice(0, 5);
+      if (win.length > 0) {
+        const avg = win.reduce((s, r) => s + toNum(r.trde_wght), 0) / win.length;
+        g = grade(avg, c);
+        value = `5일 평균 거래비중 ${avg.toFixed(1)}%`;
+      }
+    } else if (c.key === "lendingUp") {
+      const rows = (lending?.data?.dbrt_trde_trnsn ?? []) as Record<string, unknown>[];
+      if (rows.length >= 6) {
+        const now = toNum(rows[0].rmnd);
+        const before = toNum(rows[5].rmnd);
+        if (before > 0) {
+          const up = ((now - before) / before) * 100;
+          g = grade(Math.max(0, up), c);
+          value = `잔고 5일 ${up > 0 ? "+" : ""}${up.toFixed(1)}%`;
+        }
       }
     }
 
-    checks.push({ key: c.key, label: c.label, pass, value, weight: c.weight, link });
+    /*
+     * 위험 기준은 통과의 뜻이 반대다. 값이 크면 위험하므로 `grade < 50` 이 안전(통과)이다.
+     * 이름을 「매물 부담 낮음」처럼 안전한 상태로 적어 둔 것이 이것 때문이다 —
+     * 통과/미달 목록에 그대로 들어가기 때문이다.
+     */
+    const pass = g === null ? null : c.axis === "risk" ? g < 50 : g >= 50;
+    checks.push({ key: c.key, label: c.label, axis: c.axis, grade: g, pass, value, weight: c.weight, link });
   }
 
-  // 판단 불가(null)는 분모에서 뺀다 — 데이터가 없다고 감점하면 억울하다
-  const judged = checks.filter((c) => c.pass !== null);
-  const total = judged.reduce((s, c) => s + c.weight, 0);
-  const got = judged.filter((c) => c.pass).reduce((s, c) => s + c.weight, 0);
-  const score = total > 0 ? Math.round((got / total) * 100) : 0;
+  // ---- 축별 점수 ----
+  const axes: AxisResult[] = AXES.map((a) => {
+    const judged = checks.filter((c) => c.axis === a.key && c.grade !== null);
+    const total = judged.reduce((s, c) => s + c.weight, 0);
+    if (total === 0) return { key: a.key, label: a.label, score: null, level: "unknown" as Level };
+    const got = judged.reduce((s, c) => s + (c.grade ?? 0) * c.weight, 0);
+    const score = Math.round(got / total);
+    const level: Level =
+      a.key === "risk"
+        ? // 위험 축은 높을수록 나쁘다 — 신호 색이 뒤집힌다
+          score >= cfg.riskRedAt
+          ? "red"
+          : score >= cfg.riskYellowAt
+            ? "yellow"
+            : "green"
+        : score >= cfg.greenAt
+          ? "green"
+          : score >= cfg.yellowAt
+            ? "yellow"
+            : "red";
+    return { key: a.key, label: a.label, score, level };
+  });
 
-  const level: Level =
-    total === 0 ? "unknown" : score >= cfg.greenAt ? "green" : score >= cfg.yellowAt ? "yellow" : "red";
+  // ---- 종합 ----
+  // 위험은 평균에 섞지 않는다. 치명적인 위험이 좋은 추세에 씻겨 나가면 안 된다
+  const scored = axes.filter((a) => a.key !== "risk" && a.score !== null);
+  const wSum = scored.reduce((s, a) => s + cfg.axisWeights[a.key as "trend" | "flow" | "value"], 0);
+  const score =
+    wSum > 0
+      ? Math.round(
+          scored.reduce(
+            (s, a) => s + (a.score ?? 0) * cfg.axisWeights[a.key as "trend" | "flow" | "value"],
+            0,
+          ) / wSum,
+        )
+      : 0;
+
+  let level: Level =
+    scored.length === 0 ? "unknown" : score >= cfg.greenAt ? "green" : score >= cfg.yellowAt ? "yellow" : "red";
+
+  // 위험이 빨강이면 초록을 주지 않는다
+  const risk = axes.find((a) => a.key === "risk");
+  const riskCapped = cfg.riskBlocksGreen && risk?.level === "red" && level === "green";
+  if (riskCapped) level = "yellow";
 
   const result: SignalResult = {
     code,
     level,
     score,
     checks,
+    axes,
+    riskCapped,
     evaluatedAt: new Date().toISOString(),
   };
   evalCache.set(code, { data: result, at: Date.now() });

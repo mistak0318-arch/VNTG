@@ -102,8 +102,10 @@ const BLOCKS: {
   /** 간단히 보기에 들어가는 넷 */
   basic?: boolean;
 }[] = [
+  // 신호등이 맨 위다. 차트보다 먼저 본다 — 볼 만한 종목인지부터 갈라야
+  // 나머지를 들여다볼지 정할 수 있다. 넘기며 훑을 때 이 순서가 특히 중요하다
+  { key: "signal", label: "신호등", wide: true, basic: true },
   { key: "chart", label: "차트", wide: true, basic: true },
-  { key: "signal", label: "신호등", basic: true },
   { key: "opinion", label: "목표주가·투자의견", basic: true },
   // 기간 상승률은 블록으로 두지 않는다 — PriceHeader 가 이미 들고 있어 두 번 나온다
   { key: "investor", label: "투자자별 매매동향", wide: true, basic: true },

@@ -88,16 +88,47 @@ export function SignalPanel({
         <span className={`sig-dot big ${data.level}`} />
         <span className="sig-level">{LEVEL_LABEL[data.level]}</span>
         <span className="sig-score">{data.score}점</span>
+        {data.riskCapped && (
+          <span className="sig-capped" title="추세·수급·실적은 초록이지만 위험 축이 빨강이라 노랑으로 낮췄습니다">
+            위험으로 초록 차단
+          </span>
+        )}
         <button className="filter-btn" onClick={() => load(true)} disabled={loading}>
           {loading ? "평가 중…" : "↻ 다시 평가"}
         </button>
+      </div>
+
+      {/*
+        축을 먼저 보여 준다. 한 숫자만 보면 「실적 좋고 수급 최악」과 그 반대가
+        같은 점수로 보여 살 이유와 팔 이유가 상쇄된다.
+        위험 축은 눈금 방향이 반대다 — 길수록 나쁘다.
+      */}
+      <div className="sig-axes">
+        {data.axes.map((a) => (
+          <div className={`sig-axis ${a.level}`} key={a.key}>
+            <div className="sig-axis-head">
+              <span className="sig-axis-label">
+                {a.label}
+                {a.key === "risk" && <span className="pt-n"> (높을수록 위험)</span>}
+              </span>
+              <span className="sig-axis-score">{a.score === null ? "-" : `${a.score}점`}</span>
+            </div>
+            <div className="sig-axis-track">
+              <span className="sig-axis-fill" style={{ width: `${a.score ?? 0}%` }} />
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="sig-checks">
         {data.checks.map((c) => (
           <div className={`sig-check ${c.pass === null ? "na" : c.pass ? "ok" : "no"}`} key={c.key}>
             <span className="sig-mark">{c.pass === null ? "?" : c.pass ? "✓" : "✕"}</span>
-            <span className="sig-label">{c.label}</span>
+            <span className="sig-label">
+              {c.label}
+              {/* 절반만 맞은 것을 표시한다. ✓ 하나로는 50점과 100점이 같아 보인다 */}
+              {c.grade === 50 && <span className="sig-half"> 절반</span>}
+            </span>
             {c.link ? (
               <button
                 className="sig-value sig-link"
@@ -115,8 +146,10 @@ export function SignalPanel({
       </div>
 
       <div className="table-note">
-        판정 기준과 가중치는 <b>설정 &gt; 신호등 기준</b>에서 바꿀 수 있습니다. 데이터가 없어 판단할 수
-        없는 항목(?)은 점수 계산에서 제외됩니다.
+        종합 점수는 <b>추세·수급·실적</b> 세 축의 평균입니다 — <b>위험은 섞지 않습니다.</b>{" "}
+        위험이 빨강이면 나머지가 아무리 좋아도 초록을 주지 않습니다. 위험 항목(매물 부담·이격도·공매도·대차)은
+        <b> 안전할 때 ✓</b>입니다. 기준과 가중치는 <b>설정 &gt; 신호등 기준</b>에서 바꿀 수 있고,
+        데이터가 없어 판단할 수 없는 항목(?)은 점수 계산에서 빠집니다.
       </div>
 
       {target && (

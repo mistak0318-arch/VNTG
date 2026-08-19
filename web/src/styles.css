@@ -3944,3 +3944,229 @@ body {
 .sd-blockpick { margin-bottom: 12px; }
 .sd-preset { margin-bottom: 10px; }
 .sd-foot { margin-top: 12px; }
+
+/* ==================================================================
+   차트 판독 줄 (ChartInsights)
+   ------------------------------------------------------------------
+   캔들만 보고 "5일선이 20일선 위인가", "위에 매물이 얼마나 걸렸나"를
+   눈으로 세는 건 사람이 할 일이 아니다. 차트를 여는 순간 같이 나온다.
+   ================================================================== */
+
+.ci-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+/* 넓으면 이동평균과 매물대를 나란히 — 매물대 막대는 세로로 길어서 옆에 두는 게 낫다 */
+@media (min-width: 720px) {
+  .ci-wrap { grid-template-columns: minmax(0, 1fr) minmax(0, 15rem); }
+}
+
+.ci-col { min-width: 0; }
+
+.ci-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.ci-order {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.7333rem;
+  font-weight: 700;
+  border: 1px solid var(--border);
+}
+.ci-order.up { background: rgba(255,92,92,.15); color: var(--red); border-color: rgba(255,92,92,.4); }
+.ci-order.down { background: rgba(76,141,255,.15); color: var(--blue); border-color: rgba(76,141,255,.4); }
+.ci-order.mix { background: var(--panel-2); color: var(--muted); }
+
+.ci-cross { font-size: 0.7333rem; font-weight: 600; }
+.ci-cross.up { color: var(--red); }
+.ci-cross.down { color: var(--blue); }
+
+.ci-title { font-size: 0.7333rem; font-weight: 700; color: var(--muted); }
+
+.ci-overhead {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.7333rem;
+  font-weight: 700;
+  background: var(--panel-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+/* 위에 절반 넘게 걸려 있으면 올라갈 때마다 팔 사람이 나온다 — 눈에 띄어야 한다 */
+.ci-overhead.heavy { background: rgba(255,92,92,.15); color: var(--red); border-color: rgba(255,92,92,.4); }
+.ci-overhead.light { background: rgba(53,196,106,.15); color: var(--green); border-color: rgba(53,196,106,.4); }
+
+/* 이동평균 넷 ----------------------------------------------------- */
+
+.ci-ma {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ci-ma-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  min-width: 0;
+}
+/* 주가가 그 선 위에 있으면 붉게 — 캔들 색과 같은 규칙이라 따로 외울 게 없다 */
+.ci-ma-item.up { border-color: rgba(255,92,92,.45); }
+.ci-ma-item.down { border-color: rgba(76,141,255,.45); }
+.ci-ma-item.none { opacity: .45; }
+
+.ci-ma-label { font-size: 0.6667rem; color: var(--muted); font-weight: 700; }
+.ci-ma-value { font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ci-ma-gap { font-size: 0.6667rem; font-variant-numeric: tabular-nums; }
+.ci-ma-item.up .ci-ma-gap { color: var(--red); }
+.ci-ma-item.down .ci-ma-gap { color: var(--blue); }
+
+.ci-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.7333rem;
+  color: var(--text-dim);
+}
+.ci-pos { color: var(--text); }
+
+/* 매물대 막대 ------------------------------------------------------ */
+
+.ci-bars { display: flex; flex-direction: column; gap: 1px; margin-bottom: 8px; }
+
+.ci-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.6667rem;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 0;
+}
+
+/* 값이 백만 단위까지 가므로 넉넉히 — 좁으면 자릿수가 줄바꿈된다 */
+.ci-bar-price { flex: 0 0 5.4em; text-align: right; color: var(--muted); }
+.ci-bar-track { flex: 1 1 auto; height: 9px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.ci-bar-fill { display: block; height: 100%; background: var(--muted); opacity: .55; border-radius: 3px; }
+.ci-bar-share { flex: 0 0 2.4em; text-align: right; color: var(--muted); }
+
+/* 가장 두꺼운 칸 — 여기가 저항이자 지지다 */
+.ci-bar-row.top .ci-bar-fill { background: var(--blue); opacity: 1; }
+.ci-bar-row.top .ci-bar-price,
+.ci-bar-row.top .ci-bar-share { color: var(--text); font-weight: 700; }
+
+/* 위쪽에서 가장 두꺼운 칸 — 올라갈 때 막히는 자리 */
+.ci-bar-row.wall .ci-bar-fill { background: var(--red); opacity: .85; }
+.ci-bar-row.wall .ci-bar-price { color: var(--text); font-weight: 700; }
+
+/* 지금 가격이 걸친 칸 */
+.ci-bar-row.here .ci-bar-price { color: var(--red); font-weight: 700; }
+.ci-bar-row.here .ci-bar-track { box-shadow: 0 0 0 1px var(--red); }
+
+/* ==================================================================
+   신호등 — 네 축 (2026-08-19 개편)
+   ------------------------------------------------------------------
+   한 숫자만 보면 「실적 좋고 수급 최악」과 그 반대가 같아 보인다.
+   축을 갈라 놓아야 살 이유와 팔 이유가 상쇄되지 않는다.
+   ================================================================== */
+
+.sig-axes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+@media (min-width: 720px) {
+  .sig-axes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.sig-axis { min-width: 0; }
+
+.sig-axis-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.sig-axis-label { font-size: 0.7333rem; font-weight: 700; color: var(--muted); }
+.sig-axis-score { font-size: 0.7333rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.sig-axis-track { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.sig-axis-fill { display: block; height: 100%; border-radius: 3px; background: var(--muted); }
+
+.sig-axis.green .sig-axis-fill { background: var(--green); }
+.sig-axis.yellow .sig-axis-fill { background: #f5c542; }
+.sig-axis.red .sig-axis-fill { background: var(--red); }
+.sig-axis.green .sig-axis-score { color: var(--green); }
+.sig-axis.yellow .sig-axis-score { color: #f5c542; }
+.sig-axis.red .sig-axis-score { color: var(--red); }
+
+/* 위험 때문에 초록이 막혔다는 표시 — 왜 노랑인지 말해 주지 않으면 버그로 보인다 */
+.sig-capped {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.6667rem;
+  font-weight: 700;
+  background: rgba(255,92,92,.15);
+  color: var(--red);
+  border: 1px solid rgba(255,92,92,.4);
+}
+
+/* ✓ 하나로는 50점과 100점이 같아 보인다 */
+.sig-half { font-size: 0.6667rem; color: var(--muted); font-weight: 600; }
+
+/* 설정 — 축 묶음 -------------------------------------------------- */
+
+.sig-axis-group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--panel-2);
+}
+/* 위험 축만 방향이 반대라 눈으로도 갈라 둔다 */
+.sig-axis-group.risk { border-color: rgba(255,92,92,.35); }
+
+.sig-axis-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.sig-axis-title b { font-size: 0.8rem; }
+.sig-axis-title small { font-size: 0.6667rem; color: var(--muted); flex: 1 1 12rem; min-width: 0; }
+
+.sig-axis-weight { font-size: 0.6667rem; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.sig-axis-weight input { width: 3.2em; }
+
+/* 켜면 조회가 늘어나는 기준임을 미리 알린다 */
+.sig-cost {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.6667rem;
+  background: rgba(245,197,66,.18);
+  color: #f5c542;
+  border: 1px solid rgba(245,197,66,.4);
+}
+
+.sig-config-thresholds.risk { border-top: 1px dashed rgba(255,92,92,.35); padding-top: 10px; }
+.sig-block-toggle { display: flex; align-items: center; gap: 6px; }
