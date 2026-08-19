@@ -5051,3 +5051,69 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   padding-top: 0;
   border-top: none;
 }
+
+/* ------------------------------------------------------------------ */
+/* 주도주 탐색기                                                        */
+/* ------------------------------------------------------------------ */
+
+.ls-secs { display: grid; gap: 0.7rem; }
+.ls-sec {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--panel-2);
+}
+.ls-sec-h {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.ls-sec-nm { font-size: 1.05rem; }
+.ls-sec-rt { font-size: 1.05rem; font-weight: 700; }
+/* 폭이 낮으면 섹터가 아니라 종목 이슈다 — 색으로 먼저 알린다 */
+.ls-badge {
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  font-size: 0.85rem;
+}
+.ls-badge.ok { background: color-mix(in srgb, var(--green) 22%, transparent); }
+.ls-badge.warn { background: color-mix(in srgb, var(--red) 22%, transparent); }
+.ls-sec-sub {
+  display: flex;
+  gap: 0.9rem;
+  margin-top: 0.25rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.ls-sec-leaders {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.45rem;
+}
+.ls-chip {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 0.3rem;
+  padding: 0.2rem 0.45rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  color: inherit;
+}
+.ls-news {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.ls-tag {
+  display: inline-block;
+  margin-right: 0.25rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  font-size: 0.82rem;
+}

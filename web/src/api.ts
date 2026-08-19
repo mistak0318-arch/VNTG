@@ -404,6 +404,11 @@ export const api = {
     getJson<{ posts: PinnedPost[] }>(
       `/api/channels/pinned?edition=${edition}&limit=${limit}${force ? "&force=1" : ""}`,
     ),
+  /** 주도주 탐색기. 뉴스는 섹터마다 네이버를 부르므로 원할 때만 켠다 */
+  leaderScan: (withNews = false) =>
+    getJson<LeaderScan>(`/api/pulse/leaders${withNews ? "" : "?news=0"}`),
+  leaderConfig: () => getJson<LeaderConfig>("/api/pulse/leaders/config"),
+  leaderConfigSave: (c: LeaderConfig) => putJson<LeaderConfig>("/api/pulse/leaders/config", c),
   pulse: (force = false) => getJson<MarketPulse>(`/api/pulse${force ? "?force=1" : ""}`),
   pulseBrief: (force = false) =>
     getJson<PulseBrief>(`/api/pulse/brief${force ? "?force=1" : ""}`),
@@ -2256,4 +2261,54 @@ export interface UsDetail {
   fxRate: number | null;
   tradable: string;
   error: string | null;
+}
+
+
+/** 주도주 탐색기 */
+export interface LeaderConfig {
+  minTradeValue: number;
+  universe: number;
+  surgeRate: number;
+  volumeSpike: number;
+  topSectors: number;
+  minMembers: number;
+}
+
+export interface LeaderStock {
+  code: string;
+  name: string;
+  sector: string;
+  price: number;
+  changeRate: number;
+  /** 억원 */
+  tradeValue: number;
+  marketCap: number | null;
+  volumeRatio: number | null;
+  tags: string[];
+  score: number;
+}
+
+export interface LeaderScan {
+  at: string;
+  date: string;
+  config: LeaderConfig;
+  sectors: {
+    name: string;
+    /** 거래대금 가중 등락률 */
+    weightedRate: number;
+    simpleRate: number;
+    tradeValue: number;
+    members: number;
+    rising: number;
+    /** 오른 종목 비율(%) — 낮으면 섹터가 아니라 종목 이슈 */
+    breadth: number;
+    leaders: LeaderStock[];
+    streak: number | null;
+    carryOver: number | null;
+    news: { title: string; press: string; link: string }[];
+  }[];
+  stocks: LeaderStock[];
+  scanned: number;
+  belowThreshold: number;
+  note: string;
 }

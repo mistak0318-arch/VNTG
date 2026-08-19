@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { MarketPulsePanel } from "../components/MarketPulsePanel";
+import { LeaderScanPanel } from "../components/LeaderScanPanel";
 import { MarketSignalPanel } from "../components/MarketSignalPanel";
 import { api, fmtNum, type BreadthPoint, type ChannelReport } from "../api";
 import { BreadthPanel } from "../components/BreadthPanel";
@@ -22,11 +23,13 @@ import { RefreshBar } from "../components/RefreshBar";
  * 채널 정리는 「텔레그램 동향」 대메뉴로 옮겼다 — 그건 숫자가 아니라 독립된 정보원이다.
  */
 
-type FlowTab = "pulse" | "money" | "usKr" | "trade";
+type FlowTab = "pulse" | "leaders" | "money" | "usKr" | "trade";
 
 const TABS: { key: FlowTab; label: string }[] = [
   // 맥박이 첫 탭이다 — 나머지는 근거이고 이건 결론이다
   { key: "pulse", label: "맥박" },
+  // 맥박이 「지금 어떤 장인가」면 이건 「그래서 어디를 볼 것인가」다
+  { key: "leaders", label: "주도주 탐색" },
   { key: "money", label: "자금 흐름" },
   { key: "usKr", label: "미국↔국내" },
   { key: "trade", label: "수출 동향" },
@@ -202,6 +205,7 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
 
       <div key={`${tab}-${reloadKey}`}>
         {tab === "pulse" && <MarketPulsePanel />}
+        {tab === "leaders" && <LeaderScanPanel onSelectStock={onSelectStock} />}
         {tab === "money" && <MoneyFlowTab onSelectStock={onSelectStock} />}
         {tab === "usKr" && <UsKrPanel />}
         {tab === "trade" && <TradePanel onSelectStock={onSelectStock} />}
