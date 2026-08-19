@@ -1278,6 +1278,8 @@ export interface SignalCheckConfig {
   hint: string;
   /** 켜면 종목당 조회가 몇 번 더 나가나 — 「신호등 찾기」 100종목이면 그 100배다 */
   cost: number;
+  /** 같은 호출을 나눠 쓰는 기준끼리 묶는 이름. 비용을 셀 때 묶음마다 한 번만 센다 */
+  costGroup?: string;
 }
 
 export interface SignalConfig {

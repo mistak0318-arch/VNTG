@@ -2,7 +2,9 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { exportYoyForSector, getTradeStats } from "./tradeStats.js";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { analystOpinion } from "./analystOpinion.js";
 import { getFinance } from "./dartFinance.js";
+import { latestRatio } from "./financialRatio.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getSectorMood } from "./sectorMood.js";
 import { findStock } from "./stockListCache.js";
@@ -66,10 +68,14 @@ export type CheckKey =
   | "profitGrowth"
   | "marketCap"
   | "exportGrowth"
+  | "targetUpside"
+  | "targetTrend"
+  | "roe"
   | "overhead"
   | "disparity"
   | "shortSaleUp"
-  | "lendingUp";
+  | "lendingUp"
+  | "debtRatio";
 
 export interface CheckConfig {
   key: CheckKey;
@@ -92,6 +98,14 @@ export interface CheckConfig {
    * 설정 화면이 이걸 읽어 미리 알려 준다.
    */
   cost: number;
+  /**
+   * 같은 호출을 나눠 쓰는 기준끼리 묶는 이름.
+   *
+   * 목표가 괴리율과 눈높이 상향은 **한 번의 응답**에서 둘 다 나온다. 둘 다 켰다고
+   * 두 번 부르지 않으므로, 비용을 셀 때 이 묶음마다 한 번만 세야 한다.
+   * 없으면 그 기준 혼자 비용을 낸다.
+   */
+  costGroup?: string;
 }
 
 export interface SignalConfig {
@@ -234,6 +248,42 @@ export const DEFAULT_CONFIG: SignalConfig = {
       cost: 0,
     },
     {
+      key: "targetUpside",
+      label: "목표가 괴리율",
+      axis: "value",
+      enabled: false,
+      weight: 2,
+      threshold: 10,
+      strongAt: 30,
+      hint: "증권사 목표가 중앙값까지 남은 폭(%). 한투 조회가 종목당 1회 더 나간다",
+      cost: 1,
+      costGroup: "hantooOpinion",
+    },
+    {
+      key: "targetTrend",
+      label: "목표가 눈높이 상향",
+      axis: "value",
+      enabled: false,
+      weight: 1,
+      threshold: 0,
+      strongAt: 5,
+      hint: "최근 3개월 컨센서스가 그 이전 3개월보다 몇 % 높은가. 목표가 괴리율과 같은 응답에서 나온다",
+      cost: 1,
+      costGroup: "hantooOpinion",
+    },
+    {
+      key: "roe",
+      label: "ROE",
+      axis: "value",
+      enabled: false,
+      weight: 2,
+      threshold: 8,
+      strongAt: 15,
+      hint: "자기자본이익률(%). 한투 재무비율 조회가 종목당 1회 더 나간다",
+      cost: 1,
+      costGroup: "hantooRatio",
+    },
+    {
       key: "exportGrowth",
       label: "업종 수출 증가",
       axis: "value",
@@ -266,6 +316,18 @@ export const DEFAULT_CONFIG: SignalConfig = {
       strongAt: 25,
       hint: "현재가가 20일선보다 몇 % 위인가. 너무 벌어지면 되돌림이 온다",
       cost: 0,
+    },
+    {
+      key: "debtRatio",
+      label: "부채비율 안정",
+      axis: "risk",
+      enabled: false,
+      weight: 1,
+      threshold: 150,
+      strongAt: 250,
+      hint: "부채비율(%). 높을수록 위험하다. ROE 와 같은 응답에서 나온다",
+      cost: 1,
+      costGroup: "hantooRatio",
     },
     {
       key: "shortSaleUp",
@@ -489,8 +551,19 @@ export async function evaluateSignal(
   const need = new Set(enabled.map((c) => c.key));
 
   // 필요한 것만 조회한다 (기준을 꺼두면 호출도 안 한다)
+  /*
+   * 목표가 괴리율은 현재가가 있어야 잰다. 일봉 첫 줄이 현재가라 차트를 같이 받는다 —
+   * 시세를 따로 부르는 것보다 싸다(정배열·매물대가 켜져 있으면 어차피 받는 응답이다).
+   */
   const wantChart =
-    need.has("trend") || need.has("nearHigh") || need.has("overhead") || need.has("disparity");
+    need.has("trend") ||
+    need.has("nearHigh") ||
+    need.has("overhead") ||
+    need.has("disparity") ||
+    need.has("targetUpside");
+  // 둘은 한 응답에서 나온다. 하나만 켜도 부르고, 둘 다 켜도 한 번만 부른다
+  const wantOpinion = need.has("targetUpside") || need.has("targetTrend");
+  const wantRatio = need.has("roe") || need.has("debtRatio");
   const wantFlow = need.has("foreignFlow") || need.has("instFlow") || need.has("flowStreak");
   const wantFinance = need.has("profitGrowth");
   const wantSector = need.has("sectorStrength") || need.has("exportGrowth");
@@ -498,7 +571,8 @@ export async function evaluateSignal(
   const wantShort = need.has("shortSaleUp");
   const wantLending = need.has("lendingUp");
 
-  const [chart, flow, finance, mood, entry, info, shortSale, lending] = await Promise.all([
+  const [chart, flow, finance, mood, entry, info, shortSale, lending, opinion, ratio] =
+    await Promise.all([
     wantChart
       ? client
           .request<Record<string, unknown>>("/api/dostk/chart", "ka10081", {
@@ -547,6 +621,9 @@ export async function evaluateSignal(
           })
           .catch(() => null)
       : null,
+    // 현재가는 아직 모른다(같은 Promise.all 안이다). 괴리율은 아래에서 직접 잰다
+    wantOpinion ? analystOpinion(code).catch(() => null) : null,
+    wantRatio ? latestRatio(code) : null,
   ]);
 
   const chartRows = (chart?.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
@@ -659,6 +736,36 @@ export async function evaluateSignal(
         const amount = Math.round((qty * price) / 100_000_000);
         g = grade(amount, c);
         value = `${amount.toLocaleString("ko-KR")}억`;
+      }
+    } else if (c.key === "targetUpside") {
+      /*
+       * `analystOpinion` 에 현재가를 안 넘겨서 `upside` 가 비어 있다 — 여기서 직접 잰다.
+       * 넘기려면 시세를 먼저 받아야 하는데 그건 같은 Promise.all 안이라 순서가 안 맞는다.
+       */
+      const goal = opinion?.goalMedian ?? null;
+      const price = cur || Math.abs(toNum(info?.data?.cur_prc));
+      if (goal !== null && price > 0) {
+        const up = ((goal - price) / price) * 100;
+        g = grade(up, c);
+        value = `${up > 0 ? "+" : ""}${up.toFixed(1)}% (${opinion?.brokerCount ?? 0}곳)`;
+      }
+    } else if (c.key === "targetTrend") {
+      // 100건 상한에 걸린 응답은 오래된 쪽이 잘려 추세를 믿을 수 없다 — 판단 불가로 남긴다
+      if (opinion && !opinion.truncated && opinion.goalTrend !== null) {
+        g = grade(opinion.goalTrend, c);
+        value = `${opinion.goalTrend > 0 ? "+" : ""}${opinion.goalTrend.toFixed(1)}%`;
+      } else if (opinion?.truncated) {
+        value = "조회 상한에 걸려 추세를 못 냅니다";
+      }
+    } else if (c.key === "roe") {
+      if (ratio?.roe !== null && ratio?.roe !== undefined) {
+        g = grade(ratio.roe, c);
+        value = `${ratio.roe.toFixed(1)}% (${ratio.period.slice(0, 4)}년)`;
+      }
+    } else if (c.key === "debtRatio") {
+      if (ratio?.debtRatio !== null && ratio?.debtRatio !== undefined) {
+        g = grade(ratio.debtRatio, c);
+        value = `${ratio.debtRatio.toFixed(0)}%`;
       }
     } else if (c.key === "overhead") {
       const pct = overheadPct(chartRows);

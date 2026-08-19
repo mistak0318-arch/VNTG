@@ -31,6 +31,10 @@ const UNITS: Record<string, string> = {
   marketCap: "억원",
   volume: "억원",
   exportGrowth: "%",
+  targetUpside: "%",
+  targetTrend: "%",
+  roe: "%",
+  debtRatio: "%",
   overhead: "%",
   disparity: "%",
   shortSaleUp: "%",
@@ -106,7 +110,21 @@ export function SignalConfigPanel() {
    * 「신호등 찾기」는 100종목을 도니까 여기 1이면 실제로는 100번이 더 나간다 —
    * 눌러 보고 나서 느려진 이유를 찾게 두면 안 된다.
    */
-  const extraCalls = config.checks.filter((c) => c.enabled).reduce((s, c) => s + (c.cost ?? 0), 0);
+  const extraCalls = (() => {
+    // 같은 응답을 나눠 쓰는 기준(목표가 괴리율·눈높이 상향)은 둘 다 켜도 호출이 한 번이다.
+    // 그냥 더하면 실제보다 비싸게 알려 주게 된다 — 겁줘서 못 켜게 만들면 안 된다
+    const seen = new Set<string>();
+    let n = 0;
+    for (const c of config.checks) {
+      if (!c.enabled || !(c.cost > 0)) continue;
+      if (c.costGroup) {
+        if (seen.has(c.costGroup)) continue;
+        seen.add(c.costGroup);
+      }
+      n += c.cost;
+    }
+    return n;
+  })();
 
   return (
     <div className="sig-config">

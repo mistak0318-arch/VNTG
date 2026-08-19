@@ -313,7 +313,10 @@
       "Bash(rm -f .claude/settings.local.json.tmp.*)",
       "PowerShell($p = \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\docs\\\\update-minipc.bat\"; $b = [System.IO.File]::ReadAllBytes\\($p\\); \"첫 16바이트: \" + \\(\\($b[0..15] | ForEach-Object { $_.ToString\\('X2'\\) }\\) -join ' '\\); \"BOM 여부: \" + \\($b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF\\))",
       "PowerShell($mojibake = \"뾾?????붿뒪?ш?\"; $cp949 = [System.Text.Encoding]::GetEncoding\\(949\\); $bytes = $cp949.GetBytes\\($mojibake\\); \"cp949 바이트: \" + \\(\\($bytes | ForEach-Object { $_.ToString\\('X2'\\) }\\) -join ' '\\); \"UTF8로 다시 읽으면: \" + [System.Text.Encoding]::UTF8.GetString\\($bytes\\))",
-      "Bash(echo \"typecheck exit=$?\")"
+      "Bash(echo \"typecheck exit=$?\")",
+      "Bash(python -c \"import pypdf; print\\('pypdf', pypdf.__version__\\)\")",
+      "Bash(python -c \"import fitz; print\\('pymupdf ok'\\)\")",
+      "Bash(python -c \"import pdfplumber; print\\('pdfplumber ok'\\)\")"
     ]
   }
 }
