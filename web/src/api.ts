@@ -2510,5 +2510,7 @@ export interface OrderBook {
   volume: number;
   /** 거래량 ÷ 상장주식수 (%) */
   turnover: number | null;
+  /** 체결강도(%). 100 초과면 매수 체결이 우세. **잔량비와 다르다 — 실제 체결이다** */
+  strength: number | null;
   error: string | null;
 }

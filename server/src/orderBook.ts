@@ -80,6 +80,12 @@ export interface OrderBook {
   volume: number;
   /** 회전율(%) = 거래량 ÷ 상장주식수. 상장주식수를 모르면 null */
   turnover: number | null;
+  /**
+   * 체결강도(%). `ka10003`(체결정보)이 준다.
+   * 100 보다 크면 **매수 체결이 매도 체결보다 많았다**는 뜻이다.
+   * 잔량비와 다르다 — 이건 **실제 체결**이고 잔량비는 대기 물량이다.
+   */
+  strength: number | null;
   error: string | null;
 }
 
@@ -123,6 +129,7 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
     lowerLimit: 0,
     volume: 0,
     turnover: null,
+    strength: null,
     error: null,
   };
 
@@ -131,7 +138,7 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
      * 셋을 한 번에 받는다. NXT 는 실패해도 그냥 비워 둔다 —
      * 있으면 좋은 값이지 없으면 호가창을 못 그리는 값이 아니다.
      */
-    const [book, info, nxt, common] = await Promise.all([
+    const [book, info, nxt, common, tick] = await Promise.all([
       client.request<Record<string, unknown>>(MRKCOND, "ka10004", { stk_cd: bare }),
       client.request<Record<string, unknown>>(STKINFO, "ka10001", { stk_cd: bare }),
       client
@@ -139,8 +146,16 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
         .catch(() => null),
       // 상장주식수는 전종목 목록이 들고 있다 — 회전율에 쓴다
       findStock(client, bare).catch(() => undefined),
+      /*
+       * 체결강도는 **`ka10003`(체결정보)에 있다.**
+       * `ka10004`(호가)·`ka10001`(기본정보)에는 없어서 한동안 잔량비로 대신했는데,
+       * 찾고 보니 키움 안에 있었다 — 한투를 뒤질 필요가 없었다.
+       * 첫 행이 가장 최근 체결이다.
+       */
+      client
+        .request<Record<string, unknown>>(STKINFO, "ka10003", { stk_cd: bare })
+        .catch(() => null),
     ]);
-
     const b = book.data ?? {};
     const i = info.data ?? {};
     const n = nxt?.data ?? null;
@@ -177,6 +192,12 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
       lowerLimit: num(i.lst_pric),
       volume,
       turnover: shares && shares > 0 ? (volume / shares) * 100 : null,
+      strength: (() => {
+        const rows = (tick?.data as Record<string, unknown>)?.cntr_infr;
+        const first = Array.isArray(rows) ? (rows[0] as Record<string, unknown>) : null;
+        const v = first ? Number(String(first.cntr_str ?? "").replace(/[+,\s]/g, "")) : NaN;
+        return Number.isFinite(v) && v > 0 ? v : null;
+      })(),
     };
   } catch (err) {
     return { ...empty, error: err instanceof Error ? err.message : "호가 조회 실패" };

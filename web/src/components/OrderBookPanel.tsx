@@ -13,11 +13,14 @@ import { useLive } from "../useLive";
  *   오른쪽 위 KRX·NXT 고저, 250일 자리, 상·하한
  *   왼쪽 아래 잔량비·회전율·시간외 잔량
  *
- * ## 「체결강도」가 아니라 「잔량비」다
+ * ## 체결강도와 잔량비는 다른 값이다
  *
- * 체결강도는 `ka10004`·`ka10001` 어디에도 없다. 순위 TR 에는 있지만 종목 단건으로
- * 부르는 길을 확인 못 했다. **없는 값을 있는 척 부르지 않는다.**
- * 잔량비(매수잔량÷매도잔량)는 다른 값이지만 같은 물음에 답한다 — 이름 그대로 적는다.
+ * 체결강도는 **실제로 체결된 것**의 비율(`ka10003`), 잔량비는 **아직 대기 중인 물량**의
+ * 비율(`ka10004`)이다. 둘 다 보여 준다 — 체결은 세게 붙는데 잔량은 얇은 날이 있고,
+ * 그 차이가 뜻을 갖는다.
+ *
+ * ⚠️ 체결강도는 `ka10004`·`ka10001` 에는 **없다.** 한동안 못 찾아 잔량비로만 뒀는데,
+ * `ka10003`(체결정보)에 있었다 — 한투를 뒤질 필요가 없었다.
  */
 
 /** 막대 길이를 정할 기준 — 그 판에서 제일 두꺼운 호가 */
@@ -127,7 +130,13 @@ export function OrderBookPanel({ code }: { code: string }) {
 
       {/* 왼쪽 아래 — 지금 어느 쪽이 두터운가 */}
       <div className="ob-foot">
-        <div className="ob-kv" title="매수잔량 ÷ 매도잔량. 1보다 크면 사려는 쪽이 두텁다">
+        <div className="ob-kv" title="실제 체결 기준. 100 초과면 매수 체결이 우세하다">
+          <span>체결강도</span>
+          <b className={book.strength === null ? "" : book.strength >= 100 ? "positive" : "negative"}>
+            {book.strength === null ? "-" : book.strength.toFixed(1)}
+          </b>
+        </div>
+        <div className="ob-kv" title="매수잔량 ÷ 매도잔량. 대기 물량이다 — 체결강도와 다르다">
           <span>잔량비</span>
           <b className={book.ratio === null ? "" : book.ratio >= 1 ? "positive" : "negative"}>
             {book.ratio === null ? "-" : book.ratio.toFixed(2)}
@@ -158,8 +167,9 @@ export function OrderBookPanel({ code }: { code: string }) {
       </div>
 
       <div className="table-note">
-        <b>잔량비는 체결강도가 아닙니다.</b> 체결된 것이 아니라 <b>대기 중인 물량</b>의
-        비율입니다 — 두꺼운 쪽이 반드시 이기는 것도 아닙니다(허수 주문이 섞입니다).
+        <b>체결강도</b>는 실제로 체결된 것의 비율이고, <b>잔량비</b>는 아직 <b>대기 중인
+        물량</b>의 비율입니다 — 다른 값입니다. 잔량은 두꺼운 쪽이 반드시 이기지 않습니다
+        (허수 주문이 섞입니다).
         <b> 회전율</b>은 오늘 상장주식의 몇 %가 손바뀜했나입니다.
       </div>
     </div>
