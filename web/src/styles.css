@@ -5244,3 +5244,26 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .dt-move { margin-left: 0.2rem; opacity: 0.75; cursor: pointer; }
 .dt-edit { margin-left: auto; }
 .dt-reset { margin-left: 0.5rem; }
+
+/* 거래원 */
+.bf-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: 0.8rem; }
+.bf-h { font-weight: 700; padding-bottom: 0.2rem; border-bottom: 1px solid var(--border); }
+.bf-row {
+  display: grid; grid-template-columns: 7rem 1fr 6.5rem; align-items: center; gap: 0.4rem;
+  width: 100%; padding: 0.3rem 0.2rem; border: none; border-bottom: 1px solid var(--border);
+  background: none; color: inherit; font: inherit; cursor: pointer; text-align: left;
+}
+.bf-row.on { background: var(--panel-2); }
+.bf-nm { display: flex; align-items: center; gap: 0.25rem; font-size: 0.9rem; }
+.bf-fg { font-size: 0.7rem; padding: 0 0.2rem; border-radius: 0.2rem; background: var(--blue); color: #fff; }
+.bf-qty, .bf-delta { position: relative; display: flex; align-items: center; justify-content: flex-end; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.bf-qty b, .bf-delta b { position: relative; }
+.bf-bar { position: absolute; left: 0; top: 2px; bottom: 2px; border-radius: 0.15rem; opacity: 0.25; }
+.bf-bar.buy { background: var(--red); }
+.bf-bar.sell { background: var(--blue); }
+.bf-bar.d { opacity: 0.5; }
+.bf-series { display: grid; gap: 0.15rem; }
+.bf-pt { display: grid; grid-template-columns: 3.5rem 1fr 6rem; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
+.bf-pt-t { color: var(--muted); }
+.bf-pt-bar { position: relative; height: 0.9rem; }
+.bf-pt-v { text-align: right; font-variant-numeric: tabular-nums; }

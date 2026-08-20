@@ -10,6 +10,7 @@ import { CHART_RANGES, yahooChart } from "../yahooChart.js";
 import { futuresCandles } from "../kospiFutures.js";
 import { usCandles, usDetail } from "../usDetail.js";
 import { orderBook } from "../orderBook.js";
+import { brokerFlow } from "../brokerFlow.js";
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
@@ -542,6 +543,17 @@ export function createMarketRouter(client: KiwoomClient): Router {
   router.get("/orderbook/:code", async (req, res, next) => {
     try {
       res.json(await orderBook(client, String(req.params.code)));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 거래원 — 창구별 매매. 시간대별은 키움이 안 줘서 **부를 때마다 한 점씩 쌓는다.**
+   */
+  router.get("/broker-flow/:code", async (req, res, next) => {
+    try {
+      res.json(await brokerFlow(client, String(req.params.code)));
     } catch (err) {
       next(err);
     }

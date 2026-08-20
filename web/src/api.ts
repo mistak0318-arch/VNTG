@@ -123,6 +123,8 @@ export const api = {
   manualHoldingRemove: (id: string, code: string) =>
     deleteJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings/${code}`),
   /** 호가창 — 종목 상세·종목분석이 같은 것을 쓴다 */
+  /** 거래원 — 부를 때마다 시계열이 한 점씩 쌓인다 */
+  brokerFlow: (code: string) => getJson<BrokerFlow>(`/api/market/broker-flow/${code}`),
   orderBook: (code: string) => getJson<OrderBook>(`/api/market/orderbook/${code}`),
   stockInfo: (code: string) => getJson(`/api/market/info/${code}`),
   quote: (code: string) => getJson(`/api/market/quote/${code}`),
@@ -2512,5 +2514,19 @@ export interface OrderBook {
   turnover: number | null;
   /** 체결강도(%). 100 초과면 매수 체결이 우세. **잔량비와 다르다 — 실제 체결이다** */
   strength: number | null;
+  error: string | null;
+}
+
+
+/** 거래원 */
+export interface BrokerFlow {
+  code: string;
+  at: string;
+  sell: { rank: number; code: string; name: string; qty: number; delta: number; foreign: boolean }[];
+  buy: { rank: number; code: string; name: string; qty: number; delta: number; foreign: boolean }[];
+  foreignNet: number;
+  /** 우리가 쌓은 시간대별 — 화면을 안 본 시간은 빈다 */
+  series: { t: string; net: Record<string, number> }[];
+  names: Record<string, string>;
   error: string | null;
 }
