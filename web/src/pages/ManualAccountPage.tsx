@@ -305,18 +305,29 @@ export function ManualAccountPage({
           id={`manualAcct-${a.id}`}
           title={`${a.broker} ${a.name}`}
           /*
-            **접어 둬도 당일이 보여야 한다.**
-            계좌를 여럿 등록해 두면 평소에는 전부 접어 놓는데, 그 상태에서 알고 싶은 건
-            「오늘 이 계좌가 어느 쪽으로 갔나」다. 누적 수익률만 띠에 적혀 있으면
-            매번 펼쳐 봐야 한다 — 누적 +30% 인 계좌의 오늘 −3% 와 +3% 는 다른 하루다.
+            접힌 상태에서 **당일과 누적을 둘 다, 이름을 붙여서** 보여준다.
+
+            ⚠️ 당일만 띄웠다가 크게 헷갈렸다. 누적 −20.79% 인 계좌가 오늘 올랐다는
+            이유로 「+264,993 · +11.56%」라고 **빨갛게** 떠서, 접어 놓고 보면
+            잘 가고 있는 계좌로 읽혔다. 둘은 방향이 정반대일 수 있는 값이라
+            **한쪽만 보여주면 반드시 오해가 생긴다.**
+
+            그렇다고 누적만 두면 오늘 어느 쪽으로 갔는지를 매번 펼쳐 봐야 한다.
+            둘 다 두되 무엇이 무엇인지 글자로 못 박는다 — 색만으로는 못 가른다.
           */
           badge={
-            <span className={signClass(today.profit)}>
-              {today.profit > 0 ? "+" : ""}
-              {fmtNum(Math.round(today.profit))} · {pct(today.rate)}
+            <span className="ma-badge">
+              <span className={signClass(today.profit)}>
+                당일 {today.profit > 0 ? "+" : ""}
+                {fmtNum(Math.round(today.profit))} {pct(today.rate)}
+              </span>
+              <span className={signClass(a.totalProfit)}>
+                누적 {a.totalProfit > 0 ? "+" : ""}
+                {fmtNum(Math.round(a.totalProfit))} {pct(a.totalReturnRate)}
+              </span>
             </span>
           }
-          hint={`총자산 ${fmtNum(Math.round(a.totalAssets))} · 누적 ${pct(a.totalReturnRate)} · 주식 ${fmtNum(Math.round(a.totalValue))} · 예수금 ${fmtNum(Math.round(a.cash))}`}
+          hint={`총자산 ${fmtNum(Math.round(a.totalAssets))} · 주식 ${fmtNum(Math.round(a.totalValue))} · 예수금 ${fmtNum(Math.round(a.cash))}`}
         >
           <div className="ma-head">
             <button className="row-del-btn" onClick={() => deleteAccount(a.id, `${a.broker} ${a.name}`)}>
