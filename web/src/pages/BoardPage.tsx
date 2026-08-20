@@ -165,9 +165,39 @@ const PIN_KEY = "vntg.board.pins";
  * 종목은 안 담는다 — 구성은 **틀**이지 내용이 아니다.
  */
 const PRESET_KEY = "vntg.board.presets";
-const SLOTS = ["1", "2", "3", "4"] as const;
+const SLOTS = ["K1", "K2", "K3", "K4"] as const;
+
+/**
+ * 미리 넣어 둔 세 벌 — **모니터 세 대를 쓰던 HTS 구조**를 옮긴 것.
+ *
+ * 창을 셋 띄우고 각각 다른 구성을 불러오면 그 배치가 재현된다.
+ * 종목을 고르는 창에서 누르면 「종목 심층」 창만 따라오고 나머지는 안 흔들린다 —
+ * 창 연동이 하는 일이 정확히 그것이다.
+ *
+ * ⚠️ **아직 반쪽이다.** HTS 1·3번 모니터의 핵심은 지수판·시장 투자자동향·
+ * 관심종목 시세판처럼 **종목과 무관한 칸**인데, 보드는 지금 모든 칸이 종목에 매여 있다.
+ * 그 칸들이 생기기 전까지 K1·K3 은 있는 것으로 채운 임시 배치다.
+ *
+ * 슬롯에 저장된 게 있으면 그게 이긴다 — 여기 값은 **비어 있을 때의 시작점**일 뿐이다.
+ */
+const BUILT_IN: Record<string, { name: string; pick: string[] }> = {
+  K1: {
+    name: "시장 보기",
+    pick: ["chart", "insights", "news", "disclosure", "sector"],
+  },
+  K2: {
+    name: "종목 파기",
+    pick: ["chart", "orderbook", "investor", "broker", "supply", "opinion", "finance", "summary"],
+  },
+  K3: {
+    name: "장중 감시",
+    pick: ["signal", "intraday", "program", "orderbook", "insights"],
+  },
+};
 
 interface Preset {
+  /** 슬롯 이름 — 안 정하면 미리 넣어 둔 이름을 쓴다 */
+  name?: string;
   pick: string[];
   sizes: Record<string, CellSize>;
   pins: string[];
@@ -326,7 +356,10 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
 
   const saveTo = useCallback(
     (slot: string) => {
-      const next = { ...presets, [slot]: { pick, sizes, pins } };
+      const next = {
+        ...presets,
+        [slot]: { name: presets[slot]?.name ?? BUILT_IN[slot]?.name, pick, sizes, pins },
+      };
       setPresets(next);
       try {
         localStorage.setItem(PRESET_KEY, JSON.stringify(next));
@@ -340,7 +373,12 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
 
   const loadFrom = useCallback(
     (slot: string) => {
-      const p = presets[slot];
+      /*
+       * 저장된 게 없으면 **미리 넣어 둔 것**을 쓴다.
+       * 빈 슬롯을 눌렀을 때 아무 일도 안 일어나면 「고장인가」 싶어진다 —
+       * 처음 쓰는 사람에게 보여줄 게 있어야 이 기능이 뭔지 알게 된다.
+       */
+      const p = presets[slot] ?? (BUILT_IN[slot] ? { ...BUILT_IN[slot], sizes: {}, pins: [] } : null);
       if (!p) return;
       const keys = new Set(BLOCKS.map((b) => b.key as string));
       const nextPick = (p.pick ?? []).filter((k): k is BlockKey => keys.has(k));
@@ -463,16 +501,18 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                 key={s}
                 className={`filter-btn ${has && !saveMode ? "active" : ""}`}
                 onClick={() => (saveMode ? saveTo(s) : loadFrom(s))}
-                disabled={!saveMode && !has}
+                disabled={!saveMode && !has && !BUILT_IN[s]}
                 title={
                   saveMode
                     ? `지금 구성을 ${s}번에 저장`
                     : has
-                      ? `${s}번 구성 불러오기`
-                      : `${s}번은 비어 있습니다`
+                      ? `${s} 구성 불러오기`
+                      : BUILT_IN[s]
+                        ? `${s} 기본 배치 (${BUILT_IN[s].name})`
+                        : `${s} 는 비어 있습니다`
                 }
               >
-                {saveMode ? `${s}에 저장` : s}
+                {saveMode ? `${s}에 저장` : `${s} ${presets[s]?.name ?? BUILT_IN[s]?.name ?? ""}`.trim()}
               </button>
             );
           })}
