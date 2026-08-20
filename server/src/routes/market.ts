@@ -9,6 +9,7 @@ import { tradeSizeMix } from "../tradeSizeMix.js";
 import { CHART_RANGES, yahooChart } from "../yahooChart.js";
 import { futuresCandles } from "../kospiFutures.js";
 import { usCandles, usDetail } from "../usDetail.js";
+import { orderBook } from "../orderBook.js";
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
@@ -529,6 +530,18 @@ export function createMarketRouter(client: KiwoomClient): Router {
         ? (String(req.query.period) as "D" | "W" | "M")
         : "D";
       res.json(await usCandles(String(req.params.symbol).trim().toUpperCase(), period));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 호가창 — 종목 상세와 종목분석이 **같은 것**을 쓴다.
+   * 두 화면이 각자 그리면 언젠가 한쪽만 고쳐져 같은 종목이 다르게 보인다.
+   */
+  router.get("/orderbook/:code", async (req, res, next) => {
+    try {
+      res.json(await orderBook(client, String(req.params.code)));
     } catch (err) {
       next(err);
     }
