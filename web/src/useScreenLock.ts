@@ -17,24 +17,33 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * 잠금은 「그 자리의 물리적 상황」에 딸린 값이라, **회사 PC 는 잠그고 집은 안 잠그는** 게
  * 자연스럽다. 서버에 두면 집에서도 5분마다 비밀번호를 넣게 된다.
  *
- * ## 비밀번호는 해시로만 남긴다
+ * ## 비밀번호는 **네 자리 숫자로 고정**이다
  *
- * 원문을 저장하면 localStorage 를 열어보는 것만으로 드러난다. SHA-256 을 저장하고
- * 비교만 한다 — 되돌릴 수 없으니 잊으면 설정에서 새로 정해야 한다.
- * (`crypto.subtle` 은 https 나 localhost 에서만 된다. 둘 다 우리 경우다)
+ * 정하는 화면을 없앴다. 자리를 뜰 때 한 번 누르고 돌아와서 한 번 치는 것이 전부인데,
+ * 그 앞에 「비밀번호를 먼저 정하세요」가 있으면 정작 급할 때 못 쓴다.
+ *
+ * **해시로 감싸지 않는다.** 네 자리는 경우의 수가 만 개뿐이라 전부 대입해 보는 데
+ * 1초도 안 걸린다 — 해시를 씌워도 실제로 막아 주는 건 없으면서 「안전하다」는
+ * 착각만 남는다. 있으나 마나 한 것을 붙여 두느니 평문으로 두고 **무엇이 아닌지를
+ * 분명히 적는 쪽**이 낫다.
+ *
+ * ⚠️ 그러므로 다시 적어 둔다 — **이건 화면 가리개지 보안 경계가 아니다.**
+ * 지나가는 사람 눈에서 가리는 것이 전부이고, 진짜 방어는 Cloudflare 이메일 인증과
+ * OS 화면 잠금이다. 이건 그 사이의 빈 몇 분을 메운다.
  */
 
 const KEY = "vntg.lock.v1";
+
+/** 고정 PIN. 숨기는 값이 아니다 — 위 주석 참고 */
+export const PIN = "0523";
 
 export interface LockConfig {
   enabled: boolean;
   /** 몇 분 동안 아무 동작이 없으면 잠글지 */
   minutes: number;
-  /** SHA-256 해시. 비어 있으면 잠금이 안 걸린다 */
-  hash: string;
 }
 
-const DEFAULT: LockConfig = { enabled: false, minutes: 5, hash: "" };
+const DEFAULT: LockConfig = { enabled: false, minutes: 5 };
 
 export async function sha256(text: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -48,7 +57,6 @@ function read(): LockConfig {
     return {
       enabled: Boolean(raw.enabled),
       minutes: Math.min(Math.max(Number(raw.minutes) || 5, 1), 120),
-      hash: typeof raw.hash === "string" ? raw.hash : "",
     };
   } catch {
     return { ...DEFAULT };
@@ -97,7 +105,7 @@ export function useScreenLock() {
    * `passive: true` 를 주는 이유는 스크롤을 막지 않기 위해서다.
    */
   useEffect(() => {
-    if (!config.enabled || !config.hash || locked) return;
+    if (!config.enabled || locked) return;
 
     const reset = () => {
       if (timer.current) clearTimeout(timer.current);
@@ -111,7 +119,7 @@ export function useScreenLock() {
       for (const e of events) window.removeEventListener(e, reset);
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [config.enabled, config.hash, config.minutes, locked, lock]);
+  }, [config.enabled, config.minutes, locked, lock]);
 
   return { config, save, locked, lock, unlock };
 }

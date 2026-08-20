@@ -25,6 +25,12 @@ export function CloseBetPanel() {
   const [codes, setCodes] = useState(DEFAULT_CODES);
   const [days, setDays] = useState(250);
   const [futuresMin, setFuturesMin] = useState(0);
+  /*
+   * 금리 문턱은 **상승폭 상한**(bp)이다. 절대값이 아니다 —
+   * 금리가 크게 내린 날은 종가배팅에 좋은 자리라 버리면 안 된다.
+   */
+  const [y10Max, setY10Max] = useState(6);
+  const [y30Max, setY30Max] = useState(8);
   const [bt, setBt] = useState<Record<string, BetBacktest | null>>({ krx: null, nxt: null });
   const [btLoading, setBtLoading] = useState(false);
 
@@ -51,8 +57,8 @@ export function CloseBetPanel() {
     setError(null);
     try {
       const [krx, nxt] = await Promise.all([
-        api.betBacktest(codes, days, "krx", futuresMin),
-        api.betBacktest(codes, days, "nxt", futuresMin),
+        api.betBacktest(codes, days, "krx", futuresMin, y10Max, y30Max),
+        api.betBacktest(codes, days, "nxt", futuresMin, y10Max, y30Max),
       ]);
       setBt({ krx, nxt });
     } catch (e) {
@@ -60,7 +66,7 @@ export function CloseBetPanel() {
     } finally {
       setBtLoading(false);
     }
-  }, [codes, days, futuresMin]);
+  }, [codes, days, futuresMin, y10Max, y30Max]);
 
   return (
     <div className="cb">
@@ -133,6 +139,31 @@ export function CloseBetPanel() {
             % 이상
           </span>
         </div>
+        <div className="st-cfg-row">
+          <span className="st-cfg-k">금리 상승 한도</span>
+          <span>
+            10년물{" "}
+            <input
+              type="number"
+              step={1}
+              value={y10Max}
+              onChange={(e) => setY10Max(Number(e.target.value))}
+            />
+            bp · 30년물{" "}
+            <input
+              type="number"
+              step={1}
+              value={y30Max}
+              onChange={(e) => setY30Max(Number(e.target.value))}
+            />
+            bp <b>이하 상승</b>인 날만
+          </span>
+        </div>
+        <div className="table-note">
+          금리는 <b>오를 때만</b> 막습니다. 내린 날은 폭이 커도 통과합니다 — 금리 하락은
+          주식에 좋은 쪽이라, 절대값으로 막으면 <b>좋은 날까지 같이 버립니다</b>.
+          문턱을 크게(예: 999) 주면 조건을 안 거는 것과 같습니다.
+        </div>
         <div className="filter-row">
           <button className="primary-btn" onClick={() => void runBacktest()} disabled={btLoading}>
             {btLoading ? "일봉 받는 중… (종목당 약 0.5초)" : "검증하기"}
@@ -181,6 +212,47 @@ export function CloseBetPanel() {
                   </tbody>
                 </table>
               </div>
+
+              {/*
+                조건 하나씩 따로 — **어느 조건이 실제로 일을 하나.**
+                위의 「조건 맞음/안 맞음」은 넷을 한꺼번에 건 결과라, 성적이 좋아도
+                그게 선물 덕인지 금리 덕인지 알 수 없다. 여기서 갈린다.
+                조건을 걸었는데 「전체」와 「코스피 대비」가 같으면 그 조건은 아무 일도 안 한 것이다.
+              */}
+              {r.perCondition.length > 0 && (
+                <div className="data-table-wrap">
+                  <table className="data-table num">
+                    <thead>
+                      <tr>
+                        <th className="sticky-col">조건 하나씩</th>
+                        <th>건수</th>
+                        <th>시가 승률</th>
+                        <th>시가 평균</th>
+                        <th title="같은 날 코스피 대비. 조건을 걸어도 이 값이 안 오르면 그 조건은 쓸모가 없다">
+                          코스피 대비
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.perCondition.map((s) => (
+                        <tr key={s.key} className={s.n === 0 ? "st-empty" : ""}>
+                          <td className="sticky-col">{s.key}</td>
+                          <td>{s.n}</td>
+                          <td className={s.n === 0 ? "" : s.openWin >= 50 ? "positive" : "negative"}>
+                            {s.n === 0 ? "-" : `${s.openWin.toFixed(0)}%`}
+                          </td>
+                          <td className={s.n === 0 ? "" : signClass(s.openAvg)}>
+                            {s.n === 0 ? "-" : pct(s.openAvg)}
+                          </td>
+                          <td className={s.n === 0 ? "" : signClass(s.openExcess)}>
+                            <b>{s.n === 0 ? "-" : pct(s.openExcess, "%p")}</b>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           );
         })}

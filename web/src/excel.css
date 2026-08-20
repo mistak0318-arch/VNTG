@@ -421,6 +421,52 @@
   color: #605e5c;
 }
 
+/* ===== 등락을 색으로 말하지 않는다 =====
+ *
+ * 빨강·파랑 숫자가 깔려 있으면 리본을 아무리 잘 그려도 **주식창으로 읽힌다.**
+ * 다행히 값에는 이미 부호가 붙어 있다 — 화면 곳곳의 `pct()` 들이 전부
+ * `${v > 0 ? "+" : ""}` 로 찍기 때문에, 색만 빼도 오르내림은 그대로 읽힌다.
+ *
+ * 색을 뺀 자리는 **엑셀이 쓰는 방법**으로 메운다:
+ *   · 숫자는 고정폭(tabular-nums)으로 자릿수를 맞춘다 — 세로로 훑기 좋아진다
+ *   · 마이너스 칸에는 아주 옅은 회색을 깐다. 조건부 서식이 하는 그 일이고,
+ *     색이 아니라 **명암**이라 흘끗 봐도 표로 보인다
+ */
+:root[data-theme="excel"] .positive,
+:root[data-theme="excel"] .negative {
+  color: var(--text);
+}
+
+:root[data-theme="excel"] .data-table,
+:root[data-theme="excel"] .num,
+:root[data-theme="excel"] table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 칸에만 깐다 — 인라인 글자에 배경이 붙으면 얼룩덜룩해진다 */
+:root[data-theme="excel"] td.negative {
+  background: #f0f0f0;
+}
+
+/* 위아래 화살표·삼각형도 색을 뺀다 */
+:root[data-theme="excel"] .up,
+:root[data-theme="excel"] .down {
+  color: var(--text);
+}
+
+/* 어두운 색이 박혀 있던 것들 — 테마 변수를 안 쓰고 있었다 */
+:root[data-theme="excel"] .error-banner {
+  background: #fdf2f2;
+  border-color: #c00000;
+  color: #7a0000;
+}
+
+:root[data-theme="excel"] .raw-json {
+  background: #f3f3f3;
+  color: #000000;
+  border: 1px solid var(--xl-line);
+}
+
 /* ===== 표는 엑셀 표에 가깝게 ===== */
 :root[data-theme="excel"] table th {
   background: var(--xl-head-bg);

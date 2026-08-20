@@ -42,7 +42,14 @@ export function FlowBars({ flow }: { flow: InvestorFlow }) {
                 <span className="ov-bar-mid" />
                 <i
                   style={{
-                    background: positive ? "var(--up)" : "var(--down)",
+                    /*
+                     * 막대는 **글자색과 다른 변수**를 쓴다.
+                     * 엑셀 모드에서 등락 글자를 검정으로 바꿨더니 이 막대까지 새까맣게
+                     * 칠해졌다 — 글자에 맞는 색이 채움에도 맞는 건 아니다.
+                     * 방향은 어차피 가운데 선 좌우로 이미 드러나므로, 채움색은
+                     * 테마가 알아서 정하게 둔다.
+                     */
+                    background: positive ? "var(--up-fill, var(--up))" : "var(--down-fill, var(--down))",
                     opacity: item.sub ? 0.65 : 1,
                     ...(positive ? { left: "50%" } : { right: "50%" }),
                     width: `${width}%`,

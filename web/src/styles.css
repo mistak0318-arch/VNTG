@@ -5302,33 +5302,73 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 /* ------------------------------------------------------------------ */
 
 /* 뒤를 완전히 덮는다 - 반투명이면 계좌 잔고가 비친다 */
+/* ===== 잠금 화면 =====
+ * **아무것도 아닌 화면처럼 보이는 것**이 요점이다. 「잠김」이라 적힌 검은 화면은
+ * 지나가는 사람에게 감출 게 있다고 알려 주는 셈이라 가리려던 것과 반대로 간다.
+ * 그래서 흰 배경에 입력칸 하나뿐이다 — 테마(다크/엑셀)와 무관하게 늘 희다.
+ */
 .lock {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: var(--bg);
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
 }
-.lock-box {
-  width: min(22rem, 100%);
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  padding: 1.4rem;
-  border: 1px solid var(--border);
-  border-radius: 0.6rem;
-  background: var(--panel);
+
+.lock-input {
+  width: 11rem;
+  font-size: 1.1rem;
+  letter-spacing: 0.4em;
+  text-align: center;
+  padding: 0.5rem 0.6rem;
+  /* 시스템 기본 입력칸처럼 — 이 앱의 스타일이 묻어나면 어느 앱인지 티가 난다 */
+  color: #000000;
+  background: #ffffff;
+  border: 1px solid #767676;
+  border-radius: 2px;
+  font-family: -apple-system, "Segoe UI", sans-serif;
 }
-.lock-title { font-size: 1.3rem; font-weight: 700; }
-.lock-note { color: var(--muted); margin: 0; }
-.lock-input { font-size: 1rem; padding: 0.5rem 0.6rem; }
-.lock-err { color: var(--red); font-size: 0.9rem; }
-.lock-hint { color: var(--muted); font-size: 0.8rem; line-height: 1.5; margin: 0.4rem 0 0; }
-.lockset-pw { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+
+.lock-input:focus { outline: 1px solid #0f6fc6; }
+
+/* 틀렸다는 말 대신 흔든다 — 치는 사람은 알고 보는 사람은 모른다 */
+.lock-input.shake { animation: lock-shake 0.3s; }
+
+@keyframes lock-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lock-input.shake { animation: none; }
+}
 
 /* 사이드바 맨 아래 자물쇠 */
 .sidebar-foot { margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--border); }
-.lock-btn { width: 100%; }
+.foot-btn { width: 100%; }
+
+/* ===== 보드 — 다른 창에서 고른 종목을 따라 그린다 =====
+   칸이 좁으면 차트가 못 읽히므로 최소 폭을 준다. 화면이 넓으면 저절로 여러 줄이 된다. */
+.board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+  gap: 0.9rem;
+  align-items: start;
+}
+/* 차트는 한 줄을 다 쓰는 편이 낫다 — 가로가 좁으면 봉이 뭉갠다 */
+.board-cell.wide { grid-column: 1 / -1; }
+.board-cell { margin-bottom: 0; }
+/* 한 칸이 너무 길어지면 옆 칸과 높이가 안 맞아 읽기 나쁘다 */
+.board-cell:not(.wide) { max-height: 30rem; overflow-y: auto; }
+
+@media (max-width: 720px) {
+  .board-grid { grid-template-columns: 1fr; }
+  .board-cell:not(.wide) { max-height: none; }
+}
+
+/* 연동이 켜져 있으면 눈에 띄게 — 보내는 창에서도 켜야 하는 걸 자꾸 잊는다 */
+.foot-btn.active { color: var(--green); font-weight: 600; }

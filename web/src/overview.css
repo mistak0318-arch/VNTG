@@ -371,6 +371,42 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
   .ov-span2 { grid-column: span 2; }
 }
 
+/*
+ * ===== 엑셀 모드: 시황 카드 =====
+ *
+ * ⚠️ **이 파일은 어두운 값을 `.ov` 에 직접 박아 둔다.** 그래서 새 테마를 만들 때
+ * 여기를 같이 고치지 않으면 시황 대시보드만 검게 남는다 — 실제로 그랬다.
+ * (엑셀 모드 첫 판에 글로벌 카드가 검은 상자로 떴다)
+ *
+ * 등락은 **색으로 말하지 않는다.** 빨강·파랑 숫자가 화면에 깔리면 리본을 아무리
+ * 잘 그려도 주식창으로 읽힌다. 부호(+/−)는 이미 글자에 들어 있으므로 색만 빼도
+ * 뜻은 그대로 남는다.
+ */
+:root[data-theme="excel"] .ov {
+  --up: #000000;
+  --down: #000000;
+  --flat: #5a5a5a;
+  --accent: #217346;
+  --ov-panel: #ffffff;
+  --ov-panel-2: #f3f3f3;
+  --ov-line: #b1b1b1;
+  --ov-line-soft: #d4d4d4;
+  --ov-txt: #000000;
+  --ov-txt-2: #5a5a5a;
+  --ov-txt-3: #808080;
+  /*
+   * 막대 채움은 **명암으로** 가른다. 엑셀 데이터 막대가 하는 방식이고,
+   * 좌우 방향이 이미 매수·매도를 말해 주므로 색까지 쓸 필요가 없다.
+   */
+  --up-fill: #595959;
+  --down-fill: #a6a6a6;
+}
+
+/* 장 열림 표시의 붉은 테두리도 같이 지운다 */
+:root[data-theme="excel"] .ov-dot.open {
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);
+}
+
 /* ===== 라이트 테마: 시황 카드 색상 오버라이드 =====
    overview.css는 자체 변수(--ov-*)를 쓰므로 여기서 값만 갈아끼운다. */
 :root[data-theme="light"] .ov {

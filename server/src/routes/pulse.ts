@@ -108,6 +108,9 @@ export function createPulseRouter(client: KiwoomClient): Router {
         futuresMin: Number(req.query.futuresMin ?? DEFAULT_CONDITION.futuresMin),
         oilMax: Number(req.query.oilMax ?? DEFAULT_CONDITION.oilMax),
         fxMax: Number(req.query.fxMax ?? DEFAULT_CONDITION.fxMax),
+        // 금리는 상승폭 상한(bp). 999 를 주면 사실상 안 거는 것이 된다
+        y10MaxRise: Number(req.query.y10MaxRise ?? DEFAULT_CONDITION.y10MaxRise),
+        y30MaxRise: Number(req.query.y30MaxRise ?? DEFAULT_CONDITION.y30MaxRise),
       };
       // 어디서 샀다고 칠지 — KRX 정규장 마감 vs NXT 애프터마켓 마감
       const venue = req.query.venue === "nxt" ? "nxt" : "krx";

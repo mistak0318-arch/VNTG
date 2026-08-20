@@ -415,10 +415,23 @@ export const api = {
   /** 종가배팅 — 지금 시장 조건 */
   betGauge: () => getJson<{ day: BetGaugeDay; verdicts: BetVerdict[] }>("/api/pulse/closebet/gauge"),
   /** 과거 검증. 종목마다 일봉을 받아 몇 십 초 걸린다 */
-  betBacktest: (codes: string, days: number, venue: "krx" | "nxt", futuresMin: number) =>
+  /*
+   * 유가·환율은 **일부러 안 건다**(999). 둘은 조건별 표에서 따로 보는 쪽이 낫다 —
+   * 넷을 한꺼번에 걸면 남는 날이 너무 적어서 승률이 아무 말도 못 한다.
+   * 금리는 사용자가 정한 상승폭 상한을 그대로 넘긴다.
+   */
+  betBacktest: (
+    codes: string,
+    days: number,
+    venue: "krx" | "nxt",
+    futuresMin: number,
+    y10MaxRise: number,
+    y30MaxRise: number,
+  ) =>
     getJson<BetBacktest>(
       `/api/pulse/closebet/backtest?codes=${encodeURIComponent(codes)}&days=${days}&venue=${venue}` +
-        `&futuresMin=${futuresMin}&oilMax=999&fxMax=999`,
+        `&futuresMin=${futuresMin}&oilMax=999&fxMax=999` +
+        `&y10MaxRise=${y10MaxRise}&y30MaxRise=${y30MaxRise}`,
     ),
   betLog: (settled = false) =>
     getJson<BetLogSummary>(`/api/pulse/closebet/log${settled ? "?settled=1" : ""}`),
@@ -2419,10 +2432,17 @@ export interface BetGaugeDay {
   futuresPrice: number | null;
   oilPrice: number | null;
   fxPrice: number | null;
+  /** 미 국채금리 — 하루 변화·5일 변화는 bp, 수준은 % */
+  y10Move: number | null;
+  y30Move: number | null;
+  y10Trend: number | null;
+  y30Trend: number | null;
+  y10: number | null;
+  y30: number | null;
 }
 
 export interface BetVerdict {
-  key: "futures" | "oil" | "fx";
+  key: "futures" | "oil" | "fx" | "y10" | "y30";
   label: string;
   level: "ok" | "warn" | "bad";
   value: string;

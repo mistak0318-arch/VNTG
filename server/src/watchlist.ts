@@ -82,8 +82,33 @@ export async function addWatchItem(item: {
   groups?: string[];
 }): Promise<WatchItem[]> {
   const items = await load();
-  if (items.some((w) => w.code === item.code)) {
-    return [...items]; // 이미 있으면 그대로 둔다 (편입가를 덮어쓰지 않음)
+  /*
+   * 이미 담긴 종목이면 **그룹과 메모만 고친다.**
+   *
+   * 예전엔 여기서 목록을 그대로 돌려주고 끝냈다. 편입가를 덮어쓰지 않으려던 것인데,
+   * 그 바람에 **여러 그룹에 담는 기능이 통째로 죽어 있었다** — 화면은 「관심종목 그룹
+   * 고치기」라고 띄우고 그룹을 골라도 서버가 조용히 무시하니, 누르는 사람 입장에서는
+   * 아무 일도 안 일어나는 것으로 보인다. 실제로 그 증상으로 두 번 돌아왔다.
+   *
+   * 지키려던 것(편입가·담은 날짜)은 그대로 두고 고치려던 것만 고친다.
+   * 그룹을 빈 배열로 보내는 건 「어느 그룹에도 안 두겠다」가 아니라 화면에서
+   * **빼겠다는 뜻**이라 라우트가 지우기로 보내므로, 여기서는 빈 배열을 무시한다.
+   */
+  const had = items.find((w) => w.code === item.code);
+  if (had) {
+    const picked = normalizeGroups(item.groups ?? (item.group ? [item.group] : []));
+    const next = items.map((w) =>
+      w.code === item.code
+        ? {
+            ...w,
+            name: item.name || w.name,
+            memo: item.memo ?? w.memo,
+            groups: picked.length > 0 ? picked : w.groups,
+          }
+        : w,
+    );
+    await persist(next);
+    return next;
   }
   const next: WatchItem[] = [
     ...items,

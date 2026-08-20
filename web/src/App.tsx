@@ -33,6 +33,8 @@ import { useScreenLock } from "./useScreenLock";
 import { ScreenLock } from "./components/ScreenLock";
 import { ExcelChrome } from "./components/ExcelChrome";
 import { useAppearance } from "./useAppearance";
+import { BoardPage } from "./pages/BoardPage";
+import { useStockFocus } from "./useStockFocus";
 import { TelegramPage } from "./pages/TelegramPage";
 import { GuidePage } from "./pages/GuidePage";
 
@@ -63,6 +65,7 @@ type Tab =
   | "manualAccount"
   | "paper"
   | "settings"
+  | "board"
   | "guide";
 
 /**
@@ -95,6 +98,8 @@ const MENU: {
     accent: "#35c46a",
     items: [
       { key: "stockAnalysis", label: "개별종목분석", icon: "🔍" },
+      // 다른 창에서 고른 종목을 따라 그리는 자리 — 모니터를 여러 대 쓸 때
+      { key: "board", label: "보드 (창 연동)", icon: "🖥️" },
       { key: "screener", label: "시세분석", icon: "🔬" },
       { key: "volume", label: "거래상위", icon: "🔥" },
       { key: "sameNet", label: "동일순매매순위", icon: "🤝" },
@@ -159,6 +164,8 @@ export default function App() {
   const lock = useScreenLock();
   const appearance = useAppearance();
   const excel = appearance.theme === "excel";
+  /* 창들을 한 프로그램처럼 묶는다 — 꺼져 있으면 아무 일도 안 한다 */
+  const focus = useStockFocus();
   /* 엑셀 모드를 끌 때 돌아갈 곳 — 엑셀이 아니었던 마지막 테마 */
   const prevTheme = useRef<"dark" | "light">("dark");
   useEffect(() => {
@@ -233,13 +240,22 @@ export default function App() {
 
   const selected = route.stock;
 
+  /*
+   * 종목을 고르면 **열려 있는 다른 창에도 알린다.**
+   *
+   * 화면마다 따로 붙이지 않고 여기 한 곳에 둔다 — 종목을 고르는 길은 전부
+   * 이 함수를 지나므로, 새 화면을 만들어도 연동이 저절로 따라온다.
+   * 연동이 꺼져 있으면 `publish` 가 스스로 아무 일도 하지 않는다.
+   */
   function onSelectStock(code: string, name: string) {
     navigate({ stock: { code, name } });
+    focus.publish(code, name);
   }
 
   // 종목 상세(모달) → 개별종목분석 페이지로. 종목은 유지한 채 탭만 옮긴다.
   function openAnalysis(code: string, name: string) {
     navigate({ tab: "stockAnalysis", stock: { code, name } });
+    focus.publish(code, name);
     setNavOpen(false);
   }
 
@@ -263,9 +279,7 @@ export default function App() {
         잠금은 **맨 앞에** 둔다. 뒤 화면을 완전히 덮어야 가리는 뜻이 있다.
         반투명이면 계좌 잔고가 비친다.
       */}
-      {lock.locked && lock.config.hash && (
-        <ScreenLock config={lock.config} onUnlock={lock.unlock} />
-      )}
+      {lock.locked && <ScreenLock onUnlock={lock.unlock} />}
       {/* 엑셀 껍데기 — 리본·행번호·시트탭. 잠금보다는 뒤, 본문보다는 앞 */}
       {excel && <ExcelChrome sheets={sheets} current={tab} onGo={(k) => go(k as Tab)} />}
       <aside className={`sidebar${navOpen ? " open" : ""}`}>
@@ -317,12 +331,24 @@ export default function App() {
         */}
         <div className="sidebar-foot">
           {/*
+            연동은 **보내는 창에서도 켜야** 한다. 받는 창만 켜 두고 왜 안 되냐고
+            하기 쉬운 자리라, 켜져 있을 때 눈에 띄게 표시한다.
+          */}
+          <button
+            className={`nav-item foot-btn${focus.on ? " active" : ""}`}
+            onClick={() => focus.toggle(!focus.on)}
+            title={focus.on ? "종목 연동 끄기" : "종목 연동 켜기 — 다른 창과 종목을 맞춥니다"}
+          >
+            <span className="nav-icon">📡</span>
+            <span className="nav-label">{focus.on ? "종목 연동 켜짐" : "종목 연동"}</span>
+          </button>
+          {/*
             엑셀 모드는 **급할 때 눌러야** 뜻이 있다. 설정 화면까지 들어가야 한다면
             정작 필요한 순간에 못 쓴다. 직전 테마를 기억해 두고 되돌린다 —
             껐을 때 늘 다크로 가면 라이트를 쓰던 사람은 매번 다시 고쳐야 한다.
           */}
           <button
-            className="nav-item lock-btn"
+            className="nav-item foot-btn"
             onClick={() =>
               appearance.set({ theme: excel ? (prevTheme.current ?? "dark") : "excel" })
             }
@@ -331,18 +357,14 @@ export default function App() {
             <span className="nav-icon">📊</span>
             <span className="nav-label">{excel ? "엑셀 모드 끄기" : "엑셀 모드"}</span>
           </button>
-          <button
-            className="nav-item lock-btn"
-            onClick={() => {
-              if (lock.config.hash) lock.lock();
-              else go("settings");
-            }}
-            title={lock.config.hash ? "화면 잠그기" : "먼저 설정에서 비밀번호를 정하세요"}
-          >
+          {/*
+            누르면 **바로** 잠긴다. 예전엔 비밀번호를 안 정했으면 설정으로 보냈는데,
+            자리를 뜨려고 누른 사람에게 설정 화면을 띄우는 건 아무 도움이 안 된다.
+            비밀번호가 네 자리로 고정되면서 그 갈림길 자체가 없어졌다.
+          */}
+          <button className="nav-item foot-btn lock-btn" onClick={lock.lock} title="화면 잠그기">
             <span className="nav-icon">🔒</span>
-            <span className="nav-label">
-              {lock.config.hash ? "화면 잠그기" : "화면 잠금 설정"}
-            </span>
+            <span className="nav-label">화면 잠그기</span>
           </button>
         </div>
       </aside>
@@ -397,6 +419,7 @@ export default function App() {
           {tab === "paper" && <PaperTradePage onSelectStock={onSelectStock} />}
           {tab === "account" && <AccountInfoPage onSelectStock={onSelectStock} />}
           {tab === "manualAccount" && <ManualAccountPage onSelectStock={onSelectStock} />}
+          {tab === "board" && <BoardPage onSelectStock={onSelectStock} />}
           {tab === "settings" && <SettingsPage />}
           {tab === "guide" && <GuidePage />}
           </ErrorBoundary>

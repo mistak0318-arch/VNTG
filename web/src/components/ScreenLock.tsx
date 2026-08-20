@@ -1,17 +1,31 @@
 import { useEffect, useRef, useState } from "react";
-import { sha256, type LockConfig } from "../useScreenLock";
+import { PIN } from "../useScreenLock";
 
 /**
- * 잠금 화면 — **뒤를 완전히 가린다.**
+ * 잠금 화면 — **아무것도 아닌 화면처럼 보이는 것**이 요점이다.
  *
- * 반투명으로 두면 뒤의 계좌 잔고가 비쳐서 가리는 뜻이 없어진다. 불투명하게 덮는다.
+ * ## 왜 아무 말도 안 적나
  *
- * 틀린 횟수를 세어 **점점 느리게** 만든다. 진짜 방어는 아니지만
- * 옆에서 몇 번 찍어 보는 것 정도는 성가시게 만든다.
+ * 처음에는 「잠김」이라 크게 적고 무엇이 잠겼는지, 어떻게 푸는지까지 설명했다.
+ * 그런데 이 화면의 목적은 **자리를 비운 사이 남의 눈에 안 걸리는 것**이다.
+ * 「잠김」이라고 적힌 검은 화면은 지나가는 사람에게 *여기 뭔가 감출 게 있다*고
+ * 알려 주는 셈이라, 가리려던 것과 정확히 반대로 간다.
+ *
+ * 그래서 **흰 배경에 입력칸 하나**만 둔다. 로그인 화면 같기도 하고 덜 뜬 페이지
+ * 같기도 한, 아무 뜻도 읽히지 않는 화면이 가장 안전하다.
+ *
+ * 같은 이유로 **틀렸다는 말도 안 띄운다.** 「비밀번호가 다릅니다」가 뜨면 그 순간
+ * 잠금 화면인 게 드러난다. 대신 칸을 비우고 살짝 흔든다 — 치는 사람은 알아채고
+ * 보는 사람은 모른다.
+ *
+ * ## 설명은 여기(주석)에 남긴다
+ *
+ * 화면에서 지운 것이지 없앤 게 아니다. 알아야 할 것은 설정 화면에 적혀 있다:
+ * 네 자리 고정 PIN, 새로고침으로 안 풀림, **보안 경계가 아니라 화면 가리개**라는 것.
  */
-export function ScreenLock({ config, onUnlock }: { config: LockConfig; onUnlock: () => void }) {
-  const [pw, setPw] = useState("");
-  const [error, setError] = useState<string | null>(null);
+export function ScreenLock({ onUnlock }: { onUnlock: () => void }) {
+  const [pin, setPin] = useState("");
+  const [shake, setShake] = useState(0);
   const [wait, setWait] = useState(0);
   const tries = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -27,57 +41,38 @@ export function ScreenLock({ config, onUnlock }: { config: LockConfig; onUnlock:
     return () => clearTimeout(t);
   }, [wait]);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (wait > 0) return;
-    if (!pw) return;
-
-    if ((await sha256(pw)) === config.hash) {
+  /* 네 자리가 차면 스스로 확인한다 — 「열기」 버튼도 단서가 된다 */
+  useEffect(() => {
+    if (pin.length < 4 || wait > 0) return;
+    if (pin === PIN) {
       onUnlock();
       return;
     }
     tries.current += 1;
-    setPw("");
-    setError("비밀번호가 다릅니다");
-    // 세 번 틀리면 기다리게 한다 — 찍어 보는 걸 성가시게
+    setPin("");
+    setShake((n) => n + 1);
+    // 세 번 틀리면 잠깐 못 치게 한다. 찍어 보는 걸 성가시게 만드는 정도다
     if (tries.current >= 3) setWait(Math.min(5 * (tries.current - 2), 30));
-  }
+  }, [pin, wait, onUnlock]);
 
   return (
     <div className="lock">
-      <form className="lock-box" onSubmit={submit}>
-        <div className="lock-title">잠김</div>
-        <p className="lock-note">자리를 비운 사이 화면이 잠겼습니다.</p>
-        <input
-          ref={inputRef}
-          type="password"
-          className="lock-input"
-          value={pw}
-          onChange={(e) => {
-            setPw(e.target.value);
-            setError(null);
-          }}
-          placeholder="비밀번호"
-          autoComplete="current-password"
-          disabled={wait > 0}
-        />
-        {error && <div className="lock-err">{error}</div>}
-        {wait > 0 && <div className="lock-err">{wait}초 뒤에 다시 시도할 수 있습니다</div>}
-        <button className="primary-btn" type="submit" disabled={wait > 0 || !pw}>
-          열기
-        </button>
-        {/*
-          **새로고침으로는 안 풀린다.** 잠긴 사실을 localStorage 에 남기기 때문이고,
-          그게 이 기능의 요점이다 — F5 로 넘어가면 가리는 뜻이 없다.
-          그러니 「새로고침하면 된다」고 적으면 거짓말이 된다.
-        */}
-        <p className="lock-hint">
-          새로고침해도 풀리지 않습니다. 비밀번호를 잊으셨다면 브라우저의 <b>사이트 데이터
-          삭제</b>로만 풀 수 있습니다(설정도 함께 지워집니다).
-          <br />이 잠금은 <b>화면을 가리는 용도</b>지 보안 경계가 아닙니다 — 진짜 방어는
-          Cloudflare 인증과 OS 화면 잠금입니다.
-        </p>
-      </form>
+      {/*
+        `key={shake}` 로 애니메이션을 다시 태운다 — 같은 요소에 클래스만 도로 붙이면
+        브라우저가 「이미 그 상태」로 보고 두 번째부터 안 흔들린다.
+      */}
+      <input
+        key={shake}
+        ref={inputRef}
+        type="password"
+        className={`lock-input${shake > 0 ? " shake" : ""}`}
+        value={pin}
+        onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+        inputMode="numeric"
+        autoComplete="off"
+        aria-label=""
+        disabled={wait > 0}
+      />
     </div>
   );
 }
