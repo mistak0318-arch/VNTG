@@ -282,7 +282,34 @@ export default function App() {
       */}
       {lock.locked && <ScreenLock onUnlock={lock.unlock} />}
       {/* 엑셀 껍데기 — 리본·행번호·시트탭. 잠금보다는 뒤, 본문보다는 앞 */}
-      {excel && <ExcelChrome sheets={sheets} current={tab} onGo={(k) => go(k as Tab)} />}
+      {excel && (
+        <ExcelChrome
+          sheets={sheets}
+          current={tab}
+          onGo={(k) => go(k as Tab)}
+          onMenu={() => setNavOpen(true)}
+        />
+      )}
+
+      {/*
+        메뉴 여는 동그란 버튼.
+
+        **`.main` 밖에 둔다.** 안에 두면 `.main` 이 만든 쌓임 맥락에 갇혀서,
+        버튼의 z-index 를 아무리 올려도 바깥의 엑셀 껍데기 아래로 칠해진다 —
+        실제로 그래서 엑셀 모드 왼쪽 위에서 버튼이 사라졌다.
+
+        **엑셀 모드에서는 아예 안 띄운다.** 동그란 플로팅 버튼은 엑셀에 없는 물건이라,
+        리본을 아무리 잘 그려도 그것 하나로 위장이 깨진다. 그 모드에서는 리본의
+        「파일」 탭이 같은 일을 한다.
+      */}
+      {!excel && (
+        <CornerToggle
+          onOpen={() => setNavOpen(true)}
+          label="메뉴 열기"
+          side={appearance.navSide}
+          onSide={(s) => appearance.set({ navSide: s })}
+        />
+      )}
       <aside className={`sidebar${navOpen ? " open" : ""}`}>
         {/* 회사에서도 열기 때문에 이름을 중립적으로 둔다 */}
         <div className="sidebar-brand">VNTG</div>
@@ -376,17 +403,6 @@ export default function App() {
         <header className="mobile-header">
           <span className="mobile-title">{TAB_LABELS[tab]}</span>
         </header>
-        {/*
-          메뉴 버튼은 머리글에서 빼내 **떠 있게** 한다. 머리글에 박혀 있으면
-          왼쪽 위 한 자리뿐이라, 폰을 오른손으로 쥔 사람은 매번 손을 고쳐 쥐어야 한다.
-          끌어서 네 모서리 중 아무 데나 놓을 수 있다.
-        */}
-        <CornerToggle
-          onOpen={() => setNavOpen(true)}
-          label="메뉴 열기"
-          side={appearance.navSide}
-          onSide={(s) => appearance.set({ navSide: s })}
-        />
 
         <div className="main-inner">
           {/* 돌고 있는 작업 — 어느 화면에 있든 뜬다 */}

@@ -5474,3 +5474,39 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
    */
   .mobile-header { padding-left: 3.6rem; padding-right: 3.6rem; }
 }
+
+/* ===== 보드 — 칸 머리(손잡이·제목·핀) ===== */
+.board-cell-h {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+}
+.board-cell-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 손잡이를 따로 둔다 — 제목 아무 데나 끌리면 글자를 긁다가 칸이 딸려 나온다 */
+.board-grip {
+  cursor: grab;
+  color: var(--muted);
+  padding: 0 0.15rem;
+  line-height: 1;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.board-cell.dragging { opacity: 0.65; outline: 2px dashed var(--blue); }
+.board-cell.dragging .board-grip { cursor: grabbing; }
+
+.board-pin {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0.1rem;
+  opacity: 0.45;
+}
+.board-pin.on { opacity: 1; }
+
+/* 고정하면 크기도 자리도 안 움직인다 — 고정의 뜻이 그것이다 */
+.board-cell.pinned { resize: none; }

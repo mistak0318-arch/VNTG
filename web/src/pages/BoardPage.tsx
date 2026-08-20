@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, pickList, type RawRecord } from "../api";
 import { InvestorTrendTable } from "../components/InvestorTrendTable";
 import { ChartPanel } from "../components/ChartPanel";
@@ -98,6 +98,37 @@ function readSizes(): Record<string, CellSize> {
   }
 }
 
+const PIN_KEY = "vntg.board.pins";
+
+/**
+ * 화면 구성 네 벌 — **즐겨찾기처럼.**
+ *
+ * 장중에 보는 구성과 마감 뒤에 보는 구성이 다르고, 종목을 고를 때와 파고들 때가 또
+ * 다르다. 그때마다 칸을 켜고 끄고 크기를 다시 잡는 건 **하던 일을 멈추는 것**이라,
+ * 몇 벌 만들어 두고 숫자 하나로 갈아 끼우는 편이 낫다.
+ *
+ * 담는 것은 「무엇을·어떤 순서로·얼마나 크게·어디를 고정했나」 넷이다.
+ * 종목은 안 담는다 — 구성은 **틀**이지 내용이 아니다.
+ */
+const PRESET_KEY = "vntg.board.presets";
+const SLOTS = ["1", "2", "3", "4"] as const;
+
+interface Preset {
+  pick: string[];
+  sizes: Record<string, CellSize>;
+  pins: string[];
+}
+
+function readPresets(): Record<string, Preset> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PRESET_KEY) ?? "null") as unknown;
+    if (!raw || typeof raw !== "object") return {};
+    return raw as Record<string, Preset>;
+  } catch {
+    return {};
+  }
+}
+
 const PICK_KEY = "vntg.board.blocks";
 const DEFAULT_PICK: BlockKey[] = ["chart", "investor", "supply", "opinion"];
 
@@ -140,6 +171,138 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
       /* 무시 */
     }
   }, []);
+
+  /* ---------------- 고정 ---------------- */
+  const [pins, setPins] = useState<string[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(PIN_KEY) ?? "[]") as unknown;
+      return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  });
+
+  /* 끄는 도중에 읽어야 해서 ref 로도 들고 있는다 */
+  const pinsRef = useRef<string[]>(pins);
+  useEffect(() => {
+    pinsRef.current = pins;
+  }, [pins]);
+
+  const flipPin = useCallback((k: string) => {
+    setPins((prev) => {
+      const next = prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k];
+      try {
+        localStorage.setItem(PIN_KEY, JSON.stringify(next));
+      } catch {
+        /* 무시 */
+      }
+      return next;
+    });
+  }, []);
+
+  /* ---------------- 자리 바꾸기 ---------------- */
+  const [dragKey, setDragKey] = useState<string | null>(null);
+
+  /*
+   * 끄는 동안 **실시간으로 자리를 바꾼다.**
+   *
+   * 놓을 때 한 번에 옮기면 어디에 떨어질지 모르는 채로 끌게 된다. 지나가는 칸과
+   * 즉시 자리를 바꾸면 결과가 눈앞에서 보이므로 미리보기가 따로 필요 없다.
+   *
+   * 고정된 칸은 **자리를 내주지 않는다** — 고정의 뜻이 그것이다.
+   */
+  const onDragStart = useCallback(
+    (key: string) => (e: React.PointerEvent) => {
+      e.preventDefault();
+      setDragKey(key);
+
+      const move = (ev: PointerEvent) => {
+        const under = document
+          .elementFromPoint(ev.clientX, ev.clientY)
+          ?.closest<HTMLElement>(".board-cell");
+        const over = under?.dataset.cell;
+        if (!over || over === key) return;
+        /*
+         * 고정 목록은 **ref 로 읽는다.**
+         *
+         * 처음엔 `setPins` 갱신 함수 안에서 `setPick` 을 불렀는데, 그건 React 가
+         * 보장하지 않는 자리라 **아무 일도 안 일어났다** — 끌어도 순서가 그대로였다.
+         * 갱신 함수는 값을 계산해서 돌려주는 곳이지 다른 상태를 건드리는 곳이 아니다.
+         */
+        if (pinsRef.current.includes(over)) return; // 고정된 칸은 안 밀린다
+        setPick((cur) => {
+          const from = cur.indexOf(key as BlockKey);
+          const to = cur.indexOf(over as BlockKey);
+          if (from < 0 || to < 0 || from === to) return cur;
+          const next = [...cur];
+          next.splice(to, 0, next.splice(from, 1)[0]);
+          return next;
+        });
+      };
+      const up = () => {
+        setDragKey(null);
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
+
+      /*
+       * 포인터 캡처는 **맨 마지막에, 실패해도 그만인 것으로** 건다.
+       *
+       * 처음엔 리스너보다 먼저 불렀는데, 이게 예외를 던지면 **그 뒤 줄이 통째로 안
+       * 돌아서** 리스너가 하나도 안 붙었다 — 끌어도 아무 반응이 없던 게 이것이다.
+       * 캡처는 손가락이 칸 밖으로 나가도 따라오게 하는 편의 장치일 뿐이고,
+       * 어차피 `window` 에서 듣고 있으므로 없어도 동작한다.
+       */
+      try {
+        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+      } catch {
+        /* 못 걸어도 window 에서 듣는다 */
+      }
+    },
+    [],
+  );
+
+  /* ---------------- 구성 1~4 ---------------- */
+  const [presets, setPresets] = useState<Record<string, Preset>>(readPresets);
+  const [saveMode, setSaveMode] = useState(false);
+
+  const saveTo = useCallback(
+    (slot: string) => {
+      const next = { ...presets, [slot]: { pick, sizes, pins } };
+      setPresets(next);
+      try {
+        localStorage.setItem(PRESET_KEY, JSON.stringify(next));
+      } catch {
+        /* 무시 */
+      }
+      setSaveMode(false);
+    },
+    [presets, pick, sizes, pins],
+  );
+
+  const loadFrom = useCallback(
+    (slot: string) => {
+      const p = presets[slot];
+      if (!p) return;
+      const keys = new Set(BLOCKS.map((b) => b.key as string));
+      const nextPick = (p.pick ?? []).filter((k): k is BlockKey => keys.has(k));
+      setPick(nextPick.length > 0 ? nextPick : DEFAULT_PICK);
+      setSizes(p.sizes ?? {});
+      setPins(p.pins ?? []);
+      try {
+        localStorage.setItem(PICK_KEY, JSON.stringify(nextPick));
+        localStorage.setItem(SIZE_KEY, JSON.stringify(p.sizes ?? {}));
+        localStorage.setItem(PIN_KEY, JSON.stringify(p.pins ?? []));
+      } catch {
+        /* 무시 */
+      }
+    },
+    [presets],
+  );
 
   useEffect(() => {
     try {
@@ -196,9 +359,43 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
             </button>
           )}
         </div>
+
+        {/* 화면 구성 네 벌 — 즐겨찾기처럼 갈아 끼운다 */}
+        <div className="filter-row">
+          <span className="st-cfg-k">화면 구성</span>
+          {SLOTS.map((s) => {
+            const has = Boolean(presets[s]);
+            return (
+              <button
+                key={s}
+                className={`filter-btn ${has && !saveMode ? "active" : ""}`}
+                onClick={() => (saveMode ? saveTo(s) : loadFrom(s))}
+                disabled={!saveMode && !has}
+                title={
+                  saveMode
+                    ? `지금 구성을 ${s}번에 저장`
+                    : has
+                      ? `${s}번 구성 불러오기`
+                      : `${s}번은 비어 있습니다`
+                }
+              >
+                {saveMode ? `${s}에 저장` : s}
+              </button>
+            );
+          })}
+          <button
+            className={`filter-btn ${saveMode ? "active" : ""}`}
+            onClick={() => setSaveMode((v) => !v)}
+          >
+            {saveMode ? "취소" : "지금 구성 저장"}
+          </button>
+        </div>
+
         <div className="table-note">
-          칸의 <b>오른쪽 아래 모서리</b>를 끌어 크기를 바꿉니다. 바꾼 크기는 이 기기에만
-          남습니다 — 모니터마다 알맞은 크기가 다릅니다.
+          칸 제목의 <b>⠿</b>를 끌어 자리를 바꾸고, <b>오른쪽 아래 모서리</b>를 끌어 크기를
+          바꿉니다. 다 맞췄으면 <b>📍</b>를 눌러 고정하세요 — 고정한 칸은 크기도 자리도
+          안 움직입니다. 구성은 <b>틀만</b> 담습니다(종목은 안 담습니다). 모두 이 기기에만
+          남습니다.
         </div>
 
         {!on && (
@@ -219,13 +416,25 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
 
       {code && (
         <div className="board-grid">
-          {BLOCKS.filter((b) => pick.includes(b.key)).map((b) => (
+          {/*
+            **`pick` 순서대로** 그린다. 예전엔 `BLOCKS` 를 훑어 걸러냈는데,
+            그러면 자리를 바꿔도 늘 원래 순서로 되돌아갔다 — 옮긴 결과가 안 보였다.
+          */}
+          {pick
+            .map((k) => BLOCKS.find((b) => b.key === k))
+            .filter((b): b is (typeof BLOCKS)[number] => Boolean(b))
+            .map((b) => (
             <BoardCell
               key={b.key}
+              cellKey={b.key}
               title={b.label}
               wide={b.wide}
               size={sizes[b.key] ?? null}
               onSize={(s) => setSize(b.key, s)}
+              pinned={pins.includes(b.key)}
+              onPin={() => flipPin(b.key)}
+              onDragStart={onDragStart(b.key)}
+              dragging={dragKey === b.key}
             >
               {({ height, tick }) => (
                 <>

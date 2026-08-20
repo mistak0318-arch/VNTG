@@ -19,11 +19,17 @@ import { useEffect, useState } from "react";
  * 격자 배경도 **같은 값**으로 밀어 준다. 둘을 따로 계산하면 몇 픽셀씩 어긋나면서
  * 숫자와 줄이 안 맞는데, 그게 제일 먼저 들키는 부분이다.
  *
- * ## 리본은 눌리지 않는다
+ * ## 리본은 눌리지 않는다 — 「파일」만 빼고
  *
  * 진짜로 동작하게 만들 수도 없고, 만들 이유도 없다. 다만 **눌러도 아무 일이 없는 것**과
  * 「누를 수 있어 보이는 것」은 다르므로 커서를 기본값으로 두고 클릭을 막았다.
- * 대신 **시트 탭은 진짜로 동작한다** — 어차피 화면을 옮기는 자리가 필요하고,
+ *
+ * **「파일」은 메뉴를 연다.** 진짜 엑셀에서도 파일 탭을 누르면 전체 메뉴가 펼쳐지므로
+ * 이 모드에서 메뉴를 여는 자리로 이보다 자연스러운 곳이 없다.
+ * 좁은 화면에서 쓰던 **동그란 플로팅 버튼은 엑셀에 없는 물건**이라, 리본을 아무리 잘
+ * 그려도 그것 하나로 위장이 깨진다. 엑셀 모드에서는 그 버튼을 내리고 여기로 옮겼다.
+ *
+ * **시트 탭도 진짜로 동작한다** — 어차피 화면을 옮기는 자리가 필요하고,
  * 엑셀에서도 시트 탭이 하는 일이 그것이다.
  */
 
@@ -34,8 +40,8 @@ const COL_W = 84;
 /** 행번호 기둥의 너비(px) */
 const GUTTER_W = 38;
 
+/** 「파일」은 메뉴를 여는 자리라 따로 그린다 */
 const RIBBON_TABS = [
-  "파일",
   "홈",
   "삽입",
   "페이지 레이아웃",
@@ -66,10 +72,13 @@ export function ExcelChrome({
   sheets,
   current,
   onGo,
+  onMenu,
 }: {
   sheets: Sheet[];
   current: string;
   onGo: (key: string) => void;
+  /** 「파일」 탭을 누르면 — 이 모드에서 메뉴를 여는 자리다 */
+  onMenu: () => void;
 }) {
   const [scroll, setScroll] = useState(0);
   const [size, setSize] = useState({ w: window.innerWidth, h: window.innerHeight });
@@ -128,6 +137,10 @@ export function ExcelChrome({
       <div className="xl-chrome" aria-hidden="true">
         <div className="xl-ribbon">
           <div className="xl-ribbon-tabs">
+            {/* 진짜 엑셀도 파일 탭에서 전체 메뉴가 열린다 — 이 모드의 메뉴 버튼이다 */}
+            <button type="button" className="xl-rtab xl-file" onClick={onMenu}>
+              파일
+            </button>
             {RIBBON_TABS.map((t) => (
               <span key={t} className={`xl-rtab${t === "홈" ? " active" : ""}`}>
                 {t}

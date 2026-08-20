@@ -42,12 +42,29 @@ export function BoardCell({
   size,
   onSize,
   wide,
+  pinned,
+  onPin,
+  onDragStart,
+  dragging,
+  cellKey,
   children,
 }: {
   title: string;
   size: CellSize | null;
   onSize: (s: CellSize) => void;
   wide?: boolean;
+  /**
+   * 고정된 칸.
+   *
+   * 다 맞춰 놓고 나면 그다음부터는 **건드리는 게 사고**다 — 표를 훑다가 모서리를
+   * 스쳐서 크기가 바뀌거나, 제목을 짚었다가 칸이 딸려 나온다.
+   * 고정하면 크기 조절과 옮기기가 둘 다 멈춘다.
+   */
+  pinned?: boolean;
+  onPin: () => void;
+  onDragStart: (e: React.PointerEvent) => void;
+  dragging?: boolean;
+  cellKey: string;
   /** 안쪽 높이와 「크기 바뀜」 신호를 받아 그린다 */
   children: (inner: { height: number; tick: number }) => React.ReactNode;
 }) {
@@ -61,12 +78,24 @@ export function BoardCell({
     const el = ref.current;
     if (!el) return;
 
+    /*
+     * ⚠️ **`offsetWidth` 로 잰다. `clientWidth` 를 쓰면 칸이 저절로 줄어든다.**
+     *
+     * 이 앱은 `box-sizing: border-box` 라 `width` 로 넣는 값에 테두리가 포함된다.
+     * 그런데 `clientWidth` 는 **테두리를 뺀** 값이다. 그래서 재서(698 → 696)
+     * 저장하고 그걸 다시 `width` 로 넣으면 실제 폭이 696 이 되고, 다음에 재면 694 가
+     * 나온다 — 250ms 마다 **2px 씩 영원히 쪼그라든다.** 크기를 늘렸는데 혼자
+     * 줄어들던 게 이것이다.
+     *
+     * `offsetWidth/offsetHeight` 는 테두리를 포함하므로 넣은 값과 잰 값이 같다.
+     */
     const check = () => {
-      const w = Math.round(el.clientWidth);
-      const h = Math.round(el.clientHeight);
+      const w = Math.round(el.offsetWidth);
+      const h = Math.round(el.offsetHeight);
       if (w === last.current.w && h === last.current.h) return;
       last.current = { w, h };
-      setBox({ w, h });
+      // 안쪽에 알려 줄 높이는 테두리·안여백을 뺀 실제 자리다
+      setBox({ w, h: el.clientHeight });
       setTick((n) => n + 1);
     };
 
@@ -121,7 +150,8 @@ export function BoardCell({
   return (
     <section
       ref={ref}
-      className={`card board-cell${wide ? " wide" : ""}`}
+      data-cell={cellKey}
+      className={`card board-cell${wide ? " wide" : ""}${pinned ? " pinned" : ""}${dragging ? " dragging" : ""}`}
       style={{
         width: size?.w ? `${size.w}px` : undefined,
         height: size?.h ? `${size.h}px` : undefined,
@@ -129,7 +159,26 @@ export function BoardCell({
         minHeight: MIN_H,
       }}
     >
-      <h2>{title}</h2>
+      <h2 className="board-cell-h">
+        {/*
+          손잡이를 **따로 둔다.** 제목 아무 데나 끌리게 하면 글자를 긁어 복사하려다
+          칸이 딸려 나온다. 고정된 칸에는 손잡이가 아예 없다 — 못 옮긴다는 걸
+          「눌러도 반응이 없다」가 아니라 **눈으로** 알려 주는 편이 낫다.
+        */}
+        {!pinned && (
+          <span className="board-grip" onPointerDown={onDragStart} title="끌어서 자리 바꾸기">
+            ⠿
+          </span>
+        )}
+        <span className="board-cell-t">{title}</span>
+        <button
+          className={`board-pin${pinned ? " on" : ""}`}
+          onClick={onPin}
+          title={pinned ? "고정 풀기" : "이 자리에 고정"}
+        >
+          {pinned ? "📌" : "📍"}
+        </button>
+      </h2>
       <div className="board-cell-b">
         {children({ height: Math.max(120, box.h - HEAD_PX), tick })}
       </div>
