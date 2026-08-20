@@ -46,6 +46,16 @@ export class KiwoomClient {
     this.baseUrl = opts.isMock ? MOCK_URL : PROD_URL;
   }
 
+  /**
+   * 웹소켓이 쓸 토큰.
+   *
+   * ⚠️ **반드시 이걸 통해서 가져가야 한다.** 키움은 앱키 하나에 토큰 하나만 살려 두므로,
+   * 웹소켓이 따로 발급받으면 **여기 REST 가 통째로 죽는다**(8005). 같은 캐시를 쓴다.
+   */
+  async accessToken(): Promise<string> {
+    return this.getToken();
+  }
+
   /** 접근토큰발급 (au10001) — 캐시된 토큰이 유효하면 재사용 */
   private async getToken(): Promise<string> {
     if (this.tokenState && this.tokenState.expiresAt > Date.now() + 30_000) {
