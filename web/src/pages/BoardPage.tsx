@@ -165,51 +165,59 @@ const PIN_KEY = "vntg.board.pins";
  * 종목은 안 담는다 — 구성은 **틀**이지 내용이 아니다.
  */
 const PRESET_KEY = "vntg.board.presets";
-const SLOTS = ["K1", "K2", "K3", "K4"] as const;
 
 /**
- * 미리 넣어 둔 세 벌 — **모니터 세 대를 쓰던 HTS 구조**를 옮긴 것.
+ * 처음 쓸 때 깔아 두는 세 벌 — **모니터 세 대를 쓰던 HTS 구조**를 옮긴 것.
  *
  * 창을 셋 띄우고 각각 다른 구성을 불러오면 그 배치가 재현된다.
- * 종목을 고르는 창에서 누르면 「종목 심층」 창만 따라오고 나머지는 안 흔들린다 —
- * 창 연동이 하는 일이 정확히 그것이다.
+ * 종목을 고르는 창에서 누르면 「종목 파기」 창만 따라오고 나머지는 안 흔들린다.
  *
  * ⚠️ **아직 반쪽이다.** HTS 1·3번 모니터의 핵심은 지수판·시장 투자자동향·
  * 관심종목 시세판처럼 **종목과 무관한 칸**인데, 보드는 지금 모든 칸이 종목에 매여 있다.
  * 그 칸들이 생기기 전까지 K1·K3 은 있는 것으로 채운 임시 배치다.
  *
- * 슬롯에 저장된 게 있으면 그게 이긴다 — 여기 값은 **비어 있을 때의 시작점**일 뿐이다.
+ * **한 번 깔고 나면 사용자 것**이다 — 이름도 순서도 개수도 여기서 정하지 않는다.
  */
-const BUILT_IN: Record<string, { name: string; pick: string[] }> = {
-  K1: {
-    name: "시장 보기",
-    pick: ["chart", "insights", "news", "disclosure", "sector"],
-  },
-  K2: {
-    name: "종목 파기",
-    pick: ["chart", "orderbook", "investor", "broker", "supply", "opinion", "finance", "summary"],
-  },
-  K3: {
-    name: "장중 감시",
-    pick: ["signal", "intraday", "program", "orderbook", "insights"],
-  },
-};
+const SEED: Preset[] = [
+  { id: "k1", name: "K1 시장 보기", pick: ["chart", "insights", "news", "disclosure", "sector"], sizes: {}, pins: [] },
+  { id: "k2", name: "K2 종목 파기", pick: ["chart", "orderbook", "investor", "broker", "supply", "opinion", "finance", "summary"], sizes: {}, pins: [] },
+  { id: "k3", name: "K3 장중 감시", pick: ["signal", "intraday", "program", "orderbook", "insights"], sizes: {}, pins: [] },
+];
 
 interface Preset {
-  /** 슬롯 이름 — 안 정하면 미리 넣어 둔 이름을 쓴다 */
-  name?: string;
+  id: string;
+  name: string;
   pick: string[];
   sizes: Record<string, CellSize>;
   pins: string[];
 }
 
-function readPresets(): Record<string, Preset> {
+/**
+ * 저장된 구성을 읽는다.
+ *
+ * 예전에는 K1~K4 네 칸으로 **고정**돼 있었다(`{K1:{...}}` 모양).
+ * 그 모양이 남아 있으면 목록으로 옮긴다 — 쓰던 구성을 잃으면 안 된다.
+ */
+function readPresets(): Preset[] {
   try {
     const raw = JSON.parse(localStorage.getItem(PRESET_KEY) ?? "null") as unknown;
-    if (!raw || typeof raw !== "object") return {};
-    return raw as Record<string, Preset>;
+    if (Array.isArray(raw)) {
+      const out = raw
+        .filter((p): p is Preset => Boolean(p) && typeof (p as Preset).id === "string")
+        .map((p) => ({ ...p, name: p.name || p.id, pick: p.pick ?? [], sizes: p.sizes ?? {}, pins: p.pins ?? [] }));
+      return out.length > 0 ? out : SEED;
+    }
+    // 옛 모양 → 목록으로
+    if (raw && typeof raw === "object") {
+      const out: Preset[] = [];
+      for (const [k, v] of Object.entries(raw as Record<string, Partial<Preset>>)) {
+        out.push({ id: k, name: v?.name || k, pick: v?.pick ?? [], sizes: v?.sizes ?? {}, pins: v?.pins ?? [] });
+      }
+      if (out.length > 0) return out;
+    }
+    return SEED;
   } catch {
-    return {};
+    return SEED;
   }
 }
 
@@ -350,35 +358,60 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
     [],
   );
 
-  /* ---------------- 구성 1~4 ---------------- */
-  const [presets, setPresets] = useState<Record<string, Preset>>(readPresets);
-  const [saveMode, setSaveMode] = useState(false);
+  /* ---------------- 화면 구성 (목록) ---------------- */
+  const [presets, setPresets] = useState<Preset[]>(readPresets);
+  const [editing, setEditing] = useState(false);
 
-  const saveTo = useCallback(
-    (slot: string) => {
-      const next = {
-        ...presets,
-        [slot]: { name: presets[slot]?.name ?? BUILT_IN[slot]?.name, pick, sizes, pins },
-      };
-      setPresets(next);
-      try {
-        localStorage.setItem(PRESET_KEY, JSON.stringify(next));
-      } catch {
-        /* 무시 */
-      }
-      setSaveMode(false);
+  const persist = useCallback((next: Preset[]) => {
+    setPresets(next);
+    try {
+      localStorage.setItem(PRESET_KEY, JSON.stringify(next));
+    } catch {
+      /* 저장 못 해도 이번 세션에는 쓴다 */
+    }
+  }, []);
+
+  /** 지금 화면을 그 구성에 덮어쓴다 */
+  const saveInto = useCallback(
+    (id: string) => {
+      persist(presets.map((p) => (p.id === id ? { ...p, pick, sizes, pins } : p)));
     },
-    [presets, pick, sizes, pins],
+    [persist, presets, pick, sizes, pins],
+  );
+
+  /** 지금 화면을 새 구성으로 */
+  const addPreset = useCallback(() => {
+    const id = `p${Date.now().toString(36)}`;
+    persist([...presets, { id, name: `구성 ${presets.length + 1}`, pick, sizes, pins }]);
+    setEditing(true);
+  }, [persist, presets, pick, sizes, pins]);
+
+  const rename = useCallback(
+    (id: string, name: string) => persist(presets.map((p) => (p.id === id ? { ...p, name } : p))),
+    [persist, presets],
+  );
+
+  const remove = useCallback(
+    (id: string) => persist(presets.filter((p) => p.id !== id)),
+    [persist, presets],
+  );
+
+  /** 한 칸 앞/뒤로 — 자주 쓰는 걸 왼쪽에 두게 된다 */
+  const move = useCallback(
+    (id: string, delta: -1 | 1) => {
+      const at = presets.findIndex((p) => p.id === id);
+      const to = at + delta;
+      if (at < 0 || to < 0 || to >= presets.length) return;
+      const next = [...presets];
+      [next[at], next[to]] = [next[to], next[at]];
+      persist(next);
+    },
+    [persist, presets],
   );
 
   const loadFrom = useCallback(
-    (slot: string) => {
-      /*
-       * 저장된 게 없으면 **미리 넣어 둔 것**을 쓴다.
-       * 빈 슬롯을 눌렀을 때 아무 일도 안 일어나면 「고장인가」 싶어진다 —
-       * 처음 쓰는 사람에게 보여줄 게 있어야 이 기능이 뭔지 알게 된다.
-       */
-      const p = presets[slot] ?? (BUILT_IN[slot] ? { ...BUILT_IN[slot], sizes: {}, pins: [] } : null);
+    (id: string) => {
+      const p = presets.find((x) => x.id === id);
       if (!p) return;
       const keys = new Set(BLOCKS.map((b) => b.key as string));
       const nextPick = (p.pick ?? []).filter((k): k is BlockKey => keys.has(k));
@@ -491,43 +524,62 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
           )}
         </div>
 
-        {/* 화면 구성 네 벌 — 즐겨찾기처럼 갈아 끼운다 */}
+        {/*
+          화면 구성 — **개수도 이름도 순서도 내가 정한다.**
+          처음엔 K1~K4 네 칸 고정이었는데, 쓰다 보면 「장중용」「마감 뒤」처럼
+          제 이름이 붙고 개수도 사람마다 다르다. 고정 칸은 그걸 못 담는다.
+        */}
         <div className="filter-row">
           <span className="st-cfg-k">화면 구성</span>
-          {SLOTS.map((s) => {
-            const has = Boolean(presets[s]);
-            return (
+          {presets.map((p) =>
+            editing ? (
+              <span className="bp-edit" key={p.id}>
+                <button className="gt-move" onClick={() => move(p.id, -1)} title="앞으로">
+                  ◀
+                </button>
+                <input
+                  className="bp-name"
+                  value={p.name}
+                  onChange={(e) => rename(p.id, e.target.value)}
+                  placeholder="이름"
+                />
+                <button className="gt-move" onClick={() => move(p.id, 1)} title="뒤로">
+                  ▶
+                </button>
+                <button className="filter-btn" onClick={() => saveInto(p.id)} title="지금 화면을 여기에 덮어쓰기">
+                  덮어쓰기
+                </button>
+                <button className="row-del-btn" onClick={() => remove(p.id)} title="이 구성 삭제">
+                  ✕
+                </button>
+              </span>
+            ) : (
               <button
-                key={s}
-                className={`filter-btn ${has && !saveMode ? "active" : ""}`}
-                onClick={() => (saveMode ? saveTo(s) : loadFrom(s))}
-                disabled={!saveMode && !has && !BUILT_IN[s]}
-                title={
-                  saveMode
-                    ? `지금 구성을 ${s}번에 저장`
-                    : has
-                      ? `${s} 구성 불러오기`
-                      : BUILT_IN[s]
-                        ? `${s} 기본 배치 (${BUILT_IN[s].name})`
-                        : `${s} 는 비어 있습니다`
-                }
+                key={p.id}
+                className="filter-btn"
+                onClick={() => loadFrom(p.id)}
+                title={`${p.name} 불러오기 (${p.pick.length}칸)`}
               >
-                {saveMode ? `${s}에 저장` : `${s} ${presets[s]?.name ?? BUILT_IN[s]?.name ?? ""}`.trim()}
+                {p.name}
               </button>
-            );
-          })}
+            ),
+          )}
+          <button className="filter-btn" onClick={addPreset} title="지금 화면을 새 구성으로 저장">
+            ＋ 지금 화면 저장
+          </button>
           <button
-            className={`filter-btn ${saveMode ? "active" : ""}`}
-            onClick={() => setSaveMode((v) => !v)}
+            className={`filter-btn ${editing ? "active" : ""}`}
+            onClick={() => setEditing((v) => !v)}
           >
-            {saveMode ? "취소" : "지금 구성 저장"}
+            {editing ? "편집 끝" : "✏ 편집"}
           </button>
         </div>
 
         <div className="table-note">
           칸 제목의 <b>⠿</b>를 끌어 자리를 바꾸고, <b>오른쪽 아래 모서리</b>를 끌어 크기를
           바꿉니다. 다 맞췄으면 <b>📍</b>를 눌러 고정하세요 — 고정한 칸은 크기도 자리도
-          안 움직입니다. 구성은 <b>틀만</b> 담습니다(종목은 안 담습니다). 모두 이 기기에만
+          안 움직입니다. <b>화면 구성</b>은 틀만 담습니다(종목은 안 담습니다) — <b>✏ 편집</b>에서 이름·순서를
+          바꾸고 지우고, <b>＋</b>로 지금 화면을 새 구성으로 담을 수 있습니다. 모두 이 기기에만
           남습니다.
         </div>
         </>

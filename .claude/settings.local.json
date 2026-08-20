@@ -478,7 +478,9 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);console.log\\('상태:',r.state\\);for\\(const l of r.log\\)console.log\\(l.dir,l.text.replace\\(/\\\\\"token\\\\\":\\\\\"[^\\\\\"]*\\\\\"/,'\\\\\"token\\\\\":\\\\\"<가림>\\\\\"'\\)\\)}\\)\")",
       "Bash(curl -s -X POST http://localhost:4000/api/realtime/subscribe -H \"Content-Type: application/json\" -d '{\"type\":\"0w\",\"item\":\"005930\"}')",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);console.log\\('상태:',r.state\\);for\\(const l of r.log.slice\\(-8\\)\\)console.log\\(l.dir,l.text.replace\\(/\\\\\"token\\\\\":\\\\\"[^\\\\\"]*\\\\\"/,'\\\\\"token\\\\\":\\\\\"<가림>\\\\\"'\\).slice\\(0,400\\)\\)}\\)\")",
-      "Bash(curl -s http://localhost:4000/api/realtime/status)"
+      "Bash(curl -s http://localhost:4000/api/realtime/status)",
+      "Bash(python dump.py \"ka10027\")",
+      "Bash(sed -n '/Request/,/Response/p' sheet_ka10027.txt)"
     ]
   }
 }
