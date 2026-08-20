@@ -323,8 +323,52 @@ function UsWatchMap({ onOpen }: { onOpen: (symbol: string, label: string) => voi
         </span>
       </div>
       <div className="ov-card-b">
+        {/*
+          **그룹 타일이 먼저다.**
+
+          밤에 전광판을 볼 때 처음 묻는 것은 「오늘 어느 쪽이 도나」지 개별 종목이 아니다.
+          그룹을 등락률 순으로 세워 두면 그 답이 **첫 줄에서 끝난다** —
+          아래 종목 타일은 그다음에 「그 안에서 무엇이 끌었나」를 보는 자리다.
+
+          ▲/▼ 를 같이 적는 이유는, 그룹 등락률이 **한 종목에 끌려간 것인지**를
+          가려야 하기 때문이다. +0.9% 인데 ▲14/▼4 와 ▲1/▼17 은 완전히 다른 판이다.
+        */}
+        <div className="map-grid uwm-top">
+          {[...filled]
+            .sort((a, b) => (b.changeRate ?? 0) - (a.changeRate ?? 0))
+            .map((g) => {
+              const up = g.stocks.filter((s) => (s.changeRate ?? 0) > 0).length;
+              const down = g.stocks.filter((s) => (s.changeRate ?? 0) < 0).length;
+              return (
+                <button
+                  key={g.id}
+                  className="map-tile"
+                  style={tileStyle(g.changeRate)}
+                  onClick={() =>
+                    document
+                      .getElementById(`uwm-${g.id}`)
+                      ?.scrollIntoView({ block: "start" })
+                  }
+                  title={`${g.name} — 눌러서 구성종목으로`}
+                >
+                  <span className="map-tile-name">{g.name}</span>
+                  <span className={`map-tile-pct num ${cls(g.changeRate)}`}>
+                    {pct(g.changeRate)}
+                  </span>
+                  <span className="map-tile-sub">
+                    ▲{up}/▼{down}
+                  </span>
+                </button>
+              );
+            })}
+        </div>
+        <div className="table-note uwm-top-note">
+          색이 진할수록 등락폭이 큽니다(5% 기준) · 타일을 누르면 아래 구성종목으로 갑니다 ·
+          {filled.length}개 그룹 · <b>▲/▼</b> 는 그 그룹에서 오른/내린 종목 수입니다
+        </div>
+
         {filled.map((g) => (
-          <div className="uwm-group" key={g.id}>
+          <div className="uwm-group" key={g.id} id={`uwm-${g.id}`}>
             <div className="uwm-group-h">
               <span className="uwm-group-nm">{g.name}</span>
               <span className={`uwm-group-rt ${cls(g.changeRate)}`}>{pct(g.changeRate)}</span>

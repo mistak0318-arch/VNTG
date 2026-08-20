@@ -5549,3 +5549,7 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .uwm-group-h { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.35rem; }
 .uwm-group-nm { font-size: 0.8rem; font-weight: 700; }
 .uwm-group-rt { font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+
+/* 그룹 타일은 종목 타일과 한 칸 띄운다 — 같은 층으로 보이면 안 된다 */
+.uwm-top { margin-bottom: 0.35rem; }
+.uwm-top-note { margin-bottom: 0.8rem; padding-bottom: 0.7rem; border-bottom: 1px solid var(--border); }
