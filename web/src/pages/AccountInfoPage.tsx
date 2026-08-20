@@ -5,6 +5,11 @@ import { CollapsibleCard } from "../components/CollapsibleCard";
 import { RefreshBar } from "../components/RefreshBar";
 
 // 아래 필드명은 키움 REST API 공식 문서(kt00018 계좌평가잔고내역요청) 기준으로 확인된 값.
+/** 당일 손익금 — `kt00004` 계좌평가현황이 준다 */
+const TODAY_PNL_KEYS = ["tdy_lspft", "tdy_lspft_amt"];
+/** 당일 손익률 */
+const TODAY_PNL_RATE_KEYS = ["tdy_lspft_rt"];
+
 const HOLDINGS_LIST_KEYS = ["acnt_evlt_remn_indv_tot"];
 const NAME_KEYS = ["stk_nm"];
 const CODE_KEYS = ["stk_cd"];
@@ -33,6 +38,8 @@ function signClass(v: string): string {
 }
 
 export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
+  /** 계좌평가현황 — **당일 손익이 여기에만 있다** */
+  const [summary, setSummary] = useState<RawRecord | null>(null);
   const [deposit, setDeposit] = useState<RawRecord | null>(null);
   const [holdings, setHoldings] = useState<RawRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,9 +74,19 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
 
   async function load() {
     try {
-      const [depositRes, holdingsRes] = await Promise.all([api.accountDeposit(), api.holdings()]);
+      /*
+       * 계좌평가현황(`kt00004`)을 같이 받는다.
+       * **당일 손익은 여기에만 있다** — `tdy_lspft`(당일 손익금) · `tdy_lspft_rt`(당일 손익률).
+       * 보유종목 조회(`kt00018`)는 누적만 준다.
+       */
+      const [depositRes, holdingsRes, summaryRes] = await Promise.all([
+        api.accountDeposit(),
+        api.holdings(),
+        api.accountSummary().catch(() => null),
+      ]);
       setDeposit(depositRes as RawRecord);
       setHoldings(holdingsRes as RawRecord);
+      setSummary(summaryRes as RawRecord | null);
       setError(null);
       setLastUpdated(new Date());
     } catch (err) {
@@ -144,9 +161,26 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
               </div>
             </div>
             <div className="summary-item">
-              <div className="label">수익률</div>
+              <div className="label">누적 수익률</div>
               <div className={`value ${signClass(pick(holdings ?? undefined, TOTAL_PNL_RATE_KEYS))}`}>
                 {pick(holdings ?? undefined, TOTAL_PNL_RATE_KEYS)}%
+              </div>
+            </div>
+            {/*
+              **당일을 따로 세운다.**
+              누적 수익률만 보면 오늘 계좌가 어느 쪽으로 갔는지 알 수가 없다 —
+              누적 +30%인 계좌가 오늘 −3% 인 날과 +3% 인 날은 완전히 다른 하루다.
+            */}
+            <div className="summary-item today">
+              <div className="label">당일 손익</div>
+              <div className={`value ${signClass(pick(summary ?? undefined, TODAY_PNL_KEYS))}`}>
+                {fmtNumber(pick(summary ?? undefined, TODAY_PNL_KEYS))}
+              </div>
+            </div>
+            <div className="summary-item today">
+              <div className="label">당일 등락률</div>
+              <div className={`value ${signClass(pick(summary ?? undefined, TODAY_PNL_RATE_KEYS))}`}>
+                {pick(summary ?? undefined, TODAY_PNL_RATE_KEYS) || "0.00"}%
               </div>
             </div>
           </div>

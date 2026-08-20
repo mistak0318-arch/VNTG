@@ -11,6 +11,7 @@ import {
 } from "../../api";
 import { useSection } from "../../useSection";
 import { YahooChartSheet, type ChartTarget } from "./YahooChartSheet";
+import { UsSpark } from "./UsSpark";
 import { sideQuote } from "../../usSession";
 
 /**
@@ -99,16 +100,19 @@ export function UsBoardPanel() {
                   }
                   title="눌러서 차트 보기"
                 >
-                  <div className="usb-box-nm">{b.label}</div>
-                  <div className={`usb-box-px ${cls(b.changeRate)}`}>
-                    {b.price === null ? "-" : fmtNum(Number(b.price.toFixed(b.digits)))}
+                  {/*
+                    한 줄에 이름·값·등락률을 몰아넣고 그 아래 하루치 선을 깐다.
+                    예전엔 세 줄로 쌓아 자리를 많이 먹으면서 **정보는 적었다** —
+                    「−0.12%」만으로는 하루 종일 흘러내린 건지 빠졌다 되돌린 건지 모른다.
+                  */}
+                  <div className="usb-box-top">
+                    <span className="usb-box-nm">{b.label}</span>
+                    <b className={`usb-box-px ${cls(b.changeRate)}`}>
+                      {b.price === null ? "-" : fmtNum(Number(b.price.toFixed(b.digits)))}
+                    </b>
+                    <span className={`usb-box-chg ${cls(b.changeRate)}`}>{pct(b.changeRate)}</span>
                   </div>
-                  <div className={`usb-box-chg ${cls(b.changeRate)}`}>
-                    {b.change === null
-                      ? ""
-                      : `${b.change > 0 ? "▲" : b.change < 0 ? "▼" : ""}${Math.abs(b.change).toFixed(b.digits)}`}{" "}
-                    {pct(b.changeRate)}
-                  </div>
+                  <UsSpark symbol={b.symbol} />
                   {/* 왜 눈에 띄는지 한 줄. 색만 있으면 이유를 모른다 */}
                   {b.signal && <div className="usb-box-why">{b.signal.why}</div>}
                 </button>
@@ -183,16 +187,14 @@ export function UsBoardPanel() {
                   }
                   title="눌러서 차트 보기"
                 >
-                  <div className="usb-box-nm">{b.label}</div>
-                  <div className={`usb-box-px ${cls(b.changeRate)}`}>
-                    {b.price === null ? "-" : fmtNum(Number(b.price.toFixed(b.digits)))}
+                  <div className="usb-box-top">
+                    <span className="usb-box-nm">{b.label}</span>
+                    <b className={`usb-box-px ${cls(b.changeRate)}`}>
+                      {b.price === null ? "-" : fmtNum(Number(b.price.toFixed(b.digits)))}
+                    </b>
+                    <span className={`usb-box-chg ${cls(b.changeRate)}`}>{pct(b.changeRate)}</span>
                   </div>
-                  <div className={`usb-box-chg ${cls(b.changeRate)}`}>
-                    {b.change === null
-                      ? ""
-                      : `${b.change > 0 ? "▲" : b.change < 0 ? "▼" : ""}${Math.abs(b.change).toFixed(b.digits)}`}{" "}
-                    {pct(b.changeRate)}
-                  </div>
+                  <UsSpark symbol={b.symbol} />
                   {b.signal && <div className="usb-box-why">{b.signal.why}</div>}
                 </button>
               ))}

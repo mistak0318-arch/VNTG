@@ -5278,3 +5278,21 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .pf-bar.buy { background: var(--red); }
 .pf-bar.sell { background: var(--blue); }
 .pf-x { font-size: 0.65rem; color: var(--muted); margin-top: 0.15rem; white-space: nowrap; }
+
+/* 계좌 - 당일을 따로 세운다. 누적만 보면 오늘 어디로 갔는지 모른다 */
+.summary-item.today { border-left: 3px solid var(--blue); padding-left: 0.5rem; }
+
+/* 미국 전광판 상자 - 한 줄로 줄이고 하루치 선을 깐다 */
+.usb-box { padding: 0.4rem 0.55rem; }
+.usb-box-top { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
+.usb-box-nm { color: var(--muted); font-size: 0.85rem; margin-right: auto; }
+.usb-box-px { font-size: 1.02rem; font-variant-numeric: tabular-nums; }
+.usb-box-chg { font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.usp { width: 100%; height: 1.8rem; display: block; margin-top: 0.15rem; }
+.usp-empty { height: 1.8rem; }
+.usp-line { fill: none; stroke-width: 1.3; vector-effect: non-scaling-stroke; }
+.usp-line.up { stroke: var(--red); }
+.usp-line.down { stroke: var(--blue); }
+/* 전일 종가 - 선만 있으면 어디가 0 인지 모른다 */
+.usp-base { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; opacity: 0.6; }
+.usb-box-why { font-size: 0.75rem; line-height: 1.35; }
