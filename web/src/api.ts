@@ -122,6 +122,8 @@ export const api = {
     postJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings`, h),
   manualHoldingRemove: (id: string, code: string) =>
     deleteJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings/${code}`),
+  /** 호가창 — 종목 상세·종목분석이 같은 것을 쓴다 */
+  orderBook: (code: string) => getJson<OrderBook>(`/api/market/orderbook/${code}`),
   stockInfo: (code: string) => getJson(`/api/market/info/${code}`),
   quote: (code: string) => getJson(`/api/market/quote/${code}`),
   dailyChart: (code: string) => getJson(`/api/market/chart/daily/${code}`),
@@ -2479,4 +2481,34 @@ export interface BetLogSummary {
     }[];
   }[];
   note: string;
+}
+
+
+/** 호가창 */
+export interface OrderBook {
+  code: string;
+  at: string;
+  asks: { step: number; price: number; qty: number }[];
+  bids: { step: number; price: number; qty: number }[];
+  totalAsk: number;
+  totalBid: number;
+  overtimeAsk: number;
+  overtimeBid: number;
+  /** 매수잔량 ÷ 매도잔량. **체결강도가 아니다** — 대기 물량이다 */
+  ratio: number | null;
+  price: number;
+  changeRate: number;
+  open: number;
+  krxHigh: number;
+  krxLow: number;
+  nxtHigh: number | null;
+  nxtLow: number | null;
+  high250: number;
+  low250: number;
+  upperLimit: number;
+  lowerLimit: number;
+  volume: number;
+  /** 거래량 ÷ 상장주식수 (%) */
+  turnover: number | null;
+  error: string | null;
 }

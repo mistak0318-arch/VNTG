@@ -5213,3 +5213,34 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .cb-gauge-v { font-size: 1.05rem; font-weight: 700; line-height: 1.3; }
 .cb-gauge-w { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
 .cb-bt { margin-top: 1rem; }
+
+/* ------------------------------------------------------------------ */
+/* 호가창 (공통)                                                        */
+/* ------------------------------------------------------------------ */
+
+.ob-head { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.4rem; }
+.ob-now { font-size: 1.3rem; }
+.ob-body { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: flex-start; }
+.ob-book { flex: 1 1 20rem; min-width: 0; }
+/* 매도 위 매수 아래 - HTS 와 같은 방향 */
+.ob-row { display: grid; grid-template-columns: 1fr 6rem 1fr; align-items: center; height: 1.35rem; }
+.ob-price { text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ob-price.now { background: var(--panel-2); border-radius: 0.2rem; }
+.ob-qty { position: relative; display: flex; align-items: center; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.ob-qty.left { justify-content: flex-end; }
+.ob-qty.left b { position: relative; padding-right: 0.3rem; }
+.ob-qty.right b { position: relative; padding-left: 0.3rem; }
+/* 막대는 잔량 크기를 눈으로 보게 - 숫자만 있으면 비교가 안 된다 */
+.ob-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 0.15rem; opacity: 0.28; }
+.ob-bar.ask { right: 0; background: var(--blue); }
+.ob-bar.bid { left: 0; background: var(--red); }
+.ob-mid { height: 2px; background: var(--border); margin: 0.25rem 0; }
+.ob-side { flex: 0 0 13rem; }
+.ob-foot { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.1rem 0.8rem; margin-top: 0.6rem; }
+.ob-kv { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.2rem 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+.ob-kv span { color: var(--muted); }
+
+/* 상세 탭 순서 바꾸기 */
+.dt-move { margin-left: 0.2rem; opacity: 0.75; cursor: pointer; }
+.dt-edit { margin-left: auto; }
+.dt-reset { margin-left: 0.5rem; }

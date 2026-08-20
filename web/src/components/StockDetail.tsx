@@ -16,6 +16,8 @@ import { StockNotes } from "./StockNotes";
 import { SupplyDetailPanel } from "./SupplyDetailPanel";
 import { RawJson } from "./RawJson";
 import { useWatchedCodes } from "../useWatchedCodes";
+import { OrderBookPanel } from "./OrderBookPanel";
+import { useCardOrder } from "../useCardOrder";
 
 const DAILY_LIST_KEYS = ["stk_dt_pole_chart_qry"];
 // 거래일수 근사치 (달력상 개월수를 거래일로 환산)
@@ -43,14 +45,19 @@ const CUR_PRICE_KEYS = ["cur_prc"];
 const INVESTOR_LIST_KEYS = ["stk_invsr_orgn_chart"];
 
 /** 종목 상세 상단 가로 탭. 기능이 늘어나면 여기에 항목을 추가한다. */
-type DetailTab = "summary" | "opinion" | "notes" | "sector" | "finance" | "chart" | "investor" | "supply" | "feed" | "raw";
+type DetailTab = "summary" | "opinion" | "notes" | "sector" | "finance" | "chart" | "investor" | "supply" | "feed" | "raw" | "orderbook";
 
 /**
  * 탭 순서는 "실제 매매에 바로 쓰는 것"이 앞이다.
  * 차트 → 수급 → 공매도/대차 → 업종·테마 순으로 보고, 기업분석·재무는 뒤에서 확인.
  */
+/**
+ * 여기 적힌 순서가 **기본**이다. 저장된 순서가 없으면 이대로 나온다.
+ * 탭을 새로 만들면 이 배열에도 넣어야 화면에 뜬다.
+ */
 const DETAIL_TABS: { key: DetailTab; label: string }[] = [
   { key: "chart", label: "종합" },
+  { key: "orderbook", label: "호가" },
   { key: "investor", label: "투자자 수급" },
   { key: "opinion", label: "목표주가" },
   { key: "supply", label: "외국인·공매도·대차" },
@@ -102,6 +109,12 @@ export function StockDetail({
   const [watchBusy, setWatchBusy] = useState(false);
   const [addTarget, setAddTarget] = useState<WatchAddTarget | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("chart");
+  const [editTabs, setEditTabs] = useState(false);
+  /* 카드 배치와 **같은 훅**이다 — 서버에 저장되어 기기가 달라도 같은 순서 */
+  const tabOrder = useCardOrder(
+    "stockDetail.tabs",
+    DETAIL_TABS.map((t) => t.key),
+  );
   const watchedCodes = useWatchedCodes();
   const watched = watchedCodes.isWatched(code);
 
@@ -209,17 +222,72 @@ export function StockDetail({
               </button>
             )}
 
+            {/*
+              탭 순서를 바꾼다.
+              탭이 열 개를 넘으면서 자주 보는 게 뒤로 밀렸다. 카드 배치와 **같은 훅**을 쓴다 —
+              서버에 저장되어 기기가 달라도 같은 순서다.
+              JSX 를 재배열하지 않고 CSS `order` 만 준다.
+            */}
             <nav className="detail-tabs">
               {DETAIL_TABS.map((t) => (
                 <button
                   key={t.key}
                   className={`detail-tab${detailTab === t.key ? " active" : ""}`}
+                  style={{ order: tabOrder.orderOf(t.key) }}
                   onClick={() => setDetailTab(t.key)}
                 >
                   {t.label}
+                  {editTabs && (
+                    <>
+                      <span
+                        className="dt-move"
+                        role="button"
+                        title="앞으로"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          tabOrder.move(t.key, -1);
+                        }}
+                      >
+                        ◀
+                      </span>
+                      <span
+                        className="dt-move"
+                        role="button"
+                        title="뒤로"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          tabOrder.move(t.key, 1);
+                        }}
+                      >
+                        ▶
+                      </span>
+                    </>
+                  )}
                 </button>
               ))}
+              <button
+                className={`detail-tab dt-edit${editTabs ? " active" : ""}`}
+                style={{ order: 999 }}
+                onClick={() => setEditTabs((v) => !v)}
+                title="자주 보는 탭을 앞으로 옮깁니다"
+              >
+                {editTabs ? "순서 끝" : "탭 순서"}
+              </button>
             </nav>
+
+            {editTabs && (
+              <div className="table-note">
+                탭 이름 옆 <b>◀ ▶</b> 로 옮깁니다. 서버에 저장되어 <b>다른 기기에서도 같은
+                순서</b>입니다.
+                {tabOrder.customized && (
+                  <button className="filter-btn dt-reset" onClick={tabOrder.reset}>
+                    원래대로
+                  </button>
+                )}
+              </div>
+            )}
+
+            {detailTab === "orderbook" && <OrderBookPanel code={code} />}
 
             {detailTab === "summary" && <CompanySnapshot info={info} returns={returns} />}
 
