@@ -5296,3 +5296,39 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 /* 전일 종가 - 선만 있으면 어디가 0 인지 모른다 */
 .usp-base { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; opacity: 0.6; }
 .usb-box-why { font-size: 0.75rem; line-height: 1.35; }
+
+/* ------------------------------------------------------------------ */
+/* 화면 잠금                                                            */
+/* ------------------------------------------------------------------ */
+
+/* 뒤를 완전히 덮는다 - 반투명이면 계좌 잔고가 비친다 */
+.lock {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.lock-box {
+  width: min(22rem, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--panel);
+}
+.lock-title { font-size: 1.3rem; font-weight: 700; }
+.lock-note { color: var(--muted); margin: 0; }
+.lock-input { font-size: 1rem; padding: 0.5rem 0.6rem; }
+.lock-err { color: var(--red); font-size: 0.9rem; }
+.lock-hint { color: var(--muted); font-size: 0.8rem; line-height: 1.5; margin: 0.4rem 0 0; }
+.lockset-pw { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+
+/* 사이드바 맨 아래 자물쇠 */
+.sidebar-foot { margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+.lock-btn { width: 100%; }

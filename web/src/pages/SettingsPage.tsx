@@ -9,6 +9,7 @@ import { ReportSchedulePanel } from "../components/ReportSchedulePanel";
 import { ChartConfigPanel } from "../components/ChartConfigPanel";
 import { MenuOrderPanel } from "../components/MenuOrderPanel";
 import { CardOrderPanel } from "../components/CardOrderPanel";
+import { ScreenLockPanel } from "../components/ScreenLockPanel";
 import { MENU_ITEMS } from "../App";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { SignalConfigPanel } from "../components/SignalConfigPanel";
@@ -121,6 +122,16 @@ export function SettingsPage() {
         hint="시황 대시보드의 카드를 원하는 차례로 놓습니다."
       >
         <CardOrderPanel />
+      </CollapsibleCard>
+      )}
+
+      {tab === "display" && (
+      <CollapsibleCard
+        id="screenLock"
+        title="화면 잠금"
+        hint="자리를 비운 사이 화면을 가립니다. 이 기기에만 저장됩니다."
+      >
+        <ScreenLockPanel />
       </CollapsibleCard>
       )}
 

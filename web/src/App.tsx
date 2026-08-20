@@ -29,6 +29,8 @@ import { StockDiscoveryPage } from "./pages/StockDiscoveryPage";
 import { VolumeRankingPage } from "./pages/VolumeRankingPage";
 import { useHashRoute } from "./useHashRoute";
 import { applyOrder, useMenuPrefs } from "./useMenuOrder";
+import { useScreenLock } from "./useScreenLock";
+import { ScreenLock } from "./components/ScreenLock";
 import { TelegramPage } from "./pages/TelegramPage";
 import { GuidePage } from "./pages/GuidePage";
 
@@ -151,6 +153,8 @@ export default function App() {
   const { route, navigate } = useHashRoute("overview");
   const [navOpen, setNavOpen] = useState(false);
   const { prefs } = useMenuPrefs();
+  /* 자리를 비웠을 때 화면을 가린다 — 기기마다 따로 켠다 */
+  const lock = useScreenLock();
 
   /*
    * 설정에서 정한 순서·숨김을 입힌다.
@@ -230,6 +234,13 @@ export default function App() {
 
   return (
     <div className="layout">
+      {/*
+        잠금은 **맨 앞에** 둔다. 뒤 화면을 완전히 덮어야 가리는 뜻이 있다.
+        반투명이면 계좌 잔고가 비친다.
+      */}
+      {lock.locked && lock.config.hash && (
+        <ScreenLock config={lock.config} onUnlock={lock.unlock} />
+      )}
       <aside className={`sidebar${navOpen ? " open" : ""}`}>
         {/* 회사에서도 열기 때문에 이름을 중립적으로 둔다 */}
         <div className="sidebar-brand">VNTG</div>
@@ -271,6 +282,27 @@ export default function App() {
             </div>
           ))}
         </nav>
+
+        {/*
+          자물쇠는 **맨 아래**다. 자리를 뜰 때 한 번 누르는 버튼이라 자주 쓰는 메뉴 사이에
+          있으면 안 된다 — 잘못 누르면 비밀번호를 넣어야 다시 들어온다.
+          비밀번호를 안 정했으면 잠글 수가 없으므로 설정으로 보낸다.
+        */}
+        <div className="sidebar-foot">
+          <button
+            className="nav-item lock-btn"
+            onClick={() => {
+              if (lock.config.hash) lock.lock();
+              else go("settings");
+            }}
+            title={lock.config.hash ? "화면 잠그기" : "먼저 설정에서 비밀번호를 정하세요"}
+          >
+            <span className="nav-icon">🔒</span>
+            <span className="nav-label">
+              {lock.config.hash ? "화면 잠그기" : "화면 잠금 설정"}
+            </span>
+          </button>
+        </div>
       </aside>
 
       {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
