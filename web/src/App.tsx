@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { RunningJobsBar } from "./components/RunningJobsBar";
 import { CustomThemePage } from "./pages/CustomThemePage";
@@ -31,6 +31,8 @@ import { useHashRoute } from "./useHashRoute";
 import { applyOrder, useMenuPrefs } from "./useMenuOrder";
 import { useScreenLock } from "./useScreenLock";
 import { ScreenLock } from "./components/ScreenLock";
+import { ExcelChrome } from "./components/ExcelChrome";
+import { useAppearance } from "./useAppearance";
 import { TelegramPage } from "./pages/TelegramPage";
 import { GuidePage } from "./pages/GuidePage";
 
@@ -155,6 +157,13 @@ export default function App() {
   const { prefs } = useMenuPrefs();
   /* 자리를 비웠을 때 화면을 가린다 — 기기마다 따로 켠다 */
   const lock = useScreenLock();
+  const appearance = useAppearance();
+  const excel = appearance.theme === "excel";
+  /* 엑셀 모드를 끌 때 돌아갈 곳 — 엑셀이 아니었던 마지막 테마 */
+  const prevTheme = useRef<"dark" | "light">("dark");
+  useEffect(() => {
+    if (appearance.theme !== "excel") prevTheme.current = appearance.theme;
+  }, [appearance.theme]);
 
   /*
    * 설정에서 정한 순서·숨김을 입힌다.
@@ -206,6 +215,22 @@ export default function App() {
 
   // 주소창에 이상한 값이 들어와도 화면이 비지 않도록 방어
   const tab = (VALID_TABS.has(route.tab as Tab) ? route.tab : "overview") as Tab;
+
+  /*
+   * 엑셀 모드의 시트 탭.
+   *
+   * 장식으로 「Sheet1 Sheet2」를 적을 수도 있었지만, 그러면 화면 아래 한 줄을
+   * 아무 일도 안 하는 데 쓰게 된다. 어차피 엑셀에서도 시트 탭이 하는 일은
+   * **화면을 옮기는 것**이라, 자주 쓰는 메뉴를 걸어 두면 모양과 쓸모가 같이 산다.
+   * 자주 쓰는 메뉴를 안 정했으면 그룹마다 첫 항목을 세운다 — 탭 줄이 비면 안 된다.
+   */
+  const sheetSource = favorites.length > 0 ? favorites : menu.map((g) => g.items[0]).filter(Boolean);
+  const sheets = sheetSource.slice(0, 8).map((i) => ({ key: i.key as string, label: i.label }));
+  if (!sheets.some((s) => s.key === tab)) {
+    const here = flat.find((i) => i.key === tab);
+    if (here) sheets.unshift({ key: tab, label: label(tab, here.label) });
+  }
+
   const selected = route.stock;
 
   function onSelectStock(code: string, name: string) {
@@ -241,6 +266,8 @@ export default function App() {
       {lock.locked && lock.config.hash && (
         <ScreenLock config={lock.config} onUnlock={lock.unlock} />
       )}
+      {/* 엑셀 껍데기 — 리본·행번호·시트탭. 잠금보다는 뒤, 본문보다는 앞 */}
+      {excel && <ExcelChrome sheets={sheets} current={tab} onGo={(k) => go(k as Tab)} />}
       <aside className={`sidebar${navOpen ? " open" : ""}`}>
         {/* 회사에서도 열기 때문에 이름을 중립적으로 둔다 */}
         <div className="sidebar-brand">VNTG</div>
@@ -289,6 +316,21 @@ export default function App() {
           비밀번호를 안 정했으면 잠글 수가 없으므로 설정으로 보낸다.
         */}
         <div className="sidebar-foot">
+          {/*
+            엑셀 모드는 **급할 때 눌러야** 뜻이 있다. 설정 화면까지 들어가야 한다면
+            정작 필요한 순간에 못 쓴다. 직전 테마를 기억해 두고 되돌린다 —
+            껐을 때 늘 다크로 가면 라이트를 쓰던 사람은 매번 다시 고쳐야 한다.
+          */}
+          <button
+            className="nav-item lock-btn"
+            onClick={() =>
+              appearance.set({ theme: excel ? (prevTheme.current ?? "dark") : "excel" })
+            }
+            title={excel ? "엑셀 모드 끄기" : "엑셀 모드"}
+          >
+            <span className="nav-icon">📊</span>
+            <span className="nav-label">{excel ? "엑셀 모드 끄기" : "엑셀 모드"}</span>
+          </button>
           <button
             className="nav-item lock-btn"
             onClick={() => {

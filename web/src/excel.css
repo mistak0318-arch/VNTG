@@ -1,0 +1,476 @@
+/*
+ * ===== 엑셀 모드 =====
+ *
+ * 회사에서 흘끗 봤을 때 스프레드시트로 읽히게 하는 테마.
+ * 색 변수만 바꾸는 다크/라이트와 달리 **모양까지** 바꾸므로 파일을 따로 뒀다 —
+ * styles.css 는 이미 5천 줄이고, 이 규칙들은 전부 한 테마에서만 쓰인다.
+ *
+ * 규칙은 모두 `:root[data-theme="excel"]` 아래에만 있다. 다른 테마에서는
+ * 이 파일이 통째로 죽은 규칙이 되므로 다크/라이트를 건드릴 위험이 없다.
+ *
+ * 치수는 ExcelChrome.tsx 와 **공유**한다 (ROW_H 22 / COL_W 84 / GUTTER_W 38).
+ * 한쪽만 고치면 행번호와 격자가 어긋난다.
+ */
+
+:root[data-theme="excel"] {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f3f3f3;
+  --border: #d0d0d0;
+  --text: #000000;
+  --muted: #5a5a5a;
+  /* 등락 색은 그대로 둔다 — 엑셀처럼 보이자고 빨강·파랑을 바꾸면 숫자를 잘못 읽는다 */
+  --red: #c00000;
+  --blue: #0f6fc6;
+  --green: #217346;
+
+  --xl-green: #217346;
+  --xl-grid: #d4d4d4;
+  --xl-line: #b1b1b1;
+  --xl-head-bg: #f5f5f5;
+  --xl-ribbon: #f3f2f1;
+  --xl-sel: #e7f1ea;
+
+  /* 사이드바가 차지하는 폭 — 엑셀 껍데기는 그 오른쪽에만 그린다 */
+  --xl-left: 200px;
+  --xl-right: 0px;
+  --xl-head-h: 122px;
+  --xl-foot-h: 26px;
+  --xl-gutter: 38px;
+}
+
+/* 메뉴바를 오른쪽에 두면 껍데기도 반대편으로 */
+:root[data-theme="excel"][data-nav="right"] {
+  --xl-left: 0px;
+  --xl-right: 200px;
+}
+
+/*
+ * 엑셀에는 둥근 모서리가 없다.
+ *
+ * 카드마다 radius 를 찾아 끄는 건 백 군데가 넘고, 새 화면을 만들 때마다 또 늘어난다.
+ * 한 줄로 전부 각지게 만든다 — 이 테마에서만 도는 규칙이라 부작용이 갇혀 있다.
+ * 다만 완전히 동그란 것(999px)은 배지·점이라 뭉개면 오히려 이상해서 남긴다.
+ */
+:root[data-theme="excel"] .main-inner *:not([class*="dot"]):not([class*="badge"]) {
+  border-radius: 0 !important;
+}
+
+:root[data-theme="excel"] body {
+  background: var(--bg);
+}
+
+/* 본문이 격자 위에 오도록 */
+:root[data-theme="excel"] .main {
+  position: relative;
+  z-index: 1;
+}
+
+:root[data-theme="excel"] .main-inner {
+  padding: calc(var(--xl-head-h) + 10px) 16px calc(var(--xl-foot-h) + 24px)
+    calc(var(--xl-gutter) + 12px);
+  max-width: none;
+}
+
+/* 카드는 시트 위에 값이 든 칸처럼 — 그림자 없이 얇은 선만 */
+:root[data-theme="excel"] .card,
+:root[data-theme="excel"] .sf-block {
+  border-color: var(--xl-line);
+  box-shadow: none;
+}
+
+:root[data-theme="excel"] .card h2 {
+  color: var(--xl-green);
+  font-weight: 700;
+}
+
+/* ===== 격자 =====
+   내용 뒤에 깔린다. 세로 오프셋은 ExcelChrome 이 scrollY 로 넣어 준다. */
+:root[data-theme="excel"] .xl-grid {
+  position: fixed;
+  top: var(--xl-head-h);
+  bottom: var(--xl-foot-h);
+  left: calc(var(--xl-left) + var(--xl-gutter));
+  right: var(--xl-right);
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(to right, var(--xl-grid) 0 1px, transparent 1px 84px),
+    repeating-linear-gradient(to bottom, var(--xl-grid) 0 1px, transparent 1px 22px);
+}
+
+/* ===== 리본 ===== */
+:root[data-theme="excel"] .xl-chrome {
+  /* 껍데기 전체가 클릭을 먹지 않는다 — 시트 탭만 따로 되살린다 */
+  pointer-events: none;
+  user-select: none;
+}
+
+:root[data-theme="excel"] .xl-ribbon {
+  position: fixed;
+  top: 0;
+  left: var(--xl-left);
+  right: var(--xl-right);
+  height: 78px;
+  z-index: 30;
+  background: var(--xl-ribbon);
+  border-bottom: 1px solid #d2d0ce;
+  font-size: 12px;
+  color: #323130;
+}
+
+:root[data-theme="excel"] .xl-ribbon-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 8px;
+  height: 26px;
+  align-items: stretch;
+  background: var(--xl-green);
+}
+
+:root[data-theme="excel"] .xl-rtab {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  color: #ffffff;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+:root[data-theme="excel"] .xl-rtab.active {
+  background: var(--xl-ribbon);
+  color: #323130;
+}
+
+:root[data-theme="excel"] .xl-ribbon-body {
+  display: flex;
+  align-items: stretch;
+  height: 52px;
+  padding: 2px 6px;
+  overflow: hidden;
+}
+
+:root[data-theme="excel"] .xl-rgroup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 10px;
+  border-right: 1px solid #e1dfdd;
+}
+
+:root[data-theme="excel"] .xl-rbig {
+  font-size: 18px;
+  line-height: 1;
+}
+
+:root[data-theme="excel"] .xl-rname {
+  font-size: 10px;
+  color: #605e5c;
+}
+
+:root[data-theme="excel"] .xl-rfont {
+  align-items: flex-start;
+}
+
+:root[data-theme="excel"] .xl-rline {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+:root[data-theme="excel"] .xl-rbox {
+  display: inline-block;
+  border: 1px solid #c8c6c4;
+  background: #ffffff;
+  padding: 1px 5px;
+  font-size: 11px;
+  min-width: 74px;
+}
+
+:root[data-theme="excel"] .xl-rbox.xl-rnum {
+  min-width: 26px;
+}
+
+:root[data-theme="excel"] .xl-rbox.xl-wide {
+  min-width: 108px;
+}
+
+:root[data-theme="excel"] .xl-rbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  font-size: 11px;
+  color: #323130;
+}
+
+:root[data-theme="excel"] .xl-rbtn.xl-b {
+  font-weight: 700;
+}
+:root[data-theme="excel"] .xl-rbtn.xl-i {
+  font-style: italic;
+}
+:root[data-theme="excel"] .xl-rbtn.xl-u {
+  text-decoration: underline;
+}
+
+:root[data-theme="excel"] .xl-rsep {
+  width: 1px;
+  height: 14px;
+  background: #d2d0ce;
+  margin: 0 3px;
+}
+
+/* ===== 수식 입력줄 ===== */
+:root[data-theme="excel"] .xl-formula {
+  position: fixed;
+  top: 78px;
+  left: var(--xl-left);
+  right: var(--xl-right);
+  height: 24px;
+  z-index: 30;
+  display: flex;
+  align-items: stretch;
+  background: #ffffff;
+  border-bottom: 1px solid #d2d0ce;
+  font-size: 12px;
+}
+
+:root[data-theme="excel"] .xl-namebox {
+  display: flex;
+  align-items: center;
+  width: 108px;
+  padding: 0 6px;
+  border-right: 1px solid #d2d0ce;
+  color: #323130;
+}
+
+:root[data-theme="excel"] .xl-fx {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-right: 1px solid #d2d0ce;
+  font-style: italic;
+  color: #605e5c;
+}
+
+:root[data-theme="excel"] .xl-fbar {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  color: #323130;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* ===== 열 문자 ===== */
+:root[data-theme="excel"] .xl-colhead {
+  position: fixed;
+  top: 102px;
+  left: var(--xl-left);
+  right: var(--xl-right);
+  height: 20px;
+  z-index: 30;
+  display: flex;
+  background: var(--xl-head-bg);
+  border-bottom: 1px solid var(--xl-line);
+  font-size: 11px;
+  color: #444444;
+  overflow: hidden;
+}
+
+:root[data-theme="excel"] .xl-corner {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 0 3px 1px 0;
+  background: var(--xl-head-bg);
+  border-right: 1px solid var(--xl-line);
+  color: #8a8886;
+  font-size: 9px;
+}
+
+:root[data-theme="excel"] .xl-col {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--xl-line);
+}
+
+/* ===== 행 번호 ===== */
+:root[data-theme="excel"] .xl-gutter {
+  position: fixed;
+  top: var(--xl-head-h);
+  bottom: var(--xl-foot-h);
+  left: var(--xl-left);
+  z-index: 30;
+  overflow: hidden;
+  background: var(--xl-head-bg);
+  border-right: 1px solid var(--xl-line);
+  font-size: 11px;
+  color: #444444;
+}
+
+:root[data-theme="excel"] .xl-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 4px;
+  border-bottom: 1px solid var(--xl-grid);
+}
+
+/* ===== 시트 탭 ===== */
+:root[data-theme="excel"] .xl-sheets {
+  position: fixed;
+  bottom: 0;
+  left: var(--xl-left);
+  right: var(--xl-right);
+  height: var(--xl-foot-h);
+  z-index: 30;
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  padding: 0 6px;
+  background: var(--xl-head-bg);
+  border-top: 1px solid var(--xl-line);
+  font-size: 11px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+:root[data-theme="excel"] .xl-sheet-arrows,
+:root[data-theme="excel"] .xl-sheet-plus,
+:root[data-theme="excel"] .xl-status {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  color: #8a8886;
+  white-space: nowrap;
+}
+
+:root[data-theme="excel"] .xl-status {
+  margin-left: auto;
+  color: #605e5c;
+}
+
+:root[data-theme="excel"] .xl-sheet {
+  flex: none;
+  border: none;
+  background: #ececec;
+  color: #444444;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  border-right: 1px solid var(--xl-line);
+  white-space: nowrap;
+}
+
+/* 활성 시트는 흰 바탕에 아래 초록 선 — 엑셀이 그렇게 표시한다 */
+:root[data-theme="excel"] .xl-sheet.active {
+  background: #ffffff;
+  color: var(--xl-green);
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--xl-green);
+}
+
+/* ===== 사이드바는 「탐색 창」으로 ===== */
+:root[data-theme="excel"] .sidebar {
+  background: #ffffff;
+  border-right: 1px solid var(--xl-line);
+}
+
+/* 이모지 아이콘이 남아 있으면 한눈에 남의 프로그램이다 */
+:root[data-theme="excel"] .sidebar .nav-icon {
+  display: none;
+}
+
+:root[data-theme="excel"] .nav-item {
+  grid-template-columns: 1fr;
+  font-size: 12px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+:root[data-theme="excel"] .nav-item.active {
+  background: var(--xl-sel);
+  color: var(--xl-green);
+}
+
+:root[data-theme="excel"] .sidebar-brand {
+  background: var(--xl-green);
+  color: #ffffff;
+  padding: 6px 16px;
+  margin: -16px 0 6px;
+  font-size: 12px;
+  border-bottom: none;
+}
+
+:root[data-theme="excel"] .nav-group-label {
+  font-size: 10px;
+  color: #605e5c;
+}
+
+/* ===== 표는 엑셀 표에 가깝게 ===== */
+:root[data-theme="excel"] table th {
+  background: var(--xl-head-bg);
+  color: #444444;
+  border-bottom: 1px solid var(--xl-line);
+}
+
+:root[data-theme="excel"] table td {
+  border-bottom: 1px solid var(--xl-grid);
+}
+
+/* ===== 모달은 엑셀 대화상자처럼 ===== */
+:root[data-theme="excel"] .modal,
+:root[data-theme="excel"] .sheet {
+  border: 1px solid #8a8886;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+/* ===== 좁은 화면 =====
+   사이드바가 서랍이 되므로 껍데기는 화면 전체를 쓴다.
+   리본 본문은 자리만 먹으므로 접는다 — 탭 줄만 남아도 엑셀로 읽힌다. */
+@media (max-width: 899px) {
+  :root[data-theme="excel"] {
+    --xl-left: 0px;
+    --xl-right: 0px;
+    --xl-head-h: 70px;
+    --xl-gutter: 28px;
+  }
+
+  :root[data-theme="excel"] .xl-ribbon {
+    height: 26px;
+  }
+  :root[data-theme="excel"] .xl-ribbon-body {
+    display: none;
+  }
+  :root[data-theme="excel"] .xl-formula {
+    top: 26px;
+  }
+  :root[data-theme="excel"] .xl-colhead {
+    top: 50px;
+  }
+  /* 모바일 머리(☰)가 리본에 가리지 않게 아래로 민다 */
+  :root[data-theme="excel"] .mobile-header {
+    top: var(--xl-head-h);
+    z-index: 29;
+  }
+  :root[data-theme="excel"] .main-inner {
+    padding: 10px 10px calc(var(--xl-foot-h) + 20px) calc(var(--xl-gutter) + 8px);
+  }
+  :root[data-theme="excel"] .main {
+    padding-top: var(--xl-head-h);
+  }
+}

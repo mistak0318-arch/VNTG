@@ -225,6 +225,7 @@ export function SettingsPage() {
             {([
               { key: "dark" as const, label: "다크" },
               { key: "light" as const, label: "라이트" },
+              { key: "excel" as const, label: "엑셀" },
             ]).map((t) => (
               <button
                 key={t.key}
@@ -236,6 +237,14 @@ export function SettingsPage() {
             ))}
           </div>
         </div>
+        {appearance.theme === "excel" && (
+          <div className="st-cfg-note">
+            엑셀 모드는 <b>리본·행번호·시트탭</b>까지 붙여 스프레드시트처럼 보이게 합니다.
+            글꼴은 맑은 고딕으로 고정되고(고르신 글꼴은 그대로 저장돼 있습니다), 아래 시트 탭은
+            <b> 자주 쓰는 메뉴</b>로 채워집니다. 메뉴 맨 아래 <b>📊</b> 버튼으로 바로 껐다 켤 수
+            있습니다.
+          </div>
+        )}
 
         <div className="appearance-row">
           <span className="appearance-label">글꼴</span>

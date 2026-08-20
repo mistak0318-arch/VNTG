@@ -8,7 +8,13 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
  * 서버에 저장하지 않는 이유: 기기마다 다르게 쓰고 싶은 값이라서.
  */
 
-export type ThemeName = "dark" | "light";
+/**
+ * 테마.
+ *
+ * `excel` 은 색만 바꾸는 게 아니라 **엑셀처럼 보이게 하는 모드**다 —
+ * 리본·행번호·열문자·시트탭이 함께 붙는다. 자세한 건 `components/ExcelChrome.tsx`.
+ */
+export type ThemeName = "dark" | "light" | "excel";
 export type FontName = "system" | "pretendard" | "noto" | "gothic" | "mono";
 /** 메뉴바를 어느 쪽에 둘지 */
 export type NavSide = "left" | "right";
@@ -57,17 +63,30 @@ function read(): Appearance {
   }
 }
 
+/** 한국어 윈도우의 엑셀 기본 글꼴 */
+const EXCEL_FONT = '"맑은 고딕", "Malgun Gothic", "Segoe UI", sans-serif';
+
 /** <html>에 속성을 찍어두면 CSS가 알아서 변수를 바꾼다 */
 function apply(a: Appearance): void {
   const root = document.documentElement;
   root.dataset.theme = a.theme;
+  /*
+   * 엑셀 모드에서는 **글꼴 선택을 덮어쓴다.**
+   *
+   * 흘끗 봤을 때 엑셀로 보이게 하는 게 이 모드의 전부인데, 글자가 Pretendard 면
+   * 리본을 아무리 잘 그려도 남의 프로그램처럼 보인다. 설정값 자체는 그대로 두므로
+   * 다크/라이트로 돌아오면 고르셨던 글꼴이 그대로 살아난다.
+   */
   root.style.setProperty(
     "--app-font",
-    FONTS.find((f) => f.key === a.font)?.stack ?? FONTS[0].stack,
+    a.theme === "excel"
+      ? EXCEL_FONT
+      : (FONTS.find((f) => f.key === a.font)?.stack ?? FONTS[0].stack),
   );
   root.style.setProperty("--app-font-size", `${(15 * a.fontScale) / 100}px`);
   // 차트 라이브러리는 CSS 변수를 못 읽으므로 색상 스키마도 알려준다
-  root.style.colorScheme = a.theme;
+  // (`excel` 은 colorScheme 로 쓸 수 없는 값이라 밝은 쪽으로 접어 준다)
+  root.style.colorScheme = a.theme === "dark" ? "dark" : "light";
   // 메뉴바 좌우는 CSS 가 이 속성을 보고 방향을 뒤집는다
   root.dataset.nav = a.navSide;
 }
@@ -108,6 +127,9 @@ export function useAppearance(): AppearanceContext {
  * lightweight-charts는 CSS 변수를 해석하지 못해서 실제 색상값이 필요하다.
  */
 export function chartColors(theme: ThemeName) {
+  // 엑셀 모드는 격자를 진하게 — 차트도 시트 위에 그린 것처럼 보여야 한다
+  if (theme === "excel")
+    return { text: "#444444", grid: "#d4d4d4", border: "#b1b1b1", volume: "#bfbfbf" };
   return theme === "light"
     ? { text: "#5b6673", grid: "#e8ecf1", border: "#d0d7e0", volume: "#c9d2dc" }
     : { text: "#8b98a5", grid: "#1a232d", border: "#223040", volume: "#3a4553" };
