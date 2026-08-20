@@ -61,6 +61,41 @@ interface Insights {
   overhead: number | null;
 }
 
+/** 매물대 막대를 몇 줄까지 보여줄지 */
+const SHOW_BANDS = 5;
+
+/**
+ * 보여줄 매물대 칸을 고른다 — **묻는 것에 답하는 칸만.**
+ *
+ * 열네 칸을 다 그리면 화면을 잡아먹으면서 정작 답은 안 준다.
+ * 차트 옆에서 매물대를 볼 때 알고 싶은 건 셋뿐이다:
+ *
+ *   · 지금 내가 선 칸은 어디인가
+ *   · 올라가면 어디서 막히나 (위쪽 벽)
+ *   · 제일 두꺼운 데는 어디인가
+ *
+ * 이 셋을 먼저 확보하고 남는 자리를 두꺼운 순으로 채운다.
+ * 마지막에 **가격 순으로 되돌린다** — 두꺼운 순으로 늘어놓으면 위아래 관계가
+ * 사라져서 매물대가 아니라 순위표가 된다.
+ */
+function pickBands(ins: Insights): Band[] {
+  const bands = ins.bands;
+  if (bands.length <= SHOW_BANDS) return [...bands].reverse();
+
+  const must = new Set<Band>();
+  const here = bands.find((b) => ins.price >= b.from && ins.price < b.to);
+  for (const b of [here, ins.wall, ins.heaviest]) if (b) must.add(b);
+
+  // 남는 자리는 두꺼운 순으로
+  for (const b of [...bands].sort((a, c) => c.volume - a.volume)) {
+    if (must.size >= SHOW_BANDS) break;
+    must.add(b);
+  }
+
+  // 비싼 가격이 위로 오게 — 화면에서는 위가 높은 값이다
+  return bands.filter((b) => must.has(b)).reverse();
+}
+
 /** 마지막 n개의 평균. 모자라면 null — 없는 걸 있는 척하면 안 된다 */
 function sma(values: number[], n: number, end: number): number | null {
   if (end + 1 < n) return null;
@@ -317,8 +352,18 @@ export function ChartInsights({
           </div>
 
           <div className="ci-bars">
-            {/* 위가 비싼 가격이라 뒤집어 그린다 */}
-            {[...ins.bands].reverse().map((b, i) => {
+            {/*
+              **열네 칸을 다 뿌리지 않는다.**
+
+              칸을 전부 그리면 화면 반쪽이 막대로 덮이는데, 그 중 눈이 실제로 쓰는 건
+              서너 줄뿐이다 — 지금 어디 서 있나, 올라가면 어디서 막히나, 제일 두꺼운 데가 어디냐.
+              나머지 열 줄은 **스크롤만 늘리고 답은 안 준다.**
+
+              그래서 꼭 필요한 칸(현재가·위쪽 벽·가장 두꺼운 곳)은 반드시 남기고,
+              남는 자리를 두꺼운 순서로 채운다. 고른 뒤에는 **다시 가격 순으로** 세워야
+              위아래 관계가 읽힌다(두꺼운 순으로 늘어놓으면 매물대가 아니라 순위표가 된다).
+            */}
+            {pickBands(ins).map((b, i) => {
               const max = ins.heaviest?.volume ?? 1;
               const top = b === ins.heaviest;
               const wall = b === ins.wall;

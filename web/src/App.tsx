@@ -34,6 +34,7 @@ import { ScreenLock } from "./components/ScreenLock";
 import { ExcelChrome } from "./components/ExcelChrome";
 import { useAppearance } from "./useAppearance";
 import { BoardPage } from "./pages/BoardPage";
+import { CornerToggle } from "./components/CornerToggle";
 import { useStockFocus } from "./useStockFocus";
 import { TelegramPage } from "./pages/TelegramPage";
 import { GuidePage } from "./pages/GuidePage";
@@ -373,11 +374,14 @@ export default function App() {
 
       <div className="main">
         <header className="mobile-header">
-          <button className="nav-toggle" onClick={() => setNavOpen(true)} aria-label="메뉴 열기">
-            ☰
-          </button>
           <span className="mobile-title">{TAB_LABELS[tab]}</span>
         </header>
+        {/*
+          메뉴 버튼은 머리글에서 빼내 **떠 있게** 한다. 머리글에 박혀 있으면
+          왼쪽 위 한 자리뿐이라, 폰을 오른손으로 쥔 사람은 매번 손을 고쳐 쥐어야 한다.
+          끌어서 네 모서리 중 아무 데나 놓을 수 있다.
+        */}
+        <CornerToggle onOpen={() => setNavOpen(true)} label="메뉴 열기" />
 
         <div className="main-inner">
           {/* 돌고 있는 작업 — 어느 화면에 있든 뜬다 */}

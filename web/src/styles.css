@@ -5372,3 +5372,71 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 
 /* 연동이 켜져 있으면 눈에 띄게 — 보내는 창에서도 켜야 하는 걸 자꾸 잊는다 */
 .foot-btn.active { color: var(--green); font-weight: 600; }
+
+/* ------------------------------------------------------------------ */
+/* 끌어서 옮기는 메뉴 버튼                                               */
+/* ------------------------------------------------------------------ */
+
+/*
+ * 좁은 화면에서만 뜬다. 사이드바가 늘 보이는 넓은 화면에서는 열 버튼이 필요 없다.
+ * 네 모서리 중 하나에 붙어 떠 있고, 끌어서 옮긴다.
+ */
+.corner-toggle { display: none; }
+
+@media (max-width: 899px) {
+  .corner-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    z-index: 45;
+    width: 2.9rem;
+    height: 2.9rem;
+    border-radius: 999px;
+    font-size: 1.15rem;
+    line-height: 1;
+    padding: 0;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    /* 브라우저가 끌기를 스크롤로 가로채지 않게 */
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* 모서리 — 노치와 홈바를 피해 safe-area 를 더한다 */
+  .corner-toggle.tl { top: calc(0.7rem + env(safe-area-inset-top)); left: 0.7rem; }
+  .corner-toggle.tr { top: calc(0.7rem + env(safe-area-inset-top)); right: 0.7rem; }
+  .corner-toggle.bl { bottom: calc(0.7rem + env(safe-area-inset-bottom)); left: 0.7rem; }
+  .corner-toggle.br { bottom: calc(0.7rem + env(safe-area-inset-bottom)); right: 0.7rem; }
+
+  /* 끄는 동안에는 손가락 끝이 버튼 한가운데 오게 */
+  .corner-toggle.dragging {
+    transform: translate(-50%, -50%);
+    opacity: 0.9;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  }
+
+  /* 놓을 수 있는 자리를 보여 준다 — 모르면 못 옮긴다 */
+  .corner-hints { position: fixed; inset: 0; z-index: 44; pointer-events: none; }
+  .corner-hint {
+    position: absolute;
+    width: 2.9rem;
+    height: 2.9rem;
+    border-radius: 999px;
+    border: 2px dashed var(--border);
+  }
+  .corner-hint.near { border-color: var(--blue); border-style: solid; }
+  .corner-hint.tl { top: calc(0.7rem + env(safe-area-inset-top)); left: 0.7rem; }
+  .corner-hint.tr { top: calc(0.7rem + env(safe-area-inset-top)); right: 0.7rem; }
+  .corner-hint.bl { bottom: calc(0.7rem + env(safe-area-inset-bottom)); left: 0.7rem; }
+  .corner-hint.br { bottom: calc(0.7rem + env(safe-area-inset-bottom)); right: 0.7rem; }
+
+  /*
+   * 버튼이 머리글에서 빠졌으니 제목만 남는다.
+   * 버튼이 위쪽 모서리에 떠 있을 때 제목을 가리지 않도록 좌우를 비워 둔다.
+   */
+  .mobile-header { padding-left: 3.6rem; padding-right: 3.6rem; }
+}

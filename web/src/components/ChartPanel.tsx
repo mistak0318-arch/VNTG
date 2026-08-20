@@ -229,20 +229,29 @@ export function ChartPanel({
     </div>
   );
 
+  /*
+   * 판독 줄(이동평균·매물대)은 **차트 아래**다.
+   *
+   * 예전엔 도구줄 바로 밑에 있었는데, 그러면 기간을 고르고 나서 정작 차트를 보려면
+   * 판독 줄을 지나쳐 내려가야 했다. 이 화면에서 제일 먼저 볼 것은 차트고,
+   * 5일선·20일선·매물대는 **차트를 본 다음에** 확인하는 값이다.
+   * 순서를 보는 순서대로 맞춘다: 기간 고르기 → 차트 → 숫자.
+   */
+  const insightsRow = showInsights && (
+    /*
+      판독 줄은 **일봉 기준**이다. 「5일선」은 5거래일이므로 주봉으로 재면 5주선이 된다.
+      지금 보고 있는 게 KRX 일봉이면 받아 둔 배열을 그대로 넘기고(같은 걸 두 번 받지 않는다),
+      다른 봉이나 다른 거래소를 보고 있으면 넘기지 않아 판독 줄이 일봉을 따로 받는다.
+    */
+    <ChartInsights
+      code={code}
+      candles={period === "day" && venue === "krx" && !loading ? candles : undefined}
+    />
+  );
+
   const body = (
     <>
       {toolbar}
-      {/*
-        판독 줄은 **일봉 기준**이다. 「5일선」은 5거래일이므로 주봉으로 재면 5주선이 된다.
-        지금 보고 있는 게 KRX 일봉이면 받아 둔 배열을 그대로 넘기고(같은 걸 두 번 받지 않는다),
-        다른 봉이나 다른 거래소를 보고 있으면 넘기지 않아 판독 줄이 일봉을 따로 받는다.
-      */}
-      {showInsights && (
-        <ChartInsights
-          code={code}
-          candles={period === "day" && venue === "krx" && !loading ? candles : undefined}
-        />
-      )}
       {loading && <div className="empty">차트 불러오는 중...</div>}
       {error && <div className="error-banner">{error}</div>}
       {!loading && !error && (
@@ -265,6 +274,7 @@ export function ChartPanel({
           />
         </div>
       )}
+      {insightsRow}
     </>
   );
 

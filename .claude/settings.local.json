@@ -455,7 +455,8 @@
       "Bash(node -e \"const c=require\\('crypto'\\);console.log\\('0523 →',c.createHash\\('sha256'\\).update\\('0523'\\).digest\\('hex'\\)\\)\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);if\\(r.error\\){console.log\\('ERR',r.error\\);return}const s=r.items.find\\(i=>i.code==='005930'\\);console.log\\('삼성전자 그룹:',JSON.stringify\\(s.groups\\),' 편입가:',s.addedPrice,' 담은날:',s.addedAt.slice\\(0,10\\)\\)}\\)\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);if\\(r.error\\){console.log\\('ERR',r.error\\);return}const s=r.items.find\\(i=>i.code==='005930'\\);console.log\\('삼성전자 →',JSON.stringify\\(s.groups\\),'| 편입가',s.addedPrice,'| 담은날',s.addedAt.slice\\(0,10\\)\\)}\\)\")",
-      "Bash(curl -s http://localhost:4000/api/focus)"
+      "Bash(curl -s http://localhost:4000/api/focus)",
+      "Bash(grep -n \"className=\\\\\"ov\\\\\"\\\\|className={\\\\`ov\\\\|<div className=\\\\\"ov\" pages/OverviewPage.tsx)"
     ]
   }
 }

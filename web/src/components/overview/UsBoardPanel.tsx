@@ -51,6 +51,52 @@ function cls(v: number | null): string {
   return v > 0 ? "positive" : "negative";
 }
 
+/**
+ * 지수·원자재 상자 — **국내 코스피/코스닥 카드와 같은 모양.**
+ *
+ * ## 왜 바꿨나
+ *
+ * 예전에는 한 줄에 이름·값·등락률을 몰아넣었다. 자리는 아꼈지만 **옆으로 길쭉한
+ * 띠**가 되어 한눈에 안 들어왔고, 무엇보다 바로 위 국내 지수 카드와 모양이 달라서
+ * 같은 화면 안에서 눈이 두 번 적응해야 했다.
+ *
+ * 국내 카드는 이미 답을 갖고 있다 — **두 칸씩, 값은 크게, 그 아래 하루치 선.**
+ * 그래서 CSS 를 새로 만들지 않고 그 클래스(`ov-idx-*`)를 그대로 쓴다.
+ * 나중에 국내 카드 모양을 고치면 여기도 같이 따라간다.
+ *
+ * 신호 테두리와 판정 한 줄은 이 화면에만 있는 것이라 `usb-` 클래스로 덧붙인다.
+ */
+function IndexBoxes({
+  boxes,
+  onPick,
+}: {
+  boxes: { key: string; label: string; symbol: string; digits: number; price: number | null; changeRate: number | null; signal?: { level: string; why: string } | null }[];
+  onPick: (t: ChartTarget) => void;
+}) {
+  return (
+    <div className="ov-idx-grid usb-idx-grid">
+      {boxes.map((b) => (
+        <button
+          type="button"
+          className={`ov-idx clickable usb-idx${b.signal ? ` sig-${b.signal.level}` : ""}`}
+          key={b.key}
+          onClick={() => onPick({ symbol: b.symbol, label: b.label, digits: b.digits })}
+          title="눌러서 차트 보기"
+        >
+          <div className="ov-idx-name">{b.label}</div>
+          <div className={`ov-idx-val num ${cls(b.changeRate)}`}>
+            {b.price === null ? "-" : fmtNum(Number(b.price.toFixed(b.digits)))}
+          </div>
+          <div className={`ov-idx-chg num ${cls(b.changeRate)}`}>{pct(b.changeRate)}</div>
+          <UsSpark symbol={b.symbol} />
+          {/* 왜 눈에 띄는지 한 줄. 색만 있으면 이유를 모른다 */}
+          {b.signal && <div className="usb-box-why">{b.signal.why}</div>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function UsBoardPanel() {
   const usMajor = useSection<UsMajorResult>("usMajor", 15_000);
   const rates = useSection<RateRow[]>("rates", 30_000);
@@ -89,35 +135,7 @@ export function UsBoardPanel() {
           {boxes.length === 0 ? (
             <div className="empty">불러오는 중…</div>
           ) : (
-            <div className="usb-boxes">
-              {boxes.map((b) => (
-                <button
-                  type="button"
-                  className={`usb-box clickable${b.signal ? ` sig-${b.signal.level}` : ""}`}
-                  key={b.key}
-                  onClick={() =>
-                    setChart({ symbol: b.symbol, label: b.label, digits: b.digits })
-                  }
-                  title="눌러서 차트 보기"
-                >
-                  {/*
-                    한 줄에 이름·값·등락률을 몰아넣고 그 아래 하루치 선을 깐다.
-                    예전엔 세 줄로 쌓아 자리를 많이 먹으면서 **정보는 적었다** —
-                    「−0.12%」만으로는 하루 종일 흘러내린 건지 빠졌다 되돌린 건지 모른다.
-                  */}
-                  <div className="usb-box-top">
-                    <span className="usb-box-nm">{b.label}</span>
-                    <b className={`usb-box-px ${cls(b.changeRate)}`}>
-                      {b.price === null ? "-" : fmtNum(Number(b.price.toFixed(b.digits)))}
-                    </b>
-                    <span className={`usb-box-chg ${cls(b.changeRate)}`}>{pct(b.changeRate)}</span>
-                  </div>
-                  <UsSpark symbol={b.symbol} />
-                  {/* 왜 눈에 띄는지 한 줄. 색만 있으면 이유를 모른다 */}
-                  {b.signal && <div className="usb-box-why">{b.signal.why}</div>}
-                </button>
-              ))}
-            </div>
+            <IndexBoxes boxes={boxes} onPick={setChart} />
           )}
           {usMajor.data?.curveNote && (
             <div className="usb-curve">{usMajor.data.curveNote}</div>
@@ -176,29 +194,7 @@ export function UsBoardPanel() {
           {commodities.length === 0 ? (
             <div className="empty">불러오는 중…</div>
           ) : (
-            <div className="usb-boxes">
-              {commodities.map((b) => (
-                <button
-                  type="button"
-                  className={`usb-box clickable${b.signal ? ` sig-${b.signal.level}` : ""}`}
-                  key={b.key}
-                  onClick={() =>
-                    setChart({ symbol: b.symbol, label: b.label, digits: b.digits })
-                  }
-                  title="눌러서 차트 보기"
-                >
-                  <div className="usb-box-top">
-                    <span className="usb-box-nm">{b.label}</span>
-                    <b className={`usb-box-px ${cls(b.changeRate)}`}>
-                      {b.price === null ? "-" : fmtNum(Number(b.price.toFixed(b.digits)))}
-                    </b>
-                    <span className={`usb-box-chg ${cls(b.changeRate)}`}>{pct(b.changeRate)}</span>
-                  </div>
-                  <UsSpark symbol={b.symbol} />
-                  {b.signal && <div className="usb-box-why">{b.signal.why}</div>}
-                </button>
-              ))}
-            </div>
+            <IndexBoxes boxes={commodities} onPick={setChart} />
           )}
           <div className="table-note">
             유가는 <b>정유·화학·항공</b>에 바로 닿습니다. 금은 금리·달러의 반대편이라 같이 보면
