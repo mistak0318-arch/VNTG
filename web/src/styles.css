@@ -5184,3 +5184,20 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 }
 .ep-pt-x { font-size: 0.8rem; color: var(--muted); }
 .ep-pt-v { font-weight: 600; font-size: 0.9rem; }
+
+/* 종가배팅 — 시장 조건 신호등 */
+.cb-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.6rem; }
+.cb-gauge {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 0.4rem;
+  background: var(--panel-2);
+}
+.cb-gauge.ok { border-left-color: var(--green); }
+.cb-gauge.warn { border-left-color: var(--muted); }
+.cb-gauge.bad { border-left-color: var(--red); }
+.cb-gauge-l { color: var(--muted); font-size: 0.88rem; }
+.cb-gauge-v { font-size: 1.25rem; font-weight: 700; }
+.cb-gauge-w { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+.cb-bt { margin-top: 1rem; }

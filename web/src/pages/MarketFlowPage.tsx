@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { MarketPulsePanel } from "../components/MarketPulsePanel";
 import { LeaderScanPanel } from "../components/LeaderScanPanel";
 import { EventPlayPanel } from "../components/EventPlayPanel";
+import { CloseBetPanel } from "../components/CloseBetPanel";
 import { MarketSignalPanel } from "../components/MarketSignalPanel";
 import { api, fmtNum, type BreadthPoint, type ChannelReport } from "../api";
 import { BreadthPanel } from "../components/BreadthPanel";
@@ -24,7 +25,7 @@ import { RefreshBar } from "../components/RefreshBar";
  * 채널 정리는 「텔레그램 동향」 대메뉴로 옮겼다 — 그건 숫자가 아니라 독립된 정보원이다.
  */
 
-type FlowTab = "pulse" | "leaders" | "events" | "money" | "usKr" | "trade";
+type FlowTab = "pulse" | "leaders" | "events" | "closebet" | "money" | "usKr" | "trade";
 
 const TABS: { key: FlowTab; label: string }[] = [
   // 맥박이 첫 탭이다 — 나머지는 근거이고 이건 결론이다
@@ -37,6 +38,8 @@ const TABS: { key: FlowTab; label: string }[] = [
    * 이미 오른 걸 훑어서는 안 나오는 것을 잡는다.
    */
   { key: "events", label: "일정 매매" },
+  // 일정 매매의 형제 — 저쪽이 며칠~몇 주라면 이건 하룻밤이다
+  { key: "closebet", label: "종가배팅" },
   { key: "money", label: "자금 흐름" },
   { key: "usKr", label: "미국↔국내" },
   { key: "trade", label: "수출 동향" },
@@ -214,6 +217,7 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
         {tab === "pulse" && <MarketPulsePanel />}
         {tab === "leaders" && <LeaderScanPanel onSelectStock={onSelectStock} />}
         {tab === "events" && <EventPlayPanel />}
+        {tab === "closebet" && <CloseBetPanel />}
         {tab === "money" && <MoneyFlowTab onSelectStock={onSelectStock} />}
         {tab === "usKr" && <UsKrPanel />}
         {tab === "trade" && <TradePanel onSelectStock={onSelectStock} />}

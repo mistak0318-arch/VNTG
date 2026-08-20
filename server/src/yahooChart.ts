@@ -45,6 +45,12 @@ const RANGES: Record<string, { range: string; interval: string }> = {
   "1mo": { range: "1mo", interval: "1d" },
   "6mo": { range: "6mo", interval: "1d" },
   "1y": { range: "1y", interval: "1d" },
+  /*
+   * **2y 는 일봉이다.** 5y 는 주봉이라 검증에 못 쓴다 —
+   * 국내 일봉과 날짜로 맞출 때 주봉은 거의 다 어긋나서 표본이 통째로 사라진다.
+   * (250일 검증을 돌렸더니 표본이 230에서 98로 **줄어서** 발견했다)
+   */
+  "2y": { range: "2y", interval: "1d" },
   "5y": { range: "5y", interval: "1wk" },
 };
 

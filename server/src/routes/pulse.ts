@@ -3,6 +3,8 @@ import type { KiwoomClient } from "../kiwoomClient.js";
 import { marketPulse, pulseBrief } from "../marketPulse.js";
 import { getLeaderConfig, leaderScan, saveLeaderConfig } from "../leaderScan.js";
 import { leaderTrack } from "../leaderTrack.js";
+import { betBacktest, marketGauge, DEFAULT_CONDITION } from "../closeBet.js";
+import { logSummary, recordAndScore } from "../closeBetLog.js";
 
 /**
  * 시장 맥박.
@@ -67,6 +69,68 @@ export function createPulseRouter(client: KiwoomClient): Router {
   router.put("/leaders/config", async (req, res, next) => {
     try {
       res.json(await saveLeaderConfig(req.body ?? {}));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* 종가배팅 — 시장 조건 신호등 */
+  router.get("/closebet/gauge", async (_req, res, next) => {
+    try {
+      res.json(await marketGauge());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 종가배팅 검증. 종목마다 일봉을 받으므로 화면이 눌렀을 때만 돈다.
+   * `codes` 는 `005930:삼성전자,000660:SK하이닉스` 형식.
+   */
+  router.get("/closebet/backtest", async (req, res, next) => {
+    try {
+      const raw = String(req.query.codes ?? "");
+      const codes = raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => {
+          const [code, name] = s.split(":");
+          return { code: code.trim(), name: (name ?? code).trim() };
+        })
+        .slice(0, 12);
+      if (codes.length === 0) {
+        res.status(400).json({ error: "codes 가 필요합니다" });
+        return;
+      }
+      const days = Math.min(Math.max(Number(req.query.days) || 120, 20), 400);
+      const cond = {
+        futuresMin: Number(req.query.futuresMin ?? DEFAULT_CONDITION.futuresMin),
+        oilMax: Number(req.query.oilMax ?? DEFAULT_CONDITION.oilMax),
+        fxMax: Number(req.query.fxMax ?? DEFAULT_CONDITION.fxMax),
+      };
+      // 어디서 샀다고 칠지 — KRX 정규장 마감 vs NXT 애프터마켓 마감
+      const venue = req.query.venue === "nxt" ? "nxt" : "krx";
+      res.json(await betBacktest(client, codes, days, cond, venue));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* 종가배팅 실전 추적 — 매일 자동으로 찍힌 것 */
+  router.get("/closebet/log", async (req, res, next) => {
+    try {
+      res.json(await logSummary(req.query.settled === "1"));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 손으로 한 번 돌리기 — 처음 켰을 때 하루를 기다리지 않게 */
+  router.post("/closebet/log/run", async (_req, res, next) => {
+    try {
+      const days = await recordAndScore(client);
+      res.json({ days: days.length, scored: days.filter((d) => d.scored).length });
     } catch (err) {
       next(err);
     }

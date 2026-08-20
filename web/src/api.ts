@@ -406,6 +406,17 @@ export const api = {
     ),
   /** 주도주 탐색기. 뉴스는 섹터마다 네이버를 부르므로 원할 때만 켠다 */
   /** 일정 매매 — 목록은 가볍고, 추적은 종목마다 일봉을 받아 몇 십 초 걸린다 */
+  /** 종가배팅 — 지금 시장 조건 */
+  betGauge: () => getJson<{ day: BetGaugeDay; verdicts: BetVerdict[] }>("/api/pulse/closebet/gauge"),
+  /** 과거 검증. 종목마다 일봉을 받아 몇 십 초 걸린다 */
+  betBacktest: (codes: string, days: number, venue: "krx" | "nxt", futuresMin: number) =>
+    getJson<BetBacktest>(
+      `/api/pulse/closebet/backtest?codes=${encodeURIComponent(codes)}&days=${days}&venue=${venue}` +
+        `&futuresMin=${futuresMin}&oilMax=999&fxMax=999`,
+    ),
+  betLog: (settled = false) =>
+    getJson<BetLogSummary>(`/api/pulse/closebet/log${settled ? "?settled=1" : ""}`),
+  betLogRun: () => postJson<{ days: number; scored: number }>("/api/pulse/closebet/log/run"),
   eventPlays: () => getJson<{ plays: EventPlay[] }>("/api/event-plays"),
   eventPlaysTrack: () => getJson<{ plays: EventPlayResult[] }>("/api/event-plays/track"),
   eventPlaySave: (p: Partial<EventPlay>) =>
@@ -2388,4 +2399,78 @@ export interface EventPlayResult extends EventPlay {
     peakedAtEvent: boolean | null;
   }[];
   upcoming: boolean;
+}
+
+
+/* ── 종가배팅 ── */
+
+export interface BetGaugeDay {
+  date: string;
+  futuresBody: number | null;
+  oilMove: number | null;
+  fxMove: number | null;
+}
+
+export interface BetVerdict {
+  key: "futures" | "oil" | "fx";
+  label: string;
+  level: "ok" | "warn" | "bad";
+  value: string;
+  why: string;
+}
+
+export interface BetStat {
+  key: string;
+  n: number;
+  openWin: number;
+  openAvg: number;
+  closeWin: number;
+  closeAvg: number;
+  /** 코스피 대비(%p) — 이게 없으면 시장이 오른 건지 종목을 고른 건지 모른다 */
+  openExcess: number;
+  closeExcess: number;
+  excessWin: number;
+}
+
+export interface BetBacktest {
+  venue: "krx" | "nxt";
+  stocks: { code: string; name: string; days: number }[];
+  matched: BetStat;
+  unmatched: BetStat;
+  perCondition: BetStat[];
+  benchDays: number;
+  note: string;
+}
+
+export interface BetLogStat {
+  key: string;
+  n: number;
+  openWin: number;
+  openAvg: number;
+  openExcess: number;
+  excessWin: number;
+}
+
+export interface BetLogSummary {
+  days: number;
+  scored: number;
+  watch: { code: string; name: string }[];
+  periods: { label: string; matched: BetLogStat; unmatched: BetLogStat }[];
+  recent: {
+    date: string;
+    atClose: BetGaugeDay | null;
+    settled: BetGaugeDay | null;
+    scored: boolean;
+    stocks: {
+      code: string;
+      name: string;
+      close: number;
+      nxtClose: number | null;
+      openRate: number | null;
+      openExcess: number | null;
+      nxtOpenRate: number | null;
+      nxtOpenExcess: number | null;
+    }[];
+  }[];
+  note: string;
 }

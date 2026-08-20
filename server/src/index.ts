@@ -51,6 +51,7 @@ import { startKeywordScheduler } from "./keywordAlert.js";
 import { startSignalTrackScheduler } from "./signalTrack.js";
 import { startLeaderScanScheduler } from "./leaderScan.js";
 import { createEventPlayRouter } from "./routes/eventPlay.js";
+import { startCloseBetScheduler } from "./closeBetLog.js";
 import { createWatchlistRouter } from "./routes/watchlist.js";
 
 const app = express();
@@ -126,6 +127,7 @@ startChannelScheduler();
   startKeywordScheduler();
 startSignalTrackScheduler(client);
 startLeaderScanScheduler(client);
+startCloseBetScheduler(client);
   startDisclosureScheduler();
 
 /**
