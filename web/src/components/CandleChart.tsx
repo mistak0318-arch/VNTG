@@ -132,11 +132,21 @@ export function CandleChart({
   name,
   code,
   height = 320,
+  sizeTick = 0,
 }: {
   candles: Candle[];
   intraday?: boolean;
   /** 차트 높이(px). 전체화면에서 화면 높이만큼 키운다 */
   height?: number;
+  /**
+   * 크기가 바뀌었다는 **신호**. 값이 달라지면 폭을 다시 잰다.
+   *
+   * 폭은 `clientWidth` 로 읽으므로 **가로만 바뀐 경우**에는 높이가 그대로라
+   * 다시 잴 계기가 없다(창 크기가 바뀐 것도 아니라 resize 도 안 온다).
+   * 보드에서 칸을 옆으로만 늘리면 차트가 옛 폭 그대로 남는 자리가 그것이다.
+   * 크기를 아는 쪽이 이 숫자를 올려 주면 여기서는 다시 재기만 하면 된다.
+   */
+  sizeTick?: number;
   /** HTS처럼 기간 최고/최저를 선과 말풍선으로 표시 */
   showExtremes?: boolean;
   /** 툴팁 머리에 표시할 종목명·코드 (없으면 생략) */
@@ -375,7 +385,7 @@ export function CandleChart({
       if (w > 0) chartRef.current?.applyOptions({ width: w, height });
     }, 80);
     return () => clearTimeout(t);
-  }, [height]);
+  }, [height, sizeTick]);
 
   // ── 데이터 갱신 (차트는 그대로 두고 값만) ─────────────────────────────
   useEffect(() => {

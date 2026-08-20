@@ -48,6 +48,8 @@ export function ChartPanel({
   name,
   initialPeriod = "day",
   insights = true,
+  height,
+  sizeTick = 0,
 }: {
   code: string;
   /** 툴팁 머리에 쓸 종목명 */
@@ -55,6 +57,15 @@ export function ChartPanel({
   initialPeriod?: Period;
   /** 차트 위 판독 줄(이동평균·매물대)을 붙일지 */
   insights?: boolean;
+  /**
+   * 차트 높이(px). 안 주면 320.
+   *
+   * 보드처럼 **칸 크기를 사람이 정하는 자리**에서 넘긴다 — 캔버스는 칸이 커져도
+   * 스스로 커지지 않아서, 크기를 아는 쪽이 알려 주지 않으면 여백만 늘어난다.
+   */
+  height?: number;
+  /** 크기가 바뀌었다는 신호. 가로만 바뀐 경우를 잡으려고 있다 */
+  sizeTick?: number;
 }) {
   const { prefs } = useChartPrefs();
   const [period, setPeriod] = useState<Period>(initialPeriod);
@@ -182,7 +193,7 @@ export function ChartPanel({
   const compact = full && vh < COMPACT_VH;
   const chartHeight = full
     ? Math.max(200, vh - (compact ? CHROME_PX_COMPACT : CHROME_PX) - (fullInsights ? 150 : 0))
-    : 320;
+    : Math.max(140, height ?? 320);
 
   const toolbar = (
     <div className="period-toggle">
@@ -271,6 +282,7 @@ export function ChartPanel({
             height={chartHeight}
             name={name ? `${name} · ${VENUES.find((v) => v.key === venue)?.label}` : undefined}
             code={code}
+            sizeTick={sizeTick}
           />
         </div>
       )}

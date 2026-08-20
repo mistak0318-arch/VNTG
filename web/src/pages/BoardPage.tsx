@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, pickList, type RawRecord } from "../api";
 import { InvestorTrendTable } from "../components/InvestorTrendTable";
 import { ChartPanel } from "../components/ChartPanel";
@@ -8,6 +8,7 @@ import { ProgramFlowPanel } from "../components/ProgramFlowPanel";
 import { OpinionPanel } from "../components/OpinionPanel";
 import { SupplyDetailPanel } from "../components/SupplyDetailPanel";
 import { useStockFocus } from "../useStockFocus";
+import { BoardCell, type CellSize } from "../components/BoardCell";
 
 /**
  * 보드 — **다른 창에서 고른 종목을 따라 그린다.**
@@ -74,6 +75,29 @@ const BLOCKS = [
 
 type BlockKey = (typeof BLOCKS)[number]["key"];
 
+/*
+ * 칸 크기 — **기기마다 따로.**
+ * 27인치와 노트북이 같을 수 없으니 서버에 두면 한쪽에 맞춘 크기가 다른 쪽을 망친다.
+ */
+const SIZE_KEY = "vntg.board.sizes";
+
+function readSizes(): Record<string, CellSize> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SIZE_KEY) ?? "null") as unknown;
+    if (!raw || typeof raw !== "object") return {};
+    const out: Record<string, CellSize> = {};
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      const s = v as { w?: unknown; h?: unknown };
+      const w = Number(s?.w);
+      const h = Number(s?.h);
+      if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) out[k] = { w, h };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 const PICK_KEY = "vntg.board.blocks";
 const DEFAULT_PICK: BlockKey[] = ["chart", "investor", "supply", "opinion"];
 
@@ -92,6 +116,30 @@ function readPick(): BlockKey[] {
 export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: string) => void }) {
   const { on, toggle, focus } = useStockFocus();
   const [pick, setPick] = useState<BlockKey[]>(readPick);
+  const [sizes, setSizes] = useState<Record<string, CellSize>>(readSizes);
+
+  const setSize = useCallback((key: string, s: CellSize) => {
+    setSizes((prev) => {
+      const had = prev[key];
+      if (had && had.w === s.w && had.h === s.h) return prev;
+      const next = { ...prev, [key]: s };
+      try {
+        localStorage.setItem(SIZE_KEY, JSON.stringify(next));
+      } catch {
+        /* 저장 못 해도 이번 세션에는 그 크기로 본다 */
+      }
+      return next;
+    });
+  }, []);
+
+  const resetSizes = useCallback(() => {
+    setSizes({});
+    try {
+      localStorage.removeItem(SIZE_KEY);
+    } catch {
+      /* 무시 */
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -142,6 +190,15 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
               {b.label}
             </button>
           ))}
+          {Object.keys(sizes).length > 0 && (
+            <button className="filter-btn" onClick={resetSizes}>
+              크기 초기화
+            </button>
+          )}
+        </div>
+        <div className="table-note">
+          칸의 <b>오른쪽 아래 모서리</b>를 끌어 크기를 바꿉니다. 바꾼 크기는 이 기기에만
+          남습니다 — 모니터마다 알맞은 크기가 다릅니다.
         </div>
 
         {!on && (
@@ -163,22 +220,44 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
       {code && (
         <div className="board-grid">
           {BLOCKS.filter((b) => pick.includes(b.key)).map((b) => (
-            <section className={`card board-cell${b.wide ? " wide" : ""}`} key={b.key}>
-              <h2>{b.label}</h2>
-              {/*
-                `key={code}` 를 준다. 종목이 바뀌면 패널을 **새로 만든다** —
-                안 그러면 어떤 패널은 이전 종목의 값을 그대로 들고 있다가
-                자기 주기에 맞춰 뒤늦게 갱신되어, 잠깐 **다른 종목의 숫자**가 보인다.
-                보드는 여러 칸을 동시에 보는 화면이라 그 어긋남이 바로 눈에 띈다.
-              */}
-              {b.key === "chart" && <ChartPanel key={code} code={code} name={name} />}
-              {b.key === "orderbook" && <OrderBookPanel key={code} code={code} />}
-              {b.key === "investor" && <InvestorBlock key={code} code={code} />}
-              {b.key === "broker" && <BrokerFlowPanel key={code} code={code} />}
-              {b.key === "program" && <ProgramFlowPanel key={code} code={code} />}
-              {b.key === "supply" && <SupplyDetailPanel key={code} code={code} />}
-              {b.key === "opinion" && <OpinionPanel key={code} code={code} />}
-            </section>
+            <BoardCell
+              key={b.key}
+              title={b.label}
+              wide={b.wide}
+              size={sizes[b.key] ?? null}
+              onSize={(s) => setSize(b.key, s)}
+            >
+              {({ height, tick }) => (
+                <>
+                  {/*
+                    `key={code}` 를 준다. 종목이 바뀌면 패널을 **새로 만든다** —
+                    안 그러면 어떤 패널은 이전 종목의 값을 그대로 들고 있다가
+                    자기 주기에 맞춰 뒤늦게 갱신되어, 잠깐 **다른 종목의 숫자**가 보인다.
+                    보드는 여러 칸을 동시에 보는 화면이라 그 어긋남이 바로 눈에 띈다.
+                  */}
+                  {b.key === "chart" && (
+                    /*
+                      차트만 높이를 받아 간다. 표는 칸이 커지면 알아서 늘어나지만
+                      캔버스는 그렇지 않아서, 알려 주지 않으면 여백만 생긴다.
+                      판독 줄이 아래 붙으므로 그만큼 뺀다.
+                    */
+                    <ChartPanel
+                      key={code}
+                      code={code}
+                      name={name}
+                      height={Math.max(140, height - 150)}
+                      sizeTick={tick}
+                    />
+                  )}
+                  {b.key === "orderbook" && <OrderBookPanel key={code} code={code} />}
+                  {b.key === "investor" && <InvestorBlock key={code} code={code} />}
+                  {b.key === "broker" && <BrokerFlowPanel key={code} code={code} />}
+                  {b.key === "program" && <ProgramFlowPanel key={code} code={code} />}
+                  {b.key === "supply" && <SupplyDetailPanel key={code} code={code} />}
+                  {b.key === "opinion" && <OpinionPanel key={code} code={code} />}
+                </>
+              )}
+            </BoardCell>
           ))}
         </div>
       )}

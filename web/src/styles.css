@@ -5352,25 +5352,59 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .foot-btn { width: 100%; }
 
 /* ===== 보드 — 다른 창에서 고른 종목을 따라 그린다 =====
-   칸이 좁으면 차트가 못 읽히므로 최소 폭을 준다. 화면이 넓으면 저절로 여러 줄이 된다. */
+ *
+ * **그리드가 아니라 flex-wrap 이다.**
+ * 그리드는 트랙이 폭을 정하므로 칸마다 다른 크기를 줄 수가 없다 —
+ * 칸 하나를 넓히면 그 열에 있는 다른 칸까지 같이 넓어진다.
+ * 사람이 칸마다 크기를 정하는 화면이라 각자 폭을 갖는 쪽이 맞다.
+ */
 .board-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.9rem;
-  align-items: start;
+  align-items: flex-start;
 }
-/* 차트는 한 줄을 다 쓰는 편이 낫다 — 가로가 좁으면 봉이 뭉갠다 */
-.board-cell.wide { grid-column: 1 / -1; }
-.board-cell { margin-bottom: 0; }
-/* 한 칸이 너무 길어지면 옆 칸과 높이가 안 맞아 읽기 나쁘다 */
-.board-cell:not(.wide) { max-height: 30rem; overflow-y: auto; }
+
+.board-cell {
+  margin-bottom: 0;
+  /* 오른쪽 아래 모서리를 끌어 크기를 바꾼다 — 손잡이는 브라우저가 그려 준다 */
+  resize: both;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  /*
+   * 크기를 안 정했을 때의 기본값. 정하고 나면 인라인 width/height 가 이긴다.
+   *
+   * **높이를 반드시 정해 둔다.** 안 정하면 칸이 내용만큼 자라는데, 목표주가나
+   * 공매도표는 수백 줄이라 칸 하나가 화면 열 개 높이가 된다(2만6천 px 까지 갔다).
+   * 높이가 정해져야 안쪽(`flex: 1`)이 그 안에 갇히고 넘치는 건 스크롤로 넘어간다.
+   */
+  flex: 0 0 auto;
+  width: 26rem;
+  height: 22rem;
+}
+
+/* 차트는 한 줄을 다 쓰고 조금 높게 — 가로가 좁으면 봉이 뭉갠다 */
+.board-cell.wide { width: 100%; height: 30rem; }
+
+/* 제목은 고정, 안쪽만 늘어나고 넘치면 스크롤 */
+.board-cell > h2 { flex: none; }
+.board-cell-b { flex: 1; min-height: 0; overflow: auto; }
 
 @media (max-width: 720px) {
-  .board-grid { grid-template-columns: 1fr; }
-  .board-cell:not(.wide) { max-height: none; }
+  /*
+   * 폰에서는 크기 조절을 끈다. 손가락으로 모서리를 집기도 어렵고,
+   * 무엇보다 화면 폭이 정해져 있어 **넓힐 자리가 없다.**
+   */
+  .board-cell,
+  .board-cell.wide {
+    width: 100% !important;
+    height: auto !important;
+    resize: none;
+  }
+  .board-cell-b { overflow: visible; }
 }
 
-/* 연동이 켜져 있으면 눈에 띄게 — 보내는 창에서도 켜야 하는 걸 자꾸 잊는다 */
 .foot-btn.active { color: var(--green); font-weight: 600; }
 
 /* ------------------------------------------------------------------ */
