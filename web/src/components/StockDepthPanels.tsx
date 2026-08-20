@@ -159,6 +159,11 @@ function SummaryGrid({
   );
 }
 
+/**
+ * @deprecated **`OrderBookPanel` 로 옮겼다.** (2026-08-20)
+ * 종목 상세와 종목분석이 각자 호가를 그려서 같은 종목이 화면마다 다르게 보였다.
+ * 새 것에는 체결강도·회전율·KRX/NXT 고저가 들어 있다. 지금은 아무도 안 쓴다.
+ */
 export function QuoteBookPanel({ code }: { code: string }) {
   const { data, loading, error } = useFetch(() => api.quote(code), [code]);
   const snap = useFetch(() => api.snapshot(code), [code]);
@@ -291,6 +296,7 @@ function isForeign(name: string): boolean {
   return FOREIGN_BROKERS.some((f) => name.toUpperCase().includes(f.toUpperCase()));
 }
 
+/** @deprecated **`BrokerFlowPanel` 로 옮겼다.** 증감·시간대별이 들어 있다 */
 export function BrokerPanel({ code }: { code: string }) {
   const { data, loading, error } = useFetch(() => api.broker(code), [code]);
 
@@ -369,6 +375,7 @@ export function BrokerPanel({ code }: { code: string }) {
 
 // ---------------------------------------------------------------- 프로그램 매매
 
+/** @deprecated **`ProgramFlowPanel` 로 옮겼다.** 0선 위아래 그래프가 들어 있다 */
 export function StockProgramPanel({ code }: { code: string }) {
   const { data, loading, error } = useFetch(() => api.programTrend(code), [code]);
 

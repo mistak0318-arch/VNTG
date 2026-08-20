@@ -11,17 +11,17 @@ import { SignalPanel } from "../components/SignalLight";
 import { StockNotes } from "../components/StockNotes";
 import { SupplyMiniCharts } from "../components/SupplyDetailPanel";
 import {
-  BrokerPanel,
   CreditPanel,
   DailyDetailPanel,
-  QuoteBookPanel,
   QuoteSummary,
-  StockProgramPanel,
   StrengthPanel,
 } from "../components/StockDepthPanels";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { useLive } from "../useLive";
 import { useRecentStocks } from "../useRecentStocks";
+import { OrderBookPanel } from "../components/OrderBookPanel";
+import { BrokerFlowPanel } from "../components/BrokerFlowPanel";
+import { ProgramFlowPanel } from "../components/ProgramFlowPanel";
 
 /**
  * 개별종목분석 — 키움 앱에서 종목 하나를 파고들 때 쓰는 화면들을 한 페이지에 모았다.
@@ -237,10 +237,15 @@ export function StockAnalysisPage({
                 <SupplyMiniCharts code={stock.code} />
               </>
             )}
-            {tab === "quote" && <QuoteBookPanel code={stock.code} />}
-            {tab === "broker" && <BrokerPanel code={stock.code} />}
+            {/*
+              **종목 상세와 같은 컴포넌트를 쓴다.**
+              예전엔 이 페이지가 자기 호가·거래원을 따로 갖고 있어서, 같은 종목인데
+              화면마다 보이는 값이 달랐다. 고칠 때도 한쪽만 고쳐지기 쉬웠다.
+            */}
+            {tab === "quote" && <OrderBookPanel code={stock.code} />}
+            {tab === "broker" && <BrokerFlowPanel code={stock.code} />}
             {tab === "investor" && <InvestorTrendTable rows={investorRows} />}
-            {tab === "program" && <StockProgramPanel code={stock.code} />}
+            {tab === "program" && <ProgramFlowPanel code={stock.code} />}
             {tab === "credit" && <CreditPanel code={stock.code} />}
             {tab === "strength" && <StrengthPanel code={stock.code} />}
             {/*

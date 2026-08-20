@@ -17,7 +17,8 @@ import { OpinionPanel } from "../components/OpinionPanel";
 import { PriceHeader } from "../components/PriceHeader";
 import { SectorMoodPanel } from "../components/SectorMoodPanel";
 import { SignalPanel, useSignals, SignalDot } from "../components/SignalLight";
-import { BrokerPanel, QuoteBookPanel } from "../components/StockDepthPanels";
+import { OrderBookPanel } from "../components/OrderBookPanel";
+import { BrokerFlowPanel } from "../components/BrokerFlowPanel";
 import { StockNotes } from "../components/StockNotes";
 import { SupplyDetailPanel } from "../components/SupplyDetailPanel";
 import { TradeSizePanel } from "../components/TradeSizePanel";
@@ -655,9 +656,9 @@ function BlockBody({
     case "sector":
       return <SectorMoodPanel code={code} onSelectStock={onSelectStock} />;
     case "quote":
-      return <QuoteBookPanel code={code} />;
+      return <OrderBookPanel code={code} />;
     case "broker":
-      return <BrokerPanel code={code} />;
+      return <BrokerFlowPanel code={code} />;
     case "notes":
       return <StockNotes code={code} name={name} currentPrice={price} />;
     default:
