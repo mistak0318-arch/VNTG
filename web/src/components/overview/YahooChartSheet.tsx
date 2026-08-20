@@ -299,15 +299,11 @@ export function YahooChartSheet({
                 </>
               )}
             </div>
-            {view.dayRate !== null && (
-              <div className="yc-period">
-                이 구간 <b className={up ? "positive" : "negative"}>
-                  {up ? "+" : ""}
-                  {view.rate.toFixed(2)}%
-                </b>{" "}
-                <span className="pt-n">({view.firstT} 이후)</span>
-              </div>
-            )}
+            {/*
+              구간 등락률은 **안 띄운다.**
+              전일 대비 옆에 같이 있으면 두 숫자 중 어느 것을 보는지 매번 헷갈린다 —
+              부호가 갈리는 날이 흔해서 특히 그렇다. 알고 싶으면 기간을 바꿔 보면 된다.
+            */}
 
             {detail && !detail.error && <UsFigures d={detail} />}
 
@@ -386,8 +382,32 @@ function UsFigures({ d }: { d: UsDetail }) {
       v: `${fmtNum(d.volume ?? 0)} · 전일比 ${volRatio.toFixed(2)}배`,
       hint: "1배보다 크면 평소보다 붐빈다는 뜻입니다",
     });
-  if (d.marketCap !== null)
-    rows.push({ k: "시가총액", v: `${(d.marketCap / 1e9).toFixed(1)}십억 ${d.currency}` });
+  if (d.marketCap !== null) {
+    /*
+     * **원화로도 적는다.**
+     *
+     * 「3,900십억 USD」는 그 자체로는 크기가 안 잡힌다 — 국내 종목을 볼 때 쓰는 자가
+     * 「억원」이라, 같은 자로 바꿔 놔야 삼성전자와 견줄 수 있다.
+     * 환율은 원화 환산에 이미 쓰고 있는 값을 그대로 쓴다(없으면 괄호를 안 붙인다).
+     */
+    const won = d.fxRate ? (d.marketCap * d.fxRate) / 1e8 : null;
+    /*
+     * 조 단위면 조로 적는다.
+     * 엔비디아를 억원으로 적으면 「73,803,074억원」이 되는데, 자릿수가 여덟 개라
+     * **읽는 순간 크기가 안 잡힌다.** 억으로 통일하는 것보다 읽히는 게 먼저다.
+     */
+    const wonText =
+      won === null
+        ? ""
+        : won >= 10_000
+          ? ` (약 ${fmtNum(Math.round(won / 10_000))}조원)`
+          : ` (약 ${fmtNum(Math.round(won))}억원)`;
+    rows.push({
+      k: "시가총액",
+      v: `${(d.marketCap / 1e9).toFixed(1)}십억 ${d.currency}${wonText}`,
+      hint: won === null ? undefined : "국내 종목과 견주기 쉽게 원화로도 적었습니다",
+    });
+  }
   if (d.per !== null || d.pbr !== null)
     rows.push({ k: "PER / PBR", v: `${d.per ?? "-"} / ${d.pbr ?? "-"}` });
   if (d.eps !== null || d.bps !== null)

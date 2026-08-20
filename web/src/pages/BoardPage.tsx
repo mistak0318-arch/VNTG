@@ -7,6 +7,14 @@ import { BrokerFlowPanel } from "../components/BrokerFlowPanel";
 import { ProgramFlowPanel } from "../components/ProgramFlowPanel";
 import { OpinionPanel } from "../components/OpinionPanel";
 import { SupplyDetailPanel } from "../components/SupplyDetailPanel";
+import { SignalPanel } from "../components/SignalLight";
+import { ChartInsights } from "../components/ChartInsights";
+import { IntradayFlow } from "../components/IntradayPanels";
+import { NewsList, DisclosureList } from "../components/NewsDisclosurePanel";
+import { FinancePanel } from "../components/FinancePanel";
+import { CompanySnapshot } from "../components/CompanySnapshot";
+import { SectorMoodPanel } from "../components/SectorMoodPanel";
+import { StockNotes } from "../components/StockNotes";
 import { useStockFocus } from "../useStockFocus";
 import { BoardCell, type CellSize } from "../components/BoardCell";
 
@@ -363,20 +371,59 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
 
   const code = focus?.code ?? "";
   const name = focus?.name ?? "";
+  /* 기업분석·장중 수급이 쓴다. 한 번 받아 두 칸이 나눠 쓴다 */
+  const info = useStockInfo(code);
+
+  /*
+   * 설정 줄은 **접어 둘 수 있다.**
+   *
+   * 한 번 맞추고 나면 다시 볼 일이 거의 없는데, 펼친 채로 두면 화면 위쪽 두세 줄을
+   * 늘 잡아먹는다. 보드는 **본문을 넓게 보려고 만든 화면**이라 그 자리가 아깝다.
+   * 접힌 상태를 기억해서 다음에 들어와도 넓은 채로 시작한다.
+   */
+  const [cfgOpen, setCfgOpen] = useState(() => {
+    try {
+      return localStorage.getItem("vntg.board.cfgOpen") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const toggleCfg = useCallback(() => {
+    setCfgOpen((v) => {
+      try {
+        localStorage.setItem("vntg.board.cfgOpen", v ? "0" : "1");
+      } catch {
+        /* 무시 */
+      }
+      return !v;
+    });
+  }, []);
 
   return (
     <div className="board">
-      <section className="card">
-        <h2>
-          보드
-          {code && (
-            <span className="pt-n">
-              {" "}
-              지금 {name} ({code})
-            </span>
-          )}
+      <section className="card board-cfg">
+        {/*
+          접었을 때도 **지금 무슨 종목인지와 연동 상태**는 남는다.
+          그 둘은 화면을 보는 내내 알아야 하는 값이라 설정이 아니다.
+        */}
+        <h2 className="board-cfg-h">
+          <span>
+            보드
+            {code && (
+              <span className="pt-n">
+                {" "}
+                지금 {name} ({code})
+              </span>
+            )}
+            {!on && <span className="board-off"> 연동 꺼짐</span>}
+          </span>
+          <button className="filter-btn board-cfg-btn" onClick={toggleCfg}>
+            {cfgOpen ? "설정 접기" : "⚙ 설정"}
+          </button>
         </h2>
 
+        {cfgOpen && (
+        <>
         <div className="filter-row">
           <label className="st-cfg-chk">
             <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} />
@@ -443,7 +490,10 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
           안 움직입니다. 구성은 <b>틀만</b> 담습니다(종목은 안 담습니다). 모두 이 기기에만
           남습니다.
         </div>
+        </>
+        )}
 
+        {/* 아래 둘은 접어도 남는다 — 「왜 아무것도 안 뜨나」의 답이라 설정이 아니다 */}
         {!on && (
           <div className="alert-note">
             연동을 켜세요. <b>보내는 창에서도</b> 켜야 합니다 — 메뉴 맨 아래 📡 버튼입니다.
@@ -504,12 +554,41 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                       sizeTick={tick}
                     />
                   )}
+                  {b.key === "insights" && <ChartInsights key={code} code={code} />}
+                  {b.key === "signal" && (
+                    <SignalPanel key={code} code={code} onSelectStock={onSelectStock} />
+                  )}
                   {b.key === "orderbook" && <OrderBookPanel key={code} code={code} />}
+                  {b.key === "intraday" && (
+                    <IntradayFlow
+                      key={code}
+                      code={code}
+                      basePrice={Math.abs(Number(info?.base_pric)) || 0}
+                    />
+                  )}
                   {b.key === "investor" && <InvestorBlock key={code} code={code} />}
                   {b.key === "broker" && <BrokerFlowPanel key={code} code={code} />}
                   {b.key === "program" && <ProgramFlowPanel key={code} code={code} />}
                   {b.key === "supply" && <SupplyDetailPanel key={code} code={code} />}
                   {b.key === "opinion" && <OpinionPanel key={code} code={code} />}
+                  {/* 뉴스는 종목명으로 찾는다 — 코드로는 기사 검색이 안 된다 */}
+                  {b.key === "news" && <NewsList key={code} query={name || code} />}
+                  {b.key === "disclosure" && <DisclosureList key={code} code={code} />}
+                  {b.key === "finance" && <FinancePanel key={code} code={code} />}
+                  {b.key === "summary" && (
+                    <CompanySnapshot key={code} info={info} returns={null} />
+                  )}
+                  {b.key === "sector" && (
+                    <SectorMoodPanel key={code} code={code} onSelectStock={onSelectStock} />
+                  )}
+                  {b.key === "notes" && (
+                    <StockNotes
+                      key={code}
+                      code={code}
+                      name={name}
+                      currentPrice={Math.abs(Number(info?.cur_prc)) || undefined}
+                    />
+                  )}
                 </>
               )}
             </BoardCell>

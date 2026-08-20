@@ -5536,3 +5536,16 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .ma-badge > span { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ma-total { font-weight: 700; font-size: 1.08em; }
 .ma-today { font-size: 0.88em; opacity: 0.8; }
+
+/* 보드 설정 줄 — 접으면 종목·연동 상태만 남는다 */
+.board-cfg { margin-bottom: 0.9rem; }
+.board-cfg-h { display: flex; align-items: baseline; gap: 0.6rem; }
+.board-cfg-h > span:first-child { flex: 1; min-width: 0; }
+.board-cfg-btn { flex: none; }
+.board-off { color: var(--red); font-size: 0.8rem; }
+
+/* 해외 관심종목 MAP — 그룹마다 한 덩어리 */
+.uwm-group + .uwm-group { margin-top: 0.7rem; }
+.uwm-group-h { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.35rem; }
+.uwm-group-nm { font-size: 0.8rem; font-weight: 700; }
+.uwm-group-rt { font-size: 0.8rem; font-variant-numeric: tabular-nums; }

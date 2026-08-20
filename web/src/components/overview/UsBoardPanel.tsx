@@ -248,11 +248,113 @@ export function UsBoardPanel() {
         </div>
       </section>
 
+      {/* ---------------- 관심종목 MAP ---------------- */}
+      <UsWatchMap onOpen={(symbol, label) => setChart({ kind: "usStock", symbol, label })} />
+
       {/* ---------------- 관심종목 ---------------- */}
       <UsBoardWatch onOpen={(symbol, label) => setChart({ kind: "usStock", symbol, label })} />
 
       {chart && <YahooChartSheet target={chart} onClose={() => setChart(null)} />}
     </div>
+  );
+}
+
+/**
+ * 관심종목 MAP — **한눈에 어디가 도는지.**
+ *
+ * ## 왜 목록 위에 따로 두나
+ *
+ * 아래 목록은 종목마다 한 줄이라 스무 개가 넘으면 훑는 데 시간이 걸린다.
+ * 밤에 미국장을 볼 때 알고 싶은 건 「어느 그룹이 도는가」와 「어디가 튀는가」인데,
+ * 그건 숫자를 읽는 게 아니라 **색 덩어리를 보는 일**이다.
+ *
+ * ## 국내 MAP 과 같은 타일·같은 색
+ *
+ * 색 규칙을 따로 만들면 국내 화면과 나란히 못 견준다. `map-tile` 을 그대로 쓰고
+ * 색도 같은 식(5% 를 최대 강도로)으로 칠한다.
+ *
+ * ## 크기는 다 같다
+ *
+ * 국내 테마 MAP 은 시가총액으로 크기를 줄 수 있지만 **해외는 시가총액을 안 받아온다.**
+ * 없는 걸 있는 척 크기로 만들면 거짓말이 되므로 칸을 똑같이 두고 색만 쓴다.
+ */
+function tileStyle(rate: number | null): React.CSSProperties {
+  if (rate === null || !Number.isFinite(rate)) return { background: "rgba(139,150,165,.12)" };
+  const capped = Math.min(Math.abs(rate), 5) / 5; // 5% 이상은 최대 강도
+  const alpha = 0.12 + capped * 0.55;
+  if (rate > 0) return { background: `rgba(240, 85, 95, ${alpha})` };
+  if (rate < 0) return { background: `rgba(74, 139, 245, ${alpha})` };
+  return { background: "rgba(139, 150, 165, 0.12)" };
+}
+
+function UsWatchMap({ onOpen }: { onOpen: (symbol: string, label: string) => void }) {
+  const [groups, setGroups] = useState<UsWatchGroup[]>([]);
+  const [at, setAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      api
+        .usWatch()
+        .then((r) => {
+          if (!alive) return;
+          setGroups(r.groups);
+          setAt(Date.now());
+        })
+        .catch(() => undefined);
+    void load();
+    // 아래 목록과 같은 주기 — 둘이 다른 값을 보이면 안 된다
+    const t = setInterval(load, 20_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  const filled = groups.filter((g) => g.stocks.length > 0);
+  if (filled.length === 0) return null;
+
+  return (
+    <section className="ov-card">
+      <div className="ov-card-h">
+        <span className="ov-card-t">관심종목 MAP</span>
+        <span className="ov-card-sub">
+          {at ? new Date(at).toLocaleTimeString("ko-KR", { hour12: false }) : ""}
+        </span>
+      </div>
+      <div className="ov-card-b">
+        {filled.map((g) => (
+          <div className="uwm-group" key={g.id}>
+            <div className="uwm-group-h">
+              <span className="uwm-group-nm">{g.name}</span>
+              <span className={`uwm-group-rt ${cls(g.changeRate)}`}>{pct(g.changeRate)}</span>
+              <span className="pt-n">{g.stocks.length}종목</span>
+            </div>
+            <div className="map-grid">
+              {g.stocks.map((s) => (
+                <button
+                  key={s.symbol}
+                  className="map-tile"
+                  style={tileStyle(s.changeRate)}
+                  onClick={() => onOpen(s.symbol, s.name || s.symbol)}
+                  title={`${s.name} · ${s.symbol}`}
+                >
+                  <span className="map-tile-name">{s.symbol}</span>
+                  <span className="map-tile-pct num">{pct(s.changeRate)}</span>
+                  {/* 이름은 아래 작게 — 티커가 먼저 눈에 들어와야 찾기 빠르다 */}
+                  <span className="map-tile-sub">{s.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        <div className="table-note">
+          칸 크기는 <b>전부 같습니다</b> — 해외는 시가총액을 받아오지 않아 크기로 무게를
+          줄 수 없습니다. 색만 등락률입니다(±5%에서 가장 진합니다). 국내 <b>테마/업종 MAP</b>과
+          같은 색 규칙이라 나란히 견줄 수 있습니다.
+        </div>
+      </div>
+    </section>
   );
 }
 
