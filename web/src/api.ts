@@ -124,6 +124,8 @@ export const api = {
     deleteJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings/${code}`),
   /** 호가창 — 종목 상세·종목분석이 같은 것을 쓴다 */
   /** 거래원 — 부를 때마다 시계열이 한 점씩 쌓인다 */
+  /** 종목별 프로그램매매 (일자별) — 단위 백만원 */
+  programTradesByStock: (code: string) => getJson<RawRecord>(`/api/market/program/${code}`),
   brokerFlow: (code: string) => getJson<BrokerFlow>(`/api/market/broker-flow/${code}`),
   orderBook: (code: string) => getJson<OrderBook>(`/api/market/orderbook/${code}`),
   stockInfo: (code: string) => getJson(`/api/market/info/${code}`),

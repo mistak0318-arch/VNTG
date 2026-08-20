@@ -5267,3 +5267,14 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .bf-pt-t { color: var(--muted); }
 .bf-pt-bar { position: relative; height: 0.9rem; }
 .bf-pt-v { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* 종목별 프로그램 매매 — 0선 위아래로 갈라 그린다 */
+.pf-chart { display: flex; gap: 2px; align-items: flex-end; height: 11rem; margin: 0.6rem 0; overflow-x: auto; }
+.pf-col { display: flex; flex-direction: column; align-items: center; min-width: 1.6rem; flex: 1; height: 100%; }
+.pf-up { flex: 1; display: flex; align-items: flex-end; width: 100%; }
+.pf-dn { flex: 1; display: flex; align-items: flex-start; width: 100%; }
+.pf-zero { height: 1px; width: 100%; background: var(--border); }
+.pf-bar { width: 70%; margin: 0 auto; border-radius: 1px; }
+.pf-bar.buy { background: var(--red); }
+.pf-bar.sell { background: var(--blue); }
+.pf-x { font-size: 0.65rem; color: var(--muted); margin-top: 0.15rem; white-space: nowrap; }

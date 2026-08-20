@@ -18,6 +18,7 @@ import { RawJson } from "./RawJson";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { OrderBookPanel } from "./OrderBookPanel";
 import { BrokerFlowPanel } from "./BrokerFlowPanel";
+import { ProgramFlowPanel } from "./ProgramFlowPanel";
 import { useCardOrder } from "../useCardOrder";
 
 const DAILY_LIST_KEYS = ["stk_dt_pole_chart_qry"];
@@ -46,7 +47,7 @@ const CUR_PRICE_KEYS = ["cur_prc"];
 const INVESTOR_LIST_KEYS = ["stk_invsr_orgn_chart"];
 
 /** 종목 상세 상단 가로 탭. 기능이 늘어나면 여기에 항목을 추가한다. */
-type DetailTab = "summary" | "opinion" | "notes" | "sector" | "finance" | "chart" | "investor" | "supply" | "feed" | "raw" | "orderbook" | "broker";
+type DetailTab = "summary" | "opinion" | "notes" | "sector" | "finance" | "chart" | "investor" | "supply" | "feed" | "raw" | "orderbook" | "broker" | "program";
 
 /**
  * 탭 순서는 "실제 매매에 바로 쓰는 것"이 앞이다.
@@ -60,6 +61,7 @@ const DETAIL_TABS: { key: DetailTab; label: string }[] = [
   { key: "chart", label: "종합" },
   { key: "orderbook", label: "호가" },
   { key: "broker", label: "거래원" },
+  { key: "program", label: "프로그램" },
   { key: "investor", label: "투자자 수급" },
   { key: "opinion", label: "목표주가" },
   { key: "supply", label: "외국인·공매도·대차" },
@@ -291,6 +293,7 @@ export function StockDetail({
 
             {detailTab === "orderbook" && <OrderBookPanel code={code} />}
             {detailTab === "broker" && <BrokerFlowPanel code={code} />}
+            {detailTab === "program" && <ProgramFlowPanel code={code} />}
 
             {detailTab === "summary" && <CompanySnapshot info={info} returns={returns} />}
 
