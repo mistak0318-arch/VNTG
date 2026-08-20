@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { marketPulse, pulseBrief } from "../marketPulse.js";
 import { getLeaderConfig, leaderScan, saveLeaderConfig } from "../leaderScan.js";
+import { leaderTrack } from "../leaderTrack.js";
 
 /**
  * 시장 맥박.
@@ -38,6 +39,18 @@ export function createPulseRouter(client: KiwoomClient): Router {
   router.get("/leaders", async (req, res, next) => {
     try {
       res.json(await leaderScan(client, { withNews: req.query.news !== "0" }));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 성적 — **`/leaders/config` 보다 위든 아래든 상관없지만 `/leaders` 뒤여야 한다.**
+   * 종목마다 일봉을 받아 몇 십 초 걸리므로 화면이 눌렀을 때만 부른다.
+   */
+  router.get("/leaders/track", async (_req, res, next) => {
+    try {
+      res.json(await leaderTrack(client));
     } catch (err) {
       next(err);
     }

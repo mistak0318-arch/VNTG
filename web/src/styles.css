@@ -5117,3 +5117,11 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   border: 1px solid var(--border);
   font-size: 0.82rem;
 }
+
+/* 탐색기 성적 — 「그때 뽑은 게 그 뒤 어떻게 됐나」 */
+.ls-track-h {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}

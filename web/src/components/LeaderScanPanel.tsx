@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, fmtNum, signClass, type LeaderConfig, type LeaderScan } from "../api";
+import {
+  api,
+  fmtNum,
+  signClass,
+  type LeaderConfig,
+  type LeaderGroupStat,
+  type LeaderScan,
+  type LeaderTrackResult,
+} from "../api";
 
 /**
  * 주도주 탐색기 — **오늘 시장이 어디에 반응하는가.**
@@ -317,6 +325,211 @@ export function LeaderScanPanel({
           </div>
         </section>
       )}
+
+      <LeaderTrackSection onSelectStock={onSelectStock} />
+    </div>
+  );
+}
+
+/**
+ * 성적 — **「그때 뽑은 게 그 뒤 어떻게 됐나」.**
+ *
+ * 고르는 것만으로는 눈이 안 자란다. 골라 놓고 결과를 안 보면 **맞은 것만 기억**한다.
+ * 진짜 물음은 「탐색기가 맞나」가 아니라 **「나는 어떤 종류의 신호를 잘 고르나」**다.
+ */
+function LeaderTrackSection({
+  onSelectStock,
+}: {
+  onSelectStock?: (code: string, name: string) => void;
+}) {
+  const [data, setData] = useState<LeaderTrackResult | null>(null);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await api.leaderTrack());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "불러오지 못했습니다");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /*
+   * 열었을 때만 부른다. 종목마다 일봉을 받아야 해서 몇 십 초 걸린다 —
+   * 탐색하러 온 날에도 매번 기다리게 하면 안 된다.
+   */
+  useEffect(() => {
+    if (open && !data) void load();
+  }, [open, data, load]);
+
+  return (
+    <section className="card">
+      <h2 className="ls-track-h">
+        성적 — 그때 뽑은 게 그 뒤 어떻게 됐나
+        <button className="filter-btn" onClick={() => setOpen((v) => !v)}>
+          {open ? "접기" : "펼치기"}
+        </button>
+        {open && (
+          <button className="filter-btn" onClick={() => void load()} disabled={loading}>
+            {loading ? "…" : "↻"}
+          </button>
+        )}
+      </h2>
+
+      {!open ? (
+        <div className="page-note">
+          탐색기가 매일 뽑아 둔 것을 <b>1·5·20·60거래일</b>까지 따라갑니다. 종목마다 일봉을
+          받아야 해서 눌렀을 때만 조회합니다.
+        </div>
+      ) : (
+        <>
+          {loading && !data && <div className="empty">일봉을 받는 중… (종목당 약 0.3초)</div>}
+          {error && <div className="error-banner">{error}</div>}
+          {data && <div className="alert-note">{data.note}</div>}
+
+          {data && data.overall.n > 0 && (
+            <>
+              <h3 className="section-heading">어떤 신호를 잘 고르나</h3>
+              <StatTable rows={data.byTag} label="이유" />
+              <div className="table-note">
+                <b>이게 이 화면의 본론입니다.</b> 신고가로 걸린 것과 거래량 급증으로 걸린 것은
+                성격이 완전히 다릅니다 — 어느 쪽이 내 손에 맞는지는 세어 봐야 압니다. 한 종목이
+                태그를 여럿 달면 <b>각 태그에 모두</b> 들어갑니다.
+              </div>
+
+              {data.bySector.length > 0 && (
+                <>
+                  <h3 className="section-heading">섹터는 이어졌나</h3>
+                  <StatTable rows={data.bySector} label="섹터" />
+                  <div className="table-note">
+                    그때 강했던 섹터가 <b>그 뒤에도 강했는지</b>가 「주도 섹터」와 「하루 반짝」을
+                    가릅니다.
+                  </div>
+                </>
+              )}
+
+              <h3 className="section-heading">전체</h3>
+              <StatTable rows={[data.overall]} label="구분" />
+            </>
+          )}
+
+          {data && data.picks.length > 0 && (
+            <>
+              <h3 className="section-heading">뽑힌 것들 ({data.picks.length})</h3>
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th className="sticky-col">종목</th>
+                      <th>편입일</th>
+                      <th>편입가</th>
+                      <th>이유</th>
+                      {[1, 5, 20, 60].map((d) => (
+                        <th key={d}>{d}일</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.picks.slice(0, 200).map((p) => (
+                      <tr
+                        className="clickable-row"
+                        key={`${p.date}-${p.code}`}
+                        onClick={() => onSelectStock?.(p.code, p.name)}
+                      >
+                        <td className="sticky-col">{p.name}</td>
+                        <td>{p.date.slice(5)}</td>
+                        <td className="num">{fmtNum(p.price)}</td>
+                        <td>
+                          {p.tags.map((g) => (
+                            <span className="ls-tag" key={g}>
+                              {g}
+                            </span>
+                          ))}
+                        </td>
+                        {[1, 5, 20, 60].map((d) => {
+                          const o = p.outcomes.find((x) => x.days === d);
+                          return (
+                            <td className={`num ${o ? signClass(o.rate) : ""}`} key={d}>
+                              {o ? `${o.rate > 0 ? "+" : ""}${o.rate.toFixed(2)}%` : "-"}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="table-note">
+                빈 칸은 <b>아직 그만큼 지나지 않은 것</b>입니다. 결과는 편입 <b>다음</b> 거래일부터
+                셉니다.
+                {data.failed > 0 && ` · ${data.failed}종목은 일봉을 받지 못했습니다.`}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** 태그·섹터·전체가 같은 모양이라 표 하나로 그린다 */
+function StatTable({ rows, label }: { rows: LeaderGroupStat[]; label: string }) {
+  if (rows.length === 0) return <div className="page-note">아직 셀 것이 없습니다.</div>;
+  return (
+    <div className="data-table-wrap">
+      <table className="data-table num">
+        <thead>
+          <tr>
+            <th className="sticky-col">{label}</th>
+            <th>기간</th>
+            <th>건수</th>
+            <th title="편입가보다 오른 비율">승률</th>
+            <th>평균</th>
+            <th title="몇 종목이 크게 튀면 평균이 거짓말을 한다">중앙값</th>
+            <th>최고</th>
+            <th>최저</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((g) =>
+            g.byHorizon.map((h, i) => (
+              <tr key={`${g.key}-${h.days}`} className={h.n === 0 ? "st-empty" : ""}>
+                {i === 0 && (
+                  <td className="sticky-col" rowSpan={g.byHorizon.length}>
+                    <b>{g.key}</b>
+                  </td>
+                )}
+                <td>{h.days}일</td>
+                <td>{h.n}</td>
+                <td className={h.n === 0 ? "" : h.winRate >= 50 ? "positive" : "negative"}>
+                  {h.n === 0 ? "-" : `${h.winRate.toFixed(0)}%`}
+                </td>
+                <td className={h.n === 0 ? "" : signClass(h.avg)}>
+                  {h.n === 0 ? "-" : `${h.avg > 0 ? "+" : ""}${h.avg.toFixed(2)}%`}
+                </td>
+                <td className={h.n === 0 ? "" : signClass(h.median)}>
+                  {h.n === 0 ? "-" : `${h.median > 0 ? "+" : ""}${h.median.toFixed(2)}%`}
+                </td>
+                {/*
+                  최고가 음수일 수 있다 — 그 기간에 오른 게 하나도 없으면 그렇다.
+                  거기에 「+」를 붙이면 `+-5.37%` 가 된다. 부호는 값이 정하게 둔다.
+                */}
+                <td className={h.n === 0 ? "" : signClass(h.best)}>
+                  {h.n === 0 ? "-" : `${h.best > 0 ? "+" : ""}${h.best.toFixed(2)}%`}
+                </td>
+                <td className={h.n === 0 ? "" : signClass(h.worst)}>
+                  {h.n === 0 ? "-" : `${h.worst > 0 ? "+" : ""}${h.worst.toFixed(2)}%`}
+                </td>
+              </tr>
+            )),
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }

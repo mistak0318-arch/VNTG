@@ -407,6 +407,8 @@ export const api = {
   /** 주도주 탐색기. 뉴스는 섹터마다 네이버를 부르므로 원할 때만 켠다 */
   leaderScan: (withNews = false) =>
     getJson<LeaderScan>(`/api/pulse/leaders${withNews ? "" : "?news=0"}`),
+  /** 탐색기 성적 — 종목마다 일봉을 받아 몇 십 초 걸린다 */
+  leaderTrack: () => getJson<LeaderTrackResult>("/api/pulse/leaders/track"),
   leaderConfig: () => getJson<LeaderConfig>("/api/pulse/leaders/config"),
   leaderConfigSave: (c: LeaderConfig) => putJson<LeaderConfig>("/api/pulse/leaders/config", c),
   pulse: (force = false) => getJson<MarketPulse>(`/api/pulse${force ? "?force=1" : ""}`),
@@ -2313,5 +2315,43 @@ export interface LeaderScan {
   stocks: LeaderStock[];
   scanned: number;
   belowThreshold: number;
+  note: string;
+}
+
+
+/** 주도주 탐색기 성적 */
+export interface LeaderGroupStat {
+  key: string;
+  n: number;
+  byHorizon: {
+    days: number;
+    n: number;
+    winRate: number;
+    avg: number;
+    median: number;
+    best: number;
+    worst: number;
+  }[];
+}
+
+export interface LeaderTrackResult {
+  picks: {
+    date: string;
+    code: string;
+    name: string;
+    sector: string;
+    price: number;
+    changeRate: number;
+    tradeValue: number;
+    tags: string[];
+    outcomes: { days: number; price: number; rate: number }[];
+  }[];
+  /** 태그별 — 내가 어떤 신호를 잘 고르는지 */
+  byTag: LeaderGroupStat[];
+  bySector: LeaderGroupStat[];
+  overall: LeaderGroupStat;
+  days: number;
+  codes: number;
+  failed: number;
   note: string;
 }
