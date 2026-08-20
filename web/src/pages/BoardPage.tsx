@@ -63,14 +63,60 @@ function InvestorBlock({ code }: { code: string }) {
   return <InvestorTrendTable rows={rows} />;
 }
 
+/**
+ * 종목 기본정보를 받아 두는 껍데기.
+ *
+ * 「기업분석」과 「장중 수급」은 `code` 만으로는 못 그린다 — 시가총액·기준가 같은
+ * 값이 필요한데 그건 종목 상세가 따로 받아 두는 것이다.
+ * 두 칸이 각자 받으면 같은 걸 두 번 받게 되므로 여기서 한 번 받아 나눠 준다.
+ */
+function useStockInfo(code: string): RawRecord | null {
+  const [info, setInfo] = useState<RawRecord | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setInfo(null);
+    if (!code) return;
+    api
+      .stockInfo(code)
+      .then((r) => {
+        if (alive) setInfo(r as RawRecord);
+      })
+      .catch(() => {
+        if (alive) setInfo(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [code]);
+  return info;
+}
+
+/**
+ * 보드에 띄울 수 있는 칸.
+ *
+ * **종목 상세에서 볼 수 있는 것은 다 있어야 한다.** 보드를 띄워 두고 다른 창에서
+ * 종목만 바꿔 가며 보는 자리인데, 여기서 못 보는 게 있으면 결국 상세 창을 또 열게 되고
+ * 그러면 보드를 쓸 이유가 없어진다.
+ *
+ * 순서는 **자주 보는 것부터**다 — 처음 켰을 때 위에서부터 고르게 된다.
+ */
 const BLOCKS = [
   { key: "chart", label: "차트", wide: true },
+  { key: "insights", label: "이동평균·매물대", wide: false },
+  { key: "signal", label: "신호등", wide: false },
   { key: "orderbook", label: "호가", wide: false },
+  { key: "intraday", label: "장중 수급", wide: false },
   { key: "investor", label: "투자자 수급", wide: false },
   { key: "broker", label: "거래원", wide: false },
   { key: "program", label: "프로그램", wide: false },
   { key: "supply", label: "공매도·대차", wide: false },
   { key: "opinion", label: "목표주가", wide: false },
+  { key: "news", label: "뉴스", wide: false },
+  { key: "disclosure", label: "공시", wide: false },
+  { key: "finance", label: "재무", wide: false },
+  { key: "summary", label: "기업분석", wide: false },
+  { key: "sector", label: "업종·테마", wide: false },
+  { key: "notes", label: "메모", wide: false },
 ] as const;
 
 type BlockKey = (typeof BLOCKS)[number]["key"];
