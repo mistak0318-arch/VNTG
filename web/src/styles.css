@@ -5574,8 +5574,9 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .bp-row + .bp-row { border-top: 1px solid var(--border); }
 .bp-ord { display: flex; flex-direction: column; gap: 1px; }
 .bp-ord .gt-move { line-height: 1; padding: 0 0.25rem; font-size: 0.65rem; }
-.bp-name { flex: 1; min-width: 6rem; font-size: 0.85rem; padding: 0.25rem 0.4rem; }
-.bp-meta { font-size: 0.75rem; color: var(--muted); flex: none; }
+/* 이름칸은 짧게, 남는 자리는 무엇이 들었는지 적는 데 쓴다 */
+.bp-name { flex: none; width: 9rem; font-size: 0.85rem; padding: 0.25rem 0.4rem; }
+.bp-meta { flex: 1; min-width: 0; font-size: 0.75rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ===== 투자자 수급표 — 묶음과 굵기로 갈라 읽는다 ===== */
 /* 묶음이 바뀌는 첫 칸에 굵은 선. 이게 구분자다 */

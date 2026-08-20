@@ -15,6 +15,10 @@ import { FinancePanel } from "../components/FinancePanel";
 import { CompanySnapshot } from "../components/CompanySnapshot";
 import { SectorMoodPanel } from "../components/SectorMoodPanel";
 import { StockNotes } from "../components/StockNotes";
+import { BreadthPanel } from "../components/BreadthPanel";
+import { MarketSignalPanel } from "../components/MarketSignalPanel";
+import { MarketPulsePanel } from "../components/MarketPulsePanel";
+import { SectorFlowPanel } from "../components/SectorFlowPanel";
 import { useStockFocus } from "../useStockFocus";
 import { BoardCell, type CellSize } from "../components/BoardCell";
 
@@ -109,6 +113,18 @@ function useStockInfo(code: string): RawRecord | null {
  * 순서는 **자주 보는 것부터**다 — 처음 켰을 때 위에서부터 고르게 된다.
  */
 const BLOCKS = [
+  /*
+   * **종목과 무관한 칸**(`market: true`).
+   *
+   * 여기가 없어서 보드로 HTS 1·3번 모니터를 못 흉내 냈다 — 지수판·시장 수급 같은 건
+   * 종목이 바뀌어도 안 바뀌는 것들인데, 모든 칸이 종목에 매여 있었다.
+   * 연동이 꺼져 있거나 종목이 아직 안 왔을 때도 **이 칸들은 그려진다.**
+   */
+  { key: "mktSignal", label: "시장 신호등", wide: false },
+  { key: "mktPulse", label: "시장 맥박", wide: false },
+  { key: "mktBreadth", label: "상승·하락 종목수", wide: false },
+  { key: "mktSector", label: "업종 수급", wide: true },
+
   { key: "chart", label: "차트", wide: true },
   { key: "insights", label: "이동평균·매물대", wide: false },
   { key: "signal", label: "신호등", wide: false },
@@ -128,6 +144,15 @@ const BLOCKS = [
 ] as const;
 
 type BlockKey = (typeof BLOCKS)[number]["key"];
+
+/**
+ * 종목과 무관한 칸.
+ *
+ * 블록 객체에 표시를 달면 `as const` 때문에 어떤 항목에만 그 속성이 생겨서
+ * 타입이 갈린다. 키 목록으로 두는 편이 단순하다.
+ */
+const MARKET_KEYS = new Set<string>(["mktSignal", "mktPulse", "mktBreadth", "mktSector"]);
+const isMarket = (k: string) => MARKET_KEYS.has(k);
 
 /*
  * 칸 크기 — **기기마다 따로.**
@@ -201,16 +226,16 @@ const PRESET_KEY = "vntg.board.presets";
  * 창을 셋 띄우고 각각 다른 구성을 불러오면 그 배치가 재현된다.
  * 종목을 고르는 창에서 누르면 「종목 파기」 창만 따라오고 나머지는 안 흔들린다.
  *
- * ⚠️ **아직 반쪽이다.** HTS 1·3번 모니터의 핵심은 지수판·시장 투자자동향·
- * 관심종목 시세판처럼 **종목과 무관한 칸**인데, 보드는 지금 모든 칸이 종목에 매여 있다.
- * 그 칸들이 생기기 전까지 K1·K3 은 있는 것으로 채운 임시 배치다.
+ * 시장 신호등·맥박·상승하락 종목수·업종 수급은 **종목과 무관한 칸**이라
+ * 연동이 꺼져 있어도 그려진다 — HTS 1번 모니터가 하던 일이 그것이다.
+ * (아직 없는 것: 지수판 여러 장, 관심종목 다종목 시세판)
  *
  * **한 번 깔고 나면 사용자 것**이다 — 이름도 순서도 개수도 여기서 정하지 않는다.
  */
 const SEED: Preset[] = [
-  { id: "k1", name: "K1 시장 보기", pick: ["chart", "insights", "news", "disclosure", "sector"], sizes: {}, pins: [] },
+  { id: "k1", name: "K1 시장 보기", pick: ["mktSignal", "mktPulse", "mktBreadth", "mktSector", "news"], sizes: {}, pins: [] },
   { id: "k2", name: "K2 종목 파기", pick: ["chart", "orderbook", "investor", "broker", "supply", "opinion", "finance", "summary"], sizes: {}, pins: [] },
-  { id: "k3", name: "K3 장중 감시", pick: ["signal", "intraday", "program", "orderbook", "insights"], sizes: {}, pins: [] },
+  { id: "k3", name: "K3 장중 감시", pick: ["mktBreadth", "signal", "intraday", "program", "orderbook"], sizes: {}, pins: [] },
 ];
 
 interface Preset {
@@ -267,6 +292,23 @@ function readPick(): BlockKey[] {
   } catch {
     return DEFAULT_PICK;
   }
+}
+
+/**
+ * 구성에 든 패널을 사람 말로.
+ *
+ * 「15칸」은 개수만 알려 줄 뿐 **무엇이 들었는지는 안 알려 준다** — 12칸짜리와
+ * 뭐가 다른지 알려면 결국 눌러 봐야 했다. 앞의 셋을 이름으로 적고 나머지는 세어 준다.
+ */
+function summarize(pick: string[]): string {
+  const names: string[] = [];
+  for (const k of pick) {
+    const label = BLOCKS.find((b) => b.key === k)?.label;
+    if (label) names.push(label);
+  }
+  if (names.length === 0) return "빈 구성";
+  const head = names.slice(0, 3).join("·");
+  return names.length > 3 ? `${head} 외 ${names.length - 3}개` : head;
 }
 
 export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: string) => void }) {
@@ -609,7 +651,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
               key={p.id}
               className="filter-btn"
               onClick={() => loadFrom(p.id)}
-              title={`${p.name} 불러오기 (${p.pick.length}칸)`}
+              title={`${p.name} — ${summarize(p.pick)}`}
             >
               {p.name}
             </button>
@@ -649,7 +691,11 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                   onChange={(e) => rename(p.id, e.target.value)}
                   placeholder="구성 이름"
                 />
-                <span className="bp-meta">{p.pick.length}칸</span>
+                {/*
+                  개수만 적으면 「15칸」과 「12칸」의 차이를 알려면 눌러 봐야 한다.
+                  앞의 몇 개를 이름으로 보여 주면 불러오기 전에 무엇이 든 구성인지 안다.
+                */}
+                <span className="bp-meta">{summarize(p.pick)}</span>
                 <button
                   className="filter-btn"
                   onClick={() => saveInto(p.id)}
@@ -696,7 +742,12 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
         )}
       </section>
 
-      {code && (
+      {/*
+        **시장 칸은 종목이 없어도 그린다.**
+        종목과 무관한 칸만 켜 둔 구성(K1 같은)에서 연동이 아직 안 왔다고
+        화면이 통째로 비면 그 구성은 쓸 수가 없다.
+      */}
+      {(code || pick.some(isMarket)) && (
         <div className="board-grid">
           {/*
             **`pick` 순서대로** 그린다. 예전엔 `BLOCKS` 를 훑어 걸러냈는데,
@@ -710,10 +761,10 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
               key={b.key}
               cellKey={b.key}
               title={b.label}
-              sub={locks[b.key]?.name ?? name}
+              sub={isMarket(b.key) ? undefined : (locks[b.key]?.name ?? name)}
               wide={b.wide}
-              locked={locks[b.key] ?? null}
-              onToggleLock={() => {
+              locked={isMarket(b.key) ? null : (locks[b.key] ?? null)}
+              onToggleLock={isMarket(b.key) ? undefined : () => {
                 /*
                  * 잠글 땐 **지금 이 칸이 보고 있는 종목**을 붙든다.
                  * 연동으로 흘러온 종목이 곧 사람이 보고 있는 것이므로,
@@ -736,9 +787,13 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                 const lock = locks[b.key];
                 const code = lock?.code ?? focusCode;
                 const name = lock?.name ?? focusName;
-                if (!code) return <div className="empty">종목 없음</div>;
+                if (!isMarket(b.key) && !code) return <div className="empty">종목 없음</div>;
                 return (
                 <>
+                  {b.key === "mktSignal" && <MarketSignalPanel />}
+                  {b.key === "mktPulse" && <MarketPulsePanel />}
+                  {b.key === "mktBreadth" && <BreadthPanel />}
+                  {b.key === "mktSector" && <SectorFlowPanel onSelectStock={onSelectStock} />}
                   {/*
                     `key={code}` 를 준다. 종목이 바뀌면 패널을 **새로 만든다** —
                     안 그러면 어떤 패널은 이전 종목의 값을 그대로 들고 있다가
