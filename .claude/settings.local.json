@@ -480,7 +480,10 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);console.log\\('상태:',r.state\\);for\\(const l of r.log.slice\\(-8\\)\\)console.log\\(l.dir,l.text.replace\\(/\\\\\"token\\\\\":\\\\\"[^\\\\\"]*\\\\\"/,'\\\\\"token\\\\\":\\\\\"<가림>\\\\\"'\\).slice\\(0,400\\)\\)}\\)\")",
       "Bash(curl -s http://localhost:4000/api/realtime/status)",
       "Bash(python dump.py \"ka10027\")",
-      "Bash(sed -n '/Request/,/Response/p' sheet_ka10027.txt)"
+      "Bash(sed -n '/Request/,/Response/p' sheet_ka10027.txt)",
+      "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://query1.finance.yahoo.com/v8/finance/chart/NVDA?range=2d&interval=1d&includePrePost=true\")",
+      "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const m=JSON.parse\\(d\\).chart.result[0].meta; *)",
+      "Bash(curl -s --max-time 40 http://localhost:4000/api/us-watch)"
     ]
   }
 }

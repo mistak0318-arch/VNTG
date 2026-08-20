@@ -172,15 +172,12 @@ export class RealtimeClient {
    * 이걸 빠뜨리면 **연결은 살아 있는데 아무것도 안 오는** 상태가 된다 — 제일 알아채기 어렵다.
    */
   private resubscribe(): void {
+    // 한 번에 몰아 보낸다 — TR 마다 나눠 보내면 요청 횟수 제한(105110)에 걸린다
+    const data: { item: string[]; type: string[] }[] = [];
     for (const [type, items] of this.subs) {
-      if (items.size === 0) continue;
-      this.send({
-        trnm: "REG",
-        grp_no: "1",
-        refresh: "1",
-        data: [{ item: [...items], type: [type] }],
-      });
+      if (items.size > 0) data.push({ item: [...items], type: [type] });
     }
+    if (data.length > 0) this.send({ trnm: "REG", grp_no: "1", refresh: "1", data });
   }
 
   private scheduleRetry(): void {
@@ -194,7 +191,20 @@ export class RealtimeClient {
     }, wait);
   }
 
-  /** 종목 하나를 어떤 TR 로 구독한다 (`0w` 종목프로그램매매 등) */
+  /**
+   * 구독한다 — **종목을 한꺼번에 넘겨야 한다.**
+   *
+   * ⚠️ 여기서 크게 데였다. 처음엔 종목 하나에 REG 한 번씩 보냈는데,
+   * 50 종목을 걸었더니 **5건만 통과하고 44건이 거절**됐다:
+   *
+   *     return_code 105110  "해당 TRNM으로 허용된 요청 건수를 초과하였습니다 (TRNM=REG)"
+   *
+   * 막힌 것은 **종목 수가 아니라 REG 요청 횟수**다. `data[].item` 이 배열인 이유가
+   * 그것이었다 — 한 번에 몰아 넣으라는 뜻이다.
+   *
+   * 그래서 여기서는 **바로 안 보내고 모았다가** 짧은 틈을 두고 한 번에 보낸다.
+   * 화면 여러 곳이 각자 종목을 걸어도 요청은 한 번으로 합쳐진다.
+   */
   subscribe(type: string, item: string): void {
     let set = this.subs.get(type);
     if (!set) {
@@ -203,9 +213,36 @@ export class RealtimeClient {
     }
     if (set.has(item)) return;
     set.add(item);
-    if (this.ws && this.ws.readyState === 1) {
-      this.send({ trnm: "REG", grp_no: "1", refresh: "1", data: [{ item: [item], type: [type] }] });
+    this.queue(type, item);
+  }
+
+  /** 보낼 것을 모아 둔다 (TR → 종목들) */
+  private readonly pending = new Map<string, Set<string>>();
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private queue(type: string, item: string): void {
+    let p = this.pending.get(type);
+    if (!p) {
+      p = new Set();
+      this.pending.set(type, p);
     }
+    p.add(item);
+    if (this.flushTimer) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      this.flush();
+    }, 300);
+  }
+
+  private flush(): void {
+    if (!this.ws || this.ws.readyState !== 1) return;
+    const data: { item: string[]; type: string[] }[] = [];
+    for (const [type, items] of this.pending) {
+      if (items.size > 0) data.push({ item: [...items], type: [type] });
+    }
+    this.pending.clear();
+    if (data.length === 0) return;
+    this.send({ trnm: "REG", grp_no: "1", refresh: "1", data });
   }
 
   unsubscribe(type: string, item: string): void {
