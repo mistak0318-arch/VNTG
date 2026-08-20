@@ -5125,3 +5125,10 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+
+/* 필터 묶음 이름 — 버튼 생김새가 같으니 무엇을 정하는 건지 이름이 있어야 한다 */
+.filter-label {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin-right: 0.1rem;
+}

@@ -168,7 +168,14 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
         <SignalTrackPanel onSelectStock={onSelectStock} />
       ) : (
     <div>
+      {/*
+        **묶음마다 이름을 붙인다.**
+        「코스피 / 코스닥」만 덩그러니 있으면 **결과를 시장별로 나눠 보여주는 그룹**으로
+        읽힌다. 실제로는 「어디서 찾을까」를 고르는 필터다 — 고른 시장만 훑는다.
+        버튼 생김새가 셋 다 같으니 이름이 없으면 무엇을 정하는 건지 알 수가 없다.
+      */}
       <div className="filter-row">
+        <span className="filter-label">찾을 곳</span>
         {MARKETS.map((m) => (
           <button
             key={m.key}
@@ -180,6 +187,7 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
           </button>
         ))}
         <span className="news-scope-sep" />
+        <span className="filter-label">신호등</span>
         {([
           { key: "green" as const, label: "초록만" },
           { key: "yellow" as const, label: "노랑 이상" },
@@ -194,6 +202,7 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
           </button>
         ))}
         <span className="news-scope-sep" />
+        <span className="filter-label">검사 범위</span>
         {LIMITS.map((n) => (
           <button
             key={n}
@@ -202,7 +211,7 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
             disabled={running}
             title={`거래대금 상위 ${n}종목을 검사합니다`}
           >
-            상위 {n}
+            상위 {n}종목
           </button>
         ))}
         <button className="algo-run-btn" onClick={() => void start()} disabled={running}>
@@ -211,7 +220,10 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
       </div>
 
       <p className="page-note">
-        <b>거래대금 상위</b>에서 「설정 &gt; 신호등 기준」에 맞는 종목을 찾습니다.
+        <b>고른 시장의 거래대금 상위</b>에서 「설정 &gt; 신호등 기준」에 맞는 종목을 찾습니다 —
+        「찾을 곳」은 결과를 나누는 게 아니라 <b>훑을 범위를 좁히는 것</b>입니다.
+        「전체」로 뽑으면 대개 코스피 대형주가 자리를 채우므로, 코스닥에서 도는 것을 보려면
+        따로 좁혀야 걸립니다.
         ETF·ETN·리츠·우선주는 빼고 세므로 「상위 100」은 실제 종목 100개입니다. 종목마다
         차트·수급·재무를 조회하므로 100종목이면 <b>1~2분</b> 걸립니다. 신호등 결과는 15분
         캐시를 타므로 두 번째 실행은 훨씬 빠릅니다.
