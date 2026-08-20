@@ -28,17 +28,28 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
 
   router.post("/", async (req, res, next) => {
     try {
-      const { code, name, addedPrice, memo, group } = req.body ?? {};
+      const { code, name, addedPrice, memo, group, groups } = req.body ?? {};
       if (typeof code !== "string" || !code) {
         res.status(400).json({ error: "code는 필수입니다." });
         return;
       }
+      /*
+       * **`groups` 를 반드시 넘긴다.**
+       *
+       * 화면(`WatchAddSheet`)은 내가 고른 그룹들을 `groups` 배열로 보내는데,
+       * 예전엔 여기서 `group` 단수만 꺼내 쓰고 배열을 **통째로 버렸다.**
+       * 그래서 어느 그룹을 골라도 항상 기본 그룹으로 들어갔다.
+       * `addWatchItem` 은 처음부터 둘 다 받게 돼 있었다 — 중간에서 잃어버린 것이다.
+       */
       const items = await addWatchItem({
         code,
         name: typeof name === "string" ? name : code,
         addedPrice: Number(addedPrice) || 0,
         memo: typeof memo === "string" ? memo : "",
         group: typeof group === "string" ? group : undefined,
+        groups: Array.isArray(groups)
+          ? groups.filter((g): g is string => typeof g === "string" && g.trim().length > 0)
+          : undefined,
       });
       invalidateTrackingCache();
       res.json({ items });

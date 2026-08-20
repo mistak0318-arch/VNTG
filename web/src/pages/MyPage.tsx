@@ -336,9 +336,14 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
         <button
           className={`filter-btn ${editGroupBar ? "active" : ""}`}
           onClick={() => setEditGroupBar((v) => !v)}
-          title="그룹 순서·이름 바꾸기"
+          title="그룹 이름 바꾸기 · 순서 옮기기 · 삭제"
         >
-          {editGroupBar ? "정리 끝" : "정리"}
+          {/*
+            **이름이 기능을 말해야 한다.**
+            「정리」로는 무엇을 하는 버튼인지 알 수가 없어서, 그룹 이름을 바꾸는 기능이
+            있는데도 없는 줄 알고 계셨다. 하는 일을 그대로 적는다.
+          */}
+          {editGroupBar ? "편집 끝" : "그룹 편집"}
         </button>
         {editGroupBar && activeGroup !== ALL && activeGroup !== DEFAULT_GROUP && (
           <button className="filter-btn danger" onClick={removeGroupNow} title="이 그룹 삭제">
