@@ -139,6 +139,23 @@ interface DayRecord {
   date: string;
   /** 섹터명 → 그날 뽑힌 종목코드 */
   sectors: Record<string, string[]>;
+  /**
+   * 그날 뽑힌 종목의 **그때 값**.
+   *
+   * 성적 추적(「그때 뽑은 게 그 뒤 어떻게 됐나」)을 하려면 편입가가 있어야 한다.
+   * 나중에 일봉으로 되짚을 수도 있지만, 그때의 **거래대금·태그**는 되살릴 방법이 없다 —
+   * 신고가로 걸린 것과 거래량으로 걸린 것 중 어느 쪽을 잘 고르는지 물으려면
+   * 그때의 이유가 남아 있어야 한다. 오늘 안 적으면 오늘치는 영영 못 센다.
+   */
+  picks?: {
+    code: string;
+    name: string;
+    sector: string;
+    price: number;
+    changeRate: number;
+    tradeValue: number;
+    tags: string[];
+  }[];
 }
 
 interface Store {
@@ -440,6 +457,19 @@ export async function leaderScan(
   const today: DayRecord = {
     date,
     sectors: Object.fromEntries(sectors.map((s) => [s.name, s.leaders.map((l) => l.code)])),
+    /*
+     * 걸린 종목을 **값까지 통째로** 남긴다.
+     * 장중에 여러 번 훑으면 마지막 것으로 덮인다 — 그게 그날의 최종 모습이라 맞다.
+     */
+    picks: stocks.slice(0, 40).map((t) => ({
+      code: t.code,
+      name: t.name,
+      sector: t.sector,
+      price: t.price,
+      changeRate: t.changeRate,
+      tradeValue: t.tradeValue,
+      tags: t.tags,
+    })),
   };
   const idx = store.days.findIndex((d) => d.date === date);
   if (idx >= 0) store.days[idx] = today;
