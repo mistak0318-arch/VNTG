@@ -5568,8 +5568,14 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .board-cell-sub { font-size: 0.75rem; color: var(--muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 8rem; }
 
 /* 보드 화면 구성 편집 — 이름·순서·삭제를 한 줄에 */
-.bp-edit { display: inline-flex; align-items: center; gap: 0.2rem; border: 1px solid var(--border); border-radius: 6px; padding: 0.15rem 0.3rem; }
-.bp-name { width: 7rem; font-size: 0.8rem; padding: 0.15rem 0.3rem; }
+/* 편집은 아래로 펼쳐 한 줄에 하나씩 — 한 줄에 욱여넣으면 누르기가 어렵다 */
+.bp-list { border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.6rem; margin-bottom: 0.6rem; background: var(--panel-2); }
+.bp-row { display: flex; align-items: center; gap: 0.45rem; padding: 0.25rem 0; }
+.bp-row + .bp-row { border-top: 1px solid var(--border); }
+.bp-ord { display: flex; flex-direction: column; gap: 1px; }
+.bp-ord .gt-move { line-height: 1; padding: 0 0.25rem; font-size: 0.65rem; }
+.bp-name { flex: 1; min-width: 6rem; font-size: 0.85rem; padding: 0.25rem 0.4rem; }
+.bp-meta { font-size: 0.75rem; color: var(--muted); flex: none; }
 
 /* ===== 투자자 수급표 — 묶음과 굵기로 갈라 읽는다 ===== */
 /* 묶음이 바뀌는 첫 칸에 굵은 선. 이게 구분자다 */

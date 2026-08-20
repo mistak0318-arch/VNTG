@@ -48,6 +48,8 @@ export function BoardCell({
   onDragStart,
   dragging,
   cellKey,
+  locked,
+  onToggleLock,
   children,
 }: {
   title: string;
@@ -68,6 +70,15 @@ export function BoardCell({
   onDragStart: (e: React.PointerEvent) => void;
   dragging?: boolean;
   cellKey: string;
+  /**
+   * 이 칸이 붙들고 있는 종목.
+   *
+   * 없으면 **연동을 따라간다**(다른 창에서 고른 종목). 있으면 그 종목에 머문다 —
+   * HTS 로 치면 한 창에서 삼성전자를 파면서 옆 창은 하이닉스를 띄워 두는 것이다.
+   * 보드가 종목 하나만 보던 구조로는 그게 안 됐다.
+   */
+  locked?: { code: string; name: string } | null;
+  onToggleLock?: () => void;
   /** 안쪽 높이와 「크기 바뀜」 신호를 받아 그린다 */
   children: (inner: { height: number; tick: number }) => React.ReactNode;
 }) {
@@ -180,6 +191,19 @@ export function BoardCell({
           칸을 여럿 띄우고 종목만 바꿔 가며 보는 화면이라 특히 그렇다.
         */}
         {sub && <span className="board-cell-sub">{sub}</span>}
+        {/*
+          연동을 따를지, 이 종목에 머물지.
+          자물쇠가 잠겨 있으면 다른 창에서 뭘 눌러도 이 칸은 안 바뀐다.
+        */}
+        {onToggleLock && (
+          <button
+            className={`board-lock${locked ? " on" : ""}`}
+            onClick={onToggleLock}
+            title={locked ? `${locked.name} 에 고정됨 — 눌러서 연동으로` : "이 종목에 고정하기"}
+          >
+            {locked ? "🔒" : "🔗"}
+          </button>
+        )}
         <button
           className={`board-pin${pinned ? " on" : ""}`}
           onClick={onPin}

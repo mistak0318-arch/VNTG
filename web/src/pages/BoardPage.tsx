@@ -155,6 +155,35 @@ function readSizes(): Record<string, CellSize> {
 const PIN_KEY = "vntg.board.pins";
 
 /**
+ * 칸마다 붙들어 둔 종목.
+ *
+ * 안 붙들면 연동을 따라가고, 붙들면 그 종목에 머문다. HTS 로 치면 한 창에서
+ * 삼성전자를 파면서 옆 창은 하이닉스를 띄워 두는 것 — 보드가 종목 하나만 보던
+ * 구조로는 못 하던 일이다.
+ *
+ * **구성에 담는다.** 「종목은 안 담는다」던 원칙의 예외인데, 붙들어 둔 종목은
+ * 「지금 보는 종목」이 아니라 **그 배치의 일부**이기 때문이다 — 감시용 배치라면
+ * 늘 같은 종목을 보고 있어야 뜻이 있다.
+ */
+const LOCK_KEY = "vntg.board.locks";
+
+function readLocks(): Record<string, { code: string; name: string }> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LOCK_KEY) ?? "null") as unknown;
+    if (!raw || typeof raw !== "object") return {};
+    const out: Record<string, { code: string; name: string }> = {};
+    for (const [k, v] of Object.entries(raw as Record<string, { code?: unknown; name?: unknown }>)) {
+      if (typeof v?.code === "string" && v.code) {
+        out[k] = { code: v.code, name: typeof v.name === "string" ? v.name : v.code };
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
  * 화면 구성 네 벌 — **즐겨찾기처럼.**
  *
  * 장중에 보는 구성과 마감 뒤에 보는 구성이 다르고, 종목을 고를 때와 파고들 때가 또
@@ -190,6 +219,8 @@ interface Preset {
   pick: string[];
   sizes: Record<string, CellSize>;
   pins: string[];
+  /** 칸마다 붙들어 둔 종목 — 배치의 일부다 */
+  locks?: Record<string, { code: string; name: string }>;
 }
 
 /**
@@ -211,7 +242,9 @@ function readPresets(): Preset[] {
     if (raw && typeof raw === "object") {
       const out: Preset[] = [];
       for (const [k, v] of Object.entries(raw as Record<string, Partial<Preset>>)) {
-        out.push({ id: k, name: v?.name || k, pick: v?.pick ?? [], sizes: v?.sizes ?? {}, pins: v?.pins ?? [] });
+        // 예전 슬롯은 이름이 없어서 「1」「K2」로 보였다 — 사람이 읽을 이름을 준다
+        const nice = v?.name || (/^\d+$/.test(k) ? `구성 ${k}` : k);
+        out.push({ id: k, name: nice, pick: v?.pick ?? [], sizes: v?.sizes ?? {}, pins: v?.pins ?? [] });
       }
       if (out.length > 0) return out;
     }
@@ -273,6 +306,17 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
       return [];
     }
   });
+
+  const [locks, setLocks] = useState<Record<string, { code: string; name: string }>>(readLocks);
+
+  const persistLocks = useCallback((next: Record<string, { code: string; name: string }>) => {
+    setLocks(next);
+    try {
+      localStorage.setItem(LOCK_KEY, JSON.stringify(next));
+    } catch {
+      /* 무시 */
+    }
+  }, []);
 
   /* 끄는 도중에 읽어야 해서 ref 로도 들고 있는다 */
   const pinsRef = useRef<string[]>(pins);
@@ -362,6 +406,24 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   const [presets, setPresets] = useState<Preset[]>(readPresets);
   const [editing, setEditing] = useState(false);
 
+  /*
+   * **기본 세 벌을 처음 한 번 저장해 둔다.**
+   *
+   * 예전엔 저장 없이 보여주기만 했다. 화면에는 K1·K2·K3 이 멀쩡히 있는데
+   * 저장소는 비어 있어서, 이름을 고치거나 하나를 지우면 **나머지가 갑자기 나타나거나
+   * 사라지는 것처럼** 보였다 — 「저장이 안 된다」는 말이 그 뜻이었다.
+   * 보이는 것과 저장된 것이 처음부터 같아야 한다.
+   */
+  useEffect(() => {
+    if (localStorage.getItem(PRESET_KEY)) return;
+    try {
+      localStorage.setItem(PRESET_KEY, JSON.stringify(presets));
+    } catch {
+      /* 무시 */
+    }
+    // 처음 한 번만
+  }, []);
+
   const persist = useCallback((next: Preset[]) => {
     setPresets(next);
     try {
@@ -374,17 +436,22 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   /** 지금 화면을 그 구성에 덮어쓴다 */
   const saveInto = useCallback(
     (id: string) => {
-      persist(presets.map((p) => (p.id === id ? { ...p, pick, sizes, pins } : p)));
+      persist(presets.map((p) => (p.id === id ? { ...p, pick, sizes, pins, locks } : p)));
     },
-    [persist, presets, pick, sizes, pins],
+    [persist, presets, pick, sizes, pins, locks],
   );
 
   /** 지금 화면을 새 구성으로 */
   const addPreset = useCallback(() => {
+    /*
+     * 이름을 **만들 때** 받는다. 「구성 4」로 만들어 놓고 편집에서 고치게 하면
+     * 대부분 그냥 두게 되고, 그러면 이름이 있으나 마나가 된다.
+     */
+    const name = window.prompt("새 구성 이름", `구성 ${presets.length + 1}`);
+    if (name === null) return;
     const id = `p${Date.now().toString(36)}`;
-    persist([...presets, { id, name: `구성 ${presets.length + 1}`, pick, sizes, pins }]);
-    setEditing(true);
-  }, [persist, presets, pick, sizes, pins]);
+    persist([...presets, { id, name: name.trim() || `구성 ${presets.length + 1}`, pick, sizes, pins, locks }]);
+  }, [persist, presets, pick, sizes, pins, locks]);
 
   const rename = useCallback(
     (id: string, name: string) => persist(presets.map((p) => (p.id === id ? { ...p, name } : p))),
@@ -418,6 +485,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
       setPick(nextPick.length > 0 ? nextPick : DEFAULT_PICK);
       setSizes(p.sizes ?? {});
       setPins(p.pins ?? []);
+      persistLocks(p.locks ?? {});
       try {
         localStorage.setItem(PICK_KEY, JSON.stringify(nextPick));
         localStorage.setItem(SIZE_KEY, JSON.stringify(p.sizes ?? {}));
@@ -426,7 +494,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
         /* 무시 */
       }
     },
-    [presets],
+    [presets, persistLocks],
   );
 
   useEffect(() => {
@@ -442,6 +510,9 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
 
   const code = focus?.code ?? "";
   const name = focus?.name ?? "";
+  /* 칸 안에서 쓰는 이름 — 칸마다 종목이 다를 수 있어서 바깥 것과 헷갈리면 안 된다 */
+  const focusCode = code;
+  const focusName = name;
   /* 기업분석·장중 수급이 쓴다. 한 번 받아 두 칸이 나눠 쓴다 */
   const info = useStockInfo(code);
 
@@ -526,46 +597,25 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
 
         {/*
           화면 구성 — **개수도 이름도 순서도 내가 정한다.**
-          처음엔 K1~K4 네 칸 고정이었는데, 쓰다 보면 「장중용」「마감 뒤」처럼
-          제 이름이 붙고 개수도 사람마다 다르다. 고정 칸은 그걸 못 담는다.
+
+          편집을 같은 줄에 욱여넣었더니 이름칸·화살표·삭제가 다닥다닥 붙어서 누르기가
+          어려웠다. 편집은 **아래로 펼쳐서 한 줄에 하나씩** 둔다 — 평소에는 이름만
+          늘어놓고, 고칠 때만 자리를 내준다.
         */}
         <div className="filter-row">
           <span className="st-cfg-k">화면 구성</span>
-          {presets.map((p) =>
-            editing ? (
-              <span className="bp-edit" key={p.id}>
-                <button className="gt-move" onClick={() => move(p.id, -1)} title="앞으로">
-                  ◀
-                </button>
-                <input
-                  className="bp-name"
-                  value={p.name}
-                  onChange={(e) => rename(p.id, e.target.value)}
-                  placeholder="이름"
-                />
-                <button className="gt-move" onClick={() => move(p.id, 1)} title="뒤로">
-                  ▶
-                </button>
-                <button className="filter-btn" onClick={() => saveInto(p.id)} title="지금 화면을 여기에 덮어쓰기">
-                  덮어쓰기
-                </button>
-                <button className="row-del-btn" onClick={() => remove(p.id)} title="이 구성 삭제">
-                  ✕
-                </button>
-              </span>
-            ) : (
-              <button
-                key={p.id}
-                className="filter-btn"
-                onClick={() => loadFrom(p.id)}
-                title={`${p.name} 불러오기 (${p.pick.length}칸)`}
-              >
-                {p.name}
-              </button>
-            ),
-          )}
-          <button className="filter-btn" onClick={addPreset} title="지금 화면을 새 구성으로 저장">
-            ＋ 지금 화면 저장
+          {presets.map((p) => (
+            <button
+              key={p.id}
+              className="filter-btn"
+              onClick={() => loadFrom(p.id)}
+              title={`${p.name} 불러오기 (${p.pick.length}칸)`}
+            >
+              {p.name}
+            </button>
+          ))}
+          <button className="filter-btn" onClick={addPreset} title="지금 화면을 새 구성으로 담기">
+            ＋ 새로 담기
           </button>
           <button
             className={`filter-btn ${editing ? "active" : ""}`}
@@ -574,6 +624,50 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
             {editing ? "편집 끝" : "✏ 편집"}
           </button>
         </div>
+
+        {editing && (
+          <div className="bp-list">
+            {presets.length === 0 && <div className="empty">담아 둔 구성이 없습니다.</div>}
+            {presets.map((p, i) => (
+              <div className="bp-row" key={p.id}>
+                <span className="bp-ord">
+                  <button className="gt-move" onClick={() => move(p.id, -1)} disabled={i === 0} title="위로">
+                    ▲
+                  </button>
+                  <button
+                    className="gt-move"
+                    onClick={() => move(p.id, 1)}
+                    disabled={i === presets.length - 1}
+                    title="아래로"
+                  >
+                    ▼
+                  </button>
+                </span>
+                <input
+                  className="bp-name"
+                  value={p.name}
+                  onChange={(e) => rename(p.id, e.target.value)}
+                  placeholder="구성 이름"
+                />
+                <span className="bp-meta">{p.pick.length}칸</span>
+                <button
+                  className="filter-btn"
+                  onClick={() => saveInto(p.id)}
+                  title="지금 화면 배치를 이 구성에 덮어쓰기"
+                >
+                  지금 화면으로 덮기
+                </button>
+                <button className="row-del-btn" onClick={() => remove(p.id)} title="이 구성 삭제">
+                  ✕
+                </button>
+              </div>
+            ))}
+            <div className="table-note">
+              이름은 적는 대로 저장됩니다. <b>덮기</b>는 지금 보고 있는 배치(칸·크기·고정·
+              종목 고정)를 그 구성에 넣습니다.
+            </div>
+          </div>
+        )}
 
         <div className="table-note">
           칸 제목의 <b>⠿</b>를 끌어 자리를 바꾸고, <b>오른쪽 아래 모서리</b>를 끌어 크기를
@@ -616,8 +710,20 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
               key={b.key}
               cellKey={b.key}
               title={b.label}
-              sub={name}
+              sub={locks[b.key]?.name ?? name}
               wide={b.wide}
+              locked={locks[b.key] ?? null}
+              onToggleLock={() => {
+                /*
+                 * 잠글 땐 **지금 이 칸이 보고 있는 종목**을 붙든다.
+                 * 연동으로 흘러온 종목이 곧 사람이 보고 있는 것이므로,
+                 * 따로 고르게 하지 않아도 뜻이 맞는다.
+                 */
+                const next = { ...locks };
+                if (next[b.key]) delete next[b.key];
+                else if (code) next[b.key] = { code, name };
+                persistLocks(next);
+              }}
               size={sizes[b.key] ?? null}
               onSize={(s) => setSize(b.key, s)}
               pinned={pins.includes(b.key)}
@@ -625,7 +731,13 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
               onDragStart={onDragStart(b.key)}
               dragging={dragKey === b.key}
             >
-              {({ height, tick }) => (
+              {({ height, tick }) => {
+                /* 붙들어 뒀으면 그 종목, 아니면 연동을 따라간다 */
+                const lock = locks[b.key];
+                const code = lock?.code ?? focusCode;
+                const name = lock?.name ?? focusName;
+                if (!code) return <div className="empty">종목 없음</div>;
+                return (
                 <>
                   {/*
                     `key={code}` 를 준다. 종목이 바뀌면 패널을 **새로 만든다** —
@@ -683,7 +795,8 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                     />
                   )}
                 </>
-              )}
+                );
+              }}
             </BoardCell>
           ))}
         </div>
