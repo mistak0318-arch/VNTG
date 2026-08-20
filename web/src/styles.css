@@ -5132,3 +5132,55 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   font-size: 0.88rem;
   margin-right: 0.1rem;
 }
+
+/* ------------------------------------------------------------------ */
+/* 도움말                                                               */
+/* ------------------------------------------------------------------ */
+
+.guide { max-width: 56rem; line-height: 1.75; }
+.guide-lead { font-size: 1.1rem; }
+.guide-warn {
+  padding: 0.6rem 0.8rem;
+  border-left: 3px solid var(--red);
+  background: var(--panel-2);
+  border-radius: 0 0.3rem 0.3rem 0;
+}
+.guide-flow { padding-left: 1.3rem; }
+.guide-flow li { margin: 0.4rem 0; }
+.guide-dl dt { font-weight: 700; margin-top: 0.9rem; }
+.guide-dl dd { margin: 0.25rem 0 0 0; color: var(--muted); }
+.guide-cant li { margin: 0.35rem 0; }
+
+/* ------------------------------------------------------------------ */
+/* 일정 매매                                                            */
+/* ------------------------------------------------------------------ */
+
+/* 설명은 접어 둔다 — 펴 두면 화면만 길어진다 */
+.ep-howto {
+  margin-bottom: 0.8rem;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--panel-2);
+}
+.ep-howto summary { cursor: pointer; font-weight: 600; }
+.ep-howto-body { margin-top: 0.6rem; line-height: 1.75; }
+.ep-howto-body h4 { margin: 0.9rem 0 0.2rem; }
+.ep-q { padding-left: 0.8rem; border-left: 3px solid var(--blue); }
+.ep-warn { padding-left: 0.8rem; border-left: 3px solid var(--red); }
+.ep-wide { width: min(28rem, 100%); }
+.ep-themes { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.ep-play-h { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+.ep-play-t { font-size: 1.05rem; }
+.ep-play-note { margin: 0.3rem 0; color: var(--muted); }
+.ep-theme { margin-top: 0.7rem; padding-top: 0.6rem; border-top: 1px solid var(--border); }
+.ep-theme-h { display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; }
+/* 곡선은 표가 아니라 가로 띠 — 앞뒤 모양이 한눈에 들어와야 한다 */
+.ep-curve { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.5rem; }
+.ep-pt {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 3.4rem; padding: 0.3rem 0.2rem;
+  border: 1px solid var(--border); border-radius: 0.3rem;
+}
+.ep-pt-x { font-size: 0.8rem; color: var(--muted); }
+.ep-pt-v { font-weight: 600; font-size: 0.9rem; }

@@ -405,6 +405,13 @@ export const api = {
       `/api/channels/pinned?edition=${edition}&limit=${limit}${force ? "&force=1" : ""}`,
     ),
   /** 주도주 탐색기. 뉴스는 섹터마다 네이버를 부르므로 원할 때만 켠다 */
+  /** 일정 매매 — 목록은 가볍고, 추적은 종목마다 일봉을 받아 몇 십 초 걸린다 */
+  eventPlays: () => getJson<{ plays: EventPlay[] }>("/api/event-plays"),
+  eventPlaysTrack: () => getJson<{ plays: EventPlayResult[] }>("/api/event-plays/track"),
+  eventPlaySave: (p: Partial<EventPlay>) =>
+    putJson<{ plays: EventPlay[] }>("/api/event-plays", p),
+  eventPlayRemove: (id: string) =>
+    deleteJson<{ plays: EventPlay[] }>(`/api/event-plays/${encodeURIComponent(id)}`),
   leaderScan: (withNews = false) =>
     getJson<LeaderScan>(`/api/pulse/leaders${withNews ? "" : "?news=0"}`),
   /** 탐색기 성적 — 종목마다 일봉을 받아 몇 십 초 걸린다 */
@@ -2354,4 +2361,31 @@ export interface LeaderTrackResult {
   codes: number;
   failed: number;
   note: string;
+}
+
+
+/** 일정 매매 — 일정을 보고 미리 들어가서 일정 즈음에 나온다 */
+export interface EventPlay {
+  id: string;
+  date: string;
+  title: string;
+  note: string;
+  themeIds: string[];
+  calendarId?: string;
+  createdAt: string;
+}
+
+export interface EventPlayResult extends EventPlay {
+  themes: {
+    themeId: string;
+    themeName: string;
+    members: number;
+    /** D-1 종가를 100 으로 놓은 상대 곡선 */
+    points: { offset: number; index: number; rate: number }[];
+    runUp: number | null;
+    after: number | null;
+    /** 일정일이 고점이었나 — 「소문에 사서 뉴스에 판다」가 맞았는지 */
+    peakedAtEvent: boolean | null;
+  }[];
+  upcoming: boolean;
 }

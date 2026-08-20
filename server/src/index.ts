@@ -49,6 +49,8 @@ import { createDisclosureRouter } from "./routes/disclosure.js";
 import { startDisclosureScheduler } from "./disclosureAlert.js";
 import { startKeywordScheduler } from "./keywordAlert.js";
 import { startSignalTrackScheduler } from "./signalTrack.js";
+import { startLeaderScanScheduler } from "./leaderScan.js";
+import { createEventPlayRouter } from "./routes/eventPlay.js";
 import { createWatchlistRouter } from "./routes/watchlist.js";
 
 const app = express();
@@ -109,6 +111,7 @@ app.use("/api/custom-themes", createCustomThemeRouter(client));
 app.use("/api/sector-flow", createSectorFlowRouter(client));
 app.use("/api/rank", createRankSpecRouter(client));
 app.use("/api/pulse", createPulseRouter(client));
+app.use("/api/event-plays", createEventPlayRouter(client));
 app.use("/api/us-kr", createUsKrRouter(client));
 app.use("/api/channels", createChannelsRouter());
 app.use("/api/calendar-vision", createCalendarVisionRouter());
@@ -122,6 +125,7 @@ startAlertScheduler(client);
 startChannelScheduler();
   startKeywordScheduler();
 startSignalTrackScheduler(client);
+startLeaderScanScheduler(client);
   startDisclosureScheduler();
 
 /**

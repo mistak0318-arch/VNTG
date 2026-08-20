@@ -30,6 +30,7 @@ import { VolumeRankingPage } from "./pages/VolumeRankingPage";
 import { useHashRoute } from "./useHashRoute";
 import { applyOrder, useMenuPrefs } from "./useMenuOrder";
 import { TelegramPage } from "./pages/TelegramPage";
+import { GuidePage } from "./pages/GuidePage";
 
 type Tab =
   | "overview"
@@ -57,7 +58,8 @@ type Tab =
   | "account"
   | "manualAccount"
   | "paper"
-  | "settings";
+  | "settings"
+  | "guide";
 
 /**
  * 사이드바 메뉴 구조. 그룹 아래에 항목을 추가하는 식으로 기능을 늘려간다.
@@ -126,7 +128,11 @@ const MENU: {
   {
     group: "설정",
     accent: "#8b98a5",
-    items: [{ key: "settings", label: "API 사용량·설정", icon: "⚙️" }],
+    items: [
+      { key: "settings", label: "API 사용량·설정", icon: "⚙️" },
+      // 기능 설명서가 아니라 **순서와 이유**를 적는 자리다
+      { key: "guide", label: "도움말", icon: "📖" },
+    ],
   },
 ];
 
@@ -317,6 +323,7 @@ export default function App() {
           {tab === "account" && <AccountInfoPage onSelectStock={onSelectStock} />}
           {tab === "manualAccount" && <ManualAccountPage onSelectStock={onSelectStock} />}
           {tab === "settings" && <SettingsPage />}
+          {tab === "guide" && <GuidePage />}
           </ErrorBoundary>
         </div>
       </div>

@@ -490,3 +490,58 @@ export async function leaderScan(
         : `${store.days.length}일치 기록으로 지속성을 셉니다.${prevDate ? ` (직전 ${prevDate})` : ""}`,
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* 자동 기록                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 장 마감 뒤에 하루 한 번 자동으로 훑는다.
+ *
+ * ## 왜 이게 있어야 하나
+ *
+ * 이게 없으면 **화면을 열어야만 그날이 기록된다.** 바쁜 날 안 열면 그날은 영영 빈다.
+ * 가격은 나중에 일봉으로 되짚을 수 있지만 **그때의 거래대금·태그·섹터 폭은 되살릴
+ * 방법이 없다.** 「며칠 연속 강한 섹터」를 세는 기능인데 기록에 구멍이 나면 연속 계산
+ * 자체가 틀린다 — 하루 못 열었다고 3일 연속이 1일로 리셋된다.
+ *
+ * **15:35 에 돈다.** 정규장이 15:30 에 끝나므로 그때가 그날의 최종 모습이다.
+ * 신호등 추적기(15:40)보다 살짝 앞에 둬서 둘이 같은 순간에 키움을 두들기지 않게 한다.
+ *
+ * 뉴스는 **끄고** 돈다. 자동 실행이 매일 네이버를 부르면 할당량이 조용히 녹는다 —
+ * 「왜 강한가」는 사람이 볼 때 누르면 된다.
+ */
+export function startLeaderScanScheduler(client: KiwoomClient): void {
+  const CHECK_MS = 5 * 60_000;
+  let running = false;
+
+  const tick = async () => {
+    if (running) return;
+    const now = new Date();
+    const weekday = now.getDay() !== 0 && now.getDay() !== 6;
+    const mins = now.getHours() * 60 + now.getMinutes();
+    // 15:35 ~ 16:05 사이에 한 번 걸리면 된다
+    if (!weekday || mins < 15 * 60 + 35 || mins > 16 * 60 + 5) return;
+
+    // 오늘 이미 적었으면 넘어간다 — 화면에서 먼저 열어 봤을 수도 있다
+    const store = await load().catch(() => null);
+    const today = kstDate();
+    if (store?.days.some((d) => d.date === today && (d.picks?.length ?? 0) > 0)) return;
+
+    running = true;
+    try {
+      const r = await leaderScan(client, { withNews: false });
+      console.log(
+        `[leaderScan] ${r.date} — 섹터 ${r.sectors.length} · 종목 ${r.stocks.length} (${r.scanned}종목 훑음)`,
+      );
+    } catch (err) {
+      console.error("[leaderScan] 실패:", err);
+    } finally {
+      running = false;
+    }
+  };
+
+  void tick();
+  setInterval(() => void tick(), CHECK_MS);
+  console.log("[leaderScan] 주도주 탐색기 시작 — 평일 15:35 자동 기록");
+}
