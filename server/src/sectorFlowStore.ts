@@ -174,9 +174,46 @@ function fingerprint(day: SectorFlowDay): string {
  * 5일 누적이 0 하나로 희석되고, "마지막 날이 0이면 연속 아님"이라 연속 지표가 통째로 사라진다.
  * 실제로 07시대에 스케줄러가 0짜리 하루를 남겨 지표가 다 비었다.
  */
+/**
+ * 이 하루를 남기면 안 되는가.
+ *
+ * ## 왜 「전부 0」만으로는 부족한가 (2026-08-20 확인)
+ *
+ * 장 시작 전이나 장 초반에 오늘을 조회하면 **전부 0 이 아니라 잡음이 온다** —
+ * 실측에서 「등락률 0, 외국인 +872억」 같은 값이 나왔고, 그게 그대로 저장됐다.
+ * 그날의 진짜 값은 「등락률 −5.80%, 외국인 −38,298억」이었다.
+ *
+ * 더 나쁜 건 **휴장일**이다. 키움은 장이 안 선 날짜로 물으면 **가까운 거래일 값**을
+ * 준다 — 8/14(휴장)로 물었더니 8/17 값이 왔고, 그게 8/14 로 저장됐다.
+ *
+ * 그래서 두 가지를 더 본다.
+ *   · 종합 등락률이 정확히 0 이면서 순매수가 미미하면 → **미완성 캡처**
+ *   · (휴장일은 여기서 못 거른다. 아래 지문 비교가 잡는다)
+ */
 function hasNoTrading(day: SectorFlowDay): boolean {
   const total = day.kospi.find((r) => TOTAL_CODES.has(r.code));
-  return !total || total.v.every((n) => n === 0);
+  if (!total) return true;
+  if (total.v.every((n) => n === 0)) return true;
+  /*
+   * 등락률이 0 인데 수급이 몇백억뿐이면 장이 돌기 전에 찍힌 것이다.
+   * 실제 거래일이라면 종합 등락률이 0.00% 이면서 수급만 도는 일은 사실상 없다.
+   */
+  const scale = Math.max(...total.v.map((n) => Math.abs(n)));
+  return total.changeRate === 0 && scale < 5000;
+}
+
+/**
+ * 오늘을 수집해도 되는 시각인가.
+ *
+ * **장이 끝나기 전에 오늘을 저장하면 안 된다.** 진행 중인 값이 그날의 최종값으로
+ * 굳어 버리고, 다음날 다시 받지도 않는다(이미 있는 날짜는 건너뛰므로).
+ * 실측에서 8/20 자리에 8/19 값이 들어가 있던 게 이것이다.
+ */
+function todaySettled(): boolean {
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  // 15:30 장 마감 + 집계 여유 10분
+  return mins >= 15 * 60 + 40;
 }
 
 function ymd(d: Date): string {
@@ -204,12 +241,19 @@ export async function backfillSectorFlow(
   const existing = await readAll();
   const have = new Set(existing.map((r) => r.date));
 
-  // 오늘부터 거꾸로 평일만 모은다
+  /*
+   * 오늘부터 거꾸로 평일만 모은다.
+   * **오늘은 장이 끝난 뒤에만** 넣는다 — 진행 중인 값을 최종값으로 굳히면
+   * 다음날 다시 받지도 않아서 영영 틀린 채로 남는다.
+   */
   const targets: string[] = [];
   const cursor = new Date();
+  const skipToday = !todaySettled();
+  const todayYmd = ymd(new Date());
   while (targets.length < days) {
     const day = cursor.getDay();
-    if (day !== 0 && day !== 6) targets.push(ymd(cursor));
+    const d = ymd(cursor);
+    if (day !== 0 && day !== 6 && !(skipToday && d === todayYmd)) targets.push(d);
     cursor.setDate(cursor.getDate() - 1);
   }
 
@@ -237,23 +281,32 @@ export async function backfillSectorFlow(
     if (i + 5 < targets.length) await new Promise((r) => setTimeout(r, 1100));
   }
 
-  // 휴장일 제거 — 날짜순으로 훑으며 앞 거래일과 지문이 같으면 버린다
+  /*
+   * 휴장일 제거 — 지문이 같은 이웃 날짜는 하나만 남긴다.
+   *
+   * ⚠️ **뒤에 있는 날짜를 남겨야 한다.** 키움은 장이 안 선 날짜로 물으면
+   * **가까운 다음 거래일 값**을 준다. 그래서 (8/14 휴장, 8/17 거래일) 쌍이 생기면
+   * 둘의 지문이 같은데, **진짜는 8/17** 이다.
+   *
+   * 예전엔 앞의 것을 남겨서 8/14 가 살아남고 **8/17 이 사라졌다.**
+   * 그러면 달력에 없는 날의 수급이 기록되고 실제 거래일은 통째로 빈다.
+   */
   const merged = [...existing, ...fetched].sort((a, b) => a.date.localeCompare(b.date));
   const kept: SectorFlowDay[] = [];
   let skipped = 0;
-  let prev = "";
   for (const day of merged) {
-    // 예전에 저장해 둔 0짜리 하루도 이참에 걷어낸다
+    // 예전에 저장해 둔 0짜리·미완성 하루도 이참에 걷어낸다
     if (hasNoTrading(day)) {
       skipped += 1;
       continue;
     }
     const fp = fingerprint(day);
-    if (fp && fp === prev) {
+    const last = kept[kept.length - 1];
+    if (fp && last && fingerprint(last) === fp) {
+      // 같은 지문이면 **앞의 것을 버리고 뒤의 것(진짜 거래일)을 남긴다**
+      kept.pop();
       skipped += 1;
-      continue;
     }
-    prev = fp;
     kept.push(day);
   }
 

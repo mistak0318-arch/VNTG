@@ -224,12 +224,22 @@ function checkFlow(
   }
 
   const fmt = (n: number) => `${n > 0 ? "+" : ""}${Math.round(n).toLocaleString("ko-KR")}억`;
+  /*
+   * **「당일」이라고 쓰면 안 된다.**
+   *
+   * 수급은 장이 끝난 뒤에만 저장한다(진행 중인 값을 최종값으로 굳히면 안 되므로).
+   * 그래서 장중에 이 화면을 보면 마지막 저장분은 **어제**다. 그걸 「당일」이라고 부르면
+   * 오늘 −3.8조가 빠진 것처럼 읽힌다 — 실제로 그렇게 오해했다.
+   * 날짜를 그대로 적는다.
+   */
+  const lastDate = recent[recent.length - 1]?.date ?? "";
+  const lastLabel = lastDate ? lastDate.slice(5) : "최근일";
   return {
     key,
     label,
     // 5일 누적이 0 근처면 방향이 없는 것이다. ±1,000억 안쪽은 중립으로 둔다
     pass: sum > 1000 ? true : sum < -1000 ? false : null,
-    value: `5일 누적 ${fmt(sum)} (당일 ${fmt(today)})`,
+    value: `5일 누적 ${fmt(sum)} (${lastLabel} ${fmt(today)})`,
     why,
     weight: recent.length >= 5 ? weight : Math.round(weight / 2), // 표본이 얕으면 무게를 줄인다
   };
