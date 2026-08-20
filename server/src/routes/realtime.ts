@@ -35,8 +35,26 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
     res.json({ ok: true, state: rt.state });
   });
 
+  /**
+   * 상태 — **화면이 폴링으로 되돌릴지 정하는 근거.**
+   * `healthy` 가 거짓이면 실시간을 믿지 말고 평소대로 폴링하면 된다.
+   */
+  router.get("/status", (_req, res) => {
+    res.json({
+      enabled: RealtimeClient.enabled,
+      state: rt?.state ?? "안 붙음",
+      healthy: rt?.healthy ?? false,
+      lastSeen: rt?.lastSeen ?? null,
+    });
+  });
+
   router.get("/log", (_req, res) => {
-    res.json({ state: rt?.state ?? "안 붙음", log: rt?.log ?? [] });
+    res.json({
+      state: rt?.state ?? "안 붙음",
+      healthy: rt?.healthy ?? false,
+      lastSeen: rt?.lastSeen ?? null,
+      log: rt?.log ?? [],
+    });
   });
 
   router.post("/close", (_req, res) => {

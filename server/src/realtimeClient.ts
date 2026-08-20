@@ -25,7 +25,23 @@ import type { KiwoomClient } from "./kiwoomClient.js";
  *
  * 하루 종일 물고 있어야 하므로 끊김이 정상 상태다. 끊기면 점점 뜸하게 다시 붙고,
  * 붙으면 **구독을 다시 건다** — 안 그러면 조용히 아무것도 안 오는 상태가 된다.
+ *
+ * ## ⚠️ 언제든 폴링으로 돌아갈 수 있어야 한다
+ *
+ * 실시간은 **얹는 것**이지 대체하는 게 아니다. 지켜야 할 세 가지:
+ *
+ *   1. **화면의 REST 폴링을 걷어내지 않는다.** 실시간은 「지금부터의 변화」만 주므로
+ *      처음 열었을 때의 현재 상태는 어차피 REST 가 있어야 한다. 밑그림은 REST,
+ *      갱신은 웹소켓.
+ *   2. **끌 수 있어야 한다.** `REALTIME_ENABLED=0` 이면 아예 안 붙는다.
+ *      미니PC 에서 이상하면 이 한 줄로 어제 상태로 돌아간다.
+ *   3. **죽은 걸 죽었다고 말해야 한다.** 폴링은 실패하면 에러가 나지만 웹소켓은
+ *      끊긴 걸 모르면 **「시장이 조용하네」로 보인다.** 마지막 수신 시각을 들고 있다가
+ *      너무 오래 조용하면 `healthy` 가 거짓이 되고, 그걸 보고 폴링으로 되돌린다.
  */
+
+/** 이만큼 아무것도 안 오면 죽은 것으로 본다 (장중 기준) */
+const STALE_MS = 90_000;
 
 const WS_URL = "wss://api.kiwoom.com:10000/api/dostk/websocket";
 
@@ -52,6 +68,8 @@ export class RealtimeClient {
   private retry = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
+  /** 마지막으로 뭐라도 받은 시각 — 「조용한 것」과 「죽은 것」을 가른다 */
+  private lastFrameAt = 0;
 
   /** 최근 프레임 — 무엇이 오는지 눈으로 보려고 남긴다 */
   readonly log: { at: string; dir: "→" | "←"; text: string }[] = [];
@@ -75,7 +93,29 @@ export class RealtimeClient {
     this.ws?.send(text);
   }
 
+  /** 환경변수로 끌 수 있다 — 이상하면 이 한 줄로 어제 상태가 된다 */
+  static get enabled(): boolean {
+    return process.env.REALTIME_ENABLED !== "0";
+  }
+
+  /**
+   * 실시간을 믿어도 되는가.
+   *
+   * 화면은 이걸 보고 **폴링으로 되돌린다.** 붙어 있어도 오래 조용하면 거짓이다 —
+   * 끊긴 걸 모르는 채로 「시장이 조용하네」라고 읽는 게 제일 위험하다.
+   */
+  get healthy(): boolean {
+    if (!this.ws || this.ws.readyState !== 1) return false;
+    if (this.lastFrameAt === 0) return false;
+    return Date.now() - this.lastFrameAt < STALE_MS;
+  }
+
+  get lastSeen(): string | null {
+    return this.lastFrameAt ? new Date(this.lastFrameAt).toISOString() : null;
+  }
+
   async connect(): Promise<void> {
+    if (!RealtimeClient.enabled) throw new Error("실시간이 꺼져 있습니다 (REALTIME_ENABLED=0)");
     this.closed = false;
     if (this.ws) return;
 
@@ -95,6 +135,7 @@ export class RealtimeClient {
 
     ws.onmessage = (ev: MessageEvent) => {
       const text = typeof ev.data === "string" ? ev.data : String(ev.data);
+      this.lastFrameAt = Date.now();
       this.note("←", text);
       let frame: RealtimeFrame;
       try {
