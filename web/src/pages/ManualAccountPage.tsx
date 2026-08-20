@@ -315,15 +315,23 @@ export function ManualAccountPage({
             그렇다고 누적만 두면 오늘 어느 쪽으로 갔는지를 매번 펼쳐 봐야 한다.
             둘 다 두되 무엇이 무엇인지 글자로 못 박는다 — 색만으로는 못 가른다.
           */
+          /*
+            **누적이 먼저다.** 계좌를 보며 제일 먼저 알아야 할 것은
+            「지금까지 얼마 벌었나·잃었나」지 오늘 얼마 움직였나가 아니다.
+            당일을 앞에 두었더니 오늘 오른 것만 눈에 들어와서 **총 손익이 흐려졌다.**
+
+            크기도 갈라 둔다. 나란히 같은 글씨로 두면 어느 쪽이 그 계좌의 성적인지
+            매번 글자를 읽어 가려야 한다 — 누적은 굵게, 당일은 작게 괄호 안에.
+          */
           badge={
             <span className="ma-badge">
-              <span className={signClass(today.profit)}>
-                당일 {today.profit > 0 ? "+" : ""}
-                {fmtNum(Math.round(today.profit))} {pct(today.rate)}
-              </span>
-              <span className={signClass(a.totalProfit)}>
-                누적 {a.totalProfit > 0 ? "+" : ""}
+              <span className={`ma-total ${signClass(a.totalProfit)}`}>
+                {a.totalProfit > 0 ? "+" : ""}
                 {fmtNum(Math.round(a.totalProfit))} {pct(a.totalReturnRate)}
+              </span>
+              <span className={`ma-today ${signClass(today.profit)}`}>
+                (당일 {today.profit > 0 ? "+" : ""}
+                {fmtNum(Math.round(today.profit))} {pct(today.rate)})
               </span>
             </span>
           }

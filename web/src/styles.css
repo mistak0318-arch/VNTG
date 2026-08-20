@@ -2738,6 +2738,12 @@ body {
 .collapsible-head {
   display: flex;
   align-items: center;
+  /*
+   * **줄바꿈을 허용한다.**
+   * 배지가 길면(수동 계좌는 「당일 …  누적 …」 두 벌이다) 한 줄에 다 안 들어간다.
+   * 안 넘기면 제목이 대신 짜부라진다 — 넘칠 때는 배지가 아랫줄로 내려가는 게 맞다.
+   */
+  flex-wrap: wrap;
   gap: 9px;
   width: 100%;
   padding: 13px 16px;
@@ -2750,7 +2756,13 @@ body {
 }
 .collapsible-head:hover { background: var(--panel-2); }
 .card.collapsible.open .collapsible-head { border-bottom: 1px solid var(--border); }
-.collapsible-head h2 { margin: 0; font-size: 1.0rem; }
+/*
+ * 제목에 **최소 폭**을 준다.
+ *
+ * 안 주면 한글 제목은 min-content 가 한 글자라, 옆의 배지가 안 줄어들 때
+ * 「미래에셋증권 혜경」이 **한 글자씩 세로로** 늘어선다. 폰에서 실제로 그랬다.
+ */
+.collapsible-head h2 { margin: 0; font-size: 1.0rem; flex: 1 1 auto; min-width: 8rem; }
 .collapsible-caret {
   flex: none;
   font-size: 0.7333rem;
@@ -5514,6 +5526,13 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 /* 상세 시트 — 기간 수익률은 전일 대비 아래 따로 */
 .yc-period { font-size: 0.8rem; color: var(--muted); margin: -0.2rem 0 0.5rem; }
 
-/* 수동 계좌 띠 — 당일과 누적을 나란히. 좁으면 줄바꿈해서 겹치지 않게 */
-.ma-badge { display: inline-flex; flex-wrap: wrap; gap: 0.15rem 0.7rem; align-items: baseline; }
+/*
+ * 수동 계좌 띠 — **누적이 주인공, 당일은 곁들이는 값.**
+ *
+ * 같은 글씨로 나란히 두었더니 어느 쪽이 그 계좌의 성적인지 매번 읽어 가려야 했다.
+ * 누적은 굵고 크게, 당일은 작고 흐리게 괄호 안에 둔다 — 색은 각자 부호를 따른다.
+ */
+.ma-badge { display: inline-flex; flex-wrap: wrap; gap: 0.1rem 0.5rem; align-items: baseline; }
 .ma-badge > span { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ma-total { font-weight: 700; font-size: 1.08em; }
+.ma-today { font-size: 0.88em; opacity: 0.8; }
