@@ -55,7 +55,37 @@ import { startCloseBetScheduler } from "./closeBetLog.js";
 import { createWatchlistRouter } from "./routes/watchlist.js";
 
 const app = express();
-app.use(cors());
+
+/*
+ * CORS 를 좁힌다.
+ *
+ * 예전엔 `cors()` 전면 허용이었다. 집 안에서만 쓸 때는 문제가 없었지만,
+ * **서버가 인터넷에 닿는 순간** 내가 방문한 아무 웹사이트나 이 API 를 부를 수 있게 된다 —
+ * 그 페이지의 자바스크립트가 내 계좌 잔고와 관심종목을 읽어 갈 수 있다는 뜻이다.
+ *
+ * `ALLOWED_ORIGINS` 를 콤마로 적으면 그 출처만 허용한다.
+ * **안 적으면 예전처럼 전면 허용**이라 지금 개발·집 안 사용은 그대로 돌아간다.
+ * 밖으로 열 때 반드시 채울 것.
+ */
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+app.use(
+  cors(
+    allowedOrigins.length === 0
+      ? undefined
+      : {
+          origin(origin, cb) {
+            // 같은 출처(브라우저가 Origin 을 안 보냄)와 목록에 있는 것만
+            if (!origin || allowedOrigins.includes(origin)) cb(null, true);
+            else cb(new Error("허용되지 않은 출처입니다"));
+          },
+          credentials: true,
+        },
+  ),
+);
 app.use(express.json({ limit: "12mb" })); // 캘린더 이미지가 base64로 온다
 
 const startedAt = Date.now();
@@ -160,8 +190,18 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 });
 
 const port = Number(process.env.PORT ?? 4000);
-// 0.0.0.0으로 열어야 같은 Wi-Fi의 휴대폰에서 이 PC의 IP로 접속 가능
-app.listen(port, "0.0.0.0", () => {
-  console.log(`VNTG HTS server listening on port ${port}`);
-  for (const ip of localIPv4()) console.log(`  http://${ip}:${port}`);
+/*
+ * 어디에 귀를 열까.
+ *
+ * 기본은 `0.0.0.0` — 같은 Wi-Fi 의 휴대폰에서 이 PC 의 IP 로 들어와야 하기 때문이다.
+ *
+ * **터널을 쓸 때는 `BIND_HOST=127.0.0.1` 로 좁힌다.** 터널(cloudflared)은 같은 기계
+ * 안에서 로컬로 붙으므로 밖에 귀를 열 이유가 없다 — 좁혀 두면 공유기 안의 다른 기기에도
+ * 안 보인다. 열린 문은 적을수록 좋다.
+ */
+const host = process.env.BIND_HOST ?? "0.0.0.0";
+app.listen(port, host, () => {
+  console.log(`VNTG HTS server listening on ${host}:${port}`);
+  if (host === "0.0.0.0") for (const ip of localIPv4()) console.log(`  http://${ip}:${port}`);
+  if (allowedOrigins.length > 0) console.log(`  CORS 허용: ${allowedOrigins.join(", ")}`);
 });
