@@ -198,6 +198,19 @@ function kstDate(): string {
 /* 부속 조회                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * 키움이 주는 종목코드에서 거래소 접미사를 뗀다.
+ *
+ * `ka10023` 은 `053030_AL` 처럼 **통합(_AL) 접미사를 붙여** 준다. 예전엔 `_` 만 지워서
+ * `053030AL` 이 됐고, 그러면 6자리 코드와 절대 안 맞아 **거래량 급증 태그가 하나도
+ * 안 붙었다.** 같은 TR 이 장중에 멀쩡히 값을 주는데 화면만 비어 있었다.
+ */
+function bareCode(v: unknown): string {
+  return String(v ?? "")
+    .replace(/_(AL|NX)$/i, "")
+    .replace(/[^0-9A-Za-z]/g, "");
+}
+
 function toNum(v: unknown): number {
   const n = Number(String(v ?? "").replace(/[+,%\s]/g, ""));
   return Number.isFinite(n) ? n : 0;
@@ -218,7 +231,7 @@ async function highCodes(client: KiwoomClient): Promise<Set<string>> {
       ntl_tp: "1",
     });
     const rows = (res.data?.ntl_pric ?? []) as Record<string, unknown>[];
-    return new Set(rows.map((r) => String(r.stk_cd ?? "").replace(/[^0-9A-Za-z]/g, "")));
+    return new Set(rows.map((r) => bareCode(r.stk_cd)));
   } catch {
     return new Set();
   }
@@ -245,7 +258,7 @@ async function volumeSpikes(client: KiwoomClient): Promise<Map<string, number>> 
     });
     const rows = (res.data?.trde_qty_sdnin ?? []) as Record<string, unknown>[];
     for (const r of rows) {
-      const code = String(r.stk_cd ?? "").replace(/[^0-9A-Za-z]/g, "");
+      const code = bareCode(r.stk_cd);
       const now = toNum(r.now_trde_qty);
       const prev = toNum(r.prev_trde_qty);
       if (code && prev > 0) out.set(code, now / prev);
@@ -310,7 +323,8 @@ export async function leaderScan(
     stocks.push({
       code: u.code,
       name: u.name,
-      sector: snapshot?.sector ?? "기타",
+      // 스냅샷에 없으면 업종을 모르는 것이다. 「기타」로 뭉뚱그리면 그게 섹터인 척한다
+      sector: snapshot?.sector ?? "",
       price: u.price,
       changeRate: u.changeRate,
       tradeValue,
@@ -326,9 +340,17 @@ export async function leaderScan(
   stocks.sort((a, b) => b.score - a.score || b.tradeValue - a.tradeValue);
 
   /* ---------------- 섹터 묶기 ---------------- */
+  /*
+   * 업종을 모르는 종목은 **섹터 집계에서 뺀다.**
+   *
+   * 예전엔 「기타」로 묶었더니 그게 44종목짜리 상위 섹터로 올라왔다.
+   * 「기타가 강하다」는 아무 말도 아니다 — 신규상장·재상장처럼 전 종목 스냅샷이
+   * 아직 못 담은 것들이 섞인 자루일 뿐이다.
+   * **종목 목록에는 그대로 남는다.** 업종을 모른다고 종목이 사라지면 안 된다.
+   */
   const bySector = new Map<string, LeaderStock[]>();
   for (const s of stocks) {
-    if (!isRealSector(s.sector)) continue;
+    if (!s.sector || !isRealSector(s.sector)) continue;
     if (!bySector.has(s.sector)) bySector.set(s.sector, []);
     bySector.get(s.sector)!.push(s);
   }
@@ -339,7 +361,8 @@ export async function leaderScan(
    */
   const sectorAll = new Map<string, { rate: number; value: number }[]>();
   for (const u of universe) {
-    const sec = snap?.byCode.get(u.code)?.sector ?? "기타";
+    const sec = snap?.byCode.get(u.code)?.sector ?? "";
+    if (!sec) continue;
     if (!sectorAll.has(sec)) sectorAll.set(sec, []);
     sectorAll.get(sec)!.push({ rate: u.changeRate, value: Math.round(u.tradeValue / 100) });
   }

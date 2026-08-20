@@ -290,7 +290,8 @@ export function LeaderScanPanel({
                       onClick={() => onSelectStock?.(t.code, t.name)}
                     >
                       <td className="sticky-col">{t.name}</td>
-                      <td className="pt-n">{t.sector}</td>
+                      {/* 업종을 모르는 종목도 목록에는 남는다 — 신규상장은 스냅샷이 아직 못 담는다 */}
+                      <td className="pt-n">{t.sector || "-"}</td>
                       <td className={`num ${signClass(t.changeRate)}`}>{pct(t.changeRate)}</td>
                       <td className="num">{fmtNum(t.tradeValue)}억</td>
                       <td className="num">
