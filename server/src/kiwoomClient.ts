@@ -148,8 +148,17 @@ export class KiwoomClient {
           continue;
         }
       }
-      // 토큰이 죽었다 — 버리고 새로 받아 한 번 더 해 본다
-      if (returnCode === 8005 && reissued === 0) {
+      /*
+       * 토큰이 죽었다 — 버리고 새로 받아 한 번 더 해 본다.
+       *
+       * ⚠️ **`return_code` 는 8005 가 아니다.** 실제 응답은 이렇게 온다 —
+       *   `{"return_code":3,"return_msg":"인증에 실패했습니다[8005:Token이 유효하지 않습니다]"}`
+       * 8005 는 **메시지 안의 문자열**이다. 예전엔 `returnCode === 8005` 를 봤는데
+       * 그 조건은 **영원히 거짓**이라 재발급이 한 번도 안 돌았다 — 토큰이 죽으면
+       * 서버를 다시 켤 때까지 모든 호출이 실패했다. 그게 「가끔 그럴 때 있다」의 정체다.
+       */
+      const tokenDead = returnCode === 8005 || /8005/.test(String(data.return_msg ?? ""));
+      if (tokenDead && reissued === 0) {
         reissued += 1;
         void recordApiCall("kiwoom", apiId, "failed", undefined, "8005 토큰 무효 — 재발급");
         console.error(
