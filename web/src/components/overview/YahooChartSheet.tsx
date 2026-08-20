@@ -206,11 +206,35 @@ export function YahooChartSheet({
      * 「1일」은 전일 종가가 기준이다 — 그날 첫 봉과 견주면 **갭이 통째로 빠진다.**
      */
     const from = base ?? candles[0].open;
+
+    /*
+     * **전일 대비를 따로 낸다.**
+     *
+     * 목록에서 종목을 누르면 목록과 같은 숫자가 먼저 보여야 한다. 예전에는 큰 글씨가
+     * 늘 **기간 수익률**이었는데(구간 첫 봉 대비), 목록은 전일 대비라 둘이 부호까지
+     * 갈렸다 — 실제로 「목록 +4.23, 눌렀더니 −4.26」이 나왔다. 옆에 작게 「언제 이후」를
+     * 적어 두긴 했지만, 크고 색 있는 숫자를 두고 그 글씨를 읽는 사람은 없다.
+     *
+     * 어느 것이 「전일」인지는 **봉의 날짜로** 판단한다. 기간 이름(`1d`·`D`)으로 가르면
+     * 받아오는 곳마다 이름이 달라 또 어긋난다 —
+     * 마지막 두 봉의 날짜가 다르면 앞 봉이 전일이고, 같으면 장중 봉이라 알 수 없다.
+     * 장중 구간에서는 메타의 전일 종가를 쓴다.
+     */
+    const day = (t: string) => String(t).slice(0, 10);
+    const prev = candles.length >= 2 ? candles[candles.length - 2] : null;
+    const dayBase =
+      base !== null
+        ? base
+        : prev && day(prev.t) !== day(candles[candles.length - 1].t)
+          ? prev.close
+          : null;
+
     return {
       bars,
       bodyW,
       baseY: base === null ? null : y(base),
       last,
+      dayRate: dayBase !== null && dayBase > 0 ? ((last - dayBase) / dayBase) * 100 : null,
       rate: from > 0 ? ((last - from) / from) * 100 : 0,
       loLabel: Math.min(...candles.map((c) => c.low)),
       hiLabel: Math.max(...candles.map((c) => c.high)),
@@ -251,16 +275,39 @@ export function YahooChartSheet({
 
         {view && (
           <>
+            {/*
+              큰 숫자는 **전일 대비**다 — 목록에서 보고 누른 그 숫자와 같아야 한다.
+              기간 수익률은 그 아래 따로, 언제부터인지를 붙여서 적는다.
+            */}
             <div className="yc-head">
               <b className="yc-px">{view.last.toLocaleString("ko-KR", { maximumFractionDigits: digits })}</b>
-              <span className={`yc-rate ${up ? "positive" : "negative"}`}>
-                {up ? "+" : ""}
-                {view.rate.toFixed(2)}%
-              </span>
-              <span className="pt-n">
-                {range === "1d" ? "전일 종가 대비" : `${view.firstT} 이후`}
-              </span>
+              {view.dayRate !== null ? (
+                <>
+                  <span className={`yc-rate ${view.dayRate >= 0 ? "positive" : "negative"}`}>
+                    {view.dayRate >= 0 ? "+" : ""}
+                    {view.dayRate.toFixed(2)}%
+                  </span>
+                  <span className="pt-n">전일 대비</span>
+                </>
+              ) : (
+                <>
+                  <span className={`yc-rate ${up ? "positive" : "negative"}`}>
+                    {up ? "+" : ""}
+                    {view.rate.toFixed(2)}%
+                  </span>
+                  <span className="pt-n">{view.firstT} 이후</span>
+                </>
+              )}
             </div>
+            {view.dayRate !== null && (
+              <div className="yc-period">
+                이 구간 <b className={up ? "positive" : "negative"}>
+                  {up ? "+" : ""}
+                  {view.rate.toFixed(2)}%
+                </b>{" "}
+                <span className="pt-n">({view.firstT} 이후)</span>
+              </div>
+            )}
 
             {detail && !detail.error && <UsFigures d={detail} />}
 

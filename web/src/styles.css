@@ -5510,3 +5510,6 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 
 /* 고정하면 크기도 자리도 안 움직인다 — 고정의 뜻이 그것이다 */
 .board-cell.pinned { resize: none; }
+
+/* 상세 시트 — 기간 수익률은 전일 대비 아래 따로 */
+.yc-period { font-size: 0.8rem; color: var(--muted); margin: -0.2rem 0 0.5rem; }

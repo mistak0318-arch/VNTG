@@ -21,6 +21,47 @@ function pct(v: number | null): string {
   return `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
 }
 
+/**
+ * 계좌의 **당일 손익** — 보유 종목의 등락률에서 되짚는다.
+ *
+ * ## 왜 계산해야 하나
+ *
+ * 연동 계좌는 키움이 `tdy_lspft`(당일 손익금)를 그대로 준다. 수동 계좌는 우리가
+ * 평단가와 수량만 들고 있고 **어제 종가를 저장하지 않으므로** 받아올 데가 없다.
+ * 다만 종목마다 오늘 등락률은 이미 조회하고 있으니, 거기서 어제 종가를 되짚을 수 있다.
+ *
+ *   어제 종가 = 현재가 ÷ (1 + 등락률/100)
+ *   당일 손익 = Σ 수량 × (현재가 − 어제 종가)
+ *
+ * ## 예수금은 안 넣는다
+ *
+ * 계좌 등락률의 분모는 **어제 주식 평가금액**이지 총자산이 아니다. 예수금을 섞으면
+ * 현금 비중이 큰 계좌일수록 등락률이 작아 보여서, 같은 종목을 같은 수량 들고 있어도
+ * 계좌마다 다른 숫자가 나온다 — 오늘 주식이 얼마나 움직였나를 묻는 값이 아니게 된다.
+ *
+ * ## 못 하는 것
+ *
+ * **오늘 사고판 것은 반영이 안 된다.** 지금 들고 있는 것만 보므로, 오늘 산 종목은
+ * 매수가가 아니라 어제 종가부터 잰 값이 잡히고 오늘 판 것은 아예 안 잡힌다.
+ * 체결 내역을 적는 자리가 없으니 여기까지가 정직한 한계다.
+ */
+function todayPnl(holdings: { qty: number; price: number; changeRate: number | null }[]): {
+  profit: number;
+  rate: number | null;
+} {
+  let profit = 0;
+  let base = 0;
+  for (const h of holdings) {
+    const rate = h.changeRate;
+    if (rate === null || !Number.isFinite(rate) || !Number.isFinite(h.price)) continue;
+    const prev = h.price / (1 + rate / 100);
+    if (!Number.isFinite(prev) || prev <= 0) continue;
+    profit += h.qty * (h.price - prev);
+    base += h.qty * prev;
+  }
+  return { profit, rate: base > 0 ? (profit / base) * 100 : null };
+}
+
 /** 종목 검색 + 평단/수량 입력 폼 */
 function AddHoldingForm({ accountId, onDone }: { accountId: string; onDone: (a: EvaluatedAccount[]) => void }) {
   const [query, setQuery] = useState("");
@@ -256,17 +297,26 @@ export function ManualAccountPage({
         <div className="page-note">등록된 수동 계좌가 없습니다. 위에서 증권사를 골라 추가하세요.</div>
       )}
 
-      {accounts.map((a) => (
+      {accounts.map((a) => {
+        const today = todayPnl(a.holdings);
+        return (
         <CollapsibleCard
           key={a.id}
           id={`manualAcct-${a.id}`}
           title={`${a.broker} ${a.name}`}
+          /*
+            **접어 둬도 당일이 보여야 한다.**
+            계좌를 여럿 등록해 두면 평소에는 전부 접어 놓는데, 그 상태에서 알고 싶은 건
+            「오늘 이 계좌가 어느 쪽으로 갔나」다. 누적 수익률만 띠에 적혀 있으면
+            매번 펼쳐 봐야 한다 — 누적 +30% 인 계좌의 오늘 −3% 와 +3% 는 다른 하루다.
+          */
           badge={
-            <span className={signClass(a.totalProfit)}>
-              {fmtNum(Math.round(a.totalAssets))} · {pct(a.totalReturnRate)}
+            <span className={signClass(today.profit)}>
+              {today.profit > 0 ? "+" : ""}
+              {fmtNum(Math.round(today.profit))} · {pct(today.rate)}
             </span>
           }
-          hint={`총자산 ${fmtNum(Math.round(a.totalAssets))} · 주식 ${fmtNum(Math.round(a.totalValue))} · 예수금 ${fmtNum(Math.round(a.cash))}`}
+          hint={`총자산 ${fmtNum(Math.round(a.totalAssets))} · 누적 ${pct(a.totalReturnRate)} · 주식 ${fmtNum(Math.round(a.totalValue))} · 예수금 ${fmtNum(Math.round(a.cash))}`}
         >
           <div className="ma-head">
             <button className="row-del-btn" onClick={() => deleteAccount(a.id, `${a.broker} ${a.name}`)}>
@@ -293,6 +343,21 @@ export function ManualAccountPage({
             <div className="summary-item">
               <div className="label">수익률</div>
               <div className={`value ${signClass(a.totalReturnRate)}`}>{pct(a.totalReturnRate)}</div>
+            </div>
+            {/*
+              **당일을 따로 세운다.** 연동 계좌와 같은 자리·같은 이름으로 둔다 —
+              같은 것을 두 화면에서 다르게 부르면 견줄 때마다 헷갈린다.
+            */}
+            <div className="summary-item today">
+              <div className="label">당일 손익</div>
+              <div className={`value ${signClass(today.profit)}`}>
+                {today.profit > 0 ? "+" : ""}
+                {fmtNum(Math.round(today.profit))}
+              </div>
+            </div>
+            <div className="summary-item today">
+              <div className="label">당일 등락률</div>
+              <div className={`value ${signClass(today.rate)}`}>{pct(today.rate)}</div>
             </div>
             <div className="summary-item">
               <div className="label">예수금</div>
@@ -389,7 +454,8 @@ export function ManualAccountPage({
 
           <AddHoldingForm accountId={a.id} onDone={setAccounts} />
         </CollapsibleCard>
-      ))}
+        );
+      })}
     </div>
   );
 }

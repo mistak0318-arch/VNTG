@@ -456,7 +456,15 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);if\\(r.error\\){console.log\\('ERR',r.error\\);return}const s=r.items.find\\(i=>i.code==='005930'\\);console.log\\('삼성전자 그룹:',JSON.stringify\\(s.groups\\),' 편입가:',s.addedPrice,' 담은날:',s.addedAt.slice\\(0,10\\)\\)}\\)\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);if\\(r.error\\){console.log\\('ERR',r.error\\);return}const s=r.items.find\\(i=>i.code==='005930'\\);console.log\\('삼성전자 →',JSON.stringify\\(s.groups\\),'| 편입가',s.addedPrice,'| 담은날',s.addedAt.slice\\(0,10\\)\\)}\\)\")",
       "Bash(curl -s http://localhost:4000/api/focus)",
-      "Bash(grep -n \"className=\\\\\"ov\\\\\"\\\\|className={\\\\`ov\\\\|<div className=\\\\\"ov\" pages/OverviewPage.tsx)"
+      "Bash(grep -n \"className=\\\\\"ov\\\\\"\\\\|className={\\\\`ov\\\\|<div className=\\\\\"ov\" pages/OverviewPage.tsx)",
+      "Bash(curl -s --max-time 60 http://localhost:4000/api/us-watch)",
+      "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const r=JSON.parse\\(d\\); *)",
+      "Bash(curl -s -H \"User-Agent: Mozilla/5.0\" \"https://query1.finance.yahoo.com/v8/finance/chart/SKHY?range=5d&interval=1d\")",
+      "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const j=JSON.parse\\(d\\);const r=j.chart&&j.chart.result&&j.chart.result[0];if\\(!r\\){console.log\\('\\\\''없음'\\\\'',JSON.stringify\\(j\\).slice\\(0,300\\)\\);return} *)",
+      "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const r=JSON.parse\\(d\\).chart.result[0];const q=r.indicators.quote[0]; *)",
+      "Bash(printf '\\\\n/* 상세 시트 — 기간 수익률은 전일 대비 아래 따로 */\\\\n.yc-period { font-size: 0.8rem; color: var\\(--muted\\); margin: -0.2rem 0 0.5rem; }\\\\n')",
+      "Bash(curl -s --max-time 60 http://localhost:4000/api/trade/manual-accounts)",
+      "Bash(curl -s --max-time 90 http://localhost:4000/api/account/manual)"
     ]
   }
 }
