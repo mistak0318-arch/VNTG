@@ -41,7 +41,12 @@ const TABS: { key: FlowTab; label: string }[] = [
   // 일정 매매의 형제 — 저쪽이 며칠~몇 주라면 이건 하룻밤이다
   { key: "closebet", label: "종가배팅" },
   { key: "money", label: "자금 흐름" },
-  { key: "usKr", label: "미국↔국내" },
+  /*
+   * **「미국↔국내」는 당분간 숨긴다.**
+   * 지금 안 쓰는 화면이라 탭만 차지한다. 코드와 서버는 그대로 두었으니
+   * 이 줄의 주석만 풀면 바로 돌아온다 — 지우면 되살리는 게 일이 된다.
+   */
+  // { key: "usKr", label: "미국↔국내" },
   { key: "trade", label: "수출 동향" },
 ];
 

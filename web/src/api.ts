@@ -2409,6 +2409,10 @@ export interface BetGaugeDay {
   futuresBody: number | null;
   oilMove: number | null;
   fxMove: number | null;
+  /** 실제 값 — 변동률만으로는 수준을 모른다 */
+  futuresPrice: number | null;
+  oilPrice: number | null;
+  fxPrice: number | null;
 }
 
 export interface BetVerdict {
@@ -2416,6 +2420,8 @@ export interface BetVerdict {
   label: string;
   level: "ok" | "warn" | "bad";
   value: string;
+  /** 지금 값 */
+  price: string;
   why: string;
 }
 

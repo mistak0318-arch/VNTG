@@ -79,7 +79,11 @@ export function CloseBetPanel() {
           <div className="cb-gauges">
             {verdicts.map((v) => (
               <div className={`cb-gauge ${v.level}`} key={v.key}>
-                <div className="cb-gauge-l">{v.label}</div>
+                <div className="cb-gauge-l">
+                  {v.label}
+                  {/* 변동률만 보면 수준을 모른다 — 유가가 60달러대인지 90달러대인지 */}
+                  {v.price && <b className="cb-gauge-p">{v.price}</b>}
+                </div>
                 <div className="cb-gauge-v">{v.value}</div>
                 <div className="cb-gauge-w">{v.why}</div>
               </div>

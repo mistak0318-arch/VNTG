@@ -41,13 +41,24 @@ export interface GaugeDay {
   oilMove: number | null;
   /** 원/달러 하루 변동률(%) */
   fxMove: number | null;
+  /*
+   * **실제 값도 같이 준다.**
+   * 「유가 −0.21%」만 보면 그게 60달러대인지 90달러대인지 모른다. 변동률은 오늘의
+   * 움직임이고, 수준은 그 움직임이 어디서 난 것인지를 말해 준다 — 둘 다 있어야 읽힌다.
+   */
+  futuresPrice: number | null;
+  oilPrice: number | null;
+  fxPrice: number | null;
 }
 
 export interface GaugeVerdict {
   key: "futures" | "oil" | "fx";
   label: string;
   level: "ok" | "warn" | "bad";
+  /** 변동률 */
   value: string;
+  /** 지금 값 — 변동률만으로는 수준을 모른다 */
+  price: string;
   why: string;
 }
 
@@ -72,6 +83,7 @@ function verdicts(g: GaugeDay): GaugeVerdict[] {
       label: "미국 선물",
       level: v > 0.2 ? "ok" : v < -0.2 ? "bad" : "warn",
       value: `${v > 0 ? "+" : ""}${v.toFixed(2)}%`,
+      price: g.futuresPrice === null ? "" : g.futuresPrice.toLocaleString("ko-KR"),
       why:
         v > 0.2
           ? "양봉 — 장중에 올라서 끝났다"
@@ -88,6 +100,7 @@ function verdicts(g: GaugeDay): GaugeVerdict[] {
       // 하루 4% 는 정유·화학·항공이 바로 반응하는 폭이다
       level: a >= 4 ? "bad" : a >= 2 ? "warn" : "ok",
       value: `${g.oilMove > 0 ? "+" : ""}${g.oilMove.toFixed(2)}%`,
+      price: g.oilPrice === null ? "" : `$${g.oilPrice.toFixed(2)}`,
       why: a >= 4 ? "급변 — 지정학 리스크가 얹혀 있다" : a >= 2 ? "다소 흔들림" : "안정",
     });
   }
@@ -99,6 +112,7 @@ function verdicts(g: GaugeDay): GaugeVerdict[] {
       // 하루 1% 면 외국인 수급이 방향을 바꾸는 폭이다
       level: a >= 1 ? "bad" : a >= 0.5 ? "warn" : "ok",
       value: `${g.fxMove > 0 ? "+" : ""}${g.fxMove.toFixed(2)}%`,
+      price: g.fxPrice === null ? "" : `${g.fxPrice.toFixed(1)}원`,
       why:
         a >= 1
           ? "급변 — 외국인 수급이 흔들린다"
@@ -113,7 +127,15 @@ function verdicts(g: GaugeDay): GaugeVerdict[] {
 /** 오늘(또는 마지막 거래일) 기준 시장 조건 */
 export async function marketGauge(): Promise<{ day: GaugeDay; verdicts: GaugeVerdict[] }> {
   const days = await gaugeHistory(5);
-  const day = days[days.length - 1] ?? { date: "", futuresBody: null, oilMove: null, fxMove: null };
+  const day = days[days.length - 1] ?? {
+    date: "",
+    futuresBody: null,
+    oilMove: null,
+    fxMove: null,
+    futuresPrice: null,
+    oilPrice: null,
+    fxPrice: null,
+  };
   return { day, verdicts: verdicts(day) };
 }
 
@@ -146,6 +168,9 @@ async function gaugeHistory(days: number): Promise<GaugeDay[]> {
       futuresBody: bodyPct(c),
       oilMove: o?.prev ? ((o.c.close - o.prev.close) / o.prev.close) * 100 : null,
       fxMove: f?.prev ? ((f.c.close - f.prev.close) / f.prev.close) * 100 : null,
+      futuresPrice: c.close,
+      oilPrice: o?.c.close ?? null,
+      fxPrice: f?.c.close ?? null,
     };
   });
 }

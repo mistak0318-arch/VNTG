@@ -5186,18 +5186,30 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .ep-pt-v { font-weight: 600; font-size: 0.9rem; }
 
 /* 종가배팅 — 시장 조건 신호등 */
-.cb-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.6rem; }
+/*
+ * 칸을 작게 잡는다 — 폰에서 세 칸이 화면을 다 먹었다.
+ * 이름·값·이유가 **한 줄씩** 들어가면 되지 카드처럼 클 이유가 없다.
+ */
+.cb-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.35rem; }
 .cb-gauge {
-  padding: 0.6rem 0.8rem;
+  padding: 0.35rem 0.5rem;
   border: 1px solid var(--border);
-  border-left-width: 4px;
-  border-radius: 0.4rem;
+  border-left-width: 3px;
+  border-radius: 0.3rem;
   background: var(--panel-2);
 }
 .cb-gauge.ok { border-left-color: var(--green); }
 .cb-gauge.warn { border-left-color: var(--muted); }
 .cb-gauge.bad { border-left-color: var(--red); }
-.cb-gauge-l { color: var(--muted); font-size: 0.88rem; }
-.cb-gauge-v { font-size: 1.25rem; font-weight: 700; }
-.cb-gauge-w { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+.cb-gauge-l {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+/* 지금 값 — 변동률 옆에 붙여 둔다 */
+.cb-gauge-p { color: var(--text); }
+.cb-gauge-v { font-size: 1.05rem; font-weight: 700; line-height: 1.3; }
+.cb-gauge-w { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
 .cb-bt { margin-top: 1rem; }
