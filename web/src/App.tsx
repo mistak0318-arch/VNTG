@@ -231,7 +231,8 @@ export default function App() {
   return (
     <div className="layout">
       <aside className={`sidebar${navOpen ? " open" : ""}`}>
-        <div className="sidebar-brand">VNTG HTS</div>
+        {/* 회사에서도 열기 때문에 이름을 중립적으로 둔다 */}
+        <div className="sidebar-brand">VNTG</div>
         <nav className="sidebar-nav">
           {favorites.length > 0 && (
             <div className="nav-group nav-fav">
