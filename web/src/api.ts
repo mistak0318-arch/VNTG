@@ -1,7 +1,26 @@
+import { noteFetchFailure } from "./authGuard";
+
 export type RawRecord = Record<string, unknown>;
 
+/**
+ * 모든 요청이 지나는 자리.
+ *
+ * 요청이 **네트워크 단계에서** 실패하면(=`TypeError`) 인증이 끊겼는지 한 번 확인한다.
+ * 밖에서 접속할 때 Cloudflare Access 세션이 끝나면 요청이 로그인 페이지로
+ * 리다이렉트되는데, 브라우저가 그걸 CORS 로 막아 여기까지는 그냥 「실패」로 온다.
+ * 각 화면이 그 실패를 조용히 삼키면 **아무 말 없는 빈 칸**만 남는다.
+ */
+async function req(path: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(path, init);
+  } catch (e) {
+    noteFetchFailure();
+    throw e;
+  }
+}
+
 async function getJson<T = RawRecord>(path: string): Promise<T> {
-  const res = await fetch(path);
+  const res = await req(path);
   const body = (await res.json()) as T & { error?: string };
   if (!res.ok) {
     const message = (body as { error?: string }).error ?? `요청 실패 (${res.status})`;
@@ -11,7 +30,7 @@ async function getJson<T = RawRecord>(path: string): Promise<T> {
 }
 
 async function postJson<T = RawRecord>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
+  const res = await req(path, {
     method: "POST",
     ...(body === undefined
       ? {}
@@ -25,7 +44,7 @@ async function postJson<T = RawRecord>(path: string, body?: unknown): Promise<T>
 }
 
 async function patchJson<T = RawRecord>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
+  const res = await req(path, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
@@ -36,7 +55,7 @@ async function patchJson<T = RawRecord>(path: string, body?: unknown): Promise<T
 }
 
 async function putJson<T = RawRecord>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
+  const res = await req(path, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
@@ -47,7 +66,7 @@ async function putJson<T = RawRecord>(path: string, body?: unknown): Promise<T> 
 }
 
 async function deleteJson<T = RawRecord>(path: string): Promise<T> {
-  const res = await fetch(path, { method: "DELETE" });
+  const res = await req(path, { method: "DELETE" });
   const parsed = (await res.json()) as T & { error?: string };
   if (!res.ok) {
     throw new Error((parsed as { error?: string }).error ?? `요청 실패 (${res.status})`);

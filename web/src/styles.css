@@ -5494,7 +5494,9 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   gap: 0.4rem;
   margin: 0 0 0.5rem;
 }
-.board-cell-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 제목은 제 폭만, 종목명이 바로 옆에 붙게. 핀은 오른쪽 끝으로 밀어 둔다 */
+.board-cell-t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-pin { margin-left: auto; }
 
 /* 손잡이를 따로 둔다 — 제목 아무 데나 끌리면 글자를 긁다가 칸이 딸려 나온다 */
 .board-grip {
@@ -5553,3 +5555,14 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 /* 그룹 타일은 종목 타일과 한 칸 띄운다 — 같은 층으로 보이면 안 된다 */
 .uwm-top { margin-bottom: 0.35rem; }
 .uwm-top-note { margin-bottom: 0.8rem; padding-bottom: 0.7rem; border-bottom: 1px solid var(--border); }
+
+/* 인증 만료 띠 — 한 화면 문제가 아니라 앱 전체가 값을 못 받는 상태다 */
+.auth-bar {
+  display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;
+  padding: 0.6rem 0.9rem; margin-bottom: 0.8rem;
+  border: 1px solid var(--red); border-radius: 8px;
+  background: rgba(255, 92, 92, 0.12);
+}
+.auth-bar > span:first-child { flex: 1; min-width: 12rem; }
+.auth-bar-btns { display: flex; gap: 0.4rem; }
+.board-cell-sub { font-size: 0.75rem; color: var(--muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 8rem; }

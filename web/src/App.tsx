@@ -35,6 +35,7 @@ import { ExcelChrome } from "./components/ExcelChrome";
 import { useAppearance } from "./useAppearance";
 import { BoardPage } from "./pages/BoardPage";
 import { CornerToggle } from "./components/CornerToggle";
+import { AuthExpiredBar } from "./components/AuthExpiredBar";
 import { useStockFocus } from "./useStockFocus";
 import { TelegramPage } from "./pages/TelegramPage";
 import { GuidePage } from "./pages/GuidePage";
@@ -405,6 +406,9 @@ export default function App() {
         </header>
 
         <div className="main-inner">
+          {/* 인증이 끊기면 앱 전체가 값을 못 받는다 — 화면을 옮겨도 계속 보여야 한다 */}
+          <AuthExpiredBar />
+
           {/* 돌고 있는 작업 — 어느 화면에 있든 뜬다 */}
           <RunningJobsBar />
 

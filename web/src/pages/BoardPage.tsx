@@ -524,6 +524,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
               key={b.key}
               cellKey={b.key}
               title={b.label}
+              sub={name}
               wide={b.wide}
               size={sizes[b.key] ?? null}
               onSize={(s) => setSize(b.key, s)}

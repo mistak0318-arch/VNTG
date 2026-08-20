@@ -39,6 +39,7 @@ const MIN_H = 160;
 
 export function BoardCell({
   title,
+  sub,
   size,
   onSize,
   wide,
@@ -50,6 +51,8 @@ export function BoardCell({
   children,
 }: {
   title: string;
+  /** 제목 옆에 작게 — 지금 보고 있는 종목 */
+  sub?: string;
   size: CellSize | null;
   onSize: (s: CellSize) => void;
   wide?: boolean;
@@ -171,6 +174,12 @@ export function BoardCell({
           </span>
         )}
         <span className="board-cell-t">{title}</span>
+        {/*
+          **칸마다 종목명을 적는다.**
+          맨 위에 한 번만 적어 두면 아래로 내려갈수록 무엇을 보고 있는지 잊는다 —
+          칸을 여럿 띄우고 종목만 바꿔 가며 보는 화면이라 특히 그렇다.
+        */}
+        {sub && <span className="board-cell-sub">{sub}</span>}
         <button
           className={`board-pin${pinned ? " on" : ""}`}
           onClick={onPin}

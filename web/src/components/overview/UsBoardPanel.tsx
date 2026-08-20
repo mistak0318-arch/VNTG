@@ -13,6 +13,8 @@ import { useSection } from "../../useSection";
 import { YahooChartSheet, type ChartTarget } from "./YahooChartSheet";
 import { UsSpark } from "./UsSpark";
 import { sideQuote } from "../../usSession";
+import { useWatchGroupTiles } from "../../useWatchGroupTiles";
+import { ConstituentSheet, type ConstituentTarget } from "./ConstituentSheet";
 
 /**
  * 미국 전광판.
@@ -288,116 +290,77 @@ function tileStyle(rate: number | null): React.CSSProperties {
 }
 
 function UsWatchMap({ onOpen }: { onOpen: (symbol: string, label: string) => void }) {
-  const [groups, setGroups] = useState<UsWatchGroup[]>([]);
-  const [at, setAt] = useState<number | null>(null);
+  /*
+   * 그룹 계산은 **국내 MAP 과 같은 것을 쓴다.**
+   *
+   * 처음엔 여기서 직접 평균을 냈는데, 그러면 「테마/업종 MAP」의 관심종목(해외) 탭과
+   * 숫자가 어긋날 수 있다 — 같은 그룹인데 화면마다 등락률이 다르면 어느 쪽을 믿어야
+   * 할지 알 수 없다. 타일을 만드는 자리를 하나로 둔다.
+   */
+  const { tiles, loading } = useWatchGroupTiles("watchUs");
+  const [target, setTarget] = useState<ConstituentTarget | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    const load = () =>
-      api
-        .usWatch()
-        .then((r) => {
-          if (!alive) return;
-          setGroups(r.groups);
-          setAt(Date.now());
-        })
-        .catch(() => undefined);
-    void load();
-    // 아래 목록과 같은 주기 — 둘이 다른 값을 보이면 안 된다
-    const t = setInterval(load, 20_000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, []);
-
-  const filled = groups.filter((g) => g.stocks.length > 0);
-  if (filled.length === 0) return null;
+  if (loading || tiles.length === 0) return null;
 
   return (
     <section className="ov-card">
       <div className="ov-card-h">
         <span className="ov-card-t">관심종목 MAP</span>
-        <span className="ov-card-sub">
-          {at ? new Date(at).toLocaleTimeString("ko-KR", { hour12: false }) : ""}
-        </span>
+        <span className="ov-card-sub">{tiles.length}개 그룹</span>
       </div>
       <div className="ov-card-b">
         {/*
-          **그룹 타일이 먼저다.**
-
-          밤에 전광판을 볼 때 처음 묻는 것은 「오늘 어느 쪽이 도나」지 개별 종목이 아니다.
-          그룹을 등락률 순으로 세워 두면 그 답이 **첫 줄에서 끝난다** —
-          아래 종목 타일은 그다음에 「그 안에서 무엇이 끌었나」를 보는 자리다.
-
-          ▲/▼ 를 같이 적는 이유는, 그룹 등락률이 **한 종목에 끌려간 것인지**를
-          가려야 하기 때문이다. +0.9% 인데 ▲14/▼4 와 ▲1/▼17 은 완전히 다른 판이다.
+          타일을 누르면 **구성종목 시트**가 열린다.
+          예전엔 아래 종목 타일로 스크롤만 시켰는데, 「테마/업종 MAP」은 같은 자리에서
+          시트를 여는지라 같은 모양의 타일이 화면마다 다르게 움직이는 셈이었다.
         */}
         <div className="map-grid uwm-top">
-          {[...filled]
-            .sort((a, b) => (b.changeRate ?? 0) - (a.changeRate ?? 0))
-            .map((g) => {
-              const up = g.stocks.filter((s) => (s.changeRate ?? 0) > 0).length;
-              const down = g.stocks.filter((s) => (s.changeRate ?? 0) < 0).length;
-              return (
-                <button
-                  key={g.id}
-                  className="map-tile"
-                  style={tileStyle(g.changeRate)}
-                  onClick={() =>
-                    document
-                      .getElementById(`uwm-${g.id}`)
-                      ?.scrollIntoView({ block: "start" })
-                  }
-                  title={`${g.name} — 눌러서 구성종목으로`}
-                >
-                  <span className="map-tile-name">{g.name}</span>
-                  <span className={`map-tile-pct num ${cls(g.changeRate)}`}>
-                    {pct(g.changeRate)}
-                  </span>
-                  <span className="map-tile-sub">
-                    ▲{up}/▼{down}
-                  </span>
-                </button>
-              );
-            })}
+          {[...tiles]
+            .sort((a, b) => b.changeRate - a.changeRate)
+            .map((t) => (
+              <button
+                key={t.id}
+                className="map-tile"
+                style={tileStyle(t.changeRate)}
+                onClick={() =>
+                  setTarget({
+                    kind: "custom",
+                    code: t.id,
+                    name: t.name,
+                    label: "관심종목 그룹",
+                    stocks: t.stocks,
+                  })
+                }
+                title={t.name}
+              >
+                <span className="map-tile-name">{t.name}</span>
+                <span className={`map-tile-pct num ${cls(t.changeRate)}`}>
+                  {pct(t.changeRate)}
+                </span>
+                <span className="map-tile-sub">
+                  ▲{t.risingCount}/▼{t.fallingCount}
+                </span>
+              </button>
+            ))}
         </div>
-        <div className="table-note uwm-top-note">
-          색이 진할수록 등락폭이 큽니다(5% 기준) · 타일을 누르면 아래 구성종목으로 갑니다 ·
-          {filled.length}개 그룹 · <b>▲/▼</b> 는 그 그룹에서 오른/내린 종목 수입니다
-        </div>
-
-        {filled.map((g) => (
-          <div className="uwm-group" key={g.id} id={`uwm-${g.id}`}>
-            <div className="uwm-group-h">
-              <span className="uwm-group-nm">{g.name}</span>
-              <span className={`uwm-group-rt ${cls(g.changeRate)}`}>{pct(g.changeRate)}</span>
-              <span className="pt-n">{g.stocks.length}종목</span>
-            </div>
-            <div className="map-grid">
-              {g.stocks.map((s) => (
-                <button
-                  key={s.symbol}
-                  className="map-tile"
-                  style={tileStyle(s.changeRate)}
-                  onClick={() => onOpen(s.symbol, s.name || s.symbol)}
-                  title={`${s.name} · ${s.symbol}`}
-                >
-                  <span className="map-tile-name">{s.symbol}</span>
-                  <span className="map-tile-pct num">{pct(s.changeRate)}</span>
-                  {/* 이름은 아래 작게 — 티커가 먼저 눈에 들어와야 찾기 빠르다 */}
-                  <span className="map-tile-sub">{s.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
         <div className="table-note">
-          칸 크기는 <b>전부 같습니다</b> — 해외는 시가총액을 받아오지 않아 크기로 무게를
-          줄 수 없습니다. 색만 등락률입니다(±5%에서 가장 진합니다). 국내 <b>테마/업종 MAP</b>과
-          같은 색 규칙이라 나란히 견줄 수 있습니다.
+          색이 진할수록 등락폭이 큽니다(5% 기준) · 타일을 누르면 <b>구성종목</b>이 열립니다 ·
+          {tiles.length}개 그룹 · <b>▲/▼</b> 는 그 그룹에서 오른/내린 종목 수입니다 ·
+          등락률은 <b>단순평균</b>입니다(해외는 시가총액을 안 받아옵니다)
         </div>
       </div>
+
+      {target && (
+        <ConstituentSheet
+          target={target}
+          onClose={() => setTarget(null)}
+          /* 해외 티커라 국내 상세로 보내면 못 찾는다 — 차트 시트를 연다 */
+          onSelectStock={(code, name) => {
+            setTarget(null);
+            onOpen(code, name);
+          }}
+        />
+      )}
     </section>
   );
 }

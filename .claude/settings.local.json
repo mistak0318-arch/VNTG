@@ -466,7 +466,12 @@
       "Bash(curl -s --max-time 60 http://localhost:4000/api/trade/manual-accounts)",
       "Bash(curl -s --max-time 90 http://localhost:4000/api/account/manual)",
       "Bash(node -e \"const p=require\\('./web/package.json'\\);console.log\\('web:',JSON.stringify\\(p.scripts\\)\\)\")",
-      "Bash(node -e \"const p=require\\('./server/package.json'\\);console.log\\('server:',JSON.stringify\\(p.scripts\\)\\)\")"
+      "Bash(node -e \"const p=require\\('./server/package.json'\\);console.log\\('server:',JSON.stringify\\(p.scripts\\)\\)\")",
+      "Bash(python dump.py \"ka00190\" \"API 리스트\")",
+      "Bash(python dump.py \"ka00190\")",
+      "Bash(python dump.py \"종목프로그램매매\\(0w\\)\" \"주식당일거래원\\(0F\\)\" \"VI발동|해제\\(1h\\)\" \"주식체결\\(0B\\)\")",
+      "Bash(python dump.py \"종목프로그램매매\\(0w\\)\" \"주식당일거래원\\(0F\\)\" \"VI발동|해제\\(1h\\)\" \"주식체결\\(0B\\)\" \"ka00190\")",
+      "Bash(python dump.py \"종목프로그램매매\\(0w\\)\")"
     ]
   }
 }
