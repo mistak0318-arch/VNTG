@@ -472,7 +472,12 @@
       "Bash(python dump.py \"종목프로그램매매\\(0w\\)\" \"주식당일거래원\\(0F\\)\" \"VI발동|해제\\(1h\\)\" \"주식체결\\(0B\\)\")",
       "Bash(python dump.py \"종목프로그램매매\\(0w\\)\" \"주식당일거래원\\(0F\\)\" \"VI발동|해제\\(1h\\)\" \"주식체결\\(0B\\)\" \"ka00190\")",
       "Bash(python dump.py \"종목프로그램매매\\(0w\\)\")",
-      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\('deps',JSON.stringify\\(p.dependencies\\)\\);console.log\\('dev',JSON.stringify\\(p.devDependencies\\)\\)\")"
+      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\('deps',JSON.stringify\\(p.dependencies\\)\\);console.log\\('dev',JSON.stringify\\(p.devDependencies\\)\\)\")",
+      "Bash(curl -s -X POST http://localhost:4000/api/realtime/connect)",
+      "Bash(curl -s http://localhost:4000/api/realtime/log)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);console.log\\('상태:',r.state\\);for\\(const l of r.log\\)console.log\\(l.dir,l.text.replace\\(/\\\\\"token\\\\\":\\\\\"[^\\\\\"]*\\\\\"/,'\\\\\"token\\\\\":\\\\\"<가림>\\\\\"'\\)\\)}\\)\")",
+      "Bash(curl -s -X POST http://localhost:4000/api/realtime/subscribe -H \"Content-Type: application/json\" -d '{\"type\":\"0w\",\"item\":\"005930\"}')",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);console.log\\('상태:',r.state\\);for\\(const l of r.log.slice\\(-8\\)\\)console.log\\(l.dir,l.text.replace\\(/\\\\\"token\\\\\":\\\\\"[^\\\\\"]*\\\\\"/,'\\\\\"token\\\\\":\\\\\"<가림>\\\\\"'\\).slice\\(0,400\\)\\)}\\)\")"
     ]
   }
 }

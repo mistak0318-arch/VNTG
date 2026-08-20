@@ -40,6 +40,7 @@ import { createBreadthRouter } from "./routes/breadth.js";
 import { createChannelsRouter } from "./routes/channels.js";
 import { createCalendarVisionRouter } from "./routes/calendarVision.js";
 import { createFocusRouter } from "./routes/focus.js";
+import { createRealtimeRouter } from "./routes/realtime.js";
 import { createSignalRouter } from "./routes/signal.js";
 import { createPaperRouter } from "./routes/paper.js";
 import { createJournalRouter } from "./routes/journal.js";
@@ -149,6 +150,8 @@ app.use("/api/channels", createChannelsRouter());
 app.use("/api/calendar-vision", createCalendarVisionRouter());
 /* 창들을 한 프로그램처럼 묶는 자리 — 지금 보고 있는 종목 */
 app.use("/api/focus", createFocusRouter());
+/* 실시간 웹소켓 — 접속 규약 확인 단계 */
+app.use("/api/realtime", createRealtimeRouter(client));
 app.use("/api/report", createReportRouter(client));
 
 // 07/12/18시에 리포트를 발행한다 (AI 요약은 이때만 생성)
