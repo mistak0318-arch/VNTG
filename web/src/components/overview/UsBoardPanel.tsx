@@ -253,6 +253,9 @@ export function UsBoardPanel() {
       {/* ---------------- 관심종목 MAP ---------------- */}
       <UsWatchMap onOpen={(symbol, label) => setChart({ kind: "usStock", symbol, label })} />
 
+      {/* ---------------- 섹터 MAP ---------------- */}
+      <UsSectorMap onOpen={(symbol, label) => setChart({ kind: "usStock", symbol, label })} />
+
       {/* ---------------- 관심종목 ---------------- */}
       <UsBoardWatch onOpen={(symbol, label) => setChart({ kind: "usStock", symbol, label })} />
 
@@ -361,6 +364,96 @@ function UsWatchMap({ onOpen }: { onOpen: (symbol: string, label: string) => voi
           }}
         />
       )}
+    </section>
+  );
+}
+
+/**
+ * 섹터 MAP — **한 그룹의 종목을 타일로.**
+ *
+ * ## 왜 지수·ETF 인가
+ *
+ * 미국은 섹터가 ETF 로 거래된다 — `XLK`(기술) `XLF`(금융) `XLE`(에너지) 같은 것들이
+ * 사실상 **섹터 그 자체**다. 국내 화면에서 업종 MAP 을 보는 것과 같은 일을 미국에서
+ * 하려면 이 묶음을 타일로 펴 보는 게 가장 가깝다.
+ *
+ * 그룹 MAP 은 「어느 묶음이 도나」를 답하고, 여기는 **그 묶음 안에서 무엇이 끌었나**를
+ * 답한다. 층이 다르므로 둘 다 있어야 한다.
+ *
+ * ## 그룹은 고를 수 있다
+ *
+ * 기본은 지수·ETF 지만 반도체나 바이오를 펴 보고 싶을 때가 있다. 고른 것은
+ * 이 기기에 남는다 — 모니터마다 보는 자리가 다르다.
+ */
+const SECTOR_GROUP_KEY = "vntg.usboard.sectormap";
+const SECTOR_DEFAULT = "지수·ETF";
+
+function UsSectorMap({ onOpen }: { onOpen: (symbol: string, label: string) => void }) {
+  const { tiles, loading } = useWatchGroupTiles("watchUs");
+  const [picked, setPicked] = useState<string>(
+    () => localStorage.getItem(SECTOR_GROUP_KEY) ?? SECTOR_DEFAULT,
+  );
+
+  if (loading || tiles.length === 0) return null;
+  const group = tiles.find((t) => t.name === picked) ?? tiles.find((t) => t.name === SECTOR_DEFAULT) ?? tiles[0];
+  if (!group || group.stocks.length === 0) return null;
+
+  function choose(name: string) {
+    setPicked(name);
+    try {
+      localStorage.setItem(SECTOR_GROUP_KEY, name);
+    } catch {
+      /* 저장 못 해도 이번 세션에는 바뀐다 */
+    }
+  }
+
+  return (
+    <section className="ov-card">
+      <div className="ov-card-h">
+        <span className="ov-card-t">섹터 MAP</span>
+        <span className="ov-card-sub">
+          {group.name} · {group.stocks.length}종목
+        </span>
+      </div>
+      <div className="ov-card-b">
+        <div className="filter-row">
+          {tiles.map((t) => (
+            <button
+              key={t.id}
+              className={`filter-btn ${t.name === group.name ? "active" : ""}`}
+              onClick={() => choose(t.name)}
+            >
+              {t.name}
+            </button>
+          ))}
+        </div>
+
+        <div className="map-grid">
+          {[...group.stocks]
+            .sort((a, b) => (b.changeRate ?? 0) - (a.changeRate ?? 0))
+            .map((s) => (
+              <button
+                key={s.code}
+                className="map-tile"
+                style={tileStyle(s.changeRate)}
+                onClick={() => onOpen(s.code, s.name || s.code)}
+                title={`${s.name} · ${s.code}`}
+              >
+                {/* 티커가 먼저 — 미국은 티커로 기억한다 */}
+                <span className="map-tile-name">{s.code}</span>
+                <span className={`map-tile-pct num ${cls(s.changeRate)}`}>{pct(s.changeRate)}</span>
+                <span className="map-tile-sub">{s.name}</span>
+              </button>
+            ))}
+        </div>
+
+        <div className="table-note">
+          <b>{group.name}</b> 안의 종목을 등락률 순으로 폅니다 — 그룹 MAP 이 「어느 묶음이
+          도나」라면 여기는 <b>그 안에서 무엇이 끌었나</b>입니다. 미국은 섹터가 ETF 로
+          거래되므로(XLK·XLF 같은) 이 묶음이 곧 업종 MAP 노릇을 합니다.
+          칸 크기는 모두 같습니다 — 해외는 시가총액을 안 받아옵니다.
+        </div>
+      </div>
     </section>
   );
 }
