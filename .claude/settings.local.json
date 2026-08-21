@@ -575,7 +575,9 @@
       "Bash(rm -f components/StrengthPanel.tsx)",
       "Bash(curl -s --max-time 20 \"http://localhost:4000/api/journal\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('기록',j.stats.days+'일'\\);console.log\\('새 집계 키:',['reasonEdge','signalEdge','marketEdge','watch'].map\\(k=>k+'='+\\(k in j.stats?'있음':'없음'\\)\\).join\\(' '\\)\\);console.log\\('관망:',JSON.stringify\\(j.stats.watch\\)\\);console.log\\('태그:',\\(j.reasonTags||[]\\).length+'개 근거,',\\(j.watchTags||[]\\).length+'개 관망'\\)}\\)\")",
-      "Bash(awk 'NR>430 && /^  \\\\}, \\\\[/ {print NR\": \"$0}' components/CandleChart.tsx)"
+      "Bash(awk 'NR>430 && /^  \\\\}, \\\\[/ {print NR\": \"$0}' components/CandleChart.tsx)",
+      "PowerShell($sp = \"C:\\\\Users\\\\JAEMIN~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\K--0000-3740--------------00-----2-AI------260810------\\\\57c27169-a3b6-4154-a764-8be5615af14b\\\\scratchpad\"; $dst = \"$sp\\\\kw\"; if \\(Test-Path $dst\\) { Remove-Item -Recurse -Force $dst }; New-Item -ItemType Directory -Force $dst | Out-Null; Copy-Item \"C:\\\\Users\\\\Jaemin Kim\\\\Downloads\\\\키움 REST API 문서 \\(1\\).xlsx\" \"$sp\\\\kw.zip\" -Force; Expand-Archive \"$sp\\\\kw.zip\" -DestinationPath $dst -Force; \\(Get-ChildItem \"$dst\\\\xl\\\\worksheets\"\\).Count; \\(Get-Content \"$dst\\\\xl\\\\workbook.xml\" -Raw\\).Length)",
+      "PowerShell($sp = \"C:\\\\Users\\\\JAEMIN~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\K--0000-3740--------------00-----2-AI------260810------\\\\57c27169-a3b6-4154-a764-8be5615af14b\\\\scratchpad\"; Copy-Item \"C:\\\\Users\\\\Jaemin Kim\\\\Downloads\\\\한국투자증권_오픈API_전체문서_20260818_030007.xlsx\" \"$sp\\\\ht.zip\" -Force; $d=\"$sp\\\\ht\"; if\\(Test-Path $d\\){Remove-Item -Recurse -Force $d}; Expand-Archive \"$sp\\\\ht.zip\" -DestinationPath $d -Force; \\(Get-ChildItem \"$d\\\\xl\\\\worksheets\"\\).Count)"
     ]
   }
 }
