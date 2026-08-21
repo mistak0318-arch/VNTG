@@ -5622,25 +5622,73 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .ob-live.on { color: var(--green); }
 /* 시세분석 탭 — 실제로 보는 다섯이 앞 */
 .scr-tabs { margin-bottom: 0.7rem; }
+/* 필터 — 접었다 편다. 늘 펴 두면 표가 화면 밖으로 밀린다 */
+.scr-filter {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.5rem 0.6rem; margin-bottom: 0.6rem; background: var(--panel);
+}
+.scr-f-row {
+  display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+.scr-f-row .st-cfg-k { min-width: 4.2rem; }
+.scr-f-num {
+  width: 5rem; padding: 0.2rem 0.35rem; font-size: 0.8rem;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); text-align: right;
+}
+.scr-filter .table-note { margin-top: 0.2rem; }
+/* 종목명 옆 시장 꼬리표 — 시장이 「전체」일 때만 */
+.scr-mkt {
+  font-style: normal; font-size: 0.62rem; color: var(--muted);
+  margin-left: 0.3rem; border: 1px solid var(--border); border-radius: 4px;
+  padding: 0 0.2rem; vertical-align: middle;
+}
 
-/* ===== 시간축 증감 막대 — 거래원·프로그램이 같이 쓴다 ===== */
-.dc { margin: 0.3rem 0 0.5rem; }
-.dc-svg { width: 100%; height: 6rem; display: block; touch-action: manipulation; }
-.dc-zero { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.dc-bar { cursor: pointer; }
-.dc-bar.up { fill: var(--red); }
-.dc-bar.down { fill: var(--blue); }
-.dc-bar.on { stroke: var(--text); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.dc-legend {
+/* ===== 시간별 수급 선+표 — 거래원·프로그램이 같이 쓴다 ===== */
+.fs { margin: 0.3rem 0 0.4rem; }
+.fs-top {
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  margin-bottom: 0.3rem;
+}
+.fs-sum { flex: 1; min-width: 9rem; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.fs-steps { display: flex; gap: 0.2rem; }
+/* 눈금 글자를 얹어야 해서 기준이 필요하다 */
+.fs-chart { position: relative; }
+.fs-chart svg { width: 100%; height: 6rem; display: block; touch-action: manipulation; }
+.fs-zero { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.fs-line {
+  fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke;
+  stroke-linejoin: round; stroke-linecap: round;
+}
+.fs-line.up { stroke: var(--red); }
+.fs-line.down { stroke: var(--blue); }
+.fs-cross { fill: var(--text); }
+.fs-cursor { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
+.fs-dot { fill: var(--text); }
+.fs-hit { fill: transparent; cursor: pointer; }
+.fs-y {
+  position: absolute; right: 0.15rem; font-size: 0.65rem; color: var(--muted);
+  background: var(--panel); padding: 0 0.15rem; font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.fs-y.hi { top: 0; }
+.fs-y.lo { bottom: 0; }
+.fs-legend {
   display: flex; align-items: baseline; gap: 0.5rem;
-  font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem;
+  font-size: 0.7rem; color: var(--muted); margin: 0.1rem 0 0.4rem;
 }
-.dc-peak { flex: 1; text-align: center; font-variant-numeric: tabular-nums; }
-.dc-pick {
-  margin-top: 0.25rem; font-size: 0.85rem; font-variant-numeric: tabular-nums;
-  padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 6px;
-  display: inline-block;
-}
+.fs-mid { flex: 1; text-align: center; font-variant-numeric: tabular-nums; }
+/* 표는 길다 — 안에서만 구른다 */
+.fs-wrap { max-height: 17rem; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.fs-table { font-size: 0.78rem; }
+.fs-table th { position: sticky; top: 0; z-index: 2; background: var(--panel); }
+.fs-table td, .fs-table th { padding-top: 0.24rem; padding-bottom: 0.24rem; }
+.fs-table tr.on td { background: var(--hover, rgba(128, 128, 128, 0.14)); }
+/* 증감 — 누적 옆에 작게. 「지금 붙고 있나」가 여기 있다 */
+.fs-d { font-style: normal; font-size: 0.66rem; margin-left: 0.25rem; opacity: 0.85; }
+.fs-d.up { color: var(--red); }
+.fs-d.down { color: var(--blue); }
 
 /* 관심종목 시세판 — 폰에서도 읽히게 네 칸만 */
 .wt td, .wt th { padding-top: 0.28rem; padding-bottom: 0.28rem; }

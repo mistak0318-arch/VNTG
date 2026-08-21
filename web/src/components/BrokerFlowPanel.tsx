@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { DeltaChart } from "./DeltaChart";
+import { FlowSeries, type FlowSample } from "./FlowSeries";
 import { api, fmtNum, signClass, type BrokerFlow } from "../api";
 import { useLive } from "../useLive";
 
@@ -35,8 +35,9 @@ function Bar({ v, mx, cls }: { v: number; mx: number; cls: string }) {
  *
  * ## 지금은
  *
- * 웹소켓 `0F` 가 창구별 **증감**을 준다. 서버가 하루 종일 물고 30초마다 남기므로
- * 화면을 안 보고 있어도 쌓이고, 「10시에 누가 붙었나」에 실제로 답한다.
+ * 웹소켓 `0F` 를 **서버가 하루 종일 물고** 30초마다 남긴다. 값 자체는 여전히 누적이지만
+ * 이제 **시각이 다른 여러 점**이 있으므로 「10시에 누가 붙었나」에 답한다 —
+ * 증감은 앞 점과의 차이로 낸다.
  *
  * ## 슬롯을 찾아야 한다
  *
@@ -45,7 +46,7 @@ function Bar({ v, mx, cls }: { v: number; mx: number; cls: string }) {
  * 순위가 바뀌는 순간 다른 창구 값을 그 창구 것으로 그리게 된다.
  */
 function useBrokerSeries(code: string, broker: string | null) {
-  const [pts, setPts] = useState<{ t: string; v: number; c: number }[]>([]);
+  const [pts, setPts] = useState<FlowSample[]>([]);
 
   useEffect(() => {
     if (!code || !broker) {
@@ -60,23 +61,37 @@ function useBrokerSeries(code: string, broker: string | null) {
         );
         const j = (await r.json()) as { points: { t: string; v: Record<string, string> }[] };
         if (!alive) return;
-        const out: { t: string; v: number; c: number }[] = [];
+        const out: FlowSample[] = [];
+        /*
+         * ⚠️ **한쪽에서 빠진 시점을 0으로 읽으면 안 된다.**
+         *
+         * `0F` 는 매도 상위 5칸과 매수 상위 5칸을 따로 준다. 어떤 창구가 매도 5위 안에는
+         * 있는데 매수 5위 밖으로 밀리면 그 시점 「매수 누적」이 안 온다. 그걸 0으로 두면
+         * 순매수가 `-매도` 로 뚝 떨어졌다가 다음 점에서 되돌아오는 **가짜 톱니**가 생긴다.
+         *
+         * 누적은 줄지 않으므로 **마지막으로 본 값을 이어 쓴다.** 그 사이에 더 샀을 수는
+         * 있어도 덜 사지는 않는다 — 아래로만 틀리는(보수적인) 값이다.
+         */
+        let lastBuy = 0;
+        let lastSell = 0;
         for (const p of j.points ?? []) {
-          let net = 0;
-          let cum = 0;
+          let buy: number | null = null;
+          let sell: number | null = null;
           for (let i = 1; i <= 5; i++) {
-            // 매수: 코드 156~160, 수량 171~175, 증감 176~180
+            // 매수: 코드 156~160, 누적수량 171~175
             if (String(p.v[String(155 + i)] ?? "").trim() === broker) {
-              net += Number(p.v[String(175 + i)]) || 0;
-              cum += Number(p.v[String(170 + i)]) || 0;
+              buy = (buy ?? 0) + (Number(p.v[String(170 + i)]) || 0);
             }
-            // 매도: 코드 146~150, 수량 161~165, 증감 166~170
+            // 매도: 코드 146~150, 누적수량 161~165
             if (String(p.v[String(145 + i)] ?? "").trim() === broker) {
-              net -= Number(p.v[String(165 + i)]) || 0;
-              cum -= Number(p.v[String(160 + i)]) || 0;
+              sell = (sell ?? 0) + (Number(p.v[String(160 + i)]) || 0);
             }
           }
-          if (net !== 0 || cum !== 0) out.push({ t: p.t, v: net, c: cum });
+          if (buy === null && sell === null) continue;
+          lastBuy = Math.max(lastBuy, buy ?? 0);
+          lastSell = Math.max(lastSell, sell ?? 0);
+          // 한 창구가 매수·매도 양쪽에 다 오르는 일이 흔하다 — 그래서 빼서 순매수를 낸다
+          out.push({ t: p.t, buy: lastBuy, sell: lastSell, net: lastBuy - lastSell });
         }
         setPts(out);
       } catch {
@@ -119,7 +134,6 @@ export function BrokerFlowPanel({ code }: { code: string }) {
 
   /* 고른 창구의 시간대별 순매수 — 서버가 실시간으로 쌓은 것 */
   const picks = series;
-  const pmax = Math.max(...picks.map((p) => Math.abs(p.v)), 1);
 
   const side = (rows: BrokerFlow["buy"], kind: "buy" | "sell") => (
     <div className="bf-col">
@@ -172,7 +186,7 @@ export function BrokerFlowPanel({ code }: { code: string }) {
       {picked && (
         <section className="card">
           <h3 className="section-heading">
-            {data.names[picked] ?? picked} — 시간대별 순매수 증감
+            {data.names[picked] ?? picked} — 시간별 매매
             <button className="filter-btn" onClick={() => setPicked(null)}>
               닫기
             </button>
@@ -184,7 +198,7 @@ export function BrokerFlowPanel({ code }: { code: string }) {
               (장이 닫혀 있으면 더 안 쌓입니다)
             </div>
           ) : (
-            <DeltaChart points={picks} cum={picks.map((p) => p.c)} unit="주" />
+            <FlowSeries samples={picks} unit="주" unitLabel="(주)" />
           )}
         </section>
       )}
@@ -196,9 +210,9 @@ export function BrokerFlowPanel({ code }: { code: string }) {
         ⚠️ 키움은 <b>상위 5개만</b> 줍니다 — 6위 밖에서 크게 산 창구는 안 보이므로 이 값을
         「그 종목 전체」로 읽으면 안 됩니다.
         <br />
-        <b>막대는 그 구간에 붙은 양</b>(0 이면 그때 그 창구가 쉰 것)이고
-        <b>선은 그 창구의 오늘 누적 순매수</b>입니다 — 선이 0을 넘는 순간(●)이
-        그 창구가 매도에서 매수로 돌아선 자리입니다.
+        창구를 누르면 <b>시간별 매도·매수·누적 순매수</b>가 줄줄이 나옵니다(HTS 거래원 상세와
+        같은 모양). 순매수 옆 작은 글씨가 <b>앞 줄 대비 증감</b>이라 「그 사이에 얼마나
+        붙었나」는 거기서 읽습니다. 단위는 <b>주</b>입니다.
       </div>
     </div>
   );

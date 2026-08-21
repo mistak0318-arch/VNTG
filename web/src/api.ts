@@ -426,7 +426,7 @@ export const api = {
     ),
   /** 고정 채널 원문 — 선별·AI 를 안 거친다 */
   channelPinned: (edition: string, limit = 3, force = false) =>
-    getJson<{ posts: PinnedPost[] }>(
+    getJson<{ posts: PinnedPost[]; health?: PinnedHealth }>(
       `/api/channels/pinned?edition=${edition}&limit=${limit}${force ? "&force=1" : ""}`,
     ),
   /** 주도주 탐색기. 뉴스는 섹터마다 네이버를 부르므로 원할 때만 켠다 */
@@ -978,6 +978,18 @@ export interface ChannelEntry {
   enabled: boolean;
 }
 
+/** 고정 채널이 어디서 막혔나 — 빈 목록만으로는 원인을 못 가린다 */
+export interface PinnedHealth {
+  triedAt: string | null;
+  /** 마지막으로 **글을 실제로 가져온** 시각 */
+  okAt: string | null;
+  okCount: number;
+  stage: string | null;
+  pinned: string[];
+  visible: string[];
+  detail: string;
+}
+
 export interface PinnedPost {
   channelName: string;
   username: string | null;
@@ -1253,8 +1265,27 @@ export interface RankResult {
   };
   market: string;
   exchange: string;
-  /** code·name 은 항상 있고, 나머지는 명세의 컬럼 키로 들어온다 */
-  rows: (Record<string, unknown> & { code: string; name: string })[];
+  /**
+   * code·name 은 항상 있고, 나머지는 명세의 컬럼 키로 들어온다.
+   *
+   * `cap`·`tv`·`mkt`·`sector`·`common` 은 **거르라고 서버가 얹어 주는 값**이다 —
+   * 키움 순위 TR 에는 시가총액이 없어서 종목 목록(하루 캐시)에서 붙인다.
+   */
+  rows: (Record<string, unknown> & {
+    code: string;
+    name: string;
+    /** 시가총액(억원). 상장주식수를 못 찾으면 null */
+    cap: number | null;
+    /** 거래대금(억원). 못 내면 null */
+    tv: number | null;
+    /** 거래대금이 어림값(거래량 × 현재가)인가 */
+    tvEst: boolean;
+    /** 코스피 / 코스닥 */
+    mkt: string;
+    sector: string;
+    /** ETF·ETN·리츠·우선주가 아닌 보통주인가 */
+    common: boolean;
+  })[];
 }
 
 export interface SectorFlowStat {

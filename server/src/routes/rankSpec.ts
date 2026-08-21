@@ -2,6 +2,7 @@ import { Router } from "express";
 import { cumulativeRank } from "../cumulativeRank.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { COMMON_PARAMS, findSpec, specGroups, type RankSpec } from "../rankSpecs.js";
+import { getStockIndex } from "../stockListCache.js";
 
 /**
  * 시세분석 — 레지스트리에 등록된 순위 조회를 하나의 라우트로 처리한다.
@@ -31,6 +32,59 @@ function toNum(v: unknown): number | null {
 /** 종목코드의 `_AL`(NXT 통합) 접미사를 뗀다 — 우리 기준은 6자리다 */
 function bare(code: unknown): string {
   return String(code ?? "").replace(/_AL$/, "").trim();
+}
+
+/**
+ * 순위 한 줄에 **거를 재료**를 얹는다.
+ *
+ * ## 왜 서버가 붙이나
+ *
+ * 화면에서 「거래대금 500억 이상, 시가총액 1조 이하」로 좁히려면 그 값이 줄마다
+ * 있어야 하는데, **키움 순위 TR 은 시가총액을 안 준다.** 종목마다 `ka10001` 을
+ * 부르면 100줄에 20초다.
+ *
+ * 대신 `ka10099`(종목 목록)를 이미 **하루 캐싱**하고 있고 거기 상장주식수가 있다.
+ * 시가총액 = 상장주식수 × 현재가 — 한 번 만든 맵으로 100줄을 즉시 채운다.
+ *
+ * ## 거래대금은 「있으면 쓰고 없으면 어림」
+ *
+ * 거래대금 상위(`ka10032`)는 거래대금을 직접 준다(백만원). 다른 순위는 안 준다 —
+ * 그때는 **거래량 × 현재가**로 어림하고 `tvEst: true` 로 표시한다. 평균단가가 아니라
+ * 현재가로 곱한 값이라 정확하지 않다. **어림값을 정확한 값인 척하면 안 된다.**
+ */
+interface RowExtras {
+  /** 시가총액(억원). 상장주식수를 못 찾으면 null */
+  cap: number | null;
+  /** 거래대금(억원). 못 내면 null */
+  tv: number | null;
+  /** 거래대금이 어림값인가 (거래량 × 현재가) */
+  tvEst: boolean;
+  /** 코스피 / 코스닥 */
+  mkt: string;
+  sector: string;
+  /** ETF·ETN·리츠·우선주가 아닌 보통주인가 */
+  common: boolean;
+}
+
+function extras(
+  row: Record<string, unknown>,
+  entry: { marketName: string; sectorName: string; shares: number; code: string } | undefined,
+): RowExtras {
+  const price = Math.abs(toNum(row.cur_prc) ?? 0);
+  const qty = toNum(row.now_trde_qty) ?? toNum(row.trde_qty) ?? 0;
+  const prica = toNum(row.trde_prica);
+  const shares = entry?.shares ?? 0;
+  const listed = entry?.marketName === "거래소" || entry?.marketName === "코스닥";
+  return {
+    cap: shares > 0 && price > 0 ? Math.round((shares * price) / 1e8) : null,
+    // 키움이 주는 거래대금은 백만원 단위다 (100 백만원 = 1억원)
+    tv: prica !== null ? Math.round(prica / 100) : qty > 0 && price > 0 ? Math.round((qty * price) / 1e8) : null,
+    tvEst: prica === null,
+    mkt: entry?.marketName === "거래소" ? "코스피" : entry?.marketName === "코스닥" ? "코스닥" : "",
+    sector: entry?.sectorName ?? "",
+    // 끝자리가 0 이 아니면 우선주다 (stockListCache 의 판별과 같은 근거)
+    common: listed && String(entry?.code ?? "").replace(/_(AL|NX)$/, "").endsWith("0"),
+  };
 }
 
 function mapRow(row: Record<string, unknown>, spec: RankSpec): Record<string, unknown> {
@@ -102,6 +156,11 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
       );
 
       const rows = Array.isArray(data[spec.listKey]) ? (data[spec.listKey] as Record<string, unknown>[]) : [];
+      /*
+       * 시가총액·시장은 하루 캐싱된 종목 목록에서 붙인다.
+       * 목록을 못 받아도 순위 자체는 나와야 하므로 실패하면 빈 맵으로 간다.
+       */
+      const index = await getStockIndex(client).catch(() => new Map());
       res.json({
         spec: {
           key: spec.key,
@@ -112,7 +171,10 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         },
         market,
         exchange,
-        rows: rows.slice(0, 100).map((r) => mapRow(r, spec)),
+        rows: rows.slice(0, 100).map((r) => ({
+          ...mapRow(r, spec),
+          ...extras(r, index.get(bare(r.stk_cd))),
+        })),
       });
     } catch (err) {
       next(err);

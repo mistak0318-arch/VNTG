@@ -13,6 +13,7 @@ import {
   type DartEvent,
   type ChannelReport,
   type NewsItem,
+  type PinnedHealth,
   type PinnedPost,
   type UsMajorResult,
   type EvaluatedTheme,
@@ -820,6 +821,7 @@ export function MarketNewsSection({ edition }: { edition: string }) {
  */
 export function PinnedChannelSection({ edition }: { edition: string }) {
   const [posts, setPosts] = useState<PinnedPost[] | null>(null);
+  const [health, setHealth] = useState<PinnedHealth | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -830,7 +832,10 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
       if (force) setPosts(null);
       api
         .channelPinned(edition, 3, force)
-        .then((r) => setPosts(r.posts))
+        .then((r) => {
+          setPosts(r.posts);
+          setHealth(r.health ?? null);
+        })
         .catch((e: Error) => {
           /*
            * **실패를 말한다.**
@@ -863,10 +868,22 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
   }
 
   if (posts.length === 0) {
+    /*
+     * **어디서 막혔는지 말한다.**
+     * 예전엔 늘 「글이 없습니다」였다 — 채널을 안 걸었을 때도, 세션이 끊겼을 때도,
+     * 진짜로 글이 없을 때도 같은 문장이라 무엇을 고쳐야 할지 알 수가 없었다.
+     */
     return (
       <div className="empty">
-        고정한 채널의 글이 없습니다. 「텔레그램 동향 &gt; 선별 자동발송」에서 채널을 고정하면
-        여기에 원문이 올라옵니다.
+        <b>{health?.stage ?? "고정한 채널의 글이 없습니다"}</b>
+        {health?.detail && <div className="pt-n">{health.detail}</div>}
+        <div className="pt-n">
+          {health?.okAt
+            ? `마지막으로 읽은 때: ${new Date(health.okAt).toLocaleString("ko-KR")} (${health.okCount}건)`
+            : "이번 서버가 뜬 뒤로 한 번도 못 읽었습니다"}
+          {health?.triedAt &&
+            ` · 마지막 시도: ${new Date(health.triedAt).toLocaleTimeString("ko-KR")}`}
+        </div>
         <button className="filter-btn" onClick={() => load(true)} disabled={busy}>
           다시 받기
         </button>

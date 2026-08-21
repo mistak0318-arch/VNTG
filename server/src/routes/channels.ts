@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { buildChannelReport, listChannelReports } from "../channelReport.js";
-import { pinnedPosts, type Edition } from "../pinnedChannel.js";
+import { pinnedHealth, pinnedPosts, type Edition } from "../pinnedChannel.js";
 import {
   DEFAULT_CONFIG,
   INTERVAL_CHOICES,
@@ -135,6 +135,12 @@ export function createChannelsRouter(): Router {
         : "morning";
       res.json({
         posts: await pinnedPosts(edition, Number(req.query.limit) || 3, req.query.force === "1"),
+        /*
+         * **어디서 막혔는지 같이 준다.**
+         * 빈 배열만 주면 채널 미등록인지 세션이 끊긴 건지 그냥 글이 없는 건지
+         * 화면에서 구분할 수가 없다 — 「계속 안 불러진다」는 말만 나온다.
+         */
+        health: pinnedHealth(),
       });
     } catch (err) {
       next(err);

@@ -102,6 +102,61 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
  * @param limit   몇 편까지
  * @param force   저장된 판을 무시하고 다시 받는다
  */
+/**
+ * 고정 채널이 **어디서 막혔나**.
+ *
+ * ## 왜 필요한가
+ *
+ * `fetchPinned` 는 네 갈래로 **조용히 빈 배열**을 돌려준다 —
+ * 채널을 안 걸었거나, 계정이 그 채널을 못 보거나, 오류가 났거나, 그냥 글이 없거나.
+ * 화면에서는 넷이 똑같이 「비어 있음」으로 보여서 **무엇을 고쳐야 할지 알 수가 없다.**
+ * 실제로 「계속 안 불러진다」는 말만 나오고 원인을 못 짚었다.
+ *
+ * ## 마지막 성공 시각이 핵심이다
+ *
+ * 「3시간 전에 마지막으로 읽음」이면 지금 잠깐 조용한 것이고,
+ * 「어제 이후 없음」이면 세션이 끊긴 것이다. 그 둘을 가르는 건 시각뿐이다.
+ *
+ * 메모리에만 둔다 — 서버를 다시 띄우면 비는 게 맞다. 「방금 띄웠는데 어제 성공했다」는
+ * 기록은 지금 상태를 말해 주지 않는다.
+ */
+export type PinnedStage =
+  | "채널 미등록"
+  | "계정이 그 채널을 못 봄"
+  | "조회 실패"
+  | "그 시간대에 글 없음"
+  | "정상";
+
+export interface PinnedHealth {
+  /** 마지막으로 시도한 시각 */
+  triedAt: string | null;
+  /** 마지막으로 **글을 실제로 가져온** 시각 */
+  okAt: string | null;
+  /** 그때 몇 건이었나 */
+  okCount: number;
+  /** 마지막 결과가 어느 단계였나 */
+  stage: PinnedStage | null;
+  /** 걸어 둔 채널 */
+  pinned: string[];
+  /** 세션이 볼 수 있는 채널 중 걸린 것 */
+  visible: string[];
+  detail: string;
+}
+
+const health: PinnedHealth = {
+  triedAt: null,
+  okAt: null,
+  okCount: 0,
+  stage: null,
+  pinned: [],
+  visible: [],
+  detail: "",
+};
+
+export function pinnedHealth(): PinnedHealth {
+  return { ...health };
+}
+
 export async function pinnedPosts(
   edition: Edition,
   limit = 3,
@@ -122,7 +177,13 @@ export async function pinnedPosts(
 
 async function fetchPinned(edition: Edition, limit: number): Promise<PinnedPost[]> {
   const { pinned } = await getChannelConfig();
-  if (pinned.length === 0) return [];
+  health.triedAt = new Date().toISOString();
+  health.pinned = pinned;
+  if (pinned.length === 0) {
+    health.stage = "채널 미등록";
+    health.detail = "설정 › 텔레그램 › 고정 채널에서 채널을 먼저 걸어야 합니다.";
+    return [];
+  }
 
   try {
     const all = await listChannels();
@@ -132,7 +193,14 @@ async function fetchPinned(edition: Edition, limit: number): Promise<PinnedPost[
      */
     const want = new Set(pinned);
     const targets = all.filter((c) => c.username && want.has(c.username.toLowerCase()));
-    if (targets.length === 0) return [];
+    health.visible = targets.map((c) => c.username ?? String(c.id));
+    if (targets.length === 0) {
+      health.stage = "계정이 그 채널을 못 봄";
+      health.detail =
+        `건 채널: ${pinned.join(", ")} · 세션이 보는 채널 ${all.length}개 중 없음. ` +
+        "그 계정이 채널에 들어가 있는지, 이름이 맞는지 보세요.";
+      return [];
+    }
 
     const byId = new Map(targets.map((c) => [c.id, c]));
     /*
@@ -148,7 +216,7 @@ async function fetchPinned(edition: Edition, limit: number): Promise<PinnedPost[
       20_000,
     );
 
-    return messages
+    const picked = messages
       .filter((m: ChannelMessage) => byId.has(m.channelId))
       // 한 줄짜리 잡담은 시황이 아니다. 완결된 글만 남긴다
       .filter((m) => m.text.trim().length >= 80)
@@ -161,8 +229,23 @@ async function fetchPinned(edition: Edition, limit: number): Promise<PinnedPost[
         text: m.text,
         link: m.link,
       }));
-  } catch {
-    // 고정 채널 하나 때문에 리포트가 멈추면 안 된다
+
+    if (picked.length === 0) {
+      health.stage = "그 시간대에 글 없음";
+      health.detail =
+        `채널은 보이는데(${health.visible.join(", ")}) 최근 ${windowHours(edition)}시간 안에 ` +
+        "80자 넘는 글이 없습니다. 한 줄짜리 잡담은 시황이 아니라 걸러냅니다.";
+    } else {
+      health.stage = "정상";
+      health.okAt = new Date().toISOString();
+      health.okCount = picked.length;
+      health.detail = "";
+    }
+    return picked;
+  } catch (e) {
+    // 고정 채널 하나 때문에 리포트가 멈추면 안 된다 — 다만 왜 실패했는지는 남긴다
+    health.stage = "조회 실패";
+    health.detail = e instanceof Error ? e.message : String(e);
     return [];
   }
 }

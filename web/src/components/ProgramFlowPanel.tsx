@@ -1,6 +1,6 @@
 import { api, fmtNum, signClass } from "../api";
 import { useEffect, useState } from "react";
-import { DeltaChart } from "./DeltaChart";
+import { FlowSeries, type FlowSample } from "./FlowSeries";
 import { useLive } from "../useLive";
 
 /**
@@ -46,14 +46,16 @@ function toEok(v: number): number {
 }
 
 /**
- * 오늘 장중 프로그램 순매수 **증감** — 서버가 실시간(`0w`)으로 쌓은 것.
+ * 오늘 장중 프로그램 매매 — 서버가 실시간(`0w`)으로 쌓은 것.
  *
- * FID `213` 이 순매수금액증감이다. 누적(`212`)이 아니라 **증감**을 그린다 —
- * 누적을 그리면 아침에 크게 산 뒤 하루 종일 가만히 있어도 계속 높은 선으로 남아서
- * 「지금 붙고 있나」를 못 읽는다.
+ * FID `204` 매도금액 · `208` 매수금액 · `212` 순매수금액. **셋 다 누적**이다 —
+ * HTS [프로그램-종목별추이] 가 적어 주는 세 칸이 정확히 이것이다.
+ *
+ * 증감(`213`)은 안 쓴다. 앞 줄과의 차이로 화면에서 직접 내는데, 그래야 1분·5분으로
+ * 묶었을 때도 **묶은 구간의 증감**이 나온다(213 은 30초 구간 증감이라 묶으면 틀린다).
  */
 function useProgramSeries(code: string) {
-  const [pts, setPts] = useState<{ t: string; v: number; c: number }[]>([]);
+  const [pts, setPts] = useState<FlowSample[]>([]);
 
   useEffect(() => {
     if (!code) {
@@ -66,19 +68,15 @@ function useProgramSeries(code: string) {
         const r = await fetch(`/api/realtime/series?type=0w&item=${encodeURIComponent(code)}`);
         const j = (await r.json()) as { points: { t: string; v: Record<string, string> }[] };
         if (!alive) return;
-        /*
-         * 증감(213)과 **누적(212)을 같이** 담는다.
-         * 누적을 증감의 합으로 만들면 서버가 놓친 구간만큼 어긋난다 —
-         * 키움이 누적을 직접 주므로 그걸 쓰는 게 정확하다.
-         */
         setPts(
           (j.points ?? [])
             .map((p) => ({
               t: p.t,
-              v: Number(p.v["213"]) || 0,
-              c: Number(p.v["212"]) || 0,
+              buy: Number(p.v["208"]) || 0,
+              sell: Number(p.v["204"]) || 0,
+              net: Number(p.v["212"]) || 0,
             }))
-            .filter((p) => p.v !== 0 || p.c !== 0),
+            .filter((p) => p.buy !== 0 || p.sell !== 0 || p.net !== 0),
         );
       } catch {
         /* 실시간이 없으면 빈 그림 — 아래 일자별은 REST 라 그대로 뜬다 */
@@ -101,13 +99,12 @@ function IntradayProgram({ code }: { code: string }) {
 
   return (
     <section className="card">
-      <h3 className="section-heading">오늘 장중 — 구간별 프로그램 순매수</h3>
-      <DeltaChart points={pts} cum={pts.map((p) => p.c)} unit="백만" />
+      <h3 className="section-heading">오늘 장중 — 시간별 프로그램 매매</h3>
+      <FlowSeries samples={pts} unit="백만" unitLabel="(백만)" />
       <div className="table-note">
-        <b>막대는 그 구간에 붙은 양</b>이고 <b>선은 오늘 누적</b>입니다 — 선이 0을 넘는
-        순간(●)이 총매도에서 총매수로 돌아선 자리입니다. 막대만 보면 지금 붙는지는 알아도
-        전체적으로 어느 쪽인지 모릅니다. 서버가 30초마다 쌓으므로 <b>화면을 안 보고 있어도</b>
-        늘어납니다.
+        금액 단위는 <b>백만원</b>이고 세 칸 모두 <b>그 시점까지의 누적</b>입니다 — 순매수 옆
+        작은 글씨가 앞 줄 대비 증감이라 <b>「지금 붙고 있나」</b>는 거기서 읽습니다. 서버가
+        30초마다 쌓으므로 <b>화면을 안 보고 있어도</b> 늘어납니다.
       </div>
     </section>
   );

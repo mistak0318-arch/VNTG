@@ -72,6 +72,23 @@ export async function getSharesMap(client: KiwoomClient): Promise<Map<string, nu
 }
 
 /**
+ * 종목코드 → 목록 항목 전체.
+ *
+ * 순위 표에 **시가총액·시장·업종을 얹을 때** 쓴다. `findStock` 은 한 건씩 훑으므로
+ * 100줄짜리 표에 쓰면 4,300건을 100번 훑는다 — 맵을 한 번 만들어 쓴다.
+ * (접미사 `_AL`/`_NX` 는 떼고 담는다. 우리 기준은 6자리다)
+ */
+export async function getStockIndex(client: KiwoomClient): Promise<Map<string, StockEntry>> {
+  const list = await ensureCache(client);
+  const map = new Map<string, StockEntry>();
+  for (const item of list) {
+    const bare = item.code.replace(/_(AL|NX)$/, "");
+    if (bare) map.set(bare, item);
+  }
+  return map;
+}
+
+/**
  * ETF·ETN·리츠·우선주를 뺀 **보통주 코드 집합**.
  *
  * 순위 TR(거래대금상위 등)은 ETF를 걸러 주지 않는다 — ka10032 는 다른 순위 TR이 쓰는
