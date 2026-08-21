@@ -551,7 +551,12 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const g=j.groups[0];console.log\\('그룹',g.name,'| at',j.at||'-'\\);for\\(const s of g.stocks.slice\\(0,4\\)\\)console.log\\(JSON.stringify\\(s\\).slice\\(0,220\\)\\)}\\)\")",
       "Bash(curl -s --max-time 30 \"http://localhost:4000/api/us-watch\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('그룹수',j.groups.length,'| at',j.at||'-'\\);const g=j.groups[0];console.log\\('■',g.name\\);for\\(const s of g.stocks.slice\\(0,4\\)\\)console.log\\(' ',s.symbol.padEnd\\(6\\),'정규',s.price,s.changeRate!=null?s.changeRate.toFixed\\(2\\)+'%':'-','| 애프터',s.afterPrice,s.afterChangeRate,'| 주간',s.dayPrice,'거래량',s.dayVolume\\)}\\)\")",
-      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('장 마감 후 서버 재시작 뒤 →','day',j.day,'| 점',j.points.length\\)}\\)\")"
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('장 마감 후 서버 재시작 뒤 →','day',j.day,'| 점',j.points.length\\)}\\)\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const r=j.items.find\\(x=>x.code==='000660'\\);console.log\\('  현재가',r.price,'등락률',r.changeRate.toFixed\\(2\\)\\)}\\)\")",
+      "Bash(curl -s --max-time 20 \"http://localhost:4000/api/market/chart/daily/000660\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const r=j.stk_dt_pole_chart_qry;console.log\\(' ',r[0].dt,'종가',r[0].cur_prc,'| 전일',r[1].cur_prc,'→',\\(\\(\\(Math.abs\\(r[0].cur_prc\\)-Math.abs\\(r[1].cur_prc\\)\\)/Math.abs\\(r[1].cur_prc\\)\\)*100\\).toFixed\\(2\\)+'%'\\)}\\)\")",
+      "Bash(curl -s --max-time 25 \"http://localhost:4000/api/market/snapshot?code=000660\")",
+      "Bash(curl -s --max-time 25 \"http://localhost:4000/api/market/sectors/kospi\")"
     ]
   }
 }

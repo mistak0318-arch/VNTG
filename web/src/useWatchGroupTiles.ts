@@ -42,6 +42,26 @@ function toTile(id: string, name: string, stocks: StockRow[]): GroupTile {
   };
 }
 
+/**
+ * 몇 초마다 다시 받을지.
+ *
+ * ## 왜 이게 필요했나
+ *
+ * **한 번만 받고 끝이었다.** 그래서 미국 정규장이 도는 동안 MAP 은 페이지를 연 시각에
+ * 멈춰 있고, 같은 화면 아래 관심종목 카드는 20초마다 갱신됐다 — 같은 종목이 위에서는
+ * +0.50%, 아래에서는 +1.63% 로 보였다. **한 화면 안에서 숫자가 갈리면 둘 다 못 믿는다.**
+ *
+ * 저녁에 열어 두고 아침에 보면 전날 값이 그대로 남아 있는 것도 같은 이유였다.
+ *
+ * 주기는 **호출 비용에 맞춘다.** 미국은 한 번이면 전 그룹이 오므로 아래 관심종목 카드와
+ * 같은 20초로 맞춘다(그래야 두 숫자가 안 갈린다). 키움 그룹은 그룹 수만큼 부르므로 넉넉히.
+ */
+const REFRESH_MS: Record<GroupSource, number> = {
+  watchUs: 20_000,
+  watchAi: 60_000,
+  watchKiwoom: 120_000,
+};
+
 export function useWatchGroupTiles(source: GroupSource | null) {
   const [tiles, setTiles] = useState<GroupTile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -145,17 +165,22 @@ export function useWatchGroupTiles(source: GroupSource | null) {
       return out;
     };
 
-    run()
-      .then((t) => {
-        if (!alive) return;
-        // 빈 그룹은 타일로 만들 수 없다 — 회색 칸만 늘어난다
-        setTiles(t.filter((x) => x.stocks.length > 0).sort((a, b) => b.changeRate - a.changeRate));
-      })
-      .catch((e: Error) => alive && setError(e.message))
-      .finally(() => alive && setLoading(false));
+    const load = () =>
+      run()
+        .then((t) => {
+          if (!alive) return;
+          // 빈 그룹은 타일로 만들 수 없다 — 회색 칸만 늘어난다
+          setTiles(t.filter((x) => x.stocks.length > 0).sort((a, b) => b.changeRate - a.changeRate));
+          setError(null);
+        })
+        .catch((e: Error) => alive && setError(e.message))
+        .finally(() => alive && setLoading(false));
 
+    void load();
+    const timer = setInterval(() => void load(), REFRESH_MS[source]);
     return () => {
       alive = false;
+      clearInterval(timer);
     };
   }, [source]);
 
