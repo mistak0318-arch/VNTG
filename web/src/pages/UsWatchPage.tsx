@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type UsSearchResult, type UsWatchGroup , type UsQuoteRow } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
-import { sideQuote } from "../usSession";
+import { liveQuote, sideQuote } from "../usSession";
 import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
 
 /**
@@ -54,7 +54,13 @@ function stampKst(ms: number): string {
 function sortStocks(stocks: UsQuoteRow[], by: "mine" | "rate" | "name" | "power"): UsQuoteRow[] {
   if (by === "mine") return stocks;
   const copy = [...stocks];
-  if (by === "rate") copy.sort((a, b) => (b.changeRate ?? -999) - (a.changeRate ?? -999));
+  /*
+   * 정렬도 **지금 값** 기준이다.
+   * 정규장 등락률로 줄을 세우면 애프터장에 크게 움직인 종목이 한참 아래에 남는다 —
+   * 마감 뒤에 이 화면을 보는 이유가 바로 그 종목을 찾으려는 것인데.
+   */
+  if (by === "rate")
+    copy.sort((a, b) => (liveQuote(b).changeRate ?? -999) - (liveQuote(a).changeRate ?? -999));
   else if (by === "power") copy.sort((a, b) => (b.power ?? -999) - (a.power ?? -999));
   else copy.sort((a, b) => a.symbol.localeCompare(b.symbol));
   return copy;
@@ -491,8 +497,13 @@ export function UsWatchPage() {
                           ) : null;
                         })()}
                       </td>
-                      <td className={`num tickable ${cls(s.changeRate)} ${tick(s.symbol)}`}>
-                        {pct(s.changeRate)}
+                      {/*
+                        등락률은 **지금 살아 있는 세션**의 것이다.
+                        정규장 종가 기준만 그리면 애프터장에 3% 오른 종목이 −0.3% 로 남는다.
+                        가격 열에는 정규장 값과 괄호가 이미 같이 있으므로 기준을 잃지 않는다.
+                      */}
+                      <td className={`num tickable ${cls(liveQuote(s).changeRate)} ${tick(s.symbol)}`}>
+                        {pct(liveQuote(s).changeRate)}
                         {(() => {
                           const side = sideQuote(s);
                           return side ? (
