@@ -21,6 +21,7 @@ import { MarketPulsePanel } from "../components/MarketPulsePanel";
 import { SectorFlowPanel } from "../components/SectorFlowPanel";
 import { ViPanel } from "../components/ViPanel";
 import { WatchTicker } from "../components/WatchTicker";
+import { IndexBoard } from "../components/IndexBoard";
 import { useStockFocus } from "../useStockFocus";
 import { BoardCell, type CellSize } from "../components/BoardCell";
 
@@ -122,6 +123,7 @@ const BLOCKS = [
    * 종목이 바뀌어도 안 바뀌는 것들인데, 모든 칸이 종목에 매여 있었다.
    * 연동이 꺼져 있거나 종목이 아직 안 왔을 때도 **이 칸들은 그려진다.**
    */
+  { key: "mktIndex", label: "지수판", wide: false },
   { key: "mktSignal", label: "시장 신호등", wide: false },
   { key: "mktPulse", label: "시장 맥박", wide: false },
   { key: "mktBreadth", label: "상승·하락 종목수", wide: false },
@@ -155,7 +157,7 @@ type BlockKey = (typeof BLOCKS)[number]["key"];
  * 블록 객체에 표시를 달면 `as const` 때문에 어떤 항목에만 그 속성이 생겨서
  * 타입이 갈린다. 키 목록으로 두는 편이 단순하다.
  */
-const MARKET_KEYS = new Set<string>(["mktSignal", "mktPulse", "mktBreadth", "mktSector", "mktVi", "mktWatch"]);
+const MARKET_KEYS = new Set<string>(["mktIndex", "mktSignal", "mktPulse", "mktBreadth", "mktSector", "mktVi", "mktWatch"]);
 const isMarket = (k: string) => MARKET_KEYS.has(k);
 
 /*
@@ -237,7 +239,7 @@ const PRESET_KEY = "vntg.board.presets";
  * **한 번 깔고 나면 사용자 것**이다 — 이름도 순서도 개수도 여기서 정하지 않는다.
  */
 const SEED: Preset[] = [
-  { id: "k1", name: "K1 시장 보기", pick: ["mktSignal", "mktVi", "mktBreadth", "mktPulse", "mktSector"], sizes: {}, pins: [] },
+  { id: "k1", name: "K1 시장 보기", pick: ["mktIndex", "mktSignal", "mktVi", "mktBreadth", "mktSector"], sizes: {}, pins: [] },
   { id: "k2", name: "K2 종목 파기", pick: ["chart", "orderbook", "investor", "broker", "supply", "opinion", "finance", "summary"], sizes: {}, pins: [] },
   { id: "k3", name: "K3 장중 감시", pick: ["mktWatch", "mktVi", "signal", "intraday", "orderbook"], sizes: {}, pins: [] },
 ];
@@ -794,6 +796,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                 if (!isMarket(b.key) && !code) return <div className="empty">종목 없음</div>;
                 return (
                 <>
+                  {b.key === "mktIndex" && <IndexBoard />}
                   {b.key === "mktSignal" && <MarketSignalPanel />}
                   {b.key === "mktPulse" && <MarketPulsePanel />}
                   {b.key === "mktBreadth" && <BreadthPanel />}

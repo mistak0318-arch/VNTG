@@ -5648,3 +5648,17 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   display: inline-block; width: 0.35rem; height: 0.35rem; border-radius: 999px;
   background: var(--green); margin-right: 0.3rem; vertical-align: middle;
 }
+
+/* ===== 지수판 — 한 판에 모아 같이 본다 ===== */
+.ib-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); margin-bottom: 0.6rem; }
+.ib-cell { background: var(--panel); padding: 0.45rem 0.55rem; }
+.ib-nm { font-size: 0.7rem; color: var(--muted); }
+.ib-v { font-size: 1.05rem; font-weight: 700; line-height: 1.15; }
+.ib-r { font-size: 0.72rem; }
+.ib-group + .ib-group { margin-top: 0.5rem; }
+.ib-group-nm { font-size: 0.68rem; color: var(--muted); font-weight: 700; margin-bottom: 0.15rem; }
+.ib-rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0 0.7rem; }
+.ib-row { display: flex; align-items: baseline; gap: 0.35rem; font-size: 0.78rem; padding: 0.12rem 0; }
+.ib-row-nm { flex: 1; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ib-row-v { font-weight: 600; }
+.ib-row-r { width: 4rem; text-align: right; flex: none; }

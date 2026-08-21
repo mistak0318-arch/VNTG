@@ -513,7 +513,12 @@
       "Bash(curl -s --max-time 40 \"http://localhost:4000/api/market/search?q=삼성전자\")",
       "Bash(python dump.py \"ka10032\")",
       "Bash(curl -s --max-time 120 \"http://localhost:4000/api/rank/cumulative?days=5&market=000&universe=20\")",
-      "Bash(curl -s --max-time 150 \"http://localhost:4000/api/rank/cumulative?days=5&market=000&universe=30\")"
+      "Bash(curl -s --max-time 150 \"http://localhost:4000/api/rank/cumulative?days=5&market=000&universe=30\")",
+      "Bash(curl -s --max-time 30 \"http://localhost:4000/api/overview/section/indices\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const r=JSON.parse\\(d\\);const rows=r.data||r;console.log\\('개수',Array.isArray\\(rows\\)?rows.length:'?'\\);if\\(Array.isArray\\(rows\\)\\)rows.forEach\\(x=>console.log\\('  ',x.name,x.price,x.changeRate,'| spark',\\(x.sparkline||[]\\).length\\)\\)}catch{console.log\\(d.slice\\(0,150\\)\\)}}\\)\")",
+      "Bash(curl -s --max-time 30 \"http://localhost:4000/api/overview/section/global\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const r=JSON.parse\\(d\\);const rows=r.data||r;if\\(Array.isArray\\(rows\\)\\)rows.slice\\(0,8\\).forEach\\(x=>console.log\\('  ',x.name,x.price,x.changeRate\\)\\)}catch{console.log\\(d.slice\\(0,100\\)\\)}}\\)\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);const rows=r.data||r;console.log\\('첫 항목 키:',Object.keys\\(rows[0]\\).join\\(', '\\)\\);console.log\\(JSON.stringify\\(rows[0]\\)\\);console.log\\(JSON.stringify\\(rows[1]\\)\\);}\\)\")"
     ]
   }
 }
