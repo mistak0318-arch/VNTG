@@ -64,6 +64,55 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
     });
   });
 
+  /**
+   * 지금 값 여러 개를 **한 번에** — 화면이 1~2초로 물어보는 자리.
+   *
+   * ## 물어보면 알아서 구독한다
+   *
+   * 화면마다 「구독하기」를 따로 챙기면 반드시 빠뜨린다. 여기서 달라는 키를 보고
+   * 아직 안 걸린 것을 걸어 준다 — 처음 한두 번은 `null` 이 오지만 곧 채워진다.
+   * 구독 요청은 `RealtimeClient` 가 모아서 한 번에 보내므로(105110 제한) 여기서
+   * 키를 몇 개 주든 요청은 한 번이다.
+   *
+   * ## 왜 한 번에 받나
+   *
+   * 칸마다 따로 물어보면 1초에 열 번이 나간다. 키를 콤마로 이어 보내면 한 번이다.
+   */
+  router.get("/latest", async (req, res, next) => {
+    try {
+      const keys = String(req.query.keys ?? "")
+        .split(",")
+        .map((k) => k.trim())
+        .filter(Boolean)
+        .slice(0, 40);
+      if (keys.length === 0) {
+        res.json({ enabled: RealtimeClient.enabled, healthy: false, values: {} });
+        return;
+      }
+      if (!RealtimeClient.enabled) {
+        res.json({ enabled: false, healthy: false, values: {} });
+        return;
+      }
+      if (!rt) {
+        rt = new RealtimeClient(client);
+        store = new RealtimeStore(rt);
+        await store.start();
+      }
+      await rt.connect();
+
+      const values: Record<string, { at: number; values: Record<string, string> } | null> = {};
+      for (const key of keys) {
+        const [type, item] = key.split(":");
+        if (!type || !item) continue;
+        rt.subscribe(type, item);
+        values[key] = store?.getLatest(type, item) ?? null;
+      }
+      res.json({ enabled: true, healthy: rt.healthy, lastSeen: rt.lastSeen, values });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /** 하루치 시계열 — 화면이 그림을 그리는 자리 */
   router.get("/series", (req, res) => {
     const type = String(req.query.type ?? "");

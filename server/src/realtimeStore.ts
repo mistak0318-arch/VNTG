@@ -53,6 +53,12 @@ interface Latest {
 /** `type:item` → 값 */
 type SeriesMap = Record<string, Point[]>;
 
+/** 한국시간 HHmmss */
+function hhmmss(now = new Date()): string {
+  const k = new Date(now.getTime() + 9 * 3600 * 1000);
+  return k.toISOString().slice(11, 19).replace(/:/g, "");
+}
+
 function kstDate(now = new Date()): string {
   const k = new Date(now.getTime() + 9 * 3600 * 1000);
   return k.toISOString().slice(0, 10);
@@ -132,7 +138,14 @@ export class RealtimeStore {
       this.sampledAt.set(key, now);
 
       const arr = (this.series[key] ??= []);
-      arr.push({ t: String(values["20"] ?? ""), v: values });
+      /*
+       * 시각은 **프레임이 주면 그걸, 없으면 우리 시계**를 쓴다.
+       *
+       * 체결(`0B`)·프로그램매매(`0w`)는 체결시각(FID 20)을 주는데
+       * **거래원(`0F`)은 안 준다.** 그걸 모르고 `values["20"]` 만 쓰면
+       * 시각이 빈 점만 쌓여서 그림을 못 그린다.
+       */
+      arr.push({ t: values["20"] || hhmmss(), v: values });
       this.dirty = true;
     }
   }
