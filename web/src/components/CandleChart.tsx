@@ -133,6 +133,7 @@ export function CandleChart({
   code,
   height = 320,
   sizeTick = 0,
+  fitKey = "",
 }: {
   candles: Candle[];
   intraday?: boolean;
@@ -147,6 +148,16 @@ export function CandleChart({
    * 크기를 아는 쪽이 이 숫자를 올려 주면 여기서는 다시 재기만 하면 된다.
    */
   sizeTick?: number;
+  /**
+   * **무엇을 그리고 있는지**를 알려주는 표. 이 값이 바뀌면 화면을 다시 맞춘다.
+   *
+   * 갱신 때마다 맞추면 확대해 둔 구간이 풀리고, 한 번만 맞추면 **봉을 바꿔도 시간축이
+   * 예전 자리에 남는다** — 일봉(몇 달치)을 보다가 3분봉(하루치)으로 가면 봉이 구석에
+   * 뭉쳐서 아무것도 안 보였다. 실제로 그래서 「분봉이 이상하다」가 나왔다.
+   *
+   * 「같은 것의 갱신」과 「다른 것으로 갈아탐」은 다른 일이라, 부르는 쪽이 알려 준다.
+   */
+  fitKey?: string;
   /** HTS처럼 기간 최고/최저를 선과 말풍선으로 표시 */
   showExtremes?: boolean;
   /** 툴팁 머리에 표시할 종목명·코드 (없으면 생략) */
@@ -175,6 +186,8 @@ export function CandleChart({
   dataRef.current = candles;
   /** 첫 데이터에서만 화면을 맞춘다. 갱신 때 fitContent 하면 확대가 풀린다 */
   const fitted = useRef(false);
+  /** 마지막으로 화면을 맞췄을 때 무엇을 그리고 있었나 */
+  const fittedKey = useRef("");
   /**
    * 최고/최저 가로선.
    *
@@ -413,10 +426,14 @@ export function CandleChart({
       })),
     );
 
-    // 처음 한 번만 화면을 맞춘다 — 갱신 때마다 하면 사용자가 확대해 둔 구간이 풀린다
-    if (!fitted.current) {
+    /*
+     * 처음 한 번과 **그리는 대상이 바뀐 때** 화면을 맞춘다.
+     * 갱신 때마다 하면 확대해 둔 구간이 풀리고, 안 하면 봉을 바꿔도 시간축이 안 따라온다.
+     */
+    if (!fitted.current || fittedKey.current !== fitKey) {
       chart.timeScale().fitContent();
       fitted.current = true;
+      fittedKey.current = fitKey;
     }
 
     /**
@@ -484,7 +501,7 @@ export function CandleChart({
      * 새로 만든 이평선·볼린저 시리즈가 빈 채로 남아 선이 사라진 것처럼 보인다.
      * 그래서 차트를 다시 만드는 조건을 여기에도 그대로 적는다.
      */
-  }, [candles, showExtremes, maKey, prefs.bbOn, prefs.bbPeriod, prefs.bbStdDev]);
+  }, [candles, fitKey, showExtremes, maKey, prefs.bbOn, prefs.bbPeriod, prefs.bbStdDev]);
 
   if (candles.length === 0) {
     return <div className="empty">차트 데이터 없음</div>;

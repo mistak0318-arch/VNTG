@@ -332,6 +332,7 @@ export function ChartPanel({
             </button>
           )}
           <CandleChart
+            fitKey={`${period}:${span}:${venue}`}
             candles={candles}
             intraday={isIntraday}
             height={chartHeight}
