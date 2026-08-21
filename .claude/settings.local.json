@@ -501,7 +501,9 @@
       "Bash(curl -s \"http://localhost:4000/api/realtime/vi?limit=12\")",
       "Bash(curl -s \"http://localhost:4000/api/realtime/vi?limit=20\")",
       "Bash(curl -s http://localhost:4000/api/rank/specs)",
-      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);for\\(const g of r.groups\\){console.log\\('['+g.group+']'\\);for\\(const i of g.items\\)console.log\\('   ',i.key,'|',i.label\\)}}\\)\")"
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);for\\(const g of r.groups\\){console.log\\('['+g.group+']'\\);for\\(const i of g.items\\)console.log\\('   ',i.key,'|',i.label\\)}}\\)\")",
+      "Bash(python dump.py \"ka10062\")",
+      "Bash(sed -n '/Request/,/Response/p' sheet_ka10062.txt)"
     ]
   }
 }

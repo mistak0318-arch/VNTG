@@ -42,10 +42,31 @@ export function createRankingRouter(client: KiwoomClient): Router {
     try {
       const mrktTp = typeof req.query.market === "string" ? req.query.market : "000";
       const trdeTp = typeof req.query.trade === "string" ? req.query.trade : "1"; // 1:순매수, 2:순매도
+      /*
+       * 기간을 고를 수 있어야 한다.
+       *
+       * 오늘~오늘로 고정해 뒀더니 **장중에 아무것도 안 나왔다.** 문서 예시도
+       * 하루가 아니라 이틀 구간(11/06~11/07)이다 — 「며칠에 걸쳐 같은 방향으로
+       * 샀나」를 보는 TR 이라 하루만 주면 답할 게 없는 셈이다.
+       */
+      /*
+       * ⚠️ **오늘 날짜로 물으면 0건이 온다.** 실측이다 —
+       *   오늘~오늘    0건
+       *   어제~어제    100건
+       *   닷새전~오늘  100건
+       * 당일 집계가 장중에는 아직 없다. 그래서 기본을 **최근 5거래일**로 둔다.
+       * (며칠에 걸쳐 같은 방향으로 샀나를 보는 TR 이라 하루만 주면 답할 게 없다)
+       */
       const today = todayYyyymmdd();
+      const ago = (n: number) => {
+        const d = new Date(Date.now() + 9 * 3600 * 1000 - n * 86400_000);
+        return d.toISOString().slice(0, 10).replace(/-/g, "");
+      };
+      const strt = typeof req.query.from === "string" && req.query.from ? req.query.from : ago(7);
+      const end = typeof req.query.to === "string" && req.query.to ? req.query.to : today;
       const { data } = await client.request(RKINFO_RESOURCE, "ka10062", {
-        strt_dt: today,
-        end_dt: today,
+        strt_dt: strt,
+        end_dt: end,
         mrkt_tp: mrktTp,
         trde_tp: trdeTp,
         sort_cnd: "2", // 2:금액
