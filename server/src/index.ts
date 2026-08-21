@@ -16,6 +16,7 @@ import { createAccountRouter } from "./routes/account.js";
 import { createAlgoRouter } from "./routes/algo.js";
 import { createCalendarRouter } from "./routes/calendar.js";
 import { createMarketRouter } from "./routes/market.js";
+import { createUsKiwoomRouter } from "./routes/usKiwoom.js";
 import { createNewsRouter } from "./routes/news.js";
 import { createNotesRouter } from "./routes/notes.js";
 import { createOverviewRouter } from "./routes/overview.js";
@@ -121,6 +122,7 @@ app.get("/api/health", (_req, res) => {
 const client = createKiwoomClientFromEnv();
 app.use("/api/account", createAccountRouter(client));
 app.use("/api/market", createMarketRouter(client));
+app.use("/api/us-kiwoom", createUsKiwoomRouter(client));
 app.use("/api/ranking", createRankingRouter(client));
 app.use("/api/algo", createAlgoRouter(client));
 app.use("/api/overview", createOverviewRouter(client));
