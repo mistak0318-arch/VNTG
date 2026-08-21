@@ -128,7 +128,7 @@ export function BrokerFlowPanel({ code }: { code: string }) {
    */
   const series = useBrokerSeries(code, picked);
   /* 추정가격 칸과 주가 선 — 창구가 산 자리가 어느 가격이었나 */
-  const prices = useMinutePrices(code);
+  const prices = useMinutePrices(code, series.day || undefined);
 
   if (loading && !data) return <div className="empty">거래원 불러오는 중…</div>;
   if (error && !data) return <div className="error-banner">{error}</div>;

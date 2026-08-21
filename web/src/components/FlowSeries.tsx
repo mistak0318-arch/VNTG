@@ -367,7 +367,7 @@ export function FlowSeries({
  * 실시간 체결(`0B`)로도 낼 수 있지만 그건 **구독한 순간부터**라 과거가 빈다.
  * 분봉(`ka10080`)은 조회라 **하루가 통째로** 있고, 지난 장을 되짚어 볼 때도 그대로 맞는다.
  */
-export function useMinutePrices(code: string): Map<string, number> {
+export function useMinutePrices(code: string, day?: string): Map<string, number> {
   const [map, setMap] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
@@ -382,13 +382,34 @@ export function useMinutePrices(code: string): Map<string, number> {
           stk_min_pole_chart_qry?: { cntr_tm?: string; cur_prc?: string }[];
         };
         if (!alive) return;
+
+        /*
+         * ⚠️ **분봉은 며칠치가 함께 온다.**
+         *
+         * 이걸 모르고 `HHmm` 만 키로 담았더니 **이틀 전 15:35 가 오늘 15:35 를 덮어썼다** —
+         * 삼성전자 오늘 종가가 281,500 인데 표에 247,500(이틀 전 값)이 찍혔다.
+         *
+         * 그래서 **날짜를 먼저 고르고** 그 하루의 분봉만 담는다. 볼 장(`day`)을 주면 그날,
+         * 안 주면 응답에서 가장 최근 날짜다.
+         */
+        const rows = (j.stk_min_pole_chart_qry ?? [])
+          .map((r) => ({
+            tm: String(r.cntr_tm ?? ""),
+            price: Math.abs(Number(String(r.cur_prc ?? "").replace(/[+,\s]/g, "")) || 0),
+          }))
+          .filter((r) => r.tm.length >= 12 && r.price > 0);
+        if (rows.length === 0) {
+          setMap(new Map());
+          return;
+        }
+        const want = day ? day.replace(/-/g, "") : "";
+        const dates = new Set(rows.map((r) => r.tm.slice(0, 8)));
+        const pick = want && dates.has(want) ? want : [...dates].sort().pop();
+
         const next = new Map<string, number>();
-        for (const r of j.stk_min_pole_chart_qry ?? []) {
-          const tm = String(r.cntr_tm ?? "");
-          // YYYYMMDDHHMMSS → HHmm
-          if (tm.length < 12) continue;
-          const price = Math.abs(Number(String(r.cur_prc ?? "").replace(/[+,\s]/g, "")) || 0);
-          if (price > 0) next.set(tm.slice(8, 12), price);
+        for (const r of rows) {
+          if (r.tm.slice(0, 8) !== pick) continue;
+          next.set(r.tm.slice(8, 12), r.price);
         }
         setMap(next);
       } catch {
@@ -398,7 +419,7 @@ export function useMinutePrices(code: string): Map<string, number> {
     return () => {
       alive = false;
     };
-  }, [code]);
+  }, [code, day]);
 
   return map;
 }

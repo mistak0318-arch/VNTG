@@ -102,7 +102,7 @@ function useProgramSeries(code: string): FlowSeriesData {
 function IntradayProgram({ code }: { code: string }) {
   const { pts, day, stale } = useProgramSeries(code);
   /* 주가를 같이 그린다 — 프로그램이 붙는데 주가가 안 가면 그것도 정보다 */
-  const prices = useMinutePrices(code);
+  const prices = useMinutePrices(code, day || undefined);
 
   /*
    * ⚠️ **없으면 없다고 적는다.**
