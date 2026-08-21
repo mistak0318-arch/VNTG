@@ -53,7 +53,7 @@ function toEok(v: number): number {
  * 「지금 붙고 있나」를 못 읽는다.
  */
 function useProgramSeries(code: string) {
-  const [pts, setPts] = useState<{ t: string; v: number }[]>([]);
+  const [pts, setPts] = useState<{ t: string; v: number; c: number }[]>([]);
 
   useEffect(() => {
     if (!code) {
@@ -66,10 +66,19 @@ function useProgramSeries(code: string) {
         const r = await fetch(`/api/realtime/series?type=0w&item=${encodeURIComponent(code)}`);
         const j = (await r.json()) as { points: { t: string; v: Record<string, string> }[] };
         if (!alive) return;
+        /*
+         * 증감(213)과 **누적(212)을 같이** 담는다.
+         * 누적을 증감의 합으로 만들면 서버가 놓친 구간만큼 어긋난다 —
+         * 키움이 누적을 직접 주므로 그걸 쓰는 게 정확하다.
+         */
         setPts(
           (j.points ?? [])
-            .map((p) => ({ t: p.t, v: Number(p.v["213"]) || 0 }))
-            .filter((p) => p.v !== 0),
+            .map((p) => ({
+              t: p.t,
+              v: Number(p.v["213"]) || 0,
+              c: Number(p.v["212"]) || 0,
+            }))
+            .filter((p) => p.v !== 0 || p.c !== 0),
         );
       } catch {
         /* 실시간이 없으면 빈 그림 — 아래 일자별은 REST 라 그대로 뜬다 */
@@ -93,10 +102,11 @@ function IntradayProgram({ code }: { code: string }) {
   return (
     <section className="card">
       <h3 className="section-heading">오늘 장중 — 구간별 프로그램 순매수</h3>
-      <DeltaChart points={pts} unit="백만" />
+      <DeltaChart points={pts} cum={pts.map((p) => p.c)} unit="백만" />
       <div className="table-note">
-        <b>누적이 아니라 그 구간에 붙은 양</b>입니다 — 아침에 크게 산 뒤 가만히 있으면
-        0 으로 떨어집니다. 서버가 실시간으로 30초마다 쌓으므로 <b>화면을 안 보고 있어도</b>
+        <b>막대는 그 구간에 붙은 양</b>이고 <b>선은 오늘 누적</b>입니다 — 선이 0을 넘는
+        순간(●)이 총매도에서 총매수로 돌아선 자리입니다. 막대만 보면 지금 붙는지는 알아도
+        전체적으로 어느 쪽인지 모릅니다. 서버가 30초마다 쌓으므로 <b>화면을 안 보고 있어도</b>
         늘어납니다.
       </div>
     </section>

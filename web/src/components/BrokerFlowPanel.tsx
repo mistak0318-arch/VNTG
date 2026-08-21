@@ -45,7 +45,7 @@ function Bar({ v, mx, cls }: { v: number; mx: number; cls: string }) {
  * 순위가 바뀌는 순간 다른 창구 값을 그 창구 것으로 그리게 된다.
  */
 function useBrokerSeries(code: string, broker: string | null) {
-  const [pts, setPts] = useState<{ t: string; v: number }[]>([]);
+  const [pts, setPts] = useState<{ t: string; v: number; c: number }[]>([]);
 
   useEffect(() => {
     if (!code || !broker) {
@@ -60,19 +60,23 @@ function useBrokerSeries(code: string, broker: string | null) {
         );
         const j = (await r.json()) as { points: { t: string; v: Record<string, string> }[] };
         if (!alive) return;
-        const out: { t: string; v: number }[] = [];
+        const out: { t: string; v: number; c: number }[] = [];
         for (const p of j.points ?? []) {
           let net = 0;
+          let cum = 0;
           for (let i = 1; i <= 5; i++) {
-            // 매수: 코드 156~160, 증감 176~180 / 매도: 코드 146~150, 증감 166~170
+            // 매수: 코드 156~160, 수량 171~175, 증감 176~180
             if (String(p.v[String(155 + i)] ?? "").trim() === broker) {
               net += Number(p.v[String(175 + i)]) || 0;
+              cum += Number(p.v[String(170 + i)]) || 0;
             }
+            // 매도: 코드 146~150, 수량 161~165, 증감 166~170
             if (String(p.v[String(145 + i)] ?? "").trim() === broker) {
               net -= Number(p.v[String(165 + i)]) || 0;
+              cum -= Number(p.v[String(160 + i)]) || 0;
             }
           }
-          if (net !== 0) out.push({ t: p.t, v: net });
+          if (net !== 0 || cum !== 0) out.push({ t: p.t, v: net, c: cum });
         }
         setPts(out);
       } catch {
@@ -180,7 +184,7 @@ export function BrokerFlowPanel({ code }: { code: string }) {
               (장이 닫혀 있으면 더 안 쌓입니다)
             </div>
           ) : (
-            <DeltaChart points={picks} unit="주" />
+            <DeltaChart points={picks} cum={picks.map((p) => p.c)} unit="주" />
           )}
         </section>
       )}
@@ -192,8 +196,9 @@ export function BrokerFlowPanel({ code }: { code: string }) {
         ⚠️ 키움은 <b>상위 5개만</b> 줍니다 — 6위 밖에서 크게 산 창구는 안 보이므로 이 값을
         「그 종목 전체」로 읽으면 안 됩니다.
         <br />
-        시간대별은 <b>그 구간에 붙은 양(증감)</b>입니다 — 누적이 아니라서 0 이면 그때는
-        그 창구가 쉬었다는 뜻입니다.
+        <b>막대는 그 구간에 붙은 양</b>(0 이면 그때 그 창구가 쉰 것)이고
+        <b>선은 그 창구의 오늘 누적 순매수</b>입니다 — 선이 0을 넘는 순간(●)이
+        그 창구가 매도에서 매수로 돌아선 자리입니다.
       </div>
     </div>
   );

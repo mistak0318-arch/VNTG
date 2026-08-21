@@ -5662,3 +5662,7 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .ib-row-nm { flex: 1; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ib-row-v { font-weight: 600; }
 .ib-row-r { width: 4rem; text-align: right; flex: none; }
+/* 누적선 — 0을 넘는 순간이 돌아선 자리 */
+.dc-cum { fill: none; stroke: var(--text); stroke-width: 1.4; opacity: 0.75; vector-effect: non-scaling-stroke; }
+.dc-cross { fill: var(--accent, #f5c542); stroke: var(--panel); stroke-width: 1; }
+.dc-total { font-size: 0.8rem; font-variant-numeric: tabular-nums; margin-top: 0.15rem; }
