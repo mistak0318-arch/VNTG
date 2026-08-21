@@ -72,3 +72,34 @@ export function toCandles(chart: RawRecord | null, period: Period): Candle[] {
   // API는 최신순으로 내려오므로 시간순(오름차순)으로 뒤집기
   return out.reverse();
 }
+
+/**
+ * 분봉을 **최근 며칠치**로 자른다.
+ *
+ * ## 왜 필요한가
+ *
+ * 키움 분봉은 며칠치를 한꺼번에 준다. 그걸 통째로 그리면 **하루가 손톱만 해져서
+ * 분봉의 흐름이 안 보인다** — 분봉을 켜는 이유가 오늘 어떻게 흘렀나를 보는 것인데
+ * 정작 그게 안 보이면 켠 뜻이 없다. 일봉·주봉은 원래 길게 보는 것이라 그대로 둔다.
+ *
+ * 「최근 N개 봉」이 아니라 **「최근 N일」**로 자른다. 3분봉과 60분봉은 하루에 담기는
+ * 봉 개수가 스무 배 차이 나서, 개수로 자르면 60분봉은 며칠치가 남고 3분봉은 반나절만 남는다.
+ *
+ * 날짜는 타임스탬프를 그대로 나눠 센다 — 분봉 시각을 만들 때 **한국시간을 UTC 인 척**
+ * 넣어 두었으므로(`parseMinuteTime`) 86400 으로 나누면 그게 곧 한국 날짜다.
+ */
+export function lastDays(candles: Candle[], days: number): Candle[] {
+  if (days <= 0 || candles.length === 0) return candles;
+  const dayOf = (t: Candle["time"]) => Math.floor(Number(t) / 86400);
+  const keys: number[] = [];
+  for (let i = candles.length - 1; i >= 0; i--) {
+    const k = dayOf(candles[i].time);
+    if (keys[keys.length - 1] !== k) keys.push(k);
+    if (keys.length >= days) {
+      // 이 날짜부터 끝까지가 우리가 볼 구간이다
+      const from = keys[keys.length - 1];
+      return candles.filter((c) => dayOf(c.time) >= from);
+    }
+  }
+  return candles;
+}

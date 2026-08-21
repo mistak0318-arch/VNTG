@@ -4,7 +4,7 @@ import type { RawRecord } from "../api";
 import { CandleChart } from "./CandleChart";
 import { useChartPrefs } from "../useChartPrefs";
 import { ChartInsights } from "./ChartInsights";
-import { PERIOD_CONFIG, toCandles, type Period } from "./chartCandles";
+import { PERIOD_CONFIG, lastDays, toCandles, type Period } from "./chartCandles";
 
 /**
  * 기간 전환이 되는 캔들차트 패널.
@@ -38,6 +38,20 @@ const VENUES: { key: Venue; label: string; hint: string }[] = [
  * 폰을 가로로 눕히면 화면 높이가 375px 밖에 안 된다 — 거기서 108px 를 떼면
  * 차트가 화면의 60% 도 못 채운다. **낮은 화면에서는 머리줄을 접어** 그만큼을 차트에 준다.
  */
+/**
+ * 분봉을 며칠치까지 보여줄까.
+ *
+ * 키움은 분봉을 며칠치 한꺼번에 준다. 통째로 그리면 하루가 손톱만 해져서 **분봉을 켠
+ * 뜻이 없어진다** — 오늘 어떻게 흘렀나를 보려고 켜는 것이다. 그래서 **하루가 기본**이고,
+ * 어제와 견주고 싶을 때 3일, 다 보고 싶으면 전체를 고른다.
+ * 일봉·주봉·월봉은 원래 길게 보는 것이라 이 칸이 안 나온다.
+ */
+const SPANS: { key: string; label: string; days: number }[] = [
+  { key: "1d", label: "1일", days: 1 },
+  { key: "3d", label: "3일", days: 3 },
+  { key: "all", label: "전체", days: 0 },
+];
+
 const CHROME_PX = 108;
 const CHROME_PX_COMPACT = 62;
 /** 이보다 낮으면 폰을 눕힌 것으로 본다 */
@@ -70,6 +84,8 @@ export function ChartPanel({
   const { prefs } = useChartPrefs();
   const [period, setPeriod] = useState<Period>(initialPeriod);
   const [venue, setVenue] = useState<Venue>("krx");
+  /** 분봉에서만 쓰는 표시 구간 */
+  const [span, setSpan] = useState("1d");
   const [full, setFull] = useState(false);
   /** 전체화면에서는 판독 줄을 접어 둔다 — 크게 보려고 들어온 자리다 */
   const [fullInsights, setFullInsights] = useState(false);
@@ -96,7 +112,12 @@ export function ChartPanel({
     isIntraday ? 10_000 : 60_000,
   );
 
-  const candles = toCandles(chart, period);
+  const all = toCandles(chart, period);
+  /*
+   * 분봉만 자른다. 자를 때도 **받은 것을 버리지 않는다** — 구간을 바꾸면 다시 안 받고
+   * 바로 넓어진다(같은 응답을 다시 부르면 초당 제한만 먹는다).
+   */
+  const candles = isIntraday ? lastDays(all, SPANS.find((s) => s.key === span)?.days ?? 1) : all;
 
   /* ---------------- 크게 보기 ---------------- */
 
@@ -197,26 +218,60 @@ export function ChartPanel({
 
   const toolbar = (
     <div className="period-toggle">
-      {VENUES.map((v) => (
-        <button
-          key={v.key}
-          className={`period-btn venue ${v.key === venue ? "active" : ""}`}
-          onClick={() => setVenue(v.key)}
-          title={v.hint}
-        >
-          {v.label}
-        </button>
-      ))}
+      {/*
+        거래소는 **드롭박스로 접는다.** 버튼 셋을 늘어놓으면 도구줄이 길어져서
+        정작 자주 누르는 기간 버튼이 화면 밖으로 밀린다 — 거래소는 한 번 정해 두고
+        거의 안 바꾸는 값이라 접어 두는 쪽이 맞다.
+      */}
+      <select
+        className="period-select"
+        value={venue}
+        onChange={(e) => setVenue(e.target.value as Venue)}
+        title={VENUES.find((v) => v.key === venue)?.hint}
+      >
+        {VENUES.map((v) => (
+          <option key={v.key} value={v.key}>
+            {v.label}
+          </option>
+        ))}
+      </select>
       <span className="period-sep" />
-      {(Object.keys(PERIOD_CONFIG) as Period[]).map((p) => (
-        <button
-          key={p}
-          className={`period-btn ${p === period ? "active" : ""}`}
-          onClick={() => setPeriod(p)}
-        >
-          {PERIOD_CONFIG[p].label}
-        </button>
-      ))}
+      {/*
+        봉 종류도 **드롭박스로 접는다.**
+
+        여덟 개를 버튼으로 늘어놓으면 도구줄이 화면을 넘어 가로로 굴러간다.
+        거기에 분봉 구간까지 붙으니 열한 개가 되어 정작 자주 누르는 게 밖으로 밀렸다.
+
+        고르는 값이 많으면 **접는 게 맞다** — 봉은 한 번 정하면 한동안 그대로 보는 값이고,
+        분봉을 켠 뒤 자주 바꾸는 건 **구간**이라 그쪽만 버튼으로 남긴다.
+      */}
+      <select
+        className="period-select"
+        value={period}
+        onChange={(e) => setPeriod(e.target.value as Period)}
+      >
+        {(Object.keys(PERIOD_CONFIG) as Period[]).map((p) => (
+          <option key={p} value={p}>
+            {PERIOD_CONFIG[p].label}
+          </option>
+        ))}
+      </select>
+      {/* 분봉에서만 — 일봉·주봉은 원래 길게 보는 것이다 */}
+      {isIntraday && (
+        <>
+          <span className="period-sep" />
+          {SPANS.map((sp) => (
+            <button
+              key={sp.key}
+              className={`period-btn span ${sp.key === span ? "active" : ""}`}
+              onClick={() => setSpan(sp.key)}
+              title={sp.days === 0 ? "받아온 전체" : `최근 ${sp.days}거래일`}
+            >
+              {sp.label}
+            </button>
+          ))}
+        </>
+      )}
       {/*
         전체화면일 때만 여기 둔다. 「크게」 버튼은 도구줄에 두면 안 된다 —
         이 줄은 가로로 굴러가고(모바일 가로밀림을 막느라 그렇게 했다) 맨 끝 버튼은

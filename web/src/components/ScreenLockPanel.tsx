@@ -1,4 +1,4 @@
-import { PIN, useScreenLock } from "../useScreenLock";
+import { HOTKEYS, PIN, useScreenLock, type Hotkey } from "../useScreenLock";
 
 /**
  * 화면 잠금 설정 — **켜고 끄기와 시간, 그 둘뿐이다.**
@@ -17,7 +17,7 @@ export function ScreenLockPanel() {
     <div>
       <p className="page-note">
         자리를 비운 사이 화면을 가립니다. <b>이 기기에만</b> 저장되므로 회사 PC 만 켜 둘 수
-        있습니다. 메뉴 맨 아래 <b>🔒</b> 버튼을 누르면 언제든 바로 잠깁니다.
+        있습니다. 메뉴 맨 아래 <b>🔒</b> 버튼이나 <b>단축키</b>로 언제든 바로 잠깁니다.
       </p>
 
       <div className="st-cfg-row">
@@ -43,6 +43,28 @@ export function ScreenLockPanel() {
             onChange={(e) => save({ ...config, minutes: Number(e.target.value) })}
           />{" "}
           분 동안 아무 동작이 없으면
+        </span>
+      </div>
+
+      {/*
+        단축키 — **회사에서 누가 다가올 때 버튼을 찾을 새가 없다.**
+        손이 이미 키보드에 있으니 키 하나가 훨씬 빠르다.
+        자동 잠금과 따로 논다 — 시간 잠금은 꺼 두고 단축키만 쓸 수 있다.
+      */}
+      <div className="st-cfg-row">
+        <span className="st-cfg-k">단축키</span>
+        <span>
+          <select
+            value={config.hotkey}
+            onChange={(e) => save({ ...config, hotkey: e.target.value as Hotkey })}
+          >
+            {HOTKEYS.map((h) => (
+              <option key={h.key} value={h.key}>
+                {h.label}
+              </option>
+            ))}
+          </select>{" "}
+          <span className="pt-n">{HOTKEYS.find((h) => h.key === config.hotkey)?.hint}</span>
         </span>
       </div>
 

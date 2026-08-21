@@ -41,9 +41,71 @@ export interface LockConfig {
   enabled: boolean;
   /** 몇 분 동안 아무 동작이 없으면 잠글지 */
   minutes: number;
+  /**
+   * 바로 잠그는 단축키.
+   *
+   * 회사에서 누가 다가올 때 **버튼을 찾아 누를 새가 없다.** 손이 이미 키보드에 있으므로
+   * 키 하나가 훨씬 빠르다.
+   *
+   * ⚠️ 편집 단축키와 겹치는 걸 조심한다. `Ctrl+Z`(실행취소)와 `Ctrl+X`(잘라내기)는
+   * 메모를 적다가 누르면 **화면이 잠기고 되돌리려던 글자는 그대로 남아** 두 번 손해다.
+   * 기본은 `Ctrl+Shift+Z` 다 — 「다시 실행」과 겹치지만 이 앱에서 실행취소를 되돌릴 일이
+   * 사실상 없어서 실제로 부딪히지 않는다. 굳이 겹치는 걸 쓰겠다면 목록에 남겨는 뒀다.
+   */
+  hotkey: Hotkey;
 }
 
-const DEFAULT: LockConfig = { enabled: false, minutes: 5 };
+/** 「끄기」를 포함해 고를 수 있는 조합 */
+export type Hotkey =
+  | "off"
+  | "ctrl-shift-z"
+  | "ctrl-shift-x"
+  | "ctrl-shift-l"
+  | "ctrl-q"
+  | "alt-l"
+  | "ctrl-x";
+
+export const HOTKEYS: { key: Hotkey; label: string; hint: string }[] = [
+  {
+    key: "ctrl-shift-z",
+    label: "Ctrl+Shift+Z",
+    hint: "기본값 — 왼손 끝으로 눌러집니다. 「다시 실행」과 겹치지만 이 앱에서는 쓸 일이 없습니다",
+  },
+  { key: "ctrl-shift-x", label: "Ctrl+Shift+X", hint: "왼손만으로 눌러집니다" },
+  { key: "ctrl-shift-l", label: "Ctrl+Shift+L", hint: "Lock — 입력창에서 안 쓰는 조합입니다" },
+  { key: "ctrl-q", label: "Ctrl+Q", hint: "가장 빠르지만 브라우저에 따라 종료로 먹힐 수 있습니다" },
+  { key: "alt-l", label: "Alt+L", hint: "한 손으로" },
+  {
+    key: "ctrl-x",
+    label: "Ctrl+X",
+    hint: "⚠️ 잘라내기와 겹칩니다 — 메모에서 글자를 잘라내려다 화면이 잠깁니다",
+  },
+  { key: "off", label: "안 씀", hint: "단축키로는 안 잠급니다" },
+];
+
+/** 눌린 키가 그 조합인가 */
+function matches(e: KeyboardEvent, hotkey: Hotkey): boolean {
+  const k = e.key.toLowerCase();
+  switch (hotkey) {
+    case "ctrl-shift-l":
+      return (e.ctrlKey || e.metaKey) && e.shiftKey && k === "l";
+    case "ctrl-shift-z":
+      return (e.ctrlKey || e.metaKey) && e.shiftKey && k === "z";
+    case "ctrl-shift-x":
+      return (e.ctrlKey || e.metaKey) && e.shiftKey && k === "x";
+    case "ctrl-q":
+      return (e.ctrlKey || e.metaKey) && !e.shiftKey && k === "q";
+    case "alt-l":
+      return e.altKey && !e.ctrlKey && k === "l";
+    case "ctrl-x":
+      // 잘라내기와 겹치는 걸 알고도 고른 사람만 온다
+      return (e.ctrlKey || e.metaKey) && !e.shiftKey && k === "x";
+    default:
+      return false;
+  }
+}
+
+const DEFAULT: LockConfig = { enabled: false, minutes: 5, hotkey: "ctrl-shift-z" };
 
 export async function sha256(text: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -57,6 +119,7 @@ function read(): LockConfig {
     return {
       enabled: Boolean(raw.enabled),
       minutes: Math.min(Math.max(Number(raw.minutes) || 5, 1), 120),
+      hotkey: (HOTKEYS.some((h) => h.key === raw.hotkey) ? raw.hotkey : DEFAULT.hotkey) as Hotkey,
     };
   } catch {
     return { ...DEFAULT };
@@ -120,6 +183,27 @@ export function useScreenLock() {
       if (timer.current) clearTimeout(timer.current);
     };
   }, [config.enabled, config.minutes, locked, lock]);
+
+  /*
+   * 단축키로 바로 잠근다.
+   *
+   * **자동 잠금(`enabled`)과 따로 논다.** 시간이 지나면 잠그는 건 꺼 두고 싶어도
+   * 손으로 잠그는 건 쓰고 싶을 수 있다 — 회사에서 자리를 뜰 때가 그렇다.
+   *
+   * 입력창 안이라고 봐주지 않는다. 누가 다가와서 누르는 것인데 「지금 메모 중이라
+   * 안 잠급니다」는 말이 안 된다. 대신 **입력창에서 안 쓰는 조합**만 목록에 뒀다.
+   */
+  useEffect(() => {
+    if (config.hotkey === "off" || locked) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!matches(e, config.hotkey)) return;
+      // 브라우저 기본 동작(예: Ctrl+Q 종료)보다 먼저 잠근다
+      e.preventDefault();
+      lock();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [config.hotkey, locked, lock]);
 
   return { config, save, locked, lock, unlock };
 }

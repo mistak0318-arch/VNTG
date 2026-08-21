@@ -5845,3 +5845,10 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   font-size: 0.78rem; font-variant-numeric: tabular-nums;
 }
 .ma-hint-cash i { font-style: normal; color: var(--muted); font-size: 0.7rem; }
+
+/* 차트 도구줄 — 거래소는 드롭박스로 접어 기간 버튼 자리를 지킨다 */
+.period-select {
+  font-size: 0.75rem; padding: 0.15rem 0.3rem; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  flex: none;
+}
