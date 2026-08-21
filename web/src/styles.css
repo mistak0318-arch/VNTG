@@ -5641,3 +5641,10 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 6px;
   display: inline-block;
 }
+
+/* 관심종목 시세판 — 폰에서도 읽히게 네 칸만 */
+.wt td, .wt th { padding-top: 0.28rem; padding-bottom: 0.28rem; }
+.wt-dot {
+  display: inline-block; width: 0.35rem; height: 0.35rem; border-radius: 999px;
+  background: var(--green); margin-right: 0.3rem; vertical-align: middle;
+}
