@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { RealtimeClient } from "../realtimeClient.js";
-import { RealtimeStore } from "../realtimeStore.js";
+import { getRealtime, peekRealtime } from "../realtimeHub.js";
 
 /**
  * 실시간 웹소켓 — **아직 확인 단계다.**
@@ -13,17 +13,12 @@ import { RealtimeStore } from "../realtimeStore.js";
  */
 export function createRealtimeRouter(client: KiwoomClient): Router {
   const router = Router();
-  let rt: RealtimeClient | null = null;
-  let store: RealtimeStore | null = null;
+  /* 만드는 자리는 `realtimeHub` 하나다 — 여기서 또 만들면 연결이 둘이 된다 */
+  const hub = () => peekRealtime();
 
   router.post("/connect", async (_req, res, next) => {
     try {
-      if (!rt) {
-        rt = new RealtimeClient(client);
-        // 저장소는 붙기 전에 걸어 둔다 — 첫 프레임부터 받아야 한다
-        store = new RealtimeStore(rt);
-        await store.start();
-      }
+      const { client: rt } = await getRealtime(client);
       await rt.connect();
       res.json({ ok: true, state: rt.state });
     } catch (err) {
@@ -34,6 +29,7 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
   router.post("/subscribe", (req, res) => {
     const type = String(req.body?.type ?? "");
     const item = String(req.body?.item ?? "");
+    const { client: rt } = hub();
     if (!rt) {
       res.status(400).json({ error: "먼저 connect 하세요" });
       return;
@@ -47,6 +43,7 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
    * `healthy` 가 거짓이면 실시간을 믿지 말고 평소대로 폴링하면 된다.
    */
   router.get("/status", (_req, res) => {
+    const { client: rt } = hub();
     res.json({
       enabled: RealtimeClient.enabled,
       state: rt?.state ?? "안 붙음",
@@ -56,6 +53,7 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
   });
 
   router.get("/log", (_req, res) => {
+    const { client: rt } = hub();
     res.json({
       state: rt?.state ?? "안 붙음",
       healthy: rt?.healthy ?? false,
@@ -93,11 +91,7 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
         res.json({ enabled: false, healthy: false, values: {} });
         return;
       }
-      if (!rt) {
-        rt = new RealtimeClient(client);
-        store = new RealtimeStore(rt);
-        await store.start();
-      }
+      const { client: rt, store } = await getRealtime(client);
       await rt.connect();
 
       const values: Record<string, { at: number; values: Record<string, string> } | null> = {};
@@ -117,6 +111,7 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
   router.get("/series", (req, res) => {
     const type = String(req.query.type ?? "");
     const item = String(req.query.item ?? "");
+    const { store } = hub();
     res.json({
       type,
       item,
@@ -127,12 +122,12 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
 
   /** 무엇이 얼마나 쌓였나 — 진단용 */
   router.get("/store", (_req, res) => {
+    const { store } = hub();
     res.json({ items: store?.summary ?? [] });
   });
 
   router.post("/close", (_req, res) => {
-    rt?.close();
-    rt = null;
+    hub().client?.close();
     res.json({ ok: true });
   });
 

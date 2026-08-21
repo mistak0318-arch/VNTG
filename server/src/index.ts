@@ -41,6 +41,7 @@ import { createChannelsRouter } from "./routes/channels.js";
 import { createCalendarVisionRouter } from "./routes/calendarVision.js";
 import { createFocusRouter } from "./routes/focus.js";
 import { createRealtimeRouter } from "./routes/realtime.js";
+import { startRealtimeScheduler } from "./realtimeHub.js";
 import { createSignalRouter } from "./routes/signal.js";
 import { createPaperRouter } from "./routes/paper.js";
 import { createJournalRouter } from "./routes/journal.js";
@@ -164,6 +165,8 @@ startChannelScheduler();
 startSignalTrackScheduler(client);
 startLeaderScanScheduler(client);
 startCloseBetScheduler(client);
+/* 장 시간에 알아서 붙어 거래원·프로그램매매를 쌓는다 — 화면을 안 봐도 */
+startRealtimeScheduler(client);
   startDisclosureScheduler();
 
 /**
