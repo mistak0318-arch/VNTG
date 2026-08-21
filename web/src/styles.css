@@ -5263,19 +5263,25 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 }
 .ob-total span { color: var(--muted); font-size: 0.78rem; }
 .ob-total b:first-child { text-align: right; }
-/* 체결 목록 — 왼쪽 아래에 흐르는 그것 */
-.ob-ticks { margin-top: 0.5rem; }
-.ob-ticks-h {
-  display: flex; justify-content: space-between; align-items: baseline;
-  font-size: 0.72rem; color: var(--muted); margin-bottom: 0.2rem;
+/* 체결 흐름 — 표 대신 한 줄 띠. 방향은 색, 크기는 높이 */
+.ob-flow {
+  display: flex; align-items: stretch; gap: 0.4rem; height: 2rem;
+  margin: 0.25rem 0 0.45rem; padding: 0.15rem 0.3rem;
+  border: 1px solid var(--border); border-radius: 6px;
 }
-.ob-ticks-b { max-height: 11rem; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
-.ob-tick {
-  display: grid; grid-template-columns: 5rem 1fr 1fr; gap: 0.4rem;
-  padding: 0.15rem 0.4rem; font-size: 0.78rem; font-variant-numeric: tabular-nums;
+.ob-flow-str {
+  align-self: center; font-size: 0.8rem; font-weight: 700; min-width: 2.8rem;
+  font-variant-numeric: tabular-nums;
 }
-.ob-tick b { text-align: right; }
-.ob-tick:nth-child(odd) { background: var(--panel-2); }
+.ob-flow-bars { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 1px; overflow: hidden; }
+.ob-flow-bar { flex: 1 1 0; min-width: 2px; border-radius: 1px; }
+.ob-flow-bar.buy { background: var(--red); }
+.ob-flow-bar.sell { background: var(--blue); }
+.ob-flow-last {
+  align-self: center; display: flex; flex-direction: column; align-items: flex-end;
+  font-size: 0.78rem; font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.ob-flow-last i { font-style: normal; font-size: 0.62rem; }
 .ob-qty { position: relative; display: flex; align-items: center; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 .ob-qty.left { justify-content: flex-end; }
 .ob-qty.left b { position: relative; padding-right: 0.3rem; }
@@ -5774,3 +5780,37 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   font-style: normal; font-size: 0.62rem; color: var(--muted);
   border: 1px solid var(--border); border-radius: 4px; padding: 0 0.2rem;
 }
+
+/* ===== 체결강도 — 사자가 몰리나 팔자가 몰리나 ===== */
+.sp-top { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+.sp-now { font-size: 1rem; font-variant-numeric: tabular-nums; }
+.sp-now b { font-size: 1.25rem; }
+.sp-chart { position: relative; }
+.sp-chart svg { width: 100%; height: 7rem; display: block; }
+/* 100 = 균형. 값보다 이 선을 넘었는지가 먼저다 */
+.sp-base { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.sp-line { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.sp-line.up { stroke: var(--red); }
+.sp-line.down { stroke: var(--blue); }
+.sp-cross { fill: var(--text); }
+.sp-jump { stroke: var(--muted); stroke-width: 1; opacity: 0.45; vector-effect: non-scaling-stroke; }
+.sp-y {
+  position: absolute; right: 0.15rem; font-size: 0.65rem; color: var(--muted);
+  background: var(--panel); padding: 0 0.15rem; font-variant-numeric: tabular-nums; pointer-events: none;
+}
+.sp-y.hi { top: 0; }
+.sp-y.lo { bottom: 0; }
+.sp-y.base { transform: translateY(-50%); }
+.sp-legend { display: flex; align-items: baseline; gap: 0.5rem; font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
+.sp-mid { flex: 1; text-align: center; font-variant-numeric: tabular-nums; }
+.sp-marks { display: flex; flex-wrap: wrap; gap: 0.2rem 1rem; font-size: 0.72rem; color: var(--muted); margin-top: 0.35rem; }
+.sp-k { display: inline-block; width: 0.5rem; height: 0.5rem; margin-right: 0.2rem; }
+.sp-k.cross { border-radius: 999px; background: var(--text); }
+.sp-k.jump { width: 2px; height: 0.7rem; background: var(--muted); vertical-align: -1px; }
+/* 최근 체결 — 방향은 색, 크기는 높이 */
+.sp-flow { display: flex; align-items: stretch; gap: 0.4rem; height: 2rem; margin-top: 0.5rem; }
+.sp-flow > .pt-n { align-self: center; font-size: 0.7rem; }
+.sp-bars { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 1px; }
+.sp-bar { flex: 1 1 0; min-width: 2px; border-radius: 1px; }
+.sp-bar.buy { background: var(--red); }
+.sp-bar.sell { background: var(--blue); }

@@ -569,7 +569,10 @@
       "PowerShell($c = Get-NetTCPConnection -LocalPort 4000 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { \"PID $_ 가 4000 점유중\"; Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } } else { \"4000 비어 있음\" })",
       "Bash(curl -s --max-time 30 \"http://localhost:4000/api/market/orderbook/000660\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('체결강도',j.strength\\)}\\)\")",
-      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('기준가',j.basePrice,'| 거래대금',Math.round\\(j.tradeValue/1e8\\)+'억','| 체결',j.ticks.length+'건',JSON.stringify\\(j.ticks[0]\\)\\)}\\)\")"
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('기준가',j.basePrice,'| 거래대금',Math.round\\(j.tradeValue/1e8\\)+'억','| 체결',j.ticks.length+'건',JSON.stringify\\(j.ticks[0]\\)\\)}\\)\")",
+      "Bash(curl -s --max-time 25 \"http://localhost:4000/api/market/strength/000660?mode=time\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const r=j.cntr_str_tm||j.cntr_str_daly||[];console.log\\('행',r.length\\);for\\(const x of r.slice\\(0,3\\)\\)console.log\\(JSON.stringify\\(x\\)\\)}\\)\")",
+      "Bash(rm -f components/StrengthPanel.tsx)"
     ]
   }
 }

@@ -195,6 +195,53 @@ export function OrderBookPanel({ code }: { code: string }) {
         </span>
       </div>
 
+      {/*
+        체결 흐름 — **표가 아니라 띠.**
+
+        처음엔 시각·가격·수량을 표로 스무 줄 깔았다. 정확하긴 한데 자리를 크게 먹고,
+        정작 알고 싶은 「지금 사자가 몰리나 팔자가 몰리나」는 숫자를 하나씩 읽어야 나왔다.
+
+        방향은 **색**, 크기는 **높이**로 두면 한 줄이면 된다 — 빨간 막대가 길게 이어지면
+        사자가 붙는 것이고, 파란 막대가 쏟아지면 던지는 것이다.
+        수량 차이가 백 배씩 나므로 높이는 **제곱근**으로 눌러 그린다(한 건이 크면
+        나머지가 전부 1px 이 되는 걸 막는다). 정확한 값은 짚으면 나온다.
+      */}
+      {book.ticks.length > 0 && (
+        <div className="ob-flow">
+          <span
+            className={`ob-flow-str ${
+              book.strength === null ? "" : book.strength >= 100 ? "positive" : "negative"
+            }`}
+            title="체결강도 — 100 을 넘으면 매수 체결이 우세"
+          >
+            {book.strength === null ? "-" : `${book.strength.toFixed(0)}%`}
+          </span>
+          <span className="ob-flow-bars">
+            {/* 왼쪽이 과거 — 시간이 흐르는 방향을 다른 그래프와 맞춘다 */}
+            {[...book.ticks].reverse().map((t, i) => {
+              const mxq = Math.max(...book.ticks.map((x) => Math.abs(x.qty)), 1);
+              const h = Math.sqrt(Math.abs(t.qty) / mxq) * 100;
+              return (
+                <i
+                  key={`${t.t}-${i}`}
+                  className={`ob-flow-bar ${t.qty >= 0 ? "buy" : "sell"}`}
+                  style={{ height: `${Math.max(8, h)}%` }}
+                  title={`${t.t.slice(0, 2)}:${t.t.slice(2, 4)}:${t.t.slice(4, 6)} · ${fmtNum(
+                    t.price,
+                  )} · ${t.qty > 0 ? "매수" : "매도"} ${fmtNum(Math.abs(t.qty))}주`}
+                />
+              );
+            })}
+          </span>
+          <span className="ob-flow-last">
+            <b className={signClass(rate(book.ticks[0].price))}>{fmtNum(book.ticks[0].price)}</b>
+            <i className="pt-n">
+              {book.ticks[0].t.slice(0, 2)}:{book.ticks[0].t.slice(2, 4)}
+            </i>
+          </span>
+        </div>
+      )}
+
       <div className="ob-body">
         <div className="ob-book">
           {book.asks.map((l) => row(l, "ask"))}
@@ -278,29 +325,6 @@ export function OrderBookPanel({ code }: { code: string }) {
         <b className="positive">{fmtNum(book.totalBid)}</b>
       </div>
 
-      {/* 체결 목록 — HTS 호가 화면 왼쪽 아래에 흐르는 그것 */}
-      {book.ticks.length > 0 && (
-        <div className="ob-ticks">
-          <div className="ob-ticks-h">
-            <span>체결</span>
-            <span className="pt-n">최근 {book.ticks.length}건 · 부호가 방향입니다</span>
-          </div>
-          <div className="ob-ticks-b">
-            {book.ticks.map((t, i) => (
-              <div className="ob-tick" key={`${t.t}-${i}`}>
-                <span className="pt-n">
-                  {t.t.slice(0, 2)}:{t.t.slice(2, 4)}:{t.t.slice(4, 6)}
-                </span>
-                <b className={signClass(rate(t.price))}>{fmtNum(t.price)}</b>
-                <b className={t.qty >= 0 ? "positive" : "negative"}>
-                  {t.qty > 0 ? "+" : ""}
-                  {fmtNum(t.qty)}
-                </b>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* 왼쪽 아래 — 지금 어느 쪽이 두터운가 */}
       <div className="ob-foot">

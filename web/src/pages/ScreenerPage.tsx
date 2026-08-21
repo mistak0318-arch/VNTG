@@ -49,16 +49,24 @@ const EXCHANGES = [
 interface Filter {
   /** 거래대금 최소(억원) */
   minTv: number;
-  /** 시가총액 최소·최대(억원). 0 이면 안 건다 */
-  minCap: number;
-  maxCap: number;
+  /**
+   * 고른 시가총액 구간들.
+   *
+   * **여기만 복수 선택이 뜻을 갖는다.** 거래대금·등락률은 「얼마 이상」이라 겹쳐 있어서
+   * 둘을 고르면 느슨한 쪽만 남는다(100억↑ 과 500억↑ 을 같이 고르면 결국 100억↑ 이다).
+   * 시가총액은 구간이 서로 안 겹치므로 「3천억 미만 **또는** 1조~10조」처럼
+   * **중간을 빼고 양끝만** 보는 게 실제로 된다.
+   *
+   * 빈 배열이면 안 건다.
+   */
+  caps: string[];
   /** 등락률 최소(%). null 이면 안 건다 */
   minRate: number | null;
   /** ETF·ETN·우선주를 뺀다 */
   commonOnly: boolean;
 }
 
-const NO_FILTER: Filter = { minTv: 0, minCap: 0, maxCap: 0, minRate: null, commonOnly: false };
+const NO_FILTER: Filter = { minTv: 0, caps: [], minRate: null, commonOnly: false };
 const FILTER_KEY = "vntg.screener.filter";
 
 /** 거래대금 빠른 선택(억원) */
@@ -70,12 +78,22 @@ const TV_CHIPS = [0, 100, 300, 500, 1000, 3000];
  * 감각과 다르다. 숫자로 끊는 게 헷갈리지 않는다.
  */
 const CAP_CHIPS: { label: string; min: number; max: number }[] = [
-  { label: "전체", min: 0, max: 0 },
   { label: "3천억 미만", min: 0, max: 3000 },
   { label: "3천억~1조", min: 3000, max: 10000 },
   { label: "1조~10조", min: 10000, max: 100000 },
   { label: "10조 이상", min: 100000, max: 0 },
 ];
+
+/** 고른 구간 중 **하나라도** 맞으면 통과 */
+function capOk(cap: number | null, picked: string[]): boolean {
+  if (picked.length === 0) return true;
+  if (cap === null) return false;
+  return picked.some((label) => {
+    const c = CAP_CHIPS.find((x) => x.label === label);
+    if (!c) return false;
+    return cap >= c.min && (c.max === 0 || cap <= c.max);
+  });
+}
 
 function loadFilter(): Filter {
   try {
@@ -185,8 +203,7 @@ export function ScreenerPage({
   const rows = all.filter((r) => {
     if (filter.commonOnly && !r.common) return false;
     if (filter.minTv > 0 && (r.tv === null || r.tv < filter.minTv)) return false;
-    if (filter.minCap > 0 && (r.cap === null || r.cap < filter.minCap)) return false;
-    if (filter.maxCap > 0 && (r.cap === null || r.cap > filter.maxCap)) return false;
+    if (!capOk(r.cap, filter.caps)) return false;
     if (filter.minRate !== null) {
       const rate = Number(r.flu_rt ?? r.jmp_rt);
       if (!Number.isFinite(rate) || rate < filter.minRate) return false;
@@ -197,11 +214,7 @@ export function ScreenerPage({
   const hasCap = all.some((r) => r.cap !== null);
   const estimated = rows.some((r) => r.tvEst);
   const on =
-    filter.minTv > 0 ||
-    filter.minCap > 0 ||
-    filter.maxCap > 0 ||
-    filter.minRate !== null ||
-    filter.commonOnly;
+    filter.minTv > 0 || filter.caps.length > 0 || filter.minRate !== null || filter.commonOnly;
 
   return (
     <div>
@@ -313,14 +326,27 @@ export function ScreenerPage({
 
             <div className="scr-f-row">
               <span className="st-cfg-k">시가총액</span>
+              {/* 여기만 복수 선택 — 구간이 안 겹쳐서 「또는」이 뜻을 갖는다 */}
+              <button
+                className={`filter-btn ${filter.caps.length === 0 ? "active" : ""}`}
+                onClick={() => set({ caps: [] })}
+                disabled={!hasCap}
+              >
+                전체
+              </button>
               {CAP_CHIPS.map((c) => (
                 <button
                   key={c.label}
-                  className={`filter-btn ${
-                    filter.minCap === c.min && filter.maxCap === c.max ? "active" : ""
-                  }`}
-                  onClick={() => set({ minCap: c.min, maxCap: c.max })}
+                  className={`filter-btn ${filter.caps.includes(c.label) ? "active" : ""}`}
+                  onClick={() =>
+                    set({
+                      caps: filter.caps.includes(c.label)
+                        ? filter.caps.filter((x) => x !== c.label)
+                        : [...filter.caps, c.label],
+                    })
+                  }
                   disabled={!hasCap}
+                  title="여러 구간을 같이 고를 수 있습니다"
                 >
                   {c.label}
                 </button>

@@ -33,7 +33,13 @@ import type { RealtimeClient, RealtimeFrame } from "./realtimeClient.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data", "realtime");
 
-/** 시계열로 남길 TR — 나머지는 최신값만 */
+/**
+ * 시계열로 남길 TR — 나머지는 최신값만.
+ *
+ * `0B`(체결)는 **안 쌓는다.** 초당 수십 건이라 부피도 문제지만, 무엇보다
+ * **키움이 시간별 체결강도를 조회(`ka10046`)로 준다** — 5·20·60분 평균까지 얹어서.
+ * 조회로 얻는 걸 실시간으로 또 쌓을 이유가 없다(쌓아 봐야 물고 있던 종목만 남는다).
+ */
 const SERIES_TYPES = new Set(["0w", "0F"]);
 /**
  * VI 는 **값이 아니라 사건**이다.

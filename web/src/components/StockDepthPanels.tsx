@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, fmtAbsNum, fmtNum, pickList, type RawRecord } from "../api";
 import { fmtDt, fmtTm, num, SeriesTable, signOf, type SeriesColumn } from "./SeriesTable";
 import { useLive } from "../useLive";
+import { StrengthChart, type StrengthPoint } from "./StrengthChart";
 
 /**
  * 키움 앱에서 개별 종목을 볼 때 자주 쓰는 화면들을 옮겨온 패널 모음.
@@ -446,6 +447,27 @@ export function CreditPanel({ code }: { code: string }) {
 
 // ---------------------------------------------------------------- 체결강도
 
+/**
+ * 표 위에 **그래프**를 얹는다.
+ *
+ * 숫자를 세로로 예순 줄 읽어서 「10시에 뒤집혔다」를 알아내는 사람은 없다.
+ * 언제 뒤집혔나가 이 값의 쓸모라 선으로 봐야 한다 — 표는 정확한 값을 보려고 남긴다.
+ */
+function toPoints(rows: RawRecord[], mode: "daily" | "time"): StrengthPoint[] {
+  return rows
+    .map((r) => ({
+      t: String((mode === "time" ? r.cntr_tm : r.dt) ?? "").trim(),
+      strength: num(r.cntr_str),
+      // 키움이 5·20·60분(일) 평균을 같이 준다. 20 을 쓴다 — 5 는 원선과 거의 겹친다
+      avg: num(r.cntr_str_20min),
+      price: Math.abs(num(r.cur_prc)),
+      rate: num(r.flu_rt),
+    }))
+    .filter((p) => p.t.length >= 4 && p.strength > 0)
+    // 키움은 최신순으로 준다 — 왼쪽이 과거가 되게 뒤집는다
+    .reverse();
+}
+
 export function StrengthPanel({ code }: { code: string }) {
   const [mode, setMode] = useState<"daily" | "time">("daily");
   const { data, loading, error } = useFetch(() => api.strength(code, mode), [code, mode]);
@@ -485,6 +507,7 @@ export function StrengthPanel({ code }: { code: string }) {
       </div>
       {loading && <div className="empty">체결강도 불러오는 중...</div>}
       {error && <div className="error-banner">{error}</div>}
+      {!loading && !error && <StrengthChart points={toPoints(rows, mode)} />}
       {!loading && !error && (
         <SeriesTable
           rows={rows}

@@ -417,6 +417,41 @@ export function createMarketRouter(client: KiwoomClient): Router {
     }
   });
 
+  /**
+   * 체결 목록 하나만 — **체결강도를 싸게 얻는 길.**
+   *
+   * 호가 조회(`orderBook`)는 TR 을 셋 부른다. 시세 요약줄과 체결강도 화면은
+   * 체결강도만 있으면 되는데 그때마다 셋을 부르면 **초당 5건 제한**에 금방 닿는다.
+   * `ka10003` 하나만 부른다.
+   *
+   * 체결강도는 `100` 을 넘으면 매수 체결이 우세하다는 뜻이다.
+   */
+  router.get("/ticks/:code", async (req, res, next) => {
+    try {
+      const bare = String(req.params.code).replace(/_(AL|NX)$/i, "");
+      const { data } = await client.request<Record<string, unknown>>(
+        "/api/dostk/stkinfo",
+        "ka10003",
+        { stk_cd: bare },
+      );
+      const rows = Array.isArray(data.cntr_infr) ? (data.cntr_infr as Record<string, unknown>[]) : [];
+      const n = (v: unknown) => Number(String(v ?? "").replace(/[+,\s]/g, "")) || 0;
+      const ticks = rows
+        .map((r) => ({
+          t: String(r.tm ?? "").trim(),
+          price: Math.abs(n(r.cur_prc)),
+          // 부호가 방향이다 — 음수면 매도 체결
+          qty: Number(String(r.cntr_trde_qty ?? "").replace(/[,\s]/g, "")) || 0,
+          strength: n(r.cntr_str),
+          rate: Number(String(r.pre_rt ?? "").replace(/[+,\s]/g, "")) || 0,
+        }))
+        .filter((r) => r.t.length >= 6 && r.price > 0);
+      res.json({ code: bare, strength: ticks[0]?.strength ?? null, ticks });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // 분봉 차트 (ka10080)
   router.get("/chart/minute/:code", async (req, res, next) => {
     try {

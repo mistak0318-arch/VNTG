@@ -43,6 +43,30 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
   };
 
   const [nxt, setNxt] = useState<ExchangeQuote | null>(null);
+  /*
+   * 체결강도. **가벼운 조회 하나**(`ka10003`)만 쓴다 — 호가 조회는 TR 을 셋 부르는데
+   * 요약줄은 늘 떠 있으므로 그걸 쓰면 초당 제한에 금방 닿는다.
+   */
+  const [strength, setStrength] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!code) return;
+    let cancelled = false;
+    const load = () =>
+      fetch(`/api/market/ticks/${encodeURIComponent(code)}`)
+        .then((r) => r.json() as Promise<{ strength?: number | null }>)
+        .then((j) => {
+          if (!cancelled) setStrength(j.strength ?? null);
+        })
+        .catch(() => undefined);
+    void load();
+    // 장중에는 계속 바뀐다. 요약줄이라 자주 볼 값이다
+    const t = setInterval(() => void load(), 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [code]);
 
   useEffect(() => {
     if (!code) return;
@@ -239,6 +263,23 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
             <em className="ph-sublabel">거래대금</em>
             <span className="ph-value sub">
               {last?.value == null ? "-" : `${Math.round(last.value / 100).toLocaleString("ko-KR")}억`}
+            </span>
+          </span>
+          {/*
+            거래대금 밑에 체결강도. 거래대금은 「얼마나 붙었나」이고 체결강도는
+            **「어느 쪽이 붙었나」**다 — 둘이 같이 있어야 뜻이 산다.
+            돈은 몰리는데 강도가 100 아래면 그 돈은 파는 쪽이다.
+          */}
+          <span className="ph-row">
+            <em className="ph-sublabel" title="매수 체결 ÷ 매도 체결 × 100. 100 이 균형">
+              체결강도
+            </em>
+            <span
+              className={`ph-value sub ${
+                strength === null ? "" : strength >= 100 ? "positive" : "negative"
+              }`}
+            >
+              {strength === null ? "-" : strength.toFixed(0)}
             </span>
           </span>
         </div>
