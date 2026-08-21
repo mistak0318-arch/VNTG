@@ -41,7 +41,8 @@ export function CollapsibleCard({
   id: string;
   title: string;
   /** 접혀 있을 때도 보이는 한 줄 설명 */
-  hint?: string;
+  /** 접혔을 때만 보이는 줄. 글자만 넘기면 나열돼서 안 읽히는 카드가 있어 노드도 받는다 */
+  hint?: ReactNode;
   defaultOpen?: boolean;
   /** 제목 옆 작은 표시 (예: 켜진 개수) */
   badge?: ReactNode;

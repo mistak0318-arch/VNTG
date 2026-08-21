@@ -171,6 +171,15 @@ function AddHoldingForm({ accountId, onDone }: { accountId: string; onDone: (a: 
   );
 }
 
+/**
+ * 예수금이 총자산에서 차지하는 비율(%).
+ * 총자산이 0 이면 낼 수 없다 — 0 으로 나누느니 없다고 말하는 게 맞다.
+ */
+function cashPct(a: { totalAssets: number; cash: number }): number | null {
+  if (!Number.isFinite(a.totalAssets) || a.totalAssets <= 0) return null;
+  return Math.round((a.cash / a.totalAssets) * 100);
+}
+
 export function ManualAccountPage({
   onSelectStock,
 }: {
@@ -335,7 +344,44 @@ export function ManualAccountPage({
               </span>
             </span>
           }
-          hint={`총자산 ${fmtNum(Math.round(a.totalAssets))} · 주식 ${fmtNum(Math.round(a.totalValue))} · 예수금 ${fmtNum(Math.round(a.cash))}`}
+          /*
+            ⚠️ 셋을 「총자산 X · 주식 Y · 예수금 Z」로 **나열했더니 안 읽혔다.**
+            같은 크기 같은 색 숫자가 셋이면 눈이 어디를 봐야 할지 모른다.
+
+            총자산이 그 계좌의 크기이므로 **그것만 크게** 두고, 주식과 예수금은
+            그것을 나눈 것이니 **아래에 작게, 막대로 비율까지** 보인다.
+            현금 비중이 눈에 보이는 게 특히 쓸모 있다 — 지금처럼 관망이 많은 장에서는
+            「얼마나 쉬고 있나」가 곧 그 계좌의 자세다.
+          */
+          hint={
+            <span className="ma-hint">
+              <span className="ma-hint-top">
+                <em>총자산</em>
+                <b>{fmtNum(Math.round(a.totalAssets))}</b>
+              </span>
+              {/*
+                ⚠️ 총자산이 0 이면 **막대를 아예 안 그린다.** 빈 계좌에 파란 막대가 꽉 차
+                있으면 「주식 100%」로 읽힌다 — 아무것도 없는 것과 다 주식인 것은 정반대다.
+              */}
+              {cashPct(a) !== null && (
+                <span
+                  className="ma-hint-bar"
+                  title={`주식 ${100 - cashPct(a)!}% · 예수금 ${cashPct(a)}%`}
+                >
+                  <i className="ma-hint-stock" style={{ width: `${100 - cashPct(a)!}%` }} />
+                </span>
+              )}
+              <span className="ma-hint-split">
+                <span>
+                  <em>주식</em> {fmtNum(Math.round(a.totalValue))}
+                </span>
+                <span className="ma-hint-cash">
+                  <em>예수금</em> {fmtNum(Math.round(a.cash))}
+                  {cashPct(a) !== null && <i> {cashPct(a)}%</i>}
+                </span>
+              </span>
+            </span>
+          }
         >
           <div className="ma-head">
             <button className="row-del-btn" onClick={() => deleteAccount(a.id, `${a.broker} ${a.name}`)}>

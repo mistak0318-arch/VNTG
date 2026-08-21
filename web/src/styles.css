@@ -5828,3 +5828,20 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .jn-edge-ret { font-weight: 700; text-align: right; }
 .jn-edge-win { color: var(--muted); text-align: right; font-size: 0.8rem; }
 .jn-edge-two { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+
+/* 수동 계좌 접힌 줄 — 총자산은 크게, 주식·예수금은 그것을 나눈 것 */
+.ma-hint { display: block; margin-top: 0.15rem; }
+.ma-hint em { font-style: normal; color: var(--muted); font-size: 0.68rem; margin-right: 0.25rem; }
+.ma-hint-top { display: flex; align-items: baseline; gap: 0.15rem; }
+.ma-hint-top b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+/* 주식과 예수금의 비율 — 현금 비중이 눈에 보이는 게 쓸모 있다 */
+.ma-hint-bar {
+  display: block; height: 4px; border-radius: 999px; overflow: hidden;
+  background: var(--border); margin: 0.25rem 0 0.2rem;
+}
+.ma-hint-stock { display: block; height: 100%; background: var(--accent, #2563eb); }
+.ma-hint-split {
+  display: flex; justify-content: space-between; gap: 0.6rem;
+  font-size: 0.78rem; font-variant-numeric: tabular-nums;
+}
+.ma-hint-cash i { font-style: normal; color: var(--muted); font-size: 0.7rem; }
