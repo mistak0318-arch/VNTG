@@ -39,7 +39,8 @@ export async function runAlertScan(
   const watch = await listWatchlist();
   const alerts = await scanAlerts(
     client,
-    watch.map((w) => ({ code: w.code, name: w.name })),
+    // 편입가까지 넘긴다 — 알림에 「내것」 줄을 적으려면 필요하다
+    watch.map((w) => ({ code: w.code, name: w.name, addedPrice: w.addedPrice })),
     { dryRun: opts.dryRun },
   );
   if (alerts.length === 0) return { alerts, sent: false };

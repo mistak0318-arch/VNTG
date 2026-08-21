@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getSectorMood } from "./sectorMood.js";
+import { evaluateMarket } from "./marketSignal.js";
 
 /**
  * 관심종목 시그널 판정.
@@ -174,6 +175,9 @@ function toNum(v: unknown): number {
 function toAbs(v: unknown): number {
   return Math.abs(toNum(v));
 }
+/** 시장 신호등 색을 화면에서 쓰는 말로 — 영어로 적으면 한 번 더 옮겨 읽어야 한다 */
+const LEVEL_KO: Record<string, string> = { green: "초록", yellow: "노랑", red: "빨강" };
+
 function sma(values: number[], n: number): number | null {
   if (values.length < n) return null;
   return values.slice(0, n).reduce((s, v) => s + v, 0) / n;
@@ -190,8 +194,10 @@ function todayYyyymmdd(): string {
 /** 한 종목을 검사해 발동한 시그널들을 돌려준다 */
 async function evaluateStock(
   client: KiwoomClient,
-  item: { code: string; name: string },
+  item: { code: string; name: string; addedPrice?: number },
   cfg: AlertConfig,
+  /** 그날 시장 신호등 — 스캔 한 번에 한 번만 받아 돌려 쓴다 */
+  market: { level: string; score: number } | null,
 ): Promise<FiredAlert[]> {
   const rules = new Map(cfg.rules.filter((r) => r.enabled).map((r) => [r.key, r]));
   if (rules.size === 0) return [];
@@ -229,29 +235,83 @@ async function evaluateStock(
   const volumes = rows.map((r) => toNum(r.trde_qty));
 
   const fired: FiredAlert[] = [];
+
+  /*
+   * 부가정보를 **라벨 붙은 줄**로 짠다.
+   *
+   * 예전엔 「+5.20%」처럼 값만 늘어놓아서, 폰에서 받으면 **무슨 소리인지 모르고**
+   * 결국 앱을 열어 봐야 했다. 그러면 알림의 뜻이 없다 — 알림은 **열지 않고 판단하라고**
+   * 있는 것이다.
+   *
+   * 그래서 「지금·수급·자리·시장·내것」 다섯 줄로 나눈다. 다섯 가지는 사람이 종목을 볼 때
+   * 실제로 묻는 순서다 — 지금 어떤가, 누가 사고 있나, 비싼 자리인가, 시장은 받쳐주나,
+   * 나는 얼마에 담았나.
+   *
+   * ⚠️ **여기서 TR 을 더 부르지 않는다.** 이미 받아 둔 기본정보(ka10001)와 일봉(ka10081)에
+   * 다 있다. 관심종목이 서른 개면 한 번 더 부르는 것만으로 서른 콜이 늘어난다.
+   */
   const context: string[] = [];
 
-  // 공통 부가정보 — 메시지에 같이 실어주면 앱을 안 열어도 판단이 된다
+  const dayHigh = toAbs(info?.data?.high_pric);
+  const dayLow = toAbs(info?.data?.low_pric);
   const todayVol = toNum(info?.data?.trde_qty);
   const avgVol20 = sma(volumes.slice(1), 20); // 오늘 제외 20일
-  if (todayVol > 0 && avgVol20 && avgVol20 > 0) {
-    context.push(`거래량 ${fmtInt(todayVol)} (20일 평균 ${(todayVol / avgVol20).toFixed(1)}배)`);
-  }
 
+  // ── 지금 : 오늘 어디쯤에서 움직이고 있나
+  const nowBits: string[] = [];
+  if (dayHigh > 0 && dayLow > 0 && dayHigh > dayLow) {
+    const pos = ((price - dayLow) / (dayHigh - dayLow)) * 100;
+    nowBits.push(`오늘 ${pos.toFixed(0)}% 자리(고 ${fmtInt(dayHigh)} / 저 ${fmtInt(dayLow)})`);
+  }
+  if (todayVol > 0 && avgVol20 && avgVol20 > 0) {
+    nowBits.push(`거래량 20일 평균의 ${(todayVol / avgVol20).toFixed(1)}배`);
+  }
+  if (nowBits.length > 0) context.push(`지금  ${nowBits.join(" · ")}`);
+
+  // ── 수급 : 누가 사고 있나
   const flowRows = (flow?.data?.stk_invsr_orgn_chart ?? []) as Record<string, unknown>[];
   const foreign5 = flowRows.slice(0, 5).reduce((s, r) => s + toNum(r.frgnr_invsr), 0);
   const foreignPrev5 = flowRows.slice(5, 10).reduce((s, r) => s + toNum(r.frgnr_invsr), 0);
   const inst5 = flowRows.slice(0, 5).reduce((s, r) => s + toNum(r.orgn), 0);
   if (flowRows.length > 0) {
     context.push(
-      `외인 5일 ${foreign5 > 0 ? "+" : ""}${fmtInt(foreign5)} · 기관 ${inst5 > 0 ? "+" : ""}${fmtInt(inst5)}`,
+      `수급  외인 5일 ${foreign5 > 0 ? "+" : ""}${fmtInt(foreign5)} · 기관 ${inst5 > 0 ? "+" : ""}${fmtInt(inst5)}`,
     );
   }
 
+  /*
+   * ── 자리 : **비싼 자리에서 울린 건지**를 가른다.
+   * 같은 급등이라도 20일선 아래에서 올라온 것과 신고가에서 더 뛴 것은 뜻이 정반대다.
+   */
+  const seatBits: string[] = [];
+  const ma20 = sma(closes, 20);
+  if (ma20 && ma20 > 0) {
+    const gap = ((price - ma20) / ma20) * 100;
+    seatBits.push(`20일선 ${gap > 0 ? "위 +" : "아래 "}${gap.toFixed(1)}%`);
+  }
+  const hi250 = toAbs(info?.data?.["250hgst"]);
+  if (hi250 > 0) {
+    const gap = ((price - hi250) / hi250) * 100;
+    seatBits.push(gap >= 0 ? "250일 신고가권" : `250일 고점 ${gap.toFixed(1)}%`);
+  }
+  if (seatBits.length > 0) context.push(`자리  ${seatBits.join(" · ")}`);
+
+  // ── 시장 : 종목만 보고 사면 안 된다
   const mood = await getSectorMood(client, item.code).catch(() => null);
+  const mktBits: string[] = [];
+  if (market) mktBits.push(`신호등 ${LEVEL_KO[market.level] ?? market.level} ${market.score}점`);
   if (mood?.sector?.name) {
     const r = mood.sector.changeRate;
-    context.push(`업종 ${mood.sector.name} ${r > 0 ? "+" : ""}${r.toFixed(2)}%`);
+    mktBits.push(`${mood.sector.name} ${r > 0 ? "+" : ""}${r.toFixed(2)}%`);
+  }
+  if (mktBits.length > 0) context.push(`시장  ${mktBits.join(" · ")}`);
+
+  // ── 내것 : 담아 둔 값과 견준다. 편입가가 없으면 안 적는다
+  if (item.addedPrice && item.addedPrice > 0) {
+    const gain = ((price - item.addedPrice) / item.addedPrice) * 100;
+    context.push(
+      `내것  편입 ${fmtInt(item.addedPrice)} → ${gain > 0 ? "+" : ""}${gain.toFixed(1)}%`,
+    );
   }
 
   const base = { code: item.code, name: item.name, price, changeRate, context };
@@ -263,7 +323,7 @@ async function evaluateStock(
       ...base,
       rule: "priceJump",
       ruleLabel: jump.label,
-      detail: `${changeRate > 0 ? "+" : ""}${changeRate.toFixed(2)}%`,
+      detail: `설정한 ${jump.threshold}% 를 넘었습니다 (${changeRate > 0 ? "+" : ""}${changeRate.toFixed(2)}%)`,
     });
   }
 
@@ -274,7 +334,7 @@ async function evaluateStock(
       ...base,
       rule: "volumeSurge",
       ruleLabel: surge.label,
-      detail: `20일 평균의 ${(todayVol / avgVol20).toFixed(1)}배`,
+      detail: `20일 평균의 ${(todayVol / avgVol20).toFixed(1)}배 — 기준 ${surge.threshold}배`,
     });
   }
 
@@ -285,7 +345,7 @@ async function evaluateStock(
       ...base,
       rule: "flowTurn",
       ruleLabel: turn.label,
-      detail: `외국인 ${fmtInt(foreignPrev5)} → +${fmtInt(foreign5)}`,
+      detail: `외국인이 5일 ${fmtInt(foreignPrev5)} 팔다가 +${fmtInt(foreign5)} 로 돌아섰습니다`,
     });
   }
 
@@ -300,7 +360,7 @@ async function evaluateStock(
         ...base,
         rule: "newHigh",
         ruleLabel: high.label,
-        detail: `${fmtInt(prevMax)} 돌파 (${past.length}일 최고)`,
+        detail: `${past.length}일 최고 ${fmtInt(prevMax)} 를 넘었습니다`,
       });
     }
   }
@@ -322,7 +382,7 @@ async function evaluateStock(
         ...base,
         rule: "trendAlign",
         ruleLabel: align.label,
-        detail: "5 > 20 > 60일선 정렬 달성",
+        detail: "5일선 > 20일선 > 60일선 — 오늘 정배열이 됐습니다",
       });
     }
   }
@@ -336,11 +396,19 @@ async function evaluateStock(
  */
 export async function scanAlerts(
   client: KiwoomClient,
-  watch: { code: string; name: string }[],
+  watch: { code: string; name: string; addedPrice?: number }[],
   opts: { dryRun?: boolean } = {},
 ): Promise<FiredAlert[]> {
   const cfg = await getAlertConfig();
   if (!cfg.enabled || watch.length === 0) return [];
+
+  /*
+   * 시장 신호등은 **스캔 한 번에 한 번만** 받는다. 종목마다 부르면 서른 번인데
+   * 그날 시장은 종목마다 다르지 않다. (안 되면 그냥 그 줄을 안 적는다)
+   */
+  const market = await evaluateMarket(client)
+    .then((m) => ({ level: m.level, score: m.score }))
+    .catch(() => null);
 
   const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
   const state = prune(await readState());
@@ -350,7 +418,7 @@ export async function scanAlerts(
   for (let i = 0; i < watch.length; i += 2) {
     const chunk = watch.slice(i, i + 2);
     const results = await Promise.all(
-      chunk.map((w) => evaluateStock(client, w, cfg).catch(() => [] as FiredAlert[])),
+      chunk.map((w) => evaluateStock(client, w, cfg, market).catch(() => [] as FiredAlert[])),
     );
     for (const list of results) {
       for (const a of list) {
@@ -401,12 +469,17 @@ export function formatAlerts(alerts: FiredAlert[]): string {
     const sign = head.changeRate > 0 ? "+" : "";
     blocks.push(
       [
-        `${icons} <b>${esc(head.name)}</b> ${sign}${head.changeRate.toFixed(2)}%  ${fmtInt(head.price)}`,
-        ...list.map((a) => `  · ${esc(a.ruleLabel)} — ${esc(a.detail)}`),
-        ...head.context.map((c) => `  ${esc(c)}`),
+        // 첫 줄은 「무엇이 얼마에 몇 퍼센트」 — 스크롤 없이 읽히는 자리
+        `${icons} <b>${esc(head.name)}</b>  ${fmtInt(head.price)}  ${sign}${head.changeRate.toFixed(2)}%`,
+        // 왜 울렸나 — 임계값과 같이 적어야 값의 반복이 아니라 뜻이 된다
+        ...list.map((a) => `<b>${esc(a.ruleLabel)}</b> · ${esc(a.detail)}`),
+        ...head.context.map((c) => esc(c)),
       ].join("\n"),
     );
   }
 
-  return `<b>관심종목 시그널 ${alerts.length}건</b>\n\n${blocks.join("\n\n")}`;
+  const now = new Date(Date.now() + 9 * 3600_000).toISOString().slice(11, 16);
+  return (
+    `<b>관심종목 시그널 ${alerts.length}건</b>  ${now}\n\n` + blocks.join("\n\n")
+  );
 }
