@@ -5607,3 +5607,11 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 }
 .itr-gear-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; margin-bottom: 0.35rem; }
 .itr-gear-t { font-size: 0.75rem; color: var(--muted); width: 4.5rem; flex: none; }
+
+/* 호가 직전대비 — 붙는 물량인지 빠지는 물량인지 */
+.ob-d { font-style: normal; font-size: 0.68rem; margin-left: 0.25rem; opacity: 0.85; }
+.ob-d.up { color: var(--red); }
+.ob-d.down { color: var(--blue); }
+/* 지금 값이 실시간인지 조회인지 */
+.ob-live { font-size: 0.68rem; color: var(--muted); margin-right: 0.4rem; }
+.ob-live.on { color: var(--green); }

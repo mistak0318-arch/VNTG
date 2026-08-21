@@ -491,7 +491,11 @@
       "Bash(curl -s \"http://localhost:4000/api/realtime/series?type=0F&item=005930\")",
       "Bash(curl -s \"http://localhost:4000/api/realtime/latest?keys=0B:005930,0F:005930,0w:005930\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);console.log\\('enabled',r.enabled,'healthy',r.healthy\\);for\\(const[k,v]of Object.entries\\(r.values\\)\\)console.log\\(' ',k,v?'값 있음':'아직 null'\\)}\\)\")",
-      "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const r=JSON.parse\\(d\\);console.log\\('\\\\''healthy'\\\\'',r.healthy\\); *)"
+      "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const r=JSON.parse\\(d\\);console.log\\('\\\\''healthy'\\\\'',r.healthy\\); *)",
+      "Bash(python dump.py \"주식호가잔량\\(0D\\)\")",
+      "Bash(sed -n '/Response/,$p' sheet_주식호가잔량_0D.txt)",
+      "Bash(curl -s \"http://localhost:4000/api/realtime/latest?keys=0D:005930\")",
+      "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const r=JSON.parse\\(d\\);const v=r.values['\\\\''0D:005930'\\\\'']; *)"
     ]
   }
 }

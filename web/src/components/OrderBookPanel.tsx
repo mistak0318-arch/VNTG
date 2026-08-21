@@ -1,5 +1,6 @@
 import { api, fmtNum, signClass, type OrderBook } from "../api";
 import { useLive } from "../useLive";
+import { fid, useRealtime } from "../useRealtime";
 
 /**
  * 호가창 — **지금 어느 쪽이 두터운가.**
@@ -29,15 +30,77 @@ function maxQty(book: OrderBook): number {
   return all.length > 0 ? Math.max(...all, 1) : 1;
 }
 
+/**
+ * 실시간 호가(`0D`)를 REST 그림 위에 얹는다.
+ *
+ * ## 왜 얹기만 하나
+ *
+ * REST 를 걷어내면 **화면을 처음 열었을 때 빈 호가창**이 뜬다. 실시간은
+ * 「지금부터의 변화」만 주기 때문이다. 밑그림은 REST, 갱신은 웹소켓이다.
+ *
+ * ## 왜 굳이 바꾸나 (이미 1초 폴링인데)
+ *
+ * 눈에 보이는 속도는 비슷하다. 이득은 두 가지다.
+ *
+ *   1. **키움 호출이 사라진다.** 종목당 초당 1건인데, 보드에 호가 칸을 여러 개 띄우거나
+ *      창을 여럿 열면 **TR 당 초당 5건** 제한에 바로 걸린다
+ *   2. **직전대비**(잔량 증감)가 생긴다 — REST 에는 없는 값이고, 지금 붙는 물량인지
+ *      빠지는 물량인지는 그걸 봐야 안다
+ *
+ * FID: 매도호가 41~50 / 수량 61~70 / 직전대비 81~90,
+ *      매수호가 51~60 / 수량 71~80 / 직전대비 91~100, 호가시간 21.
+ */
+function useLiveBook(code: string, base: OrderBook | null) {
+  const rt = useRealtime(code ? [`0D:${code}`] : [], 1000);
+  const v = rt.values[`0D:${code}`] ?? null;
+  if (!base) return { book: base, live: false, delta: null as Record<string, number> | null };
+  if (!rt.healthy || !v) return { book: base, live: false, delta: null };
+
+  const asks: OrderBook["asks"] = [];
+  const bids: OrderBook["bids"] = [];
+  const delta: Record<string, number> = {};
+  for (let i = 1; i <= 10; i++) {
+    const ap = fid(v, String(40 + i));
+    const aq = fid(v, String(60 + i));
+    if (ap !== null && aq !== null) {
+      asks.push({ step: i, price: Math.abs(ap), qty: aq });
+      delta[`ask-${i}`] = fid(v, String(80 + i)) ?? 0;
+    }
+    const bp = fid(v, String(50 + i));
+    const bq = fid(v, String(70 + i));
+    if (bp !== null && bq !== null) {
+      bids.push({ step: i, price: Math.abs(bp), qty: bq });
+      delta[`bid-${i}`] = fid(v, String(90 + i)) ?? 0;
+    }
+  }
+  if (asks.length === 0 || bids.length === 0) return { book: base, live: false, delta: null };
+
+  const totalAsk = asks.reduce((a, b) => a + b.qty, 0);
+  const totalBid = bids.reduce((a, b) => a + b.qty, 0);
+  return {
+    book: {
+      ...base,
+      asks,
+      bids,
+      totalAsk,
+      totalBid,
+      ratio: totalAsk > 0 ? totalBid / totalAsk : base.ratio,
+    },
+    live: true,
+    delta,
+  };
+}
+
 export function OrderBookPanel({ code }: { code: string }) {
   /*
-   * 1초 갱신. 키움 제한은 **TR 하나당 초당 5건**이고 이 창은 한 번에 하나만 열린다 —
-   * 한도의 20% 다. (`useLive` 가 장중·NXT 시간에만 돌린다)
+   * 밑그림. 실시간이 붙으면 아래에서 갈아끼우므로 **주기를 늦춰도 된다** —
+   * 실시간이 죽었을 때 되돌아갈 자리로만 남겨 둔다.
    */
-  const { data: book, loading, error } = useLive<OrderBook>(() => api.orderBook(code), [code], 1000);
+  const { data: base, loading, error } = useLive<OrderBook>(() => api.orderBook(code), [code], 3000);
+  const { book, live, delta } = useLiveBook(code, base ?? null);
 
-  if (loading && !book) return <div className="empty">호가 불러오는 중…</div>;
-  if (error && !book) return <div className="error-banner">{error}</div>;
+  if (loading && !base) return <div className="empty">호가 불러오는 중…</div>;
+  if (error && !base) return <div className="error-banner">{error}</div>;
   if (!book) return null;
   if (book.error) return <div className="error-banner">{book.error}</div>;
 
@@ -55,6 +118,13 @@ export function OrderBookPanel({ code }: { code: string }) {
           <>
             <span className="ob-bar ask" style={{ width: `${(l.qty / mx) * 100}%` }} />
             <b>{fmtNum(l.qty)}</b>
+            {/* 직전대비 — 붙는 물량인지 빠지는 물량인지는 이걸 봐야 안다 */}
+            {delta?.[`ask-${l.step}`] ? (
+              <i className={`ob-d ${delta[`ask-${l.step}`] > 0 ? "up" : "down"}`}>
+                {delta[`ask-${l.step}`] > 0 ? "+" : ""}
+                {fmtNum(delta[`ask-${l.step}`])}
+              </i>
+            ) : null}
           </>
         )}
       </span>
@@ -64,6 +134,12 @@ export function OrderBookPanel({ code }: { code: string }) {
           <>
             <span className="ob-bar bid" style={{ width: `${(l.qty / mx) * 100}%` }} />
             <b>{fmtNum(l.qty)}</b>
+            {delta?.[`bid-${l.step}`] ? (
+              <i className={`ob-d ${delta[`bid-${l.step}`] > 0 ? "up" : "down"}`}>
+                {delta[`bid-${l.step}`] > 0 ? "+" : ""}
+                {fmtNum(delta[`bid-${l.step}`])}
+              </i>
+            ) : null}
           </>
         )}
       </span>
@@ -73,6 +149,10 @@ export function OrderBookPanel({ code }: { code: string }) {
   return (
     <div className="ob">
       <div className="ob-head">
+        {/* 지금 값이 어디서 온 것인지 — 실시간이 죽으면 폴링으로 돌아간 것을 알아야 한다 */}
+        <span className={`ob-live ${live ? "on" : ""}`} title={live ? "실시간 호가" : "3초 조회"}>
+          {live ? "● 실시간" : "○ 조회"}
+        </span>
         <b className={`ob-now ${signClass(book.changeRate)}`}>{fmtNum(book.price)}</b>
         <span className={signClass(book.changeRate)}>
           {book.changeRate > 0 ? "+" : ""}
