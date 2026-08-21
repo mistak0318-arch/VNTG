@@ -35,8 +35,36 @@ const DATA_DIR = join(here, "..", "data", "realtime");
 
 /** 시계열로 남길 TR — 나머지는 최신값만 */
 const SERIES_TYPES = new Set(["0w", "0F"]);
+/**
+ * VI 는 **값이 아니라 사건**이다.
+ *
+ * 30초에 한 점씩 찍으면 그 사이에 걸린 VI 를 통째로 놓친다. 오는 족족 기록한다.
+ * 하루 수백 건이라 그래도 감당된다.
+ *
+ * `1h` 는 종목을 지정해도 **전체 종목**이 온다(문서 명시). 한 번만 걸면 시장 전체다.
+ */
+const VI_TYPE = "1h";
 /** 몇 초에 한 점 */
 const SAMPLE_SEC = 30;
+
+export interface ViEvent {
+  /** 우리가 받은 시각 HHmmss */
+  at: string;
+  code: string;
+  name: string;
+  /** VI발동구분 */
+  kind: string;
+  /** 정적/동적/동적+정적 */
+  apply: string;
+  /** VI 발동가격 */
+  price: number;
+  /** 기준가격(정적) */
+  base: number;
+  market: string;
+  firedAt: string;
+  /** 채워져 있으면 해제 */
+  clearedAt: string;
+}
 
 export interface Point {
   /** HHmmss */
@@ -67,6 +95,7 @@ function kstDate(now = new Date()): string {
 export class RealtimeStore {
   private readonly latest = new Map<string, Latest>();
   private series: SeriesMap = {};
+  private vi: ViEvent[] = [];
   /** 키별 마지막 샘플 시각(ms) — 30초 간격을 지키는 기준 */
   private readonly sampledAt = new Map<string, number>();
   private day = kstDate();
@@ -87,9 +116,16 @@ export class RealtimeStore {
 
   private async load(): Promise<void> {
     try {
-      this.series = JSON.parse(await readFile(this.file(), "utf-8")) as SeriesMap;
+      const raw = JSON.parse(await readFile(this.file(), "utf-8")) as {
+        series?: SeriesMap;
+        vi?: ViEvent[];
+      };
+      // 예전 파일은 시계열만 담겨 있었다 — 그 모양도 읽는다
+      this.series = raw.series ?? (raw as unknown as SeriesMap);
+      this.vi = raw.vi ?? [];
     } catch {
       this.series = {};
+      this.vi = [];
     }
   }
 
@@ -98,7 +134,7 @@ export class RealtimeStore {
     this.dirty = false;
     try {
       await mkdir(DATA_DIR, { recursive: true });
-      await writeFile(this.file(), JSON.stringify(this.series), "utf-8");
+      await writeFile(this.file(), JSON.stringify({ series: this.series, vi: this.vi }), "utf-8");
     } catch {
       /* 못 적어도 메모리에는 남아 있다 */
     }
@@ -114,6 +150,7 @@ export class RealtimeStore {
       void this.save();
       this.day = today;
       this.series = {};
+      this.vi = [];
       this.sampledAt.clear();
     }
 
@@ -125,6 +162,11 @@ export class RealtimeStore {
 
       const key = `${type}:${item}`;
       this.latest.set(key, { at: Date.now(), values });
+
+      if (type === VI_TYPE) {
+        this.takeVi(values);
+        continue;
+      }
 
       if (!SERIES_TYPES.has(type)) continue;
 
@@ -148,6 +190,47 @@ export class RealtimeStore {
       arr.push({ t: values["20"] || hhmmss(), v: values });
       this.dirty = true;
     }
+  }
+
+  /**
+   * VI 한 건.
+   *
+   * 발동과 해제가 **같은 TR 로** 온다 — `VI해제시각`(1224)이 채워져 있으면 해제다.
+   * 같은 종목이 하루에 여러 번 걸리므로 종목 기준으로 덮어쓰면 안 되고, 줄줄이 쌓는다.
+   */
+  private takeVi(v: Record<string, string>): void {
+    const raw = String(v["9001"] ?? "").trim();
+    if (!raw) return;
+    /*
+     * **거래소마다 한 번씩 온다.** 같은 VI 가 `094480` 과 `094480_AL` 로 두 줄 들어온다 —
+     * 그대로 쌓으면 화면에 모든 VI 가 두 번씩 보인다.
+     * 접미사를 떼고, 같은 종목·같은 시각·같은 상태면 한 번만 남긴다.
+     */
+    const code = raw.replace(/^A/, "").replace(/_(AL|NX)$/i, "");
+    const fired = String(v["1223"] ?? "").trim();
+    const cleared = String(v["1224"] ?? "").trim();
+    const last = this.vi[this.vi.length - 1];
+    if (last && last.code === code && last.firedAt === fired && last.clearedAt === cleared) return;
+    this.vi.push({
+      at: hhmmss(),
+      code,
+      name: String(v["302"] ?? "").trim(),
+      kind: String(v["9068"] ?? "").trim(),
+      apply: String(v["1225"] ?? "").trim(),
+      price: Number(v["1221"]) || 0,
+      base: Number(v["1236"]) || 0,
+      market: String(v["9008"] ?? "").trim(),
+      firedAt: fired,
+      clearedAt: cleared,
+    });
+    // 하루치만 — 오래된 것부터 버린다
+    if (this.vi.length > 3000) this.vi.splice(0, this.vi.length - 3000);
+    this.dirty = true;
+  }
+
+  /** 오늘 걸린 VI — 최근 것부터 */
+  getVi(limit = 100): ViEvent[] {
+    return this.vi.slice(-limit).reverse();
   }
 
   /** 지금 값 */

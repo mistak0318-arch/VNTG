@@ -120,6 +120,17 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
     });
   });
 
+  /**
+   * 오늘 걸린 VI — **종목과 무관한 시장 전체 정보**다.
+   *
+   * `1h` 는 한 번만 걸면 전체 종목이 오므로, 화면은 이걸 읽기만 하면 된다.
+   */
+  router.get("/vi", (req, res) => {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 60, 1), 300);
+    const { store, client: rt } = hub();
+    res.json({ healthy: rt?.healthy ?? false, events: store?.getVi(limit) ?? [] });
+  });
+
   /** 무엇이 얼마나 쌓였나 — 진단용 */
   router.get("/store", (_req, res) => {
     const { store } = hub();

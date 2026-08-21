@@ -19,6 +19,7 @@ import { BreadthPanel } from "../components/BreadthPanel";
 import { MarketSignalPanel } from "../components/MarketSignalPanel";
 import { MarketPulsePanel } from "../components/MarketPulsePanel";
 import { SectorFlowPanel } from "../components/SectorFlowPanel";
+import { ViPanel } from "../components/ViPanel";
 import { useStockFocus } from "../useStockFocus";
 import { BoardCell, type CellSize } from "../components/BoardCell";
 
@@ -124,6 +125,7 @@ const BLOCKS = [
   { key: "mktPulse", label: "시장 맥박", wide: false },
   { key: "mktBreadth", label: "상승·하락 종목수", wide: false },
   { key: "mktSector", label: "업종 수급", wide: true },
+  { key: "mktVi", label: "VI 발동", wide: false },
 
   { key: "chart", label: "차트", wide: true },
   { key: "insights", label: "이동평균·매물대", wide: false },
@@ -151,7 +153,7 @@ type BlockKey = (typeof BLOCKS)[number]["key"];
  * 블록 객체에 표시를 달면 `as const` 때문에 어떤 항목에만 그 속성이 생겨서
  * 타입이 갈린다. 키 목록으로 두는 편이 단순하다.
  */
-const MARKET_KEYS = new Set<string>(["mktSignal", "mktPulse", "mktBreadth", "mktSector"]);
+const MARKET_KEYS = new Set<string>(["mktSignal", "mktPulse", "mktBreadth", "mktSector", "mktVi"]);
 const isMarket = (k: string) => MARKET_KEYS.has(k);
 
 /*
@@ -233,9 +235,9 @@ const PRESET_KEY = "vntg.board.presets";
  * **한 번 깔고 나면 사용자 것**이다 — 이름도 순서도 개수도 여기서 정하지 않는다.
  */
 const SEED: Preset[] = [
-  { id: "k1", name: "K1 시장 보기", pick: ["mktSignal", "mktPulse", "mktBreadth", "mktSector", "news"], sizes: {}, pins: [] },
+  { id: "k1", name: "K1 시장 보기", pick: ["mktSignal", "mktVi", "mktBreadth", "mktPulse", "mktSector"], sizes: {}, pins: [] },
   { id: "k2", name: "K2 종목 파기", pick: ["chart", "orderbook", "investor", "broker", "supply", "opinion", "finance", "summary"], sizes: {}, pins: [] },
-  { id: "k3", name: "K3 장중 감시", pick: ["mktBreadth", "signal", "intraday", "program", "orderbook"], sizes: {}, pins: [] },
+  { id: "k3", name: "K3 장중 감시", pick: ["mktVi", "mktBreadth", "signal", "intraday", "orderbook"], sizes: {}, pins: [] },
 ];
 
 interface Preset {
@@ -794,6 +796,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                   {b.key === "mktPulse" && <MarketPulsePanel />}
                   {b.key === "mktBreadth" && <BreadthPanel />}
                   {b.key === "mktSector" && <SectorFlowPanel onSelectStock={onSelectStock} />}
+                  {b.key === "mktVi" && <ViPanel onSelectStock={onSelectStock} />}
                   {/*
                     `key={code}` 를 준다. 종목이 바뀌면 패널을 **새로 만든다** —
                     안 그러면 어떤 패널은 이전 종목의 값을 그대로 들고 있다가

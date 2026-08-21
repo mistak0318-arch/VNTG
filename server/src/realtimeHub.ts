@@ -105,6 +105,15 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
        * 관심종목은 **바뀐 것만** 새로 건다.
        * 매번 전부 다시 걸면 REG 요청이 쌓이고, 그건 105110 으로 돌아온다.
        */
+      /*
+       * VI 는 **한 번만** 건다. 종목을 지정해도 전체 종목이 오므로(문서 명시)
+       * 종목마다 걸 이유가 없다 — 오히려 요청만 늘어난다.
+       */
+      if (!subscribed.has("__vi__")) {
+        subscribed.add("__vi__");
+        rt.subscribe("1h", "005930");
+      }
+
       const codes = await targets();
       for (const code of codes) {
         if (subscribed.has(code)) continue;
