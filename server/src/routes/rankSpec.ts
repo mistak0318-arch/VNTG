@@ -59,6 +59,27 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
    * `market` 은 000 전체 / 001 코스피 / 101 코스닥,
    * `exchange` 는 1 KRX / 2 NXT / 3 통합 (명세가 허용한 조회에서만).
    */
+  /**
+   * 누적등락률 상위 — **키움에 없어서 우리가 계산한다.**
+   *
+   * 100종목 일봉을 받아야 해서 처음 한 번은 30초쯤 걸린다. 그 뒤 10분은 캐시다.
+   */
+  router.get("/cumulative", async (req, res, next) => {
+    try {
+      const market = typeof req.query.market === "string" ? req.query.market : "000";
+      const days = Math.min(Math.max(Number(req.query.days) || 5, 2), 60);
+      const universe = Math.min(Math.max(Number(req.query.universe) || 100, 20), 200);
+      res.json(await cumulativeRank(client, market, days, universe));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * ⚠️ **`/:key` 는 반드시 맨 아래.**
+   * 무엇이든 받으므로 위에 두면 `/cumulative` 같은 이름난 경로를 **스펙 이름으로 먹는다** —
+   * 실제로 그래서 「없는 조회입니다」가 나왔다. 새 경로를 더할 때도 이 위에 둘 것.
+   */
   router.get("/:key", async (req, res, next) => {
     try {
       const spec = findSpec(req.params.key);
@@ -93,22 +114,6 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         exchange,
         rows: rows.slice(0, 100).map((r) => mapRow(r, spec)),
       });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  /**
-   * 누적등락률 상위 — **키움에 없어서 우리가 계산한다.**
-   *
-   * 100종목 일봉을 받아야 해서 처음 한 번은 30초쯤 걸린다. 그 뒤 10분은 캐시다.
-   */
-  router.get("/cumulative", async (req, res, next) => {
-    try {
-      const market = typeof req.query.market === "string" ? req.query.market : "000";
-      const days = Math.min(Math.max(Number(req.query.days) || 5, 2), 60);
-      const universe = Math.min(Math.max(Number(req.query.universe) || 100, 20), 200);
-      res.json(await cumulativeRank(client, market, days, universe));
     } catch (err) {
       next(err);
     }

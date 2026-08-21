@@ -94,8 +94,12 @@ export async function cumulativeRank(
   if (running) return running;
 
   const job = (async (): Promise<CumResult> => {
-    const top = await tradeValueTop(client, market, universe);
+    const top = await tradeValueTop(client, market, universe).catch((e: unknown) => {
+      throw new Error(`거래대금 상위 조회 실패: ${e instanceof Error ? e.message : String(e)}`);
+    });
+    if (top.length === 0) throw new Error("거래대금 상위가 0건입니다");
     const rows: CumRow[] = [];
+    const failed: string[] = [];
 
     for (const t of top) {
       try {
@@ -115,13 +119,17 @@ export async function cumulativeRank(
           from,
           tradeValue: t.tradeValue ?? 0,
         });
-      } catch {
-        // 한 종목이 실패해도 나머지는 센다
+      } catch (e) {
+        // 한 종목이 실패해도 나머지는 센다 — 다만 전부 실패하면 아래에서 알린다
+        failed.push(`${t.code} ${e instanceof Error ? e.message : ""}`);
       }
       // 키움은 TR 당 초당 5건 — 넉넉히 벌린다
       await new Promise((r) => setTimeout(r, 260));
     }
 
+    if (rows.length === 0 && failed.length > 0) {
+      throw new Error(`일봉 조회가 전부 실패했습니다 (${failed.length}건). 예: ${failed[0]}`);
+    }
     rows.sort((a, b) => b.cumRate - a.cumRate);
     const result: CumResult = {
       days,

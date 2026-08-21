@@ -3,6 +3,7 @@ import { api, fmtNum, type RankResult, type RankSpecGroup } from "../api";
 import { SameNetTradeRankingPage } from "./SameNetTradeRankingPage";
 import { ContinuousTradePage } from "./ContinuousTradePage";
 import { TopTradersTable } from "../components/TopTradersTable";
+import { CumulativeRank } from "../components/CumulativeRank";
 
 /**
  * 시세분석 — **실제로 보는 다섯 개를 앞에 세운다.**
@@ -55,6 +56,7 @@ const TABS = [
   { key: "trade-value", label: "거래대금 상위", kind: "rank" as const },
   { key: "same-net", label: "기관/외국인 동일 순매매", kind: "page" as const },
   { key: "cont", label: "기관/외국인 연속매매", kind: "page" as const },
+  { key: "cum", label: "누적등락률 상위", kind: "page" as const },
   { key: "flu-rate", label: "등락률 상위", kind: "rank" as const },
   { key: "top-traders", label: "수익률 상위고객", kind: "page" as const },
   { key: "etc", label: "그 밖에", kind: "tree" as const },
@@ -119,6 +121,7 @@ export function ScreenerPage({
       {tab === "same-net" && <SameNetTradeRankingPage onSelectStock={onSelectStock ?? (() => {})} />}
       {tab === "cont" && <ContinuousTradePage onSelectStock={onSelectStock ?? (() => {})} />}
       {tab === "top-traders" && <TopTradersTable onSelectStock={onSelectStock} />}
+      {tab === "cum" && <CumulativeRank onSelectStock={onSelectStock} />}
 
       {current?.kind !== "page" && (
         <div className="screener">
