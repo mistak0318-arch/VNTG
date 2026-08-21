@@ -1,4 +1,5 @@
 import { api, fmtNum, signClass } from "../api";
+import { useEffect, useState } from "react";
 import { useLive } from "../useLive";
 
 /**
@@ -15,7 +16,11 @@ import { useLive } from "../useLive";
  *   · **최근 며칠 추이** — 실제 일자별 데이터. 프로그램이 이 종목에 며칠째 붙고 있나
  *   · **오늘 막대** — 오늘 하루의 매수·매도를 갈라서
  *
- * 「오늘 시간대별」은 못 만든다. 없는 걸 있는 척 그리지 않는다.
+ * ## 「오늘 시간대별」이 생겼다
+ *
+ * 예전엔 여기 「못 만든다」고 적혀 있었다. REST 로는 일자별뿐이었기 때문이다.
+ * 웹소켓 `0w`(종목프로그램매매)가 **순매수 증감**을 주고 서버가 하루 종일 쌓으므로,
+ * 이제 「11시에 프로그램이 붙었나」에 답할 수 있다.
  *
  * ⚠️ 금액 단위는 **백만원**이다(`amt_qty_tp: "1"`). 억으로 보려면 100 으로 나눈다.
  */
@@ -37,6 +42,86 @@ function n(v: unknown): number {
 /** 백만원 → 억원 */
 function toEok(v: number): number {
   return Math.round(v / 100);
+}
+
+/**
+ * 오늘 장중 프로그램 순매수 **증감** — 서버가 실시간(`0w`)으로 쌓은 것.
+ *
+ * FID `213` 이 순매수금액증감이다. 누적(`212`)이 아니라 **증감**을 그린다 —
+ * 누적을 그리면 아침에 크게 산 뒤 하루 종일 가만히 있어도 계속 높은 선으로 남아서
+ * 「지금 붙고 있나」를 못 읽는다.
+ */
+function useProgramSeries(code: string) {
+  const [pts, setPts] = useState<{ t: string; v: number }[]>([]);
+
+  useEffect(() => {
+    if (!code) {
+      setPts([]);
+      return;
+    }
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await fetch(`/api/realtime/series?type=0w&item=${encodeURIComponent(code)}`);
+        const j = (await r.json()) as { points: { t: string; v: Record<string, string> }[] };
+        if (!alive) return;
+        setPts(
+          (j.points ?? [])
+            .map((p) => ({ t: p.t, v: Number(p.v["213"]) || 0 }))
+            .filter((p) => p.v !== 0),
+        );
+      } catch {
+        /* 실시간이 없으면 빈 그림 — 아래 일자별은 REST 라 그대로 뜬다 */
+      }
+    };
+    void load();
+    const t = setInterval(() => void load(), 15_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [code]);
+
+  return pts;
+}
+
+/** 「HHmmss」 → 「HH:mm」 */
+function hhmm(t: string): string {
+  return t.length >= 4 ? `${t.slice(0, 2)}:${t.slice(2, 4)}` : t;
+}
+
+function IntradayProgram({ code }: { code: string }) {
+  const pts = useProgramSeries(code);
+  if (pts.length < 2) return null;
+  const mx = Math.max(...pts.map((p) => Math.abs(p.v)), 1);
+
+  return (
+    <section className="card">
+      <h3 className="section-heading">오늘 장중 — 구간별 프로그램 순매수</h3>
+      <div className="bf-series">
+        {pts.map((p, i) => (
+          <div className="bf-pt" key={`${p.t}-${i}`}>
+            <span className="bf-pt-t">{hhmm(p.t)}</span>
+            <span className="bf-pt-bar">
+              <span
+                className={`bf-bar ${p.v >= 0 ? "buy" : "sell"}`}
+                style={{ width: `${(Math.abs(p.v) / mx) * 100}%` }}
+              />
+            </span>
+            <span className={`bf-pt-v ${p.v >= 0 ? "positive" : "negative"}`}>
+              {p.v > 0 ? "+" : ""}
+              {p.v.toLocaleString("ko-KR")}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="table-note">
+        <b>누적이 아니라 그 구간에 붙은 양</b>입니다 — 아침에 크게 산 뒤 가만히 있으면
+        0 으로 떨어집니다. 서버가 실시간으로 30초마다 쌓으므로 <b>화면을 안 보고 있어도</b>
+        늘어납니다.
+      </div>
+    </section>
+  );
 }
 
 export function ProgramFlowPanel({ code }: { code: string }) {
@@ -77,6 +162,8 @@ export function ProgramFlowPanel({ code }: { code: string }) {
 
   return (
     <div className="pf">
+      {/* 오늘 장중이 먼저다 — 일자별은 그 뒤에 「며칠째인가」를 본다 */}
+      <IntradayProgram code={code} />
       <div className="filter-row">
         <span>
           오늘 순매수{" "}
