@@ -1933,6 +1933,8 @@ export interface JournalTrade {
   price: number;
   qty: number;
   note: string;
+  /** 근거 태그 — 자유 서술은 그대로 두고, 셀 수 있는 형태를 같이 받는다 */
+  reasons?: string[];
   level?: string;
   score?: number;
   passed?: string[];
@@ -1941,6 +1943,10 @@ export interface JournalTrade {
 export interface JournalEntry {
   date: string;
   updatedAt: string;
+  /** 오늘 매매했나 쉬었나 — 안 사는 것도 판단이다 */
+  stance?: "trade" | "watch" | null;
+  /** 쉰 이유 */
+  watchReasons?: string[];
   what: string;
   why: string;
   followedRules: boolean | null;
@@ -1965,7 +1971,27 @@ export interface JournalStats {
     brokeDays: number;
     brokeAvgReturn: number | null;
   };
+  reasonEdge: EdgeRow[];
+  signalEdge: EdgeRow[];
+  marketEdge: EdgeRow[];
+  watch: {
+    days: number;
+    tradeDays: number;
+    reasons: { key: string; label: string; count: number }[];
+    byMarket: { key: string; count: number }[];
+    tradeByMarket: { key: string; count: number }[];
+  };
   lessons: { date: string; lesson: string }[];
+}
+
+/** 무엇으로 묶든 성적은 같은 모양 */
+export interface EdgeRow {
+  key: string;
+  label: string;
+  /** 판 건수 — 적으면 평균이 우연이다 */
+  count: number;
+  avgReturn: number;
+  winRate: number;
 }
 
 export interface JournalData {
@@ -1973,6 +1999,8 @@ export interface JournalData {
   stats: JournalStats;
   mistakeTags: { key: string; label: string; hint: string }[];
   moodTags: { key: string; label: string }[];
+  reasonTags: { key: string; label: string; hint: string }[];
+  watchTags: { key: string; label: string; hint: string }[];
 }
 
 

@@ -46,6 +46,59 @@ export const MISTAKE_TAGS = [
   { key: "overtrade", label: "과매매", hint: "할 게 없는 날인데 계속 사고팔았다" },
 ] as const;
 
+/**
+ * **왜 샀나** — 근거 태그.
+ *
+ * 「왜 샀나」는 이미 자유 서술로 적고 있었다. 그런데 자유 서술은 **못 센다.**
+ * "거래원이 붙어서"와 "창구가 계속 담아서"를 같은 것으로 묶을 방법이 없다.
+ * 실수 태그를 목록으로 준 이유와 똑같다.
+ *
+ * 이걸 세면 **내 로직 중 뭐가 맞는지**가 숫자로 나온다 — 이 시스템의 원래 목적이다.
+ * 「신호등 보고 산 것」과 「수급 보고 산 것」 중 어느 쪽이 나한테 통하는지는
+ * 몇 달 치를 세 봐야 안다. 자유 서술은 그 옆에 남는다.
+ *
+ * 목록은 **이 화면에서 실제로 볼 수 있는 것**으로 짰다 — 볼 수 없는 근거를 적게 하면
+ * 나중에 확인할 방법이 없다.
+ */
+export const REASON_TAGS = [
+  { key: "signal", label: "신호등", hint: "종목 신호등이 초록·점수가 높아서" },
+  { key: "broker", label: "거래원", hint: "특정 창구가 계속 담고 있어서" },
+  { key: "program", label: "프로그램", hint: "프로그램 순매수가 붙어서" },
+  { key: "foreign", label: "외국인·기관", hint: "투자자 수급이 며칠째 들어와서" },
+  { key: "strength", label: "체결강도", hint: "매수 체결이 세게 붙어서" },
+  { key: "chart", label: "차트 자리", hint: "이평선·매물대 등 자리가 좋아서" },
+  { key: "breakout", label: "돌파", hint: "전고점·박스권을 뚫어서" },
+  { key: "theme", label: "테마·업종", hint: "속한 테마가 도는 중이라" },
+  { key: "news", label: "뉴스·공시", hint: "재료가 나와서" },
+  { key: "earnings", label: "실적", hint: "실적·재무를 보고" },
+  { key: "closeBet", label: "종가배팅", hint: "장 마감 무렵 다음 날을 보고" },
+  { key: "hunch", label: "감", hint: "근거를 대기 어렵다 — 이것도 세어 둔다" },
+] as const;
+
+/**
+ * **관망한 이유** — 안 사는 것도 판단이다.
+ *
+ * 노트가 매매를 전제로 짜여 있었다. 그런데 시장이 어지러울 때는 **하루 종일 안 사는 날이
+ * 더 많고**, 그 판단이야말로 성적을 가장 크게 가른다 — 빨간 날 안 산 것이 초록 날 잘 산
+ * 것보다 계좌에 더 남는다.
+ *
+ * 그런데 안 산 날은 기록이 없으니 나중에 셀 수가 없다. **쉰 날도 적어야** 「위험할 때
+ * 쉬었나」에 답할 수 있다.
+ *
+ * 채점은 새 데이터 없이 된다 — 그날 시장 신호등이 이미 박제되므로, **쉰 날의 국면**과
+ * **산 날의 국면**을 견주면 내가 위험을 피해 쉬는지 그냥 겁이 나서 쉬는지가 갈린다.
+ */
+export const WATCH_TAGS = [
+  { key: "marketRed", label: "시장이 위험", hint: "신호등이 빨강·노랑이라 쉬었다" },
+  { key: "noSetup", label: "자리가 없음", hint: "볼 만한 종목이 없었다" },
+  { key: "choppy", label: "혼조·방향 없음", hint: "위아래로 흔들려서 붙을 자리가 아니었다" },
+  { key: "waiting", label: "기다리는 중", hint: "봐 둔 종목이 아직 자리에 안 왔다" },
+  { key: "afterLoss", label: "손실 직후", hint: "잃은 뒤라 일부러 쉬었다" },
+  { key: "noCash", label: "자금 없음", hint: "현금이 없거나 이미 다 물려 있다" },
+  { key: "offDay", label: "컨디션·일정", hint: "볼 수 있는 상태가 아니었다" },
+  { key: "rule", label: "내 규칙", hint: "매매하지 않기로 정한 조건에 걸렸다" },
+] as const;
+
 /** 그날의 상태. 성적과 엮으면 "어떤 상태일 때 지는가"가 나온다 */
 export const MOOD_TAGS = [
   { key: "calm", label: "평온" },
@@ -88,6 +141,11 @@ export interface JournalTrade {
   qty: number;
   /** 왜 샀나 / 왜 팔았나 */
   note: string;
+  /**
+   * 근거 태그 — **셀 수 있게 적는 자리.**
+   * 자유 서술(`note`)은 그대로 두고, 나중에 집계할 수 있는 형태를 같이 받는다.
+   */
+  reasons?: string[];
   /** 기록 시점의 신호등 (코드를 골랐을 때만) */
   level?: string;
   score?: number;
@@ -98,6 +156,16 @@ export interface JournalEntry {
   /** YYYY-MM-DD (KST) — 하루에 하나 */
   date: string;
   updatedAt: string;
+
+  /**
+   * 오늘 매매했나, 쉬었나.
+   *
+   * `watch` 면 매매 칸 대신 **왜 쉬었나**를 묻는다. 안 적으면 `null` 이고,
+   * 그때는 매매 기록이 있으면 매매한 날로 친다.
+   */
+  stance?: "trade" | "watch" | null;
+  /** 쉰 이유 (관망일 때) */
+  watchReasons?: string[];
 
   /** 오늘 무엇을 했나 (짧게) */
   what: string;
@@ -293,11 +361,62 @@ export interface JournalStats {
     brokeDays: number;
     brokeAvgReturn: number | null;
   };
+  /**
+   * **무엇을 보고 산 것이 통했나** — 이 시스템의 원래 목적에 가장 가까운 숫자.
+   * 근거가 여럿이면 각각에 다 센다(섞여 있었다는 것 자체가 정보다).
+   */
+  reasonEdge: EdgeRow[];
+  /** 살 때 종목 신호등이 무슨 색이었나별 성적 */
+  signalEdge: EdgeRow[];
+  /** 그날 시장 국면별 성적 */
+  marketEdge: EdgeRow[];
+  /**
+   * 쉰 날과 산 날의 국면 — **위험할 때 쉬었나.**
+   * 쉰 날이 빨강에 몰려 있으면 위험을 피한 것이고, 초록에 몰려 있으면 겁이 난 것이다.
+   */
+  watch: {
+    days: number;
+    tradeDays: number;
+    /** 쉰 이유 잦은 순 */
+    reasons: { key: string; label: string; count: number }[];
+    /** 쉰 날의 국면 분포 */
+    byMarket: { key: string; count: number }[];
+    /** 산 날의 국면 분포 — 견줘 봐야 뜻이 생긴다 */
+    tradeByMarket: { key: string; count: number }[];
+  };
   /** 최근에 적은 배운 것들 — 다시 읽으라고 */
   lessons: { date: string; lesson: string }[];
 }
 
+/** 무엇으로 묶든 성적은 같은 모양으로 낸다 */
+export interface EdgeRow {
+  key: string;
+  label: string;
+  /** 판 건수 — 이게 적으면 평균이 우연이다 */
+  count: number;
+  /** 평균 실현 수익률(%) */
+  avgReturn: number;
+  /** 이긴 비율(%) */
+  winRate: number;
+}
+
 const MISTAKE_LABEL = new Map(MISTAKE_TAGS.map((t) => [t.key as string, t.label]));
+const REASON_LABEL = new Map(REASON_TAGS.map((t) => [t.key as string, t.label]));
+const WATCH_LABEL = new Map(WATCH_TAGS.map((t) => [t.key as string, t.label]));
+
+/** 수익률 묶음 → 성적 한 줄 */
+function edge(map: Map<string, number[]>, label: (k: string) => string): EdgeRow[] {
+  return [...map.entries()]
+    .map(([key, xs]) => ({
+      key,
+      label: label(key),
+      count: xs.length,
+      avgReturn: xs.reduce((a, b) => a + b, 0) / xs.length,
+      winRate: (xs.filter((x) => x > 0).length / xs.length) * 100,
+    }))
+    // 건수가 아니라 **성적** 순으로 — 뭐가 통했나를 보는 표다
+    .sort((a, b) => b.avgReturn - a.avgReturn);
+}
 const MOOD_LABEL = new Map(MOOD_TAGS.map((t) => [t.key as string, t.label]));
 
 export async function journalStats(): Promise<JournalStats> {
@@ -340,15 +459,43 @@ export async function journalStats(): Promise<JournalStats> {
    *
    * 아직 안 판 것은 세지 않는다. 결과가 없는 걸 성적에 넣으면 물려 있는 게 실패로 잡힌다.
    */
-  const lots = new Map<string, { date: string; price: number; qty: number }[]>();
+  interface Lot {
+    date: string;
+    price: number;
+    qty: number;
+    /** 살 때 고른 근거 — 성적을 여기에 붙인다 */
+    reasons: string[];
+    /** 살 때 박제된 종목 신호등 */
+    level: string;
+    /** 그날 시장 신호등 — 국면별 성적을 내는 기준 */
+    market: string;
+  }
+  const lots = new Map<string, Lot[]>();
   const realized = new Map<string, number[]>(); // 매수일 → 실현 수익률들
+  /*
+   * **무엇을 보고 산 것이 통했나.**
+   *
+   * 실현 수익률을 매수일에만 붙이면 「규칙을 지킨 날」까지밖에 못 센다.
+   * 산 **로트마다** 근거·신호등·시장 국면을 실어 두면, 판 순간 그 성적이
+   * 그 근거에 꽂힌다 — 내 로직 중 뭐가 맞는지가 그제야 숫자로 나온다.
+   */
+  const byReason = new Map<string, number[]>();
+  const byLevel = new Map<string, number[]>();
+  const byMarket = new Map<string, number[]>();
   for (const r of [...rows].sort((a, b) => a.date.localeCompare(b.date))) {
     for (const t of r.trades ?? []) {
       const key = t.code || t.name;
       if (!key || t.price <= 0 || t.qty <= 0) continue;
       if (t.kind === "buy") {
         const arr = lots.get(key) ?? [];
-        arr.push({ date: r.date, price: t.price, qty: t.qty });
+        arr.push({
+          date: r.date,
+          price: t.price,
+          qty: t.qty,
+          reasons: t.reasons ?? [],
+          level: t.level ?? "",
+          market: r.context?.marketLevel ?? "",
+        });
         lots.set(key, arr);
         continue;
       }
@@ -362,6 +509,10 @@ export async function journalStats(): Promise<JournalStats> {
         // 수량만큼 가중하지 않고 건별로 넣는다 — 승률·평균을 보려는 것이므로
         got.push(rate);
         realized.set(lot.date, got);
+        // 한 매매에 근거가 여럿이면 **각각에 다 넣는다** — 어느 근거가 섞여 있었는지가 정보다
+        for (const k of lot.reasons) byReason.set(k, [...(byReason.get(k) ?? []), rate]);
+        if (lot.level) byLevel.set(lot.level, [...(byLevel.get(lot.level) ?? []), rate]);
+        if (lot.market) byMarket.set(lot.market, [...(byMarket.get(lot.market) ?? []), rate]);
         lot.qty -= take;
         left -= take;
         if (lot.qty <= 0) arr.shift();
@@ -395,6 +546,40 @@ export async function journalStats(): Promise<JournalStats> {
       brokeDays: judged.length - kept.length,
       brokeAvgReturn: avg(brokeReturns),
     },
+    reasonEdge: edge(byReason, (k) => REASON_LABEL.get(k) ?? k),
+    signalEdge: edge(byLevel, (k) => k),
+    marketEdge: edge(byMarket, (k) => k),
+    watch: (() => {
+      /*
+       * 쉰 날은 **적어야 세진다.** `stance` 를 안 고른 날은 매매 기록으로 갈음한다 —
+       * 예전에 적은 노트에는 이 칸이 아예 없어서다.
+       */
+      const isWatch = (r: JournalEntry) =>
+        r.stance === "watch" || (r.stance == null && (r.trades ?? []).length === 0);
+      const watchDays = rows.filter(isWatch);
+      const tradeDays = rows.filter((r) => !isWatch(r));
+      const count = (list: JournalEntry[]) => {
+        const m = new Map<string, number>();
+        for (const r of list) {
+          const k = r.context?.marketLevel;
+          if (k) m.set(k, (m.get(k) ?? 0) + 1);
+        }
+        return [...m.entries()].map(([key, c]) => ({ key, count: c })).sort((a, b) => b.count - a.count);
+      };
+      const reasonCount = new Map<string, number>();
+      for (const r of watchDays) {
+        for (const k of r.watchReasons ?? []) reasonCount.set(k, (reasonCount.get(k) ?? 0) + 1);
+      }
+      return {
+        days: watchDays.length,
+        tradeDays: tradeDays.length,
+        reasons: [...reasonCount.entries()]
+          .map(([key, c]) => ({ key, label: WATCH_LABEL.get(key) ?? key, count: c }))
+          .sort((a, b) => b.count - a.count),
+        byMarket: count(watchDays),
+        tradeByMarket: count(tradeDays),
+      };
+    })(),
     lessons: rows
       .filter((r) => r.lesson.trim())
       .slice(-12)

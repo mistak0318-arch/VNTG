@@ -6,6 +6,7 @@ import {
   type JournalEntry,
   type JournalTrade,
   type StockSearchResult,
+  type EdgeRow,
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { TradeTrackPanel } from "../components/TradeTrackPanel";
@@ -29,6 +30,31 @@ function today(): string {
 function pct(n: number | null): string {
   if (n === null) return "-";
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
+}
+
+/**
+ * 성적 한 묶음을 표로 — 근거별·신호등별·국면별이 같은 모양이라 하나로 쓴다.
+ *
+ * **건수를 반드시 같이 적는다.** 세 건 평균 +8% 와 마흔 건 평균 +2% 는 전혀 다른 말인데
+ * 평균만 적어 두면 앞의 것이 더 좋아 보인다.
+ */
+function EdgeTable({ rows }: { rows: EdgeRow[] }) {
+  return (
+    <div className="jn-edge">
+      {rows.map((r) => (
+        <div className="cost-row" key={r.key}>
+          <span className="cost-name">{r.label}</span>
+          <span className={`num jn-edge-ret ${r.avgReturn >= 0 ? "positive" : "negative"}`}>
+            {r.avgReturn > 0 ? "+" : ""}
+            {r.avgReturn.toFixed(1)}%
+          </span>
+          <span className="num jn-edge-win">{r.winRate.toFixed(0)}%</span>
+          <span className="num cost-usd">{r.count}건</span>
+        </div>
+      ))}
+      <div className="jn-stat-note">평균 · 승률 · 판 건수 순입니다.</div>
+    </div>
+  );
 }
 
 export function JournalPage({
@@ -190,6 +216,60 @@ export function JournalPage({
           증권사 계좌에서 일어난다. 복기해야 하는 건 후자다.
           종목을 골라 주면 그 순간의 신호등은 기계가 붙인다 — 사람은 "왜"만 적으면 된다.
         */}
+        {/*
+          관망 — **안 사는 것도 판단이다.**
+
+          노트가 매매를 전제로 짜여 있어서 쉰 날은 기록이 안 남았다. 그러면 나중에
+          「위험할 때 쉬었나」를 셀 수가 없다. 시장이 어지러울 때는 쉰 날이 더 많고,
+          그 판단이 성적을 가장 크게 가른다.
+        */}
+        <div className="jn-field">
+          <span className="jn-label">오늘</span>
+          <div className="filter-row">
+            {([
+              ["trade", "매매함"],
+              ["watch", "관망 — 안 샀다"],
+            ] as ["trade" | "watch", string][]).map(([k, label]) => (
+              <button
+                key={k}
+                className={`filter-btn ${form.stance === k ? "active" : ""}`}
+                onClick={() => setForm({ ...form, stance: form.stance === k ? null : k })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {form.stance === "watch" && (
+            <>
+              <span className="jn-label">
+                왜 쉬었나 <em className="jn-hint">이걸 세면 위험을 피한 건지 겁이 난 건지 갈립니다</em>
+              </span>
+              <div className="jn-tags">
+                {(data?.watchTags ?? []).map((tag) => {
+                  const on = (form.watchReasons ?? []).includes(tag.key);
+                  return (
+                    <button
+                      key={tag.key}
+                      className={`jn-tag ${on ? "on" : ""}`}
+                      title={tag.hint}
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          watchReasons: on
+                            ? (form.watchReasons ?? []).filter((x) => x !== tag.key)
+                            : [...(form.watchReasons ?? []), tag.key],
+                        })
+                      }
+                    >
+                      {tag.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
         <div className="jn-field">
           <span className="jn-label">
             오늘의 매매 <em className="jn-hint">실제 계좌에서 한 것을 적습니다</em>
@@ -235,6 +315,34 @@ export function JournalPage({
                 />
                 {t.passed && t.passed.length > 0 && (
                   <span className="jn-trade-passed">기록 시점 통과 — {t.passed.join(" · ")}</span>
+                )}
+                {/*
+                  근거 태그 — **매수에만** 묻는다. 「왜 팔았나」는 결과를 이미 아는 상태의
+                  판단이라 성적으로 셀 수가 없다.
+                  자유 서술은 위에 그대로 두고, 셀 수 있는 형태를 같이 받는다.
+                */}
+                {t.kind === "buy" && (
+                  <span className="jn-trade-reasons">
+                    {(data?.reasonTags ?? []).map((tag) => {
+                      const on = (t.reasons ?? []).includes(tag.key);
+                      return (
+                        <button
+                          key={tag.key}
+                          className={`jn-tag ${on ? "on" : ""}`}
+                          title={tag.hint}
+                          onClick={() =>
+                            patchTrade(t.id, {
+                              reasons: on
+                                ? (t.reasons ?? []).filter((x) => x !== tag.key)
+                                : [...(t.reasons ?? []), tag.key],
+                            })
+                          }
+                        >
+                          {tag.label}
+                        </button>
+                      );
+                    })}
+                  </span>
                 )}
               </div>
             ))}
@@ -388,6 +496,94 @@ export function JournalPage({
         </div>
       ) : (
         <div className="jn-stats">
+          {/*
+            **무엇을 보고 산 것이 통했나.**
+
+            이 표가 이 노트를 쓰는 이유다. 「신호등 보고 산 것」과 「수급 보고 산 것」 중
+            어느 쪽이 나한테 통하는지는 몇 달 치를 세 봐야 안다.
+            건수가 적으면 평균은 우연이라, 건수를 옆에 같이 적는다.
+          */}
+          <div className="jn-stat-block wide">
+            <div className="cost-sub">무엇을 보고 산 것이 통했나</div>
+            {s.reasonEdge.length === 0 ? (
+              <div className="jn-stat-note">
+                아직 셀 게 없습니다. 매수를 적을 때 <b>근거 태그</b>를 고르고, 그 종목을 팔면
+                여기에 성적이 붙습니다 — <b>판 것만</b> 셉니다(물려 있는 걸 실패로 세면 안 됩니다).
+              </div>
+            ) : (
+              <EdgeTable rows={s.reasonEdge} />
+            )}
+          </div>
+
+          <div className="jn-stat-block">
+            <div className="cost-sub">살 때 신호등 색별</div>
+            {s.signalEdge.length === 0 ? (
+              <div className="jn-stat-note">아직 셀 게 없습니다.</div>
+            ) : (
+              <EdgeTable rows={s.signalEdge} />
+            )}
+          </div>
+
+          <div className="jn-stat-block">
+            <div className="cost-sub">시장 국면별</div>
+            {s.marketEdge.length === 0 ? (
+              <div className="jn-stat-note">아직 셀 게 없습니다.</div>
+            ) : (
+              <EdgeTable rows={s.marketEdge} />
+            )}
+          </div>
+
+          {/*
+            관망 — 쉰 날의 국면과 산 날의 국면을 견준다.
+            쉰 날이 빨강에 몰려 있으면 위험을 피한 것이고, 초록에 몰려 있으면 겁이 난 것이다.
+          */}
+          <div className="jn-stat-block wide">
+            <div className="cost-sub">
+              관망 {s.watch.days}일 / 매매 {s.watch.tradeDays}일
+            </div>
+            <div className="jn-edge-two">
+              <div>
+                <div className="jn-stat-note">쉰 날의 시장</div>
+                {s.watch.byMarket.length === 0 ? (
+                  <div className="jn-stat-note">-</div>
+                ) : (
+                  s.watch.byMarket.map((m) => (
+                    <div className="cost-row" key={m.key}>
+                      <span className="cost-name">
+                        <span className={`sig-dot ${m.key}`} /> {m.key}
+                      </span>
+                      <span className="num cost-usd">{m.count}일</span>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div>
+                <div className="jn-stat-note">산 날의 시장</div>
+                {s.watch.tradeByMarket.length === 0 ? (
+                  <div className="jn-stat-note">-</div>
+                ) : (
+                  s.watch.tradeByMarket.map((m) => (
+                    <div className="cost-row" key={m.key}>
+                      <span className="cost-name">
+                        <span className={`sig-dot ${m.key}`} /> {m.key}
+                      </span>
+                      <span className="num cost-usd">{m.count}일</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            {s.watch.reasons.length > 0 && (
+              <div className="jn-stat-note">
+                쉰 이유 — {s.watch.reasons.slice(0, 5).map((r) => `${r.label} ${r.count}`).join(" · ")}
+              </div>
+            )}
+            <div className="jn-stat-note">
+              쉰 날이 <b>빨강·노랑</b>에 몰려 있으면 위험을 피한 것이고, <b>초록</b>에 몰려
+              있으면 겁이 나서 못 산 것입니다 — 둘은 고쳐야 할 방향이 반대입니다.
+            </div>
+          </div>
+
           <div className="jn-stat-block">
             <div className="cost-sub">규칙 준수율</div>
             <div className="jn-big">{s.ruleRate === null ? "-" : `${s.ruleRate.toFixed(0)}%`}</div>

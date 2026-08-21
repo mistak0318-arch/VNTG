@@ -4,6 +4,8 @@ import { trackTrades } from "../tradeTrack.js";
 import {
   MISTAKE_TAGS,
   MOOD_TAGS,
+  REASON_TAGS,
+  WATCH_TAGS,
   journalStats,
   listEntries,
   removeEntry,
@@ -21,6 +23,8 @@ export function createJournalRouter(client: KiwoomClient): Router {
         stats: await journalStats(),
         mistakeTags: MISTAKE_TAGS,
         moodTags: MOOD_TAGS,
+        reasonTags: REASON_TAGS,
+        watchTags: WATCH_TAGS,
       });
     } catch (err) {
       next(err);
