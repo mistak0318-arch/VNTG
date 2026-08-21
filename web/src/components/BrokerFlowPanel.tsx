@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FlowSeries, type FlowSample } from "./FlowSeries";
+import { FlowSeries, useMinutePrices, type FlowSample, type FlowSeriesData } from "./FlowSeries";
 import { api, fmtNum, signClass, type BrokerFlow } from "../api";
 import { useLive } from "../useLive";
 
@@ -45,12 +45,12 @@ function Bar({ v, mx, cls }: { v: number; mx: number; cls: string }) {
  * 있으므로 **코드로 찾아** 그 칸의 증감을 꺼낸다. 칸 번호로 고정해 읽으면
  * 순위가 바뀌는 순간 다른 창구 값을 그 창구 것으로 그리게 된다.
  */
-function useBrokerSeries(code: string, broker: string | null) {
-  const [pts, setPts] = useState<FlowSample[]>([]);
+function useBrokerSeries(code: string, broker: string | null): FlowSeriesData {
+  const [s, setS] = useState<FlowSeriesData>({ pts: [], day: "", stale: false });
 
   useEffect(() => {
     if (!code || !broker) {
-      setPts([]);
+      setS({ pts: [], day: "", stale: false });
       return;
     }
     let alive = true;
@@ -59,7 +59,11 @@ function useBrokerSeries(code: string, broker: string | null) {
         const r = await fetch(
           `/api/realtime/series?type=0F&item=${encodeURIComponent(code)}`,
         );
-        const j = (await r.json()) as { points: { t: string; v: Record<string, string> }[] };
+        const j = (await r.json()) as {
+          points: { t: string; v: Record<string, string> }[];
+          day?: string;
+          stale?: boolean;
+        };
         if (!alive) return;
         const out: FlowSample[] = [];
         /*
@@ -93,7 +97,7 @@ function useBrokerSeries(code: string, broker: string | null) {
           // 한 창구가 매수·매도 양쪽에 다 오르는 일이 흔하다 — 그래서 빼서 순매수를 낸다
           out.push({ t: p.t, buy: lastBuy, sell: lastSell, net: lastBuy - lastSell });
         }
-        setPts(out);
+        setS({ pts: out, day: j.day ?? "", stale: Boolean(j.stale) });
       } catch {
         /* 실시간이 없으면 빈 그림 — 위 표는 REST 라 그대로 뜬다 */
       }
@@ -106,7 +110,7 @@ function useBrokerSeries(code: string, broker: string | null) {
     };
   }, [code, broker]);
 
-  return pts;
+  return s;
 }
 
 export function BrokerFlowPanel({ code }: { code: string }) {
@@ -123,6 +127,8 @@ export function BrokerFlowPanel({ code }: { code: string }) {
    * 달라져 React 가 터진다.
    */
   const series = useBrokerSeries(code, picked);
+  /* 추정가격 칸과 주가 선 — 창구가 산 자리가 어느 가격이었나 */
+  const prices = useMinutePrices(code);
 
   if (loading && !data) return <div className="empty">거래원 불러오는 중…</div>;
   if (error && !data) return <div className="error-banner">{error}</div>;
@@ -191,14 +197,20 @@ export function BrokerFlowPanel({ code }: { code: string }) {
               닫기
             </button>
           </h3>
-          {picks.length < 2 ? (
+          {picks.pts.length < 2 ? (
             <div className="page-note">
-              아직 점이 <b>{picks.length}개</b>뿐입니다. 서버가 실시간으로 30초마다 쌓으므로
+              아직 점이 <b>{picks.pts.length}개</b>뿐입니다. 서버가 실시간으로 30초마다 쌓으므로
               <b>화면을 안 보고 있어도</b> 늘어납니다 — 장중에 조금 기다리면 채워집니다.
               (장이 닫혀 있으면 더 안 쌓입니다)
             </div>
           ) : (
-            <FlowSeries samples={picks} unit="주" unitLabel="(주)" />
+            <FlowSeries
+              samples={picks.pts}
+              unit="주"
+              unitLabel="(주)"
+              asOf={picks.stale ? picks.day : undefined}
+              price={prices.size > 0 ? prices : undefined}
+            />
           )}
         </section>
       )}

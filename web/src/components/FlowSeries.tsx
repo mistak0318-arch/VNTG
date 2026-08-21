@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "../api";
 
 /**
  * 시간별 수급 — **선 + 표.** 거래원과 프로그램매매가 같이 쓴다.
@@ -42,6 +43,32 @@ export interface FlowSample {
   sell: number;
   /** 그 시점까지의 누적 순매수 — 키움이 직접 주면 그 값(빼서 만들면 어긋난다) */
   net: number;
+}
+
+/** 서버가 주는 시계열 한 덩어리 — 어느 날 것인지까지 */
+export interface FlowSeriesData {
+  pts: FlowSample[];
+  /** YYYY-MM-DD (한국시간) */
+  day: string;
+  /** 오늘이 아니라 지난 장 것인가 */
+  stale: boolean;
+}
+
+const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
+
+/**
+ * `2026-08-21` → `8월 21일 (금)`.
+ *
+ * 요일을 같이 적는 이유는 **주말에 열면 금요일 것이 나오기** 때문이다.
+ * 날짜만 적으면 그게 지난 장인지 오늘인지 한 번 더 세어봐야 한다.
+ *
+ * 요일은 UTC 로 계산한다 — 날짜만 있는 문자열에 시간대를 붙이면 하루가 밀린다.
+ */
+export function dayLabel(day: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return day;
+  const d = new Date(`${day}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return day;
+  return `${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일 (${WEEKDAY[d.getUTCDay()]})`;
 }
 
 const W = 320;
@@ -94,14 +121,22 @@ export function FlowSeries({
   unit = "",
   /** 표 머리에 적을 단위 안내 — 「금액(백만)」처럼 */
   unitLabel,
+  /** 오늘이 아니면 어느 장 것인지 (YYYY-MM-DD) */
+  asOf,
+  /** HHmm → 그 시각 주가. 있으면 표에 추정가격, 그림에 주가 선이 붙는다 */
+  price,
 }: {
   samples: FlowSample[];
   unit?: string;
   unitLabel?: string;
+  asOf?: string;
+  price?: Map<string, number>;
 }) {
   const [step, setStep] = useState(1);
   /** 누른 줄 — 그림과 표가 같이 표시된다 */
   const [at, setAt] = useState<number | null>(null);
+  /** HTS 처럼 **표가 먼저**고 그림은 버튼으로 연다 */
+  const [chart, setChart] = useState(true);
 
   /* 분 단위로 묶는다 — 누적값이므로 그 분의 **마지막** 점이 그 분의 결과다 */
   const rows = useMemo(() => {
@@ -135,6 +170,30 @@ export function FlowSeries({
   const last = rows[rows.length - 1];
   const zeroIn = min < 0 && max > 0;
 
+  /*
+   * 주가 선. **눈금이 따로다** — 순매수는 억 단위고 주가는 원 단위라 한 눈금에 그리면
+   * 둘 중 하나가 납작해진다. HTS 도 좌우로 눈금을 나눠 그린다.
+   */
+  const prices = price ? rows.map((r) => price.get(r.t.slice(0, 4)) ?? null) : [];
+  const pv = prices.filter((p): p is number => p !== null);
+  const pmin = pv.length > 0 ? Math.min(...pv) : 0;
+  const pmax = pv.length > 0 ? Math.max(...pv) : 0;
+  const py = (v: number) =>
+    pmax === pmin ? PAD.t + ih / 2 : PAD.t + ((pmax - v) / (pmax - pmin)) * ih;
+  /* 값이 빈 구간에서 선을 끊는다 — 없는 값을 이어 그리면 없던 움직임이 생긴다 */
+  let pstarted = false;
+  const priceLine = prices
+    .map((p, i) => {
+      if (p === null) {
+        pstarted = false;
+        return "";
+      }
+      const cmd = pstarted ? "L" : "M";
+      pstarted = true;
+      return `${cmd}${x(i)},${py(p)}`;
+    })
+    .join("");
+
   /* 총매도 → 총매수로 돌아선 자리 */
   const crosses: number[] = [];
   for (let i = 1; i < rows.length; i++) {
@@ -152,6 +211,13 @@ export function FlowSeries({
 
   return (
     <div className="fs">
+      {/* 지난 장 것이면 반드시 적는다 — 오늘인 척 보여주면 안 된다 */}
+      {asOf && (
+        <div className="fs-asof">
+          <b>{dayLabel(asOf)}</b> 장 기준입니다 — 오늘은 쌓인 게 없습니다
+        </div>
+      )}
+
       <div className="fs-top">
         <span className="fs-sum">
           <span className="pt-n">누적 순매수 </span>
@@ -173,58 +239,15 @@ export function FlowSeries({
               {l}
             </button>
           ))}
+          {/* HTS 오른쪽 끝의 그 버튼 — 표가 본체고 그림은 켜고 끈다 */}
+          <button
+            className={`filter-btn ${chart ? "active" : ""}`}
+            onClick={() => setChart(!chart)}
+            title="그림으로 보기"
+          >
+            📈
+          </button>
         </span>
-      </div>
-
-      <div className="fs-chart">
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img">
-          {zeroIn && <line className="fs-zero" x1={0} x2={W} y1={y(0)} y2={y(0)} />}
-          <path className={`fs-line ${last.net >= 0 ? "up" : "down"}`} d={line} />
-          {crosses.map((i) => (
-            <circle key={`x-${i}`} className="fs-cross" cx={x(i)} cy={y(rows[i].net)} r={2.5} />
-          ))}
-          {at !== null && (
-            <>
-              <line className="fs-cursor" x1={x(at)} x2={x(at)} y1={0} y2={H} />
-              <circle className="fs-dot" cx={x(at)} cy={y(rows[at].net)} r={3} />
-            </>
-          )}
-          {/* 눌러서 고르는 자리 — 선은 얇아서 손가락으로 못 짚는다 */}
-          {rows.map((r, i) => (
-            <rect
-              key={`h-${r.t}-${i}`}
-              className="fs-hit"
-              x={x(i) - W / rows.length / 2}
-              y={0}
-              width={W / rows.length}
-              height={H}
-              onPointerDown={() => setAt(at === i ? null : i)}
-            />
-          ))}
-        </svg>
-        {/* 눈금은 HTML 로 — viewBox 를 늘려 그리므로 SVG 글자는 찌그러진다 */}
-        <span className="fs-y hi">{shortAmt(max, unit)}</span>
-        <span className="fs-y lo">{shortAmt(min, unit)}</span>
-      </div>
-
-      <div className="fs-legend">
-        <span>{hhmm(rows[0].t)}</span>
-        <span className="fs-mid">
-          {picked ? (
-            <>
-              {hhmmss(picked.t)}{" "}
-              <b className={picked.net >= 0 ? "positive" : "negative"}>
-                {picked.net > 0 ? "+" : ""}
-                {num(picked.net)}
-              </b>
-            </>
-          ) : (
-            <>
-              눈금은 <b>데이터 범위</b>에 맞춥니다 — 0을 억지로 넣지 않습니다
-            </>
-          )}
-        </span>
-        <span>{hhmm(last.t)}</span>
       </div>
 
       <div className="fs-wrap">
@@ -235,6 +258,7 @@ export function FlowSeries({
               <th>매도{unitLabel ? ` ${unitLabel}` : ""}</th>
               <th>매수{unitLabel ? ` ${unitLabel}` : ""}</th>
               <th title="그 시점까지의 누적. 작은 글씨는 앞 줄 대비 증감입니다">순매수</th>
+              {price && <th title="그 시각 분봉 종가">추정가격</th>}
             </tr>
           </thead>
           <tbody>
@@ -256,11 +280,125 @@ export function FlowSeries({
                     </i>
                   )}
                 </td>
+                {price && (
+                  <td className="pt-n">
+                    {price.get(r.t.slice(0, 4)) === undefined
+                      ? "-"
+                      : num(price.get(r.t.slice(0, 4)) as number)}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {chart && (
+        <>
+          <div className="fs-chart">
+            <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img">
+              {zeroIn && <line className="fs-zero" x1={0} x2={W} y1={y(0)} y2={y(0)} />}
+              {/* 주가를 먼저 깔고 순매수를 위에 — 보려는 건 수급이다 */}
+              {priceLine && <path className="fs-price" d={priceLine} />}
+              <path className={`fs-line ${last.net >= 0 ? "up" : "down"}`} d={line} />
+              {crosses.map((i) => (
+                <circle key={`x-${i}`} className="fs-cross" cx={x(i)} cy={y(rows[i].net)} r={2.5} />
+              ))}
+              {at !== null && (
+                <>
+                  <line className="fs-cursor" x1={x(at)} x2={x(at)} y1={0} y2={H} />
+                  <circle className="fs-dot" cx={x(at)} cy={y(rows[at].net)} r={3} />
+                </>
+              )}
+              {/* 눌러서 고르는 자리 — 선은 얇아서 손가락으로 못 짚는다 */}
+              {rows.map((r, i) => (
+                <rect
+                  key={`h-${r.t}-${i}`}
+                  className="fs-hit"
+                  x={x(i) - W / rows.length / 2}
+                  y={0}
+                  width={W / rows.length}
+                  height={H}
+                  onPointerDown={() => setAt(at === i ? null : i)}
+                />
+              ))}
+            </svg>
+            {/* 눈금은 HTML 로 — viewBox 를 늘려 그리므로 SVG 글자는 찌그러진다 */}
+            <span className="fs-y hi">{shortAmt(max, unit)}</span>
+            <span className="fs-y lo">{shortAmt(min, unit)}</span>
+            {pv.length > 1 && (
+              <>
+                <span className="fs-y price hi">{num(pmax)}</span>
+                <span className="fs-y price lo">{num(pmin)}</span>
+              </>
+            )}
+          </div>
+
+          <div className="fs-legend">
+            <span>{hhmm(rows[0].t)}</span>
+            <span className="fs-mid">
+              {picked ? (
+                <>
+                  {hhmmss(picked.t)}{" "}
+                  <b className={picked.net >= 0 ? "positive" : "negative"}>
+                    {picked.net > 0 ? "+" : ""}
+                    {num(picked.net)}
+                  </b>
+                </>
+              ) : (
+                <>
+                  <b className="fs-k net">순매수</b>
+                  {pv.length > 1 && <b className="fs-k price">주가</b>}
+                  <span className="pt-n"> · 눈금은 각자 제 범위로</span>
+                </>
+              )}
+            </span>
+            <span>{hhmm(last.t)}</span>
+          </div>
+        </>
+      )}
     </div>
   );
+}
+
+/**
+ * 분봉 종가 — **주가 선과 추정가격 칸의 재료.**
+ *
+ * 실시간 체결(`0B`)로도 낼 수 있지만 그건 **구독한 순간부터**라 과거가 빈다.
+ * 분봉(`ka10080`)은 조회라 **하루가 통째로** 있고, 지난 장을 되짚어 볼 때도 그대로 맞는다.
+ */
+export function useMinutePrices(code: string): Map<string, number> {
+  const [map, setMap] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    if (!code) {
+      setMap(new Map());
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      try {
+        const j = (await api.minuteChart(code, "1")) as {
+          stk_min_pole_chart_qry?: { cntr_tm?: string; cur_prc?: string }[];
+        };
+        if (!alive) return;
+        const next = new Map<string, number>();
+        for (const r of j.stk_min_pole_chart_qry ?? []) {
+          const tm = String(r.cntr_tm ?? "");
+          // YYYYMMDDHHMMSS → HHmm
+          if (tm.length < 12) continue;
+          const price = Math.abs(Number(String(r.cur_prc ?? "").replace(/[+,\s]/g, "")) || 0);
+          if (price > 0) next.set(tm.slice(8, 12), price);
+        }
+        setMap(next);
+      } catch {
+        /* 주가 선이 없어도 수급 표는 그대로 나온다 */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [code]);
+
+  return map;
 }

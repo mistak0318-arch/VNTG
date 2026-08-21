@@ -5674,9 +5674,24 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 }
 .fs-y.hi { top: 0; }
 .fs-y.lo { bottom: 0; }
+/* 주가 선 — 수급과 눈금이 다르므로 색으로 가른다 */
+.fs-price {
+  fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 2;
+  vector-effect: non-scaling-stroke; opacity: 0.9;
+}
+/* 오른쪽은 수급 눈금, 왼쪽은 주가 눈금 */
+.fs-y.price { right: auto; left: 0.15rem; }
 .fs-legend {
   display: flex; align-items: baseline; gap: 0.5rem;
   font-size: 0.7rem; color: var(--muted); margin: 0.1rem 0 0.4rem;
+}
+.fs-k { margin-right: 0.4rem; }
+.fs-k.net { color: var(--text); border-bottom: 2px solid var(--red); }
+.fs-k.price { color: var(--muted); border-bottom: 2px dashed var(--muted); }
+/* 지난 장 것을 보고 있다는 표시 — 오늘인 척하면 안 된다 */
+.fs-asof {
+  font-size: 0.72rem; padding: 0.25rem 0.45rem; margin-bottom: 0.35rem;
+  border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
 }
 .fs-mid { flex: 1; text-align: center; font-variant-numeric: tabular-nums; }
 /* 표는 길다 — 안에서만 구른다 */

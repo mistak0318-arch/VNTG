@@ -29,9 +29,14 @@ function toNum(v: unknown): number | null {
   return Number.isFinite(n) ? (negative ? -n : n) : null;
 }
 
-/** 종목코드의 `_AL`(NXT 통합) 접미사를 뗀다 — 우리 기준은 6자리다 */
+/**
+ * 종목코드의 접미사를 뗀다 — 우리 기준은 6자리다.
+ *
+ * ⚠️ `_AL`(통합)만 떼고 있었는데 **NXT 조회는 `_NX` 로 온다.** 그러면 종목을 눌러도
+ * `005930_NX` 라는 없는 코드로 열리고, 시가총액을 붙이는 맵도 못 찾는다.
+ */
 function bare(code: unknown): string {
-  return String(code ?? "").replace(/_AL$/, "").trim();
+  return String(code ?? "").replace(/_(AL|NX)$/, "").trim();
 }
 
 /**

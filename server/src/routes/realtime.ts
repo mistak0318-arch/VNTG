@@ -107,17 +107,33 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
     }
   });
 
-  /** 하루치 시계열 — 화면이 그림을 그리는 자리 */
-  router.get("/series", (req, res) => {
-    const type = String(req.query.type ?? "");
-    const item = String(req.query.item ?? "");
-    const { store } = hub();
-    res.json({
-      type,
-      item,
-      points: store?.getSeries(type, item) ?? [],
-      latest: store?.getLatest(type, item) ?? null,
-    });
+  /**
+   * 하루치 시계열 — 화면이 그림을 그리는 자리.
+   *
+   * 오늘 것이 없으면 **파일이 남아 있는 가장 최근 장**으로 되짚는다(토요일이면 금요일).
+   * 어느 날 것인지를 `day`·`stale` 로 같이 준다 — 지난 장 것을 오늘인 척 보여주면 안 된다.
+   */
+  router.get("/series", async (req, res, next) => {
+    try {
+      const type = String(req.query.type ?? "");
+      const item = String(req.query.item ?? "");
+      const { store } = hub();
+      const got = (await store?.getSeriesOrLast(type, item)) ?? {
+        points: [],
+        day: "",
+        stale: false,
+      };
+      res.json({
+        type,
+        item,
+        points: got.points,
+        day: got.day,
+        stale: got.stale,
+        latest: store?.getLatest(type, item) ?? null,
+      });
+    } catch (err) {
+      next(err);
+    }
   });
 
   /**

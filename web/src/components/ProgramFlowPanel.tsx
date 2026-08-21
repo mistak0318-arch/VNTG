@@ -1,6 +1,6 @@
 import { api, fmtNum, signClass } from "../api";
 import { useEffect, useState } from "react";
-import { FlowSeries, type FlowSample } from "./FlowSeries";
+import { FlowSeries, useMinutePrices, type FlowSeriesData } from "./FlowSeries";
 import { useLive } from "../useLive";
 
 /**
@@ -54,22 +54,26 @@ function toEok(v: number): number {
  * 증감(`213`)은 안 쓴다. 앞 줄과의 차이로 화면에서 직접 내는데, 그래야 1분·5분으로
  * 묶었을 때도 **묶은 구간의 증감**이 나온다(213 은 30초 구간 증감이라 묶으면 틀린다).
  */
-function useProgramSeries(code: string) {
-  const [pts, setPts] = useState<FlowSample[]>([]);
+function useProgramSeries(code: string): FlowSeriesData {
+  const [s, setS] = useState<FlowSeriesData>({ pts: [], day: "", stale: false });
 
   useEffect(() => {
     if (!code) {
-      setPts([]);
+      setS({ pts: [], day: "", stale: false });
       return;
     }
     let alive = true;
     const load = async () => {
       try {
         const r = await fetch(`/api/realtime/series?type=0w&item=${encodeURIComponent(code)}`);
-        const j = (await r.json()) as { points: { t: string; v: Record<string, string> }[] };
+        const j = (await r.json()) as {
+          points: { t: string; v: Record<string, string> }[];
+          day?: string;
+          stale?: boolean;
+        };
         if (!alive) return;
-        setPts(
-          (j.points ?? [])
+        setS({
+          pts: (j.points ?? [])
             .map((p) => ({
               t: p.t,
               buy: Number(p.v["208"]) || 0,
@@ -77,7 +81,9 @@ function useProgramSeries(code: string) {
               net: Number(p.v["212"]) || 0,
             }))
             .filter((p) => p.buy !== 0 || p.sell !== 0 || p.net !== 0),
-        );
+          day: j.day ?? "",
+          stale: Boolean(j.stale),
+        });
       } catch {
         /* 실시간이 없으면 빈 그림 — 아래 일자별은 REST 라 그대로 뜬다 */
       }
@@ -90,17 +96,47 @@ function useProgramSeries(code: string) {
     };
   }, [code]);
 
-  return pts;
+  return s;
 }
 
 function IntradayProgram({ code }: { code: string }) {
-  const pts = useProgramSeries(code);
-  if (pts.length < 2) return null;
+  const { pts, day, stale } = useProgramSeries(code);
+  /* 주가를 같이 그린다 — 프로그램이 붙는데 주가가 안 가면 그것도 정보다 */
+  const prices = useMinutePrices(code);
+
+  /*
+   * ⚠️ **없으면 없다고 적는다.**
+   *
+   * 예전엔 점이 모자라면 `null` 을 돌려 통째로 안 그렸다. 그러면 아래 일자별 막대만
+   * 남아서 **화면이 안 바뀐 것처럼 보인다** — 「빌드가 안 됐나」와 「이 종목은 데이터가
+   * 없나」가 구별이 안 된다. 조용한 빈 칸은 늘 이 문제를 낳는다.
+   */
+  if (pts.length < 2) {
+    return (
+      <section className="card">
+        <h3 className="section-heading">오늘 장중 — 시간별 프로그램 매매</h3>
+        <div className="page-note">
+          이 종목은 <b>실시간으로 쌓인 게 없습니다</b>
+          {pts.length === 1 ? " (점 1개)" : ""}. 실시간은 서버가 물고 있는 종목만 쌓이므로
+          방금 연 종목은 <b>장중에 조금 기다려야</b> 채워집니다 — 지난 장 것도 없으면
+          그날 한 번도 안 물었던 종목입니다. 아래 일자별은 조회(REST)라 항상 나옵니다.
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="card">
-      <h3 className="section-heading">오늘 장중 — 시간별 프로그램 매매</h3>
-      <FlowSeries samples={pts} unit="백만" unitLabel="(백만)" />
+      <h3 className="section-heading">
+        {stale ? "지난 장 — 시간별 프로그램 매매" : "오늘 장중 — 시간별 프로그램 매매"}
+      </h3>
+      <FlowSeries
+        samples={pts}
+        unit="백만"
+        unitLabel="(백만)"
+        asOf={stale ? day : undefined}
+        price={prices.size > 0 ? prices : undefined}
+      />
       <div className="table-note">
         금액 단위는 <b>백만원</b>이고 세 칸 모두 <b>그 시점까지의 누적</b>입니다 — 순매수 옆
         작은 글씨가 앞 줄 대비 증감이라 <b>「지금 붙고 있나」</b>는 거기서 읽습니다. 서버가

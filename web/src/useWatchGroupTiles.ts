@@ -68,12 +68,20 @@ export function useWatchGroupTiles(source: GroupSource | null) {
              */
             g.stocks.map((s) => {
               const q = liveQuote(s);
+              const price = q.price ?? 0;
+              const rate = q.changeRate ?? 0;
+              /*
+               * ⚠️ 대비를 **0으로 박아** 넘기고 있었다. 타일은 등락률만 쓰므로 아무도 몰랐는데,
+               * 타일을 누르면 열리는 구성종목 표에는 「대비」 칸이 있다 —
+               * 거기에 전 종목 0 이 찍혔다. 등락률과 현재가가 있으면 대비는 낼 수 있다.
+               */
+              const base = 1 + rate / 100;
               return {
                 code: s.symbol,
                 name: s.name,
-                price: q.price ?? 0,
-                change: 0,
-                changeRate: q.changeRate ?? 0,
+                price,
+                change: base !== 0 ? price - price / base : 0,
+                changeRate: rate,
                 marketCap: 0,
               };
             }),

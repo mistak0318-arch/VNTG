@@ -44,7 +44,17 @@ export function ConstituentSheet({
 
     // 내 테마는 이미 받아온 구성종목을 그대로 쓴다 (조회 0회)
     if (target.stocks) {
-      setItems([...target.stocks].sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)));
+      /*
+       * ⚠️ 시총순으로 정렬하는데 **해외 그룹은 시총이 전부 0** 이다(안 받아온다).
+       * 그러면 정렬이 아무 일도 안 해서 들어온 순서가 그대로 남는다 —
+       * 「왜 이 순서지」가 된다. 시총이 없으면 **등락률순**으로 세운다.
+       */
+      const hasCap = target.stocks.some((s) => (s.marketCap ?? 0) > 0);
+      setItems(
+        [...target.stocks].sort((a, b) =>
+          hasCap ? (b.marketCap ?? 0) - (a.marketCap ?? 0) : b.changeRate - a.changeRate,
+        ),
+      );
       setLoading(false);
       return;
     }
