@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { RealtimeClient } from "../realtimeClient.js";
+import { RealtimeStore } from "../realtimeStore.js";
 
 /**
  * 실시간 웹소켓 — **아직 확인 단계다.**
@@ -13,10 +14,16 @@ import { RealtimeClient } from "../realtimeClient.js";
 export function createRealtimeRouter(client: KiwoomClient): Router {
   const router = Router();
   let rt: RealtimeClient | null = null;
+  let store: RealtimeStore | null = null;
 
   router.post("/connect", async (_req, res, next) => {
     try {
-      if (!rt) rt = new RealtimeClient(client);
+      if (!rt) {
+        rt = new RealtimeClient(client);
+        // 저장소는 붙기 전에 걸어 둔다 — 첫 프레임부터 받아야 한다
+        store = new RealtimeStore(rt);
+        await store.start();
+      }
       await rt.connect();
       res.json({ ok: true, state: rt.state });
     } catch (err) {
@@ -55,6 +62,23 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
       lastSeen: rt?.lastSeen ?? null,
       log: rt?.log ?? [],
     });
+  });
+
+  /** 하루치 시계열 — 화면이 그림을 그리는 자리 */
+  router.get("/series", (req, res) => {
+    const type = String(req.query.type ?? "");
+    const item = String(req.query.item ?? "");
+    res.json({
+      type,
+      item,
+      points: store?.getSeries(type, item) ?? [],
+      latest: store?.getLatest(type, item) ?? null,
+    });
+  });
+
+  /** 무엇이 얼마나 쌓였나 — 진단용 */
+  router.get("/store", (_req, res) => {
+    res.json({ items: store?.summary ?? [] });
   });
 
   router.post("/close", (_req, res) => {

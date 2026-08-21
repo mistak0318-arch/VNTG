@@ -81,3 +81,23 @@ export function sideQuote(row: SessionQuote, now = new Date()): SideQuote | null
   }
   return null;
 }
+
+/**
+ * **지금 값** — 어느 세션이 살아 있든 그것으로 친다.
+ *
+ * `sideQuote` 는 「괄호에 뭘 넣을까」였고, 이건 「대표로 뭘 보여줄까」다.
+ * 관심종목 목록은 정규장 종가 옆에 괄호를 붙여 둘이 다 보이지만,
+ * **MAP 타일이나 구성종목 표는 숫자를 하나만 보여준다.** 거기서 정규장 종가만
+ * 그리면 애프터장에 3% 오른 종목이 「−0.3%」로 남는다 — 실제로 그랬다.
+ *
+ * 우선순위는 `sideQuote` 와 같다: 정규장 중이면 정규장, 아니면 애프터장,
+ * 그것도 없으면 거래가 있는 주간거래. 셋 다 아니면 마지막 정규장 값이다.
+ */
+export function liveQuote(
+  row: SessionQuote & { price: number | null; changeRate: number | null },
+  now = new Date(),
+): { price: number | null; changeRate: number | null; label: string } {
+  const side = sideQuote(row, now);
+  if (side) return { price: side.price, changeRate: side.changeRate, label: side.label };
+  return { price: row.price, changeRate: row.changeRate, label: "정규장" };
+}

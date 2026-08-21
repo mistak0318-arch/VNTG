@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { liveQuote } from "./usSession";
 import { api, type StockRow } from "./api";
 
 /**
@@ -59,14 +60,23 @@ export function useWatchGroupTiles(source: GroupSource | null) {
           toTile(
             g.id,
             g.name,
-            g.stocks.map((s) => ({
-              code: s.symbol,
-              name: s.name,
-              price: s.price ?? 0,
-              change: 0,
-              changeRate: s.changeRate ?? 0,
-              marketCap: 0,
-            })),
+            /*
+             * **지금 살아 있는 세션의 값**을 쓴다.
+             *
+             * 정규장 종가만 그리면 애프터장에 3% 오른 종목이 「−0.3%」로 남는다.
+             * 타일과 구성종목 표는 숫자를 하나만 보여주므로, 그 하나가 지금 값이어야 한다.
+             */
+            g.stocks.map((s) => {
+              const q = liveQuote(s);
+              return {
+                code: s.symbol,
+                name: s.name,
+                price: q.price ?? 0,
+                change: 0,
+                changeRate: q.changeRate ?? 0,
+                marketCap: 0,
+              };
+            }),
           ),
         );
       }
