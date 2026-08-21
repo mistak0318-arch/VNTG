@@ -5615,3 +5615,5 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 /* 지금 값이 실시간인지 조회인지 */
 .ob-live { font-size: 0.68rem; color: var(--muted); margin-right: 0.4rem; }
 .ob-live.on { color: var(--green); }
+/* 시세분석 탭 — 실제로 보는 다섯이 앞 */
+.scr-tabs { margin-bottom: 0.7rem; }
