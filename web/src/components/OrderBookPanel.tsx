@@ -98,6 +98,14 @@ export function OrderBookPanel({ code }: { code: string }) {
    */
   const { data: base, loading, error } = useLive<OrderBook>(() => api.orderBook(code), [code], 3000);
   const { book, live, delta } = useLiveBook(code, base ?? null);
+  /*
+   * 프로그램 순매수 — HTS 호가 화면 오른쪽 아래에 붙어 있는 그 값.
+   * `0w` FID 212 가 **백만원 단위 누적**이라 억으로 줄여 적는다.
+   * 서버가 물고 있는 종목만 나온다(안 물면 「-」).
+   */
+  const prog = useRealtime(code ? [`0w:${code}`] : [], 3000);
+  const progMil = fid(prog.values[`0w:${code}`] ?? null, "212");
+  const program = progMil === null ? null : Math.round(progMil / 100);
 
   if (loading && !base) return <div className="empty">호가 불러오는 중…</div>;
   if (error && !base) return <div className="error-banner">{error}</div>;
@@ -110,41 +118,65 @@ export function OrderBookPanel({ code }: { code: string }) {
       ? ((book.price - book.low250) / (book.high250 - book.low250)) * 100
       : null;
 
-  const row = (l: { step: number; price: number; qty: number }, side: "ask" | "bid") => (
-    <div className={`ob-row ${side}`} key={`${side}-${l.step}`}>
-      {/* 매도는 왼쪽에 막대, 매수는 오른쪽에 — 가운데 가격을 기준으로 갈라진다 */}
-      <span className="ob-qty left">
-        {side === "ask" && (
-          <>
-            <span className="ob-bar ask" style={{ width: `${(l.qty / mx) * 100}%` }} />
-            <b>{fmtNum(l.qty)}</b>
-            {/* 직전대비 — 붙는 물량인지 빠지는 물량인지는 이걸 봐야 안다 */}
-            {delta?.[`ask-${l.step}`] ? (
-              <i className={`ob-d ${delta[`ask-${l.step}`] > 0 ? "up" : "down"}`}>
-                {delta[`ask-${l.step}`] > 0 ? "+" : ""}
-                {fmtNum(delta[`ask-${l.step}`])}
-              </i>
-            ) : null}
-          </>
-        )}
-      </span>
-      <span className={`ob-price ${book.price === l.price ? "now" : ""}`}>{fmtNum(l.price)}</span>
-      <span className="ob-qty right">
-        {side === "bid" && (
-          <>
-            <span className="ob-bar bid" style={{ width: `${(l.qty / mx) * 100}%` }} />
-            <b>{fmtNum(l.qty)}</b>
-            {delta?.[`bid-${l.step}`] ? (
-              <i className={`ob-d ${delta[`bid-${l.step}`] > 0 ? "up" : "down"}`}>
-                {delta[`bid-${l.step}`] > 0 ? "+" : ""}
-                {fmtNum(delta[`bid-${l.step}`])}
-              </i>
-            ) : null}
-          </>
-        )}
-      </span>
-    </div>
-  );
+  /**
+   * 호가 한 줄 — **가격 옆에 등락률.**
+   *
+   * HTS 가 호가마다 등락률을 적어 두는 이유는, 「이 호가에 걸면 오늘 몇 %인가」가
+   * 가격 숫자만으로는 안 읽히기 때문이다. 상한가·하한가에서 몇 호가 떨어졌는지도
+   * 이걸로 본다. 기준가(전일 종가) 대비다.
+   */
+  const rate = (price: number): number | null =>
+    book.basePrice > 0 ? ((price - book.basePrice) / book.basePrice) * 100 : null;
+
+  const row = (l: { step: number; price: number; qty: number }, side: "ask" | "bid") => {
+    const r = rate(l.price);
+    const now = book.price === l.price;
+    return (
+      <div className={`ob-row ${side}${now ? " now" : ""}`} key={`${side}-${l.step}`}>
+        {/* 매도는 왼쪽에 막대, 매수는 오른쪽에 — 가운데 가격을 기준으로 갈라진다 */}
+        <span className="ob-qty left">
+          {side === "ask" && (
+            <>
+              <span className="ob-bar ask" style={{ width: `${(l.qty / mx) * 100}%` }} />
+              <b>{fmtNum(l.qty)}</b>
+              {/* 직전대비 — 붙는 물량인지 빠지는 물량인지는 이걸 봐야 안다 */}
+              {delta?.[`ask-${l.step}`] ? (
+                <i className={`ob-d ${delta[`ask-${l.step}`] > 0 ? "up" : "down"}`}>
+                  {delta[`ask-${l.step}`] > 0 ? "+" : ""}
+                  {fmtNum(delta[`ask-${l.step}`])}
+                </i>
+              ) : null}
+            </>
+          )}
+        </span>
+        <span className="ob-price">
+          {/* 지금 체결되는 호가에 표시 — HTS 의 그 노란 줄이다 */}
+          {now && <i className="ob-here">종</i>}
+          <b className={signClass(r)}>{fmtNum(l.price)}</b>
+          {r !== null && (
+            <i className={`ob-rt ${signClass(r)}`}>
+              {r > 0 ? "+" : ""}
+              {r.toFixed(2)}%
+            </i>
+          )}
+        </span>
+        <span className="ob-qty right">
+          {side === "bid" && (
+            <>
+              <span className="ob-bar bid" style={{ width: `${(l.qty / mx) * 100}%` }} />
+              <b>{fmtNum(l.qty)}</b>
+              {delta?.[`bid-${l.step}`] ? (
+                <i className={`ob-d ${delta[`bid-${l.step}`] > 0 ? "up" : "down"}`}>
+                  {delta[`bid-${l.step}`] > 0 ? "+" : ""}
+                  {fmtNum(delta[`bid-${l.step}`])}
+                </i>
+              ) : null}
+            </>
+          )}
+        </span>
+      </div>
+    );
+  };
 
   return (
     <div className="ob">
@@ -170,34 +202,58 @@ export function OrderBookPanel({ code }: { code: string }) {
           {book.bids.map((l) => row(l, "bid"))}
         </div>
 
-        {/* 오른쪽 위 — 오늘 어디까지 갔나, 지금이 어디쯤인가 */}
+        {/*
+         * 오른쪽 요약 — **HTS 호가 화면의 그 자리, 그 순서.**
+         *
+         * 시·고·저를 먼저 두고 각각에 등락률을 붙인다. 「고가가 143,500 이고 지금 125,400」
+         * 보다 「고가에서 +3.16 이었는데 지금 −9.85」가 훨씬 빨리 읽힌다.
+         */}
         <div className="ob-side">
-          <div className="ob-kv">
-            <span>KRX 고/저</span>
-            <b>
-              {fmtNum(book.krxHigh)} / {fmtNum(book.krxLow)}
+          {(
+            [
+              ["시", book.open],
+              ["고", book.krxHigh],
+              ["저", book.krxLow],
+            ] as [string, number][]
+          ).map(([label, v]) => {
+            const r = rate(v);
+            return (
+              <div className="ob-kv ohl" key={label}>
+                <span>{label}</span>
+                <b className={signClass(r)}>{fmtNum(v)}</b>
+                <i className={signClass(r)}>
+                  {r === null ? "" : `${r > 0 ? "+" : ""}${r.toFixed(2)}`}
+                </i>
+              </div>
+            );
+          })}
+          <div className="ob-kv" title="전일 종가. 호가 옆 등락률은 이 값 기준입니다">
+            <span>기준가</span>
+            <b>{fmtNum(book.basePrice)}</b>
+          </div>
+          <div className="ob-kv" title="오늘 누적 거래대금">
+            <span>거래대금</span>
+            <b>{book.tradeValue > 0 ? `${fmtNum(Math.round(book.tradeValue / 1e8))}억` : "-"}</b>
+          </div>
+          <div className="ob-kv" title="거래량 ÷ 상장주식수. 오늘 주식이 몇 바퀴 돌았나">
+            <span>회전율</span>
+            <b>{book.turnover === null ? "-" : `${book.turnover.toFixed(2)}%`}</b>
+          </div>
+          <div className="ob-kv" title="실제 체결 기준. 100 초과면 매수 체결이 우세하다">
+            <span>체결강도</span>
+            <b className={book.strength === null ? "" : book.strength >= 100 ? "positive" : "negative"}>
+              {book.strength === null ? "-" : `${book.strength.toFixed(2)}%`}
             </b>
           </div>
-          <div className="ob-kv">
-            <span>NXT 고/저</span>
-            <b>
-              {book.nxtHigh ? fmtNum(book.nxtHigh) : "-"} /{" "}
-              {book.nxtLow ? fmtNum(book.nxtLow) : "-"}
+          <div className="ob-kv" title="오늘 프로그램 순매수(실시간). 서버가 물고 있는 종목만 나옵니다">
+            <span>프로그램</span>
+            <b className={program === null ? "" : program >= 0 ? "positive" : "negative"}>
+              {program === null ? "-" : `${program > 0 ? "+" : ""}${fmtNum(program)}`}
             </b>
-          </div>
-          <div className="ob-kv">
-            <span>시가</span>
-            <b>{fmtNum(book.open)}</b>
           </div>
           <div className="ob-kv" title="250일 최저~최고 구간에서 지금 위치">
             <span>250일 자리</span>
             <b>{pos250 === null ? "-" : `${pos250.toFixed(0)}%`}</b>
-          </div>
-          <div className="ob-kv">
-            <span>250일 고/저</span>
-            <b className="pt-n">
-              {fmtNum(book.high250)} / {fmtNum(book.low250)}
-            </b>
           </div>
           <div className="ob-kv">
             <span>상/하한</span>
@@ -205,35 +261,63 @@ export function OrderBookPanel({ code }: { code: string }) {
               {fmtNum(book.upperLimit)} / {fmtNum(book.lowerLimit)}
             </b>
           </div>
+          <div className="ob-kv">
+            <span>NXT 고/저</span>
+            <b className="pt-n">
+              {book.nxtHigh ? fmtNum(book.nxtHigh) : "-"} /{" "}
+              {book.nxtLow ? fmtNum(book.nxtLow) : "-"}
+            </b>
+          </div>
         </div>
       </div>
 
+      {/* 총잔량 — HTS 는 호가창 맨 아래에 이 줄을 둔다 */}
+      <div className="ob-total">
+        <b className="negative">{fmtNum(book.totalAsk)}</b>
+        <span>총잔량</span>
+        <b className="positive">{fmtNum(book.totalBid)}</b>
+      </div>
+
+      {/* 체결 목록 — HTS 호가 화면 왼쪽 아래에 흐르는 그것 */}
+      {book.ticks.length > 0 && (
+        <div className="ob-ticks">
+          <div className="ob-ticks-h">
+            <span>체결</span>
+            <span className="pt-n">최근 {book.ticks.length}건 · 부호가 방향입니다</span>
+          </div>
+          <div className="ob-ticks-b">
+            {book.ticks.map((t, i) => (
+              <div className="ob-tick" key={`${t.t}-${i}`}>
+                <span className="pt-n">
+                  {t.t.slice(0, 2)}:{t.t.slice(2, 4)}:{t.t.slice(4, 6)}
+                </span>
+                <b className={signClass(rate(t.price))}>{fmtNum(t.price)}</b>
+                <b className={t.qty >= 0 ? "positive" : "negative"}>
+                  {t.qty > 0 ? "+" : ""}
+                  {fmtNum(t.qty)}
+                </b>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 왼쪽 아래 — 지금 어느 쪽이 두터운가 */}
       <div className="ob-foot">
-        <div className="ob-kv" title="실제 체결 기준. 100 초과면 매수 체결이 우세하다">
-          <span>체결강도</span>
-          <b className={book.strength === null ? "" : book.strength >= 100 ? "positive" : "negative"}>
-            {book.strength === null ? "-" : book.strength.toFixed(1)}
-          </b>
-        </div>
         <div className="ob-kv" title="매수잔량 ÷ 매도잔량. 대기 물량이다 — 체결강도와 다르다">
           <span>잔량비</span>
           <b className={book.ratio === null ? "" : book.ratio >= 1 ? "positive" : "negative"}>
             {book.ratio === null ? "-" : book.ratio.toFixed(2)}
           </b>
         </div>
-        <div className="ob-kv" title="거래량 ÷ 상장주식수. 오늘 주식이 몇 바퀴 돌았나">
-          <span>회전율</span>
-          <b>{book.turnover === null ? "-" : `${book.turnover.toFixed(2)}%`}</b>
-        </div>
         <div className="ob-kv">
           <span>거래량</span>
           <b>{fmtNum(book.volume)}</b>
         </div>
         <div className="ob-kv">
-          <span>총잔량 매도/매수</span>
+          <span>250일 고/저</span>
           <b className="pt-n">
-            {fmtNum(book.totalAsk)} / {fmtNum(book.totalBid)}
+            {fmtNum(book.high250)} / {fmtNum(book.low250)}
           </b>
         </div>
         {(book.overtimeAsk > 0 || book.overtimeBid > 0) && (

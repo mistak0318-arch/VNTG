@@ -14,12 +14,18 @@ import { findStock } from "./stockListCache.js";
  *
  * 이걸 모르고 `sel_1th_pre_bid` 를 찾으면 **첫 줄만 빈다.** 실제로 그렇게 나왔다.
  *
- * ## 체결강도는 이 TR 에 없다
+ * ## 세 TR 을 합친다
  *
- * `ka10004` 에도 `ka10001` 에도 없다. 순위 TR 에는 `cntr_str` 이 있지만 종목 단건으로
- * 부르는 길을 확인하지 못했다. **추측해서 넣지 않는다.**
- * 대신 **잔량비**(매수잔량÷매도잔량)를 낸다 — 체결강도와 다른 값이지만
- * 「지금 어느 쪽이 두터운가」라는 같은 물음에 답한다. 이름도 그대로 「잔량비」라 적는다.
+ *   `ka10004` 호가·잔량
+ *   `ka10001` 현재가·시고저·기준가·상하한·250일
+ *   `ka10003` **체결 목록** — 체결강도·누적거래대금·최근 체결 틱
+ *
+ * 체결강도는 한동안 「없다」고 적혀 있었다. `ka10004`·`ka10001` 에 없어서 잔량비로
+ * 대신했는데 **`ka10003` 안에 있었다.** 누적거래대금도 거기 있다 —
+ * HTS 호가 화면 오른쪽에 늘 붙어 있는 그 값이 `ka10001` 에는 없다.
+ *
+ * 잔량비(매수잔량÷매도잔량)는 그대로 둔다. 체결강도와 **다른 값**이라서다 —
+ * 하나는 체결된 것이고 하나는 대기 물량이다.
  */
 
 const MRKCOND = "/api/dostk/mrkcond";
@@ -86,7 +92,61 @@ export interface OrderBook {
    * 잔량비와 다르다 — 이건 **실제 체결**이고 잔량비는 대기 물량이다.
    */
   strength: number | null;
+  /** 기준가(전일 종가). 호가마다 등락률을 붙이는 기준 */
+  basePrice: number;
+  /**
+   * 누적거래대금(원).
+   *
+   * `ka10001`(기본정보)에는 **없고** `ka10003`(체결정보)의 `acc_trde_prica` 에 있다.
+   * HTS 호가 화면 오른쪽에 늘 붙어 있는 값이라 없으면 화면이 비어 보인다.
+   */
+  tradeValue: number;
+  /**
+   * 최근 체결 몇 건 — HTS 호가 화면 **왼쪽 아래에 흐르는 그 목록**이다.
+   *
+   * 수량 부호가 방향이다(`-` 매도 체결, `+` 매수 체결). 키움이 그렇게 준다.
+   */
+  ticks: { t: string; price: number; qty: number }[];
   error: string | null;
+}
+
+interface Tick {
+  /** HHmmss */
+  t: string;
+  price: number;
+  /** 부호가 방향 — 음수면 매도 체결 */
+  qty: number;
+  /** 그 시점 누적거래대금(원) */
+  accValue: number;
+  strength: number;
+}
+
+/** `ka10003` 응답에서 체결 목록을 뽑는다 (첫 행이 가장 최근) */
+function ticksOf(data: Record<string, unknown> | null | undefined): Tick[] {
+  const rows = (data as Record<string, unknown>)?.cntr_infr;
+  if (!Array.isArray(rows)) return [];
+  return (rows as Record<string, unknown>[])
+    .map((r) => ({
+      t: String(r.tm ?? "").trim(),
+      price: Math.abs(num(r.cur_prc)),
+      // ⚠️ `num` 은 부호를 살려야 한다 — 이 부호가 매수·매도 방향이다
+      qty: signedInt(r.cntr_trde_qty),
+      accValue: num(r.acc_trde_prica),
+      strength: Number(String(r.cntr_str ?? "").replace(/[+,\s]/g, "")) || 0,
+    }))
+    .filter((r) => r.t.length >= 6 && r.price > 0);
+}
+
+function strengthOf(ticks: Tick[]): number | null {
+  const v = ticks.length > 0 ? ticks[0].strength : 0;
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/** 부호를 살린 정수 — `-5` 는 매도 체결 5주다 */
+function signedInt(v: unknown): number {
+  const raw = String(v ?? "").replace(/[,\s]/g, "");
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
 }
 
 /** 매도·매수 10단계를 뽑는다 */
@@ -103,7 +163,6 @@ function levels(row: Record<string, unknown>, side: "sel" | "buy"): BookLevel[] 
   }
   return out;
 }
-
 export async function orderBook(client: KiwoomClient, code: string): Promise<OrderBook> {
   const bare = code.replace(/_(AL|NX)$/i, "");
   const empty: OrderBook = {
@@ -130,6 +189,9 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
     volume: 0,
     turnover: null,
     strength: null,
+    basePrice: 0,
+    tradeValue: 0,
+    ticks: [],
     error: null,
   };
 
@@ -159,6 +221,8 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
     const b = book.data ?? {};
     const i = info.data ?? {};
     const n = nxt?.data ?? null;
+
+    const ticks = ticksOf(tick?.data as Record<string, unknown> | null);
 
     const asks = levels(b, "sel");
     const bids = levels(b, "buy");
@@ -192,12 +256,12 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
       lowerLimit: num(i.lst_pric),
       volume,
       turnover: shares && shares > 0 ? (volume / shares) * 100 : null,
-      strength: (() => {
-        const rows = (tick?.data as Record<string, unknown>)?.cntr_infr;
-        const first = Array.isArray(rows) ? (rows[0] as Record<string, unknown>) : null;
-        const v = first ? Number(String(first.cntr_str ?? "").replace(/[+,\s]/g, "")) : NaN;
-        return Number.isFinite(v) && v > 0 ? v : null;
-      })(),
+      /** 기준가(전일 종가) — 호가마다 등락률을 붙이려면 이게 있어야 한다 */
+      basePrice: num(i.base_pric),
+      strength: strengthOf(ticks),
+      /** 누적거래대금(원). `ka10003` 이 준다 — `ka10001` 에는 없다 */
+      tradeValue: ticks.length > 0 ? ticks[0].accValue : 0,
+      ticks: ticks.slice(0, 20).map((t) => ({ t: t.t, price: t.price, qty: t.qty })),
     };
   } catch (err) {
     return { ...empty, error: err instanceof Error ? err.message : "호가 조회 실패" };

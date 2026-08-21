@@ -556,7 +556,20 @@
       "Bash(curl -s --max-time 20 \"http://localhost:4000/api/market/chart/daily/000660\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const r=j.stk_dt_pole_chart_qry;console.log\\(' ',r[0].dt,'종가',r[0].cur_prc,'| 전일',r[1].cur_prc,'→',\\(\\(\\(Math.abs\\(r[0].cur_prc\\)-Math.abs\\(r[1].cur_prc\\)\\)/Math.abs\\(r[1].cur_prc\\)\\)*100\\).toFixed\\(2\\)+'%'\\)}\\)\")",
       "Bash(curl -s --max-time 25 \"http://localhost:4000/api/market/snapshot?code=000660\")",
-      "Bash(curl -s --max-time 25 \"http://localhost:4000/api/market/sectors/kospi\")"
+      "Bash(curl -s --max-time 25 \"http://localhost:4000/api/market/sectors/kospi\")",
+      "Bash(curl -s --max-time 20 \"http://localhost:4000/api/market/stock/000660\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const want=/prica|base_pric|pred|cntr|str|open|high|low|trde/i;for\\(const [k,v] of Object.entries\\(j\\)\\)if\\(want.test\\(k\\)\\)console.log\\(' ',k,'=',v\\)}\\)\")",
+      "Bash(curl -s --max-time 20 \"http://localhost:4000/api/market/info/000660\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const want=/prica|base_pric|pred|cntr|str|open_pric|high_pric|low_pric|trde/i;for\\(const [k,v] of Object.entries\\(j\\)\\)if\\(want.test\\(k\\)\\)console.log\\(' ',k,'=',v\\)}\\)\")",
+      "Bash(sed -i 's|^export async function fetchOrderBook|let loggedTickFields = false;\\\\n\\\\nexport async function fetchOrderBook|' src/orderBook.ts)",
+      "Bash(curl -s --max-time 20 \"http://localhost:4000/api/market/orderbook/000660\")",
+      "Bash(sed -i '106i let loggedTickFields = false;\\\\n' src/orderBook.ts)",
+      "Bash(curl -s --max-time 25 \"http://localhost:4000/api/market/orderbook/000660\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('체결강도',j.strength,'| 현재가',j.price,'| 총잔량',j.totalAsk,'/',j.totalBid,'| 오류',j.error\\)}\\)\")",
+      "PowerShell($c = Get-NetTCPConnection -LocalPort 4000 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { \"PID $_ 가 4000 점유중\"; Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } } else { \"4000 비어 있음\" })",
+      "Bash(curl -s --max-time 30 \"http://localhost:4000/api/market/orderbook/000660\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('체결강도',j.strength\\)}\\)\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('기준가',j.basePrice,'| 거래대금',Math.round\\(j.tradeValue/1e8\\)+'억','| 체결',j.ticks.length+'건',JSON.stringify\\(j.ticks[0]\\)\\)}\\)\")"
     ]
   }
 }

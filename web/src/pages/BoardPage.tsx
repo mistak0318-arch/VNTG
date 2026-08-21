@@ -236,8 +236,22 @@ const PRESET_KEY = "vntg.board.presets";
  * 연동이 꺼져 있어도 그려진다 — HTS 1번 모니터가 하던 일이 그것이다.
  * (아직 없는 것: 지수판 여러 장, 관심종목 다종목 시세판)
  *
- * **한 번 깔고 나면 사용자 것**이다 — 이름도 순서도 개수도 여기서 정하지 않는다.
+ * ## 이 셋은 **못 고치고 못 지운다**
+ *
+ * 나머지 구성은 마음대로 만들고 지우는데, K1~K3 만은 박아 둔다.
+ * **돌아올 자리**가 필요해서다 — 배치를 이리저리 헤집다가 「원래대로」가 없으면
+ * 처음부터 다시 짜야 한다. 실제로 한 번 지워져서 다시 만들었다.
+ *
+ * 잠긴 건 이름·순서·삭제뿐이다. **불러오는 건 그대로** 되고, 불러온 뒤 화면에서
+ * 칸을 바꾸는 것도 자유다 — 그건 구성이 아니라 지금 화면이라서다.
+ * 바꾼 배치를 남기고 싶으면 「＋ 새로 담기」로 내 구성을 만들면 된다.
  */
+const FIXED_IDS = new Set(["k1", "k2", "k3"]);
+
+/** 박아 둔 구성인가 — 이름·순서·삭제가 막힌다 */
+function isFixed(id: string): boolean {
+  return FIXED_IDS.has(id);
+}
 const SEED: Preset[] = [
   { id: "k1", name: "K1 시장 보기", pick: ["mktIndex", "mktSignal", "mktVi", "mktBreadth", "mktSector"], sizes: {}, pins: [] },
   { id: "k2", name: "K2 종목 파기", pick: ["chart", "orderbook", "investor", "broker", "supply", "opinion", "finance", "summary"], sizes: {}, pins: [] },
@@ -260,6 +274,18 @@ interface Preset {
  * 예전에는 K1~K4 네 칸으로 **고정**돼 있었다(`{K1:{...}}` 모양).
  * 그 모양이 남아 있으면 목록으로 옮긴다 — 쓰던 구성을 잃으면 안 된다.
  */
+/**
+ * 박아 둔 셋을 **항상 앞에** 세운다.
+ *
+ * 저장된 목록에 K1~K3 가 없으면(예전에 지웠거나 첫 실행) 다시 넣고, 있으면
+ * **씨앗 쪽 내용으로 덮는다** — 잠근 구성이 예전 저장분 때문에 달라져 있으면
+ * 「돌아올 자리」가 아니게 된다.
+ */
+function withFixed(list: Preset[]): Preset[] {
+  const mine = list.filter((p) => !isFixed(p.id));
+  return [...SEED, ...mine];
+}
+
 function readPresets(): Preset[] {
   try {
     const raw = JSON.parse(localStorage.getItem(PRESET_KEY) ?? "null") as unknown;
@@ -267,7 +293,7 @@ function readPresets(): Preset[] {
       const out = raw
         .filter((p): p is Preset => Boolean(p) && typeof (p as Preset).id === "string")
         .map((p) => ({ ...p, name: p.name || p.id, pick: p.pick ?? [], sizes: p.sizes ?? {}, pins: p.pins ?? [] }));
-      return out.length > 0 ? out : SEED;
+      return withFixed(out);
     }
     // 옛 모양 → 목록으로
     if (raw && typeof raw === "object") {
@@ -277,7 +303,7 @@ function readPresets(): Preset[] {
         const nice = v?.name || (/^\d+$/.test(k) ? `구성 ${k}` : k);
         out.push({ id: k, name: nice, pick: v?.pick ?? [], sizes: v?.sizes ?? {}, pins: v?.pins ?? [] });
       }
-      if (out.length > 0) return out;
+      if (out.length > 0) return withFixed(out);
     }
     return SEED;
   } catch {
@@ -484,6 +510,8 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   /** 지금 화면을 그 구성에 덮어쓴다 */
   const saveInto = useCallback(
     (id: string) => {
+      // 박아 둔 셋은 덮어쓰기도 막는다 — 돌아올 자리가 흔들리면 뜻이 없다
+      if (isFixed(id)) return;
       persist(presets.map((p) => (p.id === id ? { ...p, pick, sizes, pins, locks } : p)));
     },
     [persist, presets, pick, sizes, pins, locks],
@@ -502,21 +530,30 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   }, [persist, presets, pick, sizes, pins, locks]);
 
   const rename = useCallback(
-    (id: string, name: string) => persist(presets.map((p) => (p.id === id ? { ...p, name } : p))),
+    (id: string, name: string) => {
+      if (isFixed(id)) return;
+      persist(presets.map((p) => (p.id === id ? { ...p, name } : p)));
+    },
     [persist, presets],
   );
 
   const remove = useCallback(
-    (id: string) => persist(presets.filter((p) => p.id !== id)),
+    (id: string) => {
+      if (isFixed(id)) return;
+      persist(presets.filter((p) => p.id !== id));
+    },
     [persist, presets],
   );
 
   /** 한 칸 앞/뒤로 — 자주 쓰는 걸 왼쪽에 두게 된다 */
   const move = useCallback(
     (id: string, delta: -1 | 1) => {
+      if (isFixed(id)) return;
       const at = presets.findIndex((p) => p.id === id);
       const to = at + delta;
       if (at < 0 || to < 0 || to >= presets.length) return;
+      // 박아 둔 셋과는 자리를 안 바꾼다 — 그러면 걔들이 밀려난다
+      if (isFixed(presets[to].id)) return;
       const next = [...presets];
       [next[at], next[to]] = [next[to], next[at]];
       persist(next);
@@ -679,44 +716,68 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
             {presets.map((p, i) => (
               <div className="bp-row" key={p.id}>
                 <span className="bp-ord">
-                  <button className="gt-move" onClick={() => move(p.id, -1)} disabled={i === 0} title="위로">
+                  <button
+                    className="gt-move"
+                    onClick={() => move(p.id, -1)}
+                    disabled={i === 0 || isFixed(p.id) || isFixed(presets[i - 1]?.id ?? "")}
+                    title="위로"
+                  >
                     ▲
                   </button>
                   <button
                     className="gt-move"
                     onClick={() => move(p.id, 1)}
-                    disabled={i === presets.length - 1}
+                    disabled={i === presets.length - 1 || isFixed(p.id)}
                     title="아래로"
                   >
                     ▼
                   </button>
                 </span>
-                <input
-                  className="bp-name"
-                  value={p.name}
-                  onChange={(e) => rename(p.id, e.target.value)}
-                  placeholder="구성 이름"
-                />
+                {/* 박아 둔 셋은 이름칸 대신 글자만 — 못 고치는 걸 눌러 보고 알게 하면 안 된다 */}
+                {isFixed(p.id) ? (
+                  <span className="bp-name fixed">
+                    {p.name}
+                    <i className="bp-lock" title="기본 구성이라 고치거나 지울 수 없습니다">
+                      고정
+                    </i>
+                  </span>
+                ) : (
+                  <input
+                    className="bp-name"
+                    value={p.name}
+                    onChange={(e) => rename(p.id, e.target.value)}
+                    placeholder="구성 이름"
+                  />
+                )}
                 {/*
                   개수만 적으면 「15칸」과 「12칸」의 차이를 알려면 눌러 봐야 한다.
                   앞의 몇 개를 이름으로 보여 주면 불러오기 전에 무엇이 든 구성인지 안다.
                 */}
                 <span className="bp-meta">{summarize(p.pick)}</span>
-                <button
-                  className="filter-btn"
-                  onClick={() => saveInto(p.id)}
-                  title="지금 화면 배치를 이 구성에 덮어쓰기"
-                >
-                  지금 화면으로 덮기
-                </button>
-                <button className="row-del-btn" onClick={() => remove(p.id)} title="이 구성 삭제">
-                  ✕
-                </button>
+                {!isFixed(p.id) && (
+                  <>
+                    <button
+                      className="filter-btn"
+                      onClick={() => saveInto(p.id)}
+                      title="지금 화면 배치를 이 구성에 덮어쓰기"
+                    >
+                      지금 화면으로 덮기
+                    </button>
+                    <button className="row-del-btn" onClick={() => remove(p.id)} title="이 구성 삭제">
+                      ✕
+                    </button>
+                  </>
+                )}
               </div>
             ))}
             <div className="table-note">
               이름은 적는 대로 저장됩니다. <b>덮기</b>는 지금 보고 있는 배치(칸·크기·고정·
               종목 고정)를 그 구성에 넣습니다.
+              <br />
+              <b>K1~K3 는 박아 둔 구성</b>이라 이름·순서·삭제가 막혀 있습니다 —
+              배치를 헤집다가 <b>돌아올 자리</b>가 필요해서입니다. 불러오는 건 그대로 되고,
+              불러온 뒤 화면에서 칸을 바꾸는 것도 자유입니다. 그 배치를 남기려면
+              <b>＋ 새로 담기</b>로 내 구성을 만드세요.
             </div>
           </div>
         )}

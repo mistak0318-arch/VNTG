@@ -2586,6 +2586,12 @@ export interface OrderBook {
   turnover: number | null;
   /** 체결강도(%). 100 초과면 매수 체결이 우세. **잔량비와 다르다 — 실제 체결이다** */
   strength: number | null;
+  /** 기준가(전일 종가) — 호가마다 등락률을 붙이는 기준 */
+  basePrice: number;
+  /** 누적거래대금(원). `ka10003` 이 준다 */
+  tradeValue: number;
+  /** 최근 체결 — 수량 부호가 방향이다(음수면 매도 체결) */
+  ticks: { t: string; price: number; qty: number }[];
   error: string | null;
 }
 

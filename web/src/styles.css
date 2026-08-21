@@ -5235,9 +5235,47 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .ob-body { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: flex-start; }
 .ob-book { flex: 1 1 20rem; min-width: 0; }
 /* 매도 위 매수 아래 - HTS 와 같은 방향 */
-.ob-row { display: grid; grid-template-columns: 1fr 6rem 1fr; align-items: center; height: 1.35rem; }
-.ob-price { text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
-.ob-price.now { background: var(--panel-2); border-radius: 0.2rem; }
+.ob-row { display: grid; grid-template-columns: 1fr 9.5rem 1fr; align-items: center; height: 1.45rem; }
+/* 가격 옆에 등락률 — 이 호가에 걸면 오늘 몇 퍼센트인가 */
+.ob-price {
+  display: flex; align-items: baseline; justify-content: center; gap: 0.25rem;
+  font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.ob-price i { font-style: normal; font-size: 0.66rem; opacity: 0.85; }
+/* 지금 체결되는 호가 — HTS 의 그 노란 줄 */
+.ob-row.now .ob-price {
+  background: var(--mark, rgba(255, 214, 0, 0.22));
+  border: 1px solid var(--red); border-radius: 0.2rem;
+}
+.ob-here {
+  font-style: normal; font-size: 0.6rem; padding: 0 0.15rem; border-radius: 2px;
+  background: var(--red); color: #fff;
+}
+/* 오른쪽 요약의 시·고·저 — 값과 등락률을 한 줄에 */
+.ob-kv.ohl b { margin-left: auto; }
+.ob-kv.ohl i { font-style: normal; font-size: 0.72rem; width: 3.6rem; text-align: right; }
+/* 총잔량 — HTS 는 호가창 맨 아래에 이 줄을 둔다 */
+.ob-total {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  gap: 0.5rem; margin-top: 0.3rem; padding: 0.25rem 0;
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.ob-total span { color: var(--muted); font-size: 0.78rem; }
+.ob-total b:first-child { text-align: right; }
+/* 체결 목록 — 왼쪽 아래에 흐르는 그것 */
+.ob-ticks { margin-top: 0.5rem; }
+.ob-ticks-h {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 0.72rem; color: var(--muted); margin-bottom: 0.2rem;
+}
+.ob-ticks-b { max-height: 11rem; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.ob-tick {
+  display: grid; grid-template-columns: 5rem 1fr 1fr; gap: 0.4rem;
+  padding: 0.15rem 0.4rem; font-size: 0.78rem; font-variant-numeric: tabular-nums;
+}
+.ob-tick b { text-align: right; }
+.ob-tick:nth-child(odd) { background: var(--panel-2); }
 .ob-qty { position: relative; display: flex; align-items: center; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 .ob-qty.left { justify-content: flex-end; }
 .ob-qty.left b { position: relative; padding-right: 0.3rem; }
@@ -5729,3 +5767,10 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .dc-cum { fill: none; stroke: var(--text); stroke-width: 1.4; opacity: 0.75; vector-effect: non-scaling-stroke; }
 .dc-cross { fill: var(--accent, #f5c542); stroke: var(--panel); stroke-width: 1; }
 .dc-total { font-size: 0.8rem; font-variant-numeric: tabular-nums; margin-top: 0.15rem; }
+
+/* 박아 둔 화면 구성 — 이름칸 대신 글자 */
+.bp-name.fixed { display: flex; align-items: center; gap: 0.35rem; font-weight: 600; }
+.bp-lock {
+  font-style: normal; font-size: 0.62rem; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 4px; padding: 0 0.2rem;
+}
