@@ -1,0 +1,142 @@
+import type { KiwoomClient } from "./kiwoomClient.js";
+import { tradeValueTop } from "./signalScreen.js";
+
+/**
+ * 누적등락률 상위 — **우리가 계산한다.**
+ *
+ * ## 왜 만들었나
+ *
+ * HTS [0796] 순위분석의 「누적등락상위」를 쓰고 있었는데, 키움 REST 순위정보 26개를
+ * **전수 확인한 결과 없다.** `ka10027` 은 전일대비뿐이고 기간 옵션이 없다.
+ *
+ * 다행히 재료는 다 있다 — 거래대금 상위(어느 종목을 볼지)와 일봉(N일 전 종가).
+ * 없는 걸 있는 척 하지 않되, **만들 수 있는 건 만든다.**
+ *
+ * ## 왜 거래대금 상위에서만 고르나
+ *
+ * 전 종목을 훑으려면 2천 번을 불러야 하고 30분이 걸린다. 그리고 **거래대금이 얇은
+ * 종목은 아무리 올라도 못 산다** — 계산대로 체결이 안 된다. 살 수 있는 것만 본다.
+ *
+ * ## 왜 캐시가 필수인가
+ *
+ * 종목당 일봉 한 번, 260ms 간격이라 100종목이면 **26초**다. 화면이 열릴 때마다
+ * 이러면 못 쓴다. 한 번 계산해 두고 10분간 그대로 준다 — 누적등락률은 그 사이에
+ * 순위가 뒤집힐 값이 아니다.
+ */
+
+const CHART = "/api/dostk/chart";
+/** 몇 분 동안 계산한 것을 그대로 줄지 */
+const TTL_MS = 10 * 60 * 1000;
+
+export interface CumRow {
+  code: string;
+  name: string;
+  price: number;
+  /** 기간 누적 등락률(%) */
+  cumRate: number;
+  /** 오늘 등락률(%) — 누적이 좋아도 오늘 빠지고 있으면 다른 이야기다 */
+  todayRate: number;
+  /** 기간 시작 종가 */
+  from: number;
+  tradeValue: number;
+}
+
+export interface CumResult {
+  days: number;
+  market: string;
+  rows: CumRow[];
+  at: string;
+  note: string;
+}
+
+interface Cached {
+  at: number;
+  result: CumResult;
+}
+
+const cache = new Map<string, Cached>();
+/** 같은 조건을 동시에 여러 번 계산하지 않는다 */
+const inflight = new Map<string, Promise<CumResult>>();
+
+function n(v: unknown): number {
+  const x = Number(String(v ?? "").replace(/[+,\s]/g, ""));
+  return Number.isFinite(x) ? x : 0;
+}
+
+/** 일봉 종가 배열 (오래된 것 → 최근) */
+async function closes(client: KiwoomClient, code: string): Promise<number[]> {
+  const d = new Date(Date.now() + 9 * 3600 * 1000);
+  const base = d.toISOString().slice(0, 10).replace(/-/g, "");
+  const res = await client.request<Record<string, unknown>>(CHART, "ka10081", {
+    stk_cd: code,
+    base_dt: base,
+    upd_stkpc_tp: "1",
+  });
+  const rows = (res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
+  return rows
+    .map((r) => ({ dt: String(r.dt ?? ""), c: Math.abs(n(r.cur_prc)) }))
+    .filter((r) => /^\d{8}$/.test(r.dt) && r.c > 0)
+    .sort((a, b) => a.dt.localeCompare(b.dt))
+    .map((r) => r.c);
+}
+
+export async function cumulativeRank(
+  client: KiwoomClient,
+  market = "000",
+  days = 5,
+  universe = 100,
+): Promise<CumResult> {
+  const key = `${market}:${days}:${universe}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.result;
+
+  const running = inflight.get(key);
+  if (running) return running;
+
+  const job = (async (): Promise<CumResult> => {
+    const top = await tradeValueTop(client, market, universe);
+    const rows: CumRow[] = [];
+
+    for (const t of top) {
+      try {
+        const cs = await closes(client, t.code);
+        // 「N일 누적」인데 데이터가 모자라면 그 종목은 못 센다 — 짧은 걸로 대신 세면 거짓말이다
+        if (cs.length < days + 1) continue;
+        const last = cs[cs.length - 1];
+        const from = cs[cs.length - 1 - days];
+        const prev = cs[cs.length - 2];
+        if (from <= 0 || prev <= 0) continue;
+        rows.push({
+          code: t.code,
+          name: t.name,
+          price: last,
+          cumRate: ((last - from) / from) * 100,
+          todayRate: ((last - prev) / prev) * 100,
+          from,
+          tradeValue: t.tradeValue ?? 0,
+        });
+      } catch {
+        // 한 종목이 실패해도 나머지는 센다
+      }
+      // 키움은 TR 당 초당 5건 — 넉넉히 벌린다
+      await new Promise((r) => setTimeout(r, 260));
+    }
+
+    rows.sort((a, b) => b.cumRate - a.cumRate);
+    const result: CumResult = {
+      days,
+      market,
+      rows,
+      at: new Date().toISOString(),
+      note:
+        `거래대금 상위 ${universe}종목 중 ${rows.length}개. ` +
+        `키움에 누적등락률 TR 이 없어 **일봉으로 직접 계산**한 값입니다 — ` +
+        `거래대금이 얇은 종목은 애초에 빼고 봅니다(못 사는 종목을 순위에 올릴 이유가 없습니다).`,
+    };
+    cache.set(key, { at: Date.now(), result });
+    return result;
+  })().finally(() => inflight.delete(key));
+
+  inflight.set(key, job);
+  return job;
+}

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { cumulativeRank } from "../cumulativeRank.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { COMMON_PARAMS, findSpec, specGroups, type RankSpec } from "../rankSpecs.js";
 
@@ -92,6 +93,22 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         exchange,
         rows: rows.slice(0, 100).map((r) => mapRow(r, spec)),
       });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 누적등락률 상위 — **키움에 없어서 우리가 계산한다.**
+   *
+   * 100종목 일봉을 받아야 해서 처음 한 번은 30초쯤 걸린다. 그 뒤 10분은 캐시다.
+   */
+  router.get("/cumulative", async (req, res, next) => {
+    try {
+      const market = typeof req.query.market === "string" ? req.query.market : "000";
+      const days = Math.min(Math.max(Number(req.query.days) || 5, 2), 60);
+      const universe = Math.min(Math.max(Number(req.query.universe) || 100, 20), 200);
+      res.json(await cumulativeRank(client, market, days, universe));
     } catch (err) {
       next(err);
     }

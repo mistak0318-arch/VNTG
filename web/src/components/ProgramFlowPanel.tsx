@@ -1,5 +1,6 @@
 import { api, fmtNum, signClass } from "../api";
 import { useEffect, useState } from "react";
+import { DeltaChart } from "./DeltaChart";
 import { useLive } from "../useLive";
 
 /**
@@ -85,36 +86,14 @@ function useProgramSeries(code: string) {
   return pts;
 }
 
-/** 「HHmmss」 → 「HH:mm」 */
-function hhmm(t: string): string {
-  return t.length >= 4 ? `${t.slice(0, 2)}:${t.slice(2, 4)}` : t;
-}
-
 function IntradayProgram({ code }: { code: string }) {
   const pts = useProgramSeries(code);
   if (pts.length < 2) return null;
-  const mx = Math.max(...pts.map((p) => Math.abs(p.v)), 1);
 
   return (
     <section className="card">
       <h3 className="section-heading">오늘 장중 — 구간별 프로그램 순매수</h3>
-      <div className="bf-series">
-        {pts.map((p, i) => (
-          <div className="bf-pt" key={`${p.t}-${i}`}>
-            <span className="bf-pt-t">{hhmm(p.t)}</span>
-            <span className="bf-pt-bar">
-              <span
-                className={`bf-bar ${p.v >= 0 ? "buy" : "sell"}`}
-                style={{ width: `${(Math.abs(p.v) / mx) * 100}%` }}
-              />
-            </span>
-            <span className={`bf-pt-v ${p.v >= 0 ? "positive" : "negative"}`}>
-              {p.v > 0 ? "+" : ""}
-              {p.v.toLocaleString("ko-KR")}
-            </span>
-          </div>
-        ))}
-      </div>
+      <DeltaChart points={pts} unit="백만" />
       <div className="table-note">
         <b>누적이 아니라 그 구간에 붙은 양</b>입니다 — 아침에 크게 산 뒤 가만히 있으면
         0 으로 떨어집니다. 서버가 실시간으로 30초마다 쌓으므로 <b>화면을 안 보고 있어도</b>
@@ -205,8 +184,8 @@ export function ProgramFlowPanel({ code }: { code: string }) {
         <b>0선 위가 순매수, 아래가 순매도</b>입니다. 며칠째 같은 방향이면 프로그램이 이 종목에
         붙어 있는 것이고, 위아래를 오가면 차익거래일 뿐입니다 — <b>하루만 보면 우연</b>입니다.
         <br />
-        ⚠️ 키움이 종목별로 주는 건 <b>일자별</b>입니다. 시장 전체는 분 단위가 있지만
-        (「프로그램 매매」 메뉴) <b>종목별 장중은 제공하지 않습니다.</b> 단위는 억원입니다.
+        아래 일자별은 키움 REST(`ka90013`)라 <b>일자 단위</b>입니다. 오늘 장중은 위쪽
+        그래프에서 보세요 — 웹소켓으로 따로 쌓습니다. 단위는 억원입니다.
       </div>
     </div>
   );

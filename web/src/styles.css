@@ -5534,7 +5534,12 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
  * 같은 글씨로 나란히 두었더니 어느 쪽이 그 계좌의 성적인지 매번 읽어 가려야 했다.
  * 누적은 굵고 크게, 당일은 작고 흐리게 괄호 안에 둔다 — 색은 각자 부호를 따른다.
  */
-.ma-badge { display: inline-flex; flex-wrap: wrap; gap: 0.1rem 0.5rem; align-items: baseline; }
+/*
+ * **두 줄로 쌓는다.**
+ * 나란히 두었더니 누적과 당일이 한 줄에 붙어 어디까지가 어느 값인지 눈이 헤맸다.
+ * 위가 누적(그 계좌의 성적), 아래가 당일(오늘 어느 쪽으로 갔나)이다.
+ */
+.ma-badge { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 0.05rem; line-height: 1.25; }
 .ma-badge > span { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ma-total { font-weight: 700; font-size: 1.08em; }
 .ma-today { font-size: 0.88em; opacity: 0.8; }
@@ -5617,3 +5622,22 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .ob-live.on { color: var(--green); }
 /* 시세분석 탭 — 실제로 보는 다섯이 앞 */
 .scr-tabs { margin-bottom: 0.7rem; }
+
+/* ===== 시간축 증감 막대 — 거래원·프로그램이 같이 쓴다 ===== */
+.dc { margin: 0.3rem 0 0.5rem; }
+.dc-svg { width: 100%; height: 6rem; display: block; touch-action: manipulation; }
+.dc-zero { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.dc-bar { cursor: pointer; }
+.dc-bar.up { fill: var(--red); }
+.dc-bar.down { fill: var(--blue); }
+.dc-bar.on { stroke: var(--text); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.dc-legend {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem;
+}
+.dc-peak { flex: 1; text-align: center; font-variant-numeric: tabular-nums; }
+.dc-pick {
+  margin-top: 0.25rem; font-size: 0.85rem; font-variant-numeric: tabular-nums;
+  padding: 0.25rem 0.5rem; border: 1px solid var(--border); border-radius: 6px;
+  display: inline-block;
+}

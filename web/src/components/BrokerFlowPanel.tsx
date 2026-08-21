@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { DeltaChart } from "./DeltaChart";
 import { api, fmtNum, signClass, type BrokerFlow } from "../api";
 import { useLive } from "../useLive";
 
@@ -179,23 +180,7 @@ export function BrokerFlowPanel({ code }: { code: string }) {
               (장이 닫혀 있으면 더 안 쌓입니다)
             </div>
           ) : (
-            <div className="bf-series">
-              {picks.map((p) => (
-                <div className="bf-pt" key={p.t}>
-                  <span className="bf-pt-t">{p.t}</span>
-                  <span className="bf-pt-bar">
-                    <span
-                      className={`bf-bar ${p.v >= 0 ? "buy" : "sell"}`}
-                      style={{ width: `${(Math.abs(p.v) / pmax) * 100}%` }}
-                    />
-                  </span>
-                  <span className={`bf-pt-v ${signClass(p.v)}`}>
-                    {p.v > 0 ? "+" : ""}
-                    {fmtNum(p.v)}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <DeltaChart points={picks} unit="주" />
           )}
         </section>
       )}
