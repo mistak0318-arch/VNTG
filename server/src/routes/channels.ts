@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { searchChannels } from "../channelSearch.js";
 import { buildChannelReport, listChannelReports } from "../channelReport.js";
 import { pinnedHealth, pinnedPosts, type Edition } from "../pinnedChannel.js";
 import {
@@ -142,6 +143,29 @@ export function createChannelsRouter(): Router {
          */
         health: pinnedHealth(),
       });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 채널 **검색** — 「내 종목이 지금 어디서 언급되나」.
+   *
+   * 정리(digest)와 다른 물음이다. 정리는 채널 전체가 무슨 말을 하나이고, 이건
+   * 종목 하나가 언급됐나다. 정리본에는 그 종목이 안 뽑혔을 수도 있다.
+   *
+   * `q` 는 쉼표로 여럿 — 한 종목이 「한화에어로」·「한화에어로스페이스」·「012450」처럼
+   * 채널마다 다르게 불리기 때문이다. 하나라도 걸리면 나온다.
+   */
+  router.get("/search", async (req, res, next) => {
+    try {
+      const q = String(req.query.q ?? "")
+        .split(",")
+        .map((w) => w.trim())
+        .filter(Boolean);
+      const minutes = Math.min(Math.max(Number(req.query.minutes) || 720, 5), 4320);
+      const limit = Math.min(Math.max(Number(req.query.limit) || 60, 5), 200);
+      res.json(await searchChannels(q, minutes, limit));
     } catch (err) {
       next(err);
     }

@@ -23,6 +23,8 @@ import { SectorFlowPanel } from "../components/SectorFlowPanel";
 import { ViPanel } from "../components/ViPanel";
 import { WatchTicker } from "../components/WatchTicker";
 import { IndexBoard } from "../components/IndexBoard";
+import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
+import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
 import { useStockFocus } from "../useStockFocus";
 import { BoardCell, type CellSize } from "../components/BoardCell";
 import { winStore } from "../boardStore";
@@ -132,6 +134,11 @@ const BLOCKS = [
   { key: "mktSector", label: "업종 수급", wide: true },
   { key: "mktVi", label: "VI 발동", wide: false },
   { key: "mktWatch", label: "관심종목 시세판", wide: false },
+  /*
+   * 텔레그램 **동향** — 채널 전체가 무슨 말을 하나. 종목과 무관하다.
+   * 수집 구간과 선별·AI 정리는 패널이 이미 갖고 있다.
+   */
+  { key: "mktTelegram", label: "텔레그램 동향", wide: true },
 
   { key: "chart", label: "차트", wide: true },
   { key: "insights", label: "이동평균·매물대", wide: false },
@@ -148,6 +155,14 @@ const BLOCKS = [
   { key: "finance", label: "재무", wide: false },
   { key: "summary", label: "기업분석", wide: false },
   { key: "sector", label: "업종·테마", wide: false },
+  /*
+   * 텔레그램 **검색** — 종목을 따라간다.
+   *
+   * 「동향」과 다른 물음이다. 동향은 채널 전체가 무슨 말을 하나이고 이건
+   * **이 종목이 언급됐나**다. 정리본에는 그 종목이 아예 안 뽑혔을 수 있다.
+   * 보드에 띄워 두면 종목을 바꿀 때마다 그 종목으로 저절로 찾는다.
+   */
+  { key: "telegram", label: "텔레그램 검색", wide: true },
   { key: "notes", label: "메모", wide: false },
 ] as const;
 
@@ -159,7 +174,7 @@ type BlockKey = (typeof BLOCKS)[number]["key"];
  * 블록 객체에 표시를 달면 `as const` 때문에 어떤 항목에만 그 속성이 생겨서
  * 타입이 갈린다. 키 목록으로 두는 편이 단순하다.
  */
-const MARKET_KEYS = new Set<string>(["mktIndex", "mktSignal", "mktPulse", "mktBreadth", "mktSector", "mktVi", "mktWatch"]);
+const MARKET_KEYS = new Set<string>(["mktIndex", "mktSignal", "mktPulse", "mktBreadth", "mktSector", "mktVi", "mktWatch", "mktTelegram"]);
 const isMarket = (k: string) => MARKET_KEYS.has(k);
 
 /*
@@ -900,6 +915,8 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                   {b.key === "mktSector" && <SectorFlowPanel onSelectStock={onSelectStock} />}
                   {b.key === "mktVi" && <ViPanel onSelectStock={onSelectStock} />}
                   {b.key === "mktWatch" && <WatchTicker onSelectStock={onSelectStock} />}
+                  {b.key === "mktTelegram" && <ChannelDigestPanel />}
+                  {b.key === "telegram" && <ChannelSearchPanel code={code} name={name} />}
                   {/*
                     `key={code}` 를 준다. 종목이 바뀌면 패널을 **새로 만든다** —
                     안 그러면 어떤 패널은 이전 종목의 값을 그대로 들고 있다가

@@ -5873,3 +5873,22 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 
 /* 다시 계산하는 동안 직전 결과를 흐리게 — 지금 값이 아니라는 표시 */
 .data-table-wrap.stale { opacity: 0.45; pointer-events: none; }
+
+/* ===== 텔레그램 검색 — 내 종목이 어디서 언급되나 ===== */
+.cs-q { margin: 0.4rem 0 0.3rem; }
+.cs-words { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.4rem; }
+.cs-word {
+  font-size: 0.68rem; padding: 0.1rem 0.35rem; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--muted);
+}
+.cs-list { max-height: 26rem; overflow: auto; }
+.cs-item { padding: 0.45rem 0; border-bottom: 1px solid var(--border); }
+.cs-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem; font-size: 0.74rem; }
+.cs-hit {
+  font-size: 0.64rem; padding: 0 0.25rem; border-radius: 3px;
+  background: var(--accent, #2563eb); color: #fff;
+}
+.cs-link { font-size: 0.7rem; color: var(--muted); margin-left: auto; }
+.cs-text { font-size: 0.82rem; line-height: 1.5; white-space: pre-wrap; margin-top: 0.2rem; }
+/* 뉴스 칸에서 종목에 덧붙이는 말 */
+.news-extra { width: 100%; margin: 0.35rem 0 0.2rem; }

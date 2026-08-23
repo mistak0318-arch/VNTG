@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type DisclosureItem, type NewsItem } from "../api";
 
 /**
@@ -28,6 +28,26 @@ export function NewsList({ query }: { query: string }) {
   const [scope, setScope] = useState<"major" | "all">("major");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * 종목에 **덧붙이는 말.**
+   *
+   * 종목 뉴스를 먼저 보여주는 건 맞다 — 그게 열었을 때 궁금한 것이다.
+   * 그런데 파고들 때는 「이 종목 + 수주」처럼 좁히고 싶어진다. 그때마다 뉴스 메뉴로
+   * 옮겨 다니면 보드에 뉴스를 띄운 뜻이 없다.
+   *
+   * 종목이 바뀌면 지운다. 다른 종목에 남아 있으면 왜 안 나오는지 알 수가 없다.
+   */
+  const [extra, setExtra] = useState("");
+  const lastQuery = useRef(query);
+
+  useEffect(() => {
+    if (lastQuery.current !== query) {
+      lastQuery.current = query;
+      setExtra("");
+    }
+  }, [query]);
+
+  const asked = extra.trim() ? `${query} ${extra.trim()}` : query;
 
   useEffect(() => {
     if (!query) {
@@ -39,7 +59,7 @@ export function NewsList({ query }: { query: string }) {
     setLoading(true);
     setError(null);
     api
-      .news(query, { scope })
+      .news(asked, { scope })
       .then((res) => {
         if (cancelled) return;
         setItems(res.items);
@@ -54,7 +74,7 @@ export function NewsList({ query }: { query: string }) {
     return () => {
       cancelled = true;
     };
-  }, [query, scope]);
+  }, [asked, query, scope]);
 
   // 필터 토글은 로딩 중에도 계속 보여야 화면이 덜컹거리지 않는다
   const filterRow = (
@@ -74,6 +94,18 @@ export function NewsList({ query }: { query: string }) {
   return (
     <div>
       {filterRow}
+      {/* 종목에 말을 덧붙여 좁힌다 — 보드에서 뉴스를 띄워 두고 파고들 때 쓴다 */}
+      <input
+        className="search-input news-extra"
+        placeholder={query ? `${query} + 키워드 (예: 수주, 실적)` : "키워드"}
+        value={extra}
+        onChange={(e) => setExtra(e.target.value)}
+      />
+      {extra.trim() && (
+        <div className="table-note">
+          <b>{asked}</b> 로 찾는 중입니다. 비우면 종목 뉴스 전체가 나옵니다.
+        </div>
+      )}
       {loading && <div className="empty">뉴스 불러오는 중...</div>}
       {error && <div className="error-banner">{error}</div>}
       {!loading && !error && items.length === 0 && (
