@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { removePref, setPref } from "../prefs";
 import { api, type ParsedEvent, type VisionModelOption } from "../api";
 
 /**
@@ -174,7 +175,7 @@ export function CalendarImageImport({ onImported }: { onImported?: () => void })
               disabled={busy !== null}
               onChange={(e) => {
                 setChosen(e.target.value);
-                localStorage.setItem("vntg.calendar.visionModel", e.target.value);
+                setPref("vntg.calendar.visionModel", e.target.value);
               }}
             >
               {models.map((m) => (

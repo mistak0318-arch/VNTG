@@ -3,6 +3,7 @@ import { getHistory, getTotals, getUsage } from "../apiUsage.js";
 import { summarize } from "../summarize.js";
 import { getMenuPrefs, saveMenuPrefs } from "../menuPrefs.js";
 import { getBoardPrefs, saveBoardPrefs } from "../boardPrefs.js";
+import { getUiPrefs, patchUiPrefs } from "../uiPrefs.js";
 import { getCardOrder, saveCardOrder } from "../cardOrder.js";
 
 export function createSettingsRouter(): Router {
@@ -80,6 +81,32 @@ export function createSettingsRouter(): Router {
   router.put("/menu", async (req, res, next) => {
     try {
       res.json(await saveMenuPrefs(req.body));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 화면 설정 **전부** — 키 하나에 값 하나.
+   *
+   * 설정마다 저장소를 따로 만들다 보니 급할 때는 그냥 localStorage 에 넣게 됐고
+   * 그렇게 열네 개가 이 기기에만 쌓였다. 새 설정을 넣는 일이 **로컬에 넣는 것만큼
+   * 쉬워야** 전역이 기본이 된다.
+   *
+   * PUT 은 **합친다**(덮어쓰지 않는다). 창이 여럿이면 각자 자기가 바꾼 것만 보내는데
+   * 통째로 갈아치우면 다른 창이 방금 바꾼 설정이 사라진다.
+   */
+  router.get("/ui", async (_req, res, next) => {
+    try {
+      res.json(await getUiPrefs());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/ui", async (req, res, next) => {
+    try {
+      res.json({ values: await patchUiPrefs(req.body) });
     } catch (err) {
       next(err);
     }

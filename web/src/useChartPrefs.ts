@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { removePref, setPref } from "./prefs";
 
 /**
  * 차트 설정.
@@ -104,7 +105,7 @@ export function readChartPrefs(): ChartPrefs {
 }
 
 export function saveChartPrefs(next: ChartPrefs): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  setPref(STORAGE_KEY, JSON.stringify(next));
   // 같은 탭에 떠 있는 다른 차트도 바로 갈아끼우게 한다
   window.dispatchEvent(new CustomEvent(EVENT));
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { removePref, setPref } from "../../prefs";
 import {
   api,
   fmtNum,
@@ -401,7 +402,7 @@ function UsSectorMap({ onOpen }: { onOpen: (symbol: string, label: string) => vo
   function choose(name: string) {
     setPicked(name);
     try {
-      localStorage.setItem(SECTOR_GROUP_KEY, name);
+      setPref(SECTOR_GROUP_KEY, name);
     } catch {
       /* 저장 못 해도 이번 세션에는 바뀐다 */
     }
@@ -516,7 +517,7 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
 
   function pickGroup(id: string) {
     setOpenId(id);
-    localStorage.setItem(GROUP_KEY, id);
+    setPref(GROUP_KEY, id);
   }
 
   async function run(fn: () => Promise<{ groups: UsWatchGroup[] }>) {

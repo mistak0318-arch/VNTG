@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { removePref, setPref } from "./prefs";
 
 /**
  * 최근 본 종목.
@@ -54,7 +55,7 @@ export function useRecentStocks() {
     );
     setRecent(next);
     try {
-      localStorage.setItem(KEY, JSON.stringify(next));
+      setPref(KEY, JSON.stringify(next));
       window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
     } catch {
       /* 저장 못 해도 이번 세션에는 남는다 */
@@ -65,7 +66,7 @@ export function useRecentStocks() {
     const next = read().filter((r) => r.code !== code);
     setRecent(next);
     try {
-      localStorage.setItem(KEY, JSON.stringify(next));
+      setPref(KEY, JSON.stringify(next));
       window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
     } catch {
       /* 무시 */
@@ -75,7 +76,7 @@ export function useRecentStocks() {
   const clear = useCallback(() => {
     setRecent([]);
     try {
-      localStorage.removeItem(KEY);
+      removePref(KEY);
       window.dispatchEvent(new StorageEvent("storage", { key: KEY }));
     } catch {
       /* 무시 */

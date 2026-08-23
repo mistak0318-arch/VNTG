@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { removePref, setPref } from "../prefs";
 import { api, pickList, type RawRecord } from "../api";
 import { InvestorTrendTable } from "../components/InvestorTrendTable";
 import { ChartPanel } from "../components/ChartPanel";
@@ -24,6 +25,7 @@ import { WatchTicker } from "../components/WatchTicker";
 import { IndexBoard } from "../components/IndexBoard";
 import { useStockFocus } from "../useStockFocus";
 import { BoardCell, type CellSize } from "../components/BoardCell";
+import { winStore } from "../boardStore";
 
 /**
  * 보드 — **다른 창에서 고른 종목을 따라 그린다.**
@@ -168,7 +170,7 @@ const SIZE_KEY = "vntg.board.sizes";
 
 function readSizes(): Record<string, CellSize> {
   try {
-    const raw = JSON.parse(localStorage.getItem(SIZE_KEY) ?? "null") as unknown;
+    const raw = JSON.parse(winStore.get(SIZE_KEY) ?? "null") as unknown;
     if (!raw || typeof raw !== "object") return {};
     const out: Record<string, CellSize> = {};
     for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
@@ -200,7 +202,7 @@ const LOCK_KEY = "vntg.board.locks";
 
 function readLocks(): Record<string, { code: string; name: string }> {
   try {
-    const raw = JSON.parse(localStorage.getItem(LOCK_KEY) ?? "null") as unknown;
+    const raw = JSON.parse(winStore.get(LOCK_KEY) ?? "null") as unknown;
     if (!raw || typeof raw !== "object") return {};
     const out: Record<string, { code: string; name: string }> = {};
     for (const [k, v] of Object.entries(raw as Record<string, { code?: unknown; name?: unknown }>)) {
@@ -316,7 +318,7 @@ const DEFAULT_PICK: BlockKey[] = ["chart", "investor", "supply", "opinion"];
 
 function readPick(): BlockKey[] {
   try {
-    const raw = JSON.parse(localStorage.getItem(PICK_KEY) ?? "null") as unknown;
+    const raw = JSON.parse(winStore.get(PICK_KEY) ?? "null") as unknown;
     if (!Array.isArray(raw)) return DEFAULT_PICK;
     const keys = new Set(BLOCKS.map((b) => b.key as string));
     const out = raw.filter((k): k is BlockKey => typeof k === "string" && keys.has(k));
@@ -354,7 +356,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
       if (had && had.w === s.w && had.h === s.h) return prev;
       const next = { ...prev, [key]: s };
       try {
-        localStorage.setItem(SIZE_KEY, JSON.stringify(next));
+        winStore.set(SIZE_KEY, JSON.stringify(next));
       } catch {
         /* 저장 못 해도 이번 세션에는 그 크기로 본다 */
       }
@@ -365,7 +367,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   const resetSizes = useCallback(() => {
     setSizes({});
     try {
-      localStorage.removeItem(SIZE_KEY);
+      winStore.remove(SIZE_KEY);
     } catch {
       /* 무시 */
     }
@@ -374,7 +376,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   /* ---------------- 고정 ---------------- */
   const [pins, setPins] = useState<string[]>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem(PIN_KEY) ?? "[]") as unknown;
+      const raw = JSON.parse(winStore.get(PIN_KEY) ?? "[]") as unknown;
       return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
     } catch {
       return [];
@@ -386,7 +388,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   const persistLocks = useCallback((next: Record<string, { code: string; name: string }>) => {
     setLocks(next);
     try {
-      localStorage.setItem(LOCK_KEY, JSON.stringify(next));
+      winStore.set(LOCK_KEY, JSON.stringify(next));
     } catch {
       /* 무시 */
     }
@@ -402,7 +404,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
     setPins((prev) => {
       const next = prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k];
       try {
-        localStorage.setItem(PIN_KEY, JSON.stringify(next));
+        winStore.set(PIN_KEY, JSON.stringify(next));
       } catch {
         /* 무시 */
       }
@@ -500,23 +502,45 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
    * 사라지는 것처럼** 보였다 — 「저장이 안 된다」는 말이 그 뜻이었다.
    * 보이는 것과 저장된 것이 처음부터 같아야 한다.
    */
+  /*
+   * 구성을 **서버에서 읽는다.**
+   *
+   * 예전엔 localStorage 였는데, 그건 **창끼리 공유**된다 — 창 A 가 K1 을 불러오면
+   * 창 B 의 K2 를 덮어썼다. 모니터 세 대에 다른 구성을 띄우려고 만든 기능인데
+   * 그 쓰임 자체가 깨져 있었다. 기기가 바뀌면 아예 없기도 했다.
+   *
+   * ⚠️ 서버가 **아직 저장한 적 없으면**(`saved: false`) 이 기기에 있던 것을 올려 준다.
+   * 빈 값으로 덮어쓰면 짜 두었던 구성이 그 자리에서 사라진다.
+   */
   useEffect(() => {
-    if (localStorage.getItem(PRESET_KEY)) return;
-    try {
-      localStorage.setItem(PRESET_KEY, JSON.stringify(presets));
-    } catch {
-      /* 무시 */
-    }
-    // 처음 한 번만
+    let alive = true;
+    void (async () => {
+      try {
+        const r = await api.boardPrefs();
+        if (!alive) return;
+        if (r.saved && r.presets.length > 0) {
+          setPresets(withFixed(r.presets as Preset[]));
+          return;
+        }
+        const local = readPresets();
+        setPresets(local);
+        await api.boardPrefsSave(local as unknown as Parameters<typeof api.boardPrefsSave>[0]);
+      } catch {
+        // 서버를 못 읽어도 화면은 서야 한다 — 이 기기 것으로 그린다
+        if (alive) setPresets(readPresets());
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const persist = useCallback((next: Preset[]) => {
     setPresets(next);
-    try {
-      localStorage.setItem(PRESET_KEY, JSON.stringify(next));
-    } catch {
-      /* 저장 못 해도 이번 세션에는 쓴다 */
-    }
+    // 서버가 본체다. 실패해도 화면은 이미 바뀌어 있고, 다음 저장에서 다시 올라간다
+    void api
+      .boardPrefsSave(next as unknown as Parameters<typeof api.boardPrefsSave>[0])
+      .catch(() => undefined);
   }, []);
 
   /** 지금 화면을 그 구성에 덮어쓴다 */
@@ -584,9 +608,9 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
       setPins(p.pins ?? []);
       persistLocks(p.locks ?? {});
       try {
-        localStorage.setItem(PICK_KEY, JSON.stringify(nextPick));
-        localStorage.setItem(SIZE_KEY, JSON.stringify(p.sizes ?? {}));
-        localStorage.setItem(PIN_KEY, JSON.stringify(p.pins ?? []));
+        winStore.set(PICK_KEY, JSON.stringify(nextPick));
+        winStore.set(SIZE_KEY, JSON.stringify(p.sizes ?? {}));
+        winStore.set(PIN_KEY, JSON.stringify(p.pins ?? []));
       } catch {
         /* 무시 */
       }
@@ -596,7 +620,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
 
   useEffect(() => {
     try {
-      localStorage.setItem(PICK_KEY, JSON.stringify(pick));
+      winStore.set(PICK_KEY, JSON.stringify(pick));
     } catch {
       /* 저장 못 해도 이번 세션에는 그대로 쓴다 */
     }
@@ -630,7 +654,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   const toggleCfg = useCallback(() => {
     setCfgOpen((v) => {
       try {
-        localStorage.setItem("vntg.board.cfgOpen", v ? "0" : "1");
+        setPref("vntg.board.cfgOpen", v ? "0" : "1");
       } catch {
         /* 무시 */
       }

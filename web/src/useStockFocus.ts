@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { removePref, setPref } from "./prefs";
 
 /**
  * 종목 전파 — **여러 창을 한 프로그램처럼 묶는다.**
@@ -150,7 +151,7 @@ export function useStockFocus() {
   const toggle = useCallback((next: boolean) => {
     on = next;
     try {
-      localStorage.setItem(KEY, next ? "1" : "0");
+      setPref(KEY, next ? "1" : "0");
     } catch {
       /* 저장 못 해도 이번 세션에는 켜진다 */
     }

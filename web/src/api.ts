@@ -474,6 +474,18 @@ export const api = {
   usKrCorrelation: () => getJson<{ result: CorrelationResult | null }>("/api/us-kr/correlation"),
   usKrCorrelate: (days = 60) =>
     postJson<{ result: CorrelationResult }>(`/api/us-kr/correlation?days=${days}`),
+  /**
+   * 보드 화면 구성 — **서버(전역)**.
+   *
+   * localStorage 는 창끼리 공유돼서 창 하나가 다른 창의 구성을 덮어썼다.
+   * `saved` 가 false 면 아직 서버에 올린 적이 없다는 뜻이라, 화면이 예전 로컬 값을
+   * 그때 한 번 올려 준다(빈 값으로 덮어쓰면 짜 둔 구성이 사라진다).
+   */
+  boardPrefs: () =>
+    getJson<{ presets: BoardPresetDto[]; saved: boolean }>("/api/settings/board"),
+  boardPrefsSave: (presets: BoardPresetDto[]) =>
+    putJson<{ presets: BoardPresetDto[] }>("/api/settings/board", { presets }),
+
   rankSpecs: () => getJson<{ groups: RankSpecGroup[] }>("/api/rank/specs"),
   rank: (key: string, market = "000", exchange = "3") =>
     getJson<RankResult>(`/api/rank/${key}?market=${market}&exchange=${exchange}`),
@@ -2635,4 +2647,17 @@ export interface BrokerFlow {
   series: { t: string; net: Record<string, number> }[];
   names: Record<string, string>;
   error: string | null;
+}
+
+/**
+ * 보드 화면 구성 한 벌 — 서버가 주고받는 모양.
+ * 화면 쪽 `Preset` 과 같은 모양이지만, 서버 계약이라 여기에도 적어 둔다.
+ */
+export interface BoardPresetDto {
+  id: string;
+  name: string;
+  pick: string[];
+  sizes: Record<string, { w: number; h: number }>;
+  pins: string[];
+  locks: Record<string, { code: string; name: string }>;
 }

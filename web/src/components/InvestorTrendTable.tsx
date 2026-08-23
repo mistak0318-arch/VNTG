@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { removePref, setPref } from "../prefs";
 import { fmtAbsNum, fmtNum, signClass, type RawRecord } from "../api";
 
 /**
@@ -103,7 +104,7 @@ export function InvestorTrendTable({ rows }: { rows: RawRecord[] }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(PICK_KEY, JSON.stringify(picked));
+      setPref(PICK_KEY, JSON.stringify(picked));
     } catch {
       /* 저장 못 해도 이번 세션에는 쓴다 */
     }

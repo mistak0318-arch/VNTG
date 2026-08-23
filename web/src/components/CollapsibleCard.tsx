@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { removePref, setPref } from "../prefs";
 
 /**
  * 접었다 펼 수 있는 설정 카드.
@@ -23,7 +24,7 @@ function readOpenMap(): Record<string, boolean> {
 
 function writeOpen(id: string, open: boolean): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...readOpenMap(), [id]: open }));
+    setPref(STORAGE_KEY, JSON.stringify({ ...readOpenMap(), [id]: open }));
   } catch {
     /* 사파리 프라이빗 모드 등 — 저장 못 해도 동작에는 지장 없다 */
   }

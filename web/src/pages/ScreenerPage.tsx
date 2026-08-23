@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { removePref, setPref } from "../prefs";
 import { api, fmtNum, type RankResult, type RankSpecGroup } from "../api";
 import { SameNetTradeRankingPage } from "./SameNetTradeRankingPage";
 import { ContinuousTradePage } from "./ContinuousTradePage";
@@ -161,7 +162,7 @@ export function ScreenerPage({
     const next = { ...filter, ...patch };
     setFilter(next);
     try {
-      localStorage.setItem(FILTER_KEY, JSON.stringify(next));
+      setPref(FILTER_KEY, JSON.stringify(next));
     } catch {
       /* 저장 못 해도 이번 화면에서는 걸린다 */
     }

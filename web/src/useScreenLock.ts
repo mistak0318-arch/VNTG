@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { removePref, setPref } from "./prefs";
 
 /**
  * 화면 잠금 — **자리를 비울 때 눈에서 가린다.**
@@ -137,7 +138,7 @@ export function useScreenLock() {
   const lock = useCallback(() => {
     setLocked(true);
     try {
-      localStorage.setItem(LOCKED_KEY, "1");
+      setPref(LOCKED_KEY, "1");
     } catch {
       /* 못 적어도 이번 세션에는 잠긴다 */
     }
@@ -146,7 +147,7 @@ export function useScreenLock() {
   const unlock = useCallback(() => {
     setLocked(false);
     try {
-      localStorage.removeItem(LOCKED_KEY);
+      removePref(LOCKED_KEY);
     } catch {
       /* 무시 */
     }
@@ -155,7 +156,7 @@ export function useScreenLock() {
   const save = useCallback((next: LockConfig) => {
     setConfig(next);
     try {
-      localStorage.setItem(KEY, JSON.stringify(next));
+      setPref(KEY, JSON.stringify(next));
     } catch {
       /* 무시 */
     }

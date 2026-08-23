@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { removePref, setPref } from "./prefs";
 import { api } from "./api";
 
 /**
@@ -70,7 +71,7 @@ function read(): MenuPrefs {
 /** 사본에 적어 둔다 — 다음에 열 때 첫 화면을 곧바로 그리려는 것이다 */
 function cache(p: MenuPrefs): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(p));
+    setPref(KEY, JSON.stringify(p));
   } catch {
     /* 사본을 못 남겨도 서버에 있으면 된다 */
   }

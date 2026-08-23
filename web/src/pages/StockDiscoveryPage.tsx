@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { removePref, setPref } from "../prefs";
 import {
   api,
   fmtNum,
@@ -407,14 +408,14 @@ export function StockDiscoveryPage({
   function toggleBlock(key: BlockKey) {
     setBlocks((prev) => {
       const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
-      localStorage.setItem(PREF_KEY, JSON.stringify(next));
+      setPref(PREF_KEY, JSON.stringify(next));
       return next;
     });
   }
 
   function setPreset(keys: BlockKey[]) {
     setBlocks(keys);
-    localStorage.setItem(PREF_KEY, JSON.stringify(keys));
+    setPref(PREF_KEY, JSON.stringify(keys));
   }
 
   const shown = BLOCKS.filter((b) => blocks.includes(b.key));

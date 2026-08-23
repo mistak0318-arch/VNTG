@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { removePref, setPref } from "./prefs";
 
 /**
  * 화면 외관 설정 (테마 / 글꼴 / 글자 크기).
@@ -103,7 +104,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     apply(state);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      setPref(STORAGE_KEY, JSON.stringify(state));
     } catch {
       // 저장 실패해도 화면은 그대로 동작해야 한다
     }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { removePref, setPref } from "../prefs";
 
 /**
  * 메뉴 여는 동그란 버튼 — **끌어서 네 모서리로 옮긴다.**
@@ -75,7 +76,7 @@ export function CornerToggle({
   const save = useCallback((c: Corner) => {
     setCorner(c);
     try {
-      localStorage.setItem(KEY, c);
+      setPref(KEY, c);
     } catch {
       /* 저장 못 해도 이번 세션에는 옮겨진다 */
     }
@@ -111,7 +112,7 @@ export function CornerToggle({
       if (c[1] === want) return c;
       const next = `${c[0]}${want}` as Corner;
       try {
-        localStorage.setItem(KEY, next);
+        setPref(KEY, next);
       } catch {
         /* 무시 */
       }
