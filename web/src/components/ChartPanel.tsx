@@ -46,11 +46,36 @@ const VENUES: { key: Venue; label: string; hint: string }[] = [
  * 어제와 견주고 싶을 때 3일, 다 보고 싶으면 전체를 고른다.
  * 일봉·주봉·월봉은 원래 길게 보는 것이라 이 칸이 안 나온다.
  */
-const SPANS: { key: string; label: string; days: number }[] = [
-  { key: "1d", label: "1일", days: 1 },
-  { key: "3d", label: "3일", days: 3 },
-  { key: "all", label: "전체", days: 0 },
-];
+type SpanKind = "intraday" | "daily" | "weekly";
+
+/**
+ * 봉 종류마다 **볼 만한 구간이 다르다.**
+ *
+ * 분봉은 오늘 어떻게 흘렀나를 보려고 켠다. 일봉을 2025년부터 통째로 그리면
+ * **열 때마다 손으로 확대**해야 한다 — 최근 캔들이 손톱만 해서 아무것도 안 읽힌다.
+ * 주봉·월봉은 반대로 짧게 자르면 사이클이 안 보인다.
+ *
+ * 숫자는 **거래일 수**다(0 이면 받아온 전체).
+ */
+const SPAN_SETS: Record<SpanKind, { label: string; days: number }[]> = {
+  intraday: [
+    { label: "1일", days: 1 },
+    { label: "3일", days: 3 },
+    { label: "전체", days: 0 },
+  ],
+  daily: [
+    { label: "1개월", days: 20 },
+    { label: "3개월", days: 60 },
+    { label: "6개월", days: 120 },
+    { label: "1년", days: 240 },
+    { label: "전체", days: 0 },
+  ],
+  weekly: [
+    { label: "1년", days: 250 },
+    { label: "3년", days: 750 },
+    { label: "전체", days: 0 },
+  ],
+};
 
 const CHROME_PX = 108;
 const CHROME_PX_COMPACT = 62;
@@ -84,8 +109,19 @@ export function ChartPanel({
   const { prefs } = useChartPrefs();
   const [period, setPeriod] = useState<Period>(initialPeriod);
   const [venue, setVenue] = useState<Venue>("krx");
-  /** 분봉에서만 쓰는 표시 구간 */
-  const [span, setSpan] = useState("1d");
+  /**
+   * 지금 보고 있는 구간(거래일 수).
+   *
+   * 봉을 바꾸면 **그 봉의 기본값으로 되돌린다** — 일봉에서 「전체」로 보던 사람이
+   * 분봉으로 갔을 때도 전체가 나오면 다시 확대해야 한다. 기본값은 설정에서 정한다.
+   */
+  const kindOf = (p: Period): SpanKind =>
+    PERIOD_CONFIG[p].intraday ? "intraday" : p === "day" ? "daily" : "weekly";
+  const defaultSpan = (p: Period): number => {
+    const k = kindOf(p);
+    return k === "intraday" ? prefs.spanIntraday : k === "daily" ? prefs.spanDaily : prefs.spanWeekly;
+  };
+  const [span, setSpan] = useState<number>(() => defaultSpan(initialPeriod));
   const [full, setFull] = useState(false);
   /** 전체화면에서는 판독 줄을 접어 둔다 — 크게 보려고 들어온 자리다 */
   const [fullInsights, setFullInsights] = useState(false);
@@ -117,7 +153,7 @@ export function ChartPanel({
    * 분봉만 자른다. 자를 때도 **받은 것을 버리지 않는다** — 구간을 바꾸면 다시 안 받고
    * 바로 넓어진다(같은 응답을 다시 부르면 초당 제한만 먹는다).
    */
-  const candles = isIntraday ? lastDays(all, SPANS.find((s) => s.key === span)?.days ?? 1) : all;
+  const candles = span > 0 ? lastDays(all, span) : all;
 
   /* ---------------- 크게 보기 ---------------- */
 
@@ -248,7 +284,12 @@ export function ChartPanel({
       <select
         className="period-select"
         value={period}
-        onChange={(e) => setPeriod(e.target.value as Period)}
+        onChange={(e) => {
+          const p = e.target.value as Period;
+          setPeriod(p);
+          // 봉이 바뀌면 그 봉의 기본 구간으로 — 안 그러면 매번 다시 확대해야 한다
+          setSpan(defaultSpan(p));
+        }}
       >
         {(Object.keys(PERIOD_CONFIG) as Period[]).map((p) => (
           <option key={p} value={p}>
@@ -256,22 +297,18 @@ export function ChartPanel({
           </option>
         ))}
       </select>
-      {/* 분봉에서만 — 일봉·주봉은 원래 길게 보는 것이다 */}
-      {isIntraday && (
-        <>
-          <span className="period-sep" />
-          {SPANS.map((sp) => (
-            <button
-              key={sp.key}
-              className={`period-btn span ${sp.key === span ? "active" : ""}`}
-              onClick={() => setSpan(sp.key)}
-              title={sp.days === 0 ? "받아온 전체" : `최근 ${sp.days}거래일`}
-            >
-              {sp.label}
-            </button>
-          ))}
-        </>
-      )}
+      {/* 구간 — 봉 종류마다 고를 수 있는 것이 다르다 */}
+      <span className="period-sep" />
+      {SPAN_SETS[kindOf(period)].map((sp) => (
+        <button
+          key={sp.label}
+          className={`period-btn span ${sp.days === span ? "active" : ""}`}
+          onClick={() => setSpan(sp.days)}
+          title={sp.days === 0 ? "받아온 전체" : `최근 ${sp.days}거래일`}
+        >
+          {sp.label}
+        </button>
+      ))}
       {/*
         전체화면일 때만 여기 둔다. 「크게」 버튼은 도구줄에 두면 안 된다 —
         이 줄은 가로로 굴러가고(모바일 가로밀림을 막느라 그렇게 했다) 맨 끝 버튼은

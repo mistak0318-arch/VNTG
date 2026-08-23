@@ -5892,3 +5892,24 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .cs-text { font-size: 0.82rem; line-height: 1.5; white-space: pre-wrap; margin-top: 0.2rem; }
 /* 뉴스 칸에서 종목에 덧붙이는 말 */
 .news-extra { width: 100%; margin: 0.35rem 0 0.2rem; }
+
+/* 칸 머리 버튼 — 복제와 종목 찾기 */
+.board-dup, .board-find {
+  background: none; border: none; cursor: pointer; opacity: 0.6;
+  font-size: 0.8rem; padding: 0 0.15rem;
+}
+.board-dup:hover, .board-find:hover { opacity: 1; }
+.board-find.on { opacity: 1; color: var(--accent, #2563eb); }
+/* 칸 안에서 종목을 찾는 자리 */
+.board-find-box { padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--border); }
+.board-find-hits { display: flex; flex-direction: column; margin-top: 0.2rem; }
+.board-find-hit {
+  display: flex; gap: 0.4rem; align-items: baseline; text-align: left;
+  background: none; border: none; color: var(--text); cursor: pointer;
+  padding: 0.2rem 0.3rem; border-radius: 4px; font-size: 0.82rem;
+}
+.board-find-hit:hover { background: var(--panel-2); }
+/* 검색 결과 AI 정리 — 원문 위에, 원문을 대신하지 않는다 */
+.cs-ai { border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.6rem; margin: 0.4rem 0; }
+.cs-ai-h { display: flex; gap: 0.4rem; align-items: baseline; font-size: 0.78rem; margin-bottom: 0.25rem; }
+.cs-ai-b { font-size: 0.85rem; line-height: 1.6; white-space: pre-wrap; }

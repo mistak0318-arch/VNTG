@@ -47,6 +47,18 @@ export interface ChartPrefs {
   profileDays: number;
   /** 말풍선에 넣을 것 */
   tip: TipField[];
+  /**
+   * 차트를 열었을 때 **처음 보이는 구간**.
+   *
+   * 일봉이 2025년부터 통째로 나와서 **열 때마다 손으로 확대**해야 했다.
+   * 매번 그러느니 기본을 정해 두는 게 맞다 — 사람마다 보는 폭이 다르고,
+   * 같은 사람도 일봉과 분봉에서 보고 싶은 폭이 다르다.
+   *
+   * 거래일 수로 센다(`0` 이면 받아온 전체). 분봉은 **하루**가 기본이다.
+   */
+  spanIntraday: number;
+  spanDaily: number;
+  spanWeekly: number;
 }
 
 /**
@@ -71,6 +83,14 @@ export const DEFAULT_PREFS: ChartPrefs = {
   profileOn: true,
   profileDays: 120,
   tip: ["ohlc", "change", "volume", "ma", "gap"],
+  /*
+   * 분봉은 하루 — 분봉을 켜는 이유가 오늘 어떻게 흘렀나를 보는 것이다.
+   * 일봉은 여섯 달 — 스무 날은 추세가 안 보이고 3년은 최근 캔들이 손톱만 해진다.
+   * 주봉·월봉은 3년. 그 정도는 봐야 사이클이 보인다.
+   */
+  spanIntraday: 1,
+  spanDaily: 120,
+  spanWeekly: 750,
 };
 
 const STORAGE_KEY = "vntg.chart";

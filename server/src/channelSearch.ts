@@ -1,4 +1,5 @@
 import { fetchNewMessages, type ChannelMessage } from "./telegramReader.js";
+import { summarize } from "./summarize.js";
 
 /**
  * 채널 메시지 **검색** — 「내 종목이 지금 어디서 언급되나」.
@@ -103,4 +104,56 @@ export async function searchChannels(
       error: err instanceof Error ? err.message : "채널을 읽지 못했습니다.",
     };
   }
+}
+
+
+/**
+ * 검색 결과를 **AI 가 정리한다.**
+ *
+ * 원문 그대로 보는 게 기본이다 — 채널 말투와 숫자가 그대로 있어야 판단이 된다.
+ * 그런데 걸린 게 마흔 건이면 다 못 읽는다. 그때 「무슨 말이 돌고 있나」를 몇 줄로 줄인다.
+ *
+ * ⚠️ **원문을 대신하지 않는다.** 정리는 훑어보라고 있는 것이고, 눈에 걸리는 게 있으면
+ * 아래 원문을 봐야 한다. AI 는 숫자를 잘못 옮기고 뉘앙스를 지운다 —
+ * 이 앱에서 AI 정리를 늘 「원문 옆에」 두는 이유다.
+ *
+ * 호출당 비용이 있으므로 **누를 때만** 돈다. 자동으로 걸지 않는다.
+ */
+export async function summarizeHits(
+  words: string[],
+  minutes: number,
+): Promise<{ text: string | null; count: number; error: string | null; model: string | null }> {
+  const found = await searchChannels(words, minutes, 80);
+  if (found.error) return { text: null, count: 0, error: found.error, model: null };
+  if (found.hits.length === 0) {
+    return { text: null, count: 0, error: "정리할 글이 없습니다.", model: null };
+  }
+
+  const body = found.hits
+    .map((h) => `[${h.channelName} ${h.at.slice(5, 16).replace("T", " ")}]\n${h.text}`)
+    .join("\n\n---\n\n");
+
+  const prompt = [
+    `아래는 텔레그램 채널들에서 「${words.join(", ")}」 가 언급된 글 ${found.hits.length}건이다.`,
+    `최근 ${minutes}분 구간이다.`,
+    "",
+    "다음 순서로 한국어로 정리하라.",
+    "1. 지금 무슨 말이 돌고 있나 — 두세 줄",
+    "2. 근거로 나온 숫자·일정 — 있는 것만. 없으면 없다고 적는다",
+    "3. 엇갈리는 의견 — 사는 쪽과 파는 쪽이 갈리면 둘 다 적는다",
+    "",
+    "규칙: 원문에 없는 것을 지어내지 않는다. 추천이나 목표가를 만들지 않는다.",
+    "같은 말이 여러 채널에 있으면 몇 곳에서 나왔는지 적는다(퍼지는 중이라는 뜻이다).",
+    "",
+    "---",
+    body,
+  ].join("\n");
+
+  const res = await summarize(prompt, 1200, "channel");
+  return {
+    text: res.text,
+    count: found.hits.length,
+    error: res.error ?? null,
+    model: res.usedModel ?? null,
+  };
 }

@@ -174,8 +174,33 @@ type BlockKey = (typeof BLOCKS)[number]["key"];
  * 블록 객체에 표시를 달면 `as const` 때문에 어떤 항목에만 그 속성이 생겨서
  * 타입이 갈린다. 키 목록으로 두는 편이 단순하다.
  */
+/**
+ * 칸 **인스턴스 id**.
+ *
+ * 예전엔 `pick` 이 블록 키 목록이라 **같은 칸을 두 번 담을 수 없었다** — 차트를 둘 띄우고
+ * 하나는 일봉, 하나는 3분봉으로 보는 게 HTS 에서 늘 하던 일인데 그게 안 됐다.
+ *
+ * 그래서 `chart`, `chart#2` 처럼 뒤에 번호를 붙인다. 크기·고정·종목잠금이 전부 이 id 를
+ * 키로 쓰므로 **인스턴스마다 따로** 기억된다. 번호가 없는 것(`chart`)은 첫 칸이라,
+ * 예전에 저장해 둔 구성이 그대로 살아난다 — 마이그레이션이 필요 없다.
+ */
+function blockOf(id: string): string {
+  const at = id.indexOf("#");
+  return at < 0 ? id : id.slice(0, at);
+}
+
+/** 그 블록의 다음 인스턴스 id — 이미 있는 번호는 건너뛴다 */
+function nextInstance(pick: string[], key: string): string {
+  if (!pick.includes(key)) return key;
+  for (let n = 2; n < 50; n += 1) {
+    const id = `${key}#${n}`;
+    if (!pick.includes(id)) return id;
+  }
+  return `${key}#${Date.now()}`;
+}
+
 const MARKET_KEYS = new Set<string>(["mktIndex", "mktSignal", "mktPulse", "mktBreadth", "mktSector", "mktVi", "mktWatch", "mktTelegram"]);
-const isMarket = (k: string) => MARKET_KEYS.has(k);
+const isMarket = (id: string) => MARKET_KEYS.has(blockOf(id));
 
 /*
  * 칸 크기 — **기기마다 따로.**
@@ -329,14 +354,19 @@ function readPresets(): Preset[] {
 }
 
 const PICK_KEY = "vntg.board.blocks";
-const DEFAULT_PICK: BlockKey[] = ["chart", "investor", "supply", "opinion"];
+/**
+ * `pick` 은 이제 **인스턴스 id 목록**이라 `string[]` 이다.
+ * `chart` 는 첫 칸, `chart#2` 는 둘째 칸. 블록 키만 담던 예전 값도 그대로 읽힌다.
+ */
+const DEFAULT_PICK: string[] = ["chart", "investor", "supply", "opinion"];
 
-function readPick(): BlockKey[] {
+function readPick(): string[] {
   try {
     const raw = JSON.parse(winStore.get(PICK_KEY) ?? "null") as unknown;
     if (!Array.isArray(raw)) return DEFAULT_PICK;
     const keys = new Set(BLOCKS.map((b) => b.key as string));
-    const out = raw.filter((k): k is BlockKey => typeof k === "string" && keys.has(k));
+    // 인스턴스 id 라 `#` 뒤를 떼고 실제 있는 칸인지 본다
+    const out = raw.filter((k): k is string => typeof k === "string" && keys.has(blockOf(k)));
     return out.length > 0 ? out : DEFAULT_PICK;
   } catch {
     return DEFAULT_PICK;
@@ -362,7 +392,7 @@ function summarize(pick: string[]): string {
 
 export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: string) => void }) {
   const { on, toggle, focus } = useStockFocus();
-  const [pick, setPick] = useState<BlockKey[]>(readPick);
+  const [pick, setPick] = useState<string[]>(readPick);
   const [sizes, setSizes] = useState<Record<string, CellSize>>(readSizes);
 
   const setSize = useCallback((key: string, s: CellSize) => {
@@ -458,8 +488,8 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
          */
         if (pinsRef.current.includes(over)) return; // 고정된 칸은 안 밀린다
         setPick((cur) => {
-          const from = cur.indexOf(key as BlockKey);
-          const to = cur.indexOf(over as BlockKey);
+          const from = cur.indexOf(key);
+          const to = cur.indexOf(over);
           if (from < 0 || to < 0 || from === to) return cur;
           const next = [...cur];
           next.splice(to, 0, next.splice(from, 1)[0]);
@@ -617,7 +647,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
       const p = presets.find((x) => x.id === id);
       if (!p) return;
       const keys = new Set(BLOCKS.map((b) => b.key as string));
-      const nextPick = (p.pick ?? []).filter((k): k is BlockKey => keys.has(k));
+      const nextPick = (p.pick ?? []).filter((k): k is string => keys.has(blockOf(k)));
       setPick(nextPick.length > 0 ? nextPick : DEFAULT_PICK);
       setSizes(p.sizes ?? {});
       setPins(p.pins ?? []);
@@ -641,7 +671,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
     }
   }, [pick]);
 
-  const flip = (k: BlockKey) =>
+  const flip = (k: string) =>
     setPick((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
 
   const code = focus?.code ?? "";
@@ -865,47 +895,65 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
         종목과 무관한 칸만 켜 둔 구성(K1 같은)에서 연동이 아직 안 왔다고
         화면이 통째로 비면 그 구성은 쓸 수가 없다.
       */}
-      {(code || pick.some(isMarket)) && (
+      {/*
+        ⚠️ **종목이 없어도 칸은 그린다.**
+
+        예전엔 종목이 없으면 그리드를 통째로 안 그렸다. 그런데 칸마다 종목을 찾는 버튼이
+        칸 머리에 있으므로, 안 그리면 **고를 방법 자체가 사라진다** — 연동을 끄고 쓰려면
+        다른 창에서 종목을 한 번 눌러 줘야만 보드가 열리는 이상한 구조가 된다.
+        빈 칸 안에 「종목 없음」이 뜨고, 거기서 🔍 로 고르면 된다.
+      */}
+      {pick.length > 0 && (
         <div className="board-grid">
           {/*
             **`pick` 순서대로** 그린다. 예전엔 `BLOCKS` 를 훑어 걸러냈는데,
             그러면 자리를 바꿔도 늘 원래 순서로 되돌아갔다 — 옮긴 결과가 안 보였다.
           */}
           {pick
-            .map((k) => BLOCKS.find((b) => b.key === k))
-            .filter((b): b is (typeof BLOCKS)[number] => Boolean(b))
-            .map((b) => (
+            .map((id) => ({ id, b: BLOCKS.find((x) => x.key === blockOf(id)) }))
+            .filter((x): x is { id: string; b: (typeof BLOCKS)[number] } => Boolean(x.b))
+            .map(({ id, b }) => (
             <BoardCell
-              key={b.key}
-              cellKey={b.key}
+              key={id}
+              cellKey={id}
               title={b.label}
-              sub={isMarket(b.key) ? undefined : (locks[b.key]?.name ?? name)}
+              sub={isMarket(id) ? undefined : (locks[id]?.name ?? name)}
               wide={b.wide}
-              locked={isMarket(b.key) ? null : (locks[b.key] ?? null)}
-              onToggleLock={isMarket(b.key) ? undefined : () => {
+              onDuplicate={() => setPick((prev) => {
+                // 바로 뒤에 꽂는다 — 맨 끝에 붙이면 어디 생겼는지 찾아야 한다
+                const at = prev.indexOf(id);
+                const next = [...prev];
+                next.splice(at < 0 ? prev.length : at + 1, 0, nextInstance(prev, b.key));
+                return next;
+              })}
+              onPickStock={isMarket(id) ? undefined : (c, n) => {
+                persistLocks({ ...locks, [id]: { code: c, name: n } });
+              }}
+              locked={isMarket(id) ? null : (locks[id] ?? null)}
+              onToggleLock={isMarket(id) ? undefined : () => {
                 /*
                  * 잠글 땐 **지금 이 칸이 보고 있는 종목**을 붙든다.
                  * 연동으로 흘러온 종목이 곧 사람이 보고 있는 것이므로,
                  * 따로 고르게 하지 않아도 뜻이 맞는다.
                  */
                 const next = { ...locks };
-                if (next[b.key]) delete next[b.key];
-                else if (code) next[b.key] = { code, name };
+                if (next[id]) delete next[id];
+                else if (code) next[id] = { code, name };
                 persistLocks(next);
               }}
-              size={sizes[b.key] ?? null}
-              onSize={(s) => setSize(b.key, s)}
-              pinned={pins.includes(b.key)}
-              onPin={() => flipPin(b.key)}
-              onDragStart={onDragStart(b.key)}
-              dragging={dragKey === b.key}
+              size={sizes[id] ?? null}
+              onSize={(s) => setSize(id, s)}
+              pinned={pins.includes(id)}
+              onPin={() => flipPin(id)}
+              onDragStart={onDragStart(id)}
+              dragging={dragKey === id}
             >
               {({ height, tick }) => {
                 /* 붙들어 뒀으면 그 종목, 아니면 연동을 따라간다 */
-                const lock = locks[b.key];
+                const lock = locks[id];
                 const code = lock?.code ?? focusCode;
                 const name = lock?.name ?? focusName;
-                if (!isMarket(b.key) && !code) return <div className="empty">종목 없음</div>;
+                if (!isMarket(id) && !code) return <div className="empty">종목 없음</div>;
                 return (
                 <>
                   {b.key === "mktIndex" && <IndexBoard />}

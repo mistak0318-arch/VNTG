@@ -70,6 +70,18 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
   const [extra, setExtra] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [busy, setBusy] = useState(false);
+  /*
+   * AI 정리 — **원문을 대신하지 않는다.**
+   *
+   * 원문 그대로 보는 게 기본이다. 채널 말투와 숫자가 그대로 있어야 판단이 된다.
+   * 그런데 걸린 게 마흔 건이면 다 못 읽는다 — 그때 몇 줄로 줄여서 훑는다.
+   * 눈에 걸리는 게 있으면 아래 원문을 봐야 한다.
+   *
+   * 호출당 비용이 있으므로 **누를 때만** 돈다. 검색어를 바꿀 때마다 자동으로 돌면
+   * 글자를 칠 때마다 돈이 나간다.
+   */
+  const [ai, setAi] = useState<{ text: string | null; model: string | null; error: string | null } | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
   /** 종목이 바뀌면 사람이 넣어 둔 키워드는 지운다 — 다른 종목에 남아 있으면 헷갈린다 */
   const lastCode = useRef(code);
 
@@ -160,6 +172,46 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
           </span>
         ))}
       </div>
+
+      <div className="filter-row">
+        <button
+          className="filter-btn"
+          disabled={aiBusy || !result || result.hits.length === 0}
+          onClick={() => {
+            setAiBusy(true);
+            setAi(null);
+            fetch(
+              `/api/channels/search-ai?q=${encodeURIComponent(words.join(","))}&minutes=${minutes}`,
+              { method: "POST" },
+            )
+              .then((r) => r.json())
+              .then((j) => setAi(j))
+              .catch((e: Error) => setAi({ text: null, model: null, error: e.message }))
+              .finally(() => setAiBusy(false));
+          }}
+          title="걸린 글을 AI 가 몇 줄로 줄입니다 (호출당 비용)"
+        >
+          {aiBusy ? "정리 중…" : "AI 로 정리"}
+        </button>
+        <span className="pt-n">
+          {result ? `${result.hits.length}건을 줄입니다` : ""}
+        </span>
+      </div>
+
+      {ai?.error && <div className="error-banner">{ai.error}</div>}
+      {ai?.text && (
+        <div className="cs-ai">
+          <div className="cs-ai-h">
+            <b>AI 정리</b>
+            {ai.model && <span className="pt-n">{ai.model}</span>}
+          </div>
+          <div className="cs-ai-b">{ai.text}</div>
+          <div className="table-note">
+            ⚠️ <b>원문을 대신하지 않습니다.</b> AI 는 숫자를 잘못 옮기고 뉘앙스를 지웁니다 —
+            눈에 걸리는 게 있으면 아래 원문을 보세요.
+          </div>
+        </div>
+      )}
 
       {busy && <div className="empty">채널을 훑는 중…</div>}
       {result?.error && <div className="error-banner">{result.error}</div>}

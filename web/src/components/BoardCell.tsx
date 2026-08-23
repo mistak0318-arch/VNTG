@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { api } from "../api";
 
 /**
  * 보드의 칸 하나 — **사람이 크기를 정한다.**
@@ -50,6 +51,8 @@ export function BoardCell({
   cellKey,
   locked,
   onToggleLock,
+  onDuplicate,
+  onPickStock,
   children,
 }: {
   title: string;
@@ -79,9 +82,26 @@ export function BoardCell({
    */
   locked?: { code: string; name: string } | null;
   onToggleLock?: () => void;
+  /**
+   * 이 칸을 하나 더 — **같은 칸을 두 번 띄운다.**
+   *
+   * 차트를 둘 놓고 하나는 일봉, 하나는 3분봉으로 보는 건 HTS 에서 늘 하던 일인데
+   * 칸 목록이 블록 키였을 땐 그게 안 됐다. 복제한 칸은 크기·고정·종목이 **따로** 논다.
+   */
+  onDuplicate?: () => void;
+  /**
+   * 이 칸만 다른 종목으로.
+   *
+   * 연동을 끄고 보면 칸마다 다른 종목을 봐야 하는데, 그러려면 **여기서 찾을 수 있어야**
+   * 한다. 지금까지는 연동으로 흘러온 종목을 붙드는 것만 됐다 — 처음부터 다른 종목을
+   * 띄우려면 다른 창에서 그 종목을 한 번 눌러야 했다.
+   */
+  onPickStock?: (code: string, name: string) => void;
   /** 안쪽 높이와 「크기 바뀜」 신호를 받아 그린다 */
   children: (inner: { height: number; tick: number }) => React.ReactNode;
 }) {
+  /** 종목 찾기 칸이 열려 있나 */
+  const [finding, setFinding] = useState(false);
   const ref = useRef<HTMLElement>(null);
   const [box, setBox] = useState<CellSize>(size ?? { w: 0, h: wide ? 420 : 300 });
   /** 크기가 바뀔 때마다 오른다 — 가로만 바뀐 경우를 안쪽에 알리는 유일한 방법 */
@@ -204,6 +224,21 @@ export function BoardCell({
             {locked ? "🔒" : "🔗"}
           </button>
         )}
+        {/* 이 칸만 다른 종목으로 — 연동을 끄고 볼 때 쓴다 */}
+        {onPickStock && (
+          <button
+            className={`board-find${finding ? " on" : ""}`}
+            onClick={() => setFinding((v) => !v)}
+            title="이 칸에 띄울 종목 찾기"
+          >
+            🔍
+          </button>
+        )}
+        {onDuplicate && (
+          <button className="board-dup" onClick={onDuplicate} title="이 칸을 하나 더">
+            ⧉
+          </button>
+        )}
         <button
           className={`board-pin${pinned ? " on" : ""}`}
           onClick={onPin}
@@ -212,9 +247,84 @@ export function BoardCell({
           {pinned ? "📌" : "📍"}
         </button>
       </h2>
+      {finding && onPickStock && (
+        <CellStockFinder
+          onPick={(c, n) => {
+            onPickStock(c, n);
+            setFinding(false);
+          }}
+          onClose={() => setFinding(false)}
+        />
+      )}
       <div className="board-cell-b">
         {children({ height: Math.max(120, box.h - HEAD_PX), tick })}
       </div>
     </section>
+  );
+}
+
+/**
+ * 칸 하나에 띄울 종목 찾기.
+ *
+ * 보드는 원래 **다른 창에서 고른 종목을 따라 그리는** 화면이라 검색이 없었다.
+ * 그런데 연동을 끄고 칸마다 다른 종목을 보려면 여기서 찾을 수 있어야 한다 —
+ * 지금까지는 다른 창에서 그 종목을 한 번 눌러야만 이 칸에 붙들 수 있었다.
+ *
+ * 찾은 종목은 **그 칸에 붙든다**(자물쇠가 잠긴다). 연동을 따라가게 하려면 자물쇠를 푼다.
+ */
+function CellStockFinder({
+  onPick,
+  onClose,
+}: {
+  onPick: (code: string, name: string) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<{ code: string; name: string }[]>([]);
+
+  useEffect(() => {
+    const text = q.trim();
+    if (text.length < 1) {
+      setHits([]);
+      return;
+    }
+    let alive = true;
+    // 글자를 칠 때마다 부르지 않는다
+    const t = setTimeout(() => {
+      void api
+        .searchStocks(text)
+        .then((r) => alive && setHits(r.results.slice(0, 8)))
+        .catch(() => alive && setHits([]));
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [q]);
+
+  return (
+    <div className="board-find-box">
+      <input
+        className="search-input"
+        autoFocus
+        placeholder="종목명 또는 코드"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onClose();
+          if (e.key === "Enter" && hits[0]) onPick(hits[0].code, hits[0].name);
+        }}
+      />
+      {hits.length > 0 && (
+        <div className="board-find-hits">
+          {hits.map((h) => (
+            <button key={h.code} className="board-find-hit" onClick={() => onPick(h.code, h.name)}>
+              <b>{h.name}</b>
+              <span className="pt-n">{h.code}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

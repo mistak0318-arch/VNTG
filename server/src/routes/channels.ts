@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { searchChannels } from "../channelSearch.js";
+import { searchChannels, summarizeHits } from "../channelSearch.js";
 import { buildChannelReport, listChannelReports } from "../channelReport.js";
 import { pinnedHealth, pinnedPosts, type Edition } from "../pinnedChannel.js";
 import {
@@ -166,6 +166,20 @@ export function createChannelsRouter(): Router {
       const minutes = Math.min(Math.max(Number(req.query.minutes) || 720, 5), 4320);
       const limit = Math.min(Math.max(Number(req.query.limit) || 60, 5), 200);
       res.json(await searchChannels(q, minutes, limit));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 검색 결과를 AI 가 정리 — **누를 때만** 돈다(호출당 비용) */
+  router.post("/search-ai", async (req, res, next) => {
+    try {
+      const q = String(req.query.q ?? "")
+        .split(",")
+        .map((w) => w.trim())
+        .filter(Boolean);
+      const minutes = Math.min(Math.max(Number(req.query.minutes) || 720, 5), 4320);
+      res.json(await summarizeHits(q, minutes));
     } catch (err) {
       next(err);
     }
