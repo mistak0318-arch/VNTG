@@ -462,13 +462,23 @@ export function CandleChart({
       if (hiLineRef.current) candleSeries.removePriceLine(hiLineRef.current);
       if (loLineRef.current) candleSeries.removePriceLine(loLineRef.current);
 
+      /*
+       * ⚠️ **제목을 안 붙인다.**
+       *
+       * 예전엔 가격선에 「최고 1,412,000 (-3.26%, 08/20)」을 통째로 달았다. 그 상자가
+       * 차트 한복판에 떠서 **캔들을 가렸다** — 정작 보려던 것을 덮은 것이다.
+       * 게다가 화살표에도 같은 값을 또 적어서 한 정보가 두 겹이었다.
+       *
+       * 값은 **오른쪽 축**에 뜬다(`axisLabelVisible`). 어느 봉인지는 화살표가 알려 준다.
+       * 날짜와 괴리율은 아래 판독 줄에 있다 — 차트 위에 겹쳐 쓸 값이 아니다.
+       */
       hiLineRef.current = candleSeries.createPriceLine({
         price: hi.high,
         color: "#ff5c5c",
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `최고 ${won(hi.high)} (${pct(hi.high)}, ${labelDate(hi.time)})`,
+        title: "",
       });
       loLineRef.current = candleSeries.createPriceLine({
         price: lo.low,
@@ -476,12 +486,13 @@ export function CandleChart({
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
-        title: `최저 ${won(lo.low)} (${pct(lo.low)}, ${labelDate(lo.time)})`,
+        title: "",
       });
 
+      /* 화살표에도 값을 안 적는다 — 값은 축에 있고 여기선 「어느 봉인가」만 필요하다 */
       const markers: SeriesMarker<Time>[] = [
-        { time: hi.time, position: "aboveBar", color: "#ff5c5c", shape: "arrowDown", text: `최고 ${won(hi.high)}` },
-        { time: lo.time, position: "belowBar", color: "#4c8dff", shape: "arrowUp", text: `최저 ${won(lo.low)}` },
+        { time: hi.time, position: "aboveBar", color: "#ff5c5c", shape: "arrowDown", text: "고" },
+        { time: lo.time, position: "belowBar", color: "#4c8dff", shape: "arrowUp", text: "저" },
       ];
       // setMarkers는 시간 오름차순을 요구한다. 같은 봉이면 겹치므로 하나만.
       candleSeries.setMarkers(

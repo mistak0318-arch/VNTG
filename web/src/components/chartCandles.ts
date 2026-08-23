@@ -100,7 +100,22 @@ export function toCandles(chart: RawRecord | null, period: Period): Candle[] {
  */
 export function lastDays(candles: Candle[], days: number): Candle[] {
   if (days <= 0 || candles.length === 0) return candles;
-  const dayOf = (t: Candle["time"]) => Math.floor(Number(t) / 86400);
+  /*
+   * ⚠️ **시각의 모양이 봉마다 다르다.**
+   *
+   * 분봉은 초 단위 숫자(`UTCTimestamp`)지만 **일·주·월봉은 `{year, month, day}` 객체**다.
+   * 객체를 `Number()` 로 나눴더니 전부 `NaN` 이 되어 **캔들이 통째로 사라졌다** —
+   * 일봉이 백스무 개를 넘는 순간 차트가 빈 채로 떴다.
+   *
+   * 둘 다 「같은 날이면 같은 값」만 나오면 되므로 모양에 맞춰 센다.
+   */
+  const dayOf = (t: Candle["time"]): number => {
+    if (typeof t === "number") return Math.floor(t / 86400);
+    if (typeof t === "object" && t && "year" in t) {
+      return t.year * 10000 + t.month * 100 + t.day;
+    }
+    return Number(t);
+  };
   const keys: number[] = [];
   for (let i = candles.length - 1; i >= 0; i--) {
     const k = dayOf(candles[i].time);

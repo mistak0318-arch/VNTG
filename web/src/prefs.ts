@@ -30,6 +30,14 @@ const LOCAL_ONLY = [
   "vntg.lock.locked",
   // 최근 본 종목은 그 기기의 흔적이다
   "vntg.recent.stocks.v1",
+  /*
+   * ⚠️ **종목 연동을 켤지는 그 창의 사정이다.**
+   *
+   * 이걸 전역으로 올렸다가 연동이 통째로 망가졌다 — 한 창에서 끄면 서버를 거쳐
+   * 다른 창까지 꺼진 채로 뜬다. 「이 창을 보드로 쓸지」는 모니터마다 다르다.
+   * (`useStockFocus.ts` 주석에 원래 그렇게 적혀 있었는데 그걸 못 보고 옮겼다)
+   */
+  "vntg.focus.on",
 ];
 
 function isGlobal(key: string): boolean {
