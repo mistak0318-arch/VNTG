@@ -318,6 +318,18 @@ export function ChartPanel({
   const body = (
     <>
       {toolbar}
+      {/*
+        판독 줄은 **차트 위**다.
+
+        예전엔 아래에 뒀다. 「보는 순서대로 — 기간 고르기 → 차트 → 숫자」라는 이유였는데,
+        보드에 넣고 보니 틀렸다. **칸을 키우면 차트만 커지고 판독 줄은 아래로 밀려나** 같이
+        안 보인다. 칸 안에서 스크롤을 내려야 나오는 값은 없는 것과 같다.
+        차트는 남는 높이를 다 먹는 요소라 **뒤에 둔 것은 반드시 밀린다.**
+
+        위에 두면 칸을 아무리 키워도 이평선·매물대가 늘 눈에 있다. 도구줄과 붙어 있어
+        「고르고 → 읽고 → 그림」 순서가 되는데, 실제로 보는 것도 그 순서다.
+      */}
+      {insightsRow}
       {loading && <div className="empty">차트 불러오는 중...</div>}
       {error && <div className="error-banner">{error}</div>}
       {!loading && !error && (
@@ -342,7 +354,6 @@ export function ChartPanel({
           />
         </div>
       )}
-      {insightsRow}
     </>
   );
 

@@ -58,12 +58,22 @@ export function toCandles(chart: RawRecord | null, period: Period): Candle[] {
     // 분봉은 cntr_tm(체결시간), 일/주/월봉은 dt(일자)를 쓴다
     const time = isIntraday ? parseMinuteTime(String(c.cntr_tm ?? "")) : parseDt(String(c.dt ?? ""));
     if (!time) continue;
+    /*
+     * ⚠️ **부호를 떼야 한다.**
+     *
+     * 키움은 값에 방향을 부호로 실어 준다 — 하락한 봉은 `-1396000` 처럼 온다.
+     * 그대로 쓰면 **가격이 음수인 봉**이 생겨서 차트가 0 아래로 뻗고, 눈금이
+     * -3,000,000 까지 벌어져 캔들이 납작한 선으로 뭉갠다. 「분봉이 이상하다」의 정체가 이것이다.
+     *
+     * 일봉 쪽은 이미 절댓값을 쓰고 있었는데 분봉만 빠져 있었다. 거래소를 NXT·통합으로
+     * 바꾸면 더 심해 보이는 이유도 같다 — 하락 봉이 섞이는 만큼 아래로 벌어진다.
+     */
     const candle: Candle = {
       time,
-      open: Number(c.open_pric),
-      high: Number(c.high_pric),
-      low: Number(c.low_pric),
-      close: Number(c.cur_prc),
+      open: Math.abs(Number(c.open_pric)),
+      high: Math.abs(Number(c.high_pric)),
+      low: Math.abs(Number(c.low_pric)),
+      close: Math.abs(Number(c.cur_prc)),
       volume: Math.abs(Number(c.trde_qty)),
     };
     if (![candle.open, candle.high, candle.low, candle.close].every(Number.isFinite)) continue;

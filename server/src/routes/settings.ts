@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getHistory, getTotals, getUsage } from "../apiUsage.js";
 import { summarize } from "../summarize.js";
 import { getMenuPrefs, saveMenuPrefs } from "../menuPrefs.js";
+import { getBoardPrefs, saveBoardPrefs } from "../boardPrefs.js";
 import { getCardOrder, saveCardOrder } from "../cardOrder.js";
 
 export function createSettingsRouter(): Router {
@@ -79,6 +80,26 @@ export function createSettingsRouter(): Router {
   router.put("/menu", async (req, res, next) => {
     try {
       res.json(await saveMenuPrefs(req.body));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 보드 화면 구성 — **창끼리 덮어쓰던 것을 여기로 옮겼다.**
+   * localStorage 는 창끼리 공유돼서, 창 A 가 K1 을 불러오면 창 B 의 K2 를 지웠다.
+   */
+  router.get("/board", async (_req, res, next) => {
+    try {
+      res.json(await getBoardPrefs());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/board", async (req, res, next) => {
+    try {
+      res.json(await saveBoardPrefs(req.body));
     } catch (err) {
       next(err);
     }

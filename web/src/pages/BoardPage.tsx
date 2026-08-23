@@ -476,6 +476,18 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
     [],
   );
 
+  /*
+   * 보드에 있는 동안 **본문 폭 제한을 푼다.**
+   *
+   * 본문은 1400px 로 묶여 있다. 글이 많은 화면에서는 그게 맞지만 보드는 칸을 늘어놓는
+   * 화면이라 3440 모니터에서 오른쪽 2000px 이 통째로 놀았다.
+   * 떠날 때 되돌린다 — 안 되돌리면 가이드·리포트에서 한 줄이 화면을 가로질러 눈이 줄을 놓친다.
+   */
+  useEffect(() => {
+    document.documentElement.setAttribute("data-page", "board");
+    return () => document.documentElement.removeAttribute("data-page");
+  }, []);
+
   /* ---------------- 화면 구성 (목록) ---------------- */
   const [presets, setPresets] = useState<Preset[]>(readPresets);
   const [editing, setEditing] = useState(false);

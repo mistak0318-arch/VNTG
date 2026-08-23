@@ -185,9 +185,27 @@ body {
   min-width: 0;
 }
 
+/*
+ * 본문 폭.
+ *
+ * 1400px 로 못 박혀 있었다. 3440x1440 울트라와이드에서는 **오른쪽 2000px 이 통째로 논다.**
+ * 그렇다고 무제한으로 풀면 글이 많은 화면(가이드·리포트)에서 한 줄이 화면을 가로질러
+ * 눈이 줄을 놓친다 — 그건 그것대로 못 읽는다.
+ *
+ * 그래서 **변수로 빼고 설정에서 고르게** 한다. 그리고 보드는 아래에서 따로 푼다 —
+ * 보드는 글이 아니라 칸을 늘어놓는 화면이라 넓을수록 낫다.
+ */
 .main-inner {
   padding: 16px 20px 48px;
-  max-width: 1400px;
+  max-width: var(--main-max, 1400px);
+}
+
+/*
+ * 보드는 **폭 제한을 안 받는다.**
+ * 칸을 늘어놓는 화면이라 넓으면 넓은 만큼 더 담긴다 — 모니터를 세 대 쓰는 이유가 그것이다.
+ */
+:root[data-page="board"] .main-inner {
+  max-width: none;
 }
 
 .mobile-header {
@@ -5852,3 +5870,6 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   border: 1px solid var(--border); background: var(--panel); color: var(--text);
   flex: none;
 }
+
+/* 다시 계산하는 동안 직전 결과를 흐리게 — 지금 값이 아니라는 표시 */
+.data-table-wrap.stale { opacity: 0.45; pointer-events: none; }

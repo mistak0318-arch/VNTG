@@ -93,15 +93,23 @@ export function CumulativeRank({
 
       {error && <div className="error-banner">{error}</div>}
 
-      {busy && !rows && (
+      {/*
+        ⚠️ **다시 계산할 때도 안내한다.**
+
+        예전엔 `!rows` 일 때만 띄웠다. 그러면 기간·시장을 바꿨을 때 **예전 표가 그대로
+        떠 있는 채로 30초**가 흐른다 — 눌러도 아무 반응이 없어 보여서 고장으로 읽힌다.
+        실제로 「설정 변경해도 반응이 없다」는 말이 나왔다.
+      */}
+      {busy && (
         <div className="page-note">
           <b>계산 중입니다 — 30초쯤 걸립니다.</b> 키움에 누적등락률 TR 이 없어서 종목마다
           일봉을 받아 직접 셉니다. 한 번 계산하면 <b>10분간</b>은 바로 나옵니다.
+          {rows && <> 아래는 <b>직전 결과</b>입니다.</>}
         </div>
       )}
 
       {rows && rows.length > 0 && (
-        <div className="data-table-wrap">
+        <div className={`data-table-wrap${busy ? " stale" : ""}`}>
           <table className="data-table num">
             <thead>
               <tr>
