@@ -25,6 +25,7 @@ import { WatchTicker } from "../components/WatchTicker";
 import { IndexBoard } from "../components/IndexBoard";
 import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
 import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
+import { SupplyMini } from "../components/SupplyMini";
 import { useStockFocus } from "../useStockFocus";
 import { BoardCell, type CellSize } from "../components/BoardCell";
 import { winStore } from "../boardStore";
@@ -145,6 +146,13 @@ const BLOCKS = [
   { key: "signal", label: "신호등", wide: false },
   { key: "orderbook", label: "호가", wide: false },
   { key: "intraday", label: "장중 수급", wide: false },
+  /*
+   * 당일 수급 **미니** — 곁눈으로 보는 자리.
+   *
+   * 투자자 수급표는 열세 칸에 며칠치를 쌓아서 파고들 때는 맞지만 보드에 놓으면 크다.
+   * 오늘 하루만 세 줄로 줄이고, 기관은 성격이 다른 넷으로 쪼개 아래에 붙인다.
+   */
+  { key: "supplyMini", label: "당일수급(미니)", wide: false },
   { key: "investor", label: "투자자 수급", wide: false },
   { key: "broker", label: "거래원", wide: false },
   { key: "program", label: "프로그램", wide: false },
@@ -965,6 +973,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                   {b.key === "mktWatch" && <WatchTicker onSelectStock={onSelectStock} />}
                   {b.key === "mktTelegram" && <ChannelDigestPanel />}
                   {b.key === "telegram" && <ChannelSearchPanel code={code} name={name} />}
+                  {b.key === "supplyMini" && <SupplyMini key={code} code={code} />}
                   {/*
                     `key={code}` 를 준다. 종목이 바뀌면 패널을 **새로 만든다** —
                     안 그러면 어떤 패널은 이전 종목의 값을 그대로 들고 있다가

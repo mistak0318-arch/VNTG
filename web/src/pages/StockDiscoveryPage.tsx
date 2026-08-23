@@ -282,16 +282,27 @@ export function StockDiscoveryPage({
 
   /* ---------------- 넘기기 ---------------- */
 
+  /*
+   * ⚠️ **넘길 때도 연동을 보낸다.**
+   *
+   * 종목을 눌러서 고르는 길(`onSelectStock`)에는 연동이 붙어 있었는데, **화살표로
+   * 넘기는 길에는 없었다.** 그래서 보드를 띄워 놓고 여기서 화살표로 훑으면
+   * 보드는 처음 종목에 멈춰 있었다 — 이 화면을 쓰는 방식이 바로 그 훑기인데.
+   *
+   * 목록에서 고르는 것(`setIndex`)도 같은 길로 보낸다.
+   */
   const move = useCallback(
     (delta: number) => {
       setIndex((i) => {
         const n = i + delta;
         if (n < 0 || n >= list.length) return i;
+        const hit = list[n];
+        if (hit) onSelectStock(hit.code, hit.name);
         return n;
       });
       setListOpen(false);
     },
-    [list.length],
+    [list, onSelectStock],
   );
 
   /*
@@ -492,6 +503,8 @@ export function StockDiscoveryPage({
           onToggleSignals={() => setListSignals((v) => !v)}
           onPick={(i) => {
             setIndex(i);
+            // 목록에서 고르는 것도 연동으로 내보낸다
+            if (list[i]) onSelectStock(list[i].code, list[i].name);
             setListOpen(false);
           }}
         />

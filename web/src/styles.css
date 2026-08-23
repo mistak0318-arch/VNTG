@@ -5920,3 +5920,17 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   font-size: 0.7rem; padding: 0.15rem 0; display: block;
 }
 .chart-insights-toggle:hover { color: var(--text); }
+
+/* 당일수급 미니 — 곁눈으로 보는 세 줄 */
+.sm-day { font-size: 0.68rem; color: var(--muted); margin-bottom: 0.3rem; }
+.sm-row { display: flex; align-items: baseline; justify-content: space-between; padding: 0.18rem 0; }
+.sm-k { font-size: 0.82rem; color: var(--muted); }
+.sm-v { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.sm-parts {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.1rem 0.6rem;
+  padding: 0.3rem 0 0.1rem; margin-left: 0.4rem;
+  border-left: 2px solid var(--border);
+}
+.sm-part { display: flex; justify-content: space-between; font-size: 0.74rem; padding-left: 0.4rem; }
+.sm-part em { font-style: normal; color: var(--muted); }
+.sm-part b { font-variant-numeric: tabular-nums; }
