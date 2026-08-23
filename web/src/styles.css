@@ -5913,3 +5913,10 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .cs-ai { border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.6rem; margin: 0.4rem 0; }
 .cs-ai-h { display: flex; gap: 0.4rem; align-items: baseline; font-size: 0.78rem; margin-bottom: 0.25rem; }
 .cs-ai-b { font-size: 0.85rem; line-height: 1.6; white-space: pre-wrap; }
+
+/* 차트 판독 줄 접기 — 보고 싶은 값이지만 늘 펴 두면 자리를 먹는다 */
+.chart-insights-toggle {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 0.7rem; padding: 0.15rem 0; display: block;
+}
+.chart-insights-toggle:hover { color: var(--text); }

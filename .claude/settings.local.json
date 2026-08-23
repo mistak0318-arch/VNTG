@@ -586,7 +586,13 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('발동',\\(j.alerts||[]\\).length,'건'\\);if\\(j.preview\\)console.log\\('\\\\n'+j.preview.replace\\(/<[^>]+>/g,''\\)\\);else console.log\\('\\(설정이 꺼져 있거나 오늘 걸린 게 없습니다\\)',JSON.stringify\\(j\\).slice\\(0,200\\)\\)}\\)\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);if\\(j.preview\\)console.log\\(j.preview.replace\\(/<[^>]+>/g,''\\)\\);else console.log\\('없음',JSON.stringify\\(j\\).slice\\(0,150\\)\\)}\\)\")",
       "Bash(curl -s -X PUT -H \"content-type: application/json\" -d '{\"vntg.focus.on\":null}' \"http://localhost:4000/api/settings/ui\")",
-      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('서버에 남은 키:',Object.keys\\(j.values||{}\\)\\)}\\)\")"
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('서버에 남은 키:',Object.keys\\(j.values||{}\\)\\)}\\)\")",
+      "Bash(curl -s --max-time 10 \"http://localhost:4000/api/focus\")",
+      "Bash(curl -s --max-time 20 \"http://localhost:4000/api/market/investor-chart/005930\")",
+      "Bash(curl -s --max-time 20 \"http://localhost:4000/api/market/investor/005930\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const rows=j.stk_invsr_orgn_chart||[];console.log\\('행',rows.length\\);console.log\\(JSON.stringify\\(rows[0],null,1\\).slice\\(0,700\\)\\)}\\)\")",
+      "Bash(curl -s --max-time 20 \"http://localhost:4000/api/market/chart/investor/005930\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const rows=j.stk_invsr_orgn_chart||[];console.log\\('행',rows.length\\);console.log\\(JSON.stringify\\(rows[0]\\)\\)}\\)\")"
     ]
   }
 }

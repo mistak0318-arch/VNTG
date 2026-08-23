@@ -56,9 +56,12 @@ export interface ChartPrefs {
    *
    * 거래일 수로 센다(`0` 이면 받아온 전체). 분봉은 **하루**가 기본이다.
    */
+  /** 판독 줄(이동평균·매물대)을 접어 뒀나 */
+  insightsFold: boolean;
   spanIntraday: number;
   spanDaily: number;
   spanWeekly: number;
+  spanMonthly: number;
 }
 
 /**
@@ -84,13 +87,17 @@ export const DEFAULT_PREFS: ChartPrefs = {
   profileDays: 120,
   tip: ["ohlc", "change", "volume", "ma", "gap"],
   /*
+   * ⚠️ 단위가 **봉 개수**다(거래일이 아니다). 일봉 120봉≈6개월, 주봉 52봉=1년, 월봉 36봉=3년.
+   * 주봉에 250(거래일 감각)을 넣었더니 250주가 되어 **자르기가 아무 일도 안 했다.**
+   *
    * 분봉은 하루 — 분봉을 켜는 이유가 오늘 어떻게 흘렀나를 보는 것이다.
    * 일봉은 여섯 달 — 스무 날은 추세가 안 보이고 3년은 최근 캔들이 손톱만 해진다.
-   * 주봉·월봉은 3년. 그 정도는 봐야 사이클이 보인다.
    */
+  insightsFold: false,
   spanIntraday: 1,
   spanDaily: 120,
-  spanWeekly: 750,
+  spanWeekly: 52,
+  spanMonthly: 36,
 };
 
 const STORAGE_KEY = "vntg.chart";

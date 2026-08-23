@@ -46,7 +46,7 @@ const VENUES: { key: Venue; label: string; hint: string }[] = [
  * 어제와 견주고 싶을 때 3일, 다 보고 싶으면 전체를 고른다.
  * 일봉·주봉·월봉은 원래 길게 보는 것이라 이 칸이 안 나온다.
  */
-type SpanKind = "intraday" | "daily" | "weekly";
+type SpanKind = "intraday" | "daily" | "weekly" | "monthly";
 
 /**
  * 봉 종류마다 **볼 만한 구간이 다르다.**
@@ -55,7 +55,10 @@ type SpanKind = "intraday" | "daily" | "weekly";
  * **열 때마다 손으로 확대**해야 한다 — 최근 캔들이 손톱만 해서 아무것도 안 읽힌다.
  * 주봉·월봉은 반대로 짧게 자르면 사이클이 안 보인다.
  *
- * 숫자는 **거래일 수**다(0 이면 받아온 전체).
+ * ⚠️ 숫자는 거래일이 아니라 **그 봉의 개수**다. `lastDays` 가 「서로 다른 날짜」를 세는데
+ * 주봉은 캔들 하나가 한 주이므로 250 을 주면 250주(≈5년)가 된다.
+ * 주봉에 「1년」을 250 으로 뒀더니 자르기가 아무 일도 안 했다 — 받아온 게 그보다 적었다.
+ * 그래서 주봉은 52·156, 월봉은 12·36 으로 **봉 단위에 맞춰** 센다. (0 이면 전체)
  */
 const SPAN_SETS: Record<SpanKind, { label: string; days: number }[]> = {
   intraday: [
@@ -71,8 +74,15 @@ const SPAN_SETS: Record<SpanKind, { label: string; days: number }[]> = {
     { label: "전체", days: 0 },
   ],
   weekly: [
-    { label: "1년", days: 250 },
-    { label: "3년", days: 750 },
+    { label: "6개월", days: 26 },
+    { label: "1년", days: 52 },
+    { label: "3년", days: 156 },
+    { label: "전체", days: 0 },
+  ],
+  monthly: [
+    { label: "1년", days: 12 },
+    { label: "3년", days: 36 },
+    { label: "10년", days: 120 },
     { label: "전체", days: 0 },
   ],
 };
@@ -106,7 +116,7 @@ export function ChartPanel({
   /** 크기가 바뀌었다는 신호. 가로만 바뀐 경우를 잡으려고 있다 */
   sizeTick?: number;
 }) {
-  const { prefs } = useChartPrefs();
+  const { prefs, set: savePrefs } = useChartPrefs();
   const [period, setPeriod] = useState<Period>(initialPeriod);
   const [venue, setVenue] = useState<Venue>("krx");
   /**
@@ -116,10 +126,13 @@ export function ChartPanel({
    * 분봉으로 갔을 때도 전체가 나오면 다시 확대해야 한다. 기본값은 설정에서 정한다.
    */
   const kindOf = (p: Period): SpanKind =>
-    PERIOD_CONFIG[p].intraday ? "intraday" : p === "day" ? "daily" : "weekly";
+    PERIOD_CONFIG[p].intraday ? "intraday" : p === "day" ? "daily" : p === "week" ? "weekly" : "monthly";
   const defaultSpan = (p: Period): number => {
     const k = kindOf(p);
-    return k === "intraday" ? prefs.spanIntraday : k === "daily" ? prefs.spanDaily : prefs.spanWeekly;
+    if (k === "intraday") return prefs.spanIntraday;
+    if (k === "daily") return prefs.spanDaily;
+    if (k === "weekly") return prefs.spanWeekly;
+    return prefs.spanMonthly;
   };
   const [span, setSpan] = useState<number>(() => defaultSpan(initialPeriod));
   const [full, setFull] = useState(false);
@@ -340,6 +353,15 @@ export function ChartPanel({
    * 5일선·20일선·매물대는 **차트를 본 다음에** 확인하는 값이다.
    * 순서를 보는 순서대로 맞춘다: 기간 고르기 → 차트 → 숫자.
    */
+  /*
+   * 판독 줄을 **접었다 편다.**
+   *
+   * 보고 싶은 값이긴 한데 늘 펴 두면 차트 위 서너 줄을 잡아먹는다 — 특히 보드에서
+   * 칸이 작을 때 거슬린다. 그렇다고 아래로 내리면 칸을 키웠을 때 밀려나서 안 보인다
+   * (그래서 위로 올렸다). 위에 두되 **접을 수 있게** 하는 게 답이다.
+   *
+   * 접은 상태는 설정에 남는다 — 매번 접는 건 매번 펴는 것만큼 번거롭다.
+   */
   const insightsRow = showInsights && (
     /*
       판독 줄은 **일봉 기준**이다. 「5일선」은 5거래일이므로 주봉으로 재면 5주선이 된다.
@@ -355,6 +377,15 @@ export function ChartPanel({
   const body = (
     <>
       {toolbar}
+      {showInsights && (
+        <button
+          className="chart-insights-toggle"
+          onClick={() => savePrefs({ ...prefs, insightsFold: !prefs.insightsFold })}
+          title={prefs.insightsFold ? "이동평균·매물대 펴기" : "접기"}
+        >
+          {prefs.insightsFold ? "▾ 이동평균·매물대" : "▴ 이동평균·매물대 접기"}
+        </button>
+      )}
       {/*
         판독 줄은 **차트 위**다.
 
@@ -366,7 +397,7 @@ export function ChartPanel({
         위에 두면 칸을 아무리 키워도 이평선·매물대가 늘 눈에 있다. 도구줄과 붙어 있어
         「고르고 → 읽고 → 그림」 순서가 되는데, 실제로 보는 것도 그 순서다.
       */}
-      {insightsRow}
+      {!prefs.insightsFold && insightsRow}
       {loading && <div className="empty">차트 불러오는 중...</div>}
       {error && <div className="error-banner">{error}</div>}
       {!loading && !error && (
