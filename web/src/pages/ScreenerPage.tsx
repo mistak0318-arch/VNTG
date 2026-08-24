@@ -7,6 +7,7 @@ import { TopTradersTable } from "../components/TopTradersTable";
 import { CumulativeRank } from "../components/CumulativeRank";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
+import { useCardOrder } from "../useCardOrder";
 
 /**
  * 시세분석 — **실제로 보는 다섯 개를 앞에 세운다.**
@@ -152,6 +153,9 @@ function cell(value: unknown, type?: string): { text: string; cls: string } {
  * `page` 는 이미 따로 있던 화면을 그대로 끼운다 — 같은 표를 두 벌 만들면
  * 한쪽만 고쳐지는 날이 온다.
  */
+/** 순위 칸들 — 숫자 서너 자리라 좁게 둔다 */
+const RANK_COLS = new Set(["now_rank", "pred_rank", "rank", "prev_rank"]);
+
 const TABS = [
   { key: "trade-value", label: "거래대금 상위", kind: "rank" as const },
   { key: "same-net", label: "기관/외국인 동일 순매매", kind: "page" as const },
@@ -213,6 +217,14 @@ export function ScreenerPage({
   const [page, setPage] = useState(0);
   /* 신호등은 **켤 때만** — 목록을 여는 것만으로 백 종목을 평가하면 안 된다 */
   const [sigOn, setSigOn] = useState(false);
+  const [editTabs, setEditTabs] = useState(false);
+  /** 신호등 색깔순 — 지금 쪽 안에서만 */
+  const [sigSort, setSigSort] = useState<"desc" | "asc" | null>(null);
+  /* 종목 상세 탭과 같은 훅 — 서버에 저장되어 기기가 달라도 같은 순서다 */
+  const tabOrder = useCardOrder(
+    "screener.tabs",
+    TABS.map((t) => t.key),
+  );
 
   /** 지금 그릴 명세 — 탭이 rank 면 탭 것, 「그 밖에」면 트리에서 고른 것 */
   const current = TABS.find((t) => t.key === tab);
@@ -301,6 +313,23 @@ export function ScreenerPage({
   const shown = sort.sorted.slice(pageAt * pageSize, (pageAt + 1) * pageSize);
   /* 지금 쪽만 평가한다 — 안 볼 것을 미리 계산할 이유가 없다 */
   const signals = useSignalColumn(shown.map((r) => r.code), sigOn);
+
+  /*
+   * 색깔순은 **이 쪽 안에서** 다시 세운다. 평가한 것이 이 쪽뿐이라 그 밖은 셀 수가 없다.
+   * 평가가 아직인 줄은 늘 아래로 — 위에 섞이면 초록이 몇 개인지 세다가 헷갈린다.
+   */
+  const RANK: Record<string, number> = { green: 3, yellow: 2, red: 1, unknown: 0 };
+  const drawn =
+    sigOn && sigSort
+      ? [...shown].sort((a, b) => {
+          const av = signals[a.code] ? RANK[signals[a.code].level] ?? 0 : -1;
+          const bv = signals[b.code] ? RANK[signals[b.code].level] ?? 0 : -1;
+          if (av === bv) return 0;
+          if (av < 0) return 1;
+          if (bv < 0) return -1;
+          return sigSort === "desc" ? bv - av : av - bv;
+        })
+      : shown;
   const estimated = rows.some((r) => r.tvEst);
   const on =
     filter.minTv > 0 ||
@@ -313,16 +342,69 @@ export function ScreenerPage({
     <div>
       {/* 실제로 보는 다섯이 앞이다 — 트리를 매번 훑지 않게 */}
       <div className="filter-row scr-tabs">
+        {/*
+          탭 순서는 사람이 정한다. 자주 쓰는 조회는 사람마다 다른데 여덟 개나 되니
+          늘 쓰는 게 뒤에 있으면 매번 눈으로 훑어야 한다. 종목 상세 탭과 **같은 훅**이라
+          서버에 저장되어 기기가 달라도 같은 순서다.
+
+          JSX 를 재배열하지 않고 CSS `order` 만 준다 — 배열을 흔들면 리액트가 칸을
+          다시 만든다.
+        */}
         {TABS.map((t) => (
           <button
             key={t.key}
             className={`filter-btn ${tab === t.key ? "active" : ""}`}
+            style={{ order: tabOrder.orderOf(t.key) }}
             onClick={() => setTab(t.key)}
           >
             {t.label}
+            {editTabs && (
+              <>
+                <span
+                  className="dt-move"
+                  role="button"
+                  title="앞으로"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    tabOrder.move(t.key, -1);
+                  }}
+                >
+                  ◀
+                </span>
+                <span
+                  className="dt-move"
+                  role="button"
+                  title="뒤로"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    tabOrder.move(t.key, 1);
+                  }}
+                >
+                  ▶
+                </span>
+              </>
+            )}
           </button>
         ))}
+        <button
+          className={`filter-btn dt-edit${editTabs ? " active" : ""}`}
+          style={{ order: 999 }}
+          onClick={() => setEditTabs((v) => !v)}
+          title="자주 보는 조회를 앞으로 옮깁니다"
+        >
+          {editTabs ? "순서 끝" : "탭 순서"}
+        </button>
       </div>
+      {editTabs && (
+        <div className="table-note">
+          탭 이름 옆 <b>◀ ▶</b> 로 옮깁니다. 서버에 저장되어 <b>다른 기기에서도 같은 순서</b>입니다.
+          {tabOrder.customized && (
+            <button className="filter-btn dt-reset" onClick={tabOrder.reset}>
+              원래대로
+            </button>
+          )}
+        </div>
+      )}
 
       {tab === "same-net" && <SameNetTradeRankingPage onSelectStock={onSelectStock ?? (() => {})} />}
       {tab === "cont" && <ContinuousTradePage onSelectStock={onSelectStock ?? (() => {})} />}
@@ -579,7 +661,25 @@ export function ScreenerPage({
               <table className="data-table">
                 <thead>
                   <tr>
-                    {sigOn && <th className="sig-th" title="신호등 — 누르면 근거가 열립니다">🚦</th>}
+                    {sigOn && (
+                      /*
+                        머리를 누르면 **색깔로 줄을 세운다.** 초록이 위로 오는 게 기본이라
+                        「볼 만한 게 뭔가」가 첫 화면에 모인다.
+
+                        ⚠️ **지금 쪽 안에서만** 세운다. 신호등은 보이는 쪽만 평가하므로
+                        전체를 세우려 하면 평가 안 된 줄이 대부분이라 아무 뜻이 없다.
+                        그걸 화면에 적어 둔다 — 안 적으면 「초록이 이것뿐인가」로 읽는다.
+                      */
+                      <th
+                        className={`sig-th sortable-th${sigSort ? " active" : ""}`}
+                        onClick={() =>
+                          setSigSort((v) => (v === null ? "desc" : v === "desc" ? "asc" : null))
+                        }
+                        title="이 쪽 안에서 색깔순으로 — 초록 먼저 → 빨강 먼저 → 원래대로"
+                      >
+                        🚦{sigSort === "desc" ? "▾" : sigSort === "asc" ? "▴" : ""}
+                      </th>
+                    )}
                     <th className="sticky-col">종목명</th>
                     {cols
                       .filter((c) => c.key !== "stk_nm")
@@ -588,6 +688,8 @@ export function ScreenerPage({
                           key={c.key}
                           columnKey={c.key}
                           label={c.label}
+                          /* 순위 칸은 숫자 서너 자리면 충분하다 — 폰에서 자리를 아낀다 */
+                          className={RANK_COLS.has(c.key) ? "num-narrow" : undefined}
                           accessor={(r: (typeof rows)[number]) => {
                             const v = r[c.key];
                             if (c.type === "text") return String(v ?? "");
@@ -617,7 +719,7 @@ export function ScreenerPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.map((r, i) => (
+                  {drawn.map((r, i) => (
                     <tr key={`${r.code}-${i}`}>
                       {sigOn && (
                         <td className="sig-td">
@@ -664,7 +766,10 @@ export function ScreenerPage({
                             );
                           }
                           return (
-                            <td key={c.key} className={`num ${v.cls}`}>
+                            <td
+                              key={c.key}
+                              className={`num ${v.cls}${RANK_COLS.has(c.key) ? " num-narrow" : ""}`}
+                            >
                               {v.text}
                             </td>
                           );

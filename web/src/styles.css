@@ -74,6 +74,17 @@ body {
 .sidebar {
   width: 200px;
   flex: none;
+  /*
+   * ⚠️ **메뉴는 표 위에 있어야 한다.**
+   *
+   * 여긴 `position: static` 이었다. 그런데 표 머리줄은 `position: sticky` 라 — 자리를
+   * 잡은 요소는 안 잡은 요소보다 **자동으로 위에 쌓인다** — 옆으로 넓은 표를 그리면
+   * 머리줄이 메뉴를 덮었다. 관심종목처럼 열이 스무 개 넘는 화면에서 그랬다.
+   *
+   * 모달(20~40)보다는 낮게 둔다. 메뉴 위에 시트가 떠야 하는 건 그대로다.
+   */
+  position: relative;
+  z-index: 10;
   background: var(--panel);
   border-right: 1px solid var(--border);
   padding: 16px 0;
@@ -1431,12 +1442,26 @@ body {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  /*
+   * ⚠️ 넓은 화면에서는 가로 스크롤을 **껐었다**(`overflow-x: visible`).
+   *
+   * 「넓으면 어차피 다 들어간다」는 생각이었는데, 관심종목처럼 **열이 스무 개 넘는 표**는
+   * 넓어도 안 들어간다. 그러면 표가 칸 밖으로 그대로 삐져나가 오른쪽 메뉴를 덮었고,
+   * 목표가·의견 같은 뒤쪽 열은 화면 밖이라 **볼 방법이 아예 없었다** — 스크롤이 꺼져
+   * 있으니 밀어 볼 수도 없다.
+   *
+   * `auto` 로 두면 안 넘칠 때는 스크롤바가 안 보이므로 넓은 화면에서 잃는 게 없다.
+   */
   .data-table-wrap {
-    overflow-x: visible;
+    overflow-x: auto;
   }
 
+  /*
+   * 표는 칸을 **채우되 넘칠 수 있다.** `width: 100%` 만 주면 열이 많을 때 글자가
+   * 뭉개지므로 최소 폭은 내용이 정하게 둔다.
+   */
   .data-table {
-    width: 100%;
+    min-width: 100%;
   }
 
   .data-table th,
@@ -6189,3 +6214,12 @@ button.ib-cell:hover { background: var(--panel-2); }
 
 /* 이 조회가 못 내는 값이라 쉬고 있는 필터 */
 .scr-idle { font-size: 0.72rem; color: #f5c542; }
+
+/* 순위처럼 숫자 서너 자리면 되는 칸 — 폰에서 자리를 아낀다 */
+.data-table th.num-narrow,
+.data-table td.num-narrow {
+  width: 2.6rem;
+  padding-left: 4px;
+  padding-right: 4px;
+  text-align: right;
+}

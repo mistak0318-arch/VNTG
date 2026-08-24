@@ -657,7 +657,10 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const r=j.orgn_frgnr_cont_trde_prst||[];console.log\\('행',r.length\\);if\\(r[0]\\)console.log\\('필드에 cap/tv/turn 있나:', 'cap' in r[0], 'tv' in r[0], 'turn' in r[0], '| 예:', r[0].stk_nm, r[0].cap, r[0].tv, r[0].turn\\)}\\)\")",
       "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const j=JSON.parse\\(d\\);const r=\\(j.orgn_frgnr_cont_trde_prst||[]\\)[0]; *)",
       "Bash(curl -s --max-time 45 \"http://localhost:4000/api/ranking/continuous-trade?market=001&days=3\")",
-      "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const r=\\(JSON.parse\\(d\\).orgn_frgnr_cont_trde_prst||[]\\); *)"
+      "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const r=\\(JSON.parse\\(d\\).orgn_frgnr_cont_trde_prst||[]\\); *)",
+      "Bash(grep -n \"@media\\\\|/\\\\*\")",
+      "Bash(awk 'NR>=1390 && NR<=1448 && \\(/@media/ || /^}/\\)' src/styles.css)",
+      "Bash(awk -F: '$1>1380 && $1<1450')"
     ]
   }
 }

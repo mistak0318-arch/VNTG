@@ -139,11 +139,16 @@ export const RANK_SPECS: RankSpec[] = [
     listKey: "trde_prica_upper",
     exchange: true,
     columns: [
+      /*
+        순위와 전일순위는 **붙여 둔다.** 둘을 견주는 게 이 조회를 보는 이유다 —
+        전일순위와 벌어진 종목이 오늘 새로 돈이 몰린 곳이다. 떨어뜨려 놓으면
+        눈이 표를 가로질러 왔다 갔다 해야 하고, 폰에서는 아예 한 화면에 안 들어온다.
+      */
       { key: "now_rank", label: "순위", type: "num" },
+      { key: "pred_rank", label: "전일", type: "num" },
       ...STOCK,
       { key: "trde_prica", label: "거래대금", type: "num" },
       { key: "now_trde_qty", label: "거래량", type: "num" },
-      { key: "pred_rank", label: "전일순위", type: "num" },
     ],
     note: "거래대금은 백만원 단위입니다. 전일순위와 벌어진 종목이 오늘 새로 돈이 몰린 곳입니다.",
   },
