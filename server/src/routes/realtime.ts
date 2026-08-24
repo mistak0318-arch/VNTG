@@ -172,10 +172,19 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
     res.json({ healthy: rt?.healthy ?? false, events: store?.getVi(limit) ?? [] });
   });
 
-  /** 무엇이 얼마나 쌓였나 — 진단용 */
-  router.get("/store", (_req, res) => {
+  /**
+   * 무엇이 얼마나 쌓였나 — 진단용.
+   *
+   * 기본은 **한 줄 요약**이다. 종목이 천 개면 키 목록은 삼천 줄이라 터미널에서 못 읽는다.
+   * 키별로 보려면 `?keys=1`.
+   */
+  router.get("/store", (req, res) => {
     const { store } = hub();
-    res.json({ items: store?.summary ?? [] });
+    if (req.query.keys === "1") {
+      res.json({ items: store?.summary ?? [] });
+      return;
+    }
+    res.json(store?.health ?? { day: "", keys: 0, points: 0, pending: 0, types: {} });
   });
 
   router.post("/close", (_req, res) => {

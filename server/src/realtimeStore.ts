@@ -40,7 +40,17 @@ const DATA_DIR = join(here, "..", "data", "realtime");
  * **키움이 시간별 체결강도를 조회(`ka10046`)로 준다** — 5·20·60분 평균까지 얹어서.
  * 조회로 얻는 걸 실시간으로 또 쌓을 이유가 없다(쌓아 봐야 물고 있던 종목만 남는다).
  */
-const SERIES_TYPES = new Set(["0w", "0F"]);
+/*
+ * 시계열로 쌓는 것들.
+ *
+ * `0B`(체결)를 넣었다 — **복기의 뼈대**다. 프로그램과 거래원이 「누가」라면 체결은
+ * 「그때 얼마에 얼마나」다. 체결강도(228)가 특히 그렇다. 돈이 몰리는데 강도가 100
+ * 아래면 그 돈은 파는 쪽이라는 걸 나중에 되짚을 수 있어야 한다.
+ *
+ * 호가(`0D`)는 안 넣는다. 30초에 한 번 찍는 호가는 **그 순간의 사진**일 뿐이라
+ * 되짚어 볼 값이 못 되는데, 양은 넷 중 제일 많다. 지금처럼 볼 때만 건다.
+ */
+const SERIES_TYPES = new Set(["0w", "0F", "0B"]);
 /**
  * VI 는 **값이 아니라 사건**이다.
  *
@@ -64,6 +74,18 @@ const SAMPLE_SEC = 30;
  * 그 전에 지나간 날은 못 되살린다는 것만 알고 있으면 된다.
  */
 const KEEP: Record<string, Set<string>> = {
+  /*
+   * 체결: 10 현재가 · 12 등락률 · 13 누적거래량 · 20 체결시각 · 228 체결강도.
+   *
+   * ⚠️ **확인된 것만 적었다.** 위 다섯은 화면(`WatchTicker`)이 실제로 읽고 있고 시각은
+   * 이 파일이 이미 쓰고 있어 확실하다. 체결량이나 누적거래대금도 오는 것 같지만 FID 를
+   * 확인 못 했다 — 추측해서 넣으면 빈 칸만 쌓인다.
+   *
+   * 장중에 `/api/realtime/latest?type=0B&item=005930` 을 보면 **손질 전 원본**이 그대로
+   * 있으므로 무슨 FID 가 오는지 알 수 있다. 확인하고 여기 한 줄 더하면 된다.
+   * 그 전에 지나간 날은 못 되살린다.
+   */
+  "0B": new Set(["10", "12", "13", "20", "228"]),
   // 프로그램매매: 매도수량·금액 202·204, 매수수량·금액 206·208, 순매수 210·212, 증감 213
   "0w": new Set(["20", "202", "204", "206", "208", "210", "212", "213", "215"]),
   // 거래원: 매도 코드 146~150·수량 161~165·증감 166~170, 매수 코드 156~160·수량 171~175·증감 176~180
@@ -452,5 +474,34 @@ export class RealtimeStore {
   /** 무엇이 쌓이고 있나 — 진단용 */
   get summary(): { key: string; points: number }[] {
     return Object.entries(this.series).map(([key, pts]) => ({ key, points: pts.length }));
+  }
+
+  /**
+   * 한눈에 보는 상태 — **진단은 짧아야 쓴다.**
+   *
+   * 종목이 천 개면 `summary` 는 삼천 줄이라 터미널에서 못 읽는다. 「어느 날짜를 들고
+   * 있나 · 몇 종목 · 몇 점 · 아직 못 적은 게 있나」 네 가지면 대개 판가름이 난다.
+   */
+  get health(): {
+    day: string;
+    keys: number;
+    points: number;
+    pending: number;
+    types: Record<string, number>;
+  } {
+    const types: Record<string, number> = {};
+    let points = 0;
+    for (const [key, pts] of Object.entries(this.series)) {
+      points += pts.length;
+      const t = key.split(":")[0];
+      types[t] = (types[t] ?? 0) + 1;
+    }
+    return {
+      day: this.day,
+      keys: Object.keys(this.series).length,
+      points,
+      pending: this.pending.length,
+      types,
+    };
   }
 }

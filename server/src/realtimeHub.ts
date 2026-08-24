@@ -206,6 +206,11 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
         subscribed.add(code);
         rt.subscribe("0F", code);
         rt.subscribe("0w", code);
+        /*
+          체결도 상시로 건다 — 복기하려면 「그때 얼마에 얼마나」가 있어야 한다.
+          프레임은 체결마다 오지만 30초에 한 점만 남기므로 쌓이는 양은 나머지와 같다.
+        */
+        rt.subscribe("0B", code);
         added += 1;
       }
       if (added > 0) console.log(`실시간: ${added}종목 추가 (총 ${subscribed.size - 1})`);
