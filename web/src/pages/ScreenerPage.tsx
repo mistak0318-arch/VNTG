@@ -6,6 +6,7 @@ import { ContinuousTradePage } from "./ContinuousTradePage";
 import { TopTradersTable } from "../components/TopTradersTable";
 import { CumulativeRank } from "../components/CumulativeRank";
 import { SortableTh, useSortableTable } from "../useSortableTable";
+import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 
 /**
  * 시세분석 — **실제로 보는 다섯 개를 앞에 세운다.**
@@ -157,6 +158,8 @@ const TABS = [
   { key: "cont", label: "기관/외국인 연속매매", kind: "page" as const },
   { key: "cum", label: "누적등락률 상위", kind: "page" as const },
   { key: "flu-rate", label: "등락률 상위", kind: "rank" as const },
+  /* 키움 순위에는 없어서 시황 스냅샷으로 우리가 세운다 */
+  { key: "market-cap", label: "시가총액 상위", kind: "rank" as const },
   { key: "top-traders", label: "수익률 상위고객", kind: "page" as const },
   { key: "etc", label: "그 밖에", kind: "tree" as const },
 ];
@@ -208,6 +211,8 @@ export function ScreenerPage({
   const [limit, setLimit] = useState<number>(() => Number(localStorage.getItem("vntg.screener.limit")) || 100);
   const [pageSize, setPageSize] = useState<number>(() => Number(localStorage.getItem("vntg.screener.pageSize")) || 100);
   const [page, setPage] = useState(0);
+  /* 신호등은 **켤 때만** — 목록을 여는 것만으로 백 종목을 평가하면 안 된다 */
+  const [sigOn, setSigOn] = useState(false);
 
   /** 지금 그릴 명세 — 탭이 rank 면 탭 것, 「그 밖에」면 트리에서 고른 것 */
   const current = TABS.find((t) => t.key === tab);
@@ -247,21 +252,34 @@ export function ScreenerPage({
    * 못 찾은 것)을 「조건 미달」로 버리면 조용히 사라진다. 조건을 켠 항목에 대해
    * 값이 없으면 그때만 뺀다.
    */
+  /*
+   * ⚠️ **이 조회가 낼 수 없는 값으로는 거르지 않는다.**
+   *
+   * 회전율 필터를 켜 둔 채 시가총액 상위로 가면 그 조회에는 회전율이 없어서 **전부
+   * 걸러졌다** — 빈 표가 뜨고 이유는 화면에 없었다. 필터는 조회를 옮겨도 남는 값이라
+   * (그게 편한 점이기도 하다) 낼 수 없는 항목은 그 조회에서만 조용히 쉰다.
+   */
+  const hasTurnCol = all.some((r) => r.turn !== null);
+  const hasCapCol = all.some((r) => r.cap !== null);
+  const hasTvCol = all.some((r) => r.tv !== null);
+
   const rows = all.filter((r) => {
     if (filter.commonOnly && !r.common) return false;
-    if (filter.minTv > 0 && (r.tv === null || r.tv < filter.minTv)) return false;
-    if (!capOk(r.cap, filter.caps)) return false;
+    if (hasTvCol && filter.minTv > 0 && (r.tv === null || r.tv < filter.minTv)) return false;
+    if (hasCapCol && !capOk(r.cap, filter.caps)) return false;
     if (filter.minRate !== null) {
       const rate = Number(r.flu_rt ?? r.jmp_rt);
       if (!Number.isFinite(rate) || rate < filter.minRate) return false;
     }
     /* 상장주식수를 못 찾아 회전율이 없는 종목은, 이 조건을 켰을 때만 뺀다 */
-    if (filter.minTurn !== null && (r.turn === null || r.turn < filter.minTurn)) return false;
+    if (hasTurnCol && filter.minTurn !== null && (r.turn === null || r.turn < filter.minTurn)) {
+      return false;
+    }
     return true;
   });
 
-  const hasCap = all.some((r) => r.cap !== null);
-  const hasTurn = all.some((r) => r.turn !== null);
+  const hasCap = hasCapCol;
+  const hasTurn = hasTurnCol;
   /*
    * 정렬.
    *
@@ -281,6 +299,8 @@ export function ScreenerPage({
   const pageCount = Math.max(1, Math.ceil(sort.sorted.length / pageSize));
   const pageAt = Math.min(page, pageCount - 1);
   const shown = sort.sorted.slice(pageAt * pageSize, (pageAt + 1) * pageSize);
+  /* 지금 쪽만 평가한다 — 안 볼 것을 미리 계산할 이유가 없다 */
+  const signals = useSignalColumn(shown.map((r) => r.code), sigOn);
   const estimated = rows.some((r) => r.tvEst);
   const on =
     filter.minTv > 0 ||
@@ -368,6 +388,29 @@ export function ScreenerPage({
               {on ? `${rows.length} / ${all.length}건` : `${all.length}건`}
             </span>
           )}
+          {/*
+            **쉬고 있는 필터를 말해 준다.** 안 그러면 「거래대금 500억↑ 을 켜 뒀는데
+            왜 다 나오지」가 된다 — 조용히 무시하는 것도 조용히 거르는 것만큼 나쁘다.
+          */}
+          {data &&
+            (() => {
+              const idle: string[] = [];
+              if (!hasTvCol && filter.minTv > 0) idle.push("거래대금");
+              if (!hasTurnCol && filter.minTurn !== null) idle.push("회전율");
+              if (!hasCapCol && filter.caps.length > 0) idle.push("시가총액");
+              return idle.length > 0 ? (
+                <span className="scr-idle" title="이 조회는 그 값을 주지 않습니다">
+                  {idle.join("·")} 필터는 쉽니다
+                </span>
+              ) : null;
+            })()}
+          <button
+            className={`filter-btn ${sigOn ? "active" : ""}`}
+            onClick={() => setSigOn((v) => !v)}
+            title="지금 보고 있는 쪽만 평가합니다 — 처음엔 좀 걸립니다"
+          >
+            🚦 신호등 {sigOn ? "끄기" : "켜기"}
+          </button>
           {/*
             받을 건수. 늘리면 연속조회가 그만큼 더 나가므로 **기본은 예전과 같은 100** 이다.
             안 건드리면 부하도 예전 그대로다.
@@ -536,6 +579,7 @@ export function ScreenerPage({
               <table className="data-table">
                 <thead>
                   <tr>
+                    {sigOn && <th className="sig-th" title="신호등 — 누르면 근거가 열립니다">🚦</th>}
                     <th className="sticky-col">종목명</th>
                     {cols
                       .filter((c) => c.key !== "stk_nm")
@@ -575,6 +619,16 @@ export function ScreenerPage({
                 <tbody>
                   {shown.map((r, i) => (
                     <tr key={`${r.code}-${i}`}>
+                      {sigOn && (
+                        <td className="sig-td">
+                          <SignalCell
+                            code={r.code}
+                            name={r.name}
+                            signal={signals[r.code]}
+                            onSelectStock={onSelectStock}
+                          />
+                        </td>
+                      )}
                       {/* 이름이 길면 잘린다(CSS) — 전체는 마우스를 올려서 본다 */}
                       <td className="sticky-col" title={r.name}>
                         <button

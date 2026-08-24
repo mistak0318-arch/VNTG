@@ -6170,3 +6170,22 @@ button.ib-cell:hover { background: var(--panel-2); }
 /* 시세분석 쪽 넘기기 */
 .scr-page-k { font-size: 0.72rem; color: var(--muted); font-weight: 600; }
 .scr-pager { margin-top: 8px; align-items: baseline; }
+
+/*
+ * 목록의 신호등 열 — 점 하나가 들어갈 만큼만.
+ * 줄 전체가 눌리는 표가 많아 점은 자기 자리만 차지한다.
+ */
+.sig-th { width: 28px; text-align: center !important; padding-left: 4px !important; padding-right: 4px !important; }
+.sig-td { text-align: center !important; padding-left: 4px !important; padding-right: 4px !important; }
+.sig-cell {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+/* 신호등 근거 시트 — 표보다 넓어야 기준 줄이 안 접힌다 */
+.sig-sheet { max-width: 560px; }
+
+/* 이 조회가 못 내는 값이라 쉬고 있는 필터 */
+.scr-idle { font-size: 0.72rem; color: #f5c542; }

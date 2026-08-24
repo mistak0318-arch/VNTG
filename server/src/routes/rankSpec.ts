@@ -2,6 +2,7 @@ import { Router } from "express";
 import { cumulativeRank } from "../cumulativeRank.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { COMMON_PARAMS, findSpec, specGroups, type RankSpec } from "../rankSpecs.js";
+import { getMarketSnapshot } from "../marketSnapshot.js";
 import { getStockIndex } from "../stockListCache.js";
 
 /**
@@ -162,6 +163,72 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
       const days = Math.min(Math.max(Number(req.query.days) || 5, 2), 60);
       const universe = Math.min(Math.max(Number(req.query.universe) || 100, 20), 200);
       res.json(await cumulativeRank(client, market, days, universe));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **시가총액 상위** — 키움에 없어서 우리가 세운다.
+   *
+   * 순위 TR 에는 시가총액 순위가 없다. 그런데 「그 종목이 얼마짜리 회사인가」로 줄을 세워
+   * 보는 일은 실제로 잦다 — 같은 +5% 라도 3천억과 30조는 다른 사건이다.
+   *
+   * 재료는 이미 있다. 시황 스냅샷이 업종 구성종목을 모아 두면서 **시가총액을 같이** 들고
+   * 있다. 새로 조회하지 않고 그걸 세운다.
+   *
+   * ⚠️ **스냅샷에 없는 종목은 못 센다.** 스냅샷은 업종 구성종목으로 만드는데 키움이
+   * 일부 업종의 구성종목을 안 주고 ETF·리츠는 업종에 안 잡힌다. 시총 상위는 대형주라
+   * 거의 다 들어오지만, 「전 종목을 다 본 순위」는 아니라는 걸 화면에 적어 둔다.
+   */
+  router.get("/market-cap", async (req, res, next) => {
+    try {
+      const market = ["000", "001", "101"].includes(String(req.query.market))
+        ? String(req.query.market)
+        : "000";
+      const limit = Math.min(Math.max(Number(req.query.limit) || 100, 20), 300);
+      const snap = await getMarketSnapshot(client);
+      const index = await getStockIndex(client).catch(() => new Map());
+
+      const want = market === "001" ? "kospi" : market === "101" ? "kosdaq" : null;
+      const rows = [...snap.byCode.values()]
+        .filter((s) => s.marketCap !== null && s.marketCap > 0)
+        .filter((s) => (want ? s.market === want : true))
+        .sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0))
+        .slice(0, limit)
+        .map((s, i) => {
+          const e = index.get(s.code);
+          const ex = extras({ cur_prc: String(s.price), now_trde_qty: "0", stk_cd: s.code }, e);
+          return {
+            code: s.code,
+            name: s.name,
+            rank: i + 1,
+            cur_prc: s.price,
+            flu_rt: s.changeRate,
+            ...ex,
+            /* 스냅샷 쪽 시총이 더 믿을 만하다 — 키움이 직접 준 값이다 */
+            cap: s.marketCap,
+          };
+        });
+
+      res.json({
+        spec: {
+          key: "market-cap",
+          label: "시가총액 상위",
+          columns: [
+            { key: "rank", label: "순위", type: "num" },
+            { key: "cur_prc", label: "현재가", type: "num" },
+            { key: "flu_rt", label: "등락률", type: "num" },
+          ],
+          exchange: false,
+          note:
+            "시황 스냅샷에서 세운 순위입니다 — 키움 순위 조회에는 시가총액 순위가 없습니다. " +
+            "스냅샷은 업종 구성종목으로 만들어서 ETF·리츠와 일부 업종 종목이 빠집니다.",
+        },
+        market,
+        exchange: "3",
+        rows,
+      });
     } catch (err) {
       next(err);
     }
