@@ -768,7 +768,7 @@ function ListPanel({
           >
             <span className="sd-list-rank">{i + 1}</span>
             {withSignals && i < 40 && <SignalDot signal={signals[c.code]} />}
-            <span className="sd-list-name">{c.name}</span>
+            <span className="sd-list-name" title={c.name}>{c.name}</span>
             {c.price > 0 && (
               <>
                 <span className="sd-list-price">{fmtNum(c.price)}</span>

@@ -240,11 +240,12 @@ export function CandleChart({
     chartRef.current = chart;
 
     const candleSeries = chart.addCandlestickSeries({
-      upColor: "#ff5c5c",
-      downColor: "#4c8dff",
+      // 봉 색은 테마가 준다 — 엑셀 모드에서는 회색조라야 시트 위 차트로 보인다
+      upColor: c.up,
+      downColor: c.down,
       borderVisible: false,
-      wickUpColor: "#ff5c5c",
-      wickDownColor: "#4c8dff",
+      wickUpColor: c.up,
+      wickDownColor: c.down,
     });
     candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.3 } });
     candleRef.current = candleSeries;
@@ -469,6 +470,8 @@ export function CandleChart({
       if (to <= from) return;
 
       const { hi, lo } = extremes(candles.slice(from, to + 1));
+      /* 고·저 선과 화살표도 봉과 같은 색이라야 한다 — 엑셀 모드에서는 회색조다 */
+      const c = chartColors(theme);
       if (hiLineRef.current) candleSeries.removePriceLine(hiLineRef.current);
       if (loLineRef.current) candleSeries.removePriceLine(loLineRef.current);
 
@@ -484,7 +487,7 @@ export function CandleChart({
        */
       hiLineRef.current = candleSeries.createPriceLine({
         price: hi.high,
-        color: "#ff5c5c",
+        color: c.up,
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
@@ -492,7 +495,7 @@ export function CandleChart({
       });
       loLineRef.current = candleSeries.createPriceLine({
         price: lo.low,
-        color: "#4c8dff",
+        color: c.down,
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
@@ -501,8 +504,8 @@ export function CandleChart({
 
       /* 화살표에도 값을 안 적는다 — 값은 축에 있고 여기선 「어느 봉인가」만 필요하다 */
       const markers: SeriesMarker<Time>[] = [
-        { time: hi.time, position: "aboveBar", color: "#ff5c5c", shape: "arrowDown", text: "고" },
-        { time: lo.time, position: "belowBar", color: "#4c8dff", shape: "arrowUp", text: "저" },
+        { time: hi.time, position: "aboveBar", color: c.up, shape: "arrowDown", text: "고" },
+        { time: lo.time, position: "belowBar", color: c.down, shape: "arrowUp", text: "저" },
       ];
       // setMarkers는 시간 오름차순을 요구한다. 같은 봉이면 겹치므로 하나만.
       candleSeries.setMarkers(

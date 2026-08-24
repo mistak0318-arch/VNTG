@@ -437,7 +437,8 @@ export function ScreenerPage({
                 <tbody>
                   {rows.map((r, i) => (
                     <tr key={`${r.code}-${i}`}>
-                      <td className="sticky-col">
+                      {/* 이름이 길면 잘린다(CSS) — 전체는 마우스를 올려서 본다 */}
+                      <td className="sticky-col" title={r.name}>
                         <button
                           className="link-btn"
                           onClick={() => onSelectStock?.(r.code, r.name)}

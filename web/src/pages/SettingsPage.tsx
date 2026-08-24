@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FONTS, FONT_SCALES, useAppearance } from "../useAppearance";
+import { FONTS, FONT_SCALES, useAppearance, WIDTHS } from "../useAppearance";
 import { api, fmtNum, type ProviderUsage, type UsageTotals } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { AiModelPanel } from "../components/AiModelPanel";
@@ -298,6 +298,29 @@ export function SettingsPage() {
         <div className="table-note">
           한 손으로 폰을 쥐면 엄지가 닿는 쪽이 정해져 있습니다. 오른쪽으로 옮기면
           드로어가 열리는 방향과 ☰ 버튼 자리도 같이 넘어갑니다.
+        </div>
+
+        <div className="appearance-row">
+          <span className="appearance-label">화면 폭</span>
+          <div className="filter-row" style={{ margin: 0 }}>
+            {WIDTHS.map((w) => (
+              <button
+                key={w.key}
+                className={`filter-btn ${appearance.width === w.key ? "active" : ""}`}
+                onClick={() => appearance.set({ width: w.key })}
+                title={w.hint}
+              >
+                {w.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="table-note">
+          본문이 <b>1400px 로 못 박혀</b> 있었습니다 — 울트라와이드에서는 표가 옆으로
+          잘리는데 오른쪽은 통째로 노는 꼴이었습니다. 시세분석처럼 <b>열이 많은 화면</b>은
+          「넓게」나 「화면 전체」가 낫고, 가이드·리포트처럼 <b>글이 많은 화면</b>은
+          한 줄이 너무 길면 눈이 줄을 놓치니 「보통」이 낫습니다.
+          <b> 보드는 이 설정과 무관하게</b> 늘 화면을 다 씁니다.
         </div>
 
         <div className="font-preview">

@@ -14,6 +14,7 @@ import { useSection } from "../../useSection";
 import { YahooChartSheet, type ChartTarget } from "./YahooChartSheet";
 import { UsSpark } from "./UsSpark";
 import { UsWatchTable } from "../UsWatchTable";
+import { tileHeat, useAppearance } from "../../useAppearance";
 import { useWatchGroupTiles } from "../../useWatchGroupTiles";
 import { ConstituentSheet, type ConstituentTarget } from "./ConstituentSheet";
 
@@ -284,14 +285,7 @@ export function UsBoardPanel() {
  * 국내 테마 MAP 은 시가총액으로 크기를 줄 수 있지만 **해외는 시가총액을 안 받아온다.**
  * 없는 걸 있는 척 크기로 만들면 거짓말이 되므로 칸을 똑같이 두고 색만 쓴다.
  */
-function tileStyle(rate: number | null): React.CSSProperties {
-  if (rate === null || !Number.isFinite(rate)) return { background: "rgba(139,150,165,.12)" };
-  const capped = Math.min(Math.abs(rate), 5) / 5; // 5% 이상은 최대 강도
-  const alpha = 0.12 + capped * 0.55;
-  if (rate > 0) return { background: `rgba(240, 85, 95, ${alpha})` };
-  if (rate < 0) return { background: `rgba(74, 139, 245, ${alpha})` };
-  return { background: "rgba(139, 150, 165, 0.12)" };
-}
+
 
 function UsWatchMap({ onOpen }: { onOpen: (symbol: string, label: string) => void }) {
   /*
@@ -303,6 +297,7 @@ function UsWatchMap({ onOpen }: { onOpen: (symbol: string, label: string) => voi
    */
   const { tiles, loading } = useWatchGroupTiles("watchUs");
   const [target, setTarget] = useState<ConstituentTarget | null>(null);
+  const { theme } = useAppearance();
 
   if (loading || tiles.length === 0) return null;
 
@@ -325,7 +320,7 @@ function UsWatchMap({ onOpen }: { onOpen: (symbol: string, label: string) => voi
               <button
                 key={t.id}
                 className="map-tile"
-                style={tileStyle(t.changeRate)}
+                style={tileHeat(t.changeRate, theme)}
                 onClick={() =>
                   setTarget({
                     kind: "custom",
@@ -398,6 +393,7 @@ const SECTOR_DEFAULT = "지수·ETF";
 
 function UsSectorMap({ onOpen }: { onOpen: (symbol: string, label: string) => void }) {
   const { tiles, loading } = useWatchGroupTiles("watchUs");
+  const { theme } = useAppearance();
   const [picked, setPicked] = useState<string>(
     () => localStorage.getItem(SECTOR_GROUP_KEY) ?? SECTOR_DEFAULT,
   );
@@ -443,7 +439,7 @@ function UsSectorMap({ onOpen }: { onOpen: (symbol: string, label: string) => vo
               <button
                 key={s.code}
                 className="map-tile"
-                style={tileStyle(s.changeRate)}
+                style={tileHeat(s.changeRate, theme)}
                 onClick={() => onOpen(s.code, s.name || s.code)}
                 title={`${s.name} · ${s.code}`}
               >

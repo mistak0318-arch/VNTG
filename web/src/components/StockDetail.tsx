@@ -8,6 +8,7 @@ import { FinancePanel } from "./FinancePanel";
 import { InvestorTrendTable } from "./InvestorTrendTable";
 import { NewsDisclosurePanel } from "./NewsDisclosurePanel";
 import { PriceHeader } from "./PriceHeader";
+import { TabScroller } from "./TabScroller";
 import { OpinionPanel } from "./OpinionPanel";
 import { useLive } from "../useLive";
 import { SectorMoodPanel } from "./SectorMoodPanel";
@@ -242,7 +243,7 @@ export function StockDetail({
               서버에 저장되어 기기가 달라도 같은 순서다.
               JSX 를 재배열하지 않고 CSS `order` 만 준다.
             */}
-            <nav className="detail-tabs">
+            <TabScroller className="detail-tabs" activeKey={detailTab}>
               {DETAIL_TABS.map((t) => (
                 <button
                   key={t.key}
@@ -287,7 +288,7 @@ export function StockDetail({
               >
                 {editTabs ? "순서 끝" : "탭 순서"}
               </button>
-            </nav>
+            </TabScroller>
 
             {editTabs && (
               <div className="table-note">

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { tileHeat, useAppearance } from "../../useAppearance";
 import {
   api,
   fmtNum,
@@ -249,14 +250,7 @@ export function MoneyFlowSection() {
 
 /* ───────────────────────────────── D6·D7. 테마 MAP */
 
-/** MAP 페이지와 같은 색 규칙 — 두 화면에서 같은 등락률이 다른 색이면 안 된다 */
-function tileStyle(rate: number): React.CSSProperties {
-  const capped = Math.min(Math.abs(rate), 5) / 5; // 5% 이상은 최대 강도
-  const alpha = 0.12 + capped * 0.55;
-  if (rate > 0) return { background: `rgba(240, 85, 95, ${alpha})` };
-  if (rate < 0) return { background: `rgba(74, 139, 245, ${alpha})` };
-  return { background: "rgba(139, 150, 165, 0.12)" };
-}
+
 
 interface MiniTile {
   key: string;
@@ -282,6 +276,7 @@ function MapMini({
   empty: string;
   onOpen?: (t: ConstituentTarget) => void;
 }) {
+  const { theme } = useAppearance();
   if (tiles.length === 0) return <div className="empty">{empty}</div>;
   return (
     <div className="rp-map">
@@ -289,7 +284,7 @@ function MapMini({
         t.open && onOpen ? (
           <button
             className="rp-map-tile clickable"
-            style={tileStyle(t.rate)}
+            style={tileHeat(t.rate, theme)}
             key={t.key}
             title={`${t.name} — 눌러서 구성종목 보기`}
             onClick={() => onOpen(t.open!)}
@@ -299,7 +294,7 @@ function MapMini({
             {t.sub && <span className="rp-map-sub">{t.sub}</span>}
           </button>
         ) : (
-          <div className="rp-map-tile" style={tileStyle(t.rate)} key={t.key} title={t.name}>
+          <div className="rp-map-tile" style={tileHeat(t.rate, theme)} key={t.key} title={t.name}>
             <span className="rp-map-name">{t.name}</span>
             <span className="rp-map-pct num">{pct(t.rate)}</span>
             {t.sub && <span className="rp-map-sub">{t.sub}</span>}

@@ -1060,6 +1060,36 @@ body {
   color: var(--text);
 }
 
+/*
+ * 가로 탭 줄을 넘기는 좌우 버튼.
+ *
+ * 줄 **위에 겹쳐** 띄운다. 자리를 따로 잡으면 탭이 그만큼 좁아지는데, 탭이 모자라서
+ * 넣은 버튼이 탭을 더 좁히는 건 앞뒤가 안 맞는다. 뒤가 비치지 않게 그라데이션을 깐다.
+ */
+.tabscroll { position: relative; }
+.tabscroll-btn {
+  position: absolute;
+  top: 0;
+  bottom: 1px;                       /* 아래 테두리는 탭 줄의 것을 살린다 */
+  z-index: 2;
+  width: 26px;
+  padding: 0;
+  border: none;
+  color: var(--text);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.tabscroll-btn.left {
+  left: 0;
+  background: linear-gradient(to right, var(--panel) 60%, transparent);
+}
+.tabscroll-btn.right {
+  right: 0;
+  background: linear-gradient(to left, var(--panel) 60%, transparent);
+}
+.tabscroll-btn:hover { color: var(--blue); }
+
 /* 종목 상세 상단 가로 탭 */
 .detail-tabs {
   display: flex;
@@ -1317,12 +1347,30 @@ body {
   font-size: 0.6rem;
 }
 
+/*
+ * 왼쪽 고정 열 — 대개 **종목명**이 들어간다.
+ *
+ * ⚠️ 폭 제한이 없었다. 표는 가장 긴 칸에 맞춰 열을 늘리므로 「KODEX 코스닥150레버리지」
+ * 같은 ETF 이름 하나가 종목명 열을 통째로 넓혔고, 그만큼 **오른쪽 지표가 화면 밖으로
+ * 밀려났다.** 거래상위에서 거래회전율 열이 잘려 안 보이던 게 그것이다. 정작 보려던
+ * 값이 안 보이고 이름만 길게 남는 셈이다.
+ *
+ * 이름은 잘라도 알아본다 — 앞 몇 글자에 이미 「KODEX 코스닥150…」이라 다 들어 있다.
+ * 반면 지표는 잘리면 아무 뜻이 없다. 그래서 이름 쪽을 자른다.
+ *
+ * 좁은 화면에서는 화면 폭에 맞춰 더 줄인다. 폰에서 13rem 을 고집하면 이번엔 이름이
+ * 화면의 절반을 먹는다. 전체 이름은 마우스를 올리면 뜬다(`title`).
+ */
 .data-table .sticky-col {
   position: sticky;
   left: 0;
   background: var(--panel);
   text-align: left;
   z-index: 1;
+  max-width: min(13rem, 45vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .data-table th.sticky-col {

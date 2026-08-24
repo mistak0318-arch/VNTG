@@ -145,7 +145,8 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
                 const name = String(r.stk_nm ?? "");
                 return (
                   <tr key={`${code}-${i}`} onClick={() => onSelectStock(code, name)} className="clickable-row">
-                    <td className="sticky-col">
+                    {/* 이름이 길면 잘린다(CSS) — 전체는 마우스를 올려서 본다 */}
+                    <td className="sticky-col" title={name}>
                       <span className="rank-cell">{i + 1}. </span>
                       <WatchStar code={code} />
                       {name}

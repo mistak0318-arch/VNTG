@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { tileHeat, useAppearance } from "../useAppearance";
 import { useWatchGroupTiles, type GroupSource } from "../useWatchGroupTiles";
 import { api, type EvaluatedTheme, type SectorRow, type ThemeRow } from "../api";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
@@ -31,20 +32,14 @@ const WATCH_MODES: { key: Mode; label: string; source: GroupSource }[] = [
   { key: "watchUs", label: "관심종목 (해외)", source: "watchUs" },
 ];
 
-/** 등락률에 따라 타일 배경색 강도를 정한다 (한국식: 상승 빨강 / 하락 파랑) */
-function tileStyle(rate: number): React.CSSProperties {
-  const capped = Math.min(Math.abs(rate), 5) / 5; // 5% 이상은 최대 강도
-  const alpha = 0.12 + capped * 0.55;
-  if (rate > 0) return { background: `rgba(240, 85, 95, ${alpha})` };
-  if (rate < 0) return { background: `rgba(74, 139, 245, ${alpha})` };
-  return { background: "rgba(139, 150, 165, 0.12)" };
-}
+
 
 function fmtPct(v: number): string {
   return `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
 }
 
 export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
+  const { theme } = useAppearance();
   const [mode, setMode] = useState<Mode>("mine");
   const [sectorMarket, setSectorMarket] = useState<"kospi" | "kosdaq">("kospi");
   const [constituent, setConstituent] = useState<ConstituentTarget | null>(null);
@@ -193,7 +188,7 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
                   <button
                     key={t.id}
                     className="map-tile"
-                    style={tileStyle(t.changeRate)}
+                    style={tileHeat(t.changeRate, theme)}
                     onClick={() =>
                       setConstituent({
                         kind: "custom",
@@ -217,7 +212,7 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
                   <button
                     key={t.id}
                     className="map-tile"
-                    style={tileStyle(t.changeRate ?? 0)}
+                    style={tileHeat(t.changeRate ?? 0, theme)}
                     onClick={() =>
                       setConstituent({
                         kind: "custom",
@@ -256,7 +251,7 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
                   <button
                     key={t.code}
                     className="map-tile"
-                    style={tileStyle(t.changeRate)}
+                    style={tileHeat(t.changeRate, theme)}
                     onClick={() => setConstituent({ kind: "theme", code: t.code, name: t.name })}
                   >
                     <span className="map-tile-name">{t.name}</span>
@@ -268,7 +263,7 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
                   <button
                     key={s.code}
                     className="map-tile"
-                    style={tileStyle(s.changeRate)}
+                    style={tileHeat(s.changeRate, theme)}
                     onClick={() =>
                       setConstituent({ kind: "sector", code: s.code, name: s.name, market: sectorMarket })
                     }
