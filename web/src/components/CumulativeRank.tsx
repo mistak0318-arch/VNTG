@@ -38,6 +38,13 @@ export function CumulativeRank({
   onSelectStock?: (code: string, name: string) => void;
 }) {
   const [days, setDays] = useState(5);
+  /*
+   * 몇 종목을 대상으로 볼까 — 거래대금 상위 N 을 받아 그 안에서 누적등락률을 센다.
+   * 늘리면 그만큼 일봉을 더 받아야 해서 **처음 조회가 길어진다**(백 종목에 30초쯤).
+   */
+  const [universe, setUniverse] = useState<number>(
+    () => Number(localStorage.getItem("vntg.cum.universe")) || 100,
+  );
   const [market, setMarket] = useState("000");
   const [rows, setRows] = useState<Row[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -50,7 +57,7 @@ export function CumulativeRank({
     let alive = true;
     setBusy(true);
     setError(null);
-    fetch(`/api/rank/cumulative?days=${days}&market=${market}`)
+    fetch(`/api/rank/cumulative?days=${days}&market=${market}&universe=${universe}`)
       .then((r) => r.json())
       .then((j: { rows?: Row[]; note?: string; error?: string }) => {
         if (!alive) return;
@@ -63,7 +70,7 @@ export function CumulativeRank({
     return () => {
       alive = false;
     };
-  }, [days, market]);
+  }, [days, market, universe]);
 
   return (
     <div>
@@ -76,6 +83,28 @@ export function CumulativeRank({
             onClick={() => setDays(d)}
           >
             {d}일
+          </button>
+        ))}
+        {/*
+          대상 종목 수. 늘리면 일봉을 그만큼 더 받아야 해서 **처음 조회가 길어진다** —
+          버튼에 그걸 적어 둔다. 다시 볼 때는 10분 캐시라 즉시 뜬다.
+        */}
+        <span className="st-cfg-k">대상</span>
+        {[100, 200].map((n) => (
+          <button
+            key={n}
+            className={`filter-btn ${universe === n ? "active" : ""}`}
+            onClick={() => {
+              setUniverse(n);
+              try {
+                localStorage.setItem("vntg.cum.universe", String(n));
+              } catch {
+                /* 저장 못 해도 이번 세션에는 바뀐다 */
+              }
+            }}
+            title={n === 100 ? "거래대금 상위 100 (30초쯤)" : "거래대금 상위 200 (1분쯤)"}
+          >
+            {n}종목
           </button>
         ))}
         <span className="st-cfg-k">시장</span>

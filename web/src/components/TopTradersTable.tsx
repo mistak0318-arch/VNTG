@@ -1,3 +1,4 @@
+import { Pager, usePager } from "./Pager";
 import { fmtNum, normalizeStockCode, signClass, type TopTraderRow } from "../api";
 import { useSection } from "../useSection";
 
@@ -14,16 +15,19 @@ import { useSection } from "../useSection";
  */
 export function TopTradersTable({
   onSelectStock,
-  limit = 20,
 }: {
   onSelectStock?: (code: string, name: string) => void;
-  limit?: number;
 }) {
   const { data, loading, error } = useSection<TopTraderRow[]>("topTraders", 120_000);
+  const rows = data ?? [];
+  /*
+   * ⚠️ 훅은 **조기 return 앞**에 둔다. 아래 「불러오는 중」에서 먼저 빠져나가면 그 렌더에는
+   * 훅이 하나 모자라고, 다음 렌더에서 개수가 달라져 React 가 통째로 멎는다.
+   */
+  const pager = usePager(rows.length, "vntg.toptraders.pageSize", rows.length);
 
   if (loading && !data) return <div className="empty">불러오는 중…</div>;
   if (error && !data) return <div className="error-banner">{error}</div>;
-  const rows = data ?? [];
   if (rows.length === 0) return <div className="empty">데이터 없음</div>;
 
   return (
@@ -44,7 +48,7 @@ export function TopTradersTable({
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, limit).map((r) => (
+            {pager.slice(rows).map((r) => (
               <tr
                 key={r.code}
                 className={onSelectStock ? "clickable-row" : ""}
@@ -70,6 +74,7 @@ export function TopTradersTable({
           </tbody>
         </table>
       </div>
+      <Pager pager={pager} total={rows.length} unit="번째" />
       <div className="table-note">
         키움 <b>수익률 상위 고객</b> 계좌들의 매매입니다. 금액은 억원.
         <b> 계좌 수</b>를 같이 보세요 — 순매수가 커도 한 계좌면 그 사람 사정이고,
