@@ -1,3 +1,4 @@
+import { fixSector } from "./sectorFix.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -240,7 +241,8 @@ async function build(client: KiwoomClient): Promise<MarketSnapshot> {
           changeRate: r.changeRate,
           price: r.price ?? 0,
           marketCap: r.marketCap ?? null,
-          sector: t.name,
+          /* 지주사를 금융에 넣는 거래소 분류를 여기서도 고친다 — `sectorFix` 참고 */
+          sector: fixSector(code, t.name),
           market: t.market,
         });
       }

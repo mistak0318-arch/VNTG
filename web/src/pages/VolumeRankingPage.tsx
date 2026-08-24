@@ -1,3 +1,4 @@
+import { useAutoRefresh } from "../useAutoRefresh";
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtAbsNum, fmtNum, normalizeStockCode, pickList, signClass, type RawRecord } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
@@ -58,9 +59,12 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
   const rows = pickList(data ?? undefined, LIST_KEYS);
   const sort = useSortableTable(rows);
 
+  /* 장중에는 스스로 다시 받는다 — 새로고침을 누르러 오게 하면 안 된다 */
+  const auto = useAutoRefresh(() => void load(), { storeKey: "vntg.auto.volume", intervalMs: 20000 });
+
   return (
     <div>
-      <RefreshBar onRefresh={load} loading={loading} updatedAt={updatedAt} />
+      <RefreshBar onRefresh={load} loading={loading} updatedAt={updatedAt} auto={auto} />
       <div className="filter-row">
         {MARKETS.map((m) => (
           <button

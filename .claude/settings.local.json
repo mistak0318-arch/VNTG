@@ -660,7 +660,17 @@
       "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const r=\\(JSON.parse\\(d\\).orgn_frgnr_cont_trde_prst||[]\\); *)",
       "Bash(grep -n \"@media\\\\|/\\\\*\")",
       "Bash(awk 'NR>=1390 && NR<=1448 && \\(/@media/ || /^}/\\)' src/styles.css)",
-      "Bash(awk -F: '$1>1380 && $1<1450')"
+      "Bash(awk -F: '$1>1380 && $1<1450')",
+      "Bash(git -C .. status --short)",
+      "Bash(curl -s --max-time 30 \"http://localhost:4000/api/market/search?q=에코프로\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);for\\(const r of \\(j.results||[]\\).slice\\(0,6\\)\\)console.log\\(r.code,\\(r.name||''\\).padEnd\\(14\\),'|',r.marketName,'|',r.sectorName\\)}\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 15 \"http://localhost:4000/api/market/status\")",
+      "Bash(curl -s --max-time 30 --get --data-urlencode \"q=에코프로\" \"http://localhost:4000/api/market/search\")",
+      "Bash(curl -s --max-time 40 \"http://localhost:4000/api/rank/market-cap?market=000&limit=300&force=1\")",
+      "Bash(curl -s --max-time 40 \"http://localhost:4000/api/rank/market-cap?market=000&limit=300\")",
+      "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const rows=JSON.parse\\(d\\).rows||[]; *)",
+      "Bash(curl -s --max-time 40 \"http://localhost:4000/api/signal/005930\")",
+      "Bash(curl -s --max-time 40 \"http://localhost:4000/api/signal/034730\")"
     ]
   }
 }

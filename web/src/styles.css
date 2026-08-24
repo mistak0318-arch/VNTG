@@ -6223,3 +6223,16 @@ button.ib-cell:hover { background: var(--panel-2); }
   padding-right: 4px;
   text-align: right;
 }
+
+/* 스스로 갱신하는 화면의 스위치 — 새로고침 버튼 옆 */
+.refresh-auto {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  margin-right: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.refresh-auto.on { border-color: var(--blue); color: var(--blue); }

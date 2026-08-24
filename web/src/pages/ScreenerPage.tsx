@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { removePref, setPref } from "../prefs";
 import { api, fmtNum, type RankResult, type RankSpecGroup } from "../api";
 import { SameNetTradeRankingPage } from "./SameNetTradeRankingPage";
@@ -8,6 +8,7 @@ import { CumulativeRank } from "../components/CumulativeRank";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { useCardOrder } from "../useCardOrder";
+import { useAutoRefresh } from "../useAutoRefresh";
 
 /**
  * 시세분석 — **실제로 보는 다섯 개를 앞에 세운다.**
@@ -237,19 +238,34 @@ export function ScreenerPage({
       .catch((e: Error) => setError(e.message));
   }, []);
 
+  /*
+   * 조회를 한 번 부른다.
+   *
+   * `quiet` 는 **스스로 다시 받을 때** 쓴다 — 그때 로딩을 띄우면 이십 초마다 표가
+   * 깜빡이고, 읽던 자리를 놓친다. 값만 조용히 갈아끼운다.
+   */
+  const fetchRank = useCallback(
+    (quiet = false) => {
+      if (!quiet) setLoading(true);
+      setError(null);
+      api
+        .rank(rankKey, market, exchange, limit)
+        .then((r) => setData(r))
+        .catch((e: Error) => setError(e.message))
+        .finally(() => setLoading(false));
+    },
+    [rankKey, market, exchange, limit],
+  );
+
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    api
-      .rank(rankKey, market, exchange, limit)
-      .then((r) => !cancelled && setData(r))
-      .catch((e: Error) => !cancelled && setError(e.message))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [rankKey, market, exchange, limit]);
+    fetchRank();
+  }, [fetchRank]);
+
+  /* 장중에는 스스로 다시 받는다 — 순위는 계속 뒤집히는 값이다 */
+  const auto = useAutoRefresh(() => fetchRank(true), {
+    storeKey: "vntg.auto.screener",
+    intervalMs: 20_000,
+  });
 
   /* 조회가 바뀌면 첫 장으로 — 3쪽을 보다가 다른 순위로 갔는데 3쪽이면 빈 화면이 뜬다 */
   useEffect(() => {
@@ -486,6 +502,23 @@ export function ScreenerPage({
                 </span>
               ) : null;
             })()}
+          {/*
+            스스로 갱신 스위치. 순위는 장중에 계속 뒤집히는 값이라 새로고침을 누르러
+            오게 하면 안 된다. 장이 닫혀 있으면 켜져 있어도 쉰다.
+          */}
+          <button
+            className={`refresh-auto${auto.on ? " on" : ""}`}
+            onClick={auto.toggle}
+            title={
+              auto.on
+                ? auto.marketOpen
+                  ? "장중에는 20초마다 스스로 다시 받습니다 — 눌러서 끄기"
+                  : "켜져 있지만 장이 닫혀 쉬는 중입니다"
+                : "스스로 다시 받게 하기"
+            }
+          >
+            {auto.on ? (auto.marketOpen ? "⟳ 자동" : "⟳ 자동(대기)") : "⟳ 자동 꺼짐"}
+          </button>
           <button
             className={`filter-btn ${sigOn ? "active" : ""}`}
             onClick={() => setSigOn((v) => !v)}

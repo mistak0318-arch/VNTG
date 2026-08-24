@@ -6,6 +6,7 @@ import { analystOpinion } from "./analystOpinion.js";
 import { getFinance } from "./dartFinance.js";
 import { latestRatio } from "./financialRatio.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { evaluateThemes } from "./customThemes.js";
 import { getSectorMood } from "./sectorMood.js";
 import { findStock } from "./stockListCache.js";
 
@@ -61,6 +62,8 @@ export type CheckKey =
   | "trend"
   | "nearHigh"
   | "sectorStrength"
+  | "themeStrength"
+  | "myThemeStrength"
   | "foreignFlow"
   | "instFlow"
   | "flowStreak"
@@ -168,15 +171,48 @@ export const DEFAULT_CONFIG: SignalConfig = {
       hint: "현재가가 52주 고가의 몇 %인가. 신고가 부근일수록 높다",
       cost: 0,
     },
+    /*
+     * 「어느 무리에 속했나」는 **세 갈래**다. 하나로 합치면 답이 흐려진다.
+     *
+     *   업종   거래소가 정한 분류. 업종 지수와 업종 수급이라는 **실제 데이터**가 붙는다
+     *   테마   시장이 부르는 이름. 키움이 묶어 준다 — 업종과 자주 어긋나는데 그게 정보다
+     *   내 테마 내가 묶은 것. 남이 안 묶은 걸 묶으려고 만든 자리라 남의 분류와 섞으면 뜻이 없다
+     *
+     * 셋이 같은 말을 하면 그건 센 신호고, 갈리면 왜 갈리는지가 볼거리다.
+     * 각각 켜고 끌 수 있게 따로 둔다.
+     */
     {
       key: "sectorStrength",
-      label: "섹터 강세",
+      label: "업종 강세",
       axis: "trend",
       enabled: true,
       weight: 1,
       threshold: 0,
       strongAt: 1.5,
-      hint: "소속 업종 등락률(%)",
+      hint: "소속 업종 등락률(%). ⚠️ 지주사는 업종 지수가 없어 못 냅니다",
+      cost: 0,
+    },
+    {
+      key: "themeStrength",
+      label: "테마 강세",
+      axis: "trend",
+      enabled: true,
+      weight: 1,
+      threshold: 0,
+      strongAt: 2,
+      hint: "이 종목이 든 키움 테마 중 **가장 센 것**의 등락률(%)",
+      cost: 0,
+    },
+    {
+      key: "myThemeStrength",
+      label: "내 테마 강세",
+      axis: "trend",
+      /* 내 테마를 안 만들었으면 늘 빈칸이라 기본은 꺼 둔다 */
+      enabled: false,
+      weight: 1,
+      threshold: 0,
+      strongAt: 2,
+      hint: "내가 묶은 테마 중 이 종목이 든 것의 등락률(%)",
       cost: 0,
     },
     // ---------------- 수급 ----------------
@@ -566,10 +602,27 @@ export async function evaluateSignal(
   const wantRatio = need.has("roe") || need.has("debtRatio");
   const wantFlow = need.has("foreignFlow") || need.has("instFlow") || need.has("flowStreak");
   const wantFinance = need.has("profitGrowth");
-  const wantSector = need.has("sectorStrength") || need.has("exportGrowth");
+  /* 테마 강세도 같은 조회에서 나온다 — `getSectorMood` 가 업종과 테마를 같이 준다 */
+  const wantSector =
+    need.has("sectorStrength") || need.has("themeStrength") || need.has("exportGrowth");
+  const wantMyTheme = need.has("myThemeStrength");
   const wantInfo = need.has("marketCap") || need.has("volume");
   const wantShort = need.has("shortSaleUp");
   const wantLending = need.has("lendingUp");
+
+  /*
+   * 내 테마는 **전부 평가한 목록**에서 이 종목이 든 것만 고른다. 종목마다 다시 평가하면
+   * 신호등 하나에 스물여덟 테마를 새로 계산하게 된다 — 목록은 그 안에서 캐싱된다.
+   */
+  const myThemes = wantMyTheme
+    ? await evaluateThemes(client)
+        .then((r) =>
+          r.themes
+            .filter((t) => t.codes.includes(code))
+            .map((t) => ({ name: t.name, rate: t.changeRate ?? 0 })),
+        )
+        .catch(() => [])
+    : [];
 
   const [chart, flow, finance, mood, entry, info, shortSale, lending, opinion, ratio] =
     await Promise.all([
@@ -663,13 +716,43 @@ export async function evaluateSignal(
         value = `52주 고가의 ${pct.toFixed(0)}%`;
       }
     } else if (c.key === "sectorStrength") {
-      if (mood?.sector) {
+      /*
+       * ⚠️ **업종 지수를 못 찾았으면 점수를 주지 않는다.**
+       *
+       * 못 찾은 경우 등락률이 0 으로 온다. 그걸 그대로 재면 기준이 0 이라 **통과로
+       * 잡힌다** — 실제로 SK 가 「지주 0.00%」로 O 를 받았다. 없는 값이 점수를 만드는
+       * 건 틀린 것보다 나쁘다. 여러 사업을 거느린 지주사는 업종 하나로 잴 수 없는 게
+       * 맞으므로, 그렇게 말하고 비워 둔다.
+       */
+      if (mood?.sector?.code) {
         g = grade(mood.sector.changeRate, c);
         value = `${mood.sector.name} ${mood.sector.changeRate > 0 ? "+" : ""}${mood.sector.changeRate.toFixed(2)}%`;
-        // 업종지수 코드를 찾은 경우에만 구성종목을 열 수 있다
-        if (mood.sector.code) {
-          link = { kind: "sector", code: mood.sector.code, name: mood.sector.name };
-        }
+        link = { kind: "sector", code: mood.sector.code, name: mood.sector.name };
+      } else if (mood?.sector) {
+        value = `${mood.sector.name} — 업종 지수가 없습니다`;
+      }
+    } else if (c.key === "themeStrength") {
+      /*
+       * 든 테마 중 **가장 센 것**을 쓴다. 평균을 내면 여러 테마에 걸친 종목이 늘
+       * 밋밋해진다 — 오늘 그 종목을 끌고 있는 건 대개 그중 하나다.
+       */
+      const best = (mood?.themes ?? []).reduce<{ name: string; changeRate: number; code: string } | null>(
+        (top, t) => (top === null || t.changeRate > top.changeRate ? t : top),
+        null,
+      );
+      if (best) {
+        g = grade(best.changeRate, c);
+        value = `${best.name} ${best.changeRate > 0 ? "+" : ""}${best.changeRate.toFixed(2)}%`;
+        if (best.code) link = { kind: "theme", code: best.code, name: best.name };
+      }
+    } else if (c.key === "myThemeStrength") {
+      const best = (myThemes ?? []).reduce<{ name: string; rate: number } | null>(
+        (top, t) => (top === null || t.rate > top.rate ? t : top),
+        null,
+      );
+      if (best) {
+        g = grade(best.rate, c);
+        value = `${best.name} ${best.rate > 0 ? "+" : ""}${best.rate.toFixed(2)}%`;
       }
     } else if (c.key === "foreignFlow" || c.key === "instFlow") {
       if (flowRows.length > 0) {

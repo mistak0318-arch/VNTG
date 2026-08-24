@@ -122,7 +122,14 @@ export async function getSectorMood(client: KiwoomClient, code: string): Promise
           marketKey: isKospi ? "kospi" : "kosdaq",
         };
       } else {
-        // 업종지수와 이름이 안 맞으면 이름만 보여주고 구성종목 조회는 막는다
+        /*
+         * 업종지수와 이름이 안 맞으면 이름만 보여주고 구성종목 조회는 막는다.
+         *
+         * ⚠️ **지주사는 여기로 온다.** 거래소가 지주회사를 금융업에 넣는 걸 우리가
+         * 「지주」로 옮겨 놨는데(`sectorFix`), 키움에는 그런 업종 지수가 없다.
+         * 이건 고장이 아니라 **낼 수 없는 값**이다 — 여러 사업을 거느린 회사를 업종
+         * 하나로 재는 것 자체가 안 맞으므로, 없다고 말하는 편이 맞다.
+         */
         sector = {
           code: "",
           name: entry.sectorName,

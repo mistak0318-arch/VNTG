@@ -1,3 +1,4 @@
+import { fixSector } from "./sectorFix.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 
 export interface StockEntry {
@@ -34,7 +35,11 @@ async function fetchMarket(client: KiwoomClient, mrktTp: string): Promise<StockE
     code: String(item.code ?? ""),
     name: String(item.name ?? ""),
     marketName: String(item.marketName ?? ""),
-    sectorName: String(item.upName ?? ""),
+    /*
+      거래소 분류는 **지주회사를 금융업에 넣는다.** 그대로 두면 「금융」이 지주사
+      바구니가 되어 업종 수급이 뜻을 잃는다 — `sectorFix` 에 그 사연이 적혀 있다.
+    */
+    sectorName: fixSector(String(item.code ?? ""), String(item.upName ?? "")),
     sizeName: String(item.upSizeName ?? ""),
     marketCode: mrktTp,
     // "0000000730492365" 처럼 0으로 패딩되어 온다
