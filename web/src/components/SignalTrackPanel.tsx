@@ -223,10 +223,15 @@ export function SignalTrackPanel({
             <span className="st-cfg-k">모집단</span>
             <span>
               거래대금 상위{" "}
+              {/*
+                ⚠️ `max` 가 200 이었다. 그 위를 적으면 **조용히 되돌아갔다** — 왜 안 되는지
+                화면이 아무 말도 안 하니 고장으로 보인다. 서버도 200 에서 자르고 있었고,
+                정작 스크리너는 500 까지 받았다. 셋을 500 으로 맞춘다.
+              */}
               <input
                 type="number"
                 min={10}
-                max={200}
+                max={500}
                 step={10}
                 value={cfg.universe}
                 onChange={(e) => saveCfg({ universe: Number(e.target.value) })}
@@ -235,8 +240,9 @@ export function SignalTrackPanel({
             </span>
           </div>
           <div className="st-cfg-note">
-            전 종목을 평가하면 몇 시간이 걸립니다. 늘릴수록 오래 걸립니다 —{" "}
-            <b>종목당 대략 2~3초</b>. 60종목이면 3분쯤입니다.
+            늘릴수록 오래 걸립니다 — <b>종목당 대략 2~3초</b>. 지금 설정한{" "}
+            <b>{cfg.universe}종목이면 {Math.max(1, Math.round((cfg.universe * 2.5) / 60))}분쯤</b>{" "}
+            입니다. 최대 500 종목까지 됩니다.
           </div>
 
           <div className="st-cfg-row">

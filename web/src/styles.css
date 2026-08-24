@@ -1231,6 +1231,28 @@ body {
   gap: 4px;
 }
 
+/*
+  고·저 괴리 — 범례 오른쪽 끝으로 민다(`margin-left:auto`).
+  MA 범례는 개수가 설정마다 달라서 고정 자리를 못 준다. 오른쪽 끝에 붙여 두면
+  이평선을 몇 개 켜든 늘 같은 자리에 있다.
+*/
+.chart-gap {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.chart-gap b {
+  font-weight: 400;
+}
+
+.chart-gap i {
+  font-style: normal;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .legend-item i {
   width: 8px;
   height: 2px;

@@ -8,7 +8,7 @@ import {
   type SeriesMarker,
   type Time,
 } from "lightweight-charts";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { chartColors, useAppearance } from "../useAppearance";
 import { useChartPrefs } from "../useChartPrefs";
 
@@ -197,6 +197,21 @@ export function CandleChart({
    */
   const hiLineRef = useRef<IPriceLine | null>(null);
   const loLineRef = useRef<IPriceLine | null>(null);
+
+  /**
+   * **지금 값이 고점에서 얼마나 내려왔고 저점에서 얼마나 올라왔나.**
+   *
+   * 고·저 점선과 「고」·「저」 화살표는 이미 그리고 있었다. 그런데 **어느 자리인지만
+   * 보여주고 얼마나 떨어졌는지는 안 말해 준다** — 497,500 과 362,000 을 눈으로 보고
+   * 머릿속에서 나눠야 −27.2% 가 나온다. 매매에서 쓰는 건 그 퍼센트다.
+   *
+   * 차트 위에 겹쳐 쓰지 않는다(예전에 말풍선이 캔들을 가려서 뺐다). 범례 옆 한 줄이다.
+   * **보이는 구간 기준**이라 확대·이동하면 그 구간의 고·저로 다시 계산된다 — 점선과
+   * 화살표가 이미 그 규칙이므로 셋이 늘 같은 말을 한다.
+   */
+  const [gap, setGap] = useState<{ hi: number; lo: number; hiPct: number; loPct: number } | null>(
+    null,
+  );
 
   // ── 차트 생성 (테마·분봉 여부가 바뀔 때만) ────────────────────────────
   useEffect(() => {
@@ -452,14 +467,13 @@ export function CandleChart({
      * 전체 기간이 아니라 "지금 화면에 보이는 구간" 기준이라, 확대·이동하면 그 구간의
      * 고점/저점으로 다시 계산된다.
      */
-    if (!showExtremes || candles.length < 2) return;
+    if (!showExtremes || candles.length < 2) {
+      setGap(null); // 껐거나 봉이 모자라면 판독 줄도 지운다 — 옛 값이 남으면 거짓말이다
+      return;
+    }
 
+    /* 괴리의 기준은 **지금 값**이다 — 보이는 구간이 어디든 「현재가가 얼마나 왔나」다 */
     const last = candles[candles.length - 1].close;
-    const pct = (v: number) => {
-      const r = ((last - v) / v) * 100;
-      return `${r > 0 ? "+" : ""}${r.toFixed(2)}%`;
-    };
-    const won = (v: number) => v.toLocaleString("ko-KR");
 
     const refresh = () => {
       const range = chart.timeScale().getVisibleLogicalRange();
@@ -483,7 +497,7 @@ export function CandleChart({
        * 게다가 화살표에도 같은 값을 또 적어서 한 정보가 두 겹이었다.
        *
        * 값은 **오른쪽 축**에 뜬다(`axisLabelVisible`). 어느 봉인지는 화살표가 알려 준다.
-       * 날짜와 괴리율은 아래 판독 줄에 있다 — 차트 위에 겹쳐 쓸 값이 아니다.
+       * 괴리율은 **범례 줄 오른쪽 끝**(`.chart-gap`)에 있다 — 차트 위에 겹쳐 쓸 값이 아니다.
        */
       hiLineRef.current = candleSeries.createPriceLine({
         price: hi.high,
@@ -513,6 +527,18 @@ export function CandleChart({
           ? [markers[0]]
           : [...markers].sort((a, b) => timeValue(a.time) - timeValue(b.time)),
       );
+
+      /* 판독 줄에 쓸 값 — 점선·화살표와 **같은 구간, 같은 고저**에서 낸다 */
+      setGap(
+        hi.high > 0 && lo.low > 0
+          ? {
+              hi: hi.high,
+              lo: lo.low,
+              hiPct: ((last - hi.high) / hi.high) * 100,
+              loPct: ((last - lo.low) / lo.low) * 100,
+            }
+          : null,
+      );
     };
 
     chart.timeScale().subscribeVisibleLogicalRangeChange(refresh);
@@ -540,6 +566,20 @@ export function CandleChart({
             MA{m.period}
           </span>
         ))}
+        {/*
+          고·저 괴리 — 범례 **오른쪽 끝**에 붙인다. 차트 안에 겹쳐 쓰면 캔들을 가리고,
+          아래에 따로 줄을 만들면 차트 높이를 먹는다. 범례 줄은 이미 비어 있다.
+        */}
+        {gap && (
+          <span className="chart-gap">
+            <b title={`구간 최고 ${gap.hi.toLocaleString("ko-KR")}`}>
+              고점 <i className="negative">{gap.hiPct.toFixed(1)}%</i>
+            </b>
+            <b title={`구간 최저 ${gap.lo.toLocaleString("ko-KR")}`}>
+              저점 <i className="positive">+{gap.loPct.toFixed(1)}%</i>
+            </b>
+          </span>
+        )}
       </div>
       <div className="candle-host">
         <div ref={containerRef} style={{ width: "100%" }} />

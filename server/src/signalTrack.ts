@@ -595,7 +595,13 @@ export async function saveTrackConfig(input: Partial<TrackConfig>): Promise<Trac
   store.config = {
     // 문턱을 하나도 안 고르면 담을 게 없다 — 그건 설정이 아니라 사고다
     tiers: tiers.length > 0 ? [...new Set(tiers)].sort((a, b) => a - b) : store.config.tiers,
-    universe: Math.min(Math.max(Number(input.universe ?? store.config.universe) || 60, 10), 200),
+    /*
+     * ⚠️ 200 에서 막고 있었다. 화면 입력칸에도 `max={200}` 이 걸려 있어서 그 위를
+     * 적으면 조용히 되돌아갔다 — 왜 안 되는지 화면이 말해 주지 않는다.
+     * 스크리너(`signalScreen`)는 이미 500 까지 받으므로 같은 자리에 맞춘다.
+     * 종목당 2~3초라 500 이면 20분쯤 걸린다 — 그건 화면이 적어 준다.
+     */
+    universe: Math.min(Math.max(Number(input.universe ?? store.config.universe) || 60, 10), 500),
     market: (["000", "001", "101"] as const).includes(input.market as "000")
       ? (input.market as TrackConfig["market"])
       : store.config.market,
