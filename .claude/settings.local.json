@@ -652,7 +652,12 @@
       "Bash(curl -s --max-time 20 \"http://localhost:4000/api/realtime/store\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('결과',j.results?.length,'| 처음',JSON.stringify\\(j.results?.[0]\\)\\)}\\)\")",
       "Bash(curl -s --max-time 45 \"http://localhost:4000/api/rank/market-cap?market=000&limit=100\")",
-      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const r=j.rows||[];console.log\\('건수',r.length\\);for\\(const x of r.slice\\(0,6\\)\\)console.log\\(String\\(x.rank\\).padStart\\(3\\),\\(x.name||''\\).padEnd\\(14\\),String\\(x.cur_prc\\).padStart\\(9\\),'시총',x.cap\\)}\\)\")"
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const r=j.rows||[];console.log\\('건수',r.length\\);for\\(const x of r.slice\\(0,6\\)\\)console.log\\(String\\(x.rank\\).padStart\\(3\\),\\(x.name||''\\).padEnd\\(14\\),String\\(x.cur_prc\\).padStart\\(9\\),'시총',x.cap\\)}\\)\")",
+      "Bash(curl -s --max-time 40 \"http://localhost:4000/api/ranking/continuous-trade?market=001&days=3\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const r=j.orgn_frgnr_cont_trde_prst||[];console.log\\('행',r.length\\);if\\(r[0]\\)console.log\\('필드에 cap/tv/turn 있나:', 'cap' in r[0], 'tv' in r[0], 'turn' in r[0], '| 예:', r[0].stk_nm, r[0].cap, r[0].tv, r[0].turn\\)}\\)\")",
+      "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const j=JSON.parse\\(d\\);const r=\\(j.orgn_frgnr_cont_trde_prst||[]\\)[0]; *)",
+      "Bash(curl -s --max-time 45 \"http://localhost:4000/api/ranking/continuous-trade?market=001&days=3\")",
+      "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const r=\\(JSON.parse\\(d\\).orgn_frgnr_cont_trde_prst||[]\\); *)"
     ]
   }
 }

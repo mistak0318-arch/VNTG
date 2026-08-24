@@ -63,6 +63,18 @@ export interface ChartTarget {
   label: string;
   /** 소수점 자릿수. 지수는 2, 금리는 3 */
   digits?: number;
+  /**
+   * **목록이 보여 준 등락률.** 있으면 그걸 그대로 쓴다.
+   *
+   * ⚠️ 시트는 일봉 마지막 두 봉으로 전일 대비를 냈다. 그런데 무엇이 「전일」인지는
+   * 종목마다 다르다 — **코스피 야간선물**은 정규장 선물 종가를 이어받아 시작하므로
+   * 전일 대비도 그 기준인데, 일봉으로 세면 **어제 야간 종가**가 기준이 된다.
+   * 실제로 카드가 −1.55%, 눌러서 연 시트가 −3.68% 로 갈렸다(기준이 1051.7 과 1074.9).
+   *
+   * 목록이 이미 옳은 값을 들고 있으면 그걸 넘겨받는 게 맞다. **같은 값을 두 번 계산하면
+   * 언젠가 갈라진다** — 그때마다 어느 쪽이 맞는지 사람이 판정해야 한다.
+   */
+  hintRate?: number | null;
 }
 
 const W = 720;
@@ -234,14 +246,20 @@ export function YahooChartSheet({
       bodyW,
       baseY: base === null ? null : y(base),
       last,
-      dayRate: dayBase !== null && dayBase > 0 ? ((last - dayBase) / dayBase) * 100 : null,
+      /* 목록이 준 값이 있으면 그게 먼저다 — 두 화면이 갈라지지 않는 유일한 방법이다 */
+      dayRate:
+        target.hintRate !== undefined && target.hintRate !== null
+          ? target.hintRate
+          : dayBase !== null && dayBase > 0
+            ? ((last - dayBase) / dayBase) * 100
+            : null,
       rate: from > 0 ? ((last - from) / from) * 100 : 0,
       loLabel: Math.min(...candles.map((c) => c.low)),
       hiLabel: Math.max(...candles.map((c) => c.high)),
       firstT: candles[0].t,
       lastT: candles[candles.length - 1].t,
     };
-  }, [candles, range, data]);
+  }, [candles, range, data, target.hintRate]);
 
   const up = (view?.rate ?? 0) >= 0;
 

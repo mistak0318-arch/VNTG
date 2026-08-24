@@ -84,7 +84,10 @@ function IndexBoxes({
           type="button"
           className={`ov-idx clickable usb-idx${b.signal ? ` sig-${b.signal.level}` : ""}`}
           key={b.key}
-          onClick={() => onPick({ symbol: b.symbol, label: b.label, digits: b.digits })}
+          /* 카드가 든 등락률을 그대로 넘긴다 — 시트가 다시 세면 기준이 갈린다 */
+          onClick={() =>
+            onPick({ symbol: b.symbol, label: b.label, digits: b.digits, hintRate: b.changeRate })
+          }
           title="눌러서 차트 보기"
         >
           <div className="ov-idx-name">{b.label}</div>
@@ -230,6 +233,8 @@ export function UsBoardPanel() {
                   symbol: night.symbol,
                   label: "코스피 야간선물",
                   digits: night.digits,
+                  /* 카드가 든 값을 그대로 넘긴다 — 시트가 다시 세면 기준이 갈린다 */
+                  hintRate: night.changeRate,
                 })
               }
               title="눌러서 차트 보기"

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { attachExtras } from "../rankExtras.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 
 const RKINFO_RESOURCE = "/api/dostk/rkinfo";
@@ -10,6 +11,23 @@ function todayYyyymmdd(): string {
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}${m}${d}`;
+}
+
+
+/**
+ * 목록에 거를 재료를 붙여 **원래 모양 그대로** 돌려준다.
+ *
+ * 화면은 키움 응답을 그대로 읽으므로 **감싸지 않는다** — 감싸면 읽는 쪽을 다 고쳐야 한다.
+ * 목록 자리의 줄만 바꿔 끼운다.
+ */
+async function withExtras(
+  client: KiwoomClient,
+  data: Record<string, unknown>,
+  listKey: string,
+): Promise<Record<string, unknown>> {
+  const rows = Array.isArray(data[listKey]) ? (data[listKey] as Record<string, unknown>[]) : [];
+  if (rows.length === 0) return data;
+  return { ...data, [listKey]: await attachExtras(client, rows) };
 }
 
 export function createRankingRouter(client: KiwoomClient): Router {
@@ -31,7 +49,7 @@ export function createRankingRouter(client: KiwoomClient): Router {
         mrkt_open_tp: "0",
         stex_tp: "3", // 통합 — 거래대금은 하루 전체(NXT 프리 + KRX 정규 + NXT 애프터)가 맞다
       });
-      res.json(data);
+      res.json(await withExtras(client, data, "tdy_trde_qty_upper"));
     } catch (err) {
       next(err);
     }
@@ -73,7 +91,11 @@ export function createRankingRouter(client: KiwoomClient): Router {
         unit_tp: "1",
         stex_tp: "1",
       });
-      res.json(data);
+      /*
+        시세분석의 필터가 이 탭에서도 걸리려면 **줄마다 시총·거래대금·회전율**이 있어야 한다.
+        같은 화면인데 탭에 따라 필터가 쉬면 그때마다 다시 확인해야 한다.
+      */
+      res.json(await withExtras(client, data, "eql_nettrde_rank"));
     } catch (err) {
       next(err);
     }
@@ -94,7 +116,7 @@ export function createRankingRouter(client: KiwoomClient): Router {
         amt_qty_tp: "0", // 0:금액
         stex_tp: "1",
       });
-      res.json(data);
+      res.json(await withExtras(client, data, "orgn_frgnr_cont_trde_prst"));
     } catch (err) {
       next(err);
     }
