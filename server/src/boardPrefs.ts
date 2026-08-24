@@ -38,6 +38,13 @@ export interface BoardPreset {
   pins: string[];
   /** 칸마다 붙들어 둔 종목 */
   locks: Record<string, { code: string; name: string }>;
+  /**
+   * 잠갔나 — 이름·순서·삭제·덮어쓰기가 막힌다.
+   *
+   * 배치를 헤집다가 **돌아올 자리**가 필요해서 있는 것이다. 무엇을 잠글지는 쓰는 사람이
+   * 정한다 — 예전엔 우리가 지은 구성 셋을 코드에 박아 뒀는데 정작 안 쓰였다.
+   */
+  locked?: boolean;
 }
 
 export interface BoardPrefs {
@@ -77,6 +84,7 @@ function clean(raw: unknown): BoardPrefs {
 
     presets.push({
       id: o.id,
+      locked: o.locked === true,
       name: typeof o.name === "string" && o.name ? o.name : o.id,
       pick: Array.isArray(o.pick) ? o.pick.filter((x): x is string => typeof x === "string") : [],
       sizes,

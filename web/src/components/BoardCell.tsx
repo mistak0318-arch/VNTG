@@ -52,6 +52,7 @@ export function BoardCell({
   locked,
   onToggleLock,
   onDuplicate,
+  onPopOut,
   onPickStock,
   children,
 }: {
@@ -89,6 +90,8 @@ export function BoardCell({
    * 칸 목록이 블록 키였을 땐 그게 안 됐다. 복제한 칸은 크기·고정·종목이 **따로** 논다.
    */
   onDuplicate?: () => void;
+  /** 이 칸만 새 창으로 — 모니터를 여러 대 쓸 때 */
+  onPopOut?: () => void;
   /**
    * 이 칸만 다른 종목으로.
    *
@@ -239,6 +242,15 @@ export function BoardCell({
             ⧉
           </button>
         )}
+        {/*
+          ⧉ 는 **복제**(이 화면에 칸 하나 더)이고 ⇱ 는 **새 창**이다. 둘은 다른 일이라
+          아이콘을 따로 둔다 — 하나로 합치면 어느 쪽이 될지 눌러 봐야 안다.
+        */}
+        {onPopOut && (
+          <button className="board-pop" onClick={onPopOut} title="이 칸만 새 창으로">
+            ⇱
+          </button>
+        )}
         <button
           className={`board-pin${pinned ? " on" : ""}`}
           onClick={onPin}
@@ -272,7 +284,7 @@ export function BoardCell({
  *
  * 찾은 종목은 **그 칸에 붙든다**(자물쇠가 잠긴다). 연동을 따라가게 하려면 자물쇠를 푼다.
  */
-function CellStockFinder({
+export function CellStockFinder({
   onPick,
   onClose,
 }: {

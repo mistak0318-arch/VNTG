@@ -2664,4 +2664,6 @@ export interface BoardPresetDto {
   sizes: Record<string, { w: number; h: number }>;
   pins: string[];
   locks: Record<string, { code: string; name: string }>;
+  /** 잠갔나 — 이름·순서·삭제·덮어쓰기가 막힌다 */
+  locked?: boolean;
 }

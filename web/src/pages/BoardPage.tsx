@@ -28,7 +28,7 @@ import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
 import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
 import { SupplyMini } from "../components/SupplyMini";
 import { useStockFocus } from "../useStockFocus";
-import { BoardCell, type CellSize } from "../components/BoardCell";
+import { BoardCell, CellStockFinder, type CellSize } from "../components/BoardCell";
 import { winStore } from "../boardStore";
 
 /**
@@ -294,25 +294,24 @@ const PRESET_KEY = "vntg.board.presets";
  *
  * ## 이 셋은 **못 고치고 못 지운다**
  *
- * 나머지 구성은 마음대로 만들고 지우는데, K1~K3 만은 박아 둔다.
- * **돌아올 자리**가 필요해서다 — 배치를 이리저리 헤집다가 「원래대로」가 없으면
- * 처음부터 다시 짜야 한다. 실제로 한 번 지워져서 다시 만들었다.
+ * 나머지 구성은 마음대로 만들고 지우는데, **잠근 것**은 못 건드린다.
  *
- * 잠긴 건 이름·순서·삭제뿐이다. **불러오는 건 그대로** 되고, 불러온 뒤 화면에서
+ * ## 왜 잠그나
+ *
+ * **돌아올 자리**가 필요해서다 — 배치를 이리저리 헤집다가 「원래대로」가 없으면 처음부터
+ * 다시 짜야 한다. 실제로 한 번 지워져서 다시 만들었다.
+ *
+ * ⚠️ 예전엔 `K1`~`K3` 라는 **우리가 지은 구성 셋을 코드에 박아** 뒀다. 그런데 돌아올
+ * 자리는 쓰는 사람이 정하는 것이지 우리가 정해 줄 게 아니다 — 실제로 그 셋은 안 쓰이고
+ * 사람이 따로 만든 구성이 그 자리를 하고 있었다. 씨앗을 없애고 **자물쇠를 사람 손에** 준다.
+ *
+ * 잠긴 건 이름·순서·삭제·덮어쓰기다. **불러오는 건 그대로** 되고, 불러온 뒤 화면에서
  * 칸을 바꾸는 것도 자유다 — 그건 구성이 아니라 지금 화면이라서다.
- * 바꾼 배치를 남기고 싶으면 「＋ 새로 담기」로 내 구성을 만들면 된다.
+ * 바꾼 배치를 남기고 싶으면 「＋ 새로 담기」로 새 구성을 만들면 된다.
  */
-const FIXED_IDS = new Set(["k1", "k2", "k3"]);
 
-/** 박아 둔 구성인가 — 이름·순서·삭제가 막힌다 */
-function isFixed(id: string): boolean {
-  return FIXED_IDS.has(id);
-}
-const SEED: Preset[] = [
-  { id: "k1", name: "K1 시장 보기", pick: ["mktIndex", "mktSignal", "mktVi", "mktBreadth", "mktSector"], sizes: {}, pins: [] },
-  { id: "k2", name: "K2 종목 파기", pick: ["chart", "orderbook", "investor", "broker", "supply", "opinion", "finance", "summary"], sizes: {}, pins: [] },
-  { id: "k3", name: "K3 장중 감시", pick: ["mktWatch", "mktVi", "signal", "intraday", "orderbook"], sizes: {}, pins: [] },
-];
+/** 예전에 코드로 박아 두었던 구성 — 목록에서 걷어낸다 */
+const RETIRED_IDS = new Set(["k1", "k2", "k3"]);
 
 interface Preset {
   id: string;
@@ -322,6 +321,13 @@ interface Preset {
   pins: string[];
   /** 칸마다 붙들어 둔 종목 — 배치의 일부다 */
   locks?: Record<string, { code: string; name: string }>;
+  /** 잠갔나 — 이름·순서·삭제·덮어쓰기가 막힌다 */
+  locked?: boolean;
+}
+
+/** 잠긴 구성인가 — 목록에서 찾아 본다 */
+function isFixed(list: Preset[], id: string): boolean {
+  return Boolean(list.find((p) => p.id === id)?.locked);
 }
 
 /**
@@ -331,15 +337,13 @@ interface Preset {
  * 그 모양이 남아 있으면 목록으로 옮긴다 — 쓰던 구성을 잃으면 안 된다.
  */
 /**
- * 박아 둔 셋을 **항상 앞에** 세운다.
+ * 예전에 박아 두었던 K1~K3 를 걷어낸다.
  *
- * 저장된 목록에 K1~K3 가 없으면(예전에 지웠거나 첫 실행) 다시 넣고, 있으면
- * **씨앗 쪽 내용으로 덮는다** — 잠근 구성이 예전 저장분 때문에 달라져 있으면
- * 「돌아올 자리」가 아니게 된다.
+ * 코드에서 씨앗만 지우면 **이미 저장된 것은 그대로 남는다** — 서버에 들어 있기 때문이다.
+ * 읽을 때 걸러 내고, 걸러졌으면 그 상태로 다시 저장한다(부르는 쪽에서 한다).
  */
 function withFixed(list: Preset[]): Preset[] {
-  const mine = list.filter((p) => !isFixed(p.id));
-  return [...SEED, ...mine];
+  return list.filter((p) => !RETIRED_IDS.has(p.id));
 }
 
 function readPresets(): Preset[] {
@@ -361,9 +365,9 @@ function readPresets(): Preset[] {
       }
       if (out.length > 0) return withFixed(out);
     }
-    return SEED;
+    return [];
   } catch {
-    return SEED;
+    return [];
   }
 }
 
@@ -404,9 +408,30 @@ function summarize(pick: string[]): string {
   return names.length > 3 ? `${head} 외 ${names.length - 3}개` : head;
 }
 
+/**
+ * **칸 하나만 띄운 창**인가 — `#/board?only=<칸 id>&code=..&name=..`
+ *
+ * 모니터를 여러 대 쓰면 보드 하나를 통째로 띄우는 것보다 「호가만 저 화면에」가 더 쓸모
+ * 있다. 새 창은 `sessionStorage` 가 비어 있으므로 무엇을 띄울지는 **URL 로만** 전할 수 있다.
+ *
+ * 칸의 **인스턴스 id 를 그대로** 넘긴다(`chart#2`). 그래야 그 칸에 맞춰 둔 차트 설정이
+ * 새 창에서도 그대로 나온다 — 봉과 구간을 그 id 로 적어 두기 때문이다.
+ */
+function readOnly(): { id: string; code: string; name: string } | null {
+  const raw = window.location.hash.replace(/^#\/?/, "");
+  const q = raw.split("?")[1];
+  if (!q) return null;
+  const params = new URLSearchParams(q);
+  const id = params.get("only");
+  if (!id) return null;
+  return { id, code: params.get("code") ?? "", name: params.get("name") ?? "" };
+}
+
 export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: string) => void }) {
-  const { on, toggle, focus } = useStockFocus();
-  const [pick, setPick] = useState<string[]>(readPick);
+  const { on, toggle, focus, publish } = useStockFocus();
+  /* 새 창으로 떼어 낸 칸이면 그것만 그린다 — 설정 줄도 구성 목록도 없다 */
+  const [solo] = useState(readOnly);
+  const [pick, setPick] = useState<string[]>(() => (solo ? [solo.id] : readPick()));
   const [sizes, setSizes] = useState<Record<string, CellSize>>(readSizes);
 
   const setSize = useCallback((key: string, s: CellSize) => {
@@ -578,7 +603,14 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
         const r = await api.boardPrefs();
         if (!alive) return;
         if (r.saved && r.presets.length > 0) {
-          setPresets(withFixed(r.presets as Preset[]));
+          /*
+            예전에 박아 두었던 K1~K3 는 걷어낸다. 서버에 이미 저장돼 있으므로 코드에서
+            씨앗만 지워서는 안 사라진다 — 걸러진 게 있으면 그 상태로 되돌려 저장한다.
+          */
+          const kept = withFixed(r.presets as Preset[]);
+          setPresets(kept);
+          if (kept.length !== r.presets.length)
+            void api.boardPrefsSave(kept as unknown as Parameters<typeof api.boardPrefsSave>[0]);
           return;
         }
         const local = readPresets();
@@ -605,8 +637,8 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   /** 지금 화면을 그 구성에 덮어쓴다 */
   const saveInto = useCallback(
     (id: string) => {
-      // 박아 둔 셋은 덮어쓰기도 막는다 — 돌아올 자리가 흔들리면 뜻이 없다
-      if (isFixed(id)) return;
+      // 잠근 구성은 덮어쓰기도 막는다 — 돌아올 자리가 흔들리면 뜻이 없다
+      if (isFixed(presets, id)) return;
       persist(presets.map((p) => (p.id === id ? { ...p, pick, sizes, pins, locks } : p)));
     },
     [persist, presets, pick, sizes, pins, locks],
@@ -626,7 +658,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
 
   const rename = useCallback(
     (id: string, name: string) => {
-      if (isFixed(id)) return;
+      if (isFixed(presets, id)) return;
       persist(presets.map((p) => (p.id === id ? { ...p, name } : p)));
     },
     [persist, presets],
@@ -634,8 +666,21 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
 
   const remove = useCallback(
     (id: string) => {
-      if (isFixed(id)) return;
+      if (isFixed(presets, id)) return;
       persist(presets.filter((p) => p.id !== id));
+    },
+    [persist, presets],
+  );
+
+  /** 잠그기·풀기 — 푸는 쪽만 묻는다 */
+  const toggleLock = useCallback(
+    (id: string) => {
+      const p = presets.find((x) => x.id === id);
+      if (!p) return;
+      if (p.locked && !window.confirm(`「${p.name}」 잠금을 풀까요? 풀면 지우거나 덮어쓸 수 있게 됩니다.`)) {
+        return;
+      }
+      persist(presets.map((x) => (x.id === id ? { ...x, locked: !x.locked } : x)));
     },
     [persist, presets],
   );
@@ -643,12 +688,12 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   /** 한 칸 앞/뒤로 — 자주 쓰는 걸 왼쪽에 두게 된다 */
   const move = useCallback(
     (id: string, delta: -1 | 1) => {
-      if (isFixed(id)) return;
+      if (isFixed(presets, id)) return;
       const at = presets.findIndex((p) => p.id === id);
       const to = at + delta;
       if (at < 0 || to < 0 || to >= presets.length) return;
-      // 박아 둔 셋과는 자리를 안 바꾼다 — 그러면 걔들이 밀려난다
-      if (isFixed(presets[to].id)) return;
+      // 잠근 것과는 자리를 안 바꾼다 — 그러면 걔가 밀려난다
+      if (presets[to].locked) return;
       const next = [...presets];
       [next[at], next[to]] = [next[to], next[at]];
       persist(next);
@@ -688,8 +733,39 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   const flip = (k: string) =>
     setPick((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
 
-  const code = focus?.code ?? "";
-  const name = focus?.name ?? "";
+  /*
+   * **이 창이 직접 고른 종목.**
+   *
+   * 연동이 꺼져 있으면 `publish` 는 아무 일도 안 한다 — 그게 연동을 끈다는 뜻이니 맞다.
+   * 그런데 그러면 보드 설정의 검색창으로 종목을 골라도 화면이 안 바뀐다. 연동을 켜야만
+   * 종목을 고를 수 있다면 「보드 하나로 끝낸다」가 안 된다.
+   *
+   * 그래서 고른 것을 이 창에만 따로 들고 있는다. 다른 창이 종목을 누르면(= `focus` 가
+   * 새로 오면) 그건 지운다 — 연동을 켜 뒀다면 따라가는 게 맞기 때문이다.
+   */
+  const [ownStock, setOwnStock] = useState<{ code: string; name: string } | null>(
+    /*
+      떼어 낸 창은 URL 에 실려 온 종목으로 시작한다. 새 창은 `sessionStorage` 가 비어 있고
+      연동이 꺼져 있을 수도 있으므로, 이걸 안 넣으면 「종목 없음」이 뜬 창이 열린다.
+    */
+    solo && solo.code ? { code: solo.code, name: solo.name || solo.code } : null,
+  );
+  /*
+   * ⚠️ **첫 렌더에서 지우면 안 된다.**
+   *
+   * `useEffect` 는 마운트 직후에도 한 번 돈다. 그냥 지우게 두면 URL 로 실려 온 종목이
+   * 그 자리에서 없어져 떼어 낸 창이 「종목 없음」으로 열린다 — 실제로 그랬다.
+   * 값이 **정말 바뀌었을 때만** 손 뗀다.
+   */
+  const seenFocusAt = useRef(focus?.at);
+  useEffect(() => {
+    if (seenFocusAt.current === focus?.at) return;
+    seenFocusAt.current = focus?.at;
+    setOwnStock(null);
+  }, [focus?.at]);
+
+  const code = ownStock?.code ?? focus?.code ?? "";
+  const name = ownStock?.name ?? focus?.name ?? "";
   /* 칸 안에서 쓰는 이름 — 칸마다 종목이 다를 수 있어서 바깥 것과 헷갈리면 안 된다 */
   const focusCode = code;
   const focusName = name;
@@ -722,7 +798,14 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   }, []);
 
   return (
-    <div className="board">
+    <div className={`board${solo ? " board-solo" : ""}`}>
+      {/*
+        떼어 낸 창에는 **설정 줄을 안 그린다.**
+
+        작은 창에서 설정과 구성 목록이 화면의 절반을 먹는다. 떼어 낸 이유가 「저 모니터에
+        호가만」인데 설정이 자리를 차지하면 뜻이 없다. 종목은 URL 로 실려 온다.
+      */}
+      {!solo && (
       <section className="card board-cfg">
         {/*
           접었을 때도 **지금 무슨 종목인지와 연동 상태**는 남는다.
@@ -746,6 +829,27 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
 
         {cfgOpen && (
         <>
+        {/*
+          **여기서도 종목을 고를 수 있어야 한다.**
+
+          보드는 다른 창이 종목을 눌러 주기를 기다리는 화면이었다. 그런데 모니터 한 대에
+          보드만 띄워 놓고 쓰는 일이 실제로 잦다 — 그때는 종목을 바꾸려고 다른 메뉴를 열었다
+          닫아야 했다. 보드 하나로 끝낼 수 있어야 독립적으로 쓰인다.
+
+          여기서 고른 종목은 **연동과 같은 자리**에 들어간다(칸에 붙드는 게 아니다) —
+          연동을 켜 둔 다른 창들도 같이 따라온다.
+        */}
+        <div className="filter-row board-cfg-find">
+          <span className="st-cfg-k">종목 찾기</span>
+          <CellStockFinder
+            onPick={(c, n) => {
+              setOwnStock({ code: c, name: n });
+              publish(c, n); // 연동이 켜져 있으면 다른 창도 같이 온다
+            }}
+            onClose={() => undefined}
+          />
+        </div>
+
         <div className="filter-row">
           <label className="st-cfg-chk">
             <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} />
@@ -814,7 +918,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                   <button
                     className="gt-move"
                     onClick={() => move(p.id, -1)}
-                    disabled={i === 0 || isFixed(p.id) || isFixed(presets[i - 1]?.id ?? "")}
+                    disabled={i === 0 || p.locked || presets[i - 1]?.locked}
                     title="위로"
                   >
                     ▲
@@ -822,18 +926,18 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                   <button
                     className="gt-move"
                     onClick={() => move(p.id, 1)}
-                    disabled={i === presets.length - 1 || isFixed(p.id)}
+                    disabled={i === presets.length - 1 || p.locked}
                     title="아래로"
                   >
                     ▼
                   </button>
                 </span>
-                {/* 박아 둔 셋은 이름칸 대신 글자만 — 못 고치는 걸 눌러 보고 알게 하면 안 된다 */}
-                {isFixed(p.id) ? (
+                {/* 잠근 것은 이름칸 대신 글자만 — 못 고치는 걸 눌러 보고 알게 하면 안 된다 */}
+                {p.locked ? (
                   <span className="bp-name fixed">
                     {p.name}
-                    <i className="bp-lock" title="기본 구성이라 고치거나 지울 수 없습니다">
-                      고정
+                    <i className="bp-lock" title="잠겨 있어 고치거나 지울 수 없습니다">
+                      🔒 잠김
                     </i>
                   </span>
                 ) : (
@@ -849,7 +953,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                   앞의 몇 개를 이름으로 보여 주면 불러오기 전에 무엇이 든 구성인지 안다.
                 */}
                 <span className="bp-meta">{summarize(p.pick)}</span>
-                {!isFixed(p.id) && (
+                {!p.locked && (
                   <>
                     <button
                       className="filter-btn"
@@ -863,16 +967,28 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                     </button>
                   </>
                 )}
+                {/*
+                  자물쇠는 **잠긴 것에도 보여야 한다.** 안 그러면 한 번 잠근 걸 풀 방법이 없다.
+                  잠글 때는 안 묻고, 풀 때만 묻는다 — 잠근 이유가 실수로 안 건드리려는 것이라
+                  푸는 쪽이 되돌리기 어려운 문 앞이다.
+                */}
+                <button
+                  className={`bp-locker${p.locked ? " on" : ""}`}
+                  onClick={() => toggleLock(p.id)}
+                  title={p.locked ? "잠금 풀기" : "잠그기 — 이름·순서·삭제·덮어쓰기가 막힙니다"}
+                >
+                  {p.locked ? "🔒" : "🔓"}
+                </button>
               </div>
             ))}
             <div className="table-note">
               이름은 적는 대로 저장됩니다. <b>덮기</b>는 지금 보고 있는 배치(칸·크기·고정·
               종목 고정)를 그 구성에 넣습니다.
               <br />
-              <b>K1~K3 는 박아 둔 구성</b>이라 이름·순서·삭제가 막혀 있습니다 —
-              배치를 헤집다가 <b>돌아올 자리</b>가 필요해서입니다. 불러오는 건 그대로 되고,
-              불러온 뒤 화면에서 칸을 바꾸는 것도 자유입니다. 그 배치를 남기려면
-              <b>＋ 새로 담기</b>로 내 구성을 만드세요.
+              <b>🔓 를 눌러 잠그면</b> 이름·순서·삭제·덮어쓰기가 막힙니다 — 배치를 헤집다가
+              <b>돌아올 자리</b>가 필요해서입니다. 잠가도 <b>불러오는 건 그대로</b> 되고,
+              불러온 뒤 화면에서 칸을 바꾸는 것도 자유입니다(그건 구성이 아니라 지금 화면입니다).
+              바꾼 배치를 남기려면 <b>＋ 새로 담기</b>로 새 구성을 만드세요.
             </div>
           </div>
         )}
@@ -903,6 +1019,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
           </div>
         )}
       </section>
+      )}
 
       {/*
         **시장 칸은 종목이 없어도 그린다.**
@@ -940,6 +1057,23 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                 next.splice(at < 0 ? prev.length : at + 1, 0, nextInstance(prev, b.key));
                 return next;
               })}
+              /*
+                이 칸만 새 창으로. 인스턴스 id 와 지금 보고 있는 종목을 URL 에 실어 보낸다 —
+                새 창은 sessionStorage 가 비어 있어 URL 말고는 전할 길이 없다.
+              */
+              onPopOut={solo ? undefined : () => {
+                const q = new URLSearchParams({ only: id });
+                const stock = locks[id]?.code ? locks[id] : code ? { code, name } : null;
+                if (stock && !isMarket(id)) {
+                  q.set("code", stock.code);
+                  q.set("name", stock.name || stock.code);
+                }
+                window.open(
+                  `${window.location.pathname}#/board?${q.toString()}`,
+                  `vntg-${id}`,
+                  "width=760,height=620",
+                );
+              }}
               onPickStock={isMarket(id) ? undefined : (c, n) => {
                 persistLocks({ ...locks, [id]: { code: c, name: n } });
               }}

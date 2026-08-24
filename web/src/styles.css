@@ -6132,3 +6132,37 @@ button.ib-cell:hover { background: var(--panel-2); }
 }
 .mood-mine-tag:hover { background: var(--panel); }
 .mood-mine-tag em { font-style: normal; font-variant-numeric: tabular-nums; font-size: 0.72rem; }
+
+/* 보드 설정의 종목 검색 — 칸 안의 검색과 같은 모양을 쓴다 */
+.board-cfg-find { align-items: flex-start; }
+.board-cfg-find .board-find-box { position: relative; flex: 1; max-width: 320px; }
+
+/* 구성 잠금 자물쇠 */
+.bp-locker {
+  flex: none;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.bp-locker.on { border-color: var(--blue); }
+
+/* 이 칸만 새 창으로 */
+.board-pop {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 3px;
+  font-size: 0.85rem;
+}
+.board-pop:hover { color: var(--blue); }
+
+/*
+ * 떼어 낸 창 — 칸 하나가 창을 다 쓴다.
+ * 격자를 한 열로 두고 여백을 줄인다. 작은 창에서 여백이 내용을 밀어내면 뗀 뜻이 없다.
+ */
+.board-solo .board-grid { grid-template-columns: 1fr; gap: 0; }
+.board-solo { padding: 0; }
