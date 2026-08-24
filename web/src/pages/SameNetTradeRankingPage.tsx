@@ -1,3 +1,4 @@
+import { StockFilterBar, StockFilterToggle, useStockFilter, type FilterCapable } from "../components/StockFilter";
 import { Pager, usePager } from "../components/Pager";
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtAbsNum, fmtNum, normalizeStockCode, pickList, signClass, type RawRecord } from "../api";
@@ -50,9 +51,13 @@ export function SameNetTradeRankingPage({
   }, [load]);
 
   const rows = pickList(data ?? undefined, LIST_KEYS);
-  const sort = useSortableTable(rows);
+  /* 시세분석의 다른 탭과 **같은 조건**을 쓴다 — 탭을 옮겨도 필터가 따라온다 */
+  const f = useStockFilter(rows as unknown as FilterCapable[], undefined);
+  const [openFilter, setOpenFilter] = useState(false);
+  const kept = (rows as unknown as FilterCapable[]).filter(f.keep) as unknown as typeof rows;
+  const sort = useSortableTable(kept);
   /* 쪽 넘기기 — 거래대금 상위와 같은 도구를 쓴다 */
-  const pager = usePager(sort.sorted.length, "vntg.samenet.pageSize", rows.length);
+  const pager = usePager(sort.sorted.length, "vntg.samenet.pageSize", kept.length);
 
   return (
     <div>
@@ -78,7 +83,14 @@ export function SameNetTradeRankingPage({
             {t.label}
           </button>
         ))}
+        <StockFilterToggle f={f} open={openFilter} onToggle={() => setOpenFilter((v) => !v)} />
+        {f.on && (
+          <span className="breadth-count">
+            {kept.length} / {rows.length}건
+          </span>
+        )}
       </div>
+      <StockFilterBar f={f} open={openFilter} />
 
       {error && <div className="error-banner">{error}</div>}
       {loading && <div className="empty">불러오는 중...</div>}

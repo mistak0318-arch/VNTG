@@ -1,3 +1,4 @@
+import { StockFilterBar, StockFilterToggle, useStockFilter, type FilterCapable } from "../components/StockFilter";
 import { Pager, usePager } from "../components/Pager";
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtNum, normalizeStockCode, pickList, signClass, type RawRecord } from "../api";
@@ -49,8 +50,12 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
   }, [load]);
 
   const rows = pickList(data ?? undefined, LIST_KEYS);
-  const sort = useSortableTable(rows);
-  const pager = usePager(sort.sorted.length, "vntg.cont.pageSize", rows.length);
+  /* 시세분석의 다른 탭과 **같은 조건**을 쓴다 — 탭을 옮겨도 필터가 따라온다 */
+  const f = useStockFilter(rows as unknown as FilterCapable[], (r) => Number(String(r.prid_stkpc_flu_rt ?? "").replace(/[+,\s]/g, "")));
+  const [openFilter, setOpenFilter] = useState(false);
+  const kept = (rows as unknown as FilterCapable[]).filter(f.keep) as unknown as typeof rows;
+  const sort = useSortableTable(kept);
+  const pager = usePager(sort.sorted.length, "vntg.cont.pageSize", kept.length);
 
   return (
     <div>
@@ -75,7 +80,14 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
             </option>
           ))}
         </select>
+        <StockFilterToggle f={f} open={openFilter} onToggle={() => setOpenFilter((v) => !v)} />
+        {f.on && (
+          <span className="breadth-count">
+            {kept.length} / {rows.length}건
+          </span>
+        )}
       </div>
+      <StockFilterBar f={f} open={openFilter} />
 
       {error && <div className="error-banner">{error}</div>}
       {loading && <div className="empty">불러오는 중...</div>}
