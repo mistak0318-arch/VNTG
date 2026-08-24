@@ -12,10 +12,11 @@ import { api, type FlowIntradayDay, type FlowSample } from "../../api";
  * 0 선을 굵게 두는 게 중요하다. **부호가 바뀌는 순간**이 이 그림의 전부다.
  */
 
+/* 순서는 **개인·외국인·기관** — 다른 수급 화면과 같아야 눈이 헤매지 않는다 */
 const SERIES = [
+  { key: "individual" as const, label: "개인", color: "#ff5c5c" },
   { key: "foreign" as const, label: "외국인", color: "#4c8dff" },
   { key: "institution" as const, label: "기관", color: "#f5c542" },
-  { key: "individual" as const, label: "개인", color: "#ff5c5c" },
 ];
 
 const W = 560;

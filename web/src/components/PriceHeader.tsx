@@ -17,6 +17,27 @@ function sigClass(sig: string): string {
   return "";
 }
 
+/**
+ * 억원을 조·억으로 — 시가총액은 자릿수가 커서 숫자를 그대로 적으면 못 읽는다.
+ * `15024936` 은 1502조다.
+ */
+function eok(v: unknown): string {
+  const n = Number(String(v ?? "").replace(/[+,\s]/g, ""));
+  if (!Number.isFinite(n) || n === 0) return "-";
+  if (Math.abs(n) >= 10000) return `${(n / 10000).toLocaleString("ko-KR", { maximumFractionDigits: 0 })}조`;
+  return `${Math.round(n).toLocaleString("ko-KR")}억`;
+}
+
+/**
+ * PER·PBR — **없으면 없다고 적는다.**
+ * 적자면 PER 이 음수거나 빈 값으로 온다. 거기에 0 을 적으면 「값이 싸다」로 읽힌다.
+ */
+function ratio(v: unknown): string {
+  const n = Number(String(v ?? "").replace(/[+,\s]/g, ""));
+  if (!Number.isFinite(n) || n <= 0) return "-";
+  return n.toFixed(2);
+}
+
 /** 시가/고가/저가를 전일종가 대비 등락률로. 가격만 보면 몇 % 움직였는지 감이 안 온다 */
 function vsBase(value: unknown, base: number): { cls: string; rate: string } {
   const n = Math.abs(Number(value));
@@ -301,6 +322,32 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           <span className="ph-label">전일比 거래량</span>
           <span className="ph-row">
             <span className="ph-value">{String(info.trde_pre ?? "-")}%</span>
+          </span>
+        </div>
+        {/*
+          **몸집과 값** — 키움이 `ka10001` 에서 같이 주는데 여태 안 쓰고 있었다.
+          재무 탭에 있긴 했지만, 종목을 처음 열었을 때 「이게 얼마짜리 회사인가」는
+          시가·고가와 같은 층의 질문이다. 탭을 옮겨서 볼 값이 아니다.
+
+          PER 은 **적자면 안 나온다**(음수거나 빈 값). 그때 0 을 적으면 「값이 싸다」로
+          읽히므로 아예 안 적는다 — 없는 걸 있는 척하는 게 제일 나쁘다.
+        */}
+        <div className="ph-cell">
+          <span className="ph-label">시가총액</span>
+          <span className="ph-row">
+            <span className="ph-value">{eok(info.mac)}</span>
+          </span>
+          <span className="ph-row">
+            <em className="ph-sublabel" title="주가 ÷ 주당순이익. 적자면 안 나옵니다">
+              PER
+            </em>
+            <span className="ph-value sub">{ratio(info.per)}</span>
+          </span>
+          <span className="ph-row">
+            <em className="ph-sublabel" title="주가 ÷ 주당순자산. 1 보다 낮으면 장부가 아래">
+              PBR
+            </em>
+            <span className="ph-value sub">{ratio(info.pbr)}</span>
           </span>
         </div>
       </div>

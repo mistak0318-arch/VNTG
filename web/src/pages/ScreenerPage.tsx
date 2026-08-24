@@ -5,6 +5,7 @@ import { SameNetTradeRankingPage } from "./SameNetTradeRankingPage";
 import { ContinuousTradePage } from "./ContinuousTradePage";
 import { TopTradersTable } from "../components/TopTradersTable";
 import { CumulativeRank } from "../components/CumulativeRank";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 
 /**
  * 시세분석 — **실제로 보는 다섯 개를 앞에 세운다.**
@@ -74,11 +75,18 @@ interface Filter {
   caps: string[];
   /** 등락률 최소(%). null 이면 안 건다 */
   minRate: number | null;
+  /**
+   * **회전율 최소(%)** — 거래량 ÷ 상장주식수.
+   *
+   * 거래대금과 같이 걸어야 뜻이 산다. 거래대금만 보면 큰 종목이 늘 위에 있는데,
+   * 「500억 이상이면서 회전율 5% 이상」이면 **작은데도 크게 돈** 종목이 남는다.
+   */
+  minTurn: number | null;
   /** ETF·ETN·우선주를 뺀다 */
   commonOnly: boolean;
 }
 
-const NO_FILTER: Filter = { minTv: 0, caps: [], minRate: null, commonOnly: false };
+const NO_FILTER: Filter = { minTv: 0, caps: [], minRate: null, minTurn: null, commonOnly: false };
 const FILTER_KEY = "vntg.screener.filter";
 
 /** 거래대금 빠른 선택(억원) */
@@ -228,13 +236,31 @@ export function ScreenerPage({
       const rate = Number(r.flu_rt ?? r.jmp_rt);
       if (!Number.isFinite(rate) || rate < filter.minRate) return false;
     }
+    /* 상장주식수를 못 찾아 회전율이 없는 종목은, 이 조건을 켰을 때만 뺀다 */
+    if (filter.minTurn !== null && (r.turn === null || r.turn < filter.minTurn)) return false;
     return true;
   });
 
   const hasCap = all.some((r) => r.cap !== null);
+  const hasTurn = all.some((r) => r.turn !== null);
+  /*
+   * 정렬.
+   *
+   * 키움이 준 **순위 그대로**가 기본이다 — 「거래대금 상위」는 이미 거래대금순이고
+   * 그게 이 조회의 뜻이다. 열 이름을 누르면 그때만 다시 세운다.
+   *
+   * ⚠️ **이 화면에 온 백 종목 안에서만** 다시 세운다. 시가총액순으로 누른다고
+   * 시장 전체의 시총 순위가 나오는 게 아니다 — 거래대금 상위 100 중 시총이 큰 순서다.
+   * 그 둘은 다른 질문이라 표 아래에 적어 둔다.
+   */
+  const sort = useSortableTable(rows);
   const estimated = rows.some((r) => r.tvEst);
   const on =
-    filter.minTv > 0 || filter.caps.length > 0 || filter.minRate !== null || filter.commonOnly;
+    filter.minTv > 0 ||
+    filter.caps.length > 0 ||
+    filter.minRate !== null ||
+    filter.minTurn !== null ||
+    filter.commonOnly;
 
   return (
     <div>
@@ -373,6 +399,30 @@ export function ScreenerPage({
               ))}
             </div>
 
+            {/*
+              회전율 — **거래대금과 짝**이다. 거래대금만 걸면 큰 종목만 남고,
+              회전율만 걸면 거래가 거의 없는 종목이 몇 주 돌아도 높게 나온다.
+            */}
+            <div className="scr-f-row">
+              <span className="st-cfg-k">회전율</span>
+              {[null, 1, 3, 5, 10, 20].map((v) => (
+                <button
+                  key={String(v)}
+                  className={`filter-btn ${filter.minTurn === v ? "active" : ""}`}
+                  onClick={() => set({ minTurn: v })}
+                  disabled={!hasTurn}
+                  title={
+                    v === null
+                      ? undefined
+                      : `상장주식의 ${v}% 이상이 오늘 손바뀜한 종목`
+                  }
+                >
+                  {v === null ? "전체" : `${v}%↑`}
+                </button>
+              ))}
+              {!hasTurn && <span className="pt-n">상장주식수를 못 찾아 못 냅니다</span>}
+            </div>
+
             <div className="scr-f-row">
               <span className="st-cfg-k">등락률</span>
               {[null, 0, 3, 5, 10].map((v) => (
@@ -400,6 +450,13 @@ export function ScreenerPage({
             </div>
 
             <div className="table-note">
+              {/*
+                정렬은 **여기 온 백 종목 안에서만** 다시 세운다. 이걸 안 적으면
+                「시가총액순으로 눌렀는데 왜 삼성전자가 없냐」가 된다.
+              */}
+              열 이름을 누르면 <b>이 목록 안에서</b> 다시 세웁니다 — 거래대금 상위 100 중
+              시총이 큰 순서지, 시장 전체의 시총 순위가 아닙니다.
+              <br />
               코스피·코스닥은 위의 <b>시장</b>에서 고릅니다(키움에 그대로 물어보는 값입니다).
               시가총액은 <b>상장주식수 × 현재가</b>로 낸 값입니다 — 순위 조회에는 시가총액이
               없어서 종목 목록에서 붙입니다.
@@ -428,14 +485,40 @@ export function ScreenerPage({
                     {cols
                       .filter((c) => c.key !== "stk_nm")
                       .map((c) => (
-                        <th key={c.key}>{c.label}</th>
+                        <SortableTh
+                          key={c.key}
+                          columnKey={c.key}
+                          label={c.label}
+                          accessor={(r: (typeof rows)[number]) => {
+                            const v = r[c.key];
+                            if (c.type === "text") return String(v ?? "");
+                            const n = Number(v);
+                            return Number.isFinite(n) ? n : -Infinity;
+                          }}
+                          sort={sort}
+                        />
                       ))}
                     {/* 걸러 보는 기준이면 표에도 있어야 한다 */}
-                    {hasCap && <th title="상장주식수 × 현재가">시가총액</th>}
+                    {hasTurn && (
+                      <SortableTh
+                        columnKey="turn"
+                        label="회전율"
+                        accessor={(r: (typeof rows)[number]) => r.turn ?? -Infinity}
+                        sort={sort}
+                      />
+                    )}
+                    {hasCap && (
+                      <SortableTh
+                        columnKey="cap"
+                        label="시가총액"
+                        accessor={(r: (typeof rows)[number]) => r.cap ?? -Infinity}
+                        sort={sort}
+                      />
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, i) => (
+                  {sort.sorted.map((r, i) => (
                     <tr key={`${r.code}-${i}`}>
                       {/* 이름이 길면 잘린다(CSS) — 전체는 마우스를 올려서 본다 */}
                       <td className="sticky-col" title={r.name}>
@@ -477,6 +560,11 @@ export function ScreenerPage({
                             </td>
                           );
                         })}
+                      {hasTurn && (
+                        <td className={`num ${r.turn !== null && r.turn >= 5 ? "positive" : "pt-n"}`}>
+                          {r.turn === null ? "-" : `${r.turn.toFixed(r.turn >= 10 ? 0 : 1)}%`}
+                        </td>
+                      )}
                       {hasCap && <td className="num pt-n">{eok(r.cap)}</td>}
                     </tr>
                   ))}

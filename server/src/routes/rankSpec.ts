@@ -85,6 +85,16 @@ interface RowExtras {
   tvKrx: number | null;
   /** 거래대금이 어림값인가 (거래량 × 현재가) */
   tvEst: boolean;
+  /**
+   * **회전율(%)** — 오늘 거래량 ÷ 상장주식수.
+   *
+   * 거래대금만 보면 큰 종목이 늘 위에 있다. 삼성전자 13조와 소형주 500억은 비교가
+   * 안 되는데, 회전율로 보면 **그 종목 치고 얼마나 돌았나**가 나온다. 시가총액이
+   * 작은 종목이 회전율 20% 면 주인이 하루에 다섯 번 바뀐 셈이다.
+   *
+   * 순위 TR 은 회전율을 안 주지만 상장주식수를 이미 갖고 있으므로 여기서 낸다.
+   */
+  turn: number | null;
   /** 코스피 / 코스닥 */
   mkt: string;
   sector: string;
@@ -107,6 +117,7 @@ function extras(
     tv: prica !== null ? Math.round(prica / 100) : qty > 0 && price > 0 ? Math.round((qty * price) / 1e8) : null,
     tvEst: prica === null,
     tvKrx: null,
+    turn: shares > 0 && qty > 0 ? (qty / shares) * 100 : null,
     mkt: entry?.marketName === "거래소" ? "코스피" : entry?.marketName === "코스닥" ? "코스닥" : "",
     sector: entry?.sectorName ?? "",
     // 끝자리가 0 이 아니면 우선주다 (stockListCache 의 판별과 같은 근거)

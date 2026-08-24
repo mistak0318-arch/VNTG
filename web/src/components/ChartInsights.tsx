@@ -238,6 +238,20 @@ function gap(from: number, to: number): string {
   return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
 }
 
+/**
+ * **고점 대비 / 저점 대비** — 기준이 되는 값을 100 으로 놓고 지금이 몇 퍼센트인가.
+ *
+ * ⚠️ 바로 위 `gap` 과 **기준이 반대**다. 「고점까지 +12%」는 지금 값을 기준으로 얼마나
+ * 더 가야 하는가이고, 「고점 대비 −10.7%」는 고점을 기준으로 얼마나 빠졌는가다.
+ * 같은 두 숫자에서 나오는데 값이 다르다 — HTS 가 쓰는 건 뒤쪽이라 그걸 적는다.
+ * 둘을 같이 적으면 어느 게 어느 건지 헷갈리므로 「고점까지」는 뺐다.
+ */
+function vsRef(price: number, ref: number): string {
+  if (!(ref > 0)) return "-";
+  const v = ((price - ref) / ref) * 100;
+  return `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
+}
+
 export function ChartInsights({
   code,
   candles,
@@ -319,9 +333,14 @@ export function ChartInsights({
               {ins.yearPos !== null && (
                 <b className="ci-pos"> 아래서 {Math.round(ins.yearPos * 100)}% 자리</b>
               )}
+              {/*
+                고점 대비·저점 대비. 「아래서 몇 % 자리」는 위치이고 이건 **거리**다 —
+                고점에서 30% 빠진 것과 저점에서 3% 오른 것은 같은 자리를 다르게 말한다.
+              */}
               <span className="pt-n">
                 {" "}
-                · 고점까지 {gap(ins.price, ins.yearHigh)}
+                · 고점 대비 <b className="negative">{vsRef(ins.price, ins.yearHigh)}</b>
+                {" · "}저점 대비 <b className="positive">{vsRef(ins.price, ins.yearLow)}</b>
               </span>
             </span>
           )}

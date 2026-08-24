@@ -25,6 +25,7 @@ import { SupplyDetailPanel } from "../components/SupplyDetailPanel";
 import { TradeSizePanel } from "../components/TradeSizePanel";
 import { useLive } from "../useLive";
 import { WatchStar } from "../useWatchedCodes";
+import { WatchButton } from "../components/WatchButton";
 
 /**
  * 종목발굴.
@@ -552,6 +553,15 @@ export function StockDiscoveryPage({
                     신호등 {signal.score}점
                   </span>
                 )}
+                {/*
+                  ⚠️ 왼쪽 `WatchStar` 는 **표시 전용**이라 담긴 종목에만 별이 찬다.
+                  거르는 자리에서 담지 못하면 거르는 뜻이 없어서, 담는 버튼을 따로 둔다.
+                */}
+                <WatchButton
+                  code={code}
+                  name={current?.name ?? ""}
+                  price={Math.abs(Number(current?.price ?? 0)) || 0}
+                />
                 <button className="filter-btn" onClick={() => onSelectStock(code, current?.name ?? "")}>
                   개별종목분석으로
                 </button>

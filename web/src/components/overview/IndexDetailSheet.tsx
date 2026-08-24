@@ -128,12 +128,18 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
             <table className="data-table num idx-sum">
               <thead>
                 <tr>
+                  {/*
+                    ⚠️ 순서는 **개인·외국인·기관** 이다.
+                    개별종목 수급표와 시황 막대가 그 순서인데 여기만 외국인이 먼저였다.
+                    화면마다 열 순서가 다르면 같은 자리를 볼 때마다 머리로 다시 맞춰야 한다 —
+                    수급은 세 주체를 **견주면서** 읽는 값이라 그 비용이 특히 크다.
+                  */}
                   <th className="sticky-col">기간</th>
+                  <th>개인</th>
                   <th>외국인</th>
                   <th>기관</th>
-                  <th>개인</th>
-                  <th>연기금</th>
                   <th>투신</th>
+                  <th>연기금</th>
                 </tr>
               </thead>
               <tbody>
@@ -149,7 +155,7 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
                         {n}일
                         {!enough && <span className="pt-n"> ({data.flows.length}일치뿐)</span>}
                       </td>
-                      {(["foreign", "institution", "individual", "pension", "trust"] as const).map(
+                      {(["individual", "foreign", "institution", "trust", "pension"] as const).map(
                         (k) => {
                           const v = sum(k);
                           return (
@@ -177,22 +183,22 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
               <thead>
                 <tr>
                   <th className="sticky-col">일자</th>
+                  <th>개인</th>
                   <th>외국인</th>
                   <th>기관</th>
-                  <th>개인</th>
-                  <th>연기금</th>
                   <th>투신</th>
+                  <th>연기금</th>
                 </tr>
               </thead>
               <tbody>
                 {data.flows.map((f) => (
                   <tr key={f.date}>
                     <td className="sticky-col">{f.date.slice(5)}</td>
+                    <td className={sign(f.individual)}>{fmtNum(f.individual)}</td>
                     <td className={sign(f.foreign)}>{fmtNum(f.foreign)}</td>
                     <td className={sign(f.institution)}>{fmtNum(f.institution)}</td>
-                    <td className={sign(f.individual)}>{fmtNum(f.individual)}</td>
-                    <td className={sign(f.pension)}>{fmtNum(f.pension)}</td>
                     <td className={sign(f.trust)}>{fmtNum(f.trust)}</td>
+                    <td className={sign(f.pension)}>{fmtNum(f.pension)}</td>
                   </tr>
                 ))}
               </tbody>

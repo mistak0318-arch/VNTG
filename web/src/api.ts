@@ -1294,6 +1294,8 @@ export interface RankResult {
     tvEst: boolean;
     /** KRX 몫의 거래대금(억원). `tv` 는 통합(=KRX+NXT)이다 */
     tvKrx: number | null;
+    /** 회전율(%) — 거래량 ÷ 상장주식수. 「그 종목 치고 얼마나 돌았나」 */
+    turn: number | null;
     /** 코스피 / 코스닥 */
     mkt: string;
     sector: string;

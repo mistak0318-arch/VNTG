@@ -195,6 +195,17 @@ const TARGETS: {
   { key: "copper", label: "구리", group: "원자재", symbol: "HG=F" },
   { key: "natgas", label: "천연가스", group: "원자재", symbol: "NG=F" },
   { key: "alum", label: "알루미늄", group: "원자재", symbol: "ALI=F" },
+  /*
+   * 리튬은 **선물이 없다.**
+   *
+   * 탄산리튬 선물은 광저우상품거래소(GFEX) 거래라 야후에 안 올라온다 — `LICO=F`,
+   * `LI=F` 둘 다 실제로 찔러 보고 Not Found 를 확인했다(2026-08-24).
+   *
+   * 그래서 **대표 ETF** 로 대신한다. `LIT` 는 리튬 채굴·배터리 회사를 담은 묶음이라
+   * 리튬 **가격 그 자체는 아니다** — 이름에 (LIT) 를 남겨 두는 이유가 그것이다.
+   * 그래도 2차전지 종목이 왜 움직이는지 볼 때는 이쪽이 실제로 쓰인다.
+   */
+  { key: "lithium", label: "리튬(LIT)", group: "원자재", symbol: "LIT" },
 
   // ── 암호화폐
   { key: "btc", label: "비트코인", group: "암호화폐", symbol: "BTC-USD" },
