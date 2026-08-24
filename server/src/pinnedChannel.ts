@@ -212,6 +212,12 @@ async function fetchPinned(edition: Edition, limit: number): Promise<PinnedPost[
         sinceMinutes: windowHours(edition) * 60,
         maxPerChannel: 20,
         useOffsets: false,
+        /*
+          ⚠️ **이 세 채널만** 읽는다. 예전엔 활성 채널 일흔 개를 다 훑고 그중에서
+          골라 냈다 — 스무 초 안에 끝날 리가 없어서 늘 「조회 시간 초과」로 비었다.
+          필요한 게 셋인데 일흔을 읽을 이유가 없다.
+        */
+        onlyIds: targets.map((c) => c.id),
       }),
       20_000,
     );

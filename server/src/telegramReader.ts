@@ -226,12 +226,24 @@ export async function fetchNewMessages(
      * 알려 주면 기다릴 만해진다.
      */
     onProgress?: (done: number, total: number, name: string) => void;
+    /**
+     * **이 채널들만** 읽는다(채널 id).
+     *
+     * ⚠️ 고정 채널 시황이 「텔레그램 조회 시간 초과」로 늘 비어 있었다. 필요한 건 세 개
+     * 채널인데 이 함수가 **활성 채널 일흔 개를 전부** 훑고 있었기 때문이다 — 스무 초
+     * 안에 끝날 리가 없다.
+     *
+     * 지정하면 `enabled` 여부도 안 본다. 고정 채널은 수집 대상이 아닐 수도 있는데
+     * 그것과 상관없이 읽어야 한다.
+     */
+    onlyIds?: string[];
   } = {},
 ): Promise<{ messages: ChannelMessage[]; channels: number; fetched: number; skipped: string[] }> {
-  const { maxPerChannel = 40, sinceMinutes = 60, useOffsets = true, onProgress } = opts;
+  const { maxPerChannel = 40, sinceMinutes = 60, useOffsets = true, onProgress, onlyIds } = opts;
   const c = await getClient();
 
-  const enabled = (await listChannels()).filter((ch) => ch.enabled);
+  const only = onlyIds && onlyIds.length > 0 ? new Set(onlyIds) : null;
+  const enabled = (await listChannels()).filter((ch) => (only ? only.has(ch.id) : ch.enabled));
   const offsets = useOffsets ? await readOffsets() : {};
   const cutoff = Date.now() - sinceMinutes * 60_000;
 
