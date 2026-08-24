@@ -214,9 +214,21 @@ export async function refreshChannels(): Promise<ChannelEntry[]> {
  *                      AI 비용이 터지므로 상한을 둔다.
  */
 export async function fetchNewMessages(
-  opts: { maxPerChannel?: number; sinceMinutes?: number; useOffsets?: boolean } = {},
+  opts: {
+    maxPerChannel?: number;
+    sinceMinutes?: number;
+    useOffsets?: boolean;
+    /**
+     * 채널 하나를 끝낼 때마다 부른다 — **진행바를 그리라고** 있다.
+     *
+     * 채널이 일흔 개가 넘어 한 번 훑는 데 한참 걸린다. 그동안 화면이 「훑는 중」만
+     * 띄우고 있으면 멈춘 건지 도는 건지 알 수가 없다. 몇 번째 채널을 보고 있는지
+     * 알려 주면 기다릴 만해진다.
+     */
+    onProgress?: (done: number, total: number, name: string) => void;
+  } = {},
 ): Promise<{ messages: ChannelMessage[]; channels: number; fetched: number; skipped: string[] }> {
-  const { maxPerChannel = 40, sinceMinutes = 60, useOffsets = true } = opts;
+  const { maxPerChannel = 40, sinceMinutes = 60, useOffsets = true, onProgress } = opts;
   const c = await getClient();
 
   const enabled = (await listChannels()).filter((ch) => ch.enabled);
@@ -259,7 +271,11 @@ export async function fetchNewMessages(
   const messages: ChannelMessage[] = [];
   const skipped: string[] = [];
 
+  let done = 0;
   for (const ch of targets) {
+    /* 채널을 **시작할 때** 알린다 — 끝나고 알리면 마지막 채널이 도는 동안 화면이 멎는다 */
+    onProgress?.(done, targets.length, ch.name || ch.id);
+    done += 1;
     try {
       const history = await c.getMessages(ch.id, {
         limit: maxPerChannel,

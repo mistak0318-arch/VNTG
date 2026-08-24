@@ -32,9 +32,39 @@ const TTL_MS = 3 * 60 * 1000;
 /** 같은 구간을 동시에 여러 번 읽지 않는다 */
 const inflight = new Map<number, Promise<ChannelMessage[]>>();
 
+/**
+ * 지금 어디까지 훑었나.
+ *
+ * 채널이 일흔 개가 넘어 한 번 도는 데 한참 걸린다. 화면이 「훑는 중」만 띄우고 있으면
+ * 멈춘 건지 도는 건지 알 수가 없어서, 몇 번째 채널을 보고 있는지 내보낸다.
+ *
+ * **모듈 변수 하나로 둔다.** 검색은 한 번에 하나만 돌고(`inflight` 로 묶여 있다) 이 값은
+ * 화면에 진행바를 그리는 데만 쓴다 — 정확한 상태 기계가 필요한 자리가 아니다.
+ */
+export interface SearchProgress {
+  running: boolean;
+  done: number;
+  total: number;
+  /** 지금 보고 있는 채널 */
+  name: string;
+  at: number;
+}
+
+let progress: SearchProgress = { running: false, done: 0, total: 0, name: "", at: 0 };
+
+export function searchProgress(): SearchProgress {
+  /*
+   * 오래된 값은 **안 돈다고 본다.** 서버가 중간에 죽거나 예외가 finally 를 못 타면
+   * `running: true` 가 영영 남아 화면에 진행바가 박힌다. 30초면 충분히 길다.
+   */
+  if (progress.running && Date.now() - progress.at > 30_000) return { ...progress, running: false };
+  return progress;
+}
+
 async function load(minutes: number): Promise<ChannelMessage[]> {
   const hit = cache.get(minutes);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.messages;
+  progress = { running: true, done: 0, total: 0, name: "채널 목록", at: Date.now() };
 
   const running = inflight.get(minutes);
   if (running) return running;
@@ -44,10 +74,19 @@ async function load(minutes: number): Promise<ChannelMessage[]> {
      * `useOffsets: false` — 오프셋을 쓰면 **이미 읽은 글을 건너뛴다.**
      * 정기 수집은 그게 맞지만 검색은 「그 구간 전체」를 봐야 한다.
      */
-    const { messages } = await fetchNewMessages({ sinceMinutes: minutes, useOffsets: false });
+    const { messages } = await fetchNewMessages({
+      sinceMinutes: minutes,
+      useOffsets: false,
+      onProgress: (done, total, name) => {
+        progress = { running: true, done, total, name, at: Date.now() };
+      },
+    });
     cache.set(minutes, { at: Date.now(), messages });
     return messages;
-  })().finally(() => inflight.delete(minutes));
+  })().finally(() => {
+    inflight.delete(minutes);
+    progress = { ...progress, running: false };
+  });
 
   inflight.set(minutes, job);
   return job;

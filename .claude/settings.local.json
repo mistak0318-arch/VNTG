@@ -625,7 +625,9 @@
       "Bash(grep -n \"min-width\\\\|width: [0-9]\\\\{3,\\\\}px\\\\|max-width\" styles.css)",
       "Bash(awk -F: '{print $1\": \"$2$3}')",
       "Bash(grep -n \"  sizeTick = 0,$\" src/components/ChartPanel.tsx)",
-      "Bash(grep -n \"sessionStorage\\\\|localStorage\\\\|/\\\\*\\\\*\")"
+      "Bash(grep -n \"sessionStorage\\\\|localStorage\\\\|/\\\\*\\\\*\")",
+      "Bash(curl -s --max-time 20 \"http://localhost:4000/api/channels/search-progress\")",
+      "Bash(curl -s --max-time 30 \"http://localhost:4000/api/channels/search?q=삼성전자&minutes=60\")"
     ]
   }
 }

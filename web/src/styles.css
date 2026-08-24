@@ -6078,3 +6078,23 @@ button.ib-cell:hover { background: var(--panel-2); }
 
 /* 전광판 안쪽도 같은 이유로 — flex 자식은 기본이 min-width:auto 라 안 줄어든다 */
 .usb > * { min-width: 0; }
+
+/*
+ * 텔레그램 검색 — 시작 버튼과 진행바.
+ *
+ * 시작 버튼은 **눈에 띄어야 한다.** 이 칸은 눌러야 도는데, 다른 버튼과 똑같이 생기면
+ * 어느 걸 눌러야 시작인지 모른 채 화면이 비어 있는 걸 보게 된다.
+ */
+.filter-btn.primary {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+  font-weight: 700;
+}
+.filter-btn.primary:disabled { opacity: .6; }
+
+.cs-stale { font-size: 0.75rem; color: #f5c542; }
+.cs-prog { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; }
+.cs-prog-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.cs-prog-bar > i { display: block; height: 100%; background: var(--blue); transition: width .3s ease; }
+.cs-prog-t { flex: none; font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }

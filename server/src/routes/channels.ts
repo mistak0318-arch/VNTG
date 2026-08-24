@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { searchChannels, summarizeHits } from "../channelSearch.js";
+import { searchChannels, searchProgress, summarizeHits } from "../channelSearch.js";
 import { buildChannelReport, listChannelReports } from "../channelReport.js";
 import { pinnedHealth, pinnedPosts, type Edition } from "../pinnedChannel.js";
 import {
@@ -169,6 +169,15 @@ export function createChannelsRouter(): Router {
     } catch (err) {
       next(err);
     }
+  });
+
+  /**
+   * 지금 어디까지 훑었나 — 진행바용.
+   *
+   * 검색이 도는 동안 화면이 0.6초마다 물어본다. 가볍게 답해야 하므로 값만 돌려준다.
+   */
+  router.get("/search-progress", (_req, res) => {
+    res.json(searchProgress());
   });
 
   /** 검색 결과를 AI 가 정리 — **누를 때만** 돈다(호출당 비용) */

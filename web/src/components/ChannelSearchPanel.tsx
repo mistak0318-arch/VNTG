@@ -108,28 +108,62 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
     return [...new Set(out)];
   }, [name, code, extra]);
 
-  useEffect(() => {
-    if (words.length === 0) {
-      setResult(null);
-      return;
-    }
-    let alive = true;
+  /*
+   * ⚠️ **저절로 돌지 않는다.**
+   *
+   * 예전엔 종목이 바뀌거나 구간을 누르면 400ms 뒤에 알아서 돌았다. 그런데 이건 채널
+   * 일흔 개를 텔레그램에서 통째로 끌어오는 조회다 — 보드에서 종목을 넘기며 훑기만 해도
+   * 넘길 때마다 그게 돌았다. 무거운 일은 **사람이 시작을 눌러야** 맞다.
+   *
+   * 대신 무엇으로 찾을지가 바뀌면 「다시 찾기」라고 알려 준다 — 눌러야 하는 걸 모르면
+   * 안 도는 게 고장으로 보인다.
+   */
+  const [ran, setRan] = useState<{ words: string; minutes: number } | null>(null);
+  const wordKey = words.join(",");
+  const stale = ran !== null && (ran.words !== wordKey || ran.minutes !== minutes);
+
+  /** 지금 어디까지 훑었나 — 검색이 도는 동안만 물어본다 */
+  const [prog, setProg] = useState<{ done: number; total: number; name: string } | null>(null);
+
+  const run = () => {
+    if (words.length === 0 || busy) return;
     setBusy(true);
-    const t = setTimeout(() => {
-      fetch(
-        `/api/channels/search?q=${encodeURIComponent(words.join(","))}&minutes=${minutes}`,
-      )
-        .then((r) => r.json() as Promise<Result>)
-        .then((j) => alive && setResult(j))
-        .catch(() => alive && setResult(null))
-        .finally(() => alive && setBusy(false));
-      // 글자를 칠 때마다 부르지 않는다 — 채널 일흔세 개를 훑는 조회다
-    }, 400);
+    setProg(null);
+    setAi(null);
+    fetch(`/api/channels/search?q=${encodeURIComponent(wordKey)}&minutes=${minutes}`)
+      .then((r) => r.json() as Promise<Result>)
+      .then((j) => {
+        setResult(j);
+        setRan({ words: wordKey, minutes });
+      })
+      .catch(() => setResult(null))
+      .finally(() => {
+        setBusy(false);
+        setProg(null);
+      });
+  };
+
+  useEffect(() => {
+    if (!busy) return;
+    let alive = true;
+    const tick = () => {
+      fetch("/api/channels/search-progress")
+        .then((r) => r.json() as Promise<{ running: boolean; done: number; total: number; name: string }>)
+        .then((p) => {
+          if (!alive) return;
+          setProg(p.running && p.total > 0 ? { done: p.done, total: p.total, name: p.name } : null);
+        })
+        .catch(() => {
+          /* 진행 상황을 못 받아도 검색 자체는 돈다 */
+        });
+    };
+    tick();
+    const t = setInterval(tick, 600);
     return () => {
       alive = false;
-      clearTimeout(t);
+      clearInterval(t);
     };
-  }, [words, minutes]);
+  }, [busy]);
 
   if (words.length === 0) {
     return (
@@ -173,6 +207,41 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
         ))}
       </div>
 
+      {/*
+        찾기 버튼 — **이게 있어야 이 칸을 띄워 놓을 수 있다.**
+        저절로 돌면 종목을 넘길 때마다 채널 일흔 개를 다시 끌어온다.
+      */}
+      <div className="filter-row">
+        <button className="filter-btn primary" disabled={busy} onClick={run}>
+          {busy ? "훑는 중…" : ran ? "다시 찾기" : "채널에서 찾기"}
+        </button>
+        {stale && !busy && (
+          <span className="cs-stale">찾을 말이 바뀌었습니다 — 다시 눌러 주세요</span>
+        )}
+        {result && !busy && (
+          <span className="pt-n">
+            원문 {result.scanned.toLocaleString("ko-KR")}건 중 {result.hits.length}건
+          </span>
+        )}
+      </div>
+
+      {/*
+        진행바 — 채널 일흔 개를 도는 동안 어디까지 왔는지.
+        「훑는 중」만 띄우면 멈춘 건지 도는 건지 알 수가 없다.
+      */}
+      {busy && (
+        <div className="cs-prog">
+          <div className="cs-prog-bar">
+            <i style={{ width: prog && prog.total > 0 ? `${(prog.done / prog.total) * 100}%` : "6%" }} />
+          </div>
+          <span className="cs-prog-t">
+            {prog && prog.total > 0
+              ? `${prog.done} / ${prog.total} · ${prog.name}`
+              : "채널 목록을 받는 중…"}
+          </span>
+        </div>
+      )}
+
       <div className="filter-row">
         <button
           className="filter-btn"
@@ -213,7 +282,6 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
         </div>
       )}
 
-      {busy && <div className="empty">채널을 훑는 중…</div>}
       {result?.error && <div className="error-banner">{result.error}</div>}
 
       {result && !result.error && (
