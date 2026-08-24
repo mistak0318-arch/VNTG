@@ -104,17 +104,41 @@ let rankCache: { at: number; codes: string[] } = { at: 0, codes: [] };
  */
 async function hotCodes(kiwoom: KiwoomClient): Promise<string[]> {
   if (Date.now() - rankCache.at < RANK_REFRESH_MS) return rankCache.codes;
+  /*
+   * ⚠️ **실패를 조용히 삼키면 안 된다.**
+   *
+   * 예전엔 `catch` 에서 아무 말 없이 지난 값을 쓰고 `at` 을 지금으로 갱신했다. 그러면
+   * 처음부터 실패했을 때 **빈 목록이 5분마다 그대로 되살아난다** — 다시 해 보지도 않는다.
+   * 실제로 그래서 하루 종일 **관심종목 여섯 개만** 쌓였다(2026-08-21 파일이 그 꼴이다).
+   * 거래대금 상위 300 을 건다고 적어 놓고 실제로는 하나도 안 걸린 것이다.
+   *
+   * 실패하면 **말하고, `at` 을 0 으로 둬 다음 차례에 곧바로 다시 해 본다.**
+   */
   try {
     // 보통주만 걸러서 준다(ETF·우선주를 실시간으로 물 이유가 없다)
-    const [kospi, kosdaq] = await Promise.all([
-      tradeValueTop(kiwoom, "001", PER_MARKET).catch(() => []),
-      tradeValueTop(kiwoom, "101", PER_MARKET).catch(() => []),
+    const [kospi, kosdaq] = await Promise.allSettled([
+      tradeValueTop(kiwoom, "001", PER_MARKET),
+      tradeValueTop(kiwoom, "101", PER_MARKET),
     ]);
-    const codes = [...kospi, ...kosdaq].map((t) => t.code).filter(Boolean);
-    // 둘 다 실패했으면 지난번 것을 그대로 쓴다 — 빈 목록으로 덮으면 구독이 통째로 풀린다
-    rankCache = { at: Date.now(), codes: codes.length > 0 ? codes : rankCache.codes };
-  } catch {
-    rankCache = { at: Date.now(), codes: rankCache.codes };
+    for (const [name, r] of [["코스피", kospi], ["코스닥", kosdaq]] as const) {
+      if (r.status === "rejected") {
+        console.log(`실시간: ${name} 거래대금 상위 실패 —`, r.reason instanceof Error ? r.reason.message : r.reason);
+      }
+    }
+    const codes = [kospi, kosdaq]
+      .flatMap((r) => (r.status === "fulfilled" ? r.value : []))
+      .map((t) => t.code)
+      .filter(Boolean);
+    if (codes.length === 0) {
+      // 빈 목록으로 덮으면 구독이 통째로 풀린다. 지난 값을 쓰되 곧바로 다시 해 본다
+      console.log("실시간: 거래대금 상위가 비었다 — 관심종목만 걸린다");
+      rankCache = { at: 0, codes: rankCache.codes };
+    } else {
+      rankCache = { at: Date.now(), codes };
+    }
+  } catch (e) {
+    console.log("실시간: 순위 조회 실패 —", e instanceof Error ? e.message : e);
+    rankCache = { at: 0, codes: rankCache.codes };
   }
   return rankCache.codes;
 }
