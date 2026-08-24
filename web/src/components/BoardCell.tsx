@@ -294,6 +294,19 @@ export function CellStockFinder({
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<{ code: string; name: string }[]>([]);
 
+  /*
+   * 고르면 **입력과 결과를 비운다.**
+   *
+   * 칸 안에서는 고르는 순간 검색창이 닫히니 몰랐는데, 보드 설정처럼 **늘 떠 있는
+   * 자리**에서는 고른 뒤에도 목록이 그대로 남아 화면을 덮었다. 고른 것은 위에 이미
+   * 「지금 SK하이닉스」로 적히므로 목록이 남을 이유가 없다.
+   */
+  const pick = (code: string, name: string) => {
+    setQ("");
+    setHits([]);
+    onPick(code, name);
+  };
+
   useEffect(() => {
     const text = q.trim();
     if (text.length < 1) {
@@ -324,13 +337,13 @@ export function CellStockFinder({
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Escape") onClose();
-          if (e.key === "Enter" && hits[0]) onPick(hits[0].code, hits[0].name);
+          if (e.key === "Enter" && hits[0]) pick(hits[0].code, hits[0].name);
         }}
       />
       {hits.length > 0 && (
         <div className="board-find-hits">
           {hits.map((h) => (
-            <button key={h.code} className="board-find-hit" onClick={() => onPick(h.code, h.name)}>
+            <button key={h.code} className="board-find-hit" onClick={() => pick(h.code, h.name)}>
               <b>{h.name}</b>
               <span className="pt-n">{h.code}</span>
             </button>

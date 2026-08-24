@@ -87,10 +87,31 @@ export class RealtimeClient {
     if (this.log.length > 200) this.log.splice(0, this.log.length - 200);
   }
 
-  private send(obj: unknown): void {
+  /**
+   * 한 줄 보낸다.
+   *
+   * ⚠️ **보내기 전에 열려 있는지 본다.** `ws.send` 는 연결 전이면 예외를 던지는데, 그게
+   * 이벤트 콜백 안에서 나면 아무도 못 잡아 **프로세스가 통째로 죽는다.** 실제로 그렇게
+   * 서버가 내려갔다(`DOMException: Sent before connected`).
+   *
+   * `onopen` 안에서 불러도 안전하지 않다 — 그 사이 재연결이 일어나면 `this.ws` 는 이미
+   * **다른 소켓**이다. 그래서 보낼 소켓을 받을 수 있게 두고, 콜백은 자기 소켓을 넘긴다.
+   *
+   * 못 보낸 건 기록만 남긴다. 구독 한 줄이 빠지는 것과 서버가 죽는 것은 무게가 다르다.
+   */
+  private send(obj: unknown, sock?: WebSocket): void {
+    const ws = sock ?? this.ws;
     const text = JSON.stringify(obj);
     this.note("→", text);
-    this.ws?.send(text);
+    if (!ws || ws.readyState !== 1) {
+      this.note("→", "(못 보냄 — 연결이 아직 안 열렸다)");
+      return;
+    }
+    try {
+      ws.send(text);
+    } catch (e) {
+      this.note("→", `(보내기 실패: ${e instanceof Error ? e.message : String(e)})`);
+    }
   }
 
   /** 환경변수로 끌 수 있다 — 이상하면 이 한 줄로 어제 상태가 된다 */
@@ -130,7 +151,7 @@ export class RealtimeClient {
        * 문서에 없는 부분이다. 이 모양이 아니면 서버가 뭐라고든 답할 것이고,
        * 그 답이 `log` 에 남는다 — 그걸 보고 고친다.
        */
-      this.send({ trnm: "LOGIN", token });
+      this.send({ trnm: "LOGIN", token }, ws);
     };
 
     ws.onmessage = (ev: MessageEvent) => {

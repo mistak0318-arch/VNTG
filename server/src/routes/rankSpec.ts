@@ -187,12 +187,48 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         ? String(req.query.exchange)
         : "3"; // 기본 통합 — 거래대금이 하루 전체(KRX+NXT)라 순위가 맞다. 가격만 아래에서 KRX 로 덮는다
 
-      const ask = (stex: string) =>
-        client.request<Record<string, unknown>>(
-          `/api/dostk/${spec.uri}`,
-          spec.apiId,
-          { ...COMMON_PARAMS, ...(spec.params ?? {}), mrkt_tp: market, stex_tp: stex },
-        );
+      /**
+       * 몇 건까지 받을까 — 화면이 정한다(기본 100, 최대 300).
+       *
+       * 키움 순위는 한 번에 백 건쯤 주고 그다음은 **연속조회**다. 예전엔 첫 장만 받아
+       * 백 건에서 잘렸는데, 「거래대금 150위가 궁금하다」에 답할 수가 없었다.
+       */
+      const limit = Math.min(Math.max(Number(req.query.limit) || 100, 20), 300);
+
+      /**
+       * 한 거래소에서 `limit` 만큼 모은다.
+       *
+       * 다음 장이 없으면 그 자리에서 멈춘다 — 코스닥 소형주처럼 목록이 짧은 조회에서
+       * 빈 장을 세 번 더 부를 이유가 없다.
+       */
+      const ask = async (stex: string) => {
+        const rows: Record<string, unknown>[] = [];
+        let contYn = "N";
+        let nextKey = "";
+        let last: Awaited<ReturnType<typeof client.request<Record<string, unknown>>>> | null = null;
+        for (let page = 0; page < 4 && rows.length < limit; page += 1) {
+          const res = await client.request<Record<string, unknown>>(
+            `/api/dostk/${spec.uri}`,
+            spec.apiId,
+            { ...COMMON_PARAMS, ...(spec.params ?? {}), mrkt_tp: market, stex_tp: stex },
+            page === 0 ? {} : { contYn, nextKey },
+          );
+          last = res;
+          const got = Array.isArray(res.data[spec.listKey])
+            ? (res.data[spec.listKey] as Record<string, unknown>[])
+            : [];
+          if (got.length === 0) break;
+          rows.push(...got);
+          contYn = res.contYn;
+          nextKey = res.nextKey;
+          if (contYn !== "Y" || !nextKey) break;
+        }
+        /* 모은 줄을 첫 응답 모양에 담아 돌려준다 — 아래 코드가 그대로 쓴다 */
+        return {
+          ...(last ?? { data: {}, contYn: "N", nextKey: "" }),
+          data: { ...(last?.data ?? {}), [spec.listKey]: rows },
+        };
+      };
 
       /*
        * **KRX 를 한 번 더 받아 가격만 덮는다.**
@@ -243,7 +279,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         },
         market,
         exchange,
-        rows: rows.slice(0, 100).map((r) => {
+        rows: rows.slice(0, limit).map((r) => {
           const code = bare(r.stk_cd);
           const k = krxOf.get(code);
           const mapped = mapRow(r, spec);
