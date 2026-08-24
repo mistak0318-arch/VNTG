@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RealtimeClient, RealtimeFrame } from "./realtimeClient.js";
@@ -130,6 +130,31 @@ function hhmmss(now = new Date()): string {
 }
 
 /**
+ * JSONL 한 덩어리를 시계열로 되돌린다.
+ *
+ * 한 줄이라도 깨져 있으면 **그 줄만 버린다.** 덧붙이기 방식은 쓰다가 전원이 나가면
+ * 마지막 줄이 잘릴 수 있는데, 그것 때문에 하루치를 통째로 못 읽으면 말이 안 된다.
+ */
+function parseJsonl(text: string): { series: SeriesMap; vi: ViEvent[] } {
+  const series: SeriesMap = {};
+  const vi: ViEvent[] = [];
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    try {
+      const o = JSON.parse(line) as { k?: string; t?: string; v?: Record<string, string>; vi?: ViEvent };
+      if (o.vi) {
+        vi.push(o.vi);
+      } else if (o.k && o.t && o.v) {
+        (series[o.k] ??= []).push({ t: o.t, v: o.v });
+      }
+    } catch {
+      /* 깨진 줄은 건너뛴다 */
+    }
+  }
+  return { series, vi };
+}
+
+/**
  * **장 기준 날짜.** 자정이 아니라 **새벽 6시에** 넘어간다.
  *
  * 자정으로 끊으면 새벽 2시에 복기하려고 열었을 때 **방금 끝난 장이 사라진다** —
@@ -153,7 +178,8 @@ export class RealtimeStore {
   /** 키별 마지막 샘플 시각(ms) — 30초 간격을 지키는 기준 */
   private readonly sampledAt = new Map<string, number>();
   private day = sessionDay();
-  private dirty = false;
+  /** 아직 파일에 안 적은 줄들 — 20초마다 덧붙인다 */
+  private pending: string[] = [];
   /** 되짚어 읽은 지난 날 파일 — 화면이 15초마다 물어도 다시 파싱하지 않게 */
   private readonly dayCache = new Map<string, { at: number; series: SeriesMap }>();
 
@@ -166,33 +192,77 @@ export class RealtimeStore {
     setInterval(() => void this.save(), 20_000);
   }
 
+  /**
+   * 오늘 파일. **JSONL** — 한 줄에 이벤트 하나다.
+   *
+   * ⚠️ 예전엔 `{day}.json` 에 **통째로 다시 썼다.** 20초마다 전체를 `JSON.stringify`
+   * 해서 파일을 갈아엎는 구조라 쓰는 시간이 **종목 수에 정비례**했다 — 300종목 0.5초,
+   * 2800종목이면 4.4초를 20초마다 물었다. 그래서 구독 종목을 300 으로 묶어 뒀었다.
+   *
+   * 덧붙이기로 바꾸면 **그 20초 동안 실제로 온 것만** 적는다. 천 종목이든 삼백 종목이든
+   * 한 번에 적는 건 수십 KB다. 종목 수 상한이 저장 때문에 정해질 이유가 없어졌다.
+   */
   private file(day = this.day): string {
+    return join(DATA_DIR, `${day}.jsonl`);
+  }
+
+  /** 예전 형식(통째로 쓴 JSON) — 되짚을 때 아직 읽어야 한다 */
+  private legacyFile(day = this.day): string {
     return join(DATA_DIR, `${day}.json`);
   }
 
   private async load(): Promise<void> {
+    /* 오늘 것이 JSONL 로 있으면 그걸 읽는다 */
     try {
-      const raw = JSON.parse(await readFile(this.file(), "utf-8")) as {
+      const parsed = parseJsonl(await readFile(this.file(), "utf-8"));
+      this.series = parsed.series;
+      this.vi = parsed.vi;
+      return;
+    } catch {
+      /* 없으면 아래 예전 형식을 본다 — 서버를 올린 날 하루는 섞여 있을 수 있다 */
+    }
+    try {
+      const raw = JSON.parse(await readFile(this.legacyFile(), "utf-8")) as {
         series?: SeriesMap;
         vi?: ViEvent[];
       };
-      // 예전 파일은 시계열만 담겨 있었다 — 그 모양도 읽는다
+      // 더 예전 파일은 시계열만 담겨 있었다 — 그 모양도 읽는다
       this.series = raw.series ?? (raw as unknown as SeriesMap);
       this.vi = raw.vi ?? [];
+      /*
+       * 읽어 들인 것을 JSONL 로 한 번 옮겨 적는다. 안 그러면 오늘 새로 온 것만
+       * 덧붙여져서 **아침에 쌓은 게 통째로 사라진 것처럼** 보인다.
+       */
+      const lines: string[] = [];
+      for (const [k, pts] of Object.entries(this.series)) {
+        for (const p of pts) lines.push(JSON.stringify({ k, t: p.t, v: p.v }) + "\n");
+      }
+      for (const e of this.vi) lines.push(JSON.stringify({ vi: e }) + "\n");
+      if (lines.length > 0) {
+        await mkdir(DATA_DIR, { recursive: true });
+        await writeFile(this.file(), lines.join(""), "utf-8");
+      }
     } catch {
       this.series = {};
       this.vi = [];
     }
   }
 
+  /**
+   * 쌓인 줄을 **덧붙인다.**
+   *
+   * 실패하면 줄을 도로 앞에 되돌린다 — 다음 차례에 다시 적으려는 것이다. 그냥 버리면
+   * 디스크가 잠깐 막힌 사이의 수급이 조용히 사라진다.
+   */
   private async save(): Promise<void> {
-    if (!this.dirty) return;
-    this.dirty = false;
+    if (this.pending.length === 0) return;
+    const chunk = this.pending;
+    this.pending = [];
     try {
       await mkdir(DATA_DIR, { recursive: true });
-      await writeFile(this.file(), JSON.stringify({ series: this.series, vi: this.vi }), "utf-8");
+      await appendFile(this.file(), chunk.join(""), "utf-8");
     } catch {
-      /* 못 적어도 메모리에는 남아 있다 */
+      this.pending = chunk.concat(this.pending);
     }
   }
 
@@ -207,6 +277,7 @@ export class RealtimeStore {
       this.day = today;
       this.series = {};
       this.vi = [];
+      this.pending = [];
       this.sampledAt.clear();
     }
 
@@ -243,8 +314,10 @@ export class RealtimeStore {
        * **거래원(`0F`)은 안 준다.** 그걸 모르고 `values["20"]` 만 쓰면
        * 시각이 빈 점만 쌓여서 그림을 못 그린다.
        */
-      arr.push({ t: values["20"] || hhmmss(), v: trim(type, values) });
-      this.dirty = true;
+      const point = { t: values["20"] || hhmmss(), v: trim(type, values) };
+      arr.push(point);
+      /* 메모리에 넣은 그 줄을 그대로 적을 목록에도 넣는다 */
+      this.pending.push(JSON.stringify({ k: key, t: point.t, v: point.v }) + "\n");
     }
   }
 
@@ -281,7 +354,7 @@ export class RealtimeStore {
     });
     // 하루치만 — 오래된 것부터 버린다
     if (this.vi.length > 3000) this.vi.splice(0, this.vi.length - 3000);
-    this.dirty = true;
+    this.pending.push(JSON.stringify({ vi: this.vi[this.vi.length - 1] }) + "\n");
   }
 
   /** 오늘 걸린 VI — 최근 것부터 */
@@ -339,7 +412,8 @@ export class RealtimeStore {
     try {
       const names = await readdir(DATA_DIR);
       return names
-        .filter((n) => /^\d{4}-\d{2}-\d{2}\.json$/.test(n))
+        // 새 형식(.jsonl)과 예전 형식(.json)을 다 본다 — 바꾼 날은 섞여 있다
+        .filter((n) => /^\d{4}-\d{2}-\d{2}\.jsonl?$/.test(n))
         .map((n) => n.slice(0, 10))
         .filter((d) => d < this.day)
         .sort((a, b) => b.localeCompare(a))
@@ -352,8 +426,17 @@ export class RealtimeStore {
   private async readDay(day: string): Promise<SeriesMap | null> {
     const hit = this.dayCache.get(day);
     if (hit && Date.now() - hit.at < DAY_CACHE_MS) return hit.series;
+    /* 새 형식 먼저 */
     try {
-      const raw = JSON.parse(await readFile(this.file(day), "utf-8")) as {
+      const series = parseJsonl(await readFile(this.file(day), "utf-8")).series;
+      if (this.dayCache.size > 3) this.dayCache.clear();
+      this.dayCache.set(day, { at: Date.now(), series });
+      return series;
+    } catch {
+      /* 없으면 예전 형식 */
+    }
+    try {
+      const raw = JSON.parse(await readFile(this.legacyFile(day), "utf-8")) as {
         series?: SeriesMap;
       };
       const series = raw.series ?? (raw as unknown as SeriesMap);

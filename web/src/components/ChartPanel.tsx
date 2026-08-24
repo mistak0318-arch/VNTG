@@ -141,7 +141,7 @@ export function ChartPanel({
    * 채워진다). 쓰기는 `setPref` 라 서버에도 올라간다.
    */
   const viewKey = viewId ? `vntg.chart.view.${viewId}` : "";
-  const saved = (): { period?: Period; venue?: Venue; span?: number } => {
+  const saved = (): { period?: Period; venue?: Venue; span?: number; fold?: boolean } => {
     if (!viewKey) return {};
     try {
       return JSON.parse(localStorage.getItem(viewKey) ?? "{}") as Record<string, never>;
@@ -177,6 +177,26 @@ export function ChartPanel({
   });
 
   /*
+   * 판독 줄을 접어 뒀나 — **이 자리의 사정**이다.
+   *
+   * ⚠️ 전역 설정에 있었다. 그래서 한 창에서 「이동평균·매물대 접기」를 누르면 **다른
+   * 창의 차트까지 같이 접혔다.** 보드를 여러 창으로 띄우는 이유가 창마다 다르게 보려는
+   * 것인데 그게 안 됐다.
+   *
+   * 자리 이름이 있으면 그 자리에 적고, 없으면(종목 상세처럼 한 번 보고 마는 자리)
+   * 예전처럼 전역 설정을 쓴다 — 거기서 접은 건 「앞으로도 접어 둬」에 가깝다.
+   */
+  const [foldOwn, setFoldOwn] = useState<boolean>(() => {
+    const v = saved().fold;
+    return typeof v === "boolean" ? v : prefs.insightsFold;
+  });
+  const fold = viewKey ? foldOwn : prefs.insightsFold;
+  const toggleFold = () => {
+    if (viewKey) setFoldOwn((v) => !v);
+    else savePrefs({ ...prefs, insightsFold: !prefs.insightsFold });
+  };
+
+  /*
    * 바뀔 때마다 적어 둔다.
    *
    * 셋을 한 덩어리로 적는다 — 봉과 구간은 짝이라서 따로 적으면 「주봉인데 구간은 240일」
@@ -184,8 +204,8 @@ export function ChartPanel({
    */
   useEffect(() => {
     if (!viewKey) return;
-    setPref(viewKey, JSON.stringify({ period, venue, span }));
-  }, [viewKey, period, venue, span]);
+    setPref(viewKey, JSON.stringify({ period, venue, span, fold: foldOwn }));
+  }, [viewKey, period, venue, span, foldOwn]);
   const [full, setFull] = useState(false);
   /** 전체화면에서는 판독 줄을 접어 둔다 — 크게 보려고 들어온 자리다 */
   const [fullInsights, setFullInsights] = useState(false);
@@ -462,10 +482,10 @@ export function ChartPanel({
       {showInsights && (
         <button
           className="chart-insights-toggle"
-          onClick={() => savePrefs({ ...prefs, insightsFold: !prefs.insightsFold })}
-          title={prefs.insightsFold ? "이동평균·매물대 펴기" : "접기"}
+          onClick={toggleFold}
+          title={fold ? "이동평균·매물대 펴기" : "접기"}
         >
-          {prefs.insightsFold ? "▾ 이동평균·매물대" : "▴ 이동평균·매물대 접기"}
+          {fold ? "▾ 이동평균·매물대" : "▴ 이동평균·매물대 접기"}
         </button>
       )}
       {/*
@@ -479,7 +499,7 @@ export function ChartPanel({
         위에 두면 칸을 아무리 키워도 이평선·매물대가 늘 눈에 있다. 도구줄과 붙어 있어
         「고르고 → 읽고 → 그림」 순서가 되는데, 실제로 보는 것도 그 순서다.
       */}
-      {!prefs.insightsFold && insightsRow}
+      {!fold && insightsRow}
       {loading && <div className="empty">차트 불러오는 중...</div>}
       {error && <div className="error-banner">{error}</div>}
       {!loading && !error && (
