@@ -16,10 +16,21 @@ import { CumulativeRank } from "../components/CumulativeRank";
  * 실제로 보는 것은 다섯이고 나머지는 가끔이다. 다섯을 탭으로 앞에 세우고
  * 나머지는 「그 밖에」에 그대로 둔다(쓰던 것을 지우지는 않는다).
  *
- * ## 거래소 토글
+ * ## 거래소 — 거래대금은 통합, 가격은 KRX
  *
- * 키움의 「통합」은 실측하면 KRX 와 같은 값이라, NXT 에서만 급등한 종목은
- * 기본 조회에 아예 안 나온다. 그래서 토글을 남겨 둔다.
+ * 2026-08-24 실측(삼성전자 하루치):
+ *
+ * | 거래소 | 거래대금 | 현재가 |
+ * |---|---|---|
+ * | KRX | 84,561억 | 257,000 |
+ * | NXT | 52,463억 | 256,000 |
+ * | **통합** | **137,023억** | 256,000 |
+ *
+ * 통합의 거래대금은 **정확히 합계**다(하루 거래가 NXT 프리 + KRX 정규 + NXT 애프터라
+ * 합계가 맞다). 그런데 **가격은 NXT 최종가**를 준다.
+ *
+ * 그래서 기본은 통합이되 **서버가 가격만 KRX 로 덮어** 준다. KRX 만 보면 삼성전자
+ * 거래대금이 84,561억으로 줄어 순위 자체가 틀어진다.
  *
  * ## 필터
  *
@@ -41,7 +52,7 @@ const MARKETS = [
 ];
 
 const EXCHANGES = [
-  { key: "3", label: "통합", hint: "실측상 KRX와 같은 값이 나옵니다" },
+  { key: "3", label: "통합", hint: "하루 전체 — NXT 프리 + KRX 정규 + NXT 애프터 (가격은 KRX 기준으로 맞춥니다)" },
   { key: "1", label: "KRX", hint: "한국거래소" },
   { key: "2", label: "NXT", hint: "대체거래소 — 여기서만 움직인 종목이 있습니다" },
 ];
@@ -151,6 +162,14 @@ export function ScreenerPage({
   const [tab, setTab] = useState<string>("trade-value");
   const [active, setActive] = useState("flu-rate");
   const [market, setMarket] = useState("000");
+  /*
+   * 기본은 **통합**이다 — 거래대금이 하루 전체(NXT 프리 + KRX 정규 + NXT 애프터)라
+   * 순위가 맞다. 2026-08-24 실측: 삼성전자 KRX 84,561억 + NXT 52,463억 = 통합 137,023억.
+   * KRX 만 보면 순위 자체가 틀어진다.
+   *
+   * ⚠️ 가격은 통합이 NXT 최종가를 주므로 **서버가 KRX 값으로 덮어** 준다.
+   * 그래야 목록과 종목 상세가 같은 값을 말한다.
+   */
   const [exchange, setExchange] = useState("3");
   const [data, setData] = useState<RankResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -432,6 +451,25 @@ export function ScreenerPage({
                         .filter((c) => c.key !== "stk_nm")
                         .map((c) => {
                           const v = cell(r[c.key], c.type);
+                          /*
+                           * 거래대금은 **어디서 돌았는지**까지 보여준다.
+                           *
+                           * 하루 거래는 NXT 프리(08~09시) + KRX 정규 + NXT 애프터 셋이다.
+                           * 합계만 적으면 「이 종목이 NXT 에서 돈 게 절반」 같은 걸 놓친다 —
+                           * 삼성전자는 오늘 137,023억 중 52,462억(38%)이 NXT 였다.
+                           */
+                          if (c.key === "trde_prica" && r.tvKrx !== null && r.tv !== null) {
+                            const nxt = r.tv - r.tvKrx;
+                            return (
+                              <td key={c.key} className="num">
+                                <b>{fmtNum(r.tv)}억</b>
+                                <i className="scr-split">
+                                  KRX {fmtNum(r.tvKrx)}
+                                  {nxt > 0 ? ` · NXT ${fmtNum(nxt)}` : ""}
+                                </i>
+                              </td>
+                            );
+                          }
                           return (
                             <td key={c.key} className={`num ${v.cls}`}>
                               {v.text}

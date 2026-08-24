@@ -1034,11 +1034,24 @@ body {
   padding: 16px;
 }
 
+/*
+ * 머리줄은 **스크롤을 따라온다.**
+ *
+ * `.sheet` 안에서 같이 흘러가고 있었다. 그래서 아래로 조금만 내려도 종목명·관심종목
+ * 버튼·닫기가 통째로 화면 밖으로 밀렸다 — **닫을 방법이 사라진다.**
+ * 종목발굴에서 화살표로 넘기면 스크롤 위치가 남아서 열자마자 그 상태로 보였다.
+ */
 .sheet-header {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+  position: sticky;
+  top: -16px; /* .sheet 의 padding 만큼 끌어올려 빈 틈이 안 생기게 */
+  z-index: 2;
+  background: var(--panel);
+  padding: 16px 0 8px;
+  margin-top: -16px;
 }
 
 .sheet-header h2 {
@@ -3205,14 +3218,20 @@ body {
   position: absolute;
   z-index: 5;
   pointer-events: none;              /* 툴팁이 커서를 가로채면 크로스헤어가 끊긴다 */
-  min-width: 168px;
-  padding: 8px 10px;
+  min-width: 152px;
+  padding: 6px 9px;
   border-radius: 8px;
-  background: var(--panel);
+  /*
+   * 반투명이라 **뒤의 봉이 비쳐 보인다.** 구석에 붙박이로 뒀어도 넓은 구간을 볼 때는
+   * 상자 뒤에도 봉이 있다. 흐릿하게라도 보이면 「저기 뭐가 있나」를 안 묻게 된다.
+   * 글자는 안 흐려야 하므로 opacity 가 아니라 배경색만 투명하게 섞는다.
+   */
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(3px);
   border: 1px solid var(--border);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-  font-size: 0.7667rem;
-  line-height: 1.5;
+  font-size: 0.7333rem;
+  line-height: 1.45;
 }
 .candle-tip .ct-name { font-weight: 700; font-size: 0.8rem; }
 .candle-tip .ct-date { color: var(--muted); margin-bottom: 5px; }
@@ -5923,6 +5942,17 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 
 /* 당일수급 미니 — 곁눈으로 보는 세 줄 */
 .sm-day { font-size: 0.68rem; color: var(--muted); margin-bottom: 0.3rem; }
+/*
+ * 미니 수급표 — **곁눈으로 보는 칸**이라 촘촘해야 한다.
+ * 구간이 열로 펴지면서 다섯 칸이 되므로 여백을 줄이고 숫자를 붙인다.
+ */
+.sm-table { font-size: 0.74rem; }
+.sm-table th, .sm-table td { padding: 3px 5px; }
+.sm-table thead th { color: var(--muted); font-weight: 600; }
+.sm-table tbody th { text-align: left; color: var(--muted); font-weight: 600; white-space: nowrap; }
+/* 기관 안쪽 넷은 들여써서 합계와 구별 — 안 그러면 일곱 줄이 다 같은 층으로 보인다 */
+.sm-table .sm-sub th { padding-left: 14px; font-weight: 400; font-size: 0.7rem; }
+.sm-table .sm-sub td { font-size: 0.7rem; color: var(--text-dim); }
 .sm-row { display: flex; align-items: baseline; justify-content: space-between; padding: 0.18rem 0; }
 .sm-k { font-size: 0.82rem; color: var(--muted); }
 .sm-v { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
@@ -5934,3 +5964,29 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .sm-part { display: flex; justify-content: space-between; font-size: 0.74rem; padding-left: 0.4rem; }
 .sm-part em { font-style: normal; color: var(--muted); }
 .sm-part b { font-variant-numeric: tabular-nums; }
+
+/* 거래대금 아래에 거래소별 몫 — 하루 거래는 NXT 프리 + KRX 정규 + NXT 애프터다 */
+.scr-split { display: block; font-style: normal; font-size: 0.66rem; color: var(--muted); }
+
+/* 수출입 — 기준 월과 받은 시각을 갈라 놓은 줄 */
+.trade-stamp { align-items: baseline; gap: 10px; }
+.trade-stamp b { font-size: 14px; }
+
+/* 종목발굴 목록의 열 이름 줄 — 행과 같은 폭을 쓰되 값과 구별되게 */
+.sd-list-cols {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel);
+  font-size: 0.7333rem;
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-strong, var(--border));
+  padding-top: 2px;
+  padding-bottom: 5px;
+  cursor: default;
+}
+.sd-list-cols .sd-list-price,
+.sd-list-cols .sd-list-rate,
+.sd-list-cols .sd-list-amt,
+.sd-list-cols .sd-list-score { color: var(--muted); font-weight: 600; font-size: 0.7333rem; }

@@ -29,7 +29,7 @@ export function createRankingRouter(client: KiwoomClient): Router {
         pric_tp: "0",
         trde_prica_tp: "0",
         mrkt_open_tp: "0",
-        stex_tp: "3", // 통합
+        stex_tp: "3", // 통합 — 거래대금은 하루 전체(NXT 프리 + KRX 정규 + NXT 애프터)가 맞다
       });
       res.json(data);
     } catch (err) {
@@ -71,7 +71,7 @@ export function createRankingRouter(client: KiwoomClient): Router {
         trde_tp: trdeTp,
         sort_cnd: "2", // 2:금액
         unit_tp: "1",
-        stex_tp: "3",
+        stex_tp: "1",
       });
       res.json(data);
     } catch (err) {

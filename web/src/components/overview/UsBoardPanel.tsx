@@ -13,7 +13,7 @@ import {
 import { useSection } from "../../useSection";
 import { YahooChartSheet, type ChartTarget } from "./YahooChartSheet";
 import { UsSpark } from "./UsSpark";
-import { sideQuote } from "../../usSession";
+import { UsWatchTable } from "../UsWatchTable";
 import { useWatchGroupTiles } from "../../useWatchGroupTiles";
 import { ConstituentSheet, type ConstituentTarget } from "./ConstituentSheet";
 
@@ -350,7 +350,14 @@ function UsWatchMap({ onOpen }: { onOpen: (symbol: string, label: string) => voi
         <div className="table-note">
           색이 진할수록 등락폭이 큽니다(5% 기준) · 타일을 누르면 <b>구성종목</b>이 열립니다 ·
           {tiles.length}개 그룹 · <b>▲/▼</b> 는 그 그룹에서 오른/내린 종목 수입니다 ·
-          등락률은 <b>단순평균</b>입니다(해외는 시가총액을 안 받아옵니다)
+          등락률은 <b>단순평균</b>입니다(해외는 시가총액을 안 받아옵니다).
+          {/*
+            타일과 아래 표가 다른 값을 낼 수 있다 — 층이 달라서다.
+            안 적어 두면 「어느 쪽이 맞나」가 된다. 실제로 그 질문을 받았다.
+          */}
+          {" "}타일은 전일 종가 대비 <b>지금</b> 값이라 <b>시간외까지</b> 칩니다.
+          아래 표의 등락률은 <b>정규장</b>만이고 시간외는 괄호에 따로 있습니다 —
+          시간외에 크게 움직이면 둘이 다릅니다.
         </div>
       </div>
 
@@ -623,93 +630,29 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
             담긴 종목이 없습니다. <b>✏ 편집</b>을 켜고 검색해서 넣으세요.
           </div>
         ) : (
-          <div className="usb-list">
-            {current.stocks.map((s, i) => (
-              <UsBoardRow
-                key={s.symbol}
-                row={s}
-                editing={editing}
-                first={i === 0}
-                last={i === current.stocks.length - 1}
-                onMove={(d) => void move(s.symbol, d)}
-                onRemove={() => void run(() => api.usWatchStockRemove(current.id, s.symbol))}
-                onOpen={() => onOpen(s.symbol, s.name || s.symbol)}
-              />
-            ))}
-          </div>
+          /*
+            ⚠️ 예전엔 카드를 **옆으로 늘어놓았다.** 한 줄에 셋씩 들어가니 종목끼리
+            줄이 안 맞아서, 어느 게 많이 빠졌는지 눈으로 훑을 수가 없었다.
+            관심종목(해외) 메뉴와 **같은 표**를 쓴다 — 값이 갈라질 일도 없어진다.
+          */
+          <UsWatchTable
+            stocks={current.stocks}
+            editing={editing}
+            onOpen={onOpen}
+            onMove={(symbol, d) => void move(symbol, d)}
+            onRemove={(symbol) => void run(() => api.usWatchStockRemove(current.id, symbol))}
+          />
         )}
 
         <div className="table-note">
           <b>관심종목(해외)</b> 와 같은 목록입니다 — 여기서 넣고 빼면 거기서도 바뀝니다.
           종목을 누르면 <b>상세</b>가 열립니다.
-          괄호는 <b>지금 도는 다른 세션</b>입니다 — 정규장 마감 후엔 <b>애프터장</b>,
-          한국 낮엔 <b>주간거래</b>. 정규장 중에는 사라집니다(그때는 지금 값이 곧 정규장입니다).
+          등락률은 <b>전일 종가 대비</b>고, 괄호는 <b>지금 도는 시간외</b>입니다 —
+          한국 저녁이면 <b>프리장</b>, 새벽 마감 뒤엔 <b>애프터장</b>, 한국 낮엔 <b>주간거래</b>.
+          정규장 중에는 사라집니다(그때는 지금 값이 곧 정규장입니다).
         </div>
       </div>
     </section>
-  );
-}
-
-function UsBoardRow({
-  row,
-  editing,
-  first,
-  last,
-  onMove,
-  onRemove,
-  onOpen,
-}: {
-  row: UsQuoteRow;
-  editing: boolean;
-  first: boolean;
-  last: boolean;
-  onMove: (d: -1 | 1) => void;
-  onRemove: () => void;
-  onOpen: () => void;
-}) {
-  const side = sideQuote(row);
-  return (
-    <div className="usb-row">
-      {editing && (
-        <span className="usb-move">
-          <button className="gt-move" onClick={() => onMove(-1)} disabled={first} title="위로">
-            ▲
-          </button>
-          <button className="gt-move" onClick={() => onMove(1)} disabled={last} title="아래로">
-            ▼
-          </button>
-        </span>
-      )}
-      {/* 종목을 누르면 상세가 열린다 — 예전엔 표에서 끊겼다 */}
-      <button type="button" className="usb-sym usb-open" onClick={onOpen} title="눌러서 상세 보기">
-        {row.flag} {row.symbol}
-        <span className="usb-nm">{row.name}</span>
-      </button>
-      <span className="usb-px">
-        {row.price === null ? "-" : row.price.toFixed(2)}
-        {/* 괄호는 지금 도는 다른 세션 — 마감 후엔 애프터장, 한국 낮엔 주간거래 */}
-        {side && (
-          <span className="uw-day" title={side.label}>
-            {" "}
-            ({side.price.toFixed(2)})
-          </span>
-        )}
-      </span>
-      <span className={`usb-rt ${cls(row.changeRate)}`}>
-        {pct(row.changeRate)}
-        {side && (
-          <span className={`uw-day ${cls(side.changeRate)}`} title={side.label}>
-            {" "}
-            ({pct(side.changeRate)})
-          </span>
-        )}
-      </span>
-      {editing && (
-        <button className="row-del-btn" onClick={onRemove} title="빼기">
-          ✕
-        </button>
-      )}
-    </div>
   );
 }
 

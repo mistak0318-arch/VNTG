@@ -245,13 +245,13 @@ async function fetchFlow(client: KiwoomClient): Promise<MarketFlow> {
       mrkt_tp: "0",
       amt_qty_tp: "0",
       base_dt: "",
-      stex_tp: "3",
+      stex_tp: "1", // KRX — 상세(ka10001)와 기준을 맞춘다. 통합은 마감 후 NXT 값을 준다
     }),
     client.request<Row>(SECT_RESOURCE, "ka10051", {
       mrkt_tp: "1",
       amt_qty_tp: "0",
       base_dt: "",
-      stex_tp: "3",
+      stex_tp: "1", // KRX — 상세(ka10001)와 기준을 맞춘다. 통합은 마감 후 NXT 값을 준다
     }),
   ]);
 
@@ -309,7 +309,7 @@ async function fetchMovers(client: KiwoomClient): Promise<Movers> {
     updown_incls: "1",
     pric_cnd: "0",
     trde_prica_cnd: "50", // 5억원 이상
-    stex_tp: "3",
+    stex_tp: "1", // KRX — 상세(ka10001)와 기준을 맞춘다. 통합은 마감 후 NXT 값을 준다
   };
   const [up, down] = await Promise.all([
     client.request<Row>(RKINFO_RESOURCE, "ka10027", { ...common, sort_tp: "1" }),
@@ -385,7 +385,7 @@ function mapThemes(rows: Row[]): ThemeRow[] {
 
 async function fetchThemes(client: KiwoomClient): Promise<Themes> {
   // ka90001 테마그룹별요청 — 테마명과 등락률을 계산해서 준다 (외부 크롤링 불필요)
-  const common = { qry_tp: "0", stk_cd: "", date_tp: "1", thema_nm: "", stex_tp: "3" };
+  const common = { qry_tp: "0", stk_cd: "", date_tp: "1", thema_nm: "", stex_tp: "1" };
   const [top, bottom] = await Promise.all([
     client.request<Row>(THME_RESOURCE, "ka90001", { ...common, flu_pl_amt_tp: "3" }), // 3:상위등락률
     client.request<Row>(THME_RESOURCE, "ka90001", { ...common, flu_pl_amt_tp: "4" }), // 4:하위등락률
@@ -413,7 +413,7 @@ async function fetchHighLow(client: KiwoomClient): Promise<HighLow> {
     crd_cnd: "0",
     updown_incls: "1",
     dt: "250",
-    stex_tp: "3",
+    stex_tp: "1", // KRX — 상세(ka10001)와 기준을 맞춘다. 통합은 마감 후 NXT 값을 준다
   };
   const [high, low] = await Promise.all([
     client.request<Row>(STKINFO_RESOURCE, "ka10016", { ...common, ntl_tp: "1" }),
@@ -453,7 +453,7 @@ async function fetchVi(client: KiwoomClient): Promise<ViRow[]> {
     min_trde_prica: "0",
     max_trde_prica: "0",
     motn_drc: "0",
-    stex_tp: "3",
+    stex_tp: "1", // KRX — 상세(ka10001)와 기준을 맞춘다. 통합은 마감 후 NXT 값을 준다
   });
   const rows = Array.isArray(data.motn_stk) ? (data.motn_stk as Row[]) : [];
   return rows.slice(0, 30).map((r) => ({
@@ -589,7 +589,7 @@ export async function getProgramTrades(
     amt_qty_tp: "1", // 금액(백만원)
     mrkt_tp: MRKT_CODE[market],
     min_tic_tp: "1", // 분
-    stex_tp: "3",
+    stex_tp: "1", // KRX — 상세(ka10001)와 기준을 맞춘다. 통합은 마감 후 NXT 값을 준다
   });
   const rows = Array.isArray(data.prm_trde_trnsn) ? (data.prm_trde_trnsn as Row[]) : [];
   const mapped = mapProgramRows(rows);
@@ -601,7 +601,12 @@ export async function getProgramTrades(
 
 /** 파라미터가 붙는 조회라 섹션 캐시와 분리해서 키별로 캐싱한다 */
 const constituentCache = new Map<string, { data: StockRow[]; at: number }>();
-const CONSTITUENT_TTL_MS = 180_000;
+/*
+ * ⚠️ 3분이었다. 그런데 이 목록에서 종목을 누르면 상세는 **그 자리에서 새로 받는다** —
+ * 목록에 −1.2% 로 뜬 종목이 눌러 보면 +0.4% 라 「어느 쪽이 맞냐」가 됐다.
+ * 장중에 3분은 너무 길다. 40초면 조회량도 감당되고 눈에 띄는 어긋남도 없다.
+ */
+const CONSTITUENT_TTL_MS = 40_000;
 
 function mapConstituents(rows: Row[], shares?: Map<string, number>): StockRow[] {
   return rows.map((r) => {
@@ -629,7 +634,7 @@ export async function getThemeStocks(client: KiwoomClient, themeCode: string): P
   const { data } = await client.request<Row>(THME_RESOURCE, "ka90002", {
     date_tp: "1",
     thema_grp_cd: themeCode,
-    stex_tp: "3",
+    stex_tp: "1", // KRX — 상세(ka10001)와 기준을 맞춘다. 통합은 마감 후 NXT 값을 준다
   });
   const rows = Array.isArray(data.thema_comp_stk) ? (data.thema_comp_stk as Row[]) : [];
   const mapped = mapConstituents(rows, await getSharesMap(client));
@@ -653,7 +658,7 @@ export async function getSectorStocks(
   const { data } = await client.request<Row>(SECT_RESOURCE, "ka20002", {
     mrkt_tp: market === "kospi" ? "0" : "1",
     inds_cd: sectorCode,
-    stex_tp: "3",
+    stex_tp: "1", // KRX — 상세(ka10001)와 기준을 맞춘다. 통합은 마감 후 NXT 값을 준다
   });
   const rows = Array.isArray(data.inds_stkpc) ? (data.inds_stkpc as Row[]) : [];
   const mapped = mapConstituents(rows, await getSharesMap(client));

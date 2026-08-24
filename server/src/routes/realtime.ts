@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { RealtimeClient } from "../realtimeClient.js";
-import { getRealtime, peekRealtime } from "../realtimeHub.js";
+import { getRealtime, peekRealtime, shouldRun } from "../realtimeHub.js";
 
 /**
  * 실시간 웹소켓 — **아직 확인 단계다.**
@@ -117,18 +117,43 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
     try {
       const type = String(req.query.type ?? "");
       const item = String(req.query.item ?? "");
-      const { store } = hub();
-      const got = (await store?.getSeriesOrLast(type, item)) ?? {
-        points: [],
-        day: "",
-        stale: false,
-      };
+      const { client: rt, store } = hub();
+
+      /*
+       * ⚠️ **장중에는 지난 장으로 되짚지 않는다.**
+       *
+       * 되짚기는 마감 뒤·주말에 복기하라고 만든 것이다. 그런데 장중에도 그게 돌아서,
+       * 오늘 아직 안 쌓인 종목을 열면 **「8월 21일(금) 장 기준」**이 떴다 —
+       * 12시에 지난 금요일 수급을 보여준 것이다. 「왜 전거래일 기준이냐」가 그래서 나왔다.
+       *
+       * 장중에 오늘 것이 없다는 건 **지금부터 쌓으면 되는 일**이지 지난 장을 볼 일이 아니다.
+       */
+      const live = shouldRun();
+
+      /*
+       * 그리고 **보고 있는 종목은 그 자리에서 구독한다.**
+       *
+       * 실시간은 스케줄러가 고른 종목(관심종목·거래대금 상위)만 물고 있었다. 그 밖의 종목은
+       * 화면을 열어도 영영 안 쌓였다 — 거래상위에서 아무 종목이나 눌러 보는 게 이 앱을
+       * 쓰는 방식인데 그때마다 빈 화면이었다.
+       * 화면이 물어본 종목은 사람이 지금 보고 있는 종목이므로 구독할 값어치가 있다.
+       */
+      if (live && rt && type && item) rt.subscribe(type, item);
+
+      const got = store
+        ? live
+          ? { points: store.getSeries(type, item), day: "", stale: false }
+          : await store.getSeriesOrLast(type, item)
+        : { points: [], day: "", stale: false };
+
       res.json({
         type,
         item,
         points: got.points,
         day: got.day,
         stale: got.stale,
+        /** 장중인가 — 화면이 「지금 쌓는 중」과 「지난 장」을 갈라 말할 수 있게 */
+        live,
         latest: store?.getLatest(type, item) ?? null,
       });
     } catch (err) {

@@ -63,6 +63,7 @@ function useBrokerSeries(code: string, broker: string | null): FlowSeriesData {
           points: { t: string; v: Record<string, string> }[];
           day?: string;
           stale?: boolean;
+          live?: boolean;
         };
         if (!alive) return;
         const out: FlowSample[] = [];
@@ -97,7 +98,7 @@ function useBrokerSeries(code: string, broker: string | null): FlowSeriesData {
           // 한 창구가 매수·매도 양쪽에 다 오르는 일이 흔하다 — 그래서 빼서 순매수를 낸다
           out.push({ t: p.t, buy: lastBuy, sell: lastSell, net: lastBuy - lastSell });
         }
-        setS({ pts: out, day: j.day ?? "", stale: Boolean(j.stale) });
+        setS({ pts: out, day: j.day ?? "", stale: Boolean(j.stale), live: Boolean(j.live) });
       } catch {
         /* 실시간이 없으면 빈 그림 — 위 표는 REST 라 그대로 뜬다 */
       }

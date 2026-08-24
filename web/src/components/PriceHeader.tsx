@@ -136,7 +136,7 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
    * 예전엔 정규장 안팎을 가리지 않고 KRX 와 NXT 를 나란히 늘어놓아서 어느 쪽을 보고
    * 있는지 헷갈렸다. 이제 국면으로 가른다 —
    *
-   *   · 정규장 중        큰 숫자 = 지금 KRX 값. **NXT 는 아예 안 띄운다**
+   *   · 정규장 중        큰 숫자 = 지금 KRX 값. NXT 는 **값이 다를 때만** 작게
    *   · 개장 전(NXT 프리) 큰 숫자 = **전날 정규장 종가**. KRX 는 아직 거래가 없다
    *   · 마감 후(NXT 애프터) 큰 숫자 = **오늘 정규장 종가**
    *
@@ -147,9 +147,23 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
   // 개장 전에는 KRX 가 아직 안 움직였다. 「현재가」라고 부르면 거짓말이 된다
   const mainPrice = preOpen ? info.base_pric : info.cur_prc;
   const mainLabel = preOpen ? "전날 종가" : krxDone ? "종가" : "현재가";
-  /** 정규장 중에는 NXT 를 숨긴다 — 헷갈리기만 한다 */
+  /**
+   * NXT 를 언제 보여줄까.
+   *
+   * ⚠️ 예전엔 **정규장 중엔 숨겼다**(「헷갈리기만 한다」). 그런데 NXT 는 정규장에도
+   * **병행 거래**된다 — 2026-08-24 실측으로 삼성전자 하루 거래대금 137,023억 중
+   * **52,462억(38%)이 NXT** 였고 종가도 KRX 257,000 · NXT 256,000 으로 달랐다.
+   * 그만한 거래를 화면에서 지워 두면 「NXT 가격이 왜 안 보이냐」가 나온다.
+   *
+   * 대신 **값이 같으면 안 띄운다.** 같은 숫자를 두 줄 쓰면 그게 진짜 헷갈리는 것이다.
+   */
+  const nxtDiffers =
+    nxt?.price != null && Math.abs(nxt.price - Math.abs(Number(info.cur_prc))) > 1e-9;
   const showNxtLine =
-    phase !== "regular" && nxt?.price != null && nxt.price > 0 && Number.isFinite(nxt.changeRate);
+    nxt?.price != null &&
+    nxt.price > 0 &&
+    Number.isFinite(nxt.changeRate) &&
+    (phase !== "regular" || nxtDiffers);
   const nxtCls = !nxt ? "" : nxt.changeRate > 0 ? "positive" : nxt.changeRate < 0 ? "negative" : "";
 
   return (
@@ -192,8 +206,8 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           const v = vsBase(it.value, base);
           const nv = vsBase(it.nxtValue, base);
           // KRX 와 같은 값이면 굳이 두 번 적지 않는다 — 다를 때만 눈에 띄어야 한다
+          // (정규장 중에도 NXT 는 병행 거래된다. 값이 다르면 그때도 보여야 한다)
           const showNxt =
-            phase !== "regular" &&
             it.nxtValue !== null &&
             it.nxtValue > 0 &&
             it.nxtValue !== Math.abs(Number(it.value));

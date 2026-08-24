@@ -711,6 +711,11 @@ function ListPanel({
     activeRef.current?.scrollIntoView({ block: "nearest" });
   }, [index]);
 
+  /* 머리줄에 적을 열을 정한다 — 한 줄이라도 값이 있으면 그 열은 쓰이는 것이다 */
+  const hasPrice = list.some((c) => c.price > 0);
+  const hasAmt = list.some((c) => c.tradeValue !== null);
+  const hasScore = list.some((c) => c.score !== undefined);
+
   return (
     <section className="card sd-list">
       <div className="sd-list-head">
@@ -720,7 +725,40 @@ function ListPanel({
         </button>
         {withSignals && <span className="pt-n">앞의 40종목만 · 처음엔 좀 걸립니다</span>}
       </div>
+      {/*
+        ⚠️ **열 이름 줄.**
+
+        이 목록은 표가 아니라 버튼을 쌓은 것이라 머리줄이 아예 없었다. 그래서
+        `186,690억` 이 거래대금인지 시가총액인지 알 방법이 없었다 — 값은 처음부터
+        맞았고 **이름이 없던 것**이다. 행과 같은 flex 클래스를 그대로 써서 폭을 맞춘다.
+
+        없는 열은 안 적는다. 조회에 따라 점수나 거래대금이 없는데 이름만 있으면
+        빈 칸이 무슨 뜻인지 또 물어야 한다.
+      */}
       <div className="sd-list-body">
+        {/*
+          ⚠️ 머리줄은 **구르는 칸 안에** 둔다.
+
+          밖에 두면 값 행에는 세로 스크롤바가 붙고 머리줄에는 안 붙어서 **스무 남짓
+          픽셀이 어긋난다** — 「거래대금」이 등락률 쪽으로 밀려 어느 열 이름인지
+          오히려 헷갈린다. 안에 넣고 sticky 로 붙이면 폭이 정확히 같고, 백 종목을
+          내려도 이름이 따라온다.
+        */}
+        {list.length > 0 && (
+          <div className="sd-list-row sd-list-cols" aria-hidden>
+            <span className="sd-list-rank">#</span>
+            {withSignals && <span className="sig-dot" style={{ visibility: "hidden" }} />}
+            <span className="sd-list-name">종목</span>
+            {hasPrice && (
+              <>
+                <span className="sd-list-price">현재가</span>
+                <span className="sd-list-rate">등락률</span>
+              </>
+            )}
+            {hasAmt && <span className="sd-list-amt">거래대금</span>}
+            {hasScore && <span className="sd-list-score">점수</span>}
+          </div>
+        )}
         {list.map((c, i) => (
           <button
             key={`${c.code}-${i}`}

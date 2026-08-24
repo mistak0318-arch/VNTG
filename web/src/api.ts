@@ -1292,6 +1292,8 @@ export interface RankResult {
     tv: number | null;
     /** 거래대금이 어림값(거래량 × 현재가)인가 */
     tvEst: boolean;
+    /** KRX 몫의 거래대금(억원). `tv` 는 통합(=KRX+NXT)이다 */
+    tvKrx: number | null;
     /** 코스피 / 코스닥 */
     mkt: string;
     sector: string;

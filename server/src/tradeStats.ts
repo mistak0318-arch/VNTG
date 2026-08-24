@@ -466,14 +466,25 @@ async function summarize(t: TradeTarget): Promise<TradeSummary | null> {
   const prevExport = sum(prevRows, (r) => r.exportUsd);
   const prevImport = sum(prevRows, (r) => r.importUsd);
 
-  const top = [...cur]
-    .sort((a, b) => b.exportUsd - a.exportUsd)
+  /*
+   * 세부 품목은 **이름으로 합친다.**
+   *
+   * HS 4단위 아래는 용도별로 갈라지는데(8542.31 프로세서 / .32 메모리 / .33 증폭기)
+   * 그 아래 이름이 겹친다 — 「복합구조칩 집적회로」가 8542313000·8542323000·8542333000
+   * 세 곳에 있다. 코드별로 세우면 **같은 이름이 목록에 두 번 뜬다.** 보는 사람은
+   * 둘 중 어느 쪽이 진짜인지 알 수 없고, 어느 쪽도 그 품목의 전부가 아니다.
+   */
+  const byName = new Map<string, { exportUsd: number; prevUsd: number }>();
+  for (const r of cur) {
+    const acc = byName.get(r.name) ?? { exportUsd: 0, prevUsd: 0 };
+    acc.exportUsd += r.exportUsd;
+    acc.prevUsd += prevByHs.get(r.hsCode)?.exportUsd ?? 0;
+    byName.set(r.name, acc);
+  }
+  const top = [...byName]
+    .sort((a, b) => b[1].exportUsd - a[1].exportUsd)
     .slice(0, 4)
-    .map((r) => ({
-      name: r.name,
-      exportUsd: r.exportUsd,
-      yoy: yoy(r.exportUsd, prevByHs.get(r.hsCode)?.exportUsd ?? 0),
-    }));
+    .map(([name, v]) => ({ name, exportUsd: v.exportUsd, yoy: yoy(v.exportUsd, v.prevUsd) }));
 
   return {
     key: t.key,

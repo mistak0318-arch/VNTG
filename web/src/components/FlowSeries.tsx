@@ -52,6 +52,8 @@ export interface FlowSeriesData {
   day: string;
   /** 오늘이 아니라 지난 장 것인가 */
   stale: boolean;
+  /** 지금 장이 열려 있나 — 「지금 쌓는 중」과 「지난 장」을 가르는 기준 */
+  live?: boolean;
 }
 
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];

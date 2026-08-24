@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, pick, pickList, type RawRecord } from "../api";
 import { ChartPanel } from "./ChartPanel";
 import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
@@ -112,6 +112,16 @@ export function StockDetail({
   const info = (live.data ?? null) as RawRecord | null;
   const [watchBusy, setWatchBusy] = useState(false);
   const [addTarget, setAddTarget] = useState<WatchAddTarget | null>(null);
+  /*
+   * 종목이 바뀌면 **맨 위로 올린다.**
+   *
+   * 종목발굴에서 화살표로 넘기면 모달은 그대로 두고 내용만 갈린다. 그때 스크롤이
+   * 내려가 있던 자리에 남아서, 새 종목이 **중간부터** 보였다.
+   */
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    sheetRef.current?.scrollTo({ top: 0 });
+  }, [code]);
   const [detailTab, setDetailTab] = useState<DetailTab>("chart");
   const [editTabs, setEditTabs] = useState(false);
   /* 카드 배치와 **같은 훅**이다 — 서버에 저장되어 기기가 달라도 같은 순서 */
@@ -184,7 +194,7 @@ export function StockDetail({
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet" ref={sheetRef} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-header">
           <h2>
             {name} ({code})

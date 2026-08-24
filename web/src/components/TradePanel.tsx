@@ -21,6 +21,38 @@ function rateClass(n: number | null): string {
   return n > 0 ? "positive" : n < 0 ? "negative" : "";
 }
 
+/**
+ * 「2026-07」 → 「2026년 7월 실적」.
+ *
+ * 관세청은 **월이 끝나야** 확정치를 낸다. 그래서 8월 하순에 봐도 7월이 최신이다.
+ * 이걸 안 적어 두면 오늘 숫자로 읽는다 — 한 달 지난 값을 오늘 것으로 오해하는 게
+ * 이 화면에서 제일 위험한 오독이다.
+ */
+function monthLabel(m: string): string {
+  const [y, mm] = m.split("-");
+  return y && mm ? `${y}년 ${Number(mm)}월 실적` : m;
+}
+
+/**
+ * 받아온 시각 — **로컬 시각으로 적는다.**
+ *
+ * ⚠️ 예전엔 `fetchedAt.slice(5, 16)` 로 ISO 문자열을 그냥 잘랐다. 그 문자열은 UTC라
+ * **아홉 시간 이른 시각**이 찍혔다. 새벽 2시에 받은 것이 전날 오후 5시로 보였다.
+ * 문자열을 자르지 말고 Date 로 파싱해서 로컬로 찍는다.
+ *
+ * 12시간 캐시라 「언제 것인가」가 실제로 중요하므로 경과 시간을 같이 적는다.
+ */
+function fetchedLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  /* toLocaleString 의 ko-KR 은 「8. 24. 19:28」처럼 점을 찍어 읽기 나쁘다 — 직접 짠다 */
+  const two = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${d.getMonth() + 1}월 ${d.getDate()}일 ${two(d.getHours())}:${two(d.getMinutes())}`;
+  const mins = Math.floor((Date.now() - d.getTime()) / 60_000);
+  const ago = mins < 1 ? "방금" : mins < 60 ? `${mins}분 전` : `${Math.floor(mins / 60)}시간 전`;
+  return `${stamp} 받음 (${ago})`;
+}
+
 interface Related {
   stocks: { code: string; name: string; changeRate: number; marketCap?: number | null }[];
   from: "theme" | "sector" | "none";
@@ -90,16 +122,25 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
 
   return (
     <div className="trade">
-      <div className="filter-row">
+      {/*
+        두 시각이 다르다는 걸 눈에 보이게 갈라 둔다.
+          · **기준 월** — 숫자가 말하는 시점. 관세청은 월이 끝나야 확정치를 낸다
+          · **받은 시각** — 우리가 조회한 시점. 12시간 캐시라 오늘 받았어도 값은 지난달 것이다
+        하나만 적으면 「어제 받았으니 어제 수출」로 읽힌다.
+      */}
+      <div className="filter-row trade-stamp">
+        <b style={{ marginLeft: 0 }}>{monthLabel(month)}</b>
         <span className="breadth-count" style={{ marginLeft: 0 }}>
-          {month} 기준 · 관세청
+          관세청 무역통계
         </span>
         <button className="filter-btn" onClick={() => load(true)} disabled={loading}>
-          {loading ? "…" : "↻ 새로고침"}
+          {loading ? "받는 중…" : "↻ 새로고침"}
         </button>
-        {fetchedAt && (
-          <span className="breadth-count">{fetchedAt.slice(5, 16).replace("T", " ")} 조회</span>
-        )}
+        {fetchedAt && <span className="breadth-count">{fetchedLabel(fetchedAt)}</span>}
+      </div>
+      <div className="table-note" style={{ marginTop: 0 }}>
+        관세청은 <b>달이 끝난 뒤</b> 확정치를 냅니다 — 오늘 받아도 최신은 지난달입니다.
+        증감률은 <b>전년 같은 달</b> 대비고, 12시간마다 다시 받습니다.
       </div>
 
       {error && <div className="page-note">{error}</div>}

@@ -70,6 +70,7 @@ function useProgramSeries(code: string): FlowSeriesData {
           points: { t: string; v: Record<string, string> }[];
           day?: string;
           stale?: boolean;
+          live?: boolean;
         };
         if (!alive) return;
         setS({
@@ -83,6 +84,7 @@ function useProgramSeries(code: string): FlowSeriesData {
             .filter((p) => p.buy !== 0 || p.sell !== 0 || p.net !== 0),
           day: j.day ?? "",
           stale: Boolean(j.stale),
+          live: Boolean(j.live),
         });
       } catch {
         /* 실시간이 없으면 빈 그림 — 아래 일자별은 REST 라 그대로 뜬다 */
@@ -100,7 +102,7 @@ function useProgramSeries(code: string): FlowSeriesData {
 }
 
 function IntradayProgram({ code }: { code: string }) {
-  const { pts, day, stale } = useProgramSeries(code);
+  const { pts, day, stale, live } = useProgramSeries(code);
   /* 주가를 같이 그린다 — 프로그램이 붙는데 주가가 안 가면 그것도 정보다 */
   const prices = useMinutePrices(code, day || undefined);
 
@@ -114,12 +116,31 @@ function IntradayProgram({ code }: { code: string }) {
   if (pts.length < 2) {
     return (
       <section className="card">
-        <h3 className="section-heading">오늘 장중 — 시간별 프로그램 매매</h3>
+        <h3 className="section-heading">
+          {live ? "오늘 장중 — 시간별 프로그램 매매" : "시간별 프로그램 매매"}
+        </h3>
+        {/*
+          ⚠️ **장중과 마감 후는 다른 말을 해야 한다.**
+
+          장중에 오늘 것이 없는 건 「지금부터 쌓으면 되는 일」이다. 그런데 예전엔 그때
+          **지난 장으로 되짚어** 「8월 21일(금) 장 기준」을 띄웠다 — 12시에 지난 금요일
+          수급을 보여준 셈이라 「왜 전거래일 기준이냐」가 나왔다.
+        */}
         <div className="page-note">
-          이 종목은 <b>실시간으로 쌓인 게 없습니다</b>
-          {pts.length === 1 ? " (점 1개)" : ""}. 실시간은 서버가 물고 있는 종목만 쌓이므로
-          방금 연 종목은 <b>장중에 조금 기다려야</b> 채워집니다 — 지난 장 것도 없으면
-          그날 한 번도 안 물었던 종목입니다. 아래 일자별은 조회(REST)라 항상 나옵니다.
+          {live ? (
+            <>
+              이 종목은 <b>방금 물기 시작했습니다.</b> 화면을 연 종목은 그 자리에서 구독하므로
+              <b> 30초쯤 뒤부터</b> 한 점씩 쌓입니다 — 조금 기다리면 채워집니다.
+              지나간 시간은 되살릴 수 없습니다(실시간은 놓치면 끝입니다).
+            </>
+          ) : (
+            <>
+              이 종목은 <b>쌓인 게 없습니다</b>
+              {pts.length === 1 ? " (점 1개)" : ""}. 실시간은 장중에만 쌓이고, 그날 한 번도
+              안 물었던 종목은 지난 장 것도 없습니다.
+            </>
+          )}{" "}
+          아래 일자별은 조회(REST)라 항상 나옵니다.
         </div>
       </section>
     );

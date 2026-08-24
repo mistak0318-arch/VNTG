@@ -351,9 +351,19 @@ export function CandleChart({
         (maRows ? `<div class="ct-sub">가격 이동평균</div>${maRows}` : "");
 
       tip.style.display = "block";
-      // 커서 오른쪽에 두되, 오른쪽 끝에서는 왼쪽으로 넘긴다
+      /*
+       * ⚠️ **커서를 따라다니지 않는다.**
+       *
+       * 예전엔 커서 오른쪽 16px 에 붙였다. 그런데 말풍선을 띄우는 이유가 **그 봉을
+       * 보려고** 인데, 바로 그 자리에 상자가 뜨니 봉과 그 옆 몇 개가 통째로 가려졌다.
+       * 이동평균까지 켜면 열 줄이 넘어 차트 절반을 덮었다.
+       *
+       * 커서가 있는 **반대쪽 구석**에 붙박이로 둔다. 왼쪽 봉을 보면 오른쪽에, 오른쪽
+       * 봉을 보면 왼쪽에 뜨므로 보려는 자리는 언제나 비어 있다. 상자가 안 움직이니
+       * 눈이 따라다니지 않아도 되는 것도 덤이다.
+       */
       const w = tip.offsetWidth;
-      const left = param.point.x + 16 + w > el.clientWidth ? param.point.x - w - 16 : param.point.x + 16;
+      const left = param.point.x < el.clientWidth / 2 ? el.clientWidth - w - 8 : 8;
       tip.style.left = `${Math.max(4, left)}px`;
       tip.style.top = "8px";
     };

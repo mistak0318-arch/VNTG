@@ -44,7 +44,7 @@ export function peekRealtime(): { client: RealtimeClient | null; store: Realtime
  *
  * 앞뒤로 조금 여유를 둔다. 정확히 08:00 에 붙으면 첫 체결을 놓친다.
  */
-function shouldRun(now = new Date()): boolean {
+export function shouldRun(now = new Date()): boolean {
   const k = new Date(now.getTime() + 9 * 3600 * 1000);
   const day = k.getUTCDay();
   if (day === 0 || day === 6) return false;

@@ -10,7 +10,17 @@ import { api, pickList, signClass, type RawRecord } from "../api";
  * 그게 맞지만 **보드에 놓으면 칸을 크게 먹는다** — 곁눈으로 보려고 띄우는 자리인데
  * 표를 읽어야 하면 곁눈으로 못 본다.
  *
- * 그래서 오늘 하루만, 세 줄로 줄인다. **개인·외국인·기관** — 이 셋이 방향을 만든다.
+ * 그래서 **개인·외국인·기관** 셋만 남긴다 — 이 셋이 방향을 만든다.
+ *
+ * ## 구간을 버튼에서 열로
+ *
+ * 처음엔 당일·5·10·20·60 을 버튼으로 두고 눌러서 바꾸게 했다. 그런데 이 칸을 보는
+ * 이유가 **「오늘 판 게 며칠째인가」**인데, 그걸 알려면 당일을 보고 5일을 누르고
+ * 다시 20일을 눌러 머릿속에서 견줘야 했다. 곁눈으로 보라고 만든 칸에서 그걸 하고
+ * 있으면 미니일 이유가 없다.
+ *
+ * 구간을 **열로 펴서 한눈에** 놓는다. 왼쪽에서 오른쪽으로 읽으면 그게 곧 흐름이다 —
+ * 당일만 파랗고 나머지가 빨가면 오늘만 판 것이고, 쭉 파랗면 며칠째 파는 중이다.
  *
  * ## 기관을 괄호로 쪼개는 이유
  *
@@ -38,16 +48,6 @@ const SPANS = [1, 5, 10, 20, 60];
 export function SupplyMini({ code }: { code: string }) {
   const [rows, setRows] = useState<RawRecord[] | null>(null);
   const [err, setErr] = useState(false);
-  /*
-   * 며칠치를 합쳐 본다.
-   *
-   * 하루만 보면 **우연과 흐름이 안 갈린다** — 외국인이 오늘 판 게 며칠째 파는 중인지
-   * 어제까지 사다가 오늘만 판 것인지는 정반대의 이야기다. 그래서 5·10·20·60일을 같이 둔다.
-   *
-   * 받아 둔 배열을 앞에서부터 잘라 더하는 것이라 **조회가 늘지 않는다**(백 일치가 온다).
-   */
-  const [span, setSpan] = useState(1);
-
   useEffect(() => {
     if (!code) return;
     let alive = true;
@@ -70,74 +70,74 @@ export function SupplyMini({ code }: { code: string }) {
   if (!rows) return <div className="empty">불러오는 중…</div>;
   if (rows.length === 0) return <div className="empty">수급 데이터가 없습니다.</div>;
 
-  /** 앞에서부터 `span` 일치를 더한다 */
-  const sum = (key: string) =>
+  /*
+   * 앞에서부터 `span` 일치를 더한다.
+   * 받아 둔 배열을 자르는 것이라 **조회가 늘지 않는다**(백 일치가 한 번에 온다).
+   */
+  const sum = (key: string, span: number) =>
     rows.slice(0, span).reduce((acc, r) => acc + n(r[key]), 0);
 
-  const ind = sum("ind_invsr");
-  const frg = sum("frgnr_invsr");
-  const org = sum("orgn");
+  /** 그 구간에 실제로 며칠치가 있나 — 상장 얼마 안 된 종목은 60일이 없다 */
+  const have = (span: number) => Math.min(span, rows.length);
 
-  /* 기관 안쪽 — 성격이 다른 넷 */
-  const parts = [
-    { label: "금융투자", v: sum("fnnc_invt"), hint: "프로그램·헤지가 많아 방향성이 약합니다" },
-    { label: "투신", v: sum("invtrt"), hint: "펀드 — 짧게 치는 편입니다" },
-    { label: "연기금", v: sum("penfnd_etc"), hint: "길게 담습니다" },
-    { label: "사모", v: sum("samo_fund"), hint: "짧게 칩니다" },
+  /* 기관 안쪽 — 성격이 다른 넷. 들여써서 합계와 구별한다 */
+  const lines: { label: string; key: string; sub?: boolean; hint?: string }[] = [
+    { label: "개인", key: "ind_invsr" },
+    { label: "외국인", key: "frgnr_invsr" },
+    { label: "기관", key: "orgn" },
+    { label: "금융투자", key: "fnnc_invt", sub: true, hint: "프로그램·헤지가 많아 방향성이 약합니다" },
+    { label: "투신", key: "invtrt", sub: true, hint: "펀드 — 짧게 치는 편입니다" },
+    { label: "연기금", key: "penfnd_etc", sub: true, hint: "길게 담습니다" },
+    { label: "사모", key: "samo_fund", sub: true, hint: "짧게 칩니다" },
   ];
 
   const dt = String(rows[0].dt ?? "");
   const day = dt.length === 8 ? `${Number(dt.slice(4, 6))}/${Number(dt.slice(6, 8))}` : "";
-  const have = Math.min(span, rows.length);
+  /* 데이터가 모자란 구간은 아예 안 그린다 — 5일 칸에 3일치를 넣으면 거짓말이 된다 */
+  const spans = SPANS.filter((d) => d === 1 || rows.length >= d);
 
   return (
     <div className="sm">
-      <div className="filter-row">
-        {SPANS.map((d) => (
-          <button
-            key={d}
-            className={`filter-btn ${span === d ? "active" : ""}`}
-            onClick={() => setSpan(d)}
-            disabled={d > rows.length}
-          >
-            {d === 1 ? "당일" : `${d}일`}
-          </button>
-        ))}
-      </div>
       <div className="sm-day">
-        {day} 기준
-        {span > 1 && ` · 최근 ${have}일 합산`} · 단위 주
+        {day} 기준 · 단위 주 · <b>당일</b> 말고는 그날까지 <b>합산</b>입니다
       </div>
 
-      {(
-        [
-          ["개인", ind],
-          ["외국인", frg],
-        ] as [string, number][]
-      ).map(([label, v]) => (
-        <div className="sm-row" key={label}>
-          <span className="sm-k">{label}</span>
-          <b className={`sm-v ${signClass(v)}`}>{qty(v)}</b>
-        </div>
-      ))}
-
-      <div className="sm-row">
-        <span className="sm-k">기관</span>
-        <b className={`sm-v ${signClass(org)}`}>{qty(org)}</b>
-      </div>
-      {/* 합계 옆이 아니라 아래에 붙인다 — 한 줄에 넷을 우겨넣으면 폰에서 뭉갠다 */}
-      <div className="sm-parts">
-        {parts.map((p) => (
-          <span className="sm-part" key={p.label} title={p.hint}>
-            <em>{p.label}</em>
-            <b className={signClass(p.v)}>{qty(p.v)}</b>
-          </span>
-        ))}
+      <div className="data-table-wrap">
+        <table className="data-table num sm-table">
+          <thead>
+            <tr>
+              <th></th>
+              {spans.map((d) => (
+                <th key={d} title={d === 1 ? "오늘 하루" : `최근 ${have(d)}일 합산`}>
+                  {d === 1 ? "당일" : `${d}일`}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l) => (
+              <tr key={l.label} className={l.sub ? "sm-sub" : ""}>
+                <th scope="row" title={l.hint}>
+                  {l.label}
+                </th>
+                {spans.map((d) => {
+                  const v = sum(l.key, d);
+                  return (
+                    <td key={d} className={signClass(v)}>
+                      {qty(v)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <div className="table-note">
-        하루만 보면 <b>우연과 흐름이 안 갈립니다</b> — 오늘 판 게 며칠째 파는 중인지
-        어제까지 사다가 오늘만 판 것인지는 정반대의 이야기라 5·20일을 같이 보세요.
+        <b>왼쪽에서 오른쪽으로 읽으면 그게 흐름입니다.</b> 당일만 파랗고 뒤가 빨가면
+        오늘만 판 것이고, 쭉 파랗면 며칠째 파는 중입니다 — 같은 「오늘 매도」라도
+        둘은 정반대의 이야기입니다.
         <br />
         <b>기관은 한 덩어리가 아닙니다.</b> 금융투자는 프로그램·헤지가 많아 방향성이 약하고
         연기금은 길게 담습니다 — 같은 플러스라도 어디서 나온 것인지에 따라 뜻이 다릅니다.

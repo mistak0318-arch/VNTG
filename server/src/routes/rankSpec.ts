@@ -60,8 +60,29 @@ function bare(code: unknown): string {
 interface RowExtras {
   /** 시가총액(억원). 상장주식수를 못 찾으면 null */
   cap: number | null;
-  /** 거래대금(억원). 못 내면 null */
+  /** 거래대금(억원) — 고른 거래소 기준. 못 내면 null */
   tv: number | null;
+  /**
+   * **KRX 몫의 거래대금(억원).** `tv` 는 통합(=KRX+NXT)이다.
+   *
+   * ## 왜 둘을 다 두나 (2026-08-24 실측)
+   *
+   * 삼성전자 하루치를 세 갈래로 재 봤다.
+   *
+   * | 거래소 | 거래대금 | 현재가 |
+   * |---|---|---|
+   * | KRX | 84,561억 | 257,000 |
+   * | NXT | 52,463억 | 256,000 |
+   * | **통합** | **137,023억** | 256,000 |
+   *
+   * 84,561 + 52,463 = 137,024 — **통합의 거래대금은 정확히 합계**다. 하루 거래는
+   * NXT 프리(08~09시) + KRX 정규(09~15:30) + NXT 애프터(15:30~20시) 셋이므로 합계가 맞다.
+   *
+   * 그런데 **가격은 통합이 NXT 최종가**를 준다. 종목 상세는 KRX 라 목록과 상세가 갈렸다.
+   *
+   * 그래서 **거래대금은 통합, 가격은 KRX** 로 받는다. 둘 다 필요하므로 두 번 부른다.
+   */
+  tvKrx: number | null;
   /** 거래대금이 어림값인가 (거래량 × 현재가) */
   tvEst: boolean;
   /** 코스피 / 코스닥 */
@@ -85,6 +106,7 @@ function extras(
     // 키움이 주는 거래대금은 백만원 단위다 (100 백만원 = 1억원)
     tv: prica !== null ? Math.round(prica / 100) : qty > 0 && price > 0 ? Math.round((qty * price) / 1e8) : null,
     tvEst: prica === null,
+    tvKrx: null,
     mkt: entry?.marketName === "거래소" ? "코스피" : entry?.marketName === "코스닥" ? "코스닥" : "",
     sector: entry?.sectorName ?? "",
     // 끝자리가 0 이 아니면 우선주다 (stockListCache 의 판별과 같은 근거)
@@ -152,13 +174,47 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         : "000";
       const exchange = spec.exchange && ["1", "2", "3"].includes(String(req.query.exchange))
         ? String(req.query.exchange)
-        : "3";
+        : "3"; // 기본 통합 — 거래대금이 하루 전체(KRX+NXT)라 순위가 맞다. 가격만 아래에서 KRX 로 덮는다
 
-      const { data } = await client.request<Record<string, unknown>>(
-        `/api/dostk/${spec.uri}`,
-        spec.apiId,
-        { ...COMMON_PARAMS, ...(spec.params ?? {}), mrkt_tp: market, stex_tp: exchange },
-      );
+      const ask = (stex: string) =>
+        client.request<Record<string, unknown>>(
+          `/api/dostk/${spec.uri}`,
+          spec.apiId,
+          { ...COMMON_PARAMS, ...(spec.params ?? {}), mrkt_tp: market, stex_tp: stex },
+        );
+
+      /*
+       * **KRX 를 한 번 더 받아 가격만 덮는다.**
+       *
+       * 순위와 거래대금은 **통합**이 맞다 — 하루 거래는 NXT 프리·KRX 정규·NXT 애프터
+       * 셋의 합이고, 통합의 거래대금이 정확히 그 합이다(2026-08-24 실측).
+       * KRX 만 보면 삼성전자 137,023억이 84,561억으로 줄어 순위 자체가 틀어진다.
+       *
+       * 그런데 **가격은 통합이 NXT 최종가**를 준다. 종목 상세는 KRX 라 목록과 상세가 갈린다.
+       * 그래서 KRX 를 한 번 더 받아 **현재가·등락률만** 그걸로 바꾼다.
+       *
+       * TR 이 한 번 더 나가지만 순위는 자주 부르는 조회가 아니고, 실패하면 통합 값을 그대로 쓴다.
+       * 거래소를 직접 고른 경우에는 안 부른다 — 그 거래소를 보겠다는 뜻이다.
+       */
+      const [main, krx] = await Promise.all([
+        ask(exchange),
+        spec.exchange && exchange === "3" ? ask("1").catch(() => null) : Promise.resolve(null),
+      ]);
+      const data = main.data;
+
+      /** KRX 몫 — 종목코드로 맞춘다 */
+      const krxOf = new Map<string, { tv: number | null; price: number | null; rate: number | null }>();
+      const krxRows = krx && Array.isArray(krx.data[spec.listKey])
+        ? (krx.data[spec.listKey] as Record<string, unknown>[])
+        : [];
+      for (const r of krxRows) {
+        const prica = toNum(r.trde_prica);
+        krxOf.set(bare(r.stk_cd), {
+          tv: prica === null ? null : Math.round(prica / 100),
+          price: toNum(r.cur_prc),
+          rate: toNum(r.flu_rt),
+        });
+      }
 
       const rows = Array.isArray(data[spec.listKey]) ? (data[spec.listKey] as Record<string, unknown>[]) : [];
       /*
@@ -176,10 +232,22 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         },
         market,
         exchange,
-        rows: rows.slice(0, 100).map((r) => ({
-          ...mapRow(r, spec),
-          ...extras(r, index.get(bare(r.stk_cd))),
-        })),
+        rows: rows.slice(0, 100).map((r) => {
+          const code = bare(r.stk_cd);
+          const k = krxOf.get(code);
+          const mapped = mapRow(r, spec);
+          /*
+           * 가격만 KRX 로 덮는다. 거래대금·순위는 통합 그대로다.
+           * KRX 에 그 종목이 없으면(그날 KRX 에서 안 돌았으면) 통합 값을 남긴다.
+           */
+          if (k?.price != null) mapped.cur_prc = k.price;
+          if (k?.rate != null) mapped.flu_rt = k.rate;
+          return {
+            ...mapped,
+            ...extras(r, index.get(code)),
+            tvKrx: k?.tv ?? null,
+          };
+        }),
       });
     } catch (err) {
       next(err);

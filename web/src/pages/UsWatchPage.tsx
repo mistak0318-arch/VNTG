@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type UsSearchResult, type UsWatchGroup , type UsQuoteRow } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
-import { liveQuote, sideQuote } from "../usSession";
+import { liveQuote } from "../usSession";
+import { UsWatchTable } from "../components/UsWatchTable";
 import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
 
 /**
@@ -423,158 +424,21 @@ export function UsWatchPage() {
             </span>
           </div>
 
-          <div className="data-table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th className="sticky-col">종목</th>
-                  {/*
-                    주간거래를 **괄호로 바로 옆에** 붙인다. 뒤쪽에 열로 두니 폰에서 잘려 안 보였다 —
-                    이 값은 정규장과 **견줘야** 뜻이 생기므로 떨어뜨려 놓으면 쓸모가 없다.
-                  */}
-                  <th title="괄호는 미국 주간거래(오버나이트) — 한국 낮에 열리는 세션입니다">
-                    현재가 <span className="uw-day-h">(주간)</span>
-                  </th>
-                  <th title="괄호는 미국 주간거래 등락률">
-                    등락률 <span className="uw-day-h">(주간)</span>
-                  </th>
-                  <th title="원화 환산가 — 한국투자증권이 계산해 준다">원화</th>
-                  <th title="52주 구간에서 지금 위치 (0=저가, 100=고가)">52주</th>
-                  <th title="오늘 거래량 ÷ 전일 거래량">거래량</th>
-                  <th title="체결강도 — 100보다 크면 사는 쪽이 세다">강도</th>
-                  <th>편입가</th>
-                  <th>편입 대비</th>
-                  {editing && <th></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {sortStocks(current.stocks, sortBy).map((s, i, arr) => (
-                    <tr key={s.symbol}>
-                      <td className="sticky-col">
-                        {/* 나라가 섞이니 국기를 앞에 — 78.89 가 달러인지 엔인지 알아야 한다 */}
-                        <span className="uw-flag">{s.flag ?? (s.symbol.includes(".") ? "🇪🇺" : "")}</span>
-                        {/* 눌러서 상세 — 예전엔 표에서 끊겼다 */}
-                        <button
-                          type="button"
-                          className="usb-open"
-                          onClick={() =>
-                            setDetail({
-                              kind: "usStock",
-                              symbol: s.symbol,
-                              label: s.name || s.symbol,
-                            })
-                          }
-                          title="눌러서 상세 보기"
-                        >
-                          <b>{s.symbol.split(".")[0]}</b>
-                          <span className="pt-n"> {s.name}</span>
-                        </button>
-                        {s.error && <span className="uw-err"> {s.error}</span>}
-                      </td>
-                      {/*
-                        현재가·등락률·원화·편입대비는 **같이 움직인다.** 하나만 반짝이면
-                        나머지는 조용히 바뀌어서, 오히려 안 바뀐 것처럼 보인다.
-                        움직인 칸은 다 같이 반짝여야 한 사건으로 읽힌다.
-                      */}
-                      {/* 엔·원처럼 소수점을 안 쓰는 통화는 반올림해서 보여 준다 */}
-                      <td className="num" title={s.currency ?? ""}>
-                        {s.price === null
-                          ? "-"
-                          : s.currency === "JPY" || s.currency === "VND" || s.currency === "KRW"
-                            ? Math.round(s.price).toLocaleString("ko-KR")
-                            : s.price.toFixed(2)}
-                        {/*
-                          괄호는 **지금 도는 다른 세션**이다 — 마감 후엔 애프터장,
-                          한국 낮엔 주간거래. 정규장 중에는 안 띄운다.
-                        */}
-                        {(() => {
-                          const side = sideQuote(s);
-                          return side ? (
-                            <span className="uw-day" title={side.label}>
-                              {" "}
-                              ({side.price.toFixed(2)})
-                            </span>
-                          ) : null;
-                        })()}
-                      </td>
-                      {/*
-                        등락률은 **지금 살아 있는 세션**의 것이다.
-                        정규장 종가 기준만 그리면 애프터장에 3% 오른 종목이 −0.3% 로 남는다.
-                        가격 열에는 정규장 값과 괄호가 이미 같이 있으므로 기준을 잃지 않는다.
-                      */}
-                      <td className={`num tickable ${cls(liveQuote(s).changeRate)} ${tick(s.symbol)}`}>
-                        {pct(liveQuote(s).changeRate)}
-                        {(() => {
-                          const side = sideQuote(s);
-                          return side ? (
-                            <span className={`uw-day ${cls(side.changeRate)}`} title={side.label}>
-                              {" "}
-                              ({pct(side.changeRate)})
-                            </span>
-                          ) : null;
-                        })()}
-                      </td>
-                      <td className="num pt-n">
-                        {s.wonPrice == null ? "-" : s.wonPrice.toLocaleString("ko-KR")}
-                      </td>
-                      {/* 52주 구간 위치를 막대로 — 신고가 근처인지 바닥인지가 숫자보다 빨리 읽힌다 */}
-                      <td className="num">
-                        {s.pos52 == null ? (
-                          "-"
-                        ) : (
-                          <span className="uw-52" title={`${s.low52} ~ ${s.high52}`}>
-                            <i style={{ width: `${Math.min(100, Math.max(0, s.pos52))}%` }} />
-                            <em>{s.pos52.toFixed(0)}</em>
-                          </span>
-                        )}
-                      </td>
-                      <td className={`num ${s.volumeVsPrev != null && s.volumeVsPrev >= 150 ? "positive" : ""}`}>
-                        {s.volumeVsPrev == null ? "-" : `${s.volumeVsPrev.toFixed(0)}%`}
-                      </td>
-                      <td className={`num ${s.power != null && s.power >= 100 ? "positive" : ""}`}>
-                        {s.power == null ? "-" : s.power.toFixed(0)}
-                      </td>
-                      <td className="num">{s.addedPrice === null ? "-" : s.addedPrice.toFixed(2)}</td>
-                      <td className={`num ${cls(s.returnRate)}`}>
-                        {pct(s.returnRate)}
-                      </td>
-                      {editing && (
-                        <td className="uw-ord">
-                          {/* 순서 바꾸기는 내 순서로 볼 때만 뜻이 있다 */}
-                          {sortBy === "mine" && (
-                            <>
-                              <button
-                                className="row-del-btn"
-                                disabled={i === 0}
-                                onClick={() => void run(() => moveStock(arr, s.symbol, -1))}
-                                title="위로"
-                              >
-                                ▲
-                              </button>
-                              <button
-                                className="row-del-btn"
-                                disabled={i === arr.length - 1}
-                                onClick={() => void run(() => moveStock(arr, s.symbol, 1))}
-                                title="아래로"
-                              >
-                                ▼
-                              </button>
-                            </>
-                          )}
-                          <button
-                            className="row-del-btn"
-                            onClick={() => void run(() => api.usWatchStockRemove(current.id, s.symbol))}
-                            title="빼기"
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+          <UsWatchTable
+            stocks={sortStocks(current.stocks, sortBy)}
+            editing={editing}
+            onOpen={(symbol, label) => setDetail({ kind: "usStock", symbol, label })}
+            /* 순서 바꾸기는 **내 순서로 볼 때만** — 정렬을 걸어 놓고 위아래로 옮기면
+               화면에서 보이는 자리와 저장되는 자리가 달라진다 */
+            onMove={
+              sortBy === "mine"
+                ? (symbol, dir) =>
+                    void run(() => moveStock(sortStocks(current.stocks, sortBy), symbol, dir))
+                : undefined
+            }
+            onRemove={(symbol) => void run(() => api.usWatchStockRemove(current.id, symbol))}
+            tick={tick}
+          />
 
           <div className="table-note">
             그룹 등락률은

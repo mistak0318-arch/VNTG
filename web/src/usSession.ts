@@ -65,12 +65,30 @@ export interface SideQuote {
   changeRate: number | null;
 }
 
+/**
+ * 지금이 정규장 **앞**인가 뒤인가 — 시간외 값에 붙일 이름을 정한다.
+ *
+ * ⚠️ 시간외 가격은 한 칸(`afterPrice`)으로 오는데 그걸 늘 「애프터장」이라 불렀다.
+ * 한국 저녁 아홉 시(미 동부 오전 여덟 시)는 **프리장**이다 — 그 시각에 「애프터장」이
+ * 뜨면 어제 장이 아직 안 끝난 줄 알게 된다. 실제로 스물한 시 이십삼 분 화면에
+ * 애프터장이라 적혀 있었다.
+ *
+ *   04:00~09:30 ET  프리장
+ *   09:30~16:00 ET  정규장 (여기선 괄호를 안 쓴다)
+ *   16:00~20:00 ET  애프터장
+ *   20:00~04:00 ET  주간거래 — 한국 낮에 도는 오버나이트 세션
+ */
+function afterHoursName(now = new Date()): string {
+  const { mins } = etNow(now);
+  return mins < 9 * 60 + 30 ? "프리장" : "애프터장";
+}
+
 export function sideQuote(row: SessionQuote, now = new Date()): SideQuote | null {
   // 정규장이 열려 있으면 괄호를 띄우지 않는다 — 가격이 두 개면 어느 쪽이 지금 값인지 헷갈린다
   if (usRegularOpen(now)) return null;
 
   if (row.afterPrice !== null) {
-    return { label: "애프터장", price: row.afterPrice, changeRate: row.afterChangeRate };
+    return { label: afterHoursName(now), price: row.afterPrice, changeRate: row.afterChangeRate };
   }
   /*
    * 주간거래는 **거래가 실제로 있을 때만.**
@@ -98,6 +116,28 @@ export function liveQuote(
   now = new Date(),
 ): { price: number | null; changeRate: number | null; label: string } {
   const side = sideQuote(row, now);
-  if (side) return { price: side.price, changeRate: side.changeRate, label: side.label };
-  return { price: row.price, changeRate: row.changeRate, label: "정규장" };
+  if (!side) return { price: row.price, changeRate: row.changeRate, label: "정규장" };
+
+  /*
+   * ⚠️ **시간외 변동률을 그대로 쓰면 안 된다.**
+   *
+   * 시간외 등락률은 **정규장 종가 대비**다. 정규장 등락률은 **전일 종가 대비**다.
+   * 기준이 다른 두 값을 같은 칸에 번갈아 넣고 있었다 — 엔비디아가 표에서는 −0.98%,
+   * MAP 타일에서는 −0.05% 로 떴다. 둘 다 맞는 계산인데 한 화면에 같이 있으니
+   * 어느 쪽이 진짜인지 알 수가 없다.
+   *
+   * 타일은 숫자를 하나만 보여주므로 **전일 종가 대비 지금 값**이라야 말이 된다.
+   * 전일 종가를 정규장 값에서 되짚어 시간외 가격과 견준다.
+   *
+   *   전일 종가 = 정규장 가격 ÷ (1 + 정규장 등락률/100)
+   *
+   * 되짚을 재료가 없으면(등락률이 없거나 −100%) 시간외 변동률을 그대로 둔다 —
+   * 없는 값을 지어내느니 기준이 다른 값이라도 있는 게 낫다.
+   */
+  const base =
+    row.price !== null && row.changeRate !== null && 1 + row.changeRate / 100 !== 0
+      ? row.price / (1 + row.changeRate / 100)
+      : null;
+  const rate = base !== null && base > 0 ? (side.price / base - 1) * 100 : side.changeRate;
+  return { price: side.price, changeRate: rate, label: side.label };
 }

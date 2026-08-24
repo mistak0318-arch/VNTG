@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { getStockIndex } from "./stockListCache.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -180,12 +181,26 @@ export async function toggleStock(id: string, code: string): Promise<CustomTheme
  * 단순평균을 쓰면 시총 500억짜리가 +20% 갔을 때 테마가 통째로 올라간 것처럼 보인다.
  * 실제로 돈이 어디로 갔는지는 시총 가중이 맞다.
  */
-function evaluate(theme: CustomTheme, byCode: Map<string, SnapshotStock>): EvaluatedTheme {
+function evaluate(
+  theme: CustomTheme,
+  byCode: Map<string, SnapshotStock>,
+  /**
+   * 종목코드 → 이름. **스냅샷이 못 담는 종목의 이름을 메운다.**
+   *
+   * 스냅샷은 **업종 구성종목을 모아** 만드는데, 키움이 일부 업종코드에 구성종목을 안 주고
+   * ETF·ETN·리츠는 업종에 아예 안 잡힌다. 그래서 내 테마에 넣은 종목 일부가 스냅샷에
+   * 없었고, 그때 이름 자리에 **종목코드가 그대로 찍혔다** — 「종목코드를 못 찾는다」의 정체다.
+   *
+   * 종목 목록(`ka10099`)은 상장 종목을 다 갖고 있고 하루 캐싱되므로 이름은 여기서 채운다.
+   * 등락률까지는 못 채운다(그건 시세라 따로 받아야 한다) — 그래서 가중평균에서는 빠진다.
+   */
+  nameOf?: Map<string, string>,
+): EvaluatedTheme {
   const stocks = theme.codes.map((code) => {
     const s = byCode.get(code);
     return {
       code,
-      name: s?.name ?? code,
+      name: s?.name ?? nameOf?.get(code) ?? code,
       changeRate: s?.changeRate ?? 0,
       marketCap: s?.marketCap ?? null,
       weight: null as number | null,
@@ -225,8 +240,15 @@ export async function evaluateThemes(
   force = false,
 ): Promise<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string; traded: boolean }> {
   const [themes, snap] = await Promise.all([load(), getMarketSnapshot(client, force)]);
+  /*
+   * 스냅샷이 못 담은 종목의 **이름만이라도** 채운다. 하루 캐싱된 목록이라 조회가 안 는다.
+   * 실패해도 예전처럼 코드가 찍힐 뿐이라 화면은 선다.
+   */
+  const nameOf = await getStockIndex(client)
+    .then((idx) => new Map([...idx].map(([code, e]) => [code, e.name])))
+    .catch(() => undefined);
   const evaluated = themes
-    .map((t) => evaluate(t, snap.byCode))
+    .map((t) => evaluate(t, snap.byCode, nameOf))
     .sort((a, b) => (b.changeRate ?? -999) - (a.changeRate ?? -999));
 
   return {
