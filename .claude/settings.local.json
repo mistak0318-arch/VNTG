@@ -671,7 +671,9 @@
       "Bash(node -e 'let d='\\\\'''\\\\'';process.stdin.on\\('\\\\''data'\\\\'',c=>d+=c\\).on\\('\\\\''end'\\\\'',\\(\\)=>{const rows=JSON.parse\\(d\\).rows||[]; *)",
       "Bash(curl -s --max-time 40 \"http://localhost:4000/api/signal/005930\")",
       "Bash(curl -s --max-time 40 \"http://localhost:4000/api/signal/034730\")",
-      "Bash(curl -s --max-time 45 \"http://localhost:4000/api/rank/market-cap?market=000&limit=300\")"
+      "Bash(curl -s --max-time 45 \"http://localhost:4000/api/rank/market-cap?market=000&limit=300\")",
+      "Bash(curl -s --max-time 60 \"http://localhost:4000/api/rank/trade-value?market=000&limit=500\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\).rows||[];console.log\\('limit=500 →',r.length,'건'\\)}\\)\")"
     ]
   }
 }

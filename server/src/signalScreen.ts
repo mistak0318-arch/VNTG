@@ -251,7 +251,12 @@ export function startScreen(
 ): string {
   const market = ["000", "001", "101"].includes(String(opts.market)) ? String(opts.market) : "000";
   const minLevel = opts.minLevel ?? "green";
-  const limit = Math.min(Math.max(opts.limit ?? 100, 10), 200);
+  /*
+   * 상한을 200 에서 500 으로 올렸다. 상위 백 개는 이미 다 아는 종목이라 **새로 걸리는 건
+   * 그 아래**에서 나온다. 종목마다 조회가 나가므로 오백이면 한참 걸리지만, 그건 화면이
+   * 진행바로 알려 주고 사람이 고른 값이다.
+   */
+  const limit = Math.min(Math.max(opts.limit ?? 100, 10), 500);
 
   const id = `scr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const job: ScreenJob = {

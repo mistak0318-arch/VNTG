@@ -26,7 +26,12 @@ const MARKETS = [
   { key: "101", label: "코스닥" },
 ];
 
-const LIMITS = [50, 100, 150];
+/*
+ * 훑을 종목 수. **넓게 볼 수 있어야 발굴이 된다** — 상위 백 개는 이미 다 아는 종목이고,
+ * 새로 걸리는 건 그 아래에서 나온다. 대신 종목마다 조회가 나가므로 오래 걸리는 만큼
+ * 버튼에 적어 둔다.
+ */
+const LIMITS = [50, 100, 200, 300, 500];
 
 function pct(n: number): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
@@ -209,7 +214,7 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
             className={`filter-btn ${limit === n ? "active" : ""}`}
             onClick={() => setLimit(n)}
             disabled={running}
-            title={`거래대금 상위 ${n}종목을 검사합니다`}
+            title={`거래대금 상위 ${n}종목을 검사합니다${n >= 300 ? " — 몇 분 걸립니다" : ""}`}
           >
             상위 {n}종목
           </button>

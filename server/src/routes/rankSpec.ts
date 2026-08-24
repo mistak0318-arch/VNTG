@@ -73,7 +73,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
       const market = ["000", "001", "101"].includes(String(req.query.market))
         ? String(req.query.market)
         : "000";
-      const limit = Math.min(Math.max(Number(req.query.limit) || 100, 20), 300);
+      const limit = Math.min(Math.max(Number(req.query.limit) || 100, 20), 500);
       const snap = await getMarketSnapshot(client);
       const index = await getStockIndex(client).catch(() => new Map());
 
@@ -147,7 +147,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
        * 키움 순위는 한 번에 백 건쯤 주고 그다음은 **연속조회**다. 예전엔 첫 장만 받아
        * 백 건에서 잘렸는데, 「거래대금 150위가 궁금하다」에 답할 수가 없었다.
        */
-      const limit = Math.min(Math.max(Number(req.query.limit) || 100, 20), 300);
+      const limit = Math.min(Math.max(Number(req.query.limit) || 100, 20), 500);
 
       /**
        * 한 거래소에서 `limit` 만큼 모은다.
@@ -160,7 +160,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         let contYn = "N";
         let nextKey = "";
         let last: Awaited<ReturnType<typeof client.request<Record<string, unknown>>>> | null = null;
-        for (let page = 0; page < 4 && rows.length < limit; page += 1) {
+        for (let page = 0; page < 6 && rows.length < limit; page += 1) {
           const res = await client.request<Record<string, unknown>>(
             `/api/dostk/${spec.uri}`,
             spec.apiId,

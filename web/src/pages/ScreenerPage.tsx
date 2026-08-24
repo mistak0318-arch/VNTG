@@ -531,7 +531,7 @@ export function ScreenerPage({
             안 건드리면 부하도 예전 그대로다.
           */}
           <span className="scr-page-k">조회</span>
-          {[100, 200, 300].map((n) => (
+          {[100, 300, 500].map((n) => (
             <button
               key={n}
               className={`filter-btn ${limit === n ? "active" : ""}`}
@@ -543,7 +543,7 @@ export function ScreenerPage({
                   /* 저장 못 해도 이번 세션에는 바뀐다 */
                 }
               }}
-              title={n === 100 ? "예전과 같습니다" : `연속조회 ${Math.ceil(n / 100)}번`}
+              title={n === 100 ? "예전과 같습니다" : `연속조회 ${Math.ceil(n / 100)}번 — 쪽으로 나눠 보므로 화면 부담은 같습니다`}
             >
               {n}
             </button>
