@@ -125,7 +125,8 @@ export async function tradeValueTop(
       out.push({
         code,
         name: String(r.stk_nm ?? "").trim(),
-        price: toNum(r.cur_prc),
+        // 키움은 하락 종목의 현재가를 음수로 준다 — 부호를 떼야 「−52,300원」이 안 뜬다
+        price: Math.abs(toNum(r.cur_prc) ?? 0),
         changeRate: Number(String(r.flu_rt ?? "").replace(/[+,\s]/g, "")) || 0,
         tradeValue: toNum(r.trde_prica),
       });

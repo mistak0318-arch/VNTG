@@ -13,6 +13,19 @@ import { getStockIndex } from "../stockListCache.js";
  * 명세(rankSpecs.ts)만 늘리면 화면까지 자동으로 붙는 구조로 뒀다.
  */
 
+/**
+ * KRX 정규장이 이미 시작했나 (평일 09:00 KST 이후).
+ *
+ * 마감 뒤에도 참이다 — 「오늘 KRX 값이 만들어졌나」를 묻는 것이지 지금 열려 있는지를
+ * 묻는 게 아니다. 09시 전이면 KRX 자리에 있는 건 **장전 시간외종가**뿐이다.
+ */
+function krxSessionStarted(at = Date.now()): boolean {
+  const d = new Date(at);
+  const kst = new Date(d.getTime() + (9 * 60 + d.getTimezoneOffset()) * 60_000);
+  if (kst.getDay() === 0 || kst.getDay() === 6) return false;
+  return kst.getHours() * 60 + kst.getMinutes() >= 9 * 60;
+}
+
 function mapRow(row: Record<string, unknown>, spec: RankSpec): Record<string, unknown> {
   const out: Record<string, unknown> = {
     code: bare(row.stk_cd),
@@ -21,7 +34,18 @@ function mapRow(row: Record<string, unknown>, spec: RankSpec): Record<string, un
   for (const c of spec.columns) {
     // 이름은 위에서 이미 넣었고, 나머지는 형에 맞춰 변환한다
     if (c.key === "stk_nm") continue;
-    out[c.key] = c.type === "text" ? String(row[c.key] ?? "") : toNum(row[c.key]);
+    const n = toNum(row[c.key]);
+    /*
+     * ⚠️ **가격은 부호를 떼서 내보낸다.**
+     *
+     * 키움은 하락 종목의 현재가를 `-52500` 처럼 **음수로** 준다(하락 표시 관행이다).
+     * 그걸 그대로 흘리고 있었다 — 거래대금 상위 100줄 중 **50줄이 음수 가격**이었다.
+     * 시세분석 화면은 그리면서 `Math.abs` 를 해 눈에 안 띄었지만, 이 응답을 쓰는
+     * 다른 코드는 −52,500원을 그대로 받는다. **화면에서 가려서 없는 척하면 안 된다.**
+     *
+     * 여기서 부호를 떼도 잃는 게 없다 — 오르내림은 `flu_rt` 가 말한다.
+     */
+    out[c.key] = c.type === "text" ? String(row[c.key] ?? "") : c.type === "price" && n !== null ? Math.abs(n) : n;
   }
   return out;
 }
@@ -196,10 +220,23 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
        *
        * TR 이 한 번 더 나가지만 순위는 자주 부르는 조회가 아니고, 실패하면 통합 값을 그대로 쓴다.
        * 거래소를 직접 고른 경우에는 안 부른다 — 그 거래소를 보겠다는 뜻이다.
+       *
+       * ## ⚠️ 09시 전에는 KRX 를 아예 안 본다 (2026-08-25)
+       *
+       * 장전(07:30~08:30)의 KRX 는 **시간외종가**다 — 전일 종가로만 체결되므로 등락률이
+       * 구조적으로 0 이고 거래대금도 몇십억뿐이다. 그런데 그걸 「가격 기준」으로 삼아
+       * 덮고 있었다. 08:32 에 재 보니 통합 상위 100줄 중 **9줄**(삼성전자·SK하이닉스·
+       * 현대차·삼성전기·신풍제약·NAVER·심텍·한화에어로스페이스·삼천당제약)이 장전
+       * KRX 목록에 걸려 **등락률이 0.00% 로 죽었다.** 나머지 91줄은 KRX 목록에 없어
+       * 통합(=오늘 NXT 프리마켓) 값을 그대로 들고 있었다 — **한 표에 두 시점**이 섞였다.
+       *
+       * 09시 전에 오늘 값을 말할 수 있는 건 NXT 프리마켓뿐이고, 그건 통합이 이미 준다.
        */
       const [main, krx] = await Promise.all([
         ask(exchange),
-        spec.exchange && exchange === "3" ? ask("1").catch(() => null) : Promise.resolve(null),
+        spec.exchange && exchange === "3" && krxSessionStarted()
+          ? ask("1").catch(() => null)
+          : Promise.resolve(null),
       ]);
       const data = main.data;
 
@@ -209,6 +246,13 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         ? (krx.data[spec.listKey] as Record<string, unknown>[])
         : [];
       for (const r of krxRows) {
+        /*
+         * **KRX 에서 실제로 안 돈 종목은 없는 셈 친다.**
+         * 거래가 0 이면 등락률도 0 으로 오는데, 그 0 은 「안 움직였다」가 아니라
+         * 「여기서는 안 팔렸다」는 뜻이다. 그걸 통합 값 위에 덮으면 거짓말이 된다.
+         */
+        const qty = toNum(r.now_trde_qty) ?? toNum(r.trde_qty) ?? 0;
+        if (qty <= 0) continue;
         const prica = toNum(r.trde_prica);
         krxOf.set(bare(r.stk_cd), {
           tv: prica === null ? null : Math.round(prica / 100),
@@ -241,7 +285,8 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
            * 가격만 KRX 로 덮는다. 거래대금·순위는 통합 그대로다.
            * KRX 에 그 종목이 없으면(그날 KRX 에서 안 돌았으면) 통합 값을 남긴다.
            */
-          if (k?.price != null) mapped.cur_prc = k.price;
+          // 부호는 여기서도 뗀다 — KRX 응답도 하락이면 음수로 온다
+          if (k?.price != null) mapped.cur_prc = Math.abs(k.price);
           if (k?.rate != null) mapped.flu_rt = k.rate;
           return {
             ...mapped,

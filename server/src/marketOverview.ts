@@ -643,8 +643,34 @@ export async function getThemeStocks(client: KiwoomClient, themeCode: string): P
 }
 
 /**
+ * 한 업종에서 몇 쪽까지 이어받을지.
+ *
+ * 키움은 한 쪽에 100건을 준다. 코스피에서 제일 큰 업종이 200종목쯤이고 코스닥
+ * 「일반서비스」가 300종목을 넘는다. 다섯 쪽(500종목)이면 다 들어간다.
+ */
+const SECTOR_PAGES = 5;
+
+/**
  * 업종 구성종목 (ka20002).
  * 문서상 모든 업종코드에 데이터가 제공되지는 않으므로 빈 배열이 나올 수 있다.
+ *
+ * ## ⚠️ 한 쪽만 받으면 뒤쪽 종목이 통째로 사라진다 (2026-08-25)
+ *
+ * 연속조회를 안 하고 첫 쪽만 받고 있었다. 키움은 한 쪽에 **100건**을 주므로 종목이
+ * 100개 넘는 업종은 **뒤가 잘렸다.** 그런데 이 목록이 전종목 스냅샷의 재료다 —
+ * 「모든 종목은 업종 하나에 속하니 업종을 다 훑으면 전종목이 된다」는 전제가
+ * 잘린 목록 위에서는 성립하지 않는다.
+ *
+ * 실제로 무엇이 빠졌나: **KB금융·신한지주·하나금융지주·우리금융지주·한국금융지주·
+ * HD현대·GS·한진칼·에코프로비엠·원익IPS·HPSP·솔브레인·한국콜마·에이피알** 등
+ * 40종목. 시가총액 상위인데도 자기 업종 목록에서 101번째 뒤였다는 이유로 사라졌다.
+ *
+ * 그 대가가 큰 자리에서 나왔다:
+ *   · 내 테마에 **「시세 없음」** — 화장품은 6종목 중 3개가 빠져 평균이 절반짜리였다
+ *   · 섹터 MAP · **업종 강세** — 업종 강세는 **신호등의 한 축**이다
+ *
+ * 조회가 46회에서 100회 남짓으로 는다. 캐시(40초)와 스냅샷 미리받기가 이미 있어
+ * 화면이 기다리는 시간은 그대로다. **빠진 종목을 아무도 모르는 것보다 낫다.**
  */
 export async function getSectorStocks(
   client: KiwoomClient,
@@ -655,12 +681,28 @@ export async function getSectorStocks(
   const hit = constituentCache.get(key);
   if (hit && Date.now() - hit.at < CONSTITUENT_TTL_MS) return hit.data;
 
-  const { data } = await client.request<Row>(SECT_RESOURCE, "ka20002", {
-    mrkt_tp: market === "kospi" ? "0" : "1",
-    inds_cd: sectorCode,
-    stex_tp: "1", // KRX — 상세(ka10001)와 기준을 맞춘다. 통합은 마감 후 NXT 값을 준다
-  });
-  const rows = Array.isArray(data.inds_stkpc) ? (data.inds_stkpc as Row[]) : [];
+  const rows: Row[] = [];
+  let contYn = "N";
+  let nextKey = "";
+  for (let page = 0; page < SECTOR_PAGES; page += 1) {
+    const res = await client.request<Row>(
+      SECT_RESOURCE,
+      "ka20002",
+      {
+        mrkt_tp: market === "kospi" ? "0" : "1",
+        inds_cd: sectorCode,
+        stex_tp: "1", // KRX — 상세(ka10001)와 기준을 맞춘다. 통합은 마감 후 NXT 값을 준다
+      },
+      page === 0 ? {} : { contYn, nextKey },
+    );
+    const got = Array.isArray(res.data.inds_stkpc) ? (res.data.inds_stkpc as Row[]) : [];
+    if (got.length === 0) break;
+    rows.push(...got);
+    if (res.contYn !== "Y" || !res.nextKey) break;
+    contYn = "Y";
+    nextKey = res.nextKey;
+  }
+
   const mapped = mapConstituents(rows, await getSharesMap(client));
   constituentCache.set(key, { data: mapped, at: Date.now() });
   return mapped;
