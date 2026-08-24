@@ -106,7 +106,8 @@ export function UsWatchTable({
             const side = sideQuote(s);
             return (
               <tr key={s.symbol}>
-                <td className="sticky-col">
+                {/* 이름이 길면 잘린다(CSS) — 티커는 안 잘리고, 전체 이름은 마우스로 본다 */}
+                <td className="sticky-col" title={`${s.symbol} ${s.name}`}>
                   {/* 나라가 섞이니 국기를 앞에 — 78.89 가 달러인지 엔인지 알아야 한다 */}
                   <span className="uw-flag">{s.flag ?? (s.symbol.includes(".") ? "🇪🇺" : "")}</span>
                   <button
@@ -115,8 +116,16 @@ export function UsWatchTable({
                     onClick={() => onOpen(s.symbol, s.name || s.symbol)}
                     title="눌러서 상세 보기"
                   >
+                    {/*
+                      **티커 아래 이름** — 두 줄로 나눈다.
+
+                      한 줄에 국기·티커·이름을 다 넣으니 이름이 긴 ETF 에서 통째로 잘려
+                      「us…」만 남았다. 이름을 줄여 봐야 무슨 종목인지 모르는 건 마찬가지다.
+                      세로로 나누면 **쓸 수 있는 가로가 두 배**가 되어 이름이 온전히 들어간다.
+                      섹터 MAP 타일도 같은 모양이라 눈이 헤매지 않는다.
+                    */}
                     <b>{s.symbol.split(".")[0]}</b>
-                    <span className="pt-n"> {s.name}</span>
+                    <span className="uw-sub">{s.name}</span>
                   </button>
                   {s.error && <span className="uw-err"> {s.error}</span>}
                 </td>
