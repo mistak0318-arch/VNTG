@@ -283,7 +283,13 @@ export function ScreenerPage({
       {tab === "cum" && <CumulativeRank onSelectStock={onSelectStock} />}
 
       {current?.kind !== "page" && (
-        <div className="screener">
+        /*
+          ⚠️ 격자가 늘 `178px 1fr` 이었다. 그런데 트리는 「그 밖에」에서만 그리므로,
+          다른 탭에서는 표가 **178px 칸에 갇혔다** — 1025px 화면에서 표가 178px 안에
+          들어앉고 옆의 831px 이 통째로 비어 있었다. 열 이름이 「전/일/순/위」처럼
+          세로로 쪼개져 보이던 게 그것이다. 해상도 문제로 보였지만 칸 문제였다.
+        */
+        <div className={`screener${tab === "etc" ? "" : " no-tree"}`}>
           {/* 「그 밖에」일 때만 트리를 편다 — 다섯 탭에서는 자리만 먹는다 */}
           {tab === "etc" && (
             <aside className="scr-tree">

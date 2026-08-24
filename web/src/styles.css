@@ -3227,6 +3227,8 @@ body {
 /* ===== 시세분석 =====
    왼쪽 트리에서 고르고 오른쪽에 표. 항목이 계속 늘어날 것이므로 목록형으로 둔다 */
 .screener { display: grid; grid-template-columns: 178px 1fr; gap: 16px; align-items: start; }
+/* 트리를 안 그리는 탭에서는 표가 화면을 다 쓴다 */
+.screener.no-tree { grid-template-columns: 1fr; }
 @media (max-width: 860px) { .screener { grid-template-columns: 1fr; } }
 
 .scr-tree {
