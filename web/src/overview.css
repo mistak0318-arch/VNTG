@@ -472,3 +472,16 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 .usb-idx.sig-danger { box-shadow: inset 0 0 0 1px var(--up); }
 .usb-idx.sig-warn { box-shadow: inset 0 0 0 1px var(--accent); }
 .usb-idx.sig-ok { box-shadow: inset 0 0 0 1px var(--flat); }
+
+/*
+ * ===== 칸이 화면 밖으로 나가던 것 =====
+ *
+ * ⚠️ 격자 칸은 `1fr` 인데, `1fr` 은 사실 `minmax(auto, 1fr)` 이고 그 **auto 의 최소값이
+ * min-content** 다. 안에 줄바꿈이 안 되는 넓은 내용이 하나라도 있으면 칸이 그만큼
+ * 커지고, 그 순간 열이 화면보다 넓어진다. 실제로 폰(375px)에서 미국 전광판 칸이
+ * **695px** 로 잡혀 화면이 통째로 옆으로 밀렸다 — 격자는 넘친 걸 잘라 주지 않는다.
+ *
+ * `min-width: 0` 은 「내용이 뭐든 칸은 줄어도 된다」는 뜻이다. 그러면 열은 화면 폭에
+ * 맞고, 안에서 넘치는 것은 각자 자기 자리에서 처리한다(표는 가로로 구르고 글은 접힌다).
+ */
+.ov-grid > * { min-width: 0; }

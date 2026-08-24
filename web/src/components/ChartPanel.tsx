@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLive } from "../useLive";
 import type { RawRecord } from "../api";
 import { CandleChart } from "./CandleChart";
+import { setPref } from "../prefs";
 import { useChartPrefs } from "../useChartPrefs";
 import { ChartInsights } from "./ChartInsights";
 import { PERIOD_CONFIG, lastDays, toCandles, type Period } from "./chartCandles";
@@ -99,6 +100,7 @@ export function ChartPanel({
   insights = true,
   height,
   sizeTick = 0,
+  viewId,
 }: {
   code: string;
   /** 툴팁 머리에 쓸 종목명 */
@@ -115,10 +117,44 @@ export function ChartPanel({
   height?: number;
   /** 크기가 바뀌었다는 신호. 가로만 바뀐 경우를 잡으려고 있다 */
   sizeTick?: number;
+  /**
+   * **이 차트가 놓인 자리의 이름.** 주면 봉·거래소·구간을 그 이름으로 기억한다.
+   *
+   * ⚠️ 보드에서 종목을 바꾸면 차트가 죄다 일봉으로 돌아갔다. 칸이 `key={code}` 로
+   * 그려져서 **종목이 바뀔 때마다 컴포넌트가 통째로 새로 태어났기** 때문이다.
+   * 새로고침해도 마찬가지였다 — 고른 봉을 아무 데도 안 적어 뒀다.
+   *
+   * 자리 이름으로 적어 두면 다시 태어나도 그대로 돌아온다. 자리마다 따로 적으므로
+   * **한 화면에서 칸 하나는 분봉, 다른 칸은 주봉**으로 둘 수도 있다 — 원래 보드를
+   * 쓰는 이유가 그것이다. 이름을 안 주면(종목 상세처럼 한 번 보고 마는 자리) 예전처럼
+   * 기억하지 않는다.
+   */
+  viewId?: string;
 }) {
   const { prefs, set: savePrefs } = useChartPrefs();
-  const [period, setPeriod] = useState<Period>(initialPeriod);
-  const [venue, setVenue] = useState<Venue>("krx");
+
+  /*
+   * 이 자리에 마지막으로 무엇을 띄워 뒀나.
+   *
+   * 읽기는 **동기**여야 한다 — useState 초깃값으로 쓰므로 나중에 도착하면 이미 일봉이
+   * 한 번 그려진 뒤다. 그래서 localStorage 에서 바로 꺼낸다(서버 값은 부팅 때 여기
+   * 채워진다). 쓰기는 `setPref` 라 서버에도 올라간다.
+   */
+  const viewKey = viewId ? `vntg.chart.view.${viewId}` : "";
+  const saved = (): { period?: Period; venue?: Venue; span?: number } => {
+    if (!viewKey) return {};
+    try {
+      return JSON.parse(localStorage.getItem(viewKey) ?? "{}") as Record<string, never>;
+    } catch {
+      return {};
+    }
+  };
+
+  const [period, setPeriod] = useState<Period>(() => {
+    const p = saved().period;
+    return p && p in PERIOD_CONFIG ? p : initialPeriod;
+  });
+  const [venue, setVenue] = useState<Venue>(() => saved().venue ?? "krx");
   /**
    * 지금 보고 있는 구간(거래일 수).
    *
@@ -134,7 +170,22 @@ export function ChartPanel({
     if (k === "weekly") return prefs.spanWeekly;
     return prefs.spanMonthly;
   };
-  const [span, setSpan] = useState<number>(() => defaultSpan(initialPeriod));
+  const [span, setSpan] = useState<number>(() => {
+    const v = saved();
+    const p = v.period && v.period in PERIOD_CONFIG ? v.period : initialPeriod;
+    return typeof v.span === "number" ? v.span : defaultSpan(p);
+  });
+
+  /*
+   * 바뀔 때마다 적어 둔다.
+   *
+   * 셋을 한 덩어리로 적는다 — 봉과 구간은 짝이라서 따로 적으면 「주봉인데 구간은 240일」
+   * 같은 어긋난 조합이 남는다.
+   */
+  useEffect(() => {
+    if (!viewKey) return;
+    setPref(viewKey, JSON.stringify({ period, venue, span }));
+  }, [viewKey, period, venue, span]);
   const [full, setFull] = useState(false);
   /** 전체화면에서는 판독 줄을 접어 둔다 — 크게 보려고 들어온 자리다 */
   const [fullInsights, setFullInsights] = useState(false);

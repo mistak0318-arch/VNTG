@@ -3,6 +3,7 @@ import { removePref, setPref } from "../prefs";
 import { api, pickList, type RawRecord } from "../api";
 import { InvestorTrendTable } from "../components/InvestorTrendTable";
 import { ChartPanel } from "../components/ChartPanel";
+import { IndexChartCell } from "../components/IndexChartCell";
 import { OrderBookPanel } from "../components/OrderBookPanel";
 import { BrokerFlowPanel } from "../components/BrokerFlowPanel";
 import { ProgramFlowPanel } from "../components/ProgramFlowPanel";
@@ -129,6 +130,11 @@ const BLOCKS = [
    * 연동이 꺼져 있거나 종목이 아직 안 왔을 때도 **이 칸들은 그려진다.**
    */
   { key: "mktIndex", label: "지수판", wide: false },
+  /*
+    지수 봉차트 칸. 지수판이 「지금 몇인가」라면 이건 「어떻게 왔나」다.
+    칸마다 어느 지수를 볼지 따로 기억하므로 **왼쪽은 코스피, 오른쪽은 코스닥**으로 둘 수 있다.
+  */
+  { key: "mktIndexChart", label: "지수 차트", wide: false },
   { key: "mktSignal", label: "시장 신호등", wide: false },
   { key: "mktPulse", label: "시장 맥박", wide: false },
   { key: "mktBreadth", label: "상승·하락 종목수", wide: false },
@@ -207,7 +213,7 @@ function nextInstance(pick: string[], key: string): string {
   return `${key}#${Date.now()}`;
 }
 
-const MARKET_KEYS = new Set<string>(["mktIndex", "mktSignal", "mktPulse", "mktBreadth", "mktSector", "mktVi", "mktWatch", "mktTelegram"]);
+const MARKET_KEYS = new Set<string>(["mktIndex", "mktIndexChart", "mktSignal", "mktPulse", "mktBreadth", "mktSector", "mktVi", "mktWatch", "mktTelegram"]);
 const isMarket = (id: string) => MARKET_KEYS.has(blockOf(id));
 
 /*
@@ -965,6 +971,10 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                 return (
                 <>
                   {b.key === "mktIndex" && <IndexBoard />}
+                  {/* 지수 차트 — 칸 이름을 주면 어느 지수를 보던 중이었는지 기억한다 */}
+                  {b.key === "mktIndexChart" && (
+                    <IndexChartCell viewId={id} height={Math.max(140, height - 110)} />
+                  )}
                   {b.key === "mktSignal" && <MarketSignalPanel />}
                   {b.key === "mktPulse" && <MarketPulsePanel />}
                   {b.key === "mktBreadth" && <BreadthPanel />}
@@ -992,6 +1002,13 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                       name={name}
                       height={Math.max(140, height - 150)}
                       sizeTick={tick}
+                      /*
+                        칸의 인스턴스 id 를 준다 — 이걸로 봉·거래소·구간을 기억한다.
+                        `key={code}` 라 종목을 바꾸면 새로 태어나는데, 그때 일봉으로
+                        돌아가던 것이 이 한 줄로 해결된다. 칸마다 따로 기억하므로
+                        왼쪽 칸은 분봉, 오른쪽 칸은 주봉으로 둘 수 있다.
+                      */
+                      viewId={id}
                     />
                   )}
                   {b.key === "insights" && <ChartInsights key={code} code={code} />}

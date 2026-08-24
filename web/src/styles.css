@@ -6069,3 +6069,12 @@ button.ib-cell:hover { background: var(--panel-2); }
 .sd-list-cols .sd-list-rate,
 .sd-list-cols .sd-list-amt,
 .sd-list-cols .sd-list-score { color: var(--muted); font-weight: 600; font-size: 0.7333rem; }
+
+/* 지수 차트 칸 — 지수·구간 버튼과 현재값을 한 줄에 */
+.idxc-bar { align-items: baseline; }
+.idxc-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
+.idxc-now { margin-left: auto; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.idxc-rate { font-size: 0.78rem; }
+
+/* 전광판 안쪽도 같은 이유로 — flex 자식은 기본이 min-width:auto 라 안 줄어든다 */
+.usb > * { min-width: 0; }
