@@ -2,6 +2,7 @@ import { useAutoRefresh } from "../useAutoRefresh";
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtAbsNum, fmtNum, normalizeStockCode, pickList, signClass, type RawRecord } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
+import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
 
@@ -58,13 +59,31 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
 
   const rows = pickList(data ?? undefined, LIST_KEYS);
   const sort = useSortableTable(rows);
+  /* 시세분석과 **같은 도구** — 켤 때만, 지금 쪽만 평가한다 */
+  const [sigOn, setSigOn] = useState(false);
+  /*
+   * 앞의 50 종목만 평가한다. 백 종목을 다 재면 서버가 한참 걸린다 —
+   * 거래상위는 쪽 넘기기가 없어 화면에 백 줄이 한꺼번에 있기 때문이다.
+   */
+  const sigCodes = sort.sorted
+    .slice(0, 50)
+    .map((r) => normalizeStockCode(String(r.stk_cd ?? "")));
+  const signals = useSignalColumn(sigCodes, sigOn);
 
   /* 장중에는 스스로 다시 받는다 — 새로고침을 누르러 오게 하면 안 된다 */
   const auto = useAutoRefresh(() => void load(), { storeKey: "vntg.auto.volume", intervalMs: 20000 });
 
   return (
     <div>
-      <RefreshBar onRefresh={load} loading={loading} updatedAt={updatedAt} auto={auto} />
+      <RefreshBar onRefresh={load} loading={loading} updatedAt={updatedAt} auto={auto}>
+        <button
+          className={`filter-btn ${sigOn ? "active" : ""}`}
+          onClick={() => setSigOn((v) => !v)}
+          title="앞의 50 종목만 평가합니다 — 처음엔 좀 걸립니다"
+        >
+          🚦 신호등 {sigOn ? "끄기" : "켜기"}
+        </button>
+      </RefreshBar>
       <div className="filter-row">
         {MARKETS.map((m) => (
           <button
@@ -96,6 +115,7 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
           <table className="data-table">
             <thead>
               <tr>
+                {sigOn && <th className="sig-th" title="신호등 — 누르면 근거가 열립니다">🚦</th>}
                 <SortableTh
                   columnKey="name"
                   label="종목명"
@@ -149,6 +169,20 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
                 const name = String(r.stk_nm ?? "");
                 return (
                   <tr key={`${code}-${i}`} onClick={() => onSelectStock(code, name)} className="clickable-row">
+                    {sigOn && (
+                      <td className="sig-td">
+                        {i < 50 ? (
+                          <SignalCell
+                            code={code}
+                            name={name}
+                            signal={signals[code]}
+                            onSelectStock={onSelectStock}
+                          />
+                        ) : (
+                          <span className="pt-n">·</span>
+                        )}
+                      </td>
+                    )}
                     {/* 이름이 길면 잘린다(CSS) — 전체는 마우스를 올려서 본다 */}
                     <td className="sticky-col" title={name}>
                       <span className="rank-cell">{i + 1}. </span>

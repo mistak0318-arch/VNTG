@@ -70,10 +70,22 @@ export async function loadPrefs(): Promise<void> {
     const body = (await res.json()) as { values?: Record<string, string>; saved?: boolean };
 
     if (body.saved && body.values && Object.keys(body.values).length > 0) {
+      /*
+       * ⚠️ **한때 전역이었다가 로컬로 돌린 값은 서버에 그대로 남는다.**
+       *
+       * `LOCAL_ONLY` 에 넣으면 앞으로는 안 올리고 안 받지만, **이미 올라간 것은 지워지지
+       * 않는다.** 남아 있어도 안 읽으니 화면은 멀쩡한데, 다음에 그 키를 다시 전역으로
+       * 바꾸는 날 옛 값이 되살아난다. 찌꺼기는 그때 사고가 된다.
+       *
+       * 받아 온 값 중 지금 기준으로 로컬인 것이 있으면 **서버에서 지운다.** 한 번만
+       * 일어나는 일이고, 지운 뒤에는 아무 일도 안 한다.
+       */
+      const stale = Object.keys(body.values).filter((k) => !isGlobal(k));
       for (const [k, v] of Object.entries(body.values)) {
         if (isGlobal(k)) localStorage.setItem(k, v);
       }
       ready = true;
+      if (stale.length > 0) void removeMany(stale);
       return;
     }
 
@@ -97,6 +109,17 @@ export async function loadPrefs(): Promise<void> {
 
 let pending: Record<string, string | null> = {};
 let timer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * 서버에서 여러 키를 **지운다** — 한때 전역이었다가 로컬로 돌린 값 청소용.
+ *
+ * `save` 에 `null` 을 넣으면 지워진다(PATCH-merge 라 그 키만 빠진다).
+ */
+async function removeMany(keys: string[]): Promise<void> {
+  const patch: Record<string, string | null> = {};
+  for (const k of keys) patch[k] = null;
+  await save(patch).catch(() => undefined);
+}
 
 async function save(patch: Record<string, string | null>): Promise<void> {
   await fetch("/api/settings/ui", {
