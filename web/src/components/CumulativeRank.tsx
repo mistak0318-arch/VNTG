@@ -1,3 +1,4 @@
+import { Pager, usePager } from "./Pager";
 import { useEffect, useState } from "react";
 import { fmtNum, signClass } from "../api";
 
@@ -42,6 +43,8 @@ export function CumulativeRank({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  /* 쪽 넘기기 — 다른 목록과 같은 도구를 쓴다 */
+  const pager = usePager(rows?.length ?? 0, "vntg.cum.pageSize", rows?.length);
 
   useEffect(() => {
     let alive = true;
@@ -122,7 +125,7 @@ export function CumulativeRank({
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, 60).map((r, i) => (
+              {pager.slice(rows ?? []).map((r, i) => (
                 <tr
                   key={r.code}
                   className={onSelectStock ? "clickable-row" : ""}
@@ -151,6 +154,7 @@ export function CumulativeRank({
           </table>
         </div>
       )}
+      {rows && rows.length > 0 && <Pager pager={pager} total={rows.length} />}
 
       {rows && rows.length === 0 && !busy && (
         <div className="empty">결과가 없습니다.</div>

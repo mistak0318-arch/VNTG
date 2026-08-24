@@ -1,3 +1,4 @@
+import { Pager, usePager } from "../components/Pager";
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtNum, normalizeStockCode, pickList, signClass, type RawRecord } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
@@ -49,6 +50,7 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
 
   const rows = pickList(data ?? undefined, LIST_KEYS);
   const sort = useSortableTable(rows);
+  const pager = usePager(sort.sorted.length, "vntg.cont.pageSize", rows.length);
 
   return (
     <div>
@@ -94,7 +96,7 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
               </tr>
             </thead>
             <tbody>
-              {sort.sorted.map((r, i) => {
+              {pager.slice(sort.sorted).map((r, i) => {
                 const code = normalizeStockCode(String(r.stk_cd ?? ""));
                 const name = String(r.stk_nm ?? "");
                 return (
@@ -125,6 +127,7 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
           </table>
         </div>
       )}
+      <Pager pager={pager} total={sort.sorted.length} />
       <div className="table-note">HTS 0763(기관외국인연속매매현황) 참고 · ka10131 · 순매수 연속일 기준</div>
     </div>
   );

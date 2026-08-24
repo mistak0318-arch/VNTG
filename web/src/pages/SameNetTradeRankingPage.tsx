@@ -1,3 +1,4 @@
+import { Pager, usePager } from "../components/Pager";
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtAbsNum, fmtNum, normalizeStockCode, pickList, signClass, type RawRecord } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
@@ -50,6 +51,8 @@ export function SameNetTradeRankingPage({
 
   const rows = pickList(data ?? undefined, LIST_KEYS);
   const sort = useSortableTable(rows);
+  /* 쪽 넘기기 — 거래대금 상위와 같은 도구를 쓴다 */
+  const pager = usePager(sort.sorted.length, "vntg.samenet.pageSize", rows.length);
 
   return (
     <div>
@@ -94,7 +97,7 @@ export function SameNetTradeRankingPage({
               </tr>
             </thead>
             <tbody>
-              {sort.sorted.map((r, i) => {
+              {pager.slice(sort.sorted).map((r, i) => {
                 const code = normalizeStockCode(String(r.stk_cd ?? ""));
                 const name = String(r.stk_nm ?? "");
                 return (
@@ -123,6 +126,7 @@ export function SameNetTradeRankingPage({
           </table>
         </div>
       )}
+      <Pager pager={pager} total={sort.sorted.length} />
       <div className="table-note">HTS 0798(동일순매매순위) 참고 · ka10062 · 당일 기준</div>
     </div>
   );
