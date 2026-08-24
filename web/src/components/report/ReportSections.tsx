@@ -819,11 +819,15 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
   const [health, setHealth] = useState<PinnedHealth | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** 오래 걸리는가 — 20초가 넘으면 화면에 말한다 */
+  const [slow, setSlow] = useState(false);
 
   const load = useCallback(
     (force: boolean) => {
       setBusy(true);
       setError(null);
+      setSlow(false);
+      const slowTimer = setTimeout(() => setSlow(true), 20_000);
       if (force) setPosts(null);
       api
         .channelPinned(edition, 3, force)
@@ -839,7 +843,10 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
           setError(e.message || "불러오지 못했습니다");
           setPosts([]);
         })
-        .finally(() => setBusy(false));
+        .finally(() => {
+          clearTimeout(slowTimer);
+          setBusy(false);
+        });
     },
     [edition],
   );
@@ -849,7 +856,31 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
     load(false);
   }, [load]);
 
-  if (posts === null) return <div className="page-note">불러오는 중…</div>;
+  /*
+   * ⚠️ **「불러오는 중」에서 안 끝나는 화면이 있었다.**
+   *
+   * 고정 채널은 텔레그램에 직접 물어보는 조회라 세션이 느리거나 붙는 중이면 응답이
+   * 한참 안 온다. 그동안 화면에는 「불러오는 중」 넉 자뿐이어서, 기다리면 되는 건지
+   * 고장인지 알 수가 없었다 — 실제로 「여전히 못 읽어온다」는 말이 나왔다.
+   *
+   * 오래 걸리면 **오래 걸린다고 말한다.** 그리고 다시 받을 길을 준다.
+   */
+  if (posts === null) {
+    return (
+      <div className="page-note">
+        불러오는 중…
+        {slow && (
+          <>
+            {" "}
+            <b>20초가 넘었습니다</b> — 텔레그램 세션이 붙는 중이거나 응답이 느립니다.
+            <button className="filter-btn" onClick={() => load(true)} disabled={busy}>
+              ↻ 다시
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
 
   if (error) {
     return (

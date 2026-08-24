@@ -141,10 +141,39 @@ function kstNow(now = new Date()): { date: string; hour: number } {
  * (며칠 치를 한꺼번에 끌어오면 AI 비용이 터진다).
  */
 /** 마지막 발행 이후 지난 만큼을 훑는다. 첫 실행이면 12시간 */
-function sinceMinutesFrom(lastRunAt?: string): number {
-  if (!lastRunAt) return 12 * 60;
-  const minutes = (Date.now() - new Date(lastRunAt).getTime()) / 60_000;
-  return Math.min(Math.max(Math.ceil(minutes), 5), 72 * 60);
+/**
+ * 이 판이 **덮어야 할 구간**(분).
+ *
+ * ## ⚠️ 왜 고쳤나
+ *
+ * 예전엔 「마지막 발행 이후 지금까지」로 쟀다. 하루 세 판이 제때 돌면 그게 맞다 —
+ * 조간은 어제 석간부터, 장중은 조간부터.
+ *
+ * 그런데 **밀린 판이 연달아 돌 때** 무너진다. 저녁에 서버를 켜면 조간·장중·석간이
+ * 세 조건에 다 걸려 한 판씩 이어서 발행되는데, 첫 판이 `lastRunAt` 을 **방금**으로
+ * 갱신해 버려서 다음 판은 **5분치**만 읽는다. 그 5분에 올라온 글이 한둘이면 선별도
+ * 한둘이다 — 「1건밖에 안 나온다」가 이것이다.
+ *
+ * 판마다 구간을 **고정**한다. 직전 판의 시각부터 지금까지다(조간의 직전은 어제 석간).
+ * 언제 돌든 같은 구간을 보므로, 밀려서 늦게 돌아도 내용이 비지 않는다.
+ */
+function windowMinutesFor(edition: ChannelEditionKey, now = new Date()): number {
+  const at = CHANNEL_EDITIONS.findIndex((e) => e.key === edition);
+  const hours = CHANNEL_EDITIONS.map((e) => e.hour);
+  /* 직전 판 — 첫 판(조간)의 직전은 **어제 석간**이라 24시간을 뺀다 */
+  const startHour = at > 0 ? hours[at - 1] : hours[hours.length - 1] - 24;
+
+  const k = new Date(now.getTime() + 9 * 3600_000); // 한국 시각으로
+  const start = Date.UTC(
+    k.getUTCFullYear(),
+    k.getUTCMonth(),
+    k.getUTCDate(),
+    startHour < 0 ? startHour + 24 : startHour,
+  );
+  const startMs = startHour < 0 ? start - 24 * 3600_000 : start;
+  const minutes = (k.getTime() - startMs) / 60_000;
+  /* 아무리 밀려도 사흘을 넘겨 읽지 않는다 — 그만큼이면 이미 지난 이야기다 */
+  return Math.min(Math.max(Math.ceil(minutes), 30), 72 * 60);
 }
 
 async function tick(): Promise<void> {
@@ -166,7 +195,7 @@ async function tick(): Promise<void> {
       const report = await buildChannelReport({
         send: true,
         useAi: true,
-        sinceMinutes: sinceMinutesFrom(state.lastRunAt),
+        sinceMinutes: windowMinutesFor(e.key),
       });
 
       if (report.summary) {
