@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
-import { getTrackedWatchlist, invalidateTrackingCache } from "../watchTracking.js";
+import { getTrackedWatchlist, invalidateTrackingCache, invalidateTracking } from "../watchTracking.js";
 import {
   addGroup,
   addWatchItem,
@@ -11,6 +11,9 @@ import {
   removeWatchItem,
   renameGroup,
   reorderGroups,
+  DEFAULT_GROUP,
+  reorderWatch,
+  addDivider,
   toggleWatchGroup,
   updateWatchItem,
 } from "../watchlist.js";
@@ -164,6 +167,37 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
   });
 
   /** 그룹 하나를 넣거나 뺀다 (표에서 칩 토글) */
+  /**
+   * 그룹 안 **종목 순서**를 바꾼다 — 화면이 보이는 순서를 통째로 보낸다.
+   *
+   * ⚠️ `/:code/...` 보다 **위**에 둔다. 아래 있으면 `reorder` 가 종목코드로 먹힌다.
+   */
+  router.put("/reorder", async (req, res, next) => {
+    try {
+      const group = String(req.body?.group ?? "").trim() || DEFAULT_GROUP;
+      const codes = Array.isArray(req.body?.codes) ? req.body.codes.map(String) : [];
+      const items = await reorderWatch(group, codes);
+      /* 순서가 바뀌었으니 추적 캐시도 버린다 — 안 그러면 새로고침에 옛 순서가 돌아온다 */
+      invalidateTracking();
+      res.json({ items });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 구분선 한 줄 넣기 — 종목 사이를 눈으로 가르는 빈 줄 */
+  router.post("/divider", async (req, res, next) => {
+    try {
+      const group = String(req.body?.group ?? "").trim() || DEFAULT_GROUP;
+      const label = String(req.body?.label ?? "").trim().slice(0, 20);
+      const items = await addDivider(group, label);
+      invalidateTracking();
+      res.json({ items });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/:code/groups/:group", async (req, res, next) => {
     try {
       res.json({ items: await toggleWatchGroup(req.params.code, decodeURIComponent(req.params.group)) });

@@ -71,7 +71,70 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       ? items
       // 한 종목이 여러 그룹에 담기므로 "포함하는가"로 거른다
       : items.filter((i) => (i.groups ?? [DEFAULT_GROUP]).includes(activeGroup));
-  const sort = useSortableTable(visible);
+  /*
+   * **내가 정한 자리대로** 세운다.
+   *
+   * 관심종목은 순위가 아니라 **내가 배치한 목록**이다 — 자주 보는 것을 위에 두고 관련된
+   * 것끼리 붙여 놓는다. 그래서 기본은 이름순도 등락률순도 아닌 내 순서다. 열 이름을
+   * 누르면 그때만 다시 세운다.
+   *
+   * 자리를 정한 적 없는 종목(새로 담은 것)은 맨 아래로 간다.
+   */
+  const ordered = [...visible].sort((a, b) => {
+    const g = activeGroup === ALL ? DEFAULT_GROUP : activeGroup;
+    const av = a.order?.[g] ?? Number.MAX_SAFE_INTEGER;
+    const bv = b.order?.[g] ?? Number.MAX_SAFE_INTEGER;
+    if (av !== bv) return av - bv;
+    return a.addedAt.localeCompare(b.addedAt);
+  });
+  const sort = useSortableTable(ordered);
+  /* 순서를 손대는 중인가 — 켤 때만 ▲▼ 가 붙는다 */
+  const [arranging, setArranging] = useState(false);
+
+  /** 한 칸 옮기고 **보이는 순서를 통째로** 저장한다 */
+  async function moveStock(code: string, dir: -1 | 1) {
+    const g = activeGroup === ALL ? DEFAULT_GROUP : activeGroup;
+    const codes = ordered.map((r) => r.code);
+    const i = codes.indexOf(code);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= codes.length) return;
+    [codes[i], codes[j]] = [codes[j], codes[i]];
+
+    /*
+     * **화면을 먼저 바꾼다.**
+     *
+     * 서버에 저장한 뒤 다시 받아 오면 그건 **캐시된 목록**이라 방금 바꾼 자리가 안 보인다
+     * (전 종목 시세를 다시 받는 조회라 캐시가 길다). 강제로 새로 받게 하면 이번엔 몇 초씩
+     * 걸린다 — 한 칸 옮기는 데 그건 말이 안 된다.
+     *
+     * 자리는 우리가 이미 아는 값이므로 손에 든 목록에 바로 반영하고, 서버에는 조용히
+     * 적어 둔다. 실패하면 다음에 새로 받을 때 원래 자리로 돌아온다.
+     */
+    const at = new Map(codes.map((c, k) => [c, k]));
+    setItems((prev) =>
+      prev.map((it) =>
+        at.has(it.code) ? { ...it, order: { ...(it.order ?? {}), [g]: at.get(it.code)! } } : it,
+      ),
+    );
+
+    try {
+      await api.watchReorder(g, codes);
+    } catch {
+      /* 실패하면 다음에 새로 받을 때 원래 자리로 돌아온다 */
+    }
+  }
+
+  async function addDivider() {
+    const g = activeGroup === ALL ? DEFAULT_GROUP : activeGroup;
+    const label = window.prompt("구분선 이름 (비워도 됩니다)", "") ?? "";
+    try {
+      await api.watchAddDivider(g, label);
+      /* 새 줄은 우리가 만든 게 아니라 서버가 코드를 지어 주므로 다시 받아야 한다 */
+      await load(true);
+    } catch {
+      /* 실패는 다음 조회에서 드러난다 */
+    }
+  }
 
   async function loadGroups() {
     try {
@@ -350,7 +413,34 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
             «{activeGroup}» 삭제
           </button>
         )}
+        {/*
+          자리 바꾸기. **켤 때만 ▲▼ 가 붙는다** — 늘 떠 있으면 종목을 누르려다 화살표를
+          누르게 된다. 끌어 옮기기(drag)는 안 쓴다: 이 앱은 폰으로 보는 시간이 더 길고
+          터치 드래그는 스크롤과 싸운다. 두 칸이면 어디서든 되고 한 칸씩 정확히 움직인다.
+        */}
+        <button
+          className={`filter-btn ${arranging ? "active" : ""}`}
+          onClick={() => setArranging((v) => !v)}
+          title="종목을 원하는 자리로 옮깁니다"
+        >
+          {arranging ? "자리 끝" : "⇅ 자리 바꾸기"}
+        </button>
+        {arranging && (
+          <button className="filter-btn" onClick={() => void addDivider()} title="종목 사이를 가르는 빈 줄">
+            ― 구분선 넣기
+          </button>
+        )}
       </div>
+      {arranging && (
+        <div className="table-note">
+          <b>▲▼</b> 로 옮깁니다 — 지금 보고 있는 <b>«{activeGroup === ALL ? DEFAULT_GROUP : activeGroup}»</b>
+          안에서의 자리이고, 같은 종목이 다른 그룹에서는 그 그룹의 자리를 따로 갖습니다.
+          <b> 구분선</b>은 그룹을 새로 만들 만큼은 아닌데 눈으로는 갈라 보고 싶을 때 씁니다.
+          {sort.sortKey && (
+            <b className="scr-idle"> 지금은 열 이름으로 정렬 중이라 옮겨도 그대로 안 보입니다 — 정렬을 풀어 주세요.</b>
+          )}
+        </div>
+      )}
       {editGroupBar && (
         <div className="table-note">
           ◀ ▶ 로 순서를 옮기고, 그룹 이름을 누르면 이름을 바꿉니다. 순서는 저장되어 다음에도
@@ -433,9 +523,55 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
               </tr>
             </thead>
             <tbody>
-              {sort.sorted.map((r) => (
+              {sort.sorted.map((r, i, arr) =>
+                /*
+                  ⚠️ **구분선은 종목이 아니다.**
+                  값 칸을 비우고 한 줄을 통째로 쓴다 — 시세를 안 받으므로 채울 것도 없다.
+                  키움 HTS 관심종목의 그 빈 줄과 같은 물건이다.
+                */
+                r.divider ? (
+                  <tr key={r.code} className="mg-divider">
+                    <td colSpan={99}>
+                      <span className="mg-divider-line" />
+                      {r.name && <span className="mg-divider-label">{r.name}</span>}
+                      {arranging && (
+                        <span className="mg-move">
+                          <button className="gt-move" onClick={() => void moveStock(r.code, -1)} disabled={i === 0}>
+                            ▲
+                          </button>
+                          <button
+                            className="gt-move"
+                            onClick={() => void moveStock(r.code, 1)}
+                            disabled={i === arr.length - 1}
+                          >
+                            ▼
+                          </button>
+                          <button className="row-del-btn" onClick={() => void remove(r.code)} title="구분선 지우기">
+                            ✕
+                          </button>
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ) : (
                 <tr key={r.code} className="clickable-row" onClick={() => onSelectStock(r.code, r.name)}>
-                  <td className="sticky-col">{r.name}</td>
+                  <td className="sticky-col">
+                    {arranging && (
+                      <span className="mg-move" onClick={(e) => e.stopPropagation()}>
+                        <button className="gt-move" onClick={() => void moveStock(r.code, -1)} disabled={i === 0}>
+                          ▲
+                        </button>
+                        <button
+                          className="gt-move"
+                          onClick={() => void moveStock(r.code, 1)}
+                          disabled={i === arr.length - 1}
+                        >
+                          ▼
+                        </button>
+                      </span>
+                    )}
+                    {r.name}
+                  </td>
                   {/*
                     드롭다운은 하나만 고를 수 있어서 다중 그룹을 못 담는다.
                     칩을 눌러 넣고 뺀다 — 담긴 것만 진하게, 나머지는 흐리게.
@@ -533,7 +669,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                     </button>
                   </td>
                 </tr>
-              ))}
+                ),
+              )}
             </tbody>
           </table>
           <div className="table-note">

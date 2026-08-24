@@ -25,6 +25,33 @@ export interface WatchItem {
    * 그 결정은 담는 시점에 할 수 있는 게 아니다.
    */
   groups: string[];
+  /**
+   * **그룹 안에서의 자리** — 그룹 이름 → 순번.
+   *
+   * ## 왜 그룹마다 따로인가
+   *
+   * 한 종목이 여러 그룹에 든다. 「반도체」에서는 맨 위에 두고 싶은 종목이 「배당주」에서는
+   * 아래여도 된다 — 순서는 **그 바구니를 어떻게 보느냐**의 문제라 바구니마다 다르다.
+   * 종목에 순번 하나만 달면 그룹을 옮길 때마다 다른 그룹의 배치가 흔들린다.
+   *
+   * 값이 없는 종목은 **맨 아래**로 간다(새로 담은 것). 자리를 정한 적이 없다는 뜻이다.
+   */
+  order?: Record<string, number>;
+  /**
+   * **구분선인가.**
+   *
+   * 키움 HTS 관심종목처럼 종목 사이에 빈 줄을 넣어 묶음을 가른다. 그룹을 새로 만들 만큼은
+   * 아닌데 눈으로는 갈라 보고 싶은 때가 있다 — 「지금 보는 것」과 「기다리는 것」처럼.
+   *
+   * 구분선은 종목이 아니므로 `code` 가 `--` 로 시작한다(`--1`, `--2`…). 시세를 조회하지
+   * 않고 화면에서도 값 칸을 비운다.
+   */
+  divider?: boolean;
+}
+
+/** 구분선 코드인가 — 시세 조회에서 걸러 낼 때 쓴다 */
+export function isDivider(code: string): boolean {
+  return code.startsWith("--");
 }
 
 export const DEFAULT_GROUP = "기본";
@@ -235,6 +262,50 @@ export async function renameGroup(from: string, to: string): Promise<string[]> {
     items.map((w) => ({ ...w, groups: normalizeGroups(w.groups.map((g) => (g === from ? clean : g))) })),
   );
   return listGroups();
+}
+
+/**
+ * 그룹 안에서 **종목 순서를 바꾼다.**
+ *
+ * 화면이 지금 보이는 순서를 통째로 보내면 그대로 번호를 매긴다. 한 칸씩 올리고 내리는
+ * 계산을 서버가 다시 하지 않아도 되고, 드래그로 여러 칸을 옮겨도 같은 길로 저장된다.
+ */
+export async function reorderWatch(group: string, codes: string[]): Promise<WatchItem[]> {
+  const items = await load();
+  const at = new Map(codes.map((c, i) => [c, i]));
+  for (const it of items) {
+    const i = at.get(it.code);
+    if (i === undefined) continue;
+    it.order = { ...(it.order ?? {}), [group]: i };
+  }
+  await persist(items);
+  return items;
+}
+
+/**
+ * 구분선을 **그 그룹에 하나 넣는다.**
+ *
+ * 종목 사이에 빈 줄을 넣어 묶음을 가른다. 그룹을 새로 만들 만큼은 아닌데 눈으로는 갈라
+ * 보고 싶은 때가 있다 — 「지금 보는 것」과 「기다리는 것」처럼.
+ *
+ * 코드는 겹치지 않게 시각으로 만든다. 사람이 볼 값이 아니라 자리를 잡아 두는 표다.
+ */
+export async function addDivider(group: string, label = ""): Promise<WatchItem[]> {
+  const items = await load();
+  const code = `--${Date.now().toString(36)}`;
+  items.push({
+    code,
+    name: label,
+    addedAt: new Date().toISOString(),
+    addedPrice: 0,
+    memo: "",
+    groups: [group],
+    divider: true,
+    /* 맨 아래에 붙는다 — 넣고 나서 원하는 자리로 옮긴다 */
+    order: { [group]: Number.MAX_SAFE_INTEGER },
+  });
+  await persist(items);
+  return items;
 }
 
 /**

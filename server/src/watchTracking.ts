@@ -77,6 +77,10 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedStock> {
+  /*
+   * 구분선은 **종목이 아니다.** 시세를 물으면 없는 코드라 오류만 나고, 그 오류가 목록
+   * 전체를 느리게 만든다. 자리만 지키는 줄이므로 값 없이 그대로 돌려준다.
+   */
   const base: TrackedStock = {
     ...item,
     price: 0,
@@ -106,6 +110,9 @@ async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedS
     brokerCount: null,
     error: null,
   };
+
+  /* 구분선은 여기서 끝 — 조회할 게 없다 */
+  if (item.divider) return base;
 
   try {
     // 일봉으로 현재가·이동평균·정배열을 계산
@@ -297,6 +304,17 @@ const trendCache = new Map<string, { day: string; short: number | null; lending:
 let cache: { data: TrackedStock[]; at: number } | null = null;
 /** 만드는 중이면 같은 약속을 돌려줘 중복 조회를 막는다 */
 let building: Promise<TrackedStock[]> | null = null;
+
+/**
+ * 쌓아 둔 결과를 **버린다** — 목록 자체가 바뀌었을 때 부른다.
+ *
+ * ⚠️ 종목 순서를 바꿨는데 새로고침하면 **옛 순서로 되돌아왔다.** 저장은 제대로 됐는데
+ * 이 캐시가 예전 목록을 들고 있었기 때문이다. 시세를 다시 받는 게 비싸서 캐시를 길게
+ * 잡아 뒀는데, **목록이 바뀐 것과 시세가 낡은 것은 다른 일**이다.
+ */
+export function invalidateTracking(): void {
+  cache = null;
+}
 
 /**
  * 캐시 수명.

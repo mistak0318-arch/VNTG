@@ -673,7 +673,9 @@
       "Bash(curl -s --max-time 40 \"http://localhost:4000/api/signal/034730\")",
       "Bash(curl -s --max-time 45 \"http://localhost:4000/api/rank/market-cap?market=000&limit=300\")",
       "Bash(curl -s --max-time 60 \"http://localhost:4000/api/rank/trade-value?market=000&limit=500\")",
-      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\).rows||[];console.log\\('limit=500 →',r.length,'건'\\)}\\)\")"
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\).rows||[];console.log\\('limit=500 →',r.length,'건'\\)}\\)\")",
+      "Bash(grep -n \"^                </tr>$\" src/pages/MyPage.tsx)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const c=\\(j.candles||[]\\).slice\\(-1\\)[0];console.log\\('캔들 필드:',Object.keys\\(c||{}\\).join\\(', '\\)\\)}\\)\")"
     ]
   }
 }

@@ -6236,3 +6236,24 @@ button.ib-cell:hover { background: var(--panel-2); }
   cursor: pointer;
 }
 .refresh-auto.on { border-color: var(--blue); color: var(--blue); }
+
+/*
+ * 관심종목 구분선 — 종목 사이를 눈으로 가르는 빈 줄.
+ * 키움 HTS 의 그 줄과 같은 물건이라 값 칸 없이 선 하나와 이름만 둔다.
+ */
+.mg-divider td {
+  padding: 6px 8px !important;
+  background: var(--panel-2);
+}
+.mg-divider-line {
+  display: inline-block;
+  width: 18px;
+  height: 2px;
+  background: var(--border-strong, var(--border));
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.mg-divider-label { font-size: 0.75rem; color: var(--muted); font-weight: 700; }
+/* 자리 바꾸기 화살표 — 이름 앞에 붙어 한 칸만 차지한다 */
+.mg-move { display: inline-flex; gap: 1px; margin-right: 6px; vertical-align: middle; }
+.mg-move .gt-move { padding: 0 4px; line-height: 1.2; }

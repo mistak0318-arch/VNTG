@@ -195,6 +195,12 @@ export const api = {
   watchGroupAdd: (name: string) => postJson<{ groups: string[] }>("/api/watchlist/groups", { name }),
   watchGroupRename: (from: string, name: string) =>
     patchJson<{ groups: string[] }>(`/api/watchlist/groups/${encodeURIComponent(from)}`, { name }),
+  /** 그룹 안 종목 순서 — 보이는 순서를 통째로 보낸다 */
+  watchReorder: (group: string, codes: string[]) =>
+    putJson<{ items: unknown[] }>("/api/watchlist/reorder", { group, codes }),
+  /** 구분선 한 줄 넣기 */
+  watchAddDivider: (group: string, label = "") =>
+    postJson<{ items: unknown[] }>("/api/watchlist/divider", { group, label }),
   watchGroupReorder: (order: string[]) =>
     putJson<{ groups: string[] }>("/api/watchlist/groups/reorder", { order }),
   watchGroupRemove: (name: string) =>
@@ -653,6 +659,13 @@ export interface OpinionSummary {
 }
 
 export interface WatchItem {
+  /**
+   * 그룹 안에서의 자리 — 그룹 이름 → 순번. 없으면 맨 아래(새로 담은 것).
+   * 한 종목이 여러 그룹에 드므로 **그룹마다 따로** 둔다.
+   */
+  order?: Record<string, number>;
+  /** 구분선인가 — 종목이 아니라 눈으로 묶음을 가르는 빈 줄 */
+  divider?: boolean;
   code: string;
   name: string;
   addedAt: string;
