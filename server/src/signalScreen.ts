@@ -93,8 +93,17 @@ export async function tradeValueTop(
   let contYn = "N";
   let nextKey = "";
 
-  // 최대 4페이지(400건)까지만 — 그 아래는 거래대금이 얇아 어차피 못 산다
-  for (let page = 0; page < 4 && out.length < limit; page += 1) {
+  /*
+   * 페이지를 넘기며 채운다.
+   *
+   * ⚠️ 4페이지(400건)로 막혀 있었다. 그런데 **보통주만 남기므로** 400건을 받아도
+   * 손에 남는 건 그보다 훨씬 적다 — 거래대금 상위에는 KODEX·TIGER 같은 ETF 와 우선주가
+   * 잔뜩 섞여 있다. 실시간 구독을 500 종목으로 올리면서 여기가 병목이 됐다.
+   *
+   * 여덟 페이지까지 본다. 요청한 만큼 채우면 그 자리에서 멈추므로, 적게 부르면
+   * 예전처럼 한두 페이지에서 끝난다 — 늘 여덟 번 부르는 게 아니다.
+   */
+  for (let page = 0; page < 8 && out.length < limit; page += 1) {
     const res = await client.request<Record<string, unknown>>(
       RKINFO,
       "ka10032",

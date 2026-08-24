@@ -312,8 +312,39 @@ export function ChartPanel({
   const showInsights = insights && prefs.insightsOn && (!full || fullInsights);
   // 눕힌 폰에서는 머리줄을 접는다. 종목명은 차트 툴팁에도 나오므로 잃는 게 없다
   const compact = full && vh < COMPACT_VH;
+
+  /*
+   * ⚠️ 전체화면 높이를 **어림하지 않고 실제로 잰다.**
+   *
+   * 예전엔 `창 높이 − 도구줄 어림값(108px)` 로 계산했다. 두 가지가 틀어졌다.
+   *   · 전체화면에 들어가면 브라우저 주소창이 사라져 창 높이가 **그 순간** 바뀐다.
+   *     `resize` 가 늦게 오면 옛 높이로 계산한 차트가 그려진다.
+   *   · 도구줄이 실제로 몇 픽셀인지는 글꼴 크기 설정에 따라 달라진다. 108 은 어림이다.
+   *
+   * 그래서 눕힌 폰(844×390)에서 **차트가 649px** 로 잡혀 창보다 커졌고, 남는 자리가
+   * 없으니 위의 도구줄이 8px 로 짓눌려 글자가 안 보였다. 사용자 화면이 그 꼴이었다.
+   *
+   * 차트를 담는 칸의 높이를 그대로 쓴다. 칸의 크기는 아래 CSS 가 flex 로 정하므로
+   * 차트가 커진다고 칸이 커지지 않는다 — 순환이 안 생긴다.
+   */
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [wrapH, setWrapH] = useState(0);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || !full) return;
+    const measure = () => setWrapH(el.clientHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [full, compact, fullInsights]);
+
   const chartHeight = full
-    ? Math.max(200, vh - (compact ? CHROME_PX_COMPACT : CHROME_PX) - (fullInsights ? 150 : 0))
+    ? Math.max(
+        200,
+        // 잰 값이 아직 없을 때만 어림값으로 시작한다 — 한 프레임 뒤 실제 값으로 바뀐다
+        wrapH > 0 ? wrapH : vh - (compact ? CHROME_PX_COMPACT : CHROME_PX),
+      )
     : Math.max(140, height ?? 320);
 
   const toolbar = (
@@ -452,7 +483,7 @@ export function ChartPanel({
       {loading && <div className="empty">차트 불러오는 중...</div>}
       {error && <div className="error-banner">{error}</div>}
       {!loading && !error && (
-        <div className="chart-wrap">
+        <div className="chart-wrap" ref={wrapRef}>
           {/*
             차트 오른쪽 위에 붙박는다. 도구줄이 굴러가도 이건 늘 같은 자리에 있다.
             전체화면 안에서는 도구줄에 닫기가 있으므로 띄우지 않는다.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, signClass, type MoodResult } from "../api";
+import { api, signClass, type MoodResult, type EvaluatedTheme } from "../api";
 import { ConstituentSheet, type ConstituentTarget } from "./overview/ConstituentSheet";
 
 /**
@@ -36,6 +36,30 @@ export function SectorMoodPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [target, setTarget] = useState<ConstituentTarget | null>(null);
+  /**
+   * **내가 만든 테마** 중 이 종목이 든 것.
+   *
+   * 위쪽 「편입 테마」는 **키움 분류**다. 그건 그것대로 쓸모가 있지만, 내가 직접 묶어
+   * 둔 테마와 다르다 — 키움에 없는 묶음을 만들려고 내 테마가 있는 것이다.
+   * 종목을 보다가 「아 이거 내가 원전 바구니에 넣어 뒀지」가 여기서 나와야 한다.
+   *
+   * 목록은 한 번만 받아 두고 종목이 바뀌면 코드로 걸러 쓴다 — 종목마다 다시 받으면
+   * 넘겨 볼 때마다 스물여덟 테마를 새로 평가하게 된다.
+   */
+  const [mine, setMine] = useState<EvaluatedTheme[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .customThemes()
+      .then((r) => alive && setMine(r.themes ?? []))
+      .catch(() => {
+        /* 내 테마를 못 받아도 업종·테마는 그대로 나와야 한다 */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +81,9 @@ export function SectorMoodPanel({
       cancelled = true;
     };
   }, [code]);
+
+  /* 이 종목이 든 내 테마 — 코드로 거른다 */
+  const myThemes = mine.filter((t) => t.codes.includes(code));
 
   if (loading) return <div className="empty">업종·테마 분위기 불러오는 중...</div>;
   if (error) return <div className="error-banner">{error}</div>;
@@ -105,6 +132,46 @@ export function SectorMoodPanel({
             </div>
           )}
         </button>
+      )}
+
+      {/*
+        내 테마 — 키움 분류 **위**에 둔다. 내가 묶은 것이 먼저 눈에 들어와야 한다.
+        든 게 없으면 줄 자체를 안 그린다(빈 줄이 「없음」보다 조용하다).
+      */}
+      {myThemes.length > 0 && (
+        <div className="mood-mine">
+          <span className="mood-mine-k">내 테마</span>
+          {myThemes.map((t) => (
+            <button
+              key={t.id}
+              className="mood-mine-tag"
+              style={{ borderColor: t.color }}
+              onClick={() =>
+                setTarget({
+                  kind: "custom",
+                  code: t.id,
+                  name: t.name,
+                  label: "내 테마",
+                  /* 이미 받아온 구성종목을 그대로 넘긴다 — 다시 조회할 이유가 없다 */
+                  stocks: t.stocks
+                    .filter((x) => x.found)
+                    .map((x) => ({
+                      code: x.code,
+                      name: x.name,
+                      price: 0,
+                      change: 0,
+                      changeRate: x.changeRate,
+                      marketCap: x.marketCap,
+                    })),
+                })
+              }
+              title={`${t.name} — 눌러서 구성종목 (${t.codes.length}종목)`}
+            >
+              {t.name}
+              <em className={signClass(t.changeRate ?? 0)}>{pct(t.changeRate ?? 0)}</em>
+            </button>
+          ))}
+        </div>
       )}
 
       {data.themes.length > 0 ? (

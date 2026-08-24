@@ -74,28 +74,46 @@ export function shouldRun(now = new Date()): boolean {
  *
  * ## 그래서 어디까지
  *
- * 300 이면 55MB · 0.5초 · CPU 2.5% 로 편안하다. 그리고 그 300 을
- * **거래대금·등락률 상위**로 채우면 「새로 보려는 종목」이 대개 그 안에 있다 —
- * 종목을 새로 발견하는 경로가 애초에 그 두 순위다.
+ * **코스피 500 + 코스닥 500** 으로 잡는다(2026-08-24).
+ *
+ * 위 표는 **통째로 다시 쓰던 시절**의 것이다. 그때 기준이면 1000 종목은 20초마다
+ * 1.6초를 무는 셈이라 못 할 짓이었다. 그래서 저장을 **덧붙이기**로 바꿨다 — 새로 들어온
+ * 샘플만 적으므로 쓰는 시간이 종목 수가 아니라 **그 20초 동안 실제로 온 양**에 붙는다.
+ * 천 종목이든 삼백 종목이든 한 번에 적는 건 수십 KB다.
+ *
+ * 편한 게 목적이 아니라 **화면을 열었을 때 이미 쌓여 있는 것**이 목적이다. 목록 밖의
+ * 종목을 열면 그 자리에서 구독이 걸리지만 지나간 시간은 아무도 못 되살린다.
  *
  * 그 밖의 종목은 **여는 순간부터** 쌓인다(화면이 물으면 그때 건다). 지난 시간은
  * 아무도 못 되살린다 — 실시간은 놓치면 끝이라 「그때 안 물었다」가 정답이다.
  */
-const MAX_CODES = 300;
+/** 시장 하나당 몇 종목 — 코스피 500 + 코스닥 500 */
+const PER_MARKET = 500;
+const MAX_CODES = PER_MARKET * 2;
 /** 순위를 몇 분마다 다시 볼지 — 거래대금 상위는 이보다 빨리 안 뒤집힌다 */
 const RANK_REFRESH_MS = 5 * 60 * 1000;
 
 let rankCache: { at: number; codes: string[] } = { at: 0, codes: [] };
 
-/** 거래대금 상위 — 돈이 몰린 곳이 곧 오늘 볼 종목이다 */
+/**
+ * 거래대금 상위 — 돈이 몰린 곳이 곧 오늘 볼 종목이다.
+ *
+ * ⚠️ **시장별로 따로 받는다.** 전체(`000`)로 한 번에 받으면 상위가 코스피로 채워져
+ * **코스닥이 거의 안 들어온다** — 거래대금 절대액이 다르기 때문이다. 그런데 코스닥에서
+ * 새 종목을 발견하는 일이 오히려 잦다. 코스피 상위 N, 코스닥 상위 N 을 따로 잡는다.
+ */
 async function hotCodes(kiwoom: KiwoomClient): Promise<string[]> {
   if (Date.now() - rankCache.at < RANK_REFRESH_MS) return rankCache.codes;
   try {
     // 보통주만 걸러서 준다(ETF·우선주를 실시간으로 물 이유가 없다)
-    const top = await tradeValueTop(kiwoom, "000", MAX_CODES);
-    rankCache = { at: Date.now(), codes: top.map((t) => t.code).filter(Boolean) };
+    const [kospi, kosdaq] = await Promise.all([
+      tradeValueTop(kiwoom, "001", PER_MARKET).catch(() => []),
+      tradeValueTop(kiwoom, "101", PER_MARKET).catch(() => []),
+    ]);
+    const codes = [...kospi, ...kosdaq].map((t) => t.code).filter(Boolean);
+    // 둘 다 실패했으면 지난번 것을 그대로 쓴다 — 빈 목록으로 덮으면 구독이 통째로 풀린다
+    rankCache = { at: Date.now(), codes: codes.length > 0 ? codes : rankCache.codes };
   } catch {
-    // 순위를 못 받아도 관심종목은 걸려야 한다 — 지난번 것을 그대로 쓴다
     rankCache = { at: Date.now(), codes: rankCache.codes };
   }
   return rankCache.codes;

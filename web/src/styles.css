@@ -4478,6 +4478,20 @@ th.est-col { color: var(--blue); }
   overflow: hidden;
 }
 
+/*
+ * ⚠️ 머리줄과 도구줄은 **절대 안 눌린다.**
+ *
+ * flex 세로 배치에서 자식은 기본이 `flex-shrink: 1` 이라, 차트가 남는 자리보다 커지면
+ * 위의 줄들이 대신 눌린다. 눕힌 폰에서 도구줄이 8px 이 되어 글자가 통째로 사라졌다 —
+ * 드롭박스와 버튼이 빈 상자처럼 보였다. 계산이 어긋나도 **조작할 것들은 남아야 한다.**
+ */
+.chart-full > .chart-full-head,
+.chart-full > .period-toggle,
+.chart-full .ci-wrap { flex: none; }
+
+/* 차트는 남는 만큼만 — `min-height: 0` 이 없으면 flex 자식이 안 줄어든다 */
+.chart-full .chart-wrap { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+
 .chart-full-head {
   display: flex;
   align-items: baseline;
@@ -6098,3 +6112,21 @@ button.ib-cell:hover { background: var(--panel-2); }
 .cs-prog-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
 .cs-prog-bar > i { display: block; height: 100%; background: var(--blue); transition: width .3s ease; }
 .cs-prog-t { flex: none; font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/*
+ * 종목이 든 **내 테마** 줄 — 키움 분류 위에 둔다.
+ * 색은 테마마다 정해 둔 것을 테두리로만 쓴다. 배경까지 칠하면 등락률 색과 싸운다.
+ */
+.mood-mine { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; }
+.mood-mine-k { font-size: 0.72rem; color: var(--muted); font-weight: 700; }
+.mood-mine-tag {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 3px 8px; border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+.mood-mine-tag:hover { background: var(--panel); }
+.mood-mine-tag em { font-style: normal; font-variant-numeric: tabular-nums; font-size: 0.72rem; }
