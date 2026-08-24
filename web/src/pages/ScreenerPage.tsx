@@ -195,6 +195,20 @@ export function ScreenerPage({
     }
   };
 
+  /*
+   * **몇 건 받고, 한 화면에 몇 개 볼까.**
+   *
+   * 둘은 다른 질문이다. 받는 건수는 「거래대금 150위까지 궁금하다」이고, 한 화면 개수는
+   * 「한 번에 눈에 들어오는 양」이다. 300건을 받아 놓고 50개씩 보는 게 실제로 쓰는 방식이라
+   * 하나로 묶으면 둘 중 하나를 포기하게 된다.
+   *
+   * 조회 건수를 늘리면 **연속조회가 그만큼 더 나간다**(100건에 한 번). 기본 100 은
+   * 예전과 같아서, 안 건드리면 부하도 예전 그대로다.
+   */
+  const [limit, setLimit] = useState<number>(() => Number(localStorage.getItem("vntg.screener.limit")) || 100);
+  const [pageSize, setPageSize] = useState<number>(() => Number(localStorage.getItem("vntg.screener.pageSize")) || 100);
+  const [page, setPage] = useState(0);
+
   /** 지금 그릴 명세 — 탭이 rank 면 탭 것, 「그 밖에」면 트리에서 고른 것 */
   const current = TABS.find((t) => t.key === tab);
   const rankKey = current?.kind === "rank" ? tab : active;
@@ -211,14 +225,19 @@ export function ScreenerPage({
     setLoading(true);
     setError(null);
     api
-      .rank(rankKey, market, exchange)
+      .rank(rankKey, market, exchange, limit)
       .then((r) => !cancelled && setData(r))
       .catch((e: Error) => !cancelled && setError(e.message))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [rankKey, market, exchange]);
+  }, [rankKey, market, exchange, limit]);
+
+  /* 조회가 바뀌면 첫 장으로 — 3쪽을 보다가 다른 순위로 갔는데 3쪽이면 빈 화면이 뜬다 */
+  useEffect(() => {
+    setPage(0);
+  }, [rankKey, market, exchange, limit, pageSize, filter]);
 
   const cols = data?.spec.columns ?? [];
   const all = data?.rows ?? [];
@@ -254,6 +273,14 @@ export function ScreenerPage({
    * 그 둘은 다른 질문이라 표 아래에 적어 둔다.
    */
   const sort = useSortableTable(rows);
+
+  /*
+   * 한 장씩 잘라 그린다. **거른 뒤·정렬한 뒤**에 자른다 — 거르기 전에 자르면
+   * 「1쪽에 조건에 맞는 게 없다」가 되고, 정렬 전에 자르면 1쪽만 정렬된 꼴이 된다.
+   */
+  const pageCount = Math.max(1, Math.ceil(sort.sorted.length / pageSize));
+  const pageAt = Math.min(page, pageCount - 1);
+  const shown = sort.sorted.slice(pageAt * pageSize, (pageAt + 1) * pageSize);
   const estimated = rows.some((r) => r.tvEst);
   const on =
     filter.minTv > 0 ||
@@ -341,6 +368,28 @@ export function ScreenerPage({
               {on ? `${rows.length} / ${all.length}건` : `${all.length}건`}
             </span>
           )}
+          {/*
+            받을 건수. 늘리면 연속조회가 그만큼 더 나가므로 **기본은 예전과 같은 100** 이다.
+            안 건드리면 부하도 예전 그대로다.
+          */}
+          <span className="scr-page-k">조회</span>
+          {[100, 200, 300].map((n) => (
+            <button
+              key={n}
+              className={`filter-btn ${limit === n ? "active" : ""}`}
+              onClick={() => {
+                setLimit(n);
+                try {
+                  localStorage.setItem("vntg.screener.limit", String(n));
+                } catch {
+                  /* 저장 못 해도 이번 세션에는 바뀐다 */
+                }
+              }}
+              title={n === 100 ? "예전과 같습니다" : `연속조회 ${Math.ceil(n / 100)}번`}
+            >
+              {n}
+            </button>
+          ))}
           {/* 필터는 접어 둔다 — 늘 펴 두면 표가 화면 밖으로 밀린다 */}
           <button
             className={`filter-btn ${on ? "active" : ""}`}
@@ -524,7 +573,7 @@ export function ScreenerPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {sort.sorted.map((r, i) => (
+                  {shown.map((r, i) => (
                     <tr key={`${r.code}-${i}`}>
                       {/* 이름이 길면 잘린다(CSS) — 전체는 마우스를 올려서 본다 */}
                       <td className="sticky-col" title={r.name}>
@@ -577,6 +626,60 @@ export function ScreenerPage({
                 </tbody>
               </table>
             </div>
+
+            {/*
+              쪽 넘기기. **한 쪽에 몇 개**는 받는 건수와 다른 질문이라 따로 둔다 —
+              300건을 받아 놓고 50개씩 보는 게 실제로 쓰는 방식이다.
+              한 쪽에 다 들어가면 줄 자체를 안 그린다.
+            */}
+            {sort.sorted.length > 0 && (
+              <div className="filter-row scr-pager">
+                <span className="scr-page-k">한 쪽에</span>
+                {[50, 100].map((n) => (
+                  <button
+                    key={n}
+                    className={`filter-btn ${pageSize === n ? "active" : ""}`}
+                    onClick={() => {
+                      setPageSize(n);
+                      try {
+                        localStorage.setItem("vntg.screener.pageSize", String(n));
+                      } catch {
+                        /* 저장 못 해도 이번 세션에는 바뀐다 */
+                      }
+                    }}
+                  >
+                    {n}
+                  </button>
+                ))}
+                {pageCount > 1 && (
+                  <>
+                    <span className="news-scope-sep" />
+                    <button
+                      className="filter-btn"
+                      onClick={() => setPage(pageAt - 1)}
+                      disabled={pageAt === 0}
+                    >
+                      ‹ 앞
+                    </button>
+                    <span className="breadth-count">
+                      {pageAt + 1} / {pageCount}쪽
+                      <b className="pt-n">
+                        {" "}
+                        ({pageAt * pageSize + 1}~{Math.min((pageAt + 1) * pageSize, sort.sorted.length)}위)
+                      </b>
+                    </span>
+                    <button
+                      className="filter-btn"
+                      onClick={() => setPage(pageAt + 1)}
+                      disabled={pageAt >= pageCount - 1}
+                    >
+                      뒤 ›
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
             {all.length === 0 && (
               <div className="empty">
                 조회 결과가 없습니다. 장 시간에만 값이 들어오는 항목일 수 있습니다.

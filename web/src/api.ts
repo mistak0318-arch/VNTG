@@ -487,8 +487,8 @@ export const api = {
     putJson<{ presets: BoardPresetDto[] }>("/api/settings/board", { presets }),
 
   rankSpecs: () => getJson<{ groups: RankSpecGroup[] }>("/api/rank/specs"),
-  rank: (key: string, market = "000", exchange = "3") =>
-    getJson<RankResult>(`/api/rank/${key}?market=${market}&exchange=${exchange}`),
+  rank: (key: string, market = "000", exchange = "3", limit = 100) =>
+    getJson<RankResult>(`/api/rank/${key}?market=${market}&exchange=${exchange}&limit=${limit}`),
   sectorFlow: (subject = "foreign", window = 5) =>
     getJson<SectorFlowResult>(`/api/sector-flow?subject=${subject}&window=${window}`),
   sectorFlowStocks: (market: string, code: string) =>

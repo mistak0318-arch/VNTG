@@ -6166,3 +6166,7 @@ button.ib-cell:hover { background: var(--panel-2); }
  */
 .board-solo .board-grid { grid-template-columns: 1fr; gap: 0; }
 .board-solo { padding: 0; }
+
+/* 시세분석 쪽 넘기기 */
+.scr-page-k { font-size: 0.72rem; color: var(--muted); font-weight: 600; }
+.scr-pager { margin-top: 8px; align-items: baseline; }
