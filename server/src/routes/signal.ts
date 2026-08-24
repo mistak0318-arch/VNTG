@@ -50,7 +50,15 @@ export function createSignalRouter(client: KiwoomClient): Router {
         .split(",")
         .map((c) => c.trim())
         .filter(Boolean)
-        .slice(0, 40); // 과도한 호출 방지
+        /*
+         * 한 번에 **50 개**까지. 화면이 한 쪽에 50 줄을 그리므로 그만큼은 받아야
+         * 「40번째까지만 켜지고 그 뒤는 안 켜지는」 이상한 화면이 안 나온다.
+         *
+         * 상한 자체는 남겨 둔다 — 종목마다 차트·수급·재무를 받아 계산하는지라
+         * 백 개를 한 번에 부르면 키움 초당 5회 제한에 걸리고 화면도 한참 멈춘다.
+         * 더 보려면 **쪽을 넘겨** 그 쪽을 평가하는 쪽이 맞다.
+         */
+        .slice(0, 50);
       res.json({ results: await evaluateMany(client, codes) });
     } catch (err) {
       next(err);

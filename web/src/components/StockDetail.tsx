@@ -48,7 +48,7 @@ const CUR_PRICE_KEYS = ["cur_prc"];
 const INVESTOR_LIST_KEYS = ["stk_invsr_orgn_chart"];
 
 /** 종목 상세 상단 가로 탭. 기능이 늘어나면 여기에 항목을 추가한다. */
-type DetailTab = "summary" | "opinion" | "notes" | "sector" | "finance" | "chart" | "investor" | "supply" | "feed" | "raw" | "orderbook" | "broker" | "program";
+type DetailTab = "chartOnly" | "summary" | "opinion" | "notes" | "sector" | "finance" | "chart" | "investor" | "supply" | "feed" | "raw" | "orderbook" | "broker" | "program";
 
 /**
  * 탭 순서는 "실제 매매에 바로 쓰는 것"이 앞이다.
@@ -60,6 +60,11 @@ type DetailTab = "summary" | "opinion" | "notes" | "sector" | "finance" | "chart
  */
 const DETAIL_TABS: { key: DetailTab; label: string }[] = [
   { key: "chart", label: "종합" },
+  /*
+    「차트만」 — 종합 탭은 신호등과 장중 수급이 위에 얹혀 차트가 아래로 밀린다.
+    차트를 **크게 오래 보고 싶을 때**가 따로 있어서 그 탭을 둔다. 판독 줄은 그대로 나온다.
+  */
+  { key: "chartOnly", label: "차트만" },
   { key: "orderbook", label: "호가" },
   { key: "broker", label: "거래원" },
   { key: "program", label: "프로그램" },
@@ -322,6 +327,9 @@ export function StockDetail({
 
             {detailTab === "finance" && <FinancePanel code={code} />}
 
+            {detailTab === "chartOnly" && (
+              <ChartPanel code={code} name={name} viewId="detail.chartOnly" height={520} />
+            )}
             {detailTab === "chart" && (
               <>
                 <SignalPanel code={code} onSelectStock={onSelectStock} />

@@ -20,6 +20,9 @@ const LEVEL_LABEL: Record<string, string> = {
 };
 
 /** 목록용 — 종목 여러 개를 한 번에 평가해서 코드별로 돌려준다 */
+/** 한 번에 물어볼 종목 수 — 서버도 이만큼에서 자른다 */
+const BATCH = 50;
+
 export function useSignals(codes: string[]): Record<string, SignalResult> {
   const [map, setMap] = useState<Record<string, SignalResult>>({});
   const key = codes.join(",");
@@ -27,12 +30,33 @@ export function useSignals(codes: string[]): Record<string, SignalResult> {
   useEffect(() => {
     if (!key) return;
     let cancelled = false;
-    api
-      .signalBatch(key.split(","))
-      .then((r) => {
-        if (!cancelled) setMap(r.results);
-      })
-      .catch(() => undefined);
+
+    /*
+     * ⚠️ **나눠서 부른다.**
+     *
+     * 서버가 한 번에 50 개까지만 받는다(종목마다 차트·수급·재무를 계산하므로 그 이상은
+     * 키움 초당 5회 제한에 걸린다). 그런데 화면은 한 쪽에 100 줄을 그릴 수도 있어서,
+     * 그냥 넘기면 **앞의 50 개만 켜지고 뒤는 영영 빈 채로 남았다** — 실제로 「40번째까지만
+     * 가고 그 뒤엔 안 붙는다」는 말이 나왔다.
+     *
+     * 화면이 몇 줄을 보든 다 켜져야 한다. 50 개씩 잘라 **차례로** 부르고, 오는 대로
+     * 화면에 얹는다 — 한꺼번에 보내면 서버가 막히고, 다 모아서 한 번에 그리면 그동안
+     * 아무것도 안 보인다.
+     */
+    void (async () => {
+      const all = key.split(",");
+      for (let i = 0; i < all.length; i += BATCH) {
+        if (cancelled) return;
+        try {
+          const r = await api.signalBatch(all.slice(i, i + BATCH));
+          if (cancelled) return;
+          setMap((prev) => ({ ...prev, ...r.results }));
+        } catch {
+          /* 한 묶음이 실패해도 나머지는 계속 받는다 */
+        }
+      }
+    })();
+
     return () => {
       cancelled = true;
     };

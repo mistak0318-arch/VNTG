@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, fmtAbsNum, fmtNum, normalizeStockCode, pickList, signClass, type RawRecord } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
+import { Pager, usePager } from "../components/Pager";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
 
@@ -65,10 +66,16 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
    * 앞의 50 종목만 평가한다. 백 종목을 다 재면 서버가 한참 걸린다 —
    * 거래상위는 쪽 넘기기가 없어 화면에 백 줄이 한꺼번에 있기 때문이다.
    */
-  const sigCodes = sort.sorted
-    .slice(0, 50)
-    .map((r) => normalizeStockCode(String(r.stk_cd ?? "")));
-  const signals = useSignalColumn(sigCodes, sigOn);
+  const pager = usePager(sort.sorted.length, "vntg.volume.pageSize", rows.length);
+  const shown = pager.slice(sort.sorted);
+  /*
+   * **보이는 쪽만** 평가한다. 예전엔 앞의 50 종목만 켜서 그 뒤로 넘어가면 신호등이
+   * 아예 안 붙었다 — 쪽을 나누면 어느 쪽을 보든 그 쪽이 켜진다.
+   */
+  const signals = useSignalColumn(
+    shown.map((r) => normalizeStockCode(String(r.stk_cd ?? ""))),
+    sigOn,
+  );
 
   /* 장중에는 스스로 다시 받는다 — 새로고침을 누르러 오게 하면 안 된다 */
   const auto = useAutoRefresh(() => void load(), { storeKey: "vntg.auto.volume", intervalMs: 20000 });
@@ -79,7 +86,7 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
         <button
           className={`filter-btn ${sigOn ? "active" : ""}`}
           onClick={() => setSigOn((v) => !v)}
-          title="앞의 50 종목만 평가합니다 — 처음엔 좀 걸립니다"
+          title="지금 보고 있는 쪽만 평가합니다 — 처음엔 좀 걸립니다"
         >
           🚦 신호등 {sigOn ? "끄기" : "켜기"}
         </button>
@@ -164,28 +171,24 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
               </tr>
             </thead>
             <tbody>
-              {sort.sorted.map((r, i) => {
+              {shown.map((r, i) => {
                 const code = normalizeStockCode(String(r.stk_cd ?? ""));
                 const name = String(r.stk_nm ?? "");
                 return (
                   <tr key={`${code}-${i}`} onClick={() => onSelectStock(code, name)} className="clickable-row">
                     {sigOn && (
                       <td className="sig-td">
-                        {i < 50 ? (
-                          <SignalCell
-                            code={code}
-                            name={name}
-                            signal={signals[code]}
-                            onSelectStock={onSelectStock}
-                          />
-                        ) : (
-                          <span className="pt-n">·</span>
-                        )}
+                        <SignalCell
+                          code={code}
+                          name={name}
+                          signal={signals[code]}
+                          onSelectStock={onSelectStock}
+                        />
                       </td>
                     )}
                     {/* 이름이 길면 잘린다(CSS) — 전체는 마우스를 올려서 본다 */}
                     <td className="sticky-col" title={name}>
-                      <span className="rank-cell">{i + 1}. </span>
+                      <span className="rank-cell">{pager.from + i}. </span>
                       <WatchStar code={code} />
                       {name}
                     </td>
@@ -219,6 +222,7 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
           </table>
         </div>
       )}
+      <Pager pager={pager} total={sort.sorted.length} />
       <div className="table-note">HTS 0130(거래상위) 참고 · ka10030 · 관리종목 제외</div>
     </div>
   );
