@@ -54,6 +54,8 @@ export function sideNameOf(stocks: UsQuoteRow[]): string {
 
 export interface UsWatchTableProps {
   stocks: UsQuoteRow[];
+  /** 빠른 시세(야후 spark, 3초) — 있으면 현재가·등락률을 덧씌운다 */
+  fast?: Record<string, { price: number; changeRate: number | null; at: number }>;
   /** 종목을 누르면 — 상세 열기 */
   onOpen: (symbol: string, name: string) => void;
   /** 편집 중이면 순서·삭제 칸이 붙는다 */
@@ -69,6 +71,7 @@ export interface UsWatchTableProps {
 
 export function UsWatchTable({
   stocks,
+  fast,
   onOpen,
   editing = false,
   onMove,
@@ -106,6 +109,16 @@ export function UsWatchTable({
     const price = fid(v, "10");
     if (price === null || price === 0) return null;
     return { price: Math.abs(price), rate: fid(v, "12") };
+  };
+
+  /*
+   * 값의 우선순위: FE 실시간(안 오는 게 실측이지만 오면 최상) → **spark 3초** → 본 시세.
+   * spark 값이 5분 넘게 낡았으면 버린다 — 장이 닫힌 뒤엔 본 시세(정규장 종가)가 기준이다.
+   */
+  const fastOf = (symbol: string): { price: number; rate: number | null } | null => {
+    const q = fast?.[symbol.toUpperCase()];
+    if (!q || Date.now() - q.at > 5 * 60_000) return null;
+    return { price: q.price, rate: q.changeRate };
   };
 
   return (
@@ -175,8 +188,8 @@ export function UsWatchTable({
         <tbody>
           {stocks.map((s, i, arr) => {
             const side = sideQuote(s);
-            /* 키움 FE 가 살아 있으면 그 값이 먼저다 — 점(●)이 그 표시다 */
-            const lv = live(s.symbol);
+            /* FE 실시간 → spark 3초 → 본 시세(1분 캐시) 순 — 점(●)이 그 표시다 */
+            const lv = live(s.symbol) ?? fastOf(s.symbol);
             const shownPrice = lv ? lv.price : s.price;
             const shownRate = lv && lv.rate !== null ? lv.rate : s.changeRate;
             return (
@@ -221,8 +234,8 @@ export function UsWatchTable({
                   현재가·등락률·원화·편입대비는 **같이 움직인다.** 하나만 반짝이면
                   나머지는 조용히 바뀌어서, 오히려 안 바뀐 것처럼 보인다.
                 */}
-                <td className="num" title={lv ? `${s.currency ?? ""} · 키움 실시간` : (s.currency ?? "")}>
-                  {lv && <span className="uw-live-dot" title="키움 실시간" />}
+                <td className="num" title={lv ? `${s.currency ?? ""} · 빠른 시세(3초)` : (s.currency ?? "")}>
+                  {lv && <span className="uw-live-dot" title="빠른 시세 — 3초마다 갱신" />}
                   {price(shownPrice, s.currency)}
                   {/* 괄호는 그대로 둔다 — 실시간이 끊길 때마다 붙었다 떨어지면 화면이 덜컹인다 */}
                   {side && (

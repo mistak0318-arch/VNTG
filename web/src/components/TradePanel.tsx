@@ -22,6 +22,26 @@ function rateClass(n: number | null): string {
 }
 
 /**
+ * HS 품목명 축약 (2026-08-26 — 「그래프가 안 읽힌다」).
+ *
+ * 관세청 품목명은 관세율표 원문이라 「제8471호에 해당하는 기계에 전용되거나 주로
+ * 사용되는 부분품과 부속품」처럼 **법조문 수식어가 절반**이다. 같은 머리말이 줄마다
+ * 반복되면 정작 다른 부분(뒤쪽)이 안 보인다 — 수식어를 걷어내고 몸통만 남긴다.
+ * 원문은 title(마우스 올림)로 보존한다.
+ */
+function shortHs(name: string): string {
+  let s = name
+    .replace(/제\s?\d{2,4}호(?:부터\s?제?\s?\d{2,4}호까지)?(?:나\s?제?\s?\d{2,4}호)?(?:에\s?해당하는|의)\s*/g, "")
+    .replace(/전용되거나\s?주로\s?사용되는\s*/g, "")
+    .replace(/주로\s?사용되는\s*/g, "")
+    .replace(/그\s?밖의\s*/g, "기타 ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (s.length === 0) s = name;
+  return s.length > 20 ? `${s.slice(0, 20)}…` : s;
+}
+
+/**
  * 「2026-07」 → 「2026년 7월 실적」.
  *
  * 관세청은 **월이 끝나야** 확정치를 낸다. 그래서 8월 하순에 봐도 7월이 최신이다.
@@ -53,6 +73,92 @@ function fetchedLabel(iso: string): string {
   return `${stamp} 받음 (${ago})`;
 }
 
+/**
+ * 큰 변화 브리핑 (2026-08-26 — 「분기·반기·연도별 큰 변화가 있는 품목은 위쪽에
+ * 강하게 설명해 달라. 그래야 알지」).
+ *
+ * 표는 최신 한 달 뿐이라 추세가 꺾인 품목이 안 튄다. 서버가 품목마다 36개월을
+ * 분기(3vs3)·반기(6vs6)·연간(12vs12)으로 견줘 주고, 여기서는 **가장 크게 움직인
+ * 품목만 카드로 크게** 박는다. 카드를 누르면 아래 표의 그 품목이 펼쳐진다.
+ */
+function TradeBriefCards({ onPick }: { onPick: (key: string) => void }) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.tradeBrief>> | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const ask = () => {
+      api
+        .tradeBrief()
+        .then((r) => {
+          if (!alive) return;
+          setData(r);
+          // 서버가 뒤에서 시계열을 채우는 중이면 잠시 뒤 다시 — 하루 한 번 있는 일이다
+          if (r.pending > 0) timer = setTimeout(ask, 12_000);
+        })
+        .catch(() => undefined);
+    };
+    ask();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  if (!data) return null;
+  /* 문턱 15% — 계절·환율로도 한 자릿수는 늘 흔들린다. 그 아래는 「큰 변화」가 아니다 */
+  const big = data.rows.filter((r) => r.top >= 15).slice(0, 6);
+  if (big.length === 0 && data.pending === 0) return null;
+
+  const seg = (label: string, w: { rate: number | null } | null) =>
+    w && w.rate !== null ? (
+      <span className={`tb-seg ${w.rate >= 0 ? "positive" : "negative"}`}>
+        {label} {w.rate > 0 ? "+" : ""}
+        {w.rate.toFixed(0)}%
+      </span>
+    ) : null;
+
+  return (
+    <div className="tb">
+      <div className="trade-sub">
+        큰 변화 브리핑 — 최근 분기·반기·연간을 직전 같은 구간과 견준 값
+        {data.pending > 0 && ` · ${data.pending}개 품목 시계열 채우는 중…`}
+      </div>
+      {big.length > 0 && (
+        <div className="tb-cards">
+          {big.map((r) => {
+            const main =
+              [
+                { l: "분기", w: r.quarter },
+                { l: "반기", w: r.half },
+                { l: "연간", w: r.year },
+              ].find((x) => x.w && x.w.rate !== null && Math.abs(x.w.rate) === r.top) ?? null;
+            return (
+              <button className="tb-card" key={r.key} onClick={() => onPick(r.key)} title="눌러서 아래 상세 펼치기">
+                <b className="tb-name">
+                  {r.label}
+                  <i className="tb-dir">{r.watch === "import" ? "수입" : "수출"}</i>
+                </b>
+                {main && main.w && main.w.rate !== null && (
+                  <b className={`tb-big num ${main.w.rate >= 0 ? "positive" : "negative"}`}>
+                    직전 {main.l} 대비 {main.w.rate > 0 ? "+" : ""}
+                    {main.w.rate.toFixed(0)}%
+                  </b>
+                )}
+                <span className="tb-segs num">
+                  {seg("분기", r.quarter)}
+                  {seg("반기", r.half)}
+                  {seg("연간", r.year)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface Related {
   stocks: { code: string; name: string; changeRate: number; marketCap?: number | null }[];
   from: "theme" | "sector" | "none";
@@ -80,8 +186,8 @@ function TradeChart({ months, watch }: { months: TradeMonth[]; watch: "export" |
   const W = 720;
   /* 낮게 (2026-08-25) — 「칸을 너무 차지한다」. 흐름의 모양은 이 높이로도 보인다 */
   const H = 110;
-  /* 오른쪽은 눈금 값(「35억$」)이 앉을 자리 */
-  const PAD = { l: 4, r: 48, t: 8, b: 16 };
+  /* 오른쪽은 눈금 값(「35억$」)이 앉을 자리. 위 16 은 최대 눈금 글자가 잘리지 않을 높이 */
+  const PAD = { l: 4, r: 48, t: 16, b: 16 };
   const max = Math.max(1, ...months.map(val));
   const bw = (W - PAD.l - PAD.r) / months.length;
   const prevOf = (m: TradeMonth): TradeMonth | undefined => {
@@ -197,7 +303,7 @@ function CountryTrend({
 }) {
   const W = 720;
   const H = 130;
-  const PAD = { l: 4, r: 48, t: 8, b: 16 };
+  const PAD = { l: 4, r: 48, t: 16, b: 16 };
   const max = Math.max(1, ...series.countries.flatMap((c) => c.values));
   const n = series.months.length;
   const xOf = (i: number) => PAD.l + ((W - PAD.l - PAD.r) * i) / Math.max(1, n - 1);
@@ -242,9 +348,16 @@ function CountryTrend({
           />
         ))}
         {/* 달 눈금은 세 달마다 — 열세 개 다 적으면 겹쳐서 하나도 안 읽힌다 */}
+        {/* 양 끝은 앵커를 안쪽으로 — middle 로 두면 글자 절반이 차트 밖에서 잘린다 */}
         {series.months.map((m, i) =>
           i % 3 === 0 ? (
-            <text key={m} className="tc-tick" x={xOf(i)} y={H - 4} textAnchor="middle">
+            <text
+              key={m}
+              className="tc-tick"
+              x={xOf(i)}
+              y={H - 4}
+              textAnchor={i === 0 ? "start" : i >= n - 2 ? "end" : "middle"}
+            >
               {m.slice(2).replace("-", ".")}
             </text>
           ) : null,
@@ -359,6 +472,8 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
         증감률은 <b>전년 같은 달</b> 대비고, 12시간마다 다시 받습니다.
       </div>
 
+      <TradeBriefCards onPick={(k) => { if (open !== k) toggle(k); }} />
+
       {error && <div className="page-note">{error}</div>}
 
       <div className="data-table-wrap">
@@ -431,14 +546,21 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
                             <span className="num trade-cty-amt">{(side(r) / 1e6).toFixed(1)}백만$</span>
                             <span className={`num trade-cty-yoy ${rateClass(r.yoy)}`}>{pct(r.yoy)}</span>
                             {/* 그 나라 안의 세부 품목 — 같은 8504 라도 대형 변압기인지 부품인지 갈린다 */}
-                            {r.top.length > 0 && (
+                            {/*
+                              1% 미만은 안 적는다 (2026-08-26 — 「0% 가 줄줄이 붙어 노이즈」).
+                              몫이 0% 로 찍히는 꼬리 품목은 판단에 아무 정보가 없다. 상위 3개면
+                              그 나라 구성이 보인다. 이름은 HS 원문 축약(원문은 마우스 올림).
+                            */}
+                            {r.top.filter((t) => t.share >= 1).length > 0 && (
                               <span className="trade-cty-items">
-                                {r.top.map((t) => (
-                                  <i key={t.name} title={`${t.name} · ${(t.usd / 1e6).toFixed(1)}백만$`}>
-                                    {t.name.length > 22 ? `${t.name.slice(0, 22)}…` : t.name}{" "}
-                                    {t.share.toFixed(0)}%
-                                  </i>
-                                ))}
+                                {r.top
+                                  .filter((t) => t.share >= 1)
+                                  .slice(0, 3)
+                                  .map((t) => (
+                                    <i key={t.name} title={`${t.name} · ${(t.usd / 1e6).toFixed(1)}백만$`}>
+                                      {shortHs(t.name)} {t.share.toFixed(0)}%
+                                    </i>
+                                  ))}
                               </span>
                             )}
                           </div>
@@ -457,8 +579,8 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
                     <div className="trade-sub">세부 품목</div>
                     <div className="trade-top">
                       {i.top.map((t) => (
-                        <div className="trade-top-row" key={t.name}>
-                          <span className="trade-top-name">{t.name}</span>
+                        <div className="trade-top-row" key={t.name} title={t.name}>
+                          <span className="trade-top-name">{shortHs(t.name)}</span>
                           <span className="num">{(t.exportUsd / 1e8).toFixed(1)}억$</span>
                           <span className={`num ${rateClass(t.yoy)}`}>{pct(t.yoy)}</span>
                         </div>

@@ -356,6 +356,14 @@ export const api = {
     getJson<{
       items: { title: string; summary: string; thumb: string | null; press: string; link: string; at: string }[];
     }>(`/api/feed/news/main?size=${size}`),
+  /**
+   * 네이버 뉴스 카테고리 + 페이지 (2026-08-26) —
+   * main 주요 · flash 속보 · market 시황·전망 · company 기업·종목 · world 해외증시 · estate 부동산
+   */
+  newsNaver: (cat: NaverNewsCat, page = 1) =>
+    getJson<{ items: NaverNewsItem[]; hasMore: boolean }>(
+      `/api/feed/news/naver?cat=${cat}&page=${page}`,
+    ),
   /** 돌려 본 조건들 — 엣지 순 리더보드. 통찰은 실행들 사이의 비교에서 나온다 */
   backtestRuns: () =>
     getJson<{
@@ -423,6 +431,11 @@ export const api = {
   keywordRun: (send: boolean) =>
     postJson<KeywordRunResult>(`/api/keyword/run${send ? "?send=1" : ""}`),
   usWatch: (force = false) => getJson<UsWatchResult>(`/api/us-watch${force ? "?force=1" : ""}`),
+  /** 빠른 시세(야후 spark 배치) — 현재가·등락률만, 4초 캐시. 표 오버레이용 */
+  usWatchFast: (symbols: string[]) =>
+    getJson<{ quotes: Record<string, { price: number; changeRate: number | null; at: number }> }>(
+      `/api/us-watch/fast?symbols=${encodeURIComponent(symbols.join(","))}`,
+    ),
   usWatchSearch: (q: string) =>
     getJson<{ results: UsSearchResult[] }>(`/api/us-watch/search?q=${encodeURIComponent(q)}`),
   usWatchGroupAdd: (name: string, memo = "") =>
@@ -516,12 +529,14 @@ export const api = {
       candles: { t: string; open: number; high: number; low: number; close: number; volume: number }[];
       error: string | null;
     }>(`/api/market/us-chart/${encodeURIComponent(symbol)}?period=${period}`),
-  futuresChart: (code: string, period: "D" | "W" | "M", days: number) =>
+  futuresChart: (code: string, period: "D" | "W" | "M", days: number, market: "F" | "CM" = "CM") =>
     getJson<{
       code: string;
       candles: { t: string; open: number; high: number; low: number; close: number; volume: number }[];
       error: string | null;
-    }>(`/api/market/futures-chart?code=${encodeURIComponent(code)}&period=${period}&days=${days}`),
+    }>(
+      `/api/market/futures-chart?code=${encodeURIComponent(code)}&period=${period}&days=${days}&market=${market}`,
+    ),
   /** 표 칸 너비 — 화면 이름 → 칸 키 → 픽셀. 카드 배치와 같은 층이라 서버에 둔다 */
   columnWidths: () => getJson<Record<string, Record<string, number>>>("/api/settings/columns"),
   columnWidthsSave: (o: Record<string, Record<string, number>>) =>
@@ -675,6 +690,25 @@ export const api = {
       from: "theme" | "sector" | "none";
       label: string;
     }>(`/api/trade/${key}/stocks`),
+  /** 장중 투자자별 누적 순매수 — 01 코스피 · 02 코스닥 · 03 K200선물. 시트 열 때만 */
+  intradayFlow: (market: "01" | "02" | "03") =>
+    getJson<{ date: string; points: IntraFlowPoint[] }>(
+      `/api/market/intraday-flow?market=${market}`,
+    ),
+  /** 큰 변화 브리핑 — 분기·반기·연간으로 크게 움직인 품목. pending>0 이면 아직 채우는 중 */
+  tradeBrief: () =>
+    getJson<{
+      rows: {
+        key: string;
+        label: string;
+        watch: "export" | "import";
+        quarter: { cur: number; prev: number; rate: number | null } | null;
+        half: { cur: number; prev: number; rate: number | null } | null;
+        year: { cur: number; prev: number; rate: number | null } | null;
+        top: number;
+      }[];
+      pending: number;
+    }>("/api/trade/brief"),
   /** 품목의 월별 수출·수입 시계열 (36개월) — 품목을 펼칠 때만 부른다 */
   tradeHistory: (key: string) =>
     getJson<{ months: { month: string; exportUsd: number; importUsd: number }[] }>(
@@ -920,6 +954,26 @@ export interface SectionResult<T> {
   updatedAt: number | null;
   error: string | null;
   stale: boolean;
+}
+
+/** 장중 투자자별 누적 순매수 한 점 — 코스피/코스닥 억원, 선물 계약 */
+export interface IntraFlowPoint {
+  t: string;
+  individual: number;
+  foreign: number;
+  institution: number;
+}
+
+/** 네이버 뉴스 카테고리 — 서버 NaverCat 과 같은 값 */
+export type NaverNewsCat = "main" | "flash" | "market" | "company" | "world" | "estate";
+
+export interface NaverNewsItem {
+  title: string;
+  summary: string;
+  thumb: string | null;
+  press: string;
+  link: string;
+  at: string;
 }
 
 export interface IndexCard {

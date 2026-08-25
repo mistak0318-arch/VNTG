@@ -15,6 +15,7 @@ import {
   updateGroup,
   updateStock,
 } from "../usWatchlist.js";
+import { usFastQuotes } from "../usFastQuotes.js";
 
 /** 미국 관심종목 */
 export function createUsWatchRouter(): Router {
@@ -29,6 +30,25 @@ export function createUsWatchRouter(): Router {
   });
 
   /** 편집용 원본 (시세 없이) */
+  /**
+   * 빠른 시세 — 야후 spark 배치(현재가·등락률만). 4초 캐시.
+   * 화면이 지금 보는 그룹의 심볼만 3초로 물어 표에 덧씌운다 — 본 시세(1분 캐시)는
+   * 원화·52주 같은 무거운 값을 그대로 맡는다.
+   */
+  router.get("/fast", async (req, res, next) => {
+    try {
+      const symbols = String(req.query.symbols ?? "")
+        .split(",")
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean)
+        .slice(0, 60);
+      const got = await usFastQuotes(symbols);
+      res.json({ quotes: Object.fromEntries(got) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/raw", async (_req, res, next) => {
     try {
       res.json({ groups: await listGroups() });

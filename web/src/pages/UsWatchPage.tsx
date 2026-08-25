@@ -141,6 +141,37 @@ export function UsWatchPage() {
    * 탭이 뒤에 있으면 아예 쉰다 — 안 보는 화면 때문에 한도를 쓰지 않는다.
    */
   const openMarket = groups.some((g) => g.stocks.some((s) => (s.state ?? "").includes("실시간")));
+
+  /*
+   * 빠른 시세 오버레이 (2026-08-25 — 「5초 갱신뿐이라 느리다」).
+   *
+   * 본 시세는 종목당 조회라 서버가 1분 캐시다 — 5초로 폴링해도 **값의 나이가
+   * 최대 1분**이었다. 야후 spark 는 배치(한 요청에 심볼 여러 개)라 지금 보는
+   * 그룹만 3초로 물어 현재가·등락률을 덧씌운다. FE 실시간은 프레임을 안 주는 게
+   * 실측 결론이라 이게 미장의 실질 실시간이다.
+   */
+  const [fast, setFast] = useState<Record<string, { price: number; changeRate: number | null; at: number }>>({});
+  const fastSymbols = (groups.find((g) => g.id === openGroup) ?? groups[0])?.stocks
+    .map((s) => s.symbol)
+    .join(",");
+  useEffect(() => {
+    if (!fastSymbols) return;
+    let alive = true;
+    const period = openMarket ? 3_000 : 30_000;
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      api
+        .usWatchFast(fastSymbols.split(","))
+        .then((r) => alive && setFast(r.quotes))
+        .catch(() => undefined);
+    };
+    tick();
+    const t = setInterval(tick, period);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [fastSymbols, openMarket]);
   useEffect(() => {
     if (!autoRefresh) return;
     const period = openMarket ? 5_000 : 60_000;
@@ -439,6 +470,7 @@ export function UsWatchPage() {
 
           <UsWatchTable
             stocks={sortStocks(current.stocks, sortBy)}
+            fast={fast}
             editing={editing}
             onOpen={(symbol, label) => setDetail({ kind: "usStock", symbol, label })}
             /* 순서 바꾸기는 **내 순서로 볼 때만** — 정렬을 걸어 놓고 위아래로 옮기면

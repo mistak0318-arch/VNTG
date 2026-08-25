@@ -268,46 +268,20 @@ export function BriefingPage({
         <RefreshBar onRefresh={refreshAll} updatedAt={indices.updatedAt} />
       </div>
 
-      <div className="bf-grid">
-        {/* [2] 타임라인 — 가운데 기둥 */}
-        <section className="bf-col bf-center">
-          <h3 className="section-heading">
-            오늘의 이벤트
-            {watchCount > 0 && <i className="bf-watch-count">내 종목 {watchCount}건</i>}
-          </h3>
-          {mainEvents === null ? (
-            <div className="empty">불러오는 중…</div>
-          ) : mainEvents.length === 0 ? (
-            <div className="empty">
-              아직 잡힌 이벤트가 없습니다 — 공시·알림이 발생하면 여기 시간순으로 쌓입니다.
-            </div>
-          ) : (
-            <div className="bf-timeline">
-              {mainEvents.map((e, i) => (
-                <button
-                  key={`${e.t}-${e.code ?? e.name}-${i}`}
-                  className={`bf-event${e.watch ? " watch" : ""}`}
-                  onClick={() => {
-                    if (e.code) onSelectStock(e.code, e.name);
-                    else if (e.link) window.open(e.link, "_blank", "noopener");
-                  }}
-                  title={e.code ? "눌러서 종목 상세" : e.link ? "눌러서 원문" : undefined}
-                >
-                  <span className="bf-event-t pt-n">{/^\d{2}:\d{2}$/.test(e.t) ? e.t : ""}</span>
-                  <span className={`bf-badge ${BADGE_CLASS[e.kind] ?? "bf-badge-gray"}`}>
-                    {e.badge}
-                  </span>
-                  <span className="bf-event-body">
-                    <b>{e.name}</b>
-                    <span className="bf-event-sum">{e.summary}</span>
-                    {e.source && <i className="bf-event-src">{e.source}</i>}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
+      {/*
+        AI 한 줄 — **지수 박스 바로 아래**(2026-08-26 사용자 요청). 오른쪽 기둥에
+        묻혀 있으면 스크롤해야 보였다. 실패·부재 시 통째로 숨긴다 — 빈 칸은 소음이다.
+      */}
+      {brief && (
+        <div className="bf-brief bf-brief-top">
+          {brief.text}
+          <i className="bf-brief-src">
+            {brief.date} {brief.label} 리포트에서 — 새 AI 호출 없음
+          </i>
+        </div>
+      )}
 
+      <div className="bf-grid">
         {/* 좌: [3] 수급 + [5] 테마 */}
         <section className="bf-col bf-left">
           <h3 className="section-heading">오늘 수급</h3>
@@ -396,21 +370,51 @@ export function BriefingPage({
               )}
             </>
           )}
-
-          {/* [6] — 실패·부재 시 통째로 숨긴다. 「AI 없음」이라는 빈 칸은 소음이다 */}
-          {brief && (
-            <>
-              <h3 className="section-heading">AI 한 줄</h3>
-              <div className="bf-brief">
-                {brief.text}
-                <i className="bf-brief-src">
-                  {brief.date} {brief.label} 리포트에서 — 새 AI 호출 없음
-                </i>
-              </div>
-            </>
-          )}
         </section>
       </div>
+
+      {/*
+        [2] 오늘의 이벤트 — **VI 발동 바로 위**(2026-08-26 사용자 요청).
+        가운데 기둥이었을 땐 수급·관심종목이 옆으로 밀렸다. 이벤트는 시간순으로
+        길게 쌓이는 목록이라 전체 폭 + 자체 스크롤이 맞다.
+      */}
+      <section className="bf-events">
+        <h3 className="section-heading">
+          오늘의 이벤트
+          {watchCount > 0 && <i className="bf-watch-count">내 종목 {watchCount}건</i>}
+        </h3>
+        {mainEvents === null ? (
+          <div className="empty">불러오는 중…</div>
+        ) : mainEvents.length === 0 ? (
+          <div className="empty">
+            아직 잡힌 이벤트가 없습니다 — 공시·알림이 발생하면 여기 시간순으로 쌓입니다.
+          </div>
+        ) : (
+          <div className="bf-timeline">
+            {mainEvents.map((e, i) => (
+              <button
+                key={`${e.t}-${e.code ?? e.name}-${i}`}
+                className={`bf-event${e.watch ? " watch" : ""}`}
+                onClick={() => {
+                  if (e.code) onSelectStock(e.code, e.name);
+                  else if (e.link) window.open(e.link, "_blank", "noopener");
+                }}
+                title={e.code ? "눌러서 종목 상세" : e.link ? "눌러서 원문" : undefined}
+              >
+                <span className="bf-event-t pt-n">{/^\d{2}:\d{2}$/.test(e.t) ? e.t : ""}</span>
+                <span className={`bf-badge ${BADGE_CLASS[e.kind] ?? "bf-badge-gray"}`}>
+                  {e.badge}
+                </span>
+                <span className="bf-event-body">
+                  <b>{e.name}</b>
+                  <span className="bf-event-sum">{e.summary}</span>
+                  {e.source && <i className="bf-event-src">{e.source}</i>}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
 
       {constituent && (
         <ConstituentSheet

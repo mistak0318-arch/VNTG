@@ -674,6 +674,103 @@ export async function getTradeHistory(key: string): Promise<{ months: TradeMonth
   return { months };
 }
 
+// ---------------------------------------------------------------- 큰 변화 브리핑
+
+/**
+ * 수출입 **큰 변화 브리핑** (2026-08-26 — 「분기·반기·연도별 큰 변화가 있는 품목은
+ * 위쪽에 강하게 설명해 달라」).
+ *
+ * 표는 최신 한 달 + 전년동월 % 뿐이라 **추세가 꺾인 품목**이 안 튄다. 품목마다
+ * 36개월 시계열로 세 구간을 견준다(보는 방향 — 수출 품목은 수출, 수입 품목은 수입):
+ *   · 분기: 최근 3개월 합 vs 그 앞 3개월
+ *   · 반기: 최근 6개월 합 vs 그 앞 6개월
+ *   · 연간: 최근 12개월 합 vs 그 앞 12개월
+ *
+ * 시계열은 품목당 관세청 3회 호출·하루 캐시다. 31품목을 **요청 안에서 다 받으면
+ * 몇 분이 걸리므로**, 없는 품목은 뒤에서 채우고(1회 1품목씩 직렬) 그동안은
+ * 이미 있는 것만으로 답한다 — pending 이 0이 될 때까지 화면이 다시 물으면 된다.
+ */
+export interface TradeBriefWindow {
+  cur: number;
+  prev: number;
+  /** (cur-prev)/prev — prev 가 0이면 null */
+  rate: number | null;
+}
+
+export interface TradeBriefRow {
+  key: string;
+  label: string;
+  watch: "export" | "import";
+  quarter: TradeBriefWindow | null;
+  half: TradeBriefWindow | null;
+  year: TradeBriefWindow | null;
+  /** 세 구간 중 절대값이 가장 큰 증감률 — 정렬·문턱용 */
+  top: number;
+}
+
+let briefFilling = false;
+
+async function fillHistories(keys: string[]): Promise<void> {
+  briefFilling = true;
+  try {
+    for (const k of keys) {
+      try {
+        await getTradeHistory(k);
+      } catch {
+        // 한 품목이 막혀도 나머지는 채운다 — 브리핑은 부분으로도 선다
+      }
+    }
+  } finally {
+    briefFilling = false;
+  }
+}
+
+function windowOf(months: TradeMonth[], watch: "export" | "import", len: number): TradeBriefWindow | null {
+  if (months.length < len * 2) return null;
+  const val = (m: TradeMonth) => (watch === "import" ? m.importUsd : m.exportUsd);
+  const sum = (from: number) => months.slice(from, from + len).reduce((a, m) => a + val(m), 0);
+  const cur = sum(months.length - len);
+  const prev = sum(months.length - len * 2);
+  return { cur, prev, rate: prev > 0 ? ((cur - prev) / prev) * 100 : null };
+}
+
+export async function getTradeBrief(): Promise<{ rows: TradeBriefRow[]; pending: number }> {
+  if (!isTradeConfigured()) return { rows: [], pending: 0 };
+
+  let cache: HistoryCache = {};
+  try {
+    cache = JSON.parse(await readFile(HISTORY_FILE, "utf-8")) as HistoryCache;
+  } catch {
+    /* 처음이면 빈 캐시 */
+  }
+
+  const fresh: { t: TradeTarget; months: TradeMonth[] }[] = [];
+  const missing: string[] = [];
+  for (const t of TRADE_TARGETS) {
+    const hit = cache[t.key];
+    if (hit && Date.now() - new Date(hit.at).getTime() < HISTORY_TTL_MS && hit.months.length > 0) {
+      fresh.push({ t, months: hit.months });
+    } else {
+      missing.push(t.key);
+    }
+  }
+  // 없는 것은 뒤에서 채운다 — 이 요청은 있는 것만으로 즉시 답한다
+  if (missing.length > 0 && !briefFilling) void fillHistories(missing);
+
+  const rows: TradeBriefRow[] = fresh.map(({ t, months }) => {
+    const quarter = windowOf(months, t.watch, 3);
+    const half = windowOf(months, t.watch, 6);
+    const year = windowOf(months, t.watch, 12);
+    const rates = [quarter, half, year]
+      .map((w) => w?.rate)
+      .filter((r): r is number => typeof r === "number");
+    const top = rates.length > 0 ? Math.max(...rates.map(Math.abs)) : 0;
+    return { key: t.key, label: t.label, watch: t.watch, quarter, half, year, top };
+  });
+  rows.sort((a, b) => b.top - a.top);
+  return { rows, pending: missing.length };
+}
+
 // ---------------------------------------------------------------- 국가별
 
 /**

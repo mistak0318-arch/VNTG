@@ -28,6 +28,9 @@ import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
 import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
 import { SupplyMini } from "../components/SupplyMini";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
+import { PriceHeader } from "../components/PriceHeader";
+import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
+import { useLive } from "../useLive";
 import { useStockFocus } from "../useStockFocus";
 import { BoardCell, CellStockFinder, type CellSize } from "../components/BoardCell";
 import { winStore } from "../boardStore";
@@ -420,6 +423,26 @@ function summarize(pick: string[]): string {
  * 칸의 **인스턴스 id 를 그대로** 넘긴다(`chart#2`). 그래야 그 칸에 맞춰 둔 차트 설정이
  * 새 창에서도 그대로 나온다 — 봉과 구간을 그 id 로 적어 두기 때문이다.
  */
+/**
+ * 「가격 요약」 칸 (2026-08-25, PDF #12) — 상세 종합의 맨 위를 **통째로**.
+ *
+ * 종가·장마감 헤더(PriceHeader: KRX/NXT 시·고·저·종가, 기간 상승률) + VWAP
+ * 기준선 줄(IntradayLevelsBar) + 오늘 수급 막대(StockSummaryPanel). 상세와
+ * **같은 컴포넌트 셋**이라 두 화면이 다른 값을 말할 일이 없다.
+ * 현재가는 3초로 산다 — 보드는 곁눈 화면이라 1초까지는 필요 없다.
+ */
+function PriceSummaryCell({ code }: { code: string }) {
+  const live = useLive(() => api.stockInfo(code), [code], 3000);
+  const info = (live.data ?? null) as Record<string, unknown> | null;
+  return (
+    <>
+      <PriceHeader info={info} code={code} />
+      <IntradayLevelsBar code={code} />
+      <StockSummaryPanel code={code} />
+    </>
+  );
+}
+
 function readOnly(): { id: string; code: string; name: string } | null {
   const raw = window.location.hash.replace(/^#\/?/, "");
   const q = raw.split("?")[1];
@@ -516,6 +539,16 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
       setDragKey(key);
 
       const move = (ev: PointerEvent) => {
+        /*
+         * 가장자리 자동 스크롤 (2026-08-25 — 「자리 이동이 안 된다」의 실체).
+         * 끄는 손이 화면 위·아래 끝에 닿아도 페이지가 안 따라와서, 보이는 화면
+         * 밖의 칸으로는 **영영 못 옮겼다**. 스왑 자체는 멀쩡했다(실측) — 못 가는
+         * 곳이 있었을 뿐이다. 끝 70px 안이면 그 방향으로 밀어 준다.
+         */
+        const EDGE = 70;
+        if (ev.clientY < EDGE) window.scrollBy(0, -20);
+        else if (ev.clientY > window.innerHeight - EDGE) window.scrollBy(0, 20);
+
         const under = document
           .elementFromPoint(ev.clientX, ev.clientY)
           ?.closest<HTMLElement>(".board-cell");
@@ -1165,10 +1198,12 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                   {b.key === "telegram" && <ChannelSearchPanel code={code} name={name} />}
                   {b.key === "supplyMini" && <SupplyMini key={code} code={code} />}
                   {/*
-                    가격 요약 (2026-08-25, PDF #12) — KRX/NXT 저·고·종가를 한눈에.
-                    종목 상세 종합 맨 위의 그 한 장 요약을 그대로 쓴다 — 새로 그리면 갈린다.
+                    가격 요약 (2026-08-25, PDF #12) — KRX/NXT 시·고·저·종가 한눈 카드.
+                    처음엔 StockSummaryPanel 만 넣었는데 그건 **수급 막대 두 표**였다 —
+                    사용자가 가리킨 건 그 위의 종가·장마감 블록(PriceHeader)이다.
+                    상세 종합과 같은 조합(가격 헤더 + 수급)을 그대로 쓴다.
                   */}
-                  {b.key === "priceSummary" && <StockSummaryPanel key={code} code={code} />}
+                  {b.key === "priceSummary" && <PriceSummaryCell key={code} code={code} />}
                   {/*
                     `key={code}` 를 준다. 종목이 바뀌면 패널을 **새로 만든다** —
                     안 그러면 어떤 패널은 이전 종목의 값을 그대로 들고 있다가

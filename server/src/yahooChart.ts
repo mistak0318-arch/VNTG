@@ -52,6 +52,8 @@ const RANGES: Record<string, { range: string; interval: string }> = {
    */
   "2y": { range: "2y", interval: "1d" },
   "5y": { range: "5y", interval: "1wk" },
+  /* 해외종목 「길게 보기」(2026-08-26) — 상장 이후 전체를 월봉으로 */
+  "max": { range: "max", interval: "1mo" },
 };
 
 export const CHART_RANGES = Object.keys(RANGES);

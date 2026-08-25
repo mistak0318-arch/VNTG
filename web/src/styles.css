@@ -2248,14 +2248,21 @@ body {
 .bf-breadth-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--red); }
 .bf-breadth em { font-style: normal; font-size: 0.68rem; color: var(--muted); white-space: nowrap; }
 
+/* 2026-08-26: 이벤트가 그리드 밖(VI 위)으로 나가서 두 기둥만 남았다 */
 .bf-grid { display: grid; gap: 0.8rem; margin-top: 0.6rem; }
 @media (min-width: 1100px) {
-  .bf-grid { grid-template-columns: 1fr 1.4fr 1fr; grid-template-areas: "left center right"; }
+  .bf-grid { grid-template-columns: 1fr 1fr; grid-template-areas: "left right"; }
   .bf-left { grid-area: left; }
-  .bf-center { grid-area: center; }
   .bf-right { grid-area: right; }
 }
 .bf-col { min-width: 0; }
+
+/* 오늘의 이벤트 — 그리드 밖 전체 폭, VI 발동 바로 위. 길어지면 안에서만 스크롤 */
+.bf-events { margin-top: 0.8rem; }
+.bf-events .bf-timeline { max-height: 26rem; overflow-y: auto; }
+
+/* AI 한 줄 — 지수 박스(온도계) 바로 아래 전체 폭 */
+.bf-brief-top { margin-top: 0.6rem; }
 
 /* VI 발동현황 — 그리드 밖, 페이지 맨 아래 전체 폭. 길어지면 안에서만 스크롤 */
 .bf-vi { margin-top: 0.8rem; }
@@ -3457,6 +3464,8 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 
 /* 선물 투자자별 수급 (차트 시트 안) */
 .ff-wrap { margin-top: 0.8rem; }
+/* 선물 타일 계약→억원 환산 — 키움(억원)과 눈으로 맞춰보라고 붙는 꼬리 */
+.ff-eok { font-style: normal; font-size: 0.86em; opacity: 0.62; }
 .ff-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 1rem; margin-bottom: 0.3rem; }
 .ff-head > b { font-size: 0.82rem; }
 
@@ -3510,7 +3519,8 @@ button:active:not(:disabled) {
 }
 
 /* ── 끌어서 순서 바꾸기 (useDragOrder) — 모든 순서 UI 공통 ── */
-[draggable="true"] { cursor: grab; }
+/* 손바닥(grab)이 아니라 손가락(pointer) — 버튼 위 커서가 갑자기 바뀌면 이상하다는 지적 */
+[draggable="true"] { cursor: pointer; }
 .drag-src { opacity: 0.4; cursor: grabbing; }
 .drag-over { outline: 2px dashed var(--blue); outline-offset: -2px; border-radius: 6px; }
 /* 표 줄에는 outline 이 안 보이는 브라우저가 있어 배경도 준다 */
@@ -3518,6 +3528,16 @@ tr.drag-over td { background: rgba(76, 141, 255, 0.12); }
 tr.drag-src td { opacity: 0.45; }
 
 /* ── 주요뉴스 썸네일 카드 (뉴스 탭) ── */
+/* 뉴스 쪽 넘김 — 신문 넘기듯. 가운데 정렬이라 어느 폭에서도 눈에 띈다 */
+.mn-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  margin: 0.8rem 0 0.2rem;
+}
+.mn-page { color: var(--muted); font-size: 0.82rem; }
+
 .mn-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -3580,6 +3600,35 @@ tr.drag-src td { opacity: 0.45; }
 .tct-l2 .tct-dot, .tct-line.tct-l2 { background: #d4a017; stroke: #d4a017; }
 .tct-l3 .tct-dot, .tct-line.tct-l3 { background: #3aa675; stroke: #3aa675; }
 .tct-l4 .tct-dot, .tct-line.tct-l4 { background: #9a6dd7; stroke: #9a6dd7; }
+
+/* 큰 변화 브리핑 — 표 위에서 강하게. 카드 하나 = 크게 움직인 품목 하나 */
+.tb { margin: 0.5rem 0 0.7rem; }
+.tb-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+.tb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--blue);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  cursor: pointer;
+}
+.tb-card:hover { border-color: var(--blue); }
+.tb-name { font-size: 0.8rem; }
+.tb-dir { font-style: normal; font-size: 0.68rem; color: var(--muted); margin-left: 0.35rem; }
+.tb-big { font-size: 0.95rem; }
+.tb-segs { display: flex; flex-wrap: wrap; gap: 0.2rem 0.7rem; font-size: 0.72rem; }
+.tb-seg { white-space: nowrap; }
 
 /* 나라별 — 이름·막대·금액·전년비 + 세부 품목 구성 한 줄 */
 .trade-cty { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
@@ -4365,7 +4414,7 @@ tr.drag-src td { opacity: 0.45; }
 .mo-row.over { outline: 2px dashed var(--blue); outline-offset: -2px; }
 .mo-row.dragging { opacity: .45; }
 .mo-grip { cursor: grab; color: var(--muted); font-size: 0.8667rem; user-select: none; }
-.mo-row[draggable="true"] { cursor: grab; }
+.mo-row[draggable="true"] { cursor: pointer; }
 .mo-name { flex: 1; text-align: left; background: none; border: none; color: var(--text); font-size: 0.8rem; cursor: text; padding: 2px 4px; border-radius: 4px; }
 .mo-name:hover { background: var(--panel-2); }
 .mo-orig { font-style: normal; color: var(--muted); font-size: 0.7333rem; }

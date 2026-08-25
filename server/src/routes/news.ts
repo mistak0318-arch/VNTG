@@ -5,7 +5,7 @@ import { estimatePerform } from "../estimatePerform.js";
 import { quarterFinance } from "../quarterFinance.js";
 import { peekSnapshot } from "../marketSnapshot.js";
 import { breakingNews, getDisclosures, newsCounts, searchNews, sectorNews } from "../newsDisclosure.js";
-import { mainNews } from "../naverMainNews.js";
+import { mainNews, naverNews, type NaverCat } from "../naverMainNews.js";
 import { listWatchlist } from "../watchlist.js";
 import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -151,6 +151,25 @@ export function createNewsRouter(client: KiwoomClient): Router {
   router.get("/news/main", async (req, res, next) => {
     try {
       res.json({ items: await mainNews(Math.min(Number(req.query.size) || 20, 40)) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 네이버 뉴스 카테고리 + 페이지 (2026-08-26) —
+   * main 주요 · flash 속보 · market 시황·전망 · company 기업·종목 ·
+   * world 해외증시 · estate 부동산. 한 쪽 20건, page 로 넘긴다.
+   */
+  router.get("/news/naver", async (req, res, next) => {
+    try {
+      const cat = String(req.query.cat ?? "main") as NaverCat;
+      if (!["main", "flash", "market", "company", "world", "estate"].includes(cat)) {
+        res.status(400).json({ error: "모르는 카테고리입니다" });
+        return;
+      }
+      const page = Math.min(Math.max(Number(req.query.page) || 1, 1), 30);
+      res.json(await naverNews(cat, page));
     } catch (err) {
       next(err);
     }

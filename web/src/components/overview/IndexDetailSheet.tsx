@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, fmtNum, type IndexDetailData, type IndexRange } from "../../api";
 import { CandleChart } from "../CandleChart";
+import { IntradayFlowChart } from "./IntradayFlowChart";
 
 /**
  * 코스피·코스닥 상세.
@@ -123,6 +124,12 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
 
           쌓인 날이 모자라면 그 칸은 비운다 — 3일치로 낸 「20일 합산」은 거짓말이다.
         */}
+        {/*
+          장중 수급 변화 (2026-08-26 요청) — 일별 표 **위에**. 오늘 안에서 누가
+          돌아섰는지는 일별 합계로는 안 보인다. 네이버 Time 누적 곡선.
+        */}
+        <IntradayFlowChart market={code === "101" ? "02" : "01"} unit="억원" />
+
         <h3 className="idx-h3">수급 합산 (억원)</h3>
         {data && data.flows.length > 0 && (
           <div className="data-table-wrap">

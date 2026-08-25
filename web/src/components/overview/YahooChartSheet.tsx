@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import type { UTCTimestamp } from "lightweight-charts";
 import { api, fmtNum, type UsDetail, type UsKiwoomDetailData, type YahooChart } from "../../api";
 import { CandleChart } from "../CandleChart";
+import { IntradayFlowChart } from "./IntradayFlowChart";
 
 /**
  * 지수·원자재 차트.
@@ -38,8 +40,14 @@ const FUTURES_RANGES: { key: string; label: string }[] = [
   { key: "3y", label: "3년" },
 ];
 
-/** 해외종목 — 한투 기간별시세는 일/주/월이다 */
+/**
+ * 해외종목 — 한투 기간별시세는 일/주/월이고 분봉이 없다.
+ * 분봉(2026-08-26 요청)은 **야후 차트**로 받는다 — 지수·원자재와 같은 엔드포인트가
+ * 개별 종목 심볼도 그대로 받아 준다(1d=5분봉·5d=30분봉, 실측).
+ */
 const US_RANGES: { key: string; label: string }[] = [
+  { key: "1d", label: "1일·분봉" },
+  { key: "5d", label: "5일" },
   { key: "D", label: "일봉" },
   { key: "W", label: "주봉" },
   { key: "M", label: "월봉" },
@@ -85,6 +93,14 @@ export interface ChartTarget {
    * 마찬가지다(목록은 지금 시세, 차트는 마지막 봉). 목록이 준 값이 있으면 그게 먼저다.
    */
   hintPrice?: number | null;
+  /**
+   * 선물 전용 — 베이시스·미결제 (2026-08-26 「차트 하단에 나오게」).
+   * 타일에 있던 걸 시트 하단으로 옮겼다. 값은 지수 섹션이 이미 들고 있어
+   * 넘겨받는다 — 시트가 따로 계산하면 언젠가 갈라진다(hintPrice 와 같은 원칙).
+   */
+  futInfo?: { basis: number | null; openInterest: number | null } | null;
+  /** 선물 시장 — 주간 F · 야간 CM(기본). 같은 TR 에 시장만 갈아 끼운다 */
+  futMarket?: "F" | "CM";
 }
 
 const W = 720;
@@ -101,7 +117,10 @@ export function YahooChartSheet({
   const futures = target.kind === "futures";
   const usStock = target.kind === "usStock";
   const ranges = usStock ? US_RANGES : futures ? FUTURES_RANGES : YAHOO_RANGES;
-  const [range, setRange] = useState(usStock ? "D" : futures ? "3mo" : "6mo");
+  // 해외종목은 분봉이 기본 — 지금 어떻게 움직이는지부터 보고 싶어서 여는 창이다
+  const [range, setRange] = useState(usStock ? "1d" : futures ? "3mo" : "6mo");
+  /** 해외 일/주/월봉 「기간 길게」 — 한투 100봉 대신 야후 2y/5y/전체 */
+  const [longRange, setLongRange] = useState(false);
   const [data, setData] = useState<YahooChart | null>(null);
   const [detail, setDetail] = useState<UsDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -128,7 +147,13 @@ export function YahooChartSheet({
     setLoading(true);
     const spec = FUTURES_SPEC[range] ?? FUTURES_SPEC["3mo"];
     const req = usStock
-      ? api.usChart(target.symbol, range as "D" | "W" | "M").then((r) => ({
+      ? range === "1d" || range === "5d"
+        ? // 분봉은 한투에 없다 — 야후가 개별 종목도 받아 준다
+          api.yahooChart(target.symbol, range)
+        : longRange
+        ? // 「기간 길게」 — 일봉 2년 · 주봉 5년 · 월봉 전체 (야후)
+          api.yahooChart(target.symbol, range === "D" ? "2y" : range === "W" ? "5y" : "max")
+        : api.usChart(target.symbol, range as "D" | "W" | "M").then((r) => ({
           symbol: target.symbol,
           range,
           interval: range === "D" ? "일봉" : range === "W" ? "주봉" : "월봉",
@@ -137,7 +162,7 @@ export function YahooChartSheet({
           error: r.error,
         }))
       : futures
-      ? api.futuresChart(target.symbol, spec.period, spec.days).then((r) => ({
+      ? api.futuresChart(target.symbol, spec.period, spec.days, target.futMarket ?? "CM").then((r) => ({
           symbol: target.symbol,
           range,
           interval: spec.period === "D" ? "1일봉" : spec.period === "W" ? "주봉" : "월봉",
@@ -160,7 +185,7 @@ export function YahooChartSheet({
     return () => {
       alive = false;
     };
-  }, [target.symbol, range, futures, usStock]);
+  }, [target.symbol, range, futures, usStock, longRange]);
 
   const digits = target.digits ?? 2;
   const candles = useMemo(() => data?.candles ?? [], [data]);
@@ -296,6 +321,23 @@ export function YahooChartSheet({
               {r.label}
             </button>
           ))}
+          {/*
+            길게 보기 (2026-08-26 — 「국내 차트처럼 기간 설정하게 해줘」).
+            한투 기간별시세는 봉 종류당 100봉 안팎이 끝이라, 긴 구간은 야후로 잇는다:
+            일봉 2년 · 주봉 5년 · 월봉은 상장 이후 전체.
+          */}
+          {usStock && ["D", "W", "M"].includes(range) && (
+            <>
+              <span className="news-scope-sep" />
+              <button
+                className={`filter-btn ${longRange ? "active" : ""}`}
+                onClick={() => setLongRange((v) => !v)}
+                title="일봉 2년 · 주봉 5년 · 월봉 전체 (야후)"
+              >
+                기간 길게
+              </button>
+            </>
+          )}
         </div>
 
         {loading && !view && <div className="empty">차트 불러오는 중…</div>}
@@ -349,13 +391,24 @@ export function YahooChartSheet({
                 candles={candles
                   .filter((c) => c.open > 0 && c.close > 0)
                   .map((c) => {
-                    const d = String(c.t).slice(0, 10);
+                    /*
+                     * 분봉(1d·5d)은 **초 단위 시각**으로 넘긴다 (2026-08-26).
+                     * 날짜로만 바꾸면 하루치 분봉이 전부 같은 날짜가 되어
+                     * lightweight-charts 가 「asc ordered」 단언으로 죽는다 — 실제로 죽었다.
+                     * t 는 서버가 한국시간으로 적은 "YYYY-MM-DD HH:mm" 이다.
+                     */
+                    const t = String(c.t);
+                    const time =
+                      t.length > 10
+                        ? ((new Date(`${t.replace(" ", "T")}:00+09:00`).getTime() /
+                            1000) as UTCTimestamp)
+                        : {
+                            year: Number(t.slice(0, 4)),
+                            month: Number(t.slice(5, 7)),
+                            day: Number(t.slice(8, 10)),
+                          };
                     return {
-                      time: {
-                        year: Number(d.slice(0, 4)),
-                        month: Number(d.slice(5, 7)),
-                        day: Number(d.slice(8, 10)),
-                      },
+                      time,
                       open: c.open,
                       high: c.high,
                       low: c.low,
@@ -364,7 +417,7 @@ export function YahooChartSheet({
                     };
                   })}
                 height={340}
-                fitKey={`${target.symbol}:${range}`}
+                fitKey={`${target.symbol}:${range}:${longRange ? "L" : "S"}`}
                 name={target.label}
                 code={target.symbol}
               />
@@ -420,7 +473,29 @@ export function YahooChartSheet({
               {range === "1d" && " · 시각은 한국시간입니다"}
             </div>
 
-            {/* 선물이면 투자자별 수급을 같이 — 외국인이 파나 기관이 사나 (PDF #13) */}
+            {/*
+              선물 차트 하단 묶음 (2026-08-26) —
+              베이시스·미결제(타일에서 이사) → 장중 수급 변화(네이버 Time 누적)
+              → 일별 투자자별 수급 30일. 코스피/코스닥 시트와 같은 구조다.
+            */}
+            {futures && target.futInfo && (
+              <div className="ff-head yc-futinfo num">
+                {target.futInfo.basis != null && (
+                  <span
+                    className={`ov-basis ${target.futInfo.basis < 0 ? "negative" : "positive"}`}
+                    title="선물 − 코스피200. 음수(백워데이션)면 선물이 현물보다 싸다 — 약세 심리"
+                  >
+                    베이시스 {target.futInfo.basis > 0 ? "+" : ""}
+                    {target.futInfo.basis.toFixed(2)}
+                  </span>
+                )}
+                {target.futInfo.openInterest != null && (
+                  <span className="pt-n">미결제약정 {fmtNum(target.futInfo.openInterest)}계약</span>
+                )}
+              </div>
+            )}
+            {futures && <IntradayFlowChart market="03" unit="계약" />}
+            {/* 일별 투자자별 수급 — 외국인이 파나 기관이 사나 (PDF #13) */}
             {futures && <FuturesFlowBars />}
           </>
         )}

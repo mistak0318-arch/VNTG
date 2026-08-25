@@ -15,6 +15,7 @@ import { orderBook } from "../orderBook.js";
 import { brokerFlow } from "../brokerFlow.js";
 import { getEtfInfo } from "../etfInfo.js";
 import { futuresFlow } from "../naverFuturesFlow.js";
+import { intradayFlow, type FlowMarket } from "../naverIntradayFlow.js";
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
@@ -56,6 +57,24 @@ export function createMarketRouter(client: KiwoomClient): Router {
   router.get("/futures-flow", async (req, res, next) => {
     try {
       res.json({ days: await futuresFlow(Math.min(Number(req.query.days) || 30, 60)) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 장중 투자자별 누적 순매수 (2026-08-26) — 코스피(01)·코스닥(02)·K200선물(03).
+   * 네이버 Time 표(2분 간격 누적)를 하루치로 모아 준다. 단위: 01/02 억원, 03 계약.
+   * 시트를 열 때만 부른다 — 하루치가 요청 30여 개라 상시 폴링할 값이 아니다.
+   */
+  router.get("/intraday-flow", async (req, res, next) => {
+    try {
+      const m = String(req.query.market ?? "01");
+      if (!["01", "02", "03"].includes(m)) {
+        res.status(400).json({ error: "market 은 01·02·03 입니다" });
+        return;
+      }
+      res.json(await intradayFlow(m as FlowMarket));
     } catch (err) {
       next(err);
     }

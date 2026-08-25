@@ -267,16 +267,34 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                       ? flow.data?.kosdaq
                       : flow.data?.kospi;
                 /*
-                  코스피·코스닥은 눌러서 상세로 간다. 코스피200·선물은 아직 상세가 없어
-                  누르는 시늉만 하면 안 되므로 그대로 둔다.
+                  코스피·코스닥은 눌러서 상세로 간다. 선물도 (2026-08-26) 같은 구조로 —
+                  차트 + 베이시스·미결제 + 장중 수급 + 일별 수급 시트가 열린다.
+                  코스피200 은 아직 상세가 없어 그대로 둔다.
                 */
-                const openable = c.code === "001" || c.code === "101";
+                const openable = c.code === "001" || c.code === "101" || (c.code === "F" && !!c.futures);
+                const open =
+                  c.code === "F"
+                    ? () =>
+                        c.futures &&
+                        setChart({
+                          kind: "futures",
+                          symbol: c.futures.code,
+                          label: "코스피200 선물 (주간)",
+                          hintRate: c.changeRate,
+                          hintPrice: c.price,
+                          futMarket: "F",
+                          futInfo: {
+                            basis: c.futures.basis,
+                            openInterest: c.futures.openInterest,
+                          },
+                        })
+                    : () => setIndexDetail(c.code);
                 return (
                   <div
                     className={`ov-idx${openable ? " clickable" : ""}`}
                     key={c.code}
-                    onClick={openable ? () => setIndexDetail(c.code) : undefined}
-                    title={openable ? "눌러서 추이·일별 수급 보기" : undefined}
+                    onClick={openable ? open : undefined}
+                    title={openable ? "눌러서 추이·수급 보기" : undefined}
                   >
                     <div className="ov-idx-name">{c.name}</div>
                     <div className={`ov-idx-val num ${signCls(c.changeRate)}`}>{fmtNum(c.price)}</div>
@@ -284,22 +302,13 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                       {fmtSigned(c.change)} {fmtPct(c.changeRate)}
                     </div>
                     <Sparkline values={c.sparkline} up={c.changeRate >= 0} />
-                    {/* 선물 카드에만 — 베이시스와 미결제는 지수엔 없는 값이다 */}
+                    {/*
+                      베이시스·미결제는 시트로 이사했다 (2026-08-26 — 「차트 하단에
+                      나오게 해줘」). 타일엔 월물 이름만 남긴다 — 칸이 수급으로 빼곡하다.
+                    */}
                     {c.futures && (
                       <div className="ov-fut">
-                        {c.futures.basis != null && (
-                          <span
-                            className={`ov-basis ${c.futures.basis < 0 ? "negative" : "positive"}`}
-                            title="선물 − 현물. 음수면 백워데이션 — 프로그램 매도가 붙기 쉽습니다"
-                          >
-                            베이시스 {c.futures.basis > 0 ? "+" : ""}
-                            {c.futures.basis.toFixed(2)}
-                          </span>
-                        )}
-                        {c.futures.openInterest != null && (
-                          <span className="pt-n">미결제 {fmtNum(c.futures.openInterest)}</span>
-                        )}
-                        <span className="pt-n">{c.futures.name}</span>
+                        <span className="pt-n">{c.futures.name} · 눌러서 차트·수급</span>
                       </div>
                     )}
                     {/*
@@ -307,35 +316,41 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                       투자자별 매매동향(sosok=03)을 실측으로 찾아 서버가 준다.
                       단위가 **계약**이라 지수 수급(억원)과 다름을 밑줄에 밝힌다.
                     */}
-                    {c.code === "F" && futFlow && (
-                      <div className="ov-idx-flow num">
-                        <div>
-                          <span className="lbl">외국인</span>
-                          <span className={signCls(futFlow.foreign)}>
-                            {futFlow.foreign > 0 ? "+" : ""}
-                            {fmtNum(futFlow.foreign)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="lbl">기관</span>
-                          <span className={signCls(futFlow.institution)}>
-                            {futFlow.institution > 0 ? "+" : ""}
-                            {fmtNum(futFlow.institution)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="lbl">개인</span>
-                          <span className={signCls(futFlow.individual)}>
-                            {futFlow.individual > 0 ? "+" : ""}
-                            {fmtNum(futFlow.individual)}
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                    {c.code === "F" &&
+                      futFlow &&
+                      (() => {
+                        /*
+                         * 계약 → ≈억원 환산 (2026-08-26). 키움 앱은 선물 수급을 억원으로
+                         * 보여줘서 「값이 다르다」 소리가 나왔다 — 같은 데이터, 단위 차이.
+                         * K200 선물 승수 25만원/pt: 억원 = 계약 × 지수 × 250,000 / 1e8
+                         * = 계약 × 지수 / 400. 평균 체결가가 아니라 현재가라 ≈ 다.
+                         */
+                        const eok = (n: number) =>
+                          c.price > 0
+                            ? ` ≈${n > 0 ? "+" : ""}${fmtNum(Math.round((n * c.price) / 400))}억`
+                            : "";
+                        const row = (lbl: string, n: number) => (
+                          <div>
+                            <span className="lbl">{lbl}</span>
+                            <span className={signCls(n)}>
+                              {n > 0 ? "+" : ""}
+                              {fmtNum(n)}
+                              <em className="ff-eok">{eok(n)}</em>
+                            </span>
+                          </div>
+                        );
+                        return (
+                          <div className="ov-idx-flow num">
+                            {row("외국인", futFlow.foreign)}
+                            {row("기관", futFlow.institution)}
+                            {row("개인", futFlow.individual)}
+                          </div>
+                        );
+                      })()}
                     {c.code === "F" && (
                       <div className="ov-idx-note">
                         {futFlow
-                          ? `${futFlow.date.slice(5).replace("-", "/")} 순매수 · 계약 · 네이버(±10분)`
+                          ? `${futFlow.date.slice(5).replace("-", "/")} 순매수 · 계약(≈억원 환산) · 네이버(±10분)`
                           : "선물 수급 불러오는 중…"}
                       </div>
                     )}

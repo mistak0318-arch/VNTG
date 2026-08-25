@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
   TRADE_TARGETS,
+  getTradeBrief,
   getTradeCountries,
   getTradeHistory,
   getTradeStats,
@@ -17,6 +18,19 @@ export function createTradeRouter(client: KiwoomClient): Router {
     try {
       const r = await getTradeStats(req.query.force === "1");
       res.json({ ...r, configured: isTradeConfigured(), targets: TRADE_TARGETS });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 큰 변화 브리핑 (2026-08-26) — 분기·반기·연간으로 크게 움직인 품목.
+   * 31품목 시계열이 다 캐시돼야 완성이라, 모자란 만큼 pending 으로 알려 주고
+   * 뒤에서 채운다 — 화면은 pending 0 이 될 때까지 다시 물으면 된다.
+   */
+  router.get("/brief", async (_req, res, next) => {
+    try {
+      res.json(await getTradeBrief());
     } catch (err) {
       next(err);
     }
