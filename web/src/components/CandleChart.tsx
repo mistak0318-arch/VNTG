@@ -560,15 +560,11 @@ export function CandleChart({
   return (
     <div>
       <div className="chart-legend">
-        {maLines.map((m) => (
-          <span className="legend-item" key={m.period}>
-            <i style={{ background: m.color }} />
-            MA{m.period}
-          </span>
-        ))}
         {/*
-          고·저 괴리 — 범례 **오른쪽 끝**에 붙인다. 차트 안에 겹쳐 쓰면 캔들을 가리고,
-          아래에 따로 줄을 만들면 차트 높이를 먹는다. 범례 줄은 이미 비어 있다.
+          고·저 괴리 — 범례 **맨 앞**이다 (2026-08-25).
+          오른쪽 끝에 뒀더니 그 위에 붙박이인 「⤢ 크게」 버튼(absolute, 우상단)과
+          겹쳐 가려졌다. 왼쪽 맨 앞이면 겹칠 게 없고, MA 이름표보다 매매에 먼저
+          쓰는 값이라 앞에 오는 게 순서로도 맞다.
         */}
         {gap && (
           <span className="chart-gap">
@@ -580,6 +576,12 @@ export function CandleChart({
             </b>
           </span>
         )}
+        {maLines.map((m) => (
+          <span className="legend-item" key={m.period}>
+            <i style={{ background: m.color }} />
+            MA{m.period}
+          </span>
+        ))}
       </div>
       <div className="candle-host">
         <div ref={containerRef} style={{ width: "100%" }} />

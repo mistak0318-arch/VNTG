@@ -413,6 +413,37 @@ export const api = {
       "/api/signal/screen/universes",
     ),
   signalScreenStatus: (jobId: string) => getJson<ScreenJob>(`/api/signal/screen/${jobId}`),
+  /** 슈퍼신호등 — 여러 목록에 동시에 걸린 초록의 관찰 목록 */
+  signalSuper: () =>
+    getJson<{
+      entries: {
+        code: string;
+        name: string;
+        addedDate: string;
+        addedPrice: number;
+        score: number;
+        lists: string[];
+        seenCount: number;
+        lastSeenDate: string;
+        price: number | null;
+        changeRate: number | null;
+        sinceAdded: number | null;
+      }[];
+      lastRunDate: string | null;
+      minLists: number;
+    }>("/api/signal/super"),
+  signalSuperJob: () =>
+    getJson<{
+      status: "idle" | "running" | "done" | "error";
+      step: string;
+      done: number;
+      total: number;
+      added: number;
+      error?: string;
+    }>("/api/signal/super/job"),
+  signalSuperRun: () =>
+    postJson<{ status: string }>("/api/signal/super/run", {}),
+  signalSuperRemove: (code: string) => deleteJson<{ ok: boolean }>(`/api/signal/super/${code}`),
   /** 지금 돌고 있는 찾기 — 전역 작업 띠와 화면 복귀가 본다 */
   signalScreenActive: () =>
     getJson<{

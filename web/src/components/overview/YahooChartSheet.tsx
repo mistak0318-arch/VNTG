@@ -392,7 +392,19 @@ function UsFigures({ d }: { d: UsDetail }) {
   const volRatio = d.volume !== null && d.prevVolume ? d.volume / d.prevVolume : null;
 
   const rows: { k: string; v: string; hint?: string }[] = [];
-  if (d.open !== null) rows.push({ k: "시/고/저", v: `${d.open} / ${d.high} / ${d.low}` });
+  /*
+   * 시/고/저 옆에 **전일 종가 대비 %** 를 괄호로 (2026-08-25 — 사용자 요청).
+   * 215.53 이라는 가격만으로는 갭이 얼마였는지 감이 안 온다 — 기준(전일 종가)과의
+   * 거리가 붙어야 읽힌다.
+   */
+  const vsBase = (v: number | null): string =>
+    v !== null && d.base ? ` (${((v - d.base) / d.base) * 100 >= 0 ? "+" : ""}${(((v - d.base) / d.base) * 100).toFixed(1)}%)` : "";
+  if (d.open !== null)
+    rows.push({
+      k: "시/고/저",
+      v: `${d.open}${vsBase(d.open)} / ${d.high}${vsBase(d.high)} / ${d.low}${vsBase(d.low)}`,
+      hint: "괄호는 전일 종가 대비입니다",
+    });
   if (pos52 !== null)
     rows.push({
       k: "52주 자리",
@@ -527,12 +539,18 @@ function UsKiwoomBlock({ symbol }: { symbol: string }) {
           s.week52.lowGap !== null ? `, +${s.week52.lowGap.toFixed(1)}%` : ""
         })`,
       });
-    if (s.pre.open !== null || s.pre.high !== null || s.pre.low !== null)
+    if (s.pre.open !== null || s.pre.high !== null || s.pre.low !== null) {
+      /* 괄호는 전일(정규장) 종가 대비 — 가격만으로는 프리장이 갭인지 아닌지 모른다 */
+      const vsClose = (v: number | null): string =>
+        v !== null && s.baseClose
+          ? ` (${(v - s.baseClose) / s.baseClose >= 0 ? "+" : ""}${(((v - s.baseClose) / s.baseClose) * 100).toFixed(1)}%)`
+          : "";
       rows.push({
         k: "프리장 시/고/저",
-        v: `${s.pre.open ?? "-"} / ${s.pre.high ?? "-"} / ${s.pre.low ?? "-"}`,
-        hint: "야후·한투가 안 주는 값 — 프리장 흐름을 볼 수 있습니다",
+        v: `${s.pre.open ?? "-"}${vsClose(s.pre.open)} / ${s.pre.high ?? "-"}${vsClose(s.pre.high)} / ${s.pre.low ?? "-"}${vsClose(s.pre.low)}`,
+        hint: "야후·한투가 안 주는 값 — 괄호는 전일 종가 대비입니다",
       });
+    }
   }
   if (b) {
     if (b.turnover !== null)

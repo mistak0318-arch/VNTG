@@ -372,8 +372,8 @@ async function contUniverse(
   return out;
 }
 
-/** 모집단 하나를 받아 온다 — 어느 키든 Candidate[] 로 통일 */
-async function fetchUniverse(
+/** 모집단 하나를 받아 온다 — 어느 키든 Candidate[] 로 통일. 슈퍼신호등도 이걸 쓴다 */
+export async function fetchUniverse(
   client: KiwoomClient,
   key: string,
   market: string,

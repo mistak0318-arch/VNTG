@@ -68,11 +68,11 @@ export interface TrackConfig {
 export const DEFAULT_TRACK_CONFIG: TrackConfig = {
   tiers: [70, 80, 90],
   /*
-   * 60 → 200 (2026-08-25, 사용자 요청). 상위 60 은 다 아는 종목이라 검증 표본이
-   * 얇았다 — 200 이면 「신호등 찾기」에서 실제로 훑는 폭과도 비슷하다.
-   * 하루 한 번(15:40) 도는 일이라 시간이 늘어도 사람이 기다리지 않는다.
+   * 60 → 300 (2026-08-25, 사용자 요청 — 같은 날 200 을 거쳐 300 으로).
+   * 상위 60 은 다 아는 종목이라 검증 표본이 얇았다. 하루 한 번(15:40) 도는
+   * 일이라 시간이 늘어도 사람이 기다리지 않는다.
    */
-  universe: 200,
+  universe: 300,
   market: "000",
   minTradeValue: 100,
   includeRiskCapped: true,
@@ -131,11 +131,12 @@ async function load(): Promise<Store> {
     // 설정이 늘어나도 예전 저장분이 깨지지 않게 기본값과 합친다
     const config = { ...DEFAULT_TRACK_CONFIG, ...(raw.config ?? {}) };
     /*
-     * 옛 기본값 이사 (2026-08-25). 저장분의 60 은 사람이 고른 값이 아니라
-     * **옛 기본값이 저장을 타며 박제된 것**이다 — 새 기본 200 으로 올린다.
-     * 60 이 아닌 값은 사람이 정한 것이므로 안 건드린다.
+     * 옛 기본값 이사 (2026-08-25). 저장분의 60·200 은 사람이 고른 값이 아니라
+     * **옛 기본값이 저장을 타며 박제된 것**이다 — 새 기본 300 으로 올린다.
+     * (200 은 같은 날 잠깐 기본이었다) 그 밖의 값은 사람이 정한 것이라 안 건드린다.
      */
-    if (config.universe === 60) config.universe = DEFAULT_TRACK_CONFIG.universe;
+    if (config.universe === 60 || config.universe === 200)
+      config.universe = DEFAULT_TRACK_CONFIG.universe;
     return {
       entries: Array.isArray(raw.entries) ? raw.entries : [],
       lastRunDate: typeof raw.lastRunDate === "string" ? raw.lastRunDate : null,

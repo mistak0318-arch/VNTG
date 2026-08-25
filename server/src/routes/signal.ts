@@ -9,6 +9,7 @@ import {
   startScreen,
 } from "../signalScreen.js";
 import { evaluateMarket } from "../marketSignal.js";
+import { listSuperSignal, removeSuperEntry, runSuperSignal, superJob } from "../superSignal.js";
 import { gradeSignalHistory, signalDays } from "../signalHistory.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
@@ -180,6 +181,37 @@ export function createSignalRouter(client: KiwoomClient): Router {
       return;
     }
     res.json(job);
+  });
+
+  /* ---------------- 슈퍼신호등 ---------------- */
+
+  /** 관찰 목록 — 지금 가격·편입가 대비까지 붙여서 */
+  router.get("/super", async (_req, res, next) => {
+    try {
+      res.json(await listSuperSignal(client));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 진행 상황 — 돌고 있으면 화면이 진행바를 그린다 */
+  router.get("/super/job", (_req, res) => {
+    res.json(superJob());
+  });
+
+  /** 지금 돌리기 — 하루 한 번 자동(15:45)이지만 눈으로 확인하고 싶을 때 */
+  router.post("/super/run", (_req, res) => {
+    void runSuperSignal(client, true).catch(() => undefined);
+    res.json(superJob());
+  });
+
+  router.delete("/super/:code", async (req, res, next) => {
+    try {
+      await removeSuperEntry(req.params.code);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
   });
 
   /* ---------------- 추적기 ---------------- */

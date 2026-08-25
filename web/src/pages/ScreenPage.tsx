@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BacktestPanel } from "../components/BacktestPanel";
 import { SignalTrackPanel } from "../components/SignalTrackPanel";
 import { api, fmtNum, type ScreenHit, type ScreenJob, type ScreenRunSummary } from "../api";
+import { SuperSignalPanel } from "../components/SuperSignalPanel";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { WatchAddSheet, type WatchAddTarget } from "../components/WatchAddSheet";
 
@@ -38,7 +39,7 @@ function pct(n: number): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 
-type ScreenTab = "find" | "track" | "backtest";
+type ScreenTab = "find" | "track" | "super" | "backtest";
 
 export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   /*
@@ -201,6 +202,8 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
         {([
           { key: "find" as const, label: "신호등 찾기" },
           { key: "track" as const, label: "추적기" },
+          /* 추적기의 상위판 — 여러 목록에 동시에 걸린 초록만 따라간다 */
+          { key: "super" as const, label: "🌟 슈퍼신호등" },
           { key: "backtest" as const, label: "조건 백테스트" },
         ]).map((t) => (
           <button
@@ -215,6 +218,8 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
 
       {screenTab === "backtest" ? (
         <BacktestPanel />
+      ) : screenTab === "super" ? (
+        <SuperSignalPanel onSelectStock={onSelectStock} />
       ) : screenTab === "track" ? (
         <SignalTrackPanel onSelectStock={onSelectStock} />
       ) : (
