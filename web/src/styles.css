@@ -3402,6 +3402,59 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 /* 마지막 달 주석 — SVG 안에 두면 눈금과 겹쳐서 HTML 로 뺐다 */
 .tc-head { font-size: 0.76rem; margin-bottom: 2px; }
 
+/* ── 주요뉴스 썸네일 카드 (뉴스 탭) ── */
+.mn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  margin-top: 0.5rem;
+}
+.mn-card {
+  display: flex;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  text-decoration: none;
+  color: var(--text);
+  min-width: 0;
+}
+.mn-card:hover { border-color: var(--blue); }
+.mn-thumb {
+  width: 92px;
+  height: 66px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: var(--panel-2);
+}
+.mn-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mn-tit {
+  font-size: 0.84rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.mn-sum {
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.mn-meta { font-size: 0.68rem; color: var(--muted); margin-top: auto; }
+
+/* 거래대금 현황(시황) — 시장 유동성 막대 */
+.to-chart { margin-top: 0.5rem; }
+.to-bar { fill: var(--muted); opacity: 0.45; }
+.to-bar.today { fill: var(--blue); opacity: 0.95; }
+.to-avg { stroke: var(--red); stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.8; }
+
 /* 나라별 월별 흐름 — 상위 5개 나라 선 겹치기 */
 .tct-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.72rem; margin-bottom: 2px; }
 .tct-key { display: inline-flex; align-items: center; gap: 4px; color: var(--text); }

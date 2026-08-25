@@ -5,6 +5,7 @@ import { estimatePerform } from "../estimatePerform.js";
 import { quarterFinance } from "../quarterFinance.js";
 import { peekSnapshot } from "../marketSnapshot.js";
 import { breakingNews, getDisclosures, newsCounts, searchNews, sectorNews } from "../newsDisclosure.js";
+import { mainNews } from "../naverMainNews.js";
 import { listWatchlist } from "../watchlist.js";
 import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -141,6 +142,15 @@ export function createNewsRouter(client: KiwoomClient): Router {
   router.get("/news/breaking", async (_req, res, next) => {
     try {
       res.json(await breakingNews());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 네이버 증권 주요뉴스 — 편집자가 고른 목록, 썸네일 포함 (5분 캐시) */
+  router.get("/news/main", async (req, res, next) => {
+    try {
+      res.json({ items: await mainNews(Math.min(Number(req.query.size) || 20, 40)) });
     } catch (err) {
       next(err);
     }

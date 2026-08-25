@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, normalizeStockCode, type StockSearchResult } from "../api";
 import { BreakingNews } from "../components/BreakingNews";
+import { MainNewsPanel } from "../components/MainNewsPanel";
 import { DisclosureList, NewsList } from "../components/NewsDisclosurePanel";
 import { NaverFinanceFrame } from "../components/NaverFinanceFrame";
 import { SectorNews } from "../components/SectorNews";
@@ -9,7 +10,7 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [picked, setPicked] = useState<{ code: string; name: string } | null>(null);
-  const [srcTab, setSrcTab] = useState<"sector" | "breaking" | "naver">("sector");
+  const [srcTab, setSrcTab] = useState<"main" | "sector" | "breaking" | "naver">("main");
 
   // 종목명이 겹칠 수 있으므로 후보를 보여주고 고르게 한다
   useEffect(() => {
@@ -84,6 +85,13 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
           <h3 className="feed-heading">분야별 주요뉴스</h3>
           <>
           <nav className="detail-tabs">
+            {/* 주요뉴스가 첫 탭 — 편집자 선별 + 썸네일이라 훑는 속도가 제일 빠르다 */}
+            <button
+              className={`detail-tab${srcTab === "main" ? " active" : ""}`}
+              onClick={() => setSrcTab("main")}
+            >
+              🏠 주요뉴스
+            </button>
             <button
               className={`detail-tab${srcTab === "sector" ? " active" : ""}`}
               onClick={() => setSrcTab("sector")}
@@ -104,7 +112,9 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
             </button>
           </nav>
 
-          {srcTab === "sector" ? (
+          {srcTab === "main" ? (
+            <MainNewsPanel />
+          ) : srcTab === "sector" ? (
             <SectorNews perSector={50} defaultSort="recent" />
           ) : srcTab === "breaking" ? (
             <BreakingNews />

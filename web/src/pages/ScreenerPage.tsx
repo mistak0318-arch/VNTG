@@ -227,6 +227,8 @@ export function ScreenerPage({
   /* 신호등은 **켤 때만** — 목록을 여는 것만으로 백 종목을 평가하면 안 된다 */
   const [sigOn, setSigOn] = useState(false);
   const [editTabs, setEditTabs] = useState(false);
+  /** 열 순서 편집 중 — 켜면 머리 칸에 ◀▶ 가 붙는다 */
+  const [editCols, setEditCols] = useState(false);
   /** 신호등 색깔순 — 지금 쪽 안에서만 */
   const [sigSort, setSigSort] = useState<"desc" | "asc" | null>(null);
   /* 종목 상세 탭과 같은 훅 — 서버에 저장되어 기기가 달라도 같은 순서다 */
@@ -287,6 +289,19 @@ export function ScreenerPage({
 
   const cols = data?.spec.columns ?? [];
   const all = data?.rows ?? [];
+
+  /*
+   * 열 순서 — **조회마다 따로**, 탭·칸너비와 같은 훅(서버 저장, 기기 공유).
+   * 종목명은 sticky 첫 칸이라 못 옮긴다. 표는 CSS order 로는 못 세우므로
+   * (머리와 몸이 같은 순서여야 한다) 배열을 실제로 다시 세운다.
+   */
+  const colOrder = useCardOrder(
+    `rank.cols.${rankKey}`,
+    cols.filter((c) => c.key !== "stk_nm").map((c) => c.key),
+  );
+  const orderedCols = [...cols.filter((c) => c.key !== "stk_nm")].sort(
+    (a, b) => colOrder.orderOf(a.key) - colOrder.orderOf(b.key),
+  );
 
   /*
    * 거르기. **못 재는 값으로는 안 거른다** — 시가총액이 null 인 종목(상장주식수를
@@ -571,7 +586,26 @@ export function ScreenerPage({
             {openFilter ? "필터 ▲" : "필터 ▼"}
             {on ? " ●" : ""}
           </button>
+          {/* 열 순서 — 자주 보는 값(등락률·거래대금)을 앞으로. 조회마다 따로 저장된다 */}
+          <button
+            className={`filter-btn ${editCols ? "active" : ""}`}
+            onClick={() => setEditCols((v) => !v)}
+            title="머리 칸의 ◀▶ 로 열 자리를 옮깁니다 — 조회마다 따로, 서버에 저장됩니다"
+          >
+            {editCols ? "칸 순서 끝" : "칸 순서"}
+          </button>
         </div>
+        {editCols && (
+          <div className="table-note">
+            머리 칸의 <b>◀ ▶</b> 로 열을 옮깁니다. <b>조회마다 따로</b> 저장되어 다른
+            기기에서도 같은 순서입니다. 종목명은 고정 첫 칸이라 못 옮깁니다.
+            {colOrder.customized && (
+              <button className="filter-btn dt-reset" onClick={colOrder.reset}>
+                원래대로
+              </button>
+            )}
+          </div>
+        )}
 
         {openFilter && (
           <div className="scr-filter">
@@ -730,11 +764,9 @@ export function ScreenerPage({
                 <colgroup>
                   {sigOn && <col style={{ width: "2.4rem" }} />}
                   <col style={cw.styleOf("stk_nm")} />
-                  {cols
-                    .filter((c) => c.key !== "stk_nm")
-                    .map((c) => (
-                      <col key={c.key} style={cw.styleOf(c.key)} />
-                    ))}
+                  {orderedCols.map((c) => (
+                    <col key={c.key} style={cw.styleOf(c.key)} />
+                  ))}
                   {hasTurn && <col style={cw.styleOf("turn")} />}
                   {hasCap && <col style={cw.styleOf("cap")} />}
                 </colgroup>
@@ -763,25 +795,54 @@ export function ScreenerPage({
                       종목명
                       <ColumnGrip cw={cw} k="stk_nm" />
                     </th>
-                    {cols
-                      .filter((c) => c.key !== "stk_nm")
-                      .map((c) => (
-                        <SortableTh
-                          key={c.key}
-                          columnKey={c.key}
-                          label={c.label}
-                          /* 순위 칸은 숫자 서너 자리면 충분하다 — 폰에서 자리를 아낀다 */
-                          className={RANK_COLS.has(c.key) ? "num-narrow" : undefined}
-                          accessor={(r: (typeof rows)[number]) => {
-                            const v = r[c.key];
-                            if (c.type === "text") return String(v ?? "");
-                            const n = Number(v);
-                            return Number.isFinite(n) ? n : -Infinity;
-                          }}
-                          sort={sort}
-                          extra={<ColumnGrip cw={cw} k={c.key} />}
-                        />
-                      ))}
+                    {orderedCols.map((c) => (
+                      <SortableTh
+                        key={c.key}
+                        columnKey={c.key}
+                        label={c.label}
+                        /* 순위 칸은 숫자 서너 자리면 충분하다 — 폰에서 자리를 아낀다 */
+                        className={RANK_COLS.has(c.key) ? "num-narrow" : undefined}
+                        accessor={(r: (typeof rows)[number]) => {
+                          const v = r[c.key];
+                          if (c.type === "text") return String(v ?? "");
+                          const n = Number(v);
+                          return Number.isFinite(n) ? n : -Infinity;
+                        }}
+                        sort={sort}
+                        extra={
+                          <>
+                            {/* 열 순서 편집 — 화살표는 정렬 클릭과 섞이면 안 되므로 전파를 막는다 */}
+                            {editCols && (
+                              <>
+                                <span
+                                  className="dt-move"
+                                  role="button"
+                                  title="왼쪽으로"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    colOrder.move(c.key, -1);
+                                  }}
+                                >
+                                  ◀
+                                </span>
+                                <span
+                                  className="dt-move"
+                                  role="button"
+                                  title="오른쪽으로"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    colOrder.move(c.key, 1);
+                                  }}
+                                >
+                                  ▶
+                                </span>
+                              </>
+                            )}
+                            <ColumnGrip cw={cw} k={c.key} />
+                          </>
+                        }
+                      />
+                    ))}
                     {/* 걸러 보는 기준이면 표에도 있어야 한다 */}
                     {hasTurn && (
                       <SortableTh
@@ -837,9 +898,7 @@ export function ScreenerPage({
                         {/* 시장이 「전체」면 어느 시장인지가 정보다 */}
                         {market === "000" && r.mkt && <i className="scr-mkt">{r.mkt}</i>}
                       </td>
-                      {cols
-                        .filter((c) => c.key !== "stk_nm")
-                        .map((c) => {
+                      {orderedCols.map((c) => {
                           const v = cell(r[c.key], c.type);
                           /*
                            * 거래대금은 **어디서 돌았는지**까지 보여준다.

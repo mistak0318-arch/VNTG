@@ -346,6 +346,11 @@ export const api = {
   backtestRules: () => getJson<{ rules: BacktestRuleDef[] }>("/api/backtest/rules"),
   backtestRun: (cfg: BacktestConfig) => postJson<{ id: string }>("/api/backtest/run", cfg),
   backtestJob: (id: string) => getJson<BacktestJob>(`/api/backtest/job/${id}`),
+  /** 네이버 증권 주요뉴스 — 편집자가 고른 목록, 썸네일 포함 */
+  newsMain: (size = 20) =>
+    getJson<{
+      items: { title: string; summary: string; thumb: string | null; press: string; link: string; at: string }[];
+    }>(`/api/feed/news/main?size=${size}`),
   /** 돌려 본 조건들 — 엣지 순 리더보드. 통찰은 실행들 사이의 비교에서 나온다 */
   backtestRuns: () =>
     getJson<{

@@ -27,6 +27,7 @@ import { OverviewCard } from "../components/overview/OverviewCard";
 import { RankList, SegmentToggle } from "../components/overview/RankList";
 import { RefreshBar } from "../components/RefreshBar";
 import { Sparkline } from "../components/overview/Sparkline";
+import { TurnoverPanel } from "../components/overview/TurnoverPanel";
 import { useSection } from "../useSection";
 import { useCardOrder } from "../useCardOrder";
 import { OVERVIEW_CARDS, type OverviewSub } from "../overviewCards";
@@ -348,6 +349,13 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                 </tbody>
               </table>
             </div>
+          </OverviewCard>
+        )}
+
+        {/* 거래대금 현황 — 폭(위 표) 다음 물음이 유동성이다. 줄을 누르면 추이가 펼쳐진다 */}
+        {show("summary") && (
+          <OverviewCard order={cards.orderOf("turnover")} title="거래대금 현황">
+            <TurnoverPanel />
           </OverviewCard>
         )}
 
