@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
+import { alCode } from "../alCode.js";
 import { intradayLevels } from "../intraday.js";
 import { stockSummary } from "../stockSummary.js";
 import { getSectorMood } from "../sectorMood.js";
@@ -173,7 +174,8 @@ export function createMarketRouter(client: KiwoomClient): Router {
       const dt = typeof req.query.dt === "string" ? req.query.dt : todayYyyymmdd();
       const { data } = await client.request(CHART_RESOURCE, "ka10060", {
         dt,
-        stk_cd: req.params.code,
+        // 통합(_AL) — 키움 앱(통합)과 수급이 달랐던 원인 (2026-08-26 실측: NXT 미포함)
+        stk_cd: alCode(req.params.code),
         amt_qty_tp: "1", // 1:금액(백만원)
         trde_tp: "0", // 0:순매수
         unit_tp: "1000",
@@ -201,7 +203,12 @@ export function createMarketRouter(client: KiwoomClient): Router {
     try {
       const days = Math.min(Number(req.query.days) || 60, 365);
       const { data } = await client.request(SHSA_RESOURCE, "ka10014", {
-        stk_cd: req.params.code,
+        /*
+         * 통합(_AL) — 2026-08-26 실측. KRX 단독은 매매비중 분모(거래대금)가 작아
+         * 4.59% 로 나왔는데 키움 앱(통합)은 2.79% 였다. _AL 이 앱과 천원 단위까지
+         * 일치(공매도 대금 302,272,068).
+         */
+        stk_cd: alCode(req.params.code),
         tm_tp: "1", // 1:기간
         strt_dt: daysAgoYyyymmdd(days),
         end_dt: todayYyyymmdd(),
@@ -268,9 +275,28 @@ export function createMarketRouter(client: KiwoomClient): Router {
   // 거래원 (ka10002) - 매도/매수 상위 5개 증권사
   router.get("/broker/:code", async (req, res, next) => {
     try {
-      const { data } = await client.request(STKINFO_RESOURCE, "ka10002", {
-        stk_cd: req.params.code,
+      const { data } = await client.request<Record<string, unknown>>(STKINFO_RESOURCE, "ka10002", {
+        // 통합(_AL) — NXT 물량이 많은 창구(키움 등)가 KRX 단독에선 반토막으로 보였다.
+        // ?stex=krx 는 진단용 — 기준이 의심될 때 단독값과 맞대 본다
+        stk_cd: req.query.stex === "krx" ? req.params.code : alCode(req.params.code),
       });
+      /*
+       * 새벽엔 통합·단독 모두 빈 값이라 _AL 미지원 여부를 아직 실측 못 했다.
+       * 만약 _AL 이 빈 응답이면 단독으로 한 번 더 — 기준이 좁아지는 건 아쉽지만
+       * 거래원 패널이 통째로 비는 것보단 낫다.
+       */
+      const empty = !String(data?.buy_trde_qty_1 ?? "").replace(/[0\s]/g, "") &&
+        !String(data?.sel_trde_qty_1 ?? "").replace(/[0\s]/g, "");
+      if (empty && req.query.stex !== "krx") {
+        const retry = await client.request(STKINFO_RESOURCE, "ka10002", {
+          stk_cd: req.params.code,
+        });
+        const retryHas = String(retry.data?.buy_trde_qty_1 ?? "").replace(/[0\s]/g, "");
+        if (retryHas) {
+          res.json(retry.data);
+          return;
+        }
+      }
       res.json(data);
     } catch (err) {
       next(err);
@@ -281,7 +307,8 @@ export function createMarketRouter(client: KiwoomClient): Router {
   router.get("/snapshot/:code", async (req, res, next) => {
     try {
       const { data } = await client.request(MRKCOND_RESOURCE, "ka10007", {
-        stk_cd: req.params.code,
+        // 통합(_AL) — 거래대금·거래량이 키움 앱(통합)과 같아야 한다
+        stk_cd: alCode(req.params.code),
       });
       res.json(data);
     } catch (err) {
@@ -397,7 +424,8 @@ export function createMarketRouter(client: KiwoomClient): Router {
   router.get("/daily-detail/:code", async (req, res, next) => {
     try {
       const { data } = await client.request(STKINFO_RESOURCE, "ka10015", {
-        stk_cd: req.params.code,
+        // 통합(_AL) — 거래 비중·수급이 키움 앱(통합)과 같아야 한다
+        stk_cd: alCode(req.params.code),
         strt_dt: todayYyyymmdd(),
       });
       res.json(data);
@@ -411,7 +439,8 @@ export function createMarketRouter(client: KiwoomClient): Router {
     try {
       const daily = req.query.mode === "daily";
       const { data } = await client.request(MRKCOND_RESOURCE, daily ? "ka10047" : "ka10046", {
-        stk_cd: req.params.code,
+        // 통합(_AL) — 체결강도도 전체 체결 기준
+        stk_cd: alCode(req.params.code),
       });
       res.json(data);
     } catch (err) {
@@ -426,7 +455,11 @@ export function createMarketRouter(client: KiwoomClient): Router {
       const amtQty = req.query.qty === "1" ? "2" : "1";
       const { data } = await client.request(STKINFO_RESOURCE, "ka10059", {
         dt: todayYyyymmdd(),
-        stk_cd: req.params.code,
+        /*
+         * 통합(_AL) — 2026-08-26 실측. KRX 단독은 하이닉스 8/25 개인 +618,857 인데
+         * 키움 앱(통합)은 +802,218 이었다(NXT 몫 누락). _AL 이 앱과 자리수까지 일치.
+         */
+        stk_cd: alCode(req.params.code),
         amt_qty_tp: amtQty,
         trde_tp: "0", // 순매수
         unit_tp: "1000",
@@ -441,7 +474,8 @@ export function createMarketRouter(client: KiwoomClient): Router {
   router.get("/program/:code", async (req, res, next) => {
     try {
       const { data } = await client.request(MRKCOND_RESOURCE, "ka90013", {
-        stk_cd: req.params.code,
+        // 통합(_AL) — 프로그램도 NXT 몫 포함 (실측: _AL 로 값이 온다)
+        stk_cd: alCode(req.params.code),
         date: todayYyyymmdd(),
         amt_qty_tp: "1", // 1:금액(백만)
       });

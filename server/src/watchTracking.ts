@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { alCode } from "./alCode.js";
 import { opinionBrief } from "./analystOpinion.js";
 import { evaluateSignal } from "./signalLight.js";
 import { listWatchlist, type WatchItem } from "./watchlist.js";
@@ -186,7 +187,8 @@ async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedS
       base.lendingTrend = cachedTrend.lending;
     } else {
       base.shortTrend = await trendOf(client, "/api/dostk/shsa", "ka10014", {
-      stk_cd: item.code,
+      // 통합(_AL) — 공매도량도 NXT 몫 포함 (2026-08-26)
+      stk_cd: alCode(item.code),
       tm_tp: "1",
       strt_dt: daysAgoYyyymmdd(10),
       end_dt: todayYyyymmdd(),

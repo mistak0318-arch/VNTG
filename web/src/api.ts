@@ -690,6 +690,17 @@ export const api = {
       from: "theme" | "sector" | "none";
       label: string;
     }>(`/api/trade/${key}/stocks`),
+  /* 메모장 — 자유 메모 + 일기 (종목 메모와 다른 저장소) */
+  memoList: (q = "", tag = "") =>
+    getJson<{ items: MemoEntry[] }>(
+      `/api/memo?q=${encodeURIComponent(q)}&tag=${encodeURIComponent(tag)}`,
+    ),
+  memoTags: () => getJson<{ tags: { tag: string; count: number }[] }>("/api/memo/tags"),
+  memoAdd: (title: string, body: string, tags: string[]) =>
+    postJson<{ memo: MemoEntry }>("/api/memo", { title, body, tags }),
+  memoUpdate: (id: string, patch: Partial<Pick<MemoEntry, "title" | "body" | "tags" | "pinned">>) =>
+    patchJson<{ memo: MemoEntry }>(`/api/memo/${id}`, patch),
+  memoRemove: (id: string) => deleteJson<{ ok: boolean }>(`/api/memo/${id}`),
   /** 장중 투자자별 누적 순매수 — 01 코스피 · 02 코스닥 · 03 K200선물. 시트 열 때만 */
   intradayFlow: (market: "01" | "02" | "03") =>
     getJson<{ date: string; points: IntraFlowPoint[] }>(
@@ -954,6 +965,17 @@ export interface SectionResult<T> {
   updatedAt: number | null;
   error: string | null;
   stale: boolean;
+}
+
+/** 메모장 글 하나 — 자유 메모 + 일기 */
+export interface MemoEntry {
+  id: string;
+  at: string;
+  updatedAt: string;
+  title: string;
+  body: string;
+  tags: string[];
+  pinned: boolean;
 }
 
 /** 장중 투자자별 누적 순매수 한 점 — 코스피/코스닥 억원, 선물 계약 */

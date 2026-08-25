@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { alCode } from "./alCode.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FILE = resolve(__dirname, "..", "data", "brokerFlow.json");
@@ -126,7 +127,8 @@ export async function brokerFlow(client: KiwoomClient, code: string): Promise<Br
 
   try {
     const { data } = await client.request<Record<string, unknown>>(RKINFO, "ka10040", {
-      stk_cd: bare,
+      // 통합(_AL) — KRX 단독은 NXT 물량 창구(키움 등)가 반토막으로 보였다 (2026-08-26)
+      stk_cd: alCode(bare),
     });
 
     const side = (kind: "sel" | "buy"): BrokerSide[] => {

@@ -19,6 +19,7 @@ import { createMarketRouter } from "./routes/market.js";
 import { createUsKiwoomRouter } from "./routes/usKiwoom.js";
 import { createNewsRouter } from "./routes/news.js";
 import { createNotesRouter } from "./routes/notes.js";
+import { createMemoRouter } from "./routes/memo.js";
 import { createOverviewRouter } from "./routes/overview.js";
 import { createRankingRouter } from "./routes/ranking.js";
 import { createReportRouter } from "./routes/report.js";

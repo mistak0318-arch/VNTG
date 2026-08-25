@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { alCode } from "./alCode.js";
 
 /**
  * 체결금액대별 매매비중 (`ka00196`).
@@ -58,9 +59,16 @@ function num(v: unknown): number {
 }
 
 export async function tradeSizeMix(client: KiwoomClient, code: string): Promise<TradeSizeRow[]> {
-  const { data } = await client.request<{ result_list?: Raw[] }>(RKINFO, "ka00196", {
-    stk_cd: code,
+  // 통합(_AL) — 체결 비중도 NXT 몫 포함. _AL 이 빈 목록이면 단독으로 한 번 더
+  // (새벽엔 둘 다 비어서 _AL 지원 여부를 아직 실측 못 했다 — 패널이 비는 것보단 폴백)
+  let { data } = await client.request<{ result_list?: Raw[] }>(RKINFO, "ka00196", {
+    stk_cd: alCode(code),
   });
+  if (!Array.isArray(data.result_list) || data.result_list.length === 0) {
+    data = (
+      await client.request<{ result_list?: Raw[] }>(RKINFO, "ka00196", { stk_cd: code })
+    ).data;
+  }
   return (data.result_list ?? [])
     .map((r) => {
       const buyQty = num(r.buy_trde_qty);

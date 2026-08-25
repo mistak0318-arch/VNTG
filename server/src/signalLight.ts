@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { exportYoyForSector, getTradeStats } from "./tradeStats.js";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { alCode } from "./alCode.js";
 import { analystOpinion } from "./analystOpinion.js";
 import { getFinance } from "./dartFinance.js";
 import { latestRatio } from "./financialRatio.js";
@@ -678,7 +679,8 @@ export async function evaluateSignal(
     wantShort
       ? client
           .request<Record<string, unknown>>("/api/dostk/shsa", "ka10014", {
-            stk_cd: code,
+            // 통합(_AL) — KRX 단독은 매매비중 분모가 작아 비중이 부풀었다 (2026-08-26 실측)
+            stk_cd: alCode(code),
             tm_tp: "1",
             strt_dt: daysAgoYyyymmdd(30),
             end_dt: todayYyyymmdd(),

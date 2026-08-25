@@ -3529,6 +3529,41 @@ tr.drag-over td { background: rgba(76, 141, 255, 0.12); }
 tr.drag-src td { opacity: 0.45; }
 
 /* ── 주요뉴스 썸네일 카드 (뉴스 탭) ── */
+/* ── 메모장 — 왼쪽 목록 / 오른쪽 편집기. 폰에서는 위아래로 ── */
+.memo-grid { display: grid; gap: 12px; }
+@media (min-width: 900px) {
+  .memo-grid { grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); align-items: start; }
+}
+.memo-list { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.memo-tags { margin: 0; }
+.memo-cnt { font-style: normal; opacity: 0.55; font-size: 0.9em; }
+.memo-new { align-self: flex-start; }
+.memo-rows { display: flex; flex-direction: column; gap: 6px; max-height: 70vh; overflow-y: auto; }
+.memo-row {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; color: var(--text); cursor: pointer;
+}
+.memo-row.on { border-color: var(--blue); }
+.memo-row-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.memo-row-head b { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memo-pin { font-style: normal; font-size: 0.72rem; opacity: 0.25; cursor: pointer; flex: none; }
+.memo-pin.on { opacity: 1; }
+.memo-prev { font-size: 0.72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memo-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 0.68rem; color: var(--muted); }
+.memo-meta i { font-style: normal; color: var(--blue); }
+.memo-editor { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.memo-tpl { margin: 0; }
+.memo-title { font-weight: 700; }
+.memo-body {
+  width: 100%; min-height: 46vh; resize: vertical;
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; font: inherit; font-size: 0.85rem; line-height: 1.7;
+}
+.memo-body:focus { outline: none; border-color: var(--blue); }
+.memo-actions { display: flex; align-items: center; gap: 8px; }
+.memo-saved-at { font-size: 0.7rem; color: var(--muted); }
+
 /* 뉴스 탭 순서 편집 — 탭 하나 = (◀) 탭 (▶) 묶음. ↔ 순서 버튼으로 켠다 */
 .nt-tab { display: inline-flex; align-items: center; gap: 2px; }
 .nt-edit { margin-left: 0.4rem; }

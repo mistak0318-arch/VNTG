@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { alCode } from "./alCode.js";
 
 /**
  * 종목 한 장 요약 — **첫 화면에서 한 번에 읽는 표.**
@@ -116,26 +117,31 @@ const INST_KEYS = {
 
 export async function stockSummary(client: KiwoomClient, code: string): Promise<StockSummary> {
   const bare = String(code).replace(/_(AL|NX)$/i, "");
+  /*
+   * 통합(_AL) — 2026-08-26. KRX 단독은 NXT 몫이 빠져 거래대금·수급이 키움 앱과
+   * 달랐다(하이닉스 8/25 개인 +618,857 vs 앱 +802,218 실측). 표시용은 통합이 기준.
+   */
+  const al = alCode(bare);
   const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10).replace(/-/g, "");
   const missing: string[] = [];
 
   const [quote, investor, ticks, program] = await Promise.all([
     client
-      .request<Record<string, unknown>>(MRKCOND, "ka10007", { stk_cd: bare })
+      .request<Record<string, unknown>>(MRKCOND, "ka10007", { stk_cd: al })
       .catch(() => null),
     client
       .request<Record<string, unknown>>(STKINFO, "ka10059", {
         dt: today,
-        stk_cd: bare,
+        stk_cd: al,
         amt_qty_tp: "1", // 금액(백만원)
         trde_tp: "0", // 순매수
         unit_tp: "1000",
       })
       .catch(() => null),
-    client.request<Record<string, unknown>>(STKINFO, "ka10003", { stk_cd: bare }).catch(() => null),
+    client.request<Record<string, unknown>>(STKINFO, "ka10003", { stk_cd: al }).catch(() => null),
     client
       .request<Record<string, unknown>>(MRKCOND, "ka90013", {
-        stk_cd: bare,
+        stk_cd: al,
         date: today,
         amt_qty_tp: "1",
       })
