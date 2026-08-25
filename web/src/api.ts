@@ -302,6 +302,9 @@ export const api = {
     postJson<{ alerts: FiredAlert[]; sent: boolean; error?: string; preview: string }>(
       `/api/alert/scan${send ? "?send=1" : ""}`,
     ),
+  backtestRules: () => getJson<{ rules: BacktestRuleDef[] }>("/api/backtest/rules"),
+  backtestRun: (cfg: BacktestConfig) => postJson<{ id: string }>("/api/backtest/run", cfg),
+  backtestJob: (id: string) => getJson<BacktestJob>(`/api/backtest/job/${id}`),
   /** 손절 감시 상태 — 보내지 않는다. 「감시 못 하는 자리가 몇인가」를 보는 창 */
   stopWatch: () =>
     getJson<{
@@ -1965,6 +1968,58 @@ export interface PaperResult {
   edges: EvidenceEdge[];
 }
 
+
+/* ── 조건 백테스트 ─────────────────────────────────────────── */
+
+export type BacktestRuleKey = "maAlign" | "aboveMa" | "volSurge" | "newHigh" | "minRate";
+
+export interface BacktestRuleDef {
+  key: BacktestRuleKey;
+  label: string;
+  hint: string;
+  hasValue: boolean;
+  defaultValue: number;
+}
+
+export interface BacktestConfig {
+  market: string;
+  universe: number;
+  /** 며칠 들고 있다 파나 (거래일) */
+  holdDays: number;
+  rules: { key: BacktestRuleKey; value: number }[];
+}
+
+export interface BacktestStat {
+  count: number;
+  avg: number;
+  median: number;
+  winRate: number;
+  best: number;
+  worst: number;
+}
+
+export interface BacktestResult {
+  config: BacktestConfig;
+  hit: BacktestStat;
+  /** 조건을 안 걸고 같은 기간·같은 종목에서 잰 것 — 이게 없으면 위 숫자는 못 읽는다 */
+  base: BacktestStat;
+  /** 조건이 만든 차이(%p) — 진짜 봐야 할 숫자 */
+  edge: number | null;
+  codes: number;
+  failed: number;
+  from: string;
+  to: string;
+  samples: { code: string; name: string; date: string; rate: number }[];
+}
+
+export interface BacktestJob {
+  status: "running" | "done" | "error";
+  total: number;
+  done: number;
+  startedAt: string;
+  result: BacktestResult | null;
+  error?: string;
+}
 
 /** 복기 노트 */
 export interface DayContext {

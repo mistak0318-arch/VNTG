@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { BacktestPanel } from "../components/BacktestPanel";
 import { SignalTrackPanel } from "../components/SignalTrackPanel";
 import { api, fmtNum, type ScreenHit, type ScreenJob, type ScreenRunSummary } from "../api";
 import { useWatchedCodes } from "../useWatchedCodes";
@@ -37,13 +38,15 @@ function pct(n: number): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 
-type ScreenTab = "find" | "track";
+type ScreenTab = "find" | "track" | "backtest";
 
 export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   /*
    * 두 자리다.
    *   찾기 — 내가 눌러서 지금 훑는다
    *   추적기 — 서버가 장 마감 뒤 알아서 담고 따라간다. **신호등이 맞는지 검증하는 자리**
+   *   백테스트 — 「이 조건으로 들어갔으면 과거에 어땠나」. 앞의 둘은 **앞을 보고**,
+   *              이건 **뒤를 본다.** 같은 질문의 반대쪽이라 여기 같이 둔다
    */
   const [screenTab, setScreenTab] = useState<ScreenTab>("find");
   const [market, setMarket] = useState("000");
@@ -158,6 +161,7 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
         {([
           { key: "find" as const, label: "신호등 찾기" },
           { key: "track" as const, label: "추적기" },
+          { key: "backtest" as const, label: "조건 백테스트" },
         ]).map((t) => (
           <button
             key={t.key}
@@ -169,7 +173,9 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
         ))}
       </nav>
 
-      {screenTab === "track" ? (
+      {screenTab === "backtest" ? (
+        <BacktestPanel />
+      ) : screenTab === "track" ? (
         <SignalTrackPanel onSelectStock={onSelectStock} />
       ) : (
     <div>
