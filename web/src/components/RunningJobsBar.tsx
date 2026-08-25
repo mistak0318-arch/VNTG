@@ -23,6 +23,14 @@ interface Active {
   job: PublishJob;
 }
 
+/** 채널 검색 진행 — 리포트 발행과 같은 띠에 얹는다. 값만 읽는 가벼운 조회다 */
+interface SearchProg {
+  running: boolean;
+  done: number;
+  total: number;
+  name: string;
+}
+
 /*
  * 작업이 막 시작됐다고 알린다.
  *
@@ -39,6 +47,13 @@ export function notifyJobStarted(): void {
 export function RunningJobsBar() {
   const [jobs, setJobs] = useState<Active[]>([]);
   const [hidden, setHidden] = useState<string[]>([]);
+  /*
+   * 채널 검색도 이 띠에 얹는다 (2026-08-25).
+   * 검색 탭에서 「채널에서 찾기」를 누르고 다른 메뉴로 가면 **도는 걸 볼 방법이
+   * 없었다** — 패널이 내려가며 진행바도 같이 사라졌다. 서버는 계속 훑고 있는데.
+   * 발행과 같은 자리에서, 어느 화면에 있든 보인다.
+   */
+  const [search, setSearch] = useState<SearchProg | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -51,13 +66,19 @@ export function RunningJobsBar() {
         return;
       }
       try {
-        const r = await api.activeJobs();
+        const [r, sp] = await Promise.all([
+          api.activeJobs(),
+          fetch("/api/channels/search-progress")
+            .then((res) => res.json() as Promise<SearchProg>)
+            .catch(() => null),
+        ]);
         if (!alive) return;
         setJobs(r.jobs);
+        setSearch(sp?.running ? sp : null);
         // 끝난 작업은 숨김 목록에서도 지운다 — 다음에 같은 id 가 다시 날 일은 없지만
         // 목록이 계속 자라는 걸 막는다
         setHidden((h) => h.filter((id) => r.jobs.some((j) => j.id === id)));
-        timer = window.setTimeout(tick, r.jobs.length > 0 ? 2000 : 5000);
+        timer = window.setTimeout(tick, r.jobs.length > 0 || sp?.running ? 2000 : 5000);
       } catch {
         timer = window.setTimeout(tick, 10000);
       }
@@ -79,10 +100,24 @@ export function RunningJobsBar() {
   }, []);
 
   const shown = jobs.filter((j) => !hidden.includes(j.id));
-  if (shown.length === 0) return null;
+  if (shown.length === 0 && !search) return null;
 
   return (
     <div className="rj-bar">
+      {search && (
+        <div className="rj-item">
+          <div className="rj-head">
+            <span className="rj-spin" />
+            <b>텔레그램 채널 검색</b>
+            <span className="pt-n">
+              {search.total > 0 ? `${search.done}/${search.total} · ${search.name}` : "채널 목록 받는 중"}
+            </span>
+          </div>
+          <div className="rj-track">
+            <i style={{ width: search.total > 0 ? `${(search.done / search.total) * 100}%` : "6%" }} />
+          </div>
+        </div>
+      )}
       {shown.map(({ id, job }) => {
         const done = job.steps.filter((s) => s.state === "done" || s.state === "skipped").length;
         const running = job.steps.find((s) => s.state === "running");

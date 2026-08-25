@@ -64,11 +64,31 @@ function stamp(at: string): string {
   return d.toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+/*
+ * 탭을 떠났다 와도 검색이 이어 보이게 — **마지막 검색을 모듈이 들고 있는다** (2026-08-25).
+ *
+ * 패널은 탭을 옮기면 내려간다. 그동안 서버는 계속 훑고 있는데, 돌아오면 진행바도
+ * 결과도 사라져 「죽었나?」가 됐다. 검색어·구간·결과·「아직 안 끝난 검색」을 모듈
+ * 변수에 남겨 두고, 다시 올라올 때 그대로 잇는다. 끝난 결과는 fetch 콜백이 화면
+ * 유무와 상관없이 여기에 적는다 — 돌아오면 바로 있다.
+ */
+interface SearchMemory {
+  extra: string;
+  minutes: number;
+  result: Result | null;
+  ran: { words: string; minutes: number } | null;
+  /** 아직 결과를 못 받은 검색의 검색어 — 남아 있으면 돌아왔을 때 이어받는다 */
+  pending: { words: string; minutes: number } | null;
+}
+const searchMemory = new Map<string, SearchMemory>();
+
 export function ChannelSearchPanel({ code, name }: { code?: string; name?: string }) {
-  const [minutes, setMinutes] = useState(720);
+  const memKey = code ?? "";
+  const saved = searchMemory.get(memKey);
+  const [minutes, setMinutes] = useState(saved?.minutes ?? 720);
   /** 사람이 더 넣은 말 (쉼표) */
-  const [extra, setExtra] = useState("");
-  const [result, setResult] = useState<Result | null>(null);
+  const [extra, setExtra] = useState(saved?.extra ?? "");
+  const [result, setResult] = useState<Result | null>(saved?.result ?? null);
   const [busy, setBusy] = useState(false);
   /*
    * AI 정리 — **원문을 대신하지 않는다.**
@@ -118,30 +138,64 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
    * 대신 무엇으로 찾을지가 바뀌면 「다시 찾기」라고 알려 준다 — 눌러야 하는 걸 모르면
    * 안 도는 게 고장으로 보인다.
    */
-  const [ran, setRan] = useState<{ words: string; minutes: number } | null>(null);
+  const [ran, setRan] = useState<{ words: string; minutes: number } | null>(saved?.ran ?? null);
   const wordKey = words.join(",");
   const stale = ran !== null && (ran.words !== wordKey || ran.minutes !== minutes);
+
+  /* 입력이 바뀔 때마다 모듈 기억을 갱신 — 탭을 떠나도 남는다 */
+  useEffect(() => {
+    const m = searchMemory.get(memKey) ?? { extra: "", minutes: 720, result: null, ran: null, pending: null };
+    searchMemory.set(memKey, { ...m, extra, minutes, result, ran });
+  }, [memKey, extra, minutes, result, ran]);
 
   /** 지금 어디까지 훑었나 — 검색이 도는 동안만 물어본다 */
   const [prog, setProg] = useState<{ done: number; total: number; name: string } | null>(null);
 
-  const run = () => {
-    if (words.length === 0 || busy) return;
+  /**
+   * 실제 조회 — 결과는 **모듈 기억에도** 적는다. 화면이 내려간 사이에 끝나도
+   * 결과가 살아 있고, 돌아오면 그대로 보인다.
+   */
+  const runFetch = (w: string, m: number) => {
     setBusy(true);
     setProg(null);
     setAi(null);
-    fetch(`/api/channels/search?q=${encodeURIComponent(wordKey)}&minutes=${minutes}`)
+    const mem = searchMemory.get(memKey);
+    if (mem) searchMemory.set(memKey, { ...mem, pending: { words: w, minutes: m } });
+    fetch(`/api/channels/search?q=${encodeURIComponent(w)}&minutes=${m}`)
       .then((r) => r.json() as Promise<Result>)
       .then((j) => {
+        const cur = searchMemory.get(memKey);
+        if (cur) searchMemory.set(memKey, { ...cur, result: j, ran: { words: w, minutes: m }, pending: null });
         setResult(j);
-        setRan({ words: wordKey, minutes });
+        setRan({ words: w, minutes: m });
       })
-      .catch(() => setResult(null))
+      .catch(() => {
+        const cur = searchMemory.get(memKey);
+        if (cur) searchMemory.set(memKey, { ...cur, pending: null });
+        setResult(null);
+      })
       .finally(() => {
         setBusy(false);
         setProg(null);
       });
   };
+
+  const run = () => {
+    if (words.length === 0 || busy) return;
+    runFetch(wordKey, minutes);
+  };
+
+  /*
+   * 다시 올라왔을 때 **하다 만 검색을 잇는다.**
+   * pending 이 남아 있으면 그 검색어로 다시 부른다 — 서버가 아직 훑는 중이면
+   * 같은 inflight 에 붙고, 이미 끝났으면 3분 캐시라 그 자리에서 결과가 온다.
+   * 어느 쪽이든 진행바(busy)와 결과가 자연스럽게 이어진다.
+   */
+  useEffect(() => {
+    const pend = searchMemory.get(memKey)?.pending;
+    if (pend) runFetch(pend.words, pend.minutes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memKey]);
 
   useEffect(() => {
     if (!busy) return;

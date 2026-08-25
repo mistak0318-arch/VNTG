@@ -4,7 +4,7 @@ import { api, normalizeStockCode, pickList, type RawRecord, type StockSearchResu
 import { ChartPanel } from "../components/ChartPanel";
 import { IntradayFlow, ProgramFlowBars } from "../components/IntradayPanels";
 import { InvestorTrendTable } from "../components/InvestorTrendTable";
-import { FinancePanel } from "../components/FinancePanel";
+import { CompanyPanel } from "../components/CompanyPanel";
 import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
 import { NewsDisclosurePanel } from "../components/NewsDisclosurePanel";
 import { OpinionPanel } from "../components/OpinionPanel";
@@ -74,7 +74,8 @@ const TABS: { key: AnalysisTab; label: string }[] = [
   { key: "opinion", label: "목표주가" },
   { key: "supply", label: "외국인·공매도·대차" },
   { key: "feed", label: "뉴스·공시" },
-  { key: "finance", label: "재무" },
+  /* 상세 시트와 같은 통합 화면 — 한 줄 진단 → 핵심 칩 → 추정·분기·연간 */
+  { key: "finance", label: "기업·재무" },
   { key: "notes", label: "메모" },
 ];
 
@@ -368,7 +369,7 @@ export function StockAnalysisPage({
             {tab === "opinion" && <OpinionPanel code={stock.code} />}
             {tab === "supply" && <SupplyDetailPanel code={stock.code} />}
             {tab === "feed" && <NewsDisclosurePanel code={stock.code} name={stock.name} />}
-            {tab === "finance" && <FinancePanel code={stock.code} />}
+            {tab === "finance" && <CompanyPanel code={stock.code} info={info} />}
             {tab === "notes" && (
               <StockNotes
                 code={stock.code}

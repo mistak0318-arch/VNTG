@@ -27,6 +27,88 @@ function growth(cur: number | null, prev: number | null): number | null {
 
 type Metric = "revenue" | "operatingProfit" | "netIncome";
 
+/**
+ * 한 줄 진단 (2026-08-25) — **표를 읽기 전에 결론부터.**
+ *
+ * 「영업이익이 좋아지고 있다, 전년 동기 대비 +34%」 — 이 한 문장이 아래 표
+ * 전체의 요약이다. 재료는 **최근 분기**가 먼저다(연간은 8월에도 작년 숫자라
+ * 「지금 벌고 있나」에 답을 못 한다). 분기가 없으면 연간으로, 그마저 없으면
+ * 아무 말도 안 한다 — 없는 판단을 지어내지 않는다.
+ *
+ * YoY 로 잰다 — 반도체·조선처럼 계절 타는 업종은 QoQ 가 매년 같은 자리에서
+ * 꺾여 보인다. YoY 가 없을 때만 QoQ 로 말하되 그렇다고 적는다.
+ */
+function verdictOf(
+  quarters: QuarterRow[],
+  periods: FinancialPeriod[],
+): { tone: "up" | "down" | "flat" | "loss"; head: string; sub: string } | null {
+  /* 894,924억은 못 읽는다 — 조로 끊는다 (엔비디아를 억원으로 적지 않는 것과 같은 규칙) */
+  const eokFmt = (v: number) =>
+    Math.abs(v) >= 10_000 ? `${(v / 10_000).toFixed(1)}조` : `${fmtNum(Math.round(v))}억`;
+  const qs = quarters.filter((q) => q.operatingProfit !== null);
+  if (qs.length > 0) {
+    const q = qs.reduce((a, b) => (a.period > b.period ? a : b));
+    const op = q.operatingProfit as number;
+    const amt = eokFmt(op);
+    if (op < 0) {
+      return {
+        tone: "loss",
+        head: `영업이익이 적자다 — ${q.label} ${amt}`,
+        sub:
+          q.qoq !== null && q.qoq > 0
+            ? "직전 분기보다 적자 폭은 줄었다"
+            : "최근 분기 기준 · 한국투자증권",
+      };
+    }
+    if (q.yoy !== null) {
+      const y = `${q.yoy > 0 ? "+" : ""}${q.yoy.toFixed(0)}%`;
+      const qq = q.qoq === null ? "" : ` · 직전 분기 대비 ${q.qoq > 0 ? "+" : ""}${q.qoq.toFixed(0)}%`;
+      if (q.yoy >= 15)
+        return { tone: "up", head: `영업이익이 좋아지고 있다 — ${q.label} ${amt}, 전년 동기 대비 ${y}`, sub: `분기 기준${qq}` };
+      if (q.yoy <= -15)
+        return { tone: "down", head: `영업이익이 꺾이고 있다 — ${q.label} ${amt}, 전년 동기 대비 ${y}`, sub: `분기 기준${qq}` };
+      return { tone: "flat", head: `영업이익이 옆걸음이다 — ${q.label} ${amt}, 전년 동기 대비 ${y}`, sub: `분기 기준${qq}` };
+    }
+    if (q.qoq !== null) {
+      const s = `${q.qoq > 0 ? "+" : ""}${q.qoq.toFixed(0)}%`;
+      return {
+        tone: q.qoq >= 15 ? "up" : q.qoq <= -15 ? "down" : "flat",
+        head: `최근 분기(${q.label}) 영업이익 ${amt} — 직전 분기 대비 ${s}`,
+        sub: "전년 동기 비교가 없어 직전 분기와 견줬다 — 계절 타는 업종은 이 수치가 과장된다",
+      };
+    }
+  }
+  // 분기가 없으면 연간 — 낡은 값이라는 걸 밝힌다
+  if (periods.length >= 2) {
+    const cur = toEok(periods[periods.length - 1].operatingProfit);
+    const prev = toEok(periods[periods.length - 2].operatingProfit);
+    if (cur !== null && prev !== null && prev !== 0) {
+      const g = ((cur - prev) / Math.abs(prev)) * 100;
+      const y = `${g > 0 ? "+" : ""}${g.toFixed(0)}%`;
+      const label = periods[periods.length - 1].label;
+      if (cur < 0)
+        return { tone: "loss", head: `연간 영업이익이 적자다 — ${label} ${eokFmt(cur)}`, sub: "분기 데이터가 없어 연간(DART)으로 — 최신이 아닐 수 있다" };
+      return {
+        tone: g >= 15 ? "up" : g <= -15 ? "down" : "flat",
+        head: `${label} 영업이익 ${eokFmt(cur)} — 전년 대비 ${y}`,
+        sub: "분기 데이터가 없어 연간(DART)으로 — 최신이 아닐 수 있다",
+      };
+    }
+  }
+  return null;
+}
+
+function FinVerdict({ quarters, periods }: { quarters: QuarterRow[]; periods: FinancialPeriod[] }) {
+  const v = verdictOf(quarters, periods);
+  if (!v) return null;
+  return (
+    <div className={`fin-verdict ${v.tone}`}>
+      <b className="fin-verdict-head">{v.head}</b>
+      <span className="fin-verdict-sub">{v.sub}</span>
+    </div>
+  );
+}
+
 const METRICS: { key: Metric; label: string; color: string }[] = [
   { key: "revenue", label: "매출액", color: "#4c8dff" },
   { key: "operatingProfit", label: "영업이익", color: "#f5c542" },
@@ -80,7 +162,14 @@ function BarChart({ periods, metric }: { periods: FinancialPeriod[]; metric: Met
   );
 }
 
-export function FinancePanel({ code }: { code: string }) {
+export function FinancePanel({
+  code,
+  afterVerdict,
+}: {
+  code: string;
+  /** 진단 한 줄 바로 아래 끼울 것 — 기업·재무 통합 화면이 핵심 지표 칩을 넣는다 */
+  afterVerdict?: React.ReactNode;
+}) {
   const [data, setData] = useState<FinanceResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +212,8 @@ export function FinancePanel({ code }: { code: string }) {
   if (periods.length === 0) {
     return (
       <div>
+        <FinVerdict quarters={quarters} periods={periods} />
+        {afterVerdict}
         <EstimateTable est={data.estimate} />
         <QuarterTable quarters={quarters} />
       </div>
@@ -134,6 +225,9 @@ export function FinancePanel({ code }: { code: string }) {
 
   return (
     <div>
+      {/* 결론부터 — 표는 그 근거다 */}
+      <FinVerdict quarters={quarters} periods={periods} />
+      {afterVerdict}
       {/*
         분기를 **연간보다 먼저** 둔다. DART 사업보고서는 8월에도 마지막 줄이 작년이라
         "지금 벌고 있나"에 답을 못 한다. 판단에 쓰이는 건 최근 분기다.

@@ -3,8 +3,8 @@ import { api, pick, pickList, type RawRecord } from "../api";
 import { ChartPanel } from "./ChartPanel";
 import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
 import { IntradayFlow } from "./IntradayPanels";
-import { CompanySnapshot, type PeriodReturns } from "./CompanySnapshot";
-import { FinancePanel } from "./FinancePanel";
+import { CompanyPanel } from "./CompanyPanel";
+import { type PeriodReturns } from "./CompanySnapshot";
 import { InvestorTrendTable } from "./InvestorTrendTable";
 import { NewsDisclosurePanel } from "./NewsDisclosurePanel";
 import { IntradayLevelsBar } from "./IntradayLevelsBar";
@@ -50,7 +50,7 @@ const CUR_PRICE_KEYS = ["cur_prc"];
 const INVESTOR_LIST_KEYS = ["stk_invsr_orgn_chart"];
 
 /** 종목 상세 상단 가로 탭. 기능이 늘어나면 여기에 항목을 추가한다. */
-type DetailTab = "chartOnly" | "summary" | "opinion" | "notes" | "sector" | "finance" | "chart" | "investor" | "supply" | "feed" | "raw" | "orderbook" | "broker" | "program";
+type DetailTab = "chartOnly" | "finance" | "opinion" | "notes" | "sector" | "chart" | "investor" | "supply" | "feed" | "raw" | "orderbook" | "broker" | "program";
 
 /**
  * 탭 순서는 "실제 매매에 바로 쓰는 것"이 앞이다.
@@ -76,8 +76,14 @@ const DETAIL_TABS: { key: DetailTab; label: string }[] = [
   { key: "notes", label: "메모" },
   { key: "sector", label: "업종·테마" },
   { key: "feed", label: "뉴스·공시" },
-  { key: "finance", label: "재무" },
-  { key: "summary", label: "기업분석" },
+  /*
+   * 기업분석 + 재무 → **기업·재무 한 탭** (2026-08-25).
+   * 같은 질문(이 회사 벌고 있나)에 탭 두 개를 들락거리게 했었다.
+   * 위에서 아래로 「한 줄 진단 → 핵심 칩 → 추정·분기·연간 → 접힌 전체 지표」.
+   * 키는 예전 「재무」의 finance 를 그대로 쓴다 — 저장된 탭 순서가 안 깨진다.
+   * 없어진 summary(기업분석) 키가 저장분에 남아 있어도 그냥 무시된다.
+   */
+  { key: "finance", label: "기업·재무" },
   { key: "raw", label: "원본 데이터" },
 ];
 
@@ -335,7 +341,7 @@ export function StockDetail({
             {detailTab === "broker" && <BrokerFlowPanel code={code} />}
             {detailTab === "program" && <ProgramFlowPanel code={code} />}
 
-            {detailTab === "summary" && <CompanySnapshot info={info} returns={returns} />}
+            {detailTab === "finance" && <CompanyPanel code={code} info={info} returns={returns} />}
 
             {detailTab === "opinion" && <OpinionPanel code={code} />}
 
@@ -349,7 +355,6 @@ export function StockDetail({
 
             {detailTab === "sector" && <SectorMoodPanel code={code} onSelectStock={onSelectStock} />}
 
-            {detailTab === "finance" && <FinancePanel code={code} />}
 
             {detailTab === "chartOnly" && (
               <ChartPanel code={code} name={name} viewId="detail.chartOnly" height={520} />

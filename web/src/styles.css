@@ -2291,10 +2291,16 @@ body {
 .col-grip {
   position: absolute; top: 0; right: 0; width: 8px; height: 100%;
   cursor: col-resize; opacity: 0; touch-action: none;
+  /* 이웃 칸 글자보다 위 — 겹치는 자리에서 손잡이가 눌려야 한다 */
+  z-index: 3;
 }
 .data-table th:hover .col-grip { opacity: 1; }
 @media (pointer: coarse) {
-  .col-grip { opacity: 0.5; width: 16px; }
+  /*
+   * 폰 손가락은 16px 를 못 짚는다 — 22px 로 넓히고 경계선 **양쪽에 걸치게**
+   * 오른쪽으로 6px 내민다. 경계를 노린 손끝은 절반쯤 다음 칸에 닿는다.
+   */
+  .col-grip { opacity: 0.5; width: 22px; right: -6px; }
 }
 .col-grip::after {
   content: ""; position: absolute; top: 15%; right: 3px; width: 2px; height: 70%;
@@ -3920,6 +3926,42 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .jn-saved { font-size: 0.8rem; color: var(--green); }
 /* 저장 안 된 편집 — 노랑. 이 점이 보이는 동안 날짜를 바꾸면 먼저 저장된다 */
 .jn-dirty { font-size: 0.8rem; color: #f5c542; }
+
+/*
+  기업·재무 통합 — 한 줄 진단과 핵심 지표 칩.
+  진단은 색 왼줄로 방향이 먼저 보인다: 좋아짐 빨강 · 꺾임 파랑 · 적자 짙은 파랑 · 옆걸음 회색
+*/
+.fin-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.7rem;
+  margin-bottom: 0.6rem;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: var(--panel);
+}
+.fin-verdict.up { border-left-color: var(--red); }
+.fin-verdict.down { border-left-color: var(--blue); }
+.fin-verdict.loss { border-left-color: var(--blue); }
+.fin-verdict.flat { border-left-color: var(--muted); }
+.fin-verdict-head { font-size: 0.95rem; }
+.fin-verdict.up .fin-verdict-head { color: var(--red); }
+.fin-verdict.down .fin-verdict-head,
+.fin-verdict.loss .fin-verdict-head { color: var(--blue); }
+.fin-verdict-sub { font-size: 0.75rem; color: var(--muted); }
+
+.co-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  margin-bottom: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+.co-chip { display: inline-flex; align-items: baseline; gap: 0.3rem; }
+.co-chip em { font-style: normal; font-size: 0.72rem; color: var(--muted); }
+.co-chip b { font-size: 0.88rem; }
 
 /* 리포트 한눈 스트립 — 신문 1면 제목 자리. 방향·수급·환율 다섯 칸 */
 .rp-glance {

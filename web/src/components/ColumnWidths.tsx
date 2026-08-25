@@ -115,6 +115,7 @@ export function useColumnWidths(scope: string): ColumnWidthsApi {
         drag.current = null;
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
         document.body.classList.remove("col-resizing");
         if (!d) return;
         // 마지막 값만 올린다
@@ -126,6 +127,13 @@ export function useColumnWidths(scope: string): ColumnWidthsApi {
 
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
+      /*
+       * ⚠️ **cancel 도 up 이다** (2026-08-25 — 폰 드래그 후속).
+       * 폰에서 브라우저가 제스처를 스크롤로 가져가기로 하면 pointerup 대신
+       * **pointercancel** 이 온다. 안 받으면 리스너가 걸린 채 남고, 그때까지
+       * 끌어 둔 폭도 저장이 안 된다 — 「끌었는데 안 먹었다」의 한 갈래다.
+       */
+      window.addEventListener("pointercancel", up);
       /* 끄는 동안 글자가 선택되면 표가 파랗게 물든다 */
       document.body.classList.add("col-resizing");
     },
@@ -168,8 +176,28 @@ export function useColumnWidths(scope: string): ColumnWidthsApi {
  * 두 번 누르면 그 칸만 원래대로 돌아간다(한 칸만 잘못 끌었을 때 전부 되돌릴 이유는 없다).
  */
 export function ColumnGrip({ cw, k }: { cw: ColumnWidthsApi; k: string }) {
+  /*
+   * ⚠️ **스크롤 차단은 네이티브 non-passive 로 걸어야 한다** (2026-08-25 — 폰 후속).
+   *
+   * 「PC 는 되는데 폰은 아무리 끌어도 안 된다」의 원인. CSS `touch-action: none` 을
+   * 믿고 있었는데, 표가 가로 스크롤 컨테이너 안이라 브라우저가 제스처를 스크롤로
+   * 가져가는 경우가 남았다. `touchstart` 에서 `preventDefault()` 를 부르는 게 확실한
+   * 차단인데 — **React 는 touch 리스너를 passive 로 붙인다.** passive 리스너의
+   * preventDefault 는 조용히 무시된다(콘솔 경고만 나고 스크롤은 그대로 시작된다).
+   * 그래서 React 를 거치지 않고 ref 로 직접, `{ passive: false }` 로 붙인다.
+   */
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const block = (e: TouchEvent) => e.preventDefault();
+    el.addEventListener("touchstart", block, { passive: false });
+    return () => el.removeEventListener("touchstart", block);
+  }, []);
+
   return (
     <span
+      ref={ref}
       className="col-grip"
       role="separator"
       aria-label="칸 너비 조절"
