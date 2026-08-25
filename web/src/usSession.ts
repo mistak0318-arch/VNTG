@@ -66,36 +66,82 @@ export interface SideQuote {
 }
 
 /**
- * 지금이 정규장 **앞**인가 뒤인가 — 시간외 값에 붙일 이름을 정한다.
+ * 지금 도는 세션.
  *
- * ⚠️ 시간외 가격은 한 칸(`afterPrice`)으로 오는데 그걸 늘 「애프터장」이라 불렀다.
- * 한국 저녁 아홉 시(미 동부 오전 여덟 시)는 **프리장**이다 — 그 시각에 「애프터장」이
- * 뜨면 어제 장이 아직 안 끝난 줄 알게 된다. 실제로 스물한 시 이십삼 분 화면에
- * 애프터장이라 적혀 있었다.
+ * ## ⚠️ 「값을 보고 이름을 붙이던」 것을 뒤집었다 (2026-08-25)
  *
- *   04:00~09:30 ET  프리장
- *   09:30~16:00 ET  정규장 (여기선 괄호를 안 쓴다)
- *   16:00~20:00 ET  애프터장
- *   20:00~04:00 ET  주간거래 — 한국 낮에 도는 오버나이트 세션
+ * 예전 코드는 **두 갈래**였다 — `mins < 09:30 ? "프리장" : "애프터장"`.
+ * 그러면 **00:00~04:00 ET 가 「프리장」으로 떨어진다.** 그 시각은 한국 오후 1시~5시,
+ * **주간거래** 시간이다. 프리장은 04:00 ET 부터다.
+ *
+ * 게다가 `sideQuote` 가 `afterPrice` 를 늘 먼저 봤다. 그래서 한국 낮에 **어제
+ * 애프터장의 잔값**이 「프리장」이라는 이름표를 달고 떴다 — 값도 이름도 둘 다 틀린
+ * 것이다. 세션은 **시계가 정하는 것**이지 어느 칸에 값이 들어 있느냐가 정할 일이 아니다.
+ *
+ * 그래서 **시각으로 세션을 먼저 정하고, 그 세션의 값을 고른다.**
+ *
+ *   04:00~09:30 ET  프리장      (한국 17:00~22:30)
+ *   09:30~16:00 ET  정규장      (한국 22:30~05:00) — 괄호를 안 쓴다
+ *   16:00~20:00 ET  애프터장    (한국 05:00~09:00)
+ *   20:00~04:00 ET  주간거래    (한국 09:00~17:00) — 오버나이트 세션
+ *
+ * ⚠️ 한투 REST 는 **어느 세션인지 말해 주지 않는다.** 「애프터·프리마켓·세션」으로
+ * 100개 필드를 훑어 0건이었다(장구분은 키움 실시간 `FE` 의 `290` 에만 있다).
+ * 그래서 시계로 셀 수밖에 없고, **그 계산이 맞아야 한다.**
  */
-function afterHoursName(now = new Date()): string {
-  const { mins } = etNow(now);
-  return mins < 9 * 60 + 30 ? "프리장" : "애프터장";
+type UsSession = "pre" | "regular" | "after" | "day";
+
+function sessionAt(now = new Date()): UsSession {
+  const { day, mins } = etNow(now);
+  // 주말엔 어느 세션도 안 돈다. 화면에는 「직전」 값이 남으므로 주간거래 자리로 본다
+  if (day === 0 || day === 6) return "day";
+  if (mins >= 4 * 60 && mins < 9 * 60 + 30) return "pre";
+  if (mins >= 9 * 60 + 30 && mins < 16 * 60) return "regular";
+  if (mins >= 16 * 60 && mins < 20 * 60) return "after";
+  return "day";
 }
 
 export function sideQuote(row: SessionQuote, now = new Date()): SideQuote | null {
-  // 정규장이 열려 있으면 괄호를 띄우지 않는다 — 가격이 두 개면 어느 쪽이 지금 값인지 헷갈린다
-  if (usRegularOpen(now)) return null;
+  const session = sessionAt(now);
 
-  if (row.afterPrice !== null) {
-    return { label: afterHoursName(now), price: row.afterPrice, changeRate: row.afterChangeRate };
-  }
+  // 정규장이 열려 있으면 괄호를 띄우지 않는다 — 가격이 두 개면 어느 쪽이 지금 값인지 헷갈린다
+  if (session === "regular") return null;
+
   /*
    * 주간거래는 **거래가 실제로 있을 때만.**
    * 거래량 0 은 아직 아무도 안 샀다는 뜻이라 가격이 있어도 정규장 종가 그대로다.
    */
-  if (row.dayPrice !== null && row.dayVolume) {
-    return { label: "주간거래", price: row.dayPrice, changeRate: row.dayChangeRate };
+  const dayOk = row.dayPrice !== null && Boolean(row.dayVolume);
+
+  if (session === "day") {
+    if (dayOk) {
+      return { label: "주간거래", price: row.dayPrice as number, changeRate: row.dayChangeRate };
+    }
+    /*
+     * 주간거래가 아직 안 돌았다. 이때 `afterPrice` 에 남아 있는 건 **직전 애프터장의
+     * 마지막 값**이다 — 지금 움직이는 값이 아니다. 숨기지 말고 **그렇다고 적는다.**
+     */
+    if (row.afterPrice !== null) {
+      return {
+        label: "직전 애프터장",
+        price: row.afterPrice,
+        changeRate: row.afterChangeRate,
+      };
+    }
+    return null;
+  }
+
+  // 프리장·애프터장 — 시간외 값은 둘 다 같은 칸(`afterPrice`)으로 온다
+  if (row.afterPrice !== null) {
+    return {
+      label: session === "pre" ? "프리장" : "애프터장",
+      price: row.afterPrice,
+      changeRate: row.afterChangeRate,
+    };
+  }
+  // 그 칸이 비었는데 주간거래 값이 살아 있으면 그거라도 (이름은 정확히)
+  if (dayOk) {
+    return { label: "주간거래", price: row.dayPrice as number, changeRate: row.dayChangeRate };
   }
   return null;
 }

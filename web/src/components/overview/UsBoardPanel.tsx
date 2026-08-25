@@ -13,7 +13,7 @@ import {
 import { useSection } from "../../useSection";
 import { YahooChartSheet, type ChartTarget } from "./YahooChartSheet";
 import { UsSpark } from "./UsSpark";
-import { UsWatchTable } from "../UsWatchTable";
+import { UsWatchTable, sideNameOf } from "../UsWatchTable";
 import { tileHeat, useAppearance } from "../../useAppearance";
 import { useWatchGroupTiles } from "../../useWatchGroupTiles";
 import { ConstituentSheet, type ConstituentTarget } from "./ConstituentSheet";
@@ -645,12 +645,18 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
           />
         )}
 
+        {/*
+          ⚠️ 여기에 「한국 저녁이면 **프리장**, 새벽 마감 뒤엔 애프터장, 한국 낮엔 주간거래」
+          라고 세 경우를 나열해 놨었다. 조건을 설명한 문장인데 **첫 낱말이 굵어서**
+          「지금 프리장」으로 읽혔다 — 실제로 애프터장 시간에 프리장이 뜬다는 말이 나왔다.
+          지금 도는 세션 하나만 이름으로 적고, 나머지는 굵게 쓰지 않는다.
+        */}
         <div className="table-note">
           <b>관심종목(해외)</b> 와 같은 목록입니다 — 여기서 넣고 빼면 거기서도 바뀝니다.
           종목을 누르면 <b>상세</b>가 열립니다.
-          등락률은 <b>전일 종가 대비</b>고, 괄호는 <b>지금 도는 시간외</b>입니다 —
-          한국 저녁이면 <b>프리장</b>, 새벽 마감 뒤엔 <b>애프터장</b>, 한국 낮엔 <b>주간거래</b>.
-          정규장 중에는 사라집니다(그때는 지금 값이 곧 정규장입니다).
+          등락률은 <b>전일 종가 대비</b>고, 괄호는 지금 도는{" "}
+          <b>{sideNameOf(current?.stocks ?? [])}</b> 입니다.
+          정규장 중에는 괄호가 사라집니다(그때는 지금 값이 곧 정규장입니다).
         </div>
       </div>
     </section>
