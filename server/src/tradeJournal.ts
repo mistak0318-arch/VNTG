@@ -419,6 +419,90 @@ export interface JournalStats {
   lessons: { date: string; lesson: string }[];
 }
 
+/**
+ * **아직 안 판 자리** — 손절 감시가 볼 대상.
+ *
+ * 노트의 매수·매도를 종목별로 선입선출(FIFO)로 맞추고 **남은 로트**를 돌려준다.
+ * 「지금 들고 있는 것」을 따로 적는 자리를 만들지 않은 이유는, **적는 자리가 둘이면
+ * 반드시 갈라지기 때문**이다. 노트에 사고판 것만 정직하게 적으면 보유는 계산된다.
+ */
+export interface OpenPosition {
+  code: string;
+  name: string;
+  /** 산 날 */
+  date: string;
+  /** 평균 진입가 — 로트가 여럿이면 수량 가중 */
+  price: number;
+  qty: number;
+  /** 적어 둔 손절선. 안 적었으면 `null` — 그 자리는 감시할 수가 없다 */
+  stop: number | null;
+  target: number | null;
+}
+
+export async function openPositions(): Promise<OpenPosition[]> {
+  const rows = await readAll();
+  interface Lot {
+    date: string;
+    price: number;
+    qty: number;
+    stop: number | null;
+    target: number | null;
+  }
+  const lots = new Map<string, { name: string; arr: Lot[] }>();
+
+  for (const r of [...rows].sort((a, b) => a.date.localeCompare(b.date))) {
+    for (const t of r.trades ?? []) {
+      const key = t.code || t.name;
+      if (!key || t.price <= 0 || t.qty <= 0) continue;
+      const slot = lots.get(key) ?? { name: t.name || key, arr: [] };
+      if (t.name) slot.name = t.name;
+      if (t.kind === "buy") {
+        slot.arr.push({
+          date: r.date,
+          price: t.price,
+          qty: t.qty,
+          // 손절선이 진입가보다 위면 적다 만 것이다 — 감시 대상으로 삼으면 즉시 울린다
+          stop: typeof t.stop === "number" && t.stop > 0 && t.stop < t.price ? t.stop : null,
+          target: typeof t.target === "number" && t.target > t.price ? t.target : null,
+        });
+      } else {
+        let left = t.qty;
+        while (left > 0 && slot.arr.length > 0) {
+          const lot = slot.arr[0];
+          const take = Math.min(left, lot.qty);
+          lot.qty -= take;
+          left -= take;
+          if (lot.qty <= 0) slot.arr.shift();
+        }
+      }
+      lots.set(key, slot);
+    }
+  }
+
+  const out: OpenPosition[] = [];
+  for (const [code, { name, arr }] of lots) {
+    if (arr.length === 0) continue;
+    const qty = arr.reduce((a, l) => a + l.qty, 0);
+    if (qty <= 0) continue;
+    /*
+     * 손절선이 로트마다 다를 수 있다. 그때는 **제일 높은 것**을 쓴다 —
+     * 가장 먼저 닿는 선이고, 「어느 하나라도 손절 조건이면 알린다」가 맞는 쪽이다.
+     */
+    const stops = arr.map((l) => l.stop).filter((x): x is number => x !== null);
+    const targets = arr.map((l) => l.target).filter((x): x is number => x !== null);
+    out.push({
+      code,
+      name,
+      date: arr[0].date,
+      price: arr.reduce((a, l) => a + l.price * l.qty, 0) / qty,
+      qty,
+      stop: stops.length > 0 ? Math.max(...stops) : null,
+      target: targets.length > 0 ? Math.min(...targets) : null,
+    });
+  }
+  return out;
+}
+
 /** 무엇으로 묶든 성적은 같은 모양으로 낸다 */
 export interface EdgeRow {
   key: string;

@@ -1,5 +1,6 @@
 import { formatAlerts, getAlertConfig, scanAlerts, type FiredAlert } from "./alertRules.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { pruneStopWatch, runStopWatch } from "./stopWatch.js";
 import { sendTelegram } from "./telegram.js";
 import { listWatchlist } from "./watchlist.js";
 
@@ -52,8 +53,29 @@ export async function runAlertScan(
 }
 
 async function tick(client: KiwoomClient): Promise<void> {
-  if (scanning) return;
   if (!isMarketHours()) return;
+
+  /*
+   * **손절 감시는 시그널 간격을 안 따른다.**
+   *
+   * 다른 시그널은 「봐라」는 말이라 10분 뒤에 봐도 손해가 안 난다. 그런데 손절선은
+   * 내가 미리 정해 둔 규칙이고, 깨진 걸 10분 뒤에 알면 그만큼 더 잃는다.
+   * 조회를 안 쓰고 실시간·스냅샷에 있는 값만 보므로 1분마다 돌려도 공짜다.
+   *
+   * `scanning` 잠금 **밖**에 둔다 — 시그널 검사가 오래 걸리는 동안 손절 감시가
+   * 통째로 쉬면 안 된다.
+   */
+  pruneStopWatch();
+  try {
+    const stop = await runStopWatch(client);
+    if (stop.breaks.length > 0) {
+      console.log(`[alert] 손절선 ${stop.breaks.length}건 — ${stop.breaks.map((b) => b.name).join(", ")}`);
+    }
+  } catch (err) {
+    console.error("[alert] 손절 감시 실패:", err instanceof Error ? err.message : err);
+  }
+
+  if (scanning) return;
 
   const cfg = await getAlertConfig();
   if (!cfg.enabled) return;
@@ -77,5 +99,5 @@ async function tick(client: KiwoomClient): Promise<void> {
 export function startAlertScheduler(client: KiwoomClient): void {
   if (timer) return;
   timer = setInterval(() => void tick(client), TICK_MS);
-  console.log("[alert] 관심종목 시그널 스케줄러 시작 (장중 09:00~15:30)");
+  console.log("[alert] 관심종목 시그널 · 손절 감시 스케줄러 시작 (장중 09:00~15:30)");
 }

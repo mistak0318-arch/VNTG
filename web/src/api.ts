@@ -302,6 +302,27 @@ export const api = {
     postJson<{ alerts: FiredAlert[]; sent: boolean; error?: string; preview: string }>(
       `/api/alert/scan${send ? "?send=1" : ""}`,
     ),
+  /** 손절 감시 상태 — 보내지 않는다. 「감시 못 하는 자리가 몇인가」를 보는 창 */
+  stopWatch: () =>
+    getJson<{
+      /** 들고 있는 자리 수 (복기 노트의 매수·매도를 FIFO 로 맞춘 것) */
+      positions: number;
+      /** 그중 손절선을 적어 둬 감시되는 자리 */
+      watched: number;
+      /** 손절선이 없어 감시 못 하는 자리 */
+      unwatched: number;
+      breaks: {
+        code: string;
+        name: string;
+        price: number;
+        stop: number;
+        entry: number;
+        qty: number;
+        lossPct: number;
+        from: string;
+      }[];
+      preview: string;
+    }>("/api/alert/stop-watch"),
   trade: (force = false) =>
     getJson<{
       items: TradeSummary[];

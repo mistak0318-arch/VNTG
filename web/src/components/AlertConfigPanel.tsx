@@ -14,6 +14,78 @@ const UNITS: Record<string, string> = {
   volumeSurge: "배",
 };
 
+/**
+ * 손절 감시 상태.
+ *
+ * **끄고 켜는 칸이 없다.** 손절선은 내가 미리 정해 둔 규칙이고, 그게 깨진 걸
+ * 알리는 것을 꺼 두는 건 규칙을 지우는 것과 같다. 손절선을 안 적으면 자연히 안 울린다.
+ *
+ * 대신 여기서 보여줄 것은 **「감시 못 하는 자리가 몇인가」**다. 그게 실은
+ * 제일 중요한 숫자다 — 손절선을 안 적은 자리는 이 기능이 아무것도 못 해 준다.
+ */
+function StopWatchBlock() {
+  const [st, setSt] = useState<{
+    positions: number;
+    watched: number;
+    unwatched: number;
+    breaks: { code: string; name: string; price: number; stop: number; lossPct: number }[];
+  } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .stopWatch()
+      .then((r) => alive && setSt(r))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!st) return null;
+
+  return (
+    <div className="alert-master">
+      <span className="sig-config-name">
+        <span>
+          <b>🛑 손절 감시</b>
+          <small>
+            복기 노트에 적어 둔 손절선이 깨지면 시그널 방으로 보냅니다. 장중{" "}
+            <b>1분마다</b> 보고, 종목당 <b>하루 한 번</b>만 울립니다. 조회를 새로 부르지
+            않으므로 자주 봐도 부담이 없습니다.
+          </small>
+        </span>
+      </span>
+      <div className="sw-stat">
+        {st.positions === 0 ? (
+          <small>
+            아직 들고 있는 자리가 없습니다. 복기 노트에 <b>매수</b>를 적으면 여기 잡힙니다.
+          </small>
+        ) : (
+          <small>
+            들고 있는 자리 <b>{st.positions}</b> · 감시 중 <b className="positive">{st.watched}</b>
+            {st.unwatched > 0 && (
+              <>
+                {" · "}
+                <b className="negative">{st.unwatched}자리는 손절선이 없어 감시 못 합니다</b>
+              </>
+            )}
+            {st.breaks.length > 0 && (
+              <>
+                <br />
+                지금 깨진 자리 —{" "}
+                <b className="negative">
+                  {st.breaks.map((b) => `${b.name} ${b.lossPct.toFixed(1)}%`).join(", ")}
+                </b>
+              </>
+            )}
+          </small>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** 기준값이 의미 없는 규칙 (조건이 계산으로만 정해짐) */
 const NO_THRESHOLD = new Set(["flowTurn", "newHigh", "trendAlign"]);
 
@@ -104,6 +176,7 @@ export function AlertConfigPanel() {
 
   return (
     <div className="sig-config">
+      <StopWatchBlock />
       <div className="alert-master">
         <label className="sig-config-name">
           <input

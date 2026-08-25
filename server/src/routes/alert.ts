@@ -8,6 +8,7 @@ import {
 } from "../alertRules.js";
 import { runAlertScan } from "../alertScheduler.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
+import { formatStopBreaks, runStopWatch } from "../stopWatch.js";
 import { telegramChannelStatus } from "../telegram.js";
 
 export function createAlertRouter(client: KiwoomClient): Router {
@@ -45,6 +46,27 @@ export function createAlertRouter(client: KiwoomClient): Router {
       res.json({
         ...result,
         preview: result.alerts.length > 0 ? formatAlerts(result.alerts) : "",
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 손절 감시 지금 상태.
+   *
+   * **보내지 않는다.** 「내가 지금 몇 자리를 들고 있고 그중 몇 자리에 손절선을
+   * 적어 뒀나」를 보는 창이다. 손절선이 없는 자리가 몇인지가 실은 제일 중요한 숫자다 —
+   * 그만큼은 **감시할 수가 없다.**
+   */
+  router.get("/stop-watch", async (_req, res, next) => {
+    try {
+      const r = await runStopWatch(client, { send: false });
+      res.json({
+        ...r,
+        /* 손절선을 안 적어 감시 못 하는 자리 수 */
+        unwatched: r.positions - r.watched,
+        preview: r.breaks.length > 0 ? formatStopBreaks(r.breaks) : "",
       });
     } catch (err) {
       next(err);
