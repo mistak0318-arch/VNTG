@@ -222,6 +222,24 @@ export function ScreenerPage({
    * 예전과 같아서, 안 건드리면 부하도 예전 그대로다.
    */
   const [limit, setLimit] = useState<number>(() => Number(localStorage.getItem("vntg.screener.limit")) || 100);
+  /*
+   * 자유 입력 칸의 글자 — limit 과 따로 둔다 (2026-08-25, 신호등 찾기와 같은 문법).
+   * 글자마다 limit 을 바꾸면 타이핑마다 순위 TR 이 나간다. Enter·포커스아웃에서 확정.
+   */
+  const [limitText, setLimitText] = useState<string>(() => String(Number(localStorage.getItem("vntg.screener.limit")) || 100));
+  const commitLimit = (raw: number) => {
+    const n = Math.round(raw);
+    // 서버 클램프(20~500)와 같은 값 — 화면과 서버가 다른 숫자를 말하면 안 된다
+    const next = Number.isFinite(n) && n > 0 ? Math.min(500, Math.max(20, n)) : limit;
+    setLimitText(String(next));
+    if (next === limit) return;
+    setLimit(next);
+    try {
+      localStorage.setItem("vntg.screener.limit", String(next));
+    } catch {
+      /* 저장 못 해도 이번 세션에는 바뀐다 */
+    }
+  };
   const [pageSize, setPageSize] = useState<number>(() => Number(localStorage.getItem("vntg.screener.pageSize")) || 100);
   const [page, setPage] = useState(0);
   /* 신호등은 **켤 때만** — 목록을 여는 것만으로 백 종목을 평가하면 안 된다 */
@@ -564,19 +582,32 @@ export function ScreenerPage({
             <button
               key={n}
               className={`filter-btn ${limit === n ? "active" : ""}`}
-              onClick={() => {
-                setLimit(n);
-                try {
-                  localStorage.setItem("vntg.screener.limit", String(n));
-                } catch {
-                  /* 저장 못 해도 이번 세션에는 바뀐다 */
-                }
-              }}
+              onClick={() => commitLimit(n)}
               title={n === 100 ? "예전과 같습니다" : `연속조회 ${Math.ceil(n / 100)}번 — 쪽으로 나눠 보므로 화면 부담은 같습니다`}
             >
               {n}
             </button>
           ))}
+          {/*
+            자유 입력 (신호등 찾기와 같은 문법) — 버튼 셋이 정답일 리 없다. 20~500.
+            ⚠️ 확정은 Enter·포커스아웃에서만 — 글자마다 확정하면 「3」을 치는 순간
+            조회가 나가고, 「30」에서 또 나간다. 순위 TR 을 타이핑 속도로 부르면 안 된다.
+          */}
+          <input
+            className="pt-input short"
+            type="number"
+            inputMode="numeric"
+            min={20}
+            max={500}
+            value={limitText}
+            onChange={(e) => setLimitText(e.target.value)}
+            onBlur={() => commitLimit(Number(limitText))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitLimit(Number(limitText));
+            }}
+            title="상위 몇 위까지 받을지 — 20~500, Enter 로 확정"
+          />
+          <span className="pt-n">위까지</span>
           {/* 필터는 접어 둔다 — 늘 펴 두면 표가 화면 밖으로 밀린다 */}
           <button
             className={`filter-btn ${on ? "active" : ""}`}
