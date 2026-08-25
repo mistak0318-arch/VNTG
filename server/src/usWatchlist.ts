@@ -520,8 +520,22 @@ async function buildGroups(force: boolean): Promise<UsWatchResult> {
     if (h && h.price !== null) {
       const rc = closes.get(sym);
       if (rc) {
-        // 한투가 준 값은 정규장이 아니라 시간외다 — 자리를 옮겨 따로 보여 준다
-        if (Math.abs(h.price - rc.price) > 1e-9) after.set(sym, { price: h.price, rate: h.changeRate });
+        /*
+         * 한투가 준 값은 정규장이 아니라 시간외다 — 자리를 옮겨 따로 보여 준다.
+         *
+         * ⚠️ 등락률은 **정규장 종가 대비로 다시 센다** (2026-08-26 — 「애프터에서
+         * 얼마 빠졌는지가 핵심인데 정규장이랑 합친 값이 보인다」).
+         * 한투 h.changeRate 는 **전일 종가 대비**라 정규장 등락과 애프터 등락이
+         * 섞인 값이다. 괄호는 「이 세션에서 얼마 움직였나」를 말해야 하므로
+         * 기준을 정규장 종가(rc.price)로 바꾼다. 프리장일 때도 rc 는 직전 정규장
+         * 종가라 같은 식이 맞다.
+         */
+        if (Math.abs(h.price - rc.price) > 1e-9) {
+          after.set(sym, {
+            price: h.price,
+            rate: rc.price > 0 ? (h.price / rc.price - 1) * 100 : null,
+          });
+        }
         quotes.set(sym, {
           price: rc.price,
           changeRate: rc.rate,

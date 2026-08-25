@@ -253,7 +253,10 @@ export function UsWatchTable({
                 <td className={`num tickable ${cls(shownRate)} ${tick?.(s.symbol) ?? ""}`}>
                   {pct(shownRate)}
                   {side && (
-                    <span className={`uw-day ${cls(side.changeRate)}`} title={side.label}>
+                    <span
+                      className={`uw-day ${cls(side.changeRate)}`}
+                      title={`${side.label}에서만 움직인 폭 — 정규장 종가 대비`}
+                    >
                       {" "}
                       ({pct(side.changeRate)})
                     </span>
