@@ -121,8 +121,19 @@ export function shouldRun(now = new Date()): boolean {
  * 관심종목이 먼저다(잘려 나가면 안 되는 쪽). 나머지를 코스피·코스닥 거래대금 상위로
  * 반씩 채운다. **200 은 적지만 0 보다는 훨씬 낫다** — 지금까지는 사실상 0 이었다.
  */
-const PER_MARKET = 100;
-const MAX_CODES = 200;
+const PER_MARKET = 95;
+/**
+ * 스케줄러가 채우는 몫.
+ *
+ * ⚠️ **200 을 꽉 채우면 안 된다.** 화면이 종목을 볼 때도 구독이 늘어나는데
+ * (`/series`·`/latest` 가 보고 있는 종목을 그 자리에서 건다), 정원이 이미 꽉 차 있으면
+ * 그 종목은 **영영 못 들어온다** — 거래상위에서 아무 종목이나 눌러 보는 게 이 앱을
+ * 쓰는 방식인데 그때마다 빈 화면이 된다.
+ *
+ * 그래서 190 만 쓰고 **열 자리는 화면 몫으로 비워 둔다.** 화면이 그 열 자리를 다 쓰면
+ * 오래 본 것부터 빠진다(`subscribeTransient`) — 스케줄러 몫은 안 밀린다.
+ */
+const MAX_CODES = 190;
 /** 순위를 몇 분마다 다시 볼지 — 거래대금 상위는 이보다 빨리 안 뒤집힌다 */
 const RANK_REFRESH_MS = 5 * 60 * 1000;
 
@@ -261,7 +272,8 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
        */
       if (!subscribed.has("__vi__")) {
         subscribed.add("__vi__");
-        rt.subscribe("1h", "005930");
+        /* VI 는 전체 종목이 오므로 종목 하나로 족하다. 정원을 먹지 않게 고정으로 둔다 */
+        rt.subscribeKeep("1h", "005930");
       }
 
       const codes = await targets(kiwoom);
@@ -269,13 +281,18 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
       for (const code of codes) {
         if (subscribed.has(code)) continue;
         subscribed.add(code);
-        rt.subscribe("0F", code);
-        rt.subscribe("0w", code);
+        /*
+          `subscribeKeep` — **밀려나면 안 되는 쪽**이다.
+          화면이 종목을 볼 때도 구독이 늘어나는데(`/series`·`/latest`), 그쪽이 상한에
+          닿으면 오래된 **화면 종목**부터 빠진다. 관심종목·순위는 하루 종일 필요하다.
+        */
+        rt.subscribeKeep("0F", code);
+        rt.subscribeKeep("0w", code);
         /*
           체결도 상시로 건다 — 복기하려면 「그때 얼마에 얼마나」가 있어야 한다.
           프레임은 체결마다 오지만 30초에 한 점만 남기므로 쌓이는 양은 나머지와 같다.
         */
-        rt.subscribe("0B", code);
+        rt.subscribeKeep("0B", code);
         added += 1;
       }
       if (added > 0) console.log(`실시간: ${added}종목 추가 (총 ${subscribed.size - 1})`);

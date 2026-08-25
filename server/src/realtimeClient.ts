@@ -254,7 +254,71 @@ export class RealtimeClient {
    *
    * 그래서 여기서는 **바로 안 보내고 모았다가** 짧은 틈을 두고 한 번에 보낸다.
    * 화면 여러 곳이 각자 종목을 걸어도 요청은 한 번으로 합쳐진다.
+   *
+   * ## ⚠️ 200종목 상한을 **여기서** 지킨다 (2026-08-25)
+   *
+   * 스케줄러가 200 을 딱 맞춰 걸어 놨는데, 화면이 종목을 볼 때마다 그 자리에서
+   * 구독을 더했다(`/series`·`/latest`). 그래서 종목 세 개만 눌러 봐도 203 이 되고
+   * **그때부터 REG 가 전부 거절**된다(105118). 실제로 그랬다 — 200 으로 낮춘 지
+   * 한 시간 만에 오류가 11건 쌓였다.
+   *
+   * 상한을 스케줄러 쪽에서만 지키면 안 된다. **구독이 들어오는 문이 둘**이기 때문이다.
+   * 그래서 문을 지키는 자리를 여기 하나로 둔다.
+   *
+   * 두 갈래로 나눈다:
+   *   **고정**(`keep`)  스케줄러가 건 것 — 관심종목·거래대금 상위. **안 뺀다**
+   *   **임시**         화면이 지금 보는 종목 — 상한에 닿으면 **오래된 것부터 뺀다**
+   *
+   * 화면이 보던 종목은 창을 닫으면 안 봐도 되지만 관심종목은 하루 종일 필요하다 —
+   * 밀려나면 안 되는 쪽이 정해져 있다.
    */
+  private static readonly MAX_ITEMS = 200;
+  /** 스케줄러가 건 종목 — 밀려나면 안 된다 */
+  private readonly keep = new Set<string>();
+  /** 화면이 건 종목 — 들어온 순서대로(오래된 것이 앞) */
+  private readonly transient: string[] = [];
+
+  /** 지금 걸려 있는 **종목** 수 (타입은 안 센다 — 상한이 종목 기준이다) */
+  private codeCount(): number {
+    const all = new Set<string>(this.keep);
+    for (const c of this.transient) all.add(c);
+    return all.size;
+  }
+
+  /**
+   * 스케줄러가 거는 자리 — **이건 안 밀려난다.**
+   * 부르는 쪽이 이미 200 안쪽으로 잘라서 준다.
+   */
+  subscribeKeep(type: string, item: string): void {
+    this.keep.add(item);
+    // 고정으로 올라왔으면 임시 목록에서는 뺀다 — 같은 종목을 두 번 셀 이유가 없다
+    const i = this.transient.indexOf(item);
+    if (i >= 0) this.transient.splice(i, 1);
+    this.subscribe(type, item);
+  }
+
+  /**
+   * 화면이 지금 보는 종목 — **상한에 닿으면 오래된 것을 빼고 넣는다.**
+   *
+   * 뺄 때 `REMOVE` 를 보내야 서버 쪽 정원도 같이 준다. 안 보내면 우리만 잊고
+   * 서버는 그대로 물고 있어서 상한이 안 풀린다.
+   */
+  subscribeTransient(type: string, item: string): void {
+    if (!this.keep.has(item) && !this.transient.includes(item)) {
+      while (this.codeCount() >= RealtimeClient.MAX_ITEMS && this.transient.length > 0) {
+        const old = this.transient.shift();
+        if (!old) break;
+        for (const t of [...this.subs.keys()]) {
+          if (this.subs.get(t)?.has(old)) this.unsubscribe(t, old);
+        }
+      }
+      /* 고정만으로 이미 꽉 찼으면 화면 종목은 포기한다 — 관심종목을 밀어낼 수는 없다 */
+      if (this.codeCount() >= RealtimeClient.MAX_ITEMS) return;
+      this.transient.push(item);
+    }
+    this.subscribe(type, item);
+  }
+
   subscribe(type: string, item: string): void {
     let set = this.subs.get(type);
     if (!set) {
