@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   api,
   fmtNum,
@@ -55,6 +55,12 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
   const [groups, setGroups] = useState<string[]>([DEFAULT_GROUP]);
   /** 그룹 편집을 펼친 행 — 한 번에 하나만 */
   const [editGroups, setEditGroups] = useState<string | null>(null);
+  /*
+   * 펼친 종목 (2026-08-25 UI 개편) — 스물세 칸을 옆으로 늘어놓던 표를
+   * **핵심 아홉 칸 + 행 펼침**으로 바꿨다. 수급 여섯 값·판정 여섯 개·편입 정보·
+   * 그룹·상태 편집은 ▼ 를 눌러야 나온다. PC 는 안 넓어도 되고 폰은 옆으로 안 민다.
+   */
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [activeGroup, setActiveGroup] = useState<string>(ALL);
   /** 그룹 정리 모드 — 평소엔 고르는 자리이고, 켤 때만 옮기고 이름을 바꾼다 */
   const [editGroupBar, setEditGroupBar] = useState(false);
@@ -574,37 +580,27 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       {visible.length > 0 && (
         <div className="data-table-wrap">
           <table className="data-table">
+            {/*
+              스물세 칸 → **아홉 칸** (2026-08-25 개편 — 「옆으로 너무 길어 PC 도
+              폰도 못 본다」). 수급 여섯 값은 부호 점 여섯 개로, 판정 여섯 개도
+              점으로 줄이고, 숫자·편집은 ▼ 펼침에 들어갔다. 어느 화면 폭에서든
+              옆으로 밀지 않고 다 보인다.
+            */}
             <thead>
               <tr>
                 <SortableTh columnKey="name" label="종목명" accessor={(r: TrackedStock) => r.name} sort={sort} className="sticky-col" />
-                <th>그룹</th>
-                <th title="이 종목과 나의 관계 — 그룹(성격)과 다른 축입니다">상태</th>
-                <SortableTh columnKey="addedAt" label="편입일" accessor={(r: TrackedStock) => r.addedAt} sort={sort} />
-                <SortableTh columnKey="addedPrice" label="편입가" accessor={(r: TrackedStock) => r.addedPrice} sort={sort} />
                 <SortableTh columnKey="price" label="현재가" accessor={(r: TrackedStock) => r.price} sort={sort} />
-                {/* 조건충족수를 수익률 앞에 — 열세 칸을 가로로 훑으며 세는 건 사람이 할 일이 아니다 */}
-                <SortableTh columnKey="pass" label="충족" accessor={(r: TrackedStock) => r.passCount} sort={sort} />
-                <SortableTh columnKey="returnRate" label="수익률" accessor={(r: TrackedStock) => r.returnRate ?? 0} sort={sort} />
                 <SortableTh columnKey="changeRate" label="당일" accessor={(r: TrackedStock) => r.changeRate} sort={sort} />
-                <SortableTh columnKey="foreign5" label="외인5" accessor={(r: TrackedStock) => r.foreign5} sort={sort} />
-                <SortableTh columnKey="foreign10" label="외인10" accessor={(r: TrackedStock) => r.foreign10} sort={sort} />
-                <SortableTh columnKey="foreign20" label="외인20" accessor={(r: TrackedStock) => r.foreign20} sort={sort} />
-                <SortableTh columnKey="inst5" label="기관5" accessor={(r: TrackedStock) => r.inst5} sort={sort} />
-                <SortableTh columnKey="inst20" label="기관20" accessor={(r: TrackedStock) => r.inst20} sort={sort} />
-                <SortableTh columnKey="inst60" label="기관60" accessor={(r: TrackedStock) => r.inst60} sort={sort} />
-                <SortableTh columnKey="trend" label="정배열" accessor={(r: TrackedStock) => (r.trendPass ? 1 : 0)} sort={sort} />
-                <th title="종가가 5일선·20일선 위에 있는가">캔들</th>
-                <th title="최근 3일 공매도 추세 — 줄어야 좋다">공매도</th>
-                <th title="최근 3일 대차잔고 추세 — 줄어야 좋다">대차</th>
-                <th title="최근 분기 영업이익 증가">영익</th>
-                <th title="속한 업종이 시장 대비 강한가">섹터</th>
+                <SortableTh columnKey="returnRate" label="수익률" accessor={(r: TrackedStock) => r.returnRate ?? 0} sort={sort} />
+                <SortableTh columnKey="pass" label="충족" accessor={(r: TrackedStock) => r.passCount} sort={sort} />
+                <th title="외인 5·10·20일 / 기관 5·20·60일 순매수 방향 — 빨강이 순매수. 값은 ▼ 를 펴면 나옵니다">수급</th>
+                <th title="정배열·캔들·공매도·대차·영익·섹터 — 초록이 좋은 쪽. 자세한 건 ▼">판정</th>
                 <SortableTh
                   columnKey="upside"
                   label="목표가"
                   accessor={(r: TrackedStock) => r.upside ?? -999}
                   sort={sort}
                 />
-                <th title="최근 60일 증권사 의견 변경 — 괄호는 커버 증권사 수">의견</th>
                 <th></th>
               </tr>
             </thead>
@@ -640,7 +636,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                     </td>
                   </tr>
                 ) : (
-                <tr key={r.code} className="clickable-row" onClick={() => onSelectStock(r.code, r.name)}>
+                <Fragment key={r.code}>
+                <tr className="clickable-row" onClick={() => onSelectStock(r.code, r.name)}>
                   <td className="sticky-col">
                     {arranging && (
                       <span className="mg-move" onClick={(e) => e.stopPropagation()}>
@@ -657,123 +654,142 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                       </span>
                     )}
                     {r.name}
+                    {/* 그룹·상태는 이름 아래 한 줄 — 칼럼 두 개가 통째로 줄었다 */}
+                    <span className="wl-sub">
+                      {(r.groups ?? [DEFAULT_GROUP]).join(" · ")}
+                      <i className={`wl-st st-${r.status ?? "watching"}`}>
+                        {statuses.find((s) => s.key === (r.status ?? "watching"))?.label}
+                      </i>
+                    </span>
                   </td>
-                  {/*
-                    드롭다운은 하나만 고를 수 있어서 다중 그룹을 못 담는다.
-                    칩을 눌러 넣고 뺀다 — 담긴 것만 진하게, 나머지는 흐리게.
-                  */}
-                  {/*
-                    담긴 그룹만 보여준다.
-                    처음엔 모든 그룹을 칩으로 깔고 켜고 끄게 했는데, 그룹이 일곱 개가 되니
-                    행마다 다섯 줄이 됐다 — 그룹은 계속 늘어나므로 이 방식은 무너진다.
-                    편집은 ✎ 를 눌렀을 때만 펼친다.
-                  */}
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div className="mg-cell">
-                      {(r.groups ?? [DEFAULT_GROUP]).map((g) => (
-                        <span className="mg-chip on" key={g}>
-                          {g}
-                        </span>
-                      ))}
-                      <button
-                        className="mg-edit"
-                        onClick={() => setEditGroups(editGroups === r.code ? null : r.code)}
-                        title="그룹 편집"
-                      >
-                        ✎
-                      </button>
-                    </div>
-                    {editGroups === r.code && (
-                      <div className="mg-picker">
-                        {groups.map((g) => {
-                          const on = (r.groups ?? [DEFAULT_GROUP]).includes(g);
-                          return (
-                            <button
-                              key={g}
-                              className={`mg-chip${on ? " on" : ""}`}
-                              onClick={() => void toggleGroup(r.code, g)}
-                            >
-                              {on ? "☑" : "☐"} {g}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </td>
-                  {/*
-                    상태 — **그룹과 다른 축**이다. 같은 종목이 「반도체」이면서 동시에
-                    「대기」일 수 있다. 그래서 그룹 칸 옆에 따로 둔다.
-                    네 개뿐이라 드롭박스보다 칩 네 개가 빠르다 — 한 번 눌러 바꾼다.
-                  */}
-                  <td>
-                    <div className="mg-cell wl-status">
-                      {statuses.map((s) => (
-                        <button
-                          key={s.key}
-                          className={`mg-chip st-${s.key}${(r.status ?? "watching") === s.key ? " on" : ""}`}
-                          title={s.hint}
-                          onClick={() => void setStatus(r.code, s.key)}
-                        >
-                          {s.label}
-                        </button>
-                      ))}
-                    </div>
-                  </td>
-                  <td>{fmtDate(r.addedAt)}</td>
-                  <td>{fmtNum(r.addedPrice)}</td>
                   <td>{fmtNum(r.price)}</td>
+                  <td className={signClass(r.changeRate)}>{fmtPct(r.changeRate)}</td>
+                  <td className={signClass(r.returnRate)}>{fmtPct(r.returnRate)}</td>
                   <td>
                     <span className={`wl-pass ${passClass(r)}`}>
                       {r.passCount}/{r.passTotal}
                     </span>
                   </td>
-                  <td className={signClass(r.returnRate)}>{fmtPct(r.returnRate)}</td>
-                  <td className={signClass(r.changeRate)}>{fmtPct(r.changeRate)}</td>
-                  <td className={signClass(r.foreign5)}>{fmtNum(r.foreign5)}</td>
-                  <td className={signClass(r.foreign10)}>{fmtNum(r.foreign10)}</td>
-                  <td className={signClass(r.foreign20)}>{fmtNum(r.foreign20)}</td>
-                  <td className={signClass(r.inst5)}>{fmtNum(r.inst5)}</td>
-                  <td className={signClass(r.inst20)}>{fmtNum(r.inst20)}</td>
-                  <td className={signClass(r.inst60)}>{fmtNum(r.inst60)}</td>
-                  <td>{mark(r.trendPass)}</td>
-                  {/* 5일선·20일선 위 여부를 한 칸에 — 둘 다 위면 "5·20" */}
-                  <td className="wl-candle">
-                    {r.above5 === null && r.above20 === null
-                      ? "-"
-                      : [r.above5 ? "5" : null, r.above20 ? "20" : null].filter(Boolean).join("·") || "↓"}
+                  {/* 수급 — 값 여섯을 부호 점 여섯으로. 값은 펼침에 있고, 점에 마우스를 올리면 보인다 */}
+                  <td className="wl-flow-cell" onClick={(e) => { e.stopPropagation(); setExpanded(expanded === r.code ? null : r.code); }}>
+                    <span className="wl-flow">
+                      <i>외</i>
+                      {([["5일", r.foreign5], ["10일", r.foreign10], ["20일", r.foreign20]] as const).map(([l, v]) => (
+                        <b key={l} className={v > 0 ? "up" : v < 0 ? "down" : "flat"} title={`외국인 ${l} ${fmtNum(v)}백만`} />
+                      ))}
+                      <i>기</i>
+                      {([["5일", r.inst5], ["20일", r.inst20], ["60일", r.inst60]] as const).map(([l, v]) => (
+                        <b key={l} className={v > 0 ? "up" : v < 0 ? "down" : "flat"} title={`기관 ${l} ${fmtNum(v)}백만`} />
+                      ))}
+                    </span>
                   </td>
-                  <td>{trendMark(r.shortTrend, true)}</td>
-                  <td>{trendMark(r.lendingTrend, true)}</td>
-                  <td>{mark(r.profitUp)}</td>
-                  <td>{mark(r.sectorStrong)}</td>
+                  {/* 판정 — 여섯 항목을 점으로. 초록 = 좋은 쪽 */}
+                  <td className="wl-flow-cell" onClick={(e) => { e.stopPropagation(); setExpanded(expanded === r.code ? null : r.code); }}>
+                    <span className="wl-judge">
+                      {([
+                        ["정", r.trendPass, "정배열"],
+                        ["캔", r.above5 === null && r.above20 === null ? null : Boolean(r.above5 || r.above20), "종가가 5·20일선 위인가"],
+                        ["공", r.shortTrend == null ? null : r.shortTrend < 0, "공매도 — 줄어야 좋다"],
+                        ["대", r.lendingTrend == null ? null : r.lendingTrend < 0, "대차잔고 — 줄어야 좋다"],
+                        ["영", r.profitUp, "최근 분기 영업이익 증가"],
+                        ["섹", r.sectorStrong, "업종이 시장 대비 강한가"],
+                      ] as const).map(([l, ok, hint]) => (
+                        <em key={l} className={ok === null || ok === undefined ? "na" : ok ? "ok" : "bad"} title={hint}>
+                          {l}
+                        </em>
+                      ))}
+                    </span>
+                  </td>
                   {/* 목표가는 금액이 아니라 남은 폭으로 — 금액은 종목마다 자릿수가 달라 못 견준다 */}
                   <td className={r.upside == null ? "" : r.upside > 0 ? "positive" : "negative"}>
                     {r.upside == null ? "-" : `${r.upside > 0 ? "+" : ""}${r.upside.toFixed(0)}%`}
                   </td>
-                  <td>
-                    {r.opinionMove == null ? (
-                      "-"
-                    ) : (
-                      <span className={r.opinionMove > 0 ? "positive" : r.opinionMove < 0 ? "negative" : ""}>
-                        {r.opinionMove > 0 ? "▲상향" : r.opinionMove < 0 ? "▼하향" : "유지"}
-                        {/* 한 곳뿐이면 컨센서스가 아니다 — 세어서 보여 준다 */}
-                        <span className="pt-n"> ({r.brokerCount ?? 0})</span>
-                      </span>
-                    )}
-                  </td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <button
-                      className="row-del-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        remove(r.code);
-                      }}
-                      title="관심종목에서 제거"
+                      className={`wl-more${expanded === r.code ? " on" : ""}`}
+                      onClick={() => setExpanded(expanded === r.code ? null : r.code)}
+                      title="수급 숫자·편입 정보·그룹·상태 편집"
                     >
-                      ✕
+                      {expanded === r.code ? "▲" : "▼"}
                     </button>
                   </td>
                 </tr>
+                {/*
+                  펼침 행 — 표에서 뺀 것들이 전부 여기 있다. 폭이 아니라 **아래**로
+                  펼치므로 폰에서도 안 밀린다. 그룹·상태 편집도 여기서 한다.
+                */}
+                {expanded === r.code && (
+                  <tr className="wl-expand">
+                    <td colSpan={9} onClick={(e) => e.stopPropagation()}>
+                      <div className="wl-ex">
+                        <div className="wl-ex-grid">
+                          <span><em>편입일</em><b>{fmtDate(r.addedAt)}</b></span>
+                          <span><em>편입가</em><b>{fmtNum(r.addedPrice)}</b></span>
+                          <span><em>외인 5/10/20일</em><b className="num">{fmtNum(r.foreign5)} / {fmtNum(r.foreign10)} / {fmtNum(r.foreign20)}</b></span>
+                          <span><em>기관 5/20/60일</em><b className="num">{fmtNum(r.inst5)} / {fmtNum(r.inst20)} / {fmtNum(r.inst60)}</b></span>
+                          <span>
+                            <em>캔들</em>
+                            <b>
+                              {r.above5 === null && r.above20 === null
+                                ? "-"
+                                : [r.above5 ? "5일선 위" : null, r.above20 ? "20일선 위" : null].filter(Boolean).join(" · ") || "둘 다 아래"}
+                            </b>
+                          </span>
+                          <span><em>공매도 / 대차</em><b>{trendMark(r.shortTrend, true)} / {trendMark(r.lendingTrend, true)}</b></span>
+                          <span>
+                            <em>증권사 의견</em>
+                            <b>
+                              {r.opinionMove == null
+                                ? "-"
+                                : `${r.opinionMove > 0 ? "▲상향" : r.opinionMove < 0 ? "▼하향" : "유지"} (${r.brokerCount ?? 0}곳)`}
+                            </b>
+                          </span>
+                        </div>
+                        <div className="wl-ex-edit">
+                          <div className="mg-cell wl-status">
+                            <em className="wl-ex-k">상태</em>
+                            {statuses.map((s) => (
+                              <button
+                                key={s.key}
+                                className={`mg-chip st-${s.key}${(r.status ?? "watching") === s.key ? " on" : ""}`}
+                                title={s.hint}
+                                onClick={() => void setStatus(r.code, s.key)}
+                              >
+                                {s.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="mg-cell">
+                            <em className="wl-ex-k">그룹</em>
+                            {groups.map((g) => {
+                              const on = (r.groups ?? [DEFAULT_GROUP]).includes(g);
+                              return (
+                                <button
+                                  key={g}
+                                  className={`mg-chip${on ? " on" : ""}`}
+                                  onClick={() => void toggleGroup(r.code, g)}
+                                >
+                                  {on ? "☑" : "☐"} {g}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <button
+                            className="row-del-btn"
+                            onClick={() => {
+                              setExpanded(null);
+                              remove(r.code);
+                            }}
+                            title="관심종목에서 제거"
+                          >
+                            ✕ 관심종목에서 빼기
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
                 ),
               )}
             </tbody>

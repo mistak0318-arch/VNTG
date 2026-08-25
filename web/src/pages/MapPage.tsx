@@ -27,8 +27,8 @@ import { useSection } from "../useSection";
 type Mode = "mine" | "watchAi" | "watchKiwoom" | "watchUs" | "theme" | "sector";
 
 const WATCH_MODES: { key: Mode; label: string; source: GroupSource }[] = [
-  { key: "watchAi", label: "관심종목 (AI_HTS)", source: "watchAi" },
-  { key: "watchKiwoom", label: "관심종목 (키움_HTS)", source: "watchKiwoom" },
+  { key: "watchAi", label: "관심종목 (VNTG)", source: "watchAi" },
+  { key: "watchKiwoom", label: "관심종목 (키움연동)", source: "watchKiwoom" },
   { key: "watchUs", label: "관심종목 (해외)", source: "watchUs" },
 ];
 

@@ -211,6 +211,12 @@ export function StockDetail({
       <div className="sheet" ref={sheetRef} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-header">
           <h2>
+            {/* 코스피/코스닥 — 같은 +5% 라도 판이 다르다. 서버가 전종목 캐시에서 붙여 준다 */}
+            {info && String(info._market ?? "") && (
+              <span className={`mkt-badge ${String(info._market).includes("코스닥") ? "kq" : "ks"}`}>
+                {String(info._market).includes("코스닥") ? "코스닥" : "코스피"}
+              </span>
+            )}
             {name} ({code})
           </h2>
           {/*

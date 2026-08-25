@@ -200,11 +200,20 @@ export function chartColors(theme: ThemeName) {
  * 엑셀에서는 색 대신 **명암**만 쓴다. 오름은 짙게, 내림은 옅게 — 조건부 서식의
  * 색조 스케일이 하는 그 일이다. 값은 타일에 숫자로 적혀 있으므로 방향은 안 잃는다.
  */
-export function tileHeat(rate: number | null, theme: ThemeName): React.CSSProperties {
+export function tileHeat(
+  rate: number | null,
+  theme: ThemeName,
+  /*
+   * 최대 강도가 되는 등락폭(%). 기본 5 — 개별 종목의 기준이다.
+   * ETF 는 ±2% 면 큰 날이라 5% 기준으로 칠하면 전부 흐릿해서 「어디가 셌나」가
+   * 안 보인다 — 미국 섹터 MAP 이 2 를 넘겨 쓴다.
+   */
+  max = 5,
+): React.CSSProperties {
   if (rate === null || !Number.isFinite(rate)) {
     return { background: theme === "excel" ? "#f2f2f2" : "rgba(139, 150, 165, .12)" };
   }
-  const capped = Math.min(Math.abs(rate), 5) / 5; // 5% 이상은 최대 강도
+  const capped = Math.min(Math.abs(rate), max) / max;
   const alpha = 0.12 + capped * 0.55;
   if (theme === "excel") {
     if (rate === 0) return { background: "#f2f2f2" };

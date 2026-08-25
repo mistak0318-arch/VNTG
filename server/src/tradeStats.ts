@@ -48,7 +48,8 @@ export interface TradeTarget {
 export const TRADE_TARGETS: TradeTarget[] = [
   {
     key: "ic",
-    themes: ["반도체_생산", "반도체_시스템반도체"],
+    /* 2026-08-25 — 키움 실제 테마 142개와 대조해 촘촘히 다시 잡았다 (전부 실존 이름) */
+    themes: ["반도체_생산", "반도체_시스템반도체", "반도체_설계(fabless)", "반도체_전공정소재", "반도체_후공정"],
     watch: "export",
     label: "반도체 (집적회로)",
     hs: "8542",
@@ -57,7 +58,8 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "semi_device",
-    themes: ["반도체_전공정소재", "반도체_시스템반도체"],
+    /* 8541 은 다이오드·트랜지스터에 LED·태양전지까지 든다 */
+    themes: ["반도체_설계(fabless)", "반도체_시스템반도체", "LED", "태양광_잉곳/웨이퍼/셀/모듈"],
     watch: "export",
     label: "반도체 소자",
     hs: "8541",
@@ -66,7 +68,8 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "semi_equip",
-    themes: ["반도체_전공정장비", "반도체_후공정장비"],
+    /* 8486 은 반도체·디스플레이 제조 장비를 같이 묶는다 */
+    themes: ["반도체_전공정장비", "반도체_후공정장비", "LCD_장비", "AMOLED_장비"],
     watch: "import",
     label: "반도체 장비",
     hs: "8486",
@@ -84,7 +87,8 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "carpart",
-    themes: ["자동차_차량경량화 수혜", "자동차_전장화 수혜"],
+    /* 부품은 전장·차량용 반도체·SW·금형까지 갈래가 많다 */
+    themes: ["자동차_차량경량화 수혜", "자동차_전장화 수혜", "자동차_차량용 반도체", "소프트웨어_자동차용", "금형/몰드베이스"],
     watch: "export",
     label: "자동차 부품",
     hs: "8708",
@@ -93,7 +97,8 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "phone",
-    themes: ["스마트폰_삼성전자관련주", "휴대폰_RF부품"],
+    /* 8517 은 휴대폰보다 통신기기 전반 — 교환기·라우터가 여기다 */
+    themes: ["스마트폰_삼성전자관련주", "휴대폰_RF부품", "통신장비", "네트워크/광통신", "휴대폰_카메라"],
     watch: "export",
     label: "무선통신기기",
     hs: "8517",
@@ -111,7 +116,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "petro",
-    themes: ["LPG(액화석유가스)", "합성수지"],
+    themes: ["LPG(액화석유가스)", "합성수지", "합성고무", "합성섬유_원료"],
     watch: "export",
     label: "석유제품",
     hs: "2710",
@@ -120,7 +125,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "ship",
-    themes: ["조선_해양플랜트", "조선_Eco선"],
+    themes: ["조선_해양플랜트", "조선_Eco선", "조선_LNG보냉재", "조선_해양플랜트기자재"],
     watch: "export",
     label: "선박",
     hs: "8901",
@@ -138,7 +143,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "battery",
-    themes: ["2차전지_완제품", "2차전지_소재(양극화물질등)"],
+    themes: ["2차전지_완제품", "2차전지_소재(양극화물질등)", "그린카_하이브리드카/전기차"],
     watch: "export",
     label: "이차전지",
     hs: "8507",
@@ -147,7 +152,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "dram_module",
-    themes: ["반도체_생산", "반도체_후공정"],
+    themes: ["반도체_생산", "반도체_후공정", "반도체_후공정소재"],
     watch: "export",
     label: "디램 모듈·CPU",
     hs: "8473",
@@ -156,7 +161,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "display",
-    themes: ["AMOLED_소재", "LCD_부품"],
+    themes: ["AMOLED_소재", "LCD_부품", "LCD_소재"],
     watch: "export",
     label: "평판디스플레이 모듈",
     hs: "8524",
@@ -165,7 +170,8 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "polarizer",
-    themes: ["LCD_소재", "AMOLED_소재"],
+    /* 9001 엔 광섬유도 든다 — 광통신 쪽도 같이 본다 */
+    themes: ["LCD_소재", "AMOLED_소재", "네트워크/광통신"],
     watch: "export",
     label: "편광판·광학필름",
     hs: "9001",
@@ -174,7 +180,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "transformer",
-    themes: ["스마트 그리드", "화력_발전기자재"],
+    themes: ["스마트 그리드", "화력_발전기자재", "원자력_기자재"],
     watch: "export",
     label: "초고압 변압기",
     hs: "8504",
@@ -183,7 +189,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "switchgear",
-    themes: ["스마트 그리드", "원자력_기자재"],
+    themes: ["스마트 그리드", "원자력_기자재", "화력_발전기자재"],
     watch: "export",
     label: "배전반·제어반",
     hs: "8537",
@@ -192,7 +198,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "connector",
-    themes: ["PCB(인쇄회로기판)", "FPCB(연성회로기판)"],
+    themes: ["PCB(인쇄회로기판)", "FPCB(연성회로기판)", "휴대폰_수동부품"],
     watch: "export",
     label: "커넥터·개폐기",
     hs: "8536",
@@ -201,7 +207,8 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "wiring",
-    themes: ["자동차_전장화 수혜", "자동차_차량경량화 수혜"],
+    /* 8544 는 절연전선·케이블 전반 — 광케이블도 여기 잡힌다 */
+    themes: ["자동차_전장화 수혜", "자동차_차량경량화 수혜", "네트워크/광통신"],
     watch: "export",
     label: "자동차 와이어링",
     hs: "8544",
@@ -219,7 +226,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "bio",
-    themes: ["바이오_바이오시밀러/베터", "바이오_진단/백신"],
+    themes: ["바이오_바이오시밀러/베터", "바이오_진단/백신", "신약개발/기술수출", "바이오_줄기세포치료제"],
     watch: "export",
     label: "바이오의약품",
     hs: "3002",
@@ -237,7 +244,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "medical_device",
-    themes: ["의료기기"],
+    themes: ["의료기기", "의료기기_치아", "의료기기_안과", "U-헬스케어"],
     watch: "import",
     label: "의료기기",
     hs: "9018",
@@ -300,7 +307,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "noodle",
-    themes: ["라면", "제과스낵"],
+    themes: ["라면", "제과스낵", "곡물가공품_설탕/밀가루/유지", "식자재유통"],
     watch: "export",
     label: "면류 (라면)",
     hs: "1902",
@@ -309,7 +316,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "aircraft",
-    themes: ["운송_항공", "우주항공"],
+    themes: ["운송_항공", "우주항공", "방위산업"],
     watch: "import",
     label: "항공기·엔진",
     hs: "8802",
@@ -318,7 +325,7 @@ export const TRADE_TARGETS: TradeTarget[] = [
   },
   {
     key: "cosmetic",
-    themes: ["화장품"],
+    themes: ["화장품", "중국_내수소비 확대"],
     watch: "export",
     label: "화장품",
     hs: "3304",
@@ -665,6 +672,185 @@ export async function getTradeHistory(key: string): Promise<{ months: TradeMonth
   await mkdir(DATA_DIR, { recursive: true });
   await writeFile(HISTORY_FILE, JSON.stringify(cache, null, 2), "utf-8");
   return { months };
+}
+
+// ---------------------------------------------------------------- 국가별
+
+/**
+ * 국가별 수출입 (2026-08-25 실측으로 확인).
+ *
+ * 같은 관세청 키로 `nitemtrade/getNitemtradeList` 가 열려 있다 — 품목(HS)별
+ * **어느 나라로 얼마나** 나갔는지가 나온다. 변압기(8504) 2026-07 실측:
+ * 미국 204백만$ · 베트남 43 · 중국 25… — 「미국 전력망 수요」가 숫자로 보인다.
+ *
+ * 응답 필드: hsCd(10자리) · statCd(국가코드) · statCdCntnKor1(국가명) ·
+ * expDlr/impDlr · year("2026.07" 또는 "총계"). 한 달 한 품목이 400행쯤이라
+ * numOfRows=999 로 받되, 품목별 API 처럼 pageNo 를 무시할 수 있으므로
+ * (hsCd, statCd, year) 중복 제거를 걸어 둔다.
+ */
+
+const NCOUNTRY_ENDPOINT = "https://apis.data.go.kr/1220000/nitemtrade/getNitemtradeList";
+
+export interface CountryRow {
+  country: string;
+  exportUsd: number;
+  importUsd: number;
+  /** 전년 동월 대비 증감률(보는 방향 기준) — 비교 대상 없으면 null */
+  yoy: number | null;
+  /**
+   * 그 나라 안의 **세부 품목(HS 10자리) 구성** — 큰 것부터.
+   * 「미국으로 변압기」가 아니라 「미국으로 1만kVA 초과 대형 변압기」까지 내려간다.
+   * 이게 있어야 같은 8504 라도 대형기(전력망)인지 소형 부품인지 갈린다.
+   */
+  top: { name: string; usd: number; share: number }[];
+}
+
+interface CountryCache {
+  [key: string]: { at: string; month: string; rows: CountryRow[] };
+}
+
+const COUNTRY_FILE = join(DATA_DIR, "tradeCountry.json");
+const COUNTRY_TTL_MS = 24 * 3600_000;
+
+interface CountryAgg {
+  exportUsd: number;
+  importUsd: number;
+  /** 세부 품목명 → 그 나라로의 금액 (수출/수입 각각) */
+  items: Map<string, { exportUsd: number; importUsd: number }>;
+}
+
+async function fetchCountryMonth(hs: string, yymm: string): Promise<Map<string, CountryAgg>> {
+  const seen = new Set<string>();
+  const out = new Map<string, CountryAgg>();
+  for (let page = 1; page <= 5; page++) {
+    const qs = new URLSearchParams({
+      serviceKey: process.env.DATA_GO_KR_KEY!.trim(),
+      strtYymm: yymm,
+      endYymm: yymm,
+      hsSgn: hs,
+      numOfRows: "999",
+      pageNo: String(page),
+    });
+    const res = await fetch(`${NCOUNTRY_ENDPOINT}?${qs}`, { signal: AbortSignal.timeout(20_000) });
+    const xml = await res.text();
+    const err = errorOf(xml);
+    if (err) {
+      void recordApiCall("dataGoKr", "nitemtrade", "failed");
+      throw new Error(err);
+    }
+    void recordApiCall("dataGoKr", "nitemtrade", "ok");
+    const raw = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)];
+    let added = 0;
+    for (const m of raw) {
+      const get = (tag: string) => new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(m[1])?.[1]?.trim() ?? "";
+      const year = get("year");
+      if (!/^\d{4}\.\d{2}$/.test(year)) continue; // 총계 행
+      const country = get("statCdCntnKor1");
+      const hsCd = get("hsCd");
+      if (!country || country === "-") continue;
+      const k = `${hsCd}:${get("statCd")}:${year}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      added += 1;
+      const num = (tag: string) => {
+        const n = Number(get(tag).replace(/,/g, ""));
+        return Number.isFinite(n) ? n : 0;
+      };
+      const exp = num("expDlr");
+      const imp = num("impDlr");
+      const acc = out.get(country) ?? { exportUsd: 0, importUsd: 0, items: new Map() };
+      acc.exportUsd += exp;
+      acc.importUsd += imp;
+      /*
+       * 세부 품목은 **10자리 이름으로** 쌓는다 — 같은 이름이 여러 코드에 있으면
+       * 합친다(품목별 요약과 같은 규칙: 코드별로 세우면 같은 이름이 두 번 뜬다).
+       */
+      const name = get("statKor");
+      if (name && name !== "-") {
+        const it = acc.items.get(name) ?? { exportUsd: 0, importUsd: 0 };
+        it.exportUsd += exp;
+        it.importUsd += imp;
+        acc.items.set(name, it);
+      }
+      out.set(country, acc);
+    }
+    if (raw.length < 999 || added === 0) break;
+  }
+  return out;
+}
+
+/**
+ * 품목 하나의 **최신 달 국가별 상위** — 품목을 펼칠 때만 부르고 하루 캐시.
+ * 최신 달은 월별 시계열 캐시(tradeHistory)나 요약과 같은 규칙 — 최근 2개월을
+ * 요청해 봐야 하는데, 이 API 는 한 달씩 부르는 게 깔끔하다: 이번 달 것이
+ * 비면 지난 달로 물러난다.
+ */
+export async function getTradeCountries(
+  key: string,
+): Promise<{ month: string; rows: CountryRow[]; watch: "export" | "import" }> {
+  const t = TRADE_TARGETS.find((x) => x.key === key);
+  if (!t) throw new Error("알 수 없는 품목입니다.");
+  if (!isTradeConfigured()) throw new Error("DATA_GO_KR_KEY 미설정");
+
+  let cache: CountryCache = {};
+  try {
+    cache = JSON.parse(await readFile(COUNTRY_FILE, "utf-8")) as CountryCache;
+  } catch {
+    /* 처음이면 빈 캐시 */
+  }
+  const hit = cache[key];
+  if (hit && Date.now() - new Date(hit.at).getTime() < COUNTRY_TTL_MS) {
+    return { month: hit.month, rows: hit.rows, watch: t.watch };
+  }
+
+  // 최신 달 찾기 — 공표 시차 때문에 이번 달부터 두 달 물러나 본다
+  const now = new Date();
+  let month = "";
+  let cur: Map<string, CountryAgg> | null = null;
+  for (let back = 0; back <= 2; back++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
+    const rows = await fetchCountryMonth(t.hs, ym(d)).catch(() => null);
+    if (rows && rows.size > 0) {
+      month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      cur = rows;
+      break;
+    }
+  }
+  if (!cur || !month) return { month: "", rows: [], watch: t.watch };
+
+  // 전년 동월 — YoY 용
+  const [y, m] = month.split("-").map(Number);
+  const prev = await fetchCountryMonth(t.hs, `${y - 1}${String(m).padStart(2, "0")}`).catch(
+    () => new Map<string, CountryAgg>(),
+  );
+
+  const side = t.watch === "import" ? ("importUsd" as const) : ("exportUsd" as const);
+  const rows: CountryRow[] = [...cur.entries()]
+    .map(([country, v]) => {
+      const p = prev.get(country);
+      const base = p ? p[side] : 0;
+      const total = v[side] || 1;
+      /* 그 나라 안의 세부 품목 구성 — 큰 것부터 넷. 나머지는 비중으로 짐작된다 */
+      const top = [...v.items.entries()]
+        .map(([name, it]) => ({ name, usd: it[side], share: (it[side] / total) * 100 }))
+        .filter((x) => x.usd > 0)
+        .sort((a, b) => b.usd - a.usd)
+        .slice(0, 4);
+      return {
+        country,
+        exportUsd: v.exportUsd,
+        importUsd: v.importUsd,
+        yoy: base > 0 ? ((v[side] - base) / base) * 100 : null,
+        top,
+      };
+    })
+    .sort((a, b) => b[side] - a[side])
+    .slice(0, 10);
+
+  cache[key] = { at: new Date().toISOString(), month, rows };
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(COUNTRY_FILE, JSON.stringify(cache, null, 2), "utf-8");
+  return { month, rows, watch: t.watch };
 }
 
 // ---------------------------------------------------------------- 리포트용

@@ -90,6 +90,23 @@ async function readDay(date: string): Promise<SignalDayRow[]> {
   }
 }
 
+/**
+ * 백테스트용 점수 지도 — **날짜(YYYYMMDD) → 종목 → 점수** (2026-08-25).
+ *
+ * 「신호등 N점 이상」을 백테스트 조건으로 쓰려면 과거 점수가 있어야 하는데,
+ * 그건 여기 쌓인 날만 있다(2026-08-25 축적 시작). 없는 날은 조건이 그냥
+ * 안 걸린다 — 표본이 며칠치뿐이라는 걸 화면이 같이 말해야 한다.
+ */
+export async function signalScoreMap(): Promise<Map<string, Map<string, number>>> {
+  const out = new Map<string, Map<string, number>>();
+  for (const d of await signalDays()) {
+    const m = new Map<string, number>();
+    for (const r of await readDay(d)) m.set(r.code, r.score);
+    if (m.size > 0) out.set(d.replace(/-/g, ""), m); // 일봉 날짜 형식에 맞춘다
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------------ */
 /* 채점                                                                 */
 /* ------------------------------------------------------------------ */

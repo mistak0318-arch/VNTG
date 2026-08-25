@@ -62,7 +62,7 @@ export function WatchStar({ code }: { code: string }) {
   const { isWatched } = useWatchedCodes();
   if (!isWatched(code)) return null;
   return (
-    <span className="watch-star" title="AI_HTS 관심종목">
+    <span className="watch-star" title="VNTG 관심종목">
       ★
     </span>
   );

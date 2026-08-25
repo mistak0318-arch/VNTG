@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { RunningJobsBar } from "./components/RunningJobsBar";
+import { QuickStockSearch } from "./components/QuickStockSearch";
 import { CustomThemePage } from "./pages/CustomThemePage";
 import { ScreenerPage } from "./pages/ScreenerPage";
 import { ScreenPage } from "./pages/ScreenPage";
@@ -122,8 +123,8 @@ const MENU: {
     items: [
       // 발굴을 맨 위에 — 관심종목은 이미 고른 것이고, 이건 고르는 자리다
       { key: "discovery", label: "종목발굴", icon: "⛏️" },
-      { key: "watchAi", label: "관심종목 (AI_HTS)", icon: "⭐" },
-      { key: "watchKiwoom", label: "관심종목 (키움_HTS)", icon: "🔖" },
+      { key: "watchAi", label: "관심종목 (VNTG)", icon: "⭐" },
+      { key: "watchKiwoom", label: "관심종목 (키움연동)", icon: "🔖" },
       { key: "usWatch", label: "관심종목 (해외)", icon: "🌏" },
       { key: "customTheme", label: "내 테마", icon: "🎯" },
       { key: "signalScreen", label: "신호등 찾기", icon: "🚦" },
@@ -416,6 +417,9 @@ export default function App() {
         <div className="main-inner">
           {/* 인증이 끊기면 앱 전체가 값을 못 받는다 — 화면을 옮겨도 계속 보여야 한다 */}
           <AuthExpiredBar />
+
+          {/* 어느 화면에서든 종목으로 바로 — 접혀 있으면 한 줄이다 */}
+          <QuickStockSearch onPick={openAnalysis} />
 
           {/* 돌고 있는 작업 — 어느 화면에 있든 뜬다 */}
           <RunningJobsBar />

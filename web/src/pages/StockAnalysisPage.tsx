@@ -228,6 +228,14 @@ export function StockAnalysisPage({
 
           <div className="analysis-title">
             <h2>
+              {/* 코스피/코스닥 — 같은 +5% 라도 판이 다르다 */}
+              {info && String(info._market ?? "") && (
+                <span
+                  className={`mkt-badge ${String(info._market).includes("코스닥") ? "kq" : "ks"}`}
+                >
+                  {String(info._market).includes("코스닥") ? "코스닥" : "코스피"}
+                </span>
+              )}
               {watched.isWatched(stock.code) ? "★ " : ""}
               {stock.name} <span className="analysis-code">{stock.code}</span>
             </h2>

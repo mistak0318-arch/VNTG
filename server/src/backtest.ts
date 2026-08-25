@@ -1,4 +1,8 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { signalScoreMap } from "./signalHistory.js";
 import { tradeValueTop } from "./signalScreen.js";
 
 /**
@@ -37,7 +41,17 @@ import { tradeValueTop } from "./signalScreen.js";
 
 const CHART = "/api/dostk/chart";
 
-export type RuleKey = "maAlign" | "aboveMa" | "volSurge" | "newHigh" | "minRate";
+export type RuleKey =
+  | "maAlign"
+  | "aboveMa"
+  | "volSurge"
+  | "newHigh"
+  | "minRate"
+  | "nearHigh52"
+  | "disparity"
+  | "volValue"
+  | "gapUp"
+  | "minScore";
 
 export interface RuleDef {
   key: RuleKey;
@@ -83,6 +97,46 @@ export const RULES: RuleDef[] = [
     hint: "그날 등락률이 N% 이상",
     hasValue: true,
     defaultValue: 3,
+  },
+  /*
+   * ── 2026-08-25 세분화 — 신호등의 축들을 일봉으로 흉내 낸 조건들 ──
+   * 신호등을 통째로 못 돌리는 대신(과거 점수가 이제 막 쌓임), 그 구성 요소를
+   * 하나씩 조건으로 뒀다 — 어느 축이 일을 하는지 따로 잴 수 있다.
+   */
+  {
+    key: "nearHigh52",
+    label: "52주 고점 근접",
+    hint: "종가가 지난 240일 고가의 N% 이상 — 신호등 「고점 근접」의 백테스트판",
+    hasValue: true,
+    defaultValue: 90,
+  },
+  {
+    key: "disparity",
+    label: "이격 과열 아님",
+    hint: "20일선과의 이격이 N% 이하 — 신호등 위험 축(과열 배제). 추세 조건과 같이 걸어야 뜻이 있다",
+    hasValue: true,
+    defaultValue: 10,
+  },
+  {
+    key: "volValue",
+    label: "거래대금",
+    hint: "그날 거래대금(종가×거래량)이 N억원 이상 — 돈이 도는 종목만",
+    hasValue: true,
+    defaultValue: 300,
+  },
+  {
+    key: "gapUp",
+    label: "시가 갭",
+    hint: "그날 시가가 전일 종가보다 N% 이상 위 — 갭 출발의 이후를 잰다",
+    hasValue: true,
+    defaultValue: 2,
+  },
+  {
+    key: "minScore",
+    label: "신호등 점수",
+    hint: "그날 저장된 신호등 점수가 N점 이상. ⚠️ 점수 축적(2026-08-25~) 이후 날짜만 잡혀 표본이 아직 적다 — 날이 쌓일수록 정확해진다",
+    hasValue: true,
+    defaultValue: 70,
   },
 ];
 
@@ -184,10 +238,48 @@ function ma(bs: Bar[], i: number, n: number): number | null {
  *
  * 여기서 쓰는 값은 전부 `i` 날까지의 것이다 — 뒤를 보면 안 된다.
  */
-function passes(bs: Bar[], i: number, rules: { key: RuleKey; value: number }[]): boolean {
+function passes(
+  bs: Bar[],
+  i: number,
+  rules: { key: RuleKey; value: number }[],
+  /** 신호등 점수 조건용 — 날짜(YYYYMMDD)→종목→점수. 그 조건이 없으면 안 온다 */
+  scores?: Map<string, Map<string, number>>,
+  code?: string,
+): boolean {
   const b = bs[i];
   for (const r of rules) {
     switch (r.key) {
+      case "nearHigh52": {
+        /* 240봉이 안 쌓인 새내기는 있는 만큼으로 잰다 — 최소 60봉은 요구한다 */
+        if (i < 60) return false;
+        const win = bs.slice(Math.max(0, i - 239), i + 1);
+        const high = Math.max(...win.map((x) => x.high));
+        if (high <= 0 || (b.close / high) * 100 < r.value) return false;
+        break;
+      }
+      case "disparity": {
+        const m = ma(bs, i, 20);
+        if (m === null || m <= 0) return false;
+        if (((b.close - m) / m) * 100 > r.value) return false;
+        break;
+      }
+      case "volValue": {
+        // 종가 × 거래량 — 어림이지만 양쪽(조건·기준선)에 같은 잣대다
+        if (b.close * b.volume < r.value * 1e8) return false;
+        break;
+      }
+      case "gapUp": {
+        if (i < 1) return false;
+        const prev = bs[i - 1].close;
+        if (prev <= 0) return false;
+        if (((b.open - prev) / prev) * 100 < r.value) return false;
+        break;
+      }
+      case "minScore": {
+        const s = code ? scores?.get(b.date)?.get(code) : undefined;
+        if (s === undefined || s < r.value) return false;
+        break;
+      }
       case "maAlign": {
         const m5 = ma(bs, i, 5);
         const m20 = ma(bs, i, 20);
@@ -243,6 +335,81 @@ function stat(xs: number[]): BacktestStat {
   };
 }
 
+/* ------------------------------------------------------------------ */
+/* 실행 기록 — 통찰은 실행 하나가 아니라 실행들 사이의 비교에서 나온다      */
+/* ------------------------------------------------------------------ */
+
+const here = dirname(fileURLToPath(import.meta.url));
+const RUNS_FILE = join(here, "..", "data", "backtestRuns.json");
+
+/**
+ * 저장하는 건 **조건과 요약**이다 (2026-08-25 — 「히스토리가 안 남으니 통찰이 없다」).
+ *
+ * 예전엔 돌린 결과가 메모리에만 있어 서버가 다시 뜨면 사라졌다. 그러면 이 도구는
+ * 「어제 뭘 실험했더라」에 답을 못 하고, 무엇보다 **조건끼리 견줄 수가 없다** —
+ * 「정배열 +0.8%p, 60일 신고가 +3.8%p」 같은 비교가 이 화면의 존재 이유인데.
+ * 돌 때마다 여기 쌓이고, 화면이 엣지 순으로 세워 보여준다.
+ */
+export interface BacktestRun {
+  id: string;
+  at: string;
+  config: BacktestConfig;
+  /** 조건을 사람 말로 — "정배열 · 60일 신고가 · 5일 보유" */
+  label: string;
+  hit: BacktestStat;
+  base: BacktestStat;
+  edge: number | null;
+  from: string;
+  to: string;
+  codes: number;
+}
+
+const KEEP_RUNS = 60;
+
+async function readRuns(): Promise<BacktestRun[]> {
+  try {
+    const parsed = JSON.parse(await readFile(RUNS_FILE, "utf-8")) as BacktestRun[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveRunRecord(run: BacktestRun): Promise<void> {
+  const rows = await readRuns();
+  rows.push(run);
+  await mkdir(dirname(RUNS_FILE), { recursive: true });
+  await writeFile(RUNS_FILE, JSON.stringify(rows.slice(-KEEP_RUNS), null, 2), "utf-8");
+}
+
+export async function listBacktestRuns(): Promise<BacktestRun[]> {
+  return (await readRuns()).sort((a, b) => b.at.localeCompare(a.at));
+}
+
+function labelOf(cfg: BacktestConfig): string {
+  const parts = cfg.rules.map((r) => {
+    const d = RULES.find((x) => x.key === r.key);
+    if (!d) return r.key;
+    return d.hasValue ? `${d.label}=${r.value}` : d.label;
+  });
+  const mkt = cfg.market === "001" ? "코스피" : cfg.market === "101" ? "코스닥" : "전체";
+  return `${parts.join(" · ") || "조건 없음"} → ${cfg.holdDays}일 보유 (${mkt} ${cfg.universe})`;
+}
+
+/**
+ * 결과를 한 줄로 읽어 준다 — 숫자만 두면 통찰이 사람 몫으로 남는다.
+ * 규칙은 단순하고 화면에도 그대로 적는다: 표본이 적으면 우연일 수 있고,
+ * 엣지가 작으면 수수료에 먹힌다.
+ */
+export function verdictOf(edge: number | null, count: number): { tone: "good" | "weak" | "thin" | "bad"; text: string } {
+  if (edge === null || count === 0) return { tone: "thin", text: "걸린 진입이 없다 — 조건이 너무 좁거나 데이터가 모자라다" };
+  if (count < 30) return { tone: "thin", text: `표본 ${count}건 — 우연일 수 있다. 모집단이나 기간을 넓혀 다시 재 볼 것` };
+  if (edge >= 1.5) return { tone: "good", text: `기준선보다 +${edge.toFixed(1)}%p — 표본 ${count}건이면 진짜 엣지에 가깝다` };
+  if (edge >= 0.5) return { tone: "weak", text: `+${edge.toFixed(1)}%p — 있긴 한데 얇다. 수수료·슬리피지를 빼면 남는 게 줄어든다` };
+  if (edge > -0.5) return { tone: "weak", text: "기준선과 사실상 같다 — 이 조건은 일을 안 한다" };
+  return { tone: "bad", text: `기준선보다 ${edge.toFixed(1)}%p 나쁘다 — 피해야 할 자리를 찾았다는 뜻이기도 하다` };
+}
+
 const jobs = new Map<string, BacktestJob>();
 
 export function getBacktestJob(id: string): BacktestJob | null {
@@ -278,6 +445,11 @@ export function startBacktest(client: KiwoomClient, input: Partial<BacktestConfi
       const universe = await tradeValueTop(client, cfg.market, cfg.universe);
       job.total = universe.length;
 
+      /* 신호등 점수 조건이 켜져 있을 때만 읽는다 — 파일이 며칠치라 싸다 */
+      const scores = cfg.rules.some((r) => r.key === "minScore")
+        ? await signalScoreMap().catch(() => undefined)
+        : undefined;
+
       const hits: number[] = [];
       const baseRates: number[] = [];
       const samples: BacktestResult["samples"] = [];
@@ -309,7 +481,7 @@ export function startBacktest(client: KiwoomClient, input: Partial<BacktestConfi
               // 기준선 — 조건을 안 걸고 같은 날 같은 방식으로 산 것
               baseRates.push(rate);
 
-              if (cfg.rules.length > 0 && passes(bs, i, cfg.rules)) {
+              if (cfg.rules.length > 0 && passes(bs, i, cfg.rules, scores, u.code)) {
                 hits.push(rate);
                 samples.push({ code: u.code, name: u.name, date: bs[i].date, rate });
               }
@@ -341,6 +513,19 @@ export function startBacktest(client: KiwoomClient, input: Partial<BacktestConfi
           .filter((_, idx, arr) => idx < 5 || idx >= arr.length - 5),
       };
       job.status = "done";
+      // 기록으로 남긴다 — 조건끼리 견주는 게 이 도구의 존재 이유다
+      await saveRunRecord({
+        id,
+        at: job.startedAt,
+        config: cfg,
+        label: labelOf(cfg),
+        hit,
+        base,
+        edge: job.result.edge,
+        from,
+        to,
+        codes: job.result.codes,
+      }).catch(() => undefined);
     } catch (err) {
       job.status = "error";
       job.error = err instanceof Error ? err.message : "백테스트 실패";

@@ -1,5 +1,12 @@
 import { Router } from "express";
-import { getBacktestJob, RULES, startBacktest, type BacktestConfig } from "../backtest.js";
+import {
+  getBacktestJob,
+  listBacktestRuns,
+  RULES,
+  startBacktest,
+  verdictOf,
+  type BacktestConfig,
+} from "../backtest.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 
 /**
@@ -13,6 +20,21 @@ export function createBacktestRouter(client: KiwoomClient): Router {
 
   router.get("/rules", (_req, res) => {
     res.json({ rules: RULES });
+  });
+
+  /**
+   * 돌려 본 조건들 — **엣지 순 리더보드.**
+   * 통찰은 실행 하나가 아니라 실행들 사이의 비교에서 나온다. 한 줄 판정까지 붙인다.
+   */
+  router.get("/runs", async (_req, res, next) => {
+    try {
+      const runs = await listBacktestRuns();
+      res.json({
+        runs: runs.map((r) => ({ ...r, verdict: verdictOf(r.edge, r.hit.count) })),
+      });
+    } catch (err) {
+      next(err);
+    }
   });
 
   router.post("/run", (req, res, next) => {

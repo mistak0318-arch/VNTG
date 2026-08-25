@@ -91,6 +91,15 @@ export function isDivider(code: string): boolean {
 
 export const DEFAULT_GROUP = "기본";
 
+/**
+ * 슈퍼신호등 그룹 (2026-08-25) — **지울 수 없다.**
+ *
+ * 슈퍼신호등(여러 목록에 동시에 걸린 초록)이 매일 15:45 자동으로 여기 담는다.
+ * 사람이 지워 버리면 자동 편입이 갈 곳을 잃으므로 기본 그룹처럼 보호한다.
+ * 종목을 빼는 건 자유다 — 보호하는 건 그룹 자체뿐이다.
+ */
+export const SUPER_GROUP = "슈퍼신호등";
+
 /** 그룹 이름 목록 (종목이 하나도 없는 빈 그룹도 유지하기 위해 따로 저장) */
 const GROUPS_FILE = resolve(__dirname, "..", "data", "watchGroups.json");
 
@@ -246,6 +255,30 @@ export async function toggleWatchGroup(code: string, group: string): Promise<Wat
   return next;
 }
 
+/**
+ * 그룹에 **반드시 들어 있게** 한다 — 자동 편입(슈퍼신호등)용.
+ * 이미 담긴 종목이면 그룹만 더하고 편입가·메모·다른 그룹은 안 건드린다.
+ * toggle 을 쓰면 이미 있을 때 **빠져 버리므로** 따로 둔다.
+ */
+export async function ensureInGroup(
+  item: { code: string; name: string; addedPrice: number; memo?: string },
+  group: string,
+): Promise<void> {
+  const items = await load();
+  const had = items.find((w) => w.code === item.code);
+  if (!had) {
+    await addWatchItem({ ...item, groups: [group] });
+    return;
+  }
+  if (!had.groups.includes(group)) {
+    await persist(
+      items.map((w) =>
+        w.code === item.code ? { ...w, groups: normalizeGroups([...w.groups, group]) } : w,
+      ),
+    );
+  }
+}
+
 /** 빈 배열이면 기본 그룹으로 — 어디에도 안 속한 종목은 목록에서 사라진다 */
 function normalizeGroups(input: string[]): string[] {
   const out = [...new Set(input.map((g) => g.trim()).filter(Boolean))];
@@ -280,7 +313,8 @@ async function persistGroups(groups: string[]): Promise<void> {
 export async function listGroups(): Promise<string[]> {
   const [groups, items] = await Promise.all([loadGroups(), load()]);
   const used = new Set(items.flatMap((w) => w.groups));
-  const merged = new Set<string>([DEFAULT_GROUP, ...groups, ...used]);
+  // 슈퍼신호등은 늘 있다 — 비어 있어도 자동 편입이 갈 자리가 보여야 한다
+  const merged = new Set<string>([DEFAULT_GROUP, ...groups, ...used, SUPER_GROUP]);
   return [...merged];
 }
 
@@ -296,6 +330,8 @@ export async function renameGroup(from: string, to: string): Promise<string[]> {
   const clean = to.trim();
   if (!clean) throw new Error("그룹 이름이 비어 있습니다.");
   if (from === DEFAULT_GROUP) throw new Error("기본 그룹은 이름을 바꿀 수 없습니다.");
+  if (from === SUPER_GROUP)
+    throw new Error("슈퍼신호등 그룹은 이름을 바꿀 수 없습니다 — 자동 편입이 이 이름을 찾습니다.");
 
   const groups = await loadGroups();
   await persistGroups(groups.map((g) => (g === from ? clean : g)));
@@ -384,6 +420,8 @@ export async function reorderGroups(order: string[]): Promise<string[]> {
 /** 그룹을 지우면 소속 종목은 기본 그룹으로 옮긴다 (종목이 사라지지 않게) */
 export async function removeGroup(name: string): Promise<string[]> {
   if (name === DEFAULT_GROUP) throw new Error("기본 그룹은 삭제할 수 없습니다.");
+  if (name === SUPER_GROUP)
+    throw new Error("슈퍼신호등 그룹은 삭제할 수 없습니다 — 자동 편입이 담기는 자리입니다.");
   const groups = await loadGroups();
   await persistGroups(groups.filter((g) => g !== name));
 

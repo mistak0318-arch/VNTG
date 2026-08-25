@@ -172,7 +172,7 @@ export function KeywordAlertPanel() {
             className={`filter-btn ${cfg.useWatchlist ? "active" : ""}`}
             onClick={() => void save({ useWatchlist: !cfg.useWatchlist })}
           >
-            관심종목 (AI_HTS)
+            관심종목 (VNTG)
           </button>
           <button
             className={`filter-btn ${cfg.useThemes ? "active" : ""}`}

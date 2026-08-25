@@ -3,7 +3,7 @@ import type { KiwoomClient } from "../kiwoomClient.js";
 import { intradayLevels } from "../intraday.js";
 import { stockSummary } from "../stockSummary.js";
 import { getSectorMood } from "../sectorMood.js";
-import { searchStocks } from "../stockListCache.js";
+import { findStock, searchStocks } from "../stockListCache.js";
 import { analystOpinion } from "../analystOpinion.js";
 import { hantooReady } from "../hantooClient.js";
 import { stockProfile } from "../stockProfile.js";
@@ -56,7 +56,13 @@ export function createMarketRouter(client: KiwoomClient): Router {
       const { data } = await client.request(STKINFO_RESOURCE, "ka10001", {
         stk_cd: req.params.code,
       });
-      res.json(data);
+      /*
+       * 시장 구분을 얹는다 (2026-08-25) — ka10001 엔 코스피/코스닥이 없다.
+       * 전종목 캐시(ka10099)에서 붙이므로 조회가 늘지 않는다. 밑줄 접두는
+       * 「키움 응답이 아니라 우리가 붙인 것」이라는 표시다.
+       */
+      const entry = await findStock(client, req.params.code).catch(() => undefined);
+      res.json({ ...data, _market: entry?.marketName ?? "" });
     } catch (err) {
       next(err);
     }

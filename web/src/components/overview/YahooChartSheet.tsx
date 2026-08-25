@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, fmtNum, type UsDetail, type UsKiwoomDetailData, type YahooChart } from "../../api";
+import { CandleChart } from "../CandleChart";
 
 /**
  * 지수·원자재 차트.
@@ -295,9 +296,10 @@ export function YahooChartSheet({
           <>
             {/*
               큰 숫자는 **전일 대비**다 — 목록에서 보고 누른 그 숫자와 같아야 한다.
-              기간 수익률은 그 아래 따로, 언제부터인지를 붙여서 적는다.
+              해외 종목은 compact — 정보가 많아 숫자 하나가 화면을 먹으면 안 된다
+              (2026-08-25, 「얘만 글자가 너무 커서 한눈에 안 담긴다」).
             */}
-            <div className="yc-head">
+            <div className={`yc-head${usStock ? " compact" : ""}`}>
               <b className="yc-px">{view.last.toLocaleString("ko-KR", { maximumFractionDigits: digits })}</b>
               {view.dayRate !== null ? (
                 <>
@@ -323,6 +325,39 @@ export function YahooChartSheet({
               부호가 갈리는 날이 흔해서 특히 그렇다. 알고 싶으면 기간을 바꿔 보면 된다.
             */}
 
+            {/*
+              해외 종목은 **국내와 같은 캔들차트 모듈**(lightweight-charts)로 그린다
+              (2026-08-25 — 「해외만 왜 따로 그리냐」). 이평선·고저 표시·설정 색이
+              국내와 똑같이 따라온다. 차트가 먼저, 숫자 블록은 그 아래다 —
+              모양을 훑고 값은 내려가서 확인한다. 지수·원자재·선물은 SVG 그대로다
+              (선 하나짜리라 모듈이 과하고, viewBox 방식이 개발 창에서 더 안정적이었다).
+            */}
+            {usStock ? (
+              <CandleChart
+                candles={candles
+                  .filter((c) => c.open > 0 && c.close > 0)
+                  .map((c) => {
+                    const d = String(c.t).slice(0, 10);
+                    return {
+                      time: {
+                        year: Number(d.slice(0, 4)),
+                        month: Number(d.slice(5, 7)),
+                        day: Number(d.slice(8, 10)),
+                      },
+                      open: c.open,
+                      high: c.high,
+                      low: c.low,
+                      close: c.close,
+                      volume: c.volume,
+                    };
+                  })}
+                height={340}
+                fitKey={`${target.symbol}:${range}`}
+                name={target.label}
+                code={target.symbol}
+              />
+            ) : null}
+
             {detail && !detail.error && <UsFigures d={detail} />}
             {/*
               키움 세부 — 한투 상세(위)에 **얹는** 값이다. 업종·프리장·52주 날짜·10호가는
@@ -330,6 +365,7 @@ export function YahooChartSheet({
             */}
             {usStock && <UsKiwoomBlock symbol={target.symbol} />}
 
+            {!usStock && (
             <svg className="yc-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img">
               {/* 기준선 — 「1일」에서 이게 없으면 오른 건지 내린 건지 안 보인다 */}
               {view.baseY !== null && (
@@ -365,6 +401,7 @@ export function YahooChartSheet({
                 {view.loLabel.toLocaleString("ko-KR", { maximumFractionDigits: digits })}
               </text>
             </svg>
+            )}
 
             <div className="table-note">
               {candles.length}개 봉 ({data?.interval}) · {view.firstT} ~ {view.lastT}

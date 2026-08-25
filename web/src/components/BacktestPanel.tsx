@@ -20,8 +20,10 @@ import {
  * **2. 잘된 사례만 보여주지 않는다.**
  * 상위 다섯 개만 늘어놓으면 그건 검증이 아니라 광고다. **양 끝을 같이** 보여준다.
  *
- * 결과를 저장하지 않는다 — 조건을 바꿔 가며 여러 번 돌려 보는 자리라 기록이 쌓이면
- * 어느 게 어느 조건이었는지가 오히려 헷갈린다. 남길 값이 나오면 복기 노트에 적으면 된다.
+ * **3. 실행이 기록으로 남는다** (2026-08-25 — 「히스토리가 없으니 통찰이 없다」).
+ * 통찰은 실행 하나가 아니라 실행들 사이의 비교에서 나온다 — 「정배열 +0.8%p,
+ * 60일 신고가 +3.8%p」. 돌 때마다 서버에 남고, 아래 리더보드가 엣지 순으로 세운다.
+ * 조건 요약이 라벨로 붙으므로 어느 실행이 어느 조건이었는지 안 헷갈린다.
  */
 
 const MARKETS = [
@@ -52,6 +54,8 @@ function StatRow({ label, s, dim }: { label: string; s: BacktestStat; dim?: bool
   );
 }
 
+type RunRow = Awaited<ReturnType<typeof api.backtestRuns>>["runs"][number];
+
 export function BacktestPanel() {
   const [defs, setDefs] = useState<BacktestRuleDef[]>([]);
   const [on, setOn] = useState<Partial<Record<BacktestRuleKey, number>>>({ maAlign: 0 });
@@ -60,13 +64,22 @@ export function BacktestPanel() {
   const [holdDays, setHoldDays] = useState(5);
   const [job, setJob] = useState<BacktestJob | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [runs, setRuns] = useState<RunRow[]>([]);
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loadRuns = () => {
+    api
+      .backtestRuns()
+      .then((r) => setRuns(r.runs))
+      .catch(() => undefined);
+  };
 
   useEffect(() => {
     api
       .backtestRules()
       .then((r) => setDefs(r.rules))
       .catch((e: Error) => setError(e.message));
+    loadRuns();
     return () => {
       if (poll.current) clearInterval(poll.current);
     };
@@ -87,7 +100,10 @@ export function BacktestPanel() {
           .backtestJob(id)
           .then((j) => {
             setJob(j);
-            if (j.status !== "running" && poll.current) clearInterval(poll.current);
+            if (j.status !== "running" && poll.current) {
+              clearInterval(poll.current);
+              loadRuns(); // 끝나면 기록에 남았으니 리더보드를 새로 받는다
+            }
           })
           .catch(() => undefined);
       }, 2000);
@@ -262,11 +278,64 @@ export function BacktestPanel() {
             <b>차이</b>는 그대로지만 절대 수익률은 이보다 낮습니다.
             <br />⚠️ <b>상장폐지된 종목이 모집단에 없습니다.</b> 오늘 거래대금 상위에 있는
             종목들이니 <b>살아남은 것만</b> 본 셈입니다 — 결과를 그만큼 좋게 봅니다.
-            <br />⚠️ 신호등 점수로는 못 돌립니다. 신호등은 <b>지금 시점만</b> 계산할 수 있고
-            과거 점수는 쌓기 시작한 지 얼마 안 됐습니다. 여기 조건은 전부{" "}
-            <b>일봉으로 계산되는 것</b>뿐입니다.
+            <br />⚠️ 「신호등 점수」 조건은 <b>점수 축적(2026-08-25~) 이후 날짜만</b> 잡습니다 —
+            날이 쌓일수록 표본이 늘어 정확해집니다. 나머지 조건은 전부 일봉으로 계산됩니다.
           </p>
         </>
+      )}
+
+      {/*
+        리더보드 — **이 화면의 진짜 산출물.**
+        실행 하나의 숫자는 반쪽이고, 조건끼리 견줘야 「무엇이 일을 하나」가 나온다.
+        엣지 순으로 세우고 판정 한 줄을 붙인다 — 표본이 적은 것은 판정이 그렇게 말한다.
+      */}
+      {runs.length > 0 && (
+        <div className="bt-board">
+          <h3 className="section-heading">
+            돌려 본 조건들 — 엣지 순 <i className="pt-n">{runs.length}회 저장됨</i>
+          </h3>
+          <div className="data-table-wrap">
+            <table className="data-table num">
+              <thead>
+                <tr>
+                  <th className="sticky-col">조건</th>
+                  <th title="조건 평균 − 기준선 평균 (%p) — 이게 진짜 성적">엣지</th>
+                  <th>조건 평균</th>
+                  <th>기준선</th>
+                  <th>승률</th>
+                  <th>표본</th>
+                  <th>돌린 날</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...runs]
+                  .sort((a, b) => (b.edge ?? -999) - (a.edge ?? -999))
+                  .map((x) => (
+                    <tr key={x.id}>
+                      <td className="sticky-col bt-board-label">
+                        {x.label}
+                        <div className={`bt-verdict ${x.verdict.tone}`}>{x.verdict.text}</div>
+                      </td>
+                      <td className={x.edge !== null && x.edge >= 0 ? "positive" : "negative"}>
+                        <b>
+                          {x.edge === null ? "-" : `${x.edge > 0 ? "+" : ""}${x.edge.toFixed(2)}%p`}
+                        </b>
+                      </td>
+                      <td className={x.hit.avg >= 0 ? "positive" : "negative"}>{pct(x.hit.avg)}</td>
+                      <td className="pt-n">{pct(x.base.avg)}</td>
+                      <td>{x.hit.winRate.toFixed(0)}%</td>
+                      <td>{x.hit.count.toLocaleString("ko-KR")}</td>
+                      <td className="pt-n">{x.at.slice(5, 10)}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="table-note">
+            같은 조건도 <b>기간·모집단이 다르면 다른 실행</b>입니다 — 라벨 끝 괄호가 그것입니다.
+            표본이 적은 줄은 판정이 「우연일 수 있다」고 말합니다. 최근 60회까지 남습니다.
+          </div>
+        </div>
       )}
     </div>
   );

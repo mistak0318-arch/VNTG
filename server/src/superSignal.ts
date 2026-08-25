@@ -5,6 +5,13 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
 import { evaluateSignal } from "./signalLight.js";
 import { fetchUniverse, SCREEN_UNIVERSES, type Candidate } from "./signalScreen.js";
+import {
+  ensureInGroup,
+  listWatchlist,
+  removeWatchItem,
+  SUPER_GROUP,
+  updateWatchItem,
+} from "./watchlist.js";
 
 /**
  * 슈퍼신호등 — **여러 목록에 동시에 걸린 초록** (2026-08-25).
@@ -160,6 +167,11 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
             if (prev.lastSeenDate !== today) prev.seenCount += 1;
             prev.lastSeenDate = today;
             prev.lists = x.lists;
+            // 그룹에서 빠져 있으면 다시 담는다(기능 추가 전 편입분도 이 길로 들어온다)
+            await ensureInGroup(
+              { code: prev.code, name: prev.name, addedPrice: prev.addedPrice },
+              SUPER_GROUP,
+            ).catch(() => undefined);
           } else {
             const entry: SuperEntry = {
               code: x.c.code,
@@ -174,6 +186,20 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
             store.entries.push(entry);
             have.set(entry.code, entry);
             added += 1;
+            /*
+             * 관심종목 「슈퍼신호등」 그룹에도 담는다 (사용자 요청) — 관심종목이
+             * 실시간·손절감시·뉴스 검색의 축이라, 거기 있어야 나머지가 따라붙는다.
+             * 이미 다른 그룹에 담긴 종목이면 그룹만 더한다(편입가·메모는 그대로).
+             */
+            await ensureInGroup(
+              {
+                code: entry.code,
+                name: entry.name,
+                addedPrice: entry.addedPrice,
+                memo: `슈퍼신호등 자동 편입 (${today} · 목록 ${entry.lists.length}곳 · ${entry.score}점)`,
+              },
+              SUPER_GROUP,
+            ).catch(() => undefined);
           }
         }
       } catch {
@@ -222,6 +248,23 @@ export async function removeSuperEntry(code: string): Promise<void> {
   const store = await load();
   store.entries = store.entries.filter((e) => e.code !== code);
   await save(store);
+
+  /*
+   * 관심종목 쪽도 정리한다 — 슈퍼신호등 그룹에만 있던 종목이면 통째로 빼고,
+   * 다른 그룹에도 담겨 있으면 슈퍼신호등 그룹만 뗀다(사람이 담은 건 사람 것이다).
+   */
+  try {
+    const items = await listWatchlist();
+    const w = items.find((i) => i.code === code);
+    if (!w) return;
+    if (w.groups.length === 1 && w.groups[0] === SUPER_GROUP) {
+      await removeWatchItem(code);
+    } else if (w.groups.includes(SUPER_GROUP)) {
+      await updateWatchItem(code, { groups: w.groups.filter((g) => g !== SUPER_GROUP) });
+    }
+  } catch {
+    /* 관심종목 정리는 부수 작업 — 실패해도 슈퍼 목록에서는 빠졌다 */
+  }
 }
 
 /**

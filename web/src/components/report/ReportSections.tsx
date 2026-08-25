@@ -557,7 +557,7 @@ export function MyStocksSection({
       <div className="rp-featured">
         <div>
           <div className="rp-flow-h">
-            관심종목 (AI_HTS)
+            관심종목 (VNTG)
             {mine && <span className="pt-n"> · {mine.length}종목</span>}
           </div>
           {mine === null && <div className="page-note">불러오는 중…</div>}
@@ -584,7 +584,7 @@ export function MyStocksSection({
       </div>
 
       <div className="table-note">
-        많이 <b>움직인 순</b>입니다 — 안 움직인 종목을 위에 둘 이유가 없습니다. AI_HTS 옆 숫자는
+        많이 <b>움직인 순</b>입니다 — 안 움직인 종목을 위에 둘 이유가 없습니다. VNTG 옆 숫자는
         조건충족수입니다. 공시는 <b>내 종목 것만</b> 걸렀습니다.
       </div>
     </>

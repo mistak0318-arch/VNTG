@@ -1107,7 +1107,37 @@ body {
 .sheet-live { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
 .sheet-live b { font-size: 0.95rem; font-variant-numeric: tabular-nums; }
 .sheet-live i { font-style: normal; font-size: 0.75rem; }
-.analysis-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+/*
+ * 제목줄을 **붙박이**로 (2026-08-25) — 정보가 길어 아래로 한참 내려가는데,
+ * 내가 지금 무엇을 보고 있고 등락이 어떤지는 스크롤과 무관하게 보여야 한다.
+ * 시트 헤더(.sheet-header)와 같은 이유·같은 문법이다.
+ */
+.analysis-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  padding: 6px 0;
+}
+
+/* 코스피/코스닥 배지 — 종목명 앞, 작게. 같은 +5%라도 판이 다르다 */
+.mkt-badge {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  margin-right: 0.4rem;
+  vertical-align: 2px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.mkt-badge.ks { color: #4c8dff; border-color: rgba(76, 141, 255, 0.45); }
+.mkt-badge.kq { color: #b184e0; border-color: rgba(177, 132, 224, 0.5); }
 
 /*
  * 가로 탭 줄을 넘기는 좌우 버튼.
@@ -3366,7 +3396,38 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .tc-bar-up { fill: var(--red); opacity: 0.85; }
 .tc-bar-down { fill: var(--blue); opacity: 0.85; }
 .tc-bar-flat { fill: var(--muted); opacity: 0.35; }
-.tc-tick, .tc-max, .tc-last { font-size: 10px; fill: var(--muted); }
+.tc-tick, .tc-max { font-size: 10px; fill: var(--muted); }
+.tc-last { font-size: 11px; font-weight: 700; fill: var(--text, currentColor); }
+.tc-grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; }
+.tc-year { stroke: var(--border); stroke-width: 1; stroke-dasharray: 1 4; }
+
+/* 나라별 — 이름·막대·금액·전년비 + 세부 품목 구성 한 줄 */
+.trade-cty { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
+.trade-cty-row {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr 5.5rem 4rem;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.82rem;
+}
+.trade-cty-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trade-cty-bar { position: relative; height: 9px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; align-self: center; }
+.trade-cty-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--red); opacity: 0.65; }
+.trade-cty-amt { text-align: right; }
+.trade-cty-yoy { text-align: right; font-size: 0.75rem; }
+.trade-cty-items {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding-left: 0.2rem;
+}
+.trade-cty-items i { font-style: normal; }
+@media (max-width: 700px) {
+  .trade-cty-row { grid-template-columns: 5rem 1fr 4.6rem 3.4rem; font-size: 0.78rem; }
+}
 .trade-top { display: flex; flex-direction: column; gap: 4px; }
 .trade-top-row { display: flex; gap: 12px; font-size: 0.8333rem; align-items: baseline; }
 .trade-top-name { flex: 1; }
@@ -4422,6 +4483,126 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .bn-meta i { font-style: normal; }
 .bn-meta i + i::before { content: " · "; }
 .bn-cat { font-weight: 600; }
+
+/*
+  관심종목(VNTG) 표 개편 — 스물세 칸을 아홉 칸 + 펼침으로.
+  수급·판정은 점, 그룹·상태는 이름 아래 서브라인, 숫자·편집은 ▼ 안에.
+*/
+.wl-sub {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 11rem;
+}
+.wl-st { font-style: normal; margin-left: 0.4rem; padding: 0 0.25rem; border: 1px solid var(--border); border-radius: 4px; }
+.wl-st.st-ready { color: #f5c542; border-color: rgba(245, 197, 66, 0.5); }
+.wl-st.st-holding { color: var(--red); border-color: rgba(255, 92, 92, 0.5); }
+.wl-st.st-closed { color: var(--muted); }
+
+.wl-flow-cell { cursor: pointer; }
+.wl-flow { display: inline-flex; align-items: center; gap: 2px; }
+.wl-flow i { font-style: normal; font-size: 0.62rem; color: var(--muted); margin: 0 2px; }
+.wl-flow b {
+  width: 8px; height: 8px; border-radius: 2px; display: inline-block;
+  background: var(--border);
+}
+.wl-flow b.up { background: var(--red); }
+.wl-flow b.down { background: var(--blue); }
+
+.wl-judge { display: inline-flex; gap: 2px; }
+.wl-judge em {
+  font-style: normal;
+  font-size: 0.62rem;
+  width: 1.15rem;
+  text-align: center;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.wl-judge em.ok { color: var(--green); border-color: rgba(53, 196, 106, 0.5); }
+.wl-judge em.bad { color: var(--blue); border-color: rgba(76, 141, 255, 0.4); }
+
+.wl-more {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+}
+.wl-more.on { color: var(--text); }
+
+.wl-expand td { background: var(--panel); }
+.wl-ex { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.3rem 0.2rem; }
+.wl-ex-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.25rem 1rem;
+}
+.wl-ex-grid span { display: flex; justify-content: space-between; gap: 0.6rem; border-bottom: 1px dashed var(--border); padding: 0.15rem 0; }
+.wl-ex-grid em { font-style: normal; color: var(--muted); font-size: 0.75rem; }
+.wl-ex-grid b { font-weight: 600; font-size: 0.8rem; }
+.wl-ex-edit { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: center; }
+.wl-ex-k { font-style: normal; font-size: 0.72rem; color: var(--muted); margin-right: 0.3rem; }
+
+/* 백테스트 리더보드 — 판정 한 줄이 색으로 갈린다 */
+.bt-board { margin-top: 1rem; }
+.bt-board-label { max-width: 20rem; white-space: normal; }
+.bt-verdict { font-size: 0.7rem; margin-top: 2px; }
+.bt-verdict.good { color: var(--red); }
+.bt-verdict.weak { color: var(--muted); }
+.bt-verdict.thin { color: #f5c542; }
+.bt-verdict.bad { color: var(--blue); }
+
+/* 최상단 종목 바로가기 — 접혀 있으면 한 줄, 펴면 검색창 */
+.qss-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  border-radius: 8px;
+  padding: 0.25rem 0.6rem;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.qss-toggle:hover { color: var(--text); border-style: solid; }
+.qss { margin-bottom: 8px; }
+.qss-box { position: relative; display: flex; gap: 6px; align-items: center; }
+.qss-box .search-input { flex: 1; }
+.qss-close {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 0.3rem 0.55rem;
+  cursor: pointer;
+}
+
+/* 미국 섹터 MAP — 두 그룹 붙박이, 촘촘한 타일 */
+.usm-sec + .usm-sec { margin-top: 0.6rem; }
+.usm-sec-h {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+.usm-best { font-style: normal; font-weight: 400; font-size: 0.72rem; }
+.usm-best em { font-style: normal; font-weight: 700; }
+.map-grid.dense { grid-template-columns: repeat(auto-fill, minmax(4.6rem, 1fr)); gap: 3px; }
+.map-grid.dense .map-tile { padding: 0.3rem 0.25rem; min-height: 0; }
+.map-grid.dense .map-tile-name { font-size: 0.72rem; }
+.map-grid.dense .map-tile-pct { font-size: 0.72rem; }
 
 /* 슈퍼신호등 — 걸린 목록 배지들 */
 .ss-lists { display: inline-flex; flex-wrap: wrap; gap: 3px; }
@@ -5578,6 +5759,10 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .yc-px {
   font-size: 1.4rem;
 }
+/* 해외 종목 — 정보가 많아 숫자 하나가 화면을 먹으면 안 된다. 국장 헤더와 같은 크기로 */
+.yc-head.compact { margin: 0.3rem 0 0.2rem; }
+.yc-head.compact .yc-px { font-size: 1.05rem; }
+.yc-head.compact .yc-rate { font-size: 0.9rem; }
 .yc-rate {
   font-size: 1.05rem;
   font-weight: 600;

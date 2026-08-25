@@ -79,7 +79,8 @@ function TradeChart({ months, watch }: { months: TradeMonth[]; watch: "export" |
   const val = (m: TradeMonth) => (watch === "import" ? m.importUsd : m.exportUsd);
   const W = 720;
   const H = 150;
-  const PAD = { l: 4, r: 4, t: 16, b: 16 };
+  /* 오른쪽은 눈금 값(「35억$」)이 앉을 자리 */
+  const PAD = { l: 4, r: 48, t: 16, b: 16 };
   const max = Math.max(1, ...months.map(val));
   const bw = (W - PAD.l - PAD.r) / months.length;
   const prevOf = (m: TradeMonth): TradeMonth | undefined => {
@@ -88,9 +89,43 @@ function TradeChart({ months, watch }: { months: TradeMonth[]; watch: "export" |
   };
   const latest = months[months.length - 1];
 
+  /*
+   * 주석 있는 그래프 (2026-08-25 — 「막대만 있으니 식별이 안 된다」).
+   * 가로 눈금 두 줄(최대·절반)에 값을 적고, 마지막 달은 막대 위에 값·전년비를
+   * 직접 단다. 연 경계는 세로 점선 — 계절 비교(작년 같은 자리)가 눈으로 된다.
+   */
+  const latestPrev = latest ? prevOf(latest) : undefined;
+  const latestYoy =
+    latest && latestPrev && val(latestPrev) > 0
+      ? ((val(latest) - val(latestPrev)) / val(latestPrev)) * 100
+      : null;
+  const yOf = (v: number) => H - PAD.b - ((H - PAD.t - PAD.b) * v) / max;
+
   return (
     <div className="trade-chart">
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img">
+        {/* 가로 눈금 — 최대와 절반. 이게 없으면 막대 높이가 서로만 견줘진다 */}
+        {[max, max / 2].map((v, i) => (
+          <g key={i}>
+            <line className="tc-grid" x1={PAD.l} x2={W - PAD.r} y1={yOf(v)} y2={yOf(v)} />
+            <text className="tc-tick" x={W - PAD.r} y={yOf(v) - 2} textAnchor="end">
+              {(v / 1e8).toFixed(0)}억$
+            </text>
+          </g>
+        ))}
+        {/* 연 경계 세로 점선 — 1월 자리. 작년 같은 자리와 견주라고 있는 선이다 */}
+        {months.map((m, i) =>
+          m.month.endsWith("-01") ? (
+            <line
+              key={`v${m.month}`}
+              className="tc-year"
+              x1={PAD.l + i * bw}
+              x2={PAD.l + i * bw}
+              y1={PAD.t}
+              y2={H - PAD.b}
+            />
+          ) : null,
+        )}
         {months.map((m, i) => {
           const h = ((H - PAD.t - PAD.b) * val(m)) / max;
           const prev = prevOf(m);
@@ -123,12 +158,16 @@ function TradeChart({ months, watch }: { months: TradeMonth[]; watch: "export" |
             </text>
           ) : null,
         )}
-        <text className="tc-max" x={PAD.l} y={11}>
-          최대 {(max / 1e8).toFixed(1)}억$
-        </text>
+        {/* 마지막 달 — 막대 위에 값과 전년비를 직접 단다. 제일 궁금한 게 이 둘이다 */}
         {latest && (
-          <text className="tc-last" x={W - PAD.r} y={11} textAnchor="end">
-            {latest.month} · {(val(latest) / 1e8).toFixed(1)}억$
+          <text
+            className="tc-last"
+            x={Math.min(PAD.l + (months.length - 1) * bw + bw / 2, W - 4)}
+            y={Math.max(10, yOf(val(latest)) - 5)}
+            textAnchor="end"
+          >
+            {latest.month.slice(2)} {(val(latest) / 1e8).toFixed(1)}억$
+            {latestYoy !== null ? ` (${latestYoy > 0 ? "+" : ""}${latestYoy.toFixed(0)}%)` : ""}
           </text>
         )}
       </svg>
@@ -148,9 +187,11 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  // 관련 종목·시계열은 펼칠 때만 부른다 — 31품목을 한꺼번에 받으면 첫 조회가 훨씬 느려진다
+  // 관련 종목·시계열·나라별은 펼칠 때만 부른다 — 31품목을 한꺼번에 받으면 첫 조회가 훨씬 느려진다
   const [related, setRelated] = useState<Record<string, Related | "loading">>({});
   const [history, setHistory] = useState<Record<string, TradeMonth[] | "loading" | "error">>({});
+  type Countries = { month: string; watch: "export" | "import"; rows: { country: string; exportUsd: number; importUsd: number; yoy: number | null; top: { name: string; usd: number; share: number }[] }[] };
+  const [countries, setCountries] = useState<Record<string, Countries | "loading" | "error">>({});
 
   function toggle(key: string) {
     if (open === key) {
@@ -171,6 +212,13 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
         .tradeHistory(key)
         .then((r) => setHistory((p) => ({ ...p, [key]: r.months })))
         .catch(() => setHistory((p) => ({ ...p, [key]: "error" })));
+    }
+    if (!countries[key]) {
+      setCountries((p) => ({ ...p, [key]: "loading" }));
+      api
+        .tradeCountries(key)
+        .then((r) => setCountries((p) => ({ ...p, [key]: r })))
+        .catch(() => setCountries((p) => ({ ...p, [key]: "error" })));
     }
   }
 
@@ -279,6 +327,50 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
                   if (h === "loading") return <div className="trade-sub">시계열 받는 중…</div>;
                   if (h === "error" || !h || h.length === 0) return null;
                   return <TradeChart months={h} watch={i.watch} />;
+                })()}
+
+                {(() => {
+                  const c = countries[i.key];
+                  if (c === "loading") return <div className="trade-sub">나라별 받는 중…</div>;
+                  if (c === "error" || !c || c.rows.length === 0) return null;
+                  const side = (r: (typeof c.rows)[number]) =>
+                    c.watch === "import" ? r.importUsd : r.exportUsd;
+                  const max = Math.max(...c.rows.map(side), 1);
+                  return (
+                    <>
+                      <div className="trade-sub">
+                        나라별 {c.watch === "import" ? "수입" : "수출"} · {c.month} —{" "}
+                        <b>어디로 나가는지가 곧 수요처</b>다
+                      </div>
+                      <div className="trade-cty">
+                        {c.rows.map((r) => (
+                          <div className="trade-cty-row" key={r.country}>
+                            <span className="trade-cty-name">{r.country}</span>
+                            <span className="trade-cty-bar">
+                              <i style={{ width: `${(side(r) / max) * 100}%` }} />
+                            </span>
+                            <span className="num trade-cty-amt">{(side(r) / 1e6).toFixed(1)}백만$</span>
+                            <span className={`num trade-cty-yoy ${rateClass(r.yoy)}`}>{pct(r.yoy)}</span>
+                            {/* 그 나라 안의 세부 품목 — 같은 8504 라도 대형 변압기인지 부품인지 갈린다 */}
+                            {r.top.length > 0 && (
+                              <span className="trade-cty-items">
+                                {r.top.map((t) => (
+                                  <i key={t.name} title={`${t.name} · ${(t.usd / 1e6).toFixed(1)}백만$`}>
+                                    {t.name.length > 22 ? `${t.name.slice(0, 22)}…` : t.name}{" "}
+                                    {t.share.toFixed(0)}%
+                                  </i>
+                                ))}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="table-note">
+                        관세청 국가별 통계(월간 확정치) · 증감률은 전년 같은 달 대비 · 세부 품목
+                        비중은 그 나라 안에서의 몫입니다. 품목명에 마우스를 올리면 금액이 보입니다.
+                      </div>
+                    </>
+                  );
                 })()}
 
                 {i.top.length > 0 && (

@@ -393,74 +393,77 @@ function UsWatchMap({ onOpen }: { onOpen: (symbol: string, label: string) => voi
  * 기본은 지수·ETF 지만 반도체나 바이오를 펴 보고 싶을 때가 있다. 고른 것은
  * 이 기기에 남는다 — 모니터마다 보는 자리가 다르다.
  */
-const SECTOR_GROUP_KEY = "vntg.usboard.sectormap";
-const SECTOR_DEFAULT = "지수·ETF";
+/*
+ * 섹터 MAP — **지수·ETF 와 액티브·테마 두 그룹만** (2026-08-25, 사용자 요청).
+ *
+ * 예전엔 그룹 선택 칩으로 아무 그룹이나 폈는데, 이 카드의 물음은 「오늘 어느
+ * 업종이 셌나」 하나다 — 섹터 노릇을 하는 두 묶음만 붙박이로 편다.
+ * 자리를 아끼려고 촘촘한 타일(dense)을 쓰고, ETF 는 ±2% 면 큰 날이라
+ * 색 기준도 2% 로 낮춰 **강한 업종이 확실히 짙게** 보이게 한다.
+ */
+const SECTOR_GROUPS = ["지수·ETF", "액티브·테마"];
 
 function UsSectorMap({ onOpen }: { onOpen: (symbol: string, label: string) => void }) {
   const { tiles, loading } = useWatchGroupTiles("watchUs");
   const { theme } = useAppearance();
-  const [picked, setPicked] = useState<string>(
-    () => localStorage.getItem(SECTOR_GROUP_KEY) ?? SECTOR_DEFAULT,
-  );
 
   if (loading || tiles.length === 0) return null;
-  const group = tiles.find((t) => t.name === picked) ?? tiles.find((t) => t.name === SECTOR_DEFAULT) ?? tiles[0];
-  if (!group || group.stocks.length === 0) return null;
-
-  function choose(name: string) {
-    setPicked(name);
-    try {
-      setPref(SECTOR_GROUP_KEY, name);
-    } catch {
-      /* 저장 못 해도 이번 세션에는 바뀐다 */
-    }
-  }
+  const groups = SECTOR_GROUPS.map((n) => tiles.find((t) => t.name === n)).filter(
+    (g): g is NonNullable<typeof g> => Boolean(g) && g!.stocks.length > 0,
+  );
+  if (groups.length === 0) return null;
 
   return (
     <section className="ov-card">
       <div className="ov-card-h">
         <span className="ov-card-t">섹터 MAP</span>
-        <span className="ov-card-sub">
-          {group.name} · {group.stocks.length}종목
-        </span>
+        <span className="ov-card-sub">{groups.map((g) => g.name).join(" · ")}</span>
       </div>
       <div className="ov-card-b">
-        <div className="filter-row">
-          {tiles.map((t) => (
-            <button
-              key={t.id}
-              className={`filter-btn ${t.name === group.name ? "active" : ""}`}
-              onClick={() => choose(t.name)}
-            >
-              {t.name}
-            </button>
-          ))}
-        </div>
-
-        <div className="map-grid">
-          {[...group.stocks]
-            .sort((a, b) => (b.changeRate ?? 0) - (a.changeRate ?? 0))
-            .map((s) => (
-              <button
-                key={s.code}
-                className="map-tile"
-                style={tileHeat(s.changeRate, theme)}
-                onClick={() => onOpen(s.code, s.name || s.code)}
-                title={`${s.name} · ${s.code}`}
-              >
-                {/* 티커가 먼저 — 미국은 티커로 기억한다 */}
-                <span className="map-tile-name">{s.code}</span>
-                <span className={`map-tile-pct num ${cls(s.changeRate)}`}>{pct(s.changeRate)}</span>
-                <span className="map-tile-sub">{s.name}</span>
-              </button>
-            ))}
-        </div>
+        {groups.map((group) => (
+          <div key={group.id} className="usm-sec">
+            <div className="usm-sec-h">
+              {group.name}
+              {/* 이 묶음의 1등 — 훑기 전에 답부터 */}
+              {(() => {
+                const best = [...group.stocks].sort(
+                  (a, b) => (b.changeRate ?? 0) - (a.changeRate ?? 0),
+                )[0];
+                return best ? (
+                  <i className="usm-best">
+                    최강 <b>{best.code}</b>
+                    <em className={cls(best.changeRate)}> {pct(best.changeRate)}</em>
+                  </i>
+                ) : null;
+              })()}
+            </div>
+            <div className="map-grid dense">
+              {[...group.stocks]
+                .sort((a, b) => (b.changeRate ?? 0) - (a.changeRate ?? 0))
+                .map((s) => (
+                  <button
+                    key={s.code}
+                    className="map-tile"
+                    /* ETF 는 ±2% 가 큰 날 — 5% 기준으로 칠하면 전부 흐리다 */
+                    style={tileHeat(s.changeRate, theme, 2)}
+                    onClick={() => onOpen(s.code, s.name || s.code)}
+                    title={`${s.name} · ${s.code}`}
+                  >
+                    {/* 티커가 먼저 — 미국은 티커로 기억한다 */}
+                    <span className="map-tile-name">{s.code}</span>
+                    <span className={`map-tile-pct num ${cls(s.changeRate)}`}>
+                      {pct(s.changeRate)}
+                    </span>
+                  </button>
+                ))}
+            </div>
+          </div>
+        ))}
 
         <div className="table-note">
-          <b>{group.name}</b> 안의 종목을 등락률 순으로 폅니다 — 그룹 MAP 이 「어느 묶음이
-          도나」라면 여기는 <b>그 안에서 무엇이 끌었나</b>입니다. 미국은 섹터가 ETF 로
-          거래되므로(XLK·XLF 같은) 이 묶음이 곧 업종 MAP 노릇을 합니다.
-          칸 크기는 모두 같습니다 — 해외는 시가총액을 안 받아옵니다.
+          미국은 섹터가 ETF 로 거래되므로(XLK·XLF 같은) 이 두 묶음이 곧 업종 MAP 노릇을
+          합니다. 등락률 순 · 색은 <b>±2% 기준</b>(ETF 는 2% 면 큰 날입니다) · 타일을
+          누르면 상세가 열립니다. 이름은 마우스를 올리면 보입니다.
         </div>
       </div>
     </section>

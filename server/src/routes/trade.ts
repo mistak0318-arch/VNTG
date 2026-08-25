@@ -1,6 +1,12 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
-import { TRADE_TARGETS, getTradeHistory, getTradeStats, isTradeConfigured } from "../tradeStats.js";
+import {
+  TRADE_TARGETS,
+  getTradeCountries,
+  getTradeHistory,
+  getTradeStats,
+  isTradeConfigured,
+} from "../tradeStats.js";
 import { listAllThemes, relatedStocks } from "../tradeStocks.js";
 import { findSectorByName } from "../sectorMood.js";
 
@@ -39,6 +45,18 @@ export function createTradeRouter(client: KiwoomClient): Router {
   router.get("/:key/history", async (req, res, next) => {
     try {
       res.json(await getTradeHistory(req.params.key));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 품목의 **나라별 상위** — 어느 나라로 얼마나 나갔나 + 그 나라 안의 세부 품목 구성.
+   * 관세청 국가별 API(nitemtrade)를 하루 캐시로. 품목을 펼칠 때만 부른다.
+   */
+  router.get("/:key/countries", async (req, res, next) => {
+    try {
+      res.json(await getTradeCountries(req.params.key));
     } catch (err) {
       next(err);
     }

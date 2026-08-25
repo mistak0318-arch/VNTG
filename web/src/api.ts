@@ -327,6 +327,22 @@ export const api = {
   backtestRules: () => getJson<{ rules: BacktestRuleDef[] }>("/api/backtest/rules"),
   backtestRun: (cfg: BacktestConfig) => postJson<{ id: string }>("/api/backtest/run", cfg),
   backtestJob: (id: string) => getJson<BacktestJob>(`/api/backtest/job/${id}`),
+  /** 돌려 본 조건들 — 엣지 순 리더보드. 통찰은 실행들 사이의 비교에서 나온다 */
+  backtestRuns: () =>
+    getJson<{
+      runs: {
+        id: string;
+        at: string;
+        label: string;
+        hit: BacktestStat;
+        base: BacktestStat;
+        edge: number | null;
+        from: string;
+        to: string;
+        codes: number;
+        verdict: { tone: "good" | "weak" | "thin" | "bad"; text: string };
+      }[];
+    }>("/api/backtest/runs"),
   /** 손절 감시 상태 — 보내지 않는다. 「감시 못 하는 자리가 몇인가」를 보는 창 */
   stopWatch: () =>
     getJson<{
@@ -631,6 +647,19 @@ export const api = {
     getJson<{ months: { month: string; exportUsd: number; importUsd: number }[] }>(
       `/api/trade/${key}/history`,
     ),
+  /** 품목의 나라별 상위 — 어느 나라로 얼마나 + 그 나라 안의 세부 품목 구성 */
+  tradeCountries: (key: string) =>
+    getJson<{
+      month: string;
+      watch: "export" | "import";
+      rows: {
+        country: string;
+        exportUsd: number;
+        importUsd: number;
+        yoy: number | null;
+        top: { name: string; usd: number; share: number }[];
+      }[];
+    }>(`/api/trade/${key}/countries`),
   breadth: (days = 60) =>
     getJson<{ days: number; points: BreadthPoint[]; summary: string }>(
       `/api/breadth?days=${days}`,
@@ -2193,7 +2222,17 @@ export interface BriefingTile {
 
 /* ── 조건 백테스트 ─────────────────────────────────────────── */
 
-export type BacktestRuleKey = "maAlign" | "aboveMa" | "volSurge" | "newHigh" | "minRate";
+export type BacktestRuleKey =
+  | "maAlign"
+  | "aboveMa"
+  | "volSurge"
+  | "newHigh"
+  | "minRate"
+  | "nearHigh52"
+  | "disparity"
+  | "volValue"
+  | "gapUp"
+  | "minScore";
 
 export interface BacktestRuleDef {
   key: BacktestRuleKey;
