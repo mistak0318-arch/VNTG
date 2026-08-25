@@ -1969,6 +1969,12 @@ export interface JournalTrade {
   level?: string;
   score?: number;
   passed?: string[];
+  /** 손절선(원) — 살 때만 적는다. R 배수의 분모 */
+  stop?: number;
+  /** 목표가(원) */
+  target?: number;
+  /** 이 매매에 건 위험 — 계좌 대비 % */
+  risk?: number;
 }
 
 export interface JournalEntry {
@@ -2002,6 +2008,8 @@ export interface JournalStats {
     brokeDays: number;
     brokeAvgReturn: number | null;
   };
+  /** 전체 실현 R — 손절선을 적은 매매에서만 */
+  rStat: { count: number; avg: number | null; best: number | null; worst: number | null };
   reasonEdge: EdgeRow[];
   signalEdge: EdgeRow[];
   marketEdge: EdgeRow[];
@@ -2023,6 +2031,10 @@ export interface EdgeRow {
   count: number;
   avgReturn: number;
   winRate: number;
+  /** 평균 실현 R — 손절선을 적은 매매에서만. 승률 옆에 꼭 같이 본다 */
+  avgR: number | null;
+  /** R 을 낼 수 있었던 건수 */
+  rCount: number;
 }
 
 export interface JournalData {

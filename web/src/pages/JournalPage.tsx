@@ -32,6 +32,50 @@ function pct(n: number | null): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 
+/** 1.5R 미만이면 경고한다 — 이기고도 지는 매매의 경계선 */
+const MIN_R = 1.5;
+
+/**
+ * 손절선·목표가를 적으면 **그 자리에서 R 을 보여준다.**
+ *
+ * 적고 나서 따로 계산하게 하면 아무도 안 한다. 숫자를 넣는 순간 옆에 떠야
+ * **주문을 내기 전에** 「이 매매는 1.2R 이네」를 알고 그만둘 수 있다 — 그게 이 칸의 전부다.
+ *
+ *   R = (목표가 − 진입가) ÷ (진입가 − 손절가)
+ *
+ * 손절폭(%)도 같이 적는다. R 이 좋아도 손절폭이 15% 면 그건 **손절이 아니라 방치**다.
+ */
+function PlanReadout({ trade }: { trade: JournalTrade }) {
+  const { price = 0, stop = 0, target = 0 } = trade;
+  if (!price || !stop) return null;
+
+  // 손절선이 진입가보다 위면 아직 적다 만 것이다 — 그 값으로 R 을 내면 부호가 뒤집힌다
+  if (stop >= price) {
+    return <i className="jn-plan-warn">손절선이 진입가보다 높습니다</i>;
+  }
+
+  const riskPct = ((price - stop) / price) * 100;
+  const r = target > price ? (target - price) / (price - stop) : null;
+
+  return (
+    <i className="jn-plan-out">
+      손절폭 <b>−{riskPct.toFixed(1)}%</b>
+      {r !== null && (
+        <>
+          {" · "}
+          <b className={r < MIN_R ? "negative" : "positive"}>{r.toFixed(1)}R</b>
+          {r < MIN_R && (
+            <span className="jn-plan-warn" title={`${MIN_R}R 미만이면 승률이 높아도 남지 않습니다`}>
+              {" "}
+              — {MIN_R}R 미만
+            </span>
+          )}
+        </>
+      )}
+    </i>
+  );
+}
+
 /**
  * 성적 한 묶음을 표로 — 근거별·신호등별·국면별이 같은 모양이라 하나로 쓴다.
  *
@@ -49,10 +93,28 @@ function EdgeTable({ rows }: { rows: EdgeRow[] }) {
             {r.avgReturn.toFixed(1)}%
           </span>
           <span className="num jn-edge-win">{r.winRate.toFixed(0)}%</span>
+          {/*
+            **승률 옆에 R 을 붙인다.** 이 둘은 따로 보면 거짓말을 한다 —
+            승률 70% 인데 평균 −0.3R 이면 지는 매매인데, 승률만 보면 잘하고 있는 줄 안다.
+            손절선을 안 적은 건은 R 을 못 내므로 「-」다. 0 으로 세지 않는다.
+          */}
+          <span
+            className={`num jn-edge-win ${r.avgR === null ? "" : r.avgR >= 0 ? "positive" : "negative"}`}
+            title={
+              r.avgR === null
+                ? "손절선을 적은 매매가 없어 R 을 못 냅니다"
+                : `${r.rCount}건에서 낸 평균 R (손절선을 적은 것만)`
+            }
+          >
+            {r.avgR === null ? "-" : `${r.avgR > 0 ? "+" : ""}${r.avgR.toFixed(2)}R`}
+          </span>
           <span className="num cost-usd">{r.count}건</span>
         </div>
       ))}
-      <div className="jn-stat-note">평균 · 승률 · 판 건수 순입니다.</div>
+      <div className="jn-stat-note">
+        평균 · 승률 · <b>평균 R</b> · 판 건수 순입니다. R 은 <b>손절선을 적어 둔 매매</b>에서만
+        나옵니다 — <b>승률보다 R 이 진짜 성적</b>입니다.
+      </div>
     </div>
   );
 }
@@ -344,6 +406,48 @@ export function JournalPage({
                     })}
                   </span>
                 )}
+                {/*
+                  ── 포지션 노트 — **매수에만.**
+
+                  이 노트는 「무엇을 볼까」까지는 잘 적어 왔는데 **「얼마나 잃을 각오인가」를
+                  적을 자리가 없었다.** 어긴 규칙에 「손절 미이행」 태그만 있었는데, 손절선을
+                  **미리** 적는 자리가 없으니 지켰는지 어겼는지도 결국 기억에 기대는 것이다.
+
+                  세 칸이면 R 배수가 따라 나오고, 판 뒤에는 **근거 태그별 평균 R** 까지 나온다.
+                  승률 70% 인데 평균 −0.3R 이면 지는 매매다 — 승률만으로는 그게 안 보인다.
+                */}
+                {t.kind === "buy" && (
+                  <span className="jn-trade-plan">
+                    <input
+                      className="pt-input short"
+                      inputMode="numeric"
+                      placeholder="손절선"
+                      title="이 아래로 가면 판다. R 배수의 분모입니다"
+                      value={t.stop || ""}
+                      onChange={(e) =>
+                        patchTrade(t.id, { stop: Number(e.target.value.replace(/,/g, "")) || 0 })
+                      }
+                    />
+                    <input
+                      className="pt-input short"
+                      inputMode="numeric"
+                      placeholder="목표가"
+                      value={t.target || ""}
+                      onChange={(e) =>
+                        patchTrade(t.id, { target: Number(e.target.value.replace(/,/g, "")) || 0 })
+                      }
+                    />
+                    <input
+                      className="pt-input short"
+                      inputMode="decimal"
+                      placeholder="위험 %"
+                      title="이 매매에 건 금액이 계좌의 몇 %인가"
+                      value={t.risk || ""}
+                      onChange={(e) => patchTrade(t.id, { risk: Number(e.target.value) || 0 })}
+                    />
+                    <PlanReadout trade={t} />
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -503,6 +607,50 @@ export function JournalPage({
             어느 쪽이 나한테 통하는지는 몇 달 치를 세 봐야 안다.
             건수가 적으면 평균은 우연이라, 건수를 옆에 같이 적는다.
           */}
+          {/*
+            **내 매매는 대체로 몇 R 짜리인가.**
+
+            승률·평균 수익률만 보면 「건 것 대비」가 안 보인다. 8% 를 걸고 번 3% 와
+            1% 를 걸고 번 3% 는 전혀 다른 매매인데 둘 다 「+3%」로 적힌다.
+
+            `count` 가 적으면 그건 성적이 나쁜 게 아니라 **손절선을 잘 안 적는다**는 뜻이다.
+            그것도 알아야 하는 정보라 건수를 앞에 둔다.
+          */}
+          <div className="jn-stat-block wide">
+            <div className="cost-sub">내 R — 건 것 대비 얼마를 벌었나</div>
+            {s.rStat.count === 0 ? (
+              <div className="jn-stat-note">
+                아직 없습니다. 매수를 적을 때 <b>손절선</b>을 같이 적으면, 그 종목을 팔 때
+                실현 R 이 여기 쌓입니다. <b>승률보다 R 이 진짜 성적</b>입니다 — 승률 70% 인데
+                평균 −0.3R 이면 지는 매매입니다.
+              </div>
+            ) : (
+              <div className="jn-edge">
+                <div className="cost-row">
+                  <span className="cost-name">평균 R</span>
+                  <span
+                    className={`num jn-edge-ret ${(s.rStat.avg ?? 0) >= 0 ? "positive" : "negative"}`}
+                  >
+                    {s.rStat.avg === null
+                      ? "-"
+                      : `${s.rStat.avg > 0 ? "+" : ""}${s.rStat.avg.toFixed(2)}R`}
+                  </span>
+                  {/* 아래 성적표들과 칸을 맞춘다 — 승률 자리는 여기 해당 값이 없다 */}
+                  <span />
+                  <span className="num jn-edge-win" title="가장 잘된 한 건">
+                    {s.rStat.best === null ? "-" : `↑${s.rStat.best.toFixed(1)}R`}
+                  </span>
+                  <span className="num cost-usd">{s.rStat.count}건</span>
+                </div>
+                <div className="jn-stat-note">
+                  최악 <b className="negative">{s.rStat.worst?.toFixed(1) ?? "-"}R</b> — 여기가
+                  <b> −1R 보다 아래</b>면 손절선을 적어 놓고 안 지킨 것입니다.
+                  손절선을 적은 매매만 셉니다.
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="jn-stat-block wide">
             <div className="cost-sub">무엇을 보고 산 것이 통했나</div>
             {s.reasonEdge.length === 0 ? (

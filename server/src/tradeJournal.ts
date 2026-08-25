@@ -150,6 +150,27 @@ export interface JournalTrade {
   level?: string;
   score?: number;
   passed?: string[];
+
+  /*
+   * ── 포지션 노트 — **살 때만 적는 세 칸**
+   *
+   * 이 노트는 「무엇을 볼까」까지는 잘 적어 왔는데 **「얼마나 잃을 각오인가」를 적을
+   * 자리가 없었다.** 어긴 규칙 칸에 「손절 미이행」이라는 태그만 있었다 — 손절선을
+   * **미리** 적어 두는 자리가 없으니 지켰는지 어겼는지도 사실은 기억에 기대는 것이다.
+   *
+   * 추세추종의 핵심은 진입이 아니라 손실 관리다. 세 칸이면 R 배수까지 따라 나온다.
+   *
+   *   R = (목표가 − 진입가) ÷ (진입가 − 손절가)
+   *
+   * 그리고 판 뒤에는 **실현 R** 이 나온다 — 승률보다 이게 진짜 성적이다.
+   * 승률 70% 인데 평균 −0.3R 이면 지는 매매다.
+   */
+  /** 손절선(원). 이 아래로 가면 판다 */
+  stop?: number;
+  /** 목표가(원) */
+  target?: number;
+  /** 이 매매에 건 위험 — **계좌 대비 %** */
+  risk?: number;
 }
 
 export interface JournalEntry {
@@ -362,6 +383,16 @@ export interface JournalStats {
     brokeAvgReturn: number | null;
   };
   /**
+   * **내 매매는 대체로 몇 R 짜리인가.**
+   *
+   * 승률·평균 수익률만 보면 「건 것 대비」가 안 보인다. 8% 를 걸고 번 3% 와 1% 를
+   * 걸고 번 3% 는 전혀 다른 매매인데 둘 다 「+3%」로 적힌다.
+   *
+   * ⚠️ **손절선을 적어 둔 매매에서만** 낸다. 안 적은 건 세지 않으므로 `count` 가
+   * 전체 매매 수보다 적을 수 있다 — 그 차이 자체가 「내가 손절선을 얼마나 적는가」다.
+   */
+  rStat: { count: number; avg: number | null; best: number | null; worst: number | null };
+  /**
    * **무엇을 보고 산 것이 통했나** — 이 시스템의 원래 목적에 가장 가까운 숫자.
    * 근거가 여럿이면 각각에 다 센다(섞여 있었다는 것 자체가 정보다).
    */
@@ -398,22 +429,51 @@ export interface EdgeRow {
   avgReturn: number;
   /** 이긴 비율(%) */
   winRate: number;
+  /**
+   * **평균 실현 R** — 손절선을 적어 둔 매매에서만 낸다. 없으면 `null`.
+   *
+   * 수익률(%)만으로는 성적을 못 잰다. 3% 를 벌었어도 **8% 를 걸고 번 3%** 와
+   * **1% 를 걸고 번 3%** 는 전혀 다른 매매다. R 은 그 둘을 갈라 준다.
+   *
+   *   실현 R = (판 가격 − 산 가격) ÷ (산 가격 − 손절가)
+   *
+   * 승률 70% 인데 평균 −0.3R 이면 지는 매매다. 그래서 **승률 옆에 꼭 같이 둔다.**
+   */
+  avgR: number | null;
+  /** R 을 낼 수 있었던 건수 — 이게 적으면 avgR 은 아직 우연이다 */
+  rCount: number;
 }
 
 const MISTAKE_LABEL = new Map(MISTAKE_TAGS.map((t) => [t.key as string, t.label]));
 const REASON_LABEL = new Map(REASON_TAGS.map((t) => [t.key as string, t.label]));
 const WATCH_LABEL = new Map(WATCH_TAGS.map((t) => [t.key as string, t.label]));
 
+/**
+ * 체결 한 건의 성적.
+ *
+ * `r` 은 **손절선을 적어 둔 매매에서만** 나온다. 안 적었으면 `null` 이고, 그 건은
+ * R 평균에서 빠진다 — 없는 것을 0 으로 세면 평균이 통째로 거짓말이 된다.
+ */
+interface Fill {
+  rate: number;
+  r: number | null;
+}
+
 /** 수익률 묶음 → 성적 한 줄 */
-function edge(map: Map<string, number[]>, label: (k: string) => string): EdgeRow[] {
+function edge(map: Map<string, Fill[]>, label: (k: string) => string): EdgeRow[] {
   return [...map.entries()]
-    .map(([key, xs]) => ({
-      key,
-      label: label(key),
-      count: xs.length,
-      avgReturn: xs.reduce((a, b) => a + b, 0) / xs.length,
-      winRate: (xs.filter((x) => x > 0).length / xs.length) * 100,
-    }))
+    .map(([key, xs]) => {
+      const rs = xs.map((x) => x.r).filter((x): x is number => x !== null);
+      return {
+        key,
+        label: label(key),
+        count: xs.length,
+        avgReturn: xs.reduce((a, b) => a + b.rate, 0) / xs.length,
+        winRate: (xs.filter((x) => x.rate > 0).length / xs.length) * 100,
+        avgR: rs.length > 0 ? rs.reduce((a, b) => a + b, 0) / rs.length : null,
+        rCount: rs.length,
+      };
+    })
     // 건수가 아니라 **성적** 순으로 — 뭐가 통했나를 보는 표다
     .sort((a, b) => b.avgReturn - a.avgReturn);
 }
@@ -469,6 +529,13 @@ export async function journalStats(): Promise<JournalStats> {
     level: string;
     /** 그날 시장 신호등 — 국면별 성적을 내는 기준 */
     market: string;
+    /**
+     * 살 때 적어 둔 손절선. 실현 R 의 분모가 여기서 나온다.
+     *
+     * **판 뒤에 손절선을 고쳐 적을 수 없다** — 산 로트에 그때 값이 실려 있기 때문이다.
+     * 그게 이 숫자를 믿을 수 있게 하는 유일한 이유다.
+     */
+    stop: number | null;
   }
   const lots = new Map<string, Lot[]>();
   const realized = new Map<string, number[]>(); // 매수일 → 실현 수익률들
@@ -479,9 +546,11 @@ export async function journalStats(): Promise<JournalStats> {
    * 산 **로트마다** 근거·신호등·시장 국면을 실어 두면, 판 순간 그 성적이
    * 그 근거에 꽂힌다 — 내 로직 중 뭐가 맞는지가 그제야 숫자로 나온다.
    */
-  const byReason = new Map<string, number[]>();
-  const byLevel = new Map<string, number[]>();
-  const byMarket = new Map<string, number[]>();
+  const byReason = new Map<string, Fill[]>();
+  const byLevel = new Map<string, Fill[]>();
+  const byMarket = new Map<string, Fill[]>();
+  /** 전체 실현 R — 「내 매매가 대체로 몇 R 짜리인가」 */
+  const allR: number[] = [];
   for (const r of [...rows].sort((a, b) => a.date.localeCompare(b.date))) {
     for (const t of r.trades ?? []) {
       const key = t.code || t.name;
@@ -495,6 +564,8 @@ export async function journalStats(): Promise<JournalStats> {
           reasons: t.reasons ?? [],
           level: t.level ?? "",
           market: r.context?.marketLevel ?? "",
+          // 손절선이 진입가보다 위면 적다 만 것이다 — 그런 값으로 R 을 내면 부호가 뒤집힌다
+          stop: typeof t.stop === "number" && t.stop > 0 && t.stop < t.price ? t.stop : null,
         });
         lots.set(key, arr);
         continue;
@@ -505,14 +576,25 @@ export async function journalStats(): Promise<JournalStats> {
         const lot = arr[0];
         const take = Math.min(left, lot.qty);
         const rate = ((t.price - lot.price) / lot.price) * 100;
+        /*
+         * **실현 R** — 건 것 대비 얼마를 벌었나.
+         *
+         *   R = (판 가격 − 산 가격) ÷ (산 가격 − 손절가)
+         *
+         * 손절선을 안 적은 로트는 `null` 이다. 0 으로 세면 평균이 통째로 거짓말이 된다 —
+         * **못 내는 값을 지어내지 않는다**는 이 앱의 규칙이 여기서도 그대로다.
+         */
+        const r = lot.stop !== null ? (t.price - lot.price) / (lot.price - lot.stop) : null;
+        if (r !== null) allR.push(r);
+        const fill: Fill = { rate, r };
         const got = realized.get(lot.date) ?? [];
         // 수량만큼 가중하지 않고 건별로 넣는다 — 승률·평균을 보려는 것이므로
         got.push(rate);
         realized.set(lot.date, got);
         // 한 매매에 근거가 여럿이면 **각각에 다 넣는다** — 어느 근거가 섞여 있었는지가 정보다
-        for (const k of lot.reasons) byReason.set(k, [...(byReason.get(k) ?? []), rate]);
-        if (lot.level) byLevel.set(lot.level, [...(byLevel.get(lot.level) ?? []), rate]);
-        if (lot.market) byMarket.set(lot.market, [...(byMarket.get(lot.market) ?? []), rate]);
+        for (const k of lot.reasons) byReason.set(k, [...(byReason.get(k) ?? []), fill]);
+        if (lot.level) byLevel.set(lot.level, [...(byLevel.get(lot.level) ?? []), fill]);
+        if (lot.market) byMarket.set(lot.market, [...(byMarket.get(lot.market) ?? []), fill]);
         lot.qty -= take;
         left -= take;
         if (lot.qty <= 0) arr.shift();
@@ -545,6 +627,12 @@ export async function journalStats(): Promise<JournalStats> {
       keptAvgReturn: avg(keptReturns),
       brokeDays: judged.length - kept.length,
       brokeAvgReturn: avg(brokeReturns),
+    },
+    rStat: {
+      count: allR.length,
+      avg: avg(allR),
+      best: allR.length > 0 ? Math.max(...allR) : null,
+      worst: allR.length > 0 ? Math.min(...allR) : null,
     },
     reasonEdge: edge(byReason, (k) => REASON_LABEL.get(k) ?? k),
     signalEdge: edge(byLevel, (k) => k),
