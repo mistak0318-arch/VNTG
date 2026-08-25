@@ -136,7 +136,12 @@
 /* ---------- 지수 카드 ---------- */
 .ov-idx-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /*
+   * ⚠️ minmax(0, 1fr) — 1fr 만 쓰면 내용 최소폭 아래로는 안 줄어서,
+   * 수급 값이 긴 선물 칸이 옆 코스피 칸을 밀어내 타일 폭이 어긋났다(2026-08-26).
+   * 칸은 내용과 무관하게 정확히 반반이어야 한다.
+   */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1px;
   background: var(--ov-line-soft);
 }
