@@ -1,5 +1,6 @@
 import { formatAlerts, getAlertConfig, scanAlerts, type FiredAlert } from "./alertRules.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { pruneLiveAlerts, runLiveAlerts } from "./liveAlerts.js";
 import { pruneStopWatch, runStopWatch } from "./stopWatch.js";
 import { sendTelegram } from "./telegram.js";
 import { listWatchlist } from "./watchlist.js";
@@ -66,6 +67,7 @@ async function tick(client: KiwoomClient): Promise<void> {
    * 통째로 쉬면 안 된다.
    */
   pruneStopWatch();
+  pruneLiveAlerts();
   try {
     const stop = await runStopWatch(client);
     if (stop.breaks.length > 0) {
@@ -73,6 +75,19 @@ async function tick(client: KiwoomClient): Promise<void> {
     }
   } catch (err) {
     console.error("[alert] 손절 감시 실패:", err instanceof Error ? err.message : err);
+  }
+
+  /*
+   * VI·체결강도 급변도 조회를 안 쓴다 — 이미 물고 있는 실시간에서 꺼낸다.
+   * VI 는 몇 초 뒤에 알면 이미 풀려 있으므로 10분 간격을 기다릴 수 없다.
+   */
+  try {
+    const live = await runLiveAlerts();
+    if (live.alerts.length > 0) {
+      console.log(`[alert] 실시간 ${live.alerts.length}건 — ${live.alerts.map((a) => a.name).join(", ")}`);
+    }
+  } catch (err) {
+    console.error("[alert] 실시간 알림 실패:", err instanceof Error ? err.message : err);
   }
 
   if (scanning) return;

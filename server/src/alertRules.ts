@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { brokerFlow } from "./brokerFlow.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getSectorMood } from "./sectorMood.js";
 import { evaluateMarket } from "./marketSignal.js";
@@ -27,7 +28,12 @@ export type AlertKey =
   | "volumeSurge"
   | "flowTurn"
   | "newHigh"
-  | "trendAlign";
+  | "trendAlign"
+  /** 아래 둘은 실시간에서 꺼낸다 — 조회 0, 1분마다 */
+  | "viHit"
+  | "strengthJump"
+  /** 이것만 조회가 필요해 10분 검사에 붙어 돈다 */
+  | "brokerExit";
 
 export interface AlertRule {
   key: AlertKey;
@@ -84,6 +90,36 @@ export const DEFAULT_ALERT_CONFIG: AlertConfig = {
       enabled: true,
       threshold: 0,
       hint: "어제까지 아니었다가 오늘 5>20>60 정렬 달성",
+    },
+    /*
+     * ── 아래 셋은 **다른 길로 돈다.**
+     *
+     * 위의 것들은 종목마다 조회를 부르므로 10분 간격을 지킨다. 아래 둘(VI·체결강도)은
+     * **이미 물고 있는 실시간에서** 값을 꺼내므로 조회가 0 이고, 그래서 **1분마다** 본다.
+     * VI 는 몇 초 뒤에 알면 이미 끝나 있다.
+     *
+     * 거래원 이탈만 조회가 필요해서 위쪽 검사에 붙어 돈다.
+     */
+    {
+      key: "viHit",
+      label: "VI 발동",
+      enabled: true,
+      threshold: 0,
+      hint: "관심종목에 변동성완화장치가 걸렸다 — 실시간에서 바로 받는다(조회 0)",
+    },
+    {
+      key: "strengthJump",
+      label: "체결강도 급변",
+      enabled: true,
+      threshold: 30,
+      hint: "체결강도가 직전보다 기준값만큼 뛰었고 100을 넘겼다 — 실시간(조회 0)",
+    },
+    {
+      key: "brokerExit",
+      label: "거래원 이탈",
+      enabled: false,
+      threshold: 0,
+      hint: "⚠️ 종목당 조회가 1회 더 나갑니다. 오늘 제일 많이 산 창구가 순매도로 돌아섰을 때",
     },
   ],
 };
@@ -387,6 +423,34 @@ async function evaluateStock(
     }
   }
 
+  /*
+   * ── 거래원 이탈
+   *
+   * **오늘 제일 많이 산 창구가 지금은 팔고 있나.**
+   *
+   * `ka10040` 은 누적과 함께 **직전 조회 대비 증감**(`delta`)을 준다. 1위 매수 창구의
+   * 증감이 음수면 그 창구가 방향을 바꾼 것이다 — 하루 종일 산 창구가 돌아서는 건
+   * 「끌던 손이 손을 뗐다」는 뜻이라 값이 있다.
+   *
+   * ⚠️ **조회가 한 번 더 나간다.** 그래서 기본이 꺼져 있고, 설정에 그렇게 적어 뒀다.
+   * 덤으로 이 조회가 거래원 시계열도 채운다 — 화면을 안 보는 시간이 그만큼 덜 빈다.
+   */
+  const exit = rules.get("brokerExit");
+  if (exit) {
+    const bf = await brokerFlow(client, item.code).catch(() => null);
+    const top = bf?.buy?.[0];
+    if (top && top.delta < 0 && top.qty > 0) {
+      fired.push({
+        ...base,
+        rule: "brokerExit",
+        ruleLabel: exit.label,
+        detail:
+          `오늘 제일 많이 산 ${top.name}(누적 ${fmtInt(top.qty)}주)이 ` +
+          `직전 조회 대비 ${fmtInt(Math.abs(top.delta))}주 순매도로 돌아섰습니다`,
+      });
+    }
+  }
+
   return fired;
 }
 
@@ -444,6 +508,9 @@ const RULE_ICON: Record<AlertKey, string> = {
   flowTurn: "🔄",
   newHigh: "🚀",
   trendAlign: "📈",
+  viHit: "⚡",
+  strengthJump: "📈",
+  brokerExit: "🚪",
 };
 
 function esc(s: string): string {

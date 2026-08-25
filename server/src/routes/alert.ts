@@ -8,6 +8,7 @@ import {
 } from "../alertRules.js";
 import { runAlertScan } from "../alertScheduler.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
+import { formatLiveAlerts, runLiveAlerts } from "../liveAlerts.js";
 import { formatStopBreaks, runStopWatch } from "../stopWatch.js";
 import { telegramChannelStatus } from "../telegram.js";
 
@@ -43,9 +44,22 @@ export function createAlertRouter(client: KiwoomClient): Router {
     try {
       const send = req.query.send === "1";
       const result = await runAlertScan(client, { dryRun: !send, send });
+      /*
+       * VI·체결강도는 다른 길로 도는데(실시간·1분), **미리보기에는 같이 보여준다** —
+       * 「지금 검사」를 눌렀는데 절반만 나오면 나머지가 꺼진 줄 안다.
+       * `send:false` 라 상태를 안 남기므로 진짜 알림을 잡아먹지 않는다.
+       */
+      const live = await runLiveAlerts({ send: false }).catch(() => null);
       res.json({
         ...result,
-        preview: result.alerts.length > 0 ? formatAlerts(result.alerts) : "",
+        live: live ? { count: live.alerts.length, connected: live.live } : null,
+        preview:
+          [
+            result.alerts.length > 0 ? formatAlerts(result.alerts) : "",
+            live && live.alerts.length > 0 ? formatLiveAlerts(live.alerts) : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n") || "",
       });
     } catch (err) {
       next(err);

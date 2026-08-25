@@ -87,7 +87,15 @@ function StopWatchBlock() {
 }
 
 /** 기준값이 의미 없는 규칙 (조건이 계산으로만 정해짐) */
-const NO_THRESHOLD = new Set(["flowTurn", "newHigh", "trendAlign"]);
+const NO_THRESHOLD = new Set(["flowTurn", "newHigh", "trendAlign", "viHit", "brokerExit"]);
+
+/**
+ * 조회를 안 쓰는 규칙 — **실시간에서 바로 꺼낸다.**
+ *
+ * 이걸 표시하는 이유는, 검사 간격을 늘려도 이 둘은 그대로 1분마다 돈다는 걸
+ * 알아야 하기 때문이다. 「간격을 20분으로 했는데 왜 VI 가 바로 오지」가 안 생기게.
+ */
+const LIVE_RULES = new Set(["viHit", "strengthJump"]);
 
 const CHANNEL_LABEL: Record<string, string> = {
   report: "리포트",
@@ -214,7 +222,17 @@ export function AlertConfigPanel() {
                 onChange={(e) => patchRule(r.key, { enabled: e.target.checked })}
               />
               <span>
-                <b>{r.label}</b>
+                <b>
+                  {r.label}
+                  {LIVE_RULES.has(r.key) && (
+                    <i
+                      className="sig-live-tag"
+                      title="실시간에서 바로 꺼냅니다 — 조회를 안 쓰므로 위 검사 간격과 상관없이 1분마다 봅니다"
+                    >
+                      실시간 · 1분
+                    </i>
+                  )}
+                </b>
                 <small>{r.hint}</small>
               </span>
             </label>

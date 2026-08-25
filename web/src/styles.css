@@ -5364,6 +5364,13 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .bt-edge-v { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
 .bt-edge small { flex: 1 1 100%; color: var(--muted); font-size: 0.75rem; line-height: 1.5; }
 
+/* 「실시간 · 1분」 꼬리표 — 검사 간격과 무관하게 도는 규칙임을 알린다 */
+.sig-live-tag {
+  font-style: normal; font-weight: 400; font-size: 0.68rem;
+  margin-left: 0.35rem; padding: 0.05rem 0.3rem;
+  border: 1px solid var(--border); border-radius: 999px; color: var(--muted);
+}
+
 /* 손절 감시 — 알림 설정 맨 위. 끄고 켜는 칸이 없어 값만 적는 줄이다 */
 .sw-stat { margin-top: 0.35rem; }
 .sw-stat small { color: var(--muted); line-height: 1.5; }
