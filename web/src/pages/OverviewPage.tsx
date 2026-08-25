@@ -400,6 +400,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                       label: g.label,
                       digits: g.isRate ? 3 : 2,
                       hintRate: g.changeRate,
+                      hintPrice: g.price,
                     })
                   }
                   title="눌러서 차트 보기"

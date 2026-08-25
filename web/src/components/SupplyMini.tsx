@@ -45,8 +45,15 @@ function n(v: unknown): number {
 function money(v: number): string {
   const a = Math.abs(v);
   const sign = v > 0 ? "+" : v < 0 ? "-" : "";
-  if (a >= 100_000) return `${sign}${(a / 10_000).toFixed(1)}조`; // 백만원 → 조
-  if (a >= 100) return `${sign}${a >= 10_000 ? Math.round(a / 100).toLocaleString("ko-KR") : (a / 100).toFixed(1)}억`;
+  /*
+   * ⚠️ 단위 환산을 틀렸던 자리 (2026-08-25 저녁 실사용 발견).
+   * 백만원 → 조는 **÷1,000,000**인데 ÷10,000 으로 나눠 하이닉스 외국인 당일이
+   * 「-199.8조」로 떴다(실제 -1.99조의 100배). 문턱도 1,000억부터 조로 접어서
+   * 하루 수급이 죄다 조 단위였다. 1조 = 1,000,000백만 — 여기 박아 둔다.
+   */
+  if (a >= 1_000_000) return `${sign}${(a / 1_000_000).toFixed(2)}조`;
+  if (a >= 100)
+    return `${sign}${a >= 10_000 ? Math.round(a / 100).toLocaleString("ko-KR") : (a / 100).toFixed(1)}억`;
   return `${sign}${Math.round(a).toLocaleString("ko-KR")}백만`;
 }
 

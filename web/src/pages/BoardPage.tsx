@@ -746,8 +746,21 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
     }
   }, [pick]);
 
-  const flip = (k: string) =>
+  /*
+   * 켜면 **그 칸으로 스크롤한다** (2026-08-25 — 「가격 요약을 넣었는데 왜 없냐」).
+   * 새 칸은 보드 맨 끝에 생기는데, 칸이 여럿이면 화면 밖이라 **켜져도 안 보였다** —
+   * 안 만든 걸로 오해받은 이유다. 생기는 자리를 바꾸는 대신(기존 배치가 밀리면 그것대로
+   * 사고다) 생긴 곳을 보여준다. 자리는 ⠿ 로 끌어 옮기면 된다.
+   */
+  const flip = (k: string) => {
+    const adding = !pick.includes(k);
     setPick((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
+    if (adding) {
+      setTimeout(() => {
+        document.querySelector(`[data-cell="${k}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 80);
+    }
+  };
 
   /*
    * **이 창이 직접 고른 종목.**

@@ -76,6 +76,15 @@ export interface ChartTarget {
    * 언젠가 갈라진다** — 그때마다 어느 쪽이 맞는지 사람이 판정해야 한다.
    */
   hintRate?: number | null;
+  /**
+   * **목록이 보여 준 현재가** (2026-08-25 — 「선물 값 반영이 안 된다」).
+   *
+   * hintRate 와 같은 원칙이다. 야간선물은 리스트가 야간 현재가(CM, 1,068.65)를
+   * 보여 주는데 시트의 큰 숫자는 **주간 일봉 마지막 종가**(1,063.3)였다 — 등락률은
+   * hintRate 로 넘겨받아 놓고 가격은 제 것을 쓰니 짝이 안 맞았다. 야후 지수도
+   * 마찬가지다(목록은 지금 시세, 차트는 마지막 봉). 목록이 준 값이 있으면 그게 먼저다.
+   */
+  hintPrice?: number | null;
 }
 
 const W = 720;
@@ -300,7 +309,10 @@ export function YahooChartSheet({
               (2026-08-25, 「얘만 글자가 너무 커서 한눈에 안 담긴다」).
             */}
             <div className={`yc-head${usStock ? " compact" : ""}`}>
-              <b className="yc-px">{view.last.toLocaleString("ko-KR", { maximumFractionDigits: digits })}</b>
+              {/* 목록이 준 현재가가 먼저다 — 차트 마지막 봉은 그보다 늦은 값일 수 있다 */}
+              <b className="yc-px">
+                {(target.hintPrice ?? view.last).toLocaleString("ko-KR", { maximumFractionDigits: digits })}
+              </b>
               {view.dayRate !== null ? (
                 <>
                   <span className={`yc-rate ${view.dayRate >= 0 ? "positive" : "negative"}`}>
