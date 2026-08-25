@@ -3464,8 +3464,9 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 
 /* 선물 투자자별 수급 (차트 시트 안) */
 .ff-wrap { margin-top: 0.8rem; }
-/* 선물 타일 계약→억원 환산 — 키움(억원)과 눈으로 맞춰보라고 붙는 꼬리 */
-.ff-eok { font-style: normal; font-size: 0.86em; opacity: 0.62; }
+/* 선물 타일 수급 — 금액(≈억원)이 위, 계약이 아래 작게 (사용자 지정) */
+.ff-eok { font-style: normal; font-size: 0.82em; opacity: 0.62; }
+.ff-two { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
 .ff-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 1rem; margin-bottom: 0.3rem; }
 .ff-head > b { font-size: 0.82rem; }
 

@@ -1,28 +1,46 @@
 import { useEffect, useState } from "react";
 import { api, normalizeStockCode, type NaverNewsCat, type StockSearchResult } from "../api";
+import { BreakingNews } from "../components/BreakingNews";
 import { MainNewsPanel } from "../components/MainNewsPanel";
 import { MineNewsPanel } from "../components/MineNewsPanel";
 import { DisclosureList, NewsList } from "../components/NewsDisclosurePanel";
 import { NaverFinanceFrame } from "../components/NaverFinanceFrame";
 import { SectorNews } from "../components/SectorNews";
+import { useDragOrder } from "../useDragOrder";
 
 /*
  * 뉴스 탭 (2026-08-26 확장) — 네이버 증권의 갈래를 그대로 편다.
- * 순서는 요청 그대로: 주요뉴스 → 시황·전망 → 기업·종목 → 해외증시 → ⭐관심종목
- * → ⚡속보 → 부동산 → 분야별(우리 검색 수집) → 맨 끝 네이버 증권 바로가기.
+ * 기본 순서: 주요뉴스 → ⚡속보(그 옆 — 사용자 요청) → 시황·전망 → 기업·종목 →
+ * 해외증시 → ⭐관심종목 → 부동산 → 분야별 → 맨 끝 네이버 증권 바로가기.
+ * **탭을 끌면 순서가 바뀌고 이 기기에 저장된다** (useDragOrder — 다른 순서 UI 와 동일).
  */
 type SrcTab = NaverNewsCat | "mine" | "sector" | "naver";
-const TABS: { key: SrcTab; label: string }[] = [
-  { key: "main", label: "🏠 주요뉴스" },
-  { key: "market", label: "시황·전망" },
-  { key: "company", label: "기업·종목" },
-  { key: "world", label: "해외증시" },
-  { key: "mine", label: "⭐ 관심종목" },
-  { key: "flash", label: "⚡ 속보" },
-  { key: "estate", label: "부동산" },
-  { key: "sector", label: "분야별 뉴스" },
-  { key: "naver", label: "네이버 증권" },
+const TAB_LABEL: Record<SrcTab, string> = {
+  main: "🏠 주요뉴스",
+  flash: "⚡ 속보",
+  market: "시황·전망",
+  company: "기업·종목",
+  world: "해외증시",
+  mine: "⭐ 관심종목",
+  estate: "부동산",
+  sector: "분야별 뉴스",
+  naver: "네이버 증권",
+};
+const TAB_DEFAULT: SrcTab[] = [
+  "main", "flash", "market", "company", "world", "mine", "estate", "sector", "naver",
 ];
+const TAB_ORDER_KEY = "vntg.newsTabOrder.v1";
+
+function loadTabOrder(): SrcTab[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TAB_ORDER_KEY) ?? "[]") as string[];
+    // 저장본에 없는 새 탭은 기본 자리 순서대로 뒤에 잇는다 — 탭이 늘어도 안 사라진다
+    const known = saved.filter((k): k is SrcTab => (TAB_DEFAULT as string[]).includes(k));
+    return [...known, ...TAB_DEFAULT.filter((k) => !known.includes(k))];
+  } catch {
+    return TAB_DEFAULT;
+  }
+}
 
 export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const [query, setQuery] = useState("");
@@ -31,6 +49,15 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
   /** 종목이 아니라 **키워드**로 검색한 상태 — 「2차전지」「금리 인하」 같은 것 */
   const [keyword, setKeyword] = useState<string | null>(null);
   const [srcTab, setSrcTab] = useState<SrcTab>("main");
+  const [tabOrder, setTabOrder] = useState<SrcTab[]>(loadTabOrder);
+  const tabDrag = useDragOrder(tabOrder, (next) => {
+    setTabOrder(next as SrcTab[]);
+    try {
+      localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(next));
+    } catch {
+      // 저장이 안 돼도 이번 화면에선 바뀐 순서로 쓴다
+    }
+  });
 
   // 종목명이 겹칠 수 있으므로 후보를 보여주고 고르게 한다
   useEffect(() => {
@@ -136,19 +163,28 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
       ) : (
         <>
           <nav className="detail-tabs">
-            {TABS.map((t) => (
+            {tabOrder.map((k) => (
               <button
-                key={t.key}
-                className={`detail-tab${srcTab === t.key ? " active" : ""}`}
-                onClick={() => setSrcTab(t.key)}
+                key={k}
+                className={`detail-tab${srcTab === k ? " active" : ""}${tabDrag.cls(k)}`}
+                onClick={() => setSrcTab(k)}
+                title="끌어서 탭 순서를 바꿀 수 있습니다"
+                {...tabDrag.props(k)}
               >
-                {t.label}
+                {TAB_LABEL[k]}
               </button>
             ))}
           </nav>
 
           {srcTab === "mine" ? (
             <MineNewsPanel />
+          ) : srcTab === "flash" ? (
+            /*
+             * ⚡속보는 **원래의 속보**다 (2026-08-26 — 「찐 속보 올라오는 곳이야
+             * 다시 고쳐놔」). 네이버 검색 API 에서 [속보]·[단독]·[긴급] 머리표만
+             * 골라낸 것 — 네이버 증권의 flashnews 목록으로 바꿨다가 되돌렸다.
+             */
+            <BreakingNews />
           ) : srcTab === "sector" ? (
             <SectorNews perSector={50} defaultSort="recent" />
           ) : srcTab === "naver" ? (

@@ -324,18 +324,21 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                          * 보여줘서 「값이 다르다」 소리가 나왔다 — 같은 데이터, 단위 차이.
                          * K200 선물 승수 25만원/pt: 억원 = 계약 × 지수 × 250,000 / 1e8
                          * = 계약 × 지수 / 400. 평균 체결가가 아니라 현재가라 ≈ 다.
+                         *
+                         * **금액이 위(크게), 계약이 아래(작게)** — 지수 수급(억원)과
+                         * 같은 눈으로 견주는 게 우선이라는 사용자 지정.
                          */
                         const eok = (n: number) =>
-                          c.price > 0
-                            ? ` ≈${n > 0 ? "+" : ""}${fmtNum(Math.round((n * c.price) / 400))}억`
-                            : "";
+                          `${n > 0 ? "+" : ""}${fmtNum(Math.round((n * c.price) / 400))}억`;
                         const row = (lbl: string, n: number) => (
                           <div>
                             <span className="lbl">{lbl}</span>
-                            <span className={signCls(n)}>
-                              {n > 0 ? "+" : ""}
-                              {fmtNum(n)}
-                              <em className="ff-eok">{eok(n)}</em>
+                            <span className={`ff-two ${signCls(n)}`}>
+                              {c.price > 0 ? `≈${eok(n)}` : `${n > 0 ? "+" : ""}${fmtNum(n)}`}
+                              <em className="ff-eok">
+                                {n > 0 ? "+" : ""}
+                                {fmtNum(n)}계약
+                              </em>
                             </span>
                           </div>
                         );
@@ -350,7 +353,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                     {c.code === "F" && (
                       <div className="ov-idx-note">
                         {futFlow
-                          ? `${futFlow.date.slice(5).replace("-", "/")} 순매수 · 계약(≈억원 환산) · 네이버(±10분)`
+                          ? `${futFlow.date.slice(5).replace("-", "/")} 순매수 · ≈억원(아래는 계약) · 네이버(±10분)`
                           : "선물 수급 불러오는 중…"}
                       </div>
                     )}
