@@ -113,12 +113,41 @@ export function ReviewPanel() {
         {result && (
           /* 한 줄 요약 — 매일 필요한 건 이것뿐이다 */
           <span className="rv-line">
+            {/*
+              ⚠️ **어느 판의 결과인지 박아 둔다.**
+
+              「드롭박스를 바꿔도 갱신이 안 된다」는 말이 나왔는데, 코드는 정상이었다.
+              판을 바꾸면 다시 채점해서 다시 그린다. 문제는 **바뀐 게 안 보인다**는
+              것이었다 — 요약이 「경과 N일 · 적중 M」뿐이라 두 판의 숫자가 비슷하면
+              화면이 그대로인 것처럼 보인다.
+
+              고른 판을 결과 안에 적으면 **바뀌었다는 게 눈에 보인다.**
+            */}
+            <b className="rv-which">
+              {picked?.date.slice(5)} {picked?.label}
+            </b>
             경과 {result.elapsedDays}일 · 적중{" "}
             <b className="positive">{result.hit}</b> · 애매 {result.partial} · 빗나감{" "}
             <b className="negative">{result.miss}</b>
           </span>
         )}
       </div>
+
+      {/*
+        **이 예측을 누가 적었나.**
+
+        「복기의 기준은 누가 정해준 건지 모르겠다, 나는 코스피를 복기 종목으로 둔 적이
+        없다」는 말이 나왔다. 맞는 지적이다 — 체크포인트는 **리포트를 발행할 때 AI 가
+        그 판의 근거로 적어 둔 것**인데 화면이 그걸 한 번도 말한 적이 없다.
+        내가 고른 종목으로 보이면 「왜 이게 여기 있냐」가 된다.
+      */}
+      <p className="page-note">
+        여기 항목은 <b>그 판을 발행할 때 AI 가 적어 둔 예측</b>입니다 — 내가 고른
+        종목이 아닙니다. 그래서 코스피 같은 지수도 들어갑니다. 채점은 <b>기계가</b>{" "}
+        일봉으로 하고 <b>AI 비용은 0</b>입니다.
+        <br />
+        <b>적중률을 자랑하려고 만든 게 아닙니다</b> — 어떤 근거가 실제로 통했는지를 보는 자리입니다.
+      </p>
 
       {error && <div className="error-banner">{error}</div>}
       {loading && !result && <div className="empty">채점 중… (종목별 일봉을 확인합니다)</div>}
