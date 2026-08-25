@@ -2236,6 +2236,17 @@ body {
 .bf-theme-main { font-style: normal; font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
 .bf-theme b { text-align: right; font-size: 0.78rem; }
 .bf-theme-sep { height: 1px; background: var(--border); margin: 0.25rem 0; }
+/* 줄이 버튼이 됐다(구성종목 시트) — 버튼 기본 모양을 지우고 줄 모양 그대로 */
+.bf-theme-click {
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+.bf-theme-click:hover { background: var(--panel-hover, rgba(128, 128, 128, 0.08)); border-radius: 4px; }
 
 /* AI 한 줄 */
 .bf-brief { font-size: 0.8rem; line-height: 1.65; background: var(--panel-2); border-radius: 0.4rem; padding: 0.6rem 0.7rem; }
@@ -3962,6 +3973,39 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .co-chip { display: inline-flex; align-items: baseline; gap: 0.3rem; }
 .co-chip em { font-style: normal; font-size: 0.72rem; color: var(--muted); }
 .co-chip b { font-size: 0.88rem; }
+
+/* ── 반응형 손질 (2026-08-25 — 전 페이지 점검) ─────────────────────────
+   실측: 폰 375·태블릿 768 은 21쪽 전부 가로 넘침 0. 남은 문제 둘 —
+   (1) 터치 기기에서 버튼이 26px 라 손가락 기준(≥32px)에 못 미친다
+   (2) 와이드(1500px+)에서 읽는 화면의 글줄이 1,300px 로 퍼져 줄을 잃는다.
+       표 화면은 넓을수록 좋지만 **글은 한 줄이 눈 폭 안에** 있어야 한다 */
+@media (pointer: coarse) {
+  .filter-btn,
+  .detail-tab,
+  .algo-run-btn,
+  .refresh-btn,
+  .refresh-auto {
+    min-height: 34px;
+  }
+}
+@media (min-width: 1500px) {
+  /* 읽는 블록만 — 표(data-table-wrap)는 건드리지 않는다 */
+  .report-header,
+  .report-section,
+  .ai-card,
+  .rp-glance,
+  .pub-progress,
+  .jn-editor,
+  .jn-ctx,
+  .bn-list,
+  .nb,
+  .report-lines,
+  .guide,
+  .page-note,
+  .table-note {
+    max-width: 1120px;
+  }
+}
 
 /* 리포트 한눈 스트립 — 신문 1면 제목 자리. 방향·수급·환율 다섯 칸 */
 .rp-glance {

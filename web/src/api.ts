@@ -403,9 +403,14 @@ export const api = {
   paperTradeRemove: (id: string) => deleteJson<PaperResult>(`/api/paper/${id}`),
   marketSignal: (force = false) =>
     getJson<MarketSignal>(`/api/signal/market${force ? "?force=1" : ""}`),
-  signalScreenStart: (market: string, level: "green" | "yellow", limit: number) =>
+  signalScreenStart: (market: string, level: "green" | "yellow", limit: number, universe = "trade-value") =>
     postJson<{ jobId: string }>(
-      `/api/signal/screen/start?market=${market}&level=${level}&limit=${limit}`,
+      `/api/signal/screen/start?market=${market}&level=${level}&limit=${limit}&universe=${encodeURIComponent(universe)}`,
+    ),
+  /** 고를 수 있는 모집단 — 서버가 정한다. 화면에 박아 두면 서버와 갈린다 */
+  signalScreenUniverses: () =>
+    getJson<{ universes: { key: string; label: string; hint: string }[] }>(
+      "/api/signal/screen/universes",
     ),
   signalScreenStatus: (jobId: string) => getJson<ScreenJob>(`/api/signal/screen/${jobId}`),
   yahooChart: (symbol: string, range: string) =>
@@ -1209,6 +1214,8 @@ export interface ScreenJob {
   results: ScreenHit[];
   market: string;
   minLevel: string;
+  /** 어느 목록에서 찾았나 — 예전 기록에는 없다(거래대금 상위였다) */
+  universe?: string;
   startedAt: string;
   error?: string;
 }
@@ -1218,6 +1225,7 @@ export interface ScreenRunSummary {
   at: string;
   market: string;
   minLevel: string;
+  universe?: string;
   total: number;
   hits: number;
 }

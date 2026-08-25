@@ -10,6 +10,7 @@ import {
   type ThemeRow,
   type UsMajorResult,
 } from "../api";
+import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { RefreshBar } from "../components/RefreshBar";
 import { useSection } from "../useSection";
 
@@ -219,6 +220,8 @@ export function BriefingPage({
   const [events, setEvents] = useState<BriefingEvent[] | null>(null);
   const [heat, setHeat] = useState<{ traded: boolean; tiles: BriefingTile[] } | null>(null);
   const [brief, setBrief] = useState<{ date: string; label: string; text: string } | null>(null);
+  /* 테마를 누르면 구성종목 시트 — 보기만 하는 숫자는 죽은 숫자다 */
+  const [constituent, setConstituent] = useState<ConstituentTarget | null>(null);
 
   const loadOwn = useCallback(() => {
     void api.briefingTimeline().then((r) => setEvents(r.items)).catch(() => undefined);
@@ -313,20 +316,37 @@ export function BriefingPage({
           <h3 className="section-heading">테마</h3>
           {themes.data ? (
             <div className="bf-themes">
+              {/*
+                줄 전체가 눌린다 — **구성종목 시트**가 열린다 (테마/업종 MAP 과 같은 시트).
+                테마 이름과 등락률만 보고 끝나면 죽은 숫자다 — 그 안에서 무엇이
+                끌었는지를 봐야 다음 행동이 나온다.
+              */}
               {themes.data.top.slice(0, 5).map((t) => (
-                <div className="bf-theme" key={t.code}>
+                <button
+                  type="button"
+                  className="bf-theme bf-theme-click"
+                  key={t.code}
+                  onClick={() => setConstituent({ kind: "theme", code: t.code, name: t.name })}
+                  title="눌러서 구성종목 보기"
+                >
                   <span className="bf-theme-name">{t.name}</span>
                   <i className="bf-theme-main">{t.mainStock}</i>
                   <b className={`num ${cls(t.changeRate)}`}>{pct(t.changeRate)}</b>
-                </div>
+                </button>
               ))}
               <div className="bf-theme-sep" />
               {themes.data.bottom.slice(0, 3).map((t) => (
-                <div className="bf-theme" key={t.code}>
+                <button
+                  type="button"
+                  className="bf-theme bf-theme-click"
+                  key={t.code}
+                  onClick={() => setConstituent({ kind: "theme", code: t.code, name: t.name })}
+                  title="눌러서 구성종목 보기"
+                >
                   <span className="bf-theme-name">{t.name}</span>
                   <i className="bf-theme-main">{t.mainStock}</i>
                   <b className={`num ${cls(t.changeRate)}`}>{pct(t.changeRate)}</b>
-                </div>
+                </button>
               ))}
             </div>
           ) : (
@@ -391,6 +411,17 @@ export function BriefingPage({
           )}
         </section>
       </div>
+
+      {constituent && (
+        <ConstituentSheet
+          target={constituent}
+          onClose={() => setConstituent(null)}
+          onSelectStock={(code, name) => {
+            setConstituent(null);
+            onSelectStock(code, name);
+          }}
+        />
+      )}
 
       {/*
         VI 발동현황 — **맨 아래**다(사용자 요청). 건수가 많고 대부분은 스치는 값이라

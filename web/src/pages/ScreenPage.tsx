@@ -52,6 +52,21 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
   const [market, setMarket] = useState("000");
   const [level, setLevel] = useState<"green" | "yellow">("green");
   const [limit, setLimit] = useState(100);
+  /*
+   * 모집단 — 거래대금 상위만이 아니다 (2026-08-25).
+   * 외국인 연속순매매·동일순매매·누적등락률… **어느 목록에서 초록이 잘 나오나**
+   * 자체가 물음이라, 목록을 고를 수 있게 했다. 목록은 서버가 정한다.
+   */
+  const [universes, setUniverses] = useState<{ key: string; label: string; hint: string }[]>([]);
+  const [universe, setUniverse] = useState("trade-value");
+  useEffect(() => {
+    api
+      .signalScreenUniverses()
+      .then((r) => setUniverses(r.universes))
+      .catch(() => setUniverses([{ key: "trade-value", label: "거래대금 상위", hint: "" }]));
+  }, []);
+  const uniLabel = (k?: string) =>
+    universes.find((u) => u.key === (k ?? universe))?.label ?? "거래대금 상위";
   const [job, setJob] = useState<ScreenJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
@@ -87,6 +102,7 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
         results: run.results,
         market: run.market,
         minLevel: run.minLevel,
+        universe: run.universe,
         startedAt: run.at,
       });
       // 바로 앞 회차와 견줘서 "새로 들어온 것"을 같이 보여준다
@@ -113,7 +129,7 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
     setDiff(null);
     if (timerRef.current) clearInterval(timerRef.current);
     try {
-      const { jobId } = await api.signalScreenStart(market, level, limit);
+      const { jobId } = await api.signalScreenStart(market, level, limit, universe);
       timerRef.current = setInterval(async () => {
         try {
           const j = await api.signalScreenStatus(jobId);
@@ -213,7 +229,31 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
             {l.label}
           </button>
         ))}
-        <span className="news-scope-sep" />
+        <button className="algo-run-btn" onClick={() => void start()} disabled={running}>
+          {running ? `검사 중 ${job?.done}/${job?.total}` : "찾기"}
+        </button>
+      </div>
+
+      {/*
+        어디서 찾을까 — 모집단. 거래대금 상위의 초록(돈이 몰린 것)과 연속매매의
+        초록(수급이 미는 것)은 다른 종류의 후보다. 목록마다 신호등을 돌려 본다.
+      */}
+      <div className="filter-row ctl-ribbon">
+        <span className="filter-label">목록</span>
+        {universes.map((u) => (
+          <button
+            key={u.key}
+            className={`filter-btn ${universe === u.key ? "active" : ""}`}
+            onClick={() => setUniverse(u.key)}
+            disabled={running}
+            title={u.hint}
+          >
+            {u.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="filter-row ctl-ribbon">
         <span className="filter-label">검사 범위</span>
         {LIMITS.map((n) => (
           <button
@@ -221,22 +261,42 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
             className={`filter-btn ${limit === n ? "active" : ""}`}
             onClick={() => setLimit(n)}
             disabled={running}
-            title={`거래대금 상위 ${n}종목을 검사합니다${n >= 300 ? " — 몇 분 걸립니다" : ""}`}
+            title={`상위 ${n}종목을 검사합니다${n >= 300 ? " — 몇 분 걸립니다" : ""}`}
           >
-            상위 {n}종목
+            {n}
           </button>
         ))}
-        <button className="algo-run-btn" onClick={() => void start()} disabled={running}>
-          {running ? `검사 중 ${job?.done}/${job?.total}` : "찾기"}
-        </button>
+        {/* 자유 입력 — 버튼 다섯 개가 정답일 리 없다. 10~500 사이에서 서버가 자른다 */}
+        <input
+          className="pt-input short"
+          type="number"
+          inputMode="numeric"
+          min={10}
+          max={500}
+          value={limit}
+          disabled={running}
+          onChange={(e) => {
+            const n = Math.round(Number(e.target.value));
+            if (Number.isFinite(n)) setLimit(Math.min(500, Math.max(10, n)));
+          }}
+          title="상위 몇 종목까지 검사할지 — 10~500"
+        />
+        <span className="pt-n">종목</span>
+        <span className="breadth-count">
+          {uniLabel()}에서 · {limit >= 300 ? "몇 분 걸립니다" : `약 ${Math.ceil((limit * 0.3) / 6) / 10}분`}
+        </span>
       </div>
 
       {/* 처음 한 번 읽으면 되는 설명 — 접어 둔다(컨트롤 다이어트) */}
       <details className="fold-note">
         <summary>어떻게 찾는지 · 얼마나 걸리는지</summary>
         <p className="page-note">
-          <b>고른 시장의 거래대금 상위</b>에서 「설정 &gt; 신호등 기준」에 맞는 종목을 찾습니다 —
+          <b>고른 시장·고른 목록</b>에서 「설정 &gt; 신호등 기준」에 맞는 종목을 찾습니다 —
           「찾을 곳」은 결과를 나누는 게 아니라 <b>훑을 범위를 좁히는 것</b>입니다.
+          목록은 후보의 성격을 정합니다 — 거래대금 상위의 초록(돈이 몰린 것)과
+          외국인 연속순매매의 초록(수급이 미는 것)은 <b>다른 종류의 후보</b>입니다.
+          연속매매·동일순매매 같은 목록은 키움이 100건 안팎만 주므로 검사 범위를 크게
+          잡아도 그만큼만 봅니다.
           「전체」로 뽑으면 대개 코스피 대형주가 자리를 채우므로, 코스닥에서 도는 것을 보려면
           따로 좁혀야 걸립니다.
           ETF·ETN·리츠·우선주는 빼고 세므로 「상위 100」은 실제 종목 100개입니다. 종목마다
@@ -266,7 +326,8 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
                   .slice(5, 16)
                   .replace("T", " ")}{" "}
                 · {r.hits}종목 / {r.total}검사 ·{" "}
-                {r.market === "001" ? "코스피" : r.market === "101" ? "코스닥" : "전체"}
+                {r.market === "001" ? "코스피" : r.market === "101" ? "코스닥" : "전체"} ·{" "}
+                {uniLabel(r.universe ?? "trade-value")}
               </option>
             ))}
           </select>
@@ -299,8 +360,9 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
           */}
           <div className="filter-row">
             <span className="breadth-count">
-              거래대금 상위 <b>{limit}</b> 중 보통주 <b>{job.total}종목</b>
-              {job.total < limit && <i className="scr-stale">ETF·우선주 제외</i>} · 검사{" "}
+              {uniLabel(job.universe ?? "trade-value")} <b>{limit}</b> 중 보통주{" "}
+              <b>{job.total}종목</b>
+              {job.total < limit && <i className="scr-stale">ETF·우선주 제외 / 목록이 짧음</i>} · 검사{" "}
               {job.done} · 통과 <b className="positive">{job.results.length}</b> · 미달{" "}
               {Math.max(0, job.done - job.results.length)}
               {job.status === "done" && " · 완료"}
@@ -309,9 +371,10 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
           {job.status === "done" && (
             <p className="page-note">
               여기 없는 종목은 <b>둘 중 하나</b>입니다 — 검사했는데 문턱에 못 미쳤거나(
-              {Math.max(0, job.done - job.results.length)}종목), 애초에 <b>거래대금 상위 {limit}
-              위 밖</b>이라 안 봤거나. 다른 화면(시세분석 등)과 결과가 다르면 대개 <b>모집단이
-              다른 것</b>입니다 — 저기는 시가총액 순, 여기는 거래대금 순입니다.
+              {Math.max(0, job.done - job.results.length)}종목), 애초에{" "}
+              <b>{uniLabel(job.universe ?? "trade-value")} {limit} 밖</b>이라 안 봤거나.
+              다른 화면과 결과가 다르면 대개 <b>모집단이 다른 것</b>입니다 — 목록이 곧
+              후보의 성격입니다.
             </p>
           )}
 

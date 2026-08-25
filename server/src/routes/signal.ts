@@ -4,6 +4,7 @@ import {
   getScreenJob,
   getScreenRun,
   listScreenRuns,
+  SCREEN_UNIVERSES,
   startScreen,
 } from "../signalScreen.js";
 import { evaluateMarket } from "../marketSignal.js";
@@ -147,12 +148,18 @@ export function createSignalRouter(client: KiwoomClient): Router {
     }
   });
 
+  /** 고를 수 있는 모집단 — 화면이 버튼을 이걸로 그린다 (하드코딩하면 서버와 갈린다) */
+  router.get("/screen/universes", (_req, res) => {
+    res.json({ universes: SCREEN_UNIVERSES });
+  });
+
   router.post("/screen/start", (req, res, next) => {
     try {
       const id = startScreen(client, {
         market: typeof req.query.market === "string" ? req.query.market : undefined,
         minLevel: req.query.level === "yellow" ? "yellow" : "green",
         limit: Number(req.query.limit) || 100,
+        universe: typeof req.query.universe === "string" ? req.query.universe : undefined,
       });
       res.json({ jobId: id });
     } catch (err) {

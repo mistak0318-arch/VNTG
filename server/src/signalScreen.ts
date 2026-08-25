@@ -1,8 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { cumulativeRank } from "./cumulativeRank.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
+import { COMMON_PARAMS, findSpec } from "./rankSpecs.js";
 import { evaluateSignal, type Level, type SignalResult } from "./signalLight.js";
 import { getCommonStockCodes } from "./stockListCache.js";
 
@@ -50,6 +52,8 @@ export interface ScreenJob {
   results: ScreenHit[];
   market: string;
   minLevel: Level;
+  /** 어느 목록에서 찾았나 — SCREEN_UNIVERSES 의 key */
+  universe: string;
   startedAt: string;
   error?: string;
 }
@@ -187,6 +191,210 @@ async function fillStale(client: KiwoomClient, rows: Candidate[]): Promise<void>
   }
 }
 
+// ---------------------------------------------------------------- 모집단
+
+/**
+ * 어디서 찾을 것인가 (2026-08-25).
+ *
+ * 지금까지 모집단은 거래대금 상위뿐이었다. 그런데 우리는 이미 다른 목록들을 갖고
+ * 있다 — 외국인 연속순매매, 동일순매매, 누적등락률… **어느 목록에서 초록이 잘
+ * 나오는가** 자체가 물음이다. 등락률 상위의 초록(이미 오른 것)과 연속매매의
+ * 초록(수급이 미는 것)은 다른 종류의 후보다.
+ *
+ * 전부 **이미 있는 조회**를 그대로 쓴다 — 시세분석 명세(rankSpecs)와 각 화면의
+ * TR. 새 TR 을 만들지 않는다.
+ */
+export const SCREEN_UNIVERSES: { key: string; label: string; hint: string }[] = [
+  { key: "trade-value", label: "거래대금 상위", hint: "돈이 몰린 곳 — 기본. 최대 500까지 이어받는다" },
+  { key: "flu-rate", label: "등락률 상위", hint: "오늘 가장 오른 종목 — 이미 오른 것 중에 더 갈 것을 찾는다" },
+  { key: "cum", label: "누적등락률 상위 (5일)", hint: "닷새 누적으로 오른 종목 — 하루 급등보다 흐름" },
+  { key: "foreign-cont", label: "외국인 연속순매매", hint: "외국인이 며칠째 사는 종목" },
+  { key: "cont", label: "기관·외국인 연속매매", hint: "두 주체가 같이 사는 종목 (ka10131)" },
+  { key: "same-net", label: "동일순매매 상위 (7일)", hint: "최근 7일 기관·외국인이 같은 방향으로 순매수" },
+  { key: "intraday-investor", label: "장중 기관 매매상위", hint: "지금 장중 기관 순매수 상위 — 장중에만 값이 있다" },
+];
+
+function yyyymmdd(daysAgo = 0): string {
+  const d = new Date(Date.now() + 9 * 3600_000 - daysAgo * 86400_000);
+  return d.toISOString().slice(0, 10).replace(/-/g, "");
+}
+
+/** 가격·등락률이 빈 줄(연속매매·장중투자자 TR 은 현재가를 안 준다)을 스냅샷으로 메운다 */
+async function fillMissing(client: KiwoomClient, rows: Candidate[]): Promise<void> {
+  if (!rows.some((r) => r.price === 0)) return;
+  const snap = await getMarketSnapshot(client).catch(() => null);
+  if (!snap) return;
+  for (const r of rows) {
+    if (r.price > 0) continue;
+    const s = snap.byCode.get(r.code);
+    if (!s) continue;
+    r.price = s.price;
+    r.changeRate = s.changeRate;
+  }
+}
+
+/** 시세분석 명세(rankSpecs)에 있는 조회를 모집단으로 — 연속조회로 limit 까지 */
+async function rankSpecUniverse(
+  client: KiwoomClient,
+  specKey: string,
+  market: string,
+  limit: number,
+): Promise<Candidate[]> {
+  const spec = findSpec(specKey);
+  if (!spec) throw new Error(`없는 조회입니다: ${specKey}`);
+  const common = await getCommonStockCodes(client);
+  const seen = new Set<string>();
+  const out: Candidate[] = [];
+  let contYn = "N";
+  let nextKey = "";
+  for (let page = 0; page < 6 && out.length < limit; page += 1) {
+    const res = await client.request<Record<string, unknown>>(
+      `/api/dostk/${spec.uri}`,
+      spec.apiId,
+      {
+        ...COMMON_PARAMS,
+        ...(spec.params ?? {}),
+        mrkt_tp: market,
+        // ⚠️ 항상 보낸다 — 시세분석 라우트도 그렇다. ka10035 는 exchange 표시가
+        // 없는데도 stex_tp 가 필수라(1511), 조건부로 보내면 그 조회가 통째로 죽는다
+        stex_tp: "3",
+      },
+      page === 0 ? {} : { contYn, nextKey },
+    );
+    const rows = Array.isArray(res.data[spec.listKey])
+      ? (res.data[spec.listKey] as Record<string, unknown>[])
+      : [];
+    if (rows.length === 0) break;
+    for (const r of rows) {
+      const code = bare(r.stk_cd);
+      if (!code || !common.has(code) || seen.has(code)) continue;
+      seen.add(code);
+      out.push({
+        code,
+        name: String(r.stk_nm ?? "").trim(),
+        price: toNum(r.cur_prc),
+        changeRate: Number(String(r.flu_rt ?? "").replace(/[+,\s]/g, "")) || 0,
+        tradeValue: toNum(r.trde_prica),
+      });
+      if (out.length >= limit) break;
+    }
+    if (res.contYn !== "Y" || !res.nextKey) break;
+    contYn = "Y";
+    nextKey = res.nextKey;
+    await new Promise((r) => setTimeout(r, 260));
+  }
+  await fillMissing(client, out);
+  return out;
+}
+
+/** 동일순매매 (ka10062) — 화면과 같은 조건: 최근 7일 · 순매수 · 금액순 */
+async function sameNetUniverse(
+  client: KiwoomClient,
+  market: string,
+  limit: number,
+): Promise<Candidate[]> {
+  const common = await getCommonStockCodes(client);
+  const { data } = await client.request<Record<string, unknown>>(RKINFO, "ka10062", {
+    strt_dt: yyyymmdd(7),
+    end_dt: yyyymmdd(0),
+    mrkt_tp: market,
+    trde_tp: "1",
+    sort_cnd: "2",
+    unit_tp: "1",
+    stex_tp: "1",
+  });
+  const rows = Array.isArray(data.eql_nettrde_rank)
+    ? (data.eql_nettrde_rank as Record<string, unknown>[])
+    : [];
+  const out: Candidate[] = [];
+  for (const r of rows) {
+    const code = bare(r.stk_cd);
+    if (!code || !common.has(code)) continue;
+    out.push({
+      code,
+      name: String(r.stk_nm ?? "").trim(),
+      price: toNum(r.cur_prc),
+      changeRate: Number(String(r.flu_rt ?? "").replace(/[+,\s]/g, "")) || 0,
+      tradeValue: 0,
+    });
+    if (out.length >= limit) break;
+  }
+  await fillMissing(client, out);
+  return out;
+}
+
+/**
+ * 기관·외국인 연속매매 (ka10131) — 화면과 같은 조건.
+ * ⚠️ 이 TR 은 전체(000)가 없다 — 000 이면 코스피·코스닥을 받아 합친다.
+ * 현재가를 안 주므로 스냅샷으로 메운다.
+ */
+async function contUniverse(
+  client: KiwoomClient,
+  market: string,
+  limit: number,
+): Promise<Candidate[]> {
+  const common = await getCommonStockCodes(client);
+  const markets = market === "000" ? ["001", "101"] : [market];
+  const out: Candidate[] = [];
+  const seen = new Set<string>();
+  for (const m of markets) {
+    const { data } = await client
+      .request<Record<string, unknown>>("/api/dostk/frgnistt", "ka10131", {
+        dt: "1",
+        strt_dt: "",
+        end_dt: "",
+        mrkt_tp: m,
+        netslmt_tp: "2",
+        stk_inds_tp: "0",
+        amt_qty_tp: "0",
+        stex_tp: "1",
+      })
+      .catch(() => ({ data: {} as Record<string, unknown> }));
+    const rows = Array.isArray(data.orgn_frgnr_cont_trde_prst)
+      ? (data.orgn_frgnr_cont_trde_prst as Record<string, unknown>[])
+      : [];
+    for (const r of rows) {
+      const code = bare(r.stk_cd);
+      if (!code || !common.has(code) || seen.has(code)) continue;
+      seen.add(code);
+      out.push({
+        code,
+        name: String(r.stk_nm ?? "").trim(),
+        price: 0, // 이 TR 은 현재가를 안 준다 — 아래 스냅샷이 메운다
+        changeRate: 0,
+        tradeValue: 0,
+      });
+      if (out.length >= limit) break;
+    }
+    if (out.length >= limit) break;
+  }
+  await fillMissing(client, out);
+  return out;
+}
+
+/** 모집단 하나를 받아 온다 — 어느 키든 Candidate[] 로 통일 */
+async function fetchUniverse(
+  client: KiwoomClient,
+  key: string,
+  market: string,
+  limit: number,
+): Promise<Candidate[]> {
+  if (key === "trade-value") return tradeValueTop(client, market, limit);
+  if (key === "cum") {
+    const r = await cumulativeRank(client, market, 5, Math.min(200, Math.max(limit, 100)));
+    return r.rows.slice(0, limit).map((c) => ({
+      code: c.code,
+      name: c.name,
+      price: c.price,
+      changeRate: c.todayRate,
+      tradeValue: c.tradeValue,
+    }));
+  }
+  if (key === "same-net") return sameNetUniverse(client, market, limit);
+  if (key === "cont") return contUniverse(client, market, limit);
+  return rankSpecUniverse(client, key, market, limit);
+}
+
 const LEVEL_RANK: Record<Level, number> = { green: 3, yellow: 2, red: 1, unknown: 0 };
 
 const jobs = new Map<string, ScreenJob>();
@@ -218,6 +426,8 @@ export interface ScreenRun {
   at: string;
   market: string;
   minLevel: Level;
+  /** 어느 목록에서 찾았나 — 예전 기록에는 없다(거래대금 상위였다) */
+  universe?: string;
   /** 검사한 종목 수 */
   total: number;
   results: ScreenHit[];
@@ -243,7 +453,7 @@ async function saveRun(run: ScreenRun): Promise<void> {
 
 /** 최신순 목록. 본문(results)까지 주면 무거우므로 요약만 */
 export async function listScreenRuns(): Promise<
-  { id: string; at: string; market: string; minLevel: Level; total: number; hits: number }[]
+  { id: string; at: string; market: string; minLevel: Level; universe?: string; total: number; hits: number }[]
 > {
   const rows = await readHistory();
   return rows
@@ -252,6 +462,7 @@ export async function listScreenRuns(): Promise<
       at: r.at,
       market: r.market,
       minLevel: r.minLevel,
+      universe: r.universe,
       total: r.total,
       hits: r.results.length,
     }))
@@ -294,16 +505,19 @@ export async function diffScreenRuns(
  */
 export function startScreen(
   client: KiwoomClient,
-  opts: { market?: string; minLevel?: Level; limit?: number } = {},
+  opts: { market?: string; minLevel?: Level; limit?: number; universe?: string } = {},
 ): string {
   const market = ["000", "001", "101"].includes(String(opts.market)) ? String(opts.market) : "000";
   const minLevel = opts.minLevel ?? "green";
   /*
    * 상한을 200 에서 500 으로 올렸다. 상위 백 개는 이미 다 아는 종목이라 **새로 걸리는 건
    * 그 아래**에서 나온다. 종목마다 조회가 나가므로 오백이면 한참 걸리지만, 그건 화면이
-   * 진행바로 알려 주고 사람이 고른 값이다.
+   * 진행바로 알려 주고 사람이 고른 값이다. 숫자는 이제 화면에서 자유 입력이다.
    */
   const limit = Math.min(Math.max(opts.limit ?? 100, 10), 500);
+  const uniKey = SCREEN_UNIVERSES.some((u) => u.key === opts.universe)
+    ? String(opts.universe)
+    : "trade-value";
 
   const id = `scr_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   const job: ScreenJob = {
@@ -313,6 +527,7 @@ export function startScreen(
     results: [],
     market,
     minLevel,
+    universe: uniKey,
     startedAt: new Date().toISOString(),
   };
   jobs.set(id, job);
@@ -320,7 +535,7 @@ export function startScreen(
 
   void (async () => {
     try {
-      const universe = await tradeValueTop(client, market, limit);
+      const universe = await fetchUniverse(client, uniKey, market, limit);
       job.total = universe.length;
 
       for (const u of universe) {
@@ -351,6 +566,7 @@ export function startScreen(
         at: job.startedAt,
         market,
         minLevel,
+        universe: uniKey,
         total: job.total,
         results: job.results,
       }).catch(() => undefined);
