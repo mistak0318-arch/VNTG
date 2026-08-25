@@ -281,7 +281,69 @@ export function CandleChart({
       /* 저장 못 해도 이번 화면에는 적용된다 */
     }
     chartRef.current?.applyOptions(scrollOptions(next));
+    // 같은 화면의 다른 차트에도 그 자리에서 — 「전역」이라 해 놓고 새로고침해야 먹으면 거짓말이다
+    window.dispatchEvent(new CustomEvent("vntg-chart-lock", { detail: next }));
   }
+
+  /*
+   * 자물쇠 동기화 (2026-08-26 — 「보드 차트가 자꾸 드래그된다」).
+   *
+   * 저장은 전역(localStorage)이었지만 **이미 떠 있는 다른 차트**는 제 상태를 그대로
+   * 들고 있었다 — 특히 보드는 따로 띄운 창이라, 본창에서 잠가도 보드 차트는 계속
+   * 끌렸다. 같은 창은 커스텀 이벤트로, 다른 창(보드)은 storage 이벤트로 받아서
+   * 잠금이 **모든 창의 모든 차트에 그 자리에서** 걸리게 한다.
+   */
+  useEffect(() => {
+    const apply = (v: boolean) => {
+      setLocked(v);
+      chartRef.current?.applyOptions(scrollOptions(v));
+    };
+    const onLocal = (e: Event) => apply(Boolean((e as CustomEvent).detail));
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === LOCK_KEY) apply(e.newValue === "1");
+    };
+    window.addEventListener("vntg-chart-lock", onLocal);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("vntg-chart-lock", onLocal);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
+  /*
+   * 키보드 조작 (2026-08-26 요청) — **+/− 확대·축소, ←/→ 좌우 이동.**
+   *
+   * 공통 모듈이라 여기 한 번이면 종목상세·보드·해외 시트 전부에 걸린다.
+   * 차트가 여럿인 화면(보드)에서는 **마우스를 올려 둔 차트**가 대상이다 —
+   * 입력창에 커서가 있으면 건드리지 않는다. 자물쇠가 잠겨 있어도 키는 듣는다:
+   * 자물쇠는 「스크롤하다 실수로 움직이는 것」을 막는 것이지 조작 금지가 아니다.
+   */
+  const hoverRef = useRef(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!hoverRef.current) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      const ts = chartRef.current?.timeScale();
+      const range = ts?.getVisibleLogicalRange();
+      if (!ts || !range) return;
+      const span = range.to - range.from;
+      if (e.key === "+" || e.key === "=" || e.key === "-" || e.key === "_") {
+        const zoomIn = e.key === "+" || e.key === "=";
+        // 오른쪽(최근 봉)을 붙들고 조인다 — 확대하면 보고 있던 최근이 남아야 한다
+        const next = Math.min(Math.max(zoomIn ? span * 0.75 : span * 1.33, 5), 3000);
+        ts.setVisibleLogicalRange({ from: range.to - next, to: range.to });
+        e.preventDefault();
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        const step = span * 0.15 * (e.key === "ArrowLeft" ? -1 : 1);
+        ts.setVisibleLogicalRange({ from: range.from + step, to: range.to + step });
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // ── 차트 생성 (테마·분봉 여부가 바뀔 때만) ────────────────────────────
   useEffect(() => {
@@ -616,7 +678,14 @@ export function CandleChart({
   }
 
   return (
-    <div>
+    <div
+      onMouseEnter={() => {
+        hoverRef.current = true;
+      }}
+      onMouseLeave={() => {
+        hoverRef.current = false;
+      }}
+    >
       <div className="chart-legend">
         {/*
           고·저 괴리 — 범례 **맨 앞**이다 (2026-08-25).
@@ -646,8 +715,8 @@ export function CandleChart({
           onClick={toggleLock}
           title={
             locked
-              ? "차트 잠김 — 휠·드래그가 차트를 안 움직입니다 (십자선은 그대로). 눌러서 풀기"
-              : "차트 잠그기 — 페이지 스크롤에 차트가 움직이는 걸 막습니다"
+              ? "차트 잠김 — 휠·드래그가 차트를 안 움직입니다 (십자선·키보드 +/−·←/→ 는 그대로). 눌러서 풀기"
+              : "차트 잠그기 — 페이지 스크롤에 차트가 움직이는 걸 막습니다. 마우스를 올리고 +/− 확대·축소, ←/→ 이동"
           }
         >
           {locked ? "🔒" : "🔓"}

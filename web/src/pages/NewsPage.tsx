@@ -50,14 +50,26 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
   const [keyword, setKeyword] = useState<string | null>(null);
   const [srcTab, setSrcTab] = useState<SrcTab>("main");
   const [tabOrder, setTabOrder] = useState<SrcTab[]>(loadTabOrder);
-  const tabDrag = useDragOrder(tabOrder, (next) => {
+  /** 폰은 드래그가 안 된다 — ↔ 순서 모드에서 ◀▶ 로 옮긴다(다른 순서 UI 와 같은 병존) */
+  const [tabEdit, setTabEdit] = useState(false);
+  const commitTabs = (next: string[]) => {
     setTabOrder(next as SrcTab[]);
     try {
       localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(next));
     } catch {
       // 저장이 안 돼도 이번 화면에선 바뀐 순서로 쓴다
     }
-  });
+  };
+  const tabDrag = useDragOrder(tabOrder, commitTabs);
+  const moveTab = (k: SrcTab, dir: -1 | 1) => {
+    const i = tabOrder.indexOf(k);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= tabOrder.length) return;
+    const next = [...tabOrder];
+    next.splice(i, 1);
+    next.splice(j, 0, k);
+    commitTabs(next);
+  };
 
   // 종목명이 겹칠 수 있으므로 후보를 보여주고 고르게 한다
   useEffect(() => {
@@ -163,17 +175,45 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
       ) : (
         <>
           <nav className="detail-tabs">
-            {tabOrder.map((k) => (
-              <button
-                key={k}
-                className={`detail-tab${srcTab === k ? " active" : ""}${tabDrag.cls(k)}`}
-                onClick={() => setSrcTab(k)}
-                title="끌어서 탭 순서를 바꿀 수 있습니다"
-                {...tabDrag.props(k)}
-              >
-                {TAB_LABEL[k]}
-              </button>
+            {tabOrder.map((k, i) => (
+              <span key={k} className="nt-tab">
+                {tabEdit && (
+                  <button
+                    className="row-del-btn"
+                    disabled={i === 0}
+                    onClick={() => moveTab(k, -1)}
+                    title="앞으로"
+                  >
+                    ◀
+                  </button>
+                )}
+                <button
+                  className={`detail-tab${srcTab === k ? " active" : ""}${tabDrag.cls(k)}`}
+                  onClick={() => setSrcTab(k)}
+                  title="끌어서(PC) 또는 ↔ 순서 모드(폰)로 탭 순서를 바꿉니다"
+                  {...tabDrag.props(k)}
+                >
+                  {TAB_LABEL[k]}
+                </button>
+                {tabEdit && (
+                  <button
+                    className="row-del-btn"
+                    disabled={i === tabOrder.length - 1}
+                    onClick={() => moveTab(k, 1)}
+                    title="뒤로"
+                  >
+                    ▶
+                  </button>
+                )}
+              </span>
             ))}
+            <button
+              className={`filter-btn nt-edit${tabEdit ? " active" : ""}`}
+              onClick={() => setTabEdit((v) => !v)}
+              title="탭 순서 바꾸기 — 폰에서는 이 모드로, PC 는 끌어서도 됩니다"
+            >
+              {tabEdit ? "✓ 완료" : "↔ 순서"}
+            </button>
           </nav>
 
           {srcTab === "mine" ? (

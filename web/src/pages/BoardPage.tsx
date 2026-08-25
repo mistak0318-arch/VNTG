@@ -475,6 +475,11 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
   }, []);
 
   const resetSizes = useCallback(() => {
+    /*
+     * 확인창 (2026-08-26 사용자 요청) — 공들여 맞춘 칸 크기가 실수 클릭 한 번에
+     * 전부 날아간다. 목록 덮기와 같은 원칙: 지우는 건 물어보고 지운다.
+     */
+    if (!window.confirm("모든 칸의 크기를 처음 값으로 되돌릴까요?\n맞춰 둔 크기가 전부 지워집니다.")) return;
     setSizes({});
     try {
       winStore.remove(SIZE_KEY);

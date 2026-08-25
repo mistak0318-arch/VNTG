@@ -3529,6 +3529,10 @@ tr.drag-over td { background: rgba(76, 141, 255, 0.12); }
 tr.drag-src td { opacity: 0.45; }
 
 /* ── 주요뉴스 썸네일 카드 (뉴스 탭) ── */
+/* 뉴스 탭 순서 편집 — 탭 하나 = (◀) 탭 (▶) 묶음. ↔ 순서 버튼으로 켠다 */
+.nt-tab { display: inline-flex; align-items: center; gap: 2px; }
+.nt-edit { margin-left: 0.4rem; }
+
 /* 뉴스 쪽 넘김 — 신문 넘기듯. 가운데 정렬이라 어느 폭에서도 눈에 띈다 */
 .mn-pager {
   display: flex;
@@ -7647,13 +7651,22 @@ button.ib-cell:hover { background: var(--panel-2); }
  *
  * 칸 자체의 자르기를 끄고, **이름 쪽만** 줄인다.
  */
-.uw-table .sticky-col { overflow: visible; text-overflow: clip; }
+.uw-table .sticky-col { overflow: visible; text-overflow: clip; white-space: normal; }
+/*
+ * ⚠️ max-width 에 **100% 를 같이** 건다 (2026-08-26 — 폰에서 긴 이름이 「…」 하나로).
+ *
+ * 이 표는 칸 너비를 저장하는 `table-layout: fixed` 라 종목 칸이 고정폭인데,
+ * 이 버튼(inline-flex)의 상한이 42vw(화면 기준)뿐이라 **긴 이름에서 버튼이 칸보다
+ * 넓어졌다.** 통짜 인라인 박스가 칸을 넘치면 text-overflow 가 내용 전체를 「…」
+ * 하나로 바꾼다 — SK hynix Inc.·마이크론만 죽고 애플은 멀쩡하던 이유다.
+ * 100% (= 칸 너비)를 상한에 넣으면 버튼이 칸 안에서 이름을 두 줄로 접는다.
+ */
 .uw-table .usb-open {
   display: inline-flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 1px;
-  max-width: min(13rem, 42vw);
+  max-width: min(13rem, 42vw, 100%);
   vertical-align: middle;
   text-align: left;
 }

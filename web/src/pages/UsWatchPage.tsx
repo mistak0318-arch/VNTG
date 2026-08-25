@@ -82,7 +82,6 @@ export function UsWatchPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(true);
   /** 눌러서 여는 해외종목 상세 */
   const [detail, setDetail] = useState<ChartTarget | null>(null);
   /*
@@ -172,55 +171,28 @@ export function UsWatchPage() {
       clearInterval(t);
     };
   }, [fastSymbols, openMarket]);
+  /*
+   * 본 시세(52주·강도·시간외 등) 자동 갱신 (2026-08-26 — 「5초 옵션 필요 없는거
+   * 아니냐」는 지적이 맞았다).
+   *
+   * 가격·등락률은 위의 3초 빠른 시세가 이미 덮고 있고, 본 시세는 서버가 1분
+   * 캐시라 5초로 조를수록 같은 값만 다시 받았다. 토글도 없앴다 — 국내 관심종목처럼
+   * **그냥 조용히 도는 것**이 맞고, 끌 이유가 있는 주기가 아니다.
+   * 장중 30초 · 마감 1분, 탭이 뒤에 있으면 쉰다.
+   */
   useEffect(() => {
-    if (!autoRefresh) return;
-    const period = openMarket ? 5_000 : 60_000;
+    const period = openMarket ? 30_000 : 60_000;
     const timer = setInterval(() => {
-      if (document.visibilityState === "visible") void load(true, true);
+      if (document.visibilityState === "visible") void load(false, true);
     }, period);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRefresh, openMarket]);
+  }, [openMarket]);
 
   /*
-   * 값이 움직인 칸을 잠깐 반짝인다 — HTS 의 틱 표시.
-   *
-   * 숫자만 조용히 바뀌면 **바뀐 줄을 놓친다.** 111종목이 한 화면에 있으면 더 그렇다.
-   * 오른 것은 붉게, 내린 것은 푸르게 0.7초.
+   * 틱 깜빡임은 **없앴다** (2026-08-26 사용자 요청). 등락률 칸만 0.7초 붉게/푸르게
+   * 물들이던 것인데, 3초 빠른 시세가 붙은 뒤로는 상시 명멸이 되어 눈만 피로했다.
    */
-  /*
-   * **화면에 보이는 등락률**을 기준으로 잡는다.
-   *
-   * 예전엔 가격이 조금이라도 바뀌면 깜빡였고, 그것도 현재가·등락률·원화·편입대비
-   * **네 칸이 한꺼번에** 번쩍였다. 111종목이면 화면 절반이 매 갱신마다 물결쳤다 —
-   * 무엇이 바뀌었는지 알리려던 것이 오히려 아무것도 못 읽게 만들었다.
-   *
-   * 이제 소수 둘째 자리까지 **찍히는 값이 달라졌을 때만**, **등락률 칸에만** 붙인다.
-   * 눈에 안 보이는 자릿수가 움직인 것으로 깜빡이면 그건 거짓 신호다.
-   */
-  const prevRates = useRef<Map<string, string>>(new Map());
-  const [ticks, setTicks] = useState<Map<string, "up" | "down">>(new Map());
-  useEffect(() => {
-    const next = new Map<string, "up" | "down">();
-    for (const g of groups) {
-      for (const s of g.stocks) {
-        if (s.changeRate === null) continue;
-        const shown = s.changeRate.toFixed(2);
-        const before = prevRates.current.get(s.symbol);
-        if (before !== undefined && before !== shown) {
-          next.set(s.symbol, Number(shown) > Number(before) ? "up" : "down");
-        }
-        prevRates.current.set(s.symbol, shown);
-      }
-    }
-    if (next.size === 0) return;
-    setTicks(next);
-    const t = setTimeout(() => setTicks(new Map()), 700);
-    return () => clearTimeout(t);
-  }, [groups]);
-
-  /** 이 종목의 등락률이 방금 바뀌었나 — **등락률 칸에만** 붙인다 */
-  const tick = (symbol: string) => ticks.get(symbol) ?? "";
 
   /** 한 칸 위·아래로. 서버에 새 순서를 통째로 보낸다 */
   function moveStock(arr: UsQuoteRow[], symbol: string, delta: number) {
@@ -289,7 +261,6 @@ export function UsWatchPage() {
     <div>
       <div className="uw-bar">
         <RefreshBar onRefresh={() => load(true)} loading={loading} />
-        {/* 자동 갱신은 끌 수 있어야 한다 — 값이 계속 움직이면 읽기 어려운 때가 있다 */}
         {SORTS.map((o) => (
           <button
             key={o.key}
@@ -299,13 +270,7 @@ export function UsWatchPage() {
             {o.label}
           </button>
         ))}
-        <button
-          className={`filter-btn ${autoRefresh ? "active" : ""}`}
-          onClick={() => setAutoRefresh((v) => !v)}
-          title={openMarket ? "장중에는 5초마다" : "장이 닫혀 있어 1분마다"}
-        >
-          {autoRefresh ? `자동 ${openMarket ? "5초" : "1분"}` : "자동 꺼짐"}
-        </button>
+        {/* 자동 갱신 토글은 없앴다(2026-08-26) — 가격은 3초 빠른 시세, 나머지는 30초 조용히 */}
       </div>
       {error && <div className="error-banner">{error}</div>}
 
@@ -488,7 +453,6 @@ export function UsWatchPage() {
                 : undefined
             }
             onRemove={(symbol) => void run(() => api.usWatchStockRemove(current.id, symbol))}
-            tick={tick}
           />
 
           <div className="table-note">
