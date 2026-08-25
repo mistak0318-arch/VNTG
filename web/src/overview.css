@@ -274,13 +274,28 @@
   margin: 7px 0;
 }
 
-/* 지수 시트의 슬림판 수급 바 — 시트는 글자가 많아 대시보드 크기 그대로면 무겁다 */
-.idx-slim .ov-flow-row { grid-template-columns: 56px 1fr 64px; gap: 7px; padding: 2px 0; }
-.idx-slim .ov-flow-nm { font-size: 0.72rem; }
-.idx-slim .ov-flow-nm.sub { font-size: 0.66rem; }
-.idx-slim .ov-flow-val { font-size: 0.72rem; }
-.idx-slim .ov-bar { height: 9px; }
-.idx-slim .ov-grp-line { margin: 4px 0; }
+/*
+ * 지수 시트의 콤팩트 수급 (2026-08-26 — 「가로바가 자리를 너무 먹는다」).
+ * 큰 세 주체 = 세 칸 한 줄(값 + 4px 미니 바), 기관 세부·기타 = 칩 한 줄.
+ * 열 줄짜리 막대 표가 넉 줄로 줄었다.
+ */
+.ifc { margin: 2px 0 6px; }
+.ifc-main { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ifc-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ifc-lbl { font-size: 0.68rem; color: var(--ov-txt-3); }
+.ifc-cell > b { font-size: 0.82rem; }
+.ifc-bar {
+  position: relative; height: 4px; border-radius: 2px;
+  background: var(--ov-panel-2); overflow: hidden;
+}
+.ifc-bar i { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+.ifc-bar i.up { background: var(--up-fill, var(--up)); }
+.ifc-bar i.down { background: var(--down-fill, var(--down)); }
+.ifc-sub {
+  display: flex; flex-wrap: wrap; gap: 2px 12px;
+  margin-top: 5px; font-size: 0.7rem; color: var(--ov-txt-3);
+}
+.ifc-sub b { font-weight: 600; }
 
 /* ---------- 표 ---------- */
 .ov-table {

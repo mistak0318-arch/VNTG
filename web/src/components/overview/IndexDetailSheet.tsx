@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmtNum, type IndexDetailData, type IndexRange, type MarketFlow } from "../../api";
 import { CandleChart } from "../CandleChart";
-import { FlowBars } from "./FlowBars";
 import { IntradayFlowChart } from "./IntradayFlowChart";
 import { useSection } from "../../useSection";
 
@@ -139,17 +138,66 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
 
         {/*
           오늘 투자자별 수급 — 장중 변화 곡선 **바로 밑**(2026-08-26 요청).
-          곡선이 「어떻게 왔나」, 이 막대가 「지금 누가 얼마나」다. 시트는 글자가
-          많은 화면이라 대시보드 크기 그대로면 무거워서 슬림판(idx-slim)으로 줄인다.
+          곡선이 「어떻게 왔나」, 이건 「지금 누가 얼마나」다.
+          가로 막대 열 줄은 시트에서 자리를 너무 먹었다(사용자 지적) — 큰 세 주체는
+          세 칸 한 줄(값 + 미니 바), 기관 세부·기타는 칩 한 줄로 접는다.
         */}
         {(() => {
           const f = code === "101" ? flow.data?.kosdaq : flow.data?.kospi;
           if (!f) return null;
+          const main = [
+            { label: "개인", v: f.individual },
+            { label: "외국인", v: f.foreign },
+            { label: "기관", v: f.institution },
+          ];
+          const subs = [
+            { label: "금융투자", v: f.financialInvestment },
+            { label: "투신", v: f.investmentTrust },
+            { label: "연기금", v: f.pensionFund },
+            { label: "사모", v: f.privateFund },
+            { label: "보험", v: f.insurance },
+            { label: "은행", v: f.bank },
+            { label: "기타법인", v: f.otherCorp },
+          ].filter((s) => s.v !== 0); // 0 은 자리만 먹는다
+          const maxAbs = Math.max(...main.map((m) => Math.abs(m.v)), 1);
           return (
             <>
               <h3 className="idx-h3">오늘 투자자별 수급 (억원)</h3>
-              <div className="idx-slim">
-                <FlowBars flow={f} />
+              <div className="ifc num">
+                <div className="ifc-main">
+                  {main.map((m) => (
+                    <div className="ifc-cell" key={m.label}>
+                      <span className="ifc-lbl">{m.label}</span>
+                      <b className={sign(m.v)}>
+                        {m.v > 0 ? "+" : ""}
+                        {fmtNum(m.v)}
+                      </b>
+                      {/* 중앙 기준 미니 바 — 방향과 크기만, 높이는 4px 면 된다 */}
+                      <span className="ifc-bar">
+                        <i
+                          className={m.v >= 0 ? "up" : "down"}
+                          style={{
+                            width: `${(Math.abs(m.v) / maxAbs) * 50}%`,
+                            ...(m.v >= 0 ? { left: "50%" } : { right: "50%" }),
+                          }}
+                        />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {subs.length > 0 && (
+                  <div className="ifc-sub">
+                    {subs.map((s) => (
+                      <span key={s.label}>
+                        {s.label}{" "}
+                        <b className={sign(s.v)}>
+                          {s.v > 0 ? "+" : ""}
+                          {fmtNum(s.v)}
+                        </b>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           );
