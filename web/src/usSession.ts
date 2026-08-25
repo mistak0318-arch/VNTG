@@ -39,6 +39,18 @@ export function usRegularOpen(now = new Date()): boolean {
 }
 
 /**
+ * 키움 실시간(FE)이 흐를 수 있는 시간인가 — 프리 04:00 ~ 애프터 20:00 ET.
+ *
+ * 해외 관심종목 표가 이 시간에만 실시간을 묻는다. 낮(미국 마감)에 물으면
+ * 답도 없는 구독이 화면 몫(10자리)을 채워 국내 화면 실시간을 밀어낸다.
+ */
+export function usFeActive(now = new Date()): boolean {
+  const { day, mins } = etNow(now);
+  if (day === 0 || day === 6) return false;
+  return mins >= 4 * 60 && mins < 20 * 60;
+}
+
+/**
  * 괄호에 무엇을 넣을 것인가.
  *
  * 괄호는 **「지금 도는 다른 세션」**이다. 미국 종목은 하루에 세 판이 돌기 때문에

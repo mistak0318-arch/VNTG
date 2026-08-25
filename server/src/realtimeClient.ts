@@ -390,6 +390,21 @@ export class RealtimeClient {
     this.ws = null;
   }
 
+  /**
+   * 구독을 **전부 백지로** — 국면 전환(낮↔저녁↔밤)에서만 부른다.
+   *
+   * `close()` 는 일부러 구독을 남긴다(재연결 때 그대로 되걸어야 하니까).
+   * 하지만 밤이 되어 국내 190 을 미국 FE 로 갈아끼울 때는 **남아 있으면 안 된다** —
+   * 재연결 순간 `resubscribe` 가 옛 목록을 다시 걸어 정원 200 이 터진다.
+   * 끊은 뒤 이걸 부르고, 새 판을 처음부터 짠다.
+   */
+  resetSubscriptions(): void {
+    this.subs.clear();
+    this.keep.clear();
+    this.transient.length = 0;
+    this.pending.clear();
+  }
+
   /** REG 가 거절된 기록 — 여기 뭐가 있으면 「연결은 됐는데 안 온다」의 원인이다 */
   private readonly regErrors: { at: string; code: number; msg: string }[] = [];
   get registrationErrors(): { at: string; code: number; msg: string }[] {

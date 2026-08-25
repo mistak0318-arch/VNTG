@@ -34,14 +34,26 @@ const MRKCOND = "/api/us/mrkcond";
 /** 한투 거래소 표기 → 키움 stex_tp. 미국이 아니면 없다 */
 const STEX: Record<string, string> = { NAS: "ND", NYS: "NY", AMS: "NA" };
 
-async function stexOf(symbol: string): Promise<string | null> {
+/**
+ * 티커 → 키움 거래소(ND/NY/NA) 전체 지도.
+ * 실시간 FE 스케줄러도 이걸로 「미국 종목만」 거른다 — 일본·홍콩 티커에 FE 를 걸 수 없다.
+ */
+export async function usStexMap(): Promise<Record<string, string>> {
   try {
-    const map = JSON.parse(await readFile(EXCD_FILE, "utf-8")) as Record<string, string>;
-    const excd = map[symbol.toUpperCase()];
-    return excd ? (STEX[excd] ?? null) : null;
+    const raw = JSON.parse(await readFile(EXCD_FILE, "utf-8")) as Record<string, string>;
+    const out: Record<string, string> = {};
+    for (const [sym, excd] of Object.entries(raw)) {
+      const stex = STEX[excd];
+      if (stex) out[sym.toUpperCase()] = stex;
+    }
+    return out;
   } catch {
-    return null;
+    return {};
   }
+}
+
+async function stexOf(symbol: string): Promise<string | null> {
+  return (await usStexMap())[symbol.toUpperCase()] ?? null;
 }
 
 /** 부호를 뗀 숫자 — 가격용. 등락 방향은 flu_rt 몫이다 */

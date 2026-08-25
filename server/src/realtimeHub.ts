@@ -2,6 +2,8 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { RealtimeClient } from "./realtimeClient.js";
 import { RealtimeStore } from "./realtimeStore.js";
 import { tradeValueTop } from "./signalScreen.js";
+import { usStexMap } from "./usKiwoomDetail.js";
+import { listGroups as listUsGroups } from "./usWatchlist.js";
 import { listWatchlist } from "./watchlist.js";
 
 /**
@@ -64,6 +66,53 @@ export function shouldRun(now = new Date()): boolean {
 }
 
 /**
+ * 미국 실시간(FE)이 돌 시간인가 — **뉴욕 시각으로** 잰다.
+ *
+ * KST 로 재면 서머타임 전환 때 한 시간이 통째로 어긋난다. Node 의 타임존 데이터로
+ * 뉴욕 현지 요일·시각을 얻는다. 프리마켓 04:00 ~ 애프터 20:00 ET, 앞뒤 10분 여유.
+ * ⚠️ 요일도 뉴욕 기준이다 — 한국 토요일 아침은 뉴욕 금요일 저녁이라 **돌아야 한다.**
+ */
+export function usShouldRun(now = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  const wd = get("weekday");
+  if (wd === "Sat" || wd === "Sun") return false;
+  const mins = Number(get("hour")) * 60 + Number(get("minute"));
+  return mins >= 3 * 60 + 50 && mins <= 20 * 60 + 10;
+}
+
+/**
+ * 하루를 세 국면으로 가른다 — **정원 200 을 국내와 미국이 나눠 쓰는 방법**이다.
+ *
+ *   낮    KRX 장중 (미국이 겹쳐도 아침 애프터장 꼬리뿐) — 국내가 전부 갖는다
+ *   저녁  NXT 애프터(∼20:00) 와 미국 프리장(17:00∼)이 겹친다 — 나눈다
+ *   밤    국내는 닫혔다 — 미국이 전부 갖는다
+ *
+ * 국면이 바뀔 때 소켓을 끊고 **처음부터 다시 짠다.** 빼기(REMOVE)를 하나씩 보내는
+ * 것보다 판을 새로 짜는 쪽이 단순하고, 키움 재접속은 싸다(LOGIN 한 번).
+ */
+type Phase = "낮" | "저녁" | "밤" | "쉼";
+
+export function phaseOf(now = new Date()): Phase {
+  const dom = shouldRun(now);
+  const us = usShouldRun(now);
+  if (dom && us) {
+    // 아침 07:50~09:00 겹침은 미국 애프터장 꼬리 — 국내 개장 준비가 먼저다
+    const kh = new Date(now.getTime() + 9 * 3600 * 1000).getUTCHours();
+    return kh >= 16 ? "저녁" : "낮";
+  }
+  if (dom) return "낮";
+  if (us) return "밤";
+  return "쉼";
+}
+
+/**
  * 몇 종목까지 물고 있을까.
  *
  * ## 왜 전 종목이 아닌가
@@ -122,6 +171,12 @@ export function shouldRun(now = new Date()): boolean {
  * 반씩 채운다. **200 은 적지만 0 보다는 훨씬 낫다** — 지금까지는 사실상 0 이었다.
  */
 const PER_MARKET = 95;
+/** 저녁(국내 애프터 + 미국 프리장 겹침)의 국내 몫 — 미국에 60 을 내준다 */
+const PER_MARKET_EVENING = 50;
+/** 저녁의 미국 몫. 관심(해외) 앞 그룹부터 이만큼 */
+const US_EVENING = 60;
+/** 밤의 미국 몫 — 국내는 닫혔으니 크게. 화면 몫 10 은 여전히 비워 둔다 */
+const US_NIGHT = 150;
 /**
  * 스케줄러가 채우는 몫.
  *
@@ -137,7 +192,7 @@ const MAX_CODES = 190;
 /** 순위를 몇 분마다 다시 볼지 — 거래대금 상위는 이보다 빨리 안 뒤집힌다 */
 const RANK_REFRESH_MS = 5 * 60 * 1000;
 
-let rankCache: { at: number; codes: string[] } = { at: 0, codes: [] };
+let rankCache: { at: number; kospi: string[]; kosdaq: string[] } = { at: 0, kospi: [], kosdaq: [] };
 
 /**
  * 거래대금 상위 — 돈이 몰린 곳이 곧 오늘 볼 종목이다.
@@ -146,8 +201,13 @@ let rankCache: { at: number; codes: string[] } = { at: 0, codes: [] };
  * **코스닥이 거의 안 들어온다** — 거래대금 절대액이 다르기 때문이다. 그런데 코스닥에서
  * 새 종목을 발견하는 일이 오히려 잦다. 코스피 상위 N, 코스닥 상위 N 을 따로 잡는다.
  */
-async function hotCodes(kiwoom: KiwoomClient): Promise<string[]> {
-  if (Date.now() - rankCache.at < RANK_REFRESH_MS) return rankCache.codes;
+async function hotCodes(kiwoom: KiwoomClient, perMarket: number): Promise<string[]> {
+  // 시장별로 따로 들고 있다가 국면에 맞게 자른다 — 저녁엔 50/50, 낮엔 95/95
+  const cut = () => [
+    ...rankCache.kospi.slice(0, perMarket),
+    ...rankCache.kosdaq.slice(0, perMarket),
+  ];
+  if (Date.now() - rankCache.at < RANK_REFRESH_MS) return cut();
   /*
    * ⚠️ **실패를 조용히 삼키면 안 된다.**
    *
@@ -169,22 +229,53 @@ async function hotCodes(kiwoom: KiwoomClient): Promise<string[]> {
         console.log(`실시간: ${name} 거래대금 상위 실패 —`, r.reason instanceof Error ? r.reason.message : r.reason);
       }
     }
-    const codes = [kospi, kosdaq]
-      .flatMap((r) => (r.status === "fulfilled" ? r.value : []))
-      .map((t) => t.code)
-      .filter(Boolean);
-    if (codes.length === 0) {
+    const pick = (r: PromiseSettledResult<{ code: string }[]>) =>
+      r.status === "fulfilled" ? r.value.map((t) => t.code).filter(Boolean) : [];
+    const ks = pick(kospi);
+    const kq = pick(kosdaq);
+    if (ks.length === 0 && kq.length === 0) {
       // 빈 목록으로 덮으면 구독이 통째로 풀린다. 지난 값을 쓰되 곧바로 다시 해 본다
       console.log("실시간: 거래대금 상위가 비었다 — 관심종목만 걸린다");
-      rankCache = { at: 0, codes: rankCache.codes };
+      rankCache = { ...rankCache, at: 0 };
     } else {
-      rankCache = { at: Date.now(), codes };
+      rankCache = { at: Date.now(), kospi: ks, kosdaq: kq };
     }
   } catch (e) {
     console.log("실시간: 순위 조회 실패 —", e instanceof Error ? e.message : e);
-    rankCache = { at: 0, codes: rankCache.codes };
+    rankCache = { ...rankCache, at: 0 };
   }
-  return rankCache.codes;
+  return cut();
+}
+
+/**
+ * 미국 FE 로 걸 티커 — 관심종목(해외) **그룹 순서대로**, 미국 거래소만.
+ *
+ * 그룹 순서가 곧 우선순위다(첫 그룹이 늘 제일 자주 보는 묶음). 유럽·일본 티커는
+ * FE 가 안 받으므로 usExchanges 지도(ND/NY/NA)에 있는 것만 남긴다.
+ */
+const US_REFRESH_MS = 5 * 60 * 1000;
+let usCache: { at: number; symbols: string[] } = { at: 0, symbols: [] };
+
+async function usSymbols(): Promise<string[]> {
+  if (Date.now() - usCache.at < US_REFRESH_MS) return usCache.symbols;
+  try {
+    const [groups, stex] = await Promise.all([listUsGroups(), usStexMap()]);
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const g of groups) {
+      for (const s of g.stocks) {
+        const sym = s.symbol.toUpperCase();
+        if (seen.has(sym) || !stex[sym]) continue;
+        seen.add(sym);
+        out.push(sym);
+      }
+    }
+    usCache = { at: Date.now(), symbols: out };
+  } catch (e) {
+    console.log("실시간: 해외 관심종목 읽기 실패 —", e instanceof Error ? e.message : e);
+    usCache = { ...usCache, at: 0 };
+  }
+  return usCache.symbols;
 }
 
 /**
@@ -192,7 +283,7 @@ async function hotCodes(kiwoom: KiwoomClient): Promise<string[]> {
  *
  * 관심종목을 앞에 두는 이유는 한도에 걸렸을 때 **잘려 나가면 안 되는 쪽**이기 때문이다.
  */
-async function targets(kiwoom: KiwoomClient): Promise<string[]> {
+async function targets(kiwoom: KiwoomClient, perMarket: number, max: number): Promise<string[]> {
   const codes: string[] = [];
   try {
     const items = await listWatchlist();
@@ -200,8 +291,8 @@ async function targets(kiwoom: KiwoomClient): Promise<string[]> {
   } catch {
     /* 관심종목을 못 읽어도 순위는 걸린다 */
   }
-  codes.push(...(await hotCodes(kiwoom)));
-  return [...new Set(codes)].slice(0, MAX_CODES);
+  codes.push(...(await hotCodes(kiwoom, perMarket)));
+  return [...new Set(codes)].slice(0, max);
 }
 
 /**
@@ -234,11 +325,11 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
    */
   let subscribed = new Set<string>();
   subCount = () => subscribed.size - (subscribed.has("__vi__") ? 1 : 0);
+  /** 지금 어느 국면으로 판을 짰나 — 바뀌면 끊고 처음부터 다시 짠다 */
+  let phase: Phase = "쉼";
 
   const tick = async () => {
     try {
-      const run = shouldRun();
-
       /*
        * ⚠️ **저장소는 장 시간과 상관없이 만든다.**
        *
@@ -251,51 +342,92 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
        */
       const { client: rt } = await getRealtime(kiwoom);
 
-      if (!run) {
+      const next = phaseOf();
+
+      if (next === "쉼") {
         // 「끊김」은 소켓이 아예 없다는 뜻 — 그때 또 닫으면 매 분 헛일이다
         if (rt.state !== "끊김") {
           rt.close();
+          rt.resetSubscriptions();
           subscribed = new Set();
         }
+        phase = "쉼";
         return;
+      }
+
+      /*
+       * 국면이 바뀌면 **판을 새로 짠다** — 끊고, 구독을 백지로 하고, 아래에서 다시 건다.
+       * 낮 190(국내)을 밤 150(미국)으로 갈아끼우는 방법이 이것이다. REMOVE 를 하나씩
+       * 보내며 교체하는 것보다 단순하고, 키움 재접속은 LOGIN 한 번이라 싸다.
+       */
+      if (next !== phase) {
+        if (rt.state !== "끊김") rt.close();
+        rt.resetSubscriptions();
+        subscribed = new Set();
+        console.log(`실시간: 국면 전환 → ${next}`);
+        phase = next;
       }
 
       await rt.connect();
 
       /*
-       * 관심종목은 **바뀐 것만** 새로 건다.
-       * 매번 전부 다시 걸면 REG 요청이 쌓이고, 그건 105110 으로 돌아온다.
-       */
-      /*
        * VI 는 **한 번만** 건다. 종목을 지정해도 전체 종목이 오므로(문서 명시)
-       * 종목마다 걸 이유가 없다 — 오히려 요청만 늘어난다.
+       * 종목마다 걸 이유가 없다 — 오히려 요청만 늘어난다. 밤엔 KRX 가 닫혀 안 건다.
        */
-      if (!subscribed.has("__vi__")) {
+      if (phase !== "밤" && !subscribed.has("__vi__")) {
         subscribed.add("__vi__");
         /* VI 는 전체 종목이 오므로 종목 하나로 족하다. 정원을 먹지 않게 고정으로 둔다 */
         rt.subscribeKeep("1h", "005930");
       }
 
-      const codes = await targets(kiwoom);
+      /*
+       * 국면별 정원. 합이 MAX_CODES(190)를 넘지 않아야 한다 — 나머지 10 은 화면 몫.
+       *
+       *   낮    국내 190 (관심 + 95/95) · 미국 0
+       *   저녁  국내 관심 + 50/50 · 미국 60  (관심 ~25 로 잡으면 185)
+       *   밤    국내 0 · 미국 150
+       */
       let added = 0;
-      for (const code of codes) {
-        if (subscribed.has(code)) continue;
-        subscribed.add(code);
-        /*
-          `subscribeKeep` — **밀려나면 안 되는 쪽**이다.
-          화면이 종목을 볼 때도 구독이 늘어나는데(`/series`·`/latest`), 그쪽이 상한에
-          닿으면 오래된 **화면 종목**부터 빠진다. 관심종목·순위는 하루 종일 필요하다.
-        */
-        rt.subscribeKeep("0F", code);
-        rt.subscribeKeep("0w", code);
-        /*
-          체결도 상시로 건다 — 복기하려면 「그때 얼마에 얼마나」가 있어야 한다.
-          프레임은 체결마다 오지만 30초에 한 점만 남기므로 쌓이는 양은 나머지와 같다.
-        */
-        rt.subscribeKeep("0B", code);
-        added += 1;
+
+      if (phase !== "밤") {
+        const perMarket = phase === "저녁" ? PER_MARKET_EVENING : PER_MARKET;
+        const usAllow = phase === "저녁" ? US_EVENING : 0;
+        const codes = await targets(kiwoom, perMarket, MAX_CODES - usAllow);
+        for (const code of codes) {
+          if (subscribed.has(code)) continue;
+          subscribed.add(code);
+          /*
+            `subscribeKeep` — **밀려나면 안 되는 쪽**이다.
+            화면이 종목을 볼 때도 구독이 늘어나는데(`/series`·`/latest`), 그쪽이 상한에
+            닿으면 오래된 **화면 종목**부터 빠진다. 관심종목·순위는 하루 종일 필요하다.
+          */
+          rt.subscribeKeep("0F", code);
+          rt.subscribeKeep("0w", code);
+          /*
+            체결도 상시로 건다 — 복기하려면 「그때 얼마에 얼마나」가 있어야 한다.
+            프레임은 체결마다 오지만 30초에 한 점만 남기므로 쌓이는 양은 나머지와 같다.
+          */
+          rt.subscribeKeep("0B", code);
+          added += 1;
+        }
       }
-      if (added > 0) console.log(`실시간: ${added}종목 추가 (총 ${subscribed.size - 1})`);
+
+      if (phase !== "낮") {
+        /*
+         * 미국 FE — 해외 관심종목, 그룹 순서대로. ⚠️ 프레임 실측은 아직이다
+         * (등록은 통과 — regErrors 0). 안 오면 밤에 로그로 원인이 남는다.
+         */
+        const allow = phase === "밤" ? US_NIGHT : US_EVENING;
+        for (const sym of (await usSymbols()).slice(0, allow)) {
+          if (subscribed.has(sym)) continue;
+          subscribed.add(sym);
+          rt.subscribeKeep("FE", sym);
+          added += 1;
+        }
+      }
+
+      if (added > 0)
+        console.log(`실시간(${phase}): ${added}종목 추가 (총 ${subCount()})`);
     } catch (e) {
       // 붙는 데 실패해도 서버는 계속 돈다 — 다음 분에 다시 해 본다
       console.log("실시간 스케줄러:", e instanceof Error ? e.message : e);
@@ -304,5 +436,5 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
 
   void tick();
   setInterval(() => void tick(), 60_000);
-  console.log("실시간 스케줄러 시작 (평일 07:50~20:10)");
+  console.log("실시간 스케줄러 시작 (국내 평일 07:50~20:10 · 미국 ET 03:50~20:10)");
 }

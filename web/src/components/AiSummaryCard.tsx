@@ -9,15 +9,67 @@ import { api, type PublishedReportResponse } from "../api";
  * 실패해도 리포트 나머지는 그대로 보여야 하므로 이 카드 안에서만 에러를 표시한다.
  */
 
-/** **굵게** 처리 */
+/**
+ * 등락·수급 낱말에 색을 입힌다 (2026-08-25 — 시인성).
+ *
+ * AI 글은 숫자가 문장에 파묻혀 훑어지지 않았다 — 「외국인이 2조 3,394억 원을
+ * 순매도하며」에서 눈이 잡아야 할 건 **부호와 크기**다. 부호 달린 수(+3.62%,
+ * -4.73%, -573억)와 순매수/순매도 낱말만 물들인다. 문장 전체를 칠하면
+ * 아무것도 안 칠한 것과 같다.
+ */
+const SIGN_RE = /([+＋]\s?\d[\d,]*(?:\.\d+)?\s?(?:%|조|억|원|p)|[-−▼]\s?\d[\d,]*(?:\.\d+)?\s?(?:%|조|억|원|p)|순매수|순매도|상승\s?마감|하락\s?마감)/g;
+
+function paint(text: string, keyBase: number): React.ReactNode[] {
+  return text.split(SIGN_RE).map((part, i) => {
+    if (!part) return null;
+    if (/^[+＋]/.test(part) || part === "순매수" || /^상승/.test(part))
+      return (
+        <em className="ai-up" key={`${keyBase}-${i}`}>
+          {part}
+        </em>
+      );
+    if (/^[-−▼]\s?\d/.test(part) || part === "순매도" || /^하락/.test(part))
+      return (
+        <em className="ai-down" key={`${keyBase}-${i}`}>
+          {part}
+        </em>
+      );
+    return <span key={`${keyBase}-${i}`}>{part}</span>;
+  });
+}
+
+/** **굵게** 처리 + 등락 착색 */
 function inline(text: string): React.ReactNode[] {
   return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
     part.startsWith("**") && part.endsWith("**") ? (
-      <b key={i}>{part.slice(2, -2)}</b>
+      <b key={i}>{paint(part.slice(2, -2), i)}</b>
     ) : (
-      <span key={i}>{part}</span>
+      <span key={i}>{paint(part, i)}</span>
     ),
   );
+}
+
+/**
+ * 섹션 제목 정규화 (2026-08-25).
+ *
+ * 발행본에 「시장の 폭」이 실제로 있었다 — AI 가 어쩌다 일본어 글자를 섞으면
+ * 그대로 박제된다. 제목은 정해진 여섯 개 중 하나라, 한글·영문만 남겨 견주고
+ * 맞으면 **우리 표기 + 아이콘**으로 갈아 끼운다. 지나간 발행분도 이 렌더러를
+ * 타므로 소급해서 고쳐 보인다. 못 알아보는 제목은 그대로 둔다.
+ */
+const HEADINGS: { canon: string; icon: string }[] = [
+  { canon: "오늘 시장 한 줄", icon: "📌" },
+  { canon: "자금 흐름", icon: "💰" },
+  { canon: "내 테마", icon: "🎯" },
+  { canon: "시장 폭", icon: "🌡️" },
+  { canon: "주도 섹터", icon: "🔥" },
+  { canon: "관심종목 & 체크포인트", icon: "⭐" },
+];
+
+function normalizeHeading(raw: string): { label: string; icon: string } {
+  const bare = raw.replace(/[^가-힣a-zA-Z&]/g, "");
+  const hit = HEADINGS.find((h) => h.canon.replace(/[^가-힣a-zA-Z&]/g, "") === bare);
+  return hit ? { label: hit.canon, icon: hit.icon } : { label: raw, icon: "" };
 }
 
 function render(text: string): React.ReactNode[] {
@@ -27,9 +79,11 @@ function render(text: string): React.ReactNode[] {
     const line = raw.trim();
     if (!line) return;
     if (line.startsWith("## ")) {
+      const h = normalizeHeading(line.slice(3));
       out.push(
         <h4 className="ai-h" key={i}>
-          {line.slice(3)}
+          {h.icon && <span className="ai-h-ico">{h.icon}</span>}
+          {h.label}
         </h4>,
       );
     } else if (/^[-*•]\s/.test(line) || /^\d+\.\s/.test(line)) {

@@ -329,6 +329,14 @@ export async function saveEntry(
   const entry: JournalEntry = {
     date,
     updatedAt: new Date().toISOString(),
+    /*
+     * ⚠️ 2026-08-25 — **여기 빠져 있었다.** 관망 기능을 넣으면서 인터페이스와
+     * 통계(watch 집계)는 만들었는데 정작 저장 조립에서 이 두 줄이 빠져, 「관망 +
+     * 사유」를 적고 저장을 눌러도 **소리 없이 버려졌다.** 화면은 저장 직후엔 제
+     * 상태를 그대로 보여 주니 알 길이 없었고, 날짜를 옮겼다 돌아와서야 드러났다.
+     */
+    stance: input.stance ?? prev?.stance ?? null,
+    watchReasons: (input.watchReasons ?? prev?.watchReasons ?? []).slice(0, 12),
     what: (input.what ?? prev?.what ?? "").slice(0, 1000),
     why: (input.why ?? prev?.why ?? "").slice(0, 1000),
     followedRules: input.followedRules ?? prev?.followedRules ?? null,

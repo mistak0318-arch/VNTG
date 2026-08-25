@@ -61,6 +61,7 @@ export const AXES: { key: Axis; label: string; hint: string }[] = [
 export type CheckKey =
   | "trend"
   | "nearHigh"
+  | "newHigh"
   | "sectorStrength"
   | "themeStrength"
   | "myThemeStrength"
@@ -169,6 +170,25 @@ export const DEFAULT_CONFIG: SignalConfig = {
       threshold: 80,
       strongAt: 95,
       hint: "현재가가 52주 고가의 몇 %인가. 신고가 부근일수록 높다",
+      cost: 0,
+    },
+    /*
+     * 60일 신고가 — **자체 백테스트가 고른 기준이다** (2026-08-25).
+     *
+     * 조건 백테스트(코스피 상위 20, 2024-03~2026-08)에서 「60일 신고가 돌파 →
+     * 20일 보유」가 기준선 대비 **+3.77%p** 로, 잰 조건 중 엣지가 가장 컸다.
+     * 그런데 신호등엔 52주 고가 근접만 있고 정작 이게 없었다 — 검증된 것부터
+     * 넣는 게 순서다. 일봉을 재사용하므로 조회는 안 늘어난다.
+     */
+    {
+      key: "newHigh",
+      label: "60일 신고가",
+      axis: "trend",
+      enabled: true,
+      weight: 1,
+      threshold: 97,
+      strongAt: 100,
+      hint: "현재가 ÷ 직전 60일 고가(%). 100이면 돌파 — 자체 백테스트에서 엣지가 가장 컸던 조건(20일 뒤 +3.77%p)",
       cost: 0,
     },
     /*
@@ -594,6 +614,7 @@ export async function evaluateSignal(
   const wantChart =
     need.has("trend") ||
     need.has("nearHigh") ||
+    need.has("newHigh") ||
     need.has("overhead") ||
     need.has("disparity") ||
     need.has("targetUpside");
@@ -714,6 +735,22 @@ export async function evaluateSignal(
         const pct = (cur / high) * 100;
         g = grade(pct, c);
         value = `52주 고가의 ${pct.toFixed(0)}%`;
+      }
+    } else if (c.key === "newHigh") {
+      /*
+       * ⚠️ **오늘을 빼고** 잰다. 첫 줄이 오늘이라 포함해서 재면 현재가 ≤ 오늘 고가라
+       * 100 을 절대 못 넘는다 — 「돌파」라는 말이 성립하려면 기준은 **직전** 60일이다.
+       * 봉이 20개도 안 되는 새내기는 신고가라는 말 자체가 이르므로 비워 둔다.
+       */
+      const win = chartRows.slice(1, 61);
+      const high = win.length >= 20 ? Math.max(...win.map((r) => Math.abs(toNum(r.high_pric)))) : 0;
+      if (cur && high > 0) {
+        const pct = (cur / high) * 100;
+        g = grade(pct, c);
+        value =
+          pct >= 100
+            ? `60일 신고가 돌파 (+${(pct - 100).toFixed(1)}%)`
+            : `직전 60일 고가의 ${pct.toFixed(0)}%`;
       }
     } else if (c.key === "sectorStrength") {
       /*

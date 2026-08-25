@@ -444,6 +444,39 @@ export function DailyReportPage({
         </div>
       </header>
 
+      {/*
+        한눈 스트립 (2026-08-25) — 글을 읽기 전에 **방향·수급·환율이 3초 안에** 잡혀야 한다.
+        아래 표들에 다 있는 값이지만, 신문의 1면 제목처럼 핵심 다섯 개만 위로 끌어올린다.
+        전부 이미 받아 둔 섹션 값이라 조회가 늘지 않는다.
+      */}
+      {(() => {
+        /* 지수 카드 이름은 KOSPI/KOSDAQ 영문 표기다 — 한글로 찾으면 빈다 */
+        const kospi = idx.find((c) => /^KOSPI$|^코스피$/i.test(c.name));
+        const kosdaq = idx.find((c) => /^KOSDAQ$|^코스닥$/i.test(c.name));
+        const usd = g.find((q) => q.key === "usdkrw");
+        const chips: { k: string; v: string; sign: number }[] = [];
+        if (kospi) chips.push({ k: "코스피", v: `${fmtNum(kospi.price)} (${pct(kospi.changeRate)})`, sign: kospi.changeRate });
+        if (kosdaq) chips.push({ k: "코스닥", v: `${fmtNum(kosdaq.price)} (${pct(kosdaq.changeRate)})`, sign: kosdaq.changeRate });
+        if (usd?.price != null)
+          chips.push({ k: "달러/원", v: `${fmtNum(usd.price)} (${usd.changeRate === null ? "-" : pct(usd.changeRate)})`, sign: usd.changeRate ?? 0 });
+        if (f) {
+          const frg = f.kospi.foreign + f.kosdaq.foreign;
+          const inst = f.kospi.institution + f.kosdaq.institution;
+          chips.push({ k: "외국인", v: `${frg > 0 ? "+" : ""}${fmtNum(Math.round(frg))}억`, sign: frg });
+          chips.push({ k: "기관", v: `${inst > 0 ? "+" : ""}${fmtNum(Math.round(inst))}억`, sign: inst });
+        }
+        return chips.length > 0 ? (
+          <div className="rp-glance">
+            {chips.map((c) => (
+              <span className="rp-glance-chip" key={c.k}>
+                <em>{c.k}</em>
+                <b className={signClass(c.sign)}>{c.v}</b>
+              </span>
+            ))}
+          </div>
+        ) : null;
+      })()}
+
       <AiSummaryCard edition={edition} />
 
       {/*

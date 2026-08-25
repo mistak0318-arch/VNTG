@@ -1,5 +1,6 @@
 import type { UsQuoteRow } from "../api";
-import { sideQuote } from "../usSession";
+import { sideQuote, usFeActive } from "../usSession";
+import { fid, useRealtime } from "../useRealtime";
 import { ColumnGrip, useColumnWidths } from "./ColumnWidths";
 
 /**
@@ -75,6 +76,31 @@ export function UsWatchTable({
   /* 칸 너비 조절 — 시세분석과 같은 공통 모듈. 머리 칸 오른쪽 가장자리를 끈다 */
   const cw = useColumnWidths("usWatch");
 
+  /*
+   * 키움 실시간(FE) — **밤(미국장)에만 묻는다.**
+   *
+   * 서버가 관심(해외)을 밤에 FE 로 걸어 두므로(realtimeHub 국면 배분) 화면은 최신값만
+   * 집어 오면 된다. 미국 마감 시간에 물으면 답 없는 구독이 화면 몫(10자리)을 채워
+   * 국내 화면 실시간을 밀어내니 그때는 아예 안 묻는다.
+   *
+   * 값은 국내 0B 와 같은 문법이다 — FID 10 현재가(부호=방향), 12 등락률.
+   * ⚠️ 프레임 실측 전(등록만 통과)이라, 안 오면 표는 그냥 한투 폴링 값 그대로다 —
+   * 실시간은 얹는 것이지 대체하는 게 아니다.
+   */
+  const feOn = usFeActive();
+  const rt = useRealtime(
+    feOn ? stocks.map((s) => `FE:${s.symbol.toUpperCase()}`) : [],
+    2500,
+  );
+  const live = (symbol: string): { price: number; rate: number | null } | null => {
+    if (!rt.healthy) return null;
+    const v = rt.values[`FE:${symbol.toUpperCase()}`];
+    if (!v || Date.now() - v.at > 90_000) return null;
+    const price = fid(v, "10");
+    if (price === null || price === 0) return null;
+    return { price: Math.abs(price), rate: fid(v, "12") };
+  };
+
   return (
     <div className="data-table-wrap">
       <table className={`data-table uw-table${cw.customized ? " col-fixed" : ""}`}>
@@ -142,6 +168,10 @@ export function UsWatchTable({
         <tbody>
           {stocks.map((s, i, arr) => {
             const side = sideQuote(s);
+            /* 키움 FE 가 살아 있으면 그 값이 먼저다 — 점(●)이 그 표시다 */
+            const lv = live(s.symbol);
+            const shownPrice = lv ? lv.price : s.price;
+            const shownRate = lv && lv.rate !== null ? lv.rate : s.changeRate;
             return (
               <tr key={s.symbol}>
                 {/* 이름이 길면 잘린다(CSS) — 티커는 안 잘리고, 전체 이름은 마우스로 본다 */}
@@ -171,8 +201,10 @@ export function UsWatchTable({
                   현재가·등락률·원화·편입대비는 **같이 움직인다.** 하나만 반짝이면
                   나머지는 조용히 바뀌어서, 오히려 안 바뀐 것처럼 보인다.
                 */}
-                <td className="num" title={s.currency ?? ""}>
-                  {price(s.price, s.currency)}
+                <td className="num" title={lv ? `${s.currency ?? ""} · 키움 실시간` : (s.currency ?? "")}>
+                  {lv && <span className="uw-live-dot" title="키움 실시간" />}
+                  {price(shownPrice, s.currency)}
+                  {/* 괄호는 그대로 둔다 — 실시간이 끊길 때마다 붙었다 떨어지면 화면이 덜컹인다 */}
                   {side && (
                     <span className="uw-day" title={side.label}>
                       {" "}
@@ -185,8 +217,8 @@ export function UsWatchTable({
                   여기에 「지금 살아 있는 세션」을 쓰면 왼쪽 가격은 정규장인데 등락률만
                   시간외가 되어 짝이 어긋난다. 괄호로 둘 다 보여주므로 나눌 필요가 없다.
                 */}
-                <td className={`num tickable ${cls(s.changeRate)} ${tick?.(s.symbol) ?? ""}`}>
-                  {pct(s.changeRate)}
+                <td className={`num tickable ${cls(shownRate)} ${tick?.(s.symbol) ?? ""}`}>
+                  {pct(shownRate)}
                   {side && (
                     <span className={`uw-day ${cls(side.changeRate)}`} title={side.label}>
                       {" "}

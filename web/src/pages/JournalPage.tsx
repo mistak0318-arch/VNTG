@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   api,
   normalizeStockCode,
@@ -136,6 +136,51 @@ export function JournalPage({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
 
+  /*
+   * ⚠️ **저장 안 된 편집을 지키는 장치** (2026-08-25).
+   *
+   * 「관망 누르고 사유까지 골랐는데 날짜를 바꿨다 돌아오니 사라졌다」 — 실제로 났다.
+   * 날짜를 바꾸면 그날 저장본을 폼에 올리는데, 그 전에 **지금 폼이 저장됐는지 아무도
+   * 안 봤다.** 다른 메뉴로 나가도(언마운트) 똑같이 날아갔다.
+   *
+   * 마지막으로 불러오거나 저장한 폼의 스냅샷을 들고 있다가, 다르면 「편집 중」이다.
+   * 편집 중인 채로 (1) 날짜를 바꾸면 먼저 저장하고 넘어가고 (2) 화면을 떠나면
+   * 저장을 쏘고 떠난다. 지우는 게 목적일 수는 없다 — 지우기는 저장으로만 한다.
+   */
+  const savedSnap = useRef("{}");
+  const snap = (f: Partial<JournalEntry>) =>
+    JSON.stringify({ ...f, context: undefined, updatedAt: undefined });
+  /** 빈 폼을 자동 저장하면 「본 날」이 「기록한 날」이 된다 — 내용이 있어야 저장한다 */
+  const meaningful = (f: Partial<JournalEntry>) =>
+    Boolean(
+      f.stance ||
+        (f.trades ?? []).length > 0 ||
+        (f.mistakes ?? []).length > 0 ||
+        f.followedRules !== null ||
+        (f.what ?? "").trim() ||
+        (f.why ?? "").trim() ||
+        (f.mood ?? "").trim() ||
+        (f.lesson ?? "").trim() ||
+        (f.tomorrow ?? "").trim() ||
+        (f.brokenRule ?? "").trim(),
+    );
+  const dirty = snap(form) !== savedSnap.current;
+
+  /** 언마운트 자동 저장이 읽을 최신값 — 클로저에 갇힌 옛 폼을 쏘면 안 된다 */
+  const live = useRef({ form, date, dirty: false });
+  live.current = { form, date, dirty };
+  useEffect(
+    () => () => {
+      const l = live.current;
+      if (l.dirty && meaningful(l.form)) {
+        // 떠나는 길이라 결과를 기다릴 수 없다 — 실패하면 다음에 열 때 없는 것으로 보인다
+        void api.journalSave({ ...l.form, date: l.date }).catch(() => {});
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   useEffect(() => {
     const q = query.trim();
     if (!q) {
@@ -151,14 +196,23 @@ export function JournalPage({
     return () => clearTimeout(timer);
   }, [query]);
 
+  const EMPTY_FORM: Partial<JournalEntry> = { mistakes: [], followedRules: null, mood: "", trades: [] };
+
+  /** 폼을 올리면서 스냅샷도 같이 — 이 순간이 「저장된 상태」의 기준이 된다 */
+  function applyForm(hit: JournalEntry | undefined) {
+    const f = hit ?? EMPTY_FORM;
+    setForm(f);
+    savedSnap.current = snap(f);
+  }
+
   async function load() {
     setLoading(true);
     setError(null);
     try {
       const d = await api.journal();
       setData(d);
-      const hit = d.entries.find((e) => e.date === date);
-      setForm(hit ?? { mistakes: [], followedRules: null, mood: "", trades: [] });
+      /* 편집 중이면 폼을 안 덮는다 — 새로고침이 지우개가 되면 안 된다 */
+      if (!live.current.dirty) applyForm(d.entries.find((e) => e.date === date));
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오기 실패");
     } finally {
@@ -171,25 +225,39 @@ export function JournalPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 날짜를 바꾸면 그날 기록을 폼에 올린다
-  useEffect(() => {
-    if (!data) return;
-    const hit = data.entries.find((e) => e.date === date);
-    setForm(hit ?? { mistakes: [], followedRules: null, mood: "", trades: [] });
-  }, [date, data]);
-
-  async function save() {
+  async function save(): Promise<{ entries: JournalEntry[] } | null> {
     setSaving(true);
     setNote(null);
     try {
       const d = await api.journalSave({ ...form, date });
       setData((prev) => (prev ? { ...prev, entries: d.entries, stats: d.stats } : prev));
+      savedSnap.current = snap(form);
       setNote("저장했습니다.");
+      return d;
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장 실패");
+      return null;
     } finally {
       setSaving(false);
     }
+  }
+
+  /**
+   * 날짜를 바꾼다 — **편집 중이면 먼저 저장하고** 넘어간다.
+   * 예전엔 날짜만 바꾸면 폼을 그날 저장본으로 갈아끼웠다. 저장 안 한 편집은
+   * 그 순간 소리 없이 사라졌다 — 실제로 관망 사유를 잃었다.
+   */
+  async function switchDate(next: string) {
+    if (next === date) return;
+    let entries = data?.entries ?? [];
+    if (dirty && meaningful(form)) {
+      const saved = await save();
+      if (!saved) return; // 저장이 실패했으면 날짜를 안 바꾼다 — 편집을 버리는 길이 없다
+      entries = saved.entries;
+    }
+    setDate(next);
+    setNote(null);
+    applyForm(entries.find((e) => e.date === next));
   }
 
   function addTrade(r: StockSearchResult | null) {
@@ -243,7 +311,8 @@ export function JournalPage({
             type="date"
             value={date}
             max={today()}
-            onChange={(e) => setDate(e.target.value)}
+            /* 편집 중이면 저장부터 하고 넘어간다 — 날짜 이동이 지우개였던 버그의 답 */
+            onChange={(e) => void switchDate(e.target.value)}
           />
           <span className="jn-streak">
             연속 <b>{s.streak}</b>일 · 총 <b>{s.days}</b>일 기록
@@ -251,7 +320,9 @@ export function JournalPage({
           <button className="algo-run-btn" onClick={() => void save()} disabled={saving}>
             {saving ? "저장 중…" : entry ? "수정" : "저장"}
           </button>
-          {note && <span className="jn-saved">{note}</span>}
+          {/* 저장 안 된 편집이 있다는 표시 — 이게 보이는 동안은 날짜를 바꿔도 안전하다(먼저 저장된다) */}
+          {dirty && !saving && <span className="jn-dirty">● 편집 중</span>}
+          {note && !dirty && <span className="jn-saved">{note}</span>}
         </div>
 
         {/* 자동으로 잡힌 그날 맥락 — 사용자가 적을 필요가 없다 */}

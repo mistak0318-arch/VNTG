@@ -17,7 +17,7 @@ import type { ChannelMessage } from "./telegramReader.js";
 
 /** 리딩방·광고 패턴. 시황 정보가 아니라 판촉이다. */
 const SPAM_PATTERNS: RegExp[] = [
-  /무료\s*(입장|가입|체험|상담)/,
+  /무료\s*(입장|가입|체험|상담|추천)/,
   /수익\s*인증/,
   /(리딩|픽|매매)\s*방/,
   /본방|입장링크|오픈채팅/,
@@ -28,6 +28,11 @@ const SPAM_PATTERNS: RegExp[] = [
   /수익률\s*\d{3,}\s*%/, // 세 자리 수익률 자랑
   /지금\s*바로\s*(신청|클릭)/,
   /광고|제휴\s*문의/,
+  // 2026-08-25 보강 — 리딩방 판촉의 다른 얼굴들
+  /VIP\s*(방|채널|반)/i,
+  /선착순\s*\d+/,
+  /입장\s*코드/,
+  /(무료|공개)\s*방송/,
 ];
 
 /** 시황과 무관한 짧은 잡담 */
@@ -62,6 +67,30 @@ function fingerprint(text: string): string {
   return n.slice(0, 60);
 }
 
+/**
+ * 낱말 5개짜리 지문 여러 개 (2026-08-25).
+ *
+ * 앞 60자 지문 하나로는 **앞머리를 단 퍼나르기를 못 잡았다** — 채널들이 남의 글을
+ * 나를 때 「★단독★」이나 자기 채널명을 앞에 붙이는데, 그러면 앞 60자가 달라져
+ * 같은 얘기가 딴 묶음이 됐다. coverage(몇 채널이 다뤘나)가 가장 강한 신호인데
+ * 그 수가 낮게 세지는 것이다.
+ *
+ * 낱말 5개 연속 조각을 **한 칸씩 밀며** 뜬다 — 앞에 뭘 붙여도 몸통 조각들은
+ * 글자 그대로 같아서 겹친다. 조각 두 개 이상 겹쳐야 같은 얘기로 본다
+ * (한 개는 「오늘 코스피 마감 시황 정리」 같은 상투구로도 겹친다).
+ */
+function shingles(text: string): string[] {
+  const words = normalize(text)
+    .split(" ")
+    .filter((w) => w.length > 1);
+  if (words.length < 5) return words.length > 0 ? [words.join(" ")] : [];
+  const out: string[] = [];
+  for (let i = 0; i + 5 <= words.length && out.length < 24; i++) {
+    out.push(words.slice(i, i + 5).join(" "));
+  }
+  return out;
+}
+
 /** 중요도 가중치 — 뉴스 점수화와 같은 사고방식 */
 const IMPACT_WEIGHTS: [RegExp, number][] = [
   [/상한가|하한가|급등|급락|폭등|폭락/, 6],
@@ -75,6 +104,15 @@ const IMPACT_WEIGHTS: [RegExp, number][] = [
   [/외국인|기관|수급|순매수|순매도/, 3],
   [/승인|허가|임상|FDA/, 4],
   [/관세|수출|규제|정책/, 3],
+  /*
+   * 2026-08-25 보강 — 지라시방에서 실제로 주가를 흔드는데 목록에 없던 것들.
+   * CB·블록딜은 **물량이 쏟아진다는 예고**라 채널에서 제일 먼저 도는 부류다.
+   */
+  [/전환사채|신주인수권|CB\s*발행|BW\s*발행/, 5],
+  [/블록딜|시간외\s*대량/, 5],
+  [/목표주가|투자의견|커버리지/, 3],
+  [/무상증자\s*권리락|권리락/, 3],
+  [/상장폐지|거래정지|불성실공시/, 6],
 ];
 
 export interface ScoredChannelItem {
@@ -190,21 +228,52 @@ export function scoreMessages(
    *   at      — 가장 최근 언급 (화면 표시와 감쇠는 이쪽)
    * 본문은 가장 최근 것을 쓴다. 같은 사건이라도 나중 글에 진행 상황이 더 담긴다.
    */
-  const groups = new Map<
-    string,
-    { rep: ChannelMessage; firstAt: string; channels: Set<string> }
-  >();
+  interface Group {
+    rep: ChannelMessage;
+    firstAt: string;
+    channels: Set<string>;
+  }
+  const groups = new Map<number, Group>();
+  /** 조각 지문 → 묶음 번호. 앞머리를 단 퍼나르기도 몸통 조각으로 걸린다 */
+  const byShingle = new Map<string, number>();
+  /** 앞 60자 지문 → 묶음 번호 — 조각으로 못 잡는 아주 짧은 글의 안전망 */
+  const byPrefix = new Map<string, number>();
+  let nextGid = 1;
+
   for (const m of clean) {
-    const key = fingerprint(m.text);
-    if (!key) continue;
-    const g = groups.get(key);
-    if (g) {
+    const fps = shingles(m.text);
+    const prefix = fingerprint(m.text);
+    if (fps.length === 0 && !prefix) continue;
+
+    // 조각 두 개 이상 겹치는 묶음을 찾는다 (조각이 하나뿐인 짧은 글은 한 개로도)
+    const votes = new Map<number, number>();
+    for (const fp of fps) {
+      const gid = byShingle.get(fp);
+      if (gid) votes.set(gid, (votes.get(gid) ?? 0) + 1);
+    }
+    const need = fps.length <= 1 ? 1 : 2;
+    let gid = 0;
+    let best = 0;
+    for (const [g, v] of votes) {
+      if (v >= need && v > best) {
+        gid = g;
+        best = v;
+      }
+    }
+    if (!gid && prefix) gid = byPrefix.get(prefix) ?? 0;
+
+    if (gid) {
+      const g = groups.get(gid)!;
       g.channels.add(m.channelName);
       if (m.at > g.rep.at) g.rep = m;
       if (m.at < g.firstAt) g.firstAt = m.at;
     } else {
-      groups.set(key, { rep: m, firstAt: m.at, channels: new Set([m.channelName]) });
+      gid = nextGid++;
+      groups.set(gid, { rep: m, firstAt: m.at, channels: new Set([m.channelName]) });
     }
+    // 이 글의 지문을 그 묶음에 등록 — 다음 퍼나르기가 여기로 붙는다
+    for (const fp of fps) if (!byShingle.has(fp)) byShingle.set(fp, gid);
+    if (prefix && !byPrefix.has(prefix)) byPrefix.set(prefix, gid);
   }
 
   // 3) 점수화

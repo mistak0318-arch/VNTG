@@ -165,17 +165,19 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
     };
   }, [busy]);
 
-  if (words.length === 0) {
-    return (
-      <div className="page-note">
-        종목을 고르거나 키워드를 넣으면 <b>채널에서 찾아 줍니다.</b> 지금 보고 있는 종목이
-        어디서 언급되는지 보는 자리입니다.
-      </div>
-    );
-  }
-
+  /*
+   * ⚠️ 예전엔 찾을 말이 없으면 안내문만 내고 **입력창까지 통째로 숨겼다.**
+   * 보드에선 종목이 늘 있으니 몰랐는데, 텔레그램 동향의 「검색」 탭처럼 종목 없이
+   * 열면 **키워드를 넣을 자리가 없어** 시작조차 못 했다. 입력창은 늘 그린다.
+   */
   return (
     <div className="cs">
+      {words.length === 0 && (
+        <div className="page-note">
+          찾을 말을 쉼표로 넣으세요 — 종목이든 테마든 (예: <b>유리기판, 전력기기</b>).
+          구독 중인 채널 전체에서 그 말이 든 글을 찾아 줍니다.
+        </div>
+      )}
       <div className="filter-row">
         <span className="st-cfg-k">구간</span>
         {WINDOWS.map((w) => (
@@ -212,7 +214,7 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
         저절로 돌면 종목을 넘길 때마다 채널 일흔 개를 다시 끌어온다.
       */}
       <div className="filter-row">
-        <button className="filter-btn primary" disabled={busy} onClick={run}>
+        <button className="filter-btn primary" disabled={busy || words.length === 0} onClick={run}>
           {busy ? "훑는 중…" : ran ? "다시 찾기" : "채널에서 찾기"}
         </button>
         {stale && !busy && (

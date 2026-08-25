@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
+import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
 import { PickAutoPanel } from "../components/PickAutoPanel";
 import { AiModelPanel } from "../components/AiModelPanel";
 import { KeywordAlertPanel } from "../components/KeywordAlertPanel";
@@ -17,10 +18,16 @@ import { DisclosureAlertPanel } from "../components/DisclosureAlertPanel";
  *   채널 — 어디를 읽을 것인가 (구독 목록 켜고 끄기)
  */
 
-type Tab = "digest" | "keyword" | "disclosure" | "channels" | "pick" | "ai";
+type Tab = "digest" | "search" | "keyword" | "disclosure" | "channels" | "pick" | "ai";
 
 const TABS: { key: Tab; label: string; hint: string }[] = [
   { key: "digest", label: "동향", hint: "지금 채널들이 무슨 말을 하고 있는지" },
+  /*
+   * 검색 — 보드(창 연동)에만 있던 것을 여기로도 꺼냈다.
+   * 「동향」은 채널 전체가 무슨 말을 하나이고, 검색은 **내가 궁금한 말이 어디서
+   * 언급됐나**다. 보드는 여러 모니터 쓸 때 얘기라, 폰에서는 이 탭이 그 자리다.
+   */
+  { key: "search", label: "🔎 검색", hint: "원하는 말을 채널 전체에서 찾습니다 — 종목이든 키워드든" },
   { key: "keyword", label: "내 관심 키워드", hint: "내 종목·키워드가 걸리면 바로 알립니다" },
   { key: "disclosure", label: "공시 알림", hint: "내 종목 공시가 뜨면 바로 알립니다" },
   { key: "channels", label: "채널 관리", hint: "어느 채널을 읽을지 고릅니다" },
@@ -47,6 +54,7 @@ export function TelegramPage() {
       </nav>
 
       {tab === "digest" && <ChannelDigestPanel />}
+      {tab === "search" && <ChannelSearchPanel />}
       {tab === "keyword" && <KeywordAlertPanel />}
       {tab === "disclosure" && <DisclosureAlertPanel />}
       {tab === "channels" && <ChannelCollectPanel />}

@@ -167,10 +167,24 @@ export function FlowSeries({
    */
   const ih = H - PAD.t - PAD.b;
   const y = (v: number) => PAD.t + ((max - v) / (max - min)) * ih;
-  const x = (i: number) => (rows.length === 1 ? W / 2 : (i / (rows.length - 1)) * W);
-  const line = rows.map((r, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(r.net)}`).join("");
   const last = rows[rows.length - 1];
+
+  /*
+   * ⚠️ X축은 **시각**이다 (2026-08-25). 예전엔 점 번호로 균등하게 폈다 —
+   * 그러면 11시부터 쌓인 날에 선이 왼쪽 끝부터 시작해서, 「장은 8시부터인데 왜
+   * 11시부터냐」가 고장으로 보였다. 축을 장 시작(08:00)에 고정하면 **왼쪽 빈칸
+   * 자체가 정보다** — 언제부터 쌓였는지가 그대로 보인다. (실시간은 구독한 순간부터라
+   * 지나간 시간은 못 되살린다. 서버가 08시 전에 떠 있었으면 자연히 08시부터 찬다)
+   */
+  const t0 = Math.min(8 * 60, mins(rows[0].t));
+  const t1 = Math.max(mins(last.t), 15 * 60 + 30);
+  const xt = (m: number) => ((m - t0) / (t1 - t0)) * W;
+  const x = (i: number) => xt(mins(rows[i].t));
+  const line = rows.map((r, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(r.net)}`).join("");
   const zeroIn = min < 0 && max > 0;
+  /* 시각 축이라 점 간격이 일정하지 않다 — 누르는 자리도 이웃 점과의 가운데로 가른다 */
+  const hitL = (i: number) => (i === 0 ? Math.max(0, x(0) - 4) : (x(i - 1) + x(i)) / 2);
+  const hitR = (i: number) => (i === rows.length - 1 ? Math.min(W, x(i) + 4) : (x(i) + x(i + 1)) / 2);
 
   /*
    * 주가 선. **눈금이 따로다** — 순매수는 억 단위고 주가는 원 단위라 한 눈금에 그리면
@@ -317,9 +331,9 @@ export function FlowSeries({
                 <rect
                   key={`h-${r.t}-${i}`}
                   className="fs-hit"
-                  x={x(i) - W / rows.length / 2}
+                  x={hitL(i)}
                   y={0}
-                  width={W / rows.length}
+                  width={Math.max(1, hitR(i) - hitL(i))}
                   height={H}
                   onPointerDown={() => setAt(at === i ? null : i)}
                 />
@@ -337,7 +351,8 @@ export function FlowSeries({
           </div>
 
           <div className="fs-legend">
-            <span>{hhmm(rows[0].t)}</span>
+            {/* 축 양 끝은 **장 시간**이다 — 데이터 시작이 아니라. 늦게 쌓이기 시작한 날은 그게 보여야 한다 */}
+            <span>{`${String(Math.floor(t0 / 60)).padStart(2, "0")}:${String(t0 % 60).padStart(2, "0")}`}</span>
             <span className="fs-mid">
               {picked ? (
                 <>
@@ -351,11 +366,15 @@ export function FlowSeries({
                 <>
                   <b className="fs-k net">순매수</b>
                   {pv.length > 1 && <b className="fs-k price">주가</b>}
-                  <span className="pt-n"> · 눈금은 각자 제 범위로</span>
+                  {mins(rows[0].t) > t0 + 10 ? (
+                    <span className="pt-n"> · {hhmm(rows[0].t)}부터 쌓임</span>
+                  ) : (
+                    <span className="pt-n"> · 눈금은 각자 제 범위로</span>
+                  )}
                 </>
               )}
             </span>
-            <span>{hhmm(last.t)}</span>
+            <span>{`${String(Math.floor(t1 / 60)).padStart(2, "0")}:${String(t1 % 60).padStart(2, "0")}`}</span>
           </div>
         </>
       )}

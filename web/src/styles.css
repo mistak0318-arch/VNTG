@@ -3918,6 +3918,39 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .jn-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
 .jn-streak { font-size: 0.8rem; color: var(--muted); }
 .jn-saved { font-size: 0.8rem; color: var(--green); }
+/* 저장 안 된 편집 — 노랑. 이 점이 보이는 동안 날짜를 바꾸면 먼저 저장된다 */
+.jn-dirty { font-size: 0.8rem; color: #f5c542; }
+
+/* 리포트 한눈 스트립 — 신문 1면 제목 자리. 방향·수급·환율 다섯 칸 */
+.rp-glance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  padding: 0.5rem 0.7rem;
+  margin-bottom: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  font-variant-numeric: tabular-nums;
+}
+.rp-glance-chip { display: inline-flex; align-items: baseline; gap: 0.35rem; }
+.rp-glance-chip em { font-style: normal; font-size: 0.72rem; color: var(--muted); }
+.rp-glance-chip b { font-size: 0.9rem; }
+
+/* AI 본문 — 등락·수급 낱말만 물든다. 제목 아이콘은 작게 */
+.ai-up { font-style: normal; color: var(--red); font-weight: 600; }
+.ai-down { font-style: normal; color: var(--blue); font-weight: 600; }
+.ai-h-ico { margin-right: 0.35rem; }
+
+/* 해외 관심종목 — 키움 실시간(FE)이 살아 있는 값의 표시 */
+.uw-live-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--green);
+  vertical-align: 1px;
+}
 .jn-ctx { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.7333rem; color: var(--muted); padding: 7px 9px; background: var(--panel-2); border-radius: 6px; margin-bottom: 10px; }
 .jn-ctx-main { color: var(--text); font-weight: 600; }
 .jn-ctx-sub::before { content: "·"; margin-right: 6px; }
@@ -6380,7 +6413,17 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 }
 
 /* ===== 시간별 수급 선+표 — 거래원·프로그램이 같이 쓴다 ===== */
-.fs { margin: 0.3rem 0 0.4rem; }
+/*
+  차트가 위, 표가 아래 (2026-08-25 — 사용자 요청).
+  「모양을 먼저 훑고 값은 아래서 확인」이 한눈 파악에 낫다.
+  DOM 을 옮기는 대신 order 로 세운다 — 그림 토글(chart&&)이 조각 둘이라 묶기 번거롭다.
+*/
+.fs { margin: 0.3rem 0 0.4rem; display: flex; flex-direction: column; }
+.fs-asof { order: 0; }
+.fs-top { order: 1; }
+.fs-chart { order: 2; }
+.fs-legend { order: 3; }
+.fs-wrap { order: 4; }
 .fs-top {
   display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
   margin-bottom: 0.3rem;
