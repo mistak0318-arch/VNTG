@@ -131,7 +131,7 @@ async function callGemini(
   });
 
   const body = (await res.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
+    candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[];
     usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
     error?: { message?: string };
   };
@@ -147,8 +147,17 @@ async function callGemini(
     };
   }
 
+  /*
+   * ⚠️ 생각(thought) 파트를 걸러낸다 (2026-08-26).
+   *
+   * gemini-3.5-flash 는 응답 parts 에 **모델의 사고 과정**을 `thought: true` 로
+   * 섞어 보낼 때가 있다. 전 파트를 그대로 이어붙였더니 조간 리포트 AI 정리에
+   * 「Character Count Check: Let's count the characters…」 같은 검산 메모가
+   * 본문으로 발행됐다 — 답이 아닌 것은 답에 넣지 않는다.
+   */
+  const parts = (body.candidates?.[0]?.content?.parts ?? []).filter((p) => !p.thought);
   return {
-    text: body.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? null,
+    text: parts.map((p) => p.text ?? "").join("") || null,
     provider: "gemini",
     model,
     inputTokens: body.usageMetadata?.promptTokenCount ?? 0,
