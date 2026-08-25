@@ -51,7 +51,7 @@ const CUR_PRICE_KEYS = ["cur_prc"];
 const INVESTOR_LIST_KEYS = ["stk_invsr_orgn_chart"];
 
 /** 종목 상세 상단 가로 탭. 기능이 늘어나면 여기에 항목을 추가한다. */
-type DetailTab = "chartOnly" | "finance" | "opinion" | "notes" | "sector" | "chart" | "investor" | "supply" | "feed" | "raw" | "orderbook" | "broker" | "program";
+type DetailTab = "chartOnly" | "finance" | "opinion" | "notes" | "sector" | "chart" | "investor" | "supply" | "feed" | "raw" | "orderbook" | "broker" | "program" | "etf";
 
 /**
  * 탭 순서는 "실제 매매에 바로 쓰는 것"이 앞이다.
@@ -139,6 +139,26 @@ export function StockDetail({
   }, [code]);
   const [detailTab, setDetailTab] = useState<DetailTab>("chart");
   const [editTabs, setEditTabs] = useState(false);
+  /*
+   * ETF 인가 — 맞을 때만 「ETF 구성」 탭이 종합 바로 옆에 나타난다 (2026-08-25).
+   * 일반 종목에서 빈 탭을 보여주느니 탭 자체가 없는 게 맞다. 판정은 6시간 캐시라 싸다.
+   */
+  const [isEtf, setIsEtf] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setIsEtf(false);
+    api
+      .etfInfo(code)
+      .then((r) => alive && setIsEtf(r.etf))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [code]);
+  // ETF 탭을 보다가 일반 종목으로 넘어가면 종합으로 돌아간다 (탭이 사라지므로)
+  useEffect(() => {
+    if (!isEtf && detailTab === "etf") setDetailTab("chart");
+  }, [isEtf, detailTab]);
   /* 카드 배치와 **같은 훅**이다 — 서버에 저장되어 기기가 달라도 같은 순서 */
   const tabOrder = useCardOrder(
     "stockDetail.tabs",
@@ -322,6 +342,21 @@ export function StockDetail({
                   )}
                 </button>
               ))}
+              {/*
+                ETF 구성 — ETF 일 때만 나타나는 탭. order 를 종합과 같게 주면
+                flex 정렬의 동점 규칙(DOM 순서)으로 **종합 바로 옆**에 선다.
+                저장되는 탭 순서에는 안 끼운다 — 종목 따라 있다 없다 하는 탭이
+                순서 배열에 섞이면 저장분이 지저분해진다.
+              */}
+              {isEtf && (
+                <button
+                  className={`detail-tab${detailTab === "etf" ? " active" : ""}`}
+                  style={{ order: tabOrder.orderOf("chart") }}
+                  onClick={() => setDetailTab("etf")}
+                >
+                  ETF 구성
+                </button>
+              )}
               <button
                 className={`detail-tab dt-edit${editTabs ? " active" : ""}`}
                 style={{ order: 999 }}
@@ -371,10 +406,11 @@ export function StockDetail({
                 <SignalPanel code={code} onSelectStock={onSelectStock} />
                 <IntradayFlow code={code} basePrice={Math.abs(Number(info?.base_pric)) || 0} />
                 <ChartPanel code={code} name={name} />
-                {/* ETF 면 구성종목이 여기 낀다 — ETF 가 아니면 아무것도 안 그린다 */}
-                <EtfPanel code={code} onSelectStock={onSelectStock} />
               </>
             )}
+
+            {/* ETF 구성 — 종합에 끼워 넣지 않고 제 탭을 갖는다 (사용자 요청) */}
+            {detailTab === "etf" && <EtfPanel code={code} onSelectStock={onSelectStock} />}
 
             {detailTab === "investor" && <InvestorTrendTable rows={investorRows} />}
 

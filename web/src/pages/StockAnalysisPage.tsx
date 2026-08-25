@@ -51,7 +51,8 @@ type AnalysisTab =
   | "supply"
   | "feed"
   | "finance"
-  | "notes";
+  | "notes"
+  | "etf";
 
 const TABS: { key: AnalysisTab; label: string }[] = [
   { key: "chart", label: "종합" },
@@ -99,6 +100,23 @@ export function StockAnalysisPage({
   const [investorChart, setInvestorChart] = useState<RawRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  /* ETF 일 때만 「ETF 구성」 탭이 종합 옆에 — 종목 상세와 같은 규칙 */
+  const [isEtf, setIsEtf] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setIsEtf(false);
+    if (!stock) return;
+    api
+      .etfInfo(stock.code)
+      .then((r) => alive && setIsEtf(r.etf))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [stock]);
+  useEffect(() => {
+    if (!isEtf && tab === "etf") setTab("chart");
+  }, [isEtf, tab]);
   const watched = useWatchedCodes();
   const recent = useRecentStocks();
 
@@ -312,6 +330,16 @@ export function StockAnalysisPage({
                 )}
               </button>
             ))}
+            {/* ETF 구성 — ETF 일 때만. order 를 종합과 같게 주면 종합 바로 옆에 선다 */}
+            {isEtf && (
+              <button
+                className={`detail-tab${tab === "etf" ? " active" : ""}`}
+                style={{ order: tabOrder.orderOf("chart") }}
+                onClick={() => setTab("etf")}
+              >
+                ETF 구성
+              </button>
+            )}
             <button
               className={`detail-tab dt-edit${editTabs ? " active" : ""}`}
               style={{ order: 999 }}
@@ -350,8 +378,6 @@ export function StockAnalysisPage({
                 <QuoteSummary code={stock.code} />
                 <IntradayFlow code={stock.code} basePrice={Math.abs(Number(info?.base_pric)) || 0} />
                 <ChartPanel code={stock.code} name={stock.name} />
-                {/* ETF 면 구성종목이 여기 낀다 — ETF 가 아니면 아무것도 안 그린다 */}
-                <EtfPanel code={stock.code} onSelectStock={onSelectStock} />
                 <h3 className="section-heading">투자자 수급</h3>
                 <InvestorTrendTable rows={investorRows} />
                 <h3 className="section-heading">프로그램 수급</h3>
@@ -364,6 +390,8 @@ export function StockAnalysisPage({
               예전엔 이 페이지가 자기 호가·거래원을 따로 갖고 있어서, 같은 종목인데
               화면마다 보이는 값이 달랐다. 고칠 때도 한쪽만 고쳐지기 쉬웠다.
             */}
+            {/* ETF 구성 — 구성종목을 누르면 팝업(종목 상세)으로 열린다 */}
+            {tab === "etf" && <EtfPanel code={stock.code} />}
             {tab === "quote" && <OrderBookPanel code={stock.code} />}
             {tab === "broker" && <BrokerFlowPanel code={stock.code} />}
             {tab === "investor" && <InvestorTrendTable rows={investorRows} />}

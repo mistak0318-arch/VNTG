@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, normalizeStockCode } from "../api";
+import { StockDetail } from "./StockDetail";
 
 /**
  * ETF 구성종목 (2026-08-25) — 종목이 ETF 일 때만 종합 화면에 끼어드는 블록.
@@ -19,9 +20,18 @@ export function EtfPanel({
   onSelectStock,
 }: {
   code: string;
+  /** 지금은 안 쓴다 — 구성종목은 팝업으로 연다(아래 popup). 시그니처만 남겨 둔다 */
   onSelectStock?: (code: string, name: string) => void;
 }) {
   const [info, setInfo] = useState<Info | null>(null);
+  /*
+   * 구성종목 클릭 → **팝업**(종목 상세 시트) (2026-08-25 — 사용자 요청).
+   * 개별종목분석으로 페이지를 옮기면 ETF 화면으로 돌아오는 데 뒤로가기가 필요했다.
+   * 팝업이면 닫는 순간 보던 ETF 가 그대로 있다. 팝업 안에서 또 다른 종목으로
+   * 갈아타는 것도 팝업 안에서 돈다.
+   */
+  const [popup, setPopup] = useState<{ code: string; name: string } | null>(null);
+  void onSelectStock;
 
   useEffect(() => {
     let alive = true;
@@ -56,7 +66,7 @@ export function EtfPanel({
             key={c.code || c.name}
             className="etf-row"
             disabled={!c.code}
-            onClick={() => c.code && onSelectStock?.(normalizeStockCode(c.code), c.name)}
+            onClick={() => c.code && setPopup({ code: normalizeStockCode(c.code), name: c.name })}
           >
             <span className="etf-name">{c.name}</span>
             <span className="etf-bar">
@@ -75,8 +85,17 @@ export function EtfPanel({
             것에 가깝습니다.
           </>
         )}{" "}
-        종목을 누르면 그 종목으로 이동합니다.
+        종목을 누르면 팝업으로 열립니다 — 닫으면 이 화면이 그대로 있습니다.
       </div>
+
+      {popup && (
+        <StockDetail
+          code={popup.code}
+          name={popup.name}
+          onClose={() => setPopup(null)}
+          onSelectStock={(c, n) => setPopup({ code: c, name: n })}
+        />
+      )}
     </div>
   );
 }

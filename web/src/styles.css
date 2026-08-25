@@ -4655,6 +4655,27 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 }
 .bt-grid-btn { margin-left: 0.6rem; font-weight: 400; }
 
+/* ── 리포트 읽어주기 — 재생/배속 한 줄 ── */
+.tts-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.4rem 0 0.6rem;
+}
+.tts-pos { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tts-rates { display: inline-flex; gap: 2px; }
+.tts-rate {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+}
+.tts-rate.on { color: var(--text); border-color: var(--blue); font-weight: 600; }
+
 /* ── ETF 구성종목 — ETF 일 때만 종합 화면에 끼는 블록 ── */
 .etf-panel { margin: 0.8rem 0; }
 .etf-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem; }

@@ -26,6 +26,7 @@ import {
   type ThemeRow,
 } from "../api";
 import { AiSummaryCard } from "../components/AiSummaryCard";
+import { ReportTts } from "../components/ReportTts";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { FlowBars } from "../components/overview/FlowBars";
 import { type MarketDriverReport, type PublishJob, type ScoredNews } from "../api";
@@ -477,6 +478,8 @@ export function DailyReportPage({
         ) : null;
       })()}
 
+      {/* 읽어주기 — 출근길에 AI 정리를 귀로. 브라우저 내장 음성이라 키·비용이 없다 */}
+      <ReportTts edition={edition} />
       <AiSummaryCard edition={edition} />
 
       {/*

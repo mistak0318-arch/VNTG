@@ -173,7 +173,16 @@ export function UsWatchTable({
             const shownPrice = lv ? lv.price : s.price;
             const shownRate = lv && lv.rate !== null ? lv.rate : s.changeRate;
             return (
-              <tr key={s.symbol}>
+              /*
+                줄 아무 데나 눌러도 상세가 열린다 (2026-08-25) — 종목명만 버튼이라
+                숫자 칸을 누르면 아무 일도 없었다. 국내 표들과 같은 규칙으로 맞춘다.
+                편집 칸(▲▼✕)은 stopPropagation 으로 제 일만 한다.
+              */
+              <tr
+                key={s.symbol}
+                className="clickable-row"
+                onClick={() => onOpen(s.symbol, s.name || s.symbol)}
+              >
                 {/* 이름이 길면 잘린다(CSS) — 티커는 안 잘리고, 전체 이름은 마우스로 본다 */}
                 <td className="sticky-col" title={`${s.symbol} ${s.name}`}>
                   {/* 나라가 섞이니 국기를 앞에 — 78.89 가 달러인지 엔인지 알아야 한다 */}
@@ -181,7 +190,10 @@ export function UsWatchTable({
                   <button
                     type="button"
                     className="usb-open"
-                    onClick={() => onOpen(s.symbol, s.name || s.symbol)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpen(s.symbol, s.name || s.symbol);
+                    }}
                     title="눌러서 상세 보기"
                   >
                     {/*
@@ -251,7 +263,7 @@ export function UsWatchTable({
                 <td className="num">{price(s.addedPrice, s.currency)}</td>
                 <td className={`num ${cls(s.returnRate)}`}>{pct(s.returnRate)}</td>
                 {editing && (
-                  <td className="uw-ord">
+                  <td className="uw-ord" onClick={(e) => e.stopPropagation()}>
                     {/* 순서 바꾸기는 내 순서로 볼 때만 뜻이 있다 — 정렬 중이면 onMove 를 안 준다 */}
                     {onMove && (
                       <>
