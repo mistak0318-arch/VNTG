@@ -9,7 +9,12 @@
  * 문서에 있는 필드가 빈 값으로 오는 경우가 있어서 값까지 확인해야 화면에 빈 칸이 안 생긴다.
  */
 
-export type ColType = "text" | "price" | "num" | "pct";
+/*
+ * `signed` (2026-08-25) — **부호가 정보인 숫자**(순매수·대비)만 색을 입힌다.
+ * 예전엔 `num` 전부를 부호로 칠해서 거래대금·거래량·순위까지 죄다 빨갰다 —
+ * 표가 온통 빨가니 정작 등락률이 안 보였다. 이제 `num` 은 무색이다.
+ */
+export type ColType = "text" | "price" | "num" | "pct" | "signed";
 
 export interface RankColumn {
   key: string;
@@ -90,7 +95,7 @@ export const RANK_SPECS: RankSpec[] = [
     columns: [
       ...STOCK,
       { key: "base_pric", label: "기준가", type: "price" },
-      { key: "base_pre", label: "기준대비", type: "num" },
+      { key: "base_pre", label: "기준대비", type: "signed" },
       { key: "jmp_rt", label: "급등률", type: "pct" },
       { key: "trde_qty", label: "거래량", type: "num" },
     ],
@@ -164,7 +169,7 @@ export const RANK_SPECS: RankSpec[] = [
       { key: "cur_prc", label: "현재가", type: "price" },
       { key: "tot_buy_req", label: "총매수잔량", type: "num" },
       { key: "tot_sel_req", label: "총매도잔량", type: "num" },
-      { key: "netprps_req", label: "순잔량", type: "num" },
+      { key: "netprps_req", label: "순잔량", type: "signed" },
       { key: "buy_rt", label: "매수비율", type: "pct" },
     ],
   },
@@ -201,7 +206,7 @@ export const RANK_SPECS: RankSpec[] = [
       { key: "rank", label: "순위", type: "num" },
       { key: "stk_nm", label: "종목명", type: "text" },
       { key: "cur_prc", label: "현재가", type: "price" },
-      { key: "netprps_qty", label: "순매수수량", type: "num" },
+      { key: "netprps_qty", label: "순매수수량", type: "signed" },
       { key: "trde_qty", label: "거래량", type: "num" },
     ],
   },
@@ -236,7 +241,7 @@ export const RANK_SPECS: RankSpec[] = [
       ...STOCK,
       { key: "buy_trde_qty", label: "매수", type: "num" },
       { key: "sel_trde_qty", label: "매도", type: "num" },
-      { key: "netprps_trde_qty", label: "순매수", type: "num" },
+      { key: "netprps_trde_qty", label: "순매수", type: "signed" },
     ],
   },
   {
@@ -251,7 +256,7 @@ export const RANK_SPECS: RankSpec[] = [
       { key: "stk_nm", label: "종목명", type: "text" },
       { key: "buy_qty", label: "매수", type: "num" },
       { key: "sel_qty", label: "매도", type: "num" },
-      { key: "netslmt", label: "순매수", type: "num" },
+      { key: "netslmt", label: "순매수", type: "signed" },
     ],
     note: "장중에만 값이 들어옵니다.",
   },

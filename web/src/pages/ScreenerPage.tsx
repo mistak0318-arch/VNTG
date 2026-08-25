@@ -142,10 +142,17 @@ function cell(value: unknown, type?: string): { text: string; cls: string } {
   const n = Number(value);
   if (!Number.isFinite(n)) return { text: "-", cls: "" };
   const sign = n > 0 ? "positive" : n < 0 ? "negative" : "";
-  if (type === "pct") return { text: `${n > 0 ? "+" : ""}${n.toFixed(2)}%`, cls: sign };
+  /* 등락률은 이 표의 주인공 — 색에 더해 굵게. 온 표가 빨갛던 시절엔 이게 파묻혔다 */
+  if (type === "pct") return { text: `${n > 0 ? "+" : ""}${n.toFixed(2)}%`, cls: `scr-rate ${sign}` };
   // 가격은 부호로 색을 칠하지 않는다 (음수 표기는 하락을 뜻하는 키움 관행이라 헷갈린다)
   if (type === "price") return { text: fmtNum(Math.abs(n)), cls: "" };
-  return { text: fmtNum(n), cls: sign };
+  /*
+   * ⚠️ 색은 **부호가 정보인 숫자**(순매수·대비 = signed)에만 (2026-08-25).
+   * 예전엔 num 전부를 부호로 칠해서 거래대금·거래량·순위까지 죄다 빨갰다 —
+   * KRX/NXT 를 고르면 표가 온통 빨가니 정작 등락률이 안 보였다.
+   */
+  if (type === "signed") return { text: fmtNum(n), cls: sign };
+  return { text: fmtNum(n), cls: "" };
 }
 
 /**
@@ -840,15 +847,50 @@ export function ScreenerPage({
                            * 하루 거래는 NXT 프리(08~09시) + KRX 정규 + NXT 애프터 셋이다.
                            * 합계만 적으면 「이 종목이 NXT 에서 돈 게 절반」 같은 걸 놓친다 —
                            * 삼성전자는 오늘 137,023억 중 52,462억(38%)이 NXT 였다.
+                           *
+                           * ⚠️ 서브 줄은 **NXT 몫이 있을 때만** (2026-08-25). NXT 에서 안 돈
+                           * 종목까지 「KRX 27,238」을 달아 주니 통합인데 KRX 만 줄줄이
+                           * 보였다 — 합계가 곧 KRX 인 종목은 굵은 값 하나면 끝난 얘기다.
                            */
                           if (c.key === "trde_prica" && r.tvKrx !== null && r.tv !== null) {
                             const nxt = r.tv - r.tvKrx;
                             return (
                               <td key={c.key} className="num">
                                 <b>{fmtNum(r.tv)}억</b>
-                                <i className="scr-split">
-                                  KRX {fmtNum(r.tvKrx)}
-                                  {nxt > 0 ? ` · NXT ${fmtNum(nxt)}` : ""}
+                                {nxt > 0 && (
+                                  <i className="scr-split">
+                                    KRX {fmtNum(r.tvKrx)} · NXT {fmtNum(nxt)}
+                                  </i>
+                                )}
+                              </td>
+                            );
+                          }
+                          /*
+                           * 통합의 가격·등락률은 KRX 기준으로 맞춰져 있다(상세와 같게).
+                           * 그런데 저녁엔 NXT 애프터가 더 갔을 수 있다 — 그 값을 괄호로.
+                           * 해외 관심종목의 시간외 괄호와 같은 문법이다.
+                           */
+                          if (c.key === "cur_prc" && r.nxtPrice != null) {
+                            return (
+                              <td key={c.key} className="num">
+                                {v.text}
+                                <i className="scr-split" title="NXT 최종가 — 프리·애프터장 포함">
+                                  NXT {fmtNum(r.nxtPrice)}
+                                </i>
+                              </td>
+                            );
+                          }
+                          if (c.key === "flu_rt" && r.nxtRate != null) {
+                            const nr = Number(r.nxtRate);
+                            return (
+                              <td key={c.key} className={`num ${v.cls}`}>
+                                {v.text}
+                                <i
+                                  className={`scr-split ${nr > 0 ? "positive" : nr < 0 ? "negative" : ""}`}
+                                  title="NXT 최종 등락률 — 프리·애프터장 포함"
+                                >
+                                  NXT {nr > 0 ? "+" : ""}
+                                  {nr.toFixed(2)}%
                                 </i>
                               </td>
                             );

@@ -7181,6 +7181,11 @@ button.ib-cell:hover { background: var(--panel-2); }
 
 /* 거래대금 아래에 거래소별 몫 — 하루 거래는 NXT 프리 + KRX 정규 + NXT 애프터다 */
 .scr-split { display: block; font-style: normal; font-size: 0.66rem; color: var(--muted); }
+/* NXT 괄호 줄이 색을 가질 땐 흐림을 살짝 푼다 — muted 만으로는 부호색이 안 산다 */
+.scr-split.positive { color: var(--red); opacity: 0.75; }
+.scr-split.negative { color: var(--blue); opacity: 0.75; }
+/* 등락률 — 이 표의 주인공. 온 표가 빨갛던 시절엔 이게 파묻혔다 */
+.scr-rate { font-weight: 700; }
 
 /* 수출입 — 기준 월과 받은 시각을 갈라 놓은 줄 */
 .trade-stamp { align-items: baseline; gap: 10px; }

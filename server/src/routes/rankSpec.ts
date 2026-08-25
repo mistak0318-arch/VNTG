@@ -284,14 +284,32 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
           /*
            * 가격만 KRX 로 덮는다. 거래대금·순위는 통합 그대로다.
            * KRX 에 그 종목이 없으면(그날 KRX 에서 안 돌았으면) 통합 값을 남긴다.
+           *
+           * ## 덮기 전 값을 버리지 않는다 (2026-08-25)
+           *
+           * 통합의 가격은 NXT 최종가다 — 저녁에 보면 애프터장에서 +2.33% 간 종목이
+           * KRX 마감 +0.42% 로만 보여서 「통합인데 왜 KRX 만 나오나」가 됐다.
+           * 그래서 KRX 로 덮되, **KRX 와 다르면 원래(NXT) 값을 nxtPrice·nxtRate 로**
+           * 같이 내린다. 화면이 괄호로 붙인다 — 해외 관심종목의 시간외 괄호와 같은 문법.
            */
-          // 부호는 여기서도 뗀다 — KRX 응답도 하락이면 음수로 온다
-          if (k?.price != null) mapped.cur_prc = Math.abs(k.price);
+          let nxtPrice: number | null = null;
+          let nxtRate: number | null = null;
+          if (k?.price != null) {
+            const orig = toNum(mapped.cur_prc);
+            if (orig !== null && Math.abs(orig) !== Math.abs(k.price)) {
+              nxtPrice = Math.abs(orig);
+              nxtRate = toNum(mapped.flu_rt);
+            }
+            // 부호는 여기서도 뗀다 — KRX 응답도 하락이면 음수로 온다
+            mapped.cur_prc = Math.abs(k.price);
+          }
           if (k?.rate != null) mapped.flu_rt = k.rate;
           return {
             ...mapped,
             ...extras(r, index.get(code)),
             tvKrx: k?.tv ?? null,
+            nxtPrice,
+            nxtRate,
           };
         }),
       });

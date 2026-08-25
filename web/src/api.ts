@@ -1468,7 +1468,7 @@ export interface RankResult {
   spec: {
     key: string;
     label: string;
-    columns: { key: string; label: string; type?: "text" | "price" | "num" | "pct" }[];
+    columns: { key: string; label: string; type?: "text" | "price" | "num" | "pct" | "signed" }[];
     exchange: boolean;
     note: string;
   };
@@ -1491,6 +1491,9 @@ export interface RankResult {
     tvEst: boolean;
     /** KRX 몫의 거래대금(억원). `tv` 는 통합(=KRX+NXT)이다 */
     tvKrx: number | null;
+    /** 통합(NXT 최종) 가격 — KRX 로 덮기 전 원값. KRX 와 같으면 null */
+    nxtPrice?: number | null;
+    nxtRate?: number | null;
     /** 회전율(%) — 거래량 ÷ 상장주식수. 「그 종목 치고 얼마나 돌았나」 */
     turn: number | null;
     /** 코스피 / 코스닥 */
