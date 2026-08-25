@@ -122,6 +122,41 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
     if (timerRef.current) clearInterval(timerRef.current);
   }, []);
 
+  /** jobId 에 붙어 끝날 때까지 폴링한다 — 시작할 때도, 돌아와서 이어받을 때도 이 길이다 */
+  function attach(jobId: string) {
+    if (timerRef.current) clearInterval(timerRef.current);
+    const poll = async () => {
+      try {
+        const j = await api.signalScreenStatus(jobId);
+        setJob(j);
+        if (j.status !== "running" && timerRef.current) {
+          clearInterval(timerRef.current);
+          loadRuns(); // 끝나면 기록에 남으므로 목록을 새로 받는다
+        }
+      } catch {
+        /* 한 번 실패해도 다음 폴링에서 다시 시도 */
+      }
+    };
+    void poll();
+    timerRef.current = setInterval(() => void poll(), 2000);
+  }
+
+  /*
+   * 돌아왔을 때 **돌던 찾기를 이어받는다** (2026-08-25 — 채널 검색과 같은 개선).
+   * 찾기를 걸고 다른 메뉴로 가면 진행바가 사라지고, 돌아와도 jobId 를 잃어
+   * 못 잇던 것을 — 서버의 「지금 도는 작업」을 물어 다시 붙는다.
+   * (돌던 게 없으면 아무 일도 없다. 끝난 것은 「지난 기록」에 있다)
+   */
+  useEffect(() => {
+    api
+      .signalScreenActive()
+      .then((r) => {
+        if (r.jobs[0]) attach(r.jobs[0].id);
+      })
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function start() {
     setError(null);
     setJob(null);
@@ -130,18 +165,7 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
     if (timerRef.current) clearInterval(timerRef.current);
     try {
       const { jobId } = await api.signalScreenStart(market, level, limit, universe);
-      timerRef.current = setInterval(async () => {
-        try {
-          const j = await api.signalScreenStatus(jobId);
-          setJob(j);
-          if (j.status !== "running" && timerRef.current) {
-            clearInterval(timerRef.current);
-            loadRuns(); // 끝나면 기록에 남으므로 목록을 새로 받는다
-          }
-        } catch {
-          /* 한 번 실패해도 다음 폴링에서 다시 시도 */
-        }
-      }, 2000);
+      attach(jobId);
     } catch (e) {
       setError(e instanceof Error ? e.message : "시작 실패");
     }

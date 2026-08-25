@@ -413,6 +413,35 @@ export function getScreenJob(id: string): ScreenJob | undefined {
 }
 
 /**
+ * 지금 돌고 있는 찾기 — **전역 작업 띠와 화면 복귀용** (2026-08-25).
+ *
+ * 채널 검색과 같은 문제였다: 찾기를 걸고 다른 메뉴로 가면 진행을 볼 방법이 없고,
+ * 돌아와도 jobId 를 잃어 이어받지 못했다. 서버가 어차피 작업을 들고 있으니
+ * 「지금 도는 것」을 물어볼 수 있게 한다 — 화면 상태를 어디 저장할 필요가 없다.
+ */
+export function activeScreenJobs(): {
+  id: string;
+  done: number;
+  total: number;
+  market: string;
+  universe: string;
+  universeLabel: string;
+  hits: number;
+}[] {
+  return [...jobs.entries()]
+    .filter(([, j]) => j.status === "running")
+    .map(([id, j]) => ({
+      id,
+      done: j.done,
+      total: j.total,
+      market: j.market,
+      universe: j.universe,
+      universeLabel: SCREEN_UNIVERSES.find((u) => u.key === j.universe)?.label ?? j.universe,
+      hits: j.results.length,
+    }));
+}
+
+/**
  * 지난 스크리닝 결과.
  *
  * 매번 새로 돌려야 하면 **어제 뭐가 걸렸는지 볼 수가 없다.** 그런데 이 화면의 값어치는

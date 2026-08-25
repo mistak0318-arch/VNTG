@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  activeScreenJobs,
   diffScreenRuns,
   getScreenJob,
   getScreenRun,
@@ -151,6 +152,11 @@ export function createSignalRouter(client: KiwoomClient): Router {
   /** 고를 수 있는 모집단 — 화면이 버튼을 이걸로 그린다 (하드코딩하면 서버와 갈린다) */
   router.get("/screen/universes", (_req, res) => {
     res.json({ universes: SCREEN_UNIVERSES });
+  });
+
+  /** 지금 돌고 있는 찾기 — 전역 작업 띠와 화면 복귀가 본다 */
+  router.get("/screen/active", (_req, res) => {
+    res.json({ jobs: activeScreenJobs() });
   });
 
   router.post("/screen/start", (req, res, next) => {

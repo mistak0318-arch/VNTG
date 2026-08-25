@@ -698,7 +698,8 @@
       "PowerShell(git -C \"K:\\\\0000 3740 ������Ʈ \\(����������\\)\\\\00. �ֽ�\\\\2 AI ������Ʈ\\\\260810_Ŭ�ε��۾�\" log --oneline -2)",
       "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\server\"; npx tsc --noEmit; echo \"server tsc: $LASTEXITCODE\")",
       "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\web\"; npx tsc --noEmit; echo \"tsc: $LASTEXITCODE\")",
-      "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\web\"; npx tsc --noEmit; echo \"web tsc: $LASTEXITCODE\"; cd \"..\\\\server\"; npx tsc --noEmit; echo \"server tsc: $LASTEXITCODE\"; cd \"..\\\\web\"; npx vite build 2>$null | Select-Object -Last 2)"
+      "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\web\"; npx tsc --noEmit; echo \"web tsc: $LASTEXITCODE\"; cd \"..\\\\server\"; npx tsc --noEmit; echo \"server tsc: $LASTEXITCODE\"; cd \"..\\\\web\"; npx vite build 2>$null | Select-Object -Last 2)",
+      "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\server\"; npx tsc --noEmit; echo \"server: $LASTEXITCODE\"; cd \"..\\\\web\"; npx tsc --noEmit; echo \"web: $LASTEXITCODE\"; npx vite build 2>$null | Select-Object -Last 2)"
     ]
   }
 }

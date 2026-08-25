@@ -413,6 +413,19 @@ export const api = {
       "/api/signal/screen/universes",
     ),
   signalScreenStatus: (jobId: string) => getJson<ScreenJob>(`/api/signal/screen/${jobId}`),
+  /** 지금 돌고 있는 찾기 — 전역 작업 띠와 화면 복귀가 본다 */
+  signalScreenActive: () =>
+    getJson<{
+      jobs: {
+        id: string;
+        done: number;
+        total: number;
+        market: string;
+        universe: string;
+        universeLabel: string;
+        hits: number;
+      }[];
+    }>("/api/signal/screen/active"),
   yahooChart: (symbol: string, range: string) =>
     getJson<YahooChart>(
       `/api/market/yahoo-chart?symbol=${encodeURIComponent(symbol)}&range=${range}`,

@@ -31,6 +31,15 @@ interface SearchProg {
   name: string;
 }
 
+/** 신호등 찾기 진행 — 채널 검색과 같은 이유로 이 띠에 얹는다 */
+interface ScreenProg {
+  id: string;
+  done: number;
+  total: number;
+  universeLabel: string;
+  hits: number;
+}
+
 /*
  * 작업이 막 시작됐다고 알린다.
  *
@@ -54,6 +63,7 @@ export function RunningJobsBar() {
    * 발행과 같은 자리에서, 어느 화면에 있든 보인다.
    */
   const [search, setSearch] = useState<SearchProg | null>(null);
+  const [screens, setScreens] = useState<ScreenProg[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -66,19 +76,22 @@ export function RunningJobsBar() {
         return;
       }
       try {
-        const [r, sp] = await Promise.all([
+        const [r, sp, sc] = await Promise.all([
           api.activeJobs(),
           fetch("/api/channels/search-progress")
             .then((res) => res.json() as Promise<SearchProg>)
             .catch(() => null),
+          api.signalScreenActive().catch(() => null),
         ]);
         if (!alive) return;
         setJobs(r.jobs);
         setSearch(sp?.running ? sp : null);
+        setScreens(sc?.jobs ?? []);
         // 끝난 작업은 숨김 목록에서도 지운다 — 다음에 같은 id 가 다시 날 일은 없지만
         // 목록이 계속 자라는 걸 막는다
         setHidden((h) => h.filter((id) => r.jobs.some((j) => j.id === id)));
-        timer = window.setTimeout(tick, r.jobs.length > 0 || sp?.running ? 2000 : 5000);
+        const busy = r.jobs.length > 0 || sp?.running || (sc?.jobs.length ?? 0) > 0;
+        timer = window.setTimeout(tick, busy ? 2000 : 5000);
       } catch {
         timer = window.setTimeout(tick, 10000);
       }
@@ -100,10 +113,24 @@ export function RunningJobsBar() {
   }, []);
 
   const shown = jobs.filter((j) => !hidden.includes(j.id));
-  if (shown.length === 0 && !search) return null;
+  if (shown.length === 0 && !search && screens.length === 0) return null;
 
   return (
     <div className="rj-bar">
+      {screens.map((s) => (
+        <div className="rj-item" key={s.id}>
+          <div className="rj-head">
+            <span className="rj-spin" />
+            <b>🚦 신호등 찾기</b>
+            <span className="pt-n">
+              {s.universeLabel} · {s.done}/{s.total} · 통과 {s.hits}
+            </span>
+          </div>
+          <div className="rj-track">
+            <i style={{ width: s.total > 0 ? `${(s.done / s.total) * 100}%` : "6%" }} />
+          </div>
+        </div>
+      ))}
       {search && (
         <div className="rj-item">
           <div className="rj-head">
