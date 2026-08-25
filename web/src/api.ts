@@ -314,6 +314,13 @@ export const api = {
   /** 장중 기준선 — 분봉+일봉 2회 조회다. 종목을 「들여다보는」 화면에서만 부른다 */
   intraday: (code: string) =>
     getJson<{ levels: IntradayLevels | null }>(`/api/market/intraday/${code}`),
+  /* 마켓 브리핑 — 셋 다 서버 캐시·파일만 읽는다. 외부 호출 0 */
+  briefingTimeline: (limit = 60) =>
+    getJson<{ items: BriefingEvent[] }>(`/api/briefing/timeline?limit=${limit}`),
+  briefingHeat: () =>
+    getJson<{ traded: boolean; tiles: BriefingTile[] }>("/api/briefing/heat"),
+  briefingBrief: () =>
+    getJson<{ brief: { date: string; label: string; text: string } | null }>("/api/briefing/brief"),
   backtestRules: () => getJson<{ rules: BacktestRuleDef[] }>("/api/backtest/rules"),
   backtestRun: (cfg: BacktestConfig) => postJson<{ id: string }>("/api/backtest/run", cfg),
   backtestJob: (id: string) => getJson<BacktestJob>(`/api/backtest/job/${id}`),
@@ -2052,6 +2059,30 @@ export interface IntradayLevels {
   or30High: number | null;
   or30Low: number | null;
   bars: number;
+}
+
+/* ── 마켓 브리핑 ───────────────────────────────────────────── */
+
+/** 타임라인 한 줄. `t` 가 "HH:mm" 이 아니면(공시) 시각 없는 묶음이다 */
+export interface BriefingEvent {
+  t: string;
+  kind: string;
+  badge: string;
+  code?: string;
+  name: string;
+  summary: string;
+  source?: string;
+  watch: boolean;
+  link?: string;
+}
+
+export interface BriefingTile {
+  code: string;
+  name: string;
+  rate: number | null;
+  /** 억원 — 타일 크기의 기준 (스냅샷에 거래대금이 없어 시총으로 잰다) */
+  cap: number | null;
+  status: string;
 }
 
 /* ── 조건 백테스트 ─────────────────────────────────────────── */

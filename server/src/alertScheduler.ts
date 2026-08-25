@@ -1,5 +1,6 @@
 import { formatAlerts, getAlertConfig, scanAlerts, type FiredAlert } from "./alertRules.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { logEvents } from "./eventLog.js";
 import { pruneLiveAlerts, runLiveAlerts } from "./liveAlerts.js";
 import { pruneStopWatch, runStopWatch } from "./stopWatch.js";
 import { sendTelegram } from "./telegram.js";
@@ -72,6 +73,16 @@ async function tick(client: KiwoomClient): Promise<void> {
     const stop = await runStopWatch(client);
     if (stop.breaks.length > 0) {
       console.log(`[alert] 손절선 ${stop.breaks.length}건 — ${stop.breaks.map((b) => b.name).join(", ")}`);
+      /* 이벤트 로그 — 브리핑 타임라인이 읽는다. 손절 이탈은 늘 「내 자리」라 watch 다 */
+      void logEvents(
+        stop.breaks.map((b) => ({
+          kind: "stop" as const,
+          code: b.code,
+          name: b.name,
+          summary: `손절선 ${b.stop.toLocaleString("ko-KR")} 이탈 — 지금 ${b.price.toLocaleString("ko-KR")} (${b.lossPct.toFixed(1)}%)`,
+          watch: true,
+        })),
+      );
     }
   } catch (err) {
     console.error("[alert] 손절 감시 실패:", err instanceof Error ? err.message : err);
@@ -85,6 +96,21 @@ async function tick(client: KiwoomClient): Promise<void> {
     const live = await runLiveAlerts();
     if (live.alerts.length > 0) {
       console.log(`[alert] 실시간 ${live.alerts.length}건 — ${live.alerts.map((a) => a.name).join(", ")}`);
+      /*
+       * 체결강도만 적는다. **VI 는 안 적는다** — 실시간 저장소가 전 종목 VI 를 이미
+       * 들고 있어서(`getVi`) 타임라인이 거기서 직접 읽는다. 두 곳에 적으면 두 번 나온다.
+       */
+      void logEvents(
+        live.alerts
+          .filter((a) => a.kind === "strength")
+          .map((a) => ({
+            kind: "strength" as const,
+            code: a.code,
+            name: a.name,
+            summary: a.detail,
+            watch: true,
+          })),
+      );
     }
   } catch (err) {
     console.error("[alert] 실시간 알림 실패:", err instanceof Error ? err.message : err);
@@ -102,6 +128,17 @@ async function tick(client: KiwoomClient): Promise<void> {
     const { alerts, sent, error } = await runAlertScan(client);
     if (alerts.length > 0) {
       console.log(`[alert] 시그널 ${alerts.length}건 ${sent ? "발송" : `발송 실패: ${error}`}`);
+      /* 시그널도 타임라인에 — 규칙 이름이 곧 배지다. 관심종목만 검사하므로 전부 watch */
+      void logEvents(
+        alerts.map((a) => ({
+          kind: "signal" as const,
+          rule: a.ruleLabel,
+          code: a.code,
+          name: a.name,
+          summary: a.detail,
+          watch: true,
+        })),
+      );
     }
   } catch (err) {
     // 시그널 실패가 서버를 죽이면 안 된다. 다음 tick에서 다시 시도한다.

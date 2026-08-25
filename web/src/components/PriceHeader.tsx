@@ -362,35 +362,22 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
             </span>
           </span>
         </div>
+        {/*
+          ⚠️ 순서를 바꿨다 (아이디어노트 4): **거래대금 → 체결강도 → 거래량.**
+
+          거래량이 맨 위였는데, 실제로 먼저 보는 건 **돈**이다 — 주식 수만 보면
+          80만주가 1,800억인 종목과 8억인 종목이 똑같이 생겼다. 그 아래 체결강도
+          (그 돈이 어느 쪽이었나), 거래량은 맨 아래다. 값 묶음 사이에 구분선을 넣어
+          다섯 줄이 한 덩어리로 안 뭉개지게 한다.
+
+          체결강도는 **빨간 %** 로 적는다 — HTS 가 그렇게 쓰고, 사용자가 그 표기에
+          눈이 익었다(요청 그대로다). 100 미만이어도 색을 바꾸지 않는다 — 값의 뜻은
+          숫자가 말하고, 색은 「이게 체결강도 자리다」라는 표지다.
+        */}
         <div className="ph-cell">
-          <span className="ph-label">거래량</span>
+          <span className="ph-label">거래대금</span>
           <span className="ph-row">
-            <span className="ph-value">{fmtNum(fill(info.trde_qty, last?.volume))}</span>
-          </span>
-          {/*
-            ⚠️ **NXT 몫을 따로 적는다.**
-
-            거래량·거래대금이 `ka10001` **KRX 조회 하나**에서만 왔다. 그래서 08~09시
-            NXT 프리마켓에는 KRX 가 장전 시간외 몇 백 주뿐이라 화면에 **「거래량 190 ·
-            거래대금 0억」**이 떴다 — 정작 그 시간에 실제로 도는 건 NXT 쪽이다.
-            시·고·저는 이미 KRX/NXT 를 갈라 적고 있었는데 여기만 안 갈라져 있었다.
-
-            ⚠️ **거래량은 줄어들지 않으므로** 한 번 뜨면 계속 뜬다 — 여기서는
-            나타났다 사라지는 일이 안 생긴다. 가격과 달리 누적값이라서다.
-          */}
-          {nxt?.volume != null && nxt.volume > 0 && (
-            <span className="ph-row">
-              <em className="ph-sublabel nxt">NXT</em>
-              <span className="ph-value sub">{fmtNum(nxt.volume)}</span>
-            </span>
-          )}
-          {/*
-            거래량 바로 밑에 거래대금. 주식 수만 보면 감이 안 온다 —
-            80만주가 1,800억인 종목과 8억인 종목이 화면에서 똑같이 생겼다.
-          */}
-          <span className="ph-row">
-            <em className="ph-sublabel">거래대금</em>
-            <span className="ph-value sub">
+            <span className="ph-value">
               {krxValue === null ? "-" : `${Math.round(krxValue / 100).toLocaleString("ko-KR")}억`}
             </span>
           </span>
@@ -402,23 +389,30 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
               </span>
             </span>
           )}
-          {/*
-            거래대금 밑에 체결강도. 거래대금은 「얼마나 붙었나」이고 체결강도는
-            **「어느 쪽이 붙었나」**다 — 둘이 같이 있어야 뜻이 산다.
-            돈은 몰리는데 강도가 100 아래면 그 돈은 파는 쪽이다.
-          */}
+          <span className="ph-sep" />
           <span className="ph-row">
             <em className="ph-sublabel" title="매수 체결 ÷ 매도 체결 × 100. 100 이 균형">
               체결강도
             </em>
-            <span
-              className={`ph-value sub ${
-                strength === null ? "" : strength >= 100 ? "positive" : "negative"
-              }`}
-            >
-              {strength === null ? "-" : strength.toFixed(0)}
+            <span className="ph-value sub ph-strength">
+              {strength === null ? "-" : `${strength.toFixed(0)}%`}
             </span>
           </span>
+          <span className="ph-sep" />
+          {/*
+            NXT 몫은 따로 — 08~09시 프리마켓에는 KRX 가 몇 백 주뿐이라 합쳐 적으면
+            「거래량 190」이 뜬다. 거래량은 누적이라 한 번 뜨면 사라지지 않는다.
+          */}
+          <span className="ph-row">
+            <em className="ph-sublabel">거래량</em>
+            <span className="ph-value sub">{fmtNum(fill(info.trde_qty, last?.volume))}</span>
+          </span>
+          {nxt?.volume != null && nxt.volume > 0 && (
+            <span className="ph-row">
+              <em className="ph-sublabel nxt">NXT</em>
+              <span className="ph-value sub">{fmtNum(nxt.volume)}</span>
+            </span>
+          )}
         </div>
         <div className="ph-cell">
           <span className="ph-label">전일比 거래량</span>

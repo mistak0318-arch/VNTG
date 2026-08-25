@@ -230,6 +230,20 @@ export function StockAnalysisPage({
               {watched.isWatched(stock.code) ? "★ " : ""}
               {stock.name} <span className="analysis-code">{stock.code}</span>
             </h2>
+            {/* 제목줄에도 현재가 — 시트 헤더와 같은 이유(아이디어노트 4). 이미 5초 폴링 중인 info 를 그릴 뿐이다 */}
+            {info && Math.abs(Number(info.cur_prc)) > 0 && (
+              <span
+                className={`sheet-live num ${
+                  Number(info.flu_rt) > 0 ? "positive" : Number(info.flu_rt) < 0 ? "negative" : ""
+                }`}
+              >
+                <b>{Math.abs(Number(info.cur_prc)).toLocaleString("ko-KR")}</b>
+                <i>
+                  {Number(info.flu_rt) > 0 ? "+" : ""}
+                  {Number(info.flu_rt).toFixed(2)}%
+                </i>
+              </span>
+            )}
           </div>
 
           {error && <div className="error-banner">{error}</div>}

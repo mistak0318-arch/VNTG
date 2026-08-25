@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { logEvent } from "./eventLog.js";
 import { fetchNewMessages, isReaderConfigured, type ChannelMessage } from "./telegramReader.js";
 import { listWatchlist } from "./watchlist.js";
 import { listThemes } from "./customThemes.js";
@@ -225,6 +226,8 @@ export async function runKeywordScan(
 
   const words = await resolveKeywords(cfg);
   if (words.length === 0) return { ...empty, error: "등록된 키워드가 없습니다" };
+  /** 관심종목 이름에서 온 낱말들 — 이벤트 로그의 watch 판정에 쓴다 */
+  const watchWords = new Set(words.filter((w) => w.from === "관심종목").map((w) => w.word));
 
   /*
    * 훑는 구간은 **주기보다 넉넉히** 잡는다. 정확히 주기만큼만 보면 경계에 걸친 메시지를
@@ -270,6 +273,20 @@ export async function runKeywordScan(
        * 급한 게 묻힌다. TELEGRAM_CHAT_ID_KEYWORD 가 없으면 예전처럼 기본 방으로 간다.
        */
       await sendTelegram(toMessage(h), "keyword").catch(() => undefined);
+      /*
+       * 이벤트 로그 — **보낸 것만** 적는다(미리보기는 안 적는다. dedup 도 안 거친
+       * 것이라 적으면 같은 사건이 스캔마다 쌓인다). 브리핑 타임라인이 읽는다.
+       */
+      void logEvent({
+        kind: "telegram",
+        name: h.words.join("·"),
+        summary: h.text.replace(/\s+/g, " ").slice(0, 120),
+        source: h.channelName,
+        // 걸린 낱말이 관심종목 이름에서 온 것인가 — resolveKeywords 가 출처를 안다
+        watch: h.words.some((w) => watchWords.has(w)),
+        link: h.link,
+        at: h.at,
+      });
       store.sent.push(h.key);
       sentCount += 1;
       await new Promise((r) => setTimeout(r, 400));

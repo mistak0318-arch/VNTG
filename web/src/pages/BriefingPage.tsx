@@ -1,0 +1,389 @@
+import { useCallback, useEffect, useState } from "react";
+import {
+  api,
+  fmtNum,
+  type BriefingEvent,
+  type BriefingTile,
+  type GlobalQuote,
+  type IndexCard,
+  type MarketFlow,
+  type ThemeRow,
+  type UsMajorResult,
+} from "../api";
+import { RefreshBar } from "../components/RefreshBar";
+import { useSection } from "../useSection";
+
+/**
+ * 마켓 브리핑 — **열자마자 3초 안에 「오늘 시장이 어떤가」.**
+ *
+ * ## 시황 대시보드와 무엇이 다른가
+ *
+ * 대시보드는 카드 13장을 **파고드는** 자리고, 여기는 **훑고 끝내는** 자리다.
+ * 같은 질문을 두 화면이 다르게 답하면 안 되므로 **데이터는 전부 같은 곳**에서 온다 —
+ * 지수·수급·테마는 대시보드와 같은 섹션 API(`useSection`, 서버 캐시 공유)를 그대로 쓰고,
+ * 타임라인·히트맵·AI 한 줄만 브리핑 전용 라우트(캐시·파일만 읽음)를 쓴다.
+ *
+ * **이 페이지가 새로 만드는 외부 호출은 0건이다.** 폴링 주기도 대시보드와 같거나
+ * 느리다 — 같은 서버 캐시를 보므로 키움·야후 호출은 한 건도 늘지 않는다.
+ *
+ * ## 구성 (중요도 순)
+ *
+ *   [1] 온도계   지수·등락 비율 컬러바·환율·미선물·VIX — 위험 선호/회피 한 줄
+ *   [2] 타임라인 VI·공시·채널 매칭·시그널·손절·체결강도 — 시간 역순
+ *   [3] 수급     코스피/코스닥 × 개인/외인/기관 (⚠️ 기관 세부는 이 캐시에 없어 제외 —
+ *                없는 값을 위해 조회를 만들지 않는다. 세부는 종목 화면 몫이다)
+ *   [4] 히트맵   관심종목 × 등락률 (타일 크기: 시총 — 스냅샷에 거래대금이 없다)
+ *   [5] 테마     상승 5 · 하락 3
+ *   [6] AI 한 줄 마지막 발행 리포트 재사용 (새 AI 호출 없음 — 비용 0)
+ */
+
+/* ── 작은 조각들 ─────────────────────────────────────────── */
+
+function cls(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n) || n === 0) return "";
+  return n > 0 ? "positive" : "negative";
+}
+
+function pct(n: number | null | undefined, digits = 2): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "-";
+  return `${n > 0 ? "+" : ""}${n.toFixed(digits)}%`;
+}
+
+/** 배지 색 — 종류가 곧 색이다. 지라시(채널)는 회색: 출처 신뢰도가 다르다는 표시 */
+const BADGE_CLASS: Record<string, string> = {
+  vi: "bf-badge-vi",
+  dart: "bf-badge-dart",
+  telegram: "bf-badge-gray",
+  stop: "bf-badge-stop",
+  strength: "bf-badge-strength",
+  signal: "bf-badge-signal",
+};
+
+/* ── [1] 시장 온도계 ────────────────────────────────────── */
+
+function Thermometer({
+  indices,
+  global,
+  usMajor,
+}: {
+  indices: IndexCard[] | null;
+  global: GlobalQuote[] | null;
+  usMajor: UsMajorResult | null;
+}) {
+  const kospi = indices?.find((i) => i.code === "001");
+  const kosdaq = indices?.find((i) => i.code === "101");
+  /* 상승/하락은 두 시장을 합쳐 본다 — 폭은 시장을 가르지 않는 게 낫다(breadthStore 와 같은 판단) */
+  const rising = (kospi?.rising ?? 0) + (kosdaq?.rising ?? 0);
+  const falling = (kospi?.falling ?? 0) + (kosdaq?.falling ?? 0);
+  const total = rising + falling;
+  const upShare = total > 0 ? (rising / total) * 100 : 50;
+
+  const pick = (key: string) => global?.find((g) => g.key === key) ?? null;
+  const usdkrw = pick("usdkrw");
+  const es = pick("esF");
+  const nq = pick("nqF");
+  const vix = usMajor?.rows.find((r) => r.key === "vix") ?? null;
+
+  return (
+    <div className="bf-thermo">
+      {[
+        { label: "코스피", card: kospi },
+        { label: "코스닥", card: kosdaq },
+      ].map(({ label, card }) => (
+        <span className="bf-idx" key={label}>
+          <em>{label}</em>
+          <b className={cls(card?.changeRate)}>
+            {card ? card.price.toFixed(2) : "-"}
+            <i>{pct(card?.changeRate)}</i>
+          </b>
+        </span>
+      ))}
+
+      {/*
+        상승/하락 컬러바 — 이 줄의 심장이다. 지수는 대형주 몇 개로도 움직이지만
+        **몇 종목이 오르고 있는가**는 못 속인다. 바의 빨강 몫이 곧 시장의 체온이다.
+      */}
+      {total > 0 && (
+        <span className="bf-breadth" title={`상승 ${rising} · 하락 ${falling} (코스피+코스닥)`}>
+          <span className="bf-breadth-bar">
+            <i style={{ width: `${upShare}%` }} />
+          </span>
+          <em>
+            ▲{rising} ▼{falling}
+          </em>
+        </span>
+      )}
+
+      {/* 위험 선호/회피 세 값 — 환율(외인 수급의 전제)·미 선물(다음 장의 예고)·VIX(공포) */}
+      {[
+        { label: "달러/원", q: usdkrw, digits: 1 },
+        { label: "ES", q: es, digits: 2 },
+        { label: "NQ", q: nq, digits: 2 },
+      ].map(
+        ({ label, q, digits }) =>
+          q?.price != null && (
+            <span className="bf-mini" key={label} title={q.label}>
+              <em>{label}</em>
+              <b className={cls(q.changeRate)}>{pct(q.changeRate, digits === 1 ? 2 : 2)}</b>
+            </span>
+          ),
+      )}
+      {vix?.price != null && (
+        <span
+          className="bf-mini"
+          title="VIX — 20이 불안의 문턱, 30이 공포입니다 (미장 주요지수와 같은 값)"
+        >
+          <em>VIX</em>
+          <b className={vix.price >= 30 ? "negative" : vix.price >= 20 ? "bf-warn" : ""}>
+            {vix.price.toFixed(1)}
+          </b>
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* ── [3] 수급 미니 바 ───────────────────────────────────── */
+
+function FlowBars({ flow }: { flow: MarketFlow | null }) {
+  if (!flow) return <div className="empty">수급을 아직 못 받았습니다.</div>;
+  const rows = [
+    { label: "코스피", f: flow.kospi },
+    { label: "코스닥", f: flow.kosdaq },
+  ];
+  const max = Math.max(
+    1,
+    ...rows.flatMap(({ f }) => [f.individual, f.foreign, f.institution].map(Math.abs)),
+  );
+  /* 쌍끌이 한 줄 — 코스피 기준. 외인·기관이 같이 사는 날이 개인 매수보다 훨씬 드물고 세다 */
+  const k = flow.kospi;
+  const twin =
+    k.foreign > 0 && k.institution > 0
+      ? "외국인·기관 쌍끌이 매수"
+      : k.foreign < 0 && k.institution < 0
+        ? "외국인·기관 동반 매도"
+        : "외국인·기관 엇갈림";
+
+  return (
+    <>
+      {rows.map(({ label, f }) => (
+        <div className="bf-flow-market" key={label}>
+          <em>{label}</em>
+          {[
+            { k: "개인", v: f.individual },
+            { k: "외국인", v: f.foreign },
+            { k: "기관", v: f.institution },
+          ].map(({ k: name, v }) => (
+            <div className="bf-flow" key={name}>
+              <span className="bf-flow-k">{name}</span>
+              {/* 가운데에서 좌우로 — 수급 요약 표(StockSummaryPanel)와 같은 문법 */}
+              <span className="bf-flow-bar">
+                <i
+                  className={v >= 0 ? "up" : "down"}
+                  style={{
+                    width: `${(Math.abs(v) / max) * 50}%`,
+                    [v >= 0 ? "left" : "right"]: "50%",
+                  }}
+                />
+              </span>
+              <b className={`num ${cls(v)}`}>
+                {v > 0 ? "+" : ""}
+                {fmtNum(Math.round(v))}억
+              </b>
+            </div>
+          ))}
+        </div>
+      ))}
+      <div className="bf-note">{twin} · 기관 세부는 종목 화면에서 봅니다</div>
+    </>
+  );
+}
+
+/* ── 본체 ───────────────────────────────────────────────── */
+
+export function BriefingPage({
+  onSelectStock,
+}: {
+  onSelectStock: (code: string, name: string) => void;
+}) {
+  /*
+   * 지수·글로벌·미장·수급·테마는 **대시보드와 같은 섹션**을 같은(또는 더 느린) 주기로.
+   * 서버 캐시가 같으므로 이 페이지가 열려 있어도 키움·야후 호출은 늘지 않는다.
+   */
+  const indices = useSection<IndexCard[]>("indices", 15_000);
+  const global = useSection<GlobalQuote[]>("global", 20_000);
+  const usMajor = useSection<UsMajorResult>("usMajor", 20_000);
+  const flow = useSection<MarketFlow>("flow", 30_000);
+  const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 60_000);
+
+  const [events, setEvents] = useState<BriefingEvent[] | null>(null);
+  const [heat, setHeat] = useState<{ traded: boolean; tiles: BriefingTile[] } | null>(null);
+  const [brief, setBrief] = useState<{ date: string; label: string; text: string } | null>(null);
+
+  const loadOwn = useCallback(() => {
+    void api.briefingTimeline().then((r) => setEvents(r.items)).catch(() => undefined);
+    void api.briefingHeat().then(setHeat).catch(() => undefined);
+    /* AI 한 줄은 실패하면 그냥 안 보인다 — 에러를 화면에 내지 않는다(지시서 요건) */
+    void api.briefingBrief().then((r) => setBrief(r.brief)).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    loadOwn();
+    /* 타임라인은 30초 — 이벤트는 놓치면 아까운 값이지만 초 단위로 볼 값은 아니다 */
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") loadOwn();
+    }, 30_000);
+    return () => clearInterval(t);
+  }, [loadOwn]);
+
+  const refreshAll = () => {
+    indices.refresh();
+    global.refresh();
+    usMajor.refresh();
+    flow.refresh();
+    themes.refresh();
+    loadOwn();
+  };
+
+  /* 히트맵 타일 크기 — 시총의 제곱근 비례. 그대로 비례하면 삼성전자가 화면을 다 먹는다 */
+  const maxCap = Math.max(1, ...(heat?.tiles ?? []).map((t) => t.cap ?? 0));
+
+  const watchCount = events?.filter((e) => e.watch).length ?? 0;
+
+  return (
+    <div className="bf">
+      {/* [1] 온도계 — 폰에서 상단 고정. 이 줄만 보고 위험 선호/회피가 갈려야 한다 */}
+      <div className="bf-top">
+        <Thermometer indices={indices.data} global={global.data} usMajor={usMajor.data} />
+        <RefreshBar onRefresh={refreshAll} updatedAt={indices.updatedAt} />
+      </div>
+
+      <div className="bf-grid">
+        {/* [2] 타임라인 — 가운데 기둥 */}
+        <section className="bf-col bf-center">
+          <h3 className="section-heading">
+            오늘의 이벤트
+            {watchCount > 0 && <i className="bf-watch-count">내 종목 {watchCount}건</i>}
+          </h3>
+          {events === null ? (
+            <div className="empty">불러오는 중…</div>
+          ) : events.length === 0 ? (
+            <div className="empty">
+              아직 잡힌 이벤트가 없습니다 — VI·공시·알림이 발생하면 여기 시간순으로 쌓입니다.
+            </div>
+          ) : (
+            <div className="bf-timeline">
+              {events.map((e, i) => (
+                <button
+                  key={`${e.t}-${e.code ?? e.name}-${i}`}
+                  className={`bf-event${e.watch ? " watch" : ""}`}
+                  onClick={() => {
+                    if (e.code) onSelectStock(e.code, e.name);
+                    else if (e.link) window.open(e.link, "_blank", "noopener");
+                  }}
+                  title={e.code ? "눌러서 종목 상세" : e.link ? "눌러서 원문" : undefined}
+                >
+                  <span className="bf-event-t pt-n">{/^\d{2}:\d{2}$/.test(e.t) ? e.t : ""}</span>
+                  <span className={`bf-badge ${BADGE_CLASS[e.kind] ?? "bf-badge-gray"}`}>
+                    {e.badge}
+                  </span>
+                  <span className="bf-event-body">
+                    <b>{e.name}</b>
+                    <span className="bf-event-sum">{e.summary}</span>
+                    {e.source && <i className="bf-event-src">{e.source}</i>}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* 좌: [3] 수급 + [5] 테마 */}
+        <section className="bf-col bf-left">
+          <h3 className="section-heading">오늘 수급</h3>
+          <FlowBars flow={flow.data} />
+
+          <h3 className="section-heading">테마</h3>
+          {themes.data ? (
+            <div className="bf-themes">
+              {themes.data.top.slice(0, 5).map((t) => (
+                <div className="bf-theme" key={t.code}>
+                  <span className="bf-theme-name">{t.name}</span>
+                  <i className="bf-theme-main">{t.mainStock}</i>
+                  <b className={`num ${cls(t.changeRate)}`}>{pct(t.changeRate)}</b>
+                </div>
+              ))}
+              <div className="bf-theme-sep" />
+              {themes.data.bottom.slice(0, 3).map((t) => (
+                <div className="bf-theme" key={t.code}>
+                  <span className="bf-theme-name">{t.name}</span>
+                  <i className="bf-theme-main">{t.mainStock}</i>
+                  <b className={`num ${cls(t.changeRate)}`}>{pct(t.changeRate)}</b>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty">테마를 아직 못 받았습니다.</div>
+          )}
+        </section>
+
+        {/* 우: [4] 히트맵 + [6] AI */}
+        <section className="bf-col bf-right">
+          <h3 className="section-heading">관심종목</h3>
+          {heat === null ? (
+            <div className="empty">불러오는 중…</div>
+          ) : heat.tiles.length === 0 ? (
+            <div className="empty">관심종목이 비어 있습니다.</div>
+          ) : (
+            <>
+              <div className="bf-heat">
+                {heat.tiles.map((t) => {
+                  const r = t.rate ?? 0;
+                  /* 진하기 = 등락 크기. ±3% 를 최대로 — 그 위는 색으로 더 말할 게 없다 */
+                  const alpha = Math.min(1, Math.abs(r) / 3) * 0.55 + 0.1;
+                  const grow = t.cap ? Math.sqrt(t.cap / maxCap) : 0.4;
+                  return (
+                    <button
+                      key={t.code}
+                      className="bf-tile"
+                      style={{
+                        flexGrow: Math.max(0.4, grow),
+                        background:
+                          r > 0
+                            ? `rgba(255,92,92,${alpha})`
+                            : r < 0
+                              ? `rgba(76,141,255,${alpha})`
+                              : undefined,
+                      }}
+                      onClick={() => onSelectStock(t.code, t.name)}
+                      title={`${t.name} ${pct(t.rate)}${t.cap ? ` · 시총 ${fmtNum(t.cap)}억` : ""}`}
+                    >
+                      <b>{t.name}</b>
+                      <i className="num">{pct(t.rate)}</i>
+                    </button>
+                  );
+                })}
+              </div>
+              {!heat.traded && (
+                <div className="bf-note">⚠️ 아직 오늘 거래가 반영되기 전입니다(직전 종가 기준).</div>
+              )}
+            </>
+          )}
+
+          {/* [6] — 실패·부재 시 통째로 숨긴다. 「AI 없음」이라는 빈 칸은 소음이다 */}
+          {brief && (
+            <>
+              <h3 className="section-heading">AI 한 줄</h3>
+              <div className="bf-brief">
+                {brief.text}
+                <i className="bf-brief-src">
+                  {brief.date} {brief.label} 리포트에서 — 새 AI 호출 없음
+                </i>
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}

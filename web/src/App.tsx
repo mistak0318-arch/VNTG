@@ -27,6 +27,7 @@ import { SameNetTradeRankingPage } from "./pages/SameNetTradeRankingPage";
 import { StockAnalysisPage } from "./pages/StockAnalysisPage";
 import { StockDiscoveryPage } from "./pages/StockDiscoveryPage";
 import { VolumeRankingPage } from "./pages/VolumeRankingPage";
+import { BriefingPage } from "./pages/BriefingPage";
 import { useHashRoute } from "./useHashRoute";
 import { applyOrder, useMenuPrefs } from "./useMenuOrder";
 import { useScreenLock } from "./useScreenLock";
@@ -41,6 +42,7 @@ import { TelegramPage } from "./pages/TelegramPage";
 import { GuidePage } from "./pages/GuidePage";
 
 type Tab =
+  | "briefing"
   | "overview"
   | "report"
   | "map"
@@ -87,6 +89,11 @@ const MENU: {
     group: "시황",
     accent: "#4c8dff",
     items: [
+      /*
+        브리핑이 맨 앞이자 홈이다 — 요약(브리핑) → 상세(대시보드)의 순서.
+        대시보드는 카드 13장을 파고드는 자리라 「열자마자 3초」용이 아니다.
+      */
+      { key: "briefing", label: "마켓 브리핑", icon: "🌡️" },
       { key: "overview", label: "시황 대시보드", icon: "📊" },
       { key: "report", label: "데일리 리포트", icon: "📰" },
       { key: "map", label: "테마/업종 MAP", icon: "🗺️" },
@@ -159,7 +166,8 @@ const TAB_LABELS = Object.fromEntries(
 const VALID_TABS = new Set(MENU.flatMap((g) => g.items).map((i) => i.key));
 
 export default function App() {
-  const { route, navigate } = useHashRoute("overview");
+  /* 홈 = 브리핑. 앱을 열면 「오늘 시장이 어떤가」부터 — 파고들기는 대시보드로 */
+  const { route, navigate } = useHashRoute("briefing");
   const [navOpen, setNavOpen] = useState(false);
   const { prefs } = useMenuPrefs();
   /* 자리를 비웠을 때 화면을 가린다 — 기기마다 따로 켠다 */
@@ -421,6 +429,7 @@ export default function App() {
             탭을 옮기면 resetKey 가 바뀌어 다시 그려 본다.
           */}
           <ErrorBoundary where={TAB_LABELS[tab] ?? tab} resetKey={tab}>
+          {tab === "briefing" && <BriefingPage onSelectStock={onSelectStock} />}
           {tab === "overview" && <OverviewPage onSelectStock={onSelectStock} />}
           {tab === "report" && <DailyReportPage onSelectStock={onSelectStock} />}
           {tab === "map" && <MapPage onSelectStock={onSelectStock} />}

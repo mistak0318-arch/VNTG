@@ -1072,6 +1072,15 @@ body {
 }
 
 /*
+  헤더 상시 시세 — 스크롤이 어디에 있든 지금 값이 보인다(아이디어노트 4).
+  제목보다 조금 작게: 이름이 주소고 값은 상태다.
+*/
+.sheet-live { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.sheet-live b { font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+.sheet-live i { font-style: normal; font-size: 0.75rem; }
+.analysis-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+
+/*
  * 가로 탭 줄을 넘기는 좌우 버튼.
  *
  * 줄 **위에 겹쳐** 띄운다. 자리를 따로 잡으면 탭이 그만큼 좁아지는데, 탭이 모자라서
@@ -2100,6 +2109,105 @@ body {
   }
 }
 
+/* ---------------- 마켓 브리핑 ---------------- */
+/*
+  레이아웃 원칙: 폰은 한 기둥(온도계→타임라인→수급→히트맵→테마→AI),
+  넓으면 세 기둥 — 좌(수급·테마) / 중앙(타임라인) / 우(히트맵·AI).
+  DOM 순서는 폰 기준으로 두고 넓은 화면에서만 grid-area 로 재배치한다 —
+  중요한 것이 먼저 그려져야 느린 회선에서도 [1][2]가 먼저 보인다.
+*/
+.bf-top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 4px 0 6px; }
+.bf-thermo {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 1rem;
+  padding: 0.5rem 0.7rem; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+.bf-idx { display: inline-flex; align-items: baseline; gap: 0.35rem; white-space: nowrap; }
+.bf-idx em, .bf-mini em { font-style: normal; font-size: 0.7rem; color: var(--muted); }
+.bf-idx b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.bf-idx b i { font-style: normal; font-size: 0.75rem; margin-left: 0.25rem; }
+.bf-mini { display: inline-flex; align-items: baseline; gap: 0.3rem; white-space: nowrap; }
+.bf-mini b { font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.bf-warn { color: #f5c542; }
+
+/* 상승/하락 컬러바 — 왼쪽 빨강(상승 몫)·오른쪽 파랑. 이 줄의 심장이다 */
+.bf-breadth { display: inline-flex; align-items: center; gap: 0.4rem; flex: 1 1 8rem; min-width: 7rem; }
+.bf-breadth-bar { position: relative; flex: 1; height: 8px; border-radius: 999px; background: var(--blue); overflow: hidden; }
+.bf-breadth-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--red); }
+.bf-breadth em { font-style: normal; font-size: 0.68rem; color: var(--muted); white-space: nowrap; }
+
+.bf-grid { display: grid; gap: 0.8rem; margin-top: 0.6rem; }
+@media (min-width: 1100px) {
+  .bf-grid { grid-template-columns: 1fr 1.4fr 1fr; grid-template-areas: "left center right"; }
+  .bf-left { grid-area: left; }
+  .bf-center { grid-area: center; }
+  .bf-right { grid-area: right; }
+}
+.bf-col { min-width: 0; }
+
+/* 타임라인 */
+.bf-watch-count { font-style: normal; font-size: 0.72rem; color: var(--red); margin-left: 0.5rem; }
+.bf-timeline { display: grid; gap: 3px; max-height: 72vh; overflow-y: auto; }
+.bf-event {
+  display: grid; grid-template-columns: 2.6rem auto minmax(0, 1fr); gap: 0.45rem;
+  align-items: start; text-align: left; padding: 0.4rem 0.5rem;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 0.4rem;
+  color: var(--text); cursor: pointer;
+}
+.bf-event:hover { border-color: var(--blue); }
+/* 내 종목 이벤트 — 왼쪽 붉은 실이 하이라이트다. 배경을 칠하면 목록 전체가 시끄럽다 */
+.bf-event.watch { border-left: 3px solid var(--red); }
+.bf-event-t { font-size: 0.72rem; padding-top: 0.15rem; }
+.bf-badge {
+  font-size: 0.66rem; font-weight: 700; padding: 0.12rem 0.4rem; border-radius: 999px;
+  white-space: nowrap; align-self: start; margin-top: 0.1rem;
+}
+.bf-badge-vi { background: rgba(245,197,66,.2); color: #f5c542; }
+.bf-badge-dart { background: rgba(76,141,255,.18); color: var(--blue); }
+.bf-badge-gray { background: var(--panel-2); color: var(--muted); }
+.bf-badge-stop { background: rgba(255,92,92,.2); color: var(--red); }
+.bf-badge-strength { background: rgba(53,196,106,.18); color: var(--green); }
+.bf-badge-signal { background: rgba(169,123,214,.2); color: #a97bd6; }
+.bf-event-body { min-width: 0; }
+.bf-event-body b { font-size: 0.82rem; margin-right: 0.35rem; }
+.bf-event-sum { font-size: 0.76rem; color: var(--muted); }
+.bf-event-src { display: block; font-style: normal; font-size: 0.68rem; color: var(--muted); opacity: 0.8; }
+
+/* 수급 미니 바 — 종목 수급 표(.ss-flow)와 같은 문법: 가운데에서 좌우로 */
+.bf-flow-market { margin-bottom: 0.5rem; }
+.bf-flow-market > em { font-style: normal; font-size: 0.72rem; color: var(--muted); }
+.bf-flow { display: grid; grid-template-columns: 3.2rem 1fr 5.4rem; gap: 0.4rem; align-items: center; padding: 0.1rem 0; }
+.bf-flow-k { font-size: 0.75rem; color: var(--muted); }
+.bf-flow b { font-size: 0.78rem; text-align: right; font-variant-numeric: tabular-nums; }
+.bf-flow-bar { position: relative; height: 8px; background: var(--bg); border-radius: 2px; overflow: hidden; }
+.bf-flow-bar::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border); }
+.bf-flow-bar i { position: absolute; top: 1px; bottom: 1px; border-radius: 2px; }
+.bf-flow-bar i.up { background: var(--red); }
+.bf-flow-bar i.down { background: var(--blue); }
+.bf-note { font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; }
+
+/* 히트맵 — flex-wrap 타일, 크기는 √시총 비례 */
+.bf-heat { display: flex; flex-wrap: wrap; gap: 4px; }
+.bf-tile {
+  flex: 1 0 5.5rem; min-height: 3.2rem; border: 1px solid var(--border); border-radius: 0.4rem;
+  background: var(--panel); color: var(--text); cursor: pointer; padding: 0.3rem 0.4rem;
+  display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0;
+}
+.bf-tile b { font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bf-tile i { font-style: normal; font-size: 0.74rem; }
+
+/* 테마 */
+.bf-themes { display: grid; gap: 2px; }
+.bf-theme { display: grid; grid-template-columns: minmax(0,1fr) auto 4.2rem; gap: 0.4rem; align-items: baseline; padding: 0.18rem 0.2rem; }
+.bf-theme-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; }
+.bf-theme-main { font-style: normal; font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+.bf-theme b { text-align: right; font-size: 0.78rem; }
+.bf-theme-sep { height: 1px; background: var(--border); margin: 0.25rem 0; }
+
+/* AI 한 줄 */
+.bf-brief { font-size: 0.8rem; line-height: 1.65; background: var(--panel-2); border-radius: 0.4rem; padding: 0.6rem 0.7rem; }
+.bf-brief-src { display: block; font-style: normal; font-size: 0.68rem; color: var(--muted); margin-top: 0.35rem; }
+
 /* ---------------- 종목 한 장 요약 ---------------- */
 .ss { margin-bottom: 0.6rem; }
 /*
@@ -2139,9 +2247,12 @@ body {
 
 /* ---------------- 표 칸 너비 조절 ---------------- */
 /*
-  손잡이는 **평소엔 안 보인다.** 늘 보이면 표가 지저분해지고 잘못 잡기도 쉽다.
-  머리 칸에 마우스를 올리면 나타난다. 폰에서는 hover 가 없지만, 폰에서 칸 너비를
-  끄는 일은 애초에 없다 — 그건 넓은 화면에서 하는 일이다.
+  손잡이는 마우스 기기에선 **평소엔 안 보인다.** 늘 보이면 표가 지저분해지고 잘못
+  잡기도 쉽다 — 머리 칸에 올리면 나타난다.
+
+  ⚠️ 「폰에서 칸 너비를 끄는 일은 없다」고 적었었는데 **틀렸다** (아이디어노트 4 —
+  실제로 폰에서 끌어 봤고 안 됐다). 터치 기기에는 hover 가 없어 opacity:0 이면
+  영영 안 보인다. coarse pointer 에선 늘 반투명하게 보이고 잡는 폭도 넓힌다.
 */
 .data-table th { position: relative; }
 .col-grip {
@@ -2149,6 +2260,9 @@ body {
   cursor: col-resize; opacity: 0; touch-action: none;
 }
 .data-table th:hover .col-grip { opacity: 1; }
+@media (pointer: coarse) {
+  .col-grip { opacity: 0.5; width: 16px; }
+}
 .col-grip::after {
   content: ""; position: absolute; top: 15%; right: 3px; width: 2px; height: 70%;
   background: var(--blue); border-radius: 1px;
@@ -3963,6 +4077,10 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .ph-sublabel { font-size: 0.7rem; color: var(--muted); font-style: normal; margin-right: 4px; }
 /* NXT 몫 — 시·고·저의 NXT 배지와 같은 색이라야 같은 거래소로 읽힌다 */
 .ph-sublabel.nxt { color: var(--blue); font-weight: 600; }
+/* 거래대금·체결강도·거래량 사이 구분선 — 다섯 줄이 한 덩어리로 뭉개지지 않게 */
+.ph-sep { display: block; height: 1px; background: var(--border); margin: 3px 0; }
+/* 체결강도는 빨간 % — HTS 표기 그대로(아이디어노트 4). 색은 값이 아니라 자리의 표지다 */
+.ph-strength { color: var(--red); font-weight: 600; }
 /* NXT 가 KRX 와 같을 때 — 자리는 지키되 눈이 안 가게. 줄이 사라지면 화면이 덜컹거린다 */
 .ph-nxt.same b, .ph-value.pt-n { opacity: 0.55; font-weight: 400; }
 

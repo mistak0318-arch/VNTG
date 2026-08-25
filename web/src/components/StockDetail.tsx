@@ -207,6 +207,25 @@ export function StockDetail({
           <h2>
             {name} ({code})
           </h2>
+          {/*
+            헤더에 현재가 상시 (아이디어노트 4 — 「스크롤 밑에 내리니깐 실시간 시세
+            확인이 안 되네」). 값은 **새로 받는 게 아니다** — 아래 `useLive`(1초)가 이미
+            들고 있는 `info` 를 sticky 헤더에도 그릴 뿐이다. 스크롤이 어디에 있든
+            지금 값이 눈 앞에 있다.
+          */}
+          {info && Math.abs(Number(info.cur_prc)) > 0 && (
+            <span
+              className={`sheet-live num ${
+                Number(info.flu_rt) > 0 ? "positive" : Number(info.flu_rt) < 0 ? "negative" : ""
+              }`}
+            >
+              <b>{Math.abs(Number(info.cur_prc)).toLocaleString("ko-KR")}</b>
+              <i>
+                {Number(info.flu_rt) > 0 ? "+" : ""}
+                {Number(info.flu_rt).toFixed(2)}%
+              </i>
+            </span>
+          )}
           <button
             className={`watch-btn${watched ? " on" : ""}`}
             onClick={toggleWatch}

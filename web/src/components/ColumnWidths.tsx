@@ -88,6 +88,18 @@ export function useColumnWidths(scope: string): ColumnWidthsApi {
   const begin = useCallback(
     (key: string, startX: number, startWidth: number) => {
       drag.current = { key, x: startX, w: startWidth };
+      /*
+       * ⚠️ **시작하는 순간 현재 폭을 박아 넣는다** (2026-08-25, 아이디어노트 4).
+       *
+       * 「드래그해도 안 바뀐다」는 말이 나왔다. 원인: `table-layout: fixed` 는
+       * `customized`(정한 폭이 하나라도 있나)일 때만 붙는데, **처음 끄는 순간에는
+       * 아직 아무 폭도 없어서** auto 레이아웃이 `<col>` 폭을 참고만 하고 무시했다 —
+       * 손은 움직이는데 표가 그대로였다.
+       *
+       * 시작할 때 지금 폭을 그대로 넣으면 그 즉시 fixed 로 넘어가고,
+       * 첫 픽셀부터 손을 따라온다.
+       */
+      setMine((prev) => (prev[key] ? prev : { ...prev, [key]: Math.round(startWidth) }));
 
       const move = (e: PointerEvent) => {
         const d = drag.current;
@@ -151,6 +163,15 @@ export function ColumnGrip({ cw, k }: { cw: ColumnWidthsApi; k: string }) {
         // 머리 칸을 누르면 정렬이 걸리는 표가 많다 — 손잡이는 그 클릭을 막는다
         e.preventDefault();
         e.stopPropagation();
+        /*
+         * ⚠️ **포인터를 붙잡는다** (2026-08-25, 아이디어노트 4).
+         *
+         * 폰에서 드래그가 안 됐다. 표가 가로 스크롤 컨테이너(`data-table-wrap`) 안에
+         * 있어서, 손가락을 끌면 **브라우저가 그 제스처를 스크롤로 가져가** pointermove 가
+         * 우리한테 안 왔다. `touch-action: none` 만으로는 부족했다 — capture 를 걸어야
+         * 이후의 move/up 이 손잡이로 온다.
+         */
+        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
         const th = (e.target as HTMLElement).closest("th");
         cw.begin(k, e.clientX, th?.getBoundingClientRect().width ?? 100);
       }}
