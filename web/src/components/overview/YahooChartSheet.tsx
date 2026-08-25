@@ -421,6 +421,35 @@ export function YahooChartSheet({
  * **없는 것은 안 그린다.** 한투 해외주식에는 재무제표도 수급도 없다 — 국내 상세와
  * 같은 모양으로 맞추겠다고 빈 칸을 늘어놓으면, 값이 없는 건지 0인 건지 알 수 없어진다.
  */
+/**
+ * 카드 하나 — 국내 상세(`summary-item`)와 같은 뼈대에, 부가 정보(전일比 %, 날짜)를
+ * **아랫줄로 뺀다** (2026-08-25). 괄호로 한 줄에 붙이니 「215.53 (+1.2%) / 218.1 (+2.4%)…」
+ * 처럼 늘어져서 읽히질 않았다 — 큰 값 하나 + 작은 부가 한 줄이면 눈이 안 걸린다.
+ */
+interface UsItem {
+  k: string;
+  v: string;
+  sub?: string;
+  /** sub 의 색 — positive/negative */
+  subCls?: string;
+  hint?: string;
+}
+
+function UsCards({ items }: { items: UsItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="summary-grid usd-cards">
+      {items.map((it) => (
+        <div className="summary-item" key={it.k} title={it.hint}>
+          <div className="label">{it.k}</div>
+          <div className="value">{it.v}</div>
+          {it.sub && <div className={`usd-sub ${it.subCls ?? ""}`}>{it.sub}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function UsFigures({ d }: { d: UsDetail }) {
   const pos52 =
     d.price !== null && d.high52 !== null && d.low52 !== null && d.high52 > d.low52
@@ -428,81 +457,66 @@ function UsFigures({ d }: { d: UsDetail }) {
       : null;
   const volRatio = d.volume !== null && d.prevVolume ? d.volume / d.prevVolume : null;
 
-  const rows: { k: string; v: string; hint?: string }[] = [];
-  /*
-   * 시/고/저 옆에 **전일 종가 대비 %** 를 괄호로 (2026-08-25 — 사용자 요청).
-   * 215.53 이라는 가격만으로는 갭이 얼마였는지 감이 안 온다 — 기준(전일 종가)과의
-   * 거리가 붙어야 읽힌다.
-   */
-  const vsBase = (v: number | null): string =>
-    v !== null && d.base ? ` (${((v - d.base) / d.base) * 100 >= 0 ? "+" : ""}${(((v - d.base) / d.base) * 100).toFixed(1)}%)` : "";
-  if (d.open !== null)
-    rows.push({
-      k: "시/고/저",
-      v: `${d.open}${vsBase(d.open)} / ${d.high}${vsBase(d.high)} / ${d.low}${vsBase(d.low)}`,
-      hint: "괄호는 전일 종가 대비입니다",
-    });
+  /* 전일 종가 대비 % — 가격만으로는 갭이 얼마였는지 감이 안 온다 */
+  const vsBase = (v: number | null): { sub?: string; subCls?: string } => {
+    if (v === null || !d.base) return {};
+    const p = ((v - d.base) / d.base) * 100;
+    return { sub: `전일比 ${p >= 0 ? "+" : ""}${p.toFixed(1)}%`, subCls: p >= 0 ? "positive" : "negative" };
+  };
+
+  const items: UsItem[] = [];
+  if (d.open !== null) items.push({ k: "시가", v: String(d.open), ...vsBase(d.open) });
+  if (d.high !== null) items.push({ k: "고가", v: String(d.high), ...vsBase(d.high) });
+  if (d.low !== null) items.push({ k: "저가", v: String(d.low), ...vsBase(d.low) });
   if (pos52 !== null)
-    rows.push({
+    items.push({
       k: "52주 자리",
-      v: `${pos52.toFixed(0)}% (${d.low52} ~ ${d.high52})`,
+      v: `${pos52.toFixed(0)}%`,
+      sub: `${d.low52} ~ ${d.high52}`,
       hint: "0%가 52주 최저, 100%가 최고입니다",
     });
   if (volRatio !== null)
-    rows.push({
+    items.push({
       k: "거래량",
-      v: `${fmtNum(d.volume ?? 0)} · 전일比 ${volRatio.toFixed(2)}배`,
+      v: fmtNum(d.volume ?? 0),
+      sub: `전일比 ${volRatio.toFixed(2)}배`,
+      subCls: volRatio >= 1 ? "positive" : "",
       hint: "1배보다 크면 평소보다 붐빈다는 뜻입니다",
     });
   if (d.marketCap !== null) {
     /*
-     * **원화로도 적는다.**
-     *
-     * 「3,900십억 USD」는 그 자체로는 크기가 안 잡힌다 — 국내 종목을 볼 때 쓰는 자가
-     * 「억원」이라, 같은 자로 바꿔 놔야 삼성전자와 견줄 수 있다.
-     * 환율은 원화 환산에 이미 쓰고 있는 값을 그대로 쓴다(없으면 괄호를 안 붙인다).
+     * **원화로도 적는다.** 「3,900십억 USD」는 그 자체로는 크기가 안 잡힌다 —
+     * 국내 종목을 볼 때 쓰는 자(조원)로 바꿔 놔야 삼성전자와 견줄 수 있다.
      */
     const won = d.fxRate ? (d.marketCap * d.fxRate) / 1e8 : null;
-    /*
-     * 조 단위면 조로 적는다.
-     * 엔비디아를 억원으로 적으면 「73,803,074억원」이 되는데, 자릿수가 여덟 개라
-     * **읽는 순간 크기가 안 잡힌다.** 억으로 통일하는 것보다 읽히는 게 먼저다.
-     */
     const wonText =
       won === null
-        ? ""
+        ? undefined
         : won >= 10_000
-          ? ` (약 ${fmtNum(Math.round(won / 10_000))}조원)`
-          : ` (약 ${fmtNum(Math.round(won))}억원)`;
-    rows.push({
+          ? `약 ${fmtNum(Math.round(won / 10_000))}조원`
+          : `약 ${fmtNum(Math.round(won))}억원`;
+    items.push({
       k: "시가총액",
-      v: `${(d.marketCap / 1e9).toFixed(1)}십억 ${d.currency}${wonText}`,
-      hint: won === null ? undefined : "국내 종목과 견주기 쉽게 원화로도 적었습니다",
+      v: `${(d.marketCap / 1e9).toFixed(1)}B ${d.currency}`,
+      sub: wonText,
+      hint: "국내 종목과 견주기 쉽게 원화로도 적었습니다",
     });
   }
-  if (d.per !== null || d.pbr !== null)
-    rows.push({ k: "PER / PBR", v: `${d.per ?? "-"} / ${d.pbr ?? "-"}` });
-  if (d.eps !== null || d.bps !== null)
-    rows.push({ k: "EPS / BPS", v: `${d.eps ?? "-"} / ${d.bps ?? "-"}` });
+  if (d.per !== null || d.pbr !== null) items.push({ k: "PER / PBR", v: `${d.per ?? "-"} / ${d.pbr ?? "-"}` });
+  if (d.eps !== null || d.bps !== null) items.push({ k: "EPS / BPS", v: `${d.eps ?? "-"} / ${d.bps ?? "-"}` });
   if (d.wonPrice !== null)
-    rows.push({
+    items.push({
       k: "원화 환산",
-      v: `${d.wonPrice.toLocaleString("ko-KR")}원${d.fxRate ? ` (환율 ${d.fxRate})` : ""}`,
+      v: `${d.wonPrice.toLocaleString("ko-KR")}원`,
+      sub: d.fxRate ? `환율 ${d.fxRate}` : undefined,
       hint: "환율까지 얹힌 값이라 실제 체감에 가깝습니다",
     });
-  if (d.sector) rows.push({ k: "업종", v: d.sector });
-  if (d.tradable) rows.push({ k: "매매", v: d.tradable });
+  if (d.sector) items.push({ k: "업종", v: d.sector });
+  if (d.tradable) items.push({ k: "매매", v: d.tradable });
 
   return (
     <>
-      <div className="usd-grid">
-        {rows.map((r) => (
-          <div className="usd-cell" key={r.k} title={r.hint}>
-            <span className="usd-k">{r.k}</span>
-            <span className="usd-v">{r.v}</span>
-          </div>
-        ))}
-      </div>
+      <UsCards items={items} />
       <div className="table-note">
         한국투자증권 해외주식 시세입니다. <b>재무제표와 수급은 없습니다</b> — 해외 종목에는
         DART 같은 자리가 없고, 외국인·기관 순매수는 국내 시장의 개념입니다.
@@ -553,52 +567,52 @@ function UsKiwoomBlock({ symbol }: { symbol: string }) {
   const s = k.summary;
   const b = k.book;
 
-  const rows: { k: string; v: string; hint?: string }[] = [];
+  const items: UsItem[] = [];
   if (s) {
     if (s.sectorLg || s.sectorSm)
-      rows.push({
-        k: "업종",
-        v: [s.sectorLg, s.sectorSm].filter(Boolean).join(" · "),
+      items.push({
+        k: "업종 (키움)",
+        v: s.sectorLg || s.sectorSm || "",
+        sub: s.sectorLg && s.sectorSm ? s.sectorSm : undefined,
         hint: "키움 분류 — 야후의 뭉뚱그린 섹터보다 세부까지 있습니다",
       });
     if (s.week52.high !== null)
-      rows.push({
+      items.push({
         k: "52주 고가",
-        v: `${fmtNum(s.week52.high)} (${ymd(s.week52.highDate)}${
-          s.week52.highGap !== null ? `, ${s.week52.highGap.toFixed(1)}%` : ""
-        })`,
-        hint: "괄호는 그 날짜와 지금 가격의 이격입니다",
+        v: fmtNum(s.week52.high),
+        sub: `${ymd(s.week52.highDate)}${s.week52.highGap !== null ? ` · ${s.week52.highGap.toFixed(1)}%` : ""}`,
+        subCls: "negative",
+        hint: "아랫줄은 그 날짜와, 지금 가격의 이격입니다",
       });
     if (s.week52.low !== null)
-      rows.push({
+      items.push({
         k: "52주 저가",
-        v: `${fmtNum(s.week52.low)} (${ymd(s.week52.lowDate)}${
-          s.week52.lowGap !== null ? `, +${s.week52.lowGap.toFixed(1)}%` : ""
-        })`,
+        v: fmtNum(s.week52.low),
+        sub: `${ymd(s.week52.lowDate)}${s.week52.lowGap !== null ? ` · +${s.week52.lowGap.toFixed(1)}%` : ""}`,
+        subCls: "positive",
       });
     if (s.pre.open !== null || s.pre.high !== null || s.pre.low !== null) {
-      /* 괄호는 전일(정규장) 종가 대비 — 가격만으로는 프리장이 갭인지 아닌지 모른다 */
-      const vsClose = (v: number | null): string =>
-        v !== null && s.baseClose
-          ? ` (${(v - s.baseClose) / s.baseClose >= 0 ? "+" : ""}${(((v - s.baseClose) / s.baseClose) * 100).toFixed(1)}%)`
-          : "";
-      rows.push({
-        k: "프리장 시/고/저",
-        v: `${s.pre.open ?? "-"}${vsClose(s.pre.open)} / ${s.pre.high ?? "-"}${vsClose(s.pre.high)} / ${s.pre.low ?? "-"}${vsClose(s.pre.low)}`,
-        hint: "야후·한투가 안 주는 값 — 괄호는 전일 종가 대비입니다",
-      });
+      /* 아랫줄은 전일(정규장) 종가 대비 — 가격만으로는 프리장이 갭인지 아닌지 모른다 */
+      const vsClose = (v: number | null): { sub?: string; subCls?: string } => {
+        if (v === null || !s.baseClose) return {};
+        const p = ((v - s.baseClose) / s.baseClose) * 100;
+        return { sub: `전일比 ${p >= 0 ? "+" : ""}${p.toFixed(1)}%`, subCls: p >= 0 ? "positive" : "negative" };
+      };
+      if (s.pre.open !== null) items.push({ k: "프리장 시가", v: String(s.pre.open), ...vsClose(s.pre.open) });
+      if (s.pre.high !== null) items.push({ k: "프리장 고가", v: String(s.pre.high), ...vsClose(s.pre.high) });
+      if (s.pre.low !== null) items.push({ k: "프리장 저가", v: String(s.pre.low), ...vsClose(s.pre.low) });
     }
   }
   if (b) {
     if (b.turnover !== null)
-      rows.push({
+      items.push({
         k: "회전율",
         v: `${b.turnover.toFixed(2)}%`,
         hint: "오늘 거래량 ÷ 상장주식수 — 손바뀜이 얼마나 있었나",
       });
     if (b.tradeValue !== null)
       // trde_prica 는 천 달러다 (실측: NVDA 28,658,314 → 286.6억 달러)
-      rows.push({ k: "거래대금", v: `${fmtNum(Math.round(b.tradeValue / 100000))}억 달러` });
+      items.push({ k: "거래대금", v: `${fmtNum(Math.round(b.tradeValue / 100000))}억 $` });
   }
 
   // 잔량 막대의 기준 — 양쪽 통틀어 제일 큰 잔량
@@ -606,16 +620,7 @@ function UsKiwoomBlock({ symbol }: { symbol: string }) {
 
   return (
     <>
-      {rows.length > 0 && (
-        <div className="usd-grid">
-          {rows.map((r) => (
-            <div className="usd-cell" key={r.k} title={r.hint}>
-              <span className="usd-k">{r.k}</span>
-              <span className="usd-v">{r.v}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <UsCards items={items} />
 
       {b && b.asks.some((r) => r.price !== null) && (
         <div className="ukb-book">

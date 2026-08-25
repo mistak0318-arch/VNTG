@@ -705,8 +705,19 @@ export interface CountryRow {
   top: { name: string; usd: number; share: number }[];
 }
 
+/**
+ * 나라별 **월별 흐름** (2026-08-25) — 「미국에서 갑자기 장사가 잘되네?」는
+ * 한 달 스냅샷으로는 안 보인다. 최근 13개월을 나라별로 쌓아 상위 나라의
+ * 흐름선을 그린다. 13개월인 이유: 마지막 달의 전년 동월이 시리즈 안에 들어와
+ * 눈으로도 YoY 비교가 된다.
+ */
+export interface CountrySeries {
+  months: string[];
+  countries: { country: string; values: number[] }[];
+}
+
 interface CountryCache {
-  [key: string]: { at: string; month: string; rows: CountryRow[] };
+  [key: string]: { at: string; month: string; rows: CountryRow[]; series?: CountrySeries };
 }
 
 const COUNTRY_FILE = join(DATA_DIR, "tradeCountry.json");
@@ -787,7 +798,7 @@ async function fetchCountryMonth(hs: string, yymm: string): Promise<Map<string, 
  */
 export async function getTradeCountries(
   key: string,
-): Promise<{ month: string; rows: CountryRow[]; watch: "export" | "import" }> {
+): Promise<{ month: string; rows: CountryRow[]; watch: "export" | "import"; series: CountrySeries | null }> {
   const t = TRADE_TARGETS.find((x) => x.key === key);
   if (!t) throw new Error("알 수 없는 품목입니다.");
   if (!isTradeConfigured()) throw new Error("DATA_GO_KR_KEY 미설정");
@@ -799,8 +810,8 @@ export async function getTradeCountries(
     /* 처음이면 빈 캐시 */
   }
   const hit = cache[key];
-  if (hit && Date.now() - new Date(hit.at).getTime() < COUNTRY_TTL_MS) {
-    return { month: hit.month, rows: hit.rows, watch: t.watch };
+  if (hit && hit.series && Date.now() - new Date(hit.at).getTime() < COUNTRY_TTL_MS) {
+    return { month: hit.month, rows: hit.rows, watch: t.watch, series: hit.series };
   }
 
   // 최신 달 찾기 — 공표 시차 때문에 이번 달부터 두 달 물러나 본다
@@ -816,15 +827,32 @@ export async function getTradeCountries(
       break;
     }
   }
-  if (!cur || !month) return { month: "", rows: [], watch: t.watch };
+  if (!cur || !month) return { month: "", rows: [], watch: t.watch, series: null };
 
-  // 전년 동월 — YoY 용
   const [y, m] = month.split("-").map(Number);
-  const prev = await fetchCountryMonth(t.hs, `${y - 1}${String(m).padStart(2, "0")}`).catch(
-    () => new Map<string, CountryAgg>(),
-  );
 
+  /*
+   * 최근 13개월 스윕 — 나라별 월별 흐름용. 한 달씩 부른다: 범위로 부르면
+   * pageNo 무시 버그(Itemtrade 에서 실측) 때문에 뒷달이 잘려 나갈 수 있다.
+   * 마지막 달(cur)은 이미 받았으니 12번만 더 부른다. 하루 캐시라 하루 한 번 값이다.
+   */
   const side = t.watch === "import" ? ("importUsd" as const) : ("exportUsd" as const);
+  const monthKeys: string[] = [];
+  const byMonth = new Map<string, Map<string, CountryAgg>>();
+  for (let back = 12; back >= 0; back--) {
+    const d = new Date(y, m - 1 - back, 1);
+    const label = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    monthKeys.push(label);
+    if (back === 0) {
+      byMonth.set(label, cur);
+      continue;
+    }
+    const rows = await fetchCountryMonth(t.hs, ym(d)).catch(() => null);
+    if (rows) byMonth.set(label, rows);
+  }
+  // 전년 동월 — YoY 용 (13개월 스윕의 첫 달이 바로 그 달이다)
+  const prev = byMonth.get(monthKeys[0]) ?? new Map<string, CountryAgg>();
+
   const rows: CountryRow[] = [...cur.entries()]
     .map(([country, v]) => {
       const p = prev.get(country);
@@ -847,10 +875,22 @@ export async function getTradeCountries(
     .sort((a, b) => b[side] - a[side])
     .slice(0, 10);
 
-  cache[key] = { at: new Date().toISOString(), month, rows };
+  /*
+   * 나라별 월별 시리즈 — 흐름을 그릴 상위 5개 나라만. 값은 보는 방향(수출/수입)이다.
+   * 어떤 달이 조회 실패로 비면 그 칸은 0 — 선이 끊겨 보이는 게 없는 값보다 정직하다.
+   */
+  const series: CountrySeries = {
+    months: monthKeys,
+    countries: rows.slice(0, 5).map((r) => ({
+      country: r.country,
+      values: monthKeys.map((mk) => byMonth.get(mk)?.get(r.country)?.[side] ?? 0),
+    })),
+  };
+
+  cache[key] = { at: new Date().toISOString(), month, rows, series };
   await mkdir(DATA_DIR, { recursive: true });
   await writeFile(COUNTRY_FILE, JSON.stringify(cache, null, 2), "utf-8");
-  return { month, rows, watch: t.watch };
+  return { month, rows, watch: t.watch, series };
 }
 
 // ---------------------------------------------------------------- 리포트용

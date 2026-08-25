@@ -58,6 +58,27 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/**
+ * 알림 딥링크 — 폰에서 알림을 받고 「열어서 확인」까지가 세 단계였다
+ * (앱 열기 → 검색 → 종목 클릭). 종목명 자체를 개별종목분석 링크로 만들면 한 번이 된다.
+ *
+ * `.env` 의 `HTS_WEB_URL` (예: `http://192.168.0.10:5100`) 이 바탕 주소다.
+ * 미설정이면 링크 없이 굵은 이름만 — 개발 PC 처럼 알림을 안 쓰는 곳에선 없어도 된다.
+ */
+export function stockDeepLink(code: string, name: string): string | null {
+  const base = process.env.HTS_WEB_URL?.trim().replace(/\/+$/, "");
+  if (!base) return null;
+  const q = new URLSearchParams({ code, name });
+  return `${base}/#/stockAnalysis?${q.toString()}`;
+}
+
+/** 종목명 HTML — 주소가 있으면 링크, 없으면 굵게 */
+export function stockNameHtml(code: string, name: string): string {
+  const url = stockDeepLink(code, name);
+  const esc = escapeHtml(name);
+  return url ? `<a href="${url}">${esc}</a>` : `<b>${esc}</b>`;
+}
+
 /** 마크다운풍 AI 텍스트를 텔레그램 HTML로 */
 export function toTelegramHtml(text: string): string {
   return text

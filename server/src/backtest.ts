@@ -362,6 +362,8 @@ export interface BacktestRun {
   from: string;
   to: string;
   codes: number;
+  /** 밤 그리드가 돌린 것 — 같은 라벨의 어제 그리드를 밀어내고 들어온다 */
+  auto?: boolean;
 }
 
 const KEEP_RUNS = 60;
@@ -408,6 +410,149 @@ export function verdictOf(edge: number | null, count: number): { tone: "good" | 
   if (edge >= 0.5) return { tone: "weak", text: `+${edge.toFixed(1)}%p — 있긴 한데 얇다. 수수료·슬리피지를 빼면 남는 게 줄어든다` };
   if (edge > -0.5) return { tone: "weak", text: "기준선과 사실상 같다 — 이 조건은 일을 안 한다" };
   return { tone: "bad", text: `기준선보다 ${edge.toFixed(1)}%p 나쁘다 — 피해야 할 자리를 찾았다는 뜻이기도 하다` };
+}
+
+/* ------------------------------------------------------------------ */
+/* 자동 그리드 — 밤마다 조건 조합을 돌려 아침 리더보드를 채운다            */
+/* ------------------------------------------------------------------ */
+
+const GRID_FILE = join(here, "..", "data", "backtestGrid.json");
+
+/**
+ * 밤 그리드 (2026-08-25) — 리더보드가 생기니 다음 문제가 보였다: **채우는 게 손 노동**이다.
+ * 조건을 하나 골라 돌리고, 기다리고, 또 하나 돌리고. 그 손이 며칠이면 게을러진다.
+ *
+ * 그래서 밤에 서버가 정해진 조합 ~18개를 알아서 돌린다. 요령은 **일봉을 한 번만 받는 것** —
+ * 종목당 봉을 받아 두면 조합 평가는 전부 메모리 계산이라, 18개 조합이 조회로는
+ * 종목 50개 + 순위 1번이면 끝난다 (조합마다 새로 돌면 900번이 될 일이다).
+ *
+ * 어제의 그리드 기록은 지우고 새로 쓴다 — 같은 조합을 매일 쌓으면 60칸이 그리드로만
+ * 차서 손으로 돌린 실험이 밀려난다. 리더보드에서 자동은 「자동」 배지로 구분된다.
+ */
+const GRID_UNIVERSE = 50;
+
+/** 돌릴 조합 — 단일 조건 전부 + 붙여 볼 만한 짝 몇 개 */
+function gridCombos(): { rules: { key: RuleKey; value: number }[]; holdDays: number }[] {
+  const v = (key: RuleKey) => RULES.find((r) => r.key === key)?.defaultValue ?? 0;
+  const singles: { key: RuleKey; value: number }[][] = RULES
+    // minScore 는 점수 축적이 며칠치라 그리드에선 뺀다 — 표본이 차면 넣는다
+    .filter((r) => r.key !== "minScore")
+    .map((r) => [{ key: r.key, value: r.defaultValue }]);
+  const pairs: { key: RuleKey; value: number }[][] = [
+    [{ key: "newHigh", value: 60 }, { key: "volValue", value: v("volValue") }],
+    [{ key: "newHigh", value: 60 }, { key: "disparity", value: v("disparity") }],
+    [{ key: "maAlign", value: 0 }, { key: "volSurge", value: v("volSurge") }],
+    [{ key: "gapUp", value: v("gapUp") }, { key: "volValue", value: v("volValue") }],
+    [{ key: "nearHigh52", value: v("nearHigh52") }, { key: "volValue", value: v("volValue") }],
+  ];
+  const five = [...singles, ...pairs].map((rules) => ({ rules, holdDays: 5 }));
+  // 잘 나오던 축은 20일 보유도 같이 — 지평이 다르면 다른 조건이 이긴다
+  const twenty: { key: RuleKey; value: number }[][] = [
+    [{ key: "newHigh", value: 60 }],
+    [{ key: "maAlign", value: 0 }],
+    [{ key: "nearHigh52", value: v("nearHigh52") }],
+  ];
+  return [...five, ...twenty.map((rules) => ({ rules, holdDays: 20 }))];
+}
+
+let gridRunning = false;
+
+export async function runBacktestGrid(client: KiwoomClient, force = false): Promise<{ ran: boolean; combos?: number }> {
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  let last: { lastRunDate?: string } = {};
+  try {
+    last = JSON.parse(await readFile(GRID_FILE, "utf-8")) as { lastRunDate?: string };
+  } catch {
+    /* 첫 실행 */
+  }
+  if (!force && last.lastRunDate === today) return { ran: false };
+  if (gridRunning) return { ran: false };
+  gridRunning = true;
+
+  try {
+    const universe = await tradeValueTop(client, "000", GRID_UNIVERSE);
+    // 일봉을 한 번만 받는다 — 그리드의 존재 이유
+    const barsByCode = new Map<string, Bar[]>();
+    for (const u of universe) {
+      try {
+        const bs = await bars(client, u.code);
+        if (bs.length >= 60 + 22) barsByCode.set(u.code, bs);
+      } catch {
+        /* 한 종목 실패는 넘어간다 */
+      }
+      await new Promise((r) => setTimeout(r, 260));
+    }
+
+    const combos = gridCombos();
+    const at = new Date().toISOString();
+    const newRuns: BacktestRun[] = [];
+
+    for (const combo of combos) {
+      const hits: number[] = [];
+      const baseRates: number[] = [];
+      let from = "";
+      let to = "";
+      for (const [code, bs] of barsByCode) {
+        if (bs.length < 60 + combo.holdDays + 2) continue;
+        if (!from || bs[0].date < from) from = bs[0].date;
+        if (!to || bs[bs.length - 1].date > to) to = bs[bs.length - 1].date;
+        for (let i = 60; i + combo.holdDays + 1 < bs.length; i += 1) {
+          const entry = bs[i + 1].open;
+          const exit = bs[i + 1 + combo.holdDays].close;
+          if (entry <= 0 || exit <= 0) continue;
+          const rate = ((exit - entry) / entry) * 100;
+          baseRates.push(rate);
+          if (passes(bs, i, combo.rules, undefined, code)) hits.push(rate);
+        }
+      }
+      const hit = stat(hits);
+      const base = stat(baseRates);
+      const cfg: BacktestConfig = {
+        market: "000",
+        universe: GRID_UNIVERSE,
+        holdDays: combo.holdDays,
+        rules: combo.rules,
+      };
+      newRuns.push({
+        id: `btg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+        at,
+        config: cfg,
+        label: labelOf(cfg),
+        hit,
+        base,
+        edge: hit.count > 0 && base.count > 0 ? hit.avg - base.avg : null,
+        from,
+        to,
+        codes: barsByCode.size,
+        auto: true,
+      });
+    }
+
+    // 어제 그리드는 지우고 오늘 것으로 — 손으로 돌린 실험은 그대로 남는다
+    const kept = (await readRuns()).filter((r) => !r.auto);
+    await mkdir(dirname(RUNS_FILE), { recursive: true });
+    await writeFile(RUNS_FILE, JSON.stringify([...kept, ...newRuns].slice(-KEEP_RUNS), null, 2), "utf-8");
+    await writeFile(GRID_FILE, JSON.stringify({ lastRunDate: today }), "utf-8");
+    console.log(`[backtest] 밤 그리드 완료 — 조합 ${combos.length}개, 종목 ${barsByCode.size}`);
+    return { ran: true, combos: combos.length };
+  } finally {
+    gridRunning = false;
+  }
+}
+
+/** 평일 17:10 — 장 마감 뒤 조회가 한가한 시간. 그 시각을 지나 켠 날도 하루 한 번 돈다 */
+export function startBacktestGridScheduler(client: KiwoomClient): void {
+  const tick = async () => {
+    const k = new Date(Date.now() + 9 * 3600_000);
+    const day = k.getUTCDay();
+    if (day === 0 || day === 6) return;
+    const mins = k.getUTCHours() * 60 + k.getUTCMinutes();
+    if (mins < 17 * 60 + 10 || mins > 23 * 60) return;
+    await runBacktestGrid(client).catch((e) => console.error("[backtest] 그리드 실패", e));
+  };
+  void tick();
+  setInterval(() => void tick(), 60_000);
+  console.log("[backtest] 밤 그리드 시작 — 평일 17:10 조건 조합 자동 실행");
 }
 
 const jobs = new Map<string, BacktestJob>();

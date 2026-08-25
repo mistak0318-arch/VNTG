@@ -141,6 +141,19 @@ export const api = {
     postJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings`, h),
   manualHoldingRemove: (id: string, code: string) =>
     deleteJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings/${code}`),
+  /** ETF 구성종목 — ETF 가 아니면 {etf:false}. 출처는 네이버(키움 REST 엔 없다) */
+  etfInfo: (code: string) =>
+    getJson<{
+      etf: boolean;
+      name?: string;
+      issuer?: string;
+      baseIndex?: string;
+      fee?: number | null;
+      nav?: number | null;
+      deviation?: number | null;
+      constituents?: { code: string; name: string; weight: number | null }[];
+      sectors?: { name: string; weight: number }[];
+    }>(`/api/market/etf/${code}`),
   /** 호가창 — 종목 상세·종목분석이 같은 것을 쓴다 */
   /** 거래원 — 부를 때마다 시계열이 한 점씩 쌓인다 */
   /** 종목별 프로그램매매 (일자별) — 단위 백만원 */
@@ -225,6 +238,12 @@ export const api = {
     getJson<{ statuses: { key: WatchStatus; label: string; hint: string }[] }>(
       "/api/watchlist/statuses",
     ),
+  /** 섹터 집중도 — 관심·보유가 어느 업종에 쏠렸나 */
+  watchConcentration: () =>
+    getJson<{
+      all: { total: number; top: { sector: string; count: number; pct: number }[] };
+      holding: { total: number; top: { sector: string; count: number; pct: number }[] };
+    }>("/api/watchlist/concentration"),
   /** 관찰/대기/보유/청산 — 그룹(성격)과 **다른 축**이다 */
   watchlistSetStatus: (code: string, status: WatchStatus) =>
     patchJson<{ items: WatchItem[] }>(`/api/watchlist/${code}`, { status }),
@@ -340,9 +359,13 @@ export const api = {
         from: string;
         to: string;
         codes: number;
+        /** 밤 그리드가 돌린 것 */
+        auto?: boolean;
         verdict: { tone: "good" | "weak" | "thin" | "bad"; text: string };
       }[];
     }>("/api/backtest/runs"),
+  /** 밤 그리드를 지금 돌린다 — 조합 ~18개, 조회는 종목 50 + 순위 1 */
+  backtestGrid: () => postJson<{ ran: boolean; combos?: number }>("/api/backtest/grid", {}),
   /** 손절 감시 상태 — 보내지 않는다. 「감시 못 하는 자리가 몇인가」를 보는 창 */
   stopWatch: () =>
     getJson<{
@@ -547,7 +570,7 @@ export const api = {
     ),
   /** 고정 채널 원문 — 선별·AI 를 안 거친다 */
   channelPinned: (edition: string, limit = 3, force = false) =>
-    getJson<{ posts: PinnedPost[]; health?: PinnedHealth }>(
+    getJson<{ posts: PinnedPost[]; summary?: string | null; health?: PinnedHealth }>(
       `/api/channels/pinned?edition=${edition}&limit=${limit}${force ? "&force=1" : ""}`,
     ),
   /** 주도주 탐색기. 뉴스는 섹터마다 네이버를 부르므로 원할 때만 켠다 */
@@ -659,6 +682,8 @@ export const api = {
         yoy: number | null;
         top: { name: string; usd: number; share: number }[];
       }[];
+      /** 상위 5개 나라의 최근 13개월 흐름 — 값은 보는 방향(수출/수입) */
+      series: { months: string[]; countries: { country: string; values: number[] }[] } | null;
     }>(`/api/trade/${key}/countries`),
   breadth: (days = 60) =>
     getJson<{ days: number; points: BreadthPoint[]; summary: string }>(

@@ -659,7 +659,7 @@ export function DailyReportPage({
 
       {/* 3. 특징 테마 — 왜 올랐는지 관련 기사까지 */}
       <Section no={7} title="시장 자금 흐름 (업종별 5일 누적)">
-        <MoneyFlowSection />
+        <MoneyFlowSection onSelectStock={onSelectStock} />
       </Section>
 
       {/*

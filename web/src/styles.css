@@ -3397,9 +3397,21 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .tc-bar-down { fill: var(--blue); opacity: 0.85; }
 .tc-bar-flat { fill: var(--muted); opacity: 0.35; }
 .tc-tick, .tc-max { font-size: 10px; fill: var(--muted); }
-.tc-last { font-size: 11px; font-weight: 700; fill: var(--text, currentColor); }
 .tc-grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; }
 .tc-year { stroke: var(--border); stroke-width: 1; stroke-dasharray: 1 4; }
+/* 마지막 달 주석 — SVG 안에 두면 눈금과 겹쳐서 HTML 로 뺐다 */
+.tc-head { font-size: 0.76rem; margin-bottom: 2px; }
+
+/* 나라별 월별 흐름 — 상위 5개 나라 선 겹치기 */
+.tct-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.72rem; margin-bottom: 2px; }
+.tct-key { display: inline-flex; align-items: center; gap: 4px; color: var(--text); }
+.tct-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.tct-line { fill: none; stroke-width: 1.8; }
+.tct-l0 .tct-dot, .tct-line.tct-l0 { background: #e0564b; stroke: #e0564b; }
+.tct-l1 .tct-dot, .tct-line.tct-l1 { background: #4c8dff; stroke: #4c8dff; }
+.tct-l2 .tct-dot, .tct-line.tct-l2 { background: #d4a017; stroke: #d4a017; }
+.tct-l3 .tct-dot, .tct-line.tct-l3 { background: #3aa675; stroke: #3aa675; }
+.tct-l4 .tct-dot, .tct-line.tct-l4 { background: #9a6dd7; stroke: #9a6dd7; }
 
 /* 나라별 — 이름·막대·금액·전년비 + 세부 품목 구성 한 줄 */
 .trade-cty { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
@@ -4372,6 +4384,18 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .rp-flow-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 0.8667rem;
   border-bottom: 1px solid var(--border); }
 .rp-flow-row b { font-variant-numeric: tabular-nums; }
+/* 업종 줄을 버튼으로 — 누르면 구성종목이 펼쳐진다 */
+.rp-flow-click {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.rp-flow-click .sf-caret { font-style: normal; color: var(--muted); font-size: 0.7rem; }
 .rp-featured { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
 
 /* 리포트 안의 작은 테마 MAP */
@@ -4606,6 +4630,120 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 
 /* 슈퍼신호등 — 걸린 목록 배지들 */
 .ss-lists { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+
+/* 슈퍼신호등 — 편입 후 성적 요약 + 줄 안의 1·5·20일 값 */
+.ss-grade { margin: 0.5rem 0 0.75rem; }
+.ss-grade-title { font-size: 0.78rem; font-weight: 700; margin-bottom: 0.3rem; }
+.ss-grade-title i { font-style: normal; font-weight: 400; color: var(--muted); }
+.ss-grade-table { max-width: 460px; }
+.ss-grade-table td:first-child { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+.ss-rets { white-space: nowrap; }
+.ss-rets i { font-style: normal; font-size: 0.72rem; }
+.ss-rets i + i { margin-left: 0.35rem; }
+
+/* 백테스트 그리드 — 리더보드의 자동 실행 배지와 버튼 */
+.bt-auto {
+  font-style: normal;
+  font-size: 0.62rem;
+  padding: 0.05rem 0.3rem;
+  margin-right: 0.35rem;
+  border-radius: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  vertical-align: 1px;
+}
+.bt-grid-btn { margin-left: 0.6rem; font-weight: 400; }
+
+/* ── ETF 구성종목 — ETF 일 때만 종합 화면에 끼는 블록 ── */
+.etf-panel { margin: 0.8rem 0; }
+.etf-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem; }
+.etf-head b { font-size: 0.86rem; }
+.etf-list { display: flex; flex-direction: column; gap: 3px; }
+.etf-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) 2fr 3.4rem;
+  align-items: center;
+  gap: 0.6rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  font: inherit;
+  padding: 0.28rem 0.1rem;
+  cursor: pointer;
+  text-align: left;
+}
+.etf-row:disabled { cursor: default; }
+.etf-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; }
+.etf-bar { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+.etf-bar i { display: block; height: 100%; background: var(--blue); border-radius: 4px; }
+.etf-w { text-align: right; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+
+/* 슈퍼신호등 그룹 — 자동 편입의 자리라는 걸 색으로 말한다 */
+.gt-super {
+  border-color: #d4a017;
+  background: linear-gradient(0deg, rgba(212, 160, 23, 0.12), rgba(212, 160, 23, 0.12));
+}
+.gt-super.active { border-color: #d4a017; }
+.wl-super {
+  font-style: normal;
+  color: #d4a017;
+  font-weight: 600;
+}
+
+/* ── 섹터 집중도 한 줄 — 관심종목(VNTG) 상단 ── */
+.wl-conc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1.1rem;
+  font-size: 0.74rem;
+  color: var(--muted);
+  padding: 0.35rem 0.1rem;
+}
+.wl-conc-part { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; }
+.wl-conc-part i { font-style: normal; color: var(--muted); }
+.wl-conc-part b { font-weight: 600; color: var(--text); }
+.wl-conc-part b.hot { color: var(--red); }
+.wl-conc-warn { color: var(--red); font-weight: 600; }
+
+/* ── 진입 전 시나리오 카드 — 「보유」 전환 관문 ── */
+.sc-card { max-width: 420px; }
+.sc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
+.sc-close { background: none; border: none; color: var(--muted); font-size: 1rem; cursor: pointer; padding: 4px 8px; }
+.sc-hint { font-size: 0.74rem; color: var(--muted); margin-bottom: 0.7rem; line-height: 1.5; }
+.sc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 0.7rem; }
+.sc-grid label { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; color: var(--muted); }
+.sc-grid input {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.45rem 0.6rem;
+  font-size: 0.9rem;
+  width: 100%;
+}
+.sc-req { font-style: normal; color: var(--red); font-size: 0.65rem; }
+.sc-rr { margin-top: 0.55rem; font-size: 0.8rem; }
+.sc-rr.good b { color: var(--red); }
+.sc-rr.mid b { color: var(--text); }
+.sc-rr.bad { color: var(--blue); }
+.sc-tags { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 0.65rem; }
+.sc-tags-label { font-size: 0.72rem; color: var(--muted); margin-right: 2px; }
+.sc-note {
+  width: 100%;
+  margin-top: 0.65rem;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 0.5rem 0.6rem;
+  font-size: 0.8rem;
+  resize: vertical;
+}
+.sc-actions { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.75rem; }
+.sc-skip { background: none; border: none; color: var(--muted); font-size: 0.72rem; cursor: pointer; text-decoration: underline; }
 .ss-list {
   font-style: normal;
   font-size: 0.68rem;
@@ -5886,21 +6024,25 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 }
 
 /* 해외종목 상세 숫자판 */
-.usd-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-  gap: 0.3rem 1rem;
+/*
+ * 미국 상세 숫자판 (2026-08-25 개편) — 국내 상세와 같은 카드 뼈대(summary-item).
+ * 예전 key:value 나열은 「215.53 (+1.2%) / 218.1 (+2.4%) / …」처럼 한 줄이 늘어져
+ * 읽히질 않았다. 큰 값 하나 + 작은 부가 한 줄로 나눈다.
+ */
+.usd-cards {
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 8px;
   margin: 0.6rem 0;
 }
-.usd-cell {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.6rem;
-  padding: 0.35rem 0;
-  border-bottom: 1px solid var(--border);
+.usd-cards .summary-item {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
 }
-.usd-k { color: var(--muted); }
-.usd-v { font-weight: 600; text-align: right; }
+.usd-cards .label { font-size: 0.7rem; margin-bottom: 2px; }
+.usd-cards .value { font-size: 0.95rem; }
+.usd-sub { font-size: 0.68rem; color: var(--muted); margin-top: 1px; font-variant-numeric: tabular-nums; }
 
 /*
  * 키움 미국 10호가 미니 호가창.
@@ -6006,6 +6148,33 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   padding-top: 0;
   border-top: none;
 }
+
+/* 발행 정보 — 누가 언제 쓴 글인지가 머리에 또렷이 */
+.rp-pin-who { font-size: 0.86rem; }
+.rp-pin-when {
+  font-size: 0.72rem;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
+/* 불릿 줄 — 살짝 들여서 층이 보이게 */
+.rp-pin-li { display: block; padding-left: 0.7rem; }
+
+/* AI 세 줄 요약 — 원문 위의 요약 카드 */
+.rp-pin-sum {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--blue);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.8rem;
+}
+.rp-pin-sum-h { font-size: 0.78rem; font-weight: 700; margin-bottom: 0.35rem; }
+.rp-pin-sum-h i { font-style: normal; font-weight: 400; color: var(--muted); }
+.rp-pin-sum-line { font-size: 0.85rem; line-height: 1.65; }
 
 /* ------------------------------------------------------------------ */
 /* 주도주 탐색기                                                        */

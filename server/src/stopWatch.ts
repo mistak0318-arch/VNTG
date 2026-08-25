@@ -1,7 +1,7 @@
 import { getMarketSnapshot } from "./marketSnapshot.js";
 import { peekRealtime } from "./realtimeHub.js";
 import { openPositions, type OpenPosition } from "./tradeJournal.js";
-import { sendTelegram } from "./telegram.js";
+import { sendTelegram, stockNameHtml } from "./telegram.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 
 /**
@@ -146,9 +146,10 @@ const won = (n: number) => Math.round(n).toLocaleString("ko-KR");
  * 못 본다 — 그게 이 기능이 필요한 바로 그 상황이다.
  */
 export function formatStopBreaks(breaks: StopBreak[]): string {
+  // 종목명이 딥링크다 — 알림에서 한 번 눌러 개별종목분석으로 (HTS_WEB_URL 설정 시)
   const lines = breaks.map(
     (b) =>
-      `• ${b.name} ${won(b.price)}원 — 손절선 ${won(b.stop)} 아래\n` +
+      `• ${stockNameHtml(b.code, b.name)} ${won(b.price)}원 — 손절선 ${won(b.stop)} 아래\n` +
       `  진입 ${won(b.entry)} · ${b.qty}주 · ${b.lossPct.toFixed(1)}% (${b.from})`,
   );
   return (

@@ -61,6 +61,11 @@ export interface SuperEntry {
   /** 며칠째 교집합에 걸렸나 — 지속성이 곧 신호다 */
   seenCount: number;
   lastSeenDate: string;
+  /**
+   * 편입 후 N거래일 뒤 종가의 편입가 대비 (%) — 채점의 재료 (2026-08-25).
+   * 봉이 아직 안 쌓였으면 null. d20 까지 차면 더 안 잰다(끝난 성적표다).
+   */
+  returns?: { d1: number | null; d5: number | null; d20: number | null };
 }
 
 interface Store {
@@ -90,6 +95,49 @@ async function save(s: Store): Promise<void> {
 function todayStr(d = new Date()): string {
   const k = new Date(d.getTime() + 9 * 3600_000);
   return k.toISOString().slice(0, 10);
+}
+
+/**
+ * 편입 후 성적 매기기 — 매일 실행 끝에 돌린다.
+ *
+ * 종목당 일봉 한 번(ka10081)으로 편입일 이후 1/5/20거래일 종가를 찾아
+ * 편입가 대비 %를 적어 둔다. d20 까지 찬 종목은 성적표가 끝났으니 다시
+ * 조회하지 않는다 — 그래서 호출량은 「아직 성적이 진행 중인 종목 수」만큼이다.
+ */
+async function gradeEntries(client: KiwoomClient, store: Store): Promise<number> {
+  const pending = store.entries.filter((e) => e.returns?.d20 == null && e.addedPrice > 0);
+  let graded = 0;
+  for (const e of pending) {
+    try {
+      const d = new Date(Date.now() + 9 * 3600_000);
+      const base = d.toISOString().slice(0, 10).replace(/-/g, "");
+      const res = await client.request<Record<string, unknown>>("/api/dostk/chart", "ka10081", {
+        stk_cd: e.code,
+        base_dt: base,
+        upd_stkpc_tp: "1",
+      });
+      const rows = ((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[])
+        .map((r) => ({
+          date: String(r.dt ?? ""),
+          close: Math.abs(Number(String(r.cur_prc ?? "").replace(/[+,]/g, ""))),
+        }))
+        .filter((r) => /^\d{8}$/.test(r.date) && r.close > 0)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      const addedYmd = e.addedDate.replace(/-/g, "");
+      const idx = rows.findIndex((r) => r.date === addedYmd);
+      if (idx < 0) continue; // 편입일 봉이 아직 없다(장중 실행 등) — 다음에
+      const pct = (n: number): number | null => {
+        const bar = rows[idx + n];
+        return bar ? ((bar.close - e.addedPrice) / e.addedPrice) * 100 : null;
+      };
+      e.returns = { d1: pct(1), d5: pct(5), d20: pct(20) };
+      graded += 1;
+    } catch {
+      /* 한 종목 실패는 넘어간다 — 다음 실행에 다시 잰다 */
+    }
+    await new Promise((r) => setTimeout(r, 260));
+  }
+  return graded;
 }
 
 /** 진행 상황 — 화면 진행바용. 하나만 돈다 */
@@ -213,6 +261,11 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
     // 오래된 것부터 정리 — 관찰 목록이지 박물관이 아니다
     store.entries.sort((a, b) => b.addedDate.localeCompare(a.addedDate));
     store.entries = store.entries.slice(0, 200);
+
+    // 편입 후 성적 채점 — 어제까지 담은 종목들의 1/5/20일 수익률을 갱신
+    job.step = "성과 채점 중";
+    await gradeEntries(client, store).catch(() => undefined);
+
     store.lastRunDate = today;
     await save(store);
     job = { ...job, status: "done", step: "완료" };
@@ -222,11 +275,33 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
   return store;
 }
 
+/** 그룹 하나의 지평별 평균 — avg 는 표본 0이면 null */
+export interface GradeRow {
+  label: string;
+  d1: { avg: number | null; n: number };
+  d5: { avg: number | null; n: number };
+  d20: { avg: number | null; n: number };
+}
+
+function gradeRow(label: string, entries: SuperEntry[]): GradeRow {
+  const agg = (pick: (r: NonNullable<SuperEntry["returns"]>) => number | null) => {
+    const vals = entries
+      .map((e) => (e.returns ? pick(e.returns) : null))
+      .filter((v): v is number => v !== null);
+    return {
+      avg: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null,
+      n: vals.length,
+    };
+  };
+  return { label, d1: agg((r) => r.d1), d5: agg((r) => r.d5), d20: agg((r) => r.d20) };
+}
+
 /** 화면용 — 지금 가격을 스냅샷에서 붙여 편입가 대비를 낸다 */
 export async function listSuperSignal(client: KiwoomClient): Promise<{
   entries: (SuperEntry & { price: number | null; changeRate: number | null; sinceAdded: number | null })[];
   lastRunDate: string | null;
   minLists: number;
+  grade: GradeRow[];
 }> {
   const store = await load();
   const snap = await getMarketSnapshot(client).catch(() => null);
@@ -241,7 +316,16 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
         price !== null && e.addedPrice > 0 ? ((price - e.addedPrice) / e.addedPrice) * 100 : null,
     };
   });
-  return { entries, lastRunDate: store.lastRunDate, minLists: MIN_LISTS };
+  /*
+   * 채점 요약 — 「교집합이 넓을수록·오래 걸릴수록 진짜인가」에 답하는 표.
+   * 표본이 몇 건 안 될 때는 화면이 n 을 함께 보여 주므로 여기서 숨기지 않는다.
+   */
+  const grade = [
+    gradeRow("전체", store.entries),
+    gradeRow("목록 4곳 이상", store.entries.filter((e) => e.lists.length >= 4)),
+    gradeRow("이틀 이상 반복", store.entries.filter((e) => e.seenCount >= 2)),
+  ];
+  return { entries, lastRunDate: store.lastRunDate, minLists: MIN_LISTS, grade };
 }
 
 export async function removeSuperEntry(code: string): Promise<void> {

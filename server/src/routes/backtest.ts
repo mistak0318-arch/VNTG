@@ -3,6 +3,7 @@ import {
   getBacktestJob,
   listBacktestRuns,
   RULES,
+  runBacktestGrid,
   startBacktest,
   verdictOf,
   type BacktestConfig,
@@ -40,6 +41,15 @@ export function createBacktestRouter(client: KiwoomClient): Router {
   router.post("/run", (req, res, next) => {
     try {
       res.json(startBacktest(client, req.body as Partial<BacktestConfig>));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 밤 그리드를 지금 돌린다 — 조회는 종목 50 + 순위 1이라 십몇 초면 끝난다 */
+  router.post("/grid", async (_req, res, next) => {
+    try {
+      res.json(await runBacktestGrid(client, true));
     } catch (err) {
       next(err);
     }

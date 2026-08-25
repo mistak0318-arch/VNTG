@@ -13,6 +13,7 @@ import { futuresCandles } from "../kospiFutures.js";
 import { usCandles, usDetail } from "../usDetail.js";
 import { orderBook } from "../orderBook.js";
 import { brokerFlow } from "../brokerFlow.js";
+import { getEtfInfo } from "../etfInfo.js";
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
@@ -45,6 +46,18 @@ export function createMarketRouter(client: KiwoomClient): Router {
       const q = typeof req.query.q === "string" ? req.query.q : "";
       const results = await searchStocks(client, q);
       res.json({ results });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * ETF 구성종목 — 키움 REST 엔 없는 값이라 네이버 etfAnalysis 를 쓴다 (etfInfo.ts).
+   * ETF 가 아니면 {etf:false} — 화면이 이걸 보고 탭을 숨긴다. 6시간 캐시.
+   */
+  router.get("/etf/:code", async (req, res, next) => {
+    try {
+      res.json(await getEtfInfo(req.params.code));
     } catch (err) {
       next(err);
     }

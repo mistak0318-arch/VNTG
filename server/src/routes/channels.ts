@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { searchChannels, searchProgress, summarizeHits } from "../channelSearch.js";
 import { buildChannelReport, listChannelReports } from "../channelReport.js";
-import { pinnedHealth, pinnedPosts, type Edition } from "../pinnedChannel.js";
+import { pinnedHealth, pinnedPosts, pinnedSummary, type Edition } from "../pinnedChannel.js";
 import {
   DEFAULT_CONFIG,
   INTERVAL_CHOICES,
@@ -134,8 +134,11 @@ export function createChannelsRouter(): Router {
       const edition = (["morning", "intraday", "closing", "weekend"] as const).includes(e as never)
         ? (e as Edition)
         : "morning";
+      const posts = await pinnedPosts(edition, Number(req.query.limit) || 3, req.query.force === "1");
       res.json({
-        posts: await pinnedPosts(edition, Number(req.query.limit) || 3, req.query.force === "1"),
+        posts,
+        // 세 줄 AI 요약 — 판마다 한 번 만들어 스냅샷에 같이 저장된다. 실패해도 원문은 나간다
+        summary: posts.length > 0 ? await pinnedSummary(edition).catch(() => null) : null,
         /*
          * **어디서 막혔는지 같이 준다.**
          * 빈 배열만 주면 채널 미등록인지 세션이 끊긴 건지 그냥 글이 없는 건지

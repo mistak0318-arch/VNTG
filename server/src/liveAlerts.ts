@@ -1,6 +1,6 @@
 import { getAlertConfig } from "./alertRules.js";
 import { peekRealtime } from "./realtimeHub.js";
-import { sendTelegram } from "./telegram.js";
+import { sendTelegram, stockNameHtml } from "./telegram.js";
 import { listWatchlist } from "./watchlist.js";
 
 /**
@@ -138,13 +138,13 @@ export function formatLiveAlerts(alerts: LiveAlert[]): string {
   const vi = alerts.filter((a) => a.kind === "vi");
   const st = alerts.filter((a) => a.kind === "strength");
   const parts: string[] = [];
+  // 종목명이 딥링크다 — 알림에서 한 번 눌러 개별종목분석으로 (HTS_WEB_URL 설정 시)
+  const line = (a: LiveAlert) => `• ${stockNameHtml(a.code, a.name)} — ${a.detail}`;
   if (vi.length > 0) {
-    parts.push(`⚡ VI 발동 (${vi.length}건)\n` + vi.map((a) => `• ${a.name} — ${a.detail}`).join("\n"));
+    parts.push(`⚡ VI 발동 (${vi.length}건)\n` + vi.map(line).join("\n"));
   }
   if (st.length > 0) {
-    parts.push(
-      `📈 체결강도 급변 (${st.length}건)\n` + st.map((a) => `• ${a.name} — ${a.detail}`).join("\n"),
-    );
+    parts.push(`📈 체결강도 급변 (${st.length}건)\n` + st.map(line).join("\n"));
   }
   return parts.join("\n\n");
 }

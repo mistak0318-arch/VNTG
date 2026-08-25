@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
+import { getMarketSnapshot } from "../marketSnapshot.js";
 import { getTrackedWatchlist, invalidateTrackingCache, invalidateTracking } from "../watchTracking.js";
 import {
   addGroup,
@@ -26,6 +27,47 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
   /** 상태 목록 — 화면이 서버와 같은 말을 쓰게 한다 */
   router.get("/statuses", (_req, res) => {
     res.json({ statuses: WATCH_STATUSES });
+  });
+
+  /**
+   * 섹터 집중도 (2026-08-25) — 「다 초록인데 전부 반도체」를 잡는 안전벨트.
+   *
+   * 관심종목 전체와 보유 표시분의 업종 분포를 스냅샷에서 세어 준다. 신호등이
+   * 종목 하나하나는 봐도 **묶음이 한 방향으로 쏠렸는지**는 아무도 안 보고 있었다.
+   * 조회는 0 — 이미 있는 전종목 스냅샷과 관심종목 목록만 겹쳐 센다.
+   */
+  router.get("/concentration", async (_req, res, next) => {
+    try {
+      const [items, snap] = await Promise.all([listWatchlist(), getMarketSnapshot(client)]);
+      const dist = (rows: { code: string }[]) => {
+        const bySector = new Map<string, number>();
+        let counted = 0;
+        for (const r of rows) {
+          const s = snap.byCode.get(r.code)?.sector;
+          if (!s) continue;
+          counted += 1;
+          bySector.set(s, (bySector.get(s) ?? 0) + 1);
+        }
+        return {
+          total: counted,
+          top: [...bySector.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 4)
+            .map(([sector, count]) => ({
+              sector,
+              count,
+              pct: counted > 0 ? (count / counted) * 100 : 0,
+            })),
+        };
+      };
+      const stocks = items.filter((i) => !i.divider);
+      res.json({
+        all: dist(stocks),
+        holding: dist(stocks.filter((i) => i.status === "holding")),
+      });
+    } catch (err) {
+      next(err);
+    }
   });
 
   router.get("/", async (_req, res, next) => {

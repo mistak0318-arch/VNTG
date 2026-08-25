@@ -20,6 +20,7 @@ import {
   type EvaluatedTheme,
 } from "../../api";
 import { CandleChart } from "../CandleChart";
+import { SectorStocks } from "../SectorFlowPanel";
 import { useSection } from "../../useSection";
 import { useWatchGroupTiles } from "../../useWatchGroupTiles";
 import { ConstituentSheet, type ConstituentTarget } from "../overview/ConstituentSheet";
@@ -176,9 +177,15 @@ export function IndexTrendSection() {
  * 반도체에서 빼서 방산으로 옮긴 날과 전 업종을 고르게 산 날은 완전히 다른 장이다.
  * 5일 누적으로 보는 건 하루치는 노이즈가 크기 때문이다.
  */
-export function MoneyFlowSection() {
+export function MoneyFlowSection({
+  onSelectStock,
+}: {
+  onSelectStock?: (code: string, name: string) => void;
+}) {
   const [d, setD] = useState<SectorFlowResult | null>(null);
   const [subject, setSubject] = useState("foreign");
+  /** 펼친 업종 — 누르면 그 자리에서 구성종목 (자금 흐름 화면과 같은 목록) */
+  const [open, setOpen] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -219,30 +226,42 @@ export function MoneyFlowSection() {
 
       {d && (
         <div className="rp-flow">
-          <div>
-            <div className="rp-flow-h positive">들어온 곳</div>
-            {inflow.map((s) => (
-              <div className="rp-flow-row" key={s.code}>
-                <span>{s.label}</span>
-                <b className="positive">+{fmtNum(Math.round(s.sum))}</b>
-              </div>
-            ))}
-          </div>
-          <div>
-            <div className="rp-flow-h negative">빠져나간 곳</div>
-            {outflow.map((s) => (
-              <div className="rp-flow-row" key={s.code}>
-                <span>{s.label}</span>
-                <b className="negative">{fmtNum(Math.round(s.sum))}</b>
-              </div>
-            ))}
-          </div>
+          {[
+            { h: "들어온 곳", cls: "positive", rows: inflow },
+            { h: "빠져나간 곳", cls: "negative", rows: outflow },
+          ].map((col) => (
+            <div key={col.h}>
+              <div className={`rp-flow-h ${col.cls}`}>{col.h}</div>
+              {col.rows.map((s) => (
+                <div key={s.code}>
+                  {/* 업종을 누르면 구성종목이 그 자리에서 (2026-08-25 — 자금 흐름 화면과 같은 목록) */}
+                  <button
+                    className="rp-flow-row rp-flow-click"
+                    onClick={() => setOpen(open === s.code ? null : s.code)}
+                    title="누르면 구성종목이 펼쳐집니다"
+                  >
+                    <span>
+                      <i className="sf-caret">{open === s.code ? "▾" : "▸"}</i> {s.label}
+                    </span>
+                    <b className={col.cls}>
+                      {s.sum > 0 ? "+" : ""}
+                      {fmtNum(Math.round(s.sum))}
+                    </b>
+                  </button>
+                  {open === s.code && (
+                    <SectorStocks market={s.market} code={s.code} onSelectStock={onSelectStock} />
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       )}
 
       <div className="table-note">
         총액이 아니라 <b>어디서 빼서 어디로 넣었나</b>를 봅니다. 같은 +800억이라도 반도체에서
-        빼서 방산으로 옮긴 날과 전 업종을 고르게 산 날은 완전히 다른 장입니다.
+        빼서 방산으로 옮긴 날과 전 업종을 고르게 산 날은 완전히 다른 장입니다. 업종을 누르면
+        구성종목이 펼쳐집니다.
       </div>
     </>
   );
@@ -816,6 +835,7 @@ export function MarketNewsSection({ edition }: { edition: string }) {
  */
 export function PinnedChannelSection({ edition }: { edition: string }) {
   const [posts, setPosts] = useState<PinnedPost[] | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
   const [health, setHealth] = useState<PinnedHealth | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -833,6 +853,7 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
         .channelPinned(edition, 3, force)
         .then((r) => {
           setPosts(r.posts);
+          setSummary(r.summary ?? null);
           setHealth(r.health ?? null);
         })
         .catch((e: Error) => {
@@ -919,11 +940,29 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
 
   return (
     <>
+      {/*
+        AI 세 줄 요약이 맨 위 (2026-08-25) — 원문이 길어서 안 읽고 넘기는 날이 생겼다.
+        요약이라도 읽으면 원문을 읽을지 말지 고를 수 있다. 원문은 그대로 아래 있다.
+      */}
+      {summary && (
+        <div className="rp-pin-sum">
+          <div className="rp-pin-sum-h">⚡ 세 줄 요약 <i>AI — 아래 원문에서 뽑았습니다</i></div>
+          {summary
+            .split(/\r?\n/)
+            .filter((l) => l.trim())
+            .map((l, i) => (
+              <div className="rp-pin-sum-line" key={i}>
+                {emphasize(l.replace(/^[·•\-]\s*/, "· "))}
+              </div>
+            ))}
+        </div>
+      )}
       {posts.map((p) => (
         <div className="rp-pinned" key={`${p.at}-${p.link}`}>
+          {/* 누가 언제 쓴 글인지가 머리에 또렷이 — 출처 없는 시황은 무게를 잴 수 없다 */}
           <div className="rp-pinned-h">
-            <b>{p.channelName}</b>
-            <span className="pt-n">{new Date(p.at).toLocaleString("ko-KR").slice(5, 16)}</span>
+            <b className="rp-pin-who">✍ {p.channelName}</b>
+            <span className="rp-pin-when">{postedLabel(p.at)}</span>
             {p.link && (
               <a href={p.link} target="_blank" rel="noreferrer" className="pt-n">
                 원문 →
@@ -960,6 +999,29 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
  * 그 층을 살리는 것만으로 「나열식이라 중요도를 모르겠다」가 상당히 풀린다.
  * 없는 중요도를 만들어 내는 게 아니라, **원문에 이미 있는 것을 안 지우는** 것이다.
  */
+/** 「8/25 (월) 07:12 발행」 — 언제 쓴 글인지가 이 섹션 신뢰의 절반이다 */
+function postedLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${d.getMonth() + 1}/${d.getDate()} (${day}) ${two(d.getHours())}:${two(d.getMinutes())} 발행`;
+}
+
+/**
+ * 등락률·숫자에 색을 입힌다 (2026-08-25 — 「너무 텍스트라 눈에 안 들어온다」).
+ * 글자는 하나도 안 바꾼다 — `+1.2%` 는 빨갛게, `-0.8%` 는 파랗게 칠하는 것뿐이다.
+ * 시황 글에서 눈이 찾는 건 대부분 이 숫자들이다.
+ */
+function emphasize(line: string) {
+  const parts = line.split(/([+▲]\s?\d+(?:[.,]\d+)?%?|[-▼]\s?\d+(?:[.,]\d+)?%)/g);
+  return parts.map((p, i) => {
+    if (/^[+▲]/.test(p)) return <b className="positive" key={i}>{p}</b>;
+    if (/^[-▼]/.test(p)) return <b className="negative" key={i}>{p}</b>;
+    return <span key={i}>{p}</span>;
+  });
+}
+
 function renderPinned(text: string) {
   return text.split(/\r?\n/).map((line, i) => {
     const t = line.trim();
@@ -970,7 +1032,16 @@ function renderPinned(text: string) {
         </b>
       );
     }
+    /* 불릿 줄은 조금 들여쓰고 표식을 흐리게 — 층이 눈에 보여야 훑어진다 */
+    if (/^[▶▷•●\-–·*]/.test(t) && t.length > 1) {
+      return (
+        <span className="rp-pin-li" key={i}>
+          {emphasize(line)}
+          {"\n"}
+        </span>
+      );
+    }
     // 줄바꿈은 CSS(white-space: pre-wrap)가 살린다 — 여기서 <br> 을 넣으면 두 번 띄어진다
-    return <span key={i}>{line}{"\n"}</span>;
+    return <span key={i}>{emphasize(line)}{"\n"}</span>;
   });
 }

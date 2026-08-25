@@ -57,6 +57,7 @@ import { startDisclosureScheduler } from "./disclosureAlert.js";
 import { startKeywordScheduler } from "./keywordAlert.js";
 import { startSignalTrackScheduler } from "./signalTrack.js";
 import { startSuperSignalScheduler } from "./superSignal.js";
+import { startBacktestGridScheduler } from "./backtest.js";
 import { startLeaderScanScheduler } from "./leaderScan.js";
 import { createEventPlayRouter } from "./routes/eventPlay.js";
 import { startCloseBetScheduler } from "./closeBetLog.js";
@@ -174,6 +175,8 @@ startChannelScheduler();
 startSignalTrackScheduler(client);
 /* 추적기 5분 뒤 — 신호등 캐시가 데워진 채로 교집합을 평가한다 */
 startSuperSignalScheduler(client);
+/* 밤 그리드 — 조건 조합을 자동으로 돌려 리더보드를 채운다 */
+startBacktestGridScheduler(client);
 startLeaderScanScheduler(client);
 startCloseBetScheduler(client);
 /* 장 시간에 알아서 붙어 거래원·프로그램매매를 쌓는다 — 화면을 안 봐도 */

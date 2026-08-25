@@ -9,6 +9,7 @@ import {
   type WatchStatus,
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
+import { ScenarioCard } from "../components/ScenarioCard";
 import { useAutoRefresh } from "../useAutoRefresh";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useWatchedCodes } from "../useWatchedCodes";
@@ -25,6 +26,8 @@ function fmtDate(iso: string): string {
 
 const ALL = "__all__";
 const DEFAULT_GROUP = "기본";
+/** 슈퍼신호등 자동 편입이 담기는 그룹 — 서버가 삭제·개명을 거부하고, 화면도 그 버튼을 안 낸다 */
+const SUPER_GROUP = "슈퍼신호등";
 
 
 /** 통과=O, 미달=빈칸, 모름=- . 빈칸이 낫다 — X 가 많으면 눈이 그리로 쏠린다 */
@@ -79,6 +82,10 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
   const [statuses, setStatuses] = useState<{ key: WatchStatus; label: string; hint: string }[]>([]);
   /** 상태로 좁혀 보기. `null` 이면 전부 */
   const [statusFilter, setStatusFilter] = useState<WatchStatus | null>(null);
+  /** 「보유」 전환 관문 — 열려 있으면 시나리오 카드가 뜬다 */
+  const [scenario, setScenario] = useState<{ code: string; name: string; price: number | null } | null>(null);
+  /** 섹터 집중도 — 관심·보유가 어느 업종에 쏠렸나 */
+  const [conc, setConc] = useState<Awaited<ReturnType<typeof api.watchConcentration>> | null>(null);
   /*
    * 자동 갱신 — 다른 목록 화면은 다 붙어 있는데 **정작 제일 오래 띄워 두는 이 화면만**
    * 없었다. 손으로 새로고침을 눌러야 값이 바뀌니, 안 누르면 아침 값을 오후까지 본다.
@@ -94,6 +101,10 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     api
       .watchStatuses()
       .then((r) => setStatuses(r.statuses))
+      .catch(() => undefined);
+    api
+      .watchConcentration()
+      .then(setConc)
       .catch(() => undefined);
   }, []);
 
@@ -270,10 +281,26 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
    * (관심종목 순서에서 같은 문제를 이미 겪었다 — `load(false)` 가 캐시를 줬다)
    */
   async function setStatus(code: string, status: WatchStatus) {
+    /*
+     * 「보유」로 바꿀 때는 시나리오 카드가 먼저다 (2026-08-25) — 손절선·목표·근거를
+     * 사기 **전**에 적는 관문. 저장하면 복기 노트의 오늘 매수가 되고, 그 뒤에 상태가
+     * 바뀐다. 카드에서 「기록 없이 표시만」을 고르면 예전처럼 바로 바뀐다.
+     */
+    if (status === "holding" && (items.find((i) => i.code === code)?.status ?? "watching") !== "holding") {
+      const r = items.find((i) => i.code === code);
+      setScenario({ code, name: r?.name ?? code, price: r?.price ?? null });
+      return;
+    }
+    await applyStatus(code, status);
+  }
+
+  async function applyStatus(code: string, status: WatchStatus) {
     const before = items;
-    setItems(items.map((i) => (i.code === code ? { ...i, status } : i)));
+    setItems((cur) => cur.map((i) => (i.code === code ? { ...i, status } : i)));
     try {
       await api.watchlistSetStatus(code, status);
+      // 보유 구성이 바뀌었으니 집중도도 다시 센다
+      api.watchConcentration().then(setConc).catch(() => undefined);
     } catch (err) {
       setItems(before);
       setError(err instanceof Error ? err.message : "상태 변경 실패");
@@ -411,6 +438,36 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
         상태 필터는 **그룹 줄과 따로** 둔다. 같은 줄에 섞으면 둘이 같은 축으로 보이는데,
         실제로는 겹쳐서 걸린다 — 「반도체 중에서 대기인 것」이 되는 게 맞다.
       */}
+      {/*
+        섹터 집중도 (2026-08-25) — 「다 초록인데 전부 반도체」를 잡는 안전벨트 한 줄.
+        신호등은 종목 하나하나를 보지만 묶음이 한 방향으로 쏠렸는지는 여기만 본다.
+      */}
+      {conc && conc.all.total >= 3 && (
+        <div className="wl-conc">
+          <span className="wl-conc-part">
+            <i>관심 {conc.all.total}종목</i>
+            {conc.all.top.map((t) => (
+              <b key={t.sector} className={t.pct >= 50 ? "hot" : ""}>
+                {t.sector} {Math.round(t.pct)}%
+              </b>
+            ))}
+          </span>
+          {conc.holding.total > 0 && (
+            <span className="wl-conc-part">
+              <i>보유 {conc.holding.total}종목</i>
+              {conc.holding.top.map((t) => (
+                <b key={t.sector} className={t.pct >= 50 ? "hot" : ""}>
+                  {t.sector} {Math.round(t.pct)}%
+                </b>
+              ))}
+            </span>
+          )}
+          {(conc.holding.top[0]?.pct ?? 0) >= 60 && conc.holding.total >= 2 && (
+            <span className="wl-conc-warn">한 업종에 쏠려 있습니다</span>
+          )}
+        </div>
+      )}
+
       {statuses.length > 0 && (
         <div className="filter-row">
           <span className="filter-label" title="그룹은 성격, 상태는 나와의 관계입니다">
@@ -449,6 +506,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
           const n = items.filter((i) => (i.groups ?? [DEFAULT_GROUP]).includes(g)).length;
           const movable = groups.filter((x) => x !== DEFAULT_GROUP);
           const mi = movable.indexOf(g);
+          /* 슈퍼신호등은 자동 편입의 자리 — 이름을 못 바꾸고 못 지운다. 배지도 다르다 */
+          const locked = g === DEFAULT_GROUP || g === SUPER_GROUP;
           return (
             <span className={`gt-item${activeGroup === g ? " active" : ""}`} key={g}>
               {editGroupBar && g !== DEFAULT_GROUP && (
@@ -462,12 +521,19 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                 </button>
               )}
               <button
-                className={`filter-btn ${activeGroup === g ? "active" : ""}`}
-                onClick={() => (editGroupBar && g !== DEFAULT_GROUP ? renameGroupNow(g) : setActiveGroup(g))}
-                title={editGroupBar && g !== DEFAULT_GROUP ? "눌러서 이름 바꾸기" : undefined}
+                className={`filter-btn ${activeGroup === g ? "active" : ""}${g === SUPER_GROUP ? " gt-super" : ""}`}
+                onClick={() => (editGroupBar && !locked ? renameGroupNow(g) : setActiveGroup(g))}
+                title={
+                  g === SUPER_GROUP
+                    ? "슈퍼신호등 자동 편입이 담기는 그룹 — 이름 변경·삭제가 안 됩니다"
+                    : editGroupBar && !locked
+                      ? "눌러서 이름 바꾸기"
+                      : undefined
+                }
               >
+                {g === SUPER_GROUP && "🌟 "}
                 {g} <span className="gt-n">{n}</span>
-                {editGroupBar && g !== DEFAULT_GROUP && <span className="gt-pen"> ✎</span>}
+                {editGroupBar && !locked && <span className="gt-pen"> ✎</span>}
               </button>
               {editGroupBar && g !== DEFAULT_GROUP && (
                 <button
@@ -499,7 +565,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
           */}
           {editGroupBar ? "편집 끝" : "그룹 편집"}
         </button>
-        {editGroupBar && activeGroup !== ALL && activeGroup !== DEFAULT_GROUP && (
+        {editGroupBar && activeGroup !== ALL && activeGroup !== DEFAULT_GROUP && activeGroup !== SUPER_GROUP && (
           <button className="filter-btn danger" onClick={removeGroupNow} title="이 그룹 삭제">
             «{activeGroup}» 삭제
           </button>
@@ -656,7 +722,12 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                     {r.name}
                     {/* 그룹·상태는 이름 아래 한 줄 — 칼럼 두 개가 통째로 줄었다 */}
                     <span className="wl-sub">
-                      {(r.groups ?? [DEFAULT_GROUP]).join(" · ")}
+                      {(r.groups ?? [DEFAULT_GROUP]).map((g, i) => (
+                        <Fragment key={g}>
+                          {i > 0 && " · "}
+                          {g === SUPER_GROUP ? <em className="wl-super">🌟 {g}</em> : g}
+                        </Fragment>
+                      ))}
                       <i className={`wl-st st-${r.status ?? "watching"}`}>
                         {statuses.find((s) => s.key === (r.status ?? "watching"))?.label}
                       </i>
@@ -800,6 +871,23 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
             충족은 판단 가능한 항목만 셉니다(데이터가 없으면 분모에서도 뺍니다)
           </div>
         </div>
+      )}
+
+      {scenario && (
+        <ScenarioCard
+          code={scenario.code}
+          name={scenario.name}
+          price={scenario.price}
+          onDone={() => {
+            void applyStatus(scenario.code, "holding");
+            setScenario(null);
+          }}
+          onSkip={() => {
+            void applyStatus(scenario.code, "holding");
+            setScenario(null);
+          }}
+          onCancel={() => setScenario(null)}
+        />
       )}
     </div>
   );

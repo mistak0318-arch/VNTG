@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getChannelConfig } from "./channelConfig.js";
+import { summarize } from "./summarize.js";
 import { fetchNewMessages, listChannels, type ChannelMessage } from "./telegramReader.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -61,7 +62,7 @@ function windowHours(edition: Edition): number {
  * ──────────────────────────────────────────────────────────────────
  */
 
-type Snapshot = Record<string, { at: string; posts: PinnedPost[] }>;
+type Snapshot = Record<string, { at: string; posts: PinnedPost[]; summary?: string | null }>;
 
 /** 한국 날짜 — 판을 하루 단위로 가른다 */
 function kstDate(): string {
@@ -173,6 +174,40 @@ export async function pinnedPosts(
     await writeSnap(snap).catch(() => undefined);
   }
   return fresh;
+}
+
+/**
+ * 고정 채널 글의 **AI 요약** (2026-08-25) — 원문이 길어서 안 읽고 넘기는 날이 생겼다.
+ * 원문은 그대로 두고(그게 이 섹션의 존재 이유다) **맨 위에 세 줄 요약을 얹는다** —
+ * 세 줄이라도 읽으면 원문을 읽을지 말지 고를 수 있다.
+ *
+ * 판(그날+판)마다 한 번만 만든다 — 원문 스냅샷과 같은 파일에 같이 저장되므로
+ * 서버가 다시 떠도 다시 안 부른다. 실패하면 null 만 주고 다음 조회에서 다시 시도한다.
+ */
+export async function pinnedSummary(edition: Edition): Promise<string | null> {
+  const key = `${kstDate()}|${edition}`;
+  const snap = await readSnap();
+  const entry = snap[key];
+  if (!entry?.posts?.length) return null;
+  if (typeof entry.summary === "string" && entry.summary) return entry.summary;
+
+  const body = entry.posts
+    .map((p) => `[${p.channelName}]\n${p.text.slice(0, 5000)}`)
+    .join("\n\n---\n\n");
+  const r = await summarize(
+    "아래는 오늘 텔레그램 시황 채널의 원문이다. 한국 주식 트레이더가 3초 안에 훑을 수 있게 " +
+      "핵심만 뽑아라. 형식: `· ` 로 시작하는 항목 3~5줄, 각 줄 40자 안팎. 숫자(지수·등락률·금리)는 " +
+      "그대로 옮기고, 원문에 없는 해석을 만들지 마라. 종목·섹터 이름이 나오면 남겨라.\n\n" +
+      body,
+    400,
+    "report",
+  );
+  if (r.text) {
+    entry.summary = r.text.trim();
+    await writeSnap(snap).catch(() => undefined);
+    return entry.summary;
+  }
+  return null;
 }
 
 async function fetchPinned(edition: Edition, limit: number): Promise<PinnedPost[]> {

@@ -78,9 +78,10 @@ interface TradeMonth {
 function TradeChart({ months, watch }: { months: TradeMonth[]; watch: "export" | "import" }) {
   const val = (m: TradeMonth) => (watch === "import" ? m.importUsd : m.exportUsd);
   const W = 720;
-  const H = 150;
+  /* 낮게 (2026-08-25) — 「칸을 너무 차지한다」. 흐름의 모양은 이 높이로도 보인다 */
+  const H = 110;
   /* 오른쪽은 눈금 값(「35억$」)이 앉을 자리 */
-  const PAD = { l: 4, r: 48, t: 16, b: 16 };
+  const PAD = { l: 4, r: 48, t: 8, b: 16 };
   const max = Math.max(1, ...months.map(val));
   const bw = (W - PAD.l - PAD.r) / months.length;
   const prevOf = (m: TradeMonth): TradeMonth | undefined => {
@@ -103,6 +104,22 @@ function TradeChart({ months, watch }: { months: TradeMonth[]; watch: "export" |
 
   return (
     <div className="trade-chart">
+      {/*
+        마지막 달 주석은 **그래프 밖 HTML 로** (2026-08-25) — SVG 안 오른쪽 위에 두니
+        눈금 값(「35억$」)과 겹쳐 둘 다 안 읽혔다. 글자는 글자 자리에.
+      */}
+      {latest && (
+        <div className="tc-head">
+          <b>{latest.month}</b> {(val(latest) / 1e8).toFixed(1)}억$
+          {latestYoy !== null && (
+            <b className={latestYoy >= 0 ? "positive" : "negative"}>
+              {" "}
+              전년동월 {latestYoy > 0 ? "+" : ""}
+              {latestYoy.toFixed(0)}%
+            </b>
+          )}
+        </div>
+      )}
       <svg viewBox={`0 0 ${W} ${H}`} role="img">
         {/* 가로 눈금 — 최대와 절반. 이게 없으면 막대 높이가 서로만 견줘진다 */}
         {[max, max / 2].map((v, i) => (
@@ -158,23 +175,84 @@ function TradeChart({ months, watch }: { months: TradeMonth[]; watch: "export" |
             </text>
           ) : null,
         )}
-        {/* 마지막 달 — 막대 위에 값과 전년비를 직접 단다. 제일 궁금한 게 이 둘이다 */}
-        {latest && (
-          <text
-            className="tc-last"
-            x={Math.min(PAD.l + (months.length - 1) * bw + bw / 2, W - 4)}
-            y={Math.max(10, yOf(val(latest)) - 5)}
-            textAnchor="end"
-          >
-            {latest.month.slice(2)} {(val(latest) / 1e8).toFixed(1)}억$
-            {latestYoy !== null ? ` (${latestYoy > 0 ? "+" : ""}${latestYoy.toFixed(0)}%)` : ""}
-          </text>
-        )}
       </svg>
       <div className="trade-note">
         월 {watch === "import" ? "수입" : "수출"}액(억$) 36개월 · 막대색은{" "}
         <b>전년 같은 달 대비</b> — 계절을 타는 품목이라 전월 대비로 보면 매년 같은 자리에서
         꺾여 보입니다. 첫 12개월은 비교 대상이 없어 회색입니다.
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 나라별 월별 흐름 (2026-08-25) — 「미국에서 갑자기 장사가 잘되네?」는 한 달
+ * 스냅샷으로는 안 보인다. 상위 5개 나라의 최근 13개월을 선으로 겹쳐 그린다.
+ * 13개월인 이유: 마지막 달의 전년 동월이 시리즈 안에 있어 눈으로 YoY 가 된다.
+ */
+function CountryTrend({
+  series,
+}: {
+  series: { months: string[]; countries: { country: string; values: number[] }[] };
+}) {
+  const W = 720;
+  const H = 130;
+  const PAD = { l: 4, r: 48, t: 8, b: 16 };
+  const max = Math.max(1, ...series.countries.flatMap((c) => c.values));
+  const n = series.months.length;
+  const xOf = (i: number) => PAD.l + ((W - PAD.l - PAD.r) * i) / Math.max(1, n - 1);
+  const yOf = (v: number) => H - PAD.b - ((H - PAD.t - PAD.b) * v) / max;
+
+  return (
+    <div className="trade-chart">
+      <div className="tct-legend">
+        {series.countries.map((c, ci) => {
+          const last = c.values[c.values.length - 1] ?? 0;
+          const yearAgo = c.values[0] ?? 0;
+          const yoy = yearAgo > 0 ? ((last - yearAgo) / yearAgo) * 100 : null;
+          return (
+            <span className={`tct-key tct-l${ci}`} key={c.country}>
+              <i className="tct-dot" />
+              {c.country} {(last / 1e6).toFixed(0)}백만$
+              {yoy !== null && (
+                <b className={yoy >= 0 ? "positive" : "negative"}>
+                  {" "}
+                  {yoy > 0 ? "+" : ""}
+                  {yoy.toFixed(0)}%
+                </b>
+              )}
+            </span>
+          );
+        })}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img">
+        {[max, max / 2].map((v, i) => (
+          <g key={i}>
+            <line className="tc-grid" x1={PAD.l} x2={W - PAD.r} y1={yOf(v)} y2={yOf(v)} />
+            <text className="tc-tick" x={W - PAD.r} y={yOf(v) - 2} textAnchor="end">
+              {(v / 1e6).toFixed(0)}백만$
+            </text>
+          </g>
+        ))}
+        {series.countries.map((c, ci) => (
+          <polyline
+            key={c.country}
+            className={`tct-line tct-l${ci}`}
+            points={c.values.map((v, i) => `${xOf(i)},${yOf(v)}`).join(" ")}
+          />
+        ))}
+        {/* 달 눈금은 세 달마다 — 열세 개 다 적으면 겹쳐서 하나도 안 읽힌다 */}
+        {series.months.map((m, i) =>
+          i % 3 === 0 ? (
+            <text key={m} className="tc-tick" x={xOf(i)} y={H - 4} textAnchor="middle">
+              {m.slice(2).replace("-", ".")}
+            </text>
+          ) : null,
+        )}
+      </svg>
+      <div className="trade-note">
+        상위 5개 나라의 월별 흐름(13개월) · 범례 %는 <b>1년 전 같은 달 대비</b> · 0으로 꺼진
+        달은 그 달 조회가 빈 것일 수 있습니다.
       </div>
     </div>
   );
@@ -190,7 +268,7 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
   // 관련 종목·시계열·나라별은 펼칠 때만 부른다 — 31품목을 한꺼번에 받으면 첫 조회가 훨씬 느려진다
   const [related, setRelated] = useState<Record<string, Related | "loading">>({});
   const [history, setHistory] = useState<Record<string, TradeMonth[] | "loading" | "error">>({});
-  type Countries = { month: string; watch: "export" | "import"; rows: { country: string; exportUsd: number; importUsd: number; yoy: number | null; top: { name: string; usd: number; share: number }[] }[] };
+  type Countries = { month: string; watch: "export" | "import"; rows: { country: string; exportUsd: number; importUsd: number; yoy: number | null; top: { name: string; usd: number; share: number }[] }[]; series: { months: string[]; countries: { country: string; values: number[] }[] } | null };
   const [countries, setCountries] = useState<Record<string, Countries | "loading" | "error">>({});
 
   function toggle(key: string) {
@@ -342,6 +420,7 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
                         나라별 {c.watch === "import" ? "수입" : "수출"} · {c.month} —{" "}
                         <b>어디로 나가는지가 곧 수요처</b>다
                       </div>
+                      {c.series && c.series.countries.length > 0 && <CountryTrend series={c.series} />}
                       <div className="trade-cty">
                         {c.rows.map((r) => (
                           <div className="trade-cty-row" key={r.country}>

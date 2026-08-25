@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { TradeSizePanel } from "../components/TradeSizePanel";
 import { api, normalizeStockCode, pickList, type RawRecord, type StockSearchResult } from "../api";
 import { ChartPanel } from "../components/ChartPanel";
+import { EtfPanel } from "../components/EtfPanel";
 import { IntradayFlow, ProgramFlowBars } from "../components/IntradayPanels";
 import { InvestorTrendTable } from "../components/InvestorTrendTable";
 import { CompanyPanel } from "../components/CompanyPanel";
@@ -349,6 +350,8 @@ export function StockAnalysisPage({
                 <QuoteSummary code={stock.code} />
                 <IntradayFlow code={stock.code} basePrice={Math.abs(Number(info?.base_pric)) || 0} />
                 <ChartPanel code={stock.code} name={stock.name} />
+                {/* ETF 면 구성종목이 여기 낀다 — ETF 가 아니면 아무것도 안 그린다 */}
+                <EtfPanel code={stock.code} onSelectStock={onSelectStock} />
                 <h3 className="section-heading">투자자 수급</h3>
                 <InvestorTrendTable rows={investorRows} />
                 <h3 className="section-heading">프로그램 수급</h3>

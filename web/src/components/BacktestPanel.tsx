@@ -65,6 +65,7 @@ export function BacktestPanel() {
   const [job, setJob] = useState<BacktestJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [runs, setRuns] = useState<RunRow[]>([]);
+  const [gridBusy, setGridBusy] = useState(false);
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadRuns = () => {
@@ -293,6 +294,21 @@ export function BacktestPanel() {
         <div className="bt-board">
           <h3 className="section-heading">
             돌려 본 조건들 — 엣지 순 <i className="pt-n">{runs.length}회 저장됨</i>
+            <button
+              className="filter-btn bt-grid-btn"
+              disabled={gridBusy}
+              title="정해진 조합 ~18개를 한 번에 — 일봉은 한 번만 받아 조합은 메모리로 계산합니다"
+              onClick={() => {
+                setGridBusy(true);
+                api
+                  .backtestGrid()
+                  .then(() => loadRuns())
+                  .catch((e: Error) => setError(e.message))
+                  .finally(() => setGridBusy(false));
+              }}
+            >
+              {gridBusy ? "그리드 도는 중…" : "그리드 지금 돌리기"}
+            </button>
           </h3>
           <div className="data-table-wrap">
             <table className="data-table num">
@@ -313,6 +329,7 @@ export function BacktestPanel() {
                   .map((x) => (
                     <tr key={x.id}>
                       <td className="sticky-col bt-board-label">
+                        {x.auto && <i className="bt-auto" title="밤 그리드가 자동으로 돌린 실행">자동</i>}
                         {x.label}
                         <div className={`bt-verdict ${x.verdict.tone}`}>{x.verdict.text}</div>
                       </td>
@@ -334,6 +351,8 @@ export function BacktestPanel() {
           <div className="table-note">
             같은 조건도 <b>기간·모집단이 다르면 다른 실행</b>입니다 — 라벨 끝 괄호가 그것입니다.
             표본이 적은 줄은 판정이 「우연일 수 있다」고 말합니다. 최근 60회까지 남습니다.
+            <b>「자동」</b>은 평일 17:10 밤 그리드가 돌린 것 — 어제 그리드는 오늘 것으로
+            바뀌고, 손으로 돌린 실행은 그대로 남습니다.
           </div>
         </div>
       )}

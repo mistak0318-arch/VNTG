@@ -5,6 +5,7 @@ import { brokerFlow } from "./brokerFlow.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getSectorMood } from "./sectorMood.js";
 import { evaluateMarket } from "./marketSignal.js";
+import { stockNameHtml } from "./telegram.js";
 
 /**
  * 관심종목 시그널 판정.
@@ -536,8 +537,8 @@ export function formatAlerts(alerts: FiredAlert[]): string {
     const sign = head.changeRate > 0 ? "+" : "";
     blocks.push(
       [
-        // 첫 줄은 「무엇이 얼마에 몇 퍼센트」 — 스크롤 없이 읽히는 자리
-        `${icons} <b>${esc(head.name)}</b>  ${fmtInt(head.price)}  ${sign}${head.changeRate.toFixed(2)}%`,
+        // 첫 줄은 「무엇이 얼마에 몇 퍼센트」 — 종목명은 개별종목분석 딥링크다
+        `${icons} ${stockNameHtml(head.code, head.name)}  ${fmtInt(head.price)}  ${sign}${head.changeRate.toFixed(2)}%`,
         // 왜 울렸나 — 임계값과 같이 적어야 값의 반복이 아니라 뜻이 된다
         ...list.map((a) => `<b>${esc(a.ruleLabel)}</b> · ${esc(a.detail)}`),
         ...head.context.map((c) => esc(c)),

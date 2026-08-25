@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, pick, pickList, type RawRecord } from "../api";
 import { ChartPanel } from "./ChartPanel";
+import { EtfPanel } from "./EtfPanel";
 import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
 import { IntradayFlow } from "./IntradayPanels";
 import { CompanyPanel } from "./CompanyPanel";
@@ -370,6 +371,8 @@ export function StockDetail({
                 <SignalPanel code={code} onSelectStock={onSelectStock} />
                 <IntradayFlow code={code} basePrice={Math.abs(Number(info?.base_pric)) || 0} />
                 <ChartPanel code={code} name={name} />
+                {/* ETF 면 구성종목이 여기 낀다 — ETF 가 아니면 아무것도 안 그린다 */}
+                <EtfPanel code={code} onSelectStock={onSelectStock} />
               </>
             )}
 

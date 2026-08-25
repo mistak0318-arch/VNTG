@@ -30,7 +30,7 @@ function cls(n: number): string {
  * 업종 줄이든 연속 줄이든 합의 줄이든, 누르면 같은 것을 보고 싶어한다.
  * 그래서 목록 자체를 떼어내 세 군데가 같이 쓴다. 펼칠 때만 조회한다.
  */
-function SectorStocks({
+export function SectorStocks({
   market,
   code,
   onSelectStock,

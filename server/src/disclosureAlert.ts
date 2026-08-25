@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { todayDartEvents, type DartEvent } from "./dartEvents.js";
-import { sendTelegram } from "./telegram.js";
+import { sendTelegram, stockNameHtml } from "./telegram.js";
 
 /**
  * 관심종목 공시 알림.
@@ -128,9 +128,13 @@ function esc(s: string): string {
 function toMessage(e: DartEvent, reason: string): string {
   const tag =
     reason === "관심종목" ? "⭐ 관심종목" : reason === "내 테마" ? `🎯 ${e.themes[0]}` : "🔥 주요 공시";
+  // 종목코드가 있으면 회사명이 개별종목분석 딥링크가 된다 (HTS_WEB_URL 설정 시)
+  const nameHtml = e.stockCode
+    ? stockNameHtml(e.stockCode, e.corpName)
+    : `<b>${esc(e.corpName)}</b>`;
   const head = [
     `📄 <b>${tag}</b>`,
-    `<b>${esc(e.corpName)}</b> · ${e.market}${e.amended ? " · 정정" : ""}`,
+    `${nameHtml} · ${e.market}${e.amended ? " · 정정" : ""}`,
   ].join("\n");
   return `${head}\n━━━━━━━━━━━━\n${esc(e.title)}\n\n🔗 <a href="${e.url}">DART 원문 →</a>`;
 }

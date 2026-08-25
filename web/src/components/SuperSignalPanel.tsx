@@ -27,6 +27,14 @@ interface Row {
   price: number | null;
   changeRate: number | null;
   sinceAdded: number | null;
+  returns?: { d1: number | null; d5: number | null; d20: number | null };
+}
+
+interface GradeRow {
+  label: string;
+  d1: { avg: number | null; n: number };
+  d5: { avg: number | null; n: number };
+  d20: { avg: number | null; n: number };
 }
 
 function pct(v: number | null): string {
@@ -45,6 +53,7 @@ export function SuperSignalPanel({
   onSelectStock: (code: string, name: string) => void;
 }) {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [grade, setGrade] = useState<GradeRow[]>([]);
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [minLists, setMinLists] = useState(3);
   const [universes, setUniverses] = useState<Universe[]>([]);
@@ -56,6 +65,7 @@ export function SuperSignalPanel({
       .signalSuper()
       .then((r) => {
         setRows(r.entries);
+        setGrade((r as { grade?: GradeRow[] }).grade ?? []);
         setLastRun(r.lastRunDate);
         setMinLists(r.minLists);
       })
@@ -140,6 +150,37 @@ export function SuperSignalPanel({
 
       {error && <div className="error-banner">{error}</div>}
 
+      {grade.some((g) => g.d1.n > 0 || g.d5.n > 0 || g.d20.n > 0) && (
+        <div className="ss-grade">
+          <div className="ss-grade-title">
+            편입 후 성적 <i>— 편입가 대비 평균, ( ) 안은 표본 수</i>
+          </div>
+          <table className="data-table ss-grade-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>1일 뒤</th>
+                <th>5일 뒤</th>
+                <th>20일 뒤</th>
+              </tr>
+            </thead>
+            <tbody>
+              {grade.map((g) => (
+                <tr key={g.label}>
+                  <td>{g.label}</td>
+                  {([g.d1, g.d5, g.d20] as const).map((h, i) => (
+                    <td key={i} className={`num ${cls(h.avg)}`}>
+                      {h.avg === null ? "-" : <b>{pct(h.avg)}</b>}
+                      {h.n > 0 && <i className="pt-n"> ({h.n})</i>}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {rows === null ? (
         <div className="empty">불러오는 중…</div>
       ) : rows.length === 0 ? (
@@ -159,6 +200,7 @@ export function SuperSignalPanel({
                 <th>편입가</th>
                 <th>지금</th>
                 <th title="편입가 대비">편입 대비</th>
+                <th title="편입 후 1·5·20거래일 종가의 편입가 대비 — 매일 15:45 채점">1·5·20일</th>
                 <th>점수</th>
                 <th></th>
               </tr>
@@ -192,6 +234,15 @@ export function SuperSignalPanel({
                   </td>
                   <td className={`num ${cls(r.sinceAdded)}`}>
                     <b>{pct(r.sinceAdded)}</b>
+                  </td>
+                  <td className="num ss-rets">
+                    {([r.returns?.d1 ?? null, r.returns?.d5 ?? null, r.returns?.d20 ?? null] as const).map(
+                      (v, i) => (
+                        <i key={i} className={cls(v)}>
+                          {v === null ? "·" : `${v > 0 ? "+" : ""}${v.toFixed(1)}`}
+                        </i>
+                      ),
+                    )}
                   </td>
                   <td className="num">{r.score}</td>
                   <td>
