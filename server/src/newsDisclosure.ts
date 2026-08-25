@@ -703,3 +703,103 @@ export async function sectorNews(
     fetchedAt: new Date().toISOString(),
   };
 }
+
+// ---------------------------------------------------------------- 속보
+
+/**
+ * 속보만.
+ *
+ * 「모든 속보」는 끝이 없다 — [속보] 는 정치·사건사고에도 붙는다. 그래서
+ * (1) **머리표가 붙은 것만** 받는다: 제목이 [속보]·[단독]·[긴급] 으로 시작해야 한다.
+ *     본문에 「속보」가 들어간 일반 기사는 거른다.
+ * (2) **갈래로 나눈다**: 증시·기업이 먼저다. 이 화면은 HTS 안이니까 —
+ *     정치 속보가 궁금하면 포털이 낫다.
+ *
+ * 질의 셋(속보/증시 속보/경제 속보)은 캐시(5분)를 타므로 반복 조회 부담이 없다.
+ * 속보치고 5분이 길어 보이지만, 네이버 검색 API 색인 자체가 분 단위라
+ * 캐시를 줄여도 더 빨라지지 않는다.
+ */
+
+const BREAKING_QUERIES = ["속보", "증시 속보", "경제 속보"];
+
+/** 제목이 속보 머리표로 시작하나 — [속보] 「단독」 <긴급> 전부 잡는다 */
+const BREAKING_HEAD = /^\s*[[〔【<「(]?\s*(속보|단독|긴급)\s*[\]〕】>」)]/;
+
+export interface BreakingCategory {
+  key: string;
+  label: string;
+  items: NewsItem[];
+}
+
+/**
+ * 갈래 판정 — 제목의 힌트 단어로. 먼저 맞는 갈래가 이긴다(증시·기업 우선).
+ * 힌트가 하나도 없으면 「그 밖에」다.
+ */
+const BREAKING_CATS: { key: string; label: string; hints: string[] }[] = [
+  {
+    key: "market",
+    label: "증시·기업",
+    hints: [
+      "코스피", "코스닥", "주가", "상장", "상한가", "하한가", "급등", "급락", "특징주",
+      "실적", "영업이익", "매출", "수주", "공시", "IPO", "공모", "합병", "인수", "지분",
+      "유상증자", "자사주", "배당", "반도체", "2차전지", "바이오",
+    ],
+  },
+  {
+    key: "econ",
+    label: "경제·정책",
+    hints: [
+      "금리", "한은", "한국은행", "환율", "물가", "수출", "무역", "관세", "정부", "기재부",
+      "금융위", "금감원", "부동산", "세제", "예산", "고용", "GDP", "경상수지",
+    ],
+  },
+  {
+    key: "world",
+    label: "국제",
+    hints: [
+      "미국", "중국", "일본", "연준", "Fed", "FOMC", "트럼프", "백악관", "EU", "유럽",
+      "러시아", "우크라", "이스라엘", "중동", "나스닥", "다우", "뉴욕증시",
+    ],
+  },
+  { key: "etc", label: "그 밖에", hints: [] },
+];
+
+function breakingCatOf(title: string): string {
+  for (const c of BREAKING_CATS) {
+    if (c.hints.some((h) => title.includes(h))) return c.key;
+  }
+  return "etc";
+}
+
+export async function breakingNews(): Promise<{
+  categories: BreakingCategory[];
+  fetchedAt: string;
+}> {
+  const lists = await Promise.all(
+    BREAKING_QUERIES.map((q) => fetchNewsRaw(q).catch(() => [] as NewsItem[])),
+  );
+
+  const seen = new Set<string>();
+  const byCat = new Map<string, NewsItem[]>();
+  for (const it of lists.flat()) {
+    if (!BREAKING_HEAD.test(it.title)) continue;
+    if (isSpamTitle(it.title)) continue;
+    const key = normalizeTitle(it.title);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const cat = breakingCatOf(it.title);
+    const arr = byCat.get(cat) ?? [];
+    arr.push(it);
+    byCat.set(cat, arr);
+  }
+
+  const categories = BREAKING_CATS.map((c) => ({
+    key: c.key,
+    label: c.label,
+    items: (byCat.get(c.key) ?? [])
+      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+      .slice(0, 40),
+  })).filter((c) => c.items.length > 0);
+
+  return { categories, fetchedAt: new Date().toISOString() };
+}

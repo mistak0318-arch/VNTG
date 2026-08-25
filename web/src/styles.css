@@ -3343,6 +3343,13 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   background: var(--panel-2);
 }
 .trade-note { font-size: 0.8333rem; color: var(--muted); margin-bottom: 8px; }
+/* 월별 수출입 막대 — 색은 전년 같은 달 대비 */
+.trade-chart { margin: 6px 0 10px; }
+.trade-chart svg { width: 100%; height: auto; display: block; }
+.tc-bar-up { fill: var(--red); opacity: 0.85; }
+.tc-bar-down { fill: var(--blue); opacity: 0.85; }
+.tc-bar-flat { fill: var(--muted); opacity: 0.35; }
+.tc-tick, .tc-max, .tc-last { font-size: 10px; fill: var(--muted); }
 .trade-top { display: flex; flex-direction: column; gap: 4px; }
 .trade-top-row { display: flex; gap: 12px; font-size: 0.8333rem; align-items: baseline; }
 .trade-top-name { flex: 1; }
@@ -4243,6 +4250,73 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   padding: 3px 0; border-bottom: 1px solid var(--border); font-size: 0.84rem; }
 .rt-row b { font-variant-numeric: tabular-nums; }
 .rt-row em { font-style: normal; font-size: 0.75rem; min-width: 62px; text-align: right; }
+/*
+  속보 — 훑는 화면. 시각 레일 + 갈래색 왼줄 + 방향 단어만 물들인다.
+  bn- 접두. (마켓 브리핑의 bf- 타임라인과 같은 문법이라 눈이 이미 안다)
+*/
+.bn-list { display: flex; flex-direction: column; }
+.bn-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.42rem 0.5rem 0.42rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  text-decoration: none;
+  color: inherit;
+}
+.bn-row:hover { background: var(--panel-hover, rgba(128, 128, 128, 0.08)); }
+.bn-cat-market { border-left-color: var(--red); }
+.bn-cat-econ { border-left-color: #f5c542; }
+.bn-cat-world { border-left-color: var(--blue); }
+.bn-cat-etc { border-left-color: var(--border); }
+.bn-time {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  position: relative;
+}
+.bn-fresh {
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: bn-pulse 1.6s ease-in-out infinite;
+  vertical-align: 2px;
+}
+@keyframes bn-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+.bn-head {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: var(--red);
+  color: #fff;
+}
+.bn-head.alt { background: var(--blue); }
+.bn-body { flex: 1; min-width: 0; font-size: 0.88rem; line-height: 1.35; }
+.bn-up { font-style: normal; font-weight: 700; color: var(--red); }
+.bn-down { font-style: normal; font-weight: 700; color: var(--blue); }
+.bn-meta { display: block; font-size: 0.72rem; color: var(--muted); margin-top: 0.1rem; }
+.bn-meta i { font-style: normal; }
+.bn-meta i + i::before { content: " · "; }
+.bn-cat { font-weight: 600; }
+
+/* 미국 10년·30년만 눌린다(야후에 있는 것만) — 버튼 기본 모양은 지운다 */
+.rt-click {
+  width: 100%;
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rt-click:hover { background: var(--panel-hover, rgba(128, 128, 128, 0.08)); }
 
 /* 글로벌 — 섹터별 묶음 */
 .ov-g-sec + .ov-g-sec { margin-top: 8px; }

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
-import { TRADE_TARGETS, getTradeStats, isTradeConfigured } from "../tradeStats.js";
+import { TRADE_TARGETS, getTradeHistory, getTradeStats, isTradeConfigured } from "../tradeStats.js";
 import { listAllThemes, relatedStocks } from "../tradeStocks.js";
 import { findSectorByName } from "../sectorMood.js";
 
@@ -27,6 +27,18 @@ export function createTradeRouter(client: KiwoomClient): Router {
       if (!t) throw new Error("알 수 없는 품목입니다.");
       const sector = await findSectorByName(client, t.sectors[0]).catch(() => null);
       res.json(await relatedStocks(client, t.themes ?? [], sector));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 품목의 월별 수출·수입 시계열 (36개월).
+   * 목록과 분리 — 품목을 펼칠 때만 부르고, 서버가 하루 캐시한다.
+   */
+  router.get("/:key/history", async (req, res, next) => {
+    try {
+      res.json(await getTradeHistory(req.params.key));
     } catch (err) {
       next(err);
     }

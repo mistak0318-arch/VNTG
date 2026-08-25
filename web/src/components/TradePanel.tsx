@@ -59,6 +59,88 @@ interface Related {
   label: string;
 }
 
+interface TradeMonth {
+  month: string;
+  exportUsd: number;
+  importUsd: number;
+}
+
+/**
+ * 월별 수출(또는 수입) 막대 — 36개월.
+ *
+ * 최신 한 달 + 전년동월 % 만으로는 「이 산업이 잘 되어 가고 있나」를 알 수 없다 —
+ * 꺾이는 중인지, 바닥 찍고 도는 중인지는 **선의 모양**이 말한다.
+ *
+ * 막대색은 **전년 같은 달 대비**다(늘었으면 빨강, 줄었으면 파랑). 수출은 계절을 타는
+ * 품목이 많아 전월 대비로 칠하면 매년 같은 자리에서 파랗게 보인다 — 설 연휴가 있는
+ * 2월이 1월보다 작은 건 불황이 아니다.
+ */
+function TradeChart({ months, watch }: { months: TradeMonth[]; watch: "export" | "import" }) {
+  const val = (m: TradeMonth) => (watch === "import" ? m.importUsd : m.exportUsd);
+  const W = 720;
+  const H = 150;
+  const PAD = { l: 4, r: 4, t: 16, b: 16 };
+  const max = Math.max(1, ...months.map(val));
+  const bw = (W - PAD.l - PAD.r) / months.length;
+  const prevOf = (m: TradeMonth): TradeMonth | undefined => {
+    const [y, mm] = m.month.split("-");
+    return months.find((x) => x.month === `${Number(y) - 1}-${mm}`);
+  };
+  const latest = months[months.length - 1];
+
+  return (
+    <div className="trade-chart">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img">
+        {months.map((m, i) => {
+          const h = ((H - PAD.t - PAD.b) * val(m)) / max;
+          const prev = prevOf(m);
+          const cls =
+            prev === undefined
+              ? "tc-bar-flat"
+              : val(m) >= val(prev)
+                ? "tc-bar-up"
+                : "tc-bar-down";
+          return (
+            <rect
+              key={m.month}
+              className={cls}
+              x={PAD.l + i * bw + bw * 0.15}
+              y={H - PAD.b - h}
+              width={bw * 0.7}
+              height={Math.max(1, h)}
+            >
+              <title>
+                {m.month} · {(val(m) / 1e8).toFixed(1)}억$
+              </title>
+            </rect>
+          );
+        })}
+        {/* 연 경계 눈금 — 1월 자리에만 */}
+        {months.map((m, i) =>
+          m.month.endsWith("-01") ? (
+            <text key={`y${m.month}`} className="tc-tick" x={PAD.l + i * bw} y={H - 4}>
+              {m.month.slice(2, 4)}년
+            </text>
+          ) : null,
+        )}
+        <text className="tc-max" x={PAD.l} y={11}>
+          최대 {(max / 1e8).toFixed(1)}억$
+        </text>
+        {latest && (
+          <text className="tc-last" x={W - PAD.r} y={11} textAnchor="end">
+            {latest.month} · {(val(latest) / 1e8).toFixed(1)}억$
+          </text>
+        )}
+      </svg>
+      <div className="trade-note">
+        월 {watch === "import" ? "수입" : "수출"}액(억$) 36개월 · 막대색은{" "}
+        <b>전년 같은 달 대비</b> — 계절을 타는 품목이라 전월 대비로 보면 매년 같은 자리에서
+        꺾여 보입니다. 첫 12개월은 비교 대상이 없어 회색입니다.
+      </div>
+    </div>
+  );
+}
+
 export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
   const [items, setItems] = useState<TradeSummary[]>([]);
   const [fetchedAt, setFetchedAt] = useState("");
@@ -66,8 +148,9 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  // 관련 종목은 펼칠 때만 부른다 — 31품목을 한꺼번에 받으면 첫 조회가 훨씬 느려진다
+  // 관련 종목·시계열은 펼칠 때만 부른다 — 31품목을 한꺼번에 받으면 첫 조회가 훨씬 느려진다
   const [related, setRelated] = useState<Record<string, Related | "loading">>({});
+  const [history, setHistory] = useState<Record<string, TradeMonth[] | "loading" | "error">>({});
 
   function toggle(key: string) {
     if (open === key) {
@@ -81,6 +164,13 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
         .tradeStocks(key)
         .then((r) => setRelated((p) => ({ ...p, [key]: r })))
         .catch(() => setRelated((p) => ({ ...p, [key]: { stocks: [], from: "none", label: "" } })));
+    }
+    if (!history[key]) {
+      setHistory((p) => ({ ...p, [key]: "loading" }));
+      api
+        .tradeHistory(key)
+        .then((r) => setHistory((p) => ({ ...p, [key]: r.months })))
+        .catch(() => setHistory((p) => ({ ...p, [key]: "error" })));
     }
   }
 
@@ -183,6 +273,14 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
             return (
               <>
                 <div className="trade-note">{i.note}</div>
+
+                {(() => {
+                  const h = history[i.key];
+                  if (h === "loading") return <div className="trade-sub">시계열 받는 중…</div>;
+                  if (h === "error" || !h || h.length === 0) return null;
+                  return <TradeChart months={h} watch={i.watch} />;
+                })()}
+
                 {i.top.length > 0 && (
                   <>
                     <div className="trade-sub">세부 품목</div>

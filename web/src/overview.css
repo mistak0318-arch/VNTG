@@ -193,6 +193,18 @@
   padding: 7px 0;
   border-top: 1px solid var(--ov-line-soft);
 }
+/* 줄이 버튼이 됐다(눌러서 차트) — 버튼 기본 모양을 지우고 줄 모양을 그대로 쓴다 */
+.ov-g-click {
+  width: 100%;
+  background: none;
+  border-right: none;
+  border-bottom: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ov-g-click:hover { background: var(--panel-hover, rgba(128, 128, 128, 0.08)); }
 
 .ov-g-row:first-child {
   border-top: none;

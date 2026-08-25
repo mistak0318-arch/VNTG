@@ -577,6 +577,11 @@ export const api = {
       from: "theme" | "sector" | "none";
       label: string;
     }>(`/api/trade/${key}/stocks`),
+  /** 품목의 월별 수출·수입 시계열 (36개월) — 품목을 펼칠 때만 부른다 */
+  tradeHistory: (key: string) =>
+    getJson<{ months: { month: string; exportUsd: number; importUsd: number }[] }>(
+      `/api/trade/${key}/history`,
+    ),
   breadth: (days = 60) =>
     getJson<{ days: number; points: BreadthPoint[]; summary: string }>(
       `/api/breadth?days=${days}`,
@@ -666,6 +671,12 @@ export const api = {
     }>(
       `/api/feed/news/sectors?scope=${scope}&per=${per}&sort=${sort}`,
     ),
+  /** 속보 — [속보]·[단독]·[긴급] 머리표가 붙은 것만. 증시·기업 갈래가 먼저다 */
+  newsBreaking: () =>
+    getJson<{
+      categories: { key: string; label: string; items: NewsItem[] }[];
+      fetchedAt: string;
+    }>("/api/feed/news/breaking"),
   finance: (code: string) => getJson<FinanceResult>(`/api/feed/finance/${code}`),
   disclosures: (code: string, days = 180) =>
     getJson<{ items: DisclosureItem[] }>(`/api/feed/disclosures/${code}?days=${days}`),

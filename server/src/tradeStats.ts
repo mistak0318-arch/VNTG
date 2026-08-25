@@ -407,24 +407,49 @@ function errorOf(xml: string): string | null {
 // ---------------------------------------------------------------- 조회
 
 async function fetchRange(hs: string, strtYymm: string, endYymm: string): Promise<TradeItem[]> {
-  const qs = new URLSearchParams({
-    serviceKey: process.env.DATA_GO_KR_KEY!.trim(),
-    strtYymm,
-    endYymm,
-    hsSgn: hs,
-    numOfRows: "200",
-    pageNo: "1",
-  });
+  /*
+   * 쪽을 넘겨 가며 다 받는다. 한 쪽 200행인데 세부 품목이 많은 HS(자동차부품 8708 등)는
+   * 기간이 길면 200을 넘는다 — 첫 쪽만 받으면 **어느 달이 통째로 빠졌는지도 모른 채**
+   * 합계가 작아진다.
+   *
+   * ⚠️ 이 API 는 **pageNo 를 무시하고 매번 전체를 준다** (2026-08-25 실측 —
+   * 열 쪽을 그대로 합쳤더니 값이 정확히 10배가 됐다). 그래서 쪽 수로 멈추지 않고
+   * (hsCode, month) 로 중복을 걸러, **새 행이 안 나오는 순간** 멈춘다.
+   * 진짜 페이징을 하는 서버로 바뀌어도 이 조건은 그대로 맞는다.
+   */
+  const seen = new Set<string>();
+  const out: TradeItem[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const qs = new URLSearchParams({
+      serviceKey: process.env.DATA_GO_KR_KEY!.trim(),
+      strtYymm,
+      endYymm,
+      hsSgn: hs,
+      numOfRows: "200",
+      pageNo: String(page),
+    });
 
-  const res = await fetch(`${ENDPOINT}?${qs}`, { signal: AbortSignal.timeout(20_000) });
-  const xml = await res.text();
-  const err = errorOf(xml);
-  if (err) {
-    void recordApiCall("dataGoKr", "Itemtrade", "failed");
-    throw new Error(err);
+    const res = await fetch(`${ENDPOINT}?${qs}`, { signal: AbortSignal.timeout(20_000) });
+    const xml = await res.text();
+    const err = errorOf(xml);
+    if (err) {
+      void recordApiCall("dataGoKr", "Itemtrade", "failed");
+      throw new Error(err);
+    }
+    void recordApiCall("dataGoKr", "Itemtrade", "ok");
+    // 총계 행은 parseItems 가 거르므로, 쪽이 찼는지는 원본 <item> 수로 센다
+    const rawCount = (xml.match(/<item>/g) ?? []).length;
+    let added = 0;
+    for (const item of parseItems(xml)) {
+      const k = `${item.hsCode}:${item.month}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(item);
+      added++;
+    }
+    if (rawCount < 200 || added === 0) break;
   }
-  void recordApiCall("dataGoKr", "Itemtrade", "ok");
-  return parseItems(xml);
+  return out;
 }
 
 function ym(d: Date): string {
@@ -570,6 +595,76 @@ export async function getTradeStats(force = false): Promise<{
   await mkdir(DATA_DIR, { recursive: true });
   await writeFile(CACHE_FILE, JSON.stringify({ at, items }, null, 2), "utf-8");
   return { items, fetchedAt: at, error: failed.length > 0 ? failed.join(" / ") : undefined };
+}
+
+// ---------------------------------------------------------------- 월별 시계열
+
+export interface TradeMonth {
+  month: string; // YYYY-MM
+  exportUsd: number;
+  importUsd: number;
+}
+
+interface HistoryCache {
+  [key: string]: { at: string; months: TradeMonth[] };
+}
+
+const HISTORY_FILE = join(DATA_DIR, "tradeHistory.json");
+/** 월 단위 데이터 — 하루 한 번이면 충분하다 */
+const HISTORY_TTL_MS = 24 * 3600_000;
+const HISTORY_MONTHS = 36;
+
+/**
+ * 한 품목의 **월별 수출·수입 시계열** (최근 36개월).
+ *
+ * 최신 한 달 + 전년동월 % 만으로는 「이 산업이 잘 되어 가고 있나」를 알 수 없다 —
+ * 꺾이는 중인지, 바닥 찍고 도는 중인지는 **선의 모양**이 말한다.
+ *
+ * 쌓이길 기다릴 필요가 없다: 관세청 API 가 과거 구간 조회를 지원하므로 그냥
+ * 3년 치를 받아 온다. 12개월씩 세 번(응답이 너무 커지지 않게), 품목을 **펼칠 때만**
+ * 부르고 하루 캐시한다 — 31품목을 미리 다 받으면 호출 낭비다.
+ */
+export async function getTradeHistory(key: string): Promise<{ months: TradeMonth[] }> {
+  const t = TRADE_TARGETS.find((x) => x.key === key);
+  if (!t) throw new Error("알 수 없는 품목입니다.");
+  if (!isTradeConfigured()) throw new Error("DATA_GO_KR_KEY 미설정");
+
+  let cache: HistoryCache = {};
+  try {
+    cache = JSON.parse(await readFile(HISTORY_FILE, "utf-8")) as HistoryCache;
+  } catch {
+    /* 처음이면 빈 캐시 */
+  }
+  const hit = cache[key];
+  if (hit && Date.now() - new Date(hit.at).getTime() < HISTORY_TTL_MS) {
+    return { months: hit.months };
+  }
+
+  const now = new Date();
+  const byMonth = new Map<string, TradeMonth>();
+  for (let w = 0; w < HISTORY_MONTHS / 12; w++) {
+    const from = new Date(now.getFullYear(), now.getMonth() - 12 * (w + 1) + 1, 1);
+    const to = new Date(now.getFullYear(), now.getMonth() - 12 * w, 1);
+    const rows = await fetchRange(t.hs, ym(from), ym(to));
+    for (const r of rows) {
+      const acc = byMonth.get(r.month) ?? { month: r.month, exportUsd: 0, importUsd: 0 };
+      acc.exportUsd += r.exportUsd;
+      acc.importUsd += r.importUsd;
+      byMonth.set(r.month, acc);
+    }
+  }
+
+  const months = [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
+  if (months.length === 0) {
+    // 조회가 통째로 빈 날은 있던 캐시를 지우지 않는다
+    if (hit) return { months: hit.months };
+    return { months: [] };
+  }
+
+  cache[key] = { at: new Date().toISOString(), months };
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(HISTORY_FILE, JSON.stringify(cache, null, 2), "utf-8");
+  return { months };
 }
 
 // ---------------------------------------------------------------- 리포트용

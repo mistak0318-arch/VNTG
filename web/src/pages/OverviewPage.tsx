@@ -20,6 +20,7 @@ import { ConstituentSheet, type ConstituentTarget } from "../components/overview
 import { FlowBars } from "../components/overview/FlowBars";
 import { FlowIntradayChart } from "../components/overview/FlowIntradayChart";
 import { IndexDetailSheet } from "../components/overview/IndexDetailSheet";
+import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
 import { MarketSignalPanel } from "../components/MarketSignalPanel";
 import { UsBoardPanel } from "../components/overview/UsBoardPanel";
 import { OverviewCard } from "../components/overview/OverviewCard";
@@ -88,6 +89,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const [constituent, setConstituent] = useState<ConstituentTarget | null>(null);
   /** 눌러서 연 지수 상세 (001 코스피 / 101 코스닥) */
   const [indexDetail, setIndexDetail] = useState<string | null>(null);
+  /* 글로벌·미장·미국 금리 줄을 누르면 — 추이 차트. 숫자 한 줄로는 「어디쯤인가」를 모른다 */
+  const [chart, setChart] = useState<ChartTarget | null>(null);
 
   /** 모든 섹션을 한 번에 다시 불러온다 */
   function refreshAll() {
@@ -371,8 +374,26 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                   <div className="ov-g-sec-h">{grp}</div>
                   {(global.data ?? [])
                     .filter((g) => g.group === grp)
+                    /*
+                      줄 전체가 눌린다 — 환율·선물·원자재 전부 야후 심볼이라 같은 차트
+                      시트로 추이가 열린다. 숫자 한 줄은 「지금 얼마」만 말하고
+                      「어디쯤인가」는 못 말한다.
+                    */
                     .map((g) => (
-                <div className="ov-g-row" key={g.key}>
+                <button
+                  type="button"
+                  className="ov-g-row ov-g-click"
+                  key={g.key}
+                  onClick={() =>
+                    setChart({
+                      symbol: g.symbol,
+                      label: g.label,
+                      digits: g.isRate ? 3 : 2,
+                      hintRate: g.changeRate,
+                    })
+                  }
+                  title="눌러서 차트 보기"
+                >
                   {/* 미장 주요지수와 같은 신호등. 판단할 게 없으면 자리만 비워 둔다 */}
                   <span
                     className={`ov-g-sig${g.signal ? ` ${g.signal.level}` : ""}`}
@@ -400,7 +421,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                       </span>
                     </>
                   )}
-                </div>
+                </button>
                     ))}
                 </div>
                 );
@@ -434,7 +455,19 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                 <tbody>
                   {usMajor.data?.nightFutures && (
                     /* 야간선물만 지금 움직이는 값이라 맨 위에 두고 줄을 나눈다 */
-                    <tr className="ov-night">
+                    <tr
+                      className="ov-night clickable-row"
+                      onClick={() =>
+                        setChart({
+                          kind: "futures",
+                          symbol: usMajor.data!.nightFutures!.symbol,
+                          label: "코스피 야간선물",
+                          digits: usMajor.data!.nightFutures!.digits,
+                          hintRate: usMajor.data!.nightFutures!.changeRate,
+                        })
+                      }
+                      title="눌러서 차트 보기"
+                    >
                       <td>{usMajor.data.nightFutures.label}</td>
                       <td className={signCls(usMajor.data.nightFutures.changeRate ?? 0)}>
                         {usMajor.data.nightFutures.price?.toFixed(2)}
@@ -448,7 +481,26 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                     </tr>
                   )}
                   {(usMajor.data?.rows ?? []).map((r) => (
-                    <tr key={r.key}>
+                    /*
+                      한투로 메운 줄은 안 눌린다 — 야후가 막혀서 메운 것이라
+                      야후 차트도 못 받는다. 되는 것만 눌리게 한다.
+                    */
+                    <tr
+                      key={r.key}
+                      className={r.source === "hantoo" ? undefined : "clickable-row"}
+                      onClick={
+                        r.source === "hantoo"
+                          ? undefined
+                          : () =>
+                              setChart({
+                                symbol: r.symbol,
+                                label: r.label,
+                                digits: r.digits,
+                                hintRate: r.changeRate,
+                              })
+                      }
+                      title={r.source === "hantoo" ? undefined : "눌러서 차트 보기"}
+                    >
                       <td>
                         {/*
                           색만 있으면 왜 빨간지 모른다. 점 옆에 이유를 한 줄로 붙인다 —
@@ -510,17 +562,48 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                     <div className="rt-h">{g}</div>
                     {(rates.data ?? [])
                       .filter((r) => r.group === g)
-                      .map((r) => (
-                        <div className="rt-row" key={r.code}>
-                          <span>{r.name}</span>
-                          <b className="num">{r.rate?.toFixed(3)}%</b>
-                          {/* 금리는 변화폭(%p)으로 읽는다 — 등락률로 보면 감이 안 온다 */}
-                          <em className={`num ${signCls(r.change ?? 0)}`}>
-                            {(r.change ?? 0) > 0 ? "+" : ""}
-                            {(r.change ?? 0).toFixed(3)}%p
-                          </em>
-                        </div>
-                      ))}
+                      .map((r) => {
+                        /*
+                          추이 차트는 **야후에 실제로 있는 것만** 연결한다 (실측:
+                          ^TNX 4.704 / ^TYX 5.231 — 한투 값과 단위까지 일치).
+                          국고채·CD·일본 10년·기준금리는 야후에 심볼이 없다(전부
+                          404 실측) — 없는 것을 눌리게 만들지 않는다.
+                        */
+                        const yahoo =
+                          r.code === "Y0202"
+                            ? "^TNX"
+                            : r.code === "Y0201"
+                              ? "^TYX"
+                              : null;
+                        const body = (
+                          <>
+                            <span>{r.name}</span>
+                            <b className="num">{r.rate?.toFixed(3)}%</b>
+                            {/* 금리는 변화폭(%p)으로 읽는다 — 등락률로 보면 감이 안 온다 */}
+                            <em className={`num ${signCls(r.change ?? 0)}`}>
+                              {(r.change ?? 0) > 0 ? "+" : ""}
+                              {(r.change ?? 0).toFixed(3)}%p
+                            </em>
+                          </>
+                        );
+                        return yahoo ? (
+                          <button
+                            type="button"
+                            className="rt-row rt-click"
+                            key={r.code}
+                            onClick={() =>
+                              setChart({ symbol: yahoo, label: r.name, digits: 3 })
+                            }
+                            title="눌러서 추이 차트"
+                          >
+                            {body}
+                          </button>
+                        ) : (
+                          <div className="rt-row" key={r.code}>
+                            {body}
+                          </div>
+                        );
+                      })}
                   </div>
                 ))}
               </div>
@@ -789,6 +872,9 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
       {indexDetail && (
         <IndexDetailSheet code={indexDetail} onClose={() => setIndexDetail(null)} />
       )}
+
+      {/* 글로벌·미장·미국 금리 줄에서 연 추이 차트 */}
+      {chart && <YahooChartSheet target={chart} onClose={() => setChart(null)} />}
 
       {constituent && (
         <ConstituentSheet

@@ -239,19 +239,30 @@ function mapFlow(row: Row | undefined): InvestorFlow {
 }
 
 async function fetchFlow(client: KiwoomClient): Promise<MarketFlow> {
-  // ka10051 업종별투자자순매수요청 — 시장 단위 집계를 한 번에 준다(종목별 합산 불필요). 단위: 억원
+  /*
+   * ka10051 업종별투자자순매수요청 — 시장 단위 집계를 한 번에 준다(종목별 합산 불필요). 단위: 억원
+   *
+   * ⚠️ stex_tp 는 **통합(3)** 이다 (2026-08-25 변경).
+   *
+   * 원래 KRX(1)였다 — 종목 상세(ka10001)와 기준을 맞추려던 것인데, 두 가지가 어긋났다:
+   *   (1) 키움 영웅문 앱의 투자자별 매매동향은 통합 기준이라 **앱과 수백억씩 달랐다**
+   *   (2) 업종 수급(sectorFlowStore)은 처음부터 통합(3)이라 **우리 화면끼리도 안 맞았다**
+   * NXT 비중이 커진 지금은 통합이 「오늘 누가 샀나」의 정답에 더 가깝다.
+   * flowIntraday 에 쌓인 장중 시계열은 이날을 경계로 기준이 바뀐다 — 당일 곡선이
+   * 한 번 튀는 건 그 때문이지 버그가 아니다.
+   */
   const [kospiRes, kosdaqRes] = await Promise.all([
     client.request<Row>(SECT_RESOURCE, "ka10051", {
       mrkt_tp: "0",
       amt_qty_tp: "0",
       base_dt: "",
-      stex_tp: "1", // KRX — 상세(ka10001)와 기준을 맞춘다. 통합은 마감 후 NXT 값을 준다
+      stex_tp: "3",
     }),
     client.request<Row>(SECT_RESOURCE, "ka10051", {
       mrkt_tp: "1",
       amt_qty_tp: "0",
       base_dt: "",
-      stex_tp: "1", // KRX — 상세(ka10001)와 기준을 맞춘다. 통합은 마감 후 NXT 값을 준다
+      stex_tp: "3",
     }),
   ]);
 

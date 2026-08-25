@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, normalizeStockCode, type StockSearchResult } from "../api";
+import { BreakingNews } from "../components/BreakingNews";
 import { DisclosureList, NewsList } from "../components/NewsDisclosurePanel";
 import { NaverFinanceFrame } from "../components/NaverFinanceFrame";
 import { SectorNews } from "../components/SectorNews";
@@ -8,7 +9,7 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [picked, setPicked] = useState<{ code: string; name: string } | null>(null);
-  const [srcTab, setSrcTab] = useState<"sector" | "naver">("sector");
+  const [srcTab, setSrcTab] = useState<"sector" | "breaking" | "naver">("sector");
 
   // 종목명이 겹칠 수 있으므로 후보를 보여주고 고르게 한다
   useEffect(() => {
@@ -90,6 +91,12 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
               분야별 뉴스
             </button>
             <button
+              className={`detail-tab${srcTab === "breaking" ? " active" : ""}`}
+              onClick={() => setSrcTab("breaking")}
+            >
+              ⚡ 속보
+            </button>
+            <button
               className={`detail-tab${srcTab === "naver" ? " active" : ""}`}
               onClick={() => setSrcTab("naver")}
             >
@@ -99,6 +106,8 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
 
           {srcTab === "sector" ? (
             <SectorNews perSector={50} defaultSort="recent" />
+          ) : srcTab === "breaking" ? (
+            <BreakingNews />
           ) : (
             <NaverFinanceFrame />
           )}

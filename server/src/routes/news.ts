@@ -4,7 +4,7 @@ import { getFinance } from "../dartFinance.js";
 import { estimatePerform } from "../estimatePerform.js";
 import { quarterFinance } from "../quarterFinance.js";
 import { peekSnapshot } from "../marketSnapshot.js";
-import { getDisclosures, newsCounts, searchNews, sectorNews } from "../newsDisclosure.js";
+import { breakingNews, getDisclosures, newsCounts, searchNews, sectorNews } from "../newsDisclosure.js";
 import { listWatchlist } from "../watchlist.js";
 import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -132,6 +132,15 @@ export function createNewsRouter(client: KiwoomClient): Router {
       const out = await sectorNews({ majorOnly, perSector, watchNames, stockNames, sort });
       // 어디서 온 종목으로 검색했는지 화면에 밝힌다 — 안 밝히면 왜 이 기사가 떴는지 모른다
       res.json({ ...out, mineSources: mine.sources, mineNames: stockNames });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 속보 — [속보]·[단독]·[긴급] 머리표가 붙은 것만, 증시·기업 갈래 우선 */
+  router.get("/news/breaking", async (_req, res, next) => {
+    try {
+      res.json(await breakingNews());
     } catch (err) {
       next(err);
     }
