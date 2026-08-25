@@ -335,8 +335,9 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                          * **금액이 위(크게), 계약이 아래(작게)** — 지수 수급(억원)과
                          * 같은 눈으로 견주는 게 우선이라는 사용자 지정.
                          */
+                        // 「억」 글자는 뺀다 — 이 카드의 수급은 다 억원이라 접미가 소음이다
                         const eok = (n: number) =>
-                          `${n > 0 ? "+" : ""}${fmtNum(Math.round((n * c.price) / 400))}억`;
+                          `${n > 0 ? "+" : ""}${fmtNum(Math.round((n * c.price) / 400))}`;
                         const row = (lbl: string, n: number) => (
                           <div>
                             <span className="lbl">{lbl}</span>
