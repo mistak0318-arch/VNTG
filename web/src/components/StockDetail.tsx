@@ -9,6 +9,7 @@ import { InvestorTrendTable } from "./InvestorTrendTable";
 import { NewsDisclosurePanel } from "./NewsDisclosurePanel";
 import { IntradayLevelsBar } from "./IntradayLevelsBar";
 import { PriceHeader } from "./PriceHeader";
+import { StockSummaryPanel } from "./StockSummaryPanel";
 import { TabScroller } from "./TabScroller";
 import { OpinionPanel } from "./OpinionPanel";
 import { useLive } from "../useLive";
@@ -237,6 +238,8 @@ export function StockDetail({
           <>
             <PriceHeader info={info} code={code} />
             <IntradayLevelsBar code={code} />
+            {/* 개별종목분석과 **같은 표** — 같은 값을 두 번 그리면 언젠가 갈린다 */}
+            <StockSummaryPanel code={code} />
 
             {onOpenAnalysis && (
               <button className="analysis-link" onClick={() => onOpenAnalysis(code, name)}>

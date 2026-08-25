@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { appendSignalDay, type SignalDayRow } from "./signalHistory.js";
 import { evaluateSignal, getConfig, type Axis } from "./signalLight.js";
 import { tradeValueTop } from "./signalScreen.js";
 
@@ -266,6 +267,19 @@ export async function enrollToday(
   let failed = 0;
   let belowTier = 0;
 
+  /*
+   * **버리기 전에 한 줄 적는다.**
+   *
+   * 아래 반복문은 모집단 전체를 평가해 놓고 **문턱 아래는 그냥 버리고 있었다.**
+   * 그런데 「70점이 진짜 40점보다 나은가」를 물으려면 **떨어진 것도 있어야 한다** —
+   * 문턱의 값어치는 문턱 아래를 알아야 잴 수 있다.
+   *
+   * 신호등은 **지금 시점만** 계산할 수 있다. 차트는 되짚을 수 있지만 그때의 수급·
+   * 재무·목표주가는 되살릴 방법이 없다 — **오늘 안 쌓으면 영영 못 쌓는다.**
+   * 조회가 한 번도 안 늘어난다.
+   */
+  const history: SignalDayRow[] = [];
+
   for (const u of universe) {
     if (job) job.current = u.name || u.code;
     let sig: Awaited<ReturnType<typeof evaluateSignal>> | null = null;
@@ -289,6 +303,17 @@ export async function enrollToday(
      */
     await new Promise((r) => setTimeout(r, 260));
     if (!sig) continue;
+
+    /* 문턱과 상관없이 **전부** 적는다 — 이게 P39 의 전부다 */
+    history.push({
+      code: u.code,
+      name: u.name,
+      score: sig.score,
+      level: sig.level,
+      riskCapped: Boolean(sig.riskCapped),
+      price: u.price,
+    });
+
     // 켠 문턱 중 높은 것부터 — 90점이면 90 으로 담는다(70 으로 중복해서 담지 않는다)
     const tier = [...cfg.tiers].sort((a, b) => b - a).find((t) => sig!.score >= t);
     if (!tier) {
@@ -338,6 +363,8 @@ export async function enrollToday(
 
   store.lastRunDate = date;
   await save(store);
+  /* 담은 것과 별개로 **평가한 전부**를 쌓는다 (P39). 실패해도 추적기를 막지 않는다 */
+  await appendSignalDay(date, history);
   const marketName = cfg.market === "001" ? "코스피" : cfg.market === "101" ? "코스닥" : "전체";
   /*
    * 0건일 때 **왜 0건인지**를 문장에 넣는다.

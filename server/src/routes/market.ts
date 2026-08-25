@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { intradayLevels } from "../intraday.js";
+import { stockSummary } from "../stockSummary.js";
 import { getSectorMood } from "../sectorMood.js";
 import { searchStocks } from "../stockListCache.js";
 import { analystOpinion } from "../analystOpinion.js";
@@ -403,6 +404,24 @@ export function createMarketRouter(client: KiwoomClient): Router {
    * 업종(지수) 분봉 — ka20005. 지수의 장중 흐름을 그리는 데 쓴다.
    * inds_cd: 001 코스피 / 101 코스닥 / 201 코스피200
    */
+  /**
+   * 업종(지수) 일봉 — ka20006. 손질 전 원본 그대로.
+   *
+   * `indexDetail` 이 이미 이 조회를 쓰지만 **캔들만 꺼내 쓴다.** 거래량·거래대금 같은
+   * 필드가 실제로 오는지는 원본을 봐야 안다 — 분봉(`index-intraday`)과 같은 자리에 둔다.
+   */
+  router.get("/index-daily/:code", async (req, res, next) => {
+    try {
+      const { data } = await client.request(CHART_RESOURCE, "ka20006", {
+        inds_cd: req.params.code,
+        base_dt: todayYyyymmdd(),
+      });
+      res.json(data);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/index-intraday/:code", async (req, res, next) => {
     try {
       const tic = typeof req.query.tic === "string" ? req.query.tic : "5";
@@ -469,6 +488,18 @@ export function createMarketRouter(client: KiwoomClient): Router {
         }))
         .filter((r) => r.t.length >= 6 && r.price > 0);
       res.json({ code: bare, strength: ticks[0]?.strength ?? null, ticks });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 종목 한 장 요약 — 몸값(시총·회전율·체결강도)과 오늘 수급(개인·외국인·기관 세부·프로그램).
+   * 조회 넷을 서버에서 합친다 — 화면이 따로 부르면 조각조각 뜬다.
+   */
+  router.get("/summary/:code", async (req, res, next) => {
+    try {
+      res.json(await stockSummary(client, req.params.code));
     } catch (err) {
       next(err);
     }

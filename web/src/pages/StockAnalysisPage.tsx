@@ -4,7 +4,14 @@ import { api, normalizeStockCode, pickList, type RawRecord, type StockSearchResu
 import { ChartPanel } from "../components/ChartPanel";
 import { IntradayFlow, ProgramFlowBars } from "../components/IntradayPanels";
 import { InvestorTrendTable } from "../components/InvestorTrendTable";
+import { FinancePanel } from "../components/FinancePanel";
 import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
+import { NewsDisclosurePanel } from "../components/NewsDisclosurePanel";
+import { OpinionPanel } from "../components/OpinionPanel";
+import { StockSummaryPanel } from "../components/StockSummaryPanel";
+import { SupplyDetailPanel } from "../components/SupplyDetailPanel";
+import { TabScroller } from "../components/TabScroller";
+import { useCardOrder } from "../useCardOrder";
 import { PriceHeader } from "../components/PriceHeader";
 import { RefreshBar } from "../components/RefreshBar";
 import { SectorMoodPanel } from "../components/SectorMoodPanel";
@@ -39,6 +46,10 @@ type AnalysisTab =
   | "strength"
   | "tradeSize"
   | "daily"
+  | "opinion"
+  | "supply"
+  | "feed"
+  | "finance"
   | "notes";
 
 const TABS: { key: AnalysisTab; label: string }[] = [
@@ -51,6 +62,19 @@ const TABS: { key: AnalysisTab; label: string }[] = [
   { key: "strength", label: "체결강도" },
   { key: "tradeSize", label: "체결금액대" },
   { key: "daily", label: "일별상세" },
+  /*
+   * ── 아래 넷은 **종목 상세 시트에만 있던 것들**이다 (P27).
+   *
+   * 「개별종목분석」이 호가·거래원·체결강도로는 더 깊은데, 정작 **목표주가·재무·뉴스**가
+   * 없어서 그걸 보려면 다른 화면으로 나가야 했다. 같은 종목을 두 화면으로 나눠 보는
+   * 셈이라, 종목을 깊게 볼수록 화면을 더 자주 옮겨 다녀야 했다 — 거꾸로다.
+   *
+   * 시트가 쓰던 **그 컴포넌트를 그대로** 붙인다. 새로 그리면 두 화면이 언젠가 갈린다.
+   */
+  { key: "opinion", label: "목표주가" },
+  { key: "supply", label: "외국인·공매도·대차" },
+  { key: "feed", label: "뉴스·공시" },
+  { key: "finance", label: "재무" },
   { key: "notes", label: "메모" },
 ];
 
@@ -64,6 +88,12 @@ export function StockAnalysisPage({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [tab, setTab] = useState<AnalysisTab>("chart");
+  const [editTabs, setEditTabs] = useState(false);
+  /* 카드 배치·상세 시트와 **같은 훅**. 키만 다르다 — 탭 구성이 달라서다 */
+  const tabOrder = useCardOrder(
+    "stockAnalysis.tabs",
+    TABS.map((t) => t.key),
+  );
   const [investorChart, setInvestorChart] = useState<RawRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -216,22 +246,82 @@ export function StockAnalysisPage({
             key={`mood-${stock.code}-${reloadKey}`}
           />
 
-          <nav className="detail-tabs">
+          {/*
+            탭 순서 바꾸기 — **종목 상세 시트와 같은 훅**이다(서버 저장, 기기가 달라도 같은 순서).
+            탭이 열둘을 넘으면서 자주 보는 게 뒤로 밀렸다. JSX 를 재배열하지 않고 CSS `order` 만 준다.
+            ⚠️ 저장 키는 시트와 **따로** 둔다 — 탭 구성이 다르므로 같은 키를 쓰면 서로 흔든다.
+          */}
+          <TabScroller className="detail-tabs" activeKey={tab}>
             {TABS.map((t) => (
               <button
                 key={t.key}
                 className={`detail-tab${tab === t.key ? " active" : ""}`}
+                style={{ order: tabOrder.orderOf(t.key) }}
                 onClick={() => setTab(t.key)}
               >
                 {t.label}
+                {editTabs && (
+                  <>
+                    <span
+                      className="dt-move"
+                      role="button"
+                      title="앞으로"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        tabOrder.move(t.key, -1);
+                      }}
+                    >
+                      ◀
+                    </span>
+                    <span
+                      className="dt-move"
+                      role="button"
+                      title="뒤로"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        tabOrder.move(t.key, 1);
+                      }}
+                    >
+                      ▶
+                    </span>
+                  </>
+                )}
               </button>
             ))}
-          </nav>
+            <button
+              className={`detail-tab dt-edit${editTabs ? " active" : ""}`}
+              style={{ order: 999 }}
+              onClick={() => setEditTabs((v) => !v)}
+              title="자주 보는 탭을 앞으로 옮깁니다"
+            >
+              {editTabs ? "순서 끝" : "탭 순서"}
+            </button>
+          </TabScroller>
+
+          {editTabs && (
+            <div className="table-note">
+              탭 이름 옆 <b>◀ ▶</b> 로 옮깁니다. 서버에 저장되어 <b>다른 기기에서도 같은
+              순서</b>입니다.
+              {tabOrder.customized && (
+                <button className="filter-btn dt-reset" onClick={tabOrder.reset}>
+                  원래대로
+                </button>
+              )}
+            </div>
+          )}
 
           <div key={`${stock.code}-${tab}-${reloadKey}`}>
             {/* 차트 탭은 "오늘 이 종목이 어땠나"를 위에서 아래로 훑는 종합 화면 */}
             {tab === "chart" && (
               <>
+                {/*
+                  **한 장 요약이 맨 위다.**
+
+                  값이 흩어져 있어서 「이 종목 지금 어떤가」를 보려고 화면을 위아래로
+                  훑어야 했다. 몸값(시총·회전율·체결강도)과 오늘 수급(개인·외국인·
+                  기관 세부·프로그램)을 표 두 개로 모은다 — 줄을 맞춰 세워야 눈이 한 번에 훑는다.
+                */}
+                <StockSummaryPanel code={stock.code} />
                 <SignalPanel code={stock.code} onSelectStock={onSelectStock} />
                 <QuoteSummary code={stock.code} />
                 <IntradayFlow code={stock.code} basePrice={Math.abs(Number(info?.base_pric)) || 0} />
@@ -260,6 +350,11 @@ export function StockAnalysisPage({
             */}
             {tab === "tradeSize" && <TradeSizePanel code={stock.code} />}
             {tab === "daily" && <DailyDetailPanel code={stock.code} />}
+            {/* 종목 상세 시트가 쓰는 그 컴포넌트 그대로 — 새로 그리면 두 화면이 갈린다 */}
+            {tab === "opinion" && <OpinionPanel code={stock.code} />}
+            {tab === "supply" && <SupplyDetailPanel code={stock.code} />}
+            {tab === "feed" && <NewsDisclosurePanel code={stock.code} name={stock.name} />}
+            {tab === "finance" && <FinancePanel code={stock.code} />}
             {tab === "notes" && (
               <StockNotes
                 code={stock.code}

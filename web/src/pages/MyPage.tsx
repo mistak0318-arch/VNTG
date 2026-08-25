@@ -9,6 +9,7 @@ import {
   type WatchStatus,
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
+import { useAutoRefresh } from "../useAutoRefresh";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useWatchedCodes } from "../useWatchedCodes";
 
@@ -72,6 +73,17 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
   const [statuses, setStatuses] = useState<{ key: WatchStatus; label: string; hint: string }[]>([]);
   /** 상태로 좁혀 보기. `null` 이면 전부 */
   const [statusFilter, setStatusFilter] = useState<WatchStatus | null>(null);
+  /*
+   * 자동 갱신 — 다른 목록 화면은 다 붙어 있는데 **정작 제일 오래 띄워 두는 이 화면만**
+   * 없었다. 손으로 새로고침을 눌러야 값이 바뀌니, 안 누르면 아침 값을 오후까지 본다.
+   *
+   * 40초다. 시세만 있는 목록(20초)보다 느린 이유는 여기가 **수급·재무까지 붙은 무거운
+   * 조회**라서다 — 20초로 잡으면 갱신이 끝나기 전에 다음 갱신이 걸린다.
+   */
+  const auto = useAutoRefresh(() => void load(true), {
+    storeKey: "vntg.auto.watch",
+    intervalMs: 40_000,
+  });
   useEffect(() => {
     api
       .watchStatuses()
@@ -344,7 +356,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
 
   return (
     <div>
-      <RefreshBar onRefresh={() => load(true)} loading={loading} updatedAt={updatedAt} />
+      <RefreshBar onRefresh={() => load(true)} loading={loading} updatedAt={updatedAt} auto={auto} />
 
       {error && <div className="error-banner">{error}</div>}
 

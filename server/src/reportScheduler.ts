@@ -58,7 +58,7 @@ export async function publishEdition(
   console.log(`[report] ${date} ${meta.label} 발행 완료 (토큰 ${summary.inputTokens}/${summary.outputTokens})`);
 
   // 발행 직후 텔레그램·메일로 전송. 실패해도 저장분은 남으므로 나중에 재발송할 수 있다.
-  if (deliver) await deliverReport(report).catch(() => undefined);
+  if (deliver) await deliverReport(report, client).catch(() => undefined);
   return report;
 }
 
@@ -83,7 +83,7 @@ export async function publishAdhoc(
   progress.start("save");
   await saveReport(report);
   console.log(`[report] ${date} ${opts.label} 즉시발행 (토큰 ${summary.inputTokens}/${summary.outputTokens})`);
-  if (opts.deliver) await deliverReport(report).catch(() => undefined);
+  if (opts.deliver) await deliverReport(report, client).catch(() => undefined);
   progress.done("save", opts.deliver ? "저장·발송 완료" : "저장 완료");
   return report;
 }

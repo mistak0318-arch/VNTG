@@ -1,4 +1,6 @@
+import type { KiwoomClient } from "./kiwoomClient.js";
 import { sendMail } from "./mailer.js";
+import { newsletterHtml } from "./newsletter.js";
 import type { PublishedReport } from "./reportStore.js";
 import { sendTelegram, toTelegramHtml } from "./telegram.js";
 
@@ -52,7 +54,14 @@ function mailHtml(r: PublishedReport): string {
 </div>`;
 }
 
-export async function deliverReport(r: PublishedReport): Promise<DeliveryResult> {
+/**
+ * @param client 있으면 **뉴스레터**(지수·내 테마·신호등까지 한 장)로 보낸다.
+ *   없으면 예전처럼 요약 글만 — 조각을 못 만들어도 메일은 나가야 하기 때문이다.
+ */
+export async function deliverReport(
+  r: PublishedReport,
+  client?: KiwoomClient,
+): Promise<DeliveryResult> {
   const text = r.summary.text;
   if (!text) {
     return {
@@ -63,10 +72,24 @@ export async function deliverReport(r: PublishedReport): Promise<DeliveryResult>
 
   const tgBody = `📰 <b>VNTG 데일리 리포트</b>\n${header(r)}\n${toTelegramHtml(text)}`;
 
+  /*
+   * 메일 본문 — **뉴스레터가 되면 뉴스레터로.**
+   *
+   * 예전엔 AI 요약 글만 나갔다. 그런데 아침에 실제로 보는 건 글이 아니라 숫자다 —
+   * 지수·거래대금·내 테마. 그게 없으면 메일이 「앱을 열라는 알림」밖에 안 된다.
+   *
+   * 만들다 실패하면 **예전 본문으로 되돌아간다.** 뉴스레터 때문에 메일이 안 가면
+   * 고친 게 아니라 망가뜨린 것이다.
+   */
+  let body = mailHtml(r);
+  if (client) {
+    body = await newsletterHtml(client, r).catch(() => body);
+  }
+
   // 한쪽이 실패해도 다른 쪽은 나가야 한다
   const [telegram, mail] = await Promise.all([
     sendTelegram(tgBody, "report").catch((e) => ({ ok: false, error: String(e) })),
-    sendMail(`[VNTG] ${r.date} ${r.label} 리포트`, mailHtml(r)).catch((e) => ({
+    sendMail(`[VNTG] ${r.date} ${r.label} 리포트`, body).catch((e) => ({
       ok: false,
       error: String(e),
     })),

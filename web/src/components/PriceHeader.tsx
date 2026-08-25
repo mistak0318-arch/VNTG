@@ -193,15 +193,20 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
    * **52,462억(38%)이 NXT** 였고 종가도 KRX 257,000 · NXT 256,000 으로 달랐다.
    * 그만한 거래를 화면에서 지워 두면 「NXT 가격이 왜 안 보이냐」가 나온다.
    *
-   * 대신 **값이 같으면 안 띄운다.** 같은 숫자를 두 줄 쓰면 그게 진짜 헷갈리는 것이다.
+   * ## ⚠️ 「값이 같으면 숨긴다」를 그만뒀다 (2026-08-25)
+   *
+   * 정규장 중엔 값이 같을 때 줄을 지웠다. 그런데 이 값은 **10초마다 다시 받는다** —
+   * KRX 와 NXT 가 붙었다 떨어졌다 하면서 **줄이 생겼다 없어졌다** 하고, 그때마다
+   * 그 아래 화면 전체가 위아래로 밀렸다. 호가를 보고 있는데 창이 움직인다.
+   *
+   * **자리는 늘 잡아 둔다.** 값이 같으면 가격 대신 「= KRX」라고 적는다 — 같은 숫자를
+   * 두 번 쓰는 것도 피하면서 높이는 안 변한다. 화면이 안 흔들리는 게 우선이다.
    */
   const nxtDiffers =
     nxt?.price != null && Math.abs(nxt.price - Math.abs(Number(info.cur_prc))) > 1e-9;
-  const showNxtLine =
-    nxt?.price != null &&
-    nxt.price > 0 &&
-    Number.isFinite(nxt.changeRate) &&
-    (phase !== "regular" || nxtDiffers);
+  const showNxtLine = nxt?.price != null && nxt.price > 0 && Number.isFinite(nxt.changeRate);
+  /** 값이 KRX 와 같은가 — 같으면 숫자 대신 그렇게 적는다(줄은 그대로 둔다) */
+  const nxtSame = showNxtLine && phase === "regular" && !nxtDiffers;
   const nxtCls = !nxt ? "" : nxt.changeRate > 0 ? "positive" : nxt.changeRate < 0 ? "negative" : "";
 
   return (
@@ -223,13 +228,19 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           </div>
         )}
         {showNxtLine && nxt && (
-          <div className={`ph-nxt ${nxtCls}`}>
+          <div className={`ph-nxt ${nxtSame ? "same" : nxtCls}`}>
             <em className="ph-ex nxt">NXT</em>
-            <b>{fmtNum(nxt.price)}</b>
-            <span className="ph-nxt-rate">
-              {nxt.changeRate > 0 ? "+" : ""}
-              {nxt.changeRate.toFixed(2)}%
-            </span>
+            {nxtSame ? (
+              <b className="pt-n">= KRX</b>
+            ) : (
+              <>
+                <b>{fmtNum(nxt.price)}</b>
+                <span className="ph-nxt-rate">
+                  {nxt.changeRate > 0 ? "+" : ""}
+                  {nxt.changeRate.toFixed(2)}%
+                </span>
+              </>
+            )}
             <span className="ph-when">{phase === "closed" ? "20:00 마감" : "거래 중"}</span>
           </div>
         )}
@@ -243,12 +254,18 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
         ].map((it) => {
           const v = vsBase(it.value, base);
           const nv = vsBase(it.nxtValue, base);
-          // KRX 와 같은 값이면 굳이 두 번 적지 않는다 — 다를 때만 눈에 띄어야 한다
-          // (정규장 중에도 NXT 는 병행 거래된다. 값이 다르면 그때도 보여야 한다)
-          const showNxt =
-            it.nxtValue !== null &&
-            it.nxtValue > 0 &&
-            it.nxtValue !== Math.abs(Number(it.value));
+          /*
+           * ⚠️ **자리는 늘 잡아 둔다.**
+           *
+           * 「KRX 와 같으면 안 적는다」로 두었더니, 10초마다 값을 다시 받으면서
+           * 두 값이 붙었다 떨어졌다 할 때마다 **줄이 생겼다 없어졌다** 했다.
+           * 세 칸(시·고·저)이 제각각 그러니 화면이 계속 덜컹거린다.
+           *
+           * NXT 값이 아예 없을 때만 안 그린다(그건 안 바뀐다). 값이 있는데 KRX 와
+           * 같으면 숫자 대신 「= KRX」다 — 같은 숫자를 두 번 안 쓰면서 높이는 고정된다.
+           */
+          const hasNxt = it.nxtValue !== null && it.nxtValue > 0;
+          const sameAsKrx = hasNxt && it.nxtValue === Math.abs(Number(it.value));
           return (
             <div className="ph-cell" key={it.label}>
               <span className="ph-label">{it.label}</span>
@@ -257,11 +274,17 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
                 <b className={`ph-value ${v.cls}`}>{fmtAbsNum(it.value)}</b>
                 {v.rate && <em className={`ph-pct ${v.cls}`}>{v.rate}</em>}
               </span>
-              {showNxt && (
+              {hasNxt && (
                 <span className="ph-row">
                   <em className="ph-ex nxt">NXT</em>
-                  <b className={`ph-value ${nv.cls}`}>{fmtNum(it.nxtValue)}</b>
-                  {nv.rate && <em className={`ph-pct ${nv.cls}`}>{nv.rate}</em>}
+                  {sameAsKrx ? (
+                    <b className="ph-value pt-n">= KRX</b>
+                  ) : (
+                    <>
+                      <b className={`ph-value ${nv.cls}`}>{fmtNum(it.nxtValue)}</b>
+                      {nv.rate && <em className={`ph-pct ${nv.cls}`}>{nv.rate}</em>}
+                    </>
+                  )}
                 </span>
               )}
             </div>
@@ -315,7 +338,8 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
             거래대금 0억」**이 떴다 — 정작 그 시간에 실제로 도는 건 NXT 쪽이다.
             시·고·저는 이미 KRX/NXT 를 갈라 적고 있었는데 여기만 안 갈라져 있었다.
 
-            NXT 가 0 이면 안 적는다. 「NXT 0」은 정보가 아니라 소음이다.
+            ⚠️ **거래량은 줄어들지 않으므로** 한 번 뜨면 계속 뜬다 — 여기서는
+            나타났다 사라지는 일이 안 생긴다. 가격과 달리 누적값이라서다.
           */}
           {nxt?.volume != null && nxt.volume > 0 && (
             <span className="ph-row">

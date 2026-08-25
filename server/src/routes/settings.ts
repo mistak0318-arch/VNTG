@@ -5,6 +5,7 @@ import { getMenuPrefs, saveMenuPrefs } from "../menuPrefs.js";
 import { getBoardPrefs, saveBoardPrefs } from "../boardPrefs.js";
 import { getUiPrefs, patchUiPrefs } from "../uiPrefs.js";
 import { getCardOrder, saveCardOrder } from "../cardOrder.js";
+import { getColumnWidths, saveColumnWidths } from "../columnWidths.js";
 
 export function createSettingsRouter(): Router {
   const router = Router();
@@ -144,6 +145,26 @@ export function createSettingsRouter(): Router {
   router.put("/cards", async (req, res, next) => {
     try {
       res.json(await saveCardOrder(req.body));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 표 칸 너비 — 카드 배치와 **같은 층**이다.
+   * 「이 표에서 무엇을 넓게 보나」는 그 사람이 표를 읽는 방식이라 기기가 바뀌어도 따라와야 한다.
+   */
+  router.get("/columns", async (_req, res, next) => {
+    try {
+      res.json(await getColumnWidths());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/columns", async (req, res, next) => {
+    try {
+      res.json(await saveColumnWidths(req.body));
     } catch (err) {
       next(err);
     }

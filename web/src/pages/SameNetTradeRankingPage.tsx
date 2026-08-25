@@ -4,6 +4,7 @@ import { Pager, usePager } from "../components/Pager";
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtAbsNum, fmtNum, normalizeStockCode, pickList, signClass, type RawRecord } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
+import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
 
@@ -63,6 +64,14 @@ export function SameNetTradeRankingPage({
   /* 장중에는 스스로 다시 받는다 — 새로고침을 누르러 오게 하면 안 된다 */
   const auto = useAutoRefresh(() => void load(), { storeKey: "vntg.auto.samenet", intervalMs: 30000 });
 
+  /* 신호등 — 지금 쪽만, 켤 때만. 시세분석·거래상위·연속매매와 같은 규칙이다 */
+  const [sigOn, setSigOn] = useState(false);
+  const drawn = pager.slice(sort.sorted);
+  const signals = useSignalColumn(
+    drawn.map((r) => normalizeStockCode(String(r.stk_cd ?? ""))),
+    sigOn,
+  );
+
   return (
     <div>
       <RefreshBar onRefresh={load} loading={loading} updatedAt={updatedAt} auto={auto} />
@@ -88,6 +97,13 @@ export function SameNetTradeRankingPage({
           </button>
         ))}
         <StockFilterToggle f={f} open={openFilter} onToggle={() => setOpenFilter((v) => !v)} />
+        <button
+          className={`filter-btn ${sigOn ? "active" : ""}`}
+          onClick={() => setSigOn((v) => !v)}
+          title="지금 쪽의 종목만 평가합니다 — 종목마다 차트·수급·재무를 조회하므로 켤 때만 돕니다"
+        >
+          🚦 신호등 {sigOn ? "끄기" : "켜기"}
+        </button>
         {f.on && (
           <span className="breadth-count">
             {kept.length} / {rows.length}건
@@ -104,6 +120,7 @@ export function SameNetTradeRankingPage({
           <table className="data-table">
             <thead>
               <tr>
+                {sigOn && <th className="sig-th">🚦</th>}
                 <SortableTh columnKey="name" label="종목명" accessor={(r: RawRecord) => String(r.stk_nm ?? "")} sort={sort} className="sticky-col" />
                 <SortableTh columnKey="price" label="현재가" accessor={(r: RawRecord) => Math.abs(Number(r.cur_prc)) || 0} sort={sort} />
                 <SortableTh columnKey="fluRt" label="등락률" accessor={(r: RawRecord) => Number(r.flu_rt) || 0} sort={sort} />
@@ -113,11 +130,16 @@ export function SameNetTradeRankingPage({
               </tr>
             </thead>
             <tbody>
-              {pager.slice(sort.sorted).map((r, i) => {
+              {drawn.map((r, i) => {
                 const code = normalizeStockCode(String(r.stk_cd ?? ""));
                 const name = String(r.stk_nm ?? "");
                 return (
                   <tr key={`${code}-${i}`} onClick={() => onSelectStock(code, name)} className="clickable-row">
+                    {sigOn && (
+                      <td className="sig-td" onClick={(e) => e.stopPropagation()}>
+                        <SignalCell code={code} name={name} signal={signals[code]} onSelectStock={onSelectStock} />
+                      </td>
+                    )}
                     <td className="sticky-col">
                       <span className="rank-cell">{String(r.rank ?? i + 1)}. </span>
                       <WatchStar code={code} />

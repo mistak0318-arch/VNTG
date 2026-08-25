@@ -68,7 +68,16 @@ export const FONTS: { key: FontName; label: string; stack: string }[] = [
   { key: "mono", label: "고정폭", stack: 'ui-monospace, Consolas, "D2Coding", monospace' },
 ];
 
-export const FONT_SCALES = [85, 92, 100, 110, 120];
+/**
+ * 글자 크기 배율(%).
+ *
+ * ⚠️ 위가 **120 에서 막혀 있었다.** 27인치를 멀리 두고 보거나 태블릿을 차 안에 세워
+ * 두면 120 도 작다 — 화면이 클수록 눈에서 멀어지는데, 그때 더 키울 방법이 없었다.
+ * **200 까지** 연다. 표가 넘치면 가로 스크롤이 받아 준다(`data-table-wrap`).
+ *
+ * 아래로도 한 칸 더 뒀다 — 엑셀 모드로 종목을 잔뜩 늘어놓을 때 쓴다.
+ */
+export const FONT_SCALES = [75, 85, 92, 100, 110, 120, 135, 150, 175, 200];
 
 const STORAGE_KEY = "vntg.appearance";
 

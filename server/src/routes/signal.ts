@@ -7,6 +7,7 @@ import {
   startScreen,
 } from "../signalScreen.js";
 import { evaluateMarket } from "../marketSignal.js";
+import { gradeSignalHistory, signalDays } from "../signalHistory.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
   DEFAULT_CONFIG,
@@ -72,6 +73,35 @@ export function createSignalRouter(client: KiwoomClient): Router {
   router.get("/market", async (req, res, next) => {
     try {
       res.json(await evaluateMarket(client, req.query.force === "1"));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 신호등 점수 축적 — 며칠치가 쌓였나.
+   *
+   * 추적기가 도는 자리에서 **문턱 아래까지 전부** 적는다(조회 0회 추가).
+   * 「70점이 진짜 40점보다 나은가」는 떨어진 것도 있어야 물을 수 있다.
+   */
+  router.get("/history", async (_req, res, next) => {
+    try {
+      res.json({ days: await signalDays() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 채점 — 점수 구간별로 N거래일 뒤 어땠나.
+   *
+   * ⚠️ 종목당 일봉 한 번이라 몇 분 걸린다. 쌓인 날이 며칠 안 되면 표본이 적어
+   * 숫자가 튄다 — 그건 화면이 적는다.
+   */
+  router.get("/history/grade", async (req, res, next) => {
+    try {
+      const days = Math.min(Math.max(Number(req.query.days) || 5, 1), 60);
+      res.json({ grade: await gradeSignalHistory(client, days) });
     } catch (err) {
       next(err);
     }

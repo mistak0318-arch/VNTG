@@ -28,6 +28,21 @@ export interface IndexCandle {
   high: number;
   low: number;
   close: number;
+  /**
+   * **그날 시장 전체 거래대금(억원).**
+   *
+   * ⚠️ 오래 「키움이 지수 거래대금을 주는지 모른다」로 남아 있었는데, 원본을 열어 보니
+   * `trde_prica` 가 그냥 들어 있었다(2026-08-25 확인). 캔들만 꺼내 쓰느라 못 보고 있었다.
+   *
+   * 이게 왜 중요한가 — **지수가 오르는 날과 돈이 들어오는 날은 다르다.** 거래대금이
+   * 줄면서 오르는 건 팔 사람이 없어서 오르는 것이라 힘이 없다. 지수 %만 봐서는
+   * 그 둘이 똑같이 생겼다.
+   *
+   * ⚠️ 지수값은 100배로 오지만 **거래대금은 아니다.** 나누면 안 된다.
+   */
+  tradeValue: number;
+  /** 그날 거래량(천주) — 키움이 주는 단위 그대로 */
+  volume: number;
 }
 
 export interface IndexFlowRow {
@@ -66,6 +81,12 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n / 100 : 0;
 }
 
+/** ⚠️ 거래량·거래대금은 **100배가 아니다.** 지수값에만 쓰는 `num` 과 섞으면 안 된다 */
+function plain(v: unknown): number {
+  const n = Math.abs(Number(String(v ?? "").replace(/,/g, "")));
+  return Number.isFinite(n) ? n : 0;
+}
+
 /**
  * 일봉을 주·월로 묶는다.
  *
@@ -98,6 +119,9 @@ function bucket(rows: IndexCandle[], range: IndexRange): IndexCandle[] {
     last.close = r.close;
     last.high = Math.max(last.high, r.high);
     last.low = Math.min(last.low, r.low);
+    // 거래대금·거래량은 **더한다** — 고저처럼 고르는 값이 아니라 쌓이는 값이다
+    last.tradeValue += r.tradeValue;
+    last.volume += r.volume;
   }
   return out;
 }
@@ -108,6 +132,9 @@ interface Row {
   open_pric?: string;
   high_pric?: string;
   low_pric?: string;
+  /** 거래대금(백만원) · 거래량 — 2026-08-25 원본에서 확인했다 */
+  trde_prica?: string;
+  trde_qty?: string;
 }
 
 export async function indexDetail(
@@ -130,6 +157,9 @@ export async function indexDetail(
       high: num(r.high_pric),
       low: num(r.low_pric),
       close: num(r.cur_prc),
+      // 키움은 백만원으로 준다 (100 백만원 = 1억). 화면은 억으로 읽는다
+      tradeValue: Math.round(plain(r.trde_prica) / 100),
+      volume: plain(r.trde_qty),
     }))
     .filter((c) => c.dt && c.close > 0)
     .reverse();

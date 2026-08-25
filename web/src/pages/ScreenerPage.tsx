@@ -7,6 +7,7 @@ import { TopTradersTable } from "../components/TopTradersTable";
 import { CumulativeRank } from "../components/CumulativeRank";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
+import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { useCardOrder } from "../useCardOrder";
 import { useAutoRefresh } from "../useAutoRefresh";
 
@@ -222,6 +223,11 @@ export function ScreenerPage({
   /** 신호등 색깔순 — 지금 쪽 안에서만 */
   const [sigSort, setSigSort] = useState<"desc" | "asc" | null>(null);
   /* 종목 상세 탭과 같은 훅 — 서버에 저장되어 기기가 달라도 같은 순서다 */
+  /*
+   * 칸 너비 — **조회마다 따로** 기억한다. 조회를 바꾸면 열 구성이 통째로 달라지므로
+   * 하나로 묶으면 「거래대금 상위에서 넓힌 칸」이 「연속매매」의 엉뚱한 칸을 넓힌다.
+   */
+  const cw = useColumnWidths(`rank.${tab}`);
   const tabOrder = useCardOrder(
     "screener.tabs",
     TABS.map((t) => t.key),
@@ -689,9 +695,41 @@ export function ScreenerPage({
 
         {data && (
           <>
-            <h3 className="section-heading">{data.spec.label}</h3>
+            <h3 className="section-heading">
+              {data.spec.label}
+              {/*
+                칸 너비를 건드린 뒤에만 뜬다 — 안 건드렸으면 되돌릴 게 없다.
+                이 버튼이 없으면 잘못 끌었을 때 되돌릴 길이 없어서 아예 못 끌게 된다.
+              */}
+              {cw.customized && (
+                <button className="filter-btn dt-reset" onClick={cw.reset} title="칸 너비를 기본으로">
+                  칸 너비 원래대로
+                </button>
+              )}
+            </h3>
             <div className="data-table-wrap">
-              <table className="data-table">
+              {/*
+                **칸 너비를 내가 정한다.**
+
+                이 표는 열이 열댓 개다. 종목명 칸이 넓게 잡혀 있으면 회전율·시가총액이
+                오른쪽으로 밀려 가로로 한참 스크롤해야 한다. 그런데 **어느 칸이 중요한지는
+                그날 무엇을 보느냐마다 다르다** — 코드가 정해 줄 값이 아니다.
+
+                머리 칸 오른쪽 가장자리를 끌면 바뀌고, 서버에 저장되어 기기가 달라도 같다.
+                조회를 바꾸면 열 구성이 통째로 달라지므로 **조회마다 따로** 기억한다.
+              */}
+              <table className={`data-table${cw.customized ? " col-fixed" : ""}`}>
+                <colgroup>
+                  {sigOn && <col style={{ width: "2.4rem" }} />}
+                  <col style={cw.styleOf("stk_nm")} />
+                  {cols
+                    .filter((c) => c.key !== "stk_nm")
+                    .map((c) => (
+                      <col key={c.key} style={cw.styleOf(c.key)} />
+                    ))}
+                  {hasTurn && <col style={cw.styleOf("turn")} />}
+                  {hasCap && <col style={cw.styleOf("cap")} />}
+                </colgroup>
                 <thead>
                   <tr>
                     {sigOn && (
@@ -713,7 +751,10 @@ export function ScreenerPage({
                         🚦{sigSort === "desc" ? "▾" : sigSort === "asc" ? "▴" : ""}
                       </th>
                     )}
-                    <th className="sticky-col">종목명</th>
+                    <th className="sticky-col">
+                      종목명
+                      <ColumnGrip cw={cw} k="stk_nm" />
+                    </th>
                     {cols
                       .filter((c) => c.key !== "stk_nm")
                       .map((c) => (
@@ -730,6 +771,7 @@ export function ScreenerPage({
                             return Number.isFinite(n) ? n : -Infinity;
                           }}
                           sort={sort}
+                          extra={<ColumnGrip cw={cw} k={c.key} />}
                         />
                       ))}
                     {/* 걸러 보는 기준이면 표에도 있어야 한다 */}
@@ -739,6 +781,7 @@ export function ScreenerPage({
                         label="회전율"
                         accessor={(r: (typeof rows)[number]) => r.turn ?? -Infinity}
                         sort={sort}
+                        extra={<ColumnGrip cw={cw} k="turn" />}
                       />
                     )}
                     {hasCap && (
@@ -747,6 +790,7 @@ export function ScreenerPage({
                         label="시가총액"
                         accessor={(r: (typeof rows)[number]) => r.cap ?? -Infinity}
                         sort={sort}
+                        extra={<ColumnGrip cw={cw} k="cap" />}
                       />
                     )}
                   </tr>

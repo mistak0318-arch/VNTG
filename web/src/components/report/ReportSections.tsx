@@ -145,7 +145,7 @@ function IndexChart({ code, label }: { code: string; label: string }) {
           high: c.high,
           low: c.low,
           close: c.close,
-          volume: 0,
+          volume: c.tradeValue,
         }))}
       />
     </div>

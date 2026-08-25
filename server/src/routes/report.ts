@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 
 import { buildMarketDrivers } from "../reportBuilder.js";
+import { newsletterHtml } from "../newsletter.js";
 import { deliverReport } from "../reportDelivery.js";
 import { publishAdhoc, publishEdition } from "../reportScheduler.js";
 import { listReviewable, reviewReport } from "../reportReview.js";
@@ -203,7 +204,29 @@ export function createReportRouter(client: KiwoomClient): Router {
         res.status(404).json({ error: "해당 판이 아직 발행되지 않았습니다." });
         return;
       }
-      res.json(await deliverReport(report));
+      res.json(await deliverReport(report, client));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 뉴스레터 미리보기 — **보내지 않는다.**
+   *
+   * 메일은 한 번 나가면 되돌릴 수 없다. 모양이 깨졌는지는 보내기 전에 봐야 하고,
+   * 그러려면 브라우저로 열 수 있어야 한다. `text/html` 로 그대로 준다.
+   */
+  router.get("/newsletter", async (req, res, next) => {
+    try {
+      const latest = latestEdition();
+      const date = String(req.query.date ?? latest.date);
+      const edition = String(req.query.edition ?? latest.edition) as EditionKey;
+      const report = await loadReport(date, edition);
+      if (!report) {
+        res.status(404).send("해당 판이 아직 발행되지 않았습니다.");
+        return;
+      }
+      res.type("html").send(await newsletterHtml(client, report));
     } catch (err) {
       next(err);
     }

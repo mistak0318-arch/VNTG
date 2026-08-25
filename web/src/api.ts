@@ -309,6 +309,8 @@ export const api = {
     postJson<{ alerts: FiredAlert[]; sent: boolean; error?: string; preview: string }>(
       `/api/alert/scan${send ? "?send=1" : ""}`,
     ),
+  /** 종목 한 장 요약 — 몸값 + 오늘 수급. 서버가 조회 넷을 합쳐 준다 */
+  stockSummary: (code: string) => getJson<StockSummaryData>(`/api/market/summary/${code}`),
   /** 장중 기준선 — 분봉+일봉 2회 조회다. 종목을 「들여다보는」 화면에서만 부른다 */
   intraday: (code: string) =>
     getJson<{ levels: IntradayLevels | null }>(`/api/market/intraday/${code}`),
@@ -412,6 +414,10 @@ export const api = {
       candles: { t: string; open: number; high: number; low: number; close: number; volume: number }[];
       error: string | null;
     }>(`/api/market/futures-chart?code=${encodeURIComponent(code)}&period=${period}&days=${days}`),
+  /** 표 칸 너비 — 화면 이름 → 칸 키 → 픽셀. 카드 배치와 같은 층이라 서버에 둔다 */
+  columnWidths: () => getJson<Record<string, Record<string, number>>>("/api/settings/columns"),
+  columnWidthsSave: (o: Record<string, Record<string, number>>) =>
+    putJson<Record<string, Record<string, number>>>("/api/settings/columns", o),
   cardOrder: () => getJson<Record<string, string[]>>("/api/settings/cards"),
   cardOrderSave: (o: Record<string, string[]>) =>
     putJson<Record<string, string[]>>("/api/settings/cards", o),
@@ -833,6 +839,10 @@ export interface IndexCandle {
   high: number;
   low: number;
   close: number;
+  /** 그날 시장 전체 거래대금(억원) — 지수가 오르는 날과 돈이 들어오는 날은 다르다 */
+  tradeValue: number;
+  /** 거래량(천주) */
+  volume: number;
 }
 
 export interface IndexFlowRow {
@@ -1987,6 +1997,38 @@ export interface PaperResult {
   edges: EvidenceEdge[];
 }
 
+
+/** 종목 한 장 요약 */
+export interface StockSummaryData {
+  code: string;
+  date: string;
+  facts: {
+    price: number;
+    changeRate: number;
+    /** 억원 */
+    marketCap: number | null;
+    shares: number | null;
+    /** 억원 */
+    tradeValue: number | null;
+    volume: number;
+    /** % */
+    turnover: number | null;
+    strength: number | null;
+    prevClose: number;
+    high: number;
+    low: number;
+    open: number;
+    upperLimit: number;
+    lowerLimit: number;
+  };
+  /** 순매수 금액(백만원). 부호가 방향이다 */
+  main: { key: string; label: string; amount: number }[];
+  institution: { key: string; label: string; amount: number }[];
+  /** 프로그램 순매수(백만원) — 위 셋과 **겹치는 값**이라 더하면 안 된다 */
+  program: number | null;
+  /** 못 받은 조각 — 「0」과 「못 받음」은 다르다 */
+  missing: string[];
+}
 
 /** 장중 기준선 — VWAP·시가갭·전일고저·장초반 30분 */
 export interface IntradayLevels {

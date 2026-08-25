@@ -69,12 +69,21 @@ export function SortableTh<T>({
   accessor,
   sort,
   className,
+  extra,
 }: {
   columnKey: string;
   label: string;
   accessor: (row: T) => string | number;
   sort: SortState<T>;
   className?: string;
+  /**
+   * 머리 칸 안에 같이 넣을 것 — 지금은 **너비 손잡이**(`ColumnGrip`)가 쓴다.
+   *
+   * 손잡이를 `<th>` 밖에 둘 수가 없어서 여기로 받는다. 손잡이 쪽에서
+   * `stopPropagation` 을 하므로 **끌어도 정렬이 안 걸린다** — 안 그러면 폭을 줄일 때마다
+   * 정렬이 뒤집힌다.
+   */
+  extra?: React.ReactNode;
 }) {
   const active = sort.sortKey === columnKey && sort.sortDir !== null;
   const arrow = !active ? "" : sort.sortDir === "desc" ? " ▾" : " ▴";
@@ -86,6 +95,7 @@ export function SortableTh<T>({
     >
       {label}
       <span className="sort-arrow">{arrow}</span>
+      {extra}
     </th>
   );
 }

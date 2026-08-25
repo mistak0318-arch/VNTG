@@ -104,7 +104,8 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
               high: c.high,
               low: c.low,
               close: c.close,
-              volume: 0,
+              /* 거래대금(억원)을 막대로 — 지수가 오르는 날과 돈이 들어오는 날은 다르다 */
+              volume: c.tradeValue,
             }))}
           />
         )}

@@ -95,6 +95,17 @@ export function IndexChartCell({ viewId, height }: { viewId?: string; height?: n
   const diff = last && prev ? last.close - prev.close : 0;
   const rate = last && prev && prev.close > 0 ? (diff / prev.close) * 100 : 0;
 
+  /* 마지막 봉이 오늘이고 장이 아직 안 끝났나 — 거래대금 비교를 막는 조건 */
+  const kst = new Date(Date.now() + 9 * 3600_000);
+  const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  const running =
+    Boolean(last) &&
+    last.dt === kst.toISOString().slice(0, 10).replace(/-/g, "") &&
+    kst.getUTCDay() !== 0 &&
+    kst.getUTCDay() !== 6 &&
+    mins >= 9 * 60 &&
+    mins < 15 * 60 + 30;
+
   return (
     <div className="idxc">
       <div className="filter-row idxc-bar">
@@ -125,6 +136,33 @@ export function IndexChartCell({ viewId, height }: { viewId?: string; height?: n
               {diff > 0 ? "+" : ""}
               {rate.toFixed(2)}%
             </span>
+            {/*
+              **거래대금을 지수 옆에 적는다.** 지수가 오른 날과 돈이 들어온 날은 다르다 —
+              어제보다 줄었으면 그 상승은 팔 사람이 없어서 오른 것이다.
+            */}
+            {last.tradeValue > 0 && (
+              <span className="idxc-tv" title="그날 시장 전체 거래대금 · 괄호는 전일 대비">
+                {" "}
+                {(last.tradeValue / 10000).toFixed(1)}조
+                {/*
+                  ⚠️ **진행 중인 날은 어제와 못 견준다.** 10시에 재면 오늘은 한 시간치,
+                  어제는 하루치다 — 그대로 나누면 「−62%」가 뜨는데 그건 거래가 줄어든 게
+                  아니라 아직 안 끝난 것이다.
+                */}
+                {running ? (
+                  <i className="pt-n"> (진행 중)</i>
+                ) : (
+                  prev &&
+                  prev.tradeValue > 0 && (
+                    <i className={sign(last.tradeValue - prev.tradeValue)}>
+                      {" "}
+                      ({last.tradeValue > prev.tradeValue ? "+" : ""}
+                      {(((last.tradeValue - prev.tradeValue) / prev.tradeValue) * 100).toFixed(0)}%)
+                    </i>
+                  )
+                )}
+              </span>
+            )}
           </b>
         )}
       </div>
@@ -154,7 +192,19 @@ export function IndexChartCell({ viewId, height }: { viewId?: string; height?: n
             high: c.high,
             low: c.low,
             close: c.close,
-            volume: 0,
+            /*
+             * ⚠️ 예전엔 0 을 넣어 **거래량 막대가 아예 안 그려졌다.** 「지수엔 거래량이
+             * 없다」고 적어 뒀는데, 원본을 열어 보니 `ka20006` 이 거래대금을 준다.
+             * 캔들만 꺼내 쓰느라 못 보고 있었던 것이다(2026-08-25).
+             *
+             * **거래량(천주)이 아니라 거래대금(억원)**을 막대로 쓴다. 지수에서
+             * 「얼마나 돌았나」를 재는 건 주식 수가 아니라 돈이다 — 대형주 한 주와
+             * 소형주 한 주를 같이 세면 아무 말도 안 된다.
+             *
+             * 지수가 오르는데 막대가 줄면 **팔 사람이 없어서 오르는 것**이라 힘이 없다.
+             * 그 둘은 지수 % 만 봐서는 똑같이 생겼다.
+             */
+            volume: c.tradeValue,
           }))}
         />
       )}

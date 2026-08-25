@@ -4,6 +4,7 @@ import { Pager, usePager } from "../components/Pager";
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtNum, normalizeStockCode, pickList, signClass, type RawRecord } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
+import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
 
@@ -61,6 +62,19 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
   /* 장중에는 스스로 다시 받는다 — 새로고침을 누르러 오게 하면 안 된다 */
   const auto = useAutoRefresh(() => void load(), { storeKey: "vntg.auto.cont", intervalMs: 30000 });
 
+  /*
+   * 신호등 — **지금 쪽만.** 기본은 꺼 둔다.
+   *
+   * 연속매매는 「기관이 5일 연속 샀다」를 보는 자리인데, 그게 좋은 종목인지는
+   * 별개다. 점 하나가 붙으면 **훑는 단계에서 갈린다** — 시세분석·거래상위와 같은 규칙이다.
+   */
+  const [sigOn, setSigOn] = useState(false);
+  const drawn = pager.slice(sort.sorted);
+  const signals = useSignalColumn(
+    drawn.map((r) => normalizeStockCode(String(r.stk_cd ?? ""))),
+    sigOn,
+  );
+
   return (
     <div>
       <RefreshBar onRefresh={load} loading={loading} updatedAt={updatedAt} auto={auto} />
@@ -85,6 +99,13 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
           ))}
         </select>
         <StockFilterToggle f={f} open={openFilter} onToggle={() => setOpenFilter((v) => !v)} />
+        <button
+          className={`filter-btn ${sigOn ? "active" : ""}`}
+          onClick={() => setSigOn((v) => !v)}
+          title="지금 쪽의 종목만 평가합니다 — 종목마다 차트·수급·재무를 조회하므로 켤 때만 돕니다"
+        >
+          🚦 신호등 {sigOn ? "끄기" : "켜기"}
+        </button>
         {f.on && (
           <span className="breadth-count">
             {kept.length} / {rows.length}건
@@ -101,6 +122,7 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
           <table className="data-table">
             <thead>
               <tr>
+                {sigOn && <th className="sig-th">🚦</th>}
                 <SortableTh columnKey="name" label="종목명" accessor={(r: RawRecord) => String(r.stk_nm ?? "")} sort={sort} className="sticky-col" />
                 <SortableTh columnKey="flu" label="기간등락률" accessor={(r: RawRecord) => Number(r.prid_stkpc_flu_rt) || 0} sort={sort} />
                 <SortableTh columnKey="orgnDays" label="기관연속일수" accessor={(r: RawRecord) => Number(r.orgn_cont_netprps_dys) || 0} sort={sort} />
@@ -112,11 +134,16 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
               </tr>
             </thead>
             <tbody>
-              {pager.slice(sort.sorted).map((r, i) => {
+              {drawn.map((r, i) => {
                 const code = normalizeStockCode(String(r.stk_cd ?? ""));
                 const name = String(r.stk_nm ?? "");
                 return (
                   <tr key={`${code}-${i}`} onClick={() => onSelectStock(code, name)} className="clickable-row">
+                    {sigOn && (
+                      <td className="sig-td" onClick={(e) => e.stopPropagation()}>
+                        <SignalCell code={code} name={name} signal={signals[code]} onSelectStock={onSelectStock} />
+                      </td>
+                    )}
                     <td className="sticky-col">
                       <span className="rank-cell">{String(r.rank ?? i + 1)}. </span>
                       <WatchStar code={code} />
