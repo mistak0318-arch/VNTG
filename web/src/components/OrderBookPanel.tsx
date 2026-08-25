@@ -125,17 +125,29 @@ export function OrderBookPanel({ code }: { code: string }) {
    * 가격 숫자만으로는 안 읽히기 때문이다. 상한가·하한가에서 몇 호가 떨어졌는지도
    * 이걸로 본다. 기준가(전일 종가) 대비다.
    */
+  /*
+   * ⚠️ **가격이 0 이면 등락률을 내지 않는다.**
+   *
+   * 장전 동시호가(08:30~09:00)에는 KRX 가 상위 세 단만 주고 나머지 일곱 단을 0 으로
+   * 채워 보낸다. 그걸 그대로 계산하면 **「0원 −100.00%」가 일곱 줄** 늘어선다 —
+   * 하한가로 곤두박질친 것처럼 보이는데 실제로는 **호가가 없는 것**이다.
+   * 시·고·저도 첫 체결 전에는 0 으로 오므로 같은 문제가 난다.
+   *
+   * 0 은 「값이 0 이다」가 아니라 **「아직 없다」**다. 그 둘을 같은 0 으로 그리면 안 된다.
+   */
   const rate = (price: number): number | null =>
-    book.basePrice > 0 ? ((price - book.basePrice) / book.basePrice) * 100 : null;
+    book.basePrice > 0 && price > 0 ? ((price - book.basePrice) / book.basePrice) * 100 : null;
 
   const row = (l: { step: number; price: number; qty: number }, side: "ask" | "bid") => {
     const r = rate(l.price);
-    const now = book.price === l.price;
+    // 가격이 없으면 「이 단은 비었다」로 그린다. 현재가와 같다고 착각해 「종」이 붙지도 않게
+    const empty = l.price <= 0;
+    const now = !empty && book.price === l.price;
     return (
-      <div className={`ob-row ${side}${now ? " now" : ""}`} key={`${side}-${l.step}`}>
+      <div className={`ob-row ${side}${now ? " now" : ""}${empty ? " empty" : ""}`} key={`${side}-${l.step}`}>
         {/* 매도는 왼쪽에 막대, 매수는 오른쪽에 — 가운데 가격을 기준으로 갈라진다 */}
         <span className="ob-qty left">
-          {side === "ask" && (
+          {side === "ask" && !empty && (
             <>
               <span className="ob-bar ask" style={{ width: `${(l.qty / mx) * 100}%` }} />
               <b>{fmtNum(l.qty)}</b>
@@ -152,7 +164,13 @@ export function OrderBookPanel({ code }: { code: string }) {
         <span className="ob-price">
           {/* 지금 체결되는 호가에 표시 — HTS 의 그 노란 줄이다 */}
           {now && <i className="ob-here">종</i>}
-          <b className={signClass(r)}>{fmtNum(l.price)}</b>
+          {empty ? (
+            <b className="pt-n" title="이 단에는 아직 호가가 없습니다 (장전 동시호가에는 세 단만 옵니다)">
+              -
+            </b>
+          ) : (
+            <b className={signClass(r)}>{fmtNum(l.price)}</b>
+          )}
           {r !== null && (
             <i className={`ob-rt ${signClass(r)}`}>
               {r > 0 ? "+" : ""}
@@ -161,7 +179,7 @@ export function OrderBookPanel({ code }: { code: string }) {
           )}
         </span>
         <span className="ob-qty right">
-          {side === "bid" && (
+          {side === "bid" && !empty && (
             <>
               <span className="ob-bar bid" style={{ width: `${(l.qty / mx) * 100}%` }} />
               <b>{fmtNum(l.qty)}</b>
@@ -244,7 +262,19 @@ export function OrderBookPanel({ code }: { code: string }) {
 
       <div className="ob-body">
         <div className="ob-book">
-          {book.asks.map((l) => row(l, "ask"))}
+          {/*
+            ⚠️ **매도호가는 뒤집어 그린다.**
+
+            키움은 매도 1호가(제일 싼 것)부터 10호가 순으로 준다. 그걸 그대로 위에서
+            아래로 늘어놓으면 **위가 싸고 아래가 비싸진다** — 호가창이 거꾸로 선다.
+
+            호가창은 **가격이 위로 갈수록 비싸야** 한다. 그래야 매도 1호가와 매수 1호가가
+            가운데에서 만나고, 현재가를 중심으로 위아래로 갈라진다. 사람이 호가창을
+            읽는 방식이 그것이다 — 「지금 값이 어디에 있고 위아래로 얼마나 두꺼운가」.
+
+            매수는 1호가(제일 비싼 것)부터 오므로 그대로 두면 맞는다.
+          */}
+          {[...book.asks].reverse().map((l) => row(l, "ask"))}
           <div className="ob-mid" />
           {book.bids.map((l) => row(l, "bid"))}
         </div>
@@ -264,10 +294,17 @@ export function OrderBookPanel({ code }: { code: string }) {
             ] as [string, number][]
           ).map(([label, v]) => {
             const r = rate(v);
+            // 첫 체결 전에는 0 으로 온다 — 「0원 −100.00」이 아니라 「-」다
             return (
               <div className="ob-kv ohl" key={label}>
                 <span>{label}</span>
-                <b className={signClass(r)}>{fmtNum(v)}</b>
+                {v > 0 ? (
+                  <b className={signClass(r)}>{fmtNum(v)}</b>
+                ) : (
+                  <b className="pt-n" title="아직 체결이 없습니다">
+                    -
+                  </b>
+                )}
                 <i className={signClass(r)}>
                   {r === null ? "" : `${r > 0 ? "+" : ""}${r.toFixed(2)}`}
                 </i>

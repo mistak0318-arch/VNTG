@@ -89,17 +89,34 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
     };
   }, [code]);
 
+  /** KRX 몫 거래대금 — 조회에서 직접 받는다(일봉은 개장 전에 어제 값을 준다) */
+  const [krxValue, setKrxValue] = useState<number | null>(null);
+
   useEffect(() => {
     if (!code) return;
     let cancelled = false;
-    api
-      .exchangeQuotes(code)
-      .then((r) => {
-        if (!cancelled) setNxt(r.exchanges.find((x) => x.key === "nxt") ?? null);
-      })
-      .catch(() => undefined);
+    /*
+     * ⚠️ **한 번만 받고 끝냈었다.** 그래서 08~09시 NXT 프리마켓에 값이 움직이는데도
+     * 화면의 NXT 등락률은 처음 받은 값에 멈춰 있었다 — 「거래 중」이라 적어 놓고
+     * 안 바뀌니 고장으로 보인다. 체결강도가 이미 10초마다 도는 것과 같은 주기로 맞춘다.
+     *
+     * 조회 셋(KRX·NXT·통합)이 나가지만 요약줄은 종목 하나에만 떠 있고,
+     * 이 줄의 값이 안 맞으면 그 아래 화면 전체를 못 믿는다.
+     */
+    const load = () =>
+      api
+        .exchangeQuotes(code)
+        .then((r) => {
+          if (cancelled) return;
+          setNxt(r.exchanges.find((x) => x.key === "nxt") ?? null);
+          setKrxValue(r.exchanges.find((x) => x.key === "krx")?.tradeValue ?? null);
+        })
+        .catch(() => undefined);
+    void load();
+    const t = setInterval(() => void load(), 10_000);
     return () => {
       cancelled = true;
+      clearInterval(t);
     };
   }, [code]);
 
@@ -291,15 +308,39 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
             <span className="ph-value">{fmtNum(fill(info.trde_qty, last?.volume))}</span>
           </span>
           {/*
+            ⚠️ **NXT 몫을 따로 적는다.**
+
+            거래량·거래대금이 `ka10001` **KRX 조회 하나**에서만 왔다. 그래서 08~09시
+            NXT 프리마켓에는 KRX 가 장전 시간외 몇 백 주뿐이라 화면에 **「거래량 190 ·
+            거래대금 0억」**이 떴다 — 정작 그 시간에 실제로 도는 건 NXT 쪽이다.
+            시·고·저는 이미 KRX/NXT 를 갈라 적고 있었는데 여기만 안 갈라져 있었다.
+
+            NXT 가 0 이면 안 적는다. 「NXT 0」은 정보가 아니라 소음이다.
+          */}
+          {nxt?.volume != null && nxt.volume > 0 && (
+            <span className="ph-row">
+              <em className="ph-sublabel nxt">NXT</em>
+              <span className="ph-value sub">{fmtNum(nxt.volume)}</span>
+            </span>
+          )}
+          {/*
             거래량 바로 밑에 거래대금. 주식 수만 보면 감이 안 온다 —
             80만주가 1,800억인 종목과 8억인 종목이 화면에서 똑같이 생겼다.
           */}
           <span className="ph-row">
             <em className="ph-sublabel">거래대금</em>
             <span className="ph-value sub">
-              {last?.value == null ? "-" : `${Math.round(last.value / 100).toLocaleString("ko-KR")}억`}
+              {krxValue === null ? "-" : `${Math.round(krxValue / 100).toLocaleString("ko-KR")}억`}
             </span>
           </span>
+          {nxt?.tradeValue != null && nxt.tradeValue > 0 && (
+            <span className="ph-row">
+              <em className="ph-sublabel nxt">NXT</em>
+              <span className="ph-value sub">
+                {Math.round(nxt.tradeValue / 100).toLocaleString("ko-KR")}억
+              </span>
+            </span>
+          )}
           {/*
             거래대금 밑에 체결강도. 거래대금은 「얼마나 붙었나」이고 체결강도는
             **「어느 쪽이 붙었나」**다 — 둘이 같이 있어야 뜻이 산다.

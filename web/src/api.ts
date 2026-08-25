@@ -221,6 +221,13 @@ export const api = {
     ),
   watchlistSetGroup: (code: string, group: string) =>
     patchJson<{ items: WatchItem[] }>(`/api/watchlist/${code}`, { group }),
+  watchStatuses: () =>
+    getJson<{ statuses: { key: WatchStatus; label: string; hint: string }[] }>(
+      "/api/watchlist/statuses",
+    ),
+  /** 관찰/대기/보유/청산 — 그룹(성격)과 **다른 축**이다 */
+  watchlistSetStatus: (code: string, status: WatchStatus) =>
+    patchJson<{ items: WatchItem[] }>(`/api/watchlist/${code}`, { status }),
   watchlistRemove: (code: string) => deleteJson<{ items: WatchItem[] }>(`/api/watchlist/${code}`),
   watchlistTracking: (force = false) =>
     getJson<{ items: TrackedStock[] }>(`/api/watchlist/tracking${force ? "?force=1" : ""}`),
@@ -702,7 +709,14 @@ export interface WatchItem {
   group?: string;
   /** 소속 그룹들 — 한 종목이 여러 그룹에 담긴다 */
   groups: string[];
+  /**
+   * 지금 이 종목과 나의 관계 — **그룹(성격)과 다른 축**이다.
+   * 같은 종목이 「반도체」이면서 동시에 「진입 대기」일 수 있다.
+   */
+  status?: WatchStatus;
 }
+
+export type WatchStatus = "watching" | "ready" | "holding" | "closed";
 
 export interface KiwoomGroup {
   code: string;
@@ -1251,6 +1265,8 @@ export interface ExchangeQuote {
   high: number | null;
   low: number | null;
   volume: number | null;
+  /** 거래대금(백만원) — 08~09시 NXT 프리마켓에는 KRX 쪽이 0 이라 이게 있어야 한다 */
+  tradeValue: number | null;
   changeRate: number;
   error: string | null;
 }

@@ -752,10 +752,24 @@ export function ScreenerPage({
                   </tr>
                 </thead>
                 <tbody>
+                  {/*
+                    **줄 아무 데나 눌러도 상세가 열린다.**
+
+                    이름 글자만 눌러야 열리게 두었더니, 거래대금이나 등락률을 보다가
+                    누르면 아무 일도 안 났다 — 거래상위·연속매매·동일순매매는 이미
+                    줄 전체가 눌린다. **같은 표인데 화면마다 다르면 그때마다 다시 배운다.**
+
+                    신호등 칸은 자기 동작(색 정렬·상세)이 따로 있으므로 `stopPropagation`
+                    으로 막는다. 여기서 안 막으면 신호등을 눌렀는데 상세가 열린다.
+                  */}
                   {drawn.map((r, i) => (
-                    <tr key={`${r.code}-${i}`}>
+                    <tr
+                      key={`${r.code}-${i}`}
+                      className={onSelectStock ? "clickable-row" : ""}
+                      onClick={() => onSelectStock?.(r.code, r.name)}
+                    >
                       {sigOn && (
-                        <td className="sig-td">
+                        <td className="sig-td" onClick={(e) => e.stopPropagation()}>
                           <SignalCell
                             code={r.code}
                             name={r.name}
@@ -766,12 +780,8 @@ export function ScreenerPage({
                       )}
                       {/* 이름이 길면 잘린다(CSS) — 전체는 마우스를 올려서 본다 */}
                       <td className="sticky-col" title={r.name}>
-                        <button
-                          className="link-btn"
-                          onClick={() => onSelectStock?.(r.code, r.name)}
-                        >
-                          {r.name}
-                        </button>
+                        {/* 줄 전체가 눌리므로 여기선 글자만 — 버튼 모양은 남겨 둔다(눌리는 자리라는 표) */}
+                        <span className="link-btn">{r.name}</span>
                         {/* 시장이 「전체」면 어느 시장인지가 정보다 */}
                         {market === "000" && r.mkt && <i className="scr-mkt">{r.mkt}</i>}
                       </td>

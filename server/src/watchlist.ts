@@ -47,7 +47,42 @@ export interface WatchItem {
    * 않고 화면에서도 값 칸을 비운다.
    */
   divider?: boolean;
+  /**
+   * **지금 이 종목과 나의 관계.**
+   *
+   * ## 왜 그룹으로는 안 되나
+   *
+   * 그룹으로 흉내 낼 수는 있다. 그런데 **상태는 그룹과 다른 축**이다 — 같은 종목이
+   * 「반도체」이면서 동시에 「진입 대기」일 수 있다. 그걸 그룹으로 하면 종목을 옮길
+   * 때마다 원래 분류가 흔들리고, 결국 어느 그룹이 성격이고 어느 그룹이 상태인지
+   * 사람이 외우고 있어야 한다.
+   *
+   * ## 네 가지면 충분하다
+   *
+   *   `watching`  관찰 중 — 담아 두고 보는 중. **기본값**
+   *   `ready`     진입 대기 — 조건이 오면 산다. 트리거를 기다리는 자리
+   *   `holding`   보유 중 — 실제로 들고 있다
+   *   `closed`    청산 — 팔았지만 계속 보고 싶은 것(복기 대상)
+   *
+   * 더 잘게 나눌 수 있지만 늘릴수록 **고르기 귀찮아서 안 고르게 된다.** 안 고르면
+   * 이 칸은 없는 것과 같다.
+   *
+   * ⚠️ **보유 수량과는 다른 값이다.** 실제 보유·손익은 복기 노트의 매수·매도에서
+   * 선입선출로 계산한다(`openPositions`). 여기 `holding` 은 **내가 그렇게 표시해 둔 것**뿐이라,
+   * 둘이 어긋날 수 있다. 그 어긋남 자체가 「노트를 안 적었다」는 신호다.
+   */
+  status?: WatchStatus;
 }
+
+export type WatchStatus = "watching" | "ready" | "holding" | "closed";
+
+/** 화면에서 쓰는 이름과 설명 — 서버가 갖고 있어야 화면 여러 곳이 같은 말을 쓴다 */
+export const WATCH_STATUSES: { key: WatchStatus; label: string; hint: string }[] = [
+  { key: "watching", label: "관찰", hint: "담아 두고 보는 중" },
+  { key: "ready", label: "대기", hint: "조건이 오면 산다 — 트리거를 기다리는 자리" },
+  { key: "holding", label: "보유", hint: "실제로 들고 있다" },
+  { key: "closed", label: "청산", hint: "팔았지만 계속 보고 싶은 것" },
+];
 
 /** 구분선 코드인가 — 시세 조회에서 걸러 낼 때 쓴다 */
 export function isDivider(code: string): boolean {
@@ -161,15 +196,24 @@ export async function removeWatchItem(code: string): Promise<WatchItem[]> {
 
 export async function updateWatchItem(
   code: string,
-  patch: { memo?: string; addedPrice?: number; group?: string; groups?: string[] },
+  patch: {
+    memo?: string;
+    addedPrice?: number;
+    group?: string;
+    groups?: string[];
+    status?: WatchStatus;
+  },
 ): Promise<WatchItem[]> {
   const items = await load();
+  const valid = new Set(WATCH_STATUSES.map((s) => s.key));
   const next = items.map((w) =>
     w.code === code
       ? {
           ...w,
           memo: patch.memo ?? w.memo,
           addedPrice: patch.addedPrice ?? w.addedPrice,
+          // 모르는 값이 오면 무시한다 — 화면이 못 그리는 상태를 저장해 두면 안 된다
+          status: patch.status && valid.has(patch.status) ? patch.status : w.status,
           groups:
             patch.groups !== undefined
               ? normalizeGroups(patch.groups)

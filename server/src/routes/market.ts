@@ -270,9 +270,20 @@ export function createMarketRouter(client: KiwoomClient): Router {
       const rows = await Promise.all(
         targets.map(async (t) => {
           try {
+            /*
+             * ⚠️ **`ka10001` 이 아니라 `ka10007`.**
+             *
+             * `ka10001`(주식기본정보)에는 **거래대금이 없다.** 거래량만 준다.
+             * 그래서 요약줄의 거래대금이 일봉에서 오고 있었고, 개장 전에는 어제 값이
+             * 그대로 남아 08~09시 NXT 프리마켓에 「0억」이 떴다.
+             *
+             * `ka10007`(시세표성정보)은 같은 값에 **`trde_prica` 까지** 준다. 접미사도
+             * 그대로 먹는다 — 09:13 실측으로 KRX 19,425억 + NXT 16,736억 = 통합 36,161억,
+             * 정확히 합계다.
+             */
             const { data } = await client.request<Record<string, unknown>>(
-              STKINFO_RESOURCE,
-              "ka10001",
+              MRKCOND_RESOURCE,
+              "ka10007",
               { stk_cd: t.code },
             );
             return {
@@ -283,6 +294,16 @@ export function createMarketRouter(client: KiwoomClient): Router {
               high: num(data.high_pric),
               low: num(data.low_pric),
               volume: num(data.trde_qty),
+              /*
+               * **거래대금도 거래소별로 준다.**
+               *
+               * 요약줄의 거래대금은 KRX 조회 하나에서만 오고 있었다. 그래서 08~09시
+               * NXT 프리마켓에는 KRX 가 장전 시간외 몇 백 주뿐이라 **「거래대금 0억」**
+               * 이 떴다 — 정작 그 시간에 실제로 도는 건 NXT 쪽이다.
+               *
+               * 키움은 백만원 단위로 준다. 억으로 바꾸는 건 화면이 한다.
+               */
+              tradeValue: num(data.trde_prica),
               // 등락률은 부호가 의미를 가지므로 절댓값을 취하지 않는다
               changeRate: Number(String(data.flu_rt ?? "").replace(/[+,\s]/g, "")) || 0,
               error: null as string | null,
@@ -291,7 +312,7 @@ export function createMarketRouter(client: KiwoomClient): Router {
             return {
               key: t.key,
               label: t.label,
-              price: null, open: null, high: null, low: null, volume: null, changeRate: 0,
+              price: null, open: null, high: null, low: null, volume: null, tradeValue: null, changeRate: 0,
               error: err instanceof Error ? err.message : "조회 실패",
             };
           }

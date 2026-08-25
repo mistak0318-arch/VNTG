@@ -6,6 +6,7 @@ import {
   signClass,
   type StockSearchResult,
   type TrackedStock,
+  type WatchStatus,
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { SortableTh, useSortableTable } from "../useSortableTable";
@@ -64,13 +65,36 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [adding, setAdding] = useState(false);
   const watchedCodes = useWatchedCodes();
+  /*
+   * 상태 목록은 **서버에서 받는다.** 화면에 박아 두면 서버가 하나 늘렸을 때
+   * 여기만 모르는 채로 남는다 — 그러면 저장은 되는데 화면에 안 뜬다.
+   */
+  const [statuses, setStatuses] = useState<{ key: WatchStatus; label: string; hint: string }[]>([]);
+  /** 상태로 좁혀 보기. `null` 이면 전부 */
+  const [statusFilter, setStatusFilter] = useState<WatchStatus | null>(null);
+  useEffect(() => {
+    api
+      .watchStatuses()
+      .then((r) => setStatuses(r.statuses))
+      .catch(() => undefined);
+  }, []);
 
   // 그룹 필터를 먼저 적용한 뒤 정렬한다
-  const visible =
+  const byGroup =
     activeGroup === ALL
       ? items
       // 한 종목이 여러 그룹에 담기므로 "포함하는가"로 거른다
       : items.filter((i) => (i.groups ?? [DEFAULT_GROUP]).includes(activeGroup));
+  /*
+   * 상태 필터는 **그룹 필터와 겹쳐서** 건다. 둘은 다른 축이라 「반도체 중에서 대기인 것」이
+   * 자연스러운 질문이다 — 하나만 고르게 하면 그 질문을 못 한다.
+   *
+   * 상태를 안 정한 종목은 「관찰」로 친다. 기본값이라 굳이 눌러 두지 않아도 되게.
+   */
+  const visible =
+    statusFilter === null
+      ? byGroup
+      : byGroup.filter((i) => (i.status ?? "watching") === statusFilter);
   /*
    * **내가 정한 자리대로** 세운다.
    *
@@ -220,6 +244,24 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     }
   }
 
+  /**
+   * 상태를 바꾼다.
+   *
+   * **화면을 먼저 바꾼다.** 상태는 한 번 눌러 바꾸는 값이라, 서버를 기다렸다 그리면
+   * 누른 게 안 먹은 것처럼 보인다. 실패하면 되돌리고 그때 말한다.
+   * (관심종목 순서에서 같은 문제를 이미 겪었다 — `load(false)` 가 캐시를 줬다)
+   */
+  async function setStatus(code: string, status: WatchStatus) {
+    const before = items;
+    setItems(items.map((i) => (i.code === code ? { ...i, status } : i)));
+    try {
+      await api.watchlistSetStatus(code, status);
+    } catch (err) {
+      setItems(before);
+      setError(err instanceof Error ? err.message : "상태 변경 실패");
+    }
+  }
+
   async function load(force = false) {
     setLoading(true);
     setError(null);
@@ -347,6 +389,37 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
         평소에는 고르는 자리로 두고, 「정리」를 켰을 때만 옮기고 이름을 바꾼다 —
         늘 화살표가 붙어 있으면 고르려다 잘못 눌러 순서가 바뀐다.
       */}
+      {/*
+        상태 필터는 **그룹 줄과 따로** 둔다. 같은 줄에 섞으면 둘이 같은 축으로 보이는데,
+        실제로는 겹쳐서 걸린다 — 「반도체 중에서 대기인 것」이 되는 게 맞다.
+      */}
+      {statuses.length > 0 && (
+        <div className="filter-row">
+          <span className="filter-label" title="그룹은 성격, 상태는 나와의 관계입니다">
+            상태
+          </span>
+          <button
+            className={`filter-btn ${statusFilter === null ? "active" : ""}`}
+            onClick={() => setStatusFilter(null)}
+          >
+            전체
+          </button>
+          {statuses.map((s) => {
+            const n = byGroup.filter((i) => (i.status ?? "watching") === s.key).length;
+            return (
+              <button
+                key={s.key}
+                className={`filter-btn ${statusFilter === s.key ? "active" : ""}`}
+                title={s.hint}
+                onClick={() => setStatusFilter(statusFilter === s.key ? null : s.key)}
+              >
+                {s.label} <span className="gt-n">{n}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="filter-row group-tabs">
         <button
           className={`filter-btn ${activeGroup === ALL ? "active" : ""}`}
@@ -493,6 +566,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
               <tr>
                 <SortableTh columnKey="name" label="종목명" accessor={(r: TrackedStock) => r.name} sort={sort} className="sticky-col" />
                 <th>그룹</th>
+                <th title="이 종목과 나의 관계 — 그룹(성격)과 다른 축입니다">상태</th>
                 <SortableTh columnKey="addedAt" label="편입일" accessor={(r: TrackedStock) => r.addedAt} sort={sort} />
                 <SortableTh columnKey="addedPrice" label="편입가" accessor={(r: TrackedStock) => r.addedPrice} sort={sort} />
                 <SortableTh columnKey="price" label="현재가" accessor={(r: TrackedStock) => r.price} sort={sort} />
@@ -613,6 +687,25 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                         })}
                       </div>
                     )}
+                  </td>
+                  {/*
+                    상태 — **그룹과 다른 축**이다. 같은 종목이 「반도체」이면서 동시에
+                    「대기」일 수 있다. 그래서 그룹 칸 옆에 따로 둔다.
+                    네 개뿐이라 드롭박스보다 칩 네 개가 빠르다 — 한 번 눌러 바꾼다.
+                  */}
+                  <td>
+                    <div className="mg-cell wl-status">
+                      {statuses.map((s) => (
+                        <button
+                          key={s.key}
+                          className={`mg-chip st-${s.key}${(r.status ?? "watching") === s.key ? " on" : ""}`}
+                          title={s.hint}
+                          onClick={() => void setStatus(r.code, s.key)}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
                   </td>
                   <td>{fmtDate(r.addedAt)}</td>
                   <td>{fmtNum(r.addedPrice)}</td>

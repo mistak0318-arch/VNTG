@@ -16,10 +16,17 @@ import {
   addDivider,
   toggleWatchGroup,
   updateWatchItem,
+  WATCH_STATUSES,
+  type WatchStatus,
 } from "../watchlist.js";
 
 export function createWatchlistRouter(client: KiwoomClient): Router {
   const router = Router();
+
+  /** 상태 목록 — 화면이 서버와 같은 말을 쓰게 한다 */
+  router.get("/statuses", (_req, res) => {
+    res.json({ statuses: WATCH_STATUSES });
+  });
 
   router.get("/", async (_req, res, next) => {
     try {
@@ -73,11 +80,13 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
 
   router.patch("/:code", async (req, res, next) => {
     try {
-      const { memo, addedPrice, group } = req.body ?? {};
+      const { memo, addedPrice, group, status } = req.body ?? {};
       const items = await updateWatchItem(req.params.code, {
         memo: typeof memo === "string" ? memo : undefined,
         addedPrice: addedPrice === undefined ? undefined : Number(addedPrice),
         group: typeof group === "string" ? group : undefined,
+        // 모르는 값은 watchlist 쪽에서 걸러 낸다 — 여기서 두 번 검사하면 규칙이 두 군데가 된다
+        status: typeof status === "string" ? (status as WatchStatus) : undefined,
       });
       invalidateTrackingCache();
       res.json({ items });
