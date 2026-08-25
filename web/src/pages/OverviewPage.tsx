@@ -37,7 +37,11 @@ type SubTab = "summary" | "flow" | "rank" | "us";
 
 const SUBTABS: { key: SubTab; label: string }[] = [
   { key: "summary", label: "요약" },
-  { key: "flow", label: "수급" },
+  /*
+   * 「수급」 탭은 숨겼다 (2026-08-26 사용자 요청) — 지수 카드의 수급·장중 수급
+   * 변화(지수/선물 시트)로 요약 쪽에 내용이 다 들어가서 따로 갈 일이 없어졌다.
+   * 카드 구성(OVERVIEW_CARDS.flow)은 남겨 둔다 — 다시 켜는 건 여기 한 줄이다.
+   */
   { key: "rank", label: "순위" },
   // 미국 전광판 — 미국장이 열려 있는 동안 보는 자리
   { key: "us", label: "미국" },

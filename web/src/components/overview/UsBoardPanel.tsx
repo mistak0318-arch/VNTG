@@ -526,6 +526,36 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
 
   const current = groups.find((g) => g.id === openId) ?? groups[0] ?? null;
 
+  /*
+   * 빠른 시세 오버레이 (2026-08-26 — 「시황 미국 탭이 실시간이 안 된다」).
+   *
+   * 관심종목(해외) 페이지에는 붙였는데 **여기(전광판)는 빠뜨렸다** — 같은 표를
+   * 쓰면서 갱신은 20초(본 시세는 서버 1분 캐시)뿐이라 그 지적이 맞았다.
+   * 같은 방식 그대로: 지금 보는 그룹만 야후 spark 배치로 3초(장중) 폴링해
+   * 현재가·등락률을 덧씌운다. 탭이 뒤에 있으면 쉰다.
+   */
+  const openMarket = groups.some((g) => g.stocks.some((s) => (s.state ?? "").includes("실시간")));
+  const [fast, setFast] = useState<Record<string, { price: number; changeRate: number | null; at: number }>>({});
+  const fastSymbols = current?.stocks.map((s) => s.symbol).join(",") ?? "";
+  useEffect(() => {
+    if (!fastSymbols) return;
+    let alive = true;
+    const period = openMarket ? 3_000 : 30_000;
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      api
+        .usWatchFast(fastSymbols.split(","))
+        .then((r) => alive && setFast(r.quotes))
+        .catch(() => undefined);
+    };
+    tick();
+    const t = setInterval(tick, period);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [fastSymbols, openMarket]);
+
   function pickGroup(id: string) {
     setOpenId(id);
     setPref(GROUP_KEY, id);
@@ -641,6 +671,7 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
           */
           <UsWatchTable
             stocks={current.stocks}
+            fast={fast}
             editing={editing}
             onOpen={onOpen}
             onMove={(symbol, d) => void move(symbol, d)}

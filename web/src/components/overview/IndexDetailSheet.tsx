@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { api, fmtNum, type IndexDetailData, type IndexRange } from "../../api";
+import { api, fmtNum, type IndexDetailData, type IndexRange, type MarketFlow } from "../../api";
 import { CandleChart } from "../CandleChart";
+import { FlowBars } from "./FlowBars";
 import { IntradayFlowChart } from "./IntradayFlowChart";
+import { useSection } from "../../useSection";
 
 /**
  * 코스피·코스닥 상세.
@@ -29,6 +31,11 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
   const [range, setRange] = useState<IndexRange>("day");
   const [data, setData] = useState<IndexDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * 오늘 투자자별 수급 (2026-08-26) — 시황의 「수급」 탭을 숨기면서 그 막대가
+   * 여기로 왔다. 대시보드와 같은 섹션(서버 캐시 공유)이라 추가 호출이 없다.
+   */
+  const flow = useSection<MarketFlow>("flow", 30_000);
 
   useEffect(() => {
     let alive = true;
@@ -129,6 +136,24 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
           돌아섰는지는 일별 합계로는 안 보인다. 네이버 Time 누적 곡선.
         */}
         <IntradayFlowChart market={code === "101" ? "02" : "01"} unit="억원" />
+
+        {/*
+          오늘 투자자별 수급 — 장중 변화 곡선 **바로 밑**(2026-08-26 요청).
+          곡선이 「어떻게 왔나」, 이 막대가 「지금 누가 얼마나」다. 시트는 글자가
+          많은 화면이라 대시보드 크기 그대로면 무거워서 슬림판(idx-slim)으로 줄인다.
+        */}
+        {(() => {
+          const f = code === "101" ? flow.data?.kosdaq : flow.data?.kospi;
+          if (!f) return null;
+          return (
+            <>
+              <h3 className="idx-h3">오늘 투자자별 수급 (억원)</h3>
+              <div className="idx-slim">
+                <FlowBars flow={f} />
+              </div>
+            </>
+          );
+        })()}
 
         <h3 className="idx-h3">수급 합산 (억원)</h3>
         {data && data.flows.length > 0 && (

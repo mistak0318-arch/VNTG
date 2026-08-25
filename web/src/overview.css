@@ -274,6 +274,14 @@
   margin: 7px 0;
 }
 
+/* 지수 시트의 슬림판 수급 바 — 시트는 글자가 많아 대시보드 크기 그대로면 무겁다 */
+.idx-slim .ov-flow-row { grid-template-columns: 56px 1fr 64px; gap: 7px; padding: 2px 0; }
+.idx-slim .ov-flow-nm { font-size: 0.72rem; }
+.idx-slim .ov-flow-nm.sub { font-size: 0.66rem; }
+.idx-slim .ov-flow-val { font-size: 0.72rem; }
+.idx-slim .ov-bar { height: 9px; }
+.idx-slim .ov-grp-line { margin: 4px 0; }
+
 /* ---------- 표 ---------- */
 .ov-table {
   width: 100%;

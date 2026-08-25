@@ -146,46 +146,89 @@ export function YahooChartSheet({
     let alive = true;
     setLoading(true);
     const spec = FUTURES_SPEC[range] ?? FUTURES_SPEC["3mo"];
-    const req = usStock
-      ? range === "1d" || range === "5d"
-        ? // 분봉은 한투에 없다 — 야후가 개별 종목도 받아 준다
-          api.yahooChart(target.symbol, range)
-        : longRange
-        ? // 「기간 길게」 — 일봉 2년 · 주봉 5년 · 월봉 전체 (야후)
-          api.yahooChart(target.symbol, range === "D" ? "2y" : range === "W" ? "5y" : "max")
-        : api.usChart(target.symbol, range as "D" | "W" | "M").then((r) => ({
-          symbol: target.symbol,
-          range,
-          interval: range === "D" ? "일봉" : range === "W" ? "주봉" : "월봉",
-          candles: r.candles,
-          prevClose: null,
-          error: r.error,
-        }))
-      : futures
-      ? api.futuresChart(target.symbol, spec.period, spec.days, target.futMarket ?? "CM").then((r) => ({
-          symbol: target.symbol,
-          range,
-          interval: spec.period === "D" ? "1일봉" : spec.period === "W" ? "주봉" : "월봉",
-          candles: r.candles,
-          // 선물은 전일 종가를 따로 안 준다 — 기준선 없이 흐름만 본다
-          prevClose: null,
-          error: r.error,
-        }))
-      : api.yahooChart(target.symbol, range);
-    req
-      .then((d) => {
-        if (alive) setData(d);
-      })
-      .catch(() => {
-        if (alive) setData(null);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
+    const build = () =>
+      usStock
+        ? range === "1d" || range === "5d"
+          ? // 분봉은 한투에 없다 — 야후가 개별 종목도 받아 준다
+            api.yahooChart(target.symbol, range)
+          : longRange
+          ? // 「기간 길게」 — 일봉 2년 · 주봉 5년 · 월봉 전체 (야후)
+            api.yahooChart(target.symbol, range === "D" ? "2y" : range === "W" ? "5y" : "max")
+          : api.usChart(target.symbol, range as "D" | "W" | "M").then((r) => ({
+              symbol: target.symbol,
+              range,
+              interval: range === "D" ? "일봉" : range === "W" ? "주봉" : "월봉",
+              candles: r.candles,
+              prevClose: null,
+              error: r.error,
+            }))
+        : futures
+        ? api.futuresChart(target.symbol, spec.period, spec.days, target.futMarket ?? "CM").then((r) => ({
+            symbol: target.symbol,
+            range,
+            interval: spec.period === "D" ? "1일봉" : spec.period === "W" ? "주봉" : "월봉",
+            candles: r.candles,
+            // 선물은 전일 종가를 따로 안 준다 — 기준선 없이 흐름만 본다
+            prevClose: null,
+            error: r.error,
+          }))
+        : api.yahooChart(target.symbol, range);
+    const run = (quiet: boolean) =>
+      build()
+        .then((d) => {
+          if (alive) setData(d);
+        })
+        .catch(() => {
+          if (alive && !quiet) setData(null);
+        })
+        .finally(() => {
+          if (alive && !quiet) setLoading(false);
+        });
+    void run(false);
+    /*
+     * 시트 자동 갱신 (2026-08-26 — 「시트도 갱신 체크해줘」).
+     * 열어 두고 보는 창인데 열 때 값에서 멈춰 있었다. 분봉(1d·5d)은 1분마다 조용히
+     * 다시 받는다 — 서버 캐시가 60초라 그보다 조여도 같은 값이다. 일/주/월봉은
+     * 하루에 한 번 바뀌는 값이라 그대로 둔다. 탭이 뒤에 있으면 쉰다.
+     */
+    const wantsLive = range === "1d" || range === "5d";
+    const t = wantsLive
+      ? setInterval(() => {
+          if (document.visibilityState === "visible") void run(true);
+        }, 60_000)
+      : null;
     return () => {
       alive = false;
+      if (t) clearInterval(t);
     };
   }, [target.symbol, range, futures, usStock, longRange]);
+
+  /*
+   * 헤더 큰 숫자의 빠른 시세 (해외종목·2026-08-26) — 목록과 같은 야후 spark 3초.
+   * hintPrice 는 「연 순간」의 목록 값이라 열어 두면 낡는다. 장이 닫혀 있으면
+   * spark 값이 안 변할 뿐이니 주기만 늦춘다.
+   */
+  const [fastQ, setFastQ] = useState<{ price: number; changeRate: number | null } | null>(null);
+  useEffect(() => {
+    if (!usStock) return;
+    let alive = true;
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      api
+        .usWatchFast([target.symbol])
+        .then((r) => {
+          const q = r.quotes[target.symbol];
+          if (alive && q) setFastQ({ price: q.price, changeRate: q.changeRate });
+        })
+        .catch(() => undefined);
+    };
+    tick();
+    const t = setInterval(tick, 3_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [usStock, target.symbol]);
 
   const digits = target.digits ?? 2;
   const candles = useMemo(() => data?.candles ?? [], [data]);
@@ -351,11 +394,24 @@ export function YahooChartSheet({
               (2026-08-25, 「얘만 글자가 너무 커서 한눈에 안 담긴다」).
             */}
             <div className={`yc-head${usStock ? " compact" : ""}`}>
-              {/* 목록이 준 현재가가 먼저다 — 차트 마지막 봉은 그보다 늦은 값일 수 있다 */}
+              {/*
+                해외종목은 3초 빠른 시세(fastQ)가 가장 새 값이다 — hintPrice 는
+                「연 순간」의 목록 값이라 열어 두면 낡는다. 그다음이 목록, 마지막이 봉.
+              */}
               <b className="yc-px">
-                {(target.hintPrice ?? view.last).toLocaleString("ko-KR", { maximumFractionDigits: digits })}
+                {(fastQ?.price ?? target.hintPrice ?? view.last).toLocaleString("ko-KR", {
+                  maximumFractionDigits: digits,
+                })}
               </b>
-              {view.dayRate !== null ? (
+              {fastQ?.changeRate != null ? (
+                <>
+                  <span className={`yc-rate ${fastQ.changeRate >= 0 ? "positive" : "negative"}`}>
+                    {fastQ.changeRate >= 0 ? "+" : ""}
+                    {fastQ.changeRate.toFixed(2)}%
+                  </span>
+                  <span className="pt-n">전일 대비 · 3초 갱신</span>
+                </>
+              ) : view.dayRate !== null ? (
                 <>
                   <span className={`yc-rate ${view.dayRate >= 0 ? "positive" : "negative"}`}>
                     {view.dayRate >= 0 ? "+" : ""}
