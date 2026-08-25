@@ -5322,6 +5322,20 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .guide-dl dd { margin: 0.25rem 0 0 0; color: var(--muted); }
 .guide-cant li { margin: 0.35rem 0; }
 
+/*
+  도움말 안의 계산식 한 줄 — 본문과 섞이면 읽다가 놓친다.
+  고정폭으로 두는 이유는 나눗셈 기호와 괄호가 줄을 맞춰야 식으로 읽히기 때문이다.
+*/
+.guide-formula {
+  font-family: var(--mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
+  font-size: 0.9rem;
+  padding: 0.5rem 0.8rem;
+  margin: 0.6rem 0;
+  background: var(--panel-2);
+  border-radius: 0.3rem;
+  overflow-x: auto;
+}
+
 /* ------------------------------------------------------------------ */
 /* 일정 매매                                                            */
 /* ------------------------------------------------------------------ */

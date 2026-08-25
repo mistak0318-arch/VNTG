@@ -334,7 +334,11 @@ export function JournalPage({
 
         <div className="jn-field">
           <span className="jn-label">
-            오늘의 매매 <em className="jn-hint">실제 계좌에서 한 것을 적습니다</em>
+            오늘의 매매{" "}
+            <em className="jn-hint">
+              실제 계좌에서 한 것을 적습니다 · 매수에는 <b>손절선</b>을 같이 —{" "}
+              <b>R</b>(건 것 대비 얼마를 벌었나)이 거기서 나옵니다
+            </em>
           </span>
           <div className="jn-trades">
             {(form.trades ?? []).map((t) => (
