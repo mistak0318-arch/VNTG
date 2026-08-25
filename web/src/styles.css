@@ -2043,6 +2043,11 @@ body {
   }
 }
 
+/* 당일 흐름 머리의 VWAP — 등락률 오른쪽에 작게. 선이 무슨 선인지 여기서 갈린다 */
+.intraday-vwap { margin-left: auto; font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+.intraday-vwap b { color: var(--amber, #f5c542); font-variant-numeric: tabular-nums; }
+.intraday-vwap i { font-style: normal; }
+
 /* 당일 흐름 — NXT 시간외 구간 표시 */
 .intraday-off {
   fill: var(--bg);

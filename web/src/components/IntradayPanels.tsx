@@ -14,6 +14,9 @@ import { num, signOf } from "./SeriesTable";
 interface Point {
   time: string; // HHmm
   price: number;
+  /** 전형가 (고+저+종)/3 — VWAP 을 내는 재료 */
+  typical: number;
+  volume: number;
 }
 
 /** 분봉 응답에서 "가장 최근 날짜" 것만 뽑아 시간순으로 정렬 */
@@ -28,9 +31,42 @@ function todayPoints(chart: RawRecord | null): Point[] {
     const tm = String(r.cntr_tm ?? "");
     if (tm.slice(0, 8) !== latestDay) break; // 최신순이라 날짜가 바뀌면 멈춰도 된다
     const price = Math.abs(num(r.cur_prc));
-    if (price > 0) out.push({ time: tm.slice(8, 12), price });
+    const high = Math.abs(num(r.high_pric)) || price;
+    const low = Math.abs(num(r.low_pric)) || price;
+    if (price > 0) {
+      out.push({
+        time: tm.slice(8, 12),
+        price,
+        typical: (high + low + price) / 3,
+        volume: Math.abs(num(r.trde_qty)),
+      });
+    }
   }
   return out.reverse();
+}
+
+/**
+ * **누적 VWAP** — 정규장이 시작한 지점부터 한 봉씩 쌓아 간다.
+ *
+ * 요약줄의 VWAP 은 「지금 값 하나」인데, 선으로 그리면 **하루 종일 어느 쪽이
+ * 이기고 있었는지**가 보인다. 아침에 VWAP 위에서 놀다가 오후에 밑으로 꺼진 날과
+ * 계속 밑에 있다가 막판에 올라선 날은 완전히 다른 날인데, 숫자 하나로는 그게 안 보인다.
+ *
+ * ⚠️ **정규장만 센다.** 프리마켓을 섞으면 09:00 의 VWAP 이 이미 한참 어긋난 채로
+ * 시작한다. 그래서 09:00 앞은 `null` 이고 선도 거기서부터 그려진다.
+ *
+ * ⚠️ 요약줄 값과 **몇 원 다를 수 있다.** 저기는 5분봉, 여기는 3분봉이다.
+ * 둘 다 전형가로 낸 어림값이라 방향은 같고 자릿수만 다르다.
+ */
+function vwapSeries(points: Point[], openIdx: number): (number | null)[] {
+  let pv = 0;
+  let vol = 0;
+  return points.map((p, i) => {
+    if (openIdx >= 0 && i < openIdx) return null;
+    pv += p.typical * p.volume;
+    vol += p.volume;
+    return vol > 0 ? pv / vol : null;
+  });
 }
 
 function fmtHm(hhmm: string): string {
@@ -87,6 +123,16 @@ export function IntradayFlow({ code, basePrice }: { code: string; basePrice: num
   // 정규장 시작(09:00)·종료(15:30) 지점을 찾아 세 구간으로 나눈다
   const openIdx = points.findIndex((p) => p.time >= "0900");
   const closeIdx = points.findIndex((p) => p.time > "1530");
+
+  /* VWAP 선 — 정규장이 시작한 자리부터 */
+  const vwaps = vwapSeries(points, openIdx);
+  const vwapLine = vwaps
+    .map((v, i) => (v === null ? null : `${x(i).toFixed(2)},${y(v).toFixed(2)}`))
+    .filter((s): s is string => s !== null)
+    .join(" ");
+  const vwapNow = vwaps[vwaps.length - 1];
+  /** 지금 값이 VWAP 위인가 — 색이 아니라 **이 한 줄**이 판을 가른다 */
+  const vsVwap = vwapNow && vwapNow > 0 ? ((last - vwapNow) / vwapNow) * 100 : null;
   const regularStart = openIdx < 0 ? 0 : x(openIdx);
   const regularEnd = closeIdx < 0 ? W : x(closeIdx);
   const hasPre = openIdx > 0;
@@ -103,6 +149,22 @@ export function IntradayFlow({ code, basePrice }: { code: string; basePrice: num
           {rate > 0 ? "+" : ""}
           {rate.toFixed(2)}%
         </span>
+        {/* 선만 그려 놓으면 무슨 선인지 모른다 — 이름과 지금 값을 같이 적는다 */}
+        {vwapNow !== null && vwapNow !== undefined && (
+          <span
+            className="intraday-vwap"
+            title="거래량가중평균가 — 오늘 산 사람들의 평균 매입가입니다. 정규장만 셉니다. ⚠️ 3분봉 전형가로 낸 어림값"
+          >
+            VWAP <b>{fmtNum(Math.round(vwapNow))}</b>
+            {vsVwap !== null && (
+              <i className={signOf(vsVwap)}>
+                {" "}
+                {vsVwap > 0 ? "+" : ""}
+                {vsVwap.toFixed(2)}%
+              </i>
+            )}
+          </span>
+        )}
       </div>
 
       <svg className="intraday-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
@@ -127,6 +189,21 @@ export function IntradayFlow({ code, basePrice }: { code: string; basePrice: num
           strokeDasharray="2 2"
           vectorEffect="non-scaling-stroke"
         />
+        {/*
+          **VWAP** — 오늘 산 사람들의 평균 매입가. 선 위에 있으면 그들이 이기고 있다.
+          가격선과 헷갈리지 않게 **점선에 다른 색**으로 둔다. 전일종가선(회색 점선)과도
+          갈려야 해서 주황 계열이다.
+        */}
+        {vwapLine && (
+          <polyline
+            points={vwapLine}
+            fill="none"
+            stroke="var(--amber, #f5c542)"
+            strokeWidth={0.45}
+            strokeDasharray="3 2"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
       </svg>
 
       {/* 구간 라벨 — 그래프 폭에 맞춰 비율로 배치 */}
