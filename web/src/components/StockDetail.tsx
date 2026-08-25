@@ -7,6 +7,7 @@ import { CompanySnapshot, type PeriodReturns } from "./CompanySnapshot";
 import { FinancePanel } from "./FinancePanel";
 import { InvestorTrendTable } from "./InvestorTrendTable";
 import { NewsDisclosurePanel } from "./NewsDisclosurePanel";
+import { IntradayLevelsBar } from "./IntradayLevelsBar";
 import { PriceHeader } from "./PriceHeader";
 import { TabScroller } from "./TabScroller";
 import { OpinionPanel } from "./OpinionPanel";
@@ -235,6 +236,7 @@ export function StockDetail({
         {!loading && !error && (
           <>
             <PriceHeader info={info} code={code} />
+            <IntradayLevelsBar code={code} />
 
             {onOpenAnalysis && (
               <button className="analysis-link" onClick={() => onOpenAnalysis(code, name)}>

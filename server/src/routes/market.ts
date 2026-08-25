@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
+import { intradayLevels } from "../intraday.js";
 import { getSectorMood } from "../sectorMood.js";
 import { searchStocks } from "../stockListCache.js";
 import { analystOpinion } from "../analystOpinion.js";
@@ -447,6 +448,18 @@ export function createMarketRouter(client: KiwoomClient): Router {
         }))
         .filter((r) => r.t.length >= 6 && r.price > 0);
       res.json({ code: bare, strength: ticks[0]?.strength ?? null, ticks });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 장중 기준선 — VWAP · 시가갭 · 전일고저 · 장초반 30분.
+   * 분봉 + 일봉 두 번 조회다. 개별종목 화면에서만 부른다.
+   */
+  router.get("/intraday/:code", async (req, res, next) => {
+    try {
+      res.json({ levels: await intradayLevels(client, req.params.code) });
     } catch (err) {
       next(err);
     }

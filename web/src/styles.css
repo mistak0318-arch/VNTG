@@ -5326,6 +5326,24 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   도움말 안의 계산식 한 줄 — 본문과 섞이면 읽다가 놓친다.
   고정폭으로 두는 이유는 나눗셈 기호와 괄호가 줄을 맞춰야 식으로 읽히기 때문이다.
 */
+/* ---------------- 장중 기준선 (VWAP·시가갭·전일고저·장초반30) ---------------- */
+/*
+  한 줄에 다 들어와야 곁눈으로 읽힌다. 좁으면 줄이 넘어가되 항목이 쪼개지지는 않게
+  (`white-space: nowrap`) — 「전일고 272,000」이 두 줄로 갈리면 읽는 데 시간이 걸린다.
+*/
+.idl {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.9rem;
+  padding: 0.45rem 0.7rem; margin-bottom: 0.5rem;
+  background: var(--panel-2); border-radius: 0.4rem;
+  font-size: 0.82rem;
+}
+.idl-item { display: inline-flex; align-items: baseline; gap: 0.25rem; white-space: nowrap; }
+.idl-item em { font-style: normal; color: var(--muted); font-size: 0.75rem; }
+.idl-item b { font-variant-numeric: tabular-nums; }
+.idl-item i { font-style: normal; color: var(--muted); font-size: 0.72rem; }
+/* 출처와 한계 — 오른쪽 끝으로 밀어 값과 안 섞이게 */
+.idl-note { margin-left: auto; color: var(--muted); font-size: 0.7rem; white-space: nowrap; }
+
 /* ---------------- 조건 백테스트 ---------------- */
 /* 이름 · 평균 · 중앙값 · 승률 · 건수 */
 .bt-row { grid-template-columns: 1fr 4.5rem 4.5rem 3rem 4.5rem !important; }

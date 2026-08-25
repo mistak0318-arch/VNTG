@@ -4,6 +4,7 @@ import { api, normalizeStockCode, pickList, type RawRecord, type StockSearchResu
 import { ChartPanel } from "../components/ChartPanel";
 import { IntradayFlow, ProgramFlowBars } from "../components/IntradayPanels";
 import { InvestorTrendTable } from "../components/InvestorTrendTable";
+import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
 import { PriceHeader } from "../components/PriceHeader";
 import { RefreshBar } from "../components/RefreshBar";
 import { SectorMoodPanel } from "../components/SectorMoodPanel";
@@ -203,6 +204,11 @@ export function StockAnalysisPage({
 
           {error && <div className="error-banner">{error}</div>}
           <PriceHeader info={info} code={stock.code} />
+          {/*
+            가격 바로 아래다 — **견줄 선은 견줄 값 옆에 있어야** 한다.
+            탭 안에 넣으면 눌러야 보이는데, 이건 늘 보면서 판단하는 값이다.
+          */}
+          <IntradayLevelsBar code={stock.code} key={`idl-${stock.code}-${reloadKey}`} />
 
           <SectorMoodPanel
             code={stock.code}

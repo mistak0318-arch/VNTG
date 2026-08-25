@@ -302,6 +302,9 @@ export const api = {
     postJson<{ alerts: FiredAlert[]; sent: boolean; error?: string; preview: string }>(
       `/api/alert/scan${send ? "?send=1" : ""}`,
     ),
+  /** 장중 기준선 — 분봉+일봉 2회 조회다. 종목을 「들여다보는」 화면에서만 부른다 */
+  intraday: (code: string) =>
+    getJson<{ levels: IntradayLevels | null }>(`/api/market/intraday/${code}`),
   backtestRules: () => getJson<{ rules: BacktestRuleDef[] }>("/api/backtest/rules"),
   backtestRun: (cfg: BacktestConfig) => postJson<{ id: string }>("/api/backtest/run", cfg),
   backtestJob: (id: string) => getJson<BacktestJob>(`/api/backtest/job/${id}`),
@@ -1968,6 +1971,28 @@ export interface PaperResult {
   edges: EvidenceEdge[];
 }
 
+
+/** 장중 기준선 — VWAP·시가갭·전일고저·장초반 30분 */
+export interface IntradayLevels {
+  code: string;
+  date: string;
+  price: number;
+  open: number;
+  high: number;
+  low: number;
+  /** ⚠️ 분봉 전형가로 낸 **어림값** — 진짜 VWAP 은 체결 단위라 REST 로 못 받는다 */
+  vwap: number | null;
+  vsVwap: number | null;
+  prevClose: number | null;
+  prevHigh: number | null;
+  prevLow: number | null;
+  gapPct: number | null;
+  /** 갭이 ±0.5% 안이면 `null` — 메울 갭이 없다 */
+  gapFilled: boolean | null;
+  or30High: number | null;
+  or30Low: number | null;
+  bars: number;
+}
 
 /* ── 조건 백테스트 ─────────────────────────────────────────── */
 
