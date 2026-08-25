@@ -136,6 +136,7 @@ app.use("/api/feed", createNewsRouter(client));
 app.use("/api/settings", createSettingsRouter());
 app.use("/api/calendar", createCalendarRouter());
 app.use("/api/notes", createNotesRouter(client));
+app.use("/api/memo", createMemoRouter());
 app.use("/api/signal", createSignalRouter(client));
 app.use("/api/paper", createPaperRouter(client));
 app.use("/api/journal", createJournalRouter(client));
