@@ -683,7 +683,8 @@
       "mcp__visualize__read_me",
       "PowerShell($r = irm \"http://localhost:4000/api/rank/trade-value?market=000&exchange=3&limit=20\"; $r.rows | Select-Object -First 12 | ConvertTo-Json -Depth 3 -Compress)",
       "PowerShell($k = irm \"http://localhost:4000/api/rank/trade-value?market=000&exchange=1&limit=10\"; $k.rows | Select-Object code,name,cur_prc,flu_rt,trde_prica,now_trde_qty | Format-Table -AutoSize | Out-String -Width 200)",
-      "PowerShell(irm \"http://localhost:4000/api/alert/stop-watch\")"
+      "PowerShell(irm \"http://localhost:4000/api/alert/stop-watch\")",
+      "Bash(curl -s 'http://localhost:4000/api/realtime/latest?type=0B&item=005930')"
     ]
   }
 }

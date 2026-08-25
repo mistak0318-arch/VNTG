@@ -2,20 +2,15 @@ import { useEffect, useState } from "react";
 import { api, fmtNum, type StockSummaryData } from "../api";
 
 /**
- * 종목 한 장 요약 — **첫 화면에서 한 번에 읽는 표 두 개.**
+ * **오늘 누가 샀나** — 장중 수급 요약.
  *
- * ## 왜 표인가
+ * ## ⚠️ 지표는 여기 없다
  *
- * 값이 흩어져 있으면 「이 종목 지금 어떤가」를 보려고 화면을 위아래로 훑게 된다.
- * 시가총액은 요약줄 한쪽에, 체결강도는 거래대금 밑에, 회전율은 아예 없고, 수급은
- * 한참 아래 차트로 있었다. **줄을 맞춰 세워야** 눈이 한 번에 훑는다.
+ * 처음엔 시총·회전율·체결강도까지 여기에 넣었다가 뺐다. 그 값들은 **요약줄
+ * (`PriceHeader`)에 이미 있다** — 같은 값을 두 번 그린 것이다. 그러면 언젠가 한쪽만
+ * 고쳐져서 같은 종목이 한 화면에서 다른 숫자를 말한다. 이 앱에서 여러 번 겪은 사고다.
  *
- * ## 둘로 나눈 이유
- *
- *   **몸값**   시총·회전율·체결강도 — 「이게 얼마짜리이고 얼마나 도는가」
- *   **수급**   개인·외국인·기관·프로그램 — 「오늘 누가 샀는가」
- *
- * 둘은 묻는 질문이 다르다. 한 표에 섞으면 열두 칸짜리 숫자 벽이 되어 아무것도 안 읽힌다.
+ * 그래서 **지표는 요약줄이 맡고**(회전율도 거기로 옮겼다), 여기는 수급만 한다.
  *
  * ## 기관은 반드시 쪼갠다
  *
@@ -83,50 +78,13 @@ export function StockSummaryPanel({ code }: { code: string }) {
   }, [code]);
 
   if (!d) return null;
-  const f = d.facts;
 
   /* 막대 기준 — 그 표 안에서 제일 큰 것. 표마다 따로여야 작은 값이 안 사라진다 */
   const maxMain = Math.max(1, ...d.main.map((r) => Math.abs(r.amount)));
   const maxInst = Math.max(1, ...d.institution.map((r) => Math.abs(r.amount)));
 
-  const facts: { k: string; v: string; cls?: string; title?: string }[] = [
-    { k: "시가총액", v: f.marketCap === null ? "-" : eok(f.marketCap * 100) },
-    { k: "거래대금", v: f.tradeValue === null ? "-" : eok(f.tradeValue * 100) },
-    {
-      k: "회전율",
-      v: f.turnover === null ? "-" : `${f.turnover.toFixed(f.turnover >= 10 ? 0 : 2)}%`,
-      cls: f.turnover !== null && f.turnover >= 5 ? "positive" : "",
-      title: "오늘 거래량 ÷ 상장주식수. 그 종목 치고 얼마나 돌았나 — 5% 면 활발한 편입니다",
-    },
-    {
-      k: "체결강도",
-      v: f.strength === null ? "-" : f.strength.toFixed(0),
-      cls: f.strength === null ? "" : f.strength >= 100 ? "positive" : "negative",
-      title: "매수 체결 ÷ 매도 체결 × 100. 100 이 균형입니다",
-    },
-    { k: "시가", v: fmtNum(f.open) },
-    { k: "고가", v: fmtNum(f.high) },
-    { k: "저가", v: fmtNum(f.low) },
-    { k: "전일종가", v: fmtNum(f.prevClose) },
-    {
-      k: "상/하한",
-      v: `${fmtNum(f.upperLimit)} / ${fmtNum(f.lowerLimit)}`,
-      title: "오늘 갈 수 있는 위·아래 끝",
-    },
-    { k: "상장주식", v: f.shares === null ? "-" : `${fmtNum(Math.round(f.shares / 10000))}만주` },
-  ];
-
   return (
     <div className="ss">
-      <div className="ss-grid">
-        {facts.map((x) => (
-          <div className="ss-cell" key={x.k} title={x.title}>
-            <span className="ss-k">{x.k}</span>
-            <b className={`num ${x.cls ?? ""}`}>{x.v}</b>
-          </div>
-        ))}
-      </div>
-
       <div className="ss-flows">
         <div className="ss-col">
           <div className="ss-sub">

@@ -174,6 +174,26 @@ export class RealtimeClient {
       // 로그인이 끝나면 걸어 둔 구독을 올린다
       if (frame.trnm === "LOGIN" && frame.return_code === 0) this.resubscribe();
 
+      /*
+       * ⚠️ **REG 실패를 붙잡아 둔다.**
+       *
+       * 등록이 거절돼도 소켓은 「연결됨·healthy」다. 그래서 **프레임이 안 오는데
+       * 상태창은 멀쩡하다** — 제일 알아채기 어려운 실패다. 실제로 하루 종일
+       * `105118`(그룹당 200종목 초과)로 전부 거절된 걸 모르고 있었다.
+       *
+       * 프레임 로그는 PING 이 10초마다 밀어내서 REG 응답이 금방 사라진다.
+       * 그래서 **실패만 따로** 남긴다 — 여기 뭐가 있으면 그게 원인이다.
+       */
+      if (frame.trnm === "REG" && frame.return_code !== 0) {
+        this.regErrors.push({
+          at: new Date().toISOString(),
+          code: Number(frame.return_code ?? -1),
+          msg: String(frame.return_msg ?? ""),
+        });
+        if (this.regErrors.length > 20) this.regErrors.shift();
+        console.log(`실시간: REG 실패 ${frame.return_code} — ${frame.return_msg}`);
+      }
+
       for (const l of this.listeners) l(frame);
     };
 
@@ -193,12 +213,21 @@ export class RealtimeClient {
    * 이걸 빠뜨리면 **연결은 살아 있는데 아무것도 안 오는** 상태가 된다 — 제일 알아채기 어렵다.
    */
   private resubscribe(): void {
-    // 한 번에 몰아 보낸다 — TR 마다 나눠 보내면 요청 횟수 제한(105110)에 걸린다
-    const data: { item: string[]; type: string[] }[] = [];
+    /*
+     * 걸어 둔 것을 **`pending` 에 다시 넣고 `flush` 에 맡긴다.**
+     *
+     * ⚠️ 예전엔 여기서 직접 REG 를 한 방에 보냈다. 그러면 **200종목 상한(105118)에
+     * 그대로 걸린다** — 아래 `flush` 가 200개씩 그룹을 나누는데 이 길만 그걸 안 거쳤다.
+     * 나눠 보내는 규칙은 한 곳에만 있어야 한다.
+     */
     for (const [type, items] of this.subs) {
-      if (items.size > 0) data.push({ item: [...items], type: [type] });
+      for (const item of items) {
+        const p = this.pending.get(type) ?? new Set<string>();
+        p.add(item);
+        this.pending.set(type, p);
+      }
     }
-    if (data.length > 0) this.send({ trnm: "REG", grp_no: "1", refresh: "1", data });
+    this.flush();
   }
 
   private scheduleRetry(): void {
@@ -255,6 +284,22 @@ export class RealtimeClient {
     }, 300);
   }
 
+  /**
+   * ## 상한 셋을 동시에 지켜야 한다 (2026-08-25 실측)
+   *
+   * 서버가 계속 말하고 있었는데 우리가 안 보고 있었다:
+   *
+   *     105118  등록 종목이 **그룹번호**에 등록할 수 있는 허용 개수(200)를 초과
+   *     105115  등록 **종목이** 허용 개수(200)를 초과      ← 연결 전체
+   *     105110  해당 TRNM 으로 허용된 **요청 건수**를 초과   ← 나눠 보내도 걸린다
+   *
+   * 즉 **한 연결에 200종목**이고, 그룹을 나눠도 총합은 그대로다. 그렇다고 잘게 나눠
+   * 여러 번 보내면 이번엔 요청 횟수에 걸린다. **한 번에, 200 안쪽으로** 보내야 한다.
+   *
+   * 그래서 여기서는 **REG 한 번**만 보낸다. 종목 수 제한은 부르는 쪽
+   * (`realtimeHub` 의 `MAX_CODES`)이 지킨다 — 여기서 또 자르면 무엇이 잘렸는지
+   * 아무도 모르게 된다.
+   */
   private flush(): void {
     if (!this.ws || this.ws.readyState !== 1) return;
     const data: { item: string[]; type: string[] }[] = [];
@@ -279,6 +324,12 @@ export class RealtimeClient {
     this.timer = null;
     this.ws?.close();
     this.ws = null;
+  }
+
+  /** REG 가 거절된 기록 — 여기 뭐가 있으면 「연결은 됐는데 안 온다」의 원인이다 */
+  private readonly regErrors: { at: string; code: number; msg: string }[] = [];
+  get registrationErrors(): { at: string; code: number; msg: string }[] {
+    return [...this.regErrors];
   }
 
   get state(): string {

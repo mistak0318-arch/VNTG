@@ -1277,6 +1277,8 @@ export interface ExchangeQuote {
   volume: number | null;
   /** 거래대금(백만원) — 08~09시 NXT 프리마켓에는 KRX 쪽이 0 이라 이게 있어야 한다 */
   tradeValue: number | null;
+  /** 상장주식수(천주) — 회전율의 분모 */
+  shares: number | null;
   changeRate: number;
   error: string | null;
 }

@@ -91,6 +91,8 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
 
   /** KRX 몫 거래대금 — 조회에서 직접 받는다(일봉은 개장 전에 어제 값을 준다) */
   const [krxValue, setKrxValue] = useState<number | null>(null);
+  /** 상장주식수(주) — 회전율의 분모. `ka10007` 이 천주로 준다 */
+  const [shares, setShares] = useState<number | null>(null);
 
   useEffect(() => {
     if (!code) return;
@@ -109,7 +111,10 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
         .then((r) => {
           if (cancelled) return;
           setNxt(r.exchanges.find((x) => x.key === "nxt") ?? null);
-          setKrxValue(r.exchanges.find((x) => x.key === "krx")?.tradeValue ?? null);
+          const krx = r.exchanges.find((x) => x.key === "krx");
+          setKrxValue(krx?.tradeValue ?? null);
+          // 천주로 온다 — 주 단위로 바꿔 둔다
+          setShares(krx?.shares ? krx.shares * 1000 : null);
         })
         .catch(() => undefined);
     void load();
@@ -207,6 +212,13 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
   const showNxtLine = nxt?.price != null && nxt.price > 0 && Number.isFinite(nxt.changeRate);
   /** 값이 KRX 와 같은가 — 같으면 숫자 대신 그렇게 적는다(줄은 그대로 둔다) */
   const nxtSame = showNxtLine && phase === "regular" && !nxtDiffers;
+
+  /*
+   * 회전율 — **통합 거래량**으로 낸다(KRX + NXT). 하루 거래는 둘의 합이라
+   * KRX 만 세면 「얼마나 돌았나」가 절반으로 적힌다.
+   */
+  const totalVol = fill(info.trde_qty, last?.volume) + (nxt?.volume ?? 0);
+  const turnover = shares && shares > 0 && totalVol > 0 ? (totalVol / shares) * 100 : null;
   const nxtCls = !nxt ? "" : nxt.changeRate > 0 ? "positive" : nxt.changeRate < 0 ? "negative" : "";
 
   return (
@@ -323,6 +335,31 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           <span className="ph-label">전일종가</span>
           <span className="ph-row">
             <span className="ph-value">{fmtAbsNum(info.base_pric)}</span>
+          </span>
+        </div>
+        {/*
+          **회전율** — 그 종목 치고 얼마나 돌았나.
+
+          거래대금만 보면 큰 종목이 늘 위에 있다. 삼성전자 2조와 소형주 500억은
+          견줄 수가 없는데, 회전율로 보면 **주인이 하루에 몇 번 바뀌었나**가 나온다.
+          시세분석 표에는 이미 있는데 정작 종목을 열면 없었다.
+
+          `ka10007` 이 상장주식수를 주므로 조회가 안 는다.
+        */}
+        <div className="ph-cell">
+          <span className="ph-label" title="오늘 거래량 ÷ 상장주식수. 5% 면 활발한 편입니다">
+            회전율
+          </span>
+          <span className="ph-row">
+            <span className={`ph-value ${turnover !== null && turnover >= 5 ? "positive" : ""}`}>
+              {turnover === null ? "-" : `${turnover.toFixed(turnover >= 10 ? 0 : 2)}%`}
+            </span>
+          </span>
+          <span className="ph-row">
+            <em className="ph-sublabel">상장주식</em>
+            <span className="ph-value sub">
+              {shares === null ? "-" : `${fmtNum(Math.round(shares / 10000))}만주`}
+            </span>
           </span>
         </div>
         <div className="ph-cell">

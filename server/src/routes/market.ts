@@ -305,6 +305,8 @@ export function createMarketRouter(client: KiwoomClient): Router {
                * 키움은 백만원 단위로 준다. 억으로 바꾸는 건 화면이 한다.
                */
               tradeValue: num(data.trde_prica),
+              /* 상장주식수(천주) — 회전율을 내려면 있어야 한다. 거래소가 달라도 같은 값이다 */
+              shares: num(data.flo_stkcnt),
               // 등락률은 부호가 의미를 가지므로 절댓값을 취하지 않는다
               changeRate: Number(String(data.flu_rt ?? "").replace(/[+,\s]/g, "")) || 0,
               error: null as string | null,
@@ -313,7 +315,8 @@ export function createMarketRouter(client: KiwoomClient): Router {
             return {
               key: t.key,
               label: t.label,
-              price: null, open: null, high: null, low: null, volume: null, tradeValue: null, changeRate: 0,
+              price: null, open: null, high: null, low: null, volume: null, tradeValue: null,
+              shares: null, changeRate: 0,
               error: err instanceof Error ? err.message : "조회 실패",
             };
           }

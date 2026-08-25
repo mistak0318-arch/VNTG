@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { RealtimeClient } from "../realtimeClient.js";
-import { getRealtime, peekRealtime, shouldRun } from "../realtimeHub.js";
+import { getRealtime, peekRealtime, shouldRun, subscribedCount } from "../realtimeHub.js";
 
 /**
  * 실시간 웹소켓 — **아직 확인 단계다.**
@@ -43,12 +43,28 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
    * `healthy` 가 거짓이면 실시간을 믿지 말고 평소대로 폴링하면 된다.
    */
   router.get("/status", (_req, res) => {
-    const { client: rt } = hub();
+    const { client: rt, store } = hub();
     res.json({
       enabled: RealtimeClient.enabled,
       state: rt?.state ?? "안 붙음",
       healthy: rt?.healthy ?? false,
       lastSeen: rt?.lastSeen ?? null,
+      /*
+       * **건 종목 수**와 **값이 온 종목 수**를 갈라 적는다.
+       *
+       * 예전엔 `keys` 하나뿐이라 「129 면 잘 걸린 건가 아닌가」를 알 수가 없었다 —
+       * 거래가 뜸한 종목은 걸려 있어도 키가 안 생기기 때문이다. 둘을 나란히 두면
+       * `subscribed` 는 크고 `keys` 가 작을 때 **「걸리긴 걸렸는데 안 도는 종목이
+       * 많다」**로 읽히고, 둘 다 작으면 **구독이 실패한 것**이다.
+       */
+      subscribed: subscribedCount(),
+      keys: store?.health.keys ?? 0,
+      /*
+       * **등록이 거절된 기록.** 비어 있어야 정상이다.
+       * 여기 뭐가 있으면 「연결은 됐는데 프레임이 안 온다」의 답이 여기 있다 —
+       * 상태창이 healthy 라고 말해도 등록이 통째로 거절됐을 수 있다.
+       */
+      regErrors: rt?.registrationErrors ?? [],
     });
   });
 

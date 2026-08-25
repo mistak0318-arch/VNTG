@@ -214,6 +214,25 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
               onDragLeave={() => setOver(null)}
               onDrop={() => dropOnGroup(g)}
             >
+              {/* 영역도 같은 자리에 화살표 — 줄 종류가 달라도 손이 가는 곳은 같아야 한다 */}
+              <span className="mo-move">
+                <button
+                  className="mo-arrow"
+                  onClick={() => moveGroup(gi, -1)}
+                  disabled={gi === 0}
+                  title="위로"
+                >
+                  ▲
+                </button>
+                <button
+                  className="mo-arrow"
+                  onClick={() => moveGroup(gi, 1)}
+                  disabled={gi === groups.length - 1}
+                  title="아래로"
+                >
+                  ▼
+                </button>
+              </span>
               {editing === `g:${g}` ? (
                 <input
                   className="mo-rename"
@@ -231,16 +250,6 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
                 </button>
               )}
               <span className="mo-group">{ordered.filter((i) => i.group === g).length}개</span>
-              <button className="filter-btn" onClick={() => moveGroup(gi, -1)} disabled={gi === 0}>
-                ↑
-              </button>
-              <button
-                className="filter-btn"
-                onClick={() => moveGroup(gi, 1)}
-                disabled={gi === groups.length - 1}
-              >
-                ↓
-              </button>
             </div>
 
             {ordered
@@ -266,6 +275,37 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
                     }}
                     onDrop={() => dropOnItem(it.key)}
                   >
+                    {/*
+                      ⚠️ **화살표를 앞으로 옮겼다.**
+
+                      예전 순서는 `⠿ 아이콘 이름 ↑ ↓ 표시 ★` 였다. 순서를 바꾸는 건
+                      이 화면에서 제일 자주 하는 일인데 그 버튼이 **줄 오른쪽 끝**에 있어서,
+                      한 칸 옮길 때마다 눈이 왼쪽(이름)과 오른쪽(화살표)을 오갔다.
+                      메뉴 이름 길이가 제각각이라 **화살표 위치도 줄마다 달라서** 연달아
+                      누르기도 어려웠다.
+
+                      화살표를 맨 앞에 붙박아 두면 **줄이 바뀌어도 자리가 안 움직인다** —
+                      같은 자리를 연달아 누르면 계속 올라간다. 아이콘도 이름 옆으로
+                      작게 붙인다. 아이콘은 **찾는 표지**지 누르는 것이 아니다.
+                    */}
+                    <span className="mo-move">
+                      <button
+                        className="mo-arrow"
+                        onClick={() => moveItem(it.key, -1)}
+                        disabled={idx === 0}
+                        title="위로"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        className="mo-arrow"
+                        onClick={() => moveItem(it.key, 1)}
+                        disabled={idx === ordered.length - 1}
+                        title="아래로"
+                      >
+                        ▼
+                      </button>
+                    </span>
                     <span className="mo-grip" aria-hidden="true">
                       ⠿
                     </span>
@@ -291,20 +331,6 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
                         {prefs.labels[it.key] && <em className="mo-orig"> ({it.label})</em>}
                       </button>
                     )}
-                    <button
-                      className="filter-btn"
-                      onClick={() => moveItem(it.key, -1)}
-                      disabled={idx === 0}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      className="filter-btn"
-                      onClick={() => moveItem(it.key, 1)}
-                      disabled={idx === ordered.length - 1}
-                    >
-                      ↓
-                    </button>
                     <button
                       className={`filter-btn${hidden ? "" : " active"}`}
                       onClick={() => toggle(it.key)}
