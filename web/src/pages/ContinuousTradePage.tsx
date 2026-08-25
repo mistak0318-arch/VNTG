@@ -7,6 +7,7 @@ import { RefreshBar } from "../components/RefreshBar";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
+import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 
 // ka10131(기관외국인연속매매현황요청) 공식 문서 기준 확인된 필드명
 const LIST_KEYS = ["orgn_frgnr_cont_trde_prst"];
@@ -57,6 +58,8 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
   const [openFilter, setOpenFilter] = useState(false);
   const kept = (rows as unknown as FilterCapable[]).filter(f.keep) as unknown as typeof rows;
   const sort = useSortableTable(kept);
+  /* 칸 너비 조절 — 시세분석과 같은 공통 모듈 */
+  const cw = useColumnWidths("contTrade");
   const pager = usePager(sort.sorted.length, "vntg.cont.pageSize", kept.length);
 
   /* 장중에는 스스로 다시 받는다 — 새로고침을 누르러 오게 하면 안 된다 */
@@ -119,18 +122,24 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
 
       {!loading && !error && (
         <div className="data-table-wrap">
-          <table className="data-table">
+          <table className={`data-table${cw.customized ? " col-fixed" : ""}`}>
+            <colgroup>
+              {sigOn && <col style={{ width: "2.4rem" }} />}
+              {["name", "flu", "orgnDays", "orgnAmt", "forDays", "forAmt", "totDays", "totAmt"].map((k) => (
+                <col key={k} style={cw.styleOf(k)} />
+              ))}
+            </colgroup>
             <thead>
               <tr>
                 {sigOn && <th className="sig-th">🚦</th>}
-                <SortableTh columnKey="name" label="종목명" accessor={(r: RawRecord) => String(r.stk_nm ?? "")} sort={sort} className="sticky-col" />
-                <SortableTh columnKey="flu" label="기간등락률" accessor={(r: RawRecord) => Number(r.prid_stkpc_flu_rt) || 0} sort={sort} />
-                <SortableTh columnKey="orgnDays" label="기관연속일수" accessor={(r: RawRecord) => Number(r.orgn_cont_netprps_dys) || 0} sort={sort} />
-                <SortableTh columnKey="orgnAmt" label="기관연속금액(백만)" accessor={(r: RawRecord) => Number(r.orgn_cont_netprps_amt) || 0} sort={sort} />
-                <SortableTh columnKey="forDays" label="외인연속일수" accessor={(r: RawRecord) => Number(r.frgnr_cont_netprps_dys) || 0} sort={sort} />
-                <SortableTh columnKey="forAmt" label="외인연속금액(백만)" accessor={(r: RawRecord) => Number(r.frgnr_cont_netprps_amt) || 0} sort={sort} />
-                <SortableTh columnKey="totDays" label="합계연속일수" accessor={(r: RawRecord) => Number(r.tot_cont_netprps_dys) || 0} sort={sort} />
-                <SortableTh columnKey="totAmt" label="합계연속금액(백만)" accessor={(r: RawRecord) => Number(r.tot_cont_netprps_amt) || 0} sort={sort} />
+                <SortableTh columnKey="name" label="종목명" accessor={(r: RawRecord) => String(r.stk_nm ?? "")} sort={sort} className="sticky-col" extra={<ColumnGrip cw={cw} k="name" />} />
+                <SortableTh columnKey="flu" label="기간등락률" accessor={(r: RawRecord) => Number(r.prid_stkpc_flu_rt) || 0} sort={sort} extra={<ColumnGrip cw={cw} k="flu" />} />
+                <SortableTh columnKey="orgnDays" label="기관연속일수" accessor={(r: RawRecord) => Number(r.orgn_cont_netprps_dys) || 0} sort={sort} extra={<ColumnGrip cw={cw} k="orgnDays" />} />
+                <SortableTh columnKey="orgnAmt" label="기관연속금액(백만)" accessor={(r: RawRecord) => Number(r.orgn_cont_netprps_amt) || 0} sort={sort} extra={<ColumnGrip cw={cw} k="orgnAmt" />} />
+                <SortableTh columnKey="forDays" label="외인연속일수" accessor={(r: RawRecord) => Number(r.frgnr_cont_netprps_dys) || 0} sort={sort} extra={<ColumnGrip cw={cw} k="forDays" />} />
+                <SortableTh columnKey="forAmt" label="외인연속금액(백만)" accessor={(r: RawRecord) => Number(r.frgnr_cont_netprps_amt) || 0} sort={sort} extra={<ColumnGrip cw={cw} k="forAmt" />} />
+                <SortableTh columnKey="totDays" label="합계연속일수" accessor={(r: RawRecord) => Number(r.tot_cont_netprps_dys) || 0} sort={sort} extra={<ColumnGrip cw={cw} k="totDays" />} />
+                <SortableTh columnKey="totAmt" label="합계연속금액(백만)" accessor={(r: RawRecord) => Number(r.tot_cont_netprps_amt) || 0} sort={sort} extra={<ColumnGrip cw={cw} k="totAmt" />} />
               </tr>
             </thead>
             <tbody>

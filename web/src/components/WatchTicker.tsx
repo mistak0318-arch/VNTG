@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, fmtNum, signClass, type TrackedStock } from "../api";
 import { fid, useRealtime } from "../useRealtime";
+import { ColumnGrip, useColumnWidths } from "./ColumnWidths";
 
 /**
  * 관심종목 실시간 시세판 — **HTS [0130] 자리.**
@@ -33,6 +34,8 @@ export function WatchTicker({
 }) {
   const [base, setBase] = useState<TrackedStock[] | null>(null);
   const [sort, setSort] = useState<SortKey>("rate");
+  /* 칸 너비 조절 — 시세분석과 같은 공통 모듈 */
+  const cw = useColumnWidths("watchTicker");
 
   useEffect(() => {
     let alive = true;
@@ -110,14 +113,29 @@ export function WatchTicker({
       </div>
 
       <div className="data-table-wrap">
-        <table className="data-table num wt">
+        <table className={`data-table num wt${cw.customized ? " col-fixed" : ""}`}>
+          <colgroup>
+            {["name", "price", "rate", "strength"].map((k) => (
+              <col key={k} style={cw.styleOf(k)} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
-              <th className="sticky-col">종목</th>
-              <th>현재가</th>
-              <th>등락률</th>
+              <th className="sticky-col">
+                종목
+                <ColumnGrip cw={cw} k="name" />
+              </th>
+              <th>
+                현재가
+                <ColumnGrip cw={cw} k="price" />
+              </th>
+              <th>
+                등락률
+                <ColumnGrip cw={cw} k="rate" />
+              </th>
               <th title="100 을 넘으면 매수 체결이 우세. 등락률만으로는 오르는 중과 올라서 멈춘 것이 안 갈린다">
                 체결강도
+                <ColumnGrip cw={cw} k="strength" />
               </th>
             </tr>
           </thead>

@@ -185,7 +185,8 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
         읽힌다. 실제로는 「어디서 찾을까」를 고르는 필터다 — 고른 시장만 훑는다.
         버튼 생김새가 셋 다 같으니 이름이 없으면 무엇을 정하는 건지 알 수가 없다.
       */}
-      <div className="filter-row">
+      {/* 폰에서는 한 줄로 세우고 옆으로 넘긴다 — 컨트롤 다이어트 */}
+      <div className="filter-row ctl-ribbon">
         <span className="filter-label">찾을 곳</span>
         {MARKETS.map((m) => (
           <button
@@ -230,15 +231,19 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
         </button>
       </div>
 
-      <p className="page-note">
-        <b>고른 시장의 거래대금 상위</b>에서 「설정 &gt; 신호등 기준」에 맞는 종목을 찾습니다 —
-        「찾을 곳」은 결과를 나누는 게 아니라 <b>훑을 범위를 좁히는 것</b>입니다.
-        「전체」로 뽑으면 대개 코스피 대형주가 자리를 채우므로, 코스닥에서 도는 것을 보려면
-        따로 좁혀야 걸립니다.
-        ETF·ETN·리츠·우선주는 빼고 세므로 「상위 100」은 실제 종목 100개입니다. 종목마다
-        차트·수급·재무를 조회하므로 100종목이면 <b>1~2분</b> 걸립니다. 신호등 결과는 15분
-        캐시를 타므로 두 번째 실행은 훨씬 빠릅니다.
-      </p>
+      {/* 처음 한 번 읽으면 되는 설명 — 접어 둔다(컨트롤 다이어트) */}
+      <details className="fold-note">
+        <summary>어떻게 찾는지 · 얼마나 걸리는지</summary>
+        <p className="page-note">
+          <b>고른 시장의 거래대금 상위</b>에서 「설정 &gt; 신호등 기준」에 맞는 종목을 찾습니다 —
+          「찾을 곳」은 결과를 나누는 게 아니라 <b>훑을 범위를 좁히는 것</b>입니다.
+          「전체」로 뽑으면 대개 코스피 대형주가 자리를 채우므로, 코스닥에서 도는 것을 보려면
+          따로 좁혀야 걸립니다.
+          ETF·ETN·리츠·우선주는 빼고 세므로 「상위 100」은 실제 종목 100개입니다. 종목마다
+          차트·수급·재무를 조회하므로 100종목이면 <b>1~2분</b> 걸립니다. 신호등 결과는 15분
+          캐시를 타므로 두 번째 실행은 훨씬 빠릅니다.
+        </p>
+      </details>
 
       {error && <div className="error-banner">{error}</div>}
       {job?.error && <div className="error-banner">{job.error}</div>}

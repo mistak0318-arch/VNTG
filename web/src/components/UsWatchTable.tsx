@@ -1,5 +1,6 @@
 import type { UsQuoteRow } from "../api";
 import { sideQuote } from "../usSession";
+import { ColumnGrip, useColumnWidths } from "./ColumnWidths";
 
 /**
  * 해외 관심종목 표 — **관심종목(해외) 메뉴와 시황 전광판이 같은 것을 쓴다.**
@@ -71,13 +72,30 @@ export function UsWatchTable({
   tick,
 }: UsWatchTableProps) {
   const sideName = sideNameOf(stocks);
+  /* 칸 너비 조절 — 시세분석과 같은 공통 모듈. 머리 칸 오른쪽 가장자리를 끈다 */
+  const cw = useColumnWidths("usWatch");
 
   return (
     <div className="data-table-wrap">
-      <table className="data-table uw-table">
+      <table className={`data-table uw-table${cw.customized ? " col-fixed" : ""}`}>
+        <colgroup>
+          <col style={cw.styleOf("name")} />
+          <col style={cw.styleOf("price")} />
+          <col style={cw.styleOf("rate")} />
+          <col style={cw.styleOf("won")} />
+          <col style={cw.styleOf("w52")} />
+          <col style={cw.styleOf("vol")} />
+          <col style={cw.styleOf("power")} />
+          <col style={cw.styleOf("added")} />
+          <col style={cw.styleOf("ret")} />
+          {editing && <col />}
+        </colgroup>
         <thead>
           <tr>
-            <th className="sticky-col">종목</th>
+            <th className="sticky-col">
+              종목
+              <ColumnGrip cw={cw} k="name" />
+            </th>
             {/*
               시간외를 **괄호로 바로 옆에** 붙인다. 뒤쪽에 열로 두니 폰에서 잘려 안 보였다 —
               이 값은 정규장과 **견줘야** 뜻이 생기므로 떨어뜨려 놓으면 쓸모가 없다.
@@ -88,16 +106,36 @@ export function UsWatchTable({
             */}
             <th title={`괄호는 ${sideName} — 정규장 밖에서 도는 세션입니다`}>
               현재가 <span className="uw-day-h">({sideName})</span>
+              <ColumnGrip cw={cw} k="price" />
             </th>
             <th title={`전일 종가 대비 등락률입니다. 괄호는 ${sideName} 변동(정규장 종가 대비)`}>
               등락률 <span className="uw-day-h">({sideName})</span>
+              <ColumnGrip cw={cw} k="rate" />
             </th>
-            <th title="원화 환산가 — 한국투자증권이 계산해 준다">원화</th>
-            <th title="52주 구간에서 지금 위치 (0=저가, 100=고가)">52주</th>
-            <th title="오늘 거래량 ÷ 전일 거래량">거래량</th>
-            <th title="체결강도 — 100보다 크면 사는 쪽이 세다">강도</th>
-            <th>편입가</th>
-            <th>편입 대비</th>
+            <th title="원화 환산가 — 한국투자증권이 계산해 준다">
+              원화
+              <ColumnGrip cw={cw} k="won" />
+            </th>
+            <th title="52주 구간에서 지금 위치 (0=저가, 100=고가)">
+              52주
+              <ColumnGrip cw={cw} k="w52" />
+            </th>
+            <th title="오늘 거래량 ÷ 전일 거래량">
+              거래량
+              <ColumnGrip cw={cw} k="vol" />
+            </th>
+            <th title="체결강도 — 100보다 크면 사는 쪽이 세다">
+              강도
+              <ColumnGrip cw={cw} k="power" />
+            </th>
+            <th>
+              편입가
+              <ColumnGrip cw={cw} k="added" />
+            </th>
+            <th>
+              편입 대비
+              <ColumnGrip cw={cw} k="ret" />
+            </th>
             {editing && <th></th>}
           </tr>
         </thead>

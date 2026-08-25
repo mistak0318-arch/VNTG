@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, fmtNum, type UsDetail, type YahooChart } from "../../api";
+import { api, fmtNum, type UsDetail, type UsKiwoomDetailData, type YahooChart } from "../../api";
 
 /**
  * 지수·원자재 차트.
@@ -324,6 +324,11 @@ export function YahooChartSheet({
             */}
 
             {detail && !detail.error && <UsFigures d={detail} />}
+            {/*
+              키움 세부 — 한투 상세(위)에 **얹는** 값이다. 업종·프리장·52주 날짜·10호가는
+              키움만 준다. 미국(ND/NY/NA) 종목이 아니면 블록이 통째로 안 뜬다.
+            */}
+            {usStock && <UsKiwoomBlock symbol={target.symbol} />}
 
             <svg className="yc-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img">
               {/* 기준선 — 「1일」에서 이게 없으면 오른 건지 내린 건지 안 보인다 */}
@@ -452,6 +457,164 @@ function UsFigures({ d }: { d: UsDetail }) {
       <div className="table-note">
         한국투자증권 해외주식 시세입니다. <b>재무제표와 수급은 없습니다</b> — 해외 종목에는
         DART 같은 자리가 없고, 외국인·기관 순매수는 국내 시장의 개념입니다.
+      </div>
+    </>
+  );
+}
+
+/** yyyymmdd → yy.mm.dd — 52주 고저 날짜용 */
+function ymd(s: string): string {
+  return /^\d{8}$/.test(s) ? `${s.slice(2, 4)}.${s.slice(4, 6)}.${s.slice(6, 8)}` : s;
+}
+/** HHmmss → HH:mm — 호가시각용 */
+function hms(s: string): string {
+  return /^\d{6}$/.test(s) ? `${s.slice(0, 2)}:${s.slice(2, 4)}` : s;
+}
+
+/**
+ * 키움 세부 — usa20100(업종·프리장·52주 날짜) + usa20101(10호가·회전율).
+ *
+ * 한투 상세(UsFigures)에 **없는 값만** 여기 있다 — 시총·가격처럼 겹치는 건 위에서
+ * 이미 보여 줬으니 다시 적지 않는다. 예외는 52주 고저인데, 키움은 **날짜와 이격(%)**
+ * 까지 줘서 정보량이 다르다.
+ *
+ * 미국(ND/NY/NA) 종목이 아니거나 조회가 실패하면 블록이 통째로 안 뜬다 —
+ * 없는 것을 있는 척하지 않는다.
+ */
+function UsKiwoomBlock({ symbol }: { symbol: string }) {
+  const [k, setK] = useState<UsKiwoomDetailData | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setK(null);
+    api
+      .usKiwoomDetail(symbol)
+      .then((d) => {
+        if (alive) setK(d);
+      })
+      .catch(() => {
+        if (alive) setK(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [symbol]);
+
+  if (!k || k.unsupported || (!k.summary && !k.book)) return null;
+  const s = k.summary;
+  const b = k.book;
+
+  const rows: { k: string; v: string; hint?: string }[] = [];
+  if (s) {
+    if (s.sectorLg || s.sectorSm)
+      rows.push({
+        k: "업종",
+        v: [s.sectorLg, s.sectorSm].filter(Boolean).join(" · "),
+        hint: "키움 분류 — 야후의 뭉뚱그린 섹터보다 세부까지 있습니다",
+      });
+    if (s.week52.high !== null)
+      rows.push({
+        k: "52주 고가",
+        v: `${fmtNum(s.week52.high)} (${ymd(s.week52.highDate)}${
+          s.week52.highGap !== null ? `, ${s.week52.highGap.toFixed(1)}%` : ""
+        })`,
+        hint: "괄호는 그 날짜와 지금 가격의 이격입니다",
+      });
+    if (s.week52.low !== null)
+      rows.push({
+        k: "52주 저가",
+        v: `${fmtNum(s.week52.low)} (${ymd(s.week52.lowDate)}${
+          s.week52.lowGap !== null ? `, +${s.week52.lowGap.toFixed(1)}%` : ""
+        })`,
+      });
+    if (s.pre.open !== null || s.pre.high !== null || s.pre.low !== null)
+      rows.push({
+        k: "프리장 시/고/저",
+        v: `${s.pre.open ?? "-"} / ${s.pre.high ?? "-"} / ${s.pre.low ?? "-"}`,
+        hint: "야후·한투가 안 주는 값 — 프리장 흐름을 볼 수 있습니다",
+      });
+  }
+  if (b) {
+    if (b.turnover !== null)
+      rows.push({
+        k: "회전율",
+        v: `${b.turnover.toFixed(2)}%`,
+        hint: "오늘 거래량 ÷ 상장주식수 — 손바뀜이 얼마나 있었나",
+      });
+    if (b.tradeValue !== null)
+      // trde_prica 는 천 달러다 (실측: NVDA 28,658,314 → 286.6억 달러)
+      rows.push({ k: "거래대금", v: `${fmtNum(Math.round(b.tradeValue / 100000))}억 달러` });
+  }
+
+  // 잔량 막대의 기준 — 양쪽 통틀어 제일 큰 잔량
+  const maxQty = b ? Math.max(1, ...b.asks.map((r) => r.qty), ...b.bids.map((r) => r.qty)) : 1;
+
+  return (
+    <>
+      {rows.length > 0 && (
+        <div className="usd-grid">
+          {rows.map((r) => (
+            <div className="usd-cell" key={r.k} title={r.hint}>
+              <span className="usd-k">{r.k}</span>
+              <span className="usd-v">{r.v}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {b && b.asks.some((r) => r.price !== null) && (
+        <div className="ukb-book">
+          <div className="ukb-head">
+            <span>10호가</span>
+            <span className="ukb-when">
+              {ymd(b.date)} {hms(b.at)} 기준
+              {/* 마감 후엔 마지막 호가가 그대로 남는다 — 시각이 없으면 지금 호가로 오해한다 */}
+            </span>
+          </div>
+          {/* 국내 호가창과 같은 규칙 — 매도는 위로 갈수록 비싸다(10호가부터 그린다) */}
+          {b.asks
+            .slice()
+            .reverse()
+            .map((r, i) =>
+              r.price === null ? null : (
+                <div className="ukb-row" key={`a${i}`}>
+                  <span className="ukb-bar-cell">
+                    <span
+                      className="ukb-bar ukb-ask"
+                      style={{ width: `${Math.min(100, (r.qty / maxQty) * 100)}%` }}
+                    />
+                    <span className="ukb-qty">{fmtNum(r.qty)}</span>
+                  </span>
+                  <span className="ukb-price down">{r.price}</span>
+                  <span className="ukb-bar-cell" />
+                </div>
+              ),
+            )}
+          {b.bids.map((r, i) =>
+            r.price === null ? null : (
+              <div className="ukb-row" key={`b${i}`}>
+                <span className="ukb-bar-cell" />
+                <span className="ukb-price up">{r.price}</span>
+                <span className="ukb-bar-cell">
+                  <span
+                    className="ukb-bar ukb-bid"
+                    style={{ width: `${Math.min(100, (r.qty / maxQty) * 100)}%` }}
+                  />
+                  <span className="ukb-qty">{fmtNum(r.qty)}</span>
+                </span>
+              </div>
+            ),
+          )}
+          <div className="ukb-foot">
+            <span>매도잔량 {fmtNum(b.totalAsk)}</span>
+            <span>매수잔량 {fmtNum(b.totalBid)}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="table-note">
+        키움 세부입니다 — 업종·프리장·10호가는 키움만 줍니다. 위(한투)와 값이 조금 다를 수
+        있는데, 서로 다른 시점의 스냅샷이라 그렇습니다.
       </div>
     </>
   );

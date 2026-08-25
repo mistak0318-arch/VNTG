@@ -6,6 +6,7 @@ import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { Pager, usePager } from "../components/Pager";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
+import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 
 // ka10030(당일거래량상위요청) 공식 문서 기준 확인된 필드명
 const LIST_KEYS = ["tdy_trde_qty_upper"];
@@ -60,6 +61,8 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
 
   const rows = pickList(data ?? undefined, LIST_KEYS);
   const sort = useSortableTable(rows);
+  /* 칸 너비 조절 — 시세분석과 같은 공통 모듈 */
+  const cw = useColumnWidths("volumeRank");
   /* 시세분석과 **같은 도구** — 켤 때만, 지금 쪽만 평가한다 */
   const [sigOn, setSigOn] = useState(false);
   /*
@@ -102,7 +105,7 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
           </button>
         ))}
       </div>
-      <div className="filter-row">
+      <div className="filter-row ctl-ribbon">
         {SORTS.map((s) => (
           <button
             key={s.key}
@@ -119,7 +122,16 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
 
       {!loading && !error && (
         <div className="data-table-wrap">
-          <table className="data-table">
+          <table className={`data-table${cw.customized ? " col-fixed" : ""}`}>
+            <colgroup>
+              {sigOn && <col style={{ width: "2.4rem" }} />}
+              <col style={cw.styleOf("name")} />
+              <col style={cw.styleOf("price")} />
+              <col style={cw.styleOf("fluRt")} />
+              <col style={cw.styleOf("amt")} />
+              <col style={cw.styleOf("qty")} />
+              <col style={cw.styleOf("turn")} />
+            </colgroup>
             <thead>
               <tr>
                 {sigOn && <th className="sig-th" title="신호등 — 누르면 근거가 열립니다">🚦</th>}
@@ -129,18 +141,21 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
                   accessor={(r: RawRecord) => String(r.stk_nm ?? "")}
                   sort={sort}
                   className="sticky-col"
+                  extra={<ColumnGrip cw={cw} k="name" />}
                 />
                 <SortableTh
                   columnKey="price"
                   label="현재가"
                   accessor={(r: RawRecord) => Math.abs(Number(r.cur_prc)) || 0}
                   sort={sort}
+                  extra={<ColumnGrip cw={cw} k="price" />}
                 />
                 <SortableTh
                   columnKey="fluRt"
                   label="등락률"
                   accessor={(r: RawRecord) => Number(r.flu_rt) || 0}
                   sort={sort}
+                  extra={<ColumnGrip cw={cw} k="fluRt" />}
                 />
                 {/*
                   거래대금을 등락률 바로 뒤로 올린다. 이 화면의 기본 정렬이 거래대금순인데
@@ -155,18 +170,21 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
                   label="거래대금(억)"
                   accessor={(r: RawRecord) => Number(r.trde_amt) || 0}
                   sort={sort}
+                  extra={<ColumnGrip cw={cw} k="amt" />}
                 />
                 <SortableTh
                   columnKey="qty"
                   label="거래량"
                   accessor={(r: RawRecord) => Number(r.trde_qty) || 0}
                   sort={sort}
+                  extra={<ColumnGrip cw={cw} k="qty" />}
                 />
                 <SortableTh
                   columnKey="turn"
                   label="거래회전율(%)"
                   accessor={(r: RawRecord) => Number(r.trde_tern_rt) || 0}
                   sort={sort}
+                  extra={<ColumnGrip cw={cw} k="turn" />}
                 />
               </tr>
             </thead>

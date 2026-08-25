@@ -685,7 +685,13 @@
       "PowerShell($k = irm \"http://localhost:4000/api/rank/trade-value?market=000&exchange=1&limit=10\"; $k.rows | Select-Object code,name,cur_prc,flu_rt,trde_prica,now_trde_qty | Format-Table -AutoSize | Out-String -Width 200)",
       "PowerShell(irm \"http://localhost:4000/api/alert/stop-watch\")",
       "Bash(curl -s 'http://localhost:4000/api/realtime/latest?type=0B&item=005930')",
-      "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\server\"; npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 12; if \\($?\\) { Start-Sleep -Seconds 6; \"--- timeline\"; \\(irm \"http://localhost:4000/api/briefing/timeline\"\\).items | Select-Object -First 5 | Format-Table t,kind,badge,name,watch -AutoSize | Out-String -Width 100; \"--- heat\"; $h = irm \"http://localhost:4000/api/briefing/heat\"; \"traded=$\\($h.traded\\) tiles=$\\($h.tiles.Count\\)\"; \"--- brief\"; \\(irm \"http://localhost:4000/api/briefing/brief\"\\).brief | ConvertTo-Json -Compress })"
+      "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\server\"; npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 12; if \\($?\\) { Start-Sleep -Seconds 6; \"--- timeline\"; \\(irm \"http://localhost:4000/api/briefing/timeline\"\\).items | Select-Object -First 5 | Format-Table t,kind,badge,name,watch -AutoSize | Out-String -Width 100; \"--- heat\"; $h = irm \"http://localhost:4000/api/briefing/heat\"; \"traded=$\\($h.traded\\) tiles=$\\($h.tiles.Count\\)\"; \"--- brief\"; \\(irm \"http://localhost:4000/api/briefing/brief\"\\).brief | ConvertTo-Json -Compress })",
+      "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\web\"; npx tsc --noEmit; echo \"web tsc exit: $LASTEXITCODE\")",
+      "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\server\"; npx tsc --noEmit; echo \"server tsc exit: $LASTEXITCODE\")",
+      "PowerShell($r = Invoke-RestMethod -Method Post -Uri \"http://localhost:4000/api/realtime/subscribe\" -ContentType \"application/json\" -Body '{\"type\":\"FE\",\"item\":\"NVDA\"}'; $r | ConvertTo-Json -Depth 5; $s = Invoke-RestMethod \"http://localhost:4000/api/realtime/status\"; $s.subscribed; $s.regErrors | ConvertTo-Json -Depth 4)",
+      "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\web\"; npx tsc --noEmit; echo \"tsc: $LASTEXITCODE\"; npx vite build 2>$null | Select-Object -Last 2)",
+      "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\server\"; npx tsc --noEmit; echo \"server tsc: $LASTEXITCODE\"; cd \"..\\\\web\"; npx tsc --noEmit; echo \"web tsc: $LASTEXITCODE\"; npx vite build 2>$null | Select-Object -Last 2)",
+      "PowerShell(git -C \"K:\\\\0000 3740 ������Ʈ \\(����������\\)\\\\00. �ֽ�\\\\2 AI ������Ʈ\\\\260810_Ŭ�ε��۾�\" status --short)"
     ]
   }
 }

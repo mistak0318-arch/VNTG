@@ -6,6 +6,7 @@ import { api, fmtAbsNum, fmtNum, normalizeStockCode, pickList, signClass, type R
 import { RefreshBar } from "../components/RefreshBar";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { SortableTh, useSortableTable } from "../useSortableTable";
+import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { WatchStar } from "../useWatchedCodes";
 
 // ka10062(동일순매매순위요청) 공식 문서 기준 확인된 필드명
@@ -58,6 +59,8 @@ export function SameNetTradeRankingPage({
   const [openFilter, setOpenFilter] = useState(false);
   const kept = (rows as unknown as FilterCapable[]).filter(f.keep) as unknown as typeof rows;
   const sort = useSortableTable(kept);
+  /* 칸 너비 조절 — 시세분석과 같은 공통 모듈 */
+  const cw = useColumnWidths("sameNet");
   /* 쪽 넘기기 — 거래대금 상위와 같은 도구를 쓴다 */
   const pager = usePager(sort.sorted.length, "vntg.samenet.pageSize", kept.length);
 
@@ -117,16 +120,22 @@ export function SameNetTradeRankingPage({
 
       {!loading && !error && (
         <div className="data-table-wrap">
-          <table className="data-table">
+          <table className={`data-table${cw.customized ? " col-fixed" : ""}`}>
+            <colgroup>
+              {sigOn && <col style={{ width: "2.4rem" }} />}
+              {["name", "price", "fluRt", "orgn", "for", "net"].map((k) => (
+                <col key={k} style={cw.styleOf(k)} />
+              ))}
+            </colgroup>
             <thead>
               <tr>
                 {sigOn && <th className="sig-th">🚦</th>}
-                <SortableTh columnKey="name" label="종목명" accessor={(r: RawRecord) => String(r.stk_nm ?? "")} sort={sort} className="sticky-col" />
-                <SortableTh columnKey="price" label="현재가" accessor={(r: RawRecord) => Math.abs(Number(r.cur_prc)) || 0} sort={sort} />
-                <SortableTh columnKey="fluRt" label="등락률" accessor={(r: RawRecord) => Number(r.flu_rt) || 0} sort={sort} />
-                <SortableTh columnKey="orgn" label="기관순매매(백만)" accessor={(r: RawRecord) => Number(r.orgn_nettrde_amt) || 0} sort={sort} />
-                <SortableTh columnKey="for" label="외국인순매매(백만)" accessor={(r: RawRecord) => Number(r.for_nettrde_amt) || 0} sort={sort} />
-                <SortableTh columnKey="net" label="합계순매매(백만)" accessor={(r: RawRecord) => Number(r.nettrde_amt) || 0} sort={sort} />
+                <SortableTh columnKey="name" label="종목명" accessor={(r: RawRecord) => String(r.stk_nm ?? "")} sort={sort} className="sticky-col" extra={<ColumnGrip cw={cw} k="name" />} />
+                <SortableTh columnKey="price" label="현재가" accessor={(r: RawRecord) => Math.abs(Number(r.cur_prc)) || 0} sort={sort} extra={<ColumnGrip cw={cw} k="price" />} />
+                <SortableTh columnKey="fluRt" label="등락률" accessor={(r: RawRecord) => Number(r.flu_rt) || 0} sort={sort} extra={<ColumnGrip cw={cw} k="fluRt" />} />
+                <SortableTh columnKey="orgn" label="기관순매매(백만)" accessor={(r: RawRecord) => Number(r.orgn_nettrde_amt) || 0} sort={sort} extra={<ColumnGrip cw={cw} k="orgn" />} />
+                <SortableTh columnKey="for" label="외국인순매매(백만)" accessor={(r: RawRecord) => Number(r.for_nettrde_amt) || 0} sort={sort} extra={<ColumnGrip cw={cw} k="for" />} />
+                <SortableTh columnKey="net" label="합계순매매(백만)" accessor={(r: RawRecord) => Number(r.nettrde_amt) || 0} sort={sort} extra={<ColumnGrip cw={cw} k="net" />} />
               </tr>
             </thead>
             <tbody>

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
+import { usKiwoomDetail } from "../usKiwoomDetail.js";
 
 /**
  * 키움 미국주식.
@@ -35,6 +36,18 @@ export function createUsKiwoomRouter(client: KiwoomClient): Router {
   const router = Router();
 
   const MRKCOND = "/api/us/mrkcond";
+
+  /**
+   * 세부 한 덩어리 — 해외 상세 화면이 쓴다.
+   * 거래소는 `usExchanges.json` 에서 자동으로 푼다(미국이 아니면 `unsupported`).
+   */
+  router.get("/detail/:symbol", async (req, res, next) => {
+    try {
+      res.json(await usKiwoomDetail(client, req.params.symbol));
+    } catch (err) {
+      next(err);
+    }
+  });
 
   /** 미국주식 현재가 종목정보 (usa20100) */
   router.get("/quote/:symbol", async (req, res, next) => {

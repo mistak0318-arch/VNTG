@@ -10,6 +10,7 @@ import {
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { SortableTh, useSortableTable } from "../useSortableTable";
+import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { useWatchedCodes, WatchStar } from "../useWatchedCodes";
 import { WatchAddSheet, type WatchAddTarget } from "../components/WatchAddSheet";
 
@@ -28,6 +29,8 @@ export function KiwoomWatchlistPage({
   const [adding, setAdding] = useState<string | null>(null);
   const watchedCodes = useWatchedCodes();
   const sort = useSortableTable(items);
+  /* 칸 너비 조절 — 시세분석과 같은 공통 모듈 */
+  const cw = useColumnWidths("kiwoomWatch");
 
   useEffect(() => {
     let cancelled = false;
@@ -119,14 +122,20 @@ export function KiwoomWatchlistPage({
 
       {!loading && items.length > 0 && (
         <div className="data-table-wrap">
-          <table className="data-table">
+          <table className={`data-table${cw.customized ? " col-fixed" : ""}`}>
+            <colgroup>
+              {["name", "price", "change", "changeRate", "amount"].map((k) => (
+                <col key={k} style={cw.styleOf(k)} />
+              ))}
+              <col />
+            </colgroup>
             <thead>
               <tr>
-                <SortableTh columnKey="name" label="종목명" accessor={(s: KiwoomGroupStock) => s.name} sort={sort} className="sticky-col" />
-                <SortableTh columnKey="price" label="현재가" accessor={(s: KiwoomGroupStock) => s.price} sort={sort} />
-                <SortableTh columnKey="change" label="전일대비" accessor={(s: KiwoomGroupStock) => s.change} sort={sort} />
-                <SortableTh columnKey="changeRate" label="등락률" accessor={(s: KiwoomGroupStock) => s.changeRate} sort={sort} />
-                <SortableTh columnKey="amount" label="거래대금(백만)" accessor={(s: KiwoomGroupStock) => s.tradeAmount} sort={sort} />
+                <SortableTh columnKey="name" label="종목명" accessor={(s: KiwoomGroupStock) => s.name} sort={sort} className="sticky-col" extra={<ColumnGrip cw={cw} k="name" />} />
+                <SortableTh columnKey="price" label="현재가" accessor={(s: KiwoomGroupStock) => s.price} sort={sort} extra={<ColumnGrip cw={cw} k="price" />} />
+                <SortableTh columnKey="change" label="전일대비" accessor={(s: KiwoomGroupStock) => s.change} sort={sort} extra={<ColumnGrip cw={cw} k="change" />} />
+                <SortableTh columnKey="changeRate" label="등락률" accessor={(s: KiwoomGroupStock) => s.changeRate} sort={sort} extra={<ColumnGrip cw={cw} k="changeRate" />} />
+                <SortableTh columnKey="amount" label="거래대금(백만)" accessor={(s: KiwoomGroupStock) => s.tradeAmount} sort={sort} extra={<ColumnGrip cw={cw} k="amount" />} />
                 <th>추적</th>
               </tr>
             </thead>

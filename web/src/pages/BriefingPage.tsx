@@ -248,7 +248,14 @@ export function BriefingPage({
   /* 히트맵 타일 크기 — 시총의 제곱근 비례. 그대로 비례하면 삼성전자가 화면을 다 먹는다 */
   const maxCap = Math.max(1, ...(heat?.tiles ?? []).map((t) => t.cap ?? 0));
 
-  const watchCount = events?.filter((e) => e.watch).length ?? 0;
+  /*
+   * VI 는 하루 수백 건이라 타임라인을 도배한다 — 공시·시그널·손절이 밀려나
+   * 정작 드문(=값있는) 이벤트가 안 보였다. VI 만 떼어 **맨 아래 자기 칸**으로 보낸다.
+   */
+  const mainEvents = events === null ? null : events.filter((e) => e.kind !== "vi");
+  const viEvents = events?.filter((e) => e.kind === "vi") ?? [];
+
+  const watchCount = mainEvents?.filter((e) => e.watch).length ?? 0;
 
   return (
     <div className="bf">
@@ -265,15 +272,15 @@ export function BriefingPage({
             오늘의 이벤트
             {watchCount > 0 && <i className="bf-watch-count">내 종목 {watchCount}건</i>}
           </h3>
-          {events === null ? (
+          {mainEvents === null ? (
             <div className="empty">불러오는 중…</div>
-          ) : events.length === 0 ? (
+          ) : mainEvents.length === 0 ? (
             <div className="empty">
-              아직 잡힌 이벤트가 없습니다 — VI·공시·알림이 발생하면 여기 시간순으로 쌓입니다.
+              아직 잡힌 이벤트가 없습니다 — 공시·알림이 발생하면 여기 시간순으로 쌓입니다.
             </div>
           ) : (
             <div className="bf-timeline">
-              {events.map((e, i) => (
+              {mainEvents.map((e, i) => (
                 <button
                   key={`${e.t}-${e.code ?? e.name}-${i}`}
                   className={`bf-event${e.watch ? " watch" : ""}`}
@@ -384,6 +391,40 @@ export function BriefingPage({
           )}
         </section>
       </div>
+
+      {/*
+        VI 발동현황 — **맨 아래**다(사용자 요청). 건수가 많고 대부분은 스치는 값이라
+        위에 두면 화면을 다 먹는다. 내 종목(빨간 테두리)만 훑으면 된다.
+        없으면 칸 자체를 안 그린다.
+      */}
+      {viEvents.length > 0 && (
+        <section className="bf-vi">
+          <h3 className="section-heading">
+            VI 발동현황 <i className="pt-n">{viEvents.length}건</i>
+          </h3>
+          <div className="bf-timeline">
+            {viEvents.map((e, i) => (
+              <button
+                key={`${e.t}-${e.code ?? e.name}-${i}`}
+                className={`bf-event${e.watch ? " watch" : ""}`}
+                onClick={() => {
+                  if (e.code) onSelectStock(e.code, e.name);
+                }}
+                title="눌러서 종목 상세"
+              >
+                <span className="bf-event-t pt-n">{/^\d{2}:\d{2}$/.test(e.t) ? e.t : ""}</span>
+                <span className={`bf-badge ${BADGE_CLASS[e.kind] ?? "bf-badge-gray"}`}>
+                  {e.badge}
+                </span>
+                <span className="bf-event-body">
+                  <b>{e.name}</b>
+                  <span className="bf-event-sum">{e.summary}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

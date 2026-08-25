@@ -347,6 +347,35 @@ body {
   flex-wrap: wrap;
 }
 
+/*
+  컨트롤 다이어트 (아이디어노트 4 총평 — 「기능이 많아 화면이 어수선」).
+
+  좁은 화면에서 컨트롤 줄이 서너 줄로 꺾여 표가 화면 밖으로 밀렸다.
+  숨기면 누르러 갈 곳이 없어지니, **한 줄로 세우고 옆으로 넘긴다** —
+  관심종목 그룹 칩과 같은 문법이라 손이 이미 안다. 넓은 화면은 그대로 꺾는다.
+*/
+@media (max-width: 700px) {
+  .ctl-ribbon {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .ctl-ribbon::-webkit-scrollbar { display: none; }
+  .ctl-ribbon > * { flex: 0 0 auto; white-space: nowrap; }
+}
+
+/* 긴 설명은 접어 둔다 — 처음 한 번 읽으면 그다음부턴 자리만 먹는다 */
+.fold-note { margin: 0 0 10px; }
+.fold-note > summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--muted);
+  user-select: none;
+}
+.fold-note[open] > summary { margin-bottom: 0.3rem; }
+
 .filter-btn {
   background: var(--panel-2);
   border: 1px solid var(--border);
@@ -2144,6 +2173,10 @@ body {
   .bf-right { grid-area: right; }
 }
 .bf-col { min-width: 0; }
+
+/* VI 발동현황 — 그리드 밖, 페이지 맨 아래 전체 폭. 길어지면 안에서만 스크롤 */
+.bf-vi { margin-top: 0.8rem; }
+.bf-vi .bf-timeline { max-height: 22rem; overflow-y: auto; }
 
 /* 타임라인 */
 .bf-watch-count { font-style: normal; font-size: 0.72rem; color: var(--red); margin-left: 0.5rem; }
@@ -5478,6 +5511,63 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 }
 .usd-k { color: var(--muted); }
 .usd-v { font-weight: 600; text-align: right; }
+
+/*
+ * 키움 미국 10호가 미니 호가창.
+ * 국내 호가창과 같은 규칙 — 매도(파랑)가 위, 매수(빨강)가 아래, 가운데가 가격.
+ * 잔량 막대는 매도는 왼쪽, 매수는 오른쪽으로 뻗는다.
+ */
+.ukb-book {
+  margin: 0.6rem 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+.ukb-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.ukb-when { font-weight: 400; font-size: 0.75rem; color: var(--muted); }
+.ukb-row {
+  display: grid;
+  grid-template-columns: 1fr 6rem 1fr;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.1rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.ukb-price { text-align: center; font-weight: 600; }
+.ukb-price.down { color: var(--blue); }
+.ukb-price.up { color: var(--red); }
+.ukb-bar-cell { position: relative; height: 1.15rem; }
+.ukb-bar {
+  position: absolute;
+  top: 0.15rem;
+  bottom: 0.15rem;
+  opacity: 0.25;
+  border-radius: 2px;
+}
+.ukb-ask { right: 0; background: var(--blue); }
+.ukb-bid { left: 0; background: var(--red); }
+.ukb-qty {
+  position: absolute;
+  top: 0;
+  line-height: 1.15rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.ukb-ask + .ukb-qty,
+.ukb-bar-cell .ukb-qty { right: 0.2rem; }
+.ukb-bid + .ukb-qty { right: auto; left: 0.2rem; }
+.ukb-foot {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
 
 /* 전광판 관심종목 줄 — 눌러서 상세 */
 .usb-open {

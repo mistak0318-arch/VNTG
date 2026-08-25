@@ -41,6 +41,8 @@ export interface ColumnWidthsApi {
   styleOf: (key: string) => { width?: string };
   /** 끌기 시작 */
   begin: (key: string, startX: number, startWidth: number) => void;
+  /** 이 칸만 원래대로 — 손잡이 두 번 누르기 */
+  clear: (key: string) => void;
   /** 하나라도 정한 적이 있나 — 「원래대로」를 보여줄지 정한다 */
   customized: boolean;
   reset: () => void;
@@ -138,9 +140,22 @@ export function useColumnWidths(scope: string): ColumnWidthsApi {
     void api.columnWidthsSave(merged).catch(() => undefined);
   }, [all, scope]);
 
+  const clear = useCallback(
+    (key: string) => {
+      setMine((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        write(next, true);
+        return next;
+      });
+    },
+    [write],
+  );
+
   return {
     styleOf: (key: string) => (mine[key] ? { width: `${mine[key]}px` } : {}),
     begin,
+    clear,
     customized: Object.keys(mine).length > 0,
     reset,
   };
@@ -170,12 +185,25 @@ export function ColumnGrip({ cw, k }: { cw: ColumnWidthsApi; k: string }) {
          * 있어서, 손가락을 끌면 **브라우저가 그 제스처를 스크롤로 가져가** pointermove 가
          * 우리한테 안 왔다. `touch-action: none` 만으로는 부족했다 — capture 를 걸어야
          * 이후의 move/up 이 손잡이로 온다.
+         *
+         * ⚠️ try/catch 다 — `?.` 가 아니라. capture 는 **실패할 수 있는 호출**이고
+         * (활성 포인터가 아니면 NotFoundError 를 던진다), 여기서 던지면 아래
+         * `begin()` 이 통째로 안 돌아 「드래그가 안 된다」가 됐다. capture 는
+         * 스크롤 방지용 보강일 뿐이라, 실패해도 드래그 자체는 시작해야 한다.
          */
-        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        try {
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        } catch {
+          /* capture 실패 — 데스크톱 마우스는 capture 없이도 잘 끌린다 */
+        }
         const th = (e.target as HTMLElement).closest("th");
         cw.begin(k, e.clientX, th?.getBoundingClientRect().width ?? 100);
       }}
       onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        cw.clear(k);
+      }}
     />
   );
 }

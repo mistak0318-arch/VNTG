@@ -137,7 +137,17 @@ export function createBriefingRouter(client: KiwoomClient): Router {
       const timed = items.filter((i) => /^\d{2}:\d{2}$/.test(i.t));
       const untimed = items.filter((i) => !/^\d{2}:\d{2}$/.test(i.t));
       timed.sort((a, b) => b.t.localeCompare(a.t));
-      res.json({ items: [...timed, ...untimed].slice(0, limit) });
+      /*
+       * ⚠️ 상한은 **VI 따로, 나머지 따로** (2026-08-25).
+       * VI 가 하루 수백 건이라 한 상한에 넣으면 공시·시그널이 밀려 없어졌다 —
+       * 화면은 VI 를 맨 아래 자기 칸에 그리므로, 서로 자리를 뺏을 이유가 없다.
+       */
+      const merged = [...timed, ...untimed];
+      const vi = merged.filter((i) => i.kind === "vi").slice(0, limit);
+      const rest = merged.filter((i) => i.kind !== "vi").slice(0, limit);
+      res.json({
+        items: merged.filter((i) => vi.includes(i) || rest.includes(i)),
+      });
     } catch (err) {
       next(err);
     }
@@ -156,6 +166,21 @@ export function createBriefingRouter(client: KiwoomClient): Router {
         listWatchlist(),
         getMarketSnapshot(client).catch(() => null),
       ]);
+      /*
+       * ⚠️ 등락률은 **실시간이 우선**이다 (2026-08-25).
+       *
+       * 스냅샷은 10분 캐시라, 타일의 −7.29% 를 눌러 들어가면 상세는 −5.8% 인 일이
+       * 실제로 났다 — 같은 화면에서 두 값이 다르면 어느 쪽도 못 믿게 된다.
+       * 관심종목은 전부 실시간 keep 목록에 있으므로(0B), 10분 안에 받은 체결이
+       * 있으면 그 등락률(FID 12)을 쓰고, 없을 때만 스냅샷으로 돌아간다.
+       */
+      const { store } = peekRealtime();
+      const liveRate = (code: string): number | null => {
+        const l = store?.getLatest("0B", code);
+        if (!l || Date.now() - l.at > 10 * 60_000) return null;
+        const n = Number(String(l.values["12"] ?? "").replace(/,/g, ""));
+        return Number.isFinite(n) ? n : null;
+      };
       res.json({
         traded: snap?.traded ?? false,
         tiles: items
@@ -165,7 +190,7 @@ export function createBriefingRouter(client: KiwoomClient): Router {
             return {
               code: w.code,
               name: w.name,
-              rate: s?.changeRate ?? null,
+              rate: liveRate(w.code) ?? s?.changeRate ?? null,
               cap: s?.marketCap ?? null,
               status: w.status ?? "watching",
             };

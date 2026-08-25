@@ -363,7 +363,8 @@ export function ScreenerPage({
   return (
     <div>
       {/* 실제로 보는 다섯이 앞이다 — 트리를 매번 훑지 않게 */}
-      <div className="filter-row scr-tabs">
+      {/* 폰에서는 한 줄로 세우고 옆으로 넘긴다 — 컨트롤이 표를 밀어내지 않게 */}
+      <div className="filter-row scr-tabs ctl-ribbon">
         {/*
           탭 순서는 사람이 정한다. 자주 쓰는 조회는 사람마다 다른데 여덟 개나 되니
           늘 쓰는 게 뒤에 있으면 매번 눈으로 훑어야 한다. 종목 상세 탭과 **같은 훅**이라
@@ -462,7 +463,7 @@ export function ScreenerPage({
           )}
 
       <div className="scr-main">
-        <div className="filter-row">
+        <div className="filter-row ctl-ribbon">
           {MARKETS.map((m) => (
             <button
               key={m.key}

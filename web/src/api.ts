@@ -314,6 +314,9 @@ export const api = {
   /** 장중 기준선 — 분봉+일봉 2회 조회다. 종목을 「들여다보는」 화면에서만 부른다 */
   intraday: (code: string) =>
     getJson<{ levels: IntradayLevels | null }>(`/api/market/intraday/${code}`),
+  /** 키움 미국 세부 — 업종·프리장·52주·10호가. 한투 상세에 **얹는** 값이다(교체 아님) */
+  usKiwoomDetail: (symbol: string) =>
+    getJson<UsKiwoomDetailData>(`/api/us-kiwoom/detail/${encodeURIComponent(symbol)}`),
   /* 마켓 브리핑 — 셋 다 서버 캐시·파일만 읽는다. 외부 호출 0 */
   briefingTimeline: (limit = 60) =>
     getJson<{ items: BriefingEvent[] }>(`/api/briefing/timeline?limit=${limit}`),
@@ -2059,6 +2062,46 @@ export interface IntradayLevels {
   or30High: number | null;
   or30Low: number | null;
   bars: number;
+}
+
+/* ── 키움 미국 세부 ────────────────────────────────────────── */
+
+export interface UsKiwoomDetailData {
+  summary: {
+    symbol: string;
+    stex: string;
+    name: string;
+    sectorLg: string;
+    sectorSm: string;
+    /** 백만 달러 */
+    marketCap: number | null;
+    shares: number | null;
+    price: number | null;
+    changeRate: number | null;
+    volume: number | null;
+    week52: {
+      high: number | null;
+      highDate: string;
+      highGap: number | null;
+      low: number | null;
+      lowDate: string;
+      lowGap: number | null;
+    };
+    pre: { open: number | null; high: number | null; low: number | null };
+    baseClose: number | null;
+    exchangeRate: number | null;
+  } | null;
+  book: {
+    asks: { price: number | null; qty: number }[];
+    bids: { price: number | null; qty: number }[];
+    totalAsk: number;
+    totalBid: number;
+    tradeValue: number | null;
+    turnover: number | null;
+    at: string;
+    date: string;
+  } | null;
+  unsupported?: string;
 }
 
 /* ── 마켓 브리핑 ───────────────────────────────────────────── */
