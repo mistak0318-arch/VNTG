@@ -39,11 +39,20 @@ const EMPTY: RealtimeState = { enabled: false, healthy: false, values: {} };
 /**
  * @param keys `["0F:005930", "0B:005930"]` 처럼 `TR:종목` 목록
  * @param ms   몇 밀리초마다 물어볼지. 기본 1.5초
+ * @param opts.readOnly **목록 오버레이 모드** (2026-08-25) — 구독을 안 걸고 이미 온
+ *   값만 읽는다. 줄이 백 개인 표가 보통 모드로 물으면 임시구독이 정원을 짓밟는다.
+ *   거래대금 상위·관심종목은 스케줄러가 이미 걸어 뒀으니 읽기만 하면 된다.
+ *   키 상한도 40 → 120 으로 는다.
  */
-export function useRealtime(keys: string[], ms = 1500): RealtimeState {
+export function useRealtime(
+  keys: string[],
+  ms = 1500,
+  opts?: { readOnly?: boolean },
+): RealtimeState {
   const [state, setState] = useState<RealtimeState>(EMPTY);
   // 배열은 매 렌더 새 객체라 그대로 의존성에 넣으면 타이머가 계속 다시 걸린다
   const joined = keys.join(",");
+  const readOnly = opts?.readOnly === true;
 
   useEffect(() => {
     if (!joined) {
@@ -51,22 +60,67 @@ export function useRealtime(keys: string[], ms = 1500): RealtimeState {
       return;
     }
     let alive = true;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let es: EventSource | null = null;
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
     const tick = async () => {
       try {
-        const r = await fetch(`/api/realtime/latest?keys=${encodeURIComponent(joined)}`);
+        const r = await fetch(
+          `/api/realtime/latest?keys=${encodeURIComponent(joined)}${readOnly ? "&sub=0" : ""}`,
+        );
         const j = (await r.json()) as RealtimeState;
         if (alive) setState(j);
       } catch {
         /* 끊겨도 화면은 그대로 둔다 — 마지막 값이 없는 것보다 낫다 */
       }
     };
-    void tick();
-    const t = setInterval(() => void tick(), ms);
+    const startPolling = () => {
+      if (pollTimer) return;
+      void tick();
+      pollTimer = setInterval(() => void tick(), ms);
+    };
+
+    /*
+     * SSE 먼저 (2026-08-25) — 읽기 전용(목록 오버레이)은 서버가 틱 도착 즉시 민다.
+     * 값의 나이가 폴링 주기(1.5초)에서 0.5초 아래로 준다. 스트림이 못 열리거나
+     * 끊기면 **조용히 폴링으로 내려간다** — 화면은 차이를 모른다.
+     * 이벤트는 200ms 로 모아서 한 번에 그린다 — 체결이 몰릴 때 키마다 리렌더하면
+     * 백 줄 표가 초당 수십 번 그려진다.
+     */
+    if (readOnly && typeof EventSource !== "undefined") {
+      const values: Record<string, RealtimeValue | null> = {};
+      const flush = () => {
+        flushTimer = null;
+        if (alive) setState({ enabled: true, healthy: true, values: { ...values } });
+      };
+      es = new EventSource(`/api/realtime/stream?keys=${encodeURIComponent(joined)}`);
+      es.onmessage = (e) => {
+        try {
+          const d = JSON.parse(e.data) as { key: string; at: number; values: Record<string, string> };
+          values[d.key] = { at: d.at, values: d.values };
+          if (!flushTimer) flushTimer = setTimeout(flush, 200);
+        } catch {
+          /* 깨진 이벤트 하나로 스트림을 접지 않는다 */
+        }
+      };
+      es.onerror = () => {
+        // 한 번 끊기면 이 마운트에서는 폴링으로 산다 — 재연결 곡예는 폴링이 이미 한다
+        es?.close();
+        es = null;
+        if (alive) startPolling();
+      };
+    } else {
+      startPolling();
+    }
+
     return () => {
       alive = false;
-      clearInterval(t);
+      if (pollTimer) clearInterval(pollTimer);
+      if (flushTimer) clearTimeout(flushTimer);
+      es?.close();
     };
-  }, [joined, ms]);
+  }, [joined, ms, readOnly]);
 
   return state;
 }

@@ -16,6 +16,161 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
   /* 만드는 자리는 `realtimeHub` 하나다 — 여기서 또 만들면 연결이 둘이 된다 */
   const hub = () => peekRealtime();
 
+  /**
+   * SSE 푸시 (2026-08-25) — **폴링 없이 틱이 오는 대로 민다.**
+   *
+   * `/latest` 폴링은 값의 나이가 폴링 주기(1.5초)만큼이었다. 이 스트림은 키움
+   * 프레임이 도착하는 그 순간 브라우저로 흘려서 틱→화면이 0.5초 안이다.
+   *
+   *   GET /api/realtime/stream?keys=0B:005930,0B:000660[&sub=1]
+   *
+   * 기본은 **읽기 전용**(구독 안 걸음 — 목록 오버레이용). `sub=1` 이면 임시구독을
+   * 건다(호가창처럼 그 종목을 지금 보는 화면용). 키당 250ms 로 눌러 보낸다 —
+   * 체결이 몰릴 때 브라우저에 초당 수백 이벤트를 던지면 그쪽이 먼저 죽는다.
+   * 연결 직후에 들고 있는 최신값을 한 번 쏟아 화면이 바로 차게 한다.
+   */
+  router.get("/stream", async (req, res, next) => {
+    try {
+      const wantSub = String(req.query.sub ?? "") === "1";
+      const keys = String(req.query.keys ?? "")
+        .split(",")
+        .map((k) => k.trim())
+        .filter(Boolean)
+        .slice(0, wantSub ? 40 : 120);
+      if (keys.length === 0 || !RealtimeClient.enabled) {
+        res.status(400).json({ error: "keys 가 없거나 실시간이 꺼져 있습니다" });
+        return;
+      }
+      const { client: rt, store } = await getRealtime(client);
+      await rt.connect();
+
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+        "x-accel-buffering": "no",
+      });
+      /*
+       * ⚠️ 첫 바이트를 **즉시** 보낸다. Node 는 본문 첫 write 까지 헤더를 물고
+       * 있어서, 초기값이 하나도 없으면(장 마감 뒤 등) 15초 하트비트까지
+       * 브라우저가 「연결 중」에 매달렸다 — 실측으로 걸렸다.
+       */
+      res.write(": hi\n\n");
+
+      const want = new Set(keys);
+      const send = (key: string, at: number, values: Record<string, string>) => {
+        res.write(`data: ${JSON.stringify({ key, at, values })}\n\n`);
+      };
+
+      // 들고 있는 값 먼저 — 첫 틱이 올 때까지 빈 화면이면 스트림이 느려 보인다
+      for (const key of keys) {
+        const [type, item] = key.split(":");
+        if (!type || !item) continue;
+        if (wantSub) rt.subscribeTransient(type, item);
+        const got = store?.getLatest(type, item);
+        if (got) send(key, got.at, got.values as Record<string, string>);
+      }
+
+      /* 키당 마지막 전송 시각 — 250ms 스로틀. 눌린 틱은 다음 틱이 대신한다(누적값이라 무손실) */
+      const lastSent = new Map<string, number>();
+      const off = rt.onFrame((f) => {
+        const frame = f as { trnm?: string; data?: { type?: string; item?: string; values?: Record<string, string> }[] };
+        if (frame.trnm !== "REAL" || !Array.isArray(frame.data)) return;
+        const now = Date.now();
+        for (const d of frame.data) {
+          if (!d.type || !d.item || !d.values) continue;
+          const key = `${d.type}:${String(d.item).replace(/_(AL|NX)$/, "")}`;
+          if (!want.has(key)) continue;
+          if (now - (lastSent.get(key) ?? 0) < 250) continue;
+          lastSent.set(key, now);
+          send(key, now, d.values);
+        }
+      });
+
+      // 끊김 감지용 심장박동 — 프록시가 조용한 연결을 자르는 걸 막는 겸
+      const beat = setInterval(() => res.write(`: beat ${rt.healthy ? 1 : 0}\n\n`), 15_000);
+      req.on("close", () => {
+        clearInterval(beat);
+        off();
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 두 번째 웹소켓 탐침 (2026-08-25 — 정원 200 을 넘을 길이 있나).
+   *
+   * 문서에 없어서 실측만이 답이다: **같은 토큰으로 소켓을 하나 더** 열어
+   * LOGIN → REG 가 받아지는지, 그리고 **기존 소켓이 쫓겨나는지**를 잰다.
+   * 프로세스 안에서 같은 토큰 캐시를 쓴다 — 밖에서 토큰을 새로 받으면
+   * 서버 REST 가 통째로 죽는다(8005).
+   *
+   * 진단용 일회성 — 성공하면 realtimeHub 를 두 연결로 재설계하는 근거가 되고,
+   * 실패해도 그 답 자체가 결론이다.
+   */
+  router.post("/probe-second", async (_req, res, next) => {
+    try {
+      const { client: rt } = await getRealtime(client);
+      const firstBefore = { state: rt.state, healthy: rt.healthy };
+      const token = await client.accessToken();
+      const log: string[] = [];
+      // Node 22 내장 WebSocket — realtimeClient 와 같은 물건이다 (ws 패키지 아님)
+      const ws = new WebSocket("wss://api.kiwoom.com:10000/api/dostk/websocket");
+
+      const result = await new Promise<Record<string, unknown>>((resolve) => {
+        const done = (why: string) => {
+          try {
+            ws.close();
+          } catch {
+            /* 이미 닫혔으면 그만 */
+          }
+          resolve({
+            why,
+            log,
+            firstBefore,
+            firstAfter: { state: rt.state, healthy: rt.healthy, lastSeen: rt.lastSeen },
+          });
+        };
+        const timer = setTimeout(() => done("8초 관찰 끝"), 8000);
+        ws.onopen = () => {
+          log.push("(2번 소켓 연결됨)");
+          ws.send(JSON.stringify({ trnm: "LOGIN", token }));
+        };
+        ws.onmessage = (ev: MessageEvent) => {
+          const text = typeof ev.data === "string" ? ev.data : String(ev.data);
+          log.push(`← ${text.slice(0, 300)}`);
+          try {
+            const f = JSON.parse(text) as { trnm?: string; return_code?: number };
+            if (f.trnm === "LOGIN" && f.return_code === 0) {
+              // 로그인 통과 — 종목 하나를 걸어 REG 응답을 본다
+              ws.send(
+                JSON.stringify({ trnm: "REG", grp_no: "1", refresh: "1", data: [{ item: ["005930"], type: ["0B"] }] }),
+              );
+            }
+            if (f.trnm === "LOGIN" && f.return_code !== undefined && f.return_code !== 0) {
+              clearTimeout(timer);
+              done("LOGIN 거절");
+            }
+          } catch {
+            /* JSON 아니어도 로그에는 남았다 */
+          }
+        };
+        ws.onclose = (ev: { code?: number }) => {
+          log.push(`(2번 소켓 닫힘 ${ev.code ?? "?"})`);
+        };
+        ws.onerror = () => {
+          log.push("(소켓 오류)");
+          clearTimeout(timer);
+          done("소켓 오류");
+        };
+      });
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/connect", async (_req, res, next) => {
     try {
       const { client: rt } = await getRealtime(client);
@@ -95,11 +250,21 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
    */
   router.get("/latest", async (req, res, next) => {
     try {
+      /*
+       * 읽기 전용 모드 (2026-08-25, `sub=0`) — **목록 화면 오버레이용.**
+       *
+       * 시세분석·관심종목은 줄이 백 개다. 보통 모드로 백 개를 물으면 임시구독
+       * 백 개가 정원(10자리)을 짓밟는다. 읽기 전용은 **구독을 안 걸고 이미 온 값만**
+       * 준다 — 어차피 그 줄들(거래대금 상위·관심종목)은 스케줄러가 KEEP 으로 걸어
+       * 뒀으니, 값이 있으면 오고 없으면 null 이다. null 은 화면이 REST 값을 그대로
+       * 쓰면 된다. 키 상한도 그래서 넉넉하다(120).
+       */
+      const readOnly = String(req.query.sub ?? "") === "0";
       const keys = String(req.query.keys ?? "")
         .split(",")
         .map((k) => k.trim())
         .filter(Boolean)
-        .slice(0, 40);
+        .slice(0, readOnly ? 120 : 40);
       if (keys.length === 0) {
         res.json({ enabled: RealtimeClient.enabled, healthy: false, values: {} });
         return;
@@ -118,8 +283,9 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
         /*
           **화면이 보는 종목**이다 — 정원(200)에 닿으면 오래 본 것부터 빠진다.
           스케줄러가 건 관심종목·순위는 안 밀린다. 밀려나면 안 되는 쪽이 정해져 있다.
+          읽기 전용(sub=0)은 안 건다 — 목록 오버레이가 정원을 먹으면 안 된다.
         */
-        rt.subscribeTransient(type, item);
+        if (!readOnly) rt.subscribeTransient(type, item);
         values[key] = store?.getLatest(type, item) ?? null;
       }
       res.json({ enabled: true, healthy: rt.healthy, lastSeen: rt.lastSeen, values });

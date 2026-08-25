@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { applyOrder, useMenuPrefs } from "../useMenuOrder";
+import { useDragOrder } from "../useDragOrder";
 
 /**
  * 사이드바 메뉴 구성.
@@ -127,6 +128,9 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
     save({ ...prefs, favorites: next });
   }
 
+  /* 즐겨찾기 줄 끌어서 옮기기 (2026-08-25) — 화살표와 같은 저장 */
+  const favDrag = useDragOrder(prefs.favorites, (next) => save({ ...prefs, favorites: next }));
+
   /** 자주 쓰는 메뉴에 올리고 내린다. 순서는 올린 순서다 */
   function toggleFav(key: string) {
     const favorites = prefs.favorites.includes(key)
@@ -179,7 +183,10 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
                 >
                   ◀
                 </button>
-                <span className="mo-fav-chip">
+                <span
+                  className={`mo-fav-chip${favDrag.cls(it.key)}`}
+                  {...favDrag.props(it.key)}
+                >
                   {it.icon} {prefs.labels[it.key]?.trim() || it.label}
                 </span>
                 <button

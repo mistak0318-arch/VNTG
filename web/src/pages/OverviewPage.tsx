@@ -394,6 +394,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                   key={g.key}
                   onClick={() =>
                     setChart({
+                      /* 야간선물 줄은 야후가 아니라 한투 CM — 심볼이 월물코드다 */
+                      kind: g.key === "krNightFut" ? "futures" : undefined,
                       symbol: g.symbol,
                       label: g.label,
                       digits: g.isRate ? 3 : 2,
@@ -442,113 +444,13 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           미장 주요지수 — 국내 지수 → 종목등락현황 **다음** 자리다.
           아침에 "밤사이 무슨 일이 있었나"를 한 표로 읽는 곳이라, 국내를 본 직후에 와야 한다.
         */}
-        {show("summary") && (
-          <OverviewCard
-            order={cards.orderOf("usMajor")}
-            title="미장 주요지수"
-            updatedAt={usMajor.updatedAt}
-            loading={usMajor.loading}
-            error={usMajor.error}
-          >
-            <div className="ov-card-b">
-              <table className="ov-table num">
-                <thead>
-                  <tr>
-                    <th>구분</th>
-                    <th>종가</th>
-                    <th>대비</th>
-                    <th>등락률</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usMajor.data?.nightFutures && (
-                    /* 야간선물만 지금 움직이는 값이라 맨 위에 두고 줄을 나눈다 */
-                    <tr
-                      className="ov-night clickable-row"
-                      onClick={() =>
-                        setChart({
-                          kind: "futures",
-                          symbol: usMajor.data!.nightFutures!.symbol,
-                          label: "코스피 야간선물",
-                          digits: usMajor.data!.nightFutures!.digits,
-                          hintRate: usMajor.data!.nightFutures!.changeRate,
-                        })
-                      }
-                      title="눌러서 차트 보기"
-                    >
-                      <td>{usMajor.data.nightFutures.label}</td>
-                      <td className={signCls(usMajor.data.nightFutures.changeRate ?? 0)}>
-                        {usMajor.data.nightFutures.price?.toFixed(2)}
-                      </td>
-                      <td className={signCls(usMajor.data.nightFutures.changeRate ?? 0)}>
-                        {fmtSigned(usMajor.data.nightFutures.change ?? 0)}
-                      </td>
-                      <td className={signCls(usMajor.data.nightFutures.changeRate ?? 0)}>
-                        {fmtPct(usMajor.data.nightFutures.changeRate ?? 0)}
-                      </td>
-                    </tr>
-                  )}
-                  {(usMajor.data?.rows ?? []).map((r) => (
-                    /*
-                      한투로 메운 줄은 안 눌린다 — 야후가 막혀서 메운 것이라
-                      야후 차트도 못 받는다. 되는 것만 눌리게 한다.
-                    */
-                    <tr
-                      key={r.key}
-                      className={r.source === "hantoo" ? undefined : "clickable-row"}
-                      onClick={
-                        r.source === "hantoo"
-                          ? undefined
-                          : () =>
-                              setChart({
-                                symbol: r.symbol,
-                                label: r.label,
-                                digits: r.digits,
-                                hintRate: r.changeRate,
-                              })
-                      }
-                      title={r.source === "hantoo" ? undefined : "눌러서 차트 보기"}
-                    >
-                      <td>
-                        {/*
-                          색만 있으면 왜 빨간지 모른다. 점 옆에 이유를 한 줄로 붙인다 —
-                          숫자는 경험칙이라 사람이 "이번엔 아니다" 라고 판단할 여지를 남긴다.
-                        */}
-                        {r.signal && <span className={`um-dot ${r.signal.level}`} />}
-                        {r.label}
-                        {/* 야후가 막혀 한투로 메운 줄은 밝힌다 — 두 출처가 섞이니까 */}
-                        {r.source === "hantoo" && <span className="pt-n"> 한투</span>}
-                        {r.signal && <div className="um-why">{r.signal.why}</div>}
-                      </td>
-                      <td className={signCls(r.changeRate ?? 0)}>
-                        {r.price == null
-                          ? "-"
-                          : r.price.toLocaleString("ko-KR", {
-                              minimumFractionDigits: r.digits,
-                              maximumFractionDigits: r.digits,
-                            })}
-                        {/* 금리는 값 자체가 % 라 단위를 붙여야 오해가 없다 */}
-                        {r.isRate && "%"}
-                      </td>
-                      <td className={signCls(r.changeRate ?? 0)}>{fmtSigned(r.change ?? 0)}</td>
-                      <td className={signCls(r.changeRate ?? 0)}>{fmtPct(r.changeRate ?? 0)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {/* 장단기 금리차는 어느 줄에도 안 들어가는 값이라 따로 둔다 */}
-              {usMajor.data?.curveNote && (
-                <div className="alert-note">{usMajor.data.curveNote}</div>
-              )}
-              <div className="table-note">
-                야간선물을 뺀 나머지는 <b>전일 마감값</b>입니다. 기본은 야후이고, 못 받은 줄만
-                한투로 메웁니다(그 줄엔 「한투」라고 적습니다). — 미국 현물은 우리 시간 05:30 에
-                닫혀 낮에는 움직이지 않습니다. 지금 움직이는 걸 보시려면 「글로벌 시황지수」의
-                선물을 보세요.
-              </div>
-            </div>
-          </OverviewCard>
-        )}
+        {/*
+          미장 주요지수 카드는 숨겼다 (2026-08-25, PDF #6 — 사용자 요청).
+          전일 마감값 표라 글로벌의 선물과 겹쳤다. 남길 것은 옮겼다 —
+          야간선물은 글로벌 맨 위로, VIX 는 지수선물 묶음 아래로, WTI·브렌트는
+          원자재로. 장단기 역전 경고는 맥박(risks)이 서버 쪽에서 계속 본다.
+          미국 현물 전광판은 「미국」 서브탭에 그대로 있다.
+        */}
 
         {/*
           금리 — 야후는 미국 것만 준다(일본·한국은 심볼 자체가 없다). 한투가 국내
@@ -565,7 +467,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           >
             <div className="ov-card-b">
               <div className="rt-grid">
-                {(["국내", "해외"] as const).map((g) => (
+                {/* 해외가 먼저다 (2026-08-25, PDF #6) — 요즘 시장을 흔드는 게 미국 금리라서 */}
+                {(["해외", "국내"] as const).map((g) => (
                   <div key={g}>
                     <div className="rt-h">{g}</div>
                     {(rates.data ?? [])
@@ -583,10 +486,12 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                             : r.code === "Y0201"
                               ? "^TYX"
                               : null;
+                        /* 미국 10년·30년 강조 (PDF #6) — 이 카드에서 실제로 보는 두 줄 */
+                        const hot = r.code === "Y0202" || r.code === "Y0201";
                         const body = (
                           <>
-                            <span>{r.name}</span>
-                            <b className="num">{r.rate?.toFixed(3)}%</b>
+                            <span className={hot ? "rt-hot" : undefined}>{r.name}</span>
+                            <b className={`num${hot ? " rt-hot" : ""}`}>{r.rate?.toFixed(3)}%</b>
                             {/* 금리는 변화폭(%p)으로 읽는다 — 등락률로 보면 감이 안 온다 */}
                             <em className={`num ${signCls(r.change ?? 0)}`}>
                               {(r.change ?? 0) > 0 ? "+" : ""}

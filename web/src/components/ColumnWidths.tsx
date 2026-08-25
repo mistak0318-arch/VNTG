@@ -202,6 +202,14 @@ export function ColumnGrip({ cw, k }: { cw: ColumnWidthsApi; k: string }) {
       role="separator"
       aria-label="칸 너비 조절"
       title="끌어서 칸 너비 조절"
+      /*
+        머리 칸(th)이 열 순서 드래그로 draggable 일 수 있다 — 손잡이에서 시작된
+        끌기가 열 이동으로 새면 폭을 조절하려다 열이 옮겨진다. 여기서 자른다.
+      */
+      onDragStart={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
       onPointerDown={(e) => {
         // 머리 칸을 누르면 정렬이 걸리는 표가 많다 — 손잡이는 그 클릭을 막는다
         e.preventDefault();

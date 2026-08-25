@@ -1,5 +1,6 @@
 import type { UsQuoteRow } from "../api";
 import { sideQuote, usFeActive } from "../usSession";
+import { useDragOrder } from "../useDragOrder";
 import { fid, useRealtime } from "../useRealtime";
 import { ColumnGrip, useColumnWidths } from "./ColumnWidths";
 
@@ -59,6 +60,8 @@ export interface UsWatchTableProps {
   editing?: boolean;
   /** 순서 바꾸기. 없으면 버튼을 안 그린다 (정렬을 걸었을 때는 뜻이 없다) */
   onMove?: (symbol: string, dir: -1 | 1) => void;
+  /** 끌어서 옮긴 새 순서 전체 — onMove 와 같은 조건(내 순서 + 편집)에서만 준다 */
+  onReorder?: (nextSymbols: string[]) => void;
   onRemove?: (symbol: string) => void;
   /** 값이 바뀐 종목에 붙일 반짝임 클래스 */
   tick?: (symbol: string) => string;
@@ -69,12 +72,16 @@ export function UsWatchTable({
   onOpen,
   editing = false,
   onMove,
+  onReorder,
   onRemove,
   tick,
 }: UsWatchTableProps) {
   const sideName = sideNameOf(stocks);
   /* 칸 너비 조절 — 시세분석과 같은 공통 모듈. 머리 칸 오른쪽 가장자리를 끈다 */
   const cw = useColumnWidths("usWatch");
+  /* 끌어서 옮기기 — 편집 + 내 순서에서만 (onReorder 가 그 조건으로만 온다) */
+  const drag = useDragOrder(stocks.map((s) => s.symbol), (next) => onReorder?.(next));
+  const canDrag = editing && Boolean(onReorder);
 
   /*
    * 키움 실시간(FE) — **밤(미국장)에만 묻는다.**
@@ -180,8 +187,9 @@ export function UsWatchTable({
               */
               <tr
                 key={s.symbol}
-                className="clickable-row"
+                className={`clickable-row${canDrag ? drag.cls(s.symbol) : ""}`}
                 onClick={() => onOpen(s.symbol, s.name || s.symbol)}
+                {...(canDrag ? drag.props(s.symbol) : {})}
               >
                 {/* 이름이 길면 잘린다(CSS) — 티커는 안 잘리고, 전체 이름은 마우스로 본다 */}
                 <td className="sticky-col" title={`${s.symbol} ${s.name}`}>

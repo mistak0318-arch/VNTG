@@ -227,6 +227,59 @@ body {
   display: none;
 }
 
+/*
+ * 사이드바 자동숨김 (2026-08-25, PDF #2 — 설정 > 화면에서 켠다).
+ * 켜면 PC 에서도 아래 모바일 규칙과 같은 드로어가 된다 — 본문이 200px 넓어진다.
+ * ◐ 버튼(corner-toggle)도 그때는 PC 에 떠야 한다.
+ */
+:root[data-sidebar="auto"] .sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  transform: translateX(-100%);
+  transition: transform 0.2s ease;
+}
+:root[data-sidebar="auto"] .sidebar.open { transform: translateX(0); }
+:root[data-sidebar="auto"][data-nav="right"] .sidebar {
+  left: auto;
+  right: 0;
+  transform: translateX(100%);
+}
+:root[data-sidebar="auto"][data-nav="right"] .sidebar.open { transform: translateX(0); }
+:root[data-sidebar="auto"] .nav-backdrop {
+  display: block;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 35;
+}
+:root[data-sidebar="auto"] .corner-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  z-index: 45;
+  width: 2.9rem;
+  height: 2.9rem;
+  border-radius: 999px;
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 0;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+:root[data-sidebar="auto"] .corner-toggle.tl { top: 0.7rem; left: 0.7rem; }
+:root[data-sidebar="auto"] .corner-toggle.tr { top: 0.7rem; right: 0.7rem; }
+:root[data-sidebar="auto"] .corner-toggle.bl { bottom: 0.7rem; left: 0.7rem; }
+:root[data-sidebar="auto"] .corner-toggle.br { bottom: 0.7rem; right: 0.7rem; }
+
 /* 모바일: 사이드바를 드로어로 */
 @media (max-width: 899px) {
   .sidebar {
@@ -3402,6 +3455,68 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 /* 마지막 달 주석 — SVG 안에 두면 눈금과 겹쳐서 HTML 로 뺐다 */
 .tc-head { font-size: 0.76rem; margin-bottom: 2px; }
 
+/* 선물 투자자별 수급 (차트 시트 안) */
+.ff-wrap { margin-top: 0.8rem; }
+.ff-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 1rem; margin-bottom: 0.3rem; }
+.ff-head > b { font-size: 0.82rem; }
+
+/* 금리 카드 — 미국 10년·30년 강조 (PDF #6). 이 카드에서 실제로 보는 두 줄 */
+.rt-hot { color: #d4a017; font-weight: 700; }
+
+/* 차트 자물쇠 — 범례 줄 끝. 잠기면 색이 붙어 「지금 잠김」이 보인다 */
+.chart-lock {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 0.35rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  margin-left: auto;
+  line-height: 1.5;
+}
+.chart-lock.on { border-color: #d4a017; background: rgba(212, 160, 23, 0.12); }
+
+/*
+ * ── 버튼 눌림 피드백 — 전체 UI 공통 (2026-08-25, PDF #15) ──
+ *
+ * PC 에서 버튼을 눌러도 아무 반응이 없어 눌린 건지 알 수 없었다.
+ * 살짝 줄었다 돌아오는 것 + 순간 밝아지는 것 — 요란하지 않게 80ms.
+ * 비활성 버튼은 안 눌리니 효과도 없다.
+ */
+button:not(:disabled) {
+  transition: transform 0.08s ease, filter 0.08s ease;
+}
+button:active:not(:disabled) {
+  transform: scale(0.94);
+  filter: brightness(1.3);
+}
+
+/*
+ * 폰 관심종목 상단 (2026-08-25, PDF #14) — 상태·그룹 칩이 바둑알처럼 세 줄로
+ * 쌓였다. 좁은 화면에서는 **한 줄 가로 스크롤**로 눕힌다(ctl-ribbon 과 같은 문법)
+ * — 칩은 다 있되 화면을 안 잡아먹는다.
+ */
+@media (max-width: 700px) {
+  .my-chip-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .my-chip-row::-webkit-scrollbar { display: none; }
+  .my-chip-row .filter-btn,
+  .my-chip-row .gt-item { flex-shrink: 0; }
+}
+
+/* ── 끌어서 순서 바꾸기 (useDragOrder) — 모든 순서 UI 공통 ── */
+[draggable="true"] { cursor: grab; }
+.drag-src { opacity: 0.4; cursor: grabbing; }
+.drag-over { outline: 2px dashed var(--blue); outline-offset: -2px; border-radius: 6px; }
+/* 표 줄에는 outline 이 안 보이는 브라우저가 있어 배경도 준다 */
+tr.drag-over td { background: rgba(76, 141, 255, 0.12); }
+tr.drag-src td { opacity: 0.45; }
+
 /* ── 주요뉴스 썸네일 카드 (뉴스 탭) ── */
 .mn-grid {
   display: grid;
@@ -4570,9 +4685,12 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   font-size: 0.68rem;
   color: var(--muted);
   margin-top: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /*
+   * 줄바꿈 허용 (2026-08-25, PDF #8) — 「🌟 슈퍼신호등」 뒤의 상태(관찰)가
+   * ellipsis 로 잘려 「관…」이 됐다. 그룹이 여럿이면 어차피 한 줄엔 안 들어간다 —
+   * 자르지 말고 다음 줄로 내린다. 행 높이가 조금 크는 것이 정보를 자르는 것보다 낫다.
+   */
+  white-space: normal;
   max-width: 11rem;
 }
 .wl-st { font-style: normal; margin-left: 0.4rem; padding: 0 0.25rem; border: 1px solid var(--border); border-radius: 4px; }
@@ -7184,6 +7302,19 @@ button.ib-cell:hover { background: var(--panel-2); }
   background: none; border: none; cursor: pointer; opacity: 0.6;
   font-size: 0.8rem; padding: 0 0.15rem;
 }
+/* 칸 닫기 (✕) — 복제한 칸을 만든 자리에서 뺀다 */
+.board-x {
+  background: none; border: none; cursor: pointer; opacity: 0.55;
+  font-size: 0.78rem; padding: 0 0.15rem; color: var(--muted);
+}
+.board-x:hover { opacity: 1; color: var(--red); }
+/* 떼어 낸 창(solo)의 닫기 — 브라우저 틀이 최소라 닫을 길이 안 보였다 */
+.board-solo-close {
+  position: fixed; top: 6px; right: 8px; z-index: 30;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--muted); font-size: 0.75rem; padding: 0.2rem 0.55rem; cursor: pointer;
+}
+.board-solo-close:hover { color: var(--red); border-color: var(--red); }
 .board-dup:hover, .board-find:hover { opacity: 1; }
 .board-find.on { opacity: 1; color: var(--accent, #2563eb); }
 /* 칸 안에서 종목을 찾는 자리 */
@@ -7213,8 +7344,10 @@ button.ib-cell:hover { background: var(--panel-2); }
  * 미니 수급표 — **곁눈으로 보는 칸**이라 촘촘해야 한다.
  * 구간이 열로 펴지면서 다섯 칸이 되므로 여백을 줄이고 숫자를 붙인다.
  */
-.sm-table { font-size: 0.74rem; }
-.sm-table th, .sm-table td { padding: 3px 5px; }
+.sm-table { font-size: 0.72rem; }
+.sm-table th, .sm-table td { padding: 2px 4px; }
+/* 미니 칸에서 표가 안 밀리게 — 숫자는 붙이고 자릿수는 표가 아니라 값이 줄인다(억 접기) */
+.sm-table td { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sm-table thead th { color: var(--muted); font-weight: 600; }
 .sm-table tbody th { text-align: left; color: var(--muted); font-weight: 600; white-space: nowrap; }
 /* 기관 안쪽 넷은 들여써서 합계와 구별 — 안 그러면 일곱 줄이 다 같은 층으로 보인다 */

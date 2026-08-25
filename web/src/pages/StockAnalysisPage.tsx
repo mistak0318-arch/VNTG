@@ -297,9 +297,10 @@ export function StockAnalysisPage({
             {TABS.map((t) => (
               <button
                 key={t.key}
-                className={`detail-tab${tab === t.key ? " active" : ""}`}
+                className={`detail-tab${tab === t.key ? " active" : ""}${tabOrder.drag.cls(t.key)}`}
                 style={{ order: tabOrder.orderOf(t.key) }}
                 onClick={() => setTab(t.key)}
+                {...tabOrder.drag.props(t.key)}
               >
                 {t.label}
                 {editTabs && (

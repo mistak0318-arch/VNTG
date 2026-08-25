@@ -141,6 +141,11 @@ export const api = {
     postJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings`, h),
   manualHoldingRemove: (id: string, code: string) =>
     deleteJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings/${code}`),
+  /** 코스피200 선물 투자자별 순매수(계약) — 네이버. 키움엔 없는 값 */
+  futuresFlow: (days = 30) =>
+    getJson<{ days: { date: string; individual: number; foreign: number; institution: number }[] }>(
+      `/api/market/futures-flow?days=${days}`,
+    ),
   /** ETF 구성종목 — ETF 가 아니면 {etf:false}. 출처는 네이버(키움 REST 엔 없다) */
   etfInfo: (code: string) =>
     getJson<{

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { FONTS, FONT_SCALES, useAppearance, WIDTHS } from "../useAppearance";
+import { FONTS, FONT_SCALES, GLOBAL_KEY, useAppearance, WIDTHS } from "../useAppearance";
+import { setPref } from "../prefs";
 import { api, fmtNum, type ProviderUsage, type UsageTotals } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { AiModelPanel } from "../components/AiModelPanel";
@@ -44,6 +45,8 @@ const SETTINGS_TABS: { key: SettingsTab; label: string; hint: string }[] = [
 
 export function SettingsPage() {
   const appearance = useAppearance();
+  /** 전체 설정 저장/불러오기의 결과 한 줄 */
+  const [globalMsg, setGlobalMsg] = useState<string | null>(null);
   const [tab, setTab] = useState<SettingsTab>("display");
 
   const [usage, setUsage] = useState<ProviderUsage[]>([]);
@@ -300,6 +303,30 @@ export function SettingsPage() {
           드로어가 열리는 방향과 ☰ 버튼 자리도 같이 넘어갑니다.
         </div>
 
+        {/* 사이드바 자동숨김 (2026-08-25, PDF #2) — PC 에서도 드로어로 */}
+        <div className="appearance-row">
+          <span className="appearance-label">사이드바 자동숨김</span>
+          <div className="filter-row" style={{ margin: 0 }}>
+            {([
+              { key: false, label: "고정" },
+              { key: true, label: "자동숨김" },
+            ] as const).map((t) => (
+              <button
+                key={String(t.key)}
+                className={`filter-btn ${appearance.sidebarAuto === t.key ? "active" : ""}`}
+                onClick={() => appearance.set({ sidebarAuto: t.key })}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="table-note">
+          자동숨김을 켜면 PC 에서도 사이드바가 상시로 안 붙고 <b>◐ 버튼으로 여는
+          드로어</b>가 됩니다 — 본문이 그만큼 넓어집니다. 시세분석처럼 열 많은 표를
+          주로 볼 때 씁니다.
+        </div>
+
         <div className="appearance-row">
           <span className="appearance-label">화면 폭</span>
           <div className="filter-row" style={{ margin: 0 }}>
@@ -327,7 +354,61 @@ export function SettingsPage() {
           미리보기 — 삼성전자 <span className="num positive">+6.68%</span> / SK하이닉스{" "}
           <span className="num negative">-1.23%</span> · 거래대금 <span className="num">6,282</span>억
         </div>
-        <div className="table-note">이 설정은 이 기기(브라우저)에만 저장됩니다.</div>
+
+        {/*
+          전체 설정 (2026-08-25, PDF #1) — 화면설정은 기기별이 기본인데(27인치 글자
+          크기가 폰까지 따라오면 안 된다), 한 번에 전 기기에 적용하고 싶을 때가 있다.
+          그래서 서버에 「전체 기본」 한 판을 두고, 밀고(저장) 당기는(불러오기) 버튼을 준다.
+          처음 여는 기기는 전체 기본으로 시작한다.
+        */}
+        <div className="appearance-row">
+          <span className="appearance-label">전체 설정</span>
+          <div className="filter-row" style={{ margin: 0 }}>
+            <button
+              className="filter-btn"
+              onClick={() => {
+                setPref(GLOBAL_KEY, JSON.stringify({
+                  theme: appearance.theme,
+                  font: appearance.font,
+                  fontScale: appearance.fontScale,
+                  navSide: appearance.navSide,
+                  width: appearance.width,
+                  sidebarAuto: appearance.sidebarAuto,
+                }));
+                setGlobalMsg("지금 화면설정을 전체 기본으로 저장했습니다 — 다른 기기에서 「전체 기본 불러오기」로 받습니다.");
+              }}
+              title="지금 이 화면설정을 서버에 저장합니다 — 모든 기기의 기본이 됩니다"
+            >
+              모든 기기의 기본으로 저장
+            </button>
+            <button
+              className="filter-btn"
+              onClick={() => {
+                try {
+                  const raw = localStorage.getItem(GLOBAL_KEY);
+                  if (!raw) {
+                    setGlobalMsg("저장된 전체 기본이 아직 없습니다 — 먼저 어느 기기에서든 저장해 주세요.");
+                    return;
+                  }
+                  appearance.set(JSON.parse(raw) as Parameters<typeof appearance.set>[0]);
+                  setGlobalMsg("전체 기본을 이 기기에 적용했습니다.");
+                } catch {
+                  setGlobalMsg("전체 기본을 읽지 못했습니다.");
+                }
+              }}
+              title="서버에 저장된 전체 기본을 이 기기에 적용합니다"
+            >
+              전체 기본 불러오기
+            </button>
+          </div>
+        </div>
+        {globalMsg && <div className="alert-note">{globalMsg}</div>}
+        <div className="table-note">
+          화면설정은 <b>기기별</b>이 기본입니다 — 27인치에 맞춘 글자 크기가 폰까지
+          따라오면 안 되니까요. <b>전체 기본</b>은 서버에 두는 공용 한 판입니다:
+          여기서 저장하면 다른 기기에서 불러오거나, <b>처음 여는 기기</b>는 자동으로
+          그 설정으로 시작합니다.
+        </div>
       </CollapsibleCard>
       )}
 

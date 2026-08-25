@@ -27,6 +27,7 @@ import { IndexBoard } from "../components/IndexBoard";
 import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
 import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
 import { SupplyMini } from "../components/SupplyMini";
+import { StockSummaryPanel } from "../components/StockSummaryPanel";
 import { useStockFocus } from "../useStockFocus";
 import { BoardCell, CellStockFinder, type CellSize } from "../components/BoardCell";
 import { winStore } from "../boardStore";
@@ -159,6 +160,8 @@ const BLOCKS = [
    * 오늘 하루만 세 줄로 줄이고, 기관은 성격이 다른 넷으로 쪼개 아래에 붙인다.
    */
   { key: "supplyMini", label: "당일수급(미니)", wide: false },
+  /* KRX/NXT 저·고·종가 한눈 카드 — 상세 종합의 한 장 요약을 그대로 (PDF #12) */
+  { key: "priceSummary", label: "가격 요약", wide: false },
   { key: "investor", label: "투자자 수급", wide: false },
   { key: "broker", label: "거래원", wide: false },
   { key: "program", label: "프로그램", wide: false },
@@ -639,6 +642,19 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
     (id: string) => {
       // 잠근 구성은 덮어쓰기도 막는다 — 돌아올 자리가 흔들리면 뜻이 없다
       if (isFixed(presets, id)) return;
+      const target = presets.find((p) => p.id === id);
+      if (!target) return;
+      /*
+       * 묻고 덮는다 (2026-08-25, PDF #10 — 「자꾸 덮어써진다」).
+       * 덮기는 기존 배치를 지우는 일인데 한 번 누르면 소리 없이 끝났다 —
+       * 실수로 눌러도 알 길이 없었다. 예를 눌러야 전역(서버) 구성에 저장된다.
+       */
+      if (
+        !window.confirm(
+          `지금 화면 배치를 「${target.name}」 구성에 덮어쓸까요?\n기존 배치는 사라지고, 모든 기기에 적용됩니다.`,
+        )
+      )
+        return;
       persist(presets.map((p) => (p.id === id ? { ...p, pick, sizes, pins, locks } : p)));
     },
     [persist, presets, pick, sizes, pins, locks],
@@ -804,7 +820,19 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
 
         작은 창에서 설정과 구성 목록이 화면의 절반을 먹는다. 떼어 낸 이유가 「저 모니터에
         호가만」인데 설정이 자리를 차지하면 뜻이 없다. 종목은 URL 로 실려 온다.
+
+        닫기만은 준다 (2026-08-25, PDF #3) — 떼어 낸 창은 브라우저 틀이 최소라
+        닫을 길이 안 보였다. 스크립트로 연 창이라 window.close() 가 그대로 먹는다.
       */}
+      {solo && (
+        <button
+          className="board-solo-close"
+          onClick={() => window.close()}
+          title="이 창 닫기"
+        >
+          ✕ 닫기
+        </button>
+      )}
       {!solo && (
       <section className="card board-cfg">
         {/*
@@ -1058,6 +1086,11 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                 return next;
               })}
               /*
+                칸 닫기 (2026-08-25, PDF #3) — 복제(⧉)로 만든 칸을 지우려면 설정을
+                열어야 했다. 만든 자리에서 닫는다. 떼어 낸 창(solo)은 위의 「✕ 닫기」가 맡는다.
+              */
+              onRemove={solo ? undefined : () => setPick((prev) => prev.filter((x) => x !== id))}
+              /*
                 이 칸만 새 창으로. 인스턴스 id 와 지금 보고 있는 종목을 URL 에 실어 보낸다 —
                 새 창은 sessionStorage 가 비어 있어 URL 말고는 전할 길이 없다.
               */
@@ -1118,6 +1151,11 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                   {b.key === "mktTelegram" && <ChannelDigestPanel />}
                   {b.key === "telegram" && <ChannelSearchPanel code={code} name={name} />}
                   {b.key === "supplyMini" && <SupplyMini key={code} code={code} />}
+                  {/*
+                    가격 요약 (2026-08-25, PDF #12) — KRX/NXT 저·고·종가를 한눈에.
+                    종목 상세 종합 맨 위의 그 한 장 요약을 그대로 쓴다 — 새로 그리면 갈린다.
+                  */}
+                  {b.key === "priceSummary" && <StockSummaryPanel key={code} code={code} />}
                   {/*
                     `key={code}` 를 준다. 종목이 바뀌면 패널을 **새로 만든다** —
                     안 그러면 어떤 패널은 이전 종목의 값을 그대로 들고 있다가

@@ -53,6 +53,7 @@ export function BoardCell({
   onToggleLock,
   onDuplicate,
   onPopOut,
+  onRemove,
   onPickStock,
   children,
 }: {
@@ -92,6 +93,8 @@ export function BoardCell({
   onDuplicate?: () => void;
   /** 이 칸만 새 창으로 — 모니터를 여러 대 쓸 때 */
   onPopOut?: () => void;
+  /** 이 칸을 보드에서 뺀다 — 복제로 만든 칸을 만든 자리에서 닫는다 (PDF #3) */
+  onRemove?: () => void;
   /**
    * 이 칸만 다른 종목으로.
    *
@@ -258,6 +261,11 @@ export function BoardCell({
         >
           {pinned ? "📌" : "📍"}
         </button>
+        {onRemove && (
+          <button className="board-x" onClick={onRemove} title="이 칸을 보드에서 빼기">
+            ✕
+          </button>
+        )}
       </h2>
       {finding && onPickStock && (
         <CellStockFinder

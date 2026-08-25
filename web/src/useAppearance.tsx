@@ -47,6 +47,14 @@ export interface Appearance {
    * 화면을 가로지르면 눈이 줄을 놓친다. 그래서 고르게 둔다.
    */
   width: WidthName;
+  /**
+   * 사이드바 자동숨김 (2026-08-25, PDF #2).
+   *
+   * 켜면 PC 에서도 사이드바가 상시로 안 붙고 **모바일처럼 드로어**가 된다 —
+   * ◐ 버튼으로 열고, 고르면 닫힌다. 본문이 사이드바 폭만큼 넓어진다.
+   * 시세분석처럼 열 많은 표를 주로 보는 사람의 옵션이다.
+   */
+  sidebarAuto: boolean;
 }
 
 export const WIDTHS: { key: WidthName; label: string; css: string; hint: string }[] = [
@@ -87,13 +95,28 @@ const DEFAULTS: Appearance = {
   fontScale: 100,
   navSide: "left",
   width: "normal",
+  sidebarAuto: false,
 };
+
+/**
+ * 전체 기본 (2026-08-25, PDF #1) — 서버에 두는 **모든 기기 공용** 화면설정.
+ *
+ * 화면설정은 원래 기기별이다(27인치 글자 크기가 폰까지 따라오면 안 된다 —
+ * prefs.ts 의 LOCAL_ONLY 이유). 그건 그대로 두고, **원할 때만** 쓰는 공용 판을
+ * 하나 더 둔다: 「모든 기기의 기본으로 저장」을 누르면 서버에 올라가고,
+ * 다른 기기는 「전체 기본 불러오기」로 받거나 — **처음 여는 기기**는 자동으로
+ * 이걸로 시작한다(자기 설정이 아직 없으니까).
+ */
+export const GLOBAL_KEY = "vntg.appearance.global";
 
 function read(): Appearance {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULTS;
-    return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Appearance>) };
+    if (raw) return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Appearance>) };
+    // 이 기기 설정이 없으면 전체 기본으로 시작 (loadPrefs 가 렌더 전에 채워 둔다)
+    const global = localStorage.getItem(GLOBAL_KEY);
+    if (global) return { ...DEFAULTS, ...(JSON.parse(global) as Partial<Appearance>) };
+    return DEFAULTS;
   } catch {
     return DEFAULTS;
   }
@@ -125,6 +148,8 @@ function apply(a: Appearance): void {
   root.style.colorScheme = a.theme === "dark" ? "dark" : "light";
   // 메뉴바 좌우는 CSS 가 이 속성을 보고 방향을 뒤집는다
   root.dataset.nav = a.navSide;
+  // 사이드바 자동숨김 — CSS 가 이 속성을 보고 PC 에서도 드로어로 바꾼다
+  root.dataset.sidebar = a.sidebarAuto ? "auto" : "fixed";
   /* 본문 폭 — 보드는 CSS 에서 따로 풀어 두었으므로 여기서는 신경 안 쓴다 */
   root.style.setProperty("--main-max", WIDTHS.find((w) => w.key === a.width)?.css ?? "1400px");
 }

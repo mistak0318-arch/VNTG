@@ -70,6 +70,7 @@ export function SortableTh<T>({
   sort,
   className,
   extra,
+  thProps,
 }: {
   columnKey: string;
   label: string;
@@ -84,14 +85,17 @@ export function SortableTh<T>({
    * 정렬이 뒤집힌다.
    */
   extra?: React.ReactNode;
+  /** `<th>` 에 그대로 얹을 것 — 열 순서 드래그(draggable·onDrop…)가 쓴다 */
+  thProps?: React.ThHTMLAttributes<HTMLTableCellElement>;
 }) {
   const active = sort.sortKey === columnKey && sort.sortDir !== null;
   const arrow = !active ? "" : sort.sortDir === "desc" ? " ▾" : " ▴";
   return (
     <th
+      {...thProps}
       className={`sortable-th${active ? " active" : ""}${className ? ` ${className}` : ""}`}
       onClick={() => sort.toggle(columnKey, accessor)}
-      title="클릭: 내림차순 → 오름차순 → 원래대로"
+      title="클릭: 정렬 (내림→오름→원래) · 끌어서 열 자리 옮기기"
     >
       {label}
       <span className="sort-arrow">{arrow}</span>

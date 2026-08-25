@@ -28,6 +28,61 @@ export interface Candle {
  * 기본값과 색은 `useChartPrefs` 에 있고 키움 HTS 와 같은 색으로 맞춰 뒀다.
  */
 
+/*
+ * 차트 자물쇠 (2026-08-25, PDF #4) — **스크롤하다 차트가 움직이는 것**을 잠근다.
+ *
+ * 페이지를 내리려고 휠을 굴렸는데 커서가 차트 위에 있으면 차트가 확대된다 —
+ * 매번 당한다. 잠그면 이동·확대가 전부 죽고, **십자선·클릭 정보(툴팁)는 그대로**다.
+ * 전역으로 기억한다 — 차트마다 따로 잠그게 하면 화면 옮길 때마다 또 잠가야 한다.
+ */
+const LOCK_KEY = "vntg.chart.lock";
+
+function lockedPref(): boolean {
+  try {
+    return localStorage.getItem(LOCK_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function scrollOptions(locked: boolean) {
+  if (locked) {
+    return {
+      handleScroll: {
+        vertTouchDrag: false,
+        horzTouchDrag: false,
+        pressedMouseMove: false,
+        mouseWheel: false,
+      },
+      handleScale: {
+        pinch: false,
+        mouseWheel: false,
+        axisDoubleClickReset: false,
+        axisPressedMouseMove: { time: false, price: false },
+      },
+    };
+  }
+  return {
+    /*
+     * 세로로 움직여서 얻는 건 없다 — 가격 범위는 autoScale 이 알아서 맞춘다.
+     * 남기는 건 **가로 이동**과 **확대·축소**뿐이다.
+     */
+    handleScroll: {
+      vertTouchDrag: false, // 손가락 세로 드래그 (이게 오동작의 원인)
+      horzTouchDrag: true, // 가로로 넘기기는 남긴다
+      pressedMouseMove: true, // 마우스로 끌기 — 가로만 먹는다
+      mouseWheel: true,
+    },
+    handleScale: {
+      pinch: true, // 두 손가락 확대·축소
+      mouseWheel: true,
+      axisDoubleClickReset: true, // 축을 두 번 누르면 처음 배율로
+      // 가격축을 끌어 세로로 늘이는 것도 막는다. 시간축 배율은 남긴다
+      axisPressedMouseMove: { time: true, price: false },
+    },
+  };
+}
+
 function sma(candles: Candle[], period: number): { time: Time; value: number }[] {
   const closes = candles.map((c) => c.close);
   const out: { time: Time; value: number }[] = [];
@@ -213,6 +268,21 @@ export function CandleChart({
     null,
   );
 
+  /* 자물쇠 — 전역 기억. ref 는 차트 생성 시점(위 effect)에서 최신값을 읽기 위한 것 */
+  const [locked, setLocked] = useState(lockedPref);
+  const lockRef = useRef(locked);
+  lockRef.current = locked;
+  function toggleLock() {
+    const next = !locked;
+    setLocked(next);
+    try {
+      localStorage.setItem(LOCK_KEY, next ? "1" : "0");
+    } catch {
+      /* 저장 못 해도 이번 화면에는 적용된다 */
+    }
+    chartRef.current?.applyOptions(scrollOptions(next));
+  }
+
   // ── 차트 생성 (테마·분봉 여부가 바뀔 때만) ────────────────────────────
   useEffect(() => {
     const c = chartColors(theme);
@@ -238,19 +308,7 @@ export function CandleChart({
        * 세로로 움직여서 얻는 건 없다 — 가격 범위는 autoScale 이 알아서 맞춘다.
        * 남기는 건 **가로 이동**과 **확대·축소**뿐이다.
        */
-      handleScroll: {
-        vertTouchDrag: false, // 손가락 세로 드래그 (이게 오동작의 원인)
-        horzTouchDrag: true, // 가로로 넘기기는 남긴다
-        pressedMouseMove: true, // 마우스로 끌기 — 가로만 먹는다
-        mouseWheel: true,
-      },
-      handleScale: {
-        pinch: true, // 두 손가락 확대·축소
-        mouseWheel: true,
-        axisDoubleClickReset: true, // 축을 두 번 누르면 처음 배율로
-        // 가격축을 끌어 세로로 늘이는 것도 막는다. 시간축 배율은 남긴다
-        axisPressedMouseMove: { time: true, price: false },
-      },
+      ...scrollOptions(lockRef.current),
     });
     chartRef.current = chart;
 
@@ -582,6 +640,18 @@ export function CandleChart({
             MA{m.period}
           </span>
         ))}
+        {/* 자물쇠 — 잠그면 휠·드래그에 차트가 안 움직인다. 십자선·클릭 정보는 그대로 */}
+        <button
+          className={`chart-lock${locked ? " on" : ""}`}
+          onClick={toggleLock}
+          title={
+            locked
+              ? "차트 잠김 — 휠·드래그가 차트를 안 움직입니다 (십자선은 그대로). 눌러서 풀기"
+              : "차트 잠그기 — 페이지 스크롤에 차트가 움직이는 걸 막습니다"
+          }
+        >
+          {locked ? "🔒" : "🔓"}
+        </button>
       </div>
       <div className="candle-host">
         <div ref={containerRef} style={{ width: "100%" }} />

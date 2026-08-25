@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
+import { useDragOrder } from "./useDragOrder";
 
 /**
  * 화면 카드 배치.
@@ -99,6 +100,13 @@ export function useCardOrder(scope: string, known: string[]) {
   /** 코드에 적힌 순서로 되돌린다 */
   const reset = useCallback(() => write([]), [write]);
 
+  /*
+   * 끌어서 옮기기 (2026-08-25) — 화살표와 같은 write 로 떨어진다.
+   * PC 는 끌고, 폰은 화살표 그대로. 소비처는 요소에 `{...order.drag.props(key)}` 를
+   * 스프레드하고 `order.drag.cls(key)` 를 클래스에 붙이면 끝이다.
+   */
+  const drag = useDragOrder(current, write);
+
   return {
     /** 카드에 넘길 CSS order 값 */
     orderOf: (key: string) => rank.get(key) ?? 0,
@@ -109,5 +117,6 @@ export function useCardOrder(scope: string, known: string[]) {
     move,
     toFront,
     reset,
+    drag,
   };
 }

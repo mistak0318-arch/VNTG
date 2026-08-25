@@ -35,11 +35,19 @@ function n(v: unknown): number {
   return Number.isFinite(x) ? x : 0;
 }
 
-/** 주 수량을 짧게 — 만 단위가 넘으면 만주로 */
-function qty(v: number): string {
+/**
+ * 금액(백만원)을 짧게 — 억으로 접는다 (2026-08-25, PDF #11).
+ *
+ * ⚠️ 값은 처음부터 **금액**이었다(ka10060 amt_qty_tp=1 · 백만원). 그런데 화면이
+ * 「단위 주 · +6,168」이라 적어서 6,168주로 읽혔다 — 실제로는 61.7억원이다.
+ * 기준을 바꾼 게 아니라 **라벨의 거짓말**을 고친 것이다.
+ */
+function money(v: number): string {
   const a = Math.abs(v);
-  if (a >= 10_000) return `${v > 0 ? "+" : ""}${(v / 10_000).toFixed(1)}만`;
-  return `${v > 0 ? "+" : ""}${Math.round(v).toLocaleString("ko-KR")}`;
+  const sign = v > 0 ? "+" : v < 0 ? "-" : "";
+  if (a >= 100_000) return `${sign}${(a / 10_000).toFixed(1)}조`; // 백만원 → 조
+  if (a >= 100) return `${sign}${a >= 10_000 ? Math.round(a / 100).toLocaleString("ko-KR") : (a / 100).toFixed(1)}억`;
+  return `${sign}${Math.round(a).toLocaleString("ko-KR")}백만`;
 }
 
 /** 며칠을 합쳐 볼지 — 1일은 오늘 하루 */
@@ -99,7 +107,7 @@ export function SupplyMini({ code }: { code: string }) {
   return (
     <div className="sm">
       <div className="sm-day">
-        {day} 기준 · 단위 주 · <b>당일</b> 말고는 그날까지 <b>합산</b>입니다
+        {day} 기준 · <b>순매수 금액</b>(억원) · <b>당일</b> 말고는 그날까지 <b>합산</b>입니다
       </div>
 
       <div className="data-table-wrap">
@@ -124,7 +132,7 @@ export function SupplyMini({ code }: { code: string }) {
                   const v = sum(l.key, d);
                   return (
                     <td key={d} className={signClass(v)}>
-                      {qty(v)}
+                      {money(v)}
                     </td>
                   );
                 })}

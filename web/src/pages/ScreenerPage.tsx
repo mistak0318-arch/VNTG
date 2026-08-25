@@ -6,6 +6,7 @@ import { ContinuousTradePage } from "./ContinuousTradePage";
 import { TopTradersTable } from "../components/TopTradersTable";
 import { CumulativeRank } from "../components/CumulativeRank";
 import { SortableTh, useSortableTable } from "../useSortableTable";
+import { fid, useRealtime } from "../useRealtime";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { useCardOrder } from "../useCardOrder";
@@ -294,10 +295,14 @@ export function ScreenerPage({
     fetchRank();
   }, [fetchRank]);
 
-  /* 장중에는 스스로 다시 받는다 — 순위는 계속 뒤집히는 값이다 */
+  /*
+   * 장중에는 스스로 다시 받는다 — 순위는 계속 뒤집히는 값이다.
+   * 10초 (2026-08-25, 20초에서) — 300건이어도 연속조회 3콜/10초 = TR 한도의 6%다.
+   * 가격·등락률은 아래 실시간 오버레이가 1.5초로 덧씌우므로, 이 주기는 **순위 재편**만 맡는다.
+   */
   const auto = useAutoRefresh(() => fetchRank(true), {
     storeKey: "vntg.auto.screener",
-    intervalMs: 20_000,
+    intervalMs: 10_000,
   });
 
   /* 조회가 바뀌면 첫 장으로 — 3쪽을 보다가 다른 순위로 갔는데 3쪽이면 빈 화면이 뜬다 */
@@ -377,6 +382,27 @@ export function ScreenerPage({
   const signals = useSignalColumn(shown.map((r) => r.code), sigOn);
 
   /*
+   * 실시간 오버레이 (2026-08-25) — **이 쪽 줄들의 현재가·등락률을 1.5초로.**
+   *
+   * 순위 조회는 10초마다지만 가격은 그보다 빨리 움직인다. 거래대금 상위는 스케줄러가
+   * 이미 웹소켓으로 물고 있으므로(낮 국면 190종목) **읽기 전용**으로 최신값만 얹는다 —
+   * 키움 호출도, 구독 정원도 안 는다. 값이 없는 줄(구독 밖)은 REST 값 그대로다.
+   *
+   * ⚠️ 통합일 때만. KRX/NXT 를 콕 집어 보는 중이면 실시간(통합 최신가)을 덮는 게
+   * 거짓말이 된다 — 그 화면은 그 거래소의 값을 보겠다는 뜻이다.
+   */
+  const liveOn = !data?.spec.exchange || exchange === "3";
+  const rt = useRealtime(liveOn ? shown.map((r) => `0B:${r.code}`) : [], 1500, { readOnly: true });
+  const liveOf = (code: string): { price: number; rate: number | null } | null => {
+    if (!rt.healthy) return null;
+    const v = rt.values[`0B:${code}`];
+    if (!v || Date.now() - v.at > 90_000) return null;
+    const p = fid(v, "10");
+    if (p === null || p === 0) return null;
+    return { price: Math.abs(p), rate: fid(v, "12") };
+  };
+
+  /*
    * 색깔순은 **이 쪽 안에서** 다시 세운다. 평가한 것이 이 쪽뿐이라 그 밖은 셀 수가 없다.
    * 평가가 아직인 줄은 늘 아래로 — 위에 섞이면 초록이 몇 개인지 세다가 헷갈린다.
    */
@@ -416,9 +442,10 @@ export function ScreenerPage({
         {TABS.map((t) => (
           <button
             key={t.key}
-            className={`filter-btn ${tab === t.key ? "active" : ""}`}
+            className={`filter-btn ${tab === t.key ? "active" : ""}${tabOrder.drag.cls(t.key)}`}
             style={{ order: tabOrder.orderOf(t.key) }}
             onClick={() => setTab(t.key)}
+            {...tabOrder.drag.props(t.key)}
           >
             {t.label}
             {editTabs && (
@@ -831,8 +858,10 @@ export function ScreenerPage({
                         key={c.key}
                         columnKey={c.key}
                         label={c.label}
+                        /* 끌어서 열 자리 옮기기 — 화살표(칸 순서 모드)와 같은 저장으로 떨어진다 */
+                        thProps={colOrder.drag.props(c.key)}
                         /* 순위 칸은 숫자 서너 자리면 충분하다 — 폰에서 자리를 아낀다 */
-                        className={RANK_COLS.has(c.key) ? "num-narrow" : undefined}
+                        className={`${RANK_COLS.has(c.key) ? "num-narrow" : ""}${colOrder.drag.cls(c.key)}`}
                         accessor={(r: (typeof rows)[number]) => {
                           const v = r[c.key];
                           if (c.type === "text") return String(v ?? "");
@@ -956,32 +985,41 @@ export function ScreenerPage({
                             );
                           }
                           /*
-                           * 통합의 가격·등락률은 KRX 기준으로 맞춰져 있다(상세와 같게).
-                           * 그런데 저녁엔 NXT 애프터가 더 갔을 수 있다 — 그 값을 괄호로.
-                           * 해외 관심종목의 시간외 괄호와 같은 문법이다.
+                           * 현재가·등락률 — **실시간이 있으면 그 값이 먼저다**(●이 그 표시).
+                           * 없으면 REST 값(통합은 KRX 기준으로 맞춘 것). 저녁의 NXT
+                           * 애프터 값은 작은 줄로 — 해외 관심종목의 시간외 괄호와 같은 문법.
                            */
-                          if (c.key === "cur_prc" && r.nxtPrice != null) {
+                          if (c.key === "cur_prc") {
+                            const lv = liveOf(r.code);
                             return (
                               <td key={c.key} className="num">
-                                {v.text}
-                                <i className="scr-split" title="NXT 최종가 — 프리·애프터장 포함">
-                                  NXT {fmtNum(r.nxtPrice)}
-                                </i>
+                                {lv && <span className="uw-live-dot" title="키움 실시간 (1.5초)" />}
+                                {lv ? fmtNum(lv.price) : v.text}
+                                {r.nxtPrice != null && !lv && (
+                                  <i className="scr-split" title="NXT 최종가 — 프리·애프터장 포함">
+                                    NXT {fmtNum(r.nxtPrice)}
+                                  </i>
+                                )}
                               </td>
                             );
                           }
-                          if (c.key === "flu_rt" && r.nxtRate != null) {
-                            const nr = Number(r.nxtRate);
+                          if (c.key === "flu_rt") {
+                            const lv = liveOf(r.code);
+                            const rate =
+                              lv?.rate ?? (Number.isFinite(Number(r.flu_rt)) ? Number(r.flu_rt) : null);
+                            const rc = rate === null ? "" : rate > 0 ? "positive" : rate < 0 ? "negative" : "";
                             return (
-                              <td key={c.key} className={`num ${v.cls}`}>
-                                {v.text}
-                                <i
-                                  className={`scr-split ${nr > 0 ? "positive" : nr < 0 ? "negative" : ""}`}
-                                  title="NXT 최종 등락률 — 프리·애프터장 포함"
-                                >
-                                  NXT {nr > 0 ? "+" : ""}
-                                  {nr.toFixed(2)}%
-                                </i>
+                              <td key={c.key} className={`num scr-rate ${rc}`}>
+                                {rate === null ? "-" : `${rate > 0 ? "+" : ""}${rate.toFixed(2)}%`}
+                                {r.nxtRate != null && lv?.rate == null && (
+                                  <i
+                                    className={`scr-split ${Number(r.nxtRate) > 0 ? "positive" : Number(r.nxtRate) < 0 ? "negative" : ""}`}
+                                    title="NXT 최종 등락률 — 프리·애프터장 포함"
+                                  >
+                                    NXT {Number(r.nxtRate) > 0 ? "+" : ""}
+                                    {Number(r.nxtRate).toFixed(2)}%
+                                  </i>
+                                )}
                               </td>
                             );
                           }

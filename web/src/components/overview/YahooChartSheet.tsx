@@ -407,6 +407,9 @@ export function YahooChartSheet({
               {candles.length}개 봉 ({data?.interval}) · {view.firstT} ~ {view.lastT}
               {range === "1d" && " · 시각은 한국시간입니다"}
             </div>
+
+            {/* 선물이면 투자자별 수급을 같이 — 외국인이 파나 기관이 사나 (PDF #13) */}
+            {futures && <FuturesFlowBars />}
           </>
         )}
       </div>
@@ -414,6 +417,112 @@ export function YahooChartSheet({
   );
 }
 
+
+/**
+ * 코스피200 선물 **투자자별 수급** (2026-08-25, PDF #13).
+ *
+ * 키움이 안 주던 값 — 네이버 채널(투자자별 매매동향, sosok=03)을 실측으로 찾아
+ * 서버가 파싱해 준다. 하루 세 막대(개인·외국인·기관 순매수 계약), 30거래일.
+ * 「외국인이 파나 기관이 사나」의 흐름이 이 그림 하나로 보인다.
+ */
+function FuturesFlowBars() {
+  const [days, setDays] = useState<
+    { date: string; individual: number; foreign: number; institution: number }[] | null
+  >(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .futuresFlow(30)
+      .then((r) => alive && setDays(r.days))
+      .catch(() => alive && setDays([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (days === null) return <div className="empty">선물 수급 불러오는 중…</div>;
+  if (days.length === 0) return null;
+
+  const W = 640;
+  const H = 150;
+  const PADX = { l: 4, r: 46, t: 8, b: 16 };
+  // 국내 관행 색 — 자금 흐름 차트와 같은 배색 (외국인 파랑 · 기관 초록 · 개인 노랑)
+  const SERIES = [
+    { key: "foreign" as const, label: "외국인", color: "var(--blue)" },
+    { key: "institution" as const, label: "기관", color: "#35c46a" },
+    { key: "individual" as const, label: "개인", color: "#f5c542" },
+  ];
+  const max = Math.max(1, ...days.flatMap((d) => SERIES.map((s) => Math.abs(d[s.key]))));
+  const zero = PADX.t + (H - PADX.t - PADX.b) / 2;
+  const scale = (H - PADX.t - PADX.b) / 2 / max;
+  const slot = (W - PADX.l - PADX.r) / days.length;
+  const bw = Math.max(1, (slot * 0.7) / SERIES.length);
+  const last = days[days.length - 1];
+
+  return (
+    <div className="ff-wrap">
+      <div className="ff-head">
+        <b>선물 투자자별 순매수</b>
+        <span className="tct-legend">
+          {SERIES.map((s) => (
+            <span className="tct-key" key={s.key}>
+              <i className="tct-dot" style={{ background: s.color }} />
+              {s.label}{" "}
+              <b className={last[s.key] > 0 ? "positive" : last[s.key] < 0 ? "negative" : ""}>
+                {last[s.key] > 0 ? "+" : ""}
+                {last[s.key].toLocaleString("ko-KR")}
+              </b>
+            </span>
+          ))}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img">
+        <line className="breadth-zero" x1={PADX.l} x2={W - PADX.r} y1={zero} y2={zero} />
+        <text className="tc-tick" x={W - PADX.r + 4} y={PADX.t + 8}>
+          +{max.toLocaleString("ko-KR")}
+        </text>
+        <text className="tc-tick" x={W - PADX.r + 4} y={H - PADX.b}>
+          -{max.toLocaleString("ko-KR")}
+        </text>
+        {days.map((d, i) =>
+          SERIES.map((s, k) => {
+            const v = d[s.key];
+            if (v === 0) return null;
+            const h = Math.abs(v) * scale;
+            return (
+              <rect
+                key={`${d.date}${s.key}`}
+                x={PADX.l + slot * i + slot * 0.15 + bw * k}
+                y={v > 0 ? zero - h : zero}
+                width={bw}
+                height={Math.max(1, h)}
+                fill={s.color}
+                opacity={0.9}
+              >
+                <title>
+                  {d.date.slice(5)} {s.label} {v > 0 ? "+" : ""}
+                  {v.toLocaleString("ko-KR")}계약
+                </title>
+              </rect>
+            );
+          }),
+        )}
+        {days.map((d, i) =>
+          i > 0 && d.date.slice(5, 7) !== days[i - 1].date.slice(5, 7) ? (
+            <text key={`m${d.date}`} className="tc-tick" x={PADX.l + slot * i} y={H - 4}>
+              {Number(d.date.slice(5, 7))}월
+            </text>
+          ) : null,
+        )}
+      </svg>
+      <div className="table-note">
+        최근 {days.length}거래일 · 단위 <b>계약</b>(코스피200 선물, 일별 순매수) · 범례 숫자는
+        마지막 날입니다. 네이버 투자자별 매매동향 — 키움 REST 엔 없는 값이라 여기서 받습니다.
+      </div>
+    </div>
+  );
+}
 
 /**
  * 해외종목 숫자판.

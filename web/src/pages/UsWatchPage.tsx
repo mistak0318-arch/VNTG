@@ -3,6 +3,7 @@ import { api, type UsSearchResult, type UsWatchGroup , type UsQuoteRow } from ".
 import { RefreshBar } from "../components/RefreshBar";
 import { liveQuote } from "../usSession";
 import { UsWatchTable } from "../components/UsWatchTable";
+import { useDragOrder } from "../useDragOrder";
 import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
 
 /**
@@ -240,6 +241,17 @@ export function UsWatchPage() {
     await run(() => api.usWatchGroupOrder(next.map((g) => g.id)));
   }
 
+  /* 그룹 칩 끌어서 옮기기 — 화살표와 같은 저장. 편집 모드에서만 스프레드된다 */
+  const groupDrag = useDragOrder(
+    groups.map((g) => g.id),
+    (nextIds) => {
+      const byId = new Map(groups.map((g) => [g.id, g]));
+      const next = nextIds.map((id) => byId.get(id)).filter((g): g is UsWatchGroup => Boolean(g));
+      setGroups(next);
+      void run(() => api.usWatchGroupOrder(nextIds));
+    },
+  );
+
   const current = groups.find((g) => g.id === openGroup) ?? groups[0] ?? null;
 
   return (
@@ -300,9 +312,10 @@ export function UsWatchPage() {
               </button>
             )}
             <button
-              className={`filter-btn ${current?.id === g.id ? "active" : ""}`}
+              className={`filter-btn ${current?.id === g.id ? "active" : ""}${editing ? groupDrag.cls(g.id) : ""}`}
               onClick={() => setOpenGroup(g.id)}
               title={g.memo}
+              {...(editing ? groupDrag.props(g.id) : {})}
             >
               {g.name}
               <span className={`uw-grate ${cls(g.changeRate)}`}> {pct(g.changeRate)}</span>
@@ -434,6 +447,12 @@ export function UsWatchPage() {
               sortBy === "mine"
                 ? (symbol, dir) =>
                     void run(() => moveStock(sortStocks(current.stocks, sortBy), symbol, dir))
+                : undefined
+            }
+            /* 끌어서 옮기기 — 화살표와 같은 조건(내 순서)·같은 저장 */
+            onReorder={
+              sortBy === "mine"
+                ? (order) => void run(() => api.usWatchStockOrder(current.id, order))
                 : undefined
             }
             onRemove={(symbol) => void run(() => api.usWatchStockRemove(current.id, symbol))}

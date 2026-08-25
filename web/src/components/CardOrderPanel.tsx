@@ -53,7 +53,12 @@ function SubList({ sub }: { sub: OverviewSub }) {
       ) : (
         <ol className="cop-list">
           {ordered.map((d) => (
-            <li className="cop-row" key={d.key}>
+            /* 끌어서도 옮긴다 — 화살표와 같은 저장. 폰은 화살표 그대로 */
+            <li
+              className={`cop-row${cards.drag.cls(d.key)}`}
+              key={d.key}
+              {...cards.drag.props(d.key)}
+            >
               <span className="cop-nm">{d.label}</span>
               <span className="cop-move">
                 <button

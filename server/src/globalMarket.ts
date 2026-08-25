@@ -138,10 +138,6 @@ const TARGETS: {
 }[] = [
   // ── 환율·원자재 (인베스팅 순서)
   { key: "usdkrw", label: "달러/원", group: "환율", symbol: "KRW=X" },
-  /*
-   * WTI 는 뺐다 — 「미장 주요지수」 카드가 WTI 와 브렌트를 같이 준다.
-   * 한 화면에 같은 값이 두 번 뜨면 어느 쪽이 지금 값인지 확인하게 되고, 그게 시간을 먹는다.
-   */
 
   // ── 미국 지수
   /*
@@ -157,6 +153,12 @@ const TARGETS: {
   { key: "esF", label: "US 500", group: "미국 지수선물", symbol: "ES=F", kind: "선물" },
   { key: "nqF", label: "US Tech 100", group: "미국 지수선물", symbol: "NQ=F", kind: "선물" },
   { key: "rtyF", label: "US 2000", group: "미국 지수선물", symbol: "RTY=F", kind: "선물" },
+  /*
+   * VIX (2026-08-25, PDF #6) — 미장주요지수 카드를 숨기면서 거기 있던 VIX 를
+   * 이리로 옮겼다. 지수선물 묶음 맨 아래 — 선물 읽고 바로 공포지수를 본다.
+   * VIX 선물(VX=F)은 야후에 없어 현물(^VIX)이다.
+   */
+  { key: "vix", label: "VIX", group: "미국 지수선물", symbol: "^VIX", kind: "현물" },
 
   /*
    * 미국 **현물** 지수(^DJI·^GSPC·^NDX·^IXIC·^RUT)는 여기서 뺐다.
@@ -189,7 +191,9 @@ const TARGETS: {
   { key: "hsi", label: "항셍", group: "아시아", symbol: "^HSI" },
   { key: "hsce", label: "홍콩 H", group: "아시아", symbol: "^HSCE" },
 
-  // ── 원자재
+  // ── 원자재 — WTI·브렌트가 금 앞 (2026-08-25, PDF #6. 미장주요지수 카드 숨김에 맞춰 복귀)
+  { key: "wti", label: "WTI", group: "원자재", symbol: "CL=F" },
+  { key: "brent", label: "브렌트", group: "원자재", symbol: "BZ=F" },
   { key: "gold", label: "금", group: "원자재", symbol: "GC=F" },
   { key: "silver", label: "은", group: "원자재", symbol: "SI=F" },
   { key: "copper", label: "구리", group: "원자재", symbol: "HG=F" },
@@ -349,6 +353,38 @@ export async function getGlobalMarket(force = false): Promise<GlobalQuote[]> {
   inflight = (async () => {
     try {
       const results = await fetchAll();
+      /*
+       * 코스피 야간선물을 **맨 위에** (2026-08-25, PDF #6 — 환율 위).
+       *
+       * 출처가 다르다(야후가 아니라 한투 CM 시세). 미장주요지수 카드를 숨기면서
+       * 거기 있던 이 줄을 글로벌 꼭대기로 옮겼다 — 밤사이 「한국 지수가 어디로
+       * 가는지」가 글로벌 카드의 첫 줄이 되는 게 맞다. 한투 키가 없거나 실패하면
+       * 줄 없이 나간다 — 없는 값을 있는 척하지 않는다.
+       */
+      try {
+        const { usMajorIndices } = await import("./usMajor.js");
+        const nf = (await usMajorIndices()).nightFutures;
+        if (nf && nf.price !== null) {
+          results.unshift({
+            key: "krNightFut",
+            label: "코스피 야간선물",
+            group: "야간선물",
+            color: "#e0564b",
+            // 심볼 자리엔 월물코드 — 화면이 이걸로 선물 차트(한투)를 연다
+            symbol: nf.symbol,
+            price: nf.price,
+            change: nf.change ?? null,
+            changeRate: nf.changeRate ?? null,
+            isRate: false,
+            kind: "선물",
+            quotedAt: nf.quotedAt ?? null,
+            signal: nf.signal ?? null,
+            error: null,
+          });
+        }
+      } catch {
+        /* 야간선물 없이도 글로벌은 나간다 */
+      }
       cache = { data: results, at: Date.now() };
       return results;
     } finally {

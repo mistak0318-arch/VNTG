@@ -24,7 +24,7 @@ export const OVERVIEW_CARDS: Record<OverviewSub, CardDef[]> = {
     /* 폭(몇 종목이 올랐나) 다음 물음이 유동성(돈이 얼마나 돌았나)이다 */
     { key: "turnover", label: "거래대금 현황" },
     { key: "global", label: "글로벌" },
-    { key: "usMajor", label: "미장 주요지수" },
+    /* 미장 주요지수 카드는 숨김 (2026-08-25) — 야간선물·VIX·유가는 글로벌로 옮겼다 */
     { key: "rates", label: "금리" },
     { key: "breadth", label: "시장 폭 추이" },
     { key: "sectors", label: "업종" },

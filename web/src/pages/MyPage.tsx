@@ -12,6 +12,8 @@ import { RefreshBar } from "../components/RefreshBar";
 import { ScenarioCard } from "../components/ScenarioCard";
 import { useAutoRefresh } from "../useAutoRefresh";
 import { SortableTh, useSortableTable } from "../useSortableTable";
+import { useDragOrder } from "../useDragOrder";
+import { fid, useRealtime } from "../useRealtime";
 import { useWatchedCodes } from "../useWatchedCodes";
 
 function fmtPct(v: number | null): string {
@@ -144,37 +146,77 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
   /* 순서를 손대는 중인가 — 켤 때만 ▲▼ 가 붙는다 */
   const [arranging, setArranging] = useState(false);
 
-  /** 한 칸 옮기고 **보이는 순서를 통째로** 저장한다 */
-  async function moveStock(code: string, dir: -1 | 1) {
-    const g = activeGroup === ALL ? DEFAULT_GROUP : activeGroup;
-    const codes = ordered.map((r) => r.code);
-    const i = codes.indexOf(code);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= codes.length) return;
-    [codes[i], codes[j]] = [codes[j], codes[i]];
+  /*
+   * 끌어서 옮기기 (2026-08-25) — 화살표와 같은 저장으로 떨어진다.
+   * 종목 줄은 「자리 바꾸기」 모드에서만 끌린다 — 평소엔 줄 클릭이 상세 열기라
+   * 드래그가 섞이면 오조작이 된다. 그룹 칩은 「그룹 편집」에서만.
+   */
+  const rowDrag = useDragOrder(
+    ordered.map((r) => r.code),
+    (next) => void commitStockOrder(next),
+  );
 
-    /*
-     * **화면을 먼저 바꾼다.**
-     *
-     * 서버에 저장한 뒤 다시 받아 오면 그건 **캐시된 목록**이라 방금 바꾼 자리가 안 보인다
-     * (전 종목 시세를 다시 받는 조회라 캐시가 길다). 강제로 새로 받게 하면 이번엔 몇 초씩
-     * 걸린다 — 한 칸 옮기는 데 그건 말이 안 된다.
-     *
-     * 자리는 우리가 이미 아는 값이므로 손에 든 목록에 바로 반영하고, 서버에는 조용히
-     * 적어 둔다. 실패하면 다음에 새로 받을 때 원래 자리로 돌아온다.
-     */
+  /*
+   * 실시간 오버레이 (2026-08-25) — 현재가·당일·수익률을 1.5초로.
+   * 관심종목은 스케줄러가 전부 KEEP 구독 중이라 **읽기 전용**으로 읽기만 한다 —
+   * 40초짜리 트래킹 조회(수급·재무 포함)는 그대로 두고 가격만 산다.
+   */
+  const rtWatch = useRealtime(
+    ordered.filter((r) => !r.divider).map((r) => `0B:${r.code}`),
+    1500,
+    { readOnly: true },
+  );
+  const liveOf = (code: string): { price: number; rate: number | null } | null => {
+    if (!rtWatch.healthy) return null;
+    const v = rtWatch.values[`0B:${code}`];
+    if (!v || Date.now() - v.at > 90_000) return null;
+    const p = fid(v, "10");
+    if (p === null || p === 0) return null;
+    return { price: Math.abs(p), rate: fid(v, "12") };
+  };
+  const groupDrag = useDragOrder(
+    groups.filter((g) => g !== DEFAULT_GROUP),
+    (next) => {
+      // 화면 먼저 — 기본 그룹은 늘 맨 앞이라 순서 배열에 안 들어간다
+      setGroups([DEFAULT_GROUP, ...next]);
+      api
+        .watchGroupReorder(next)
+        .then((r) => setGroups(r.groups))
+        .catch(() => void loadGroups());
+    },
+  );
+
+  /**
+   * 보이는 순서를 **통째로** 저장한다 — 화살표도 드래그도 결국 이리로 온다.
+   *
+   * **화면을 먼저 바꾼다.** 서버에 저장한 뒤 다시 받아 오면 그건 **캐시된 목록**이라
+   * 방금 바꾼 자리가 안 보인다(전 종목 시세를 다시 받는 조회라 캐시가 길다).
+   * 자리는 우리가 이미 아는 값이므로 손에 든 목록에 바로 반영하고, 서버에는 조용히
+   * 적어 둔다. 실패하면 다음에 새로 받을 때 원래 자리로 돌아온다.
+   */
+  async function commitStockOrder(codes: string[]) {
+    const g = activeGroup === ALL ? DEFAULT_GROUP : activeGroup;
     const at = new Map(codes.map((c, k) => [c, k]));
     setItems((prev) =>
       prev.map((it) =>
         at.has(it.code) ? { ...it, order: { ...(it.order ?? {}), [g]: at.get(it.code)! } } : it,
       ),
     );
-
     try {
       await api.watchReorder(g, codes);
     } catch {
       /* 실패하면 다음에 새로 받을 때 원래 자리로 돌아온다 */
     }
+  }
+
+  /** 한 칸 옮기기 (▲▼) */
+  async function moveStock(code: string, dir: -1 | 1) {
+    const codes = ordered.map((r) => r.code);
+    const i = codes.indexOf(code);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= codes.length) return;
+    [codes[i], codes[j]] = [codes[j], codes[i]];
+    await commitStockOrder(codes);
   }
 
   async function addDivider() {
@@ -469,7 +511,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       )}
 
       {statuses.length > 0 && (
-        <div className="filter-row">
+        <div className="filter-row my-chip-row">
           <span className="filter-label" title="그룹은 성격, 상태는 나와의 관계입니다">
             상태
           </span>
@@ -495,7 +537,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
         </div>
       )}
 
-      <div className="filter-row group-tabs">
+      <div className="filter-row group-tabs my-chip-row">
         <button
           className={`filter-btn ${activeGroup === ALL ? "active" : ""}`}
           onClick={() => setActiveGroup(ALL)}
@@ -521,7 +563,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                 </button>
               )}
               <button
-                className={`filter-btn ${activeGroup === g ? "active" : ""}${g === SUPER_GROUP ? " gt-super" : ""}`}
+                className={`filter-btn ${activeGroup === g ? "active" : ""}${g === SUPER_GROUP ? " gt-super" : ""}${editGroupBar && g !== DEFAULT_GROUP ? groupDrag.cls(g) : ""}`}
+                {...(editGroupBar && g !== DEFAULT_GROUP ? groupDrag.props(g) : {})}
                 onClick={() => (editGroupBar && !locked ? renameGroupNow(g) : setActiveGroup(g))}
                 title={
                   g === SUPER_GROUP
@@ -590,7 +633,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       </div>
       {arranging && (
         <div className="table-note">
-          <b>▲▼</b> 로 옮깁니다 — 지금 보고 있는 <b>«{activeGroup === ALL ? DEFAULT_GROUP : activeGroup}»</b>
+          줄을 <b>끌어서</b> 옮기거나(PC) <b>▲▼</b> 로 옮깁니다(폰) — 지금 보고 있는 <b>«{activeGroup === ALL ? DEFAULT_GROUP : activeGroup}»</b>
           안에서의 자리이고, 같은 종목이 다른 그룹에서는 그 그룹의 자리를 따로 갖습니다.
           <b> 구분선</b>은 그룹을 새로 만들 만큼은 아닌데 눈으로는 갈라 보고 싶을 때 씁니다.
           {sort.sortKey && (
@@ -600,7 +643,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       )}
       {editGroupBar && (
         <div className="table-note">
-          ◀ ▶ 로 순서를 옮기고, 그룹 이름을 누르면 이름을 바꿉니다. 순서는 저장되어 다음에도
+          그룹을 <b>끌어서</b> 옮기거나(PC) ◀ ▶ 로 옮기고(폰), 그룹 이름을 누르면 이름을 바꿉니다. 순서는 저장되어 다음에도
           그대로입니다. <b>기본 그룹은 늘 맨 앞</b>이라 옮길 수 없습니다.
         </div>
       )}
@@ -678,7 +721,11 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                   키움 HTS 관심종목의 그 빈 줄과 같은 물건이다.
                 */
                 r.divider ? (
-                  <tr key={r.code} className="mg-divider">
+                  <tr
+                    key={r.code}
+                    className={`mg-divider${arranging ? rowDrag.cls(r.code) : ""}`}
+                    {...(arranging ? rowDrag.props(r.code) : {})}
+                  >
                     <td colSpan={99}>
                       <span className="mg-divider-line" />
                       {r.name && <span className="mg-divider-label">{r.name}</span>}
@@ -703,7 +750,11 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                   </tr>
                 ) : (
                 <Fragment key={r.code}>
-                <tr className="clickable-row" onClick={() => onSelectStock(r.code, r.name)}>
+                <tr
+                  className={`clickable-row${arranging ? rowDrag.cls(r.code) : ""}`}
+                  onClick={() => onSelectStock(r.code, r.name)}
+                  {...(arranging ? rowDrag.props(r.code) : {})}
+                >
                   <td className="sticky-col">
                     {arranging && (
                       <span className="mg-move" onClick={(e) => e.stopPropagation()}>
@@ -733,9 +784,26 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                       </i>
                     </span>
                   </td>
-                  <td>{fmtNum(r.price)}</td>
-                  <td className={signClass(r.changeRate)}>{fmtPct(r.changeRate)}</td>
-                  <td className={signClass(r.returnRate)}>{fmtPct(r.returnRate)}</td>
+                  {/* 실시간이 있으면 그 값이 먼저다(●) — 40초 트래킹 조회 사이를 1.5초로 메운다 */}
+                  {(() => {
+                    const lv = liveOf(r.code);
+                    const price = lv?.price ?? r.price;
+                    const rate = lv?.rate ?? r.changeRate;
+                    const ret =
+                      lv && r.addedPrice > 0
+                        ? ((lv.price - r.addedPrice) / r.addedPrice) * 100
+                        : r.returnRate;
+                    return (
+                      <>
+                        <td>
+                          {lv && <span className="uw-live-dot" title="키움 실시간 (1.5초)" />}
+                          {fmtNum(price)}
+                        </td>
+                        <td className={signClass(rate)}>{fmtPct(rate)}</td>
+                        <td className={signClass(ret)}>{fmtPct(ret)}</td>
+                      </>
+                    );
+                  })()}
                   <td>
                     <span className={`wl-pass ${passClass(r)}`}>
                       {r.passCount}/{r.passTotal}

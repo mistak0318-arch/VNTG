@@ -14,6 +14,7 @@ import { usCandles, usDetail } from "../usDetail.js";
 import { orderBook } from "../orderBook.js";
 import { brokerFlow } from "../brokerFlow.js";
 import { getEtfInfo } from "../etfInfo.js";
+import { futuresFlow } from "../naverFuturesFlow.js";
 
 const MRKCOND_RESOURCE = "/api/dostk/mrkcond";
 const CHART_RESOURCE = "/api/dostk/chart";
@@ -46,6 +47,15 @@ export function createMarketRouter(client: KiwoomClient): Router {
       const q = typeof req.query.q === "string" ? req.query.q : "";
       const results = await searchStocks(client, q);
       res.json({ results });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 코스피200 선물 투자자별 수급 — 네이버 (키움엔 없다). 10분 캐시 */
+  router.get("/futures-flow", async (req, res, next) => {
+    try {
+      res.json({ days: await futuresFlow(Math.min(Number(req.query.days) || 30, 60)) });
     } catch (err) {
       next(err);
     }
