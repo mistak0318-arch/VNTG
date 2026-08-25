@@ -3464,6 +3464,9 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 
 /* 선물 투자자별 수급 (차트 시트 안) */
 .ff-wrap { margin-top: 0.8rem; }
+/* 선물 타일 밑줄 — 무슨 일이 있어도 한 줄. 넘치면 …이고, 전체 설명은 툴팁에 있다 */
+.ov-idx-note-1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* 선물 타일 수급 — 금액(≈억원)이 위, 계약이 아래 작게 (사용자 지정) */
 .ff-eok { font-style: normal; font-size: 0.82em; opacity: 0.62; }
 .ff-two { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }

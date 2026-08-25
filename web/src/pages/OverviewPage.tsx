@@ -312,7 +312,10 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                     */}
                     {c.futures && (
                       <div className="ov-fut">
-                        <span className="pt-n">{c.futures.name} · 눌러서 차트·수급</span>
+                        {/* 클릭 유도는 카드 전체 title 이 이미 한다 — 글자는 월물만 */}
+                        <span className="pt-n" title="눌러서 차트·베이시스·수급 시트">
+                          {c.futures.name}
+                        </span>
                       </div>
                     )}
                     {/*
@@ -355,9 +358,16 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                         );
                       })()}
                     {c.code === "F" && (
-                      <div className="ov-idx-note">
+                      /*
+                       * 밑줄 설명이 길어 두 줄로 접히던 것 (2026-08-26) — 표시는 날짜와
+                       * 출처만 짧게, 단위 설명은 툴팁으로. 두 줄이 되느니 글자를 줄인다.
+                       */
+                      <div
+                        className="ov-idx-note ov-idx-note-1"
+                        title="큰 값은 ≈억원 환산(계약 × 지수 × 25만원), 아래 작은 값이 원본 계약 수 · 네이버 투자자별 매매동향(±10분 지연)"
+                      >
                         {futFlow
-                          ? `${futFlow.date.slice(5).replace("-", "/")} 순매수 · ≈억원(아래는 계약) · 네이버(±10분)`
+                          ? `${futFlow.date.slice(5).replace("-", "/")} 순매수 · 네이버 ±10분`
                           : "선물 수급 불러오는 중…"}
                       </div>
                     )}
