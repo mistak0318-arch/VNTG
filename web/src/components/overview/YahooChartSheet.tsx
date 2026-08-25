@@ -553,6 +553,12 @@ interface UsItem {
   sub?: string;
   /** sub 의 색 — positive/negative */
   subCls?: string;
+  /**
+   * 등락률은 **값 바로 옆 같은 줄에** (2026-08-25 — 「국내 표시하던 대로」).
+   * 아랫줄에 「전일비 +2.8%」로 뒀더니 값과 비율이 떨어져 읽혔다. 국내 카드처럼
+   * `159.77 +2.8%` 로 붙인다. 범위·환율 같은 진짜 부가정보만 아랫줄로 남는다.
+   */
+  inline?: boolean;
   hint?: string;
 }
 
@@ -563,8 +569,11 @@ function UsCards({ items }: { items: UsItem[] }) {
       {items.map((it) => (
         <div className="summary-item" key={it.k} title={it.hint}>
           <div className="label">{it.k}</div>
-          <div className="value">{it.v}</div>
-          {it.sub && <div className={`usd-sub ${it.subCls ?? ""}`}>{it.sub}</div>}
+          <div className="value">
+            {it.v}
+            {it.sub && it.inline && <em className={`usd-inline ${it.subCls ?? ""}`}>{it.sub}</em>}
+          </div>
+          {it.sub && !it.inline && <div className={`usd-sub ${it.subCls ?? ""}`}>{it.sub}</div>}
         </div>
       ))}
     </div>
@@ -578,11 +587,15 @@ function UsFigures({ d }: { d: UsDetail }) {
       : null;
   const volRatio = d.volume !== null && d.prevVolume ? d.volume / d.prevVolume : null;
 
-  /* 전일 종가 대비 % — 가격만으로는 갭이 얼마였는지 감이 안 온다 */
-  const vsBase = (v: number | null): { sub?: string; subCls?: string } => {
+  /* 전일 종가 대비 % — 국내 카드처럼 값 옆 같은 줄에 색으로 (기준은 title 로) */
+  const vsBase = (v: number | null): { sub?: string; subCls?: string; inline?: boolean } => {
     if (v === null || !d.base) return {};
     const p = ((v - d.base) / d.base) * 100;
-    return { sub: `전일比 ${p >= 0 ? "+" : ""}${p.toFixed(1)}%`, subCls: p >= 0 ? "positive" : "negative" };
+    return {
+      sub: `${p >= 0 ? "+" : ""}${p.toFixed(2)}%`,
+      subCls: p >= 0 ? "positive" : "negative",
+      inline: true,
+    };
   };
 
   const items: UsItem[] = [];
@@ -713,11 +726,15 @@ function UsKiwoomBlock({ symbol }: { symbol: string }) {
         subCls: "positive",
       });
     if (s.pre.open !== null || s.pre.high !== null || s.pre.low !== null) {
-      /* 아랫줄은 전일(정규장) 종가 대비 — 가격만으로는 프리장이 갭인지 아닌지 모른다 */
-      const vsClose = (v: number | null): { sub?: string; subCls?: string } => {
+      /* 전일(정규장) 종가 대비 — 국내처럼 값 옆 같은 줄에 */
+      const vsClose = (v: number | null): { sub?: string; subCls?: string; inline?: boolean } => {
         if (v === null || !s.baseClose) return {};
         const p = ((v - s.baseClose) / s.baseClose) * 100;
-        return { sub: `전일比 ${p >= 0 ? "+" : ""}${p.toFixed(1)}%`, subCls: p >= 0 ? "positive" : "negative" };
+        return {
+          sub: `${p >= 0 ? "+" : ""}${p.toFixed(2)}%`,
+          subCls: p >= 0 ? "positive" : "negative",
+          inline: true,
+        };
       };
       if (s.pre.open !== null) items.push({ k: "프리장 시가", v: String(s.pre.open), ...vsClose(s.pre.open) });
       if (s.pre.high !== null) items.push({ k: "프리장 고가", v: String(s.pre.high), ...vsClose(s.pre.high) });

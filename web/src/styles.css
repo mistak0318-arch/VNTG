@@ -4281,8 +4281,51 @@ tr.drag-src td { opacity: 0.45; }
 .jn-ctx { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.7333rem; color: var(--muted); padding: 7px 9px; background: var(--panel-2); border-radius: 6px; margin-bottom: 10px; }
 .jn-ctx-main { color: var(--text); font-weight: 600; }
 .jn-ctx-sub::before { content: "·"; margin-right: 6px; }
-.jn-field { display: block; margin-bottom: 10px; }
-.jn-label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 3px; }
+/*
+ * 복기 노트 단계 시인성 (2026-08-25 — 「각 단계가 눈에 안 들어온다」).
+ *
+ * 질문 일곱 개가 같은 크기 글자로 이어져 어디서 다음 단계가 시작되는지 훑어지지
+ * 않았다. 세 가지로 가른다:
+ *   ① 단계마다 **번호 원** — CSS counter 라 마크업을 안 건드린다
+ *   ② 단계를 **칸(카드)** 으로 — 왼쪽 파란 띠가 단계의 경계다
+ *   ③ 질문 글자를 키우고, 힌트는 흐리게 그대로
+ * 안쪽 보조 라벨(「왜 쉬었나」 등)은 번호 없이 들여쓴 소제목이 된다.
+ */
+.jn-editor { counter-reset: jnstep; }
+.jn-field {
+  display: block;
+  margin-bottom: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--blue);
+  border-radius: 8px;
+  padding: 10px 12px;
+  counter-increment: jnstep;
+}
+.jn-label { display: block; font-size: 0.88rem; font-weight: 700; margin-bottom: 6px; }
+/* 번호 원은 각 칸의 **첫 라벨에만** — 안쪽 보조 라벨까지 달면 단계 수가 늘어 보인다 */
+.jn-field > .jn-label:first-child::before {
+  content: counter(jnstep);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.45rem;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: -2px;
+}
+/* 안쪽 보조 라벨 — 번호 없이 작게, 살짝 들여서 */
+.jn-field > .jn-label:not(:first-child) {
+  font-size: 0.76rem;
+  color: var(--muted);
+  margin-top: 8px;
+  padding-left: 0.2rem;
+}
 .jn-hint { font-style: normal; font-weight: 400; font-size: 0.7333rem; color: var(--muted); margin-left: 5px; }
 .jn-text { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 0.8rem; font-family: inherit; resize: vertical; }
 .jn-tags { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -6235,6 +6278,8 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .usd-cards .label { font-size: 0.7rem; margin-bottom: 2px; }
 .usd-cards .value { font-size: 0.95rem; }
 .usd-sub { font-size: 0.68rem; color: var(--muted); margin-top: 1px; font-variant-numeric: tabular-nums; }
+/* 등락률은 값 옆 같은 줄 — 국내 카드와 같은 문법 */
+.usd-inline { font-style: normal; font-size: 0.72rem; margin-left: 0.35rem; font-weight: 600; }
 
 /*
  * 키움 미국 10호가 미니 호가창.

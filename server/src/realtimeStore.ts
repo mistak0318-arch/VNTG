@@ -235,6 +235,15 @@ export class RealtimeStore {
   }
 
   /**
+   * 두 번째 연결의 프레임도 **같은 저장소로** (2026-08-25 이중 연결).
+   * 키 형식(`type:item`)이 같아 그대로 합쳐진다 — 화면·`/latest`·SSE 는
+   * 어느 소켓에서 온 값인지 몰라도 된다. 저장소가 둘이면 그때부터 갈라진다.
+   */
+  attach(other: RealtimeClient): void {
+    other.onFrame((f) => this.take(f));
+  }
+
+  /**
    * 오늘 파일. **JSONL** — 한 줄에 이벤트 하나다.
    *
    * ⚠️ 예전엔 `{day}.json` 에 **통째로 다시 썼다.** 20초마다 전체를 `JSON.stringify`

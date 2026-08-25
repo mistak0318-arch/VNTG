@@ -72,6 +72,30 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
    */
   const indices = useSection<IndexCard[]>("indices", 5_000);
   const flow = useSection<MarketFlow>("flow", 20_000);
+  /*
+   * 선물 투자자별 수급 (네이버, 계약 단위) — 선물 타일의 「받을 데가 없다」 자리.
+   * 서버가 10분 캐시라 5분마다 물으면 충분하다. 마지막 날(장중이면 오늘 누적)만 쓴다.
+   */
+  const [futFlow, setFutFlow] = useState<{
+    date: string;
+    individual: number;
+    foreign: number;
+    institution: number;
+  } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      api
+        .futuresFlow(1)
+        .then((r) => alive && r.days.length > 0 && setFutFlow(r.days[r.days.length - 1]))
+        .catch(() => undefined);
+    void load();
+    const t = setInterval(load, 5 * 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
   const movers = useSection<{ rising: StockRow[]; falling: StockRow[] }>("movers", 20_000);
   const sectors = useSection<{ kospi: SectorRow[]; kosdaq: SectorRow[] }>("sectors", 60_000);
   const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 60_000);
@@ -232,8 +256,9 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                  * 코스피200 은 코스피 구성종목의 부분집합이라 참고로 붙여 둔다.
                  *
                  * 한투 339개 API 에 선물 투자자별 매매동향이 없다(투자자 매매동향 7개가
-                 * 전부 국내주식이고, 「시장별」도 KSP/KSQ 만 받는다). 키움에 있는지는
-                 * 아직 확인 못 했다 — 찾으면 여기에 붙인다.
+                 * 전부 국내주식이고, 「시장별」도 KSP/KSQ 만 받는다). 키움에도 없다.
+                 * → 2026-08-25 **네이버**(investorDealTrendDay, sosok=03)에서 찾아
+                 *   아래 futFlow 로 붙였다. 단위는 계약이다.
                  */
                 const f =
                   c.code === "F"
@@ -277,8 +302,42 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                         <span className="pt-n">{c.futures.name}</span>
                       </div>
                     )}
+                    {/*
+                      선물 수급 (2026-08-25) — 「받을 데가 없다」던 자리. 네이버
+                      투자자별 매매동향(sosok=03)을 실측으로 찾아 서버가 준다.
+                      단위가 **계약**이라 지수 수급(억원)과 다름을 밑줄에 밝힌다.
+                    */}
+                    {c.code === "F" && futFlow && (
+                      <div className="ov-idx-flow num">
+                        <div>
+                          <span className="lbl">외국인</span>
+                          <span className={signCls(futFlow.foreign)}>
+                            {futFlow.foreign > 0 ? "+" : ""}
+                            {fmtNum(futFlow.foreign)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="lbl">기관</span>
+                          <span className={signCls(futFlow.institution)}>
+                            {futFlow.institution > 0 ? "+" : ""}
+                            {fmtNum(futFlow.institution)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="lbl">개인</span>
+                          <span className={signCls(futFlow.individual)}>
+                            {futFlow.individual > 0 ? "+" : ""}
+                            {fmtNum(futFlow.individual)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                     {c.code === "F" && (
-                      <div className="ov-idx-note">선물 수급은 아직 받을 데가 없습니다</div>
+                      <div className="ov-idx-note">
+                        {futFlow
+                          ? `${futFlow.date.slice(5).replace("-", "/")} 순매수 · 계약 · 네이버(±10분)`
+                          : "선물 수급 불러오는 중…"}
+                      </div>
                     )}
                     {f && (
                       <div className="ov-idx-flow num">

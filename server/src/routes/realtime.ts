@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { RealtimeClient } from "../realtimeClient.js";
-import { getRealtime, peekRealtime, shouldRun, subscribedCount } from "../realtimeHub.js";
+import { dualEnabled, getRealtime, peekRealtime, secondInfo, shouldRun, subscribedCount } from "../realtimeHub.js";
 
 /**
  * 실시간 웹소켓 — **아직 확인 단계다.**
@@ -214,6 +214,12 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
        * 많다」**로 읽히고, 둘 다 작으면 **구독이 실패한 것**이다.
        */
       subscribed: subscribedCount(),
+      /*
+       * 2번 연결 (2026-08-25 이중화) — 정원 190→380. null 이면 안 떠 있는 것
+       * (밤 국면이거나 REALTIME_DUAL=0 롤백). 문제가 보이면 .env 한 줄이 롤백이다.
+       */
+      second: secondInfo(),
+      dual: dualEnabled(),
       keys: store?.health.keys ?? 0,
       /*
        * **등록이 거절된 기록.** 비어 있어야 정상이다.

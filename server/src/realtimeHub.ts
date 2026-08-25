@@ -29,6 +29,49 @@ export async function getRealtime(
   return { client, store: store as RealtimeStore };
 }
 
+/* ------------------------------------------------------------------ */
+/* 두 번째 연결 — 정원 190 → 380 (2026-08-25 실측 근거)                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * ## 왜 두 번째 연결인가
+ *
+ * 키움은 **연결 하나에 200종목**이다(105115·105118 실측). 그런데 같은 토큰으로
+ * 소켓을 하나 더 열어 봤더니 **LOGIN·REG 둘 다 return_code 0 이고 첫 소켓도
+ * 산다**(probe-second, 2026-08-25). 연결마다 정원이 따로라는 뜻이다.
+ *
+ * 2번 연결은 **거래대금 순위의 다음 구간**(96~190위 × 코스피/코스닥)을 **0B(체결)만**
+ * 건다 — 목적이 시세분석 오버레이의 가격 커버리지라 거래원(0F)·프로그램(0w)
+ * 시계열까지는 필요 없고, 타입을 줄여야 프레임 양도 준다. 프레임은 같은
+ * 저장소(store.attach)로 합쳐지므로 화면은 어느 소켓의 값인지 모른다.
+ *
+ * ## 롤백 스위치
+ *
+ * `.env` 에 `REALTIME_DUAL=0` 을 넣으면 **다음 재시작부터 한 연결로 돌아간다**
+ * (기본은 켬). 장중에 REG 거절·첫 소켓 이상이 보이면 이 한 줄이 롤백이다.
+ * 2번 연결이 실패해도 1번은 건드리지 않는다 — 얹는 것이지 대체가 아니다.
+ */
+export function dualEnabled(): boolean {
+  return RealtimeClient.enabled && process.env.REALTIME_DUAL?.trim() !== "0";
+}
+
+let client2: RealtimeClient | null = null;
+
+async function getSecond(kiwoom: KiwoomClient): Promise<RealtimeClient> {
+  if (!client2) {
+    client2 = new RealtimeClient(kiwoom);
+    // 저장소는 1번 것을 같이 쓴다 — getRealtime 이 먼저 만들어 둔 상태다
+    store?.attach(client2);
+  }
+  return client2;
+}
+
+/** 2번 연결 상태 — 상태창용. 없으면 null */
+export function secondInfo(): { state: string; healthy: boolean; subscribed: number } | null {
+  if (!client2) return null;
+  return { state: client2.state, healthy: client2.healthy, subscribed: sub2Count() };
+}
+
 export function peekRealtime(): { client: RealtimeClient | null; store: RealtimeStore | null } {
   return { client, store };
 }
@@ -43,6 +86,9 @@ let subCount: () => number = () => 0;
 export function subscribedCount(): number {
   return subCount();
 }
+
+/** 2번 연결이 건 종목 수 — 스케줄러가 시작되면 실제 함수로 바뀐다 */
+let sub2Count: () => number = () => 0;
 
 /* ------------------------------------------------------------------ */
 /* 장 시간                                                              */
@@ -171,6 +217,13 @@ export function phaseOf(now = new Date()): Phase {
  * 반씩 채운다. **200 은 적지만 0 보다는 훨씬 낫다** — 지금까지는 사실상 0 이었다.
  */
 const PER_MARKET = 95;
+/**
+ * 2번 연결의 시장당 몫 — 1번이 못 담은 **다음 구간**(96~190위)을 가져간다.
+ * 0B 하나만 걸므로 190종목이어도 연결 정원(200) 안이다. 5는 여유.
+ */
+const DUAL_PER_MARKET = 95;
+/** 순위 캐시를 몇 위까지 받아 둘지 — 1번(95) + 2번(95) 몫 */
+const RANK_DEPTH = PER_MARKET + DUAL_PER_MARKET;
 /** 저녁(국내 애프터 + 미국 프리장 겹침)의 국내 몫 — 미국에 60 을 내준다 */
 const PER_MARKET_EVENING = 50;
 /** 저녁의 미국 몫. 관심(해외) 앞 그룹부터 이만큼 */
@@ -208,6 +261,16 @@ async function hotCodes(kiwoom: KiwoomClient, perMarket: number): Promise<string
     ...rankCache.kosdaq.slice(0, perMarket),
   ];
   if (Date.now() - rankCache.at < RANK_REFRESH_MS) return cut();
+  return refreshRank(kiwoom).then(cut);
+}
+
+/** 2번 연결 몫 — 순위 캐시의 **다음 구간**(from~to위). 캐시가 식었으면 새로 받는다 */
+async function hotCodesSlice(kiwoom: KiwoomClient, from: number, to: number): Promise<string[]> {
+  if (Date.now() - rankCache.at >= RANK_REFRESH_MS) await refreshRank(kiwoom);
+  return [...rankCache.kospi.slice(from, to), ...rankCache.kosdaq.slice(from, to)];
+}
+
+async function refreshRank(kiwoom: KiwoomClient): Promise<void> {
   /*
    * ⚠️ **실패를 조용히 삼키면 안 된다.**
    *
@@ -220,9 +283,10 @@ async function hotCodes(kiwoom: KiwoomClient, perMarket: number): Promise<string
    */
   try {
     // 보통주만 걸러서 준다(ETF·우선주를 실시간으로 물 이유가 없다)
+    // 깊이는 RANK_DEPTH(190) — 2번 연결이 다음 구간(96~190위)을 가져간다
     const [kospi, kosdaq] = await Promise.allSettled([
-      tradeValueTop(kiwoom, "001", PER_MARKET),
-      tradeValueTop(kiwoom, "101", PER_MARKET),
+      tradeValueTop(kiwoom, "001", RANK_DEPTH),
+      tradeValueTop(kiwoom, "101", RANK_DEPTH),
     ]);
     for (const [name, r] of [["코스피", kospi], ["코스닥", kosdaq]] as const) {
       if (r.status === "rejected") {
@@ -244,7 +308,6 @@ async function hotCodes(kiwoom: KiwoomClient, perMarket: number): Promise<string
     console.log("실시간: 순위 조회 실패 —", e instanceof Error ? e.message : e);
     rankCache = { ...rankCache, at: 0 };
   }
-  return cut();
 }
 
 /**
@@ -325,6 +388,9 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
    */
   let subscribed = new Set<string>();
   subCount = () => subscribed.size - (subscribed.has("__vi__") ? 1 : 0);
+  /** 2번 연결이 건 것 — 1번과 겹치지 않는 다음 순위 구간 */
+  let subscribed2 = new Set<string>();
+  sub2Count = () => subscribed2.size;
   /** 지금 어느 국면으로 판을 짰나 — 바뀌면 끊고 처음부터 다시 짠다 */
   let phase: Phase = "쉼";
 
@@ -344,6 +410,13 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
 
       const next = phaseOf();
 
+      /* 2번 연결을 접는 공통 경로 — 쉼·밤·롤백(REALTIME_DUAL=0) 전부 이 길이다 */
+      const dropSecond = () => {
+        if (client2 && client2.state !== "끊김") client2.close();
+        client2?.resetSubscriptions();
+        subscribed2 = new Set();
+      };
+
       if (next === "쉼") {
         // 「끊김」은 소켓이 아예 없다는 뜻 — 그때 또 닫으면 매 분 헛일이다
         if (rt.state !== "끊김") {
@@ -351,6 +424,7 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
           rt.resetSubscriptions();
           subscribed = new Set();
         }
+        dropSecond();
         phase = "쉼";
         return;
       }
@@ -364,6 +438,7 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
         if (rt.state !== "끊김") rt.close();
         rt.resetSubscriptions();
         subscribed = new Set();
+        dropSecond();
         console.log(`실시간: 국면 전환 → ${next}`);
         phase = next;
       }
@@ -424,6 +499,33 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
           rt.subscribeKeep("FE", sym);
           added += 1;
         }
+      }
+
+      /*
+       * 2번 연결 — 낮·저녁에만 (밤은 국내가 닫혔고 FE 는 프레임을 안 준다 — 실측).
+       * 1번의 다음 순위 구간을 0B 만 건다. 실패해도 1번은 안 건드린다.
+       * 롤백: REALTIME_DUAL=0 이면 이 블록이 통째로 안 돌고, 켜져 있던 소켓은 접는다.
+       */
+      if (phase !== "밤" && dualEnabled()) {
+        try {
+          const rt2 = await getSecond(kiwoom);
+          await rt2.connect();
+          const perMarket = phase === "저녁" ? PER_MARKET_EVENING : PER_MARKET;
+          const slice = await hotCodesSlice(kiwoom, perMarket, perMarket + DUAL_PER_MARKET);
+          let added2 = 0;
+          for (const code of slice) {
+            if (subscribed.has(code) || subscribed2.has(code)) continue;
+            if (subscribed2.size >= 190) break; // 연결 정원 200 에 여유 10
+            subscribed2.add(code);
+            rt2.subscribeKeep("0B", code);
+            added2 += 1;
+          }
+          if (added2 > 0) console.log(`실시간(${phase}·2번): ${added2}종목 추가 (총 ${sub2Count()})`);
+        } catch (e) {
+          console.log("실시간 2번 연결:", e instanceof Error ? e.message : e);
+        }
+      } else if (!dualEnabled() && client2) {
+        dropSecond();
       }
 
       if (added > 0)
