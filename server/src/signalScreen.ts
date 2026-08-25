@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { getMarketSnapshot } from "./marketSnapshot.js";
 import { evaluateSignal, type Level, type SignalResult } from "./signalLight.js";
 import { getCommonStockCodes } from "./stockListCache.js";
 
@@ -68,6 +69,17 @@ export interface Candidate {
   price: number;
   changeRate: number;
   tradeValue: number;
+  /**
+   * **오늘 거래가 아직 없어 직전 거래일 값으로 메운 줄인가.**
+   *
+   * 개장 전에 돌리면 `ka10032` 가 등락률도 거래대금도 0 으로 준다. 그걸 그대로
+   * 보여주면 화면에 **「0.00% · 0억」이 늘어서고**, 시세분석은 같은 종목을 두고
+   * 전일 값을 말하니 두 화면이 다른 소리를 한다. 실제로 07:26 에 그 일이 났다.
+   *
+   * 0 은 「안 움직였다」가 아니라 **「아직 안 열렸다」**다. 그 둘은 다른 말이므로
+   * 같은 0 으로 적으면 안 된다. 직전 거래일 값으로 메우고 **메웠다고 표시한다.**
+   */
+  stale?: boolean;
 }
 
 /**
@@ -142,7 +154,37 @@ export async function tradeValueTop(
     nextKey = res.nextKey;
     await new Promise((r) => setTimeout(r, 260));
   }
+
+  await fillStale(client, out);
   return out;
+}
+
+/**
+ * 개장 전이라 0 으로 온 줄을 **직전 거래일 값**으로 메운다.
+ *
+ * 전종목 스냅샷은 「거래가 반영된 것」만 저장하도록 이미 막아 뒀다(`traded`). 그래서
+ * 개장 전에 읽으면 **직전 거래일 종가와 등락률**이 들어 있다 — 우리가 필요한 게 그것이다.
+ *
+ * 거래대금은 스냅샷에 없다. 지어내지 않고 0 으로 두면 화면이 「-」로 적는다 —
+ * **못 내는 값을 어림해서 채우지 않는다.**
+ *
+ * 스냅샷도 0 이면 아무것도 안 한다. 그때는 정말 값이 없는 것이고, `stale` 도 안 붙여
+ * **거짓 표시를 만들지 않는다.**
+ */
+async function fillStale(client: KiwoomClient, rows: Candidate[]): Promise<void> {
+  // 오늘 거래가 하나라도 잡혔으면 개장 전이 아니다 — 스냅샷을 부를 이유가 없다
+  if (rows.length === 0 || rows.some((r) => r.tradeValue > 0)) return;
+
+  const snap = await getMarketSnapshot(client).catch(() => null);
+  if (!snap) return;
+
+  for (const r of rows) {
+    const s = snap.byCode.get(r.code);
+    if (!s || (s.changeRate === 0 && s.price === 0)) continue;
+    if (s.price > 0) r.price = s.price;
+    r.changeRate = s.changeRate;
+    r.stale = true;
+  }
 }
 
 const LEVEL_RANK: Record<Level, number> = { green: 3, yellow: 2, red: 1, unknown: 0 };

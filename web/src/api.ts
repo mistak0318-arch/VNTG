@@ -1120,12 +1120,14 @@ export interface ScreenHit {
   name: string;
   price: number;
   changeRate: number;
-  /** 거래대금(백만원) */
+  /** 거래대금(백만원). 개장 전에 돌리면 0 — 메울 재료가 없어 화면이 「-」로 적는다 */
   tradeValue: number;
   level: "green" | "yellow" | "red" | "unknown";
   score: number;
   passed: string[];
   failed: string[];
+  /** 개장 전이라 등락률·현재가를 **직전 거래일 값**으로 메운 줄 */
+  stale?: boolean;
 }
 
 export interface ScreenJob {

@@ -278,12 +278,31 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
 
       {job && (
         <>
+          {/*
+            ⚠️ 예전엔 「421/421 검사 · 조건 통과 3종목」뿐이었다. 그러면 **왜 421 인지**
+            알 수가 없다 — 상위 500 을 골랐는데 421 이 나오니 고장으로 보인다.
+            그리고 결과에 없는 종목이 「점수가 모자라서」인지 「모집단 밖이라서」인지도
+            구별이 안 된다. 그 둘은 완전히 다른 이야기다.
+
+            그래서 **고른 수 → 실제 모집단 → 통과/미달**을 한 줄에 다 적는다.
+          */}
           <div className="filter-row">
             <span className="breadth-count">
-              {job.done}/{job.total} 검사 · 조건 통과 <b>{job.results.length}종목</b>
+              거래대금 상위 <b>{limit}</b> 중 보통주 <b>{job.total}종목</b>
+              {job.total < limit && <i className="scr-stale">ETF·우선주 제외</i>} · 검사{" "}
+              {job.done} · 통과 <b className="positive">{job.results.length}</b> · 미달{" "}
+              {Math.max(0, job.done - job.results.length)}
               {job.status === "done" && " · 완료"}
             </span>
           </div>
+          {job.status === "done" && (
+            <p className="page-note">
+              여기 없는 종목은 <b>둘 중 하나</b>입니다 — 검사했는데 문턱에 못 미쳤거나(
+              {Math.max(0, job.done - job.results.length)}종목), 애초에 <b>거래대금 상위 {limit}
+              위 밖</b>이라 안 봤거나. 다른 화면(시세분석 등)과 결과가 다르면 대개 <b>모집단이
+              다른 것</b>입니다 — 저기는 시가총액 순, 여기는 거래대금 순입니다.
+            </p>
+          )}
 
           <div className="data-table-wrap">
             <table className="data-table">
@@ -311,10 +330,25 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
                       <b>{r.score}</b>
                     </td>
                     <td className="num">{fmtNum(r.price)}</td>
+                    {/*
+                      개장 전에 돌리면 등락률·거래대금이 0 으로 온다. 그걸 그대로 적으면
+                      「0.00% · 0억」이 줄줄이 서서, 안 움직인 것인지 아직 안 열린 것인지
+                      구별이 안 된다. 서버가 직전 거래일 값으로 메우면서 `stale` 을 달아
+                      주므로 **메운 값이라고 적는다.** 거래대금은 메울 재료가 없어 「-」다.
+                    */}
                     <td className={`num ${r.changeRate > 0 ? "positive" : r.changeRate < 0 ? "negative" : ""}`}>
                       {pct(r.changeRate)}
+                      {r.stale && <i className="scr-stale" title="개장 전이라 직전 거래일 값입니다">전일</i>}
                     </td>
-                    <td className="num">{fmtNum(Math.round(r.tradeValue / 100))}억</td>
+                    <td className="num">
+                      {r.tradeValue > 0 ? (
+                        `${fmtNum(Math.round(r.tradeValue / 100))}억`
+                      ) : (
+                        <span className="pt-n" title="개장 전이라 오늘 거래대금이 없습니다">
+                          -
+                        </span>
+                      )}
+                    </td>
                     <td className="scr-passed">{r.passed.join(" · ")}</td>
                     <td>
                       {watched.isWatched(r.code) ? (

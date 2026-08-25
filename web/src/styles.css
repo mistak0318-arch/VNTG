@@ -1236,6 +1236,17 @@ body {
   MA 범례는 개수가 설정마다 달라서 고정 자리를 못 준다. 오른쪽 끝에 붙여 두면
   이평선을 몇 개 켜든 늘 같은 자리에 있다.
 */
+/*
+  「전일」 꼬리표 — 개장 전이라 직전 거래일 값으로 메운 줄에 붙인다.
+  숫자보다 작고 흐리게. 값을 가리지 않으면서 **이건 오늘 값이 아니다**만 알리면 된다.
+*/
+.scr-stale {
+  font-style: normal;
+  font-size: 0.7333rem;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
 .chart-gap {
   margin-left: auto;
   display: inline-flex;
