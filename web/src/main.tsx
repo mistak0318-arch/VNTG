@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { AppearanceProvider } from "./useAppearance";
 import { WatchedCodesProvider } from "./useWatchedCodes";
-import { loadPrefs } from "./prefs";
+import { applyPushedPrefs, loadPrefs } from "./prefs";
 import "./styles.css";
 import "./overview.css";
 /* 엑셀 모드는 색뿐 아니라 모양까지 바꿔서 규칙이 많다 — 파일을 따로 둔다 */
@@ -18,6 +18,8 @@ import "./excel.css";
  * 이 기기 값으로 평소처럼 뜬다.
  */
 void loadPrefs().then(() => {
+  // 다른 기기가 배포한 기기별 설정(화면설정 등)이 있으면 렌더 전에 적용 — 도장이 중복을 막는다
+  applyPushedPrefs();
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <AppearanceProvider>

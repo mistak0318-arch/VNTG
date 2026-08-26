@@ -1280,13 +1280,32 @@ export function SuperSignalSection({
     );
   }
 
+  /*
+   * 요약이 본체다 (2026-08-26 — 「종목 많아질 텐데 나열이 무슨 의미냐」).
+   * 오늘 움직인 것(신규 편입·오늘 급변)과 잘된 것/망가진 것만 하이라이트로 올리고,
+   * 전체 표는 접어 둔다. 다 보고 싶은 날만 편다.
+   */
   const w5 = data.stats.win.d5;
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  const newly = active.filter((e) => e.addedDate === today);
+  const withReturn = active.filter((e) => e.sinceAdded !== null);
+  const best = [...withReturn].sort((a, b) => (b.sinceAdded ?? 0) - (a.sinceAdded ?? 0)).slice(0, 3);
+  const worst = [...withReturn].sort((a, b) => (a.sinceAdded ?? 0) - (b.sinceAdded ?? 0)).slice(0, 2);
+  const chip = (e: (typeof active)[number], tag?: string) => (
+    <button className="rp-ss-chip" key={`${e.code}-${tag ?? ""}`} onClick={() => onSelectStock(e.code, e.name)}>
+      {tag && <em>{tag}</em>}
+      <b>{e.name}</b>
+      <span className={`num ${scls(e.sinceAdded)}`}>{spct(e.sinceAdded)}</span>
+    </button>
+  );
+
   return (
     <>
       <p className="page-note">
-        일곱 목록(거래대금·등락률·외국인 연속매수…)의 <b>교집합에 걸린 초록 신호등</b> —
-        시스템이 기계적으로 골라 따라가는 목록입니다. 추적 {data.stats.activeCount}종목
+        일곱 목록의 <b>교집합에 걸린 초록 신호등</b> — 시스템이 기계적으로 골라 따라가는
+        목록입니다. 추적 <b>{data.stats.activeCount}종목</b>
         {data.stats.todayAdded > 0 && <> · 오늘 신규 {data.stats.todayAdded}</>}
+        {data.stats.exitedCount > 0 && <> · 이탈 {data.stats.exitedCount}</>}
         {w5.rate !== null && (
           <>
             {" "}
@@ -1295,47 +1314,57 @@ export function SuperSignalSection({
         )}{" "}
         — 흐름 상세는 🌟 슈퍼신호등 메뉴에서.
       </p>
-      <div className="data-table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th className="sticky-col">종목</th>
-              <th>편입일</th>
-              <th>점수</th>
-              <th>목록</th>
-              <th>반복</th>
-              <th>편입 대비</th>
-              <th>+5일</th>
-            </tr>
-          </thead>
-          <tbody>
-            {active.slice(0, 10).map((e) => {
-              const daily = e.daily ?? [];
-              const now = daily.length > 0 ? daily[daily.length - 1].score : null;
-              return (
-                <tr key={e.code}>
-                  <td className="sticky-col">
-                    <button className="report-line rl-inline" onClick={() => onSelectStock(e.code, e.name)}>
-                      <b>{e.name}</b>
-                    </button>
-                  </td>
-                  <td>{e.addedDate.slice(5)}</td>
-                  <td className="num">
-                    {e.score}
-                    {now !== null && now !== e.score && (
-                      <i className={now > e.score ? "positive" : "negative"}> →{now}</i>
-                    )}
-                  </td>
-                  <td className="num">{e.lists.length}곳</td>
-                  <td className="num">{e.seenCount}일</td>
-                  <td className={`num strong-col ${scls(e.sinceAdded)}`}>{spct(e.sinceAdded)}</td>
-                  <td className={`num ${scls(e.returns?.d5)}`}>{spct(e.returns?.d5)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+
+      <div className="rp-ss-chips">
+        {newly.map((e) => chip(e, "신규"))}
+        {best.filter((e) => !newly.includes(e)).map((e) => chip(e, "잘됨"))}
+        {worst.filter((e) => !newly.includes(e) && !best.includes(e)).map((e) => chip(e, "부진"))}
       </div>
+
+      <details className="rp-pin-fold">
+        <summary>전체 {active.length}종목 표 펼치기</summary>
+        <div className="data-table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="sticky-col">종목</th>
+                <th>편입일</th>
+                <th>점수</th>
+                <th>목록</th>
+                <th>반복</th>
+                <th>편입 대비</th>
+                <th>+5일</th>
+              </tr>
+            </thead>
+            <tbody>
+              {active.map((e) => {
+                const daily = e.daily ?? [];
+                const now = daily.length > 0 ? daily[daily.length - 1].score : null;
+                return (
+                  <tr key={e.code}>
+                    <td className="sticky-col">
+                      <button className="report-line rl-inline" onClick={() => onSelectStock(e.code, e.name)}>
+                        <b>{e.name}</b>
+                      </button>
+                    </td>
+                    <td>{e.addedDate.slice(5)}</td>
+                    <td className="num">
+                      {e.score}
+                      {now !== null && now !== e.score && (
+                        <i className={now > e.score ? "positive" : "negative"}> →{now}</i>
+                      )}
+                    </td>
+                    <td className="num">{e.lists.length}곳</td>
+                    <td className="num">{e.seenCount}일</td>
+                    <td className={`num strong-col ${scls(e.sinceAdded)}`}>{spct(e.sinceAdded)}</td>
+                    <td className={`num ${scls(e.returns?.d5)}`}>{spct(e.returns?.d5)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </>
   );
 }

@@ -82,8 +82,16 @@ body {
    * 머리줄이 메뉴를 덮었다. 관심종목처럼 열이 스무 개 넘는 화면에서 그랬다.
    *
    * 모달(20~40)보다는 낮게 둔다. 메뉴 위에 시트가 떠야 하는 건 그대로다.
+   *
+   * sticky (2026-08-26 — 「스크롤 내리면 메뉴가 안 따라온다」): 본문이 길어도 메뉴는
+   * 화면에 붙어 따라오고, 메뉴 자체가 화면보다 길면 **메뉴 안에서** 스크롤된다.
+   * (모바일 드로어는 아래 미디어쿼리가 position: fixed 로 덮는다 — 그쪽은 그대로)
    */
-  position: relative;
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+  align-self: flex-start;
   z-index: 10;
   background: var(--panel);
   border-right: 1px solid var(--border);
@@ -3671,38 +3679,40 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 /* ---------------- 데일리 리포트 개편 (2026-08-26) ---------------- */
 
 /* 국내외 주요 지수 — 표 대신 박스 그리드. 공간은 적게, 등락 색은 확 */
+/* 촘촘하게 (2026-08-26 「박스가 너무 커서 한눈에 안 들어온다」) — 눈이 찾는 건 등락률 색이라 그걸 제일 크게 */
 .rp-idx-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(7.2rem, 1fr));
+  gap: 5px;
 }
 .rp-idx-box {
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-left: 3px solid var(--g, var(--border));
-  border-radius: 10px;
-  padding: 8px 10px;
+  border-radius: 8px;
+  padding: 5px 8px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
   min-width: 0;
 }
 .rp-idx-kr { --g: var(--blue); }
 .rp-idx-name {
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rp-idx-price { font-size: 1.02rem; font-variant-numeric: tabular-nums; }
-.rp-idx-rate { font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rp-idx-price { font-size: 0.82rem; font-weight: 400; font-variant-numeric: tabular-nums; }
+.rp-idx-chg { font-style: normal; font-size: 0.68rem; }
+.rp-idx-rate { font-size: 0.95rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .rp-idx-ghead {
   grid-column: 1 / -1;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
   color: var(--g, var(--muted));
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 /* 뉴스 클리핑 콤팩트 — 분야 라벨 + 제목 줄만 */
@@ -3744,6 +3754,42 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .rp-digest-li { padding: 2px 0 2px 6px; font-size: 0.86rem; line-height: 1.55; }
 .rp-digest-li > i { color: var(--muted); font-style: normal; margin-right: 2px; }
 .rp-digest-p { padding: 3px 0; font-size: 0.86rem; line-height: 1.6; }
+
+/* 설정 카드 저장 범위 뱃지 — 전역(서버)인지 이 기기인지 한눈에 */
+.cc-scope {
+  font-size: 0.66rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.cc-scope.global { color: var(--blue); border-color: var(--blue); }
+
+/* 리포트 슈퍼신호등 — 하이라이트 칩 (신규·잘됨·부진) */
+.rp-ss-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.rp-ss-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.rp-ss-chip:hover { background: var(--panel); }
+.rp-ss-chip em {
+  font-style: normal;
+  font-size: 0.68rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+}
 
 /* 리포트 수출입 동향 — 품목 카드 + 36개월 그래프 */
 .rp-trade { display: flex; flex-direction: column; gap: 14px; }

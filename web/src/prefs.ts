@@ -53,7 +53,60 @@ const LOCAL_ONLY = [
 ];
 
 function isGlobal(key: string): boolean {
+  // vntg.pushApplied.* 는 「이 기기가 어느 배포까지 받았나」 도장이라 기기별이어야 한다
+  if (key.startsWith("vntg.pushApplied.")) return false;
   return key.startsWith("vntg.") && !LOCAL_ONLY.includes(key);
+}
+
+/* ── 기기별 설정의 전역 배포 (2026-08-26) ─────────────────────────
+ *
+ * 화면설정처럼 **일부러 기기별로 둔** 설정도, 「지금 이 상태를 전 기기에 깔아라」가
+ * 필요할 때가 있다. 그래서 배포 스냅샷을 둔다:
+ *
+ *   pushGlobalSnapshot(name, keys) — 지금 값을 vntg.push.<name> 에 담아 서버로.
+ *   applyPushedPrefs()            — 앱이 뜰 때, 아직 안 받은 배포가 있으면 로컬에 적용.
+ *
+ * 「어느 배포까지 받았나」는 기기별 도장(vntg.pushApplied.<name>)이 기억하므로
+ * 같은 배포를 두 번 덮지 않는다 — 배포 후 그 기기에서 다시 바꾼 값은 살아남는다.
+ */
+
+export function pushGlobalSnapshot(name: string, keys: string[]): void {
+  const values: Record<string, string> = {};
+  for (const k of keys) {
+    const v = localStorage.getItem(k);
+    if (v !== null) values[k] = v;
+  }
+  const at = new Date().toISOString();
+  setPref(`vntg.push.${name}`, JSON.stringify({ at, values }));
+  try {
+    // 이 기기는 이미 그 값 그대로다 — 도장을 찍어 재적용을 막는다
+    localStorage.setItem(`vntg.pushApplied.${name}`, at);
+  } catch {
+    /* 무시 */
+  }
+}
+
+/** 앱이 뜰 때 loadPrefs **다음에** 한 번 — 서버가 채워 둔 배포를 로컬에 편다 */
+export function applyPushedPrefs(): void {
+  try {
+    const pushes: { name: string; raw: string }[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith("vntg.push.")) {
+        const raw = localStorage.getItem(k);
+        if (raw) pushes.push({ name: k.slice("vntg.push.".length), raw });
+      }
+    }
+    for (const p of pushes) {
+      const parsed = JSON.parse(p.raw) as { at?: string; values?: Record<string, string> };
+      if (!parsed.at || !parsed.values) continue;
+      if (localStorage.getItem(`vntg.pushApplied.${p.name}`) === parsed.at) continue;
+      for (const [key, v] of Object.entries(parsed.values)) localStorage.setItem(key, v);
+      localStorage.setItem(`vntg.pushApplied.${p.name}`, parsed.at);
+    }
+  } catch {
+    /* 배포 적용이 실패해도 앱은 떠야 한다 */
+  }
 }
 
 let ready = false;

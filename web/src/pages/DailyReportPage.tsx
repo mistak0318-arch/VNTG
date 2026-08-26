@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { useCardOrder } from "../useCardOrder";
 import {
   FeaturedSection,
   IndexTrendSection,
@@ -169,6 +170,32 @@ function DriverItem({
 
 /* StockLines(급등락·신고저 나열)는 섹션과 함께 뺐다 (2026-08-26) — 특징주 섹션이 대체 */
 
+/**
+ * 리포트 섹션 목록 — **이 순서가 기본이고, 사용자가 설정에서 재배열한다** (2026-08-26).
+ * 설정 > 화면 > 「서브탭·섹션 순서」가 이 목록을 그대로 보여 주므로,
+ * 섹션을 더하거나 빼면 여기 한 줄이 곧 설정 화면이다.
+ */
+export const REPORT_SECTION_DEFS: { key: string; label: string }[] = [
+  { key: "calendar", label: "오늘 일정" },
+  { key: "review", label: "복기 — 지난 예측과 실제 결과" },
+  { key: "pinned", label: "고정 채널 시황" },
+  { key: "nightFutures", label: "코스피 야간선물 · 환율" },
+  { key: "indices", label: "국내외 주요 지수" },
+  { key: "indexTrend", label: "코스피 · 코스닥 추이 (60거래일)" },
+  { key: "investors", label: "투자자별 매매 동향" },
+  { key: "moneyFlow", label: "시장 자금 흐름 (업종별 5일 누적)" },
+  { key: "usThemeMap", label: "미국 테마 MAP" },
+  { key: "krThemeMap", label: "국내 테마 MAP" },
+  { key: "themes", label: "특징 테마 (상승 이유 포함)" },
+  { key: "sectors", label: "강한 업종 (상승 이유 포함)" },
+  { key: "myStocks", label: "내 관심종목" },
+  { key: "superSignal", label: "슈퍼신호등" },
+  { key: "featured", label: "특징주" },
+  { key: "news", label: "주요 뉴스 클리핑 (종목·테마)" },
+  { key: "channel", label: "텔레그램 채널 요약" },
+  { key: "trade", label: "수출입 동향 — 크게 움직인 품목" },
+];
+
 export function DailyReportPage({
   onSelectStock,
 }: {
@@ -195,6 +222,11 @@ export function DailyReportPage({
   const sectors = useSection<{ kospi: SectorRow[]; kosdaq: SectorRow[] }>("sectors", 180_000);
   const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 180_000);
   const global = useSection<GlobalQuote[]>("global", 60_000);
+  /* 섹션 순서 — 카드 배치와 같은 훅(서버 저장). 목록은 REPORT_SECTION_DEFS */
+  const secOrder = useCardOrder(
+    "report.sections",
+    REPORT_SECTION_DEFS.map((s) => s.key),
+  );
 
   function reloadAll() {
     for (const s of [indices, flow, sectors, themes, global]) s.refresh();
@@ -334,6 +366,15 @@ export function DailyReportPage({
   const sec = sectors.data;
   const th = themes.data;
 
+  /*
+   * 섹션 순서 (2026-08-26) — 설정 > 화면 > 「서브탭·섹션 순서」에서 바꾼다(서버 저장).
+   * 번호는 화면 순서를 따라 다시 매기므로, 순서를 바꿔도 0부터 이어진다.
+   */
+  const orderedSections = [...REPORT_SECTION_DEFS].sort(
+    (a, b) => secOrder.orderOf(a.key) - secOrder.orderOf(b.key),
+  );
+  const sectionBodies = buildSectionBodies();
+
   return (
     <div className="report">
       <RefreshBar onRefresh={reloadAll} updatedAt={indices.updatedAt}>
@@ -454,49 +495,64 @@ export function DailyReportPage({
       <AiSummaryCard edition={edition} />
 
       {/*
-        일정이 맨 위다.
-
-        오늘 무엇이 열리는지를 모르고 지수부터 보면 순서가 거꾸로다 — FOMC 가 있는 날과
-        없는 날은 같은 −1% 도 뜻이 다르다. **오늘 것을 먼저**, 다가오는 것은 그 아래 몇 줄.
+        섹션 순서는 설정이 정한다 (2026-08-26 — 「일일이 얘기하고 바꾸려니 불편하다」).
+        아래 sectionBodies 의 JSX 를 REPORT_SECTION_DEFS 순서 + 사용자 저장 순서로
+        늘어놓고, 번호는 화면 순서를 따라 다시 매긴다. 저장은 카드 배치와 같은
+        훅(useCardOrder, 서버) — 설정 > 화면 > 서브탭·섹션 순서에서 바꾼다.
       */}
-      <Section no={0} title="오늘 일정">
-        <TodayCalendarSection />
-      </Section>
+      {orderedSections.map((s, i) => (
+        <Section key={s.key} no={i} title={s.label}>
+          {sectionBodies[s.key]}
+        </Section>
+      ))}
 
-      <Section no={1} title="복기 — 지난 예측과 실제 결과">
-        <ReviewPanel />
-      </Section>
+      {target && (
+        <ConstituentSheet
+          target={target}
+          onClose={() => setTarget(null)}
+          onSelectStock={(c, n) => {
+            setTarget(null);
+            onSelectStock(c, n);
+          }}
+        />
+      )}
 
-      {/*
-        조간에 가장 먼저 봐야 할 값이다. 미국 현물은 05:30 에 닫혀 이미 굳었지만
-        야간선물은 그 결과를 한국 지수로 환산해 준다 — 오늘 개장가의 예고편이다.
-      */}
-      {/*
-        리포트를 여는 이유가 대개 이 글이다. 이미 한 편으로 정리된 시황이라
-        선별에 넣으면 점수 싸움에 밀리고, AI 로 다시 요약하면 그 정리가 사라진다.
-      */}
-      <Section no={2} title="고정 채널 시황">
-        <PinnedChannelSection edition={edition} />
-      </Section>
+      <div className="table-note report-footer">
+        데이터: 키움 REST API · DART · 네이버 검색 API · Yahoo Finance ·
+        시황 대시보드와 동일한 캐시를 사용하므로 추가 조회가 발생하지 않습니다
+      </div>
+    </div>
+  );
 
-      <Section no={3} title="코스피 야간선물 · 환율">
-        <NightFuturesSection />
-      </Section>
-
-      {/*
-        2. 국내외 주요 지수 — 표에서 박스 그리드로 (2026-08-26, 「공간은 적게, 눈에는 확」).
-        표는 스무 줄 넘게 세로를 먹었다. 값 하나하나는 박스 하나면 충분하고,
-        눈이 찾는 건 이름과 등락률 색이다. 그룹 색·신호등 점은 시황과 같은 것을 쓴다.
-      */}
-      <Section no={4} title="국내외 주요 지수">
+  /*
+   * 섹션 본문 사전 — 위 orderedSections 가 이 사전에서 꺼내 그린다.
+   * 함수 끝에 두는 이유: 본문이 길어서, 순서 로직이 먼저 보여야 읽힌다.
+   */
+  function buildSectionBodies(): Record<string, ReactNode> {
+    return {
+      /*
+        일정이 맨 위(기본 순서)다. 오늘 무엇이 열리는지를 모르고 지수부터 보면
+        순서가 거꾸로다 — FOMC 가 있는 날과 없는 날은 같은 −1% 도 뜻이 다르다.
+      */
+      calendar: <TodayCalendarSection />,
+      review: <ReviewPanel />,
+      /* 리포트를 여는 이유가 대개 이 글이다 — 이미 한 편으로 정리된 시황 */
+      pinned: <PinnedChannelSection edition={edition} />,
+      nightFutures: <NightFuturesSection />,
+      /*
+        국내외 주요 지수 — 박스 그리드 (2026-08-26, 「공간은 적게, 눈에는 확」).
+        그룹 색·신호등 점은 시황과 같은 것을 쓴다.
+      */
+      indices: (
         <div className="rp-idx-grid">
           {idx.map((c) => (
             <div className="rp-idx-box rp-idx-kr" key={c.name}>
               <span className="rp-idx-name">{c.name}</span>
-              <b className="rp-idx-price">{fmtNum(c.price)}</b>
-              <span className={`rp-idx-rate ${signClass(c.changeRate)}`}>
-                {fmtNum(c.change)} · {pct(c.changeRate)}
-              </span>
+              {/* 대비는 작게 가격 옆 — 눈이 찾는 건 등락률이라 그것만 크게 */}
+              <b className="rp-idx-price">
+                {fmtNum(c.price)} <i className={`rp-idx-chg ${signClass(c.change)}`}>{fmtNum(c.change)}</i>
+              </b>
+              <span className={`rp-idx-rate ${signClass(c.changeRate)}`}>{pct(c.changeRate)}</span>
             </div>
           ))}
           {[...new Set(g.map((q) => q.group))].map((grp) => {
@@ -530,28 +586,15 @@ export function DailyReportPage({
             );
           })}
         </div>
-      </Section>
-
-      {/* 2. 투자자 수급 — 시황 대시보드와 같은 막대 그래프를 시장별로 */}
-      {/*
-        숫자만으로는 "오늘 -1.5%" 가 어디쯤에서 난 하락인지 모른다.
-        고점에서 흘러내리는 중인지 바닥에서 튀는 중인지가 판단을 가른다.
-      */}
-      <Section no={5} title="코스피 · 코스닥 추이 (60거래일)">
-        <IndexTrendSection />
-      </Section>
-
-      <Section no={6} title="투자자별 매매 동향">
-        {/*
-          **표 하나로 줄였다.**
-
-          예전엔 막대 그래프 둘이 나란히 자리를 크게 먹고, 정작 궁금한 합계는 맨 밑에 있었다.
-          숫자를 보러 온 자리인데 숫자가 제일 뒤였다.
-
-          이제 한 표다 — 줄이 주체(외국인·기관·개인), 칸이 시장(코스피·코스닥·합계).
-          **합계를 오른쪽 끝에 두고 굵게** 둔다. 시장별로 나뉘어 있으니 어디서 나온 돈인지도 보인다.
-          막대는 접어 뒀다. 모양으로 훑고 싶을 때만 편다.
-        */}
+      ),
+      /* 고점에서 흘러내리는 중인지 바닥에서 튀는 중인지가 판단을 가른다 */
+      indexTrend: <IndexTrendSection />,
+      /*
+        투자자별 — **표 하나로 줄였다.** 줄이 주체, 칸이 시장(코스피·코스닥·합계).
+        막대는 접어 뒀다. 모양으로 훑고 싶을 때만 편다.
+      */
+      investors: (
+        <>
         {f ? (
           <>
             <div className="data-table-wrap">
@@ -613,26 +656,14 @@ export function DailyReportPage({
           <b> 한쪽이 사면 다른 쪽이 판 것</b>이기 때문입니다 — 그래서 누가 누구에게
           넘겼는지를 보는 표입니다.
         </div>
-      </Section>
-
-      {/* 3. 특징 테마 — 왜 올랐는지 관련 기사까지 */}
-      <Section no={7} title="시장 자금 흐름 (업종별 5일 누적)">
-        <MoneyFlowSection onSelectStock={onSelectStock} />
-      </Section>
-
-      {/*
-        밤사이 미국에서 무엇이 돌았나가 오늘 국내 무엇이 도는지를 상당 부분 정한다.
-        반도체가 밤에 빠졌으면 아침에 국내 반도체도 빠진 채로 시작한다.
-      */}
-      <Section no={8} title="미국 테마 MAP">
-        <UsThemeMapSection onSelectStock={onSelectStock} />
-      </Section>
-
-      <Section no={9} title="국내 테마 MAP">
-        <KrThemeMapSection onSelectStock={onSelectStock} />
-      </Section>
-
-      <Section no={10} title="특징 테마 (상승 이유 포함)">
+        </>
+      ),
+      moneyFlow: <MoneyFlowSection onSelectStock={onSelectStock} />,
+      /* 밤사이 미국에서 무엇이 돌았나가 오늘 국내 무엇이 도는지를 상당 부분 정한다 */
+      usThemeMap: <UsThemeMapSection onSelectStock={onSelectStock} />,
+      krThemeMap: <KrThemeMapSection onSelectStock={onSelectStock} />,
+      themes: (
+        <>
         <div className="report-lines">
           {(drivers?.themes.up ?? []).map((t) => (
             <DriverItem
@@ -662,10 +693,9 @@ export function DailyReportPage({
             />
           ))}
         </div>
-      </Section>
-
-      {/* 4. 강한 업종 — 이유 포함 */}
-      <Section no={11} title="강한 업종 (상승 이유 포함)">
+        </>
+      ),
+      sectors: (
         <div className="report-lines">
           {(drivers?.sectors ?? []).map((sec) => (
             <DriverItem
@@ -689,66 +719,19 @@ export function DailyReportPage({
           ))}
           {!drivers && <div className="empty">업종 분석 불러오는 중...</div>}
         </div>
-      </Section>
-
-      {/*
-        특징 종목(급등/급락)·신고가/신저가 섹션은 뺐다 (2026-08-26 사용자 결정) —
-        「특징주」(옛 15번)가 신호등·신고가·급등 세 갈래를 이미 다 담고 있어 같은 값이
-        두 번 나왔다.
-      */}
-      {/*
-        리포트가 시장 전체를 아무리 잘 정리해도 내가 든 종목이 어떤지가 없으면
-        결국 다른 화면을 열게 된다. 여기서 끝나야 한다.
-      */}
-      <Section no={12} title="내 관심종목">
-        <MyStocksSection onSelectStock={onSelectStock} />
-      </Section>
-
-      {/* 시스템이 기계적으로 골라 따라가는 목록 — 리포트 본문에도 있어야 한다 (2026-08-26) */}
-      <Section no={13} title="슈퍼신호등">
-        <SuperSignalSection onSelectStock={onSelectStock} />
-      </Section>
-
-      <Section no={14} title="특징주">
-        <FeaturedSection onSelectStock={onSelectStock} />
-      </Section>
-
-      {/* 콤팩트판 (2026-08-26) — 분야 이름 + 제목만. 본문·검색은 뉴스·공시 메뉴 몫 */}
-      <Section no={15} title="주요 뉴스 클리핑 (종목·테마)">
-        <NewsClippingCompact onFetched={setNewsAt} />
-      </Section>
-
-      {/*
-        AI 정리에 이미 녹아 있지만 원문도 같이 둔다 — 요약이 무엇을 보고 그렇게 말했는지
-        확인할 데가 있어야 요약을 믿거나 의심할 수 있다.
-      */}
-      {/* 국내외 주요 뉴스 섹션은 뺐다 (2026-08-26) — 뉴스 클리핑과 겹쳐서 같은 기사가 두 번 나왔다 */}
-      <Section no={16} title="텔레그램 채널 요약">
-        <ChannelDigestSection />
-      </Section>
-
-      {/* 실물 마감 — 관세청 월별. 크게 움직인 품목만 그래프로 (2026-08-26) */}
-      <Section no={17} title="수출입 동향 — 크게 움직인 품목">
-        <TradeTrendSection />
-      </Section>
-
-      {target && (
-        <ConstituentSheet
-          target={target}
-          onClose={() => setTarget(null)}
-          onSelectStock={(c, n) => {
-            setTarget(null);
-            onSelectStock(c, n);
-          }}
-        />
-      )}
-
-      <div className="table-note report-footer">
-        데이터: 키움 REST API · DART · 네이버 검색 API · Yahoo Finance ·
-        시황 대시보드와 동일한 캐시를 사용하므로 추가 조회가 발생하지 않습니다
-      </div>
-    </div>
-  );
+      ),
+      /* 내가 든 종목이 어떤지가 없으면 결국 다른 화면을 열게 된다 — 여기서 끝나야 한다 */
+      myStocks: <MyStocksSection onSelectStock={onSelectStock} />,
+      /* 시스템이 기계적으로 골라 따라가는 목록 — 리포트 본문에도 (2026-08-26) */
+      superSignal: <SuperSignalSection onSelectStock={onSelectStock} />,
+      featured: <FeaturedSection onSelectStock={onSelectStock} />,
+      /* 콤팩트판 — 분야 이름 + 제목만. 본문·검색은 뉴스·공시 메뉴 몫 */
+      news: <NewsClippingCompact onFetched={setNewsAt} />,
+      channel: <ChannelDigestSection />,
+      /* 실물 마감 — 관세청 월별. 크게 움직인 품목만 그래프로 */
+      trade: <TradeTrendSection />,
+    };
+  }
 }
 
 /**

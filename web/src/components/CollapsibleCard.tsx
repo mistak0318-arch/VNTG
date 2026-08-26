@@ -36,6 +36,7 @@ export function CollapsibleCard({
   hint,
   defaultOpen = false,
   badge,
+  scope,
   children,
 }: {
   /** localStorage 키. 제목을 바꿔도 접힘 상태가 유지되도록 별도로 받는다 */
@@ -47,6 +48,11 @@ export function CollapsibleCard({
   defaultOpen?: boolean;
   /** 제목 옆 작은 표시 (예: 켜진 개수) */
   badge?: ReactNode;
+  /**
+   * 이 설정이 어디까지 미치나 (2026-08-26 — 「어떤 건 공유되고 어떤 건 아니라 헷갈린다」).
+   * global = 서버 저장이라 모든 기기 공용 · device = 이 기기(창)에만.
+   */
+  scope?: "global" | "device";
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -69,6 +75,18 @@ export function CollapsibleCard({
       <button className="collapsible-head" onClick={toggle} aria-expanded={open}>
         <span className={`collapsible-caret${open ? " open" : ""}`}>▸</span>
         <h2>{title}</h2>
+        {scope && (
+          <span
+            className={`cc-scope ${scope}`}
+            title={
+              scope === "global"
+                ? "서버에 저장됩니다 — 모든 기기에서 같은 설정을 씁니다"
+                : "이 기기에만 저장됩니다 — 기기(화면)마다 다르게 두는 설정입니다"
+            }
+          >
+            {scope === "global" ? "☁ 전역" : "📱 이 기기"}
+          </span>
+        )}
         {badge && <span className="collapsible-badge">{badge}</span>}
         <span className="collapsible-action">{open ? "접기" : "펼치기"}</span>
       </button>

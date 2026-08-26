@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FONTS, FONT_SCALES, GLOBAL_KEY, useAppearance, WIDTHS } from "../useAppearance";
-import { setPref } from "../prefs";
+import { pushGlobalSnapshot, setPref } from "../prefs";
 import { api, fmtNum, type ProviderUsage, type UsageTotals } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { AiModelPanel } from "../components/AiModelPanel";
@@ -108,6 +108,7 @@ export function SettingsPage() {
       {tab === "display" && (
       <CollapsibleCard
         id="menuOrder"
+        scope="global"
         title="메뉴 순서·표시"
         hint="사이드바 메뉴를 원하는 순서로 바꾸고 안 쓰는 것은 숨깁니다."
       >
@@ -123,6 +124,7 @@ export function SettingsPage() {
       {tab === "display" && (
       <CollapsibleCard
         id="cardOrder"
+        scope="global"
         title="시황 카드 순서"
         hint="시황 대시보드의 카드를 원하는 차례로 놓습니다."
       >
@@ -133,8 +135,9 @@ export function SettingsPage() {
       {tab === "display" && (
       <CollapsibleCard
         id="subTabOrder"
-        title="서브탭 순서"
-        hint="각 메뉴 상단의 서브탭을 원하는 차례로 놓습니다."
+        scope="global"
+        title="서브탭·섹션 순서"
+        hint="각 메뉴의 서브탭과 데일리 리포트 섹션을 원하는 차례로 놓습니다."
       >
         <SubTabOrderPanel />
       </CollapsibleCard>
@@ -143,6 +146,7 @@ export function SettingsPage() {
       {tab === "display" && (
       <CollapsibleCard
         id="screenLock"
+        scope="device"
         title="화면 잠금"
         hint="자리를 비운 사이 화면을 가립니다. 이 기기에만 저장됩니다."
       >
@@ -153,6 +157,7 @@ export function SettingsPage() {
       {tab === "display" && (
       <CollapsibleCard
         id="chartConfig"
+        scope="global"
         title="차트"
         hint="이동평균선·볼린저 밴드·매물대·말풍선을 내 방식대로 맞춥니다."
       >
@@ -179,6 +184,7 @@ export function SettingsPage() {
       {tab === "publish" && (
       <CollapsibleCard
         id="reportSchedule"
+        scope="global"
         title="리포트 발행 일정"
         hint="언제 몇 판을 낼지 직접 정합니다. 판을 추가·삭제할 수 있습니다."
       >
@@ -189,6 +195,7 @@ export function SettingsPage() {
       {tab === "analysis" && (
       <CollapsibleCard
         id="aiModels"
+        scope="global"
         title="AI 모델"
         hint="데일리 리포트·채널 요약에 어떤 모델을 쓸지 고릅니다."
       >
@@ -203,6 +210,7 @@ export function SettingsPage() {
       {tab === "publish" && (
       <CollapsibleCard
         id="channels"
+        scope="global"
         title="구독 채널 수집 (텔레그램)"
         hint="구독 채널을 읽어 여러 채널이 동시에 말하는 것을 뽑아냅니다."
       >
@@ -217,6 +225,7 @@ export function SettingsPage() {
       {tab === "publish" && (
       <CollapsibleCard
         id="alerts"
+        scope="global"
         title="관심종목 시그널 (텔레그램)"
         hint="장중에 관심종목이 조건에 걸리면 시그널 방으로 알립니다."
       >
@@ -231,6 +240,7 @@ export function SettingsPage() {
       {tab === "analysis" && (
       <CollapsibleCard
         id="signal"
+        scope="global"
         title="신호등 기준"
         hint="종목명 옆 신호등이 켜지는 기준을 내 매매 기준에 맞춥니다."
       >
@@ -245,6 +255,7 @@ export function SettingsPage() {
       {tab === "display" && (
       <CollapsibleCard
         id="appearance"
+        scope="device"
         title="화면 설정"
         hint="테마 · 글꼴 · 글자 크기 · 메뉴바 위치"
         defaultOpen
@@ -395,6 +406,11 @@ export function SettingsPage() {
             <button
               className="filter-btn"
               onClick={() => {
+                /*
+                 * 전역 배포 (2026-08-26) — 기본으로 저장할 뿐 아니라 **이미 쓰던 기기에도**
+                 * 다음에 열 때 이 설정이 깔린다(applyPushedPrefs). 배포 뒤 그 기기에서
+                 * 다시 바꾼 값은 그대로 살아남는다 — 도장이 같은 배포를 두 번 안 덮는다.
+                 */
                 setPref(GLOBAL_KEY, JSON.stringify({
                   theme: appearance.theme,
                   font: appearance.font,
@@ -403,11 +419,14 @@ export function SettingsPage() {
                   width: appearance.width,
                   sidebarAuto: appearance.sidebarAuto,
                 }));
-                setGlobalMsg("지금 화면설정을 전체 기본으로 저장했습니다 — 다른 기기에서 「전체 기본 불러오기」로 받습니다.");
+                pushGlobalSnapshot("appearance", ["vntg.appearance"]);
+                setGlobalMsg(
+                  "지금 화면설정을 모든 기기에 배포했습니다 — 다른 기기는 다음에 열 때 자동 적용됩니다 (그 뒤 그 기기에서 바꾸면 그 값이 우선).",
+                );
               }}
-              title="지금 이 화면설정을 서버에 저장합니다 — 모든 기기의 기본이 됩니다"
+              title="지금 이 화면설정을 서버에 올립니다 — 모든 기기가 다음에 열 때 자동으로 받습니다"
             >
-              모든 기기의 기본으로 저장
+              모든 기기에 적용
             </button>
             <button
               className="filter-btn"

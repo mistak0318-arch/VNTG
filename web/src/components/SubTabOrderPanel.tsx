@@ -5,6 +5,7 @@ import { SCREENER_TABS } from "../pages/ScreenerPage";
 import { SCREEN_TABS } from "../pages/ScreenPage";
 import { FLOW_TABS } from "../pages/MarketFlowPage";
 import { TELEGRAM_TABS } from "../pages/TelegramPage";
+import { REPORT_SECTION_DEFS } from "../pages/DailyReportPage";
 
 /**
  * 서브탭 순서 (2026-08-26) — **모든 메뉴의 서브탭 순서를 한 자리에서.**
@@ -30,6 +31,8 @@ const PAGES: PageDef[] = [
   { scope: "screen.tabs", label: "신호등 찾기", tabs: SCREEN_TABS },
   { scope: "marketflow.tabs", label: "시장흐름분석", tabs: FLOW_TABS },
   { scope: "telegram.tabs", label: "텔레그램 동향", tabs: TELEGRAM_TABS },
+  /* 리포트는 탭이 아니라 **섹션** 순서다 — 위에서 아래로 읽는 차례 (2026-08-26) */
+  { scope: "report.sections", label: "데일리 리포트 섹션", tabs: REPORT_SECTION_DEFS },
 ];
 
 function PageRow({ page }: { page: PageDef }) {
