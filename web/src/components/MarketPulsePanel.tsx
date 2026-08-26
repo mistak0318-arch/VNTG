@@ -43,7 +43,12 @@ const PHASE_TONE: Record<string, string> = {
   bothOut: "bad",
 };
 
-export function MarketPulsePanel() {
+export function MarketPulsePanel({
+  onSelectStock,
+}: {
+  /** 교차 신호의 종목을 눌렀을 때 — 본창 종목 상세 */
+  onSelectStock?: (code: string, name: string) => void;
+}) {
   const [pulse, setPulse] = useState<MarketPulse | null>(null);
   const [brief, setBrief] = useState<PulseBrief | null>(null);
   const [loading, setLoading] = useState(true);
@@ -125,7 +130,11 @@ export function MarketPulsePanel() {
 
       {/* ---------------- 자금 국면 ---------------- */}
       <section className="card">
-        <h2>자금 국면</h2>
+        <h2>
+          자금 국면
+          {/* 표본이 얇으면 판정 옆에서 바로 말한다 (재검토 #1) — 라벨이 거짓말하면 안 된다 */}
+          {pulse.days < 10 && <span className="mp-prov">표본 {pulse.days}일 — 잠정</span>}
+        </h2>
         <div className="mp-phase">
           <span className={`mp-phase-tag ${tone}`}>{pulse.phase.label}</span>
           <span className="mp-phase-note">{pulse.phase.note}</span>
@@ -147,8 +156,10 @@ export function MarketPulsePanel() {
             <div className="mp-flow-item" key={r.key}>
               <div className="mp-flow-who">{r.key}</div>
               <div className={`mp-flow-5 ${signClass(r.d5)}`}>{signed(r.d5)}</div>
+              {/* 실제 며칠치로 계산했는지를 라벨에 — 「20일」이 9일치면 그렇게 적는다 */}
               <div className="mp-flow-sub">
-                20일 <span className={signClass(r.d20)}>{signed(r.d20)}</span>
+                20일{pulse.flow.days20 < 20 ? `(${pulse.flow.days20}일치)` : ""}{" "}
+                <span className={signClass(r.d20)}>{signed(r.d20)}</span>
               </div>
               {r.st !== null && <div className="mp-flow-streak">{streakText(r.st)}</div>}
             </div>
@@ -180,6 +191,44 @@ export function MarketPulsePanel() {
           )}
         </div>
       </section>
+
+      {/* ---------------- 교차 신호 (재검토 #2) ---------------- */}
+      {pulse.cross && (
+        <section className="card">
+          <h2>교차 신호 — 세 화면이 동시에 가리키는 종목</h2>
+          <p className="page-note">
+            <b>주도주 태그</b>(신고가·거래량급증·급등)와 <b>🌟 슈퍼신호등</b>에 동시에 걸린
+            종목입니다. 업종 자금(최근 5일 외인+기관)까지 들어오고 있으면 「업종유입」이 붙습니다.
+          </p>
+          {pulse.cross.stocks.length === 0 ? (
+            <div className="page-note">{pulse.cross.note}</div>
+          ) : (
+            <>
+              <div className="mp-cross-note">{pulse.cross.note}</div>
+              <div className="mp-cross">
+                {pulse.cross.stocks.map((s) => (
+                  <button
+                    className="mp-cross-item"
+                    key={s.code}
+                    onClick={() => onSelectStock?.(s.code, s.name)}
+                  >
+                    <b>{s.name}</b>
+                    <span className={`num ${signClass(s.changeRate)}`}>
+                      {s.changeRate > 0 ? "+" : ""}
+                      {s.changeRate.toFixed(2)}%
+                    </span>
+                    <span className="mp-cross-tags">
+                      {s.tags.join(" · ")}
+                      {s.sectorInflow && " · 업종유입"}
+                    </span>
+                    {s.sector && <span className="pt-n">{s.sector}</span>}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      )}
 
       {/* ---------------- 위험 ---------------- */}
       <section className="card">
@@ -230,6 +279,10 @@ export function MarketPulsePanel() {
             선물 베이시스 <b>{pulse.basis.toFixed(2)}</b> — 음수면 선물이 현물보다 싸다는 뜻이고,
             그 자리에서 프로그램 매도가 붙기 쉽습니다.
           </div>
+        )}
+        {/* 「못 봤다」와 「정상」을 가른다 (재검토 #1) — 값이 없으면 없다고 말한다 */}
+        {pulse.basis === null && pulse.basisNote && (
+          <div className="table-note">{pulse.basisNote}</div>
         )}
       </section>
     </div>

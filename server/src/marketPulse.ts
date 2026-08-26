@@ -9,6 +9,12 @@ import type { UsMajorRow } from "./usMajor.js";
 import { choiceFor } from "./aiConfig.js";
 import { summarize } from "./summarize.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { getSection } from "./marketOverview.js";
+import type { Sectors } from "./marketOverview.js";
+import { exportYoyForSector, getTradeStats } from "./tradeStats.js";
+import { leaderScan } from "./leaderScan.js";
+import { getActiveSuper } from "./superSignal.js";
+import { listSectorFlow, SUBJECTS } from "./sectorFlowStore.js";
 
 /**
  * 시장 맥박 — 「돈이 어디로 가고 있나」를 한 덩어리로 낸다.
@@ -57,6 +63,30 @@ export interface PulseFlow {
   /** 외국인이 며칠 연속 순매수(양수) 또는 순매도(음수)인가 */
   foreignStreak: number;
   instStreak: number;
+  /**
+   * 실제로 계산에 쓴 일수 (2026-08-26 — 재검토 #1 「라벨이 거짓말을 한다」).
+   * 폭 데이터가 9일치면 「20일 누적」은 사실 9일 누적이다 — 화면이 이걸로
+   * 「20일(9일치)」라고 정직하게 적는다.
+   */
+  days5: number;
+  days20: number;
+}
+
+/** 교차 신호 — 주도주 태그 ∩ 슈퍼신호등 (+ 그 업종에 자금이 들어오고 있나) */
+export interface PulseCrossStock {
+  code: string;
+  name: string;
+  sector: string;
+  /** 주도주 탐색이 붙인 태그 (신고가·거래량급증·급등·대금상위) */
+  tags: string[];
+  /** 그 업종이 최근 5일 외인+기관 순유입 상위인가 */
+  sectorInflow: boolean;
+  changeRate: number;
+}
+
+export interface PulseCross {
+  stocks: PulseCrossStock[];
+  note: string;
 }
 
 export interface PulseDivergence {
@@ -87,6 +117,13 @@ export interface MarketPulse {
   signal: { level: string; score: number; summary: string } | null;
   /** 선물 베이시스 — 음수면 프로그램 매도가 붙기 쉽다 */
   basis: number | null;
+  /**
+   * 베이시스를 못 받았을 때의 설명 (재검토 #1) — null 이 조용히 사라지면
+   * 「못 봤다」와 「정상이다」가 구분이 안 된다. 값이 있으면 화면이 한 줄 적는다.
+   */
+  basisNote: string | null;
+  /** 교차 신호 (재검토 #2) — 주도주 태그 ∩ 슈퍼신호등. 없으면 null */
+  cross: PulseCross | null;
   /** 위험 신호 모음 — 화면이 색만 칠하지 않고 이유를 말할 수 있게 */
   risks: { key: string; label: string; detail: string; level: "warn" | "danger" }[];
   /** 바깥에서 미는 것 — 미장·금리·환율에서 고른 몇 줄 */
@@ -210,6 +247,120 @@ function findTurn(flow: PulseFlow): PulseTurn {
   };
 }
 
+/**
+ * 교차 신호 (2026-08-26, 재검토 #2) — **세 화면이 동시에 가리키는 종목.**
+ *
+ * 주도주 탐색의 태그와 슈퍼신호등 목록, 업종 자금 유입은 각자 딴 화면에 있어서
+ * 같은 종목이 셋 다에 걸려도 사람이 오가며 눈으로 맞춰야 했다. 그 교집합이
+ * 가장 강한 시그널인데 아무도 안 세고 있었다 — 서버가 여기서 센다.
+ *
+ * 주도주 스캔은 조회 4묶음이라 맥박 캐시(60초)보다 길게, 5분에 한 번만 돈다.
+ */
+const CROSS_TTL_MS = 5 * 60_000;
+let crossCache: { at: number; data: PulseCross | null } | null = null;
+
+async function findCross(client: KiwoomClient): Promise<PulseCross | null> {
+  if (crossCache && Date.now() - crossCache.at < CROSS_TTL_MS) return crossCache.data;
+  try {
+    const [scan, superList, flowDays] = await Promise.all([
+      leaderScan(client),
+      getActiveSuper(),
+      listSectorFlow(5).catch(() => []),
+    ]);
+    const superCodes = new Set(superList.map((s) => s.code));
+
+    /*
+     * 자금 유입 업종 — 최근 5일 외인+기관 순매수 합이 플러스인 업종 이름.
+     * SUBJECTS 순서(foreign=0, institution=1)가 저장 스키마다.
+     */
+    const fi = SUBJECTS.indexOf("foreign");
+    const ii = SUBJECTS.indexOf("institution");
+    const inflow = new Map<string, number>();
+    for (const day of flowDays) {
+      for (const row of [...day.kospi, ...day.kosdaq]) {
+        inflow.set(row.name, (inflow.get(row.name) ?? 0) + (row.v[fi] ?? 0) + (row.v[ii] ?? 0));
+      }
+    }
+    const norm = (s: string) => s.replace(/[^가-힣a-zA-Z0-9]/g, "");
+    const inflowNames = new Set(
+      [...inflow.entries()].filter(([, v]) => v > 0).map(([name]) => norm(name)),
+    );
+
+    const stocks: PulseCrossStock[] = scan.stocks
+      .filter((s) => superCodes.has(s.code))
+      .slice(0, 8)
+      .map((s) => ({
+        code: s.code,
+        name: s.name,
+        sector: s.sector,
+        tags: s.tags,
+        sectorInflow:
+          s.sector.length > 0 &&
+          [...inflowNames].some((n) => n.includes(norm(s.sector)) || norm(s.sector).includes(n)),
+        changeRate: s.changeRate,
+      }));
+
+    const data: PulseCross | null =
+      stocks.length === 0
+        ? {
+            stocks: [],
+            note: "주도주 태그와 슈퍼신호등이 겹치는 종목이 지금은 없습니다",
+          }
+        : {
+            stocks,
+            note:
+              `주도주 태그와 슈퍼신호등에 동시에 걸린 종목 ${stocks.length}개` +
+              (stocks.some((s) => s.sectorInflow)
+                ? ` — 그중 ${stocks.filter((s) => s.sectorInflow).length}개는 업종 자금도 유입 중`
+                : ""),
+          };
+    crossCache = { at: Date.now(), data };
+    return data;
+  } catch {
+    // 교차 신호가 없어도 맥박은 나가야 한다
+    crossCache = { at: Date.now(), data: null };
+    return null;
+  }
+}
+
+/**
+ * 수출↔업종 어긋남 (재검토 #4) — 「실물이 꺾였는데 주가만 오르는」 업종.
+ *
+ * exportYoyForSector(관세청 최신월 YoY)는 이미 있는데 어디에도 안 얹혀 있었다.
+ * 오늘 +1% 넘게 오른 업종 중 수출 YoY 가 -5% 이하인 것을 경고로 만든다.
+ * (월별 데이터라 「2개월 연속」 판정은 품목별 이력 조회가 더 필요해 다음 단계로 —
+ * 우선 최신월 뚜렷한 마이너스만 잡는다)
+ */
+async function exportMismatch(
+  client: KiwoomClient,
+): Promise<{ sector: string; market: string; changeRate: number; yoy: number }[]> {
+  try {
+    const [sectorSec, trade] = await Promise.all([
+      getSection("sectors", client).catch(() => null),
+      getTradeStats().catch(() => null),
+    ]);
+    const sectors = (sectorSec?.data ?? null) as Sectors | null;
+    if (!sectors || !trade || trade.items.length === 0) return [];
+
+    const out: { sector: string; market: string; changeRate: number; yoy: number }[] = [];
+    const check = (rows: { name: string; changeRate: number }[], market: string) => {
+      for (const s of rows) {
+        if (s.changeRate < 1) continue; // 오늘 뚜렷이 오른 업종만
+        const yoy = exportYoyForSector(trade.items, s.name);
+        if (yoy !== null && yoy <= -5) {
+          out.push({ sector: s.name, market, changeRate: s.changeRate, yoy });
+        }
+      }
+    };
+    check(sectors.kospi ?? [], "코스피");
+    check(sectors.kosdaq ?? [], "코스닥");
+    // 경고는 둘까지 — 셋 넘게 쏟아지면 아무것도 안 읽힌다
+    return out.sort((a, b) => a.yoy - b.yoy).slice(0, 2);
+  } catch {
+    return [];
+  }
+}
+
 const TTL_MS = 60_000;
 let cache: { at: number; data: MarketPulse } | null = null;
 
@@ -238,6 +389,9 @@ export async function marketPulse(client: KiwoomClient, force = false): Promise<
     individual20: Math.round(sum(last20, "individual")),
     foreignStreak: streak(points, "foreign"),
     instStreak: streak(points, "institution"),
+    // 라벨 정직화 — 「20일 누적」이 실제 며칠치인지
+    days5: last5.length,
+    days20: last20.length,
   };
 
   const key = decidePhase(flow.foreign5, flow.inst5, flow.individual5);
@@ -279,6 +433,26 @@ export async function marketPulse(client: KiwoomClient, force = false): Promise<
       level: basis < -1 ? "danger" : "warn",
     });
   }
+  /* basis 를 못 받은 날 — 「못 봤다」와 「정상」을 가른다 (재검토 #1) */
+  const basisNote =
+    basis === null
+      ? "선물 값이 없어(장 마감 뒤 등) 백워데이션 위험은 이번엔 판단하지 못했습니다"
+      : null;
+
+  /* 수출↔업종 어긋남 (재검토 #4) — 실물이 꺾였는데 업종 주가만 오르면 경고 */
+  for (const m of await exportMismatch(client)) {
+    risks.push({
+      key: `trade-${m.sector}`,
+      label: "수출·주가 어긋남",
+      detail:
+        `${m.market} ${m.sector} 이(가) 오늘 +${m.changeRate.toFixed(1)}% 인데 ` +
+        `관련 수출은 최신월 전년동월 ${m.yoy.toFixed(1)}% 입니다. 실물이 안 받쳐 주는 상승일 수 있습니다`,
+      level: "warn",
+    });
+  }
+
+  /* 교차 신호 (재검토 #2) — 주도주 ∩ 슈퍼신호등 */
+  const cross = await findCross(client);
   // 미장 쪽 경고는 이미 usMajor 가 줄 단위로 판정해 둔 것을 그대로 쓴다
   for (const row of usMajor?.rows ?? []) {
     if (row.signal?.level === "danger") {
@@ -364,6 +538,8 @@ export async function marketPulse(client: KiwoomClient, force = false): Promise<
       ? { level: signal.level, score: signal.score, summary: signal.summary }
       : null,
     basis,
+    basisNote,
+    cross,
     risks,
     external,
     at: new Date().toISOString(),
@@ -408,12 +584,15 @@ function pulsePrompt(p: MarketPulse): string {
   const won = (v: number) => `${v > 0 ? "+" : ""}${v.toLocaleString("ko-KR")}억`;
   const lines = [
     `[자금 국면] ${p.phase.label}`,
-    `[누적 순매수] 5일 — 외국인 ${won(p.flow.foreign5)} / 기관 ${won(p.flow.inst5)} / 개인 ${won(p.flow.individual5)}`,
-    `             20일 — 외국인 ${won(p.flow.foreign20)} / 기관 ${won(p.flow.inst20)} / 개인 ${won(p.flow.individual20)}`,
+    `[누적 순매수] 5일(${p.flow.days5}일치) — 외국인 ${won(p.flow.foreign5)} / 기관 ${won(p.flow.inst5)} / 개인 ${won(p.flow.individual5)}`,
+    `             20일(${p.flow.days20}일치) — 외국인 ${won(p.flow.foreign20)} / 기관 ${won(p.flow.inst20)} / 개인 ${won(p.flow.individual20)}`,
+    p.cross && p.cross.stocks.length > 0
+      ? `[교차 신호] ${p.cross.note} — ${p.cross.stocks.map((s) => `${s.name}(${s.tags.join("·")}${s.sectorInflow ? "·업종유입" : ""})`).join(", ")}`
+      : "",
     `[연속성] 외국인 ${p.flow.foreignStreak >= 0 ? `${p.flow.foreignStreak}일 연속 순매수` : `${-p.flow.foreignStreak}일 연속 순매도`} · 기관 ${p.flow.instStreak >= 0 ? `${p.flow.instStreak}일 순매수` : `${-p.flow.instStreak}일 순매도`}`,
     p.turn.turning ? `[방향 전환] ${p.turn.note}` : "",
     `[지수·폭] ${p.divergence.note}${p.divergence.indexMove !== null ? ` (5일 지수 ${p.divergence.indexMove.toFixed(2)}%, 상승비율 변화 ${p.divergence.breadthMove?.toFixed(0)}%p)` : ""}`,
-    p.basis !== null ? `[선물 베이시스] ${p.basis.toFixed(2)}` : "",
+    p.basis !== null ? `[선물 베이시스] ${p.basis.toFixed(2)}` : p.basisNote ? `[선물 베이시스] ${p.basisNote}` : "",
     p.signal ? `[시장 신호등] ${p.signal.level} ${p.signal.score}점 — ${p.signal.summary}` : "",
     p.risks.length > 0
       ? `[위험]\n${p.risks.map((r) => `  · ${r.label}: ${r.detail}`).join("\n")}`

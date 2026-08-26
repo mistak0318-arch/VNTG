@@ -2758,6 +2758,19 @@ export interface PulseFlow {
   /** 양수면 연속 순매수 일수, 음수면 연속 순매도 일수 */
   foreignStreak: number;
   instStreak: number;
+  /** 실제 계산에 쓴 일수 — 「20일 누적」이 9일치면 화면이 그렇게 적는다 */
+  days5: number;
+  days20: number;
+}
+
+/** 교차 신호 — 주도주 태그 ∩ 슈퍼신호등 */
+export interface PulseCrossStock {
+  code: string;
+  name: string;
+  sector: string;
+  tags: string[];
+  sectorInflow: boolean;
+  changeRate: number;
 }
 
 export interface MarketPulse {
@@ -2775,6 +2788,10 @@ export interface MarketPulse {
   turn: { turning: boolean; who: string | null; note: string };
   signal: { level: string; score: number; summary: string } | null;
   basis: number | null;
+  /** basis 를 못 받았을 때의 설명 — 「못 봤다」와 「정상」을 가른다 */
+  basisNote: string | null;
+  /** 교차 신호 — 없으면 null */
+  cross: { stocks: PulseCrossStock[]; note: string } | null;
   risks: { key: string; label: string; detail: string; level: "warn" | "danger" }[];
   external: { label: string; value: string; changeRate: number | null; note?: string }[];
   at: string;

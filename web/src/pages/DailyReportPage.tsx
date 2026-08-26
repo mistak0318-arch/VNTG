@@ -5,10 +5,10 @@ import {
   KrThemeMapSection,
   ChannelDigestSection,
   PinnedChannelSection,
-  MarketNewsSection,
   MoneyFlowSection,
   MyStocksSection,
   NightFuturesSection,
+  SuperSignalSection,
   UsThemeMapSection,
 } from "../components/report/ReportSections";
 import { notifyJobStarted } from "../components/RunningJobsBar";
@@ -30,7 +30,7 @@ import { ReportTts } from "../components/ReportTts";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { FlowBars } from "../components/overview/FlowBars";
 import { type MarketDriverReport, type PublishJob, type ScoredNews } from "../api";
-import { SectorNews } from "../components/SectorNews";
+import { NewsClippingCompact } from "../components/report/ReportSections";
 import { RefreshBar } from "../components/RefreshBar";
 import { ReviewPanel } from "../components/ReviewPanel";
 import { useSection } from "../useSection";
@@ -166,35 +166,7 @@ function DriverItem({
   );
 }
 
-/** 종목 여러 개를 한 줄씩 나열 */
-function StockLines({
-  rows,
-  onSelectStock,
-  limit = 10,
-}: {
-  rows: StockRow[];
-  onSelectStock: (code: string, name: string) => void;
-  limit?: number;
-}) {
-  if (rows.length === 0) return <div className="empty">데이터가 없습니다.</div>;
-  return (
-    <div className="report-lines">
-      {rows.slice(0, limit).map((s, i) => {
-        const code = normalizeStockCode(s.code);
-        return (
-          <button className="report-line" key={`${code}-${i}`} onClick={() => onSelectStock(code, s.name)}>
-            <span className="rl-name">
-              <WatchStar code={code} />
-              {s.name}
-            </span>
-            <span className="rl-price">{fmtNum(s.price)}</span>
-            <span className={`rl-rate ${signClass(s.changeRate)}`}>{pct(s.changeRate)}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+/* StockLines(급등락·신고저 나열)는 섹션과 함께 뺐다 (2026-08-26) — 특징주 섹션이 대체 */
 
 export function DailyReportPage({
   onSelectStock,
@@ -219,14 +191,12 @@ export function DailyReportPage({
   // 시황 대시보드와 같은 섹션 캐시를 공유한다 (추가 호출 없음)
   const indices = useSection<IndexCard[]>("indices", 60_000);
   const flow = useSection<MarketFlow>("flow", 60_000);
-  const movers = useSection<{ rising: StockRow[]; falling: StockRow[] }>("movers", 60_000);
   const sectors = useSection<{ kospi: SectorRow[]; kosdaq: SectorRow[] }>("sectors", 180_000);
   const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 180_000);
-  const highLow = useSection<{ high: StockRow[]; low: StockRow[] }>("highLow", 300_000);
   const global = useSection<GlobalQuote[]>("global", 60_000);
 
   function reloadAll() {
-    for (const s of [indices, flow, movers, sectors, themes, highLow, global]) s.refresh();
+    for (const s of [indices, flow, sectors, themes, global]) s.refresh();
   }
 
   /**
@@ -512,68 +482,52 @@ export function DailyReportPage({
         <NightFuturesSection />
       </Section>
 
-      {/* 2. 국내외 주요 지수 */}
+      {/*
+        2. 국내외 주요 지수 — 표에서 박스 그리드로 (2026-08-26, 「공간은 적게, 눈에는 확」).
+        표는 스무 줄 넘게 세로를 먹었다. 값 하나하나는 박스 하나면 충분하고,
+        눈이 찾는 건 이름과 등락률 색이다. 그룹 색·신호등 점은 시황과 같은 것을 쓴다.
+      */}
       <Section no={4} title="국내외 주요 지수">
-        <div className="data-table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th className="sticky-col">지수/종목</th>
-                <th>현재가</th>
-                <th>전일대비</th>
-                <th>등락률</th>
-              </tr>
-            </thead>
-            <tbody>
-              {idx.map((c) => (
-                <tr key={c.name}>
-                  <td className="sticky-col">{c.name}</td>
-                  <td>{fmtNum(c.price)}</td>
-                  <td className={signClass(c.change)}>{fmtNum(c.change)}</td>
-                  <td className={signClass(c.changeRate)}>{pct(c.changeRate)}</td>
-                </tr>
-              ))}
-              {/*
-                섹터별로 묶는다. 시황 대시보드와 같은 방식이다 — 두 화면이 같은 값을
-                다르게 늘어놓으면 하나를 보고 다른 하나를 찾을 때 헷갈린다.
-              */}
-              {[...new Set(g.map((q) => q.group))].map((grp) => {
-                // 시황과 **같은 색**을 쓴다. 서버가 정해 준 것을 그대로 받는다 —
-                // 두 화면이 같은 값을 다른 색으로 칠하면 하나 보고 다른 하나를 못 찾는다
-                const color = g.find((q) => q.group === grp)?.color ?? "#8b98a5";
-                return (
-                <Fragment key={grp}>
-                  <tr className="rp-g-sec" style={{ ["--g" as string]: color }}>
-                    <td className="sticky-col" colSpan={4}>
-                      {grp}
-                    </td>
-                  </tr>
-                  {g
-                    .filter((q) => q.group === grp)
-                    .map((q) => (
-                      <tr key={q.key} style={{ ["--g" as string]: color }} className="rp-g-row">
-                        <td className="sticky-col">
-                          <span
-                            className={`ov-g-sig${q.signal ? ` ${q.signal.level}` : ""}`}
-                            title={q.signal?.why}
-                          />
-                          {q.label}
-                          <span className="rl-sub"> {q.symbol}</span>
-                        </td>
-                        <td>{q.price === null ? "-" : fmtNum(q.price)}</td>
-                        <td className={signClass(q.change)}>
-                          {q.change === null ? "-" : fmtNum(q.change)}
-                        </td>
-                        <td className={signClass(q.changeRate)}>
-                          {q.changeRate === null ? "-" : pct(q.changeRate)}
-                        </td>
-                      </tr>
-                    ))}
-                </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="rp-idx-grid">
+          {idx.map((c) => (
+            <div className="rp-idx-box rp-idx-kr" key={c.name}>
+              <span className="rp-idx-name">{c.name}</span>
+              <b className="rp-idx-price">{fmtNum(c.price)}</b>
+              <span className={`rp-idx-rate ${signClass(c.changeRate)}`}>
+                {fmtNum(c.change)} · {pct(c.changeRate)}
+              </span>
+            </div>
+          ))}
+          {[...new Set(g.map((q) => q.group))].map((grp) => {
+            // 시황과 **같은 색** — 두 화면이 같은 값을 다른 색으로 칠하면 못 찾는다
+            const color = g.find((q) => q.group === grp)?.color ?? "#8b98a5";
+            return (
+              <Fragment key={grp}>
+                <div className="rp-idx-ghead" style={{ ["--g" as string]: color }}>
+                  {grp}
+                </div>
+                {g
+                  .filter((q) => q.group === grp)
+                  .map((q) => (
+                    <div
+                      className="rp-idx-box"
+                      key={q.key}
+                      style={{ ["--g" as string]: color }}
+                      title={q.signal?.why}
+                    >
+                      <span className="rp-idx-name">
+                        <span className={`ov-g-sig${q.signal ? ` ${q.signal.level}` : ""}`} />
+                        {q.label}
+                      </span>
+                      <b className="rp-idx-price">{q.price === null ? "-" : fmtNum(q.price)}</b>
+                      <span className={`rp-idx-rate ${signClass(q.changeRate)}`}>
+                        {q.changeRate === null ? "-" : pct(q.changeRate)}
+                      </span>
+                    </div>
+                  ))}
+              </Fragment>
+            );
+          })}
         </div>
       </Section>
 
@@ -736,69 +690,40 @@ export function DailyReportPage({
         </div>
       </Section>
 
-      {/* 5. 특징 종목 */}
-      <Section no={12} title="특징 종목 (급등/급락)">
-        <div className="report-two-col">
-          <div>
-            <h4 className="report-subheading positive">상승률 상위</h4>
-            <StockLines rows={movers.data?.rising ?? []} onSelectStock={onSelectStock} />
-          </div>
-          <div>
-            <h4 className="report-subheading negative">하락률 상위</h4>
-            <StockLines rows={movers.data?.falling ?? []} onSelectStock={onSelectStock} />
-          </div>
-        </div>
-      </Section>
-
-      {/* 6. 신고가/신저가 */}
-      <Section no={13} title="52주(250일) 신고가 · 신저가">
-        <div className="report-two-col">
-          <div>
-            <h4 className="report-subheading positive">신고가</h4>
-            <StockLines rows={highLow.data?.high ?? []} onSelectStock={onSelectStock} limit={8} />
-          </div>
-          <div>
-            <h4 className="report-subheading negative">신저가</h4>
-            <StockLines rows={highLow.data?.low ?? []} onSelectStock={onSelectStock} limit={8} />
-          </div>
-        </div>
-      </Section>
-
-      {/* 7. 뉴스 클리핑 — 분야별 (뉴스·공시 탭과 같은 컴포넌트) */}
       {/*
-        오늘 볼 만한 종목. 세 갈래는 성격이 다르다 — 신호등은 조건을 갖춘 것,
-        신고가는 이미 올라간 것, 급등은 오늘 움직인 것. 섞으면 뭘 보는지 모르게 된다.
+        특징 종목(급등/급락)·신고가/신저가 섹션은 뺐다 (2026-08-26 사용자 결정) —
+        「특징주」(옛 15번)가 신호등·신고가·급등 세 갈래를 이미 다 담고 있어 같은 값이
+        두 번 나왔다.
       */}
       {/*
         리포트가 시장 전체를 아무리 잘 정리해도 내가 든 종목이 어떤지가 없으면
         결국 다른 화면을 열게 된다. 여기서 끝나야 한다.
       */}
-      <Section no={14} title="내 관심종목">
+      <Section no={12} title="내 관심종목">
         <MyStocksSection onSelectStock={onSelectStock} />
       </Section>
 
-      <Section no={15} title="특징주">
+      {/* 시스템이 기계적으로 골라 따라가는 목록 — 리포트 본문에도 있어야 한다 (2026-08-26) */}
+      <Section no={13} title="슈퍼신호등">
+        <SuperSignalSection onSelectStock={onSelectStock} />
+      </Section>
+
+      <Section no={14} title="특징주">
         <FeaturedSection onSelectStock={onSelectStock} />
       </Section>
 
-      <Section no={16} title="주요 뉴스 클리핑 (종목·테마)">
-        <SectorNews perSector={20} onFetched={setNewsAt} />
+      {/* 콤팩트판 (2026-08-26) — 분야 이름 + 제목만. 본문·검색은 뉴스·공시 메뉴 몫 */}
+      <Section no={15} title="주요 뉴스 클리핑 (종목·테마)">
+        <NewsClippingCompact onFetched={setNewsAt} />
       </Section>
 
       {/*
         AI 정리에 이미 녹아 있지만 원문도 같이 둔다 — 요약이 무엇을 보고 그렇게 말했는지
         확인할 데가 있어야 요약을 믿거나 의심할 수 있다.
       */}
-      <Section no={17} title="텔레그램 채널 요약">
+      {/* 국내외 주요 뉴스 섹션은 뺐다 (2026-08-26) — 뉴스 클리핑과 겹쳐서 같은 기사가 두 번 나왔다 */}
+      <Section no={16} title="텔레그램 채널 요약">
         <ChannelDigestSection />
-      </Section>
-
-      {/*
-        위 클리핑은 종목·테마에 붙은 뉴스고 이건 시장 전체 뉴스다 — 겹쳐 보여도
-        둘 다 있는 게 낫다는 판단이다.
-      */}
-      <Section no={18} title="국내외 주요 뉴스">
-        <MarketNewsSection edition={edition} />
       </Section>
 
       {target && (

@@ -3668,6 +3668,113 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .rp-pin-fold[open] > summary::before { content: "▾ "; }
 .rp-pin-fold > summary::-webkit-details-marker { display: none; }
 
+/* ---------------- 데일리 리포트 개편 (2026-08-26) ---------------- */
+
+/* 국내외 주요 지수 — 표 대신 박스 그리드. 공간은 적게, 등락 색은 확 */
+.rp-idx-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 8px;
+}
+.rp-idx-box {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--g, var(--border));
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rp-idx-kr { --g: var(--blue); }
+.rp-idx-name {
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-idx-price { font-size: 1.02rem; font-variant-numeric: tabular-nums; }
+.rp-idx-rate { font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rp-idx-ghead {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--g, var(--muted));
+  margin-top: 4px;
+}
+
+/* 뉴스 클리핑 콤팩트 — 분야 라벨 + 제목 줄만 */
+.rp-nc-sec { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.rp-nc-sec:last-of-type { border-bottom: none; }
+.rp-nc-label {
+  flex: 0 0 5.2rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--blue);
+  padding-top: 2px;
+}
+.rp-nc-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rp-nc-line {
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.rp-nc-line:hover { text-decoration: underline; }
+.rp-nc-cov {
+  font-style: normal;
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-left: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+
+/* 채널 요약 — 문장 벽 대신 제목·불릿 층 */
+.rp-digest-h {
+  margin: 12px 0 4px;
+  font-size: 0.88rem;
+  padding-left: 8px;
+  border-left: 3px solid var(--blue);
+}
+.rp-digest-h:first-child { margin-top: 0; }
+.rp-digest-li { padding: 2px 0 2px 6px; font-size: 0.86rem; line-height: 1.55; }
+.rp-digest-li > i { color: var(--muted); font-style: normal; margin-right: 2px; }
+.rp-digest-p { padding: 3px 0; font-size: 0.86rem; line-height: 1.6; }
+
+/* 맥박 — 잠정 배지·교차 신호 */
+.mp-prov {
+  margin-left: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #f5c542;
+  border: 1px solid #f5c542;
+  border-radius: 999px;
+  padding: 2px 8px;
+  vertical-align: middle;
+}
+.mp-cross-note { font-size: 0.85rem; margin-bottom: 8px; }
+.mp-cross { display: flex; flex-wrap: wrap; gap: 8px; }
+.mp-cross-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: var(--panel-2);
+  border: 1px solid var(--green);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.mp-cross-item:hover { background: var(--panel); }
+.mp-cross-tags { font-size: 0.72rem; color: var(--green); }
+
 /* 미니 라인차트 */
 .miniline-legend { display: flex; gap: 14px; font-size: 0.72rem; color: var(--muted); margin-bottom: 4px; flex-wrap: wrap; }
 .miniline-key { display: inline-flex; align-items: center; gap: 5px; }

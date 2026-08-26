@@ -16,6 +16,7 @@ import {
   type NewsItem,
   type PinnedHealth,
   type PinnedPost,
+  type ScoredNews,
   type UsMajorResult,
   type EvaluatedTheme,
 } from "../../api";
@@ -745,7 +746,13 @@ export function ChannelDigestSection() {
         {report.channels}개 · 원문 {report.rawCount}건 중 {report.usedCount}건 선별
       </div>
 
-      {report.summary && <div className="report-ai-body">{report.summary}</div>}
+      {/*
+        요약을 구조로 그린다 (2026-08-26 — 「문장 나열식이라 보기 힘들다」).
+        AI 요약은 "## 제목" 과 불릿으로 오는데 통짜 텍스트로 흘려서 벽이 됐다.
+        제목은 제목답게 세우고, 불릿은 줄마다 끊고, 등락률 숫자에 색을 입힌다 —
+        글자는 하나도 안 바꾼다.
+      */}
+      {report.summary && <div className="rp-digest">{renderDigest(report.summary)}</div>}
 
       {report.items.length > 0 && (
         <details className="ov-help">
@@ -763,6 +770,31 @@ export function ChannelDigestSection() {
       )}
     </>
   );
+}
+
+/** 채널 요약 본문 — ## 제목 / 불릿 / 숫자 색까지. 글자는 그대로 */
+function renderDigest(text: string) {
+  return text
+    .split(/\r?\n/)
+    .map((raw, i) => {
+      const line = raw.trim();
+      if (!line) return null;
+      if (line.startsWith("## ")) {
+        return (
+          <h4 className="rp-digest-h" key={i}>
+            {line.slice(3)}
+          </h4>
+        );
+      }
+      const isBullet = /^[-•·*▶]/.test(line);
+      const body = line.replace(/^[-•·*▶]\s*/, "").replace(/\*\*([^*]+)\*\*/g, "$1");
+      return (
+        <div className={isBullet ? "rp-digest-li" : "rp-digest-p"} key={i}>
+          {isBullet && <i>·</i>} {emphasize(body)}
+        </div>
+      );
+    })
+    .filter(Boolean);
 }
 
 function hhmm(iso: string): string {
@@ -1052,4 +1084,167 @@ function renderPinned(text: string) {
     // 줄바꿈은 CSS(white-space: pre-wrap)가 살린다 — 여기서 <br> 을 넣으면 두 번 띄어진다
     return <span key={i}>{emphasize(line)}{"\n"}</span>;
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* 뉴스 클리핑 콤팩트 (2026-08-26) — 「섹터와 제목만, 링크로 가면 되니까」   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 뉴스·공시 탭의 큰 컴포넌트(SectorNews: 탭·브리핑·본문 미리보기) 대신, 리포트에서는
+ * **분야 이름 + 제목 줄**만 늘어놓는다. 눌러 볼 기사만 링크로 나간다.
+ * 중요한 것만 — 분야당 다섯 줄, 보도 매체 수가 붙은(=여러 곳이 다룬) 순서다.
+ */
+export function NewsClippingCompact({ onFetched }: { onFetched?: (iso: string) => void }) {
+  const [sectors, setSectors] = useState<
+    { key: string; label: string; items: ScoredNews[] }[] | null
+  >(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .newsSectors("major", 8, "importance")
+      .then((r) => {
+        setSectors(r.sectors);
+        if (r.fetchedAt) onFetched?.(r.fetchedAt);
+      })
+      .catch((e: Error) => setError(e.message || "불러오지 못했습니다"));
+    // onFetched 는 부모의 setState 라 참조가 바뀌어도 다시 부를 이유가 없다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (error) return <div className="error-banner">{error}</div>;
+  if (!sectors) return <div className="page-note">불러오는 중…</div>;
+
+  const filled = sectors.filter((s) => s.items.length > 0);
+  if (filled.length === 0) return <div className="empty">기사가 없습니다.</div>;
+
+  return (
+    <div className="rp-nc">
+      {filled.map((s) => (
+        <div className="rp-nc-sec" key={s.key}>
+          <span className="rp-nc-label">{s.label}</span>
+          <div className="rp-nc-list">
+            {s.items.slice(0, 5).map((n) => (
+              <a
+                className="rp-nc-line"
+                key={n.link}
+                href={n.link}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {n.title}
+                {n.coverage > 1 && <i className="rp-nc-cov">{n.coverage}곳</i>}
+              </a>
+            ))}
+          </div>
+        </div>
+      ))}
+      <div className="table-note">
+        분야마다 <b>여러 매체가 같이 다룬 순서</b>로 다섯 건 — 제목을 누르면 기사로 갑니다.
+        본문 미리보기·검색은 뉴스·공시 메뉴에서.
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 슈퍼신호등 (2026-08-26) — 리포트 본문판                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 대시보드(🌟 메뉴)의 축약판 — 리포트에서는 「지금 시스템이 어떤 종목을 가리키고
+ * 있고, 그게 얼마나 벌고 있나」 한 표면 된다. 흐름 상세는 🌟 메뉴 몫이다.
+ */
+export function SuperSignalSection({
+  onSelectStock,
+}: {
+  onSelectStock: (code: string, name: string) => void;
+}) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.signalSuper>> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .signalSuper()
+      .then(setData)
+      .catch((e: Error) => setError(e.message || "불러오지 못했습니다"));
+  }, []);
+
+  if (error) return <div className="error-banner">{error}</div>;
+  if (!data) return <div className="page-note">불러오는 중…</div>;
+
+  const active = data.entries.filter((e) => e.active !== false);
+  const spct = (v: number | null | undefined) =>
+    v === null || v === undefined ? "-" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
+  const scls = (v: number | null | undefined) =>
+    v === null || v === undefined ? "" : v >= 0 ? "positive" : "negative";
+
+  if (active.length === 0) {
+    return (
+      <div className="empty">
+        추적 중인 슈퍼신호등 종목이 없습니다 — 평일 15:45 에 일곱 목록 교집합에서
+        자동으로 뽑습니다.
+      </div>
+    );
+  }
+
+  const w5 = data.stats.win.d5;
+  return (
+    <>
+      <p className="page-note">
+        일곱 목록(거래대금·등락률·외국인 연속매수…)의 <b>교집합에 걸린 초록 신호등</b> —
+        시스템이 기계적으로 골라 따라가는 목록입니다. 추적 {data.stats.activeCount}종목
+        {data.stats.todayAdded > 0 && <> · 오늘 신규 {data.stats.todayAdded}</>}
+        {w5.rate !== null && (
+          <>
+            {" "}
+            · 편입 5일 뒤 승률 <b>{w5.rate.toFixed(0)}%</b> ({w5.n}건)
+          </>
+        )}{" "}
+        — 흐름 상세는 🌟 슈퍼신호등 메뉴에서.
+      </p>
+      <div className="data-table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th className="sticky-col">종목</th>
+              <th>편입일</th>
+              <th>점수</th>
+              <th>목록</th>
+              <th>반복</th>
+              <th>편입 대비</th>
+              <th>+5일</th>
+            </tr>
+          </thead>
+          <tbody>
+            {active.slice(0, 10).map((e) => {
+              const daily = e.daily ?? [];
+              const now = daily.length > 0 ? daily[daily.length - 1].score : null;
+              return (
+                <tr key={e.code}>
+                  <td className="sticky-col">
+                    <button className="report-line rl-inline" onClick={() => onSelectStock(e.code, e.name)}>
+                      <b>{e.name}</b>
+                    </button>
+                  </td>
+                  <td>{e.addedDate.slice(5)}</td>
+                  <td className="num">
+                    {e.score}
+                    {now !== null && now !== e.score && (
+                      <i className={now > e.score ? "positive" : "negative"}> →{now}</i>
+                    )}
+                  </td>
+                  <td className="num">{e.lists.length}곳</td>
+                  <td className="num">{e.seenCount}일</td>
+                  <td className={`num strong-col ${scls(e.sinceAdded)}`}>{spct(e.sinceAdded)}</td>
+                  <td className={`num ${scls(e.returns?.d5)}`}>{spct(e.returns?.d5)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
 }

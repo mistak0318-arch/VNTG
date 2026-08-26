@@ -226,7 +226,7 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
       </nav>
 
       <div key={`${tab}-${reloadKey}`}>
-        {tab === "pulse" && <MarketPulsePanel />}
+        {tab === "pulse" && <MarketPulsePanel onSelectStock={onSelectStock} />}
         {tab === "leaders" && <LeaderScanPanel onSelectStock={onSelectStock} />}
         {tab === "events" && <EventPlayPanel />}
         {tab === "closebet" && <CloseBetPanel />}
