@@ -15,6 +15,7 @@ import { exportYoyForSector, getTradeStats } from "./tradeStats.js";
 import { leaderScan } from "./leaderScan.js";
 import { getActiveSuper } from "./superSignal.js";
 import { listSectorFlow, SUBJECTS } from "./sectorFlowStore.js";
+import { ensureInGroup } from "./watchlist.js";
 
 /**
  * 시장 맥박 — 「돈이 어디로 가고 있나」를 한 덩어리로 낸다.
@@ -286,19 +287,35 @@ async function findCross(client: KiwoomClient): Promise<PulseCross | null> {
       [...inflow.entries()].filter(([, v]) => v > 0).map(([name]) => norm(name)),
     );
 
-    const stocks: PulseCrossStock[] = scan.stocks
-      .filter((s) => superCodes.has(s.code))
-      .slice(0, 8)
-      .map((s) => ({
-        code: s.code,
-        name: s.name,
-        sector: s.sector,
-        tags: s.tags,
-        sectorInflow:
-          s.sector.length > 0 &&
-          [...inflowNames].some((n) => n.includes(norm(s.sector)) || norm(s.sector).includes(n)),
-        changeRate: s.changeRate,
-      }));
+    const hits = scan.stocks.filter((s) => superCodes.has(s.code)).slice(0, 8);
+    const stocks: PulseCrossStock[] = hits.map((s) => ({
+      code: s.code,
+      name: s.name,
+      sector: s.sector,
+      tags: s.tags,
+      sectorInflow:
+        s.sector.length > 0 &&
+        [...inflowNames].some((n) => n.includes(norm(s.sector)) || norm(s.sector).includes(n)),
+      changeRate: s.changeRate,
+    }));
+
+    /*
+     * 교차 종목 자동 편입 (2026-08-26 사용자 요청) — 관심 그룹 「슈퍼신호등+교차」.
+     * 세 화면이 동시에 가리킨 종목이 그 뒤로 어떻게 갔는지 **추적할 수 있어야** 한다.
+     * ensureInGroup 이라 이미 담긴 종목은 그룹만 붙고 편입가·메모는 안 건드린다.
+     */
+    const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+    for (const s of hits) {
+      await ensureInGroup(
+        {
+          code: s.code,
+          name: s.name,
+          addedPrice: s.price,
+          memo: `교차 신호 자동 편입 (${today} · ${s.tags.join("·")})`,
+        },
+        "슈퍼신호등+교차",
+      ).catch(() => undefined);
+    }
 
     const data: PulseCross | null =
       stocks.length === 0
