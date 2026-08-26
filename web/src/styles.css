@@ -3755,6 +3755,28 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .rp-digest-li > i { color: var(--muted); font-style: normal; margin-right: 2px; }
 .rp-digest-p { padding: 3px 0; font-size: 0.86rem; line-height: 1.6; }
 
+/* 텔레그램 방 배정 바꾸기 */
+.tro-edit { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.tro-edit h3 { margin: 0 0 6px; font-size: 0.9rem; }
+.tro-rows { display: flex; flex-direction: column; gap: 6px; }
+.tro-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tro-name { flex: 0 0 12rem; font-size: 0.85rem; }
+.tro-row .group-select { max-width: 16rem; }
+.tro-add { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.tro-add .search-input { max-width: 14rem; }
+.tro-del {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  margin-left: 4px;
+  cursor: pointer;
+}
+.tro-del:hover { color: var(--red); border-color: var(--red); }
+
 /* 설정 카드 저장 범위 뱃지 — 전역(서버)인지 이 기기인지 한눈에 */
 .cc-scope {
   font-size: 0.66rem;

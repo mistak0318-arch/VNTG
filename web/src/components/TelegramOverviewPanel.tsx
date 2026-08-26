@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { api, type TelegramChannelStatus } from "../api";
+import {
+  api,
+  type TelegramChannelStatus,
+  type TelegramRoomsData,
+  type TelegramRoomStore,
+} from "../api";
 
 /**
  * 텔레그램 발송 한눈에 (2026-08-26).
@@ -151,12 +156,172 @@ export function TelegramOverviewPanel() {
         </table>
       </div>
       <div className="table-note">
-        방 배정은 서버 <b>server/.env</b> 의 <code>TELEGRAM_CHAT_ID_리포트/시그널/채널/공시/키워드</code>
-        (REPORT · SIGNAL · CHANNEL · DISCLOSURE · KEYWORD) 값이 정합니다 — 비워 두면 그 갈래는
-        기본 방(<code>TELEGRAM_CHAT_ID</code>)으로 갑니다. 방을 나누는 순서: ① 텔레그램에서 그룹을
-        만들고 ② 봇을 초대한 뒤 ③ 그 그룹의 chat_id 를 .env 에 적고 서버를 재시작합니다.
-        자세한 순서는 <b>docs/텔레그램_방_구성.md</b> 에 있습니다.
+        기본 배정은 서버 <b>server/.env</b> 의 <code>TELEGRAM_CHAT_ID_*</code> 키가 정합니다 —
+        비워 두면 그 갈래는 기본 방(<code>TELEGRAM_CHAT_ID</code>)으로 갑니다. 방 만들기 순서는{" "}
+        <b>docs/텔레그램_방_구성.md</b>. 아래 「방 배정 바꾸기」로 .env 를 안 고치고도(재시작 없이)
+        갈래별 방을 옮길 수 있습니다.
       </div>
+
+      <RoomAssignEditor />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 방 배정 바꾸기 (2026-08-26) — .env 를 안 고치고 갈래별 보내는 방 변경   */
+/* ------------------------------------------------------------------ */
+
+const ASSIGN_LABEL: Record<string, string> = {
+  report: "📰 리포트",
+  signal: "🔔 시그널 (VI·손절 포함)",
+  super: "🌟 슈퍼신호등",
+  channel: "📡 채널 수집",
+  disclosure: "📄 공시",
+  keyword: "🔍 키워드",
+  log: "🪵 로그(예비)",
+};
+/** 화면에 보여줄 순서 — 서버 enum 순서가 아니라 쓰는 빈도 순 */
+const ASSIGN_ORDER = ["report", "signal", "super", "channel", "disclosure", "keyword", "log"];
+
+function RoomAssignEditor() {
+  const [data, setData] = useState<TelegramRoomsData | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newId, setNewId] = useState("");
+
+  useEffect(() => {
+    api
+      .telegramRooms()
+      .then(setData)
+      .catch((e: Error) => setMsg(e.message));
+  }, []);
+
+  if (!data) return null;
+
+  const rooms: { label: string; chatId: string }[] = [
+    ...data.envRooms.map((r) => ({ label: `${r.label} (.env)`, chatId: r.chatId })),
+    ...data.store.custom.map((c) => ({ label: `${c.name || c.chatId} (직접 등록)`, chatId: c.chatId })),
+  ];
+
+  async function save(next: TelegramRoomStore) {
+    setBusy(true);
+    try {
+      const r = await api.telegramRoomsSave(next);
+      setData((prev) => (prev ? { ...prev, store: r.store, channels: r.channels } : prev));
+      setMsg("저장했습니다 — 다음 발송부터 이 방으로 갑니다 (재시작 불필요).");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "저장 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function test(ch: string) {
+    setBusy(true);
+    try {
+      const r = await api.telegramRoomTest(ch);
+      setMsg(r.ok ? `「${ASSIGN_LABEL[ch] ?? ch}」 방으로 시험 메시지를 보냈습니다 — 텔레그램을 확인하세요.` : r.error ?? "발송 실패");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "발송 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="tro-edit">
+      <h3>방 배정 바꾸기</h3>
+      <p className="page-note">
+        갈래마다 보낼 방을 고릅니다 — <b>기본(.env)</b>이면 환경변수 그대로, 방을 고르면
+        그쪽이 우선합니다(서버 재시작 없이 즉시). 「시험」을 누르면 그 갈래로 한 통 보내
+        배정이 맞는지 바로 확인할 수 있습니다.
+      </p>
+      <div className="tro-rows">
+        {ASSIGN_ORDER.map((ch) => {
+          const st = data.channels.find((c) => c.channel === ch);
+          return (
+            <div className="tro-row" key={ch}>
+              <span className="tro-name">{ASSIGN_LABEL[ch] ?? ch}</span>
+              <select
+                className="group-select"
+                value={data.store.assign[ch] ?? ""}
+                disabled={busy}
+                onChange={(e) => {
+                  const assign = { ...data.store.assign };
+                  if (e.target.value) assign[ch] = e.target.value;
+                  else delete assign[ch];
+                  void save({ ...data.store, assign });
+                }}
+              >
+                <option value="">기본(.env{st?.envChatId ? "" : " 없음 → 기본 방"})</option>
+                {rooms.map((r) => (
+                  <option key={r.chatId} value={r.chatId}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+              <button className="filter-btn" onClick={() => void test(ch)} disabled={busy}>
+                시험
+              </button>
+              {st?.overridden && <span className="pt-n">재배정됨</span>}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="tro-add">
+        <input
+          className="search-input"
+          placeholder="방 이름 (예: 임시 테스트방)"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+        />
+        <input
+          className="search-input"
+          placeholder="chat_id (예: -1001234567890)"
+          value={newId}
+          onChange={(e) => setNewId(e.target.value)}
+        />
+        <button
+          className="filter-btn"
+          disabled={busy || !newId.trim()}
+          onClick={() => {
+            void save({
+              ...data.store,
+              custom: [...data.store.custom, { name: newName.trim(), chatId: newId.trim() }],
+            });
+            setNewName("");
+            setNewId("");
+          }}
+        >
+          방 등록
+        </button>
+        {data.store.custom.length > 0 && (
+          <span className="pt-n">
+            등록된 방:{" "}
+            {data.store.custom.map((c) => (
+              <button
+                key={c.chatId}
+                className="tro-del"
+                title="지우기 (배정에서 쓰는 중이면 그 배정도 기본으로 돌아갑니다)"
+                onClick={() => {
+                  const assign = Object.fromEntries(
+                    Object.entries(data.store.assign).filter(([, v]) => v !== c.chatId),
+                  );
+                  void save({
+                    assign,
+                    custom: data.store.custom.filter((x) => x.chatId !== c.chatId),
+                  });
+                }}
+              >
+                {c.name || c.chatId} ✕
+              </button>
+            ))}
+          </span>
+        )}
+      </div>
+      {msg && <div className="alert-note">{msg}</div>}
     </div>
   );
 }

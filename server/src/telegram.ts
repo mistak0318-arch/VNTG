@@ -1,4 +1,5 @@
 import { recordApiCall } from "./apiUsage.js";
+import { assignedChatId } from "./telegramRooms.js";
 
 /**
  * 텔레그램 단방향 알림.
@@ -38,10 +39,20 @@ const CHANNEL_ENV: Record<TelegramChannel, string> = {
   super: "TELEGRAM_CHAT_ID_SUPER",
 };
 
-/** 채널 전용 방이 있으면 그쪽으로, 없으면 기본 방으로 */
+/**
+ * 채널의 목적지 —
+ *   ① 화면에서 재배정한 방(data/telegramRooms.json)
+ *   ② .env 의 전용 키(TELEGRAM_CHAT_ID_*)
+ *   ③ 기본 방(TELEGRAM_CHAT_ID)
+ * 순서다. 화면 배정이 .env 를 이기는 이유: .env 는 재시작이 필요해서,
+ * 「이 갈래만 잠깐 저 방으로」 같은 조정을 화면이 담당한다.
+ */
 export function chatIdFor(channel: TelegramChannel): string {
   return (
-    process.env[CHANNEL_ENV[channel]]?.trim() || process.env.TELEGRAM_CHAT_ID?.trim() || ""
+    assignedChatId(channel) ||
+    process.env[CHANNEL_ENV[channel]]?.trim() ||
+    process.env.TELEGRAM_CHAT_ID?.trim() ||
+    ""
   );
 }
 
@@ -57,7 +68,7 @@ export function isTelegramConfigured(channel: TelegramChannel = "report"): boole
  * 그걸로 판단하면 방을 안 판 사람의 알림이 기본 방에 섞여 버린다.
  */
 export function hasDedicatedChannel(channel: TelegramChannel): boolean {
-  return Boolean(process.env[CHANNEL_ENV[channel]]?.trim());
+  return Boolean(assignedChatId(channel) || process.env[CHANNEL_ENV[channel]]?.trim());
 }
 
 /** 어느 방이 어디로 가는지 — 설정 화면에서 확인용 */
@@ -65,12 +76,40 @@ export function telegramChannelStatus(): {
   channel: TelegramChannel;
   chatId: string;
   dedicated: boolean;
+  /** 화면에서 재배정된 갈래인가 (.env 대신 telegramRooms.json 이 정함) */
+  overridden: boolean;
+  /** .env 전용 키가 가리키는 원래 방 — 재배정을 되돌릴 때 보여줄 값 */
+  envChatId: string;
 }[] {
   return (Object.keys(CHANNEL_ENV) as TelegramChannel[]).map((channel) => ({
     channel,
     chatId: chatIdFor(channel),
-    dedicated: Boolean(process.env[CHANNEL_ENV[channel]]?.trim()),
+    dedicated: hasDedicatedChannel(channel),
+    overridden: Boolean(assignedChatId(channel)),
+    envChatId: process.env[CHANNEL_ENV[channel]]?.trim() ?? "",
   }));
+}
+
+/** .env 가 아는 방 명단 — 재배정 드롭다운의 후보 (기본 방 포함) */
+export function telegramEnvRooms(): { key: string; label: string; chatId: string }[] {
+  const LABEL: Record<TelegramChannel, string> = {
+    report: "리포트 방",
+    signal: "시그널 방",
+    log: "로그 방",
+    channel: "채널수집 방",
+    disclosure: "공시 방",
+    keyword: "키워드 방",
+    super: "슈퍼신호등 방",
+  };
+  const out: { key: string; label: string; chatId: string }[] = [];
+  const base = process.env.TELEGRAM_CHAT_ID?.trim();
+  if (base) out.push({ key: "base", label: "기본 방", chatId: base });
+  for (const ch of Object.keys(CHANNEL_ENV) as TelegramChannel[]) {
+    const id = process.env[CHANNEL_ENV[ch]]?.trim();
+    // 같은 chat_id 가 여러 키에 걸려 있으면 한 번만
+    if (id && !out.some((r) => r.chatId === id)) out.push({ key: ch, label: LABEL[ch], chatId: id });
+  }
+  return out;
 }
 
 /** HTML parse_mode를 쓰므로 &, <, > 는 이스케이프해야 한다 */

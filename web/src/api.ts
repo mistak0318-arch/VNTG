@@ -329,6 +329,15 @@ export const api = {
     ),
   alertConfigSave: (config: AlertConfig) =>
     putJson<{ config: AlertConfig }>("/api/alert/config", config),
+  /** 텔레그램 방 재배정 — 갈래별 보내는 방을 화면에서 바꾼다 */
+  telegramRooms: () => getJson<TelegramRoomsData>("/api/alert/telegram-rooms"),
+  telegramRoomsSave: (store: TelegramRoomStore) =>
+    putJson<{ store: TelegramRoomStore; channels: TelegramChannelStatus[] }>(
+      "/api/alert/telegram-rooms",
+      store,
+    ),
+  telegramRoomTest: (channel: string) =>
+    postJson<{ ok: boolean; error?: string }>(`/api/alert/telegram-rooms/test/${channel}`, {}),
   alertScan: (send = false) =>
     postJson<{ alerts: FiredAlert[]; sent: boolean; error?: string; preview: string }>(
       `/api/alert/scan${send ? "?send=1" : ""}`,
@@ -1421,6 +1430,20 @@ export interface TelegramChannelStatus {
   channel: "report" | "signal" | "log" | "channel" | "disclosure" | "keyword" | "super";
   chatId: string;
   dedicated: boolean;
+  /** 화면에서 재배정된 갈래인가 (.env 대신 저장된 배정이 정함) */
+  overridden: boolean;
+  envChatId: string;
+}
+
+export interface TelegramRoomStore {
+  assign: Record<string, string>;
+  custom: { name: string; chatId: string }[];
+}
+
+export interface TelegramRoomsData {
+  channels: TelegramChannelStatus[];
+  envRooms: { key: string; label: string; chatId: string }[];
+  store: TelegramRoomStore;
 }
 
 export interface FiredAlert {

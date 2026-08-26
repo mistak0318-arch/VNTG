@@ -10,7 +10,8 @@ import { runAlertScan } from "../alertScheduler.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { formatLiveAlerts, runLiveAlerts } from "../liveAlerts.js";
 import { formatStopBreaks, runStopWatch } from "../stopWatch.js";
-import { telegramChannelStatus } from "../telegram.js";
+import { isTelegramConfigured, sendTelegram, telegramChannelStatus, telegramEnvRooms, type TelegramChannel } from "../telegram.js";
+import { readRooms, saveRooms, type RoomStore } from "../telegramRooms.js";
 
 export function createAlertRouter(client: KiwoomClient): Router {
   const router = Router();
@@ -22,6 +23,44 @@ export function createAlertRouter(client: KiwoomClient): Router {
         defaults: DEFAULT_ALERT_CONFIG,
         channels: telegramChannelStatus(),
       });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* ── 텔레그램 방 재배정 (2026-08-26) — 화면에서 갈래별 보내는 방 바꾸기 ── */
+
+  router.get("/telegram-rooms", (_req, res) => {
+    res.json({
+      channels: telegramChannelStatus(),
+      envRooms: telegramEnvRooms(),
+      store: readRooms(),
+    });
+  });
+
+  router.put("/telegram-rooms", (req, res, next) => {
+    try {
+      const body = req.body as Partial<RoomStore>;
+      const saved = saveRooms({ assign: body.assign ?? {}, custom: body.custom ?? [] });
+      res.json({ store: saved, channels: telegramChannelStatus() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 지정한 갈래로 시험 발송 — 방 배정이 맞는지 그 자리에서 확인 */
+  router.post("/telegram-rooms/test/:channel", async (req, res, next) => {
+    try {
+      const ch = req.params.channel as TelegramChannel;
+      if (!isTelegramConfigured(ch)) {
+        res.json({ ok: false, error: "이 갈래로 보낼 방이 없습니다 (키 미설정)" });
+        return;
+      }
+      const r = await sendTelegram(
+        `🔧 VNTG 방 배정 시험 — 「${ch}」 갈래가 이 방으로 옵니다`,
+        ch,
+      );
+      res.json(r);
     } catch (err) {
       next(err);
     }
