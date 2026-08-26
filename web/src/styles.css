@@ -2085,6 +2085,28 @@ body {
   .ph-grid {
     grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
   }
+  /*
+   * 폰에서는 칸 안의 줄들을 **한 줄로 흘린다** (2026-08-26 — 「NXT 서브 줄이
+   * 붙으니 칸마다 세로로 길어져 정작 볼 게 좁아진다」). PC 는 그대로(칸이 넓어
+   * 줄맞춤이 보기 좋다). 라벨만 제 줄을 갖고, 값·NXT·체결강도는 이어 붙어
+   * 자리가 모자랄 때만 접힌다. 구분선은 폰에선 자리만 먹어서 뺀다.
+   */
+  .ph-cell {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 10px;
+    row-gap: 1px;
+  }
+  .ph-cell > .ph-label { width: 100%; }
+  .ph-cell > .ph-row {
+    flex: 0 1 auto;
+    justify-content: flex-start;
+    gap: 5px;
+  }
+  .ph-cell .ph-row .ph-sublabel,
+  .ph-cell .ph-row .ph-ex { margin-right: 0; }
+  .ph-cell .ph-sep { display: none; }
   .mood-theme-mood {
     display: none;
   }
