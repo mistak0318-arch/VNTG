@@ -393,6 +393,12 @@ export function ScreenerPage({
    */
   // KRX 정규장 밖(NXT 프리·애프터)엔 오버레이를 끈다 — KRX 0% 가 통합 값을 덮어 「왜 0이냐」가 됐다
   const liveOn = (!data?.spec.exchange || exchange === "3") && krxOverlayLive();
+  /*
+   * NXT 서브 줄은 **정규장엔 숨긴다** (2026-08-26 — 「정규장 돌아가는데 나타났다
+   * 사라졌다 헷갈린다」). 목록은 통합 숫자 하나면 되고, NXT 가 궁금하면 종목을
+   * 누르면 상세에 있다. 프리·애프터·마감(NXT 가 그날의 주인공인 시간)엔 보여 준다.
+   */
+  const showNxtSub = !krxOverlayLive();
   const rt = useRealtime(liveOn ? shown.map((r) => `0B:${r.code}`) : [], 1500, { readOnly: true });
   const liveOf = (code: string): { price: number; rate: number | null } | null => {
     if (!liveOn) return null;
@@ -978,7 +984,7 @@ export function ScreenerPage({
                             return (
                               <td key={c.key} className="num">
                                 <b>{fmtNum(r.tv)}억</b>
-                                {nxt > 0 && (
+                                {showNxtSub && nxt > 0 && (
                                   <i className="scr-split">
                                     KRX {fmtNum(r.tvKrx)} · NXT {fmtNum(nxt)}
                                   </i>
@@ -997,7 +1003,7 @@ export function ScreenerPage({
                               <td key={c.key} className="num">
                                 {lv && <span className="uw-live-dot" title="키움 실시간 (1.5초)" />}
                                 {lv ? fmtNum(lv.price) : v.text}
-                                {r.nxtPrice != null && !lv && (
+                                {showNxtSub && r.nxtPrice != null && !lv && (
                                   <i className="scr-split" title="NXT 최종가 — 프리·애프터장 포함">
                                     NXT {fmtNum(r.nxtPrice)}
                                   </i>
@@ -1013,7 +1019,7 @@ export function ScreenerPage({
                             return (
                               <td key={c.key} className={`num scr-rate ${rc}`}>
                                 {rate === null ? "-" : `${rate > 0 ? "+" : ""}${rate.toFixed(2)}%`}
-                                {r.nxtRate != null && lv?.rate == null && (
+                                {showNxtSub && r.nxtRate != null && lv?.rate == null && (
                                   <i
                                     className={`scr-split ${Number(r.nxtRate) > 0 ? "positive" : Number(r.nxtRate) < 0 ? "negative" : ""}`}
                                     title="NXT 최종 등락률 — 프리·애프터장 포함"
