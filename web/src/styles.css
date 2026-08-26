@@ -7900,10 +7900,10 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
  * 본문이 시황 컴포넌트 공용(ov-idx-grid 등)으로 바뀌면서 이 판만의 CSS 가 없어졌다.
  * "일자로 쭉" — 옆으로 붙이되, 칸이 좁아지면 아래로 접힌다.
  */
-.ib-row3 { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: flex-start; }
-.ib-sec { flex: 1 1 16rem; min-width: 0; }
-/* 지수 타일 넷이 제일 넓다 — 두 몫을 준다 */
-.ib-sec-idx { flex: 2 1 26rem; }
+.ib-row3 { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: flex-start; }
+.ib-sec { flex: 1 1 11.5rem; min-width: 0; }
+/* 지수 타일 넷이 제일 넓다 — 두 몫을 준다 (컴팩트 타일이라 20rem 이면 2×2 가 선다) */
+.ib-sec-idx { flex: 2 1 20rem; }
 .ib-sec-t {
   font-size: 0.72rem; font-weight: 700; color: var(--muted);
   margin-bottom: 0.3rem; letter-spacing: 0.02em;

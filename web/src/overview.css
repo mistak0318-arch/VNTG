@@ -8,7 +8,13 @@
  * 기준은 15px = 1rem 이다.
  */
 /* 시황 탭 — docs/시황탭_목업.html의 디자인 토큰을 따름 */
-.ov {
+/*
+ * ⚠️ `.ib`(보드 지수판)도 같은 토큰을 받는다 (2026-08-27) — 지수판이 시황 카드
+ * 본문(DomesticIndexGrid 등)을 공용하는데, 변수가 `.ov` 에만 있으면 보드에서
+ * 색·그래프·배경이 통째로 죽는다(실제로 그랬다 — 스파크라인 stroke 가
+ * var(--up) 미정의로 투명이 됐다). 테마 오버라이드(엑셀·라이트)도 같이 받는다.
+ */
+.ov, .ib {
   --up: #f0555f;
   --down: #4a8bf5;
   --flat: #8b96a5;
@@ -22,14 +28,14 @@
   --ov-txt-3: #5b6675;
 }
 
-.ov .num {
+.ov .num, .ib .num {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
   letter-spacing: -0.01em;
 }
-.ov .up { color: var(--up); }
-.ov .down { color: var(--down); }
-.ov .flat { color: var(--flat); }
+.ov .up, .ib .up { color: var(--up); }
+.ov .down, .ib .down { color: var(--down); }
+.ov .flat, .ib .flat { color: var(--flat); }
 
 /* ---------- 장 상태 ---------- */
 .ov-statusbar {
@@ -189,6 +195,23 @@
   font-size: 0.6rem;
   margin-bottom: 1px;
 }
+
+/* ===== 보드 지수판 — 컴팩트 오버라이드 (2026-08-27) =====
+   시황 본문을 그대로 쓰되 보드 칸에 맞게 줄인다. 「사각형이 너무 커」 —
+   usb-idx 컴팩트와 같은 문법: 값은 얌전히, **등락률이 주인공**(크고 굵게). */
+.ib .ov-idx { padding: 5px 8px; }
+.ib .ov-idx-name { font-size: 0.64rem; margin-bottom: 1px; }
+.ib .ov-idx-val { font-size: 0.92rem; font-weight: 500; }
+.ib .ov-idx-chg { font-size: 1rem; font-weight: 700; margin-top: 0; }
+.ib .ov-spark { height: 16px; margin: 4px 0 1px; }
+.ib .ov-idx-flow { gap: 6px; padding-top: 3px; margin-top: 3px; }
+.ib .ov-fut { margin-top: 1px; }
+.ib .ov-idx-note { font-size: 0.62rem; margin-top: 2px; }
+/* 등락표·거래대금도 한 단계 촘촘히 */
+.ib .ov-card-b { padding: 0; }
+.ib .ov-table { font-size: 0.74rem; }
+.ib .ov-table th { padding-bottom: 4px; }
+.ib .ov-table td { padding: 4px 0; }
 
 /* ---------- 글로벌 ---------- */
 .ov-g-row {
@@ -424,7 +447,7 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
  * 잘 그려도 주식창으로 읽힌다. 부호(+/−)는 이미 글자에 들어 있으므로 색만 빼도
  * 뜻은 그대로 남는다.
  */
-:root[data-theme="excel"] .ov {
+:root[data-theme="excel"] .ov, :root[data-theme="excel"] .ib {
   --up: #000000;
   --down: #000000;
   --flat: #5a5a5a;
@@ -451,7 +474,7 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 
 /* ===== 라이트 테마: 시황 카드 색상 오버라이드 =====
    overview.css는 자체 변수(--ov-*)를 쓰므로 여기서 값만 갈아끼운다. */
-:root[data-theme="light"] .ov {
+:root[data-theme="light"] .ov, :root[data-theme="light"] .ib {
   --up: #e03131;
   --down: #1c6dd0;
   --flat: #6b7684;
