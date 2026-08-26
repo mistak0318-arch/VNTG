@@ -2364,15 +2364,16 @@ body {
 
 /* 히트맵 — flex-wrap 타일, 크기는 √시총 비례 */
 /* 균등 격자 (2026-08-26 — 「오와 열 맞춰라」). 시총 비례 flex 는 줄마다 폭이 달라 들쭉날쭉했다 */
-.bf-heat { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.4rem, 1fr)); gap: 4px; }
+/* 더 촘촘하게 — 관심종목은 계속 는다. 한 화면에 많이 들어오는 게 히트맵의 뜻이다 */
+.bf-heat { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.2rem, 1fr)); gap: 3px; }
 .bf-tile {
-  min-height: 3.6rem; border: 1px solid var(--border); border-radius: 0.4rem;
-  background: var(--panel); color: var(--text); cursor: pointer; padding: 0.3rem 0.4rem;
-  display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 0;
+  min-height: 2.7rem; border: 1px solid var(--border); border-radius: 0.35rem;
+  background: var(--panel); color: var(--text); cursor: pointer; padding: 0.2rem 0.3rem;
+  display: flex; flex-direction: column; justify-content: center; gap: 0; min-width: 0;
   position: relative;
 }
-.bf-tile b { font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bf-tile i { font-style: normal; font-size: 0.74rem; }
+.bf-tile b { font-size: 0.7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bf-tile i { font-style: normal; font-size: 0.68rem; }
 /* 오늘 수급 격자판 — 숫자가 주인공, 막대는 밑줄 (긴 막대가 태블릿에서 값을 가렸다) */
 .bf-fg {
   display: grid;
@@ -2408,13 +2409,13 @@ body {
 /* 그룹 뱃지 — 어느 관심 그룹의 종목인지. 슈퍼신호등은 별 하나로 */
 .bf-tile-g {
   font-style: normal;
-  font-size: 0.58rem;
+  font-size: 0.54rem;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.bf-tile-g.super { font-size: 0.66rem; }
+.bf-tile-g.super { font-size: 0.6rem; }
 
 /* 테마 */
 .bf-themes { display: grid; gap: 2px; }
