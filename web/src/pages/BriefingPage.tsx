@@ -62,6 +62,12 @@ const BADGE_CLASS: Record<string, string> = {
 
 /* ── [1] 시장 온도계 ────────────────────────────────────── */
 
+/*
+ * 접힘 상태는 기기별 — 폰은 접어 두고 PC 는 펼쳐 두는 게 자연스럽다.
+ * vntg. 프리픽스를 안 쓰는 이유: 그 프리픽스는 서버로 동기화(전역)된다.
+ */
+const THERMO_FOLD_KEY = "bf.thermo.folded";
+
 function Thermometer({
   indices,
   global,
@@ -71,6 +77,25 @@ function Thermometer({
   global: GlobalQuote[] | null;
   usMajor: UsMajorResult | null;
 }) {
+  /* 접기 (2026-08-26) — 접으면 코스피·코스닥·환율 숫자 한 줄만 남아 공간을 돌려준다 */
+  const [folded, setFolded] = useState(() => {
+    try {
+      return localStorage.getItem(THERMO_FOLD_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleFold = () => {
+    setFolded((v) => {
+      try {
+        localStorage.setItem(THERMO_FOLD_KEY, v ? "0" : "1");
+      } catch {
+        /* 무시 */
+      }
+      return !v;
+    });
+  };
+
   const kospi = indices?.find((i) => i.code === "001");
   const kosdaq = indices?.find((i) => i.code === "101");
   /* 상승/하락은 두 시장을 합쳐 본다 — 폭은 시장을 가르지 않는 게 낫다(breadthStore 와 같은 판단) */
@@ -89,8 +114,35 @@ function Thermometer({
   const tyx = usMajor?.rows.find((r) => r.key === "tyx") ?? null;
   const wti = usMajor?.rows.find((r) => r.key === "wti") ?? null;
 
+  /* 접힌 모습 — 핵심 세 숫자 한 줄 + 펼치기 */
+  if (folded) {
+    return (
+      <div className="bf-thermo bf-thermo-folded">
+        {[
+          { label: "코스피", v: kospi?.price?.toFixed(2), r: kospi?.changeRate },
+          { label: "코스닥", v: kosdaq?.price?.toFixed(2), r: kosdaq?.changeRate },
+          { label: "달러/원", v: usdkrw?.price?.toFixed(1), r: usdkrw?.changeRate },
+        ].map(({ label, v, r }) => (
+          <span className="bf-mini" key={label}>
+            <em>{label}</em>
+            <b className={cls(r)}>
+              {v ?? "-"}
+              <i className="bf-mini-sub">{pct(r)}</i>
+            </b>
+          </span>
+        ))}
+        <button className="bf-fold-btn" onClick={toggleFold} title="온도계 펼치기">
+          ▾ 펼치기
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="bf-thermo">
+      <button className="bf-fold-btn" onClick={toggleFold} title="접으면 코스피·코스닥·환율 숫자만 남습니다">
+        ▴ 접기
+      </button>
       {[
         { label: "코스피", card: kospi },
         { label: "코스닥", card: kosdaq },
