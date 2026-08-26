@@ -20,7 +20,6 @@ import { createUsKiwoomRouter } from "./routes/usKiwoom.js";
 import { createNewsRouter } from "./routes/news.js";
 import { createNotesRouter } from "./routes/notes.js";
 import { createMemoRouter } from "./routes/memo.js";
-import { createSummaryRouter } from "./routes/summary.js";
 import { createOverviewRouter } from "./routes/overview.js";
 import { createRankingRouter } from "./routes/ranking.js";
 import { createReportRouter } from "./routes/report.js";
@@ -139,8 +138,6 @@ app.use("/api/settings", createSettingsRouter());
 app.use("/api/calendar", createCalendarRouter());
 app.use("/api/notes", createNotesRouter(client));
 app.use("/api/memo", createMemoRouter());
-/* 위젯·워치 요약 — Cloudflare Access 서비스 토큰은 이 프리픽스만 연다 (TODO G절) */
-app.use("/api/summary", createSummaryRouter(client));
 app.use("/api/signal", createSignalRouter(client));
 app.use("/api/paper", createPaperRouter(client));
 app.use("/api/journal", createJournalRouter(client));
