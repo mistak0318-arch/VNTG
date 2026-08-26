@@ -9,8 +9,9 @@ import { api, type IntraFlowPoint } from "../../api";
  * 외국인이 오후에 돌아섰는지가 이 그림 하나로 보인다.
  *
  * 코스피(01)·코스닥(02)은 억원, K200 선물(03)은 계약.
- * 색은 사용자 지정(2026-08-26): 외국인 빨강 · 기관 주황 · 개인 초록 —
- * 처음엔 국내 관행(외국인 파랑)으로 했는데 「색이 낯설다」고 해서 바꿨다.
+ * 색은 사용자 지정(2026-08-26): 외국인 빨강 · 기관 찐한 노랑 · 개인 초록 —
+ * 처음엔 국내 관행(외국인 파랑)으로 했는데 「색이 낯설다」고 해서 바꿨고,
+ * 기관 주황은 빨강과 겹쳐 보여서 노랑으로 확정.
  */
 export function IntradayFlowChart({
   market,
@@ -44,9 +45,12 @@ export function IntradayFlowChart({
   const H = 150;
   const PAD = { l: 4, r: 52, t: 14, b: 16 };
   const SERIES = [
-    /* 색 배정 (2026-08-26 사용자 지정) — 외국인 빨강 · 기관 주황 · 개인 초록 */
+    /*
+     * 색 배정 (2026-08-26 사용자 지정) — 외국인 빨강 · 기관 찐한 노랑 · 개인 초록.
+     * 주황도 써 봤는데 가는 선에서 빨강과 겹쳐 보여서 노랑으로 확정.
+     */
     { key: "foreign" as const, label: "외국인", color: "#f04452" },
-    { key: "institution" as const, label: "기관", color: "#f97316" },
+    { key: "institution" as const, label: "기관", color: "#eab308" },
     { key: "individual" as const, label: "개인", color: "#35c46a" },
   ];
   const vals = pts.flatMap((p) => SERIES.map((s) => p[s.key]));
