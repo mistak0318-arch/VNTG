@@ -1158,6 +1158,17 @@ body {
   제목보다 조금 작게: 이름이 주소고 값은 상태다.
 */
 .sheet-live { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+/*
+ * 폰 시트 헤더 (2026-08-26 — 「SK하 / 이닉스 / (000660)」로 이름이 세로로 깨짐).
+ * 한 줄 flex 에서 가격(nowrap)과 버튼 셋이 자리를 먹으니 이름이 글자 중간에서
+ * 접혔다. 폰에서는 **이름이 첫 줄을 통째로** 갖고, 가격·버튼이 둘째 줄로 내려온다
+ * (가격 왼쪽 · 버튼 오른쪽).
+ */
+@media (max-width: 700px) {
+  .sheet-header { flex-wrap: wrap; row-gap: 2px; }
+  .sheet-header h2 { flex: 1 1 100%; min-width: 0; }
+  .sheet-header .sheet-live { margin-right: auto; }
+}
 .sheet-live b { font-size: 0.95rem; font-variant-numeric: tabular-nums; }
 .sheet-live i { font-style: normal; font-size: 0.75rem; }
 /*
