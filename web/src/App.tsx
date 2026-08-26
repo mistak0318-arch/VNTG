@@ -10,6 +10,7 @@ import { JournalPage } from "./pages/JournalPage";
 import { MemoPage } from "./pages/MemoPage";
 import { MiniPage } from "./pages/MiniPage";
 import { matchesMiniHotkey, onMiniConfigChange, readMiniConfig } from "./miniConfig";
+import { TabActiveContext } from "./tabActive";
 import { SuperDashboardPage } from "./pages/SuperDashboardPage";
 import { UsWatchPage } from "./pages/UsWatchPage";
 import { AskPage } from "./pages/AskPage";
@@ -291,6 +292,99 @@ export default function App() {
     setNavOpen(false); // 모바일에서 항목을 고르면 드로어를 닫는다
   }
 
+  /*
+   * 인앱 탭 (2026-08-26 — 「브라우저 탭처럼, 메뉴 옮겨도 보던 게 안 날아가게」).
+   *
+   * 연 페이지들을 **언마운트하지 않고 숨긴다** — 스크롤·필터·입력이 그대로 산다.
+   * 활성 탭은 여전히 해시가 정한다(새로고침·뒤로가기 그대로). 숨은 탭의 실시간
+   * 구독은 useRealtime 이 TabActiveContext 를 보고 놓는다(소켓 정원 보호).
+   * 폴링 fetch 는 계속 돌지만 대부분 서버 캐시를 읽는 것이라 키움 호출은 안 는다.
+   *
+   * 탭 목록은 sessionStorage — **창마다 따로**다(보드용 창이 본창 탭을 물려받으면 안 된다).
+   */
+  const MAX_TABS = 6;
+  const [openTabs, setOpenTabs] = useState<Tab[]>(() => {
+    try {
+      const raw = sessionStorage.getItem("vntg.openTabs");
+      const saved = raw ? (JSON.parse(raw) as string[]) : [];
+      const valid = saved.filter((t): t is Tab => VALID_TABS.has(t as Tab));
+      return valid.length > 0 ? valid : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("vntg.openTabs", JSON.stringify(openTabs));
+    } catch {
+      /* 무시 */
+    }
+  }, [openTabs]);
+  // 활성 탭은 늘 목록에 있게 — 없으면 뒤에 붙이고, 상한을 넘으면 가장 오래된 비활성 탭을 닫는다
+  useEffect(() => {
+    if (tab === "mini") return;
+    setOpenTabs((prev) => {
+      if (prev.includes(tab)) return prev;
+      const next = [...prev, tab];
+      while (next.length > MAX_TABS) {
+        const victim = next.find((t) => t !== tab);
+        if (!victim) break;
+        next.splice(next.indexOf(victim), 1);
+      }
+      return next;
+    });
+  }, [tab]);
+
+  function closeTab(t: Tab) {
+    setOpenTabs((prev) => {
+      const next = prev.filter((x) => x !== t);
+      if (t === tab) {
+        // 활성 탭을 닫으면 옆 탭으로 — 브라우저와 같은 감각
+        const fallback = next[next.length - 1] ?? "briefing";
+        navigate({ tab: fallback, stock: null });
+      }
+      return next;
+    });
+  }
+
+  /** 탭 키 → 페이지. 인앱 탭이 열린 것들을 전부 이걸로 그린다 */
+  function renderPage(t: Tab) {
+    switch (t) {
+      case "briefing": return <BriefingPage onSelectStock={onSelectStock} />;
+      case "overview": return <OverviewPage onSelectStock={onSelectStock} />;
+      case "report": return <DailyReportPage onSelectStock={onSelectStock} />;
+      case "map": return <MapPage onSelectStock={onSelectStock} />;
+      case "program": return <ProgramTradePage />;
+      case "news": return <NewsPage onSelectStock={onSelectStock} />;
+      case "discovery": return <StockDiscoveryPage onSelectStock={onSelectStock} />;
+      case "watchAi": return <MyPage onSelectStock={onSelectStock} />;
+      case "watchKiwoom": return <KiwoomWatchlistPage onSelectStock={onSelectStock} />;
+      case "customTheme": return <CustomThemePage onSelectStock={onSelectStock} />;
+      case "signalScreen": return <ScreenPage onSelectStock={onSelectStock} />;
+      case "superSignal": return <SuperDashboardPage onSelectStock={onSelectStock} />;
+      case "journal": return <JournalPage onSelectStock={onSelectStock} />;
+      case "memo": return <MemoPage />;
+      case "usWatch": return <UsWatchPage />;
+      case "marketFlow": return <MarketFlowPage onSelectStock={onSelectStock} />;
+      case "ask": return <AskPage />;
+      case "calendar": return <CalendarPage />;
+      case "telegram": return <TelegramPage />;
+      case "screener": return <ScreenerPage onSelectStock={onSelectStock} />;
+      case "stockAnalysis": return <StockAnalysisPage stock={selected} onSelectStock={openAnalysis} />;
+      case "volume": return <VolumeRankingPage onSelectStock={onSelectStock} />;
+      case "sameNet": return <SameNetTradeRankingPage onSelectStock={onSelectStock} />;
+      case "continuous": return <ContinuousTradePage onSelectStock={onSelectStock} />;
+      case "algo": return <AlgoPicksPage onSelectStock={onSelectStock} />;
+      case "paper": return <PaperTradePage onSelectStock={onSelectStock} />;
+      case "account": return <AccountInfoPage onSelectStock={onSelectStock} />;
+      case "manualAccount": return <ManualAccountPage onSelectStock={onSelectStock} />;
+      case "board": return <BoardPage onSelectStock={onSelectStock} />;
+      case "settings": return <SettingsPage />;
+      case "guide": return <GuidePage />;
+      default: return null;
+    }
+  }
+
   /**
    * 메뉴를 **새 브라우저 탭**으로 (2026-08-26 — 「메뉴 옮기면 보던 게 초기화된다」).
    * Ctrl(⌘)+클릭 또는 휠 클릭. 해시 라우팅이라 새 탭이 그 메뉴로 바로 열리고,
@@ -524,48 +618,45 @@ export default function App() {
           <RunningJobsBar />
 
           {/*
-            화면 하나가 터져도 앱이 통째로 내려앉지 않게 감싼다.
-            미니PC 에서 종목발굴이 검은 화면이 됐을 때, 원인은 신호등 응답의 필드 하나였는데
-            그 예외가 React 트리를 전부 걷어내 body 배경만 남았다.
-            서버와 웹은 따로 배포되므로 둘이 어긋나는 창은 배포할 때마다 열린다 —
-            그때 보이는 게 검은 화면이면 무엇이 잘못됐는지 알 길이 없다.
-            탭을 옮기면 resetKey 가 바뀌어 다시 그려 본다.
+            인앱 탭바 (2026-08-26) — 연 메뉴들이 브라우저 탭처럼 쌓인다.
+            탭이 하나면 안 그린다 — 기능을 안 쓰는 사람에게는 예전 화면 그대로다.
           */}
-          <ErrorBoundary where={TAB_LABELS[tab] ?? tab} resetKey={tab}>
-          {tab === "briefing" && <BriefingPage onSelectStock={onSelectStock} />}
-          {tab === "overview" && <OverviewPage onSelectStock={onSelectStock} />}
-          {tab === "report" && <DailyReportPage onSelectStock={onSelectStock} />}
-          {tab === "map" && <MapPage onSelectStock={onSelectStock} />}
-          {tab === "program" && <ProgramTradePage />}
-          {tab === "news" && <NewsPage onSelectStock={onSelectStock} />}
-          {tab === "discovery" && <StockDiscoveryPage onSelectStock={onSelectStock} />}
-          {tab === "watchAi" && <MyPage onSelectStock={onSelectStock} />}
-          {tab === "watchKiwoom" && <KiwoomWatchlistPage onSelectStock={onSelectStock} />}
-          {tab === "customTheme" && <CustomThemePage onSelectStock={onSelectStock} />}
-          {tab === "signalScreen" && <ScreenPage onSelectStock={onSelectStock} />}
-          {tab === "superSignal" && <SuperDashboardPage onSelectStock={onSelectStock} />}
-          {tab === "journal" && <JournalPage onSelectStock={onSelectStock} />}
-          {tab === "memo" && <MemoPage />}
-          {tab === "usWatch" && <UsWatchPage />}
-          {tab === "marketFlow" && <MarketFlowPage onSelectStock={onSelectStock} />}
-          {tab === "ask" && <AskPage />}
-          {tab === "calendar" && <CalendarPage />}
-          {tab === "telegram" && <TelegramPage />}
-          {tab === "screener" && <ScreenerPage onSelectStock={onSelectStock} />}
-          {tab === "stockAnalysis" && (
-            <StockAnalysisPage stock={selected} onSelectStock={openAnalysis} />
+          {openTabs.length > 1 && (
+            <div className="app-tabs">
+              {openTabs.map((t) => (
+                <span key={t} className={`app-tab${t === tab ? " active" : ""}`}>
+                  <button className="app-tab-go" onClick={() => go(t)} title={TAB_LABELS[t] ?? t}>
+                    {TAB_LABELS[t] ?? t}
+                  </button>
+                  <button
+                    className="app-tab-x"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(t);
+                    }}
+                    title="탭 닫기"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
           )}
-          {tab === "volume" && <VolumeRankingPage onSelectStock={onSelectStock} />}
-          {tab === "sameNet" && <SameNetTradeRankingPage onSelectStock={onSelectStock} />}
-          {tab === "continuous" && <ContinuousTradePage onSelectStock={onSelectStock} />}
-          {tab === "algo" && <AlgoPicksPage onSelectStock={onSelectStock} />}
-          {tab === "paper" && <PaperTradePage onSelectStock={onSelectStock} />}
-          {tab === "account" && <AccountInfoPage onSelectStock={onSelectStock} />}
-          {tab === "manualAccount" && <ManualAccountPage onSelectStock={onSelectStock} />}
-          {tab === "board" && <BoardPage onSelectStock={onSelectStock} />}
-          {tab === "settings" && <SettingsPage />}
-          {tab === "guide" && <GuidePage />}
-          </ErrorBoundary>
+
+          {/*
+            열린 탭들을 **전부 마운트한 채** 활성만 보인다 — 상태(스크롤·필터·입력)가 산다.
+            화면 하나가 터져도 앱이 통째로 내려앉지 않게 탭마다 ErrorBoundary 로 감싼다.
+            숨은 탭의 실시간은 TabActiveContext=false 를 본 useRealtime 이 놓는다.
+          */}
+          {(openTabs.includes(tab) ? openTabs : [...openTabs, tab]).map((t) => (
+            <div key={t} className="app-tabpane" hidden={t !== tab}>
+              <TabActiveContext.Provider value={t === tab}>
+                <ErrorBoundary where={TAB_LABELS[t] ?? t} resetKey={t}>
+                  {renderPage(t)}
+                </ErrorBoundary>
+              </TabActiveContext.Provider>
+            </div>
+          ))}
         </div>
       </div>
 

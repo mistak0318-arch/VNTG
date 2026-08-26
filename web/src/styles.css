@@ -3884,6 +3884,50 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 }
 .tro-del:hover { color: var(--red); border-color: var(--red); }
 
+/* ---------------- 인앱 탭바 — 브라우저 탭처럼 열린 메뉴들 ---------------- */
+.app-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.app-tabs::-webkit-scrollbar { display: none; }
+.app-tab {
+  display: inline-flex;
+  align-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+  white-space: nowrap;
+  flex: none;
+}
+.app-tab.active { background: var(--panel); border-color: var(--blue); }
+.app-tab-go {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 5px 4px 5px 10px;
+  cursor: pointer;
+}
+.app-tab.active .app-tab-go { color: var(--text); }
+.app-tab-x {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 5px 8px 5px 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+.app-tab-x:hover { color: var(--red); }
+.app-tabpane[hidden] { display: none; }
+
 /* 설정 카드 저장 범위 뱃지 — 전역(서버)인지 이 기기인지 한눈에 */
 .cc-scope {
   font-size: 0.66rem;

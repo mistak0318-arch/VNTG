@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTabActive } from "./tabActive";
 
 /**
  * 실시간 값을 읽는다 — **화면이 달라고 하면 서버가 알아서 구독한다.**
@@ -66,8 +67,14 @@ export function useRealtime(
   opts?: { readOnly?: boolean },
 ): RealtimeState {
   const [state, setState] = useState<RealtimeState>(EMPTY);
+  /*
+   * 숨은 인앱 탭이면 키를 통째로 비운다 (2026-08-26) — 구독·폴링이 전부 멎는다.
+   * 상태 보존을 위해 페이지를 언마운트하지 않으므로, 실시간만은 여기서 끊어야
+   * 열린 탭 몇 개가 소켓 정원(화면 몫 20)을 짓밟지 않는다.
+   */
+  const tabActive = useTabActive();
   // 배열은 매 렌더 새 객체라 그대로 의존성에 넣으면 타이머가 계속 다시 걸린다
-  const joined = keys.join(",");
+  const joined = tabActive ? keys.join(",") : "";
   const readOnly = opts?.readOnly === true;
 
   useEffect(() => {
