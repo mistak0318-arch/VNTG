@@ -308,11 +308,17 @@ export function createMarketRouter(client: KiwoomClient): Router {
   // 거래원 (ka10002) - 매도/매수 상위 5개 증권사
   router.get("/broker/:code", async (req, res, next) => {
     try {
+      const bareCd = req.params.code.replace(/_(AL|NX)$/i, "");
       const { data } = await client.request<Record<string, unknown>>(STKINFO_RESOURCE, "ka10002", {
         // 통합(_AL) — NXT 물량이 많은 창구(키움 등)가 KRX 단독에선 반토막으로 보였다.
-        // ?stex=krx 는 진단용 — 기준이 의심될 때 단독값과 맞대 본다
-        stk_cd: req.query.stex === "krx" ? req.params.code : alCode(req.params.code),
-      });
+        // ?stex=krx|nxt 는 진단용 — 기준이 의심될 때 단독값과 맞대 본다
+        stk_cd:
+          req.query.stex === "krx"
+            ? bareCd
+            : req.query.stex === "nxt"
+              ? `${bareCd}_NX`
+              : alCode(bareCd),
+      }, { noAl: true });
       /*
        * 새벽엔 통합·단독 모두 빈 값이라 _AL 미지원 여부를 아직 실측 못 했다.
        * 만약 _AL 이 빈 응답이면 단독으로 한 번 더 — 기준이 좁아지는 건 아쉽지만
