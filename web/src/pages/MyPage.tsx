@@ -329,15 +329,27 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
   /**
    * 그룹 하나를 넣거나 뺀다.
    *
-   * 서버가 갱신된 전체 목록을 돌려주므로 그걸 그대로 쓴다 — 화면이 계산해서 맞추면
-   * 두 창을 띄웠을 때 서로 어긋난다.
+   * **화면을 먼저 바꾼다** (2026-08-26 — 「반응이 되게 느리다」).
+   * 예전엔 토글 후 `load(true)` 로 전체 트래킹(수급·재무까지)을 다시 받았다 —
+   * 체크 하나 누르는데 수십 초짜리 조회가 돌았다. 그룹 편입은 화면이 정확히 아는
+   * 변화라 items 의 groups 만 그 자리에서 고치고, 서버엔 조용히 적는다.
+   * 실패하면 되돌리고 그때 말한다 — 상태 바꾸기(applyStatus)와 같은 원칙.
    */
   async function toggleGroup(code: string, group: string) {
+    const before = items;
+    setItems((cur) =>
+      cur.map((i) => {
+        if (i.code !== code) return i;
+        const gs = i.groups ?? [DEFAULT_GROUP];
+        const next = gs.includes(group) ? gs.filter((g) => g !== group) : [...gs, group];
+        // 마지막 그룹에서 빼면 기본 그룹으로 — 서버 규칙과 같게(무소속은 없다)
+        return { ...i, groups: next.length > 0 ? next : [DEFAULT_GROUP] };
+      }),
+    );
     try {
       await api.watchGroupToggle(code, group);
-      // 표는 시세까지 붙은 TrackedStock 이라 서버 목록을 그대로 못 쓴다. 다시 받는다
-      await load(true);
     } catch (err) {
+      setItems(before);
       setError(err instanceof Error ? err.message : "그룹 변경 실패");
     }
   }
