@@ -128,10 +128,13 @@ export function UsBoardPanel() {
       */}
       {usMajor.data?.boardSignal && <BoardLight sig={usMajor.data.boardSignal} />}
 
-      {/* ---------------- 지수 ---------------- */}
+      {/*
+        지수와 원자재를 **한 카드**로 (2026-08-26 — 「미국 지수 및 원자재로 윗줄에 붙이자」).
+        칸이 컴팩트해지면서 여덟 개가 한두 줄에 다 들어온다 — 카드를 나눌 이유가 없어졌다.
+      */}
       <section className="ov-card">
         <div className="ov-card-h">
-          <span className="ov-card-t">미국 지수</span>
+          <span className="ov-card-t">미국 지수 · 원자재</span>
           <span className="ov-card-sub">
             {usMajor.data?.fetchedAt
               ? new Date(usMajor.data.fetchedAt).toLocaleTimeString("ko-KR", { hour12: false })
@@ -139,14 +142,18 @@ export function UsBoardPanel() {
           </span>
         </div>
         <div className="ov-card-b">
-          {boxes.length === 0 ? (
+          {boxes.length === 0 && commodities.length === 0 ? (
             <div className="empty">불러오는 중…</div>
           ) : (
-            <IndexBoxes boxes={boxes} onPick={setChart} />
+            <IndexBoxes boxes={[...boxes, ...commodities]} onPick={setChart} />
           )}
           {usMajor.data?.curveNote && (
             <div className="usb-curve">{usMajor.data.curveNote}</div>
           )}
+          <div className="table-note">
+            유가는 <b>정유·화학·항공</b>에 바로 닿고, 금은 금리·달러의 반대편이라 같이 보면
+            시장이 <b>위험을 사는지 피하는지</b>가 읽힙니다. WTI·브렌트는 선물(근월물)입니다.
+          </div>
         </div>
       </section>
 
@@ -187,28 +194,7 @@ export function UsBoardPanel() {
         </div>
       </section>
 
-      {/* ---------------- 원자재 ---------------- */}
-      <section className="ov-card">
-        <div className="ov-card-h">
-          <span className="ov-card-t">원자재</span>
-          <span className="ov-card-sub">
-            {usMajor.data?.fetchedAt
-              ? new Date(usMajor.data.fetchedAt).toLocaleTimeString("ko-KR", { hour12: false })
-              : ""}
-          </span>
-        </div>
-        <div className="ov-card-b">
-          {commodities.length === 0 ? (
-            <div className="empty">불러오는 중…</div>
-          ) : (
-            <IndexBoxes boxes={commodities} onPick={setChart} />
-          )}
-          <div className="table-note">
-            유가는 <b>정유·화학·항공</b>에 바로 닿습니다. 금은 금리·달러의 반대편이라 같이 보면
-            지금 시장이 <b>위험을 사는지 피하는지</b>가 읽힙니다. WTI·브렌트는 선물(근월물)입니다.
-          </div>
-        </div>
-      </section>
+      {/* 원자재 카드는 위 「미국 지수 · 원자재」로 합쳤다 (2026-08-26) */}
 
       {/* ---------------- 야간선물 ---------------- */}
       <section className="ov-card">
