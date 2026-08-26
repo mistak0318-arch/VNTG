@@ -97,6 +97,8 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
 
   /** KRX 몫 거래대금 — 조회에서 직접 받는다(일봉은 개장 전에 어제 값을 준다) */
   const [krxValue, setKrxValue] = useState<number | null>(null);
+  /** 통합(KRX+NXT) 거래대금 — 메인 표기는 이것 (2026-08-26) */
+  const [allValue, setAllValue] = useState<number | null>(null);
   /** 상장주식수(주) — 회전율의 분모. `ka10007` 이 천주로 준다 */
   const [shares, setShares] = useState<number | null>(null);
 
@@ -120,6 +122,7 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           const k = r.exchanges.find((x) => x.key === "krx") ?? null;
           setKrx(k);
           setKrxValue(k?.tradeValue ?? null);
+          setAllValue(r.exchanges.find((x) => x.key === "all")?.tradeValue ?? null);
           // 천주로 온다 — 주 단위로 바꿔 둔다
           setShares(k?.shares ? k.shares * 1000 : null);
         })
@@ -426,20 +429,47 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           숫자가 말하고, 색은 「이게 체결강도 자리다」라는 표지다.
         */}
         <div className="ph-cell">
-          <span className="ph-label">거래대금</span>
-          <span className="ph-row">
-            <span className="ph-value">
-              {krxValue === null ? "-" : `${Math.round(krxValue / 100).toLocaleString("ko-KR")}억`}
-            </span>
-          </span>
-          {nxt?.tradeValue != null && nxt.tradeValue > 0 && (
-            <span className="ph-row">
-              <em className="ph-sublabel nxt">NXT</em>
-              <span className="ph-value sub">
-                {Math.round(nxt.tradeValue / 100).toLocaleString("ko-KR")}억
-              </span>
-            </span>
-          )}
+          {/*
+            거래대금은 **통합이 메인** (2026-08-26 — 「통합 아래에 KRX/NXT 비중까지」).
+            메인 숫자가 KRX 만이면 키움 앱(통합)과 어긋나 보인다. 아래 두 줄이
+            거래소별 몫과 비중(%) — 어느 판에서 돈이 돌았는지 참고용이다.
+          */}
+          {(() => {
+            const total =
+              allValue ??
+              (krxValue !== null || nxt?.tradeValue != null
+                ? (krxValue ?? 0) + (nxt?.tradeValue ?? 0)
+                : null);
+            const eok = (v: number) => `${Math.round(v / 100).toLocaleString("ko-KR")}억`;
+            const share = (v: number | null | undefined) =>
+              v != null && total ? ` (${Math.round((v / total) * 100)}%)` : "";
+            return (
+              <>
+                <span className="ph-label" title="KRX+NXT 통합 거래대금">거래대금</span>
+                <span className="ph-row">
+                  <span className="ph-value">{total === null ? "-" : eok(total)}</span>
+                </span>
+                {krxValue !== null && krxValue > 0 && (
+                  <span className="ph-row">
+                    <em className="ph-sublabel">KRX</em>
+                    <span className="ph-value sub ph-venue-share">
+                      {eok(krxValue)}
+                      <i>{share(krxValue)}</i>
+                    </span>
+                  </span>
+                )}
+                {nxt?.tradeValue != null && nxt.tradeValue > 0 && (
+                  <span className="ph-row">
+                    <em className="ph-sublabel nxt">NXT</em>
+                    <span className="ph-value sub ph-venue-share">
+                      {eok(nxt.tradeValue)}
+                      <i>{share(nxt.tradeValue)}</i>
+                    </span>
+                  </span>
+                )}
+              </>
+            );
+          })()}
           <span className="ph-sep" />
           <span className="ph-row">
             <em className="ph-sublabel" title="매수 체결 ÷ 매도 체결 × 100. 100 이 균형">
