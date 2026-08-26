@@ -111,9 +111,12 @@ export function TelegramOverviewPanel() {
   /*
    * 같은 chat_id 를 쓰는 채널이 몇 개인지 — 「전용방」이라 적혀 있어도 실제로는
    * 값이 같아 한 방에 섞여 들어올 수 있다. 그건 여기서만 보인다.
+   * log 갈래는 뺀다 — 보내는 코드가 없어서(예비) 같은 방이어도 섞일 게 없다.
+   * 실제로 슈퍼신호등이 옛 로그 방을 재활용한다 (2026-08-26).
    */
   const idCount = new Map<string, number>();
   for (const c of channels) {
+    if (c.channel === "log") continue;
     if (c.chatId) idCount.set(c.chatId, (idCount.get(c.chatId) ?? 0) + 1);
   }
 
