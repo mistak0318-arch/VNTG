@@ -137,6 +137,11 @@ export async function etfTaxInfo(client: KiwoomClient, code: string): Promise<Et
   return info;
 }
 
+/** 전체 ETF — 누적등락률(기간 등락률) 계산의 모집단으로도 쓴다 */
+export async function etfAll(client: KiwoomClient): Promise<EtfListRow[]> {
+  return fetchAll(client);
+}
+
 /**
  * 리스트 캐시에서 한 종목 — 상세(ETF 탭)가 추적오차·NAV 를 얹을 때 쓴다.
  * 캐시가 식었으면 전체를 새로 받는다(3분 캐시라 상세 몇 번에 한 번 꼴).

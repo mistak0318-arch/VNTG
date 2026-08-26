@@ -168,6 +168,8 @@ export interface UsSearchResult {
   name: string;
   exchange: string;
   type: string;
+  /** 국가 (USA/JPN/HKG/CHN…) — 네이버 검색이 준다. 야후 결과는 빈 값 */
+  nation?: string;
 }
 
 /**
@@ -193,13 +195,61 @@ const OK_EXCHANGES = new Set([
   "JPX", "TYO", "HKG", "SHH", "SHZ", "TAI", "KSC", "KOE",
 ]);
 
-export async function searchUs(query: string): Promise<UsSearchResult[]> {
-  const q = query.trim();
-  if (!q) return [];
+/**
+ * 네이버 자동완성 — **한국어 검색**이 여기서 나온다 (2026-08-27).
+ *
+ * "테슬라"를 야후에 치면 아무것도 안 나온다 — 한글 회사명을 야후가 모른다.
+ * 네이버 front-api 자동완성은 한글 이름으로 미국·일본·홍콩·중국 종목을 찾아 주고
+ * 인증도 필요 없다. 실측(2026-08-27):
+ *   GET m.stock.naver.com/front-api/search/autoComplete?query=…&target=stock
+ *   → items[{code, name(한글), typeCode(NASDAQ/TOKYO/HONG_KONG/SHANGHAI…),
+ *            reutersCode(TSLA.O·7203.T·0700.HK·600519.SS), nationCode(USA/JPN/HKG/CHN/KOR), isEtf}]
+ *
+ * **야후 심볼 매핑도 실측으로 확정**: 미국은 code 가 이미 야후 심볼(TSLA·TM·NVDA)이고,
+ * 일본(.T)·홍콩(.HK)·상해(.SS)·심천(.SZ)은 reutersCode 가 야후와 같은 접미를 쓴다.
+ * 국내(KOR)는 뺀다 — 이 메뉴는 해외다.
+ */
+async function searchNaver(q: string): Promise<UsSearchResult[]> {
+  try {
+    const res = await fetch(
+      `https://m.stock.naver.com/front-api/search/autoComplete?query=${encodeURIComponent(q)}&target=stock`,
+      { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(6000) },
+    );
+    void recordApiCall("naver", "usSearch", res.ok ? "ok" : "failed");
+    if (!res.ok) return [];
+    const j = (await res.json()) as {
+      result?: {
+        items?: {
+          code?: string;
+          name?: string;
+          typeCode?: string;
+          reutersCode?: string;
+          nationCode?: string;
+          isEtf?: boolean;
+        }[];
+      };
+    };
+    return (j.result?.items ?? [])
+      .filter((x) => x.code && x.nationCode && x.nationCode !== "KOR")
+      .map((x) => ({
+        symbol: x.nationCode === "USA" ? String(x.code) : String(x.reutersCode ?? x.code),
+        name: String(x.name ?? x.code),
+        exchange: String(x.typeCode ?? ""),
+        type: x.isEtf ? "ETF" : "EQUITY",
+        nation: String(x.nationCode),
+      }))
+      .slice(0, 8);
+  } catch {
+    void recordApiCall("naver", "usSearch", "failed");
+    return [];
+  }
+}
+
+async function searchYahoo(q: string): Promise<UsSearchResult[]> {
   try {
     const res = await fetch(
       `${SEARCH}?q=${encodeURIComponent(q)}&quotesCount=15&newsCount=0`,
-      { headers: { "User-Agent": "Mozilla/5.0" } },
+      { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(6000) },
     );
     void recordApiCall("yahoo", "search", res.ok ? "ok" : "failed");
     const j = (await res.json()) as {
@@ -218,6 +268,25 @@ export async function searchUs(query: string): Promise<UsSearchResult[]> {
     void recordApiCall("yahoo", "search", "failed");
     return [];
   }
+}
+
+export async function searchUs(query: string): Promise<UsSearchResult[]> {
+  const q = query.trim();
+  if (!q) return [];
+  /*
+   * 둘 다 물어서 합친다 — 네이버(한글 이름·아시아)가 앞, 야후(영문·유럽)가 뒤.
+   * 같은 심볼이 양쪽에서 오면 네이버 것(한글 이름)을 남긴다 — 담을 때 그 이름이
+   * 그대로 표시 이름이 된다.
+   */
+  const [naver, yahoo] = await Promise.all([searchNaver(q), searchYahoo(q)]);
+  const seen = new Set<string>();
+  const out: UsSearchResult[] = [];
+  for (const r of [...naver, ...yahoo]) {
+    if (seen.has(r.symbol)) continue;
+    seen.add(r.symbol);
+    out.push(r);
+  }
+  return out.slice(0, 12);
 }
 
 export interface UsQuoteRow {

@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { etfAll } from "./routes/etf.js";
 import { tradeValueTop } from "./signalScreen.js";
 
 /**
@@ -94,9 +95,21 @@ export async function cumulativeRank(
   if (running) return running;
 
   const job = (async (): Promise<CumResult> => {
-    const top = await tradeValueTop(client, market, universe).catch((e: unknown) => {
-      throw new Error(`거래대금 상위 조회 실패: ${e instanceof Error ? e.message : String(e)}`);
-    });
+    /*
+     * 모집단. market="ETF" 면 **ETF 전체시세(ka40004)의 거래대금 상위**에서 고른다
+     * (2026-08-27 — ETF 메뉴의 기간 등락률). 개별주의 거래대금 상위 TR 은 ETF 를
+     * 순위에 잘 안 올리므로 모집단 자체를 갈아끼우는 게 맞다. 일봉(ka10081)은
+     * ETF 도 똑같이 나온다.
+     */
+    const top =
+      market === "ETF"
+        ? (await etfAll(client))
+            .sort((a, b) => b.tradeValue - a.tradeValue)
+            .slice(0, universe)
+            .map((r) => ({ code: r.code, name: r.name, tradeValue: r.tradeValue }))
+        : await tradeValueTop(client, market, universe).catch((e: unknown) => {
+            throw new Error(`거래대금 상위 조회 실패: ${e instanceof Error ? e.message : String(e)}`);
+          });
     if (top.length === 0) throw new Error("거래대금 상위가 0건입니다");
     const rows: CumRow[] = [];
     const failed: string[] = [];

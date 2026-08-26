@@ -4786,6 +4786,21 @@ tr.drag-src td { opacity: 0.45; }
 /* 선물 수급 표 — 금액(억)이 주인공, 계약은 괄호 잔글씨 */
 .fut-ct { font-style: normal; font-size: 0.7rem; opacity: 0.65; margin-left: 2px; }
 
+/* ── 해외 관심종목 — 상시 담기 패널 (2026-08-27) ── */
+.uw-add { border-left: 3px solid var(--blue); }
+.uw-newgroup { width: 9rem; }
+.uw-searching { padding: 6px 10px; }
+.uw-etf-badge {
+  font-style: normal;
+  font-size: 0.62rem;
+  font-weight: 700;
+  margin-left: 5px;
+  padding: 0 5px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
 /* ── 사이드바 그룹 접기 (2026-08-27) ── */
 button.nav-group-toggle {
   display: flex;

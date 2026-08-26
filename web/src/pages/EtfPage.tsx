@@ -30,6 +30,7 @@ import { WatchStar } from "../useWatchedCodes";
 
 const SUBTABS = [
   { key: "list", label: "시세·NAV" },
+  { key: "cum", label: "기간 등락률" },
   { key: "supply", label: "수급 우위" },
   { key: "cont", label: "연속 매매" },
 ] as const;
@@ -72,7 +73,8 @@ function EtfListTab({ onSelectStock }: { onSelectStock: (code: string, name: str
   }, [load]);
 
   const kept = useMemo(() => {
-    const list = rows ?? [];
+    /* 기본은 **거래대금 상위** (2026-08-27 사용자 지정) — 정렬 3번째 클릭의 「원래 순서」도 이것 */
+    const list = [...(rows ?? [])].sort((a, b) => b.tradeValue - a.tradeValue);
     const needle = q.trim().toLowerCase();
     if (!needle) return list;
     return list.filter(
@@ -180,6 +182,91 @@ function EtfListTab({ onSelectStock }: { onSelectStock: (code: string, name: str
         순위입니다(거래량·등락률·괴리율…). 종목을 누르면 상세 — 구성종목·과세유형까지.
         표는 상위 300까지 그립니다(검색으로 좁혀 보세요).
       </div>
+    </>
+  );
+}
+
+/* ── ①-2 기간 등락률 — 누적등락 계산기를 ETF 모집단으로 (시세분석과 같은 문법) ── */
+
+interface CumRow {
+  code: string;
+  name: string;
+  price: number;
+  cumRate: number;
+  todayRate: number;
+  tradeValue: number;
+}
+
+function EtfCumTab({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
+  const [days, setDays] = useState(5);
+  const [rows, setRows] = useState<CumRow[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const sort = useSortableTable<CumRow>(rows ?? []);
+
+  useEffect(() => {
+    let alive = true;
+    setBusy(true);
+    setError(null);
+    fetch(`/api/rank/cumulative?days=${days}&market=ETF&universe=100`)
+      .then((r) => r.json())
+      .then((j: { rows?: CumRow[]; note?: string; error?: string }) => {
+        if (!alive) return;
+        if (j.error) setError(j.error);
+        setRows(j.rows ?? []);
+        setNote(j.note ?? "");
+      })
+      .catch((e: Error) => alive && setError(e.message))
+      .finally(() => alive && setBusy(false));
+    return () => {
+      alive = false;
+    };
+  }, [days]);
+
+  return (
+    <>
+      <div className="filter-row">
+        <span className="st-cfg-k">기간</span>
+        {[3, 5, 10, 20].map((d) => (
+          <button key={d} className={`filter-btn ${days === d ? "active" : ""}`} onClick={() => setDays(d)}>
+            {d}일
+          </button>
+        ))}
+        <span className="pt-n">ETF 거래대금 상위 100 을 일봉으로 직접 계산 — 처음 한 번은 30초쯤 걸립니다 (10분 캐시)</span>
+      </div>
+      {error && <div className="error-banner">{error}</div>}
+      {busy && rows === null && <div className="empty">계산 중… (종목마다 일봉을 받습니다)</div>}
+      {rows !== null && rows.length > 0 && (
+        <div className="data-table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <SortableTh columnKey="name" label="종목명" accessor={(r: CumRow) => r.name} sort={sort} className="sticky-col" />
+                <SortableTh columnKey="price" label="현재가" accessor={(r: CumRow) => r.price} sort={sort} />
+                <SortableTh columnKey="cum" label={`${days}일 누적`} accessor={(r: CumRow) => r.cumRate} sort={sort} />
+                <SortableTh columnKey="today" label="오늘" accessor={(r: CumRow) => r.todayRate} sort={sort} />
+                <SortableTh columnKey="tv" label="거래대금(억)" accessor={(r: CumRow) => r.tradeValue} sort={sort} />
+              </tr>
+            </thead>
+            <tbody>
+              {sort.sorted.map((r) => (
+                <tr key={r.code} className="clickable-row" onClick={() => onSelectStock(r.code, r.name)}>
+                  <td className="sticky-col">
+                    <WatchStar code={r.code} />
+                    {r.name}
+                  </td>
+                  <td className="num">{fmtNum(r.price)}</td>
+                  <td className={`num strong-col ${cls(r.cumRate)}`}>{pct(r.cumRate)}</td>
+                  <td className={`num ${cls(r.todayRate)}`}>{pct(r.todayRate)}</td>
+                  <td className="num pt-n">{fmtNum(r.tradeValue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {note && <div className="table-note">{note}</div>}
     </>
   );
 }
@@ -374,6 +461,7 @@ export function EtfPage({ onSelectStock }: { onSelectStock: (code: string, name:
         ))}
       </div>
       {sub === "list" && <EtfListTab onSelectStock={onSelectStock} />}
+      {sub === "cum" && <EtfCumTab onSelectStock={onSelectStock} />}
       {sub === "supply" && <EtfSupplyTab onSelectStock={onSelectStock} />}
       {sub === "cont" && <EtfContTab onSelectStock={onSelectStock} />}
     </div>

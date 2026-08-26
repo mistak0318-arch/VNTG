@@ -2669,6 +2669,8 @@ export interface UsSearchResult {
   name: string;
   exchange: string;
   type: string;
+  /** 국가 (USA/JPN/HKG/CHN…) — 네이버 검색 결과에만 있다 */
+  nation?: string;
 }
 
 export interface UsQuoteRow {

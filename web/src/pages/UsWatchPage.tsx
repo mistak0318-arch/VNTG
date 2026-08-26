@@ -75,6 +75,26 @@ const SORTS: { key: "mine" | "rate" | "name" | "power"; label: string }[] = [
   { key: "name", label: "티커" },
 ];
 
+/** 검색 결과의 국기 — 나라가 섞이니 한눈에 갈라야 한다 */
+const NATION_FLAG: Record<string, string> = {
+  USA: "🇺🇸",
+  JPN: "🇯🇵",
+  HKG: "🇭🇰",
+  CHN: "🇨🇳",
+  TWN: "🇹🇼",
+  VNM: "🇻🇳",
+};
+/** 야후 결과는 국가가 없다 — 거래소 코드로 유추한다 */
+const EXCHANGE_FLAG: Record<string, string> = {
+  GER: "🇩🇪", FRA: "🇩🇪", LSE: "🇬🇧", PAR: "🇫🇷", MIL: "🇮🇹", STO: "🇸🇪",
+  AMS: "🇳🇱", SWX: "🇨🇭", EBS: "🇨🇭", CPH: "🇩🇰", OSL: "🇳🇴", MCE: "🇪🇸",
+  JPX: "🇯🇵", TYO: "🇯🇵", TOKYO: "🇯🇵", HKG: "🇭🇰", HONG_KONG: "🇭🇰",
+  SHH: "🇨🇳", SHZ: "🇨🇳", SHANGHAI: "🇨🇳", SHENZHEN: "🇨🇳", TAI: "🇹🇼",
+};
+function flagOf(r: { nation?: string; exchange: string }): string {
+  return NATION_FLAG[r.nation ?? ""] ?? EXCHANGE_FLAG[r.exchange] ?? "🇺🇸";
+}
+
 export function UsWatchPage() {
   const [groups, setGroups] = useState<UsWatchGroup[]>([]);
   const [quotedAt, setQuotedAt] = useState<number | null>(null);
@@ -95,9 +115,17 @@ export function UsWatchPage() {
   const [sortBy, setSortBy] = useState<"mine" | "rate" | "name" | "power">("mine");
   const [openGroup, setOpenGroup] = useState<string | null>(null);
 
-  // 종목 추가
+  // 종목 추가 (2026-08-27 개편 — 편집 모드 밖으로. "추가하는 게 너무 불편하거든")
+  const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UsSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  /** 담을 그룹 — 기본은 지금 보고 있는 그룹 */
+  const [addTo, setAddTo] = useState<string>("");
+  /** 방금 담은 것 — "담았습니다"를 그 자리에서 말한다 (연속으로 담게 패널은 유지) */
+  const [addedMsg, setAddedMsg] = useState<string | null>(null);
+  // 그룹 추가 — 역시 편집 모드 밖, 그룹 탭줄의 ＋
+  const [groupAdding, setGroupAdding] = useState(false);
   const [newGroup, setNewGroup] = useState("");
 
   /*
@@ -203,21 +231,59 @@ export function UsWatchPage() {
     return api.usWatchStockOrder(openGroup ?? "", order);
   }
 
-  // 검색은 늦춰서 — 타이핑마다 Yahoo 를 부르지 않는다
+  // 검색은 늦춰서 — 타이핑마다 네이버·야후를 부르지 않는다
   useEffect(() => {
     const q = query.trim();
     if (!q) {
       setResults([]);
+      setSearching(false);
       return;
     }
+    setSearching(true);
     const timer = setTimeout(() => {
       api
         .usWatchSearch(q)
         .then((r) => setResults(r.results))
-        .catch(() => setResults([]));
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
     }, 350);
     return () => clearTimeout(timer);
   }, [query]);
+
+  /** 결과를 눌러 담는다 — 패널은 유지 (연속으로 담는 게 보통이다) */
+  async function addStock(r: UsSearchResult) {
+    const target = addTo || current?.id || groups[0]?.id;
+    if (!target) return;
+    const gname = groups.find((g) => g.id === target)?.name ?? "";
+    try {
+      setError(null);
+      const res = await api.usWatchStockAdd(target, r.symbol, r.name);
+      setGroups(res.groups);
+      setAddedMsg(`✓ ${r.name} → 「${gname}」에 담았습니다`);
+      setTimeout(() => setAddedMsg(null), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "담기 실패");
+    }
+  }
+
+  /** ＋ 그룹 — 편집 모드 없이 그 자리에서 */
+  async function addGroup() {
+    const name = newGroup.trim();
+    if (!name) return;
+    try {
+      const r = await api.usWatchGroupAdd(name);
+      setGroups(r.groups);
+      setNewGroup("");
+      setGroupAdding(false);
+      const made = r.groups.find((g) => g.name === name);
+      if (made) {
+        setOpenGroup(made.id);
+        setAddTo(made.id);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "그룹 추가 실패");
+    }
+  }
 
   async function run(fn: () => Promise<{ groups: UsWatchGroup[] }>) {
     setError(null);
@@ -328,88 +394,124 @@ export function UsWatchPage() {
             )}
           </span>
         ))}
+        {/* ＋ 그룹 — 편집 모드 없이 바로 (2026-08-27 "추가가 너무 불편") */}
+        {groupAdding ? (
+          <span className="gt-item">
+            <input
+              className="ma-input uw-newgroup"
+              autoFocus
+              placeholder="새 그룹 이름"
+              value={newGroup}
+              onChange={(e) => setNewGroup(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void addGroup();
+                if (e.key === "Escape") setGroupAdding(false);
+              }}
+            />
+            <button className="filter-btn active" onClick={() => void addGroup()}>
+              추가
+            </button>
+            <button className="filter-btn" onClick={() => setGroupAdding(false)}>
+              ✕
+            </button>
+          </span>
+        ) : (
+          <button className="filter-btn" onClick={() => setGroupAdding(true)} title="새 그룹 만들기">
+            ＋ 그룹
+          </button>
+        )}
+        <button
+          className={`filter-btn ${adding ? "active" : ""}`}
+          onClick={() => {
+            setAdding((v) => !v);
+            setAddTo(current?.id ?? "");
+          }}
+          title="이름으로 검색해서 담습니다 — 한국어로도 됩니다 (테슬라, 도요타, 텐센트…)"
+        >
+          ＋ 종목 담기
+        </button>
         <button
           className={`filter-btn ${editing ? "active" : ""}`}
           onClick={() => setEditing(!editing)}
         >
           {editing ? "편집 끝" : "✏ 편집"}
         </button>
-
       </div>
 
-      {editing && (
+      {/*
+        종목 담기 패널 — 상시 접근 (2026-08-27 전면 개편).
+        예전엔 ✏ 편집을 켜야 검색창이 나왔다 — 담으려고 편집 모드에 들어가는 건
+        길이 아니다. 한국어 검색(네이버)·미국 외 국가(일본·홍콩·중국·유럽)도 된다.
+      */}
+      {adding && (
+        <section className="pt-entry uw-add">
+          <div className="pt-entry-row">
+            <div className="pt-search">
+              <input
+                className="pt-input"
+                autoFocus
+                placeholder="한국어·영어·티커 (예: 테슬라, 도요타, 텐센트, rocket lab, 7203)"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              {(results.length > 0 || searching) && query.trim() && (
+                <ul className="pt-results">
+                  {searching && results.length === 0 && <li className="pt-n uw-searching">찾는 중…</li>}
+                  {results.map((r) => (
+                    <li key={r.symbol}>
+                      <button onClick={() => void addStock(r)} title={`${r.symbol} · ${r.exchange}`}>
+                        <span className="uw-flag">{flagOf(r)}</span>
+                        <b>{r.name}</b> <span className="pt-n">{r.symbol}</span>
+                        {r.type === "ETF" && <em className="uw-etf-badge">ETF</em>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <select
+              className="group-select"
+              value={addTo || current?.id || ""}
+              onChange={(e) => setAddTo(e.target.value)}
+              title="어느 그룹에 담을까"
+            >
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+            <button className="filter-btn" onClick={() => setAdding(false)}>
+              닫기
+            </button>
+          </div>
+          {addedMsg ? (
+            <div className="alert-note">{addedMsg} — 계속 검색해서 더 담을 수 있습니다</div>
+          ) : (
+            <span className="tg-ctl-hint">
+              결과를 누르면 바로 담깁니다 · 편입가는 지금 가격으로 자동 · 일본·홍콩·중국·유럽도 검색됩니다
+            </span>
+          )}
+        </section>
+      )}
+
+      {/* 편집 모드는 이제 지우고 옮기는 자리다 — 추가는 위의 상시 패널이 맡는다 */}
+      {editing && current && (
         <section className="pt-entry">
           <div className="pt-entry-row">
-            <input
-              className="pt-input"
-              placeholder="새 그룹 이름"
-              value={newGroup}
-              onChange={(e) => setNewGroup(e.target.value)}
-            />
             <button
-              className="filter-btn"
-              disabled={!newGroup.trim()}
-              onClick={() =>
-                void run(async () => {
-                  const r = await api.usWatchGroupAdd(newGroup.trim());
-                  setNewGroup("");
-                  return r;
-                })
-              }
+              className="filter-btn danger"
+              onClick={() => {
+                if (!window.confirm(`「${current.name}」 그룹을 지웁니다.`)) return;
+                void run(() => api.usWatchGroupRemove(current.id));
+              }}
             >
-              + 그룹 추가
+              「{current.name}」 그룹 삭제
             </button>
-            {current && (
-              <>
-                <span className="news-scope-sep" />
-                <button
-                  className="filter-btn danger"
-                  onClick={() => {
-                    if (!window.confirm(`「${current.name}」 그룹을 지웁니다.`)) return;
-                    void run(() => api.usWatchGroupRemove(current.id));
-                  }}
-                >
-                  「{current.name}」 그룹 삭제
-                </button>
-              </>
-            )}
+            <span className="tg-ctl-hint">
+              그룹 순서는 ◀▶, 종목 순서는 표의 ▲▼ 또는 끌기 (내 순서로 볼 때)
+            </span>
           </div>
-
-          {current && (
-            <div className="pt-entry-row">
-              <div className="pt-search">
-                <input
-                  className="pt-input"
-                  placeholder="종목 검색 (예: nvidia, rocket lab, OKLO)"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-                {results.length > 0 && (
-                  <ul className="pt-results">
-                    {results.map((r) => (
-                      <li key={r.symbol}>
-                        <button
-                          onClick={() =>
-                            void run(async () => {
-                              const res = await api.usWatchStockAdd(current.id, r.symbol, r.name);
-                              setQuery("");
-                              setResults([]);
-                              return res;
-                            })
-                          }
-                        >
-                          <b>{r.symbol}</b> <span className="pt-n">{r.name}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <span className="tg-ctl-hint">
-                「{current.name}」에 담깁니다 · 편입가는 지금 가격으로 자동
-              </span>
-            </div>
-          )}
         </section>
       )}
 
