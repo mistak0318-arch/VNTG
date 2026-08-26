@@ -9,6 +9,7 @@ import { PaperTradePage } from "./pages/PaperTradePage";
 import { JournalPage } from "./pages/JournalPage";
 import { MemoPage } from "./pages/MemoPage";
 import { MiniPage } from "./pages/MiniPage";
+import { matchesMiniHotkey, onMiniConfigChange, readMiniConfig } from "./miniConfig";
 import { SuperDashboardPage } from "./pages/SuperDashboardPage";
 import { UsWatchPage } from "./pages/UsWatchPage";
 import { AskPage } from "./pages/AskPage";
@@ -299,7 +300,7 @@ export default function App() {
     window.open(`${window.location.pathname}#/${key}`, "_blank");
   }
 
-  /** 미니창 — 작은 팝업으로 종목 조회 전용 화면(#/mini)을 연다 */
+  /** 미니창 — 작은 팝업으로 보조 화면(#/mini)을 연다. 같은 이름이라 하나만 뜬다 */
   function openMini() {
     window.open(
       `${window.location.pathname}#/mini`,
@@ -308,6 +309,31 @@ export default function App() {
     );
     setNavOpen(false);
   }
+
+  /*
+   * 미니창 단축키 (2026-08-26) — 화면잠금 단축키와 같은 방식.
+   * 설정 > 화면 > 미니창에서 조합을 고른다(기본 Ctrl+M). 미니창 자신(#/mini)에서는
+   * 안 듣는다 — 이미 미니창인데 또 열 이유가 없다.
+   */
+  useEffect(() => {
+    if (route.tab === "mini") return;
+    let hotkey = readMiniConfig().hotkey;
+    const off = onMiniConfigChange(() => {
+      hotkey = readMiniConfig().hotkey;
+    });
+    const onKey = (e: KeyboardEvent) => {
+      if (!matchesMiniHotkey(e, hotkey)) return;
+      e.preventDefault();
+      openMini();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      off();
+      window.removeEventListener("keydown", onKey);
+    };
+    // openMini 는 안정적(참조만 씀) — route.tab 이 mini 로/에서 바뀔 때만 다시 건다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.tab]);
 
   /** 메뉴 클릭 공통 — 미니창은 팝업, Ctrl/휠 클릭은 새 브라우저 탭, 나머지는 전환 */
   function navClick(e: React.MouseEvent, key: Tab) {

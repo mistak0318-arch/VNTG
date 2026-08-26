@@ -1,21 +1,107 @@
 import { useEffect, useState } from "react";
 import { api, normalizeStockCode, type StockSearchResult } from "../api";
 import { StockDetail } from "../components/StockDetail";
+import {
+  MINI_SCREENS,
+  onMiniConfigChange,
+  readMiniConfig,
+  type MiniScreenKey,
+} from "../miniConfig";
+import { OverviewPage } from "./OverviewPage";
+import { MyPage } from "./MyPage";
+import { NewsPage } from "./NewsPage";
+import { SuperDashboardPage } from "./SuperDashboardPage";
+import { TelegramPage } from "./TelegramPage";
+import { MemoPage } from "./MemoPage";
+import { DailyReportPage } from "./DailyReportPage";
 
 /**
- * 미니창 (2026-08-26) — **보던 페이지를 떠나지 않고 종목을 조회하는 보조창.**
+ * 미니창 (2026-08-26) — **보던 페이지를 떠나지 않고 곁눈질하는 보조창.**
  *
- * 설정 밑 「미니창 열기」가 작은 팝업 창으로 이 화면을 연다(#/mini).
+ * 설정 밑 「미니창 열기」(또는 단축키)가 작은 팝업 창으로 이 화면을 연다(#/mini).
  *
- * 구조는 창 하나에 딱 붙는 모양이다 — 검색창이 **맨 위에 고정**이고,
- * 결과도 종목 상세도 전부 그 아래에 **본문으로** 펼쳐진다. 처음엔 상세를
- * 오버레이 시트(본창의 팝업 그대로)로 띄웠더니 「미니창 안의 미니팝업」이
- * 되어 버렸다 — 그래서 .mini-root 밑에서는 오버레이를 CSS로 눕혀서
- * 그냥 본문이 되게 한다(styles.css의 .mini-root .overlay/.sheet).
- *
- * 해시 라우팅이라 미니창을 새로고침해도 보던 종목이 유지된다.
+ * 상단에 **버튼 1·2·3** — 각 버튼에 어떤 화면을 물릴지는 설정 > 화면 > 미니창에서
+ * 고른다(기본: 종목 검색 · 시황 · 관심종목). 종목 검색 화면은 검색창 고정 + 상세가
+ * 본문으로 펼쳐지고(mini-inline 이 오버레이를 눕힌다), 다른 화면들은 본창 페이지를
+ * 그대로 빌려 쓴다 — 거기서 종목을 누르면 상세가 보통 팝업으로 뜬다.
  */
 export function MiniPage({
+  stock,
+  onSelect,
+  onClear,
+}: {
+  stock: { code: string; name: string } | null;
+  onSelect: (code: string, name: string) => void;
+  onClear: () => void;
+}) {
+  const [cfg, setCfg] = useState(readMiniConfig);
+  const [slot, setSlot] = useState(0);
+  /* 종목검색이 아닌 화면에서 종목을 눌렀을 때 — 보통 오버레이 시트로 */
+  const [popupStock, setPopupStock] = useState<{ code: string; name: string } | null>(null);
+
+  useEffect(() => onMiniConfigChange(() => setCfg(readMiniConfig())), []);
+
+  const screenKey: MiniScreenKey = cfg.slots[slot] ?? "stock";
+  const openPopup = (code: string, name: string) => setPopupStock({ code, name });
+
+  return (
+    <div className="mini-root">
+      {/* 상단 버튼 — 1·2·3. 어떤 화면인지는 아이콘+이름이 말한다 */}
+      <div className="mini-tabs">
+        {cfg.slots.map((key, i) => {
+          const def = MINI_SCREENS.find((s) => s.key === key);
+          return (
+            <button
+              key={i}
+              className={`mini-tab${slot === i ? " active" : ""}`}
+              onClick={() => setSlot(i)}
+              title={def?.hint}
+            >
+              <i>{i + 1}</i> {def?.icon} {def?.label}
+            </button>
+          );
+        })}
+        <button
+          className="mini-tab mini-tab-cfg"
+          title="버튼 배정·단축키는 본창 설정 > 화면 > 미니창에서 — 새 탭으로 엽니다"
+          onClick={() => window.open(`${window.location.pathname}#/settings`, "_blank")}
+        >
+          ⚙
+        </button>
+      </div>
+
+      <div className="mini-body">
+        {screenKey === "stock" && <StockSearchScreen stock={stock} onSelect={onSelect} onClear={onClear} />}
+        {screenKey === "overview" && <OverviewPage onSelectStock={openPopup} />}
+        {screenKey === "watch" && <MyPage onSelectStock={openPopup} />}
+        {screenKey === "news" && <NewsPage onSelectStock={openPopup} />}
+        {screenKey === "superSignal" && <SuperDashboardPage onSelectStock={openPopup} />}
+        {screenKey === "telegram" && <TelegramPage />}
+        {screenKey === "memo" && <MemoPage />}
+        {screenKey === "report" && <DailyReportPage onSelectStock={openPopup} />}
+      </div>
+
+      {/* 다른 화면에서 종목을 눌렀을 때 — 여긴 검색창이 없으니 보통 팝업 시트가 맞다 */}
+      {popupStock && (
+        <StockDetail
+          code={popupStock.code}
+          name={popupStock.name}
+          onClose={() => setPopupStock(null)}
+          onOpenAnalysis={(code, name) => {
+            window.open(
+              `${window.location.pathname}#/stockAnalysis?code=${code}&name=${encodeURIComponent(name)}`,
+              "_blank",
+            );
+          }}
+          onSelectStock={(code, name) => setPopupStock({ code, name })}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 종목 검색 화면 — 검색창 고정 + 결과·상세가 본문으로 (미니창의 원래 용도) */
+function StockSearchScreen({
   stock,
   onSelect,
   onClear,
@@ -55,10 +141,10 @@ export function MiniPage({
   const q = query.trim();
 
   return (
-    <div className="mini-root">
+    <div className="mini-inline">
       {/* 검색은 항상 맨 위 — 종목을 보다가도 바로 다음 종목을 찾는다 */}
       <div className="mini-search">
-        <span className="mini-search-icon" aria-hidden="true">🪟</span>
+        <span className="mini-search-icon" aria-hidden="true">🔎</span>
         <input
           className="search-input"
           type="text"
@@ -74,44 +160,42 @@ export function MiniPage({
         />
       </div>
 
-      <div className="mini-body">
-        {/* 입력 중이면 결과 목록이 본문 — 보던 상세는 입력을 지우면 그대로 다시 나온다 */}
-        {q ? (
-          results.length > 0 ? (
-            <div className="mini-results">
-              {results.map((r) => (
-                <button key={r.code} className="mini-result-row" onClick={() => pick(r)}>
-                  <span className="name">{r.name}</span>
-                  <span className="sub">
-                    {r.code} · {r.marketName}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="empty">{searching ? "검색 중..." : "검색 결과가 없습니다"}</div>
-          )
-        ) : stock ? (
-          <StockDetail
-            code={stock.code}
-            name={stock.name}
-            onClose={onClear}
-            /* 미니창엔 개별종목분석 페이지가 없다 — 본창에서 열도록 새 탭으로 */
-            onOpenAnalysis={(code, name) => {
-              window.open(
-                `${window.location.pathname}#/stockAnalysis?code=${code}&name=${encodeURIComponent(name)}`,
-                "_blank",
-              );
-            }}
-            onSelectStock={(code, name) => onSelect(code, name)}
-          />
-        ) : (
-          <div className="table-note mini-hint">
-            본창을 떠나지 않고 종목을 들여다보는 보조창입니다. 위에서 검색해 고르면
-            종목 상세가 바로 아래에 펼쳐집니다.
+      {/* 입력 중이면 결과 목록이 본문 — 보던 상세는 입력을 지우면 그대로 다시 나온다 */}
+      {q ? (
+        results.length > 0 ? (
+          <div className="mini-results">
+            {results.map((r) => (
+              <button key={r.code} className="mini-result-row" onClick={() => pick(r)}>
+                <span className="name">{r.name}</span>
+                <span className="sub">
+                  {r.code} · {r.marketName}
+                </span>
+              </button>
+            ))}
           </div>
-        )}
-      </div>
+        ) : (
+          <div className="empty">{searching ? "검색 중..." : "검색 결과가 없습니다"}</div>
+        )
+      ) : stock ? (
+        <StockDetail
+          code={stock.code}
+          name={stock.name}
+          onClose={onClear}
+          /* 미니창엔 개별종목분석 페이지가 없다 — 본창에서 열도록 새 탭으로 */
+          onOpenAnalysis={(code, name) => {
+            window.open(
+              `${window.location.pathname}#/stockAnalysis?code=${code}&name=${encodeURIComponent(name)}`,
+              "_blank",
+            );
+          }}
+          onSelectStock={(code, name) => onSelect(code, name)}
+        />
+      ) : (
+        <div className="table-note mini-hint">
+          위에서 검색해 고르면 종목 상세가 바로 아래에 펼쳐집니다. 상단 버튼으로 다른
+          화면(배정은 설정 &gt; 화면 &gt; 미니창)으로 바꿀 수 있습니다.
+        </div>
+      )}
     </div>
   );
 }

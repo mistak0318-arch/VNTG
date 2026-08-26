@@ -3518,11 +3518,46 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 /* 선물 투자자별 수급 (차트 시트 안) */
 .ff-wrap { margin-top: 0.8rem; }
 /*
- * 미니창(#/mini) — 검색창은 맨 위 고정, 결과·종목 상세는 그 아래 본문.
- * 상세(StockDetail)는 원래 오버레이 시트인데, 미니창 안에서 또 팝업이 뜨면
- * 「미니창의 미니팝업」이 된다(2026-08-26) — 오버레이를 눕혀 본문으로 만든다.
+ * 미니창(#/mini) — 상단 버튼 1~5 로 화면을 바꾸는 보조 팝업 (2026-08-26 확장).
+ * 종목 검색 화면(mini-inline)만 상세를 본문으로 눕히고, 빌려 온 다른 페이지들은
+ * 원래 방식(보통 팝업 시트) 그대로 둔다.
  */
 .mini-root { display: flex; flex-direction: column; height: 100vh; background: var(--bg); }
+.mini-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mini-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 5px 9px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mini-tab.active { color: var(--text); border-color: var(--blue); background: var(--panel); }
+.mini-tab > i {
+  font-style: normal;
+  font-size: 0.66rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.mini-tab-cfg { margin-left: auto; }
+.mini-inline { display: flex; flex-direction: column; min-height: 100%; }
 .mini-search {
   flex: 0 0 auto;
   display: flex;
@@ -3531,10 +3566,16 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
+  /* 검색창은 미니창 스크롤에서도 맨 위에 붙어 있는다 */
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 .mini-search .search-input { flex: 1; }
 .mini-search-icon { font-size: 1.05rem; }
-.mini-body { flex: 1; overflow-y: auto; min-height: 0; }
+.mini-body { flex: 1; overflow-y: auto; min-height: 0; padding: 0 0 12px; }
+/* 빌려 온 본창 페이지들이 가장자리에 딱 붙지 않게 */
+.mini-body > :not(.mini-inline) { padding: 10px; display: block; }
 .mini-hint { padding: 16px; }
 .mini-results { display: flex; flex-direction: column; }
 .mini-result-row {
@@ -3554,15 +3595,15 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 }
 .mini-result-row:hover { background: var(--panel); }
 .mini-result-row .sub { color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
-/* 오버레이 시트를 본문으로 — 배경 어둡게 깔지 않고 그 자리에 펼친다 */
-.mini-root .overlay {
+/* 종목검색 화면만: 오버레이 시트를 본문으로 — 배경 어둡게 깔지 않고 그 자리에 펼친다 */
+.mini-inline .overlay {
   position: static;
   inset: auto;
   background: none;
   display: block;
   z-index: auto;
 }
-.mini-root .sheet {
+.mini-inline .sheet {
   max-width: none;
   width: 100%;
   max-height: none;
@@ -3570,8 +3611,8 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   border-radius: 0;
   border-top: none;
 }
-/* 시트 헤더 sticky 기준이 .mini-body 스크롤로 바뀐다 — -16px이면 잘려 보인다 */
-.mini-root .sheet-header { top: 0; }
+/* 시트 헤더 sticky 기준이 .mini-body 스크롤로 바뀐다 — 검색창(고정) 아래에 붙인다 */
+.mini-inline .sheet-header { top: 52px; }
 
 /* ---------------- 슈퍼신호등 대시보드 ---------------- */
 .sd-cards {
