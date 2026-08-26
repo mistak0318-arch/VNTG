@@ -13,7 +13,7 @@ import { ScenarioCard } from "../components/ScenarioCard";
 import { useAutoRefresh } from "../useAutoRefresh";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useDragOrder } from "../useDragOrder";
-import { fid, useRealtime } from "../useRealtime";
+import { fid, krxOverlayLive, useRealtime } from "../useRealtime";
 import { useWatchedCodes } from "../useWatchedCodes";
 
 function fmtPct(v: number | null): string {
@@ -166,13 +166,40 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     1500,
     { readOnly: true },
   );
+  /*
+   * 통합(_AL) 폴백 (2026-08-26 — 「관심종목에 NXT 값이 안 들어온다」).
+   * 0B 실시간은 KRX 체결이라 NXT 프리·애프터엔 조용하다. 그 시간엔 서버의
+   * ka10095(_AL) 통합 시세를 5초로 받아 그걸 쓴다. 정규장엔 실시간이 이긴다.
+   */
+  const [alq, setAlq] = useState<Record<string, { price: number; changeRate: number }>>({});
+  useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      api
+        .watchQuotes()
+        .then((r) => alive && setAlq(r.quotes))
+        .catch(() => undefined);
+    };
+    tick();
+    const t = setInterval(tick, 5_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
   const liveOf = (code: string): { price: number; rate: number | null } | null => {
-    if (!rtWatch.healthy) return null;
-    const v = rtWatch.values[`0B:${code}`];
-    if (!v || Date.now() - v.at > 90_000) return null;
-    const p = fid(v, "10");
-    if (p === null || p === 0) return null;
-    return { price: Math.abs(p), rate: fid(v, "12") };
+    // KRX 정규장 밖엔 0B 오버레이를 안 믿는다 — 프리장 KRX 0% 가 통합 값을 덮었다
+    if (krxOverlayLive() && rtWatch.healthy) {
+      const v = rtWatch.values[`0B:${code}`];
+      if (v && Date.now() - v.at <= 90_000) {
+        const p = fid(v, "10");
+        if (p !== null && p !== 0) return { price: Math.abs(p), rate: fid(v, "12") };
+      }
+    }
+    const a = alq[code];
+    if (a) return { price: a.price, rate: a.changeRate };
+    return null;
   };
   const groupDrag = useDragOrder(
     groups.filter((g) => g !== DEFAULT_GROUP),

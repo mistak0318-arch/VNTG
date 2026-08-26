@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { alCode } from "../alCode.js";
+import { peekRealtime } from "../realtimeHub.js";
 import { intradayLevels } from "../intraday.js";
 import { stockSummary } from "../stockSummary.js";
 import { getSectorMood } from "../sectorMood.js";
@@ -93,11 +94,32 @@ export function createMarketRouter(client: KiwoomClient): Router {
     }
   });
 
+  /**
+   * 지금 이 현재가가 **어느 시장 값인가** (2026-08-26 — 「NXT 값일 땐 NXT 라고
+   * 표기해 달라」). ka10001 응답엔 없어서 시각으로 라벨을 정한다 — NXT 운영시간
+   * (프리 08:00~08:50 · 정규 09:00~15:30 KRX 와 병행 · 애프터 15:30~20:00).
+   */
+  function venueNow(): string {
+    const kst = new Date(Date.now() + 9 * 3600_000);
+    const day = kst.getUTCDay();
+    if (day === 0 || day === 6) return "마감";
+    const m = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+    if (m >= 8 * 60 && m < 8 * 60 + 50) return "NXT 프리마켓";
+    if (m >= 8 * 60 + 50 && m < 9 * 60) return "장전 시간외";
+    if (m >= 9 * 60 && m < 15 * 60 + 30) return "정규장";
+    if (m >= 15 * 60 + 30 && m < 20 * 60) return "NXT 애프터마켓";
+    return "마감";
+  }
+
   // 종목 기본정보 (ka10001) - 종목명, 현재가, 등락률 등
   router.get("/info/:code", async (req, res, next) => {
     try {
       const { data } = await client.request(STKINFO_RESOURCE, "ka10001", {
-        stk_cd: req.params.code,
+        /*
+         * 통합(_AL) — 2026-08-26. KRX 단독은 NXT 프리·애프터 체결이 안 보여서
+         * 「관심종목에 NXT 값이 안 들어온다」가 됐다. 키움 앱(통합)과 같은 기준.
+         */
+        stk_cd: alCode(req.params.code),
       });
       /*
        * 시장 구분을 얹는다 (2026-08-25) — ka10001 엔 코스피/코스닥이 없다.
@@ -105,7 +127,17 @@ export function createMarketRouter(client: KiwoomClient): Router {
        * 「키움 응답이 아니라 우리가 붙인 것」이라는 표시다.
        */
       const entry = await findStock(client, req.params.code).catch(() => undefined);
-      res.json({ ...data, _market: entry?.marketName ?? "" });
+      /*
+       * VI 발동 표시 (2026-08-26 — 「멈춰 있으면 헷갈린다」). 실시간 저장소의 오늘
+       * VI 중 이 종목 것을 찾는다: 해제 안 된 게 있으면 「발동 중」, 최근 발동은 시각만.
+       */
+      const bareCode = req.params.code.replace(/_(AL|NX)$/i, "");
+      const viEvents = peekRealtime().store?.getVi(3000) ?? [];
+      const myVi = viEvents.find((v) => v.code === bareCode);
+      const _vi = myVi
+        ? { active: !myVi.clearedAt, firedAt: myVi.firedAt, clearedAt: myVi.clearedAt || null }
+        : null;
+      res.json({ ...data, _market: entry?.marketName ?? "", _venue: venueNow(), _vi });
     } catch (err) {
       next(err);
     }
@@ -127,11 +159,12 @@ export function createMarketRouter(client: KiwoomClient): Router {
   router.get("/chart/daily/:code", async (req, res, next) => {
     try {
       const baseDt = typeof req.query.base_dt === "string" ? req.query.base_dt : todayYyyymmdd();
+      // noAl — 차트는 화면에 KRX/NXT/통합 셀렉터가 있어 코드 접미를 화면이 정한다
       const { data } = await client.request(CHART_RESOURCE, "ka10081", {
         stk_cd: req.params.code,
         base_dt: baseDt,
         upd_stkpc_tp: "1", // 수정주가 반영
-      });
+      }, { noAl: true });
       res.json(data);
     } catch (err) {
       next(err);
@@ -146,7 +179,7 @@ export function createMarketRouter(client: KiwoomClient): Router {
         stk_cd: req.params.code,
         base_dt: baseDt,
         upd_stkpc_tp: "1",
-      });
+      }, { noAl: true });
       res.json(data);
     } catch (err) {
       next(err);
@@ -161,7 +194,7 @@ export function createMarketRouter(client: KiwoomClient): Router {
         stk_cd: req.params.code,
         base_dt: baseDt,
         upd_stkpc_tp: "1",
-      });
+      }, { noAl: true });
       res.json(data);
     } catch (err) {
       next(err);
@@ -610,7 +643,7 @@ export function createMarketRouter(client: KiwoomClient): Router {
         stk_cd: req.params.code,
         tic_scope: tic,
         upd_stkpc_tp: "1",
-      });
+      }, { noAl: true });
       res.json(data);
     } catch (err) {
       next(err);

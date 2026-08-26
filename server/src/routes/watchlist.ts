@@ -24,6 +24,45 @@ import {
 export function createWatchlistRouter(client: KiwoomClient): Router {
   const router = Router();
 
+  /**
+   * 관심종목 통합(_AL) 시세 (2026-08-26) — 「관심종목에 NXT 값이 안 들어온다」.
+   *
+   * 화면 실시간 오버레이(0B)는 KRX 체결이라 NXT 프리(08:00~08:50)·애프터
+   * (15:30~20:00)엔 조용하다. ka10095 는 여러 종목을 한 번에 받으므로,
+   * `_AL` 로 통합 현재가·등락률만 가볍게 얹는다. 화면은 5초로 묻는다.
+   */
+  router.get("/quotes", async (_req, res, next) => {
+    try {
+      const items = await listWatchlist();
+      const codes = [...new Set(items.map((i) => i.code).filter((c) => /^\d{6}$/.test(c)))];
+      if (codes.length === 0) {
+        res.json({ quotes: {} });
+        return;
+      }
+      const { data } = await client.request<Record<string, unknown>>(
+        "/api/dostk/stkinfo",
+        "ka10095",
+        { stk_cd: codes.map((c) => `${c}_AL`).join("|") },
+      );
+      const rows = Array.isArray(data.atn_stk_infr)
+        ? (data.atn_stk_infr as Record<string, unknown>[])
+        : [];
+      const num = (v: unknown) => {
+        const n = Number(String(v ?? "").replace(/[+,\s]/g, ""));
+        return Number.isFinite(n) ? n : 0;
+      };
+      const quotes: Record<string, { price: number; changeRate: number }> = {};
+      for (const r of rows) {
+        const code = String(r.stk_cd ?? "").replace(/_(AL|NX)$/i, "");
+        const price = Math.abs(num(r.cur_prc));
+        if (code && price > 0) quotes[code] = { price, changeRate: num(r.flu_rt) };
+      }
+      res.json({ quotes });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /** 상태 목록 — 화면이 서버와 같은 말을 쓰게 한다 */
   router.get("/statuses", (_req, res) => {
     res.json({ statuses: WATCH_STATUSES });

@@ -20,7 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
 const FILE = join(DATA_DIR, "aiConfig.json");
 
-export type AiPurpose = "report" | "channel" | "research" | "ask" | "pulse";
+export type AiPurpose = "report" | "channel" | "research" | "ask" | "pulse" | "pinned" | "vision";
 
 export interface AiChoice {
   provider: VisionProvider;
@@ -54,6 +54,16 @@ export interface AiConfig {
    * 따로 고를 수 있게 뒀다.
    */
   pulse: AiChoice | null;
+  /**
+   * 고정 채널 AI 세줄 (2026-08-26 분리) — 전엔 「데일리 리포트」 설정을 따라가서
+   * 사용자가 따로 고를 수 없었다. 입력이 채널 원문 몇 개라 크지 않다.
+   */
+  pinned: AiChoice | null;
+  /**
+   * 캘린더 이미지 인식 (2026-08-26 추가) — vision.ts 가 자체 순서(싼 것부터)로
+   * 골랐고 설정에는 없었다. 여기서 고르면 그 모델을 먼저 시도한다.
+   */
+  vision: AiChoice | null;
 }
 
 /** null 이면 기존 동작(ANTHROPIC_API_KEY + CLAUDE_MODEL)을 그대로 쓴다 */
@@ -63,6 +73,8 @@ export const DEFAULT_AI_CONFIG: AiConfig = {
   research: null,
   ask: null,
   pulse: null,
+  pinned: null,
+  vision: null,
 };
 
 export const PURPOSE_LABEL: Record<AiPurpose, string> = {
@@ -71,6 +83,8 @@ export const PURPOSE_LABEL: Record<AiPurpose, string> = {
   research: "웹 리서치 (입력 정제)",
   ask: "시황 질문하기 (Claude 만)",
   pulse: "시장 흐름 요약",
+  pinned: "고정 채널 AI 세줄",
+  vision: "캘린더 이미지 인식",
 };
 
 let cache: AiConfig | null = null;
@@ -97,6 +111,8 @@ export async function saveAiConfig(input: AiConfig): Promise<AiConfig> {
     channel: clean(input.channel),
     research: clean(input.research),
     pulse: clean(input.pulse),
+    pinned: clean(input.pinned),
+    vision: clean(input.vision),
     // 질문하기는 Anthropic 만 — 검색 도구가 거기 붙어 있다
     ask: (() => {
       const c = clean(input.ask);
@@ -110,5 +126,11 @@ export async function saveAiConfig(input: AiConfig): Promise<AiConfig> {
 }
 
 export async function choiceFor(purpose: AiPurpose): Promise<AiChoice | null> {
-  return (await getAiConfig())[purpose];
+  const cfg = await getAiConfig();
+  /*
+   * 고정 채널 세줄은 따로 안 골랐으면 **리포트 설정을 따라간다** — 분리 전의 동작
+   * 그대로다. 분리한 이유는 「고를 수 있게」이지 「기본이 바뀌게」가 아니다.
+   */
+  if (purpose === "pinned") return cfg.pinned ?? cfg.report;
+  return cfg[purpose];
 }

@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { alCode } from "./alCode.js";
 
 /**
  * 키움 MTS/HTS에 등록해둔 관심종목 그룹 조회 (읽기 전용).
@@ -52,13 +53,14 @@ export async function getKiwoomGroupStocks(
   if (codes.length === 0) return [];
 
   // ka10095는 "|" 로 구분해 여러 종목을 한 번에 조회할 수 있다
+  // 통합(_AL) — NXT 프리·애프터 체결도 보이게 (2026-08-26, 키움 앱과 같은 기준)
   const { data: quoteData } = await client.request<Row>(STKINFO_RESOURCE, "ka10095", {
-    stk_cd: codes.join("|"),
+    stk_cd: codes.map((c) => alCode(c)).join("|"),
   });
   const quotes = Array.isArray(quoteData.atn_stk_infr) ? (quoteData.atn_stk_infr as Row[]) : [];
 
   return quotes.map((q) => ({
-    code: String(q.stk_cd ?? ""),
+    code: String(q.stk_cd ?? "").replace(/_(AL|NX)$/i, ""),
     name: String(q.stk_nm ?? ""),
     price: Math.abs(toNum(q.cur_prc)),
     change: toNum(q.pred_pre),

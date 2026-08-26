@@ -200,7 +200,8 @@ export async function pinnedSummary(edition: Edition): Promise<string | null> {
       "그대로 옮기고, 원문에 없는 해석을 만들지 마라. 종목·섹터 이름이 나오면 남겨라.\n\n" +
       body,
     400,
-    "report",
+    // 2026-08-26: 「고정 채널 세줄」 전용 설정으로 분리 — 리포트 모델을 따라가지 않는다
+    "pinned",
   );
   if (r.text) {
     entry.summary = r.text.trim();

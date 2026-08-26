@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, fmtNum, signClass, type TrackedStock } from "../api";
-import { fid, useRealtime } from "../useRealtime";
+import { fid, krxOverlayLive, useRealtime } from "../useRealtime";
 import { ColumnGrip, useColumnWidths } from "./ColumnWidths";
 
 /**
@@ -67,7 +67,8 @@ export function WatchTicker({
    * FID: 10 현재가 · 12 등락율 · 13 누적거래량 · 228 체결강도
    */
   const rows = base.map((b) => {
-    const v = rt.values[`0B:${b.code}`] ?? null;
+    // KRX 정규장 밖엔 0B 를 안 믿는다 — 프리장 KRX 0% 가 본 시세(통합)를 덮었다
+    const v = krxOverlayLive() ? rt.values[`0B:${b.code}`] ?? null : null;
     const live = fid(v, "10");
     const rate = fid(v, "12");
     return {

@@ -53,6 +53,8 @@ export interface OrderBook {
   code: string;
   /** 호가 기준시각 HHMMSS */
   at: string;
+  /** 어느 시장의 호가인가 — KRX 가 비는 프리·애프터엔 NXT 호가로 폴백한다 */
+  venue?: "KRX" | "NXT";
   /** 매도호가 — **10호가가 위, 1호가가 아래**로 화면에 그린다 */
   asks: BookLevel[];
   /** 매수호가 — 1호가가 위 */
@@ -215,12 +217,31 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
        * 첫 행이 가장 최근 체결이다.
        */
       client
-        .request<Record<string, unknown>>(STKINFO, "ka10003", { stk_cd: bare })
+        // 체결은 통합(_AL) — NXT 체결도 최근 체결·체결강도에 들어와야 한다 (2026-08-26)
+        .request<Record<string, unknown>>(STKINFO, "ka10003", { stk_cd: `${bare}_AL` })
         .catch(() => null),
     ]);
-    const b = book.data ?? {};
+    let b = book.data ?? {};
     const i = info.data ?? {};
     const n = nxt?.data ?? null;
+
+    /*
+     * NXT 호가 폴백 (2026-08-26 — 「NXT 에서 호가창이 왜 안 나와」).
+     * KRX 호가가 통째로 비면(프리 08:00~08:50 · 애프터 15:30~20:00) `_NX` 로
+     * 다시 받는다 — 실측: 프리장 ka10004 `000660_NX` 가 살아 있는 10단계를 줬다
+     * (매수1 1,696,000 · 총잔량 27,617). venue 로 어느 시장 호가인지 밝힌다.
+     */
+    let venue: "KRX" | "NXT" = "KRX";
+    if (num(b.tot_sel_req) === 0 && num(b.tot_buy_req) === 0) {
+      const nx = await client
+        .request<Record<string, unknown>>(MRKCOND, "ka10004", { stk_cd: `${bare}_NX` })
+        .catch(() => null);
+      const nb = nx?.data ?? null;
+      if (nb && (num(nb.tot_sel_req) > 0 || num(nb.tot_buy_req) > 0)) {
+        b = nb;
+        venue = "NXT";
+      }
+    }
 
     const ticks = ticksOf(tick?.data as Record<string, unknown> | null);
 
@@ -262,6 +283,7 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
       /** 누적거래대금(원). `ka10003` 이 준다 — `ka10001` 에는 없다 */
       tradeValue: ticks.length > 0 ? ticks[0].accValue : 0,
       ticks: ticks.slice(0, 20).map((t) => ({ t: t.t, price: t.price, qty: t.qty })),
+      venue,
     };
   } catch (err) {
     return { ...empty, error: err instanceof Error ? err.message : "호가 조회 실패" };

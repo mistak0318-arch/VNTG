@@ -154,7 +154,12 @@ export function ChartPanel({
     const p = saved().period;
     return p && p in PERIOD_CONFIG ? p : initialPeriod;
   });
-  const [venue, setVenue] = useState<Venue>(() => saved().venue ?? "krx");
+  /*
+   * 기본을 **통합**으로 (2026-08-26 — 「모든 로직은 모든 시장을 반영해야 한다」).
+   * 시장이 KRX 만으로 돌지 않는다 — NXT 프리·애프터 체결까지가 오늘의 전부다.
+   * KRX/NXT 만 보고 싶으면 셀렉터로 고른다(칸마다 기억).
+   */
+  const [venue, setVenue] = useState<Venue>(() => saved().venue ?? "all");
   /**
    * 지금 보고 있는 구간(거래일 수).
    *

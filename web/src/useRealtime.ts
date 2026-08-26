@@ -44,6 +44,22 @@ const EMPTY: RealtimeState = { enabled: false, healthy: false, values: {} };
  *   거래대금 상위·관심종목은 스케줄러가 이미 걸어 뒀으니 읽기만 하면 된다.
  *   키 상한도 40 → 120 으로 는다.
  */
+/**
+ * 국내 0B 오버레이를 **믿어도 되는 시간**인가 — KRX 정규장 언저리(08:59~15:35).
+ *
+ * (2026-08-26) NXT 프리장에 시세분석·관심종목이 ●(실시간 표시)를 켠 채 등락률
+ * 0% 를 보여줬다 — KRX 는 아직 안 열렸으니 0 이 맞는데, 화면의 다른 값(통합)은
+ * +1.3% 라 「왜 0이냐」가 된다. 이 시간 밖에서는 오버레이를 쓰지 말고
+ * 본 시세(통합)를 그대로 두는 게 맞다.
+ */
+export function krxOverlayLive(now = new Date()): boolean {
+  const kst = new Date(now.getTime() + 9 * 3600_000);
+  const day = kst.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  const m = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  return m >= 8 * 60 + 59 && m <= 15 * 60 + 35;
+}
+
 export function useRealtime(
   keys: string[],
   ms = 1500,

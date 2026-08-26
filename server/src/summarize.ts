@@ -93,8 +93,15 @@ export async function summarize(
   if (purpose) {
     const choice = await choiceFor(purpose);
     if (choice) {
-      // 용도를 그대로 넘긴다 — 안 넘기면 이 경로의 비용이 전부 "이미지 인식"으로 잡힌다
-      const r = await generateText(prompt, maxTokens, choice.provider, choice.model, purpose);
+      // 용도를 그대로 넘긴다 — 안 넘기면 이 경로의 비용이 전부 "이미지 인식"으로 잡힌다.
+      // pinned(고정 채널 세줄)는 비용 집계상 채널 요약으로 묶는다
+      const r = await generateText(
+        prompt,
+        maxTokens,
+        choice.provider,
+        choice.model,
+        purpose === "pinned" ? "channel" : purpose === "vision" ? "vision" : purpose,
+      );
       return {
         text: r.text ? stripAiScratch(r.text) || null : r.text,
         inputTokens: r.inputTokens,

@@ -690,6 +690,11 @@ export const api = {
       from: "theme" | "sector" | "none";
       label: string;
     }>(`/api/trade/${key}/stocks`),
+  /** 관심종목 통합(KRX+NXT) 시세 — NXT 프리·애프터에 0B 오버레이가 조용할 때의 값 */
+  watchQuotes: () =>
+    getJson<{ quotes: Record<string, { price: number; changeRate: number }> }>(
+      "/api/watchlist/quotes",
+    ),
   /* 메모장 — 자유 메모 + 일기 (종목 메모와 다른 저장소) */
   memoList: (q = "", tag = "") =>
     getJson<{ items: MemoEntry[] }>(
@@ -1237,6 +1242,10 @@ export interface AiConfig {
   ask: AiChoice | null;
   /** 시장 흐름 요약. 안 고르면 report 를 따라간다 */
   pulse: AiChoice | null;
+  /** 고정 채널 AI 세줄 — 안 고르면 report 를 따라간다 */
+  pinned: AiChoice | null;
+  /** 캘린더 이미지 인식 — 안 고르면 싼 제공자부터 시도한다 */
+  vision: AiChoice | null;
 }
 
 export interface VisionModelOption {

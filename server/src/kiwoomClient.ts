@@ -33,6 +33,33 @@ interface TokenState {
   expiresAt: number; // epoch ms
 }
 
+/**
+ * 통합(_AL)을 자동 부착할 TR — **실측했거나 같은 계열로 확인된 것만.**
+ * (하이닉스로 실측: ka10059/60 수급 = 키움 앱 일치 · ka10014 공매도 비중 2.79% 일치 ·
+ *  ka10015 통합 거래량 6,738,900 일치 · ka10081 오늘 봉에 NXT 프리 체결 포함)
+ * ka10004(호가)는 없다 — 통합 호가란 게 없고, orderBook 이 KRX→NXT 폴백으로 처리한다.
+ */
+const AL_TRS = new Set([
+  "ka10001", // 기본정보(현재가·등락률·거래량)
+  "ka10002", // 거래원
+  "ka10003", // 체결(체결강도)
+  "ka10007", // 시세표성
+  "ka10015", // 일별 거래상세
+  "ka10040", // 당일 주요 거래원
+  "ka10046", // 체결강도 시간별
+  "ka10047", // 체결강도 일별
+  "ka10059", // 일별 투자자
+  "ka10060", // 투자자 차트
+  "ka10080", // 분봉
+  "ka10081", // 일봉
+  "ka10082", // 주봉
+  "ka10083", // 월봉
+  "ka10095", // 관심종목 시세 (여러 코드 "|" — 각 코드는 호출부가 _AL 처리)
+  "ka90013", // 프로그램
+  "ka00196", // 체결금액대별
+  "ka10014", // 공매도
+]);
+
 export class KiwoomClient {
   private readonly baseUrl: string;
   private readonly appKey: string;
@@ -97,13 +124,27 @@ export class KiwoomClient {
   /**
    * 키움 REST API POST 호출 공통 래퍼.
    * resourceUrl 예: /api/dostk/acnt, api-id 예: kt00018
+   *
+   * ## 통합(_AL) 자동 부착 (2026-08-26 — 「모든 로직은 모든 시장을 반영해야 한다」)
+   *
+   * 접미 없는 종목코드는 **KRX 단독**이다. 시장은 KRX 만으로 돌지 않는데(NXT 프리·
+   * 애프터·병행) 호출처 수십 곳이 전부 bare 코드를 보내고 있었다 — 수급·공매도·
+   * 거래원·차트·신호등·백테스트가 죄다 반쪽 시장을 봤다.
+   *
+   * 그래서 여기 **한 곳에서**: AL_TRS 목록의 TR 에 6자리 bare 코드가 오면 `_AL` 을
+   * 붙인다. 명시적 `_NX`/`_AL` 은 건드리지 않는다. 차트 4개 라우트는 화면에
+   * KRX/NXT/통합 셀렉터가 있어 `noAl` 로 빠진다 — 사용자가 고른 시장을 서버가
+   * 덮어쓰면 안 된다.
    */
   async request<T = Record<string, unknown>>(
     resourceUrl: string,
     apiId: string,
     body: Record<string, unknown> = {},
-    opts: { contYn?: string; nextKey?: string } = {},
+    opts: { contYn?: string; nextKey?: string; noAl?: boolean } = {},
   ): Promise<{ data: T; contYn: string; nextKey: string }> {
+    if (!opts.noAl && AL_TRS.has(apiId) && typeof body.stk_cd === "string" && /^\d{6}$/.test(body.stk_cd)) {
+      body = { ...body, stk_cd: `${body.stk_cd}_AL` };
+    }
     let token = await this.getToken();
     const maxRetries = 6;
     /*

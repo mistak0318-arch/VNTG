@@ -1,4 +1,5 @@
 import { addEvent, type CalendarEvent, type EventKind } from "./calendar.js";
+import { choiceFor } from "./aiConfig.js";
 import { availableVisionProviders, readImage, type VisionProvider } from "./vision.js";
 
 /**
@@ -111,6 +112,18 @@ export async function parseCalendarImage(
   prefer?: VisionProvider,
   model?: string,
 ): Promise<ParseResult> {
+  /*
+   * 설정 > AI 의 「캘린더 이미지 인식」 선택을 따른다 (2026-08-26).
+   * 호출부가 provider/model 을 명시하면 그게 우선이고(화면에서 직접 고른 경우),
+   * 없으면 설정값 → 그것도 없으면 지금까지처럼 싼 제공자부터 시도한다.
+   */
+  if (!prefer) {
+    const chosen = await choiceFor("vision").catch(() => null);
+    if (chosen) {
+      prefer = chosen.provider;
+      model = model ?? chosen.model;
+    }
+  }
   const res = await readImage(PROMPT, imageBase64, mimeType, prefer, model);
 
   if (!res.text) {

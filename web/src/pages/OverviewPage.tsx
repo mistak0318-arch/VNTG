@@ -20,6 +20,7 @@ import { ConstituentSheet, type ConstituentTarget } from "../components/overview
 import { FlowBars } from "../components/overview/FlowBars";
 import { FlowIntradayChart } from "../components/overview/FlowIntradayChart";
 import { IndexDetailSheet } from "../components/overview/IndexDetailSheet";
+import { FuturesDetailSheet, type FuturesDetailTarget } from "../components/overview/FuturesDetailSheet";
 import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
 import { MarketSignalPanel } from "../components/MarketSignalPanel";
 import { UsBoardPanel } from "../components/overview/UsBoardPanel";
@@ -118,6 +119,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const [constituent, setConstituent] = useState<ConstituentTarget | null>(null);
   /** 눌러서 연 지수 상세 (001 코스피 / 101 코스닥) */
   const [indexDetail, setIndexDetail] = useState<string | null>(null);
+  /** 선물 타일 → 코스피/코스닥과 같은 골격의 선물 상세 시트 */
+  const [futDetail, setFutDetail] = useState<FuturesDetailTarget | null>(null);
   /* 글로벌·미장·미국 금리 줄을 누르면 — 추이 차트. 숫자 한 줄로는 「어디쯤인가」를 모른다 */
   const [chart, setChart] = useState<ChartTarget | null>(null);
 
@@ -280,17 +283,13 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                   c.code === "F"
                     ? () =>
                         c.futures &&
-                        setChart({
-                          kind: "futures",
-                          symbol: c.futures.code,
-                          label: "코스피200 선물 (주간)",
-                          hintRate: c.changeRate,
-                          hintPrice: c.price,
-                          futMarket: "F",
-                          futInfo: {
-                            basis: c.futures.basis,
-                            openInterest: c.futures.openInterest,
-                          },
+                        setFutDetail({
+                          code: c.futures.code,
+                          name: c.futures.name,
+                          price: c.price,
+                          changeRate: c.changeRate,
+                          basis: c.futures.basis,
+                          openInterest: c.futures.openInterest,
                         })
                     : () => setIndexDetail(c.code);
                 return (
@@ -338,11 +337,12 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                         // 「억」 글자는 뺀다 — 이 카드의 수급은 다 억원이라 접미가 소음이다
                         const eok = (n: number) =>
                           `${n > 0 ? "+" : ""}${fmtNum(Math.round((n * c.price) / 400))}`;
+                        // ≈ 는 뺐다 — 추정치인 건 알고 있으니 지우라는 지정. 툴팁이 말한다
                         const row = (lbl: string, n: number) => (
                           <div>
                             <span className="lbl">{lbl}</span>
                             <span className={`ff-two ${signCls(n)}`}>
-                              {c.price > 0 ? `≈${eok(n)}` : `${n > 0 ? "+" : ""}${fmtNum(n)}`}
+                              {c.price > 0 ? eok(n) : `${n > 0 ? "+" : ""}${fmtNum(n)}`}
                               <em className="ff-eok">
                                 {n > 0 ? "+" : ""}
                                 {fmtNum(n)}계약
@@ -878,6 +878,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
       {indexDetail && (
         <IndexDetailSheet code={indexDetail} onClose={() => setIndexDetail(null)} />
       )}
+
+      {futDetail && <FuturesDetailSheet target={futDetail} onClose={() => setFutDetail(null)} />}
 
       {/* 글로벌·미장·미국 금리 줄에서 연 추이 차트 */}
       {chart && <YahooChartSheet target={chart} onClose={() => setChart(null)} />}

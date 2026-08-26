@@ -211,6 +211,12 @@ export function OrderBookPanel({ code }: { code: string }) {
         <span className="pt-n">
           {book.at ? `${book.at.slice(0, 2)}:${book.at.slice(2, 4)}:${book.at.slice(4, 6)}` : ""}
         </span>
+        {/* KRX 가 비는 프리·애프터엔 NXT 호가로 폴백된다 — 어느 시장 호가인지 밝힌다 */}
+        {(book as { venue?: string }).venue === "NXT" && (
+          <em className="ph-ex nxt" title="지금 KRX 호가가 비어 NXT 호가를 보여주고 있습니다">
+            NXT 호가
+          </em>
+        )}
       </div>
 
       {/*

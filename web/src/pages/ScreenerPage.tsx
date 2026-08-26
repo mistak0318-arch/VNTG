@@ -6,7 +6,7 @@ import { ContinuousTradePage } from "./ContinuousTradePage";
 import { TopTradersTable } from "../components/TopTradersTable";
 import { CumulativeRank } from "../components/CumulativeRank";
 import { SortableTh, useSortableTable } from "../useSortableTable";
-import { fid, useRealtime } from "../useRealtime";
+import { fid, krxOverlayLive, useRealtime } from "../useRealtime";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { useCardOrder } from "../useCardOrder";
@@ -391,9 +391,11 @@ export function ScreenerPage({
    * ⚠️ 통합일 때만. KRX/NXT 를 콕 집어 보는 중이면 실시간(통합 최신가)을 덮는 게
    * 거짓말이 된다 — 그 화면은 그 거래소의 값을 보겠다는 뜻이다.
    */
-  const liveOn = !data?.spec.exchange || exchange === "3";
+  // KRX 정규장 밖(NXT 프리·애프터)엔 오버레이를 끈다 — KRX 0% 가 통합 값을 덮어 「왜 0이냐」가 됐다
+  const liveOn = (!data?.spec.exchange || exchange === "3") && krxOverlayLive();
   const rt = useRealtime(liveOn ? shown.map((r) => `0B:${r.code}`) : [], 1500, { readOnly: true });
   const liveOf = (code: string): { price: number; rate: number | null } | null => {
+    if (!liveOn) return null;
     if (!rt.healthy) return null;
     const v = rt.values[`0B:${code}`];
     if (!v || Date.now() - v.at > 90_000) return null;

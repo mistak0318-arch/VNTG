@@ -3464,6 +3464,22 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 
 /* 선물 투자자별 수급 (차트 시트 안) */
 .ff-wrap { margin-top: 0.8rem; }
+/* VI 발동 중 배지 — 종목 상단. 단일가 전환으로 체결이 멈춘 것을 이름으로 밝힌다 */
+.ph-vi {
+  font-style: normal;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--red, #e0564b);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 8px;
+  animation: ph-vi-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ph-vi-pulse {
+  50% { opacity: 0.55; }
+}
+
 /* 선물 타일 밑줄 — 무슨 일이 있어도 한 줄. 넘치면 …이고, 전체 설명은 툴팁에 있다 */
 .ov-idx-note-1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

@@ -139,9 +139,14 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
   const kst = new Date(Date.now() + 9 * 3600_000);
   const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
   const weekday = kst.getUTCDay() !== 0 && kst.getUTCDay() !== 6;
+  /*
+   * 하루의 경계는 **07:50** 이다 (2026-08-26 — 「전날 값이 NXT 새 값과 섞인다」).
+   * 07:50 부터는 새 거래일로 보고 어제 값으로 메우지 않는다 — 증권 앱들이 그 시각에
+   * 표시를 리셋하는 것과 같은 규칙. 전날 시세는 마감 국면(20:00~다음날 07:50)에 보인다.
+   */
   const phase: "pre" | "regular" | "after" | "closed" = !weekday
     ? "closed"
-    : mins < 8 * 60
+    : mins < 7 * 60 + 50
       ? "closed"
       : mins < 9 * 60
         ? "pre"
@@ -151,6 +156,8 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
             ? "after"
             : "closed";
   const closed = phase === "closed";
+  /** 어제 값으로 메워도 되는가 — 마감 국면에만. 새 거래일엔 빈 칸이 정직하다 */
+  const fillOk = closed;
   const PHASE_LABEL: Record<typeof phase, string> = {
     pre: "NXT 프리마켓",
     regular: "정규장",
@@ -169,7 +176,7 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
    * 오늘 전일종가로 두면 엉뚱한 퍼센트가 나온다 — NAVER 08/18 시가 225,500 이
    * -1.10% 대신 +3.92% 로 찍혔다. 메운 값에는 **그날의** 전일종가를 쓴다.
    */
-  const filled = Math.abs(Number(info.open_pric)) === 0 && last?.base != null;
+  const filled = fillOk && Math.abs(Number(info.open_pric)) === 0 && last?.base != null;
   const base = filled ? last!.base! : Math.abs(Number(info.base_pric));
   const fluRt = Number(String(info.flu_rt ?? "").replace(/\+/g, ""));
 
@@ -186,10 +193,25 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
    * 정규장 밖에서는 그 밑에 NXT 를 **작게** 붙인다. 그 시간에 실제로 움직이는 건 NXT 이지만
    * 기준이 되는 값은 정규장 종가이므로, 크기로 둘의 무게를 갈라 놓는다.
    */
+  /*
+   * 2026-08-26 — /info 가 통합(_AL)이 됐다. cur_prc 는 이제 NXT 체결까지 포함한
+   * 값이라, NXT 만 도는 시간(프리 08:00~08:50 · 애프터 15:30~20:00)에도 살아 있다.
+   * 「krx 만 나온다」는 지적의 답: 그 시간엔 큰 숫자를 그 값으로 두고
+   * **「NXT 시세」라고 적는다** — 어느 시장 값인지 이름으로 밝히면 헷갈릴 게 없다.
+   */
   const preOpen = phase === "pre";
-  // 개장 전에는 KRX 가 아직 안 움직였다. 「현재가」라고 부르면 거짓말이 된다
-  const mainPrice = preOpen ? info.base_pric : info.cur_prc;
-  const mainLabel = preOpen ? "전날 종가" : krxDone ? "종가" : "현재가";
+  const hasCur = Math.abs(Number(info.cur_prc)) > 0;
+  const mainPrice = preOpen && !hasCur ? info.base_pric : info.cur_prc;
+  const mainLabel =
+    phase === "pre"
+      ? hasCur
+        ? "NXT 시세"
+        : "전날 종가"
+      : phase === "after"
+        ? "NXT 시세"
+        : krxDone
+          ? "종가"
+          : "현재가";
   /**
    * NXT 를 언제 보여줄까.
    *
@@ -214,10 +236,12 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
   const nxtSame = showNxtLine && phase === "regular" && !nxtDiffers;
 
   /*
-   * 회전율 — **통합 거래량**으로 낸다(KRX + NXT). 하루 거래는 둘의 합이라
-   * KRX 만 세면 「얼마나 돌았나」가 절반으로 적힌다.
+   * 회전율 — 통합 거래량으로 낸다.
+   * ⚠️ NXT 를 **더하지 않는다** (2026-08-26): /info 가 통합(_AL)이 되면서
+   * trde_qty 에 NXT 가 이미 들어 있다. 예전처럼 nxt.volume 을 더하면 NXT 가
+   * 두 번 세어져 거래량·회전율이 부풀었다 — 「거래량이 안 맞는다」의 원인.
    */
-  const totalVol = fill(info.trde_qty, last?.volume) + (nxt?.volume ?? 0);
+  const totalVol = fillOk ? fill(info.trde_qty, last?.volume) : Math.abs(Number(info.trde_qty)) || 0;
   const turnover = shares && shares > 0 && totalVol > 0 ? (totalVol / shares) * 100 : null;
   const nxtCls = !nxt ? "" : nxt.changeRate > 0 ? "positive" : nxt.changeRate < 0 ? "negative" : "";
 
@@ -226,10 +250,25 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
       <div className="ph-main">
         <div className="ph-main-label">
           {mainLabel} · {PHASE_LABEL[phase]}
+          {/* VI 발동 중 — 값이 멈춰 있으면 헷갈린다(2026-08-26). 해제되면 배지도 사라진다 */}
+          {(() => {
+            const vi = info._vi as
+              | { active: boolean; firedAt: string; clearedAt: string | null }
+              | null
+              | undefined;
+            if (!vi?.active) return null;
+            const t = String(vi.firedAt ?? "");
+            const hm = t.length >= 4 ? `${t.slice(0, 2)}:${t.slice(2, 4)}` : "";
+            return (
+              <em className="ph-vi" title={`변동성완화장치(VI) 발동${hm ? ` — ${hm}` : ""} · 단일가 매매 중이라 체결이 멈춰 보입니다`}>
+                ⚡ VI 발동 중{hm ? ` ${hm}` : ""}
+              </em>
+            );
+          })()}
         </div>
-        <div className={`ph-price ${preOpen ? "" : sign}`}>{fmtAbsNum(mainPrice)}</div>
-        {/* 개장 전 KRX 등락은 늘 0 이라 적을 이유가 없다 */}
-        {!preOpen && (
+        <div className={`ph-price ${preOpen && !hasCur ? "" : sign}`}>{fmtAbsNum(mainPrice)}</div>
+        {/* 통합 값이 있으면 프리장에도 등락을 적는다(NXT 체결 기준). 없을 때만 생략 */}
+        {!(preOpen && !hasCur) && (
           <div className={`ph-change ${sign}`}>
             {Number(info.pred_pre) > 0 ? "▲" : Number(info.pred_pre) < 0 ? "▼" : ""}
             {fmtAbsNum(info.pred_pre)}
@@ -259,10 +298,10 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
       </div>
       <div className="ph-grid">
         {[
-          // 개장 전에는 ka10001 이 0 을 주므로 마지막 거래일 값으로 메운다
-          { label: "시가", value: fill(info.open_pric, last?.open), nxtValue: nxt?.open ?? null },
-          { label: "고가", value: fill(info.high_pric, last?.high), nxtValue: nxt?.high ?? null },
-          { label: "저가", value: fill(info.low_pric, last?.low), nxtValue: nxt?.low ?? null },
+          // 마감 국면에만 마지막 거래일 값으로 메운다 — 07:50 부터는 오늘 값만(없으면 -)
+          { label: "시가", value: fillOk ? fill(info.open_pric, last?.open) : info.open_pric, nxtValue: nxt?.open ?? null },
+          { label: "고가", value: fillOk ? fill(info.high_pric, last?.high) : info.high_pric, nxtValue: nxt?.high ?? null },
+          { label: "저가", value: fillOk ? fill(info.low_pric, last?.low) : info.low_pric, nxtValue: nxt?.low ?? null },
         ].map((it) => {
           const v = vsBase(it.value, base);
           const nv = vsBase(it.nxtValue, base);
@@ -283,8 +322,16 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
               <span className="ph-label">{it.label}</span>
               <span className="ph-row">
                 <em className="ph-ex">KRX</em>
-                <b className={`ph-value ${v.cls}`}>{fmtAbsNum(it.value)}</b>
-                {v.rate && <em className={`ph-pct ${v.cls}`}>{v.rate}</em>}
+                {Math.abs(Number(it.value)) === 0 ? (
+                  <b className="ph-value pt-n" title="오늘 아직 체결이 없습니다">
+                    -
+                  </b>
+                ) : (
+                  <>
+                    <b className={`ph-value ${v.cls}`}>{fmtAbsNum(it.value)}</b>
+                    {v.rate && <em className={`ph-pct ${v.cls}`}>{v.rate}</em>}
+                  </>
+                )}
               </span>
               {hasNxt && (
                 <span className="ph-row">
@@ -400,16 +447,16 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           </span>
           <span className="ph-sep" />
           {/*
-            NXT 몫은 따로 — 08~09시 프리마켓에는 KRX 가 몇 백 주뿐이라 합쳐 적으면
-            「거래량 190」이 뜬다. 거래량은 누적이라 한 번 뜨면 사라지지 않는다.
+            거래량은 이제 **통합(KRX+NXT)** 이다 (/info 가 _AL). 그 옆 NXT 는
+            「그중 NXT 몫」 — 합산 대상이 아니라 부분집합이다. 헷갈리지 않게 툴팁에 적는다.
           */}
           <span className="ph-row">
-            <em className="ph-sublabel">거래량</em>
-            <span className="ph-value sub">{fmtNum(fill(info.trde_qty, last?.volume))}</span>
+            <em className="ph-sublabel" title="KRX+NXT 통합 누적 거래량">거래량</em>
+            <span className="ph-value sub">{fmtNum(totalVol)}</span>
           </span>
           {nxt?.volume != null && nxt.volume > 0 && (
-            <span className="ph-row">
-              <em className="ph-sublabel nxt">NXT</em>
+            <span className="ph-row" title="통합 거래량 중 NXT 에서 체결된 몫">
+              <em className="ph-sublabel nxt">그중 NXT</em>
               <span className="ph-value sub">{fmtNum(nxt.volume)}</span>
             </span>
           )}

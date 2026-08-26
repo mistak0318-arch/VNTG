@@ -301,6 +301,8 @@
   margin-top: 5px; font-size: 0.7rem; color: var(--ov-txt-3);
 }
 .ifc-sub b { font-weight: 600; }
+/* 선물 시트 — 큰 값(억원 환산) 밑의 원본 계약 수 */
+.ifc-sub-line { font-size: 0.66rem; color: var(--ov-txt-3); }
 
 /* ---------- 표 ---------- */
 .ov-table {
