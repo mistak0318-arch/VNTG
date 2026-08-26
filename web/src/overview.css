@@ -14,8 +14,7 @@
  * 색·그래프·배경이 통째로 죽는다(실제로 그랬다 — 스파크라인 stroke 가
  * var(--up) 미정의로 투명이 됐다). 테마 오버라이드(엑셀·라이트)도 같이 받는다.
  */
-/* `.bf`(마켓 브리핑)도 같다 — 종목등락현황·거래대금이 브리핑에 꽂히면서 (2026-08-27) */
-.ov, .ib, .bf {
+.ov, .ib {
   --up: #f0555f;
   --down: #4a8bf5;
   --flat: #8b96a5;
@@ -29,14 +28,14 @@
   --ov-txt-3: #5b6675;
 }
 
-.ov .num, .ib .num, .bf .num {
+.ov .num, .ib .num {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
   letter-spacing: -0.01em;
 }
-.ov .up, .ib .up, .bf .up { color: var(--up); }
-.ov .down, .ib .down, .bf .down { color: var(--down); }
-.ov .flat, .ib .flat, .bf .flat { color: var(--flat); }
+.ov .up, .ib .up { color: var(--up); }
+.ov .down, .ib .down { color: var(--down); }
+.ov .flat, .ib .flat { color: var(--flat); }
 
 /* ---------- 장 상태 ---------- */
 .ov-statusbar {
@@ -448,7 +447,7 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
  * 잘 그려도 주식창으로 읽힌다. 부호(+/−)는 이미 글자에 들어 있으므로 색만 빼도
  * 뜻은 그대로 남는다.
  */
-:root[data-theme="excel"] .ov, :root[data-theme="excel"] .ib, :root[data-theme="excel"] .bf {
+:root[data-theme="excel"] .ov, :root[data-theme="excel"] .ib {
   --up: #000000;
   --down: #000000;
   --flat: #5a5a5a;
@@ -475,7 +474,7 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 
 /* ===== 라이트 테마: 시황 카드 색상 오버라이드 =====
    overview.css는 자체 변수(--ov-*)를 쓰므로 여기서 값만 갈아끼운다. */
-:root[data-theme="light"] .ov, :root[data-theme="light"] .ib, :root[data-theme="light"] .bf {
+:root[data-theme="light"] .ov, :root[data-theme="light"] .ib {
   --up: #e03131;
   --down: #1c6dd0;
   --flat: #6b7684;

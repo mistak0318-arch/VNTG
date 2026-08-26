@@ -9,6 +9,7 @@ import {
   MoneyFlowSection,
   MyStocksSection,
   NightFuturesSection,
+  CrossSignalSection,
   SuperSignalSection,
   TradeTrendSection,
   UsThemeMapSection,
@@ -190,6 +191,8 @@ export const REPORT_SECTION_DEFS: { key: string; label: string }[] = [
   { key: "sectors", label: "강한 업종 (상승 이유 포함)" },
   { key: "myStocks", label: "내 관심종목" },
   { key: "superSignal", label: "슈퍼신호등" },
+  /* 시장 흐름 분석(맥박)의 교차 신호 — 슈퍼신호등 바로 아래 (2026-08-27 사용자 지정) */
+  { key: "crossSignal", label: "교차 신호 (주도주 ∩ 슈퍼신호등)" },
   { key: "featured", label: "특징주" },
   { key: "news", label: "주요 뉴스 클리핑 (종목·테마)" },
   { key: "channel", label: "텔레그램 채널 요약" },
@@ -724,6 +727,7 @@ export function DailyReportPage({
       myStocks: <MyStocksSection onSelectStock={onSelectStock} />,
       /* 시스템이 기계적으로 골라 따라가는 목록 — 리포트 본문에도 (2026-08-26) */
       superSignal: <SuperSignalSection onSelectStock={onSelectStock} />,
+      crossSignal: <CrossSignalSection onSelectStock={onSelectStock} />,
       featured: <FeaturedSection onSelectStock={onSelectStock} />,
       /* 콤팩트판 — 분야 이름 + 제목만. 본문·검색은 뉴스·공시 메뉴 몫 */
       news: <NewsClippingCompact onFetched={setNewsAt} />,

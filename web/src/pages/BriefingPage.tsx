@@ -11,9 +11,13 @@ import {
   type UsMajorResult,
 } from "../api";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
-import { FlowBars, ThemeStrip, WatchHeatGrid } from "../components/BriefingBlocks";
-import { UpDownTable } from "../components/overview/DomesticIndexGrid";
-import { TurnoverPanel } from "../components/overview/TurnoverPanel";
+import {
+  FlowBars,
+  ThemeStrip,
+  TurnoverStrip,
+  UpDownStrip,
+  WatchHeatGrid,
+} from "../components/BriefingBlocks";
 import { RefreshBar } from "../components/RefreshBar";
 import { useSection } from "../useSection";
 
@@ -304,11 +308,12 @@ export function BriefingPage({
 
           {/*
             폭과 유동성 (2026-08-27 — "그래야 시장을 읽지").
-            수급(누가 사나) 다음 물음이 「몇 종목이 오르나(폭)」와 「돈이 도나(대금)」다 —
-            시황 대시보드와 같은 공용 본문(UpDownTable·TurnoverPanel)을 그대로 꽂는다.
+            수급(누가 사나) 다음 물음이 「몇 종목이 오르나(폭)」와 「돈이 도나(대금)」다.
+            처음엔 시황의 표를 그대로 꽂았는데 글자 크기·간격이 브리핑과 안 맞았다 —
+            **데이터만 같고 레이아웃은 브리핑 것**(수급 격자와 같은 문법)으로 다시 그린다.
           */}
           <h3 className="section-heading">종목등락현황</h3>
-          <UpDownTable
+          <UpDownStrip
             cards={[
               indices.data?.find((i) => i.code === "001"),
               indices.data?.find((i) => i.code === "101"),
@@ -316,7 +321,7 @@ export function BriefingPage({
           />
 
           <h3 className="section-heading">거래대금 현황</h3>
-          <TurnoverPanel />
+          <TurnoverStrip />
 
           <h3 className="section-heading">테마</h3>
           {/* 본문은 보드 블록과 공용 (BriefingBlocks) */}

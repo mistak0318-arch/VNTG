@@ -37,6 +37,8 @@ export function SuperDetailSheet({
   const [data, setData] = useState<SuperDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  /** 펼쳐 놓은 메모(날짜) — 그날 상황 브리핑이 아래로 열린다 */
+  const [openNote, setOpenNote] = useState<string | null>(null);
   const [exitNote, setExitNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -414,14 +416,107 @@ export function SuperDetailSheet({
 
             <section className="sd-block">
               <h3>메모</h3>
-              {/* 이력 — 덮어쓰지 않는다. 그날 무엇을 보고 추적하려 했는지가 복기의 전부다 */}
+              {/* 이력 — 덮어쓰지 않는다. 그날 무엇을 보고 추적하려 했는지가 복기의 전부다.
+                  줄을 누르면 **그날의 상황 브리핑**(주가·점수·시장·수급·체크)이 펼쳐진다 */}
               {(entry.notes ?? []).length > 0 && (
                 <div className="sd-note-hist">
-                  {[...(entry.notes ?? [])].reverse().map((n, i) => (
-                    <div className="sd-note-row" key={`${n.date}-${i}`}>
-                      <b>{n.date.slice(5)}</b> {n.text}
-                    </div>
-                  ))}
+                  {[...(entry.notes ?? [])].reverse().map((n, i) => {
+                    const open = openNote === n.date;
+                    /* 그날의 기록을 이미 받아 둔 것에서 찾는다 — 추가 조회 없음 */
+                    const di = daily.findIndex((d) => d.date === n.date);
+                    const d = di >= 0 ? daily[di] : null;
+                    const prev = di > 0 ? daily[di - 1] : null;
+                    const ymd = n.date.replace(/-/g, "");
+                    const fl = data.flows.find((f) => f.date === ymd) ?? null;
+                    const since =
+                      d && entry.addedPrice > 0 && d.close > 0
+                        ? ((d.close - entry.addedPrice) / entry.addedPrice) * 100
+                        : null;
+                    const dayChg =
+                      d && prev && prev.close > 0 && d.close > 0
+                        ? ((d.close - prev.close) / prev.close) * 100
+                        : null;
+                    const byGrade = (g: number) =>
+                      (d?.checks ?? []).filter((c) => c.g === g).map((c) => c.l);
+                    const p = (v: number | null) =>
+                      v === null ? "-" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
+                    return (
+                      <div key={`${n.date}-${i}`}>
+                        <button
+                          type="button"
+                          className={`sd-note-row sd-note-click${open ? " open" : ""}`}
+                          onClick={() => setOpenNote(open ? null : n.date)}
+                          title="눌러서 그날 상황 보기"
+                        >
+                          <b>{n.date.slice(5)}</b> {n.text}
+                          <i className="sd-note-caret">{open ? "▴" : "▾"}</i>
+                        </button>
+                        {open && (
+                          <div className="sd-note-ctx">
+                            {d ? (
+                              <>
+                                <div>
+                                  주가 <b>{d.close > 0 ? d.close.toLocaleString("ko-KR") : "-"}</b>
+                                  <span className={`num ${since !== null && since >= 0 ? "positive" : "negative"}`}>
+                                    {" "}편입 대비 {p(since)}
+                                  </span>
+                                  {dayChg !== null && (
+                                    <span className={`num ${dayChg >= 0 ? "positive" : "negative"}`}>
+                                      {" "}· 그날 {p(dayChg)}
+                                    </span>
+                                  )}
+                                </div>
+                                <div>
+                                  신호등 <b>{LEVEL_KO[d.level] ?? d.level} {d.score}점</b>
+                                  {prev && prev.score !== d.score && (
+                                    <span className="pt-n"> (전일 {prev.score}점에서)</span>
+                                  )}
+                                  {d.market && (
+                                    <>
+                                      {" "}· 시장{" "}
+                                      <b>
+                                        {LEVEL_KO[d.market.level] ?? d.market.level} {d.market.score}점
+                                      </b>
+                                    </>
+                                  )}
+                                </div>
+                                {fl && (
+                                  <div>
+                                    수급{" "}
+                                    <span className={`num ${fl.foreign >= 0 ? "positive" : "negative"}`}>
+                                      외인 {(fl.foreign / 100).toFixed(1)}억
+                                    </span>{" "}
+                                    ·{" "}
+                                    <span className={`num ${fl.inst >= 0 ? "positive" : "negative"}`}>
+                                      기관 {(fl.inst / 100).toFixed(1)}억
+                                    </span>
+                                  </div>
+                                )}
+                                {(d.checks ?? []).length > 0 && (
+                                  <div className="sd-note-checks">
+                                    {byGrade(100).length > 0 && (
+                                      <span className="positive">충족 {byGrade(100).join("·")}</span>
+                                    )}
+                                    {byGrade(50).length > 0 && (
+                                      <span> 절반 {byGrade(50).join("·")}</span>
+                                    )}
+                                    {byGrade(0).length > 0 && (
+                                      <span className="negative"> 미충족 {byGrade(0).join("·")}</span>
+                                    )}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div className="pt-n">
+                                그날의 일별 기록이 없습니다 — 기록은 평일 15:45 실행이 쌓습니다
+                                (주말이거나 기록 기능 이전의 메모).
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               <textarea

@@ -15,6 +15,7 @@ import {
   type TelegramChannel,
 } from "./telegram.js";
 import {
+  CROSS_GROUP,
   ensureInGroup,
   listWatchlist,
   removeWatchItem,
@@ -74,6 +75,12 @@ export interface SuperDaily {
    * 적는다 — 120일 × 체크 열두어 개가 종목마다 쌓이는 파일이다.
    */
   checks?: { l: string; g: number | null }[];
+  /**
+   * 그날의 시장 신호등 (2026-08-27) — 메모 복기 브리핑용. "종목이 죽었나 장이
+   * 죽었나"는 그날 시장을 같이 봐야 답이 나온다. 하루 한 번 평가한 값을 전 종목에
+   * 같이 찍는다 — 종목당 비용이 늘지 않는다.
+   */
+  market?: { level: string; score: number };
 }
 
 /** 메모 한 줄 — 그날 무엇을 보고 무엇을 추적하려 했는지의 흔적 */
@@ -237,8 +244,10 @@ async function recordSuperDaily(client: KiwoomClient, store: Store): Promise<Sup
   if (active.length === 0) return exited;
 
   const snap = await getMarketSnapshot(client).catch(() => null);
-  /* 시장 신호등은 이탈이 실제로 생겼을 때 한 번만 받는다 */
-  let market: { level: string; score: number } | null | undefined;
+  /* 시장 신호등 — 하루 한 번 평가해 일별 기록(복기 브리핑 재료)과 이탈 기록이 같이 쓴다 */
+  const market: { level: string; score: number } | null = await evaluateMarket(client)
+    .then((m) => ({ level: m.level, score: m.score }))
+    .catch(() => null);
 
   for (const e of active) {
     try {
@@ -252,6 +261,7 @@ async function recordSuperDaily(client: KiwoomClient, store: Store): Promise<Sup
         level: sig.level,
         // 체크 내역 — 내일 이후 「무엇 때문에 점수가 움직였나」를 이걸로 되짚는다
         checks: sig.checks.map((c) => ({ l: c.label, g: c.grade })),
+        ...(market ? { market } : {}),
       };
       const last = daily[daily.length - 1];
       if (last?.date === today) daily[daily.length - 1] = row;
@@ -261,11 +271,6 @@ async function recordSuperDaily(client: KiwoomClient, store: Store): Promise<Sup
       // 이틀 연속 초록 미만 → 자동 이탈
       const n = daily.length;
       if (n >= 2 && daily[n - 1].level !== "green" && daily[n - 2].level !== "green") {
-        if (market === undefined) {
-          market = await evaluateMarket(client)
-            .then((m) => ({ level: m.level, score: m.score }))
-            .catch(() => null);
-        }
         e.active = false;
         (e.exits ??= []).push({
           date: today,
@@ -586,9 +591,21 @@ export interface SuperStats {
   worst: { name: string; v: number } | null;
 }
 
+/** 화면 한 줄 — 원장 항목 + 지금 값 + 소속 그룹 표 */
+export type SuperListRow = SuperEntry & {
+  price: number | null;
+  changeRate: number | null;
+  sinceAdded: number | null;
+  /**
+   * 어느 그룹에서 온 종목인가 (2026-08-27) — "super"=슈퍼신호등 원장,
+   * "cross"=관심 그룹 「슈퍼신호등+교차」. 둘 다일 수도 있다. 화면이 심볼(🌟/⚡)로 단다.
+   */
+  groupTags: ("super" | "cross")[];
+};
+
 /** 화면용 — 지금 가격을 스냅샷에서 붙여 편입가 대비를 낸다 */
 export async function listSuperSignal(client: KiwoomClient): Promise<{
-  entries: (SuperEntry & { price: number | null; changeRate: number | null; sinceAdded: number | null })[];
+  entries: SuperListRow[];
   lastRunDate: string | null;
   minLists: number;
   grade: GradeRow[];
@@ -596,7 +613,44 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
 }> {
   const store = await load();
   const snap = await getMarketSnapshot(client).catch(() => null);
-  const entries = store.entries.map((e) => {
+  /* 교차 그룹 — 대시보드에 같이 보여 달라는 요청 (2026-08-27). 원장에는 안 섞는다 —
+     점수·이탈 체계는 슈퍼(초록 교집합)의 것이고, 교차는 관찰 대상일 뿐이다.
+     통계(grade/stats)도 그래서 원장만 센다. */
+  const crossCodes = new Set<string>();
+  const crossOnly: SuperListRow[] = [];
+  try {
+    const items = await listWatchlist();
+    const superCodes = new Set(store.entries.map((e) => e.code));
+    for (const w of items) {
+      if (!w.groups.includes(CROSS_GROUP)) continue;
+      crossCodes.add(w.code);
+      if (superCodes.has(w.code)) continue;
+      const s = snap?.byCode.get(w.code);
+      const price = s?.price ?? null;
+      crossOnly.push({
+        code: w.code,
+        name: w.name,
+        addedDate: w.addedAt.slice(0, 10),
+        addedPrice: w.addedPrice,
+        score: 0,
+        lists: [],
+        seenCount: 0,
+        lastSeenDate: w.addedAt.slice(0, 10),
+        active: true,
+        daily: [],
+        exits: [],
+        notes: [],
+        price,
+        changeRate: s?.changeRate ?? null,
+        sinceAdded:
+          price !== null && w.addedPrice > 0 ? ((price - w.addedPrice) / w.addedPrice) * 100 : null,
+        groupTags: ["cross"],
+      });
+    }
+  } catch {
+    /* 관심종목을 못 읽어도 슈퍼 원장은 그대로 보여준다 */
+  }
+  const entries: SuperListRow[] = store.entries.map((e) => {
     const s = snap?.byCode.get(e.code);
     const price = s?.price ?? null;
     return {
@@ -605,8 +659,12 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
       changeRate: s?.changeRate ?? null,
       sinceAdded:
         price !== null && e.addedPrice > 0 ? ((price - e.addedPrice) / e.addedPrice) * 100 : null,
+      groupTags: crossCodes.has(e.code)
+        ? (["super", "cross"] as ("super" | "cross")[])
+        : (["super"] as ("super" | "cross")[]),
     };
   });
+  entries.push(...crossOnly);
   /*
    * 채점 요약 — 「교집합이 넓을수록·오래 걸릴수록 진짜인가」에 답하는 표.
    * 표본이 몇 건 안 될 때는 화면이 n 을 함께 보여 주므로 여기서 숨기지 않는다.

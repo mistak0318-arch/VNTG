@@ -3,6 +3,8 @@ import {
   api,
   fmtNum,
   type BriefingTile,
+  type IndexCandle,
+  type IndexCard,
   type MarketFlow,
   type ThemeRow,
 } from "../api";
@@ -92,6 +94,140 @@ export function FlowBars({
         {twin} · 선물은 K200 지수선물(계약) · 기관 세부는 종목 화면에서 봅니다
       </div>
     </>
+  );
+}
+
+/**
+ * 종목등락현황 — **브리핑 압축판** (2026-08-27 "데이터만 가져오고 레이아웃은 따로").
+ * 시황의 표(ov-table)를 그대로 꽂았더니 글자 크기·간격이 브리핑과 안 맞았다.
+ * 수급 격자와 같은 문법으로 다시 그린다: 숫자가 주인공, **비율 밑줄**이 폭을 말한다.
+ * 재료는 지수 카드에 이미 실려 온다 — 새로 받는 게 없다.
+ */
+export function UpDownStrip({ cards }: { cards: (IndexCard | undefined)[] }) {
+  const rows = cards.filter((c): c is IndexCard => Boolean(c));
+  if (rows.length === 0) return <div className="empty">등락현황을 아직 못 받았습니다.</div>;
+  return (
+    <div className="bf-updown">
+      {rows.map((c) => {
+        const total = Math.max(1, c.rising + c.flat + c.falling);
+        const w = (n: number) => `${(n / total) * 100}%`;
+        return (
+          <div className="bf-ud-row" key={c.code}>
+            <em className="bf-ud-m">{c.name}</em>
+            <span className="bf-ud-cells num">
+              <b className="positive">
+                ▲{fmtNum(c.rising)}
+                {c.upperLimit > 0 && <i title="상한가">上{c.upperLimit}</i>}
+              </b>
+              <b className="bf-ud-flat">{fmtNum(c.flat)}</b>
+              <b className="negative">
+                ▼{fmtNum(c.falling)}
+                {c.lowerLimit > 0 && <i title="하한가">下{c.lowerLimit}</i>}
+              </b>
+            </span>
+            {/* 상승/보합/하락 비율 — 수급 격자의 밑줄과 같은 자리·같은 뜻 */}
+            <span
+              className="bf-ud-bar"
+              title={`상승 ${c.rising} · 보합 ${c.flat} · 하락 ${c.falling}`}
+            >
+              <i className="u" style={{ width: w(c.rising) }} />
+              <i className="f" style={{ width: w(c.flat) }} />
+              <i className="d" style={{ width: w(c.falling) }} />
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 억원 → 「12.3조」/「8,400억」 */
+function money(eok: number): string {
+  if (eok >= 10000) return `${(eok / 10000).toFixed(1)}조`;
+  return `${fmtNum(Math.round(eok))}억`;
+}
+
+/**
+ * 거래대금 현황 — **브리핑 압축판.** 시황(TurnoverPanel)과 같은 재료(지수 일봉의
+ * 거래대금, 서버 캐시 공유)로 한 줄씩만: 오늘 값이 주인공, 밑줄이 20일 평균 대비.
+ * 추이 차트·긴 설명은 시황 탭 몫이다 — 여기는 「돈이 도나」만 답한다.
+ */
+export function TurnoverStrip() {
+  const [rows, setRows] = useState<
+    { name: string; today: number; vsPrev: number | null; vsAvg: number | null }[] | null
+  >(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const out: { name: string; today: number; vsPrev: number | null; vsAvg: number | null }[] = [];
+      for (const m of [
+        { code: "001", name: "코스피" },
+        { code: "101", name: "코스닥" },
+      ]) {
+        try {
+          const r = await api.indexDetail(m.code, "day");
+          const cs: IndexCandle[] = r.candles;
+          if (cs.length === 0) continue;
+          const today = cs[cs.length - 1];
+          const prev = cs[cs.length - 2];
+          const last20 = cs.slice(-21, -1);
+          const avg =
+            last20.length > 0 ? last20.reduce((a, c) => a + c.tradeValue, 0) / last20.length : 0;
+          out.push({
+            name: m.name,
+            today: today.tradeValue,
+            vsPrev:
+              prev && prev.tradeValue > 0
+                ? ((today.tradeValue - prev.tradeValue) / prev.tradeValue) * 100
+                : null,
+            vsAvg: avg > 0 ? (today.tradeValue / avg) * 100 : null,
+          });
+        } catch {
+          /* 한 시장 실패는 넘어간다 */
+        }
+      }
+      if (alive) setRows(out);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (rows === null) return <div className="empty">불러오는 중…</div>;
+  if (rows.length === 0) return <div className="empty">거래대금을 아직 못 받았습니다.</div>;
+  return (
+    <div className="bf-updown">
+      {rows.map((r) => (
+        <div className="bf-ud-row" key={r.name}>
+          <em className="bf-ud-m">{r.name}</em>
+          <span className="bf-ud-cells num">
+            <b>{money(r.today)}</b>
+            <b className={`bf-to-sub ${cls(r.vsPrev)}`}>
+              전일 {r.vsPrev === null ? "-" : `${r.vsPrev > 0 ? "+" : ""}${r.vsPrev.toFixed(0)}%`}
+            </b>
+            <b
+              className={`bf-to-sub ${
+                r.vsAvg !== null && r.vsAvg >= 120
+                  ? "positive"
+                  : r.vsAvg !== null && r.vsAvg <= 70
+                    ? "negative"
+                    : ""
+              }`}
+            >
+              20일比 {r.vsAvg === null ? "-" : `${r.vsAvg.toFixed(0)}%`}
+            </b>
+          </span>
+          {/* 밑줄 = 20일 평균 대비. 눈금(평균 자리)을 넘으면 평소보다 붐빈 날이다 */}
+          <span className="bf-ud-bar bf-to-bar" title="밑줄 눈금이 20일 평균(100%) 자리입니다">
+            <i
+              className={r.vsAvg !== null && r.vsAvg >= 100 ? "u" : "f"}
+              style={{ width: `${Math.min(100, ((r.vsAvg ?? 0) / 150) * 100)}%` }}
+            />
+            <u className="bf-to-tick" />
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 

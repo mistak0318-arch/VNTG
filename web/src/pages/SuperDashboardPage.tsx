@@ -288,29 +288,49 @@ export function SuperDashboardPage({
                 const daily = e.daily ?? [];
                 const nowScore = daily.length > 0 ? daily[daily.length - 1].score : null;
                 const scoreDelta = nowScore !== null ? nowScore - e.score : null;
+                /* 교차 그룹에서만 온 줄 — 슈퍼 원장(점수·이탈 체계)이 없어 관찰만 한다 */
+                const crossOnly = e.groupTags != null && !e.groupTags.includes("super");
                 return (
                   <tr
                     key={e.code}
                     className={`sd-row${e.active === false ? " exited" : ""}`}
                     onClick={() => {
-                      setDetail({ code: e.code, name: e.name });
-                      publish(e.code, e.name);
+                      /* 교차 전용은 슈퍼 상세가 없다 — 종목 상세(연동 포함)로 */
+                      if (crossOnly) onSelectStock(e.code, e.name);
+                      else {
+                        setDetail({ code: e.code, name: e.name });
+                        publish(e.code, e.name);
+                      }
                     }}
                   >
                     <td>{e.active !== false ? "🟢" : "⛔"}</td>
                     <td className="sticky-col">
-                      <b>{e.name}</b> <span className="pt-n">{e.code}</span>
+                      <b>{e.name}</b>{" "}
+                      {/* 어느 그룹에서 온 종목인지 — 🌟 슈퍼 원장 · ⚡ 교차 그룹 */}
+                      {e.groupTags?.includes("super") && (
+                        <span title="슈퍼신호등 원장 (교집합 편입)">🌟</span>
+                      )}
+                      {e.groupTags?.includes("cross") && (
+                        <span title="관심 그룹 「슈퍼신호등+교차」 (맥박 교차 자동 편입)">⚡</span>
+                      )}{" "}
+                      <span className="pt-n">{e.code}</span>
                     </td>
                     <td>{e.addedDate.slice(5)}</td>
-                    <td className="num">{e.seenCount}일</td>
-                    <td className="num">{e.lists.length}곳</td>
+                    <td className="num">{crossOnly ? "-" : `${e.seenCount}일`}</td>
+                    <td className="num">{crossOnly ? "-" : `${e.lists.length}곳`}</td>
                     <td className="num">
-                      {e.score}
-                      {scoreDelta !== null && scoreDelta !== 0 && (
-                        <i className={scoreDelta > 0 ? "positive" : "negative"}>
-                          {" "}
-                          →{nowScore}
-                        </i>
+                      {crossOnly ? (
+                        "-"
+                      ) : (
+                        <>
+                          {e.score}
+                          {scoreDelta !== null && scoreDelta !== 0 && (
+                            <i className={scoreDelta > 0 ? "positive" : "negative"}>
+                              {" "}
+                              →{nowScore}
+                            </i>
+                          )}
+                        </>
                       )}
                     </td>
                     <td>

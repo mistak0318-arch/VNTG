@@ -3781,6 +3781,31 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   white-space: pre-wrap;
 }
 .sd-note-row > b { color: var(--muted); margin-right: 4px; }
+/* 메모 줄은 눌린다 — 그날 상황 브리핑이 펼쳐진다 */
+button.sd-note-click {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  border: none;
+  cursor: pointer;
+  position: relative;
+}
+button.sd-note-click.open { border-left-color: var(--blue); }
+.sd-note-caret { position: absolute; right: 8px; top: 4px; font-style: normal; color: var(--muted); }
+.sd-note-ctx {
+  font-size: 0.8rem;
+  margin: -2px 0 6px 10px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--blue);
+  background: var(--panel-2);
+  border-radius: 0 8px 8px 0;
+  display: grid;
+  gap: 3px;
+}
+.sd-note-checks { font-size: 0.74rem; }
+.sd-note-checks span { margin-right: 8px; }
 
 .sd-exit {
   font-size: 0.82rem;
@@ -3926,6 +3951,62 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   padding-bottom: 6px;
 }
 .app-tabs::-webkit-scrollbar { display: none; }
+
+/* ── 브리핑 압축 스트립 — 종목등락현황·거래대금 (2026-08-27) ──
+   수급 격자(bf-supply)와 같은 문법: 이름 작게, 숫자 주인공, 비율은 밑줄. */
+.bf-updown { margin-bottom: 4px; }
+.bf-ud-row {
+  display: grid;
+  grid-template-columns: 3.6rem 1fr;
+  grid-template-areas: "m cells" "m bar";
+  align-items: center;
+  gap: 1px 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.bf-ud-m { grid-area: m; font-style: normal; font-size: 0.72rem; color: var(--muted); }
+.bf-ud-cells {
+  grid-area: cells;
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  font-size: 0.84rem;
+  flex-wrap: wrap;
+}
+.bf-ud-cells b { font-weight: 700; }
+.bf-ud-cells b i {
+  font-style: normal;
+  font-size: 0.66rem;
+  font-weight: 600;
+  margin-left: 2px;
+  opacity: 0.85;
+}
+.bf-ud-flat { color: var(--muted); font-weight: 500 !important; }
+.bf-ud-bar {
+  grid-area: bar;
+  position: relative;
+  display: flex;
+  height: 3px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+/* 수급 밑줄과 같은 색 — 트랙 없는 색 막대 */
+.bf-ud-bar i { display: block; height: 100%; }
+.bf-ud-bar i.u { background: #f04452; }
+.bf-ud-bar i.f { background: var(--muted); opacity: 0.35; }
+.bf-ud-bar i.d { background: #3182f6; }
+/* 거래대금 밑줄 — 눈금이 20일 평균(100%) 자리 */
+.bf-to-sub { font-size: 0.74rem; font-weight: 600 !important; color: var(--text-dim); }
+.bf-to-bar { overflow: visible; }
+.bf-to-tick {
+  position: absolute;
+  left: 66.6%; /* 100/150 — 막대 눈금 = 20일 평균 */
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--muted);
+}
 /*
  * 탭바 고정 (2026-08-26) — 스크롤을 내려도 따라와서 바로 갈아탄다.
  * 설정 > 화면의 「탭바 고정」이 <html data-tabs> 로 켜고 끈다(기본 켬).

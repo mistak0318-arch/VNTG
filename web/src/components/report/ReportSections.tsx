@@ -19,6 +19,7 @@ import {
   type ScoredNews,
   type UsMajorResult,
   type EvaluatedTheme,
+  type MarketPulse,
 } from "../../api";
 import { CandleChart } from "../CandleChart";
 import { TradeChart, type TradeMonth } from "../TradePanel";
@@ -1265,7 +1266,10 @@ export function SuperSignalSection({
   if (error) return <div className="error-banner">{error}</div>;
   if (!data) return <div className="page-note">불러오는 중…</div>;
 
-  const active = data.entries.filter((e) => e.active !== false);
+  /* 교차 전용 줄은 뺀다 — 리포트에선 바로 아래 「교차 신호」 섹션이 따로 맡는다 */
+  const active = data.entries.filter(
+    (e) => e.active !== false && (e.groupTags?.includes("super") ?? true),
+  );
   const spct = (v: number | null | undefined) =>
     v === null || v === undefined ? "-" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
   const scls = (v: number | null | undefined) =>
@@ -1365,6 +1369,64 @@ export function SuperSignalSection({
           </table>
         </div>
       </details>
+    </>
+  );
+}
+
+/**
+ * 교차 신호 — 시장 흐름 분석(맥박)의 「주도주 태그 ∩ 슈퍼신호등」을 리포트에도 (2026-08-27).
+ * 두 체계가 **동시에** 가리키는 종목은 드물고, 드문 게 신호다. 걸리면 관심 그룹
+ * 「슈퍼신호등+교차」에 자동 편입되어 추적된다 — 여기는 오늘 교집합의 스냅샷이다.
+ */
+export function CrossSignalSection({
+  onSelectStock,
+}: {
+  onSelectStock: (code: string, name: string) => void;
+}) {
+  const [cross, setCross] = useState<MarketPulse["cross"] | null | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .pulse()
+      .then((p) => setCross(p.cross))
+      .catch((e: Error) => setError(e.message || "불러오지 못했습니다"));
+  }, []);
+
+  if (error) return <div className="error-banner">{error}</div>;
+  if (cross === undefined) return <div className="page-note">불러오는 중…</div>;
+  if (cross === null || cross.stocks.length === 0) {
+    return (
+      <div className="empty">
+        오늘은 교차 신호가 없습니다 — 주도주 스캔과 슈퍼신호등이 같은 종목을 가리킬 때만
+        나타납니다. 걸린 종목은 관심 그룹 「슈퍼신호등+교차」로 자동 편입됩니다.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <p className="page-note">{cross.note}</p>
+      <div className="rp-ss-chips">
+        {cross.stocks.map((s) => (
+          <button
+            className="rp-ss-chip"
+            key={s.code}
+            onClick={() => onSelectStock(s.code, s.name)}
+            title={`${s.sector}${s.tags.length > 0 ? ` · ${s.tags.join(" · ")}` : ""}`}
+          >
+            <em>{s.sectorInflow ? "⚡자금" : "⚡"}</em>
+            <b>{s.name}</b>
+            <span className={`num ${s.changeRate >= 0 ? "positive" : "negative"}`}>
+              {s.changeRate > 0 ? "+" : ""}
+              {s.changeRate.toFixed(2)}%
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className="table-note">
+        ⚡자금 = 업종에도 5일 외국인+기관 순매수가 붙어 있음 · 종목을 누르면 상세로 갑니다.
+      </p>
     </>
   );
 }

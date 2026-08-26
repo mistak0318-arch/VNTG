@@ -1355,6 +1355,8 @@ export interface SuperDaily {
   level: string;
   /** 그날 체크별 판정 (라벨·grade 0/50/100/null) — 점수 변동 사유의 재료 (2026-08-27) */
   checks?: { l: string; g: number | null }[];
+  /** 그날의 시장 신호등 — 메모 복기 브리핑용 (2026-08-27부터 기록) */
+  market?: { level: string; score: number };
 }
 
 export interface SuperExit {
@@ -1383,6 +1385,8 @@ export interface SuperEntry {
   note?: string;
   /** 메모 이력 (2026-08-27) — 날짜와 함께 쌓인다. note 는 마지막 것의 사본 */
   notes?: { date: string; text: string }[];
+  /** 어느 그룹에서 온 줄인가 — super=슈퍼 원장, cross=「슈퍼신호등+교차」 관심 그룹 */
+  groupTags?: ("super" | "cross")[];
   /* 서버가 스냅샷에서 붙여 주는 현재 값 */
   price: number | null;
   changeRate: number | null;
