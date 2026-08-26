@@ -4686,6 +4686,38 @@ tr.drag-src td { opacity: 0.45; }
 /* CandleChart 전용 — .chart-wrap 은 이미 다른 패널들이 쓰고 있어 이름을 나눈다 */
 /* min-width 0 + overflow hidden — 캔버스가 잠깐 넓게 잡혀도 시트 밖으로 밀지 못하게 */
 .candle-host { position: relative; min-width: 0; max-width: 100%; overflow: hidden; }
+/* 그리기 계층 (2026-08-27) — 추세선 캔버스는 마우스를 통과시킨다 */
+.chart-draw-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+/* 툴박스 — 트레이딩뷰처럼 왼쪽 위 세로줄. 반투명이라 봉을 덜 가린다 */
+.chart-tools {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ct-tool {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.ct-tool:hover { opacity: 1; color: var(--text); }
+.ct-tool.on { border-color: var(--accent, #f5c542); color: var(--accent, #f5c542); opacity: 1; }
 .candle-tip {
   display: none;
   position: absolute;

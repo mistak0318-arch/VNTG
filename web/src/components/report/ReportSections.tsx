@@ -549,8 +549,9 @@ export function MyStocksSection({
     };
   }, []);
 
-  const line = (code: string, name: string, price: number, rate: number, extra?: string) => (
-    <button className="ov-li" key={code} onClick={() => onSelectStock(code, name)}>
+  /* key 에 자리 번호를 섞는다 — 한 종목이 여러 그룹에 담기면 code 만으로는 겹친다 */
+  const line = (key: string, code: string, name: string, price: number, rate: number, extra?: string) => (
+    <button className="ov-li" key={key} onClick={() => onSelectStock(code, name)}>
       <span className="ov-nm">{name}</span>
       <span className={`ov-px num ${cls(rate)}`}>{fmtNum(price)}</span>
       <span className={`ov-pct num ${cls(rate)}`}>{pct(rate)}</span>
@@ -586,8 +587,8 @@ export function MyStocksSection({
           {mine?.length === 0 && <div className="empty">담은 종목이 없습니다.</div>}
           {sorted
             .slice(0, 12)
-            .map((s) =>
-              line(s.code, s.name, s.price, s.changeRate, `${s.passCount}/${s.passTotal}`),
+            .map((s, i) =>
+              line(`${s.code}-${i}`, s.code, s.name, s.price, s.changeRate, `${s.passCount}/${s.passTotal}`),
             )}
         </div>
 
@@ -601,7 +602,7 @@ export function MyStocksSection({
             .slice()
             .sort((a, b) => Math.abs(b.changeRate) - Math.abs(a.changeRate))
             .slice(0, 12)
-            .map((s) => line(s.code, s.name, s.price, s.changeRate))}
+            .map((s, i) => line(`k-${s.code}-${i}`, s.code, s.name, s.price, s.changeRate))}
         </div>
       </div>
 

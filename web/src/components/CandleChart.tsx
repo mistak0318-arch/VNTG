@@ -5,10 +5,12 @@ import {
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
+  type MouseEventParams,
   type SeriesMarker,
   type Time,
 } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
+import { setPref } from "../prefs";
 import { chartColors, useAppearance } from "../useAppearance";
 import { useChartPrefs } from "../useChartPrefs";
 
@@ -81,6 +83,43 @@ function scrollOptions(locked: boolean) {
       axisPressedMouseMove: { time: true, price: false },
     },
   };
+}
+
+/*
+ * 선 그리기 (2026-08-27 사용자 요청 — "트레이딩뷰처럼 줄 좀 그어서").
+ *
+ * 도구는 둘이다: **수평선**(한 번 클릭 — 지지·저항 가격)과 **추세선**(두 번 클릭).
+ * 수평선은 lightweight-charts 의 priceLine 으로, 추세선은 차트 위에 얹은 캔버스에
+ * 좌표 변환(timeToCoordinate·priceToCoordinate)으로 직접 긋는다 — 라이브러리에
+ * 그리기 도구가 없어서 이 방법뿐이다.
+ *
+ * ## 저장은 종목 단위, 전역이다
+ *
+ * `vntg.chart.draw.<종목코드>` — setPref 라 서버에 올라간다. 같은 종목을 보드에서
+ * 열든 폰에서 열든 **그어 둔 선이 따라온다**("저장해둬서 다른데서 열어도").
+ * 추세선의 시간은 봉의 time 그대로 저장한다 — 일봉에 그은 선은 분봉에서는
+ * 좌표가 안 잡혀 자연히 안 보인다(다른 축이니 맞는 동작이다).
+ */
+type DrawTool = "none" | "hline" | "trend";
+type DrawItem =
+  | { k: "h"; p: number }
+  | { k: "t"; a: { t: Time; p: number }; b: { t: Time; p: number } };
+
+const drawKeyOf = (code: string) => `vntg.chart.draw.${code}`;
+
+function loadDraw(code?: string): DrawItem[] {
+  if (!code) return [];
+  try {
+    const j = JSON.parse(localStorage.getItem(drawKeyOf(code)) ?? "[]") as unknown;
+    return Array.isArray(j) ? (j as DrawItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 그린 선 색 — 캔버스는 CSS 변수를 못 읽어 리터럴로. 엑셀 모드는 회색 */
+function drawColor(theme: string): string {
+  return theme === "excel" ? "#5a5a5a" : "#f5c542";
 }
 
 function sma(candles: Candle[], period: number): { time: Time; value: number }[] {
@@ -252,6 +291,107 @@ export function CandleChart({
    */
   const hiLineRef = useRef<IPriceLine | null>(null);
   const loLineRef = useRef<IPriceLine | null>(null);
+
+  /* ── 선 그리기 ─────────────────────────────────────────── */
+  const [tool, setTool] = useState<DrawTool>("none");
+  const toolRef = useRef(tool);
+  toolRef.current = tool;
+  const [drawings, setDrawings] = useState<DrawItem[]>(() => loadDraw(code));
+  const drawingsRef = useRef(drawings);
+  drawingsRef.current = drawings;
+  /** 추세선 첫 점 — 두 번째 클릭을 기다리는 중 */
+  const pendingRef = useRef<{ t: Time; p: number } | null>(null);
+  /** 두 번째 점 미리보기용 커서 좌표 */
+  const previewRef = useRef<{ x: number; y: number } | null>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
+  /** 그린 수평선 핸들 — 차트가 다시 만들어지면 버려진다 */
+  const drawHRef = useRef<IPriceLine[]>([]);
+  /** 차트를 새로 만들 때마다 오른다 — 그리기 구독·선 복원이 이걸 보고 다시 돈다 */
+  const [chartEpoch, setChartEpoch] = useState(0);
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
+
+  /** 추세선 캔버스 다시 그리기 — 전부 ref 만 읽으므로 어디서 불러도 최신이다 */
+  const redrawRef = useRef<() => void>(() => undefined);
+  redrawRef.current = () => {
+    const chart = chartRef.current;
+    const series = candleRef.current;
+    const cv = overlayRef.current;
+    const el = containerRef.current;
+    if (!chart || !series || !cv || !el) return;
+    const w = el.clientWidth;
+    const h = el.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    if (cv.width !== w * dpr || cv.height !== h * dpr) {
+      cv.width = w * dpr;
+      cv.height = h * dpr;
+      cv.style.width = `${w}px`;
+      cv.style.height = `${h}px`;
+    }
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = drawColor(themeRef.current);
+    ctx.lineWidth = 1.4;
+    const seg = (a: { t: Time; p: number }, bx: number | null, by: number | null) => {
+      const x1 = chart.timeScale().timeToCoordinate(a.t);
+      const y1 = series.priceToCoordinate(a.p);
+      if (x1 === null || y1 === null || bx === null || by === null) return;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+    };
+    for (const d of drawingsRef.current) {
+      if (d.k !== "t") continue;
+      const x2 = chart.timeScale().timeToCoordinate(d.b.t);
+      const y2 = series.priceToCoordinate(d.b.p);
+      seg(d.a, x2, y2);
+    }
+    /* 첫 점을 찍고 커서를 움직이는 중 — 점선 미리보기 */
+    const pend = pendingRef.current;
+    const prev = previewRef.current;
+    if (pend && prev) {
+      ctx.setLineDash([4, 4]);
+      seg(pend, prev.x, prev.y);
+      ctx.setLineDash([]);
+    }
+  };
+
+  /** 저장 — 화면·서버·다른 창까지 한 번에 */
+  const saveDrawRef = useRef<(items: DrawItem[]) => void>(() => undefined);
+  saveDrawRef.current = (items: DrawItem[]) => {
+    setDrawings(items);
+    if (!code) return;
+    setPref(drawKeyOf(code), JSON.stringify(items));
+    window.dispatchEvent(new CustomEvent("vntg-chart-draw", { detail: code }));
+  };
+
+  /* 종목이 바뀌면 그 종목의 선을 다시 읽는다. 찍다 만 점도 버린다 */
+  useEffect(() => {
+    setDrawings(loadDraw(code));
+    pendingRef.current = null;
+    setTool("none");
+  }, [code]);
+
+  /* 같은 창의 다른 차트(보드 두 칸)·다른 창(보드 창)과 동기화 */
+  useEffect(() => {
+    if (!code) return;
+    const reload = () => setDrawings(loadDraw(code));
+    const onLocal = (e: Event) => {
+      if ((e as CustomEvent).detail === code) reload();
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === drawKeyOf(code)) reload();
+    };
+    window.addEventListener("vntg-chart-draw", onLocal);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("vntg-chart-draw", onLocal);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [code]);
 
   /**
    * **지금 값이 고점에서 얼마나 내려왔고 저점에서 얼마나 올라왔나.**
@@ -522,6 +662,9 @@ export function CandleChart({
     fitted.current = false;
     hiLineRef.current = null;
     loLineRef.current = null;
+    // 그리기 계층 — 옛 차트의 수평선 핸들은 chart.remove 로 같이 죽었다. 다시 건다
+    drawHRef.current = [];
+    setChartEpoch((e) => e + 1);
     return () => {
       window.removeEventListener("resize", resize);
       chart.remove();
@@ -532,6 +675,82 @@ export function CandleChart({
     };
     // maKey·볼린저 설정이 바뀌면 시리즈 구성이 달라지므로 차트를 다시 만든다
   }, [intraday, theme, name, code, maKey, prefs.bbOn]);
+
+  /*
+   * ── 그리기: 클릭·미리보기·화면 이동 구독 (차트가 새로 태어날 때마다) ──
+   */
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = candleRef.current;
+    if (!chart || !series) return;
+
+    const onClick = (param: MouseEventParams) => {
+      const t = toolRef.current;
+      if (t === "none" || !param.point || !code) return;
+      const price = series.coordinateToPrice(param.point.y);
+      if (price === null) return;
+      if (t === "hline") {
+        saveDrawRef.current([...drawingsRef.current, { k: "h", p: price }]);
+        return;
+      }
+      // 추세선 — 첫 클릭은 점만 찍고, 두 번째 클릭에 선이 된다
+      if (!param.time) return;
+      if (!pendingRef.current) {
+        pendingRef.current = { t: param.time, p: price };
+        redrawRef.current();
+      } else {
+        const a = pendingRef.current;
+        pendingRef.current = null;
+        previewRef.current = null;
+        saveDrawRef.current([
+          ...drawingsRef.current,
+          { k: "t", a, b: { t: param.time, p: price } },
+        ]);
+      }
+    };
+    const onMove = (param: MouseEventParams) => {
+      if (!pendingRef.current) return;
+      previewRef.current = param.point ? { x: param.point.x, y: param.point.y } : null;
+      redrawRef.current();
+    };
+    const onRange = () => redrawRef.current();
+
+    chart.subscribeClick(onClick);
+    chart.subscribeCrosshairMove(onMove);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
+    return () => {
+      chart.unsubscribeClick(onClick);
+      chart.unsubscribeCrosshairMove(onMove);
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
+    };
+  }, [chartEpoch, code]);
+
+  /*
+   * ── 그리기: 저장된 선을 실제로 얹는다 (선이 바뀌거나 차트가 새로 태어나면) ──
+   * 수평선은 priceLine 으로(축에 값도 뜬다), 추세선은 캔버스로.
+   */
+  useEffect(() => {
+    const series = candleRef.current;
+    if (!series) return;
+    for (const h of drawHRef.current) series.removePriceLine(h);
+    drawHRef.current = drawings
+      .filter((d): d is Extract<DrawItem, { k: "h" }> => d.k === "h")
+      .map((d) =>
+        series.createPriceLine({
+          price: d.p,
+          color: drawColor(theme),
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title: "",
+        }),
+      );
+    redrawRef.current();
+    return () => {
+      // 차트가 통째로 사라질 때는 핸들도 같이 죽는다 — removePriceLine 을 부를 필요도,
+      // 부를 수도 없다(이미 없는 차트다). 다음 effect 실행이 새로 그린다.
+    };
+  }, [drawings, chartEpoch, theme, candles]);
 
   /*
    * 높이만 바뀌었을 때.
@@ -735,6 +954,57 @@ export function CandleChart({
       </div>
       <div className="candle-host">
         <div ref={containerRef} style={{ width: "100%" }} />
+        {/* 추세선 캔버스 — 차트 위에 얹되 마우스는 통과시킨다(십자선·클릭은 차트 몫) */}
+        <canvas ref={overlayRef} className="chart-draw-overlay" />
+        {/*
+          그리기 툴박스 (2026-08-27) — 트레이딩뷰처럼 왼쪽 위.
+          종목 코드가 있어야 저장할 곳이 있다 — 지수 차트에는 안 띄운다.
+        */}
+        {code && (
+          <div className="chart-tools">
+            <button
+              className={`ct-tool${tool === "hline" ? " on" : ""}`}
+              onClick={() => {
+                pendingRef.current = null;
+                setTool(tool === "hline" ? "none" : "hline");
+              }}
+              title="수평선 — 클릭한 가격에 긋습니다 (지지·저항)"
+            >
+              ─
+            </button>
+            <button
+              className={`ct-tool${tool === "trend" ? " on" : ""}`}
+              onClick={() => {
+                pendingRef.current = null;
+                redrawRef.current();
+                setTool(tool === "trend" ? "none" : "trend");
+              }}
+              title="추세선 — 두 점을 차례로 클릭합니다"
+            >
+              ╱
+            </button>
+            {drawings.length > 0 && (
+              <>
+                <button
+                  className="ct-tool"
+                  onClick={() => saveDrawRef.current(drawingsRef.current.slice(0, -1))}
+                  title="마지막에 그린 선 지우기"
+                >
+                  ↩
+                </button>
+                <button
+                  className="ct-tool"
+                  onClick={() => {
+                    if (window.confirm("이 종목에 그린 선을 전부 지웁니다.")) saveDrawRef.current([]);
+                  }}
+                  title="이 종목의 선 전부 지우기"
+                >
+                  🗑
+                </button>
+              </>
+            )}
+          </div>
+        )}
         <div ref={tipRef} className="candle-tip" />
       </div>
     </div>
