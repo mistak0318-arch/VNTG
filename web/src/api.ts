@@ -352,7 +352,8 @@ export const api = {
     getJson<UsKiwoomDetailData>(`/api/us-kiwoom/detail/${encodeURIComponent(symbol)}`),
   /* 마켓 브리핑 — 셋 다 서버 캐시·파일만 읽는다. 외부 호출 0 */
   briefingTimeline: (limit = 60) =>
-    getJson<{ items: BriefingEvent[] }>(`/api/briefing/timeline?limit=${limit}`),
+    /* eventDay: 로그 이벤트(급증·시그널·손절·키워드)가 어느 날 것인가 — 자정 넘어 오늘 것이 없으면 마지막 장일 */
+    getJson<{ items: BriefingEvent[]; eventDay?: string }>(`/api/briefing/timeline?limit=${limit}`),
   briefingHeat: () =>
     getJson<{ traded: boolean; tiles: BriefingTile[] }>("/api/briefing/heat"),
   briefingBrief: () =>

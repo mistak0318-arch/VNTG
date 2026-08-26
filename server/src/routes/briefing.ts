@@ -112,7 +112,27 @@ export function createBriefingRouter(client: KiwoomClient): Router {
 
       /* 이벤트 로그 — 키워드·시그널·손절·체결강도. 텔레그램 세션이 없는 기기(개발 PC)면
          telegram 소스만 자연히 빈다. 코드 수정 없이, 쌓이기 시작하면 그대로 나온다 */
-      for (const e of await readEvents()) {
+      /*
+       * ⚠️ 오늘 파일만 읽으면 **자정이 지나는 순간 급증·시그널이 통째로 사라진다**
+       * (2026-08-27 새벽 실사용 — "있던 거 어디 갔어"). VI 는 실시간 저장소에 어제
+       * 것이 남아 계속 보이는데 로그만 비니 그 칸만 없어진 모양이 됐다.
+       * 오늘 것이 비어 있으면 **마지막으로 기록이 있는 날**(3일 안)로 되돌아가고,
+       * 어느 날 것인지 eventDay 로 화면에 알린다 — 새 장이 열려 오늘 파일이
+       * 생기는 순간 자연히 오늘 것으로 돌아온다.
+       */
+      const kstDay = (back = 0) =>
+        new Date(Date.now() + 9 * 3600_000 - back * 86_400_000).toISOString().slice(0, 10);
+      let eventDay = kstDay();
+      let logRows = await readEvents(eventDay);
+      for (let back = 1; back <= 3 && logRows.length === 0; back += 1) {
+        const d = kstDay(back);
+        const rows = await readEvents(d);
+        if (rows.length > 0) {
+          eventDay = d;
+          logRows = rows;
+        }
+      }
+      for (const e of logRows) {
         items.push({
           t: hm(e.at),
           kind: e.kind,
@@ -147,6 +167,8 @@ export function createBriefingRouter(client: KiwoomClient): Router {
       const rest = merged.filter((i) => i.kind !== "vi").slice(0, limit);
       res.json({
         items: merged.filter((i) => vi.includes(i) || rest.includes(i)),
+        /* 로그 이벤트가 어느 날 것인가 — 오늘이 아니면 화면이 「(08/26 장)」을 단다 */
+        eventDay,
       });
     } catch (err) {
       next(err);

@@ -235,9 +235,17 @@ export function BriefingPage({
   const [brief, setBrief] = useState<{ date: string; label: string; text: string } | null>(null);
   /* 테마를 누르면 구성종목 시트 — 보기만 하는 숫자는 죽은 숫자다 */
   const [constituent, setConstituent] = useState<ConstituentTarget | null>(null);
+  /* 로그 이벤트(급증·시그널 등)가 어느 날 것인가 — 자정 넘으면 마지막 장일로 폴백된다 */
+  const [eventDay, setEventDay] = useState<string | null>(null);
 
   const loadOwn = useCallback(() => {
-    void api.briefingTimeline().then((r) => setEvents(r.items)).catch(() => undefined);
+    void api
+      .briefingTimeline()
+      .then((r) => {
+        setEvents(r.items);
+        setEventDay(r.eventDay ?? null);
+      })
+      .catch(() => undefined);
     void api.briefingHeat().then(setHeat).catch(() => undefined);
     void api
       .futuresFlow(1)
@@ -347,6 +355,11 @@ export function BriefingPage({
       <section className="bf-events">
         <h3 className="section-heading">
           오늘의 이벤트
+          {/* 자정을 넘어 오늘 로그가 아직 없으면 마지막 장일 것을 보여준다 — 어느 날인지 명시 */}
+          {eventDay &&
+            eventDay !== new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10) && (
+              <i className="pt-n"> ({eventDay.slice(5).replace("-", "/")} 장)</i>
+            )}
           {watchCount > 0 && <i className="bf-watch-count">내 종목 {watchCount}건</i>}
         </h3>
         {mainEvents === null ? (
