@@ -40,6 +40,16 @@ export interface CumRow {
   /** 기간 시작 종가 */
   from: number;
   tradeValue: number;
+  /**
+   * 구간별 누적 (2026-08-27 — ETF 표가 3·5·10·20·60일을 한 표에 편다).
+   * 일봉은 어차피 다 받았으니 공짜다. 봉이 모자란 구간은 null — 짧은 걸로
+   * 대신 세면 거짓말이다(위 days 필터와 같은 원칙).
+   */
+  r3: number | null;
+  r5: number | null;
+  r10: number | null;
+  r20: number | null;
+  r60: number | null;
 }
 
 export interface CumResult {
@@ -123,6 +133,10 @@ export async function cumulativeRank(
         const from = cs[cs.length - 1 - days];
         const prev = cs[cs.length - 2];
         if (from <= 0 || prev <= 0) continue;
+        const rateAt = (n: number): number | null => {
+          const base = cs[cs.length - 1 - n];
+          return base && base > 0 ? ((last - base) / base) * 100 : null;
+        };
         rows.push({
           code: t.code,
           name: t.name,
@@ -131,6 +145,11 @@ export async function cumulativeRank(
           todayRate: ((last - prev) / prev) * 100,
           from,
           tradeValue: t.tradeValue ?? 0,
+          r3: rateAt(3),
+          r5: rateAt(5),
+          r10: rateAt(10),
+          r20: rateAt(20),
+          r60: rateAt(60),
         });
       } catch (e) {
         // 한 종목이 실패해도 나머지는 센다 — 다만 전부 실패하면 아래에서 알린다

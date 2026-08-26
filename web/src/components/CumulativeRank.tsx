@@ -29,16 +29,32 @@ interface Row {
   todayRate: number;
   from: number;
   tradeValue: number;
+  r3: number | null;
+  r5: number | null;
+  r10: number | null;
+  r20: number | null;
+  r60: number | null;
 }
 
-const DAYS = [3, 5, 10, 20];
+/*
+ * 기간 버튼은 없앴다 (2026-08-27 — ETF 판과 같은 지정). 서버가 3·5·10·20·60일
+ * 누적을 **한 번에** 준다 — 일봉은 어차피 다 받았으니 공짜다. 표에 다 펴고,
+ * 어느 구간으로 줄 세울지는 머리 클릭 정렬이 맡는다. 기본은 5일 누적순(서버 정렬).
+ */
+const CUM_SPANS = [
+  { key: "r3", label: "3일" },
+  { key: "r5", label: "5일" },
+  { key: "r10", label: "10일" },
+  { key: "r20", label: "20일" },
+  { key: "r60", label: "60일" },
+] as const;
 
 export function CumulativeRank({
   onSelectStock,
 }: {
   onSelectStock?: (code: string, name: string) => void;
 }) {
-  const [days, setDays] = useState(5);
+  const days = 5; // 기본 정렬 구간 — 구간 값들은 전부 같이 온다
   /*
    * 몇 종목을 대상으로 볼까 — 거래대금 상위 N 을 받아 그 안에서 누적등락률을 센다.
    * 늘리면 그만큼 일봉을 더 받아야 해서 **처음 조회가 길어진다**(백 종목에 30초쯤).
@@ -78,16 +94,7 @@ export function CumulativeRank({
   return (
     <div>
       <div className="filter-row">
-        <span className="st-cfg-k">기간</span>
-        {DAYS.map((d) => (
-          <button
-            key={d}
-            className={`filter-btn ${days === d ? "active" : ""}`}
-            onClick={() => setDays(d)}
-          >
-            {d}일
-          </button>
-        ))}
+        {/* 기간 버튼 자리 — 이제 3·5·10·20·60일이 표에 한꺼번에 나온다 */}
         {/*
           대상 종목 수. 늘리면 일봉을 그만큼 더 받아야 해서 **처음 조회가 길어진다** —
           버튼에 그걸 적어 둔다. 다시 볼 때는 10분 캐시라 즉시 뜬다.
@@ -150,9 +157,16 @@ export function CumulativeRank({
               <tr>
                 <SortableTh columnKey="name" label="종목" accessor={(r: Row) => r.name} sort={sort} className="sticky-col" />
                 <SortableTh columnKey="price" label="현재가" accessor={(r: Row) => r.price} sort={sort} />
-                <SortableTh columnKey="cum" label={`${days}일 누적`} accessor={(r: Row) => r.cumRate} sort={sort} />
                 <SortableTh columnKey="today" label="오늘" accessor={(r: Row) => r.todayRate} sort={sort} />
-                <SortableTh columnKey="from" label="시작가" accessor={(r: Row) => r.from} sort={sort} />
+                {CUM_SPANS.map((s) => (
+                  <SortableTh
+                    key={s.key}
+                    columnKey={s.key}
+                    label={`${s.label} 누적`}
+                    accessor={(r: Row) => r[s.key] ?? -999}
+                    sort={sort}
+                  />
+                ))}
                 <SortableTh columnKey="tv" label="거래대금" accessor={(r: Row) => r.tradeValue} sort={sort} />
               </tr>
             </thead>
@@ -168,17 +182,27 @@ export function CumulativeRank({
                     {r.name}
                   </td>
                   <td>{fmtNum(r.price)}</td>
-                  <td className={signClass(r.cumRate)}>
-                    <b>
-                      {r.cumRate > 0 ? "+" : ""}
-                      {r.cumRate.toFixed(2)}%
-                    </b>
-                  </td>
                   <td className={signClass(r.todayRate)}>
                     {r.todayRate > 0 ? "+" : ""}
                     {r.todayRate.toFixed(2)}%
                   </td>
-                  <td className="pt-n">{fmtNum(r.from)}</td>
+                  {CUM_SPANS.map((s) => {
+                    const v = r[s.key];
+                    return (
+                      <td key={s.key} className={v === null ? "pt-n" : signClass(v)}>
+                        {v === null ? (
+                          "-"
+                        ) : s.key === "r5" ? (
+                          <b>
+                            {v > 0 ? "+" : ""}
+                            {v.toFixed(2)}%
+                          </b>
+                        ) : (
+                          `${v > 0 ? "+" : ""}${v.toFixed(2)}%`
+                        )}
+                      </td>
+                    );
+                  })}
                   <td className="pt-n">{fmtNum(Math.round(r.tradeValue))}</td>
                 </tr>
               ))}

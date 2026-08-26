@@ -195,10 +195,23 @@ interface CumRow {
   cumRate: number;
   todayRate: number;
   tradeValue: number;
+  r3: number | null;
+  r5: number | null;
+  r10: number | null;
+  r20: number | null;
+  r60: number | null;
 }
 
+/** 구간 컬럼 — 3·5·10·20·60일을 한 표에 편다 (2026-08-27 사용자 지정) */
+const CUM_SPANS = [
+  { key: "r3", label: "3일" },
+  { key: "r5", label: "5일" },
+  { key: "r10", label: "10일" },
+  { key: "r20", label: "20일" },
+  { key: "r60", label: "60일" },
+] as const;
+
 function EtfCumTab({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
-  const [days, setDays] = useState(5);
   const [rows, setRows] = useState<CumRow[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -209,7 +222,8 @@ function EtfCumTab({ onSelectStock }: { onSelectStock: (code: string, name: stri
     let alive = true;
     setBusy(true);
     setError(null);
-    fetch(`/api/rank/cumulative?days=${days}&market=ETF&universe=100`)
+    /* days=5 는 기본 정렬(서버가 5일 누적순으로 준다) — 구간 값은 전부 같이 온다 */
+    fetch(`/api/rank/cumulative?days=5&market=ETF&universe=100`)
       .then((r) => r.json())
       .then((j: { rows?: CumRow[]; note?: string; error?: string }) => {
         if (!alive) return;
@@ -222,18 +236,16 @@ function EtfCumTab({ onSelectStock }: { onSelectStock: (code: string, name: stri
     return () => {
       alive = false;
     };
-  }, [days]);
+  }, []);
 
   return (
     <>
       <div className="filter-row">
-        <span className="st-cfg-k">기간</span>
-        {[3, 5, 10, 20].map((d) => (
-          <button key={d} className={`filter-btn ${days === d ? "active" : ""}`} onClick={() => setDays(d)}>
-            {d}일
-          </button>
-        ))}
-        <span className="pt-n">ETF 거래대금 상위 100 을 일봉으로 직접 계산 — 처음 한 번은 30초쯤 걸립니다 (10분 캐시)</span>
+        <span className="pt-n">
+          ETF 거래대금 상위 100 을 일봉으로 직접 계산 — 3·5·10·20·60일 누적을 한 표에.
+          기본은 5일 누적순, 머리를 눌러 다른 구간으로 정렬합니다. 처음 한 번은 30초쯤
+          걸립니다 (10분 캐시).
+        </span>
       </div>
       {error && <div className="error-banner">{error}</div>}
       {busy && rows === null && <div className="empty">계산 중… (종목마다 일봉을 받습니다)</div>}
@@ -244,8 +256,16 @@ function EtfCumTab({ onSelectStock }: { onSelectStock: (code: string, name: stri
               <tr>
                 <SortableTh columnKey="name" label="종목명" accessor={(r: CumRow) => r.name} sort={sort} className="sticky-col" />
                 <SortableTh columnKey="price" label="현재가" accessor={(r: CumRow) => r.price} sort={sort} />
-                <SortableTh columnKey="cum" label={`${days}일 누적`} accessor={(r: CumRow) => r.cumRate} sort={sort} />
                 <SortableTh columnKey="today" label="오늘" accessor={(r: CumRow) => r.todayRate} sort={sort} />
+                {CUM_SPANS.map((s) => (
+                  <SortableTh
+                    key={s.key}
+                    columnKey={s.key}
+                    label={`${s.label} 누적`}
+                    accessor={(r: CumRow) => r[s.key] ?? -999}
+                    sort={sort}
+                  />
+                ))}
                 <SortableTh columnKey="tv" label="거래대금(억)" accessor={(r: CumRow) => r.tradeValue} sort={sort} />
               </tr>
             </thead>
@@ -257,8 +277,15 @@ function EtfCumTab({ onSelectStock }: { onSelectStock: (code: string, name: stri
                     {r.name}
                   </td>
                   <td className="num">{fmtNum(r.price)}</td>
-                  <td className={`num strong-col ${cls(r.cumRate)}`}>{pct(r.cumRate)}</td>
                   <td className={`num ${cls(r.todayRate)}`}>{pct(r.todayRate)}</td>
+                  {CUM_SPANS.map((s) => {
+                    const v = r[s.key];
+                    return (
+                      <td key={s.key} className={`num ${s.key === "r5" ? "strong-col " : ""}${cls(v)}`}>
+                        {v === null ? "-" : pct(v)}
+                      </td>
+                    );
+                  })}
                   <td className="num pt-n">{fmtNum(r.tradeValue)}</td>
                 </tr>
               ))}
@@ -266,7 +293,7 @@ function EtfCumTab({ onSelectStock }: { onSelectStock: (code: string, name: stri
           </table>
         </div>
       )}
-      {note && <div className="table-note">{note}</div>}
+      {note && <div className="table-note">{note} 60일치 봉이 아직 없는 신생 ETF 는 그 칸이 "-" 입니다.</div>}
     </>
   );
 }
