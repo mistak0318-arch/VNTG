@@ -8,8 +8,9 @@ import { api, type IntraFlowPoint } from "../../api";
  * 선 세 개(개인·외국인·기관)의 **모양 자체가 장중 수급 변화**다 — 오전에 팔던
  * 외국인이 오후에 돌아섰는지가 이 그림 하나로 보인다.
  *
- * 코스피(01)·코스닥(02)은 억원, K200 선물(03)은 계약. 색은 선물 수급 막대와
- * 같은 국내 관행(외국인 파랑 · 기관 초록 · 개인 노랑).
+ * 코스피(01)·코스닥(02)은 억원, K200 선물(03)은 계약.
+ * 색은 사용자 지정(2026-08-26): 외국인 빨강 · 기관 주황 · 개인 초록 —
+ * 처음엔 국내 관행(외국인 파랑)으로 했는데 「색이 낯설다」고 해서 바꿨다.
  */
 export function IntradayFlowChart({
   market,
@@ -43,9 +44,10 @@ export function IntradayFlowChart({
   const H = 150;
   const PAD = { l: 4, r: 52, t: 14, b: 16 };
   const SERIES = [
-    { key: "foreign" as const, label: "외국인", color: "var(--blue)" },
-    { key: "institution" as const, label: "기관", color: "#35c46a" },
-    { key: "individual" as const, label: "개인", color: "#f5c542" },
+    /* 색 배정 (2026-08-26 사용자 지정) — 외국인 빨강 · 기관 주황 · 개인 초록 */
+    { key: "foreign" as const, label: "외국인", color: "#f04452" },
+    { key: "institution" as const, label: "기관", color: "#f97316" },
+    { key: "individual" as const, label: "개인", color: "#35c46a" },
   ];
   const vals = pts.flatMap((p) => SERIES.map((s) => p[s.key]));
   const max = Math.max(1, ...vals.map(Math.abs));
