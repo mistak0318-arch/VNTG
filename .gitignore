@@ -60,3 +60,11 @@ server/data/hantooToken.json
 server/data/usWatchCache.json
 server/data/askHistory.json
 server/data/flowIntraday.json
+
+# 안드로이드(위젯·워치) — 소스만 추적한다. 빌드 캐시·IDE 설정·SDK 경로는 기기 것
+android/.gradle/
+android/.idea/
+android/build/
+android/*/build/
+android/local.properties
+android/.kotlin/
