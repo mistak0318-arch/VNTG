@@ -2085,12 +2085,21 @@ body {
   .ph-grid {
     grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
   }
-  /*
-   * 폰에서는 칸 안의 줄들을 **한 줄로 흘린다** (2026-08-26 — 「NXT 서브 줄이
-   * 붙으니 칸마다 세로로 길어져 정작 볼 게 좁아진다」). PC 는 그대로(칸이 넓어
-   * 줄맞춤이 보기 좋다). 라벨만 제 줄을 갖고, 값·NXT·체결강도는 이어 붙어
-   * 자리가 모자랄 때만 접힌다. 구분선은 폰에선 자리만 먹어서 뺀다.
-   */
+  .mood-theme-mood {
+    display: none;
+  }
+}
+
+/*
+ * 폰에서는 종목 상단 칸 안의 줄들을 **한 줄로 흘린다** (2026-08-26 — 「NXT 서브
+ * 줄이 붙으니 칸마다 세로로 길어져 정작 볼 게 좁아진다」).
+ *
+ * ⚠️ 기준은 700px — 480 으로 했더니 **요즘 대화면 폰(CSS 폭 500px대)이 안 걸렸다**
+ * (실기에서 그대로 세로로 길게 나옴). PC 창은 700 을 넘으니 그대로다.
+ * 라벨만 제 줄을 갖고, 값·NXT·체결강도는 이어 붙어 자리가 모자랄 때만 접힌다.
+ * 칸 안 구분선은 폰에선 자리만 먹어서 뺀다.
+ */
+@media (max-width: 700px) {
   .ph-cell {
     flex-direction: row;
     flex-wrap: wrap;
@@ -2107,9 +2116,6 @@ body {
   .ph-cell .ph-row .ph-sublabel,
   .ph-cell .ph-row .ph-ex { margin-right: 0; }
   .ph-cell .ph-sep { display: none; }
-  .mood-theme-mood {
-    display: none;
-  }
 }
 
 /* 호가창은 넓은 화면에서 너무 벌어지지 않게 폭을 제한 */
