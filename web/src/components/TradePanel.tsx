@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, normalizeStockCode, type TradeSummary } from "../api";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 
 /**
  * 수출입 동향.
@@ -429,6 +430,17 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
 
   useEffect(() => load(), []);
 
+  /*
+   * ⚠️ 정렬 훅은 **조기 return 앞** — 뒤에 뒀다가 「Rendered more hooks」로
+   * 화면이 통째로 죽었다(실측). 기본 순서는 전년동월 증감률 내림차순.
+   */
+  const baseSorted = [...items].sort(
+    (a, b) =>
+      ((b.watch === "import" ? b.importYoy : b.exportYoy) ?? -999) -
+      ((a.watch === "import" ? a.importYoy : a.exportYoy) ?? -999),
+  );
+  const tSort = useSortableTable<TradeSummary>(baseSorted);
+
   if (!configured) {
     return (
       <div className="page-note">
@@ -447,7 +459,6 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
   const month = items[0]?.month ?? "";
   const val = (i: TradeSummary) => (i.watch === "import" ? i.importUsd : i.exportUsd);
   const rate = (i: TradeSummary) => (i.watch === "import" ? i.importYoy : i.exportYoy);
-  const sorted = [...items].sort((a, b) => (rate(b) ?? -999) - (rate(a) ?? -999));
 
   return (
     <div className="trade">
@@ -480,15 +491,15 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
         <table className="data-table num">
           <thead>
             <tr>
-              <th className="sticky-col">품목</th>
-              <th>구분</th>
-              <th>금액(억$)</th>
-              <th>전년동월</th>
+              <SortableTh columnKey="label" label="품목" accessor={(i: TradeSummary) => i.label} sort={tSort} className="sticky-col" />
+              <SortableTh columnKey="watch" label="구분" accessor={(i: TradeSummary) => i.watch} sort={tSort} />
+              <SortableTh columnKey="usd" label="금액(억$)" accessor={(i: TradeSummary) => val(i)} sort={tSort} />
+              <SortableTh columnKey="yoy" label="전년동월" accessor={(i: TradeSummary) => rate(i) ?? -999} sort={tSort} />
               <th>대응 업종</th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map((i) => (
+            {tSort.sorted.map((i) => (
               <tr
                 key={i.key}
                 className="trade-row"

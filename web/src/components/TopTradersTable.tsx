@@ -1,5 +1,6 @@
 import { Pager, usePager } from "./Pager";
 import { fmtNum, normalizeStockCode, signClass, type TopTraderRow } from "../api";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useSection } from "../useSection";
 
 /**
@@ -25,6 +26,8 @@ export function TopTradersTable({
    * 훅이 하나 모자라고, 다음 렌더에서 개수가 달라져 React 가 통째로 멎는다.
    */
   const pager = usePager(rows.length, "vntg.toptraders.pageSize", rows.length);
+  // 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26). 정렬은 쪽 나누기 전에 건다
+  const sort = useSortableTable<TopTraderRow>(rows);
 
   if (loading && !data) return <div className="empty">불러오는 중…</div>;
   if (error && !data) return <div className="error-banner">{error}</div>;
@@ -36,19 +39,17 @@ export function TopTradersTable({
         <table className="data-table">
           <thead>
             <tr>
-              <th className="sticky-col">종목</th>
-              <th>현재가</th>
-              <th>등락률</th>
-              <th title="상위 계좌들의 순매수 금액">순매수</th>
-              <th title="이 종목을 들고 있는 상위 계좌 수 — 한 계좌의 몰빵인지 여럿이 보는지">
-                계좌
-              </th>
-              <th>평균단가</th>
-              <th title="그 계좌들의 이 종목 수익률">수익률</th>
+              <SortableTh columnKey="name" label="종목" accessor={(r: TopTraderRow) => r.name} sort={sort} className="sticky-col" />
+              <SortableTh columnKey="price" label="현재가" accessor={(r: TopTraderRow) => r.price} sort={sort} />
+              <SortableTh columnKey="rate" label="등락률" accessor={(r: TopTraderRow) => r.changeRate} sort={sort} />
+              <SortableTh columnKey="net" label="순매수" accessor={(r: TopTraderRow) => r.netAmount} sort={sort} />
+              <SortableTh columnKey="acc" label="계좌" accessor={(r: TopTraderRow) => r.accounts} sort={sort} />
+              <SortableTh columnKey="avg" label="평균단가" accessor={(r: TopTraderRow) => r.avgBuyPrice} sort={sort} />
+              <SortableTh columnKey="pr" label="수익률" accessor={(r: TopTraderRow) => r.profitRate} sort={sort} />
             </tr>
           </thead>
           <tbody>
-            {pager.slice(rows).map((r) => (
+            {pager.slice(sort.sorted).map((r) => (
               <tr
                 key={r.code}
                 className={onSelectStock ? "clickable-row" : ""}

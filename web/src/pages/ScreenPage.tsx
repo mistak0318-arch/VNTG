@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BacktestPanel } from "../components/BacktestPanel";
 import { SignalTrackPanel } from "../components/SignalTrackPanel";
 import { api, fmtNum, type ScreenHit, type ScreenJob, type ScreenRunSummary } from "../api";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 import { SuperSignalPanel } from "../components/SuperSignalPanel";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { WatchAddSheet, type WatchAddTarget } from "../components/WatchAddSheet";
@@ -69,6 +70,8 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
   const uniLabel = (k?: string) =>
     universes.find((u) => u.key === (k ?? universe))?.label ?? "거래대금 상위";
   const [job, setJob] = useState<ScreenJob | null>(null);
+  /* 결과표 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26). 기본은 서버가 준 점수순 */
+  const resSort = useSortableTable<ScreenHit>(job?.results ?? []);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -411,17 +414,18 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="sticky-col">종목명</th>
-                  <th>점수</th>
-                  <th>현재가</th>
-                  <th>등락률</th>
-                  <th>거래대금</th>
+                  {/* 컬럼 정렬 — 모든 표 공통 규칙 (2026-08-26) */}
+                  <SortableTh columnKey="name" label="종목명" accessor={(r: ScreenHit) => r.name} sort={resSort} className="sticky-col" />
+                  <SortableTh columnKey="score" label="점수" accessor={(r: ScreenHit) => r.score} sort={resSort} />
+                  <SortableTh columnKey="price" label="현재가" accessor={(r: ScreenHit) => r.price} sort={resSort} />
+                  <SortableTh columnKey="rate" label="등락률" accessor={(r: ScreenHit) => r.changeRate} sort={resSort} />
+                  <SortableTh columnKey="tv" label="거래대금" accessor={(r: ScreenHit) => r.tradeValue} sort={resSort} />
                   <th>통과 항목</th>
                   <th>담기</th>
                 </tr>
               </thead>
               <tbody>
-                {job.results.map((r) => (
+                {resSort.sorted.map((r) => (
                   <tr key={r.code}>
                     <td className="sticky-col">
                       <button className="link-btn" onClick={() => onSelectStock(r.code, r.name)}>

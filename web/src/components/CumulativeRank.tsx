@@ -1,6 +1,7 @@
 import { Pager, usePager } from "./Pager";
 import { useEffect, useState } from "react";
 import { fmtNum, signClass } from "../api";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 
 /**
  * 누적등락률 상위 — **키움에 없어서 우리가 계산한다.**
@@ -52,6 +53,8 @@ export function CumulativeRank({
   const [note, setNote] = useState("");
   /* 쪽 넘기기 — 다른 목록과 같은 도구를 쓴다 */
   const pager = usePager(rows?.length ?? 0, "vntg.cum.pageSize", rows?.length);
+  // 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26). 기본은 누적등락률순(서버 순서)
+  const sort = useSortableTable<Row>(rows ?? []);
 
   useEffect(() => {
     let alive = true;
@@ -145,16 +148,16 @@ export function CumulativeRank({
           <table className="data-table num">
             <thead>
               <tr>
-                <th className="sticky-col">종목</th>
-                <th>현재가</th>
-                <th title="고른 기간 동안의 누적 등락률">{days}일 누적</th>
-                <th title="오늘 하루 — 누적이 좋아도 오늘 꺾였으면 다른 이야기다">오늘</th>
-                <th title="기간 시작일 종가">시작가</th>
-                <th>거래대금</th>
+                <SortableTh columnKey="name" label="종목" accessor={(r: Row) => r.name} sort={sort} className="sticky-col" />
+                <SortableTh columnKey="price" label="현재가" accessor={(r: Row) => r.price} sort={sort} />
+                <SortableTh columnKey="cum" label={`${days}일 누적`} accessor={(r: Row) => r.cumRate} sort={sort} />
+                <SortableTh columnKey="today" label="오늘" accessor={(r: Row) => r.todayRate} sort={sort} />
+                <SortableTh columnKey="from" label="시작가" accessor={(r: Row) => r.from} sort={sort} />
+                <SortableTh columnKey="tv" label="거래대금" accessor={(r: Row) => r.tradeValue} sort={sort} />
               </tr>
             </thead>
             <tbody>
-              {pager.slice(rows ?? []).map((r, i) => (
+              {pager.slice(sort.sorted).map((r, i) => (
                 <tr
                   key={r.code}
                   className={onSelectStock ? "clickable-row" : ""}

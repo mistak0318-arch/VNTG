@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 import {
   api,
   fmtNum,
@@ -30,6 +31,8 @@ export function LeaderScanPanel({
 }) {
   const [data, setData] = useState<LeaderScan | null>(null);
   const [cfg, setCfg] = useState<LeaderConfig | null>(null);
+  // 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26)
+  const stockSort = useSortableTable<LeaderScan["stocks"][number]>(data?.stocks ?? []);
   const [cfgOpen, setCfgOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -282,16 +285,16 @@ export function LeaderScanPanel({
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th className="sticky-col">종목</th>
-                    <th>업종</th>
-                    <th>등락률</th>
-                    <th>거래대금</th>
-                    <th title="전일 거래량 대비">거래량</th>
+                    <SortableTh columnKey="name" label="종목" accessor={(t: LeaderScan["stocks"][number]) => t.name} sort={stockSort} className="sticky-col" />
+                    <SortableTh columnKey="sector" label="업종" accessor={(t: LeaderScan["stocks"][number]) => t.sector ?? ""} sort={stockSort} />
+                    <SortableTh columnKey="rate" label="등락률" accessor={(t: LeaderScan["stocks"][number]) => t.changeRate} sort={stockSort} />
+                    <SortableTh columnKey="tv" label="거래대금" accessor={(t: LeaderScan["stocks"][number]) => t.tradeValue} sort={stockSort} />
+                    <SortableTh columnKey="vol" label="거래량" accessor={(t: LeaderScan["stocks"][number]) => t.volumeRatio ?? -1} sort={stockSort} />
                     <th title="왜 걸렸나">이유</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.stocks.map((t) => (
+                  {stockSort.sorted.map((t) => (
                     <tr
                       className="clickable-row"
                       key={t.code}

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 import {
   api,
   fmtNum,
@@ -351,24 +352,26 @@ function TradeTable({
   onClose?: (t: EvaluatedTrade) => void;
   onRemove: (t: EvaluatedTrade) => void;
 }) {
+  // 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26)
+  const sort = useSortableTable<EvaluatedTrade>(rows);
   return (
     <div className="data-table-wrap">
       <table className="data-table">
         <thead>
           <tr>
-            <th className="sticky-col">종목명</th>
-            <th>매수가</th>
-            <th>{onClose ? "현재가" : "청산가"}</th>
-            <th>수량</th>
-            <th>평가손익</th>
-            <th>수익률</th>
-            <th>보유일</th>
-            <th>매수시 신호등</th>
+            <SortableTh columnKey="name" label="종목명" accessor={(t: EvaluatedTrade) => t.name} sort={sort} className="sticky-col" />
+            <SortableTh columnKey="entry" label="매수가" accessor={(t: EvaluatedTrade) => t.entryPrice} sort={sort} />
+            <SortableTh columnKey="price" label={onClose ? "현재가" : "청산가"} accessor={(t: EvaluatedTrade) => t.price} sort={sort} />
+            <SortableTh columnKey="qty" label="수량" accessor={(t: EvaluatedTrade) => t.qty} sort={sort} />
+            <SortableTh columnKey="pnl" label="평가손익" accessor={(t: EvaluatedTrade) => t.pnl} sort={sort} />
+            <SortableTh columnKey="rr" label="수익률" accessor={(t: EvaluatedTrade) => t.returnRate} sort={sort} />
+            <SortableTh columnKey="days" label="보유일" accessor={(t: EvaluatedTrade) => t.holdingDays} sort={sort} />
+            <SortableTh columnKey="sig" label="매수시 신호등" accessor={(t: EvaluatedTrade) => t.evidence.score} sort={sort} />
             <th></th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((t) => (
+          {sort.sorted.map((t) => (
             // 축약형 <>…</> 는 key 를 못 받는다. 배열 안이므로 Fragment 를 써야 한다
             <Fragment key={t.id}>
               <tr>

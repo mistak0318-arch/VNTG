@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fmtNum } from "../api";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 
 /**
  * VI 발동/해제 — **오늘 어디가 튀었나.**
@@ -65,9 +66,11 @@ export function ViPanel({ onSelectStock }: { onSelectStock?: (c: string, n: stri
     };
   }, []);
 
-  if (events === null) return <div className="empty">불러오는 중…</div>;
+  // 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26). 훅이라 조기 return 앞에 둔다
+  const rows = firedOnly ? (events ?? []).filter((e) => !e.clearedAt) : events ?? [];
+  const sort = useSortableTable<ViEvent>(rows);
 
-  const rows = firedOnly ? events.filter((e) => !e.clearedAt) : events;
+  if (events === null) return <div className="empty">불러오는 중…</div>;
 
   return (
     <div>
@@ -94,16 +97,16 @@ export function ViPanel({ onSelectStock }: { onSelectStock?: (c: string, n: stri
           <table className="data-table num">
             <thead>
               <tr>
-                <th className="sticky-col">시각</th>
-                <th>종목</th>
-                <th>구분</th>
-                <th>발동가</th>
-                <th>기준가</th>
-                <th>괴리</th>
+                <SortableTh columnKey="at" label="시각" accessor={(e: ViEvent) => e.at} sort={sort} className="sticky-col" />
+                <SortableTh columnKey="name" label="종목" accessor={(e: ViEvent) => e.name} sort={sort} />
+                <SortableTh columnKey="kind" label="구분" accessor={(e: ViEvent) => e.kind} sort={sort} />
+                <SortableTh columnKey="price" label="발동가" accessor={(e: ViEvent) => e.price} sort={sort} />
+                <SortableTh columnKey="base" label="기준가" accessor={(e: ViEvent) => e.base} sort={sort} />
+                <SortableTh columnKey="gap" label="괴리" accessor={(e: ViEvent) => (e.base > 0 ? ((e.price - e.base) / e.base) * 100 : 0)} sort={sort} />
               </tr>
             </thead>
             <tbody>
-              {rows.map((e, i) => {
+              {sort.sorted.map((e, i) => {
                 // 기준가 대비 얼마나 튀어서 걸렸나 — 이게 「얼마나 센 일인가」다
                 const gap = e.base > 0 ? ((e.price - e.base) / e.base) * 100 : null;
                 return (

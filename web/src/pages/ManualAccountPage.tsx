@@ -5,8 +5,10 @@ import {
   normalizeStockCode,
   signClass,
   type EvaluatedAccount,
+  type EvaluatedHolding,
   type StockSearchResult,
 } from "../api";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 import { CollapsibleCard } from "../components/CollapsibleCard";
 import { RefreshBar } from "../components/RefreshBar";
 
@@ -465,62 +467,81 @@ export function ManualAccountPage({
           </div>
 
           {a.holdings.length > 0 && (
-            <div className="data-table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th className="sticky-col">종목명</th>
-                    <th>평단가</th>
-                    <th>수량</th>
-                    <th>현재가</th>
-                    <th>당일</th>
-                    <th>평가금액</th>
-                    <th>평가손익</th>
-                    <th>수익률</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {a.holdings.map((h) => (
-                    <tr
-                      key={h.code}
-                      className="clickable-row"
-                      onClick={() => onSelectStock(h.code, h.name)}
-                    >
-                      <td className="sticky-col">{h.name}</td>
-                      <td>{fmtNum(h.avgPrice)}</td>
-                      <td>{fmtNum(h.qty)}</td>
-                      <td>{fmtNum(h.price)}</td>
-                      <td className={signClass(h.changeRate)}>{pct(h.changeRate)}</td>
-                      <td>{fmtNum(Math.round(h.value))}</td>
-                      <td className={signClass(h.profit)}>
-                        {h.profit > 0 ? "+" : ""}
-                        {fmtNum(Math.round(h.profit))}
-                      </td>
-                      <td className={signClass(h.returnRate)}>{pct(h.returnRate)}</td>
-                      <td>
-                        <button
-                          className="row-del-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteHolding(a.id, h.code);
-                          }}
-                          title="이 종목 삭제"
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <HoldingsTable
+              holdings={a.holdings}
+              onRow={onSelectStock}
+              onDelete={(code) => deleteHolding(a.id, code)}
+            />
           )}
 
           <AddHoldingForm accountId={a.id} onDone={setAccounts} />
         </CollapsibleCard>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * 계좌 보유 표 — 컬럼 정렬(모든 표 공통 규칙, 2026-08-26).
+ * 계좌마다 표가 하나씩이라(맵 안) 훅을 못 쓰던 것을 컴포넌트로 떼어 정렬을 달았다.
+ */
+function HoldingsTable({
+  holdings,
+  onRow,
+  onDelete,
+}: {
+  holdings: EvaluatedHolding[];
+  onRow: (code: string, name: string) => void;
+  onDelete: (code: string) => void;
+}) {
+  const sort = useSortableTable<EvaluatedHolding>(holdings);
+  return (
+    <div className="data-table-wrap">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <SortableTh columnKey="name" label="종목명" accessor={(h: EvaluatedHolding) => h.name} sort={sort} className="sticky-col" />
+            <SortableTh columnKey="avg" label="평단가" accessor={(h: EvaluatedHolding) => h.avgPrice} sort={sort} />
+            <SortableTh columnKey="qty" label="수량" accessor={(h: EvaluatedHolding) => h.qty} sort={sort} />
+            <SortableTh columnKey="price" label="현재가" accessor={(h: EvaluatedHolding) => h.price} sort={sort} />
+            <SortableTh columnKey="day" label="당일" accessor={(h: EvaluatedHolding) => h.changeRate} sort={sort} />
+            <SortableTh columnKey="value" label="평가금액" accessor={(h: EvaluatedHolding) => h.value} sort={sort} />
+            <SortableTh columnKey="profit" label="평가손익" accessor={(h: EvaluatedHolding) => h.profit} sort={sort} />
+            <SortableTh columnKey="rr" label="수익률" accessor={(h: EvaluatedHolding) => h.returnRate ?? -9999} sort={sort} />
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {sort.sorted.map((h) => (
+            <tr key={h.code} className="clickable-row" onClick={() => onRow(h.code, h.name)}>
+              <td className="sticky-col">{h.name}</td>
+              <td>{fmtNum(h.avgPrice)}</td>
+              <td>{fmtNum(h.qty)}</td>
+              <td>{fmtNum(h.price)}</td>
+              <td className={signClass(h.changeRate)}>{pct(h.changeRate)}</td>
+              <td>{fmtNum(Math.round(h.value))}</td>
+              <td className={signClass(h.profit)}>
+                {h.profit > 0 ? "+" : ""}
+                {fmtNum(Math.round(h.profit))}
+              </td>
+              <td className={signClass(h.returnRate)}>{pct(h.returnRate)}</td>
+              <td>
+                <button
+                  className="row-del-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(h.code);
+                  }}
+                  title="이 종목 삭제"
+                >
+                  ✕
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
