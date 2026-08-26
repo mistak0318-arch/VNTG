@@ -2798,6 +2798,70 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 }
 
 /* ---------------- 캘린더 ---------------- */
+/* ── 캘린더 2단 레이아웃 (2026-08-27 개편) — 왼쪽 달력, 오른쪽 다가오는·선택일·폼 ── */
+.cal-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 0 1.2rem;
+  align-items: start;
+}
+@media (max-width: 899px) {
+  .cal-layout { grid-template-columns: minmax(0, 1fr); }
+}
+/* 다가오는 일정 — D-day 가 주인공 */
+.cal-up { margin-bottom: 0.6rem; }
+.cal-up-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cal-up-row:hover { background: var(--panel-2); }
+.cal-dday {
+  flex: none;
+  min-width: 2.6rem;
+  text-align: center;
+  font-style: normal;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+.cal-dday.now { color: #fff; background: var(--red); border-color: var(--red); }
+.cal-dday.soon { color: var(--accent, #f5c542); border-color: var(--accent, #f5c542); }
+.cal-up-date { flex: none; font-variant-numeric: tabular-nums; }
+.cal-up-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 0.86rem;
+}
+/* 수정 모드 — 어느 일정을 고치는 중인지 눈에 보이게 */
+.cal-item.editing { outline: 1px dashed var(--blue); border-radius: 6px; }
+.cal-form.editing { border-left: 3px solid var(--blue); padding-left: 8px; }
+/* 가져오기류 접기 — 매일 쓰는 게 아니다 */
+.cal-fold {
+  margin-top: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.5rem 0.8rem;
+  background: var(--panel);
+}
+.cal-fold > summary { cursor: pointer; font-weight: 600; font-size: 0.88rem; color: var(--text-dim); }
+.cal-fold[open] > summary { margin-bottom: 0.5rem; color: var(--text); }
+
 .cal-toolbar {
   display: flex;
   align-items: center;

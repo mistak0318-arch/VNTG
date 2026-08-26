@@ -54,11 +54,17 @@ export function CalendarPage() {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // 입력 폼
+  // 입력 폼 — 날짜도 폼에 있다(2026-08-27). 달력을 클릭하면 따라오고, 직접 바꿀 수도 있다
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<EventKind>("personal");
   const [time, setTime] = useState("");
   const [memo, setMemo] = useState("");
+  const [formDate, setFormDate] = useState<string>(() => ymd(new Date()));
+  /** 수정 중인 일정 id — 있으면 폼이 「추가」가 아니라 「수정 저장」이 된다 */
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  /* 다가오는 일정 — 달력은 「어느 날에 뭐가 있나」고, 이건 「곧 뭐가 오나」다 */
+  const [upcoming, setUpcoming] = useState<CalendarEvent[] | null>(null);
 
   async function load() {
     setLoading(true);
@@ -70,6 +76,10 @@ export function CalendarPage() {
     } finally {
       setLoading(false);
     }
+    void api
+      .calendarUpcoming(14)
+      .then((r) => setUpcoming(r.events))
+      .catch(() => undefined);
   }
 
   useEffect(() => {
@@ -168,32 +178,72 @@ export function CalendarPage() {
     return m;
   }, [events]);
 
-  async function addEvent() {
+  function resetForm() {
+    setTitle("");
+    setTime("");
+    setMemo("");
+    setEditingId(null);
+  }
+
+  /** 추가와 수정이 같은 폼을 쓴다 — editingId 가 있으면 그 일정을 고친다 */
+  async function submitEvent() {
     if (!title.trim()) return;
     try {
-      const res = await api.calendarAdd({
-        date: selected,
+      const body = {
+        date: formDate,
         title,
         kind,
         time: time || undefined,
         memo: memo || undefined,
-      });
+      };
+      const res = editingId
+        ? await api.calendarUpdate(editingId, body)
+        : await api.calendarAdd(body);
       setEvents(res.events.filter((e) => e.date.startsWith(monthKey(cursor))));
-      setTitle("");
-      setTime("");
-      setMemo("");
+      void api.calendarUpcoming(14).then((r) => setUpcoming(r.events)).catch(() => undefined);
+      resetForm();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "추가 실패");
+      setError(err instanceof Error ? err.message : editingId ? "수정 실패" : "추가 실패");
     }
+  }
+
+  /** ✎ — 그 일정을 폼에 실어 수정 모드로 */
+  function startEdit(e: CalendarEvent) {
+    setEditingId(e.id);
+    setFormDate(e.date);
+    setTitle(e.title);
+    setKind(e.kind);
+    setTime(e.time ?? "");
+    setMemo(e.memo ?? "");
   }
 
   async function removeEvent(id: string) {
     try {
       const res = await api.calendarRemove(id);
       setEvents(res.events.filter((e) => e.date.startsWith(monthKey(cursor))));
+      void api.calendarUpcoming(14).then((r) => setUpcoming(r.events)).catch(() => undefined);
+      if (editingId === id) resetForm();
     } catch (err) {
       setError(err instanceof Error ? err.message : "삭제 실패");
     }
+  }
+
+  /** 다가오는 일정에서 눌렀을 때 — 그 날짜로 달력을 옮기고 고른다 */
+  function jumpTo(date: string) {
+    const [y, m] = date.split("-").map(Number);
+    setCursor(new Date(y, m - 1, 1));
+    setSelected(date);
+    setFormDate(date);
+  }
+
+  /** D-day 라벨 — 오늘/내일은 말로, 그 뒤는 D-n */
+  function dday(date: string): string {
+    const today = ymd(new Date());
+    if (date === today) return "오늘";
+    const diff = Math.round(
+      (new Date(`${date}T00:00`).getTime() - new Date(`${today}T00:00`).getTime()) / 86400_000,
+    );
+    return diff === 1 ? "내일" : `D-${diff}`;
   }
 
   function shiftMonth(delta: number) {
@@ -213,143 +263,217 @@ export function CalendarPage() {
       <h3 className="section-heading">오늘 공시</h3>
       <DartTodayPanel />
 
-      <h3 className="section-heading">일정</h3>
-      <div className="cal-toolbar">
-        <button className="filter-btn" onClick={() => shiftMonth(-1)}>
-          ‹ 이전
-        </button>
-        <span className="cal-month">
-          {cursor.getFullYear()}년 {cursor.getMonth() + 1}월
-        </span>
-        <button className="filter-btn" onClick={() => shiftMonth(1)}>
-          다음 ›
-        </button>
-        <button
-          className="filter-btn"
-          onClick={() => {
-            const now = new Date();
-            setCursor(new Date(now.getFullYear(), now.getMonth(), 1));
-            setSelected(ymd(now));
-          }}
-        >
-          오늘
-        </button>
-      </div>
-
-      <div className="cal-grid">
-        {WEEKDAYS.map((w, i) => (
-          <div className={`cal-wd${i === 0 ? " sun" : i === 6 ? " sat" : ""}`} key={w}>
-            {w}
-          </div>
-        ))}
-        {grid.map((d, i) => {
-          if (!d) return <div className="cal-cell empty" key={`e${i}`} />;
-          const key = ymd(d);
-          const list = byDate.get(key) ?? [];
-          const dow = d.getDay();
-          return (
-            <button
-              key={key}
-              className={`cal-cell${key === todayStr ? " today" : ""}${key === selected ? " selected" : ""}`}
-              onClick={() => setSelected(key)}
-            >
-              <span className={`cal-day${dow === 0 ? " sun" : dow === 6 ? " sat" : ""}`}>
-                {d.getDate()}
-              </span>
-              <span className="cal-events">
-                {list.slice(0, 3).map((e) => (
-                  <span className={`cal-chip ${e.kind}`} key={e.id} title={e.title}>
-                    {e.title}
-                  </span>
-                ))}
-                {list.length > 3 && <span className="cal-more">+{list.length - 3}</span>}
-              </span>
+      {/*
+        2단 구조 (2026-08-27 개편) — 왼쪽은 달력(어느 날에 뭐가 있나), 오른쪽은
+        「다가오는 일정」(곧 뭐가 오나)과 선택일 상세 + 입력 폼. 예전엔 전부 세로로
+        쌓여서 폼까지 한참 내려가야 했다. 폰에서는 다시 세로로 접힌다.
+      */}
+      <div className="cal-layout">
+        <div className="cal-main">
+          <h3 className="section-heading">일정</h3>
+          <div className="cal-toolbar">
+            <button className="filter-btn" onClick={() => shiftMonth(-1)}>
+              ‹ 이전
             </button>
-          );
-        })}
-      </div>
+            <span className="cal-month">
+              {cursor.getFullYear()}년 {cursor.getMonth() + 1}월
+            </span>
+            <button className="filter-btn" onClick={() => shiftMonth(1)}>
+              다음 ›
+            </button>
+            <button
+              className="filter-btn"
+              onClick={() => {
+                const now = new Date();
+                setCursor(new Date(now.getFullYear(), now.getMonth(), 1));
+                setSelected(ymd(now));
+                setFormDate(ymd(now));
+              }}
+            >
+              오늘
+            </button>
+          </div>
 
-      <section className="card">
-        <h2>{selected} 일정</h2>
-
-        {selectedEvents.length === 0 ? (
-          <div className="empty">등록된 일정이 없습니다.</div>
-        ) : (
-          <div className="cal-list">
-            {selectedEvents.map((e) => (
-              <div className="cal-item" key={e.id}>
-                <span className={`cal-badge ${e.kind}`}>{KIND_LABEL[e.kind]}</span>
-                <span className="cal-item-title">
-                  {e.time && <b>{e.time} </b>}
-                  {e.title}
-                  {e.memo && <span className="rl-sub"> — {e.memo}</span>}
-                </span>
-                <button className="row-del-btn" onClick={() => removeEvent(e.id)} title="삭제">
-                  ✕
-                </button>
+          <div className="cal-grid">
+            {WEEKDAYS.map((w, i) => (
+              <div className={`cal-wd${i === 0 ? " sun" : i === 6 ? " sat" : ""}`} key={w}>
+                {w}
               </div>
             ))}
+            {grid.map((d, i) => {
+              if (!d) return <div className="cal-cell empty" key={`e${i}`} />;
+              const key = ymd(d);
+              const list = byDate.get(key) ?? [];
+              const dow = d.getDay();
+              return (
+                <button
+                  key={key}
+                  className={`cal-cell${key === todayStr ? " today" : ""}${key === selected ? " selected" : ""}`}
+                  onClick={() => {
+                    setSelected(key);
+                    setFormDate(key);
+                  }}
+                >
+                  <span className={`cal-day${dow === 0 ? " sun" : dow === 6 ? " sat" : ""}`}>
+                    {d.getDate()}
+                  </span>
+                  <span className="cal-events">
+                    {list.slice(0, 3).map((e) => (
+                      <span
+                        className={`cal-chip ${e.kind}`}
+                        key={e.id}
+                        title={`${e.time ? `${e.time} ` : ""}${e.title}${e.memo ? ` — ${e.memo}` : ""}`}
+                      >
+                        {e.title}
+                      </span>
+                    ))}
+                    {list.length > 3 && <span className="cal-more">+{list.length - 3}</span>}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        )}
-
-        <div className="ma-form-row" style={{ marginTop: 12 }}>
-          <select
-            className="group-select"
-            value={kind}
-            onChange={(e) => setKind(e.target.value as EventKind)}
-          >
-            {(Object.keys(KIND_LABEL) as EventKind[]).map((k) => (
-              <option key={k} value={k}>
-                {KIND_LABEL[k]}
-              </option>
-            ))}
-          </select>
-          <input
-            className="ma-input"
-            type="time"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-            title="시간 (비우면 종일)"
-          />
-          <input
-            className="ma-input wide"
-            placeholder="일정 제목"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addEvent()}
-          />
-          <input
-            className="ma-input wide"
-            placeholder="메모 (선택)"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-          />
-          <button className="filter-btn active" onClick={addEvent}>
-            추가
-          </button>
         </div>
-        <div className="table-note">
-          선물옵션 동시만기·휴장일은 처음 실행할 때 자동으로 들어갑니다. 구글 캘린더 연동은 추후
-          iCal 읽기 방식으로 붙일 예정입니다.
-        </div>
-      </section>
 
-      <section className="card">
-        <h2>경제 캘린더</h2>
+        <div className="cal-side">
+          {/* 곧 뭐가 오나 — D-day 로. 누르면 그 날짜로 점프한다 */}
+          <h3 className="section-heading">다가오는 일정 (14일)</h3>
+          {upcoming === null ? (
+            <div className="empty">불러오는 중…</div>
+          ) : upcoming.length === 0 ? (
+            <div className="empty">14일 안에 잡힌 일정이 없습니다.</div>
+          ) : (
+            <div className="cal-up">
+              {upcoming.slice(0, 12).map((e) => (
+                <button className="cal-up-row" key={e.id} onClick={() => jumpTo(e.date)}>
+                  <em className={`cal-dday${dday(e.date) === "오늘" ? " now" : dday(e.date) === "내일" ? " soon" : ""}`}>
+                    {dday(e.date)}
+                  </em>
+                  <span className="cal-up-date pt-n">
+                    {e.date.slice(5).replace("-", "/")}
+                    {e.time && ` ${e.time}`}
+                  </span>
+                  <span className={`cal-badge ${e.kind}`}>{KIND_LABEL[e.kind]}</span>
+                  <b className="cal-up-title">{e.title}</b>
+                </button>
+              ))}
+              {upcoming.length > 12 && (
+                <div className="table-note">…외 {upcoming.length - 12}건 — 달력에서 봅니다</div>
+              )}
+            </div>
+          )}
+
+          <h3 className="section-heading">{selected} 일정</h3>
+          {selectedEvents.length === 0 ? (
+            <div className="empty">등록된 일정이 없습니다.</div>
+          ) : (
+            <div className="cal-list">
+              {selectedEvents.map((e) => (
+                <div className={`cal-item${editingId === e.id ? " editing" : ""}`} key={e.id}>
+                  <span className={`cal-badge ${e.kind}`}>{KIND_LABEL[e.kind]}</span>
+                  <span className="cal-item-title">
+                    {e.time && <b>{e.time} </b>}
+                    {e.title}
+                    {e.memo && <span className="rl-sub"> — {e.memo}</span>}
+                  </span>
+                  {/* 가져온 일정(source 있음)도 고칠 수 있다 — 단 다음 동기화 때 원본으로 돌아간다 */}
+                  <button className="row-del-btn" onClick={() => startEdit(e)} title="수정">
+                    ✎
+                  </button>
+                  <button className="row-del-btn" onClick={() => removeEvent(e.id)} title="삭제">
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 추가/수정 폼 — 같은 폼이다. 수정 중이면 테두리와 버튼이 바뀐다 */}
+          <div className={`cal-form${editingId ? " editing" : ""}`}>
+            {editingId && (
+              <div className="pt-n" style={{ marginBottom: 4 }}>
+                ✎ 일정 수정 중 — 저장하면 반영됩니다
+              </div>
+            )}
+            <div className="ma-form-row">
+              <input
+                className="ma-input"
+                type="date"
+                value={formDate}
+                onChange={(e) => setFormDate(e.target.value)}
+                title="날짜"
+              />
+              <select
+                className="group-select"
+                value={kind}
+                onChange={(e) => setKind(e.target.value as EventKind)}
+              >
+                {(Object.keys(KIND_LABEL) as EventKind[]).map((k) => (
+                  <option key={k} value={k}>
+                    {KIND_LABEL[k]}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="ma-input"
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                title="시간 (비우면 종일)"
+              />
+            </div>
+            <div className="ma-form-row">
+              <input
+                className="ma-input wide"
+                placeholder="일정 제목"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submitEvent()}
+              />
+              <input
+                className="ma-input wide"
+                placeholder="메모 (선택)"
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submitEvent()}
+              />
+              <button className="filter-btn active" onClick={submitEvent}>
+                {editingId ? "수정 저장" : "추가"}
+              </button>
+              {editingId && (
+                <button className="filter-btn" onClick={resetForm}>
+                  취소
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="table-note">
+            선물옵션 동시만기·휴장일은 처음 실행할 때 자동으로 들어갑니다. 날짜를 바꿔서
+            저장하면 일정이 그 날짜로 옮겨집니다.
+          </div>
+        </div>
+      </div>
+
+      {/*
+        가져오기·설정 — 매일 쓰는 게 아니라 접어 둔다 (2026-08-27).
+        예전엔 카드 셋이 항상 펼쳐져 페이지 절반을 차지했다.
+      */}
+      <details className="cal-fold">
+        <summary>경제 캘린더 (FOMC·CPI·금통위 시드)</summary>
         <EconomicCalendarCard onInstalled={load} />
-      </section>
+      </details>
 
-      <section className="card">
-        <h2>이미지에서 일정 가져오기</h2>
+      <details className="cal-fold">
+        <summary>이미지에서 일정 가져오기</summary>
         <p className="page-note">
           증권사 리포트 캡처, 카톡으로 받은 일정표, 손으로 적은 메모 사진을 그대로 올리면
           날짜와 제목을 뽑아냅니다. <b>확인 후 추가</b>하는 방식이라 잘못 인식된 건 빼거나 고칠 수 있습니다.
         </p>
         <CalendarImageImport onImported={load} />
-      </section>
+      </details>
 
-      <section className="card">
-        <h2>외부 일정 가져오기</h2>
+      <details className="cal-fold">
+        <summary>외부 일정 가져오기 (구글 캘린더·ICS·CSV)</summary>
 
         <div className="ma-form-row">
           <input
@@ -406,7 +530,7 @@ export function CalendarPage() {
           같은 파일·주소를 다시 가져오면 <b>기존 것을 지우고 새로 넣습니다</b> (중복 안 쌓임).
           직접 입력한 일정은 건드리지 않습니다.
         </div>
-      </section>
+      </details>
     </div>
   );
 }

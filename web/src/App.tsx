@@ -282,7 +282,14 @@ export default function App() {
 
   // 종목 상세(모달) → 개별종목분석 페이지로. 종목은 유지한 채 탭만 옮긴다.
   function openAnalysis(code: string, name: string) {
+    /*
+     * 새 종목은 **맨 위부터** (2026-08-27 — "포커스가 중간에 잡혀 있네").
+     * 인앱 탭이 생기면서 창 스크롤이 탭끼리 공유돼, 스크롤 내린 채 종목을
+     * 누르면 분석 화면이 중간부터 보였다. 기억해 둔 자리도 0으로 지운다.
+     */
+    scrollMemo.current.stockAnalysis = 0;
     navigate({ tab: "stockAnalysis", stock: { code, name } });
+    window.scrollTo(0, 0);
     focus.publish(code, name);
     setNavOpen(false);
   }
@@ -339,6 +346,24 @@ export default function App() {
   /* 탭 순서 끌어서 바꾸기 (2026-08-27) — 순서 자리마다 쓰는 공용 훅 그대로.
      저장은 openTabs 가 이미 하고 있다(sessionStorage) — 순서만 바꿔 주면 끝. */
   const tabDrag = useDragOrder(openTabs, (next) => setOpenTabs(next as Tab[]));
+
+  /*
+   * 탭별 스크롤 기억 (2026-08-27) — 창 스크롤은 하나뿐이라 탭을 갈아타면
+   * **남의 스크롤 자리**에서 시작했다(종목 눌렀더니 분석 화면이 중간부터).
+   * 브라우저 탭처럼: 보던 자리를 탭마다 적어 두고, 돌아오면 그 자리로,
+   * 처음 여는 탭은 맨 위로.
+   */
+  const scrollMemo = useRef<Record<string, number>>({});
+  useEffect(() => {
+    const onScroll = () => {
+      scrollMemo.current[tab] = window.scrollY;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [tab]);
+  useEffect(() => {
+    window.scrollTo(0, scrollMemo.current[tab] ?? 0);
+  }, [tab]);
 
   function closeTab(t: Tab) {
     setOpenTabs((prev) => {

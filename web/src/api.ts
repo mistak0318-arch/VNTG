@@ -801,6 +801,8 @@ export const api = {
       kind,
     }),
   calendarRemove: (id: string) => deleteJson<{ events: CalendarEvent[] }>(`/api/calendar/${id}`),
+  calendarUpdate: (id: string, patch: Partial<Omit<CalendarEvent, "id">>) =>
+    patchJson<{ events: CalendarEvent[] }>(`/api/calendar/${id}`, patch),
   apiUsage: () => getJson<{ day: string; providers: ProviderUsage[] }>("/api/settings/usage"),
   apiUsageTotals: (days = 30) => getJson<UsageTotals>(`/api/settings/usage/totals?days=${days}`),
   apiUsageHistory: (days = 14) =>

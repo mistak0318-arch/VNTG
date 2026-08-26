@@ -101,11 +101,16 @@ export async function listEvents(month?: string): Promise<CalendarEvent[]> {
 /** 오늘 이후로 다가오는 일정 (알림·리포트용) */
 export async function upcomingEvents(days = 14): Promise<CalendarEvent[]> {
   const items = await load();
-  const today = new Date().toISOString().slice(0, 10);
-  const until = new Date(Date.now() + days * 86400_000).toISOString().slice(0, 10);
+  /*
+   * ⚠️ KST 로 잰다 (2026-08-27). toISOString 은 UTC 라 **자정~아침 9시 사이에는
+   * 어제 날짜**가 나온다 — 그 시간대에 "다가오는 일정"에 어제 것이 끼고,
+   * 정작 오늘 것이 리포트에서 하루 늦게 빠지는 미묘한 어긋남이 있었다.
+   */
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  const until = new Date(Date.now() + 9 * 3600_000 + days * 86400_000).toISOString().slice(0, 10);
   return items
     .filter((e) => e.date >= today && e.date <= until)
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => (a.date + (a.time ?? "")).localeCompare(b.date + (b.time ?? "")));
 }
 
 export async function addEvent(e: Omit<CalendarEvent, "id">): Promise<CalendarEvent[]> {
