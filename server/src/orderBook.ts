@@ -204,7 +204,8 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
      */
     const [book, info, nxt, common, tick] = await Promise.all([
       client.request<Record<string, unknown>>(MRKCOND, "ka10004", { stk_cd: bare }),
-      client.request<Record<string, unknown>>(STKINFO, "ka10001", { stk_cd: bare }),
+      // noAl — 이 조회는 krxHigh/krxLow 라벨 그대로 **KRX 단독**이어야 한다(옆에 _NX 별도)
+      client.request<Record<string, unknown>>(STKINFO, "ka10001", { stk_cd: bare }, { noAl: true }),
       client
         .request<Record<string, unknown>>(STKINFO, "ka10001", { stk_cd: `${bare}_NX` })
         .catch(() => null),

@@ -65,6 +65,12 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
 
   const [nxt, setNxt] = useState<ExchangeQuote | null>(null);
   /*
+   * KRX 단독 시세 (2026-08-26) — /info 가 통합(_AL)이 된 뒤로 info 의 시/고/저는
+   * **통합 범위**다. 「KRX」 라벨 줄에 그걸 쓰면 NXT 와 늘 같아 보인다(통합 고가 =
+   * 둘 중 큰 값). KRX 줄은 거래소별 조회의 진짜 KRX 값으로 그린다.
+   */
+  const [krx, setKrx] = useState<ExchangeQuote | null>(null);
+  /*
    * 체결강도. **가벼운 조회 하나**(`ka10003`)만 쓴다 — 호가 조회는 TR 을 셋 부르는데
    * 요약줄은 늘 떠 있으므로 그걸 쓰면 초당 제한에 금방 닿는다.
    */
@@ -111,10 +117,11 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
         .then((r) => {
           if (cancelled) return;
           setNxt(r.exchanges.find((x) => x.key === "nxt") ?? null);
-          const krx = r.exchanges.find((x) => x.key === "krx");
-          setKrxValue(krx?.tradeValue ?? null);
+          const k = r.exchanges.find((x) => x.key === "krx") ?? null;
+          setKrx(k);
+          setKrxValue(k?.tradeValue ?? null);
           // 천주로 온다 — 주 단위로 바꿔 둔다
-          setShares(krx?.shares ? krx.shares * 1000 : null);
+          setShares(k?.shares ? k.shares * 1000 : null);
         })
         .catch(() => undefined);
     void load();
@@ -293,10 +300,14 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
       </div>
       <div className="ph-grid">
         {[
-          // 마감 국면에만 마지막 거래일 값으로 메운다 — 07:50 부터는 오늘 값만(없으면 -)
-          { label: "시가", value: fillOk ? fill(info.open_pric, last?.open) : info.open_pric, nxtValue: nxt?.open ?? null },
-          { label: "고가", value: fillOk ? fill(info.high_pric, last?.high) : info.high_pric, nxtValue: nxt?.high ?? null },
-          { label: "저가", value: fillOk ? fill(info.low_pric, last?.low) : info.low_pric, nxtValue: nxt?.low ?? null },
+          /*
+           * KRX 줄은 **거래소별 조회의 진짜 KRX 값** (2026-08-26) — info 는 통합(_AL)
+           * 이라 여기 쓰면 NXT 와 늘 같아 보였다. krx 조회가 아직이면 info(통합)로
+           * 임시. 마감 국면에만 마지막 거래일 값으로 메운다 — 07:50 부터는 오늘 값만.
+           */
+          { label: "시가", value: krx?.open ?? (fillOk ? fill(info.open_pric, last?.open) : info.open_pric), nxtValue: nxt?.open ?? null },
+          { label: "고가", value: krx?.high ?? (fillOk ? fill(info.high_pric, last?.high) : info.high_pric), nxtValue: nxt?.high ?? null },
+          { label: "저가", value: krx?.low ?? (fillOk ? fill(info.low_pric, last?.low) : info.low_pric), nxtValue: nxt?.low ?? null },
         ].map((it) => {
           const v = vsBase(it.value, base);
           const nv = vsBase(it.nxtValue, base);

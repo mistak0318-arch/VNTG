@@ -390,10 +390,16 @@ export function createMarketRouter(client: KiwoomClient): Router {
              * 그대로 먹는다 — 09:13 실측으로 KRX 19,425억 + NXT 16,736억 = 통합 36,161억,
              * 정확히 합계다.
              */
+            /*
+             * ⚠️ noAl (2026-08-26) — 이 라우트는 접미를 **스스로** 관리한다(KRX=bare).
+             * 중앙 _AL 래퍼가 bare 를 _AL 로 바꿔서 KRX 줄에 통합 값이 들어갔었다 —
+             * 「모든 종목의 NXT 고저가 KRX 와 똑같다」의 원인.
+             */
             const { data } = await client.request<Record<string, unknown>>(
               MRKCOND_RESOURCE,
               "ka10007",
               { stk_cd: t.code },
+              { noAl: true },
             );
             return {
               key: t.key,
