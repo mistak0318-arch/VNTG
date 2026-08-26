@@ -5733,6 +5733,8 @@ tr.drag-src td { opacity: 0.45; }
 .qss-toggle:hover { color: var(--text); border-style: solid; }
 .qss { margin-bottom: 8px; }
 .qss-box { position: relative; display: flex; gap: 6px; align-items: center; }
+/* 검색 결과가 고정 탭바(z 15) 뒤로 깔렸다 (2026-08-27) — 탭바 위, 모달(20) 아래 */
+.qss-box .search-dropdown { z-index: 18; }
 .qss-box .search-input { flex: 1; }
 .qss-close {
   border: 1px solid var(--border);
