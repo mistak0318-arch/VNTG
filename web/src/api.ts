@@ -2437,9 +2437,11 @@ export interface BriefingTile {
   code: string;
   name: string;
   rate: number | null;
-  /** 억원 — 타일 크기의 기준 (스냅샷에 거래대금이 없어 시총으로 잰다) */
+  /** 억원 — 툴팁에만 (칸 크기는 균등 격자로 바뀜) */
   cap: number | null;
   status: string;
+  /** 대표 그룹 — 슈퍼신호등이 있으면 그것, 아니면 그룹 정렬순 첫 그룹 */
+  group: string;
 }
 
 /* ── 조건 백테스트 ─────────────────────────────────────────── */

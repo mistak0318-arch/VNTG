@@ -2363,14 +2363,53 @@ body {
 .bf-note { font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; }
 
 /* 히트맵 — flex-wrap 타일, 크기는 √시총 비례 */
-.bf-heat { display: flex; flex-wrap: wrap; gap: 4px; }
+/* 균등 격자 (2026-08-26 — 「오와 열 맞춰라」). 시총 비례 flex 는 줄마다 폭이 달라 들쭉날쭉했다 */
+.bf-heat { display: grid; grid-template-columns: repeat(auto-fill, minmax(6.4rem, 1fr)); gap: 4px; }
 .bf-tile {
-  flex: 1 0 5.5rem; min-height: 3.2rem; border: 1px solid var(--border); border-radius: 0.4rem;
+  min-height: 3.6rem; border: 1px solid var(--border); border-radius: 0.4rem;
   background: var(--panel); color: var(--text); cursor: pointer; padding: 0.3rem 0.4rem;
-  display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0;
+  display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 0;
+  position: relative;
 }
 .bf-tile b { font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bf-tile i { font-style: normal; font-size: 0.74rem; }
+/* 오늘 수급 격자판 — 숫자가 주인공, 막대는 밑줄 (긴 막대가 태블릿에서 값을 가렸다) */
+.bf-fg {
+  display: grid;
+  grid-template-columns: 3.6rem repeat(3, minmax(0, 1fr));
+  gap: 6px 10px;
+  align-items: center;
+}
+.bf-fg-corner { }
+.bf-fg-h { font-size: 0.7rem; color: var(--muted); text-align: right; }
+.bf-fg-m { font-style: normal; font-size: 0.78rem; color: var(--muted); }
+.bf-fg-cell { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 0; }
+.bf-fg-cell > b { font-size: 0.82rem; white-space: nowrap; }
+.bf-fg-cell > b > i { font-style: normal; font-size: 0.62rem; color: var(--muted); margin-left: 1px; }
+.bf-fg-bar { width: 100%; max-width: 6.5rem; height: 3px; border-radius: 2px; background: var(--panel-2); overflow: hidden; display: flex; justify-content: flex-end; }
+.bf-fg-bar > i { display: block; height: 100%; }
+.bf-fg-bar > i.up { background: var(--up, #f04452); margin-right: auto; }
+.bf-fg-bar > i.down { background: var(--blue); }
+
+/* 온도계 보조 표기 — 달러/원 등락률·VIX 방향 잔글씨, 약어 풀이 한 줄 */
+.bf-mini-sub { font-style: normal; font-size: 0.66rem; margin-left: 3px; opacity: 0.9; }
+.bf-thermo-note {
+  flex-basis: 100%;
+  font-size: 0.64rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* 그룹 뱃지 — 어느 관심 그룹의 종목인지. 슈퍼신호등은 별 하나로 */
+.bf-tile-g {
+  font-style: normal;
+  font-size: 0.58rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bf-tile-g.super { font-size: 0.66rem; }
 
 /* 테마 */
 .bf-themes { display: grid; gap: 2px; }

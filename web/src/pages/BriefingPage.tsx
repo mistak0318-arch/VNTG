@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import {
   api,
   fmtNum,
@@ -116,19 +116,29 @@ function Thermometer({
       )}
 
       {/* 위험 선호/회피 세 값 — 환율(외인 수급의 전제)·미 선물(다음 장의 예고)·VIX(공포) */}
+      {/* 달러/원은 값 자체가 판단 기준(1,400 같은)이라 가격+등락률을 같이 (2026-08-26) */}
+      {usdkrw?.price != null && (
+        <span className="bf-mini" title={usdkrw.label}>
+          <em>달러/원</em>
+          <b className={cls(usdkrw.changeRate)}>
+            {usdkrw.price.toFixed(1)}
+            <i className="bf-mini-sub">{pct(usdkrw.changeRate)}</i>
+          </b>
+        </span>
+      )}
       {[
-        { label: "달러/원", q: usdkrw, digits: 1 },
-        { label: "ES", q: es, digits: 2 },
-        { label: "NQ", q: nq, digits: 2 },
+        { label: "ES", q: es },
+        { label: "NQ", q: nq },
       ].map(
-        ({ label, q, digits }) =>
+        ({ label, q }) =>
           q?.price != null && (
             <span className="bf-mini" key={label} title={q.label}>
               <em>{label}</em>
-              <b className={cls(q.changeRate)}>{pct(q.changeRate, digits === 1 ? 2 : 2)}</b>
+              <b className={cls(q.changeRate)}>{pct(q.changeRate)}</b>
             </span>
           ),
       )}
+      {/* VIX 도 방향까지 — 오르는 중인지가 값만큼 중요하다 (2026-08-26) */}
       {vix?.price != null && (
         <span
           className="bf-mini"
@@ -137,25 +147,44 @@ function Thermometer({
           <em>VIX</em>
           <b className={vix.price >= 30 ? "negative" : vix.price >= 20 ? "bf-warn" : ""}>
             {vix.price.toFixed(1)}
+            {vix.changeRate !== null && (
+              <i className={`bf-mini-sub ${cls(vix.changeRate)}`}>
+                {vix.changeRate > 0 ? "▲" : vix.changeRate < 0 ? "▼" : ""}
+                {Math.abs(vix.changeRate).toFixed(1)}%
+              </i>
+            )}
           </b>
         </span>
       )}
+      {/* 약어 풀이 (2026-08-26 요청) — ES/NQ 가 뭔지 화면이 직접 말한다 */}
+      <span className="bf-thermo-note">
+        ES = S&amp;P500 선물 · NQ = 나스닥100 선물 (지금 도는 미국 지수선물 — 다음 미장의 예고편)
+        · VIX = 변동성(공포)지수
+      </span>
     </div>
   );
 }
 
 /* ── [3] 수급 미니 바 ───────────────────────────────────── */
 
-function FlowBars({ flow }: { flow: MarketFlow | null }) {
+/**
+ * 오늘 수급 — 격자판 (2026-08-26 개편).
+ * 예전엔 주체마다 화면 폭을 다 쓰는 긴 막대였는데, 태블릿에서 막대가 너무 길어
+ * 정작 값이 안 읽혔다. **숫자가 주인공, 막대는 밑줄**로 뒤집고 선물(계약)도 한 줄 넣는다.
+ */
+function FlowBars({
+  flow,
+  futures,
+}: {
+  flow: MarketFlow | null;
+  futures: { individual: number; foreign: number; institution: number } | null;
+}) {
   if (!flow) return <div className="empty">수급을 아직 못 받았습니다.</div>;
   const rows = [
-    { label: "코스피", f: flow.kospi },
-    { label: "코스닥", f: flow.kosdaq },
+    { label: "코스피", f: flow.kospi, unit: "억" },
+    { label: "코스닥", f: flow.kosdaq, unit: "억" },
+    ...(futures ? [{ label: "선물", f: futures, unit: "계약" }] : []),
   ];
-  const max = Math.max(
-    1,
-    ...rows.flatMap(({ f }) => [f.individual, f.foreign, f.institution].map(Math.abs)),
-  );
   /* 쌍끌이 한 줄 — 코스피 기준. 외인·기관이 같이 사는 날이 개인 매수보다 훨씬 드물고 세다 */
   const k = flow.kospi;
   const twin =
@@ -167,35 +196,39 @@ function FlowBars({ flow }: { flow: MarketFlow | null }) {
 
   return (
     <>
-      {rows.map(({ label, f }) => (
-        <div className="bf-flow-market" key={label}>
-          <em>{label}</em>
-          {[
-            { k: "개인", v: f.individual },
-            { k: "외국인", v: f.foreign },
-            { k: "기관", v: f.institution },
-          ].map(({ k: name, v }) => (
-            <div className="bf-flow" key={name}>
-              <span className="bf-flow-k">{name}</span>
-              {/* 가운데에서 좌우로 — 수급 요약 표(StockSummaryPanel)와 같은 문법 */}
-              <span className="bf-flow-bar">
-                <i
-                  className={v >= 0 ? "up" : "down"}
-                  style={{
-                    width: `${(Math.abs(v) / max) * 50}%`,
-                    [v >= 0 ? "left" : "right"]: "50%",
-                  }}
-                />
-              </span>
-              <b className={`num ${cls(v)}`}>
-                {v > 0 ? "+" : ""}
-                {fmtNum(Math.round(v))}억
-              </b>
-            </div>
-          ))}
-        </div>
-      ))}
-      <div className="bf-note">{twin} · 기관 세부는 종목 화면에서 봅니다</div>
+      <div className="bf-fg">
+        <span className="bf-fg-corner" />
+        {["개인", "외국인", "기관"].map((h) => (
+          <span className="bf-fg-h" key={h}>{h}</span>
+        ))}
+        {rows.map(({ label, f, unit }) => {
+          /* 행별 최대로 잰다 — 억(현물)과 계약(선물)은 단위가 달라 같이 재면 안 된다 */
+          const max = Math.max(1, ...[f.individual, f.foreign, f.institution].map(Math.abs));
+          return (
+            <Fragment key={label}>
+              <em className="bf-fg-m">{label}</em>
+              {[f.individual, f.foreign, f.institution].map((v, i) => (
+                <span className="bf-fg-cell" key={i}>
+                  <b className={`num ${cls(v)}`}>
+                    {v > 0 ? "+" : ""}
+                    {fmtNum(Math.round(v))}
+                    <i>{unit}</i>
+                  </b>
+                  <span className="bf-fg-bar">
+                    <i
+                      className={v >= 0 ? "up" : "down"}
+                      style={{ width: `${(Math.abs(v) / max) * 100}%` }}
+                    />
+                  </span>
+                </span>
+              ))}
+            </Fragment>
+          );
+        })}
+      </div>
+      <div className="bf-note">
+        {twin} · 선물은 K200 지수선물(계약) · 기관 세부는 종목 화면에서 봅니다
+      </div>
     </>
   );
 }
@@ -219,6 +252,8 @@ export function BriefingPage({
 
   const [events, setEvents] = useState<BriefingEvent[] | null>(null);
   const [heat, setHeat] = useState<{ traded: boolean; tiles: BriefingTile[] } | null>(null);
+  /* K200 선물 오늘 수급(계약) — 현물 수급 카드에 한 줄 같이 (2026-08-26) */
+  const [futFlow, setFutFlow] = useState<{ individual: number; foreign: number; institution: number } | null>(null);
   const [brief, setBrief] = useState<{ date: string; label: string; text: string } | null>(null);
   /* 테마를 누르면 구성종목 시트 — 보기만 하는 숫자는 죽은 숫자다 */
   const [constituent, setConstituent] = useState<ConstituentTarget | null>(null);
@@ -226,6 +261,10 @@ export function BriefingPage({
   const loadOwn = useCallback(() => {
     void api.briefingTimeline().then((r) => setEvents(r.items)).catch(() => undefined);
     void api.briefingHeat().then(setHeat).catch(() => undefined);
+    void api
+      .futuresFlow(1)
+      .then((r) => setFutFlow(r.days[r.days.length - 1] ?? null))
+      .catch(() => undefined);
     /* AI 한 줄은 실패하면 그냥 안 보인다 — 에러를 화면에 내지 않는다(지시서 요건) */
     void api.briefingBrief().then((r) => setBrief(r.brief)).catch(() => undefined);
   }, []);
@@ -248,8 +287,7 @@ export function BriefingPage({
     loadOwn();
   };
 
-  /* 히트맵 타일 크기 — 시총의 제곱근 비례. 그대로 비례하면 삼성전자가 화면을 다 먹는다 */
-  const maxCap = Math.max(1, ...(heat?.tiles ?? []).map((t) => t.cap ?? 0));
+  /* (타일 크기는 균등 격자로 바뀌어 시총 비례 계산이 필요 없어졌다 — 2026-08-26) */
 
   /*
    * VI 는 하루 수백 건이라 타임라인을 도배한다 — 공시·시그널·손절이 밀려나
@@ -285,7 +323,7 @@ export function BriefingPage({
         {/* 좌: [3] 수급 + [5] 테마 */}
         <section className="bf-col bf-left">
           <h3 className="section-heading">오늘 수급</h3>
-          <FlowBars flow={flow.data} />
+          <FlowBars flow={flow.data} futures={futFlow} />
 
           <h3 className="section-heading">테마</h3>
           {themes.data ? (
@@ -337,18 +375,22 @@ export function BriefingPage({
             <div className="empty">관심종목이 비어 있습니다.</div>
           ) : (
             <>
+              {/*
+                균등 격자 (2026-08-26 — 「오와 열이 안 맞는다」). 시총 비례 flexGrow 는
+                줄마다 폭이 달라 들쭉날쭉했다 — 칸을 똑같이 맞추고 시총은 툴팁으로만.
+                순서는 서버가 정렬해 준다: 슈퍼신호등 그룹 먼저 → 그룹 정렬순,
+                같은 그룹 안은 등락률 내림차순. 그룹 이름은 뱃지로 칸 안에.
+              */}
               <div className="bf-heat">
                 {heat.tiles.map((t) => {
                   const r = t.rate ?? 0;
                   /* 진하기 = 등락 크기. ±3% 를 최대로 — 그 위는 색으로 더 말할 게 없다 */
                   const alpha = Math.min(1, Math.abs(r) / 3) * 0.55 + 0.1;
-                  const grow = t.cap ? Math.sqrt(t.cap / maxCap) : 0.4;
                   return (
                     <button
                       key={t.code}
                       className="bf-tile"
                       style={{
-                        flexGrow: Math.max(0.4, grow),
                         background:
                           r > 0
                             ? `rgba(255,92,92,${alpha})`
@@ -357,8 +399,13 @@ export function BriefingPage({
                               : undefined,
                       }}
                       onClick={() => onSelectStock(t.code, t.name)}
-                      title={`${t.name} ${pct(t.rate)}${t.cap ? ` · 시총 ${fmtNum(t.cap)}억` : ""}`}
+                      title={`${t.name} ${pct(t.rate)}${t.group ? ` · ${t.group}` : ""}${t.cap ? ` · 시총 ${fmtNum(t.cap)}억` : ""}`}
                     >
+                      {t.group && (
+                        <em className={`bf-tile-g${t.group === "슈퍼신호등" ? " super" : ""}`}>
+                          {t.group === "슈퍼신호등" ? "🌟" : t.group}
+                        </em>
+                      )}
                       <b>{t.name}</b>
                       <i className="num">{pct(t.rate)}</i>
                     </button>

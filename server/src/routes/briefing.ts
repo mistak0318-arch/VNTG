@@ -5,7 +5,7 @@ import type { KiwoomClient } from "../kiwoomClient.js";
 import { getMarketSnapshot } from "../marketSnapshot.js";
 import { peekRealtime } from "../realtimeHub.js";
 import { latestEdition, loadReport } from "../reportStore.js";
-import { listWatchlist } from "../watchlist.js";
+import { listGroups, listWatchlist, SUPER_GROUP } from "../watchlist.js";
 
 /**
  * 마켓 브리핑 — **열자마자 3초 안에 「오늘 시장이 어떤가」.**
@@ -162,10 +162,29 @@ export function createBriefingRouter(client: KiwoomClient): Router {
    */
   router.get("/heat", async (_req, res, next) => {
     try {
-      const [items, snap] = await Promise.all([
+      const [items, groups, snap] = await Promise.all([
         listWatchlist(),
+        listGroups().catch(() => [] as string[]),
         getMarketSnapshot(client).catch(() => null),
       ]);
+      /*
+       * 정렬 (2026-08-26 사용자 지정) — 슈퍼신호등 그룹이 맨 앞, 그 뒤는 그룹
+       * 정렬순. 같은 그룹 안에서는 등락률 내림차순. 여러 그룹에 든 종목은
+       * 슈퍼신호등이 있으면 그걸, 아니면 그룹 순서가 앞선 것을 대표로 삼는다.
+       */
+      const groupRank = new Map<string, number>();
+      groupRank.set(SUPER_GROUP, -1); // 슈퍼신호등이 늘 맨 앞
+      groups.forEach((g, i) => {
+        if (!groupRank.has(g)) groupRank.set(g, i);
+      });
+      const primaryGroup = (gs: string[]): string => {
+        if (gs.includes(SUPER_GROUP)) return SUPER_GROUP;
+        let best = gs[0] ?? "";
+        for (const g of gs) {
+          if ((groupRank.get(g) ?? 999) < (groupRank.get(best) ?? 999)) best = g;
+        }
+        return best;
+      };
       /*
        * ⚠️ 등락률은 **실시간이 우선**이다 (2026-08-25).
        *
@@ -181,21 +200,26 @@ export function createBriefingRouter(client: KiwoomClient): Router {
         const n = Number(String(l.values["12"] ?? "").replace(/,/g, ""));
         return Number.isFinite(n) ? n : null;
       };
-      res.json({
-        traded: snap?.traded ?? false,
-        tiles: items
-          .filter((w) => !w.divider)
-          .map((w) => {
-            const s = snap?.byCode.get(w.code);
-            return {
-              code: w.code,
-              name: w.name,
-              rate: liveRate(w.code) ?? s?.changeRate ?? null,
-              cap: s?.marketCap ?? null,
-              status: w.status ?? "watching",
-            };
-          }),
-      });
+      const tiles = items
+        .filter((w) => !w.divider)
+        .map((w) => {
+          const s = snap?.byCode.get(w.code);
+          return {
+            code: w.code,
+            name: w.name,
+            rate: liveRate(w.code) ?? s?.changeRate ?? null,
+            cap: s?.marketCap ?? null,
+            status: w.status ?? "watching",
+            group: primaryGroup(w.groups),
+          };
+        })
+        .sort((a, b) => {
+          const ga = groupRank.get(a.group) ?? 999;
+          const gb = groupRank.get(b.group) ?? 999;
+          if (ga !== gb) return ga - gb;
+          return (b.rate ?? -999) - (a.rate ?? -999);
+        });
+      res.json({ traded: snap?.traded ?? false, tiles });
     } catch (err) {
       next(err);
     }
