@@ -38,15 +38,38 @@ function pct(n: number | null | undefined): string {
 export function FlowBars({
   flow,
   futures,
+  futPrice,
 }: {
   flow: MarketFlow | null;
   futures: { individual: number; foreign: number; institution: number } | null;
+  /** K200 선물 지수 — 있으면 계약을 **억원으로 환산**해 코스피·코스닥과 결을 맞춘다 (2026-08-27) */
+  futPrice?: number | null;
 }) {
   if (!flow) return <div className="empty">수급을 아직 못 받았습니다.</div>;
+  /*
+   * 선물 환산: 억원 ≈ 계약 × 지수 × 25만원 ÷ 1억 = 계약 × 지수 ÷ 400.
+   * 지수 카드 선물 타일과 같은 식이다. 원본 계약 수는 툴팁으로 남긴다 —
+   * 평균 체결가가 아니라 현재가 기준이라 추정치다.
+   */
+  const conv =
+    futures && futPrice && futPrice > 0
+      ? {
+          individual: Math.round((futures.individual * futPrice) / 400),
+          foreign: Math.round((futures.foreign * futPrice) / 400),
+          institution: Math.round((futures.institution * futPrice) / 400),
+        }
+      : null;
+  type FutRaw = { individual: number; foreign: number; institution: number } | null;
   const rows = [
-    { label: "코스피", f: flow.kospi, unit: "억" },
-    { label: "코스닥", f: flow.kosdaq, unit: "억" },
-    ...(futures ? [{ label: "선물", f: futures, unit: "계약" }] : []),
+    { label: "코스피", f: flow.kospi, unit: "억", raw: null as FutRaw },
+    { label: "코스닥", f: flow.kosdaq, unit: "억", raw: null as FutRaw },
+    ...(futures
+      ? [
+          conv
+            ? { label: "선물", f: conv, unit: "억", raw: futures as FutRaw }
+            : { label: "선물", f: futures, unit: "계약", raw: null as FutRaw },
+        ]
+      : []),
   ];
   /* 쌍끌이 한 줄 — 코스피 기준. 외인·기관이 같이 사는 날이 개인 매수보다 훨씬 드물고 세다 */
   const k = flow.kospi;
@@ -65,14 +88,23 @@ export function FlowBars({
         {["개인", "외국인", "기관"].map((h) => (
           <span className="bf-supply-h" key={h}>{h}</span>
         ))}
-        {rows.map(({ label, f, unit }) => {
-          /* 행별 최대로 잰다 — 억(현물)과 계약(선물)은 단위가 달라 같이 재면 안 된다 */
+        {rows.map(({ label, f, unit, raw }) => {
+          /* 행별 최대로 잰다 — 행마다 판(코스피/코스닥/선물)이 달라 같이 재면 안 된다 */
           const max = Math.max(1, ...[f.individual, f.foreign, f.institution].map(Math.abs));
+          const rawVals = raw ? [raw.individual, raw.foreign, raw.institution] : null;
           return (
             <Fragment key={label}>
               <em className="bf-supply-m">{label}</em>
               {[f.individual, f.foreign, f.institution].map((v, i) => (
-                <span className="bf-supply-cell" key={i}>
+                <span
+                  className="bf-supply-cell"
+                  key={i}
+                  title={
+                    rawVals
+                      ? `원본 ${rawVals[i] > 0 ? "+" : ""}${fmtNum(rawVals[i])}계약 · 억원 환산은 계약 × 지수 × 25만원 (추정)`
+                      : undefined
+                  }
+                >
                   <b className={`num ${cls(v)}`}>
                     {v > 0 ? "+" : ""}
                     {fmtNum(Math.round(v))}
@@ -91,7 +123,8 @@ export function FlowBars({
         })}
       </div>
       <div className="bf-note">
-        {twin} · 선물은 K200 지수선물(계약) · 기관 세부는 종목 화면에서 봅니다
+        {twin} · 선물은 K200 지수선물{conv ? " — 계약을 억원으로 환산(≈, 원본은 툴팁)" : "(계약)"} · 기관
+        세부는 종목 화면에서 봅니다
       </div>
     </>
   );
@@ -325,6 +358,9 @@ export function BriefingTrioCell({
   onSelectStock: (code: string, name: string) => void;
 }) {
   const flow = useSection<MarketFlow>("flow", 30_000);
+  /* 선물 계약→억원 환산에 지수값이 필요하다 — 브리핑과 같은 섹션 캐시라 공짜 */
+  const indices = useSection<IndexCard[]>("indices", 30_000);
+  const futPrice = indices.data?.find((i) => i.code === "F")?.price ?? null;
   const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 60_000);
   const [heat, setHeat] = useState<{ traded: boolean; tiles: BriefingTile[] } | null>(null);
   const [futFlow, setFutFlow] = useState<{
@@ -354,7 +390,7 @@ export function BriefingTrioCell({
       <div className="ib-row3">
         <div className="ib-sec">
           <div className="ib-sec-t">오늘 수급</div>
-          <FlowBars flow={flow.data ?? null} futures={futFlow} />
+          <FlowBars flow={flow.data ?? null} futures={futFlow} futPrice={futPrice} />
         </div>
         <div className="ib-sec">
           <div className="ib-sec-t">테마</div>

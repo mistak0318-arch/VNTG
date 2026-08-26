@@ -312,7 +312,12 @@ export function BriefingPage({
         {/* 좌: [3] 수급 + [5] 테마 */}
         <section className="bf-col bf-left">
           <h3 className="section-heading">오늘 수급</h3>
-          <FlowBars flow={flow.data} futures={futFlow} />
+          {/* 선물은 계약을 억원으로 환산 — 위 코스피·코스닥과 같은 결 (지수값은 지수 카드에서) */}
+          <FlowBars
+            flow={flow.data}
+            futures={futFlow}
+            futPrice={indices.data?.find((i) => i.code === "F")?.price ?? null}
+          />
 
           {/*
             폭과 유동성 (2026-08-27 — "그래야 시장을 읽지").
