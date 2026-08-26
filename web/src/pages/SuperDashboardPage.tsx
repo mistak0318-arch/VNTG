@@ -9,6 +9,7 @@ import { Spark } from "../components/MiniLine";
 import { SuperDetailSheet } from "../components/SuperDetailSheet";
 import { RefreshBar } from "../components/RefreshBar";
 import { SortableTh, useSortableTable } from "../useSortableTable";
+import { useStockFocus } from "../useStockFocus";
 
 /**
  * 슈퍼신호등 대시보드 (2026-08-26) — **이 체계가 정말 돈이 되는지 검증하는 자리.**
@@ -50,6 +51,14 @@ export function SuperDashboardPage({
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<{ code: string; name: string } | null>(null);
   const [showExited, setShowExited] = useState(true);
+  /*
+   * 창 연동 (2026-08-27 — 「슈퍼신호등에서 종목 클릭하면 보드판에 반영이 안 되네」).
+   * 종목 고르는 길은 원래 App.onSelectStock 하나로 모이는데, 이 표의 행 클릭은
+   * 슈퍼 전용 시트를 열려고 그 길을 안 지난다 — 그래서 연동 전파만 따로 얹는다.
+   * StockDetail 모달은 안 띄운다(이 화면의 본체는 슈퍼 상세 시트다). 연동이
+   * 꺼져 있으면 publish 가 스스로 아무 일도 하지 않는다.
+   */
+  const { publish } = useStockFocus();
 
   async function load() {
     setLoading(true);
@@ -72,7 +81,22 @@ export function SuperDashboardPage({
   }, []);
 
   const visible = showExited ? entries : entries.filter((e) => e.active !== false);
-  const sort = useSortableTable(visible);
+  /*
+   * 기본 정렬 = **지금 점수 높은 순** (2026-08-27 사용자 지정 "점수높은순으로").
+   * 점수는 일별 기록의 마지막(오늘 자)이 있으면 그걸, 없으면 편입 점수를 쓴다 —
+   * 지금 센 놈이 위로 오는 게 보는 목적에 맞다. 추적 중이 이탈보다 먼저다.
+   * 머리 클릭 정렬은 이 위에 얹힌다(3번째 클릭 「원래 순서」= 이 순서).
+   */
+  const nowScoreOf = (e: SuperEntry): number => {
+    const daily = e.daily ?? [];
+    return daily.length > 0 ? daily[daily.length - 1].score : e.score;
+  };
+  const ranked = [...visible].sort((a, b) => {
+    const act = Number(b.active !== false) - Number(a.active !== false);
+    if (act !== 0) return act;
+    return nowScoreOf(b) - nowScoreOf(a);
+  });
+  const sort = useSortableTable(ranked);
 
   /* 승률 카드의 게이지 — 50% 가 동전 던지기 선이다 */
   const winBar = (w: { rate: number | null; n: number }) => (
@@ -268,7 +292,10 @@ export function SuperDashboardPage({
                   <tr
                     key={e.code}
                     className={`sd-row${e.active === false ? " exited" : ""}`}
-                    onClick={() => setDetail({ code: e.code, name: e.name })}
+                    onClick={() => {
+                      setDetail({ code: e.code, name: e.name });
+                      publish(e.code, e.name);
+                    }}
                   >
                     <td>{e.active !== false ? "🟢" : "⛔"}</td>
                     <td className="sticky-col">

@@ -24,6 +24,7 @@ import { SectorFlowPanel } from "../components/SectorFlowPanel";
 import { ViPanel } from "../components/ViPanel";
 import { WatchTicker } from "../components/WatchTicker";
 import { IndexBoard } from "../components/IndexBoard";
+import { BriefingTrioCell } from "../components/BriefingBlocks";
 import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
 import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
 import { SupplyMini } from "../components/SupplyMini";
@@ -146,6 +147,8 @@ const BLOCKS = [
   { key: "mktSector", label: "업종 수급", wide: true },
   { key: "mktVi", label: "VI 발동", wide: false },
   { key: "mktWatch", label: "관심종목 시세판", wide: false },
+  /* 마켓 브리핑의 세 조각(오늘 수급·테마·관심종목 히트맵)을 한 줄로 (2026-08-27) */
+  { key: "mktBrief", label: "수급·테마·관심종목", wide: true },
   /*
    * 텔레그램 **동향** — 채널 전체가 무슨 말을 하나. 종목과 무관하다.
    * 수집 구간과 선별·AI 정리는 패널이 이미 갖고 있다.
@@ -220,7 +223,7 @@ function nextInstance(pick: string[], key: string): string {
   return `${key}#${Date.now()}`;
 }
 
-const MARKET_KEYS = new Set<string>(["mktIndex", "mktIndexChart", "mktSignal", "mktPulse", "mktBreadth", "mktSector", "mktVi", "mktWatch", "mktTelegram"]);
+const MARKET_KEYS = new Set<string>(["mktIndex", "mktIndexChart", "mktSignal", "mktPulse", "mktBreadth", "mktSector", "mktVi", "mktWatch", "mktBrief", "mktTelegram"]);
 const isMarket = (id: string) => MARKET_KEYS.has(blockOf(id));
 
 /*
@@ -1218,6 +1221,15 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                 return (
                 <>
                   {b.key === "mktIndex" && <IndexBoard />}
+                  {/* 히트맵·테마 클릭 = 종목 찾기와 같은 길: 이 창 종목 + 연동 전파 */}
+                  {b.key === "mktBrief" && (
+                    <BriefingTrioCell
+                      onSelectStock={(c, n) => {
+                        setOwnStock({ code: c, name: n });
+                        publish(c, n);
+                      }}
+                    />
+                  )}
                   {/* 지수 차트 — 칸 이름을 주면 어느 지수를 보던 중이었는지 기억한다 */}
                   {b.key === "mktIndexChart" && (
                     <IndexChartCell viewId={id} height={Math.max(140, height - 110)} />

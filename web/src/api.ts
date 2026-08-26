@@ -1353,6 +1353,8 @@ export interface SuperDaily {
   close: number;
   score: number;
   level: string;
+  /** 그날 체크별 판정 (라벨·grade 0/50/100/null) — 점수 변동 사유의 재료 (2026-08-27) */
+  checks?: { l: string; g: number | null }[];
 }
 
 export interface SuperExit {
@@ -1379,6 +1381,8 @@ export interface SuperEntry {
   daily?: SuperDaily[];
   exits?: SuperExit[];
   note?: string;
+  /** 메모 이력 (2026-08-27) — 날짜와 함께 쌓인다. note 는 마지막 것의 사본 */
+  notes?: { date: string; text: string }[];
   /* 서버가 스냅샷에서 붙여 주는 현재 값 */
   price: number | null;
   changeRate: number | null;

@@ -66,6 +66,20 @@ export interface SuperDaily {
   close: number;
   score: number;
   level: string;
+  /**
+   * 그날 체크별 판정 (라벨·grade 0/50/100/null) — **점수 변동 사유의 재료** (2026-08-27).
+   * 점수만 적어 두면 「왜 빠졌나」를 되짚을 길이 없다 — 신호등은 그날 데이터로만
+   * 평가되므로, 체크 내역도 그날 적어 두는 이 기록이 유일한 소스다.
+   * 화면이 전날과 견줘 「정배열 100→50」 같은 사유를 만든다. 키를 l·g 로 줄여
+   * 적는다 — 120일 × 체크 열두어 개가 종목마다 쌓이는 파일이다.
+   */
+  checks?: { l: string; g: number | null }[];
+}
+
+/** 메모 한 줄 — 그날 무엇을 보고 무엇을 추적하려 했는지의 흔적 */
+export interface SuperNote {
+  date: string;
+  text: string;
 }
 
 /** 이탈 기록 — 언제·얼마에·몇 점으로 떨어졌고, 그날 시장은 어땠나 */
@@ -106,8 +120,13 @@ export interface SuperEntry {
   daily?: SuperDaily[];
   /** 이탈 이력 — 재편입돼도 지우지 않는다. 이탈→복귀 자체가 정보다 */
   exits?: SuperExit[];
-  /** 자유 메모 — 복기용 */
+  /** 자유 메모 — 마지막 것. 표의 📝 표시가 이걸 본다 (이력은 notes) */
   note?: string;
+  /**
+   * 메모 이력 (2026-08-27) — 덮어쓰지 않고 날짜와 함께 쌓는다.
+   * "그날 무엇을 메모했고 추적하려 했는지 알아야지" — 복기는 이력이 전부다.
+   */
+  notes?: SuperNote[];
 }
 
 interface Store {
@@ -126,6 +145,12 @@ async function load(): Promise<Store> {
       active: e.active !== false,
       daily: Array.isArray(e.daily) ? e.daily : [],
       exits: Array.isArray(e.exits) ? e.exits : [],
+      // 메모 이력이 생기기 전 저장분 — 홑 메모를 편입일 이력 한 줄로 옮긴다
+      notes: Array.isArray(e.notes)
+        ? e.notes
+        : e.note
+          ? [{ date: e.addedDate, text: e.note }]
+          : [],
     }));
     return {
       entries,
@@ -220,7 +245,14 @@ async function recordSuperDaily(client: KiwoomClient, store: Store): Promise<Sup
       const sig = await evaluateSignal(client, e.code);
       const close = snap?.byCode.get(e.code)?.price ?? 0;
       const daily = (e.daily ??= []);
-      const row: SuperDaily = { date: today, close, score: sig.score, level: sig.level };
+      const row: SuperDaily = {
+        date: today,
+        close,
+        score: sig.score,
+        level: sig.level,
+        // 체크 내역 — 내일 이후 「무엇 때문에 점수가 움직였나」를 이걸로 되짚는다
+        checks: sig.checks.map((c) => ({ l: c.label, g: c.grade })),
+      };
       const last = daily[daily.length - 1];
       if (last?.date === today) daily[daily.length - 1] = row;
       else daily.push(row);
@@ -634,12 +666,24 @@ export async function exitSuperEntry(
   return e;
 }
 
-/** 자유 메모 수정 */
+/**
+ * 메모 추가 — **덮어쓰지 않고 쌓는다** (2026-08-27).
+ * 같은 날 다시 적으면 그날 것을 고친 것으로 보고 마지막 줄만 바꾼다.
+ * `note` 필드는 마지막 메모의 사본 — 표의 📝 표시가 본다.
+ */
 export async function updateSuperNote(code: string, note: string): Promise<boolean> {
   const store = await load();
   const e = store.entries.find((x) => x.code === code);
   if (!e) return false;
-  e.note = note.trim();
+  const text = note.trim();
+  if (text) {
+    const notes = (e.notes ??= []);
+    const last = notes[notes.length - 1];
+    const today = todayStr();
+    if (last?.date === today) last.text = text;
+    else notes.push({ date: today, text });
+  }
+  e.note = text;
   await save(store);
   return true;
 }

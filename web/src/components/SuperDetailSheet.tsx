@@ -50,7 +50,15 @@ export function SuperDetailSheet({
       .then((d) => {
         if (!alive) return;
         setData(d);
-        setNote(d.entry.note ?? "");
+        /*
+         * 메모 칸은 **오늘 것만** 채운다 (2026-08-27 이력화) — 어제 메모를 칸에
+         * 미리 넣어 두면 오늘 저장할 때 어제 글이 오늘 날짜로 복제된다.
+         * 지난 메모는 아래 이력에서 읽는다.
+         */
+        const notes = d.entry.notes ?? [];
+        const last = notes[notes.length - 1];
+        const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+        setNote(last && last.date === today ? last.text : "");
       })
       .catch((e) => alive && setError(e instanceof Error ? e.message : "불러오기 실패"));
     return () => {
@@ -123,6 +131,36 @@ export function SuperDetailSheet({
   const flows = flowSeries();
   const daily = entry?.daily ?? [];
 
+  /*
+   * ── 점수 변동 사유 (2026-08-27) ──
+   * 매일 기록에 실린 체크별 grade 를 전날과 견줘 「무엇 때문에 올랐고 무엇 때문에
+   * 빠졌나」를 만든다. 체크 내역은 이 기능이 생긴 날부터 쌓이므로, 그 전 날짜는
+   * 사유 없이 점수만 남는다 — 과거로는 못 되짚는 값이다(신호등은 그날 데이터로만).
+   */
+  const reasons = (() => {
+    const rows: { date: string; from: number; to: number; up: string[]; down: string[] }[] = [];
+    for (let i = 1; i < daily.length; i += 1) {
+      const a = daily[i - 1];
+      const b = daily[i];
+      if (!a.checks || !b.checks) continue;
+      const prev = new Map(a.checks.map((c) => [c.l, c.g]));
+      const up: string[] = [];
+      const down: string[] = [];
+      for (const c of b.checks) {
+        if (!prev.has(c.l)) continue; // 기준이 바뀌어 새로 생긴 체크 — 변동으로 안 센다
+        const pg = prev.get(c.l) ?? null;
+        if (pg === c.g) continue;
+        const s = (g: number | null) => (g === null ? "판단불가" : String(g));
+        const line = `${c.l} ${s(pg)}→${s(c.g)}`;
+        if ((c.g ?? 0) > (pg ?? 0)) up.push(line);
+        else down.push(line);
+      }
+      if (up.length === 0 && down.length === 0) continue;
+      rows.push({ date: b.date, from: a.score, to: b.score, up, down });
+    }
+    return rows.reverse(); // 최신이 위 — 이력은 어제부터 읽는다
+  })();
+
   async function doExit() {
     if (!confirm(`${name} 을(를) 이탈 처리할까요? 기록은 남고 추적만 멈춥니다.`)) return;
     setBusy(true);
@@ -143,8 +181,11 @@ export function SuperDetailSheet({
     setBusy(true);
     try {
       await api.signalSuperNote(code, note);
-      setMsg("메모를 저장했습니다.");
+      setMsg("메모를 저장했습니다 — 이력에 쌓였습니다.");
       onChanged?.();
+      // 이력이 바로 보여야 저장됐다는 걸 안다
+      const d = await api.signalSuperDetail(code);
+      setData(d);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "실패");
     } finally {
@@ -257,6 +298,40 @@ export function SuperDetailSheet({
                   ))}
                 </div>
               )}
+              {/* 왜 움직였나 — 체크별 판정을 전날과 견준 이력. 트래킹의 핵심이다 */}
+              {reasons.length > 0 && (
+                <div className="sd-why">
+                  <h4>점수 변동 사유</h4>
+                  {reasons.map((r) => (
+                    <div className="sd-why-row" key={r.date}>
+                      <b>{r.date.slice(5)}</b>
+                      <span
+                        className={`num ${r.to > r.from ? "positive" : r.to < r.from ? "negative" : ""}`}
+                      >
+                        {r.from}→{r.to}점
+                      </span>
+                      <span className="sd-why-items">
+                        {r.up.map((t) => (
+                          <i className="sd-why-up" key={t}>
+                            ▲ {t}
+                          </i>
+                        ))}
+                        {r.down.map((t) => (
+                          <i className="sd-why-down" key={t}>
+                            ▼ {t}
+                          </i>
+                        ))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {reasons.length === 0 && daily.length >= 2 && (
+                <p className="pt-n sd-hint">
+                  점수 변동 사유는 2026-08-27 부터 체크 내역을 함께 적어 만들어집니다 —
+                  내일 기록부터 「무엇 때문에 올랐고 빠졌는지」가 여기 쌓입니다.
+                </p>
+              )}
             </section>
 
             {flows && (
@@ -339,10 +414,20 @@ export function SuperDetailSheet({
 
             <section className="sd-block">
               <h3>메모</h3>
+              {/* 이력 — 덮어쓰지 않는다. 그날 무엇을 보고 추적하려 했는지가 복기의 전부다 */}
+              {(entry.notes ?? []).length > 0 && (
+                <div className="sd-note-hist">
+                  {[...(entry.notes ?? [])].reverse().map((n, i) => (
+                    <div className="sd-note-row" key={`${n.date}-${i}`}>
+                      <b>{n.date.slice(5)}</b> {n.text}
+                    </div>
+                  ))}
+                </div>
+              )}
               <textarea
                 className="sd-note"
                 rows={3}
-                placeholder="복기 메모 — 왜 걸렸고, 어떻게 흘러갔고, 배운 것"
+                placeholder="오늘 메모 — 왜 걸렸고, 무엇을 추적하려는지. 날짜와 함께 이력으로 쌓입니다"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />

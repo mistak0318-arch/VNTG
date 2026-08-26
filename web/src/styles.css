@@ -3751,6 +3751,37 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .sd-dot.green { background: var(--green); }
 .sd-dot.yellow { background: #f5c542; }
 .sd-dot.red { background: var(--red); }
+/* 점수 변동 사유 — 「무엇 때문에 올랐고 빠졌나」 이력 (2026-08-27) */
+.sd-why { margin-top: 8px; }
+.sd-why h4 { margin: 0 0 4px; font-size: 0.78rem; color: var(--muted); }
+.sd-why-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+.sd-why-row > b { flex: none; }
+.sd-why-items { display: flex; gap: 4px 10px; flex-wrap: wrap; }
+.sd-why-items i { font-style: normal; font-size: 0.76rem; }
+.sd-why-up { color: var(--red); }
+.sd-why-down { color: var(--blue); }
+
+/* 메모 이력 — 그날 무엇을 보고 추적하려 했는지의 흔적 */
+.sd-note-hist { margin-bottom: 6px; }
+.sd-note-row {
+  font-size: 0.82rem;
+  padding: 4px 8px;
+  border-left: 3px solid var(--border);
+  background: var(--panel-2);
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 4px;
+  white-space: pre-wrap;
+}
+.sd-note-row > b { color: var(--muted); margin-right: 4px; }
+
 .sd-exit {
   font-size: 0.82rem;
   padding: 6px 8px;
@@ -6426,28 +6457,9 @@ th.est-col { color: var(--blue); }
 .gt-move:disabled { opacity: .25; }
 .gt-pen { font-size: 0.6667rem; opacity: .7; }
 
-/*
- * 크게 보기 버튼.
- * 도구줄에 두면 안 된다 — 그 줄은 가로로 굴러가서 맨 끝 버튼이 화면 밖으로 나간다.
- * 차트 모서리에 붙박아 늘 같은 자리에 두고, 차트를 가리지 않게 반투명으로 둔다.
- */
+/* 「크게」 버튼은 도구줄(전체 옆, period-btn)로 이사했다 (2026-08-27) —
+   모서리 붙박이(chart-expand)가 보드 칸의 자물쇠·핀을 가렸다. */
 .chart-wrap { position: relative; }
-
-.chart-expand {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  z-index: 5;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text-dim);
-  font-size: 0.7333rem;
-  font-weight: 600;
-  padding: 5px 10px;
-  opacity: .82;
-}
-.chart-expand:hover { opacity: 1; color: var(--text); }
 
 /* ==================================================================
    글로벌 — 묶음 색과 줄 신호등

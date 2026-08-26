@@ -11,6 +11,7 @@ import {
   type UsMajorResult,
 } from "../api";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
+import { FlowBars, ThemeStrip, WatchHeatGrid } from "../components/BriefingBlocks";
 import { RefreshBar } from "../components/RefreshBar";
 import { useSection } from "../useSection";
 
@@ -202,74 +203,7 @@ function Thermometer({
   );
 }
 
-/* ── [3] 수급 미니 바 ───────────────────────────────────── */
-
-/**
- * 오늘 수급 — 격자판 (2026-08-26 개편).
- * 예전엔 주체마다 화면 폭을 다 쓰는 긴 막대였는데, 태블릿에서 막대가 너무 길어
- * 정작 값이 안 읽혔다. **숫자가 주인공, 막대는 밑줄**로 뒤집고 선물(계약)도 한 줄 넣는다.
- */
-function FlowBars({
-  flow,
-  futures,
-}: {
-  flow: MarketFlow | null;
-  futures: { individual: number; foreign: number; institution: number } | null;
-}) {
-  if (!flow) return <div className="empty">수급을 아직 못 받았습니다.</div>;
-  const rows = [
-    { label: "코스피", f: flow.kospi, unit: "억" },
-    { label: "코스닥", f: flow.kosdaq, unit: "억" },
-    ...(futures ? [{ label: "선물", f: futures, unit: "계약" }] : []),
-  ];
-  /* 쌍끌이 한 줄 — 코스피 기준. 외인·기관이 같이 사는 날이 개인 매수보다 훨씬 드물고 세다 */
-  const k = flow.kospi;
-  const twin =
-    k.foreign > 0 && k.institution > 0
-      ? "외국인·기관 쌍끌이 매수"
-      : k.foreign < 0 && k.institution < 0
-        ? "외국인·기관 동반 매도"
-        : "외국인·기관 엇갈림";
-
-  return (
-    <>
-      {/* ⚠️ 클래스명 bf-supply — bf-fg 는 거래원 「외국계」 뱃지가 선점(파란 배경 사고, 2026-08-26) */}
-      <div className="bf-supply">
-        <span className="bf-supply-corner" />
-        {["개인", "외국인", "기관"].map((h) => (
-          <span className="bf-supply-h" key={h}>{h}</span>
-        ))}
-        {rows.map(({ label, f, unit }) => {
-          /* 행별 최대로 잰다 — 억(현물)과 계약(선물)은 단위가 달라 같이 재면 안 된다 */
-          const max = Math.max(1, ...[f.individual, f.foreign, f.institution].map(Math.abs));
-          return (
-            <Fragment key={label}>
-              <em className="bf-supply-m">{label}</em>
-              {[f.individual, f.foreign, f.institution].map((v, i) => (
-                <span className="bf-supply-cell" key={i}>
-                  <b className={`num ${cls(v)}`}>
-                    {v > 0 ? "+" : ""}
-                    {fmtNum(Math.round(v))}
-                    <i>{unit}</i>
-                  </b>
-                  <span className="bf-supply-bar">
-                    <i
-                      className={v >= 0 ? "up" : "down"}
-                      style={{ width: `${(Math.abs(v) / max) * 100}%` }}
-                    />
-                  </span>
-                </span>
-              ))}
-            </Fragment>
-          );
-        })}
-      </div>
-      <div className="bf-note">
-        {twin} · 선물은 K200 지수선물(계약) · 기관 세부는 종목 화면에서 봅니다
-      </div>
-    </>
-  );
-}
+/* ── [3] 수급 미니 바 — BriefingBlocks 로 이사 (보드 블록과 공용, 2026-08-27) ── */
 
 /* ── 본체 ───────────────────────────────────────────────── */
 
@@ -367,97 +301,18 @@ export function BriefingPage({
           <FlowBars flow={flow.data} futures={futFlow} />
 
           <h3 className="section-heading">테마</h3>
-          {themes.data ? (
-            <div className="bf-themes">
-              {/*
-                줄 전체가 눌린다 — **구성종목 시트**가 열린다 (테마/업종 MAP 과 같은 시트).
-                테마 이름과 등락률만 보고 끝나면 죽은 숫자다 — 그 안에서 무엇이
-                끌었는지를 봐야 다음 행동이 나온다.
-              */}
-              {themes.data.top.slice(0, 5).map((t) => (
-                <button
-                  type="button"
-                  className="bf-theme bf-theme-click"
-                  key={t.code}
-                  onClick={() => setConstituent({ kind: "theme", code: t.code, name: t.name })}
-                  title="눌러서 구성종목 보기"
-                >
-                  <span className="bf-theme-name">{t.name}</span>
-                  <i className="bf-theme-main">{t.mainStock}</i>
-                  <b className={`num ${cls(t.changeRate)}`}>{pct(t.changeRate)}</b>
-                </button>
-              ))}
-              <div className="bf-theme-sep" />
-              {themes.data.bottom.slice(0, 3).map((t) => (
-                <button
-                  type="button"
-                  className="bf-theme bf-theme-click"
-                  key={t.code}
-                  onClick={() => setConstituent({ kind: "theme", code: t.code, name: t.name })}
-                  title="눌러서 구성종목 보기"
-                >
-                  <span className="bf-theme-name">{t.name}</span>
-                  <i className="bf-theme-main">{t.mainStock}</i>
-                  <b className={`num ${cls(t.changeRate)}`}>{pct(t.changeRate)}</b>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="empty">테마를 아직 못 받았습니다.</div>
-          )}
+          {/* 본문은 보드 블록과 공용 (BriefingBlocks) */}
+          <ThemeStrip
+            themes={themes.data ?? null}
+            onPickTheme={(t) => setConstituent({ kind: "theme", code: t.code, name: t.name })}
+          />
         </section>
 
         {/* 우: [4] 히트맵 + [6] AI */}
         <section className="bf-col bf-right">
           <h3 className="section-heading">관심종목</h3>
-          {heat === null ? (
-            <div className="empty">불러오는 중…</div>
-          ) : heat.tiles.length === 0 ? (
-            <div className="empty">관심종목이 비어 있습니다.</div>
-          ) : (
-            <>
-              {/*
-                균등 격자 (2026-08-26 — 「오와 열이 안 맞는다」). 시총 비례 flexGrow 는
-                줄마다 폭이 달라 들쭉날쭉했다 — 칸을 똑같이 맞추고 시총은 툴팁으로만.
-                순서는 서버가 정렬해 준다: 슈퍼신호등 그룹 먼저 → 그룹 정렬순,
-                같은 그룹 안은 등락률 내림차순. 그룹 이름은 뱃지로 칸 안에.
-              */}
-              <div className="bf-heat">
-                {heat.tiles.map((t) => {
-                  const r = t.rate ?? 0;
-                  /* 진하기 = 등락 크기. ±3% 를 최대로 — 그 위는 색으로 더 말할 게 없다 */
-                  const alpha = Math.min(1, Math.abs(r) / 3) * 0.55 + 0.1;
-                  return (
-                    <button
-                      key={t.code}
-                      className="bf-tile"
-                      style={{
-                        background:
-                          r > 0
-                            ? `rgba(255,92,92,${alpha})`
-                            : r < 0
-                              ? `rgba(76,141,255,${alpha})`
-                              : undefined,
-                      }}
-                      onClick={() => onSelectStock(t.code, t.name)}
-                      title={`${t.name} ${pct(t.rate)}${t.group ? ` · ${t.group}` : ""}${t.cap ? ` · 시총 ${fmtNum(t.cap)}억` : ""}`}
-                    >
-                      {t.group && (
-                        <em className={`bf-tile-g${t.group === "슈퍼신호등" ? " super" : ""}`}>
-                          {t.group === "슈퍼신호등" ? "🌟" : t.group}
-                        </em>
-                      )}
-                      <b>{t.name}</b>
-                      <i className="num">{pct(t.rate)}</i>
-                    </button>
-                  );
-                })}
-              </div>
-              {!heat.traded && (
-                <div className="bf-note">⚠️ 아직 오늘 거래가 반영되기 전입니다(직전 종가 기준).</div>
-              )}
-            </>
-          )}
+          {/* 본문은 보드 블록과 공용 (BriefingBlocks) */}
+          <WatchHeatGrid heat={heat} onSelectStock={onSelectStock} />
         </section>
       </div>
 
