@@ -20,6 +20,7 @@ import { AccountInfoPage } from "./pages/AccountInfoPage";
 import { AlgoPicksPage } from "./pages/AlgoPicksPage";
 import { CalendarPage } from "./pages/CalendarPage";
 import { ContinuousTradePage } from "./pages/ContinuousTradePage";
+import { EtfPage } from "./pages/EtfPage";
 import { DailyReportPage } from "./pages/DailyReportPage";
 import { KiwoomWatchlistPage } from "./pages/KiwoomWatchlistPage";
 import { ManualAccountPage } from "./pages/ManualAccountPage";
@@ -73,6 +74,7 @@ type Tab =
   | "volume"
   | "sameNet"
   | "continuous"
+  | "etf"
   | "algo"
   | "account"
   | "manualAccount"
@@ -123,6 +125,8 @@ const MENU: {
       { key: "volume", label: "거래상위", icon: "🔥" },
       { key: "sameNet", label: "동일순매매순위", icon: "🤝" },
       { key: "continuous", label: "연속매매현황", icon: "📈" },
+      /* ETF (2026-08-27) — 퇴직연금 판. 시세·NAV·괴리율 + ETF 만 골라낸 수급·연속 */
+      { key: "etf", label: "ETF", icon: "🧺" },
       { key: "algo", label: "내 알고리즘", icon: "🧮" },
     ],
   },
@@ -343,6 +347,26 @@ export default function App() {
     });
   }, [tab]);
 
+  /* 사이드바 그룹 접기 — 기기별(localStorage). 27인치와 폰의 메뉴 사정은 다르다 */
+  const [navFold, setNavFold] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("vntg.nav.fold") ?? "{}") as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  });
+  function toggleNavFold(group: string) {
+    setNavFold((prev) => {
+      const next = { ...prev, [group]: !prev[group] };
+      try {
+        localStorage.setItem("vntg.nav.fold", JSON.stringify(next));
+      } catch {
+        /* 저장 못 해도 이번 세션에는 접힌다 */
+      }
+      return next;
+    });
+  }
+
   /* 탭 순서 끌어서 바꾸기 (2026-08-27) — 순서 자리마다 쓰는 공용 훅 그대로.
      저장은 openTabs 가 이미 하고 있다(sessionStorage) — 순서만 바꿔 주면 끝. */
   const tabDrag = useDragOrder(openTabs, (next) => setOpenTabs(next as Tab[]));
@@ -403,6 +427,7 @@ export default function App() {
       case "stockAnalysis": return <StockAnalysisPage stock={selected} onSelectStock={openAnalysis} />;
       case "volume": return <VolumeRankingPage onSelectStock={onSelectStock} />;
       case "sameNet": return <SameNetTradeRankingPage onSelectStock={onSelectStock} />;
+      case "etf": return <EtfPage onSelectStock={onSelectStock} />;
       case "continuous": return <ContinuousTradePage onSelectStock={onSelectStock} />;
       case "algo": return <AlgoPicksPage onSelectStock={onSelectStock} />;
       case "paper": return <PaperTradePage onSelectStock={onSelectStock} />;
@@ -555,12 +580,27 @@ export default function App() {
           )}
           {menu.map((g) => (
             <div
-              className="nav-group"
+              className={`nav-group${navFold[g.group] ? " folded" : ""}`}
               key={g.group}
               style={{ "--accent": g.accent } as CSSProperties}
             >
-              <div className="nav-group-label">{g.label}</div>
-              {g.items.map((item) => (
+              {/*
+                그룹 접기 (2026-08-27 — "메뉴가 너무 많아졌으니 접었다 펼 수 있게").
+                라벨을 누르면 접힌다. 접힌 채로도 **지금 활성인 항목은 보인다** —
+                내가 어디 있는지까지 숨기면 길을 잃는다. 상태는 기기별(localStorage).
+              */}
+              <button
+                type="button"
+                className="nav-group-label nav-group-toggle"
+                onClick={() => toggleNavFold(g.group)}
+                title={navFold[g.group] ? "펼치기" : "접기"}
+              >
+                {g.label}
+                <span className="nav-fold-caret">{navFold[g.group] ? "▸" : "▾"}</span>
+              </button>
+              {g.items
+                .filter((item) => !navFold[g.group] || tab === item.key)
+                .map((item) => (
                 <button
                   key={item.key}
                   className={`nav-item${tab === item.key ? " active" : ""}`}

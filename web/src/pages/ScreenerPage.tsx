@@ -89,9 +89,18 @@ interface Filter {
   minTurn: number | null;
   /** ETF·ETN·우선주를 뺀다 */
   commonOnly: boolean;
+  /** ETF 만 본다 (2026-08-27) — 보통주만과는 상호배타다 */
+  etfOnly: boolean;
 }
 
-const NO_FILTER: Filter = { minTv: 0, caps: [], minRate: null, minTurn: null, commonOnly: false };
+const NO_FILTER: Filter = {
+  minTv: 0,
+  caps: [],
+  minRate: null,
+  minTurn: null,
+  commonOnly: false,
+  etfOnly: false,
+};
 const FILTER_KEY = "vntg.screener.filter";
 
 /** 거래대금 빠른 선택(억원) */
@@ -344,6 +353,7 @@ export function ScreenerPage({
 
   const rows = all.filter((r) => {
     if (filter.commonOnly && !r.common) return false;
+    if (filter.etfOnly && !r.etf) return false;
     if (hasTvCol && filter.minTv > 0 && (r.tv === null || r.tv < filter.minTv)) return false;
     if (hasCapCol && !capOk(r.cap, filter.caps)) return false;
     if (filter.minRate !== null) {
@@ -432,7 +442,8 @@ export function ScreenerPage({
     filter.caps.length > 0 ||
     filter.minRate !== null ||
     filter.minTurn !== null ||
-    filter.commonOnly;
+    filter.commonOnly ||
+    filter.etfOnly;
 
   return (
     <div>
@@ -764,10 +775,18 @@ export function ScreenerPage({
               <span className="news-scope-sep" />
               <button
                 className={`filter-btn ${filter.commonOnly ? "active" : ""}`}
-                onClick={() => set({ commonOnly: !filter.commonOnly })}
+                onClick={() => set({ commonOnly: !filter.commonOnly, etfOnly: false })}
                 title="거래대금 상위는 KODEX·TIGER 같은 ETF와 우선주가 늘 위에 있습니다"
               >
                 보통주만
+              </button>
+              {/* ETF 판(지수·섹터 자금)만 따로 본다 — 보통주만과 동시에 켜면 공집합이라 상호배타 */}
+              <button
+                className={`filter-btn ${filter.etfOnly ? "active" : ""}`}
+                onClick={() => set({ etfOnly: !filter.etfOnly, commonOnly: false })}
+                title="ETF 만 남깁니다 — 지수·섹터로 돈이 어디로 도는지 볼 때"
+              >
+                ETF만
               </button>
               {on && (
                 <button className="filter-btn" onClick={() => set(NO_FILTER)}>

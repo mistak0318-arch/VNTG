@@ -20,6 +20,7 @@ import { createUsKiwoomRouter } from "./routes/usKiwoom.js";
 import { createNewsRouter } from "./routes/news.js";
 import { createNotesRouter } from "./routes/notes.js";
 import { createMemoRouter } from "./routes/memo.js";
+import { createEtfRouter } from "./routes/etf.js";
 import { createOverviewRouter } from "./routes/overview.js";
 import { createRankingRouter } from "./routes/ranking.js";
 import { createReportRouter } from "./routes/report.js";
@@ -138,6 +139,8 @@ app.use("/api/settings", createSettingsRouter());
 app.use("/api/calendar", createCalendarRouter());
 app.use("/api/notes", createNotesRouter(client));
 app.use("/api/memo", createMemoRouter());
+/* ETF 메뉴 (2026-08-27) — 전체 시세(ka40004). 상세 과세·추적오차는 market /etf/:code 가 병합 */
+app.use("/api/etf", createEtfRouter(client));
 app.use("/api/signal", createSignalRouter(client));
 app.use("/api/paper", createPaperRouter(client));
 app.use("/api/journal", createJournalRouter(client));

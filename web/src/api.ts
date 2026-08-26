@@ -146,7 +146,7 @@ export const api = {
     getJson<{ days: { date: string; individual: number; foreign: number; institution: number }[] }>(
       `/api/market/futures-flow?days=${days}`,
     ),
-  /** ETF 구성종목 — ETF 가 아니면 {etf:false}. 출처는 네이버(키움 REST 엔 없다) */
+  /** ETF 구성종목 — ETF 가 아니면 {etf:false}. 구성은 네이버, 과세·NAV·추적오차는 키움 병합 */
   etfInfo: (code: string) =>
     getJson<{
       etf: boolean;
@@ -156,9 +156,15 @@ export const api = {
       fee?: number | null;
       nav?: number | null;
       deviation?: number | null;
+      /** "비과세" | "보유기간과세" — 키움 ka40002. 퇴직연금 세금 판단용 */
+      taxType?: string;
+      /** 추적오차율(%) — 키움 ka40004 */
+      traceErr?: number | null;
       constituents?: { code: string; name: string; weight: number | null }[];
       sectors?: { name: string; weight: number }[];
     }>(`/api/market/etf/${code}`),
+  /** ETF 전체 시세 — ka40004, 서버 3분 캐시. 괴리율은 서버가 (현재가−NAV)/NAV 로 계산 */
+  etfList: () => getJson<{ rows: EtfListRow[]; at: number }>("/api/etf/list"),
   /** 호가창 — 종목 상세·종목분석이 같은 것을 쓴다 */
   /** 거래원 — 부를 때마다 시계열이 한 점씩 쌓인다 */
   /** 종목별 프로그램매매 (일자별) — 단위 백만원 */
@@ -1068,6 +1074,23 @@ export interface IndexCandle {
   volume: number;
 }
 
+/** ETF 전체 시세 한 줄 (ka40004 실측 필드 기반) */
+export interface EtfListRow {
+  code: string;
+  name: string;
+  price: number;
+  change: number;
+  changeRate: number;
+  volume: number;
+  /** 거래대금(억원) — 현재가 × 거래량 어림 */
+  tradeValue: number;
+  nav: number | null;
+  /** 괴리율(%) — 양수면 NAV 보다 비싸게(프리미엄) 거래 중 */
+  deviation: number | null;
+  traceErr: number | null;
+  index: string;
+}
+
 export interface IndexFlowRow {
   date: string;
   changeRate: number;
@@ -1710,6 +1733,8 @@ export interface RankResult {
     sector: string;
     /** ETF·ETN·리츠·우선주가 아닌 보통주인가 */
     common: boolean;
+    /** ETF 인가 — 「ETF만」 필터가 쓴다 */
+    etf: boolean;
   })[];
 }
 

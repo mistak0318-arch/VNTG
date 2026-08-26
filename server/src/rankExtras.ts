@@ -104,6 +104,8 @@ export interface RowExtras {
   sector: string;
   /** ETF·ETN·리츠·우선주가 아닌 보통주인가 */
   common: boolean;
+  /** ETF 인가 — 목록의 marketName === "ETF" (실측 2026-08-27, KODEX 200 등). ETN·리츠는 아니다 */
+  etf: boolean;
 }
 
 export function extras(
@@ -126,6 +128,7 @@ export function extras(
     sector: entry?.sectorName ?? "",
     // 끝자리가 0 이 아니면 우선주다 (stockListCache 의 판별과 같은 근거)
     common: listed && String(entry?.code ?? "").replace(/_(AL|NX)$/, "").endsWith("0"),
+    etf: entry?.marketName === "ETF",
   };
 }
 

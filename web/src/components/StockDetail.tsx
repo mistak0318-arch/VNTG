@@ -88,6 +88,14 @@ export const DETAIL_TABS: { key: DetailTab; label: string }[] = [
   { key: "raw", label: "원본 데이터" },
 ];
 
+/**
+ * ETF 전용 상세 (2026-08-27 — "봐야 하는 정보가 다르니 다르게 구성").
+ * 기존 탭을 그대로 살리되 **개별 기업의 것**만 뺀다 — 목표주가·업종테마·기업재무는
+ * ETF 에서 빈 화면이거나 뜻이 없다. 호가·거래원·프로그램·수급·공매도는 ETF 도
+ * 똑같이 거래되는 값이라 남는다.
+ */
+const ETF_HIDDEN = new Set<DetailTab>(["opinion", "sector", "finance"]);
+
 export function StockDetail({
   code,
   name,
@@ -155,14 +163,21 @@ export function StockDetail({
       alive = false;
     };
   }, [code]);
-  // ETF 탭을 보다가 일반 종목으로 넘어가면 종합으로 돌아간다 (탭이 사라지므로)
+  // ETF 탭을 보다가 일반 종목으로 넘어가면(또는 반대) 사라진 탭에서 빠져나온다
   useEffect(() => {
     if (!isEtf && detailTab === "etf") setDetailTab("chart");
+    if (isEtf && ETF_HIDDEN.has(detailTab)) setDetailTab("chart");
   }, [isEtf, detailTab]);
-  /* 카드 배치와 **같은 훅**이다 — 서버에 저장되어 기기가 달라도 같은 순서 */
+  /* ETF 는 보이는 탭이 다르다 — 기존 것에서 개별 기업의 것만 뺀다 */
+  const visibleTabs = isEtf ? DETAIL_TABS.filter((t) => !ETF_HIDDEN.has(t.key)) : DETAIL_TABS;
+  /*
+   * 카드 배치와 **같은 훅** — 서버 저장, 기기 공유.
+   * ETF 는 **순서도 따로 저장한다** (2026-08-27 사용자 지적 — "일반종목 순서
+   * 바꾸면 ETF 도 바뀌면 귀찮다"). 보는 정보가 다르니 배치도 따로가 맞다.
+   */
   const tabOrder = useCardOrder(
-    "stockDetail.tabs",
-    DETAIL_TABS.map((t) => t.key),
+    isEtf ? "stockDetail.tabs.etf" : "stockDetail.tabs",
+    visibleTabs.map((t) => t.key),
   );
   const watchedCodes = useWatchedCodes();
   const watched = watchedCodes.isWatched(code);
@@ -306,7 +321,7 @@ export function StockDetail({
               JSX 를 재배열하지 않고 CSS `order` 만 준다.
             */}
             <TabScroller className="detail-tabs" activeKey={detailTab}>
-              {DETAIL_TABS.map((t) => (
+              {visibleTabs.map((t) => (
                 <button
                   key={t.key}
                   className={`detail-tab${detailTab === t.key ? " active" : ""}${tabOrder.drag.cls(t.key)}`}
@@ -355,7 +370,7 @@ export function StockDetail({
                   style={{ order: tabOrder.orderOf("chart") }}
                   onClick={() => setDetailTab("etf")}
                 >
-                  ETF 구성
+                  ETF 정보
                 </button>
               )}
               <button

@@ -4785,6 +4785,44 @@ tr.drag-src td { opacity: 0.45; }
 .ct-tool.ct-del { border-color: var(--red); color: var(--red); opacity: 1; }
 /* 선물 수급 표 — 금액(억)이 주인공, 계약은 괄호 잔글씨 */
 .fut-ct { font-style: normal; font-size: 0.7rem; opacity: 0.65; margin-left: 2px; }
+
+/* ── 사이드바 그룹 접기 (2026-08-27) ── */
+button.nav-group-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.nav-fold-caret { font-size: 0.7rem; color: var(--muted); margin-right: 6px; }
+.nav-group.folded { padding-bottom: 4px; }
+
+/* ── ETF 판 ── */
+.etf-search { max-width: 22rem; }
+.etf-idx-cell { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ETF 정보 탭 — 과세 뱃지·핵심 숫자 */
+.etf-tax {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid #f5c542;
+  color: #f5c542;
+}
+.etf-tax.free { border-color: var(--green); color: var(--green); }
+.etf-facts {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin: 4px 0 8px;
+}
+.etf-facts b { color: var(--text); }
 .candle-tip {
   display: none;
   position: absolute;

@@ -48,17 +48,55 @@ export function EtfPanel({
   if (!info?.etf || !info.constituents?.length) return null;
   const max = Math.max(...info.constituents.map((c) => c.weight ?? 0), 1);
   const top2 = info.constituents.slice(0, 2).reduce((a, c) => a + (c.weight ?? 0), 0);
+  const dev = info.deviation ?? null;
 
   return (
     <div className="etf-panel">
       <div className="etf-head">
-        <b>ETF 구성종목</b>
+        <b>ETF 정보</b>
+        {/*
+          과세유형 (2026-08-27 — "세금 이슈를 고려할 수 있게"). 키움 ka40002 가
+          한글로 준다: 비과세(국내 주식형) / 보유기간과세(해외·채권·파생형 —
+          매매차익 15.4% 원천징수, 퇴직연금 계좌면 과세이연). 뱃지로 크게.
+        */}
+        {info.taxType && (
+          <span className={`etf-tax${info.taxType.includes("비과세") ? " free" : ""}`}
+            title={
+              info.taxType.includes("비과세")
+                ? "국내 주식형 — 매매차익 비과세 (분배금은 과세)"
+                : "매매차익 배당소득세 15.4% 원천징수 — 연금계좌에서는 과세이연"
+            }
+          >
+            {info.taxType}
+          </span>
+        )}
         <span className="pt-n">
           {info.issuer}
           {info.baseIndex && ` · 기초지수 ${info.baseIndex}`}
           {info.fee !== null && info.fee !== undefined && ` · 총보수 ${info.fee}%`}
-          {info.deviation !== null && info.deviation !== undefined && ` · 괴리율 ${info.deviation}%`}
         </span>
+      </div>
+      {/* ETF 에서만 봐야 하는 숫자들 — NAV·괴리율·추적오차 (키움 실측값) */}
+      <div className="etf-facts num">
+        {info.nav !== null && info.nav !== undefined && (
+          <span>
+            NAV <b>{Math.round(info.nav).toLocaleString("ko-KR")}</b>
+          </span>
+        )}
+        {dev !== null && (
+          <span title="(현재가 − NAV) ÷ NAV — 양수면 순자산보다 비싸게 거래 중">
+            괴리율{" "}
+            <b className={Math.abs(dev) >= 0.5 ? (dev > 0 ? "positive" : "negative") : ""}>
+              {dev > 0 ? "+" : ""}
+              {dev.toFixed(2)}%
+            </b>
+          </span>
+        )}
+        {info.traceErr !== null && info.traceErr !== undefined && (
+          <span title="추적오차율 — 클수록 기초지수를 못 따라갑니다">
+            추적오차 <b>{info.traceErr.toFixed(2)}%</b>
+          </span>
+        )}
       </div>
       <div className="etf-list">
         {info.constituents.map((c) => (

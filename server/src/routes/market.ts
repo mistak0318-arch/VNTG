@@ -16,6 +16,7 @@ import { usCandles, usDetail } from "../usDetail.js";
 import { orderBook } from "../orderBook.js";
 import { brokerFlow } from "../brokerFlow.js";
 import { getEtfInfo } from "../etfInfo.js";
+import { etfRowOf, etfTaxInfo } from "./etf.js";
 import { futuresFlow } from "../naverFuturesFlow.js";
 import { intradayFlow, type FlowMarket } from "../naverIntradayFlow.js";
 
@@ -43,6 +44,7 @@ function daysAgoYyyymmdd(days: number): string {
 
 export function createMarketRouter(client: KiwoomClient): Router {
   const router = Router();
+
 
 
 
@@ -87,10 +89,27 @@ export function createMarketRouter(client: KiwoomClient): Router {
   /*
    * ETF 구성종목 — 키움 REST 엔 없는 값이라 네이버 etfAnalysis 를 쓴다 (etfInfo.ts).
    * ETF 가 아니면 {etf:false} — 화면이 이걸 보고 탭을 숨긴다. 6시간 캐시.
+   *
+   * (2026-08-27) 키움 값도 병합한다 — **과세유형**(ka40002, 비과세/보유기간과세 —
+   * 퇴직연금 세금 판단), **추적오차·NAV·괴리율**(ka40004 리스트 캐시). 네이버 NAV 와
+   * 키움 NAV 가 둘 다 있으면 키움 것을 쓴다(장중 갱신이 더 잦다).
    */
   router.get("/etf/:code", async (req, res, next) => {
     try {
-      res.json(await getEtfInfo(req.params.code));
+      const info = await getEtfInfo(req.params.code);
+      if (!info.etf) return res.json(info);
+      const [tax, row] = await Promise.all([
+        etfTaxInfo(client, req.params.code).catch(() => null),
+        etfRowOf(client, req.params.code).catch(() => null),
+      ]);
+      res.json({
+        ...info,
+        taxType: tax?.taxType || undefined,
+        nav: row?.nav ?? info.nav,
+        deviation: row?.deviation ?? info.deviation,
+        traceErr: row?.traceErr ?? undefined,
+        baseIndex: info.baseIndex || tax?.index || row?.index || undefined,
+      });
     } catch (err) {
       next(err);
     }
