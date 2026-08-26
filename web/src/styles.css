@@ -5573,6 +5573,12 @@ tr.drag-src td { opacity: 0.45; }
   background: linear-gradient(0deg, rgba(212, 160, 23, 0.12), rgba(212, 160, 23, 0.12));
 }
 .gt-super.active { border-color: #d4a017; }
+/* 슈퍼신호등+교차 — 슈퍼보다 한 급 위(세 화면 교집합)라 초록 번개 톤으로 */
+.gt-cross {
+  border-color: #22c55e;
+  background: linear-gradient(0deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.12));
+}
+.gt-cross.active { border-color: #22c55e; }
 .wl-super {
   font-style: normal;
   color: #d4a017;

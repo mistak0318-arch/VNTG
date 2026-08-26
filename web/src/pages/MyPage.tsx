@@ -30,6 +30,8 @@ const ALL = "__all__";
 const DEFAULT_GROUP = "기본";
 /** 슈퍼신호등 자동 편입이 담기는 그룹 — 서버가 삭제·개명을 거부하고, 화면도 그 버튼을 안 낸다 */
 const SUPER_GROUP = "슈퍼신호등";
+/** 교차 신호(주도주 ∩ 슈퍼신호등) 자동 편입 그룹 — 같은 보호·같은 특별 표시 (2026-08-26) */
+const CROSS_GROUP = "슈퍼신호등+교차";
 
 
 /** 통과=O, 미달=빈칸, 모름=- . 빈칸이 낫다 — X 가 많으면 눈이 그리로 쏠린다 */
@@ -315,6 +317,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
 
   async function removeGroupNow() {
     if (activeGroup === ALL || activeGroup === DEFAULT_GROUP) return;
+    if (activeGroup === SUPER_GROUP || activeGroup === CROSS_GROUP) return; // 자동 편입 그룹 — 서버도 거부한다
     if (!window.confirm(`'${activeGroup}' 그룹을 삭제할까요?
 소속 종목은 기본 그룹으로 이동합니다.`)) return;
     try {
@@ -587,8 +590,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
           const n = items.filter((i) => (i.groups ?? [DEFAULT_GROUP]).includes(g)).length;
           const movable = groups.filter((x) => x !== DEFAULT_GROUP);
           const mi = movable.indexOf(g);
-          /* 슈퍼신호등은 자동 편입의 자리 — 이름을 못 바꾸고 못 지운다. 배지도 다르다 */
-          const locked = g === DEFAULT_GROUP || g === SUPER_GROUP;
+          /* 슈퍼신호등·교차는 자동 편입의 자리 — 이름을 못 바꾸고 못 지운다. 배지도 다르다 */
+          const locked = g === DEFAULT_GROUP || g === SUPER_GROUP || g === CROSS_GROUP;
           return (
             <span className={`gt-item${activeGroup === g ? " active" : ""}`} key={g}>
               {editGroupBar && g !== DEFAULT_GROUP && (
@@ -602,18 +605,21 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                 </button>
               )}
               <button
-                className={`filter-btn ${activeGroup === g ? "active" : ""}${g === SUPER_GROUP ? " gt-super" : ""}${editGroupBar && g !== DEFAULT_GROUP ? groupDrag.cls(g) : ""}`}
+                className={`filter-btn ${activeGroup === g ? "active" : ""}${g === SUPER_GROUP ? " gt-super" : ""}${g === CROSS_GROUP ? " gt-cross" : ""}${editGroupBar && g !== DEFAULT_GROUP ? groupDrag.cls(g) : ""}`}
                 {...(editGroupBar && g !== DEFAULT_GROUP ? groupDrag.props(g) : {})}
                 onClick={() => (editGroupBar && !locked ? renameGroupNow(g) : setActiveGroup(g))}
                 title={
                   g === SUPER_GROUP
                     ? "슈퍼신호등 자동 편입이 담기는 그룹 — 이름 변경·삭제가 안 됩니다"
-                    : editGroupBar && !locked
-                      ? "눌러서 이름 바꾸기"
-                      : undefined
+                    : g === CROSS_GROUP
+                      ? "교차 신호(주도주∩슈퍼신호등) 자동 편입 그룹 — 이름 변경·삭제가 안 됩니다"
+                      : editGroupBar && !locked
+                        ? "눌러서 이름 바꾸기"
+                        : undefined
                 }
               >
                 {g === SUPER_GROUP && "🌟 "}
+                {g === CROSS_GROUP && "⚡ "}
                 {g} <span className="gt-n">{n}</span>
                 {editGroupBar && !locked && <span className="gt-pen"> ✎</span>}
               </button>
@@ -647,7 +653,11 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
           */}
           {editGroupBar ? "편집 끝" : "그룹 편집"}
         </button>
-        {editGroupBar && activeGroup !== ALL && activeGroup !== DEFAULT_GROUP && activeGroup !== SUPER_GROUP && (
+        {editGroupBar &&
+          activeGroup !== ALL &&
+          activeGroup !== DEFAULT_GROUP &&
+          activeGroup !== SUPER_GROUP &&
+          activeGroup !== CROSS_GROUP && (
           <button className="filter-btn danger" onClick={removeGroupNow} title="이 그룹 삭제">
             «{activeGroup}» 삭제
           </button>
