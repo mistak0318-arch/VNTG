@@ -8,6 +8,7 @@ import { ScreenPage } from "./pages/ScreenPage";
 import { PaperTradePage } from "./pages/PaperTradePage";
 import { JournalPage } from "./pages/JournalPage";
 import { MemoPage } from "./pages/MemoPage";
+import { MiniPage } from "./pages/MiniPage";
 import { UsWatchPage } from "./pages/UsWatchPage";
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
@@ -73,7 +74,8 @@ type Tab =
   | "paper"
   | "settings"
   | "board"
-  | "guide";
+  | "guide"
+  | "mini";
 
 /**
  * 사이드바 메뉴 구조. 그룹 아래에 항목을 추가하는 식으로 기능을 늘려간다.
@@ -154,6 +156,11 @@ const MENU: {
       { key: "settings", label: "API 사용량·설정", icon: "⚙️" },
       // 기능 설명서가 아니라 **순서와 이유**를 적는 자리다
       { key: "guide", label: "도움말", icon: "📖" },
+      /*
+       * 미니창 (2026-08-26) — 보던 페이지를 떠나지 않고 종목을 들여다보는 보조 팝업.
+       * 이 항목만 탭 전환이 아니라 **새 작은 창**을 연다(#/mini).
+       */
+      { key: "mini", label: "미니창 열기", icon: "🪟" },
     ],
   },
 ];
@@ -279,6 +286,38 @@ export default function App() {
     setNavOpen(false); // 모바일에서 항목을 고르면 드로어를 닫는다
   }
 
+  /**
+   * 메뉴를 **새 브라우저 탭**으로 (2026-08-26 — 「메뉴 옮기면 보던 게 초기화된다」).
+   * Ctrl(⌘)+클릭 또는 휠 클릭. 해시 라우팅이라 새 탭이 그 메뉴로 바로 열리고,
+   * 원래 탭의 화면·상태는 그대로 남는다 — 탭마다 세션이 산다.
+   */
+  function openInNewTab(key: Tab) {
+    window.open(`${window.location.pathname}#/${key}`, "_blank");
+  }
+
+  /** 미니창 — 작은 팝업으로 종목 조회 전용 화면(#/mini)을 연다 */
+  function openMini() {
+    window.open(
+      `${window.location.pathname}#/mini`,
+      "vntg-mini",
+      "width=560,height=880,resizable=yes,scrollbars=yes",
+    );
+    setNavOpen(false);
+  }
+
+  /** 메뉴 클릭 공통 — 미니창은 팝업, Ctrl/휠 클릭은 새 브라우저 탭, 나머지는 전환 */
+  function navClick(e: React.MouseEvent, key: Tab) {
+    if (key === "mini") {
+      openMini();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+      openInNewTab(key);
+      return;
+    }
+    go(key);
+  }
+
   // 드로어가 열려 있을 때 배경 스크롤 방지
   useEffect(() => {
     document.body.style.overflow = navOpen ? "hidden" : "";
@@ -286,6 +325,20 @@ export default function App() {
       document.body.style.overflow = "";
     };
   }, [navOpen]);
+
+  /*
+   * 미니창(#/mini) — 사이드바 없이 종목 조회 전용 화면만 그린다.
+   * 훅은 전부 위에서 이미 돌았으므로 여기서 갈라져도 순서가 안 흔들린다.
+   */
+  if (route.tab === "mini") {
+    return (
+      <MiniPage
+        stock={route.stock}
+        onSelect={(code, name) => navigate({ stock: { code, name } })}
+        onClear={() => navigate({ stock: null })}
+      />
+    );
+  }
 
   return (
     <div className="layout">
@@ -334,7 +387,11 @@ export default function App() {
                 <button
                   key={`fav-${item.key}`}
                   className={`nav-item${tab === item.key ? " active" : ""}`}
-                  onClick={() => go(item.key)}
+                  onClick={(e) => navClick(e, item.key)}
+                  onAuxClick={(e) => {
+                    if (e.button === 1) openInNewTab(item.key);
+                  }}
+                  title="Ctrl+클릭 또는 휠 클릭: 새 브라우저 탭으로 — 보던 화면이 유지됩니다"
                 >
                   <span className="nav-icon" aria-hidden="true">{item.icon}</span>
                   {item.label}
@@ -353,7 +410,15 @@ export default function App() {
                 <button
                   key={item.key}
                   className={`nav-item${tab === item.key ? " active" : ""}`}
-                  onClick={() => go(item.key)}
+                  onClick={(e) => navClick(e, item.key)}
+                  onAuxClick={(e) => {
+                    if (e.button === 1 && item.key !== "mini") openInNewTab(item.key);
+                  }}
+                  title={
+                    item.key === "mini"
+                      ? "작은 팝업 창으로 종목을 조회합니다 — 보던 페이지는 그대로"
+                      : "Ctrl+클릭 또는 휠 클릭: 새 브라우저 탭으로 — 보던 화면이 유지됩니다"
+                  }
                 >
                   <span className="nav-icon" aria-hidden="true">
                     {item.icon}

@@ -3503,6 +3503,11 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 
 /* 선물 투자자별 수급 (차트 시트 안) */
 .ff-wrap { margin-top: 0.8rem; }
+/* 미니창(#/mini) — 검색 하나짜리 홈. 상세는 StockDetail 오버레이가 창 전체를 쓴다 */
+.mini-root { min-height: 100vh; background: var(--bg); }
+.mini-home { max-width: 34rem; margin: 0 auto; padding: 18px 16px; }
+.mini-title { margin: 0 0 10px; font-size: 1rem; }
+
 /* 보드 칸별 글자 크기 버튼 — 헤더의 다른 컨트롤과 같은 톤 */
 .board-font {
   background: none;
