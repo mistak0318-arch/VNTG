@@ -34,6 +34,7 @@ import { StockAnalysisPage } from "./pages/StockAnalysisPage";
 import { StockDiscoveryPage } from "./pages/StockDiscoveryPage";
 import { VolumeRankingPage } from "./pages/VolumeRankingPage";
 import { BriefingPage } from "./pages/BriefingPage";
+import { useDragOrder } from "./useDragOrder";
 import { useHashRoute } from "./useHashRoute";
 import { applyOrder, useMenuPrefs } from "./useMenuOrder";
 import { useScreenLock } from "./useScreenLock";
@@ -335,6 +336,10 @@ export default function App() {
     });
   }, [tab]);
 
+  /* 탭 순서 끌어서 바꾸기 (2026-08-27) — 순서 자리마다 쓰는 공용 훅 그대로.
+     저장은 openTabs 가 이미 하고 있다(sessionStorage) — 순서만 바꿔 주면 끝. */
+  const tabDrag = useDragOrder(openTabs, (next) => setOpenTabs(next as Tab[]));
+
   function closeTab(t: Tab) {
     setOpenTabs((prev) => {
       const next = prev.filter((x) => x !== t);
@@ -624,7 +629,11 @@ export default function App() {
           {openTabs.length > 1 && (
             <div className="app-tabs">
               {openTabs.map((t) => (
-                <span key={t} className={`app-tab${t === tab ? " active" : ""}`}>
+                <span
+                  key={t}
+                  className={`app-tab${t === tab ? " active" : ""}${tabDrag.cls(t)}`}
+                  {...tabDrag.props(t)}
+                >
                   <button className="app-tab-go" onClick={() => go(t)} title={TAB_LABELS[t] ?? t}>
                     {TAB_LABELS[t] ?? t}
                   </button>
