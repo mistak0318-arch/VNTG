@@ -9,6 +9,7 @@ import { PaperTradePage } from "./pages/PaperTradePage";
 import { JournalPage } from "./pages/JournalPage";
 import { MemoPage } from "./pages/MemoPage";
 import { MiniPage } from "./pages/MiniPage";
+import { SuperDashboardPage } from "./pages/SuperDashboardPage";
 import { UsWatchPage } from "./pages/UsWatchPage";
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
@@ -58,6 +59,7 @@ type Tab =
   | "marketFlow"
   | "customTheme"
   | "signalScreen"
+  | "superSignal"
   | "journal"
   | "memo"
   | "usWatch"
@@ -132,6 +134,8 @@ const MENU: {
       { key: "usWatch", label: "관심종목 (해외)", icon: "🌏" },
       { key: "customTheme", label: "내 테마", icon: "🎯" },
       { key: "signalScreen", label: "신호등 찾기", icon: "🚦" },
+      /* 슈퍼신호등 검증 대시보드 (2026-08-26) — 걸린 것들이 그 뒤로 어떻게 됐나 */
+      { key: "superSignal", label: "슈퍼신호등", icon: "🌟" },
       { key: "journal", label: "복기 노트", icon: "📓" },
       { key: "memo", label: "메모장", icon: "📝" },
       { key: "marketFlow", label: "시장 흐름 분석", icon: "🌊" },
@@ -513,6 +517,7 @@ export default function App() {
           {tab === "watchKiwoom" && <KiwoomWatchlistPage onSelectStock={onSelectStock} />}
           {tab === "customTheme" && <CustomThemePage onSelectStock={onSelectStock} />}
           {tab === "signalScreen" && <ScreenPage onSelectStock={onSelectStock} />}
+          {tab === "superSignal" && <SuperDashboardPage onSelectStock={onSelectStock} />}
           {tab === "journal" && <JournalPage onSelectStock={onSelectStock} />}
           {tab === "memo" && <MemoPage />}
           {tab === "usWatch" && <UsWatchPage />}

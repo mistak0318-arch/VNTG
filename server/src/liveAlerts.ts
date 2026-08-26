@@ -1,6 +1,7 @@
 import { getAlertConfig } from "./alertRules.js";
 import { peekRealtime } from "./realtimeHub.js";
-import { sendTelegram, stockNameHtml } from "./telegram.js";
+import { getActiveSuper } from "./superSignal.js";
+import { hasDedicatedChannel, sendTelegram, stockNameHtml } from "./telegram.js";
 import { listWatchlist } from "./watchlist.js";
 
 /**
@@ -140,8 +141,18 @@ export async function runLiveAlerts(
 
   if (out.length === 0 || preview) return { alerts: out, sent: false, live: true };
 
-  const res = await sendTelegram(formatLiveAlerts(out), "signal");
-  return { alerts: out, sent: res.ok, live: true };
+  /* 슈퍼신호등 전용 방이 있으면 슈퍼 종목 건은 그 방으로 — 시그널 스캔과 같은 규칙 */
+  let superCodes = new Set<string>();
+  if (hasDedicatedChannel("super")) {
+    const list = await getActiveSuper().catch(() => [] as { code: string }[]);
+    superCodes = new Set(list.map((s) => s.code));
+  }
+  const superOnes = out.filter((a) => superCodes.has(a.code));
+  const rest = out.filter((a) => !superCodes.has(a.code));
+  let ok = true;
+  if (superOnes.length > 0) ok = (await sendTelegram(formatLiveAlerts(superOnes), "super")).ok && ok;
+  if (rest.length > 0) ok = (await sendTelegram(formatLiveAlerts(rest), "signal")).ok && ok;
+  return { alerts: out, sent: ok, live: true };
 }
 
 export function formatLiveAlerts(alerts: LiveAlert[]): string {

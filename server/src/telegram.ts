@@ -18,7 +18,15 @@ import { recordApiCall } from "./apiUsage.js";
 
 const LIMIT = 3900; // 텔레그램 한도 4096자. 여유를 둔다.
 
-export type TelegramChannel = "report" | "signal" | "log" | "channel" | "disclosure" | "keyword";
+export type TelegramChannel =
+  | "report"
+  | "signal"
+  | "log"
+  | "channel"
+  | "disclosure"
+  | "keyword"
+  /** 슈퍼신호등 편입·이탈 (2026-08-26) — 하루 한 번 15:45 실행이 보낸다 */
+  | "super";
 
 const CHANNEL_ENV: Record<TelegramChannel, string> = {
   report: "TELEGRAM_CHAT_ID_REPORT",
@@ -27,6 +35,7 @@ const CHANNEL_ENV: Record<TelegramChannel, string> = {
   channel: "TELEGRAM_CHAT_ID_CHANNEL",
   disclosure: "TELEGRAM_CHAT_ID_DISCLOSURE",
   keyword: "TELEGRAM_CHAT_ID_KEYWORD",
+  super: "TELEGRAM_CHAT_ID_SUPER",
 };
 
 /** 채널 전용 방이 있으면 그쪽으로, 없으면 기본 방으로 */
@@ -38,6 +47,17 @@ export function chatIdFor(channel: TelegramChannel): string {
 
 export function isTelegramConfigured(channel: TelegramChannel = "report"): boolean {
   return Boolean(process.env.TELEGRAM_BOT_TOKEN?.trim() && chatIdFor(channel));
+}
+
+/**
+ * 이 갈래에 **전용 방**이 있나.
+ *
+ * 슈퍼신호등처럼 「전용 방이 있으면 거기로, 없으면 원래 갈래로」 나눠 보내는
+ * 라우팅이 이걸 본다 — chatIdFor 는 기본 방으로 조용히 떨어지기 때문에,
+ * 그걸로 판단하면 방을 안 판 사람의 알림이 기본 방에 섞여 버린다.
+ */
+export function hasDedicatedChannel(channel: TelegramChannel): boolean {
+  return Boolean(process.env[CHANNEL_ENV[channel]]?.trim());
 }
 
 /** 어느 방이 어디로 가는지 — 설정 화면에서 확인용 */

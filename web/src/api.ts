@@ -478,22 +478,18 @@ export const api = {
   /** 슈퍼신호등 — 여러 목록에 동시에 걸린 초록의 관찰 목록 */
   signalSuper: () =>
     getJson<{
-      entries: {
-        code: string;
-        name: string;
-        addedDate: string;
-        addedPrice: number;
-        score: number;
-        lists: string[];
-        seenCount: number;
-        lastSeenDate: string;
-        price: number | null;
-        changeRate: number | null;
-        sinceAdded: number | null;
-      }[];
+      entries: SuperEntry[];
       lastRunDate: string | null;
       minLists: number;
+      grade: SuperGradeRow[];
+      stats: SuperStats;
     }>("/api/signal/super"),
+  /** 대시보드 상세 — 주가·지수·업종·수급 흐름. 클릭했을 때만 */
+  signalSuperDetail: (code: string) => getJson<SuperDetail>(`/api/signal/super/detail/${code}`),
+  signalSuperExit: (code: string, note: string) =>
+    postJson<{ ok: boolean }>(`/api/signal/super/exit/${code}`, { note }),
+  signalSuperNote: (code: string, note: string) =>
+    putJson<{ ok: boolean }>(`/api/signal/super/note/${code}`, { note }),
   signalSuperJob: () =>
     getJson<{
       status: "idle" | "running" | "done" | "error";
@@ -1341,9 +1337,88 @@ export interface AlertConfig {
   rules: AlertRule[];
 }
 
+/* ---------------- 슈퍼신호등 대시보드 (2026-08-26) ---------------- */
+
+export interface SuperDaily {
+  date: string;
+  close: number;
+  score: number;
+  level: string;
+}
+
+export interface SuperExit {
+  date: string;
+  price: number | null;
+  score: number | null;
+  marketLevel: string | null;
+  marketScore: number | null;
+  note: string;
+  auto: boolean;
+}
+
+export interface SuperEntry {
+  code: string;
+  name: string;
+  addedDate: string;
+  addedPrice: number;
+  score: number;
+  lists: string[];
+  seenCount: number;
+  lastSeenDate: string;
+  returns?: { d1: number | null; d5: number | null; d20: number | null };
+  active?: boolean;
+  daily?: SuperDaily[];
+  exits?: SuperExit[];
+  note?: string;
+  /* 서버가 스냅샷에서 붙여 주는 현재 값 */
+  price: number | null;
+  changeRate: number | null;
+  sinceAdded: number | null;
+}
+
+export interface SuperGradeRow {
+  label: string;
+  d1: { avg: number | null; n: number };
+  d5: { avg: number | null; n: number };
+  d20: { avg: number | null; n: number };
+}
+
+export interface SuperStats {
+  activeCount: number;
+  exitedCount: number;
+  todayAdded: number;
+  win: {
+    d1: { rate: number | null; n: number };
+    d5: { rate: number | null; n: number };
+    d20: { rate: number | null; n: number };
+  };
+  best: { name: string; v: number } | null;
+  worst: { name: string; v: number } | null;
+}
+
+export interface SuperSeriesPoint {
+  date: string;
+  close: number;
+}
+
+export interface SuperDetail {
+  entry: Omit<SuperEntry, "price" | "changeRate" | "sinceAdded">;
+  stock: SuperSeriesPoint[];
+  index: { code: string; name: string; series: SuperSeriesPoint[] };
+  sector: {
+    code: string;
+    name: string;
+    changeRate: number;
+    series: SuperSeriesPoint[];
+  } | null;
+  flows: { date: string; foreign: number; inst: number }[];
+  signalNow: { level: string; score: number } | null;
+  marketNow: { level: string; score: number; summary: string } | null;
+}
+
 export interface TelegramChannelStatus {
   /** 서버 telegram.ts 의 TelegramChannel 과 같은 목록이어야 한다 */
-  channel: "report" | "signal" | "log" | "channel" | "disclosure" | "keyword";
+  channel: "report" | "signal" | "log" | "channel" | "disclosure" | "keyword" | "super";
   chatId: string;
   dedicated: boolean;
 }

@@ -3,8 +3,17 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
+import { evaluateMarket } from "./marketSignal.js";
+import { getSectorMood } from "./sectorMood.js";
 import { evaluateSignal } from "./signalLight.js";
 import { fetchUniverse, SCREEN_UNIVERSES, type Candidate } from "./signalScreen.js";
+import {
+  hasDedicatedChannel,
+  isTelegramConfigured,
+  sendTelegram,
+  stockNameHtml,
+  type TelegramChannel,
+} from "./telegram.js";
 import {
   ensureInGroup,
   listWatchlist,
@@ -47,6 +56,31 @@ const MIN_LISTS = 3;
 /** 하루에 평가할 교집합 상한 — 종목당 조회 여러 번이라 폭주를 막는다 */
 const MAX_EVAL = 40;
 
+/**
+ * 하루 한 줄 — 편입 후 이 종목이 **어떻게 흘러갔는지**의 원장 (2026-08-26).
+ * 점수는 과거로 되짚어 잴 수 없으므로(신호등은 그날 데이터로만 평가된다)
+ * 매일 장 마감 뒤 적어 두는 이 기록이 점수 흐름의 유일한 소스다.
+ */
+export interface SuperDaily {
+  date: string;
+  close: number;
+  score: number;
+  level: string;
+}
+
+/** 이탈 기록 — 언제·얼마에·몇 점으로 떨어졌고, 그날 시장은 어땠나 */
+export interface SuperExit {
+  date: string;
+  price: number | null;
+  score: number | null;
+  /** 이탈 시점의 시장 신호등 — 「내가 죽었나, 장이 죽었나」를 가른다 */
+  marketLevel: string | null;
+  marketScore: number | null;
+  note: string;
+  /** true = 신호등이 초록에서 떨어져 자동 이탈, false = 손으로 이탈 처리 */
+  auto: boolean;
+}
+
 export interface SuperEntry {
   code: string;
   name: string;
@@ -66,6 +100,14 @@ export interface SuperEntry {
    * 봉이 아직 안 쌓였으면 null. d20 까지 차면 더 안 잰다(끝난 성적표다).
    */
   returns?: { d1: number | null; d5: number | null; d20: number | null };
+  /** 추적 중인가 — 이탈하면 false. 교집합에 다시 걸리면 되살아난다 */
+  active?: boolean;
+  /** 편입 후 일별 기록 (종가·점수) — 대시보드의 점수/주가 흐름이 이걸 읽는다 */
+  daily?: SuperDaily[];
+  /** 이탈 이력 — 재편입돼도 지우지 않는다. 이탈→복귀 자체가 정보다 */
+  exits?: SuperExit[];
+  /** 자유 메모 — 복기용 */
+  note?: string;
 }
 
 interface Store {
@@ -78,8 +120,15 @@ const EMPTY: Store = { entries: [], lastRunDate: null };
 async function load(): Promise<Store> {
   try {
     const raw = JSON.parse(await readFile(FILE, "utf-8")) as Partial<Store>;
+    const entries = (Array.isArray(raw.entries) ? raw.entries : []).map((e) => ({
+      ...e,
+      // 대시보드 필드가 생기기 전(2026-08-26 이전) 저장분 — 전부 추적 중으로 본다
+      active: e.active !== false,
+      daily: Array.isArray(e.daily) ? e.daily : [],
+      exits: Array.isArray(e.exits) ? e.exits : [],
+    }));
     return {
-      entries: Array.isArray(raw.entries) ? raw.entries : [],
+      entries,
       lastRunDate: typeof raw.lastRunDate === "string" ? raw.lastRunDate : null,
     };
   } catch {
@@ -138,6 +187,175 @@ async function gradeEntries(client: KiwoomClient, store: Store): Promise<number>
     await new Promise((r) => setTimeout(r, 260));
   }
   return graded;
+}
+
+/**
+ * 일별 기록 + 자동 이탈 판정 (2026-08-26) — 매일 실행 끝에 돈다.
+ *
+ * 추적 중(active) 종목마다 오늘의 종가·신호등 점수를 한 줄 적는다. 점수는
+ * 과거로 못 되짚으므로 이 기록이 곧 「편입 후 점수가 어떻게 흘러갔나」다.
+ *
+ * ## 자동 이탈
+ *
+ * 슈퍼신호등의 정의가 「초록」이므로, 초록에서 떨어진 게 이탈이다. 다만 노랑을
+ * 하루 스치고 돌아오는 종목이 흔해서 **이틀 연속** 초록 미만일 때만 이탈로 적는다.
+ * 이탈 시점의 시장 신호등을 같이 적는다 — 종목이 죽은 건지 장이 꺾인 건지는
+ * 나중에 복기할 때 가장 먼저 묻게 되는 것이다.
+ *
+ * 조회 비용: 15:45 실행 직전에 추적기·교집합 평가가 신호등 캐시(15분)를 데워
+ * 두므로 대부분 캐시로 끝난다. 그래도 상한(60종목)을 둔다.
+ */
+async function recordSuperDaily(client: KiwoomClient, store: Store): Promise<SuperEntry[]> {
+  const today = todayStr();
+  const exited: SuperEntry[] = [];
+  const active = store.entries.filter((e) => e.active !== false).slice(0, 60);
+  if (active.length === 0) return exited;
+
+  const snap = await getMarketSnapshot(client).catch(() => null);
+  /* 시장 신호등은 이탈이 실제로 생겼을 때 한 번만 받는다 */
+  let market: { level: string; score: number } | null | undefined;
+
+  for (const e of active) {
+    try {
+      const sig = await evaluateSignal(client, e.code);
+      const close = snap?.byCode.get(e.code)?.price ?? 0;
+      const daily = (e.daily ??= []);
+      const row: SuperDaily = { date: today, close, score: sig.score, level: sig.level };
+      const last = daily[daily.length - 1];
+      if (last?.date === today) daily[daily.length - 1] = row;
+      else daily.push(row);
+      if (daily.length > 120) daily.splice(0, daily.length - 120); // 넉 달이면 충분하다
+
+      // 이틀 연속 초록 미만 → 자동 이탈
+      const n = daily.length;
+      if (n >= 2 && daily[n - 1].level !== "green" && daily[n - 2].level !== "green") {
+        if (market === undefined) {
+          market = await evaluateMarket(client)
+            .then((m) => ({ level: m.level, score: m.score }))
+            .catch(() => null);
+        }
+        e.active = false;
+        (e.exits ??= []).push({
+          date: today,
+          price: close > 0 ? close : null,
+          score: sig.score,
+          marketLevel: market?.level ?? null,
+          marketScore: market?.score ?? null,
+          note: "신호등 초록 이탈 (이틀 연속)",
+          auto: true,
+        });
+        exited.push(e);
+      }
+    } catch {
+      /* 한 종목 실패는 다음 날 다시 */
+    }
+    await new Promise((r) => setTimeout(r, 220));
+  }
+  return exited;
+}
+
+// ---------------------------------------------------------------- 텔레그램 (전용 방)
+
+/**
+ * 슈퍼신호등 전용 방 (2026-08-26).
+ *
+ * `.env` 에 `TELEGRAM_CHAT_ID_SUPER` 를 넣으면 그 방이 **슈퍼 종목의 이벤트 허브**가
+ * 된다 — 편입·이탈은 여기서 직접 보내고, 시그널·공시·키워드 알림은 각자의 발송
+ * 지점이 `superRoute()` 로 물어서 슈퍼 종목 건만 이 방으로 돌린다.
+ * 전용 방이 없으면 아무것도 안 바뀐다 — 전부 원래 갈래로 간다.
+ */
+
+/** 추적 중인 슈퍼 종목 — 라우팅용. 발송 지점들이 1분마다 물어봐서 캐시를 둔다 */
+let activeCache: { at: number; list: { code: string; name: string }[] } | null = null;
+
+export async function getActiveSuper(): Promise<{ code: string; name: string }[]> {
+  if (activeCache && Date.now() - activeCache.at < 60_000) return activeCache.list;
+  const store = await load();
+  const list = store.entries
+    .filter((e) => e.active !== false)
+    .map((e) => ({ code: e.code, name: e.name }));
+  activeCache = { at: Date.now(), list };
+  return list;
+}
+
+/**
+ * 이 종목의 알림을 어느 방으로 보낼까 — 슈퍼 전용 방이 있고 슈퍼 종목이면 "super",
+ * 아니면 원래 갈래. 발송 지점이 한 줄로 쓰라고 만든 헬퍼다.
+ */
+export async function superRoute(
+  code: string,
+  fallback: TelegramChannel,
+): Promise<TelegramChannel> {
+  if (!hasDedicatedChannel("super")) return fallback;
+  const list = await getActiveSuper().catch(() => [] as { code: string }[]);
+  return list.some((s) => s.code === code) ? "super" : fallback;
+}
+
+const UNIVERSE_LABEL = new Map(SCREEN_UNIVERSES.map((u) => [u.key, u.label]));
+
+function fmtWon(n: number): string {
+  return Math.round(n).toLocaleString("ko-KR");
+}
+
+/** 편입·부활·이탈을 한 통으로 — 하루 한 번 15:45 실행이 보낸다 */
+function formatSuperRun(
+  added: SuperEntry[],
+  revived: SuperEntry[],
+  exited: SuperEntry[],
+): string {
+  const parts: string[] = [];
+  const listNames = (e: SuperEntry) =>
+    e.lists.map((k) => UNIVERSE_LABEL.get(k) ?? k).join(" · ");
+
+  if (added.length > 0) {
+    parts.push(
+      `🌟 <b>슈퍼신호등 편입 ${added.length}건</b>\n` +
+        added
+          .map(
+            (e) =>
+              `• ${stockNameHtml(e.code, e.name)}  ${fmtWon(e.addedPrice)}  ${e.score}점\n` +
+              `  목록 ${e.lists.length}곳 — ${listNames(e)}`,
+          )
+          .join("\n"),
+    );
+  }
+  if (revived.length > 0) {
+    parts.push(
+      `♻️ <b>다시 걸림 ${revived.length}건</b> (이탈했다가 교집합 복귀)\n` +
+        revived
+          .map((e) => `• ${stockNameHtml(e.code, e.name)} — ${e.seenCount}일째 · 목록 ${e.lists.length}곳`)
+          .join("\n"),
+    );
+  }
+  if (exited.length > 0) {
+    parts.push(
+      `⛔ <b>이탈 ${exited.length}건</b> (신호등 초록에서 이틀 연속 미달)\n` +
+        exited
+          .map((e) => {
+            const ex = e.exits?.[e.exits.length - 1];
+            const ret =
+              ex?.price && e.addedPrice > 0
+                ? ` · 편입 대비 ${(((ex.price - e.addedPrice) / e.addedPrice) * 100).toFixed(1)}%`
+                : "";
+            const mkt = ex?.marketLevel ? ` · 시장 ${ex.marketLevel} ${ex.marketScore ?? ""}점` : "";
+            return `• ${stockNameHtml(e.code, e.name)} — ${e.addedDate} 편입${ret}${mkt}`;
+          })
+          .join("\n"),
+    );
+  }
+  return parts.join("\n\n");
+}
+
+async function notifySuperRun(
+  added: SuperEntry[],
+  revived: SuperEntry[],
+  exited: SuperEntry[],
+): Promise<void> {
+  if (added.length + revived.length + exited.length === 0) return;
+  /* 전용 방이 있으면 거기로, 없으면 시그널 방으로 — 어쨌든 이 소식은 봐야 한다 */
+  const ch: TelegramChannel = hasDedicatedChannel("super") ? "super" : "signal";
+  if (!isTelegramConfigured(ch)) return;
+  await sendTelegram(formatSuperRun(added, revived, exited), ch).catch(() => undefined);
 }
 
 /** 진행 상황 — 화면 진행바용. 하나만 돈다 */
@@ -205,6 +423,9 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
 
     const have = new Map(store.entries.map((e) => [e.code, e]));
     let added = 0;
+    /* 텔레그램에 보낼 것들 — 신규 편입과, 이탈했다 다시 걸린 부활 */
+    const addedEntries: SuperEntry[] = [];
+    const revivedEntries: SuperEntry[] = [];
     for (const x of inter) {
       try {
         const sig = await evaluateSignal(client, x.c.code);
@@ -215,6 +436,9 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
             if (prev.lastSeenDate !== today) prev.seenCount += 1;
             prev.lastSeenDate = today;
             prev.lists = x.lists;
+            // 이탈했던 종목이 다시 걸렸다 — 되살린다. 이탈 이력은 그대로 남는다
+            if (prev.active === false) revivedEntries.push(prev);
+            prev.active = true;
             // 그룹에서 빠져 있으면 다시 담는다(기능 추가 전 편입분도 이 길로 들어온다)
             await ensureInGroup(
               { code: prev.code, name: prev.name, addedPrice: prev.addedPrice },
@@ -234,6 +458,7 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
             store.entries.push(entry);
             have.set(entry.code, entry);
             added += 1;
+            addedEntries.push(entry);
             /*
              * 관심종목 「슈퍼신호등」 그룹에도 담는다 (사용자 요청) — 관심종목이
              * 실시간·손절감시·뉴스 검색의 축이라, 거기 있어야 나머지가 따라붙는다.
@@ -266,6 +491,14 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
     job.step = "성과 채점 중";
     await gradeEntries(client, store).catch(() => undefined);
 
+    // 오늘의 종가·점수를 원장에 한 줄 — 대시보드의 흐름 그래프가 이걸 먹는다
+    job.step = "일별 기록 중";
+    const exitedEntries = await recordSuperDaily(client, store).catch(() => [] as SuperEntry[]);
+
+    // 편입·부활·이탈을 전용 방으로 (없으면 시그널 방)
+    activeCache = null; // 오늘 결과가 라우팅에 바로 반영되게
+    await notifySuperRun(addedEntries, revivedEntries, exitedEntries).catch(() => undefined);
+
     store.lastRunDate = today;
     await save(store);
     job = { ...job, status: "done", step: "완료" };
@@ -296,12 +529,38 @@ function gradeRow(label: string, entries: SuperEntry[]): GradeRow {
   return { label, d1: agg((r) => r.d1), d5: agg((r) => r.d5), d20: agg((r) => r.d20) };
 }
 
+/** 지평 하나의 승률 — 「편입하고 N일 뒤 플러스였나」 */
+function winRate(entries: SuperEntry[], pick: (r: NonNullable<SuperEntry["returns"]>) => number | null) {
+  const vals = entries
+    .map((e) => (e.returns ? pick(e.returns) : null))
+    .filter((v): v is number => v !== null);
+  return {
+    rate: vals.length ? (vals.filter((v) => v > 0).length / vals.length) * 100 : null,
+    n: vals.length,
+  };
+}
+
+/** 대시보드 요약 통계 — 체계 자체를 검증하는 숫자들 */
+export interface SuperStats {
+  activeCount: number;
+  exitedCount: number;
+  todayAdded: number;
+  win: {
+    d1: { rate: number | null; n: number };
+    d5: { rate: number | null; n: number };
+    d20: { rate: number | null; n: number };
+  };
+  best: { name: string; v: number } | null;
+  worst: { name: string; v: number } | null;
+}
+
 /** 화면용 — 지금 가격을 스냅샷에서 붙여 편입가 대비를 낸다 */
 export async function listSuperSignal(client: KiwoomClient): Promise<{
   entries: (SuperEntry & { price: number | null; changeRate: number | null; sinceAdded: number | null })[];
   lastRunDate: string | null;
   minLists: number;
   grade: GradeRow[];
+  stats: SuperStats;
 }> {
   const store = await load();
   const snap = await getMarketSnapshot(client).catch(() => null);
@@ -325,7 +584,179 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
     gradeRow("목록 4곳 이상", store.entries.filter((e) => e.lists.length >= 4)),
     gradeRow("이틀 이상 반복", store.entries.filter((e) => e.seenCount >= 2)),
   ];
-  return { entries, lastRunDate: store.lastRunDate, minLists: MIN_LISTS, grade };
+
+  const today = todayStr();
+  const d20s = store.entries
+    .map((e) => ({ name: e.name, v: e.returns?.d20 ?? null }))
+    .filter((x): x is { name: string; v: number } => x.v !== null);
+  const stats: SuperStats = {
+    activeCount: store.entries.filter((e) => e.active !== false).length,
+    exitedCount: store.entries.filter((e) => e.active === false).length,
+    todayAdded: store.entries.filter((e) => e.addedDate === today).length,
+    win: {
+      d1: winRate(store.entries, (r) => r.d1),
+      d5: winRate(store.entries, (r) => r.d5),
+      d20: winRate(store.entries, (r) => r.d20),
+    },
+    best: d20s.length ? d20s.reduce((a, b) => (b.v > a.v ? b : a)) : null,
+    worst: d20s.length ? d20s.reduce((a, b) => (b.v < a.v ? b : a)) : null,
+  };
+  return { entries, lastRunDate: store.lastRunDate, minLists: MIN_LISTS, grade, stats };
+}
+
+/** 수동 이탈 — 기록을 남기고 추적만 멈춘다. 목록에서 지우지 않는다 */
+export async function exitSuperEntry(
+  client: KiwoomClient,
+  code: string,
+  note: string,
+): Promise<SuperEntry | null> {
+  const store = await load();
+  const e = store.entries.find((x) => x.code === code);
+  if (!e) return null;
+  const snap = await getMarketSnapshot(client).catch(() => null);
+  const market = await evaluateMarket(client)
+    .then((m) => ({ level: m.level, score: m.score }))
+    .catch(() => null);
+  const sig = await evaluateSignal(client, code).catch(() => null);
+  e.active = false;
+  (e.exits ??= []).push({
+    date: todayStr(),
+    price: snap?.byCode.get(code)?.price ?? null,
+    score: sig?.score ?? null,
+    marketLevel: market?.level ?? null,
+    marketScore: market?.score ?? null,
+    note: note.trim() || "수동 이탈",
+    auto: false,
+  });
+  await save(store);
+  activeCache = null;
+  await notifySuperRun([], [], [e]).catch(() => undefined);
+  return e;
+}
+
+/** 자유 메모 수정 */
+export async function updateSuperNote(code: string, note: string): Promise<boolean> {
+  const store = await load();
+  const e = store.entries.find((x) => x.code === code);
+  if (!e) return false;
+  e.note = note.trim();
+  await save(store);
+  return true;
+}
+
+// ---------------------------------------------------------------- 상세 (온디맨드)
+
+interface DailyPoint {
+  date: string;
+  close: number;
+}
+
+const CHART_RESOURCE = "/api/dostk/chart";
+
+function toNum2(v: unknown): number {
+  const n = Number(String(v ?? "").replace(/[+,]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** 종목 일봉 — 옛날→최신 순 {date, close} */
+async function stockDailySeries(client: KiwoomClient, code: string): Promise<DailyPoint[]> {
+  const base = todayStr().replace(/-/g, "");
+  const res = await client.request<Record<string, unknown>>(CHART_RESOURCE, "ka10081", {
+    stk_cd: code,
+    base_dt: base,
+    upd_stkpc_tp: "1",
+  });
+  return ((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[])
+    .map((r) => ({ date: String(r.dt ?? ""), close: Math.abs(toNum2(r.cur_prc)) }))
+    .filter((r) => /^\d{8}$/.test(r.date) && r.close > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** 업종/지수 일봉(ka20006) — 옛날→최신 순. 값이 지수×100 이지만 비율만 쓰므로 그대로 */
+async function indexDailySeries(client: KiwoomClient, indsCode: string): Promise<DailyPoint[]> {
+  const base = todayStr().replace(/-/g, "");
+  const res = await client.request<Record<string, unknown>>(CHART_RESOURCE, "ka20006", {
+    inds_cd: indsCode,
+    base_dt: base,
+  });
+  return ((res.data?.inds_dt_pole_qry ?? []) as Record<string, unknown>[])
+    .map((r) => ({ date: String(r.dt ?? ""), close: Math.abs(toNum2(r.cur_prc)) }))
+    .filter((r) => /^\d{8}$/.test(r.date) && r.close > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** 일별 외인/기관 순매수 (ka10060) — 옛날→최신 순 */
+async function investorDailySeries(
+  client: KiwoomClient,
+  code: string,
+): Promise<{ date: string; foreign: number; inst: number }[]> {
+  const base = todayStr().replace(/-/g, "");
+  const res = await client.request<Record<string, unknown>>(CHART_RESOURCE, "ka10060", {
+    stk_cd: code,
+    dt: base,
+    amt_qty_tp: "1", // 금액
+    trde_tp: "0",
+    unit_tp: "1000",
+  });
+  return ((res.data?.stk_invsr_orgn_chart ?? []) as Record<string, unknown>[])
+    .map((r) => ({
+      date: String(r.dt ?? ""),
+      foreign: toNum2(r.frgnr_invsr),
+      inst: toNum2(r.orgn),
+    }))
+    .filter((r) => /^\d{8}$/.test(r.date))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * 종목 하나의 대시보드 상세 — 클릭했을 때만 부른다 (조회 4콜 안팎).
+ *
+ * 편입일 20거래일 전부터의 주가·지수·업종 시리즈와 일별 수급을 준다.
+ * 상대 비교(편입일=0% 정규화)는 화면이 한다 — 서버는 원자료만.
+ */
+export async function superDetail(client: KiwoomClient, code: string) {
+  const store = await load();
+  const entry = store.entries.find((e) => e.code === code);
+  if (!entry) return null;
+
+  const [stock, flows, mood, sig, market] = await Promise.all([
+    stockDailySeries(client, code).catch(() => [] as DailyPoint[]),
+    investorDailySeries(client, code).catch(() => [] as { date: string; foreign: number; inst: number }[]),
+    getSectorMood(client, code).catch(() => null),
+    evaluateSignal(client, code).catch(() => null),
+    evaluateMarket(client).catch(() => null),
+  ]);
+
+  /* 지수 — 업종 매칭이 알려 준 시장, 못 찾으면 코스피 */
+  const marketIdx = mood?.sector?.marketKey === "kosdaq" ? "101" : "001";
+  const [indexSeries, sectorSeries] = await Promise.all([
+    indexDailySeries(client, marketIdx).catch(() => [] as DailyPoint[]),
+    mood?.sector?.code
+      ? indexDailySeries(client, mood.sector.code).catch(() => [] as DailyPoint[])
+      : Promise.resolve([] as DailyPoint[]),
+  ]);
+
+  /* 편입일 20거래일 전부터만 — 그 앞은 이 화면의 물음이 아니다 */
+  const addedYmd = entry.addedDate.replace(/-/g, "");
+  const cut = (rows: DailyPoint[]): DailyPoint[] => {
+    const i = rows.findIndex((r) => r.date >= addedYmd);
+    return i < 0 ? rows.slice(-1) : rows.slice(Math.max(0, i - 20));
+  };
+
+  return {
+    entry,
+    stock: cut(stock),
+    index: { code: marketIdx, name: marketIdx === "101" ? "코스닥" : "코스피", series: cut(indexSeries) },
+    sector: mood?.sector
+      ? { code: mood.sector.code, name: mood.sector.name, changeRate: mood.sector.changeRate, series: cut(sectorSeries) }
+      : null,
+    flows: (() => {
+      const i = flows.findIndex((r) => r.date >= addedYmd);
+      return i < 0 ? [] : flows.slice(Math.max(0, i - 20));
+    })(),
+    signalNow: sig ? { level: sig.level, score: sig.score } : null,
+    marketNow: market ? { level: market.level, score: market.score, summary: market.summary } : null,
+  };
 }
 
 export async function removeSuperEntry(code: string): Promise<void> {

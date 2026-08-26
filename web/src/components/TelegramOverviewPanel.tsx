@@ -67,6 +67,13 @@ const SENDERS: SenderRow[] = [
     where: "텔레그램 동향 > 선별 관리",
   },
   {
+    icon: "🌟",
+    name: "슈퍼신호등",
+    what: "편입·이탈(15:45) + 슈퍼 종목의 시그널·공시·키워드 알림이 이 방으로 모임",
+    channel: "super",
+    where: "전용 방(.env TELEGRAM_CHAT_ID_SUPER)이 있을 때만 — 없으면 각자 원래 방으로",
+  },
+  {
     icon: "📄",
     name: "공시 알림",
     what: "켜면 10분 간격(기본 08~19시) — 관심종목·내 테마·주요 공시",

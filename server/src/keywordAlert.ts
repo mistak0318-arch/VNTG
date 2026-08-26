@@ -5,7 +5,8 @@ import { logEvent } from "./eventLog.js";
 import { fetchNewMessages, isReaderConfigured, type ChannelMessage } from "./telegramReader.js";
 import { listWatchlist } from "./watchlist.js";
 import { listThemes } from "./customThemes.js";
-import { sendTelegram } from "./telegram.js";
+import { hasDedicatedChannel, sendTelegram } from "./telegram.js";
+import { getActiveSuper } from "./superSignal.js";
 import { hhmmKst } from "./telegramDigest.js";
 
 /**
@@ -264,6 +265,13 @@ export async function runKeywordScan(
 
   let sentCount = 0;
   if (send) {
+    /*
+     * 슈퍼신호등 종목 이름이 걸린 건은 슈퍼 전용 방으로 (2026-08-26, 전용 방이 있을 때만).
+     * 키워드 매칭은 종목코드가 아니라 낱말이라, 슈퍼 종목의 **이름**과 대조한다.
+     */
+    const superNames = hasDedicatedChannel("super")
+      ? new Set((await getActiveSuper().catch(() => [])).map((s) => s.name))
+      : new Set<string>();
     for (const h of picked) {
       /*
        * 키워드 알림은 **따로 받는 방**으로 보낸다.
@@ -272,7 +280,8 @@ export async function runKeywordScan(
        * 몇 번 몰아 읽는 것이고 키워드는 뜨는 즉시 봐야 하는 것이다. 한 방에 섞이면
        * 급한 게 묻힌다. TELEGRAM_CHAT_ID_KEYWORD 가 없으면 예전처럼 기본 방으로 간다.
        */
-      await sendTelegram(toMessage(h), "keyword").catch(() => undefined);
+      const ch = h.words.some((w) => superNames.has(w)) ? ("super" as const) : ("keyword" as const);
+      await sendTelegram(toMessage(h), ch).catch(() => undefined);
       /*
        * 이벤트 로그 — **보낸 것만** 적는다(미리보기는 안 적는다. dedup 도 안 거친
        * 것이라 적으면 같은 사건이 스캔마다 쌓인다). 브리핑 타임라인이 읽는다.

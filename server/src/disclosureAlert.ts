@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { todayDartEvents, type DartEvent } from "./dartEvents.js";
 import { sendTelegram, stockNameHtml } from "./telegram.js";
+import { superRoute } from "./superSignal.js";
 
 /**
  * 관심종목 공시 알림.
@@ -181,7 +182,11 @@ export async function runDisclosureScan(
   let sentCount = 0;
   if (send) {
     for (const h of picked) {
-      await sendTelegram(toMessage(h.event, h.reason), "disclosure").catch(() => undefined);
+      /* 슈퍼신호등 종목의 공시는 슈퍼 전용 방으로 (전용 방이 있을 때만) */
+      const ch = h.event.stockCode
+        ? await superRoute(h.event.stockCode, "disclosure").catch(() => "disclosure" as const)
+        : ("disclosure" as const);
+      await sendTelegram(toMessage(h.event, h.reason), ch).catch(() => undefined);
       store.sent.push(h.event.url.split("rcpNo=")[1] ?? h.event.url);
       sentCount += 1;
       await new Promise((r) => setTimeout(r, 400));

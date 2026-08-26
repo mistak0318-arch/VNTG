@@ -3,7 +3,8 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { logEvents } from "./eventLog.js";
 import { pruneLiveAlerts, runLiveAlerts } from "./liveAlerts.js";
 import { pruneStopWatch, runStopWatch } from "./stopWatch.js";
-import { sendTelegram } from "./telegram.js";
+import { getActiveSuper } from "./superSignal.js";
+import { hasDedicatedChannel, sendTelegram } from "./telegram.js";
 import { listWatchlist } from "./watchlist.js";
 
 /**
@@ -50,8 +51,31 @@ export async function runAlertScan(
 
   if (opts.send === false) return { alerts, sent: false };
 
-  const res = await sendTelegram(formatAlerts(alerts), "signal");
-  return { alerts, sent: res.ok, error: res.error };
+  /*
+   * 슈퍼신호등 전용 방이 있으면 슈퍼 종목 건은 그 방으로 (2026-08-26) —
+   * 슈퍼 방이 그 종목들의 이벤트 허브다. 묶음 메시지라 종목 단위로 갈라 보낸다.
+   */
+  let superCodes = new Set<string>();
+  if (hasDedicatedChannel("super")) {
+    const list = await getActiveSuper().catch(() => [] as { code: string }[]);
+    superCodes = new Set(list.map((s) => s.code));
+  }
+  const superOnes = alerts.filter((a) => superCodes.has(a.code));
+  const rest = alerts.filter((a) => !superCodes.has(a.code));
+
+  let ok = true;
+  let error: string | undefined;
+  if (superOnes.length > 0) {
+    const r = await sendTelegram(formatAlerts(superOnes), "super");
+    ok = ok && r.ok;
+    error = error ?? r.error;
+  }
+  if (rest.length > 0) {
+    const r = await sendTelegram(formatAlerts(rest), "signal");
+    ok = ok && r.ok;
+    error = error ?? r.error;
+  }
+  return { alerts, sent: ok, error };
 }
 
 async function tick(client: KiwoomClient): Promise<void> {

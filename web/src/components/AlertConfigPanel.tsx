@@ -104,6 +104,7 @@ const CHANNEL_LABEL: Record<string, string> = {
   channel: "채널 수집",
   disclosure: "공시",
   keyword: "키워드",
+  super: "슈퍼신호등",
 };
 
 export function AlertConfigPanel() {

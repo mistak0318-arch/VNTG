@@ -9,7 +9,15 @@ import {
   startScreen,
 } from "../signalScreen.js";
 import { evaluateMarket } from "../marketSignal.js";
-import { listSuperSignal, removeSuperEntry, runSuperSignal, superJob } from "../superSignal.js";
+import {
+  exitSuperEntry,
+  listSuperSignal,
+  removeSuperEntry,
+  runSuperSignal,
+  superDetail,
+  superJob,
+  updateSuperNote,
+} from "../superSignal.js";
 import { gradeSignalHistory, signalDays } from "../signalHistory.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
@@ -209,6 +217,48 @@ export function createSignalRouter(client: KiwoomClient): Router {
     try {
       await removeSuperEntry(req.params.code);
       res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* ---------------- 슈퍼신호등 대시보드 (2026-08-26) ---------------- */
+
+  /** 종목 하나의 흐름 — 주가·지수·업종·수급·일별 점수. 클릭했을 때만 부른다 */
+  router.get("/super/detail/:code", async (req, res, next) => {
+    try {
+      const d = await superDetail(client, req.params.code);
+      if (!d) {
+        res.status(404).json({ error: "슈퍼신호등 목록에 없는 종목입니다" });
+        return;
+      }
+      res.json(d);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 수동 이탈 — 기록을 남기고 추적만 멈춘다 */
+  router.post("/super/exit/:code", async (req, res, next) => {
+    try {
+      const note = String((req.body as { note?: string })?.note ?? "");
+      const e = await exitSuperEntry(client, req.params.code, note);
+      if (!e) {
+        res.status(404).json({ error: "슈퍼신호등 목록에 없는 종목입니다" });
+        return;
+      }
+      res.json({ ok: true, entry: e });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 자유 메모 */
+  router.put("/super/note/:code", async (req, res, next) => {
+    try {
+      const note = String((req.body as { note?: string })?.note ?? "");
+      const ok = await updateSuperNote(req.params.code, note);
+      res.status(ok ? 200 : 404).json({ ok });
     } catch (err) {
       next(err);
     }
