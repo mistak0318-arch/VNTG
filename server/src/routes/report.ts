@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 
+import { buildDigest } from "../aiSummary.js";
 import { buildMarketDrivers } from "../reportBuilder.js";
 import { newsletterHtml } from "../newsletter.js";
 import { deliverReport } from "../reportDelivery.js";
@@ -21,6 +22,20 @@ import { activeJobs, createJob, getJob, reporterFor } from "../reportProgress.js
  */
 export function createReportRouter(client: KiwoomClient): Router {
   const router = Router();
+
+  /**
+   * 다이제스트 미리보기 (2026-08-26) — **AI 를 부르지 않는다.** 발행 때 프롬프트에
+   * 들어가는 시장 데이터 본문만 그대로 돌려준다. 리포트 입력을 개편할 때 실제로
+   * 무엇이 들어가는지 눈으로 확인하는 용도다 (발행·발송·비용 없음).
+   */
+  router.get("/digest-preview", async (_req, res, next) => {
+    try {
+      const digest = await buildDigest(client);
+      res.type("text/plain; charset=utf-8").send(digest);
+    } catch (err) {
+      next(err);
+    }
+  });
 
   /** 오늘 시장을 움직인 것 — 강한 테마·업종과 그 이유(관련 뉴스) */
   router.get("/drivers", async (req, res, next) => {

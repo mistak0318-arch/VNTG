@@ -48,8 +48,10 @@ export const PUBLISH_STEPS: { key: string; label: string }[] = [
   { key: "market", label: "지수·수급·급등락 수집" },
   { key: "sector", label: "업종 자금 흐름" },
   { key: "signal", label: "시장 신호등" },
-  { key: "usKr", label: "미국↔국내 테마 연동" },
+  /* 2026-08-26 개편 — 미국↔국내 연동(안 쓰는 화면)을 빼고 슈퍼신호등·수출입이 들어왔다 */
+  { key: "super", label: "슈퍼신호등 현황" },
   { key: "theme", label: "내 테마 평가" },
+  { key: "trade", label: "수출입 동향" },
   { key: "news", label: "뉴스·공시" },
   { key: "research", label: "웹 리서치 (검색)" },
   { key: "ai", label: "AI 정리 생성" },

@@ -5,8 +5,9 @@ import { getTradeStats, toTradeDigest } from "./tradeStats.js";
 import { peekWebResearch, runWebResearch, toResearchDigest } from "./webResearch.js";
 import { describeBreadth, listBreadth, toPoints } from "./breadthStore.js";
 import { listSectorFlow, toSectorFlowDigest } from "./sectorFlowStore.js";
-import { evaluateLinks, toUsKrDigest } from "./usKrLinks.js";
 import { evaluateMarket, toMarketSignalDigest } from "./marketSignal.js";
+import { listSuperSignal } from "./superSignal.js";
+import { mainNews } from "./naverMainNews.js";
 import { getSection } from "./marketOverview.js";
 import type { IndexCard, MarketFlow, StockRow, HighLow } from "./marketOverview.js";
 import type { GlobalQuote } from "./globalMarket.js";
@@ -223,15 +224,51 @@ export async function buildDigest(
   progress.done("signal", marketSig ? `${marketSig.level} ${marketSig.score}점` : "판정 불가");
 
   /*
-   * 밤사이 미국이 어느 국내 테마로 이어지는지.
-   * "나스닥 +0.8%"만 있으면 사람이 머릿속으로 이어야 하는데, 그 연결을 붙여서 준다.
-   * 아직 상관계수 검증 전이라 프롬프트에 "가설"이라고 못박아 둔다.
+   * 슈퍼신호등 (2026-08-26 전면 개편) — **이 시스템의 핵심 관찰 대상**을 리포트 한가운데로.
+   *
+   * 일곱 목록 교집합에 걸린 초록을 매일 편입해 따라가는 목록이다. 리포트가 이걸 모르면
+   * 「시스템이 지금 무엇을 가리키는가」를 말할 수 없다. 편입 시점 대비 수익·점수 변화·
+   * 오늘의 편입/이탈, 그리고 체계 자체의 성적(5·20일 평균과 승률)까지 넘긴다.
+   *
+   * (같은 자리에 있던 미국↔국내 테마 연동은 뺐다 — 화면에서도 숨긴 안 쓰는 기능이었다)
    */
-  progress.start("usKr");
-  const usKr = await evaluateLinks(client).then((r) => r.links).catch(() => []);
-  const usKrDigest = toUsKrDigest(usKr, { premarket: !traded });
-  if (usKrDigest) lines.push(usKrDigest);
-  progress.done("usKr", `연결 ${usKr.length}개`);
+  progress.start("super");
+  try {
+    const sup = await listSuperSignal(client);
+    const act = sup.entries.filter((e) => e.active !== false);
+    const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+    const newly = sup.entries.filter((e) => e.addedDate === todayKst);
+    const exitedToday = sup.entries.filter(
+      (e) => e.active === false && (e.exits ?? []).some((x) => x.date === todayKst),
+    );
+    if (act.length + newly.length + exitedToday.length > 0) {
+      lines.push("\n[슈퍼신호등 — 거래대금·등락률·외국인 연속매수 등 일곱 목록의 교집합에 걸린 초록 신호등 종목. 이 시스템의 핵심 관찰 목록]");
+      const head: string[] = [`추적 ${act.length}종목`];
+      if (newly.length > 0) head.push(`오늘 신규 편입: ${newly.map((e) => e.name).join(", ")}`);
+      if (exitedToday.length > 0) head.push(`오늘 이탈: ${exitedToday.map((e) => e.name).join(", ")}`);
+      lines.push(head.join(" · "));
+      for (const e of act.slice(0, 10)) {
+        const daily = e.daily ?? [];
+        const nowScore = daily.length > 0 ? daily[daily.length - 1].score : null;
+        const scoreTxt =
+          nowScore !== null && nowScore !== e.score
+            ? `${e.score}점→지금 ${nowScore}점`
+            : `${e.score}점`;
+        lines.push(
+          `${e.name}: ${e.addedDate} 편입(${scoreTxt}) · 목록 ${e.lists.length}곳 · ${e.seenCount}일째 · 편입가 대비 ${e.sinceAdded === null ? "-" : pct(e.sinceAdded)}`,
+        );
+      }
+      const g = sup.grade.find((x) => x.label === "전체");
+      if (g && (g.d5.n > 0 || g.d20.n > 0)) {
+        lines.push(
+          `체계 성적: 편입 5일 뒤 평균 ${g.d5.avg === null ? "-" : pct(g.d5.avg)} (${g.d5.n}건, 승률 ${sup.stats.win.d5.rate === null ? "-" : `${sup.stats.win.d5.rate.toFixed(0)}%`}) · 20일 뒤 ${g.d20.avg === null ? "-" : pct(g.d20.avg)} (${g.d20.n}건)`,
+        );
+      }
+    }
+    progress.done("super", `추적 ${act.length}종목`);
+  } catch {
+    progress.skip("super", "없음");
+  }
 
   /*
    * 내가 만든 테마를 **키움 테마보다 먼저** 넣는다.
@@ -270,12 +307,24 @@ export async function buildDigest(
     for (const sec of drivers.sectors) lines.push(`${sec.market} ${sec.name} ${pct(sec.changeRate)}`);
   }
 
+  /*
+   * 수출입 동향 (2026-08-26 개편) — toTradeDigest 는 지금까지 **import 만 되고 한 번도
+   * 불린 적이 없었다.** 관세청 월별 실측이 리포트에 안 들어가고 있던 것이다.
+   * 월 단위 데이터라 매일 같은 값이지만, 그 해석(어느 업종의 실물이 좋아지고 있나)은
+   * 시세·수급과 붙여 읽을 때 값이 있다 — 반복 서술은 프롬프트 규칙으로 막는다.
+   */
+  progress.start("trade");
+  const trade = await getTradeStats().catch(() => null);
+  const tradeDigest = trade && trade.items.length > 0 ? toTradeDigest(trade.items) : "";
+  if (tradeDigest) lines.push(tradeDigest);
+  progress.done("trade", trade?.items.length ? `${trade.items.length}품목` : "없음");
+
   const movers = (moverSec?.data ?? null) as { rising: StockRow[]; falling: StockRow[] } | null;
   if (movers && traded) {
     lines.push("\n[급등 상위]");
-    lines.push(movers.rising.slice(0, 8).map((x) => `${x.name} ${pct(x.changeRate)}`).join(", "));
+    lines.push(movers.rising.slice(0, 5).map((x) => `${x.name} ${pct(x.changeRate)}`).join(", "));
     lines.push("[급락 상위]");
-    lines.push(movers.falling.slice(0, 8).map((x) => `${x.name} ${pct(x.changeRate)}`).join(", "));
+    lines.push(movers.falling.slice(0, 5).map((x) => `${x.name} ${pct(x.changeRate)}`).join(", "));
   }
 
   const hiLo = (hiLoSec?.data ?? null) as HighLow | null;
@@ -300,10 +349,25 @@ export async function buildDigest(
     for (const e of events.slice(0, 8)) lines.push(`${e.date}${e.time ? " " + e.time : ""} ${e.title}`);
   }
 
+  /*
+   * 네이버 금융 첫 화면의 주요 뉴스 (2026-08-26 개편) — 뉴스 수집이 커지면서
+   * 「지금 시장이 크게 보고 있는 기사」를 따로 받게 됐다. 분야별 헤드라인과 성격이
+   * 다르다: 이건 편집자가 고른 오늘의 핵심이다.
+   */
+  try {
+    const main = await mainNews(8);
+    if (main.length > 0) {
+      lines.push("\n[주요 뉴스 — 네이버 금융 첫 화면]");
+      for (const m of main) lines.push(`- ${m.title} (${m.press})`);
+    }
+  } catch {
+    /* 없어도 분야별 헤드라인이 있다 */
+  }
+
   if (news) {
-    lines.push("\n[주요 뉴스 헤드라인]");
+    lines.push("\n[분야별 뉴스 헤드라인]");
     for (const sec of news.sectors) {
-      const heads = sec.items.slice(0, 4).map((n) => `- ${n.title} (${n.coverage}개 매체)`);
+      const heads = sec.items.slice(0, 3).map((n) => `- ${n.title} (${n.coverage}개 매체)`);
       if (heads.length > 0) lines.push(`<${sec.label}>`, ...heads);
     }
   }
@@ -324,7 +388,7 @@ const SYSTEM_RULES = `너는 한국 주식시장 데이터를 정리해 주는 �
   「시장の 폭」이 나간 적이 있다. 섹션 제목은 아래 틀의 표기 그대로 쓴다.
 - 금액은 **조·억으로 끊어 써라** — 「1조 1,635억 원」이지 「11,635억 원」이 아니다.
   1조 미만이면 억으로만 쓴다.
-- **분량 제한은 반드시 지켜라. 항목마다 최대 5문장, 전체 한글 2,200자를 넘기지 마라.**
+- **분량 제한은 반드시 지켜라. 항목마다 최대 5문장, 전체 한글 2,600자를 넘기지 마라.**
   넘길 것 같으면 항목을 줄이지 말고 **문장을 줄여라.** 마지막 체크포인트 구획까지
   반드시 다 쓰고 끝내야 한다 — 중간에 잘리면 그 리포트는 쓸 수 없다.
   데이터가 많아졌으므로 나열하지 말고 **연결해라** — 같은 사실을 두 항목에서 반복하지 마라.
@@ -332,16 +396,18 @@ const SYSTEM_RULES = `너는 한국 주식시장 데이터를 정리해 주는 �
   **그 숫자가 무엇을 뜻하는지**만 쓴다.
 
 <우선순위>
-데이터에 [내가 만든 테마]가 있으면 **그것을 [강한 테마]보다 먼저, 더 비중 있게** 다뤄라.
-키움 테마 분류는 참고이고, 사용자가 직접 정의한 테마가 이 사람의 관점이다.
-[출처: 인포스탁] 표시가 붙은 테마는 사용자가 만든 것이 아니라 옮겨온 것이므로 보조로만 쓴다.
+이 리포트의 중심축은 둘이다: **[슈퍼신호등]과 [내가 만든 테마].**
+슈퍼신호등은 이 시스템이 기계적으로 골라 따라가는 종목들이고, 내 테마는 사용자의 관점이다.
+데이터에 이 둘이 있으면 다른 어떤 항목보다 비중 있게 다뤄라.
+키움 테마 분류는 참고이고, [출처: 인포스탁] 표시가 붙은 테마는 보조로만 쓴다.
 </우선순위>
 
 <연결>
 좋은 리포트는 숫자를 옮겨 적는 게 아니라 **서로 다른 데이터를 잇는 것**이다. 예를 들면:
-- 업종별 자금 흐름의 순위 변화 ↔ 그 업종에 속한 내 테마의 등락
+- 업종별 자금 흐름의 순위 변화 ↔ 그 업종에 속한 내 테마·슈퍼신호등 종목의 등락
 - 주체 합의(여러 주체가 같은 방향) ↔ 그 업종이 강한 테마인지
-- 미국↔국내 연동의 '덜 반영' ↔ 오늘 국내에서 실제로 그 테마가 어땠는지
+- 슈퍼신호등 편입 종목의 업종 ↔ 오늘 그 업종의 수급·수출입 실물
+- 수출입 증감률 ↔ 그 업종 시세가 실물을 따라가는지 앞서가는지
 - 시장의 폭 ↔ 지수 등락 (지수만 오르고 폭이 좁으면 반드시 지적)
 근거가 약하면 억지로 잇지 말고 "연결이 뚜렷하지 않다"고 써라.
 </연결>
@@ -354,21 +420,31 @@ const SYSTEM_RULES = `너는 한국 주식시장 데이터를 정리해 주는 �
 **업종별 자금 흐름이 있으면 어느 업종에서 빼서 어디로 넣었는지**를 반드시 쓴다 — 총액만
 말하는 것은 의미가 없다. 여러 주체가 같은 방향으로 움직인 업종이 있으면 그것을 앞세워라)
 
+## 슈퍼신호등
+(데이터에 [슈퍼신호등]이 있으면 **반드시 이 항목을 쓴다.** 오늘 신규 편입·이탈이 있으면
+그것부터 — 어떤 종목이 왜 걸렸을지(업종·수급·뉴스에서 근거를 찾아라). 이어서 추적 중
+종목들이 편입 시점 대비 어떤지, 점수가 오르는 쪽인지 꺾이는 쪽인지 흐름을 짚어라.
+체계 성적(5·20일 평균/승률)이 있으면 지금 이 목록을 얼마나 신뢰할 수 있는지 한 줄로.
+데이터에 [슈퍼신호등]이 없으면 이 항목을 생략한다)
+
 ## 내 테마
 (사용자가 만든 테마의 오늘 움직임. 강한 것과 약한 것을 나누고, **왜 그렇게 움직였는지**를
-업종 자금 흐름·뉴스·미국 연동에서 찾아 붙여라. 내가 만든 테마가 없으면 이 항목을 생략한다)
+업종 자금 흐름·뉴스에서 찾아 붙여라. 내가 만든 테마가 없으면 이 항목을 생략한다)
 
 ## 시장의 폭
 (상승 대 하락 종목 수, 신고가/신저가 종목 수로 이 상승(하락)이 얼마나 퍼져 있는지 판단.
 지수와 개별주의 온도차가 있으면 반드시 지적한다)
 
-## 주도 섹터
+## 주도 섹터와 실물
 (내 테마에서 다루지 않은 강한 테마·업종 2~3개와 그 배경. 뉴스에서 근거를 찾아 연결하라.
-약한 쪽도 한 줄 언급해 자금이 어디서 어디로 이동했는지 보여라)
+약한 쪽도 한 줄 언급해 자금이 어디서 어디로 이동했는지 보여라.
+[수출입 동향]이 있으면 **증감이 두드러진 품목만** 골라 관련 업종 시세와 잇는다 — 월별
+데이터라 매일 같은 값이니, 시세와의 연결이 새로울 때만 쓰고 아니면 언급하지 마라)
 
 ## 관심종목 & 체크포인트
 (사용자 관심종목이 있으면 그 종목들의 오늘 움직임과 수급을 먼저 정리한다.
-이어서 확인 사항 3~4개. **"무엇을 보면 무엇을 알 수 있는가"** 형태로 구체적으로 써라)
+이어서 확인 사항 3~4개. **"무엇을 보면 무엇을 알 수 있는가"** 형태로 구체적으로 써라.
+슈퍼신호등 종목에 대한 확인 사항이 있으면 우선한다)
 ${CHECKPOINT_RULE}`;
 
 
@@ -400,10 +476,14 @@ const MORNING_RULES = `너는 한국 주식시장 개장 전 브리핑을 쓰는
 (미국·유럽·아시아 지수와 그 원인. 유가·금리·환율에 특징이 있으면 함께.
 어떤 업종·테마가 움직였는지까지 짚어라 — 그게 오늘 우리 장의 출발점이다)
 
+## 슈퍼신호등 점검
+(데이터에 [슈퍼신호등]이 있으면 쓴다. 추적 중 종목 각각에 대해 간밤 해외·뉴스에서
+관련 재료가 있으면 짚어라 — 이 목록이 시스템이 기계적으로 골라 둔 오늘의 관찰 대상이다.
+편입가 대비 수익률을 인용할 땐 "전일 종가 기준"임을 밝혀라. 재료가 없는 종목은
+나열하지 말고 "특이 재료 없음" 한 줄로 접어라. 없으면 이 항목을 생략한다)
+
 ## 내 테마 점검
-(**이 항목을 먼저 쓴다.** 사용자가 직접 만든 테마 각각에 대해, 간밤 미국·뉴스가
-그 테마로 이어지는지 짚어라. '미국↔국내 테마 연동'의 기대치가 있으면 그 숫자를 인용하되
-**아직 개장 전이므로 결과가 아니라 기대치임을 분명히** 하라.
+(사용자가 직접 만든 테마 각각에 대해, 간밤 미국·뉴스가 그 테마로 이어지는지 짚어라.
 테마의 등락률을 인용할 땐 반드시 "전일" 이라고 밝혀라 — 오늘 값이 아니다.
 간밤 재료가 없는 테마는 굳이 언급하지 마라. 내가 만든 테마가 없으면 이 항목을 생략한다)
 
