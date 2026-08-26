@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  위젯 크기 정의 — 크기 조절이 핵심이다 (증권플러스 모양, 늘 대화면이 아니다).
+  resizeMode 를 다 열고, 칸을 몇 개 그릴지는 코드(LocalSize)가 정한다.
+  updatePeriodMillis 는 안드로이드 최소가 30분이라, 실제 갱신은 WorkManager(15분)가 한다.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="3"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:updatePeriodMillis="1800000"
+    android:initialLayout="@layout/widget_loading" />

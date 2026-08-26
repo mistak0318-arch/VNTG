@@ -3656,6 +3656,18 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 }
 .sd-exit-input { flex: 1; min-width: 160px; }
 
+/* 고정 채널 — 원문 접기 (본체는 요약, 원문은 펼칠 때만) */
+.rp-pin-fold > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 4px 0;
+  list-style: none;
+}
+.rp-pin-fold > summary::before { content: "▸ "; }
+.rp-pin-fold[open] > summary::before { content: "▾ "; }
+.rp-pin-fold > summary::-webkit-details-marker { display: none; }
+
 /* 미니 라인차트 */
 .miniline-legend { display: flex; gap: 14px; font-size: 0.72rem; color: var(--muted); margin-bottom: 4px; flex-wrap: wrap; }
 .miniline-key { display: inline-flex; align-items: center; gap: 5px; }

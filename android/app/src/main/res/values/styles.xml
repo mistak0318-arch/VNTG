@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="CfgLabel">
+        <item name="android:textColor">#8B96A5</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:layout_marginTop">16dp</item>
+    </style>
+    <style name="CfgInput">
+        <item name="android:textColor">#E7EBF0</item>
+        <item name="android:textColorHint">#5B6673</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+</resources>

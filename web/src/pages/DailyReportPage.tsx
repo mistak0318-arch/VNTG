@@ -504,7 +504,7 @@ export function DailyReportPage({
         리포트를 여는 이유가 대개 이 글이다. 이미 한 편으로 정리된 시황이라
         선별에 넣으면 점수 싸움에 밀리고, AI 로 다시 요약하면 그 정리가 사라진다.
       */}
-      <Section no={2} title="고정 채널 시황 (원문)">
+      <Section no={2} title="고정 채널 시황">
         <PinnedChannelSection edition={edition} />
       </Section>
 

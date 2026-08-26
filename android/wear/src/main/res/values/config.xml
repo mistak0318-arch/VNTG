@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  워치 접속 설정 — 워치에서 URL 을 타이핑하는 건 고문이라 **빌드 전에 여기 적는다.**
+  Cloudflare Access 서비스 토큰(id/secret)은 조회 요약(/api/summary/*)만 열린 토큰이어야 한다.
+  내부망(미니PC 직결)으로 쓸 거면 base_url 만 바꾸고 토큰은 비워 둔다.
+-->
+<resources>
+    <string name="vntg_base_url">https://vntgts.com</string>
+    <string name="vntg_cf_id"></string>
+    <string name="vntg_cf_secret"></string>
+</resources>

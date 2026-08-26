@@ -946,7 +946,7 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
       */}
       {summary && (
         <div className="rp-pin-sum">
-          <div className="rp-pin-sum-h">⚡ 세 줄 요약 <i>AI — 아래 원문에서 뽑았습니다</i></div>
+          <div className="rp-pin-sum-h">⚡ 요약 <i>AI — 원문에서 뽑았습니다</i></div>
           {summary
             .split(/\r?\n/)
             .filter((l) => l.trim())
@@ -957,6 +957,11 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
             ))}
         </div>
       )}
+      {/*
+        원문은 접어 둔다 (2026-08-26 — 「원문이 너무 길다」).
+        본체는 위의 요약이고, 각 글은 출처·시각·원문 링크 한 줄만 보인다.
+        더 읽고 싶은 날만 「원문 펼치기」 — 원문 자체는 그대로 보존한다(그게 이 섹션의 존재 이유).
+      */}
       {posts.map((p) => (
         <div className="rp-pinned" key={`${p.at}-${p.link}`}>
           {/* 누가 언제 쓴 글인지가 머리에 또렷이 — 출처 없는 시황은 무게를 잴 수 없다 */}
@@ -965,18 +970,21 @@ export function PinnedChannelSection({ edition }: { edition: string }) {
             <span className="rp-pin-when">{postedLabel(p.at)}</span>
             {p.link && (
               <a href={p.link} target="_blank" rel="noreferrer" className="pt-n">
-                원문 →
+                텔레그램 원문 →
               </a>
             )}
           </div>
-          {/* 원문이라 줄바꿈을 그대로 살린다 — 문단이 무너지면 읽기가 어려워진다 */}
-          <div className="rp-pinned-body">{renderPinned(p.text)}</div>
+          <details className="rp-pin-fold">
+            <summary>원문 펼치기 ({p.text.length.toLocaleString("ko-KR")}자)</summary>
+            {/* 원문이라 줄바꿈을 그대로 살린다 — 문단이 무너지면 읽기가 어려워진다 */}
+            <div className="rp-pinned-body">{renderPinned(p.text)}</div>
+          </details>
         </div>
       ))}
       <div className="table-note">
-        고정 채널은 <b>선별도 AI 요약도 거치지 않은 원문</b>입니다. 이미 정리된 글이라
-        다시 요약하면 정보만 잃습니다. 한 번 받은 판은 <b>그날치로 저장</b>되어, 나중에 열어도
-        아침에 본 그 글이 그대로 있습니다.
+        위 요약은 AI 가 원문에서 뽑은 것이고, <b>원문은 접혀 있을 뿐 그대로</b>입니다 —
+        펼치거나 텔레그램 링크로 봅니다. 한 번 받은 판은 <b>그날치로 저장</b>되어, 나중에
+        열어도 아침에 본 그 글이 그대로 있습니다.
         <button className="filter-btn" onClick={() => load(true)} disabled={busy}>
           {busy ? "…" : "다시 받기"}
         </button>

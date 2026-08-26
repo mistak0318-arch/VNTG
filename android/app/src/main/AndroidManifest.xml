@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="VNTG"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
+
+        <!-- 폰 앱 껍데기 — 누르면 웹(HTS)을 브라우저로 연다. 본체는 위젯이다 -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 위젯 설정(⚙) — 서버 주소·Access 토큰·관심종목 그룹 -->
+        <activity
+            android:name=".ConfigActivity"
+            android:exported="true"
+            android:label="VNTG 위젯 설정" />
+
+        <!-- 바탕화면 위젯 -->
+        <receiver
+            android:name=".VntgWidgetReceiver"
+            android:exported="true"
+            android:label="VNTG 관심종목">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/vntg_widget_info" />
+        </receiver>
+    </application>
+</manifest>
