@@ -84,6 +84,10 @@ function Thermometer({
   const es = pick("esF");
   const nq = pick("nqF");
   const vix = usMajor?.rows.find((r) => r.key === "vix") ?? null;
+  /* 금리·유가 (2026-08-26 요청) — 위험 선호의 나머지 반쪽 */
+  const tnx = usMajor?.rows.find((r) => r.key === "tnx") ?? null;
+  const tyx = usMajor?.rows.find((r) => r.key === "tyx") ?? null;
+  const wti = usMajor?.rows.find((r) => r.key === "wti") ?? null;
 
   return (
     <div className="bf-thermo">
@@ -156,10 +160,39 @@ function Thermometer({
           </b>
         </span>
       )}
+      {/* 미국 금리·유가 (2026-08-26 요청) — 금리는 %p 방향이 본체라 값+방향 화살표로 */}
+      {[
+        { label: "美10년", r: tnx },
+        { label: "美30년", r: tyx },
+      ].map(
+        ({ label, r }) =>
+          r?.price != null && (
+            <span className="bf-mini" key={label} title={`${r.label} 국채금리 — 오르면 할인율 부담`}>
+              <em>{label}</em>
+              <b>
+                {r.price.toFixed(2)}%
+                {r.changeRate !== null && r.changeRate !== 0 && (
+                  <i className={`bf-mini-sub ${cls(r.changeRate)}`}>
+                    {r.changeRate > 0 ? "▲" : "▼"}
+                  </i>
+                )}
+              </b>
+            </span>
+          ),
+      )}
+      {wti?.price != null && (
+        <span className="bf-mini" title="WTI 유가(근월물) — 정유·화학·항공에 바로 닿습니다">
+          <em>WTI</em>
+          <b className={cls(wti.changeRate)}>
+            {wti.price.toFixed(1)}
+            <i className="bf-mini-sub">{pct(wti.changeRate)}</i>
+          </b>
+        </span>
+      )}
       {/* 약어 풀이 (2026-08-26 요청) — ES/NQ 가 뭔지 화면이 직접 말한다 */}
       <span className="bf-thermo-note">
         ES = S&amp;P500 선물 · NQ = 나스닥100 선물 (지금 도는 미국 지수선물 — 다음 미장의 예고편)
-        · VIX = 변동성(공포)지수
+        · VIX = 변동성(공포)지수 · 美금리 화살표 = 전일 대비 방향
       </span>
     </div>
   );
