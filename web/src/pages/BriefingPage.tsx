@@ -196,25 +196,26 @@ function FlowBars({
 
   return (
     <>
-      <div className="bf-fg">
-        <span className="bf-fg-corner" />
+      {/* ⚠️ 클래스명 bf-supply — bf-fg 는 거래원 「외국계」 뱃지가 선점(파란 배경 사고, 2026-08-26) */}
+      <div className="bf-supply">
+        <span className="bf-supply-corner" />
         {["개인", "외국인", "기관"].map((h) => (
-          <span className="bf-fg-h" key={h}>{h}</span>
+          <span className="bf-supply-h" key={h}>{h}</span>
         ))}
         {rows.map(({ label, f, unit }) => {
           /* 행별 최대로 잰다 — 억(현물)과 계약(선물)은 단위가 달라 같이 재면 안 된다 */
           const max = Math.max(1, ...[f.individual, f.foreign, f.institution].map(Math.abs));
           return (
             <Fragment key={label}>
-              <em className="bf-fg-m">{label}</em>
+              <em className="bf-supply-m">{label}</em>
               {[f.individual, f.foreign, f.institution].map((v, i) => (
-                <span className="bf-fg-cell" key={i}>
+                <span className="bf-supply-cell" key={i}>
                   <b className={`num ${cls(v)}`}>
                     {v > 0 ? "+" : ""}
                     {fmtNum(Math.round(v))}
                     <i>{unit}</i>
                   </b>
-                  <span className="bf-fg-bar">
+                  <span className="bf-supply-bar">
                     <i
                       className={v >= 0 ? "up" : "down"}
                       style={{ width: `${(Math.abs(v) / max) * 100}%` }}

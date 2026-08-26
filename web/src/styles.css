@@ -2374,28 +2374,28 @@ body {
 }
 .bf-tile b { font-size: 0.7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bf-tile i { font-style: normal; font-size: 0.68rem; }
-/* 오늘 수급 격자판 — 숫자가 주인공, 막대는 밑줄 (긴 막대가 태블릿에서 값을 가렸다) */
-.bf-fg {
+/*
+ * 오늘 수급 격자판 — 숫자가 주인공, 막대는 밑줄 (긴 막대가 태블릿에서 값을 가렸다).
+ * ⚠️ 클래스명 bf-supply — 처음에 bf-fg 로 지었다가 거래원 「외국계」 뱃지(.bf-fg,
+ * 파란 배경)와 충돌해 수급판 전체가 파랗게 칠해졌다. 접두사 있는 이름도 겹친다 —
+ * 새 클래스는 grep 부터.
+ */
+.bf-supply {
   display: grid;
   grid-template-columns: 3.6rem repeat(3, minmax(0, 1fr));
   gap: 6px 10px;
   align-items: center;
 }
-.bf-fg-corner { }
-.bf-fg-h { font-size: 0.7rem; color: var(--muted); text-align: right; }
-.bf-fg-m { font-style: normal; font-size: 0.78rem; color: var(--muted); }
-.bf-fg-cell { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 0; }
-.bf-fg-cell > b { font-size: 0.82rem; white-space: nowrap; }
-.bf-fg-cell > b > i { font-style: normal; font-size: 0.62rem; color: var(--muted); margin-left: 1px; }
-/*
- * 트랙 배경 없이 색 막대만 (2026-08-26 — 「배경색이 이상하다」).
- * 회색 트랙이 카드 배경과 어중간하게 섞여 지저분했고, --up 은 엑셀 모드에서
- * 검정으로 덮이는 변수라 테마 변수 대신 등락색 리터럴을 쓴다.
- */
-.bf-fg-bar { width: 100%; max-width: 6.5rem; height: 3px; display: flex; justify-content: flex-end; }
-.bf-fg-bar > i { display: block; height: 100%; border-radius: 2px; }
-.bf-fg-bar > i.up { background: #f04452; margin-right: auto; }
-.bf-fg-bar > i.down { background: #3182f6; }
+.bf-supply-h { font-size: 0.7rem; color: var(--muted); text-align: right; }
+.bf-supply-m { font-style: normal; font-size: 0.78rem; color: var(--muted); }
+.bf-supply-cell { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 0; }
+.bf-supply-cell > b { font-size: 0.82rem; white-space: nowrap; }
+.bf-supply-cell > b > i { font-style: normal; font-size: 0.62rem; color: var(--muted); margin-left: 1px; }
+/* 트랙 배경 없이 색 막대만 — 등락색 리터럴(--up 은 엑셀 모드에서 검정으로 덮인다) */
+.bf-supply-bar { width: 100%; max-width: 6.5rem; height: 3px; display: flex; justify-content: flex-end; }
+.bf-supply-bar > i { display: block; height: 100%; border-radius: 2px; }
+.bf-supply-bar > i.up { background: #f04452; margin-right: auto; }
+.bf-supply-bar > i.down { background: #3182f6; }
 
 /* 온도계 보조 표기 — 달러/원 등락률·VIX 방향 잔글씨, 약어 풀이 한 줄 */
 .bf-mini-sub { font-style: normal; font-size: 0.66rem; margin-left: 3px; opacity: 0.9; }
