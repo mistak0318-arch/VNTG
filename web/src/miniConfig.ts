@@ -8,7 +8,11 @@ import { setPref } from "./prefs";
  * 저장은 setPref(vntg.*) 라 서버 동기 = 전역(모든 기기 공용)이다.
  */
 
-/** 미니창에 넣을 수 있는 화면 — 팝업(560px) 폭에서 쓸모 있는 것만 추렸다 */
+/**
+ * 미니창에 넣을 수 있는 화면 — 팝업(560px) 폭에서 쓸모 있는 것만 추렸다.
+ * 아래쪽 「보드 블록」 묶음(2026-08-26)은 보드의 시장 무관 칸들을 그대로 빌린 것 —
+ * 종목이 없어도 그려지는 것들이라 미니창에 딱 맞다.
+ */
 export type MiniScreenKey =
   | "stock"
   | "overview"
@@ -17,17 +21,33 @@ export type MiniScreenKey =
   | "superSignal"
   | "telegram"
   | "memo"
-  | "report";
+  | "report"
+  /* ── 보드 블록 ── */
+  | "indexBoard"
+  | "marketSignal"
+  | "pulse"
+  | "breadth"
+  | "sectorFlow"
+  | "vi"
+  | "watchTicker";
 
 export const MINI_SCREENS: { key: MiniScreenKey; label: string; icon: string; hint: string }[] = [
   { key: "stock", label: "종목 검색", icon: "🔎", hint: "종목 검색해서 상세 조회 — 미니창의 원래 용도" },
   { key: "overview", label: "시황", icon: "📊", hint: "시황 대시보드 한 벌" },
-  { key: "watch", label: "관심종목", icon: "⭐", hint: "관심종목 (VNTG)" },
+  { key: "watch", label: "관심종목", icon: "⭐", hint: "관심종목 (VNTG) — 그룹·편집까지 전체 화면" },
   { key: "news", label: "뉴스", icon: "📢", hint: "뉴스·공시" },
   { key: "superSignal", label: "슈퍼신호등", icon: "🌟", hint: "슈퍼신호등 대시보드" },
   { key: "telegram", label: "텔레그램", icon: "📡", hint: "텔레그램 동향" },
   { key: "memo", label: "메모장", icon: "📝", hint: "메모장 + 일기" },
   { key: "report", label: "리포트", icon: "📰", hint: "데일리 리포트" },
+  /* ── 보드 블록 (가볍고 미니창 폭에 맞음) ── */
+  { key: "indexBoard", label: "지수판", icon: "🧮", hint: "보드의 지수판 — 국내외 지수·환율·선물 전광판" },
+  { key: "marketSignal", label: "시장 신호등", icon: "🚥", hint: "지금이 살 자리인가 — 시장 신호등 판정" },
+  { key: "pulse", label: "시장 맥박", icon: "💓", hint: "자금 국면·위험·교차 신호 (시장흐름분석 맥박 탭)" },
+  { key: "breadth", label: "상승·하락", icon: "📶", hint: "상승·하락 종목수 — 시장의 폭" },
+  { key: "sectorFlow", label: "업종 수급", icon: "🏭", hint: "업종별 자금 흐름 (5일 누적)" },
+  { key: "vi", label: "VI 발동", icon: "⚡", hint: "오늘 VI 걸린 종목 실시간 목록" },
+  { key: "watchTicker", label: "관심 시세판", icon: "🎯", hint: "관심종목 시세만 콤팩트하게 (보드의 시세판)" },
 ];
 
 export type MiniHotkey = "off" | "ctrl-m" | "ctrl-shift-m" | "alt-m" | "ctrl-shift-o";

@@ -14,6 +14,14 @@ import { SuperDashboardPage } from "./SuperDashboardPage";
 import { TelegramPage } from "./TelegramPage";
 import { MemoPage } from "./MemoPage";
 import { DailyReportPage } from "./DailyReportPage";
+/* 보드의 시장 무관 블록들 — 종목이 없어도 그려져서 미니창에 딱 맞다 (2026-08-26) */
+import { IndexBoard } from "../components/IndexBoard";
+import { MarketSignalPanel } from "../components/MarketSignalPanel";
+import { MarketPulsePanel } from "../components/MarketPulsePanel";
+import { BreadthPanel } from "../components/BreadthPanel";
+import { SectorFlowPanel } from "../components/SectorFlowPanel";
+import { ViPanel } from "../components/ViPanel";
+import { WatchTicker } from "../components/WatchTicker";
 
 /**
  * 미니창 (2026-08-26) — **보던 페이지를 떠나지 않고 곁눈질하는 보조창.**
@@ -79,6 +87,14 @@ export function MiniPage({
         {screenKey === "telegram" && <TelegramPage />}
         {screenKey === "memo" && <MemoPage />}
         {screenKey === "report" && <DailyReportPage onSelectStock={openPopup} />}
+        {/* 보드 블록들 */}
+        {screenKey === "indexBoard" && <IndexBoard />}
+        {screenKey === "marketSignal" && <MarketSignalPanel />}
+        {screenKey === "pulse" && <MarketPulsePanel onSelectStock={openPopup} />}
+        {screenKey === "breadth" && <BreadthPanel />}
+        {screenKey === "sectorFlow" && <SectorFlowPanel onSelectStock={openPopup} />}
+        {screenKey === "vi" && <ViPanel onSelectStock={openPopup} />}
+        {screenKey === "watchTicker" && <WatchTicker onSelectStock={openPopup} />}
       </div>
 
       {/* 다른 화면에서 종목을 눌렀을 때 — 여긴 검색창이 없으니 보통 팝업 시트가 맞다 */}
