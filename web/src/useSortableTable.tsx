@@ -73,7 +73,8 @@ export function SortableTh<T>({
   thProps,
 }: {
   columnKey: string;
-  label: string;
+  /** 글자면 그대로, JSX 면 그대로 — 해외 관심종목처럼 라벨 옆에 세션 괄호가 붙는 머리도 있다 */
+  label: React.ReactNode;
   accessor: (row: T) => string | number;
   sort: SortState<T>;
   className?: string;
@@ -95,7 +96,12 @@ export function SortableTh<T>({
       {...thProps}
       className={`sortable-th${active ? " active" : ""}${className ? ` ${className}` : ""}`}
       onClick={() => sort.toggle(columnKey, accessor)}
-      title="클릭: 정렬 (내림→오름→원래) · 끌어서 열 자리 옮기기"
+      /* 열이 제 설명(52주가 뭔지 등)을 갖고 있으면 지우지 말고 정렬 안내만 덧붙인다 */
+      title={
+        thProps?.title
+          ? `${thProps.title} — 클릭: 정렬`
+          : "클릭: 정렬 (내림→오름→원래) · 끌어서 열 자리 옮기기"
+      }
     >
       {label}
       <span className="sort-arrow">{arrow}</span>
