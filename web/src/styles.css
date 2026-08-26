@@ -2400,23 +2400,16 @@ body {
 /* 거래대금 거래소별 몫 — 비중은 더 작은 잔글씨로 */
 .ph-venue-share > i { font-style: normal; font-size: 0.62rem; color: var(--muted); }
 
-/* 온도계 접기 — 접으면 핵심 세 숫자 한 줄 (공간 반납) */
-.bf-fold-btn {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.66rem;
-  padding: 2px 8px;
-  cursor: pointer;
-  margin-left: auto;
-  order: 99; /* 펼친 상태에선 줄 끝으로 */
-  align-self: flex-start;
-}
-.bf-fold-btn:hover { color: var(--text); }
-.bf-thermo-folded { padding: 4px 0; }
-.bf-thermo-folded .bf-fold-btn { order: 0; margin-left: 6px; align-self: center; }
+/*
+ * 상단 고정은 새로고침 한 줄만 — 온도계는 흐름 배치 (2026-08-26).
+ * 새로고침도 작게: 브리핑에선 자리 주인이 아니다.
+ */
+.bf-top-slim { padding: 2px 0; }
+.bf-top-slim .refresh-bar { margin: 0; padding: 2px 0; min-height: 0; }
+.bf-top-slim .refresh-btn { font-size: 0.7rem; padding: 3px 10px; }
+.bf-top-slim .refresh-at { font-size: 0.62rem; }
+/* 코스피·코스닥 — 온도계 안 다른 값들보다 반 발짝만 크게 */
+.bf-mini-idx b { font-size: 0.95rem; }
 
 /* 온도계 보조 표기 — 달러/원 등락률·VIX 방향 잔글씨, 약어 풀이 한 줄 */
 .bf-mini-sub { font-style: normal; font-size: 0.66rem; margin-left: 3px; opacity: 0.9; }
