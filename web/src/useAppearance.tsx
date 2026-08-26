@@ -55,6 +55,11 @@ export interface Appearance {
    * 시세분석처럼 열 많은 표를 주로 보는 사람의 옵션이다.
    */
   sidebarAuto: boolean;
+  /**
+   * 인앱 탭바 고정 (2026-08-26) — 스크롤을 내려도 탭바가 따라와서 바로 갈아탄다.
+   * 기본 켬. 화면 한 줄이 아쉬우면 끄면 되고, 탭이 하나뿐이면 바 자체가 없다.
+   */
+  tabsSticky: boolean;
 }
 
 export const WIDTHS: { key: WidthName; label: string; css: string; hint: string }[] = [
@@ -96,6 +101,7 @@ const DEFAULTS: Appearance = {
   navSide: "left",
   width: "normal",
   sidebarAuto: false,
+  tabsSticky: true,
 };
 
 /**
@@ -150,6 +156,8 @@ function apply(a: Appearance): void {
   root.dataset.nav = a.navSide;
   // 사이드바 자동숨김 — CSS 가 이 속성을 보고 PC 에서도 드로어로 바꾼다
   root.dataset.sidebar = a.sidebarAuto ? "auto" : "fixed";
+  // 인앱 탭바 고정 — CSS 가 이 속성을 보고 sticky 를 켜고 끈다
+  root.dataset.tabs = a.tabsSticky ? "sticky" : "static";
   /* 본문 폭 — 보드는 CSS 에서 따로 풀어 두었으므로 여기서는 신경 안 쓴다 */
   root.style.setProperty("--main-max", WIDTHS.find((w) => w.key === a.width)?.css ?? "1400px");
 }

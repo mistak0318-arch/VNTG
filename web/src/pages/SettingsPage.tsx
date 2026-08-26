@@ -378,6 +378,30 @@ export function SettingsPage() {
           주로 볼 때 씁니다.
         </div>
 
+        {/* 인앱 탭바 고정 (2026-08-26) — 스크롤을 내려도 탭바가 따라온다 */}
+        <div className="appearance-row">
+          <span className="appearance-label">탭바 고정</span>
+          <div className="filter-row" style={{ margin: 0 }}>
+            {([
+              { key: true, label: "고정" },
+              { key: false, label: "일반" },
+            ] as const).map((t) => (
+              <button
+                key={String(t.key)}
+                className={`filter-btn ${appearance.tabsSticky === t.key ? "active" : ""}`}
+                onClick={() => appearance.set({ tabsSticky: t.key })}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="table-note">
+          메뉴를 여러 개 열면 생기는 <b>인앱 탭바</b>를 스크롤해도 위에 붙어 따라오게
+          합니다 — 긴 화면을 보다가 바로 다른 탭으로 갈아탈 수 있습니다. 「일반」이면
+          맨 위에만 있고 같이 밀려 올라갑니다.
+        </div>
+
         <div className="appearance-row">
           <span className="appearance-label">화면 폭</span>
           <div className="filter-row" style={{ margin: 0 }}>
@@ -430,6 +454,7 @@ export function SettingsPage() {
                   navSide: appearance.navSide,
                   width: appearance.width,
                   sidebarAuto: appearance.sidebarAuto,
+                  tabsSticky: appearance.tabsSticky,
                 }));
                 pushGlobalSnapshot("appearance", ["vntg.appearance"]);
                 setGlobalMsg(
