@@ -2386,10 +2386,15 @@ body {
 .bf-fg-cell { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 0; }
 .bf-fg-cell > b { font-size: 0.82rem; white-space: nowrap; }
 .bf-fg-cell > b > i { font-style: normal; font-size: 0.62rem; color: var(--muted); margin-left: 1px; }
-.bf-fg-bar { width: 100%; max-width: 6.5rem; height: 3px; border-radius: 2px; background: var(--panel-2); overflow: hidden; display: flex; justify-content: flex-end; }
-.bf-fg-bar > i { display: block; height: 100%; }
-.bf-fg-bar > i.up { background: var(--up, #f04452); margin-right: auto; }
-.bf-fg-bar > i.down { background: var(--blue); }
+/*
+ * 트랙 배경 없이 색 막대만 (2026-08-26 — 「배경색이 이상하다」).
+ * 회색 트랙이 카드 배경과 어중간하게 섞여 지저분했고, --up 은 엑셀 모드에서
+ * 검정으로 덮이는 변수라 테마 변수 대신 등락색 리터럴을 쓴다.
+ */
+.bf-fg-bar { width: 100%; max-width: 6.5rem; height: 3px; display: flex; justify-content: flex-end; }
+.bf-fg-bar > i { display: block; height: 100%; border-radius: 2px; }
+.bf-fg-bar > i.up { background: #f04452; margin-right: auto; }
+.bf-fg-bar > i.down { background: #3182f6; }
 
 /* 온도계 보조 표기 — 달러/원 등락률·VIX 방향 잔글씨, 약어 풀이 한 줄 */
 .bf-mini-sub { font-style: normal; font-size: 0.66rem; margin-left: 3px; opacity: 0.9; }
