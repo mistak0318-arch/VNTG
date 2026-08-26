@@ -4786,6 +4786,12 @@ tr.drag-src td { opacity: 0.45; }
 /* 선물 수급 표 — 금액(억)이 주인공, 계약은 괄호 잔글씨 */
 .fut-ct { font-style: normal; font-size: 0.7rem; opacity: 0.65; margin-left: 2px; }
 
+/* 시가총액 상위 2단 — 넓은 화면에서만 갈라진다. 폰은 한 단 그대로 */
+.scr-two { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 1.2rem; align-items: start; }
+@media (min-width: 1100px) {
+  .scr-two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
 /* ── 해외 관심종목 — 상시 담기 패널 (2026-08-27) ── */
 .uw-add { border-left: 3px solid var(--blue); }
 .uw-newgroup { width: 9rem; }

@@ -834,7 +834,19 @@ export function ScreenerPage({
                 </button>
               )}
             </h3>
-            <div className="data-table-wrap">
+            {(() => {
+              /*
+               * 시가총액 상위 — 넓은 화면에서 **반으로 갈라 2단** (2026-08-27 —
+               * "태블릿·PC 에선 표의 공백이 너무 크거든"). 열이 적은 조회라 오른쪽이
+               * 통째로 놀았다. 순위는 왼단 위→아래 → 오른단. 좁은 화면에선 CSS 가
+               * 도로 한 단으로 쌓는다(폰은 예전 그대로).
+               * ⚠️ 클래스는 scr-two — scr-split 은 NXT 서브줄이 선점(grep 확인).
+               */
+              const splitTwo = tab === "market-cap" && drawn.length > 10;
+              const half = Math.ceil(drawn.length / 2);
+              const parts = splitTwo ? [drawn.slice(0, half), drawn.slice(half)] : [drawn];
+              const tableOf = (part: typeof drawn) => (
+              <>
               {/*
                 **칸 너비를 내가 정한다.**
 
@@ -962,7 +974,7 @@ export function ScreenerPage({
                     신호등 칸은 자기 동작(색 정렬·상세)이 따로 있으므로 `stopPropagation`
                     으로 막는다. 여기서 안 막으면 신호등을 눌렀는데 상세가 열린다.
                   */}
-                  {drawn.map((r, i) => (
+                  {part.map((r, i) => (
                     <tr
                       key={`${r.code}-${i}`}
                       className={onSelectStock ? "clickable-row" : ""}
@@ -1076,7 +1088,18 @@ export function ScreenerPage({
                   ))}
                 </tbody>
               </table>
-            </div>
+              </>
+              );
+              return (
+                <div className={splitTwo ? "scr-two" : undefined}>
+                  {parts.map((p, k) => (
+                    <div className="data-table-wrap" key={k}>
+                      {tableOf(p)}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/*
               쪽 넘기기. **한 쪽에 몇 개**는 받는 건수와 다른 질문이라 따로 둔다 —

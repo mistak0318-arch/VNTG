@@ -819,6 +819,66 @@ export async function reorderCachedGroup(groupId: string, symbols: string[]): Pr
   shot.mtime = await watchlistMtime();
 }
 
+/**
+ * 그룹·종목 **구성**만 바뀌었을 때의 캐시 수술 (2026-08-27 — "그룹 추가·삭제가
+ * 왜 이렇게 딜레이?"). 이 라우트들이 캐시를 통째로 버리고 evaluateGroups 를
+ * 기다렸다 — 그룹 하나 만드는데 **전 종목 시세 한 바퀴(6~8초)**를 다시 받은 것이다.
+ * reorderCachedGroup 과 같은 원리: 그룹을 넣고 빼고 이름을 바꾼다고 다른 종목
+ * 가격이 변하지 않는다. 캐시를 그 자리에서 고치고 mtime 만 다시 새긴다.
+ * 캐시가 없으면 false — 다음 조회가 어차피 새로 받는다.
+ */
+export async function patchCachedGroups(
+  mutate: (groups: UsWatchResult["groups"]) => void,
+): Promise<boolean> {
+  // 재시작 직후엔 메모리가 비어 있다 — 디스크 캐시부터 읽는다. 안 그러면 첫
+  // 수술이 불발돼 전 종목 재수집(20초)으로 떨어진다 (실측 21.7초 → 이 줄로 해결)
+  await loadCache();
+  if (!shot) return false;
+  mutate(shot.data.groups);
+  shot.mtime = await watchlistMtime();
+  /* 디스크 캐시도 맞춰 둔다 — 재시작 직후 옛 구성이 돌아오면 유령 그룹이 보인다 */
+  await writeFile(CACHE_FILE, JSON.stringify(shot), "utf-8").catch(() => undefined);
+  return true;
+}
+
+/**
+ * 방금 담은 종목의 임시 줄 — 캐시 수술로 **즉시 보이게**. 시세 상세(52주·원화·강도)는
+ * null 로 두고, 다음 배경 갱신(FRESH_MS 뒤 폴링)이 채운다. 가격은 편입가로 시작한다.
+ */
+export function stubQuoteRow(symbol: string, name: string, addedPrice: number | null): UsQuoteRow {
+  return {
+    symbol,
+    name,
+    price: addedPrice,
+    changeRate: null,
+    returnRate: addedPrice !== null ? 0 : null,
+    addedPrice,
+    memo: "",
+    marketState: null,
+    quotedAt: null,
+    error: null,
+    wonPrice: null,
+    volumeVsPrev: null,
+    pos52: null,
+    high52: null,
+    low52: null,
+    power: null,
+    open: null,
+    high: null,
+    low: null,
+    state: null,
+    afterPrice: null,
+    afterChangeRate: null,
+    dayPrice: null,
+    dayChangeRate: null,
+    dayVolume: null,
+    currency: null,
+    country: null,
+    flag: null,
+    source: "yahoo",
+  };
+}
+
 /** 지금 가격 하나만 — 담을 때 편입가를 채우려고 */
 export async function quoteSymbol(symbol: string): Promise<number | null> {
   return (await quoteOne(symbol)).price;
