@@ -428,51 +428,52 @@ export default function App() {
               ))}
             </div>
           ))}
-        </nav>
 
-        {/*
-          자물쇠는 **맨 아래**다. 자리를 뜰 때 한 번 누르는 버튼이라 자주 쓰는 메뉴 사이에
-          있으면 안 된다 — 잘못 누르면 비밀번호를 넣어야 다시 들어온다.
-          비밀번호를 안 정했으면 잠글 수가 없으므로 설정으로 보낸다.
-        */}
-        <div className="sidebar-foot">
           {/*
-            연동은 **보내는 창에서도 켜야** 한다. 받는 창만 켜 두고 왜 안 되냐고
-            하기 쉬운 자리라, 켜져 있을 때 눈에 띄게 표시한다.
+            도구 버튼들 — 원래 사이드바 맨 바닥(margin-top: auto)에 붙여 뒀는데,
+            PC처럼 세로가 긴 화면에선 메뉴와 뚝 떨어져 손이 안 갔다(2026-08-26).
+            설정 그룹 바로 아래로 올려 메뉴 흐름 안에서 같이 스크롤되게 한다.
           */}
-          <button
-            className={`nav-item foot-btn${focus.on ? " active" : ""}`}
-            onClick={() => focus.toggle(!focus.on)}
-            title={focus.on ? "종목 연동 끄기" : "종목 연동 켜기 — 다른 창과 종목을 맞춥니다"}
-          >
-            <span className="nav-icon">📡</span>
-            <span className="nav-label">{focus.on ? "종목 연동 켜짐" : "종목 연동"}</span>
-          </button>
-          {/*
-            엑셀 모드는 **급할 때 눌러야** 뜻이 있다. 설정 화면까지 들어가야 한다면
-            정작 필요한 순간에 못 쓴다. 직전 테마를 기억해 두고 되돌린다 —
-            껐을 때 늘 다크로 가면 라이트를 쓰던 사람은 매번 다시 고쳐야 한다.
-          */}
-          <button
-            className="nav-item foot-btn"
-            onClick={() =>
-              appearance.set({ theme: excel ? (prevTheme.current ?? "dark") : "excel" })
-            }
-            title={excel ? "엑셀 모드 끄기" : "엑셀 모드"}
-          >
-            <span className="nav-icon">📊</span>
-            <span className="nav-label">{excel ? "엑셀 모드 끄기" : "엑셀 모드"}</span>
-          </button>
-          {/*
-            누르면 **바로** 잠긴다. 예전엔 비밀번호를 안 정했으면 설정으로 보냈는데,
-            자리를 뜨려고 누른 사람에게 설정 화면을 띄우는 건 아무 도움이 안 된다.
-            비밀번호가 네 자리로 고정되면서 그 갈림길 자체가 없어졌다.
-          */}
-          <button className="nav-item foot-btn lock-btn" onClick={lock.lock} title="화면 잠그기">
-            <span className="nav-icon">🔒</span>
-            <span className="nav-label">화면 잠그기</span>
-          </button>
-        </div>
+          <div className="nav-group">
+            <div className="nav-group-label">도구</div>
+            {/*
+              연동은 **보내는 창에서도 켜야** 한다. 받는 창만 켜 두고 왜 안 되냐고
+              하기 쉬운 자리라, 켜져 있을 때 눈에 띄게 표시한다.
+            */}
+            <button
+              className={`nav-item foot-btn${focus.on ? " active" : ""}`}
+              onClick={() => focus.toggle(!focus.on)}
+              title={focus.on ? "종목 연동 끄기" : "종목 연동 켜기 — 다른 창과 종목을 맞춥니다"}
+            >
+              <span className="nav-icon">📡</span>
+              <span className="nav-label">{focus.on ? "종목 연동 켜짐" : "종목 연동"}</span>
+            </button>
+            {/*
+              엑셀 모드는 **급할 때 눌러야** 뜻이 있다. 설정 화면까지 들어가야 한다면
+              정작 필요한 순간에 못 쓴다. 직전 테마를 기억해 두고 되돌린다 —
+              껐을 때 늘 다크로 가면 라이트를 쓰던 사람은 매번 다시 고쳐야 한다.
+            */}
+            <button
+              className="nav-item foot-btn"
+              onClick={() =>
+                appearance.set({ theme: excel ? (prevTheme.current ?? "dark") : "excel" })
+              }
+              title={excel ? "엑셀 모드 끄기" : "엑셀 모드"}
+            >
+              <span className="nav-icon">📊</span>
+              <span className="nav-label">{excel ? "엑셀 모드 끄기" : "엑셀 모드"}</span>
+            </button>
+            {/*
+              누르면 **바로** 잠긴다. 예전엔 비밀번호를 안 정했으면 설정으로 보냈는데,
+              자리를 뜨려고 누른 사람에게 설정 화면을 띄우는 건 아무 도움이 안 된다.
+              비밀번호가 네 자리로 고정되면서 그 갈림길 자체가 없어졌다.
+            */}
+            <button className="nav-item foot-btn lock-btn" onClick={lock.lock} title="화면 잠그기">
+              <span className="nav-icon">🔒</span>
+              <span className="nav-label">화면 잠그기</span>
+            </button>
+          </div>
+        </nav>
       </aside>
 
       {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}

@@ -3503,10 +3503,61 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 
 /* 선물 투자자별 수급 (차트 시트 안) */
 .ff-wrap { margin-top: 0.8rem; }
-/* 미니창(#/mini) — 검색 하나짜리 홈. 상세는 StockDetail 오버레이가 창 전체를 쓴다 */
-.mini-root { min-height: 100vh; background: var(--bg); }
-.mini-home { max-width: 34rem; margin: 0 auto; padding: 18px 16px; }
-.mini-title { margin: 0 0 10px; font-size: 1rem; }
+/*
+ * 미니창(#/mini) — 검색창은 맨 위 고정, 결과·종목 상세는 그 아래 본문.
+ * 상세(StockDetail)는 원래 오버레이 시트인데, 미니창 안에서 또 팝업이 뜨면
+ * 「미니창의 미니팝업」이 된다(2026-08-26) — 오버레이를 눕혀 본문으로 만든다.
+ */
+.mini-root { display: flex; flex-direction: column; height: 100vh; background: var(--bg); }
+.mini-search {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.mini-search .search-input { flex: 1; }
+.mini-search-icon { font-size: 1.05rem; }
+.mini-body { flex: 1; overflow-y: auto; min-height: 0; }
+.mini-hint { padding: 16px; }
+.mini-results { display: flex; flex-direction: column; }
+.mini-result-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mini-result-row:hover { background: var(--panel); }
+.mini-result-row .sub { color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
+/* 오버레이 시트를 본문으로 — 배경 어둡게 깔지 않고 그 자리에 펼친다 */
+.mini-root .overlay {
+  position: static;
+  inset: auto;
+  background: none;
+  display: block;
+  z-index: auto;
+}
+.mini-root .sheet {
+  max-width: none;
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+  border-radius: 0;
+  border-top: none;
+}
+/* 시트 헤더 sticky 기준이 .mini-body 스크롤로 바뀐다 — -16px이면 잘려 보인다 */
+.mini-root .sheet-header { top: 0; }
 
 /* 보드 칸별 글자 크기 버튼 — 헤더의 다른 컨트롤과 같은 톤 */
 .board-font {
@@ -6982,7 +7033,6 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 }
 
 /* 사이드바 맨 아래 자물쇠 */
-.sidebar-foot { margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--border); }
 .foot-btn { width: 100%; }
 
 /* ===== 보드 — 다른 창에서 고른 종목을 따라 그린다 =====
