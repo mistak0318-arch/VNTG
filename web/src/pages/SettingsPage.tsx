@@ -14,6 +14,8 @@ import { ScreenLockPanel } from "../components/ScreenLockPanel";
 import { MENU_ITEMS } from "../App";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { SignalConfigPanel } from "../components/SignalConfigPanel";
+import { TelegramOverviewPanel } from "../components/TelegramOverviewPanel";
+import { SubTabOrderPanel } from "../components/SubTabOrderPanel";
 
 interface KeyInfo {
   name: string;
@@ -130,6 +132,16 @@ export function SettingsPage() {
 
       {tab === "display" && (
       <CollapsibleCard
+        id="subTabOrder"
+        title="서브탭 순서"
+        hint="각 메뉴 상단의 서브탭을 원하는 차례로 놓습니다."
+      >
+        <SubTabOrderPanel />
+      </CollapsibleCard>
+      )}
+
+      {tab === "display" && (
+      <CollapsibleCard
         id="screenLock"
         title="화면 잠금"
         hint="자리를 비운 사이 화면을 가립니다. 이 기기에만 저장됩니다."
@@ -145,6 +157,22 @@ export function SettingsPage() {
         hint="이동평균선·볼린저 밴드·매물대·말풍선을 내 방식대로 맞춥니다."
       >
         <ChartConfigPanel />
+      </CollapsibleCard>
+      )}
+
+      {/*
+        발송 전수 현황이 맨 위 (2026-08-26) — 텔레그램으로 나가는 여덟 갈래의 설정이
+        설정·텔레그램 동향·.env 세 곳에 흩어져 있어, 「뭐가 어디로 가는지」부터
+        한 자리에서 보이게 한다. 각 행이 해당 설정의 위치를 안내한다.
+      */}
+      {tab === "publish" && (
+      <CollapsibleCard
+        id="telegramOverview"
+        title="텔레그램 발송 한눈에"
+        hint="무엇이 언제 어느 방으로 가는지 — 발송 전체 지도"
+        defaultOpen
+      >
+        <TelegramOverviewPanel />
       </CollapsibleCard>
       )}
 

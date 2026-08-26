@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useCardOrder } from "../useCardOrder";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
 import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
@@ -20,7 +21,7 @@ import { DisclosureAlertPanel } from "../components/DisclosureAlertPanel";
 
 type Tab = "digest" | "search" | "keyword" | "disclosure" | "channels" | "pick" | "ai";
 
-const TABS: { key: Tab; label: string; hint: string }[] = [
+export const TELEGRAM_TABS: { key: Tab; label: string; hint: string }[] = [
   { key: "digest", label: "동향", hint: "지금 채널들이 무슨 말을 하고 있는지" },
   /*
    * 검색 — 보드(창 연동)에만 있던 것을 여기로도 꺼냈다.
@@ -37,14 +38,20 @@ const TABS: { key: Tab; label: string; hint: string }[] = [
 
 export function TelegramPage() {
   const [tab, setTab] = useState<Tab>("digest");
+  /* 탭 순서 — 설정 > 서브탭 순서에서 바꾼다(서버 저장) */
+  const tabOrder = useCardOrder(
+    "telegram.tabs",
+    TELEGRAM_TABS.map((t) => t.key),
+  );
 
   return (
     <div>
       <nav className="detail-tabs">
-        {TABS.map((t) => (
+        {TELEGRAM_TABS.map((t) => (
           <button
             key={t.key}
             className={`detail-tab${tab === t.key ? " active" : ""}`}
+            style={{ order: tabOrder.orderOf(t.key) }}
             onClick={() => setTab(t.key)}
             title={t.hint}
           >

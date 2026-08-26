@@ -1342,7 +1342,8 @@ export interface AlertConfig {
 }
 
 export interface TelegramChannelStatus {
-  channel: "report" | "signal" | "log";
+  /** 서버 telegram.ts 의 TelegramChannel 과 같은 목록이어야 한다 */
+  channel: "report" | "signal" | "log" | "channel" | "disclosure" | "keyword";
   chatId: string;
   dedicated: boolean;
 }

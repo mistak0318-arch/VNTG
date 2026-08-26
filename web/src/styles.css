@@ -1351,7 +1351,13 @@ body {
 
 .chart-legend {
   display: flex;
-  gap: 12px;
+  /*
+   * 줄바꿈 허용 (2026-08-26) — 폰에서 고저괴리+MA 다섯+자물쇠가 한 줄에 안 들어가면
+   * nowrap 은 min-content 폭을 화면보다 넓혀 버리고, 차트가 그 넓어진 폭을 캔버스에
+   * 고정해 시트 전체가 옆으로 넘쳤다. 두 줄이 되는 게 차트가 밀려나는 것보다 낫다.
+   */
+  flex-wrap: wrap;
+  gap: 4px 12px;
   font-size: 0.7333rem;
   color: var(--muted);
   padding: 0 4px 6px;
@@ -3559,6 +3565,32 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 /* 시트 헤더 sticky 기준이 .mini-body 스크롤로 바뀐다 — -16px이면 잘려 보인다 */
 .mini-root .sheet-header { top: 0; }
 
+/* 서브탭 순서 패널 — 메뉴별 한 줄, 탭 알약에 ◀▶ */
+.sto-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.sto-row:last-child { border-bottom: none; }
+.sto-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.sto-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.sto-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 0.8rem;
+}
+.sto-move {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.7rem;
+  padding: 2px 3px;
+  cursor: pointer;
+}
+.sto-move:hover:not(:disabled) { color: var(--text); }
+.sto-move:disabled { opacity: 0.25; cursor: default; }
+
 /* 보드 칸별 글자 크기 버튼 — 헤더의 다른 컨트롤과 같은 톤 */
 .board-font {
   background: none;
@@ -4079,7 +4111,8 @@ tr.drag-src td { opacity: 0.45; }
 /* ===== 캔들 호버 툴팁 (키움 차트 방식) =====
    봉 위에 올리면 그 봉의 OHLCV와 이동평균 이격을 보여준다 */
 /* CandleChart 전용 — .chart-wrap 은 이미 다른 패널들이 쓰고 있어 이름을 나눈다 */
-.candle-host { position: relative; }
+/* min-width 0 + overflow hidden — 캔버스가 잠깐 넓게 잡혀도 시트 밖으로 밀지 못하게 */
+.candle-host { position: relative; min-width: 0; max-width: 100%; overflow: hidden; }
 .candle-tip {
   display: none;
   position: absolute;

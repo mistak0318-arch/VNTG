@@ -87,11 +87,21 @@ export async function runLiveAlerts(
       const key = `${day}:vi:${v.code}:${v.at}`;
       if (sent.has(key)) continue;
       if (!preview) sent.add(key);
+      /*
+       * 「VI 발동」 넉 자로는 폰에서 판단이 안 된다 — 언제·어느 가격에서 걸렸는지가
+       * 있어야 지나간 것인지 지금 것인지 안다. 전부 이미 받은 이벤트에 있는 값이다.
+       */
+      const hhmm = v.at?.length >= 4 ? `${v.at.slice(0, 2)}:${v.at.slice(2, 4)}` : "";
+      const bits = [
+        `VI 발동${hhmm ? ` ${hhmm}` : ""}`,
+        v.apply || v.kind || "",
+        v.price > 0 ? `발동가 ${Math.round(v.price).toLocaleString("ko-KR")}` : "",
+      ].filter(Boolean);
       out.push({
         kind: "vi",
         code: v.code,
         name,
-        detail: `VI 발동${v.kind ? ` (${v.kind})` : ""}`,
+        detail: bits.join(" · "),
       });
     }
   }

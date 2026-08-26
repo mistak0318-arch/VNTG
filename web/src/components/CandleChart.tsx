@@ -355,6 +355,17 @@ export function CandleChart({
       width: el.clientWidth,
       height,
       layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: c.text },
+      /*
+       * 축 가격 표기 (2026-08-26) — 기본값은 「3002000.00」처럼 콤마 없이 소수점까지
+       * 붙는다. 원화 종목엔 소수점이 뜻이 없고 축만 넓어져 폰에서 차트를 밀어냈다.
+       * 1,000 이상은 콤마 정수로, 그 밑(미국 주식·저가)은 소수점 둘째 자리까지.
+       */
+      localization: {
+        priceFormatter: (p: number) =>
+          Math.abs(p) >= 1000
+            ? Math.round(p).toLocaleString("ko-KR")
+            : p.toLocaleString("ko-KR", { maximumFractionDigits: 2 }),
+      },
       grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
       // autoScale 을 켜 두면 보이는 구간에 맞춰 세로 범위가 늘 스스로 맞는다.
       // 세로 조작을 막았으므로 이게 없으면 봉이 화면 밖으로 나가도 되돌릴 방법이 없다

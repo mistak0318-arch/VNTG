@@ -5,6 +5,7 @@ import { api, fmtNum, type ScreenHit, type ScreenJob, type ScreenRunSummary } fr
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { SuperSignalPanel } from "../components/SuperSignalPanel";
 import { useWatchedCodes } from "../useWatchedCodes";
+import { useCardOrder } from "../useCardOrder";
 import { WatchAddSheet, type WatchAddTarget } from "../components/WatchAddSheet";
 
 /**
@@ -42,6 +43,18 @@ function pct(n: number): string {
 
 type ScreenTab = "find" | "track" | "super" | "backtest";
 
+/*
+ * 탭 기본 순서 — 슈퍼신호등이 찾기 바로 옆이다 (2026-08-26 사용자 요청).
+ * 순서는 「설정 > 서브탭 순서」에서 바꿀 수 있다(서버 저장, 스코프 "screen.tabs").
+ */
+export const SCREEN_TABS: { key: ScreenTab; label: string }[] = [
+  { key: "find", label: "신호등 찾기" },
+  /* 추적기의 상위판 — 여러 목록에 동시에 걸린 초록만 따라간다 */
+  { key: "super", label: "🌟 슈퍼신호등" },
+  { key: "track", label: "추적기" },
+  { key: "backtest", label: "조건 백테스트" },
+];
+
 export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   /*
    * 두 자리다.
@@ -51,6 +64,11 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
    *              이건 **뒤를 본다.** 같은 질문의 반대쪽이라 여기 같이 둔다
    */
   const [screenTab, setScreenTab] = useState<ScreenTab>("find");
+  /* 탭 순서 — 설정 > 서브탭 순서와 같은 저장분(서버)을 읽는다 */
+  const tabOrder = useCardOrder(
+    "screen.tabs",
+    SCREEN_TABS.map((t) => t.key),
+  );
   const [market, setMarket] = useState("000");
   const [level, setLevel] = useState<"green" | "yellow">("green");
   const [limit, setLimit] = useState(100);
@@ -202,16 +220,11 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
   return (
     <div>
       <nav className="detail-tabs">
-        {([
-          { key: "find" as const, label: "신호등 찾기" },
-          { key: "track" as const, label: "추적기" },
-          /* 추적기의 상위판 — 여러 목록에 동시에 걸린 초록만 따라간다 */
-          { key: "super" as const, label: "🌟 슈퍼신호등" },
-          { key: "backtest" as const, label: "조건 백테스트" },
-        ]).map((t) => (
+        {SCREEN_TABS.map((t) => (
           <button
             key={t.key}
             className={`detail-tab${screenTab === t.key ? " active" : ""}`}
+            style={{ order: tabOrder.orderOf(t.key) }}
             onClick={() => setScreenTab(t.key)}
           >
             {t.label}

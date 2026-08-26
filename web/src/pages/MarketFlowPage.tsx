@@ -10,6 +10,7 @@ import { SectorFlowPanel } from "../components/SectorFlowPanel";
 import { UsKrPanel } from "../components/UsKrPanel";
 import { TradePanel } from "../components/TradePanel";
 import { RefreshBar } from "../components/RefreshBar";
+import { useCardOrder } from "../useCardOrder";
 
 /**
  * 시장 흐름 분석.
@@ -27,7 +28,7 @@ import { RefreshBar } from "../components/RefreshBar";
 
 type FlowTab = "pulse" | "leaders" | "events" | "closebet" | "money" | "usKr" | "trade";
 
-const TABS: { key: FlowTab; label: string }[] = [
+export const FLOW_TABS: { key: FlowTab; label: string }[] = [
   // 맥박이 첫 탭이다 — 나머지는 근거이고 이건 결론이다
   { key: "pulse", label: "맥박" },
   // 맥박이 「지금 어떤 장인가」면 이건 「그래서 어디를 볼 것인가」다
@@ -195,6 +196,11 @@ function MoneyFlowTab({ onSelectStock }: { onSelectStock?: (code: string, name: 
 export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
   const [tab, setTab] = useState<FlowTab>("pulse");
   const [reloadKey, setReloadKey] = useState(0);
+  /* 탭 순서 — 설정 > 서브탭 순서에서 바꾼다(서버 저장) */
+  const tabOrder = useCardOrder(
+    "marketflow.tabs",
+    FLOW_TABS.map((t) => t.key),
+  );
 
   return (
     <div>
@@ -207,10 +213,11 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
       {tab !== "pulse" && <MarketSignalPanel />}
 
       <nav className="detail-tabs">
-        {TABS.map((t) => (
+        {FLOW_TABS.map((t) => (
           <button
             key={t.key}
             className={`detail-tab${tab === t.key ? " active" : ""}`}
+            style={{ order: tabOrder.orderOf(t.key) }}
             onClick={() => setTab(t.key)}
           >
             {t.label}

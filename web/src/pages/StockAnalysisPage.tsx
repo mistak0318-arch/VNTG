@@ -54,7 +54,7 @@ type AnalysisTab =
   | "notes"
   | "etf";
 
-const TABS: { key: AnalysisTab; label: string }[] = [
+export const ANALYSIS_TABS: { key: AnalysisTab; label: string }[] = [
   { key: "chart", label: "종합" },
   { key: "quote", label: "호가" },
   { key: "broker", label: "거래원" },
@@ -95,7 +95,7 @@ export function StockAnalysisPage({
   /* 카드 배치·상세 시트와 **같은 훅**. 키만 다르다 — 탭 구성이 달라서다 */
   const tabOrder = useCardOrder(
     "stockAnalysis.tabs",
-    TABS.map((t) => t.key),
+    ANALYSIS_TABS.map((t) => t.key),
   );
   const [investorChart, setInvestorChart] = useState<RawRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -294,7 +294,7 @@ export function StockAnalysisPage({
             ⚠️ 저장 키는 시트와 **따로** 둔다 — 탭 구성이 다르므로 같은 키를 쓰면 서로 흔든다.
           */}
           <TabScroller className="detail-tabs" activeKey={tab}>
-            {TABS.map((t) => (
+            {ANALYSIS_TABS.map((t) => (
               <button
                 key={t.key}
                 className={`detail-tab${tab === t.key ? " active" : ""}${tabOrder.drag.cls(t.key)}`}

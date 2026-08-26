@@ -166,7 +166,7 @@ function cell(value: unknown, type?: string): { text: string; cls: string } {
 /** 순위 칸들 — 숫자 서너 자리라 좁게 둔다 */
 const RANK_COLS = new Set(["now_rank", "pred_rank", "rank", "prev_rank"]);
 
-const TABS = [
+export const SCREENER_TABS = [
   { key: "trade-value", label: "거래대금 상위", kind: "rank" as const },
   { key: "same-net", label: "기관/외국인 동일 순매매", kind: "page" as const },
   { key: "cont", label: "기관/외국인 연속매매", kind: "page" as const },
@@ -258,11 +258,11 @@ export function ScreenerPage({
   const cw = useColumnWidths(`rank.${tab}`);
   const tabOrder = useCardOrder(
     "screener.tabs",
-    TABS.map((t) => t.key),
+    SCREENER_TABS.map((t) => t.key),
   );
 
   /** 지금 그릴 명세 — 탭이 rank 면 탭 것, 「그 밖에」면 트리에서 고른 것 */
-  const current = TABS.find((t) => t.key === tab);
+  const current = SCREENER_TABS.find((t) => t.key === tab);
   const rankKey = current?.kind === "rank" ? tab : active;
 
   useEffect(() => {
@@ -447,7 +447,7 @@ export function ScreenerPage({
           JSX 를 재배열하지 않고 CSS `order` 만 준다 — 배열을 흔들면 리액트가 칸을
           다시 만든다.
         */}
-        {TABS.map((t) => (
+        {SCREENER_TABS.map((t) => (
           <button
             key={t.key}
             className={`filter-btn ${tab === t.key ? "active" : ""}${tabOrder.drag.cls(t.key)}`}

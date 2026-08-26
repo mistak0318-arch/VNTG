@@ -101,6 +101,9 @@ const CHANNEL_LABEL: Record<string, string> = {
   report: "리포트",
   signal: "시그널",
   log: "로그",
+  channel: "채널 수집",
+  disclosure: "공시",
+  keyword: "키워드",
 };
 
 export function AlertConfigPanel() {

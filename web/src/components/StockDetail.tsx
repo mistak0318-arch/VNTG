@@ -61,7 +61,7 @@ type DetailTab = "chartOnly" | "finance" | "opinion" | "notes" | "sector" | "cha
  * 여기 적힌 순서가 **기본**이다. 저장된 순서가 없으면 이대로 나온다.
  * 탭을 새로 만들면 이 배열에도 넣어야 화면에 뜬다.
  */
-const DETAIL_TABS: { key: DetailTab; label: string }[] = [
+export const DETAIL_TABS: { key: DetailTab; label: string }[] = [
   { key: "chart", label: "종합" },
   /*
     「차트만」 — 종합 탭은 신호등과 장중 수급이 위에 얹혀 차트가 아래로 밀린다.
