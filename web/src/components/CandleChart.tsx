@@ -100,7 +100,7 @@ function scrollOptions(locked: boolean) {
  * 추세선의 시간은 봉의 time 그대로 저장한다 — 일봉에 그은 선은 분봉에서는
  * 좌표가 안 잡혀 자연히 안 보인다(다른 축이니 맞는 동작이다).
  */
-type DrawTool = "none" | "hline" | "trend";
+type DrawTool = "none" | "hline" | "trend" | "measure";
 type DrawItem =
   | { k: "h"; p: number }
   | { k: "t"; a: { t: Time; p: number }; b: { t: Time; p: number } };
@@ -306,12 +306,45 @@ export function CandleChart({
   const overlayRef = useRef<HTMLCanvasElement>(null);
   /** 그린 수평선 핸들 — 차트가 다시 만들어지면 버려진다 */
   const drawHRef = useRef<IPriceLine[]>([]);
+  /**
+   * 끌기 상태 (2026-08-27 — "한방에 잘 그어야 한다는 부담이 있네").
+   * 도구를 꺼 둔 상태에서 선 근처를 잡으면 끌 수 있다: 수평선은 위아래로,
+   * 추세선은 끝점을 따로, 몸통을 잡으면 통째로. 끄는 동안의 작업본은
+   * dragDraft 에 두고, 놓는 순간 저장한다.
+   */
+  const dragStateRef = useRef<{
+    idx: number;
+    part: "h" | "a" | "b" | "body";
+    hIndex: number;
+    startX: number;
+    startY: number;
+    /* body 끌기용 — 잡는 순간의 두 끝점 픽셀 좌표 */
+    ax: number;
+    ay: number;
+    bx: number;
+    by: number;
+    moved: boolean;
+  } | null>(null);
+  const dragDraftRef = useRef<DrawItem[] | null>(null);
+  /**
+   * 측정 (2026-08-27 — "기간 잡고 그동안 등락이 얼마였나").
+   * 저장하지 않는 일회용이다 — 트레이딩뷰 측정자와 같다. 첫 클릭이 시작점,
+   * 두 번째 클릭에 굳고, 다시 클릭하면 새로 잰다. 도구를 끄면 사라진다.
+   */
+  const measureRef = useRef<{ a: { t: Time; p: number }; b: { t: Time; p: number } | null } | null>(
+    null,
+  );
   /** 차트를 새로 만들 때마다 오른다 — 그리기 구독·선 복원이 이걸 보고 다시 돈다 */
   const [chartEpoch, setChartEpoch] = useState(0);
   const themeRef = useRef(theme);
   themeRef.current = theme;
 
-  /** 추세선 캔버스 다시 그리기 — 전부 ref 만 읽으므로 어디서 불러도 최신이다 */
+  /** 선택된 선 — 끌기·선택 삭제의 대상. 툴박스가 보므로 state 다 */
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const selectedRef = useRef(selectedIdx);
+  selectedRef.current = selectedIdx;
+
+  /** 캔버스(추세선·측정·선택 표시) 다시 그리기 — 전부 ref 만 읽으므로 어디서 불러도 최신이다 */
   const redrawRef = useRef<() => void>(() => undefined);
   redrawRef.current = () => {
     const chart = chartRef.current;
@@ -332,30 +365,127 @@ export function CandleChart({
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    ctx.strokeStyle = drawColor(themeRef.current);
-    ctx.lineWidth = 1.4;
-    const seg = (a: { t: Time; p: number }, bx: number | null, by: number | null) => {
-      const x1 = chart.timeScale().timeToCoordinate(a.t);
-      const y1 = series.priceToCoordinate(a.p);
-      if (x1 === null || y1 === null || bx === null || by === null) return;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(bx, by);
-      ctx.stroke();
+    const excel = themeRef.current === "excel";
+    const col = drawColor(themeRef.current);
+    const upCol = excel ? "#4a4a4a" : "#f0555f";
+    const downCol = excel ? "#8a8a8a" : "#4a8bf5";
+    const ts = chart.timeScale();
+    const xyOf = (pt: { t: Time; p: number }): [number, number] | null => {
+      const x = ts.timeToCoordinate(pt.t);
+      const y = series.priceToCoordinate(pt.p);
+      return x === null || y === null ? null : [x, y];
     };
-    for (const d of drawingsRef.current) {
-      if (d.k !== "t") continue;
-      const x2 = chart.timeScale().timeToCoordinate(d.b.t);
-      const y2 = series.priceToCoordinate(d.b.p);
-      seg(d.a, x2, y2);
-    }
-    /* 첫 점을 찍고 커서를 움직이는 중 — 점선 미리보기 */
+    const dot = (x: number, y: number, r: number) => {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = col;
+      ctx.fill();
+    };
+    /* 작은 라벨 — 캔버스 글자는 배경이 없으면 봉 위에서 안 읽힌다 */
+    const label = (x: number, y: number, text: string, color: string) => {
+      ctx.font = "11px sans-serif";
+      const tw = ctx.measureText(text).width;
+      const lx = Math.min(Math.max(2, x), w - tw - 10);
+      const ly = Math.min(Math.max(12, y), h - 4);
+      ctx.fillStyle = excel ? "rgba(255,255,255,0.85)" : "rgba(10,14,20,0.75)";
+      ctx.fillRect(lx - 3, ly - 11, tw + 6, 15);
+      ctx.fillStyle = color;
+      ctx.fillText(text, lx, ly);
+    };
+    const pctText = (a: { p: number }, b: { p: number }): { text: string; color: string } => {
+      const r = a.p > 0 ? ((b.p - a.p) / a.p) * 100 : 0;
+      return { text: `${r > 0 ? "+" : ""}${r.toFixed(1)}%`, color: r >= 0 ? upCol : downCol };
+    };
+
+    const items = dragDraftRef.current ?? drawingsRef.current;
+    items.forEach((d, i) => {
+      const sel = i === selectedRef.current;
+      if (d.k === "h") {
+        /* 수평선 자체는 priceLine 이 그린다 — 선택됐을 때만 위에 표시를 얹는다 */
+        if (!sel) return;
+        const y = series.priceToCoordinate(d.p);
+        if (y === null) return;
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 2.4;
+        ctx.globalAlpha = 0.45;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        dot(10, y, 4);
+        return;
+      }
+      const a = xyOf(d.a);
+      const b = xyOf(d.b);
+      if (!a || !b) return;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = sel ? 2.4 : 1.4;
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.stroke();
+      /* 끝점 손잡이 — 잡아 끌 수 있다는 표시. 선택되면 커진다 */
+      dot(a[0], a[1], sel ? 4.5 : 3);
+      dot(b[0], b[1], sel ? 4.5 : 3);
+      /* 몇 % 위/아래인가 — 시작점 대비. 라벨은 끝점 옆에 */
+      const { text, color } = pctText(d.a, d.b);
+      label(b[0] + 6, b[1] - 6, text, color);
+    });
+
+    /* 첫 점을 찍고 커서를 움직이는 중 — 점선 미리보기 + 실시간 % */
     const pend = pendingRef.current;
     const prev = previewRef.current;
     if (pend && prev) {
-      ctx.setLineDash([4, 4]);
-      seg(pend, prev.x, prev.y);
-      ctx.setLineDash([]);
+      const a = xyOf(pend);
+      if (a) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(a[0], a[1]);
+        ctx.lineTo(prev.x, prev.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const p2 = series.coordinateToPrice(prev.y);
+        if (p2 !== null) {
+          const { text, color } = pctText(pend, { p: p2 });
+          label(prev.x + 6, prev.y - 6, text, color);
+        }
+      }
+    }
+
+    /* 측정 — 구간 상자 + 등락%·가격차·봉수. 저장 안 되는 일회용 */
+    const m = measureRef.current;
+    if (m) {
+      const a = xyOf(m.a);
+      const bPt = m.b ? xyOf(m.b) : prev ? ([prev.x, prev.y] as [number, number]) : null;
+      const bPrice = m.b ? m.b.p : prev ? series.coordinateToPrice(prev.y) : null;
+      if (a && bPt && bPrice !== null) {
+        const [x1, y1] = a;
+        const [x2, y2] = bPt;
+        ctx.fillStyle = excel ? "rgba(90,90,90,0.10)" : "rgba(245,197,66,0.10)";
+        ctx.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+        ctx.setLineDash([]);
+        const pt = pctText(m.a, { p: bPrice });
+        /* 봉 수 — 시작·끝이 실제 봉이면 거래일 수로 읽힌다 */
+        const rows = dataRef.current;
+        const i1 = rows.findIndex((r) => timeValue(r.time) === timeValue(m.a.t));
+        const bTime = m.b?.t;
+        const i2 = bTime === undefined ? -1 : rows.findIndex((r) => timeValue(r.time) === timeValue(bTime));
+        const bars = i1 >= 0 && i2 >= 0 ? `${Math.abs(i2 - i1)}봉` : "";
+        const diff = Math.round(bPrice - m.a.p).toLocaleString("ko-KR");
+        label(
+          (x1 + x2) / 2 - 30,
+          Math.min(y1, y2) - 6,
+          `${pt.text} · ${bPrice - m.a.p > 0 ? "+" : ""}${diff}${bars ? ` · ${bars}` : ""}`,
+          pt.color,
+        );
+      }
     }
   };
 
@@ -368,10 +498,12 @@ export function CandleChart({
     window.dispatchEvent(new CustomEvent("vntg-chart-draw", { detail: code }));
   };
 
-  /* 종목이 바뀌면 그 종목의 선을 다시 읽는다. 찍다 만 점도 버린다 */
+  /* 종목이 바뀌면 그 종목의 선을 다시 읽는다. 찍다 만 점·선택·측정도 버린다 */
   useEffect(() => {
     setDrawings(loadDraw(code));
     pendingRef.current = null;
+    measureRef.current = null;
+    setSelectedIdx(null);
     setTool("none");
   }, [code]);
 
@@ -682,7 +814,19 @@ export function CandleChart({
   useEffect(() => {
     const chart = chartRef.current;
     const series = candleRef.current;
-    if (!chart || !series) return;
+    const el = containerRef.current;
+    if (!chart || !series || !el) return;
+    const ts = chart.timeScale();
+
+    /* x 좌표 → 가장 가까운 봉의 time. coordinateToTime 은 봉 밖에서 null 이라 논리축으로 잰다 */
+    const timeAt = (x: number): Time | null => {
+      const l = ts.coordinateToLogical(x);
+      if (l === null) return null;
+      const rows = dataRef.current;
+      if (rows.length === 0) return null;
+      const i = Math.min(rows.length - 1, Math.max(0, Math.round(l)));
+      return rows[i]?.time ?? null;
+    };
 
     const onClick = (param: MouseEventParams) => {
       const t = toolRef.current;
@@ -691,6 +835,15 @@ export function CandleChart({
       if (price === null) return;
       if (t === "hline") {
         saveDrawRef.current([...drawingsRef.current, { k: "h", p: price }]);
+        return;
+      }
+      if (t === "measure") {
+        const time = timeAt(param.point.x);
+        if (time === null) return;
+        const m = measureRef.current;
+        if (!m || m.b) measureRef.current = { a: { t: time, p: price }, b: null };
+        else m.b = { t: time, p: price };
+        redrawRef.current();
         return;
       }
       // 추세선 — 첫 클릭은 점만 찍고, 두 번째 클릭에 선이 된다
@@ -709,7 +862,9 @@ export function CandleChart({
       }
     };
     const onMove = (param: MouseEventParams) => {
-      if (!pendingRef.current) return;
+      const m = measureRef.current;
+      const measuring = toolRef.current === "measure" && m && !m.b;
+      if (!pendingRef.current && !measuring) return;
       previewRef.current = param.point ? { x: param.point.x, y: param.point.y } : null;
       redrawRef.current();
     };
@@ -718,10 +873,144 @@ export function CandleChart({
     chart.subscribeClick(onClick);
     chart.subscribeCrosshairMove(onMove);
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
+
+    /* ── 선택·끌기 — 도구를 꺼 둔 상태에서 선을 잡는다 ── */
+    const dist = (x: number, y: number, x2: number, y2: number) => Math.hypot(x - x2, y - y2);
+    const distToSeg = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len2 = dx * dx + dy * dy;
+      const u = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2));
+      return dist(px, py, x1 + u * dx, y1 + u * dy);
+    };
+    const hitTest = (x: number, y: number): { idx: number; part: "h" | "a" | "b" | "body" } | null => {
+      const items = drawingsRef.current;
+      for (let i = items.length - 1; i >= 0; i -= 1) {
+        const d = items[i];
+        if (d.k === "h") {
+          const y0 = series.priceToCoordinate(d.p);
+          if (y0 !== null && Math.abs(y - y0) <= 6) return { idx: i, part: "h" };
+          continue;
+        }
+        const x1 = ts.timeToCoordinate(d.a.t);
+        const y1 = series.priceToCoordinate(d.a.p);
+        const x2 = ts.timeToCoordinate(d.b.t);
+        const y2 = series.priceToCoordinate(d.b.p);
+        if (x1 === null || y1 === null || x2 === null || y2 === null) continue;
+        if (dist(x, y, x1, y1) <= 8) return { idx: i, part: "a" };
+        if (dist(x, y, x2, y2) <= 8) return { idx: i, part: "b" };
+        if (distToSeg(x, y, x1, y1, x2, y2) <= 5) return { idx: i, part: "body" };
+      }
+      return null;
+    };
+
+    const onDragMove = (ev: PointerEvent) => {
+      const st = dragStateRef.current;
+      const items = dragDraftRef.current;
+      if (!st || !items) return;
+      const rect = el.getBoundingClientRect();
+      const x = ev.clientX - rect.left;
+      const y = ev.clientY - rect.top;
+      if (!st.moved && Math.abs(x - st.startX) + Math.abs(y - st.startY) < 3) return;
+      st.moved = true;
+      const d = items[st.idx];
+      if (d.k === "h") {
+        const p = series.coordinateToPrice(y);
+        if (p !== null) {
+          items[st.idx] = { k: "h", p };
+          drawHRef.current[st.hIndex]?.applyOptions({ price: p });
+          redrawRef.current();
+        }
+        return;
+      }
+      const moveTo = (pt: { t: Time; p: number }, nx: number, ny: number) => {
+        const t = timeAt(nx);
+        const p = series.coordinateToPrice(ny);
+        return { t: t ?? pt.t, p: p ?? pt.p };
+      };
+      if (st.part === "a") d.a = moveTo(d.a, x, y);
+      else if (st.part === "b") d.b = moveTo(d.b, x, y);
+      else {
+        const dx = x - st.startX;
+        const dy = y - st.startY;
+        d.a = moveTo(d.a, st.ax + dx, st.ay + dy);
+        d.b = moveTo(d.b, st.bx + dx, st.by + dy);
+      }
+      redrawRef.current();
+    };
+    const onDragUp = () => {
+      const st = dragStateRef.current;
+      const items = dragDraftRef.current;
+      window.removeEventListener("pointermove", onDragMove);
+      window.removeEventListener("pointerup", onDragUp);
+      chart.applyOptions(scrollOptions(lockRef.current));
+      dragStateRef.current = null;
+      if (st?.moved && items) saveDrawRef.current(items);
+      dragDraftRef.current = null;
+      redrawRef.current();
+    };
+    const onDown = (ev: PointerEvent) => {
+      if (!code || toolRef.current !== "none") return;
+      const rect = el.getBoundingClientRect();
+      const x = ev.clientX - rect.left;
+      const y = ev.clientY - rect.top;
+      const hit = hitTest(x, y);
+      if (!hit) {
+        if (selectedRef.current !== null) {
+          setSelectedIdx(null);
+          // 다음 프레임에 지운다 — state 반영 전이라 ref 로 즉시 그리면 옛 선택이 남는다
+          requestAnimationFrame(() => redrawRef.current());
+        }
+        return;
+      }
+      /* 차트 이동을 뺏는다 — 선을 끄는 동안 차트가 같이 끌리면 안 된다 */
+      ev.preventDefault();
+      ev.stopPropagation();
+      setSelectedIdx(hit.idx);
+      selectedRef.current = hit.idx;
+      const items = drawingsRef.current.map((d) =>
+        d.k === "t" ? { k: "t" as const, a: { ...d.a }, b: { ...d.b } } : { ...d },
+      ) as DrawItem[];
+      dragDraftRef.current = items;
+      const d = items[hit.idx];
+      let ax = 0;
+      let ay = 0;
+      let bx = 0;
+      let by = 0;
+      if (d.k === "t") {
+        ax = ts.timeToCoordinate(d.a.t) ?? 0;
+        ay = series.priceToCoordinate(d.a.p) ?? 0;
+        bx = ts.timeToCoordinate(d.b.t) ?? 0;
+        by = series.priceToCoordinate(d.b.p) ?? 0;
+      }
+      dragStateRef.current = {
+        idx: hit.idx,
+        part: hit.part,
+        hIndex: items.slice(0, hit.idx).filter((q) => q.k === "h").length,
+        startX: x,
+        startY: y,
+        ax,
+        ay,
+        bx,
+        by,
+        moved: false,
+      };
+      chart.applyOptions({
+        handleScroll: { vertTouchDrag: false, horzTouchDrag: false, pressedMouseMove: false, mouseWheel: false },
+      });
+      window.addEventListener("pointermove", onDragMove);
+      window.addEventListener("pointerup", onDragUp);
+      redrawRef.current();
+    };
+    el.addEventListener("pointerdown", onDown, true);
+
     return () => {
       chart.unsubscribeClick(onClick);
       chart.unsubscribeCrosshairMove(onMove);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
+      el.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("pointermove", onDragMove);
+      window.removeEventListener("pointerup", onDragUp);
     };
   }, [chartEpoch, code]);
 
@@ -750,7 +1039,7 @@ export function CandleChart({
       // 차트가 통째로 사라질 때는 핸들도 같이 죽는다 — removePriceLine 을 부를 필요도,
       // 부를 수도 없다(이미 없는 차트다). 다음 effect 실행이 새로 그린다.
     };
-  }, [drawings, chartEpoch, theme, candles]);
+  }, [drawings, chartEpoch, theme, candles, selectedIdx]);
 
   /*
    * 높이만 바뀌었을 때.
@@ -979,15 +1268,43 @@ export function CandleChart({
                 redrawRef.current();
                 setTool(tool === "trend" ? "none" : "trend");
               }}
-              title="추세선 — 두 점을 차례로 클릭합니다"
+              title="추세선 — 두 점을 차례로 클릭합니다. 시작점 대비 % 가 같이 붙습니다"
             >
               ╱
             </button>
+            <button
+              className={`ct-tool${tool === "measure" ? " on" : ""}`}
+              onClick={() => {
+                measureRef.current = null;
+                previewRef.current = null;
+                redrawRef.current();
+                setTool(tool === "measure" ? "none" : "measure");
+              }}
+              title="측정 — 두 점을 클릭하면 그 구간의 등락%·가격차·봉수를 잽니다 (저장 안 됨)"
+            >
+              ⤡
+            </button>
+            {selectedIdx !== null && (
+              <button
+                className="ct-tool ct-del"
+                onClick={() => {
+                  const items = drawingsRef.current.filter((_, i) => i !== selectedIdx);
+                  setSelectedIdx(null);
+                  saveDrawRef.current(items);
+                }}
+                title="선택한 선 삭제 (도구를 끄고 선을 누르면 선택됩니다)"
+              >
+                ✕
+              </button>
+            )}
             {drawings.length > 0 && (
               <>
                 <button
                   className="ct-tool"
-                  onClick={() => saveDrawRef.current(drawingsRef.current.slice(0, -1))}
+                  onClick={() => {
+                    setSelectedIdx(null);
+                    saveDrawRef.current(drawingsRef.current.slice(0, -1));
+                  }}
                   title="마지막에 그린 선 지우기"
                 >
                   ↩
@@ -995,7 +1312,10 @@ export function CandleChart({
                 <button
                   className="ct-tool"
                   onClick={() => {
-                    if (window.confirm("이 종목에 그린 선을 전부 지웁니다.")) saveDrawRef.current([]);
+                    if (window.confirm("이 종목에 그린 선을 전부 지웁니다.")) {
+                      setSelectedIdx(null);
+                      saveDrawRef.current([]);
+                    }
                   }}
                   title="이 종목의 선 전부 지우기"
                 >

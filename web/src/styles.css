@@ -4782,6 +4782,7 @@ tr.drag-src td { opacity: 0.45; }
 }
 .ct-tool:hover { opacity: 1; color: var(--text); }
 .ct-tool.on { border-color: var(--accent, #f5c542); color: var(--accent, #f5c542); opacity: 1; }
+.ct-tool.ct-del { border-color: var(--red); color: var(--red); opacity: 1; }
 .candle-tip {
   display: none;
   position: absolute;
