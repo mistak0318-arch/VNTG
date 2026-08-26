@@ -89,7 +89,7 @@ export function createRankingRouter(client: KiwoomClient): Router {
         trde_tp: trdeTp,
         sort_cnd: "2", // 2:금액
         unit_tp: "1",
-        stex_tp: "1",
+        stex_tp: "3", // 통합 — 표시용 표는 키움 앱(통합) 기준과 맞춘다 (2026-08-26)
       });
       /*
         시세분석의 필터가 이 탭에서도 걸리려면 **줄마다 시총·거래대금·회전율**이 있어야 한다.
@@ -114,7 +114,7 @@ export function createRankingRouter(client: KiwoomClient): Router {
         netslmt_tp: "2", // 고정값
         stk_inds_tp: "0", // 0:종목
         amt_qty_tp: "0", // 0:금액
-        stex_tp: "1",
+        stex_tp: "3", // 통합 — 표시용 표는 키움 앱(통합) 기준과 맞춘다 (2026-08-26)
       });
       res.json(await withExtras(client, data, "orgn_frgnr_cont_trde_prst"));
     } catch (err) {
