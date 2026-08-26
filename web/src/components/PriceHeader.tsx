@@ -279,19 +279,14 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           </div>
         )}
         {showNxtLine && nxt && (
-          <div className={`ph-nxt ${nxtSame ? "same" : nxtCls}`}>
+          /* 「= KRX」 접기 폐지(2026-08-26) — 견주라고 있는 줄이니 늘 숫자로 */
+          <div className={`ph-nxt ${nxtCls}`}>
             <em className="ph-ex nxt">NXT</em>
-            {nxtSame ? (
-              <b className="pt-n">= KRX</b>
-            ) : (
-              <>
-                <b>{fmtNum(nxt.price)}</b>
-                <span className="ph-nxt-rate">
-                  {nxt.changeRate > 0 ? "+" : ""}
-                  {nxt.changeRate.toFixed(2)}%
-                </span>
-              </>
-            )}
+            <b>{fmtNum(nxt.price)}</b>
+            <span className="ph-nxt-rate">
+              {nxt.changeRate > 0 ? "+" : ""}
+              {nxt.changeRate.toFixed(2)}%
+            </span>
             <span className="ph-when">{phase === "closed" ? "20:00 마감" : "거래 중"}</span>
           </div>
         )}
@@ -315,8 +310,12 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
            * NXT 값이 아예 없을 때만 안 그린다(그건 안 바뀐다). 값이 있는데 KRX 와
            * 같으면 숫자 대신 「= KRX」다 — 같은 숫자를 두 번 안 쓰면서 높이는 고정된다.
            */
+          /*
+           * 「= KRX」 접기는 그만뒀다 (2026-08-26 — 「NXT 에서 이 정도 고저였는데
+           * KRX 는 이렇네, 를 보려는 건데 값을 숨기면 못 본다」). 같은 값이어도
+           * 숫자로 적는다 — 견주는 게 목적이면 양쪽 다 숫자여야 한다.
+           */
           const hasNxt = it.nxtValue !== null && it.nxtValue > 0;
-          const sameAsKrx = hasNxt && it.nxtValue === Math.abs(Number(it.value));
           return (
             <div className="ph-cell" key={it.label}>
               <span className="ph-label">{it.label}</span>
@@ -336,14 +335,8 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
               {hasNxt && (
                 <span className="ph-row">
                   <em className="ph-ex nxt">NXT</em>
-                  {sameAsKrx ? (
-                    <b className="ph-value pt-n">= KRX</b>
-                  ) : (
-                    <>
-                      <b className={`ph-value ${nv.cls}`}>{fmtNum(it.nxtValue)}</b>
-                      {nv.rate && <em className={`ph-pct ${nv.cls}`}>{nv.rate}</em>}
-                    </>
-                  )}
+                  <b className={`ph-value ${nv.cls}`}>{fmtNum(it.nxtValue)}</b>
+                  {nv.rate && <em className={`ph-pct ${nv.cls}`}>{nv.rate}</em>}
                 </span>
               )}
             </div>
