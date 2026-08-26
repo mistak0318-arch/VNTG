@@ -981,14 +981,21 @@ export function ScreenerPage({
                            */
                           if (c.key === "trde_prica" && r.tvKrx !== null && r.tv !== null) {
                             const nxt = r.tv - r.tvKrx;
+                            /*
+                             * 통합만 (2026-08-26 — 「서브줄까지 적으니 표가 굵어진다」).
+                             * KRX/NXT 분해는 툴팁으로 내리고, 자세한 건 종목 상세 몫이다.
+                             */
                             return (
-                              <td key={c.key} className="num">
+                              <td
+                                key={c.key}
+                                className="num"
+                                title={
+                                  nxt > 0
+                                    ? `KRX ${fmtNum(r.tvKrx)}억 · NXT ${fmtNum(nxt)}억`
+                                    : undefined
+                                }
+                              >
                                 <b>{fmtNum(r.tv)}억</b>
-                                {showNxtSub && nxt > 0 && (
-                                  <i className="scr-split">
-                                    KRX {fmtNum(r.tvKrx)} · NXT {fmtNum(nxt)}
-                                  </i>
-                                )}
                               </td>
                             );
                           }
