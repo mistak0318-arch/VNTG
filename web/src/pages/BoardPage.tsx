@@ -227,6 +227,8 @@ const isMarket = (id: string) => MARKET_KEYS.has(blockOf(id));
  * 27인치와 노트북이 같을 수 없으니 서버에 두면 한쪽에 맞춘 크기가 다른 쪽을 망친다.
  */
 const SIZE_KEY = "vntg.board.sizes";
+/** 칸별 글자 크기(%) — 기기마다 다르게(해상도가 제각각). 크기와 같은 저장소 */
+const FONT_KEY = "vntg.board.fonts";
 
 function readSizes(): Record<string, CellSize> {
   try {
@@ -467,6 +469,30 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
       const next = { ...prev, [key]: s };
       try {
         winStore.set(SIZE_KEY, JSON.stringify(next));
+      } catch {
+        /* 저장 못 해도 이번 세션에는 그 크기로 본다 */
+      }
+      return next;
+    });
+  }, []);
+
+  /* 칸별 글자 크기(%) — 70~150, 10% 걸음. 기기별(winStore) */
+  const [fonts, setFonts] = useState<Record<string, number>>(() => {
+    try {
+      const raw = JSON.parse(winStore.get(FONT_KEY) ?? "{}") as Record<string, unknown>;
+      const out: Record<string, number> = {};
+      for (const [k, v] of Object.entries(raw)) if (typeof v === "number") out[k] = v;
+      return out;
+    } catch {
+      return {};
+    }
+  });
+  const bumpFont = useCallback((key: string, delta: number) => {
+    setFonts((prev) => {
+      const next = { ...prev, [key]: Math.min(150, Math.max(70, (prev[key] ?? 100) + delta)) };
+      if (next[key] === 100) delete next[key];
+      try {
+        winStore.set(FONT_KEY, JSON.stringify(next));
       } catch {
         /* 저장 못 해도 이번 세션에는 그 크기로 본다 */
       }
@@ -1179,6 +1205,8 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
               onPin={() => flipPin(id)}
               onDragStart={onDragStart(id)}
               dragging={dragKey === id}
+              fontScale={fonts[id] ?? 100}
+              onFontScale={(d) => bumpFont(id, d)}
             >
               {({ height, tick }) => {
                 /* 붙들어 뒀으면 그 종목, 아니면 연동을 따라간다 */

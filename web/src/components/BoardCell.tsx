@@ -48,6 +48,8 @@ export function BoardCell({
   onPin,
   onDragStart,
   dragging,
+  fontScale,
+  onFontScale,
   cellKey,
   locked,
   onToggleLock,
@@ -74,6 +76,10 @@ export function BoardCell({
   onPin: () => void;
   onDragStart: (e: React.PointerEvent) => void;
   dragging?: boolean;
+  /** 칸별 글자 크기(%) — 기기별 저장. 100 이 기본 */
+  fontScale?: number;
+  /** 가−/가+ — delta(±10)를 보드가 받아 저장한다 */
+  onFontScale?: (delta: number) => void;
   cellKey: string;
   /**
    * 이 칸이 붙들고 있는 종목.
@@ -240,6 +246,31 @@ export function BoardCell({
             🔍
           </button>
         )}
+        {/*
+          칸별 글자 크기 (2026-08-26 요청) — **기기마다 다르게**(winStore 저장).
+          모니터 해상도가 제각각이라 전역 글자 크기로는 안 맞는다. 70~150%, 10% 걸음.
+          rem 글자는 컨테이너 font-size 로 안 줄어들어 zoom 으로 칸째 줄인다.
+        */}
+        {onFontScale && (
+          <>
+            <button
+              className="board-font"
+              onClick={() => onFontScale(-10)}
+              disabled={(fontScale ?? 100) <= 70}
+              title={`글자 작게 (지금 ${fontScale ?? 100}%)`}
+            >
+              가−
+            </button>
+            <button
+              className="board-font"
+              onClick={() => onFontScale(10)}
+              disabled={(fontScale ?? 100) >= 150}
+              title={`글자 크게 (지금 ${fontScale ?? 100}%)`}
+            >
+              가+
+            </button>
+          </>
+        )}
         {onDuplicate && (
           <button className="board-dup" onClick={onDuplicate} title="이 칸을 하나 더">
             ⧉
@@ -276,8 +307,18 @@ export function BoardCell({
           onClose={() => setFinding(false)}
         />
       )}
-      <div className="board-cell-b">
-        {children({ height: Math.max(120, box.h - HEAD_PX), tick })}
+      <div
+        className="board-cell-b"
+        /*
+         * zoom — rem 글자까지 칸째 줄이고 키운다(크로뮴 지원, 보드는 PC 화면).
+         * 차트 높이(px)는 zoom 과 무관하게 칸에 맞도록 스케일로 나눠 준다.
+         */
+        style={fontScale && fontScale !== 100 ? ({ zoom: fontScale / 100 } as React.CSSProperties) : undefined}
+      >
+        {children({
+          height: Math.max(120, Math.round((box.h - HEAD_PX) / ((fontScale ?? 100) / 100))),
+          tick,
+        })}
       </div>
     </section>
   );

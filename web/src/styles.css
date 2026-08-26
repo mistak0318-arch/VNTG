@@ -3503,6 +3503,20 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 
 /* 선물 투자자별 수급 (차트 시트 안) */
 .ff-wrap { margin-top: 0.8rem; }
+/* 보드 칸별 글자 크기 버튼 — 헤더의 다른 컨트롤과 같은 톤 */
+.board-font {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  padding: 0 4px;
+  cursor: pointer;
+  line-height: 1.5;
+}
+.board-font:hover:not(:disabled) { color: var(--text); border-color: var(--blue); }
+.board-font:disabled { opacity: 0.3; cursor: default; }
+
 /* VI 발동 중 배지 — 종목 상단. 단일가 전환으로 체결이 멈춘 것을 이름으로 밝힌다 */
 .ph-vi {
   font-style: normal;
