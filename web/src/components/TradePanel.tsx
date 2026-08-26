@@ -166,7 +166,7 @@ interface Related {
   label: string;
 }
 
-interface TradeMonth {
+export interface TradeMonth {
   month: string;
   exportUsd: number;
   importUsd: number;
@@ -182,7 +182,7 @@ interface TradeMonth {
  * 품목이 많아 전월 대비로 칠하면 매년 같은 자리에서 파랗게 보인다 — 설 연휴가 있는
  * 2월이 1월보다 작은 건 불황이 아니다.
  */
-function TradeChart({ months, watch }: { months: TradeMonth[]; watch: "export" | "import" }) {
+export function TradeChart({ months, watch }: { months: TradeMonth[]; watch: "export" | "import" }) {
   const val = (m: TradeMonth) => (watch === "import" ? m.importUsd : m.exportUsd);
   const W = 720;
   /* 낮게 (2026-08-25) — 「칸을 너무 차지한다」. 흐름의 모양은 이 높이로도 보인다 */

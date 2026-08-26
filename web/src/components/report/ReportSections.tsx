@@ -21,6 +21,7 @@ import {
   type EvaluatedTheme,
 } from "../../api";
 import { CandleChart } from "../CandleChart";
+import { TradeChart, type TradeMonth } from "../TradePanel";
 import { SectorStocks } from "../SectorFlowPanel";
 import { useSection } from "../../useSection";
 import { useWatchGroupTiles } from "../../useWatchGroupTiles";
@@ -1084,6 +1085,96 @@ function renderPinned(text: string) {
     // 줄바꿈은 CSS(white-space: pre-wrap)가 살린다 — 여기서 <br> 을 넣으면 두 번 띄어진다
     return <span key={i}>{emphasize(line)}{"\n"}</span>;
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* 수출입 동향 (2026-08-26) — 리포트 끝에서 「실물이 어디로 가나」 한눈에    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 관세청 월별 실측 중 **크게 움직인 품목만** 골라 카드 + 36개월 그래프로 보여준다.
+ * 그래프는 수출 동향 탭과 같은 컴포넌트(TradeChart — 막대색이 전년동월 대비) —
+ * 두 화면이 같은 값을 다르게 그리면 헷갈린다. 전체 표·나라별은 그 탭 몫이다.
+ */
+export function TradeTrendSection() {
+  const [brief, setBrief] = useState<Awaited<ReturnType<typeof api.tradeBrief>> | null>(null);
+  const [charts, setCharts] = useState<Record<string, TradeMonth[]>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .tradeBrief()
+      .then(async (r) => {
+        if (!alive) return;
+        setBrief(r);
+        /*
+         * 그래프는 변화 상위 4품목만 — 서른 개를 다 그리면 아무것도 안 읽힌다.
+         * 시계열은 서버가 24시간 캐시하므로 여기서 넷을 물어도 비용이 없다.
+         */
+        const picks = [...r.rows].sort((a, b) => b.top - a.top).slice(0, 4);
+        for (const p of picks) {
+          try {
+            const h = await api.tradeHistory(p.key);
+            if (!alive) return;
+            setCharts((prev) => ({ ...prev, [p.key]: h.months }));
+          } catch {
+            /* 한 품목 실패는 그 그래프만 빈다 */
+          }
+        }
+      })
+      .catch((e: Error) => setError(e.message || "불러오지 못했습니다"));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (error) return <div className="error-banner">{error}</div>;
+  if (!brief) return <div className="page-note">불러오는 중…</div>;
+  if (brief.rows.length === 0) {
+    return <div className="empty">수출입 데이터가 없습니다 — DATA_GO_KR_KEY 설정을 확인하세요.</div>;
+  }
+
+  const picks = [...brief.rows].sort((a, b) => b.top - a.top).slice(0, 4);
+  const seg = (label: string, w: { rate: number | null } | null) =>
+    w && w.rate !== null ? (
+      <span className={`tb-seg ${w.rate >= 0 ? "positive" : "negative"}`}>
+        {label} {w.rate > 0 ? "+" : ""}
+        {w.rate.toFixed(0)}%
+      </span>
+    ) : null;
+
+  return (
+    <>
+      <p className="page-note">
+        관세청 월별 실측에서 <b>가장 크게 움직인 품목</b>입니다 — 막대색은 전년 같은 달
+        대비(늘면 빨강). 실물이 좋아지는 업종은 시세보다 먼저 여기 나타날 때가 많습니다.
+        전체 품목·나라별 상세는 시장흐름분석 &gt; 수출 동향에서.
+      </p>
+      <div className="rp-trade">
+        {picks.map((r) => (
+          <div className="rp-trade-item" key={r.key}>
+            <div className="rp-trade-head">
+              <b>
+                {r.label}
+                <i className="tb-dir">{r.watch === "import" ? "수입" : "수출"}</i>
+              </b>
+              <span className="tb-segs num">
+                {seg("분기", r.quarter)}
+                {seg("반기", r.half)}
+                {seg("연간", r.year)}
+              </span>
+            </div>
+            {charts[r.key] ? (
+              <TradeChart months={charts[r.key]} watch={r.watch} />
+            ) : (
+              <div className="page-note">그래프 불러오는 중…</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  );
 }
 
 /* ------------------------------------------------------------------ */

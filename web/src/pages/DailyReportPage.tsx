@@ -9,6 +9,7 @@ import {
   MyStocksSection,
   NightFuturesSection,
   SuperSignalSection,
+  TradeTrendSection,
   UsThemeMapSection,
 } from "../components/report/ReportSections";
 import { notifyJobStarted } from "../components/RunningJobsBar";
@@ -724,6 +725,11 @@ export function DailyReportPage({
       {/* 국내외 주요 뉴스 섹션은 뺐다 (2026-08-26) — 뉴스 클리핑과 겹쳐서 같은 기사가 두 번 나왔다 */}
       <Section no={16} title="텔레그램 채널 요약">
         <ChannelDigestSection />
+      </Section>
+
+      {/* 실물 마감 — 관세청 월별. 크게 움직인 품목만 그래프로 (2026-08-26) */}
+      <Section no={17} title="수출입 동향 — 크게 움직인 품목">
+        <TradeTrendSection />
       </Section>
 
       {target && (
