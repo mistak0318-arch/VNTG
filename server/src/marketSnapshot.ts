@@ -271,15 +271,21 @@ export async function getMarketSnapshot(
   client: KiwoomClient,
   force = false,
 ): Promise<MarketSnapshot> {
-  if (!force && isFresh(cache)) return cache;
-
-  // 메모리에 없으면 디스크부터 본다 (재시작 직후)
-  if (!force && !restored) {
+  /*
+   * ⚠️ 디스크 복원은 **force 여도** 한다 (2026-08-26).
+   *
+   * 예전엔 `!force` 안에 있어서, 재시작 직후 백그라운드 갱신(force)이 먼저 돌면
+   * 복원을 건너뛴 채 cache=null 로 build 에 들어갔다. 그 순간 업종 목록 조회가
+   * 실패하면 **빈 스냅샷이 캐시로 굳고 디스크의 멀쩡한 종가까지 덮어썼다** —
+   * 마감 후엔 만료가 다음날 09시라, 마켓 브리핑 관심종목이 밤새 전부 「-」였다.
+   * 복원된 캐시가 있어야 아래 「절반 미만이면 유지」 방어가 설 자리도 생긴다.
+   */
+  if (!restored) {
     restored = true;
     const saved = await restore();
     if (saved && (!cache || saved.at > cache.at)) cache = saved;
-    if (isFresh(cache)) return cache;
   }
+  if (!force && isFresh(cache)) return cache;
 
   if (building) return building;
 
@@ -287,6 +293,16 @@ export async function getMarketSnapshot(
     .then(async (snap) => {
       // 절반도 못 받았으면 이전 스냅샷을 유지한다 — 반쪽 데이터로 테마 등락률을 내면 틀린다
       if (cache && snap.byCode.size < cache.byCode.size / 2) return cache;
+      /*
+       * 통째로 무너진 조회는 **캐시로 굳히지도 않는다** (2026-08-26).
+       * 전종목 스냅샷은 정상일 때 2천 종목이 넘는다 — 몇백도 안 되면 데이터가 아니라
+       * 장애다. 캐시가 있으면 그걸 지키고, 없으면 굳히지 않고 돌려만 준다
+       * (rejectedAt 이 5분 뒤 재시도를 잡는다).
+       */
+      if (snap.byCode.size < 500) {
+        rejectedAt = Date.now();
+        return cache ?? snap;
+      }
       /*
        * 개장 전 0짜리로 직전 거래일 종가를 덮지 않는다.
        *
@@ -300,7 +316,8 @@ export async function getMarketSnapshot(
         return cache;
       }
       cache = snap;
-      await persist(snap).catch(() => undefined);
+      /* 0짜리(개장 전)는 메모리에만 — 디스크의 직전 종가 파일은 traded 일 때만 덮는다 */
+      if (snap.traded) await persist(snap).catch(() => undefined);
       return snap;
     })
     .finally(() => {
