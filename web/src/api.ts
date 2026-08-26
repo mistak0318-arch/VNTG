@@ -1076,6 +1076,10 @@ export interface IndexFlowRow {
   individual: number;
   pension: number;
   trust: number;
+  /** 사모펀드 (2026-08-27) */
+  privateFund: number;
+  /** 금융투자 — 수집 스키마에 2026-08-27 추가돼 그 전 날짜는 null("-") */
+  securities: number | null;
 }
 
 export interface IndexDetailData {

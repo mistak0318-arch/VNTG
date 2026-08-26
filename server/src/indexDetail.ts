@@ -54,6 +54,10 @@ export interface IndexFlowRow {
   individual: number;
   pension: number;
   trust: number;
+  /** 사모펀드 — 종목 매매동향처럼 기관 속살을 편다 (2026-08-27) */
+  privateFund: number;
+  /** 금융투자 — 저장 스키마에 2026-08-27 추가돼 그 전 날짜는 null("-") */
+  securities: number | null;
 }
 
 export interface IndexDetail {
@@ -182,6 +186,10 @@ export async function indexDetail(
         individual: at(row.v, "individual"),
         pension: at(row.v, "pension"),
         trust: at(row.v, "trust"),
+        privateFund: at(row.v, "private"),
+        // 금융투자는 스키마에 나중에 붙었다 — 그 전 날짜(v 가 짧다)는 0이 아니라 "모름"
+        securities:
+          row.v.length > SUBJECTS.indexOf("securities") ? at(row.v, "securities") : null,
       };
     })
     .filter((x): x is IndexFlowRow => x !== null)

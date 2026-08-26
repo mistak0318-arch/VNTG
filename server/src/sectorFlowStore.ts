@@ -40,6 +40,15 @@ export const SUBJECTS = [
   "pension",
   "trust",
   "private",
+  /*
+   * 금융투자 (2026-08-27 추가 — 지수 시트 기관 세부). **맨 뒤에만 붙인다** —
+   * 이 순서가 저장 스키마라 중간에 끼우면 기존 파일이 깨진다. 옛 행은 이 칸이
+   * 없으므로 읽는 쪽이 v.length 로 가려 "-" 처리한다.
+   * 필드 실측(2026-08-27, ka10051 원본): sc_netprps = 금융투자.
+   * 검산: 금투 8328 + 투신 -37 + 연기금 -339 + 사모 1067 + 보험 73 + 은행 1
+   * + 종신금 174 = 9267 = orgn_netprps(기관계) 정확히 일치.
+   */
+  "securities",
 ] as const;
 export type Subject = (typeof SUBJECTS)[number];
 
@@ -50,6 +59,7 @@ const FIELD_OF: Record<Subject, string> = {
   pension: "endw_netprps", // 연기금
   trust: "invtrt_netprps", // 투신
   private: "samo_fund_netprps", // 사모펀드
+  securities: "sc_netprps", // 금융투자 (실측 2026-08-27 — 검산은 SUBJECTS 주석)
 };
 
 export const SUBJECT_LABEL: Record<Subject, string> = {
@@ -59,6 +69,7 @@ export const SUBJECT_LABEL: Record<Subject, string> = {
   pension: "연기금",
   trust: "투신",
   private: "사모",
+  securities: "금융투자",
 };
 
 export interface SectorFlowRow {

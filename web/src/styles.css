@@ -4783,6 +4783,8 @@ tr.drag-src td { opacity: 0.45; }
 .ct-tool:hover { opacity: 1; color: var(--text); }
 .ct-tool.on { border-color: var(--accent, #f5c542); color: var(--accent, #f5c542); opacity: 1; }
 .ct-tool.ct-del { border-color: var(--red); color: var(--red); opacity: 1; }
+/* 선물 수급 표 — 금액(억)이 주인공, 계약은 괄호 잔글씨 */
+.fut-ct { font-style: normal; font-size: 0.7rem; opacity: 0.65; margin-left: 2px; }
 .candle-tip {
   display: none;
   position: absolute;

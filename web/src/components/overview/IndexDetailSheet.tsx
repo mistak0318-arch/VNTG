@@ -267,8 +267,11 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
                   <th>개인</th>
                   <th>외국인</th>
                   <th>기관</th>
+                  {/* 기관 속살 — 종목상세 매매동향과 같은 갈래 (2026-08-27) */}
+                  <th title="금융투자(증권) — 수집을 2026-08-27 시작해 그 전 날짜는 -">금융투자</th>
                   <th>투신</th>
                   <th>연기금</th>
+                  <th>사모펀드</th>
                 </tr>
               </thead>
               <tbody>
@@ -278,8 +281,12 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
                     <td className={sign(f.individual)}>{fmtNum(f.individual)}</td>
                     <td className={sign(f.foreign)}>{fmtNum(f.foreign)}</td>
                     <td className={sign(f.institution)}>{fmtNum(f.institution)}</td>
+                    <td className={f.securities === null ? "" : sign(f.securities)}>
+                      {f.securities === null ? "-" : fmtNum(f.securities)}
+                    </td>
                     <td className={sign(f.trust)}>{fmtNum(f.trust)}</td>
                     <td className={sign(f.pension)}>{fmtNum(f.pension)}</td>
+                    <td className={sign(f.privateFund)}>{fmtNum(f.privateFund)}</td>
                   </tr>
                 ))}
               </tbody>

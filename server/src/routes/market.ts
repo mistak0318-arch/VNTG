@@ -44,6 +44,8 @@ function daysAgoYyyymmdd(days: number): string {
 export function createMarketRouter(client: KiwoomClient): Router {
   const router = Router();
 
+
+
   // 종목 검색 (ka10099 코스피/코스닥 전종목 리스트를 캐싱해서 이름/코드로 필터링)
   router.get("/search", async (req, res, next) => {
     try {

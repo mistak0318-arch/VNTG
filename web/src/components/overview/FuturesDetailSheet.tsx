@@ -88,6 +88,20 @@ export function FuturesDetailSheet({
     target.price > 0 ? `${n > 0 ? "+" : ""}${fmtNum(Math.round((n * target.price) / 400))}` : "-";
   const sum = (k: "individual" | "foreign" | "institution", n: number) =>
     (flow ?? []).slice(-n).reduce((a, d) => a + d[k], 0);
+  /*
+   * 표 칸 — **금액(억)이 주인공, 계약은 괄호** (2026-08-27 "금액(계약) 이렇게").
+   * 지수 수급(억원)과 같은 눈으로 견주는 게 우선이라는 타일 결정과 같은 문법.
+   * 지수값을 못 받았으면(환산 불가) 계약만 적는다.
+   */
+  const amtCell = (v: number) =>
+    target.price > 0 ? (
+      <>
+        {eok(v)}
+        <i className="fut-ct">({fmtNum(v)})</i>
+      </>
+    ) : (
+      <>{fmtNum(v)}</>
+    );
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -190,7 +204,12 @@ export function FuturesDetailSheet({
         )}
 
         {/* 수급 합산 — 지수 시트의 5/10/20/60일과 같은 문법. 자료가 30일치라 30까지 */}
-        <h3 className="idx-h3">수급 합산 (계약)</h3>
+        <h3 className="idx-h3">
+          수급 합산{" "}
+          <span className="pt-n" title="큰 값은 억원 환산(계약 × 지수 × 25만원, 추정) · 괄호가 원본 계약">
+            억원 환산 · (계약)
+          </span>
+        </h3>
         {flow && flow.length > 0 && (
           <div className="data-table-wrap">
             <table className="data-table num idx-sum">
@@ -215,7 +234,7 @@ export function FuturesDetailSheet({
                         const v = sum(k, n);
                         return (
                           <td className={sign(v)} key={k}>
-                            {enough ? fmtNum(v) : "-"}
+                            {enough ? amtCell(v) : "-"}
                           </td>
                         );
                       })}
@@ -227,7 +246,12 @@ export function FuturesDetailSheet({
           </div>
         )}
 
-        <h3 className="idx-h3">일별 수급 (계약)</h3>
+        <h3 className="idx-h3">
+          일별 수급{" "}
+          <span className="pt-n" title="큰 값은 억원 환산(계약 × 지수 × 25만원, 추정) · 괄호가 원본 계약">
+            억원 환산 · (계약)
+          </span>
+        </h3>
         {flow === null && <div className="empty">수급 불러오는 중…</div>}
         {flow !== null && flow.length === 0 && (
           <div className="empty">선물 수급을 받지 못했습니다.</div>
@@ -247,9 +271,9 @@ export function FuturesDetailSheet({
                 {[...flow].reverse().map((d) => (
                   <tr key={d.date}>
                     <td className="sticky-col">{d.date.slice(5)}</td>
-                    <td className={sign(d.individual)}>{fmtNum(d.individual)}</td>
-                    <td className={sign(d.foreign)}>{fmtNum(d.foreign)}</td>
-                    <td className={sign(d.institution)}>{fmtNum(d.institution)}</td>
+                    <td className={sign(d.individual)}>{amtCell(d.individual)}</td>
+                    <td className={sign(d.foreign)}>{amtCell(d.foreign)}</td>
+                    <td className={sign(d.institution)}>{amtCell(d.institution)}</td>
                   </tr>
                 ))}
               </tbody>
