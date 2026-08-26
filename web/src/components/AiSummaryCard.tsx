@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type PublishedReportResponse } from "../api";
+import { speechText } from "./ReportTts";
 
 /**
  * 리포트 최상단 AI 정리.
@@ -115,6 +116,7 @@ export function AiSummaryCard({ edition }: { edition?: string }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [showDigest, setShowDigest] = useState(false);
   const [pick, setPick] = useState<{ date?: string; edition?: string }>({});
+  const [copied, setCopied] = useState(false);
 
   async function load(p: { date?: string; edition?: string } = pick) {
     setLoading(true);
@@ -203,6 +205,30 @@ export function AiSummaryCard({ edition }: { edition?: string }) {
         <span className="ai-badge">AI 정리</span>
         {report && <span className="ai-model">{report.label} · {publishedLabel} 발행</span>}
         {!report && <span className="ai-model">미발행</span>}
+
+        {/*
+          복사 (2026-08-26) — 다른 앱의 읽어주기(TTS)에 붙여넣는 용도.
+          마크다운 기호를 그대로 복사하면 「별표 별표」를 읽어 대므로,
+          낭독용으로 다듬은 텍스트(speechText — 읽어주기와 같은 정제)를 담는다.
+        */}
+        {s?.text && (
+          <button
+            className="filter-btn"
+            onClick={() => {
+              const label = report
+                ? `${report.date.slice(5).replace("-", "월 ")}일 ${report.label} AI 정리. `
+                : "";
+              void navigator.clipboard
+                .writeText(label + speechText(s.text ?? ""))
+                .then(() => setCopied(true))
+                .catch(() => setCopied(false));
+              window.setTimeout(() => setCopied(false), 2000);
+            }}
+            title="낭독용으로 다듬은 본문을 복사합니다 — 다른 앱의 읽어주기에 붙여넣기 좋게 마크다운 기호를 걷어냅니다"
+          >
+            {copied ? "✓ 복사됨" : "📋 복사"}
+          </button>
+        )}
 
         {/* 지난 리포트 — 날짜와 판을 한 곳에서 고른다 */}
         {history.length > 1 && (
