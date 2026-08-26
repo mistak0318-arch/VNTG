@@ -2405,6 +2405,13 @@ body {
  * 새로고침도 작게: 브리핑에선 자리 주인이 아니다.
  */
 .bf-top-slim { padding: 2px 0; }
+/*
+ * 모바일에선 상단 헤더(☰, sticky top:0, z-20)가 이미 붙어 있어서 top:0 이면
+ * 그 **밑에 깔려** 새로고침이 안 보였다(2026-08-26) — 헤더 높이만큼 내려 준다.
+ */
+@media (max-width: 899px) {
+  .bf-top { top: 2.85rem; }
+}
 .bf-top-slim .refresh-bar { margin: 0; padding: 2px 0; min-height: 0; }
 .bf-top-slim .refresh-btn { font-size: 0.7rem; padding: 3px 10px; }
 .bf-top-slim .refresh-at { font-size: 0.62rem; }

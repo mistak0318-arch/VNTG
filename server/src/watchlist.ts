@@ -99,6 +99,8 @@ export const DEFAULT_GROUP = "기본";
  * 종목을 빼는 건 자유다 — 보호하는 건 그룹 자체뿐이다.
  */
 export const SUPER_GROUP = "슈퍼신호등";
+/** 교차 신호(주도주 ∩ 슈퍼신호등) 자동 편입 그룹 — 슈퍼신호등과 같은 보호를 받는다 */
+export const CROSS_GROUP = "슈퍼신호등+교차";
 
 /** 그룹 이름 목록 (종목이 하나도 없는 빈 그룹도 유지하기 위해 따로 저장) */
 const GROUPS_FILE = resolve(__dirname, "..", "data", "watchGroups.json");
@@ -266,17 +268,26 @@ export async function ensureInGroup(
 ): Promise<void> {
   const items = await load();
   const had = items.find((w) => w.code === item.code);
+  if (had && had.groups.includes(group)) return; // 이미 그대로 — 캐시도 건드릴 것 없다
   if (!had) {
     await addWatchItem({ ...item, groups: [group] });
-    return;
-  }
-  if (!had.groups.includes(group)) {
+  } else {
     await persist(
       items.map((w) =>
         w.code === item.code ? { ...w, groups: normalizeGroups([...w.groups, group]) } : w,
       ),
     );
   }
+  /*
+   * ⚠️ 자동 편입도 목록 변경이다 (2026-08-26) — 트래킹 캐시를 비워야 한다.
+   * 사용자 편집 경로는 라우트가 invalidate 를 부르는데, 슈퍼신호등·교차 자동 편입은
+   * 이 함수로 직접 들어와서 캐시가 옛 목록을 물고 있었다. 마감 후엔 캐시가
+   * **다음 개장까지** 살아서, 15:45 편입분이 관심종목 화면(그룹 개수 포함)에
+   * 밤새 안 보였다 — 「슈퍼신호등이 15개 넘는데 15개로 나온다」의 원인.
+   * (watchTracking 이 이 파일을 import 하므로 순환을 피해 동적 import)
+   */
+  const { invalidateTrackingCache } = await import("./watchTracking.js");
+  invalidateTrackingCache();
 }
 
 /** 빈 배열이면 기본 그룹으로 — 어디에도 안 속한 종목은 목록에서 사라진다 */
@@ -314,7 +325,7 @@ export async function listGroups(): Promise<string[]> {
   const [groups, items] = await Promise.all([loadGroups(), load()]);
   const used = new Set(items.flatMap((w) => w.groups));
   // 슈퍼신호등은 늘 있다 — 비어 있어도 자동 편입이 갈 자리가 보여야 한다
-  const merged = new Set<string>([DEFAULT_GROUP, ...groups, ...used, SUPER_GROUP]);
+  const merged = new Set<string>([DEFAULT_GROUP, ...groups, ...used, SUPER_GROUP, CROSS_GROUP]);
   return [...merged];
 }
 
@@ -332,6 +343,8 @@ export async function renameGroup(from: string, to: string): Promise<string[]> {
   if (from === DEFAULT_GROUP) throw new Error("기본 그룹은 이름을 바꿀 수 없습니다.");
   if (from === SUPER_GROUP)
     throw new Error("슈퍼신호등 그룹은 이름을 바꿀 수 없습니다 — 자동 편입이 이 이름을 찾습니다.");
+  if (from === CROSS_GROUP)
+    throw new Error("슈퍼신호등+교차 그룹은 이름을 바꿀 수 없습니다 — 자동 편입이 이 이름을 찾습니다.");
 
   const groups = await loadGroups();
   await persistGroups(groups.map((g) => (g === from ? clean : g)));
@@ -422,6 +435,8 @@ export async function removeGroup(name: string): Promise<string[]> {
   if (name === DEFAULT_GROUP) throw new Error("기본 그룹은 삭제할 수 없습니다.");
   if (name === SUPER_GROUP)
     throw new Error("슈퍼신호등 그룹은 삭제할 수 없습니다 — 자동 편입이 담기는 자리입니다.");
+  if (name === CROSS_GROUP)
+    throw new Error("슈퍼신호등+교차 그룹은 삭제할 수 없습니다 — 교차 신호 자동 편입이 담기는 자리입니다.");
   const groups = await loadGroups();
   await persistGroups(groups.filter((g) => g !== name));
 

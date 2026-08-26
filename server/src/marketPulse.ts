@@ -15,7 +15,7 @@ import { exportYoyForSector, getTradeStats } from "./tradeStats.js";
 import { leaderScan } from "./leaderScan.js";
 import { getActiveSuper } from "./superSignal.js";
 import { listSectorFlow, SUBJECTS } from "./sectorFlowStore.js";
-import { ensureInGroup } from "./watchlist.js";
+import { CROSS_GROUP, ensureInGroup } from "./watchlist.js";
 
 /**
  * 시장 맥박 — 「돈이 어디로 가고 있나」를 한 덩어리로 낸다.
@@ -313,7 +313,7 @@ async function findCross(client: KiwoomClient): Promise<PulseCross | null> {
           addedPrice: s.price,
           memo: `교차 신호 자동 편입 (${today} · ${s.tags.join("·")})`,
         },
-        "슈퍼신호등+교차",
+        CROSS_GROUP,
       ).catch(() => undefined);
     }
 
