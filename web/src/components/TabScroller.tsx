@@ -39,11 +39,18 @@ export function TabScroller({
     const el = ref.current;
     if (!el) return;
     // 1px 여유 — 소수점 폭 때문에 끝에 닿아도 0.5 쯤 남는 일이 있다
-    setEdge({
-      left: el.scrollLeft > 1,
-      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
-    });
+    const left = el.scrollLeft > 1;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    // 값이 그대로면 이전 상태를 돌려준다 — 매 렌더마다 재는데 매번 새 객체면 무한 렌더
+    setEdge((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
   }, []);
+
+  /*
+   * 렌더마다 다시 잰다 (2026-08-27) — ResizeObserver 는 **컨테이너 크기**만 본다.
+   * 인앱 탭바처럼 탭이 하나씩 늘어나는 줄은 컨테이너는 그대로인 채 내용만 넘쳐서,
+   * 끝까지 갔는데도 버튼이 안 나타났다. 자식이 바뀌면 부모가 다시 그리니 여기서 잡힌다.
+   */
+  useEffect(measure);
 
   useEffect(() => {
     const el = ref.current;
@@ -64,6 +71,7 @@ export function TabScroller({
       if (el.scrollWidth <= el.clientWidth) return;
       e.preventDefault();
       el.scrollLeft += e.deltaY;
+      measure(); // scroll 이벤트를 안 기다린다 — 환경에 따라 늦거나 안 오는 일이 있다
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     el.addEventListener("scroll", measure, { passive: true });

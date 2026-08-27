@@ -16,6 +16,7 @@ import {
   runSuperSignal,
   superDetail,
   superJob,
+  superRunStatus,
   updateSuperNote,
 } from "../superSignal.js";
 import { gradeSignalHistory, signalDays } from "../signalHistory.js";
@@ -205,6 +206,15 @@ export function createSignalRouter(client: KiwoomClient): Router {
   /** 진행 상황 — 돌고 있으면 화면이 진행바를 그린다 */
   router.get("/super/job", (_req, res) => {
     res.json(superJob());
+  });
+
+  /** 마지막 수집일만 — 사이드바 N 배지가 1분마다 물어본다(가볍게) */
+  router.get("/super/status", async (_req, res, next) => {
+    try {
+      res.json(await superRunStatus());
+    } catch (err) {
+      next(err);
+    }
   });
 
   /** 지금 돌리기 — 하루 한 번 자동(15:45)이지만 눈으로 확인하고 싶을 때 */

@@ -37,6 +37,16 @@ export function createReportRouter(client: KiwoomClient): Router {
     }
   });
 
+  /** 최신 발행분이 무엇인지만 — 사이드바 N 배지가 1분마다 물어본다(파일 목록 읽기 수준) */
+  router.get("/status", async (_req, res, next) => {
+    try {
+      const [head] = await listReports(1);
+      res.json({ latest: head ? `${head.date}_${head.edition}` : null });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /** 오늘 시장을 움직인 것 — 강한 테마·업종과 그 이유(관련 뉴스) */
   router.get("/drivers", async (req, res, next) => {
     try {

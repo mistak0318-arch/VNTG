@@ -98,6 +98,8 @@ export function TelegramRoomsPanel() {
       const read = await api.tgRoomRead(ch);
       setPhoneRead((read as { phoneRead?: boolean }).phoneRead ?? false);
       setRooms((prev) => prev?.map((x) => (x.channel === ch ? { ...x, unread: 0 } : x)) ?? prev);
+      // 사이드바 「텔레그램 동향」의 N 배지가 바로 꺼지게 — App 이 이 이벤트로 다시 센다
+      window.dispatchEvent(new Event("vntg:tg-read"));
       setTimeout(() => endRef.current?.scrollIntoView({ block: "end" }), 50);
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오기 실패");

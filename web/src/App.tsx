@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { api } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { RunningJobsBar } from "./components/RunningJobsBar";
 import { QuickStockSearch } from "./components/QuickStockSearch";
+import { TabScroller } from "./components/TabScroller";
 import { CustomThemePage } from "./pages/CustomThemePage";
 import { ScreenerPage } from "./pages/ScreenerPage";
 import { ScreenPage } from "./pages/ScreenPage";
@@ -367,6 +369,95 @@ export default function App() {
   const tabDrag = useDragOrder(openTabs, (next) => setOpenTabs(next as Tab[]));
 
   /*
+   * 사이드바 N 배지 (2026-08-27 — 「신규 메시지 왔다는 걸 알 수 있게」).
+   *   텔레그램 동향: 받은 방에 안 읽은 메시지가 있으면 N (로그 방은 운영 소음이라 제외)
+   *   슈퍼신호등: 당일 수집이 끝났는데 아직 안 들어가 봤으면 N
+   *              + 추적 종목의 당일 상승/하락 수(▲▼)는 N 과 별개로 상시
+   *   데일리 리포트: 새 판이 발행됐는데 아직 안 읽었으면 N
+   * 확인(그 메뉴에 들어가면)한 것은 기기별(localStorage)로 적어 배지를 끈다.
+   * 1분 폴링(가벼운 라우트만 — 파일 읽기 수준) + 방을 읽으면 즉시(vntg:tg-read).
+   */
+  const [navN, setNavN] = useState({ telegram: false, superSignal: false, report: false });
+  const [superUD, setSuperUD] = useState<{ up: number; down: number } | null>(null);
+  const superRunRef = useRef<string | null>(null);
+  const reportRef = useRef<string | null>(null);
+  const refreshNavN = useCallback(() => {
+    /* 보고 있는 화면의 새 소식은 이미 확인한 것 — 배지를 켜는 대신 본 것으로 적는다 */
+    const seeing = (key: string, val: string): boolean => {
+      if (location.hash.slice(1) !== key) return false;
+      try {
+        localStorage.setItem(`vntg.seen.${key}`, val);
+      } catch {
+        /* 못 적으면 다음에 또 켜질 뿐 */
+      }
+      return true;
+    };
+    void api
+      .tgRooms()
+      .then((r) => {
+        const on = r.rooms.some((x) => x.channel !== "log" && x.unread > 0);
+        setNavN((p) => (p.telegram === on ? p : { ...p, telegram: on }));
+      })
+      .catch(() => undefined);
+    void api
+      .signalSuperStatus()
+      .then((r) => {
+        superRunRef.current = r.lastRunDate;
+        const on =
+          !!r.lastRunDate &&
+          !seeing("superSignal", r.lastRunDate) &&
+          r.lastRunDate !== localStorage.getItem("vntg.seen.superSignal");
+        setNavN((p) => (p.superSignal === on ? p : { ...p, superSignal: on }));
+        setSuperUD(r.up !== null && r.down !== null ? { up: r.up, down: r.down } : null);
+      })
+      .catch(() => undefined);
+    void api
+      .reportStatus()
+      .then((r) => {
+        reportRef.current = r.latest;
+        const on =
+          !!r.latest &&
+          !seeing("report", r.latest) &&
+          r.latest !== localStorage.getItem("vntg.seen.report");
+        setNavN((p) => (p.report === on ? p : { ...p, report: on }));
+      })
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    refreshNavN();
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") refreshNavN();
+    }, 60_000);
+    window.addEventListener("vntg:tg-read", refreshNavN);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("vntg:tg-read", refreshNavN);
+    };
+  }, [refreshNavN]);
+  /* 그 메뉴에 들어가면 확인 — 최신분을 본 것으로 적고 배지를 끈다 */
+  useEffect(() => {
+    const seenVal = tab === "superSignal" ? superRunRef.current : tab === "report" ? reportRef.current : null;
+    if (tab !== "superSignal" && tab !== "report") return;
+    if (seenVal) {
+      try {
+        localStorage.setItem(`vntg.seen.${tab}`, seenVal);
+      } catch {
+        /* 무시 */
+      }
+    }
+    setNavN((p) => (p[tab] ? { ...p, [tab]: false } : p));
+  }, [tab]);
+  /** 메뉴 항목에 N 을 달지 — 자주 쓰는 메뉴 줄에도 같이 단다 */
+  const navNOf = (key: Tab) =>
+    key === "telegram"
+      ? navN.telegram
+      : key === "superSignal"
+        ? navN.superSignal
+        : key === "report"
+          ? navN.report
+          : false;
+
+  /*
    * 탭별 스크롤 기억 (2026-08-27) — 창 스크롤은 하나뿐이라 탭을 갈아타면
    * **남의 스크롤 자리**에서 시작했다(종목 눌렀더니 분석 화면이 중간부터).
    * 브라우저 탭처럼: 보던 자리를 탭마다 적어 두고, 돌아오면 그 자리로,
@@ -575,6 +666,13 @@ export default function App() {
                 >
                   <span className="nav-icon" aria-hidden="true">{item.icon}</span>
                   {item.label}
+                  {item.key === "superSignal" && superUD && (
+                    <em className="nav-ud" title="추적 중 종목의 당일 상승/하락">
+                      <span className="positive">▲{superUD.up}</span>
+                      <span className="negative">▼{superUD.down}</span>
+                    </em>
+                  )}
+                  {navNOf(item.key) && <em className="nav-n">N</em>}
                 </button>
               ))}
             </div>
@@ -619,6 +717,13 @@ export default function App() {
                     {item.icon}
                   </span>
                   <span className="nav-label">{item.label}</span>
+                  {item.key === "superSignal" && superUD && (
+                    <em className="nav-ud" title="추적 중 종목의 당일 상승/하락">
+                      <span className="positive">▲{superUD.up}</span>
+                      <span className="negative">▼{superUD.down}</span>
+                    </em>
+                  )}
+                  {navNOf(item.key) && <em className="nav-n">N</em>}
                 </button>
               ))}
             </div>
@@ -703,9 +808,11 @@ export default function App() {
           {/*
             인앱 탭바 (2026-08-26) — 연 메뉴들이 브라우저 탭처럼 쌓인다.
             탭이 하나면 안 그린다 — 기능을 안 쓰는 사람에게는 예전 화면 그대로다.
+            상한이 없어지며 넘칠 수 있게 됐다(2026-08-27) — 종목상세와 같은
+            TabScroller 로 휠 가로 스크롤·좌우 버튼·활성 탭 끌어오기를 준다.
           */}
           {openTabs.length > 1 && (
-            <div className="app-tabs">
+            <TabScroller className="app-tabs" activeKey={tab}>
               {openTabs.map((t) => (
                 <span
                   key={t}
@@ -727,7 +834,7 @@ export default function App() {
                   </button>
                 </span>
               ))}
-            </div>
+            </TabScroller>
           )}
 
           {/*

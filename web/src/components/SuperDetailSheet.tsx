@@ -219,6 +219,18 @@ export function SuperDetailSheet({
         {data && entry && (
           <>
             <div className="sd-facts">
+              {/* 현재가(등락률) — 오늘 어떤지가 첫 물음 (2026-08-27) */}
+              {data.now && data.now.price !== null && (
+                <span>
+                  현재가 <b>{data.now.price.toLocaleString("ko-KR")}원</b>
+                  {data.now.changeRate !== null && (
+                    <b className={data.now.changeRate >= 0 ? "positive" : "negative"}>
+                      {" "}({data.now.changeRate > 0 ? "+" : ""}
+                      {data.now.changeRate.toFixed(2)}%)
+                    </b>
+                  )}
+                </span>
+              )}
               <span>
                 편입 <b>{entry.addedDate}</b> · {entry.addedPrice.toLocaleString("ko-KR")}원 ·{" "}
                 {entry.score}점

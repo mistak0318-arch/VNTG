@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
-import { getMarketSnapshot } from "./marketSnapshot.js";
+import { getMarketSnapshot, peekSnapshot } from "./marketSnapshot.js";
 import { evaluateMarket } from "./marketSignal.js";
 import { getSectorMood } from "./sectorMood.js";
 import { evaluateSignal } from "./signalLight.js";
@@ -166,6 +166,34 @@ async function load(): Promise<Store> {
   } catch {
     return { ...EMPTY };
   }
+}
+
+/**
+ * 사이드바 배지용 — 마지막 수집일 + 추적 중 종목의 당일 상승/하락 수.
+ * 시세는 peekSnapshot(캐시만)으로 센다 — 1분 폴링이 시장 스캔을 유발하면 안 된다.
+ * 캐시가 아직 없으면 up/down 은 null(배지가 그 부분만 생략).
+ */
+export async function superRunStatus(): Promise<{
+  lastRunDate: string | null;
+  up: number | null;
+  down: number | null;
+}> {
+  const store = await load();
+  const snap = peekSnapshot();
+  let up: number | null = null;
+  let down: number | null = null;
+  if (snap) {
+    up = 0;
+    down = 0;
+    for (const e of store.entries) {
+      if (e.active === false) continue;
+      const r = snap.byCode.get(e.code)?.changeRate;
+      if (typeof r !== "number") continue;
+      if (r > 0) up += 1;
+      else if (r < 0) down += 1;
+    }
+  }
+  return { lastRunDate: store.lastRunDate, up, down };
 }
 
 async function save(s: Store): Promise<void> {
@@ -821,13 +849,17 @@ export async function superDetail(client: KiwoomClient, code: string) {
   const entry = store.entries.find((e) => e.code === code);
   if (!entry) return null;
 
-  const [stock, flows, mood, sig, market] = await Promise.all([
+  const [stock, flows, mood, sig, market, snap] = await Promise.all([
     stockDailySeries(client, code).catch(() => [] as DailyPoint[]),
     investorDailySeries(client, code).catch(() => [] as { date: string; foreign: number; inst: number }[]),
     getSectorMood(client, code).catch(() => null),
     evaluateSignal(client, code).catch(() => null),
     evaluateMarket(client).catch(() => null),
+    getMarketSnapshot(client).catch(() => null),
   ]);
+  /* 지금 시세 — 「오늘 어떤지」가 첫 물음이다 (2026-08-27 등락률 병기 요청) */
+  const nowRow = snap?.byCode.get(code);
+  const now = nowRow ? { price: nowRow.price ?? null, changeRate: nowRow.changeRate ?? null } : null;
 
   /* 지수 — 업종 매칭이 알려 준 시장, 못 찾으면 코스피 */
   const marketIdx = mood?.sector?.marketKey === "kosdaq" ? "101" : "001";
@@ -847,6 +879,7 @@ export async function superDetail(client: KiwoomClient, code: string) {
 
   return {
     entry,
+    now,
     stock: cut(stock),
     index: { code: marketIdx, name: marketIdx === "101" ? "코스닥" : "코스피", series: cut(indexSeries) },
     sector: mood?.sector
