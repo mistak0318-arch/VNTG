@@ -41,6 +41,7 @@ export function MorningPage() {
   const [report, setReport] = useState<PublishedReport | null>(null);
   const [sup, setSup] = useState<{ entries: SuperEntry[]; stats: SuperStats } | null>(null);
   const [rooms, setRooms] = useState<MajorRoom[] | null>(null);
+  const [buzz, setBuzz] = useState<Awaited<ReturnType<typeof api.buzz>> | null>(null);
   const [loadedAt, setLoadedAt] = useState<number | null>(null);
 
   const load = useCallback(() => {
@@ -65,6 +66,10 @@ export function MorningPage() {
       .majorRooms()
       .then((r) => setRooms(r.rooms))
       .catch(() => setRooms([]));
+    void api
+      .buzz()
+      .then(setBuzz)
+      .catch(() => undefined);
     setLoadedAt(Date.now());
   }, []);
   useEffect(() => load(), [load]);
@@ -248,6 +253,51 @@ export function MorningPage() {
               )}
             </>
           )}
+        </section>
+
+        {/* ── 밤사이 버즈 — 채널 언급 급증 (2026-08-27 버즈 레이더) ── */}
+        <section className="card mrn-card">
+          <button className="mrn-title" onClick={() => go("telegram")}>
+            🌋 밤사이 버즈 <i>›</i>
+          </button>
+          {!buzz && <div className="empty">불러오는 중…</div>}
+          {buzz && buzz.baselineDays < 3 && (
+            <>
+              <p className="pt-n">
+                기준선 수집 중 ({buzz.baselineDays}/3일) — 사흘치가 쌓이면 「평소 대비 몇 배」
+                판정과 시그널 방 발송이 시작됩니다.
+              </p>
+              {buzz.topToday.length > 0 && (
+                <div className="mrn-sup">
+                  {buzz.topToday.slice(0, 6).map((t) => (
+                    <div key={t.term}>
+                      <span>{t.term}</span>
+                      <b>{t.recent}건</b>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+          {buzz && buzz.baselineDays >= 3 && buzz.hits.length === 0 && (
+            <div className="empty">최근 {buzz.windowHours}시간, 평소보다 크게 커진 주제가 없습니다.</div>
+          )}
+          {buzz &&
+            buzz.hits.slice(0, 5).map((h) => (
+              <div className="mrn-buzz" key={h.term}>
+                <div className="mrn-buzz-head">
+                  <b>{h.term}</b>
+                  <span className="positive">
+                    {h.recent}건 · 평소 {h.baseline}건의 {h.ratio}배
+                  </span>
+                </div>
+                {h.samples[0] && (
+                  <p className="pt-n mrn-buzz-sample">
+                    {h.samples[0].text.slice(0, 90)} <i>({h.samples[0].channel})</i>
+                  </p>
+                )}
+              </div>
+            ))}
         </section>
 
         {/* ── 주요 채널 밤사이 글 ── */}

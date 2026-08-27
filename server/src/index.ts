@@ -32,6 +32,7 @@ import { createSettingsRouter } from "./routes/settings.js";
 import { startAlertScheduler } from "./alertScheduler.js";
 import { startChannelScheduler } from "./channelScheduler.js";
 import { startMajorFeedLoop } from "./majorFeed.js";
+import { startBuzzScheduler } from "./buzzRadar.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createTradeRouter } from "./routes/trade.js";
@@ -183,6 +184,8 @@ startChannelScheduler();
   startKeywordScheduler();
 /* 주요 채널 — 골라 둔 채널의 글을 5분마다 빠짐없이 아카이브 (「주요 채널」 방이 읽는다) */
 startMajorFeedLoop();
+/* 버즈 레이더 — 채널 언급 급증을 30분마다 판정, 강한 것은 시그널 방으로 */
+startBuzzScheduler(client);
 startSignalTrackScheduler(client);
 /* 추적기 5분 뒤 — 신호등 캐시가 데워진 채로 교집합을 평가한다 */
 startSuperSignalScheduler(client);

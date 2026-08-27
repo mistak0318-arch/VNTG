@@ -208,6 +208,16 @@ export function createSignalRouter(client: KiwoomClient): Router {
     res.json(superJob());
   });
 
+  /** 밤사이 버즈 — 채널 언급 급증 판정 결과 (장전 브리핑룸 카드가 읽는다) */
+  router.get("/buzz", async (_req, res, next) => {
+    try {
+      const { evaluateBuzz } = await import("../buzzRadar.js");
+      res.json(await evaluateBuzz());
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /** 마지막 수집일만 — 사이드바 N 배지가 1분마다 물어본다(가볍게) */
   router.get("/super/status", async (_req, res, next) => {
     try {

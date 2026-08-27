@@ -4939,6 +4939,10 @@ tr.drag-src td { opacity: 0.45; }
 .mrn-report { font-size: 0.82rem; line-height: 1.5; white-space: pre-wrap; margin: 0; }
 .mrn-sup div { display: flex; justify-content: space-between; padding: 2px 0; font-size: 0.84rem; }
 .mrn-room { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 0.84rem; }
+.mrn-buzz { padding: 4px 0; border-bottom: 1px solid var(--border); }
+.mrn-buzz-head { display: flex; justify-content: space-between; gap: 8px; font-size: 0.84rem; }
+.mrn-buzz-sample { margin: 2px 0 0; }
+.mrn-buzz-sample i { font-style: normal; }
 .mrn-room .tgr-preview { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── 주요 채널 (2026-08-27) — 채널마다 방 하나, 글은 원문 그대로 ── */

@@ -197,6 +197,23 @@ export const api = {
     ),
   /** 데일리 리포트 최신 발행분 — 사이드바 N 배지용 */
   reportStatus: () => getJson<{ latest: string | null }>("/api/report/status"),
+  /** 밤사이 버즈 — 채널 언급 급증 (장전 브리핑룸) */
+  buzz: () =>
+    getJson<{
+      hits: {
+        term: string;
+        kind: "theme" | "myTheme" | "stock" | "event" | "entity";
+        recent: number;
+        baseline: number;
+        ratio: number;
+        codes: string[];
+        samples: { at: string; channel: string; text: string; link: string }[];
+      }[];
+      baselineDays: number;
+      topToday: { term: string; kind: string; recent: number }[];
+      windowHours: number;
+      at: string;
+    }>("/api/signal/buzz"),
   /** 호가창 — 종목 상세·종목분석이 같은 것을 쓴다 */
   /** 거래원 — 부를 때마다 시계열이 한 점씩 쌓인다 */
   /** 종목별 프로그램매매 (일자별) — 단위 백만원 */

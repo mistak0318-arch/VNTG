@@ -358,6 +358,11 @@ export async function fetchNewMessages(
   }
 
   if (useOffsets) await writeOffsets(offsets);
+  /* 버즈 레이더 (2026-08-27) — 지나가는 메시지를 세기만 한다. 중복은 저쪽이 거르고,
+     실패는 저쪽이 삼킨다. 어떤 경로의 수집이든 한 번 본 메시지는 한 번만 세어진다. */
+  void import("./buzzRadar.js")
+    .then((m) => m.recordBuzz(messages))
+    .catch(() => undefined);
   // 최신 메시지가 위로 오게 — 화면에서도 요약에서도 "지금"이 먼저다
   messages.sort((a, b) => b.at.localeCompare(a.at));
   // channels 는 "대상 채널 수"라 켜둔 전체를 알려주는 게 맞다 (조회한 수는 fetched)
