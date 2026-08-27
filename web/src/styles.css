@@ -2990,7 +2990,8 @@ body.col-resizing { user-select: none; cursor: col-resize; }
    */
   .cal-cell { min-height: 44px; padding: 4px 2px; }
   .cal-events { flex-direction: row; flex-wrap: wrap; gap: 3px; justify-content: center; }
-  .cal-chip {
+  /* ⚠️ 월 그리드 안에서만 점으로 — 전역으로 걸면 주·일 보기 칩까지 점이 돼 쓸모가 없다 */
+  .cal-grid .cal-chip {
     width: 6px;
     height: 6px;
     padding: 0;
@@ -5043,7 +5044,18 @@ tr.drag-src td { opacity: 0.45; }
 .cal-week-list { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .cal-week-empty { color: var(--muted); text-align: center; font-size: 0.7rem; }
 .cal-chip-time { font-style: normal; font-size: 0.62rem; opacity: 0.8; margin-right: 2px; }
-.cal-day { max-width: 40rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.cal-dayview { max-width: 40rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+/* 일간·주간 칩은 월 셀과 달리 자리가 넉넉하다 — 점이 아니라 읽히는 블록으로 (2026-08-27) */
+.cal-dayview .cal-chip,
+.cal-week .cal-chip {
+  font-size: 0.8rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: normal;
+  word-break: break-word;
+}
+.cal-dayview .cal-chip { font-size: 0.84rem; }
+.cal-dayev-memo { font-style: normal; color: var(--muted); font-size: 0.72rem; margin-left: 6px; }
 .cal-day-row {
   display: flex;
   align-items: center;

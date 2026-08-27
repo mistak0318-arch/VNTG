@@ -485,9 +485,10 @@ export function CalendarPage() {
             </div>
           )}
 
-          {/* ── 일간 보기 — 시간 줄을 누르면 그 시간으로 입력 폼이 맞춰진다 ── */}
+          {/* ── 일간 보기 — 시간 줄을 누르면 그 시간으로 입력 폼이 맞춰진다.
+                 클래스명 주의: .cal-day 는 월 셀의 날짜 숫자가 선점 — dayview 로 갈랐다 ── */}
           {view === "day" && (
-            <div className="cal-day">
+            <div className="cal-dayview">
               {(() => {
                 const list = byDate.get(selected) ?? [];
                 const allDay = list.filter((e) => !e.time);
@@ -536,6 +537,11 @@ export function CalendarPage() {
                               >
                                 <i className="cal-chip-time">{e.time}</i>
                                 {e.title}
+                                {e.memo && (
+                                  <i className="cal-dayev-memo">
+                                    {e.memo.replace(/\s+/g, " ").slice(0, 40)}
+                                  </i>
+                                )}
                               </span>
                             ))}
                           </span>
