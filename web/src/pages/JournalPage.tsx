@@ -35,6 +35,26 @@ function pct(n: number | null): string {
 /** 1.5R 미만이면 경고한다 — 이기고도 지는 매매의 경계선 */
 const MIN_R = 1.5;
 
+/* ── 날짜 고르기 달력 (2026-08-27) — 캘린더 화면과 같은 문법 ── */
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+function ymdOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function monthOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** 앞 빈칸 + 그 달의 날짜들 */
+function buildCalGrid(cursor: Date): (Date | null)[] {
+  const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const days = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+  const cells: (Date | null)[] = Array.from({ length: first.getDay() }, () => null);
+  for (let i = 1; i <= days; i += 1) cells.push(new Date(cursor.getFullYear(), cursor.getMonth(), i));
+  return cells;
+}
+
 /**
  * 손절선·목표가를 적으면 **그 자리에서 R 을 보여준다.**
  *
@@ -130,6 +150,8 @@ export function JournalPage({
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [date, setDate] = useState(today());
+  /** 달력이 보고 있는 달 — 날짜와 따로 논다(지난달을 넘겨봐도 고른 날은 그대로) */
+  const [calCursor, setCalCursor] = useState(() => new Date());
 
   // 편집 중인 값
   const [form, setForm] = useState<Partial<JournalEntry>>({});
@@ -257,8 +279,21 @@ export function JournalPage({
     }
     setDate(next);
     setNote(null);
+    // 다른 달의 날을 고르면 달력도 따라간다
+    const [y, m] = next.split("-").map(Number);
+    setCalCursor(new Date(y, m - 1, 1));
     applyForm(entries.find((e) => e.date === next));
   }
+
+  /* ── 달력 (2026-08-27) — 한 달치를 펴 놓고 눌러서 고른다 ── */
+  const shiftCal = (d: number) =>
+    setCalCursor((c) => new Date(c.getFullYear(), c.getMonth() + d, 1));
+  async function goToday() {
+    setCalCursor(new Date());
+    await switchDate(today());
+  }
+  /** 기록이 있는 날 — 달력에 점을 찍어 빈 날이 보이게 한다 */
+  const written = new Set((data?.entries ?? []).map((e) => e.date));
 
   function addTrade(r: StockSearchResult | null) {
     const t: JournalTrade = {
@@ -297,6 +332,7 @@ export function JournalPage({
   const s = data.stats;
   const entry = data.entries.find((e) => e.date === date);
   const ctx = entry?.context ?? null;
+  const calGrid = buildCalGrid(calCursor);
 
   return (
     <div>
@@ -305,24 +341,59 @@ export function JournalPage({
 
       {/* ── 오늘 적기 ── */}
       <section className="jn-editor">
+        {/*
+          날짜 고르기 — **한 달치 달력** (2026-08-27). 예전엔 `<input type="date">` 라
+          네이티브 피커를 열어 두 번 눌러야 했고, 어느 날에 기록이 있는지도 안 보였다.
+          달력이면 한 번에 고르고, **기록이 있는 날에 점**이 찍혀 빈 날이 바로 보인다.
+        */}
         <div className="jn-head">
-          <input
-            className="pt-input"
-            type="date"
-            value={date}
-            max={today()}
-            /* 편집 중이면 저장부터 하고 넘어간다 — 날짜 이동이 지우개였던 버그의 답 */
-            onChange={(e) => void switchDate(e.target.value)}
-          />
+          <button className="filter-btn" onClick={() => shiftCal(-1)} title="이전 달">
+            ‹
+          </button>
+          <b className="jn-cal-month">
+            {calCursor.getFullYear()}년 {calCursor.getMonth() + 1}월
+          </b>
+          <button
+            className="filter-btn"
+            onClick={() => shiftCal(1)}
+            disabled={monthOf(calCursor) >= monthOf(new Date())}
+            title="다음 달"
+          >
+            ›
+          </button>
+          <button className="filter-btn" onClick={() => void goToday()} title="오늘로">
+            오늘
+          </button>
           <span className="jn-streak">
             연속 <b>{s.streak}</b>일 · 총 <b>{s.days}</b>일 기록
           </span>
-          <button className="algo-run-btn" onClick={() => void save()} disabled={saving}>
-            {saving ? "저장 중…" : entry ? "수정" : "저장"}
-          </button>
-          {/* 저장 안 된 편집이 있다는 표시 — 이게 보이는 동안은 날짜를 바꿔도 안전하다(먼저 저장된다) */}
           {dirty && !saving && <span className="jn-dirty">● 편집 중</span>}
-          {note && !dirty && <span className="jn-saved">{note}</span>}
+        </div>
+
+        <div className="jn-cal">
+          {WEEKDAYS.map((w, i) => (
+            <div className={`cal-wd${i === 0 ? " sun" : i === 6 ? " sat" : ""}`} key={w}>
+              {w}
+            </div>
+          ))}
+          {calGrid.map((d, i) => {
+            if (!d) return <span className="jn-cal-cell empty" key={`e${i}`} />;
+            const key = ymdOf(d);
+            const future = key > today();
+            return (
+              <button
+                key={key}
+                className={`jn-cal-cell${key === date ? " on" : ""}${key === today() ? " today" : ""}${
+                  written.has(key) ? " has" : ""
+                }`}
+                disabled={future}
+                onClick={() => void switchDate(key)}
+                title={written.has(key) ? "기록 있음" : "기록 없음"}
+              >
+                {d.getDate()}
+              </button>
+            );
+          })}
         </div>
 
         {/* 자동으로 잡힌 그날 맥락 — 사용자가 적을 필요가 없다 */}
@@ -654,12 +725,18 @@ export function JournalPage({
           </div>
         </div>
 
+        {/*
+          배운 것·내일 할 것은 **여러 줄** (2026-08-27) — 한 줄 입력이라 길게 적으면
+          뒷부분이 칸 밖으로 밀려 안 보였다. 여기가 이 노트의 결론인데 정작 다시 읽을
+          수가 없었던 셈이다.
+        */}
         <label className="jn-field">
           <span className="jn-label">
-            오늘 배운 것 <em className="jn-hint">한 줄. 이게 다음 달의 나를 바꿉니다</em>
+            오늘 배운 것 <em className="jn-hint">이게 다음 달의 나를 바꿉니다</em>
           </span>
-          <input
-            className="pt-input wide"
+          <textarea
+            className="jn-text"
+            rows={3}
             placeholder="예: 시장 신호등이 빨간 날엔 정배열이어도 안 밀린 종목이 없었다"
             value={form.lesson ?? ""}
             onChange={(e) => setForm({ ...form, lesson: e.target.value })}
@@ -668,13 +745,25 @@ export function JournalPage({
 
         <label className="jn-field">
           <span className="jn-label">내일 할 것</span>
-          <input
-            className="pt-input wide"
+          <textarea
+            className="jn-text"
+            rows={3}
             placeholder="예: 개장 후 외국인이 전기전자 순매수 이어가는지 확인"
             value={form.tomorrow ?? ""}
             onChange={(e) => setForm({ ...form, tomorrow: e.target.value })}
           />
         </label>
+
+        {/* 저장은 **맨 아래** (2026-08-27) — 다 적고 나서 손이 가는 자리가 여기다 */}
+        <div className="jn-save-bar">
+          <div className="jn-save-state">
+            {dirty && !saving && <span className="jn-dirty">● 저장 안 된 편집이 있습니다</span>}
+            {note && !dirty && <span className="jn-saved">✓ {note}</span>}
+          </div>
+          <button className="jn-save-btn" onClick={() => void save()} disabled={saving}>
+            {saving ? "저장 중…" : entry ? "수정 저장" : "저장"}
+          </button>
+        </div>
       </section>
 
       {/* ── 쌓인 나 ── */}

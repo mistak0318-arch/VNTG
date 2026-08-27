@@ -5827,9 +5827,98 @@ button.nav-group-toggle {
   padding-left: 0.2rem;
 }
 .jn-hint { font-style: normal; font-weight: 400; font-size: 0.7333rem; color: var(--muted); margin-left: 5px; }
-.jn-text { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 0.8rem; font-family: inherit; resize: vertical; }
-.jn-tags { display: flex; flex-wrap: wrap; gap: 5px; }
-.jn-tag { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); border-radius: 12px; padding: 3px 10px; font-size: 0.7333rem; cursor: pointer; }
+.jn-text {
+  width: 100%;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  font-family: inherit;
+  resize: vertical;
+}
+.jn-text:focus { outline: 1px solid var(--blue); }
+
+/* ── 날짜 달력 (2026-08-27) — 한 달치를 펴 놓고 누른다 ── */
+.jn-cal-month { font-size: 0.9rem; min-width: 6.5rem; text-align: center; }
+.jn-cal {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  max-width: 22rem;
+  margin-bottom: 12px;
+}
+.jn-cal .cal-wd { font-size: 0.68rem; text-align: center; padding: 2px 0; }
+.jn-cal-cell {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-2);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.jn-cal-cell.empty { background: none; cursor: default; }
+.jn-cal-cell:disabled { color: var(--border); background: none; cursor: default; }
+.jn-cal-cell:hover:not(:disabled):not(.empty) { border-color: var(--muted); }
+.jn-cal-cell.today { border-color: var(--green); }
+.jn-cal-cell.on { background: var(--blue); color: #fff; font-weight: 700; }
+/* 기록이 있는 날엔 점 — 빈 날이 한눈에 보인다 */
+.jn-cal-cell.has::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--green);
+}
+.jn-cal-cell.on.has::after { background: #fff; }
+
+/* ── 저장 바 — 맨 아래, 다 적고 손이 가는 자리 ── */
+.jn-save-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.jn-save-state { flex: 1; min-width: 0; }
+.jn-save-btn {
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 30px;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgba(76, 141, 255, 0.3);
+}
+.jn-save-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.jn-save-btn:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
+/* 태그 버튼 — 손가락으로 누를 만한 크기로 (2026-08-27 "조금씩 키워주고") */
+.jn-tags { display: flex; flex-wrap: wrap; gap: 7px; }
+.jn-tag {
+  background: var(--panel-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 0.84rem;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.jn-tag:hover { color: var(--text); border-color: var(--muted); }
 .jn-tag.on { background: rgba(255,92,92,.15); border-color: var(--red); color: var(--red); font-weight: 600; }
 .jn-tag.mood.on { background: rgba(76,141,255,.15); border-color: var(--blue); color: var(--blue); }
 .jn-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 14px; }
@@ -8759,14 +8848,17 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .sp-bar.buy { background: var(--red); }
 .sp-bar.sell { background: var(--blue); }
 
-/* 복기 노트 — 근거 태그와 성적 표 */
+/* 복기 노트 — 근거 태그와 성적 표.
+   ⚠️ 여기 `.jn-tag` 는 **매매 줄 안의 작은 근거 태그** 전용이다 (2026-08-27 스코프 수리).
+   전역으로 두는 바람에 위(5910)에서 키운 실수·상태 태그를 도로 작게 덮고 있었다 —
+   6·7번 버튼이 안 커지던 원인. 매매 줄 안으로 좁힌다. */
 .jn-trade-reasons { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.2rem; margin-top: 0.2rem; }
-.jn-tag {
+.jn-trade-reasons .jn-tag {
   font-size: 0.7rem; padding: 0.12rem 0.4rem; border-radius: 999px;
   border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer;
 }
-.jn-tag.on { background: var(--accent, #2563eb); border-color: transparent; color: #fff; }
-.jn-tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem; }
+.jn-trade-reasons .jn-tag.on { background: var(--accent, #2563eb); border-color: transparent; color: #fff; }
+.jn-trade-reasons .jn-tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem; }
 .jn-stat-block.wide { grid-column: 1 / -1; }
 /* 이름 · 평균수익률 · 승률 · 평균R · 건수 — R 칸이 늘면서 다섯 칸이 됐다 */
 .jn-edge .cost-row { display: grid; grid-template-columns: 1fr 4rem 3rem 4rem 3.5rem; gap: 0.4rem; align-items: baseline; }
