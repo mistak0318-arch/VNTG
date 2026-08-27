@@ -4,11 +4,11 @@ import {
   api,
   fmtNum,
   signClass,
-  type LeaderConfig,
   type LeaderGroupStat,
   type LeaderScan,
   type LeaderTrackResult,
 } from "../api";
+import { LeaderConfigPanel } from "./LeaderConfigPanel";
 
 /**
  * 주도주 탐색기 — **오늘 시장이 어디에 반응하는가.**
@@ -30,7 +30,6 @@ export function LeaderScanPanel({
   onSelectStock?: (code: string, name: string) => void;
 }) {
   const [data, setData] = useState<LeaderScan | null>(null);
-  const [cfg, setCfg] = useState<LeaderConfig | null>(null);
   // 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26)
   const stockSort = useSortableTable<LeaderScan["stocks"][number]>(data?.stocks ?? []);
   const [cfgOpen, setCfgOpen] = useState(false);
@@ -55,15 +54,7 @@ export function LeaderScanPanel({
      * 돌면 하루 할당량이 녹는다. 「왜 강한가」는 눌러서 받는다.
      */
     void load(false);
-    api.leaderConfig().then(setCfg).catch(() => setCfg(null));
   }, [load]);
-
-  function saveCfg(patch: Partial<LeaderConfig>) {
-    if (!cfg) return;
-    const next = { ...cfg, ...patch };
-    setCfg(next);
-    void api.leaderConfigSave(next).then(setCfg).catch(() => {});
-  }
 
   const hasNews = (data?.sectors ?? []).some((s) => s.news.length > 0);
 
@@ -93,101 +84,15 @@ export function LeaderScanPanel({
       {error && <div className="error-banner">{error}</div>}
       {data?.note && <div className="alert-note">{data.note}</div>}
 
-      {/* ---------------- 조건 ---------------- */}
-      {cfgOpen && cfg && (
-        <section className="card st-cfg">
+      {/*
+        조건 — **설정 > 분석 기준과 같은 패널**이다 (2026-08-27).
+        예전엔 이 화면 안에만 있어서, 교차 신호나 브리핑에서 결과를 본 사람은
+        그 숫자가 어디서 정해졌는지 못 찾았다. 값은 서버 한 곳이라 어디서 바꾸든 같다.
+      */}
+      {cfgOpen && (
+        <section className="card">
           <h2>탐색 조건</h2>
-          <div className="st-cfg-row">
-            <span className="st-cfg-k">최소 거래대금</span>
-            <span>
-              <input
-                type="number"
-                min={0}
-                step={100}
-                value={cfg.minTradeValue}
-                onChange={(e) => saveCfg({ minTradeValue: Number(e.target.value) })}
-              />{" "}
-              억원 이상
-            </span>
-          </div>
-          <div className="st-cfg-note">
-            <b>이 문턱이 이 화면의 핵심</b>입니다. 대금이 얇은 구간은 작전·휩쏘가 끼기 쉬워서,
-            신호가 맞아도 실제로 사고팔 수 있는 자리가 아닙니다.
-          </div>
-
-          <div className="st-cfg-row">
-            <span className="st-cfg-k">모집단</span>
-            <span>
-              거래대금 상위{" "}
-              <input
-                type="number"
-                min={20}
-                max={400}
-                step={20}
-                value={cfg.universe}
-                onChange={(e) => saveCfg({ universe: Number(e.target.value) })}
-              />{" "}
-              종목
-            </span>
-          </div>
-
-          <div className="st-cfg-row">
-            <span className="st-cfg-k">급등 기준</span>
-            <span>
-              당일{" "}
-              <input
-                type="number"
-                min={0}
-                max={30}
-                step={1}
-                value={cfg.surgeRate}
-                onChange={(e) => saveCfg({ surgeRate: Number(e.target.value) })}
-              />
-              % 이상
-            </span>
-          </div>
-
-          <div className="st-cfg-row">
-            <span className="st-cfg-k">거래량 급증</span>
-            <span>
-              전일 대비{" "}
-              <input
-                type="number"
-                min={1}
-                max={20}
-                step={0.5}
-                value={cfg.volumeSpike}
-                onChange={(e) => saveCfg({ volumeSpike: Number(e.target.value) })}
-              />
-              배 이상
-            </span>
-          </div>
-
-          <div className="st-cfg-row">
-            <span className="st-cfg-k">섹터 표시</span>
-            <span>
-              상위{" "}
-              <input
-                type="number"
-                min={1}
-                max={20}
-                value={cfg.topSectors}
-                onChange={(e) => saveCfg({ topSectors: Number(e.target.value) })}
-              />
-              개 · 최소{" "}
-              <input
-                type="number"
-                min={1}
-                max={10}
-                value={cfg.minMembers}
-                onChange={(e) => saveCfg({ minMembers: Number(e.target.value) })}
-              />
-              종목
-            </span>
-          </div>
-          <div className="st-cfg-note">
-            바꾸면 <b>다음 훑기부터</b> 적용됩니다.
-          </div>
+          <LeaderConfigPanel />
         </section>
       )}
 

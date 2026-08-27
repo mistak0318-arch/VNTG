@@ -84,7 +84,7 @@ export const STOCK_TABS: { key: StockTab; label: string }[] = [
   { key: "opinion", label: "목표주가" },
   { key: "supply", label: "외국인·공매도·대차" },
   { key: "notes", label: "메모" },
-  { key: "sector", label: "업종·테마" },
+  { key: "sector", label: "테마" },
   /* 이 종목을 편입한 ETF 들 — 업종·테마 옆이다. 셋 다 「어느 묶음에 속하나」를 답한다 */
   { key: "etfHolders", label: "담은 ETF" },
   { key: "feed", label: "뉴스·공시" },

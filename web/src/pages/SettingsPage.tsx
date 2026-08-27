@@ -17,6 +17,7 @@ import { ScreenLockPanel } from "../components/ScreenLockPanel";
 import { MENU_ITEMS } from "../App";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { SignalConfigPanel } from "../components/SignalConfigPanel";
+import { LeaderConfigPanel } from "../components/LeaderConfigPanel";
 import { TelegramOverviewPanel } from "../components/TelegramOverviewPanel";
 import { SubTabOrderPanel } from "../components/SubTabOrderPanel";
 import { MiniConfigPanel } from "../components/MiniConfigPanel";
@@ -44,7 +45,7 @@ type SettingsTab = "display" | "analysis" | "publish" | "cost";
 
 const SETTINGS_TABS: { key: SettingsTab; label: string; hint: string }[] = [
   { key: "display", label: "화면", hint: "메뉴 순서 · 테마 · 글꼴" },
-  { key: "analysis", label: "분석 기준", hint: "신호등 기준 · AI 모델" },
+  { key: "analysis", label: "분석 기준", hint: "신호등 기준 · 주도주/교차 기준 · AI 모델" },
   { key: "publish", label: "발행·알림", hint: "리포트 일정 · 채널 수집 · 시그널" },
   { key: "cost", label: "비용·상태", hint: "AI 비용 · API 사용량 · 키 상태" },
 ];
@@ -298,6 +299,22 @@ export function SettingsPage() {
           맞지 않으면 계속 고쳐가면서 쓰는 것이 이 기능의 목적입니다.
         </p>
         <SignalConfigPanel />
+      </CollapsibleCard>
+      )}
+
+      {tab === "analysis" && (
+      <CollapsibleCard
+        id="leader"
+        scope="global"
+        title="주도주·교차 신호 기준"
+        hint="거래대금 문턱 · 모집단 · 급등/거래량 급증 기준"
+      >
+        <p className="page-note">
+          「오늘 시장이 어디에 반응하나」를 고르는 숫자입니다. <b>주도주 탐색</b>만이 아니라
+          신호등 찾기의 <b>교차 신호</b>와 마켓 브리핑의 주도 섹터가 전부 이 기준을 씁니다 —
+          결과를 보는 자리와 기준을 정하는 자리가 멀어서 여기에도 두었습니다.
+        </p>
+        <LeaderConfigPanel />
       </CollapsibleCard>
       )}
 

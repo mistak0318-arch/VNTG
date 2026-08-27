@@ -192,43 +192,12 @@ export function MarketPulsePanel({
         </div>
       </section>
 
-      {/* ---------------- 교차 신호 (재검토 #2) ---------------- */}
-      {pulse.cross && (
-        <section className="card">
-          <h2>교차 신호 — 세 화면이 동시에 가리키는 종목</h2>
-          <p className="page-note">
-            <b>주도주 태그</b>(신고가·거래량급증·급등)와 <b>🌟 슈퍼신호등</b>에 동시에 걸린
-            종목입니다. 업종 자금(최근 5일 외인+기관)까지 들어오고 있으면 「업종유입」이 붙습니다.
-          </p>
-          {pulse.cross.stocks.length === 0 ? (
-            <div className="page-note">{pulse.cross.note}</div>
-          ) : (
-            <>
-              <div className="mp-cross-note">{pulse.cross.note}</div>
-              <div className="mp-cross">
-                {pulse.cross.stocks.map((s) => (
-                  <button
-                    className="mp-cross-item"
-                    key={s.code}
-                    onClick={() => onSelectStock?.(s.code, s.name)}
-                  >
-                    <b>{s.name}</b>
-                    <span className={`num ${signClass(s.changeRate)}`}>
-                      {s.changeRate > 0 ? "+" : ""}
-                      {s.changeRate.toFixed(2)}%
-                    </span>
-                    <span className="mp-cross-tags">
-                      {s.tags.join(" · ")}
-                      {s.sectorInflow && " · 업종유입"}
-                    </span>
-                    {s.sector && <span className="pt-n">{s.sector}</span>}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </section>
-      )}
+      {/*
+        교차 신호는 **신호등 찾기로 옮겼다** (2026-08-27).
+        「어느 종목을 볼까」는 신호등 찾기의 물음이고, 여기(시장 흐름)는 「지금 판이
+        어떤가」다. 종목 목록이 이 화면에 있으면 판을 보러 왔다가 종목을 고르게 된다.
+        슈퍼신호등 바로 옆에 선다 — 둘 다 목록 교집합에서 나온 종목이다.
+      */}
 
       {/* ---------------- 위험 ---------------- */}
       <section className="card">

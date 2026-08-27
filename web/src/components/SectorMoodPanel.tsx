@@ -85,54 +85,22 @@ export function SectorMoodPanel({
   /* 이 종목이 든 내 테마 — 코드로 거른다 */
   const myThemes = mine.filter((t) => t.codes.includes(code));
 
-  if (loading) return <div className="empty">업종·테마 분위기 불러오는 중...</div>;
+  if (loading) return <div className="empty">테마 분위기 불러오는 중...</div>;
   if (error) return <div className="error-banner">{error}</div>;
   if (!data) return null;
-
-  const sector = data.sector;
-  // 업종지수 코드를 못 찾았으면 구성종목 조회가 불가능하므로 버튼으로 만들지 않는다
-  const sectorClickable = Boolean(sector?.code);
 
   return (
     <div className="mood-panel">
       {/*
-        표준산업분류(한투). 키움 업종은 「전기/전자」 하나로 삼성전자·SK하이닉스·포스코퓨처엠을
-        같이 묶는데, 이건 통신방송장비 / 반도체 / 이차전지로 갈린다.
-        **등락률은 없다** — 지수가 없는 분류라 이름만 쓴다. 그래서 업종을 대체하지 않고 옆에 붙인다.
+        ⚠️ **산업분류와 거래소 업종은 안 그린다** (2026-08-27).
+
+        「화학」 한 칸에 화장품·이차전지·정유가 같이 들어간다. 업종이 +0.18% 라는 게
+        이 종목에 대해 아무 말도 못 하는데, 맨 위에 크게 있으니 읽을 때마다 뜻을
+        찾게 됐다. **눈금이 안 맞는 값은 옆에 붙여 두는 것도 방해다.**
+        판정에서도 뺐다(signalLight 의 `sectorStrength`).
+
+        남는 것은 **테마 둘**이다 — 내가 묶은 것이 먼저, 그다음이 키움 분류.
       */}
-      {data.industry && (
-        <div className="mood-industry">
-          <span className="mood-tag">산업분류</span>
-          <span>{data.industry}</span>
-        </div>
-      )}
-      {sector && (
-        <button
-          className={`mood-sector${sectorClickable ? " clickable" : ""}`}
-          disabled={!sectorClickable}
-          onClick={() =>
-            setTarget({
-              kind: "sector",
-              code: sector.code,
-              name: sector.name,
-              market: sector.marketKey,
-            })
-          }
-        >
-          <div className="mood-sector-head">
-            <span className="mood-tag">{sector.market} 업종</span>
-            <span className="mood-name">{sector.name}</span>
-            <span className={`mood-rate ${signClass(sector.changeRate)}`}>{pct(sector.changeRate)}</span>
-          </div>
-          {sector.rank !== null && sector.total !== null && (
-            <div className="mood-sub">
-              {sector.market} 전체 {sector.total}개 업종 중 <strong>{sector.rank}위</strong>
-              {sector.rank <= 5 ? " · 오늘 시장을 이끄는 업종입니다" : ""}
-              {sectorClickable ? " · 눌러서 구성종목 보기" : ""}
-            </div>
-          )}
-        </button>
-      )}
 
       {/*
         내 테마 — 키움 분류 **위**에 둔다. 내가 묶은 것이 먼저 눈에 들어와야 한다.

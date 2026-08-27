@@ -193,24 +193,26 @@ export const DEFAULT_CONFIG: SignalConfig = {
       cost: 0,
     },
     /*
-     * 「어느 무리에 속했나」는 **세 갈래**다. 하나로 합치면 답이 흐려진다.
+     * 「어느 무리에 속했나」는 **테마로 본다** (2026-08-27 개정).
      *
-     *   업종   거래소가 정한 분류. 업종 지수와 업종 수급이라는 **실제 데이터**가 붙는다
-     *   테마   시장이 부르는 이름. 키움이 묶어 준다 — 업종과 자주 어긋나는데 그게 정보다
-     *   내 테마 내가 묶은 것. 남이 안 묶은 걸 묶으려고 만든 자리라 남의 분류와 섞으면 뜻이 없다
+     *   테마   시장이 부르는 이름. 키움이 묶어 준다
+     *   내 테마 내가 묶은 것. 남이 안 묶은 걸 묶으려고 만든 자리다
      *
-     * 셋이 같은 말을 하면 그건 센 신호고, 갈리면 왜 갈리는지가 볼거리다.
-     * 각각 켜고 끌 수 있게 따로 둔다.
+     * ⚠️ **업종은 뺐다.** 거래소 업종 분류는 이 앱이 보는 것과 눈금이 안 맞는다 —
+     * 「화학」 하나에 화장품·이차전지·정유가 같이 들어가서, 업종이 올랐다는 게
+     * 이 종목에 대해 아무 말도 못 한다. 그런 값에 점수를 주면 **없는 근거로 등급이
+     * 올라간다.** 기본값을 꺼 두고 가중치도 0 이다(아래 mergeConfig 가 저장분에서도
+     * 강제로 끈다). 항목 자체는 남긴다 — 지난 판정 기록이 이 키를 참조한다.
      */
     {
       key: "sectorStrength",
-      label: "업종 강세",
+      label: "업종 강세 (쓰지 않음)",
       axis: "trend",
-      enabled: true,
-      weight: 1,
+      enabled: false,
+      weight: 0,
       threshold: 0,
       strongAt: 1.5,
-      hint: "소속 업종 등락률(%). ⚠️ 지주사는 업종 지수가 없어 못 냅니다",
+      hint: "거래소 업종 분류가 이 앱의 눈금과 안 맞아 **판정에서 뺐습니다.** 테마 강세를 쓰세요",
       cost: 0,
     },
     {
@@ -441,6 +443,12 @@ function mergeConfig(saved: Partial<SignalConfig> | null): SignalConfig {
     checks: DEFAULT_CONFIG.checks.map((d) => {
       const s = savedChecks.get(d.key);
       if (!s) return d;
+      /*
+       * 업종 강세는 **저장분이 켜 두었어도 끈다** (2026-08-27).
+       * 기본값만 바꾸면, 이미 저장된 설정을 쓰는 쪽(=실제로 쓰던 사람)에게는
+       * 아무것도 안 바뀐다. 판정에서 빼기로 한 값이라 저장분보다 이 결정이 위다.
+       */
+      if (d.key === "sectorStrength") return { ...d, enabled: false, weight: 0 };
       return {
         ...d,
         enabled: typeof s.enabled === "boolean" ? s.enabled : d.enabled,

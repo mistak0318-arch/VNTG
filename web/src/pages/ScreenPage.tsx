@@ -4,6 +4,7 @@ import { SignalTrackPanel } from "../components/SignalTrackPanel";
 import { api, fmtNum, type ScreenHit, type ScreenJob, type ScreenRunSummary } from "../api";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { SuperSignalPanel } from "../components/SuperSignalPanel";
+import { CrossSignalPanel } from "../components/CrossSignalPanel";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { useCardOrder } from "../useCardOrder";
 import { WatchAddSheet, type WatchAddTarget } from "../components/WatchAddSheet";
@@ -41,7 +42,7 @@ function pct(n: number): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 
-type ScreenTab = "find" | "track" | "super" | "backtest";
+type ScreenTab = "find" | "track" | "super" | "cross" | "backtest";
 
 /*
  * 탭 기본 순서 — 슈퍼신호등이 찾기 바로 옆이다 (2026-08-26 사용자 요청).
@@ -51,6 +52,11 @@ export const SCREEN_TABS: { key: ScreenTab; label: string }[] = [
   { key: "find", label: "신호등 찾기" },
   /* 추적기의 상위판 — 여러 목록에 동시에 걸린 초록만 따라간다 */
   { key: "super", label: "🌟 슈퍼신호등" },
+  /*
+   * 교차 신호 — 슈퍼신호등 **바로 옆**이다 (2026-08-27, 시장 흐름 분석에서 이사).
+   * 둘 다 「여러 목록이 동시에 가리킨 종목」이라 같이 읽힌다.
+   */
+  { key: "cross", label: "🎯 교차 신호" },
   { key: "track", label: "추적기" },
   { key: "backtest", label: "조건 백테스트" },
 ];
@@ -236,6 +242,8 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
         <BacktestPanel />
       ) : screenTab === "super" ? (
         <SuperSignalPanel onSelectStock={onSelectStock} />
+      ) : screenTab === "cross" ? (
+        <CrossSignalPanel onSelectStock={onSelectStock} />
       ) : screenTab === "track" ? (
         <SignalTrackPanel onSelectStock={onSelectStock} />
       ) : (
