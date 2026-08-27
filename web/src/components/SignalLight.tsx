@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type SignalResult } from "../api";
+import { api, type SignalResult, type ThemeStrength } from "../api";
 import { ConstituentSheet, type ConstituentTarget } from "./overview/ConstituentSheet";
 
 /**
@@ -91,6 +91,8 @@ export function SignalPanel({
   const [data, setData] = useState<SignalResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [target, setTarget] = useState<ConstituentTarget | null>(null);
+  /** 네이버 테마 고르기 — 한 종목이 여럿에 얽혀 있어 먼저 고르게 한다 */
+  const [themePick, setThemePick] = useState(false);
 
   async function load(force = false) {
     setLoading(true);
@@ -164,7 +166,20 @@ export function SignalPanel({
               {/* 절반만 맞은 것을 표시한다. ✓ 하나로는 50점과 100점이 같아 보인다 */}
               {c.grade === 50 && <span className="sig-half"> 절반</span>}
             </span>
-            {c.link ? (
+            {/*
+              네이버 테마는 **한 종목이 여럿에 얽힌다** (삼성SDI 는 열 개).
+              그래서 곧바로 구성종목으로 보내지 않고 **어느 테마인지 먼저 고르게** 한다 —
+              가장 강한 하나만 보여 주면 나머지 아홉은 있는 줄도 모른다.
+            */}
+            {c.key === "naverTheme" && c.link ? (
+              <button
+                className="sig-value sig-link"
+                onClick={() => setThemePick(true)}
+                title="이 종목이 든 테마 전부 보기"
+              >
+                {c.value} ›
+              </button>
+            ) : c.link ? (
               <button
                 className="sig-value sig-link"
                 onClick={() => setTarget(c.link!)}
@@ -187,6 +202,17 @@ export function SignalPanel({
         데이터가 없어 판단할 수 없는 항목(?)은 점수 계산에서 빠집니다.
       </div>
 
+      {themePick && (
+        <ThemePickSheet
+          code={code}
+          onClose={() => setThemePick(false)}
+          onPick={(key, name) => {
+            setThemePick(false);
+            setTarget({ kind: "theme", code: key, name });
+          }}
+        />
+      )}
+
       {target && (
         <ConstituentSheet
           target={target}
@@ -197,6 +223,77 @@ export function SignalPanel({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * 이 종목이 든 **네이버 테마 전부** — 눌러서 하나를 고른다.
+ *
+ * 한 종목이 열 개 테마에 얽히는 일이 흔하다(삼성SDI: 2차전지 계열 넷·ESS·IT 대표주·
+ * 전기차·리비안…). 신호등은 그중 **가장 강한 하나**로 점수를 매기는데, 그것만
+ * 보여 주면 나머지가 있는 줄도 모른다. 강한 순으로 세워 두고 고르게 한다.
+ *
+ * 조회는 없다 — 서버의 테마 강도(파일 + 스냅샷)에서 이 종목이 든 것만 걸러 온다.
+ */
+function ThemePickSheet({
+  code,
+  onClose,
+  onPick,
+}: {
+  code: string;
+  onClose: () => void;
+  onPick: (key: string, name: string) => void;
+}) {
+  const [rows, setRows] = useState<ThemeStrength[] | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .themeStrength("kr")
+      .then((r) => {
+        if (alive) setRows(r.themes.filter((t) => t.stocks.some((s) => s.code === code)));
+      })
+      .catch(() => alive && setRows([]));
+    return () => {
+      alive = false;
+    };
+  }, [code]);
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-header">
+          <h2>이 종목이 든 테마</h2>
+          <button className="close-btn" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        {rows === null ? (
+          <div className="empty">불러오는 중…</div>
+        ) : rows.length === 0 ? (
+          <div className="page-note">네이버 테마에 편입된 곳이 없습니다.</div>
+        ) : (
+          <div className="tpk-list">
+            {rows.map((t) => (
+              <button className="tpk-row" key={t.key} onClick={() => onPick(t.key, t.name)}>
+                <span className="tpk-name">{t.name}</span>
+                <span className={`num ${t.changeRate >= 0 ? "positive" : "negative"}`}>
+                  {t.changeRate > 0 ? "+" : ""}
+                  {t.changeRate.toFixed(2)}%
+                </span>
+                <span className="pt-n tpk-sub">
+                  {t.up}/{t.stocks.length}
+                  {t.hit5.of > 0 && ` · ${t.hit5.of}일 중 ${t.hit5.n}일`}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="table-note">
+          강한 순입니다. 신호등 점수는 이 중 <b>가장 강한 테마</b>로 매깁니다.
+        </div>
+      </div>
     </div>
   );
 }

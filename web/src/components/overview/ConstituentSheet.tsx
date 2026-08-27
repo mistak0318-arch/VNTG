@@ -59,6 +59,41 @@ export function ConstituentSheet({
       return;
     }
 
+    /*
+     * ⚠️ **네이버 테마는 키움에 물어보면 안 된다** (2026-08-28).
+     *
+     * 신호등의 「테마 강세(네이버)」가 `kr:449` 같은 **우리 키**를 링크로 넘기는데,
+     * 그걸 그대로 `themeStocks`(키움 ka90002)에 넣으면 전혀 다른 테마가 나온다 —
+     * 삼성SDI 를 눌렀더니 엉뚱한 종목들이 떴다.
+     * 이 키는 우리 파일에 있으므로 서버의 테마 강도에서 꺼내 쓴다(조회 0회).
+     */
+    if (target.kind === "theme" && /^(kr|us|etf):/.test(target.code)) {
+      const market = target.code.startsWith("us")
+        ? "us"
+        : target.code.startsWith("etf")
+          ? "etf"
+          : "kr";
+      api
+        .themeStrength(market)
+        .then((r) => {
+          if (cancelled) return;
+          const t = r.themes.find((x) => x.key === target.code);
+          setItems(
+            (t?.stocks ?? []).map((s) => ({
+              code: s.code,
+              name: s.name,
+              price: 0,
+              change: 0,
+              changeRate: s.changeRate ?? 0,
+              marketCap: null,
+            })),
+          );
+        })
+        .catch((err: Error) => !cancelled && setError(err.message))
+        .finally(() => !cancelled && setLoading(false));
+      return;
+    }
+
     const req =
       target.kind === "theme"
         ? api.themeStocks(target.code)

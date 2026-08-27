@@ -9887,3 +9887,23 @@ button.tpb-row:hover { background: var(--panel-2); }
   }
   .tdb-table .tdb-td-tops { display: none; }
 }
+
+/* 이 종목이 든 테마 고르기 (2026-08-28) — 한 종목이 열 개에 얽히기도 한다 */
+.tpk-list { display: flex; flex-direction: column; gap: 3px; }
+.tpk-row {
+  display: grid;
+  grid-template-columns: 1fr 4.5rem;
+  align-items: baseline;
+  gap: 0.3rem 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.tpk-row:hover { border-color: var(--muted); }
+.tpk-name { font-size: 0.8rem; font-weight: 700; }
+.tpk-row .num { text-align: right; font-weight: 700; }
+.tpk-sub { grid-column: 1 / -1; font-size: 0.68rem; }
