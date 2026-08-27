@@ -192,7 +192,9 @@ function toMessage(h: KeywordHit): string {
     `🔔 <b>${esc(h.words.join(", "))}</b>`,
     `📡 ${esc(h.channelName)} · ${hhmmKst(h.at)}`,
   ].join("\n");
-  const body = esc(h.text.replace(/\n{3,}/g, "\n\n").slice(0, 700));
+  /* 원문 전체 (2026-08-27 — "줄이지 말고 원문으로"). 700자 컷을 없앤다 —
+     sendTelegram 이 한도(3,900자)를 넘으면 문단 경계에서 나눠 보내므로 잘리지 않는다 */
+  const body = esc(h.text.replace(/\n{3,}/g, "\n\n"));
   const link = h.link ? `\n\n🔗 <a href="${h.link}">원문 보기 →</a>` : "";
   return `${head}\n━━━━━━━━━━━━\n${body}${link}`;
 }
