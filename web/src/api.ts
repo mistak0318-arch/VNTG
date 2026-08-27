@@ -286,6 +286,12 @@ export const api = {
   channelsRefresh: () => postJson<{ channels: ChannelEntry[] }>("/api/channels/refresh"),
   channelsSetEnabled: (updates: { id: string; enabled: boolean }[]) =>
     putJson<{ channels: ChannelEntry[] }>("/api/channels/enabled", { updates }),
+  /* 주요 채널 (2026-08-27) — 골라 둔 채널의 글을 빠짐없이 원문 그대로 */
+  channelsSetMajor: (updates: { id: string; major: boolean }[]) =>
+    putJson<{ channels: ChannelEntry[] }>("/api/channels/major", { updates }),
+  majorFeed: (limit = 200) =>
+    getJson<{ messages: MajorMsg[]; readAt: string }>(`/api/channels/major-feed?limit=${limit}`),
+  majorFeedRead: () => postJson<{ ok: boolean }>("/api/channels/major-feed/read", {}),
   channelsReportStatus: (jobId: string) => getJson<PublishJob>(`/api/channels/report/${jobId}`),
   /** 끝날 때까지 기다리는 옛 방식 — 진행 표시가 필요 없는 짧은 확인용 */
   channelsReportSync: (o: { ai?: boolean; send?: boolean; minutes?: number } = {}) => {
@@ -1342,6 +1348,17 @@ export interface ChannelEntry {
   participants: number | null;
   lastAt: string | null;
   enabled: boolean;
+  /** 주요 채널 — 글을 빠짐없이 아카이브해 「주요 채널」 방에서 읽는다 */
+  major?: boolean;
+}
+
+/** 주요 채널 피드 한 건 — 원문 그대로 */
+export interface MajorMsg {
+  id: string;
+  at: string;
+  channel: string;
+  text: string;
+  link: string;
 }
 
 /** 고정 채널이 어디서 막혔나 — 빈 목록만으로는 원인을 못 가린다 */

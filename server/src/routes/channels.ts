@@ -14,7 +14,9 @@ import {
   listChannels,
   refreshChannels,
   setChannelEnabled,
+  setChannelMajor,
 } from "../telegramReader.js";
+import { majorFeedMessages, markMajorRead } from "../majorFeed.js";
 import { CHANNEL_STEPS, createJob, getJob, reporterFor } from "../reportProgress.js";
 
 export function createChannelsRouter(): Router {
@@ -43,6 +45,39 @@ export function createChannelsRouter(): Router {
     try {
       const updates = (req.body?.updates ?? []) as { id: string; enabled: boolean }[];
       res.json({ channels: await setChannelEnabled(updates) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* ---------------- 주요 채널 피드 (2026-08-27) ----------------
+     골라 둔 채널의 글을 빠짐없이 원문 그대로 — 「주요 채널」 방이 읽는다.
+     사용자 요청으로 사이드바 N 배지에는 절대 안 넣는다(늘 새 글이라 신호가 죽는다). */
+
+  /** 주요 채널 지정 토글 */
+  router.put("/major", async (req, res, next) => {
+    try {
+      const updates = (req.body?.updates ?? []) as { id: string; major: boolean }[];
+      res.json({ channels: await setChannelMajor(updates) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 쌓인 피드 — 시간순 마지막 limit 건 + 읽은 위치(여기까지 읽음 선) */
+  router.get("/major-feed", async (req, res, next) => {
+    try {
+      res.json(await majorFeedMessages(Number(req.query.limit) || 200));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 방을 열면 읽음 — 다음에 열 때 「여기까지 읽음」 선이 여기 그어진다 */
+  router.post("/major-feed/read", async (_req, res, next) => {
+    try {
+      await markMajorRead();
+      res.json({ ok: true });
     } catch (err) {
       next(err);
     }

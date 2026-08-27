@@ -4890,6 +4890,48 @@ tr.drag-src td { opacity: 0.45; }
 .tgr-search-row { max-width: 44rem; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .tgr-search-row .search-input { flex: 1; }
 .tgr-search-n { white-space: nowrap; }
+/* ── 주요 채널 (2026-08-27) — 골라 둔 채널의 글을 빠짐없이 원문 그대로 ── */
+.tgr-chname {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--blue);
+  margin-bottom: 2px;
+}
+.tgr-chname a { text-decoration: none; }
+.tgr-plain { white-space: pre-wrap; word-break: break-word; }
+.mjr-pick { max-width: 44rem; margin-bottom: 8px; }
+.mjr-pick .search-input { width: 100%; margin-bottom: 6px; }
+.mjr-pick-list {
+  max-height: 16rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.mjr-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.mjr-pick-row:hover { background: var(--panel-2); }
+.mjr-pick-row.on { color: var(--text); }
+.mjr-pick-row.on i { color: #f5c542; }
+.mjr-pick-row i { font-style: normal; width: 1rem; }
+
 /* 여기까지 읽음 — 방을 열면 이 선에서 시작한다 */
 .tgr-unread {
   display: flex;

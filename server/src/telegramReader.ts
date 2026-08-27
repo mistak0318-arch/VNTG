@@ -30,6 +30,8 @@ export interface ChannelEntry {
   lastAt: string | null;
   /** 수집 대상인지. 처음 발견된 채널은 false로 들어온다 */
   enabled: boolean;
+  /** 주요 채널 — 이 채널의 글은 빠짐없이 아카이브해서 「주요 채널」 방에서 읽는다 */
+  major?: boolean;
 }
 
 export interface ChannelMessage {
@@ -88,6 +90,16 @@ export async function setChannelEnabled(
   const rows = await listChannels();
   const map = new Map(updates.map((u) => [u.id, u.enabled]));
   const next = rows.map((r) => (map.has(r.id) ? { ...r, enabled: map.get(r.id)! } : r));
+  return saveChannels(next);
+}
+
+/** 주요 채널 지정 — 수집(enabled)과 무관하다. 주요 피드 루프가 onlyIds 로 직접 읽는다 */
+export async function setChannelMajor(
+  updates: { id: string; major: boolean }[],
+): Promise<ChannelEntry[]> {
+  const rows = await listChannels();
+  const map = new Map(updates.map((u) => [u.id, u.major]));
+  const next = rows.map((r) => (map.has(r.id) ? { ...r, major: map.get(r.id)! } : r));
   return saveChannels(next);
 }
 
@@ -210,6 +222,7 @@ export async function refreshChannels(): Promise<ChannelEntry[]> {
       lastAt: d.message?.date ? new Date(d.message.date * 1000).toISOString() : null,
       // 처음 보는 채널은 꺼둔다 — 180개가 한꺼번에 켜지면 감당이 안 된다
       enabled: prev.get(String(d.id))?.enabled ?? false,
+      major: prev.get(String(d.id))?.major ?? false,
     }))
     .sort((a: ChannelEntry, b: ChannelEntry) => (b.lastAt ?? "").localeCompare(a.lastAt ?? ""));
 
