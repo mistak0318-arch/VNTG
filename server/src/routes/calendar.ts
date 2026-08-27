@@ -14,6 +14,7 @@ import {
   replaceBySource,
   EVENT_KINDS,
   listEvents,
+  listEventsRange,
   removeEvent,
   updateEvent,
   upcomingEvents,
@@ -29,8 +30,13 @@ export function createCalendarRouter(): Router {
 
   router.get("/", async (req, res, next) => {
     try {
-      const month = typeof req.query.month === "string" ? req.query.month : undefined;
-      res.json({ events: await listEvents(month) });
+      const { month, from, to } = req.query as Record<string, string | undefined>;
+      // from~to 기간 조회가 우선 — 주·일 보기가 월 경계를 넘는다 (2026-08-27)
+      if (from && to && /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
+        res.json({ events: await listEventsRange(from, to) });
+        return;
+      }
+      res.json({ events: await listEvents(typeof month === "string" ? month : undefined) });
     } catch (err) {
       next(err);
     }

@@ -144,6 +144,14 @@ export async function listEvents(month?: string): Promise<CalendarEvent[]> {
   return [...filtered].sort((a, b) => (a.date + (a.time ?? "")).localeCompare(b.date + (b.time ?? "")));
 }
 
+/** 기간 조회 — 주·일 보기가 월 경계를 넘으므로 (2026-08-27). 반복은 기간 인스턴스로 편다 */
+export async function listEventsRange(from: string, to: string): Promise<CalendarEvent[]> {
+  const items = await load();
+  return expandRepeats(items, from, to).sort((a, b) =>
+    (a.date + (a.time ?? "")).localeCompare(b.date + (b.time ?? "")),
+  );
+}
+
 /** 오늘 이후로 다가오는 일정 (알림·리포트용) */
 export async function upcomingEvents(days = 14): Promise<CalendarEvent[]> {
   const items = await load();

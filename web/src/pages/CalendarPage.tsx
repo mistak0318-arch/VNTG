@@ -49,8 +49,12 @@ const CAL_TABS: { key: CalTab; label: string }[] = [
   { key: "import", label: "⬇ 가져오기" },
 ];
 
+/** 달력 보기 — 월(전체) · 주(한눈에) · 일(시간 단위 입력) (2026-08-27, 구글 캘린더처럼) */
+type CalView = "month" | "week" | "day";
+
 export function CalendarPage() {
   const [tab, setTab] = useState<CalTab>("cal");
+  const [view, setView] = useState<CalView>("month");
   const [cursor, setCursor] = useState(() => new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,7 +88,12 @@ export function CalendarPage() {
     setLoading(true);
     setError(null);
     try {
-      setEvents((await api.calendarList(monthKey(cursor))).events);
+      /* 월 앞뒤로 일주일 여유 — 주·일 보기가 월 경계를 넘어도 한 번에 커버된다 */
+      const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+      const last = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+      const from = ymd(new Date(first.getTime() - 7 * 86400_000));
+      const to = ymd(new Date(last.getTime() + 7 * 86400_000));
+      setEvents((await api.calendarRange(from, to)).events);
     } catch (err) {
       setError(err instanceof Error ? err.message : "불러오기 실패");
     } finally {
@@ -284,6 +293,28 @@ export function CalendarPage() {
     setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
   }
 
+  /** 보기 단위로 이동 — 월은 ±1개월, 주는 ±7일, 일은 ±1일. 주·일은 선택일이 기준이다 */
+  function shiftView(delta: number) {
+    if (view === "month") {
+      shiftMonth(delta);
+      return;
+    }
+    const days = view === "week" ? 7 : 1;
+    const next = new Date(new Date(`${selected}T00:00`).getTime() + delta * days * 86400_000);
+    setSelected(ymd(next));
+    setFormDate(ymd(next));
+    // 로드 범위(cursor 월 ±7일)를 벗어나면 달을 따라 옮긴다
+    if (next.getMonth() !== cursor.getMonth() || next.getFullYear() !== cursor.getFullYear()) {
+      setCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+    }
+  }
+
+  /** 선택일이 낀 주의 일요일 */
+  function weekStart(dateStr: string): Date {
+    const d = new Date(`${dateStr}T00:00`);
+    return new Date(d.getTime() - d.getDay() * 86400_000);
+  }
+
   const grid = buildGrid(cursor);
   const todayStr = ymd(new Date());
   const selectedEvents = byDate.get(selected) ?? [];
@@ -314,13 +345,21 @@ export function CalendarPage() {
         <div className="cal-main">
           <h3 className="section-heading">일정</h3>
           <div className="cal-toolbar">
-            <button className="filter-btn" onClick={() => shiftMonth(-1)}>
+            <button className="filter-btn" onClick={() => shiftView(-1)}>
               ‹ 이전
             </button>
             <span className="cal-month">
-              {cursor.getFullYear()}년 {cursor.getMonth() + 1}월
+              {view === "month"
+                ? `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월`
+                : view === "week"
+                  ? (() => {
+                      const s = weekStart(selected);
+                      const e = new Date(s.getTime() + 6 * 86400_000);
+                      return `${s.getMonth() + 1}/${s.getDate()} ~ ${e.getMonth() + 1}/${e.getDate()}`;
+                    })()
+                  : `${selected} (${WEEKDAYS[new Date(`${selected}T00:00`).getDay()]})`}
             </span>
-            <button className="filter-btn" onClick={() => shiftMonth(1)}>
+            <button className="filter-btn" onClick={() => shiftView(1)}>
               다음 ›
             </button>
             <button
@@ -334,8 +373,27 @@ export function CalendarPage() {
             >
               오늘
             </button>
+            {/* 보기 전환 (2026-08-27) — 월=전체, 주=한눈에, 일=시간 단위 입력 */}
+            <span className="cal-views">
+              {(
+                [
+                  { key: "month", label: "월" },
+                  { key: "week", label: "주" },
+                  { key: "day", label: "일" },
+                ] as const
+              ).map((v) => (
+                <button
+                  key={v.key}
+                  className={`filter-btn${view === v.key ? " active" : ""}`}
+                  onClick={() => setView(v.key)}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </span>
           </div>
 
+          {view === "month" && (
           <div className="cal-grid">
             {WEEKDAYS.map((w, i) => (
               <div className={`cal-wd${i === 0 ? " sun" : i === 6 ? " sat" : ""}`} key={w}>
@@ -376,6 +434,101 @@ export function CalendarPage() {
               );
             })}
           </div>
+          )}
+
+          {/* ── 주간 보기 — 7일을 한눈에. 날짜를 누르면 그날이 선택된다 ── */}
+          {view === "week" && (
+            <div className="cal-week">
+              {Array.from({ length: 7 }, (_, i) => {
+                const d = new Date(weekStart(selected).getTime() + i * 86400_000);
+                const key = ymd(d);
+                const list = byDate.get(key) ?? [];
+                return (
+                  <button
+                    key={key}
+                    className={`cal-week-col${key === todayStr ? " today" : ""}${key === selected ? " selected" : ""}`}
+                    onClick={() => {
+                      setSelected(key);
+                      setFormDate(key);
+                    }}
+                  >
+                    <span className={`cal-wd${i === 0 ? " sun" : i === 6 ? " sat" : ""}`}>
+                      {WEEKDAYS[i]} {d.getDate()}
+                    </span>
+                    <span className="cal-week-list">
+                      {list.map((e) => (
+                        <span
+                          className={`cal-chip ${e.kind}${e.todo && e.done ? " done" : ""}`}
+                          key={e.id}
+                          title={`${e.time ? `${e.time} ` : ""}${e.title}${e.memo ? ` — ${e.memo}` : ""}`}
+                        >
+                          {e.time && <i className="cal-chip-time">{e.time}</i>}
+                          {e.todo ? (e.done ? "✅" : "☐") : e.repeat ? "↻" : ""}
+                          {e.title}
+                        </span>
+                      ))}
+                      {list.length === 0 && <span className="cal-week-empty">—</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── 일간 보기 — 시간 줄을 누르면 그 시간으로 입력 폼이 맞춰진다 ── */}
+          {view === "day" && (
+            <div className="cal-day">
+              {(() => {
+                const list = byDate.get(selected) ?? [];
+                const allDay = list.filter((e) => !e.time);
+                const timed = list.filter((e) => e.time);
+                const evAt = (h: number) =>
+                  timed.filter((e) => Number((e.time ?? "0").split(":")[0]) === h);
+                return (
+                  <>
+                    {allDay.length > 0 && (
+                      <div className="cal-day-row allday">
+                        <span className="cal-day-h">종일</span>
+                        <span className="cal-day-evs">
+                          {allDay.map((e) => (
+                            <span className={`cal-chip ${e.kind}${e.todo && e.done ? " done" : ""}`} key={e.id}>
+                              {e.todo ? (e.done ? "✅" : "☐") : e.repeat ? "↻" : ""}
+                              {e.title}
+                            </span>
+                          ))}
+                        </span>
+                      </div>
+                    )}
+                    {Array.from({ length: 17 }, (_, i) => i + 6).map((h) => {
+                      const hh = `${String(h).padStart(2, "0")}:00`;
+                      const evs = evAt(h);
+                      return (
+                        <button
+                          key={h}
+                          className={`cal-day-row${evs.length > 0 ? " has" : ""}`}
+                          onClick={() => {
+                            setFormDate(selected);
+                            setTime(hh);
+                          }}
+                          title={`${hh} 에 일정 추가`}
+                        >
+                          <span className="cal-day-h">{hh}</span>
+                          <span className="cal-day-evs">
+                            {evs.map((e) => (
+                              <span className={`cal-chip ${e.kind}`} key={e.id} title={e.memo ?? ""}>
+                                <i className="cal-chip-time">{e.time}</i>
+                                {e.title}
+                              </span>
+                            ))}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </>
+                );
+              })()}
+            </div>
+          )}
         </div>
 
         <div className="cal-side">

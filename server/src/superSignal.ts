@@ -195,9 +195,21 @@ export async function superRunStatus(): Promise<{
       else if (r < 0) down += 1;
     }
   }
+  /* 원장(active) + 「슈퍼신호등+교차」 관심 그룹 — 캘린더 공시 매칭이 합집합을 쓴다 */
   const stocks = store.entries
     .filter((e) => e.active !== false)
     .map((e) => ({ code: e.code, name: e.name }));
+  try {
+    const seen = new Set(stocks.map((s) => s.code));
+    for (const w of await listWatchlist()) {
+      if (w.groups.includes(CROSS_GROUP) && !seen.has(w.code)) {
+        seen.add(w.code);
+        stocks.push({ code: w.code, name: w.name });
+      }
+    }
+  } catch {
+    /* 관심종목을 못 읽어도 원장만으로 답한다 */
+  }
   return { lastRunDate: store.lastRunDate, up, down, stocks };
 }
 

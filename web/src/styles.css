@@ -5020,6 +5020,53 @@ tr.drag-src td { opacity: 0.45; }
 .mjr-pick-row.on i { color: #f5c542; }
 .mjr-pick-row i { font-style: normal; width: 1rem; }
 
+/* ── 캘린더 월/주/일 보기 (2026-08-27) ── */
+.cal-views { display: inline-flex; gap: 2px; margin-left: auto; }
+.cal-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-week-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 10rem;
+  padding: 6px 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cal-week-col.today { border-color: var(--green); }
+.cal-week-col.selected { border-color: var(--blue); }
+.cal-week-col .cal-wd { font-size: 0.72rem; text-align: center; }
+.cal-week-list { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cal-week-empty { color: var(--muted); text-align: center; font-size: 0.7rem; }
+.cal-chip-time { font-style: normal; font-size: 0.62rem; opacity: 0.8; margin-right: 2px; }
+.cal-day { max-width: 40rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.cal-day-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 2.1rem;
+  padding: 3px 8px;
+  background: var(--panel);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cal-day-row:hover { background: var(--panel-2); }
+.cal-day-row.allday { background: var(--panel-2); cursor: default; }
+.cal-day-h { flex: 0 0 3.2rem; font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cal-day-evs { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+@media (max-width: 700px) {
+  .cal-week { grid-template-columns: repeat(7, minmax(3.4rem, 1fr)); gap: 2px; font-size: 0.9em; }
+}
+
 /* ── 캘린더 전면 개편 (2026-08-27) — 일정 카드·할 일·메모 ── */
 .cal-ev {
   border: 1px solid var(--border);

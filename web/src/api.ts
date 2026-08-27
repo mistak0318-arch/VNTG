@@ -846,6 +846,9 @@ export const api = {
     deleteJson<{ name: string; notes: StockNote[] }>(`/api/notes/${code}/${id}`),
   calendarList: (month?: string) =>
     getJson<{ events: CalendarEvent[] }>(`/api/calendar${month ? `?month=${month}` : ""}`),
+  /** 기간 조회 — 주·일 보기가 월 경계를 넘는다. 반복은 서버가 기간 인스턴스로 편다 */
+  calendarRange: (from: string, to: string) =>
+    getJson<{ events: CalendarEvent[] }>(`/api/calendar?from=${from}&to=${to}`),
   calendarUpcoming: (days = 14) =>
     getJson<{ events: CalendarEvent[] }>(`/api/calendar/upcoming?days=${days}`),
   calendarAdd: (e: Omit<CalendarEvent, "id">) =>
