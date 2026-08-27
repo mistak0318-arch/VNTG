@@ -389,6 +389,75 @@ function UsWatchMap({ onOpen }: { onOpen: (symbol: string, label: string) => voi
  */
 const SECTOR_GROUPS = ["지수·ETF", "액티브·테마"];
 
+/**
+ * 타일에 얹을 짧은 이름 (2026-08-27).
+ *
+ * ETF 정식명은 「SPDR Select Sector Fund - Materials」처럼 길고, 앞부분은 전부
+ * 운용사·상품 형식이라 **뒤가 진짜 이름**이다. 흔한 접두를 걷어내고 남는 말만 쓴다.
+ * 잘 알려진 것 몇은 한국어로 못 박아 둔다 — 「S&P 500」이 「SPDR S&P 500 ETF Trust」보다
+ * 빨리 읽힌다. 사전에 없으면 정리한 영문을 그대로 쓴다(추측해서 지어내지 않는다).
+ */
+const ETF_KO: Record<string, string> = {
+  SPY: "S&P 500",
+  QQQ: "나스닥 100",
+  IVV: "S&P 500",
+  VOO: "S&P 500",
+  DIA: "다우 30",
+  IWM: "러셀 2000",
+  SOXX: "반도체",
+  SMH: "반도체",
+  XLK: "기술",
+  XLF: "금융",
+  XLE: "에너지",
+  XLV: "헬스케어",
+  XLI: "산업재",
+  XLY: "경기소비재",
+  XLP: "필수소비재",
+  XLB: "소재",
+  XLU: "유틸리티",
+  XLC: "커뮤니케이션",
+  XLRE: "리츠",
+  IBB: "바이오",
+  XBI: "바이오(중소형)",
+  IHI: "의료기기",
+  ITA: "항공우주·방산",
+  ITB: "주택건설",
+  PAVE: "인프라",
+  IGV: "소프트웨어",
+  VGT: "기술",
+  VYM: "고배당",
+  VIG: "배당성장",
+  IUSG: "미국 성장주",
+  IUSV: "미국 가치주",
+  HYG: "하이일드 채권",
+  AMLP: "MLP(에너지 인프라)",
+  VNQ: "리츠",
+  EWY: "한국",
+  EWJ: "일본",
+  FXI: "중국 대형주",
+  XME: "금속·광업",
+  BOTZ: "로봇·AI",
+  IDRV: "전기차·자율주행",
+  FDN: "인터넷",
+  CHAT: "AI·챗봇",
+  ARKK: "혁신성장",
+  TAN: "태양광",
+  URA: "우라늄",
+  LIT: "리튬·배터리",
+};
+
+function shortEtfName(raw: string): string {
+  const ko = raw.trim();
+  const cleaned = ko
+    // 운용사·상품 형식 접두를 걷어낸다 — 남는 게 진짜 이름이다
+    .replace(/^(SPDR|iShares|Invesco|Vanguard|Global X|ARK|VanEck|First Trust|Direxion|ProShares)\s+/i, "")
+    .replace(/\b(ETF|Trust|Fund|Index|Shares?|Select Sector|Series)\b/gi, " ")
+    .replace(/\s*[-–]\s*/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return cleaned || ko;
+}
+
 function UsSectorMap({ onOpen }: { onOpen: (symbol: string, label: string) => void }) {
   const { tiles, loading } = useWatchGroupTiles("watchUs");
   const { theme } = useAppearance();
@@ -433,13 +502,21 @@ function UsSectorMap({ onOpen }: { onOpen: (symbol: string, label: string) => vo
                     /* ETF 는 ±2% 가 큰 날 — 5% 기준으로 칠하면 전부 흐리다 */
                     style={tileHeat(s.changeRate, theme, 2)}
                     onClick={() => onOpen(s.code, s.name || s.code)}
-                    title={`${s.name} · ${s.code}`}
+                    title={`${s.code} · ${s.name}`}
                   >
                     {/* 티커가 먼저 — 미국은 티커로 기억한다 */}
                     <span className="map-tile-name">{s.code}</span>
                     <span className={`map-tile-pct num ${cls(s.changeRate)}`}>
                       {pct(s.changeRate)}
                     </span>
+                    {/*
+                      이름 한 줄 (2026-08-27 — "뭐가 뭔지 모르겠어").
+                      XLB·IHI 처럼 티커만으로는 안 떠오르는 게 태반이다. 길면 말줄임하고
+                      전체는 title 로 — 타일 폭은 그대로 두어 격자가 안 흐트러진다.
+                    */}
+                    {(ETF_KO[s.code] || (s.name && s.name !== s.code)) && (
+                      <span className="map-tile-sub">{ETF_KO[s.code] ?? shortEtfName(s.name)}</span>
+                    )}
                   </button>
                 ))}
             </div>

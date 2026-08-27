@@ -6676,10 +6676,25 @@ button.nav-group-toggle {
 }
 .usm-best { font-style: normal; font-weight: 400; font-size: 0.72rem; }
 .usm-best em { font-style: normal; font-weight: 700; }
-.map-grid.dense { grid-template-columns: repeat(auto-fill, minmax(4.6rem, 1fr)); gap: 3px; }
-.map-grid.dense .map-tile { padding: 0.3rem 0.25rem; min-height: 0; }
-.map-grid.dense .map-tile-name { font-size: 0.72rem; }
+/*
+ * 촘촘한 타일 — 섹터 MAP 이 쓴다.
+ * 이름 줄이 생기면서(2026-08-27) 칸을 조금 넓혔다: 4.6→5.6rem.
+ * 「XLB」만으로는 소재인지 바이오인지 안 떠오른다 — 이름 한 줄이 그 값을 한다.
+ */
+.map-grid.dense { grid-template-columns: repeat(auto-fill, minmax(5.6rem, 1fr)); gap: 3px; }
+.map-grid.dense .map-tile { padding: 0.3rem 0.35rem; min-height: 0; }
+.map-grid.dense .map-tile-name { font-size: 0.72rem; -webkit-line-clamp: 1; }
 .map-grid.dense .map-tile-pct { font-size: 0.72rem; }
+/* 이름 — 티커 아래 한 줄. 길면 말줄임(전체는 타일 title 로) */
+.map-tile-sub {
+  font-size: 0.6rem;
+  line-height: 1.15;
+  opacity: 0.75;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* 슈퍼신호등 — 걸린 목록 배지들 */
 .ss-lists { display: inline-flex; flex-wrap: wrap; gap: 3px; }
