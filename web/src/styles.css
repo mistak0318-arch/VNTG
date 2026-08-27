@@ -4942,6 +4942,23 @@ tr.drag-src td { opacity: 0.45; }
 @media (max-width: 700px) {
   .tgr-head-note { display: none; } /* 폰에선 안내문이 머리줄을 두 줄로 만든다 */
 }
+/*
+ * PC 는 반대 사정 (2026-08-27) — 폰 기준으로 낮춘 머리줄·검색이 넓은 화면에서는
+ * 너무 작아 눈에 안 들어온다. 자리는 넉넉하니 방 이름·검색·글씨 버튼을 키운다.
+ */
+@media (min-width: 900px) {
+  .tgr-room-head { gap: 10px; margin-bottom: 8px; }
+  .tgr-room-head b { font-size: 1.05rem; }
+  .tgr-room-head .filter-btn { padding: 6px 12px; font-size: 0.82rem; }
+  .tgr-head-note { font-size: 0.76rem; }
+  .tgr-search-row { margin-bottom: 8px; }
+  .tgr-search-row .search-input { padding: 9px 12px; font-size: 0.92rem; border-radius: 8px; }
+  .tgr-search-row .qss-close { padding: 7px 12px; font-size: 0.9rem; }
+  .tgr-back { font-size: 0.9rem; padding: 8px 16px; }
+  /* 별표도 같이 — 말풍선 옆에서 눌러야 하는 물건이다.
+     .tgr-star 본 정의가 이 블록보다 아래에 있어 같은 특이성이면 진다 → 한 단계 구체적으로 */
+  .tgr-room .tgr-star { font-size: 1.15rem; padding: 4px; }
+}
 /* 방 목록으로 — 오른쪽 아래 플로팅 (폰: 왼쪽 위까지 손이 멀다) */
 .tgr-fab {
   position: fixed;
