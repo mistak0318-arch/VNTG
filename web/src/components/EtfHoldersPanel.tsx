@@ -97,7 +97,7 @@ export function EtfHoldersPanel({
       </div>
 
       <div className="data-table-wrap">
-        <table className="data-table">
+        <table className="data-table etfh-table">
           <thead>
             <tr>
               <th>ETF</th>
@@ -118,8 +118,11 @@ export function EtfHoldersPanel({
                 onClick={() => onSelectStock?.(h.code, h.name)}
                 title="ETF 상세로"
               >
-                <td className="sticky-col">
-                  <b>{h.name}</b> <span className="pt-n">{h.code}</span>
+                {/* 이름은 길다(「KODEX 삼성전자단일종목레버리지」) — 폭을 묶고 넘치면 말줄임.
+                    전체 이름은 title 로 본다 (2026-08-27 줄바뀜 수리) */}
+                <td className="sticky-col etfh-name" title={`${h.name} (${h.code})`}>
+                  <b>{h.name}</b>
+                  <i className="etfh-code">{h.code}</i>
                 </td>
                 <td className="num strong-col">
                   {h.weight === null ? "-" : `${h.weight.toFixed(2)}%`}

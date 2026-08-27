@@ -6194,6 +6194,25 @@ button.nav-group-toggle {
   cursor: help;
 }
 .etfw-groups { display: block; font-style: normal; font-size: 0.66rem; color: var(--muted); }
+/*
+ * 담은 ETF 표 (2026-08-27) — ETF 이름이 길어 숫자 칸이 눌리고 줄이 바뀌었다.
+ * 이름 칸을 못 박고(넘치면 말줄임·전체는 title), 숫자 칸은 nowrap 으로 한 줄 유지.
+ */
+.etfh-table .etfh-name {
+  max-width: 13rem;
+  min-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.etfh-table .etfh-name b { display: block; overflow: hidden; text-overflow: ellipsis; }
+.etfh-code { display: block; font-style: normal; font-size: 0.66rem; color: var(--muted); }
+.etfh-table th,
+.etfh-table td.num { white-space: nowrap; }
+/* 순자산("1조 5,750억")·추적지수도 한 줄로 — 여기서 접히면 표가 들쭉날쭉해진다 */
+.etfh-table td:nth-child(3),
+.etfh-table td:last-child { white-space: nowrap; }
+
 /* 그룹 편집 — 칩 옆 ✎·✕, 표 안에서는 그룹 토글 */
 .etfw-gchip { display: inline-flex; align-items: center; gap: 2px; }
 .etfw-gedit {
