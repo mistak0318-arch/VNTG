@@ -9,6 +9,7 @@ import {
   type ThemeRow,
 } from "../api";
 import { useSection } from "../useSection";
+import { tileHeat, useAppearance } from "../useAppearance";
 import { ConstituentSheet, type ConstituentTarget } from "./overview/ConstituentSheet";
 
 /**
@@ -306,27 +307,23 @@ export function WatchHeatGrid({
   heat: { traded: boolean; tiles: BriefingTile[] } | null;
   onSelectStock: (code: string, name: string) => void;
 }) {
+  const appearance = useAppearance();
   if (heat === null) return <div className="empty">불러오는 중…</div>;
   if (heat.tiles.length === 0) return <div className="empty">관심종목이 비어 있습니다.</div>;
   return (
     <>
       <div className="bf-heat">
         {heat.tiles.map((t) => {
-          const r = t.rate ?? 0;
-          /* 진하기 = 등락 크기. ±3% 를 최대로 — 그 위는 색으로 더 말할 게 없다 */
-          const alpha = Math.min(1, Math.abs(r) / 3) * 0.55 + 0.1;
+          /*
+           * 색은 **공용 tileHeat** 로 (2026-08-27) — 여기서 빨강·파랑을 직접 박고 있어서
+           * 엑셀 모드에서도 주식 색이 그대로 남았다. 테마 MAP·전광판과 같은 함수를 쓰면
+           * 엑셀에서는 무채색 명암(+ 내림 왼줄)으로 자동으로 갈린다. ±3% 를 최대로.
+           */
           return (
             <button
               key={t.code}
               className="bf-tile"
-              style={{
-                background:
-                  r > 0
-                    ? `rgba(255,92,92,${alpha})`
-                    : r < 0
-                      ? `rgba(76,141,255,${alpha})`
-                      : undefined,
-              }}
+              style={tileHeat(t.rate, appearance.theme, 3)}
               onClick={() => onSelectStock(t.code, t.name)}
               title={`${t.name} ${pct(t.rate)}${t.group ? ` · ${t.group}` : ""}${t.cap ? ` · 시총 ${fmtNum(t.cap)}억` : ""}`}
             >

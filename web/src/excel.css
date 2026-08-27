@@ -501,6 +501,59 @@
   color: var(--text);
 }
 
+/* ===== 색으로 그리는 것들 — 그래프·막대·배지 (2026-08-27 전수 점검) =====
+ *
+ * 숫자 색은 위에서 뺐는데 **그림은 그대로 빨강·파랑**이었다. 장중 수급 선, 체결
+ * 막대, 수급 막대, 집중도 막대 같은 것들이다. 회계 장부 위에 형광색 그래프가
+ * 하나만 있어도 위장이 통째로 깨진다 — 여기서는 **명암 3단계**로 갈린다.
+ * (인라인 style 로 칠하는 것은 !important 로만 덮인다)
+ */
+
+/* 장중 수급 — 개인·외국인·기관 세 선을 짙기로 가른다 */
+:root[data-theme="excel"] .fi-svg path:nth-of-type(1) { stroke: #7a7a7a !important; }
+:root[data-theme="excel"] .fi-svg path:nth-of-type(2) { stroke: #333333 !important; }
+:root[data-theme="excel"] .fi-svg path:nth-of-type(3) { stroke: #b0b0b0 !important; }
+:root[data-theme="excel"] .fi-legend span:nth-of-type(1) i { background: #7a7a7a !important; }
+:root[data-theme="excel"] .fi-legend span:nth-of-type(2) i { background: #333333 !important; }
+:root[data-theme="excel"] .fi-legend span:nth-of-type(3) i { background: #b0b0b0 !important; }
+
+/* 매수·매도 방향 막대 — 오름은 짙게, 내림은 옅게 (봉 차트와 같은 규칙) */
+:root[data-theme="excel"] .sp-bar.buy,
+:root[data-theme="excel"] .bf-bar.buy,
+:root[data-theme="excel"] .bar-up,
+:root[data-theme="excel"] .conc-fill { background: #4a4a4a !important; }
+:root[data-theme="excel"] .sp-bar.sell,
+:root[data-theme="excel"] .bf-bar.sell,
+:root[data-theme="excel"] .bar-down { background: #a6a6a6 !important; }
+:root[data-theme="excel"] .conc-fill.heavy { background: #1f1f1f !important; }
+
+/* 알림 배지·점 — 빨간 알약은 장부 위에서 제일 먼저 튄다 */
+:root[data-theme="excel"] .tgr-badge,
+:root[data-theme="excel"] .uw-live-dot,
+:root[data-theme="excel"] .rt-dot {
+  background: #6b6b6b !important;
+  color: #ffffff !important;
+}
+
+/* 신호등 점 — 초록·노랑·빨강 대신 명암. 옆의 글자가 이미 색을 말한다 */
+:root[data-theme="excel"] .sig-dot.green { background: #4a4a4a !important; }
+:root[data-theme="excel"] .sig-dot.yellow { background: #9a9a9a !important; }
+:root[data-theme="excel"] .sig-dot.red { background: #d0d0d0 !important; border: 1px solid #8a8a8a; }
+
+/* 복기 노트 — 저장 버튼·태그·달력 선택도 파랑을 뺀다 */
+:root[data-theme="excel"] .jn-save-btn {
+  background: var(--xl-green) !important;
+  box-shadow: none !important;
+}
+:root[data-theme="excel"] .jn-cal-cell.on { background: #4a4a4a !important; }
+:root[data-theme="excel"] .jn-cal-cell.has::after { background: #7a7a7a !important; }
+:root[data-theme="excel"] .jn-tag.on,
+:root[data-theme="excel"] .jn-tag.mood.on {
+  background: #e8e8e8 !important;
+  border-color: #7a7a7a !important;
+  color: #1f1f1f !important;
+}
+
 /* 어두운 색이 박혀 있던 것들 — 테마 변수를 안 쓰고 있었다 */
 :root[data-theme="excel"] .error-banner {
   background: #fdf2f2;

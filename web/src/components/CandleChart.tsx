@@ -626,7 +626,15 @@ export function CandleChart({
     const chart = createChart(el, {
       width: el.clientWidth,
       height,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: c.text },
+      /*
+       * 엑셀 모드만 **흰 도화지** (2026-08-27) — 투명이면 뒤의 시트 격자가 그대로
+       * 비쳐서 봉과 겹친다(무채색 봉이라 더 안 갈린다). 엑셀에서도 차트는 흰 판
+       * 위에 그리는 물건이라 모양도 이쪽이 맞다. 다크·라이트는 그대로 투명.
+       */
+      layout: {
+        background: { type: ColorType.Solid, color: theme === "excel" ? "#ffffff" : "transparent" },
+        textColor: c.text,
+      },
       /*
        * 축 가격 표기 (2026-08-26) — 기본값은 「3002000.00」처럼 콤마 없이 소수점까지
        * 붙는다. 원화 종목엔 소수점이 뜻이 없고 축만 넓어져 폰에서 차트를 밀어냈다.
@@ -790,6 +798,19 @@ export function CandleChart({
 
     const resize = () => chart.applyOptions({ width: el.clientWidth, height });
     window.addEventListener("resize", resize);
+    /*
+     * **칸이 자리를 잡으면 다시 잰다** (2026-08-27).
+     *
+     * 폭은 `createChart` 때의 `clientWidth` 로 굳고, 그 뒤엔 창 크기 변화(resize)나
+     * `sizeTick` 이 와야만 다시 쟀다. 그런데 화면이 **뜬 뒤에 자리를 잡는** 경우가
+     * 있다 — 엑셀 모드의 데일리 리포트가 그랬다: 처음 렌더에 폭이 0이라 캔버스가
+     * 기본값(300×150)으로 굳고 **차트가 통째로 안 보였다**(일반 모드는 우연히
+     * 처음부터 폭이 있어서 멀쩡했다). 컨테이너를 직접 지켜보면 그 창이 닫힌다.
+     */
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth > 0) resize();
+    });
+    ro.observe(el);
 
     fitted.current = false;
     hiLineRef.current = null;
@@ -799,6 +820,7 @@ export function CandleChart({
     setChartEpoch((e) => e + 1);
     return () => {
       window.removeEventListener("resize", resize);
+      ro.disconnect();
       chart.remove();
       chartRef.current = null;
       candleRef.current = null;
@@ -1083,11 +1105,14 @@ export function CandleChart({
       bbRefs.current[0].setData(bb.upper);
       bbRefs.current[1].setData(bb.lower);
     }
+    /* 거래량 봉도 테마 색으로 (2026-08-27) — 여기만 빨강·파랑이 박혀 있어서
+       엑셀 모드에서 봉은 무채색인데 거래량만 주식 색으로 남았다 */
+    const vc = chartColors(theme);
     volRef.current?.setData(
       candles.map((c) => ({
         time: c.time,
         value: c.volume,
-        color: c.close >= c.open ? "rgba(255,92,92,0.5)" : "rgba(76,141,255,0.5)",
+        color: c.close >= c.open ? `${vc.up}80` : `${vc.down}80`,
       })),
     );
 
