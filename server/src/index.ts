@@ -33,6 +33,7 @@ import { startAlertScheduler } from "./alertScheduler.js";
 import { startChannelScheduler } from "./channelScheduler.js";
 import { startMajorFeedLoop } from "./majorFeed.js";
 import { startBuzzScheduler } from "./buzzRadar.js";
+import { startEtfHoldersScheduler } from "./etfHolders.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createTradeRouter } from "./routes/trade.js";
@@ -186,6 +187,8 @@ startChannelScheduler();
 startMajorFeedLoop();
 /* 버즈 레이더 — 채널 언급 급증을 30분마다 판정, 강한 것은 시그널 방으로 */
 startBuzzScheduler(client);
+/* 「이 종목을 담은 ETF」 역인덱스 — 하루 1회(16시 이후). 화면은 파일만 읽는다 */
+startEtfHoldersScheduler(client);
 startSignalTrackScheduler(client);
 /* 추적기 5분 뒤 — 신호등 캐시가 데워진 채로 교집합을 평가한다 */
 startSuperSignalScheduler(client);

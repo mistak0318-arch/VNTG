@@ -13,6 +13,7 @@ import { PriceHeader } from "./PriceHeader";
 import { StockSummaryPanel } from "./StockSummaryPanel";
 import { TabScroller } from "./TabScroller";
 import { OpinionPanel } from "./OpinionPanel";
+import { EtfHoldersPanel } from "./EtfHoldersPanel";
 import { useLive } from "../useLive";
 import { SectorMoodPanel } from "./SectorMoodPanel";
 import { SignalPanel } from "./SignalLight";
@@ -51,7 +52,7 @@ const CUR_PRICE_KEYS = ["cur_prc"];
 const INVESTOR_LIST_KEYS = ["stk_invsr_orgn_chart"];
 
 /** 종목 상세 상단 가로 탭. 기능이 늘어나면 여기에 항목을 추가한다. */
-type DetailTab = "chartOnly" | "finance" | "opinion" | "notes" | "sector" | "chart" | "investor" | "supply" | "feed" | "raw" | "orderbook" | "broker" | "program" | "etf";
+type DetailTab = "chartOnly" | "finance" | "opinion" | "notes" | "sector" | "chart" | "investor" | "supply" | "feed" | "raw" | "orderbook" | "broker" | "program" | "etf" | "etfHolders";
 
 /**
  * 탭 순서는 "실제 매매에 바로 쓰는 것"이 앞이다.
@@ -76,6 +77,12 @@ export const DETAIL_TABS: { key: DetailTab; label: string }[] = [
   { key: "supply", label: "외국인·공매도·대차" },
   { key: "notes", label: "메모" },
   { key: "sector", label: "업종·테마" },
+  /*
+   * 「담은 ETF」 (2026-08-27) — 이 종목을 편입한 ETF 들.
+   * 업종·테마 바로 뒤다: 셋 다 「이 종목이 어느 묶음에 속하나」를 답한다.
+   * ETF 종목에서는 숨긴다(ETF 가 ETF 를 담는 경우는 드물고 뜻도 다르다).
+   */
+  { key: "etfHolders", label: "담은 ETF" },
   { key: "feed", label: "뉴스·공시" },
   /*
    * 기업분석 + 재무 → **기업·재무 한 탭** (2026-08-25).
@@ -94,7 +101,7 @@ export const DETAIL_TABS: { key: DetailTab; label: string }[] = [
  * ETF 에서 빈 화면이거나 뜻이 없다. 호가·거래원·프로그램·수급·공매도는 ETF 도
  * 똑같이 거래되는 값이라 남는다.
  */
-const ETF_HIDDEN = new Set<DetailTab>(["opinion", "sector", "finance"]);
+const ETF_HIDDEN = new Set<DetailTab>(["opinion", "sector", "finance", "etfHolders"]);
 
 export function StockDetail({
   code,
@@ -402,6 +409,11 @@ export function StockDetail({
             {detailTab === "finance" && <CompanyPanel code={code} info={info} returns={returns} />}
 
             {detailTab === "opinion" && <OpinionPanel code={code} />}
+
+            {/* 담은 ETF — 이 종목을 편입한 ETF 들 (2026-08-27) */}
+            {detailTab === "etfHolders" && (
+              <EtfHoldersPanel code={code} name={name} onSelectStock={onSelectStock} />
+            )}
 
             {detailTab === "notes" && (
               <StockNotes

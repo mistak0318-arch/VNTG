@@ -180,6 +180,9 @@ export const api = {
     }>(`/api/market/etf/${code}`),
   /** ETF 전체 시세 — ka40004, 서버 3분 캐시. 괴리율은 서버가 (현재가−NAV)/NAV 로 계산 */
   etfList: () => getJson<{ rows: EtfListRow[]; at: number }>("/api/etf/list"),
+  /** 이 종목을 담은 ETF — 서버 역인덱스(파일)를 읽는다. 조회 0회 */
+  etfHolders: (code: string) =>
+    getJson<{ holders: EtfHolder[]; builtAt: string; scanned: number }>(`/api/etf/holders/${code}`),
   /* VNTG 방 뷰어 (2026-08-27) — 봇이 보낸 방들을 브라우저에서 텔레그램처럼 */
   tgRooms: () => getJson<{ rooms: TgRoom[] }>("/api/tg-feed/rooms"),
   tgRoom: (ch: string, limit = 120) =>
@@ -1159,6 +1162,22 @@ export interface TgStar extends TgMsg {
 }
 
 /** ETF 전체 시세 한 줄 (ka40004 실측 필드 기반) */
+/** 이 종목을 담은 ETF 한 줄 (2026-08-27) — 서버가 하루 1회 뒤집어 만든 인덱스에서 */
+export interface EtfHolder {
+  code: string;
+  name: string;
+  /** 이 ETF 안에서 그 종목의 비중(%) */
+  weight: number | null;
+  /** 순자산총액 — 사람이 읽는 형태("25조 4,885억") */
+  aum: string;
+  aumRaw: number;
+  changeRate: number | null;
+  w1: number | null;
+  m1: number | null;
+  m3: number | null;
+  index: string;
+}
+
 export interface EtfListRow {
   code: string;
   name: string;

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
+import { buildEtfHolders, etfHoldersOf } from "../etfHolders.js";
 
 /**
  * ETF 메뉴 (2026-08-27 — "퇴직연금에서 ETF도 투자하거든").
@@ -153,6 +154,20 @@ export async function etfRowOf(client: KiwoomClient, code: string): Promise<EtfL
 
 export function createEtfRouter(client: KiwoomClient): Router {
   const router = Router();
+
+  /**
+   * 이 종목을 담고 있는 ETF (2026-08-27) — 역인덱스를 파일에서 읽는다(조회 0회).
+   * `?rebuild=1` 은 인덱스를 지금 다시 만든다(150곳 훑어 40초쯤 — 눈으로 확인할 때만).
+   */
+  router.get("/holders/:code", async (req, res, next) => {
+    try {
+      const code = String(req.params.code).replace(/_(AL|NX)$/i, "");
+      if (req.query.rebuild === "1") await buildEtfHolders(client);
+      res.json(await etfHoldersOf(code));
+    } catch (err) {
+      next(err);
+    }
+  });
 
   router.get("/list", async (_req, res, next) => {
     try {
