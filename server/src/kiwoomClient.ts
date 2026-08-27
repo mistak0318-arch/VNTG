@@ -74,8 +74,6 @@ export class KiwoomClient {
   private readonly appSecret: string;
   private tokenState: TokenState | null = null;
   private tokenPromise: Promise<string> | null = null;
-  /** 선제 레이트리밋 — 다음 호출이 나가도 되는 시각(슬롯) */
-  private nextSlot = 0;
 
   constructor(opts: { appKey: string; appSecret: string; isMock: boolean }) {
     this.appKey = opts.appKey;
@@ -84,19 +82,14 @@ export class KiwoomClient {
   }
 
   /*
-   * 선제 레이트리밋 (2026-08-27) — 키움은 초당 5회다.
+   * ⚠️ 선제 레이트리밋(호출마다 220ms 슬롯)을 넣었다가 **바로 뺐다** (2026-08-27).
    *
-   * 예전엔 429/return_code 5 를 **맞고 나서** 400ms 백오프로 재시도했다. 스케줄러
-   * 여럿과 화면 폴링이 겹치는 순간엔 429 파도를 맞고 재시도가 몰려 응답이 출렁였다.
-   * 호출마다 220ms 슬롯(초당 ~4.5회)을 미리 배정해 애초에 몰리지 않게 한다 —
-   * 동시 호출자들은 슬롯 큐에 자연히 한 줄로 선다. 반응형 재시도는 보험으로 남긴다.
+   * 이 앱의 호출은 버스트다 — 종목 상세 하나가 열리며 패널들이 15~20건을 동시에
+   * 쏜다. 고정 간격 슬롯은 그 버스트를 전부 한 줄로 세워서 상세 로딩이 몇 초씩
+   * 걸리게 만들었다(실사용 체감 즉시 악화). 키움의 초당 제한은 아래 429/return_code 5
+   * 반응형 백오프가 이미 감당하고 있고, 그쪽이 실측으로 검증된 균형이다.
+   * 선제 제한을 다시 시도하려면 **버스트를 통과시키는 토큰버킷**이어야 한다.
    */
-  private async rateGate(): Promise<void> {
-    const now = Date.now();
-    const at = Math.max(now, this.nextSlot);
-    this.nextSlot = at + 220;
-    if (at > now) await sleep(at - now);
-  }
 
   /**
    * 웹소켓이 쓸 토큰.
@@ -186,7 +179,6 @@ export class KiwoomClient {
     let reissued = 0;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      await this.rateGate(); // 재시도도 슬롯을 받는다 — 백오프 중에 새 호출이 몰리면 도로 429 다
       const res = await fetch(`${this.baseUrl}${resourceUrl}`, {
         method: "POST",
         headers: {

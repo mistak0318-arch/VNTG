@@ -849,16 +849,16 @@ export async function superDetail(client: KiwoomClient, code: string) {
   const entry = store.entries.find((e) => e.code === code);
   if (!entry) return null;
 
-  const [stock, flows, mood, sig, market, snap] = await Promise.all([
+  const [stock, flows, mood, sig, market] = await Promise.all([
     stockDailySeries(client, code).catch(() => [] as DailyPoint[]),
     investorDailySeries(client, code).catch(() => [] as { date: string; foreign: number; inst: number }[]),
     getSectorMood(client, code).catch(() => null),
     evaluateSignal(client, code).catch(() => null),
     evaluateMarket(client).catch(() => null),
-    getMarketSnapshot(client).catch(() => null),
   ]);
-  /* 지금 시세 — 「오늘 어떤지」가 첫 물음이다 (2026-08-27 등락률 병기 요청) */
-  const nowRow = snap?.byCode.get(code);
+  /* 지금 시세 — 「오늘 어떤지」 (2026-08-27). peek(캐시만) — 만료 순간에 걸리면
+     getMarketSnapshot 이 65업종 리빌드(15초)를 기다리게 해서 시트가 멈춘 것처럼 보인다 */
+  const nowRow = peekSnapshot()?.byCode.get(code);
   const now = nowRow ? { price: nowRow.price ?? null, changeRate: nowRow.changeRate ?? null } : null;
 
   /* 지수 — 업종 매칭이 알려 준 시장, 못 찾으면 코스피 */
