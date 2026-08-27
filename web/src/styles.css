@@ -4786,6 +4786,41 @@ tr.drag-src td { opacity: 0.45; }
 /* 선물 수급 표 — 금액(억)이 주인공, 계약은 괄호 잔글씨 */
 .fut-ct { font-style: normal; font-size: 0.7rem; opacity: 0.65; margin-left: 2px; }
 
+/* ── 시장 신호등 컴팩트 (2026-08-27) — 체크는 칩 한 줄, 근거는 칩을 눌러 편다 ── */
+.msig-slim { padding: 0.55rem 0.75rem; }
+.msig-slim .msig-head { margin-bottom: 0.35rem; }
+.msig-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.msig-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+  max-width: 100%;
+}
+.msig-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.msig-chip.ok i { background: var(--green); }
+.msig-chip.bad i { background: var(--red); }
+.msig-chip.ok { border-color: rgba(53, 196, 106, 0.4); }
+.msig-chip.bad { border-color: rgba(255, 92, 92, 0.4); }
+.msig-chip.open { border-color: var(--blue); }
+.msig-chip em {
+  font-style: normal;
+  font-size: 0.68rem;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 13rem;
+}
+.msig-slim .msig-why { margin: 0.4rem 0 0; font-size: 0.78rem; }
+
 /* 순위 접두 — 칸 대신 종목명 앞에 얇게. 전일 순위는 그 옆 잔글씨 */
 .scr-rank-pre {
   display: inline-block;

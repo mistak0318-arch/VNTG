@@ -47,53 +47,53 @@ export function MarketSignalPanel() {
 
   const meta = LEVEL_TEXT[sig.level] ?? LEVEL_TEXT.unknown;
 
+  /*
+   * 컴팩트 (2026-08-27 — "전해주는 내용에 비해 박스가 너무 커").
+   * 한 줄 헤더(등급·점수) + 체크는 **칩 한 줄**로 — 칩 색이 판정이고, 값은 칩에
+   * 바로, 근거(왜)는 칩을 눌러 편다. 보드·시황·미니가 같은 컴포넌트라 전부 적용.
+   */
   return (
-    <section className={`msig msig-${sig.level}`}>
+    <section className={`msig msig-${sig.level} msig-slim`}>
       <div className="msig-head">
         <span className={`sig-dot big ${sig.level}`} />
         <div className="msig-title">
-          <b>시장 신호등 — {meta.label}</b>
+          <b>
+            시장 신호등 {meta.label}
+            {sig.level !== "unknown" && <span className="msig-score num"> {sig.score}점</span>}
+          </b>
           <span className="msig-note">{meta.note}</span>
         </div>
-        {sig.level !== "unknown" && <span className="msig-score num">{sig.score}점</span>}
-        <button className="filter-btn" onClick={() => void load(true)} disabled={loading}>
+        <button className="filter-btn" onClick={() => void load(true)} disabled={loading} title="다시 판정">
           {loading ? "…" : "↻"}
         </button>
       </div>
 
-      <p className="msig-summary">{sig.summary}</p>
-
-      <div className="msig-checks">
+      <div className="msig-chips">
         {sig.checks.map((c) => (
-          <div className="msig-check" key={c.key}>
-            <div className="msig-check-row">
-              <span
-                className={`msig-mark ${c.pass === true ? "ok" : c.pass === false ? "bad" : "mid"}`}
-              >
-                {c.pass === true ? "우호" : c.pass === false ? "비우호" : "중립"}
-              </span>
-              <span className="msig-check-label">{c.label}</span>
-              <span className="msig-check-value">{c.value}</span>
-              {c.why && (
-                <button
-                  className="msig-why-btn"
-                  onClick={() => setOpenWhy(openWhy === c.key ? null : c.key)}
-                  title="이 항목을 왜 보는가"
-                >
-                  {openWhy === c.key ? "닫기" : "왜?"}
-                </button>
-              )}
-            </div>
-            {openWhy === c.key && c.why && <p className="msig-why">{c.why}</p>}
-          </div>
+          <button
+            key={c.key}
+            className={`msig-chip ${c.pass === true ? "ok" : c.pass === false ? "bad" : "mid"}${openWhy === c.key ? " open" : ""}`}
+            onClick={() => setOpenWhy(openWhy === c.key ? null : c.key)}
+            title={`${c.value}${c.why ? ` — 눌러서 근거 보기` : ""}`}
+          >
+            <i />
+            {c.label}
+            <em className="num">{c.value.length > 26 ? `${c.value.slice(0, 26)}…` : c.value}</em>
+          </button>
         ))}
       </div>
-
-      <div className="table-note">
-        이건 <b>개별 종목이 아니라 시장 전체</b>의 상태입니다. 초록이라고 아무거나 사도 되는
-        게 아니고, 빨강이라고 모든 종목이 빠지는 것도 아닙니다 — 내 종목 판단에 얹는
-        배경으로 쓰세요.
-      </div>
+      {openWhy &&
+        (() => {
+          const c = sig.checks.find((x) => x.key === openWhy);
+          if (!c) return null;
+          return (
+            <p className="msig-why">
+              <b>{c.label}</b> — {c.value}
+              <br />
+              {c.why} <span className="pt-n">(가중치 {c.weight})</span>
+            </p>
+          );
+        })()}
     </section>
   );
 }

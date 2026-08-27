@@ -1,5 +1,7 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { indexDetail } from "./indexDetail.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
+import { futuresFlow } from "./naverFuturesFlow.js";
 import { listSectorFlow, type SectorFlowDay } from "./sectorFlowStore.js";
 import type { Level } from "./signalLight.js";
 
@@ -139,20 +141,40 @@ async function checkTrend(client: KiwoomClient): Promise<MarketCheck> {
  */
 function checkBreadth(rates: number[]): MarketCheck {
   const total = rates.length;
+  const why =
+    "전체 종목 중 오른 종목의 비율(보합 제외). 지수가 올라도 이 값이 45% 아래면 소수 대형주가 끌어올린 장이라 내 종목은 안 올랐을 가능성이 크다. 55% 위면 상승이 시장 전반에 퍼진 것이다.";
   if (total === 0) {
-    return { key: "breadth", label: "시장 폭", pass: null, value: "-", why: "", weight: 25 };
+    return { key: "breadth", label: "시장 폭", pass: null, value: "-", why, weight: 20 };
   }
   const up = rates.filter((r) => r > 0).length;
   const down = rates.filter((r) => r < 0).length;
-  const pct = (up / total) * 100;
+  /*
+   * ⚠️ **보합을 분모에서 뺀다** (2026-08-27 — "잘 안 맞는 것 같다" 점검에서 발견).
+   * 예전엔 up/전체 로 쟀는데, 개장 전·개장 직후에는 대부분이 0% 라 상승비율이
+   * 0%로 곤두박질쳐 **아침마다 빨간불**이 됐다. 시장이 나쁜 게 아니라 아직 안
+   * 움직인 것이다. 움직인 종목(up+down)만으로 재고, 움직인 게 전체의 30%도
+   * 안 되면 「아직 판단할 장이 아니다」로 보류한다.
+   */
+  const moved = up + down;
+  if (moved < total * 0.3) {
+    return {
+      key: "breadth",
+      label: "시장 폭",
+      pass: null,
+      value: `움직인 종목 ${moved}/${total} — 장 시작 전이거나 직후`,
+      why,
+      weight: 20,
+    };
+  }
+  const pct = (up / moved) * 100;
   return {
     key: "breadth",
     label: "시장 폭",
     // 55% 위면 확산, 45% 아래면 위축. 그 사이는 방향이 없는 것이지 좋은 것도 나쁜 것도 아니다
     pass: pct >= 55 ? true : pct <= 45 ? false : null,
     value: `상승 ${up} / 하락 ${down} (상승비율 ${pct.toFixed(0)}%)`,
-    why: "전체 종목 중 오른 종목의 비율. 지수가 올라도 이 값이 45% 아래면 소수 대형주가 끌어올린 장이라 내 종목은 안 올랐을 가능성이 크다. 55% 위면 상승이 시장 전반에 퍼진 것이다.",
-    weight: 25,
+    why,
+    weight: 20,
   };
 }
 
@@ -177,18 +199,29 @@ function checkSectorSpread(bySector: Map<string, number[]>): MarketCheck {
   };
   const sectorRates = [...bySector.values()].filter((xs) => xs.length >= 3).map(median);
   if (sectorRates.length === 0) {
-    return { key: "sectorSpread", label: "업종 확산", pass: null, value: "-", why: "", weight: 15 };
+    return { key: "sectorSpread", label: "업종 확산", pass: null, value: "-", why: "", weight: 10 };
   }
-  const up = sectorRates.filter((r) => r > 0).length;
-  const sectors = sectorRates;
-  const pct = (up / sectors.length) * 100;
+  /* 시장 폭과 같은 개장 전 가드 — 중앙값이 거의 다 0이면 아직 안 움직인 것이다 */
+  const movedSectors = sectorRates.filter((r) => Math.abs(r) > 0.01);
+  if (movedSectors.length < sectorRates.length * 0.3) {
+    return {
+      key: "sectorSpread",
+      label: "업종 확산",
+      pass: null,
+      value: "장 시작 전이거나 직후",
+      why: "오른 업종의 비율(보합 업종 제외). 여러 업종이 함께 오르는 장이 오래간다.",
+      weight: 10,
+    };
+  }
+  const up = movedSectors.filter((r) => r > 0).length;
+  const pct = (up / movedSectors.length) * 100;
   return {
     key: "sectorSpread",
     label: "업종 확산",
     pass: pct >= 55 ? true : pct <= 40 ? false : null,
-    value: `${up}/${sectors.length} 업종 상승 (${pct.toFixed(0)}%)`,
+    value: `${up}/${movedSectors.length} 업종 상승 (${pct.toFixed(0)}%)`,
     why: "오른 업종의 비율. 업종마다 구성종목 등락률의 중앙값으로 판정한다. 종목은 많이 올랐는데 업종 수가 적으면 한 테마에 쏠린 장이라, 그 테마가 식으면 시장이 같이 꺼진다. 여러 업종이 함께 오르는 장이 오래간다.",
-    weight: 15,
+    weight: 10,
   };
 }
 
@@ -245,6 +278,97 @@ function checkFlow(
   };
 }
 
+/**
+ * 거래 에너지 — 코스피 거래대금이 20일 평균 대비 얼마나 도는가 (2026-08-27 추가).
+ *
+ * 지수가 올라도 대금이 평소의 60% 면 팔 사람이 없어서 오르는 것이라 힘이 없고,
+ * 대금이 도는 상승이라야 이어진다. 재료는 지수 일봉(ka20006)의 거래대금 — 거래대금
+ * 현황 카드와 같은 값이다.
+ *
+ * ⚠️ 장중엔 오늘 봉이 **지금까지의 누적**이라 그대로 평균과 견주면 늘 모자라 보인다.
+ * 장 경과 시간으로 나눠 하루치로 환산해 견준다(9:00~15:30 기준). 개장 45분 전까지는
+ * 표본이 얕아 보류.
+ */
+async function checkEnergy(client: KiwoomClient): Promise<MarketCheck> {
+  const why =
+    "코스피 거래대금 ÷ 20일 평균. 대금이 마른 상승은 팔 사람이 없어 오르는 것이라 힘이 없다. 장중에는 경과 시간으로 하루치를 환산해 견준다.";
+  try {
+    const d = await indexDetail(client, "001", "day");
+    const cs = d.candles;
+    if (cs.length < 22) {
+      return { key: "energy", label: "거래 에너지", pass: null, value: "-", why, weight: 10 };
+    }
+    const today = cs[cs.length - 1];
+    const last20 = cs.slice(-21, -1);
+    const avg = last20.reduce((a, c) => a + c.tradeValue, 0) / last20.length;
+    if (avg <= 0) {
+      return { key: "energy", label: "거래 에너지", pass: null, value: "-", why, weight: 10 };
+    }
+    /* 장중 보정 — KST 9:00~15:30 (390분) */
+    const k = new Date(Date.now() + 9 * 3600_000);
+    const mins = k.getUTCHours() * 60 + k.getUTCMinutes();
+    const openMin = 9 * 60;
+    const closeMin = 15 * 60 + 30;
+    let value = today.tradeValue;
+    let note = "";
+    if (mins >= openMin - 0 && mins < openMin + 45 && k.getUTCDay() >= 1 && k.getUTCDay() <= 5) {
+      return {
+        key: "energy",
+        label: "거래 에너지",
+        pass: null,
+        value: "개장 직후 — 표본이 얕아 보류",
+        why,
+        weight: 10,
+      };
+    }
+    if (mins >= openMin && mins < closeMin) {
+      const elapsed = Math.max(0.12, (mins - openMin) / (closeMin - openMin));
+      value = today.tradeValue / elapsed;
+      note = " (장중 환산)";
+    }
+    const ratio = (value / avg) * 100;
+    return {
+      key: "energy",
+      label: "거래 에너지",
+      pass: ratio >= 100 ? true : ratio <= 65 ? false : null,
+      value: `20일 평균의 ${ratio.toFixed(0)}%${note}`,
+      why,
+      weight: 10,
+    };
+  } catch {
+    return { key: "energy", label: "거래 에너지", pass: null, value: "조회 실패", why, weight: 10 };
+  }
+}
+
+/**
+ * 외국인 선물 — 최근일 K200 지수선물 순매수 (2026-08-27 추가, 네이버 계약).
+ *
+ * 현물 수급은 마감 후에만 쌓여 장중엔 어제 것이지만, 선물은 외국인이 **방향을 거는
+ * 자리**라 시장 판단에 한 발 앞선다. 크게 팔면(수천 계약) 현물이 버텨도 곧 눌린다.
+ */
+async function checkFutForeign(): Promise<MarketCheck> {
+  const why =
+    "외국인의 K200 지수선물 순매수(계약, 네이버 ±10분). 선물은 방향을 거는 자리라 현물 수급보다 앞선다. ±2,000계약 안쪽은 중립.";
+  try {
+    const days = await futuresFlow(5);
+    const last = days[days.length - 1];
+    if (!last) {
+      return { key: "futForeign", label: "외인 선물", pass: null, value: "-", why, weight: 10 };
+    }
+    const v = last.foreign;
+    return {
+      key: "futForeign",
+      label: "외인 선물",
+      pass: v > 2000 ? true : v < -2000 ? false : null,
+      value: `${last.date.slice(5)} ${v > 0 ? "+" : ""}${Math.round(v).toLocaleString("ko-KR")}계약`,
+      why,
+      weight: 10,
+    };
+  } catch {
+    return { key: "futForeign", label: "외인 선물", pass: null, value: "조회 실패", why, weight: 10 };
+  }
+}
+
 // ---------------------------------------------------------------- 종합
 
 const CACHE_TTL_MS = 10 * 60_000;
@@ -253,10 +377,12 @@ let cache: { data: MarketSignal; at: number } | null = null;
 export async function evaluateMarket(client: KiwoomClient, force = false): Promise<MarketSignal> {
   if (!force && cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.data;
 
-  const [trend, snap, flowDays] = await Promise.all([
+  const [trend, snap, flowDays, energy, futFor] = await Promise.all([
     checkTrend(client),
     getMarketSnapshot(client).catch(() => null),
     listSectorFlow(30).catch(() => [] as SectorFlowDay[]),
+    checkEnergy(client),
+    checkFutForeign(),
   ]);
 
   const stocks = snap ? [...snap.byCode.values()] : [];
@@ -280,7 +406,7 @@ export async function evaluateMarket(client: KiwoomClient, force = false): Promi
       "foreignFlow",
       "외국인 수급",
       "외국인의 5일 누적 순매수. 하루치는 노이즈라 방향이 안 보이지만 5일을 쌓으면 보인다. 외국인이 파는 장에서는 개별 재료가 잘 안 먹힌다.",
-      20,
+      15,
     ),
     checkFlow(
       flowDays,
@@ -288,8 +414,11 @@ export async function evaluateMarket(client: KiwoomClient, force = false): Promi
       "instFlow",
       "기관 수급",
       "기관의 5일 누적 순매수. 외국인과 방향이 같으면 신호가 강하고, 엇갈리면 한쪽이 곧 꺾인다는 뜻이라 판단을 미루는 게 낫다.",
-      20,
+      15,
     ),
+    /* 2026-08-27 추가 — 쌓아 둔 데이터로 판을 더 넓게 본다: 돈이 도는가 + 외인의 방향 */
+    energy,
+    futFor,
   ];
 
   /*
