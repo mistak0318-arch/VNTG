@@ -6171,6 +6171,32 @@ button.nav-group-toggle {
 .wl-pass.mid { background: rgba(245,197,66,.18); color: #f5c542; }
 .wl-pass.bad { background: rgba(255,92,92,.15); color: var(--red); }
 .wl-candle { font-size: 0.7333rem; color: var(--muted); }
+/* ── ETF 관심종목 (2026-08-27) ── */
+.etfw-sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.84rem;
+}
+.etfw-warn {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: 999px;
+  padding: 2px 9px;
+  cursor: help;
+}
+.etfw-groups { display: block; font-style: normal; font-size: 0.66rem; color: var(--muted); }
+
+/* 편입 기간 — 수익률 아래 한 줄 잔글씨 (2026-08-27) */
+.wl-held { display: block; font-style: normal; font-size: 0.66rem; color: var(--muted); line-height: 1.2; }
 
 .mg-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; max-width: 190px; }
 .mg-edit { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.7333rem; padding: 0 2px; }

@@ -12,6 +12,7 @@ import {
 import { RefreshBar } from "../components/RefreshBar";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
+import { EtfWatchTab } from "../components/EtfWatchTab";
 
 /**
  * ETF (2026-08-27 — "퇴직연금에서 ETF도 투자하거든").
@@ -29,6 +30,8 @@ import { WatchStar } from "../useWatchedCodes";
  */
 
 const SUBTABS = [
+  /* 내가 굴리는 것이 먼저다 — 전체 시세는 그다음 (2026-08-27) */
+  { key: "watch", label: "내 ETF" },
   { key: "list", label: "시세·NAV" },
   { key: "cum", label: "기간 등락률" },
   { key: "supply", label: "수급 우위" },
@@ -188,7 +191,8 @@ function EtfListTab({ onSelectStock }: { onSelectStock: (code: string, name: str
 
 /* ── ①-2 기간 등락률 — 누적등락 계산기를 ETF 모집단으로 (시세분석과 같은 문법) ── */
 
-interface CumRow {
+/** 「내 ETF」 탭도 같은 값을 붙여 쓴다 (2026-08-27) — 두 화면이 같은 계산을 본다 */
+export interface CumRow {
   code: string;
   name: string;
   price: number;
@@ -477,7 +481,7 @@ function EtfContTab({ onSelectStock }: { onSelectStock: (code: string, name: str
 }
 
 export function EtfPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
-  const [sub, setSub] = useState<Sub>("list");
+  const [sub, setSub] = useState<Sub>("watch");
   return (
     <div>
       <div className="ov-subtabs">
@@ -487,6 +491,7 @@ export function EtfPage({ onSelectStock }: { onSelectStock: (code: string, name:
           </button>
         ))}
       </div>
+      {sub === "watch" && <EtfWatchTab onSelectStock={onSelectStock} />}
       {sub === "list" && <EtfListTab onSelectStock={onSelectStock} />}
       {sub === "cum" && <EtfCumTab onSelectStock={onSelectStock} />}
       {sub === "supply" && <EtfSupplyTab onSelectStock={onSelectStock} />}

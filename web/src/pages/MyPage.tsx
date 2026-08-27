@@ -26,6 +26,21 @@ function fmtDate(iso: string): string {
   return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/**
+ * 편입 기간 (2026-08-27) — 수익률 아래 붙는 잔글씨.
+ *
+ * 「+8%」는 혼자서는 반쪽이다. 사흘 만의 8% 와 여덟 달 걸린 8% 는 전혀 다른 매매인데
+ * 편입일(10/02)만 적혀 있으면 매번 오늘 날짜와 빼야 한다. 그 계산은 기계가 한다.
+ * 한 달이 넘으면 개월로 — 「173일」보다 「5.7개월」이 빨리 읽힌다.
+ */
+function heldLabel(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400_000);
+  if (!Number.isFinite(days) || days < 0) return "";
+  if (days === 0) return "오늘";
+  if (days < 31) return `${days}일`;
+  return `${(days / 30.4).toFixed(1)}개월`;
+}
+
 const ALL = "__all__";
 const DEFAULT_GROUP = "기본";
 /** 슈퍼신호등 자동 편입이 담기는 그룹 — 서버가 삭제·개명을 거부하고, 화면도 그 버튼을 안 낸다 */
@@ -849,7 +864,15 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                           {fmtNum(price)}
                         </td>
                         <td className={signClass(rate)}>{fmtPct(rate)}</td>
-                        <td className={signClass(ret)}>{fmtPct(ret)}</td>
+                        {/*
+                          수익률 아래 **편입 기간** (2026-08-27) — 「며칠 들고 얼마」가
+                          한 칸에 있어야 뜻이 산다. +8% 가 사흘이면 잘 잡은 것이고
+                          여덟 달이면 예금만도 못한 것인데, 날짜만으로는 그게 안 읽힌다.
+                        */}
+                        <td className={signClass(ret)}>
+                          {fmtPct(ret)}
+                          <i className="wl-held">{heldLabel(r.addedAt)}</i>
+                        </td>
                       </>
                     );
                   })()}
