@@ -35,6 +35,7 @@ import { startMajorFeedLoop } from "./majorFeed.js";
 import { startBuzzScheduler } from "./buzzRadar.js";
 import { startEtfHoldersScheduler } from "./etfHolders.js";
 import { startThemeScheduler } from "./naverThemes.js";
+import { startClosesScheduler } from "./dailyCloses.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createTradeRouter } from "./routes/trade.js";
@@ -192,6 +193,8 @@ startBuzzScheduler(client);
 startEtfHoldersScheduler(client);
 /* 네이버 테마 DB — 주 1회(일요일 04시). 구성은 매일 바뀌는 값이 아니다 */
 startThemeScheduler();
+/* 전종목 일봉 캐시 — 하루 1회(16시 이후). 테마 5·20일 누적과 신호등이 같이 쓴다 */
+startClosesScheduler(client);
 startSignalTrackScheduler(client);
 /* 추적기 5분 뒤 — 신호등 캐시가 데워진 채로 교집합을 평가한다 */
 startSuperSignalScheduler(client);

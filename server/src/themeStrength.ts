@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { peekSnapshot } from "./marketSnapshot.js";
 import { ETF_TABS, loadThemes } from "./naverThemes.js";
+import { cumOf, dailyRates, loadCloses } from "./dailyCloses.js";
 
 /**
  * 테마 강도 — **분류는 남의 것, 숫자는 우리 것.**
@@ -174,6 +175,8 @@ export async function themeStrength(
   const snap = peekSnapshot();
   const hist = await loadHistory();
   const days = Object.keys(hist.days).sort();
+  /* 일봉 캐시 — 있으면 5일·20일을 오늘 바로 낸다(없으면 기록 쪽 값을 쓴다) */
+  const closes = (await loadCloses()).closes;
 
   /*
    * ⚠️ **스냅샷이 아직 없을 때를 구분해서 알려 준다** (2026-08-28).
@@ -202,7 +205,21 @@ export async function themeStrength(
         };
       });
       const row = build(`kr:${t.no}`, t.name, stocks, days, hist);
-      if (row) rows.push(row);
+      if (!row) continue;
+      /*
+       * 5일·20일·60일은 **일봉 캐시에서** 낸다 (2026-08-28).
+       *
+       * 원래는 하루 한 줄씩 쌓는 기록으로만 냈는데, 그러면 첫 값이 나오기까지
+       * 닷새를 기다려야 했다. 일봉을 하루 한 번 받아 두면 오늘 바로 나온다.
+       * 캐시가 아직 없으면 기록 쪽 값(대개 null)이 그대로 남는다.
+       */
+      const c = cumTheme(closes, t.stocks.map((s) => s.code));
+      if (c.w1 !== null) row.w1 = c.w1;
+      if (c.m1 !== null) row.m1 = c.m1;
+      if (c.hit5) row.hit5 = c.hit5;
+      if (c.hit10) row.hit10 = c.hit10;
+      if (c.streak !== null) row.streak = c.streak;
+      rows.push(row);
     }
   } else if (market === "us") {
     /*
@@ -293,6 +310,58 @@ export async function themeStrength(
   );
 
   return { themes: rows, at: String(snap?.at ?? "") };
+}
+
+/**
+ * 일봉 캐시로 낸 테마의 기간 지표.
+ *
+ * **종목마다 낸 뒤 평균한다.** 테마 지수를 만들어 놓고 그 지수의 등락을 세는 것과
+ * 다른데, 이쪽이 맞다 — 종목마다 상장일이 달라서 지수를 만들면 구성이 바뀌는 날마다
+ * 계단이 생긴다. 값을 못 낸 종목은 평균에서 빼고, 절반도 못 내면 통째로 null 이다.
+ */
+function cumTheme(
+  closes: Record<string, number[]>,
+  codes: string[],
+): {
+  w1: number | null;
+  m1: number | null;
+  hit5: { n: number; of: number } | null;
+  hit10: { n: number; of: number } | null;
+  streak: number | null;
+} {
+  const avg = (vals: (number | null)[]): number | null => {
+    const ok = vals.filter((v): v is number => v !== null);
+    return ok.length >= Math.max(1, codes.length * 0.5)
+      ? Math.round((ok.reduce((a, b) => a + b, 0) / ok.length) * 100) / 100
+      : null;
+  };
+
+  const w1 = avg(codes.map((c) => cumOf(closes[c], 5)));
+  const m1 = avg(codes.map((c) => cumOf(closes[c], 20)));
+
+  /*
+   * 「N일 중 며칠 올랐나」는 **테마 평균의 하루하루**로 센다.
+   * 종목별로 세어 평균하면 「5일 중 3.4일」 같은 값이 나와 뜻이 흐려진다.
+   */
+  const perDay: number[][] = codes.map((c) => dailyRates(closes[c], 10)).filter((a) => a.length > 0);
+  if (perDay.length === 0) return { w1, m1, hit5: null, hit10: null, streak: null };
+  const len = Math.min(...perDay.map((a) => a.length));
+  const themeDaily: number[] = [];
+  for (let i = 0; i < len; i++) {
+    const day = perDay.map((a) => a[a.length - len + i]);
+    themeDaily.push(day.reduce((x, y) => x + y, 0) / day.length);
+  }
+
+  const hits = (n: number) => {
+    const win = themeDaily.slice(-n);
+    return { n: win.filter((v) => v > 0).length, of: win.length };
+  };
+  let streak = 0;
+  for (let i = themeDaily.length - 1; i >= 0; i--) {
+    if (themeDaily[i] > 0) streak += 1;
+    else break;
+  }
+  return { w1, m1, hit5: hits(5), hit10: hits(10), streak };
 }
 
 function build(

@@ -13,6 +13,7 @@ import { tradeSizeMix } from "../tradeSizeMix.js";
 import { CHART_RANGES, yahooChart } from "../yahooChart.js";
 import { usEtfHoldings } from "../usEtfHoldings.js";
 import { themeStrength } from "../themeStrength.js";
+import { buildCloses, closesProgress } from "../dailyCloses.js";
 import { themeLinks } from "../themeLinks.js";
 import {
   fetchAllThemes,
@@ -837,6 +838,23 @@ export function createMarketRouter(client: KiwoomClient): Router {
     } catch (err) {
       next(err);
     }
+  });
+
+  /**
+   * 일봉 캐시 다시 받기 — 10분쯤 걸린다(3,000종목 안팎, 초당 5건 제한).
+   * 평소엔 장 마감 뒤 자동으로 돈다.
+   */
+  router.post("/daily-closes/build", async (_req, res, next) => {
+    try {
+      void buildCloses(client).catch(() => undefined);
+      res.json({ started: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/daily-closes/progress", (_req, res) => {
+    res.json(closesProgress());
   });
 
   /** ETF 목록 — **요청 한 번**이라 기다렸다 결과를 준다 */

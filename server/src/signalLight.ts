@@ -10,6 +10,7 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { evaluateThemes } from "./customThemes.js";
 import { getSectorMood } from "./sectorMood.js";
 import { findStock } from "./stockListCache.js";
+import { themeStrength } from "./themeStrength.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_FILE = resolve(__dirname, "..", "data", "signalConfig.json");
@@ -79,6 +80,7 @@ export type CheckKey =
   | "overhead"
   | "disparity"
   | "ma5Gap"
+  | "naverTheme"
   | "shortSaleUp"
   | "lendingUp"
   | "debtRatio";
@@ -216,9 +218,33 @@ export const DEFAULT_CONFIG: SignalConfig = {
       hint: "거래소 업종 분류가 이 앱의 눈금과 안 맞아 **판정에서 뺐습니다.** 테마 강세를 쓰세요",
       cost: 0,
     },
+    /*
+     * 네이버 테마 강세 (2026-08-28) — **업종 강세를 뺀 자리에 들어온다.**
+     *
+     * 업종은 눈금이 안 맞아 판정에서 뺐지만(「화학」 한 칸에 화장품·이차전지·정유),
+     * 테마는 맞다. 그리고 키움 테마와 달리 이쪽은 **왜 묶였는지가 종목마다 적혀 있어**
+     * 분류를 믿을 근거가 있다.
+     *
+     * 재는 것은 「이 종목이 든 테마가 지금 강한가」다. 그 종목이 여러 테마에 들면
+     * **가장 강한 테마**를 쓴다 — 하나라도 강한 흐름에 얹혀 있으면 그게 신호다.
+     * 조회는 0회다(분류는 파일, 시세는 스냅샷).
+     */
+    {
+      key: "naverTheme",
+      label: "테마 강세 (네이버)",
+      axis: "trend",
+      enabled: true,
+      weight: 2,
+      threshold: 0,
+      strongAt: 2,
+      hint:
+        "이 종목이 든 테마의 오늘 평균 등락률(%). 여러 테마에 들면 **가장 강한 쪽**입니다. " +
+        "테마 안에서 몇이 올랐는지(상승비율)도 값에 같이 적힙니다",
+      cost: 0,
+    },
     {
       key: "themeStrength",
-      label: "테마 강세",
+      label: "테마 강세 (키움)",
       axis: "trend",
       enabled: true,
       weight: 1,
@@ -736,6 +762,16 @@ export async function evaluateSignal(
     wantRatio ? latestRatio(code) : null,
   ]);
 
+  /*
+   * 네이버 테마 강도 — **조회가 아니다.** 분류는 파일, 시세는 이미 떠 있는 스냅샷이라
+   * 위 Promise.all 에 끼우지 않고 따로 부른다(키움 호출을 하나도 안 늘린다).
+   */
+  const themeRows = need.has("naverTheme")
+    ? await themeStrength("kr")
+        .then((r) => r.themes)
+        .catch(() => [])
+    : [];
+
   const chartRows = (chart?.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
   const closes = chartRows.map((r) => Math.abs(toNum(r.cur_prc))).filter((n) => n > 0);
   const cur = closes[0];
@@ -936,6 +972,24 @@ export async function evaluateSignal(
         // 아래로 벌어진 건 과열이 아니다. 위로 벌어진 것만 위험으로 친다
         g = grade(Math.max(0, away), c);
         value = `20일선 ${away > 0 ? "+" : ""}${away.toFixed(1)}%`;
+      }
+    } else if (c.key === "naverTheme") {
+      /*
+       * 이 종목이 든 네이버 테마 중 **가장 강한 것**.
+       * 값에 상승비율과 5일 중 오른 날을 같이 적는다 — 평균 등락률만 보면
+       * 「하나가 상한가라 오른 테마」와 「고르게 오른 테마」가 같아 보인다.
+       */
+      const best = themeRows
+        .filter((t) => t.stocks.some((s) => s.code === code))
+        .sort((a, b) => b.changeRate - a.changeRate)[0];
+      if (best) {
+        g = grade(best.changeRate, c);
+        value =
+          `${best.name} ${best.changeRate > 0 ? "+" : ""}${best.changeRate.toFixed(2)}%` +
+          ` (${best.up}/${best.stocks.length}` +
+          (best.hit5.of > 0 ? ` · ${best.hit5.of}일 중 ${best.hit5.n}일` : "") +
+          ")";
+        link = { kind: "theme", code: best.key, name: best.name };
       }
     } else if (c.key === "ma5Gap") {
       const ma5 = sma(closes, 5);

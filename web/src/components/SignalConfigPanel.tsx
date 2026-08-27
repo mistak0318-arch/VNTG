@@ -29,6 +29,8 @@ const UNITS: Record<string, string> = {
   sectorStrength: "%",
   /* 5일선 이격 — 「몇 % 위인가」라 단위가 %. 좁을수록 좋은 점수다 */
   ma5Gap: "%",
+  /* 네이버 테마 강세 — 그 종목이 든 테마의 오늘 평균 등락률 */
+  naverTheme: "%",
   nearHigh: "%",
   marketCap: "억원",
   volume: "억원",
