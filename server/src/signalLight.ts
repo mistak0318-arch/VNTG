@@ -13,6 +13,30 @@ import { findStock } from "./stockListCache.js";
 import { themeStrength } from "./themeStrength.js";
 import { etfHoldersOf } from "./etfHolders.js";
 
+/**
+ * 「ETF 뒷배」에서 **빼야 하는 ETF** — 테마가 아닌 것들.
+ *
+ * 두 부류다.
+ *
+ * ① **자기 자신을 담은 것** — 「삼성전자단일종목레버리지 92.3%」를 보고 「묶음이
+ *    간다」고 하는 건 자기를 근거로 삼는 것이다. 등락률도 두 배로 나와 점수만 부푼다.
+ *
+ * ② **지수를 담은 것** — KOSPI200·코스닥150 은 그 종목을 **시가총액 때문에** 담았지
+ *    테마라서 담은 게 아니다. 삼성전자가 KOSPI200 에 들어 있다는 사실은 이 종목에
+ *    대해 아무것도 말해 주지 않는다. 커버드콜·TR·배당 같은 **전략 상품**도 같은
+ *    이유로 뺀다 — 담는 이유가 그 종목의 사업이 아니다.
+ *
+ * 이름으로 거른다. ETF 이름은 그 성격을 꽤 정직하게 적어 두는 편이고, 이 판정에
+ * 쓸 다른 표지(운용 전략 코드 같은 것)를 네이버·키움 어느 쪽도 주지 않는다.
+ */
+function isNotTheme(name: string): boolean {
+  return (
+    /레버리지|인버스|단일종목|2X|3X/i.test(name) ||
+    /200|150|300|KRX|코스피|코스닥|KOSPI|KOSDAQ|MSCI|S&P|TOP\s*10\b/i.test(name) ||
+    /커버드콜|배당|TR\b|채권|국고채|머니마켓|파킹/i.test(name)
+  );
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_FILE = resolve(__dirname, "..", "data", "signalConfig.json");
 
@@ -821,10 +845,7 @@ export async function evaluateSignal(
              * 나와 점수만 부풀린다.
              * 비중 50% 가 넘으면 사실상 그 종목 하나짜리라 같이 뺀다.
              */
-            .filter(
-              (h) =>
-                !/레버리지|인버스|단일종목|2X|3X/i.test(h.name) && (h.weight ?? 0) <= 50,
-            )
+            .filter((h) => !isNotTheme(h.name) && (h.weight ?? 0) <= 50)
             .slice(0, 3),
         )
         .catch(() => [])
