@@ -5020,6 +5020,34 @@ tr.drag-src td { opacity: 0.45; }
 .mjr-pick-row.on i { color: #f5c542; }
 .mjr-pick-row i { font-style: normal; width: 1rem; }
 
+/* ── 캘린더 전면 개편 (2026-08-27) — 일정 카드·할 일·메모 ── */
+.cal-ev {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  background: var(--panel);
+}
+.cal-ev.editing { border-color: var(--blue); }
+.cal-ev.done .cal-item-title { text-decoration: line-through; color: var(--muted); }
+.cal-ev-head { display: flex; align-items: center; gap: 6px; }
+.cal-ev-head .cal-item-title { flex: 1; min-width: 0; }
+/* 메모가 제 줄을 갖는다 — 한 줄 꼬리표로 붙이면 긴 메모는 못 읽는다 */
+.cal-ev-memo {
+  margin-top: 4px;
+  padding: 5px 8px;
+  background: var(--panel-2);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.cal-memo-input { width: 100%; resize: vertical; margin-bottom: 6px; font: inherit; font-size: 0.8rem; }
+.cal-plan { max-width: 46rem; }
+.cal-dday.late { color: var(--red); border-color: var(--red); }
+.cal-chip.done { opacity: 0.55; text-decoration: line-through; }
+
 /* 슈퍼신호등 종목 공시 — 오늘 공시 맨 앞의 별도 묶음 (2026-08-27) */
 .dart-super { margin-bottom: 8px; border: 1px solid #f5c542; border-radius: 8px; padding: 6px 8px; }
 .dart-super-h { font-weight: 700; margin-bottom: 4px; }

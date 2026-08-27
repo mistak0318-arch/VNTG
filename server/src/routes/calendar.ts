@@ -48,13 +48,16 @@ export function createCalendarRouter(): Router {
 
   router.post("/", async (req, res, next) => {
     try {
-      const { date, time, title, kind, memo } = req.body ?? {};
+      const { date, time, title, kind, memo, repeat, todo } = req.body ?? {};
       const events = await addEvent({
         date: String(date ?? ""),
         time: time ? String(time) : undefined,
         title: String(title ?? ""),
         kind: (String(kind ?? "personal") as EventKind),
         memo: memo ? String(memo) : undefined,
+        /* 반복과 할 일은 함께 못 쓴다 — 반복 할 일의 「완료」는 인스턴스별이어야 해서 다른 문제다 */
+        repeat: ["weekly", "monthly", "yearly"].includes(String(repeat)) && !todo ? (repeat as "weekly") : undefined,
+        todo: todo === true || todo === "true" ? true : undefined,
       });
       res.json({ events });
     } catch (err) {

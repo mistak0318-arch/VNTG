@@ -21,6 +21,9 @@ export const EVENT_KINDS: { key: EventKind; label: string }[] = [
   { key: "personal", label: "개인 일정" },
 ];
 
+/** 반복 주기 — date 를 앵커로 그 뒤로 되풀이된다 (2026-08-27 전면 개편) */
+export type RepeatKind = "weekly" | "monthly" | "yearly";
+
 export interface CalendarEvent {
   id: string;
   /** YYYY-MM-DD */
@@ -32,6 +35,49 @@ export interface CalendarEvent {
   memo?: string;
   /** 어디서 왔는지. 직접 입력은 없음, 가져온 일정은 "ics:<url>" / "file:<이름>" */
   source?: string;
+  /** 반복 — date 가 첫 회다. 조회 시 인스턴스로 전개된다 */
+  repeat?: RepeatKind;
+  /** 할 일 — 달력에 뜨되 체크로 끝내는 것. 반복과는 함께 못 쓴다 */
+  todo?: boolean;
+  /** 할 일 완료 */
+  done?: boolean;
+  /** (전개 인스턴스에만) 원본의 날짜 — 수정 폼이 앵커를 보여줄 때 쓴다 */
+  anchor?: string;
+}
+
+/**
+ * 반복 일정을 기간 [from, to] 의 실제 날짜들로 편다.
+ *
+ * 저장은 원본 한 건이고 조회가 전개한다 — 반복을 저장 시점에 복제하면
+ * 「이 반복을 고친다」가 수십 건 수정이 된다. 인스턴스 id 는 `원본id@날짜`,
+ * 수정·삭제는 어느 인스턴스로 와도 원본으로 간다(updateEvent 가 @ 앞을 쓴다).
+ */
+function expandRepeats(items: CalendarEvent[], from: string, to: string): CalendarEvent[] {
+  const out: CalendarEvent[] = [];
+  for (const e of items) {
+    if (!e.repeat) {
+      if (e.date >= from && e.date <= to) out.push(e);
+      continue;
+    }
+    const [ay, am, ad] = e.date.split("-").map(Number);
+    const anchorDow = new Date(Date.UTC(ay, am - 1, ad)).getUTCDay();
+    // 기간을 하루씩 걷는다 — 조회 창이 한 달~석 달이라 이게 제일 단순하고 안 틀린다
+    const start = new Date(`${from < e.date ? e.date : from}T00:00:00Z`);
+    const end = new Date(`${to}T00:00:00Z`);
+    for (let d = start; d <= end; d = new Date(d.getTime() + 86400_000)) {
+      const ds = d.toISOString().slice(0, 10);
+      const [, m, day] = ds.split("-").map(Number);
+      const hit =
+        e.repeat === "weekly"
+          ? d.getUTCDay() === anchorDow
+          : e.repeat === "monthly"
+            ? day === ad // 31일 앵커는 없는 달을 자연히 건너뛴다
+            : m === am && day === ad;
+      if (!hit) continue;
+      out.push(ds === e.date ? e : { ...e, id: `${e.id}@${ds}`, date: ds, anchor: e.date });
+    }
+  }
+  return out;
 }
 
 let cache: CalendarEvent[] | null = null;
@@ -91,10 +137,10 @@ function newId(): string {
   return `ev_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-/** month는 "YYYY-MM". 없으면 전체 */
+/** month는 "YYYY-MM" — 지정하면 반복 일정을 그 달의 인스턴스로 편다. 없으면 원본 전체 */
 export async function listEvents(month?: string): Promise<CalendarEvent[]> {
   const items = await load();
-  const filtered = month ? items.filter((e) => e.date.startsWith(month)) : items;
+  const filtered = month ? expandRepeats(items, `${month}-01`, `${month}-31`) : items;
   return [...filtered].sort((a, b) => (a.date + (a.time ?? "")).localeCompare(b.date + (b.time ?? "")));
 }
 
@@ -108,9 +154,9 @@ export async function upcomingEvents(days = 14): Promise<CalendarEvent[]> {
    */
   const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
   const until = new Date(Date.now() + 9 * 3600_000 + days * 86400_000).toISOString().slice(0, 10);
-  return items
-    .filter((e) => e.date >= today && e.date <= until)
-    .sort((a, b) => (a.date + (a.time ?? "")).localeCompare(b.date + (b.time ?? "")));
+  return expandRepeats(items, today, until).sort((a, b) =>
+    (a.date + (a.time ?? "")).localeCompare(b.date + (b.time ?? "")),
+  );
 }
 
 export async function addEvent(e: Omit<CalendarEvent, "id">): Promise<CalendarEvent[]> {
@@ -122,14 +168,18 @@ export async function addEvent(e: Omit<CalendarEvent, "id">): Promise<CalendarEv
 }
 
 export async function updateEvent(id: string, patch: Partial<CalendarEvent>): Promise<CalendarEvent[]> {
+  const baseId = id.split("@")[0]; // 반복 인스턴스로 와도 원본을 고친다
   const items = await load();
-  await persist(items.map((e) => (e.id === id ? { ...e, ...patch, id: e.id } : e)));
+  await persist(
+    items.map((e) => (e.id === baseId ? { ...e, ...patch, id: e.id, anchor: undefined } : e)),
+  );
   return listEvents();
 }
 
 export async function removeEvent(id: string): Promise<CalendarEvent[]> {
+  const baseId = id.split("@")[0]; // 반복 인스턴스를 지우면 반복 전체가 지워진다
   const items = await load();
-  await persist(items.filter((e) => e.id !== id));
+  await persist(items.filter((e) => e.id !== baseId));
   return listEvents();
 }
 

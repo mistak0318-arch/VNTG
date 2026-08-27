@@ -2027,6 +2027,13 @@ export interface CalendarEvent {
   title: string;
   kind: EventKind;
   memo?: string;
+  /** 반복 — date 가 첫 회. 조회 시 인스턴스(id 에 @날짜)로 전개돼 온다 */
+  repeat?: "weekly" | "monthly" | "yearly";
+  /** 할 일 — 체크로 끝내는 것 */
+  todo?: boolean;
+  done?: boolean;
+  /** (전개 인스턴스에만) 원본 날짜 */
+  anchor?: string;
 }
 
 export interface AiSummary {
