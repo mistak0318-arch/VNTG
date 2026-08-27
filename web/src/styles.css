@@ -6003,6 +6003,26 @@ button.nav-group-toggle {
   padding: 0.3rem 0.55rem;
   cursor: pointer;
 }
+/* 바로가기 줄 우측 「탭 모두 닫기」 — 탭이 2개 이상 쌓였을 때만 나온다 (2026-08-27) */
+.qss-row { display: flex; gap: 8px; align-items: flex-start; }
+.qss-row .qss { flex: 1; }
+.qss-close-tabs {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  border-radius: 8px;
+  padding: 0.25rem 0.6rem;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.qss-close-tabs:hover { color: var(--text); border-style: solid; }
 
 /* 미국 섹터 MAP — 두 그룹 붙박이, 촘촘한 타일 */
 .usm-sec + .usm-sec { margin-top: 0.6rem; }

@@ -314,7 +314,6 @@ export default function App() {
    *
    * 탭 목록은 sessionStorage — **창마다 따로**다(보드용 창이 본창 탭을 물려받으면 안 된다).
    */
-  const MAX_TABS = 6;
   const [openTabs, setOpenTabs] = useState<Tab[]>(() => {
     try {
       const raw = sessionStorage.getItem("vntg.openTabs");
@@ -332,19 +331,15 @@ export default function App() {
       /* 무시 */
     }
   }, [openTabs]);
-  // 활성 탭은 늘 목록에 있게 — 없으면 뒤에 붙이고, 상한을 넘으면 가장 오래된 비활성 탭을 닫는다
+  /*
+   * 활성 탭은 늘 목록에 있게 — 없으면 뒤에 붙인다. 상한은 없다(2026-08-27 —
+   * 「이것저것 누르다 보니 이전 탭이 사라져서 히스토리가 날아가네」). 비활성 탭은
+   * 실시간 구독을 놓고(TabActiveContext) 폴링도 서버 캐시 위주라, 자연 상한
+   * (= 메뉴 개수)까지는 열려 있어도 부담이 없다.
+   */
   useEffect(() => {
     if (tab === "mini") return;
-    setOpenTabs((prev) => {
-      if (prev.includes(tab)) return prev;
-      const next = [...prev, tab];
-      while (next.length > MAX_TABS) {
-        const victim = next.find((t) => t !== tab);
-        if (!victim) break;
-        next.splice(next.indexOf(victim), 1);
-      }
-      return next;
-    });
+    setOpenTabs((prev) => (prev.includes(tab) ? prev : [...prev, tab]));
   }, [tab]);
 
   /* 사이드바 그룹 접기 — 기기별(localStorage). 27인치와 폰의 메뉴 사정은 다르다 */
@@ -399,6 +394,12 @@ export default function App() {
       }
       return next;
     });
+  }
+
+  /** 탭 모두 닫기 — 지금 보고 있는 탭 하나만 남긴다(보던 화면까지 날리면 그게 또 사고) */
+  function closeAllTabs() {
+    if (!window.confirm("열려 있는 모든 탭을 닫을까요?\n지금 보고 있는 화면만 남습니다.")) return;
+    setOpenTabs(tab === "mini" ? [] : [tab]);
   }
 
   /** 탭 키 → 페이지. 인앱 탭이 열린 것들을 전부 이걸로 그린다 */
@@ -681,8 +682,20 @@ export default function App() {
           {/* 인증이 끊기면 앱 전체가 값을 못 받는다 — 화면을 옮겨도 계속 보여야 한다 */}
           <AuthExpiredBar />
 
-          {/* 어느 화면에서든 종목으로 바로 — 접혀 있으면 한 줄이다 */}
-          <QuickStockSearch onPick={openAnalysis} />
+          {/* 어느 화면에서든 종목으로 바로 — 접혀 있으면 한 줄이다.
+              우측엔 탭 모두 닫기(탭이 쌓였을 때만) — 상한을 없애면서 치우는 손도 같이 준다 */}
+          <div className="qss-row">
+            <QuickStockSearch onPick={openAnalysis} />
+            {openTabs.length > 1 && (
+              <button
+                className="qss-close-tabs"
+                onClick={closeAllTabs}
+                title="열려 있는 탭을 모두 닫습니다 — 지금 화면만 남아요"
+              >
+                🧹 탭 모두 닫기 ({openTabs.length})
+              </button>
+            )}
+          </div>
 
           {/* 돌고 있는 작업 — 어느 화면에 있든 뜬다 */}
           <RunningJobsBar />
