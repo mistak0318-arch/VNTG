@@ -293,6 +293,15 @@ export interface StockRow {
   changeRate: number;
   /** 시가총액(억원). 상장주식수를 못 찾으면 null */
   marketCap?: number | null;
+  /**
+   * 거래대금 **어림값**(억원) — 거래량 × 현재가 (2026-08-28).
+   *
+   * ⚠️ 진짜 거래대금이 아니다. `ka20002` 는 거래대금을 안 주고 거래량(`now_trde_qty`)만
+   * 준다. 실제 거래대금은 체결가를 하나하나 곱한 값이라 장중 평균가가 기준인데,
+   * 여기서는 지금 가격으로 곱한다 — 하루 안에서 크게 오르내린 종목일수록 어긋난다.
+   * 「얼마 이상만 보기」로 거르는 용도라 이 정도면 쓸 만하고, 그 이상으로는 쓰지 않는다.
+   */
+  tradeValue?: number | null;
 }
 
 function mapStockRows(rows: Row[], limit = 30): StockRow[] {
@@ -624,6 +633,7 @@ function mapConstituents(rows: Row[], shares?: Map<string, number>): StockRow[] 
     const code = String(r.stk_cd ?? "");
     const price = toAbsNum(r.cur_prc);
     const cnt = shares?.get(code.replace(/_(AL|NX)$/, ""));
+    const qty = toNum(r.now_trde_qty);
     return {
       code,
       name: String(r.stk_nm ?? ""),
@@ -632,6 +642,8 @@ function mapConstituents(rows: Row[], shares?: Map<string, number>): StockRow[] 
       changeRate: toNum(r.flu_rt),
       // 억원 단위. 구성종목 TR에는 시총 필드가 없어 상장주식수 × 현재가로 계산한다
       marketCap: cnt && price > 0 ? Math.round((cnt * price) / 100_000_000) : null,
+      /* 거래대금 **어림값**(억원) — TR 이 거래량만 줘서 현재가를 곱한다. StockRow 주석 참고 */
+      tradeValue: qty > 0 && price > 0 ? Math.round((qty * price) / 100_000_000) : null,
     };
   });
 }

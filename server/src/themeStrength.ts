@@ -41,6 +41,8 @@ export interface ThemeStockRow {
   desc: string;
   /** 오늘 등락률. 스냅샷에 없는 종목은 null */
   changeRate: number | null;
+  /** 거래대금 어림값(억원) */
+  tradeValue?: number | null;
 }
 
 export interface ThemeStrength {
@@ -53,12 +55,33 @@ export interface ThemeStrength {
   down: number;
   /** 오른 종목 비율(0~100) */
   breadth: number;
-  /** 며칠째 오르고 있나 (오늘 포함). 기록이 없으면 0 */
+  /** 며칠째 **연속으로** 오르고 있나 (오늘 포함). 기록이 없으면 0 */
   streak: number;
+  /**
+   * 최근 5일·10일 중 오른 날 수 (2026-08-28 요청).
+   *
+   * 연속 상승만 세면 「올랐다 쉬었다 하며 꾸준히 오르는」 테마를 놓친다 — 하루만
+   * 쉬어도 0 으로 돌아가기 때문이다. 5일 중 4일이면 연속이 아니어도 흐름이 있는 것이다.
+   * 기록이 모자라면 `of` 가 실제로 가진 날 수라, 화면이 「3일 중 2일」처럼 정직하게 적는다.
+   */
+  hit5: { n: number; of: number };
+  hit10: { n: number; of: number };
+  /**
+   * 테마 거래대금 합계(억원) — **어림값**이다(거래량 × 현재가).
+   * 「이 테마에 오늘 돈이 도는가」로 거르는 용도다. 266개를 다 볼 이유가 없다.
+   */
+  tradeValue: number;
   /** 5거래일 누적(%) — 기록이 모자라면 null */
   w1: number | null;
   /** 20거래일 누적(%) — 기록이 모자라면 null */
   m1: number | null;
+  /**
+   * 3개월 수익률(%) — **ETF 만.** 네이버가 목록에 담아 준다.
+   *
+   * ⚠️ `m1`(20거래일) 자리에 넣지 않는다. 화면이 「월간」이라 적어 놓고 3개월 값을
+   * 보여주면 그건 거짓말이다. 기간이 다른 값은 칸도 달라야 한다.
+   */
+  m3: number | null;
   /** ETF 만 — 분류(국내 업종/테마 · 해외 주식 · 원자재…). 화면이 이걸로 나눠 본다 */
   group?: string;
   stocks: ThemeStockRow[];
@@ -115,7 +138,7 @@ function cumulative(series: number[], n: number): number | null {
   return (win.reduce((acc, v) => acc * (1 + v / 100), 1) - 1) * 100;
 }
 
-/** 오늘 포함 며칠째 오르고 있나 */
+/** 오늘 포함 며칠째 **연속으로** 오르고 있나 */
 function streakOf(series: number[]): number {
   let n = 0;
   for (let i = series.length - 1; i >= 0; i--) {
@@ -123,6 +146,18 @@ function streakOf(series: number[]): number {
     else break;
   }
   return n;
+}
+
+/**
+ * 최근 N일 중 오른 날 수.
+ *
+ * 연속만 세면 하루 쉰 테마가 0 이 된다 — 「올랐다 쉬었다 하며 꾸준한」 흐름을
+ * 통째로 놓친다. `of` 는 실제로 가진 날 수라, 기록이 사흘뿐이면 「3일 중 2일」로
+ * 정직하게 나온다. 없는 날을 0% 로 채워 세지 않는다.
+ */
+function hitsOf(series: number[], n: number): { n: number; of: number } {
+  const win = series.slice(-n);
+  return { n: win.filter((v) => v > 0).length, of: win.length };
 }
 
 /**
@@ -156,12 +191,16 @@ export async function themeStrength(
 
   if (market === "kr") {
     for (const t of store.themes) {
-      const stocks: ThemeStockRow[] = t.stocks.map((s) => ({
-        code: s.code,
-        name: s.name,
-        desc: s.desc,
-        changeRate: snap?.byCode.get(s.code)?.changeRate ?? null,
-      }));
+      const stocks: ThemeStockRow[] = t.stocks.map((s) => {
+        const row = snap?.byCode.get(s.code);
+        return {
+          code: s.code,
+          name: s.name,
+          desc: s.desc,
+          changeRate: row?.changeRate ?? null,
+          tradeValue: row?.tradeValue ?? null,
+        };
+      });
       const row = build(`kr:${t.no}`, t.name, stocks, days, hist);
       if (row) rows.push(row);
     }
@@ -190,17 +229,31 @@ export async function themeStrength(
      */
     for (const e of store.etf) {
       if (e.changeRate === null) continue;
+      const key = `etf:${e.code}`;
+      const series = days
+        .map((d) => hist.days[d]?.[key])
+        .filter((v): v is number => typeof v === "number");
+      const withToday = [...series, e.changeRate];
       rows.push({
-        key: `etf:${e.code}`,
+        key,
         name: e.name,
         changeRate: e.changeRate,
         up: e.changeRate > 0 ? 1 : 0,
         down: e.changeRate < 0 ? 1 : 0,
         breadth: e.changeRate > 0 ? 100 : 0,
-        streak: 0,
-        /* 네이버가 3개월 수익률을 준다 — 주간은 없으므로 월간 자리에만 넣는다 */
-        w1: null,
-        m1: e.m3,
+        streak: streakOf(withToday),
+        hit5: hitsOf(withToday, 5),
+        hit10: hitsOf(withToday, 10),
+        /*
+         * ETF 는 거래대금 대신 **시가총액(순자산)** 을 쓴다 — 네이버가 그걸 준다.
+         * 864개 중 대부분은 규모가 작아 거래가 거의 없다. 「얼마 이상만」이 없으면
+         * 화면이 쓸모없는 타일로 덮인다.
+         */
+        tradeValue: Math.round(e.marketCap ?? 0),
+        /* 주간·월간은 기록이 쌓여야 나온다. 3개월은 네이버가 주는 별도 값이다 */
+        w1: cumulative(series, 5),
+        m1: cumulative(series, 20),
+        m3: e.m3,
         group: ETF_TABS[e.tab] ?? "기타",
         stocks: [
           {
@@ -211,6 +264,7 @@ export async function themeStrength(
                 ? `NAV ${e.nav.toLocaleString("ko-KR")} · 괴리 ${(((e.price - e.nav) / e.nav) * 100).toFixed(2)}%`
                 : "",
             changeRate: e.changeRate,
+            tradeValue: e.marketCap,
           },
         ],
       });
@@ -246,6 +300,8 @@ function build(
   const down = known.filter((s) => (s.changeRate ?? 0) < 0).length;
 
   const series = days.map((d) => hist.days[d]?.[key]).filter((v): v is number => typeof v === "number");
+  /* 오늘 값은 아직 기록 전이라 뒤에 붙여서 센다 */
+  const withToday = [...series, avg];
 
   return {
     key,
@@ -254,9 +310,13 @@ function build(
     up,
     down,
     breadth: Math.round((up / known.length) * 100),
-    streak: streakOf([...series, avg]),
+    streak: streakOf(withToday),
+    hit5: hitsOf(withToday, 5),
+    hit10: hitsOf(withToday, 10),
+    tradeValue: Math.round(stocks.reduce((n, s) => n + (s.tradeValue ?? 0), 0)),
     w1: cumulative(series, 5),
     m1: cumulative(series, 20),
+    m3: null,
     stocks: stocks.sort((a, b) => (b.changeRate ?? -99) - (a.changeRate ?? -99)),
   };
 }

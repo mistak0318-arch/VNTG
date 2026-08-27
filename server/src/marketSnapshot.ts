@@ -28,6 +28,8 @@ export interface SnapshotStock {
   price: number;
   /** 시가총액(억원). 키움이 안 주는 종목이 있다 */
   marketCap: number | null;
+  /** 거래대금 어림값(억원) — 거래량 × 현재가. `StockRow.tradeValue` 주석 참고 */
+  tradeValue: number | null;
   sector: string;
   market: "kospi" | "kosdaq";
 }
@@ -241,6 +243,7 @@ async function build(client: KiwoomClient): Promise<MarketSnapshot> {
           changeRate: r.changeRate,
           price: r.price ?? 0,
           marketCap: r.marketCap ?? null,
+          tradeValue: r.tradeValue ?? null,
           /* 지주사를 금융에 넣는 거래소 분류를 여기서도 고친다 — `sectorFix` 참고 */
           sector: fixSector(code, t.name),
           market: t.market,

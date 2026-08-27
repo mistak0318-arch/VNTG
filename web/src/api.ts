@@ -3267,15 +3267,28 @@ export interface ThemeStrength {
   down: number;
   /** 오른 종목 비율(%) — 몇몇이 끄는지 다 같이 가는지 */
   breadth: number;
-  /** 며칠째 오르고 있나. 기록이 없으면 0 */
+  /** 며칠째 **연속으로** 오르고 있나. 기록이 없으면 0 */
   streak: number;
+  /** 최근 5일 중 오른 날 — `of` 는 실제로 가진 날 수다(기록이 모자라면 그만큼만) */
+  hit5: { n: number; of: number };
+  hit10: { n: number; of: number };
+  /** 테마 거래대금 합계(억원, 어림값). ETF 는 순자산 */
+  tradeValue: number;
   /** 5거래일 누적(%). 기록이 모자라면 null */
   w1: number | null;
-  /** 20거래일 누적(%). 기록이 모자라면 null. ETF 는 네이버가 준 3개월 수익률이다 */
+  /** 20거래일 누적(%). 기록이 모자라면 null */
   m1: number | null;
+  /** 3개월 수익률(%) — ETF 만. 네이버가 주는 값이라 월간(m1)과 칸이 다르다 */
+  m3: number | null;
   /** ETF 만 — 분류(국내 업종/테마 · 해외 주식 · 원자재…) */
   group?: string;
-  stocks: { code: string; name: string; desc: string; changeRate: number | null }[];
+  stocks: {
+    code: string;
+    name: string;
+    desc: string;
+    changeRate: number | null;
+    tradeValue?: number | null;
+  }[];
 }
 
 export interface ThemeLink {

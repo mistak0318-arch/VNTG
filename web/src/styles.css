@@ -9683,3 +9683,24 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .tpb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tpb-row .num { text-align: right; }
 .tpb-tops { display: flex; gap: 2px; flex-wrap: wrap; }
+
+/* 테마 시트 — 지표 칩. 한 줄에 다 붙이면 안 읽힌다 */
+.tdb-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 0.4rem 0 0.6rem; }
+.tdb-chip {
+  font-size: 0.7rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+}
+.tdb-chip b { color: var(--text); }
+
+/* 일간·주간·월간 — 줄 전체가 버튼(테마 안을 열려고 누른다) */
+button.tpb-row {
+  width: 100%;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+button.tpb-row:hover { background: var(--panel-2); }
