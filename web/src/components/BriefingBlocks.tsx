@@ -3,10 +3,12 @@ import {
   api,
   fmtNum,
   type BriefingTile,
+  type EvaluatedTheme,
   type IndexCandle,
   type IndexCard,
   type MarketFlow,
   type ThemeRow,
+  type UsWatchGroup,
 } from "../api";
 import { useSection } from "../useSection";
 import { tileHeat, useAppearance } from "../useAppearance";
@@ -293,6 +295,141 @@ export function ThemeStrip({
       <div className="bf-theme-sep" />
       {themes.bottom.slice(0, 3).map(row)}
     </div>
+  );
+}
+
+/**
+ * 내 테마 · 미국 테마 (2026-08-27) — **키움 테마를 걷어낸 자리.**
+ *
+ * 증권사가 나눠 준 테마와 실제로 시장이 도는 묶음은 다르다 — 「반도체_후공정」처럼
+ * 잘게 쪼개져 있어 무엇이 도는지 읽히지 않았다. 데일리 리포트가 이미 **내 테마 ·
+ * 미국 테마** 두 판으로 답을 내고 있으므로 브리핑도 같은 재료를 쓴다.
+ *
+ * 다만 리포트는 타일(MAP)이고 여기는 **텍스트 줄**이다 — 브리핑 가운데 기둥은
+ * 좁고, 타일은 자리를 너무 먹는다. 오른 것 위·내린 것 아래, 그 사이에 실선.
+ */
+export function MyThemeStrip({
+  onPickTheme,
+}: {
+  /** 테마를 누르면 구성종목 시트 — 보기만 하는 숫자는 죽은 숫자다 */
+  onPickTheme: (t: { kind: "custom" | "usGroup"; id: string; name: string; stocks: { code: string; name: string }[] }) => void;
+}) {
+  const [kr, setKr] = useState<EvaluatedTheme[] | null>(null);
+  const [us, setUs] = useState<UsWatchGroup[] | null>(null);
+  const [tab, setTab] = useState<"kr" | "us">("kr");
+
+  useEffect(() => {
+    let alive = true;
+    void api
+      .customThemes()
+      .then((r) => alive && setKr(r.themes))
+      .catch(() => alive && setKr([]));
+    void api
+      .usWatch()
+      .then((r) => alive && setUs(r.groups))
+      .catch(() => alive && setUs([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const krRows = (kr ?? [])
+    .filter((t) => t.changeRate !== null && t.stocks.length > 0)
+    .sort((a, b) => (b.changeRate ?? 0) - (a.changeRate ?? 0));
+  const usRows = (us ?? [])
+    .filter((g) => g.changeRate !== null && g.stocks.length > 0)
+    .sort((a, b) => (b.changeRate ?? 0) - (a.changeRate ?? 0));
+
+  const loading = tab === "kr" ? kr === null : us === null;
+  const rows: { id: string; name: string; rate: number; sub: string; onClick: () => void }[] =
+    tab === "kr"
+      ? krRows.map((t) => ({
+          id: t.id,
+          name: t.name,
+          rate: t.changeRate ?? 0,
+          sub: `▲${t.risingCount}/▼${t.fallingCount}`,
+          onClick: () =>
+            onPickTheme({
+              kind: "custom",
+              id: t.id,
+              name: t.name,
+              stocks: t.stocks.map((s) => ({ code: s.code, name: s.name })),
+            }),
+        }))
+      : usRows.map((g) => ({
+          id: g.id,
+          name: g.name,
+          rate: g.changeRate ?? 0,
+          sub: `▲${g.rising}/▼${g.falling}`,
+          onClick: () =>
+            onPickTheme({
+              kind: "usGroup",
+              id: g.id,
+              name: g.name,
+              stocks: g.stocks.map((s) => ({ code: s.symbol, name: s.name })),
+            }),
+        }));
+
+  /* 오른 것 위, 내린 것 아래. 가운데를 실선으로 갈라 방향이 한눈에 보이게 */
+  const upRows = rows.filter((r) => r.rate > 0).slice(0, 6);
+  const downRows = rows.filter((r) => r.rate < 0).slice(-4);
+
+  return (
+    <>
+      <div className="filter-row bf-theme-tabs">
+        <button
+          className={`filter-btn ${tab === "kr" ? "active" : ""}`}
+          onClick={() => setTab("kr")}
+        >
+          내 테마
+        </button>
+        <button
+          className={`filter-btn ${tab === "us" ? "active" : ""}`}
+          onClick={() => setTab("us")}
+        >
+          미국 테마
+        </button>
+      </div>
+      {loading ? (
+        <div className="empty">불러오는 중…</div>
+      ) : rows.length === 0 ? (
+        <div className="empty">
+          {tab === "kr"
+            ? "내 테마가 비어 있습니다 — 마이페이지 > 내 테마에서 만듭니다."
+            : "해외 관심종목 그룹이 비어 있습니다."}
+        </div>
+      ) : (
+        <div className="bf-themes">
+          {upRows.map((r) => (
+            <button
+              type="button"
+              className="bf-theme bf-theme-click"
+              key={r.id}
+              onClick={r.onClick}
+              title="눌러서 구성종목 보기"
+            >
+              <span className="bf-theme-name">{r.name}</span>
+              <i className="bf-theme-main">{r.sub}</i>
+              <b className={`num ${cls(r.rate)}`}>{pct(r.rate)}</b>
+            </button>
+          ))}
+          {downRows.length > 0 && <div className="bf-theme-sep" />}
+          {downRows.map((r) => (
+            <button
+              type="button"
+              className="bf-theme bf-theme-click"
+              key={r.id}
+              onClick={r.onClick}
+              title="눌러서 구성종목 보기"
+            >
+              <span className="bf-theme-name">{r.name}</span>
+              <i className="bf-theme-main">{r.sub}</i>
+              <b className={`num ${cls(r.rate)}`}>{pct(r.rate)}</b>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

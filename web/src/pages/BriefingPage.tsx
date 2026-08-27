@@ -13,7 +13,7 @@ import {
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import {
   FlowBars,
-  ThemeStrip,
+  MyThemeStrip,
   TurnoverStrip,
   UpDownStrip,
   WatchHeatGrid,
@@ -336,11 +336,29 @@ export function BriefingPage({
           <h3 className="section-heading">거래대금 현황</h3>
           <TurnoverStrip />
 
+          {/*
+            테마 (2026-08-27) — 키움 테마 → **내 테마 · 미국 테마**.
+            증권사 분류는 잘게 쪼개져 무엇이 도는지 안 읽혔다. 데일리 리포트가 이미
+            내 분류로 답을 내고 있으니 브리핑도 같은 재료를 쓴다(타일 대신 텍스트 줄).
+          */}
           <h3 className="section-heading">테마</h3>
-          {/* 본문은 보드 블록과 공용 (BriefingBlocks) */}
-          <ThemeStrip
-            themes={themes.data ?? null}
-            onPickTheme={(t) => setConstituent({ kind: "theme", code: t.code, name: t.name })}
+          <MyThemeStrip
+            onPickTheme={(t) =>
+              setConstituent({
+                /* 둘 다 「내가 묶은 것」이라 custom 이고, 이름표로 갈린다 (리포트와 같은 방식) */
+                kind: "custom",
+                code: t.id,
+                name: t.name,
+                label: t.kind === "usGroup" ? "해외 관심종목 그룹" : "내 테마 구성종목",
+                stocks: t.stocks.map((s) => ({
+                  code: s.code,
+                  name: s.name,
+                  price: 0,
+                  change: 0,
+                  changeRate: 0,
+                })),
+              })
+            }
           />
         </section>
 
