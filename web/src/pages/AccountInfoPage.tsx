@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, normalizeStockCode, pick, pickList, type RawRecord, type StockSearchResult } from "../api";
 import { RawJson } from "../components/RawJson";
 import { CollapsibleCard } from "../components/CollapsibleCard";
+import { ConcentrationCard } from "../components/ConcentrationCard";
 import { RefreshBar } from "../components/RefreshBar";
 
 // 아래 필드명은 키움 REST API 공식 문서(kt00018 계좌평가잔고내역요청) 기준으로 확인된 값.
@@ -186,6 +187,11 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
           </div>
         )}
         {deposit && holdings && <RawJson data={{ deposit, holdings }} />}
+      </CollapsibleCard>
+
+      {/* 집중도 (2026-08-27) — 업종·테마 비중. 종목 리스트에선 쏠림이 안 보인다 */}
+      <CollapsibleCard id="acctConc" title="보유 집중도" hint="업종·내 테마별 비중 — 쏠림 확인" defaultOpen>
+        <ConcentrationCard />
       </CollapsibleCard>
 
       <CollapsibleCard id="acctHoldings" title={`보유종목 (${rows.length})`} hint="종목별 평가손익" defaultOpen>

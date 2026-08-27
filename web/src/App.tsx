@@ -37,6 +37,7 @@ import { StockAnalysisPage } from "./pages/StockAnalysisPage";
 import { StockDiscoveryPage } from "./pages/StockDiscoveryPage";
 import { VolumeRankingPage } from "./pages/VolumeRankingPage";
 import { BriefingPage } from "./pages/BriefingPage";
+import { MorningPage } from "./pages/MorningPage";
 import { useDragOrder } from "./useDragOrder";
 import { useHashRoute } from "./useHashRoute";
 import { applyOrder, useMenuPrefs } from "./useMenuOrder";
@@ -52,6 +53,7 @@ import { TelegramPage } from "./pages/TelegramPage";
 import { GuidePage } from "./pages/GuidePage";
 
 type Tab =
+  | "morning"
   | "briefing"
   | "overview"
   | "report"
@@ -107,6 +109,8 @@ const MENU: {
         브리핑이 맨 앞이자 홈이다 — 요약(브리핑) → 상세(대시보드)의 순서.
         대시보드는 카드 13장을 파고드는 자리라 「열자마자 3초」용이 아니다.
       */
+      /* 장전 브리핑룸 (2026-08-27) — 아침 루틴(일정·조간·미국 마감·슈퍼 변동·주요 채널)을 한 화면에 */
+      { key: "morning", label: "장전 브리핑룸", icon: "🌅" },
       { key: "briefing", label: "마켓 브리핑", icon: "🌡️" },
       { key: "overview", label: "시황 대시보드", icon: "📊" },
       { key: "report", label: "데일리 리포트", icon: "📰" },
@@ -497,6 +501,7 @@ export default function App() {
   function renderPage(t: Tab) {
     switch (t) {
       case "briefing": return <BriefingPage onSelectStock={onSelectStock} />;
+      case "morning": return <MorningPage />;
       case "overview": return <OverviewPage onSelectStock={onSelectStock} />;
       case "report": return <DailyReportPage onSelectStock={onSelectStock} />;
       case "map": return <MapPage onSelectStock={onSelectStock} />;

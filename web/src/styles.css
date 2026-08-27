@@ -4890,6 +4890,57 @@ tr.drag-src td { opacity: 0.45; }
 .tgr-search-row { max-width: 44rem; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .tgr-search-row .search-input { flex: 1; }
 .tgr-search-n { white-space: nowrap; }
+/* ── 보유 집중도 (2026-08-27) — 업종·테마 비중 막대 ── */
+.conc-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 12px; }
+.conc-h { margin: 6px 0 4px; font-size: 0.8rem; color: var(--muted); }
+.conc-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 0.8rem; }
+.conc-name { flex: 0 0 8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conc-name i { font-style: normal; color: var(--muted); font-size: 0.7rem; }
+.conc-track { flex: 1; height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+.conc-fill { display: block; height: 100%; background: var(--blue); border-radius: 4px; }
+.conc-fill.heavy { background: var(--red); } /* 절반 넘는 쏠림은 색으로 먼저 말한다 */
+.conc-pct { flex: 0 0 2.6rem; text-align: right; font-variant-numeric: tabular-nums; }
+.conc-val { flex: 0 0 3.4rem; text-align: right; }
+.conc-note { margin: 4px 0 0; }
+
+/* ── 장전 브리핑룸 (2026-08-27) — 아침 루틴 카드 격자 ── */
+.mrn-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.mrn-head h2 { margin: 0; font-size: 1.1rem; }
+.mrn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+.mrn-card { padding: 12px; }
+.mrn-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.mrn-title i { font-style: normal; color: var(--muted); }
+.mrn-title:hover { color: var(--blue); }
+.mrn-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.mrn-table td { padding: 2px 4px; border-bottom: 1px solid var(--border); }
+.mrn-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.mrn-note { margin: 6px 0 0; }
+.mrn-day { margin-bottom: 6px; }
+.mrn-day > b { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 2px; }
+.mrn-event { font-size: 0.84rem; padding: 2px 0; }
+.mrn-event i { font-style: normal; color: var(--muted); font-size: 0.75rem; margin-right: 4px; }
+.mrn-report { font-size: 0.82rem; line-height: 1.5; white-space: pre-wrap; margin: 0; }
+.mrn-sup div { display: flex; justify-content: space-between; padding: 2px 0; font-size: 0.84rem; }
+.mrn-room { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 0.84rem; }
+.mrn-room .tgr-preview { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ── 주요 채널 (2026-08-27) — 채널마다 방 하나, 글은 원문 그대로 ── */
 .tgr-plain { white-space: pre-wrap; word-break: break-word; }
 .tgr-src { margin-left: 6px; text-decoration: none; }

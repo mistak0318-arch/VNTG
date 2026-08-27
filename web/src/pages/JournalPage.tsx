@@ -441,6 +441,18 @@ export function JournalPage({
                     <span className={`sig-dot ${t.level}`} /> {t.score}점
                   </span>
                 )}
+                {/* 기록 시점 수급 (2026-08-27) — 「누가 사고 있을 때 샀나」 자동 박제 */}
+                {t.flow && (
+                  <span className="jn-trade-sig" title="기록 시점의 당일 외인·기관 순매수 (억원)">
+                    <i className={`num ${t.flow.foreign >= 0 ? "positive" : "negative"}`}>
+                      외 {(t.flow.foreign / 100).toFixed(1)}
+                    </i>
+                    {" · "}
+                    <i className={`num ${t.flow.inst >= 0 ? "positive" : "negative"}`}>
+                      기 {(t.flow.inst / 100).toFixed(1)}
+                    </i>
+                  </span>
+                )}
                 <button className="row-del-btn" onClick={() => removeTrade(t.id)} title="삭제">
                   ✕
                 </button>

@@ -129,6 +129,21 @@ export const api = {
   accountSummary: () => getJson("/api/account/summary"),
   accountDeposit: () => getJson("/api/account/deposit"),
   holdings: () => getJson("/api/account/holdings"),
+  /** 보유 집중도 — 업종·내 테마별 비중 (2026-08-27) */
+  accountConcentration: () =>
+    getJson<{
+      total: number;
+      stocks: {
+        code: string;
+        name: string;
+        value: number;
+        weight: number;
+        sector: string;
+        themes: string[];
+      }[];
+      bySector: { name: string; value: number; count: number; weight: number }[];
+      byTheme: { name: string; value: number; count: number; weight: number }[];
+    }>("/api/account/concentration"),
   manualBrokers: () => getJson<{ brokers: string[] }>("/api/account/manual/brokers"),
   manualAccounts: () => getJson<{ accounts: EvaluatedAccount[] }>("/api/account/manual"),
   manualAccountAdd: (broker: string, name: string) =>
@@ -2640,6 +2655,8 @@ export interface JournalTrade {
   level?: string;
   score?: number;
   passed?: string[];
+  /** 기록 시점의 당일 외인·기관 순매수 (백만원) */
+  flow?: { foreign: number; inst: number };
   /** 손절선(원) — 살 때만 적는다. R 배수의 분모 */
   stop?: number;
   /** 목표가(원) */

@@ -6,6 +6,7 @@ import { evaluateMarket } from "./marketSignal.js";
 import { peekSnapshot } from "./marketSnapshot.js";
 import { listThemes } from "./customThemes.js";
 import { evaluateSignal } from "./signalLight.js";
+import { investorDailySeries } from "./superSignal.js";
 
 /**
  * 복기 노트 — 하루를 적고, 쌓아서 나를 고친다.
@@ -150,6 +151,8 @@ export interface JournalTrade {
   level?: string;
   score?: number;
   passed?: string[];
+  /** 기록 시점의 당일 외인·기관 순매수 (백만원) — 「누가 사고 있을 때 샀나」 (2026-08-27) */
+  flow?: { foreign: number; inst: number };
 
   /*
    * ── 포지션 노트 — **살 때만 적는 세 칸**
@@ -291,15 +294,27 @@ async function withSignals(
   return Promise.all(
     next.map(async (t) => {
       const old = before.get(t.id);
-      if (old?.level) return { ...t, level: old.level, score: old.score, passed: old.passed };
+      if (old?.level) {
+        return { ...t, level: old.level, score: old.score, passed: old.passed, flow: old.flow };
+      }
       if (!/^\d{6}$/.test(t.code)) return t;
-      const sig = await evaluateSignal(client, t.code).catch(() => null);
-      if (!sig) return t;
+      /* 신호등과 함께 그날 수급도 박제한다 (2026-08-27) — 「누가 사고 있을 때 샀나」.
+         복기 때 제일 먼저 묻게 되는 것인데 손으로 찾아 적게 하면 안 적는다. */
+      const [sig, flows] = await Promise.all([
+        evaluateSignal(client, t.code).catch(() => null),
+        investorDailySeries(client, t.code).catch(
+          () => [] as { date: string; foreign: number; inst: number }[],
+        ),
+      ]);
+      const lastFlow = flows[flows.length - 1];
+      const flow = lastFlow ? { foreign: lastFlow.foreign, inst: lastFlow.inst } : undefined;
+      if (!sig) return { ...t, flow };
       return {
         ...t,
         level: sig.level,
         score: sig.score,
         passed: sig.checks.filter((c) => c.pass === true).map((c) => c.label),
+        flow,
       };
     }),
   );

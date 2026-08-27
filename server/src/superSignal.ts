@@ -815,8 +815,8 @@ async function indexDailySeries(client: KiwoomClient, indsCode: string): Promise
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** 일별 외인/기관 순매수 (ka10060) — 옛날→최신 순 */
-async function investorDailySeries(
+/** 일별 외인/기관 순매수 (ka10060) — 옛날→최신 순. 값은 백만원 (복기 노트도 쓴다) */
+export async function investorDailySeries(
   client: KiwoomClient,
   code: string,
 ): Promise<{ date: string; foreign: number; inst: number }[]> {
