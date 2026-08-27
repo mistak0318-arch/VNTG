@@ -296,7 +296,12 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
           let nxtRate: number | null = null;
           if (k?.price != null) {
             const orig = toNum(mapped.cur_prc);
-            if (orig !== null && Math.abs(orig) !== Math.abs(k.price)) {
+            /*
+             * ⚠️ 「KRX 와 다를 때만」 병기했더니 깜빡였다 (2026-08-27) — NXT 체결가가
+             * KRX 종가와 같아지는 순간 괄호가 사라지고 한 틱 벌어지면 다시 나타나서
+             * 「나왔다 안 나왔다」가 됐다. 항상 내리고, 보여줄 시간대는 화면이 정한다.
+             */
+            if (orig !== null) {
               nxtPrice = Math.abs(orig);
               nxtRate = toNum(mapped.flu_rt);
             }
