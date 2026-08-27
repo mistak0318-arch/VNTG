@@ -86,6 +86,18 @@ export function MajorChannelPanel() {
     return () => clearInterval(t);
   }, [loadRooms]);
 
+  /* Esc 로 방 목록 — 받은 방과 같은 규칙 */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      if (e.key === "Escape") setOpen(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   /* 방 열기 — 「여기까지 읽음」 선에서 시작. 다 읽었거나 처음 여는 방은 최신부터 */
   async function openRoom(id: string) {
     setOpen(id);
@@ -145,7 +157,8 @@ export function MajorChannelPanel() {
     return (
       <div className="tgr-room" style={font.style}>
         <div className="tgr-room-head">
-          <button className="filter-btn" onClick={() => setOpen(null)}>
+          {/* 받은 방과 같은 자리·같은 크기 (2026-08-27) */}
+          <button className="tgr-back" onClick={() => setOpen(null)} title="방 목록으로 (Esc)">
             ‹ 방 목록
           </button>
           <b>{label}</b>

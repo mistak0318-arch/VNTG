@@ -4917,6 +4917,24 @@ tr.drag-src td { opacity: 0.45; }
 .tgr-room-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
 .tgr-room-head b { font-size: 0.86rem; }
 .tgr-room-head .filter-btn { padding: 2px 8px; font-size: 0.72rem; }
+/*
+ * 「‹ 방 목록」 — 이 화면에서 제일 자주 누르는 버튼 (2026-08-27).
+ * 헤더를 컴팩트하게 만들면서 같이 작아져 조준하기 어려웠다. 이것만 크게 두고
+ * 파란 테두리로 눈에 띄게 — 나가는 문은 늘 같은 자리에 크게 있어야 한다.
+ */
+.tgr-back {
+  flex: none;
+  background: var(--panel-2);
+  border: 1px solid var(--blue);
+  border-radius: 8px;
+  color: var(--blue);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+.tgr-back:hover { background: var(--blue); color: #fff; }
 .tgr-head-note { font-size: 0.66rem; }
 .tgr-font-ctl { display: inline-flex; gap: 2px; }
 .tgr-search-row .search-input { padding: 4px 8px; font-size: 0.76rem; }
@@ -4941,7 +4959,20 @@ tr.drag-src td { opacity: 0.45; }
   cursor: pointer;
   opacity: 0.92;
 }
-.tgr-fab:hover { border-color: var(--blue); opacity: 1; }
+.tgr-fab:hover { border-color: var(--blue); opacity: 1; background: var(--panel-2); }
+/* PC 는 화면이 넓어 오른쪽 아래가 멀다 — 조금 키우고 진하게 해서 눈에 걸리게 */
+@media (min-width: 900px) {
+  .tgr-fab {
+    right: 22px;
+    bottom: 24px;
+    padding: 11px 18px;
+    font-size: 0.86rem;
+    font-weight: 600;
+    border-color: var(--blue);
+    color: var(--blue);
+    opacity: 1;
+  }
+}
 /* 대화는 이 칸 **안에서** 스크롤 (2026-08-27) — 「방 목록」 버튼·검색이 늘 보인다.
    페이지째 스크롤이면 긴 방에서 돌아가는 버튼까지 한참을 올려야 했다. */
 .tgr-msgs {

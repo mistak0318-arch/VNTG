@@ -164,6 +164,18 @@ export function TelegramRoomsPanel() {
     return () => clearInterval(t);
   }, [loadRooms]);
 
+  /* Esc 로 방 목록 — PC 에서 제일 빠른 길. 입력칸에 있을 때는 그 칸이 먼저 쓴다 */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      if (e.key === "Escape") setOpen(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   /* 방 열기 — 메시지 받고, 읽음 처리(뷰어 + 가능하면 폰 텔레그램까지).
      시작 위치는 「여기까지 읽음」 선 — 다 읽은 방이거나 처음 여는 방은 맨 아래(최신)다. */
   async function openRoom(ch: string) {
@@ -224,7 +236,8 @@ export function TelegramRoomsPanel() {
       <div className="tgr-room" style={font.style}>
         {/* 대화는 아래 칸이 **안에서** 스크롤된다 — 이 머리줄은 늘 보인다 */}
         <div className="tgr-room-head">
-          <button className="filter-btn" onClick={() => setOpen(null)}>
+          {/* 제일 자주 누르는 버튼 — 헤더 컴팩트 규칙에서 빼고 크게 (2026-08-27) */}
+          <button className="tgr-back" onClick={() => setOpen(null)} title="방 목록으로 (Esc)">
             ‹ 방 목록
           </button>
           <b>{label}</b>
