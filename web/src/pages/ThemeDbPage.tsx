@@ -262,11 +262,19 @@ function ThemeMap({
         지표는 한 번에 하나밖에 못 봤다 — 「5일 누적으로 정렬했는데 그 값이 안 보인다」.
         표는 여러 자를 나란히 놓고 견줄 수 있고, 칸을 눌러 정렬한다(시세분석과 같은 규칙).
       */}
-      <div className="table-wrap">
+      {/* ⚠️ 감싸개는 `data-table-wrap` 이다 — 시세분석과 같은 뼈대라야 폭·스크롤이 맞는다 */}
+      <div className="data-table-wrap">
         <table className="data-table tdb-table">
           <thead>
             <tr>
-              <SortableTh columnKey="name" label="테마" accessor={(t) => t.name} sort={sortT} />
+              {/* `.data-table` 은 기본이 오른쪽 정렬이라 이름 칸만 왼쪽으로 되돌린다 */}
+              <SortableTh
+                columnKey="name"
+                label="테마"
+                accessor={(t) => t.name}
+                sort={sortT}
+                className="tdb-th-name"
+              />
               <SortableTh
                 columnKey="rate"
                 label="오늘"

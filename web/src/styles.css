@@ -9781,3 +9781,18 @@ button.tpb-row:hover { background: var(--panel-2); }
 @media (max-width: 720px) {
   .tdb-stocks { grid-template-columns: 1fr; }
 }
+
+/*
+ * 테마 표 — 시세분석과 같은 뼈대(`data-table`)를 쓴다.
+ * ⚠️ 그 표는 **기본이 오른쪽 정렬**이라(숫자 표라서), 이름 칸만 왼쪽으로 되돌려야 한다.
+ * 안 그러면 테마명이 오른쪽에 붙어 어디서 시작하는지 눈이 못 찾는다.
+ */
+.tdb-table .tdb-th-name,
+.tdb-table .tdb-td-name {
+  text-align: left;
+  /* 이름이 길어도 표가 안 밀리게 — 넘치면 말줄임 */
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tdb-table .tdb-td-tops { justify-content: flex-end; }
