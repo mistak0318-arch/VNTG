@@ -56,19 +56,39 @@ export function TgFontButtons({ font }: { font: ReturnType<typeof useTgFont> }) 
  * 방을 열면 읽음 처리되고, 미니PC(MTProto 세션)에선 **폰 텔레그램도 읽음**이 된다.
  */
 
+/**
+ * 평문 속 URL 을 링크로 (2026-08-27 — "URL 주소에 하이퍼링크가 안 먹네").
+ *
+ * 텔레그램은 주소를 그냥 적어도 앱이 눌리게 만들어 준다. 우리 화면은 텍스트로만
+ * 넣고 있어서 눈에는 보이는데 못 눌렀다 — 채널 글은 링크가 본론일 때가 많다.
+ *
+ * ⚠️ **이미 이스케이프된 문자열**에 적용한다(태그가 살아 있는 채로 정규식을 돌리면
+ * 속성 안의 주소까지 건드린다). http/https 만, 끝에 붙은 문장부호는 링크에서 뺀다.
+ */
+export function linkifyEscaped(escaped: string): string {
+  return escaped.replace(/https?:\/\/[^\s<>"']+/g, (url) => {
+    const m = url.match(/[),.;!?]+$/); // 「(주소)」·「주소.」의 꼬리는 링크가 아니다
+    const tail = m ? m[0] : "";
+    const href = tail ? url.slice(0, -tail.length) : url;
+    if (!href) return url;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>${tail}`;
+  });
+}
+
 /** 봇 메시지의 HTML — 우리가 만든 것이지만 외부 텍스트가 섞이므로 화이트리스트로 거른다 */
 export function sanitizeTgHtml(html: string): string {
   const ALLOW = new Set(["B", "STRONG", "I", "EM", "U", "S", "CODE", "PRE", "BR", "A"]);
   const doc = new DOMParser().parseFromString(html, "text/html");
-  const walk = (node: Node): string => {
+  const walk = (node: Node, inLink = false): string => {
     if (node.nodeType === Node.TEXT_NODE) {
       const d = document.createElement("div");
       d.textContent = node.textContent ?? "";
-      return d.innerHTML; // 이스케이프된 텍스트
+      // 평문으로 적힌 주소도 링크로 — 이미 <a> 안이면 그대로 둔다(링크 속 링크 방지)
+      return inLink ? d.innerHTML : linkifyEscaped(d.innerHTML);
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return "";
     const el = node as Element;
-    const inner = [...el.childNodes].map(walk).join("");
+    const inner = [...el.childNodes].map((c) => walk(c, inLink || el.tagName === "A")).join("");
     if (!ALLOW.has(el.tagName)) return inner;
     if (el.tagName === "BR") return "<br/>";
     if (el.tagName === "A") {
@@ -79,7 +99,8 @@ export function sanitizeTgHtml(html: string): string {
     const tag = el.tagName.toLowerCase();
     return `<${tag}>${inner}</${tag}>`;
   };
-  return [...doc.body.childNodes].map(walk).join("");
+  // map 이 넘기는 index 가 inLink 자리에 들어가지 않게 한 겹 감싼다
+  return [...doc.body.childNodes].map((n) => walk(n)).join("");
 }
 
 function hm(iso: string): string {

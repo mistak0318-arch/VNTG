@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type ChannelEntry, type MajorMsg, type MajorRoom } from "../api";
 import { useCardOrder } from "../useCardOrder";
-import { TgFontButtons, useTgFont } from "./TelegramRoomsPanel";
+import { TgFontButtons, linkifyEscaped, useTgFont } from "./TelegramRoomsPanel";
+
+/** 평문을 HTML 에 넣기 전에 — 태그로 해석될 글자를 막는다 */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 /**
  * 주요 채널 (2026-08-27) — **골라 둔 채널의 글은 빠짐없이, 원문 그대로.**
@@ -187,8 +192,15 @@ export function MajorChannelPanel() {
                 {showDay && <div className="tgr-day">{day}</div>}
                 <div className="tgr-bubble-row">
                   <div className="tgr-bubble">
-                    {/* 원문 그대로 — 채널 글은 평문이라 텍스트 노드로 넣는다 (HTML 해석 없음) */}
-                    <div className="tgr-text tgr-plain">{m.text}</div>
+                    {/*
+                      원문 그대로. 평문이라 **이스케이프한 뒤 주소만 링크로** 바꾼다
+                      (2026-08-27) — 채널 글은 링크가 본론일 때가 많은데 텍스트로만
+                      넣어서 눈에는 보이고 못 눌렀다. HTML 해석은 여전히 없다.
+                    */}
+                    <div
+                      className="tgr-text tgr-plain"
+                      dangerouslySetInnerHTML={{ __html: linkifyEscaped(escapeHtml(m.text)) }}
+                    />
                     <span className="tgr-time">
                       {hm(m.at)}
                       {m.link && (

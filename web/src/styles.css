@@ -6036,7 +6036,22 @@ button.nav-group-toggle {
 .jn-trade-note { flex-basis: 100%; color: var(--blue); font-weight: 600; }
 .jn-trade-passed { flex-basis: 100%; font-size: 0.7333rem; color: var(--muted); }
 
-.jn-add { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+/*
+ * 종목 검색 칸 — **해외 관심종목 담기와 같은 크기** (2026-08-27).
+ * 모의투자에서 빌려 온 표용 좁은 칸(110px·0.8rem)을 그대로 쓰고 있어서
+ * 검색창인데 서너 글자만 보였다. 매매·예측 양쪽 다 넓게.
+ */
+.jn-add { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.jn-add .pt-search { flex: 1; min-width: 14rem; }
+.jn-add .pt-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  border-radius: 8px;
+}
+.jn-add .filter-btn { padding: 8px 14px; font-size: 0.85rem; }
+.jn-add .pt-results { right: 0; min-width: 0; max-height: 20rem; padding: 6px; }
+.jn-add .pt-results button { font-size: 0.9rem; padding: 8px 10px; }
 .jn-trade-kind { cursor: pointer; border: none; }
 
 /* 메뉴 구성 — 끌어다 놓기 */
@@ -6276,7 +6291,15 @@ button.nav-group-toggle {
 .rp-kv-item { display: flex; align-items: baseline; gap: 6px; }
 .rp-kv-label { font-size: 0.8rem; color: var(--muted); }
 .rp-kv-val { font-size: 1.3333rem; font-variant-numeric: tabular-nums; }
+/*
+ * ⚠️ `min-width: 0` 이 없으면 그리드 칸이 **내용 크기만큼 벌어진다**(기본 auto).
+ * 차트가 한 번 넓게 그려지면(1열이던 순간의 폭) 칸이 그 폭을 물고 늘어져
+ * 오른쪽으로 삐져나온다 — 「차트가 칸에 안 맞고 오른쪽으로 쏠린다」의 정체.
+ * 칸을 먼저 못 박고, 차트는 ResizeObserver 가 칸에 맞춘다.
+ */
 .rp-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.rp-charts > * { min-width: 0; }
+.rp-chart { min-width: 0; overflow: hidden; }
 .rp-chart-title { font-size: 0.8rem; color: var(--muted); margin-bottom: 2px; }
 .rp-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
 .rp-flow-h { font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; }

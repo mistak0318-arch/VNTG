@@ -525,6 +525,44 @@
 :root[data-theme="excel"] .sp-bar.sell,
 :root[data-theme="excel"] .bf-bar.sell,
 :root[data-theme="excel"] .bar-down { background: #a6a6a6 !important; }
+
+/* 브리핑 「오늘 수급」 밑줄 막대 · 등락 현황 · 거래대금 — #f04452/#3182f6 이 박혀 있었다 */
+:root[data-theme="excel"] .bf-supply-bar > i.up,
+:root[data-theme="excel"] .bf-ud-bar i.u { background: #4a4a4a !important; }
+:root[data-theme="excel"] .bf-supply-bar > i.down,
+:root[data-theme="excel"] .bf-ud-bar i.d { background: #a6a6a6 !important; }
+
+/* ===== 배지·태그·칩 일괄 무채색 (2026-08-27) =====
+ *
+ * 색이 박힌 자리를 하나씩 찾아 끄는 방식은 **끝이 없다** — 화면을 새로 만들 때마다
+ * 또 생긴다. 이 모드에서 색을 쓰는 물건은 거의 **작은 알약(배지·태그·칩)**이므로,
+ * 그 부류를 통째로 회색 테두리 + 회색 글자로 눌러 둔다. 뜻은 글자가 이미 말한다.
+ * (등락 숫자·표 배경은 위에서 따로 처리했고, 여기서 덮지 않는다)
+ */
+:root[data-theme="excel"] .news-tag,
+:root[data-theme="excel"] .chan-tag,
+:root[data-theme="excel"] .cal-badge,
+:root[data-theme="excel"] .vi-badge,
+:root[data-theme="excel"] .vi-tag,
+:root[data-theme="excel"] .tl-badge,
+:root[data-theme="excel"] .tl-kind,
+:root[data-theme="excel"] .ev-tag,
+:root[data-theme="excel"] .bf-tile-g,
+:root[data-theme="excel"] .uw-etf-badge,
+:root[data-theme="excel"] .dart-amend,
+:root[data-theme="excel"] .jn-trade-kind,
+:root[data-theme="excel"] .scr-rank-pre {
+  background: #f2f2f2 !important;
+  border-color: #c8c8c8 !important;
+  color: #3a3a3a !important;
+}
+
+/* VI 발동 — 상승/하락 구분은 명암으로. 깜빡임(펄스)도 장부에는 안 맞는다 */
+:root[data-theme="excel"] .ph-vi,
+:root[data-theme="excel"] [class*="vi-"][class*="up"],
+:root[data-theme="excel"] [class*="vi-"][class*="down"] {
+  animation: none !important;
+}
 :root[data-theme="excel"] .conc-fill.heavy { background: #1f1f1f !important; }
 
 /* 알림 배지·점 — 빨간 알약은 장부 위에서 제일 먼저 튄다 */
