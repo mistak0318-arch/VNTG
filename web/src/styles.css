@@ -5067,6 +5067,13 @@ tr.drag-src td { opacity: 0.45; }
   .cal-week { grid-template-columns: repeat(7, minmax(3.4rem, 1fr)); gap: 2px; font-size: 0.9em; }
 }
 
+/* 일정 미니팝업 — 작은 시트. 메모가 주인공 */
+.cal-pop { max-width: 26rem; }
+.cal-pop-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.cal-pop-when { font-size: 0.86rem; margin-bottom: 8px; }
+.cal-pop-memo { max-height: 40vh; overflow-y: auto; font-size: 0.84rem; color: var(--text); }
+.cal-chip { cursor: pointer; }
+
 /* ── 캘린더 전면 개편 (2026-08-27) — 일정 카드·할 일·메모 ── */
 .cal-ev {
   border: 1px solid var(--border);

@@ -62,6 +62,8 @@ export function CalendarPage() {
   const [selected, setSelected] = useState<string>(() => ymd(new Date()));
   /** 할 일 탭용 — 월과 무관한 원본 전체 (반복 전개 없음) */
   const [allEvents, setAllEvents] = useState<CalendarEvent[] | null>(null);
+  /** 일정 미니팝업 (2026-08-27) — 어느 목록에서든 누르면 메모 전체·시간·반복이 보인다 */
+  const [detail, setDetail] = useState<CalendarEvent | null>(null);
 
   // 외부 가져오기
   const [subs, setSubs] = useState<{ label: string; masked: string; url: string; count: number }[]>([]);
@@ -422,7 +424,11 @@ export function CalendarPage() {
                       <span
                         className={`cal-chip ${e.kind}${e.todo && e.done ? " done" : ""}`}
                         key={e.id}
-                        title={`${e.time ? `${e.time} ` : ""}${e.title}${e.memo ? ` — ${e.memo}` : ""}`}
+                        title={`${e.time ? `${e.time} ` : ""}${e.title} — 눌러서 자세히`}
+                        onClick={(ev) => {
+                          ev.stopPropagation(); // 날짜 선택까지 겹치지 않게
+                          setDetail(e);
+                        }}
                       >
                         {e.todo ? (e.done ? "✅" : "☐") : e.repeat ? "↻" : ""}
                         {e.title}
@@ -460,7 +466,11 @@ export function CalendarPage() {
                         <span
                           className={`cal-chip ${e.kind}${e.todo && e.done ? " done" : ""}`}
                           key={e.id}
-                          title={`${e.time ? `${e.time} ` : ""}${e.title}${e.memo ? ` — ${e.memo}` : ""}`}
+                          title={`${e.time ? `${e.time} ` : ""}${e.title} — 눌러서 자세히`}
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            setDetail(e);
+                          }}
                         >
                           {e.time && <i className="cal-chip-time">{e.time}</i>}
                           {e.todo ? (e.done ? "✅" : "☐") : e.repeat ? "↻" : ""}
@@ -515,7 +525,15 @@ export function CalendarPage() {
                           <span className="cal-day-h">{hh}</span>
                           <span className="cal-day-evs">
                             {evs.map((e) => (
-                              <span className={`cal-chip ${e.kind}`} key={e.id} title={e.memo ?? ""}>
+                              <span
+                                className={`cal-chip ${e.kind}`}
+                                key={e.id}
+                                title={`${e.title} — 눌러서 자세히`}
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  setDetail(e);
+                                }}
+                              >
                                 <i className="cal-chip-time">{e.time}</i>
                                 {e.title}
                               </span>
@@ -558,10 +576,10 @@ export function CalendarPage() {
                         ↻ {e.repeat === "weekly" ? "매주" : e.repeat === "monthly" ? "매월" : "매년"}
                       </span>
                     )}
-                    <span className="cal-item-title">
+                    <button className="cal-item-title link-btn" onClick={() => setDetail(e)} title="자세히 보기">
                       {e.time && <b>{e.time} </b>}
                       {e.title}
-                    </span>
+                    </button>
                     {/* 가져온 일정(source 있음)도 고칠 수 있다 — 단 다음 동기화 때 원본으로 돌아간다 */}
                     <button className="row-del-btn" onClick={() => startEdit(e)} title="수정">
                       ✎
@@ -682,14 +700,7 @@ export function CalendarPage() {
           ) : (
             <div className="cal-up">
               {upcoming.map((e) => (
-                <button
-                  className="cal-up-row"
-                  key={e.id}
-                  onClick={() => {
-                    jumpTo(e.date);
-                    setTab("cal");
-                  }}
-                >
+                <button className="cal-up-row" key={e.id} onClick={() => setDetail(e)} title="자세히 보기">
                   <em className={`cal-dday${dday(e.date) === "오늘" ? " now" : dday(e.date) === "내일" ? " soon" : ""}`}>
                     {dday(e.date)}
                   </em>
@@ -732,7 +743,9 @@ export function CalendarPage() {
                             >
                               {e.date < ymd(new Date()) ? "지남" : dday(e.date)}
                             </em>
-                            <span className="cal-item-title">{e.title}</span>
+                            <button className="cal-item-title link-btn" onClick={() => setDetail(e)} title="자세히 보기">
+                              {e.title}
+                            </button>
                             <button className="row-del-btn" onClick={() => void removeEvent(e)} title="삭제">
                               ✕
                             </button>
@@ -847,6 +860,84 @@ export function CalendarPage() {
         </div>
       </details>
         </>
+      )}
+
+      {/* ── 일정 미니팝업 — 메모를 길게 적어도 여기서 전부 읽는다 (2026-08-27) ── */}
+      {detail && (
+        <div className="overlay" onClick={() => setDetail(null)}>
+          <div className="sheet cal-pop" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-header">
+              <h2>
+                {detail.todo ? (detail.done ? "✅ " : "☐ ") : ""}
+                {detail.title}
+              </h2>
+              <button className="close-btn" onClick={() => setDetail(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="cal-pop-meta">
+              <span className={`cal-badge ${detail.kind}`}>{KIND_LABEL[detail.kind]}</span>
+              {detail.repeat && (
+                <span className="cal-badge market">
+                  ↻ {detail.repeat === "weekly" ? "매주" : detail.repeat === "monthly" ? "매월" : "매년"}
+                  {detail.anchor && ` (첫 회 ${detail.anchor})`}
+                </span>
+              )}
+              {detail.todo && <span className="cal-badge personal">{detail.done ? "완료" : "할 일"}</span>}
+            </div>
+            <div className="cal-pop-when">
+              📅 {detail.date} ({WEEKDAYS[new Date(`${detail.date}T00:00`).getDay()]})
+              {detail.time ? ` · 🕐 ${detail.time}` : " · 종일"}
+            </div>
+            {detail.memo ? (
+              <div className="cal-ev-memo cal-pop-memo">{detail.memo}</div>
+            ) : (
+              <div className="pt-n">메모가 없습니다.</div>
+            )}
+            <div className="filter-row" style={{ marginTop: 10 }}>
+              <button
+                className="filter-btn"
+                onClick={() => {
+                  jumpTo(detail.date);
+                  setTab("cal");
+                  setDetail(null);
+                }}
+              >
+                📅 달력에서 보기
+              </button>
+              <button
+                className="filter-btn"
+                onClick={() => {
+                  startEdit(detail);
+                  setTab("cal");
+                  setDetail(null);
+                }}
+              >
+                ✎ 수정
+              </button>
+              {detail.todo && (
+                <button
+                  className="filter-btn"
+                  onClick={() => {
+                    void toggleDone(detail);
+                    setDetail(null);
+                  }}
+                >
+                  {detail.done ? "다시 할 일로" : "✅ 완료"}
+                </button>
+              )}
+              <button
+                className="filter-btn danger"
+                onClick={() => {
+                  void removeEvent(detail);
+                  setDetail(null);
+                }}
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
