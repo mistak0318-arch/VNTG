@@ -276,7 +276,14 @@ export function UsBoardPanel() {
       {/* ---------------- 관심종목 ---------------- */}
       <UsBoardWatch onOpen={(symbol, label) => setChart({ kind: "usStock", symbol, label })} />
 
-      {chart && <YahooChartSheet target={chart} onClose={() => setChart(null)} />}
+      {chart && (
+        <YahooChartSheet
+          target={chart}
+          onClose={() => setChart(null)}
+          /* ETF 구성종목을 누르면 **그 자리에서** 그 종목 차트로 갈아탄다 */
+          onSelectSymbol={(symbol, label) => setChart({ kind: "usStock", symbol, label })}
+        />
+      )}
     </div>
   );
 }

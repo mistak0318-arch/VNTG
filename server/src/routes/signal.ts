@@ -20,6 +20,7 @@ import {
   updateSuperNote,
 } from "../superSignal.js";
 import { gradeSignalHistory, signalDays } from "../signalHistory.js";
+import { themeSeriesFor } from "../themeSeries.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
   DEFAULT_CONFIG,
@@ -244,7 +245,22 @@ export function createSignalRouter(client: KiwoomClient): Router {
 
   /* ---------------- 슈퍼신호등 대시보드 (2026-08-26) ---------------- */
 
-  /** 종목 하나의 흐름 — 주가·지수·업종·수급·일별 점수. 클릭했을 때만 부른다 */
+  /**
+   * 테마 지수 — **비교선 하나를 위해 따로 부른다** (2026-08-27).
+   *
+   * 상세(`/super/detail`) 응답에 안 싣는다. 테마엔 지수가 없어서 구성종목 일봉으로
+   * 만들어야 하는데(최대 8콜), 그걸 기다리느라 종목 창이 늦게 열리면 안 된다.
+   * 선 하나가 뒤늦게 그려지는 편이 낫다. 서버 캐시 6시간이라 대개는 즉답이다.
+   */
+  router.get("/super/theme/:code", async (req, res, next) => {
+    try {
+      res.json({ theme: await themeSeriesFor(client, req.params.code) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 종목 하나의 흐름 — 주가·지수·수급·일별 점수. 클릭했을 때만 부른다 */
   router.get("/super/detail/:code", async (req, res, next) => {
     try {
       const d = await superDetail(client, req.params.code);

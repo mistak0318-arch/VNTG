@@ -11,6 +11,7 @@ import { hantooReady } from "../hantooClient.js";
 import { stockProfile } from "../stockProfile.js";
 import { tradeSizeMix } from "../tradeSizeMix.js";
 import { CHART_RANGES, yahooChart } from "../yahooChart.js";
+import { usEtfHoldings } from "../usEtfHoldings.js";
 import { futuresCandles } from "../kospiFutures.js";
 import { usCandles, usDetail } from "../usDetail.js";
 import { orderBook } from "../orderBook.js";
@@ -740,6 +741,23 @@ export function createMarketRouter(client: KiwoomClient): Router {
         ? String(req.query.range)
         : "6mo";
       res.json(await yahooChart(symbol, range));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 미국 ETF 구성종목 — 섹터 MAP 타일을 눌렀을 때 「무엇이 들었나」 (2026-08-27).
+   * 「소프트웨어 +6%」만 봐서는 무엇이 밀어 올렸는지를 모른다. 하루 캐시다.
+   */
+  router.get("/us-etf-holdings", async (req, res, next) => {
+    try {
+      const symbol = String(req.query.symbol ?? "").trim();
+      if (!symbol) {
+        res.status(400).json({ error: "symbol 이 필요합니다" });
+        return;
+      }
+      res.json(await usEtfHoldings(symbol));
     } catch (err) {
       next(err);
     }

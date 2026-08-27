@@ -575,8 +575,15 @@ export const api = {
       grade: SuperGradeRow[];
       stats: SuperStats;
     }>("/api/signal/super"),
-  /** 대시보드 상세 — 주가·지수·업종·수급 흐름. 클릭했을 때만 */
+  /** 대시보드 상세 — 주가·지수·수급 흐름. 클릭했을 때만 */
   signalSuperDetail: (code: string) => getJson<SuperDetail>(`/api/signal/super/detail/${code}`),
+  /**
+   * 테마 지수 — 상세와 **따로** 받는다.
+   * 테마엔 지수가 없어 구성종목 일봉으로 만드는 값이라(최대 8콜) 시트 열림을
+   * 잡아두면 안 된다. 서버 캐시 6시간.
+   */
+  signalSuperTheme: (code: string) =>
+    getJson<{ theme: ThemeSeries | null }>(`/api/signal/super/theme/${code}`),
   signalSuperExit: (code: string, note: string) =>
     postJson<{ ok: boolean }>(`/api/signal/super/exit/${code}`, { note }),
   signalSuperNote: (code: string, note: string) =>
@@ -610,6 +617,9 @@ export const api = {
     getJson<YahooChart>(
       `/api/market/yahoo-chart?symbol=${encodeURIComponent(symbol)}&range=${range}`,
     ),
+  /** 미국 ETF 구성종목 — 섹터 MAP 타일을 눌렀을 때. 하루 캐시라 여닫아도 조회가 안 는다 */
+  usEtfHoldings: (symbol: string) =>
+    getJson<UsEtfHoldings>(`/api/market/us-etf-holdings?symbol=${encodeURIComponent(symbol)}`),
   usDetail: (symbol: string) => getJson<UsDetail>(`/api/market/us-detail/${encodeURIComponent(symbol)}`),
   usChart: (symbol: string, period: "D" | "W" | "M") =>
     getJson<{
@@ -1583,18 +1593,27 @@ export interface SuperSeriesPoint {
   close: number;
 }
 
+/**
+ * 테마 지수 — 구성종목 일봉의 **동일가중** 평균 (첫날 = 100).
+ *
+ * 테마엔 지수라는 물건이 없어서 서버가 만든다. 시가총액 가중이 아닌 이유는,
+ * 큰 종목 하나가 테마 전체를 대변해 버리면 「이 묶음이 같이 움직이나」에 답을
+ * 못 하기 때문이다. `used < total` 이면 시가총액 상위 몇 개만 쓴 것이다.
+ */
+export interface ThemeSeries {
+  kind: "custom" | "kiwoom";
+  name: string;
+  used: number;
+  total: number;
+  series: SuperSeriesPoint[];
+}
+
 export interface SuperDetail {
   entry: Omit<SuperEntry, "price" | "changeRate" | "sinceAdded">;
   /** 지금 시세 — 시트 머리에 현재가(등락률)를 단다 */
   now: { price: number | null; changeRate: number | null } | null;
   stock: SuperSeriesPoint[];
   index: { code: string; name: string; series: SuperSeriesPoint[] };
-  sector: {
-    code: string;
-    name: string;
-    changeRate: number;
-    series: SuperSeriesPoint[];
-  } | null;
   flows: { date: string; foreign: number; inst: number }[];
   signalNow: { level: string; score: number } | null;
   marketNow: { level: string; score: number; summary: string } | null;
@@ -3177,6 +3196,17 @@ export interface TrackJob {
   error?: string;
 }
 
+
+/**
+ * 미국 ETF 구성종목 (야후 topHoldings).
+ * **상위 10종목 안팎이다** — 전량이 아니므로 화면이 그렇게 적어야 한다.
+ */
+export interface UsEtfHoldings {
+  symbol: string;
+  holdings: { symbol: string; name: string; weight: number | null }[];
+  sectors: { name: string; weight: number }[];
+  error: string | null;
+}
 
 /** 야후 심볼 봉 데이터 — 전광판의 지수·원자재를 눌렀을 때 */
 export interface YahooChart {

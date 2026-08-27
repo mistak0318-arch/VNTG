@@ -1,15 +1,19 @@
 import { useEffect, useState } from "react";
-import { api, type SuperDetail } from "../api";
+import { api, type SuperDetail, type ThemeSeries } from "../api";
 import { MiniLine } from "./MiniLine";
 
 /**
  * 슈퍼신호등 종목 상세 (2026-08-26) — 대시보드에서 행을 눌렀을 때.
  *
  * 묻는 것 네 가지를 위에서 아래로 늘어놓는다:
- *   ① 편입 후 주가가 시장·업종 대비 어떻게 갔나 (상대 수익률, 편입일 = 0%)
+ *   ① 편입 후 주가가 시장·**테마** 대비 어떻게 갔나 (상대 수익률, 편입일 = 0%)
  *   ② 신호등 점수는 어떻게 흘러갔나 (일별 기록 — 편입 이후만 존재한다)
  *   ③ 수급은 누가 사고 있었나 (외인·기관 누적 순매수)
  *   ④ 이탈 기록과 내 메모
+ *
+ * ①의 세 번째 선은 원래 **업종**이었는데 테마로 바꿨다 (2026-08-27).
+ * 「화학」 한 칸에 화장품·이차전지·정유가 같이 들어가는 분류라, 업종 대비
+ * 어떻다는 말이 이 종목에 대해 아무것도 알려 주지 않았다.
  */
 
 const LEVEL_KO: Record<string, string> = { green: "🟢 초록", yellow: "🟡 노랑", red: "🔴 빨강" };
@@ -17,6 +21,24 @@ const LEVEL_KO: Record<string, string> = { green: "🟢 초록", yellow: "🟡 �
 function ymdShort(d: string): string {
   // 20260826 → 8/26
   return d.length === 8 ? `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}` : d;
+}
+
+/** 범례에 쓸 이름 — 어느 쪽 테마인지가 이름만큼 중요하다 */
+function themeLabel(t: ThemeSeries): string {
+  return `${t.name} (${t.kind === "custom" ? "내 테마" : "키움"})`;
+}
+
+/** 테마 지수의 전일 대비 — 마지막 두 점에서 낸다 */
+function themeRate(t: ThemeSeries): number | null {
+  const n = t.series.length;
+  if (n < 2) return null;
+  const prev = t.series[n - 2].close;
+  return prev > 0 ? ((t.series[n - 1].close - prev) / prev) * 100 : null;
+}
+
+function themeHint(t: ThemeSeries): string {
+  const how = t.used < t.total ? `시가총액 상위 ${t.used}종목` : `${t.used}종목`;
+  return `${how}의 동일가중 평균입니다 (테마엔 지수가 없어 구성종목으로 만듭니다)`;
 }
 
 export function SuperDetailSheet({
@@ -35,6 +57,13 @@ export function SuperDetailSheet({
   onChanged?: () => void;
 }) {
   const [data, setData] = useState<SuperDetail | null>(null);
+  /**
+   * 테마 지수 — 비교선 세 번째.
+   *
+   * **따로 받는다.** 테마엔 지수가 없어 구성종목 일봉으로 만드는 값이라(최대 8콜)
+   * 상세 응답에 실으면 시트가 그만큼 늦게 열린다. 선 하나가 뒤늦게 그려지는 편이 낫다.
+   */
+  const [theme, setTheme] = useState<ThemeSeries | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   /** 펼쳐 놓은 메모(날짜) — 그날 상황 브리핑이 아래로 열린다 */
@@ -63,6 +92,12 @@ export function SuperDetailSheet({
         setNote(last && last.date === today ? last.text : "");
       })
       .catch((e) => alive && setError(e instanceof Error ? e.message : "불러오기 실패"));
+    /* 테마 지수는 뒤따라온다 — 못 받아도 나머지 화면은 그대로다 */
+    setTheme(null);
+    api
+      .signalSuperTheme(code)
+      .then((r) => alive && setTheme(r.theme))
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
@@ -95,8 +130,14 @@ export function SuperDetailSheet({
       series: [
         { label: name, color: "var(--blue)", values: toRel(data.stock), width: 2.2 },
         { label: data.index.name, color: "var(--muted)", values: toRel(data.index.series), dash: true },
-        ...(data.sector
-          ? [{ label: data.sector.name, color: "#c084fc", values: toRel(data.sector.series), dash: true }]
+        /*
+         * 세 번째 선은 **테마**다 (2026-08-27, 업종에서 교체).
+         * 업종이었을 때는 「업종은 올랐는데 이 종목은」이 아무 뜻이 없었다 —
+         * 「화학」 한 칸에 화장품·이차전지·정유가 같이 들어 있어서다.
+         * 늦게 도착하므로(따로 받는다) 없으면 선 없이 그린다.
+         */
+        ...(theme && theme.series.length > 1
+          ? [{ label: themeLabel(theme), color: "#c084fc", values: toRel(theme.series), dash: true }]
           : []),
       ],
     };
@@ -250,12 +291,13 @@ export function SuperDetailSheet({
                   {data.marketNow.score}점
                 </span>
               )}
-              {data.sector && (
-                <span>
-                  업종 {data.sector.name}{" "}
-                  <b className={data.sector.changeRate >= 0 ? "positive" : "negative"}>
-                    {data.sector.changeRate > 0 ? "+" : ""}
-                    {data.sector.changeRate.toFixed(2)}%
+              {/* 테마 — 내 테마가 먼저다. 등락률은 지수의 마지막 두 점에서 낸다 */}
+              {theme && themeRate(theme) !== null && (
+                <span title={themeHint(theme)}>
+                  {theme.kind === "custom" ? "내 테마" : "키움 테마"} {theme.name}{" "}
+                  <b className={themeRate(theme)! >= 0 ? "positive" : "negative"}>
+                    {themeRate(theme)! > 0 ? "+" : ""}
+                    {themeRate(theme)!.toFixed(2)}%
                   </b>
                 </span>
               )}
@@ -263,9 +305,13 @@ export function SuperDetailSheet({
 
             {rel && (
               <section className="sd-block">
-                <h3>편입 후 상대 수익률 — 시장·업종과 나란히</h3>
+                <h3>편입 후 상대 수익률 — 시장·테마와 나란히</h3>
                 <p className="pt-n sd-hint">
-                  편입일 종가를 0% 로 놓고 그린다. 종목 혼자 오르는지, 장이 밀어주는지가 갈린다.
+                  편입일 종가를 0% 로 놓고 그린다. 종목 혼자 오르는지, 장이 밀어주는지,{" "}
+                  <b>테마가 같이 가는지</b>가 갈린다.
+                  {theme
+                    ? ` 테마선은 「${themeLabel(theme)}」 — ${themeHint(theme)}.`
+                    : " 테마선은 잠시 뒤에 붙습니다."}
                 </p>
                 <MiniLine
                   series={rel.series}

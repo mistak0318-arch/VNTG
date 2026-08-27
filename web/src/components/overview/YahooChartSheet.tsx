@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { UTCTimestamp } from "lightweight-charts";
-import { api, fmtNum, type UsDetail, type UsKiwoomDetailData, type YahooChart } from "../../api";
+import {
+  api,
+  fmtNum,
+  type UsDetail,
+  type UsEtfHoldings,
+  type UsKiwoomDetailData,
+  type YahooChart,
+} from "../../api";
 import { CandleChart } from "../CandleChart";
 import { IntradayFlowChart } from "./IntradayFlowChart";
 
@@ -110,9 +117,15 @@ const PAD = { l: 8, r: 58, t: 12, b: 22 };
 export function YahooChartSheet({
   target,
   onClose,
+  onSelectSymbol,
 }: {
   target: ChartTarget;
   onClose: () => void;
+  /**
+   * ETF 구성종목을 눌렀을 때 그 종목으로 갈아타기 (2026-08-27).
+   * 안 넘기면 목록은 그대로 보이되 누를 수 없다 — 갈 곳이 없는 버튼은 안 만든다.
+   */
+  onSelectSymbol?: (symbol: string, label: string) => void;
 }) {
   const futures = target.kind === "futures";
   const usStock = target.kind === "usStock";
@@ -326,6 +339,16 @@ export function YahooChartSheet({
       bodyW,
       baseY: base === null ? null : y(base),
       last,
+      /*
+       * **진짜 전일 종가.** 상세 칩이 이걸 쓴다 (2026-08-27).
+       *
+       * ⚠️ 야후 meta 의 `chartPreviousClose` 를 「전일 종가」로 쓰면 안 된다 —
+       * 그건 **차트 구간 직전** 종가라 기간마다 값이 다르다(실측: S&P500 이
+       * 1d 7,675.7 / 6mo 6,878.88 / 1y 6,481.4). 그걸 기준으로 삼으니
+       * 「당일 고가 +0.5%」가 기간을 바꾸면 「+12%」가 됐다.
+       * 여기 dayBase 는 장중이면 meta(1d 한정), 일봉이면 **직전 봉 종가**다.
+       */
+      dayBase,
       /* 목록이 준 값이 있으면 그게 먼저다 — 두 화면이 갈라지지 않는 유일한 방법이다 */
       dayRate:
         target.hintRate !== undefined && target.hintRate !== null
@@ -481,6 +504,13 @@ export function YahooChartSheet({
               />
             ) : null}
 
+            {/*
+              ETF 구성종목 (2026-08-27 요청) — 섹터 MAP 타일을 눌렀을 때 「무엇이 들었나」.
+              「소프트웨어 +6%」만 봐서는 무엇이 밀어 올렸는지 모른다. 지수·원자재·금리는
+              구성종목이라는 게 없으므로 조용히 안 뜬다.
+            */}
+            <UsEtfHoldingsBlock symbol={target.symbol} onSelectSymbol={onSelectSymbol} />
+
             {detail && !detail.error && <UsFigures d={detail} />}
             {/*
               키움 세부 — 한투 상세(위)에 **얹는** 값이다. 업종·프리장·52주 날짜·10호가는
@@ -532,7 +562,9 @@ export function YahooChartSheet({
               그런데 **차트 응답의 meta 에 이미** 당일 고저·52주 고저·거래량이 들어 있어서,
               조회를 하나도 안 늘리고 채울 수 있다.
             */}
-            {!usStock && data?.meta && <YahooFigures m={data.meta} digits={digits} prevClose={data.prevClose} />}
+            {!usStock && data?.meta && (
+              <YahooFigures m={data.meta} digits={digits} prevClose={view.dayBase} />
+            )}
 
             <div className="table-note">
               {candles.length}개 봉 ({data?.interval}) · {view.firstT} ~ {view.lastT}
@@ -735,11 +767,103 @@ function UsCards({ items }: { items: UsItem[] }) {
 }
 
 /**
+ * ETF 구성종목 — **무엇이 이 ETF 를 밀어 올렸나** (2026-08-27 요청).
+ *
+ * 미국은 섹터가 ETF 로 거래되므로 섹터 MAP 의 타일이 곧 업종이다. 그런데 타일을
+ * 눌러도 차트뿐이라, 「소프트웨어 +6%」를 보고도 다음을 못 물었다.
+ *
+ * **상위 10종목 안팎이다.** 야후가 그만큼만 준다 — 「전체 구성」인 척하면 안 되므로
+ * 아래에 그렇게 적는다. ETF 가 아니면(지수·원자재·금리) 블록이 통째로 안 뜬다.
+ */
+function UsEtfHoldingsBlock({
+  symbol,
+  onSelectSymbol,
+}: {
+  symbol: string;
+  onSelectSymbol?: (symbol: string, label: string) => void;
+}) {
+  const [data, setData] = useState<UsEtfHoldings | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setData(null);
+    /*
+     * 지수·원자재·금리는 애초에 구성종목이 없다 — 심볼 모양으로 먼저 거른다.
+     * `^GSPC`(지수)·`CL=F`(선물)를 부르면 야후가 빈 값을 주는데, 그 한 번이 아깝다.
+     */
+    if (/[\^=]/.test(symbol)) return;
+    api
+      .usEtfHoldings(symbol)
+      .then((d) => alive && setData(d))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [symbol]);
+
+  if (!data || data.error || data.holdings.length === 0) return null;
+
+  const top = data.holdings.reduce((sum, h) => sum + (h.weight ?? 0), 0);
+
+  return (
+    <div className="etfh">
+      <div className="etfh-head">
+        <b>구성종목 상위 {data.holdings.length}</b>
+        {top > 0 && <span className="pt-n">합계 비중 {top.toFixed(1)}%</span>}
+      </div>
+      <div className="etfh-list">
+        {data.holdings.map((h) => {
+          const inner = (
+            <>
+              <b>{h.symbol}</b>
+              <span className="etfh-name">{h.name}</span>
+              {h.weight !== null && <span className="num etfh-w">{h.weight.toFixed(2)}%</span>}
+            </>
+          );
+          return onSelectSymbol ? (
+            <button
+              key={h.symbol}
+              className="etfh-item clickable"
+              onClick={() => onSelectSymbol(h.symbol, h.name || h.symbol)}
+              title={`${h.name} 차트 보기`}
+            >
+              {inner}
+            </button>
+          ) : (
+            <div className="etfh-item" key={h.symbol}>
+              {inner}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 섹터 쏠림 — 「이 ETF 가 사실은 어디에 걸려 있나」 */}
+      {data.sectors.length > 0 && (
+        <div className="etfh-secs">
+          {data.sectors.slice(0, 6).map((s) => (
+            <span className="etfh-sec" key={s.name}>
+              {s.name} <b>{s.weight.toFixed(0)}%</b>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="table-note">
+        야후가 주는 <b>상위 종목만</b>입니다 — 전체 구성이 아닙니다. 하루 한 번 받아 둡니다.
+      </div>
+    </div>
+  );
+}
+
+/**
  * 지수·원자재·금리 숫자판 (2026-08-27).
  *
  * **추가 조회가 0회다.** 값은 전부 차트 응답이 같이 준 `meta` 에서 나온다.
  * 없는 칸은 안 그린다 — 지수는 거래량이 0 으로 오는 곳이 있고(금리는 늘 0),
  * 0 을 그대로 적으면 「거래가 없었다」는 **틀린 사실**이 화면에 남는다.
+ *
+ * ⚠️ 당일 고저·52주 고저·거래량은 **기간을 바꿔도 같은 값**이다(실측 확인).
+ * 전일 종가만 meta 를 안 쓰고 봉에서 낸다 — 위 `dayBase` 주석 참고.
  */
 function YahooFigures({
   m,

@@ -901,14 +901,17 @@ export async function superDetail(client: KiwoomClient, code: string) {
   const nowRow = peekSnapshot()?.byCode.get(code);
   const now = nowRow ? { price: nowRow.price ?? null, changeRate: nowRow.changeRate ?? null } : null;
 
-  /* 지수 — 업종 매칭이 알려 준 시장, 못 찾으면 코스피 */
+  /*
+   * 지수 — 업종 매칭이 알려 준 시장, 못 찾으면 코스피.
+   *
+   * ⚠️ **업종 시리즈는 더 안 받는다** (2026-08-27). 비교선이 업종이면
+   * 「업종은 올랐는데 이 종목은」이라는 뜻 없는 문장이 된다 — 「화학」 한 칸에
+   * 화장품·이차전지·정유가 같이 들어 있어서다. 그 자리는 **테마 지수**가 대신하고,
+   * 그건 화면이 따로 받는다(`/api/super/theme/:code`) — 구성종목 일봉으로 만드는
+   * 값이라 여기 실으면 종목 창이 늦게 열린다.
+   */
   const marketIdx = mood?.sector?.marketKey === "kosdaq" ? "101" : "001";
-  const [indexSeries, sectorSeries] = await Promise.all([
-    indexDailySeries(client, marketIdx).catch(() => [] as DailyPoint[]),
-    mood?.sector?.code
-      ? indexDailySeries(client, mood.sector.code).catch(() => [] as DailyPoint[])
-      : Promise.resolve([] as DailyPoint[]),
-  ]);
+  const indexSeries = await indexDailySeries(client, marketIdx).catch(() => [] as DailyPoint[]);
 
   /* 편입일 20거래일 전부터만 — 그 앞은 이 화면의 물음이 아니다 */
   const addedYmd = entry.addedDate.replace(/-/g, "");
@@ -922,9 +925,7 @@ export async function superDetail(client: KiwoomClient, code: string) {
     now,
     stock: cut(stock),
     index: { code: marketIdx, name: marketIdx === "101" ? "코스닥" : "코스피", series: cut(indexSeries) },
-    sector: mood?.sector
-      ? { code: mood.sector.code, name: mood.sector.name, changeRate: mood.sector.changeRate, series: cut(sectorSeries) }
-      : null,
+    /* 업종은 뺐다 — 그 자리는 테마 지수다(`/api/super/theme/:code`, 화면이 따로 받는다) */
     flows: (() => {
       const i = flows.findIndex((r) => r.date >= addedYmd);
       return i < 0 ? [] : flows.slice(Math.max(0, i - 20));
