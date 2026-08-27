@@ -4237,10 +4237,37 @@ html[data-tabs="sticky"] .main-inner > .tabscroll {
 .miniline-key { display: inline-flex; align-items: center; gap: 5px; }
 .miniline-key i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
 
-/* 서브탭 순서 패널 — 메뉴별 한 줄, 탭 알약에 ◀▶ */
+/* 서브탭 순서 패널 — 메뉴별 한 묶음, 탭은 세로 일렬(끌어서 옮긴다, 2026-08-27) */
 .sto-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
 .sto-row:last-child { border-bottom: none; }
 .sto-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.sto-list { display: flex; flex-direction: column; max-width: 30rem; }
+.sto-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 0.84rem;
+  margin-bottom: 4px;
+}
+.sto-no {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sto-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sto-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .sto-tab {
   display: inline-flex;

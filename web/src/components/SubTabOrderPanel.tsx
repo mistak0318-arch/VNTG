@@ -52,27 +52,38 @@ function PageRow({ page }: { page: PageDef }) {
           </button>
         )}
       </div>
-      <div className="sto-tabs">
+      {/*
+        세로 일렬 + 끌어서 옮기기 (2026-08-27 — "일자로 나열하고 드래그").
+        가로 알약에 ◀▶ 였는데, 탭이 예닐곱이면 줄이 감겨 순서가 안 읽혔다.
+        위에서 아래가 곧 화면의 왼쪽에서 오른쪽(리포트는 위에서 아래) 차례다.
+      */}
+      <div className="sto-list">
         {sorted.map((t, i) => (
-          <span className="sto-tab" key={t.key}>
-            <button
-              className="sto-move"
-              disabled={i === 0}
-              title="앞으로"
-              onClick={() => order.move(t.key, -1)}
-            >
-              ◀
-            </button>
-            {t.label}
-            <button
-              className="sto-move"
-              disabled={i === sorted.length - 1}
-              title="뒤로"
-              onClick={() => order.move(t.key, 1)}
-            >
-              ▶
-            </button>
-          </span>
+          <div className={`sto-item${order.drag.cls(t.key)}`} key={t.key} {...order.drag.props(t.key)}>
+            <span className="sto-no">{i + 1}</span>
+            <span className="mo-grip" aria-hidden="true">
+              ⠿
+            </span>
+            <span className="sto-name">{t.label}</span>
+            <span className="mo-move">
+              <button
+                className="mo-arrow"
+                disabled={i === 0}
+                title="위로"
+                onClick={() => order.move(t.key, -1)}
+              >
+                ▲
+              </button>
+              <button
+                className="mo-arrow"
+                disabled={i === sorted.length - 1}
+                title="아래로"
+                onClick={() => order.move(t.key, 1)}
+              >
+                ▼
+              </button>
+            </span>
+          </div>
         ))}
       </div>
     </div>
@@ -83,9 +94,10 @@ export function SubTabOrderPanel() {
   return (
     <div>
       <p className="page-note">
-        각 메뉴 상단의 서브탭이 여기 적힌 차례대로 놓입니다. <b>◀ ▶</b> 로 한 칸씩
-        옮기면 바로 저장됩니다(서버 저장 — 다른 기기에서도 같은 순서). 뉴스 탭 순서는
-        뉴스 화면에서 직접 끌어서 바꿉니다.
+        각 메뉴 상단의 서브탭이 여기 적힌 차례대로 놓입니다. <b>끌어서</b> 옮기거나
+        <b> ▲▼</b> 로 한 칸씩 — 바꾸면 바로 저장되고 <b>열려 있는 화면에도 즉시</b>
+        적용됩니다(서버 저장 — 다른 기기에서도 같은 순서). 뉴스 탭 순서는 뉴스 화면에서
+        직접 끌어서 바꿉니다.
       </p>
       {PAGES.map((p) => (
         <PageRow key={p.scope} page={p} />

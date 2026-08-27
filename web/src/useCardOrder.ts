@@ -39,24 +39,46 @@ export function orderMap(known: string[], saved: string[]): Map<string, number> 
   return rank;
 }
 
+/**
+ * 순서가 바뀌었다는 **전역 알림** (2026-08-27).
+ *
+ * ⚠️ 훅이 인스턴스마다 자기 상태만 들고 있었다. 설정 화면에서 리포트 섹션 순서를
+ * 바꿔도 **이미 열려 있는 리포트 탭은 그대로**였다 — 서버엔 저장됐는데 화면이 안
+ * 따라오니 「적용이 안 된다」가 된다. 탭 상한을 없애 화면이 언마운트되지 않으면서
+ * 더 잘 드러났다. 저장한 인스턴스가 알리고, 같은 scope 를 보는 인스턴스가 받는다.
+ */
+const ORDER_EVENT = "vntg:card-order";
+
 export function useCardOrder(scope: string, known: string[]) {
   const [saved, setSaved] = useState<string[]>([]);
   const [all, setAll] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     let alive = true;
-    api
-      .cardOrder()
-      .then((o) => {
-        if (!alive) return;
-        setAll(o);
-        setSaved(Array.isArray(o[scope]) ? o[scope] : []);
-      })
-      .catch(() => {
-        /* 못 읽으면 코드 순서 그대로 — 카드가 사라지진 않는다 */
-      });
+    const pull = () =>
+      api
+        .cardOrder()
+        .then((o) => {
+          if (!alive) return;
+          setAll(o);
+          setSaved(Array.isArray(o[scope]) ? o[scope] : []);
+        })
+        .catch(() => {
+          /* 못 읽으면 코드 순서 그대로 — 카드가 사라지진 않는다 */
+        });
+    void pull();
+
+    /* 다른 화면이 순서를 바꿨다 — 내 scope 면 다시 읽는다 */
+    const onChanged = (e: Event) => {
+      const detail = (e as CustomEvent<{ scope: string; order: string[] }>).detail;
+      if (!detail || detail.scope !== scope) return;
+      setSaved(detail.order);
+      setAll((prev) => ({ ...prev, [detail.scope]: detail.order }));
+    };
+    window.addEventListener(ORDER_EVENT, onChanged);
     return () => {
       alive = false;
+      window.removeEventListener(ORDER_EVENT, onChanged);
     };
   }, [scope]);
 
@@ -69,6 +91,8 @@ export function useCardOrder(scope: string, known: string[]) {
       setSaved(next);
       const merged = { ...all, [scope]: next };
       setAll(merged);
+      // 같은 scope 를 보고 있는 다른 화면도 즉시 따라온다 (열려 있는 탭 포함)
+      window.dispatchEvent(new CustomEvent(ORDER_EVENT, { detail: { scope, order: next } }));
       void api.cardOrderSave(merged).catch(() => {
         /* 서버에 못 올려도 이번 화면에는 적용돼 있다 */
       });
