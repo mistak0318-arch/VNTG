@@ -5,6 +5,9 @@ import { api, fmtNum, type ProviderUsage, type UsageTotals } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { AiModelPanel } from "../components/AiModelPanel";
 import { AlertConfigPanel } from "../components/AlertConfigPanel";
+import { KeywordAlertPanel } from "../components/KeywordAlertPanel";
+import { DisclosureAlertPanel } from "../components/DisclosureAlertPanel";
+import { PickAutoPanel } from "../components/PickAutoPanel";
 import { CollapsibleCard } from "../components/CollapsibleCard";
 import { ReportSchedulePanel } from "../components/ReportSchedulePanel";
 import { ChartConfigPanel } from "../components/ChartConfigPanel";
@@ -246,6 +249,40 @@ export function SettingsPage() {
           알림은 많아지면 무시하게 되므로, 기준값을 올려 <b>덜 울리게</b> 맞추는 게 요령입니다.
         </p>
         <AlertConfigPanel />
+      </CollapsibleCard>
+      )}
+
+      {/* 2026-08-27 — 텔레그램 동향 메뉴에서 이사 온 설정들 ("설정이랑 기능이랑 섞여 있잖아") */}
+      {tab === "publish" && (
+      <CollapsibleCard
+        id="tgKeyword"
+        scope="global"
+        title="내 관심 키워드 알림 (텔레그램)"
+        hint="내 종목·키워드가 채널에서 언급되면 바로 알립니다."
+      >
+        <KeywordAlertPanel />
+      </CollapsibleCard>
+      )}
+
+      {tab === "publish" && (
+      <CollapsibleCard
+        id="tgDisclosure"
+        scope="global"
+        title="공시 알림 (텔레그램)"
+        hint="내 종목 공시가 뜨면 바로 알립니다."
+      >
+        <DisclosureAlertPanel />
+      </CollapsibleCard>
+      )}
+
+      {tab === "publish" && (
+      <CollapsibleCard
+        id="tgPick"
+        scope="global"
+        title="채널 선별 발송 (텔레그램)"
+        hint="AI 없이 원문 그대로 자동 발송 — 비용 없음."
+      >
+        <PickAutoPanel />
       </CollapsibleCard>
       )}
 

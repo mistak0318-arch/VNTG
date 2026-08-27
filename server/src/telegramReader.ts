@@ -135,6 +135,26 @@ async function getClient(): Promise<any> {
   return client;
 }
 
+/**
+ * 방 읽음 처리 (2026-08-27) — 브라우저 뷰어에서 읽으면 **폰 텔레그램도 읽음**이 되게.
+ *
+ * 봇 API 엔 읽음 처리가 없다 — 채널 수집에 쓰는 **사용자 세션(MTProto)** 의
+ * markAsRead 를 쓴다. 그러면 폰에 남은 안읽음 배지가 진짜 안 읽은 것만 남는다.
+ * 세션이 없는 기기(개발 PC)에선 조용히 아무것도 안 한다 — 실패해도 뷰어의
+ * 읽음 표시는 이미 됐으므로 부수 작업일 뿐이다.
+ */
+export async function markChatRead(chatId: string): Promise<boolean> {
+  if (!isReaderConfigured()) return false;
+  try {
+    const c = await getClient();
+    const entity = await c.getEntity(Number(chatId));
+    await c.markAsRead(entity);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function disconnectReader(): Promise<void> {
   if (client) {
     await client.disconnect().catch(() => undefined);

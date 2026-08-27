@@ -60,11 +60,11 @@ export const MINI_HOTKEYS: { key: MiniHotkey; label: string; hint: string }[] = 
   { key: "off", label: "안 씀", hint: "단축키로는 안 엽니다" },
 ];
 
-/** 버튼 수 — 1~5 (2026-08-26 「이왕 하는 거 다섯으로」) */
-export const MINI_SLOT_COUNT = 5;
+/** 버튼 수 — 1~7 (2026-08-27 「7개까지」. 저장된 5슬롯 구성은 기본값으로 늘려 읽힌다) */
+export const MINI_SLOT_COUNT = 7;
 
 export interface MiniConfig {
-  /** 상단 버튼 1~5 가 여는 화면 */
+  /** 상단 버튼 1~7 이 여는 화면 */
   slots: MiniScreenKey[];
   hotkey: MiniHotkey;
 }
@@ -73,7 +73,7 @@ const KEY = "vntg.mini";
 const EVENT = "vntg-mini-config";
 
 const DEFAULT: MiniConfig = {
-  slots: ["stock", "overview", "watch", "news", "superSignal"],
+  slots: ["stock", "overview", "watch", "news", "superSignal", "pulse", "indexBoard"],
   hotkey: "ctrl-m",
 };
 

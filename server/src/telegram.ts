@@ -205,6 +205,13 @@ export async function sendTelegram(
         return { ok: false, error: body.description ?? `HTTP ${res.status}` };
       }
       void recordApiCall("telegram", "sendMessage", "ok");
+      /*
+       * 발신 아카이브 (2026-08-27) — 브라우저 「받은 방」 뷰어의 재료.
+       * 동적 import 로 순환을 피하고, 실패는 아카이브 쪽이 삼킨다.
+       */
+      void import("./telegramArchive.js")
+        .then((m) => m.archiveOutgoing(channel, chunk))
+        .catch(() => undefined);
       // 초당 제한이 있어 여러 건이면 잠깐 쉰다
       if (i < chunks.length - 1) await new Promise((r) => setTimeout(r, 400));
     } catch (err) {

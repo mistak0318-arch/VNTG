@@ -165,6 +165,16 @@ export const api = {
     }>(`/api/market/etf/${code}`),
   /** ETF 전체 시세 — ka40004, 서버 3분 캐시. 괴리율은 서버가 (현재가−NAV)/NAV 로 계산 */
   etfList: () => getJson<{ rows: EtfListRow[]; at: number }>("/api/etf/list"),
+  /* VNTG 방 뷰어 (2026-08-27) — 봇이 보낸 방들을 브라우저에서 텔레그램처럼 */
+  tgRooms: () => getJson<{ rooms: TgRoom[] }>("/api/tg-feed/rooms"),
+  tgRoom: (ch: string, limit = 120) =>
+    getJson<{ channel: string; label: string; messages: TgMsg[] }>(
+      `/api/tg-feed/room/${ch}?limit=${limit}`,
+    ),
+  tgRoomRead: (ch: string) => postJson<{ ok: boolean }>(`/api/tg-feed/room/${ch}/read`, {}),
+  tgStar: (channel: string, m: TgMsg) =>
+    postJson<{ starred: boolean }>("/api/tg-feed/star", { channel, ...m }),
+  tgStars: () => getJson<{ stars: TgStar[] }>("/api/tg-feed/stars"),
   /** 호가창 — 종목 상세·종목분석이 같은 것을 쓴다 */
   /** 거래원 — 부를 때마다 시계열이 한 점씩 쌓인다 */
   /** 종목별 프로그램매매 (일자별) — 단위 백만원 */
@@ -1072,6 +1082,25 @@ export interface IndexCandle {
   tradeValue: number;
   /** 거래량(천주) */
   volume: number;
+}
+
+/* VNTG 방 뷰어 */
+export interface TgRoom {
+  channel: string;
+  label: string;
+  lastAt: string | null;
+  preview: string;
+  unread: number;
+  total: number;
+}
+export interface TgMsg {
+  id: string;
+  at: string;
+  text: string;
+}
+export interface TgStar extends TgMsg {
+  channel: string;
+  starredAt: string;
 }
 
 /** ETF 전체 시세 한 줄 (ka40004 실측 필드 기반) */
