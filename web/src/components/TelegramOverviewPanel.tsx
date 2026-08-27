@@ -79,6 +79,13 @@ const SENDERS: SenderRow[] = [
     where: "전용 방(.env TELEGRAM_CHAT_ID_SUPER)이 있을 때만 — 없으면 각자 원래 방으로",
   },
   {
+    icon: "🌋",
+    name: "버즈 레이더",
+    what: "30분 간격 판정 — 채널 언급이 평소의 몇 배로 커진 주제(기준선 3일 후 발송)",
+    channel: "buzz",
+    where: "전용 방(.env TELEGRAM_CHAT_ID_SUPERSIGNAL) — 장전 브리핑룸 카드에서 전체 확인",
+  },
+  {
     icon: "📄",
     name: "공시 알림",
     what: "켜면 10분 간격(기본 08~19시) — 관심종목·내 테마·주요 공시",
@@ -177,6 +184,7 @@ export function TelegramOverviewPanel() {
 const ASSIGN_LABEL: Record<string, string> = {
   report: "📰 리포트",
   signal: "🔔 시그널 (VI·손절 포함)",
+  buzz: "🌋 버즈 레이더",
   super: "🌟 슈퍼신호등",
   channel: "📡 채널 수집",
   disclosure: "📄 공시",
@@ -184,7 +192,7 @@ const ASSIGN_LABEL: Record<string, string> = {
   log: "🪵 로그(예비)",
 };
 /** 화면에 보여줄 순서 — 서버 enum 순서가 아니라 쓰는 빈도 순 */
-const ASSIGN_ORDER = ["report", "signal", "super", "channel", "disclosure", "keyword", "log"];
+const ASSIGN_ORDER = ["report", "signal", "buzz", "super", "channel", "disclosure", "keyword", "log"];
 
 function RoomAssignEditor() {
   const [data, setData] = useState<TelegramRoomsData | null>(null);

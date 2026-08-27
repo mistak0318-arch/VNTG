@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type TgMsg, type TgRoom, type TgStar } from "../api";
+import { useCardOrder } from "../useCardOrder";
 
 /**
  * VNTG 방 뷰어 (2026-08-27) — **봇이 보낸 방들을 브라우저에서 텔레그램처럼.**
@@ -70,6 +71,11 @@ export function TelegramRoomsPanel() {
   const [query, setQuery] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const unreadRef = useRef<HTMLDivElement>(null);
+  /* 방 순서 (2026-08-27) — 끌어서 바꾼다. 서버(cardOrder) 저장이라 기기 공통 */
+  const roomOrder = useCardOrder(
+    "telegram.rooms",
+    (rooms ?? []).map((r) => r.channel),
+  );
 
   const loadRooms = useCallback(() => {
     void api
@@ -223,11 +229,18 @@ export function TelegramRoomsPanel() {
     );
   }
 
-  /* ── 방 목록 ── */
+  /* ── 방 목록 — 순서는 끌어서 바꾼다(서버 저장, 기기 공통). CSS order 라 재마운트가 없다 ── */
   return (
     <div className="tgr-list">
       {rooms.map((r) => (
-        <button key={r.channel} className="tgr-room-row" onClick={() => void openRoom(r.channel)}>
+        <button
+          key={r.channel}
+          className={`tgr-room-row${roomOrder.drag.cls(r.channel)}`}
+          style={{ order: roomOrder.orderOf(r.channel) }}
+          {...roomOrder.drag.props(r.channel)}
+          onClick={() => void openRoom(r.channel)}
+          title="끌어서 순서를 바꿀 수 있습니다"
+        >
           <span className="tgr-avatar">{r.label.slice(0, 1)}</span>
           <span className="tgr-room-main">
             <b>{r.label}</b>

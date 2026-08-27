@@ -4821,7 +4821,10 @@ tr.drag-src td { opacity: 0.45; }
 .fut-ct { font-style: normal; font-size: 0.7rem; opacity: 0.65; margin-left: 2px; }
 
 /* ── VNTG 방 뷰어 (2026-08-27) — 텔레그램처럼 ── */
-.tgr-list { max-width: 40rem; }
+/* 세로 flex — 방 순서를 CSS order 로 먹인다 (끌어서 바꾸기, 재마운트 없음) */
+.tgr-list { max-width: 40rem; display: flex; flex-direction: column; }
+.tgr-list .tgr-room-head, .tgr-list .mjr-pick, .tgr-list .empty { order: -1; }
+.tgr-list .table-note { order: 99; } /* 설명은 방들 아래 그대로 */
 .tgr-room-row {
   display: flex;
   align-items: center;

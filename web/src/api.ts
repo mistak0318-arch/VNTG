@@ -1567,7 +1567,7 @@ export interface SuperDetail {
 
 export interface TelegramChannelStatus {
   /** 서버 telegram.ts 의 TelegramChannel 과 같은 목록이어야 한다 */
-  channel: "report" | "signal" | "log" | "channel" | "disclosure" | "keyword" | "super";
+  channel: "report" | "signal" | "log" | "channel" | "disclosure" | "keyword" | "super" | "buzz";
   chatId: string;
   dedicated: boolean;
   /** 화면에서 재배정된 갈래인가 (.env 대신 저장된 배정이 정함) */

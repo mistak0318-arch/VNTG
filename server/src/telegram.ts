@@ -27,7 +27,9 @@ export type TelegramChannel =
   | "disclosure"
   | "keyword"
   /** 슈퍼신호등 편입·이탈 (2026-08-26) — 하루 한 번 15:45 실행이 보낸다 */
-  | "super";
+  | "super"
+  /** 밤사이 버즈 레이더 (2026-08-27) — 채널 언급 급증 감지가 보낸다 */
+  | "buzz";
 
 const CHANNEL_ENV: Record<TelegramChannel, string> = {
   report: "TELEGRAM_CHAT_ID_REPORT",
@@ -37,6 +39,8 @@ const CHANNEL_ENV: Record<TelegramChannel, string> = {
   disclosure: "TELEGRAM_CHAT_ID_DISCLOSURE",
   keyword: "TELEGRAM_CHAT_ID_KEYWORD",
   super: "TELEGRAM_CHAT_ID_SUPER",
+  // 사용자가 판 방의 .env 키 이름이 SUPERSIGNAL 이다 — 갈래 이름(buzz)과 키 이름이 다름에 주의
+  buzz: "TELEGRAM_CHAT_ID_SUPERSIGNAL",
 };
 
 /**
@@ -100,6 +104,7 @@ export function telegramEnvRooms(): { key: string; label: string; chatId: string
     disclosure: "공시 방",
     keyword: "키워드 방",
     super: "슈퍼신호등 방",
+    buzz: "버즈 레이더 방",
   };
   const out: { key: string; label: string; chatId: string }[] = [];
   const base = process.env.TELEGRAM_CHAT_ID?.trim();

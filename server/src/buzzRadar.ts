@@ -359,7 +359,7 @@ async function tick(): Promise<void> {
         codeNote +
         sample +
         `\n\n장전 브리핑룸의 「밤사이 버즈」에서 전체를 보세요.`;
-      await sendTelegram(msg, "signal").catch(() => undefined);
+      await sendTelegram(msg, "buzz").catch(() => undefined);
       sent[`${today}|${h.term}`] = new Date().toISOString();
     }
     /* 발송 기록은 30일만 */

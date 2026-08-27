@@ -31,14 +31,16 @@ const STARS = join(DIR, "stars.json");
 export const ROOM_LABELS: Record<string, string> = {
   report: "리포트",
   signal: "시그널",
+  buzz: "버즈 레이더",
   channel: "채널 선별",
   disclosure: "공시",
   keyword: "키워드",
   super: "슈퍼신호등",
   log: "로그",
 };
-/** 방 나열 순서 — 시장 흐름을 읽는 순서대로. 로그는 맨 뒤(운영 소음) */
-export const ROOM_ORDER = ["signal", "super", "channel", "keyword", "disclosure", "report", "log"];
+/** 방 나열 순서(기본값) — 시장 흐름을 읽는 순서대로. 로그는 맨 뒤(운영 소음).
+    화면(받은 방)은 이 순서를 기본으로 하고 사용자가 끌어서 바꾼 순서를 얹는다 */
+export const ROOM_ORDER = ["signal", "buzz", "super", "channel", "keyword", "disclosure", "report", "log"];
 
 export interface TgMsg {
   /** at + 순번 — 별표가 이 id 로 메시지를 가리킨다 */
