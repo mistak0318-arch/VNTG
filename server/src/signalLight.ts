@@ -174,7 +174,15 @@ export const DEFAULT_CONFIG: SignalConfig = {
   yellowAt: 40,
   flowDays: 5,
   maLines: [5, 20, 60],
-  axisWeights: { trend: 1, flow: 1, value: 1 },
+  /*
+   * 축 비중 (2026-08-28 개정) — **며칠에서 몇 주를 보는 매매**에 맞춘 값이다.
+   *
+   * 셋을 똑같이 1 로 두면 실적이 추세만큼 무거워진다. 그런데 그 기간의 매매에서
+   * 실적은 이미 가격에 들어가 있고, 새 실적은 분기에 한 번 나온다 — 매일 보는
+   * 판단에는 거의 안 움직이는 값이다.
+   * 그렇다고 0 으로 두면 **적자기업이 안 걸러진다.** 낮게 두되 살려 둔다.
+   */
+  axisWeights: { trend: 1.5, flow: 1.3, value: 0.6 },
   riskYellowAt: 40,
   riskRedAt: 70,
   riskBlocksGreen: true,
@@ -193,13 +201,19 @@ export const DEFAULT_CONFIG: SignalConfig = {
     },
     {
       key: "nearHigh",
-      label: "고점 근접",
+      label: "고점 근접 (신고가와 중복)",
       axis: "trend",
-      enabled: true,
+      /*
+       * **꺼 둔다** (2026-08-28) — 아래 「60일 신고가」와 같은 것을 잰다.
+       * 신고가면 이 항목도 자동으로 만점이라 추세 축에서 2점이 한 자리에 몰렸다.
+       * 둘 중 신고가를 남긴 이유는 **자체 백테스트로 검증된 쪽**이기 때문이다
+       * (20일 뒤 +3.77%p). 게다가 문턱 80% 는 느슨해서 대부분이 그냥 통과했다.
+       */
+      enabled: false,
       weight: 1,
-      threshold: 80,
-      strongAt: 95,
-      hint: "현재가가 52주 고가의 몇 %인가. 신고가 부근일수록 높다",
+      threshold: 88,
+      strongAt: 97,
+      hint: "현재가가 52주 고가의 몇 %인가. **60일 신고가와 겹칩니다** — 둘 중 하나만 쓰세요",
       cost: 0,
     },
     /*
@@ -215,7 +229,8 @@ export const DEFAULT_CONFIG: SignalConfig = {
       label: "60일 신고가",
       axis: "trend",
       enabled: true,
-      weight: 1,
+      /* 자체 백테스트에서 엣지가 가장 컸던 조건이라 무게를 준다 (2026-08-28) */
+      weight: 2,
       threshold: 97,
       strongAt: 100,
       hint: "현재가 ÷ 직전 60일 고가(%). 100이면 돌파 — 자체 백테스트에서 엣지가 가장 컸던 조건(20일 뒤 +3.77%p)",
@@ -288,7 +303,12 @@ export const DEFAULT_CONFIG: SignalConfig = {
       label: "ETF 뒷배",
       axis: "trend",
       enabled: true,
-      weight: 1,
+      /*
+       * 무게 2 — 추세 축에서 **다른 것과 안 겹치는 유일한 자금 신호**다.
+       * 정배열·신고가는 가격이 그린 모양이고, 테마 강세는 이름으로 묶인 종목들의
+       * 평균이다. 이것만 「실제로 돈을 넣어 담은 쪽이 가나」를 본다.
+       */
+      weight: 2,
       threshold: 0,
       strongAt: 1.5,
       hint:
@@ -299,13 +319,19 @@ export const DEFAULT_CONFIG: SignalConfig = {
     },
     {
       key: "themeStrength",
-      label: "테마 강세 (키움)",
+      label: "테마 강세 (키움 · 중복)",
       axis: "trend",
-      enabled: true,
+      /*
+       * **꺼 둔다** (2026-08-28) — 위의 「테마 강세(네이버)」와 같은 것을 잰다.
+       * 키움 분류는 묶음이 거칠어 「이 종목이 왜 여기 있나」가 안 풀렸고, 그래서
+       * 네이버로 갈아탔다(종목마다 편입 사유가 붙는다). 둘 다 켜면 같은 값이
+       * 추세 축에서 두 번 세어진다.
+       */
+      enabled: false,
       weight: 1,
       threshold: 0,
       strongAt: 2,
-      hint: "이 종목이 든 키움 테마 중 **가장 센 것**의 등락률(%)",
+      hint: "이 종목이 든 키움 테마 중 **가장 센 것**의 등락률(%). 네이버 테마와 겹칩니다",
       cost: 0,
     },
     {
@@ -327,8 +353,13 @@ export const DEFAULT_CONFIG: SignalConfig = {
       axis: "flow",
       enabled: true,
       weight: 2,
-      threshold: 0,
-      strongAt: 10000,
+      /*
+       * ⚠️ 문턱이 **0 이었다** (2026-08-28 정정) — 순매수가 1원만 있어도 통과라
+       * 사실상 아무도 못 거르는 기준이었다. 「샀다」고 말하려면 규모가 있어야 한다.
+       * 10억(1,000백만원)을 문턱, 300억을 만점으로 둔다.
+       */
+      threshold: 1000,
+      strongAt: 30000,
       hint: "설정 기간 외국인 순매수 합계(백만원). 종목 규모와 무관한 절대금액이라 대형주에 유리하다",
       cost: 0,
     },
@@ -338,8 +369,9 @@ export const DEFAULT_CONFIG: SignalConfig = {
       axis: "flow",
       enabled: true,
       weight: 1,
-      threshold: 0,
-      strongAt: 10000,
+      /* 외국인과 같은 이유로 문턱을 세운다 — 0 은 아무도 못 거른다 */
+      threshold: 1000,
+      strongAt: 20000,
       hint: "설정 기간 기관 순매수 합계(백만원)",
       cost: 0,
     },
@@ -348,7 +380,11 @@ export const DEFAULT_CONFIG: SignalConfig = {
       label: "외인 연속 순매수",
       axis: "flow",
       enabled: true,
-      weight: 1,
+      /*
+       * 무게 2 — **하루치 큰 금액보다 이어지는 쪽이 강하다.**
+       * 하루 300억은 기관 하나가 리밸런싱한 것일 수 있지만, 닷새 연속은 방향이다.
+       */
+      weight: 2,
       threshold: 2,
       strongAt: 5,
       hint: "외국인이 며칠 연속 순매수했나. 하루치 큰 금액보다 이어지는 게 낫다",
@@ -474,7 +510,11 @@ export const DEFAULT_CONFIG: SignalConfig = {
       label: "5일선 이격 좁음",
       axis: "risk",
       enabled: true,
-      weight: 1,
+      /*
+       * 무게 2 — 「다른 조건이 좋은데 이격까지 좁은 자리」가 이 항목에서 나온다.
+       * 위험 축에 있으므로 **다른 축이 이미 좋을 때만** 총점을 밀어 올린다.
+       */
+      weight: 2,
       threshold: 6,
       strongAt: 12,
       hint:

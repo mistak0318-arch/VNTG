@@ -9907,3 +9907,24 @@ button.tpb-row:hover { background: var(--panel-2); }
 .tpk-name { font-size: 0.8rem; font-weight: 700; }
 .tpk-row .num { text-align: right; font-weight: 700; }
 .tpk-sub { grid-column: 1 / -1; font-size: 0.68rem; }
+
+/* 신호등 기준 — 「읽는 법」 접이식 설명 (2026-08-28) */
+.sig-guide { margin-top: 0.6rem; }
+.sig-guide-body {
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+.sig-guide-body h4 {
+  margin: 0.8rem 0 0.3rem;
+  font-size: 0.8rem;
+}
+.sig-guide-body h4:first-child { margin-top: 0; }
+.sig-guide-body p { margin: 0 0 0.4rem; color: var(--muted); }
+.sig-guide-body ul { margin: 0 0 0.5rem; padding-left: 1.1rem; color: var(--muted); }
+.sig-guide-body li { margin-bottom: 0.25rem; }
+.sig-guide-body b { color: var(--text); }
