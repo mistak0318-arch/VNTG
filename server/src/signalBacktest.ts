@@ -67,6 +67,15 @@ export interface BacktestResult {
   green: Summary;
   /** 견줄 대상 — 같은 기간 **모든 날·모든 종목**의 평균. 이걸 못 이기면 뜻이 없다 */
   base: Summary;
+  /**
+   * 점수대별 성적 — **이 표가 기준이 맞는지를 스스로 증명한다.**
+   *
+   * 70점 초록과 95점 초록이 한 칸에 섞여 있으면 「초록이 좋다」까지만 알 수 있다.
+   * 점수를 나눠 놓고 **위 칸이 아래 칸보다 잘 갔는지** 보면, 점수라는 것이 실제로
+   * 무언가를 재고 있는지가 드러난다. 순서가 뒤집혀 있으면(80점대가 60점대보다 못
+   * 가면) 그 기준 조합은 점수를 잘못 매기고 있는 것이다.
+   */
+  buckets: { label: string; from: number; to: number; s: Summary }[];
   note: string;
 }
 
@@ -237,6 +246,8 @@ export async function runSignalBacktest(
   progress = { done: 0, total: opts.codes.length };
   const rows: BacktestRow[] = [];
   const all: { d1: number | null; d5: number | null; d20: number | null }[] = [];
+  /* 점수대별로 나누려면 **초록이 아닌 것까지** 점수를 들고 있어야 한다 */
+  const scored: { score: number; d1: number | null; d5: number | null; d20: number | null }[] = [];
 
   try {
     for (const { code, name } of opts.codes) {
@@ -255,7 +266,13 @@ export async function runSignalBacktest(
           all.push(f);
 
           const s = scoreAt(bs, i, cfg);
-          if (!s || s.level !== "green") continue;
+          if (!s) continue;
+          scored.push({ score: s.score, ...f });
+          /*
+           * **전부 담는다** — 화면에서 점수대를 눌러 그 구간의 종목을 보기 때문이다.
+           * 초록만 담았을 때는 「60점대는 무엇이었나」에 답할 수가 없었다.
+           * 아래에서 점수 높은 순으로 잘라 보내므로 응답이 무한정 커지지는 않는다.
+           */
           rows.push({ date: bs[i].date, code, name, close: bs[i].close, ...s, ...f });
         }
       } catch {
@@ -271,14 +288,41 @@ export async function runSignalBacktest(
   const used = cfg.checks.filter((c) => c.enabled && BACKTESTABLE.has(c.key)).map((c) => c.label);
   const skipped = cfg.checks.filter((c) => c.enabled && !BACKTESTABLE.has(c.key)).map((c) => c.label);
 
+  /*
+   * 점수대 — 신호등의 경계(45·70)에 맞춰 나눈다. 그래야 「노랑 안에서도 위쪽이
+   * 나은가」·「초록 안에서 90점이 70점보다 나은가」를 각각 볼 수 있다.
+   */
+  const CUTS: { label: string; from: number; to: number }[] = [
+    { label: "90~100 (초록)", from: 90, to: 101 },
+    { label: "80~89 (초록)", from: 80, to: 90 },
+    { label: "70~79 (초록)", from: 70, to: 80 },
+    { label: "60~69 (노랑)", from: 60, to: 70 },
+    { label: "45~59 (노랑)", from: 45, to: 60 },
+    { label: "0~44 (빨강)", from: 0, to: 45 },
+  ];
+  const buckets = CUTS.map((c) => ({
+    ...c,
+    s: summarize(scored.filter((x) => x.score >= c.from && x.score < c.to)),
+  }));
+
   return {
     used,
     skipped,
     days,
     codes: opts.codes.length,
-    rows: rows.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 300),
-    green: summarize(rows),
+    /*
+     * 점수대마다 **골고루** 남긴다. 날짜순으로 300개를 자르면 최근 며칠이 다 먹어
+     * 「60점대 목록」이 통째로 비는 일이 생긴다.
+     */
+    rows: CUTS.flatMap((c) =>
+      rows
+        .filter((r) => r.score >= c.from && r.score < c.to)
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 60),
+    ),
+    green: summarize(rows.filter((r) => r.level === "green")),
     base: summarize(all),
+    buckets,
     note:
       "일봉으로 되살릴 수 있는 기준만 씁니다 — 테마·ETF·수급·재무는 **그때의 구성을 모르므로** 뺐습니다. " +
       "「전체」는 같은 기간 모든 날·모든 종목의 평균입니다. 초록이 이걸 못 이기면 그 기준은 쓸모가 없습니다.",

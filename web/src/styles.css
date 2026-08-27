@@ -9977,3 +9977,17 @@ button.tpb-row:hover { background: var(--panel-2); }
   .sbt-panel { position: static; }
   .sbt-on { min-width: 100%; }
 }
+
+/* 백테스트 점수대 표 — 건수를 눌러 그 구간 종목을 편다 */
+.sbt-count {
+  background: none;
+  border: none;
+  color: var(--blue);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+.sbt-bucket.on { background: var(--panel-2); }
+.sbt-bucket.empty { opacity: 0.45; }
+.sbt-clear { margin-left: 0.5rem; font-size: 0.7rem; }

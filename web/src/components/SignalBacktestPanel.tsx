@@ -43,6 +43,7 @@ interface Result {
   }[];
   green: Summary;
   base: Summary;
+  buckets: { label: string; from: number; to: number; s: Summary }[];
   note: string;
 }
 
@@ -68,6 +69,8 @@ export function SignalBacktestPanel({
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** 눌러서 펼친 점수대 — 그 구간의 종목을 아래에 보여준다 */
+  const [pick, setPick] = useState<string | null>(null);
 
   /* 지금 쓰는 기준을 가져와 **사본으로** 만진다 — 저장은 안 한다 */
   useEffect(() => {
@@ -93,6 +96,7 @@ export function SignalBacktestPanel({
     setBusy(true);
     setError(null);
     try {
+      setPick(null); // 새로 돌리면 펼쳐 둔 구간은 닫는다 — 옛 결과가 남으면 헷갈린다
       setRes(await api.signalBacktest({ limit, days, config: cfg }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "실패했습니다");
@@ -110,6 +114,12 @@ export function SignalBacktestPanel({
   );
   const patch = (key: string, p: Partial<(typeof cfg.checks)[number]>) =>
     setCfg({ ...cfg, checks: cfg.checks.map((c) => (c.key === key ? { ...c, ...p } : c)) });
+
+  /* 펼친 점수대의 종목 — 서버가 구간마다 골고루 담아 보낸 것에서 고른다 */
+  const bucket = res?.buckets.find((b) => b.label === pick);
+  const picked = bucket
+    ? (res?.rows ?? []).filter((r) => r.score >= bucket.from && r.score < bucket.to)
+    : [];
 
   return (
     <div className="sbt">
@@ -308,9 +318,66 @@ export function SignalBacktestPanel({
             <div className="table-note">{res.note}</div>
           </section>
 
-          {res.rows.length > 0 && (
+          {/* ── 점수대별 ── */}
+          <section className="card">
+            <h2>점수대별 성적</h2>
+            <p className="page-note">
+              <b>위 칸이 아래 칸보다 잘 갔는지</b>가 이 표의 답입니다. 순서가 뒤집혀 있으면
+              (80점대가 60점대보다 못 가면) 그 조합은 점수를 잘못 매기고 있는 것입니다.
+              건수를 누르면 그 구간의 종목이 아래에 나옵니다.
+            </p>
+            <div className="data-table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th className="sbt-th-l">점수</th>
+                    <th>건수</th>
+                    <th>1일</th>
+                    <th>5일</th>
+                    <th>20일</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {res.buckets.map((b) => (
+                    <tr
+                      key={b.label}
+                      className={`sbt-bucket${pick === b.label ? " on" : ""}${b.s.n === 0 ? " empty" : ""}`}
+                    >
+                      <td className="sbt-th-l">{b.label}</td>
+                      <td>
+                        {b.s.n === 0 ? (
+                          "0"
+                        ) : (
+                          <button
+                            className="sbt-count"
+                            onClick={() => setPick(pick === b.label ? null : b.label)}
+                          >
+                            {b.s.n}
+                          </button>
+                        )}
+                      </td>
+                      {(["d1", "d5", "d20"] as const).map((k) => (
+                        <td key={k} className={`num ${signClass(b.s[k].avg ?? 0)}`}>
+                          {pct(b.s[k].avg)}
+                          <em className="pt-n"> {b.s[k].win ?? "—"}%</em>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* ── 고른 점수대의 종목 ── */}
+          {pick && (
             <section className="card">
-              <h2>초록이 켜진 날 (최근 {Math.min(res.rows.length, 300)}건)</h2>
+              <h2>
+                {pick} — {picked.length}건
+                <button className="filter-btn sbt-clear" onClick={() => setPick(null)}>
+                  닫기
+                </button>
+              </h2>
               <div className="data-table-wrap">
                 <table className="data-table">
                   <thead>
@@ -325,7 +392,53 @@ export function SignalBacktestPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {res.rows.slice(0, 100).map((r, i) => (
+                    {picked.map((r, i) => (
+                      <tr key={`${r.code}${r.date}${i}`}>
+                        <td className="sbt-th-l">
+                          {r.date.slice(4, 6)}/{r.date.slice(6, 8)}
+                        </td>
+                        <td className="sbt-th-l">
+                          <button className="tlk-chip" onClick={() => onSelectStock(r.code, r.name)}>
+                            {r.name}
+                          </button>
+                        </td>
+                        <td>{r.score}</td>
+                        <td>{r.close.toLocaleString("ko-KR")}</td>
+                        {(["d1", "d5", "d20"] as const).map((k) => (
+                          <td key={k} className={`num ${r[k] === null ? "" : signClass(r[k]!)}`}>
+                            {pct(r[k])}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="table-note">종목을 누르면 상세가 열립니다.</div>
+            </section>
+          )}
+
+          {!pick && res.rows.filter((r) => r.score >= 70).length > 0 && (
+            <section className="card">
+              <h2>초록이 켜진 날</h2>
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th className="sbt-th-l">날짜</th>
+                      <th className="sbt-th-l">종목</th>
+                      <th>점수</th>
+                      <th>종가</th>
+                      <th>1일</th>
+                      <th>5일</th>
+                      <th>20일</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {res.rows
+                      .filter((r) => r.score >= 70)
+                      .slice(0, 100)
+                      .map((r, i) => (
                       <tr key={`${r.code}${r.date}${i}`}>
                         <td className="sbt-th-l">
                           {r.date.slice(4, 6)}/{r.date.slice(6, 8)}

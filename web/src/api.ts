@@ -902,6 +902,8 @@ export const api = {
       }[];
       green: BacktestSummary;
       base: BacktestSummary;
+      /** 점수대별 — 위 칸이 아래 칸보다 잘 갔는지가 기준이 맞는지를 증명한다 */
+      buckets: { label: string; from: number; to: number; s: BacktestSummary }[];
       note: string;
     }>("/api/signal/backtest", body),
   signalBacktestProgress: () =>
