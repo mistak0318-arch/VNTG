@@ -254,9 +254,25 @@ export default function App() {
    * **그룹을 무시하고 맨 위에** 세운다 — 아래 원래 자리에도 그대로 남는다(찾을 때 헷갈리면 안 된다).
    */
   const favorites = prefs.favorites
+    .filter((key) => !key.startsWith("#")) // 섹션 구분은 항목이 아니다
     .map((key) => flat.find((i) => i.key === key))
     .filter((i): i is (typeof flat)[number] => Boolean(i))
     .map((i) => ({ ...i, label: label(i.key, i.label) }));
+
+  /*
+   * 자주 쓰는 메뉴의 렌더 순서 — 섹션 구분(`#이름`) 포함 (2026-08-27).
+   * 즐겨찾기가 열 개를 넘으면서 "어디에 뭐가 있는지"가 안 보였다 — 설정에서
+   * 구분을 끼워 넣으면 사이드바에 작은 소제목으로 나뉜다.
+   */
+  const favEntries = prefs.favorites
+    .map((key) => {
+      if (key.startsWith("#")) return { type: "sec" as const, key, name: key.slice(1) };
+      const it = flat.find((i) => i.key === key);
+      return it
+        ? { type: "item" as const, key, item: { ...it, label: label(it.key, it.label) } }
+        : null;
+    })
+    .filter((e): e is NonNullable<typeof e> => e !== null);
 
   // 주소창에 이상한 값이 들어와도 화면이 비지 않도록 방어
   const tab = (VALID_TABS.has(route.tab as Tab) ? route.tab : "overview") as Tab;
@@ -659,27 +675,35 @@ export default function App() {
           {favorites.length > 0 && (
             <div className="nav-group nav-fav">
               <div className="nav-group-label">자주 쓰는 메뉴</div>
-              {favorites.map((item) => (
-                <button
-                  key={`fav-${item.key}`}
-                  className={`nav-item${tab === item.key ? " active" : ""}`}
-                  onClick={(e) => navClick(e, item.key)}
-                  onAuxClick={(e) => {
-                    if (e.button === 1) openInNewTab(item.key);
-                  }}
-                  title="Ctrl+클릭 또는 휠 클릭: 새 브라우저 탭으로 — 보던 화면이 유지됩니다"
-                >
-                  <span className="nav-icon" aria-hidden="true">{item.icon}</span>
-                  {item.label}
-                  {item.key === "superSignal" && superUD && (
-                    <em className="nav-ud" title="추적 중 종목의 당일 상승/하락">
-                      <span className="positive">▲{superUD.up}</span>
-                      <span className="negative">▼{superUD.down}</span>
-                    </em>
-                  )}
-                  {navNOf(item.key) && <em className="nav-n">N</em>}
-                </button>
-              ))}
+              {favEntries.map((e) =>
+                e.type === "sec" ? (
+                  /* 섹션 구분 — 설정에서 끼워 넣은 소제목 */
+                  <div className="nav-fav-sec" key={e.key}>
+                    {e.name}
+                  </div>
+                ) : (
+                  <button
+                    key={`fav-${e.key}`}
+                    className={`nav-item${tab === e.key ? " active" : ""}`}
+                    onClick={(ev) => navClick(ev, e.item.key)}
+                    onAuxClick={(ev) => {
+                      if (ev.button === 1) openInNewTab(e.item.key);
+                    }}
+                    title="Ctrl+클릭 또는 휠 클릭: 새 브라우저 탭으로 — 보던 화면이 유지됩니다"
+                  >
+                    <span className="nav-icon" aria-hidden="true">{e.item.icon}</span>
+                    {/* nav-label 로 감싼다 — 맨 텍스트면 말줄임·정렬이 본 메뉴와 달라진다 */}
+                    <span className="nav-label">{e.item.label}</span>
+                    {e.key === "superSignal" && superUD && (
+                      <em className="nav-ud" title="추적 중 종목의 당일 상승/하락">
+                        <span className="positive">▲{superUD.up}</span>
+                        <span className="negative">▼{superUD.down}</span>
+                      </em>
+                    )}
+                    {navNOf(e.item.key) && <em className="nav-n">N</em>}
+                  </button>
+                ),
+              )}
             </div>
           )}
           {menu.map((g) => (

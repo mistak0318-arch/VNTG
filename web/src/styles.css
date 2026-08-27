@@ -5907,6 +5907,15 @@ button.nav-group-toggle {
 /* 자주 쓰는 메뉴 — 그룹을 무시하고 맨 위에 */
 .nav-fav { --accent: #f5c542; }
 .nav-fav .nav-group-label::before { content: "★ "; }
+/* 자주 쓰는 메뉴 안의 섹션 구분 (2026-08-27) — 설정에서 끼워 넣은 소제목 */
+.nav-fav-sec {
+  font-size: 0.66rem;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  padding: 7px 16px 2px;
+  border-top: 1px dashed var(--border);
+  margin-top: 3px;
+}
 
 /* 지표 설명 — 맨 아래, 접어 둔다 */
 .ov-help { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
@@ -7155,16 +7164,20 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .mo-fav-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .mo-fav-h b { font-size: 0.8rem; }
 .mo-fav-h small { font-size: 0.6667rem; color: var(--muted); }
-.mo-fav-list { display: flex; flex-wrap: wrap; gap: 6px; }
-.mo-fav-chip {
-  padding: 5px 10px;
-  border-radius: 8px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  font-size: 0.7333rem;
-  font-weight: 600;
-  white-space: nowrap;
+/* 세로 일렬 (2026-08-27 개편) — 가로 칩은 열 개 넘으니 줄이 감겨 순서가 안 읽혔다 */
+.mo-fav-list { display: flex; flex-direction: column; margin-bottom: 8px; }
+.mo-fav-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  background: var(--panel-2);
 }
+.mo-fav-row.sec { background: none; }
+.mo-fav-name { flex: 1; font-weight: 600; }
+.mo-fav-secname { flex: 1; color: var(--muted); font-size: 0.72rem; letter-spacing: 0.06em; }
 
 /*
  * 리포트 투자자 수급 표.

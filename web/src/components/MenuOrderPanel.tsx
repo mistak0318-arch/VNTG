@@ -27,6 +27,7 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
   const [over, setOver] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [newGroup, setNewGroup] = useState("");
+  const [newSection, setNewSection] = useState("");
 
   /** 내가 옮긴 영역을 반영한 목록 */
   const placed = items.map((i) => ({ ...i, group: prefs.groupOf[i.key] ?? i.group }));
@@ -154,51 +155,101 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
     Object.keys(prefs.groupOf).length > 0 ||
     prefs.extraGroups.length > 0;
 
-  /** 즐겨찾기에 올라간 항목들을 순서대로 — 없는 키는 걸러낸다 */
-  const favItems = prefs.favorites
-    .map((k) => items.find((i) => i.key === k))
-    .filter((i): i is (typeof items)[number] => Boolean(i));
+  /*
+   * 즐겨찾기 줄들 — **섹션 구분(`#이름`) 포함, 저장 배열 그대로**의 순서다 (2026-08-27 개편).
+   * 예전엔 가로 칩 + ◀▶ 였는데, 열 개가 넘으니 줄이 감겨서 순서가 안 읽혔다.
+   * 사이드바와 같은 **세로 한 줄씩**으로 세우고, 끌어서(또는 ▲▼) 옮긴다.
+   * 섹션을 끼우면 사이드바의 자주 쓰는 메뉴가 소제목으로 나뉜다.
+   */
+  const favRows = prefs.favorites.map((k) =>
+    k.startsWith("#")
+      ? { key: k, sec: k.slice(1), icon: "", label: "" }
+      : {
+          key: k,
+          sec: null,
+          icon: items.find((i) => i.key === k)?.icon ?? "❓",
+          label: nameOf(k, items.find((i) => i.key === k)?.label ?? k),
+        },
+  );
+
+  function removeFav(key: string) {
+    save({ ...prefs, favorites: prefs.favorites.filter((k) => k !== key) });
+  }
+
+  function addFavSection() {
+    const name = newSection.trim();
+    if (!name) return;
+    const key = `#${name}`;
+    if (prefs.favorites.includes(key)) return; // 같은 이름 두 번이면 순서 저장이 꼬인다
+    save({ ...prefs, favorites: [...prefs.favorites, key] });
+    setNewSection("");
+  }
 
   return (
     <>
-      {/*
-        즐겨찾기 순서. 사이드바 맨 위 줄이 이 순서 그대로다.
-        아래 목록에서 ☆ 로 올리고 내리며, **순서는 여기서만** 바꾼다 —
-        아래 목록은 영역별로 나뉘어 있어 즐겨찾기 줄의 순서를 거기서 읽을 수 없다.
-      */}
-      {favItems.length > 0 && (
+      {favRows.length > 0 && (
         <section className="mo-fav">
           <div className="mo-fav-h">
             <b>자주 쓰는 메뉴 순서</b>
-            <small>사이드바 맨 위에 이 순서대로 뜹니다</small>
+            <small>사이드바 맨 위에 이 순서대로 뜹니다 — 끌거나 ▲▼로 옮기세요</small>
           </div>
           <div className="mo-fav-list">
-            {favItems.map((it, i) => (
-              <span className="gt-item" key={it.key}>
-                <button
-                  className="gt-move"
-                  onClick={() => moveFav(i, -1)}
-                  disabled={i === 0}
-                  title="앞으로"
-                >
-                  ◀
-                </button>
-                <span
-                  className={`mo-fav-chip${favDrag.cls(it.key)}`}
-                  {...favDrag.props(it.key)}
-                >
-                  {it.icon} {prefs.labels[it.key]?.trim() || it.label}
+            {favRows.map((r, i) => (
+              <div
+                className={`mo-fav-row${r.sec !== null ? " sec" : ""}${favDrag.cls(r.key)}`}
+                key={r.key}
+                {...favDrag.props(r.key)}
+              >
+                <span className="mo-move">
+                  <button
+                    className="mo-arrow"
+                    onClick={() => moveFav(i, -1)}
+                    disabled={i === 0}
+                    title="위로"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    className="mo-arrow"
+                    onClick={() => moveFav(i, 1)}
+                    disabled={i >= favRows.length - 1}
+                    title="아래로"
+                  >
+                    ▼
+                  </button>
                 </span>
+                <span className="mo-grip" aria-hidden="true">
+                  ⠿
+                </span>
+                {r.sec !== null ? (
+                  <span className="mo-fav-secname">── {r.sec} ──</span>
+                ) : (
+                  <span className="mo-fav-name">
+                    <span className="mo-icon">{r.icon}</span> {r.label}
+                  </span>
+                )}
                 <button
-                  className="gt-move"
-                  onClick={() => moveFav(i, 1)}
-                  disabled={i >= favItems.length - 1}
-                  title="뒤로"
+                  className="row-del-btn"
+                  onClick={() => removeFav(r.key)}
+                  title={r.sec !== null ? "구분 삭제" : "자주 쓰는 메뉴에서 빼기 (메뉴 자체는 그대로)"}
                 >
-                  ▶
+                  ✕
                 </button>
-              </span>
+              </div>
             ))}
+          </div>
+          <div className="filter-row">
+            <input
+              className="pt-input"
+              placeholder="구분 이름 (예: 아침, 장중, 복기)"
+              value={newSection}
+              onChange={(e) => setNewSection(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addFavSection()}
+            />
+            <button className="filter-btn" onClick={addFavSection} disabled={!newSection.trim()}>
+              + 구분 추가
+            </button>
+            <span className="tg-ctl-hint">추가한 구분을 원하는 자리로 끌어 옮기세요</span>
           </div>
         </section>
       )}
