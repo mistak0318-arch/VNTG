@@ -160,6 +160,7 @@ export function YahooChartSheet({
               interval: range === "D" ? "일봉" : range === "W" ? "주봉" : "월봉",
               candles: r.candles,
               prevClose: null,
+              meta: null,
               error: r.error,
             }))
         : futures
@@ -170,6 +171,7 @@ export function YahooChartSheet({
             candles: r.candles,
             // 선물은 전일 종가를 따로 안 준다 — 기준선 없이 흐름만 본다
             prevClose: null,
+            meta: null,
             error: r.error,
           }))
         : api.yahooChart(target.symbol, range);
@@ -524,6 +526,14 @@ export function YahooChartSheet({
             </svg>
             )}
 
+            {/*
+              지수·원자재·금리 숫자판 (2026-08-27 — 「지수나 원자재는 개별종목처럼 안 나온다」).
+              이 셋은 개별종목 상세(한투 해외주식)를 못 받는다 — 심볼 체계가 아예 다르다.
+              그런데 **차트 응답의 meta 에 이미** 당일 고저·52주 고저·거래량이 들어 있어서,
+              조회를 하나도 안 늘리고 채울 수 있다.
+            */}
+            {!usStock && data?.meta && <YahooFigures m={data.meta} digits={digits} prevClose={data.prevClose} />}
+
             <div className="table-note">
               {candles.length}개 봉 ({data?.interval}) · {view.firstT} ~ {view.lastT}
               {range === "1d" && " · 시각은 한국시간입니다"}
@@ -721,6 +731,62 @@ function UsCards({ items }: { items: UsItem[] }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * 지수·원자재·금리 숫자판 (2026-08-27).
+ *
+ * **추가 조회가 0회다.** 값은 전부 차트 응답이 같이 준 `meta` 에서 나온다.
+ * 없는 칸은 안 그린다 — 지수는 거래량이 0 으로 오는 곳이 있고(금리는 늘 0),
+ * 0 을 그대로 적으면 「거래가 없었다」는 **틀린 사실**이 화면에 남는다.
+ */
+function YahooFigures({
+  m,
+  digits,
+  prevClose,
+}: {
+  m: NonNullable<YahooChart["meta"]>;
+  digits: number;
+  prevClose: number | null;
+}) {
+  const fmt = (v: number) => v.toLocaleString("ko-KR", { maximumFractionDigits: digits });
+  const pos52 =
+    m.price !== null && m.high52 !== null && m.low52 !== null && m.high52 > m.low52
+      ? ((m.price - m.low52) / (m.high52 - m.low52)) * 100
+      : null;
+
+  /* 기준(전일 종가) 대비 % — 개별종목 카드와 같은 규칙으로 값 옆 같은 줄에 */
+  const vsBase = (v: number): { sub?: string; subCls?: string; inline?: boolean } => {
+    if (!prevClose) return {};
+    const p = ((v - prevClose) / prevClose) * 100;
+    return { sub: `${p >= 0 ? "+" : ""}${p.toFixed(2)}%`, subCls: p >= 0 ? "positive" : "negative", inline: true };
+  };
+
+  const items: UsItem[] = [];
+  if (prevClose !== null) items.push({ k: "전일 종가", v: fmt(prevClose) });
+  if (m.dayHigh !== null) items.push({ k: "당일 고가", v: fmt(m.dayHigh), ...vsBase(m.dayHigh) });
+  if (m.dayLow !== null) items.push({ k: "당일 저가", v: fmt(m.dayLow), ...vsBase(m.dayLow) });
+  if (pos52 !== null)
+    items.push({
+      k: "52주 자리",
+      v: `${pos52.toFixed(0)}%`,
+      sub: `${fmt(m.low52!)} ~ ${fmt(m.high52!)}`,
+      hint: "0%가 52주 최저, 100%가 최고입니다",
+    });
+  // 거래량 0 은 「없는 값」이다 — 금리·일부 지수가 그렇게 온다
+  if (m.volume !== null && m.volume > 0) items.push({ k: "거래량", v: fmtNum(m.volume) });
+  if (m.exchange) items.push({ k: "거래소", v: m.exchange, sub: m.currency || undefined });
+
+  if (items.length === 0) return null;
+  return (
+    <>
+      <UsCards items={items} />
+      <div className="table-note">
+        {m.name ? `${m.name} · ` : ""}야후 파이낸스입니다. <b>차트와 같이 온 값</b>이라 조회가 더
+        들지 않습니다 — 개별 종목처럼 재무·수급은 없습니다(지수·원자재엔 그런 자리가 없습니다).
+      </div>
+    </>
   );
 }
 

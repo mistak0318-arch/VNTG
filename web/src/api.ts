@@ -3185,6 +3185,22 @@ export interface YahooChart {
   interval: string;
   candles: { t: string; open: number; high: number; low: number; close: number; volume: number }[];
   prevClose: number | null;
+  /**
+   * 차트와 **같이 오는** 요약값 (2026-08-27).
+   * 지수·원자재·금리는 개별종목 상세(us-detail)를 못 받는다 — 그런데 이 값들이
+   * 차트 응답에 이미 들어 있어서, 조회를 늘리지 않고 시트를 채울 수 있다.
+   */
+  meta: {
+    price: number | null;
+    dayHigh: number | null;
+    dayLow: number | null;
+    high52: number | null;
+    low52: number | null;
+    volume: number | null;
+    currency: string;
+    exchange: string;
+    name: string;
+  } | null;
   error: string | null;
 }
 

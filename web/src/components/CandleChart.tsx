@@ -278,6 +278,23 @@ export function CandleChart({
   /** 최신 캔들 — 크로스헤어 핸들러가 항상 최신 배열을 보게 한다 */
   const dataRef = useRef<Candle[]>(candles);
   dataRef.current = candles;
+  /**
+   * 최신 높이.
+   *
+   * ⚠️ 아래 리사이저(`resize`)는 **차트를 만든 effect 안에** 있고, 그 effect 의 deps 에
+   * `height` 는 없다(테마·봉 종류가 바뀔 때만 차트를 다시 만든다). 그래서 클로저가
+   * **만들어질 때의 높이를 영구히 물고 있었다** — 폭이 바뀌어 리사이저가 도는 순간
+   * 높이가 옛 값으로 되돌아갔다.
+   *
+   * 실제로 이 때문에 **전체화면이 반쪽만 찼다** (2026-08-27, 실측: 칸은 902px 인데
+   * 캔버스가 320px). 전체화면으로 들어가면 ① 높이 effect 가 902 를 적용하고 ②
+   * 곧바로 폭이 넓어져 리사이저가 돌면서 320 으로 덮어썼다. 폭이 안 변하는 경우
+   * (같은 폭에서 높이만 커지는 보드 칸)에는 멀쩡해서 더 늦게 드러났다.
+   */
+  const heightRef = useRef(height);
+  heightRef.current = height;
+  /** 리사이저가 마지막으로 적용한 폭 — 크게 달라졌는지 판정하는 기준 */
+  const lastWidthRef = useRef(0);
   /** 첫 데이터에서만 화면을 맞춘다. 갱신 때 fitContent 하면 확대가 풀린다 */
   const fitted = useRef(false);
   /** 마지막으로 화면을 맞췄을 때 무엇을 그리고 있었나 */
@@ -796,7 +813,31 @@ export function CandleChart({
     };
     chart.subscribeCrosshairMove(onMove);
 
-    const resize = () => chart.applyOptions({ width: el.clientWidth, height });
+    /*
+     * 높이는 **ref 에서 읽는다** — 이 클로저는 차트가 살아 있는 동안 그대로라
+     * `height` 를 직접 읽으면 만들 때의 값에 갇힌다(위 heightRef 주석 참고).
+     */
+    const resize = () => {
+      const w = el.clientWidth;
+      chart.applyOptions({ width: w, height: heightRef.current });
+      /*
+       * **폭이 크게 달라지면 봉을 다시 채운다** (2026-08-27).
+       *
+       * 봉 간격(barSpacing)은 폭이 변해도 그대로라, 좁은 칸에서 보던 차트를
+       * 전체화면으로 키우면 **봉이 오른쪽 끝에만 몰리고 왼쪽이 텅 빈다.**
+       * 세로로 긴 모니터에서 특히 심했다 — 폭이 세 배 가까이 뛰니 그림의 3분의 2가
+       * 빈 공간이었다.
+       *
+       * 문턱을 둔다: 조금씩 흔들리는 폭(스크롤바 유무, 창 미세 조정)에까지 맞추면
+       * 사람이 확대해 둔 구간이 자꾸 풀린다. 1.25배 이상 벌어질 때만 맞춘다.
+       */
+      const prev = lastWidthRef.current;
+      if (w > 0) {
+        if (prev > 0 && (w / prev > 1.25 || prev / w > 1.25)) chart.timeScale().fitContent();
+        lastWidthRef.current = w;
+      }
+    };
+    lastWidthRef.current = el.clientWidth;
     window.addEventListener("resize", resize);
     /*
      * **칸이 자리를 잡으면 다시 잰다** (2026-08-27).

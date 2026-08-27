@@ -30,6 +30,25 @@ export interface YahooChart {
   candles: Candle[];
   /** 전일 종가 — 「오늘」 차트에서 기준선을 그으려면 있어야 한다 */
   prevClose: number | null;
+  /**
+   * 야후가 차트와 **같이 주는** 요약값 (2026-08-27).
+   *
+   * 지수·원자재·금리 시트가 「차트 하나만」이었다 — 개별종목은 상세(us-detail)가
+   * 있는데 지수는 그 API 가 못 받는다(한투 해외주식 상세라 심볼이 없다).
+   * 그런데 차트 응답의 `meta` 에 당일 고저·52주 고저·거래량이 이미 들어 있다.
+   * **조회를 늘리지 않고** 시트를 채울 수 있는 값이라 그대로 실어 보낸다.
+   */
+  meta: {
+    price: number | null;
+    dayHigh: number | null;
+    dayLow: number | null;
+    high52: number | null;
+    low52: number | null;
+    volume: number | null;
+    currency: string;
+    exchange: string;
+    name: string;
+  } | null;
   error: string | null;
 }
 
@@ -79,6 +98,7 @@ export async function yahooChart(symbol: string, key = "6mo"): Promise<YahooChar
     interval: pick.interval,
     candles: [],
     prevClose: null,
+    meta: null,
     error: null,
   };
 
@@ -94,7 +114,21 @@ export async function yahooChart(symbol: string, key = "6mo"): Promise<YahooChar
     const body = (await res.json()) as {
       chart?: {
         result?: Array<{
-          meta?: { chartPreviousClose?: number; previousClose?: number };
+          meta?: {
+            chartPreviousClose?: number;
+            previousClose?: number;
+            regularMarketPrice?: number;
+            regularMarketDayHigh?: number;
+            regularMarketDayLow?: number;
+            fiftyTwoWeekHigh?: number;
+            fiftyTwoWeekLow?: number;
+            regularMarketVolume?: number;
+            currency?: string;
+            fullExchangeName?: string;
+            exchangeName?: string;
+            longName?: string;
+            shortName?: string;
+          };
           timestamp?: number[];
           indicators?: {
             quote?: Array<{
@@ -142,6 +176,19 @@ export async function yahooChart(symbol: string, key = "6mo"): Promise<YahooChar
       ...empty,
       candles,
       prevClose: r.meta?.chartPreviousClose ?? r.meta?.previousClose ?? null,
+      meta: r.meta
+        ? {
+            price: fin(r.meta.regularMarketPrice),
+            dayHigh: fin(r.meta.regularMarketDayHigh),
+            dayLow: fin(r.meta.regularMarketDayLow),
+            high52: fin(r.meta.fiftyTwoWeekHigh),
+            low52: fin(r.meta.fiftyTwoWeekLow),
+            volume: fin(r.meta.regularMarketVolume),
+            currency: r.meta.currency ?? "",
+            exchange: r.meta.fullExchangeName ?? r.meta.exchangeName ?? "",
+            name: r.meta.longName ?? r.meta.shortName ?? "",
+          }
+        : null,
       error: candles.length === 0 ? "봉이 하나도 없습니다" : null,
     };
     cache.set(cacheKey, { data, at: Date.now() });
@@ -154,4 +201,9 @@ export async function yahooChart(symbol: string, key = "6mo"): Promise<YahooChar
 
 function num(v: number | null | undefined, fallback: number): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+/** 값이 없으면 null — 0 으로 메우면 「거래량 0」처럼 **틀린 사실**이 화면에 적힌다 */
+function fin(v: number | null | undefined): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
 }

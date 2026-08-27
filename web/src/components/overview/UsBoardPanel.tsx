@@ -173,18 +173,42 @@ export function UsBoardPanel() {
             <div className="empty">불러오는 중…</div>
           ) : (
             <div className="usb-rates">
-              {usRates.map((r) => (
-                <div className="usb-rate" key={r.code}>
-                  <span className="usb-rate-nm">{r.name}</span>
-                  <b className="usb-rate-v">{r.rate === null ? "-" : `${r.rate.toFixed(3)}%`}</b>
-                  {/* 금리는 등락률이 아니라 %p 로 읽어야 한다 */}
-                  <span className={`usb-rate-d ${cls(r.change)}`}>
-                    {r.change === null
-                      ? ""
-                      : `${r.change > 0 ? "+" : ""}${r.change.toFixed(3)}%p`}
-                  </span>
-                </div>
-              ))}
+              {usRates.map((r) => {
+                /*
+                  추이 차트 (2026-08-27 — "국채금리는 아예 차트를 볼 수가 없어").
+                  **야후에 실제로 있는 것만** 연결한다(시황 대시보드와 같은 판단):
+                  ^TNX 10년 · ^TYX 30년 · ^FVX 5년 · ^IRX 13주. 기준금리와 일본 10년은
+                  야후에 심볼이 없어(404 실측) 누르는 시늉을 만들지 않는다.
+                */
+                const yahoo = RATE_YAHOO[r.code] ?? null;
+                const body = (
+                  <>
+                    <span className="usb-rate-nm">{r.name}</span>
+                    <b className="usb-rate-v">{r.rate === null ? "-" : `${r.rate.toFixed(3)}%`}</b>
+                    {/* 금리는 등락률이 아니라 %p 로 읽어야 한다 */}
+                    <span className={`usb-rate-d ${cls(r.change)}`}>
+                      {r.change === null
+                        ? ""
+                        : `${r.change > 0 ? "+" : ""}${r.change.toFixed(3)}%p`}
+                    </span>
+                  </>
+                );
+                return yahoo ? (
+                  <button
+                    type="button"
+                    className="usb-rate clickable"
+                    key={r.code}
+                    onClick={() => setChart({ kind: "usStock", symbol: yahoo, label: r.name })}
+                    title="눌러서 추이 차트"
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <div className="usb-rate" key={r.code}>
+                    {body}
+                  </div>
+                );
+              })}
             </div>
           )}
           <div className="table-note">
@@ -387,6 +411,19 @@ function UsWatchMap({ onOpen }: { onOpen: (symbol: string, label: string) => voi
  * 자리를 아끼려고 촘촘한 타일(dense)을 쓰고, ETF 는 ±2% 면 큰 날이라
  * 색 기준도 2% 로 낮춰 **강한 업종이 확실히 짙게** 보이게 한다.
  */
+/**
+ * 금리 → 야후 심볼 (2026-08-27 실측).
+ *
+ * 값이 실제로 오는 것만 넣는다: `^TNX` 4.656 · `^TYX` 5.182 (같은 시각 한투 값과 일치).
+ * **미국 기준금리(Y0204)와 일본 10년(Y0207)은 야후에 심볼이 없다** — 13주 국채(^IRX)가
+ * 기준금리와 비슷하게 움직이지만 **다른 지표**라, 「미국 기준금리」라고 적어 놓고 그걸
+ * 보여주면 거짓말이 된다. 없는 것은 안 눌리게 둔다.
+ */
+const RATE_YAHOO: Record<string, string> = {
+  Y0202: "^TNX", // 미국 10년
+  Y0201: "^TYX", // 미국 30년
+};
+
 const SECTOR_GROUPS = ["지수·ETF", "액티브·테마"];
 
 /**

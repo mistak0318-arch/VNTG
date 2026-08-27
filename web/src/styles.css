@@ -8,6 +8,11 @@
   --app-font:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --app-font-size: 1.0rem;
+  /*
+   * 넓은 화면 배율 (2026-08-27) — 기본은 1, 아래 미디어쿼리가 키운다.
+   * 파일 맨 아래 「넓은 화면」 블록 참고.
+   */
+  --wide-scale: 1;
   --bg: #0b0f14;
   --panel: #131a22;
   --panel-2: #1a232d;
@@ -47,15 +52,18 @@ html {
    * 예전엔 --app-font-size 를 body 에만 걸었는데, CSS 곳곳에 font-size 가 px 로 박혀
    * 있어서 그것들이 전부 덮어썼다 — 설정에서 글자 크기를 바꿔도 거의 아무 데도 안 먹었다.
    * 이제 px 를 전부 rem 으로 바꾸고 그 기준을 여기서 정한다.
+   *
+   * 넓은 화면에서는 `--wide-scale` 이 이 값을 통째로 키운다 — 치수가 거의 다 rem 이라
+   * 글자만이 아니라 칸·여백·타일까지 같이 커진다. (파일 맨 아래 「넓은 화면」 블록)
    */
-  font-size: var(--app-font-size);
+  font-size: calc(var(--app-font-size) * var(--wide-scale));
 }
 
 body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--app-font);
-  font-size: var(--app-font-size);
+  font-size: calc(var(--app-font-size) * var(--wide-scale));
 }
 
 .app {
@@ -9450,3 +9458,31 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 }
 /* 국기는 티커 줄에 맞춰 위로 */
 .uw-table .uw-flag { vertical-align: top; margin-right: 3px; }
+
+/* ==================================================================
+   넓은 화면 — 글자와 칸을 같이 키운다 (2026-08-27)
+   ------------------------------------------------------------------
+   27인치·세로 모니터를 붙이니 화면만 넓어지고 **글자는 그대로**라
+   시황 대시보드의 관심종목 표와 섹터 MAP 타일이 깨알같이 보였다.
+   폭이 늘면 정보를 더 넣는 게 아니라 **같은 정보를 크게** 보는 게 맞다 —
+   한 줄에 열 개를 더 욱여넣어 봐야 읽히지 않는다.
+
+   `--wide-scale` 은 rem 의 기준(html font-size)을 통째로 곱한다. 이 앱은
+   치수를 거의 다 rem 으로 적어 두었으므로 글자·여백·타일 폭이 **함께** 커진다.
+   설정의 글자 크기와도 곱해진다 — 크게 쓰던 사람은 더 크게 나온다.
+
+   ⚠️ 폭만 본다. 세로로 긴 모니터(1100×1900 같은)는 폭이 좁으므로
+   키우면 오히려 한 줄에 안 들어간다.
+   ================================================================== */
+@media (min-width: 1700px) {
+  :root { --wide-scale: 1.08; }
+}
+@media (min-width: 2100px) {
+  :root { --wide-scale: 1.16; }
+}
+@media (min-width: 2600px) {
+  :root { --wide-scale: 1.24; }
+}
+
+/* 테마 MAP 기본 타일도 rem 으로 — 120px 로 박혀 있어 화면이 넓어져도 안 커졌다 */
+.map-grid { grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); }

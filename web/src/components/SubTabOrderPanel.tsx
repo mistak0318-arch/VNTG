@@ -1,6 +1,5 @@
 import { useCardOrder } from "../useCardOrder";
-import { DETAIL_TABS } from "./StockDetail";
-import { ANALYSIS_TABS } from "../pages/StockAnalysisPage";
+import { STOCK_TABS } from "./StockTabsSection";
 import { SCREENER_TABS } from "../pages/ScreenerPage";
 import { SCREEN_TABS } from "../pages/ScreenPage";
 import { FLOW_TABS } from "../pages/MarketFlowPage";
@@ -25,8 +24,12 @@ interface PageDef {
 }
 
 const PAGES: PageDef[] = [
-  { scope: "stockDetail.tabs", label: "종목 상세 시트", tabs: DETAIL_TABS },
-  { scope: "stockAnalysis.tabs", label: "개별종목분석", tabs: ANALYSIS_TABS },
+  /*
+   * 종목 상세 시트와 개별종목분석은 **같은 탭 묶음**이라 줄도 하나다 (2026-08-27).
+   * 예전엔 각자 탭 목록을 들고 있어서 순서도 따로 정해야 했다 — 같은 종목을 보는
+   * 화면인데 한쪽에만 있는 탭이 생기는 원인이기도 했다.
+   */
+  { scope: "stockDetail.tabs", label: "종목 상세 · 개별종목분석", tabs: STOCK_TABS },
   { scope: "screener.tabs", label: "시세분석", tabs: SCREENER_TABS },
   { scope: "screen.tabs", label: "신호등 찾기", tabs: SCREEN_TABS },
   { scope: "marketflow.tabs", label: "시장흐름분석", tabs: FLOW_TABS },
