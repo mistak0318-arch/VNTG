@@ -255,6 +255,13 @@ export function SuperDashboardPage({
                   accessor={(e: SuperEntry) => e.price ?? -1}
                   sort={sort}
                 />
+                {/* 오늘 얘가 몇 % 인지 — 들어가 보지 않아도 (2026-08-27) */}
+                <SortableTh
+                  columnKey="today"
+                  label="당일"
+                  accessor={(e: SuperEntry) => e.changeRate ?? -9999}
+                  sort={sort}
+                />
                 <SortableTh
                   columnKey="since"
                   label="편입 대비"
@@ -337,6 +344,7 @@ export function SuperDashboardPage({
                       <Spark values={daily.map((d) => d.score)} color="var(--green)" />
                     </td>
                     <td className="num">{e.price ? e.price.toLocaleString("ko-KR") : "-"}</td>
+                    <td className={`num ${cls(e.changeRate)}`}>{pct(e.changeRate)}</td>
                     <td className={`num strong-col ${cls(e.sinceAdded)}`}>{pct(e.sinceAdded)}</td>
                     <td>
                       <Spark
