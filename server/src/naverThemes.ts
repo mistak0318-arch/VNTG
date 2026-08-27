@@ -70,8 +70,59 @@ export interface UsTheme {
   /** 로이터 산업 코드 — 이름이 같아도 코드로 가른다 */
   code: string;
   name: string;
-  stocks: { symbol: string; name: string; exchange: string }[];
+  stocks: {
+    symbol: string;
+    name: string;
+    exchange: string;
+    /**
+     * 마지막 정규장 등락률(%).
+     *
+     * ⚠️ 국내와 달리 **여기 시세를 같이 저장한다.** 키움·한투 해외주식은 종목당
+     * 1콜이라 6,100종목을 매일 받을 수가 없다 — 국내는 업종 묶음으로 65콜이면
+     * 전종목이 되지만 해외엔 그런 묶음 조회가 없다.
+     * 그런데 이 분류를 주는 네이버 API 가 **시세를 같은 응답에 담아 준다.**
+     * 100종목씩 63장이면 6,100종목이 다 온다 — 그래서 미국만 여기 얹는다.
+     * 집계(테마 평균·상승비율·연속성)는 국내와 똑같이 우리가 한다.
+     */
+    changeRate: number | null;
+    /** 시가총액(현지 통화) — 큰 종목부터 보여주려고 */
+    marketCap: number | null;
+  }[];
 }
+
+/**
+ * ETF — **묶음이 아니라 종목 하나하나가 곧 테마다.**
+ *
+ * 「KODEX 2차전지산업」은 그 자체로 이차전지 테마다. 그래서 국내 테마처럼 구성종목을
+ * 모을 필요가 없고, ETF 목록을 분류별로 늘어놓으면 그게 곧 테마 MAP 이 된다.
+ *
+ * 네이버 ETF 목록 API 는 **요청 한 번에 1,163개가 통째로** 온다 — 등락률·NAV·
+ * 3개월 수익률·시총까지 같이. 그래서 매일 받아도 부담이 없다.
+ */
+export interface EtfRow {
+  code: string;
+  name: string;
+  /** 분류 — 1 국내지수 · 2 국내업종/테마 · 3 국내파생 · 4 해외주식 · 5 원자재 · 6 채권 · 7 기타 */
+  tab: number;
+  changeRate: number | null;
+  /** 순자산가치. 괴리율을 볼 때 쓴다 */
+  nav: number | null;
+  price: number | null;
+  /** 최근 3개월 수익률(%) — 네이버가 같이 준다 */
+  m3: number | null;
+  /** 시가총액(억원) */
+  marketCap: number | null;
+}
+
+export const ETF_TABS: Record<number, string> = {
+  1: "국내 시장지수",
+  2: "국내 업종/테마",
+  3: "국내 파생",
+  4: "해외 주식",
+  5: "원자재",
+  6: "채권",
+  7: "기타",
+};
 
 export interface NaverThemeStore {
   /** 마지막으로 받은 시각 (ISO) */
@@ -81,9 +132,19 @@ export interface NaverThemeStore {
   us: UsTheme[];
   /** 미국 쪽 마지막 갱신 */
   usFetchedAt: string;
+  /** ETF 목록 — 요청 한 번이라 매일 받는다 */
+  etf: EtfRow[];
+  etfFetchedAt: string;
 }
 
-const EMPTY: NaverThemeStore = { fetchedAt: "", themes: [], us: [], usFetchedAt: "" };
+const EMPTY: NaverThemeStore = {
+  fetchedAt: "",
+  themes: [],
+  us: [],
+  usFetchedAt: "",
+  etf: [],
+  etfFetchedAt: "",
+};
 
 let cache: NaverThemeStore | null = null;
 
@@ -100,6 +161,8 @@ export async function loadThemes(): Promise<NaverThemeStore> {
       themes: Array.isArray(raw.themes) ? raw.themes : [],
       us: Array.isArray(raw.us) ? raw.us : [],
       usFetchedAt: String(raw.usFetchedAt ?? ""),
+      etf: Array.isArray(raw.etf) ? raw.etf : [],
+      etfFetchedAt: String(raw.etfFetchedAt ?? ""),
     };
   } catch {
     cache = EMPTY;
@@ -249,10 +312,9 @@ export async function fetchAllThemes(opts: { limit?: number } = {}): Promise<Nav
     /* 미국 쪽은 **건드리지 않는다** — 국내만 다시 받는 일이 흔하다 */
     const prev = await loadThemes();
     const store: NaverThemeStore = {
+      ...prev,
       fetchedAt: new Date().toISOString(),
       themes,
-      us: prev.us,
-      usFetchedAt: prev.usFetchedAt,
     };
     await mkdir(DIR, { recursive: true });
     await writeFile(FILE, JSON.stringify(store), "utf-8");
@@ -279,6 +341,14 @@ interface UsRow {
   stockName?: string;
   stockExchangeType?: { name?: string };
   industryCodeType?: { code?: string; industryGroupKor?: string };
+  /** 등락률 — 문자열로 온다("1.23") */
+  fluctuationsRatio?: string;
+  marketValueRaw?: number;
+}
+
+function toNum(v: unknown): number | null {
+  const n = Number(String(v ?? "").replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
 }
 
 /**
@@ -315,6 +385,8 @@ export async function fetchUsThemes(): Promise<UsTheme[]> {
             symbol,
             name: String(s.stockName ?? symbol).trim(),
             exchange: String(s.stockExchangeType?.name ?? ex),
+            changeRate: toNum(s.fluctuationsRatio),
+            marketCap: toNum(s.marketValueRaw),
           });
           byCode.set(code, t);
         }
@@ -344,19 +416,89 @@ export async function refreshUsThemes(): Promise<{ themes: number; stocks: numbe
 }
 
 /* ------------------------------------------------------------------ */
+/* ETF                                                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * ETF 목록 — **요청 한 번에 전부.**
+ *
+ * 이 API 는 페이징이 없다. 1,163개가 한 응답에 오고 등락률·NAV·3개월 수익률·시총이
+ * 붙어 있다. 그래서 국내 테마(273장)나 미국(63장)과 달리 매일 받아도 티가 안 난다.
+ * `Referer` 가 없으면 막힐 수 있어 같이 보낸다.
+ */
+export async function fetchEtfs(): Promise<EtfRow[]> {
+  const res = await fetch("https://finance.naver.com/api/sise/etfItemList.nhn", {
+    headers: { "User-Agent": UA, Referer: "https://finance.naver.com/sise/etf.naver" },
+  });
+  if (!res.ok) {
+    void recordApiCall("naver", "etfList", res.status === 429 ? "rateLimited" : "failed");
+    throw new Error(`네이버 응답 ${res.status}`);
+  }
+  void recordApiCall("naver", "etfList", "ok");
+  /*
+   * ⚠️ **JSON 인데 EUC-KR 이다.**
+   * `res.json()` 은 본문을 UTF-8 로 읽으므로 「TIGER 2차전지TOP10」이
+   * 「TIGER 2������TOP10」이 된다(실측). HTML 쪽과 같은 함정인데, 응답이
+   * JSON 이라 방심하기 쉽다. 바이트로 받아 EUC-KR 로 풀고 나서 파싱한다.
+   */
+  const body = JSON.parse(
+    new TextDecoder("euc-kr").decode(Buffer.from(await res.arrayBuffer())),
+  ) as {
+    result?: {
+      etfItemList?: {
+        itemcode?: string;
+        itemname?: string;
+        etfTabCode?: number;
+        changeRate?: number;
+        nowVal?: number;
+        nav?: number;
+        threeMonthEarnRate?: number;
+        marketSum?: number;
+      }[];
+    };
+  };
+  return (body.result?.etfItemList ?? [])
+    .map((r) => ({
+      code: String(r.itemcode ?? "").trim(),
+      name: String(r.itemname ?? "").trim(),
+      tab: Number(r.etfTabCode) || 7,
+      changeRate: toNum(r.changeRate),
+      nav: toNum(r.nav),
+      price: toNum(r.nowVal),
+      m3: toNum(r.threeMonthEarnRate),
+      marketCap: toNum(r.marketSum),
+    }))
+    .filter((r) => /^\d{6}$/.test(r.code) && r.name.length > 0);
+}
+
+/** ETF 만 다시 받아 저장한다 */
+export async function refreshEtfs(): Promise<{ count: number }> {
+  const etf = await fetchEtfs();
+  const prev = await loadThemes();
+  const store: NaverThemeStore = { ...prev, etf, etfFetchedAt: new Date().toISOString() };
+  await mkdir(DIR, { recursive: true });
+  await writeFile(FILE, JSON.stringify(store), "utf-8");
+  cache = store;
+  return { count: etf.length };
+}
+
+/* ------------------------------------------------------------------ */
 /* 주 1회 갱신                                                          */
 /* ------------------------------------------------------------------ */
 
 let timer: NodeJS.Timeout | null = null;
 
 /**
- * 주 1회 자동 갱신 (2026-08-28 요청 — "내가 누르는 거 까먹을 수 있잖아").
+ * 자동 갱신 — **국내와 미국의 주기가 다르다.**
  *
- * **일요일 새벽 4시**다. 장이 안 서는 날이라 우리 서버도 한가하고, 네이버도 그렇다.
- * 테마 구성은 매일 바뀌는 값이 아니라 이 주기로 충분하다 — 매일 돌리면 쓰지도 않는
- * 데이터를 300장씩 받는 셈이다.
+ * 국내: **주 1회(일요일 04시).** 받는 것이 분류뿐이라 이 주기로 충분하다. 등락률은
+ *   키움 스냅샷으로 매일 새로 내므로 이 파일이 낡아도 화면 숫자는 오늘 것이다.
+ *   매일 돌리면 쓰지도 않는 데이터를 273장씩 받는 셈이다.
  *
- * 지난 갱신이 7일이 안 됐으면 건너뛴다. 서버를 자주 재시작해도 그때마다 받지 않는다.
+ * 미국: **매일(07시대).** 여기는 분류와 **시세가 한 응답에 같이 온다** — 키움·한투
+ *   해외주식은 종목당 1콜이라 6,100종목을 받을 길이 없고, 이 API 는 63장이면 된다.
+ *   그래서 미국만 매일 받아 등락률까지 갱신한다. 한국시간 07시면 미국 정규장이
+ *   끝난 뒤라 그날 종가가 들어온다.
  */
 export function startThemeScheduler(): void {
   if (timer) return;
@@ -364,15 +506,14 @@ export function startThemeScheduler(): void {
     if (running) return;
     const store = await loadThemes();
     const kst = new Date(Date.now() + 9 * 3600_000);
-    // 일요일(0) 새벽 4시대에만
-    if (kst.getUTCDay() !== 0 || kst.getUTCHours() !== 4) {
-      // 다만 **한 번도 받은 적이 없으면** 요일을 안 따진다. 빈 화면으로 두지 않는다
-      if (store.themes.length > 0) return;
-    }
+    const hour = kst.getUTCHours();
+    const day = kst.getUTCDay();
     const age = store.fetchedAt ? Date.now() - new Date(store.fetchedAt).getTime() : Infinity;
     const usAge = store.usFetchedAt ? Date.now() - new Date(store.usFetchedAt).getTime() : Infinity;
-    const WEEK = 6.5 * 24 * 3600_000;
-    if (age >= WEEK) {
+
+    /* 국내 — 일요일 04시. 한 번도 받은 적이 없으면 때를 안 가린다(빈 화면으로 두지 않는다) */
+    const krDue = age >= 6.5 * 24 * 3600_000 && (day === 0 && hour === 4);
+    if (krDue || store.themes.length === 0) {
       try {
         const r = await fetchAllThemes();
         console.log(`[naverThemes] 국내 갱신 — 테마 ${r.themes.length}개`);
@@ -380,8 +521,10 @@ export function startThemeScheduler(): void {
         console.error("[naverThemes] 국내 갱신 실패:", err instanceof Error ? err.message : err);
       }
     }
-    /* 미국은 국내 다음에 — 둘을 동시에 돌리면 같은 곳에 두 배로 간다 */
-    if (usAge >= WEEK) {
+
+    /* 미국 — 매일 07시대(미국 마감 뒤). 20시간이 안 지났으면 건너뛴다 */
+    const usDue = usAge >= 20 * 3600_000 && hour === 7;
+    if (usDue || store.us.length === 0) {
       try {
         const r = await refreshUsThemes();
         console.log(`[naverThemes] 미국 갱신 — 테마 ${r.themes}개 · 종목 ${r.stocks}개`);
@@ -389,10 +532,23 @@ export function startThemeScheduler(): void {
         console.error("[naverThemes] 미국 갱신 실패:", err instanceof Error ? err.message : err);
       }
     }
+
+    /* ETF — **요청 한 번**이라 장 마감 뒤(16시대) 매일 받는다 */
+    const etfAge = store.etfFetchedAt
+      ? Date.now() - new Date(store.etfFetchedAt).getTime()
+      : Infinity;
+    if ((etfAge >= 12 * 3600_000 && hour === 16) || store.etf.length === 0) {
+      try {
+        const r = await refreshEtfs();
+        console.log(`[naverThemes] ETF 갱신 — ${r.count}개`);
+      } catch (err) {
+        console.error("[naverThemes] ETF 갱신 실패:", err instanceof Error ? err.message : err);
+      }
+    }
   };
   setTimeout(() => void tick(), 120_000); // 기동 직후는 다른 초기화에 자리를 내준다
   timer = setInterval(() => void tick(), 30 * 60_000);
-  console.log("[naverThemes] 테마 갱신 스케줄러 시작 (주 1회, 일요일 04시)");
+  console.log("[naverThemes] 테마 갱신 스케줄러 시작 (국내 주 1회 · 미국 매일 07시)");
 }
 
 /** 요약 — 화면 머리에 「언제 받은 것인가」를 적기 위해 */
@@ -404,6 +560,8 @@ export async function themeSummary(): Promise<{
   usFetchedAt: string;
   usThemes: number;
   usStocks: number;
+  etfFetchedAt: string;
+  etfs: number;
 }> {
   const store = await loadThemes();
   const all = store.themes.flatMap((t) => t.stocks);
@@ -415,5 +573,7 @@ export async function themeSummary(): Promise<{
     usFetchedAt: store.usFetchedAt,
     usThemes: store.us.length,
     usStocks: store.us.reduce((n, t) => n + t.stocks.length, 0),
+    etfFetchedAt: store.etfFetchedAt,
+    etfs: store.etf.length,
   };
 }

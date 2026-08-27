@@ -85,10 +85,13 @@ function ThemeMap({
   onSelectStock: (code: string, name: string) => void;
 }) {
   const [rows, setRows] = useState<ThemeStrength[] | null>(null);
+  const [warming, setWarming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("rate");
   const [open, setOpen] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  /** ETF 는 분류가 있어 그걸로 좁혀 본다 */
+  const [group, setGroup] = useState<string>("");
   const { theme } = useAppearance();
 
   useEffect(() => {
@@ -96,25 +99,38 @@ function ThemeMap({
     setRows(null);
     setError(null);
     setOpen(null);
+    setGroup("");
     api
       .themeStrength(market)
-      .then((r) => alive && setRows(r.themes))
+      .then((r) => {
+        if (!alive) return;
+        setRows(r.themes);
+        setWarming(Boolean(r.warming));
+      })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
     };
   }, [market]);
 
+  /** ETF 분류 목록 — 개수까지 보여야 어디를 볼지 정해진다 */
+  const groups = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of rows ?? []) if (t.group) m.set(t.group, (m.get(t.group) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [rows]);
+
   const sorted = useMemo(() => {
     if (!rows) return [];
     const key = q.trim().toLowerCase();
+    const base = group ? rows.filter((t) => t.group === group) : rows;
     const hit = key
-      ? rows.filter(
+      ? base.filter(
           (t) =>
             t.name.toLowerCase().includes(key) ||
             t.stocks.some((s) => s.name.toLowerCase().includes(key)),
         )
-      : rows;
+      : base;
     const by: Record<SortKey, (a: ThemeStrength, b: ThemeStrength) => number> = {
       rate: (a, b) => b.changeRate - a.changeRate,
       breadth: (a, b) => b.breadth - a.breadth,
@@ -122,15 +138,40 @@ function ThemeMap({
       size: (a, b) => b.stocks.length - a.stocks.length,
     };
     return [...hit].sort(by[sort]);
-  }, [rows, sort, q]);
+  }, [rows, sort, q, group]);
 
   if (error) return <div className="error-banner">{error}</div>;
   if (!rows) return <div className="empty">테마 불러오는 중…</div>;
   if (rows.length === 0) {
+    /*
+     * **왜 비었는지가 경우마다 다르다.** 「받아 주세요」로 뭉뚱그리면 원인이 다른
+     * 상태들이 같은 화면으로 보여서, 사람이 엉뚱한 데를 고치러 간다.
+     * 특히 `warming` 은 분류가 멀쩡히 있는데 시세만 아직 없는 상태다.
+     */
     return (
       <div className="page-note">
-        아직 받아 둔 테마가 없습니다. <b>설정 &gt; 분석 기준</b>에서 테마 DB 를 한 번
-        받아 주세요. 주 1회 자동으로도 갱신됩니다.
+        {warming ? (
+          <>
+            분류는 받아 두었는데 <b>시세를 아직 못 불러왔습니다.</b> 서버를 막 켰을 때
+            그렇습니다 — 키움 전종목을 한 바퀴 받는 데 십몇 초 걸립니다. 잠시 뒤 다시
+            열어 주세요.
+          </>
+        ) : market === "etf" ? (
+          <>
+            ETF 목록을 아직 못 받았습니다. 장 마감 뒤(16시)에 자동으로 받습니다 —
+            지금 받으려면 <b>설정 &gt; 분석 기준</b>에서 눌러 주세요(요청 한 번이라 바로 끝납니다).
+          </>
+        ) : market === "us" ? (
+          <>
+            미국 테마를 아직 못 받았습니다. 매일 아침 7시에 자동으로 받습니다 —
+            지금 바로 받으려면 <b>설정 &gt; 분석 기준</b>에서 눌러 주세요(2분 걸립니다).
+          </>
+        ) : (
+          <>
+            국내 테마를 아직 못 받았습니다. <b>설정 &gt; 분석 기준</b>에서 한 번 받아
+            주세요(10분 걸립니다). 이후 주 1회 자동으로 갱신됩니다.
+          </>
+        )}
       </div>
     );
   }
@@ -139,6 +180,24 @@ function ThemeMap({
 
   return (
     <>
+      {/* ETF 분류 — 「국내 업종/테마」만 보고 싶은 때가 대부분이라 앞에 둔다 */}
+      {groups.length > 0 && (
+        <div className="filter-row">
+          <button className={`filter-btn ${group === "" ? "active" : ""}`} onClick={() => setGroup("")}>
+            전체 <span className="gt-n">{rows.length}</span>
+          </button>
+          {groups.map(([g, n]) => (
+            <button
+              key={g}
+              className={`filter-btn ${group === g ? "active" : ""}`}
+              onClick={() => setGroup(g)}
+            >
+              {g} <span className="gt-n">{n}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="filter-row tdb-bar">
         {SORTS.map((s) => (
           <button

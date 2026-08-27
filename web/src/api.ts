@@ -629,7 +629,10 @@ export const api = {
   naverThemeFetchUs: () => postJson<{ started: boolean }>("/api/market/naver-themes/fetch-us", {}),
   /** 테마 강도 — 등락률·상승비율·연속성. **조회 0회**(분류는 파일, 시세는 스냅샷) */
   themeStrength: (market: "kr" | "etf" | "us") =>
-    getJson<{ themes: ThemeStrength[]; at: string }>(`/api/market/theme-strength/${market}`),
+    getJson<{ themes: ThemeStrength[]; at: string; warming?: boolean }>(
+      `/api/market/theme-strength/${market}`,
+    ),
+  naverThemeFetchEtf: () => postJson<{ count: number }>("/api/market/naver-themes/fetch-etf", {}),
   /** 테마 브리핑 — 국내·미국이 같은 이야기를 하는 짝과 「누가 앞서나」 */
   themeLinks: () => getJson<{ pairs: ThemeLink[]; note: string }>("/api/market/theme-links"),
   /** 미국 ETF 구성종목 — 섹터 MAP 타일을 눌렀을 때. 하루 캐시라 여닫아도 조회가 안 는다 */
@@ -3225,7 +3228,17 @@ export interface TrackJob {
 export interface NaverThemeStore {
   fetchedAt: string;
   themes: { no: number; name: string; stocks: { code: string; name: string; desc: string }[] }[];
-  us: { code: string; name: string; stocks: { symbol: string; name: string; exchange: string }[] }[];
+  us: {
+    code: string;
+    name: string;
+    stocks: {
+      symbol: string;
+      name: string;
+      exchange: string;
+      changeRate: number | null;
+      marketCap: number | null;
+    }[];
+  }[];
   usFetchedAt: string;
 }
 
@@ -3238,6 +3251,8 @@ export interface ThemeDbSummary {
   usFetchedAt: string;
   usThemes: number;
   usStocks: number;
+  etfFetchedAt: string;
+  etfs: number;
 }
 
 /**
@@ -3256,8 +3271,10 @@ export interface ThemeStrength {
   streak: number;
   /** 5거래일 누적(%). 기록이 모자라면 null */
   w1: number | null;
-  /** 20거래일 누적(%). 기록이 모자라면 null */
+  /** 20거래일 누적(%). 기록이 모자라면 null. ETF 는 네이버가 준 3개월 수익률이다 */
   m1: number | null;
+  /** ETF 만 — 분류(국내 업종/테마 · 해외 주식 · 원자재…) */
+  group?: string;
   stocks: { code: string; name: string; desc: string; changeRate: number | null }[];
 }
 

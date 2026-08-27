@@ -17,6 +17,7 @@ import { themeLinks } from "../themeLinks.js";
 import {
   fetchAllThemes,
   loadThemes,
+  refreshEtfs,
   refreshUsThemes,
   themeFetchProgress,
   themeSummary,
@@ -833,6 +834,15 @@ export function createMarketRouter(client: KiwoomClient): Router {
     try {
       void refreshUsThemes().catch(() => undefined);
       res.json({ started: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** ETF 목록 — **요청 한 번**이라 기다렸다 결과를 준다 */
+  router.post("/naver-themes/fetch-etf", async (_req, res, next) => {
+    try {
+      res.json(await refreshEtfs());
     } catch (err) {
       next(err);
     }

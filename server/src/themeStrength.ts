@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { peekSnapshot } from "./marketSnapshot.js";
-import { loadThemes } from "./naverThemes.js";
+import { ETF_TABS, loadThemes } from "./naverThemes.js";
 
 /**
  * 테마 강도 — **분류는 남의 것, 숫자는 우리 것.**
@@ -59,6 +59,8 @@ export interface ThemeStrength {
   w1: number | null;
   /** 20거래일 누적(%) — 기록이 모자라면 null */
   m1: number | null;
+  /** ETF 만 — 분류(국내 업종/테마 · 해외 주식 · 원자재…). 화면이 이걸로 나눠 본다 */
+  group?: string;
   stocks: ThemeStockRow[];
 }
 
@@ -88,11 +90,17 @@ function kstDate(): string {
  * **장중에는 안 적는다.** 오전 10시의 +3% 를 그날 값으로 굳히면 연속성이 거짓이 된다.
  * 스냅샷이 「거래 중」이 아닐 때(=마감 뒤)만 적는다.
  */
-async function record(rows: ThemeStrength[], traded: boolean): Promise<void> {
+async function record(rows: ThemeStrength[], traded: boolean, market: Market): Promise<void> {
   if (!traded || rows.length === 0) return;
   const hist = await loadHistory();
   const day = kstDate();
-  hist.days[day] = Object.fromEntries(rows.map((r) => [r.key, Math.round(r.changeRate * 100) / 100]));
+  /* 같은 날 다른 시장을 덮지 않는다 — 국내와 미국이 같은 줄을 나눠 쓴다 */
+  const prev = hist.days[day] ?? {};
+  for (const k of Object.keys(prev)) if (k.startsWith(`${market}:`)) delete prev[k];
+  hist.days[day] = {
+    ...prev,
+    ...Object.fromEntries(rows.map((r) => [r.key, Math.round(r.changeRate * 100) / 100])),
+  };
   /* 60일치만 남긴다 — 월간까지 보는데 그 이상은 쓰지 않는다 */
   const keys = Object.keys(hist.days).sort();
   for (const k of keys.slice(0, Math.max(0, keys.length - 60))) delete hist.days[k];
@@ -124,11 +132,25 @@ function streakOf(series: number[]): number {
  * 에서 읽는다. 스냅샷이 아직 없으면 등락률이 전부 null 이 되므로 그때는 빈 목록을 준다 —
  * 0% 로 채워진 MAP 은 「전부 보합」이라는 거짓말이다.
  */
-export async function themeStrength(market: Market): Promise<{ themes: ThemeStrength[]; at: string }> {
+export async function themeStrength(
+  market: Market,
+): Promise<{ themes: ThemeStrength[]; at: string; warming?: boolean }> {
   const store = await loadThemes();
   const snap = peekSnapshot();
   const hist = await loadHistory();
   const days = Object.keys(hist.days).sort();
+
+  /*
+   * ⚠️ **스냅샷이 아직 없을 때를 구분해서 알려 준다** (2026-08-28).
+   *
+   * 국내 등락률은 키움 전종목 스냅샷에서 나오는데, 서버를 막 켜면 그게 비어 있다.
+   * 그러면 모든 종목의 등락률이 null 이라 테마가 통째로 걸러지고, 화면에는
+   * 「받아 둔 테마가 없습니다」가 뜬다 — **분류는 멀쩡히 있는데** 그렇게 보인다.
+   * 원인이 전혀 다른 두 상태가 같은 화면으로 보이면 사람이 엉뚱한 데를 고치게 된다.
+   */
+  if (market === "kr" && !snap && store.themes.length > 0) {
+    return { themes: [], at: "", warming: true };
+  }
 
   const rows: ThemeStrength[] = [];
 
@@ -145,35 +167,65 @@ export async function themeStrength(market: Market): Promise<{ themes: ThemeStre
     }
   } else if (market === "us") {
     /*
-     * 미국은 스냅샷이 없다(키움 전종목은 국내뿐이다). 네이버가 분류와 함께 준
-     * 시세를 쓰려면 매일 받아야 하는데, 지금은 주 1회다 — 그래서 **등락률을 못 낸다.**
-     * 구성만 보여 주고 숫자는 비운다. 0 으로 채우지 않는다.
+     * 미국은 키움 스냅샷이 없다 — 해외주식은 종목당 1콜이라 6,100종목을 매일 받을 수
+     * 없다. 대신 **분류를 주는 네이버 API 가 시세를 같은 응답에 담아 준다**(63콜).
+     * 그래서 저장된 값을 그대로 쓴다. 집계는 국내와 똑같이 여기서 한다 —
+     * 평균도 상승비율도 연속성도 우리 계산이다.
      */
     for (const t of store.us) {
-      const stocks: ThemeStockRow[] = t.stocks.map((s) => ({
-        code: s.symbol,
-        name: s.name,
-        desc: "",
-        changeRate: null,
-      }));
+      const stocks: ThemeStockRow[] = t.stocks
+        .slice()
+        .sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0))
+        .map((s) => ({ code: s.symbol, name: s.name, desc: "", changeRate: s.changeRate }));
+      const row = build(`us:${t.code}`, t.name, stocks, days, hist);
+      if (row) rows.push(row);
+    }
+  } else {
+    /*
+     * ETF — **묶음이 아니라 종목 하나가 곧 테마다.**
+     * 「KODEX 2차전지산업」은 그 자체로 이차전지 테마라, 구성종목을 모을 필요가 없다.
+     * 그래서 분류(국내 업종/테마·해외 주식·원자재…)를 테마 이름 대신 쓰고
+     * 타일 하나가 ETF 하나가 된다. 상승비율·연속성은 뜻이 없어 0 으로 둔다 —
+     * 한 종목짜리 묶음에서 「몇이 올랐나」는 물음 자체가 성립하지 않는다.
+     */
+    for (const e of store.etf) {
+      if (e.changeRate === null) continue;
       rows.push({
-        key: `us:${t.code}`,
-        name: t.name,
-        changeRate: 0,
-        up: 0,
-        down: 0,
-        breadth: 0,
+        key: `etf:${e.code}`,
+        name: e.name,
+        changeRate: e.changeRate,
+        up: e.changeRate > 0 ? 1 : 0,
+        down: e.changeRate < 0 ? 1 : 0,
+        breadth: e.changeRate > 0 ? 100 : 0,
         streak: 0,
+        /* 네이버가 3개월 수익률을 준다 — 주간은 없으므로 월간 자리에만 넣는다 */
         w1: null,
-        m1: null,
-        stocks,
+        m1: e.m3,
+        group: ETF_TABS[e.tab] ?? "기타",
+        stocks: [
+          {
+            code: e.code,
+            name: e.name,
+            desc:
+              e.nav !== null && e.price !== null && e.nav > 0
+                ? `NAV ${e.nav.toLocaleString("ko-KR")} · 괴리 ${(((e.price - e.nav) / e.nav) * 100).toFixed(2)}%`
+                : "",
+            changeRate: e.changeRate,
+          },
+        ],
       });
     }
   }
-  /* ETF 테마는 아직 출처가 없다 — 빈 목록을 준다(화면이 안내한다) */
 
   rows.sort((a, b) => b.changeRate - a.changeRate);
-  if (market === "kr") void record(rows, snap?.traded ?? false).catch(() => undefined);
+  /*
+   * 기록은 국내·미국 둘 다 남긴다 — 연속성과 주간·월간이 여기서 나온다.
+   * 국내는 **마감 뒤에만** 적는다(장중 +3% 를 그날 값으로 굳히면 거짓이 된다).
+   * 미국은 저장된 값 자체가 이미 마지막 정규장 종가 기준이라 그 조건이 없다.
+   */
+  void record(rows, market === "kr" ? snap?.traded ?? false : rows.length > 0, market).catch(
+    () => undefined,
+  );
 
   return { themes: rows, at: String(snap?.at ?? "") };
 }
