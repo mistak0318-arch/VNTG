@@ -9704,3 +9704,13 @@ button.tpb-row {
   text-align: left;
 }
 button.tpb-row:hover { background: var(--panel-2); }
+
+/* 테마 표 (2026-08-28) — MAP 에서 갈아탔다. 지표를 나란히 놓고 견주려면 표라야 한다 */
+.tdb-table { font-size: 0.76rem; }
+.tdb-tr { cursor: pointer; }
+.tdb-tr:hover { background: var(--panel-2); }
+.tdb-td-name { font-weight: 700; white-space: nowrap; }
+.tdb-td-name em { font-style: normal; font-weight: 400; }
+.tdb-table .num em { font-style: normal; }
+/* 주도주 칩 — 넘치면 잘라서 표가 안 늘어나게 */
+.tdb-td-tops { display: flex; gap: 3px; flex-wrap: nowrap; overflow: hidden; max-width: 18rem; }

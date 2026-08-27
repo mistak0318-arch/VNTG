@@ -212,10 +212,21 @@ export async function themeStrength(
      * 평균도 상승비율도 연속성도 우리 계산이다.
      */
     for (const t of store.us) {
+      /*
+       * 미국은 거래대금을 안 주므로 **시가총액**을 규모로 쓴다.
+       * 네이버가 달러 원값을 주니 억원으로 바꾼다 — 국내와 단위를 맞춰야 화면이
+       * 같은 말을 할 수 있다. 환율은 대략치다(필터용이라 소수점이 뜻이 없다).
+       */
       const stocks: ThemeStockRow[] = t.stocks
         .slice()
         .sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0))
-        .map((s) => ({ code: s.symbol, name: s.name, desc: "", changeRate: s.changeRate }));
+        .map((s) => ({
+          code: s.symbol,
+          name: s.name,
+          desc: "",
+          changeRate: s.changeRate,
+          tradeValue: s.marketCap !== null ? Math.round((s.marketCap * 1380) / 100_000_000) : null,
+        }));
       const row = build(`us:${t.code}`, t.name, stocks, days, hist);
       if (row) rows.push(row);
     }

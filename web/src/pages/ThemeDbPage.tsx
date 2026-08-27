@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, signClass, type NaverThemeStore, type ThemeStrength } from "../api";
+import { api, signClass, type ThemeStrength } from "../api";
 import { useCardOrder } from "../useCardOrder";
 import { TabScroller } from "../components/TabScroller";
-import { tileHeat, useAppearance } from "../useAppearance";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 
 /**
  * 테마 DB — **네이버 테마를 우리 눈금으로 다시 그린다.**
@@ -33,19 +33,32 @@ export const THEME_TABS: { key: ThemeTab; label: string }[] = [
   { key: "period", label: "일간·주간·월간" },
 ];
 
-/** 정렬 기준 — 「무엇이 강한가」를 무엇으로 볼 것인가 */
-type SortKey = "rate" | "w1" | "m1" | "breadth" | "hit5" | "value";
-const SORTS: { key: SortKey; label: string; hint: string }[] = [
-  { key: "rate", label: "오늘", hint: "오늘 평균 등락률이 높은 순" },
-  { key: "w1", label: "5일 누적", hint: "닷새 누적 — 하루 급등보다 흐름을 본다 (기록이 쌓여야 나옵니다)" },
-  { key: "m1", label: "20일 누적", hint: "스무 날 누적 (기록이 쌓여야 나옵니다)" },
-  { key: "breadth", label: "상승비율", hint: "테마 안에서 오른 종목 비율 — 몇몇이 끄는지 다 같이 가는지" },
-  { key: "hit5", label: "5일 중 상승", hint: "최근 닷새 중 며칠 올랐나 — 연속이 끊겨도 흐름은 남는다" },
-  { key: "value", label: "거래대금", hint: "테마 구성종목의 거래대금 합계 — 오늘 돈이 도는 곳" },
-];
+/**
+ * 규모 문턱 — **시장마다 자가 다르다.**
+ *
+ * 국내는 거래대금(억원), ETF 는 순자산(억원), 미국은 시가총액(억원 환산)이다.
+ * 같은 숫자를 쓰면 미국은 종목 하나가 1,900조라 아무것도 안 걸러진다.
+ */
+const MIN_VALUES: Record<"kr" | "etf" | "us", readonly number[]> = {
+  kr: [0, 100, 500, 1000, 3000],
+  etf: [0, 100, 500, 1000, 3000],
+  /* 미국은 시총 합이라 단위가 조 단위다 — 10조·50조·100조·300조 */
+  us: [0, 100_000, 500_000, 1_000_000, 3_000_000],
+};
 
-/** 거래대금 문턱(억원) — 266개를 다 볼 이유가 없다 */
-const MIN_VALUES = [0, 100, 500, 1000, 3000] as const;
+/**
+ * 처음 열었을 때의 문턱.
+ *
+ * 국내 265개·ETF 864개는 **처음부터 걸러야** 화면이 쓸모 있다. 미국은 134개뿐이라
+ * 거를 이유가 없다 — 적은 목록에까지 문턱을 걸면 볼 것을 못 보게 만든다.
+ */
+const DEFAULT_MIN: Record<"kr" | "etf" | "us", number> = { kr: 100, etf: 100, us: 0 };
+
+const VALUE_LABEL: Record<"kr" | "etf" | "us", string> = {
+  kr: "거래대금",
+  etf: "순자산",
+  us: "시가총액",
+};
 
 /** 억원을 짧게 — 1.2조 / 3,400억 */
 function money(v: number): string {
@@ -53,26 +66,9 @@ function money(v: number): string {
   return `${Math.round(v).toLocaleString("ko-KR")}억`;
 }
 
-/** 타일 아랫줄 — 지금 고른 정렬 기준을 그대로 적는다 */
-function tileSub(t: ThemeStrength, sort: SortKey, market: "kr" | "etf" | "us"): string {
-  const pct = (v: number | null) => (v === null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
-  switch (sort) {
-    case "w1":
-      return `5일 ${pct(t.w1)}`;
-    case "m1":
-      return market === "etf" ? `3개월 ${pct(t.m3)}` : `20일 ${pct(t.m1)}`;
-    case "hit5":
-      return t.hit5.of > 0 ? `${t.hit5.of}일 중 ${t.hit5.n}일` : "기록 없음";
-    case "value":
-      return money(t.tradeValue);
-    case "breadth":
-      return market === "etf" ? money(t.tradeValue) : `${t.up}/${t.stocks.length} · ${t.breadth}%`;
-    default:
-      /* 오늘 정렬일 때는 ETF 면 규모, 그 외엔 상승비율이 가장 쓸모 있다 */
-      return market === "etf"
-        ? money(t.tradeValue)
-        : `${t.up}/${t.stocks.length}${t.streak > 1 ? ` · ${t.streak}일` : ""}`;
-  }
+/** 퍼센트 — 값이 없으면 「—」. 0 으로 채우면 거짓말이 된다 */
+function pct(v: number | null): string {
+  return v === null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
 }
 
 export function ThemeDbPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
@@ -120,7 +116,6 @@ function ThemeMap({
   const [rows, setRows] = useState<ThemeStrength[] | null>(null);
   const [warming, setWarming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sort, setSort] = useState<SortKey>("rate");
   const [open, setOpen] = useState<string | null>(null);
   const [q, setQ] = useState("");
   /** ETF 는 분류가 있어 그걸로 좁혀 본다 */
@@ -132,8 +127,7 @@ function ThemeMap({
    * 묶음이 대부분이기 때문이다. **기본값을 0 이 아니라 100억으로 둔다**: 처음 열었을 때
    * 이미 볼 만한 것만 남아 있어야 「무엇을 볼까」가 바로 시작된다.
    */
-  const [minValue, setMinValue] = useState(100);
-  const { theme } = useAppearance();
+  const [minValue, setMinValue] = useState(DEFAULT_MIN[market]);
 
   useEffect(() => {
     let alive = true;
@@ -141,6 +135,7 @@ function ThemeMap({
     setError(null);
     setOpen(null);
     setGroup("");
+    setMinValue(DEFAULT_MIN[market]);
     api
       .themeStrength(market)
       .then((r) => {
@@ -174,18 +169,12 @@ function ThemeMap({
             t.stocks.some((s) => s.name.toLowerCase().includes(key)),
         )
       : base;
-    /* 값이 없는 항목(기록 부족)은 **뒤로** 보낸다 — 0 으로 쳐서 섞으면 순서가 거짓이 된다 */
-    const nz = (v: number | null) => (v === null ? -Infinity : v);
-    const by: Record<SortKey, (a: ThemeStrength, b: ThemeStrength) => number> = {
-      rate: (a, b) => b.changeRate - a.changeRate,
-      w1: (a, b) => nz(b.w1) - nz(a.w1) || b.changeRate - a.changeRate,
-      m1: (a, b) => nz(b.m1 ?? b.m3) - nz(a.m1 ?? a.m3) || b.changeRate - a.changeRate,
-      breadth: (a, b) => b.breadth - a.breadth || b.changeRate - a.changeRate,
-      hit5: (a, b) => b.hit5.n - a.hit5.n || b.changeRate - a.changeRate,
-      value: (a, b) => b.tradeValue - a.tradeValue,
-    };
-    return [...hit].sort(by[sort]);
-  }, [rows, sort, q, group, minValue]);
+    /* 기본은 오늘 등락률 순 — 칸을 누르면 그 아래 `useSortableTable` 이 다시 정렬한다 */
+    return [...hit].sort((a, b) => b.changeRate - a.changeRate);
+  }, [rows, q, group, minValue]);
+
+  /* 표 정렬 — 시세분석과 같은 훅·같은 규칙(내림 → 오름 → 원래) */
+  const sortT = useSortableTable<ThemeStrength>(sorted);
 
   if (error) return <div className="error-banner">{error}</div>;
   if (!rows) return <div className="empty">테마 불러오는 중…</div>;
@@ -246,30 +235,15 @@ function ThemeMap({
       )}
 
       <div className="filter-row tdb-bar">
-        {SORTS.map((s) => (
-          <button
-            key={s.key}
-            className={`filter-btn ${sort === s.key ? "active" : ""}`}
-            onClick={() => setSort(s.key)}
-            title={s.hint}
-          >
-            {s.label}
-          </button>
-        ))}
-        <span className="news-scope-sep" />
-        {/* 거래대금 문턱 — 「너무 많다」를 푸는 자리라 정렬 옆에 둔다 */}
-        {MIN_VALUES.map((v) => (
+        {/* 규모 문턱 — 「너무 많다」를 푸는 자리라 맨 앞이다 */}
+        {MIN_VALUES[market].map((v) => (
           <button
             key={v}
             className={`filter-btn ${minValue === v ? "active" : ""}`}
             onClick={() => setMinValue(v)}
-            title={
-              v === 0
-                ? "전부 보기"
-                : `${market === "etf" ? "순자산" : "거래대금"} ${v.toLocaleString("ko-KR")}억 이상만`
-            }
+            title={v === 0 ? "전부 보기" : `${VALUE_LABEL[market]} ${money(v)} 이상만`}
           >
-            {v === 0 ? "전부" : `${v.toLocaleString("ko-KR")}억+`}
+            {v === 0 ? "전부" : `${money(v)}+`}
           </button>
         ))}
         <input
@@ -284,35 +258,109 @@ function ThemeMap({
       </div>
 
       {/*
-        타일 하나 = 테마 하나. 색은 등락률, 아래 두 줄은 상승비율과 연속성이다.
-        「몇 %」만으로는 부족하다 — 열 종목 중 하나가 상한가라 평균이 오른 것과
-        전부 고르게 오른 것은 **다음 날이 다르다.**
+        **표다.** 처음엔 MAP(타일)이었는데 266개를 색으로 늘어놓으니 이름이 잘리고
+        지표는 한 번에 하나밖에 못 봤다 — 「5일 누적으로 정렬했는데 그 값이 안 보인다」.
+        표는 여러 자를 나란히 놓고 견줄 수 있고, 칸을 눌러 정렬한다(시세분석과 같은 규칙).
       */}
-      <div className="map-grid dense tdb-grid">
-        {sorted.map((t) => (
-          <button
-            key={t.key}
-            className={`map-tile tdb-tile${open === t.key ? " on" : ""}`}
-            /* 테마 평균은 개별 종목보다 진폭이 작다 — ±3% 를 최대로 잡아야 강약이 보인다 */
-            style={tileHeat(t.changeRate, theme, 3)}
-            onClick={() => setOpen(open === t.key ? null : t.key)}
-            title={`${t.name} — ${t.stocks.length}종목 · 상승 ${t.up}/${t.stocks.length}${
-              t.streak > 1 ? ` · ${t.streak}일째` : ""
-            }`}
-          >
-            <span className="map-tile-name">{t.name}</span>
-            <span className="map-tile-pct">
-              {t.changeRate > 0 ? "+" : ""}
-              {t.changeRate.toFixed(2)}%
-            </span>
-            {/*
-              아랫줄은 **지금 고른 정렬 기준**을 보여준다.
-              늘 상승비율만 적어 두면, 5일 누적으로 정렬해 놓고도 그 값이 안 보여서
-              왜 이 순서인지 알 수가 없다. 고른 자로 재고 그 자를 적는다.
-            */}
-            <span className="map-tile-sub">{tileSub(t, sort, market)}</span>
-          </button>
-        ))}
+      <div className="table-wrap">
+        <table className="data-table tdb-table">
+          <thead>
+            <tr>
+              <SortableTh columnKey="name" label="테마" accessor={(t) => t.name} sort={sortT} />
+              <SortableTh
+                columnKey="rate"
+                label="오늘"
+                accessor={(t) => t.changeRate}
+                sort={sortT}
+                className="num"
+              />
+              <SortableTh
+                columnKey="w1"
+                label="5일"
+                accessor={(t) => t.w1 ?? -999}
+                sort={sortT}
+                className="num"
+                extra="닷새 누적 — 하루 급등보다 흐름. 기록이 쌓여야 나옵니다"
+              />
+              <SortableTh
+                columnKey="m1"
+                label={market === "etf" ? "3개월" : "20일"}
+                accessor={(t) => (market === "etf" ? t.m3 : t.m1) ?? -999}
+                sort={sortT}
+                className="num"
+              />
+              {market !== "etf" && (
+                <SortableTh
+                  columnKey="breadth"
+                  label="상승비율"
+                  accessor={(t) => t.breadth}
+                  sort={sortT}
+                  className="num"
+                  extra="테마 안에서 오른 종목 비율 — 몇몇이 끄는지 다 같이 가는지"
+                />
+              )}
+              {market !== "etf" && (
+                <SortableTh
+                  columnKey="hit5"
+                  label="5일 중"
+                  accessor={(t) => t.hit5.n}
+                  sort={sortT}
+                  className="num"
+                  extra="최근 닷새 중 오른 날 — 연속이 끊겨도 흐름은 남는다"
+                />
+              )}
+              <SortableTh
+                columnKey="value"
+                label={VALUE_LABEL[market]}
+                accessor={(t) => t.tradeValue}
+                sort={sortT}
+                className="num"
+              />
+              <th>주도주</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortT.sorted.map((t) => (
+              <tr key={t.key} className="tdb-tr" onClick={() => setOpen(t.key)}>
+                <td className="tdb-td-name">
+                  {t.name}
+                  {t.stocks.length > 1 && <em className="pt-n"> {t.stocks.length}</em>}
+                </td>
+                <td className={`num ${signClass(t.changeRate)}`}>{pct(t.changeRate)}</td>
+                <td className={`num ${t.w1 === null ? "" : signClass(t.w1)}`}>{pct(t.w1)}</td>
+                <td
+                  className={`num ${
+                    (market === "etf" ? t.m3 : t.m1) === null
+                      ? ""
+                      : signClass((market === "etf" ? t.m3 : t.m1)!)
+                  }`}
+                >
+                  {pct(market === "etf" ? t.m3 : t.m1)}
+                </td>
+                {market !== "etf" && (
+                  <td className="num">
+                    {t.up}/{t.stocks.length}
+                    <em className="pt-n"> {t.breadth}%</em>
+                  </td>
+                )}
+                {market !== "etf" && (
+                  <td className="num">
+                    {t.hit5.of > 0 ? `${t.hit5.n}/${t.hit5.of}` : "—"}
+                    {t.streak > 1 && <em className="pt-n"> 연속{t.streak}</em>}
+                  </td>
+                )}
+                <td className="num">{t.tradeValue > 0 ? money(t.tradeValue) : "—"}</td>
+                <td className="tdb-td-tops">
+                  {t.stocks.slice(0, 3).map((s) => (
+                    <span key={s.code} className="tlk-chip">
+                      {s.name}
+                    </span>
+                  ))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {/*
