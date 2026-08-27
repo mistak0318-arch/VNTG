@@ -9796,3 +9796,94 @@ button.tpb-row:hover { background: var(--panel-2); }
   text-overflow: ellipsis;
 }
 .tdb-table .tdb-td-tops { justify-content: flex-end; }
+
+/* ==================================================================
+   테마 표 — 폰 카드를 **촘촘하게** (2026-08-28 두 번째)
+   ------------------------------------------------------------------
+   처음엔 카드 하나가 143px 이라 화면에 다섯 개밖에 안 들어갔다.
+   빈 자리가 너무 많았다 — 값이 여덟인데 한 줄에 하나씩 흐르니 그렇다.
+   격자로 묶어 **두 줄에 다 담는다.** 한 화면에 열 개 넘게 들어온다.
+   ================================================================== */
+@media (max-width: 720px) {
+  .tdb-tr {
+    display: grid;
+    /* 이름 줄 · 값 줄 · 주도주 줄 */
+    grid-template-columns: 1fr auto auto auto;
+    gap: 1px 0.5rem;
+    padding: 0.35rem 0.45rem;
+    margin-bottom: 3px;
+    align-items: baseline;
+  }
+  .tdb-table .tdb-td-name {
+    grid-column: 1 / -1;
+    font-size: 0.8rem;
+    margin: 0;
+    max-width: none;
+    /* 이름 옆에 오늘 등락률을 붙이려고 자리를 나눈다 */
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+  }
+  /* 오늘은 이름 줄 오른쪽 끝에 — 제일 먼저 보는 값이다 */
+  .tdb-table td[data-l="오늘"] {
+    grid-column: 1 / -1;
+    margin-top: -1.15rem;
+    text-align: right;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+  .tdb-table td[data-l="오늘"]::before { content: none; }
+  /* 나머지 값들은 한 줄에 촘촘히 */
+  .tdb-table td[data-l] { font-size: 0.68rem; white-space: nowrap; }
+  .tdb-table td[data-l]::before { font-size: 0.6rem; margin-right: 1px; }
+  .tdb-table .tdb-td-tops {
+    grid-column: 1 / -1;
+    margin-top: 0.15rem;
+    gap: 2px;
+    overflow: hidden;
+    flex-wrap: nowrap;
+  }
+  .tdb-table .tdb-td-tops .tlk-chip { font-size: 0.62rem; padding: 0.05rem 0.3rem; }
+}
+
+/*
+ * 폰 카드 — **두 줄로 끝낸다** (2026-08-28 세 번째).
+ *
+ * 격자로 묶었더니 값이 여섯이라 줄이 또 나뉘어 128px 이었다(화면에 여섯 개).
+ * 이름+오늘을 한 줄에 겹쳐 놓고, 나머지 값을 아랫줄에 흘리면 55px 이다 —
+ * 한 화면에 열네 개. 주도주는 **숨긴다**: 눌러서 보면 되는 것이고,
+ * 그 한 줄이 카드 높이의 3분의 1을 먹었다.
+ */
+@media (max-width: 720px) {
+  .tdb-tr {
+    display: block;
+    position: relative;
+    padding: 0.3rem 0.45rem;
+    margin-bottom: 3px;
+  }
+  .tdb-table .tdb-td-name {
+    display: block;
+    font-size: 0.78rem;
+    /* 오른쪽 위 「오늘」과 겹치지 않게 자리를 비운다 */
+    padding-right: 4rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0;
+  }
+  .tdb-table td[data-l="오늘"] {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.45rem;
+    margin: 0;
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+  /* 나머지 값은 아랫줄에 한 줄로 흐른다 */
+  .tdb-table td[data-l] {
+    display: inline-block;
+    margin-right: 0.5rem;
+    font-size: 0.66rem;
+  }
+  .tdb-table .tdb-td-tops { display: none; }
+}

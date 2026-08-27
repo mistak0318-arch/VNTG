@@ -83,6 +83,11 @@ export interface ThemeStrength {
    * 보여주면 그건 거짓말이다. 기간이 다른 값은 칸도 달라야 한다.
    */
   m3: number | null;
+  /**
+   * 60거래일 누적(%) — 일봉 캐시가 70일치를 들고 있어 바로 나온다.
+   * 20일은 이번 파동을, 60일은 「이 테마가 원래 오던 자리인가」를 말한다.
+   */
+  m60: number | null;
   /** ETF 만 — 분류(국내 업종/테마 · 해외 주식 · 원자재…). 화면이 이걸로 나눠 본다 */
   group?: string;
   stocks: ThemeStockRow[];
@@ -216,6 +221,7 @@ export async function themeStrength(
       const c = cumTheme(closes, t.stocks.map((s) => s.code));
       if (c.w1 !== null) row.w1 = c.w1;
       if (c.m1 !== null) row.m1 = c.m1;
+      if (c.m60 !== null) row.m60 = c.m60;
       if (c.hit5) row.hit5 = c.hit5;
       if (c.hit10) row.hit10 = c.hit10;
       if (c.streak !== null) row.streak = c.streak;
@@ -281,6 +287,7 @@ export async function themeStrength(
         /* 주간·월간은 기록이 쌓여야 나온다. 3개월은 네이버가 주는 별도 값이다 */
         w1: cumulative(series, 5),
         m1: cumulative(series, 20),
+        m60: cumulative(series, 60),
         m3: e.m3,
         group: ETF_TABS[e.tab] ?? "기타",
         stocks: [
@@ -325,6 +332,7 @@ function cumTheme(
 ): {
   w1: number | null;
   m1: number | null;
+  m60: number | null;
   hit5: { n: number; of: number } | null;
   hit10: { n: number; of: number } | null;
   streak: number | null;
@@ -338,13 +346,14 @@ function cumTheme(
 
   const w1 = avg(codes.map((c) => cumOf(closes[c], 5)));
   const m1 = avg(codes.map((c) => cumOf(closes[c], 20)));
+  const m60 = avg(codes.map((c) => cumOf(closes[c], 60)));
 
   /*
    * 「N일 중 며칠 올랐나」는 **테마 평균의 하루하루**로 센다.
    * 종목별로 세어 평균하면 「5일 중 3.4일」 같은 값이 나와 뜻이 흐려진다.
    */
   const perDay: number[][] = codes.map((c) => dailyRates(closes[c], 10)).filter((a) => a.length > 0);
-  if (perDay.length === 0) return { w1, m1, hit5: null, hit10: null, streak: null };
+  if (perDay.length === 0) return { w1, m1, m60, hit5: null, hit10: null, streak: null };
   const len = Math.min(...perDay.map((a) => a.length));
   const themeDaily: number[] = [];
   for (let i = 0; i < len; i++) {
@@ -361,7 +370,7 @@ function cumTheme(
     if (themeDaily[i] > 0) streak += 1;
     else break;
   }
-  return { w1, m1, hit5: hits(5), hit10: hits(10), streak };
+  return { w1, m1, m60, hit5: hits(5), hit10: hits(10), streak };
 }
 
 function build(
@@ -396,6 +405,7 @@ function build(
     tradeValue: Math.round(stocks.reduce((n, s) => n + (s.tradeValue ?? 0), 0)),
     w1: cumulative(series, 5),
     m1: cumulative(series, 20),
+    m60: cumulative(series, 60),
     m3: null,
     stocks: stocks.sort((a, b) => (b.changeRate ?? -99) - (a.changeRate ?? -99)),
   };

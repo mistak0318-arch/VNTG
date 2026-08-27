@@ -3278,6 +3278,8 @@ export interface ThemeStrength {
   w1: number | null;
   /** 20거래일 누적(%). 기록이 모자라면 null */
   m1: number | null;
+  /** 60거래일 누적(%) — 「이 테마가 원래 오던 자리인가」 */
+  m60: number | null;
   /** 3개월 수익률(%) — ETF 만. 네이버가 주는 값이라 월간(m1)과 칸이 다르다 */
   m3: number | null;
   /** ETF 만 — 분류(국내 업종/테마 · 해외 주식 · 원자재…) */

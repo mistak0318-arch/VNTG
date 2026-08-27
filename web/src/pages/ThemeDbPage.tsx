@@ -300,6 +300,16 @@ function ThemeMap({
               />
               {market !== "etf" && (
                 <SortableTh
+                  columnKey="m60"
+                  label="60일"
+                  accessor={(t) => t.m60 ?? -999}
+                  sort={sortT}
+                  className="num"
+                  thProps={{ title: "60거래일 누적 — 이 테마가 원래 오던 자리인가" }}
+                />
+              )}
+              {market !== "etf" && (
+                <SortableTh
                   columnKey="breadth"
                   label="상승비율"
                   accessor={(t) => t.breadth}
@@ -356,6 +366,12 @@ function ThemeMap({
                 >
                   {pct(market === "etf" ? t.m3 : t.m1)}
                 </td>
+                {/* 60일 — 20일이 「이번 파동」이라면 이건 「원래 오던 자리인가」다 */}
+                {market !== "etf" && (
+                  <td className={`num ${t.m60 === null ? "" : signClass(t.m60)}`} data-l="60일">
+                    {pct(t.m60)}
+                  </td>
+                )}
                 {market !== "etf" && (
                   <td className="num" data-l="상승">
                     {t.up}/{t.stocks.length}
