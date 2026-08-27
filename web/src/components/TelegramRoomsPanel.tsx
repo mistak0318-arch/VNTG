@@ -1,6 +1,51 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { api, type TgMsg, type TgRoom, type TgStar } from "../api";
 import { useCardOrder } from "../useCardOrder";
+
+/**
+ * 방 본문 글씨 크기 (2026-08-27 — "본문 글씨 키우고 줄이게 옵션 좀").
+ * 기기별(localStorage)이다 — 27인치와 폰의 답이 다르다. 받은 방·주요 채널이 같이 쓴다.
+ */
+const FONT_KEY = "vntg.tgr.font";
+
+export function useTgFont() {
+  const [scale, setScale] = useState<number>(() => {
+    const v = Number(localStorage.getItem(FONT_KEY));
+    return Number.isFinite(v) && v >= 80 && v <= 160 ? v : 100;
+  });
+  /* 함수형 갱신 — 연속으로 빠르게 누르면 클로저의 옛 값 때문에 한 번만 먹는다 */
+  const nudge = (d: number) =>
+    setScale((prev) => {
+      const v = Math.min(160, Math.max(80, prev + d));
+      try {
+        localStorage.setItem(FONT_KEY, String(v));
+      } catch {
+        /* 못 적어도 이번 화면에는 적용된다 */
+      }
+      return v;
+    });
+  return {
+    scale,
+    dec: () => nudge(-10),
+    inc: () => nudge(10),
+    /* .tgr-text 가 이 변수를 읽는다 — 방 컨테이너에 스프레드 */
+    style: { "--tgr-fs": `${(0.84 * scale) / 100}rem` } as CSSProperties,
+  };
+}
+
+/** 헤더의 [가− 가+] — 두 방 화면이 같은 모양으로 쓴다 */
+export function TgFontButtons({ font }: { font: ReturnType<typeof useTgFont> }) {
+  return (
+    <span className="tgr-font-ctl">
+      <button className="filter-btn" onClick={font.dec} disabled={font.scale <= 80} title="본문 글씨 줄이기">
+        가−
+      </button>
+      <button className="filter-btn" onClick={font.inc} disabled={font.scale >= 160} title="본문 글씨 키우기">
+        가+
+      </button>
+    </span>
+  );
+}
 
 /**
  * VNTG 방 뷰어 (2026-08-27) — **봇이 보낸 방들을 브라우저에서 텔레그램처럼.**
@@ -76,6 +121,7 @@ export function TelegramRoomsPanel() {
     "telegram.rooms",
     (rooms ?? []).map((r) => r.channel),
   );
+  const font = useTgFont();
 
   const loadRooms = useCallback(() => {
     void api
@@ -154,14 +200,15 @@ export function TelegramRoomsPanel() {
        처음 여는 방(readAt 없음)은 전부가 새것이라 선이 뜻이 없다 — 최신부터 본다. */
     const firstUnread = readAt && !q ? shown.findIndex((m) => m.at > readAt) : -1;
     return (
-      <div className="tgr-room">
+      <div className="tgr-room" style={font.style}>
         {/* 대화는 아래 칸이 **안에서** 스크롤된다 — 이 머리줄은 늘 보인다 */}
         <div className="tgr-room-head">
           <button className="filter-btn" onClick={() => setOpen(null)}>
             ‹ 방 목록
           </button>
           <b>{label}</b>
-          <span className="pt-n">
+          <TgFontButtons font={font} />
+          <span className="pt-n tgr-head-note">
             최근 {msgs.length}건
             {phoneRead === true && " · 폰 텔레그램도 읽음 처리됨"}
             {phoneRead === false && " · 읽음은 이 화면만 (폰 연동은 미니PC에서)"}
@@ -225,6 +272,11 @@ export function TelegramRoomsPanel() {
           })}
           <div ref={endRef} />
         </div>
+        {/* 방 목록으로 — 오른쪽 아래 플로팅. 폰에서 왼쪽 위 버튼까지 손이 멀고,
+            브라우저 뒤로가기는 페이지째 나가 버린다 (2026-08-27) */}
+        <button className="tgr-fab" onClick={() => setOpen(null)} title="방 목록으로">
+          ‹ 방 목록
+        </button>
       </div>
     );
   }

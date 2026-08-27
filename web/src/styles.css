@@ -4885,7 +4885,35 @@ tr.drag-src td { opacity: 0.45; }
   font-size: 0.7rem;
   font-weight: 700;
 }
-.tgr-room-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+/* 머리줄·검색은 낮게 — 본문이 주인공이다 (2026-08-27 "위쪽이 너무 커서 본문이 안 들어와") */
+.tgr-room-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
+.tgr-room-head b { font-size: 0.86rem; }
+.tgr-room-head .filter-btn { padding: 2px 8px; font-size: 0.72rem; }
+.tgr-head-note { font-size: 0.66rem; }
+.tgr-font-ctl { display: inline-flex; gap: 2px; }
+.tgr-search-row .search-input { padding: 4px 8px; font-size: 0.76rem; }
+.tgr-search-row { margin-bottom: 4px; }
+@media (max-width: 700px) {
+  .tgr-head-note { display: none; } /* 폰에선 안내문이 머리줄을 두 줄로 만든다 */
+}
+/* 방 목록으로 — 오른쪽 아래 플로팅 (폰: 왼쪽 위까지 손이 멀다) */
+.tgr-fab {
+  position: fixed;
+  right: 14px;
+  bottom: 18px;
+  z-index: 18;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 9px 14px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  opacity: 0.92;
+}
+.tgr-fab:hover { border-color: var(--blue); opacity: 1; }
 /* 대화는 이 칸 **안에서** 스크롤 (2026-08-27) — 「방 목록」 버튼·검색이 늘 보인다.
    페이지째 스크롤이면 긴 방에서 돌아가는 버튼까지 한참을 올려야 했다. */
 .tgr-msgs {
@@ -5026,7 +5054,8 @@ tr.drag-src td { opacity: 0.45; }
   max-width: 38rem;
   min-width: 0;
 }
-.tgr-text { font-size: 0.84rem; line-height: 1.5; word-break: break-word; white-space: pre-wrap; }
+/* 크기는 [가− 가+] 가 방 컨테이너에 --tgr-fs 로 준다 (기기별 저장) */
+.tgr-text { font-size: var(--tgr-fs, 0.84rem); line-height: 1.5; word-break: break-word; white-space: pre-wrap; }
 .tgr-text a { color: var(--blue); }
 .tgr-time { display: block; text-align: right; font-size: 0.64rem; color: var(--muted); margin-top: 2px; }
 .tgr-star {

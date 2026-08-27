@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type ChannelEntry, type MajorMsg, type MajorRoom } from "../api";
+import { useCardOrder } from "../useCardOrder";
+import { TgFontButtons, useTgFont } from "./TelegramRoomsPanel";
 
 /**
  * 주요 채널 (2026-08-27) — **골라 둔 채널의 글은 빠짐없이, 원문 그대로.**
@@ -46,6 +48,13 @@ export function MajorChannelPanel() {
   const [pickFilter, setPickFilter] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const unreadRef = useRef<HTMLDivElement>(null);
+  /* 방 순서 (2026-08-27) — 받은 방과 같은 문법: 끌어서 바꾸고 서버 저장(기기 공통).
+     안 바꾸면 서버가 주는 최근 글 순 그대로다(모르는 방은 원래 자리 순서로 뒤에). */
+  const roomOrder = useCardOrder(
+    "telegram.majorRooms",
+    (rooms ?? []).map((r) => r.id),
+  );
+  const font = useTgFont();
 
   const loadRooms = useCallback(() => {
     void api
@@ -129,13 +138,14 @@ export function MajorChannelPanel() {
     const shown = q ? msgs.filter((m) => m.text.toLowerCase().includes(q)) : msgs;
     const firstUnread = readAt && !q ? shown.findIndex((m) => m.at > readAt) : -1;
     return (
-      <div className="tgr-room">
+      <div className="tgr-room" style={font.style}>
         <div className="tgr-room-head">
           <button className="filter-btn" onClick={() => setOpen(null)}>
             ‹ 방 목록
           </button>
           <b>{label}</b>
-          <span className="pt-n">최근 {msgs.length}건 · 5분마다 수집</span>
+          <TgFontButtons font={font} />
+          <span className="pt-n tgr-head-note">최근 {msgs.length}건 · 5분마다 수집</span>
         </div>
         <div className="search-box tgr-search-row">
           <input
@@ -207,6 +217,10 @@ export function MajorChannelPanel() {
           })}
           <div ref={endRef} />
         </div>
+        {/* 방 목록으로 — 오른쪽 아래 플로팅 (받은 방과 같은 이유) */}
+        <button className="tgr-fab" onClick={() => setOpen(null)} title="방 목록으로">
+          ‹ 방 목록
+        </button>
       </div>
     );
   }
@@ -265,7 +279,14 @@ export function MajorChannelPanel() {
         </div>
       )}
       {rooms.map((r) => (
-        <button key={r.id} className="tgr-room-row" onClick={() => void openRoom(r.id)}>
+        <button
+          key={r.id}
+          className={`tgr-room-row${roomOrder.drag.cls(r.id)}`}
+          style={{ order: roomOrder.orderOf(r.id) }}
+          {...roomOrder.drag.props(r.id)}
+          onClick={() => void openRoom(r.id)}
+          title="끌어서 순서를 바꿀 수 있습니다"
+        >
           <span className="tgr-avatar">{r.name.slice(0, 1)}</span>
           <span className="tgr-room-main">
             <b>{r.name}</b>
