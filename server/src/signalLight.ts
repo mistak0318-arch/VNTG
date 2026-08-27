@@ -11,6 +11,7 @@ import { evaluateThemes } from "./customThemes.js";
 import { getSectorMood } from "./sectorMood.js";
 import { findStock } from "./stockListCache.js";
 import { themeStrength } from "./themeStrength.js";
+import { etfHoldersOf } from "./etfHolders.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_FILE = resolve(__dirname, "..", "data", "signalConfig.json");
@@ -81,6 +82,7 @@ export type CheckKey =
   | "disparity"
   | "ma5Gap"
   | "naverTheme"
+  | "etfBacking"
   | "shortSaleUp"
   | "lendingUp"
   | "debtRatio";
@@ -240,6 +242,35 @@ export const DEFAULT_CONFIG: SignalConfig = {
       hint:
         "이 종목이 든 테마의 오늘 평균 등락률(%). 여러 테마에 들면 **가장 강한 쪽**입니다. " +
         "테마 안에서 몇이 올랐는지(상승비율)도 값에 같이 적힙니다",
+      cost: 0,
+    },
+    /*
+     * ETF 뒷배 (2026-08-28 아이디어) — **이 종목을 가장 많이 담은 ETF 들이 가고 있나.**
+     *
+     * ETF 도 결국 테마다. 그런데 테마 분류와 다른 점이 하나 있다 — **비중이 숫자로
+     * 적혀 있다.** 어떤 ETF 가 이 종목을 8% 담고 있다면, 그 ETF 를 만든 쪽이 이
+     * 종목을 그 테마의 핵심으로 본다는 뜻이다. 그런 ETF 셋이 같이 오르고 있으면
+     * 이 종목 하나가 아니라 **묶음에 돈이 들어오는 중**이라는 신호다.
+     *
+     * 반대로 종목만 오르고 그 ETF 들은 가만히 있으면, 묶음이 아니라 이 종목만의
+     * 이야기다 — 그것도 알아야 하는 정보다.
+     *
+     * 비중 상위 셋의 **오늘 등락률 평균**으로 잰다. 상위를 고르는 일(어느 ETF 가
+     * 얼마나 담았나)은 하루 한 번 스캔한 결과를 쓰고, 등락률은 그 파일에 매일
+     * 갱신되어 들어온다. **조회 0회다.**
+     */
+    {
+      key: "etfBacking",
+      label: "ETF 뒷배",
+      axis: "trend",
+      enabled: true,
+      weight: 1,
+      threshold: 0,
+      strongAt: 1.5,
+      hint:
+        "이 종목을 **가장 많이 담은 ETF 셋**의 오늘 등락률 평균(%). 비중이 크다는 것은 " +
+        "그 묶음에서 이 종목이 핵심이라는 뜻입니다 — 그 ETF 들이 같이 가면 종목 하나가 " +
+        "아니라 묶음에 돈이 들어오는 중입니다",
       cost: 0,
     },
     {
@@ -772,6 +803,33 @@ export async function evaluateSignal(
         .catch(() => [])
     : [];
 
+  /*
+   * 이 종목을 가장 많이 담은 ETF 셋 — 이것도 **파일에서 읽는다.**
+   * 어느 ETF 가 얼마나 담았는지는 하루 한 번 스캔한 결과이고, 등락률은 그 파일에
+   * 매일 갱신되어 들어온다. 키움 호출이 없다.
+   */
+  const etfTop3 = need.has("etfBacking")
+    ? await etfHoldersOf(code)
+        .then((r) =>
+          r.holders
+            /*
+             * ⚠️ **단일종목 ETF 와 레버리지는 뺀다** (실측 2026-08-28).
+             *
+             * 삼성전자를 조회하면 상위 셋이 「삼성전자단일종목레버리지 92.3%」처럼
+             * 나온다. 그건 그 종목 자체를 담은 것이라, 그걸 보고 「묶음이 간다」고
+             * 판단하는 건 **자기 자신을 근거로 삼는 것**이다. 등락률도 종목의 두 배로
+             * 나와 점수만 부풀린다.
+             * 비중 50% 가 넘으면 사실상 그 종목 하나짜리라 같이 뺀다.
+             */
+            .filter(
+              (h) =>
+                !/레버리지|인버스|단일종목|2X|3X/i.test(h.name) && (h.weight ?? 0) <= 50,
+            )
+            .slice(0, 3),
+        )
+        .catch(() => [])
+    : [];
+
   const chartRows = (chart?.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
   const closes = chartRows.map((r) => Math.abs(toNum(r.cur_prc))).filter((n) => n > 0);
   const cur = closes[0];
@@ -990,6 +1048,22 @@ export async function evaluateSignal(
           (best.hit5.of > 0 ? ` · ${best.hit5.of}일 중 ${best.hit5.n}일` : "") +
           ")";
         link = { kind: "theme", code: best.key, name: best.name };
+      }
+    } else if (c.key === "etfBacking") {
+      /*
+       * 비중 상위 셋 — `etfHoldersOf` 가 이미 비중 내림차순으로 준다.
+       * 등락률이 없는 ETF 는 빼고 센다. 하나도 못 찾으면 판단하지 않는다(null) —
+       * ETF 에 안 담긴 종목은 흔하고, 그걸 감점으로 치면 억울하다.
+       */
+      const top = etfTop3.filter((h) => h.changeRate !== null);
+      if (top.length > 0) {
+        const avg = top.reduce((n, h) => n + (h.changeRate ?? 0), 0) / top.length;
+        g = grade(avg, c);
+        value =
+          `${avg > 0 ? "+" : ""}${avg.toFixed(2)}% · ` +
+          top
+            .map((h) => `${h.name.replace(/^(KODEX|TIGER|RISE|PLUS|ACE|SOL|HANARO)\s*/, "")} ${h.weight?.toFixed(1) ?? "?"}%`)
+            .join(", ");
       }
     } else if (c.key === "ma5Gap") {
       const ma5 = sma(closes, 5);

@@ -31,6 +31,8 @@ const UNITS: Record<string, string> = {
   ma5Gap: "%",
   /* 네이버 테마 강세 — 그 종목이 든 테마의 오늘 평균 등락률 */
   naverTheme: "%",
+  /* ETF 뒷배 — 이 종목을 가장 많이 담은 ETF 셋의 오늘 등락률 평균 */
+  etfBacking: "%",
   nearHigh: "%",
   marketCap: "억원",
   volume: "억원",
