@@ -6194,6 +6194,19 @@ button.nav-group-toggle {
   cursor: help;
 }
 .etfw-groups { display: block; font-style: normal; font-size: 0.66rem; color: var(--muted); }
+/* 그룹 편집 — 칩 옆 ✎·✕, 표 안에서는 그룹 토글 */
+.etfw-gchip { display: inline-flex; align-items: center; gap: 2px; }
+.etfw-gedit {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.72rem;
+  padding: 2px 3px;
+  cursor: pointer;
+}
+.etfw-gedit:hover { color: var(--blue); }
+.etfw-gpick { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.etfw-gpick .jn-tag { padding: 3px 9px; font-size: 0.72rem; }
 
 /* 편입 기간 — 수익률 아래 한 줄 잔글씨 (2026-08-27) */
 .wl-held { display: block; font-style: normal; font-size: 0.66rem; color: var(--muted); line-height: 1.2; }
