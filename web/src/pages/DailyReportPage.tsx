@@ -761,7 +761,13 @@ function TodayCalendarSection() {
 
   if (loading) return <div className="empty">일정 불러오는 중…</div>;
 
-  const today = new Date().toISOString().slice(0, 10);
+  /*
+   * ⚠️ **한국 날짜다.** `new Date().toISOString()` 은 UTC 라, 한국 새벽(0~9시)에는
+   * **어제 날짜**가 나온다 — 새벽 2시에 열었더니 오늘 일정(잭슨홀)이 「D-1」로 밀리고
+   * 「오늘 잡힌 일정은 없습니다」가 떴다. 캘린더가 적어 둔 날짜는 한국 날짜이므로
+   * 여기도 +9시간으로 맞춘다(앱의 다른 곳들과 같은 방식).
+   */
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
   const mine = events.filter((e) => e.date === today);
   const soon = events.filter((e) => e.date > today).slice(0, 6);
 

@@ -24,7 +24,8 @@ export function EconomicCalendarCard({ onInstalled }: { onInstalled?: () => void
       .then((r) => {
         setVerifiedAt(r.verifiedAt);
         setTotal(r.events.length);
-        const today = new Date().toISOString().slice(0, 10);
+        /* ⚠️ 한국 날짜다 — UTC 로 재면 새벽에 오늘 일정이 통째로 빠진다 (+9시간) */
+        const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
         setUpcoming(r.events.filter((e) => e.date >= today).slice(0, 6));
       })
       .catch(() => undefined);
