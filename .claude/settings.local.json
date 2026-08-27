@@ -849,7 +849,8 @@
       "Bash(curl -s -X POST \"http://localhost:4000/api/market/naver-themes/fetch-us\")",
       "Bash(curl -s -X POST \"http://localhost:4000/api/market/naver-themes/fetch-etf\")",
       "Bash(curl -s \"http://localhost:4000/api/market/__probe-sector\")",
-      "Bash(curl -s \"http://localhost:4000/api/market/daily-closes/progress\")"
+      "Bash(curl -s \"http://localhost:4000/api/market/daily-closes/progress\")",
+      "Bash(curl -s \"http://localhost:4000/api/market/daily-closes/summary\")"
     ]
   }
 }

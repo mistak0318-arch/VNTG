@@ -195,7 +195,16 @@ export function startClosesScheduler(client: KiwoomClient): void {
     const kst = new Date(Date.now() + 9 * 3600_000);
     const today = kst.toISOString().slice(0, 10);
     if (store.builtAt.slice(0, 10) === today) return;
-    if (kst.getUTCHours() < 16) return;
+    /*
+     * ⚠️ **캐시가 아예 없으면 시각을 안 따진다** (2026-08-28).
+     *
+     * 16시 이후에만 돌게 해 놨더니, 새벽에 처음 배포한 날은 조건에 안 걸려서
+     * **하루 종일 시작조차 안 했다.** 화면에는 5일·20일이 계속 「—」로 남았고,
+     * 원인이 「아직 안 받았다」인지 「받았는데 값이 없다」인지 구분도 안 됐다.
+     * 첫 한 바퀴는 언제든 돈다 — 빈 화면으로 두는 것보다 낫다.
+     * (그날 종가가 아직 아닐 수는 있지만, 다음 마감 뒤에 어차피 다시 받는다)
+     */
+    if (kst.getUTCHours() < 16 && Object.keys(store.closes).length > 0) return;
     const themes = await loadThemes();
     if (themes.themes.length === 0) return;
     try {

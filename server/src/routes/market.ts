@@ -13,7 +13,7 @@ import { tradeSizeMix } from "../tradeSizeMix.js";
 import { CHART_RANGES, yahooChart } from "../yahooChart.js";
 import { usEtfHoldings } from "../usEtfHoldings.js";
 import { themeStrength } from "../themeStrength.js";
-import { buildCloses, closesProgress } from "../dailyCloses.js";
+import { buildCloses, closesProgress, loadCloses } from "../dailyCloses.js";
 import { themeLinks } from "../themeLinks.js";
 import {
   fetchAllThemes,
@@ -855,6 +855,16 @@ export function createMarketRouter(client: KiwoomClient): Router {
 
   router.get("/daily-closes/progress", (_req, res) => {
     res.json(closesProgress());
+  });
+
+  /** 언제 받았고 몇 종목이 들어 있나 — 「—」가 뜰 때 원인을 가리려면 이게 있어야 한다 */
+  router.get("/daily-closes/summary", async (_req, res, next) => {
+    try {
+      const s = await loadCloses();
+      res.json({ builtAt: s.builtAt, total: Object.keys(s.closes).length });
+    } catch (err) {
+      next(err);
+    }
   });
 
   /** ETF 목록 — **요청 한 번**이라 기다렸다 결과를 준다 */

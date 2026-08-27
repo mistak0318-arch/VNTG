@@ -16,13 +16,30 @@ export function ThemeDbPanel() {
     null,
   );
   const [msg, setMsg] = useState<string | null>(null);
+  /** 일봉 캐시 — 진행률(cp)과 받아 둔 종목 수 */
+  const [cp, setCp] = useState<{ done: number; total: number; running: boolean } | null>(null);
+  const [closes, setCloses] = useState<{ total: number } | null>(null);
 
   const load = () => {
     api
       .naverThemeSummary()
       .then(setSum)
       .catch(() => undefined);
+    api
+      .dailyClosesSummary()
+      .then(setCloses)
+      .catch(() => undefined);
   };
+
+  async function runCloses() {
+    setMsg(null);
+    try {
+      await api.dailyClosesBuild();
+      setMsg("일봉을 받기 시작했습니다 (9분쯤 걸립니다 — 끝나면 5·20·60일이 채워집니다)");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "시작하지 못했습니다");
+    }
+  }
 
   useEffect(() => {
     load();
@@ -34,6 +51,10 @@ export function ThemeDbPanel() {
           setProg(p.running ? p : null);
           if (!p.running && prog) load(); // 방금 끝났으면 요약을 새로
         })
+        .catch(() => undefined);
+      api
+        .dailyClosesProgress()
+        .then((p) => setCp(p.running ? p : null))
         .catch(() => undefined);
     }, 3000);
     return () => clearInterval(t);
@@ -77,6 +98,23 @@ export function ThemeDbPanel() {
           </button>
         </div>
 
+        {/*
+          일봉 캐시 — 5일·20일·60일 누적이 여기서 나온다.
+          이게 없으면 표의 그 칸들이 통째로 「—」다. 스케줄러는 장 마감 뒤에 도므로
+          **처음 켠 날**에는 여기서 눌러 받는 게 빠르다.
+        */}
+        <div className="tdp-row">
+          <span className="tdp-k">일봉 캐시</span>
+          <span className="tdp-v">
+            {closes ? `종목 ${closes.total}개` : "…"}
+            <em className="pt-n"> · 5·20·60일 누적의 바탕</em>
+          </span>
+          <span className="pt-n tdp-when" />
+          <button className="filter-btn" onClick={() => void runCloses()} disabled={Boolean(cp)}>
+            지금 받기
+          </button>
+        </div>
+
         <div className="tdp-row">
           <span className="tdp-k">미국</span>
           <span className="tdp-v">
@@ -91,7 +129,12 @@ export function ThemeDbPanel() {
 
       {prog && (
         <div className="tdp-prog">
-          받는 중 — {prog.done}/{prog.total} {prog.at && `· ${prog.at}`}
+          테마 받는 중 — {prog.done}/{prog.total} {prog.at && `· ${prog.at}`}
+        </div>
+      )}
+      {cp && (
+        <div className="tdp-prog">
+          일봉 받는 중 — {cp.done}/{cp.total}
         </div>
       )}
       {msg && <div className="alert-note">{msg}</div>}

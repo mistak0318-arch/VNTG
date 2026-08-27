@@ -633,6 +633,12 @@ export const api = {
       `/api/market/theme-strength/${market}`,
     ),
   naverThemeFetchEtf: () => postJson<{ count: number }>("/api/market/naver-themes/fetch-etf", {}),
+  /* 일봉 캐시 — 5·20·60일 누적의 바탕. 없으면 그 칸들이 통째로 「—」다 */
+  dailyClosesBuild: () => postJson<{ started: boolean }>("/api/market/daily-closes/build", {}),
+  dailyClosesProgress: () =>
+    getJson<{ done: number; total: number; running: boolean }>("/api/market/daily-closes/progress"),
+  dailyClosesSummary: () =>
+    getJson<{ builtAt: string; total: number }>("/api/market/daily-closes/summary"),
   /** 테마 브리핑 — 국내·미국이 같은 이야기를 하는 짝과 「누가 앞서나」 */
   themeLinks: () => getJson<{ pairs: ThemeLink[]; note: string }>("/api/market/theme-links"),
   /** 미국 ETF 구성종목 — 섹터 MAP 타일을 눌렀을 때. 하루 캐시라 여닫아도 조회가 안 는다 */
