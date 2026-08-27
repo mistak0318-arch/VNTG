@@ -203,6 +203,8 @@ export const api = {
     }>("/api/signal/super/status"),
   /** 데일리 리포트 최신 발행분 — 사이드바 N 배지용 */
   reportStatus: () => getJson<{ latest: string | null }>("/api/report/status"),
+  /** 알림 점검 — 갈래별 켜짐·방·마지막 발송 (2026-08-27) */
+  alertHealth: () => getJson<AlertHealth>("/api/settings/alert-health"),
   /** 밤사이 버즈 — 채널 언급 급증 (장전 브리핑룸) */
   buzz: () =>
     getJson<{
@@ -1596,6 +1598,21 @@ export interface SuperDetail {
   flows: { date: string; foreign: number; inst: number }[];
   signalNow: { level: string; score: number } | null;
   marketNow: { level: string; score: number; summary: string } | null;
+}
+
+/** 알림 점검 (2026-08-27) — 「왜 조용한가」를 갈래마다 */
+export interface AlertHealth {
+  readerConfigured: boolean;
+  botConfigured: boolean;
+  senders: {
+    key: string;
+    label: string;
+    enabled: boolean | null;
+    needsReader?: boolean;
+    inWindow?: boolean | null;
+    room: boolean;
+    lastSent: string | null;
+  }[];
 }
 
 export interface TelegramChannelStatus {

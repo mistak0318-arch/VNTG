@@ -39,6 +39,103 @@ export function createSettingsRouter(): Router {
   });
 
   /** 어떤 키가 설정되어 있는지만 알려준다 (값은 절대 내보내지 않음) */
+  /**
+   * 알림 점검 (2026-08-27) — **왜 조용한가.**
+   *
+   * 알림이 안 오는 이유는 다섯 가지인데(꺼짐·시간대 아님·세션 없음·방 없음·보낼 게 없음)
+   * 전부 「아무것도 안 옴」으로 똑같이 보인다. 실제로 「버즈가 안 온다」·「슈퍼신호등이
+   * 안 온다」가 나왔고, 그게 고장인지 조용한 것인지 가릴 방법이 없었다.
+   *
+   * 갈래마다 **켜짐·시간창·방 배정·마지막 발송**을 한 줄로 준다. 마지막 발송은
+   * 발신 아카이브(받은 방)에서 읽는다 — 보낸 것이 거기 그대로 쌓이므로 가장 정확하다.
+   */
+  router.get("/alert-health", async (_req, res, next) => {
+    try {
+      const [{ getAlertConfig }, { getChannelConfig, withinWindow }, keyword, disclosure, rooms, tg, reader] =
+        await Promise.all([
+          import("../alertRules.js"),
+          import("../channelConfig.js"),
+          import("../keywordAlert.js"),
+          import("../disclosureAlert.js"),
+          import("../telegramArchive.js"),
+          import("../telegram.js"),
+          import("../telegramReader.js"),
+        ]);
+      const [alertCfg, chCfg, kwCfg, dcCfg, roomList] = await Promise.all([
+        getAlertConfig().catch(() => null),
+        getChannelConfig().catch(() => null),
+        keyword.getConfig().catch(() => null),
+        disclosure.getConfig().catch(() => null),
+        rooms.roomsSummary().catch(() => []),
+      ]);
+      const lastOf = (ch: string): string | null =>
+        roomList.find((r: { channel: string }) => r.channel === ch)?.lastAt ?? null;
+      const dedicated = (ch: string) => tg.hasDedicatedChannel(ch as never);
+
+      res.json({
+        readerConfigured: reader.isReaderConfigured(),
+        botConfigured: tg.isTelegramConfigured(),
+        senders: [
+          {
+            key: "signal",
+            label: "관심종목 시그널",
+            enabled: alertCfg?.enabled ?? null,
+            room: dedicated("signal"),
+            lastSent: lastOf("signal"),
+          },
+          {
+            key: "keyword",
+            label: "키워드 알림",
+            enabled: kwCfg?.enabled ?? null,
+            needsReader: true,
+            room: dedicated("keyword"),
+            lastSent: lastOf("keyword"),
+          },
+          {
+            key: "disclosure",
+            label: "공시 알림",
+            enabled: dcCfg?.enabled ?? null,
+            room: dedicated("disclosure"),
+            lastSent: lastOf("disclosure"),
+          },
+          {
+            key: "channel",
+            label: "채널 선별 자동발송",
+            enabled: chCfg?.pickAuto?.enabled ?? null,
+            needsReader: true,
+            inWindow: chCfg?.pickAuto ? withinWindow(chCfg.pickAuto) : null,
+            room: dedicated("channel"),
+            lastSent: lastOf("channel"),
+          },
+          {
+            key: "super",
+            label: "슈퍼신호등",
+            enabled: true, // 스케줄러 고정(15:45) — 끄는 스위치가 없다
+            room: dedicated("super"),
+            lastSent: lastOf("super"),
+          },
+          {
+            key: "buzz",
+            label: "버즈 레이더",
+            enabled: true, // 30분 주기 고정. 기준선 3일 뒤부터 발송
+            needsReader: true,
+            room: dedicated("buzz"),
+            lastSent: lastOf("buzz"),
+          },
+          {
+            key: "report",
+            label: "데일리 리포트",
+            enabled: true, // 판별 on/off 는 리포트 일정에서
+            room: dedicated("report"),
+            lastSent: lastOf("report"),
+          },
+        ],
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/keys", (_req, res) => {
     res.json({
       keys: [

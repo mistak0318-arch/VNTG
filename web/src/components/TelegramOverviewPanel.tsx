@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   api,
+  type AlertHealth,
   type TelegramChannelStatus,
   type TelegramRoomsData,
   type TelegramRoomStore,
@@ -105,12 +106,31 @@ export function TelegramOverviewPanel() {
   const [channels, setChannels] = useState<TelegramChannelStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  /* 왜 조용한가 (2026-08-27) — 켜짐·마지막 발송을 갈래마다 */
+  const [health, setHealth] = useState<AlertHealth | null>(null);
+
   useEffect(() => {
     api
       .alertConfig()
       .then((r) => setChannels(r.channels))
       .catch((e) => setError(e instanceof Error ? e.message : "불러오기 실패"));
+    void api
+      .alertHealth()
+      .then(setHealth)
+      .catch(() => undefined);
   }, []);
+
+  const healthOf = (key: string) => health?.senders.find((s) => s.key === key);
+
+  /** 마지막 발송 — 언제 왔는지가 「돌고 있나」의 답이다 */
+  function lastLabel(iso: string | null | undefined): string {
+    if (!iso) return "기록 없음";
+    const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+    if (m < 60) return `${m}분 전`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}시간 전`;
+    return `${Math.floor(h / 24)}일 전`;
+  }
 
   const roomOf = (ch: TelegramChannelStatus["channel"]) =>
     channels.find((c) => c.channel === ch);
@@ -143,6 +163,9 @@ export function TelegramOverviewPanel() {
             <tr>
               <th className="sticky-col">무엇이</th>
               <th>언제 · 어떤 내용</th>
+              {/* 조용한 이유를 가르는 두 칸 (2026-08-27) */}
+              <th title="꺼져 있으면 주기가 와도 아무 일도 안 일어납니다">상태</th>
+              <th title="마지막으로 이 갈래가 실제로 보낸 시각">마지막 발송</th>
               <th>방</th>
               <th>설정 위치</th>
             </tr>
@@ -154,6 +177,29 @@ export function TelegramOverviewPanel() {
                   {s.icon} <b>{s.name}</b>
                 </td>
                 <td>{s.what}</td>
+                {(() => {
+                  const h = healthOf(s.channel === "signal" && s.name !== "관심종목 시그널" ? "signal" : s.channel);
+                  const off = h?.enabled === false;
+                  const noReader = h?.needsReader && health && !health.readerConfigured;
+                  return (
+                    <>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {h === undefined ? (
+                          <span className="pt-n">-</span>
+                        ) : off ? (
+                          <span className="key-missing">꺼짐</span>
+                        ) : noReader ? (
+                          <span className="key-missing">세션 없음</span>
+                        ) : (
+                          <span className="key-ok">켜짐</span>
+                        )}
+                      </td>
+                      <td style={{ whiteSpace: "nowrap" }} className="pt-n">
+                        {lastLabel(h?.lastSent)}
+                      </td>
+                    </>
+                  );
+                })()}
                 <td style={{ whiteSpace: "nowrap" }}>
                   <span className={roomOf(s.channel)?.dedicated ? "key-ok" : "key-missing"}>
                     {roomLabel(s.channel)}
