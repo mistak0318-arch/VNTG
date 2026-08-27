@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -62,6 +62,29 @@ function dayOf(now = new Date()): string {
 }
 
 /**
+ * 오래된 날짜 파일 정리 (2026-08-27 전수 점검) — 파일이 무기한 쌓이기만 했다.
+ * 타임라인·복기는 최근을 보므로 90일이면 넉넉하다. 하루 한 번, 첫 기록길에 지나간다.
+ */
+const KEEP_DAYS = 90;
+let cleanedDay = "";
+
+async function cleanupOldDays(): Promise<void> {
+  const today = dayOf();
+  if (cleanedDay === today) return;
+  cleanedDay = today;
+  try {
+    const cutoff = new Date(Date.now() - KEEP_DAYS * 86400_000).toISOString().slice(0, 10);
+    for (const f of await readdir(DIR)) {
+      if (f.endsWith(".jsonl") && f.replace(/\.jsonl$/, "") < cutoff) {
+        await unlink(join(DIR, f)).catch(() => undefined);
+      }
+    }
+  } catch {
+    /* 정리 실패는 다음 날 다시 */
+  }
+}
+
+/**
  * 한 건 남긴다. **실패는 삼킨다** — 로그 때문에 알림이 죽으면 주객전도다.
  */
 export async function logEvent(e: Omit<MarketEvent, "at"> & { at?: string }): Promise<void> {
@@ -69,6 +92,7 @@ export async function logEvent(e: Omit<MarketEvent, "at"> & { at?: string }): Pr
     await mkdir(DIR, { recursive: true });
     const row: MarketEvent = { ...e, at: e.at ?? new Date().toISOString() };
     await appendFile(join(DIR, `${dayOf()}.jsonl`), `${JSON.stringify(row)}\n`, "utf-8");
+    void cleanupOldDays();
   } catch {
     /* 기록 실패가 알림을 막으면 안 된다 */
   }

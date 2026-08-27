@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { useTabActive } from "./tabActive";
 
 /**
  * 조용한 백그라운드 갱신.
@@ -11,33 +12,52 @@ import { api } from "./api";
  * 돌지 말아야 할 때는 확실히 멈춘다:
  *   - **장이 안 열렸을 때** — 값이 안 바뀌는데 부를 이유가 없다 (초당 5회 제한도 아껴야 한다)
  *   - **탭이 백그라운드일 때** — 보지도 않는 화면 때문에 호출이 나가면 안 된다
+ *   - **인앱 탭이 숨어 있을 때** (2026-08-27) — 탭 상한을 없애면서 열린 페이지가 전부
+ *     마운트된 채 산다. 게이트가 없으면 열어 둔 탭 수만큼 폴링이 배가된다
  *   - 이전 요청이 아직 안 끝났을 때 — 느린 응답이 쌓이면 순서가 뒤집힌다
  */
 
-/**
- * **지금 체결이 도는가.** 1분마다 확인한다.
+/*
+ * **지금 체결이 도는가** — 모든 훅 인스턴스가 폴링 하나를 나눠 쓴다 (2026-08-27).
  *
- * 예전엔 정규장(`state === "open"`)만 봤다. 그런데 넥스트레이드가 08:00~09:00 과
- * 15:30~20:00 에도 도는데, 그 시간엔 폴링이 아예 안 걸려서 **종목 창이 멈춰 있었다.**
- * 서버가 주는 `live` 는 NXT 시간외를 포함한다.
+ * 예전엔 인스턴스마다 따로 1분 폴링을 돌렸다. useLive·useAutoRefresh 를 쓰는
+ * 컴포넌트가 수십 개 마운트되면 /api/market/status 가 분당 수십 번 나갔다 —
+ * 값은 어차피 전부 같은데. 모듈 하나가 돌고 구독자에게 나눠 준다.
+ *
+ * NXT 참고: 정규장(state==="open")만 보면 08:00~09:00·15:30~20:00 프리·애프터에
+ * 폴링이 멈춘다 — 서버가 주는 live 는 NXT 시간외를 포함한다.
  */
+let moOpen = false;
+let moTimer: ReturnType<typeof setInterval> | null = null;
+const moSubs = new Set<(v: boolean) => void>();
+
+function moCheck(): void {
+  api
+    .marketStatus()
+    // 옛 서버는 live 를 안 준다 — 그때는 예전처럼 정규장만 본다
+    .then((s) => {
+      moOpen = s.live ?? s.state === "open";
+      for (const fn of moSubs) fn(moOpen);
+    })
+    .catch(() => undefined); // 상태를 못 받으면 폴링하지 않는 쪽(기존 값 유지)이 안전하다
+}
+
 export function useMarketOpen(): boolean {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(moOpen);
 
   useEffect(() => {
-    let cancelled = false;
-    const check = () => {
-      api
-        .marketStatus()
-        // 옛 서버는 live 를 안 준다 — 그때는 예전처럼 정규장만 본다
-        .then((s) => !cancelled && setOpen(s.live ?? s.state === "open"))
-        .catch(() => undefined); // 상태를 못 받으면 폴링하지 않는 쪽(false 유지)이 안전하다
-    };
-    check();
-    const timer = setInterval(check, 60_000);
+    moSubs.add(setOpen);
+    setOpen(moOpen);
+    if (!moTimer) {
+      moCheck();
+      moTimer = setInterval(moCheck, 60_000);
+    }
     return () => {
-      cancelled = true;
-      clearInterval(timer);
+      moSubs.delete(setOpen);
+      if (moSubs.size === 0 && moTimer) {
+        clearInterval(moTimer);
+        moTimer = null;
+      }
     };
   }, []);
 
@@ -70,6 +90,7 @@ export function useLive<T>(
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
 
   const marketOpen = useMarketOpen();
+  const tabActive = useTabActive(); // 숨은 인앱 탭에서는 주기 갱신을 통째로 놓는다
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
   /** 요청이 겹치지 않게 — 응답이 느린 날 순서가 뒤집히는 걸 막는다 */
@@ -109,9 +130,9 @@ export function useLive<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
-  // 장중 + 탭이 보일 때만 주기 갱신
+  // 장중 + 탭이 보일 때만 주기 갱신 (숨은 인앱 탭도 제외 — 돌아오면 즉시 한 번 받는다)
   useEffect(() => {
-    if (!marketOpen || intervalMs <= 0) return;
+    if (!marketOpen || intervalMs <= 0 || !tabActive) return;
 
     let timer: ReturnType<typeof setInterval> | null = null;
     const start = () => {
@@ -138,7 +159,7 @@ export function useLive<T>(
       stop();
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [marketOpen, intervalMs]);
+  }, [marketOpen, intervalMs, tabActive]);
 
   return { data, loading, error, updatedAt, refresh: () => void run.current(false) };
 }

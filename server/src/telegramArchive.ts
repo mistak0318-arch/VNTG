@@ -54,6 +54,31 @@ export interface TgStar extends TgMsg {
 
 let seq = 0;
 
+/**
+ * 방별 줄 수 — 트림 판단용 (2026-08-27 전수 점검).
+ * append 만 하던 파일이라 로그 방처럼 잦은 방은 무한히 자랐다. 처음 한 번 세고,
+ * 그 뒤로는 더할 때마다 올리다가 3천 줄을 넘으면 최근 2천 줄로 줄인다.
+ */
+const lineCount = new Map<string, number>();
+
+async function trimIfNeeded(channel: string): Promise<void> {
+  let n = lineCount.get(channel);
+  if (n === undefined) {
+    n = (await readJsonl(channel)).length;
+  } else {
+    n += 1;
+  }
+  lineCount.set(channel, n);
+  if (n <= 3000) return;
+  const keep = (await readJsonl(channel)).slice(-2000);
+  await writeFile(
+    join(DIR, `${channel}.jsonl`),
+    `${keep.map((r) => JSON.stringify(r)).join("\n")}\n`,
+    "utf-8",
+  );
+  lineCount.set(channel, keep.length);
+}
+
 /** 발신 성공 직후 한 줄 — 실패는 삼킨다 */
 export async function archiveOutgoing(channel: string, html: string): Promise<void> {
   try {
@@ -62,6 +87,7 @@ export async function archiveOutgoing(channel: string, html: string): Promise<vo
     const at = new Date().toISOString();
     const row: TgMsg = { id: `${Date.now().toString(36)}_${seq}`, at, text: html };
     await appendFile(join(DIR, `${channel}.jsonl`), `${JSON.stringify(row)}\n`, "utf-8");
+    await trimIfNeeded(channel);
   } catch {
     /* 기록 실패가 발송을 막으면 안 된다 */
   }

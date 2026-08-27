@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { setPref } from "./prefs";
+import { useTabActive } from "./tabActive";
 import { useMarketOpen } from "./useLive";
 
 /**
@@ -33,13 +34,16 @@ export function useAutoRefresh(
 ): { on: boolean; toggle: () => void; marketOpen: boolean } {
   const [on, setOn] = useState<boolean>(() => localStorage.getItem(storeKey) !== "0");
   const marketOpen = useMarketOpen();
+  /* 숨은 인앱 탭에서는 안 돈다 (2026-08-27) — 탭 상한이 없어지며 열린 페이지가
+     전부 마운트된 채 살아서, 게이트가 없으면 탭 수만큼 호출이 배가된다 */
+  const tabActive = useTabActive();
 
   /* 최신 함수를 본다 — 타이머가 옛 클로저를 붙들면 옛 조건으로 조회한다 */
   const runRef = useRef(run);
   runRef.current = run;
 
   useEffect(() => {
-    if (!on) return;
+    if (!on || !tabActive) return;
     if (!ignoreMarket && !marketOpen) return;
 
     const tick = () => {
@@ -49,7 +53,7 @@ export function useAutoRefresh(
     };
     const t = setInterval(tick, intervalMs);
     return () => clearInterval(t);
-  }, [on, marketOpen, ignoreMarket, intervalMs]);
+  }, [on, marketOpen, ignoreMarket, intervalMs, tabActive]);
 
   const toggle = () => {
     setOn((v) => {

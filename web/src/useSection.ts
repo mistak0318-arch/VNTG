@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type SectionResult } from "./api";
+import { useTabActive } from "./tabActive";
 
 /**
  * 시황 섹션 하나를 조회하고 주기적으로 갱신한다.
@@ -17,12 +18,15 @@ import { api, type SectionResult } from "./api";
  * 없애는 건 안 보여주는 것보다 나쁘다.
  *
  * 보지 않는 탭에서는 멈춘다. 우리 서버를 두들기는 것도 서버가 외부를 부를 빌미가 된다.
+ * 숨은 인앱 탭도 마찬가지다(2026-08-27) — 탭 상한이 없어지며 열린 페이지가 전부
+ * 마운트된 채 살아서, 게이트가 없으면 열어 둔 탭 수만큼 폴링이 배가된다.
  */
 export function useSection<T>(name: string, intervalMs: number) {
   const [result, setResult] = useState<SectionResult<T> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
+  const tabActive = useTabActive();
   /** 요청이 겹치지 않게 — 느린 응답이 쌓이면 순서가 뒤집힌다 */
   const inFlight = useRef(false);
   /** 값을 한 번이라도 받았나. 로딩 표시를 띄울지 정하는 기준 */
@@ -53,9 +57,15 @@ export function useSection<T>(name: string, intervalMs: number) {
     [name],
   );
 
+  /* 섹션이 바뀔 때만 처음부터 — 탭을 오간 것 때문에 스켈레톤이 다시 뜨면 안 된다 */
+  useEffect(() => {
+    hasData.current = false;
+  }, [load]);
+
   useEffect(() => {
     cancelledRef.current = false;
-    hasData.current = false;
+    // 숨은 인앱 탭은 첫 조회도 미룬다 — 탭을 여는 순간 이 effect 가 다시 돌며 받는다
+    if (!tabActive) return;
     void load();
 
     let timer: ReturnType<typeof setInterval> | null = null;
@@ -83,7 +93,7 @@ export function useSection<T>(name: string, intervalMs: number) {
       stop();
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [load, intervalMs]);
+  }, [load, intervalMs, tabActive]);
 
   return {
     data: result?.data ?? null,

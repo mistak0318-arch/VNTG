@@ -74,11 +74,28 @@ export class KiwoomClient {
   private readonly appSecret: string;
   private tokenState: TokenState | null = null;
   private tokenPromise: Promise<string> | null = null;
+  /** 선제 레이트리밋 — 다음 호출이 나가도 되는 시각(슬롯) */
+  private nextSlot = 0;
 
   constructor(opts: { appKey: string; appSecret: string; isMock: boolean }) {
     this.appKey = opts.appKey;
     this.appSecret = opts.appSecret;
     this.baseUrl = opts.isMock ? MOCK_URL : PROD_URL;
+  }
+
+  /*
+   * 선제 레이트리밋 (2026-08-27) — 키움은 초당 5회다.
+   *
+   * 예전엔 429/return_code 5 를 **맞고 나서** 400ms 백오프로 재시도했다. 스케줄러
+   * 여럿과 화면 폴링이 겹치는 순간엔 429 파도를 맞고 재시도가 몰려 응답이 출렁였다.
+   * 호출마다 220ms 슬롯(초당 ~4.5회)을 미리 배정해 애초에 몰리지 않게 한다 —
+   * 동시 호출자들은 슬롯 큐에 자연히 한 줄로 선다. 반응형 재시도는 보험으로 남긴다.
+   */
+  private async rateGate(): Promise<void> {
+    const now = Date.now();
+    const at = Math.max(now, this.nextSlot);
+    this.nextSlot = at + 220;
+    if (at > now) await sleep(at - now);
   }
 
   /**
@@ -169,6 +186,7 @@ export class KiwoomClient {
     let reissued = 0;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      await this.rateGate(); // 재시도도 슬롯을 받는다 — 백오프 중에 새 호출이 몰리면 도로 429 다
       const res = await fetch(`${this.baseUrl}${resourceUrl}`, {
         method: "POST",
         headers: {
