@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtNum } from "../api";
 import { WatchStar } from "../useWatchedCodes";
+import { useTabActive } from "../tabActive";
+import { useMarketOpen } from "../useLive";
 
 /**
  * 슈퍼신호등 — **여러 목록에 동시에 걸린 초록의 관찰 목록.**
@@ -59,6 +61,8 @@ export function SuperSignalPanel({
   const [universes, setUniverses] = useState<Universe[]>([]);
   const [job, setJob] = useState<{ status: string; step: string; done: number; total: number; added: number; error?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const tabActive = useTabActive();
+  const marketOpen = useMarketOpen();
 
   const load = useCallback(() => {
     api
@@ -79,6 +83,26 @@ export function SuperSignalPanel({
       .then((r) => setUniverses(r.universes))
       .catch(() => undefined);
   }, [load]);
+
+  /*
+   * 시세 갱신 (2026-08-28 — "당일 시세가 실시간 반영이 안 된다").
+   *
+   * 마운트 때 한 번만 받고 있었다. 열어 두고 보는 표인데 값이 그 시점에서 멈춰
+   * 있으면 **지난 시세로 판단하게 된다** — 편입가 대비도 같이 굳는다.
+   * 값 자체는 서버가 전종목 스냅샷에서 붙이므로 다시 부르면 최신이다.
+   *
+   * 장중 20초 · 장 밖 2분. 탭이 뒤에 있으면 쉰다 — 탭 상한을 없앤 뒤로 화면이
+   * 전부 살아 있어서, 이 게이트가 없으면 안 보는 표까지 계속 폴링한다.
+   */
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!tabActive) return;
+      load();
+    };
+    const t = setInterval(tick, marketOpen ? 20_000 : 120_000);
+    return () => clearInterval(t);
+  }, [load, marketOpen, tabActive]);
 
   /* 돌고 있으면 진행을 따라간다 — 끝나면 목록을 새로 받는다 */
   useEffect(() => {

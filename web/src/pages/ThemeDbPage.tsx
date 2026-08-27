@@ -3,6 +3,8 @@ import { api, signClass, type ThemeStrength } from "../api";
 import { useCardOrder } from "../useCardOrder";
 import { TabScroller } from "../components/TabScroller";
 import { SortableTh, useSortableTable } from "../useSortableTable";
+import { useTabActive } from "../tabActive";
+import { useMarketOpen } from "../useLive";
 
 /**
  * 테마 DB — **네이버 테마를 우리 눈금으로 다시 그린다.**
@@ -128,6 +130,8 @@ function ThemeMap({
    * 이미 볼 만한 것만 남아 있어야 「무엇을 볼까」가 바로 시작된다.
    */
   const [minValue, setMinValue] = useState(DEFAULT_MIN[market]);
+  const tabActive = useTabActive();
+  const marketOpen = useMarketOpen();
 
   useEffect(() => {
     let alive = true;
@@ -136,18 +140,39 @@ function ThemeMap({
     setOpen(null);
     setGroup("");
     setMinValue(DEFAULT_MIN[market]);
-    api
-      .themeStrength(market)
-      .then((r) => {
-        if (!alive) return;
-        setRows(r.themes);
-        setWarming(Boolean(r.warming));
-      })
-      .catch((e: Error) => alive && setError(e.message));
+
+    const fetchOnce = (quiet: boolean) =>
+      api
+        .themeStrength(market)
+        .then((r) => {
+          if (!alive) return;
+          setRows(r.themes);
+          setWarming(Boolean(r.warming));
+        })
+        .catch((e: Error) => {
+          if (alive && !quiet) setError(e.message);
+        });
+
+    void fetchOnce(false);
+
+    /*
+     * 시세 갱신 (2026-08-28) — **조회가 0회라 자주 불러도 된다.**
+     * 분류는 파일에서, 시세는 이미 떠 있는 전종목 스냅샷에서 읽으므로 키움을
+     * 새로 부르지 않는다. 서버가 하는 일은 265개 테마의 평균을 다시 내는 것뿐이다.
+     * 장중 20초 · 장 밖 2분. 탭이 뒤에 있으면 쉰다.
+     */
+    const t = setInterval(
+      () => {
+        if (document.visibilityState !== "visible" || !tabActive) return;
+        void fetchOnce(true);
+      },
+      marketOpen ? 20_000 : 120_000,
+    );
     return () => {
       alive = false;
+      clearInterval(t);
     };
-  }, [market]);
+  }, [market, marketOpen, tabActive]);
 
   /** ETF 분류 목록 — 개수까지 보여야 어디를 볼지 정해진다 */
   const groups = useMemo(() => {
