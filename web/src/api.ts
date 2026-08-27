@@ -617,6 +617,21 @@ export const api = {
     getJson<YahooChart>(
       `/api/market/yahoo-chart?symbol=${encodeURIComponent(symbol)}&range=${range}`,
     ),
+  /* ── 테마 DB (2026-08-28) — 분류는 네이버, 숫자는 우리가 계산 ── */
+  /** 저장된 분류 원본 */
+  naverThemes: () => getJson<NaverThemeStore>("/api/market/naver-themes"),
+  naverThemeSummary: () => getJson<ThemeDbSummary>("/api/market/naver-themes/summary"),
+  naverThemeProgress: () =>
+    getJson<{ done: number; total: number; at: string; running: boolean }>(
+      "/api/market/naver-themes/progress",
+    ),
+  naverThemeFetch: () => postJson<{ started: boolean }>("/api/market/naver-themes/fetch", {}),
+  naverThemeFetchUs: () => postJson<{ started: boolean }>("/api/market/naver-themes/fetch-us", {}),
+  /** 테마 강도 — 등락률·상승비율·연속성. **조회 0회**(분류는 파일, 시세는 스냅샷) */
+  themeStrength: (market: "kr" | "etf" | "us") =>
+    getJson<{ themes: ThemeStrength[]; at: string }>(`/api/market/theme-strength/${market}`),
+  /** 테마 브리핑 — 국내·미국이 같은 이야기를 하는 짝과 「누가 앞서나」 */
+  themeLinks: () => getJson<{ pairs: ThemeLink[]; note: string }>("/api/market/theme-links"),
   /** 미국 ETF 구성종목 — 섹터 MAP 타일을 눌렀을 때. 하루 캐시라 여닫아도 조회가 안 는다 */
   usEtfHoldings: (symbol: string) =>
     getJson<UsEtfHoldings>(`/api/market/us-etf-holdings?symbol=${encodeURIComponent(symbol)}`),
@@ -2332,6 +2347,13 @@ export interface MoodResult {
   note?: string;
   /** 표준산업분류 (한투). 키움 업종보다 자세하다 — 등락률은 없고 이름만 있다 */
   industry?: string | null;
+  /**
+   * 네이버 테마 (2026-08-28) — **종목마다 편입 사유가 붙는다.**
+   * 「가온전선: LS그룹 계열사로 전력케이블 및 통신케이블 등을 생산하는…」
+   * 키움 테마는 왜 묶였는지를 말해 주지 않아서, 이 한 줄이 이 화면에서 제일 쓸모 있다.
+   * 서버가 파일에서 읽어 붙여 주므로 조회가 늘지 않는다.
+   */
+  naverThemes?: { no: number; name: string; desc: string }[];
 }
 
 export interface NewsItem {
@@ -3196,6 +3218,58 @@ export interface TrackJob {
   error?: string;
 }
 
+
+/* ── 테마 DB (2026-08-28) ────────────────────────────────────── */
+
+/** 네이버에서 받아 둔 분류 원본 — 화면은 대개 `themeStrength` 쪽을 쓴다 */
+export interface NaverThemeStore {
+  fetchedAt: string;
+  themes: { no: number; name: string; stocks: { code: string; name: string; desc: string }[] }[];
+  us: { code: string; name: string; stocks: { symbol: string; name: string; exchange: string }[] }[];
+  usFetchedAt: string;
+}
+
+export interface ThemeDbSummary {
+  fetchedAt: string;
+  themes: number;
+  stocks: number;
+  /** 편입 사유가 붙은 종목 수 — 국내는 전부 붙는다 */
+  withDesc: number;
+  usFetchedAt: string;
+  usThemes: number;
+  usStocks: number;
+}
+
+/**
+ * 테마 강도 — **분류는 네이버, 숫자는 우리 것.**
+ * 등락률은 구성종목의 단순평균이다(시총 가중이면 큰 종목 하나가 테마를 대변해 버린다).
+ */
+export interface ThemeStrength {
+  key: string;
+  name: string;
+  changeRate: number;
+  up: number;
+  down: number;
+  /** 오른 종목 비율(%) — 몇몇이 끄는지 다 같이 가는지 */
+  breadth: number;
+  /** 며칠째 오르고 있나. 기록이 없으면 0 */
+  streak: number;
+  /** 5거래일 누적(%). 기록이 모자라면 null */
+  w1: number | null;
+  /** 20거래일 누적(%). 기록이 모자라면 null */
+  m1: number | null;
+  stocks: { code: string; name: string; desc: string; changeRate: number | null }[];
+}
+
+export interface ThemeLink {
+  key: string;
+  label: string;
+  kr: ThemeStrength | null;
+  us: ThemeStrength | null;
+  etf: ThemeStrength | null;
+  lead: "kr" | "us" | null;
+  note: string;
+}
 
 /**
  * 미국 ETF 구성종목 (야후 topHoldings).

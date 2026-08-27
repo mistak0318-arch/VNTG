@@ -27,6 +27,7 @@ import { DailyReportPage } from "./pages/DailyReportPage";
 import { KiwoomWatchlistPage } from "./pages/KiwoomWatchlistPage";
 import { ManualAccountPage } from "./pages/ManualAccountPage";
 import { MapPage } from "./pages/MapPage";
+import { ThemeDbPage } from "./pages/ThemeDbPage";
 import { MyPage } from "./pages/MyPage";
 import { NewsPage } from "./pages/NewsPage";
 import { OverviewPage } from "./pages/OverviewPage";
@@ -58,6 +59,7 @@ type Tab =
   | "overview"
   | "report"
   | "map"
+  | "themedb"
   | "program"
   | "news"
   | "discovery"
@@ -115,6 +117,8 @@ const MENU: {
       { key: "overview", label: "시황 대시보드", icon: "📊" },
       { key: "report", label: "데일리 리포트", icon: "📰" },
       { key: "map", label: "테마/업종 MAP", icon: "🗺️" },
+      /* 테마 DB (2026-08-28) — 네이버 분류를 우리 눈금(등락률·상승비율·연속성)으로 다시 그린다 */
+      { key: "themedb", label: "테마 DB", icon: "🧭" },
       { key: "program", label: "프로그램 매매", icon: "🤖" },
       { key: "news", label: "뉴스·공시", icon: "📢" },
       { key: "ask", label: "시황 질문하기", icon: "💬" },
@@ -521,6 +525,7 @@ export default function App() {
       case "overview": return <OverviewPage onSelectStock={onSelectStock} />;
       case "report": return <DailyReportPage onSelectStock={onSelectStock} />;
       case "map": return <MapPage onSelectStock={onSelectStock} />;
+      case "themedb": return <ThemeDbPage onSelectStock={onSelectStock} />;
       case "program": return <ProgramTradePage />;
       case "news": return <NewsPage onSelectStock={onSelectStock} />;
       case "discovery": return <StockDiscoveryPage onSelectStock={onSelectStock} />;

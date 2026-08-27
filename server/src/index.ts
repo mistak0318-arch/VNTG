@@ -34,6 +34,7 @@ import { startChannelScheduler } from "./channelScheduler.js";
 import { startMajorFeedLoop } from "./majorFeed.js";
 import { startBuzzScheduler } from "./buzzRadar.js";
 import { startEtfHoldersScheduler } from "./etfHolders.js";
+import { startThemeScheduler } from "./naverThemes.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createTradeRouter } from "./routes/trade.js";
@@ -189,6 +190,8 @@ startMajorFeedLoop();
 startBuzzScheduler(client);
 /* 「이 종목을 담은 ETF」 역인덱스 — 하루 1회(16시 이후). 화면은 파일만 읽는다 */
 startEtfHoldersScheduler(client);
+/* 네이버 테마 DB — 주 1회(일요일 04시). 구성은 매일 바뀌는 값이 아니다 */
+startThemeScheduler();
 startSignalTrackScheduler(client);
 /* 추적기 5분 뒤 — 신호등 캐시가 데워진 채로 교집합을 평가한다 */
 startSuperSignalScheduler(client);

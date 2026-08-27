@@ -12,6 +12,16 @@ import { stockProfile } from "../stockProfile.js";
 import { tradeSizeMix } from "../tradeSizeMix.js";
 import { CHART_RANGES, yahooChart } from "../yahooChart.js";
 import { usEtfHoldings } from "../usEtfHoldings.js";
+import { themeStrength } from "../themeStrength.js";
+import { themeLinks } from "../themeLinks.js";
+import {
+  fetchAllThemes,
+  loadThemes,
+  refreshUsThemes,
+  themeFetchProgress,
+  themeSummary,
+  themesOfStock,
+} from "../naverThemes.js";
 import { futuresCandles } from "../kospiFutures.js";
 import { usCandles, usDetail } from "../usDetail.js";
 import { orderBook } from "../orderBook.js";
@@ -600,11 +610,17 @@ export function createMarketRouter(client: KiwoomClient): Router {
        * 키움이 「전기/전자」 하나로 묶는 삼성전자·SK하이닉스·포스코퓨처엠이
        * 통신방송장비 / 반도체 / 이차전지로 갈린다.
        */
-      const [mood, profile] = await Promise.all([
+      /*
+       * 네이버 테마를 **같이 실어 보낸다** (2026-08-28) — 조회가 아니라 파일이라 공짜다.
+       * 키움 테마는 묶음이 거칠어서 「왜 여기 있나」가 안 풀렸는데, 네이버는 종목마다
+       * 편입 사유가 한 줄씩 붙어 있다. 그 한 줄이 이 화면에서 제일 쓸모 있다.
+       */
+      const [mood, profile, naver] = await Promise.all([
         getSectorMood(client, req.params.code),
         stockProfile(req.params.code).catch(() => null),
+        themesOfStock(req.params.code).catch(() => []),
       ]);
-      res.json({ ...mood, industry: profile?.industry ?? null });
+      res.json({ ...mood, industry: profile?.industry ?? null, naverThemes: naver });
     } catch (err) {
       next(err);
     }
@@ -741,6 +757,82 @@ export function createMarketRouter(client: KiwoomClient): Router {
         ? String(req.query.range)
         : "6mo";
       res.json(await yahooChart(symbol, range));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* ---------------- 네이버 테마 DB (2026-08-28) ---------------- */
+
+  /** 저장된 테마 — 화면이 읽는 자리. 조회가 없다(파일에서 읽는다) */
+  router.get("/naver-themes", async (_req, res, next) => {
+    try {
+      res.json(await loadThemes());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 요약 — 「언제 받은 것인가」 */
+  router.get("/naver-themes/summary", async (_req, res, next) => {
+    try {
+      res.json(await themeSummary());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 받는 중인지 — 10분 넘게 걸리므로 화면이 진행률을 물어본다 */
+  router.get("/naver-themes/progress", (_req, res) => {
+    res.json(themeFetchProgress());
+  });
+
+  /**
+   * 다시 받기 — **사람이 눌러야 돈다.**
+   *
+   * 테마 구성은 매일 바뀌는 값이 아니라 주 1회면 충분하다. 자동 스케줄을 걸어 두면
+   * 쓰지도 않는 데이터를 매일 300장씩 받게 된다.
+   * `limit` 은 시험용이다(앞에서 몇 개만).
+   */
+  router.post("/naver-themes/fetch", async (req, res, next) => {
+    try {
+      const limit = Number(req.query.limit) || undefined;
+      // 기다리지 않는다 — 10분짜리 작업이라 응답을 붙들면 브라우저가 먼저 끊는다
+      void fetchAllThemes({ limit }).catch(() => undefined);
+      res.json({ started: true, limit: limit ?? null });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 테마 강도 — 분류는 파일, 숫자는 스냅샷. **조회가 0회다.**
+   * 등락률·상승비율·연속성을 우리가 계산하므로 국내·ETF·미국이 같은 자로 재진다.
+   */
+  router.get("/theme-strength/:market", async (req, res, next) => {
+    try {
+      const m = req.params.market;
+      const market = m === "us" ? "us" : m === "etf" ? "etf" : "kr";
+      res.json(await themeStrength(market));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 테마 브리핑 — 국내·미국이 같은 이야기를 하는 짝과 「누가 앞서나」 */
+  router.get("/theme-links", async (_req, res, next) => {
+    try {
+      res.json(await themeLinks());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 미국 테마만 다시 받기 — 63장 안팎이라 2분이면 끝난다 */
+  router.post("/naver-themes/fetch-us", async (_req, res, next) => {
+    try {
+      void refreshUsThemes().catch(() => undefined);
+      res.json({ started: true });
     } catch (err) {
       next(err);
     }

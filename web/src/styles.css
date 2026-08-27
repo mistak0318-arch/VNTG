@@ -9554,3 +9554,132 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .gt-del { color: var(--red); font-weight: 700; }
 .gt-del:hover { background: color-mix(in srgb, var(--red) 15%, transparent); }
 .gt-help { font-size: 0.7rem; align-self: center; }
+
+/* ==================================================================
+   네이버 테마 (2026-08-28) — 종목 상세의 「테마」 탭
+   ------------------------------------------------------------------
+   키움 테마는 이름만 주는데 이건 **왜 묶였는지**가 한 줄로 붙는다.
+   설명이 본체라 이름보다 넓게 잡고, 이름은 그 위에 작게 얹는다.
+   ================================================================== */
+.nvt { margin: 0.5rem 0 0.75rem; }
+.nvt-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.8rem;
+}
+.nvt-row {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  margin-bottom: 3px;
+}
+.nvt-name { font-size: 0.78rem; font-weight: 700; }
+/* 설명은 두 줄까지 — 길어도 줄이 들쭉날쭉해지지 않게 */
+.nvt-desc {
+  margin-top: 2px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+/* ==================================================================
+   테마 DB (2026-08-28) — 네이버 분류를 우리 눈금으로
+   ------------------------------------------------------------------
+   테마가 266개다. 표로 늘어놓으면 스크롤만 하다 끝나서 MAP 으로 본다.
+   타일 아래 두 줄(상승비율·연속일)이 평균 등락률만으로는 안 보이는 것을 말한다.
+   ================================================================== */
+.tdb-bar { align-items: center; gap: 4px; }
+.tdb-search { max-width: 16rem; height: 1.9rem; font-size: 0.76rem; }
+.tdb-grid { margin-top: 0.4rem; }
+.tdb-tile.on { outline: 2px solid var(--text); outline-offset: -2px; }
+
+/* 펼친 테마 — 구성종목과 편입 사유 */
+.tdb-detail { margin-top: 0.6rem; }
+.tdb-detail-h {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+.tdb-stocks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 4px;
+}
+.tdb-stock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-2);
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  min-width: 0;
+}
+.tdb-stock:hover { border-color: var(--muted); }
+.tdb-stock-h { display: flex; align-items: baseline; gap: 0.4rem; font-size: 0.78rem; }
+.tdb-stock-h em { font-style: normal; margin-left: auto; }
+/* 편입 사유 — 두 줄까지. 이게 이 데이터의 값어치다 */
+.tdb-why {
+  font-size: 0.68rem;
+  color: var(--muted);
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* ── 테마 브리핑 — 국내·미국 짝 ── */
+.tlk-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.tlk-h { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem; }
+.tlk-lead {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.tlk-lead.us { color: var(--blue); border-color: var(--blue); }
+.tlk-lead.kr { color: var(--green); border-color: var(--green); }
+.tlk-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 6px; }
+.tlk-side { border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 0.5rem; min-width: 0; }
+.tlk-side-h { display: flex; align-items: baseline; gap: 0.35rem; }
+.tlk-tag { font-size: 0.64rem; color: var(--muted); }
+.tlk-name { font-size: 0.78rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tlk-side-h .num { margin-left: auto; }
+.tlk-sub { font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
+.tlk-tops { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.tlk-chip {
+  font-size: 0.66rem;
+  padding: 0.08rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+.tlk-chip:hover { border-color: var(--muted); }
+.tlk-note { font-size: 0.7rem; color: var(--muted); margin-top: 0.4rem; }
+
+/* ── 일간·주간·월간 ── */
+.tpb-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 8px; }
+.tpb-list { display: flex; flex-direction: column; gap: 2px; }
+.tpb-row {
+  display: grid;
+  grid-template-columns: 1fr 4rem auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.35rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.76rem;
+}
+.tpb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tpb-row .num { text-align: right; }
+.tpb-tops { display: flex; gap: 2px; flex-wrap: wrap; }

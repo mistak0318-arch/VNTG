@@ -142,6 +142,26 @@ export function SectorMoodPanel({
         </div>
       )}
 
+      {/*
+        네이버 테마 (2026-08-28) — **왜 이 테마에 묶였는지가 적혀 있다.**
+        키움 테마는 이름만 주는데, 이건 종목마다 한 줄 설명이 붙는다. 종목을 처음 볼 때
+        「이 회사가 이 테마에서 무슨 역할인가」가 여기서 풀린다. 그래서 키움 테마 위에 둔다.
+      */}
+      {(data.naverThemes ?? []).length > 0 && (
+        <div className="nvt">
+          <div className="nvt-head">
+            <b>네이버 테마 {data.naverThemes!.length}</b>
+            <span className="pt-n">종목마다 편입 사유가 붙습니다</span>
+          </div>
+          {data.naverThemes!.map((t) => (
+            <div className="nvt-row" key={t.no}>
+              <div className="nvt-name">{t.name}</div>
+              {t.desc && <div className="nvt-desc">{t.desc}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
       {data.themes.length > 0 ? (
         <div className="mood-themes">
           <div className="mood-themes-title">편입 테마 {data.themes.length}개 · 눌러서 구성종목 보기</div>
