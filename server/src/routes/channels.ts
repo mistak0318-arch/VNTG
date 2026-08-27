@@ -16,7 +16,7 @@ import {
   setChannelEnabled,
   setChannelMajor,
 } from "../telegramReader.js";
-import { majorFeedMessages, markMajorRead } from "../majorFeed.js";
+import { majorRoomMessages, majorRooms, markMajorRead } from "../majorFeed.js";
 import { CHANNEL_STEPS, createJob, getJob, reporterFor } from "../reportProgress.js";
 
 export function createChannelsRouter(): Router {
@@ -64,19 +64,28 @@ export function createChannelsRouter(): Router {
     }
   });
 
-  /** 쌓인 피드 — 시간순 마지막 limit 건 + 읽은 위치(여기까지 읽음 선) */
-  router.get("/major-feed", async (req, res, next) => {
+  /** 방 목록 — 받은 방과 같은 모양(미리보기·안읽음 말풍선), 최근 글 순 */
+  router.get("/major-rooms", async (_req, res, next) => {
     try {
-      res.json(await majorFeedMessages(Number(req.query.limit) || 200));
+      res.json({ rooms: await majorRooms() });
     } catch (err) {
       next(err);
     }
   });
 
-  /** 방을 열면 읽음 — 다음에 열 때 「여기까지 읽음」 선이 여기 그어진다 */
-  router.post("/major-feed/read", async (_req, res, next) => {
+  /** 대화방 — 그 채널의 글 + 읽음 처리 전의 읽은 위치(여기까지 읽음 선) */
+  router.get("/major-room/:id", async (req, res, next) => {
     try {
-      await markMajorRead();
+      res.json(await majorRoomMessages(req.params.id, Number(req.query.limit) || 200));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 방을 열면 읽음 — 채널별로 적는다 */
+  router.post("/major-room/:id/read", async (req, res, next) => {
+    try {
+      await markMajorRead(req.params.id);
       res.json({ ok: true });
     } catch (err) {
       next(err);

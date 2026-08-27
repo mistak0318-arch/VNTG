@@ -9,8 +9,11 @@ import type { ChannelMessage } from "./telegramReader.js";
  *
  * 동향(digest)은 AI 가 고르고 줄인 요약이다 — 회사에서 텔레그램이 막힌 사용자에게는
  * 「읽어볼 만한 채널 몇 곳은 한 글자도 빼지 말고 다 보여 달라」는 요구가 따로 있다.
- * 그 채널들(ChannelEntry.major)만 5분마다 통째로 읽어 JSONL 로 쌓고,
- * 화면은 VNTG 방 뷰어와 같은 문법(말풍선·여기까지 읽음·검색)으로 보여 준다.
+ * 그 채널들(ChannelEntry.major)만 5분마다 통째로 읽어 JSONL 로 쌓는다.
+ *
+ * 화면은 **받은 방과 똑같은 구조**다(2026-08-27 재편) — 주요 채널 하나가 방 하나.
+ * 방 목록에 안읽음 말풍선이 뜨고, 누르면 그 채널의 대화방이 열린다.
+ * 읽음도 채널별로 적는다(reads: { 채널id: 시각 }).
  *
  * ## 오프셋을 안 쓰는 이유
  *
@@ -18,10 +21,10 @@ import type { ChannelMessage } from "./telegramReader.js";
  * 다음 발행이 빈 채로 나간다. 대신 매번 최근 구간(겹치게)을 읽고 **메시지 id 로
  * 중복을 걸러** 같은 글이 두 번 쌓이지 않게 한다.
  *
- * ## N 배지에 안 넣는다 (사용자 요청)
+ * ## 사이드바 N 배지에 안 넣는다 (사용자 요청)
  *
  * 모든 글을 긁어오는 방이라 늘 새 글이 있다 — 배지로 알리면 항상 켜져 있어
- * 신호가 죽는다. 읽은 위치(여기까지 읽음)만 방 안에서 관리한다.
+ * 신호가 죽는다. 안읽음 말풍선은 이 메뉴 안에서만 보여 준다.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -32,7 +35,9 @@ const READ_FILE = join(DATA_DIR, "majorFeed.read.json");
 export interface MajorMsg {
   /** `${channelId}_${messageId}` — 중복 방지 키 */
   id: string;
+  channelId: string;
   at: string;
+  /** 채널 표시 이름 */
   channel: string;
   text: string;
   link: string;
@@ -74,7 +79,14 @@ export async function archiveMajor(messages: ChannelMessage[]): Promise<number> 
     const id = `${m.channelId}_${m.messageId}`;
     if (known.has(id)) continue;
     known.add(id);
-    fresh.push({ id, at: m.at, channel: m.channelName, text: m.text, link: m.link });
+    fresh.push({
+      id,
+      channelId: m.channelId,
+      at: m.at,
+      channel: m.channelName,
+      text: m.text,
+      link: m.link,
+    });
   }
   if (fresh.length === 0) return 0;
   // 시간순으로 붙인다 — fetch 는 최신순으로 주므로 뒤집는다
@@ -90,29 +102,70 @@ export async function archiveMajor(messages: ChannelMessage[]): Promise<number> 
   return fresh.length;
 }
 
-/** 화면용 — 시간순 마지막 limit 건 + 읽은 위치 */
-export async function majorFeedMessages(
-  limit = 200,
-): Promise<{ messages: MajorMsg[]; readAt: string }> {
-  const all = (await readFeed()).sort((a, b) => a.at.localeCompare(b.at));
-  return {
-    messages: all.slice(-Math.min(Math.max(limit, 20), 500)),
-    readAt: await readAtOf(),
-  };
-}
+// ---------------------------------------------------------------- 읽음 (채널별)
 
-export async function readAtOf(): Promise<string> {
+async function readReads(): Promise<Record<string, string>> {
   try {
-    const j = JSON.parse(await readFile(READ_FILE, "utf-8")) as { readAt?: string };
-    return j.readAt ?? "";
+    const j = JSON.parse(await readFile(READ_FILE, "utf-8")) as Record<string, string>;
+    return typeof j === "object" && j !== null ? j : {};
   } catch {
-    return "";
+    return {};
   }
 }
 
-export async function markMajorRead(): Promise<void> {
+export async function markMajorRead(channelId: string): Promise<void> {
+  const reads = await readReads();
+  reads[channelId] = new Date().toISOString();
   await mkdir(DATA_DIR, { recursive: true });
-  await writeFile(READ_FILE, JSON.stringify({ readAt: new Date().toISOString() }), "utf-8");
+  await writeFile(READ_FILE, JSON.stringify(reads, null, 2), "utf-8");
+}
+
+// ---------------------------------------------------------------- 방 목록·대화방
+
+/** 방 목록 — 받은 방과 같은 모양: 미리보기 + 안읽음 말풍선. 최근 글 순 */
+export async function majorRooms(): Promise<
+  { id: string; name: string; lastAt: string | null; preview: string; unread: number; total: number }[]
+> {
+  const majors = (await listChannels()).filter((c) => c.major);
+  const feed = await readFeed();
+  const reads = await readReads();
+  const byCh = new Map<string, MajorMsg[]>();
+  for (const m of feed) {
+    const arr = byCh.get(m.channelId);
+    if (arr) arr.push(m);
+    else byCh.set(m.channelId, [m]);
+  }
+  return majors
+    .map((c) => {
+      const msgs = (byCh.get(c.id) ?? []).sort((a, b) => a.at.localeCompare(b.at));
+      const last = msgs[msgs.length - 1];
+      const readAt = reads[c.id] ?? "";
+      return {
+        id: c.id,
+        name: c.name,
+        lastAt: last?.at ?? null,
+        preview: last ? last.text.replace(/\s+/g, " ").trim().slice(0, 60) : "",
+        unread: msgs.filter((m) => m.at > readAt).length,
+        total: msgs.length,
+      };
+    })
+    .sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? ""));
+}
+
+/** 대화방 — 그 채널의 글, 시간순 마지막 limit 건 + 읽음 처리 전의 읽은 위치 */
+export async function majorRoomMessages(
+  channelId: string,
+  limit = 200,
+): Promise<{ name: string; messages: MajorMsg[]; readAt: string }> {
+  const ch = (await listChannels()).find((c) => c.id === channelId);
+  const all = (await readFeed())
+    .filter((m) => m.channelId === channelId)
+    .sort((a, b) => a.at.localeCompare(b.at));
+  return {
+    name: ch?.name ?? all[all.length - 1]?.channel ?? channelId,
+    messages: all.slice(-Math.min(Math.max(limit, 20), 500)),
+    readAt: (await readReads())[channelId] ?? "",
+  };
 }
 
 // ---------------------------------------------------------------- 수집 루프

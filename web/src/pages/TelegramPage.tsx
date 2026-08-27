@@ -25,10 +25,10 @@ type Tab = "rooms" | "digest" | "major" | "search" | "stars";
 
 export const TELEGRAM_TABS: { key: Tab; label: string; hint: string }[] = [
   { key: "rooms", label: "받은 방", hint: "VNTG 방 6곳 — 안읽음 말풍선, 열면 대화방처럼" },
+  { key: "major", label: "주요 채널", hint: "골라 둔 채널마다 방 하나 — 글을 빠짐없이 원문 그대로" },
   { key: "digest", label: "동향", hint: "지금 채널들이 무슨 말을 하고 있는지" },
-  { key: "major", label: "주요 채널", hint: "골라 둔 채널의 글을 빠짐없이 원문 그대로" },
   { key: "search", label: "🔎 검색", hint: "원하는 말을 채널 전체에서 찾습니다 — 종목이든 키워드든" },
-  { key: "stars", label: "⭐ 중요 메시지", hint: "받은 방에서 별표한 것들" },
+  { key: "stars", label: "⭐ 중요 메시지", hint: "받은 방·주요 채널에서 별표한 것들" },
 ];
 
 export function TelegramPage() {

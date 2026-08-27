@@ -289,9 +289,13 @@ export const api = {
   /* 주요 채널 (2026-08-27) — 골라 둔 채널의 글을 빠짐없이 원문 그대로 */
   channelsSetMajor: (updates: { id: string; major: boolean }[]) =>
     putJson<{ channels: ChannelEntry[] }>("/api/channels/major", { updates }),
-  majorFeed: (limit = 200) =>
-    getJson<{ messages: MajorMsg[]; readAt: string }>(`/api/channels/major-feed?limit=${limit}`),
-  majorFeedRead: () => postJson<{ ok: boolean }>("/api/channels/major-feed/read", {}),
+  majorRooms: () => getJson<{ rooms: MajorRoom[] }>("/api/channels/major-rooms"),
+  majorRoom: (id: string, limit = 200) =>
+    getJson<{ name: string; messages: MajorMsg[]; readAt: string }>(
+      `/api/channels/major-room/${encodeURIComponent(id)}?limit=${limit}`,
+    ),
+  majorRoomRead: (id: string) =>
+    postJson<{ ok: boolean }>(`/api/channels/major-room/${encodeURIComponent(id)}/read`, {}),
   channelsReportStatus: (jobId: string) => getJson<PublishJob>(`/api/channels/report/${jobId}`),
   /** 끝날 때까지 기다리는 옛 방식 — 진행 표시가 필요 없는 짧은 확인용 */
   channelsReportSync: (o: { ai?: boolean; send?: boolean; minutes?: number } = {}) => {
@@ -1355,10 +1359,21 @@ export interface ChannelEntry {
 /** 주요 채널 피드 한 건 — 원문 그대로 */
 export interface MajorMsg {
   id: string;
+  channelId: string;
   at: string;
   channel: string;
   text: string;
   link: string;
+}
+
+/** 주요 채널 방 목록 한 줄 — 받은 방과 같은 모양 */
+export interface MajorRoom {
+  id: string;
+  name: string;
+  lastAt: string | null;
+  preview: string;
+  unread: number;
+  total: number;
 }
 
 /** 고정 채널이 어디서 막혔나 — 빈 목록만으로는 원인을 못 가린다 */

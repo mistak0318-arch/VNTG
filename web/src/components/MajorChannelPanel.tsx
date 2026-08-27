@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type ChannelEntry, type MajorMsg } from "../api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, type ChannelEntry, type MajorMsg, type MajorRoom } from "../api";
 
 /**
  * 주요 채널 (2026-08-27) — **골라 둔 채널의 글은 빠짐없이, 원문 그대로.**
  *
- * 동향은 AI 가 고르고 줄인 요약이다. 회사에서 텔레그램이 막혀 있는 사용자에게는
- * 「읽어볼 만한 채널 몇 곳은 한 글자도 안 빼고 다 본다」는 자리가 따로 필요하다.
- * 서버가 5분마다 주요 채널만 통째로 아카이브하고, 여기서 VNTG 방 뷰어와 같은
- * 문법(말풍선·여기까지 읽음·검색)으로 읽는다.
+ * 받은 방과 똑같은 구조다(사용자 요청) — 주요 채널 하나가 방 하나. 방 목록에
+ * 안읽음 말풍선이 뜨고, 누르면 그 채널의 대화방이 열린다(날짜 구분·여기까지 읽음·
+ * 방 내 검색·별표). 재료는 서버가 5분마다 모아 두는 아카이브(majorFeed)다.
  *
  * ⚠️ 사이드바 N 배지에는 일부러 안 넣는다 — 모든 글을 긁어오는 방이라 늘 새 글이
  * 있고, 그러면 배지가 항상 켜져 신호가 죽는다 (사용자 요청).
@@ -23,50 +22,90 @@ function dayOf(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()} (${"일월화수목금토"[d.getDay()]})`;
 }
 
+function ago(iso: string | null): string {
+  if (!iso) return "";
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (m < 1) return "방금";
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}시간 전`;
+  return `${Math.floor(h / 24)}일 전`;
+}
+
 export function MajorChannelPanel() {
-  const [msgs, setMsgs] = useState<MajorMsg[] | null>(null);
+  const [rooms, setRooms] = useState<MajorRoom[] | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [msgs, setMsgs] = useState<MajorMsg[]>([]);
+  const [label, setLabel] = useState("");
   const [readAt, setReadAt] = useState("");
-  const [channels, setChannels] = useState<ChannelEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [starred, setStarred] = useState<Set<string>>(new Set());
+  const [channels, setChannels] = useState<ChannelEntry[]>([]);
   const [pickOpen, setPickOpen] = useState(false);
   const [pickFilter, setPickFilter] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const unreadRef = useRef<HTMLDivElement>(null);
 
-  /* 처음 열 때 한 번 — 피드 받고 읽음 처리. 「여기까지 읽음」 선은 그 전 값으로 긋는다 */
-  useEffect(() => {
-    let alive = true;
+  const loadRooms = useCallback(() => {
     void api
-      .majorFeed()
-      .then(async (r) => {
-        if (!alive) return;
-        setMsgs(r.messages);
-        setReadAt(r.readAt);
-        await api.majorFeedRead().catch(() => undefined);
-        setTimeout(() => {
-          if (unreadRef.current) unreadRef.current.scrollIntoView({ block: "center" });
-          else endRef.current?.scrollIntoView({ block: "end" });
-        }, 50);
-      })
-      .catch((e: Error) => alive && setError(e.message));
-    void api
-      .channels()
-      .then((r) => alive && setChannels(r.channels))
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
+      .majorRooms()
+      .then((r) => setRooms(r.rooms))
+      .catch((e: Error) => setError(e.message));
   }, []);
 
-  async function reload() {
+  useEffect(() => {
+    loadRooms();
+    void api
+      .channels()
+      .then((r) => setChannels(r.channels))
+      .catch(() => undefined);
+    /* 별표는 받은 방과 같은 보관함 — 「중요 메시지」 탭에 같이 모인다 */
+    void api
+      .tgStars()
+      .then((r) => setStarred(new Set(r.stars.map((s) => `${s.channel}:${s.id}`))))
+      .catch(() => undefined);
+    /* 새 글 말풍선 — 서버 수집이 5분 주기라 1분 폴링이면 넉넉하다 */
+    const t = setInterval(() => {
+      if (document.visibilityState === "visible") loadRooms();
+    }, 60_000);
+    return () => clearInterval(t);
+  }, [loadRooms]);
+
+  /* 방 열기 — 「여기까지 읽음」 선에서 시작. 다 읽었거나 처음 여는 방은 최신부터 */
+  async function openRoom(id: string) {
+    setOpen(id);
+    setMsgs([]);
+    setQuery("");
     try {
-      const r = await api.majorFeed();
+      const r = await api.majorRoom(id);
       setMsgs(r.messages);
-      setReadAt(r.readAt); // 마지막 읽음 이후 새로 온 것 앞에 선이 다시 그어진다
-      await api.majorFeedRead().catch(() => undefined);
+      setLabel(r.name);
+      setReadAt(r.readAt); // 읽음 처리 전의 값 — 선은 이 시각에 긋는다
+      await api.majorRoomRead(id).catch(() => undefined);
+      setRooms((prev) => prev?.map((x) => (x.id === id ? { ...x, unread: 0 } : x)) ?? prev);
+      setTimeout(() => {
+        if (unreadRef.current) unreadRef.current.scrollIntoView({ block: "center" });
+        else endRef.current?.scrollIntoView({ block: "end" });
+      }, 50);
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오기 실패");
+    }
+  }
+
+  async function toggleStar(m: MajorMsg) {
+    /* 별표 키는 채널 표시 이름 — 「중요 메시지」에서 어느 방 글인지 그대로 보인다 */
+    const key = `${m.channel}:${m.id}`;
+    try {
+      const r = await api.tgStar(m.channel, { id: m.id, at: m.at, text: m.text });
+      setStarred((prev) => {
+        const next = new Set(prev);
+        if (r.starred) next.add(key);
+        else next.delete(key);
+        return next;
+      });
+    } catch {
+      /* 다음 클릭에 다시 */
     }
   }
 
@@ -74,38 +113,113 @@ export function MajorChannelPanel() {
     try {
       const r = await api.channelsSetMajor([{ id: ch.id, major: !ch.major }]);
       setChannels(r.channels);
+      loadRooms(); // 방 목록에 바로 반영
     } catch {
       /* 다음 클릭에 다시 */
     }
   }
 
-  const majors = channels.filter((c) => c.major);
-  const q = query.trim().toLowerCase();
-  const shown = useMemo(
-    () => (q && msgs ? msgs.filter((m) => `${m.channel}\n${m.text}`.toLowerCase().includes(q)) : (msgs ?? [])),
-    [msgs, q],
-  );
-  const firstUnread = readAt && !q ? shown.findIndex((m) => m.at > readAt) : -1;
+  if (error && rooms === null) return <div className="error-banner">{error}</div>;
+  if (rooms === null) return <div className="empty">방 목록 불러오는 중…</div>;
 
-  if (error && msgs === null) return <div className="error-banner">{error}</div>;
-  if (msgs === null) return <div className="empty">불러오는 중…</div>;
+  /* ── 대화방 뷰 — 받은 방과 같은 문법 ── */
+  if (open) {
+    let lastDay = "";
+    const q = query.trim().toLowerCase();
+    const shown = q ? msgs.filter((m) => m.text.toLowerCase().includes(q)) : msgs;
+    const firstUnread = readAt && !q ? shown.findIndex((m) => m.at > readAt) : -1;
+    return (
+      <div className="tgr-room">
+        <div className="tgr-room-head">
+          <button className="filter-btn" onClick={() => setOpen(null)}>
+            ‹ 방 목록
+          </button>
+          <b>{label}</b>
+          <span className="pt-n">최근 {msgs.length}건 · 5분마다 수집</span>
+        </div>
+        <div className="search-box tgr-search-row">
+          <input
+            className="search-input"
+            type="text"
+            inputMode="search"
+            placeholder="이 방에서 검색 — 모아 둔 글 안에서 찾습니다"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {q && (
+            <>
+              <span className="pt-n tgr-search-n">{shown.length}건</span>
+              <button className="qss-close" onClick={() => setQuery("")} title="검색 지우기">
+                ✕
+              </button>
+            </>
+          )}
+        </div>
+        <div className="tgr-msgs">
+          {msgs.length === 0 && (
+            <div className="empty">아직 모인 글이 없습니다 — 다음 수집(5분 안)에 채워집니다.</div>
+          )}
+          {q && shown.length === 0 && msgs.length > 0 && (
+            <div className="empty">「{query.trim()}」 — 모아 둔 글에는 없습니다.</div>
+          )}
+          {shown.map((m, i) => {
+            const day = dayOf(m.at);
+            const showDay = day !== lastDay;
+            lastDay = day;
+            const key = `${m.channel}:${m.id}`;
+            return (
+              <div key={m.id}>
+                {i === firstUnread && (
+                  <div className="tgr-unread" ref={unreadRef}>
+                    여기까지 읽음 — 아래부터 새 글
+                  </div>
+                )}
+                {showDay && <div className="tgr-day">{day}</div>}
+                <div className="tgr-bubble-row">
+                  <div className="tgr-bubble">
+                    {/* 원문 그대로 — 채널 글은 평문이라 텍스트 노드로 넣는다 (HTML 해석 없음) */}
+                    <div className="tgr-text tgr-plain">{m.text}</div>
+                    <span className="tgr-time">
+                      {hm(m.at)}
+                      {m.link && (
+                        <a
+                          className="tgr-src"
+                          href={m.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="텔레그램 원문으로"
+                        >
+                          ↗
+                        </a>
+                      )}
+                    </span>
+                  </div>
+                  <button
+                    className={`tgr-star${starred.has(key) ? " on" : ""}`}
+                    onClick={() => void toggleStar(m)}
+                    title={starred.has(key) ? "중요 해제" : "중요 표시 — 「중요 메시지」에 모입니다"}
+                  >
+                    {starred.has(key) ? "★" : "☆"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          <div ref={endRef} />
+        </div>
+      </div>
+    );
+  }
 
-  let lastDay = "";
+  /* ── 방 목록 — 받은 방과 같은 모양 + 위에 채널 고르기 ── */
+  const majorCount = channels.filter((c) => c.major).length || rooms.length;
   return (
-    <div className="tgr-room">
+    <div className="tgr-list">
       <div className="tgr-room-head">
-        <b>주요 채널</b>
-        <span className="pt-n">
-          {majors.length > 0
-            ? `${majors.length}곳 · ${msgs.length}건 (5분마다 수집)`
-            : "아직 등록된 채널이 없습니다"}
-        </span>
-        <button className="filter-btn" onClick={() => void reload()} title="새 글 다시 읽기">
-          ↻ 새로고침
-        </button>
         <button className="filter-btn" onClick={() => setPickOpen((v) => !v)}>
-          {pickOpen ? "채널 고르기 닫기" : `⭐ 채널 고르기 (${majors.length})`}
+          {pickOpen ? "채널 고르기 닫기" : `⭐ 채널 고르기 (${majorCount})`}
         </button>
+        <span className="pt-n">별표한 채널마다 방이 하나씩 생깁니다 — 글은 5분마다 수집</span>
       </div>
 
       {pickOpen && (
@@ -118,7 +232,9 @@ export function MajorChannelPanel() {
           />
           <div className="mjr-pick-list">
             {channels
-              .filter((c) => !pickFilter.trim() || c.name.toLowerCase().includes(pickFilter.trim().toLowerCase()))
+              .filter(
+                (c) => !pickFilter.trim() || c.name.toLowerCase().includes(pickFilter.trim().toLowerCase()),
+              )
               .map((c) => (
                 <button
                   key={c.id}
@@ -131,7 +247,9 @@ export function MajorChannelPanel() {
                 </button>
               ))}
             {channels.length === 0 && (
-              <div className="pt-n">구독 채널 목록이 없습니다 — 설정 &gt; 발행·알림에서 채널을 불러오세요.</div>
+              <div className="pt-n">
+                구독 채널 목록이 없습니다 — 설정 &gt; 발행·알림에서 채널을 불러오세요.
+              </div>
             )}
           </div>
           <div className="table-note">
@@ -141,67 +259,24 @@ export function MajorChannelPanel() {
         </div>
       )}
 
-      <div className="search-box tgr-search-row">
-        <input
-          className="search-input"
-          type="text"
-          inputMode="search"
-          placeholder="이 방에서 검색 — 채널 이름·본문"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {q && (
-          <>
-            <span className="pt-n tgr-search-n">{shown.length}건</span>
-            <button className="qss-close" onClick={() => setQuery("")} title="검색 지우기">
-              ✕
-            </button>
-          </>
-        )}
-      </div>
-
-      <div className="tgr-msgs">
-        {msgs.length === 0 && (
-          <div className="empty">
-            아직 글이 없습니다 — 위 「⭐ 채널 고르기」에서 채널을 등록하면 미니PC가 5분 안에
-            모아 옵니다.
-          </div>
-        )}
-        {q && shown.length === 0 && msgs.length > 0 && (
-          <div className="empty">「{query.trim()}」 — 모아 둔 글에는 없습니다.</div>
-        )}
-        {shown.map((m, i) => {
-          const day = dayOf(m.at);
-          const showDay = day !== lastDay;
-          lastDay = day;
-          return (
-            <div key={m.id}>
-              {i === firstUnread && (
-                <div className="tgr-unread" ref={unreadRef}>
-                  여기까지 읽음 — 아래부터 새 글
-                </div>
-              )}
-              {showDay && <div className="tgr-day">{day}</div>}
-              <div className="tgr-bubble-row">
-                <div className="tgr-bubble">
-                  <div className="tgr-chname">
-                    {m.channel}
-                    {m.link && (
-                      <a href={m.link} target="_blank" rel="noopener noreferrer" title="텔레그램 원문으로">
-                        ↗
-                      </a>
-                    )}
-                  </div>
-                  {/* 원문 그대로 — 채널 글은 평문이라 텍스트 노드로 넣는다 (HTML 해석 없음) */}
-                  <div className="tgr-text tgr-plain">{m.text}</div>
-                  <span className="tgr-time">{hm(m.at)}</span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-        <div ref={endRef} />
-      </div>
+      {rooms.length === 0 && (
+        <div className="empty">
+          아직 등록된 채널이 없습니다 — 위 「⭐ 채널 고르기」에서 별표하면 방이 생깁니다.
+        </div>
+      )}
+      {rooms.map((r) => (
+        <button key={r.id} className="tgr-room-row" onClick={() => void openRoom(r.id)}>
+          <span className="tgr-avatar">{r.name.slice(0, 1)}</span>
+          <span className="tgr-room-main">
+            <b>{r.name}</b>
+            <i className="tgr-preview">{r.preview || "메시지 없음"}</i>
+          </span>
+          <span className="tgr-room-side">
+            <i className="tgr-ago">{ago(r.lastAt)}</i>
+            {r.unread > 0 && <em className="tgr-badge">{r.unread > 99 ? "99+" : r.unread}</em>}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }
