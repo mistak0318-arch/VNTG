@@ -5020,6 +5020,10 @@ tr.drag-src td { opacity: 0.45; }
 .mjr-pick-row.on i { color: #f5c542; }
 .mjr-pick-row i { font-style: normal; width: 1rem; }
 
+/* 슈퍼신호등 종목 공시 — 오늘 공시 맨 앞의 별도 묶음 (2026-08-27) */
+.dart-super { margin-bottom: 8px; border: 1px solid #f5c542; border-radius: 8px; padding: 6px 8px; }
+.dart-super-h { font-weight: 700; margin-bottom: 4px; }
+
 /* 여기까지 읽음 — 방을 열면 이 선에서 시작한다 */
 .tgr-unread {
   display: flex;

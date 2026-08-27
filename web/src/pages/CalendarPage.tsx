@@ -259,14 +259,11 @@ export function CalendarPage() {
       <RefreshBar onRefresh={load} loading={loading} />
       {error && <div className="error-banner">{error}</div>}
 
-      {/* 이미 벌어진 일이 예정된 일보다 급하다 — 달력보다 위에 둔다 */}
-      <h3 className="section-heading">오늘 공시</h3>
-      <DartTodayPanel />
-
       {/*
         2단 구조 (2026-08-27 개편) — 왼쪽은 달력(어느 날에 뭐가 있나), 오른쪽은
         「다가오는 일정」(곧 뭐가 오나)과 선택일 상세 + 입력 폼. 예전엔 전부 세로로
         쌓여서 폼까지 한참 내려가야 했다. 폰에서는 다시 세로로 접힌다.
+        순서는 달력 → 공시 (2026-08-27 재배치 — "달력을 맨 위로").
       */}
       <div className="cal-layout">
         <div className="cal-main">
@@ -453,6 +450,10 @@ export function CalendarPage() {
           </div>
         </div>
       </div>
+
+      {/* 공시는 달력 아래 — 맨 앞에 슈퍼신호등 종목 것부터 선다 */}
+      <h3 className="section-heading">오늘 공시</h3>
+      <DartTodayPanel />
 
       {/*
         가져오기·설정 — 매일 쓰는 게 아니라 접어 둔다 (2026-08-27).

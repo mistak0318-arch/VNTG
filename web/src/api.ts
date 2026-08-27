@@ -190,11 +190,14 @@ export const api = {
   tgStar: (channel: string, m: TgMsg) =>
     postJson<{ starred: boolean }>("/api/tg-feed/star", { channel, ...m }),
   tgStars: () => getJson<{ stars: TgStar[] }>("/api/tg-feed/stars"),
-  /** 슈퍼신호등 배지용 — 마지막 수집일 + 추적 종목 당일 상승/하락 수(캐시 시세만) */
+  /** 슈퍼신호등 배지용 — 마지막 수집일 + 당일 상승/하락 수 + 추적 종목 목록(가벼움) */
   signalSuperStatus: () =>
-    getJson<{ lastRunDate: string | null; up: number | null; down: number | null }>(
-      "/api/signal/super/status",
-    ),
+    getJson<{
+      lastRunDate: string | null;
+      up: number | null;
+      down: number | null;
+      stocks: { code: string; name: string }[];
+    }>("/api/signal/super/status"),
   /** 데일리 리포트 최신 발행분 — 사이드바 N 배지용 */
   reportStatus: () => getJson<{ latest: string | null }>("/api/report/status"),
   /** 밤사이 버즈 — 채널 언급 급증 (장전 브리핑룸) */

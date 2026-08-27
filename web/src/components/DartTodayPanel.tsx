@@ -27,6 +27,8 @@ export function DartTodayPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("mine");
+  /* 슈퍼신호등 추적 종목 — 얘들의 공시는 필터와 무관하게 맨 앞에 세운다 (2026-08-27) */
+  const [superCodes, setSuperCodes] = useState<Set<string>>(new Set());
 
   async function load(force = false) {
     setLoading(true);
@@ -44,12 +46,20 @@ export function DartTodayPanel({
 
   useEffect(() => {
     void load();
+    void api
+      .signalSuperStatus()
+      .then((r) => setSuperCodes(new Set(r.stocks.map((s) => s.code))))
+      .catch(() => undefined);
   }, []);
 
+  /* 슈퍼신호등 종목 공시 — 지금 추적 중인 종목의 사건이 오늘 제일 급하다 */
+  const superHits = events.filter((e) => e.stockCode && superCodes.has(e.stockCode));
   const mine = events.filter((e) => e.watched || e.themes.length > 0);
   // 중요도 8 이상 = 유상증자·수주·합병·상장폐지 같은 되돌리기 어려운 사건
   const notable = events.filter((e) => !e.watched && e.themes.length === 0 && e.weight >= 8);
-  const shown = filter === "mine" ? mine : filter === "notable" ? notable : events;
+  const base = filter === "mine" ? mine : filter === "notable" ? notable : events;
+  // 슈퍼 섹션에 이미 세운 건 아래 목록에서 뺀다 — 같은 공시가 두 번 보이면 헷갈린다
+  const shown = base.filter((e) => !(e.stockCode && superCodes.has(e.stockCode)));
 
   if (loading && events.length === 0) return <div className="page-note">공시 불러오는 중…</div>;
   if (error) return <div className="error-banner">{error}</div>;
@@ -77,6 +87,35 @@ export function DartTodayPanel({
           ↻
         </button>
       </div>
+
+      {/* 🌟 슈퍼신호등 종목 공시 — 있을 때만, 필터와 무관하게 맨 앞 */}
+      {superHits.length > 0 && (
+        <div className="dart-list dart-super">
+          <div className="pt-n dart-super-h">🌟 슈퍼신호등 종목 공시</div>
+          {superHits.map((e) => (
+            <div className="dart-row hot" key={`s-${e.url}`}>
+              <div className="dart-head">
+                <span className="news-tag watch">🌟 슈퍼</span>
+                {e.stockCode && onSelectStock ? (
+                  <button
+                    className="link-btn dart-name"
+                    onClick={() => onSelectStock(e.stockCode, e.corpName)}
+                  >
+                    {e.corpName}
+                  </button>
+                ) : (
+                  <span className="dart-name">{e.corpName}</span>
+                )}
+                <span className="pt-n">{e.market}</span>
+                {e.amended && <span className="dart-amend">정정</span>}
+              </div>
+              <a className="dart-title" href={e.url} target="_blank" rel="noreferrer">
+                {e.title}
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
 
       {shown.length === 0 ? (
         <div className="empty">

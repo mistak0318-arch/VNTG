@@ -177,6 +177,8 @@ export async function superRunStatus(): Promise<{
   lastRunDate: string | null;
   up: number | null;
   down: number | null;
+  /** 추적 중 종목 — 캘린더의 공시 매칭 등 가벼운 소비처용 */
+  stocks: { code: string; name: string }[];
 }> {
   const store = await load();
   const snap = peekSnapshot();
@@ -193,7 +195,10 @@ export async function superRunStatus(): Promise<{
       else if (r < 0) down += 1;
     }
   }
-  return { lastRunDate: store.lastRunDate, up, down };
+  const stocks = store.entries
+    .filter((e) => e.active !== false)
+    .map((e) => ({ code: e.code, name: e.name }));
+  return { lastRunDate: store.lastRunDate, up, down, stocks };
 }
 
 async function save(s: Store): Promise<void> {
