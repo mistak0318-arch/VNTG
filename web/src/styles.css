@@ -4455,13 +4455,15 @@ tr.drag-src td { opacity: 0.45; }
 }
 .mn-meta { font-size: 0.68rem; color: var(--muted); margin-top: auto; }
 /*
- * PC 는 카드가 넓어 제목이 거의 한 줄에 든다 — 그런데 제목 2줄+요약 2줄 클램프면
- * 서너 줄 덩어리가 돼 훑어지지 않았다 (2026-08-27 "최대 2줄로").
- * 넓은 화면에서는 제목 1줄 + 요약 1줄로 눌러 카드 높이를 고르게 만든다.
+ * PC 는 **한 줄에 하나씩** (2026-08-27 — "한 줄에 뉴스가 3개씩 있으니 눈에 안 들어온다").
+ * 신문처럼 위에서 아래로만 훑으면 되고, 줄이 넓어진 만큼 미리보기도 더 싣는다 —
+ * 썸네일을 키우고 제목은 한 줄에 다 들어가니 요약을 3줄까지 편다. 폰은 기존 그대로.
  */
 @media (min-width: 900px) {
-  .mn-tit { -webkit-line-clamp: 1; }
-  .mn-sum { -webkit-line-clamp: 1; }
+  .mn-grid { grid-template-columns: 1fr; gap: 8px; max-width: 56rem; }
+  .mn-thumb { width: 132px; height: 88px; }
+  .mn-tit { font-size: 0.92rem; -webkit-line-clamp: 1; }
+  .mn-sum { font-size: 0.78rem; -webkit-line-clamp: 3; }
 }
 
 /* 거래대금 현황(시황) — 시장 유동성 막대 */
