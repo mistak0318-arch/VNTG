@@ -219,6 +219,14 @@ export const api = {
       topToday: { term: string; kind: string; recent: number }[];
       windowHours: number;
       at: string;
+      /** 살아 있나 — 「안 온다」가 고장인지 조용한 것인지 (2026-08-27) */
+      health?: {
+        reader: boolean;
+        todayCount: number;
+        days: number;
+        lastCollect: string | null;
+        needDays: number;
+      };
     }>("/api/signal/buzz"),
   /** 호가창 — 종목 상세·종목분석이 같은 것을 쓴다 */
   /** 거래원 — 부를 때마다 시계열이 한 점씩 쌓인다 */

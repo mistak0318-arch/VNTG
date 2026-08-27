@@ -2,7 +2,11 @@ import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
-import type { ChannelMessage } from "./telegramReader.js";
+import {
+  fetchNewMessages,
+  isReaderConfigured,
+  type ChannelMessage,
+} from "./telegramReader.js";
 import { peekSnapshot } from "./marketSnapshot.js";
 import { listThemes } from "./customThemes.js";
 
@@ -242,6 +246,22 @@ export interface BuzzHit {
 
 export interface BuzzResult {
   hits: BuzzHit[];
+  /**
+   * 지금 살아 있나 (2026-08-27) — 「아무것도 안 온다」가 **고장인지 조용한 것인지**를
+   * 가르는 값들. 화면이 그대로 보여 준다.
+   */
+  health: {
+    /** 텔레그램 사용자 세션이 있나 (없으면 수집 자체가 불가) */
+    reader: boolean;
+    /** 오늘 센 메시지 매칭 수 */
+    todayCount: number;
+    /** 카운트가 있는 날 수(오늘 포함) */
+    days: number;
+    /** 마지막으로 스스로 훑은 시각 */
+    lastCollect: string | null;
+    /** 발송 문턱을 넘으려면 며칠 더 필요한가 */
+    needDays: number;
+  };
   /** 기준선으로 쓴 지난 날 수 — 3 미만이면 아직 판정하지 않는다 */
   baselineDays: number;
   /** 기준선이 모자랄 때도 「지금 많이 말해지는 것」은 보여 준다 */
@@ -310,7 +330,15 @@ export async function evaluateBuzz(windowHours = 12): Promise<BuzzResult> {
 
   hits.sort((a, b) => b.ratio - a.ratio);
   topToday.sort((a, b) => b.recent - a.recent);
+  const todayCount = Object.values(today.total).reduce((a, b) => a + b, 0);
   return {
+    health: {
+      reader: isReaderConfigured(),
+      todayCount,
+      days: baselineDays + (todayCount > 0 ? 1 : 0),
+      lastCollect: lastCollectAt > 0 ? new Date(lastCollectAt).toISOString() : null,
+      needDays: Math.max(0, 3 - baselineDays),
+    },
     hits: hits.slice(0, 12),
     baselineDays,
     topToday: topToday.slice(0, 10),
@@ -332,10 +360,37 @@ async function readSent(): Promise<Record<string, string>> {
 let timer: ReturnType<typeof setInterval> | null = null;
 let ticking = false;
 
+/**
+ * ⚠️ **스스로도 모은다** (2026-08-27 수리).
+ *
+ * 처음엔 카운터를 다른 수집(키워드 알림·채널 정리·주요 채널)에 얹기만 했다. 그런데
+ * 그것들은 **저마다 꺼질 수 있다** — 키워드 알림을 안 켰고 주요 채널도 안 골랐으면
+ * 하루 세 번(07/12/18시 정리) 말고는 아무것도 안 쌓인다. 그래서 「버즈가 안 온다」가
+ * 된다. 기준선은 며칠 치 카운트인데 그 카운트가 안 생기니 영영 판정이 안 선다.
+ *
+ * 45분 넘게 아무것도 안 쌓였으면 **직접 훑는다**. 다른 수집이 돌고 있으면 그대로
+ * 얹혀 가고(중복은 메시지 id 로 걸린다), 아무도 안 돌면 이쪽이 채운다.
+ * 오프셋은 안 건드린다(useOffsets:false) — 정기 발행이 빈 채로 나가면 안 된다.
+ */
+let lastCollectAt = 0;
+
+async function collectIfStale(): Promise<void> {
+  if (!isReaderConfigured()) return;
+  if (Date.now() - lastCollectAt < 45 * 60_000) return;
+  lastCollectAt = Date.now();
+  try {
+    /* 카운트는 fetchNewMessages 안의 훅(recordBuzz)이 알아서 한다 */
+    await fetchNewMessages({ sinceMinutes: 60, useOffsets: false, maxPerChannel: 30 });
+  } catch (err) {
+    console.error("[buzz] 수집 실패:", err instanceof Error ? err.message : err);
+  }
+}
+
 async function tick(): Promise<void> {
   if (ticking) return;
   ticking = true;
   try {
+    await collectIfStale();
     const result = await evaluateBuzz();
     if (result.hits.length === 0) return;
 

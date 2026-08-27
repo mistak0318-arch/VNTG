@@ -261,11 +261,25 @@ export function MorningPage() {
             🌋 밤사이 버즈 <i>›</i>
           </button>
           {!buzz && <div className="empty">불러오는 중…</div>}
+          {/* 살아 있나 — 「안 온다」가 고장인지 조용한 것인지 (2026-08-27) */}
+          {buzz?.health && !buzz.health.reader && (
+            <div className="alert-note">
+              텔레그램 사용자 세션이 없어 수집이 안 됩니다 — 미니PC에서만 돕니다.
+            </div>
+          )}
           {buzz && buzz.baselineDays < 3 && (
             <>
               <p className="pt-n">
                 기준선 수집 중 ({buzz.baselineDays}/3일) — 사흘치가 쌓이면 「평소 대비 몇 배」
-                판정과 시그널 방 발송이 시작됩니다.
+                판정과 버즈 방 발송이 시작됩니다.
+                {buzz.health && (
+                  <>
+                    {" "}
+                    오늘 센 것 <b>{buzz.health.todayCount}건</b>
+                    {buzz.health.lastCollect &&
+                      ` · 마지막 수집 ${new Date(buzz.health.lastCollect).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`}
+                  </>
+                )}
               </p>
               {buzz.topToday.length > 0 && (
                 <div className="mrn-sup">

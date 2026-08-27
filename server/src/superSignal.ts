@@ -432,11 +432,29 @@ async function notifySuperRun(
   added: SuperEntry[],
   revived: SuperEntry[],
   exited: SuperEntry[],
+  /** 지금 추적 중인 수 — 변화가 없는 날의 「살아 있다」 한 줄에 쓴다 */
+  activeCount = 0,
 ): Promise<void> {
-  if (added.length + revived.length + exited.length === 0) return;
   /* 전용 방이 있으면 거기로, 없으면 시그널 방으로 — 어쨌든 이 소식은 봐야 한다 */
   const ch: TelegramChannel = hasDedicatedChannel("super") ? "super" : "signal";
   if (!isTelegramConfigured(ch)) return;
+
+  /*
+   * ⚠️ 변화가 없으면 **아무것도 안 보냈다** (2026-08-27 수리).
+   *
+   * 조용한 게 맞긴 한데, 그러면 「돌고 있는지」를 알 방법이 없다 — 실제로
+   * 「슈퍼신호등이 아무것도 안 온다」가 나왔고, 그게 고장인지 변화가 없는 건지
+   * 사용자가 가릴 수가 없었다. 변화 없는 날은 **한 줄만** 보낸다.
+   * 하루 한 번이라 소음이 되지 않고, 이 줄이 오면 「어제도 돌았다」가 증명된다.
+   */
+  if (added.length + revived.length + exited.length === 0) {
+    const kst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+    await sendTelegram(
+      `🌟 <b>슈퍼신호등 ${kst}</b>\n오늘 편입·이탈 없음 · 추적 중 ${activeCount}종목`,
+      ch,
+    ).catch(() => undefined);
+    return;
+  }
   await sendTelegram(formatSuperRun(added, revived, exited), ch).catch(() => undefined);
 }
 
@@ -579,7 +597,12 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
 
     // 편입·부활·이탈을 전용 방으로 (없으면 시그널 방)
     activeCache = null; // 오늘 결과가 라우팅에 바로 반영되게
-    await notifySuperRun(addedEntries, revivedEntries, exitedEntries).catch(() => undefined);
+    await notifySuperRun(
+      addedEntries,
+      revivedEntries,
+      exitedEntries,
+      store.entries.filter((e) => e.active !== false).length,
+    ).catch(() => undefined);
 
     store.lastRunDate = today;
     await save(store);
