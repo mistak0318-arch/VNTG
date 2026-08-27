@@ -50,6 +50,15 @@ const LOCAL_ONLY = [
    * 이건 어디서 보느냐가 곧 답이다.
    */
   "vntg.appearance",
+  /*
+   * ⚠️ **메뉴 버튼의 모서리도 그 기기의 사정이다** (2026-08-27).
+   *
+   * 이게 전역이라 폰에서 왼쪽 아래에 둔 버튼이 회사 PC 로 내려왔고, 엑셀 모드를
+   * 끌 때 CornerToggle 이 다시 마운트되며 그 값으로 「메뉴바 위치」까지 왼쪽으로
+   * 덮었다 — 메뉴바 위치(vntg.appearance)가 기기별인데 그 지름길만 전역이면
+   * 이렇게 뒷문으로 덮인다.
+   */
+  "vntg.navcorner",
 ];
 
 function isGlobal(key: string): boolean {

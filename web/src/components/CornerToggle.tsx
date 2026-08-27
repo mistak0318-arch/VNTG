@@ -66,47 +66,49 @@ export function CornerToggle({
   /** 버튼을 놓은 쪽을 알린다 — 서랍이 이쪽에서 열려야 한다 */
   onSide: (s: "left" | "right") => void;
 }) {
-  const [corner, setCorner] = useState<Corner>(read);
+  /*
+   * ⚠️ **처음 뜰 때는 설정(「메뉴바 위치」)이 진실이다** (2026-08-27 수리).
+   *
+   * 예전엔 마운트하면서 저장된 모서리를 설정에 밀어 넣었다(onSide). 그런데 이
+   * 버튼은 엑셀 모드를 켜고 끌 때마다 **다시 마운트**되고, 모서리 저장값은 한때
+   * 서버 전역이라 폰에서 왼쪽에 둔 값이 회사 PC 로 내려와 있었다 — 그래서
+   * 엑셀 모드를 끌 때마다 오른쪽으로 둔 메뉴바가 왼쪽으로 튕겼다.
+   * 저장된 모서리의 좌우가 설정과 다르면 **모서리를 설정에 맞춘다.**
+   */
+  const [corner, setCorner] = useState<Corner>(() => {
+    const c = read();
+    const want = side === "right" ? "r" : "l";
+    return c[1] === want ? c : (`${c[0]}${want}` as Corner);
+  });
   /** 끄는 동안의 손가락 위치. null 이면 안 끌고 있다 */
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
   const btn = useRef<HTMLButtonElement>(null);
-
-  const save = useCallback((c: Corner) => {
-    setCorner(c);
-    try {
-      setPref(KEY, c);
-    } catch {
-      /* 저장 못 해도 이번 세션에는 옮겨진다 */
-    }
-  }, []);
+  /** onUp 클로저가 옛 side 를 보지 않게 */
+  const sideRef = useRef(side);
+  sideRef.current = side;
 
   /*
-   * 버튼 자리와 설정의 「메뉴바 위치」를 맞춘다 — **양쪽 다.**
-   *
-   * ⚠️ 여기서 한 번 데였다. 처음엔 그냥 서로를 쳐다보게 했는데,
-   * 버튼을 오른쪽에 놓는 순간 설정값은 아직 왼쪽이라 「설정→버튼」 쪽이
-   * **방금 옮긴 자리를 즉시 되돌렸다.** 끌어도 버튼이 제자리로 튕겨 나왔다.
-   *
-   * 그래서 **내가 마지막으로 보낸 값**을 기억한다. 돌아온 것이 내가 보낸 것이면
-   * 그건 메아리지 새 지시가 아니므로 무시한다 — 사람이 설정에서 직접 바꿨을 때만
-   * 버튼이 따라 움직인다.
+   * 버튼 → 설정은 **사람이 실제로 끌어다 놓은 순간에만** 일어난다(save).
+   * 그래야 마운트·동기화가 설정을 덮는 길이 원천적으로 없다.
    */
-  const lastSent = useRef<"left" | "right" | null>(null);
-
-  // 버튼 → 설정. 처음 뜰 때도 한 번 맞춘다(저장된 자리와 설정이 어긋나 있을 수 있다)
-  useEffect(() => {
-    const s: "left" | "right" = corner[1] === "r" ? "right" : "left";
-    if (lastSent.current === s) return;
-    lastSent.current = s;
-    onSide(s);
-  }, [corner, onSide]);
+  const save = useCallback(
+    (c: Corner) => {
+      setCorner(c);
+      try {
+        setPref(KEY, c);
+      } catch {
+        /* 저장 못 해도 이번 세션에는 옮겨진다 */
+      }
+      const s: "left" | "right" = c[1] === "r" ? "right" : "left";
+      if (s !== sideRef.current) onSide(s);
+    },
+    [onSide],
+  );
 
   // 설정 → 버튼. 위아래는 그대로 둔다 — 바꾼 건 좌우지 높이가 아니다
   useEffect(() => {
-    if (side === lastSent.current) return;
-    lastSent.current = side;
     const want = side === "right" ? "r" : "l";
     setCorner((c) => {
       if (c[1] === want) return c;

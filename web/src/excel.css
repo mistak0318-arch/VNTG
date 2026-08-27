@@ -125,6 +125,29 @@
     repeating-linear-gradient(to bottom, var(--xl-grid) 0 1px, transparent 1px 22px);
 }
 
+/*
+ * 모달(종목 상세·슈퍼 상세)은 리본 아래에서 시작한다 (2026-08-27).
+ * 리본이 z 30 이라 화면 전체를 덮는 overlay(z 20)의 시트 머리가 가려졌다 —
+ * z 를 올려 리본을 덮으면 위장이 깨지므로, overlay 자체를 리본·시트탭 사이로 좁힌다.
+ */
+:root[data-theme="excel"] .overlay {
+  top: var(--xl-head-h);
+  bottom: var(--xl-foot-h);
+}
+
+/*
+ * 사이드바 N 배지·상승하락 수 — 빨간 알약은 장부 위에서 너무 튄다 (2026-08-27).
+ * 칸 테두리 같은 얇은 외곽선에 엑셀 초록 글자로, 한 단계 작게.
+ */
+:root[data-theme="excel"] .nav-n {
+  background: none;
+  color: var(--xl-green);
+  border: 1px solid var(--xl-line);
+  border-radius: 2px;
+  font-size: 0.55rem;
+  padding: 0 3px;
+}
+
 /* ===== 리본 ===== */
 :root[data-theme="excel"] .xl-chrome {
   /* 껍데기 전체가 클릭을 먹지 않는다 — 시트 탭만 따로 되살린다 */
