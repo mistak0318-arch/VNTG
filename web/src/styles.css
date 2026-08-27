@@ -4786,6 +4786,21 @@ tr.drag-src td { opacity: 0.45; }
 /* 선물 수급 표 — 금액(억)이 주인공, 계약은 괄호 잔글씨 */
 .fut-ct { font-style: normal; font-size: 0.7rem; opacity: 0.65; margin-left: 2px; }
 
+/* 순위 접두 — 칸 대신 종목명 앞에 얇게. 전일 순위는 그 옆 잔글씨 */
+.scr-rank-pre {
+  display: inline-block;
+  min-width: 1.6rem;
+  margin-right: 4px;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+.scr-rank-pre i {
+  font-style: normal;
+  font-size: 0.62rem;
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
 /* ── 내 테마 — 타일 격자 (2026-08-27 개편, 관심종목 히트맵 문법) ── */
 .ct-find { max-width: 13rem; }
 .ct-grid {

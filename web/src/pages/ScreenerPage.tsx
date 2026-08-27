@@ -845,7 +845,17 @@ export function ScreenerPage({
               const splitTwo = tab === "market-cap" && drawn.length > 10;
               const half = Math.ceil(drawn.length / 2);
               const parts = splitTwo ? [drawn.slice(0, half), drawn.slice(half)] : [drawn];
-              const tableOf = (part: typeof drawn) => (
+              /*
+               * 순위를 **종목명 앞에 얇게** (2026-08-27 사용자 지정) — 거래대금 상위는
+               * 순위·전일순위 칸을 표에서 빼서 이름 앞 접두로, 시가총액 상위는 줄
+               * 번호(쪽·단 오프셋 반영)로 센다. 칸 두 개가 줄어 표가 홀쭉해진다.
+               */
+              const inlineRank = tab === "trade-value" || tab === "market-cap";
+              const pageBase = pageAt * pageSize;
+              const shownCols = inlineRank
+                ? orderedCols.filter((c) => !RANK_COLS.has(c.key))
+                : orderedCols;
+              const tableOf = (part: typeof drawn, rankOff = 0) => (
               <>
               {/*
                 **칸 너비를 내가 정한다.**
@@ -861,7 +871,7 @@ export function ScreenerPage({
                 <colgroup>
                   {sigOn && <col style={{ width: "2.4rem" }} />}
                   <col style={cw.styleOf("stk_nm")} />
-                  {orderedCols.map((c) => (
+                  {shownCols.map((c) => (
                     <col key={c.key} style={cw.styleOf(c.key)} />
                   ))}
                   {hasTurn && <col style={cw.styleOf("turn")} />}
@@ -892,7 +902,7 @@ export function ScreenerPage({
                       종목명
                       <ColumnGrip cw={cw} k="stk_nm" />
                     </th>
-                    {orderedCols.map((c) => (
+                    {shownCols.map((c) => (
                       <SortableTh
                         key={c.key}
                         columnKey={c.key}
@@ -992,12 +1002,29 @@ export function ScreenerPage({
                       )}
                       {/* 이름이 길면 잘린다(CSS) — 전체는 마우스를 올려서 본다 */}
                       <td className="sticky-col" title={r.name}>
+                        {/* 순위 — 칸 대신 이름 앞 접두. 전일 순위는 그 옆 잔글씨 */}
+                        {inlineRank &&
+                          (() => {
+                            const rec = r as Record<string, unknown>;
+                            const now = Number(rec.now_rank ?? rec.rank);
+                            const rankNo = Number.isFinite(now) && now > 0 ? now : pageBase + rankOff + i + 1;
+                            const prevN = Number(rec.pred_rank ?? rec.prev_rank);
+                            return (
+                              <span
+                                className="scr-rank-pre num"
+                                title={Number.isFinite(prevN) && prevN > 0 ? `전일 ${prevN}위` : undefined}
+                              >
+                                {rankNo}
+                                {Number.isFinite(prevN) && prevN > 0 && <i>전{prevN}</i>}
+                              </span>
+                            );
+                          })()}
                         {/* 줄 전체가 눌리므로 여기선 글자만 — 버튼 모양은 남겨 둔다(눌리는 자리라는 표) */}
                         <span className="link-btn">{r.name}</span>
                         {/* 시장이 「전체」면 어느 시장인지가 정보다 */}
                         {market === "000" && r.mkt && <i className="scr-mkt">{r.mkt}</i>}
                       </td>
-                      {orderedCols.map((c) => {
+                      {shownCols.map((c) => {
                           const v = cell(r[c.key], c.type);
                           /*
                            * 거래대금은 **어디서 돌았는지**까지 보여준다.
@@ -1094,7 +1121,7 @@ export function ScreenerPage({
                 <div className={splitTwo ? "scr-two" : undefined}>
                   {parts.map((p, k) => (
                     <div className="data-table-wrap" key={k}>
-                      {tableOf(p)}
+                      {tableOf(p, k === 0 ? 0 : parts[0].length)}
                     </div>
                   ))}
                 </div>
