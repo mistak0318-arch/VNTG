@@ -64,7 +64,12 @@ export function TelegramRoomsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [starred, setStarred] = useState<Set<string>>(new Set());
   const [phoneRead, setPhoneRead] = useState<boolean | null>(null);
+  /** 방을 열기 전에 어디까지 읽었었나 — 「여기까지 읽음」 선의 기준 */
+  const [readAt, setReadAt] = useState("");
+  /** 이 방에서 찾기 — 불러온 메시지 안에서 거른다 */
+  const [query, setQuery] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  const unreadRef = useRef<HTMLDivElement>(null);
 
   const loadRooms = useCallback(() => {
     void api
@@ -86,21 +91,28 @@ export function TelegramRoomsPanel() {
     return () => clearInterval(t);
   }, [loadRooms]);
 
-  /* 방 열기 — 메시지 받고, 읽음 처리(뷰어 + 가능하면 폰 텔레그램까지) */
+  /* 방 열기 — 메시지 받고, 읽음 처리(뷰어 + 가능하면 폰 텔레그램까지).
+     시작 위치는 「여기까지 읽음」 선 — 다 읽은 방이거나 처음 여는 방은 맨 아래(최신)다. */
   async function openRoom(ch: string) {
     setOpen(ch);
     setMsgs([]);
     setPhoneRead(null);
+    setQuery("");
     try {
       const r = await api.tgRoom(ch);
       setMsgs(r.messages);
       setLabel(r.label);
+      setReadAt(r.readAt); // 읽음 처리 전의 값 — 선은 이 시각에 긋는다
       const read = await api.tgRoomRead(ch);
       setPhoneRead((read as { phoneRead?: boolean }).phoneRead ?? false);
       setRooms((prev) => prev?.map((x) => (x.channel === ch ? { ...x, unread: 0 } : x)) ?? prev);
       // 사이드바 「텔레그램 동향」의 N 배지가 바로 꺼지게 — App 이 이 이벤트로 다시 센다
       window.dispatchEvent(new Event("vntg:tg-read"));
-      setTimeout(() => endRef.current?.scrollIntoView({ block: "end" }), 50);
+      setTimeout(() => {
+        // 안 읽은 첫 메시지 앞의 선으로 — 없으면(다 읽음·첫 방문) 맨 아래로
+        if (unreadRef.current) unreadRef.current.scrollIntoView({ block: "center" });
+        else endRef.current?.scrollIntoView({ block: "end" });
+      }, 50);
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오기 실패");
     }
@@ -128,8 +140,16 @@ export function TelegramRoomsPanel() {
   /* ── 대화방 뷰 ── */
   if (open) {
     let lastDay = "";
+    const q = query.trim().toLowerCase();
+    const stripTags = (s: string) => s.replace(/<[^>]+>/g, "");
+    /* 검색은 불러온 범위(최근 120건) 안에서 — 방 전체 검색은 「검색」 탭의 몫이다 */
+    const shown = q ? msgs.filter((m) => stripTags(m.text).toLowerCase().includes(q)) : msgs;
+    /* 「여기까지 읽음」 — 읽은 적 있는 방에서, 검색 중이 아닐 때만 긋는다.
+       처음 여는 방(readAt 없음)은 전부가 새것이라 선이 뜻이 없다 — 최신부터 본다. */
+    const firstUnread = readAt && !q ? shown.findIndex((m) => m.at > readAt) : -1;
     return (
       <div className="tgr-room">
+        {/* 대화는 아래 칸이 **안에서** 스크롤된다 — 이 머리줄은 늘 보인다 */}
         <div className="tgr-room-head">
           <button className="filter-btn" onClick={() => setOpen(null)}>
             ‹ 방 목록
@@ -141,15 +161,41 @@ export function TelegramRoomsPanel() {
             {phoneRead === false && " · 읽음은 이 화면만 (폰 연동은 미니PC에서)"}
           </span>
         </div>
+        <div className="search-box tgr-search-row">
+          <input
+            className="search-input"
+            type="text"
+            inputMode="search"
+            placeholder="이 방에서 검색 — 불러온 최근 메시지 안에서 찾습니다"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {q && (
+            <>
+              <span className="pt-n tgr-search-n">{shown.length}건</span>
+              <button className="qss-close" onClick={() => setQuery("")} title="검색 지우기">
+                ✕
+              </button>
+            </>
+          )}
+        </div>
         <div className="tgr-msgs">
           {msgs.length === 0 && <div className="empty">아직 이 방으로 보낸 메시지가 없습니다.</div>}
-          {msgs.map((m) => {
+          {q && shown.length === 0 && msgs.length > 0 && (
+            <div className="empty">「{query.trim()}」 — 불러온 메시지에는 없습니다.</div>
+          )}
+          {shown.map((m, i) => {
             const day = dayOf(m.at);
             const showDay = day !== lastDay;
             lastDay = day;
             const key = `${open}:${m.id}`;
             return (
               <div key={m.id}>
+                {i === firstUnread && (
+                  <div className="tgr-unread" ref={unreadRef}>
+                    여기까지 읽음 — 아래부터 새 메시지
+                  </div>
+                )}
                 {showDay && <div className="tgr-day">{day}</div>}
                 <div className="tgr-bubble-row">
                   <div className="tgr-bubble">

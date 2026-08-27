@@ -4872,7 +4872,40 @@ tr.drag-src td { opacity: 0.45; }
   font-weight: 700;
 }
 .tgr-room-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
-.tgr-msgs { max-width: 44rem; display: flex; flex-direction: column; gap: 4px; }
+/* 대화는 이 칸 **안에서** 스크롤 (2026-08-27) — 「방 목록」 버튼·검색이 늘 보인다.
+   페이지째 스크롤이면 긴 방에서 돌아가는 버튼까지 한참을 올려야 했다. */
+.tgr-msgs {
+  max-width: 44rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: calc(100vh - 15rem);
+  min-height: 16rem;
+  overflow-y: auto;
+  overscroll-behavior: contain; /* 안쪽 끝에 닿아도 페이지가 딸려 가지 않게 */
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+}
+.tgr-search-row { max-width: 44rem; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.tgr-search-row .search-input { flex: 1; }
+.tgr-search-n { white-space: nowrap; }
+/* 여기까지 읽음 — 방을 열면 이 선에서 시작한다 */
+.tgr-unread {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  color: var(--blue);
+  margin: 8px 0 4px;
+}
+.tgr-unread::before,
+.tgr-unread::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--blue);
+  opacity: 0.5;
+}
 .tgr-day {
   align-self: center;
   font-size: 0.7rem;

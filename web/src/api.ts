@@ -168,7 +168,7 @@ export const api = {
   /* VNTG 방 뷰어 (2026-08-27) — 봇이 보낸 방들을 브라우저에서 텔레그램처럼 */
   tgRooms: () => getJson<{ rooms: TgRoom[] }>("/api/tg-feed/rooms"),
   tgRoom: (ch: string, limit = 120) =>
-    getJson<{ channel: string; label: string; messages: TgMsg[] }>(
+    getJson<{ channel: string; label: string; messages: TgMsg[]; readAt: string }>(
       `/api/tg-feed/room/${ch}?limit=${limit}`,
     ),
   tgRoomRead: (ch: string) => postJson<{ ok: boolean }>(`/api/tg-feed/room/${ch}/read`, {}),

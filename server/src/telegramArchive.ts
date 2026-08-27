@@ -121,6 +121,12 @@ export async function roomMessages(channel: string, limit = 80): Promise<TgMsg[]
   return msgs.slice(-Math.min(Math.max(limit, 10), 300));
 }
 
+/** 이 방을 어디까지 읽었나 — 「여기까지 읽음」 구분선이 이 시각으로 갈린다 */
+export async function readAtOf(channel: string): Promise<string> {
+  const reads = await readReads();
+  return reads[channel] ?? "";
+}
+
 /** 방을 열면 읽음 — 그 시각 이전은 전부 읽은 것으로 */
 export async function markRead(channel: string): Promise<void> {
   const reads = await readReads();

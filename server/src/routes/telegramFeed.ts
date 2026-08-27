@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   listStars,
   markRead,
+  readAtOf,
   ROOM_LABELS,
   roomMessages,
   roomsSummary,
@@ -28,7 +29,13 @@ export function createTelegramFeedRouter(): Router {
         return;
       }
       const limit = Number(req.query.limit) || 80;
-      res.json({ channel: ch, label: ROOM_LABELS[ch], messages: await roomMessages(ch, limit) });
+      res.json({
+        channel: ch,
+        label: ROOM_LABELS[ch],
+        messages: await roomMessages(ch, limit),
+        /* 읽음 처리(POST /read) 전의 값 — 화면이 「여기까지 읽음」 선을 긋는 기준 */
+        readAt: await readAtOf(ch),
+      });
     } catch (err) {
       next(err);
     }
