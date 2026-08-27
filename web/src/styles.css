@@ -9549,3 +9549,8 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   padding: 0.1rem 0.45rem;
 }
 .etfh-sec b { color: var(--text); }
+
+/* 그룹 편집 — 칩마다 붙는 삭제(✕)와 안내 (2026-08-27) */
+.gt-del { color: var(--red); font-weight: 700; }
+.gt-del:hover { background: color-mix(in srgb, var(--red) 15%, transparent); }
+.gt-help { font-size: 0.7rem; align-self: center; }

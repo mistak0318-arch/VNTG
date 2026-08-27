@@ -27,6 +27,8 @@ const UNITS: Record<string, string> = {
   flowStreak: "일",
   profitGrowth: "%",
   sectorStrength: "%",
+  /* 5일선 이격 — 「몇 % 위인가」라 단위가 %. 좁을수록 좋은 점수다 */
+  ma5Gap: "%",
   nearHigh: "%",
   marketCap: "억원",
   volume: "억원",

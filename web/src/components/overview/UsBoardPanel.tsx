@@ -782,6 +782,12 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
             editing={editing}
             onOpen={onOpen}
             onMove={(symbol, d) => void move(symbol, d)}
+            /*
+             * 끌어서 옮기기 (2026-08-27) — 관심종목(해외) 페이지엔 있는데 **여기만
+             * 빠져 있었다.** 같은 표를 쓰면서 한쪽만 못 끄는 셈이었다.
+             * 화살표와 같은 저장 경로다(usWatchStockOrder).
+             */
+            onReorder={(order) => void run(() => api.usWatchStockOrder(current.id, order))}
             onRemove={(symbol) => void run(() => api.usWatchStockRemove(current.id, symbol))}
           />
         )}

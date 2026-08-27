@@ -54,6 +54,20 @@ async function readAll(): Promise<UsGroup[]> {
 async function writeAll(rows: UsGroup[]): Promise<void> {
   await mkdir(DATA_DIR, { recursive: true });
   await writeFile(FILE, JSON.stringify(rows, null, 2), "utf-8");
+  /*
+   * 원장을 바꿨으면 **시세 캐시를 낡은 것으로 표시한다** (2026-08-27).
+   *
+   * 「종목을 담았는데 다음 갱신 때 사라진다」의 원인이 여기였다. 캐시는 원본 파일의
+   * mtime 으로 낡음을 판정하는데, 그 mtime 을 **빌드가 끝난 뒤에** 읽고 있었다.
+   * 한 바퀴가 6~8초라(163종목), 그 사이에 종목을 담으면:
+   *   ① 진행 중인 빌드는 담기 **전** 원장을 들고 있고
+   *   ② 끝날 때 mtime 은 담기 **후** 값을 읽어 캐시에 박는다
+   *   ③ 그래서 「최신 캐시」로 보이는데 방금 담은 종목만 없다 — 그대로 굳는다
+   *
+   * 여기서 한 줄 지우면 어떤 경로로 원장이 바뀌든(담기·빼기·순서·그룹) 다음 조회가
+   * 반드시 다시 받는다. 아래 rebuild 도 mtime 을 **시작 전에** 읽도록 고쳤다.
+   */
+  shot = null;
 }
 
 export async function listGroups(): Promise<UsGroup[]> {
@@ -750,9 +764,16 @@ async function loadCache(): Promise<void> {
 
 function rebuild(force: boolean): Promise<UsWatchResult> {
   if (building) return building;
+  /*
+   * ⚠️ mtime 은 **시작 전에** 읽는다.
+   * 끝난 뒤에 읽으면, 빌드가 도는 6~8초 사이에 바뀐 원장의 mtime 을 옛 데이터에
+   * 박아 버린다 — 그러면 캐시가 「최신」인 척 굳어서 방금 담은 종목이 사라진다.
+   * 시작 전 값을 박으면 최악이라야 한 번 더 받는 것이고, 그건 안전한 쪽이다.
+   */
+  const mtimeAtStart = watchlistMtime();
   building = buildGroups(force)
     .then(async (data) => {
-      shot = { at: Date.now(), mtime: await watchlistMtime(), data };
+      shot = { at: Date.now(), mtime: await mtimeAtStart, data };
       await mkdir(DATA_DIR, { recursive: true }).catch(() => undefined);
       await writeFile(CACHE_FILE, JSON.stringify(shot), "utf-8").catch(() => undefined);
       return data;

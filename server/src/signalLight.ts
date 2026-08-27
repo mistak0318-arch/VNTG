@@ -78,6 +78,7 @@ export type CheckKey =
   | "roe"
   | "overhead"
   | "disparity"
+  | "ma5Gap"
   | "shortSaleUp"
   | "lendingUp"
   | "debtRatio";
@@ -367,13 +368,37 @@ export const DEFAULT_CONFIG: SignalConfig = {
     },
     {
       key: "disparity",
-      label: "이격도 정상",
+      label: "이격도 정상 (20일)",
       axis: "risk",
       enabled: true,
       weight: 1,
       threshold: 15,
       strongAt: 25,
       hint: "현재가가 20일선보다 몇 % 위인가. 너무 벌어지면 되돌림이 온다",
+      cost: 0,
+    },
+    /*
+     * 5일선 이격 (2026-08-27 요청) — **좁을수록 점수가 높다.**
+     *
+     * 20일선 이격이 「이번 파동이 얼마나 왔나」라면, 5일선 이격은 **지금 이 순간
+     * 얼마나 급하게 떴나**다. 며칠 새 5일선에서 크게 벌어진 자리는 눌림이 잦다.
+     *
+     * ⚠️ 이 값 하나로는 방향을 못 정한다 — 5일선에 붙어 있는 것은 「상승 중 눌림」일
+     * 수도, 「아무 일 없는 횡보」일 수도 있다. 그래서 **위험 축**에 둔다: 다른 축
+     * (추세·수급)이 이미 좋을 때에 한해 총점을 밀어 올리는 방식이다. 20일선 것보다
+     * 문턱을 좁게 잡는다 — 5일선은 원래 가격에 가깝게 붙어 다닌다.
+     */
+    {
+      key: "ma5Gap",
+      label: "5일선 이격 좁음",
+      axis: "risk",
+      enabled: true,
+      weight: 1,
+      threshold: 6,
+      strongAt: 12,
+      hint:
+        "현재가가 5일선보다 몇 % 위인가. **좁을수록 좋은 점수**입니다 — 급하게 뜬 자리는 " +
+        "되돌림이 잦습니다. 다른 기준이 좋은데 이격까지 좁으면 눌림 자리일 수 있습니다",
       cost: 0,
     },
     {
@@ -626,6 +651,7 @@ export async function evaluateSignal(
     need.has("newHigh") ||
     need.has("overhead") ||
     need.has("disparity") ||
+    need.has("ma5Gap") ||
     need.has("targetUpside");
   // 둘은 한 응답에서 나온다. 하나만 켜도 부르고, 둘 다 켜도 한 번만 부른다
   const wantOpinion = need.has("targetUpside") || need.has("targetTrend");
@@ -910,6 +936,17 @@ export async function evaluateSignal(
         // 아래로 벌어진 건 과열이 아니다. 위로 벌어진 것만 위험으로 친다
         g = grade(Math.max(0, away), c);
         value = `20일선 ${away > 0 ? "+" : ""}${away.toFixed(1)}%`;
+      }
+    } else if (c.key === "ma5Gap") {
+      const ma5 = sma(closes, 5);
+      if (cur && ma5) {
+        const away = ((cur - ma5) / ma5) * 100;
+        /*
+         * 20일선과 **같은 규칙**이다: 위로 벌어진 것만 위험으로 친다.
+         * 아래로 벌어진 것은 이 항목이 답할 물음이 아니다 — 그건 추세 축이 본다.
+         */
+        g = grade(Math.max(0, away), c);
+        value = `5일선 ${away > 0 ? "+" : ""}${away.toFixed(1)}%`;
       }
     } else if (c.key === "shortSaleUp") {
       const rows = (shortSale?.data?.shrts_trnsn ?? []) as Record<string, unknown>[];

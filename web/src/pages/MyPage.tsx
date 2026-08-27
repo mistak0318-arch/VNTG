@@ -330,14 +330,22 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     }
   }
 
-  async function removeGroupNow() {
-    if (activeGroup === ALL || activeGroup === DEFAULT_GROUP) return;
-    if (activeGroup === SUPER_GROUP || activeGroup === CROSS_GROUP) return; // 자동 편입 그룹 — 서버도 거부한다
-    if (!window.confirm(`'${activeGroup}' 그룹을 삭제할까요?
+  /**
+   * 그룹 삭제.
+   *
+   * ⚠️ **지울 그룹을 인자로 받는다** (2026-08-27). 예전엔 「지금 고른 그룹」을
+   * 지웠는데, 편집 모드에서는 그룹 칩을 누르는 것이 **이름 바꾸기**라 정작 지울
+   * 그룹을 고를 수가 없었다 — 그래서 「그룹 삭제가 안 된다」가 나왔다.
+   * 이제 칩마다 ✕ 가 붙고, 그 칩의 이름이 그대로 여기로 온다.
+   */
+  async function removeGroupNow(name: string) {
+    if (name === ALL || name === DEFAULT_GROUP) return;
+    if (name === SUPER_GROUP || name === CROSS_GROUP) return; // 자동 편입 그룹 — 서버도 거부한다
+    if (!window.confirm(`'${name}' 그룹을 삭제할까요?
 소속 종목은 기본 그룹으로 이동합니다.`)) return;
     try {
-      setGroups((await api.watchGroupRemove(activeGroup)).groups);
-      setActiveGroup(ALL);
+      setGroups((await api.watchGroupRemove(name)).groups);
+      if (activeGroup === name) setActiveGroup(ALL);
       await load(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "그룹 삭제 실패");
@@ -648,6 +656,21 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                   ▶
                 </button>
               )}
+              {/*
+                삭제는 **칩마다** 붙는다 (2026-08-27).
+                예전엔 그룹 바 끝에 「«고른 그룹» 삭제」 버튼 하나였는데, 편집 모드에서
+                칩을 누르면 이름 바꾸기가 열려서 **지울 그룹을 고를 수가 없었다.**
+                자동 편입 그룹(🌟·⚡)과 기본 그룹에는 안 붙는다 — 서버도 거부한다.
+              */}
+              {editGroupBar && !locked && (
+                <button
+                  className="gt-move gt-del"
+                  onClick={() => void removeGroupNow(g)}
+                  title={`「${g}」 그룹 삭제 — 담긴 종목은 기본 그룹으로 갑니다`}
+                >
+                  ✕
+                </button>
+              )}
               {/* gi 는 키 경고를 피하려고 받는다 — 실제 순서는 서버가 들고 있다 */}
               <span hidden>{gi}</span>
             </span>
@@ -668,14 +691,10 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
           */}
           {editGroupBar ? "편집 끝" : "그룹 편집"}
         </button>
-        {editGroupBar &&
-          activeGroup !== ALL &&
-          activeGroup !== DEFAULT_GROUP &&
-          activeGroup !== SUPER_GROUP &&
-          activeGroup !== CROSS_GROUP && (
-          <button className="filter-btn danger" onClick={removeGroupNow} title="이 그룹 삭제">
-            «{activeGroup}» 삭제
-          </button>
+        {editGroupBar && (
+          <span className="pt-n gt-help">
+            칩을 누르면 이름 바꾸기 · <b>✕</b> 로 삭제 · <b>◀ ▶</b> 나 끌어서 순서
+          </span>
         )}
         {/*
           자리 바꾸기. **켤 때만 ▲▼ 가 붙는다** — 늘 떠 있으면 종목을 누르려다 화살표를
