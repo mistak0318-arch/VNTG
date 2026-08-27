@@ -880,6 +880,32 @@ export const api = {
     getJson<{ config: SignalConfig; defaults: SignalConfig }>("/api/signal/config"),
   signalConfigSave: (config: SignalConfig) =>
     putJson<{ config: SignalConfig }>("/api/signal/config", config),
+  /**
+   * 신호등 백테스트 — 기준을 바꿔 과거를 다시 매긴다. **저장하지 않는다.**
+   * 일봉으로 되살릴 수 있는 기준만 쓴다(테마·ETF·수급·재무는 그때의 구성을 모른다).
+   */
+  signalBacktest: (body: { limit: number; days: number; config: SignalConfig }) =>
+    postJson<{
+      used: string[];
+      skipped: string[];
+      days: number;
+      codes: number;
+      rows: {
+        date: string;
+        code: string;
+        name: string;
+        score: number;
+        close: number;
+        d1: number | null;
+        d5: number | null;
+        d20: number | null;
+      }[];
+      green: BacktestSummary;
+      base: BacktestSummary;
+      note: string;
+    }>("/api/signal/backtest", body),
+  signalBacktestProgress: () =>
+    getJson<{ done: number; total: number; running: boolean }>("/api/signal/backtest/progress"),
   notes: (code: string) => getJson<{ name: string; notes: StockNote[] }>(`/api/notes/${code}`),
   notesRecent: (limit = 30) =>
     getJson<{ items: { code: string; name: string; note: StockNote }[] }>(
@@ -1610,6 +1636,14 @@ export interface SuperStats {
   };
   best: { name: string; v: number } | null;
   worst: { name: string; v: number } | null;
+}
+
+/** 백테스트 성적 — 평균 수익률과 승률 */
+export interface BacktestSummary {
+  n: number;
+  d1: { avg: number | null; win: number | null };
+  d5: { avg: number | null; win: number | null };
+  d20: { avg: number | null; win: number | null };
 }
 
 export interface SuperSeriesPoint {

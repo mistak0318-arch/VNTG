@@ -5,6 +5,7 @@ import { api, fmtNum, type ScreenHit, type ScreenJob, type ScreenRunSummary } fr
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { SuperSignalPanel } from "../components/SuperSignalPanel";
 import { CrossSignalPanel } from "../components/CrossSignalPanel";
+import { SignalBacktestPanel } from "../components/SignalBacktestPanel";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { useCardOrder } from "../useCardOrder";
 import { WatchAddSheet, type WatchAddTarget } from "../components/WatchAddSheet";
@@ -42,7 +43,7 @@ function pct(n: number): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 
-type ScreenTab = "find" | "track" | "super" | "cross" | "backtest";
+type ScreenTab = "find" | "track" | "super" | "cross" | "sigbt" | "backtest";
 
 /*
  * 탭 기본 순서 — 슈퍼신호등이 찾기 바로 옆이다 (2026-08-26 사용자 요청).
@@ -57,6 +58,12 @@ export const SCREEN_TABS: { key: ScreenTab; label: string }[] = [
    * 둘 다 「여러 목록이 동시에 가리킨 종목」이라 같이 읽힌다.
    */
   { key: "cross", label: "🎯 교차 신호" },
+  /*
+   * 신호등 백테스트 — 교차 신호 **오른쪽**이다 (2026-08-28).
+   * 앞의 셋이 「지금 무엇이 걸렸나」라면 이건 「그 기준이 맞나」다 — 같은 신호등을
+   * 두고 앞뒤를 보는 것이라 나란히 둔다.
+   */
+  { key: "sigbt", label: "🧪 신호등 백테스트" },
   { key: "track", label: "추적기" },
   { key: "backtest", label: "조건 백테스트" },
 ];
@@ -244,6 +251,8 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
         <SuperSignalPanel onSelectStock={onSelectStock} />
       ) : screenTab === "cross" ? (
         <CrossSignalPanel onSelectStock={onSelectStock} />
+      ) : screenTab === "sigbt" ? (
+        <SignalBacktestPanel onSelectStock={onSelectStock} />
       ) : screenTab === "track" ? (
         <SignalTrackPanel onSelectStock={onSelectStock} />
       ) : (

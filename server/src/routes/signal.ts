@@ -21,6 +21,8 @@ import {
 } from "../superSignal.js";
 import { gradeSignalHistory, signalDays } from "../signalHistory.js";
 import { themeSeriesFor } from "../themeSeries.js";
+import { backtestProgress, runSignalBacktest } from "../signalBacktest.js";
+import { tradeValueTop } from "../signalScreen.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
   DEFAULT_CONFIG,
@@ -241,6 +243,30 @@ export function createSignalRouter(client: KiwoomClient): Router {
     } catch (err) {
       next(err);
     }
+  });
+
+  /* ---------------- 신호등 백테스트 (2026-08-28) ---------------- */
+
+  /**
+   * 기준을 바꿔 가며 과거를 다시 매긴다.
+   *
+   * 설정은 **저장하지 않는다** — 조절해 보는 자리라 지금 쓰는 기준을 건드리면 안 된다.
+   * 모집단은 거래대금 상위 N 종목이다: 실제로 살 수 있는 자리에서만 재야 뜻이 있다.
+   */
+  router.post("/backtest", async (req, res, next) => {
+    try {
+      const body = req.body as { limit?: number; days?: number; config?: Partial<SignalConfig> };
+      const limit = Math.min(Math.max(Number(body.limit) || 40, 5), 150);
+      const top = await tradeValueTop(client, "000", limit);
+      const codes = top.map((t) => ({ code: t.code, name: t.name }));
+      res.json(await runSignalBacktest(client, { codes, days: body.days, config: body.config }));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/backtest/progress", (_req, res) => {
+    res.json(backtestProgress());
   });
 
   /* ---------------- 슈퍼신호등 대시보드 (2026-08-26) ---------------- */
