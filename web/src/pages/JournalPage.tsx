@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import {
   api,
+  fmtNum,
   normalizeStockCode,
   type JournalData,
   type JournalEntry,
+  type JournalPick,
   type JournalTrade,
+  type PickStats,
   type StockSearchResult,
   type EdgeRow,
 } from "../api";
@@ -139,6 +142,179 @@ function EdgeTable({ rows }: { rows: EdgeRow[] }) {
   );
 }
 
+const LEVEL_KO: Record<string, string> = {
+  green: "🟢 초록장",
+  yellow: "🟡 노랑장",
+  red: "🔴 빨강장",
+  unknown: "기록 없음",
+};
+
+/**
+ * 예측 복기 (2026-08-27) — **적중률과 그 조건.**
+ *
+ * 승률 하나만 크게 놓으면 「60%」가 좋은 건지 나쁜 건지 알 수 없다. 그래서 옆에
+ * **평균 우위**(예측 방향으로 봤을 때의 평균 등락)를 같이 둔다 — 적중률 55%인데
+ * 평균 +1.8% 면 좋은 예측이고, 70%인데 +0.1% 면 잔파도를 맞힌 것이다.
+ */
+function PickReview({
+  picks,
+  onSelectStock,
+}: {
+  picks: PickStats;
+  onSelectStock?: (code: string, name: string) => void;
+}) {
+  if (picks.graded === 0 && picks.pending === 0) {
+    return (
+      <>
+        <h3 className="section-heading">예측 복기</h3>
+        <div className="page-note">
+          아직 예측이 없습니다 — 위 <b>「내일 예측」</b>에 종목을 담으면 다음 거래일
+          종가로 자동 채점되고, 여기에 적중률·시장 상태별 성적이 쌓입니다.
+        </div>
+      </>
+    );
+  }
+
+  const rate = (v: number | null) => (v === null ? "-" : `${v.toFixed(0)}%`);
+  const edge = (v: number | null) => (v === null ? "-" : `${v > 0 ? "+" : ""}${v.toFixed(2)}%`);
+  const band = (rows: { n: number; hitRate: number; avgEdge: number }[], labelOf: (i: number) => string) =>
+    rows.length === 0 ? (
+      <div className="jn-stat-note">아직 셀 게 없습니다.</div>
+    ) : (
+      <div className="jn-edge">
+        {rows.map((r, i) => (
+          <div className="cost-row" key={labelOf(i)}>
+            <span>{labelOf(i)}</span>
+            <span className={`num jn-edge-win ${r.hitRate >= 50 ? "positive" : "negative"}`}>
+              {r.hitRate.toFixed(0)}%
+            </span>
+            <span className={`num ${r.avgEdge >= 0 ? "positive" : "negative"}`}>
+              {edge(r.avgEdge)}
+            </span>
+            <span className="pt-n">{r.n}건</span>
+          </div>
+        ))}
+      </div>
+    );
+
+  return (
+    <>
+      <h3 className="section-heading">예측 복기 — 내 판단이 맞는가</h3>
+
+      <div className="jn-pick-top">
+        <div className="jn-pick-big">
+          <span className="jn-pick-big-k">적중률</span>
+          <b className={`jn-pick-big-v ${(picks.hitRate ?? 0) >= 50 ? "positive" : "negative"}`}>
+            {rate(picks.hitRate)}
+          </b>
+          <span className="pt-n">{picks.graded}건 채점</span>
+        </div>
+        <div className="jn-pick-big">
+          <span className="jn-pick-big-k">평균 우위</span>
+          <b className={`jn-pick-big-v ${(picks.avgEdge ?? 0) >= 0 ? "positive" : "negative"}`}>
+            {edge(picks.avgEdge)}
+          </b>
+          <span className="pt-n">예측 방향으로 본 등락</span>
+        </div>
+        <div className="jn-pick-big">
+          <span className="jn-pick-big-k">방향별</span>
+          <b className="jn-pick-big-v">
+            ▲{rate(picks.up.hitRate)} / ▼{rate(picks.down.hitRate)}
+          </b>
+          <span className="pt-n">
+            오름 {picks.up.n}건 · 내림 {picks.down.n}건
+          </span>
+        </div>
+        {picks.pending > 0 && (
+          <div className="jn-pick-big">
+            <span className="jn-pick-big-k">채점 대기</span>
+            <b className="jn-pick-big-v">{picks.pending}건</b>
+            <span className="pt-n">다음 거래일 종가로</span>
+          </div>
+        )}
+      </div>
+
+      <div className="jn-stats">
+        <div className="jn-stat-block">
+          <div className="cost-sub">시장 상태별 — 어떤 판에서 맞았나</div>
+          {band(picks.byMarket, (i) => LEVEL_KO[picks.byMarket[i].level] ?? picks.byMarket[i].level)}
+          <div className="jn-stat-note">
+            초록장에서만 맞으면 시장을 따라간 것이고, 빨강장에서도 맞으면 판단입니다.
+          </div>
+        </div>
+
+        <div className="jn-stat-block">
+          <div className="cost-sub">선물 외국인 수급별 — 그날 국장 선물</div>
+          {band(picks.byFutures, (i) => `선물 ${picks.byFutures[i].band}`)}
+          <div className="jn-stat-note">±2,000계약 기준 (시장 신호등의 선물 체크와 같은 문턱)</div>
+        </div>
+
+        {picks.byStock.length > 0 && (
+          <div className="jn-stat-block wide">
+            <div className="cost-sub">종목별 — 2회 이상 예측한 것</div>
+            <div className="jn-edge">
+              {picks.byStock.map((r) => (
+                <div className="cost-row" key={r.code}>
+                  <button
+                    className="link-btn"
+                    onClick={() => onSelectStock?.(r.code, r.name)}
+                    title="종목 상세"
+                  >
+                    {r.name}
+                  </button>
+                  <span className={`num jn-edge-win ${r.hitRate >= 50 ? "positive" : "negative"}`}>
+                    {r.hitRate.toFixed(0)}%
+                  </span>
+                  <span className={`num ${r.avgEdge >= 0 ? "positive" : "negative"}`}>
+                    {edge(r.avgEdge)}
+                  </span>
+                  <span className="pt-n">{r.n}건</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 히스토리 — 그날 무엇을 보고 무엇을 예측했고 어떻게 됐나 */}
+      {picks.recent.length > 0 && (
+        <details className="cal-fold jn-pick-hist">
+          <summary>예측 히스토리 ({picks.recent.length}건)</summary>
+          {picks.recent.map((r, i) => (
+            <div className={`jn-pick-row ${r.hit ? "hit" : "miss"}`} key={`${r.date}-${r.code}-${i}`}>
+              <div className="jn-pick-row-head">
+                <span className="pt-n">{r.date.slice(5)}</span>
+                <button className="link-btn" onClick={() => onSelectStock?.(r.code, r.name)}>
+                  {r.name}
+                </button>
+                <span className={`jn-pick-dir ${r.dir}`}>{r.dir === "up" ? "▲" : "▼"}</span>
+                <span className={`jn-pick-res ${r.hit ? "hit" : "miss"}`}>
+                  {r.hit ? "적중" : "빗나감"} {r.rate > 0 ? "+" : ""}
+                  {r.rate.toFixed(2)}%
+                </span>
+                <span className="pt-n">→ {r.gradedAt.slice(4, 6)}/{r.gradedAt.slice(6, 8)} 종가</span>
+              </div>
+              <div className="jn-pick-row-ctx">
+                {r.market && (
+                  <span>
+                    <span className={`sig-dot ${r.market.level}`} /> 시장 {r.market.score}점
+                  </span>
+                )}
+                {r.signal && (
+                  <span>
+                    종목 신호등 <b>{r.signal.score}점</b>
+                  </span>
+                )}
+                {r.note && <span className="jn-pick-note">“{r.note}”</span>}
+              </div>
+            </div>
+          ))}
+        </details>
+      )}
+    </>
+  );
+}
+
 export function JournalPage({
   onSelectStock,
 }: {
@@ -157,6 +333,9 @@ export function JournalPage({
   const [form, setForm] = useState<Partial<JournalEntry>>({});
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
+  /* 예측 종목 검색 — 매매 검색과 칸을 나눈다(같이 쓰면 어느 쪽에 담을지 헷갈린다) */
+  const [pickQuery, setPickQuery] = useState("");
+  const [pickResults, setPickResults] = useState<StockSearchResult[]>([]);
 
   /*
    * ⚠️ **저장 안 된 편집을 지키는 장치** (2026-08-25).
@@ -218,7 +397,28 @@ export function JournalPage({
     return () => clearTimeout(timer);
   }, [query]);
 
-  const EMPTY_FORM: Partial<JournalEntry> = { mistakes: [], followedRules: null, mood: "", trades: [] };
+  useEffect(() => {
+    const q = pickQuery.trim();
+    if (!q) {
+      setPickResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      api
+        .searchStocks(q)
+        .then((r) => setPickResults(r.results))
+        .catch(() => setPickResults([]));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [pickQuery]);
+
+  const EMPTY_FORM: Partial<JournalEntry> = {
+    mistakes: [],
+    followedRules: null,
+    mood: "",
+    trades: [],
+    picks: [],
+  };
 
   /** 폼을 올리면서 스냅샷도 같이 — 이 순간이 「저장된 상태」의 기준이 된다 */
   function applyForm(hit: JournalEntry | undefined) {
@@ -308,6 +508,31 @@ export function JournalPage({
     setForm({ ...form, trades: [...(form.trades ?? []), t] });
     setQuery("");
     setResults([]);
+  }
+
+  /* ── 예측 종목 (2026-08-27) ── */
+  function addPick(r: StockSearchResult) {
+    const p: JournalPick = {
+      id: `jp_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+      code: normalizeStockCode(r.code),
+      name: r.name,
+      dir: "up",
+      note: "",
+    };
+    setForm({ ...form, picks: [...(form.picks ?? []), p] });
+    setPickQuery("");
+    setPickResults([]);
+  }
+
+  function patchPick(id: string, patch: Partial<JournalPick>) {
+    setForm({
+      ...form,
+      picks: (form.picks ?? []).map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    });
+  }
+
+  function removePick(id: string) {
+    setForm({ ...form, picks: (form.picks ?? []).filter((p) => p.id !== id) });
   }
 
   function patchTrade(id: string, patch: Partial<JournalTrade>) {
@@ -754,6 +979,78 @@ export function JournalPage({
           />
         </label>
 
+        {/*
+          예측 종목 (2026-08-27) — **판단만 걸린 것.**
+          매매는 크기·타이밍이 섞여 성적이 판단력을 안 보여준다. 사지 않아도 예측은
+          할 수 있고, 그 적중률이 「내가 시장을 읽는가」에 답한다.
+          예측한 날 종가를 박제하고 다음 거래일 종가로 자동 채점된다.
+        */}
+        <div className="jn-field">
+          <span className="jn-label">
+            내일 예측{" "}
+            <em className="jn-hint">
+              다음 거래일 종가로 자동 채점됩니다 · 그날 시장 신호등·선물 수급도 함께 박제
+            </em>
+          </span>
+
+          <div className="jn-picks">
+            {(form.picks ?? []).map((p) => (
+              <div className={`jn-pick ${p.dir}`} key={p.id}>
+                <button
+                  className={`jn-pick-dir ${p.dir}`}
+                  onClick={() => patchPick(p.id, { dir: p.dir === "up" ? "down" : "up" })}
+                  title="눌러서 오름/내림 전환"
+                >
+                  {p.dir === "up" ? "▲ 오를 것" : "▼ 내릴 것"}
+                </button>
+                <span className="jn-pick-name">{p.name}</span>
+                {p.basePrice ? (
+                  <span className="pt-n">{fmtNum(p.basePrice)}원</span>
+                ) : (
+                  <span className="pt-n">저장하면 기준가 박제</span>
+                )}
+                {p.result && (
+                  <span className={`jn-pick-res ${p.result.hit ? "hit" : "miss"}`}>
+                    {p.result.hit ? "적중" : "빗나감"} {p.result.rate > 0 ? "+" : ""}
+                    {p.result.rate.toFixed(2)}%
+                  </span>
+                )}
+                <input
+                  className="pt-input wide"
+                  placeholder="왜 그렇게 보나 — 한 줄"
+                  value={p.note ?? ""}
+                  onChange={(e) => patchPick(p.id, { note: e.target.value })}
+                />
+                <button className="row-del-btn" onClick={() => removePick(p.id)} title="삭제">
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="jn-add">
+            <div className="pt-search">
+              <input
+                className="pt-input"
+                placeholder="예측할 종목 검색"
+                value={pickQuery}
+                onChange={(e) => setPickQuery(e.target.value)}
+              />
+              {pickResults.length > 0 && (
+                <ul className="pt-results">
+                  {pickResults.slice(0, 8).map((r) => (
+                    <li key={r.code}>
+                      <button onClick={() => addPick(r)}>
+                        {r.name} <span className="pt-n">{normalizeStockCode(r.code)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* 저장은 **맨 아래** (2026-08-27) — 다 적고 나서 손이 가는 자리가 여기다 */}
         <div className="jn-save-bar">
           <div className="jn-save-state">
@@ -767,6 +1064,14 @@ export function JournalPage({
       </section>
 
       {/* ── 쌓인 나 ── */}
+      {/*
+        예측 복기 (2026-08-27) — **내 판단이 맞는가.**
+        매매 성적은 크기·타이밍이 섞여 판단력만 못 잰다. 예측은 그것만 잰다.
+        시장 상태별·선물 수급별로 갈라 보는 게 이 표의 값어치다 —
+        초록장에서만 맞으면 따라간 것이고, 어느 판에서나 맞으면 그게 실력이다.
+      */}
+      <PickReview picks={s.picks} onSelectStock={onSelectStock} />
+
       <h3 className="section-heading">쌓인 나 — 노트가 일기와 갈리는 곳</h3>
       {s.days === 0 ? (
         <div className="page-note">

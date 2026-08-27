@@ -5868,6 +5868,69 @@ button.nav-group-toggle {
 }
 .jn-text:focus { outline: 1px solid var(--blue); }
 
+/* ── 예측 종목·예측 복기 (2026-08-27) ── */
+.jn-picks { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.jn-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 9px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--muted);
+  border-radius: 8px;
+}
+.jn-pick.up { border-left-color: var(--red); }
+.jn-pick.down { border-left-color: var(--blue); }
+.jn-pick-dir {
+  flex: none;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.jn-pick-dir.up { color: var(--red); border-color: var(--red); }
+.jn-pick-dir.down { color: var(--blue); border-color: var(--blue); }
+.jn-pick-name { font-weight: 600; font-size: 0.86rem; }
+.jn-pick .pt-input.wide { flex: 1; min-width: 12rem; }
+.jn-pick-res { font-size: 0.76rem; font-weight: 700; }
+.jn-pick-res.hit { color: var(--green); }
+.jn-pick-res.miss { color: var(--muted); }
+
+.jn-pick-top { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.jn-pick-big {
+  flex: 1 1 10rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.jn-pick-big-k { font-size: 0.72rem; color: var(--muted); }
+.jn-pick-big-v { font-size: 1.5rem; font-variant-numeric: tabular-nums; line-height: 1.15; }
+
+.jn-pick-hist { margin-top: 10px; }
+.jn-pick-row { padding: 7px 4px; border-bottom: 1px solid var(--border); }
+.jn-pick-row.hit { border-left: 3px solid var(--green); padding-left: 8px; }
+.jn-pick-row.miss { border-left: 3px solid var(--border); padding-left: 8px; }
+.jn-pick-row-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.84rem; }
+.jn-pick-row-ctx {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.jn-pick-note { font-style: italic; }
+
 /* ── 날짜 달력 (2026-08-27) — 한 달치를 펴 놓고 누른다 ── */
 .jn-cal-month { font-size: 0.9rem; min-width: 6.5rem; text-align: center; }
 .jn-cal {

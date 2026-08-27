@@ -7,6 +7,7 @@ import { peekSnapshot } from "./marketSnapshot.js";
 import { listThemes } from "./customThemes.js";
 import { evaluateSignal } from "./signalLight.js";
 import { investorDailySeries } from "./superSignal.js";
+import { futuresFlow, type FuturesFlowDay } from "./naverFuturesFlow.js";
 
 /**
  * 복기 노트 — 하루를 적고, 쌓아서 나를 고친다.
@@ -119,6 +120,14 @@ export interface DayContext {
   /** 그날 시장 폭 / 지수 추세 — 문장 그대로 */
   breadth: string | null;
   trend: string | null;
+  /**
+   * 국내 선물 수급 (2026-08-27) — **순매수 계약**.
+   *
+   * 외국인 선물이 시장을 이끄는 날이 많다. 「선물을 이만큼 산 날의 다음날 예측이
+   * 실제로 맞았나」를 나중에 세려면 그날 값이 박제돼 있어야 한다 —
+   * 되짚어 부를 수는 있지만, 예측할 때 내가 본 값이 그대로 남는 게 복기에 맞다.
+   */
+  futures?: { foreign: number; institution: number; individual: number } | null;
   /** 그날 내 테마 상위·하위 */
   topThemes: { name: string; changeRate: number }[];
   bottomThemes: { name: string; changeRate: number }[];
@@ -176,10 +185,54 @@ export interface JournalTrade {
   risk?: number;
 }
 
+/**
+ * 예측 종목 (2026-08-27) — **내일 이게 오를까 내릴까.**
+ *
+ * 매매와 다르다. 매매는 돈이 걸린 결정이고, 예측은 **판단만 걸린 것**이다.
+ * 사지 않아도 예측은 할 수 있고, 그 적중률이 쌓이면 「내 판단이 실제로 맞는가」에
+ * 답이 나온다 — 매매 성적은 크기·타이밍이 섞여 있어서 판단력만 따로 못 잰다.
+ *
+ * 예측한 날의 종가를 기준가로 박제하고, **다음 거래일 종가**로 채점한다.
+ * 채점은 조회할 때 아직 결과가 없는 것만 일봉으로 채운다(신호등 박제와 같은 문법).
+ */
+export interface JournalPick {
+  id: string;
+  code: string;
+  name: string;
+  /** 오를 것 / 내릴 것 */
+  dir: "up" | "down";
+  /** 왜 그렇게 봤나 — 한 줄 */
+  note?: string;
+  /** 예측한 날의 종가 (저장 때 박제) */
+  basePrice?: number;
+  /**
+   * 예측한 순간의 판 (2026-08-27) — 슈퍼신호등 상세와 같은 문법.
+   * 「어떤 시장에서 한 예측이 맞았나」를 나중에 세려면 그때 값이 남아 있어야 한다.
+   * 시장은 그날 맥락(context)에서 복사하므로 조회가 안 는다.
+   */
+  market?: { level: string; score: number };
+  /** 예측한 순간의 그 종목 신호등 */
+  signal?: { level: string; score: number };
+  /** 그날 국내 선물 외국인 순매수(계약) — 「선물을 산 날의 예측이 맞나」 */
+  futForeign?: number;
+  /** 채점 결과 — 다음 거래일 종가 기준 */
+  result?: {
+    /** 채점에 쓴 거래일 (YYYYMMDD) */
+    date: string;
+    close: number;
+    /** 기준가 대비 % */
+    rate: number;
+    /** 방향이 맞았나 */
+    hit: boolean;
+  };
+}
+
 export interface JournalEntry {
   /** YYYY-MM-DD (KST) — 하루에 하나 */
   date: string;
   updatedAt: string;
+  /** 오늘의 예측 (2026-08-27) */
+  picks?: JournalPick[];
 
   /**
    * 오늘 매매했나, 쉬었나.
@@ -236,6 +289,74 @@ export async function listEntries(limit = 90): Promise<JournalEntry[]> {
   return rows.slice(-limit).reverse();
 }
 
+/**
+ * 예측 채점 (2026-08-27) — **결과가 아직 없는 것만** 다음 거래일 종가로 매긴다.
+ *
+ * 조회할 때 돌린다. 이미 매긴 것은 건드리지 않으므로 종목당 일봉 한 번이고,
+ * 채점할 게 없으면 조회가 0회다. 오늘 것은 아직 다음 거래일이 없어 그냥 넘어간다.
+ * 실패는 삼킨다 — 채점이 안 됐다고 노트가 안 열리면 안 된다.
+ */
+async function gradePicks(client: KiwoomClient): Promise<boolean> {
+  const rows = await readAll();
+  const today = kstDate();
+  /** 채점할 것: 결과 없음 + 기준가 있음 + 예측일이 오늘보다 이전 */
+  const todo = rows.flatMap((e) =>
+    (e.picks ?? [])
+      .filter((p) => !p.result && p.basePrice && p.basePrice > 0 && e.date < today && /^\d{6}$/.test(p.code))
+      .map((p) => ({ entryDate: e.date, pick: p })),
+  );
+  if (todo.length === 0) return false;
+
+  let changed = false;
+  /* 같은 종목을 여러 날 예측했을 수 있다 — 일봉은 종목당 한 번만 */
+  const byCode = new Map<string, typeof todo>();
+  for (const t of todo) byCode.set(t.pick.code, [...(byCode.get(t.pick.code) ?? []), t]);
+
+  for (const [code, items] of byCode) {
+    try {
+      const { data } = await client.request<Record<string, unknown>>(
+        "/api/dostk/chart",
+        "ka10081",
+        { stk_cd: code, base_dt: today.replace(/-/g, ""), upd_stkpc_tp: "1" },
+      );
+      const bars = ((data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[])
+        .map((r) => ({
+          dt: String(r.dt ?? ""),
+          close: Math.abs(Number(String(r.cur_prc ?? "").replace(/[+,\s]/g, "")) || 0),
+        }))
+        .filter((b) => /^\d{8}$/.test(b.dt) && b.close > 0)
+        .sort((a, b) => a.dt.localeCompare(b.dt));
+      if (bars.length === 0) continue;
+
+      for (const it of items) {
+        const ymd = it.entryDate.replace(/-/g, "");
+        // 예측한 날 **다음** 거래일 — 그날 봉이 없으면(휴장·미래) 채점하지 않는다
+        const next = bars.find((b) => b.dt > ymd);
+        if (!next) continue;
+        const base = it.pick.basePrice ?? 0;
+        const rate = ((next.close - base) / base) * 100;
+        it.pick.result = {
+          date: next.dt,
+          close: next.close,
+          rate: Math.round(rate * 100) / 100,
+          hit: it.pick.dir === "up" ? rate > 0 : rate < 0,
+        };
+        changed = true;
+      }
+    } catch {
+      /* 이 종목만 다음 기회에 */
+    }
+  }
+  if (changed) await writeAll(rows);
+  return changed;
+}
+
+/** 화면이 부르는 목록 — 열 때마다 밀린 예측을 채점하고 준다 */
+export async function listEntriesGraded(client: KiwoomClient, limit = 90): Promise<JournalEntry[]> {
+  await gradePicks(client).catch(() => false);
+  return listEntries(limit);
+}
+
 function kstDate(d = new Date()): string {
   return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
 }
@@ -247,11 +368,14 @@ function kstDate(d = new Date()): string {
  * 무엇보다 **손으로 적으면 기억으로 적게 된다** — 그러면 복기의 근거가 흔들린다.
  */
 export async function captureContext(client: KiwoomClient, date: string): Promise<DayContext | null> {
-  const [market, themes] = await Promise.all([
+  const [market, themes, futDays] = await Promise.all([
     evaluateMarket(client).catch(() => null),
     listThemes().catch(() => []),
+    /* 선물 수급 — 네이버 캐시(10분)라 조회 부담이 없다. 최근 하루만 쓴다 */
+    futuresFlow(3).catch(() => [] as FuturesFlowDay[]),
   ]);
   const snap = peekSnapshot();
+  const fut = futDays.length > 0 ? futDays[futDays.length - 1] : null;
 
   const rated = themes
     .map((t) => {
@@ -274,6 +398,9 @@ export async function captureContext(client: KiwoomClient, date: string): Promis
     // 시장 폭 한 줄 — "지수는 올랐는데 내 종목은 죽은 날"이 복기에서 제일 중요하다
     breadth: market?.checks.find((c) => c.key === "breadth")?.value ?? null,
     trend: market?.checks.find((c) => c.key === "trend")?.value ?? null,
+    futures: fut
+      ? { foreign: fut.foreign, institution: fut.institution, individual: fut.individual }
+      : null,
     topThemes: rated.slice(0, 3),
     bottomThemes: rated.slice(-3).reverse(),
   };
@@ -361,6 +488,7 @@ export async function saveEntry(
     mood: input.mood ?? prev?.mood ?? "",
     lesson: (input.lesson ?? prev?.lesson ?? "").slice(0, 500),
     tomorrow: (input.tomorrow ?? prev?.tomorrow ?? "").slice(0, 500),
+    picks: await withPickPrices(client, input.picks ?? prev?.picks ?? [], prev?.picks ?? [], context),
     context,
   };
 
@@ -368,6 +496,50 @@ export async function saveEntry(
   next.push(entry);
   await writeAll(next);
   return listEntries();
+}
+
+/**
+ * 예측에 **기준가를 박제**한다 — 그때 얼마였는지가 있어야 채점이 된다.
+ *
+ * 이미 박힌 것(기준가·결과)은 건드리지 않는다. 사흘 뒤에 노트를 고치면서 기준가가
+ * 오늘 값으로 덮이면 그건 그날의 예측이 아니게 된다 — 신호등 박제와 같은 이유다.
+ * 시세는 캐시(peekSnapshot)에서만 읽는다: 예측 몇 건 때문에 시장 스캔을 부를 일이 아니다.
+ */
+async function withPickPrices(
+  client: KiwoomClient,
+  next: JournalPick[],
+  prev: JournalPick[],
+  context: DayContext | null,
+): Promise<JournalPick[]> {
+  const before = new Map(prev.map((p) => [p.id, p]));
+  const snap = peekSnapshot();
+  return Promise.all(
+    next.slice(0, 20).map(async (p) => {
+      const old = before.get(p.id);
+      // 이미 박힌 예측은 통째로 그대로 — 나중에 고쳐도 그날의 판단이 남는다
+      if (old?.basePrice) {
+        return {
+          ...p,
+          basePrice: old.basePrice,
+          result: old.result,
+          market: old.market,
+          signal: old.signal,
+        };
+      }
+      const price = snap?.byCode.get(p.code)?.price ?? null;
+      /* 종목 신호등은 매매와 같은 문법으로 그 순간 값을 박제한다 */
+      const sig = /^\d{6}$/.test(p.code)
+        ? await evaluateSignal(client, p.code).catch(() => null)
+        : null;
+      return {
+        ...p,
+        basePrice: price && price > 0 ? price : undefined,
+        market: context ? { level: context.marketLevel, score: context.marketScore } : undefined,
+        signal: sig ? { level: sig.level, score: sig.score } : undefined,
+        futForeign: context?.futures?.foreign,
+      };
+    }),
+  );
 }
 
 export async function removeEntry(date: string): Promise<JournalEntry[]> {
@@ -384,7 +556,53 @@ export async function removeEntry(date: string): Promise<JournalEntry[]> {
  * 내가 어떤 사람인지가 나온다 — 제일 자주 하는 실수, 어떤 상태일 때 규칙을 어기는지,
  * 규칙을 지킨 날과 어긴 날의 성적 차이.
  */
+/** 예측 성적 (2026-08-27) — 「내 판단이 실제로 맞는가」 */
+export interface PickStats {
+  /** 채점이 끝난 예측 수 */
+  graded: number;
+  /** 아직 결과를 기다리는 수 */
+  pending: number;
+  /** 방향 적중률(%) */
+  hitRate: number | null;
+  /** 예측 방향대로 봤을 때의 평균 수익률(%) — 내림 예측은 부호를 뒤집어 더한다 */
+  avgEdge: number | null;
+  /** 오를 것 / 내릴 것 각각의 적중률 */
+  up: { n: number; hitRate: number | null };
+  down: { n: number; hitRate: number | null };
+  /**
+   * **어떤 시장에서 한 예측이 맞았나** — 이 표가 예측 노트를 쓰는 이유다.
+   * 초록장에서만 맞는 사람은 상승장을 읽는 게 아니라 그냥 따라간 것이고,
+   * 빨간장에서도 맞으면 그건 진짜 판단이다.
+   */
+  byMarket: { level: string; n: number; hitRate: number; avgEdge: number }[];
+  /**
+   * **국내 선물 외국인 수급별** 적중률 (2026-08-27 요청) — 「선물을 산 날의
+   * 다음날 예측이 실제로 맞나」. ±2,000계약을 경계로 셋으로 가른다
+   * (시장 신호등의 선물 체크와 같은 문턱이라 두 화면이 같은 말을 한다).
+   */
+  byFutures: { band: "매수" | "중립" | "매도"; n: number; hitRate: number; avgEdge: number }[];
+  /** 여러 번 예측한 종목 — 「이 종목은 내가 잘 본다」 (2회 이상, 적중률 순) */
+  byStock: { code: string; name: string; n: number; hitRate: number; avgEdge: number }[];
+  /** 최근 채점분 — 화면이 히스토리로 보여 준다 (최신순 30건) */
+  recent: {
+    date: string;
+    code: string;
+    name: string;
+    dir: "up" | "down";
+    rate: number;
+    hit: boolean;
+    note?: string;
+    /** 그날의 판 — 시장 신호등·종목 신호등 */
+    market?: { level: string; score: number };
+    signal?: { level: string; score: number };
+    /** 채점에 쓴 날 (YYYYMMDD) */
+    gradedAt: string;
+  }[];
+}
+
 export interface JournalStats {
+  /** 예측 성적 */
+  picks: PickStats;
   /** 기록한 날 수 */
   days: number;
   /** 연속 기록 일수 — 습관이 붙었는지 */
@@ -586,6 +804,100 @@ function edge(map: Map<string, Fill[]>, label: (k: string) => string): EdgeRow[]
 }
 const MOOD_LABEL = new Map(MOOD_TAGS.map((t) => [t.key as string, t.label]));
 
+/**
+ * 예측 성적을 센다 — **채점이 끝난 것만.**
+ *
+ * 아직 결과가 없는 오늘 예측을 승률에 넣으면 승률이 매일 아침 떨어진다.
+ * 「맞았나」는 방향이고, 「얼마나」는 예측 방향으로 본 수익률이다 —
+ * 내릴 것을 맞히면 −3% 는 +3% 의 값어치다(그래서 부호를 뒤집어 더한다).
+ */
+function pickStats(rows: JournalEntry[]): PickStats {
+  const all = rows.flatMap((e) => (e.picks ?? []).map((p) => ({ date: e.date, p })));
+  const done = all.filter((x) => x.p.result);
+  const pending = all.length - done.length;
+  const rate = (xs: typeof done) =>
+    xs.length === 0 ? null : (xs.filter((x) => x.p.result!.hit).length / xs.length) * 100;
+  const up = done.filter((x) => x.p.dir === "up");
+  const down = done.filter((x) => x.p.dir === "down");
+  const edge = (x: (typeof done)[number]) =>
+    x.p.dir === "up" ? x.p.result!.rate : -x.p.result!.rate;
+  const edges = done.map(edge);
+
+  /** 묶어서 적중률·평균 우위를 낸다 — 시장 상태별·종목별이 같은 모양이라 하나로 */
+  const agg = <K extends string>(keyOf: (x: (typeof done)[number]) => K | null) => {
+    const m = new Map<K, (typeof done)[number][]>();
+    for (const x of done) {
+      const k = keyOf(x);
+      if (k === null) continue;
+      m.set(k, [...(m.get(k) ?? []), x]);
+    }
+    return [...m.entries()].map(([k, xs]) => ({
+      key: k,
+      n: xs.length,
+      hitRate: (xs.filter((x) => x.p.result!.hit).length / xs.length) * 100,
+      avgEdge: xs.reduce((a, b) => a + edge(b), 0) / xs.length,
+    }));
+  };
+
+  const byMarket = agg((x) => x.p.market?.level ?? null)
+    .map((r) => ({ level: r.key, n: r.n, hitRate: r.hitRate, avgEdge: r.avgEdge }))
+    /* 초록 → 노랑 → 빨강 차례로 — 화면에서 읽는 순서가 늘 같아야 한다 */
+    .sort((a, b) => {
+      const rank = (l: string) => (l === "green" ? 0 : l === "yellow" ? 1 : l === "red" ? 2 : 3);
+      return rank(a.level) - rank(b.level);
+    });
+
+  const byStock = agg((x) => x.p.code)
+    .filter((r) => r.n >= 2) // 한 번은 우연이다
+    .map((r) => ({
+      code: r.key,
+      name: done.find((x) => x.p.code === r.key)?.p.name ?? r.key,
+      n: r.n,
+      hitRate: r.hitRate,
+      avgEdge: r.avgEdge,
+    }))
+    .sort((a, b) => b.hitRate - a.hitRate || b.n - a.n)
+    .slice(0, 12);
+
+  const byFutures = agg((x) => {
+    const f = x.p.futForeign;
+    if (typeof f !== "number") return null;
+    return (f >= 2000 ? "매수" : f <= -2000 ? "매도" : "중립") as "매수" | "중립" | "매도";
+  })
+    .map((r) => ({ band: r.key, n: r.n, hitRate: r.hitRate, avgEdge: r.avgEdge }))
+    .sort((a, b) => {
+      const rank = (x: string) => (x === "매수" ? 0 : x === "중립" ? 1 : 2);
+      return rank(a.band) - rank(b.band);
+    });
+
+  return {
+    byMarket,
+    byFutures,
+    byStock,
+    graded: done.length,
+    pending,
+    hitRate: rate(done),
+    avgEdge: edges.length > 0 ? edges.reduce((a, b) => a + b, 0) / edges.length : null,
+    up: { n: up.length, hitRate: rate(up) },
+    down: { n: down.length, hitRate: rate(down) },
+    recent: done
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 30)
+      .map((x) => ({
+        date: x.date,
+        code: x.p.code,
+        name: x.p.name,
+        dir: x.p.dir,
+        rate: x.p.result!.rate,
+        hit: x.p.result!.hit,
+        note: x.p.note,
+        market: x.p.market,
+        signal: x.p.signal,
+        gradedAt: x.p.result!.date,
+      })),
+  };
+}
+
 export async function journalStats(): Promise<JournalStats> {
   const rows = await readAll();
 
@@ -715,6 +1027,7 @@ export async function journalStats(): Promise<JournalStats> {
   const avg = (xs: number[]) => (xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
   return {
+    picks: pickStats(rows),
     days: rows.length,
     streak,
     ruleRate: judged.length > 0 ? (kept.length / judged.length) * 100 : null,

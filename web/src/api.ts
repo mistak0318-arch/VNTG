@@ -2670,6 +2670,47 @@ export interface DayContext {
   trend: string | null;
   topThemes: { name: string; changeRate: number }[];
   bottomThemes: { name: string; changeRate: number }[];
+  /** 그날 국내 선물 순매수(계약) — 2026-08-27 박제 */
+  futures?: { foreign: number; institution: number; individual: number } | null;
+}
+
+/** 예측 종목 (2026-08-27) — 내일 오를까 내릴까. 다음 거래일 종가로 채점된다 */
+export interface JournalPick {
+  id: string;
+  code: string;
+  name: string;
+  dir: "up" | "down";
+  note?: string;
+  basePrice?: number;
+  market?: { level: string; score: number };
+  signal?: { level: string; score: number };
+  futForeign?: number;
+  result?: { date: string; close: number; rate: number; hit: boolean };
+}
+
+/** 예측 성적 */
+export interface PickStats {
+  graded: number;
+  pending: number;
+  hitRate: number | null;
+  avgEdge: number | null;
+  up: { n: number; hitRate: number | null };
+  down: { n: number; hitRate: number | null };
+  byMarket: { level: string; n: number; hitRate: number; avgEdge: number }[];
+  byFutures: { band: "매수" | "중립" | "매도"; n: number; hitRate: number; avgEdge: number }[];
+  byStock: { code: string; name: string; n: number; hitRate: number; avgEdge: number }[];
+  recent: {
+    date: string;
+    code: string;
+    name: string;
+    dir: "up" | "down";
+    rate: number;
+    hit: boolean;
+    note?: string;
+    market?: { level: string; score: number };
+    signal?: { level: string; score: number };
+    gradedAt: string;
+  }[];
 }
 
 export interface JournalTrade {
@@ -2711,10 +2752,14 @@ export interface JournalEntry {
   mood: string;
   lesson: string;
   tomorrow: string;
+  /** 오늘의 예측 */
+  picks?: JournalPick[];
   context: DayContext | null;
 }
 
 export interface JournalStats {
+  /** 예측 성적 — 「내 판단이 실제로 맞는가」 */
+  picks: PickStats;
   days: number;
   streak: number;
   ruleRate: number | null;

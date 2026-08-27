@@ -8,6 +8,7 @@ import {
   WATCH_TAGS,
   journalStats,
   listEntries,
+  listEntriesGraded,
   removeEntry,
   saveEntry,
 } from "../tradeJournal.js";
@@ -19,7 +20,8 @@ export function createJournalRouter(client: KiwoomClient): Router {
   router.get("/", async (_req, res, next) => {
     try {
       res.json({
-        entries: await listEntries(90),
+        /* 열 때 밀린 예측을 채점한다 — 채점할 게 없으면 조회 0회 (2026-08-27) */
+        entries: await listEntriesGraded(client, 90),
         stats: await journalStats(),
         mistakeTags: MISTAKE_TAGS,
         moodTags: MOOD_TAGS,
