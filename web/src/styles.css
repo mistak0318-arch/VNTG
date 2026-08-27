@@ -5286,8 +5286,34 @@ tr.drag-src td { opacity: 0.45; }
 }
 
 /* ── 해외 관심종목 — 상시 담기 패널 (2026-08-27) ── */
+/*
+ * 종목 담기 패널 (2026-08-27 크기 개편 — "칸이 너무 작지 않아? 국내는 사용성 좋잖아").
+ *
+ * 구조는 모의투자의 `pt-entry` 를 빌려 썼는데, 거기 입력칸은 **표 안에 끼우는 좁은 칸**
+ * (110px·0.8rem)이라 검색창으로 쓰면 글자가 서너 자밖에 안 보인다. 국내 종목 검색
+ * (`search-input`: 100%·12px·1rem)과 같은 감각으로 키운다 — 이 패널 안에서만.
+ */
 .uw-add { border-left: 3px solid var(--blue); }
-.uw-newgroup { width: 9rem; }
+.uw-add .pt-entry-row { gap: 8px; }
+.uw-add .pt-search { flex: 1; min-width: 16rem; }
+.uw-add .pt-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  border-radius: 8px;
+}
+.uw-add .group-select {
+  max-width: none;
+  min-width: 9rem;
+  padding: 9px 10px;
+  font-size: 0.9rem;
+  border-radius: 8px;
+}
+.uw-add .filter-btn { padding: 8px 14px; font-size: 0.85rem; }
+/* 결과 목록도 같이 — 좁은 드롭다운에 긴 해외 종목명이 들어가면 다 잘린다 */
+.uw-add .pt-results { right: 0; min-width: 0; max-height: 20rem; padding: 6px; }
+.uw-add .pt-results button { font-size: 0.9rem; padding: 8px 10px; }
+.uw-newgroup { width: 12rem; padding: 8px 10px; font-size: 0.9rem; }
 .uw-searching { padding: 6px 10px; }
 .uw-etf-badge {
   font-style: normal;
