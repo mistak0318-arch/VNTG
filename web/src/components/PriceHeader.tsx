@@ -362,9 +362,24 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
         */}
         <div className="ph-cell">
           <span className="ph-label">{krxDone ? "종가" : "현재가"} · 거래소별</span>
+          {/*
+            ⚠️ KRX 줄에 info.cur_prc 를 쓰고 있었다 (2026-08-27 수리) — info 는 통합(_AL)이라
+            마감 후에는 **NXT 최종가**가 「KRX 종가」 자리에 떴다. 진짜 KRX 값(거래소별 조회)과
+            등락률을 쓴다 — 마감 후 통합(큰 숫자)과 견주라고 있는 줄이다.
+          */}
           <span className="ph-row">
             <em className="ph-ex">KRX</em>
-            <b className={`ph-value ${sign}`}>{fmtAbsNum(info.cur_prc)}</b>
+            <b
+              className={`ph-value ${krx ? (krx.changeRate > 0 ? "positive" : krx.changeRate < 0 ? "negative" : "") : sign}`}
+            >
+              {krx?.price != null ? fmtNum(krx.price) : fmtAbsNum(info.cur_prc)}
+            </b>
+            {krx && (
+              <em className={`ph-pct ${krx.changeRate > 0 ? "positive" : krx.changeRate < 0 ? "negative" : ""}`}>
+                {krx.changeRate > 0 ? "+" : ""}
+                {krx.changeRate.toFixed(2)}%
+              </em>
+            )}
             <em className="ph-when">{krxDone ? "15:30 마감" : "거래 중"}</em>
           </span>
           {/* 위 큰 숫자와 같은 규칙 — 정규장 중에는 NXT 를 띄우지 않는다 */}
