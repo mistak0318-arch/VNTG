@@ -274,13 +274,14 @@ function ThemeMap({
                 sort={sortT}
                 className="num"
               />
+              {/* ⚠️ 설명은 `thProps.title` 이다. `extra` 는 머리 칸 **안에 넣는 요소**라 글자를 주면 그대로 찍힌다 */}
               <SortableTh
                 columnKey="w1"
                 label="5일"
                 accessor={(t) => t.w1 ?? -999}
                 sort={sortT}
                 className="num"
-                extra="닷새 누적 — 하루 급등보다 흐름. 기록이 쌓여야 나옵니다"
+                thProps={{ title: "닷새 누적 — 하루 급등보다 흐름을 본다" }}
               />
               <SortableTh
                 columnKey="m1"
@@ -296,7 +297,7 @@ function ThemeMap({
                   accessor={(t) => t.breadth}
                   sort={sortT}
                   className="num"
-                  extra="테마 안에서 오른 종목 비율 — 몇몇이 끄는지 다 같이 가는지"
+                  thProps={{ title: "테마 안에서 오른 종목 비율 — 몇몇이 끄는지 다 같이 가는지" }}
                 />
               )}
               {market !== "etf" && (
@@ -306,7 +307,7 @@ function ThemeMap({
                   accessor={(t) => t.hit5.n}
                   sort={sortT}
                   className="num"
-                  extra="최근 닷새 중 오른 날 — 연속이 끊겨도 흐름은 남는다"
+                  thProps={{ title: "최근 닷새 중 오른 날 — 연속이 끊겨도 흐름은 남는다" }}
                 />
               )}
               <SortableTh
@@ -321,35 +322,47 @@ function ThemeMap({
           </thead>
           <tbody>
             {sortT.sorted.map((t) => (
+              /*
+                `data-l` 은 **폰에서 쓰는 라벨**이다. 좁은 화면에서는 표 머리를 숨기고
+                칸마다 이 이름을 앞에 붙여 카드처럼 편다 — 칸이 여덟이라 가로로는
+                절대 안 들어간다(2026-08-28: "모바일에서 확인이 안 될 정도").
+              */
               <tr key={t.key} className="tdb-tr" onClick={() => setOpen(t.key)}>
                 <td className="tdb-td-name">
                   {t.name}
                   {t.stocks.length > 1 && <em className="pt-n"> {t.stocks.length}</em>}
                 </td>
-                <td className={`num ${signClass(t.changeRate)}`}>{pct(t.changeRate)}</td>
-                <td className={`num ${t.w1 === null ? "" : signClass(t.w1)}`}>{pct(t.w1)}</td>
+                <td className={`num ${signClass(t.changeRate)}`} data-l="오늘">
+                  {pct(t.changeRate)}
+                </td>
+                <td className={`num ${t.w1 === null ? "" : signClass(t.w1)}`} data-l="5일">
+                  {pct(t.w1)}
+                </td>
                 <td
                   className={`num ${
                     (market === "etf" ? t.m3 : t.m1) === null
                       ? ""
                       : signClass((market === "etf" ? t.m3 : t.m1)!)
                   }`}
+                  data-l={market === "etf" ? "3개월" : "20일"}
                 >
                   {pct(market === "etf" ? t.m3 : t.m1)}
                 </td>
                 {market !== "etf" && (
-                  <td className="num">
+                  <td className="num" data-l="상승">
                     {t.up}/{t.stocks.length}
                     <em className="pt-n"> {t.breadth}%</em>
                   </td>
                 )}
                 {market !== "etf" && (
-                  <td className="num">
+                  <td className="num" data-l="5일 중">
                     {t.hit5.of > 0 ? `${t.hit5.n}/${t.hit5.of}` : "—"}
                     {t.streak > 1 && <em className="pt-n"> 연속{t.streak}</em>}
                   </td>
                 )}
-                <td className="num">{t.tradeValue > 0 ? money(t.tradeValue) : "—"}</td>
+                <td className="num" data-l={VALUE_LABEL[market]}>
+                  {t.tradeValue > 0 ? money(t.tradeValue) : "—"}
+                </td>
                 <td className="tdb-td-tops">
                   {t.stocks.slice(0, 3).map((s) => (
                     <span key={s.code} className="tlk-chip">

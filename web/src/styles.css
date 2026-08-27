@@ -9714,3 +9714,70 @@ button.tpb-row:hover { background: var(--panel-2); }
 .tdb-table .num em { font-style: normal; }
 /* 주도주 칩 — 넘치면 잘라서 표가 안 늘어나게 */
 .tdb-td-tops { display: flex; gap: 3px; flex-wrap: nowrap; overflow: hidden; max-width: 18rem; }
+
+/* ==================================================================
+   테마 표 — 폰에서는 카드로 편다 (2026-08-28)
+   ------------------------------------------------------------------
+   칸이 여덟이라 좁은 화면에 가로로는 절대 안 들어간다.
+   표 머리를 숨기고 칸마다 `data-l` 을 앞에 붙여 두 줄짜리 카드로 만든다.
+   ================================================================== */
+@media (max-width: 720px) {
+  .tdb-table,
+  .tdb-table tbody,
+  .tdb-table tr,
+  .tdb-table td {
+    display: block;
+  }
+  .tdb-table thead { display: none; }
+
+  .tdb-tr {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-2);
+    padding: 0.45rem 0.55rem;
+    margin-bottom: 5px;
+    /* 값 칸들이 옆으로 흐르게 — 이름과 주도주만 제 줄을 갖는다 */
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem 0.6rem;
+    align-items: baseline;
+  }
+  .tdb-table td { border: none; padding: 0; }
+
+  /* 테마명은 한 줄 통째로 */
+  .tdb-table .tdb-td-name {
+    flex: 0 0 100%;
+    font-size: 0.85rem;
+    margin-bottom: 0.15rem;
+  }
+  /* 값 칸 — 「5일 +6.3%」처럼 라벨을 앞에 붙인다 */
+  .tdb-table td[data-l] { font-size: 0.74rem; text-align: left; }
+  .tdb-table td[data-l]::before {
+    content: attr(data-l) " ";
+    color: var(--muted);
+    font-size: 0.66rem;
+  }
+  /* 주도주도 제 줄 */
+  .tdb-table .tdb-td-tops { flex: 0 0 100%; margin-top: 0.2rem; max-width: none; flex-wrap: wrap; }
+}
+
+/* ==================================================================
+   편입 사유는 자르지 않는다 (2026-08-28)
+   ------------------------------------------------------------------
+   두 줄로 잘라 뒀는데, 이 한 줄이 이 데이터의 값어치라 잘리면 쓸모가 준다.
+   「…를 영위하는 국내 최대의 건축, 산업자재 및 도료 생산업체」가 통째로 보여야
+   왜 이 테마에 들었는지가 풀린다.
+   ================================================================== */
+.tdb-why {
+  display: block;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: unset;
+  overflow: visible;
+  white-space: normal;
+  word-break: keep-all;
+}
+/* 설명이 길어지므로 칸을 넓게 — 폰에서는 한 줄에 하나 */
+.tdb-stocks { grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); }
+@media (max-width: 720px) {
+  .tdb-stocks { grid-template-columns: 1fr; }
+}
