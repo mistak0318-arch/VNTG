@@ -41,6 +41,7 @@ import { BriefingPage } from "./pages/BriefingPage";
 import { MorningPage } from "./pages/MorningPage";
 import { useDragOrder } from "./useDragOrder";
 import { useHashRoute } from "./useHashRoute";
+import { useEdgeSwipe } from "./useEdgeSwipe";
 import { applyOrder, parseSection, useMenuPrefs } from "./useMenuOrder";
 import { useScreenLock } from "./useScreenLock";
 import { ScreenLock } from "./components/ScreenLock";
@@ -209,6 +210,11 @@ export default function App() {
   /* 자리를 비웠을 때 화면을 가린다 — 기기마다 따로 켠다 */
   const lock = useScreenLock();
   const appearance = useAppearance();
+  /*
+   * 모서리에서 안쪽으로 밀면 메뉴 (2026-08-28 요청) — 사이드바가 붙은 쪽 모서리다.
+   * ☰ 는 한 손으로 들었을 때 엄지가 제일 안 닿는 구석이라, 폰에서는 이쪽이 본길이다.
+   */
+  useEdgeSwipe({ side: appearance.navSide, open: navOpen, onOpen: () => setNavOpen(true) });
   const excel = appearance.theme === "excel";
   /* 창들을 한 프로그램처럼 묶는다 — 꺼져 있으면 아무 일도 안 한다 */
   const focus = useStockFocus();
