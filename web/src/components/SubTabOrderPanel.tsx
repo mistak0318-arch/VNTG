@@ -5,6 +5,8 @@ import { SCREEN_TABS } from "../pages/ScreenPage";
 import { FLOW_TABS } from "../pages/MarketFlowPage";
 import { TELEGRAM_TABS } from "../pages/TelegramPage";
 import { REPORT_SECTION_DEFS } from "../pages/DailyReportPage";
+import { THEME_TABS } from "../pages/ThemeDbPage";
+import { MAP_MODES } from "../pages/MapPage";
 
 /**
  * 서브탭 순서 (2026-08-26) — **모든 메뉴의 서브탭 순서를 한 자리에서.**
@@ -32,7 +34,11 @@ const PAGES: PageDef[] = [
   { scope: "stockDetail.tabs", label: "종목 상세 · 개별종목분석", tabs: STOCK_TABS },
   { scope: "screener.tabs", label: "시세분석", tabs: SCREENER_TABS },
   { scope: "screen.tabs", label: "신호등 찾기", tabs: SCREEN_TABS },
-  { scope: "marketflow.tabs", label: "시장흐름분석", tabs: FLOW_TABS },
+  /* 마켓 브리핑과 합친 뒤에도 scope 는 그대로 — 저장된 순서가 이 이름을 기억한다 */
+  { scope: "marketflow.tabs", label: "마켓 브리핑·흐름", tabs: FLOW_TABS },
+  { scope: "themeDb.tabs", label: "테마 DB", tabs: THEME_TABS },
+  /* MAP 은 탭이 아니라 모드 버튼이지만 같은 물음(무엇이 먼저 오나)이라 여기 있다 */
+  { scope: "map.modes", label: "테마/업종 MAP 모드", tabs: MAP_MODES },
   { scope: "telegram.tabs", label: "텔레그램 동향", tabs: TELEGRAM_TABS },
   /* 리포트는 탭이 아니라 **섹션** 순서다 — 위에서 아래로 읽는 차례 (2026-08-26) */
   { scope: "report.sections", label: "데일리 리포트 섹션", tabs: REPORT_SECTION_DEFS },

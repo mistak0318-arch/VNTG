@@ -113,7 +113,12 @@ const MENU: {
       */
       /* 장전 브리핑룸 (2026-08-27) — 아침 루틴(일정·조간·미국 마감·슈퍼 변동·주요 채널)을 한 화면에 */
       { key: "morning", label: "장전 브리핑룸", icon: "🌅" },
-      { key: "briefing", label: "마켓 브리핑", icon: "🌡️" },
+      /*
+       * 마켓 브리핑 + 시장 흐름 분석 = 한 메뉴 (2026-08-28 — 「시황분석 메뉴가 너무 많아」).
+       * 브리핑이 첫 탭(홈), 맥박·로테이션·주도주·자금 흐름이 그 뒤 탭이다.
+       * key 는 "briefing" 을 남겼다 — 홈 라우트·탭 복원·즐겨찾기가 이 키를 기억한다.
+       */
+      { key: "briefing", label: "마켓 브리핑·흐름", icon: "🌊" },
       { key: "overview", label: "시황 대시보드", icon: "📊" },
       { key: "report", label: "데일리 리포트", icon: "📰" },
       { key: "map", label: "테마/업종 MAP", icon: "🗺️" },
@@ -155,7 +160,6 @@ const MENU: {
       { key: "superSignal", label: "슈퍼신호등", icon: "🌟" },
       { key: "journal", label: "복기 노트", icon: "📓" },
       { key: "memo", label: "메모장", icon: "📝" },
-      { key: "marketFlow", label: "시장 흐름 분석", icon: "🌊" },
       { key: "telegram", label: "텔레그램 동향", icon: "📡" },
       { key: "calendar", label: "캘린더", icon: "📅" },
     ],
@@ -282,7 +286,9 @@ export default function App() {
     .filter((e): e is NonNullable<typeof e> => e !== null);
 
   // 주소창에 이상한 값이 들어와도 화면이 비지 않도록 방어
-  const tab = (VALID_TABS.has(route.tab as Tab) ? route.tab : "overview") as Tab;
+  /* 옛 키 구조조정 — 시장 흐름 분석은 마켓 브리핑과 합쳤다 (2026-08-28) */
+  const routedTab = route.tab === "marketFlow" ? "briefing" : route.tab;
+  const tab = (VALID_TABS.has(routedTab as Tab) ? routedTab : "overview") as Tab;
 
   /*
    * 엑셀 모드의 시트 탭.
@@ -523,7 +529,7 @@ export default function App() {
   /** 탭 키 → 페이지. 인앱 탭이 열린 것들을 전부 이걸로 그린다 */
   function renderPage(t: Tab) {
     switch (t) {
-      case "briefing": return <BriefingPage onSelectStock={onSelectStock} />;
+      case "briefing": return <MarketFlowPage onSelectStock={onSelectStock} />;
       case "morning": return <MorningPage />;
       case "overview": return <OverviewPage onSelectStock={onSelectStock} />;
       case "report": return <DailyReportPage onSelectStock={onSelectStock} />;
@@ -540,6 +546,7 @@ export default function App() {
       case "journal": return <JournalPage onSelectStock={onSelectStock} />;
       case "memo": return <MemoPage onSelectStock={onSelectStock} />;
       case "usWatch": return <UsWatchPage />;
+      /* 옛 키 — 합치기 전 즐겨찾기·링크가 남아 있어도 같은 화면이 뜬다 */
       case "marketFlow": return <MarketFlowPage onSelectStock={onSelectStock} />;
       case "ask": return <AskPage />;
       case "calendar": return <CalendarPage />;

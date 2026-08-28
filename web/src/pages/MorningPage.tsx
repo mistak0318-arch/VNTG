@@ -164,7 +164,7 @@ export function MorningPage() {
         {/* ── 테마 흐름 (2026-08-28, 테마 DB 개편) — 아침의 두 물음 ──
              ① 어제 주도 테마가 이어질 자리인가  ② 밤사이 미국은 어느 테마가 움직였나 */}
         <section className="card mrn-card">
-          <button className="mrn-title" onClick={() => go("marketFlow")}>
+          <button className="mrn-title" onClick={() => go("briefing")}>
             🔄 테마 흐름 <i>›</i>
           </button>
           {!lens && <div className="empty">불러오는 중…</div>}

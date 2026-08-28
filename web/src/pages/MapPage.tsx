@@ -5,6 +5,7 @@ import { api, type EvaluatedTheme, type SectorRow, type ThemeRow, type ThemeStre
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { RefreshBar } from "../components/RefreshBar";
 import { useSection } from "../useSection";
+import { useCardOrder } from "../useCardOrder";
 
 /**
  * 테마/업종 MAP.
@@ -32,6 +33,19 @@ const WATCH_MODES: { key: Mode; label: string; source: GroupSource }[] = [
   { key: "watchUs", label: "관심종목 (해외)", source: "watchUs" },
 ];
 
+/**
+ * 모드 전체 — **버튼 순서를 사용자가 정한다** (2026-08-28 요청).
+ * 끌어서 옮기거나 설정 > 서브탭 순서에서. 저장은 서브탭들과 같은 훅(서버 저장)이다.
+ * SubTabOrderPanel 이 이 목록을 그대로 읽으므로 여기가 유일한 정의다.
+ */
+export const MAP_MODES: { key: Mode; label: string }[] = [
+  { key: "mine", label: "내 테마" },
+  ...WATCH_MODES.map((m) => ({ key: m.key, label: m.label })),
+  { key: "naver", label: "네이버 테마" },
+  { key: "theme", label: "키움 테마" },
+  { key: "sector", label: "업종" },
+];
+
 
 
 function fmtPct(v: number): string {
@@ -41,6 +55,11 @@ function fmtPct(v: number): string {
 export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const { theme } = useAppearance();
   const [mode, setMode] = useState<Mode>("mine");
+  /* 모드 버튼 순서 — 서브탭들과 같은 저장(서버) */
+  const modeOrder = useCardOrder(
+    "map.modes",
+    MAP_MODES.map((m) => m.key),
+  );
   const [sectorMarket, setSectorMarket] = useState<"kospi" | "kosdaq">("kospi");
   const [constituent, setConstituent] = useState<ConstituentTarget | null>(null);
   /** 옮겨온(인포스탁) 테마를 섞을지. 기본은 내가 만든 것만 */
@@ -139,28 +158,22 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
         loading={loading}
         updatedAt={mode === "theme" ? themes.updatedAt : sectors.updatedAt}
       />
+      {/*
+        모드 버튼 — **끌어서 순서를 바꾼다** (2026-08-28 요청). CSS order 로만 움직이므로
+        버튼이 다시 만들어지지 않는다. 설정 > 서브탭 순서에도 같은 목록이 있다.
+      */}
       <div className="filter-row">
-        <button className={`filter-btn ${mode === "mine" ? "active" : ""}`} onClick={() => setMode("mine")}>
-          내 테마
-        </button>
-        {WATCH_MODES.map((m) => (
+        {MAP_MODES.map((m) => (
           <button
             key={m.key}
-            className={`filter-btn ${mode === m.key ? "active" : ""}`}
+            className={`filter-btn ${mode === m.key ? "active" : ""}${modeOrder.drag.cls(m.key)}`}
+            style={{ order: modeOrder.orderOf(m.key) }}
             onClick={() => setMode(m.key)}
+            {...modeOrder.drag.props(m.key)}
           >
             {m.label}
           </button>
         ))}
-        <button className={`filter-btn ${mode === "naver" ? "active" : ""}`} onClick={() => setMode("naver")}>
-          네이버 테마
-        </button>
-        <button className={`filter-btn ${mode === "theme" ? "active" : ""}`} onClick={() => setMode("theme")}>
-          키움 테마
-        </button>
-        <button className={`filter-btn ${mode === "sector" ? "active" : ""}`} onClick={() => setMode("sector")}>
-          업종
-        </button>
       </div>
 
       {mode === "mine" && (
