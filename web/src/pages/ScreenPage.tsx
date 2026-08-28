@@ -457,6 +457,21 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
                   <SortableTh columnKey="price" label="현재가" accessor={(r: ScreenHit) => r.price} sort={resSort} />
                   <SortableTh columnKey="rate" label="등락률" accessor={(r: ScreenHit) => r.changeRate} sort={resSort} />
                   <SortableTh columnKey="tv" label="거래대금" accessor={(r: ScreenHit) => r.tradeValue} sort={resSort} />
+                  {/* 렌즈 (2026-08-28) — 걸린 종목의 무리가 지금 도는가. 판정과 무관한 표시다 */}
+                  <SortableTh
+                    columnKey="theme"
+                    label="테마"
+                    accessor={(r: ScreenHit) => r.theme?.changeRate ?? -9999}
+                    sort={resSort}
+                    thProps={{ title: "든 사업 테마 중 오늘 가장 강한 것 (지수성 제외)" }}
+                  />
+                  <SortableTh
+                    columnKey="etf"
+                    label="ETF 뒷배"
+                    accessor={(r: ScreenHit) => r.etfBack?.rate ?? -9999}
+                    sort={resSort}
+                    thProps={{ title: "테마로 담은 상위 3 ETF 의 오늘 평균" }}
+                  />
                   <th>통과 항목</th>
                   <th>담기</th>
                 </tr>
@@ -468,6 +483,10 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
                       <button className="link-btn" onClick={() => onSelectStock(r.code, r.name)}>
                         <span className={`sig-dot ${r.level}`} />
                         {r.name}
+                        {/* 🌟 지금 슈퍼신호등 원장에도 있는 종목 — 표시만 한다(범위는 안 좁힌다) */}
+                        {job.superCodes?.includes(r.code) && (
+                          <span title="슈퍼신호등 추적 중 — 여러 목록 교집합에 걸린 종목"> 🌟</span>
+                        )}
                       </button>
                     </td>
                     <td className="num">
@@ -492,6 +511,28 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
                           -
                         </span>
                       )}
+                    </td>
+                    <td
+                      className="sd-theme-cell"
+                      title={r.theme ? `${r.theme.name} ${pct(r.theme.changeRate)}` : "든 사업 테마가 없다"}
+                    >
+                      {r.theme ? (
+                        <>
+                          <span className="sd-theme-name">{r.theme.name}</span>{" "}
+                          <b className={r.theme.changeRate > 0 ? "positive" : r.theme.changeRate < 0 ? "negative" : ""}>
+                            {pct(r.theme.changeRate)}
+                          </b>
+                          {r.theme.streak >= 2 && <i className="lens-streak">{r.theme.streak}일↑</i>}
+                        </>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td
+                      className={`num ${(r.etfBack?.rate ?? 0) > 0 ? "positive" : (r.etfBack?.rate ?? 0) < 0 ? "negative" : ""}`}
+                      title={r.etfBack ? `대표 ${r.etfBack.top}` : "테마로 담은 ETF 가 없다"}
+                    >
+                      {r.etfBack ? pct(r.etfBack.rate) : "-"}
                     </td>
                     <td className="scr-passed">{r.passed.join(" · ")}</td>
                     <td>

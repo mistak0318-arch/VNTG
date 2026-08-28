@@ -5,10 +5,8 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { getMarketSnapshot, peekSnapshot } from "./marketSnapshot.js";
 import { evaluateMarket } from "./marketSignal.js";
 import { getSectorMood } from "./sectorMood.js";
-import { evaluateSignal, isNotTheme } from "./signalLight.js";
-import { themeStrength } from "./themeStrength.js";
-import { isIndexLikeTheme, themesOfStock } from "./naverThemes.js";
-import { etfHoldersOf } from "./etfHolders.js";
+import { evaluateSignal } from "./signalLight.js";
+import { stockLens, themeMapNow } from "./stockLens.js";
 import { fetchUniverse, SCREEN_UNIVERSES, type Candidate } from "./signalScreen.js";
 import {
   hasDedicatedChannel,
@@ -735,42 +733,8 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
    * 테마·ETF 뒷배를 한 번에 준비한다 (2026-08-28) — 종목마다 부르면 테마 강도가
    * 그만큼 반복 계산된다. 강도는 한 번(수십 ms), 나머지는 파일 조회다.
    */
-  const themeMap = new Map(
-    (await themeStrength("kr").catch(() => ({ themes: [] as { key: string; name: string; changeRate: number; streak: number }[] }))).themes.map(
-      (t) => [t.key, t] as const,
-    ),
-  );
-  const lensOf = async (
-    code: string,
-  ): Promise<{
-    theme: SuperListRow["theme"];
-    etfBack: SuperListRow["etfBack"];
-  }> => {
-    let theme: SuperListRow["theme"] = null;
-    for (const t of await themesOfStock(code).catch(() => [])) {
-      const row = themeMap.get(`kr:${t.no}`);
-      if (!row) continue;
-      if (isIndexLikeTheme(row.name)) continue; // 밸류업 지수는 무리가 아니다
-
-      if (!theme || row.changeRate > theme.changeRate) {
-        theme = { key: row.key, name: row.name, changeRate: row.changeRate, streak: row.streak };
-      }
-    }
-    let etfBack: SuperListRow["etfBack"] = null;
-    const holders = (await etfHoldersOf(code).catch(() => ({ holders: [] }))).holders
-      .filter((h) => !isNotTheme(h.name) && (h.weight ?? 0) <= 50 && h.changeRate !== null)
-      .slice(0, 3);
-    if (holders.length > 0) {
-      etfBack = {
-        rate:
-          Math.round(
-            (holders.reduce((n, h) => n + (h.changeRate ?? 0), 0) / holders.length) * 100,
-          ) / 100,
-        top: holders[0].name.replace(/^(KODEX|TIGER|RISE|PLUS|ACE|SOL|HANARO)\s*/, ""),
-      };
-    }
-    return { theme, etfBack };
-  };
+  const themeMap = await themeMapNow();
+  const lensOf = (code: string) => stockLens(code, themeMap);
 
   const entries: SuperListRow[] = await Promise.all(
     store.entries.map(async (e) => {

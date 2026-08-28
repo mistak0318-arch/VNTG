@@ -7,6 +7,7 @@ import { getMarketSnapshot } from "./marketSnapshot.js";
 import { COMMON_PARAMS, findSpec } from "./rankSpecs.js";
 import { evaluateSignal, type Level, type SignalResult } from "./signalLight.js";
 import { getCommonStockCodes } from "./stockListCache.js";
+import { stockLens, themeMapNow } from "./stockLens.js";
 
 /**
  * 신호등 스크리너 — 거래대금 상위에서 내 기준에 맞는 종목을 찾는다.
@@ -41,6 +42,9 @@ export interface ScreenHit {
   passed: string[];
   /** 미달한 항목 이름 */
   failed: string[];
+  /** 렌즈 (2026-08-28) — 이 종목의 무리(가장 강한 사업 테마)와 ETF 뒷배. 조회 0회 */
+  theme?: { key: string; name: string; changeRate: number; streak: number } | null;
+  etfBack?: { rate: number; top: string } | null;
 }
 
 export interface ScreenJob {
@@ -566,17 +570,21 @@ export function startScreen(
     try {
       const universe = await fetchUniverse(client, uniKey, market, limit);
       job.total = universe.length;
+      /* 렌즈 — 테마 강도 한 벌을 잡 시작에 받아 두고(수십 ms) 걸린 종목마다 붙인다 */
+      const themeMap = await themeMapNow().catch(() => new Map() as Awaited<ReturnType<typeof themeMapNow>>);
 
       for (const u of universe) {
         try {
           const sig: SignalResult = await evaluateSignal(client, u.code);
           if (LEVEL_RANK[sig.level] >= LEVEL_RANK[minLevel]) {
+            const lens = await stockLens(u.code, themeMap).catch(() => ({ theme: null, etfBack: null }));
             job.results.push({
               ...u,
               level: sig.level,
               score: sig.score,
               passed: sig.checks.filter((c) => c.pass === true).map((c) => c.label),
               failed: sig.checks.filter((c) => c.pass === false).map((c) => c.label),
+              ...lens,
             });
             // 점수 높은 순 — 진행 중에도 화면에서 바로 볼 수 있게 매번 정렬한다
             job.results.sort((a, b) => b.score - a.score || b.tradeValue - a.tradeValue);

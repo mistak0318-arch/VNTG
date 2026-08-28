@@ -1830,6 +1830,9 @@ export interface ScreenHit {
   failed: string[];
   /** 개장 전이라 등락률·현재가를 **직전 거래일 값**으로 메운 줄 */
   stale?: boolean;
+  /** 렌즈 (2026-08-28) — 이 종목의 무리(가장 강한 사업 테마)와 ETF 뒷배 */
+  theme?: { key: string; name: string; changeRate: number; streak: number } | null;
+  etfBack?: { rate: number; top: string } | null;
 }
 
 export interface ScreenJob {
@@ -1843,6 +1846,8 @@ export interface ScreenJob {
   universe?: string;
   startedAt: string;
   error?: string;
+  /** 지금 슈퍼신호등 원장에 있는 종목들 — 결과표가 🌟 를 단다 */
+  superCodes?: string[];
 }
 
 export interface ScreenRunSummary {

@@ -11,6 +11,7 @@ import {
 import { evaluateMarket } from "../marketSignal.js";
 import {
   exitSuperEntry,
+  getActiveSuper,
   listSuperSignal,
   removeSuperEntry,
   runSuperSignal,
@@ -186,13 +187,20 @@ export function createSignalRouter(client: KiwoomClient): Router {
     }
   });
 
-  router.get("/screen/:jobId", (req, res) => {
+  router.get("/screen/:jobId", async (req, res) => {
     const job = getScreenJob(req.params.jobId);
     if (!job) {
       res.status(404).json({ error: "없는 작업입니다 (서버가 재시작되면 사라집니다)." });
       return;
     }
-    res.json(job);
+    /*
+     * 🌟 슈퍼신호등 소속 표시 (2026-08-28 — 「슈퍼인 애들은 표시만 더 해주고」).
+     * 잡 안에서 붙이면 signalScreen→superSignal 순환 임포트가 되므로 여기서 얹는다.
+     */
+    const superCodes = await getActiveSuper()
+      .then((l) => l.map((e) => e.code))
+      .catch(() => [] as string[]);
+    res.json({ ...job, superCodes });
   });
 
   /* ---------------- 슈퍼신호등 ---------------- */
