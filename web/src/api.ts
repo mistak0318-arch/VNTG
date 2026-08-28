@@ -1711,7 +1711,7 @@ export interface SuperSeriesPoint {
  * 못 하기 때문이다. `used < total` 이면 시가총액 상위 몇 개만 쓴 것이다.
  */
 export interface ThemeSeries {
-  kind: "custom" | "kiwoom";
+  kind: "custom" | "naver" | "kiwoom";
   name: string;
   used: number;
   total: number;

@@ -25,7 +25,7 @@ function ymdShort(d: string): string {
 
 /** 범례에 쓸 이름 — 어느 쪽 테마인지가 이름만큼 중요하다 */
 function themeLabel(t: ThemeSeries): string {
-  return `${t.name} (${t.kind === "custom" ? "내 테마" : "키움"})`;
+  return `${t.name} (${t.kind === "custom" ? "내 테마" : t.kind === "naver" ? "네이버 테마" : "키움"})`;
 }
 
 /** 테마 지수의 전일 대비 — 마지막 두 점에서 낸다 */
@@ -294,7 +294,7 @@ export function SuperDetailSheet({
               {/* 테마 — 내 테마가 먼저다. 등락률은 지수의 마지막 두 점에서 낸다 */}
               {theme && themeRate(theme) !== null && (
                 <span title={themeHint(theme)}>
-                  {theme.kind === "custom" ? "내 테마" : "키움 테마"} {theme.name}{" "}
+                  {theme.kind === "custom" ? "내 테마" : theme.kind === "naver" ? "네이버 테마" : "키움 테마"} {theme.name}{" "}
                   <b className={themeRate(theme)! >= 0 ? "positive" : "negative"}>
                     {themeRate(theme)! > 0 ? "+" : ""}
                     {themeRate(theme)!.toFixed(2)}%

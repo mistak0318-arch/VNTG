@@ -1,5 +1,6 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { listThemes } from "./customThemes.js";
+import { loadThemes, themesOfStock } from "./naverThemes.js";
 import { getThemeStocks } from "./marketOverview.js";
 import { getSectorMood } from "./sectorMood.js";
 import { peekSnapshot } from "./marketSnapshot.js";
@@ -29,8 +30,8 @@ import { peekSnapshot } from "./marketSnapshot.js";
  */
 
 export interface ThemeSeriesResult {
-  /** 어느 테마를 썼나 — 내 테마가 먼저다 */
-  kind: "custom" | "kiwoom";
+  /** 어느 테마를 썼나 — 내 테마 → 네이버 → 키움 순 */
+  kind: "custom" | "naver" | "kiwoom";
   name: string;
   /** 지수에 실제로 쓴 종목 수 */
   used: number;
@@ -69,7 +70,7 @@ export async function themeSeriesFor(
 }
 
 interface Pick {
-  kind: "custom" | "kiwoom";
+  kind: "custom" | "naver" | "kiwoom";
   id: string;
   name: string;
   codes: string[];
@@ -85,6 +86,31 @@ async function pickTheme(client: KiwoomClient, code: string): Promise<Pick | nul
     .filter((t) => t.codes.includes(code) && t.codes.length >= 2)
     .sort((a, b) => a.codes.length - b.codes.length)[0];
   if (mine) return { kind: "custom", id: mine.id, name: mine.name, codes: mine.codes };
+
+  /*
+   * 네이버 테마가 키움보다 먼저다 (2026-08-28 — 「지금 설정한 애들이 정밀도가
+   * 훨씬 높잖아」). 신호등의 테마 기준(naverTheme)과 **같은 분류**를 쓰므로
+   * 편입 점수와 대시보드 비교선이 같은 자로 재진다. 여기도 종목 수 적은
+   * 쪽(가장 구체적인 테마)을 고른다 — 내 테마와 같은 이유다. 조회 0회(파일).
+   */
+  const naver = (await themesOfStock(code).catch(() => []))
+    .sort((a, b) => a.no - b.no);
+  if (naver.length > 0) {
+    const store = await loadThemes();
+    const cands = naver
+      .map((n) => store.themes.find((t) => t.no === n.no))
+      .filter((t): t is NonNullable<typeof t> => !!t && t.stocks.length >= 2)
+      .sort((a, b) => a.stocks.length - b.stocks.length);
+    const best = cands[0];
+    if (best) {
+      return {
+        kind: "naver",
+        id: `naver:${best.no}`,
+        name: best.name,
+        codes: best.stocks.map((s) => s.code),
+      };
+    }
+  }
 
   /* 없으면 키움 테마 — sectorMood 가 이미 이 종목의 편입 테마를 들고 있다 */
   const mood = await getSectorMood(client, code).catch(() => null);
