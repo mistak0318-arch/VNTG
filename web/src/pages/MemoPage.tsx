@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSheetBack } from "../useSheetBack";
 import { api, type MemoEntry, type MemoFile } from "../api";
 import { MemoBody, toggleTaskLine } from "../components/MemoBody";
 import { YahooChartSheet } from "../components/overview/YahooChartSheet";
@@ -430,6 +431,8 @@ function MemoFiles({ memo, onChanged }: { memo: MemoEntry | null; onChanged: () 
   const [err, setErr] = useState<string | null>(null);
   /** 크게 볼 파일 — PDF·영상은 시트에서 연다 */
   const [open, setOpen] = useState<MemoFile | null>(null);
+  /* 뒤로가기로 미리보기를 닫는다 (2026-08-28) */
+  useSheetBack(open !== null, () => setOpen(null));
 
   if (!memo) {
     return (

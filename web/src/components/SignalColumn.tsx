@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSheetBack } from "../useSheetBack";
 import type { SignalResult } from "../api";
 import { SignalDot, SignalPanel, useSignals } from "./SignalLight";
 
@@ -45,6 +46,8 @@ export function SignalCell({
   onSelectStock?: (code: string, name: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  /* 뒤로가기로 닫힌다 (2026-08-28) */
+  useSheetBack(open, () => setOpen(false));
 
   return (
     <>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSheetBack } from "../../useSheetBack";
 import { api, fmtNum, type IndexDetailData, type IndexRange, type MarketFlow } from "../../api";
 import { CandleChart } from "../CandleChart";
 import { IntradayFlowChart } from "./IntradayFlowChart";
@@ -27,6 +28,8 @@ function sign(v: number): string {
 }
 
 export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () => void }) {
+  /* 뒤로가기로 닫힌다 — 폰에서 시트를 열고 뒤로 누르면 페이지가 넘어갔다 (2026-08-28) */
+  useSheetBack(true, onClose);
   const [range, setRange] = useState<IndexRange>("day");
   const [data, setData] = useState<IndexDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);

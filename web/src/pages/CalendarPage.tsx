@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSheetBack } from "../useSheetBack";
 import { api, type CalendarEvent, type EventKind } from "../api";
 import { guessKind, kindMeta, KIND_ORDER, span, timeText, toHhmm, toMin } from "../calendarKinds";
 import { DartTodayPanel } from "../components/DartTodayPanel";
@@ -301,6 +302,8 @@ export function CalendarPage() {
   const [allEvents, setAllEvents] = useState<CalendarEvent[] | null>(null);
   /** 일정 미니팝업 (2026-08-27) — 어느 목록에서든 누르면 메모 전체·시간·반복이 보인다 */
   const [detail, setDetail] = useState<CalendarEvent | null>(null);
+  /* 뒤로가기로 일정 팝업을 닫는다 (2026-08-28) */
+  useSheetBack(detail !== null, () => setDetail(null));
 
   // 외부 가져오기
   const [subs, setSubs] = useState<{ label: string; masked: string; url: string; count: number }[]>([]);

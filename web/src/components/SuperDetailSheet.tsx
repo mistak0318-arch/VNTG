@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSheetBack } from "../useSheetBack";
 import { api, type SuperDetail, type ThemeSeries } from "../api";
 import { MiniLine } from "./MiniLine";
 
@@ -56,6 +57,8 @@ export function SuperDetailSheet({
   /** 이탈·메모 저장 뒤 목록을 다시 읽게 */
   onChanged?: () => void;
 }) {
+  /* 뒤로가기로 닫힌다 — 폰에서 시트를 열고 뒤로 누르면 페이지가 넘어갔다 (2026-08-28) */
+  useSheetBack(true, onClose);
   const [data, setData] = useState<SuperDetail | null>(null);
   /**
    * 테마 지수 — 비교선 세 번째.

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSheetBack } from "../useSheetBack";
 import { api, pick, type RawRecord } from "../api";
 import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
 import { IntradayLevelsBar } from "./IntradayLevelsBar";
@@ -36,6 +37,8 @@ export function StockDetail({
   /** 업종·테마 구성종목에서 다른 종목으로 갈아타기 */
   onSelectStock?: (code: string, name: string) => void;
 }) {
+  /* 뒤로가기로 닫힌다 — 폰에서 시트를 열고 뒤로 누르면 페이지가 넘어갔다 (2026-08-28) */
+  useSheetBack(true, onClose);
   const [error, setError] = useState<string | null>(null);
 
   /*

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSheetBack } from "../useSheetBack";
 import { api, type SignalResult, type ThemeStrength } from "../api";
 import { useMarketOpen } from "../useLive";
 import { useTabActive } from "../tabActive";
@@ -123,6 +124,9 @@ export function SignalPanel({
   const [themePick, setThemePick] = useState(false);
   /** ETF 뒷배 고르기 — 상위 셋 중 어느 ETF 를 열지 */
   const [etfPick, setEtfPick] = useState(false);
+  /* 뒤로가기로 고르개를 닫는다 (2026-08-28). 둘이 같이 열리진 않는다 */
+  useSheetBack(themePick, () => setThemePick(false));
+  useSheetBack(etfPick, () => setEtfPick(false));
 
   async function load(force = false) {
     setLoading(true);
@@ -344,6 +348,9 @@ function ThemePickSheet({
       alive = false;
     };
   }, [code]);
+
+  /* 뒤로가기로 닫힌다 (2026-08-28) */
+  useSheetBack(true, onClose);
 
   return (
     <div className="overlay" onClick={onClose}>

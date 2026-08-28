@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSheetBack } from "../useSheetBack";
 import { api, signClass, type ThemeStrength } from "../api";
 import { useCardOrder } from "../useCardOrder";
 import { useSwipeTabs, visualOrder } from "../useSwipeTabs";
@@ -471,6 +472,9 @@ function ThemeSheet({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  /* 뒤로가기로 닫힌다 (2026-08-28) */
+  useSheetBack(true, onClose);
 
   return (
     <div className="overlay" onClick={onClose}>

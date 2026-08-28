@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSheetBack } from "../useSheetBack";
 import { api, type WatchItem } from "../api";
 import { useWatchedCodes } from "../useWatchedCodes";
 
@@ -28,6 +29,8 @@ export function WatchAddSheet({
   onClose: () => void;
   onDone?: () => void;
 }) {
+  /* 뒤로가기로 닫힌다 — 폰에서 시트를 열고 뒤로 누르면 페이지가 넘어갔다 (2026-08-28) */
+  useSheetBack(true, onClose);
   const [groups, setGroups] = useState<string[]>([]);
   const [items, setItems] = useState<WatchItem[]>([]);
   /** 여러 그룹에 동시에 담는다 — 한 종목은 성격이 하나가 아니다 */

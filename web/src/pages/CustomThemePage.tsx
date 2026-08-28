@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSheetBack } from "../useSheetBack";
 import { api, normalizeStockCode, type EvaluatedTheme, type StockSearchResult } from "../api";
 import { tileHeat, useAppearance } from "../useAppearance";
 
@@ -131,6 +132,8 @@ export function CustomThemePage({
   }, [themes, srcFilter, themeQ, sortBy]);
 
   const openTheme = themes.find((t) => t.id === open) ?? null;
+  /* 뒤로가기로 테마 시트를 닫는다 (2026-08-28) */
+  useSheetBack(openTheme !== null, () => setOpen(null));
 
   return (
     <div>

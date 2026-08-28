@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSheetBack } from "../../useSheetBack";
 import type { UTCTimestamp } from "lightweight-charts";
 import {
   api,
@@ -127,6 +128,8 @@ export function YahooChartSheet({
    */
   onSelectSymbol?: (symbol: string, label: string) => void;
 }) {
+  /* 뒤로가기로 닫힌다 — 폰에서 시트를 열고 뒤로 누르면 페이지가 넘어갔다 (2026-08-28) */
+  useSheetBack(true, onClose);
   const futures = target.kind === "futures";
   const usStock = target.kind === "usStock";
   const ranges = usStock ? US_RANGES : futures ? FUTURES_RANGES : YAHOO_RANGES;

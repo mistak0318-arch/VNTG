@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSheetBack } from "../useSheetBack";
 import { api, fmtNum, type JournalTrade } from "../api";
 
 /**
@@ -96,6 +97,9 @@ export function ScenarioCard({
       setSaving(false);
     }
   }
+
+  /* 뒤로가기로 닫힌다 (2026-08-28) */
+  useSheetBack(true, onCancel);
 
   return (
     <div className="overlay" onClick={onCancel}>

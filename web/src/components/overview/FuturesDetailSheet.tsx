@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSheetBack } from "../../useSheetBack";
 import { api, fmtNum } from "../../api";
 import { CandleChart } from "../CandleChart";
 import { IntradayFlowChart } from "./IntradayFlowChart";
@@ -44,6 +45,8 @@ export function FuturesDetailSheet({
   target: FuturesDetailTarget;
   onClose: () => void;
 }) {
+  /* 뒤로가기로 닫힌다 — 폰에서 시트를 열고 뒤로 누르면 페이지가 넘어갔다 (2026-08-28) */
+  useSheetBack(true, onClose);
   const [range, setRange] = useState<"D" | "W" | "M">("D");
   const [candles, setCandles] = useState<
     { t: string; open: number; high: number; low: number; close: number; volume: number }[]
