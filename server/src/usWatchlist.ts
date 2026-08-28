@@ -419,6 +419,25 @@ async function quoteOne(symbol: string): Promise<Quote> {
 
 const cache = new Map<string, { at: number; data: Quote }>();
 const TTL_MS = 60_000;
+/**
+ * **실패는 짧게만 기억한다** (2026-08-28).
+ *
+ * 종목을 잇달아 담으면 야후가 뒤쪽 몇 개를 막는다(429·빈 응답). 그때 돌아온
+ * `price: null` 을 성공과 똑같이 60초 캐시했더니 — **화면에 빈 줄이 1분간 굳었다.**
+ * 새로고침해도 캐시가 살아 있어 「칸은 생겼는데 아무것도 안 보이는」 상태가 됐다.
+ * (누르면 상세는 떴다 — 그쪽은 다른 경로라 멀쩡했고, 그래서 더 헷갈렸다)
+ *
+ * 실패는 5초만 잡아 둔다: 다음 폴링(장중 15초)에서 곧바로 다시 물어보되,
+ * 한 번의 실패로 같은 초에 몰려 재요청하는 일은 막는다.
+ */
+const FAIL_TTL_MS = 5_000;
+
+/** 이 시세를 캐시에서 계속 쓸 수 있나 — 실패한 것은 훨씬 빨리 만료된다 */
+function fresh(hit: { at: number; data: Quote } | undefined): boolean {
+  if (!hit) return false;
+  const ttl = hit.data.price === null ? FAIL_TTL_MS : TTL_MS;
+  return Date.now() - hit.at < ttl;
+}
 
 /**
  * 미국 정규장이 열려 있나 (평일 09:30~16:00 ET).
@@ -646,8 +665,16 @@ async function buildGroups(force: boolean): Promise<UsWatchResult> {
     const got = await Promise.all(
       chunk.map(async (sym) => {
         const hit = cache.get(sym);
-        if (!force && hit && Date.now() - hit.at < TTL_MS) return [sym, hit.data] as const;
+        if (!force && fresh(hit)) return [sym, hit!.data] as const;
         const q = await quoteOne(sym);
+        /*
+         * 실패했는데 **직전에 성공한 값이 있으면 그걸 계속 쓴다.**
+         * 잠깐 막힌 것 때문에 멀쩡히 보이던 시세가 빈칸이 되면 안 된다 —
+         * 값이 조금 낡는 편이 사라지는 것보다 낫다.
+         */
+        if (q.price === null && hit?.data.price != null) {
+          return [sym, hit.data] as const;
+        }
         cache.set(sym, { at: Date.now(), data: q });
         return [sym, q] as const;
       }),
@@ -669,7 +696,12 @@ async function buildGroups(force: boolean): Promise<UsWatchResult> {
         memo: s.memo,
         marketState: q?.state ?? null,
         quotedAt: q?.quotedAt ?? null,
-        error: q?.error ?? null,
+        /*
+         * **값이 없으면 이유를 반드시 남긴다** (2026-08-28).
+         * 여기서 error 가 null 이면 화면은 「-」만 줄줄이 그려서 「칸은 생겼는데
+         * 아무것도 안 보이는」 상태가 된다 — 고장인지 아직 못 받은 건지 구별이 안 된다.
+         */
+        error: q?.error ?? (q?.price == null ? "시세 못 받음 — 곧 다시 시도합니다" : null),
         ...(extra.get(s.symbol) ?? EMPTY_EXTRA),
         afterPrice: after.get(s.symbol)?.price ?? null,
         afterChangeRate: after.get(s.symbol)?.rate ?? null,
