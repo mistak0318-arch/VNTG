@@ -824,8 +824,12 @@ export const api = {
   memoTags: () => getJson<{ tags: { tag: string; count: number }[] }>("/api/memo/tags"),
   memoAdd: (title: string, body: string, tags: string[]) =>
     postJson<{ memo: MemoEntry }>("/api/memo", { title, body, tags }),
-  memoUpdate: (id: string, patch: Partial<Pick<MemoEntry, "title" | "body" | "tags" | "pinned">>) =>
-    patchJson<{ memo: MemoEntry }>(`/api/memo/${id}`, patch),
+  memoUpdate: (
+    id: string,
+    patch: Partial<Pick<MemoEntry, "title" | "body" | "tags" | "pinned" | "stocks">>,
+  ) => patchJson<{ memo: MemoEntry }>(`/api/memo/${id}`, patch),
+  /** 이 종목에 매어 둔 메모 — 종목 상세가 읽는다 */
+  memosOfStock: (code: string) => getJson<{ items: MemoEntry[] }>(`/api/memo/stock/${code}`),
   memoRemove: (id: string) => deleteJson<{ ok: boolean }>(`/api/memo/${id}`),
   /**
    * 붙임 파일 올리기 — **바이너리 그대로** 보낸다(base64 는 3분의 1 부푼다).
@@ -1168,6 +1172,8 @@ export interface MemoEntry {
   pinned: boolean;
   /** 옛 메모에는 이 칸이 없다 */
   files?: MemoFile[];
+  /** 이어 둔 종목 — 종목 상세에서도 이 메모가 보인다 */
+  stocks?: { code: string; name: string }[];
 }
 
 /** 장중 투자자별 누적 순매수 한 점 — 코스피/코스닥 억원, 선물 계약 */

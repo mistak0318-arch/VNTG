@@ -47,6 +47,14 @@ export interface MemoEntry {
   pinned: boolean;
   /** 붙임 파일 — 없으면 빈 배열(옛 메모에는 이 칸이 없다) */
   files?: MemoFile[];
+  /**
+   * 이어 둔 종목 (2026-08-28).
+   *
+   * 「추적관찰」을 쓸 때 종목명을 본문에 적기만 하면 **나중에 못 찾는다** — 이름이
+   * 바뀌거나 오타가 나면 검색으로도 안 걸린다. 코드로 매어 두면 종목 상세에서
+   * 그 메모가 보이고, 메모에서 종목으로도 건너간다.
+   */
+  stocks?: { code: string; name: string }[];
 }
 
 let cache: MemoEntry[] | null = null;
@@ -94,7 +102,11 @@ export async function listMemos(q = "", tag = ""): Promise<MemoEntry[]> {
       return (
         m.title.toLowerCase().includes(needle) ||
         m.body.toLowerCase().includes(needle) ||
-        m.tags.some((t) => t.toLowerCase().includes(needle))
+        m.tags.some((t) => t.toLowerCase().includes(needle)) ||
+        /* 종목명·코드로도 찾는다 — 「에코프로 메모 어디 갔지」가 흔한 물음이다 */
+        (m.stocks ?? []).some(
+          (s) => s.name.toLowerCase().includes(needle) || s.code.includes(needle),
+        )
       );
     }),
   );
@@ -132,11 +144,22 @@ export async function addMemo(input: {
 
 export async function updateMemo(
   id: string,
-  patch: { title?: string; body?: string; tags?: string[]; pinned?: boolean },
+  patch: {
+    title?: string;
+    body?: string;
+    tags?: string[];
+    pinned?: boolean;
+    stocks?: { code: string; name: string }[];
+  },
 ): Promise<MemoEntry> {
   const rows = await load();
   const memo = rows.find((m) => m.id === id);
   if (!memo) throw new Error("메모를 찾지 못했습니다.");
+  if (patch.stocks !== undefined)
+    memo.stocks = patch.stocks
+      .filter((s) => /^\d{6}$/.test(String(s.code)))
+      .map((s) => ({ code: String(s.code), name: String(s.name).slice(0, 40) }))
+      .slice(0, 20);
   if (patch.title !== undefined) memo.title = patch.title.slice(0, 120);
   if (patch.body !== undefined) memo.body = patch.body.slice(0, 20_000);
   if (patch.tags !== undefined)
@@ -149,6 +172,12 @@ export async function updateMemo(
   memo.updatedAt = new Date().toISOString();
   await persist(rows);
   return memo;
+}
+
+/** 이 종목에 매어 둔 메모 — 종목 상세가 읽는다 */
+export async function memosOfStock(code: string): Promise<MemoEntry[]> {
+  const rows = await load();
+  return sorted(rows.filter((m) => (m.stocks ?? []).some((s) => s.code === code)));
 }
 
 export async function removeMemo(id: string): Promise<void> {

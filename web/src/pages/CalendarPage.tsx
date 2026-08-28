@@ -52,6 +52,49 @@ const CAL_TABS: { key: CalTab; label: string }[] = [
 /** 달력 보기 — 월(전체) · 주(한눈에) · 일(시간 단위 입력) (2026-08-27, 구글 캘린더처럼) */
 type CalView = "month" | "week" | "day";
 
+/**
+ * CSV 양식 내려받기 — **AI 에게 그대로 주기 위한 파일.**
+ *
+ * 증권사가 월 1회 내는 캘린더를 AI 에게 주면서 「이 양식대로 채워 줘」라고 할 때
+ * 쓴다. 그래서 **규칙을 파일 안에 주석으로 적는다** — 설명서가 따로 있으면 AI 에게
+ * 줄 때 그것까지 챙겨야 하고, 대개 안 챙긴다.
+ *
+ * `#` 로 시작하는 줄은 파서가 날짜 자리에서 8자리 숫자를 못 찾아 그냥 건너뛴다.
+ * 예시 줄도 실제 파서가 읽는 꼴 그대로 적었다 — 양식과 파서가 어긋나면 안 된다.
+ */
+function downloadCsvTemplate() {
+  const lines = [
+    "# VNTG 캘린더 가져오기 양식",
+    "# ─────────────────────────────────────────────",
+    "# 열 순서: 날짜,제목,종류,시간,메모",
+    "#",
+    "# 날짜 (필수) 2026-09-01 / 2026.09.01 / 20260901 다 됩니다",
+    "# 제목 (필수) 짧게. 목록에 그대로 보입니다",
+    "# 종류 (선택) 증시 · 실적 · 휴장 · 개인  (비우면 개인)",
+    "# 시간 (선택) 03:00 처럼 24시간. 비우면 종일 일정",
+    "#            ⚠️ 한국 시각으로 적으세요 — FOMC 는 한국 새벽입니다",
+    "# 메모 (선택) 쉼표가 들어가면 \"큰따옴표\"로 감싸세요",
+    "#",
+    "# ⚠️ 같은 파일 이름으로 다시 올리면 그 파일로 넣었던 일정을 지우고 새로 넣습니다.",
+    "#    직접 입력한 일정은 건드리지 않습니다.",
+    "# ─────────────────────────────────────────────",
+    "날짜,제목,종류,시간,메모",
+    "2026-09-01,한국 8월 수출입,증시,09:00,전년 대비 증감률",
+    "2026-09-05,미국 8월 고용보고서,증시,21:30,실업률·비농업 고용",
+    "2026-09-17,FOMC 결과,증시,03:00,\"금리 결정, 점도표\"",
+    "2026-09-30,삼성전자 3분기 잠정실적,실적,,",
+    "2026-10-03,개천절 휴장,휴장,,",
+  ];
+  /* BOM 을 붙인다 — 엑셀이 UTF-8 을 못 알아보고 한글을 깬다 */
+  const blob = new Blob([`﻿${lines.join("\n")}\n`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "VNTG_캘린더_양식.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function CalendarPage() {
   const [tab, setTab] = useState<CalTab>("cal");
   const [view, setView] = useState<CalView>("month");
@@ -851,6 +894,15 @@ export function CalendarPage() {
             파일 업로드 (.ics / .csv)
             <input type="file" accept=".ics,.csv,text/calendar,text/csv" onChange={onFile} hidden />
           </label>
+          {/*
+            양식 내려받기 (2026-08-28) — **AI 에게 이 틀로 채우라고 시키기 위한 것.**
+            증권사 월간 캘린더를 AI 에게 주고 「이 양식대로」라고 하면 바로 올릴 수 있는
+            파일이 나온다. 그래서 양식 자체에 규칙을 주석으로 적어 둔다 —
+            사람이 읽을 설명서가 따로 있으면 AI 에게 줄 때 그것까지 챙겨야 한다.
+          */}
+          <button className="filter-btn" onClick={downloadCsvTemplate}>
+            ⤓ CSV 양식
+          </button>
         </div>
 
         {importMsg && <div className="page-note">{importMsg}</div>}

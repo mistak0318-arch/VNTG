@@ -4,6 +4,7 @@ import {
   addMemoFile,
   listMemos,
   listMemoTags,
+  memosOfStock,
   readMemoFile,
   removeMemo,
   removeMemoFile,
@@ -51,15 +52,34 @@ export function createMemoRouter(): Router {
     }
   });
 
+  /** 이 종목에 매어 둔 메모 — 종목 상세의 「메모」 탭이 읽는다 */
+  router.get("/stock/:code", async (req, res, next) => {
+    try {
+      res.json({ items: await memosOfStock(req.params.code) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.patch("/:id", async (req, res, next) => {
     try {
-      const { title, body, tags, pinned } = req.body ?? {};
+      const { title, body, tags, pinned, stocks } = req.body ?? {};
       res.json({
         memo: await updateMemo(req.params.id, {
           ...(title !== undefined ? { title: String(title) } : {}),
           ...(body !== undefined ? { body: String(body) } : {}),
           ...(tags !== undefined ? { tags: Array.isArray(tags) ? tags.map(String) : [] } : {}),
           ...(pinned !== undefined ? { pinned: Boolean(pinned) } : {}),
+          ...(stocks !== undefined
+            ? {
+                stocks: Array.isArray(stocks)
+                  ? stocks.map((s: { code?: unknown; name?: unknown }) => ({
+                      code: String(s?.code ?? ""),
+                      name: String(s?.name ?? ""),
+                    }))
+                  : [],
+              }
+            : {}),
         }),
       });
     } catch (err) {

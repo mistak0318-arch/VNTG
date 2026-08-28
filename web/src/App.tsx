@@ -535,7 +535,7 @@ export default function App() {
       case "signalScreen": return <ScreenPage onSelectStock={onSelectStock} />;
       case "superSignal": return <SuperDashboardPage onSelectStock={onSelectStock} />;
       case "journal": return <JournalPage onSelectStock={onSelectStock} />;
-      case "memo": return <MemoPage />;
+      case "memo": return <MemoPage onSelectStock={onSelectStock} />;
       case "usWatch": return <UsWatchPage />;
       case "marketFlow": return <MarketFlowPage onSelectStock={onSelectStock} />;
       case "ask": return <AskPage />;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type MemoEntry, type MemoFile } from "../api";
+import { MemoBody, toggleTaskLine } from "../components/MemoBody";
 
 /**
  * 메모장 (2026-08-26) — **메모장 + 일기장.**
@@ -57,11 +58,17 @@ interface Draft {
   body: string;
   tags: string;
   pinned: boolean;
+  stocks: { code: string; name: string }[];
 }
 
-const EMPTY: Draft = { id: null, title: "", body: "", tags: "", pinned: false };
+const EMPTY: Draft = { id: null, title: "", body: "", tags: "", pinned: false, stocks: [] };
 
-export function MemoPage() {
+export function MemoPage({
+  onSelectStock,
+}: {
+  /** 이어 둔 종목을 눌렀을 때 — 없으면 칩이 눌리지 않는다 */
+  onSelectStock?: (code: string, name: string) => void;
+}) {
   const [items, setItems] = useState<MemoEntry[]>([]);
   const [tags, setTags] = useState<{ tag: string; count: number }[]>([]);
   const [q, setQ] = useState("");
@@ -70,6 +77,8 @@ export function MemoPage() {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** 읽기 / 쓰기 — 대개는 다시 보려고 열기 때문에 읽기가 기본이다 */
+  const [editing, setEditing] = useState(false);
 
   const load = useCallback(async (query: string, tag: string) => {
     try {
@@ -90,8 +99,16 @@ export function MemoPage() {
 
   function openMemo(m: MemoEntry) {
     if (dirty && !window.confirm("저장하지 않은 내용이 있습니다. 버리고 이동할까요?")) return;
-    setDraft({ id: m.id, title: m.title, body: m.body, tags: m.tags.join(", "), pinned: m.pinned });
+    setDraft({
+      id: m.id,
+      title: m.title,
+      body: m.body,
+      tags: m.tags.join(", "),
+      pinned: m.pinned,
+      stocks: m.stocks ?? [],
+    });
     setDirty(false);
+    setEditing(false); // 열면 **읽기부터** — 대개는 다시 보려고 연다
   }
 
   function newMemo(tpl?: (typeof TEMPLATES)[number]) {
@@ -102,8 +119,10 @@ export function MemoPage() {
       body: tpl ? tpl.body : "",
       tags: tpl ? tpl.tag : "",
       pinned: false,
+      stocks: [],
     });
     setDirty(Boolean(tpl));
+    setEditing(true); // 새 글은 바로 쓰기
   }
 
   /** 이미 글을 쓰는 중이면 틀을 **본문 끝에 잇는다** — 지우고 새로 시작하지 않는다 */
@@ -128,8 +147,14 @@ export function MemoPage() {
       if (draft.id === null) {
         const r = await api.memoAdd(draft.title, draft.body, tagList);
         setDraft((d) => ({ ...d, id: r.memo.id }));
+        if (draft.stocks.length > 0) await api.memoUpdate(r.memo.id, { stocks: draft.stocks });
       } else {
-        await api.memoUpdate(draft.id, { title: draft.title, body: draft.body, tags: tagList });
+        await api.memoUpdate(draft.id, {
+          title: draft.title,
+          body: draft.body,
+          tags: tagList,
+          stocks: draft.stocks,
+        });
       }
       setDirty(false);
       await load(q, tagFilter);
@@ -173,6 +198,35 @@ export function MemoPage() {
     setDraft((d) => ({ ...d, ...patch }));
     setDirty(true);
   };
+
+  /*
+   * 자동 저장 (2026-08-28) — **3초 멈추면 저장한다.**
+   *
+   * 수동 저장만 있으면 쓰다가 탭을 옮기거나 창을 닫을 때 날아간다. 메모장은
+   * 「생각나면 적는」 자리라 그 사고가 특히 아깝다.
+   * 새 글(id 없음)은 자동 저장하지 않는다 — 몇 글자 치다 만 것이 목록에 쌓이면
+   * 그게 더 성가시다. 한 번 저장한 뒤부터 자동이다.
+   */
+  useEffect(() => {
+    if (!dirty || draft.id === null || busy) return;
+    const t = setTimeout(() => void save(), 3000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, dirty]);
+
+  /** 읽기 화면에서 체크박스를 눌렀을 때 — 본문을 고쳐 바로 저장한다 */
+  async function toggleTask(line: number) {
+    if (draft.id === null) return;
+    const next = toggleTaskLine(draft.body, line);
+    if (next === draft.body) return;
+    setDraft((d) => ({ ...d, body: next }));
+    try {
+      await api.memoUpdate(draft.id, { body: next });
+      await load(q, tagFilter);
+    } catch {
+      /* 실패하면 다음 클릭에 다시 시도된다 */
+    }
+  }
 
   return (
     <div className="memo">
@@ -273,18 +327,42 @@ export function MemoPage() {
             value={draft.title}
             onChange={(e) => set({ title: e.target.value })}
           />
-          <textarea
-            className="memo-body"
-            placeholder={"내용 — 자유롭게. 위 틀 버튼을 누르면 골격이 깔립니다."}
-            value={draft.body}
-            onChange={(e) => set({ body: e.target.value })}
-          />
+          {/*
+            읽기 / 쓰기 — 대개는 **다시 보려고** 연다. 그래서 읽기가 기본이고,
+            체크박스는 읽기 화면에서 바로 눌린다(추적관찰 조건을 지워 나가는 자리).
+          */}
+          {editing ? (
+            <textarea
+              className="memo-body"
+              placeholder={
+                "내용 — 자유롭게. 위 틀 버튼을 누르면 골격이 깔립니다.\n\n" +
+                "# 제목 · - 목록 · - [ ] 할 일 · **굵게** · https://링크"
+              }
+              value={draft.body}
+              onChange={(e) => set({ body: e.target.value })}
+            />
+          ) : (
+            <div className="memo-read" onDoubleClick={() => setEditing(true)}>
+              {draft.body.trim() ? (
+                <MemoBody text={draft.body} onToggle={(l) => void toggleTask(l)} />
+              ) : (
+                <span className="pt-n">내용이 없습니다 — ✎ 를 눌러 쓰세요.</span>
+              )}
+            </div>
+          )}
           <input
             className="search-input memo-taginput"
             type="text"
             placeholder="태그 (쉼표로 구분 — 예: 추적관찰, 2차전지)"
             value={draft.tags}
             onChange={(e) => set({ tags: e.target.value })}
+          />
+
+          {/* 종목 잇기 — 이어 두면 종목 상세에서도 이 메모가 보인다 */}
+          <MemoStocks
+            stocks={draft.stocks}
+            onChange={(s) => set({ stocks: s })}
+            onOpen={onSelectStock}
           />
           {/*
             붙임 파일 — **저장된 메모에만** 붙는다. 새 글은 아직 id 가 없어서
@@ -296,6 +374,13 @@ export function MemoPage() {
           />
 
           <div className="memo-actions">
+            <button
+              className={`filter-btn${editing ? " active" : ""}`}
+              onClick={() => setEditing((v) => !v)}
+              title={editing ? "읽기로" : "고치기"}
+            >
+              {editing ? "👁 읽기" : "✎ 고치기"}
+            </button>
             <button
               className="refresh-btn"
               onClick={() => void save()}
@@ -462,6 +547,96 @@ function MemoFiles({ memo, onChanged }: { memo: MemoEntry | null; onChanged: () 
               </div>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 메모에 종목 잇기.
+ *
+ * 「추적관찰」을 쓸 때 종목명을 본문에만 적으면 **나중에 못 찾는다** — 오타 하나면
+ * 검색에도 안 걸리고, 종목 화면에서는 그런 메모가 있는 줄도 모른다.
+ * 코드로 매어 두면 양쪽에서 이어진다.
+ */
+function MemoStocks({
+  stocks,
+  onChange,
+  onOpen,
+}: {
+  stocks: { code: string; name: string }[];
+  onChange: (s: { code: string; name: string }[]) => void;
+  onOpen?: (code: string, name: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [found, setFound] = useState<{ code: string; name: string; marketName: string }[]>([]);
+
+  useEffect(() => {
+    const s = q.trim();
+    if (!s) {
+      setFound([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      api
+        .searchStocks(s)
+        .then((r) => setFound(r.results.slice(0, 6)))
+        .catch(() => setFound([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  return (
+    <div className="memo-stocks">
+      <div className="memo-stock-chips">
+        {stocks.map((s) => (
+          <span className="memo-stock" key={s.code}>
+            <button
+              className="memo-stock-go"
+              onClick={() => onOpen?.(s.code, s.name)}
+              title="종목 상세 열기"
+            >
+              {s.name}
+            </button>
+            <button
+              className="memo-stock-x"
+              onClick={() => onChange(stocks.filter((x) => x.code !== s.code))}
+              title="빼기"
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+        <input
+          className="memo-stock-input"
+          type="text"
+          placeholder="+ 종목 잇기"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+      </div>
+      {found.length > 0 && (
+        <div className="search-dropdown memo-stock-drop">
+          {found.map((f) => (
+            <button
+              key={f.code}
+              className="search-result-row"
+              onClick={() => {
+                const code = f.code.replace(/[^0-9]/g, "").slice(0, 6);
+                if (!stocks.some((x) => x.code === code)) {
+                  onChange([...stocks, { code, name: f.name }]);
+                }
+                setQ("");
+                setFound([]);
+              }}
+            >
+              <span className="name">{f.name}</span>
+              <span className="sub">
+                {f.code} · {f.marketName}
+              </span>
+            </button>
+          ))}
         </div>
       )}
     </div>

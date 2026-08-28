@@ -10060,3 +10060,93 @@ button.tpb-row:hover { background: var(--panel-2); }
 .memo-view-img { width: 100%; height: auto; border-radius: 8px; }
 .memo-view-vid { width: 100%; max-height: 70vh; border-radius: 8px; background: #000; }
 .memo-view-pdf { width: 100%; height: 70vh; border: none; border-radius: 8px; background: #fff; }
+
+/* ==================================================================
+   메모장 개편 (2026-08-28) — 읽기 화면 · 종목 잇기
+   ================================================================== */
+/* 읽기 화면 — 두 번 누르면 고치기로 */
+.memo-read {
+  min-height: 14rem;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  cursor: text;
+}
+
+/* 얕은 마크다운 */
+.mdx-h { font-weight: 700; margin: 0.5rem 0 0.25rem; }
+.mdx-h1 { font-size: 1.02rem; }
+.mdx-h2 { font-size: 0.92rem; }
+.mdx-h3 { font-size: 0.86rem; color: var(--muted); }
+.mdx-p { margin-bottom: 0.15rem; }
+.mdx-gap { height: 0.5rem; }
+.mdx-li { display: flex; gap: 0.4rem; }
+.mdx-dot { color: var(--muted); }
+/* 「항목: 값」 — 템플릿이 이 꼴이라 이름을 살짝 세운다 */
+.mdx-kv { display: flex; gap: 0.45rem; align-items: baseline; margin-bottom: 0.1rem; }
+.mdx-kv b { color: var(--muted); font-weight: 600; min-width: 5.5rem; flex: none; }
+.mdx-task { display: flex; gap: 0.45rem; align-items: baseline; margin-bottom: 0.1rem; }
+.mdx-task input { margin: 0; }
+.mdx-task.done span { text-decoration: line-through; color: var(--muted); }
+.mdx a { color: var(--blue); }
+
+/* 종목 잇기 */
+.memo-stocks { position: relative; margin-top: 0.4rem; }
+.memo-stock-chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.memo-stock {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.memo-stock-go,
+.memo-stock-x {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+}
+.memo-stock-go:hover { color: var(--blue); }
+.memo-stock-x { color: var(--muted); padding-left: 0; }
+.memo-stock-x:hover { color: var(--red); }
+.memo-stock-input {
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text);
+  font-size: 0.72rem;
+  padding: 0.15rem 0.55rem;
+  width: 8rem;
+}
+.memo-stock-drop { top: 2rem; }
+
+/* ==================================================================
+   표 칸 너비를 고정한다 (2026-08-28)
+   ------------------------------------------------------------------
+   값이 바뀔 때마다 브라우저가 칸 너비를 다시 재서 **표 전체가 움찔거렸다** —
+   「+8.91%」가 「+12.34%」가 되는 것만으로 옆 칸들이 밀린다. 실시간으로 값이
+   도는 표에서는 그때마다 눈이 자리를 다시 찾아야 해서 읽기가 어렵다.
+
+   `table-layout: fixed` 는 **첫 줄의 너비로 굳힌다.** 값이 길어지면 넘칠 뿐
+   칸은 안 움직인다. 칸 너비는 어차피 사람이 손잡이로 조절하므로(columnWidths),
+   답답하면 늘리면 된다 — 자동으로 흔들리는 것보다 그 편이 낫다.
+   ================================================================== */
+.data-table { table-layout: fixed; }
+/*
+ * 넘치는 값은 **잘라서 말줄임** 한다. 그대로 흘리면 옆 칸 글자와 겹쳐 둘 다 못 읽는다.
+ * 전체 값은 칸을 넓히거나 줄을 눌러서 본다.
+ */
+.data-table td,
+.data-table th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
