@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useSheetBack } from "../useSheetBack";
 import { api, type TgMsg, type TgRoom, type TgStar } from "../api";
 import { useCardOrder } from "../useCardOrder";
 
@@ -126,6 +127,12 @@ function ago(iso: string | null): string {
 export function TelegramRoomsPanel() {
   const [rooms, setRooms] = useState<TgRoom[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  /*
+   * 뒤로가기로 **방을 나간다** (2026-08-28 요청). 방에 들어간 것도 「들어간 것」이라
+   * 뒤로가기가 목록으로 돌아오는 길이어야 한다 — 전에는 페이지가 통째로 넘어갔다.
+   * Esc·◀·목록 버튼으로 나가도 훅이 쌓아 둔 히스토리 칸을 스스로 회수한다.
+   */
+  useSheetBack(open !== null, () => setOpen(null));
   const [msgs, setMsgs] = useState<TgMsg[]>([]);
   const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
