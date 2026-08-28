@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type MemoEntry, type MemoFile } from "../api";
 import { MemoBody, toggleTaskLine } from "../components/MemoBody";
+import { YahooChartSheet } from "../components/overview/YahooChartSheet";
 
 /**
  * 메모장 (2026-08-26) — **메모장 + 일기장.**
@@ -570,7 +571,9 @@ function MemoStocks({
   onOpen?: (code: string, name: string) => void;
 }) {
   const [q, setQ] = useState("");
-  const [found, setFound] = useState<{ code: string; name: string; marketName: string }[]>([]);
+  const [found, setFound] = useState<{ code: string; name: string; sub: string }[]>([]);
+  /** 해외 차트 시트 — 해외는 국내 상세가 없어 야후 차트 시트로 연다 */
+  const [usSheet, setUsSheet] = useState<{ symbol: string; label: string } | null>(null);
 
   useEffect(() => {
     const s = q.trim();
@@ -579,10 +582,28 @@ function MemoStocks({
       return;
     }
     const t = setTimeout(() => {
-      api
-        .searchStocks(s)
-        .then((r) => setFound(r.results.slice(0, 6)))
-        .catch(() => setFound([]));
+      /*
+       * 국내와 해외를 **같이** 찾는다 (2026-08-28 — 「해외주식도 넣을 수 있게」).
+       * 해외는 `us:` 접두를 붙여 저장한다 — 국내 코드(0155E0 같은 영숫자 6자)와
+       * 심볼(AAPL)이 생김새로는 안 갈려서, 접두가 없으면 열 때 어느 쪽인지 모른다.
+       */
+      void Promise.allSettled([api.searchStocks(s), api.usWatchSearch(s)]).then(([kr, us]) => {
+        const a =
+          kr.status === "fulfilled"
+            ? kr.value.results
+                .slice(0, 5)
+                .map((f) => ({ code: f.code, name: f.name, sub: `${f.code} · ${f.marketName}` }))
+            : [];
+        const b =
+          us.status === "fulfilled"
+            ? us.value.results.slice(0, 4).map((f) => ({
+                code: `us:${f.symbol}`,
+                name: f.name || f.symbol,
+                sub: `${f.symbol} · ${f.exchange}${f.nation ? ` · ${f.nation}` : ""}`,
+              }))
+            : [];
+        setFound([...a, ...b]);
+      });
     }, 300);
     return () => clearTimeout(t);
   }, [q]);
@@ -594,9 +615,16 @@ function MemoStocks({
           <span className="memo-stock" key={s.code}>
             <button
               className="memo-stock-go"
-              onClick={() => onOpen?.(s.code, s.name)}
-              title="종목 상세 열기"
+              onClick={() => {
+                if (s.code.startsWith("us:")) {
+                  setUsSheet({ symbol: s.code.slice(3), label: s.name });
+                } else {
+                  onOpen?.(s.code, s.name);
+                }
+              }}
+              title={s.code.startsWith("us:") ? "해외 차트 열기" : "종목 상세 열기"}
             >
+              {s.code.startsWith("us:") && "🌏 "}
               {s.name}
             </button>
             <button
@@ -611,7 +639,7 @@ function MemoStocks({
         <input
           className="memo-stock-input"
           type="text"
-          placeholder="+ 종목 잇기"
+          placeholder="+ 종목 잇기 (국내·해외 이름이나 코드)"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -623,7 +651,10 @@ function MemoStocks({
               key={f.code}
               className="search-result-row"
               onClick={() => {
-                const code = f.code.replace(/[^0-9]/g, "").slice(0, 6);
+                /* 해외(us:)는 심볼 그대로, 국내는 숫자만 남긴 6자리 코드 */
+                const code = f.code.startsWith("us:")
+                  ? f.code
+                  : f.code.replace(/[^0-9A-Z]/gi, "").slice(0, 6);
                 if (!stocks.some((x) => x.code === code)) {
                   onChange([...stocks, { code, name: f.name }]);
                 }
@@ -631,13 +662,20 @@ function MemoStocks({
                 setFound([]);
               }}
             >
-              <span className="name">{f.name}</span>
-              <span className="sub">
-                {f.code} · {f.marketName}
+              <span className="name">
+                {f.code.startsWith("us:") && "🌏 "}
+                {f.name}
               </span>
+              <span className="sub">{f.sub}</span>
             </button>
           ))}
         </div>
+      )}
+      {usSheet && (
+        <YahooChartSheet
+          target={{ kind: "usStock", symbol: usSheet.symbol, label: usSheet.label }}
+          onClose={() => setUsSheet(null)}
+        />
       )}
     </div>
   );

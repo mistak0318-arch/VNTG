@@ -74,16 +74,20 @@ export function sectionKey(name: string, color: string | null): string {
   return `#${name}${color ? `|${color}` : ""}`;
 }
 
-/** 고를 수 있는 색 — 사이드바가 어두워서 밝은 쪽으로만 고른다 */
+/**
+ * 자주 쓰는 색 — **상승 계열이 앞이다** (2026-08-28, 「파란색은 주식하는데 재수가
+ * 없잖아」). 국장에서 파랑은 하락색이라 프리셋에서 뺐다. 프리셋 밖의 색은
+ * 옆의 컬러피커로 아무 색이나 고른다 — 저장은 CSS 색 문자열이라 제한이 없다.
+ */
 export const SECTION_COLORS = [
   { key: "", label: "기본" },
-  { key: "#4c8dff", label: "파랑" },
-  { key: "#35c46a", label: "초록" },
-  { key: "#f5c542", label: "노랑" },
-  { key: "#ff8c42", label: "주황" },
   { key: "#ff5c5c", label: "빨강" },
+  { key: "#ff8c42", label: "주황" },
+  { key: "#f5c542", label: "금색" },
+  { key: "#35c46a", label: "초록" },
   { key: "#c084fc", label: "보라" },
-  { key: "#4dd0e1", label: "청록" },
+  { key: "#f472b6", label: "분홍" },
+  { key: "#e8e4d8", label: "상아" },
 ];
 
 const EMPTY: MenuPrefs = { order: [], hidden: [], labels: {}, groupOf: {}, extraGroups: [], favorites: [] };

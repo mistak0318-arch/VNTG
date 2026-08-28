@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   applyOrder,
   parseSection,
@@ -7,6 +7,43 @@ import {
   useMenuPrefs,
 } from "../useMenuOrder";
 import { useDragOrder } from "../useDragOrder";
+
+/**
+ * 컬러피커 — **닫을 때만 확정한다.**
+ *
+ * React 의 onChange 는 네이티브 `input` 이라 다이얼로그에서 끄는 동안 계속 온다.
+ * 그때마다 저장하면 저장 키(#이름|색)가 바뀌어 이 입력 자체가 다시 그려지고,
+ * 열려 있던 OS 색상판이 무너진다. 네이티브 `change`(닫힘)에만 반응한다.
+ */
+function NativeColorPick({
+  value,
+  className,
+  onPick,
+}: {
+  value: string;
+  className: string;
+  onPick: (color: string) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const pick = useRef(onPick);
+  pick.current = onPick;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const h = () => pick.current(el.value);
+    el.addEventListener("change", h);
+    return () => el.removeEventListener("change", h);
+  }, []);
+  return (
+    <input
+      ref={ref}
+      type="color"
+      className={className}
+      defaultValue={value}
+      title="원하는 색 직접 고르기"
+    />
+  );
+}
 
 /**
  * 사이드바 메뉴 구성.
@@ -294,6 +331,24 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
                           {c.key ? "" : "○"}
                         </button>
                       ))}
+                      {/*
+                        아무 색이나 (2026-08-28 — 「팔레트를 주던지 해서 내가 원하는
+                        색으로」). 프리셋에 없는 색은 여기서 고른다. 프리셋 색이면 그
+                        동그라미에 표시가 가고, 아니면 이 피커가 지금 색을 보여 준다.
+                      */}
+                      <NativeColorPick
+                        className={`mo-sec-picker${
+                          r.sec.color && !SECTION_COLORS.some((c) => c.key === r.sec!.color)
+                            ? " on"
+                            : ""
+                        }`}
+                        value={
+                          r.sec.color && /^#[0-9a-f]{6}$/i.test(r.sec.color)
+                            ? r.sec.color
+                            : "#d4a94e"
+                        }
+                        onPick={(color) => renameSection(r.key, r.sec!.name, color)}
+                      />
                     </span>
                   </span>
                 ) : (

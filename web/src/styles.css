@@ -10265,9 +10265,15 @@ button.tpb-row:hover { background: var(--panel-2); }
   border-radius: 999px;
   background: none;
   color: var(--text);
-  font-size: 0.72rem;
-  padding: 0.15rem 0.55rem;
-  width: 8rem;
+  /*
+   * 넉넉하게 (2026-08-28 — 「텍스트 박스가 너무 작다. ETF 는 이름도 길고」).
+   * 8rem 고정이었는데 「TIGER 미국나스닥100」을 치면 앞부분이 밀려 안 보였다.
+   * 남는 폭을 다 쓰고, 좁아도 12rem 아래로는 안 줄인다.
+   */
+  font-size: 0.8rem;
+  padding: 0.25rem 0.7rem;
+  flex: 1 1 16rem;
+  min-width: 12rem;
 }
 .memo-stock-drop { top: 2rem; }
 
@@ -10431,3 +10437,17 @@ button.tpb-row:hover { background: var(--panel-2); }
 /* 백테스트 진행바 — 바 + 몇 종목째 (2026-08-28 백그라운드 잡으로 바꾸며) */
 .sbt-progress { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .sbt-progress .progress-bar { flex: 1; }
+
+/* 구분선 컬러피커 — 동그라미들과 같은 줄, 무지개 테두리로 「직접 고르기」임을 표시 */
+.mo-sec-picker {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+.mo-sec-picker.on { outline: 2px solid var(--text); outline-offset: 1px; }
+.mo-sec-picker::-webkit-color-swatch-wrapper { padding: 2px; }
+.mo-sec-picker::-webkit-color-swatch { border: none; border-radius: 50%; }
