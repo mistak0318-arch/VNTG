@@ -10544,9 +10544,18 @@ button.tpb-row:hover { background: var(--panel-2); }
  * ⚠️ 닫힌 상태의 `transform` 도 같이 뒤집어야 한다 — 안 그러면 오른쪽에서 연
  * 서랍이 왼쪽 밖에서 화면을 가로질러 날아온다.
  */
-.sidebar.from-left { left: 0; right: auto; }
-.sidebar.from-right { left: auto; right: 0; }
-.sidebar.from-left:not(.open) { transform: translateX(-100%); }
-.sidebar.from-right:not(.open) { transform: translateX(100%); }
+/*
+ * ⚠️ **!important 가 필요하다** (2026-08-29 — 「왼쪽에서 밀었는데 오른쪽에서 열린다」).
+ *
+ * 배치 설정 규칙이 `:root[data-sidebar="auto"][data-nav="right"] .sidebar.open`
+ * 처럼 특정도가 높다(0,5,0). 여기 클래스 둘(0,2,0)로는 절대 못 이겨서, 오른쪽
+ * 배치인 사람이 왼쪽 모서리에서 밀면 서랍이 계속 오른쪽에서 나왔다.
+ * 선택자를 더 길게 늘여 이기는 것보다 「이번 몸짓이 배치 설정을 이긴다」를
+ * 그대로 적는 편이 읽힌다 — 이 네 줄이 정확히 그 뜻이다.
+ */
+.sidebar.from-left { left: 0 !important; right: auto !important; }
+.sidebar.from-right { left: auto !important; right: 0 !important; }
+.sidebar.from-left:not(.open) { transform: translateX(-100%) !important; }
+.sidebar.from-right:not(.open) { transform: translateX(100%) !important; }
 .sidebar.from-left.open,
-.sidebar.from-right.open { transform: translateX(0); }
+.sidebar.from-right.open { transform: translateX(0) !important; }
