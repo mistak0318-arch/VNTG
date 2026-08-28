@@ -2970,10 +2970,19 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   text-overflow: ellipsis;
   border-left: 2px solid;
 }
-.cal-chip.market   { background: rgba(76,141,255,.16);  border-color: var(--blue); }
-.cal-chip.earnings { background: rgba(245,197,66,.16);  border-color: #f5c542; }
-.cal-chip.holiday  { background: rgba(255,92,92,.16);   border-color: var(--red); }
-.cal-chip.personal { background: rgba(53,196,106,.16);  border-color: var(--green); }
+/*
+ * 종류별 색 — **`calendarKinds.ts` 의 KIND_META 와 같은 값이다** (2026-08-28).
+ * 한쪽만 고치면 폼의 미리보기와 달력의 칩 색이 어긋난다.
+ */
+.cal-chip.market     { background: rgba(76,141,255,.16);  border-color: #4c8dff; }
+.cal-chip.earnings   { background: rgba(245,197,66,.16);  border-color: #f5c542; }
+.cal-chip.holiday    { background: rgba(255,92,92,.16);   border-color: #ff5c5c; }
+.cal-chip.event      { background: rgba(255,140,66,.16);  border-color: #ff8c42; }
+.cal-chip.conference { background: rgba(192,132,252,.16); border-color: #c084fc; }
+.cal-chip.personal   { background: rgba(53,196,106,.16);  border-color: #35c46a; }
+.cal-chip-icon { font-style: normal; margin-right: 2px; }
+/* 앞 시간대에서 이어진 줄 — 시작한 자리를 알아보게 흐리게 */
+.cal-chip.cont { opacity: 0.55; }
 .cal-more { font-size: 0.6333rem; color: var(--muted); }
 .cal-list { display: flex; flex-direction: column; }
 .cal-item {
@@ -2992,10 +3001,21 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   border-radius: 4px;
   flex: none;
 }
-.cal-badge.market   { background: rgba(76,141,255,.2);  color: var(--blue); }
-.cal-badge.earnings { background: rgba(245,197,66,.2);  color: #f5c542; }
-.cal-badge.holiday  { background: rgba(255,92,92,.2);   color: var(--red); }
-.cal-badge.personal { background: rgba(53,196,106,.2);  color: var(--green); }
+.cal-badge.market     { background: rgba(76,141,255,.2);  color: #4c8dff; }
+.cal-badge.earnings   { background: rgba(245,197,66,.2);  color: #f5c542; }
+.cal-badge.holiday    { background: rgba(255,92,92,.2);   color: #ff5c5c; }
+.cal-badge.event      { background: rgba(255,140,66,.2);  color: #ff8c42; }
+.cal-badge.conference { background: rgba(192,132,252,.2); color: #c084fc; }
+.cal-badge.personal   { background: rgba(53,196,106,.2);  color: #35c46a; }
+/* 폼의 종류 고르개 — 지금 고른 종류의 색이 왼쪽 막대로 보인다 */
+.cal-kind-sel { border-left: 3px solid var(--border); }
+.cal-kind-sel.market     { border-left-color: #4c8dff; }
+.cal-kind-sel.earnings   { border-left-color: #f5c542; }
+.cal-kind-sel.holiday    { border-left-color: #ff5c5c; }
+.cal-kind-sel.event      { border-left-color: #ff8c42; }
+.cal-kind-sel.conference { border-left-color: #c084fc; }
+.cal-kind-sel.personal   { border-left-color: #35c46a; }
+.cal-time-row { align-items: center; }
 
 @media (max-width: 640px) {
   /*
@@ -5115,26 +5135,110 @@ tr.drag-src td { opacity: 0.45; }
 
 /* ── 캘린더 월/주/일 보기 (2026-08-27) ── */
 .cal-views { display: inline-flex; gap: 2px; margin-left: auto; }
-.cal-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.cal-week-col {
+/*
+ * 주간 시간표 (2026-08-28 전면 개편).
+ *
+ * 전에는 하루가 칩 목록이었다(.cal-week / .cal-week-col — 삭제). 시각이 붙은 일정도
+ * 종일 일정 사이에 섞여 몇 시인지·얼마나 걸리는지가 안 보였고, 짧은 일정은 다른
+ * 일정에 밀려 아래로 흘러 아예 눈에 안 들어왔다.
+ *
+ * 왼쪽 시각 자, 위 종일 줄, 그 아래 요일 일곱 칸. 일정은 **시작 위치와 길이대로
+ * 놓인 블록**이라 겹치는 것도 나란히 보인다.
+ */
+.calw {
+  display: grid;
+  grid-template-columns: 2.4rem repeat(7, 1fr);
+  gap: 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  background: var(--panel);
+  overflow-x: auto;
+}
+.calw-corner { }
+.calw-head {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-height: 10rem;
-  padding: 6px 4px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
   font: inherit;
   color: inherit;
-  text-align: left;
   cursor: pointer;
 }
-.cal-week-col.today { border-color: var(--green); }
-.cal-week-col.selected { border-color: var(--blue); }
-.cal-week-col .cal-wd { font-size: 0.72rem; text-align: center; }
-.cal-week-list { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.cal-week-empty { color: var(--muted); text-align: center; font-size: 0.7rem; }
+.calw-head b { font-size: 0.95rem; }
+.calw-head .cal-wd { font-size: 0.7rem; }
+.calw-head.today { border-bottom-color: var(--green); }
+.calw-head.selected { border-bottom-color: var(--blue); background: var(--panel-2); }
+
+.calw-allday-h,
+.calw-allday {
+  border-top: 1px solid var(--border);
+  padding: 3px 2px;
+  min-height: 1.4rem;
+}
+.calw-allday-h { font-size: 0.66rem; color: var(--muted); text-align: right; padding-right: 5px; }
+.calw-allday { display: flex; flex-direction: column; gap: 2px; min-width: 0; cursor: pointer; }
+
+/* 시각 자 — 숫자를 각 시간 칸의 위쪽에 붙인다 */
+.calw-ruler { display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.calw-hour {
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-align: right;
+  padding-right: 5px;
+  line-height: 1;
+  padding-top: 1px;
+}
+.calw-col { position: relative; border-top: 1px solid var(--border); min-width: 0; }
+.calw-slot {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 0;
+  cursor: pointer;
+}
+.calw-slot:hover { background: var(--row-hover); }
+/*
+ * 일정 블록 — 자리(top/height/left/width)는 인라인 style 로 계산해 넣는다.
+ * `min-width: 0` 이 없으면 긴 제목이 칸을 밀어 하루 폭이 제멋대로 넓어진다.
+ */
+.calw-ev {
+  position: absolute;
+  overflow: hidden;
+  padding: 1px 3px;
+  border-radius: 3px;
+  border-left: 2px solid;
+  font-size: 0.64rem;
+  line-height: 1.15;
+  cursor: pointer;
+  min-width: 0;
+}
+.calw-ev b { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; }
+.calw-ev-t { font-style: normal; opacity: 0.75; display: block; font-size: 0.58rem; }
+.calw-ev.done { opacity: 0.5; text-decoration: line-through; }
+.calw-ev.market     { background: rgba(76,141,255,.22);  border-color: #4c8dff; }
+.calw-ev.earnings   { background: rgba(245,197,66,.22);  border-color: #f5c542; }
+.calw-ev.holiday    { background: rgba(255,92,92,.22);   border-color: #ff5c5c; }
+.calw-ev.event      { background: rgba(255,140,66,.22);  border-color: #ff8c42; }
+.calw-ev.conference { background: rgba(192,132,252,.22); border-color: #c084fc; }
+.calw-ev.personal   { background: rgba(53,196,106,.22);  border-color: #35c46a; }
+
+/*
+ * 폰 — 시각 자를 좁히고 글자를 줄인다. 일곱 칸을 세로로 접지 않는 건,
+ * 접으면 「이번 주가 어떻게 생겼나」라는 주간 보기의 존재 이유가 사라지기 때문이다.
+ */
+@media (max-width: 640px) {
+  .calw { grid-template-columns: 1.7rem repeat(7, minmax(2.6rem, 1fr)); }
+  .calw-head b { font-size: 0.8rem; }
+  .calw-ev { font-size: 0.55rem; padding: 0 2px; }
+  .calw-ev-t { display: none; } /* 자리에서 몇 시인지 읽힌다 */
+}
 .cal-chip-time { font-style: normal; font-size: 0.62rem; opacity: 0.8; margin-right: 2px; }
 .cal-dayview { max-width: 40rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 /* 일간·주간 칩은 월 셀과 달리 자리가 넉넉하다 — 점이 아니라 읽히는 블록으로 (2026-08-27) */
@@ -10212,4 +10316,22 @@ button.tpb-row:hover { background: var(--panel-2); }
       inset 0 1px 0 0 var(--row-hover-line),
       inset 0 -1px 0 0 var(--row-hover-line);
   }
+}
+
+/*
+ * 「저장분이 기본값과 다르다」 알림 (2026-08-28).
+ * 오류가 아니라 안내다 — 빨강 말고 파랑 계열로.
+ */
+.sig-stale {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: var(--text);
+  background: rgba(76, 141, 255, 0.1);
+  border: 1px solid var(--blue);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
 }

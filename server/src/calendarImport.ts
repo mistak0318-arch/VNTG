@@ -66,7 +66,14 @@ export function parseIcs(text: string, source: string, kind: EventKind = "person
   const lines = unfold(text);
   const out: ImportedEvent[] = [];
 
-  let cur: { date?: string; time?: string; title?: string; memo?: string } | null = null;
+  let cur: {
+    date?: string;
+    time?: string;
+    endTime?: string;
+    endDate?: string;
+    title?: string;
+    memo?: string;
+  } | null = null;
   for (const line of lines) {
     if (line.startsWith("BEGIN:VEVENT")) {
       cur = {};
@@ -77,6 +84,11 @@ export function parseIcs(text: string, source: string, kind: EventKind = "person
         out.push({
           date: cur.date,
           time: cur.time,
+          /*
+           * 끝나는 시각은 **같은 날일 때만** 쓴다 (2026-08-28). 자정을 넘기는 일정의
+           * DTEND 는 다음 날이라 그대로 넣으면 「22:00~01:00」처럼 거꾸로 보인다.
+           */
+          endTime: cur.time && cur.endDate === cur.date ? cur.endTime : undefined,
           title: cur.title,
           memo: cur.memo,
           kind,
@@ -100,6 +112,12 @@ export function parseIcs(text: string, source: string, kind: EventKind = "person
         cur.date = p.date;
         cur.time = p.time;
       }
+    } else if (name === "DTEND") {
+      const p = parseDt(value, params.join(";"));
+      if (p) {
+        cur.endDate = p.date;
+        cur.endTime = p.time;
+      }
     } else if (name === "SUMMARY") {
       cur.title = unescapeIcs(value);
     } else if (name === "DESCRIPTION") {
@@ -120,7 +138,27 @@ const KIND_ALIAS: Record<string, EventKind> = {
   holiday: "holiday",
   개인: "personal",
   personal: "personal",
+  이벤트: "event",
+  행사: "event",
+  event: "event",
+  학회: "conference",
+  컨퍼런스: "conference",
+  conference: "conference",
 };
+
+/**
+ * 시간 칸을 읽는다 — `09:00` 또는 `09:00~10:00` (`-`, `–` 도 됨).
+ *
+ * 열을 새로 만들지 않고 **한 칸 안에서 범위를 받는다.** 열을 늘리면 이미 쓰던
+ * `날짜,제목,종류,시간,메모` 파일이 메모 자리를 잃는다.
+ */
+function parseTimeCell(raw: string | undefined): { time?: string; endTime?: string } {
+  const v = (raw ?? "").trim();
+  if (!v) return {};
+  const [a, b] = v.split(/\s*[~\-–]\s*/);
+  const ok = (s: string | undefined) => (s && /^\d{1,2}:\d{2}$/.test(s) ? s : undefined);
+  return { time: ok(a), endTime: ok(a) ? ok(b) : undefined };
+}
 
 /**
  * CSV 파싱. 헤더는 있어도 없어도 되고, 열 순서는
@@ -141,7 +179,7 @@ export function parseCsv(text: string, source: string, defaultKind: EventKind = 
     );
     if (cells.length < 2) continue;
 
-    const [rawDate, title, rawKind, time, memo] = cells;
+    const [rawDate, title, rawKind, rawTime, memo, rawEnd] = cells;
     // 헤더 줄 건너뛰기
     if (/^(date|날짜)$/i.test(rawDate)) continue;
 
@@ -151,11 +189,14 @@ export function parseCsv(text: string, source: string, defaultKind: EventKind = 
     const date = `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
     if (!title) continue;
 
+    const { time, endTime } = parseTimeCell(rawTime);
     out.push({
       date,
       title,
       kind: KIND_ALIAS[(rawKind ?? "").toLowerCase()] ?? defaultKind,
-      time: time && /^\d{1,2}:\d{2}$/.test(time) ? time : undefined,
+      time,
+      // 여섯째 칸을 종료 시각으로도 받는다 — 시간 칸에 `~` 로 적는 쪽이 기본
+      endTime: endTime ?? parseTimeCell(rawEnd).time,
       memo: memo || undefined,
       source,
     });

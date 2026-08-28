@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { removePref, setPref } from "../prefs";
 import { api, type ParsedEvent, type VisionModelOption } from "../api";
+import { kindMeta, KIND_ORDER } from "../calendarKinds";
 
 /**
  * 이미지에서 일정 가져오기.
@@ -12,12 +13,6 @@ import { api, type ParsedEvent, type VisionModelOption } from "../api";
  * 그래서 뽑기 → 확인(체크 해제로 제외) → 추가, 세 단계로 나눴다.
  */
 
-const KIND_LABEL: Record<string, string> = {
-  market: "증시 일정",
-  earnings: "실적 발표",
-  holiday: "휴장일",
-  personal: "개인 일정",
-};
 
 const PROVIDER_LABEL: Record<string, string> = {
   gemini: "Gemini",
@@ -222,9 +217,9 @@ export function CalendarImageImport({ onImported }: { onImported?: () => void })
                   value={e.kind}
                   onChange={(ev) => patch(i, { kind: ev.target.value })}
                 >
-                  {Object.entries(KIND_LABEL).map(([k, label]) => (
+                  {KIND_ORDER.map((k) => (
                     <option key={k} value={k}>
-                      {label}
+                      {kindMeta(k).icon} {kindMeta(k).label}
                     </option>
                   ))}
                 </select>

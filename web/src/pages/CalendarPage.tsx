@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type CalendarEvent, type EventKind } from "../api";
+import { guessKind, kindMeta, KIND_ORDER, span, timeText, toHhmm, toMin } from "../calendarKinds";
 import { DartTodayPanel } from "../components/DartTodayPanel";
 import { CalendarImageImport } from "../components/CalendarImageImport";
 import { EconomicCalendarCard } from "../components/EconomicCalendarCard";
@@ -10,14 +11,35 @@ import { RefreshBar } from "../components/RefreshBar";
  * 구글 연동은 나중에 iCal 읽기 전용으로 붙일 예정이라 지금은 직접 입력만 다룬다.
  */
 
-const KIND_LABEL: Record<EventKind, string> = {
-  market: "증시",
-  earnings: "실적",
-  holiday: "휴장",
-  personal: "개인",
-};
-
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+/** 일정 하나를 칩으로 — 글머리·시각을 한 곳에서 붙인다 (2026-08-28) */
+function Chip({
+  e,
+  onOpen,
+  showTime = true,
+}: {
+  e: CalendarEvent;
+  onOpen: (e: CalendarEvent) => void;
+  showTime?: boolean;
+}) {
+  const meta = kindMeta(e.kind);
+  return (
+    <span
+      className={`cal-chip ${e.kind}${e.todo && e.done ? " done" : ""}`}
+      title={`${timeText(e)} ${e.title}${e.memo ? ` — ${e.memo}` : ""} (눌러서 자세히)`}
+      onClick={(ev) => {
+        ev.stopPropagation(); // 날짜 선택까지 겹치지 않게
+        onOpen(e);
+      }}
+    >
+      {showTime && e.time && <i className="cal-chip-time">{timeText(e)}</i>}
+      <i className="cal-chip-icon">{e.todo ? (e.done ? "✅" : "☐") : meta.icon}</i>
+      {e.repeat ? "↻" : ""}
+      {e.title}
+    </span>
+  );
+}
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -38,6 +60,168 @@ function buildGrid(cursor: Date): (Date | null)[] {
   }
   while (cells.length % 7 !== 0) cells.push(null);
   return cells;
+}
+
+const HOUR_PX = 34;
+
+/**
+ * 시간표에 그릴 시각 범위 [시작시, 끝시].
+ *
+ * ⚠️ **고정 6~22시가 아니다** (2026-08-28). 그 시절엔 새벽 3시 FOMC 나 밤 11시
+ * 일정이 시간표에서 통째로 사라졌다 — 넣긴 넣었는데 화면에 없으니 지워진 줄 안다.
+ * 기본은 장 시간을 넉넉히 덮는 7~20시고, 그 밖의 일정이 있으면 **그만큼만 넓힌다.**
+ */
+function hourRange(events: CalendarEvent[]): [number, number] {
+  let lo = 7;
+  let hi = 20;
+  for (const e of events) {
+    const s = span(e);
+    if (!s) continue;
+    lo = Math.min(lo, Math.floor(s.from / 60));
+    hi = Math.max(hi, Math.ceil(s.to / 60));
+  }
+  return [Math.max(0, lo), Math.min(24, Math.max(hi, lo + 1))];
+}
+
+/**
+ * 겹치는 일정을 나란히 세운다.
+ *
+ * 시작 순으로 훑으며 **이미 끝난 줄(lane)에 다시 앉힌다.** 완벽한 최소 lane 배치는
+ * 아니지만 하루에 겹치는 일정이 두셋인 개인 캘린더에서는 차이가 없다.
+ */
+function laneOut(list: CalendarEvent[]): { e: CalendarEvent; from: number; to: number; lane: number; lanes: number }[] {
+  const items = list
+    .map((e) => ({ e, ...span(e)! }))
+    .filter((x) => Number.isFinite(x.from))
+    .sort((a, b) => a.from - b.from || a.to - b.to);
+  const ends: number[] = [];
+  const placed = items.map((x) => {
+    let lane = ends.findIndex((end) => end <= x.from);
+    if (lane < 0) {
+      lane = ends.length;
+      ends.push(x.to);
+    } else {
+      ends[lane] = x.to;
+    }
+    return { ...x, lane };
+  });
+  /*
+   * 폭은 **겹치는 무리 안에서만** 나눈다. 하루 전체의 최대 lane 수로 나누면
+   * 아침에 겹친 두 건 때문에 저녁의 외톨이 일정까지 반쪽이 된다.
+   */
+  return placed.map((x) => ({
+    ...x,
+    lanes: Math.max(
+      1,
+      ...placed.filter((o) => o.from < x.to && x.from < o.to).map((o) => o.lane + 1),
+    ),
+  }));
+}
+
+/** 주간 시간표 (2026-08-28) — 종일 줄 + 시각 블록 */
+function WeekGrid({
+  start,
+  byDate,
+  todayStr,
+  selected,
+  onPick,
+  onSlot,
+  onOpen,
+}: {
+  start: Date;
+  byDate: Map<string, CalendarEvent[]>;
+  todayStr: string;
+  selected: string;
+  onPick: (key: string) => void;
+  onSlot: (key: string, hhmm: string) => void;
+  onOpen: (e: CalendarEvent) => void;
+}) {
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start.getTime() + i * 86400_000);
+    const key = ymd(d);
+    const list = byDate.get(key) ?? [];
+    return { d, key, dow: i, allDay: list.filter((e) => !e.time), timed: list.filter((e) => e.time) };
+  });
+  const [lo, hi] = hourRange(days.flatMap((x) => x.timed));
+  const hours = Array.from({ length: hi - lo }, (_, i) => lo + i);
+  const bodyH = hours.length * HOUR_PX;
+  const anyAllDay = days.some((x) => x.allDay.length > 0);
+
+  return (
+    <div className="calw">
+      {/* 머리줄 */}
+      <div className="calw-corner" />
+      {days.map((x) => (
+        <button
+          key={`h${x.key}`}
+          className={`calw-head${x.key === todayStr ? " today" : ""}${x.key === selected ? " selected" : ""}`}
+          onClick={() => onPick(x.key)}
+        >
+          <span className={`cal-wd${x.dow === 0 ? " sun" : x.dow === 6 ? " sat" : ""}`}>
+            {WEEKDAYS[x.dow]}
+          </span>
+          <b>{x.d.getDate()}</b>
+        </button>
+      ))}
+
+      {/* 종일 줄 — 일정이 하나도 없으면 자리를 안 차지한다 */}
+      {anyAllDay && (
+        <>
+          <div className="calw-allday-h">종일</div>
+          {days.map((x) => (
+            <div className="calw-allday" key={`a${x.key}`} onClick={() => onPick(x.key)}>
+              {x.allDay.map((e) => (
+                <Chip e={e} key={e.id} onOpen={onOpen} showTime={false} />
+              ))}
+            </div>
+          ))}
+        </>
+      )}
+
+      {/* 시각 줄 */}
+      <div className="calw-ruler" style={{ height: bodyH }}>
+        {hours.map((h) => (
+          <span className="calw-hour" key={h} style={{ height: HOUR_PX }}>
+            {String(h).padStart(2, "0")}
+          </span>
+        ))}
+      </div>
+      {days.map((x) => (
+        <div className="calw-col" key={`c${x.key}`} style={{ height: bodyH }}>
+          {/* 빈 칸을 누르면 그 시각으로 폼이 맞춰진다 */}
+          {hours.map((h) => (
+            <button
+              className="calw-slot"
+              key={h}
+              style={{ height: HOUR_PX }}
+              onClick={() => onSlot(x.key, `${String(h).padStart(2, "0")}:00`)}
+              title={`${x.key} ${String(h).padStart(2, "0")}:00 에 일정 추가`}
+            />
+          ))}
+          {laneOut(x.timed).map(({ e, from, to, lane, lanes }) => (
+            <span
+              className={`calw-ev ${e.kind}${e.todo && e.done ? " done" : ""}`}
+              key={e.id}
+              style={{
+                top: ((from - lo * 60) / 60) * HOUR_PX,
+                height: Math.max(16, ((to - from) / 60) * HOUR_PX - 2),
+                left: `${(lane / lanes) * 100}%`,
+                width: `${(1 / lanes) * 100}%`,
+              }}
+              title={`${timeText(e)} ${e.title}${e.memo ? ` — ${e.memo}` : ""}`}
+              onClick={() => onOpen(e)}
+            >
+              <i className="calw-ev-t">{timeText(e)}</i>
+              <b>
+                {e.todo ? (e.done ? "✅" : "☐") : kindMeta(e.kind).icon}
+                {e.title}
+              </b>
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** 서브탭 (2026-08-27 전면 개편) — 달력은 달력답게, 공시·가져오기는 제 방으로 */
@@ -70,8 +254,9 @@ function downloadCsvTemplate() {
     "#",
     "# 날짜 (필수) 2026-09-01 / 2026.09.01 / 20260901 다 됩니다",
     "# 제목 (필수) 짧게. 목록에 그대로 보입니다",
-    "# 종류 (선택) 증시 · 실적 · 휴장 · 개인  (비우면 개인)",
+    "# 종류 (선택) 증시 · 실적 · 휴장 · 이벤트 · 학회 · 개인  (비우면 개인)",
     "# 시간 (선택) 03:00 처럼 24시간. 비우면 종일 일정",
+    "#            09:00~10:30 처럼 물결로 끝나는 시각까지 적을 수 있습니다",
     "#            ⚠️ 한국 시각으로 적으세요 — FOMC 는 한국 새벽입니다",
     "# 메모 (선택) 쉼표가 들어가면 \"큰따옴표\"로 감싸세요",
     "#",
@@ -84,6 +269,8 @@ function downloadCsvTemplate() {
     "2026-09-17,FOMC 결과,증시,03:00,\"금리 결정, 점도표\"",
     "2026-09-30,삼성전자 3분기 잠정실적,실적,,",
     "2026-10-03,개천절 휴장,휴장,,",
+    "2026-10-14,반도체 학회 발표,학회,14:00~16:00,차세대 HBM 세션",
+    "2026-11-05,신제품 언팩,이벤트,23:00~00:00,",
   ];
   /* BOM 을 붙인다 — 엑셀이 UTF-8 을 못 알아보고 한글을 깬다 */
   const blob = new Blob([`﻿${lines.join("\n")}\n`], { type: "text/csv;charset=utf-8" });
@@ -119,6 +306,9 @@ export function CalendarPage() {
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<EventKind>("personal");
   const [time, setTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  /** 종류를 손으로 골랐나 — 골랐으면 제목을 봐도 넘겨짚지 않는다 */
+  const [kindTouched, setKindTouched] = useState(false);
   const [memo, setMemo] = useState("");
   const [repeat, setRepeat] = useState<"none" | "weekly" | "monthly" | "yearly">("none");
   const [isTodo, setIsTodo] = useState(false);
@@ -253,10 +443,26 @@ export function CalendarPage() {
   function resetForm() {
     setTitle("");
     setTime("");
+    setEndTime("");
     setMemo("");
     setRepeat("none");
     setIsTodo(false);
     setEditingId(null);
+    setKindTouched(false);
+  }
+
+  /**
+   * 제목을 치면 종류를 **넘겨짚어 미리 골라 둔다** (2026-08-28).
+   *
+   * 고칠 수 있으니 틀려도 손해가 없고, 「FOMC」를 치자마자 📈 증시가 잡혀 있으면
+   * 드롭다운을 건드릴 일이 없다. **직접 고른 뒤에는 다시 안 건드린다** —
+   * 사람이 정한 걸 기계가 되돌리면 그게 제일 짜증난다.
+   */
+  function onTitle(v: string) {
+    setTitle(v);
+    if (kindTouched || editingId) return;
+    const g = guessKind(v);
+    if (g) setKind(g);
   }
 
   /** 추가와 수정이 같은 폼을 쓴다 — editingId 가 있으면 그 일정을 고친다 */
@@ -268,6 +474,8 @@ export function CalendarPage() {
         title,
         kind,
         time: time || undefined,
+        /* 종일이면 끝 시각은 뜻이 없다. 수정에서 지울 수 있게 null 을 보낸다 */
+        endTime: time && endTime ? endTime : null,
         memo: memo || undefined,
         /* 반복과 할 일은 상호 배타. 수정에서 해제하려면 값이 실려 가야 해서 null 을 보낸다
            (undefined 는 JSON 에서 사라져 기존 값이 남는다) */
@@ -289,7 +497,9 @@ export function CalendarPage() {
     setFormDate(e.anchor ?? e.date);
     setTitle(e.title);
     setKind(e.kind);
+    setKindTouched(true); // 이미 정해진 일정이다 — 제목을 고쳐도 종류를 바꾸지 않는다
     setTime(e.time ?? "");
+    setEndTime(e.endTime ?? "");
     setMemo(e.memo ?? "");
     setRepeat(e.repeat ?? "none");
     setIsTodo(Boolean(e.todo));
@@ -464,18 +674,7 @@ export function CalendarPage() {
                   </span>
                   <span className="cal-events">
                     {list.slice(0, 3).map((e) => (
-                      <span
-                        className={`cal-chip ${e.kind}${e.todo && e.done ? " done" : ""}`}
-                        key={e.id}
-                        title={`${e.time ? `${e.time} ` : ""}${e.title} — 눌러서 자세히`}
-                        onClick={(ev) => {
-                          ev.stopPropagation(); // 날짜 선택까지 겹치지 않게
-                          setDetail(e);
-                        }}
-                      >
-                        {e.todo ? (e.done ? "✅" : "☐") : e.repeat ? "↻" : ""}
-                        {e.title}
-                      </span>
+                      <Chip e={e} key={e.id} onOpen={setDetail} showTime={false} />
                     ))}
                     {list.length > 3 && <span className="cal-more">+{list.length - 3}</span>}
                   </span>
@@ -485,47 +684,34 @@ export function CalendarPage() {
           </div>
           )}
 
-          {/* ── 주간 보기 — 7일을 한눈에. 날짜를 누르면 그날이 선택된다 ── */}
+          {/*
+            ── 주간 보기 — **시간표**로 전면 개편 (2026-08-28) ──
+
+            전에는 하루가 칩 목록 하나였다. 시각이 붙은 일정도 종일 일정과 같은 줄에
+            섞여, 「이 일정이 몇 시고 얼마나 걸리나」가 안 보였다. 짧은 일정은 다른
+            일정에 밀려 아래로 흘러가 아예 눈에 안 들어왔다.
+
+            이제 종일 줄과 시간 줄이 갈리고, 시각 일정은 **시작 위치와 길이대로 놓인
+            블록**이다. 겹치는 일정은 나란히 선다(lane).
+          */}
           {view === "week" && (
-            <div className="cal-week">
-              {Array.from({ length: 7 }, (_, i) => {
-                const d = new Date(weekStart(selected).getTime() + i * 86400_000);
-                const key = ymd(d);
-                const list = byDate.get(key) ?? [];
-                return (
-                  <button
-                    key={key}
-                    className={`cal-week-col${key === todayStr ? " today" : ""}${key === selected ? " selected" : ""}`}
-                    onClick={() => {
-                      setSelected(key);
-                      setFormDate(key);
-                    }}
-                  >
-                    <span className={`cal-wd${i === 0 ? " sun" : i === 6 ? " sat" : ""}`}>
-                      {WEEKDAYS[i]} {d.getDate()}
-                    </span>
-                    <span className="cal-week-list">
-                      {list.map((e) => (
-                        <span
-                          className={`cal-chip ${e.kind}${e.todo && e.done ? " done" : ""}`}
-                          key={e.id}
-                          title={`${e.time ? `${e.time} ` : ""}${e.title} — 눌러서 자세히`}
-                          onClick={(ev) => {
-                            ev.stopPropagation();
-                            setDetail(e);
-                          }}
-                        >
-                          {e.time && <i className="cal-chip-time">{e.time}</i>}
-                          {e.todo ? (e.done ? "✅" : "☐") : e.repeat ? "↻" : ""}
-                          {e.title}
-                        </span>
-                      ))}
-                      {list.length === 0 && <span className="cal-week-empty">—</span>}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <WeekGrid
+              start={weekStart(selected)}
+              byDate={byDate}
+              todayStr={todayStr}
+              selected={selected}
+              onPick={(key) => {
+                setSelected(key);
+                setFormDate(key);
+              }}
+              onSlot={(key, hhmm) => {
+                setSelected(key);
+                setFormDate(key);
+                setTime(hhmm);
+                setEndTime(toHhmm(Math.min(24 * 60 - 1, (Number(hhmm.slice(0, 2)) + 1) * 60)));
+              }}
+              onOpen={setDetail}
+            />
           )}
 
           {/* ── 일간 보기 — 시간 줄을 누르면 그 시간으로 입력 폼이 맞춰진다.
@@ -536,8 +722,13 @@ export function CalendarPage() {
                 const list = byDate.get(selected) ?? [];
                 const allDay = list.filter((e) => !e.time);
                 const timed = list.filter((e) => e.time);
-                const evAt = (h: number) =>
-                  timed.filter((e) => Number((e.time ?? "0").split(":")[0]) === h);
+                /*
+                 * ⚠️ 「그 시각에 **시작하는**」이 아니라 「그 시각에 **걸쳐 있는**」이다
+                 * (2026-08-28). 09:00~11:00 일정이 9시 줄에만 있으면 10시 줄을 보고
+                 * 비었다고 읽는다. 그리고 범위는 일정에 맞춰 넓힌다 — 6~22시로 묶어
+                 * 두니 새벽 3시 FOMC 가 화면에서 사라졌다.
+                 */
+                const [lo, hi] = hourRange(timed);
                 return (
                   <>
                     {allDay.length > 0 && (
@@ -545,17 +736,17 @@ export function CalendarPage() {
                         <span className="cal-day-h">종일</span>
                         <span className="cal-day-evs">
                           {allDay.map((e) => (
-                            <span className={`cal-chip ${e.kind}${e.todo && e.done ? " done" : ""}`} key={e.id}>
-                              {e.todo ? (e.done ? "✅" : "☐") : e.repeat ? "↻" : ""}
-                              {e.title}
-                            </span>
+                            <Chip e={e} key={e.id} onOpen={setDetail} showTime={false} />
                           ))}
                         </span>
                       </div>
                     )}
-                    {Array.from({ length: 17 }, (_, i) => i + 6).map((h) => {
+                    {Array.from({ length: hi - lo }, (_, i) => i + lo).map((h) => {
                       const hh = `${String(h).padStart(2, "0")}:00`;
-                      const evs = evAt(h);
+                      const evs = timed.filter((e) => {
+                        const s = span(e);
+                        return s !== null && s.from < (h + 1) * 60 && h * 60 < s.to;
+                      });
                       return (
                         <button
                           key={h}
@@ -563,6 +754,7 @@ export function CalendarPage() {
                           onClick={() => {
                             setFormDate(selected);
                             setTime(hh);
+                            setEndTime(toHhmm(Math.min(24 * 60 - 1, (h + 1) * 60)));
                           }}
                           title={`${hh} 에 일정 추가`}
                         >
@@ -570,7 +762,8 @@ export function CalendarPage() {
                           <span className="cal-day-evs">
                             {evs.map((e) => (
                               <span
-                                className={`cal-chip ${e.kind}`}
+                                /* 이어지는 줄은 흐리게 — 시작한 줄이 어디인지 보이게 */
+                                className={`cal-chip ${e.kind}${span(e)!.from < h * 60 ? " cont" : ""}`}
                                 key={e.id}
                                 title={`${e.title} — 눌러서 자세히`}
                                 onClick={(ev) => {
@@ -578,7 +771,8 @@ export function CalendarPage() {
                                   setDetail(e);
                                 }}
                               >
-                                <i className="cal-chip-time">{e.time}</i>
+                                <i className="cal-chip-time">{timeText(e)}</i>
+                                <i className="cal-chip-icon">{kindMeta(e.kind).icon}</i>
                                 {e.title}
                                 {e.memo && (
                                   <i className="cal-dayev-memo">
@@ -619,14 +813,16 @@ export function CalendarPage() {
                         title={e.done ? "다시 할 일로" : "완료"}
                       />
                     )}
-                    <span className={`cal-badge ${e.kind}`}>{KIND_LABEL[e.kind]}</span>
+                    <span className={`cal-badge ${e.kind}`}>
+                      {kindMeta(e.kind).icon} {kindMeta(e.kind).label}
+                    </span>
                     {e.repeat && (
                       <span className="cal-badge market" title="반복 일정">
                         ↻ {e.repeat === "weekly" ? "매주" : e.repeat === "monthly" ? "매월" : "매년"}
                       </span>
                     )}
                     <button className="cal-item-title link-btn" onClick={() => setDetail(e)} title="자세히 보기">
-                      {e.time && <b>{e.time} </b>}
+                      {e.time && <b>{timeText(e)} </b>}
                       {e.title}
                     </button>
                     {/* 가져온 일정(source 있음)도 고칠 수 있다 — 단 다음 동기화 때 원본으로 돌아간다 */}
@@ -659,23 +855,52 @@ export function CalendarPage() {
                 title="날짜"
               />
               <select
-                className="group-select"
+                className={`group-select cal-kind-sel ${kind}`}
                 value={kind}
-                onChange={(e) => setKind(e.target.value as EventKind)}
+                onChange={(e) => {
+                  setKind(e.target.value as EventKind);
+                  setKindTouched(true);
+                }}
               >
-                {(Object.keys(KIND_LABEL) as EventKind[]).map((k) => (
+                {KIND_ORDER.map((k) => (
                   <option key={k} value={k}>
-                    {KIND_LABEL[k]}
+                    {kindMeta(k).icon} {kindMeta(k).label}
                   </option>
                 ))}
               </select>
+            </div>
+            {/*
+              시각 (2026-08-28) — **시작과 끝**. 전에는 시작만 있어서 「몇 시부터
+              몇 시까지」를 메모에 적어야 했고, 주간 시간표에 길이를 그릴 수 없었다.
+            */}
+            <div className="ma-form-row cal-time-row">
               <input
                 className="ma-input"
                 type="time"
                 value={time}
-                onChange={(e) => setTime(e.target.value)}
-                title="시간 (비우면 종일)"
+                onChange={(e) => {
+                  setTime(e.target.value);
+                  /* 시작을 정하면 끝을 한 시간 뒤로 미리 채운다 — 대개 그게 맞다 */
+                  if (e.target.value && !endTime) {
+                    const m = toMin(e.target.value);
+                    if (m !== null) setEndTime(toHhmm(Math.min(24 * 60 - 1, m + 60)));
+                  }
+                  if (!e.target.value) setEndTime("");
+                }}
+                title="시작 시각 (비우면 종일 일정)"
               />
+              <span className="pt-n">~</span>
+              <input
+                className="ma-input"
+                type="time"
+                value={endTime}
+                disabled={!time}
+                onChange={(e) => setEndTime(e.target.value)}
+                title={time ? "끝나는 시각" : "시작 시각을 먼저 정하세요"}
+              />
+              <span className="pt-n">
+                {time ? (endTime ? "" : "끝 시각을 비우면 1시간으로 봅니다") : "종일 일정"}
+              </span>
             </div>
             <div className="ma-form-row">
               {/* 반복·할 일 (2026-08-27) — 상호 배타: 반복 할 일의 「완료」는 다른 문제다 */}
@@ -706,9 +931,9 @@ export function CalendarPage() {
             <div className="ma-form-row">
               <input
                 className="ma-input wide"
-                placeholder={isTodo ? "할 일 제목" : "일정 제목"}
+                placeholder={isTodo ? "할 일 제목" : "일정 제목 — 종류를 알아서 골라 줍니다"}
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => onTitle(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && submitEvent()}
               />
             </div>
@@ -757,7 +982,9 @@ export function CalendarPage() {
                     {e.date.slice(5).replace("-", "/")}
                     {e.time && ` ${e.time}`}
                   </span>
-                  <span className={`cal-badge ${e.kind}`}>{KIND_LABEL[e.kind]}</span>
+                  <span className={`cal-badge ${e.kind}`}>
+                      {kindMeta(e.kind).icon} {kindMeta(e.kind).label}
+                    </span>
                   <b className="cal-up-title">
                     {e.todo ? (e.done ? "✅ " : "☐ ") : e.repeat ? "↻ " : ""}
                     {e.title}
@@ -911,7 +1138,9 @@ export function CalendarPage() {
           구글 캘린더: 설정 → 내 캘린더 설정 → 캘린더 통합 → <b>비공개 주소(ICAL)</b>를 복사해
           위에 붙여넣으세요. 읽기 전용이라 이 앱에서 수정해도 구글에는 반영되지 않습니다.
           <br />
-          CSV 형식: <code>날짜,제목,종류,시간,메모</code> (예: <code>2026-08-20,FOMC,증시,03:00,새벽</code>)
+          CSV 형식: <code>날짜,제목,종류,시간,메모</code> (예:{" "}
+          <code>2026-08-20,FOMC,증시,03:00,새벽</code>). 시간 칸에{" "}
+          <code>14:00~16:00</code> 처럼 적으면 끝나는 시각까지 들어갑니다.
           <br />
           같은 파일·주소를 다시 가져오면 <b>기존 것을 지우고 새로 넣습니다</b> (중복 안 쌓임).
           직접 입력한 일정은 건드리지 않습니다.
@@ -934,7 +1163,9 @@ export function CalendarPage() {
               </button>
             </div>
             <div className="cal-pop-meta">
-              <span className={`cal-badge ${detail.kind}`}>{KIND_LABEL[detail.kind]}</span>
+              <span className={`cal-badge ${detail.kind}`}>
+                {kindMeta(detail.kind).icon} {kindMeta(detail.kind).label}
+              </span>
               {detail.repeat && (
                 <span className="cal-badge market">
                   ↻ {detail.repeat === "weekly" ? "매주" : detail.repeat === "monthly" ? "매월" : "매년"}
@@ -945,7 +1176,7 @@ export function CalendarPage() {
             </div>
             <div className="cal-pop-when">
               📅 {detail.date} ({WEEKDAYS[new Date(`${detail.date}T00:00`).getDay()]})
-              {detail.time ? ` · 🕐 ${detail.time}` : " · 종일"}
+              {detail.time ? ` · 🕐 ${timeText(detail)}` : " · 종일"}
             </div>
             {detail.memo ? (
               <div className="cal-ev-memo cal-pop-memo">{detail.memo}</div>

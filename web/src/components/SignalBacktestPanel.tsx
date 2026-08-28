@@ -57,12 +57,23 @@ function pct(v: number | null): string {
   return v === null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
 }
 
+/**
+ * 두 기준이 같은가 — 되돌리기 버튼을 죽여 둘지 판단한다.
+ * JSON 비교로 충분하다: 서버가 준 뼈대를 그대로 복사해 만지므로 키 순서가 안 흔들린다.
+ */
+function same(a: SignalConfig | null, b: SignalConfig | null): boolean {
+  return a !== null && b !== null && JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function SignalBacktestPanel({
   onSelectStock,
 }: {
   onSelectStock: (code: string, name: string) => void;
 }) {
   const [cfg, setCfg] = useState<SignalConfig | null>(null);
+  /** 지금 저장돼 있는 기준(=처음 불러온 값)과 코드가 정한 기본값 — 되돌리기용 */
+  const [saved, setSavedCfg] = useState<SignalConfig | null>(null);
+  const [defaults, setDefaults] = useState<SignalConfig | null>(null);
   const [limit, setLimit] = useState(40);
   const [days, setDays] = useState(120);
   const [res, setRes] = useState<Result | null>(null);
@@ -76,7 +87,11 @@ export function SignalBacktestPanel({
   useEffect(() => {
     api
       .signalConfig()
-      .then((r) => setCfg(r.config))
+      .then((r) => {
+        setCfg(r.config);
+        setSavedCfg(r.config);
+        setDefaults(r.defaults);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -232,7 +247,38 @@ export function SignalBacktestPanel({
               {prog.done}/{prog.total}
             </span>
           )}
+          {/*
+            되돌리기 두 가지 (2026-08-28) — **다른 두 곳으로 돌아간다.**
+            「지금 설정」은 실제로 저장돼 쓰이는 기준, 「추천 기본값」은 코드가 정한 값.
+            둘이 다를 수 있다: 예전에 저장해 둔 설정이 있으면 그게 이깁니다.
+          */}
+          <button
+            className="filter-btn"
+            onClick={() => saved && setCfg(saved)}
+            disabled={busy || !saved || same(cfg, saved)}
+            title="설정 화면에 저장돼 있는 기준으로"
+          >
+            ↺ 지금 설정
+          </button>
+          <button
+            className="filter-btn"
+            onClick={() => defaults && setCfg(defaults)}
+            disabled={busy || !defaults || same(cfg, defaults)}
+            title="코드가 정한 추천 기본값으로 (저장은 안 됩니다)"
+          >
+            ↺ 추천 기본값
+          </button>
         </div>
+        {defaults && !same(cfg, defaults) && (
+          <div className="pt-n">
+            추천 기본값과 다릅니다 — 축 가중치 기본은{" "}
+            <b>
+              추세 {defaults.axisWeights.trend} · 수급 {defaults.axisWeights.flow} · 실적{" "}
+              {defaults.axisWeights.value}
+            </b>
+            .
+          </div>
+        )}
         {error && <div className="error-banner">{error}</div>}
       </section>
 

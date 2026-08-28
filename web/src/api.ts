@@ -2183,12 +2183,21 @@ export interface StockNote {
   text: string;
 }
 
-export type EventKind = "market" | "personal" | "earnings" | "holiday";
+/** 서버 `calendar.ts` 의 EventKind 와 같아야 한다 (2026-08-28 이벤트·학회 추가) */
+export type EventKind =
+  | "market"
+  | "personal"
+  | "earnings"
+  | "holiday"
+  | "event"
+  | "conference";
 
 export interface CalendarEvent {
   id: string;
   date: string;
   time?: string;
+  /** 끝나는 시각. 없고 time 만 있으면 화면에서 한 시간짜리로 본다 */
+  endTime?: string;
   title: string;
   kind: EventKind;
   memo?: string;

@@ -12,12 +12,23 @@ const DATA_FILE = resolve(__dirname, "..", "data", "calendar.json");
  * 지금은 직접 입력만 다룬다. 저장은 로컬 JSON.
  */
 
-export type EventKind = "market" | "personal" | "earnings" | "holiday";
+/**
+ * 일정 종류.
+ *
+ * `event`(이벤트)·`conference`(학회)는 2026-08-28 에 늘렸다 — CES·GTC 같은 행사와
+ * 학회 발표가 「증시」에도 「개인」에도 안 맞았다. 둘 다 종목이 움직이는 자리라
+ * 뭉뚱그리면 달력에서 안 보인다.
+ *
+ * ⚠️ 이미 저장된 일정은 옛 넷 중 하나다. **키를 바꾸거나 지우면 안 된다.**
+ */
+export type EventKind = "market" | "personal" | "earnings" | "holiday" | "event" | "conference";
 
 export const EVENT_KINDS: { key: EventKind; label: string }[] = [
   { key: "market", label: "증시 일정" },
   { key: "earnings", label: "실적 발표" },
   { key: "holiday", label: "휴장일" },
+  { key: "event", label: "이벤트" },
+  { key: "conference", label: "학회" },
   { key: "personal", label: "개인 일정" },
 ];
 
@@ -30,6 +41,14 @@ export interface CalendarEvent {
   date: string;
   /** HH:mm — 없으면 종일 일정 */
   time?: string;
+  /**
+   * HH:mm — 끝나는 시각 (2026-08-28).
+   *
+   * 없으면 **한 시간짜리로 본다** (화면에서만. 저장은 비운 채로 둔다) — 시작만 적는
+   * 일정이 대부분이고, 길이를 0 으로 두면 주간 시간표에서 선 하나로 보여 안 읽힌다.
+   * `time` 이 없으면(종일) 이 값도 의미가 없다.
+   */
+  endTime?: string;
   title: string;
   kind: EventKind;
   memo?: string;

@@ -132,8 +132,38 @@ export function SignalConfigPanel() {
     return n;
   })();
 
+  /*
+   * **저장분이 기본값을 이긴다** — 그래서 코드에서 기본값을 바꿔도, 이미 저장해 둔
+   * 사람에게는 아무것도 안 바뀐다 (2026-08-28). 축 가중치를 1·1·1 에서 추천값으로
+   * 고쳐 놓고도 화면은 1·1·1 이라 「왜 안 바뀌지」가 됐다.
+   * 조용히 덮어쓰지는 않는다 — 일부러 맞춰 둔 값일 수도 있다. **다르다고 알리고
+   * 누르면 바뀌게** 한다.
+   */
+  const axisStale =
+    defaults !== null &&
+    (["trend", "flow", "value"] as const).some(
+      (k) => config.axisWeights[k] !== defaults.axisWeights[k],
+    );
+
   return (
     <div className="sig-config">
+      {axisStale && defaults && (
+        <div className="sig-stale">
+          지금 축 가중치는 <b>추세 {config.axisWeights.trend} · 수급 {config.axisWeights.flow} ·
+          실적 {config.axisWeights.value}</b> 로, 추천 기본값(<b>추세{" "}
+          {defaults.axisWeights.trend} · 수급 {defaults.axisWeights.flow} · 실적{" "}
+          {defaults.axisWeights.value}</b>)과 다릅니다. 저장해 둔 설정이 기본값보다 우선하기
+          때문입니다.
+          <button
+            className="filter-btn"
+            onClick={() =>
+              patch({ axisWeights: { ...defaults.axisWeights } })
+            }
+          >
+            축 가중치만 추천값으로
+          </button>
+        </div>
+      )}
       {AXIS_META.map((axis) => {
         const rows = config.checks.filter((c) => c.axis === axis.key);
         if (rows.length === 0) return null;

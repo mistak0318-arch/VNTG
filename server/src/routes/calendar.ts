@@ -54,10 +54,12 @@ export function createCalendarRouter(): Router {
 
   router.post("/", async (req, res, next) => {
     try {
-      const { date, time, title, kind, memo, repeat, todo } = req.body ?? {};
+      const { date, time, endTime, title, kind, memo, repeat, todo } = req.body ?? {};
       const events = await addEvent({
         date: String(date ?? ""),
         time: time ? String(time) : undefined,
+        /* 끝 시각은 시작이 있을 때만 뜻이 있다 — 종일 일정에 붙으면 화면이 헷갈린다 */
+        endTime: time && endTime ? String(endTime) : undefined,
         title: String(title ?? ""),
         kind: (String(kind ?? "personal") as EventKind),
         memo: memo ? String(memo) : undefined,

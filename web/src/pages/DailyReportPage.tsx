@@ -15,6 +15,7 @@ import {
   UsThemeMapSection,
 } from "../components/report/ReportSections";
 import { notifyJobStarted } from "../components/RunningJobsBar";
+import { kindMeta } from "../calendarKinds";
 import {
   api,
   type CalendarEvent,
@@ -794,7 +795,9 @@ function TodayCalendarSection() {
         <div className="rp-cal-today">
           {mine.map((e) => (
             <div className={`rp-cal-item kind-${e.kind}`} key={e.id}>
-              <span className="rp-cal-kind">{KIND_LABEL[e.kind] ?? e.kind}</span>
+              <span className="rp-cal-kind">
+                {kindMeta(e.kind).icon} {kindMeta(e.kind).label}
+              </span>
               {e.time && <span className="rp-cal-time">{e.time}</span>}
               <span className="rp-cal-title">{e.title}</span>
               {e.memo && <span className="rp-cal-memo">{e.memo}</span>}
@@ -817,9 +820,3 @@ function TodayCalendarSection() {
   );
 }
 
-const KIND_LABEL: Record<string, string> = {
-  market: "증시",
-  earnings: "실적",
-  holiday: "휴장",
-  personal: "개인",
-};
