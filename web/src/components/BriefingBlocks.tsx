@@ -312,7 +312,17 @@ export function MyThemeStrip({
   onPickTheme,
 }: {
   /** 테마를 누르면 구성종목 시트 — 보기만 하는 숫자는 죽은 숫자다 */
-  onPickTheme: (t: { kind: "custom" | "usGroup"; id: string; name: string; stocks: { code: string; name: string }[] }) => void;
+  /*
+   * ⚠️ 등락률·가격을 **여기서 떨어뜨리면 안 된다** (2026-08-28).
+   * 원본(customThemes·usWatch)엔 다 있는데 이 콜백이 code·name 만 넘겨서,
+   * 시트가 전 종목 0.00% 로 떴다 — 이미 손에 있는 값을 버리고 있었다.
+   */
+  onPickTheme: (t: {
+    kind: "custom" | "usGroup";
+    id: string;
+    name: string;
+    stocks: { code: string; name: string; price: number; changeRate: number; marketCap: number | null }[];
+  }) => void;
 }) {
   const [kr, setKr] = useState<EvaluatedTheme[] | null>(null);
   const [us, setUs] = useState<UsWatchGroup[] | null>(null);
@@ -353,7 +363,15 @@ export function MyThemeStrip({
               kind: "custom",
               id: t.id,
               name: t.name,
-              stocks: t.stocks.map((s) => ({ code: s.code, name: s.name })),
+              stocks: t.stocks
+                .filter((s) => s.found)
+                .map((s) => ({
+                  code: s.code,
+                  name: s.name,
+                  price: 0, // 내 테마 평가엔 가격이 없다 — 등락률만 있다
+                  changeRate: s.changeRate,
+                  marketCap: s.marketCap,
+                })),
             }),
         }))
       : usRows.map((g) => ({
@@ -366,7 +384,13 @@ export function MyThemeStrip({
               kind: "usGroup",
               id: g.id,
               name: g.name,
-              stocks: g.stocks.map((s) => ({ code: s.symbol, name: s.name })),
+              stocks: g.stocks.map((s) => ({
+                code: s.symbol,
+                name: s.name,
+                price: s.price ?? 0,
+                changeRate: s.changeRate ?? 0,
+                marketCap: null,
+              })),
             }),
         }));
 

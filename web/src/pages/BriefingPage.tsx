@@ -354,12 +354,14 @@ export function BriefingPage({
                 code: t.id,
                 name: t.name,
                 label: t.kind === "usGroup" ? "해외 관심종목 그룹" : "내 테마 구성종목",
+                /* 스트립이 등락률·가격까지 넘긴다 — 0 으로 채우면 시트가 전부 보합으로 뜬다 */
                 stocks: t.stocks.map((s) => ({
                   code: s.code,
                   name: s.name,
-                  price: 0,
+                  price: s.price,
                   change: 0,
-                  changeRate: 0,
+                  changeRate: s.changeRate,
+                  marketCap: s.marketCap,
                 })),
               })
             }
