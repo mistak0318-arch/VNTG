@@ -72,6 +72,57 @@ function RatioSpark({ data, mid }: { data: number[]; mid?: number }) {
   );
 }
 
+/**
+ * 체온 요약 칩 — 판 전체 없이 **한 줄**만 필요할 때 (브리핑 상황실 머리 등).
+ * ThermoPanel 도 같은 것을 쓴다 — 두 벌이면 언젠가 다른 말을 한다.
+ */
+export function ThermoChips({
+  lens,
+  showSample = false,
+}: {
+  lens: MarketLens | null;
+  showSample?: boolean;
+}) {
+  if (!lens || lens.thermo.stocks === 0) return null;
+  const t = lens.thermo;
+  const last = (a: number[]) => (a.length > 0 ? a[a.length - 1] : null);
+  const hi = last(t.series.high60);
+  const lo = last(t.series.low60);
+  return (
+    <div className="lens-chips">
+      {t.riseNow !== null && (
+        <span className="lens-chip">
+          지금 상승 <b className={t.riseNow >= 50 ? "positive" : "negative"}>{t.riseNow}%</b>
+        </span>
+      )}
+      <span className="lens-chip">
+        20일선 위{" "}
+        <b className={(last(t.series.above20) ?? 0) >= 50 ? "positive" : "negative"}>
+          {pct(last(t.series.above20), 1).replace("+", "")}
+        </b>
+        <i>어제 마감</i>
+      </span>
+      {hi !== null && lo !== null && (
+        <span className="lens-chip">
+          60일 신고−신저{" "}
+          <b className={hi - lo > 0 ? "positive" : "negative"}>
+            {hi - lo > 0 ? "+" : ""}
+            {hi - lo}
+          </b>
+          <i>
+            ▲{hi} ▼{lo}
+          </i>
+        </span>
+      )}
+      {showSample && (
+        <span className="lens-chip">
+          표본 <b>{t.stocks.toLocaleString("ko-KR")}종목</b>
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function ThermoPanel({ lens: given }: { lens?: MarketLens | null } = {}) {
   /* 이미 받아 둔 렌즈가 있으면 그걸 쓴다 — 한 화면에서 두 번 받을 이유가 없다 */
   const own = useMarketLens();
@@ -98,32 +149,7 @@ export function ThermoPanel({ lens: given }: { lens?: MarketLens | null } = {}) 
         「지금 상승」은 스냅샷(전종목·장중), 나머지는 일봉 캐시(어제 마감) 기준이라
         기준 시점이 다르다 — 칩에 그대로 적는다. 섞어 놓고 침묵하면 거짓말이 된다.
       */}
-      <div className="lens-chips">
-        {t.riseNow !== null && (
-          <span className="lens-chip">
-            지금 상승 <b className={t.riseNow >= 50 ? "positive" : "negative"}>{t.riseNow}%</b>
-          </span>
-        )}
-        <span className="lens-chip">
-          20일선 위 <b className={(last(t.series.above20) ?? 0) >= 50 ? "positive" : "negative"}>{pct(last(t.series.above20), 1).replace("+", "")}</b>
-          <i>어제 마감</i>
-        </span>
-        {hi !== null && lo !== null && (
-          <span className="lens-chip">
-            60일 신고−신저{" "}
-            <b className={hi - lo > 0 ? "positive" : "negative"}>
-              {hi - lo > 0 ? "+" : ""}
-              {hi - lo}
-            </b>
-            <i>
-              ▲{hi} ▼{lo}
-            </i>
-          </span>
-        )}
-        <span className="lens-chip">
-          표본 <b>{t.stocks.toLocaleString("ko-KR")}종목</b>
-        </span>
-      </div>
+      <ThermoChips lens={lens} showSample />
 
       <div className="lens-sparks">
         <div className="lens-spark-box">

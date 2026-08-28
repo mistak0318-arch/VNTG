@@ -10451,3 +10451,42 @@ button.tpb-row:hover { background: var(--panel-2); }
 .mo-sec-picker.on { outline: 2px solid var(--text); outline-offset: 1px; }
 .mo-sec-picker::-webkit-color-swatch-wrapper { padding: 2px; }
 .mo-sec-picker::-webkit-color-swatch { border: none; border-radius: 50%; }
+
+/* ═══════ 마켓 브리핑 — 라이브 티커 (2026-08-28 상황실 개편) ═══════
+   「오늘의 이벤트」+「VI 발동현황」 전폭 두 목록을 오른쪽 기둥의
+   고정 높이 한 칸으로. 상황실의 이벤트는 벽이 아니라 구석의 티커다. */
+.bf-ticker { margin-top: 12px; }
+.bf-ticker-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bf-ticker-h .section-heading { margin: 0; }
+.bf-ticker-modes { display: flex; gap: 4px; margin-left: auto; }
+.bf-ticker-modes .filter-btn { font-size: 0.68rem; padding: 2px 8px; }
+.bf-ticker-box {
+  max-height: 340px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 6px;
+}
+/* 한 줄짜리 — 시각·배지·이름은 제 폭, 요약이 남는 폭에서 말줄임 */
+.bf-tk {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 8px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  font: inherit;
+  font-size: 0.74rem;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.bf-tk:last-child { border-bottom: none; }
+.bf-tk:hover { background: var(--row-hover); }
+.bf-tk.watch { box-shadow: inset 2px 0 0 var(--red); }
+.bf-tk-t { flex: none; font-size: 0.66rem; color: var(--muted); font-variant-numeric: tabular-nums; width: 2.4rem; }
+.bf-tk-name { flex: none; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bf-tk-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }

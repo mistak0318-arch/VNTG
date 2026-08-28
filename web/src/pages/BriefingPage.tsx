@@ -19,7 +19,7 @@ import {
   WatchHeatGrid,
 } from "../components/BriefingBlocks";
 import { RefreshBar } from "../components/RefreshBar";
-import { RotationStrip } from "../components/MarketLensPanel";
+import { RotationStrip, ThermoChips, useMarketLens } from "../components/MarketLensPanel";
 import { useSection } from "../useSection";
 
 /**
@@ -271,19 +271,14 @@ export function BriefingPage({
     usMajor.refresh();
     flow.refresh();
     themes.refresh();
+    reloadLens();
     loadOwn();
   };
 
   /* (타일 크기는 균등 격자로 바뀌어 시총 비례 계산이 필요 없어졌다 — 2026-08-26) */
 
-  /*
-   * VI 는 하루 수백 건이라 타임라인을 도배한다 — 공시·시그널·손절이 밀려나
-   * 정작 드문(=값있는) 이벤트가 안 보였다. VI 만 떼어 **맨 아래 자기 칸**으로 보낸다.
-   */
-  const mainEvents = events === null ? null : events.filter((e) => e.kind !== "vi");
-  const viEvents = events?.filter((e) => e.kind === "vi") ?? [];
-
-  const watchCount = mainEvents?.filter((e) => e.watch).length ?? 0;
+  /* 체온 칩 + 로테이션이 같은 렌즈를 나눠 본다 — 한 번만 받는다 */
+  const { lens, reload: reloadLens } = useMarketLens();
 
   return (
     <div className="bf">
@@ -295,6 +290,8 @@ export function BriefingPage({
         <RefreshBar onRefresh={refreshAll} updatedAt={indices.updatedAt} />
       </div>
       <Thermometer indices={indices.data} global={global.data} usMajor={usMajor.data} />
+      {/* 체온 한 줄 (2026-08-28 상황실 개편) — 지수 다음 물음 「종목들은 어떤가」 */}
+      <ThermoChips lens={lens} />
 
       {/*
         AI 한 줄 — **지수 박스 바로 아래**(2026-08-26 사용자 요청). 오른쪽 기둥에
@@ -348,7 +345,7 @@ export function BriefingPage({
             주도가 이어지는지, 새 주자가 들어왔는지, 주도가 쉬는지. 판 전체는
             시장 흐름 분석 > 테마 로테이션에 있다.
           */}
-          <RotationStrip onSelectStock={onSelectStock} />
+          <RotationStrip lens={lens} onSelectStock={onSelectStock} />
           <MyThemeStrip
             onPickTheme={(t) =>
               setConstituent({
@@ -369,61 +366,22 @@ export function BriefingPage({
           />
         </section>
 
-        {/* 우: [4] 히트맵 + [6] AI */}
+        {/* 우: [4] 히트맵 + 라이브 티커 */}
         <section className="bf-col bf-right">
           <h3 className="section-heading">관심종목</h3>
           {/* 본문은 보드 블록과 공용 (BriefingBlocks) */}
           <WatchHeatGrid heat={heat} onSelectStock={onSelectStock} />
+
+          {/*
+            라이브 티커 (2026-08-28 상황실 개편) — 「오늘의 이벤트」와 「VI 발동현황」
+            두 전폭 목록을 **하나의 고정 높이 칸**으로 합쳤다.
+            둘이 화면 절반을 먹었는데 실제로는 훑지도 않았다 — 상황실의 이벤트는
+            벽 하나를 차지하는 게 아니라 구석의 티커다. 기본은 「중요」(내 종목 전부 +
+            VI 아닌 이벤트)만: VI 는 하루 수백 건이라 켜 두면 나머지가 파묻힌다.
+          */}
+          <LiveTicker events={events} eventDay={eventDay} onSelectStock={onSelectStock} />
         </section>
       </div>
-
-      {/*
-        [2] 오늘의 이벤트 — **VI 발동 바로 위**(2026-08-26 사용자 요청).
-        가운데 기둥이었을 땐 수급·관심종목이 옆으로 밀렸다. 이벤트는 시간순으로
-        길게 쌓이는 목록이라 전체 폭 + 자체 스크롤이 맞다.
-      */}
-      <section className="bf-events">
-        <h3 className="section-heading">
-          오늘의 이벤트
-          {/* 자정을 넘어 오늘 로그가 아직 없으면 마지막 장일 것을 보여준다 — 어느 날인지 명시 */}
-          {eventDay &&
-            eventDay !== new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10) && (
-              <i className="pt-n"> ({eventDay.slice(5).replace("-", "/")} 장)</i>
-            )}
-          {watchCount > 0 && <i className="bf-watch-count">내 종목 {watchCount}건</i>}
-        </h3>
-        {mainEvents === null ? (
-          <div className="empty">불러오는 중…</div>
-        ) : mainEvents.length === 0 ? (
-          <div className="empty">
-            아직 잡힌 이벤트가 없습니다 — 공시·알림이 발생하면 여기 시간순으로 쌓입니다.
-          </div>
-        ) : (
-          <div className="bf-timeline">
-            {mainEvents.map((e, i) => (
-              <button
-                key={`${e.t}-${e.code ?? e.name}-${i}`}
-                className={`bf-event${e.watch ? " watch" : ""}`}
-                onClick={() => {
-                  if (e.code) onSelectStock(e.code, e.name);
-                  else if (e.link) window.open(e.link, "_blank", "noopener");
-                }}
-                title={e.code ? "눌러서 종목 상세" : e.link ? "눌러서 원문" : undefined}
-              >
-                <span className="bf-event-t pt-n">{/^\d{2}:\d{2}$/.test(e.t) ? e.t : ""}</span>
-                <span className={`bf-badge ${BADGE_CLASS[e.kind] ?? "bf-badge-gray"}`}>
-                  {e.badge}
-                </span>
-                <span className="bf-event-body">
-                  <b>{e.name}</b>
-                  <span className="bf-event-sum">{e.summary}</span>
-                  {e.source && <i className="bf-event-src">{e.source}</i>}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
 
       {constituent && (
         <ConstituentSheet
@@ -436,39 +394,94 @@ export function BriefingPage({
         />
       )}
 
-      {/*
-        VI 발동현황 — **맨 아래**다(사용자 요청). 건수가 많고 대부분은 스치는 값이라
-        위에 두면 화면을 다 먹는다. 내 종목(빨간 테두리)만 훑으면 된다.
-        없으면 칸 자체를 안 그린다.
-      */}
-      {viEvents.length > 0 && (
-        <section className="bf-vi">
-          <h3 className="section-heading">
-            VI 발동현황 <i className="pt-n">{viEvents.length}건</i>
-          </h3>
-          <div className="bf-timeline">
-            {viEvents.map((e, i) => (
-              <button
-                key={`${e.t}-${e.code ?? e.name}-${i}`}
-                className={`bf-event${e.watch ? " watch" : ""}`}
-                onClick={() => {
-                  if (e.code) onSelectStock(e.code, e.name);
-                }}
-                title="눌러서 종목 상세"
-              >
-                <span className="bf-event-t pt-n">{/^\d{2}:\d{2}$/.test(e.t) ? e.t : ""}</span>
-                <span className={`bf-badge ${BADGE_CLASS[e.kind] ?? "bf-badge-gray"}`}>
-                  {e.badge}
-                </span>
-                <span className="bf-event-body">
-                  <b>{e.name}</b>
-                  <span className="bf-event-sum">{e.summary}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
+  );
+}
+
+/* ── 라이브 티커 — 이벤트 + VI 를 한 칸에 (2026-08-28 상황실 개편) ── */
+
+function LiveTicker({
+  events,
+  eventDay,
+  onSelectStock,
+}: {
+  events: BriefingEvent[] | null;
+  eventDay: string | null;
+  onSelectStock: (code: string, name: string) => void;
+}) {
+  /*
+   * 「중요」가 기본이다 — 내 종목에서 일어난 건 종류 불문 전부, 나머지는 VI 를 뺀
+   * 드문 이벤트(공시·시그널·손절·체결강도·채널)만. VI 는 하루 수백 건이라
+   * 켜 두면 값있는 것이 파묻힌다. 다 보고 싶은 날만 「전체」를 누른다.
+   */
+  const [mode, setMode] = useState<"key" | "watch" | "all">("key");
+
+  const rows =
+    events === null
+      ? null
+      : events.filter((e) =>
+          mode === "all" ? true : mode === "watch" ? e.watch : e.watch || e.kind !== "vi",
+        );
+  const watchCount = events?.filter((e) => e.watch).length ?? 0;
+  const viCount = events?.filter((e) => e.kind === "vi").length ?? 0;
+
+  return (
+    <section className="bf-ticker">
+      <div className="bf-ticker-h">
+        <h3 className="section-heading">
+          라이브
+          {eventDay &&
+            eventDay !== new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10) && (
+              <i className="pt-n"> ({eventDay.slice(5).replace("-", "/")} 장)</i>
+            )}
+        </h3>
+        <span className="bf-ticker-modes">
+          {(
+            [
+              { key: "key", label: "중요" },
+              { key: "watch", label: `⭐ 내 종목${watchCount > 0 ? ` ${watchCount}` : ""}` },
+              { key: "all", label: `전체${viCount > 0 ? ` (VI ${viCount})` : ""}` },
+            ] as const
+          ).map((m) => (
+            <button
+              key={m.key}
+              className={`filter-btn${mode === m.key ? " active" : ""}`}
+              onClick={() => setMode(m.key)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </span>
+      </div>
+
+      {rows === null ? (
+        <div className="empty">불러오는 중…</div>
+      ) : rows.length === 0 ? (
+        <div className="empty">
+          {mode === "watch"
+            ? "내 종목에는 아직 이벤트가 없습니다."
+            : "아직 잡힌 이벤트가 없습니다 — 공시·VI·알림이 생기면 여기 쌓입니다."}
+        </div>
+      ) : (
+        <div className="bf-ticker-box">
+          {rows.map((e, i) => (
+            <button
+              key={`${e.t}-${e.code ?? e.name}-${i}`}
+              className={`bf-tk${e.watch ? " watch" : ""}`}
+              onClick={() => {
+                if (e.code) onSelectStock(e.code, e.name);
+                else if (e.link) window.open(e.link, "_blank", "noopener");
+              }}
+              title={`${e.name} — ${e.summary}${e.code ? " (눌러서 종목 상세)" : ""}`}
+            >
+              <span className="bf-tk-t">{/^\d{2}:\d{2}$/.test(e.t) ? e.t : "—"}</span>
+              <span className={`bf-badge ${BADGE_CLASS[e.kind] ?? "bf-badge-gray"}`}>{e.badge}</span>
+              <b className="bf-tk-name">{e.name}</b>
+              <span className="bf-tk-sum">{e.summary}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
