@@ -121,6 +121,8 @@ export function SignalPanel({
   const [target, setTarget] = useState<ConstituentTarget | null>(null);
   /** 네이버 테마 고르기 — 한 종목이 여럿에 얽혀 있어 먼저 고르게 한다 */
   const [themePick, setThemePick] = useState(false);
+  /** ETF 뒷배 고르기 — 상위 셋 중 어느 ETF 를 열지 */
+  const [etfPick, setEtfPick] = useState(false);
 
   async function load(force = false) {
     setLoading(true);
@@ -207,6 +209,18 @@ export function SignalPanel({
               >
                 {c.value} ›
               </button>
+            ) : c.key === "etfBacking" && (c.etfs?.length ?? 0) > 0 ? (
+              /*
+                ETF 뒷배도 누른다 (2026-08-28 — 「테마는 되는데 ETF 는 안 됐다」).
+                상위 셋을 목록으로 펼치고, 하나를 고르면 그 ETF 가 종목으로 열린다.
+              */
+              <button
+                className="sig-value sig-link"
+                onClick={() => setEtfPick(true)}
+                title="담고 있는 ETF 셋 보기 — 눌러서 각 ETF 열기"
+              >
+                {c.value} ›
+              </button>
             ) : c.link ? (
               <button
                 className="sig-value sig-link"
@@ -239,6 +253,49 @@ export function SignalPanel({
             setTarget({ kind: "theme", code: key, name });
           }}
         />
+      )}
+
+      {/* ETF 뒷배 목록 — 테마 픽커와 같은 문법. ETF 는 그 자체가 종목이라 바로 연다 */}
+      {etfPick && (
+        <div className="overlay" onClick={() => setEtfPick(false)}>
+          <div className="sheet tpk-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-header">
+              <h2>담고 있는 ETF</h2>
+              <button className="close-btn" onClick={() => setEtfPick(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="tpk-list">
+              {(data.checks.find((c) => c.key === "etfBacking")?.etfs ?? []).map((e) => (
+                <button
+                  className="tpk-row"
+                  key={e.code}
+                  onClick={() => {
+                    setEtfPick(false);
+                    onSelectStock?.(e.code, e.name);
+                  }}
+                  title="이 ETF 를 종목으로 열기"
+                >
+                  <span className="tpk-name">{e.name}</span>
+                  <b
+                    className={`num ${(e.changeRate ?? 0) > 0 ? "positive" : (e.changeRate ?? 0) < 0 ? "negative" : ""}`}
+                  >
+                    {e.changeRate === null
+                      ? "—"
+                      : `${e.changeRate > 0 ? "+" : ""}${e.changeRate.toFixed(2)}%`}
+                  </b>
+                  <span className="pt-n tpk-sub">
+                    이 종목 비중 {e.weight === null ? "?" : `${e.weight.toFixed(1)}%`}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="table-note">
+              단일종목·레버리지·지수(200/150)·커버드콜은 뺀, <b>테마로 담은 ETF</b> 상위
+              셋입니다. 누르면 그 ETF 가 종목으로 열립니다 — 구성종목은 ETF 탭에서 보세요.
+            </div>
+          </div>
+        </div>
       )}
 
       {target && (

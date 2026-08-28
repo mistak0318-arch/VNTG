@@ -647,6 +647,11 @@ export interface CheckResult {
   value: string;
   /** 눌러서 더 볼 수 있는 대상 (섹터 강세 → 업종 구성종목) */
   link?: { kind: "sector" | "theme"; code: string; name: string };
+  /**
+   * ETF 뒷배의 상위 셋 (2026-08-28) — 화면이 목록으로 펼쳐 **각 ETF 를 눌러 열게**.
+   * value 문자열에도 이름이 있지만 그건 사람이 읽는 것이고, 이건 기계가 여는 것이다.
+   */
+  etfs?: { code: string; name: string; weight: number | null; changeRate: number | null }[];
   weight: number;
 }
 
@@ -902,6 +907,7 @@ export async function evaluateSignal(
     /** 판단 불가면 null 로 남긴다 — 데이터가 없다고 감점하면 억울하다 */
     let g: number | null = null;
     let link: CheckResult["link"];
+    let etfs: CheckResult["etfs"];
     let value = "-";
 
     if (c.key === "trend") {
@@ -1120,6 +1126,13 @@ export async function evaluateSignal(
       if (top.length > 0) {
         const avg = top.reduce((n, h) => n + (h.changeRate ?? 0), 0) / top.length;
         g = grade(avg, c);
+        /* 화면이 목록으로 펼쳐 각 ETF 를 연다 (2026-08-28 — 테마는 되는데 ETF 는 안 됐다) */
+        etfs = top.map((h) => ({
+          code: h.code,
+          name: h.name,
+          weight: h.weight,
+          changeRate: h.changeRate,
+        }));
         value =
           `${avg > 0 ? "+" : ""}${avg.toFixed(2)}% · ` +
           top
@@ -1164,7 +1177,7 @@ export async function evaluateSignal(
      * 통과/미달 목록에 그대로 들어가기 때문이다.
      */
     const pass = g === null ? null : c.axis === "risk" ? g < 50 : g >= 50;
-    checks.push({ key: c.key, label: c.label, axis: c.axis, grade: g, pass, value, weight: c.weight, link });
+    checks.push({ key: c.key, label: c.label, axis: c.axis, grade: g, pass, value, weight: c.weight, link, etfs });
   }
 
   // ---- 축별 점수 ----

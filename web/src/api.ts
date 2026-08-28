@@ -2131,6 +2131,8 @@ export interface SignalCheck {
   value: string;
   weight: number;
   link?: { kind: "sector" | "theme"; code: string; name: string };
+  /** ETF 뒷배 — 상위 셋. 눌러서 각 ETF 를 연다 (2026-08-28) */
+  etfs?: { code: string; name: string; weight: number | null; changeRate: number | null }[];
 }
 
 export interface SignalAxisResult {
