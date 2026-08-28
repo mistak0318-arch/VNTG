@@ -912,30 +912,16 @@ export const api = {
    * 신호등 백테스트 — 기준을 바꿔 과거를 다시 매긴다. **저장하지 않는다.**
    * 일봉으로 되살릴 수 있는 기준만 쓴다(테마·ETF·수급·재무는 그때의 구성을 모른다).
    */
+  /** 백그라운드 시작 (2026-08-28) — 결과는 /result 를 폴링해서 받는다 */
   signalBacktest: (body: { limit: number; days: number; config: SignalConfig }) =>
-    postJson<{
-      used: string[];
-      skipped: string[];
-      days: number;
-      codes: number;
-      rows: {
-        date: string;
-        code: string;
-        name: string;
-        score: number;
-        close: number;
-        d1: number | null;
-        d5: number | null;
-        d20: number | null;
-      }[];
-      green: BacktestSummary;
-      base: BacktestSummary;
-      /** 점수대별 — 위 칸이 아래 칸보다 잘 갔는지가 기준이 맞는지를 증명한다 */
-      buckets: { label: string; from: number; to: number; s: BacktestSummary }[];
-      note: string;
-    }>("/api/signal/backtest", body),
+    postJson<{ started: boolean }>("/api/signal/backtest", body),
   signalBacktestProgress: () =>
     getJson<{ done: number; total: number; running: boolean }>("/api/signal/backtest/progress"),
+  /** 마지막 결과 — 탭을 떠났다 돌아와도 그대로 (서버 재시작이면 없다) */
+  signalBacktestResult: () =>
+    getJson<{ result: SignalBacktestResult | null; at: string; error?: string }>(
+      "/api/signal/backtest/result",
+    ),
   notes: (code: string) => getJson<{ name: string; notes: StockNote[] }>(`/api/notes/${code}`),
   notesRecent: (limit = 30) =>
     getJson<{ items: { code: string; name: string; note: StockNote }[] }>(
@@ -1687,6 +1673,29 @@ export interface BacktestSummary {
   d1: { avg: number | null; win: number | null };
   d5: { avg: number | null; win: number | null };
   d20: { avg: number | null; win: number | null };
+}
+
+/** 신호등 백테스트 결과 — 서버 signalBacktest.ts 와 같은 모양 */
+export interface SignalBacktestResult {
+  used: string[];
+  skipped: string[];
+  days: number;
+  codes: number;
+  rows: {
+    date: string;
+    code: string;
+    name: string;
+    score: number;
+    close: number;
+    d1: number | null;
+    d5: number | null;
+    d20: number | null;
+  }[];
+  green: BacktestSummary;
+  base: BacktestSummary;
+  /** 점수대별 — 위 칸이 아래 칸보다 잘 갔는지가 기준이 맞는지를 증명한다 */
+  buckets: { label: string; from: number; to: number; s: BacktestSummary }[];
+  note: string;
 }
 
 export interface SuperSeriesPoint {

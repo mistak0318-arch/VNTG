@@ -224,6 +224,36 @@ let progress = { done: 0, total: 0 };
 export const backtestProgress = () => ({ ...progress, running });
 
 /**
+ * 백그라운드 잡 (2026-08-28) — **요청이 결과를 기다리지 않는다.**
+ *
+ * 150종목 × 220ms 면 30초가 넘는데, 그동안 요청 하나가 붙잡혀 있었고
+ * **페이지를 떠나면 결과를 통째로 잃었다** — 돌아와도 다시 돌려야 한다.
+ * 신호등 찾기(signalScreen)와 같은 꼴로 바꾼다: 시작 → 즉시 응답 →
+ * 진행 폴링 → 끝나면 결과 조회. 마지막 결과는 메모리에 남아, 탭을 떠났다
+ * 돌아와도 그대로 있다 (서버 재시작이면 사라진다 — 백테스트는 다시 돌리면 된다).
+ */
+let lastResult: { result: BacktestResult; at: string; error?: never } | { result?: never; at: string; error: string } | null = null;
+
+export function backtestResult() {
+  return lastResult ?? { result: null, at: "" };
+}
+
+export function startBacktestJob(
+  client: KiwoomClient,
+  opts: { codes: { code: string; name: string }[]; days?: number; config?: Partial<SignalConfig> },
+): { started: boolean } {
+  if (running) return { started: false }; // 하나면 된다 — 겹치면 키움 한도가 터진다
+  void runSignalBacktest(client, opts)
+    .then((result) => {
+      lastResult = { result, at: new Date().toISOString() };
+    })
+    .catch((err) => {
+      lastResult = { error: err instanceof Error ? err.message : "실패했습니다", at: new Date().toISOString() };
+    });
+  return { started: true };
+}
+
+/**
  * 돌린다.
  *
  * 종목마다 일봉 한 번(600봉 안팎)이라 100종목이면 100콜, 초당 5건 제한으로 20초쯤이다.

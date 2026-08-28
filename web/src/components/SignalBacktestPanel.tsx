@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, signClass, type SignalConfig } from "../api";
 
 /**
@@ -95,29 +95,52 @@ export function SignalBacktestPanel({
       .catch(() => undefined);
   }, []);
 
+  /*
+   * **백그라운드 잡** (2026-08-28) — 전에는 요청 하나가 30초 넘게 붙잡혀 있었고,
+   * 다른 메뉴에 갔다 오면 결과가 없었다. 이제 시작만 걸고 진행을 폴링하다가,
+   * 끝나면 결과를 받아 온다. **탭에 들어올 때도 같은 폴링을 한 번 돈다** — 돌던 게
+   * 있으면 이어받고, 지난 결과가 있으면 그대로 보여 준다 (신호등 찾기와 같은 꼴).
+   */
+  const pull = useCallback(async () => {
+    try {
+      const p = await api.signalBacktestProgress();
+      if (p.running) {
+        setBusy(true);
+        setProg(p);
+        return;
+      }
+      setProg(null);
+      const r = await api.signalBacktestResult();
+      if (r.error) setError(r.error);
+      else if (r.result) setRes(r.result);
+      setBusy(false);
+    } catch {
+      /* 다음 폴링에서 다시 */
+    }
+  }, []);
+
+  useEffect(() => {
+    void pull(); // 탭 진입 — 돌던 잡 이어받기 + 지난 결과 복원
+  }, [pull]);
+
   useEffect(() => {
     if (!busy) return;
-    const t = setInterval(() => {
-      api
-        .signalBacktestProgress()
-        .then((p) => setProg(p.running ? p : null))
-        .catch(() => undefined);
-    }, 1500);
+    const t = setInterval(() => void pull(), 1500);
     return () => clearInterval(t);
-  }, [busy]);
+  }, [busy, pull]);
 
   async function run() {
     if (!cfg) return;
-    setBusy(true);
     setError(null);
     try {
       setPick(null); // 새로 돌리면 펼쳐 둔 구간은 닫는다 — 옛 결과가 남으면 헷갈린다
-      setRes(await api.signalBacktest({ limit, days, config: cfg }));
+      const r = await api.signalBacktest({ limit, days, config: cfg });
+      if (!r.started) {
+        setError("이미 돌고 있습니다 — 끝나면 결과가 여기 뜹니다.");
+      }
+      setBusy(true); // 폴링을 켠다 — 이미 돌던 것이든 방금 건 것이든 이어받는다
     } catch (e) {
       setError(e instanceof Error ? e.message : "실패했습니다");
-    } finally {
-      setBusy(false);
-      setProg(null);
     }
   }
 
@@ -242,9 +265,9 @@ export function SignalBacktestPanel({
           <button className="filter-btn active" onClick={() => void run()} disabled={busy}>
             {busy ? "돌리는 중…" : "돌리기"}
           </button>
-          {prog && (
+          {busy && (
             <span className="pt-n">
-              {prog.done}/{prog.total}
+              백그라운드로 돕니다 — 다른 메뉴에 갔다 와도 됩니다
             </span>
           )}
           {/*
@@ -277,6 +300,20 @@ export function SignalBacktestPanel({
               {defaults.axisWeights.value}
             </b>
             .
+          </div>
+        )}
+        {/* 진행바 — 신호등 찾기와 같은 문법. 몇 종목째인지가 바로 보인다 */}
+        {busy && prog && prog.total > 0 && (
+          <div className="sbt-progress">
+            <div className="progress-bar">
+              <div
+                className="progress-bar-fill"
+                style={{ width: `${Math.round((prog.done / prog.total) * 100)}%` }}
+              />
+            </div>
+            <span className="pt-n">
+              {prog.done}/{prog.total} 종목
+            </span>
           </div>
         )}
         {error && <div className="error-banner">{error}</div>}

@@ -21,7 +21,7 @@ import {
 } from "../superSignal.js";
 import { gradeSignalHistory, signalDays } from "../signalHistory.js";
 import { themeSeriesFor } from "../themeSeries.js";
-import { backtestProgress, runSignalBacktest } from "../signalBacktest.js";
+import { backtestProgress, backtestResult, startBacktestJob } from "../signalBacktest.js";
 import { tradeValueTop } from "../signalScreen.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
@@ -253,13 +253,17 @@ export function createSignalRouter(client: KiwoomClient): Router {
    * 설정은 **저장하지 않는다** — 조절해 보는 자리라 지금 쓰는 기준을 건드리면 안 된다.
    * 모집단은 거래대금 상위 N 종목이다: 실제로 살 수 있는 자리에서만 재야 뜻이 있다.
    */
+  /*
+   * **백그라운드로 돈다** (2026-08-28). 30초 넘게 요청을 붙잡고 있었고, 페이지를
+   * 떠나면 결과를 잃었다. 시작 → 즉시 응답, 진행은 /progress, 결과는 /result.
+   */
   router.post("/backtest", async (req, res, next) => {
     try {
       const body = req.body as { limit?: number; days?: number; config?: Partial<SignalConfig> };
       const limit = Math.min(Math.max(Number(body.limit) || 40, 5), 150);
       const top = await tradeValueTop(client, "000", limit);
       const codes = top.map((t) => ({ code: t.code, name: t.name }));
-      res.json(await runSignalBacktest(client, { codes, days: body.days, config: body.config }));
+      res.json(startBacktestJob(client, { codes, days: body.days, config: body.config }));
     } catch (err) {
       next(err);
     }
@@ -267,6 +271,11 @@ export function createSignalRouter(client: KiwoomClient): Router {
 
   router.get("/backtest/progress", (_req, res) => {
     res.json(backtestProgress());
+  });
+
+  /** 마지막 결과 — 탭을 떠났다 돌아와도 그대로 있다 (메모리라 서버 재시작이면 없다) */
+  router.get("/backtest/result", (_req, res) => {
+    res.json(backtestResult());
   });
 
   /* ---------------- 슈퍼신호등 대시보드 (2026-08-26) ---------------- */

@@ -10427,3 +10427,7 @@ button.tpb-row:hover { background: var(--panel-2); }
 
 /* 장전 카드의 미국 테마 밤사이 */
 .mrn-us-themes { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+
+/* 백테스트 진행바 — 바 + 몇 종목째 (2026-08-28 백그라운드 잡으로 바꾸며) */
+.sbt-progress { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.sbt-progress .progress-bar { flex: 1; }
