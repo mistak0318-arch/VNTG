@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,6 +16,23 @@ const DATA_FILE = resolve(__dirname, "..", "data", "memoPad.json");
  * 안 쓰게 된다(다들 그렇게 버려진다).
  */
 
+/**
+ * 붙임 파일 (2026-08-28) — 차트 캡처·리포트 PDF·설명 영상.
+ *
+ * **파일은 디스크에, 메모에는 이름표만** 둔다. 메모 JSON 에 통째로 넣으면
+ * (base64) 파일 하나에 메모 목록 전체가 무거워져서, 목록을 여는 것만으로
+ * 수십 MB 를 읽게 된다.
+ */
+export interface MemoFile {
+  id: string;
+  /** 올릴 때의 파일 이름 — 내려받을 때 이 이름으로 준다 */
+  name: string;
+  /** image/png · application/pdf · video/mp4 … */
+  mime: string;
+  size: number;
+  at: string;
+}
+
 export interface MemoEntry {
   id: string;
   /** 작성 시각 (ISO) */
@@ -28,6 +45,8 @@ export interface MemoEntry {
   tags: string[];
   /** 고정 — 목록 맨 위 */
   pinned: boolean;
+  /** 붙임 파일 — 없으면 빈 배열(옛 메모에는 이 칸이 없다) */
+  files?: MemoFile[];
 }
 
 let cache: MemoEntry[] | null = null;
@@ -134,6 +153,78 @@ export async function updateMemo(
 
 export async function removeMemo(id: string): Promise<void> {
   const rows = await load();
-  if (!rows.some((m) => m.id === id)) throw new Error("메모를 찾지 못했습니다.");
+  const memo = rows.find((m) => m.id === id);
+  if (!memo) throw new Error("메모를 찾지 못했습니다.");
+  /* 메모를 지우면 붙임 파일도 같이 지운다 — 안 그러면 주인 없는 파일이 쌓인다 */
+  for (const f of memo.files ?? []) await unlink(filePath(f.id)).catch(() => undefined);
   await persist(rows.filter((m) => m.id !== id));
+}
+
+/* ------------------------------------------------------------------ */
+/* 붙임 파일                                                            */
+/* ------------------------------------------------------------------ */
+
+const FILE_DIR = resolve(__dirname, "..", "data", "memoFiles");
+
+/**
+ * 파일이 놓이는 자리.
+ *
+ * ⚠️ **id 로만 이름을 짓는다.** 올린 이름을 그대로 쓰면 `../` 같은 것이 섞여
+ * 엉뚱한 곳에 쓸 수 있고, 한글·공백 때문에 다루기도 나쁘다. 원래 이름은 메모의
+ * 이름표에만 남겨 두고 내려받을 때 되살린다.
+ */
+function filePath(id: string): string {
+  return resolve(FILE_DIR, id.replace(/[^a-zA-Z0-9_]/g, ""));
+}
+
+/** 한 파일 25MB · 메모 하나에 20개까지 — 개인용이라 넉넉하되 무한은 아니다 */
+export const MEMO_FILE_MAX = 25 * 1024 * 1024;
+const MEMO_FILE_COUNT = 20;
+
+export async function addMemoFile(
+  memoId: string,
+  file: { name: string; mime: string; buf: Buffer },
+): Promise<MemoFile> {
+  const rows = await load();
+  const memo = rows.find((m) => m.id === memoId);
+  if (!memo) throw new Error("메모를 찾지 못했습니다.");
+  if (file.buf.length > MEMO_FILE_MAX) throw new Error("파일이 25MB 를 넘습니다.");
+  memo.files ??= [];
+  if (memo.files.length >= MEMO_FILE_COUNT) throw new Error(`한 메모에 ${MEMO_FILE_COUNT}개까지입니다.`);
+
+  const f: MemoFile = {
+    id: `mf_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+    name: file.name.slice(0, 200),
+    mime: file.mime || "application/octet-stream",
+    size: file.buf.length,
+    at: new Date().toISOString(),
+  };
+  await mkdir(FILE_DIR, { recursive: true });
+  await writeFile(filePath(f.id), file.buf);
+  memo.files.push(f);
+  memo.updatedAt = new Date().toISOString();
+  await persist(rows);
+  return f;
+}
+
+/** 내려받기·미리보기가 읽는다. 원래 이름과 형식을 같이 준다 */
+export async function readMemoFile(
+  memoId: string,
+  fileId: string,
+): Promise<{ meta: MemoFile; buf: Buffer }> {
+  const rows = await load();
+  const memo = rows.find((m) => m.id === memoId);
+  const meta = memo?.files?.find((f) => f.id === fileId);
+  if (!meta) throw new Error("파일을 찾지 못했습니다.");
+  return { meta, buf: await readFile(filePath(fileId)) };
+}
+
+export async function removeMemoFile(memoId: string, fileId: string): Promise<void> {
+  const rows = await load();
+  const memo = rows.find((m) => m.id === memoId);
+  if (!memo?.files) throw new Error("파일을 찾지 못했습니다.");
+  memo.files = memo.files.filter((f) => f.id !== fileId);
+  memo.updatedAt = new Date().toISOString();
+  await persist(rows);
+  await unlink(filePath(fileId)).catch(() => undefined);
 }

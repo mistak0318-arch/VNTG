@@ -9991,3 +9991,72 @@ button.tpb-row:hover { background: var(--panel-2); }
 .sbt-bucket.on { background: var(--panel-2); }
 .sbt-bucket.empty { opacity: 0.45; }
 .sbt-clear { margin-left: 0.5rem; font-size: 0.7rem; }
+
+/* ==================================================================
+   메모 붙임 파일 (2026-08-28) — 차트 캡처·리포트 PDF·설명 영상
+   ------------------------------------------------------------------
+   이미지는 **펴 둔다.** 파일 이름만 늘어놓으면 하나하나 내려받아 열어 봐야 하고,
+   그러면 결국 안 보게 된다 — 「그때 그 그림」을 다시 보려고 붙이는 것이다.
+   ================================================================== */
+.memo-files { margin-top: 0.5rem; }
+.memo-files.empty { padding: 0.4rem 0; }
+.memo-files-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
+
+.memo-file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 6px;
+}
+.memo-file {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+.memo-file-thumb {
+  display: block;
+  width: 100%;
+  height: 6.5rem;
+  padding: 0;
+  border: none;
+  background: var(--panel);
+  cursor: pointer;
+}
+.memo-file-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.memo-file-thumb.icon { display: grid; place-items: center; font-size: 2rem; }
+
+.memo-file-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.35rem;
+  font-size: 0.66rem;
+}
+.memo-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.memo-file-dl,
+.memo-file-x {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 2px;
+  text-decoration: none;
+  font-size: 0.8rem;
+}
+.memo-file-dl:hover { color: var(--text); }
+.memo-file-x:hover { color: var(--red); }
+
+/* 목록의 클립 배지 — 붙임이 있는 메모를 열어 보지 않고도 안다 */
+.memo-clip { font-style: normal; }
+
+/* 크게 보기 */
+.memo-viewer .sheet-header { align-items: center; }
+.memo-view-img { width: 100%; height: auto; border-radius: 8px; }
+.memo-view-vid { width: 100%; max-height: 70vh; border-radius: 8px; background: #000; }
+.memo-view-pdf { width: 100%; height: 70vh; border: none; border-radius: 8px; background: #fff; }

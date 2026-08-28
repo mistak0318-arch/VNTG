@@ -827,6 +827,28 @@ export const api = {
   memoUpdate: (id: string, patch: Partial<Pick<MemoEntry, "title" | "body" | "tags" | "pinned">>) =>
     patchJson<{ memo: MemoEntry }>(`/api/memo/${id}`, patch),
   memoRemove: (id: string) => deleteJson<{ ok: boolean }>(`/api/memo/${id}`),
+  /**
+   * 붙임 파일 올리기 — **바이너리 그대로** 보낸다(base64 는 3분의 1 부푼다).
+   * 이름은 한글·공백이 흔해 헤더에 그냥 넣으면 깨지므로 base64 로 감싼다.
+   */
+  memoFileAdd: async (id: string, file: File): Promise<{ file: MemoFile }> => {
+    const res = await fetch(`/api/memo/${id}/files`, {
+      method: "POST",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        "x-file-name": btoa(String.fromCharCode(...new TextEncoder().encode(file.name))),
+        "x-file-type": file.type || "application/octet-stream",
+      },
+      body: file,
+    });
+    if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "올리지 못했습니다");
+    return res.json() as Promise<{ file: MemoFile }>;
+  },
+  memoFileRemove: (id: string, fileId: string) =>
+    deleteJson<{ ok: boolean }>(`/api/memo/${id}/files/${fileId}`),
+  /** 미리보기·내려받기 주소 — `inline` 이면 브라우저가 열고, 아니면 받는다 */
+  memoFileUrl: (id: string, fileId: string, inline = false) =>
+    `/api/memo/${id}/files/${fileId}${inline ? "?inline=1" : ""}`,
   /** 장중 투자자별 누적 순매수 — 01 코스피 · 02 코스닥 · 03 K200선물. 시트 열 때만 */
   intradayFlow: (market: "01" | "02" | "03") =>
     getJson<{ date: string; points: IntraFlowPoint[] }>(
@@ -1127,6 +1149,15 @@ export interface SectionResult<T> {
 }
 
 /** 메모장 글 하나 — 자유 메모 + 일기 */
+/** 메모 붙임 파일 — 파일은 서버 디스크에, 여기엔 이름표만 */
+export interface MemoFile {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  at: string;
+}
+
 export interface MemoEntry {
   id: string;
   at: string;
@@ -1135,6 +1166,8 @@ export interface MemoEntry {
   body: string;
   tags: string[];
   pinned: boolean;
+  /** 옛 메모에는 이 칸이 없다 */
+  files?: MemoFile[];
 }
 
 /** 장중 투자자별 누적 순매수 한 점 — 코스피/코스닥 억원, 선물 계약 */

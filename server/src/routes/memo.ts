@@ -1,5 +1,14 @@
-import { Router } from "express";
-import { addMemo, listMemos, listMemoTags, removeMemo, updateMemo } from "../memoPad.js";
+import express, { Router } from "express";
+import {
+  addMemo,
+  addMemoFile,
+  listMemos,
+  listMemoTags,
+  readMemoFile,
+  removeMemo,
+  removeMemoFile,
+  updateMemo,
+} from "../memoPad.js";
 
 /** 메모장 — 자유 메모 + 일기. 종목 메모(/api/notes)와 다른 자리다 */
 export function createMemoRouter(): Router {
@@ -61,6 +70,68 @@ export function createMemoRouter(): Router {
   router.delete("/:id", async (req, res, next) => {
     try {
       await removeMemo(req.params.id);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* ---------------- 붙임 파일 (2026-08-28) ---------------- */
+
+  /**
+   * 올리기 — **바이너리 그대로** 받는다.
+   *
+   * 이 앱의 다른 업로드(캘린더 이미지)는 base64 를 JSON 에 실어 보내는데, 그건
+   * 크기가 3분의 1 늘어난다. 동영상까지 붙이는 자리라 그 낭비가 크다.
+   * 파일 이름과 형식은 헤더로 받는다 — 이름에 한글·공백이 흔해서 URL 에 넣으면
+   * 인코딩이 어긋나기 쉬우므로 **base64 로 감싸서** 보낸다.
+   */
+  router.post(
+    "/:id/files",
+    express.raw({ type: "*/*", limit: "30mb" }),
+    async (req, res, next) => {
+      try {
+        const name = Buffer.from(String(req.header("x-file-name") ?? ""), "base64").toString("utf-8");
+        const mime = String(req.header("x-file-type") ?? "application/octet-stream");
+        const buf = req.body as Buffer;
+        if (!Buffer.isBuffer(buf) || buf.length === 0) {
+          res.status(400).json({ error: "파일이 비어 있습니다." });
+          return;
+        }
+        res.json({ file: await addMemoFile(req.params.id, { name: name || "파일", mime, buf }) });
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
+
+  /**
+   * 내려받기·미리보기 — 같은 자리에서 준다.
+   * `?inline=1` 이면 브라우저가 열고(이미지·PDF·영상 미리보기), 아니면 내려받는다.
+   */
+  router.get("/:id/files/:fileId", async (req, res, next) => {
+    try {
+      const { meta, buf } = await readMemoFile(req.params.id, req.params.fileId);
+      const inline = req.query.inline === "1";
+      res.setHeader("Content-Type", meta.mime);
+      res.setHeader("Content-Length", String(buf.length));
+      /*
+       * 파일 이름에 한글이 흔하다 — `filename*` (RFC 5987) 로 줘야 안 깨진다.
+       * 옛 브라우저용 `filename` 도 같이 두되 ASCII 로만 적는다.
+       */
+      res.setHeader(
+        "Content-Disposition",
+        `${inline ? "inline" : "attachment"}; filename="file"; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
+      );
+      res.end(buf);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.delete("/:id/files/:fileId", async (req, res, next) => {
+    try {
+      await removeMemoFile(req.params.id, req.params.fileId);
       res.json({ ok: true });
     } catch (err) {
       next(err);
