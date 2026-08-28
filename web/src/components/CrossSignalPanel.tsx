@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, signClass, type MarketPulse } from "../api";
+import { api, signClass, type MarketPulse, type PulseCrossStock } from "../api";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 
 /**
  * 교차 신호 — **두 목록이 동시에 가리키는 종목.**
@@ -21,6 +22,8 @@ export function CrossSignalPanel({
 }) {
   const [pulse, setPulse] = useState<MarketPulse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* 머리 클릭 정렬 — 훅이라 조기 return 앞에 둔다 (2026-08-28) */
+  const sort = useSortableTable<PulseCrossStock>(pulse?.cross?.stocks ?? []);
 
   useEffect(() => {
     let alive = true;
@@ -53,21 +56,71 @@ export function CrossSignalPanel({
       ) : (
         <>
           <div className="mp-cross-note">{cross.note}</div>
-          <div className="mp-cross">
-            {cross.stocks.map((s) => (
-              <button className="mp-cross-item" key={s.code} onClick={() => onSelectStock?.(s.code, s.name)}>
-                <b>{s.name}</b>
-                <span className={`num ${signClass(s.changeRate)}`}>
-                  {s.changeRate > 0 ? "+" : ""}
-                  {s.changeRate.toFixed(2)}%
-                </span>
-                <span className="mp-cross-tags">
-                  {s.tags.join(" · ")}
-                  {s.sectorInflow && " · 업종유입"}
-                </span>
-                {s.sector && <span className="pt-n">{s.sector}</span>}
-              </button>
-            ))}
+          {/*
+            카드 격자였다 → **표**로 (2026-08-28 요청 "칼럼명 누르면 정렬").
+            여덟 줄 남짓이라 표가 더 읽히고, 다른 화면들과 같은 정렬 규칙을 쓴다.
+          */}
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <SortableTh
+                    columnKey="name"
+                    label="종목명"
+                    accessor={(s: PulseCrossStock) => s.name}
+                    sort={sort}
+                    className="sticky-col"
+                  />
+                  <SortableTh
+                    columnKey="rate"
+                    label="등락률"
+                    accessor={(s: PulseCrossStock) => s.changeRate}
+                    sort={sort}
+                  />
+                  {/* 태그 수가 곧 「몇 가지로 걸렸나」다 — 정렬은 그 수로 */}
+                  <SortableTh
+                    columnKey="tags"
+                    label="주도주 태그"
+                    accessor={(s: PulseCrossStock) => s.tags.length}
+                    sort={sort}
+                    thProps={{ title: "신고가·거래량급증·급등 중 걸린 것 — 정렬은 걸린 가짓수로" }}
+                  />
+                  <SortableTh
+                    columnKey="inflow"
+                    label="업종유입"
+                    accessor={(s: PulseCrossStock) => (s.sectorInflow ? 1 : 0)}
+                    sort={sort}
+                    thProps={{ title: "최근 5일 외인+기관 자금이 그 업종으로 들어오는가" }}
+                  />
+                  <SortableTh
+                    columnKey="sector"
+                    label="업종"
+                    accessor={(s: PulseCrossStock) => s.sector}
+                    sort={sort}
+                  />
+                </tr>
+              </thead>
+              <tbody>
+                {sort.sorted.map((s) => (
+                  <tr
+                    key={s.code}
+                    className="clickable-row"
+                    onClick={() => onSelectStock?.(s.code, s.name)}
+                  >
+                    <td className="sticky-col">
+                      <b>{s.name}</b>
+                    </td>
+                    <td className={`num ${signClass(s.changeRate)}`}>
+                      {s.changeRate > 0 ? "+" : ""}
+                      {s.changeRate.toFixed(2)}%
+                    </td>
+                    <td className="mp-cross-tags">{s.tags.join(" · ")}</td>
+                    <td>{s.sectorInflow ? "✓" : ""}</td>
+                    <td className="pt-n">{s.sector}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </>
       )}

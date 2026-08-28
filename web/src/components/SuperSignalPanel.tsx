@@ -3,6 +3,7 @@ import { api, fmtNum } from "../api";
 import { WatchStar } from "../useWatchedCodes";
 import { useTabActive } from "../tabActive";
 import { useMarketOpen } from "../useLive";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 
 /**
  * 슈퍼신호등 — **여러 목록에 동시에 걸린 초록의 관찰 목록.**
@@ -63,6 +64,8 @@ export function SuperSignalPanel({
   const [error, setError] = useState<string | null>(null);
   const tabActive = useTabActive();
   const marketOpen = useMarketOpen();
+  /* 머리 클릭 정렬 — 훅이라 조기 return 앞에 둔다 (rows 가 없으면 빈 배열) */
+  const sort = useSortableTable<Row>(rows ?? []);
 
   const load = useCallback(() => {
     api
@@ -215,22 +218,71 @@ export function SuperSignalPanel({
       ) : (
         <div className="data-table-wrap">
           <table className="data-table">
+            {/* 머리 클릭 정렬 (2026-08-28) — 다른 표들과 같은 규칙 */}
             <thead>
               <tr>
-                <th className="sticky-col">종목명</th>
-                <th title="며칠째 교집합에 걸렸나 — 지속이 곧 신호">며칠째</th>
-                <th title="어느 목록들에 걸렸나">걸린 목록</th>
-                <th>편입일</th>
-                <th>편입가</th>
-                <th>지금</th>
-                <th title="편입가 대비">편입 대비</th>
-                <th title="편입 후 1·5·20거래일 종가의 편입가 대비 — 매일 15:45 채점">1·5·20일</th>
-                <th>점수</th>
+                <SortableTh
+                  columnKey="name"
+                  label="종목명"
+                  accessor={(r: Row) => r.name}
+                  sort={sort}
+                  className="sticky-col"
+                />
+                <SortableTh
+                  columnKey="seen"
+                  label="며칠째"
+                  accessor={(r: Row) => r.seenCount}
+                  sort={sort}
+                  thProps={{ title: "며칠째 교집합에 걸렸나 — 지속이 곧 신호" }}
+                />
+                <SortableTh
+                  columnKey="lists"
+                  label="걸린 목록"
+                  accessor={(r: Row) => r.lists.length}
+                  sort={sort}
+                  thProps={{ title: "어느 목록들에 걸렸나 — 정렬은 걸린 곳 수로" }}
+                />
+                <SortableTh
+                  columnKey="added"
+                  label="편입일"
+                  accessor={(r: Row) => r.addedDate}
+                  sort={sort}
+                />
+                <SortableTh
+                  columnKey="addedPrice"
+                  label="편입가"
+                  accessor={(r: Row) => r.addedPrice}
+                  sort={sort}
+                />
+                <SortableTh
+                  columnKey="price"
+                  label="지금"
+                  accessor={(r: Row) => r.price ?? -1}
+                  sort={sort}
+                />
+                <SortableTh
+                  columnKey="since"
+                  label="편입 대비"
+                  accessor={(r: Row) => r.sinceAdded ?? -9999}
+                  sort={sort}
+                  thProps={{ title: "편입가 대비" }}
+                />
+                {/* 셋을 한 칸에 넣었으므로 정렬은 **20일**로 — 가장 긴 답이 이 표의 물음이다 */}
+                <SortableTh
+                  columnKey="rets"
+                  label="1·5·20일"
+                  accessor={(r: Row) => r.returns?.d20 ?? -9999}
+                  sort={sort}
+                  thProps={{
+                    title: "편입 후 1·5·20거래일 종가의 편입가 대비 — 매일 15:45 채점 (정렬은 20일 기준)",
+                  }}
+                />
+                <SortableTh columnKey="score" label="점수" accessor={(r: Row) => r.score} sort={sort} />
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {sort.sorted.map((r) => (
                 <tr key={r.code} className="clickable-row" onClick={() => onSelectStock(r.code, r.name)}>
                   <td className="sticky-col">
                     <WatchStar code={r.code} />
