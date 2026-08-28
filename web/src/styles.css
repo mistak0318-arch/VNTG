@@ -10503,3 +10503,21 @@ button.tpb-row:hover { background: var(--panel-2); }
   font-size: 0.7rem;
   color: var(--muted);
 }
+
+/*
+ * 관심종목 「경과」 칸 (2026-08-28) — **한눈에 들어와야 한다.**
+ * 처음엔 옅은 회색으로 뒀는데 그게 원래 문제였다(수익률 밑 작은 글씨라 안 보였다).
+ * 다른 숫자 칸과 같은 크기·같은 굵기로 세운다.
+ */
+.wl-held-cell {
+  font-size: 0.7333rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/*
+ * 오래 들고 있을수록 진해진다 — 색이 곧 「얼마나 묵었나」다.
+ * 한 달 넘으면 노랑, 석 달 넘으면 주황. 훑을 때 눈이 먼저 잡는다.
+ */
+.wl-held-cell.aged { color: #f5c542; }
+.wl-held-cell.old { color: #ff8c42; }

@@ -33,9 +33,14 @@ function fmtDate(iso: string): string {
  * 편입일(10/02)만 적혀 있으면 매번 오늘 날짜와 빼야 한다. 그 계산은 기계가 한다.
  * 한 달이 넘으면 개월로 — 「173일」보다 「5.7개월」이 빨리 읽힌다.
  */
-function heldLabel(iso: string): string {
+function heldDays(iso: string): number {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400_000);
-  if (!Number.isFinite(days) || days < 0) return "";
+  return Number.isFinite(days) && days >= 0 ? days : -1;
+}
+
+function heldLabel(iso: string): string {
+  const days = heldDays(iso);
+  if (days < 0) return "";
   if (days === 0) return "오늘";
   if (days < 31) return `${days}일`;
   return `${(days / 30.4).toFixed(1)}개월`;
@@ -784,6 +789,18 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                 <SortableTh columnKey="price" label="현재가" accessor={(r: TrackedStock) => r.price} sort={sort} />
                 <SortableTh columnKey="changeRate" label="당일" accessor={(r: TrackedStock) => r.changeRate} sort={sort} />
                 <SortableTh columnKey="returnRate" label="수익률" accessor={(r: TrackedStock) => r.returnRate ?? 0} sort={sort} />
+                {/*
+                  경과 (2026-08-28 요청) — 수익률 밑에 회색 작은 글씨로 붙어 있어 눈에
+                  안 띄었다. 제 칸으로 올리고 **정렬 가능**하게 — 「오래 들고 있는데 안
+                  가는 것」을 골라내는 게 이 값을 보는 이유다.
+                */}
+                <SortableTh
+                  columnKey="held"
+                  label="경과"
+                  accessor={(r: TrackedStock) => heldDays(r.addedAt)}
+                  sort={sort}
+                  thProps={{ title: "편입일로부터 며칠 지났나 — 같은 +8% 라도 사흘과 여덟 달은 다르다" }}
+                />
                 <SortableTh columnKey="pass" label="충족" accessor={(r: TrackedStock) => r.passCount} sort={sort} />
                 <th title="외인 5·10·20일 / 기관 5·20·60일 순매수 방향 — 빨강이 순매수. 값은 ▼ 를 펴면 나옵니다">수급</th>
                 <th title="정배열·캔들·공매도·대차·영익·섹터 — 초록이 좋은 쪽. 자세한 건 ▼">판정</th>
@@ -888,9 +905,14 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                           한 칸에 있어야 뜻이 산다. +8% 가 사흘이면 잘 잡은 것이고
                           여덟 달이면 예금만도 못한 것인데, 날짜만으로는 그게 안 읽힌다.
                         */}
-                        <td className={signClass(ret)}>
-                          {fmtPct(ret)}
-                          <i className="wl-held">{heldLabel(r.addedAt)}</i>
+                        <td className={signClass(ret)}>{fmtPct(ret)}</td>
+                        {/* 경과 — 편입일 기준. 한 달 넘으면 개월로 (「173일」보다 「5.7개월」이 빨리 읽힌다) */}
+                        {/* 한 달·석 달을 넘으면 색이 진해진다 — 훑을 때 묵은 것이 먼저 눈에 든다 */}
+                        <td
+                          className={`num wl-held-cell${heldDays(r.addedAt) >= 91 ? " old" : heldDays(r.addedAt) >= 31 ? " aged" : ""}`}
+                          title={`편입 ${fmtDate(r.addedAt)} — ${heldDays(r.addedAt)}일 경과`}
+                        >
+                          {heldLabel(r.addedAt)}
                         </td>
                       </>
                     );
@@ -950,7 +972,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                 */}
                 {expanded === r.code && (
                   <tr className="wl-expand">
-                    <td colSpan={9} onClick={(e) => e.stopPropagation()}>
+                    {/* 머리 칸 수와 같아야 한다 — 「경과」가 늘어 10 (2026-08-28) */}
+                    <td colSpan={10} onClick={(e) => e.stopPropagation()}>
                       <div className="wl-ex">
                         <div className="wl-ex-grid">
                           <span><em>편입일</em><b>{fmtDate(r.addedAt)}</b></span>
