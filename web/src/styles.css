@@ -10324,9 +10324,8 @@ button.tpb-row:hover { background: var(--panel-2); }
  */
 .sig-stale {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 6px;
   font-size: 0.78rem;
   color: var(--text);
   background: rgba(76, 141, 255, 0.1);
@@ -10335,3 +10334,14 @@ button.tpb-row:hover { background: var(--panel-2); }
   padding: 8px 10px;
   margin-bottom: 10px;
 }
+
+.sig-stale-why { color: var(--muted); font-size: 0.73rem; }
+.sig-stale-list {
+  margin: 0;
+  padding-left: 18px;
+  max-height: 11rem;
+  overflow-y: auto;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.sig-stale-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

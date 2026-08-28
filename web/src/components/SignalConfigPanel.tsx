@@ -53,6 +53,38 @@ const NO_THRESHOLD = new Set(["trend"]);
 /** 정배열 판정에 고를 수 있는 이동평균선 */
 const MA_OPTIONS = [5, 10, 20, 60];
 
+/**
+ * 지금 기준이 추천 기본값과 **어디가 다른가**.
+ *
+ * ⚠️ 이게 왜 필요한가 (2026-08-28): **저장분이 코드 기본값을 이긴다**(`mergeConfig`).
+ * 그래서 추천값을 코드에서 손봐도, 한 번이라도 저장한 적이 있으면 화면은 옛날 값
+ * 그대로다. 축 가중치만 그런 게 아니라 **켬/끔·무게·기준값 전부**가 그렇다 —
+ * 백테스트로 좋다고 확인한 조합이 정작 실전 신호등에는 하나도 안 들어가 있었다.
+ *
+ * 조용히 덮어쓰지 않고 **무엇이 다른지 적어서 보여준 뒤** 누르면 바꾼다.
+ * 일부러 맞춰 둔 값일 수도 있으니 결정은 사람이 한다.
+ */
+function diffFromDefaults(cur: SignalConfig, def: SignalConfig): string[] {
+  const out: string[] = [];
+  for (const k of ["trend", "flow", "value"] as const) {
+    const label = { trend: "추세", flow: "수급", value: "실적" }[k];
+    if (cur.axisWeights[k] !== def.axisWeights[k]) {
+      out.push(`${label} 축 가중치 ${cur.axisWeights[k]} → ${def.axisWeights[k]}`);
+    }
+  }
+  for (const d of def.checks) {
+    const c = cur.checks.find((x) => x.key === d.key);
+    if (!c) continue;
+    if (c.enabled !== d.enabled) out.push(`${d.label} ${c.enabled ? "켬 → 끔" : "끔 → 켬"}`);
+    // 꺼진 항목의 무게·기준값은 판정에 안 쓰인다 — 다르다고 알려 봐야 소음이다
+    if (!d.enabled && !c.enabled) continue;
+    if (c.weight !== d.weight) out.push(`${d.label} 무게 ${c.weight} → ${d.weight}`);
+    if (c.threshold !== d.threshold) out.push(`${d.label} 기준값 ${c.threshold} → ${d.threshold}`);
+    if (c.strongAt !== d.strongAt) out.push(`${d.label} 아주 좋음 ${c.strongAt} → ${d.strongAt}`);
+  }
+  return out;
+}
+
 const AXIS_META: { key: SignalAxis; label: string; hint: string }[] = [
   { key: "trend", label: "추세", hint: "지금 올라가는 자리인가" },
   { key: "flow", label: "수급", hint: "누가 사고 있나" },
@@ -132,36 +164,44 @@ export function SignalConfigPanel() {
     return n;
   })();
 
-  /*
-   * **저장분이 기본값을 이긴다** — 그래서 코드에서 기본값을 바꿔도, 이미 저장해 둔
-   * 사람에게는 아무것도 안 바뀐다 (2026-08-28). 축 가중치를 1·1·1 에서 추천값으로
-   * 고쳐 놓고도 화면은 1·1·1 이라 「왜 안 바뀌지」가 됐다.
-   * 조용히 덮어쓰지는 않는다 — 일부러 맞춰 둔 값일 수도 있다. **다르다고 알리고
-   * 누르면 바뀌게** 한다.
-   */
-  const axisStale =
-    defaults !== null &&
-    (["trend", "flow", "value"] as const).some(
-      (k) => config.axisWeights[k] !== defaults.axisWeights[k],
-    );
+  const stale = defaults ? diffFromDefaults(config, defaults) : [];
 
   return (
     <div className="sig-config">
-      {axisStale && defaults && (
+      {stale.length > 0 && defaults && (
         <div className="sig-stale">
-          지금 축 가중치는 <b>추세 {config.axisWeights.trend} · 수급 {config.axisWeights.flow} ·
-          실적 {config.axisWeights.value}</b> 로, 추천 기본값(<b>추세{" "}
-          {defaults.axisWeights.trend} · 수급 {defaults.axisWeights.flow} · 실적{" "}
-          {defaults.axisWeights.value}</b>)과 다릅니다. 저장해 둔 설정이 기본값보다 우선하기
-          때문입니다.
-          <button
-            className="filter-btn"
-            onClick={() =>
-              patch({ axisWeights: { ...defaults.axisWeights } })
-            }
-          >
-            축 가중치만 추천값으로
-          </button>
+          <b>지금 기준이 추천 기본값과 {stale.length}군데 다릅니다.</b>
+          <span className="sig-stale-why">
+            저장해 둔 설정이 기본값보다 우선하기 때문입니다 — 추천값을 손봐도 한 번이라도
+            저장한 적이 있으면 그 값이 그대로 남습니다.
+          </span>
+          <ul className="sig-stale-list">
+            {stale.map((s) => (
+              <li key={s}>{s}</li>
+            ))}
+          </ul>
+          <span className="sig-stale-acts">
+            <button
+              className="filter-btn active"
+              onClick={() => {
+                setConfig(defaults);
+                setSaved(false);
+              }}
+              disabled={saving}
+            >
+              전부 추천 기본값으로
+            </button>
+            <button
+              className="filter-btn"
+              onClick={() => {
+                patch({ axisWeights: { ...defaults.axisWeights } });
+              }}
+              disabled={saving}
+            >
+              축 가중치만
+            </button>
+            <span className="pt-n">바꾼 뒤 아래 「저장」을 눌러야 반영됩니다</span>
+          </span>
         </div>
       )}
       {AXIS_META.map((axis) => {

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type SignalResult, type ThemeStrength } from "../api";
+import { useMarketOpen } from "../useLive";
+import { useTabActive } from "../tabActive";
 import { ConstituentSheet, type ConstituentTarget } from "./overview/ConstituentSheet";
 
 /**
@@ -25,10 +27,36 @@ const BATCH = 50;
 
 export function useSignals(codes: string[]): Record<string, SignalResult> {
   const [map, setMap] = useState<Record<string, SignalResult>>({});
-  const key = codes.join(",");
+  /*
+   * ⚠️ **정렬해서 잇는다** (2026-08-28, `useRealtime` 과 같은 이유).
+   *
+   * 결과는 종목코드로 찾으니 순서는 아무 뜻이 없다. 그런데 그냥 이으면 **순위가
+   * 한 칸만 뒤바뀌어도 다른 문자열**이라 이 효과가 다시 돌고, 58종목이면 배치
+   * 두 번이 통째로 다시 나간다. 시세분석은 순위를 10초마다 받으므로 —
+   * 종목 구성은 그대로인데 — 10초마다 전부 다시 평가하고 있었다.
+   * 신호등 점이 깜빡이고 서버가 바빠져 실시간 밀어주기까지 늦어진다.
+   */
+  const key = [...codes].sort().join(",");
+  /*
+   * 다시 매기는 **주기를 일부러 둔다** (2026-08-28).
+   *
+   * 정렬 전에는 순위가 뒤바뀔 때마다(=10초마다) 우연히 다시 돌고 있었다. 정렬로
+   * 그 우연이 사라졌으니, 필요한 갱신은 **의도해서** 넣는다. 신호등에는 오늘 시세를
+   * 보는 항목이 있어 하루 한 번으로는 모자라고, 10초는 과하다 — 3분.
+   * 장이 닫혔거나 숨은 탭이면 돌지 않는다.
+   */
+  const marketOpen = useMarketOpen();
+  const tabActive = useTabActive();
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    if (!key || !marketOpen || !tabActive) return;
+    const t = setInterval(() => setRound((n) => n + 1), 180_000);
+    return () => clearInterval(t);
+  }, [key, marketOpen, tabActive]);
 
   useEffect(() => {
     if (!key) return;
+    void round; // 주기가 돌면 다시 받는다
     let cancelled = false;
 
     /*
@@ -60,7 +88,7 @@ export function useSignals(codes: string[]): Record<string, SignalResult> {
     return () => {
       cancelled = true;
     };
-  }, [key]);
+  }, [key, round]);
 
   return map;
 }

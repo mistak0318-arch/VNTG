@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTabActive } from "./tabActive";
 
 /**
@@ -73,9 +73,26 @@ export function useRealtime(
    * 열린 탭 몇 개가 소켓 정원(화면 몫 20)을 짓밟지 않는다.
    */
   const tabActive = useTabActive();
-  // 배열은 매 렌더 새 객체라 그대로 의존성에 넣으면 타이머가 계속 다시 걸린다
-  const joined = tabActive ? keys.join(",") : "";
+  /*
+   * 배열은 매 렌더 새 객체라 그대로 의존성에 넣으면 타이머가 계속 다시 걸린다.
+   *
+   * ⚠️ **정렬해서 잇는다** (2026-08-28). 여기서 중요한 건 「어떤 종목을 보는가」이지
+   * 순서가 아니다. 그냥 이으면 **순위가 한 칸만 뒤바뀌어도 다른 문자열**이 되어
+   * 이 훅이 통째로 다시 돌고, **열려 있던 SSE 를 끊고 새로 연다.**
+   *
+   * 시세분석은 순위를 10초마다 다시 받는다. 거래대금 상위는 그때마다 몇 자리씩
+   * 자리를 바꾸므로 — 종목 구성은 그대로인데 — **10초마다 스트림이 끊겼다.**
+   * 끊길 때마다 모아 둔 값(values)이 통째로 날아가고 재연결 동안 값이 안 온다.
+   * 「시세 갱신이 느려졌다」의 정체가 이것이다.
+   */
+  const joined = tabActive ? [...keys].sort().join(",") : "";
   const readOnly = opts?.readOnly === true;
+  /*
+   * 끊겼다 다시 열릴 때 **직전 값에서 이어 그린다.** 종목 구성이 진짜로 바뀌어
+   * 다시 열 때도, 남아 있던 종목의 값까지 지우면 표가 한 번 허옇게 된다.
+   */
+  const lastValues = useRef<Record<string, RealtimeValue | null>>({});
+  lastValues.current = state.values ?? lastValues.current;
 
   useEffect(() => {
     if (!joined) {
@@ -112,7 +129,8 @@ export function useRealtime(
      * 백 줄 표가 초당 수십 번 그려진다.
      */
     if (readOnly && typeof EventSource !== "undefined") {
-      const values: Record<string, RealtimeValue | null> = {};
+      // 직전 값에서 이어 간다 — 다시 여는 동안 표가 비지 않게
+      const values: Record<string, RealtimeValue | null> = { ...lastValues.current };
       const flush = () => {
         flushTimer = null;
         if (alive) setState({ enabled: true, healthy: true, values: { ...values } });
