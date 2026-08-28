@@ -13,6 +13,7 @@ import { UsKrPanel } from "../components/UsKrPanel";
 import { TradePanel } from "../components/TradePanel";
 import { RefreshBar } from "../components/RefreshBar";
 import { useCardOrder } from "../useCardOrder";
+import { useSwipeTabs, visualOrder } from "../useSwipeTabs";
 
 /**
  * 시장 흐름 분석.
@@ -224,9 +225,15 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
     "marketflow.tabs",
     FLOW_TABS.map((t) => t.key),
   );
+  /* 폰 — 본문을 좌우로 밀면 이웃 탭으로 (2026-08-28) */
+  const swipe = useSwipeTabs({
+    order: visualOrder(FLOW_TABS.map((t) => t.key), tabOrder.orderOf),
+    current: tab,
+    onChange: (k) => setTab(k as FlowTab),
+  });
 
   return (
-    <div>
+    <div {...swipe}>
       {/* 브리핑 탭은 제 새로고침 막대를 갖고 있다 — 겹쳐 그리면 두 줄이 된다 */}
       {tab !== "briefing" && <RefreshBar onRefresh={() => setReloadKey((k) => k + 1)} />}
 

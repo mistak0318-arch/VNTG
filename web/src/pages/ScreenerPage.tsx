@@ -11,6 +11,7 @@ import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { useCardOrder } from "../useCardOrder";
 import { useAutoRefresh } from "../useAutoRefresh";
+import { useSwipeTabs, visualOrder } from "../useSwipeTabs";
 
 /**
  * 시세분석 — **실제로 보는 다섯 개를 앞에 세운다.**
@@ -272,6 +273,12 @@ export function ScreenerPage({
 
   /** 지금 그릴 명세 — 탭이 rank 면 탭 것, 「그 밖에」면 트리에서 고른 것 */
   const current = SCREENER_TABS.find((t) => t.key === tab);
+  /* 폰 — 본문 좌우 스와이프로 이웃 탭 (2026-08-28) */
+  const swipe = useSwipeTabs({
+    order: visualOrder(SCREENER_TABS.map((t) => t.key), tabOrder.orderOf),
+    current: tab,
+    onChange: setTab,
+  });
   const rankKey = current?.kind === "rank" ? tab : active;
 
   useEffect(() => {
@@ -446,7 +453,7 @@ export function ScreenerPage({
     filter.etfOnly;
 
   return (
-    <div>
+    <div {...swipe}>
       {/* 실제로 보는 다섯이 앞이다 — 트리를 매번 훑지 않게 */}
       {/* 폰에서는 한 줄로 세우고 옆으로 넘긴다 — 컨트롤이 표를 밀어내지 않게 */}
       <div className="filter-row scr-tabs ctl-ribbon">

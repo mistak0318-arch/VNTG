@@ -34,6 +34,7 @@ import {
 import { TurnoverPanel } from "../components/overview/TurnoverPanel";
 import { useSection } from "../useSection";
 import { useCardOrder } from "../useCardOrder";
+import { useSwipeTabs } from "../useSwipeTabs";
 import { OVERVIEW_CARDS, type OverviewSub } from "../overviewCards";
 import { WatchStar } from "../useWatchedCodes";
 
@@ -166,6 +167,13 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
    */
   const show = (sec: SubTab) => sub === sec;
 
+  /* 폰 — 본문 좌우 스와이프로 국내↔미국 (2026-08-28) */
+  const swipe = useSwipeTabs({
+    order: SUBTABS.map((t) => t.key),
+    current: sub,
+    onChange: (k) => setSub(k as SubTab),
+  });
+
   const idx = indices.data ?? [];
   const kospiCard = idx.find((i) => i.code === "001");
   const kosdaqCard = idx.find((i) => i.code === "101");
@@ -186,7 +194,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   }
 
   return (
-    <div className="ov">
+    <div className="ov" {...swipe}>
       <RefreshBar onRefresh={refreshAll} loading={indices.loading}>
         <span className="ov-statusbar" style={{ padding: 0 }}>
           <span className={`ov-dot ${status?.state ?? ""}`} />

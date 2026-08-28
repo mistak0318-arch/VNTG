@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, signClass, type ThemeStrength } from "../api";
 import { useCardOrder } from "../useCardOrder";
+import { useSwipeTabs, visualOrder } from "../useSwipeTabs";
 import { TabScroller } from "../components/TabScroller";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useTabActive } from "../tabActive";
@@ -79,9 +80,15 @@ export function ThemeDbPage({ onSelectStock }: { onSelectStock: (code: string, n
     "themeDb.tabs",
     THEME_TABS.map((t) => t.key),
   );
+  /* 폰 — 본문 좌우 스와이프로 이웃 탭 (2026-08-28) */
+  const swipe = useSwipeTabs({
+    order: visualOrder(THEME_TABS.map((t) => t.key), tabOrder.orderOf),
+    current: tab,
+    onChange: (k) => setTab(k as ThemeTab),
+  });
 
   return (
-    <div>
+    <div {...swipe}>
       <TabScroller className="detail-tabs" activeKey={tab}>
         {THEME_TABS.map((t) => (
           <button

@@ -21,6 +21,7 @@ import { BrokerFlowPanel } from "./BrokerFlowPanel";
 import { ProgramFlowPanel } from "./ProgramFlowPanel";
 import { CreditPanel, DailyDetailPanel, QuoteSummary, StrengthPanel } from "./StockDepthPanels";
 import { useCardOrder } from "../useCardOrder";
+import { useSwipeTabs, visualOrder } from "../useSwipeTabs";
 
 /**
  * 종목 하나를 보는 **탭 묶음 — 화면 두 곳이 같이 쓴다.**
@@ -201,6 +202,16 @@ export function StockTabsSection({
     visibleTabs.map((t) => t.key),
   );
 
+  /*
+   * 폰 — 본문 좌우 스와이프로 이웃 탭 (2026-08-28). 열여덟 탭이라 여기가 제일 절실하다:
+   * 탭 줄을 밀어 찾는 대신 본문을 밀면 다음 탭이다.
+   */
+  const swipe = useSwipeTabs({
+    order: visualOrder(visibleTabs.map((t) => t.key), tabOrder.orderOf),
+    current: tab,
+    onChange: (k) => setTab(k as StockTab),
+  });
+
   const investorRows = pickList(investorChart ?? undefined, ["stk_invsr_orgn_chart"]);
   const dailyCloses = pickList(daily ?? undefined, ["stk_dt_pole_chart_qry"])
     .map((c) => Number(c.cur_prc))
@@ -210,7 +221,8 @@ export function StockTabsSection({
   const curPrice = Math.abs(Number(info?.cur_prc)) || undefined;
 
   return (
-    <>
+    /* Fragment 였다 — 스와이프 핸들러를 얹으려면 실제 요소가 필요하다 */
+    <div {...swipe}>
       <TabScroller className="detail-tabs" activeKey={tab}>
         {visibleTabs.map((t) => (
           <button
@@ -319,6 +331,6 @@ export function StockTabsSection({
         {tab === "etf" && <EtfPanel code={code} onSelectStock={onSelectStock} />}
         {tab === "raw" && <RawJson data={{ info, investorChart, daily }} />}
       </div>
-    </>
+    </div>
   );
 }

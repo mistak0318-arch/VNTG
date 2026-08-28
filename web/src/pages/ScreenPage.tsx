@@ -8,6 +8,7 @@ import { CrossSignalPanel } from "../components/CrossSignalPanel";
 import { SignalBacktestPanel } from "../components/SignalBacktestPanel";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { useCardOrder } from "../useCardOrder";
+import { useSwipeTabs, visualOrder } from "../useSwipeTabs";
 import { WatchAddSheet, type WatchAddTarget } from "../components/WatchAddSheet";
 
 /**
@@ -82,6 +83,12 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
     "screen.tabs",
     SCREEN_TABS.map((t) => t.key),
   );
+  /* 폰 — 본문 좌우 스와이프로 이웃 탭 (2026-08-28) */
+  const swipe = useSwipeTabs({
+    order: visualOrder(SCREEN_TABS.map((t) => t.key), tabOrder.orderOf),
+    current: screenTab,
+    onChange: (k) => setScreenTab(k as ScreenTab),
+  });
   const [market, setMarket] = useState("000");
   const [level, setLevel] = useState<"green" | "yellow">("green");
   const [limit, setLimit] = useState(100);
@@ -231,7 +238,7 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
   const progress = job && job.total > 0 ? Math.round((job.done / job.total) * 100) : 0;
 
   return (
-    <div>
+    <div {...swipe}>
       <nav className="detail-tabs">
         {SCREEN_TABS.map((t) => (
           <button

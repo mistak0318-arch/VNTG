@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useCardOrder } from "../useCardOrder";
+import { useSwipeTabs, visualOrder } from "../useSwipeTabs";
 import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
 import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
 import { MajorChannelPanel } from "../components/MajorChannelPanel";
@@ -39,8 +40,15 @@ export function TelegramPage() {
     TELEGRAM_TABS.map((t) => t.key),
   );
 
+  /* 폰 — 본문 좌우 스와이프로 이웃 탭 (2026-08-28) */
+  const swipe = useSwipeTabs({
+    order: visualOrder(TELEGRAM_TABS.map((t) => t.key), tabOrder.orderOf),
+    current: tab,
+    onChange: (k) => setTab(k as Tab),
+  });
+
   return (
-    <div>
+    <div {...swipe}>
       <nav className="detail-tabs">
         {TELEGRAM_TABS.map((t) => (
           <button

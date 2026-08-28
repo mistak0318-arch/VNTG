@@ -5,6 +5,7 @@ import { DartTodayPanel } from "../components/DartTodayPanel";
 import { CalendarImageImport } from "../components/CalendarImageImport";
 import { EconomicCalendarCard } from "../components/EconomicCalendarCard";
 import { RefreshBar } from "../components/RefreshBar";
+import { useSwipeTabs } from "../useSwipeTabs";
 
 /**
  * 캘린더 — 증시 일정과 개인 일정을 한 달력에서 본다.
@@ -284,6 +285,12 @@ function downloadCsvTemplate() {
 
 export function CalendarPage() {
   const [tab, setTab] = useState<CalTab>("cal");
+  /* 폰 — 본문 좌우 스와이프로 이웃 탭 (2026-08-28) */
+  const swipe = useSwipeTabs({
+    order: CAL_TABS.map((t) => t.key),
+    current: tab,
+    onChange: (k) => setTab(k as CalTab),
+  });
   const [view, setView] = useState<CalView>("month");
   const [cursor, setCursor] = useState(() => new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -575,7 +582,7 @@ export function CalendarPage() {
   const selectedEvents = byDate.get(selected) ?? [];
 
   return (
-    <div>
+    <div {...swipe}>
       {/*
         서브탭 (2026-08-27 전면 개편 — "캘린더 본연의 기능에 집중").
         달력 탭에는 달력과 선택일·입력만 남기고, 다가오는·할 일 / 공시 / 가져오기는
