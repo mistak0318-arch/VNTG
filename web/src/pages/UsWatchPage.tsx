@@ -360,6 +360,28 @@ export function UsWatchPage() {
         그룹 — 등락률까지 붙여서 어느 판이 도는지 목록에서 바로 보이게.
         편집을 켜면 ◀ ▶ 가 붙어 순서를 옮긴다. 끌어 옮기기는 폰에서 안 되므로 쓰지 않는다.
       */}
+      {/*
+        폰 — 그룹 칩이 **일곱 줄 274px** 로 쌓여 화면을 통째로 먹었다 (2026-08-28 실측).
+        좁은 화면에서는 고르개 하나로 (관심종목 VNTG 와 같은 문법).
+        편집 중에는 칩을 남긴다 — 순서 옮기기·이름 바꾸기가 칩에만 있다.
+      */}
+      {!editing && (
+        <div className="my-group-pick">
+          <select
+            className="group-select"
+            value={current?.id ?? ""}
+            onChange={(e) => setOpenGroup(e.target.value)}
+            aria-label="그룹 고르기"
+          >
+            {groups.map((g) => (
+              <option value={g.id} key={g.id}>
+                {g.name} ({g.stocks.length}) {pct(g.changeRate)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="filter-row group-tabs">
         {groups.map((g, i) => (
           <span className="gt-item" key={g.id}>

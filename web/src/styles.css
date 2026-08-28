@@ -10521,3 +10521,16 @@ button.tpb-row:hover { background: var(--panel-2); }
  */
 .wl-held-cell.aged { color: #f5c542; }
 .wl-held-cell.old { color: #ff8c42; }
+
+/*
+ * 관심종목 그룹 고르개 (2026-08-28 — 「그룹 많아지니 포도알처럼 보인다」).
+ * 넓은 화면은 칩 줄이 낫다(한눈에 다 보이고 바로 누른다). **좁은 화면에서만**
+ * 고르개로 바꾼다 — 열댓 개를 가로로 미는 건 찾는 게 아니라 뒤지는 것이다.
+ */
+.my-group-pick { display: none; margin-bottom: 10px; }
+.my-group-pick .group-select { width: 100%; font-size: 0.85rem; padding: 7px 10px; }
+@media (max-width: 700px) {
+  .my-group-pick { display: block; }
+  /* 고르개가 대신하므로 칩 줄은 감춘다. 편집 중이면 JSX 가 고르개를 안 그린다 */
+  .my-group-pick + .group-tabs { display: none; }
+}

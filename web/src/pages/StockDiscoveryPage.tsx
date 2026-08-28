@@ -438,7 +438,8 @@ export function StockDiscoveryPage({
   return (
     <div className="sd-page">
       {/* ---------------- 모집단 고르기 ---------------- */}
-      <div className="filter-row">
+      {/* 폰 — 모집단 칩이 두 줄로 쌓인다. 한 줄 가로 스크롤 (2026-08-28) */}
+      <div className="filter-row ctl-ribbon">
         {SOURCES.map((s) => (
           <button
             key={s.key}

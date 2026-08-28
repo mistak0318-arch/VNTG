@@ -134,7 +134,8 @@ export function CustomThemePage({
 
   return (
     <div>
-      <div className="filter-row">
+      {/* 폰 — 칩 열둘이 다섯 줄로 쌓였다(2026-08-28 실측 145px). 한 줄 가로 스크롤로 */}
+      <div className="filter-row ctl-ribbon">
         <button className="filter-btn" onClick={() => load(true)} disabled={loading}>
           {loading ? "계산 중…" : "↻ 새로고침"}
         </button>

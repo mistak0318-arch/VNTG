@@ -607,6 +607,32 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
         </div>
       )}
 
+      {/*
+        폰 — 그룹이 많으면 칩 줄이 **가로로 끝없이** 이어진다 (2026-08-28 「포도알처럼
+        보인다」). 가로 스크롤로 눕혀 놨지만 열댓 개가 되면 끝에 뭐가 있는지도 모른 채
+        밀어야 한다. 좁은 화면에서는 **고르개 하나**로 바꾼다 — 지금 어느 그룹인지도
+        한눈에 보이고 자리도 한 줄이다.
+        ⚠️ 편집 중일 때는 칩을 그대로 둔다 — 이름 바꾸기·순서 옮기기는 칩에만 있다.
+      */}
+      {!editGroupBar && (
+        <div className="my-group-pick">
+          <select
+            className="group-select"
+            value={activeGroup}
+            onChange={(e) => setActiveGroup(e.target.value)}
+            aria-label="그룹 고르기"
+          >
+            <option value={ALL}>전체 ({items.length})</option>
+            {groups.map((g) => (
+              <option value={g} key={g}>
+                {g === SUPER_GROUP ? "🌟 " : g === CROSS_GROUP ? "⚡ " : ""}
+                {g} ({items.filter((i) => (i.groups ?? [DEFAULT_GROUP]).includes(g)).length})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="filter-row group-tabs my-chip-row">
         <button
           className={`filter-btn ${activeGroup === ALL ? "active" : ""}`}

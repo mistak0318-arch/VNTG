@@ -266,7 +266,8 @@ function ThemeMap({
         </div>
       )}
 
-      <div className="filter-row tdb-bar">
+      {/* 폰 — 문턱·정렬 칩이 세 줄로 쌓인다. 한 줄 가로 스크롤 (2026-08-28) */}
+      <div className="filter-row tdb-bar ctl-ribbon">
         {/* 규모 문턱 — 「너무 많다」를 푸는 자리라 맨 앞이다 */}
         {MIN_VALUES[market].map((v) => (
           <button
