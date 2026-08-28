@@ -7,10 +7,12 @@ import { useEffect, useRef } from "react";
  * 그 자리는 엄지가 제일 안 닿는 구석이다. 모서리 스와이프는 안드로이드·iOS 의
  * 드로어가 다 쓰는 몸짓이라 따로 배울 것도 없다.
  *
- * ## 어느 모서리인가
+ * ## 어느 모서리든 — **민 쪽에서 나온다** (2026-08-29)
  *
- * 사이드바가 붙은 쪽이다 — 설정에서 오른쪽으로 옮겼으면 오른쪽 모서리에서 연다.
- * 서랍이 나오는 방향과 미는 방향이 다르면 그건 다른 동작처럼 느껴진다.
+ * 처음엔 사이드바가 붙은 쪽(설정값) 한 곳에서만 열었다. 그런데 한 손으로 들면
+ * 엄지가 닿는 모서리는 그때그때 다르다 — 오른손이면 오른쪽이 가깝다.
+ * **양쪽 다 받고, 민 쪽에서 서랍이 나온다.** 미는 방향과 나오는 방향이 같아야
+ * 손이 서랍을 끌어낸 것처럼 느껴진다.
  *
  * ## 오작동 안 나게
  *
@@ -22,17 +24,15 @@ import { useEffect, useRef } from "react";
  * · 이미 열려 있으면 아무것도 안 한다(닫기는 배경 탭이 맡는다).
  */
 export function useEdgeSwipe({
-  side,
   open,
   onOpen,
 }: {
-  /** 사이드바가 붙은 쪽 */
-  side: "left" | "right";
   /** 지금 열려 있나 — 열려 있으면 쉰다 */
   open: boolean;
-  onOpen: () => void;
+  /** 어느 모서리에서 밀었나 — 그쪽에서 서랍이 나와야 한다 */
+  onOpen: (side: "left" | "right") => void;
 }): void {
-  const start = useRef<{ x: number; y: number } | null>(null);
+  const start = useRef<{ x: number; y: number; side: "left" | "right" } | null>(null);
   const openRef = useRef(onOpen);
   openRef.current = onOpen;
 
@@ -48,9 +48,10 @@ export function useEdgeSwipe({
       /* 시트가 떠 있으면 그쪽 몸짓이다 */
       if (document.querySelector(".overlay")) return;
       const t = e.touches[0];
-      const fromEdge = side === "left" ? t.clientX <= EDGE : t.clientX >= window.innerWidth - EDGE;
-      if (!fromEdge) return;
-      start.current = { x: t.clientX, y: t.clientY };
+      const side =
+        t.clientX <= EDGE ? "left" : t.clientX >= window.innerWidth - EDGE ? "right" : null;
+      if (!side) return;
+      start.current = { x: t.clientX, y: t.clientY, side };
     };
 
     const onEnd = (e: TouchEvent) => {
@@ -61,10 +62,10 @@ export function useEdgeSwipe({
       if (!t) return;
       const dx = t.clientX - s.x;
       const dy = t.clientY - s.y;
-      /* 안쪽으로 — 왼쪽 서랍은 오른쪽으로, 오른쪽 서랍은 왼쪽으로 */
-      const inward = side === "left" ? dx : -dx;
+      /* 안쪽으로 — 왼쪽 모서리면 오른쪽으로, 오른쪽 모서리면 왼쪽으로 */
+      const inward = s.side === "left" ? dx : -dx;
       if (inward < MIN_X || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-      openRef.current();
+      openRef.current(s.side);
     };
 
     window.addEventListener("touchstart", onStart, { passive: true });
@@ -73,5 +74,5 @@ export function useEdgeSwipe({
       window.removeEventListener("touchstart", onStart);
       window.removeEventListener("touchend", onEnd);
     };
-  }, [side, open]);
+  }, [open]);
 }

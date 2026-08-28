@@ -211,10 +211,20 @@ export default function App() {
   const lock = useScreenLock();
   const appearance = useAppearance();
   /*
-   * 모서리에서 안쪽으로 밀면 메뉴 (2026-08-28 요청) — 사이드바가 붙은 쪽 모서리다.
+   * 모서리에서 안쪽으로 밀면 메뉴 (2026-08-28) — **민 쪽에서 나온다** (2026-08-29).
    * ☰ 는 한 손으로 들었을 때 엄지가 제일 안 닿는 구석이라, 폰에서는 이쪽이 본길이다.
+   *
+   * 연 방향은 **이번 열기에만** 쓴다 — 설정값(navSide)을 건드리면 PC 배치까지
+   * 따라 움직인다. ☰ 로 열 때는 설정값 그대로다.
    */
-  useEdgeSwipe({ side: appearance.navSide, open: navOpen, onOpen: () => setNavOpen(true) });
+  const [navFrom, setNavFrom] = useState<"left" | "right" | null>(null);
+  useEdgeSwipe({
+    open: navOpen,
+    onOpen: (side) => {
+      setNavFrom(side);
+      setNavOpen(true);
+    },
+  });
   const excel = appearance.theme === "excel";
   /* 창들을 한 프로그램처럼 묶는다 — 꺼져 있으면 아무 일도 안 한다 */
   const focus = useStockFocus();
@@ -337,12 +347,14 @@ export default function App() {
     window.scrollTo(0, 0);
     focus.publish(code, name);
     setNavOpen(false);
+    setNavFrom(null);
   }
 
   function go(next: Tab) {
     // 메뉴를 옮기면 열려 있던 종목 상세는 닫는다
     navigate({ tab: next, stock: null });
     setNavOpen(false); // 모바일에서 항목을 고르면 드로어를 닫는다
+    setNavFrom(null);
   }
 
   /*
@@ -591,6 +603,7 @@ export default function App() {
       "width=560,height=880,resizable=yes,scrollbars=yes",
     );
     setNavOpen(false);
+    setNavFrom(null);
   }
 
   /*
@@ -689,7 +702,7 @@ export default function App() {
           onSide={(s) => appearance.set({ navSide: s })}
         />
       )}
-      <aside className={`sidebar${navOpen ? " open" : ""}`}>
+      <aside className={`sidebar${navOpen ? " open" : ""}${navOpen && navFrom ? ` from-${navFrom}` : ""}`}>
         {/* 회사에서도 열기 때문에 이름을 중립적으로 둔다 */}
         <div className="sidebar-brand">VNTG</div>
         <nav className="sidebar-nav">
@@ -834,7 +847,16 @@ export default function App() {
         </nav>
       </aside>
 
-      {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
+      {navOpen && (
+        <div
+          className="nav-backdrop"
+          onClick={() => {
+            setNavOpen(false);
+    setNavFrom(null);
+            setNavFrom(null); // 다음에 ☰ 로 열면 설정값 자리로 돌아간다
+          }}
+        />
+      )}
 
       <div className="main">
         <header className="mobile-header">

@@ -10534,3 +10534,19 @@ button.tpb-row:hover { background: var(--panel-2); }
   /* 고르개가 대신하므로 칩 줄은 감춘다. 편집 중이면 JSX 가 고르개를 안 그린다 */
   .my-group-pick + .group-tabs { display: none; }
 }
+
+/*
+ * 드로어가 **민 쪽에서 나온다** (2026-08-29 요청).
+ * 모서리 스와이프로 열면 App 이 `from-left`/`from-right` 를 붙인다 — 미는 방향과
+ * 나오는 방향이 같아야 손이 서랍을 끌어낸 것처럼 느껴진다.
+ * ☰ 로 열면 이 클래스가 없어 설정값(data-nav) 자리 그대로다.
+ *
+ * ⚠️ 닫힌 상태의 `transform` 도 같이 뒤집어야 한다 — 안 그러면 오른쪽에서 연
+ * 서랍이 왼쪽 밖에서 화면을 가로질러 날아온다.
+ */
+.sidebar.from-left { left: 0; right: auto; }
+.sidebar.from-right { left: auto; right: 0; }
+.sidebar.from-left:not(.open) { transform: translateX(-100%); }
+.sidebar.from-right:not(.open) { transform: translateX(100%); }
+.sidebar.from-left.open,
+.sidebar.from-right.open { transform: translateX(0); }
