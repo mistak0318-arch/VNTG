@@ -148,7 +148,8 @@ export function SignalBacktestPanel({
 
   /** 백테스트가 재현할 수 있는 것만 추려 보여준다 — 나머지를 만져 봐야 결과가 안 바뀐다 */
   const usable = cfg.checks.filter((c) =>
-    ["trend", "newHigh", "nearHigh", "disparity", "ma5Gap", "overhead", "volume"].includes(c.key),
+    /* naverTheme — 일봉 캐시로 최근 60여 일 한정 재현 (2026-08-28) */
+    ["trend", "newHigh", "nearHigh", "disparity", "ma5Gap", "overhead", "volume", "naverTheme"].includes(c.key),
   );
   const patch = (key: string, p: Partial<(typeof cfg.checks)[number]>) =>
     setCfg({ ...cfg, checks: cfg.checks.map((c) => (c.key === key ? { ...c, ...p } : c)) });

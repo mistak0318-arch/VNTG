@@ -1,5 +1,7 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { DEFAULT_CONFIG, type CheckConfig, type SignalConfig } from "./signalLight.js";
+import { loadCloses } from "./dailyCloses.js";
+import { isIndexLikeTheme, loadThemes } from "./naverThemes.js";
 
 /**
  * 신호등 백테스트 — **과거의 그날로 돌아가 같은 기준으로 다시 매긴다.**
@@ -29,7 +31,14 @@ import { DEFAULT_CONFIG, type CheckConfig, type SignalConfig } from "./signalLig
 
 const CHART = "/api/dostk/chart";
 
-/** 백테스트가 재현할 수 있는 기준 — 나머지는 계산에서 빠진다 */
+/**
+ * 백테스트가 재현할 수 있는 기준 — 나머지는 계산에서 빠진다.
+ *
+ * `naverTheme` 는 2026-08-28 부터 **최근 60여 일 한정으로** 재현된다 — 일봉 캐시
+ * (2,300여 종목 × 70일)로 테마의 하루하루 평균 등락률을 되짚을 수 있어서다.
+ * ⚠️ 정직한 한계: **구성은 오늘 것**이다. 두 달 안에서 편입이 크게 안 바뀐다고
+ * 가정한다 — 그 밖의 기간은 판단 불가(null)로 빠진다(0 으로 지어내지 않는다).
+ */
 export const BACKTESTABLE = new Set([
   "trend",
   "newHigh",
@@ -38,7 +47,98 @@ export const BACKTESTABLE = new Set([
   "ma5Gap",
   "overhead",
   "volume",
+  "naverTheme",
 ]);
+
+/* ------------------------------------------------------------------ */
+/* 테마 렌즈 재구성                                                     */
+/* ------------------------------------------------------------------ */
+
+interface ThemeCtx {
+  /** 테마 no → 하루하루 평균 등락률(%). k=0 이 캐시의 마지막 날, 커질수록 과거 */
+  rate: Map<number, number[]>;
+  /** 종목 → 든 사업 테마 no 들 (지수성 제외) */
+  themesOf: Map<string, number[]>;
+  /** 재현 가능한 날 수 */
+  span: number;
+}
+
+/**
+ * 일봉 캐시에서 테마별 일일 등락률을 되짚는다 — 조회 0회.
+ * 구성원 절반 이상이 값을 내야 그날을 센다(모자라면 그 날은 없음).
+ */
+async function buildThemeCtx(): Promise<ThemeCtx | null> {
+  const [{ themes }, { closes }] = await Promise.all([loadThemes(), loadCloses()]);
+  if (themes.length === 0 || Object.keys(closes).length === 0) return null;
+
+  const rate = new Map<number, number[]>();
+  const themesOf = new Map<string, number[]>();
+  let span = 0;
+
+  for (const t of themes) {
+    if (isIndexLikeTheme(t.name)) continue;
+    const members = t.stocks.map((s) => closes[s.code]).filter((a) => a && a.length >= 2);
+    if (members.length < Math.max(2, t.stocks.length * 0.5)) continue;
+
+    const maxK = Math.min(...members.map((a) => a.length - 1));
+    const rates: number[] = [];
+    for (let k = 0; k < maxK; k++) {
+      let sum = 0;
+      let n2 = 0;
+      for (const a of members) {
+        const i = a.length - 1 - k;
+        if (i >= 1 && a[i - 1] > 0) {
+          sum += ((a[i] - a[i - 1]) / a[i - 1]) * 100;
+          n2 += 1;
+        }
+      }
+      if (n2 < members.length * 0.5) break;
+      rates.push(sum / n2);
+    }
+    if (rates.length < 5) continue;
+    rate.set(t.no, rates);
+    span = Math.max(span, rates.length);
+    for (const s of t.stocks) {
+      const list = themesOf.get(s.code) ?? [];
+      list.push(t.no);
+      themesOf.set(s.code, list);
+    }
+  }
+  return rate.size > 0 ? { rate, themesOf, span } : null;
+}
+
+/**
+ * 캐시의 「끝에서 k번째」가 어느 날짜인가 — **종가를 맞대 보고 정한다.**
+ *
+ * 캐시에는 날짜가 없다(종가 배열뿐). 대충 「마지막 = 오늘」로 두면 장중에 받은
+ * 캐시와 하루 어긋나 모든 판정이 한 칸 밀린다 — 그건 조용한 거짓이다.
+ * 그래서 같은 종목의 **일봉(날짜 있음)과 종가 다섯 개를 맞대** 오프셋을 찾는다.
+ * 다섯 개가 다 맞는 자리만 믿고, 못 찾으면 그 종목으로는 정하지 않는다.
+ */
+function alignDates(cache: number[] | undefined, bars: Bar[]): Map<string, number> | null {
+  if (!cache || cache.length < 6 || bars.length < 8) return null;
+  for (let off = 0; off <= 2; off++) {
+    let match = true;
+    for (let j = 0; j < 5; j++) {
+      const a = cache[cache.length - 1 - j];
+      const b = bars[bars.length - 1 - off - j]?.close;
+      if (!b || Math.abs(a - b) > Math.max(1, a * 0.001)) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      const map = new Map<string, number>();
+      for (let k = 0; k < cache.length - 1; k++) {
+        const bar = bars[bars.length - 1 - off - k];
+        if (!bar) break;
+        map.set(bar.date, k);
+      }
+      return map;
+    }
+  }
+  return null;
+}
 
 export interface BacktestRow {
   /** 신호가 켜진 날 (YYYYMMDD) */
@@ -136,7 +236,13 @@ function grade(value: number, c: CheckConfig): number {
  * `at` 이 그날의 인덱스다. 뒤쪽(미래) 봉을 실수로 쓰면 백테스트가 통째로 거짓이
  * 되므로, 자를 때 항상 `slice(0, at + 1)` 로 끊는다.
  */
-function scoreAt(all: Bar[], at: number, cfg: SignalConfig): { score: number; level: BacktestRow["level"] } | null {
+function scoreAt(
+  all: Bar[],
+  at: number,
+  cfg: SignalConfig,
+  /** 그날 이 종목의 가장 강한 사업 테마 등락률(%) — 재현 못 하는 날은 null */
+  themeRate: number | null = null,
+): { score: number; level: BacktestRow["level"] } | null {
   const hist = all.slice(0, at + 1);
   if (hist.length < 65) return null; // 60일 지표를 내려면 그만큼은 있어야 한다
   const closes = hist.map((b) => b.close);
@@ -182,6 +288,9 @@ function scoreAt(all: Bar[], at: number, cfg: SignalConfig): { score: number; le
       }
     } else if (c.key === "volume") {
       g = grade((hist[hist.length - 1].vol * cur) / 100_000_000, c);
+    } else if (c.key === "naverTheme") {
+      /* 실제 신호등과 같은 물음: 든 테마 중 가장 강한 것이 그날 몇 % 였나 */
+      if (themeRate !== null) g = grade(themeRate, c);
     }
 
     add(c.axis, g, c.weight);
@@ -274,6 +383,10 @@ export async function runSignalBacktest(
 
   running = true;
   progress = { done: 0, total: opts.codes.length };
+  /* 테마 렌즈 — 일봉 캐시로 최근 60여 일을 되짚는다. 캐시가 없으면 그 기준만 빠진다 */
+  const themeCtx = cfg.checks.some((c) => c.enabled && c.key === "naverTheme")
+    ? await buildThemeCtx()
+    : null;
   const rows: BacktestRow[] = [];
   const all: { d1: number | null; d5: number | null; d20: number | null }[] = [];
   /* 점수대별로 나누려면 **초록이 아닌 것까지** 점수를 들고 있어야 한다 */
@@ -283,6 +396,27 @@ export async function runSignalBacktest(
     for (const { code, name } of opts.codes) {
       try {
         const bs = await bars(client, code);
+        /*
+         * 테마 렌즈의 날짜 맞춤 — 이 종목의 캐시 종가와 일봉을 맞대 「끝에서 k번째가
+         * 어느 날인가」를 정한다. 못 맞추면 이 종목의 테마 판정은 전부 null 이다.
+         */
+        const myThemes = themeCtx?.themesOf.get(code) ?? [];
+        const dateToK =
+          themeCtx && myThemes.length > 0
+            ? alignDates((await loadCloses()).closes[code], bs)
+            : null;
+        const themeRateAt = (date: string): number | null => {
+          if (!themeCtx || !dateToK || myThemes.length === 0) return null;
+          const k = dateToK.get(date);
+          if (k === undefined) return null;
+          let best: number | null = null;
+          for (const no of myThemes) {
+            const arr = themeCtx.rate.get(no);
+            const v = arr?.[k];
+            if (v !== undefined && (best === null || v > best)) best = v;
+          }
+          return best;
+        };
         // 마지막 봉은 오늘(미완성)일 수 있으나 종가 기준이라 그대로 쓴다
         const from = Math.max(65, bs.length - days);
         for (let i = from; i < bs.length; i++) {
@@ -295,7 +429,7 @@ export async function runSignalBacktest(
           const f = { d1: fwd(1), d5: fwd(5), d20: fwd(20) };
           all.push(f);
 
-          const s = scoreAt(bs, i, cfg);
+          const s = scoreAt(bs, i, cfg, themeRateAt(bs[i].date));
           if (!s) continue;
           scored.push({ score: s.score, ...f });
           /*
@@ -315,8 +449,10 @@ export async function runSignalBacktest(
     running = false;
   }
 
-  const used = cfg.checks.filter((c) => c.enabled && BACKTESTABLE.has(c.key)).map((c) => c.label);
-  const skipped = cfg.checks.filter((c) => c.enabled && !BACKTESTABLE.has(c.key)).map((c) => c.label);
+  const reproducible = (c: CheckConfig): boolean =>
+    BACKTESTABLE.has(c.key) && (c.key !== "naverTheme" || themeCtx !== null);
+  const used = cfg.checks.filter((c) => c.enabled && reproducible(c)).map((c) => c.label);
+  const skipped = cfg.checks.filter((c) => c.enabled && !reproducible(c)).map((c) => c.label);
 
   /*
    * 점수대 — 신호등의 경계(45·70)에 맞춰 나눈다. 그래야 「노랑 안에서도 위쪽이
@@ -354,7 +490,8 @@ export async function runSignalBacktest(
     base: summarize(all),
     buckets,
     note:
-      "일봉으로 되살릴 수 있는 기준만 씁니다 — 테마·ETF·수급·재무는 **그때의 구성을 모르므로** 뺐습니다. " +
+      "일봉으로 되살릴 수 있는 기준을 씁니다. 테마 강세는 일봉 캐시로 **최근 60여 일만** 재현되며 " +
+      "구성은 오늘 것을 씁니다(그 밖의 날은 판단 불가로 빠짐). ETF·수급·재무는 그때의 구성을 모르므로 뺐습니다. " +
       "「전체」는 같은 기간 모든 날·모든 종목의 평균입니다. 초록이 이걸 못 이기면 그 기준은 쓸모가 없습니다.",
   };
 }
