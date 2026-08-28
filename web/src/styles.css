@@ -10490,3 +10490,16 @@ button.tpb-row:hover { background: var(--panel-2); }
 .bf-tk-t { flex: none; font-size: 0.66rem; color: var(--muted); font-variant-numeric: tabular-nums; width: 2.4rem; }
 .bf-tk-name { flex: none; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bf-tk-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+
+/* 슈퍼신호등 표 — 테마 칸 (2026-08-28). 이름은 줄이고 %가 주인공 */
+.sd-theme-cell { text-align: left; }
+.sd-theme-name {
+  display: inline-block;
+  max-width: 7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-size: 0.7rem;
+  color: var(--muted);
+}

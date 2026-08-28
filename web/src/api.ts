@@ -584,6 +584,16 @@ export const api = {
    */
   signalSuperTheme: (code: string) =>
     getJson<{ theme: ThemeSeries | null }>(`/api/signal/super/theme/${code}`),
+  /** ETF 뒷배 비교선 — 뒷배 점수와 같은 규칙으로 고른 ETF 하나 (6시간 캐시) */
+  signalSuperEtf: (code: string) =>
+    getJson<{
+      etf: {
+        code: string;
+        name: string;
+        weight: number | null;
+        series: { date: string; close: number }[];
+      } | null;
+    }>(`/api/signal/super/etf/${code}`),
   signalSuperExit: (code: string, note: string) =>
     postJson<{ ok: boolean }>(`/api/signal/super/exit/${code}`, { note }),
   signalSuperNote: (code: string, note: string) =>
@@ -1645,6 +1655,10 @@ export interface SuperEntry {
   price: number | null;
   changeRate: number | null;
   sinceAdded: number | null;
+  /** 지금 이 종목의 무리 — 든 네이버 테마 중 오늘 가장 강한 것 (2026-08-28) */
+  theme?: { key: string; name: string; changeRate: number; streak: number } | null;
+  /** ETF 뒷배 — 상위 3 ETF 오늘 평균 (신호등 뒷배와 같은 규칙) */
+  etfBack?: { rate: number; top: string } | null;
 }
 
 export interface SuperGradeRow {

@@ -20,7 +20,7 @@ import {
   updateSuperNote,
 } from "../superSignal.js";
 import { gradeSignalHistory, signalDays } from "../signalHistory.js";
-import { themeSeriesFor } from "../themeSeries.js";
+import { etfSeriesFor, themeSeriesFor } from "../themeSeries.js";
 import { backtestProgress, backtestResult, startBacktestJob } from "../signalBacktest.js";
 import { tradeValueTop } from "../signalScreen.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -290,6 +290,15 @@ export function createSignalRouter(client: KiwoomClient): Router {
   router.get("/super/theme/:code", async (req, res, next) => {
     try {
       res.json({ theme: await themeSeriesFor(client, req.params.code) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** ETF 뒷배 비교선 — 뒷배 점수와 같은 규칙으로 고른 ETF 하나의 일봉 (6시간 캐시) */
+  router.get("/super/etf/:code", async (req, res, next) => {
+    try {
+      res.json({ etf: await etfSeriesFor(client, req.params.code) });
     } catch (err) {
       next(err);
     }

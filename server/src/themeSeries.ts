@@ -1,6 +1,8 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { listThemes } from "./customThemes.js";
-import { loadThemes, themesOfStock } from "./naverThemes.js";
+import { isIndexLikeTheme, loadThemes, themesOfStock } from "./naverThemes.js";
+import { etfHoldersOf } from "./etfHolders.js";
+import { isNotTheme } from "./signalLight.js";
 import { getThemeStocks } from "./marketOverview.js";
 import { getSectorMood } from "./sectorMood.js";
 import { peekSnapshot } from "./marketSnapshot.js";
@@ -100,6 +102,8 @@ async function pickTheme(client: KiwoomClient, code: string): Promise<Pick | nul
     const cands = naver
       .map((n) => store.themes.find((t) => t.no === n.no))
       .filter((t): t is NonNullable<typeof t> => !!t && t.stocks.length >= 2)
+      /* 지수·제도 묶음(밸류업 등)은 비교선이 못 된다 — 사업 테마만 */
+      .filter((t) => !isIndexLikeTheme(t.name))
       .sort((a, b) => a.stocks.length - b.stocks.length);
     const best = cands[0];
     if (best) {
@@ -176,4 +180,49 @@ async function dailyCloses(client: KiwoomClient, code: string): Promise<Map<stri
     if (/^\d{8}$/.test(date) && Number.isFinite(close) && close > 0) out.set(date, close);
   }
   return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* ETF 뒷배 비교선 (2026-08-28 — 「ETF 뒷배도 반영해야지」)               */
+/* ------------------------------------------------------------------ */
+
+export interface EtfSeriesResult {
+  code: string;
+  name: string;
+  /** 이 종목의 비중(%) — 화면이 「왜 이 ETF 인가」를 적는다 */
+  weight: number | null;
+  series: { date: string; close: number }[];
+}
+
+const etfCache = new Map<string, { at: number; data: EtfSeriesResult | null }>();
+
+/**
+ * 이 종목을 **테마로** 가장 많이 담은 ETF 의 일봉.
+ *
+ * 신호등의 「ETF 뒷배」와 같은 규칙으로 고른다 — 단일종목·레버리지·지수(200/150)·
+ * 커버드콜은 빼고, 비중 50% 초과(사실상 그 종목 하나짜리)도 뺀다. 뒷배 점수와
+ * 대시보드 비교선이 **같은 ETF** 를 봐야 말이 맞는다.
+ * ETF 는 그 자체가 종목이라 일봉 한 번이면 된다. 6시간 캐시.
+ */
+export async function etfSeriesFor(
+  client: KiwoomClient,
+  code: string,
+): Promise<EtfSeriesResult | null> {
+  const hit = etfCache.get(code);
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.data;
+
+  const data = await (async (): Promise<EtfSeriesResult | null> => {
+    const { holders } = await etfHoldersOf(code).catch(() => ({ holders: [] as { code: string; name: string; weight: number | null }[] }));
+    const best = holders.find((h) => !isNotTheme(h.name) && (h.weight ?? 0) <= 50);
+    if (!best) return null;
+    const closes = await dailyCloses(client, best.code).catch(() => null);
+    if (!closes || closes.size < 2) return null;
+    const series = [...closes.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, close]) => ({ date, close }));
+    return { code: best.code, name: best.name, weight: best.weight, series };
+  })();
+
+  etfCache.set(code, { at: Date.now(), data });
+  return data;
 }

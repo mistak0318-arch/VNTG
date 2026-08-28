@@ -11,6 +11,7 @@ import { evaluateThemes } from "./customThemes.js";
 import { getSectorMood } from "./sectorMood.js";
 import { findStock } from "./stockListCache.js";
 import { themeStrength } from "./themeStrength.js";
+import { isIndexLikeTheme } from "./naverThemes.js";
 import { etfHoldersOf } from "./etfHolders.js";
 
 /**
@@ -29,7 +30,7 @@ import { etfHoldersOf } from "./etfHolders.js";
  * 이름으로 거른다. ETF 이름은 그 성격을 꽤 정직하게 적어 두는 편이고, 이 판정에
  * 쓸 다른 표지(운용 전략 코드 같은 것)를 네이버·키움 어느 쪽도 주지 않는다.
  */
-function isNotTheme(name: string): boolean {
+export function isNotTheme(name: string): boolean {
   return (
     /레버리지|인버스|단일종목|2X|3X/i.test(name) ||
     /200|150|300|KRX|코스피|코스닥|KOSPI|KOSDAQ|MSCI|S&P|TOP\s*10\b/i.test(name) ||
@@ -1106,6 +1107,8 @@ export async function evaluateSignal(
        */
       const best = themeRows
         .filter((t) => t.stocks.some((s) => s.code === code))
+        /* 지수·제도 묶음(밸류업 등)은 무리가 아니다 — 사업 테마만 (2026-08-28) */
+        .filter((t) => !isIndexLikeTheme(t.name))
         .sort((a, b) => b.changeRate - a.changeRate)[0];
       if (best) {
         g = grade(best.changeRate, c);

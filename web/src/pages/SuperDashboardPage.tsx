@@ -262,6 +262,22 @@ export function SuperDashboardPage({
                   accessor={(e: SuperEntry) => e.changeRate ?? -9999}
                   sort={sort}
                 />
+                {/* 테마·ETF 뒷배 (2026-08-28) — 걸린 종목의 무리가 지금도 도는가.
+                    편입 점수의 「테마 강세(네이버)」·「ETF 뒷배」와 같은 분류·같은 규칙이다 */}
+                <SortableTh
+                  columnKey="theme"
+                  label="테마"
+                  accessor={(e: SuperEntry) => e.theme?.changeRate ?? -9999}
+                  sort={sort}
+                  thProps={{ title: "든 네이버 테마 중 오늘 가장 강한 것 — 식으면 이탈이 가깝다" }}
+                />
+                <SortableTh
+                  columnKey="etfBack"
+                  label="ETF 뒷배"
+                  accessor={(e: SuperEntry) => e.etfBack?.rate ?? -9999}
+                  sort={sort}
+                  thProps={{ title: "테마로 담은 상위 3 ETF 의 오늘 평균 (신호등 뒷배와 같은 규칙)" }}
+                />
                 <SortableTh
                   columnKey="since"
                   label="편입 대비"
@@ -345,6 +361,30 @@ export function SuperDashboardPage({
                     </td>
                     <td className="num">{e.price ? e.price.toLocaleString("ko-KR") : "-"}</td>
                     <td className={`num ${cls(e.changeRate)}`}>{pct(e.changeRate)}</td>
+                    <td
+                      className="sd-theme-cell"
+                      title={
+                        e.theme
+                          ? `${e.theme.name} ${pct(e.theme.changeRate)}${e.theme.streak >= 2 ? ` · ${e.theme.streak}일 연속↑` : ""}`
+                          : "든 네이버 테마가 없다"
+                      }
+                    >
+                      {e.theme ? (
+                        <>
+                          <span className="sd-theme-name">{e.theme.name}</span>{" "}
+                          <b className={cls(e.theme.changeRate)}>{pct(e.theme.changeRate)}</b>
+                          {e.theme.streak >= 2 && <i className="lens-streak">{e.theme.streak}일↑</i>}
+                        </>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td
+                      className={`num ${cls(e.etfBack?.rate)}`}
+                      title={e.etfBack ? `대표 ${e.etfBack.top}` : "테마로 담은 ETF 가 없다"}
+                    >
+                      {e.etfBack ? pct(e.etfBack.rate) : "-"}
+                    </td>
                     <td className={`num strong-col ${cls(e.sinceAdded)}`}>{pct(e.sinceAdded)}</td>
                     <td>
                       <Spark

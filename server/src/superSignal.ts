@@ -5,7 +5,10 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { getMarketSnapshot, peekSnapshot } from "./marketSnapshot.js";
 import { evaluateMarket } from "./marketSignal.js";
 import { getSectorMood } from "./sectorMood.js";
-import { evaluateSignal } from "./signalLight.js";
+import { evaluateSignal, isNotTheme } from "./signalLight.js";
+import { themeStrength } from "./themeStrength.js";
+import { isIndexLikeTheme, themesOfStock } from "./naverThemes.js";
+import { etfHoldersOf } from "./etfHolders.js";
 import { fetchUniverse, SCREEN_UNIVERSES, type Candidate } from "./signalScreen.js";
 import {
   hasDedicatedChannel,
@@ -665,6 +668,14 @@ export type SuperListRow = SuperEntry & {
   changeRate: number | null;
   sinceAdded: number | null;
   /**
+   * 지금 이 종목의 무리가 도는가 (2026-08-28, 테마 DB 개편).
+   * 든 네이버 테마 중 오늘 가장 강한 것 — 편입 점수의 「테마 강세(네이버)」와
+   * 같은 분류다. 걸린 종목의 테마가 식으면 이탈이 가까운 신호다. 조회 0회(파일+스냅샷).
+   */
+  theme: { key: string; name: string; changeRate: number; streak: number } | null;
+  /** ETF 뒷배 — 테마로 담은 상위 3 ETF 의 오늘 평균 (신호등 뒷배와 같은 규칙). 조회 0회 */
+  etfBack: { rate: number; top: string } | null;
+  /**
    * 어느 그룹에서 온 종목인가 (2026-08-27) — "super"=슈퍼신호등 원장,
    * "cross"=관심 그룹 「슈퍼신호등+교차」. 둘 다일 수도 있다. 화면이 심볼(🌟/⚡)로 단다.
    */
@@ -713,25 +724,72 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
         sinceAdded:
           price !== null && w.addedPrice > 0 ? ((price - w.addedPrice) / w.addedPrice) * 100 : null,
         groupTags: ["cross"],
+        theme: null,
+        etfBack: null,
       });
     }
   } catch {
     /* 관심종목을 못 읽어도 슈퍼 원장은 그대로 보여준다 */
   }
-  const entries: SuperListRow[] = store.entries.map((e) => {
-    const s = snap?.byCode.get(e.code);
-    const price = s?.price ?? null;
-    return {
-      ...e,
-      price,
-      changeRate: s?.changeRate ?? null,
-      sinceAdded:
-        price !== null && e.addedPrice > 0 ? ((price - e.addedPrice) / e.addedPrice) * 100 : null,
-      groupTags: crossCodes.has(e.code)
-        ? (["super", "cross"] as ("super" | "cross")[])
-        : (["super"] as ("super" | "cross")[]),
-    };
-  });
+  /*
+   * 테마·ETF 뒷배를 한 번에 준비한다 (2026-08-28) — 종목마다 부르면 테마 강도가
+   * 그만큼 반복 계산된다. 강도는 한 번(수십 ms), 나머지는 파일 조회다.
+   */
+  const themeMap = new Map(
+    (await themeStrength("kr").catch(() => ({ themes: [] as { key: string; name: string; changeRate: number; streak: number }[] }))).themes.map(
+      (t) => [t.key, t] as const,
+    ),
+  );
+  const lensOf = async (
+    code: string,
+  ): Promise<{
+    theme: SuperListRow["theme"];
+    etfBack: SuperListRow["etfBack"];
+  }> => {
+    let theme: SuperListRow["theme"] = null;
+    for (const t of await themesOfStock(code).catch(() => [])) {
+      const row = themeMap.get(`kr:${t.no}`);
+      if (!row) continue;
+      if (isIndexLikeTheme(row.name)) continue; // 밸류업 지수는 무리가 아니다
+
+      if (!theme || row.changeRate > theme.changeRate) {
+        theme = { key: row.key, name: row.name, changeRate: row.changeRate, streak: row.streak };
+      }
+    }
+    let etfBack: SuperListRow["etfBack"] = null;
+    const holders = (await etfHoldersOf(code).catch(() => ({ holders: [] }))).holders
+      .filter((h) => !isNotTheme(h.name) && (h.weight ?? 0) <= 50 && h.changeRate !== null)
+      .slice(0, 3);
+    if (holders.length > 0) {
+      etfBack = {
+        rate:
+          Math.round(
+            (holders.reduce((n, h) => n + (h.changeRate ?? 0), 0) / holders.length) * 100,
+          ) / 100,
+        top: holders[0].name.replace(/^(KODEX|TIGER|RISE|PLUS|ACE|SOL|HANARO)\s*/, ""),
+      };
+    }
+    return { theme, etfBack };
+  };
+
+  const entries: SuperListRow[] = await Promise.all(
+    store.entries.map(async (e) => {
+      const s = snap?.byCode.get(e.code);
+      const price = s?.price ?? null;
+      return {
+        ...e,
+        price,
+        changeRate: s?.changeRate ?? null,
+        sinceAdded:
+          price !== null && e.addedPrice > 0 ? ((price - e.addedPrice) / e.addedPrice) * 100 : null,
+        groupTags: crossCodes.has(e.code)
+          ? (["super", "cross"] as ("super" | "cross")[])
+          : (["super"] as ("super" | "cross")[]),
+        ...(await lensOf(e.code)),
+      };
+    }),
+  );
+  for (const c of crossOnly) Object.assign(c, await lensOf(c.code));
   entries.push(...crossOnly);
   /*
    * 채점 요약 — 「교집합이 넓을수록·오래 걸릴수록 진짜인가」에 답하는 표.

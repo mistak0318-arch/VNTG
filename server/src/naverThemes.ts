@@ -177,6 +177,17 @@ export async function loadThemes(): Promise<NaverThemeStore> {
 let reverse: Map<string, { no: number; name: string; desc: string }[]> | null = null;
 let reverseAt = "";
 
+/**
+ * 테마라기보다 **지수·제도 묶음**인 것 (2026-08-28).
+ *
+ * 네이버 분류에는 「코리아 밸류업 지수」처럼 사업이 아니라 제도·지수 편입으로
+ * 묶인 것이 섞여 있다. 그게 「이 종목의 무리」로 뽑히면 LS ELECTRIC 의 무리가
+ * 전력기기가 아니라 밸류업이 된다 — 신호등 테마 판정과 슈퍼 대시보드가 같이 거른다.
+ */
+export function isIndexLikeTheme(name: string): boolean {
+  return /지수|밸류업|MSCI|K-뉴딜|공기업|지주사|우선주/i.test(name);
+}
+
 export async function themesOfStock(code: string): Promise<{ no: number; name: string; desc: string }[]> {
   const store = await loadThemes();
   if (!reverse || reverseAt !== store.fetchedAt) {

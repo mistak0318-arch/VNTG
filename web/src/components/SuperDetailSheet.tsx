@@ -64,6 +64,8 @@ export function SuperDetailSheet({
    * 상세 응답에 실으면 시트가 그만큼 늦게 열린다. 선 하나가 뒤늦게 그려지는 편이 낫다.
    */
   const [theme, setTheme] = useState<ThemeSeries | null>(null);
+  /** ETF 뒷배 비교선 — 네 번째 선. 뒷배 점수와 같은 규칙으로 고른 ETF 하나다 */
+  const [etf, setEtf] = useState<Awaited<ReturnType<typeof api.signalSuperEtf>>["etf"]>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   /** 펼쳐 놓은 메모(날짜) — 그날 상황 브리핑이 아래로 열린다 */
@@ -97,6 +99,11 @@ export function SuperDetailSheet({
     api
       .signalSuperTheme(code)
       .then((r) => alive && setTheme(r.theme))
+      .catch(() => undefined);
+    setEtf(null);
+    api
+      .signalSuperEtf(code)
+      .then((r) => alive && setEtf(r.etf))
       .catch(() => undefined);
     return () => {
       alive = false;
@@ -138,6 +145,21 @@ export function SuperDetailSheet({
          */
         ...(theme && theme.series.length > 1
           ? [{ label: themeLabel(theme), color: "#c084fc", values: toRel(theme.series), dash: true }]
+          : []),
+        /*
+         * 네 번째 선 — **ETF 뒷배** (2026-08-28). 테마선이 「같은 무리가 가는가」면
+         * 이건 「그 무리에 실제로 돈을 태우는 상품이 가는가」다. 편입 점수의
+         * ETF 뒷배 기준과 같은 규칙으로 고른 ETF 라 점수와 선이 같은 것을 본다.
+         */
+        ...(etf && etf.series.length > 1
+          ? [
+              {
+                label: `${etf.name}${etf.weight !== null ? ` (비중 ${etf.weight.toFixed(1)}%)` : ""}`,
+                color: "#4dd0e1",
+                values: toRel(etf.series),
+                dash: true,
+              },
+            ]
           : []),
       ],
     };
@@ -309,6 +331,7 @@ export function SuperDetailSheet({
                 <p className="pt-n sd-hint">
                   편입일 종가를 0% 로 놓고 그린다. 종목 혼자 오르는지, 장이 밀어주는지,{" "}
                   <b>테마가 같이 가는지</b>가 갈린다.
+                  {etf ? ` ETF선은 「${etf.name}」 — 이 종목을 테마로 가장 많이 담은 ETF입니다(신호등 ETF 뒷배와 같은 기준).` : ""}
                   {theme
                     ? ` 테마선은 「${themeLabel(theme)}」 — ${themeHint(theme)}.`
                     : " 테마선은 잠시 뒤에 붙습니다."}
