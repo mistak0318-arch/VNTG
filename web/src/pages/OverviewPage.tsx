@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BreadthHelp, BreadthPanel } from "../components/BreadthPanel";
+import { RotationStrip, ThermoPanel, useMarketLens } from "../components/MarketLensPanel";
 import {
   api,
   fmtNum,
@@ -8,7 +8,6 @@ import {
   type MarketFlow,
   type MarketStatus,
   type GlobalQuote,
-  type SectorRow,
   type StockRow,
   type ThemeRow,
   type ViRow,
@@ -89,7 +88,6 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   /* 선물 투자자별 수급 — 지수 타일 공용 훅(DomesticIndexGrid)으로 이사했다 */
   const futFlow = useFutFlow();
   const movers = useSection<{ rising: StockRow[]; falling: StockRow[] }>("movers", 20_000);
-  const sectors = useSection<{ kospi: SectorRow[]; kosdaq: SectorRow[] }>("sectors", 60_000);
   const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 60_000);
   const highLow = useSection<{ high: StockRow[]; low: StockRow[] }>("highLow", 120_000);
   const vi = useSection<ViRow[]>("vi", 20_000);
@@ -97,10 +95,11 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const usMajor = useSection<UsMajorResult>("usMajor", 15_000);
   const rates = useSection<RateRow[]>("rates", 30_000);
   const topTraders = useSection<TopTraderRow[]>("topTraders", 120_000);
+  /* 시장 렌즈 — 체온계·테마 흐름 두 카드가 나눠 본다 (한 번만 받는다) */
+  const { lens, reload: reloadLens } = useMarketLens();
 
   const [flowMarket, setFlowMarket] = useState<"kospi" | "kosdaq">("kospi");
   const [moverDir, setMoverDir] = useState<"rising" | "falling">("rising");
-  const [sectorMarket, setSectorMarket] = useState<"kospi" | "kosdaq">("kospi");
   const [themeDir, setThemeDir] = useState<"top" | "bottom">("top");
   const [hlDir, setHlDir] = useState<"high" | "low">("high");
   const [constituent, setConstituent] = useState<ConstituentTarget | null>(null);
@@ -116,11 +115,11 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
     indices.refresh();
     flow.refresh();
     movers.refresh();
-    sectors.refresh();
     themes.refresh();
     highLow.refresh();
     vi.refresh();
     global.refresh();
+    reloadLens();
   }
 
   useEffect(() => {
@@ -440,10 +439,16 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           </OverviewCard>
         )}
 
+        {/*
+          시장 체온계 (2026-08-28) — 「시장 폭 추이」를 갈아끼웠다.
+          하루씩 쌓던 폭 그래프는 서버를 새로 켜면 비었는데, 체온계는 일봉 캐시로
+          40일치를 소급해 낸다. 같은 물음(장이 넓게 사는가)에 더 긴 답이다.
+          key 는 "breadth" 그대로 — 저장된 배치가 자리를 기억한다.
+        */}
         {show("summary") && (
-          <OverviewCard title="시장 폭 추이" order={cards.orderOf("breadth")}>
+          <OverviewCard title="시장 체온계" order={cards.orderOf("breadth")}>
             <div className="ov-card-b">
-              <BreadthPanel />
+              <ThermoPanel lens={lens} />
             </div>
           </OverviewCard>
         )}
@@ -453,31 +458,21 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           키움에도 한투에도 없어서 공공데이터포털 키가 생겨야 붙는다. 그때 여기 끼운다.
         */}
 
+        {/*
+          테마 흐름 (2026-08-28) — 「업종」을 갈아끼웠다. 거래소 업종 분류는 이 앱의
+          눈금과 안 맞아 신호등 가중치에서도 뺐다 — 대시보드에만 남을 이유가 없다.
+          대신 로테이션(주도/부상/휴식)이 「오늘 어느 판이 도는가」에 바로 답한다.
+          key 는 "sectors" 그대로 — 저장된 배치가 자리를 기억한다.
+        */}
         {show("summary") && (
-          <OverviewCard title="업종" order={cards.orderOf("sectors")} updatedAt={sectors.updatedAt} loading={sectors.loading} error={sectors.error}>
-            <SegmentToggle
-              options={[
-                { key: "kospi" as const, label: "코스피" },
-                { key: "kosdaq" as const, label: "코스닥" },
-              ]}
-              value={sectorMarket}
-              onChange={setSectorMarket}
-            />
-            <RankList
-              items={sectors.data?.[sectorMarket] ?? []}
-              renderItem={(s: SectorRow, i) => (
-                <button
-                  className="ov-li"
-                  key={`${s.code}-${i}`}
-                  onClick={() =>
-                    setConstituent({ kind: "sector", code: s.code, name: s.name, market: sectorMarket })
-                  }
-                >
-                  <span className="ov-nm">{s.name}</span>
-                  <span className={`ov-pct num ${signCls(s.changeRate)}`}>{fmtPct(s.changeRate)}</span>
-                </button>
-              )}
-            />
+          <OverviewCard title="테마 흐름" order={cards.orderOf("sectors")}>
+            <RotationStrip lens={lens} onSelectStock={onSelectStock} />
+            {lens?.rotation.ready && (
+              <div className="table-note">
+                거래대금 300억↑ 테마 {lens.rotation.universe}개를 오늘 × 한 달 누적으로
+                나눕니다 — 판 전체는 <b>시장 흐름 분석 &gt; 테마 로테이션</b>.
+              </div>
+            )}
           </OverviewCard>
         )}
 
@@ -680,17 +675,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         하려는 일이 아니라, 앞의 지표들을 다 보고 난 뒤 곁눈질하는 자리에 둔다.
       */}
 
-      {/*
-        지표 설명은 **맨 아래**다. 원래 시장 폭 그래프 바로 밑에 있었는데 설명이 길어서
-        본문을 밀어냈다 — 세 지표를 보러 왔다가 다음 카드까지 한참 스크롤해야 했다.
-        처음 몇 번만 읽으면 되는 것이라 뒤로 뺀다.
-      */}
-      {show("summary") && (
-        <details className="ov-help">
-          <summary>시장 폭 지표는 어떻게 읽나</summary>
-          <BreadthHelp />
-        </details>
-      )}
+      {/* 시장 폭 도움말은 카드와 함께 뺐다 (2026-08-28) — 체온계가 제 설명을 달고 있다 */}
 
       {indexDetail && (
         <IndexDetailSheet code={indexDetail} onClose={() => setIndexDetail(null)} />

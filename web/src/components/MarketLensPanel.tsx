@@ -72,8 +72,11 @@ function RatioSpark({ data, mid }: { data: number[]; mid?: number }) {
   );
 }
 
-export function ThermoPanel() {
-  const { lens, error } = useMarketLens();
+export function ThermoPanel({ lens: given }: { lens?: MarketLens | null } = {}) {
+  /* 이미 받아 둔 렌즈가 있으면 그걸 쓴다 — 한 화면에서 두 번 받을 이유가 없다 */
+  const own = useMarketLens();
+  const lens = given !== undefined ? given : own.lens;
+  const error = given !== undefined ? null : own.error;
   if (error) return <div className="error-banner">{error}</div>;
   if (!lens) return <div className="empty">불러오는 중…</div>;
   const t = lens.thermo;

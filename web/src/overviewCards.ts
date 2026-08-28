@@ -26,8 +26,16 @@ export const OVERVIEW_CARDS: Record<OverviewSub, CardDef[]> = {
     { key: "global", label: "글로벌" },
     /* 미장 주요지수 카드는 숨김 (2026-08-25) — 야간선물·VIX·유가는 글로벌로 옮겼다 */
     { key: "rates", label: "금리" },
-    { key: "breadth", label: "시장 폭 추이" },
-    { key: "sectors", label: "업종" },
+    /*
+     * 두 카드를 갈아끼웠다 (2026-08-28, 테마 DB 개편).
+     * - 시장 폭 추이 → **시장 체온계**: 하루씩 쌓던 폭은 일봉 캐시가 40일치를
+     *   소급해 내는 체온계가 완전히 대체한다.
+     * - 업종 → **테마 흐름**: 거래소 업종 분류는 「의미가 없다」고 판정해 신호등
+     *   가중치에서도 뺐다 — 대시보드에만 남아 있을 이유가 없다.
+     * ⚠️ key 는 그대로 둔다 — 저장된 카드 배치가 key 로 자리를 기억한다.
+     */
+    { key: "breadth", label: "시장 체온계" },
+    { key: "sectors", label: "테마 흐름" },
   ],
   flow: [{ key: "flow", label: "투자자별 수급" }],
   rank: [
