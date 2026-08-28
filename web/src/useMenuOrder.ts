@@ -48,6 +48,44 @@ export interface MenuPrefs {
   favorites: string[];
 }
 
+/**
+ * 자주 쓰는 메뉴의 **구분선** — 저장은 `#이름` 또는 `#이름|색` 이다 (2026-08-28).
+ *
+ * 색을 담을 자리가 없어서 이름 뒤에 `|` 로 잇는다. **옛 저장분(`#이름`)도 그대로
+ * 읽힌다** — 색이 없으면 기본색이다. 새 칸을 만들지 않은 이유는 favorites 가
+ * 문자열 배열이고 그 순서가 곧 화면 순서이기 때문이다: 구조를 바꾸면 저장분이
+ * 통째로 깨진다.
+ */
+export interface FavSection {
+  name: string;
+  /** CSS 색. 없으면 기본색 */
+  color: string | null;
+}
+
+export function parseSection(key: string): FavSection | null {
+  if (!key.startsWith("#")) return null;
+  const body = key.slice(1);
+  const bar = body.lastIndexOf("|");
+  if (bar < 0) return { name: body, color: null };
+  return { name: body.slice(0, bar), color: body.slice(bar + 1) || null };
+}
+
+export function sectionKey(name: string, color: string | null): string {
+  return `#${name}${color ? `|${color}` : ""}`;
+}
+
+/** 고를 수 있는 색 — 사이드바가 어두워서 밝은 쪽으로만 고른다 */
+export const SECTION_COLORS = [
+  { key: "", label: "기본" },
+  { key: "#4c8dff", label: "파랑" },
+  { key: "#35c46a", label: "초록" },
+  { key: "#f5c542", label: "노랑" },
+  { key: "#ff8c42", label: "주황" },
+  { key: "#ff5c5c", label: "빨강" },
+  { key: "#c084fc", label: "보라" },
+  { key: "#4dd0e1", label: "청록" },
+];
+
 const EMPTY: MenuPrefs = { order: [], hidden: [], labels: {}, groupOf: {}, extraGroups: [], favorites: [] };
 
 function read(): MenuPrefs {

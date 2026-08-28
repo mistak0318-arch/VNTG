@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { applyOrder, useMenuPrefs } from "../useMenuOrder";
+import {
+  applyOrder,
+  parseSection,
+  sectionKey,
+  SECTION_COLORS,
+  useMenuPrefs,
+} from "../useMenuOrder";
 import { useDragOrder } from "../useDragOrder";
 
 /**
@@ -28,6 +34,8 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [newGroup, setNewGroup] = useState("");
   const [newSection, setNewSection] = useState("");
+  /** 구분선 이름을 치는 중인 값 — 확정 전까지는 저장하지 않는다 */
+  const [draft, setDraft] = useState<{ key: string; name: string } | null>(null);
 
   /** 내가 옮긴 영역을 반영한 목록 */
   const placed = items.map((i) => ({ ...i, group: prefs.groupOf[i.key] ?? i.group }));
@@ -163,7 +171,7 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
    */
   const favRows = prefs.favorites.map((k) =>
     k.startsWith("#")
-      ? { key: k, sec: k.slice(1), icon: "", label: "" }
+      ? { key: k, sec: parseSection(k), icon: "", label: "" }
       : {
           key: k,
           sec: null,
@@ -179,10 +187,37 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
   function addFavSection() {
     const name = newSection.trim();
     if (!name) return;
-    const key = `#${name}`;
+    const key = sectionKey(name, null);
     if (prefs.favorites.includes(key)) return; // 같은 이름 두 번이면 순서 저장이 꼬인다
     save({ ...prefs, favorites: [...prefs.favorites, key] });
     setNewSection("");
+  }
+
+  /**
+   * 구분선 이름을 **다 쳤을 때 한 번에** 반영한다.
+   *
+   * ⚠️ 한 글자마다 저장하면 안 된다 — 저장 키가 곧 이름이라(`#이름|색`) 키가 바뀌고,
+   * 그 키가 React 의 `key` 라 칸이 통째로 다시 그려진다. **글자 하나 칠 때마다 커서가
+   * 빠졌다.** 그래서 치는 동안은 여기(draft)에 담아 두고 엔터·포커스 해제에 확정한다.
+   */
+  function commitDraft(key: string, color: string | null) {
+    if (!draft || draft.key !== key) return;
+    const name = draft.name;
+    setDraft(null);
+    renameSection(key, name, color);
+  }
+
+  /**
+   * 구분선의 이름·색을 고친다 — **자리는 그대로 두고 값만 바꾼다.**
+   * 지우고 새로 넣으면 맨 뒤로 가서, 순서를 다시 잡아야 한다.
+   */
+  function renameSection(oldKey: string, name: string, color: string | null) {
+    const next = sectionKey(name.trim() || "구분", color);
+    if (next !== oldKey && prefs.favorites.includes(next)) return; // 같은 이름 둘은 안 된다
+    save({
+      ...prefs,
+      favorites: prefs.favorites.map((k) => (k === oldKey ? next : k)),
+    });
   }
 
   return (
@@ -222,7 +257,45 @@ export function MenuOrderPanel({ items }: { items: MenuItemRef[] }) {
                   ⠿
                 </span>
                 {r.sec !== null ? (
-                  <span className="mo-fav-secname">── {r.sec} ──</span>
+                  /*
+                   * 구분선 — **이름을 고치고 색을 고른다** (2026-08-28).
+                   * 예전엔 지우고 다시 만드는 수밖에 없었고, 색이 없어서 사이드바에서
+                   * 메뉴 항목처럼 보였다.
+                   */
+                  <span className="mo-fav-secedit">
+                    <input
+                      className="pt-input mo-sec-name"
+                      value={draft && draft.key === r.key ? draft.name : r.sec.name}
+                      onChange={(e) => setDraft({ key: r.key, name: e.target.value })}
+                      onBlur={() => commitDraft(r.key, r.sec!.color)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                        if (e.key === "Escape") setDraft(null);
+                      }}
+                      title="구분 이름 (엔터로 확정)"
+                      /*
+                       * 줄 전체가 `draggable` 이라 칸 안에서 글자를 끌면 **줄이 끌려간다**
+                       * — 글자 선택이 아예 안 된다. 여기서 끊는다.
+                       */
+                      onDragStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                    />
+                    <span className="mo-sec-colors">
+                      {SECTION_COLORS.map((c) => (
+                        <button
+                          key={c.key || "default"}
+                          className={`mo-sec-color${(r.sec!.color ?? "") === c.key ? " on" : ""}`}
+                          style={c.key ? { background: c.key } : undefined}
+                          title={c.label}
+                          onClick={() => renameSection(r.key, r.sec!.name, c.key || null)}
+                        >
+                          {c.key ? "" : "○"}
+                        </button>
+                      ))}
+                    </span>
+                  </span>
                 ) : (
                   <span className="mo-fav-name">
                     <span className="mo-icon">{r.icon}</span> {r.label}

@@ -41,7 +41,7 @@ import { BriefingPage } from "./pages/BriefingPage";
 import { MorningPage } from "./pages/MorningPage";
 import { useDragOrder } from "./useDragOrder";
 import { useHashRoute } from "./useHashRoute";
-import { applyOrder, useMenuPrefs } from "./useMenuOrder";
+import { applyOrder, parseSection, useMenuPrefs } from "./useMenuOrder";
 import { useScreenLock } from "./useScreenLock";
 import { ScreenLock } from "./components/ScreenLock";
 import { ExcelChrome } from "./components/ExcelChrome";
@@ -270,7 +270,10 @@ export default function App() {
    */
   const favEntries = prefs.favorites
     .map((key) => {
-      if (key.startsWith("#")) return { type: "sec" as const, key, name: key.slice(1) };
+      if (key.startsWith("#")) {
+        const s = parseSection(key)!;
+        return { type: "sec" as const, key, name: s.name, color: s.color };
+      }
       const it = flat.find((i) => i.key === key);
       return it
         ? { type: "item" as const, key, item: { ...it, label: label(it.key, it.label) } }
@@ -682,8 +685,16 @@ export default function App() {
               <div className="nav-group-label">자주 쓰는 메뉴</div>
               {favEntries.map((e) =>
                 e.type === "sec" ? (
-                  /* 섹션 구분 — 설정에서 끼워 넣은 소제목 */
-                  <div className="nav-fav-sec" key={e.key}>
+                  /*
+                   * 섹션 구분 — 설정에서 끼워 넣은 소제목.
+                   * 색을 정했으면 글자와 밑줄에 같이 입힌다. 색이 없으면 메뉴 항목과
+                   * 구분이 안 돼서 그냥 또 하나의 메뉴처럼 보였다 (2026-08-28).
+                   */
+                  <div
+                    className={`nav-fav-sec${e.color ? " tinted" : ""}`}
+                    key={e.key}
+                    style={e.color ? { color: e.color, borderColor: e.color } : undefined}
+                  >
                     {e.name}
                   </div>
                 ) : (

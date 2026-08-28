@@ -22,6 +22,13 @@
   --red: #ff5c5c;
   --blue: #4c8dff;
   --green: #35c46a;
+  /*
+   * 마우스가 얹힌 줄 (2026-08-28) — 종목이 수십 개인 표에서 **한 줄을 끝까지 따라가기가
+   * 어렵다.** 칸이 열 몇 개를 넘어가면 눈이 위아래 줄로 샌다.
+   * 반투명이어야 한다: 아래에 깔린 히트맵 색을 지우지 않고 덮기만 한다.
+   */
+  --row-hover: rgba(76, 141, 255, 0.14);
+  --row-hover-line: rgba(76, 141, 255, 0.45);
 }
 
 /* ===== 라이트 테마 ===== */
@@ -36,6 +43,8 @@
   --red: #e03131;
   --blue: #1c6dd0;
   --green: #1f9254;
+  --row-hover: rgba(28, 109, 208, 0.1);
+  --row-hover-line: rgba(28, 109, 208, 0.4);
 }
 
 html,
@@ -6387,7 +6396,13 @@ button.nav-group-toggle {
   padding: 7px 16px 2px;
   border-top: 1px dashed var(--border);
   margin-top: 3px;
+  font-weight: 700;
 }
+/*
+ * 색을 정한 구분선 (2026-08-28) — 글자색·선색은 인라인 style 로 들어온다.
+ * 색이 없으면 흐린 회색이라 메뉴 항목과 구분이 안 됐다.
+ */
+.nav-fav-sec.tinted { border-top-style: solid; }
 
 /* 지표 설명 — 맨 아래, 접어 둔다 */
 .ov-help { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
@@ -6983,6 +6998,10 @@ button.nav-group-toggle {
 }
 
 .sd-list-row.active { background: var(--panel-2); box-shadow: inset 3px 0 0 var(--blue); }
+/* 표와 같은 이유로 얹힌 줄을 강조 (2026-08-28) — .active 는 건드리지 않는다 */
+@media (hover: hover) {
+  .sd-list-row:not(.active):hover { background-image: linear-gradient(var(--row-hover), var(--row-hover)); }
+}
 .sd-list-rank { flex: 0 0 2.2em; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sd-list-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .sd-list-price,
@@ -7673,6 +7692,25 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .mo-fav-row.sec { background: none; }
 .mo-fav-name { flex: 1; font-weight: 600; }
 .mo-fav-secname { flex: 1; color: var(--muted); font-size: 0.72rem; letter-spacing: 0.06em; }
+
+/* 구분선 편집 — 이름 칸 + 색 고르기 (2026-08-28) */
+.mo-fav-secedit { flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.mo-sec-name { flex: 1 1 120px; min-width: 90px; font-size: 0.75rem; padding: 2px 6px; }
+.mo-sec-colors { display: flex; gap: 3px; }
+.mo-sec-color {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  font-size: 0.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+/* 고른 색은 테두리를 굵게 — 동그라미 안이 색이라 체크 표시를 넣을 자리가 없다 */
+.mo-sec-color.on { outline: 2px solid var(--text); outline-offset: 1px; }
 
 /*
  * 리포트 투자자 수급 표.
@@ -10149,4 +10187,29 @@ button.tpb-row:hover { background: var(--panel-2); }
 .data-table th {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/*
+ * **마우스가 얹힌 줄을 통째로 강조한다** (2026-08-28).
+ *
+ * 표가 열 열댓 개에 종목 수십 개다. 종목명은 맨 왼쪽, 보려는 값은 맨 오른쪽인데
+ * 그 사이를 눈으로 건너다가 한 줄 위아래로 새는 일이 잦았다.
+ *
+ * ⚠️ `tr` 이 아니라 **`td` 에 칠한다.** `tr` 배경은 칸이 제 배경(히트맵·강조색)을
+ * 갖고 있으면 그 아래로 가려 보이지 않는다.
+ * ⚠️ `background-color` 가 아니라 **`background-image`** 다. 색을 바꾸면 칸이 가진
+ * 히트맵 색을 지워 버린다. 이미지 층은 색 위에 겹치므로 원래 색이 살아 있다.
+ *
+ * 위아래 실선은 칸마다 그어지지만 이어 붙어 **줄 전체를 가로지르는 띠**가 된다 —
+ * 옅은 배경만으로는 밝은 화면에서 잘 안 보였다.
+ *
+ * 손가락 화면에서는 뗄 때까지 색이 남아 지저분하므로 마우스가 있는 기기만.
+ */
+@media (hover: hover) {
+  .data-table tbody tr:hover > td {
+    background-image: linear-gradient(var(--row-hover), var(--row-hover));
+    box-shadow:
+      inset 0 1px 0 0 var(--row-hover-line),
+      inset 0 -1px 0 0 var(--row-hover-line);
+  }
 }

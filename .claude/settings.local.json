@@ -850,7 +850,8 @@
       "Bash(curl -s -X POST \"http://localhost:4000/api/market/naver-themes/fetch-etf\")",
       "Bash(curl -s \"http://localhost:4000/api/market/__probe-sector\")",
       "Bash(curl -s \"http://localhost:4000/api/market/daily-closes/progress\")",
-      "Bash(curl -s \"http://localhost:4000/api/market/daily-closes/summary\")"
+      "Bash(curl -s \"http://localhost:4000/api/market/daily-closes/summary\")",
+      "Bash(grep -n \"className=\\\\\"[a-z-]*table[a-z-]*\\\\\"\\\\|className={\\\\`[a-z-]*table\" web/src/pages/SuperDashboardPage.tsx web/src/pages/WatchlistPage.tsx web/src/pages/SignalScreenPage.tsx)"
     ]
   }
 }
