@@ -10345,3 +10345,85 @@ button.tpb-row:hover { background: var(--panel-2); }
   font-variant-numeric: tabular-nums;
 }
 .sig-stale-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ═══════════ 시장 렌즈 — 체온계·로테이션 (2026-08-28) ═══════════ */
+.lens-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.lens-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.lens-chip b { font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.lens-chip i { font-style: normal; font-size: 0.62rem; }
+
+.lens-sparks { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.lens-spark-box { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--panel); }
+.lens-spark-h { font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 2px; }
+.lens-spark { width: 100%; height: 56px; display: block; }
+.lens-line { stroke: var(--blue); stroke-width: 1.6; }
+.lens-mid { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.6; }
+
+/* 로테이션 판 — 세 기둥. 폰에서는 세로로 쌓인다 */
+.lens-buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.lens-bucket { border: 1px solid var(--border); border-radius: 10px; padding: 8px; background: var(--panel); }
+.lens-bucket.lead  { border-top: 3px solid var(--green); }
+.lens-bucket.fresh { border-top: 3px solid var(--blue); }
+.lens-bucket.rest  { border-top: 3px solid #f5c542; }
+.lens-bucket-h { display: flex; flex-direction: column; gap: 1px; margin-bottom: 6px; }
+.lens-bucket-h small { color: var(--muted); font-size: 0.68rem; }
+.lens-theme {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 6px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.lens-theme:last-child { border-bottom: none; }
+.lens-theme:hover { background: var(--row-hover); }
+.lens-theme-name { font-weight: 600; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lens-theme > b { font-size: 0.82rem; }
+.lens-theme-sub { margin-left: auto; font-size: 0.68rem; color: var(--muted); white-space: nowrap; }
+.lens-theme-sub i { font-style: normal; }
+.lens-streak {
+  font-style: normal;
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(53, 196, 106, 0.15);
+  color: var(--green);
+  font-size: 0.62rem;
+}
+
+/* 압축판 — 브리핑·장전·리포트에 꽂는 석 줄 */
+.lens-strip { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.lens-strip-row { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 0.78rem; }
+.lens-strip-row > i { font-style: normal; color: var(--muted); font-size: 0.7rem; flex: none; }
+.lens-strip-theme {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 7px;
+  font: inherit;
+  font-size: 0.75rem;
+  color: inherit;
+  cursor: pointer;
+}
+.lens-strip-theme:hover { border-color: var(--blue); }
+.lens-strip-theme b { font-variant-numeric: tabular-nums; }
+
+/* 장전 카드의 미국 테마 밤사이 */
+.mrn-us-themes { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }

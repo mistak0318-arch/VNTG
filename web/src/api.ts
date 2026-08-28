@@ -633,6 +633,8 @@ export const api = {
       `/api/market/theme-strength/${market}`,
     ),
   naverThemeFetchEtf: () => postJson<{ count: number }>("/api/market/naver-themes/fetch-etf", {}),
+  /** 시장 렌즈 — 체온계 + 테마 로테이션 + 미국 밤사이. 조회 0회 */
+  marketLens: () => getJson<MarketLens>("/api/market/lens"),
   /* 일봉 캐시 — 5·20·60일 누적의 바탕. 없으면 그 칸들이 통째로 「—」다 */
   dailyClosesBuild: () => postJson<{ started: boolean }>("/api/market/daily-closes/build", {}),
   dailyClosesProgress: () =>
@@ -3381,6 +3383,41 @@ export interface ThemeStrength {
     changeRate: number | null;
     tradeValue?: number | null;
   }[];
+}
+
+/** 시장 렌즈 — 서버 `marketLens.ts` 와 같은 모양 */
+export interface RotationTheme {
+  key: string;
+  name: string;
+  changeRate: number;
+  w1: number | null;
+  m1: number | null;
+  m60: number | null;
+  streak: number;
+  hit10: { n: number; of: number };
+  breadth: number;
+  tradeValue: number;
+}
+
+export interface MarketLens {
+  thermo: {
+    stocks: number;
+    builtAt: string;
+    series: { rise: number[]; above20: number[]; high60: number[]; low60: number[] };
+    riseNow: number | null;
+  };
+  rotation: {
+    lead: RotationTheme[];
+    fresh: RotationTheme[];
+    rest: RotationTheme[];
+    universe: number;
+    ready: boolean;
+    at: string;
+  };
+  us: {
+    top: { key: string; name: string; changeRate: number; streak: number }[];
+    bottom: { key: string; name: string; changeRate: number; streak: number }[];
+  };
 }
 
 export interface ThemeLink {

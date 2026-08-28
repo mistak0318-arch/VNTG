@@ -6,6 +6,7 @@ import { CloseBetPanel } from "../components/CloseBetPanel";
 import { MarketSignalPanel } from "../components/MarketSignalPanel";
 import { api, fmtNum, type BreadthPoint, type ChannelReport } from "../api";
 import { BreadthPanel } from "../components/BreadthPanel";
+import { RotationBoard, ThermoPanel } from "../components/MarketLensPanel";
 import { SectorFlowPanel } from "../components/SectorFlowPanel";
 import { UsKrPanel } from "../components/UsKrPanel";
 import { TradePanel } from "../components/TradePanel";
@@ -26,11 +27,17 @@ import { useCardOrder } from "../useCardOrder";
  * 채널 정리는 「텔레그램 동향」 대메뉴로 옮겼다 — 그건 숫자가 아니라 독립된 정보원이다.
  */
 
-type FlowTab = "pulse" | "leaders" | "events" | "closebet" | "money" | "usKr" | "trade";
+type FlowTab = "pulse" | "rotation" | "leaders" | "events" | "closebet" | "money" | "usKr" | "trade";
 
 export const FLOW_TABS: { key: FlowTab; label: string }[] = [
   // 맥박이 첫 탭이다 — 나머지는 근거이고 이건 결론이다
   { key: "pulse", label: "맥박" },
+  /*
+   * 로테이션 (2026-08-28, 테마 DB 개편) — **돈의 자리바꿈**을 본다.
+   * 맥박이 「지금 어떤 장인가」면 이건 「돈이 어느 테마에서 어느 테마로 옮겨가는가」다.
+   * 이 메뉴의 존재 이유("돈이 어디서 어디로")에 가장 곧게 답하는 탭이라 맥박 바로 뒤다.
+   */
+  { key: "rotation", label: "테마 로테이션" },
   // 맥박이 「지금 어떤 장인가」면 이건 「그래서 어디를 볼 것인가」다
   { key: "leaders", label: "주도주 탐색" },
   /*
@@ -227,6 +234,14 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
 
       <div key={`${tab}-${reloadKey}`}>
         {tab === "pulse" && <MarketPulsePanel onSelectStock={onSelectStock} />}
+        {tab === "rotation" && (
+          <>
+            <h3 className="section-heading">테마 로테이션 — 돈이 어디서 어디로</h3>
+            <RotationBoard onSelectStock={onSelectStock} />
+            <h3 className="section-heading">시장 체온계 — 지수 말고 종목들</h3>
+            <ThermoPanel />
+          </>
+        )}
         {tab === "leaders" && <LeaderScanPanel onSelectStock={onSelectStock} />}
         {tab === "events" && <EventPlayPanel />}
         {tab === "closebet" && <CloseBetPanel />}

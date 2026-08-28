@@ -19,6 +19,7 @@ import {
   WatchHeatGrid,
 } from "../components/BriefingBlocks";
 import { RefreshBar } from "../components/RefreshBar";
+import { RotationStrip } from "../components/MarketLensPanel";
 import { useSection } from "../useSection";
 
 /**
@@ -342,6 +343,12 @@ export function BriefingPage({
             내 분류로 답을 내고 있으니 브리핑도 같은 재료를 쓴다(타일 대신 텍스트 줄).
           */}
           <h3 className="section-heading">테마</h3>
+          {/*
+            로테이션 압축판 (2026-08-28) — 훑는 화면답게 석 줄이다.
+            주도가 이어지는지, 새 주자가 들어왔는지, 주도가 쉬는지. 판 전체는
+            시장 흐름 분석 > 테마 로테이션에 있다.
+          */}
+          <RotationStrip onSelectStock={onSelectStock} />
           <MyThemeStrip
             onPickTheme={(t) =>
               setConstituent({

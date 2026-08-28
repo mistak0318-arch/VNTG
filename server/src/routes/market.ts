@@ -13,6 +13,7 @@ import { tradeSizeMix } from "../tradeSizeMix.js";
 import { CHART_RANGES, yahooChart } from "../yahooChart.js";
 import { usEtfHoldings } from "../usEtfHoldings.js";
 import { themeStrength } from "../themeStrength.js";
+import { marketThermo, themeRotation, usOvernight } from "../marketLens.js";
 import { buildCloses, closesProgress, loadCloses } from "../dailyCloses.js";
 import { themeLinks } from "../themeLinks.js";
 import {
@@ -816,6 +817,23 @@ export function createMarketRouter(client: KiwoomClient): Router {
       const m = req.params.market;
       const market = m === "us" ? "us" : m === "etf" ? "etf" : "kr";
       res.json(await themeStrength(market));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 시장 렌즈 — 체온계(일봉 캐시로 소급 계산) + 테마 로테이션 + 미국 밤사이.
+   * 장전 브리핑·마켓 브리핑·시장 흐름이 같은 판을 나눠 본다. 조회 0회.
+   */
+  router.get("/lens", async (_req, res, next) => {
+    try {
+      const [thermo, rotation, us] = await Promise.all([
+        marketThermo(),
+        themeRotation(),
+        usOvernight(),
+      ]);
+      res.json({ thermo, rotation, us });
     } catch (err) {
       next(err);
     }

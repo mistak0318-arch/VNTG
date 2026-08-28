@@ -9,6 +9,7 @@ import {
   type UsMajorResult,
 } from "../api";
 import { MarketSignalPanel } from "../components/MarketSignalPanel";
+import { RotationStrip, useMarketLens } from "../components/MarketLensPanel";
 
 /**
  * 장전 브리핑룸 (2026-08-27 전수 점검에서 제안) — **아침 루틴을 한 화면으로.**
@@ -36,6 +37,8 @@ function kstToday(offsetDays = 0): string {
 }
 
 export function MorningPage() {
+  /* 테마 흐름 카드 — 국내 로테이션(어제 마감 기준)과 미국 밤사이가 한 렌즈에서 온다 */
+  const { lens, reload: reloadLens } = useMarketLens();
   const [cal, setCal] = useState<CalendarEvent[] | null>(null);
   const [us, setUs] = useState<UsMajorResult | null>(null);
   const [report, setReport] = useState<PublishedReport | null>(null);
@@ -70,8 +73,9 @@ export function MorningPage() {
       .buzz()
       .then(setBuzz)
       .catch(() => undefined);
+    reloadLens();
     setLoadedAt(Date.now());
-  }, []);
+  }, [reloadLens]);
   useEffect(() => load(), [load]);
 
   const go = (hash: string) => {
@@ -153,6 +157,43 @@ export function MorningPage() {
                 </tbody>
               </table>
               {us.curveNote && <p className="pt-n mrn-note">{us.curveNote}</p>}
+            </>
+          )}
+        </section>
+
+        {/* ── 테마 흐름 (2026-08-28, 테마 DB 개편) — 아침의 두 물음 ──
+             ① 어제 주도 테마가 이어질 자리인가  ② 밤사이 미국은 어느 테마가 움직였나 */}
+        <section className="card mrn-card">
+          <button className="mrn-title" onClick={() => go("marketFlow")}>
+            🔄 테마 흐름 <i>›</i>
+          </button>
+          {!lens && <div className="empty">불러오는 중…</div>}
+          {lens && (
+            <>
+              {lens.rotation.ready ? (
+                <RotationStrip lens={lens} />
+              ) : (
+                <p className="pt-n">일봉 캐시가 돌면 국내 로테이션이 나옵니다.</p>
+              )}
+              {(lens.us.top.length > 0 || lens.us.bottom.length > 0) && (
+                <div className="mrn-us-themes">
+                  <b className="pt-n">🇺🇸 밤사이 미국 테마</b>
+                  <div className="mrn-sup">
+                    {lens.us.top.slice(0, 3).map((t) => (
+                      <div key={t.key}>
+                        <span>{t.name}</span>
+                        <b className="positive">{pct(t.changeRate)}</b>
+                      </div>
+                    ))}
+                    {lens.us.bottom.slice(0, 2).map((t) => (
+                      <div key={t.key}>
+                        <span>{t.name}</span>
+                        <b className="negative">{pct(t.changeRate)}</b>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </section>

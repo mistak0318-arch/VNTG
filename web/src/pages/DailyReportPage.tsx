@@ -16,6 +16,7 @@ import {
 } from "../components/report/ReportSections";
 import { notifyJobStarted } from "../components/RunningJobsBar";
 import { kindMeta } from "../calendarKinds";
+import { RotationStrip } from "../components/MarketLensPanel";
 import {
   api,
   type CalendarEvent,
@@ -668,6 +669,11 @@ export function DailyReportPage({
       krThemeMap: <KrThemeMapSection onSelectStock={onSelectStock} />,
       themes: (
         <>
+        {/*
+          로테이션 압축판 (2026-08-28) — 상승·하락 테마 명단 위에 「이어달리기인가
+          자리바꿈인가」가 먼저 온다. 오늘의 명단은 아래가, 그 명단의 **맥락**은 이 석 줄이 준다.
+        */}
+        <RotationStrip onSelectStock={onSelectStock} />
         <div className="report-lines">
           {(drivers?.themes.up ?? []).map((t) => (
             <DriverItem

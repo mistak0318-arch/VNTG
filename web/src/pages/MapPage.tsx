@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { tileHeat, useAppearance } from "../useAppearance";
 import { useWatchGroupTiles, type GroupSource } from "../useWatchGroupTiles";
-import { api, type EvaluatedTheme, type SectorRow, type ThemeRow } from "../api";
+import { api, type EvaluatedTheme, type SectorRow, type ThemeRow, type ThemeStrength } from "../api";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { RefreshBar } from "../components/RefreshBar";
 import { useSection } from "../useSection";
@@ -24,7 +24,7 @@ import { useSection } from "../useSection";
  * 「내가 만든 것만 / 옮겨온 것 포함」 토글은 그대로 둔다 — 인포스탁 테마를 「내 테마」
  * 안에 그대로 두기로 했으니, 그걸 걸러 볼 수단이 없으면 지도가 인포스탁으로 뒤덮인다.
  */
-type Mode = "mine" | "watchAi" | "watchKiwoom" | "watchUs" | "theme" | "sector";
+type Mode = "mine" | "naver" | "watchAi" | "watchKiwoom" | "watchUs" | "theme" | "sector";
 
 const WATCH_MODES: { key: Mode; label: string; source: GroupSource }[] = [
   { key: "watchAi", label: "관심종목 (VNTG)", source: "watchAi" },
@@ -49,6 +49,24 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
   const [mine, setMine] = useState<EvaluatedTheme[]>([]);
   const [mineLoading, setMineLoading] = useState(true);
   const [mineError, setMineError] = useState<string | null>(null);
+
+  /*
+   * 네이버 테마 모드 (2026-08-28, 테마 DB 개편) — **266개 분류를 지도에 올린다.**
+   * 표(테마 DB)는 정렬해 파고드는 자리고, 지도는 「오늘 어느 판이 도는가」를 한 눈에
+   * 보는 자리다. 거래대금 문턱이 없으면 죽은 테마 타일로 덮이므로 300억으로 자른다.
+   */
+  const [naver, setNaver] = useState<ThemeStrength[] | null>(null);
+  const [naverError, setNaverError] = useState<string | null>(null);
+  useEffect(() => {
+    if (mode !== "naver" || naver !== null) return;
+    api
+      .themeStrength("kr")
+      .then((r) => setNaver(r.themes))
+      .catch((e: Error) => setNaverError(e.message));
+  }, [mode, naver]);
+  const naverTiles = (naver ?? [])
+    .filter((t) => t.tradeValue >= 300)
+    .sort((a, b) => b.changeRate - a.changeRate);
 
   async function loadMine(force = false) {
     setMineLoading(true);
@@ -94,22 +112,27 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
     ? watch.loading
     : mode === "mine"
       ? mineLoading
-      : mode === "theme"
-        ? themes.loading
-        : sectors.loading;
+      : mode === "naver"
+        ? naver === null && naverError === null
+        : mode === "theme"
+          ? themes.loading
+          : sectors.loading;
   const error = watchSource
     ? watch.error
     : mode === "mine"
       ? mineError
-      : mode === "theme"
-        ? themes.error
-        : sectors.error;
+      : mode === "naver"
+        ? naverError
+        : mode === "theme"
+          ? themes.error
+          : sectors.error;
 
   return (
     <div>
       <RefreshBar
         onRefresh={() => {
           void loadMine(true);
+          setNaver(null); // 네이버 테마도 다시 (effect 가 null 을 보고 받아온다)
           themes.refresh();
           sectors.refresh();
         }}
@@ -129,6 +152,9 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
             {m.label}
           </button>
         ))}
+        <button className={`filter-btn ${mode === "naver" ? "active" : ""}`} onClick={() => setMode("naver")}>
+          네이버 테마
+        </button>
         <button className={`filter-btn ${mode === "theme" ? "active" : ""}`} onClick={() => setMode("theme")}>
           키움 테마
         </button>
@@ -246,6 +272,24 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
                     </span>
                   </button>
                 ))
+              : mode === "naver"
+              ? naverTiles.map((t) => (
+                  <button
+                    key={t.key}
+                    className="map-tile"
+                    style={tileHeat(t.changeRate, theme)}
+                    onClick={() => setConstituent({ kind: "theme", code: t.key, name: t.name })}
+                    title={`${t.name} — 월간 ${t.m1 !== null ? `${t.m1 > 0 ? "+" : ""}${t.m1.toFixed(1)}%` : "—"} · 거래대금 ${t.tradeValue.toLocaleString("ko-KR")}억`}
+                  >
+                    <span className="map-tile-name">{t.name}</span>
+                    <span className="map-tile-pct num">{fmtPct(t.changeRate)}</span>
+                    {/* 연속성이 이 지도의 존재 이유다 — 오늘 색은 같아도 3일째와 첫날은 다른 판이다 */}
+                    <span className="map-tile-sub">
+                      ▲{t.up}/▼{t.down}
+                      {t.streak >= 2 && ` · ${t.streak}일↑`}
+                    </span>
+                  </button>
+                ))
               : mode === "theme"
               ? themeTiles.map((t) => (
                   <button
@@ -277,6 +321,7 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
             색이 진할수록 등락폭이 큽니다 (5% 기준) · 타일을 누르면 구성종목이 열립니다
             {watchSource && ` · ${watch.tiles.length}개 그룹 · ▲/▼ 는 그 그룹에서 오른/내린 종목 수`}
             {mode === "mine" && ` · ${mineTiles.length}개 · ▲/▼ 는 그 테마에서 오른/내린 종목 수`}
+            {mode === "naver" && ` · 거래대금 300억↑ ${naverTiles.length}개 · N일↑ 는 연속 상승`}
             {mode === "theme" && ` · ${themeTiles.length}개 테마`}
           </div>
           {mode === "mine" && mineTiles.length === 0 && (
