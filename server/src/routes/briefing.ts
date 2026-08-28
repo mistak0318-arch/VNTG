@@ -4,6 +4,7 @@ import { readEvents, type MarketEvent } from "../eventLog.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { getMarketSnapshot } from "../marketSnapshot.js";
 import { peekRealtime } from "../realtimeHub.js";
+import { viDirText } from "../realtimeStore.js";
 import { latestEdition, loadReport } from "../reportStore.js";
 import { listGroups, listWatchlist, SUPER_GROUP } from "../watchlist.js";
 
@@ -84,9 +85,14 @@ export function createBriefingRouter(client: KiwoomClient): Router {
           badge: v.clearedAt ? "VI 해제" : "VI",
           code: v.code,
           name: v.name || v.code,
-          summary:
-            `${v.apply || v.kind || "발동"}` +
-            (v.price > 0 ? ` · 발동가 ${v.price.toLocaleString("ko-KR")}` : ""),
+          /* ▲상방/▼하방 + 몇 % 가 먼저다 (2026-08-28) — 방향 없는 VI 는 못 읽는다 */
+          summary: [
+            viDirText(v),
+            v.apply || v.kind || "발동",
+            v.price > 0 ? `발동가 ${v.price.toLocaleString("ko-KR")}` : "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
           watch: watch.has(v.code),
         });
       }

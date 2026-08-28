@@ -1,5 +1,6 @@
 import { getAlertConfig } from "./alertRules.js";
 import { peekRealtime } from "./realtimeHub.js";
+import { viDirText } from "./realtimeStore.js";
 import { getActiveSuper } from "./superSignal.js";
 import { hasDedicatedChannel, sendTelegram, stockNameHtml } from "./telegram.js";
 import { listWatchlist } from "./watchlist.js";
@@ -95,6 +96,8 @@ export async function runLiveAlerts(
       const hhmm = v.at?.length >= 4 ? `${v.at.slice(0, 2)}:${v.at.slice(2, 4)}` : "";
       const bits = [
         `VI 발동${hhmm ? ` ${hhmm}` : ""}`,
+        /* ▲상방/▼하방 + 몇 % (2026-08-28) — 방향 없는 VI 알림은 판단이 안 된다 */
+        viDirText(v),
         v.apply || v.kind || "",
         v.price > 0 ? `발동가 ${Math.round(v.price).toLocaleString("ko-KR")}` : "",
       ].filter(Boolean);

@@ -150,6 +150,27 @@ export interface ViEvent {
   clearedAt: string;
 }
 
+/**
+ * VI 의 방향과 발동 % (2026-08-28 — 「상방인지 하방인지 구분이 안 되니 데이터가
+ * 의미가 없네」).
+ *
+ * 발동가가 기준가보다 위면 **급등해서**(상방), 아래면 **급락해서**(하방) 걸린 것이다.
+ * 코드값(9068)을 해석하지 않고 **우리가 이미 가진 두 가격의 산수**로 정한다 —
+ * 코드표는 추측이 되지만 가격 비교는 사실이다.
+ */
+export function viDirection(v: ViEvent): { dir: "up" | "down" | null; gap: number | null } {
+  if (!(v.price > 0) || !(v.base > 0)) return { dir: null, gap: null };
+  const gap = Math.round(((v.price - v.base) / v.base) * 1000) / 10;
+  return { dir: gap > 0 ? "up" : gap < 0 ? "down" : null, gap };
+}
+
+/** 알림·타임라인이 같은 말을 쓰게 — 「▲상방 +10.0%」 / 「▼하방 -10.2%」 */
+export function viDirText(v: ViEvent): string {
+  const { dir, gap } = viDirection(v);
+  if (dir === null || gap === null) return "";
+  return `${dir === "up" ? "▲상방" : "▼하방"} ${gap > 0 ? "+" : ""}${gap.toFixed(1)}%`;
+}
+
 export interface Point {
   /** HHmmss */
   t: string;

@@ -118,6 +118,12 @@ export function ViPanel({ onSelectStock }: { onSelectStock?: (c: string, n: stri
                     <td className="sticky-col">{hhmm(e.firedAt || e.at)}</td>
                     <td>{e.name || e.code}</td>
                     <td>
+                      {/* ▲상방/▼하방 (2026-08-28) — 급등 VI 와 급락 VI 는 정반대 신호다 */}
+                      {gap !== null && gap !== 0 && (
+                        <b className={gap > 0 ? "positive" : "negative"}>
+                          {gap > 0 ? "▲상방 " : "▼하방 "}
+                        </b>
+                      )}
                       {e.apply}
                       {e.clearedAt && <span className="pt-n"> 해제</span>}
                     </td>

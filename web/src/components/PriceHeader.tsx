@@ -263,15 +263,17 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           {/* VI 발동 중 — 값이 멈춰 있으면 헷갈린다(2026-08-26). 해제되면 배지도 사라진다 */}
           {(() => {
             const vi = info._vi as
-              | { active: boolean; firedAt: string; clearedAt: string | null }
+              | { active: boolean; firedAt: string; clearedAt: string | null; dirText?: string }
               | null
               | undefined;
             if (!vi?.active) return null;
             const t = String(vi.firedAt ?? "");
             const hm = t.length >= 4 ? `${t.slice(0, 2)}:${t.slice(2, 4)}` : "";
+            /* ▲상방/▼하방 + 몇 % (2026-08-28) — 방향 없는 VI 배지는 판단이 안 된다 */
+            const dir = vi.dirText ?? "";
             return (
               <em className="ph-vi" title={`변동성완화장치(VI) 발동${hm ? ` — ${hm}` : ""} · 단일가 매매 중이라 체결이 멈춰 보입니다`}>
-                ⚡ VI 발동 중{hm ? ` ${hm}` : ""}
+                ⚡ VI 발동 중{hm ? ` ${hm}` : ""}{dir ? ` ${dir}` : ""}
               </em>
             );
           })()}

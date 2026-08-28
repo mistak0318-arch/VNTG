@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { alCode } from "../alCode.js";
 import { peekRealtime } from "../realtimeHub.js";
+import { viDirText } from "../realtimeStore.js";
 import { intradayLevels } from "../intraday.js";
 import { stockSummary } from "../stockSummary.js";
 import { getSectorMood } from "../sectorMood.js";
@@ -170,7 +171,13 @@ export function createMarketRouter(client: KiwoomClient): Router {
       const viEvents = peekRealtime().store?.getVi(3000) ?? [];
       const myVi = viEvents.find((v) => v.code === bareCode);
       const _vi = myVi
-        ? { active: !myVi.clearedAt, firedAt: myVi.firedAt, clearedAt: myVi.clearedAt || null }
+        ? {
+            active: !myVi.clearedAt,
+            firedAt: myVi.firedAt,
+            clearedAt: myVi.clearedAt || null,
+            /* ▲상방/▼하방 + 몇 % (2026-08-28) — 헤더 배지가 방향까지 말한다 */
+            dirText: viDirText(myVi),
+          }
         : null;
       res.json({ ...data, _market: entry?.marketName ?? "", _venue: venueNow(), _vi });
     } catch (err) {
