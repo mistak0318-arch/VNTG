@@ -20,6 +20,10 @@ import {
 } from "../components/BriefingBlocks";
 import { RefreshBar } from "../components/RefreshBar";
 import { IndexDetailSheet } from "../components/overview/IndexDetailSheet";
+import {
+  FuturesDetailSheet,
+  type FuturesDetailTarget,
+} from "../components/overview/FuturesDetailSheet";
 import { RotationStrip, ThermoChips, useMarketLens } from "../components/MarketLensPanel";
 import { useSection } from "../useSection";
 
@@ -292,6 +296,8 @@ export function BriefingPage({
   const { lens, reload: reloadLens } = useMarketLens();
   /* 지수 상세 — 시황 대시보드와 **같은 시트**를 쓴다. 두 화면이 다른 걸 보여 주면 안 된다 */
   const [indexDetail, setIndexDetail] = useState<string | null>(null);
+  /* 선물 상세 — 대시보드와 같은 시트(차트·베이시스·미결제·수급) */
+  const [futDetail, setFutDetail] = useState<FuturesDetailTarget | null>(null);
 
   return (
     <div className="bf">
@@ -333,6 +339,20 @@ export function BriefingPage({
             flow={flow.data}
             futures={futFlow}
             futPrice={indices.data?.find((i) => i.code === "F")?.price ?? null}
+            onOpenIndex={setIndexDetail}
+            onOpenFutures={() => {
+              /* 지수 카드에 실려 오는 월물 정보로 연다 — 없으면 열 게 없다 */
+              const c = indices.data?.find((i) => i.code === "F");
+              if (!c?.futures) return;
+              setFutDetail({
+                code: c.futures.code,
+                name: c.futures.name,
+                price: c.price,
+                changeRate: c.changeRate,
+                basis: c.futures.basis,
+                openInterest: c.futures.openInterest,
+              });
+            }}
           />
 
           {/*
@@ -406,6 +426,8 @@ export function BriefingPage({
       {indexDetail && (
         <IndexDetailSheet code={indexDetail} onClose={() => setIndexDetail(null)} />
       )}
+
+      {futDetail && <FuturesDetailSheet target={futDetail} onClose={() => setFutDetail(null)} />}
 
       {constituent && (
         <ConstituentSheet

@@ -10690,3 +10690,17 @@ button.tpb-row:hover { background: var(--panel-2); }
 .bf-mini-click { width: auto; }
 .bf-ud-click:hover,
 .bf-mini-click:hover { background: var(--row-hover); border-radius: 6px; }
+
+/* 「오늘 수급」 격자의 시장 이름 — 눌러서 그 시장 상세로 (2026-08-29) */
+.bf-supply-click {
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline dotted transparent;
+  text-underline-offset: 3px;
+}
+.bf-supply-click:hover { text-decoration-color: var(--muted); }

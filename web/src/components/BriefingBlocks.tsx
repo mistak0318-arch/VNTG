@@ -43,11 +43,19 @@ export function FlowBars({
   flow,
   futures,
   futPrice,
+  onOpenIndex,
+  onOpenFutures,
 }: {
   flow: MarketFlow | null;
   futures: { individual: number; foreign: number; institution: number } | null;
   /** K200 선물 지수 — 있으면 계약을 **억원으로 환산**해 코스피·코스닥과 결을 맞춘다 (2026-08-27) */
   futPrice?: number | null;
+  /**
+   * 시장 이름을 누르면 상세 (2026-08-29 요청) — 시황 대시보드의 지수 타일과
+   * **같은 시트**로 간다. 안 넘기면 그냥 안 눌린다(보드 블록 등 다른 자리).
+   */
+  onOpenIndex?: (code: string) => void;
+  onOpenFutures?: () => void;
 }) {
   if (!flow) return <div className="empty">수급을 아직 못 받았습니다.</div>;
   /*
@@ -65,13 +73,13 @@ export function FlowBars({
       : null;
   type FutRaw = { individual: number; foreign: number; institution: number } | null;
   const rows = [
-    { label: "코스피", f: flow.kospi, unit: "억", raw: null as FutRaw },
-    { label: "코스닥", f: flow.kosdaq, unit: "억", raw: null as FutRaw },
+    { label: "코스피", f: flow.kospi, unit: "억", raw: null as FutRaw, open: () => onOpenIndex?.("001") },
+    { label: "코스닥", f: flow.kosdaq, unit: "억", raw: null as FutRaw, open: () => onOpenIndex?.("101") },
     ...(futures
       ? [
           conv
-            ? { label: "선물", f: conv, unit: "억", raw: futures as FutRaw }
-            : { label: "선물", f: futures, unit: "계약", raw: null as FutRaw },
+            ? { label: "선물", f: conv, unit: "억", raw: futures as FutRaw, open: () => onOpenFutures?.() }
+            : { label: "선물", f: futures, unit: "계약", raw: null as FutRaw, open: () => onOpenFutures?.() },
         ]
       : []),
   ];
@@ -92,13 +100,25 @@ export function FlowBars({
         {["개인", "외국인", "기관"].map((h) => (
           <span className="bf-supply-h" key={h}>{h}</span>
         ))}
-        {rows.map(({ label, f, unit, raw }) => {
+        {rows.map(({ label, f, unit, raw, open }) => {
           /* 행별 최대로 잰다 — 행마다 판(코스피/코스닥/선물)이 달라 같이 재면 안 된다 */
           const max = Math.max(1, ...[f.individual, f.foreign, f.institution].map(Math.abs));
           const rawVals = raw ? [raw.individual, raw.foreign, raw.institution] : null;
           return (
             <Fragment key={label}>
-              <em className="bf-supply-m">{label}</em>
+              {/* 이름 칸을 누르면 그 시장의 상세 — 대시보드 지수 타일과 같은 시트 */}
+              {onOpenIndex || onOpenFutures ? (
+                <button
+                  type="button"
+                  className="bf-supply-m bf-supply-click"
+                  onClick={open}
+                  title={`${label} 상세 보기`}
+                >
+                  {label}
+                </button>
+              ) : (
+                <em className="bf-supply-m">{label}</em>
+              )}
               {[f.individual, f.foreign, f.institution].map((v, i) => (
                 <span
                   className="bf-supply-cell"
