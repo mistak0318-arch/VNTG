@@ -34,7 +34,8 @@ export function ScrollTopButton() {
     check();
     window.addEventListener("scroll", check, { passive: true });
     /* 화면이 바뀌면(탭 이동) 길이도 단추 유무도 달라진다 — 잠깐 뒤 다시 잰다 */
-    const t = setInterval(check, 1000);
+    /* 짧게 — 방에 들어간 직후 잠깐이라도 「방 목록」 단추와 같은 자리에 겹치면 안 된다 */
+    const t = setInterval(check, 300);
     return () => {
       window.removeEventListener("scroll", check);
       clearInterval(t);

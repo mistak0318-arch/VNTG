@@ -66,9 +66,19 @@ export function useSwipeTabs({
   onTouchStart: (e: React.TouchEvent) => void;
   onTouchMove: (e: React.TouchEvent) => void;
   onTouchEnd: (e: React.TouchEvent) => void;
+  onTouchCancel: () => void;
 } {
   const start = useRef<{ x: number; y: number; blocked: boolean } | null>(null);
   const el = useRef<HTMLDivElement | null>(null);
+  /**
+   * 이번 몸짓에서 **transform 을 실제로 걸었나.**
+   *
+   * ⚠️ 이게 왜 중요한가: transform 이 걸린 요소는 그 안의 `position: fixed` 자식의
+   * **기준이 된다**(값이 translateX(0) 이어도 마찬가지다). 텔레그램 방의 「방 목록」
+   * 단추가 그 안에 있는데, 메시지가 길면 단추가 화면 밖으로 밀려나 안 눌렸다.
+   * 그래서 **끌지 않은 몸짓(그냥 탭)에서는 transform 을 아예 안 건드린다.**
+   */
+  const moved = useRef(false);
   /** 방금 어느 쪽으로 넘어갔나 — 새 본문이 그쪽에서 미끄러져 들어온다 */
   const [slide, setSlide] = useState<"next" | "prev" | null>(null);
 
@@ -80,6 +90,11 @@ export function useSwipeTabs({
   }, [slide]);
 
   const setRef = useCallback((node: HTMLDivElement | null) => {
+    /* 떠날 때 자국을 남기지 않는다 — 남은 transform 이 fixed 자식을 망친다 */
+    if (!node && el.current) {
+      el.current.style.transition = "";
+      el.current.style.transform = "";
+    }
     el.current = node;
   }, []);
 
@@ -88,14 +103,20 @@ export function useSwipeTabs({
     const n = el.current;
     if (!n || reduceMotion()) return;
     const damped = Math.max(-MAX_FOLLOW, Math.min(MAX_FOLLOW, dx * FOLLOW));
+    moved.current = true;
     n.style.transition = "none";
     n.style.transform = `translateX(${damped.toFixed(1)}px)`;
   };
 
-  /** 제자리로 — 넘어가든 되돌아가든 transform 은 반드시 지운다(fixed 자식 때문) */
+  /**
+   * 제자리로. **transform 은 반드시 지운다** — 남아 있으면 그 안의 fixed 자식
+   * (플로팅 단추·시트)이 화면이 아니라 이 요소를 기준으로 잡혀 엉뚱한 데로 간다.
+   * 끌지 않았으면 애초에 안 걸었으므로 그냥 나간다.
+   */
   const release = () => {
     const n = el.current;
-    if (!n) return;
+    if (!n || !moved.current) return;
+    moved.current = false;
     n.style.transition = "transform 0.18s ease-out";
     n.style.transform = "translateX(0)";
     window.setTimeout(() => {
@@ -120,7 +141,17 @@ export function useSwipeTabs({
       let node = e.target as HTMLElement | null;
       const stop = e.currentTarget as HTMLElement;
       while (node && node !== stop.parentElement) {
-        if (node.classList?.contains("overlay") || node.classList?.contains("sheet")) {
+        /*
+         * 시트·팝업, 그리고 **텔레그램 방 안**은 양보한다 (2026-08-29).
+         * 방은 탭이 아니라 「들어간 화면」이라 옆으로 밀어 탭을 바꾸는 건 뜻이 안 맞고,
+         * 무엇보다 그때 컨테이너에 걸리는 transform 이 방 안의 fixed 단추(방 목록·
+         * 맨 아래로)를 화면 밖으로 밀어내 **안 눌리게** 만들었다.
+         */
+        if (
+          node.classList?.contains("overlay") ||
+          node.classList?.contains("sheet") ||
+          node.classList?.contains("tgr-room")
+        ) {
           blocked = true;
           break;
         }
@@ -148,6 +179,15 @@ export function useSwipeTabs({
       const i = order.indexOf(current);
       const wall = dx < 0 ? i >= order.length - 1 : i <= 0;
       drag(wall ? dx * 0.35 : dx);
+    },
+    /*
+     * ⚠️ **touchcancel 을 반드시 받는다.** 폰에서는 시스템 제스처·스크롤 인계로
+     * 자주 뜨는데, 안 받으면 끌던 transform 이 **영영 남는다** — 그때부터 그 화면의
+     * 플로팅 단추와 시트가 전부 엉뚱한 자리에 앉는다.
+     */
+    onTouchCancel: () => {
+      start.current = null;
+      release();
     },
     onTouchEnd: (e) => {
       const s = start.current;
