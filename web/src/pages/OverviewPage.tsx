@@ -194,7 +194,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   }
 
   return (
-    <div className="ov" {...swipe}>
+    /* ⚠️ 스프레드가 className 을 덮으므로 합쳐서 넘긴다 — "ov" 를 잃으면 화면이 통째로 깨진다 */
+    <div {...swipe} className={`ov ${swipe.className}`}>
       <RefreshBar onRefresh={refreshAll} loading={indices.loading}>
         <span className="ov-statusbar" style={{ padding: 0 }}>
           <span className={`ov-dot ${status?.state ?? ""}`} />

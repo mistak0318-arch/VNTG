@@ -10559,3 +10559,27 @@ button.tpb-row:hover { background: var(--panel-2); }
 .sidebar.from-right:not(.open) { transform: translateX(100%) !important; }
 .sidebar.from-left.open,
 .sidebar.from-right.open { transform: translateX(0) !important; }
+
+/*
+ * 서브탭 스와이프 — **미끄러져 들어온다** (2026-08-29 요청).
+ *
+ * 이웃 탭을 미리 그리는 캐러셀은 안 쓴다(탭마다 차트·표가 무겁다). 대신 새 본문이
+ * 밀려온 쪽에서 짧게 들어오게 해 방향감만 남긴다 — 어디서 와서 어디로 갔는지가 보인다.
+ * 끄는 동안의 따라 움직임은 훅이 인라인 transform 으로 한다.
+ */
+@keyframes tab-slide-next {
+  from { transform: translateX(34px); opacity: 0.35; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes tab-slide-prev {
+  from { transform: translateX(-34px); opacity: 0.35; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.tab-slide-next { animation: tab-slide-next 0.2s ease-out; }
+.tab-slide-prev { animation: tab-slide-prev 0.2s ease-out; }
+
+/* 움직임을 줄이라고 한 기기에서는 아무것도 안 움직인다 */
+@media (prefers-reduced-motion: reduce) {
+  .tab-slide-next,
+  .tab-slide-prev { animation: none; }
+}
