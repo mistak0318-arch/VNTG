@@ -289,6 +289,18 @@ export async function listEntries(limit = 90): Promise<JournalEntry[]> {
   return rows.slice(-limit).reverse();
 }
 
+/** 마지막 종가 — 스냅샷이 비었을 때 기준가를 메우는 데만 쓴다 (조회 1회) */
+async function lastClose(client: KiwoomClient, code: string): Promise<number | null> {
+  const { data } = await client.request<Record<string, unknown>>("/api/dostk/chart", "ka10081", {
+    stk_cd: code,
+    base_dt: kstDate().replace(/-/g, ""),
+    upd_stkpc_tp: "1",
+  });
+  const rows = (data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
+  const v = Math.abs(Number(String(rows[0]?.cur_prc ?? "").replace(/[+,\s]/g, "")) || 0);
+  return v > 0 ? v : null;
+}
+
 /**
  * 예측 채점 (2026-08-27) — **결과가 아직 없는 것만** 다음 거래일 종가로 매긴다.
  *
@@ -299,10 +311,22 @@ export async function listEntries(limit = 90): Promise<JournalEntry[]> {
 async function gradePicks(client: KiwoomClient): Promise<boolean> {
   const rows = await readAll();
   const today = kstDate();
-  /** 채점할 것: 결과 없음 + 기준가 있음 + 예측일이 오늘보다 이전 */
+  /*
+   * 채점할 것: 결과 없음 + 예측일이 오늘보다 이전.
+   *
+   * ⚠️ 예전엔 **기준가가 있는 것만** 골랐다(`p.basePrice > 0`). 그런데 기준가는
+   * 저장 순간의 전종목 스냅샷에서 가져오는데, 서버를 막 켰거나 장 밖이면 그게
+   * 비어 있다 — 그때 넣은 예측은 기준가 없이 저장되고 **영원히 「채점 대기」**로
+   * 남았다. 며칠이 지나도 안 매겨지던 것이 이것이다.
+   * 이제 기준가가 없으면 **예측한 날의 종가를 일봉에서 찾아** 쓴다. 어차피
+   * 일봉을 받고 있으므로 조회가 늘지도 않는다.
+   *
+   * ⚠️ 코드 정규식도 넓혔다 — ETF·신주인수권에는 `0182R0` 처럼 영문이 섞인
+   * 여섯 자리가 있는데, 숫자만 받으면 그것들도 영영 채점이 안 됐다.
+   */
   const todo = rows.flatMap((e) =>
     (e.picks ?? [])
-      .filter((p) => !p.result && p.basePrice && p.basePrice > 0 && e.date < today && /^\d{6}$/.test(p.code))
+      .filter((p) => !p.result && e.date < today && /^[0-9A-Z]{6}$/i.test(p.code))
       .map((p) => ({ entryDate: e.date, pick: p })),
   );
   if (todo.length === 0) return false;
@@ -333,7 +357,19 @@ async function gradePicks(client: KiwoomClient): Promise<boolean> {
         // 예측한 날 **다음** 거래일 — 그날 봉이 없으면(휴장·미래) 채점하지 않는다
         const next = bars.find((b) => b.dt > ymd);
         if (!next) continue;
-        const base = it.pick.basePrice ?? 0;
+        /*
+         * 기준가 — 박제된 값이 우선이다(예측한 그 순간의 값). 없으면 예측한 날의
+         * 종가로 대신한다. 그날 봉조차 없으면(장 열기 전에 넣은 예측 등) 바로
+         * 앞 거래일 종가를 쓴다 — 「예측 직전에 보던 값」이 그것이다.
+         */
+        let base = it.pick.basePrice ?? 0;
+        if (!(base > 0)) {
+          const sameDay = bars.find((b) => b.dt === ymd);
+          const before = [...bars].reverse().find((b) => b.dt < ymd);
+          base = sameDay?.close ?? before?.close ?? 0;
+          if (base > 0) it.pick.basePrice = base; // 다음부터는 다시 안 찾게 박아 둔다
+        }
+        if (!(base > 0)) continue; // 그래도 못 구하면 다음 기회에
         const rate = ((next.close - base) / base) * 100;
         it.pick.result = {
           date: next.dt,
@@ -526,7 +562,16 @@ async function withPickPrices(
           signal: old.signal,
         };
       }
-      const price = snap?.byCode.get(p.code)?.price ?? null;
+      /*
+       * 기준가 — 스냅샷(전종목 캐시)에서 읽는다. **비어 있을 수 있다**: 서버를 막
+       * 켰거나 장 밖이면 스캔이 아직 안 돌았다. 그때 기준가 없이 저장되면 나중에
+       * 채점이 밀리므로(그건 gradePicks 가 일봉으로 메운다) 여기서도 한 번 더
+       * 시도한다 — 마지막 종가라도 있으면 그게 「예측 직전에 보던 값」이다.
+       */
+      let price = snap?.byCode.get(p.code)?.price ?? null;
+      if (!(price && price > 0) && /^[0-9A-Z]{6}$/i.test(p.code)) {
+        price = await lastClose(client, p.code).catch(() => null);
+      }
       /* 종목 신호등은 매매와 같은 문법으로 그 순간 값을 박제한다 */
       const sig = /^\d{6}$/.test(p.code)
         ? await evaluateSignal(client, p.code).catch(() => null)
