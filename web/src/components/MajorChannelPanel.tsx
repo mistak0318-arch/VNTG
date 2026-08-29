@@ -58,6 +58,39 @@ export function MajorChannelPanel() {
   const [pickOpen, setPickOpen] = useState(false);
   const [pickFilter, setPickFilter] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  /*
+   * 맨 아래로 (2026-08-29) — **받은 방과 같은 문법.** 글이 쌓인 방은 옛 글을 보러
+   * 위로 훑고 나면 최신으로 돌아오는 데 또 한참 걸린다.
+   * (받은 방에만 넣고 여기를 빠뜨렸다 — 같은 화면인데 한쪽만 되면 그게 더 헷갈린다)
+   */
+  const msgsRef = useRef<HTMLDivElement>(null);
+  const [atBottom, setAtBottom] = useState(true);
+
+  /* 여유 24px — 「거의 끝」도 끝으로 친다. 1px 남았다고 단추가 깜빡이면 더 거슬린다 */
+  const onMsgScroll = () => {
+    const n = msgsRef.current;
+    if (!n) return;
+    setAtBottom(n.scrollHeight - n.scrollTop - n.clientHeight <= 24);
+  };
+
+  /* 방을 열거나 메시지가 바뀌면 다시 잰다 — 안 재면 단추가 옛 상태로 남는다 */
+  useEffect(() => {
+    const t = setTimeout(onMsgScroll, 120);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, msgs.length]);
+
+  /**
+   * 맨 아래로. **거리에 따라 갈라진다** — 방 하나가 3만 픽셀을 넘기도 하는데
+   * 그걸 전부 스르륵 굴리면 몇 초를 기다리게 된다. 가까울 때만 부드럽게.
+   */
+  const jumpToBottom = () => {
+    const n = msgsRef.current;
+    if (!n) return;
+    const far = Math.abs(n.scrollHeight - n.scrollTop) > n.clientHeight * 3;
+    n.scrollTo({ top: n.scrollHeight, behavior: far ? "auto" : "smooth" });
+    window.setTimeout(onMsgScroll, 60);
+  };
   const unreadRef = useRef<HTMLDivElement>(null);
   /*
    * 방 순서 — **업데이트순 고정** (2026-08-29 요청).
@@ -205,7 +238,7 @@ export function MajorChannelPanel() {
             </>
           )}
         </div>
-        <div className="tgr-msgs">
+        <div className="tgr-msgs" ref={msgsRef} onScroll={onMsgScroll}>
           {msgs.length === 0 && (
             <div className="empty">아직 모인 글이 없습니다 — 다음 수집(5분 안)에 채워집니다.</div>
           )}
@@ -268,6 +301,14 @@ export function MajorChannelPanel() {
         <button className="tgr-fab" onClick={() => setOpen(null)} title="방 목록으로">
           ‹ 방 목록
         </button>
+        {/* 맨 아래로 — 맨 아래에 있으면 안 뜬다(안 쓰는 단추가 곧 가리는 것이다) */}
+        {!atBottom && (
+          <div className="tgr-jump">
+            <button onClick={jumpToBottom} title="맨 아래로 (최신)" aria-label="맨 아래로">
+              ↓
+            </button>
+          </div>
+        )}
       </div>
     );
   }
