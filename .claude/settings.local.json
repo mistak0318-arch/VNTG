@@ -853,7 +853,12 @@
       "Bash(curl -s \"http://localhost:4000/api/market/daily-closes/summary\")",
       "Bash(grep -n \"className=\\\\\"[a-z-]*table[a-z-]*\\\\\"\\\\|className={\\\\`[a-z-]*table\" web/src/pages/SuperDashboardPage.tsx web/src/pages/WatchlistPage.tsx web/src/pages/SignalScreenPage.tsx)",
       "Bash(echo \"EXIT=$?\")",
-      "mcp__claude-in-chrome__list_connected_browsers"
+      "mcp__claude-in-chrome__list_connected_browsers",
+      "Bash(node -e \"const p=require\\('./server/package.json'\\);console.log\\(Object.keys\\(p.dependencies\\).join\\(' '\\)\\)\")",
+      "Bash(node -e \"const p=require\\('./web/package.json'\\);console.log\\('deps:',Object.keys\\(p.dependencies||{}\\).join\\(' '\\)\\);console.log\\('dev:',Object.keys\\(p.devDependencies||{}\\).join\\(' '\\)\\)\")",
+      "Bash(node rfc-check.mjs)",
+      "Bash(touch server/src/auth.ts)",
+      "Bash(cd \"K:/0000 3740 프로젝트 \\(경제적자유\\)/00. 주식/2 AI 프롬프트/260810_클로드작업/server\" && npx tsc --noEmit -p tsconfig.json 2>&1|head -5; echo \"[서버 OK]\"; cd ../web && npx tsc --noEmit -p tsconfig.json 2>&1|head -5; echo \"[웹 OK]\")"
     ]
   }
 }

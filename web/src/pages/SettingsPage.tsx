@@ -21,6 +21,7 @@ import { LeaderConfigPanel } from "../components/LeaderConfigPanel";
 import { TelegramOverviewPanel } from "../components/TelegramOverviewPanel";
 import { SubTabOrderPanel } from "../components/SubTabOrderPanel";
 import { MiniConfigPanel } from "../components/MiniConfigPanel";
+import { LoginSettingsPanel } from "../components/LoginSettingsPanel";
 
 interface KeyInfo {
   name: string;
@@ -41,13 +42,15 @@ function rateColor(rate: number | null): string {
  * 카드 열한 개가 한 화면에 쌓여 있으니 찾는 게 일이었다. 성격이 전혀 다른 것들이
  * 섞여 있었다 — 화면 꾸미기와 API 비용을 같은 목록에서 스크롤로 찾을 이유가 없다.
  */
-type SettingsTab = "display" | "analysis" | "publish" | "cost";
+type SettingsTab = "display" | "analysis" | "publish" | "cost" | "security";
 
 const SETTINGS_TABS: { key: SettingsTab; label: string; hint: string }[] = [
   { key: "display", label: "화면", hint: "메뉴 순서 · 테마 · 글꼴" },
   { key: "analysis", label: "분석 기준", hint: "신호등 기준 · 주도주/교차 기준 · AI 모델" },
   { key: "publish", label: "발행·알림", hint: "리포트 일정 · 채널 수집 · 시그널" },
   { key: "cost", label: "비용·상태", hint: "AI 비용 · API 사용량 · 키 상태" },
+  /* 화면 잠금(가리개)과 달리 이쪽은 **서버로 들어오는 문**이라 따로 세운다 */
+  { key: "security", label: "보안", hint: "로그인 · 2단계 인증 · 기기 관리 · 서버 문단속" },
 ];
 
 export function SettingsPage() {
@@ -156,6 +159,17 @@ export function SettingsPage() {
         hint="상단 버튼 1~5에 어떤 화면을 물릴지, 여는 단축키를 정합니다."
       >
         <MiniConfigPanel />
+      </CollapsibleCard>
+      )}
+
+      {tab === "security" && (
+      <CollapsibleCard
+        id="loginAuth"
+        scope="global"
+        title="로그인"
+        hint="이 서버에 들어오는 문입니다. 아이디·비밀번호와 새 기기 확인 방식을 정합니다."
+      >
+        <LoginSettingsPanel />
       </CollapsibleCard>
       )}
 

@@ -12,8 +12,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(here, ".."); // dist/ 또는 src/ 의 상위 = server/
 dotenv.config({ path: path.join(serverRoot, ".env") });
 import { createKiwoomClientFromEnv, KiwoomApiError } from "./kiwoomClient.js";
+import { authState, requireAuth } from "./auth.js";
 import { createAccountRouter } from "./routes/account.js";
 import { createAlgoRouter } from "./routes/algo.js";
+import { createAuthRouter } from "./routes/auth.js";
 import { createCalendarRouter } from "./routes/calendar.js";
 import { createMarketRouter } from "./routes/market.js";
 import { createUsKiwoomRouter } from "./routes/usKiwoom.js";
@@ -118,12 +120,20 @@ function localIPv4(): string[] {
   return out;
 }
 
-app.get("/api/health", (_req, res) => {
+/*
+ * 헬스체크는 로그인 없이도 열어 둔다 — 살아 있는지 묻는 것뿐이고, 이게 막히면
+ * 앞단이 서버를 죽은 것으로 볼 수 있다.
+ *
+ * 다만 **집 안 IP 목록은 로그인한 사람에게만** 준다. 그건 「살아 있나」의 답이
+ * 아니라 내 공유기 안의 지도라, 문 앞에 붙여 둘 것이 아니다.
+ */
+app.get("/api/health", async (req, res) => {
+  const { authed } = await authState(req);
   res.json({
     ok: true,
     startedAt: new Date(startedAt).toISOString(),
     uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
-    addresses: localIPv4(),
+    ...(authed ? { addresses: localIPv4() } : {}),
     keysConfigured: {
       kiwoom: Boolean(process.env.KIWOOM_APP_KEY && process.env.KIWOOM_APP_SECRET),
       dart: Boolean(process.env.DART_API_KEY),
@@ -131,6 +141,23 @@ app.get("/api/health", (_req, res) => {
     },
   });
 });
+
+/*
+ * 로그인 창구는 문지기 **앞**에 둔다 — 잠긴 문을 여는 손잡이까지 잠글 수는 없다.
+ * (그 안에서 설정을 바꾸는 것들은 각자 로그인을 다시 확인한다. routes/auth.ts 참고)
+ */
+app.use("/api/auth", createAuthRouter());
+
+/*
+ * 여기서부터 아래 **전부**가 로그인 뒤에 있다.
+ *
+ * 라우터마다 하나씩 붙이지 않는 이유: 40개가 넘고 앞으로도 는다. 하나 빠뜨리면
+ * 그게 곧 뚫린 구멍인데, 빠뜨렸다는 걸 알 방법이 없다. 그래서 **한 줄로 전부 덮고**
+ * 열어 둘 것만 auth.ts 에 적는다 — 뚫린 곳이 아니라 열어 둔 곳을 세는 편이 안전하다.
+ *
+ * 잠금이 꺼져 있으면(기본값) 이 미들웨어는 아무것도 안 한다.
+ */
+app.use(requireAuth);
 
 const client = createKiwoomClientFromEnv();
 app.use("/api/account", createAccountRouter(client));

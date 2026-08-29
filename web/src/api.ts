@@ -1,4 +1,5 @@
 import { noteFetchFailure } from "./authGuard";
+import { markNeedLogin } from "./loginState";
 
 export type RawRecord = Record<string, unknown>;
 
@@ -9,10 +10,17 @@ export type RawRecord = Record<string, unknown>;
  * 밖에서 접속할 때 Cloudflare Access 세션이 끝나면 요청이 로그인 페이지로
  * 리다이렉트되는데, 브라우저가 그걸 CORS 로 막아 여기까지는 그냥 「실패」로 온다.
  * 각 화면이 그 실패를 조용히 삼키면 **아무 말 없는 빈 칸**만 남는다.
+ *
+ * 그리고 **우리 서버가 401 을 주면** 로그인 칸을 올린다(2026-08-29). 세션은 화면을
+ * 보고 있는 도중에도 끝나므로, 그때 데이터를 부르던 화면이 401 을 받는다.
+ * 여기 한 곳만 보면 되는 게 이 함수를 지나지 않는 요청이 없기 때문이다.
  */
 async function req(path: string, init?: RequestInit): Promise<Response> {
   try {
-    return await fetch(path, init);
+    const res = await fetch(path, init);
+    /* 로그인 창구 자체의 401(비밀번호가 틀림)은 신호가 아니다 — 이미 로그인 칸 안이다 */
+    if (res.status === 401 && !path.startsWith("/api/auth/")) markNeedLogin();
+    return res;
   } catch (e) {
     noteFetchFailure();
     throw e;
@@ -124,8 +132,135 @@ export interface AlgoJob {
   usedPreviousDay: boolean;
 }
 
+/* ── 로그인 (2026-08-29) ─────────────────────────────────────────────────── */
+
+export type OtpMethod = "email" | "totp";
+
+export interface AuthState {
+  enabled: boolean;
+  authed: boolean;
+  knownDevice: boolean;
+  mailReady: boolean;
+  otpForNewDevice: boolean;
+  otpMethod: OtpMethod;
+  username: string;
+}
+
+/** 서버가 어디까지 열려 있나 — 설정 화면의 「문단속」 칸 */
+export interface DoorState {
+  corsRestricted: boolean;
+  corsOrigins: string[];
+  loopbackOnly: boolean;
+  bindHost: string;
+}
+
+export interface AuthDevice {
+  id: string;
+  name: string;
+  ua: string;
+  addedAt: string;
+  lastSeenAt: string;
+  current: boolean;
+}
+
+export interface AuthConfigView {
+  enabled: boolean;
+  username: string;
+  hasPassword: boolean;
+  isFirstPassword: boolean;
+  sessionHours: number;
+  otpForNewDevice: boolean;
+  otpMethod: OtpMethod;
+  totpReady: boolean;
+  mailReady: boolean;
+  mailTo: string;
+  devices: AuthDevice[];
+  door: DoorState;
+}
+
+/** 비밀번호가 맞았지만 처음 보는 기기라 6자리를 더 받아야 하는 상태 */
+export interface LoginNeedsOtp {
+  ok: false;
+  otpRequired: true;
+  method: OtpMethod;
+  ticket: string;
+  /** 어디로 보냈는지 — 가려서 보여 준다 */
+  sentTo: string;
+}
+
 export const api = {
   health: () => getJson<{ ok: boolean }>("/api/health"),
+
+  authState: () => getJson<AuthState>("/api/auth/state"),
+  /**
+   * 로그인. 던지지 않고 **결과를 돌려준다** — 「비밀번호가 틀렸다」는 예외가 아니라
+   * 정상적인 답이고, 화면은 그걸 칸 아래에 적어야지 오류로 터뜨리면 안 된다.
+   */
+  login: async (
+    username: string,
+    password: string,
+  ): Promise<{ ok: true } | LoginNeedsOtp | { ok: false; error: string }> => {
+    const res = await req("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    return (await res.json()) as { ok: true } | LoginNeedsOtp | { ok: false; error: string };
+  },
+  loginOtp: async (
+    ticket: string,
+    code: string,
+    deviceName: string,
+  ): Promise<{ ok: boolean; error?: string }> => {
+    const res = await req("/api/auth/otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticket, code, deviceName }),
+    });
+    return (await res.json()) as { ok: boolean; error?: string };
+  },
+  logout: () => postJson<{ ok: boolean }>("/api/auth/logout"),
+
+  /* 비밀번호 찾기 — 이 둘도 던지지 않고 결과를 돌려준다(로그인 칸 안에서 쓴다) */
+  authForgot: async (): Promise<{
+    ok: boolean;
+    ticket?: string;
+    sentTo?: string;
+    error?: string;
+  }> => {
+    const res = await req("/api/auth/forgot", { method: "POST" });
+    return (await res.json()) as { ok: boolean; ticket?: string; sentTo?: string; error?: string };
+  },
+  authReset: async (
+    ticket: string,
+    code: string,
+    next: string,
+  ): Promise<{ ok: boolean; error?: string }> => {
+    const res = await req("/api/auth/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticket, code, next }),
+    });
+    return (await res.json()) as { ok: boolean; error?: string };
+  },
+
+  authConfig: () => getJson<AuthConfigView>("/api/auth/config"),
+  authSetPassword: (current: string, next: string) =>
+    postJson<{ ok: boolean }>("/api/auth/password", { current, next }),
+  authSetUsername: (username: string) =>
+    postJson<AuthConfigView>("/api/auth/username", { username }),
+  authEnable: (on: boolean) => postJson<{ ok: boolean }>("/api/auth/enable", { on }),
+  authOptions: (o: { sessionHours?: number; otpForNewDevice?: boolean; otpMethod?: OtpMethod }) =>
+    putJson<AuthConfigView>("/api/auth/options", o),
+  authRemoveDevice: (id: string) =>
+    deleteJson<AuthConfigView>(`/api/auth/device/${encodeURIComponent(id)}`),
+  authRevokeAll: () => postJson<{ ok: boolean }>("/api/auth/revoke-all"),
+
+  /* 구글 OTP 등록 — begin 으로 키를 받아 앱에 넣고, confirm 으로 확인해야 켜진다 */
+  authTotpBegin: () => postJson<{ secret: string; uri: string }>("/api/auth/totp/begin"),
+  authTotpConfirm: (code: string) => postJson<AuthConfigView>("/api/auth/totp/confirm", { code }),
+  authTotpClear: () => deleteJson<AuthConfigView>("/api/auth/totp"),
+  authTotpNow: () => getJson<{ code: string }>("/api/auth/totp/now"),
   accountSummary: () => getJson("/api/account/summary"),
   accountDeposit: () => getJson("/api/account/deposit"),
   holdings: () => getJson("/api/account/holdings"),

@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { LoginGate } from "./components/LoginGate";
 import { AppearanceProvider } from "./useAppearance";
 import { WatchedCodesProvider } from "./useWatchedCodes";
 import { applyPushedPrefs, loadPrefs } from "./prefs";
@@ -8,6 +9,7 @@ import "./styles.css";
 import "./overview.css";
 /* 엑셀 모드는 색뿐 아니라 모양까지 바꿔서 규칙이 많다 — 파일을 따로 둔다 */
 import "./excel.css";
+import "./login.css";
 
 /*
  * **설정을 먼저 받고 그린다.**
@@ -23,9 +25,16 @@ void loadPrefs().then(() => {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <AppearanceProvider>
-        <WatchedCodesProvider>
-          <App />
-        </WatchedCodesProvider>
+        {/*
+          로그인 문은 **제일 바깥**이다. 안쪽에 두면 잠긴 동안에도 앱이 먼저 그려지고,
+          그 화면들이 저마다 막힌 요청을 쏘아 401 이 무더기로 난다.
+          잠금이 꺼져 있으면(기본값) 아무것도 그리지 않고 그대로 통과시킨다.
+        */}
+        <LoginGate>
+          <WatchedCodesProvider>
+            <App />
+          </WatchedCodesProvider>
+        </LoginGate>
       </AppearanceProvider>
     </React.StrictMode>,
   );
