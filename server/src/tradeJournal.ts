@@ -628,6 +628,22 @@ export interface PickStats {
   byFutures: { band: "매수" | "중립" | "매도"; n: number; hitRate: number; avgEdge: number }[];
   /** 여러 번 예측한 종목 — 「이 종목은 내가 잘 본다」 (2회 이상, 적중률 순) */
   byStock: { code: string; name: string; n: number; hitRate: number; avgEdge: number }[];
+  /**
+   * **예측한 순간 그 종목 신호등이 무슨 색이었나별 적중률** (2026-08-29).
+   *
+   * 값은 진작부터 박제해 두고(`pick.signal`) 한 번도 세지 않았다. 이게 이 앱에서
+   * 제일 물어보고 싶은 것에 가깝다 — 「신호등이 초록일 때 내 예측이 실제로 맞나」.
+   * 맞으면 신호등을 믿고 걸러도 되고, 색과 무관하면 신호등이 예측에는 안 통하는 것이다.
+   */
+  bySignal: { level: string; n: number; hitRate: number; avgEdge: number }[];
+  /**
+   * **나아지고 있나** (2026-08-29) — 최근 10건과 그 이전을 갈라 본다.
+   *
+   * 누적 적중률 하나만 보면 **훈련이 되고 있는지가 안 보인다.** 석 달 전의 실수가
+   * 평균에 계속 섞여 있어서, 요즘 잘 맞아도 숫자가 안 움직인다.
+   * 표본이 적을 때는 둘 다 null 이다 — 다섯 건으로 「나아졌다」고 말하면 거짓말이다.
+   */
+  trend: { recent: number | null; earlier: number | null; recentN: number; earlierN: number };
   /** 최근 채점분 — 화면이 히스토리로 보여 준다 (최신순 30건) */
   recent: {
     date: string;
@@ -701,6 +717,15 @@ export interface JournalStats {
     /** 산 날의 국면 분포 — 견줘 봐야 뜻이 생긴다 */
     tradeByMarket: { key: string; count: number }[];
   };
+  /**
+   * **판단 vs 실행** (2026-08-29) — 예측은 맞는데 매매는 지고 있나.
+   *
+   * 두 숫자가 따로 놀면 원인을 못 짚는다. 예측 적중률이 높은데 매매 승률이 낮으면
+   * 문제는 **보는 눈이 아니라 손**이다(늦게 들어가거나 일찍 판다). 반대면 방향을
+   * 잘못 보는 것이라 고칠 자리가 전혀 다르다.
+   * 둘 다 있을 때만 낸다 — 한쪽만으로는 견줄 수가 없다.
+   */
+  judgeVsAct: { pickHit: number | null; tradeWin: number | null; tradeN: number } | null;
   /** 최근에 적은 배운 것들 — 다시 읽으라고 */
   lessons: { date: string; lesson: string }[];
 }
@@ -915,10 +940,36 @@ function pickStats(rows: JournalEntry[]): PickStats {
       return rank(a.band) - rank(b.band);
     });
 
+  /* 예측한 순간의 종목 신호등별 — 값은 진작 박제해 두고 안 쓰고 있었다 */
+  const bySignal = agg((x) => x.p.signal?.level ?? null)
+    .map((r) => ({ level: r.key, n: r.n, hitRate: r.hitRate, avgEdge: r.avgEdge }))
+    .sort((a, b) => {
+      const rank = (l: string) => (l === "green" ? 0 : l === "yellow" ? 1 : l === "red" ? 2 : 3);
+      return rank(a.level) - rank(b.level);
+    });
+
+  /*
+   * 나아지고 있나 — **채점된 순서대로** 최근 10건과 그 이전.
+   * 예측일로 정렬한다(채점된 날이 아니라). 열 건이 안 되면 가르지 않는다 —
+   * 다섯 건으로 「나아졌다」고 말하면 그건 숫자가 아니라 기분이다.
+   */
+  const ordered = [...done].sort((a, b) => a.date.localeCompare(b.date));
+  const RECENT = 10;
+  const recentArr = ordered.slice(-RECENT);
+  const earlierArr = ordered.slice(0, -RECENT);
+  const trend = {
+    recent: recentArr.length >= RECENT ? rate(recentArr) : null,
+    earlier: earlierArr.length >= 5 ? rate(earlierArr) : null,
+    recentN: recentArr.length,
+    earlierN: earlierArr.length,
+  };
+
   return {
     byMarket,
     byFutures,
     byStock,
+    bySignal,
+    trend,
     graded: done.length,
     pending,
     hitRate: rate(done),
@@ -1071,8 +1122,25 @@ export async function journalStats(): Promise<JournalStats> {
   const brokeReturns = judged.filter((r) => !r.followedRules).flatMap((r) => returnOn(r.date));
   const avg = (xs: number[]) => (xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
+  /*
+   * 판단 vs 실행 — 예측 적중률과 **실현 매매 승률**을 나란히 놓는다.
+   * 승률은 판 건 기준(수량 가중 안 함) — 「몇 번 중 몇 번 이겼나」를 묻는 것이라
+   * 큰 매매가 평균을 끌면 그 물음이 흐려진다. 위 실현 집계와 같은 규칙이다.
+   */
+  const allRealized = [...realized.values()].flat();
+  const pk = pickStats(rows);
+  const judgeVsAct =
+    pk.hitRate !== null && allRealized.length > 0
+      ? {
+          pickHit: pk.hitRate,
+          tradeWin: (allRealized.filter((x) => x > 0).length / allRealized.length) * 100,
+          tradeN: allRealized.length,
+        }
+      : null;
+
   return {
-    picks: pickStats(rows),
+    picks: pk,
+    judgeVsAct,
     days: rows.length,
     streak,
     ruleRate: judged.length > 0 ? (kept.length / judged.length) * 100 : null,

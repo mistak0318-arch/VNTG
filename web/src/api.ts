@@ -2909,6 +2909,10 @@ export interface PickStats {
   byMarket: { level: string; n: number; hitRate: number; avgEdge: number }[];
   byFutures: { band: "매수" | "중립" | "매도"; n: number; hitRate: number; avgEdge: number }[];
   byStock: { code: string; name: string; n: number; hitRate: number; avgEdge: number }[];
+  /** 예측한 순간 그 종목 신호등 색깔별 적중률 (2026-08-29) */
+  bySignal: { level: string; n: number; hitRate: number; avgEdge: number }[];
+  /** 나아지고 있나 — 최근 10건 vs 그 이전 (표본이 적으면 null) */
+  trend: { recent: number | null; earlier: number | null; recentN: number; earlierN: number };
   recent: {
     date: string;
     code: string;
@@ -2993,6 +2997,8 @@ export interface JournalStats {
     byMarket: { key: string; count: number }[];
     tradeByMarket: { key: string; count: number }[];
   };
+  /** 판단 vs 실행 — 예측 적중률과 실현 매매 승률 (둘 다 있을 때만) */
+  judgeVsAct: { pickHit: number | null; tradeWin: number | null; tradeN: number } | null;
   lessons: { date: string; lesson: string }[];
 }
 

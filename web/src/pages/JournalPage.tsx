@@ -225,6 +225,28 @@ function PickReview({
             오름 {picks.up.n}건 · 내림 {picks.down.n}건
           </span>
         </div>
+        {/* 나아지고 있나 (2026-08-29) — 누적 하나만 보면 훈련이 되는지가 안 보인다 */}
+        {picks.trend.recent !== null && (
+          <div className="jn-pick-big">
+            <span className="jn-pick-big-k">최근 {picks.trend.recentN}건</span>
+            <b
+              className={`jn-pick-big-v ${
+                picks.trend.earlier === null
+                  ? ""
+                  : picks.trend.recent >= picks.trend.earlier
+                    ? "positive"
+                    : "negative"
+              }`}
+            >
+              {rate(picks.trend.recent)}
+            </b>
+            <span className="pt-n">
+              {picks.trend.earlier === null
+                ? "이전과 견줄 만큼은 아직"
+                : `이전 ${picks.trend.earlierN}건 ${rate(picks.trend.earlier)}`}
+            </span>
+          </div>
+        )}
         {picks.pending > 0 && (
           <div className="jn-pick-big">
             <span className="jn-pick-big-k">채점 대기</span>
@@ -242,6 +264,17 @@ function PickReview({
             초록장에서만 맞으면 시장을 따라간 것이고, 빨강장에서도 맞으면 판단입니다.
           </div>
         </div>
+
+        {picks.bySignal.length > 0 && (
+          <div className="jn-stat-block">
+            <div className="cost-sub">종목 신호등별 — 그때 그 종목이 무슨 색이었나</div>
+            {band(picks.bySignal, (i) => LEVEL_KO[picks.bySignal[i].level] ?? picks.bySignal[i].level)}
+            <div className="jn-stat-note">
+              초록일 때만 잘 맞으면 신호등을 걸러 쓰면 되고, 색과 무관하게 비슷하면
+              예측에는 신호등이 안 통하는 것입니다.
+            </div>
+          </div>
+        )}
 
         <div className="jn-stat-block">
           <div className="cost-sub">선물 외국인 수급별 — 그날 국장 선물</div>
@@ -1071,6 +1104,41 @@ export function JournalPage({
         초록장에서만 맞으면 따라간 것이고, 어느 판에서나 맞으면 그게 실력이다.
       */}
       <PickReview picks={s.picks} onSelectStock={onSelectStock} />
+
+      {/*
+        판단 vs 실행 (2026-08-29) — 두 숫자를 나란히 놓아야 **고칠 자리**가 정해진다.
+        예측은 맞는데 매매가 지면 문제는 보는 눈이 아니라 손이다(늦게 들어가거나
+        일찍 판다). 반대면 방향을 잘못 보는 것이라 손볼 데가 전혀 다르다.
+      */}
+      {s.judgeVsAct && (
+        <div className="jn-gap">
+          <div className="jn-gap-side">
+            <span className="jn-pick-big-k">판단 (예측 적중)</span>
+            <b className={`jn-pick-big-v ${(s.judgeVsAct.pickHit ?? 0) >= 50 ? "positive" : "negative"}`}>
+              {s.judgeVsAct.pickHit === null ? "—" : `${s.judgeVsAct.pickHit.toFixed(0)}%`}
+            </b>
+          </div>
+          <span className="jn-gap-vs">vs</span>
+          <div className="jn-gap-side">
+            <span className="jn-pick-big-k">실행 (매매 승률)</span>
+            <b className={`jn-pick-big-v ${(s.judgeVsAct.tradeWin ?? 0) >= 50 ? "positive" : "negative"}`}>
+              {s.judgeVsAct.tradeWin === null ? "—" : `${s.judgeVsAct.tradeWin.toFixed(0)}%`}
+            </b>
+            <span className="pt-n">{s.judgeVsAct.tradeN}건 실현</span>
+          </div>
+          <p className="jn-gap-note">
+            {s.judgeVsAct.pickHit !== null &&
+            s.judgeVsAct.tradeWin !== null &&
+            s.judgeVsAct.pickHit - s.judgeVsAct.tradeWin >= 15
+              ? "방향은 맞히는데 매매가 못 따라갑니다 — 진입·청산 시점을 보세요(눈이 아니라 손의 문제)."
+              : s.judgeVsAct.tradeWin !== null &&
+                  s.judgeVsAct.pickHit !== null &&
+                  s.judgeVsAct.tradeWin - s.judgeVsAct.pickHit >= 15
+                ? "매매가 예측보다 낫습니다 — 실제로 살 때 더 신중하게 고르고 있다는 뜻입니다."
+                : "판단과 실행이 비슷하게 갑니다."}
+          </p>
+        </div>
+      )}
 
       <h3 className="section-heading">쌓인 나 — 노트가 일기와 갈리는 곳</h3>
       {s.days === 0 ? (
