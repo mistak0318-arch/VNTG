@@ -143,6 +143,43 @@ export function TelegramRoomsPanel() {
   /** 이 방에서 찾기 — 불러온 메시지 안에서 거른다 */
   const [query, setQuery] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  /* 맨 위·맨 아래 단추 (2026-08-29 요청) — 지금 어디쯤인지에 따라 필요한 것만 띄운다 */
+  const msgsRef = useRef<HTMLDivElement>(null);
+  const [atBottom, setAtBottom] = useState(true);
+
+  /*
+   * 지금 위·아래 끝에 닿았나. 여유 24px 은 「거의 끝」도 끝으로 친다 —
+   * 1px 남았다고 단추가 깜빡이면 그게 더 거슬린다.
+   */
+  const onMsgScroll = () => {
+    const n = msgsRef.current;
+    if (!n) return;
+    setAtBottom(n.scrollHeight - n.scrollTop - n.clientHeight <= 24);
+  };
+
+  /* 방을 열거나 메시지가 바뀌면 다시 잰다 — 안 재면 단추가 옛 상태로 남는다 */
+  useEffect(() => {
+    const t = setTimeout(onMsgScroll, 120);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, msgs.length]);
+
+  /**
+   * 맨 위/맨 아래로.
+   *
+   * **거리에 따라 갈라진다.** 방 하나가 3만 픽셀을 넘기도 하는데 그걸 전부
+   * 스르륵 굴리면 몇 초를 기다리게 된다 — 가까울 때(세 화면 안쪽)만 부드럽게
+   * 가고, 멀면 즉시 뛴다. 어디로 갔는지는 어차피 단추가 말해 준다.
+   */
+  const jumpTo = (where: "top" | "bottom") => {
+    const n = msgsRef.current;
+    if (!n) return;
+    const to = where === "top" ? 0 : n.scrollHeight;
+    const far = Math.abs(to - n.scrollTop) > n.clientHeight * 3;
+    n.scrollTo({ top: to, behavior: far ? "auto" : "smooth" });
+    /* 즉시 뛰면 scroll 이벤트가 한 번만 오므로 단추 상태를 여기서도 맞춘다 */
+    window.setTimeout(onMsgScroll, 60);
+  };
   const unreadRef = useRef<HTMLDivElement>(null);
   /* 방 순서 (2026-08-27) — 끌어서 바꾼다. 서버(cardOrder) 저장이라 기기 공통 */
   const roomOrder = useCardOrder(
@@ -273,7 +310,7 @@ export function TelegramRoomsPanel() {
             </>
           )}
         </div>
-        <div className="tgr-msgs">
+        <div className="tgr-msgs" ref={msgsRef} onScroll={onMsgScroll}>
           {msgs.length === 0 && <div className="empty">아직 이 방으로 보낸 메시지가 없습니다.</div>}
           {q && shown.length === 0 && msgs.length > 0 && (
             <div className="empty">「{query.trim()}」 — 불러온 메시지에는 없습니다.</div>
@@ -318,6 +355,23 @@ export function TelegramRoomsPanel() {
         <button className="tgr-fab" onClick={() => setOpen(null)} title="방 목록으로">
           ‹ 방 목록
         </button>
+        {/*
+          맨 아래로 (2026-08-29 요청) — 방에서는 **이것 하나면 된다.**
+          위로 올라가는 건 옛 글을 읽으려고 손으로 훑는 것이고, 돌아올 곳은
+          늘 최신이다. (페이지 전체의 「맨 위로」는 App 의 전역 단추가 맡는다)
+
+          **글을 가리지 않는 자리**여야 한다 — 말풍선은 왼쪽부터 차고 오른쪽 끝은
+          시각·★ 자리라 글자가 거의 안 온다. 그래서 오른쪽 가장자리에, 「방 목록」
+          단추 위로 쌓는다. 그리고 **맨 아래에 있으면 안 뜬다** — 안 쓰는 단추가
+          떠 있으면 그게 곧 가리는 것이다.
+        */}
+        {!atBottom && (
+          <div className="tgr-jump">
+            <button onClick={() => jumpTo("bottom")} title="맨 아래로 (최신)" aria-label="맨 아래로">
+              ↓
+            </button>
+          </div>
+        )}
       </div>
     );
   }

@@ -49,6 +49,7 @@ import { ExcelChrome } from "./components/ExcelChrome";
 import { useAppearance } from "./useAppearance";
 import { BoardPage } from "./pages/BoardPage";
 import { CornerToggle } from "./components/CornerToggle";
+import { ScrollTopButton } from "./components/ScrollTopButton";
 import { AuthExpiredBar } from "./components/AuthExpiredBar";
 import { useStockFocus } from "./useStockFocus";
 import { TelegramPage } from "./pages/TelegramPage";
@@ -846,6 +847,9 @@ export default function App() {
           </div>
         </nav>
       </aside>
+
+      {/* 맨 위로 — 길게 내려간 화면에서만 뜬다. 어느 메뉴에서든 같은 자리 (2026-08-29) */}
+      <ScrollTopButton />
 
       {navOpen && (
         <div

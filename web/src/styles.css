@@ -10583,3 +10583,78 @@ button.tpb-row:hover { background: var(--panel-2); }
   .tab-slide-next,
   .tab-slide-prev { animation: none; }
 }
+
+/*
+ * 텔레그램 방 — 맨 위/맨 아래 단추 (2026-08-29 요청).
+ *
+ * **글을 가리지 않는 자리.** 말풍선은 왼쪽부터 차고 오른쪽 끝은 시각·★ 자리라
+ * 글자가 거의 안 온다 — 그래서 오른쪽 가장자리에 세로로 세우고, 「방 목록」
+ * 단추 **위로** 쌓는다(가로로 늘어놓으면 둘이 겹친다).
+ *
+ * 작고 반투명하게 두되, 손이 닿을 땐 진해진다. 필요할 때만 뜨는 것(JSX)이
+ * 가림을 줄이는 제일 큰 장치다 — 맨 위에서 ↑ 는 할 일이 없다.
+ */
+.tgr-jump {
+  position: fixed;
+  right: 14px;
+  /* 「방 목록」(bottom 18px, 높이 34px 남짓) 바로 위 */
+  bottom: 62px;
+  z-index: 18;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tgr-jump button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  /* 글 위에 얹히는 물건이라 평소엔 물러나 있는다 */
+  opacity: 0.55;
+  transition: opacity 0.15s ease, border-color 0.15s ease;
+}
+.tgr-jump button:hover,
+.tgr-jump button:active {
+  opacity: 1;
+  color: var(--text);
+  border-color: var(--blue);
+}
+
+/*
+ * 맨 위로 — 전역 플로팅 (2026-08-29 요청).
+ *
+ * 리포트·종목분석처럼 한 화면이 3만 픽셀을 넘는 곳에서 위로 돌아가는 길.
+ * 읽는 글은 왼쪽부터 차므로 오른쪽 끝이 제일 덜 가린다. 평소엔 반투명으로
+ * 물러나 있다가 손이 닿으면 진해진다 — 글 위에 얹히는 물건의 예의다.
+ */
+.scroll-top {
+  position: fixed;
+  right: 14px;
+  bottom: 18px;
+  z-index: 17; /* 텔레그램 방 단추(18)보다 아래 — 겹칠 일이 있으면 그쪽이 먼저다 */
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  opacity: 0.5;
+  transition: opacity 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.scroll-top:hover,
+.scroll-top:active { opacity: 1; color: var(--text); border-color: var(--blue); }
+/*
+ * 텔레그램 방에는 이미 오른쪽 아래에 「방 목록」(18px)·「맨 아래로」(62px)가 있다.
+ * 그 위로 비켜 앉는다 — 겹쳐 놓으면 둘 다 못 누른다.
+ */
+.scroll-top.has-room-fab { bottom: 106px; }
