@@ -620,6 +620,53 @@
   font-size: 13px;
 }
 
+/* 환경변수 안내 — 평소엔 접혀 있다 */
+.login-set-how {
+  margin-top: 14px;
+}
+.login-set-howbtn {
+  background: none;
+  border: none;
+  color: var(--blue);
+  font-size: 13px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.login-set-howbody {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 13px;
+  margin-top: 8px;
+}
+/* 붙여 넣을 줄이라 줄바꿈을 그대로 살린다 */
+.login-set-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 11px;
+  margin: 7px 0;
+  color: var(--text);
+}
+
+.login-set-custom {
+  margin-top: 10px;
+}
+.login-set-custom span {
+  color: var(--muted);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+.login-set-custom input {
+  flex: 0 0 70px;
+  min-width: 70px;
+  text-align: center;
+}
+
 .login-set-msg,
 .login-set-err {
   margin-top: 14px;

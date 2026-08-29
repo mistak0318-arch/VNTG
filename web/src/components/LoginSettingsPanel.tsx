@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type AuthConfigView, type OtpMethod } from "../api";
+import { api, type AuthConfigView, type DoorState, type OtpMethod } from "../api";
 
 /**
  * 로그인 설정 (2026-08-29 요청).
@@ -27,6 +27,97 @@ const HOUR_CHOICES = [
   { h: 720, label: "한 달" },
 ];
 
+/** 168을 「168시간」이라고 적으면 며칠인지 세어야 한다 */
+function hourText(h: number): string {
+  if (h >= 24 && h % 24 === 0) {
+    const d = h / 24;
+    return d % 7 === 0 && d >= 7 ? `${d / 7}주 (${h}시간)` : `${d}일 (${h}시간)`;
+  }
+  return `${h}시간`;
+}
+
+/**
+ * 환경변수 고치는 법 (2026-08-29 요청 — 「환경변수 어떻게 하는건지도 써줘」).
+ *
+ * 「ALLOWED_ORIGINS 를 넣으세요」까지만 적어 두면, 정작 **어느 파일 어디에 어떻게**
+ * 를 매번 다시 찾아야 한다. 미니PC 앞에 앉았을 때 이 화면만 보고 끝낼 수 있어야
+ * 하므로 파일 경로·줄 내용·다시 켜는 방법까지 다 적는다.
+ *
+ * 이미 제대로 돼 있는 항목은 접어 둔다 — 다 고쳐 놓고도 빨간 글이 남아 있으면
+ * 다음에 볼 때 뭐가 남은 건지 헷갈린다.
+ */
+function EnvHowTo({ door }: { door: DoorState }) {
+  const [open, setOpen] = useState(false);
+  const allDone = door.corsRestricted && door.loopbackOnly;
+
+  const lines: string[] = [];
+  if (!door.corsRestricted) lines.push("ALLOWED_ORIGINS=https://vntgts.com");
+  if (!door.loopbackOnly) lines.push("BIND_HOST=127.0.0.1");
+
+  return (
+    <div className="login-set-how">
+      <button className="login-set-howbtn" onClick={() => setOpen(!open)}>
+        {open ? "▾" : "▸"} 환경변수 고치는 법{allDone ? " (지금은 손댈 것 없음)" : ""}
+      </button>
+      {open && (
+        <div className="login-set-howbody">
+          {allDone ? (
+            <p className="login-set-note">
+              두 값 모두 제대로 들어가 있습니다. 참고로 파일은 미니PC 의{" "}
+              <code>C:\vntg-hts\server\.env</code> 이고, 고친 뒤에는 서버를 다시 켜야
+              반영됩니다.
+            </p>
+          ) : (
+            <>
+              <p className="login-set-note">
+                <b>① 미니PC 에서</b> 이 파일을 메모장으로 엽니다.
+              </p>
+              <div className="login-set-code">C:\vntg-hts\server\.env</div>
+
+              <p className="login-set-note">
+                <b>② 맨 아래에</b> 아래 줄을 붙여 넣습니다. (이미 같은 이름의 줄이 있으면
+                그 줄을 고칩니다 — 두 번 적으면 나중 것이 이깁니다.)
+              </p>
+              <div className="login-set-code">{lines.join("\n")}</div>
+              <button
+                className="login-set-copy"
+                onClick={() => void navigator.clipboard?.writeText(lines.join("\n"))}
+              >
+                복사
+              </button>
+
+              <p className="login-set-note">
+                <b>③ 저장하고 서버를 다시 켭니다.</b> 껐다 켜야 <code>.env</code> 를 다시
+                읽습니다 — 고치기만 해서는 아무것도 안 바뀝니다.
+              </p>
+
+              <p className="login-set-note">
+                <b>④ 이 화면을 새로고침</b>해서 위 두 줄이 초록으로 바뀌면 끝입니다.
+              </p>
+
+              {!door.loopbackOnly && (
+                <p className="login-set-note">
+                  ⚠️ <code>BIND_HOST=127.0.0.1</code> 은 <b>터널(cloudflared)을 쓸 때만</b>{" "}
+                  넣으세요. 터널 없이 폰에서 <code>192.168.x.x</code> 로 직접 들어오고
+                  있다면, 이 줄을 넣는 순간 그 길이 막힙니다.
+                </p>
+              )}
+              {!door.corsRestricted && (
+                <p className="login-set-note">
+                  ⚠️ <code>ALLOWED_ORIGINS</code> 에는 <b>브라우저 주소창에 뜨는 주소</b>를
+                  그대로 적습니다. 여러 개면 쉼표로 잇습니다(예{" "}
+                  <code>https://vntgts.com,http://192.168.0.20:4000</code>). 여기 없는
+                  주소로 열면 화면이 뜨고도 데이터가 안 나옵니다.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function LoginSettingsPanel() {
   const [cfg, setCfg] = useState<AuthConfigView | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -37,6 +128,8 @@ export function LoginSettingsPanel() {
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [nameDraft, setNameDraft] = useState("");
+  /** 버튼에 없는 값을 넣고 싶을 때 */
+  const [hourDraft, setHourDraft] = useState("");
 
   /* 구글 OTP 등록 중 */
   const [setup, setSetup] = useState<{ secret: string; uri: string } | null>(null);
@@ -322,9 +415,36 @@ export function LoginSettingsPanel() {
           </button>
         ))}
       </div>
+      <div className="login-set-inline login-set-custom">
+        <span>직접 넣기</span>
+        <input
+          inputMode="numeric"
+          value={hourDraft}
+          placeholder={String(cfg.sessionHours)}
+          onChange={(e) => setHourDraft(e.target.value.replace(/\D/g, "").slice(0, 3))}
+        />
+        <span>시간</span>
+        <button
+          disabled={busy || !hourDraft || Number(hourDraft) < 1 || Number(hourDraft) > 720}
+          onClick={() =>
+            void run("유지 시간 변경", async () => {
+              await api.authOptions({ sessionHours: Number(hourDraft) });
+              setHourDraft("");
+            })
+          }
+        >
+          적용
+        </button>
+      </div>
       <p className="login-set-note">
-        짧을수록 안전하고 자주 물어봅니다. 알던 기기라면 다시 물어도 비밀번호 한 번이라
-        하루 정도가 무난합니다.
+        지금은 <b>{hourText(cfg.sessionHours)}</b>입니다. 1시간~720시간(30일) 사이로 넣을 수
+        있습니다. 짧을수록 안전하고 자주 물어봅니다 — 알던 기기라면 다시 물어도 비밀번호
+        한 번이라 하루 정도가 무난합니다.
+      </p>
+      <p className="login-set-note">
+        ⚠️ 바꾸면 <b>다음 로그인부터</b> 적용됩니다. 지금 들고 있는 쿠키의 만료 시각은 굽던
+        때 정해진 것이라 이미 박혀 있습니다 — 당장 줄이고 싶으면 아래 「모든 기기·세션
+        끊기」를 누르세요.
       </p>
 
       {/* ── 기기 ─────────────────────────────────────────────── */}
@@ -407,6 +527,8 @@ export function LoginSettingsPanel() {
           </span>
         </li>
       </ul>
+
+      <EnvHowTo door={cfg.door} />
 
       {msg && <div className="login-set-msg">{msg}</div>}
       {err && <div className="login-set-err">{err}</div>}
