@@ -19,6 +19,7 @@ import {
   WatchHeatGrid,
 } from "../components/BriefingBlocks";
 import { RefreshBar } from "../components/RefreshBar";
+import { IndexDetailSheet } from "../components/overview/IndexDetailSheet";
 import { RotationStrip, ThermoChips, useMarketLens } from "../components/MarketLensPanel";
 import { useSection } from "../useSection";
 
@@ -74,10 +75,13 @@ function Thermometer({
   indices,
   global,
   usMajor,
+  onIndex,
 }: {
   indices: IndexCard[] | null;
   global: GlobalQuote[] | null;
   usMajor: UsMajorResult | null;
+  /** 지수를 누르면 — 시황 대시보드와 같은 상세 시트를 연다 (2026-08-29) */
+  onIndex: (code: string) => void;
 }) {
   const kospi = indices?.find((i) => i.code === "001");
   const kosdaq = indices?.find((i) => i.code === "101");
@@ -103,17 +107,24 @@ function Thermometer({
         코스피·코스닥은 다른 값들과 같은 작은 표기(bf-mini)로 — 큰 박스가
         두 줄을 만들어 아래를 밀어냈다(2026-08-26). 온도계는 한 줄이 목표다.
       */}
+      {/* 눌러서 상세 — 시황 대시보드의 지수 타일과 같은 시트다 (2026-08-29) */}
       {[
-        { label: "코스피", card: kospi },
-        { label: "코스닥", card: kosdaq },
-      ].map(({ label, card }) => (
-        <span className="bf-mini bf-mini-idx" key={label}>
+        { label: "코스피", card: kospi, code: "001" },
+        { label: "코스닥", card: kosdaq, code: "101" },
+      ].map(({ label, card, code }) => (
+        <button
+          type="button"
+          className="bf-mini bf-mini-idx bf-mini-click"
+          key={label}
+          onClick={() => onIndex(code)}
+          title={`${label} 지수 상세`}
+        >
           <em>{label}</em>
           <b className={cls(card?.changeRate)}>
             {card ? card.price.toFixed(2) : "-"}
             <i className="bf-mini-sub">{pct(card?.changeRate)}</i>
           </b>
-        </span>
+        </button>
       ))}
 
       {/*
@@ -279,6 +290,8 @@ export function BriefingPage({
 
   /* 체온 칩 + 로테이션이 같은 렌즈를 나눠 본다 — 한 번만 받는다 */
   const { lens, reload: reloadLens } = useMarketLens();
+  /* 지수 상세 — 시황 대시보드와 **같은 시트**를 쓴다. 두 화면이 다른 걸 보여 주면 안 된다 */
+  const [indexDetail, setIndexDetail] = useState<string | null>(null);
 
   return (
     <div className="bf">
@@ -289,7 +302,12 @@ export function BriefingPage({
       <div className="bf-top bf-top-slim">
         <RefreshBar onRefresh={refreshAll} updatedAt={indices.updatedAt} />
       </div>
-      <Thermometer indices={indices.data} global={global.data} usMajor={usMajor.data} />
+      <Thermometer
+        indices={indices.data}
+        global={global.data}
+        usMajor={usMajor.data}
+        onIndex={setIndexDetail}
+      />
       {/* 체온 한 줄 (2026-08-28 상황실 개편) — 지수 다음 물음 「종목들은 어떤가」 */}
       <ThermoChips lens={lens} />
 
@@ -384,6 +402,10 @@ export function BriefingPage({
           <LiveTicker events={events} eventDay={eventDay} onSelectStock={onSelectStock} />
         </section>
       </div>
+
+      {indexDetail && (
+        <IndexDetailSheet code={indexDetail} onClose={() => setIndexDetail(null)} />
+      )}
 
       {constituent && (
         <ConstituentSheet

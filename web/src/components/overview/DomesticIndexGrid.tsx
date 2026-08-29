@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MarketTrendSheet } from "../MarketTrendSheet";
 import { api, fmtNum, type IndexCard, type MarketFlow } from "../../api";
 import type { FuturesDetailTarget } from "./FuturesDetailSheet";
 import { Sparkline } from "./Sparkline";
@@ -207,6 +208,8 @@ export function DomesticIndexGrid({
 
 /** 종목등락현황 — 상한·상승·보합·하락·하한 표. 재료는 지수 카드에 이미 실려 온다 */
 export function UpDownTable({ cards }: { cards: (IndexCard | undefined)[] }) {
+  /* 줄을 누르면 60일 흐름 — 브리핑과 **같은 시트**다 (2026-08-29) */
+  const [trend, setTrend] = useState<{ code: string; name: string } | null>(null);
   return (
     <div className="ov-card-b">
       <table className="ov-table num">
@@ -224,7 +227,12 @@ export function UpDownTable({ cards }: { cards: (IndexCard | undefined)[] }) {
           {cards.map(
             (c) =>
               c && (
-                <tr key={c.code}>
+                <tr
+                  key={c.code}
+                  className="clickable-row"
+                  onClick={() => setTrend({ code: c.code, name: c.name })}
+                  title={`${c.name} 60일 흐름 보기`}
+                >
                   <td>{c.name}</td>
                   <td className="up">{c.upperLimit}</td>
                   <td className="up">{fmtNum(c.rising)}</td>
@@ -236,6 +244,9 @@ export function UpDownTable({ cards }: { cards: (IndexCard | undefined)[] }) {
           )}
         </tbody>
       </table>
+      {trend && (
+        <MarketTrendSheet code={trend.code} name={trend.name} onClose={() => setTrend(null)} />
+      )}
     </div>
   );
 }

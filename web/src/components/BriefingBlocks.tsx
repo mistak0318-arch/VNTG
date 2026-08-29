@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { MarketTrendSheet } from "./MarketTrendSheet";
 import {
   api,
   fmtNum,
@@ -141,6 +142,8 @@ export function FlowBars({
  */
 export function UpDownStrip({ cards }: { cards: (IndexCard | undefined)[] }) {
   const rows = cards.filter((c): c is IndexCard => Boolean(c));
+  /* 눌러서 60일 흐름 (2026-08-29) — 오늘 숫자 하나로는 많은지 적은지 모른다 */
+  const [trend, setTrend] = useState<{ code: string; name: string } | null>(null);
   if (rows.length === 0) return <div className="empty">등락현황을 아직 못 받았습니다.</div>;
   return (
     <div className="bf-updown">
@@ -148,7 +151,13 @@ export function UpDownStrip({ cards }: { cards: (IndexCard | undefined)[] }) {
         const total = Math.max(1, c.rising + c.flat + c.falling);
         const w = (n: number) => `${(n / total) * 100}%`;
         return (
-          <div className="bf-ud-row" key={c.code}>
+          <button
+            type="button"
+            className="bf-ud-row bf-ud-click"
+            key={c.code}
+            onClick={() => setTrend({ code: c.code, name: c.name })}
+            title={`${c.name} 60일 흐름 보기`}
+          >
             <em className="bf-ud-m">{c.name}</em>
             <span className="bf-ud-cells num">
               <b className="positive">
@@ -170,9 +179,12 @@ export function UpDownStrip({ cards }: { cards: (IndexCard | undefined)[] }) {
               <i className="f" style={{ width: w(c.flat) }} />
               <i className="d" style={{ width: w(c.falling) }} />
             </span>
-          </div>
+          </button>
         );
       })}
+      {trend && (
+        <MarketTrendSheet code={trend.code} name={trend.name} onClose={() => setTrend(null)} />
+      )}
     </div>
   );
 }
@@ -190,12 +202,14 @@ function money(eok: number): string {
  */
 export function TurnoverStrip() {
   const [rows, setRows] = useState<
-    { name: string; today: number; vsPrev: number | null; vsAvg: number | null }[] | null
+    { code: string; name: string; today: number; vsPrev: number | null; vsAvg: number | null }[] | null
   >(null);
+  /* 눌러서 60일 흐름 (2026-08-29) — 「8.4조」는 평소를 알아야 뜻이 생긴다 */
+  const [trend, setTrend] = useState<{ code: string; name: string } | null>(null);
   useEffect(() => {
     let alive = true;
     (async () => {
-      const out: { name: string; today: number; vsPrev: number | null; vsAvg: number | null }[] = [];
+      const out: { code: string; name: string; today: number; vsPrev: number | null; vsAvg: number | null }[] = [];
       for (const m of [
         { code: "001", name: "코스피" },
         { code: "101", name: "코스닥" },
@@ -210,6 +224,7 @@ export function TurnoverStrip() {
           const avg =
             last20.length > 0 ? last20.reduce((a, c) => a + c.tradeValue, 0) / last20.length : 0;
           out.push({
+            code: m.code,
             name: m.name,
             today: today.tradeValue,
             vsPrev:
@@ -234,7 +249,13 @@ export function TurnoverStrip() {
   return (
     <div className="bf-updown">
       {rows.map((r) => (
-        <div className="bf-ud-row" key={r.name}>
+        <button
+          type="button"
+          className="bf-ud-row bf-ud-click"
+          key={r.name}
+          onClick={() => setTrend({ code: r.code, name: r.name })}
+          title={`${r.name} 거래대금 60일 흐름 보기`}
+        >
           <em className="bf-ud-m">{r.name}</em>
           <span className="bf-ud-cells num">
             <b>{money(r.today)}</b>
@@ -261,8 +282,11 @@ export function TurnoverStrip() {
             />
             <u className="bf-to-tick" />
           </span>
-        </div>
+        </button>
       ))}
+      {trend && (
+        <MarketTrendSheet code={trend.code} name={trend.name} onClose={() => setTrend(null)} />
+      )}
     </div>
   );
 }
