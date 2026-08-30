@@ -1,4 +1,5 @@
 import { listThemes } from "./customThemes.js";
+import { dropPhantomToday } from "./candleGuard.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { listReports, loadReport } from "./reportStore.js";
 import type { Checkpoint, CheckDirection } from "./checkpoints.js";
@@ -70,7 +71,7 @@ async function dailyCloses(
     "ka10081",
     { stk_cd: code, base_dt: ymd(new Date()), upd_stkpc_tp: "1" },
   );
-  const rows = Array.isArray(data.stk_dt_pole_chart_qry) ? data.stk_dt_pole_chart_qry : [];
+  const rows = dropPhantomToday(Array.isArray(data.stk_dt_pole_chart_qry) ? (data.stk_dt_pole_chart_qry as Record<string, unknown>[]) : []);
   return rows
     .map((r) => {
       const raw = String(r.dt ?? "");
@@ -97,7 +98,7 @@ async function indexCloses(
     "ka20006",
     { inds_cd: indsCode, base_dt: ymd(new Date()) },
   );
-  const rows = Array.isArray(data.inds_dt_pole_qry) ? data.inds_dt_pole_qry : [];
+  const rows = dropPhantomToday(Array.isArray(data.inds_dt_pole_qry) ? (data.inds_dt_pole_qry as Record<string, unknown>[]) : []);
   return rows
     .map((r) => {
       const raw = String(r.dt ?? "");

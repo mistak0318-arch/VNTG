@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { dropPhantomToday } from "./candleGuard.js";
 import { yahooChart } from "./yahooChart.js";
 import { indexDetail } from "./indexDetail.js";
 
@@ -405,7 +406,7 @@ async function krCandles(
     base_dt: base,
     upd_stkpc_tp: "1",
   });
-  const rows = (res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
+  const rows = dropPhantomToday((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]);
   const n = (v: unknown) => Math.abs(Number(String(v ?? "").replace(/[+,-]/g, "")));
   return rows
     .map((r) => ({

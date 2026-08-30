@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { dropPhantomToday } from "./candleGuard.js";
 
 /**
  * 장중 기준선 — **데이트레이더가 화면에서 제일 먼저 찾는 선들.**
@@ -153,7 +154,7 @@ export async function intradayLevels(
       base_dt: d.toISOString().slice(0, 10).replace(/-/g, ""),
       upd_stkpc_tp: "1",
     });
-    const dRows = (day.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
+    const dRows = dropPhantomToday((day.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]);
     const prev = dRows
       .map((r) => ({
         dt: String(r.dt ?? ""),

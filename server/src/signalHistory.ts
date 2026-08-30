@@ -1,4 +1,5 @@
 import { appendFile, mkdir, readFile, readdir } from "node:fs/promises";
+import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -201,7 +202,7 @@ export async function gradeSignalHistory(
         base_dt: d.toISOString().slice(0, 10).replace(/-/g, ""),
         upd_stkpc_tp: "1",
       });
-      rows = ((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[])
+      rows = (dropPhantomToday((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]))
         .map((r) => ({ dt: String(r.dt ?? ""), close: num(r.cur_prc) }))
         .filter((r) => /^\d{8}$/.test(r.dt) && r.close > 0)
         .sort((a, b) => a.dt.localeCompare(b.dt));

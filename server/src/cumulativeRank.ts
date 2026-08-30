@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { dropPhantomToday } from "./candleGuard.js";
 import { etfAll } from "./routes/etf.js";
 import { tradeValueTop } from "./signalScreen.js";
 
@@ -83,7 +84,7 @@ async function closes(client: KiwoomClient, code: string): Promise<number[]> {
     base_dt: base,
     upd_stkpc_tp: "1",
   });
-  const rows = (res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
+  const rows = dropPhantomToday((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]);
   return rows
     .map((r) => ({ dt: String(r.dt ?? ""), c: Math.abs(n(r.cur_prc)) }))
     .filter((r) => /^\d{8}$/.test(r.dt) && r.c > 0)

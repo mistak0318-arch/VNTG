@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brokerFlow } from "./brokerFlow.js";
@@ -267,7 +268,7 @@ async function evaluateStock(
   const changeRate = toNum(info?.data?.flu_rt);
   if (price === 0) return []; // 시세를 못 받으면 판단하지 않는다
 
-  const rows = (chart?.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
+  const rows = dropPhantomToday((chart?.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]);
   const closes = rows.map((r) => toAbs(r.cur_prc)).filter((n) => n > 0);
   const volumes = rows.map((r) => toNum(r.trde_qty));
 

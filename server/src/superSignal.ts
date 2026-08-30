@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -243,7 +244,7 @@ async function gradeEntries(client: KiwoomClient, store: Store): Promise<number>
         base_dt: base,
         upd_stkpc_tp: "1",
       });
-      const rows = ((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[])
+      const rows = (dropPhantomToday((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]))
         .map((r) => ({
           date: String(r.dt ?? ""),
           close: Math.abs(Number(String(r.cur_prc ?? "").replace(/[+,]/g, ""))),
@@ -858,7 +859,7 @@ async function stockDailySeries(client: KiwoomClient, code: string): Promise<Dai
     base_dt: base,
     upd_stkpc_tp: "1",
   });
-  return ((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[])
+  return (dropPhantomToday((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]))
     .map((r) => ({ date: String(r.dt ?? ""), close: Math.abs(toNum2(r.cur_prc)) }))
     .filter((r) => /^\d{8}$/.test(r.date) && r.close > 0)
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -871,7 +872,7 @@ async function indexDailySeries(client: KiwoomClient, indsCode: string): Promise
     inds_cd: indsCode,
     base_dt: base,
   });
-  return ((res.data?.inds_dt_pole_qry ?? []) as Record<string, unknown>[])
+  return (dropPhantomToday((res.data?.inds_dt_pole_qry ?? []) as Record<string, unknown>[]))
     .map((r) => ({ date: String(r.dt ?? ""), close: Math.abs(toNum2(r.cur_prc)) }))
     .filter((r) => /^\d{8}$/.test(r.date) && r.close > 0)
     .sort((a, b) => a.date.localeCompare(b.date));

@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { dropPhantomToday } from "./candleGuard.js";
 import { listSectorFlow, SUBJECTS } from "./sectorFlowStore.js";
 
 /**
@@ -154,7 +155,12 @@ export async function indexDetail(
   });
 
   // 키움은 최신순으로 준다. 차트는 과거 → 최근이라 뒤집는다
-  const daily: IndexCandle[] = (data.inds_dt_pole_qry ?? [])
+  /*
+   * ⚠️ 장 전 **유령 봉**을 여기서 뺀다 (2026-08-31) — 이 함수가 지수 차트·거래대금
+   * 현황·리포트 스트립 **여러 화면의 원천**이라 여기서 한 번 거르면 전부 따라온다.
+   * 화면마다 따로 거르면 언젠가 한 곳이 빠지고, 그 화면만 「거래대금 0억」이 된다.
+   */
+  const daily: IndexCandle[] = dropPhantomToday((data.inds_dt_pole_qry ?? []) as Record<string, unknown>[])
     .map((r) => ({
       dt: String(r.dt ?? ""),
       open: num(r.open_pric),

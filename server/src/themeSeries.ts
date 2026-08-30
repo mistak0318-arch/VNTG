@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { dropPhantomToday } from "./candleGuard.js";
 import { listThemes } from "./customThemes.js";
 import { isIndexLikeTheme, loadThemes, themesOfStock } from "./naverThemes.js";
 import { etfHoldersOf } from "./etfHolders.js";
@@ -174,7 +175,7 @@ async function dailyCloses(client: KiwoomClient, code: string): Promise<Map<stri
     upd_stkpc_tp: "1",
   });
   const out = new Map<string, number>();
-  for (const r of (res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]) {
+  for (const r of dropPhantomToday((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[])) {
     const date = String(r.dt ?? "");
     const close = Math.abs(Number(String(r.cur_prc ?? "").replace(/[+,]/g, "")));
     if (/^\d{8}$/.test(date) && Number.isFinite(close) && close > 0) out.set(date, close);

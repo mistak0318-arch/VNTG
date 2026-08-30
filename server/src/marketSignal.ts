@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { dropPhantomToday } from "./candleGuard.js";
 import { indexDetail } from "./indexDetail.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
 import { futuresFlow } from "./naverFuturesFlow.js";
@@ -85,7 +86,7 @@ async function indexCloses(client: KiwoomClient, indsCode: string): Promise<numb
     // base_dt 가 비면 키움이 데이터를 아예 안 준다
     { inds_cd: indsCode, base_dt: ymd(new Date()) },
   );
-  const rows = Array.isArray(data.inds_dt_pole_qry) ? data.inds_dt_pole_qry : [];
+  const rows = dropPhantomToday(Array.isArray(data.inds_dt_pole_qry) ? (data.inds_dt_pole_qry as Record<string, unknown>[]) : []);
   return rows.map((r) => Math.abs(toNum(r.cur_prc))).filter((n) => n > 0);
 }
 

@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { dropPhantomToday } from "./candleGuard.js";
 import { DEFAULT_CONFIG, type CheckConfig, type SignalConfig } from "./signalLight.js";
 import { loadCloses } from "./dailyCloses.js";
 import { isIndexLikeTheme, loadThemes } from "./naverThemes.js";
@@ -207,7 +208,7 @@ async function bars(client: KiwoomClient, code: string): Promise<Bar[]> {
     base_dt: base,
     upd_stkpc_tp: "1",
   });
-  return ((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[])
+  return (dropPhantomToday((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]))
     .map((r) => ({
       date: String(r.dt ?? ""),
       close: Math.abs(n(r.cur_prc)),

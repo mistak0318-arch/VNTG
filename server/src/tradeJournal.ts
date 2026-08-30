@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -296,7 +297,7 @@ async function lastClose(client: KiwoomClient, code: string): Promise<number | n
     base_dt: kstDate().replace(/-/g, ""),
     upd_stkpc_tp: "1",
   });
-  const rows = (data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
+  const rows = dropPhantomToday((data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]);
   const v = Math.abs(Number(String(rows[0]?.cur_prc ?? "").replace(/[+,\s]/g, "")) || 0);
   return v > 0 ? v : null;
 }
@@ -343,7 +344,7 @@ async function gradePicks(client: KiwoomClient): Promise<boolean> {
         "ka10081",
         { stk_cd: code, base_dt: today.replace(/-/g, ""), upd_stkpc_tp: "1" },
       );
-      const bars = ((data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[])
+      const bars = (dropPhantomToday((data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]))
         .map((r) => ({
           dt: String(r.dt ?? ""),
           close: Math.abs(Number(String(r.cur_prc ?? "").replace(/[+,\s]/g, "")) || 0),

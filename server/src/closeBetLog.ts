@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -125,7 +126,7 @@ async function candles(
     base_dt: base,
     upd_stkpc_tp: "1",
   });
-  const rows = (res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
+  const rows = dropPhantomToday((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]);
   const out = new Map<string, { open: number; close: number }>();
   for (const r of rows) {
     const dt = String(r.dt ?? "");

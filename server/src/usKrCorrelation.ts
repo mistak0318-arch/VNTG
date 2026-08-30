@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recordApiCall } from "./apiUsage.js";
@@ -65,7 +66,7 @@ async function krCloses(client: KiwoomClient, code: string): Promise<{ date: str
     // base_dt 를 빈 값으로 보내면 "필수 입력 값 없음"으로 전부 실패한다
     { stk_cd: code, base_dt: todayYmd(), upd_stkpc_tp: "1" },
   );
-  const rows = Array.isArray(data.stk_dt_pole_chart_qry) ? data.stk_dt_pole_chart_qry : [];
+  const rows = dropPhantomToday(Array.isArray(data.stk_dt_pole_chart_qry) ? (data.stk_dt_pole_chart_qry as Record<string, unknown>[]) : []);
   return rows
     .map((r) => ({ date: dashed(String(r.dt ?? "")), close: toNum(r.cur_prc) }))
     .filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.close > 0);

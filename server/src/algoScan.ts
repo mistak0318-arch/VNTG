@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { dropPhantomToday } from "./candleGuard.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 
 /** 수급 주체 구분 */
@@ -187,7 +188,7 @@ async function checkTrendAlignment(
     base_dt: todayYyyymmdd(),
     upd_stkpc_tp: "1",
   });
-  const rows = Array.isArray(data.stk_dt_pole_chart_qry) ? data.stk_dt_pole_chart_qry : [];
+  const rows = dropPhantomToday(Array.isArray(data.stk_dt_pole_chart_qry) ? (data.stk_dt_pole_chart_qry as Record<string, unknown>[]) : []);
   const closes = rows.map((r) => Math.abs(toNum(r.cur_prc))).filter((n) => n > 0);
   if (closes.length < maxPeriod) return null; // 상장 이력이 짧아 계산 불가
 

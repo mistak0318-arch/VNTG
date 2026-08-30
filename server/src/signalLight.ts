@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dropPhantomToday } from "./candleGuard.js";
 import { exportYoyForSector, getTradeStats } from "./tradeStats.js";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -897,7 +898,16 @@ export async function evaluateSignal(
         .catch(() => [])
     : [];
 
-  const chartRows = (chart?.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
+  /*
+   * ⚠️ 장 전 **유령 봉**을 뺀다 (2026-08-31).
+   *
+   * 안 빼면 전일 종가가 두 번 세어지고 가장 오래된 하루가 빠져 **이동평균이 한 칸씩
+   * 밀린다.** 값이 크게 튀지 않아 눈치채기 어렵고, 15:30 뒤에는 저절로 제자리로
+   * 돌아와 재현도 잘 안 된다 — 신호등은 다른 판단의 바탕이라 여기가 밀리면 전부 밀린다.
+   */
+  const chartRows = dropPhantomToday(
+    (chart?.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[],
+  );
   const closes = chartRows.map((r) => Math.abs(toNum(r.cur_prc))).filter((n) => n > 0);
   const cur = closes[0];
   const flowRows = (flow?.data?.stk_invsr_orgn_chart ?? []) as Record<string, unknown>[];

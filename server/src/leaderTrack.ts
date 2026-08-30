@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -128,7 +129,7 @@ async function dailyCloses(
     base_dt: base,
     upd_stkpc_tp: "1",
   });
-  const rows = (res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
+  const rows = dropPhantomToday((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]);
   return rows
     .map((r) => ({
       date: String(r.dt ?? ""),

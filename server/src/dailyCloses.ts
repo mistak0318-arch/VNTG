@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -105,7 +106,7 @@ async function fetchOne(client: KiwoomClient, code: string): Promise<number[]> {
     base_dt: base,
     upd_stkpc_tp: "1",
   });
-  const rows = (res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[];
+  const rows = dropPhantomToday((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]);
   /* 응답은 최신 → 옛날 순이다. 뒤집어서 옛날 → 최신으로 두고 최근 것만 남긴다 */
   return rows
     .map((r) => Math.abs(n(r.cur_prc)))

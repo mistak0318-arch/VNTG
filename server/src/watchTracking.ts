@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { dropPhantomToday } from "./candleGuard.js";
 import { alCode } from "./alCode.js";
 import { opinionBrief } from "./analystOpinion.js";
 import { evaluateSignal } from "./signalLight.js";
@@ -122,7 +123,11 @@ async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedS
       base_dt: todayYyyymmdd(),
       upd_stkpc_tp: "1",
     });
-    const rows = Array.isArray(chart.data.stk_dt_pole_chart_qry) ? chart.data.stk_dt_pole_chart_qry : [];
+    const rows = dropPhantomToday(
+      Array.isArray(chart.data.stk_dt_pole_chart_qry)
+        ? (chart.data.stk_dt_pole_chart_qry as Record<string, unknown>[])
+        : [],
+    );
     const closes = rows.map((r) => Math.abs(toNum(r.cur_prc))).filter((n) => n > 0);
 
     if (closes.length > 0) {
