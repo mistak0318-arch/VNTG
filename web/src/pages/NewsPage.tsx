@@ -6,6 +6,7 @@ import { MineNewsPanel } from "../components/MineNewsPanel";
 import { DisclosureList, NewsList } from "../components/NewsDisclosurePanel";
 import { NaverFinanceFrame } from "../components/NaverFinanceFrame";
 import { SectorNews } from "../components/SectorNews";
+import { KeywordFlowPanel } from "../components/KeywordFlowPanel";
 import { useDragOrder } from "../useDragOrder";
 
 /*
@@ -14,8 +15,9 @@ import { useDragOrder } from "../useDragOrder";
  * 해외증시 → ⭐관심종목 → 부동산 → 분야별 → 맨 끝 네이버 증권 바로가기.
  * **탭을 끌면 순서가 바뀌고 이 기기에 저장된다** (useDragOrder — 다른 순서 UI 와 동일).
  */
-type SrcTab = NaverNewsCat | "mine" | "sector" | "naver";
+type SrcTab = NaverNewsCat | "mine" | "sector" | "naver" | "flow";
 const TAB_LABEL: Record<SrcTab, string> = {
+  flow: "🔮 키워드 흐름",
   main: "🏠 주요뉴스",
   flash: "⚡ 속보",
   market: "시황·전망",
@@ -27,9 +29,9 @@ const TAB_LABEL: Record<SrcTab, string> = {
   naver: "네이버 증권",
 };
 const TAB_DEFAULT: SrcTab[] = [
-  "main", "flash", "market", "company", "world", "mine", "estate", "sector", "naver",
+  "flow", "main", "flash", "market", "company", "world", "mine", "estate", "sector", "naver",
 ];
-const TAB_ORDER_KEY = "vntg.newsTabOrder.v1";
+const TAB_ORDER_KEY = "vntg.newsTabOrder.v2";
 
 function loadTabOrder(): SrcTab[] {
   try {
@@ -216,7 +218,14 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
             </button>
           </nav>
 
-          {srcTab === "mine" ? (
+          {srcTab === "flow" ? (
+            /*
+             * 키워드 흐름을 **맨 앞에** 둔다 (2026-08-30 요청).
+             * 기사 목록은 「무슨 일이 있었나」를 읽는 곳이고, 이건 「지금 무엇이
+             * 갑자기 커졌나」를 보는 곳이다. 읽기 전에 보는 게 순서가 맞다.
+             */
+            <KeywordFlowPanel onSelectStock={onSelectStock} />
+          ) : srcTab === "mine" ? (
             <MineNewsPanel />
           ) : srcTab === "flash" ? (
             /*

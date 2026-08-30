@@ -188,8 +188,46 @@ export interface LoginNeedsOtp {
   sentTo: string;
 }
 
+/* ── 뉴스 키워드 흐름 (2026-08-30) ──────────────────────────────────────── */
+
+export type KeywordKind = "theme" | "myTheme" | "stock" | "event" | "entity" | "new";
+
+export interface KeywordHit {
+  term: string;
+  kind: KeywordKind;
+  /** 고른 창 안의 언급 수 */
+  recent: number;
+  /** 같은 길이의 평소 언급 수 */
+  baseline: number;
+  /** recent / baseline — **이 값이 이 화면의 요점**이다 */
+  ratio: number;
+  /** 기준선이 사실상 0이었나 — 처음 보는 말 */
+  fresh: boolean;
+  codes: string[];
+  samples: { title: string; link: string; press: string; at: string }[];
+  /** 종목 낱말이면 지금 등락률 — 이미 오른 뒤인지 */
+  changeRate?: number;
+  /** 텔레그램 채널에서도 급증했나. null = 채널 쪽이 아직 판단할 수 없음 */
+  buzzRatio: number | null;
+}
+
+export interface KeywordFlow {
+  windowMin: number;
+  articles: number;
+  hits: KeywordHit[];
+  baselineDays: number;
+  timeline: { minute: string; count: number }[];
+  buzzReady: boolean;
+  updatedAt: string;
+}
+
 export const api = {
   health: () => getJson<{ ok: boolean }>("/api/health"),
+
+  keywordFlow: (windowMin: number) =>
+    getJson<KeywordFlow>(`/api/news-keywords/flow?window=${windowMin}`),
+  keywordCollect: () =>
+    postJson<{ articles: number; terms: number }>("/api/news-keywords/collect"),
 
   authState: () => getJson<AuthState>("/api/auth/state"),
   /**

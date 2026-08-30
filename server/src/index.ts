@@ -16,6 +16,7 @@ import { authState, requireAuth } from "./auth.js";
 import { createAccountRouter } from "./routes/account.js";
 import { createAlgoRouter } from "./routes/algo.js";
 import { createAuthRouter } from "./routes/auth.js";
+import { createNewsKeywordRouter } from "./routes/newsKeywords.js";
 import { createCalendarRouter } from "./routes/calendar.js";
 import { createMarketRouter } from "./routes/market.js";
 import { createUsKiwoomRouter } from "./routes/usKiwoom.js";
@@ -35,6 +36,7 @@ import { startAlertScheduler } from "./alertScheduler.js";
 import { startChannelScheduler } from "./channelScheduler.js";
 import { startMajorFeedLoop } from "./majorFeed.js";
 import { startBuzzScheduler } from "./buzzRadar.js";
+import { startNewsKeywordScheduler } from "./newsKeywords.js";
 import { startEtfHoldersScheduler } from "./etfHolders.js";
 import { startThemeScheduler } from "./naverThemes.js";
 import { startClosesScheduler } from "./dailyCloses.js";
@@ -204,6 +206,7 @@ app.use("/api/focus", createFocusRouter());
 /* 실시간 웹소켓 — 접속 규약 확인 단계 */
 app.use("/api/realtime", createRealtimeRouter(client));
 app.use("/api/report", createReportRouter(client));
+app.use("/api/news-keywords", createNewsKeywordRouter());
 
 // 07/12/18시에 리포트를 발행한다 (AI 요약은 이때만 생성)
 startReportScheduler(client);
@@ -216,6 +219,8 @@ startChannelScheduler();
 startMajorFeedLoop();
 /* 버즈 레이더 — 채널 언급 급증을 30분마다 판정, 강한 것은 시그널 방으로 */
 startBuzzScheduler(client);
+/* 뉴스 키워드 흐름 (2026-08-30) — 버즈 레이더의 「뉴스판 귀」. 사전을 공유한다 */
+startNewsKeywordScheduler();
 /* 「이 종목을 담은 ETF」 역인덱스 — 하루 1회(16시 이후). 화면은 파일만 읽는다 */
 startEtfHoldersScheduler(client);
 /* 네이버 테마 DB — 주 1회(일요일 04시). 구성은 매일 바뀌는 값이 아니다 */

@@ -121,6 +121,17 @@ async function refreshKiwoomThemes(client: KiwoomClient | null): Promise<void> {
 }
 
 /** 사전 구성 — 10분 캐시. 종목명은 스냅샷(캐시)에서, 짧은 이름(2자 이하)은 오탐이라 뺀다 */
+/**
+ * 사전을 밖에도 내준다 (2026-08-30).
+ *
+ * [newsKeywords](./newsKeywords.ts) 가 **같은 낱말로** 뉴스를 센다. 사전이 갈리면
+ * 「채널에서는 잡혔는데 뉴스에서는 안 잡힌」 것이 진짜 차이인지 사전 차이인지
+ * 알 수 없게 된다 — 두 귀를 견주려면 자가 같아야 한다.
+ */
+export function buzzDictionary(): Promise<BuzzTerm[]> {
+  return buildDict();
+}
+
 async function buildDict(): Promise<BuzzTerm[]> {
   if (dict && Date.now() - dictAt < 10 * 60_000) return dict;
   await refreshKiwoomThemes(boundClient);

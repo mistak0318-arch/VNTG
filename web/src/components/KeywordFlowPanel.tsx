@@ -1,0 +1,401 @@
+import { useEffect, useMemo, useState } from "react";
+import { api, type KeywordFlow, type KeywordHit, type KeywordKind } from "../api";
+import { useSheetBack } from "../useSheetBack";
+
+/**
+ * 키워드 흐름 (2026-08-30 요청 — 「뉴스에서 트렌드·키워드를 자동으로 잡자」).
+ *
+ * ## 이 화면이 답하는 질문
+ *
+ * 「지금 뉴스에서 **평소보다 갑자기 커진 말**이 뭔가.」
+ *
+ * 「많이 나온 말」이 아니다. 그건 매일 삼성전자·코스피라 아무것도 안 알려 준다.
+ * 게다가 언급 1위 종목은 대개 **이미 오른 종목**이라 보고 들어가면 늦는다.
+ * 그래서 크기(언급 수)보다 **진하기(급증 배율)**를 먼저 보게 만들었다.
+ *
+ * ## 왜 동그라미인가
+ *
+ * 표로 주면 위에서부터 읽게 되는데, 이 데이터는 **한눈에 덩어리를 보는 것**이
+ * 목적이다. 큰 것이 많이 나온 것, 진한 것이 갑자기 커진 것 — 진하고 큰 것이
+ * 오른쪽 위에 몰려 있으면 그게 오늘의 사건이다. 정확한 숫자가 필요하면 아래 표.
+ *
+ * ## ⚠️ 기준선이 없으면 급증도 없다
+ *
+ * 어제까지의 기록이 있어야 「평소」를 안다. 하루도 안 쌓였으면 배율이 무의미하므로
+ * 화면이 그렇게 **말한다** — 지어낸 배율을 보여 주는 것보다 낫다.
+ */
+
+const WINDOWS = [
+  { min: 10, label: "10분" },
+  { min: 30, label: "30분" },
+  { min: 60, label: "1시간" },
+  { min: 180, label: "3시간" },
+  { min: 360, label: "6시간" },
+  { min: 1440, label: "24시간" },
+];
+
+const KIND_META: Record<KeywordKind, { label: string; hue: number }> = {
+  myTheme: { label: "내 테마", hue: 145 },
+  theme: { label: "테마", hue: 175 },
+  stock: { label: "종목", hue: 265 },
+  event: { label: "사건", hue: 25 },
+  entity: { label: "인물·국가", hue: 205 },
+  new: { label: "신규어", hue: 320 },
+};
+
+/** 배율 → 색 진하기. 2배부터 눈에 띄게, 6배 넘으면 더 진해지지 않는다(눈이 못 센다) */
+function heat(ratio: number): number {
+  return Math.max(0.16, Math.min(1, (ratio - 1) / 5));
+}
+
+/* ── 색: 흰 글자가 읽히는 선까지만 밝힌다 ──────────────────────────────── */
+
+function hsl2rgb(h: number, s: number, l: number): [number, number, number] {
+  const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    return l / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  return [f(0), f(8), f(4)];
+}
+
+/** WCAG 상대 휘도 */
+function luminance([r, g, b]: [number, number, number]): number {
+  const c = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * c(r) + 0.7152 * c(g) + 0.0722 * c(b);
+}
+
+/**
+ * ⚠️ **HSL 명도가 같아도 색상마다 실제 밝기가 다르다.**
+ *
+ * 처음엔 색상별로 같은 명도를 썼는데, 실측에서 초록·틸 계열이 흰 글자 대비
+ * **2.3:1** 로 나왔다(합격선 4.5:1). 같은 `lightness 46%` 라도 초록은 파랑보다
+ * 훨씬 밝기 때문이다. 손으로 색상마다 상한을 정할 수도 있지만, 색을 하나 더할
+ * 때마다 또 손으로 맞춰야 한다.
+ *
+ * 그래서 **재서 낮춘다.** 대비가 4.5 를 넘을 때까지 명도를 2씩 내린다. 색을 나중에
+ * 바꾸거나 더해도 규칙이 저절로 지켜진다.
+ */
+function bubbleColor(kind: KeywordKind, ratio: number): string {
+  const { hue } = KIND_META[kind];
+  const h = heat(ratio);
+  const sat = Math.round(34 + h * 28);
+  let l = Math.round(22 + h * 24);
+  while (l > 12 && 1.05 / (luminance(hsl2rgb(hue, sat, l)) + 0.05) < 4.5) l -= 2;
+  return `hsl(${hue} ${sat}% ${l}%)`;
+}
+
+export function KeywordFlowPanel({
+  onSelectStock,
+}: {
+  onSelectStock: (code: string, name: string) => void;
+}) {
+  const [windowMin, setWindowMin] = useState(60);
+  const [flow, setFlow] = useState<KeywordFlow | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [picked, setPicked] = useState<KeywordHit | null>(null);
+  /** 표를 배율순으로 볼지 건수순으로 볼지 */
+  const [sortBy, setSortBy] = useState<"ratio" | "recent">("ratio");
+
+  const load = (min: number) => {
+    api
+      .keywordFlow(min)
+      .then((f) => {
+        setFlow(f);
+        setError(null);
+      })
+      .catch((e: Error) => setError(e.message));
+  };
+
+  useEffect(() => {
+    load(windowMin);
+    /* 3분마다 — 수집 주기와 같다. 더 자주 불러도 새 기사가 없다 */
+    const t = setInterval(() => load(windowMin), 3 * 60_000);
+    return () => clearInterval(t);
+  }, [windowMin]);
+
+  const refresh = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api.keywordCollect();
+      load(windowMin);
+    } catch {
+      /* 수집 실패는 화면을 막지 않는다 — 지금 있는 것으로 계속 본다 */
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const hits = flow?.hits ?? [];
+  const sorted = useMemo(() => {
+    const arr = [...hits];
+    if (sortBy === "recent") arr.sort((a, b) => b.recent - a.recent);
+    return arr;
+  }, [hits, sortBy]);
+
+  /* 동그라미는 상위 40개까지 — 그 아래는 눈으로 구분이 안 된다 */
+  const bubbles = sorted.slice(0, 40);
+  const maxRecent = Math.max(1, ...bubbles.map((h) => h.recent));
+
+  return (
+    <div className="kwf">
+      <div className="kwf-bar">
+        <div className="kwf-wins">
+          {WINDOWS.map((w) => (
+            <button
+              key={w.min}
+              className={windowMin === w.min ? "on" : ""}
+              onClick={() => setWindowMin(w.min)}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
+        <button className="kwf-refresh" onClick={() => void refresh()} disabled={busy}>
+          {busy ? "긁는 중…" : "지금 긁기"}
+        </button>
+      </div>
+
+      {error && <div className="error-banner">{error}</div>}
+      {!flow && !error && <div className="empty">불러오는 중…</div>}
+
+      {flow && (
+        <>
+          <Health flow={flow} />
+          <Timeline flow={flow} />
+
+          {bubbles.length === 0 ? (
+            <div className="empty">
+              이 창에서는 두 번 이상 나온 말이 없습니다. 창을 넓혀 보세요.
+            </div>
+          ) : (
+            <div className="kwf-cloud">
+              {bubbles.map((h) => (
+                <button
+                  key={h.term}
+                  className={`kwf-bub${h.fresh ? " fresh" : ""}`}
+                  style={{
+                    /* 크기는 건수, 색은 배율 — 두 축을 한 동그라미에 담는다 */
+                    fontSize: `${11 + (h.recent / maxRecent) * 15}px`,
+                    background: bubbleColor(h.kind, h.ratio),
+                    borderColor: `hsl(${KIND_META[h.kind].hue} 45% ${Math.round(
+                      34 + heat(h.ratio) * 22,
+                    )}%)`,
+                  }}
+                  onClick={() => setPicked(h)}
+                  title={`${KIND_META[h.kind].label} · ${h.recent}건 · 평소 ${h.baseline}건 · ${h.ratio}배`}
+                >
+                  {h.term}
+                  <i>{h.fresh ? "NEW" : `${h.ratio.toFixed(1)}×`}</i>
+                  {h.buzzRatio !== null && h.buzzRatio >= 2 && <b className="kwf-both">양쪽</b>}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <Legend />
+
+          <div className="kwf-sort">
+            <button className={sortBy === "ratio" ? "on" : ""} onClick={() => setSortBy("ratio")}>
+              급증순
+            </button>
+            <button className={sortBy === "recent" ? "on" : ""} onClick={() => setSortBy("recent")}>
+              건수순
+            </button>
+          </div>
+
+          <div className="data-table-wrap">
+            <table className="data-table kwf-table">
+              <thead>
+                <tr>
+                  <th>키워드</th>
+                  <th>갈래</th>
+                  <th className="num">지금</th>
+                  <th className="num">평소</th>
+                  <th className="num">배율</th>
+                  <th className="num">채널</th>
+                  <th className="num">등락</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.slice(0, 40).map((h) => (
+                  <tr key={h.term} onClick={() => setPicked(h)} className="row-click">
+                    <td>
+                      {h.term}
+                      {h.fresh && <span className="kwf-new">NEW</span>}
+                    </td>
+                    <td className="muted">{KIND_META[h.kind].label}</td>
+                    <td className="num">{h.recent}</td>
+                    <td className="num muted">{h.baseline || "—"}</td>
+                    <td className={`num${h.ratio >= 3 ? " positive" : ""}`}>
+                      {h.fresh ? "신규" : `${h.ratio.toFixed(1)}×`}
+                    </td>
+                    <td className="num">
+                      {h.buzzRatio === null ? (
+                        <span className="muted" title="채널 쪽 기준선이 아직 모자랍니다">
+                          —
+                        </span>
+                      ) : h.buzzRatio >= 2 ? (
+                        <span className="positive">{h.buzzRatio.toFixed(1)}×</span>
+                      ) : (
+                        <span className="muted">·</span>
+                      )}
+                    </td>
+                    <td className="num">
+                      {h.changeRate === undefined ? (
+                        <span className="muted">—</span>
+                      ) : (
+                        <span className={h.changeRate >= 0 ? "positive" : "negative"}>
+                          {h.changeRate.toFixed(2)}%
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="table-note">
+            <b>동그라미의 크기</b>는 지금 나온 건수, <b>색 진하기</b>는 평소 대비 몇 배인지입니다.
+            진하고 큰 것이 오늘의 사건입니다.
+            <br />
+            <b>「양쪽」</b>은 텔레그램 채널에서도 같이 급증했다는 뜻입니다. 채널은 빠르고
+            투기적이고 뉴스는 느리고 공식적이라 <b>편향 방향이 반대</b>입니다 — 둘이 같이
+            떴다면 한쪽만 뜬 것보다 믿을 만합니다.
+            <br />
+            <b>등락</b> 칸이 이미 크게 올라 있으면 그 키워드는 <b>뒷북</b>일 수 있습니다.
+          </div>
+        </>
+      )}
+
+      {picked && <KeywordSheet hit={picked} onClose={() => setPicked(null)} onSelectStock={onSelectStock} />}
+    </div>
+  );
+}
+
+/**
+ * 지금 이 화면을 믿어도 되나.
+ *
+ * 「아무것도 안 뜬다」가 **조용한 것인지 고장인지** 구분이 안 되면 사람은 화면을
+ * 안 믿게 된다. 기사 수와 기준선 일수를 그대로 보여 준다.
+ */
+function Health({ flow }: { flow: KeywordFlow }) {
+  const thin = flow.articles < 5;
+  return (
+    <div className="kwf-health">
+      <span>
+        창 안 기사 <b>{flow.articles}</b>건
+      </span>
+      <span>
+        기준선 <b>{flow.baselineDays}</b>일
+      </span>
+      {flow.baselineDays < 2 && (
+        <span className="kwf-warn">
+          평소를 아직 모릅니다 — 배율 대신 <b>건수</b>로 보세요. 하루 더 쌓이면 급증
+          판정이 섭니다.
+        </span>
+      )}
+      {thin && flow.baselineDays >= 2 && (
+        <span className="kwf-warn">
+          표본이 적어(<b>{flow.articles}건</b>) 배율이 크게 흔들립니다. 창을 넓혀 보세요.
+        </span>
+      )}
+      {!flow.buzzReady && (
+        <span className="muted">채널 쪽 기준선이 모자라 「양쪽」 확인은 아직 못 합니다</span>
+      )}
+    </div>
+  );
+}
+
+/** 분 단위 기사량 — 「지금 시끄러운가」를 한 줄로 */
+function Timeline({ flow }: { flow: KeywordFlow }) {
+  const t = flow.timeline;
+  if (t.length < 3) return null;
+  const max = Math.max(...t.map((x) => x.count), 1);
+  return (
+    <div className="kwf-timeline" title="분 단위 기사 수">
+      {t.map((x) => (
+        <i key={x.minute} style={{ height: `${Math.max(8, (x.count / max) * 100)}%` }} />
+      ))}
+    </div>
+  );
+}
+
+function Legend() {
+  return (
+    <div className="kwf-legend">
+      {(Object.keys(KIND_META) as KeywordKind[]).map((k) => (
+        <span key={k}>
+          <i style={{ background: `hsl(${KIND_META[k].hue} 48% 38%)` }} />
+          {KIND_META[k].label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** 왜 떴는지 — 그 낱말이 실제로 나온 기사들 */
+function KeywordSheet({
+  hit,
+  onClose,
+  onSelectStock,
+}: {
+  hit: KeywordHit;
+  onClose: () => void;
+  onSelectStock: (code: string, name: string) => void;
+}) {
+  useSheetBack(true, onClose);
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-header">
+          <h2>
+            {hit.term}
+            <span className="kwf-sheet-sub">
+              {KIND_META[hit.kind].label} · {hit.recent}건
+              {hit.fresh ? " · 처음 등장" : ` · 평소의 ${hit.ratio.toFixed(1)}배`}
+            </span>
+          </h2>
+          <button className="close-btn" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        {hit.codes.length > 0 && (
+          <div className="kwf-codes">
+            {hit.codes.map((c) => (
+              <button key={c} onClick={() => onSelectStock(c, hit.term)}>
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {hit.samples.length === 0 ? (
+          <div className="empty">표본이 없습니다.</div>
+        ) : (
+          <ul className="kwf-arts">
+            {hit.samples.map((s) => (
+              <li key={s.link}>
+                <a href={s.link} target="_blank" rel="noreferrer">
+                  {s.title}
+                </a>
+                <span className="muted">
+                  {s.press} · {s.at.slice(11, 16)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="table-note">
+          기사 표본은 <b>최근 6건</b>만 남깁니다 — 목록이 아니라 「왜 떴는지」를 보려는
+          칸입니다.
+        </div>
+      </div>
+    </div>
+  );
+}

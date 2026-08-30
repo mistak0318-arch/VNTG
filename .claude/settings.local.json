@@ -868,7 +868,11 @@
       "Bash(sed -i 's/rx=\"520\" ry=\"820\"/rx=\"900\" ry=\"1500\"/; s/haze: 34, far: 13/haze: 22, far: 13/' scripts/make-login-bg.mjs)",
       "Bash(grep -n \"^\\\\.login-bg\\\\|^\\\\.login-grid\\\\|^\\\\.login-glow\\\\|^\\\\.login-ticker\\\\|^@keyframes login-\\\\|^\\\\.login-card\\\\|^/\\\\* ── 카드\" web/src/login.css)",
       "Bash(sed -i '144s|.*|  background: linear-gradient\\(135deg, var\\(--lg-teal\\), #1d5b68\\);|' web/src/login.css)",
-      "Bash(sed -i '83s|.*|  color: var\\(--lg-gold\\);|' web/src/login.css)"
+      "Bash(sed -i '83s|.*|  color: var\\(--lg-gold\\);|' web/src/login.css)",
+      "Bash(touch server/src/index.ts)",
+      "Bash(curl -s -X POST http://localhost:4000/api/news-keywords/collect)",
+      "Bash(curl -s -X POST http://localhost:5173/api/news-keywords/collect)",
+      "Bash(rm -f server/data/newsKeywords/*.json)"
     ]
   }
 }
