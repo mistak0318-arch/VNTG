@@ -1057,13 +1057,27 @@ export async function evaluateSignal(
         }
       }
     } else if (c.key === "volume") {
-      // 거래량 × 현재가로 대략의 거래대금 (억원)
+      /*
+       * 거래대금(억).
+       *
+       * ⚠️ **장 전에는 오늘 거래량이 0 이다** (2026-08-31). 예전엔 그걸 그대로 재서
+       * 0억 → 0점을 줬다. 그러면 **매일 아침 모든 종목이 이 항목에서 깎인다** —
+       * 「거래가 없다」가 아니라 「아직 안 열렸다」인데 감점이 되는 것이다.
+       *
+       * 오늘이 아직이면 **마지막 거래일의 거래대금**으로 물러선다. 일봉이 억 단위가
+       * 아니라 백만원이라 /100 이 억이다.
+       */
       const qty = toNum(info?.data?.trde_qty);
       const price = Math.abs(toNum(info?.data?.cur_prc));
-      if (qty > 0 && price > 0) {
-        const amount = Math.round((qty * price) / 100_000_000);
+      let amount = qty > 0 && price > 0 ? Math.round((qty * price) / 100_000_000) : 0;
+      let fromPrevDay = false;
+      if (amount <= 0 && chartRows.length > 0) {
+        amount = Math.round(toNum(chartRows[0].trde_prica) / 100);
+        fromPrevDay = amount > 0;
+      }
+      if (amount > 0) {
         g = grade(amount, c);
-        value = `${amount.toLocaleString("ko-KR")}억`;
+        value = `${amount.toLocaleString("ko-KR")}억${fromPrevDay ? " (직전 거래일)" : ""}`;
       }
     } else if (c.key === "targetUpside") {
       /*
