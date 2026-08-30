@@ -11256,3 +11256,29 @@ button.tpb-row:hover { background: var(--panel-2); }
   background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
   padding: 10px 12px; font-size: 0.76rem; overflow-x: auto; white-space: pre;
 }
+
+/* 버즈 원문 창 (2026-08-31) — 글이 주인공이라 다른 장식을 안 넣는다 */
+.bsrc { padding: 14px 16px 40px; max-width: 46rem; margin: 0 auto; }
+.bsrc-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.bsrc-head h2 { margin: 0; font-size: 1.15rem; }
+.bsrc-list { display: flex; flex-direction: column; gap: 10px; }
+.bsrc-item {
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px 12px; background: var(--panel);
+}
+.bsrc-meta { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 0.76rem; }
+.bsrc-badge { font-size: 0.68rem; border-radius: 4px; padding: 1px 5px; }
+.bsrc-badge.full { background: color-mix(in srgb, var(--green) 22%, transparent); color: var(--green); }
+.bsrc-badge.cut { background: var(--panel-2); color: var(--muted); }
+.bsrc-link { margin-left: auto; font-size: 0.74rem; color: var(--muted); }
+/* 본문 — 줄바꿈을 살리고 읽기 좋은 크기로 */
+.bsrc-text {
+  margin: 6px 0 0; font-size: 0.9rem; line-height: 1.6;
+  white-space: pre-wrap; word-break: break-word;
+}
+.buzz-src-btn {
+  margin-left: 8px; font-size: 0.72rem; background: none;
+  border: 1px solid var(--border); border-radius: 5px;
+  color: var(--muted); padding: 2px 7px; cursor: pointer;
+}
+.buzz-src-btn:hover { border-color: var(--blue); color: var(--blue); }

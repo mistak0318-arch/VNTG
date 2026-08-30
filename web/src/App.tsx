@@ -11,6 +11,7 @@ import { PaperTradePage } from "./pages/PaperTradePage";
 import { JournalPage } from "./pages/JournalPage";
 import { MemoPage } from "./pages/MemoPage";
 import { MiniPage } from "./pages/MiniPage";
+import { BuzzSourcePage } from "./pages/BuzzSourcePage";
 import { matchesMiniHotkey, onMiniConfigChange, readMiniConfig } from "./miniConfig";
 import { TabActiveContext } from "./tabActive";
 import { SuperDashboardPage } from "./pages/SuperDashboardPage";
@@ -657,6 +658,18 @@ export default function App() {
    * 미니창(#/mini) — 사이드바 없이 종목 조회 전용 화면만 그린다.
    * 훅은 전부 위에서 이미 돌았으므로 여기서 갈라져도 순서가 안 흔들린다.
    */
+  /*
+   * 버즈 원문 창(#/buzzSource?term=…) — 사이드바 없이 **글만** 그린다 (2026-08-31).
+   * 미니창과 같은 자리에서 갈라진다. 훅은 위에서 다 돌았으니 순서가 안 흔들린다.
+   */
+  if (route.tab === "buzzSource") {
+    return (
+      <div className="mini-root">
+        <BuzzSourcePage />
+      </div>
+    );
+  }
+
   if (route.tab === "mini") {
     return (
       <MiniPage

@@ -322,7 +322,8 @@ export interface BuzzTermDetail {
   hourly: { at: string; count: number }[];
   daily: { day: string; count: number }[];
   channels: { name: string; count: number }[];
-  samples: { at: string; channel: string; text: string; link: string }[];
+  /** full — 주요 채널 아카이브에서 전문을 찾아 바꿔 넣은 것 (2026-08-31) */
+  samples: { at: string; channel: string; text: string; link: string; full?: boolean }[];
 }
 
 /* ── 뉴스 키워드 흐름 (2026-08-30) ──────────────────────────────────────── */

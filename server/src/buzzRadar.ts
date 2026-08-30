@@ -345,12 +345,23 @@ export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
         samples.unshift({
           at: m.at,
           channel: m.channelName,
-          /* 대시보드에서 읽을 것이라 조금 길게 남긴다 — 120자면 문장이 잘려 뜻을 잃는다 */
-          text: text.replace(/\s+/g, " ").slice(0, 240),
+          /*
+           * **원문을 거의 그대로 남긴다** (2026-08-31 요청 — 「원문보기하면 미니창에
+           * 원문만으로도 볼 수 있고, 텔레그램 막혀 있는 회사에서는 좋은 구조」).
+           *
+           * 240자였을 때는 두세 줄에서 잘려 「원문」이라 부를 수 없었다. 텔레그램에서
+           * 가져오는 것은 **글자뿐**이라 늘려도 부담이 작다 — 실측으로 버즈 30일치가
+           * 0.05MB 였다. 수집 단계에서 이미 600자로 자르므로 여기서는 그대로 담는다.
+           */
+          text: text.replace(/\s+/g, " "),
           link: m.link,
         });
-        /* 알림 카드는 2개면 되지만 **자세히 보기**는 흐름을 읽어야 해서 더 남긴다 */
-        if (samples.length > 12) samples.length = 12;
+        /*
+         * 한 낱말에 남기는 글 수. 알림 카드는 2개면 되지만 **원문 보기**는 「그 방들이
+         * 무슨 이야기를 했나」를 읽는 자리라 훨씬 많이 남긴다. 낱말 하나가 하루에
+         * 40번 언급됐는데 12개만 보이면 그날의 절반을 못 본다.
+         */
+        if (samples.length > 40) samples.length = 40;
       }
     }
     await mkdir(DIR, { recursive: true });
@@ -378,7 +389,8 @@ export interface BuzzHit {
   /** recent / baseline — 몇 배로 커졌나 */
   ratio: number;
   codes: string[];
-  samples: { at: string; channel: string; text: string; link: string }[];
+  /** `full` 은 주요 채널 아카이브에서 전문을 찾아 바꿔 넣었다는 표시 (2026-08-31) */
+  samples: { at: string; channel: string; text: string; link: string; full?: boolean }[];
 }
 
 export interface BuzzResult {

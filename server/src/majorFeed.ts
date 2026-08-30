@@ -94,8 +94,26 @@ export async function archiveMajor(messages: ChannelMessage[]): Promise<number> 
   await mkdir(DATA_DIR, { recursive: true });
   await appendFile(FEED_FILE, `${fresh.map((r) => JSON.stringify(r)).join("\n")}\n`, "utf-8");
 
+  /*
+   * 오래된 글을 덜어낸다.
+   *
+   * ⚠️ 예전엔 **건수로만** 잘랐다(4000 넘으면 최근 2500건). 그런데 이건 방이 몇 개인지,
+   * 그 방들이 얼마나 떠드는지에 따라 **며칠치인지가 매번 달라진다** — 조용한 주에는
+   * 2주가 남고 시끄러운 주에는 사흘이 남는다. 「원문 보기」로 지난주 이야기를 찾으려는
+   * 사람에게 그건 있다 없다 하는 기능이다 (2026-08-31 요청 — 「몇일~한달치는 저장할 수
+   * 있지 않나」).
+   *
+   * 그래서 **날짜로 자르고**, 그래도 너무 많으면 건수로 한 번 더 막는다. 글자만
+   * 담는 파일이라 한 달치도 몇 MB 수준이다.
+   */
+  const KEEP_DAYS = 45;
+  const HARD_MAX = 40_000; // 방이 아주 많을 때의 안전판
   if (known.size > 4000) {
-    const all = (await readFeed()).sort((a, b) => a.at.localeCompare(b.at)).slice(-2500);
+    const cutoff = new Date(Date.now() - KEEP_DAYS * 86400_000).toISOString();
+    const all = (await readFeed())
+      .filter((m) => m.at >= cutoff)
+      .sort((a, b) => a.at.localeCompare(b.at))
+      .slice(-HARD_MAX);
     await writeFile(FEED_FILE, `${all.map((r) => JSON.stringify(r)).join("\n")}\n`, "utf-8");
     knownIds = new Set(all.map((m) => m.id));
   }
@@ -111,6 +129,25 @@ async function readReads(): Promise<Record<string, string>> {
   } catch {
     return {};
   }
+}
+
+/**
+ * 링크로 **전문**을 찾아 준다 (2026-08-31).
+ *
+ * 버즈가 남기는 조각은 수집 단계에서 이미 잘려 있다. 이 아카이브에는 주요 채널의
+ * 글이 **자른 데 없이** 들어 있으므로, 같은 글이 여기 있으면 그쪽을 보여 주는 것이
+ * 맞다 — 「원문 보기」인데 잘린 것을 보여 주면 이름값을 못 한다.
+ *
+ * 주요 채널로 고르지 않은 방의 글은 여기 없다. 그때는 버즈가 가진 조각을 쓴다.
+ */
+export async function fullTextByLinks(links: string[]): Promise<Map<string, string>> {
+  const want = new Set(links.filter(Boolean));
+  const out = new Map<string, string>();
+  if (want.size === 0) return out;
+  for (const m of await readFeed()) {
+    if (m.link && want.has(m.link)) out.set(m.link, m.text);
+  }
+  return out;
 }
 
 export async function markMajorRead(channelId: string): Promise<void> {

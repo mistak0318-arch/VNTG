@@ -532,6 +532,25 @@ function BuzzTermSheet({
 
             <h4 className="buzz-h">
               실제 문장 <i>{d.samples.length}건</i>
+              {/*
+                원문 창 (2026-08-31 요청) — 시트 안에서는 문장이 곁다리라 몇 줄만
+                보인다. 정작 그 글을 읽고 싶을 때가 있고, 그때는 **글만 있는 화면**이
+                필요하다. 본창을 안 떠나고 옆에 띄워 두고 읽으라고 팝업이다.
+                텔레그램이 막힌 곳에서도 우리가 받아 둔 글은 그대로 읽힌다.
+              */}
+              <button
+                className="buzz-src-btn"
+                title="원문만 있는 작은 창으로 엽니다"
+                onClick={() =>
+                  window.open(
+                    `${window.location.pathname}#/buzzSource?term=${encodeURIComponent(d.term)}`,
+                    "vntg-buzz-src",
+                    "width=620,height=880,resizable=yes,scrollbars=yes",
+                  )
+                }
+              >
+                🪟 원문 보기
+              </button>
             </h4>
             {d.samples.length === 0 ? (
               <div className="empty">표본이 없습니다.</div>

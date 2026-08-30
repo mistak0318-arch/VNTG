@@ -282,7 +282,18 @@ export function createSignalRouter(client: KiwoomClient): Router {
   router.get("/buzz/term/:term", async (req, res, next) => {
     try {
       const { buzzTerm } = await import("../buzzRadar.js");
-      res.json(await buzzTerm(decodeURIComponent(req.params.term)));
+      const d = await buzzTerm(decodeURIComponent(req.params.term));
+      /*
+       * 주요 채널 아카이브에 **전문**이 있으면 그것으로 바꿔 준다 (2026-08-31).
+       * 버즈가 들고 있는 조각은 수집 단계에서 이미 잘린 것이라 「원문 보기」로는 모자란다.
+       */
+      const { fullTextByLinks } = await import("../majorFeed.js");
+      const full = await fullTextByLinks(d.samples.map((s) => s.link));
+      d.samples = d.samples.map((s) => {
+        const t = full.get(s.link);
+        return t && t.length > s.text.length ? { ...s, text: t, full: true } : s;
+      });
+      res.json(d);
     } catch (err) {
       next(err);
     }
