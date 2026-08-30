@@ -37,6 +37,7 @@ import { ConstituentSheet, type ConstituentTarget } from "../components/overview
 import { FlowBars } from "../components/overview/FlowBars";
 import { type MarketDriverReport, type PublishJob, type ScoredNews } from "../api";
 import { NewsClippingCompact } from "../components/report/ReportSections";
+import { ReportGlance } from "../components/report/ReportGlance";
 import { RefreshBar } from "../components/RefreshBar";
 import { ReviewPanel } from "../components/ReviewPanel";
 import { useSection } from "../useSection";
@@ -466,37 +467,14 @@ export function DailyReportPage({
       </header>
 
       {/*
-        한눈 스트립 (2026-08-25) — 글을 읽기 전에 **방향·수급·환율이 3초 안에** 잡혀야 한다.
-        아래 표들에 다 있는 값이지만, 신문의 1면 제목처럼 핵심 다섯 개만 위로 끌어올린다.
-        전부 이미 받아 둔 섹션 값이라 조회가 늘지 않는다.
+        한눈 스트립 (2026-08-25 · 2026-08-30 확장) — 글을 읽기 전에 **방향·수급·환율이
+        3초 안에** 잡혀야 한다. 아래 표들에 다 있는 값이지만 신문의 1면 제목처럼 위로
+        끌어올린다.
+
+        기준 시점이 다른 값이 한 줄에 섞이면 안 되므로 국내 마감과 밤사이를 갈라
+        각자의 기준을 적는다 — 자세한 이유는 ReportGlance 안에.
       */}
-      {(() => {
-        /* 지수 카드 이름은 KOSPI/KOSDAQ 영문 표기다 — 한글로 찾으면 빈다 */
-        const kospi = idx.find((c) => /^KOSPI$|^코스피$/i.test(c.name));
-        const kosdaq = idx.find((c) => /^KOSDAQ$|^코스닥$/i.test(c.name));
-        const usd = g.find((q) => q.key === "usdkrw");
-        const chips: { k: string; v: string; sign: number }[] = [];
-        if (kospi) chips.push({ k: "코스피", v: `${fmtNum(kospi.price)} (${pct(kospi.changeRate)})`, sign: kospi.changeRate });
-        if (kosdaq) chips.push({ k: "코스닥", v: `${fmtNum(kosdaq.price)} (${pct(kosdaq.changeRate)})`, sign: kosdaq.changeRate });
-        if (usd?.price != null)
-          chips.push({ k: "달러/원", v: `${fmtNum(usd.price)} (${usd.changeRate === null ? "-" : pct(usd.changeRate)})`, sign: usd.changeRate ?? 0 });
-        if (f) {
-          const frg = f.kospi.foreign + f.kosdaq.foreign;
-          const inst = f.kospi.institution + f.kosdaq.institution;
-          chips.push({ k: "외국인", v: `${frg > 0 ? "+" : ""}${fmtNum(Math.round(frg))}억`, sign: frg });
-          chips.push({ k: "기관", v: `${inst > 0 ? "+" : ""}${fmtNum(Math.round(inst))}억`, sign: inst });
-        }
-        return chips.length > 0 ? (
-          <div className="rp-glance">
-            {chips.map((c) => (
-              <span className="rp-glance-chip" key={c.k}>
-                <em>{c.k}</em>
-                <b className={signClass(c.sign)}>{c.v}</b>
-              </span>
-            ))}
-          </div>
-        ) : null;
-      })()}
+      <ReportGlance idx={idx} g={g} f={f} />
 
       {/* 읽어주기 — 출근길에 AI 정리를 귀로. 브라우저 내장 음성이라 키·비용이 없다 */}
       <ReportTts edition={edition} />
