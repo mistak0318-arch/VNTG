@@ -1,4 +1,5 @@
 import { tileHeat, type ThemeName } from "../useAppearance";
+import { useEffect, useState } from "react";
 import { treemap } from "../treemap";
 
 /**
@@ -58,8 +59,38 @@ export interface MapTile {
  */
 const COMPRESS_POWER = 0.45;
 
-/** 한 화면에 이 이상은 그리지 않는다 — 그 아래는 눌러도 손끝보다 작다 */
-const MAX_TILES = 48;
+/**
+ * 몇 개까지 그릴지는 **상자 크기가 정한다** (2026-08-31).
+ *
+ * ⚠️ 예전엔 48 로 못 박혀 있었다. 1400px 화면에 맞춰 고른 수인데, 고해상도
+ * 모니터에서는 그 48개가 상자를 나눠 가지면서 **타일 하나가 200px 짜리 덩어리**가
+ * 됐다 — 화면은 넓어졌는데 보이는 테마 수는 그대로였다.
+ *
+ * 그래서 「몇 개」가 아니라 **「제일 작은 타일이 아직 누를 만한가」**로 정한다.
+ * 넓은 화면에서는 자연히 더 많이, 폰에서는 더 적게 그려진다.
+ */
+const MIN_TILE_PX = 26; // 손끝으로 누를 수 있는 최소 한 변
+const HARD_CAP = 160; // 이 이상은 사람이 훑지 못한다
+
+/**
+ * 상자 넓이에 맞는 타일 수.
+ *
+ * 정렬된 무게 배열에서 앞 N개만 그리면 제일 작은 타일의 넓이는
+ * `상자넓이 × wN / Σ(w1..wN)` 이다. 그 값이 문턱 아래로 떨어지기 직전까지 늘린다.
+ */
+function fitCount(weights: number[], boxArea: number): number {
+  if (boxArea <= 0) return 24; // 아직 못 쟀다 — 첫 그림은 적당히
+  const floor = MIN_TILE_PX * MIN_TILE_PX;
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i < Math.min(weights.length, HARD_CAP); i += 1) {
+    const next = sum + weights[i];
+    if (i > 0 && (boxArea * weights[i]) / next < floor) break;
+    sum = next;
+    n = i + 1;
+  }
+  return Math.max(8, n);
+}
 
 export function TreemapGrid({
   tiles,
@@ -73,6 +104,67 @@ export function TreemapGrid({
   /** 크기 차이를 눌러 그릴지. 끄면 넓이가 값에 정비례한다(작은 것은 안 보인다) */
   compress?: boolean;
 }) {
+  /*
+   * 상자를 **실제로 재서** 몇 개를 그릴지 정한다 (2026-08-31).
+   * 창 크기·사이드바 접기·본문 폭 설정이 바뀌면 그때마다 다시 잰다.
+   */
+  const [boxEl, setBoxEl] = useState<HTMLDivElement | null>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+
+  /*
+   * ⚠️ **콜백 ref 로 직접 잰다.**
+   *
+   * 두 가지를 겪고 여기로 왔다:
+   *   ① `useRef` + `[]` 효과 — 자료가 오기 전 첫 그림에는 이 상자가 없어서(균등
+   *      배치로 빠진다) 관찰자가 못 붙고, 나중에 상자가 생겨도 효과가 다시 안 돈다.
+   *   ② `ResizeObserver` — 붙기는 하는데 값이 상태로 안 들어와 **0×0 에 굳었다**
+   *      (실측: DOM 은 1360×819 인데 상태는 0×0, 창을 줄였다 늘려도 그대로).
+   *
+   * 그래서 상자가 붙는 그 순간 `getBoundingClientRect` 로 재고, 그 뒤로는 창 크기
+   * 변화만 듣는다. 잴 일이 그것뿐이다 — 이 상자는 화면 폭을 그대로 따라간다.
+   */
+  const measure = (el: HTMLDivElement | null) => {
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    /*
+     * ⚠️ **0 은 재지 않는다.** 탭 판이 숨겨져 있는 동안(display:none) 재면 0×0 이
+     * 나오는데, 그걸 좋은 값 위에 덮으면 다시 보일 때 타일이 전부 0 크기로 그려진다
+     * (실측으로 그 꼴을 봤다). 못 쟀으면 **직전 값을 그대로 둔다.**
+     */
+    if (r.width < 1 || r.height < 1) return;
+    /* 몇 픽셀 흔들림으로 타일 수가 요동치면 화면이 깜빡인다 — 20px 단위로 반올림 */
+    const w = Math.round(r.width / 20) * 20;
+    const h = Math.round(r.height / 20) * 20;
+    setBox((p) => (p.w === w && p.h === h ? p : { w, h }));
+  };
+
+  useEffect(() => {
+    if (!boxEl) return;
+    /* 첫 값은 **직접 잰다** — 관찰자만 믿으면 0×0 으로 굳는 경우를 실제로 겪었다 */
+    measure(boxEl);
+    /*
+     * 그 뒤의 변화는 관찰자가 맡는다. 창 크기 말고도 상자가 바뀌는 길이 여럿이다 —
+     * 사이드바 접기, 본문 폭 설정, 탭 전환, 글자 크기. 창 이벤트만 들으면 그것들을
+     * 다 놓친다. 관찰자가 못 깨워도 첫 측정은 이미 끝나 있으니 최악이 옛 그림이다.
+     */
+    const ro = new ResizeObserver(() => measure(boxEl));
+    ro.observe(boxEl);
+    const onResize = () => measure(boxEl);
+    window.addEventListener("resize", onResize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", onResize);
+    };
+    /*
+     * 타일 묶음·크기 기준이 바뀔 때도 다시 잰다.
+     *
+     * 서브탭을 옮기면 상자는 그대로여도 **그 안에 담길 내용이 달라지고**, 그때
+     * 화면이 이미 다른 폭으로 바뀌어 있을 수 있다(탭 판이 안 사라지고 숨기만 하는
+     * 구조라 ref 가 다시 안 붙는다). 관찰자에 기대지 않는 세 번째 길이다.
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boxEl, tiles.length, sizeBy, compress]);
+
   const rawOf = (t: MapTile): number =>
     sizeBy === "cap" ? (t.marketCap ?? 0) : sizeBy === "value" ? (t.tradeValue ?? 0) : 0;
   const weightOf = (t: MapTile): number => {
@@ -87,7 +179,8 @@ export function TreemapGrid({
   const withWeight = tiles.filter((t) => weightOf(t) > 0);
   const usable = sizeBy !== "flat" && withWeight.length >= tiles.length * 0.5 && withWeight.length > 0;
   /* 큰 것부터 잘라 낸다 — 뒤쪽은 어차피 못 누른다 */
-  const shown = [...withWeight].sort((a, b) => rawOf(b) - rawOf(a)).slice(0, MAX_TILES);
+  const sorted = [...withWeight].sort((a, b) => rawOf(b) - rawOf(a));
+  const shown = sorted.slice(0, fitCount(sorted.map(weightOf), box.w * box.h));
   const hidden = withWeight.length - shown.length;
 
   if (!usable) {
@@ -117,7 +210,7 @@ export function TreemapGrid({
 
   return (
     <>
-    <div className="map-tree">
+    <div className="map-tree" ref={setBoxEl}>
       {rects.map((r) => {
         /* 넓이(%²)로 글자 크기를 정한다 — 폭만 보면 가로로 긴 타일이 과하게 커진다 */
         const area = r.w * r.h;

@@ -4548,7 +4548,23 @@ tr.drag-src td { opacity: 0.45; }
 }
 
 @media (min-width: 900px) {
-  .mn-grid { gap: 8px; max-width: 56rem; }
+  /*
+   * 자리가 있는 만큼 열을 늘린다 (2026-08-31).
+   *
+   * ⚠️ 전에는 `max-width: 56rem` 한 열로 못 박혀 있었다. 태블릿에서 두 열로 쪼개지던
+   * 것을 고치면서 위쪽을 같이 묶어 버린 것인데, **고해상도 모니터에서는 오른쪽
+   * 절반 이상이 통째로 검게 남았다.**
+   *
+   * `auto-fill` + `minmax` 라 화면이 정한다 — 한 칸에 32rem 이 안 나오면 한 열,
+   * 나오면 두 열, 더 넓으면 세 열. 태블릿(768px)은 32rem(≈550px)이 두 개가 안 되니
+   * 예전처럼 한 열 그대로다. 「한 줄에 하나」의 뜻은 **칸이 좁아지지 않는 것**이지
+   * 화면을 비워 두는 것이 아니다.
+   */
+  .mn-grid {
+    gap: 10px 14px;
+    grid-template-columns: repeat(auto-fill, minmax(32rem, 1fr));
+    max-width: none;
+  }
   .mn-thumb { width: 132px; height: 88px; }
   .mn-tit { font-size: 0.92rem; -webkit-line-clamp: 1; }
   .mn-sum { font-size: 0.78rem; -webkit-line-clamp: 3; }
@@ -5963,7 +5979,14 @@ button.nav-group-toggle {
   .guide,
   .page-note,
   .table-note {
-    max-width: 1120px;
+    /*
+     * 설정 > 화면 > 「본문 폭」을 따른다 (2026-08-31).
+     *
+     * ⚠️ 예전엔 `1120px` 이 그냥 박혀 있어서 **「화면 전체」를 골라도 리포트는
+     * 안 넓어졌다.** 고해상도에서 오른쪽이 통째로 비던 진짜 이유다 —
+     * 손잡이(`--main-max`)는 있었는데 그 줄이 여기까지 안 닿았다.
+     */
+    max-width: var(--read-max, 1120px);
   }
 }
 
@@ -10789,6 +10812,17 @@ button.tpb-row:hover { background: var(--panel-2); }
    * 세로가 40% 늘어 작은 타일의 넓이도 그만큼 는다.
    */
   aspect-ratio: 1.35;
+  /*
+   * ⚠️ **화면보다 커지지 않게** (2026-08-31).
+   *
+   * 비율만 정해 두면 폭이 넓어질수록 세로가 따라 늘어난다 — 1800px 화면에서
+   * 1333px, 3440 울트라와이드에서는 2500px 이 되어 **MAP 을 보려면 스크롤을 해야
+   * 했다.** 한눈에 보는 것이 이 화면의 전부인데 한눈에 안 들어오면 뜻이 없다.
+   *
+   * 높이가 막히면 상자는 그냥 더 납작해진다. 타일 수는 넓이를 재서 정하므로
+   * (fitCount) 납작해진 만큼 알아서 덜 그린다.
+   */
+  max-height: 78vh;
   border-radius: 10px;
   overflow: hidden;
   background: var(--panel-2);

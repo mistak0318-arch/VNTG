@@ -62,10 +62,22 @@ export interface Appearance {
   tabsSticky: boolean;
 }
 
-export const WIDTHS: { key: WidthName; label: string; css: string; hint: string }[] = [
-  { key: "normal", label: "보통", css: "1400px", hint: "글이 많은 화면이 읽기 좋습니다" },
-  { key: "wide", label: "넓게", css: "1920px", hint: "표가 넓은 화면에서 열이 더 보입니다" },
-  { key: "full", label: "화면 전체", css: "none", hint: "울트라와이드에서 남는 자리가 없습니다" },
+/**
+ * 본문 폭.
+ *
+ * `read` 는 **글이 많은 블록**(리포트·가이드·설명문)의 최대 폭이다 (2026-08-31).
+ *
+ * ⚠️ 예전엔 이 값이 CSS 에 `1120px` 로 못 박혀 있었다. 그래서 「화면 전체」를 골라도
+ * **데일리 리포트는 그대로 1120px 에서 끊겼다** — 고해상도 모니터에서 오른쪽 절반이
+ * 통째로 비던 진짜 이유다. 손잡이는 있는데 그 줄이 리포트까지 안 닿아 있었다.
+ *
+ * 표·차트와 달리 글은 한 줄이 너무 길면 눈이 줄을 놓치므로 「보통」에서는 계속
+ * 1120px 로 묶는다. 넓게·전체를 고른 사람은 그걸 감수하겠다고 말한 것이다.
+ */
+export const WIDTHS: { key: WidthName; label: string; css: string; read: string; hint: string }[] = [
+  { key: "normal", label: "보통", css: "1400px", read: "1120px", hint: "글이 많은 화면이 읽기 좋습니다" },
+  { key: "wide", label: "넓게", css: "1920px", read: "1500px", hint: "표가 넓은 화면에서 열이 더 보입니다" },
+  { key: "full", label: "화면 전체", css: "none", read: "none", hint: "울트라와이드에서 남는 자리가 없습니다" },
 ];
 
 export const FONTS: { key: FontName; label: string; stack: string }[] = [
@@ -159,7 +171,10 @@ function apply(a: Appearance): void {
   // 인앱 탭바 고정 — CSS 가 이 속성을 보고 sticky 를 켜고 끈다
   root.dataset.tabs = a.tabsSticky ? "sticky" : "static";
   /* 본문 폭 — 보드는 CSS 에서 따로 풀어 두었으므로 여기서는 신경 안 쓴다 */
-  root.style.setProperty("--main-max", WIDTHS.find((w) => w.key === a.width)?.css ?? "1400px");
+  const w = WIDTHS.find((x) => x.key === a.width);
+  root.style.setProperty("--main-max", w?.css ?? "1400px");
+  /* 글 블록도 같은 손잡이를 따라간다 — 여기가 빠져 있어서 리포트만 안 넓어졌다 */
+  root.style.setProperty("--read-max", w?.read ?? "1120px");
 }
 
 interface AppearanceContext extends Appearance {
