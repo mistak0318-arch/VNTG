@@ -248,14 +248,39 @@ export function createMarketRouter(client: KiwoomClient): Router {
   router.get("/chart/investor/:code", async (req, res, next) => {
     try {
       const dt = typeof req.query.dt === "string" ? req.query.dt : todayYyyymmdd();
-      const { data } = await client.request(CHART_RESOURCE, "ka10060", {
+      /*
+       * 며칠치 (2026-08-31 요청 — 「30일밖에 안 되네, 60·120·240 정도로」).
+       *
+       * ⚠️ 한 번 부르면 **100줄**이 온다(실측: 삼성전자 2026-04-03~08-28).
+       * 그래서 60·120 은 조회가 안 늘고, 240 만 한 쪽 더 넘긴다. 안 물어보면
+       * 예전 그대로 한 번만 부른다 — 화면 열 때마다 세 번 부르면 안 된다.
+       */
+      const want = Math.max(1, Math.min(400, Number(req.query.days) || 0));
+      const params = {
         dt,
         // 통합(_AL) — 키움 앱(통합)과 수급이 달랐던 원인 (2026-08-26 실측: NXT 미포함)
         stk_cd: alCode(req.params.code),
         amt_qty_tp: "1", // 1:금액(백만원)
         trde_tp: "0", // 0:순매수
         unit_tp: "1000",
-      });
+      };
+      const first = await client.request<Record<string, unknown>>(CHART_RESOURCE, "ka10060", params);
+      const data = first.data;
+      const rows = (data.stk_invsr_orgn_chart as Record<string, unknown>[]) ?? [];
+      let contYn = first.contYn;
+      let nextKey = first.nextKey;
+      for (let page = 0; page < 4 && rows.length < want && contYn === "Y" && nextKey; page += 1) {
+        const more = await client.request<Record<string, unknown>>(CHART_RESOURCE, "ka10060", params, {
+          contYn: "Y",
+          nextKey,
+        });
+        const add = (more.data.stk_invsr_orgn_chart as Record<string, unknown>[]) ?? [];
+        if (add.length === 0) break;
+        rows.push(...add);
+        contYn = more.contYn;
+        nextKey = more.nextKey;
+      }
+      data.stk_invsr_orgn_chart = rows;
       res.json(data);
     } catch (err) {
       next(err);
@@ -541,7 +566,15 @@ export function createMarketRouter(client: KiwoomClient): Router {
     try {
       // amt_qty_tp 1:금액(백만) 2:수량
       const amtQty = req.query.qty === "1" ? "2" : "1";
-      const { data } = await client.request(STKINFO_RESOURCE, "ka10059", {
+      /*
+       * 며칠치가 필요한가 (2026-08-31 요청 — 「30일밖에 안 되네, 240일까지」).
+       *
+       * ⚠️ 한 번 부르면 **100줄**이 온다(실측: 삼성전자 2026-04-03~08-28).
+       * 60·120일은 그 안에서 해결되지만 240일은 **연속조회**가 있어야 한다.
+       * 필요한 만큼만 넘긴다 — 넉넉히 부르면 조회 수만 버린다.
+       */
+      const want = Math.max(1, Math.min(400, Number(req.query.days) || 30));
+      const params = {
         dt: todayYyyymmdd(),
         /*
          * 통합(_AL) — 2026-08-26 실측. KRX 단독은 하이닉스 8/25 개인 +618,857 인데
@@ -551,7 +584,31 @@ export function createMarketRouter(client: KiwoomClient): Router {
         amt_qty_tp: amtQty,
         trde_tp: "0", // 순매수
         unit_tp: "1000",
-      });
+      };
+      const first = await client.request<Record<string, unknown>>(
+        STKINFO_RESOURCE,
+        "ka10059",
+        params,
+      );
+      const data = first.data;
+      const rows = (data.stk_invsr_orgn as Record<string, unknown>[]) ?? [];
+      let contYn = first.contYn;
+      let nextKey = first.nextKey;
+      /* 다섯 쪽이면 500줄 — 400일을 달라 해도 넘친다. 무한 루프 방지도 겸한다 */
+      for (let page = 0; page < 5 && rows.length < want && contYn === "Y" && nextKey; page += 1) {
+        const more = await client.request<Record<string, unknown>>(
+          STKINFO_RESOURCE,
+          "ka10059",
+          params,
+          { contYn: "Y", nextKey },
+        );
+        const add = (more.data.stk_invsr_orgn as Record<string, unknown>[]) ?? [];
+        if (add.length === 0) break;
+        rows.push(...add);
+        contYn = more.contYn;
+        nextKey = more.nextKey;
+      }
+      data.stk_invsr_orgn = rows;
       res.json(data);
     } catch (err) {
       next(err);

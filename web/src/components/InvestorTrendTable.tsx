@@ -25,7 +25,14 @@ import { fmtAbsNum, fmtNum, signClass, type RawRecord } from "../api";
  * 고른 것은 **이 기기에** 남고, 상세와 보드가 같은 설정을 쓴다(같은 표니까).
  */
 
-const PERIOD_OPTIONS = [5, 10, 20, 30];
+/**
+ * 며칠치를 볼지 (2026-08-31 요청 — 「30일밖에 안 되네」).
+ *
+ * ⚠️ 키움은 한 번 부르면 **100줄**을 준다(실측: 2026-04-03~08-28). 그래서 120까지는
+ * 이미 받아 둔 것 안에서 해결되고 **조회가 안 는다.** 240 만 한 쪽 더 받아야 하는데,
+ * 그건 `onNeedDays` 로 부모에게 부탁한다 — 표는 자기가 받아오지 않는다.
+ */
+const PERIOD_OPTIONS = [5, 10, 20, 30, 60, 120, 240];
 
 /** ka10060(종목별투자자기관별차트요청) 확인된 필드명. 단위: 백만원 */
 interface Col {
@@ -95,7 +102,14 @@ function changeRate(row: RawRecord): number | null {
   return (diff / base) * 100;
 }
 
-export function InvestorTrendTable({ rows }: { rows: RawRecord[] }) {
+export function InvestorTrendTable({
+  rows,
+  onNeedDays,
+}: {
+  rows: RawRecord[];
+  /** 갖고 있는 줄보다 긴 기간을 골랐을 때 부모에게 더 받아 달라고 한다 (선택) */
+  onNeedDays?: (days: number) => void;
+}) {
   /** 일별 목록을 몇 줄까지 볼지. 합계는 아래에서 네 기간을 한꺼번에 보여준다 */
   const [period, setPeriod] = useState(20);
   const [picked, setPicked] = useState<string[]>(readPick);
@@ -147,7 +161,12 @@ export function InvestorTrendTable({ rows }: { rows: RawRecord[] }) {
         <select
           id="investor-period"
           value={period}
-          onChange={(e) => setPeriod(Number(e.target.value))}
+          onChange={(e) => {
+            const p = Number(e.target.value);
+            setPeriod(p);
+            /* 갖고 있는 것보다 길면 더 받아 달라고 한다 — 없으면 있는 만큼만 보여준다 */
+            if (p > rows.length) onNeedDays?.(p);
+          }}
         >
           {PERIOD_OPTIONS.map((p) => (
             <option key={p} value={p}>
@@ -155,6 +174,13 @@ export function InvestorTrendTable({ rows }: { rows: RawRecord[] }) {
             </option>
           ))}
         </select>
+        {/*
+          받아 온 것이 고른 기간보다 짧으면 **말해 준다.** 조용히 적게 보여 주면
+          「240일인데 왜 100줄이지」를 알 길이 없다.
+        */}
+        {period > rows.length && rows.length > 0 && (
+          <span className="pt-n">받아 온 것은 {rows.length}일치입니다</span>
+        )}
         <button
           className={`filter-btn ${gear ? "active" : ""}`}
           onClick={() => setGear((v) => !v)}

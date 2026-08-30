@@ -155,18 +155,26 @@ export function StockTabsSection({
     if (isEtf && ETF_HIDDEN.has(tab)) setTab("chart");
   }, [isEtf, tab]);
 
-  /* 투자자 수급 — 종합 탭에도 들어가므로 종목이 바뀌면 바로 받는다. 일별이라 폴링 안 한다 */
+  /*
+   * 투자자 수급 — 종합 탭에도 들어가므로 종목이 바뀌면 바로 받는다. 일별이라 폴링 안 한다.
+   *
+   * `investorDays` 는 표가 「더 긴 기간을 골랐다」고 알려 줄 때만 오른다 (2026-08-31).
+   * 기본값 0 은 **예전처럼 한 번만** 부른다는 뜻이다 — 한 번에 100줄이 오므로
+   * 120일까지는 이걸로 이미 충분하고, 240일을 고른 사람만 한 쪽을 더 받는다.
+   */
+  const [investorDays, setInvestorDays] = useState(0);
+  useEffect(() => setInvestorDays(0), [code]); // 종목이 바뀌면 다시 기본으로
   useEffect(() => {
     let cancelled = false;
     setInvestorChart(null);
     api
-      .investorChart(code)
+      .investorChart(code, investorDays || undefined)
       .then((v) => !cancelled && setInvestorChart(v as RawRecord))
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [code, reloadKey]);
+  }, [code, reloadKey, investorDays]);
 
   /*
    * 기간수익률용 일봉은 **기업·재무 탭에 들어갈 때만** 받는다.
@@ -306,7 +314,7 @@ export function StockTabsSection({
             <IntradayFlow code={code} basePrice={basePrice} />
             <ChartPanel code={code} name={name} />
             <h3 className="section-heading">투자자 수급</h3>
-            <InvestorTrendTable rows={investorRows} />
+            <InvestorTrendTable rows={investorRows} onNeedDays={setInvestorDays} />
             <h3 className="section-heading">프로그램 수급</h3>
             <ProgramFlowBars code={code} />
             <SupplyMiniCharts code={code} />
@@ -316,7 +324,7 @@ export function StockTabsSection({
         {tab === "orderbook" && <OrderBookPanel code={code} />}
         {tab === "broker" && <BrokerFlowPanel code={code} />}
         {tab === "program" && <ProgramFlowPanel code={code} />}
-        {tab === "investor" && <InvestorTrendTable rows={investorRows} />}
+        {tab === "investor" && <InvestorTrendTable rows={investorRows} onNeedDays={setInvestorDays} />}
         {tab === "credit" && <CreditPanel code={code} />}
         {tab === "strength" && <StrengthPanel code={code} />}
         {tab === "tradeSize" && <TradeSizePanel code={code} />}

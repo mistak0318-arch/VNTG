@@ -11228,3 +11228,16 @@ button.tpb-row:hover { background: var(--panel-2); }
   margin-left: 3px;
   font-size: 0.9em;
 }
+
+/* 창 직접 입력 (2026-08-31) — 단추 줄 끝에 붙는 작은 칸 */
+.kwf-manual {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.76rem; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 2px 7px 2px 4px;
+}
+.kwf-manual input {
+  width: 3.6rem; background: var(--panel-2); color: var(--text);
+  border: 0; border-radius: 4px; padding: 3px 4px;
+  font-size: 0.8rem; font-variant-numeric: tabular-nums;
+}

@@ -152,6 +152,21 @@ export function KeywordFlowPanel({
               {w.label}
             </button>
           ))}
+          {/* 직접 입력 (2026-08-31 요청) — 단추 사이를 보고 싶을 때. 5분~7일 */}
+          <label className="kwf-manual" title="분을 직접 넣습니다 (5~10080)">
+            <input
+              type="number"
+              min={5}
+              max={10080}
+              step={5}
+              value={windowMin}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (Number.isFinite(v) && v >= 5 && v <= 10080) setWindowMin(Math.round(v));
+              }}
+            />
+            분
+          </label>
         </div>
         <button className="kwf-refresh" onClick={() => void refresh()} disabled={busy}>
           {busy ? "긁는 중…" : "지금 긁기"}

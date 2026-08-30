@@ -25,6 +25,8 @@ import { useSheetBack } from "../useSheetBack";
  */
 
 const WINDOWS = [
+  /* 1시간 (2026-08-31 요청) — 장중에는 세 시간이면 이미 지나간 이야기다 */
+  { h: 1, label: "1시간" },
   { h: 3, label: "3시간" },
   { h: 6, label: "6시간" },
   { h: 12, label: "12시간" },
@@ -120,6 +122,23 @@ export function BuzzBoardPanel({
               {w.label}
             </button>
           ))}
+          {/*
+            직접 입력 (2026-08-31 요청) — 단추는 자주 쓰는 자리만 잡아 두고, 「2시간만」
+            「어제 이맘때부터」처럼 그 사이를 보고 싶을 때가 있다. 1~336시간(2주).
+          */}
+          <label className="kwf-manual" title="시간을 직접 넣습니다 (1~336)">
+            <input
+              type="number"
+              min={1}
+              max={336}
+              value={hours}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (Number.isFinite(v) && v >= 1 && v <= 336) setHours(Math.round(v));
+              }}
+            />
+            시간
+          </label>
         </div>
       </div>
 
