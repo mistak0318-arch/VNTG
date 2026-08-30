@@ -24,6 +24,7 @@ import { MiniConfigPanel } from "../components/MiniConfigPanel";
 import { LoginSettingsPanel } from "../components/LoginSettingsPanel";
 import { BuzzConfigPanel } from "../components/BuzzConfigPanel";
 import { NaverSyncPanel } from "../components/NaverSyncPanel";
+import { DataRetentionPanel } from "../components/DataRetentionPanel";
 
 interface KeyInfo {
   name: string;
@@ -183,6 +184,17 @@ export function SettingsPage() {
         hint="네이버에서 스스로 긁어오는 것들 — 목록 · 주기 · 끄기 · 지금 실행"
       >
         <NaverSyncPanel />
+      </CollapsibleCard>
+      )}
+
+      {tab === "cost" && (
+      <CollapsibleCard
+        id="dataRetention"
+        scope="global"
+        title="데이터 보관"
+        hint="무엇이 얼마나 쌓였나 · 며칠까지 둘까 · 정리하면 얼마가 빠지나"
+      >
+        <DataRetentionPanel />
       </CollapsibleCard>
       )}
 

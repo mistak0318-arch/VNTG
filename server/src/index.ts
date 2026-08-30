@@ -18,6 +18,8 @@ import { createAlgoRouter } from "./routes/algo.js";
 import { createAuthRouter } from "./routes/auth.js";
 import { createNewsKeywordRouter } from "./routes/newsKeywords.js";
 import { createNaverSyncRouter } from "./routes/naverSync.js";
+import { createDataRouter } from "./routes/data.js";
+import { startRetentionScheduler } from "./dataRetention.js";
 import { createCalendarRouter } from "./routes/calendar.js";
 import { createMarketRouter } from "./routes/market.js";
 import { createUsKiwoomRouter } from "./routes/usKiwoom.js";
@@ -210,6 +212,7 @@ app.use("/api/realtime", createRealtimeRouter(client));
 app.use("/api/report", createReportRouter(client));
 app.use("/api/news-keywords", createNewsKeywordRouter());
 app.use("/api/naver-sync", createNaverSyncRouter(client));
+app.use("/api/data", createDataRouter());
 
 // 07/12/18시에 리포트를 발행한다 (AI 요약은 이때만 생성)
 startReportScheduler(client);
@@ -226,6 +229,8 @@ startBuzzScheduler(client);
 startNewsKeywordScheduler();
 /* 구독 캘린더 자동 동기화 (2026-08-30) — 예전엔 단추를 눌러야만 들어왔다 */
 startCalendarSyncScheduler();
+/* 데이터 보관 기간 정리 (2026-08-31) — 실시간 로그가 무한히 쌓고 있었다 */
+startRetentionScheduler();
 /* 「이 종목을 담은 ETF」 역인덱스 — 하루 1회(16시 이후). 화면은 파일만 읽는다 */
 startEtfHoldersScheduler(client);
 /* 네이버 테마 DB — 주 1회(일요일 04시). 구성은 매일 바뀌는 값이 아니다 */

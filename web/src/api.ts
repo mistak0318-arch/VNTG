@@ -231,6 +231,32 @@ export interface TopicPulse {
 
 /* ── 버즈·키워드 알고리즘 설정 (2026-08-30) ─────────────────────────────── */
 
+/** 데이터 보관 현황 (2026-08-31) */
+export interface DataCatStat {
+  key: string;
+  label: string;
+  what: string;
+  kind: "daily" | "append" | "single";
+  bytes: number;
+  files: number;
+  oldest: string | null;
+  newest: string | null;
+  keepDays: number | null;
+  defaultKeep: number | null;
+  byAge: { d7: number; d30: number; d90: number; d365: number; older: number };
+  /** 지금 설정대로 자르면 빠질 용량 */
+  prunable: number;
+  perDay: number;
+}
+export interface DataReport {
+  dir: string;
+  cats: DataCatStat[];
+  otherBytes: number;
+  totalBytes: number;
+  prunableBytes: number;
+  disk: { free: number; total: number } | null;
+}
+
 /** 네이버에서 스스로 긁어오는 일들 (2026-08-30) */
 export interface NaverSyncJob {
   key: string;
@@ -355,6 +381,12 @@ export const api = {
     getJson<KeywordFlow>(`/api/news-keywords/flow?window=${windowMin}`),
   keywordCollect: () =>
     postJson<{ articles: number; terms: number }>("/api/news-keywords/collect"),
+
+  dataReport: () => getJson<DataReport>("/api/data"),
+  dataKeep: (key: string, days: number | null) =>
+    postJson<DataReport>(`/api/data/${key}/keep`, { days }),
+  dataPrune: () =>
+    postJson<{ removed: number; bytes: number; report: DataReport }>("/api/data/prune"),
 
   naverSync: () => getJson<NaverSyncConfig>("/api/naver-sync"),
   naverSyncEnable: (key: string, on: boolean) =>
