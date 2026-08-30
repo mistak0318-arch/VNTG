@@ -879,7 +879,8 @@
       "Bash(rm -f audit.mjs)",
       "Bash(node -)",
       "Bash(curl -s \"http://localhost:5173/api/signal/buzz/config\")",
-      "Bash(node /tmp/tmck/check.mjs)"
+      "Bash(node /tmp/tmck/check.mjs)",
+      "Bash(awk '/^\\\\.nb-/{c=$0} /grid-template-columns/{if\\(c ~ /^\\\\.nb-/\\) print NR\": \"c\" → \"$0}' web/src/styles.css)"
     ]
   }
 }

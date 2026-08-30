@@ -4474,9 +4474,21 @@ tr.drag-src td { opacity: 0.45; }
 }
 .mn-page { color: var(--muted); font-size: 0.82rem; }
 
+/*
+ * **어느 기기에서든 한 줄에 하나씩** (2026-08-30).
+ *
+ * ⚠️ 예전엔 `repeat(auto-fill, minmax(280px, 1fr))` 이 기본이고 한 줄 배치는
+ * `@media (min-width: 900px)` 안에만 있었다. 그래서 **태블릿(768~1024px)이
+ * 사이에 끼어** 2열로 떨어졌다 — 폰도 아니고 PC 도 아닌, 제일 안 좋은 배치다.
+ * 좁은 칸 두 개에 제목이 두 줄씩 접히니 눈이 좌우로 왔다 갔다 한다.
+ *
+ * 뉴스는 신문처럼 **위에서 아래로만** 훑는 것이 맞다. 한 줄이 넓어진 만큼
+ * 미리보기를 더 실을 수도 있다. 그래서 기본을 한 열로 두고, 화면이 넓어질수록
+ * **칸을 늘리는 게 아니라 내용을 늘린다.**
+ */
 .mn-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
   margin-top: 0.5rem;
 }
@@ -4524,8 +4536,19 @@ tr.drag-src td { opacity: 0.45; }
  * 신문처럼 위에서 아래로만 훑으면 되고, 줄이 넓어진 만큼 미리보기도 더 싣는다 —
  * 썸네일을 키우고 제목은 한 줄에 다 들어가니 요약을 3줄까지 편다. 폰은 기존 그대로.
  */
+/*
+ * 태블릿 (600~899) — 한 줄 하나는 위에서 정해졌고, 여기서는 **내용을 늘린다.**
+ * 폰보다 폭이 넉넉하니 썸네일을 키우고 요약을 한 줄 더 편다. 제목은 두 줄 그대로 —
+ * 이 폭에서는 긴 제목이 한 줄에 다 안 들어간다.
+ */
+@media (min-width: 600px) and (max-width: 899px) {
+  .mn-thumb { width: 116px; height: 78px; }
+  .mn-tit { font-size: 0.88rem; }
+  .mn-sum { font-size: 0.76rem; -webkit-line-clamp: 3; }
+}
+
 @media (min-width: 900px) {
-  .mn-grid { grid-template-columns: 1fr; gap: 8px; max-width: 56rem; }
+  .mn-grid { gap: 8px; max-width: 56rem; }
   .mn-thumb { width: 132px; height: 88px; }
   .mn-tit { font-size: 0.92rem; -webkit-line-clamp: 1; }
   .mn-sum { font-size: 0.78rem; -webkit-line-clamp: 3; }
