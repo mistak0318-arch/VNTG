@@ -21,16 +21,72 @@ const DATA_FILE = resolve(__dirname, "..", "data", "calendar.json");
  *
  * ⚠️ 이미 저장된 일정은 옛 넷 중 하나다. **키를 바꾸거나 지우면 안 된다.**
  */
-export type EventKind = "market" | "personal" | "earnings" | "holiday" | "event" | "conference";
+/**
+ * 일정의 갈래.
+ *
+ * 2026-08-30 에 증권사 리서치 캘린더(미래에셋) 양식을 참고해 넷을 더했다. 그 양식은
+ * 일정마다 **분류 태그를 왼쪽에 붙여 세로로 정렬**하는데, 그러면 「오늘 회의가 몇
+ * 개인가」가 훑기만 해도 보인다. 우리 갈래는 그보다 성겼다 — 「증시 일정」 하나에
+ * 지표 발표·중앙은행 회의·국채 입찰·선물 만기가 다 뭉쳐 있었다.
+ *
+ *   indicator 공개  지표·통계 발표 (고용보고서·CPI·PMI)
+ *   meeting   회의  중앙은행·정상회담 (FOMC·ECB·금통위)
+ *   bond      채권  국채 입찰·발행
+ *   deriv     파생  선물·옵션 만기
+ *
+ * `weekly` 는 성격이 다르다 — **날짜 하나에 붙는 일정이 아니라 그 주 전체의 요약**이다.
+ * 리서치 캘린더가 일요일 칸을 통째로 「이번 주 핵심」에 쓰는 것과 같다. 그 주 일요일에
+ * 달아 두면 주간 화면이 맨 앞에 펼친다. 새 저장소를 만들지 않은 이유는, 그러면
+ * CSV·수정·삭제·동기화를 전부 두 벌로 만들어야 하기 때문이다.
+ */
+export type EventKind =
+  | "market"
+  | "personal"
+  | "earnings"
+  | "holiday"
+  | "event"
+  | "conference"
+  | "indicator"
+  | "meeting"
+  | "bond"
+  | "deriv"
+  | "weekly";
 
 export const EVENT_KINDS: { key: EventKind; label: string }[] = [
+  { key: "weekly", label: "주간 핵심" },
   { key: "market", label: "증시 일정" },
+  { key: "indicator", label: "지표 공개" },
+  { key: "meeting", label: "회의" },
   { key: "earnings", label: "실적 발표" },
+  { key: "bond", label: "채권" },
+  { key: "deriv", label: "파생" },
   { key: "holiday", label: "휴장일" },
   { key: "event", label: "이벤트" },
   { key: "conference", label: "학회" },
   { key: "personal", label: "개인 일정" },
 ];
+
+/**
+ * 나라.
+ *
+ * 리서치 캘린더가 일정마다 국가를 붙이는 이유는, **같은 「고용보고서」라도 미국 것과
+ * 한국 것이 시장에 주는 무게가 다르기 때문**이다. 목록에서 국가가 정렬돼 있으면
+ * 「오늘 미국 것이 몇 개인가」가 바로 보인다.
+ *
+ * 목록에 없는 나라도 그냥 적을 수 있다 — 여기 있는 것은 **고를 수 있는 후보**일 뿐이다.
+ */
+export const COUNTRIES = [
+  "한국",
+  "미국",
+  "중국",
+  "일본",
+  "유로존",
+  "영국",
+  "독일",
+  "대만",
+  "인도",
+  "글로벌",
+] as const;
 
 /** 반복 주기 — date 를 앵커로 그 뒤로 되풀이된다 (2026-08-27 전면 개편) */
 export type RepeatKind = "weekly" | "monthly" | "yearly";
@@ -62,6 +118,21 @@ export interface CalendarEvent {
   done?: boolean;
   /** (전개 인스턴스에만) 원본의 날짜 — 수정 폼이 앵커를 보여줄 때 쓴다 */
   anchor?: string;
+  /**
+   * 어느 나라 일정인가 (2026-08-30).
+   *
+   * 비우면 화면이 아무것도 안 보여 준다 — **모르는 것을 지어내지 않는다.**
+   * 가져온 일정(구글 캘린더)에는 대개 없다.
+   */
+  country?: string;
+  /**
+   * 그날의 **대표 일정**인가 (2026-08-30).
+   *
+   * 리서치 캘린더는 날짜마다 굵은 제목이 하나 있고 나머지는 그 아래 목록이다.
+   * 「9월 17일에 뭐가 있더라」에 답하는 것은 그 한 줄이지 열두 줄이 아니다.
+   * 하루에 여럿이 켜져 있으면 화면은 **먼저 오는 것 하나만** 굵게 쓴다.
+   */
+  headline?: boolean;
 }
 
 /**

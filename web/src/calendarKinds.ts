@@ -25,6 +25,13 @@ export const KIND_META: Record<EventKind, KindMeta> = {
   event: { label: "이벤트", icon: "🎪", color: "#ff8c42" },
   conference: { label: "학회", icon: "🎓", color: "#c084fc" },
   personal: { label: "개인", icon: "🙋", color: "#35c46a" },
+  /* 리서치 캘린더 양식의 분류 (2026-08-30) — 「증시」 하나에 뭉쳐 있던 것을 가른다 */
+  indicator: { label: "공개", icon: "📊", color: "#4fa3b0" },
+  meeting: { label: "회의", icon: "🏛", color: "#7aa2f7" },
+  bond: { label: "채권", icon: "📜", color: "#9aa5b1" },
+  deriv: { label: "파생", icon: "⚙️", color: "#e0af68" },
+  /* 주간 핵심은 날짜 일정이 아니라 그 주의 요약이라 색을 따로 준다 */
+  weekly: { label: "주간", icon: "🗓", color: "#c89a4a" },
 };
 
 export const KIND_ORDER: EventKind[] = [

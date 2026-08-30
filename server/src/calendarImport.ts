@@ -144,6 +144,23 @@ const KIND_ALIAS: Record<string, EventKind> = {
   학회: "conference",
   컨퍼런스: "conference",
   conference: "conference",
+  /* 2026-08-30 — 리서치 캘린더 양식의 분류를 그대로 받는다 */
+  공개: "indicator",
+  지표: "indicator",
+  발표: "indicator",
+  indicator: "indicator",
+  회의: "meeting",
+  meeting: "meeting",
+  채권: "bond",
+  발행: "bond",
+  입찰: "bond",
+  bond: "bond",
+  파생: "deriv",
+  만기: "deriv",
+  deriv: "deriv",
+  주간: "weekly",
+  주간핵심: "weekly",
+  weekly: "weekly",
 };
 
 /**
@@ -164,6 +181,45 @@ function parseTimeCell(raw: string | undefined): { time?: string; endTime?: stri
  * CSV 파싱. 헤더는 있어도 없어도 되고, 열 순서는
  * date,title,kind,time,memo 를 기본으로 본다.
  */
+/**
+ * CSV 한 줄을 칸으로 가른다.
+ *
+ * ## ⚠️ 예전 방식은 빈 칸을 삼켰다
+ *
+ * `row.match(/("[^"]*"|[^,]+)/g)` 로 뽑고 있었는데, 이 정규식은 **연속된 쉼표 사이의
+ * 빈 칸을 아예 안 만든다.** 그래서 `날짜,제목,공개,21:30,,미국,` 이 여섯 칸이 아니라
+ * 다섯 칸으로 읽히고 **그 뒤가 통째로 한 칸씩 밀린다** — 나라 자리에 「★」가 들어가는
+ * 식이다. 칸을 하나 더할 때마다 이 문제가 커진다.
+ *
+ * 실측(2026-08-30): 국가 칸을 더하자마자 두 줄이 어긋났다.
+ *
+ * 그래서 한 글자씩 훑으며 **쉼표를 만나면 그 자리에서 칸을 닫는다.** 따옴표 안의
+ * 쉼표는 지나치고, `""` 는 따옴표 한 개로 푼다(엑셀이 그렇게 내보낸다).
+ */
+function splitRow(row: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuote = false;
+  for (let i = 0; i < row.length; i += 1) {
+    const c = row[i];
+    if (c === '"') {
+      if (inQuote && row[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else {
+        inQuote = !inQuote;
+      }
+    } else if (c === "," && !inQuote) {
+      out.push(cur.trim());
+      cur = "";
+    } else {
+      cur += c;
+    }
+  }
+  out.push(cur.trim());
+  return out;
+}
+
 export function parseCsv(text: string, source: string, defaultKind: EventKind = "personal"): ImportedEvent[] {
   const rows = text
     .replace(/\r\n/g, "\n")
@@ -173,13 +229,32 @@ export function parseCsv(text: string, source: string, defaultKind: EventKind = 
 
   const out: ImportedEvent[] = [];
   for (const row of rows) {
-    // 아주 단순한 CSV — 따옴표로 감싼 쉼표까지만 처리
-    const cells = (row.match(/("[^"]*"|[^,]+)/g) ?? []).map((c) =>
-      c.replace(/^"|"$/g, "").trim(),
-    );
+    /*
+     * ⚠️ **주석 줄을 명시적으로 건너뛴다.**
+     *
+     * 양식 파일은 「`#` 로 시작하는 줄은 설명」이라고 적어 두고 있었는데, 파서는
+     * 그걸 모르고 **날짜 자리에 8자리 숫자가 없기를** 바라고 있었다. 그런데 설명에
+     * 예시를 적으면(「빈 칸도 쉼표로 — 2026-09-04,고용보고서,…」) 거기 날짜가 들어
+     * 있어 **설명이 일정으로 등록된다.** 실측에서 예시 열 줄이 열한 줄로 읽혔다.
+     *
+     * 규칙을 적어 놨으면 그 규칙대로 읽어야 한다.
+     */
+    if (row.startsWith("#")) continue;
+
+    const cells = splitRow(row);
     if (cells.length < 2) continue;
 
-    const [rawDate, title, rawKind, rawTime, memo, rawEnd] = cells;
+    /*
+     * 열 순서: 날짜,제목,종류,시간,메모,국가,대표
+     *
+     * ⚠️ **예전 파일과 섞여야 한다.** 여섯째 칸이 옛 양식에서는 종료 시각이었다.
+     * 그래서 그 칸이 `HH:mm` 꼴이면 종료 시각으로, 아니면 국가로 읽는다 — 옛 파일을
+     * 다시 올렸을 때 나라 칸에 「10:30」이 들어가는 일이 없어야 한다.
+     */
+    const [rawDate, title, rawKind, rawTime, memo, rawSixth, rawFlag] = cells;
+    const sixthIsTime = /^\d{1,2}:\d{2}$/.test((rawSixth ?? "").trim());
+    const rawEnd = sixthIsTime ? rawSixth : undefined;
+    const rawCountry = sixthIsTime ? undefined : rawSixth;
     // 헤더 줄 건너뛰기
     if (/^(date|날짜)$/i.test(rawDate)) continue;
 
@@ -198,6 +273,9 @@ export function parseCsv(text: string, source: string, defaultKind: EventKind = 
       // 여섯째 칸을 종료 시각으로도 받는다 — 시간 칸에 `~` 로 적는 쪽이 기본
       endTime: endTime ?? parseTimeCell(rawEnd).time,
       memo: memo || undefined,
+      country: (rawCountry ?? "").trim() || undefined,
+      /* 「대표」「★」「Y」 무엇으로 적어도 받는다 — 사람이 손으로 채우는 칸이다 */
+      headline: /^(대표|핵심|★|\*|y|yes|true|1)$/i.test((rawFlag ?? "").trim()) || undefined,
       source,
     });
   }

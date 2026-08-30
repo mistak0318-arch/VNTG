@@ -2521,7 +2521,14 @@ export type EventKind =
   | "earnings"
   | "holiday"
   | "event"
-  | "conference";
+  | "conference"
+  /* 리서치 캘린더 양식 (2026-08-30) — 「증시」 하나에 뭉쳐 있던 것을 가른다 */
+  | "indicator"
+  | "meeting"
+  | "bond"
+  | "deriv"
+  /** 날짜 일정이 아니라 **그 주의 요약** — 그 주 일요일에 달아 둔다 */
+  | "weekly";
 
 export interface CalendarEvent {
   id: string;
@@ -2539,6 +2546,11 @@ export interface CalendarEvent {
   done?: boolean;
   /** (전개 인스턴스에만) 원본 날짜 */
   anchor?: string;
+  /** 어느 나라 일정인가 — 비우면 화면이 아무것도 안 쓴다 */
+  country?: string;
+  /** 그날의 대표 일정 — 주간 브리핑 맨 위로 올라간다 */
+  headline?: boolean;
+  /** 서버가 붙여 주는 나라 후보 (읽기 전용) */
 }
 
 export interface AiSummary {
