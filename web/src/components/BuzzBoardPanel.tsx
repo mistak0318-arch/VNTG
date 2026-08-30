@@ -212,6 +212,16 @@ export function BuzzBoardPanel({
                     <td className="num">{r.recent}</td>
                     <td className={`num${r.channels >= 3 ? " positive" : " muted"}`}>
                       {r.channels || "—"}
+                      {/* 서명으로 걸러낸 몫 — 왜 건수가 적어 보이는지 설명해 준다 */}
+                      {r.boilerplate >= 0.3 && (
+                        <span
+                          className="muted"
+                          title={`언급의 ${Math.round(r.boilerplate * 100)}% 가 그 방들의 서명이라 뺐습니다`}
+                        >
+                          {" "}
+                          ✂
+                        </span>
+                      )}
                     </td>
                     <td className="num muted">{board.baselineDays >= 2 ? r.baseline : "—"}</td>
                     <td className={`num${r.ratio >= 3 ? " positive" : ""}`}>
@@ -226,6 +236,9 @@ export function BuzzBoardPanel({
           <div className="table-note">
             <b>방</b> 칸이 중요합니다 — 한 방이 같은 말을 열 번 한 것과 <b>열 방이 한 번씩</b>{" "}
             한 것은 완전히 다른 사건입니다. 앞은 그 방의 버릇이고 뒤는 시장의 화제입니다.
+            <br />
+            <b>✂</b> 표시는 그 낱말의 언급 상당수가 <b>채널 서명</b>이라 뺐다는 뜻입니다 —
+            「[하나증권 …]」처럼 방이 자기 소속을 밝히는 것은 시장의 화제가 아닙니다.
             <br />
             문턱(<b>{board.threshold.minCount}건·{board.threshold.minRatio}배</b> 또는{" "}
             <b>{board.threshold.sharpCount}건·{board.threshold.sharpRatio}배</b>)을 넘은 것에만

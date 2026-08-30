@@ -166,6 +166,12 @@ function stripJosa(w: string): string {
  */
 function harvest(title: string): string[] {
   const out: string[] = [];
+  /*
+   * 머리 대괄호를 뗀다 — 「[특징주]」「[표]」「[게시판]」「[속보]」.
+   * 기사 제목의 관례라 **내용이 아니라 갈래 표시**다. 채널 서명을 걷어낸 것과
+   * 같은 이유다(buzzRadar 의 stripSignature 참고).
+   */
+  title = title.replace(/^\s*(?:[[［【].{0,20}?[\]］】]\s*){1,2}/u, "");
   for (const m of title.matchAll(/[가-힣]{2,8}/g)) {
     const w = stripJosa(m[0]);
     if (w.length < 2 || w.length > 7) continue;

@@ -212,6 +212,10 @@ export interface BuzzBoardRow {
   ratio: number;
   /** 몇 개의 방에서 나왔나 — 한 방이 떠드는 것과 여러 방이 말하는 것은 다르다 */
   channels: number;
+  /** 뜻밖의 정도 — (지금−평소)/√(평소+1). 정렬과 판정의 기준 */
+  z: number;
+  /** 채널 서명으로 판정해 깎은 몫(0~1) — 0.8 이면 언급의 80%가 그 방들의 버릇이었다 */
+  boilerplate: number;
   /** 알림 문턱을 넘었나 */
   alerted: boolean;
   codes: string[];

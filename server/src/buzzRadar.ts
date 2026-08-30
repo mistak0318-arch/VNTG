@@ -98,9 +98,17 @@ interface DayFile {
    * 다른 사건**이다 — 앞은 그 방의 버릇이고 뒤는 시장의 화제다.
    */
   channels?: Record<string, Record<string, number>>;
+  /**
+   * 방 이름 → 그 방의 **전체 메시지 수** (2026-08-30).
+   *
+   * 상투어를 스스로 찾아내려고 둔다. 「투자콤」 방이 글마다 「DS투자증권 투자전략
+   * 양형모」라고 적으면, 그 방 글의 90%에 「증권」이 들어간다 — 그건 뉴스가 아니라
+   * **그 방의 서명**이다. 분모가 있어야 그 비율을 낼 수 있다.
+   */
+  channelMsgs?: Record<string, number>;
 }
 
-const EMPTY_DAY: DayFile = { total: {}, byHour: {}, samples: {}, kinds: {}, codes: {}, channels: {} };
+const EMPTY_DAY: DayFile = { total: {}, byHour: {}, samples: {}, kinds: {}, codes: {}, channels: {}, channelMsgs: {} };
 
 function kstNow(): Date {
   return new Date(Date.now() + 9 * 3600_000);
@@ -184,6 +192,44 @@ async function buildDict(): Promise<BuzzTerm[]> {
   return out;
 }
 
+// ---------------------------------------------------------------- 서명 걷어내기
+
+/**
+ * 채널이 **자기 소속을 밝히는 부분**을 지운다 (2026-08-30).
+ *
+ * ## 무엇이 문제였나
+ *
+ * 「증권」이 버즈 상위에 늘 올라왔는데, 실제 문장을 보니 전부 이런 것이었다:
+ *
+ *     [하나증권 철강금속 박성봉] 철강금속 Weekly…
+ *     DS투자증권 투자전략 양형모
+ *     [신영증권 자산전략팀] 모닝 브리프
+ *
+ * **시장이 증권 얘기를 한 게 아니라 채널이 자기 이름을 쓴 것**이다. 이런 게 섞이면
+ * 「지금 무슨 얘기가 도나」의 답이 통째로 오염된다.
+ *
+ * ## 어떻게 지우나
+ *
+ * 1) **맨 앞 대괄호 묶음** — 「[하나증권 철강금속 박성봉]」. 리서치 글의 관례라
+ *    거의 항상 소속·부서·작성자다. 본문이 아니다.
+ * 2) **채널 이름에 들어 있는 낱말** — 「하나증권 리서치」 방의 글에서 「하나증권」과
+ *    「리서치」를 뺀다. 그 방이 자기 이름을 반복하는 것은 뉴스가 아니다.
+ *
+ * ⚠️ **다른 회사 이름은 안 지운다.** 하나증권 방이 「삼성증권」을 말하면 그건 진짜
+ * 얘깃거리다. 그래서 채널 이름에 든 낱말만 지운다.
+ */
+export function stripSignature(text: string, channelName: string): string {
+  /* ① 맨 앞 대괄호 — 여러 개 붙어 있는 경우도 있다 */
+  let out = text.replace(/^\s*(?:[[［【(].{0,40}?[\]］】)]\s*){1,3}/u, "");
+
+  /* ② 채널 이름의 낱말들 — 2자 이상만(한 글자는 아무 데나 걸린다) */
+  for (const w of channelName.split(/[\s·・_\-|/[\]()]+/u)) {
+    if (w.length < 2) continue;
+    out = out.split(w).join(" ");
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- 카운팅
 
 /** 같은 메시지를 두 번 세지 않기 — 스캔이 20분씩 겹쳐 읽는다. 날짜별 메모리 셋 */
@@ -199,9 +245,10 @@ async function readDay(day: string): Promise<DayFile> {
       kinds: j.kinds ?? {},
       codes: j.codes ?? {},
       channels: j.channels ?? {},
+      channelMsgs: j.channelMsgs ?? {},
     };
   } catch {
-    return { total: {}, byHour: {}, samples: {}, kinds: {}, codes: {}, channels: {} };
+    return { total: {}, byHour: {}, samples: {}, kinds: {}, codes: {}, channels: {}, channelMsgs: {} };
   }
 }
 
@@ -273,12 +320,15 @@ export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
     for (const m of fresh) {
       processed += 1;
       if (processed % 30 === 0) await new Promise((r) => setImmediate(r));
-      const text = m.text.slice(0, 600);
+      /* 서명·머리말을 걷어낸 뒤 센다 — 「[하나증권 …]」의 「증권」이 시장 얘기로 잡히면 안 된다 */
+      const text = stripSignature(m.text, m.channelName).slice(0, 600);
       const kst = new Date(new Date(m.at).getTime() + 9 * 3600_000);
       const hour = String(kst.getUTCHours());
       /* 그 메시지가 속한 날 파일 — 자정을 걸친 수집에서 이게 갈린다 */
       const file = files.get(dayStr(kst));
       if (!file) continue;
+      /* 상투어 판정의 분모 — 낱말이 걸리든 말든 그 방의 글 수는 센다 */
+      (file.channelMsgs ??= {})[m.channelName] = (file.channelMsgs?.[m.channelName] ?? 0) + 1;
       for (const t of d) {
         if (!text.includes(t.term)) continue;
         file.total[t.term] = (file.total[t.term] ?? 0) + 1;
@@ -431,6 +481,53 @@ function hourShare(pastDays: DayFile[], windowHours: number, useTimeOfDay: boole
     inWindow += perHour[new Date(now.getTime() - i * 3600_000).getUTCHours()];
   }
   return 0.7 * (inWindow / all) + 0.3 * flat;
+}
+
+/**
+ * 그 방의 **상투어**인가 — 스스로 찾아낸다 (2026-08-30).
+ *
+ * 「[하나증권 …]」 같은 머리말은 `stripSignature` 가 걷어 내지만, 문장 **중간**에
+ * 박힌 서명은 못 잡는다(「9월 증시 전망 코멘트 DS투자증권 투자전략 양형모 …」 —
+ * 방 이름이 「투자콤」이라 채널명 규칙에도 안 걸린다).
+ *
+ * 그래서 규칙 대신 **빈도로 판별한다**: 어떤 낱말이 그 방 글의 절반을 넘게 나오면,
+ * 그건 화제가 아니라 그 방의 버릇이다. 사람이 목록을 관리할 필요가 없고, 새 방이
+ * 늘어도 저절로 맞는다.
+ *
+ * ⚠️ 글이 적은 방은 판단하지 않는다 — 세 글 중 두 글에 나왔다고 상투어라 할 수 없다.
+ *
+ * 돌려주는 값은 **버릴 몫**(0~1)이다. 그 방들이 차지한 비율만큼 건수를 깎는다.
+ * 방별 시각 기록까지 두면 정확히 뺄 수 있지만 저장이 몇 배로 커진다 — 비율로
+ * 깎는 것이 어림이지만 충분하고, 어림이라는 것을 여기 적어 둔다.
+ */
+const BOILER_SHARE = 0.5;
+const BOILER_MIN_MSGS = 8;
+
+function boilerplateDiscount(
+  term: string,
+  files: Map<string, DayFile>,
+): { drop: number; realChannels: Set<string> } {
+  const said = new Map<string, number>(); // 방 → 이 낱말을 쓴 글 수
+  const wrote = new Map<string, number>(); // 방 → 전체 글 수
+  for (const f of files.values()) {
+    for (const [ch, n] of Object.entries(f.channels?.[term] ?? {})) {
+      said.set(ch, (said.get(ch) ?? 0) + n);
+    }
+    for (const [ch, n] of Object.entries(f.channelMsgs ?? {})) {
+      wrote.set(ch, (wrote.get(ch) ?? 0) + n);
+    }
+  }
+
+  let total = 0;
+  let boiler = 0;
+  const realChannels = new Set<string>();
+  for (const [ch, n] of said) {
+    total += n;
+    const all = wrote.get(ch) ?? 0;
+    if (all >= BOILER_MIN_MSGS && n / all >= BOILER_SHARE) boiler += n;
+    else realChannels.add(ch);
+  }
+  return { drop: total > 0 ? boiler / total : 0, realChannels };
 }
 
 /** 창이 닿는 날들을 한 번에 읽어 둔다 */
@@ -657,6 +754,8 @@ export interface BuzzBoardRow {
   channels: number;
   /** 뜻밖의 정도 — (지금-평소)/√(평소+1). 정렬과 판정의 기준 */
   z: number;
+  /** 채널 서명으로 판정해 깎은 몫(0~1). 0.8 이면 언급의 80%가 그 방들의 버릇이었다 */
+  boilerplate: number;
   /** 알림 문턱을 넘었나 */
   alerted: boolean;
   codes: string[];
@@ -719,22 +818,25 @@ export async function buzzBoard(windowHours = 12): Promise<BuzzBoard> {
     const avgDaily =
       baselineDays > 0 ? pastDays.reduce((a, f) => a + (f.total[term] ?? 0), 0) / baselineDays : 0;
     const baseline = Math.max(avgDaily * share, 0.5);
-    const ratio = recent / baseline;
-    /* 방 개수는 창이 걸친 날들을 합쳐 센다 — 자정을 넘긴 버즈가 반토막 나면 안 된다 */
-    const chNames = new Set<string>();
-    for (const f of winFiles.values()) {
-      for (const n of Object.keys(f.channels?.[term] ?? {})) chNames.add(n);
-    }
-    const { z, alert } = buzzPoints(recent, baseline, chNames.size, cfg);
+    /*
+     * 그 방들의 서명이면 깎는다 — 「증권」이 상위에 오던 이유가 이것이었다.
+     * 방 개수도 서명 아닌 방만 센다(서명 방이 셋이라고 화제가 세 곳에서 난 게 아니다).
+     */
+    const { drop, realChannels } = boilerplateDiscount(term, winFiles);
+    const adjusted = Math.round(recent * (1 - drop));
+    const ratio = adjusted / baseline;
+    const { z, alert } = buzzPoints(adjusted, baseline, realChannels.size, cfg);
 
     rows.push({
       term,
       kind,
-      recent,
+      recent: adjusted,
       baseline: Math.round(baseline * 10) / 10,
       ratio: Math.round(ratio * 10) / 10,
       z: Math.round(z * 100) / 100,
-      channels: chNames.size,
+      channels: realChannels.size,
+      /* 서명으로 판정해 버린 몫 — 화면이 「왜 줄었나」를 말할 수 있게 */
+      boilerplate: Math.round(drop * 100) / 100,
       alerted: baselineDays >= 3 && alert,
       codes: kindOf.get(term)?.codes ?? today.codes?.[term] ?? yesterday.codes?.[term] ?? [],
     });

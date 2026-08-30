@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { logEvent } from "./eventLog.js";
+import { stripSignature } from "./buzzRadar.js";
 import { fetchNewMessages, isReaderConfigured, type ChannelMessage } from "./telegramReader.js";
 import { listWatchlist } from "./watchlist.js";
 import { listThemes } from "./customThemes.js";
@@ -244,7 +245,15 @@ export async function runKeywordScan(
   let skipped = 0;
 
   for (const m of messages) {
-    const matched = matchMessage(m.text, words);
+    /*
+     * 서명을 걷어내고 맞춘다 (2026-08-30).
+     *
+     * 채널들이 「[하나증권 철강금속 박성봉]」처럼 소속을 밝히는데, 「증권」이나
+     * 증권사 이름을 알림 낱말로 걸어 두면 **리서치 글마다 울린다.** 버즈에서 이
+     * 오탐을 잡고 나서 같은 문제가 여기에도 있다는 걸 확인했다.
+     * 규칙은 buzzRadar 한 곳에만 둔다 — 두 벌이 되면 언젠가 갈린다.
+     */
+    const matched = matchMessage(stripSignature(m.text, m.channelName), words);
     if (matched.length === 0) continue;
     const key = keyOf(m);
     if (sent.has(key)) {
