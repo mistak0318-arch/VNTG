@@ -148,14 +148,11 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="login-wrap">
-      {/* 배경 — 순수 장식이라 화면낭독기는 건너뛴다 */}
-      <div className="login-bg" aria-hidden="true">
-        <div className="login-grid" />
-        <div className="login-glow login-glow-a" />
-        <div className="login-glow login-glow-b" />
-        <Ticker />
-      </div>
-
+      {/*
+        배경은 이제 **구운 그림 한 장**이다(login.css 의 background).
+        예전엔 여기서 격자·빛덩이·봉차트를 div 로 그렸는데, 조각이 늘수록 합성 비용만
+        늘고 그림은 안 좋아졌다. 그림은 scripts/make-login-bg.mjs 가 만든다.
+      */}
       <div className="login-card">
         <div className="login-mark">
           <span className="login-mark-v">V</span>NTG
@@ -292,38 +289,6 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
         {error && <div className="login-error">{error}</div>}
         {notice && !error && <div className="login-notice">{notice}</div>}
       </div>
-    </div>
-  );
-}
-
-/**
- * 배경에 흐르는 봉차트.
- *
- * 한 번만 만들고 CSS 로 흘린다 — 매 프레임 자바스크립트가 도는 배경은 로그인 칸을
- * 치는 동안에도 계속 전기를 먹는다. 값은 아무 의미 없는 난수라 **시세처럼 보이는
- * 무늬**일 뿐이고, 진짜 숫자로 오해할 여지가 없게 축도 눈금도 안 붙인다.
- */
-function Ticker() {
-  const bars = useRef<{ h: number; y: number; up: boolean }[]>();
-  if (!bars.current) {
-    let p = 50;
-    bars.current = Array.from({ length: 40 }, () => {
-      const next = Math.max(12, Math.min(88, p + (Math.random() - 0.48) * 16));
-      const up = next >= p;
-      const bar = { h: Math.max(3, Math.abs(next - p) * 1.6 + 4), y: Math.min(p, next), up };
-      p = next;
-      return bar;
-    });
-  }
-  return (
-    <div className="login-ticker">
-      {bars.current.map((b, i) => (
-        <i
-          key={i}
-          className={b.up ? "up" : "down"}
-          style={{ height: `${b.h}%`, bottom: `${b.y}%` }}
-        />
-      ))}
     </div>
   );
 }

@@ -858,7 +858,17 @@
       "Bash(node -e \"const p=require\\('./web/package.json'\\);console.log\\('deps:',Object.keys\\(p.dependencies||{}\\).join\\(' '\\)\\);console.log\\('dev:',Object.keys\\(p.devDependencies||{}\\).join\\(' '\\)\\)\")",
       "Bash(node rfc-check.mjs)",
       "Bash(touch server/src/auth.ts)",
-      "Bash(cd \"K:/0000 3740 프로젝트 \\(경제적자유\\)/00. 주식/2 AI 프롬프트/260810_클로드작업/server\" && npx tsc --noEmit -p tsconfig.json 2>&1|head -5; echo \"[서버 OK]\"; cd ../web && npx tsc --noEmit -p tsconfig.json 2>&1|head -5; echo \"[웹 OK]\")"
+      "Bash(cd \"K:/0000 3740 프로젝트 \\(경제적자유\\)/00. 주식/2 AI 프롬프트/260810_클로드작업/server\" && npx tsc --noEmit -p tsconfig.json 2>&1|head -5; echo \"[서버 OK]\"; cd ../web && npx tsc --noEmit -p tsconfig.json 2>&1|head -5; echo \"[웹 OK]\")",
+      "Bash(node -e \"const s=require\\('./web/node_modules/sharp'\\);console.log\\('sharp',s.versions?.vips?'OK vips '+s.versions.vips:'OK'\\)\")",
+      "Bash(node scripts/make-login-bg.mjs)",
+      "Bash(sed -i 's/haze: 46, far: 16/haze: 26, far: 16/' scripts/make-login-bg.mjs)",
+      "Bash(python3 -)",
+      "Bash(node -e \"const s=require\\('sharp'\\);s\\('public/login-bg-wide.png'\\).resize\\({width:900}\\).png\\(\\).toFile\\('../login-bg-wide-preview.png'\\).then\\(\\(\\)=>console.log\\('ok'\\)\\)\")",
+      "Bash(sed -i 's/deepBot: \"#03050A\"/deepBot: \"#05070E\"/' scripts/make-login-bg.mjs)",
+      "Bash(sed -i 's/rx=\"520\" ry=\"820\"/rx=\"900\" ry=\"1500\"/; s/haze: 34, far: 13/haze: 22, far: 13/' scripts/make-login-bg.mjs)",
+      "Bash(grep -n \"^\\\\.login-bg\\\\|^\\\\.login-grid\\\\|^\\\\.login-glow\\\\|^\\\\.login-ticker\\\\|^@keyframes login-\\\\|^\\\\.login-card\\\\|^/\\\\* ── 카드\" web/src/login.css)",
+      "Bash(sed -i '144s|.*|  background: linear-gradient\\(135deg, var\\(--lg-teal\\), #1d5b68\\);|' web/src/login.css)",
+      "Bash(sed -i '83s|.*|  color: var\\(--lg-gold\\);|' web/src/login.css)"
     ]
   }
 }

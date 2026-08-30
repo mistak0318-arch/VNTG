@@ -1,15 +1,22 @@
 /*
- * 로그인 문 (2026-08-29).
+ * 로그인 화면은 **라이트/다크와 무관하게 늘 어둡다.**
  *
- * 앱의 다른 화면과 달리 **이것만 떠 있는 상태**라, 여백을 넉넉히 주고 배경을 깐다.
- * 색은 앱 변수를 그대로 쓰므로 라이트/다크가 저절로 따라온다.
+ * 배경 그림이 심연이라 밝은 테마에서 흰 카드를 얹으면 그림과 따로 논다. 여기만
+ * 테마를 안 따르게 하고 색을 직접 박는다 — 앱 안이 아니라 앱 앞에 있는 화면이라
+ * 다른 규칙을 써도 어색하지 않다.
  *
- * 배경은 셋을 겹친다: 격자 → 번지는 빛 두 덩이 → 흐르는 봉차트.
- * 전부 **CSS 애니메이션**이라 자바스크립트가 매 프레임 돌지 않는다. 로그인 칸을
- * 치는 동안 배경이 전기를 먹으면 안 된다.
+ * 배경은 scripts/make-login-bg.mjs 가 굽는다. 고치려면 그 파일의 좌표를 고치고
+ * 다시 돌린다(web/ 에서 `node scripts/make-login-bg.mjs`).
  */
-
 .login-wrap {
+  --lg-ink: #eef4f6;
+  --lg-dim: #8fa3ab;
+  --lg-line: rgba(120, 170, 182, 0.22);
+  --lg-card: rgba(10, 16, 24, 0.62);
+  --lg-field: rgba(255, 255, 255, 0.05);
+  --lg-teal: #4fa3b0;
+  --lg-gold: #c89a4a;
+
   position: fixed;
   inset: 0;
   z-index: 9000; /* 시트·플로팅 단추보다 위 — 잠긴 동안엔 아무것도 못 만져야 한다 */
@@ -17,115 +24,18 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: var(--bg);
   overflow: hidden;
+
+  /* `cover` 로 채우고 가운데를 맞춘다 — 그림의 가운데가 비어 있으므로
+     어떤 화면비로 잘려도 카드 뒤는 계속 조용하다 */
+  background: #05070e url("/login-bg-wide.png") center / cover no-repeat;
+  color: var(--lg-ink);
 }
 
-/* ── 배경 ────────────────────────────────────────────────────────────── */
-
-.login-bg {
-  position: absolute;
-  inset: 0;
-  pointer-events: none; /* 배경이 클릭을 먹으면 칸을 못 누른다 */
-}
-
-.login-grid {
-  position: absolute;
-  inset: -40px;
-  background-image:
-    linear-gradient(var(--border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--border) 1px, transparent 1px);
-  background-size: 44px 44px;
-  opacity: 0.22;
-  /* 아래로 갈수록 흐려져 카드 뒤가 조용해진다 */
-  mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 100%);
-  animation: login-grid-drift 24s linear infinite;
-}
-@keyframes login-grid-drift {
-  to {
-    transform: translate(44px, 44px);
-  }
-}
-
-.login-glow {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(70px);
-  opacity: 0.32;
-}
-/* 상승은 빨강, 하락은 파랑 — 국장 색을 그대로 쓴다 */
-.login-glow-a {
-  width: 46vmax;
-  height: 46vmax;
-  top: -16vmax;
-  left: -12vmax;
-  background: var(--red);
-  animation: login-float-a 18s ease-in-out infinite alternate;
-}
-.login-glow-b {
-  width: 40vmax;
-  height: 40vmax;
-  bottom: -18vmax;
-  right: -10vmax;
-  background: var(--blue);
-  animation: login-float-b 22s ease-in-out infinite alternate;
-}
-@keyframes login-float-a {
-  to {
-    transform: translate(8vmax, 6vmax) scale(1.15);
-  }
-}
-@keyframes login-float-b {
-  to {
-    transform: translate(-7vmax, -5vmax) scale(1.1);
-  }
-}
-
-/* 흐르는 봉 — 아래쪽에 낮게 깔린다 */
-.login-ticker {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 32vh;
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  padding: 0 12px;
-  opacity: 0.3;
-  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
-  animation: login-ticker-slide 40s linear infinite;
-}
-.login-ticker i {
-  position: relative;
-  flex: 1 0 auto;
-  width: 6px;
-  min-width: 6px;
-  border-radius: 2px;
-}
-.login-ticker i.up {
-  background: var(--red);
-}
-.login-ticker i.down {
-  background: var(--blue);
-}
-@keyframes login-ticker-slide {
-  to {
-    transform: translateX(-24px);
-  }
-}
-
-/*
- * 움직임을 줄여 달라고 한 사람에게는 전부 멈춘다.
- * 배경 장식이라 안 움직여도 잃는 정보가 없다.
- */
-@media (prefers-reduced-motion: reduce) {
-  .login-grid,
-  .login-glow,
-  .login-ticker {
-    animation: none;
+/* 세로 화면에는 **다시 짠 그림**을 쓴다. 가로판을 세로로 자르면 고래가 날아간다 */
+@media (orientation: portrait) {
+  .login-wrap {
+    background-image: url("/login-bg-tall.png");
   }
 }
 
@@ -135,11 +45,11 @@
   position: relative;
   width: 100%;
   max-width: 340px;
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  background: var(--lg-card);
   /* 유리처럼 — 뒤의 봉차트가 은은하게 비친다. 안 먹는 브라우저면 그냥 불투명해진다 */
   backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--lg-line);
   border-radius: 16px;
   padding: 30px 24px 22px;
   box-shadow:
@@ -164,41 +74,41 @@
   font-weight: 800;
   letter-spacing: 6px;
   text-align: center;
-  color: var(--text);
+  color: var(--lg-ink);
   /* 글자 사이를 벌리면 마지막 글자 뒤에도 간격이 붙어 가운데가 왼쪽으로 밀린다 */
   text-indent: 6px;
   line-height: 1.1;
 }
 .login-mark-v {
-  color: var(--red);
+  color: var(--lg-gold);
 }
 
 .login-sub {
   text-align: center;
-  color: var(--muted);
+  color: var(--lg-dim);
   font-size: 11px;
   letter-spacing: 2px;
   margin: 6px 0 22px;
 }
 
 .login-lead {
-  color: var(--muted);
+  color: var(--lg-dim);
   font-size: 13px;
   line-height: 1.65;
   text-align: center;
   margin: 0 0 16px;
 }
 .login-lead b {
-  color: var(--text);
+  color: var(--lg-ink);
 }
 
 .login-input {
   width: 100%;
   box-sizing: border-box;
-  background: color-mix(in srgb, var(--panel-2) 82%, transparent);
-  border: 1px solid var(--border);
+  background: var(--lg-field);
+  border: 1px solid var(--lg-line);
   border-radius: 10px;
-  color: var(--text);
+  color: var(--lg-ink);
   /* 16px 아래로 내려가면 iOS 사파리가 칸을 누를 때 화면을 확대한다 */
   font-size: 16px;
   padding: 12px 14px;
@@ -209,12 +119,12 @@
     box-shadow 0.15s;
 }
 .login-input::placeholder {
-  color: var(--muted);
+  color: var(--lg-dim);
   opacity: 0.75;
 }
 .login-input:focus {
-  border-color: var(--red);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 18%, transparent);
+  border-color: var(--lg-teal);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lg-teal) 18%, transparent);
 }
 
 /* 여섯 자리는 한 글자씩 떨어져 보여야 세면서 칠 수 있다 */
@@ -231,7 +141,7 @@
   width: 100%;
   border: none;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--red), color-mix(in srgb, var(--red) 62%, #7a1020));
+  background: linear-gradient(135deg, var(--lg-teal), #1d5b68);
   color: #fff;
   font-size: 15px;
   font-weight: 700;
@@ -257,17 +167,17 @@
   width: 100%;
   border: none;
   background: none;
-  color: var(--muted);
+  color: var(--lg-dim);
   font-size: 12px;
   padding: 13px 0 2px;
   cursor: pointer;
 }
 .login-link:hover {
-  color: var(--text);
+  color: var(--lg-ink);
 }
 
 .login-warn {
-  color: var(--muted);
+  color: var(--lg-dim);
   font-size: 11px;
   text-align: center;
   margin: 10px 0 0;
@@ -281,10 +191,10 @@
   line-height: 1.5;
 }
 .login-error {
-  color: var(--red);
+  color: var(--lg-teal);
 }
 .login-notice {
-  color: var(--green);
+  color: #5fbf8a;
 }
 
 /* ── 설정 > 보안 > 로그인 ──────────────────────────────────────────────── */
@@ -665,6 +575,26 @@
   flex: 0 0 70px;
   min-width: 70px;
   text-align: center;
+}
+
+/* 「모든 기기 끊기」(빨강)와 달리 평범한 동작이라 경고색을 안 쓴다 */
+.login-set-logout {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px;
+  cursor: pointer;
+}
+.login-set-logout:hover:not(:disabled) {
+  border-color: var(--blue);
+}
+.login-set-logout:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .login-set-msg,

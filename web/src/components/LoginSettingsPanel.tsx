@@ -530,6 +530,38 @@ export function LoginSettingsPanel() {
 
       <EnvHowTo door={cfg.door} />
 
+      {/*
+        로그아웃 (2026-08-30 요청 — 「옵션 가장 아래에」).
+
+        위의 「모든 기기·세션 끊기」와 다르다. 저건 **모든 브라우저**를 끊는 마지막
+        수단이고, 이건 **이 브라우저만** 나가는 평범한 문이다. 기기 기억은 그대로
+        남으므로 다시 들어올 때 6자리를 또 묻지 않는다.
+
+        잠금이 꺼져 있으면 나갈 곳이 없어서 아예 안 보여 준다 — 눌러도 아무 일도
+        안 일어나는 단추가 제일 나쁘다.
+      */}
+      {cfg.enabled && (
+        <>
+          <h4 className="login-set-h">로그아웃</h4>
+          <button
+            className="login-set-logout"
+            disabled={busy}
+            onClick={() =>
+              void run("로그아웃", async () => {
+                await api.logout();
+                window.location.reload();
+              })
+            }
+          >
+            이 기기에서 로그아웃
+          </button>
+          <p className="login-set-note">
+            이 브라우저만 나갑니다. 기기 기억은 남아 있어 다시 들어올 때 6자리를 또
+            묻지 않습니다 — 이 기기를 아예 잊게 하려면 위 목록에서 <b>해제</b>하세요.
+          </p>
+        </>
+      )}
+
       {msg && <div className="login-set-msg">{msg}</div>}
       {err && <div className="login-set-err">{err}</div>}
     </div>
