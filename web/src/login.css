@@ -78,17 +78,11 @@
   /* 글자 사이를 벌리면 마지막 글자 뒤에도 간격이 붙어 가운데가 왼쪽으로 밀린다 */
   text-indent: 6px;
   line-height: 1.1;
+  /* 설명 줄이 갖고 있던 아래 여백을 이름이 물려받는다 — 안 주면 칸이 붙어 버린다 */
+  margin-bottom: 26px;
 }
 .login-mark-v {
   color: var(--lg-gold);
-}
-
-.login-sub {
-  text-align: center;
-  color: var(--lg-dim);
-  font-size: 11px;
-  letter-spacing: 2px;
-  margin: 6px 0 22px;
 }
 
 .login-lead {

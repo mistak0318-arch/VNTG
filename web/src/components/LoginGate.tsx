@@ -154,10 +154,11 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
         늘고 그림은 안 좋아졌다. 그림은 scripts/make-login-bg.mjs 가 만든다.
       */}
       <div className="login-card">
+        {/* 이름만 둔다 — 설명 줄(「개인용 시세 분석」)은 뺐다 (2026-08-30 요청).
+            내 서버에 내가 들어가는 문이라 무엇인지 설명할 상대가 없다 */}
         <div className="login-mark">
           <span className="login-mark-v">V</span>NTG
         </div>
-        <div className="login-sub">개인용 시세 분석</div>
 
         {step.kind === "password" && (
           <>
