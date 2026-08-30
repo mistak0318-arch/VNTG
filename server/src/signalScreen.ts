@@ -163,8 +163,58 @@ export async function tradeValueTop(
     await new Promise((r) => setTimeout(r, 260));
   }
 
+  /*
+   * 개장 전이면(전부 0) **직전 거래일 기준으로 다시 뽑는다.** 값만 메우면 순서가
+   * 종목코드순으로 남아 「거래대금 상위」라는 이름이 거짓이 된다.
+   */
+  if (out.length > 0 && out.every((r) => r.tradeValue <= 0)) {
+    const prev = await rankByPrevDay(client, limit, market);
+    if (prev && prev.length > 0) return prev;
+  }
   await fillStale(client, out);
   return out;
+}
+
+/**
+ * 개장 전이면 **직전 거래일 거래대금으로 줄을 다시 세운다** (2026-08-31).
+ *
+ * ⚠️ 예전엔 값만 메우고 **순서는 그대로 뒀다.** 그런데 개장 전 `ka10032` 는 거래대금이
+ * 전부 0 이라 **종목코드 앞순서**로 온다(실측: 동화약품·KR모터스·경방…). 그걸 앞에서
+ * N개 잘라 쓰면 「거래대금 상위 40」이 실제로는 **000020 부터 40개**다.
+ *
+ * 신호등 찾기·신호등 백테스트·주도주가 전부 이 함수를 모집단으로 쓰므로, 아침에
+ * 돌린 결과는 통째로 다른 종목을 본 것이었다.
+ *
+ * 스냅샷에는 **직전 거래일 거래대금이 들어 있다**(`tradeValue`, 억). 그것으로 전 종목을
+ * 다시 줄 세워 진짜 상위를 뽑는다 — 받아 온 N개 안에서만 정렬하면 「엉뚱한 40개 중의
+ * 상위」가 될 뿐이다.
+ */
+async function rankByPrevDay(
+  client: KiwoomClient,
+  limit: number,
+  market: string,
+): Promise<Candidate[] | null> {
+  const snap = await getMarketSnapshot(client).catch(() => null);
+  if (!snap) return null;
+  const common = await getCommonStockCodes(client).catch(() => null);
+  const rows = [...snap.byCode.values()]
+    .filter((s) => (s.tradeValue ?? 0) > 0 && (!common || common.has(s.code)))
+    /* 시장 고르기 — "000" 은 전체, "001" 코스피, "101" 코스닥 */
+    .filter((s) =>
+      market === "001" ? s.market === "kospi" : market === "101" ? s.market === "kosdaq" : true,
+    )
+    .sort((a, b) => (b.tradeValue ?? 0) - (a.tradeValue ?? 0))
+    .slice(0, limit);
+  if (rows.length === 0) return null;
+  return rows.map((s) => ({
+    code: s.code,
+    name: s.name,
+    price: s.price,
+    changeRate: s.changeRate,
+    /* 스냅샷은 억, 이 함수를 쓰는 쪽은 백만원을 기대한다 (leaderScan 이 /100 한다) */
+    tradeValue: (s.tradeValue ?? 0) * 100,
+    stale: true,
+  }));
 }
 
 /**

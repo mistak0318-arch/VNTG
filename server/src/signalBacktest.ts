@@ -189,6 +189,8 @@ export interface Summary {
 
 interface Bar {
   date: string;
+  /** 다음 날 시가 — **매수가**로 쓴다 (2026-08-31). 아래 fwd 주석 참고 */
+  open: number;
   close: number;
   high: number;
   low: number;
@@ -211,12 +213,13 @@ async function bars(client: KiwoomClient, code: string): Promise<Bar[]> {
   return (dropPhantomToday((res.data?.stk_dt_pole_chart_qry ?? []) as Record<string, unknown>[]))
     .map((r) => ({
       date: String(r.dt ?? ""),
+      open: Math.abs(n(r.open_pric)),
       close: Math.abs(n(r.cur_prc)),
       high: Math.abs(n(r.high_pric)),
       low: Math.abs(n(r.low_pric)),
       vol: Math.abs(n(r.trde_qty)),
     }))
-    .filter((b) => /^\d{8}$/.test(b.date) && b.close > 0)
+    .filter((b) => /^\d{8}$/.test(b.date) && b.close > 0 && b.open > 0)
     .reverse();
 }
 
@@ -421,11 +424,25 @@ export async function runSignalBacktest(
         // 마지막 봉은 오늘(미완성)일 수 있으나 종가 기준이라 그대로 쓴다
         const from = Math.max(65, bs.length - days);
         for (let i = from; i < bs.length; i++) {
+          /*
+           * ⚠️ **다음 날 시가에 산다** (2026-08-31).
+           *
+           * 예전엔 `bs[i].close` 를 매수가로 썼다. 그런데 점수도 **그 종가까지 보고**
+           * 낸 것이라, 종가를 보고 판단해 그 종가에 사는 **불가능한 매매**였다.
+           * 점수가 높은 날은 대개 그날 오른 날이므로 수익률이 그만큼 부풀려진다.
+           *
+           * 조건 백테스트(backtest.ts)는 처음부터 다음 날 시가로 샀다 — 같은 앱의
+           * 두 백테스트가 서로 다른 규칙으로 재고 있었던 셈이라 비교도 안 됐다.
+           *
+           * 이제 **다음 날 시가에 사서 k 거래일 뒤 종가에 판다.** d1 은 다음 날
+           * 시가에 사서 그날 종가에 파는 하루짜리다.
+           */
           const fwd = (k: number): number | null => {
-            const j = i + k;
-            return j < bs.length && bs[i].close > 0
-              ? ((bs[j].close - bs[i].close) / bs[i].close) * 100
-              : null;
+            const entryIdx = i + 1;
+            const exitIdx = i + k;
+            if (entryIdx >= bs.length || exitIdx >= bs.length || exitIdx < entryIdx) return null;
+            const entry = bs[entryIdx].open;
+            return entry > 0 ? ((bs[exitIdx].close - entry) / entry) * 100 : null;
           };
           const f = { d1: fwd(1), d5: fwd(5), d20: fwd(20) };
           all.push(f);

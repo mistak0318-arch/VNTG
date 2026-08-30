@@ -131,6 +131,10 @@ export interface LeaderScan {
   note: string;
   /** 오늘 거래가 아직 없어 판단 자체가 불가능한 상태인가 (2026-08-31) */
   noTrade?: boolean;
+  /** 모집단이 **직전 거래일** 거래대금으로 뽑힌 것인가 (개장 전) */
+  staleUniverse?: boolean;
+  /** 마감 전이라 이력에 안 남긴 중간 모습인가 */
+  intraday?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -485,7 +489,32 @@ export async function leaderScan(
    * 판단할 재료가 없으면 **아무 말도 안 하고 기록도 남기지 않는다.**
    */
   const noTrade = universe.length > 0 && universe.every((u) => u.tradeValue <= 0);
-  if (!noTrade) {
+  /*
+   * ⚠️ **정규장이 끝나기 전에는 그날을 기록하지 않는다** (2026-08-31 2차).
+   *
+   * 「전부 0이면 안 남긴다」만으로는 모자랐다. 08시대 **장전 시간외**에는 거래대금이
+   * 0 은 아니지만 아주 작아서(실측 08:03 — SK하이닉스 1,910억, 200종목 중 198개가
+   * 500억 문턱 미달) 주도주가 0~2 종목으로 나온다. 그 상태가 그날 기록으로 굳는다.
+   *
+   * 주도주는 **하루의 결론**이다. 장중 화면에서는 지금 모습을 그대로 보여 주되,
+   * 이력에 남기는 것은 마감 뒤여야 한다 — 그래야 「며칠 연속 상위」 같은 지속성
+   * 계산이 하루의 결론끼리 비교하는 것이 된다.
+   */
+  const kst = new Date(Date.now() + 9 * 3600_000);
+  const afterClose = kst.getUTCHours() > 15 || (kst.getUTCHours() === 15 && kst.getUTCMinutes() >= 30);
+  /*
+   * ⚠️ **주말·휴장일에는 기록하지 않는다** (2026-08-31 3차).
+   *
+   * 토요일에 스캔하면 키움은 **금요일 자료**를 준다. 그걸 「토요일」 기록으로 저장하면
+   * 같은 하루가 이틀·사흘로 세어진다 — 실측에서 8/28(금)·8/29(토)·8/30(일)이 전부
+   * 같은 21종목이었다. 「며칠 연속 상위」와 「어제 종목 유지율」이 그만큼 부풀려진다.
+   *
+   * 지속성은 이 기능의 핵심 물음이라(「그 강함이 유지되는가」) 여기가 부풀면
+   * 기능 전체가 거짓말이 된다.
+   */
+  const dow = kst.getUTCDay();
+  const tradingDay = dow >= 1 && dow <= 5;
+  if (!noTrade && afterClose && tradingDay) {
     const idx = store.days.findIndex((d) => d.date === date);
     if (idx >= 0) store.days[idx] = today;
     else store.days.push(today);
@@ -505,8 +534,15 @@ export async function leaderScan(
      * 말할 수 있어야 한다. 빈 목록만 던지면 둘이 똑같아 보인다.
      */
     noTrade,
+    staleUniverse: universe.some((u) => u.stale),
+    /** 지금 본 것이 하루의 결론인가 — 아니면 장중 중간 모습인가 */
+    intraday: !afterClose,
     note: noTrade
       ? "아직 오늘 거래가 없습니다 — 장이 열린 뒤에 판단합니다 (기록도 남기지 않습니다)."
+      : !tradingDay
+        ? "장이 없는 날입니다 — 직전 거래일 자료를 보여 주되 이력에는 안 남깁니다."
+        : !afterClose
+          ? "장중 중간 모습입니다 — 마감(15:30) 뒤 값으로 이력에 남깁니다."
       : store.days.length <= 1
         ? "오늘이 첫 기록입니다. 지속성(연속일·유지율)은 내일부터 나옵니다."
         : `${store.days.length}일치 기록으로 지속성을 셉니다.${prevDate ? ` (직전 ${prevDate})` : ""}`,
