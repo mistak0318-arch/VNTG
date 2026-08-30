@@ -129,6 +129,8 @@ export interface LeaderScan {
   /** 500억 문턱에서 잘린 수 — 문턱이 적당한지 판단하는 근거 */
   belowThreshold: number;
   note: string;
+  /** 오늘 거래가 아직 없어 판단 자체가 불가능한 상태인가 (2026-08-31) */
+  noTrade?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -471,10 +473,24 @@ export async function leaderScan(
       tags: t.tags,
     })),
   };
-  const idx = store.days.findIndex((d) => d.date === date);
-  if (idx >= 0) store.days[idx] = today;
-  else store.days.push(today);
-  await save(store).catch(() => undefined);
+  /*
+   * ⚠️ **거래가 아직 없는 시각의 결과로 그날을 굳히지 않는다** (2026-08-31).
+   *
+   * 장 전(07시대)에는 거래대금 상위가 **전부 0**으로 온다. 그러면 200종목이 통째로
+   * 문턱 아래가 되어 주도주 0종목이 나오는데, 예전엔 그걸 그대로 그날 기록으로
+   * 저장했다. **조간 리포트가 07시에 만들어지므로 주도주와 교차 신호가 늘 비어
+   * 있었다** — 실측에서 거래일 6일이 내리 0종목이었던 이유가 이것이다.
+   *
+   * 「오늘 주도주가 없다」와 「아직 장이 안 열렸다」는 완전히 다른 말이다.
+   * 판단할 재료가 없으면 **아무 말도 안 하고 기록도 남기지 않는다.**
+   */
+  const noTrade = universe.length > 0 && universe.every((u) => u.tradeValue <= 0);
+  if (!noTrade) {
+    const idx = store.days.findIndex((d) => d.date === date);
+    if (idx >= 0) store.days[idx] = today;
+    else store.days.push(today);
+    await save(store).catch(() => undefined);
+  }
 
   return {
     at: new Date().toISOString(),
@@ -484,8 +500,14 @@ export async function leaderScan(
     stocks: stocks.slice(0, 60),
     scanned: universe.length,
     belowThreshold,
-    note:
-      store.days.length <= 1
+    /*
+     * `noTrade` 를 밖으로 알린다 — 화면이 「없다」와 「아직 모른다」를 갈라
+     * 말할 수 있어야 한다. 빈 목록만 던지면 둘이 똑같아 보인다.
+     */
+    noTrade,
+    note: noTrade
+      ? "아직 오늘 거래가 없습니다 — 장이 열린 뒤에 판단합니다 (기록도 남기지 않습니다)."
+      : store.days.length <= 1
         ? "오늘이 첫 기록입니다. 지속성(연속일·유지율)은 내일부터 나옵니다."
         : `${store.days.length}일치 기록으로 지속성을 셉니다.${prevDate ? ` (직전 ${prevDate})` : ""}`,
   };

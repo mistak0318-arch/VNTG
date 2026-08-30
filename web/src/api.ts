@@ -2258,6 +2258,9 @@ export interface ScoredCheckpoint {
   actual: number | null;
   verdict: "hit" | "miss" | "partial" | "pending" | "unknown";
   note: string;
+  /** 실제로 견준 두 거래일 — 달력 날수와 다를 수 있다 (2026-08-31) */
+  baseDate?: string;
+  lastDate?: string;
 }
 
 export interface ReviewResult {

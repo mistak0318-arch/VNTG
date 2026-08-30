@@ -27,6 +27,15 @@ export interface ScoredCheckpoint extends Checkpoint {
   verdict: Verdict;
   /** 왜 그렇게 판정했는지 (화면 설명용) */
   note: string;
+  /**
+   * **실제로 견준 두 날** (2026-08-31).
+   *
+   * 「4일 경과」라고 적으면서 속으로는 8/27→8/28 하루치를 재고 있었다. 주말·휴장이
+   * 끼면 달력 날수와 거래일 수가 벌어지는데, 화면이 달력 날수만 말하면 읽는 사람은
+   * 나흘치 결과로 읽는다. 무엇과 무엇을 견줬는지 그대로 적는다.
+   */
+  baseDate?: string;
+  lastDate?: string;
 }
 
 export interface ReviewResult {
@@ -104,13 +113,40 @@ async function indexCloses(
  * 발행일 이후의 등락률.
  * 발행일에 거래가 없었으면(주말·휴장) 그 **이전 가장 가까운 거래일**을 기준으로 삼는다.
  */
+/**
+ * **종가가 확정된 마지막 날** (YYYY-MM-DD, KST).
+ *
+ * 15:40 이전이면 오늘 종가는 아직 없다 — 그날은 채점에 쓸 수 없다. 주말·휴일은
+ * 애초에 봉이 없으니 걸러진다(있어도 하루 뒤로 밀릴 뿐 해가 없다).
+ */
+function lastClosedDay(): string {
+  const kst = new Date(Date.now() + 9 * 3600_000);
+  const closed = kst.getUTCHours() > 15 || (kst.getUTCHours() === 15 && kst.getUTCMinutes() >= 40);
+  if (!closed) kst.setUTCDate(kst.getUTCDate() - 1);
+  return kst.toISOString().slice(0, 10);
+}
+
 function changeSince(rows: { date: string; close: number }[], from: string): {
   base: number | null;
   last: number | null;
   rate: number | null;
+  baseDate?: string;
+  lastDate?: string;
 } {
   if (rows.length === 0) return { base: null, last: null, rate: null };
-  const asc = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+  /*
+   * ⚠️ **종가가 아직 안 나온 날은 빼고 센다** (2026-08-31).
+   *
+   * 키움 일봉은 **장 전에도 오늘 봉을 준다.** 그 봉의 「종가」는 아직 종가가 아니고
+   * 흔히 전일 종가와 같은 값이 온다. 그대로 채점하면 기준일과 채점일이 **다른
+   * 날인데 등락이 정확히 0%** 로 나오고, ±1% 안이라 「부분 적중」으로 세어진다.
+   *
+   * 실측: 8/29(토) 발행분을 「2일 경과」로 채점했더니 다섯 항목이 **전부 0% ·
+   * 부분 적중**이었다. 거래일은 하루도 안 지났는데 채점이 끝난 것처럼 보였다 —
+   * 이대로면 적중률이 통째로 거짓말이 된다.
+   */
+  const asc = [...rows].sort((a, b) => a.date.localeCompare(b.date)).filter((r) => r.date <= lastClosedDay());
+  if (asc.length === 0) return { base: null, last: null, rate: null };
   // 발행일 이하 중 가장 늦은 날
   const baseRow = [...asc].reverse().find((r) => r.date <= from);
   const lastRow = asc[asc.length - 1];
@@ -121,6 +157,8 @@ function changeSince(rows: { date: string; close: number }[], from: string): {
     base: baseRow.close,
     last: lastRow.close,
     rate: ((lastRow.close - baseRow.close) / baseRow.close) * 100,
+    baseDate: baseRow.date,
+    lastDate: lastRow.date,
   };
 }
 
@@ -167,6 +205,8 @@ export async function reviewReport(
     let base: number | null = null;
     let last: number | null = null;
     let rate: number | null = null;
+    let baseDate: string | undefined;
+    let lastDate: string | undefined;
 
     try {
       if (cp.kind === "stock") {
@@ -174,6 +214,8 @@ export async function reviewReport(
         base = r.base;
         last = r.last;
         rate = r.rate;
+        baseDate = r.baseDate;
+        lastDate = r.lastDate;
       } else if (cp.kind === "theme") {
         const t = themes.find((x) => x.name === cp.key);
         /*
@@ -197,7 +239,11 @@ export async function reviewReport(
           // 테마 하나에 열 종목이면 열 번 조회다. 초당 5회 제한을 지킨다
           for (const code of t.codes.slice(0, 10)) {
             const r = changeSince(await dailyCloses(client, code), date);
-            if (r.rate !== null) rates.push(r.rate);
+            if (r.rate !== null) {
+              rates.push(r.rate);
+              baseDate ??= r.baseDate;
+              lastDate ??= r.lastDate;
+            }
             await new Promise((x) => setTimeout(x, 220));
           }
           if (rates.length > 0) rate = rates.reduce((a, b) => a + b, 0) / rates.length;
@@ -216,13 +262,15 @@ export async function reviewReport(
         base = r.base;
         last = r.last;
         rate = r.rate;
+        baseDate = r.baseDate;
+        lastDate = r.lastDate;
       }
     } catch {
       // 한 항목 실패가 전체 채점을 막지 않게
     }
 
     const { verdict, note } = judge(cp.direction, rate);
-    items.push({ ...cp, basePrice: base, lastPrice: last, actual: rate, verdict, note });
+    items.push({ ...cp, basePrice: base, lastPrice: last, actual: rate, verdict, note, baseDate, lastDate });
   }
 
   const elapsedDays = Math.max(

@@ -199,7 +199,17 @@ export function ReviewPanel() {
                     <span className={`rv-verdict ${v.cls}`}>{v.label}</span>
                   </div>
                   {it.reason && <div className="rv-reason">근거: {it.reason}</div>}
-                  <div className="rv-note">{it.note}</div>
+                  <div className="rv-note">
+                    {it.note}
+                    {/*
+                      **무엇과 무엇을 견줬는지** 적는다 (2026-08-31). 위의 「N일 경과」는
+                      달력 날수라 주말·휴장이 끼면 실제 잰 구간과 어긋난다 — 8/27 발행분을
+                      「4일 경과」로 적으면서 속으로는 8/27→8/28 하루치를 재고 있었다.
+                    */}
+                    {it.baseDate && it.lastDate && (
+                      <span className="pt-n"> · {it.baseDate.slice(5)} → {it.lastDate.slice(5)} 종가</span>
+                    )}
+                  </div>
                 </div>
               );
             })}
