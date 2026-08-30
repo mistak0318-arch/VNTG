@@ -175,7 +175,11 @@ export function KeywordFlowPanel({
               {bubbles.map((h) => (
                 <button
                   key={h.term}
-                  className={`kwf-bub${h.fresh ? " fresh" : ""}`}
+                  /* 「양쪽」은 이 화면에서 제일 값진 신호라 테두리로 크게 표시한다 —
+                     배지만 달면 동그라미가 많을 때 묻힌다 */
+                  className={`kwf-bub${h.fresh ? " fresh" : ""}${
+                    h.buzzRatio !== null && h.buzzRatio >= 2 ? " both" : ""
+                  }`}
                   style={{
                     /* 크기는 건수, 색은 배율 — 두 축을 한 동그라미에 담는다 */
                     fontSize: `${11 + (h.recent / maxRecent) * 15}px`,
@@ -221,7 +225,13 @@ export function KeywordFlowPanel({
               </thead>
               <tbody>
                 {sorted.slice(0, 40).map((h) => (
-                  <tr key={h.term} onClick={() => setPicked(h)} className="row-click">
+                  <tr
+                    key={h.term}
+                    onClick={() => setPicked(h)}
+                    className={`row-click${
+                      h.buzzRatio !== null && h.buzzRatio >= 2 ? " kwf-row-both" : ""
+                    }`}
+                  >
                     <td>
                       {h.term}
                       {h.fresh && <span className="kwf-new">NEW</span>}
@@ -270,6 +280,8 @@ export function KeywordFlowPanel({
           </div>
         </>
       )}
+
+      {flow && <BuzzSection />}
 
       {picked && <KeywordSheet hit={picked} onClose={() => setPicked(null)} onSelectStock={onSelectStock} />}
     </div>
@@ -334,6 +346,134 @@ function Legend() {
         </span>
       ))}
     </div>
+  );
+}
+
+/**
+ * 🌋 채널 버즈 — **다른 쪽 귀** (2026-08-30, 「버즈 볼 수 있는 메뉴를 못 찾겠다」).
+ *
+ * 원래 장전 브리핑룸의 여섯 번째 카드에만 있어서, 한참 스크롤해야 나왔다. 그런데
+ * 이건 위쪽 뉴스 키워드와 **같은 물음의 다른 답**이라(느린 귀 / 빠른 귀) 나란히
+ * 있어야 뜻이 산다. 위에서 「양쪽」 배지를 보고 여기서 그 근거를 확인하게 된다.
+ *
+ * ## 있으면 크게, 없으면 조용히
+ *
+ * 버즈는 **드물게 뜨는 것이 정상**이다. 매일 뜨면 문턱이 낮은 것이다. 그래서
+ * 평소엔 한 줄로 접혀 있다가, **뜨는 날은 눈에 띄게** 펼친다 — 놓치면 안 되는
+ * 정보인데 평소와 같은 모양이면 그냥 지나친다.
+ */
+function BuzzSection() {
+  const [buzz, setBuzz] = useState<Awaited<ReturnType<typeof api.buzz>> | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .buzz()
+      .then((b) => alive && setBuzz(b))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!buzz) return null;
+  const hits = buzz.hits ?? [];
+  const hot = hits.length > 0;
+
+  return (
+    <div className={`kwf-buzz${hot ? " hot" : ""}`}>
+      <button className="kwf-buzz-head" onClick={() => setOpen((v) => !v)}>
+        <span className="kwf-buzz-title">
+          🌋 채널 버즈
+          {hot ? (
+            <b className="kwf-buzz-count">{hits.length}건 급증</b>
+          ) : (
+            <i>최근 {buzz.windowHours}시간 조용함</i>
+          )}
+        </span>
+        <span className="kwf-buzz-toggle">{open || hot ? "▾" : "▸"}</span>
+      </button>
+
+      {/* 뜬 날은 접혀 있어도 보여 준다 — 한 번 더 눌러야 보이면 놓친다 */}
+      {(open || hot) && (
+        <div className="kwf-buzz-body">
+          {hot ? (
+            <>
+              <p className="kwf-buzz-lead">
+                텔레그램 채널에서 평소보다 크게 늘어난 주제입니다. 위 뉴스 목록에도
+                같은 말이 있으면 <b>양쪽</b> 배지가 붙습니다 — 그게 제일 믿을 만합니다.
+              </p>
+              {hits.map((h) => (
+                <div className="kwf-buzz-hit" key={h.term}>
+                  <div className="kwf-buzz-hit-head">
+                    <b>{h.term}</b>
+                    <span>
+                      {h.recent}건 · 평소 {h.baseline}건의 <b>{h.ratio}배</b>
+                    </span>
+                  </div>
+                  {h.samples[0] && (
+                    <p className="kwf-buzz-sample">
+                      {h.samples[0].text.slice(0, 100)}
+                      <i> ({h.samples[0].channel})</i>
+                    </p>
+                  )}
+                </div>
+              ))}
+            </>
+          ) : (
+            <BuzzWhy buzz={buzz} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 조용할 때 「왜 안 뜨나」 — 고장인지 진짜 조용한 건지 */
+function BuzzWhy({ buzz }: { buzz: NonNullable<Awaited<ReturnType<typeof api.buzz>>> }) {
+  if (buzz.health && !buzz.health.reader) {
+    return (
+      <p className="kwf-buzz-lead">
+        텔레그램 사용자 세션이 없어 수집이 안 됩니다 — 미니PC에서만 돕니다.
+      </p>
+    );
+  }
+  if (buzz.baselineDays < 3) {
+    return (
+      <p className="kwf-buzz-lead">
+        기준선 수집 중 ({buzz.baselineDays}/3일). 사흘치가 쌓이면 「평소 대비 몇 배」
+        판정이 시작됩니다.
+        {buzz.health && (
+          <>
+            {" "}
+            오늘 센 것 <b>{buzz.health.todayCount}건</b>.
+          </>
+        )}
+      </p>
+    );
+  }
+  return (
+    <>
+      <p className="kwf-buzz-lead">
+        문턱은 <b>{buzz.threshold?.minCount}건·{buzz.threshold?.minRatio}배</b> 또는{" "}
+        <b>{buzz.threshold?.sharpCount}건·{buzz.threshold?.sharpRatio}배</b>입니다.
+      </p>
+      {buzz.nearMiss && buzz.nearMiss.length > 0 ? (
+        <>
+          <p className="kwf-buzz-lead">아깝게 못 넘은 것 — 여기가 줄줄이면 문턱이 높은 것입니다.</p>
+          <div className="kwf-buzz-near">
+            {buzz.nearMiss.slice(0, 6).map((t) => (
+              <span key={t.term}>
+                {t.term} <b>{t.recent}건·{t.ratio}배</b>
+              </span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p className="kwf-buzz-lead">문턱 근처에 온 것도 없습니다 — 정말로 조용합니다.</p>
+      )}
+    </>
   );
 }
 
