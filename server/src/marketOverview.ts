@@ -523,6 +523,16 @@ export interface SectionResult {
   updatedAt: number | null;
   error: string | null;
   stale: boolean;
+  /**
+   * 이 섹션이 **얼마마다 새로 만들어지는가**(ms) — 2026-08-31.
+   *
+   * ⚠️ 화면이 이걸 모르면 서버보다 빨리 물어본다. 실측에서 여덟 섹션 중 **일곱**이
+   * 그랬다 — 화면은 20초마다 묻는데 서버는 60초마다만 새 값을 만드니 **체감 60초**,
+   * 요청만 세 배였다. 코드에 20초라고 적혀 있어 「왜 이렇게 느리지」의 원인이 됐다.
+   *
+   * 주기를 정하는 곳을 **서버 한 곳**으로 모은다. 화면은 이 값을 하한으로 쓴다.
+   */
+  ttlMs: number;
 }
 
 /**
@@ -549,6 +559,7 @@ export async function getSection(section: SectionName, client: KiwoomClient): Pr
     updatedAt: latest.updatedAt || null,
     error: latest.error,
     stale: Date.now() - latest.updatedAt > SECTION_TTL_MS[section],
+    ttlMs: SECTION_TTL_MS[section],
   };
 }
 

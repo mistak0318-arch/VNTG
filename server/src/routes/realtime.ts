@@ -109,6 +109,62 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
    * 진단용 일회성 — 성공하면 realtimeHub 를 두 연결로 재설계하는 근거가 되고,
    * 실패해도 그 답 자체가 결론이다.
    */
+  /**
+   * **NXT 시간대 실시간이 오는가** — `_AL`(통합) 구독 실측 (2026-08-31 요청).
+   *
+   * 실시간 구독은 지금 6자리 KRX 단독 코드로 건다. 그래서 NXT 프리마켓(08:00~08:50)·
+   * 애프터마켓(15:40~20:00)에는 체결 프레임이 안 온다 — 실측으로 `keys: 0` 이었다.
+   * 그런데 **슈퍼신호등 편입(15:45)과 종가배팅이 바로 그 시간대 매수를 전제로 한다.**
+   *
+   * REST TR 에서는 `_AL` 이 통합값을 준다는 게 확인됐지만 **웹소켓 REAL 도 그런지는
+   * 모른다.** 추측으로 전체 구독을 바꾸면 멀쩡한 정규장 실시간을 깨뜨릴 수 있으므로,
+   * 한 종목만 잠깐 걸어 보고 **프레임이 실제로 오는지**만 본다.
+   *
+   * `subscribeTransient` 를 쓰므로 상시 구독(관심종목·순위)을 밀어내지 않는다.
+   */
+  router.post("/probe-nxt", async (req, res, next) => {
+    try {
+      const code = String(req.body?.code ?? "005930").replace(/[^0-9A-Za-z]/g, "");
+      const waitMs = Math.min(60_000, Math.max(5_000, Number(req.body?.waitMs) || 25_000));
+      const { client: rt, store } = await getRealtime(client);
+
+      const bare = code;
+      const al = `${code}_AL`;
+      const before = {
+        bare: store.getLatest("0B", bare)?.at ?? null,
+        al: store.getLatest("0B", al)?.at ?? null,
+        regErrors: rt.registrationErrors.length,
+      };
+
+      rt.subscribeTransient("0B", al);
+      await new Promise((r) => setTimeout(r, waitMs));
+
+      const after = {
+        bare: store.getLatest("0B", bare)?.at ?? null,
+        al: store.getLatest("0B", al)?.at ?? null,
+      };
+      const errs = rt.registrationErrors.slice(before.regErrors);
+
+      res.json({
+        code,
+        waitedMs: waitMs,
+        /** `_AL` 로 프레임이 왔나 — 이 값이 이 실측의 결론이다 */
+        alFrames: after.al !== null && after.al !== before.al,
+        /** 그 사이 KRX 단독으로도 왔나 (비교용) */
+        bareFrames: after.bare !== null && after.bare !== before.bare,
+        before,
+        after,
+        /** 구독이 거절됐으면 여기 남는다 */
+        newRegErrors: errs,
+        note:
+          "alFrames 가 true 면 _AL 구독으로 NXT 시간대 체결을 받을 수 있다는 뜻이다. " +
+          "false 라도 그 시각에 그 종목 체결이 없었을 수 있으니 거래가 있는 종목·시간에 다시 재라.",
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/probe-second", async (_req, res, next) => {
     try {
       const { client: rt } = await getRealtime(client);

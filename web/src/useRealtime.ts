@@ -53,12 +53,28 @@ const EMPTY: RealtimeState = { enabled: false, healthy: false, values: {} };
  * +1.3% 라 「왜 0이냐」가 된다. 이 시간 밖에서는 오버레이를 쓰지 말고
  * 본 시세(통합)를 그대로 두는 게 맞다.
  */
+/**
+ * 실시간 오버레이를 켤 시간인가.
+ *
+ * ⚠️ **NXT 시간외까지 포함한다** (2026-08-31 요청 「실시간도 NXT 도 동일하게」).
+ *
+ * 예전엔 08:59~15:35, **정규장만**이었다. 그런데 실시간 구독을 통합(`_AL`)으로
+ * 바꾸면서 NXT 프리마켓(08:00~08:50)·애프터마켓(15:40~20:00) 체결도 들어온다 —
+ * 실측으로 확인했다(08:42 프리마켓에서 `_AL` 프레임 도착).
+ *
+ * 값은 오는데 화면이 안 받으면 아무 소용이 없다. **슈퍼신호등 편입(15:45)과
+ * 종가배팅이 애프터마켓 매수를 전제로 하므로**, 정작 살 수 있는 시간에 시세가
+ * 멈춰 보이는 것이 제일 나빴다.
+ *
+ * 08:00 부터 여는 것은 NXT 프리마켓 시작 시각이다. 20:10 까지 두는 것은 애프터가
+ * 20:00 에 끝나고 마지막 체결이 조금 늦게 들어오기 때문이다.
+ */
 export function krxOverlayLive(now = new Date()): boolean {
   const kst = new Date(now.getTime() + 9 * 3600_000);
   const day = kst.getUTCDay();
   if (day === 0 || day === 6) return false;
   const m = kst.getUTCHours() * 60 + kst.getUTCMinutes();
-  return m >= 8 * 60 + 59 && m <= 15 * 60 + 35;
+  return m >= 8 * 60 && m <= 20 * 60 + 10;
 }
 
 export function useRealtime(

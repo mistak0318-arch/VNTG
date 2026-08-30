@@ -355,7 +355,19 @@ export class RealtimeStore {
 
     for (const d of f.data) {
       const type = d.type;
-      const item = d.item;
+      /*
+       * ⚠️ **거래소 접미(`_AL`/`_NX`)를 떼고 저장한다** (2026-08-31).
+       *
+       * NXT 시간대(프리 08:00~08:50 · 애프터 15:40~20:00)에 체결을 받으려면 통합
+       * 코드(`005930_AL`)로 구독해야 한다 — 실측으로 확인했다(08:42 NXT 프리마켓,
+       * `_AL` 프레임 도착 · KRX 단독은 안 옴 · 구독 거절 없음).
+       *
+       * 그런데 그러면 키가 `0B:005930_AL` 이 되어 **화면이 찾는 `0B:005930` 과
+       * 안 맞는다.** 화면 수십 곳을 고치는 대신 **들어올 때 한 번 떼면** 나머지가
+       * 전부 그대로 동작한다. 어느 거래소에서 온 체결인지는 값 안의 `9081` 필드에
+       * 들어 있으므로 정보를 잃지도 않는다.
+       */
+      const item = String(d.item ?? "").replace(/_(AL|NX)$/i, "");
       const values = d.values;
       if (!type || !item || !values) continue;
 

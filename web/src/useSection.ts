@@ -21,8 +21,23 @@ import { useTabActive } from "./tabActive";
  * 숨은 인앱 탭도 마찬가지다(2026-08-27) — 탭 상한이 없어지며 열린 페이지가 전부
  * 마운트된 채 살아서, 게이트가 없으면 열어 둔 탭 수만큼 폴링이 배가된다.
  */
+/**
+ * 시황 섹션 하나를 물어본다.
+ *
+ * ⚠️ **서버 캐시보다 빨리 물어봐야 소용없다** (2026-08-31 점검).
+ *
+ * 실측에서 여덟 섹션 중 **일곱**이 그랬다 — 화면은 20초마다 묻는데 서버는 60초마다만
+ * 새 값을 만드니 **체감은 60초**고 요청만 세 배였다. 화면 코드에 20초라고 적혀 있어
+ * 「왜 이렇게 느리지」의 원인이 됐다.
+ *
+ * 이제 서버가 응답에 제 주기(`ttlMs`)를 실어 준다. 여기서 **둘 중 느린 쪽**을 쓴다 —
+ * 주기를 정하는 곳이 서버 한 곳으로 모이고, 화면은 짧게 적어도 헛돌지 않는다.
+ * 화면이 일부러 **더 느리게** 두고 싶은 경우(뒤쪽 카드 등)는 그대로 존중한다.
+ */
 export function useSection<T>(name: string, intervalMs: number) {
   const [result, setResult] = useState<SectionResult<T> | null>(null);
+  /** 서버가 알려준 제 주기 — 받기 전에는 화면이 적은 값을 쓴다 */
+  const [serverTtl, setServerTtl] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
@@ -43,6 +58,7 @@ export function useSection<T>(name: string, intervalMs: number) {
         const res = await api.overviewSection<T>(name);
         if (cancelledRef.current) return;
         setResult(res);
+        if (typeof res.ttlMs === "number" && res.ttlMs > 0) setServerTtl(res.ttlMs);
         hasData.current = res.data !== null;
         setError(res.error);
       } catch (err) {
@@ -70,7 +86,9 @@ export function useSection<T>(name: string, intervalMs: number) {
 
     let timer: ReturnType<typeof setInterval> | null = null;
     const start = () => {
-      if (!timer) timer = setInterval(() => void load(true), intervalMs);
+      /* 서버 주기와 화면 주기 중 **느린 쪽** — 빨리 물어도 값이 안 바뀐다 */
+      const every = Math.max(intervalMs, serverTtl);
+      if (!timer) timer = setInterval(() => void load(true), every);
     };
     const stop = () => {
       if (timer) clearInterval(timer);
@@ -93,7 +111,7 @@ export function useSection<T>(name: string, intervalMs: number) {
       stop();
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [load, intervalMs, tabActive]);
+  }, [load, intervalMs, tabActive, serverTtl]);
 
   return {
     data: result?.data ?? null,

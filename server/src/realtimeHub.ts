@@ -7,6 +7,39 @@ import { listGroups as listUsGroups } from "./usWatchlist.js";
 import { listWatchlist } from "./watchlist.js";
 
 /**
+ * 실시간 구독에 쓸 종목 코드 — **통합(`_AL`)** (2026-08-31 요청 「실시간도 NXT 도 동일하게」).
+ *
+ * ## 왜 바꿨나
+ *
+ * 예전엔 6자리 KRX 단독 코드로 걸었다. 그래서 **NXT 시간대(프리 08:00~08:50 ·
+ * 애프터 15:40~20:00)에는 체결 프레임이 하나도 안 왔다** — 실측으로 `keys: 0` 이었다.
+ * 그런데 **슈퍼신호등 편입(15:45)과 종가배팅이 바로 그 시간대 매수를 전제로 한다.**
+ * 정작 살 수 있는 시간에 시세가 안 보였다.
+ *
+ * ## 실측
+ *
+ * 2026-08-31 08:42 (NXT 프리마켓), SK하이닉스로 `POST /api/realtime/probe-nxt`:
+ *
+ * ```
+ * _AL 프레임 옴?      true    ← 온다
+ * KRX 단독 프레임 옴?  false   ← 안 온다 (정규장 전)
+ * 구독 거절            없음
+ * ```
+ *
+ * 저장할 때 접미를 떼므로(`realtimeStore`) 화면이 찾는 키(`0B:005930`)는 그대로다.
+ *
+ * ## 되돌리는 법
+ *
+ * `REALTIME_VENUE=krx` 를 .env 에 넣으면 예전처럼 KRX 단독으로 건다. 정규장에서
+ * 통합 프레임이 기대와 다르면 그것으로 즉시 되돌릴 수 있게 남겨 둔다.
+ */
+function subCode(code: string): string {
+  if ((process.env.REALTIME_VENUE ?? "").toLowerCase() === "krx") return code;
+  return /^\d{6}$/.test(code) ? `${code}_AL` : code;
+}
+
+
+/**
  * 실시간 하나를 **서버 전체가 나눠 쓴다.**
  *
  * 예전엔 라우터가 필요할 때 만들었다. 그러면 화면이 한 번도 안 열린 날은 아무것도
@@ -484,13 +517,13 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
             화면이 종목을 볼 때도 구독이 늘어나는데(`/series`·`/latest`), 그쪽이 상한에
             닿으면 오래된 **화면 종목**부터 빠진다. 관심종목·순위는 하루 종일 필요하다.
           */
-          rt.subscribeKeep("0F", code);
-          rt.subscribeKeep("0w", code);
+          rt.subscribeKeep("0F", subCode(code));
+          rt.subscribeKeep("0w", subCode(code));
           /*
             체결도 상시로 건다 — 복기하려면 「그때 얼마에 얼마나」가 있어야 한다.
             프레임은 체결마다 오지만 30초에 한 점만 남기므로 쌓이는 양은 나머지와 같다.
           */
-          rt.subscribeKeep("0B", code);
+          rt.subscribeKeep("0B", subCode(code));
           added += 1;
         }
       }
@@ -525,7 +558,7 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
             if (subscribed.has(code) || subscribed2.has(code)) continue;
             if (subscribed2.size >= 190) break; // 연결 정원 200 에 여유 10
             subscribed2.add(code);
-            rt2.subscribeKeep("0B", code);
+            rt2.subscribeKeep("0B", subCode(code));
             added2 += 1;
           }
           if (added2 > 0) console.log(`실시간(${phase}·2번): ${added2}종목 추가 (총 ${sub2Count()})`);

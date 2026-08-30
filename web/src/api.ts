@@ -1518,6 +1518,8 @@ export interface SectionResult<T> {
   updatedAt: number | null;
   error: string | null;
   stale: boolean;
+  /** 서버가 이 섹션을 얼마마다 새로 만드는가(ms) — 화면 폴링의 하한 (2026-08-31) */
+  ttlMs?: number;
 }
 
 /** 메모장 글 하나 — 자유 메모 + 일기 */
