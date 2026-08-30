@@ -89,9 +89,17 @@ interface DayFile {
   kinds?: Record<string, BuzzTerm["kind"]>;
   /** term → 관련 종목코드. 갈래와 같은 이유로 같이 적어 둔다 */
   codes?: Record<string, string[]>;
+  /**
+   * term → 방 이름 → 건수 (2026-08-30).
+   *
+   * 「어느 방에서 나온 얘기냐」가 버즈에서 제일 중요한 맥락인데 저장을 안 하고
+   * 있었다. 한 방이 같은 말을 열 번 한 것과 열 방이 한 번씩 한 것은 **완전히
+   * 다른 사건**이다 — 앞은 그 방의 버릇이고 뒤는 시장의 화제다.
+   */
+  channels?: Record<string, Record<string, number>>;
 }
 
-const EMPTY_DAY: DayFile = { total: {}, byHour: {}, samples: {}, kinds: {}, codes: {} };
+const EMPTY_DAY: DayFile = { total: {}, byHour: {}, samples: {}, kinds: {}, codes: {}, channels: {} };
 
 function kstNow(): Date {
   return new Date(Date.now() + 9 * 3600_000);
@@ -189,9 +197,10 @@ async function readDay(day: string): Promise<DayFile> {
       samples: j.samples ?? {},
       kinds: j.kinds ?? {},
       codes: j.codes ?? {},
+      channels: j.channels ?? {},
     };
   } catch {
-    return { total: {}, byHour: {}, samples: {}, kinds: {}, codes: {} };
+    return { total: {}, byHour: {}, samples: {}, kinds: {}, codes: {}, channels: {} };
   }
 }
 
@@ -257,14 +266,20 @@ export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
         if (t.codes?.length) (file.codes ??= {})[t.term] = t.codes;
         const bh = (file.byHour[t.term] = file.byHour[t.term] ?? {});
         bh[hour] = (bh[hour] ?? 0) + 1;
+        /* 어느 방이 말했나 — 「한 방이 열 번」과 「열 방이 한 번씩」은 다른 사건이다 */
+        const bc = ((file.channels ??= {})[t.term] ??= {});
+        bc[m.channelName] = (bc[m.channelName] ?? 0) + 1;
+
         const samples = (file.samples[t.term] = file.samples[t.term] ?? []);
         samples.unshift({
           at: m.at,
           channel: m.channelName,
-          text: text.replace(/\s+/g, " ").slice(0, 120),
+          /* 대시보드에서 읽을 것이라 조금 길게 남긴다 — 120자면 문장이 잘려 뜻을 잃는다 */
+          text: text.replace(/\s+/g, " ").slice(0, 240),
           link: m.link,
         });
-        if (samples.length > 3) samples.length = 3;
+        /* 알림 카드는 2개면 되지만 **자세히 보기**는 흐름을 읽어야 해서 더 남긴다 */
+        if (samples.length > 12) samples.length = 12;
       }
     }
     await mkdir(DIR, { recursive: true });
@@ -537,6 +552,193 @@ async function tick(): Promise<void> {
   } finally {
     ticking = false;
   }
+}
+
+/* ── 대시보드 (2026-08-30) ───────────────────────────────────────────────
+ *
+ * 「데이터는 들어오는데 자세한 걸 볼 데가 없다」 — 맞는 지적이었다. 텔레그램
+ * 알림은 「장전 브리핑룸에서 보세요」라고 하고, 그 카드는 요약 세 줄이 전부라
+ * **서로를 가리키기만 하고 아무도 자세히 보여 주지 않았다.**
+ *
+ * 두 가지를 새로 낸다:
+ *
+ *   buzzBoard  — 문턱과 **무관하게** 창 안에서 언급된 것을 전부. 알림 문턱은
+ *                「울릴 것」을 고르는 값이지 「볼 것」을 고르는 값이 아니다.
+ *                문턱 아래도 봐야 「지금 조용한 게 맞나」를 사람이 판단한다.
+ *   buzzTerm   — 낱말 하나의 속사정. 시간대별·날짜별 흐름, 어느 방이 말했나,
+ *                실제 문장들.
+ */
+
+export interface BuzzBoardRow {
+  term: string;
+  kind: BuzzTerm["kind"];
+  recent: number;
+  baseline: number;
+  ratio: number;
+  /** 몇 개의 방에서 나왔나 — 한 방이 떠드는 것과 여러 방이 말하는 것은 다르다 */
+  channels: number;
+  /** 알림 문턱을 넘었나 */
+  alerted: boolean;
+  codes: string[];
+}
+
+export interface BuzzBoard {
+  windowHours: number;
+  baselineDays: number;
+  rows: BuzzBoardRow[];
+  /** 창 안 총 매칭 수 — 「지금 시끄러운가」 */
+  total: number;
+  /** 시각별 총 매칭 (0~23시) — 흐름 띠 */
+  byHour: { hour: number; count: number }[];
+  threshold: { minCount: number; minRatio: number; sharpCount: number; sharpRatio: number };
+  reader: boolean;
+  at: string;
+}
+
+export async function buzzBoard(windowHours = 12): Promise<BuzzBoard> {
+  const win = Math.min(48, Math.max(1, Math.round(windowHours)));
+  const now = kstNow();
+  const today = await readDay(dayStr(now));
+  const yesterday = await readDay(dayStr(new Date(now.getTime() - 86400_000)));
+
+  const pastDays: DayFile[] = [];
+  for (let i = 1; i <= 7; i += 1) {
+    const f = await readDay(dayStr(new Date(now.getTime() - i * 86400_000)));
+    if (Object.keys(f.total).length > 0) pastDays.push(f);
+  }
+  const baselineDays = pastDays.length;
+
+  const candidates = new Set<string>([...Object.keys(today.total), ...Object.keys(yesterday.total)]);
+  const d = await buildDict();
+  const kindOf = new Map(d.map((t) => [t.term, t]));
+
+  const rows: BuzzBoardRow[] = [];
+  let total = 0;
+  const hourly = new Map<number, number>();
+
+  for (const term of candidates) {
+    const kind = today.kinds?.[term] ?? yesterday.kinds?.[term] ?? kindOf.get(term)?.kind;
+    if (!kind) continue;
+    const recent = recentCount(term, today, yesterday, win);
+    if (recent === 0) continue;
+    total += recent;
+
+    /* 시각별 합 — 창 안의 시각만 */
+    for (let i = 0; i < win; i += 1) {
+      const t = new Date(now.getTime() - i * 3600_000);
+      const file = dayStr(t) === dayStr(now) ? today : yesterday;
+      const h = t.getUTCHours();
+      const c = file.byHour[term]?.[String(h)] ?? 0;
+      if (c > 0) hourly.set(h, (hourly.get(h) ?? 0) + c);
+    }
+
+    const avgDaily =
+      baselineDays > 0 ? pastDays.reduce((a, f) => a + (f.total[term] ?? 0), 0) / baselineDays : 0;
+    const baseline = Math.max(avgDaily * (win / 24), 0.5);
+    const ratio = recent / baseline;
+    const chCount = Object.keys(
+      today.channels?.[term] ?? yesterday.channels?.[term] ?? {},
+    ).length;
+
+    rows.push({
+      term,
+      kind,
+      recent,
+      baseline: Math.round(baseline * 10) / 10,
+      ratio: Math.round(ratio * 10) / 10,
+      channels: chCount,
+      alerted:
+        baselineDays >= 3 &&
+        ((recent >= MIN_COUNT && ratio >= MIN_RATIO) ||
+          (recent >= SHARP_COUNT && ratio >= SHARP_RATIO)),
+      codes: kindOf.get(term)?.codes ?? today.codes?.[term] ?? yesterday.codes?.[term] ?? [],
+    });
+  }
+
+  /* 기준선이 없으면 배율이 무의미하므로 건수로, 있으면 배율로 줄 세운다 */
+  rows.sort((a, b) =>
+    baselineDays >= 2
+      ? b.ratio * Math.log2(b.recent + 1) - a.ratio * Math.log2(a.recent + 1)
+      : b.recent - a.recent,
+  );
+
+  return {
+    windowHours: win,
+    baselineDays,
+    rows: rows.slice(0, 120),
+    total,
+    byHour: [...hourly.entries()].sort((a, b) => a[0] - b[0]).map(([hour, count]) => ({ hour, count })),
+    threshold: {
+      minCount: MIN_COUNT,
+      minRatio: MIN_RATIO,
+      sharpCount: SHARP_COUNT,
+      sharpRatio: SHARP_RATIO,
+    },
+    reader: isReaderConfigured(),
+    at: new Date().toISOString(),
+  };
+}
+
+export interface BuzzTermDetail {
+  term: string;
+  kind: BuzzTerm["kind"] | null;
+  codes: string[];
+  /** 48시간 시간대별 — 언제 터졌나 */
+  hourly: { at: string; count: number }[];
+  /** 날짜별 총합(최근 14일) — 평소가 어땠나 */
+  daily: { day: string; count: number }[];
+  /** 어느 방이 얼마나 */
+  channels: { name: string; count: number }[];
+  /** 실제 문장들 */
+  samples: { at: string; channel: string; text: string; link: string }[];
+}
+
+export async function buzzTerm(term: string): Promise<BuzzTermDetail> {
+  const now = kstNow();
+  const days: { day: string; file: DayFile }[] = [];
+  for (let i = 0; i < 14; i += 1) {
+    const day = dayStr(new Date(now.getTime() - i * 86400_000));
+    days.push({ day, file: await readDay(day) });
+  }
+  const byDay = new Map(days.map((x) => [x.day, x.file]));
+
+  /* 48시간을 한 시간씩 되짚는다 — 「언제부터 커졌나」가 이 그림의 요점이다 */
+  const hourly: { at: string; count: number }[] = [];
+  for (let i = 47; i >= 0; i -= 1) {
+    const t = new Date(now.getTime() - i * 3600_000);
+    const f = byDay.get(dayStr(t));
+    hourly.push({
+      at: `${dayStr(t)}T${String(t.getUTCHours()).padStart(2, "0")}`,
+      count: f?.byHour[term]?.[String(t.getUTCHours())] ?? 0,
+    });
+  }
+
+  const daily = days
+    .map((x) => ({ day: x.day, count: x.file.total[term] ?? 0 }))
+    .reverse();
+
+  /* 방 목록·표본은 오늘과 어제를 합친다 — 밤사이 버즈는 자정을 걸치는 일이 잦다 */
+  const chMap = new Map<string, number>();
+  for (const d of days.slice(0, 2)) {
+    for (const [name, c] of Object.entries(d.file.channels?.[term] ?? {})) {
+      chMap.set(name, (chMap.get(name) ?? 0) + c);
+    }
+  }
+  const samples = [...(days[0].file.samples[term] ?? []), ...(days[1]?.file.samples[term] ?? [])]
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, 16);
+
+  return {
+    term,
+    kind: days[0].file.kinds?.[term] ?? days[1]?.file.kinds?.[term] ?? null,
+    codes: days[0].file.codes?.[term] ?? days[1]?.file.codes?.[term] ?? [],
+    hourly,
+    daily,
+    channels: [...chMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count })),
+    samples,
+  };
 }
 
 export function startBuzzScheduler(client: KiwoomClient): void {

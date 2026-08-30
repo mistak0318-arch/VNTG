@@ -188,6 +188,44 @@ export interface LoginNeedsOtp {
   sentTo: string;
 }
 
+/* ── 버즈 대시보드 (2026-08-30) ─────────────────────────────────────────── */
+
+export type BuzzKind = "theme" | "myTheme" | "stock" | "event" | "entity";
+
+export interface BuzzBoardRow {
+  term: string;
+  kind: BuzzKind;
+  recent: number;
+  baseline: number;
+  ratio: number;
+  /** 몇 개의 방에서 나왔나 — 한 방이 떠드는 것과 여러 방이 말하는 것은 다르다 */
+  channels: number;
+  /** 알림 문턱을 넘었나 */
+  alerted: boolean;
+  codes: string[];
+}
+
+export interface BuzzBoard {
+  windowHours: number;
+  baselineDays: number;
+  rows: BuzzBoardRow[];
+  total: number;
+  byHour: { hour: number; count: number }[];
+  threshold: { minCount: number; minRatio: number; sharpCount: number; sharpRatio: number };
+  reader: boolean;
+  at: string;
+}
+
+export interface BuzzTermDetail {
+  term: string;
+  kind: BuzzKind | null;
+  codes: string[];
+  hourly: { at: string; count: number }[];
+  daily: { day: string; count: number }[];
+  channels: { name: string; count: number }[];
+  samples: { at: string; channel: string; text: string; link: string }[];
+}
+
 /* ── 뉴스 키워드 흐름 (2026-08-30) ──────────────────────────────────────── */
 
 export type KeywordKind = "theme" | "myTheme" | "stock" | "event" | "entity" | "new";
@@ -223,6 +261,11 @@ export interface KeywordFlow {
 
 export const api = {
   health: () => getJson<{ ok: boolean }>("/api/health"),
+
+  /* 버즈 대시보드 (2026-08-30) — 문턱과 무관하게 전부 본다 */
+  buzzBoard: (hours: number) => getJson<BuzzBoard>(`/api/signal/buzz/board?hours=${hours}`),
+  buzzTerm: (term: string) =>
+    getJson<BuzzTermDetail>(`/api/signal/buzz/term/${encodeURIComponent(term)}`),
 
   keywordFlow: (windowMin: number) =>
     getJson<KeywordFlow>(`/api/news-keywords/flow?window=${windowMin}`),

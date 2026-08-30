@@ -84,7 +84,7 @@ export function MiniPage({
         {screenKey === "watch" && <MyPage onSelectStock={openPopup} />}
         {screenKey === "news" && <NewsPage onSelectStock={openPopup} />}
         {screenKey === "superSignal" && <SuperDashboardPage onSelectStock={openPopup} />}
-        {screenKey === "telegram" && <TelegramPage />}
+        {screenKey === "telegram" && <TelegramPage onSelectStock={openPopup} />}
         {screenKey === "memo" && <MemoPage />}
         {screenKey === "report" && <DailyReportPage onSelectStock={openPopup} />}
         {/* 보드 블록들 */}

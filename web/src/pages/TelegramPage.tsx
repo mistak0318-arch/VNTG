@@ -5,6 +5,7 @@ import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
 import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
 import { MajorChannelPanel } from "../components/MajorChannelPanel";
 import { TelegramRoomsPanel, TelegramStarsPanel } from "../components/TelegramRoomsPanel";
+import { BuzzBoardPanel } from "../components/BuzzBoardPanel";
 
 /**
  * 텔레그램 동향.
@@ -22,9 +23,14 @@ import { TelegramRoomsPanel, TelegramStarsPanel } from "../components/TelegramRo
  *   중요   — 별표로 집은 메시지 보관함
  */
 
-type Tab = "rooms" | "digest" | "major" | "search" | "stars";
+type Tab = "buzz" | "rooms" | "digest" | "major" | "search" | "stars";
 
 export const TELEGRAM_TABS: { key: Tab; label: string; hint: string }[] = [
+  /*
+   * 맨 앞 — 「지금 채널이 무슨 얘기를 하나」가 이 메뉴의 첫 물음이다 (2026-08-30).
+   * 받은 방·주요 채널은 **읽는** 곳이고, 이건 **보는** 곳이다. 읽기 전에 본다.
+   */
+  { key: "buzz", label: "🌋 버즈", hint: "평소보다 갑자기 커진 주제 — 언제 터졌나·어느 방이 말했나까지" },
   { key: "rooms", label: "받은 방", hint: "VNTG 방 6곳 — 안읽음 말풍선, 열면 대화방처럼" },
   { key: "major", label: "주요 채널", hint: "골라 둔 채널마다 방 하나 — 글을 빠짐없이 원문 그대로" },
   { key: "digest", label: "동향", hint: "지금 채널들이 무슨 말을 하고 있는지" },
@@ -32,8 +38,8 @@ export const TELEGRAM_TABS: { key: Tab; label: string; hint: string }[] = [
   { key: "stars", label: "⭐ 중요 메시지", hint: "받은 방·주요 채널에서 별표한 것들" },
 ];
 
-export function TelegramPage() {
-  const [tab, setTab] = useState<Tab>("rooms");
+export function TelegramPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
+  const [tab, setTab] = useState<Tab>("buzz");
   /* 탭 순서 — 설정 > 서브탭 순서에서 바꾼다(서버 저장) */
   const tabOrder = useCardOrder(
     "telegram.tabs",
@@ -63,6 +69,7 @@ export function TelegramPage() {
         ))}
       </nav>
 
+      {tab === "buzz" && <BuzzBoardPanel onSelectStock={onSelectStock} />}
       {tab === "rooms" && <TelegramRoomsPanel />}
       {tab === "digest" && <ChannelDigestPanel />}
       {tab === "major" && <MajorChannelPanel />}

@@ -229,6 +229,32 @@ export function createSignalRouter(client: KiwoomClient): Router {
     }
   });
 
+  /**
+   * 버즈 대시보드 (2026-08-30) — **문턱과 무관하게 전부**.
+   *
+   * `/buzz` 는 「울릴 것」만 준다(알림용). 사람이 보는 화면은 문턱 아래도 봐야
+   * 「지금 조용한 게 맞나」를 스스로 판단할 수 있다.
+   */
+  router.get("/buzz/board", async (req, res, next) => {
+    try {
+      const { buzzBoard } = await import("../buzzRadar.js");
+      const h = Number(req.query.hours ?? 12);
+      res.json(await buzzBoard(Number.isFinite(h) ? h : 12));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 낱말 하나의 속사정 — 언제 터졌나·어느 방이 말했나·실제 문장 */
+  router.get("/buzz/term/:term", async (req, res, next) => {
+    try {
+      const { buzzTerm } = await import("../buzzRadar.js");
+      res.json(await buzzTerm(decodeURIComponent(req.params.term)));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /** 마지막 수집일만 — 사이드바 N 배지가 1분마다 물어본다(가볍게) */
   router.get("/super/status", async (_req, res, next) => {
     try {

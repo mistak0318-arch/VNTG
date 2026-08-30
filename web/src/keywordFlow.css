@@ -284,6 +284,177 @@
   color: var(--text);
 }
 
+/* ── 🌋 버즈 대시보드 (텔레그램 동향 첫 탭) ──────────────────────────── */
+
+.kwf-hot-count {
+  background: color-mix(in srgb, #c89a4a 22%, transparent);
+  border: 1px solid #c89a4a;
+  border-radius: 5px;
+  padding: 1px 8px;
+  color: var(--text);
+}
+.kwf-hot-count b {
+  color: #d8ae66;
+}
+
+/* 시각별 띠 — 「밤 몇 시에 터졌나」 */
+.buzz-hours {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 58px;
+  margin-bottom: 12px;
+  padding: 0 2px;
+  background: var(--panel-2);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.buzz-hour {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+}
+.buzz-hour i {
+  width: 100%;
+  background: var(--blue);
+  opacity: 0.6;
+  border-radius: 2px 2px 0 0;
+}
+.buzz-hour span {
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 1;
+  padding-bottom: 2px;
+}
+
+/* ── 낱말 상세 시트 ──────────────────────────────────────────────────── */
+
+.buzz-sheet {
+  max-width: 620px;
+}
+
+.buzz-h {
+  margin: 20px 0 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text);
+}
+.buzz-h:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 6px;
+}
+.buzz-h i {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+.buzz-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 82px;
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 6px 4px 0;
+  overflow: hidden;
+}
+.buzz-bars.wide {
+  gap: 4px;
+}
+.buzz-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 3px;
+}
+.buzz-bar i {
+  width: 100%;
+  background: linear-gradient(180deg, var(--green), color-mix(in srgb, var(--green) 55%, #0a2a1a));
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+}
+.buzz-bar span {
+  font-size: 9px;
+  color: var(--muted);
+  line-height: 1;
+  white-space: nowrap;
+  padding-bottom: 3px;
+}
+
+.buzz-chans {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.buzz-chans span {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.buzz-chans b {
+  color: var(--text);
+  margin-left: 4px;
+}
+
+.buzz-msgs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.buzz-msgs li {
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+.buzz-msg-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.buzz-msg-head b {
+  font-size: 12px;
+  color: var(--blue);
+}
+.buzz-msg-head span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.buzz-msgs p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+  word-break: break-word;
+}
+.buzz-msgs a {
+  display: inline-block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.buzz-msgs a:hover {
+  color: var(--blue);
+}
+
 .kwf-legend {
   display: flex;
   flex-wrap: wrap;

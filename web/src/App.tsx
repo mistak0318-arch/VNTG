@@ -569,7 +569,7 @@ export default function App() {
       case "marketFlow": return <MarketFlowPage onSelectStock={onSelectStock} />;
       case "ask": return <AskPage />;
       case "calendar": return <CalendarPage />;
-      case "telegram": return <TelegramPage />;
+      case "telegram": return <TelegramPage onSelectStock={onSelectStock} />;
       case "screener": return <ScreenerPage onSelectStock={onSelectStock} />;
       case "stockAnalysis": return <StockAnalysisPage stock={selected} onSelectStock={openAnalysis} />;
       case "volume": return <VolumeRankingPage onSelectStock={onSelectStock} />;
