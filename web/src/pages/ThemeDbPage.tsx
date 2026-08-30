@@ -369,6 +369,20 @@ function ThemeMap({
                 sort={sortT}
                 className="num"
               />
+              {/*
+                시가총액 (2026-08-30 요청) — **정렬 기준으로 쓰라고** 넣는다.
+                거래대금은 「오늘 돈이 도는가」이고 시총은 「이 판이 얼마나 큰가」다.
+                둘은 자주 어긋나고 그 어긋남이 오히려 볼 만하다 — 시총 큰 판이
+                조용한데 작은 판에 돈이 몰리는 날 같은 것. MAP 타일 크기도 이 값이다.
+              */}
+              <SortableTh
+                columnKey="cap"
+                label="시총"
+                accessor={(t) => t.marketCap}
+                sort={sortT}
+                className="num"
+                thProps={{ title: "구성종목 시가총액 합 — 스냅샷에 없는 종목은 빠진 어림값" }}
+              />
               <th>주도주</th>
             </tr>
           </thead>
@@ -420,6 +434,9 @@ function ThemeMap({
                 )}
                 <td className="num" data-l={VALUE_LABEL[market]}>
                   {t.tradeValue > 0 ? money(t.tradeValue) : "—"}
+                </td>
+                <td className="num muted" data-l="시총">
+                  {t.marketCap > 0 ? money(t.marketCap) : "—"}
                 </td>
                 <td className="tdb-td-tops">
                   {t.stocks.slice(0, 3).map((s) => (

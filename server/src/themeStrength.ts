@@ -44,6 +44,8 @@ export interface ThemeStockRow {
   changeRate: number | null;
   /** 거래대금 어림값(억원) */
   tradeValue?: number | null;
+  /** 시가총액(억원). 스냅샷에 없으면 null */
+  marketCap?: number | null;
 }
 
 export interface ThemeStrength {
@@ -72,6 +74,16 @@ export interface ThemeStrength {
    * 「이 테마에 오늘 돈이 도는가」로 거르는 용도다. 266개를 다 볼 이유가 없다.
    */
   tradeValue: number;
+  /**
+   * 테마 **전체 시가총액** 합계(억원) (2026-08-30 요청).
+   *
+   * MAP 타일의 **크기**가 이 값이다. 등락률만으로 그린 지도는 「+7% 짜리 손톱만한
+   * 테마」와 「+7% 짜리 시장의 기둥」을 똑같이 그려서, 어느 쪽이 시장을 실제로
+   * 움직이는지 알 수 없었다. 표에서도 정렬 기준으로 쓴다.
+   *
+   * 스냅샷에 없는 종목은 빼고 더하므로 **어림값**이다. ETF 는 순자산이 곧 이 값이다.
+   */
+  marketCap: number;
   /** 5거래일 누적(%) — 기록이 모자라면 null */
   w1: number | null;
   /** 20거래일 누적(%) — 기록이 모자라면 null */
@@ -207,6 +219,7 @@ export async function themeStrength(
           desc: s.desc,
           changeRate: row?.changeRate ?? null,
           tradeValue: row?.tradeValue ?? null,
+          marketCap: row?.marketCap ?? null,
         };
       });
       const row = build(`kr:${t.no}`, t.name, stocks, days, hist);
@@ -249,6 +262,8 @@ export async function themeStrength(
           desc: "",
           changeRate: s.changeRate,
           tradeValue: s.marketCap !== null ? Math.round((s.marketCap * 1380) / 100_000_000) : null,
+          /* 미국은 달러 시총이라 억원으로 맞춘다 — 국내와 같은 자로 재야 크기를 견준다 */
+          marketCap: s.marketCap !== null ? Math.round((s.marketCap * 1380) / 100_000_000) : null,
         }));
       const row = build(`us:${t.code}`, t.name, stocks, days, hist);
       if (row) rows.push(row);
@@ -284,6 +299,7 @@ export async function themeStrength(
          * 화면이 쓸모없는 타일로 덮인다.
          */
         tradeValue: Math.round(e.marketCap ?? 0),
+        marketCap: Math.round(e.marketCap ?? 0),
         /* 주간·월간은 기록이 쌓여야 나온다. 3개월은 네이버가 주는 별도 값이다 */
         w1: cumulative(series, 5),
         m1: cumulative(series, 20),
@@ -403,6 +419,7 @@ function build(
     hit5: hitsOf(withToday, 5),
     hit10: hitsOf(withToday, 10),
     tradeValue: Math.round(stocks.reduce((n, s) => n + (s.tradeValue ?? 0), 0)),
+    marketCap: Math.round(stocks.reduce((n, s) => n + (s.marketCap ?? 0), 0)),
     w1: cumulative(series, 5),
     m1: cumulative(series, 20),
     m60: cumulative(series, 60),

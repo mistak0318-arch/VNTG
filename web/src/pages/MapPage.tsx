@@ -6,6 +6,7 @@ import { ConstituentSheet, type ConstituentTarget } from "../components/overview
 import { RefreshBar } from "../components/RefreshBar";
 import { useSection } from "../useSection";
 import { useCardOrder } from "../useCardOrder";
+import { SizeByPicker, TreemapGrid, type MapTile, type SizeMode } from "../components/TreemapGrid";
 
 /**
  * 테마/업종 MAP.
@@ -48,8 +49,15 @@ export const MAP_MODES: { key: Mode; label: string }[] = [
 
 
 
-function fmtPct(v: number): string {
-  return `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
+/**
+ * 테마 하나의 시가총액 — 구성종목 합.
+ *
+ * 스냅샷에 없는 종목은 빠지므로 **어림값**이다. 전부 0 이면(값을 못 받았으면)
+ * null 을 돌려준다 — 0 을 주면 그 타일이 지도에서 통째로 사라진다.
+ */
+function sumCap(stocks: { marketCap?: number | null }[]): number | null {
+  const n = stocks.reduce((a, s) => a + (s.marketCap ?? 0), 0);
+  return n > 0 ? n : null;
 }
 
 export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
@@ -64,6 +72,8 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
   const [constituent, setConstituent] = useState<ConstituentTarget | null>(null);
   /** 옮겨온(인포스탁) 테마를 섞을지. 기본은 내가 만든 것만 */
   const [includeImported, setIncludeImported] = useState(false);
+  /** 타일 크기를 무엇으로 — 시총이 기본. 균등은 예전 배치 */
+  const [sizeBy, setSizeBy] = useState<SizeMode>("cap");
 
   const [mine, setMine] = useState<EvaluatedTheme[]>([]);
   const [mineLoading, setMineLoading] = useState(true);
@@ -127,6 +137,82 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
   const watch = useWatchGroupTiles(watchSource);
 
   const sectorTiles = sectors.data?.[sectorMarket] ?? [];
+
+  /*
+   * 모드마다 타일 모양이 다르니 **여기서 하나로 모은다** (2026-08-30).
+   *
+   * 규모(시총·거래대금)를 같이 실어 보내면 TreemapGrid 가 크기를 정한다. 값이
+   * 없는 모드(키움 테마·업종)는 그냥 비워 두면 저쪽이 균등 배치로 돌아간다 —
+   * 없는 값을 0 으로 채워 넣으면 그 타일이 지도에서 통째로 사라진다.
+   */
+  const mapTiles: MapTile[] = watchSource
+    ? watch.tiles.map((t) => ({
+        key: t.id,
+        name: t.name,
+        changeRate: t.changeRate,
+        sub: `▲${t.risingCount}/▼${t.fallingCount}`,
+        marketCap: sumCap(t.stocks),
+        onClick: () =>
+          setConstituent({ kind: "custom", code: t.id, name: t.name, stocks: t.stocks }),
+      }))
+    : mode === "mine"
+      ? mineTiles.map((t) => ({
+          key: t.id,
+          name: t.name,
+          changeRate: t.changeRate ?? 0,
+          sub: `▲${t.risingCount}/▼${t.fallingCount}${
+            (t.source ?? "manual") !== "manual" ? " · 옮김" : ""
+          }`,
+          marketCap: sumCap(t.stocks),
+          title: t.memo || t.name,
+          onClick: () =>
+            setConstituent({
+              kind: "custom",
+              code: t.id,
+              name: t.name,
+              stocks: t.stocks
+                .filter((x) => x.found)
+                .map((x) => ({
+                  code: x.code,
+                  name: x.name,
+                  price: 0,
+                  change: 0,
+                  changeRate: x.changeRate,
+                  marketCap: x.marketCap,
+                })),
+            }),
+        }))
+      : mode === "naver"
+        ? naverTiles.map((t) => ({
+            key: t.key,
+            name: t.name,
+            changeRate: t.changeRate,
+            sub: `▲${t.up}/▼${t.down}${t.streak >= 2 ? ` · ${t.streak}일↑` : ""}`,
+            marketCap: t.marketCap,
+            tradeValue: t.tradeValue,
+            title: t.name,
+            onClick: () => setConstituent({ kind: "theme", code: t.key, name: t.name }),
+          }))
+        : mode === "theme"
+          ? themeTiles.map((t) => ({
+              key: t.code,
+              name: t.name,
+              changeRate: t.changeRate,
+              sub: `${t.stockCount}종목`,
+              onClick: () => setConstituent({ kind: "theme", code: t.code, name: t.name }),
+            }))
+          : sectorTiles.map((s) => ({
+              key: s.code,
+              name: s.name,
+              changeRate: s.changeRate,
+              onClick: () =>
+                setConstituent({
+                  kind: "sector",
+                  code: s.code,
+                  name: s.name,
+                  market: sectorMarket,
+                }),
+            }));
   const loading = watchSource
     ? watch.loading
     : mode === "mine"
@@ -217,119 +303,19 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
 
       {!loading && !error && (
         <>
-          <div className="map-grid">
-            {/*
-              관심종목 그룹 타일. 테마 타일과 같은 모양이라 나란히 견줄 수 있다 —
-              "내 그룹이 테마보다 잘 도는가" 가 바로 읽힌다.
-            */}
-            {watchSource
-              ? watch.tiles.map((t) => (
-                  <button
-                    key={t.id}
-                    className="map-tile"
-                    style={tileHeat(t.changeRate, theme)}
-                    onClick={() =>
-                      setConstituent({
-                        kind: "custom",
-                        code: t.id,
-                        name: t.name,
-                        // 이미 손에 있는 구성종목을 그대로 넘긴다
-                        stocks: t.stocks,
-                      })
-                    }
-                    title={t.name}
-                  >
-                    <span className="map-tile-name">{t.name}</span>
-                    <span className="map-tile-pct num">{fmtPct(t.changeRate)}</span>
-                    <span className="map-tile-sub">
-                      ▲{t.risingCount}/▼{t.fallingCount}
-                    </span>
-                  </button>
-                ))
-              : mode === "mine"
-              ? mineTiles.map((t) => (
-                  <button
-                    key={t.id}
-                    className="map-tile"
-                    style={tileHeat(t.changeRate ?? 0, theme)}
-                    onClick={() =>
-                      setConstituent({
-                        kind: "custom",
-                        code: t.id,
-                        name: t.name,
-                        // 이미 받아온 구성종목을 그대로 넘긴다 — 다시 조회할 이유가 없다
-                        stocks: t.stocks
-                          .filter((x) => x.found)
-                          .map((x) => ({
-                            code: x.code,
-                            name: x.name,
-                            price: 0,
-                            change: 0,
-                            changeRate: x.changeRate,
-                            marketCap: x.marketCap,
-                          })),
-                      })
-                    }
-                    title={t.memo || t.name}
-                  >
-                    <span className="map-tile-name">{t.name}</span>
-                    <span className="map-tile-pct num">{fmtPct(t.changeRate ?? 0)}</span>
-                    {/*
-                      ▲/▼ 를 같이 보여준다. 테마 등락률이 +2%여도 한 종목만 급등한
-                      것이면 그건 테마가 도는 게 아니다 — 몇 개가 함께 올랐는지가
-                      "주목받고 있는가"의 실제 근거다.
-                    */}
-                    <span className="map-tile-sub">
-                      ▲{t.risingCount}/▼{t.fallingCount}
-                      {(t.source ?? "manual") !== "manual" ? " · 옮김" : ""}
-                    </span>
-                  </button>
-                ))
-              : mode === "naver"
-              ? naverTiles.map((t) => (
-                  <button
-                    key={t.key}
-                    className="map-tile"
-                    style={tileHeat(t.changeRate, theme)}
-                    onClick={() => setConstituent({ kind: "theme", code: t.key, name: t.name })}
-                    title={`${t.name} — 월간 ${t.m1 !== null ? `${t.m1 > 0 ? "+" : ""}${t.m1.toFixed(1)}%` : "—"} · 거래대금 ${t.tradeValue.toLocaleString("ko-KR")}억`}
-                  >
-                    <span className="map-tile-name">{t.name}</span>
-                    <span className="map-tile-pct num">{fmtPct(t.changeRate)}</span>
-                    {/* 연속성이 이 지도의 존재 이유다 — 오늘 색은 같아도 3일째와 첫날은 다른 판이다 */}
-                    <span className="map-tile-sub">
-                      ▲{t.up}/▼{t.down}
-                      {t.streak >= 2 && ` · ${t.streak}일↑`}
-                    </span>
-                  </button>
-                ))
-              : mode === "theme"
-              ? themeTiles.map((t) => (
-                  <button
-                    key={t.code}
-                    className="map-tile"
-                    style={tileHeat(t.changeRate, theme)}
-                    onClick={() => setConstituent({ kind: "theme", code: t.code, name: t.name })}
-                  >
-                    <span className="map-tile-name">{t.name}</span>
-                    <span className="map-tile-pct num">{fmtPct(t.changeRate)}</span>
-                    <span className="map-tile-sub">{t.stockCount}종목</span>
-                  </button>
-                ))
-              : sectorTiles.map((s) => (
-                  <button
-                    key={s.code}
-                    className="map-tile"
-                    style={tileHeat(s.changeRate, theme)}
-                    onClick={() =>
-                      setConstituent({ kind: "sector", code: s.code, name: s.name, market: sectorMarket })
-                    }
-                  >
-                    <span className="map-tile-name">{s.name}</span>
-                    <span className="map-tile-pct num">{fmtPct(s.changeRate)}</span>
-                  </button>
-                ))}
-          </div>
+          {/*
+            크기가 뜻을 갖는 지도 (2026-08-30) — 크기=규모, 색=오늘 등락.
+            모드마다 타일 모양이 달라서 여기서 **하나의 모양으로 모아** 넘긴다.
+            규모 값이 절반도 없는 모드는 TreemapGrid 가 알아서 균등 배치로 돌아간다.
+          */}
+          <SizeByPicker
+            value={sizeBy}
+            onChange={setSizeBy}
+            hasCap={mapTiles.some((t) => (t.marketCap ?? 0) > 0)}
+            hasValue={mapTiles.some((t) => (t.tradeValue ?? 0) > 0)}
+          />
+          <TreemapGrid tiles={mapTiles} sizeBy={sizeBy} theme={theme} />
+
           <div className="table-note">
             색이 진할수록 등락폭이 큽니다 (5% 기준) · 타일을 누르면 구성종목이 열립니다
             {watchSource && ` · ${watch.tiles.length}개 그룹 · ▲/▼ 는 그 그룹에서 오른/내린 종목 수`}

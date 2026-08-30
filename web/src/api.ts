@@ -3653,6 +3653,8 @@ export interface ThemeStrength {
   hit10: { n: number; of: number };
   /** 테마 거래대금 합계(억원, 어림값). ETF 는 순자산 */
   tradeValue: number;
+  /** 테마 전체 시가총액 합계(억원, 어림값) — MAP 타일 크기이자 표 정렬 기준 */
+  marketCap: number;
   /** 5거래일 누적(%). 기록이 모자라면 null */
   w1: number | null;
   /** 20거래일 누적(%). 기록이 모자라면 null */

@@ -878,7 +878,8 @@
       "Bash(node audit.mjs)",
       "Bash(rm -f audit.mjs)",
       "Bash(node -)",
-      "Bash(curl -s \"http://localhost:5173/api/signal/buzz/config\")"
+      "Bash(curl -s \"http://localhost:5173/api/signal/buzz/config\")",
+      "Bash(node /tmp/tmck/check.mjs)"
     ]
   }
 }
