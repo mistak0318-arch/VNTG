@@ -143,6 +143,12 @@ function ThemeMap({
       setHidden(r.hidden);
       /* 목록에서 바로 빼거나 되돌린다 — 새로고침을 기다리게 하면 눌렀는지 알 수 없다 */
       setRows((prev) => (prev && !showHidden && on ? prev.filter((t) => t.key !== key) : prev));
+      /*
+       * 되살리는 화면에서 **마지막 하나를 되살렸으면 그 화면에서 나온다** (2026-08-30).
+       * 안 그러면 「숨긴 것만」 거르는 화면에 숨긴 것이 하나도 없어 빈 표를 보게 되고,
+       * 탭을 옮겨도 따라다녀서 「테마가 다 사라졌다」로 읽힌다.
+       */
+      if (showHidden && !on && r.hidden.length === 0) setShowHidden(false);
     } finally {
       setHiding(false);
     }
@@ -509,6 +515,30 @@ function ThemeMap({
                       {s.name}
                     </span>
                   ))}
+                </td>
+                {/*
+                  숨기기·되살리기 (2026-08-30).
+
+                  ⚠️ **줄 전체가 구성종목을 여는 단추다.** stopPropagation 을 빼면
+                  숨기려고 누를 때마다 시트가 같이 열린다 — 머리글만 있고 이 칸이
+                  통째로 빠져 있어서 「어떻게 쓰는 거냐」는 말을 들었다(2026-08-30).
+                */}
+                <td className="tdb-td-hide" data-l={showHidden ? "되살리기" : "숨기기"}>
+                  <button
+                    className="tdb-hide-btn"
+                    disabled={hiding}
+                    title={
+                      showHidden
+                        ? "다시 목록에 보이게 합니다"
+                        : "테마 DB·MAP·신호등 어디에도 안 나오게 가립니다 (지우는 게 아닙니다)"
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void toggleHide(t.key, !showHidden);
+                    }}
+                  >
+                    {showHidden ? "↩ 되살리기" : "🙈 숨기기"}
+                  </button>
                 </td>
               </tr>
             ))}
