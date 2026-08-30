@@ -188,6 +188,18 @@ export interface LoginNeedsOtp {
   sentTo: string;
 }
 
+/* ── 버즈·키워드 알고리즘 설정 (2026-08-30) ─────────────────────────────── */
+
+export interface BuzzConfig {
+  zMin: number;
+  minCount: number;
+  fullSources: number;
+  singleSourcePenalty: number;
+  buzzWindowHours: number;
+  baselineDays: number;
+  timeOfDay: boolean;
+}
+
 /* ── 버즈 대시보드 (2026-08-30) ─────────────────────────────────────────── */
 
 export type BuzzKind = "theme" | "myTheme" | "stock" | "event" | "entity";
@@ -245,6 +257,10 @@ export interface KeywordHit {
   samples: { title: string; link: string; press: string; at: string }[];
   /** 종목 낱말이면 지금 등락률 — 이미 오른 뒤인지 */
   changeRate?: number;
+  /** 몇 개 매체가 썼나 — 한 매체가 열 번 쓴 것과 열 매체가 한 번씩은 다르다 */
+  presses: number;
+  /** 뜻밖의 정도 — (지금−평소)/√(평소+1) */
+  z: number;
   /** 텔레그램 채널에서도 급증했나. null = 채널 쪽이 아직 판단할 수 없음 */
   buzzRatio: number | null;
 }
@@ -263,6 +279,10 @@ export const api = {
   health: () => getJson<{ ok: boolean }>("/api/health"),
 
   /* 버즈 대시보드 (2026-08-30) — 문턱과 무관하게 전부 본다 */
+  buzzConfig: () => getJson<BuzzConfig>("/api/signal/buzz/config"),
+  buzzConfigSave: (patch: Partial<BuzzConfig>) =>
+    putJson<BuzzConfig>("/api/signal/buzz/config", patch),
+
   buzzBoard: (hours: number) => getJson<BuzzBoard>(`/api/signal/buzz/board?hours=${hours}`),
   buzzTerm: (term: string) =>
     getJson<BuzzTermDetail>(`/api/signal/buzz/term/${encodeURIComponent(term)}`),

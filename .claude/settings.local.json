@@ -874,7 +874,11 @@
       "Bash(curl -s -X POST http://localhost:5173/api/news-keywords/collect)",
       "Bash(rm -f server/data/newsKeywords/*.json)",
       "Bash(curl -s \"http://localhost:5173/api/signal/buzz\")",
-      "Bash(awk 'NR>=195 && NR<=260' server/src/buzzRadar.ts)"
+      "Bash(awk 'NR>=195 && NR<=260' server/src/buzzRadar.ts)",
+      "Bash(node audit.mjs)",
+      "Bash(rm -f audit.mjs)",
+      "Bash(node -)",
+      "Bash(curl -s \"http://localhost:5173/api/signal/buzz/config\")"
     ]
   }
 }

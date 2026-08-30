@@ -9,6 +9,7 @@ import {
 } from "./telegramReader.js";
 import { peekSnapshot } from "./marketSnapshot.js";
 import { listThemes } from "./customThemes.js";
+import { buzzPoints, getBuzzConfig } from "./buzzScore.js";
 
 /**
  * 밤사이 버즈 레이더 (2026-08-27) — **등록 없이도 「갑자기 커진 주제」를 잡는다.**
@@ -245,7 +246,23 @@ export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
     });
     if (fresh.length === 0) return;
 
-    const file = await readDay(today);
+    /*
+     * ⚠️ **메시지는 자기 날짜의 파일에 넣는다.**
+     *
+     * 예전엔 무조건 「오늘」 파일에 넣으면서 시각 버킷만 메시지 시각으로 잡았다.
+     * 그래서 어제 23:50 글을 00:05 에 수집하면 **오늘 파일의 23시 칸**에 들어갔고,
+     * 창을 되짚는 쪽은 그 시각이면 어제 파일을 보므로 **못 찾았다.** 그리고 그
+     * 숫자는 23시간 뒤에 엉뚱하게 세어졌다.
+     *
+     * 실측(2026-08-30): 40시간에 걸친 40건을 심고 12시간 창을 재니 **24건**이 나왔다.
+     * 하필 이 기능의 본 무대가 **자정을 걸치는 밤**이라 그냥 둘 수 없다.
+     */
+    const files = new Map<string, DayFile>();
+    const dayOfMsg = (iso: string) => dayStr(new Date(new Date(iso).getTime() + 9 * 3600_000));
+    for (const m of fresh) {
+      const day = dayOfMsg(m.at);
+      if (!files.has(day)) files.set(day, await readDay(day));
+    }
     /*
      * 매칭 비용 통제 — 실측 150건×사전 3,200개 ≈ 84ms (2026-08-27).
      * 평상시 스캔(수십 건)은 한 번에 끝나지만, 첫 소급 수집처럼 수백~수천 건이
@@ -257,7 +274,11 @@ export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
       processed += 1;
       if (processed % 30 === 0) await new Promise((r) => setImmediate(r));
       const text = m.text.slice(0, 600);
-      const hour = String(new Date(new Date(m.at).getTime() + 9 * 3600_000).getUTCHours());
+      const kst = new Date(new Date(m.at).getTime() + 9 * 3600_000);
+      const hour = String(kst.getUTCHours());
+      /* 그 메시지가 속한 날 파일 — 자정을 걸친 수집에서 이게 갈린다 */
+      const file = files.get(dayStr(kst));
+      if (!file) continue;
       for (const t of d) {
         if (!text.includes(t.term)) continue;
         file.total[t.term] = (file.total[t.term] ?? 0) + 1;
@@ -283,7 +304,9 @@ export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
       }
     }
     await mkdir(DIR, { recursive: true });
-    await writeFile(join(DIR, `${today}.json`), JSON.stringify(file), "utf-8");
+    for (const [day, f] of files) {
+      await writeFile(join(DIR, `${day}.json`), JSON.stringify(f), "utf-8");
+    }
   } catch {
     /* 버즈 기록 실패가 수집을 막으면 안 된다 */
   } finally {
@@ -356,23 +379,78 @@ const MIN_RATIO = 3;
 const SHARP_COUNT = 3;
 const SHARP_RATIO = 8;
 
-function recentCount(term: string, today: DayFile, yesterday: DayFile, windowHours: number): number {
+/**
+ * 창 안의 언급 수.
+ *
+ * ⚠️ 예전엔 `today`·`yesterday` 둘만 받고 「오늘이 아니면 어제」로 갈랐다. 창이
+ * 24시간을 넘으면 그저께 시각까지 **어제 파일에서** 찾아 같은 숫자를 두 번 셌다.
+ * 날짜→파일 지도를 받아 몇 시간짜리 창이든 제 날 파일에서 찾는다.
+ */
+function recentCount(term: string, files: Map<string, DayFile>, windowHours: number): number {
   const now = kstNow();
   let sum = 0;
   for (let i = 0; i < windowHours; i += 1) {
     const t = new Date(now.getTime() - i * 3600_000);
-    const file = dayStr(t) === dayStr(now) ? today : yesterday;
-    sum += file.byHour[term]?.[String(t.getUTCHours())] ?? 0;
+    sum += files.get(dayStr(t))?.byHour[term]?.[String(t.getUTCHours())] ?? 0;
   }
   return sum;
+}
+
+/**
+ * 시간대 보정 — 창이 걸친 시각들이 하루의 몇 %인가.
+ *
+ * 채널도 하루 내내 고르게 떠들지 않는다. 새벽 3시는 조용하고 아침 8시는 시끄럽다.
+ * 그런데 기준선을 `하루평균 × (창/24)` 로 잡으면 **새벽에는 뭐든 급증으로 보이고
+ * 아침에는 평범한 것이 급증으로 보인다.**
+ *
+ * 지난 날들의 **시각별 매칭 분포**로 환산한다. 관측이 없는 시각에서 0 이 되지
+ * 않도록 균등 가정과 7:3 으로 섞는다(뉴스 쪽과 같은 이유).
+ */
+function hourShare(pastDays: DayFile[], windowHours: number, useTimeOfDay: boolean): number {
+  const flat = windowHours / 24;
+  if (!useTimeOfDay) return flat;
+
+  const perHour = new Array(24).fill(0);
+  let all = 0;
+  for (const f of pastDays) {
+    for (const mins of Object.values(f.byHour)) {
+      for (const [h, c] of Object.entries(mins)) {
+        const hi = Number(h);
+        if (hi >= 0 && hi < 24) {
+          perHour[hi] += c;
+          all += c;
+        }
+      }
+    }
+  }
+  if (all < 50) return flat; // 표본이 모자라면 균등 가정이 낫다
+
+  const now = kstNow();
+  let inWindow = 0;
+  for (let i = 0; i < windowHours; i += 1) {
+    inWindow += perHour[new Date(now.getTime() - i * 3600_000).getUTCHours()];
+  }
+  return 0.7 * (inWindow / all) + 0.3 * flat;
+}
+
+/** 창이 닿는 날들을 한 번에 읽어 둔다 */
+async function windowFiles(windowHours: number): Promise<Map<string, DayFile>> {
+  const now = kstNow();
+  const out = new Map<string, DayFile>();
+  for (let i = 0; i <= Math.ceil(windowHours / 24); i += 1) {
+    const day = dayStr(new Date(now.getTime() - i * 86400_000));
+    if (!out.has(day)) out.set(day, await readDay(day));
+  }
+  return out;
 }
 
 export async function evaluateBuzz(windowHours = 12): Promise<BuzzResult> {
   const d = await buildDict();
   const kindOf = new Map(d.map((t) => [t.term, t]));
   const now = kstNow();
-  const today = await readDay(dayStr(now));
-  const yesterday = await readDay(dayStr(new Date(now.getTime() - 86400_000)));
+  const winFiles = await windowFiles(windowHours);
+  const today = winFiles.get(dayStr(now)) ?? EMPTY_DAY;
+  const yesterday = winFiles.get(dayStr(new Date(now.getTime() - 86400_000))) ?? EMPTY_DAY;
 
   /* 기준선 — 지난 7일(오늘 제외) 총 건수의 하루 평균 ÷ 2 (12시간 상당) */
   const pastDays: DayFile[] = [];
@@ -402,7 +480,7 @@ export async function evaluateBuzz(windowHours = 12): Promise<BuzzResult> {
     if (!kind) continue;
     const codes = info?.codes ?? today.codes?.[term] ?? yesterday.codes?.[term] ?? [];
 
-    const recent = recentCount(term, today, yesterday, windowHours);
+    const recent = recentCount(term, winFiles, windowHours);
     if (recent === 0) continue;
     topToday.push({ term, kind, recent });
     if (baselineDays < 3) continue; // 기준선이 서기 전에는 판정하지 않는다
@@ -577,6 +655,8 @@ export interface BuzzBoardRow {
   ratio: number;
   /** 몇 개의 방에서 나왔나 — 한 방이 떠드는 것과 여러 방이 말하는 것은 다르다 */
   channels: number;
+  /** 뜻밖의 정도 — (지금-평소)/√(평소+1). 정렬과 판정의 기준 */
+  z: number;
   /** 알림 문턱을 넘었나 */
   alerted: boolean;
   codes: string[];
@@ -598,15 +678,19 @@ export interface BuzzBoard {
 export async function buzzBoard(windowHours = 12): Promise<BuzzBoard> {
   const win = Math.min(48, Math.max(1, Math.round(windowHours)));
   const now = kstNow();
-  const today = await readDay(dayStr(now));
-  const yesterday = await readDay(dayStr(new Date(now.getTime() - 86400_000)));
+  const winFiles = await windowFiles(win);
+  const today = winFiles.get(dayStr(now)) ?? EMPTY_DAY;
+  const yesterday = winFiles.get(dayStr(new Date(now.getTime() - 86400_000))) ?? EMPTY_DAY;
 
+  const cfg = await getBuzzConfig();
   const pastDays: DayFile[] = [];
-  for (let i = 1; i <= 7; i += 1) {
+  for (let i = 1; i <= cfg.baselineDays; i += 1) {
     const f = await readDay(dayStr(new Date(now.getTime() - i * 86400_000)));
     if (Object.keys(f.total).length > 0) pastDays.push(f);
   }
   const baselineDays = pastDays.length;
+  /* 하루평균을 이 창 몫으로 환산 — 시간대 쏠림을 반영한다 */
+  const share = hourShare(pastDays, win, cfg.timeOfDay);
 
   const candidates = new Set<string>([...Object.keys(today.total), ...Object.keys(yesterday.total)]);
   const d = await buildDict();
@@ -619,7 +703,7 @@ export async function buzzBoard(windowHours = 12): Promise<BuzzBoard> {
   for (const term of candidates) {
     const kind = today.kinds?.[term] ?? yesterday.kinds?.[term] ?? kindOf.get(term)?.kind;
     if (!kind) continue;
-    const recent = recentCount(term, today, yesterday, win);
+    const recent = recentCount(term, winFiles, win);
     if (recent === 0) continue;
     total += recent;
 
@@ -634,11 +718,14 @@ export async function buzzBoard(windowHours = 12): Promise<BuzzBoard> {
 
     const avgDaily =
       baselineDays > 0 ? pastDays.reduce((a, f) => a + (f.total[term] ?? 0), 0) / baselineDays : 0;
-    const baseline = Math.max(avgDaily * (win / 24), 0.5);
+    const baseline = Math.max(avgDaily * share, 0.5);
     const ratio = recent / baseline;
-    const chCount = Object.keys(
-      today.channels?.[term] ?? yesterday.channels?.[term] ?? {},
-    ).length;
+    /* 방 개수는 창이 걸친 날들을 합쳐 센다 — 자정을 넘긴 버즈가 반토막 나면 안 된다 */
+    const chNames = new Set<string>();
+    for (const f of winFiles.values()) {
+      for (const n of Object.keys(f.channels?.[term] ?? {})) chNames.add(n);
+    }
+    const { z, alert } = buzzPoints(recent, baseline, chNames.size, cfg);
 
     rows.push({
       term,
@@ -646,21 +733,16 @@ export async function buzzBoard(windowHours = 12): Promise<BuzzBoard> {
       recent,
       baseline: Math.round(baseline * 10) / 10,
       ratio: Math.round(ratio * 10) / 10,
-      channels: chCount,
-      alerted:
-        baselineDays >= 3 &&
-        ((recent >= MIN_COUNT && ratio >= MIN_RATIO) ||
-          (recent >= SHARP_COUNT && ratio >= SHARP_RATIO)),
+      z: Math.round(z * 100) / 100,
+      channels: chNames.size,
+      alerted: baselineDays >= 3 && alert,
       codes: kindOf.get(term)?.codes ?? today.codes?.[term] ?? yesterday.codes?.[term] ?? [],
     });
   }
 
   /* 기준선이 없으면 배율이 무의미하므로 건수로, 있으면 배율로 줄 세운다 */
-  rows.sort((a, b) =>
-    baselineDays >= 2
-      ? b.ratio * Math.log2(b.recent + 1) - a.ratio * Math.log2(a.recent + 1)
-      : b.recent - a.recent,
-  );
+  /* 기준선이 서기 전엔 배율이 무의미하므로 건수로, 서면 **뜻밖의 정도**로 */
+  rows.sort((a, b) => (baselineDays >= 2 ? b.z - a.z : b.recent - a.recent));
 
   return {
     windowHours: win,

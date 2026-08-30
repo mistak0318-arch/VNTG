@@ -128,6 +128,7 @@ export function BuzzBoardPanel({
 
       {board && (
         <>
+          <Headline board={board} onPick={setPicked} />
           <BoardHealth board={board} alerted={alerted.length} />
           <HourStrip board={board} />
 
@@ -238,6 +239,133 @@ export function BuzzBoardPanel({
       {picked && (
         <BuzzTermSheet term={picked} onClose={() => setPicked(null)} onSelectStock={onSelectStock} />
       )}
+    </div>
+  );
+}
+
+/**
+ * 맨 위 한 문장 — **「지금 무슨 일인가」**를 읽고 끝낼 수 있게 (2026-08-30 요청).
+ *
+ * 낱말만 늘어놓으면 「관세, 트럼프, 중국」이라 결국 표를 다시 봐야 한다. 그래서
+ * 문장으로 쓴다: **무엇이** 커졌고, **얼마나**(평소 대비), **몇 군데**에서, 그리고
+ * **실제로 어떤 말**이 오갔는지. 근거를 같이 줘야 그 문장을 믿을 수 있다.
+ *
+ * 조용할 때도 문장으로 답한다 — 「없음」이라고만 하면 고장인지 조용한 건지 모른다.
+ */
+function Headline({
+  board,
+  onPick,
+}: {
+  board: BuzzBoard;
+  onPick: (term: string) => void;
+}) {
+  const hot = board.rows.filter((r) => r.alerted).slice(0, 3);
+  const win = `${board.windowHours}시간`;
+
+  /*
+   * ⚠️ 세션 유무를 **먼저** 보면 안 된다.
+   *
+   * 처음엔 `!reader` 이면 무조건 「수집이 멈춰 있습니다」로 끝냈는데, 그 아래에서는
+   * 급증 2건을 보여 주고 있었다 — **같은 화면이 서로 다른 말을 했다.** 세션은
+   * 배관 이야기이고 머리 문장은 데이터 이야기다. 창 안에 아무것도 없을 때만
+   * 배관을 의심하는 게 맞다(그때는 그게 진짜 원인이다).
+   */
+  if (!board.reader && board.total === 0) {
+    return (
+      <div className="kwf-lead quiet">
+        <b>수집이 멈춰 있습니다.</b> 텔레그램 사용자 세션이 없어 채널을 읽지 못합니다 —
+        미니PC에서만 돕니다.
+      </div>
+    );
+  }
+
+  if (board.baselineDays < 2) {
+    const top = board.rows.slice(0, 3);
+    return (
+      <div className="kwf-lead quiet">
+        <b>아직 「평소」를 모릅니다</b> (기준선 {board.baselineDays}일). 며칠 쌓이면 갑자기
+        커진 것을 짚어 드립니다.
+        {top.length > 0 && (
+          <>
+            {" "}
+            그동안은 <b>지금 많이 나온 말</b>만 보여 드립니다 —{" "}
+            {top.map((r, i) => (
+              <span key={r.term}>
+                {i > 0 && ", "}
+                <button className="kwf-lead-term" onClick={() => onPick(r.term)}>
+                  {r.term}
+                </button>
+                <i> {r.recent}건</i>
+              </span>
+            ))}
+            .
+          </>
+        )}
+      </div>
+    );
+  }
+
+  if (hot.length === 0) {
+    const near = board.rows[0];
+    return (
+      <div className="kwf-lead quiet">
+        <b>최근 {win}, 평소보다 크게 커진 주제는 없습니다.</b>
+        {near ? (
+          <>
+            {" "}
+            가장 눈에 띈 것은{" "}
+            <button className="kwf-lead-term" onClick={() => onPick(near.term)}>
+              {near.term}
+            </button>
+            (평소 {near.baseline}건 → {near.recent}건, {near.channels || "?"}개 방)이지만 아직
+            문턱 아래입니다.
+          </>
+        ) : (
+          " 사전에 걸린 말 자체가 없습니다."
+        )}
+      </div>
+    );
+  }
+
+  const lead = hot[0];
+  const others = hot.slice(1);
+  return (
+    <div className="kwf-lead hot">
+      <div className="kwf-lead-main">
+        지금 채널은{" "}
+        <button className="kwf-lead-term big" onClick={() => onPick(lead.term)}>
+          {lead.term}
+        </button>{" "}
+        얘기로 달아올랐습니다.
+        {others.length > 0 && (
+          <>
+            {" "}
+            <button className="kwf-lead-term" onClick={() => onPick(others[0].term)}>
+              {others[0].term}
+            </button>
+            {others[1] && (
+              <>
+                ·
+                <button className="kwf-lead-term" onClick={() => onPick(others[1].term)}>
+                  {others[1].term}
+                </button>
+              </>
+            )}
+            도 같이 커졌습니다.
+          </>
+        )}
+      </div>
+      <div className="kwf-lead-why">
+        평소 {win}에 <b>{lead.baseline}건</b>이던 것이 <b>{lead.recent}건</b>
+        {lead.channels > 0 && (
+          <>
+            {" — "}
+            <b>{lead.channels}개 방</b>이 함께 말하고 있습니다
+            {lead.channels === 1 && " (한 방뿐이라 그 방의 버릇일 수 있습니다)"}
+          </>
+        )}
+        .
+      </div>
     </div>
   );
 }

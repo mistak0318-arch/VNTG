@@ -163,6 +163,7 @@ export function KeywordFlowPanel({
 
       {flow && (
         <>
+          <NewsHeadline flow={flow} onPick={setPicked} />
           <Health flow={flow} />
           <Timeline flow={flow} />
 
@@ -284,6 +285,123 @@ export function KeywordFlowPanel({
       {flow && <BuzzSection />}
 
       {picked && <KeywordSheet hit={picked} onClose={() => setPicked(null)} onSelectStock={onSelectStock} />}
+    </div>
+  );
+}
+
+/**
+ * 맨 위 한 문장 — **「지금 뉴스가 무슨 일로 시끄러운가」** (2026-08-30 요청).
+ *
+ * 낱말만 늘어놓으면 결국 표를 다시 봐야 한다. 그래서 문장으로 쓴다: 무엇이,
+ * 얼마나(평소 대비), **몇 개 매체**가, 그리고 **실제 기사 제목**까지.
+ *
+ * 매체 수를 근거로 넣는 이유: 같은 기사가 열 매체로 퍼지면 건수는 열 배가 되지만
+ * 그건 열 개의 사건이 아니라 **한 사건이 열 번 복사된 것**이다. 반대로 여러 매체가
+ * 각자 다르게 쓰고 있으면 그건 진짜 큰 건이다. 숫자 하나로 그 둘이 갈린다.
+ */
+function NewsHeadline({
+  flow,
+  onPick,
+}: {
+  flow: KeywordFlow;
+  onPick: (h: KeywordHit) => void;
+}) {
+  const win =
+    flow.windowMin >= 60 ? `${Math.round(flow.windowMin / 60)}시간` : `${flow.windowMin}분`;
+
+  if (flow.baselineDays < 1) {
+    const top = flow.hits.slice(0, 3);
+    return (
+      <div className="kwf-lead quiet">
+        <b>아직 「평소」를 모릅니다.</b> 하루치가 더 쌓이면 갑자기 커진 말을 짚어 드립니다.
+        {top.length > 0 && (
+          <>
+            {" "}
+            그동안은 <b>많이 나온 말</b>만 —{" "}
+            {top.map((h, i) => (
+              <span key={h.term}>
+                {i > 0 && ", "}
+                <button className="kwf-lead-term" onClick={() => onPick(h)}>
+                  {h.term}
+                </button>
+                <i> {h.recent}건</i>
+              </span>
+            ))}
+            .
+          </>
+        )}
+      </div>
+    );
+  }
+
+  /* 문턱이랄 게 없는 화면이라 「충분히 뜻밖인 것」을 직접 고른다 */
+  const hot = flow.hits.filter((h) => h.z >= 2.2 && h.recent >= 3).slice(0, 3);
+  if (hot.length === 0) {
+    const near = flow.hits[0];
+    return (
+      <div className="kwf-lead quiet">
+        <b>최근 {win}, 뉴스에 크게 커진 주제는 없습니다.</b>
+        {near && (
+          <>
+            {" "}
+            가장 눈에 띈 것은{" "}
+            <button className="kwf-lead-term" onClick={() => onPick(near)}>
+              {near.term}
+            </button>
+            (평소 {near.baseline}건 → {near.recent}건)이지만 아직 평소 범위 안입니다.
+          </>
+        )}
+      </div>
+    );
+  }
+
+  const lead = hot[0];
+  const others = hot.slice(1);
+  const quote = lead.samples[0];
+  return (
+    <div className="kwf-lead hot">
+      <div className="kwf-lead-main">
+        지금 뉴스는{" "}
+        <button className="kwf-lead-term big" onClick={() => onPick(lead)}>
+          {lead.term}
+        </button>{" "}
+        {lead.fresh ? "얘기가 처음 올라왔습니다." : "얘기로 시끄럽습니다."}
+        {others.length > 0 && (
+          <>
+            {" "}
+            {others.map((h, i) => (
+              <span key={h.term}>
+                {i > 0 && "·"}
+                <button className="kwf-lead-term" onClick={() => onPick(h)}>
+                  {h.term}
+                </button>
+              </span>
+            ))}
+            도 같이 커졌습니다.
+          </>
+        )}
+      </div>
+      <div className="kwf-lead-why">
+        평소 {win}에 <b>{lead.baseline}건</b>이던 것이 <b>{lead.recent}건</b>
+        {lead.presses > 0 && (
+          <>
+            {" — "}
+            <b>{lead.presses}개 매체</b>가 다루고 있습니다
+            {lead.presses === 1 && " (한 매체뿐이라 아직 단발입니다)"}
+          </>
+        )}
+        {lead.buzzRatio !== null && lead.buzzRatio >= 2 && (
+          <>
+            . 텔레그램 채널에서도 <b>같이 급증</b>했습니다
+          </>
+        )}
+        .
+      </div>
+      {quote && (
+        <div className="kwf-lead-quote">
+          「{quote.title}」 <i>({quote.press})</i>
+        </div>
+      )}
     </div>
   );
 }

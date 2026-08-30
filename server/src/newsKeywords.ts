@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { naverNews, type NaverCat } from "./naverMainNews.js";
 import { buzzDictionary, type BuzzTerm } from "./buzzRadar.js";
 import { peekSnapshot } from "./marketSnapshot.js";
+import { buzzPoints, getBuzzConfig } from "./buzzScore.js";
 
 /**
  * 뉴스 키워드 흐름 (2026-08-30 요청).
@@ -72,6 +73,13 @@ interface DayFile {
   kinds: Record<string, TermKind>;
   /** term → 관련 종목코드 (테마·종목만) */
   codes: Record<string, string[]>;
+  /**
+   * term → 언론사 → 건수 (2026-08-30).
+   *
+   * 같은 기사가 열 매체로 퍼지면 건수만 열 배가 된다 — 그건 열 개의 사건이 아니라
+   * **한 사건이 열 번 복사된 것**이다. 매체 수를 같이 세면 그 둘이 갈린다.
+   */
+  presses?: Record<string, Record<string, number>>;
   /** term → 최근 기사 표본 (제목·링크·매체·시각) */
   samples: Record<string, { title: string; link: string; press: string; at: string }[]>;
   /** 이미 센 기사 링크 — 같은 기사를 두 번 세지 않는다 */
@@ -79,7 +87,7 @@ interface DayFile {
 }
 
 function emptyDay(): DayFile {
-  return { byMinute: {}, articlesByMinute: {}, kinds: {}, codes: {}, samples: {}, seen: [] };
+  return { byMinute: {}, articlesByMinute: {}, kinds: {}, codes: {}, presses: {}, samples: {}, seen: [] };
 }
 
 function dayOf(iso: string): string {
@@ -231,6 +239,8 @@ export async function collectNewsKeywords(): Promise<{ articles: number; terms: 
           const known = byTerm.get(term);
           f.kinds[term] = known?.kind ?? "new";
           if (known?.codes?.length) f.codes[term] = known.codes;
+          const pr = ((f.presses ??= {})[term] ??= {});
+          if (it.press) pr[it.press] = (pr[it.press] ?? 0) + 1;
           (f.byMinute[term] ??= {});
           f.byMinute[term][minute] = (f.byMinute[term][minute] ?? 0) + 1;
 
@@ -283,6 +293,10 @@ export interface KeywordHit {
   samples: { title: string; link: string; press: string; at: string }[];
   /** 종목 낱말이면 지금 등락률 — 이미 오른 뒤인지 판단하려고 */
   changeRate?: number;
+  /** 몇 개 매체가 썼나 — 한 매체가 열 번 쓴 것과 열 매체가 한 번씩은 다르다 */
+  presses: number;
+  /** 뜻밖의 정도 */
+  z: number;
 }
 
 export interface KeywordFlow {
@@ -388,6 +402,10 @@ export async function keywordFlow(windowMin = 60): Promise<KeywordFlow> {
     .slice(-7);
 
   const dayTotals = new Map<string, number>(); // term → 지난 날들 총 건수
+  /* 시간대 보정을 하려면 「지난 날 이 시각들에 기사가 몇 건이었나」가 필요하다 */
+  const clock = new Set([...keys].map((k) => k.slice(11))); // HH:mm 만
+  let pastArticlesAll = 0;
+  let pastArticlesInClock = 0;
   for (const d of pastDays) {
     const f = await readDay(d);
     for (const [term, mins] of Object.entries(f.byMinute)) {
@@ -395,10 +413,43 @@ export async function keywordFlow(windowMin = 60): Promise<KeywordFlow> {
       for (const c of Object.values(mins)) n += c;
       dayTotals.set(term, (dayTotals.get(term) ?? 0) + n);
     }
+    for (const [minute, c] of Object.entries(f.articlesByMinute)) {
+      pastArticlesAll += c;
+      if (clock.has(minute.slice(11))) pastArticlesInClock += c;
+    }
   }
   const baselineDays = pastDays.length;
-  /* 하루(1440분)를 창 길이로 환산 */
-  const scale = win / 1440;
+
+  /*
+   * 창 길이를 「하루 중 얼마쯤」으로 환산한다.
+   *
+   * ⚠️ 처음엔 그냥 `win / 1440` 을 썼다. 그건 **뉴스가 하루 내내 고르게 나온다**는
+   * 가정인데 전혀 그렇지 않다 — 장중에 몰리고 새벽엔 거의 없다. 그 결과:
+   *
+   *   · 새벽 30분 창 — 실제 기사는 거의 없는데 기준선은 하루의 1/48 을 요구하니
+   *     한 건만 나와도 배율이 치솟는다
+   *   · 장중 30분 창 — 실제 기사가 많은데 기준선은 여전히 1/48 이라 **평범한 시간이
+   *     급증으로 보인다**
+   *
+   * 그래서 **지난 날들의 같은 시각대에 기사가 몇 %였나**로 환산한다. 이 값은
+   * 이미 세고 있는 `articlesByMinute` 에서 그대로 나온다.
+   *
+   * 표본이 모자라면(기사 30건 미만) 옛 방식으로 돌아간다 — 몇 건으로 낸 비율은
+   * 균등 가정보다 오히려 더 튄다.
+   */
+  const flat = win / 1440;
+  /*
+   * ⚠️ 시간대 비율만 쓰면 **역방향으로 망가진다.** 과거에 그 시각 기사가 한 건도
+   * 없었으면 비율이 0 이 되고, 기준선이 0 이니 뭐가 나오든 전부 「신규·무한배」가
+   * 된다. 실측에서 저녁 7시 창이 그렇게 됐다(과거 표본이 장중에만 있었다).
+   *
+   * 그래서 **7 대 3 으로 섞는다** — 시간대 차이는 살리되 균등 가정을 바닥으로 깐다.
+   * 통계에서 관측이 없는 칸에 최소값을 얹는 것과 같은 이유다.
+   */
+  const scale =
+    pastArticlesAll >= 30
+      ? 0.7 * (pastArticlesInClock / pastArticlesAll) + 0.3 * flat
+      : flat;
 
   const snap = peekSnapshot();
   const kinds = new Map<string, TermKind>();
@@ -410,12 +461,22 @@ export async function keywordFlow(windowMin = 60): Promise<KeywordFlow> {
     for (const [t, s] of Object.entries(f.samples)) samples.set(t, s);
   }
 
+  const cfg = await getBuzzConfig();
+  const presses = new Map<string, number>();
+  for (const f of cur.values()) {
+    for (const [t, ps] of Object.entries(f.presses ?? {})) {
+      presses.set(t, Math.max(presses.get(t) ?? 0, Object.keys(ps).length));
+    }
+  }
+
   const hits: KeywordHit[] = [];
   for (const [term, n] of recent) {
     if (n < 2) continue; // 한 번 나온 것은 아직 흐름이 아니다
     const base = baselineDays > 0 ? ((dayTotals.get(term) ?? 0) / baselineDays) * scale : 0;
     const fresh = baselineDays >= 2 && base < 0.35; // 사실상 처음 보는 말
     const ratio = base > 0 ? n / base : n; // 기준선이 없으면 건수 자체가 세기다
+    const pressCount = presses.get(term) ?? 0;
+    const { z } = buzzPoints(n, base, pressCount, cfg);
 
     const cs = codes.get(term) ?? [];
     let changeRate: number | undefined;
@@ -431,6 +492,8 @@ export async function keywordFlow(windowMin = 60): Promise<KeywordFlow> {
       codes: cs,
       samples: samples.get(term) ?? [],
       changeRate,
+      presses: pressCount,
+      z: Math.round(z * 100) / 100,
     });
   }
 
@@ -440,7 +503,12 @@ export async function keywordFlow(windowMin = 60): Promise<KeywordFlow> {
    * 건수로 줄 세우면 매일 같은 낱말이 1등이라 아무것도 안 알려 준다.
    * 다만 배율만 보면 2→6건 같은 잔챙이가 위로 오므로 건수를 약하게 섞는다.
    */
-  hits.sort((a, b) => b.ratio * Math.log2(b.recent + 1) - a.ratio * Math.log2(a.recent + 1));
+  /*
+   * **뜻밖의 정도(z)로 줄 세운다.** 배수로 세우면 「평소 0.3건이 2건」 같은 잔챙이가
+   * 위로 오고, 건수로 세우면 매일 같은 낱말이 1등이다. z 는 둘을 한 값으로 푼다.
+   * 기준선이 없으면 z 도 의미가 없어 건수로 돌아간다.
+   */
+  hits.sort((a, b) => (baselineDays >= 1 ? b.z - a.z : b.recent - a.recent));
 
   let articles = 0;
   for (const c of timeline.values()) articles += c;

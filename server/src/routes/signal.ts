@@ -245,6 +245,25 @@ export function createSignalRouter(client: KiwoomClient): Router {
     }
   });
 
+  /** 알고리즘 설정 — 버즈와 뉴스 키워드가 **같은 값**을 쓴다 */
+  router.get("/buzz/config", async (_req, res, next) => {
+    try {
+      const { getBuzzConfig } = await import("../buzzScore.js");
+      res.json(await getBuzzConfig());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/buzz/config", async (req, res, next) => {
+    try {
+      const { saveBuzzConfig } = await import("../buzzScore.js");
+      res.json(await saveBuzzConfig(req.body ?? {}));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /** 낱말 하나의 속사정 — 언제 터졌나·어느 방이 말했나·실제 문장 */
   router.get("/buzz/term/:term", async (req, res, next) => {
     try {

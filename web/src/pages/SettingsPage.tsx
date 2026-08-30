@@ -22,6 +22,7 @@ import { TelegramOverviewPanel } from "../components/TelegramOverviewPanel";
 import { SubTabOrderPanel } from "../components/SubTabOrderPanel";
 import { MiniConfigPanel } from "../components/MiniConfigPanel";
 import { LoginSettingsPanel } from "../components/LoginSettingsPanel";
+import { BuzzConfigPanel } from "../components/BuzzConfigPanel";
 
 interface KeyInfo {
   name: string;
@@ -159,6 +160,17 @@ export function SettingsPage() {
         hint="상단 버튼 1~5에 어떤 화면을 물릴지, 여는 단축키를 정합니다."
       >
         <MiniConfigPanel />
+      </CollapsibleCard>
+      )}
+
+      {tab === "analysis" && (
+      <CollapsibleCard
+        id="buzzConfig"
+        scope="global"
+        title="버즈 · 키워드 흐름 기준"
+        hint="텔레그램 버즈와 뉴스 키워드가 함께 쓰는 자 — 얼마나 예민하게 잡을지"
+      >
+        <BuzzConfigPanel />
       </CollapsibleCard>
       )}
 
