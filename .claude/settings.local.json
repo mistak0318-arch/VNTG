@@ -887,7 +887,22 @@
       "Bash(npx --prefix web tsc -p web --noEmit)",
       "Bash(grep -v \"^\\\\s*$\")",
       "Bash(printf '%s\\\\n' '캘린더 — 가져온 일정 수정이 되돌아가던 문제' '' '고쳐도 다음 동기화에 원본으로 되돌아갔다. 구독 캘린더에 자동' '동기화\\(30분\\)를 붙이면서 「고쳐도 삼십 분이면 사라지는」 상태가' '됐고, 이건 못 고치는 것과 같다.' '' '- 가져온 일정을 고치면 edited 표시가 붙고, 동기화가 건드리지 않는다' '- srcKey\\(ICS UID / 표는 날짜|제목\\)로 원본과 짝지어 다시 안 넣는다' '- 종류 고르는 칸에 지표·회의·채권·파생·주간이 빠져 있어서, 그 종류를' '  가진 일정을 고치면 종류가 조용히 바뀌었다' '- 국가·대표 칸을 폼에 추가 \\(표로만 넣을 수 있던 값\\)' '' 'Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>')",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(curl -s -X POST http://localhost:4000/api/naver-sync/themesKr/enabled -H \"Content-Type: application/json\" -d '{\"on\":false}')",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('  off =',d['off']\\)\")",
+      "Bash(curl -s -X POST http://localhost:4000/api/naver-sync/newsKeywords/period -H \"Content-Type: application/json\" -d '{\"min\":5}')",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('  periodMin =',d['periodMin']\\)\")",
+      "Bash(curl -s -o /dev/null -w \"  HTTP %{http_code}\\\\n\" -X POST http://localhost:4000/api/naver-sync/themesKr/period -H \"Content-Type: application/json\" -d '{\"min\":5}')",
+      "Bash(curl -s -o /dev/null -w \"  HTTP %{http_code}\\\\n\" -X POST http://localhost:4000/api/naver-sync/infostock/run)",
+      "Bash(curl -s -X POST http://localhost:4000/api/naver-sync/themesEtf/enabled -H \"Content-Type: application/json\" -d '{\"on\":false}')",
+      "Bash(curl -s -X POST http://localhost:4000/api/naver-sync/themesEtf/run --max-time 180)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('  ok =',d.get\\('ok'\\),'| msg =',d.get\\('msg'\\),'| 여전히 꺼짐?',  'themesEtf' in d['config']['off']\\)\")",
+      "Bash(curl -s -X POST http://localhost:4000/api/naver-sync/newsKeywords/enabled -H \"Content-Type: application/json\" -d '{\"on\":true}')",
+      "Bash(node -e \"setTimeout\\(\\(\\)=>process.exit\\(0\\),92000\\)\")",
+      "Bash(curl -s http://localhost:4000/api/naver-sync)",
+      "Bash(grep -o '\"/api/[^\"`]*\\\\|`/api/[^`]*')",
+      "Bash(curl -s -X PUT http://localhost:4000/api/market/theme-hidden -H \"Content-Type: application/json\" -d '{\"keys\":[\"kr:575\"],\"hidden\":false}')",
+      "Bash(printf '%s\\\\n' '설정 — 네이버 동기화 목록·주기·끄기·지금 실행' '' '스스로 도는 네이버 수집 다섯 가지를 한 자리에 모았다.' '뉴스 키워드 / 테마 DB 국내·미국·ETF / ETF 보유 역인덱스.' '' '- 줄마다 무엇을·언제·마지막 결과가 보인다' '- 켜기·끄기, 「지금 실행」' '- 주기는 뜻이 있는 것에만 \\(뉴스 키워드\\). 시각이 정해진 일에' '  「몇 분마다」를 주면 같은 것을 하루 수십 번 받는다' '- 꺼도 「지금 실행」은 된다 — 끈다는 건 알아서 하지 말라는 뜻' '- 화면 열 때만 받는 것들\\(주요뉴스·수급·ETF 정보\\)은 목록 대신 설명으로' '' 'naverSyncConfig 는 수집 모듈을 부르지 않는다. 부르면 서로 물고' '도는 참조가 된다 — 조작 길만 양쪽을 안다.' '' 'Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>')"
     ]
   }
 }

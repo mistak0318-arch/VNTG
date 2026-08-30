@@ -231,6 +231,22 @@ export interface TopicPulse {
 
 /* ── 버즈·키워드 알고리즘 설정 (2026-08-30) ─────────────────────────────── */
 
+/** 네이버에서 스스로 긁어오는 일들 (2026-08-30) */
+export interface NaverSyncJob {
+  key: string;
+  label: string;
+  what: string;
+  when: string;
+  /** 「몇 분마다」가 뜻이 있는 일인가 — 아니면 주기 칸을 안 보여 준다 */
+  periodic: boolean;
+}
+export interface NaverSyncConfig {
+  jobs: NaverSyncJob[];
+  off: string[];
+  periodMin: Record<string, number | undefined>;
+  state: Record<string, { at?: string; msg?: string; ok?: boolean } | undefined>;
+}
+
 export interface BuzzConfig {
   zMin: number;
   minCount: number;
@@ -339,6 +355,16 @@ export const api = {
     getJson<KeywordFlow>(`/api/news-keywords/flow?window=${windowMin}`),
   keywordCollect: () =>
     postJson<{ articles: number; terms: number }>("/api/news-keywords/collect"),
+
+  naverSync: () => getJson<NaverSyncConfig>("/api/naver-sync"),
+  naverSyncEnable: (key: string, on: boolean) =>
+    postJson<NaverSyncConfig>(`/api/naver-sync/${key}/enabled`, { on }),
+  naverSyncPeriod: (key: string, min: number | null) =>
+    postJson<NaverSyncConfig>(`/api/naver-sync/${key}/period`, { min }),
+  naverSyncRun: (key: string) =>
+    postJson<{ ok: boolean; msg: string; config: NaverSyncConfig }>(
+      `/api/naver-sync/${key}/run`,
+    ),
 
   authState: () => getJson<AuthState>("/api/auth/state"),
   /**

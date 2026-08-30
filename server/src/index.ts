@@ -17,6 +17,7 @@ import { createAccountRouter } from "./routes/account.js";
 import { createAlgoRouter } from "./routes/algo.js";
 import { createAuthRouter } from "./routes/auth.js";
 import { createNewsKeywordRouter } from "./routes/newsKeywords.js";
+import { createNaverSyncRouter } from "./routes/naverSync.js";
 import { createCalendarRouter } from "./routes/calendar.js";
 import { createMarketRouter } from "./routes/market.js";
 import { createUsKiwoomRouter } from "./routes/usKiwoom.js";
@@ -208,6 +209,7 @@ app.use("/api/focus", createFocusRouter());
 app.use("/api/realtime", createRealtimeRouter(client));
 app.use("/api/report", createReportRouter(client));
 app.use("/api/news-keywords", createNewsKeywordRouter());
+app.use("/api/naver-sync", createNaverSyncRouter(client));
 
 // 07/12/18시에 리포트를 발행한다 (AI 요약은 이때만 생성)
 startReportScheduler(client);

@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recordApiCall } from "./apiUsage.js";
+import { isEnabled, markRun } from "./naverSyncConfig.js";
 
 /**
  * 네이버 테마 DB — **분류와 편입 사유만 받아 두고, 숫자는 우리가 낸다.**
@@ -524,23 +525,29 @@ export function startThemeScheduler(): void {
 
     /* 국내 — 일요일 04시. 한 번도 받은 적이 없으면 때를 안 가린다(빈 화면으로 두지 않는다) */
     const krDue = age >= 6.5 * 24 * 3600_000 && (day === 0 && hour === 4);
-    if (krDue || store.themes.length === 0) {
+    if ((krDue || store.themes.length === 0) && (await isEnabled("themesKr"))) {
       try {
         const r = await fetchAllThemes();
         console.log(`[naverThemes] 국내 갱신 — 테마 ${r.themes.length}개`);
+        await markRun("themesKr", true, `테마 ${r.themes.length}개`);
       } catch (err) {
-        console.error("[naverThemes] 국내 갱신 실패:", err instanceof Error ? err.message : err);
+        const m = err instanceof Error ? err.message : String(err);
+        console.error("[naverThemes] 국내 갱신 실패:", m);
+        await markRun("themesKr", false, m);
       }
     }
 
     /* 미국 — 매일 07시대(미국 마감 뒤). 20시간이 안 지났으면 건너뛴다 */
     const usDue = usAge >= 20 * 3600_000 && hour === 7;
-    if (usDue || store.us.length === 0) {
+    if ((usDue || store.us.length === 0) && (await isEnabled("themesUs"))) {
       try {
         const r = await refreshUsThemes();
         console.log(`[naverThemes] 미국 갱신 — 테마 ${r.themes}개 · 종목 ${r.stocks}개`);
+        await markRun("themesUs", true, `테마 ${r.themes}개 · 종목 ${r.stocks}개`);
       } catch (err) {
-        console.error("[naverThemes] 미국 갱신 실패:", err instanceof Error ? err.message : err);
+        const m = err instanceof Error ? err.message : String(err);
+        console.error("[naverThemes] 미국 갱신 실패:", m);
+        await markRun("themesUs", false, m);
       }
     }
 
@@ -548,12 +555,16 @@ export function startThemeScheduler(): void {
     const etfAge = store.etfFetchedAt
       ? Date.now() - new Date(store.etfFetchedAt).getTime()
       : Infinity;
-    if ((etfAge >= 12 * 3600_000 && hour === 16) || store.etf.length === 0) {
+    const etfDue = (etfAge >= 12 * 3600_000 && hour === 16) || store.etf.length === 0;
+    if (etfDue && (await isEnabled("themesEtf"))) {
       try {
         const r = await refreshEtfs();
         console.log(`[naverThemes] ETF 갱신 — ${r.count}개`);
+        await markRun("themesEtf", true, `${r.count}개`);
       } catch (err) {
-        console.error("[naverThemes] ETF 갱신 실패:", err instanceof Error ? err.message : err);
+        const m = err instanceof Error ? err.message : String(err);
+        console.error("[naverThemes] ETF 갱신 실패:", m);
+        await markRun("themesEtf", false, m);
       }
     }
   };

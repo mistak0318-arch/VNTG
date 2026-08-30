@@ -11102,3 +11102,21 @@ button.tpb-row:hover { background: var(--panel-2); }
   opacity: 0.5;
   cursor: default;
 }
+
+/* 네이버 동기화 목록 (2026-08-30) — 줄마다 「무엇을·언제·마지막·조작」이 한 덩어리 */
+.nsync { display: flex; flex-direction: column; gap: 8px; }
+.nsync-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--panel-2, var(--panel));
+}
+.nsync-row.off { opacity: 0.55; }
+.nsync-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.nsync-when { font-size: 0.78rem; color: var(--muted); }
+.nsync-what { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+.nsync-last { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+.nsync-ok { color: var(--up, #22c55e); }
+.nsync-bad { color: var(--down, #ef4444); }
+/* 조작은 줄바꿈 허용 — 폰에서 단추 세 개가 화면을 밀어내면 안 된다 */
+.nsync-ctl { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; align-items: center; }

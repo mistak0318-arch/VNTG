@@ -5,6 +5,7 @@ import { naverNews, type NaverCat } from "./naverMainNews.js";
 import { buzzDictionary, type BuzzTerm } from "./buzzRadar.js";
 import { peekSnapshot } from "./marketSnapshot.js";
 import { buzzPoints, getBuzzConfig } from "./buzzScore.js";
+import { isEnabled, markRun, periodOverrideMs } from "./naverSyncConfig.js";
 
 /**
  * 뉴스 키워드 흐름 (2026-08-30 요청).
@@ -575,9 +576,16 @@ export function startNewsKeywordScheduler(): void {
   if (timer) return;
   let last = 0;
   const tick = async () => {
-    if (Date.now() - last < periodMs()) return;
+    /* 설정에서 끌 수 있다 (2026-08-30) — 「지금 실행」은 꺼도 되니 여기서만 막는다 */
+    if (!(await isEnabled("newsKeywords"))) return;
+    const period = (await periodOverrideMs("newsKeywords")) ?? periodMs();
+    if (Date.now() - last < period) return;
     last = Date.now();
-    await collectNewsKeywords().catch(() => undefined);
+    const r = await collectNewsKeywords().catch((e) => {
+      void markRun("newsKeywords", false, e instanceof Error ? e.message : "실패");
+      return null;
+    });
+    if (r) await markRun("newsKeywords", true, `기사 ${r.articles}건 · 낱말 ${r.terms}개`);
   };
   void tick();
   /* 1분마다 깨어나 「지금 긁을 때인가」만 본다 — 시간대별 주기를 갈아 끼우지 않아도 된다 */

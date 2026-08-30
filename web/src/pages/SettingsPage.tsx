@@ -23,6 +23,7 @@ import { SubTabOrderPanel } from "../components/SubTabOrderPanel";
 import { MiniConfigPanel } from "../components/MiniConfigPanel";
 import { LoginSettingsPanel } from "../components/LoginSettingsPanel";
 import { BuzzConfigPanel } from "../components/BuzzConfigPanel";
+import { NaverSyncPanel } from "../components/NaverSyncPanel";
 
 interface KeyInfo {
   name: string;
@@ -171,6 +172,17 @@ export function SettingsPage() {
         hint="텔레그램 버즈와 뉴스 키워드가 함께 쓰는 자 — 얼마나 예민하게 잡을지"
       >
         <BuzzConfigPanel />
+      </CollapsibleCard>
+      )}
+
+      {tab === "publish" && (
+      <CollapsibleCard
+        id="naverSync"
+        scope="global"
+        title="네이버 동기화"
+        hint="네이버에서 스스로 긁어오는 것들 — 목록 · 주기 · 끄기 · 지금 실행"
+      >
+        <NaverSyncPanel />
       </CollapsibleCard>
       )}
 

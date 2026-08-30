@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { recordApiCall } from "./apiUsage.js";
+import { isEnabled, markRun } from "./naverSyncConfig.js";
 
 /**
  * **이 종목을 담고 있는 ETF** (2026-08-27) — 역인덱스.
@@ -176,14 +177,18 @@ export function startEtfHoldersScheduler(client: KiwoomClient): void {
     /* 16시 이후 하루 한 번. 인덱스가 통째로 없으면 시간과 무관하게 한 번 만든다 */
     if (built === today) return;
     if (s.builtAt && hour < 16) return;
+    if (!(await isEnabled("etfHolders"))) return;
     running = true;
     try {
       const r = await buildEtfHolders(client);
       if (r.scanned > 0) {
         console.log(`[etfHolders] 인덱스 갱신 — ETF ${r.scanned}곳 · 종목 ${r.stocks}개`);
       }
+      await markRun("etfHolders", true, `ETF ${r.scanned}곳 · 종목 ${r.stocks}개`);
     } catch (err) {
-      console.error("[etfHolders] 실패:", err instanceof Error ? err.message : err);
+      const m = err instanceof Error ? err.message : String(err);
+      console.error("[etfHolders] 실패:", m);
+      await markRun("etfHolders", false, m);
     } finally {
       running = false;
     }
