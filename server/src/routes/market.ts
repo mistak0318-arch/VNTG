@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { clearHidden, listHidden, setHidden } from "../hiddenThemes.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { alCode } from "../alCode.js";
 import { peekRealtime } from "../realtimeHub.js";
@@ -823,7 +824,35 @@ export function createMarketRouter(client: KiwoomClient): Router {
     try {
       const m = req.params.market;
       const market = m === "us" ? "us" : m === "etf" ? "etf" : "kr";
-      res.json(await themeStrength(market));
+      /* `?hidden=1` 은 **되살리는 화면만** 쓴다 — 평소 목록에는 숨긴 것이 안 온다 */
+      const includeHidden = req.query.hidden === "1";
+      const r = await themeStrength(market, { includeHidden });
+      res.json({ ...r, hidden: await listHidden() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 테마 숨기기 / 되살리기 (2026-08-30).
+   *
+   * 네이버에서 긁어온 분류라 **지울 수는 없다** — 지워도 다음 동기화에 돌아온다.
+   * 그래서 원본은 두고 가리개만 우리가 갖는다. 여기서 바꾸면 테마 DB·MAP·신호등이
+   * 전부 따라온다(themeStrength 한 곳에서 거르므로).
+   */
+  router.put("/theme-hidden", async (req, res, next) => {
+    try {
+      const keys = (req.body?.keys ?? []) as string[];
+      const hidden = Boolean(req.body?.hidden);
+      res.json({ hidden: await setHidden(Array.isArray(keys) ? keys : [], hidden) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.delete("/theme-hidden", async (_req, res, next) => {
+    try {
+      res.json({ hidden: await clearHidden() });
     } catch (err) {
       next(err);
     }

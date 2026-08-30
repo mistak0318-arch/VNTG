@@ -881,7 +881,8 @@
       "Bash(curl -s \"http://localhost:5173/api/signal/buzz/config\")",
       "Bash(node /tmp/tmck/check.mjs)",
       "Bash(awk '/^\\\\.nb-/{c=$0} /grid-template-columns/{if\\(c ~ /^\\\\.nb-/\\) print NR\": \"c\" → \"$0}' web/src/styles.css)",
-      "Bash(rm -f server/wk.csv)"
+      "Bash(rm -f server/wk.csv)",
+      "Bash(curl -s \"http://localhost:5173/api/market/theme-strength/kr\")"
     ]
   }
 }

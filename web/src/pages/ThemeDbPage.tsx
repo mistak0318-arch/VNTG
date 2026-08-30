@@ -125,6 +125,28 @@ function ThemeMap({
 }) {
   const [rows, setRows] = useState<ThemeStrength[] | null>(null);
   const [warming, setWarming] = useState(false);
+  /**
+   * 숨긴 테마 (2026-08-30 요청 — 「지워야 할 것들이 보이네」).
+   *
+   * 네이버 분류라 **지울 수 없다** — 지워도 다음 동기화에 돌아온다. 그래서 가린다.
+   * `showHidden` 은 **되살리는 화면**이다. 평소 목록에는 숨긴 것이 아예 안 온다.
+   */
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [showHidden, setShowHidden] = useState(false);
+  const [hiding, setHiding] = useState(false);
+
+  const toggleHide = async (key: string, on: boolean) => {
+    if (hiding) return;
+    setHiding(true);
+    try {
+      const r = await api.themeHide([key], on);
+      setHidden(r.hidden);
+      /* 목록에서 바로 빼거나 되돌린다 — 새로고침을 기다리게 하면 눌렀는지 알 수 없다 */
+      setRows((prev) => (prev && !showHidden && on ? prev.filter((t) => t.key !== key) : prev));
+    } finally {
+      setHiding(false);
+    }
+  };
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -151,10 +173,12 @@ function ThemeMap({
 
     const fetchOnce = (quiet: boolean) =>
       api
-        .themeStrength(market)
+        /* 되살리는 화면일 때만 숨긴 것까지 받아 온다 — 평소 목록에는 아예 안 온다 */
+        .themeStrength(market, showHidden)
         .then((r) => {
           if (!alive) return;
           setRows(r.themes);
+          setHidden(r.hidden ?? []);
           setWarming(Boolean(r.warming));
         })
         .catch((e: Error) => {
@@ -180,7 +204,7 @@ function ThemeMap({
       alive = false;
       clearInterval(t);
     };
-  }, [market, marketOpen, tabActive]);
+  }, [market, marketOpen, tabActive, showHidden]);
 
   /** ETF 분류 목록 — 개수까지 보여야 어디를 볼지 정해진다 */
   const groups = useMemo(() => {
@@ -193,6 +217,12 @@ function ThemeMap({
     if (!rows) return [];
     const key = q.trim().toLowerCase();
     let base = group ? rows.filter((t) => t.group === group) : rows;
+    /*
+     * 「숨긴 것 보기」에서는 **숨긴 것만** 보여야 한다. 서버는 includeHidden 으로
+     * 전부 주는데(그래야 되살릴 대상을 알 수 있다) 화면에서 다시 좁힌다 —
+     * 되살리는 자리에 안 숨긴 265개가 같이 있으면 찾을 수가 없다.
+     */
+    if (showHidden) base = base.filter((t) => hidden.includes(t.key));
     /* 거래대금 문턱 — 이게 「너무 많아서 못 보겠다」를 푸는 열쇠다 */
     if (minValue > 0) base = base.filter((t) => t.tradeValue >= minValue);
     const hit = key
@@ -204,7 +234,7 @@ function ThemeMap({
       : base;
     /* 기본은 오늘 등락률 순 — 칸을 누르면 그 아래 `useSortableTable` 이 다시 정렬한다 */
     return [...hit].sort((a, b) => b.changeRate - a.changeRate);
-  }, [rows, q, group, minValue]);
+  }, [rows, q, group, minValue, showHidden, hidden]);
 
   /* 표 정렬 — 시세분석과 같은 훅·같은 규칙(내림 → 오름 → 원래) */
   const sortT = useSortableTable<ThemeStrength>(sorted);
@@ -296,6 +326,38 @@ function ThemeMap({
         지표는 한 번에 하나밖에 못 봤다 — 「5일 누적으로 정렬했는데 그 값이 안 보인다」.
         표는 여러 자를 나란히 놓고 견줄 수 있고, 칸을 눌러 정렬한다(시세분석과 같은 규칙).
       */}
+      {/*
+        숨긴 테마로 오가는 줄 (2026-08-30).
+
+        숨기는 기능만 있고 되살릴 길이 없으면 **한 번 잘못 누르면 끝**이다. 그러면
+        사람이 숨기기를 무서워하게 되고, 결국 안 쓴다. 숨긴 것이 하나라도 있으면
+        그 수를 늘 보여 주고 한 번에 들어갈 수 있게 둔다.
+      */}
+      {(hidden.length > 0 || showHidden) && (
+        <div className="tdb-hidden-bar">
+          <span>
+            숨긴 테마 <b>{hidden.length}</b>개 — 테마 DB·MAP·신호등 어디에도 안 나옵니다.
+          </span>
+          <button className={showHidden ? "on" : ""} onClick={() => setShowHidden((v) => !v)}>
+            {showHidden ? "← 보이는 것만" : "숨긴 것 보기"}
+          </button>
+          {showHidden && hidden.length > 0 && (
+            <button
+              className="tdb-hidden-all"
+              disabled={hiding}
+              onClick={() => {
+                void api.themeHideClear().then((r) => {
+                  setHidden(r.hidden);
+                  setShowHidden(false);
+                });
+              }}
+            >
+              전부 되살리기
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ⚠️ 감싸개는 `data-table-wrap` 이다 — 시세분석과 같은 뼈대라야 폭·스크롤이 맞는다 */}
       <div className="data-table-wrap">
         <table className="data-table tdb-table">
@@ -384,6 +446,9 @@ function ThemeMap({
                 thProps={{ title: "구성종목 시가총액 합 — 스냅샷에 없는 종목은 빠진 어림값" }}
               />
               <th>주도주</th>
+              <th className="tdb-th-hide" title="목록에서 가립니다 — 지우는 게 아니라 숨기는 것입니다">
+                {showHidden ? "되살리기" : "숨기기"}
+              </th>
             </tr>
           </thead>
           <tbody>

@@ -60,6 +60,12 @@ function sumCap(stocks: { marketCap?: number | null }[]): number | null {
   return n > 0 ? n : null;
 }
 
+/** 테마 하나의 오늘 거래대금 — 구성종목 합. 같은 이유로 0 이면 null */
+function sumValue(stocks: { tradeValue?: number | null }[]): number | null {
+  const n = stocks.reduce((a, s) => a + (s.tradeValue ?? 0), 0);
+  return n > 0 ? n : null;
+}
+
 export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const { theme } = useAppearance();
   const [mode, setMode] = useState<Mode>("mine");
@@ -166,6 +172,7 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
             (t.source ?? "manual") !== "manual" ? " · 옮김" : ""
           }`,
           marketCap: sumCap(t.stocks),
+          tradeValue: sumValue(t.stocks),
           title: t.memo || t.name,
           onClick: () =>
             setConstituent({

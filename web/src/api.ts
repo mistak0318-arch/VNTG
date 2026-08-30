@@ -937,10 +937,20 @@ export const api = {
   naverThemeFetch: () => postJson<{ started: boolean }>("/api/market/naver-themes/fetch", {}),
   naverThemeFetchUs: () => postJson<{ started: boolean }>("/api/market/naver-themes/fetch-us", {}),
   /** 테마 강도 — 등락률·상승비율·연속성. **조회 0회**(분류는 파일, 시세는 스냅샷) */
-  themeStrength: (market: "kr" | "etf" | "us") =>
-    getJson<{ themes: ThemeStrength[]; at: string; warming?: boolean }>(
-      `/api/market/theme-strength/${market}`,
+  themeStrength: (market: "kr" | "etf" | "us", includeHidden = false) =>
+    getJson<{ themes: ThemeStrength[]; at: string; warming?: boolean; hidden: string[] }>(
+      `/api/market/theme-strength/${market}${includeHidden ? "?hidden=1" : ""}`,
     ),
+  /**
+   * 테마 숨기기 — **지우는 게 아니라 가린다.**
+   *
+   * 네이버 분류라 지워도 다음 동기화에 그대로 돌아온다. 원본은 두고 가리개만
+   * 우리가 갖는다. 서버가 `themeStrength` 한 곳에서 거르므로 테마 DB·MAP·신호등이
+   * 전부 따라온다.
+   */
+  themeHide: (keys: string[], hidden: boolean) =>
+    putJson<{ hidden: string[] }>("/api/market/theme-hidden", { keys, hidden }),
+  themeHideClear: () => deleteJson<{ hidden: string[] }>("/api/market/theme-hidden"),
   naverThemeFetchEtf: () => postJson<{ count: number }>("/api/market/naver-themes/fetch-etf", {}),
   /** 시장 렌즈 — 체온계 + 테마 로테이션 + 미국 밤사이. 조회 0회 */
   marketLens: () => getJson<MarketLens>("/api/market/lens"),
@@ -2105,6 +2115,8 @@ export interface EvaluatedTheme {
     name: string;
     changeRate: number;
     marketCap: number | null;
+    /** 오늘 거래대금(억원) — 내 테마도 거래대금으로 볼 수 있게 (2026-08-30) */
+    tradeValue: number | null;
     weight: number | null;
     found: boolean;
   }[];

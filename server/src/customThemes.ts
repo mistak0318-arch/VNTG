@@ -52,6 +52,14 @@ export interface EvaluatedTheme extends CustomTheme {
     name: string;
     changeRate: number;
     marketCap: number | null;
+    /**
+     * 오늘 거래대금(억원) — 2026-08-30.
+     *
+     * 이게 없어서 **내 테마를 거래대금으로 볼 수 없었다.** 시총은 「이 판이 얼마나
+     * 큰가」이고 거래대금은 「오늘 돈이 도는가」인데, 뒤쪽이 오히려 더 자주 필요하다.
+     * 스냅샷에 이미 있는 값이라 실어 보내기만 하면 된다(조회 0회).
+     */
+    tradeValue: number | null;
     /** 이 종목이 테마 등락률에 기여한 비중(%) */
     weight: number | null;
     found: boolean;
@@ -203,6 +211,7 @@ function evaluate(
       name: s?.name ?? nameOf?.get(code) ?? code,
       changeRate: s?.changeRate ?? 0,
       marketCap: s?.marketCap ?? null,
+      tradeValue: s?.tradeValue ?? null,
       weight: null as number | null,
       found: Boolean(s),
     };

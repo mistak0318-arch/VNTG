@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { peekSnapshot } from "./marketSnapshot.js";
+import { hiddenSet } from "./hiddenThemes.js";
 import { ETF_TABS, loadThemes } from "./naverThemes.js";
 import { cumOf, dailyRates, loadCloses } from "./dailyCloses.js";
 
@@ -187,6 +188,10 @@ function hitsOf(series: number[], n: number): { n: number; of: number } {
  */
 export async function themeStrength(
   market: Market,
+  opts: {
+    /** 숨긴 것까지 전부 — **되살리는 화면만** 켠다 */
+    includeHidden?: boolean;
+  } = {},
 ): Promise<{ themes: ThemeStrength[]; at: string; warming?: boolean }> {
   const store = await loadThemes();
   const snap = peekSnapshot();
@@ -332,7 +337,18 @@ export async function themeStrength(
     () => undefined,
   );
 
-  return { themes: rows, at: String(snap?.at ?? "") };
+  /*
+   * 숨긴 테마를 **여기 한 곳에서** 뺀다 (2026-08-30).
+   *
+   * 이 함수가 테마 DB·테마 MAP·신호등 테마 렌즈·마켓 렌즈·종목 렌즈·테마 링크
+   * **여덟 곳의 원천**이다. 화면마다 따로 거르면 언젠가 한 곳이 빠지고, 그러면
+   * 「숨겼는데 저기서는 보이는」 상태가 된다 — 그게 제일 나쁘다.
+   */
+  const visible = opts.includeHidden
+    ? rows
+    : await hiddenSet().then((h) => rows.filter((r) => !h.has(r.key)));
+
+  return { themes: visible, at: String(snap?.at ?? "") };
 }
 
 /**
