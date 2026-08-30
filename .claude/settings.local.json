@@ -882,7 +882,12 @@
       "Bash(node /tmp/tmck/check.mjs)",
       "Bash(awk '/^\\\\.nb-/{c=$0} /grid-template-columns/{if\\(c ~ /^\\\\.nb-/\\) print NR\": \"c\" → \"$0}' web/src/styles.css)",
       "Bash(rm -f server/wk.csv)",
-      "Bash(curl -s \"http://localhost:5173/api/market/theme-strength/kr\")"
+      "Bash(curl -s \"http://localhost:5173/api/market/theme-strength/kr\")",
+      "Bash(npx --prefix server tsc -p server --noEmit)",
+      "Bash(npx --prefix web tsc -p web --noEmit)",
+      "Bash(grep -v \"^\\\\s*$\")",
+      "Bash(printf '%s\\\\n' '캘린더 — 가져온 일정 수정이 되돌아가던 문제' '' '고쳐도 다음 동기화에 원본으로 되돌아갔다. 구독 캘린더에 자동' '동기화\\(30분\\)를 붙이면서 「고쳐도 삼십 분이면 사라지는」 상태가' '됐고, 이건 못 고치는 것과 같다.' '' '- 가져온 일정을 고치면 edited 표시가 붙고, 동기화가 건드리지 않는다' '- srcKey\\(ICS UID / 표는 날짜|제목\\)로 원본과 짝지어 다시 안 넣는다' '- 종류 고르는 칸에 지표·회의·채권·파생·주간이 빠져 있어서, 그 종류를' '  가진 일정을 고치면 종류가 조용히 바뀌었다' '- 국가·대표 칸을 폼에 추가 \\(표로만 넣을 수 있던 값\\)' '' 'Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>')",
+      "Bash(git push *)"
     ]
   }
 }

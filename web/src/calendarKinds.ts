@@ -34,12 +34,24 @@ export const KIND_META: Record<EventKind, KindMeta> = {
   weekly: { label: "주간", icon: "🗓", color: "#c89a4a" },
 };
 
+/*
+ * 고르는 칸에 뜨는 차례.
+ *
+ * ⚠️ **새 종류를 만들면 여기에도 넣어야 한다** (2026-08-30). 여기 빠진 종류를 가진
+ * 일정을 고치려고 열면, 고르는 칸에 짝이 없어 첫 항목이 뽑힌 것처럼 보이고 —
+ * 저장하는 순간 종류가 조용히 바뀐다. 지표·회의 같은 것들이 실제로 그랬다.
+ */
 export const KIND_ORDER: EventKind[] = [
   "market",
   "earnings",
+  "indicator",
+  "meeting",
+  "bond",
+  "deriv",
   "holiday",
   "event",
   "conference",
+  "weekly",
   "personal",
 ];
 

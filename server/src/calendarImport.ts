@@ -71,6 +71,7 @@ export function parseIcs(text: string, source: string, kind: EventKind = "person
     time?: string;
     endTime?: string;
     endDate?: string;
+    srcKey?: string;
     title?: string;
     memo?: string;
   } | null = null;
@@ -92,6 +93,7 @@ export function parseIcs(text: string, source: string, kind: EventKind = "person
           title: cur.title,
           memo: cur.memo,
           kind,
+          srcKey: cur.srcKey,
           source,
         });
       }
@@ -118,6 +120,15 @@ export function parseIcs(text: string, source: string, kind: EventKind = "person
         cur.endDate = p.date;
         cur.endTime = p.time;
       }
+    } else if (name === "UID") {
+      /*
+       * 원본 쪽 고유 열쇠 (2026-08-30).
+       *
+       * 이게 있어야 **내가 고친 일정을 동기화가 덮어쓰지 않는다.** 고친 일정을 남겨
+       * 두면 다음 동기화에 원본이 다시 들어와 둘이 되는데, 열쇠가 같으면 「이미
+       * 고쳐서 갖고 있는 것」임을 알고 건너뛴다.
+       */
+      cur.srcKey = value.trim();
     } else if (name === "SUMMARY") {
       cur.title = unescapeIcs(value);
     } else if (name === "DESCRIPTION") {
@@ -276,6 +287,8 @@ export function parseCsv(text: string, source: string, defaultKind: EventKind = 
       country: (rawCountry ?? "").trim() || undefined,
       /* 「대표」「★」「Y」 무엇으로 적어도 받는다 — 사람이 손으로 채우는 칸이다 */
       headline: /^(대표|핵심|★|\*|y|yes|true|1)$/i.test((rawFlag ?? "").trim()) || undefined,
+      /* 표에는 UID 가 없으니 「날짜|제목」을 열쇠로 쓴다 — 같은 파일을 다시 올려도 짝이 맞는다 */
+      srcKey: `${date}|${title}`,
       source,
     });
   }

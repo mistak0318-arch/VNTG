@@ -333,6 +333,9 @@ export function CalendarPage() {
   const [memo, setMemo] = useState("");
   const [repeat, setRepeat] = useState<"none" | "weekly" | "monthly" | "yearly">("none");
   const [isTodo, setIsTodo] = useState(false);
+  /* 국가·대표 — 표로 올린 일정에만 있던 값이라 손으로도 고칠 수 있어야 한다 (2026-08-30) */
+  const [country, setCountry] = useState("");
+  const [headline, setHeadline] = useState(false);
   const [formDate, setFormDate] = useState<string>(() => ymd(new Date()));
   /** 수정 중인 일정 id — 있으면 폼이 「추가」가 아니라 「수정 저장」이 된다 */
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -487,6 +490,8 @@ export function CalendarPage() {
     setMemo("");
     setRepeat("none");
     setIsTodo(false);
+    setCountry("");
+    setHeadline(false);
     setEditingId(null);
     setKindTouched(false);
   }
@@ -521,6 +526,9 @@ export function CalendarPage() {
            (undefined 는 JSON 에서 사라져 기존 값이 남는다) */
         repeat: !isTodo && repeat !== "none" ? repeat : null,
         todo: isTodo ? true : null,
+        /* 국가·대표도 같은 이유로 null 을 보낸다 — 안 실으면 표에서 온 값이 그대로 남는다 */
+        country: country.trim() || null,
+        headline: headline ? true : null,
       } as unknown as Omit<CalendarEvent, "id">;
       if (editingId) await api.calendarUpdate(editingId, body);
       else await api.calendarAdd(body);
@@ -543,6 +551,8 @@ export function CalendarPage() {
     setMemo(e.memo ?? "");
     setRepeat(e.repeat ?? "none");
     setIsTodo(Boolean(e.todo));
+    setCountry(e.country ?? "");
+    setHeadline(Boolean(e.headline));
   }
 
   async function removeEvent(e: CalendarEvent) {
@@ -995,6 +1005,28 @@ export function CalendarPage() {
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
             />
+            {/*
+              국가·대표 (2026-08-30) — 표로 올린 일정에만 있던 값이다. 칸이 없으면
+              가져온 일정을 열어 고칠 때 이 둘을 손댈 수 없고, 주간 브리핑에 왜 떴는지
+              왜 사라졌는지도 알 수 없다. 자주 쓰는 칸은 아니라 아래쪽에 둔다.
+            */}
+            <div className="ma-form-row">
+              <input
+                className="ma-input"
+                style={{ maxWidth: "7rem" }}
+                placeholder="국가 (선택)"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submitEvent()}
+              />
+              <button
+                className={`filter-btn${headline ? " active" : ""}`}
+                onClick={() => setHeadline((v) => !v)}
+                title="주간 브리핑 맨 위에 올린다"
+              >
+                ★ 대표
+              </button>
+            </div>
             <div className="ma-form-row">
               <button className="filter-btn active" onClick={submitEvent}>
                 {editingId ? "수정 저장" : "추가"}
@@ -1009,6 +1041,8 @@ export function CalendarPage() {
           <div className="table-note">
             선물옵션 동시만기·휴장일은 처음 실행할 때 자동으로 들어갑니다. 날짜를 바꿔서
             저장하면 일정이 그 날짜로 옮겨집니다. 반복 일정은 정한 날짜가 첫 회입니다.
+            표·구글 캘린더에서 가져온 일정도 그대로 고칠 수 있고, <b>고친 일정은 다음
+            동기화 때 되돌아가지 않습니다.</b>
           </div>
         </div>
       </div>

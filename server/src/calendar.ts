@@ -110,6 +110,24 @@ export interface CalendarEvent {
   memo?: string;
   /** 어디서 왔는지. 직접 입력은 없음, 가져온 일정은 "ics:<url>" / "file:<이름>" */
   source?: string;
+  /**
+   * 원본 쪽 고유 열쇠 (2026-08-30). ICS 는 UID, CSV 는 「날짜|제목」.
+   *
+   * 내가 고친 일정을 동기화가 덮어쓰지 않게 하려면, 들어오는 원본과 갖고 있는 것을
+   * **짝지을 수단**이 있어야 한다. 제목으로 짝지으면 제목을 고친 순간 짝이 끊긴다.
+   */
+  srcKey?: string;
+  /**
+   * 내가 손으로 고쳤나 (2026-08-30 요청 — 「어느 소스에서 왔던 내가 수정할 수 있게」).
+   *
+   * ⚠️ 예전엔 가져온 일정을 고쳐도 **다음 동기화에 원래대로 돌아갔다.** `replaceBySource`
+   * 가 그 출처의 것을 통째로 지우고 다시 넣기 때문이다. 손으로 올리는 파일은 그나마
+   * 다시 올릴 때만 그랬지만, 구독 캘린더에 자동 동기화(30분)를 붙이면서 **고쳐도
+   * 삼십 분이면 사라지는** 상태가 됐다 — 고칠 수 없는 것과 같다.
+   *
+   * 이 표시가 붙은 것은 동기화가 건드리지 않는다.
+   */
+  edited?: boolean;
   /** 반복 — date 가 첫 회다. 조회 시 인스턴스로 전개된다 */
   repeat?: RepeatKind;
   /** 할 일 — 달력에 뜨되 체크로 끝내는 것. 반복과는 함께 못 쓴다 */
@@ -269,7 +287,21 @@ export async function updateEvent(id: string, patch: Partial<CalendarEvent>): Pr
   const baseId = id.split("@")[0]; // 반복 인스턴스로 와도 원본을 고친다
   const items = await load();
   await persist(
-    items.map((e) => (e.id === baseId ? { ...e, ...patch, id: e.id, anchor: undefined } : e)),
+    items.map((e) =>
+      e.id === baseId
+        ? {
+            ...e,
+            ...patch,
+            id: e.id,
+            anchor: undefined,
+            /*
+             * 가져온 일정이면 **손댔다고 적어 둔다** — 그래야 다음 동기화가 안 덮는다.
+             * 직접 만든 일정에는 필요 없다(애초에 동기화가 안 건드린다).
+             */
+            ...(e.source ? { edited: true } : {}),
+          }
+        : e,
+    ),
   );
   return listEvents();
 }
@@ -293,10 +325,25 @@ export async function replaceBySource(
   incoming: Omit<CalendarEvent, "id">[],
 ): Promise<{ events: CalendarEvent[]; added: number; removed: number }> {
   const items = await load();
+
+  /*
+   * **내가 고친 것은 남긴다** (2026-08-30).
+   *
+   * 예전엔 그 출처의 것을 전부 지우고 새로 넣었다. 파일은 다시 올릴 때만 그랬지만,
+   * 구독 캘린더에 자동 동기화가 붙으면서 **고쳐도 삼십 분이면 사라지는** 상태가 됐다.
+   * 고칠 수 있는 것처럼 보이는데 실제로는 못 고치는 것이 제일 나쁘다.
+   */
+  const mine = items.filter((e) => e.source === source && e.edited);
   const kept = items.filter((e) => e.source !== source);
-  const removed = items.length - kept.length;
-  const added = incoming.map((e) => ({ ...e, id: newId(), source }));
-  await persist([...kept, ...added]);
+  const removed = items.length - kept.length - mine.length;
+
+  /* 고쳐서 갖고 있는 것과 **같은 원본**은 다시 안 넣는다 — 넣으면 둘이 된다 */
+  const held = new Set(mine.map((e) => e.srcKey).filter(Boolean) as string[]);
+  const added = incoming
+    .filter((e) => !(e.srcKey && held.has(e.srcKey)))
+    .map((e) => ({ ...e, id: newId(), source }));
+
+  await persist([...kept, ...mine, ...added]);
   return { events: await listEvents(), added: added.length, removed };
 }
 
