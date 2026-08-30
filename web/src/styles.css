@@ -11147,3 +11147,50 @@ button.tpb-row:hover { background: var(--panel-2); }
 /* 잔글씨가 아랫줄로 가게 — 같은 줄에 두면 칩 하나가 화면 폭을 다 쓴다 */
 .rp-glance-band .rp-glance-chip { flex-direction: column; align-items: flex-start; gap: 0; }
 .rp-glance-main { display: flex; align-items: baseline; gap: 0.35rem; }
+
+/*
+  캘린더 입력 폼을 크게 (2026-08-31 요청 — 「각 input 창이 되게 작아서 불편」).
+
+  ⚠️ `.ma-input` 자체는 안 건드린다 — 앱 곳곳이 쓰는 공용 칸이라 여기서 키우면
+  관계없는 화면들이 같이 커진다. **캘린더 폼 안에서만** 키운다.
+*/
+.cal-form .ma-input,
+.cal-form .group-select {
+  font-size: 0.95rem;
+  padding: 9px 12px;
+  min-height: 40px;
+  border-radius: 8px;
+}
+.cal-form .ma-form-row { gap: 10px; margin-bottom: 8px; }
+/* 날짜·시각은 브라우저 기본 폭이 좁아 글자가 잘린다 — 넉넉히 */
+.cal-form .cal-in-date { width: 158px; }
+.cal-form .cal-time-row .ma-input { width: 122px; }
+/* 제목은 이 폼의 주인공이다 — 한 줄을 다 쓰고 조금 더 크게 */
+.cal-form .ma-input.wide { font-size: 1rem; min-height: 44px; }
+.cal-form .cal-memo-input {
+  font-size: 0.9rem;
+  padding: 9px 12px;
+  min-height: 76px;
+  border-radius: 8px;
+  /*
+   * ⚠️ **가로를 여기서 되찾는다.** `.cal-memo-input{width:100%}` 는 있었지만
+   * `.ma-input.wide{width:auto}` 가 더 무거워서(0,2,0 대 0,1,0) 늘 졌다 —
+   * 메모 칸이 186px 로 쪼그라들어 있던 진짜 이유다. flex 부모가 아니라
+   * `flex:1` 도 안 먹는 자리다.
+   */
+  width: 100%;
+}
+/* 손가락으로 누르는 기기에서는 한 번 더 — 40px 은 터치 목표로 빠듯하다 */
+@media (pointer: coarse) {
+  .cal-form .ma-input,
+  .cal-form .group-select { min-height: 46px; font-size: 1rem; }
+  .cal-form .cal-in-date { width: 100%; }
+  .cal-form .cal-date-row { flex-wrap: wrap; }
+}
+/* 며칠짜리 표시 — 칩 안에서는 작게, 목록에서는 배지로 */
+.cal-chip-span {
+  font-style: normal;
+  opacity: 0.65;
+  margin-left: 3px;
+  font-size: 0.9em;
+}

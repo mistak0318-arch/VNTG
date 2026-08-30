@@ -2574,6 +2574,15 @@ export interface CalendarEvent {
   time?: string;
   /** 끝나는 시각. 없고 time 만 있으면 화면에서 한 시간짜리로 본다 */
   endTime?: string;
+  /** 며칠짜리 일정의 마지막 날. 없으면 하루짜리 (2026-08-31) */
+  endDate?: string;
+  /**
+   * **화면에서만 붙는 표시** — 서버에 이런 값은 없다 (2026-08-31).
+   *
+   * 며칠짜리 일정을 날짜별 묶음으로 펼칠 때 「3일 중 2일째」를 적으려고 사본에 단다.
+   * 저장 요청에 실어 보내면 안 된다.
+   */
+  span?: { i: number; of: number };
   title: string;
   kind: EventKind;
   memo?: string;

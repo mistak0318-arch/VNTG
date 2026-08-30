@@ -40,12 +40,36 @@ function Chip({
       <i className="cal-chip-icon">{e.todo ? (e.done ? "✅" : "☐") : meta.icon}</i>
       {e.repeat ? "↻" : ""}
       {e.title}
+      {/* 며칠짜리면 「2/3」 — 이게 없으면 같은 제목이 사흘 내리 있는 것처럼 보인다 */}
+      {e.span && <i className="cal-chip-span">{e.span.i}/{e.span.of}</i>}
     </span>
   );
 }
 
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** "2026-08-31" 에서 n 일 뒤. 월·연 넘김은 Date 가 알아서 한다 */
+function addDays(key: string, n: number): string {
+  const [y, m, d] = key.split("-").map(Number);
+  return ymd(new Date(y, m - 1, d + n));
+}
+
+/**
+ * 시작일과 마지막 날을 포함해 **며칠짜리인가**. 8/31~9/2 면 3.
+ *
+ * ⚠️ 밀리초 나눗셈으로 세면 안 된다 — 서머타임이 없는 한국이라 지금은 맞지만,
+ * 그 계산은 하루가 23시간이거나 25시간인 날에 조용히 틀린다. 날짜를 하나씩 민다.
+ */
+function spanDays(from: string, to: string): number {
+  let n = 1;
+  let cur = from;
+  while (cur < to && n < 400) {
+    cur = addDays(cur, 1);
+    n += 1;
+  }
+  return n;
 }
 
 function monthKey(d: Date): string {
@@ -334,6 +358,8 @@ export function CalendarPage() {
   const [repeat, setRepeat] = useState<"none" | "weekly" | "monthly" | "yearly">("none");
   const [isTodo, setIsTodo] = useState(false);
   /* 국가·대표 — 표로 올린 일정에만 있던 값이라 손으로도 고칠 수 있어야 한다 (2026-08-30) */
+  /** 며칠짜리 일정의 마지막 날 (2026-08-31). 비우면 하루짜리 */
+  const [endDate, setEndDate] = useState("");
   const [country, setCountry] = useState("");
   const [headline, setHeadline] = useState(false);
   const [formDate, setFormDate] = useState<string>(() => ymd(new Date()));
@@ -454,13 +480,55 @@ export function CalendarPage() {
   }
 
   // 날짜별로 미리 묶어두면 셀마다 배열을 훑지 않아도 된다
+  /**
+   * 날짜별 묶음.
+   *
+   * ## 할 일이 맨 위 (2026-08-31 요청)
+   *
+   * 일정은 「그 시각이 되면 일어나는 일」이고 할 일은 **내가 움직여야 끝나는 것**이다.
+   * 섞여 있으면 아직 안 한 일이 일정 사이에 파묻힌다.
+   *
+   * 끝낸 할 일은 **맨 아래로 내린다.** 할 일이라고 다 위로 올리면 이미 체크한 것이
+   * 오늘 봐야 할 일정 위에 앉는다 — 그건 「위로 올려 달라」는 뜻이 아니다.
+   *
+   * ⚠️ 여기서 한 번만 정렬한다. 이 map 이 **선택일 목록·월 칸 칩·주간 시간표
+   * 세 곳의 원천**이라, 화면마다 따로 정렬하면 언젠가 한 곳이 빠지고 그러면
+   * 「달력에선 위인데 주간표에선 아래」가 된다.
+   *
+   * 정렬은 **안정 정렬**이라 같은 무리 안에서는 서버가 준 차례(날짜·등록순)가 그대로다.
+   */
   const byDate = useMemo(() => {
+    const rank = (e: CalendarEvent) => (e.todo ? (e.done ? 2 : 0) : 1);
     const m = new Map<string, CalendarEvent[]>();
-    for (const e of events) {
-      const list = m.get(e.date) ?? [];
+    const put = (key: string, e: CalendarEvent) => {
+      const list = m.get(key) ?? [];
       list.push(e);
-      m.set(e.date, list);
+      m.set(key, list);
+    };
+    for (const e of events) {
+      put(e.date, e);
+      /*
+       * 며칠짜리 일정을 **가운데 날들에도 놓는다** (2026-08-31).
+       *
+       * 저장은 시작일 하나뿐이다. 여기서 펼치는 사본에는 `span` 을 달아 두어
+       * 화면이 「2/4일째」를 적을 수 있게 한다. id 는 **건드리지 않는다** — 어느
+       * 날에서 눌러 고치든 원본 하나를 고쳐야 하기 때문이다(React 키만 날짜를 붙인다).
+       */
+      if (!e.endDate || e.endDate <= e.date) continue;
+      const total = spanDays(e.date, e.endDate);
+      if (total < 2) continue;
+      for (let i = 1; i < total; i += 1) {
+        const key = addDays(e.date, i);
+        put(key, { ...e, span: { i: i + 1, of: total } });
+      }
+      /* 첫날에도 「1/N」이 보이게 표시를 심는다 */
+      const first = m.get(e.date);
+      if (first) {
+        const at = first.findIndex((x) => x.id === e.id && !x.span);
+        if (at >= 0) first[at] = { ...e, span: { i: 1, of: total } };
+      }
     }
+    for (const list of m.values()) list.sort((a, b) => rank(a) - rank(b));
     return m;
   }, [events]);
 
@@ -487,6 +555,7 @@ export function CalendarPage() {
     setTitle("");
     setTime("");
     setEndTime("");
+    setEndDate("");
     setMemo("");
     setRepeat("none");
     setIsTodo(false);
@@ -521,6 +590,8 @@ export function CalendarPage() {
         time: time || undefined,
         /* 종일이면 끝 시각은 뜻이 없다. 수정에서 지울 수 있게 null 을 보낸다 */
         endTime: time && endTime ? endTime : null,
+        /* 끝날이 시작일보다 뒤일 때만 싣는다. 비우면 null 로 보내야 기간이 풀린다 */
+        endDate: endDate && endDate > formDate ? endDate : null,
         memo: memo || undefined,
         /* 반복과 할 일은 상호 배타. 수정에서 해제하려면 값이 실려 가야 해서 null 을 보낸다
            (undefined 는 JSON 에서 사라져 기존 값이 남는다) */
@@ -548,6 +619,7 @@ export function CalendarPage() {
     setKindTouched(true); // 이미 정해진 일정이다 — 제목을 고쳐도 종류를 바꾸지 않는다
     setTime(e.time ?? "");
     setEndTime(e.endTime ?? "");
+    setEndDate(e.endDate ?? "");
     setMemo(e.memo ?? "");
     setRepeat(e.repeat ?? "none");
     setIsTodo(Boolean(e.todo));
@@ -882,6 +954,15 @@ export function CalendarPage() {
                         ↻ {e.repeat === "weekly" ? "매주" : e.repeat === "monthly" ? "매월" : "매년"}
                       </span>
                     )}
+                    {/* 며칠짜리 — 몇 일째인지와 전체 기간을 같이 (2026-08-31) */}
+                    {e.span && (
+                      <span
+                        className="cal-badge conference"
+                        title={`${e.date} ~ ${e.endDate} (${e.span.of}일)`}
+                      >
+                        {e.span.i}/{e.span.of}일째
+                      </span>
+                    )}
                     <button className="cal-item-title link-btn" onClick={() => setDetail(e)} title="자세히 보기">
                       {e.time && <b>{timeText(e)} </b>}
                       {e.title}
@@ -907,14 +988,38 @@ export function CalendarPage() {
                 ✎ 일정 수정 중 — 저장하면 반영됩니다
               </div>
             )}
-            <div className="ma-form-row">
+            {/*
+              날짜 — **시작과 끝** (2026-08-31 요청). 달력의 기본인데 없어서 출장·전시회
+              같은 며칠짜리를 시작일에만 적어야 했다.
+            */}
+            <div className="ma-form-row cal-date-row">
               <input
-                className="ma-input"
+                className="ma-input cal-in-date"
                 type="date"
                 value={formDate}
-                onChange={(e) => setFormDate(e.target.value)}
-                title="날짜"
+                onChange={(e) => {
+                  setFormDate(e.target.value);
+                  /* 시작을 끝보다 뒤로 옮기면 끝을 놓아 준다 — 거꾸로 저장되면 안 된다 */
+                  if (endDate && e.target.value > endDate) setEndDate("");
+                }}
+                title="시작 날짜"
               />
+              <span className="pt-n">~</span>
+              <input
+                className="ma-input cal-in-date"
+                type="date"
+                value={endDate}
+                min={formDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                title="마지막 날 (비우면 하루짜리)"
+              />
+              <span className="pt-n">
+                {endDate && endDate > formDate
+                  ? `${spanDays(formDate, endDate)}일짜리`
+                  : "하루짜리 — 끝날을 넣으면 그 사이 모든 날에 보입니다"}
+              </span>
+            </div>
+            <div className="ma-form-row">
               <select
                 className={`group-select cal-kind-sel ${kind}`}
                 value={kind}
