@@ -818,10 +818,17 @@ export async function buzzBoard(windowHours = 12): Promise<BuzzBoard> {
     if (recent === 0) continue;
     total += recent;
 
-    /* 시각별 합 — 창 안의 시각만 */
+    /*
+     * 시각별 합 — 창 안의 시각만.
+     *
+     * ⚠️ 예전엔 「오늘 아니면 어제」 둘 중 하나로 골랐다. 창이 24시간을 넘으면
+     * (48시간 창이 화면에 있다) **그저께 시각을 어제 파일에서 찾게 되어** 어제
+     * 값이 두 번 세어졌다. 건수 자체(`recent`)는 여러 날 파일을 제대로 훑으므로
+     * 맞았고, **띠 그림만 틀렸다** — 그래서 눈치채기 어려웠다.
+     */
     for (let i = 0; i < win; i += 1) {
       const t = new Date(now.getTime() - i * 3600_000);
-      const file = dayStr(t) === dayStr(now) ? today : yesterday;
+      const file = winFiles.get(dayStr(t)) ?? EMPTY_DAY;
       const h = t.getUTCHours();
       const c = file.byHour[term]?.[String(h)] ?? 0;
       if (c > 0) hourly.set(h, (hourly.get(h) ?? 0) + c);
