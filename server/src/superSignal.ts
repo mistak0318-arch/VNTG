@@ -254,6 +254,19 @@ async function gradeEntries(client: KiwoomClient, store: Store): Promise<number>
       const addedYmd = e.addedDate.replace(/-/g, "");
       const idx = rows.findIndex((r) => r.date === addedYmd);
       if (idx < 0) continue; // 편입일 봉이 아직 없다(장중 실행 등) — 다음에
+      /*
+       * **기준은 편입일 종가다** (2026-08-31).
+       *
+       * 편입은 15:45 에 일어난다. 그 시각 **NXT 애프터마켓(15:40~20:00)이 열려 있어
+       * 실제로 살 수 있다** — 그러니 「불가능한 매매」는 아니다.
+       *
+       * 다만 애프터마켓은 **별도 호가**라 KRX 정규장 종가와 값이 다르고 유동성도
+       * 얕다. 그래서 이 수익률은 「종가에 샀다면」이라는 **근사**이지 체결 가능한
+       * 가격으로 잰 성과가 아니다. 그 차이를 화면에 적는다.
+       *
+       * 신호등 백테스트는 **다음 날 시가**를 쓴다(2026-08-31) — 일봉에 애프터마켓
+       * 가격이 없어 그쪽이 더 보수적인 가정이기 때문이다.
+       */
       const pct = (n: number): number | null => {
         const bar = rows[idx + n];
         return bar ? ((bar.close - e.addedPrice) / e.addedPrice) * 100 : null;

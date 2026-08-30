@@ -182,6 +182,16 @@ export function SuperSignalPanel({
           <div className="ss-grade-title">
             편입 후 성적 <i>— 편입가 대비 평균, ( ) 안은 표본 수</i>
           </div>
+          {/*
+            정의를 밝힌다 (2026-08-31 점검). 편입 15:45 시점에 NXT 애프터마켓이
+            열려 있어 매수 자체는 가능하다 — 다만 별도 호가라 종가와 값이 다르다.
+            그 차이를 안 적으면 「종가에 샀다면」이 「종가에 샀다」로 읽힌다.
+          */}
+          <div className="table-note">
+            편입가는 <b>편입일 종가</b>입니다. 편입 시각(15:45)에는 NXT 애프터마켓이
+            열려 있어 매수는 가능하지만 <b>애프터마켓은 별도 호가라 종가와 값이
+            다릅니다</b> — 「종가에 샀다면」이라는 근삿값으로 읽으세요.
+          </div>
           <table className="data-table ss-grade-table">
             <thead>
               <tr>
