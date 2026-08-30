@@ -39,6 +39,29 @@ const KIND_NOTE: Record<string, string> = {
   single: "매번 덮어써서 이력이 없습니다",
 };
 
+/**
+ * **기간별로 얼마가 빠지나** (2026-08-31 2차).
+ *
+ * ⚠️ 처음엔 「지금 설정이면 −몇 MB」 한 칸만 뒀는데, 설정이 넉넉하면 그 값이 늘
+ * 0 이라 **표 전체가 「—」로 보였다.** 「조절해 가면서 정하겠다」는 사람에게 그건
+ * 아무 정보가 아니다 — 고르기 전에 결과를 알아야 고를 수 있다.
+ *
+ * 그래서 **후보 기간마다** 얼마가 빠지는지 미리 계산해 나란히 놓는다. 숫자 자체가
+ * 단추라 눌러서 바로 그 기간으로 정할 수 있다.
+ *
+ * 서버가 주는 나이대별 용량(`byAge`)의 **누적 밖**이 빠지는 양이다.
+ */
+function freedAt(byAge: { d7: number; d30: number; d90: number; d365: number; older: number }, keep: number): number {
+  if (keep <= 7) return byAge.d30 + byAge.d90 + byAge.d365 + byAge.older;
+  if (keep <= 30) return byAge.d90 + byAge.d365 + byAge.older;
+  if (keep <= 90) return byAge.d365 + byAge.older;
+  if (keep <= 365) return byAge.older;
+  return 0;
+}
+
+/** 나이대 문턱과 겹치는 후보만 보여 준다 — 안 그러면 0 만 늘어선다 */
+const BANDS = [7, 30, 90, 365];
+
 export function DataRetentionPanel() {
   const [rep, setRep] = useState<DataReport | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,12 +87,16 @@ export function DataRetentionPanel() {
 
   if (!rep) return <div className="table-note">불러오는 중…</div>;
 
+  /* 하루에 전부 합쳐 얼마나 느는가 — 「이대로 두면 한 달 뒤」를 말하려고 */
+  const perDayAll = rep.cats.reduce((a, c) => a + c.perDay, 0);
+
   return (
     <div className="dret">
       <div className="dret-top">
         <div>
           <b className="dret-total">{mb(rep.totalBytes)}</b>
           <span className="pt-n"> 쓰는 중</span>
+          {perDayAll > 0 && <span className="pt-n"> · 하루 {mb(perDayAll)}씩</span>}
           {rep.disk && (
             <span className="pt-n">
               {" "}· 디스크 여유 {mb(rep.disk.free)} / {mb(rep.disk.total)}
@@ -77,9 +104,24 @@ export function DataRetentionPanel() {
           )}
         </div>
         <button className="filter-btn" onClick={prune} disabled={busy || rep.prunableBytes === 0}>
-          {busy ? "정리 중…" : rep.prunableBytes > 0 ? `지금 정리 (−${mb(rep.prunableBytes)})` : "정리할 것 없음"}
+          {busy
+            ? "정리 중…"
+            : rep.prunableBytes > 0
+              ? `지금 정리 (−${mb(rep.prunableBytes)})`
+              : "지금 설정으로는 지울 것 없음"}
         </button>
       </div>
+      {/*
+        「지울 것 없음」만 있으면 **다음에 뭘 해야 할지**를 말해 주지 않는다.
+        지금 기준으로 얼마나 자랄지를 같이 적어 판단할 거리를 준다.
+      */}
+      {rep.prunableBytes === 0 && perDayAll > 0 && (
+        <div className="table-note">
+          지금 보관 기준으로는 지울 것이 없습니다. 이대로면 <b>한 달에 약{" "}
+          {mb(perDayAll * 30)}</b>, <b>일 년에 약 {mb(perDayAll * 365)}</b> 늘어납니다 —
+          아래 표의 기간 단추로 미리 줄여 둘 수 있습니다.
+        </div>
+      )}
       {msg && <div className="table-note">{msg}</div>}
 
       <div className="data-table-wrap">
@@ -90,7 +132,7 @@ export function DataRetentionPanel() {
               <th className="num">지금</th>
               <th className="num">하루</th>
               <th>보관</th>
-              <th className="num">이 기준이면</th>
+              <th>기간별로 줄이면</th>
             </tr>
           </thead>
           <tbody>
@@ -130,14 +172,34 @@ export function DataRetentionPanel() {
                   )}
                 </td>
                 {/*
-                  「이 기준이면 얼마가 빠지나」 — 기간을 고르는 사람이 실제로 알고
-                  싶은 것은 이 한 칸이다. 없으면 숫자를 감으로 고르게 된다.
+                  기간별로 얼마가 빠지나. **숫자가 곧 단추다** — 눌러서 그 기간으로
+                  정한다. 어느 후보로도 빠지는 게 없으면 그 사실을 한 줄로 말한다
+                  (칸을 「—」로 비워 두면 「고장인가」로 읽힌다).
                 */}
-                <td className="num">
-                  {c.prunable > 0 ? (
-                    <b className="negative">−{mb(c.prunable)}</b>
-                  ) : (
+                <td>
+                  {c.kind !== "daily" ? (
                     <span className="pt-n">—</span>
+                  ) : BANDS.every((d) => freedAt(c.byAge, d) === 0) ? (
+                    <span className="pt-n">
+                      {c.bytes === 0 ? "쌓인 것 없음" : `전부 ${c.oldest ?? ""} 이후 — 줄여도 안 빠짐`}
+                    </span>
+                  ) : (
+                    <div className="dret-bands">
+                      {BANDS.map((d) => {
+                        const f = freedAt(c.byAge, d);
+                        return (
+                          <button
+                            key={d}
+                            className={`dret-band${c.keepDays === d ? " on" : ""}`}
+                            title={`${d}일만 남기면 ${mb(f)} 가 빠집니다`}
+                            onClick={async () => setRep(await api.dataKeep(c.key, d))}
+                          >
+                            <em>{d === 365 ? "1년" : `${d}일`}</em>
+                            <b className={f > 0 ? "negative" : ""}>{f > 0 ? `−${mb(f)}` : "0"}</b>
+                          </button>
+                        );
+                      })}
+                    </div>
                   )}
                 </td>
               </tr>
