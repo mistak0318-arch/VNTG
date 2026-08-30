@@ -95,30 +95,49 @@ export function ReportGlance({
 }) {
   /** 거래대금 — 시장별 오늘 값과 20일 평균 대비, 그리고 **기준 거래일** */
   const [turn, setTurn] = useState<
-    { name: string; today: number; avg: number; dt: string }[] | null
+    { name: string; today: number; avg: number; dt: string; close: number; rate: number | null }[] | null
   >(null);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const out: { name: string; today: number; avg: number; dt: string }[] = [];
+      const out: { name: string; today: number; avg: number; dt: string; close: number; rate: number | null }[] = [];
       for (const m of [
         { code: "001", name: "코스피" },
         { code: "101", name: "코스닥" },
       ]) {
         try {
           const r = await api.indexDetail(m.code, "day");
-          const cs = r.candles;
+          /*
+           * ⚠️ **거래가 없는 봉은 버린다** (2026-08-31).
+           *
+           * 키움 일봉은 **장 전에도 오늘 봉을 준다.** 거래대금 0, 등락 0 인 껍데기다.
+           * 그대로 마지막 봉으로 쓰면 기준일이 「8/31(월) 종가 기준」으로 찍히고
+           * 거래대금이 0억, 20일 평균의 0% 로 나온다 — 값은 8/28 종가인데 날짜와
+           * 등락만 오늘 것인 **앞뒤가 안 맞는 줄**이 조간마다 나갔다.
+           *
+           * 거래대금이 0인 날은 장이 안 섰거나 아직 안 끝난 날이다. 둘 다 「마감」이
+           * 아니므로 마감 줄에 쓸 수 없다.
+           */
+          const cs = r.candles.filter((c) => c.tradeValue > 0);
           if (cs.length === 0) continue;
           const last = cs[cs.length - 1];
           const prev20 = cs.slice(-21, -1);
           const avg =
             prev20.length > 0 ? prev20.reduce((a, c) => a + c.tradeValue, 0) / prev20.length : 0;
+          const prev = cs[cs.length - 2];
           out.push({
             name: m.name,
             today: last.tradeValue,
             avg,
             dt: last.dt,
+            /*
+             * 종가·등락률도 **같은 봉에서** 낸다 (2026-08-31).
+             * 지수 카드(`idx`)는 장 전에 등락 0 으로 오는데, 값은 지난 종가라
+             * 「6,788.88 (0.00%)」처럼 한 줄 안에서 앞뒤가 안 맞았다.
+             */
+            close: last.close,
+            rate: prev && prev.close > 0 ? ((last.close - prev.close) / prev.close) * 100 : null,
           });
         } catch {
           /* 한 시장을 못 받아도 나머지는 보여 준다 */
@@ -137,8 +156,17 @@ export function ReportGlance({
 
   /* ── 국내 마감 ── */
   const kr: Chip[] = [];
-  if (kospi) kr.push({ k: "코스피", v: `${fmtNum(kospi.price)} (${pct(kospi.changeRate)})`, s: kospi.changeRate });
-  if (kosdaq) kr.push({ k: "코스닥", v: `${fmtNum(kosdaq.price)} (${pct(kosdaq.changeRate)})`, s: kosdaq.changeRate });
+  /* 일봉에서 낸 값을 먼저 쓴다 — 없을 때만 지수 카드로 물러선다 */
+  const byName = new Map((turn ?? []).map((t) => [t.name, t]));
+  const idxChip = (label: string, card: IndexCard | undefined) => {
+    const t = byName.get(label);
+    const price = t ? t.close : card?.price;
+    const rate = t && t.rate !== null ? t.rate : card?.changeRate;
+    if (price == null) return;
+    kr.push({ k: label, v: `${fmtNum(price)} (${pct(rate ?? null)})`, s: rate ?? null });
+  };
+  idxChip("코스피", kospi);
+  idxChip("코스닥", kosdaq);
 
   if (turn && turn.length > 0) {
     const total = turn.reduce((a, t) => a + t.today, 0);
@@ -179,9 +207,18 @@ export function ReportGlance({
     });
   }
 
-  if (f) {
-    const frg = f.kospi.foreign + f.kosdaq.foreign;
-    const inst = f.kospi.institution + f.kosdaq.institution;
+  /*
+   * ⚠️ **「0억」과 「아직 안 나옴」은 다르다** (2026-08-31).
+   *
+   * 장 전에는 수급이 전부 0 으로 온다. 그걸 그대로 「외국인 0억 · 기관 0억」이라
+   * 적으면 **오늘 아무도 안 샀다**는 말이 된다 — 조간에 그건 거짓 정보다.
+   * 열두 주체가 모두 정확히 0 이면 그것은 값이 아니라 빈칸이다.
+   */
+  const frg = f ? f.kospi.foreign + f.kosdaq.foreign : 0;
+  const inst = f ? f.kospi.institution + f.kosdaq.institution : 0;
+  const indiv = f ? f.kospi.individual + f.kosdaq.individual : 0;
+  const flowEmpty = !f || (frg === 0 && inst === 0 && indiv === 0);
+  if (!flowEmpty) {
     kr.push({ k: "외국인", v: `${frg > 0 ? "+" : ""}${fmtNum(Math.round(frg))}억`, s: frg });
     kr.push({ k: "기관", v: `${inst > 0 ? "+" : ""}${fmtNum(Math.round(inst))}억`, s: inst });
   }
@@ -225,7 +262,12 @@ export function ReportGlance({
     <div className="rp-glance-wrap">
       <ChipRow
         title="국내 마감"
-        note={base ? `${base} 종가 기준` : "최근 거래일 종가 기준"}
+        note={
+          (base ? `${base} 종가 기준` : "최근 거래일 종가 기준") +
+          /* 빠진 것을 밝힌다 — 없는 줄을 조용히 지우면 왜 없는지 알 수 없다 */
+          (flowEmpty ? " · 수급은 장 마감 뒤에 들어옵니다" : "") +
+          (rising + falling === 0 ? " · 등락 종목 수 집계 전" : "")
+        }
         chips={kr}
       />
       <ChipRow title="밤사이" note="지금 시각 기준 · 오늘 개장의 예고편" chips={night} />
