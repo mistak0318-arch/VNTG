@@ -334,8 +334,43 @@ export function MorningPage() {
               )}
             </>
           )}
+          {/*
+            「없습니다」로만 끝내면 **조용한 것인지 문턱이 안 닿는 것인지** 알 수 없다.
+            실제로 「한 건도 안 온다」는 물음이 여기서 나왔다 (2026-08-30).
+            아깝게 놓친 것을 같이 보여 주면 그 자리에서 판단이 된다 —
+            줄줄이 있으면 문턱이 높은 것이고, 여기도 비면 정말 조용한 것이다.
+          */}
           {buzz && buzz.baselineDays >= 3 && buzz.hits.length === 0 && (
-            <div className="empty">최근 {buzz.windowHours}시간, 평소보다 크게 커진 주제가 없습니다.</div>
+            <>
+              <div className="empty">
+                최근 {buzz.windowHours}시간, 평소보다 크게 커진 주제가 없습니다.
+              </div>
+              {buzz.threshold && (
+                <p className="pt-n">
+                  발송 문턱은 <b>{buzz.threshold.minCount}건 이상 · {buzz.threshold.minRatio}배 이상</b>
+                  {" 또는 "}
+                  <b>{buzz.threshold.sharpCount}건 이상 · {buzz.threshold.sharpRatio}배 이상</b>입니다.
+                  {buzz.health && <> 오늘 센 것 <b>{buzz.health.todayCount}건</b>.</>}
+                </p>
+              )}
+              {buzz.nearMiss && buzz.nearMiss.length > 0 ? (
+                <>
+                  <p className="pt-n">아깝게 못 넘은 것 — 여기가 줄줄이면 문턱이 높은 것입니다.</p>
+                  <div className="mrn-sup">
+                    {buzz.nearMiss.slice(0, 6).map((t) => (
+                      <div key={t.term}>
+                        <span>{t.term}</span>
+                        <b>
+                          {t.recent}건 · {t.ratio}배
+                        </b>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="pt-n">문턱 근처에 온 것도 없습니다 — 정말로 조용합니다.</p>
+              )}
+            </>
           )}
           {buzz &&
             buzz.hits.slice(0, 5).map((h) => (

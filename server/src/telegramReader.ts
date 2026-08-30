@@ -314,6 +314,8 @@ export async function fetchNewMessages(
   }
 
   const messages: ChannelMessage[] = [];
+  /** 창에 걸리든 말든 **새로 읽은 전부** — 버즈 카운터가 이걸 본다 */
+  const forCount: ChannelMessage[] = [];
   const skipped: string[] = [];
 
   let done = 0;
@@ -334,15 +336,26 @@ export async function fetchNewMessages(
         const text = String(m.message ?? "").trim();
         if (!text) continue; // 사진·스티커만 있는 건 버린다
         const at = m.date ? m.date * 1000 : 0;
-        if (at < cutoff) continue;
-        messages.push({
+        const row = {
           channelId: ch.id,
           channelName: ch.name,
           messageId: m.id,
           at: new Date(at).toISOString(),
           text,
           link: messageLink(ch, m.id),
-        });
+        };
+        /*
+         * ⚠️ **세는 쪽은 창을 안 본다.**
+         *
+         * 돌려주는 목록은 「최근 것」만 담아야 하지만(화면이 쓴다), 버즈 카운터는
+         * 새 글을 하나도 놓치면 안 된다. 그런데 오프셋은 **창에 걸려 버린 글까지
+         * 지나쳐 올라간다** — 재시작이나 FLOOD_WAIT 로 창(20분)보다 긴 공백이
+         * 생기면 그 사이 글이 버려지는데 오프셋은 넘어가 **다시는 못 읽는다.**
+         * 그래서 창 필터 **앞에서** 카운터용 배열에 먼저 담는다.
+         */
+        forCount.push(row);
+        if (at < cutoff) continue;
+        messages.push(row);
       }
       if (useOffsets) offsets[ch.id] = maxId;
     } catch (err) {
@@ -361,7 +374,7 @@ export async function fetchNewMessages(
   /* 버즈 레이더 (2026-08-27) — 지나가는 메시지를 세기만 한다. 중복은 저쪽이 거르고,
      실패는 저쪽이 삼킨다. 어떤 경로의 수집이든 한 번 본 메시지는 한 번만 세어진다. */
   void import("./buzzRadar.js")
-    .then((m) => m.recordBuzz(messages))
+    .then((m) => m.recordBuzz(forCount))
     .catch(() => undefined);
   // 최신 메시지가 위로 오게 — 화면에서도 요약에서도 "지금"이 먼저다
   messages.sort((a, b) => b.at.localeCompare(a.at));

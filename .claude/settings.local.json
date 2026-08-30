@@ -872,7 +872,9 @@
       "Bash(touch server/src/index.ts)",
       "Bash(curl -s -X POST http://localhost:4000/api/news-keywords/collect)",
       "Bash(curl -s -X POST http://localhost:5173/api/news-keywords/collect)",
-      "Bash(rm -f server/data/newsKeywords/*.json)"
+      "Bash(rm -f server/data/newsKeywords/*.json)",
+      "Bash(curl -s \"http://localhost:5173/api/signal/buzz\")",
+      "Bash(awk 'NR>=195 && NR<=260' server/src/buzzRadar.ts)"
     ]
   }
 }

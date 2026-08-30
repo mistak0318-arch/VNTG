@@ -392,6 +392,21 @@ export const api = {
       }[];
       baselineDays: number;
       topToday: { term: string; kind: string; recent: number }[];
+      /** 문턱에 못 미친 것들 — 「왜 안 오나」의 답 (2026-08-30) */
+      nearMiss?: {
+        term: string;
+        kind: string;
+        recent: number;
+        baseline: number;
+        ratio: number;
+      }[];
+      /** 지금 걸려 있는 문턱 */
+      threshold?: {
+        minCount: number;
+        minRatio: number;
+        sharpCount: number;
+        sharpRatio: number;
+      };
       windowHours: number;
       at: string;
       /** 살아 있나 — 「안 온다」가 고장인지 조용한 것인지 (2026-08-27) */

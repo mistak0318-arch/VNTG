@@ -75,9 +75,23 @@ interface DayFile {
   byHour: Record<string, Record<string, number>>;
   /** term → 최근 샘플 (트리거 문구로 보여 준다) */
   samples: Record<string, { at: string; channel: string; text: string; link: string }[]>;
+  /**
+   * term → 갈래. **셀 때 같이 적어 둔다** (2026-08-30).
+   *
+   * ⚠️ 예전엔 판정할 때마다 **그 순간의 사전**에서 갈래를 찾았고, 못 찾으면 그
+   * 낱말을 통째로 버렸다. 그런데 사전의 종목명은 `peekSnapshot()` 에서 오고
+   * 키움 테마명은 하루 한 번 받아 온다 — **재시작 직후나 그 호출이 실패한 날에는
+   * 사전이 홀쭉해진다.** 그러면 기록은 멀쩡히 쌓이는데 판정에서 전부 탈락해
+   * 「한 건도 안 오는」 상태가 된다. 셀 때 적어 두면 나중 사전이 어떻든 살아남는다.
+   *
+   * 옛 파일에는 이 칸이 없다 — 그때는 예전처럼 사전에서 찾는다.
+   */
+  kinds?: Record<string, BuzzTerm["kind"]>;
+  /** term → 관련 종목코드. 갈래와 같은 이유로 같이 적어 둔다 */
+  codes?: Record<string, string[]>;
 }
 
-const EMPTY_DAY: DayFile = { total: {}, byHour: {}, samples: {} };
+const EMPTY_DAY: DayFile = { total: {}, byHour: {}, samples: {}, kinds: {}, codes: {} };
 
 function kstNow(): Date {
   return new Date(Date.now() + 9 * 3600_000);
@@ -169,9 +183,15 @@ const seenIds = new Map<string, Set<string>>();
 async function readDay(day: string): Promise<DayFile> {
   try {
     const j = JSON.parse(await readFile(join(DIR, `${day}.json`), "utf-8")) as DayFile;
-    return { total: j.total ?? {}, byHour: j.byHour ?? {}, samples: j.samples ?? {} };
+    return {
+      total: j.total ?? {},
+      byHour: j.byHour ?? {},
+      samples: j.samples ?? {},
+      kinds: j.kinds ?? {},
+      codes: j.codes ?? {},
+    };
   } catch {
-    return { total: {}, byHour: {}, samples: {} };
+    return { total: {}, byHour: {}, samples: {}, kinds: {}, codes: {} };
   }
 }
 
@@ -181,10 +201,23 @@ let recording = false;
  * 메시지 묶음을 센다 — fetchNewMessages 가 부른다. 실패는 삼킨다(수집이 본업을 막으면 안 된다).
  * 파일은 일별 하나. 동시 호출이 겹치면 한쪽을 버리는 대신 순차화한다(recording).
  */
+/**
+ * 아직 못 센 메시지들.
+ *
+ * ⚠️ 예전엔 세는 중이면 `return` 으로 **그 묶음을 통째로 버렸다.** 수집기가 둘이라
+ * (majorFeed 5분 · channelScheduler) 겹치는 일이 생기고, 세는 데는 30건마다 이벤트
+ * 루프를 양보하느라 시간이 걸린다 — 즉 **셀 것이 많을 때 하필 더 잘 버려졌다.**
+ * 버즈가 안 뜨는 이유 중 하나가 이것이다. 버리지 말고 쌓아 뒀다가 이어서 센다.
+ */
+const queued: ChannelMessage[] = [];
+
 export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
-  if (messages.length === 0 || recording) return;
+  if (messages.length > 0) queued.push(...messages);
+  if (queued.length === 0 || recording) return;
   recording = true;
   try {
+    /* 쌓인 것을 통째로 가져가고 큐를 비운다 — 세는 동안 들어온 것은 다음 판에 */
+    messages = queued.splice(0, queued.length);
     const d = await buildDict();
     const today = dayStr(kstNow());
     let ids = seenIds.get(today);
@@ -219,6 +252,9 @@ export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
       for (const t of d) {
         if (!text.includes(t.term)) continue;
         file.total[t.term] = (file.total[t.term] ?? 0) + 1;
+        /* 갈래·코드를 **셀 때** 적어 둔다 — 나중 사전이 홀쭉해져도 살아남게 */
+        (file.kinds ??= {})[t.term] = t.kind;
+        if (t.codes?.length) (file.codes ??= {})[t.term] = t.codes;
         const bh = (file.byHour[t.term] = file.byHour[t.term] ?? {});
         bh[hour] = (bh[hour] ?? 0) + 1;
         const samples = (file.samples[t.term] = file.samples[t.term] ?? []);
@@ -237,6 +273,8 @@ export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
     /* 버즈 기록 실패가 수집을 막으면 안 된다 */
   } finally {
     recording = false;
+    /* 세는 동안 새로 들어온 것이 있으면 이어서 — 큐에 남겨 두면 영영 안 세진다 */
+    if (queued.length > 0) void recordBuzz([]);
   }
 }
 
@@ -277,11 +315,32 @@ export interface BuzzResult {
   baselineDays: number;
   /** 기준선이 모자랄 때도 「지금 많이 말해지는 것」은 보여 준다 */
   topToday: { term: string; kind: BuzzTerm["kind"]; recent: number }[];
+  /**
+   * 문턱에 못 미친 것들 (2026-08-30).
+   *
+   * 「한 건도 안 온다」가 **조용한 것인지 문턱이 안 닿는 것인지**를 가른다.
+   * 아깝게 놓친 것이 줄줄이 있으면 문턱이 높은 것이고, 여기도 비어 있으면
+   * 정말로 조용한 것이다. 화면이 이걸 그대로 보여 준다.
+   */
+  nearMiss: BuzzHit[];
+  /** 지금 걸려 있는 문턱 — 화면이 「몇 건 넘어야 하는지」를 말할 수 있게 */
+  threshold: { minCount: number; minRatio: number; sharpCount: number; sharpRatio: number };
   windowHours: number;
   at: string;
 }
 
 /** 최근 windowHours 시간의 건수 — 오늘·어제 파일의 시각 버킷에서 모은다 */
+/*
+ * 발송 문턱. 화면이 이 값을 그대로 보여 주므로 여기 한 곳만 고치면 된다 —
+ * 「왜 안 오나」를 묻는 사람에게 「6건 넘어야 하는데 지금 제일 큰 게 4건」이라고
+ * 답할 수 있어야 한다.
+ */
+const MIN_COUNT = 6;
+const MIN_RATIO = 3;
+/** 적지만 아주 날카롭게 뛴 것 */
+const SHARP_COUNT = 3;
+const SHARP_RATIO = 8;
+
 function recentCount(term: string, today: DayFile, yesterday: DayFile, windowHours: number): number {
   const now = kstNow();
   let sum = 0;
@@ -314,30 +373,56 @@ export async function evaluateBuzz(windowHours = 12): Promise<BuzzResult> {
   const hits: BuzzHit[] = [];
   const topToday: { term: string; kind: BuzzTerm["kind"]; recent: number }[] = [];
 
+  /** 문턱에 못 미친 것들 — 「왜 안 오나」를 답하려면 이게 있어야 한다 */
+  const nearMiss: BuzzHit[] = [];
+
   for (const term of candidates) {
+    /*
+     * 갈래는 **기록해 둔 것을 먼저** 본다. 사전은 그때그때 홀쭉해질 수 있고,
+     * 예전에는 그때 이 줄에서 낱말이 통째로 사라졌다(위 DayFile.kinds 주석 참고).
+     */
+    const storedKind = today.kinds?.[term] ?? yesterday.kinds?.[term];
     const info = kindOf.get(term);
-    if (!info) continue;
+    const kind = storedKind ?? info?.kind;
+    if (!kind) continue;
+    const codes = info?.codes ?? today.codes?.[term] ?? yesterday.codes?.[term] ?? [];
+
     const recent = recentCount(term, today, yesterday, windowHours);
     if (recent === 0) continue;
-    topToday.push({ term, kind: info.kind, recent });
+    topToday.push({ term, kind, recent });
     if (baselineDays < 3) continue; // 기준선이 서기 전에는 판정하지 않는다
 
     const avgDaily = pastDays.reduce((a, f) => a + (f.total[term] ?? 0), 0) / baselineDays;
     const baseline = Math.max(avgDaily * (windowHours / 24), 0.5);
     const ratio = recent / baseline;
-    /* 문턱 — 절대량과 배수를 같이 본다. 평소 0건이던 게 2건 온 것까지 울리면 소음이 된다 */
-    if (recent >= 6 && ratio >= 3) {
-      hits.push({
-        term,
-        kind: info.kind,
-        recent,
-        baseline: Math.round(baseline * 10) / 10,
-        ratio: Math.round(ratio * 10) / 10,
-        codes: info.codes ?? [],
-        samples: (today.samples[term] ?? yesterday.samples[term] ?? []).slice(0, 2),
-      });
+    const hit: BuzzHit = {
+      term,
+      kind,
+      recent,
+      baseline: Math.round(baseline * 10) / 10,
+      ratio: Math.round(ratio * 10) / 10,
+      codes,
+      samples: (today.samples[term] ?? yesterday.samples[term] ?? []).slice(0, 2),
+    };
+
+    /*
+     * 문턱 — 절대량과 배수를 같이 본다. 평소 0건이던 게 2건 온 것까지 울리면 소음이 된다.
+     *
+     * 두 갈래를 둔다 (2026-08-30):
+     *   ① 넉넉히 많고 꽤 커진 것       6건 이상 · 3배 이상
+     *   ② 적지만 **아주 날카롭게** 뛴 것 3건 이상 · 8배 이상
+     *
+     * ②를 더한 이유: 따라 보는 채널이 적으면 12시간에 6건을 넘기는 낱말 자체가
+     * 드물다. 평소 0.4건이던 게 3건이면 그건 분명한 사건인데 ①만으로는 영영 안 걸린다.
+     * 배수를 높게 잡아 소음은 막는다.
+     */
+    if ((recent >= MIN_COUNT && ratio >= MIN_RATIO) || (recent >= SHARP_COUNT && ratio >= SHARP_RATIO)) {
+      hits.push(hit);
+    } else if (recent >= 2) {
+      nearMiss.push(hit);
     }
   }
+  nearMiss.sort((a, b) => b.ratio - a.ratio);
 
   hits.sort((a, b) => b.ratio - a.ratio);
   topToday.sort((a, b) => b.recent - a.recent);
@@ -353,6 +438,13 @@ export async function evaluateBuzz(windowHours = 12): Promise<BuzzResult> {
     hits: hits.slice(0, 12),
     baselineDays,
     topToday: topToday.slice(0, 10),
+    nearMiss: nearMiss.slice(0, 8),
+    threshold: {
+      minCount: MIN_COUNT,
+      minRatio: MIN_RATIO,
+      sharpCount: SHARP_COUNT,
+      sharpRatio: SHARP_RATIO,
+    },
     windowHours,
     at: new Date().toISOString(),
   };
