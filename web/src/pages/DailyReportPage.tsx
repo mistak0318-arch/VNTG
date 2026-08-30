@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { TopicPulseBlock } from "../components/TopicPulse";
 import { useCardOrder } from "../useCardOrder";
 import {
   FeaturedSection,
@@ -180,6 +181,8 @@ function DriverItem({
  */
 export const REPORT_SECTION_DEFS: { key: string; label: string }[] = [
   { key: "calendar", label: "오늘 일정" },
+  /* 무엇이 열리는지 다음에 「무슨 얘기가 도는지」 — 지수를 보기 전에 맥락 (2026-08-30) */
+  { key: "topicPulse", label: "지금의 화제 (채널·뉴스)" },
   { key: "review", label: "복기 — 지난 예측과 실제 결과" },
   { key: "pinned", label: "고정 채널 시황" },
   { key: "nightFutures", label: "코스피 야간선물 · 환율" },
@@ -540,6 +543,12 @@ export function DailyReportPage({
         순서가 거꾸로다 — FOMC 가 있는 날과 없는 날은 같은 −1% 도 뜻이 다르다.
       */
       calendar: <TodayCalendarSection />,
+      /*
+        지금의 화제 (2026-08-30) — 리포트는 **읽는 글**이라 근거를 더 붙인다.
+        낱말만 늘어놓으면 표가 되므로 문장 + 실제 기사 제목까지 담는 full 을 쓴다.
+        창은 6시간 — 발행 시점 기준으로 「오늘 무슨 얘기였나」에 맞는 길이다.
+      */
+      topicPulse: <TopicPulseBlock window="today" variant="full" onSelectStock={onSelectStock} />,
       review: <ReviewPanel />,
       /* 리포트를 여는 이유가 대개 이 글이다 — 이미 한 편으로 정리된 시황 */
       pinned: <PinnedChannelSection edition={edition} />,

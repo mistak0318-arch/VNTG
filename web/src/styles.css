@@ -10758,16 +10758,23 @@ button.tpb-row:hover { background: var(--panel-2); }
 .map-tree {
   position: relative;
   width: 100%;
-  aspect-ratio: 1.9;
+  /*
+   * 세로로 길게 (2026-08-30 요청 — 「조그만 건 아예 안 보인다」).
+   *
+   * 트리맵은 넓이가 값에 비례하므로 **상자가 커지면 작은 타일도 같이 커진다.**
+   * 1.9 는 가로로 납작해서 꼬리가 몇 픽셀로 뭉갰다. 1.35 로 낮추면 같은 폭에서
+   * 세로가 40% 늘어 작은 타일의 넓이도 그만큼 는다.
+   */
+  aspect-ratio: 1.35;
   border-radius: 10px;
   overflow: hidden;
   background: var(--panel-2);
   margin-bottom: 10px;
 }
 @media (max-width: 640px) {
-  /* 폰에서 1.9 는 너무 납작해 글자가 안 들어간다 */
+  /* 폰은 폭이 좁으니 더 세워야 한다 — 가로로 누우면 꼬리가 통째로 사라진다 */
   .map-tree {
-    aspect-ratio: 1.05;
+    aspect-ratio: 0.78;
   }
 }
 

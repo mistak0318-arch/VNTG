@@ -188,6 +188,47 @@ export interface LoginNeedsOtp {
   sentTo: string;
 }
 
+/* ── 지금 시장의 화제 (2026-08-30) ──────────────────────────────────────── */
+
+export type PulseWindow = "overnight" | "now" | "today";
+
+export interface PulseItem {
+  term: string;
+  kind: string;
+  /** 어디서 떴나 — 양쪽이 제일 값지다 */
+  where: "both" | "channel" | "news";
+  buzzCount: number;
+  newsCount: number;
+  /** 몇 개 방 / 몇 개 매체 */
+  sources: number;
+  score: number;
+  buzzRatio: number;
+  newsRatio: number;
+  fresh: boolean;
+  codes: string[];
+  quote: string | null;
+  quoteFrom: string | null;
+}
+
+export interface TopicPulse {
+  window: PulseWindow;
+  hours: number;
+  /** 「지금 무슨 일인가」 한 문장 */
+  headline: string;
+  /** 그 문장의 근거 */
+  detail: string;
+  hot: boolean;
+  items: PulseItem[];
+  health: {
+    channelReady: boolean;
+    newsReady: boolean;
+    baselineDays: number;
+    channelTotal: number;
+    newsArticles: number;
+  };
+  at: string;
+}
+
 /* ── 버즈·키워드 알고리즘 설정 (2026-08-30) ─────────────────────────────── */
 
 export interface BuzzConfig {
@@ -283,6 +324,9 @@ export const api = {
   health: () => getJson<{ ok: boolean }>("/api/health"),
 
   /* 버즈 대시보드 (2026-08-30) — 문턱과 무관하게 전부 본다 */
+  /** 네 브리핑 화면이 같은 문장을 쓰게 하는 자리 */
+  topicPulse: (w: PulseWindow) => getJson<TopicPulse>(`/api/signal/topic-pulse?window=${w}`),
+
   buzzConfig: () => getJson<BuzzConfig>("/api/signal/buzz/config"),
   buzzConfigSave: (patch: Partial<BuzzConfig>) =>
     putJson<BuzzConfig>("/api/signal/buzz/config", patch),

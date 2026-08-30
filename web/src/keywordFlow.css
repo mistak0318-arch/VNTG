@@ -646,3 +646,141 @@
 .buzz-slider .login-set-note {
   margin-top: 4px;
 }
+
+/* ── 지금 시장의 화제 (브리핑 네 화면 공용) ──────────────────────────── */
+
+.pulse {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  padding: 13px 15px;
+  margin-bottom: 12px;
+}
+/* 뜨거운 날은 눈에 들어와야 한다 — 이 줄만 읽고 끝낼 수 있어야 하니까 */
+.pulse.hot {
+  border-color: #c89a4a;
+  background: color-mix(in srgb, #c89a4a 10%, var(--panel-2));
+}
+
+.pulse-head {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.55;
+  word-break: keep-all;
+}
+.pulse-detail {
+  margin-top: 5px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.6;
+  word-break: keep-all;
+}
+.pulse-detail b {
+  color: var(--text);
+}
+
+.pulse-terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+/* 어디서 떴는지를 색으로 — 이 구분이 이 시스템의 요점이다 */
+.pulse-term {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+}
+button.pulse-term {
+  cursor: pointer;
+}
+.pulse-term i {
+  font-style: normal;
+  font-size: 0.76em;
+  font-weight: 400;
+  color: var(--muted);
+}
+.pulse-term em {
+  font-style: normal;
+  font-size: 0.68em;
+  font-weight: 800;
+  background: var(--green);
+  color: #fff;
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+.pulse-term.both {
+  border-color: #c89a4a;
+  background: color-mix(in srgb, #c89a4a 16%, var(--panel));
+}
+.pulse-term.both i {
+  color: #d8ae66;
+}
+.pulse-term.channel {
+  border-color: color-mix(in srgb, var(--blue) 45%, transparent);
+}
+.pulse-term.news {
+  border-color: color-mix(in srgb, var(--green) 40%, transparent);
+}
+
+.pulse-ev {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.pulse-ev li {
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.pulse-ev b {
+  color: var(--text);
+  margin-right: 6px;
+}
+.pulse-ev-q {
+  color: var(--muted);
+  word-break: keep-all;
+}
+.pulse-ev-q i {
+  opacity: 0.7;
+}
+
+.pulse-foot {
+  margin-top: 9px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* 한 줄짜리 — 자리가 없는 카드용 */
+.pulse-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+.pulse-line.quiet {
+  color: var(--muted);
+}
+.pulse-line.hot {
+  color: var(--text);
+  font-weight: 600;
+}
+.pulse-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c89a4a;
+  box-shadow: 0 0 8px #c89a4a;
+}

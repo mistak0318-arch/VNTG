@@ -245,6 +245,20 @@ export function createSignalRouter(client: KiwoomClient): Router {
     }
   });
 
+  /**
+   * 지금 시장의 화제 — 네 브리핑 화면이 **같은 문장**을 쓴다.
+   * window: overnight(밤사이 12h) · now(3h) · today(6h)
+   */
+  router.get("/topic-pulse", async (req, res, next) => {
+    try {
+      const { topicPulse } = await import("../topicPulse.js");
+      const w = String(req.query.window ?? "now");
+      res.json(await topicPulse(w === "overnight" || w === "today" ? w : "now"));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /** 알고리즘 설정 — 버즈와 뉴스 키워드가 **같은 값**을 쓴다 */
   router.get("/buzz/config", async (_req, res, next) => {
     try {

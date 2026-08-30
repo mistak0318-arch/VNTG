@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { TopicPulseBlock } from "../components/TopicPulse";
 import {
   api,
   fmtNum,
@@ -329,6 +330,13 @@ export function BriefingPage({
           </i>
         </div>
       )}
+
+      {/*
+        지금 무슨 얘기가 도는가 — **격자 위, 지수 아래** (2026-08-30).
+        마켓 브리핑은 「지금」의 종합 상황실이라 창을 3시간으로 짧게 잡는다.
+        장전 브리핑룸(밤사이 12시간)과 같은 문장 만드는 자리를 쓰되 창만 다르다.
+      */}
+      <TopicPulseBlock window="now" onSelectStock={onSelectStock} />
 
       <div className="bf-grid">
         {/* 좌: [3] 수급 + [5] 테마 */}

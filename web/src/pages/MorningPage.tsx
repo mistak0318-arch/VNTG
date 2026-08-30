@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { TopicPulseBlock } from "../components/TopicPulse";
 import {
   api,
   type CalendarEvent,
@@ -301,6 +302,12 @@ export function MorningPage() {
           <button className="mrn-title" onClick={() => go("telegram")}>
             🌋 밤사이 버즈 <i>›</i>
           </button>
+          {/*
+            자는 동안 무슨 일이 있었나 — **한 문장으로 먼저** (2026-08-30).
+            아래 카드는 채널만 보지만 이 줄은 **뉴스까지 합쳐서** 말한다.
+            아침에 제일 먼저 읽는 화면이라 여기가 가장 앞이어야 한다.
+          */}
+          <TopicPulseBlock window="overnight" />
           {!buzz && <div className="empty">불러오는 중…</div>}
           {/* 살아 있나 — 「안 온다」가 고장인지 조용한 것인지 (2026-08-27) */}
           {buzz?.health && !buzz.health.reader && (

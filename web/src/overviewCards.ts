@@ -34,6 +34,11 @@ export const OVERVIEW_CARDS: Record<OverviewSub, CardDef[]> = {
      *   가중치에서도 뺐다 — 대시보드에만 남아 있을 이유가 없다.
      * ⚠️ key 는 그대로 둔다 — 저장된 카드 배치가 key 로 자리를 기억한다.
      */
+    /*
+     * 지금 무슨 얘기가 도는가 (2026-08-30) — 체온계 바로 위.
+     * 체온계가 「장이 넓게 사는가」이고 이건 「무엇 때문에」다. 순서가 그게 맞다.
+     */
+    { key: "topicPulse", label: "지금의 화제" },
     { key: "breadth", label: "시장 체온계" },
     { key: "sectors", label: "테마 흐름" },
   ],

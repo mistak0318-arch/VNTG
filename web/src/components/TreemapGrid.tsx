@@ -83,7 +83,7 @@ export function TreemapGrid({
 
   const rects = treemap(
     withWeight.map((t) => ({ weight: weightOf(t), data: t })),
-    1.9,
+    1.35,
   );
 
   return (
@@ -98,7 +98,8 @@ export function TreemapGrid({
          * 원래 그렇다. 작은 타일에 글자를 넣으면 잘린 글자 조각만 남아 오히려
          * 지저분하므로, **넓이에 따라 이름까지 지운다**(마우스를 올리면 뜬다).
          */
-        const showName = area >= 2;
+        /* 상자가 커진 만큼 문턱도 같이 낮춘다 — 안 그러면 늘린 보람이 없다 */
+        const showName = area >= 1.2;
         const showPct = area >= 12;
         const showSub = area >= 42;
         return (

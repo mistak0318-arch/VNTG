@@ -82,7 +82,14 @@ interface DayFile {
   presses?: Record<string, Record<string, number>>;
   /** term → 최근 기사 표본 (제목·링크·매체·시각) */
   samples: Record<string, { title: string; link: string; press: string; at: string }[]>;
-  /** 이미 센 기사 링크 — 같은 기사를 두 번 세지 않는다 */
+  /**
+   * 이미 센 기사 — 같은 기사를 두 번 세지 않는다.
+   *
+   * ⚠️ 예전엔 **링크만** 봤다. 그런데 같은 기사가 여러 갈래(주요뉴스·시황·기업)에
+   * 실리면서 **링크가 다르게** 오는 일이 있다. 그러면 한 기사가 여섯 번 세어져
+   * 배율이 통째로 부푼다 — 실제로 「원·달러, 올 들어 최저 수준」이 같은 시각에
+   * 여섯 번 잡혔다. 그래서 **제목+매체**도 열쇠로 같이 쓴다.
+   */
   seen: string[];
 }
 
@@ -131,6 +138,8 @@ const STOP = new Set([
   /* 2차 실측(2026-08-30)에서 걸러낸 것들 — 뜻은 있으나 아무 기사에나 붙는 말 */
   "이유", "기회", "주식", "오른", "내린", "이번", "최근", "당분간", "여전히",
   "목표주", "수익률", "실적", "매출", "영업익", "순이익", "공모", "청약",
+  /* 3차 실측(2026-08-30, 미니PC 화면) — 「올 들어」「다시」처럼 문장을 잇는 말 */
+  "들어", "다시", "수준", "가운데", "이후", "통해", "위해", "대해", "따라", "관해",
 ]);
 
 /**
@@ -225,9 +234,15 @@ export async function collectNewsKeywords(): Promise<{ articles: number; terms: 
         }
         const f = days.get(day)!;
         const seen = seenSets.get(day)!;
-        if (seen.has(it.link)) continue;
+        /*
+         * 링크와 「제목+매체」 둘 다로 거른다. 제목만 쓰면 연재물(「[표] 코스피」)이
+         * 매일 하나로 뭉개지므로 **날짜 파일 안에서만** 견준다 — 지금 구조가 그렇다.
+         */
+        const titleKey = `T|${it.press}|${it.title.replace(/s+/g, "")}`;
+        if (seen.has(it.link) || seen.has(titleKey)) continue;
         seen.add(it.link);
-        f.seen.push(it.link);
+        seen.add(titleKey);
+        f.seen.push(it.link, titleKey);
         articles += 1;
 
         const minute = minuteOf(it.at);
