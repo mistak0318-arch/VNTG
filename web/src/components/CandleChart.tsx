@@ -308,6 +308,12 @@ export function CandleChart({
    */
   const hiLineRef = useRef<IPriceLine | null>(null);
   const loLineRef = useRef<IPriceLine | null>(null);
+  /*
+   * 축 꼬리표에 「현재가 대비 %」를 붙이려고 들고 있는 값 (2026-08-31).
+   * `priceFormatter` 는 차트를 만들 때 한 번 넘기므로 **ref 여야** 최신 값을 본다 —
+   * 상태로 넘기면 처음 값이 클로저에 굳는다.
+   */
+  const tagRef = useRef<{ hi: number; lo: number; last: number } | null>(null);
 
   /* ── 선 그리기 ─────────────────────────────────────────── */
   const [tool, setTool] = useState<DrawTool>("none");
@@ -658,10 +664,28 @@ export function CandleChart({
        * 1,000 이상은 콤마 정수로, 그 밑(미국 주식·저가)은 소수점 둘째 자리까지.
        */
       localization: {
-        priceFormatter: (p: number) =>
-          Math.abs(p) >= 1000
-            ? Math.round(p).toLocaleString("ko-KR")
-            : p.toLocaleString("ko-KR", { maximumFractionDigits: 2 }),
+        priceFormatter: (p: number) => {
+          const num =
+            Math.abs(p) >= 1000
+              ? Math.round(p).toLocaleString("ko-KR")
+              : p.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+          /*
+           * 고가·저가 꼬리표에만 **현재가 대비 %** 를 괄호로 붙인다 (2026-08-31 요청).
+           *
+           * 축에 값만 있으면 「473,000 이 지금보다 위인지 아래인지, 얼마나 먼지」를
+           * 매번 암산해야 한다. 범례에도 괴리율이 있지만 그건 구간 전체 이야기고,
+           * 눈이 머무는 자리는 선 끝의 이 꼬리표다.
+           *
+           * ⚠️ 다른 눈금까지 붙이면 축이 글자로 가득 차 차트를 밀어낸다. 그래서
+           * **그 두 값일 때만** 붙인다(가격선에 넘긴 그 수를 그대로 비교한다).
+           */
+          const t = tagRef.current;
+          if (t && t.last > 0 && (p === t.hi || p === t.lo)) {
+            const d = ((p - t.last) / t.last) * 100;
+            return `${num} (${d > 0 ? "+" : ""}${d.toFixed(1)}%)`;
+          }
+          return num;
+        },
       },
       grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
       // autoScale 을 켜 두면 보이는 구간에 맞춰 세로 범위가 늘 스스로 맞는다.
@@ -1204,6 +1228,10 @@ export function CandleChart({
        * 값은 **오른쪽 축**에 뜬다(`axisLabelVisible`). 어느 봉인지는 화살표가 알려 준다.
        * 괴리율은 **범례 줄 오른쪽 끝**(`.chart-gap`)에 있다 — 차트 위에 겹쳐 쓸 값이 아니다.
        */
+      /* 꼬리표에 쓸 값을 먼저 적어 둔다 — 선을 만들면 그 즉시 축이 다시 그려진다 */
+      const lastClose = candles[candles.length - 1]?.close ?? 0;
+      tagRef.current = { hi: hi.high, lo: lo.low, last: lastClose };
+
       hiLineRef.current = candleSeries.createPriceLine({
         price: hi.high,
         color: c.up,
