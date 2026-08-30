@@ -74,6 +74,8 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
   const [includeImported, setIncludeImported] = useState(false);
   /** 타일 크기를 무엇으로 — 시총이 기본. 균등은 예전 배치 */
   const [sizeBy, setSizeBy] = useState<SizeMode>("cap");
+  /** 크기 차이를 눌러 그릴지 — 안 누르면 큰 테마 하나가 화면을 먹는다 */
+  const [compress, setCompress] = useState(true);
 
   const [mine, setMine] = useState<EvaluatedTheme[]>([]);
   const [mineLoading, setMineLoading] = useState(true);
@@ -313,8 +315,10 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
             onChange={setSizeBy}
             hasCap={mapTiles.some((t) => (t.marketCap ?? 0) > 0)}
             hasValue={mapTiles.some((t) => (t.tradeValue ?? 0) > 0)}
+            compress={compress}
+            onCompress={setCompress}
           />
-          <TreemapGrid tiles={mapTiles} sizeBy={sizeBy} theme={theme} />
+          <TreemapGrid tiles={mapTiles} sizeBy={sizeBy} theme={theme} compress={compress} />
 
           <div className="table-note">
             색이 진할수록 등락폭이 큽니다 (5% 기준) · 타일을 누르면 구성종목이 열립니다

@@ -6,6 +6,7 @@ import {
   installEconomicCalendar,
 } from "../economicCalendar.js";
 import { addSub, listSubs, maskUrl, removeSub } from "../calendarSubscription.js";
+import { syncStatus, syncSubscriptions } from "../calendarSync.js";
 import { fetchIcs, parseCsv, parseIcs } from "../calendarImport.js";
 import {
   addEvent,

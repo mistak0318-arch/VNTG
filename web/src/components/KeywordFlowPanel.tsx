@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type KeywordFlow, type KeywordHit, type KeywordKind } from "../api";
+import { api, type BuzzBoard, type KeywordFlow, type KeywordHit, type KeywordKind } from "../api";
 import { useSheetBack } from "../useSheetBack";
 
 /**
@@ -282,7 +282,7 @@ export function KeywordFlowPanel({
         </>
       )}
 
-      {flow && <BuzzSection />}
+      {flow && <BuzzSection windowMin={windowMin} />}
 
       {picked && <KeywordSheet hit={picked} onClose={() => setPicked(null)} onSelectStock={onSelectStock} />}
     </div>
@@ -480,34 +480,48 @@ function Legend() {
  * 평소엔 한 줄로 접혀 있다가, **뜨는 날은 눈에 띄게** 펼친다 — 놓치면 안 되는
  * 정보인데 평소와 같은 모양이면 그냥 지나친다.
  */
-function BuzzSection() {
-  const [buzz, setBuzz] = useState<Awaited<ReturnType<typeof api.buzz>> | null>(null);
+function BuzzSection({ windowMin }: { windowMin: number }) {
+  const [board, setBoard] = useState<BuzzBoard | null>(null);
   const [open, setOpen] = useState(false);
+
+  /*
+   * ⚠️ **위 뉴스와 같은 창으로 본다** (2026-08-30).
+   *
+   * 예전엔 여기서 `api.buzz()` 를 불렀는데 그건 알림용이라 창이 **12시간 고정**이었다.
+   * 위에서 3시간을 고르고 아래에서 12시간짜리를 보여 주니 「같은 3시간인데 왜 다르냐」는
+   * 물음이 나왔다 — 당연한 물음이다. 두 귀를 견주려면 **자가 같아야 한다.**
+   *
+   * 30분짜리 창은 채널 쪽에서 표본이 너무 적어 쓸모가 없으므로 **최소 1시간**으로
+   * 올린다. 그 사실은 머리글에 적어 둔다 — 조용히 다른 창을 쓰는 것이 문제였으니까.
+   */
+  const hours = Math.max(1, Math.round(windowMin / 60));
 
   useEffect(() => {
     let alive = true;
     api
-      .buzz()
-      .then((b) => alive && setBuzz(b))
+      .buzzBoard(hours)
+      .then((b) => alive && setBoard(b))
       .catch(() => undefined);
     return () => {
       alive = false;
     };
-  }, []);
+  }, [hours]);
 
-  if (!buzz) return null;
-  const hits = buzz.hits ?? [];
+  if (!board) return null;
+  const hits = board.rows.filter((r) => r.alerted);
   const hot = hits.length > 0;
+  const buzz = board;
 
   return (
     <div className={`kwf-buzz${hot ? " hot" : ""}`}>
       <button className="kwf-buzz-head" onClick={() => setOpen((v) => !v)}>
         <span className="kwf-buzz-title">
           🌋 채널 버즈
+          <i>최근 {buzz.windowHours}시간</i>
           {hot ? (
             <b className="kwf-buzz-count">{hits.length}건 급증</b>
           ) : (
-            <i>최근 {buzz.windowHours}시간 조용함</i>
+            <i>· 조용함</i>
           )}
         </span>
         <span className="kwf-buzz-toggle">{open || hot ? "▾" : "▸"}</span>
@@ -522,20 +536,15 @@ function BuzzSection() {
                 텔레그램 채널에서 평소보다 크게 늘어난 주제입니다. 위 뉴스 목록에도
                 같은 말이 있으면 <b>양쪽</b> 배지가 붙습니다 — 그게 제일 믿을 만합니다.
               </p>
-              {hits.map((h) => (
+              {hits.slice(0, 10).map((h) => (
                 <div className="kwf-buzz-hit" key={h.term}>
                   <div className="kwf-buzz-hit-head">
                     <b>{h.term}</b>
                     <span>
-                      {h.recent}건 · 평소 {h.baseline}건의 <b>{h.ratio}배</b>
+                      {h.recent}건 · {h.channels}개 방 · 평소 {h.baseline}건의{" "}
+                      <b>{h.ratio}배</b>
                     </span>
                   </div>
-                  {h.samples[0] && (
-                    <p className="kwf-buzz-sample">
-                      {h.samples[0].text.slice(0, 100)}
-                      <i> ({h.samples[0].channel})</i>
-                    </p>
-                  )}
                 </div>
               ))}
             </>
@@ -549,8 +558,8 @@ function BuzzSection() {
 }
 
 /** 조용할 때 「왜 안 뜨나」 — 고장인지 진짜 조용한 건지 */
-function BuzzWhy({ buzz }: { buzz: NonNullable<Awaited<ReturnType<typeof api.buzz>>> }) {
-  if (buzz.health && !buzz.health.reader) {
+function BuzzWhy({ buzz }: { buzz: BuzzBoard }) {
+  if (!buzz.reader) {
     return (
       <p className="kwf-buzz-lead">
         텔레그램 사용자 세션이 없어 수집이 안 됩니다 — 미니PC에서만 돕니다.
@@ -561,27 +570,21 @@ function BuzzWhy({ buzz }: { buzz: NonNullable<Awaited<ReturnType<typeof api.buz
     return (
       <p className="kwf-buzz-lead">
         기준선 수집 중 ({buzz.baselineDays}/3일). 사흘치가 쌓이면 「평소 대비 몇 배」
-        판정이 시작됩니다.
-        {buzz.health && (
-          <>
-            {" "}
-            오늘 센 것 <b>{buzz.health.todayCount}건</b>.
-          </>
-        )}
+        판정이 시작됩니다. 창 안 언급 <b>{buzz.total}건</b>.
       </p>
     );
   }
   return (
     <>
       <p className="kwf-buzz-lead">
-        문턱은 <b>{buzz.threshold?.minCount}건·{buzz.threshold?.minRatio}배</b> 또는{" "}
-        <b>{buzz.threshold?.sharpCount}건·{buzz.threshold?.sharpRatio}배</b>입니다.
+        문턱은 <b>{buzz.threshold.minCount}건 이상</b>이면서 뜻밖의 정도가{" "}
+        <b>{buzz.threshold.minRatio}</b> 이상일 때입니다.
       </p>
-      {buzz.nearMiss && buzz.nearMiss.length > 0 ? (
+      {buzz.rows.length > 0 ? (
         <>
           <p className="kwf-buzz-lead">아깝게 못 넘은 것 — 여기가 줄줄이면 문턱이 높은 것입니다.</p>
           <div className="kwf-buzz-near">
-            {buzz.nearMiss.slice(0, 6).map((t) => (
+            {buzz.rows.slice(0, 6).map((t) => (
               <span key={t.term}>
                 {t.term} <b>{t.recent}건·{t.ratio}배</b>
               </span>

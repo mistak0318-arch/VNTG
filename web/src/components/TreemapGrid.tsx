@@ -42,17 +42,43 @@ export interface MapTile {
   onClick: () => void;
 }
 
+/**
+ * 크기 차이를 얼마나 눌러 그릴지.
+ *
+ * ⚠️ 시가총액 분포는 **극단적으로 치우쳐 있다.** 실측에서 제일 큰 테마와 작은 테마가
+ * **381배**였고, 그대로 그리면 반도체 하나가 화면 절반을 먹고 나머지는 몇 픽셀이
+ * 되어 **누를 수조차 없었다.**
+ *
+ * 그래서 넓이를 값의 **거듭제곱(0.45)** 으로 잡는다. 순서는 그대로고 비율만 완만해진다
+ * — 381배가 **14배**쯤으로 준다. 「넓이가 값에 정비례한다」는 성질은 잃지만,
+ * **못 누르는 타일은 애초에 정보가 아니다.**
+ *
+ * 정확한 값이 필요하면 타일에 마우스를 올리면 나온다. 그리고 아래 「실제 비율」을
+ * 켜면 누르지 않은 원래 그림을 볼 수 있다.
+ */
+const COMPRESS_POWER = 0.45;
+
+/** 한 화면에 이 이상은 그리지 않는다 — 그 아래는 눌러도 손끝보다 작다 */
+const MAX_TILES = 48;
+
 export function TreemapGrid({
   tiles,
   sizeBy,
   theme,
+  compress = true,
 }: {
   tiles: MapTile[];
   sizeBy: SizeMode;
   theme: ThemeName;
+  /** 크기 차이를 눌러 그릴지. 끄면 넓이가 값에 정비례한다(작은 것은 안 보인다) */
+  compress?: boolean;
 }) {
-  const weightOf = (t: MapTile): number =>
+  const rawOf = (t: MapTile): number =>
     sizeBy === "cap" ? (t.marketCap ?? 0) : sizeBy === "value" ? (t.tradeValue ?? 0) : 0;
+  const weightOf = (t: MapTile): number => {
+    const v = rawOf(t);
+    return v > 0 && compress ? Math.pow(v, COMPRESS_POWER) : v;
+  };
 
   /*
    * 규모 데이터가 절반도 없으면 트리맵이 거짓말이 된다 — 값이 없는 것들이 전부
@@ -60,6 +86,9 @@ export function TreemapGrid({
    */
   const withWeight = tiles.filter((t) => weightOf(t) > 0);
   const usable = sizeBy !== "flat" && withWeight.length >= tiles.length * 0.5 && withWeight.length > 0;
+  /* 큰 것부터 잘라 낸다 — 뒤쪽은 어차피 못 누른다 */
+  const shown = [...withWeight].sort((a, b) => rawOf(b) - rawOf(a)).slice(0, MAX_TILES);
+  const hidden = withWeight.length - shown.length;
 
   if (!usable) {
     return (
@@ -82,11 +111,12 @@ export function TreemapGrid({
   }
 
   const rects = treemap(
-    withWeight.map((t) => ({ weight: weightOf(t), data: t })),
+    shown.map((t) => ({ weight: weightOf(t), data: t })),
     1.35,
   );
 
   return (
+    <>
     <div className="map-tree">
       {rects.map((r) => {
         /* 넓이(%²)로 글자 크기를 정한다 — 폭만 보면 가로로 긴 타일이 과하게 커진다 */
@@ -126,6 +156,13 @@ export function TreemapGrid({
         );
       })}
     </div>
+    {hidden > 0 && (
+      <p className="map-tree-note">
+        규모 상위 <b>{shown.length}개</b>만 그렸습니다 — 나머지 {hidden}개는 화면에서 손톱보다
+        작아집니다. 표(테마 DB)에서는 전부 볼 수 있습니다.
+      </p>
+    )}
+    </>
   );
 }
 
@@ -145,11 +182,15 @@ export function SizeByPicker({
   onChange,
   hasCap,
   hasValue,
+  compress,
+  onCompress,
 }: {
   value: SizeMode;
   onChange: (v: SizeMode) => void;
   hasCap: boolean;
   hasValue: boolean;
+  compress: boolean;
+  onCompress: (v: boolean) => void;
 }) {
   const opts: { key: SizeMode; label: string; ok: boolean; hint: string }[] = [
     { key: "cap", label: "시총", ok: hasCap, hint: "이 판이 얼마나 큰가" },
@@ -170,6 +211,20 @@ export function SizeByPicker({
           {o.label}
         </button>
       ))}
+      {/* 눌러 그린 것을 원래 비율로 되돌려 보는 단추 — 정직하려면 원본을 볼 길이 있어야 한다 */}
+      {value !== "flat" && (
+        <button
+          className={`map-sizeby-real${compress ? "" : " on"}`}
+          onClick={() => onCompress(!compress)}
+          title={
+            compress
+              ? "지금은 크기 차이를 눌러 그리고 있습니다 — 누르면 실제 비율로 봅니다"
+              : "넓이가 값에 정비례합니다 — 작은 것은 거의 안 보입니다"
+          }
+        >
+          실제 비율
+        </button>
+      )}
     </div>
   );
 }
