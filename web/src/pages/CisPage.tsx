@@ -632,8 +632,13 @@ function ReviewTab({ account }: { account: string }) {
         </div>
       )}
 
+      {/*
+        폰에서는 카드로 편다 (2026-08-31 — "복기노트 모바일에서 읽기 불편해").
+        다섯 칸이 375px 에 가로로 안 들어간다. `data-l` 로 라벨을 달아 두면
+        CSS 가 「실현 +12,000」처럼 앞에 붙여 준다 — 테마 표와 같은 문법이다.
+      */}
       <div className="data-table-wrap">
-        <table className="data-table">
+        <table className="data-table cis-card-table">
           <thead>
             <tr>
               <th>날짜</th>
@@ -651,20 +656,23 @@ function ReviewTab({ account }: { account: string }) {
                   className="cis-row"
                   onClick={() => setOpen(open === d.date ? null : d.date)}
                 >
-                  <td>
+                  <td className="cis-td-date">
                     {open === d.date ? "▾" : "▸"} {d.date}
                     <i className="cis-wd">{dateLabel(d.date).slice(-3)}</i>
                   </td>
-                  <td className="num">
+                  <td className="num" data-l="계획→체결">
                     {d.review ? `${d.review.planned} → ${d.review.executed}` : "-"}
                   </td>
-                  <td className={`num ${d.review ? cls(d.review.realized) : ""}`}>
+                  <td className={`num ${d.review ? cls(d.review.realized) : ""}`} data-l="실현">
                     {d.review ? signed(d.review.realized) : "-"}
                   </td>
-                  <td className={`num ${d.review ? cls(d.review.equityChange) : ""}`}>
+                  <td
+                    className={`num ${d.review ? cls(d.review.equityChange) : ""}`}
+                    data-l="평가액"
+                  >
                     {d.review ? signed(d.review.equityChange) : "-"}
                   </td>
-                  <td>
+                  <td className="cis-td-vio">
                     {d.review?.violations.length ? (
                       <span className="negative">{d.review.violations.join(", ")}</span>
                     ) : (
@@ -734,7 +742,7 @@ function FillsTab({
         <span className="breadth-count">{total}건</span>
       </h3>
       <div className="data-table-wrap">
-        <table className="data-table">
+        <table className="data-table cis-card-table">
           <thead>
             <tr>
               <th>날짜</th>
@@ -751,7 +759,7 @@ function FillsTab({
           <tbody>
             {fills.map((f) => (
               <tr key={f.id}>
-                <td>
+                <td className="cis-td-date">
                   {f.date}
                   <i className="cis-slot-tag">{f.slot === "morning" ? "아침" : f.slot === "noon" ? "점심" : "저녁"}</i>
                 </td>
@@ -763,14 +771,14 @@ function FillsTab({
                     {f.name}
                   </button>
                 </td>
-                <td className="num">{f.qty.toLocaleString()}</td>
-                <td className="num">{f.price.toLocaleString()}</td>
-                <td className={`num ${f.pnl !== undefined ? cls(f.pnl) : ""}`}>
+                <td className="num" data-l="수량">{f.qty.toLocaleString()}</td>
+                <td className="num" data-l="단가">{f.price.toLocaleString()}</td>
+                <td className={`num ${f.pnl !== undefined ? cls(f.pnl) : ""}`} data-l="손익">
                   {f.pnl !== undefined ? signed(f.pnl) : "-"}
                 </td>
-                <td className="num">{f.heldDays !== undefined ? `${f.heldDays}일` : "-"}</td>
-                <td>{f.funding === "cash" ? "예수금" : f.funding === "misu" ? "미수" : "신용"}</td>
-                <td className="cis-why">{f.why}</td>
+                <td className="num" data-l="보유">{f.heldDays !== undefined ? `${f.heldDays}일` : "-"}</td>
+                <td data-l="자금">{f.funding === "cash" ? "예수금" : f.funding === "misu" ? "미수" : "신용"}</td>
+                <td className="cis-why cis-td-wide">{f.why}</td>
               </tr>
             ))}
           </tbody>
@@ -870,7 +878,7 @@ function AccountTab({
         <div className="empty">보유 없음.</div>
       ) : (
         <div className="data-table-wrap">
-          <table className="data-table">
+          <table className="data-table cis-card-table">
             <thead>
               <tr>
                 <th>종목</th>
@@ -897,17 +905,17 @@ function AccountTab({
                     {p.safe && <i className="cis-safe">안전</i>}
                     {p.dueDate && <i className="cis-due">미수 {p.dueDate}</i>}
                   </td>
-                  <td className="num">{p.qty.toLocaleString()}</td>
-                  <td className="num">{p.avg.toLocaleString()}</td>
-                  <td className="num">{p.price !== null ? p.price.toLocaleString() : "-"}</td>
-                  <td className={`num ${p.pnl !== null ? cls(p.pnl) : ""}`}>
+                  <td className="num" data-l="수량">{p.qty.toLocaleString()}</td>
+                  <td className="num" data-l="평단">{p.avg.toLocaleString()}</td>
+                  <td className="num" data-l="현재가">{p.price !== null ? p.price.toLocaleString() : "-"}</td>
+                  <td className={`num ${p.pnl !== null ? cls(p.pnl) : ""}`} data-l="손익">
                     {p.pnl !== null ? `${signed(p.pnl)} (${p.pnlPct}%)` : "-"}
                   </td>
                   {/*
                     흔들림 — 손절폭이 적당한지 판단하는 결정적 자료다.
                     -7% 손절인데 매번 -6.5% 까지 갔다 돌아온다면 손절폭이 좁은 것이다.
                   */}
-                  <td className="num cis-swing">
+                  <td className="num cis-swing" data-l="흔들림">
                     {p.worstPct !== undefined ? (
                       <>
                         <span className="negative">{p.worstPct}%</span>
@@ -921,10 +929,10 @@ function AccountTab({
                       "-"
                     )}
                   </td>
-                  <td className="num">{p.stop?.toLocaleString() ?? "-"}</td>
-                  <td className="num">{p.target?.toLocaleString() ?? "-"}</td>
-                  <td>{p.funding === "cash" ? "예수금" : p.funding === "misu" ? "미수" : "신용"}</td>
-                  <td className="cis-why">{p.why}</td>
+                  <td className="num" data-l="손절">{p.stop?.toLocaleString() ?? "-"}</td>
+                  <td className="num" data-l="목표">{p.target?.toLocaleString() ?? "-"}</td>
+                  <td data-l="자금">{p.funding === "cash" ? "예수금" : p.funding === "misu" ? "미수" : "신용"}</td>
+                  <td className="cis-why cis-td-wide">{p.why}</td>
                 </tr>
               ))}
             </tbody>
@@ -1174,7 +1182,7 @@ function BucketTable({
     <>
       <h3 className="section-heading">{title}</h3>
       <div className="data-table-wrap">
-        <table className="data-table">
+        <table className="data-table cis-card-table">
           <thead>
             <tr>
               <th>구분</th>
@@ -1190,13 +1198,13 @@ function BucketTable({
             {rows.map((b) => (
               /* 표본이 적으면 흐리게 — 세 번 이겨 100% 인 줄이 눈에 세게 박히면 안 된다 */
               <tr key={b.key} className={b.trades < 5 ? "cis-thin" : ""}>
-                <td>{b.label}</td>
-                <td className="num">{b.trades}</td>
-                <td className="num">{b.winRate}%</td>
-                <td className={`num ${cls(b.pnl)}`}>{signed(b.pnl)}</td>
-                <td className={`num ${cls(b.avgPnl)}`}>{signed(b.avgPnl)}</td>
-                <td className="num">{b.payoff ?? "-"}</td>
-                <td className="num">{b.avgHold}일</td>
+                <td className="cis-td-date">{b.label}</td>
+                <td className="num" data-l="건수">{b.trades}</td>
+                <td className="num" data-l="승률">{b.winRate}%</td>
+                <td className={`num ${cls(b.pnl)}`} data-l="손익 합">{signed(b.pnl)}</td>
+                <td className={`num ${cls(b.avgPnl)}`} data-l="평균">{signed(b.avgPnl)}</td>
+                <td className="num" data-l="손익비">{b.payoff ?? "-"}</td>
+                <td className="num" data-l="보유">{b.avgHold}일</td>
               </tr>
             ))}
           </tbody>
@@ -1227,7 +1235,7 @@ function UsageTab({ account }: { account: string }) {
         자주 보는데 돈이 안 되는 화면이 보이면 그게 배움입니다.
       </div>
       <div className="data-table-wrap">
-        <table className="data-table">
+        <table className="data-table cis-card-table">
           <thead>
             <tr>
               <th>화면 · 지표</th>
@@ -1242,15 +1250,15 @@ function UsageTab({ account }: { account: string }) {
             {rows.map((r) => (
               <tr key={r.name}>
                 <td>{r.name}</td>
-                <td className="num">{r.used}</td>
-                <td>
+                <td className="num" data-l="쓴 횟수">{r.used}</td>
+                <td className="cis-td-wide">
                   <div className="cis-bar">
                     <i style={{ width: `${(r.used / maxUsed) * 100}%` }} />
                   </div>
                 </td>
-                <td className="num">{r.trades || "-"}</td>
-                <td className="num">{r.winRate !== null ? `${r.winRate}%` : "-"}</td>
-                <td className={`num ${cls(r.pnl)}`}>{r.pnl ? signed(r.pnl) : "-"}</td>
+                <td className="num" data-l="매매">{r.trades || "-"}</td>
+                <td className="num" data-l="승률">{r.winRate !== null ? `${r.winRate}%` : "-"}</td>
+                <td className={`num ${cls(r.pnl)}`} data-l="손익">{r.pnl ? signed(r.pnl) : "-"}</td>
               </tr>
             ))}
           </tbody>
