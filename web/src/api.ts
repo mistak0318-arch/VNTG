@@ -5081,6 +5081,8 @@ export interface ListEntry {
   lastSeenDate: string;
   active?: boolean;
   exitedDate?: string;
+  /** 편입일 종가 대비 — 슈퍼신호등과 같은 기준이라 견줄 수 있다 */
+  returns?: { d1: number | null; d5: number | null; d20: number | null };
 }
 
 export interface ListTrackSummary {
@@ -5089,4 +5091,19 @@ export interface ListTrackSummary {
   /** 목록별로 몇 개를 받았고 몇 개가 초록이었나 */
   counts: Record<string, { universe: number; green: number }>;
   byList: { key: string; label: string; active: number; exited: number; avgScore: number | null }[];
+  /** 성적표 — 슈퍼신호등 채점표와 같은 모양이라 나란히 놓을 수 있다 */
+  grade: ListGradeRow[];
+  /** 추적 중 종목의 당일 상승/하락 수 — 사이드바 배지 (조회 0회) */
+  up: number | null;
+  down: number | null;
+}
+
+/** 성적 한 줄 */
+export interface ListGradeRow {
+  label: string;
+  n: number;
+  d1: { avg: number | null; n: number };
+  d5: { avg: number | null; n: number };
+  d20: { avg: number | null; n: number };
+  win1: number | null;
 }

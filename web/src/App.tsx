@@ -445,6 +445,8 @@ export default function App() {
    */
   const [navN, setNavN] = useState({ telegram: false, superSignal: false, report: false });
   const [superUD, setSuperUD] = useState<{ up: number; down: number } | null>(null);
+  /** 신호등 분석 배지 — 슈퍼신호등과 같은 자로 잰 당일 상승/하락 */
+  const [listUD, setListUD] = useState<{ up: number; down: number } | null>(null);
   const superRunRef = useRef<string | null>(null);
   const reportRef = useRef<string | null>(null);
   const refreshNavN = useCallback(() => {
@@ -475,6 +477,16 @@ export default function App() {
           r.lastRunDate !== localStorage.getItem("vntg.seen.superSignal");
         setNavN((p) => (p.superSignal === on ? p : { ...p, superSignal: on }));
         setSuperUD(r.up !== null && r.down !== null ? { up: r.up, down: r.down } : null);
+      })
+      .catch(() => undefined);
+    /*
+     * 신호등 분석 배지 — 슈퍼신호등과 **같은 자**(전종목 스냅샷 엿보기)로 잰다.
+     * 두 메뉴가 다른 방식으로 세면 나란히 놓고 볼 수가 없다.
+     */
+    void api
+      .listTrack()
+      .then((r) => {
+        setListUD(r.up !== null && r.down !== null ? { up: r.up, down: r.down } : null);
       })
       .catch(() => undefined);
     void api
@@ -771,6 +783,12 @@ export default function App() {
                         <span className="negative">▼{superUD.down}</span>
                       </em>
                     )}
+                    {e.key === "listTrack" && listUD && (
+                      <em className="nav-ud" title="추적 중 종목의 당일 상승/하락">
+                        <span className="positive">▲{listUD.up}</span>
+                        <span className="negative">▼{listUD.down}</span>
+                      </em>
+                    )}
                     {navNOf(e.item.key) && <em className="nav-n">N</em>}
                   </button>
                 ),
@@ -821,6 +839,12 @@ export default function App() {
                     <em className="nav-ud" title="추적 중 종목의 당일 상승/하락">
                       <span className="positive">▲{superUD.up}</span>
                       <span className="negative">▼{superUD.down}</span>
+                    </em>
+                  )}
+                  {item.key === "listTrack" && listUD && (
+                    <em className="nav-ud" title="추적 중 종목의 당일 상승/하락">
+                      <span className="positive">▲{listUD.up}</span>
+                      <span className="negative">▼{listUD.down}</span>
                     </em>
                   )}
                   {navNOf(item.key) && <em className="nav-n">N</em>}

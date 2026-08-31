@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type ListTrackSummary, type ListEntry } from "../api";
+
+/** 등락 색 — 0 은 색을 안 준다 */
+const cls = (v: number | null | undefined): string =>
+  v === null || v === undefined || !Number.isFinite(v) ? "" : v > 0 ? "positive" : v < 0 ? "negative" : "";
 import { SuperMark } from "../useSuperMarks";
 import { WatchStar } from "../useWatchedCodes";
 
@@ -170,6 +174,56 @@ export function ListTrackPage({
           종목이 뜹니다.
         </p>
       </section>
+
+      {/* ── 성적표 — 이 원장의 존재 이유 ── */}
+      {data.grade.length > 0 && (
+        <section className="card">
+          <h3>편입 후 성적</h3>
+          <p className="pt-n">
+            <b>슈퍼신호등 채점표와 같은 자</b>로 잽니다(편입일 종가 대비) — 그래야 두
+            원장을 나란히 놓고 「교집합이 값을 하나」에 답할 수 있습니다.
+          </p>
+          <div className="table-wrap">
+            <table className="sim-table">
+              <thead>
+                <tr>
+                  <th>구간</th>
+                  <th className="num">편입</th>
+                  <th className="num">1일</th>
+                  <th className="num">5일</th>
+                  <th className="num">20일</th>
+                  <th className="num">승률(1일)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.grade.map((g, i) => (
+                  <tr key={g.label} className={i === 0 ? "gb-base" : g.n < 5 ? "sim-thin" : ""}>
+                    <td>{g.label}</td>
+                    <td className="num">{g.n.toLocaleString("ko-KR")}</td>
+                    <td className={`num ${cls(g.d1.avg)}`}>
+                      {g.d1.avg === null ? "-" : `${g.d1.avg > 0 ? "+" : ""}${g.d1.avg}%`}
+                      <span className="pt-n"> ({g.d1.n})</span>
+                    </td>
+                    <td className={`num ${cls(g.d5.avg)}`}>
+                      {g.d5.avg === null ? "-" : `${g.d5.avg > 0 ? "+" : ""}${g.d5.avg}%`}
+                      <span className="pt-n"> ({g.d5.n})</span>
+                    </td>
+                    <td className={`num ${cls(g.d20.avg)}`}>
+                      {g.d20.avg === null ? "-" : `${g.d20.avg > 0 ? "+" : ""}${g.d20.avg}%`}
+                      <span className="pt-n"> ({g.d20.n})</span>
+                    </td>
+                    <td className="num pt-n">{g.win1 === null ? "-" : `${g.win1}%`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="pt-n">
+            괄호는 <b>성적이 찬 표본 수</b>입니다 — 편입 수와 다릅니다(20일이 안 지난
+            종목은 20일 칸이 비어 있습니다). 표본 5 미만인 줄은 흐리게 그렸습니다.
+          </p>
+        </section>
+      )}
 
       {/* ── 목록 고르기 ── */}
       <div className="filter-row">
