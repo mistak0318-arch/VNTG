@@ -95,6 +95,13 @@ export function StockAnalysisPage({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setFocused(true)}
+          /*
+           * 누를 때도 켠다. 목록에서 종목을 고르면 focused 만 꺼지고 **포커스는 칸에
+           * 그대로 남는다**(줄 단추가 mousedown 을 막으니까). 그 상태로 칸을 다시
+           * 눌러도 이미 포커스가 있어 focus 이벤트가 안 나고, 목록이 영영 안 펴진다.
+           * 연달아 두 종목을 볼 때 바로 걸린다.
+           */
+          onClick={() => setFocused(true)}
           onBlur={() => setTimeout(() => setFocused(false), 150)}
         />
         {/*
