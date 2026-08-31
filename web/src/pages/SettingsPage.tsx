@@ -25,6 +25,7 @@ import { LoginSettingsPanel } from "../components/LoginSettingsPanel";
 import { BuzzConfigPanel } from "../components/BuzzConfigPanel";
 import { NaverSyncPanel } from "../components/NaverSyncPanel";
 import { DataRetentionPanel } from "../components/DataRetentionPanel";
+import { RealtimeStatusPanel } from "../components/RealtimeStatusPanel";
 
 interface KeyInfo {
   name: string;
@@ -184,6 +185,17 @@ export function SettingsPage() {
         hint="네이버에서 스스로 긁어오는 것들 — 목록 · 주기 · 끄기 · 지금 실행"
       >
         <NaverSyncPanel />
+      </CollapsibleCard>
+      )}
+
+      {tab === "cost" && (
+      <CollapsibleCard
+        id="realtimeStatus"
+        scope="global"
+        title="실시간 상태"
+        hint="구독 · 받은 값 · 거절 — 「연결됨인데 값이 안 온다」를 여기서 봅니다"
+      >
+        <RealtimeStatusPanel />
       </CollapsibleCard>
       )}
 

@@ -231,6 +231,24 @@ export interface TopicPulse {
 
 /* ── 버즈·키워드 알고리즘 설정 (2026-08-30) ─────────────────────────────── */
 
+/** 실시간 연결 상태 (2026-08-31) — 「연결됨인데 값이 안 온다」를 눈으로 보려고 */
+export interface RealtimeStatus {
+  enabled: boolean;
+  state: string;
+  healthy: boolean;
+  lastSeen: string | null;
+  subscribed: number;
+  keys: number;
+  regErrors: { at: string; code: number; msg: string }[];
+}
+export interface RealtimeStoreInfo {
+  day: string;
+  keys: number;
+  points: number;
+  pending: number;
+  types: Record<string, number>;
+}
+
 /** 데이터 보관 현황 (2026-08-31) */
 export interface DataCatStat {
   key: string;
@@ -382,6 +400,9 @@ export const api = {
     getJson<KeywordFlow>(`/api/news-keywords/flow?window=${windowMin}`),
   keywordCollect: () =>
     postJson<{ articles: number; terms: number }>("/api/news-keywords/collect"),
+
+  realtimeStatus: () => getJson<RealtimeStatus>("/api/realtime/status"),
+  realtimeStoreInfo: () => getJson<RealtimeStoreInfo>("/api/realtime/store"),
 
   dataReport: () => getJson<DataReport>("/api/data"),
   dataKeep: (key: string, days: number | null) =>

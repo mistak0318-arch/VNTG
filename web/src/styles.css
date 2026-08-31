@@ -11294,3 +11294,17 @@ button.tpb-row:hover { background: var(--panel-2); }
 .dret-band b { font-size: 0.76rem; font-variant-numeric: tabular-nums; }
 .dret-band:hover { border-color: var(--blue); }
 .dret-band.on { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, transparent); }
+
+/* 실시간 상태 (2026-08-31) */
+.rts-top { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+.rts-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); }
+.rts-dot.ok { background: var(--green); }
+.rts-nums { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 8px; }
+.rts-nums span { display: flex; flex-direction: column; }
+.rts-nums em { font-style: normal; font-size: 0.72rem; color: var(--muted); }
+.rts-nums b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.rts-errs {
+  border: 1px solid var(--red); border-radius: 8px; padding: 7px 10px;
+  font-size: 0.76rem; margin-bottom: 8px;
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
