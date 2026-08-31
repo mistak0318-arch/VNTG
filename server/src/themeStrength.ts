@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { peekSnapshot } from "./marketSnapshot.js";
-import { hiddenSet } from "./hiddenThemes.js";
+import { hiddenNames, hiddenSet } from "./hiddenThemes.js";
 import { ETF_TABS, loadThemes } from "./naverThemes.js";
 import { cumOf, dailyRates, loadCloses } from "./dailyCloses.js";
 
@@ -50,6 +50,13 @@ export interface ThemeStockRow {
 }
 
 export interface ThemeStrength {
+  /**
+   * 네이버 분류에서 **사라진 테마** (2026-08-31).
+   *
+   * 숨겨 둔 사이에 네이버가 그 테마를 뺀 경우다. 숫자는 없지만 되살리기 화면에는
+   * 띄운다 — 안 띄우면 숨김만 남고 되돌릴 길이 없다.
+   */
+  gone?: boolean;
   /** 시장 + 원본 id — 화면이 여는 열쇠 */
   key: string;
   name: string;
@@ -360,6 +367,45 @@ export async function themeStrength(
   const visible = opts.includeHidden
     ? rows
     : await hiddenSet().then((h) => rows.filter((r) => !h.has(r.key)));
+
+  /*
+   * **네이버에서 사라진 테마도 되살리기 화면에는 띄운다** (2026-08-31 요청).
+   *
+   * 숨김은 열쇠로 저장하는데, 네이버가 그 테마를 분류에서 빼면 목록에 없으므로
+   * **되살리기 화면에도 안 뜬다.** 숨김은 남아 있는데 무엇을 숨겼는지도, 어떻게
+   * 되돌리는지도 알 수 없었다 — 「전체 되살리기」밖에 길이 없었다.
+   *
+   * 그래서 빈 줄을 만들어 끼운다. 숫자는 없지만(`gone`) **이름과 되살리기 단추는
+   * 있다.** 이름은 숨길 때 같이 적어 둔 것이고, 옛 기록이라 없으면 열쇠를 쓴다.
+   */
+  if (opts.includeHidden) {
+    const names = await hiddenNames();
+    const have = new Set(visible.map((r) => r.key));
+    for (const [key, name] of names) {
+      if (have.has(key)) continue;
+      /* 이 시장 것만 — `kr:12` 의 앞머리로 가른다 */
+      if (!key.startsWith(`${market}:`)) continue;
+      visible.push({
+        key,
+        name: name ?? key,
+        changeRate: 0,
+        up: 0,
+        down: 0,
+        breadth: 0,
+        streak: 0,
+        hit5: { n: 0, of: 0 },
+        hit10: { n: 0, of: 0 },
+        tradeValue: 0,
+        marketCap: 0,
+        w1: null,
+        m1: null,
+        m60: null,
+        m3: null,
+        stocks: [],
+        gone: true,
+      });
+    }
+  }
 
   return { themes: visible, at: String(snap?.at ?? "") };
 }

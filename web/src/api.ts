@@ -1031,8 +1031,9 @@ export const api = {
    * 우리가 갖는다. 서버가 `themeStrength` 한 곳에서 거르므로 테마 DB·MAP·신호등이
    * 전부 따라온다.
    */
-  themeHide: (keys: string[], hidden: boolean) =>
-    putJson<{ hidden: string[] }>("/api/market/theme-hidden", { keys, hidden }),
+  /** names 를 같이 보내면 그 테마가 나중에 사라져도 이름을 보여 줄 수 있다 */
+  themeHide: (keys: string[], hidden: boolean, names?: Record<string, string>) =>
+    putJson<{ hidden: string[] }>("/api/market/theme-hidden", { keys, hidden, names }),
   themeHideClear: () => deleteJson<{ hidden: string[] }>("/api/market/theme-hidden"),
   naverThemeFetchEtf: () => postJson<{ count: number }>("/api/market/naver-themes/fetch-etf", {}),
   /** 시장 렌즈 — 체온계 + 테마 로테이션 + 미국 밤사이. 조회 0회 */
@@ -3808,6 +3809,13 @@ export interface ThemeDbSummary {
  * 등락률은 구성종목의 단순평균이다(시총 가중이면 큰 종목 하나가 테마를 대변해 버린다).
  */
 export interface ThemeStrength {
+  /**
+   * 네이버 분류에서 **사라진 테마** (2026-08-31).
+   *
+   * 숨겨 둔 사이에 네이버가 그 테마를 뺀 경우다. 숫자는 없지만 되살리기 화면에는
+   * 띄운다 — 안 띄우면 숨김만 남고 되돌릴 길이 없다.
+   */
+  gone?: boolean;
   key: string;
   name: string;
   changeRate: number;

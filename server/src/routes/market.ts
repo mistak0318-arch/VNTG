@@ -901,7 +901,9 @@ export function createMarketRouter(client: KiwoomClient): Router {
     try {
       const keys = (req.body?.keys ?? []) as string[];
       const hidden = Boolean(req.body?.hidden);
-      res.json({ hidden: await setHidden(Array.isArray(keys) ? keys : [], hidden) });
+      /* 이름도 같이 받는다 — 나중에 그 테마가 사라져도 무엇이었는지 말할 수 있게 */
+      const names = (req.body?.names ?? {}) as Record<string, string>;
+      res.json({ hidden: await setHidden(Array.isArray(keys) ? keys : [], hidden, names) });
     } catch (err) {
       next(err);
     }

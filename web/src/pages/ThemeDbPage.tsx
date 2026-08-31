@@ -135,11 +135,12 @@ function ThemeMap({
   const [showHidden, setShowHidden] = useState(false);
   const [hiding, setHiding] = useState(false);
 
-  const toggleHide = async (key: string, on: boolean) => {
+  const toggleHide = async (key: string, on: boolean, name?: string) => {
     if (hiding) return;
     setHiding(true);
     try {
-      const r = await api.themeHide([key], on);
+      /* 이름을 같이 보낸다 — 나중에 네이버가 그 테마를 빼도 무엇이었는지 남는다 */
+      const r = await api.themeHide([key], on, name ? { [key]: name } : undefined);
       setHidden(r.hidden);
       /* 목록에서 바로 빼거나 되돌린다 — 새로고침을 기다리게 하면 눌렀는지 알 수 없다 */
       setRows((prev) => (prev && !showHidden && on ? prev.filter((t) => t.key !== key) : prev));
@@ -466,6 +467,11 @@ function ThemeMap({
               */
               <tr key={t.key} className="tdb-tr" onClick={() => setOpen(t.key)}>
                 <td className="tdb-td-name">
+                  {/*
+                    네이버 분류에서 사라진 테마 (2026-08-31 요청). 숫자는 없지만
+                    이름과 되살리기 단추는 있어야 되돌릴 수 있다.
+                  */}
+                  {t.gone && <span className="tdb-gone">사라짐</span>}
                   {t.name}
                   {t.stocks.length > 1 && <em className="pt-n"> {t.stocks.length}</em>}
                 </td>
@@ -534,7 +540,7 @@ function ThemeMap({
                     }
                     onClick={(e) => {
                       e.stopPropagation();
-                      void toggleHide(t.key, !showHidden);
+                      void toggleHide(t.key, !showHidden, t.name);
                     }}
                   >
                     {showHidden ? "↩ 되살리기" : "🙈 숨기기"}

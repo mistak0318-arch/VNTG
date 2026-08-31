@@ -30,46 +30,85 @@ const FILE = join(here, "..", "data", "hiddenThemes.json");
  * (이름으로 저장하면 네이버가 이름을 바꿨을 때 가리개가 헛돈다).
  */
 
-let cache: Set<string> | null = null;
+/**
+ * 숨긴 테마의 **이름도 같이** 들고 있는다 (2026-08-31 요청 —
+ * 「테마 하나가 네이버에서 사라지면 화면에 표시해주자」).
+ *
+ * 예전엔 열쇠(`kr:12`)만 저장했다. 그러면 네이버 분류에서 그 테마가 아주 사라졌을 때
+ * **되살리기 목록에도 안 뜬다** — 숨김은 남아 있는데 무엇을 숨겼는지도, 어떻게
+ * 되돌리는지도 알 수 없었다. 「전체 되살리기」밖에 길이 없었다.
+ *
+ * 이름을 같이 적어 두면 사라진 뒤에도 「무엇이었는지」를 화면이 말할 수 있다.
+ *
+ * 저장 형식은 **둘 다 읽는다** — 옛 파일은 `["kr:12", …]`, 새 파일은
+ * `[{key,name}, …]`. 옛 항목은 이름이 없으니 화면이 열쇠를 대신 적는다.
+ */
+let cache: Map<string, string | undefined> | null = null;
 
 export async function listHidden(): Promise<string[]> {
-  if (!cache) {
-    try {
-      const raw = JSON.parse(await readFile(FILE, "utf-8")) as string[];
-      cache = new Set(Array.isArray(raw) ? raw : []);
-    } catch {
-      cache = new Set();
+  await loadCache();
+  return [...cache!.keys()];
+}
+
+/** 열쇠 → 숨길 때의 이름 (없을 수 있다 — 옛 형식) */
+export async function hiddenNames(): Promise<Map<string, string | undefined>> {
+  await loadCache();
+  return new Map(cache!);
+}
+
+async function loadCache(): Promise<void> {
+  if (cache) return;
+  try {
+    const raw = JSON.parse(await readFile(FILE, "utf-8")) as (string | { key: string; name?: string })[];
+    cache = new Map();
+    for (const it of Array.isArray(raw) ? raw : []) {
+      if (typeof it === "string") cache.set(it, undefined);
+      else if (it && typeof it.key === "string") cache.set(it.key, it.name);
     }
+  } catch {
+    cache = new Map();
   }
-  return [...cache];
 }
 
 /** 빠른 조회용 — themeStrength 가 테마마다 부른다 */
 export async function hiddenSet(): Promise<Set<string>> {
-  await listHidden();
-  return cache!;
+  await loadCache();
+  return new Set(cache!.keys());
 }
 
 async function persist(): Promise<void> {
   await mkdir(dirname(FILE), { recursive: true });
-  await writeFile(FILE, JSON.stringify([...cache!], null, 2), "utf-8");
+  await writeFile(
+    FILE,
+    JSON.stringify(
+      [...cache!.entries()].map(([key, name]) => ({ key, name })),
+      null,
+      2,
+    ),
+    "utf-8",
+  );
 }
 
-export async function setHidden(keys: string[], hidden: boolean): Promise<string[]> {
-  await listHidden();
+export async function setHidden(
+  keys: string[],
+  hidden: boolean,
+  /** 숨길 때의 이름 — 나중에 그 테마가 사라져도 무엇이었는지 말할 수 있게 */
+  names: Record<string, string> = {},
+): Promise<string[]> {
+  await loadCache();
   for (const k of keys) {
     const clean = k.trim();
     if (!clean) continue;
-    if (hidden) cache!.add(clean);
+    if (hidden) cache!.set(clean, names[clean] ?? cache!.get(clean));
     else cache!.delete(clean);
   }
   await persist();
-  return [...cache!];
+  return [...cache!.keys()];
 }
 
 /** 전부 되살리기 — 하나씩 누르다 지치는 경우가 있다 */
 export async function clearHidden(): Promise<string[]> {
-  await listHidden();
+  await loadCache();
   cache!.clear();
   await persist();
   return [];
