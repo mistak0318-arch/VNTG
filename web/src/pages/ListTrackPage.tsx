@@ -17,16 +17,17 @@ function useFold(key: string, initial = false) {
       return initial;
     }
   });
-  const toggle = () =>
-    setOpen((v) => {
-      try {
-        localStorage.setItem(`vntg.lt.${key}`, v ? "0" : "1");
-      } catch {
-        /* 못 적으면 다음에 또 접혀 있을 뿐 */
-      }
-      return !v;
-    });
-  return [open, toggle] as const;
+  /** 값을 못 박는다 — 「전체 펼치기」가 이걸 쓴다 */
+  const set = (v: boolean) => {
+    setOpen(v);
+    try {
+      localStorage.setItem(`vntg.lt.${key}`, v ? "1" : "0");
+    } catch {
+      /* 못 적으면 다음에 원래대로일 뿐 */
+    }
+  };
+  const toggle = () => set(!open);
+  return [open, toggle, set] as const;
 }
 
 /** 등락 색 — 0 은 색을 안 준다 */
@@ -75,8 +76,20 @@ export function ListTrackPage({
   } | null>(null);
   const [tab, setTab] = useState<string>("");
   const [showExited, setShowExited] = useState(false);
-  const [openSum, toggleSum] = useFold("summary", true);
-  const [openGrade, toggleGrade] = useFold("grade", false);
+  const [openSum, toggleSum, setSum] = useFold("summary", true);
+  const [openGrade, toggleGrade, setGrade] = useFold("grade", false);
+  /*
+   * **전체 펼치기/접기** (2026-08-31 — "전체보기도 만들어야지 화면에 일일히 다
+   * 누를 수는 없잖아"). 접는 칸이 늘수록 하나씩 펴는 게 더 불편해진다.
+   *
+   * 하나라도 접혀 있으면 「전체 펼치기」, 다 펴져 있으면 「전체 접기」로 바뀐다 —
+   * 버튼이 지금 무엇을 할지 스스로 말해야 한다.
+   */
+  const allOpen = openSum && openGrade;
+  const setAll = (v: boolean) => {
+    setSum(v);
+    setGrade(v);
+  };
   const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -152,6 +165,9 @@ export function ListTrackPage({
           disabled={job?.status === "running"}
         >
           {job?.status === "running" ? "돌리는 중…" : "지금 돌리기"}
+        </button>
+        <button className="filter-btn" onClick={() => setAll(!allOpen)}>
+          {allOpen ? "▴ 전체 접기" : "▾ 전체 펼치기"}
         </button>
         <span className="pt-n">
           40분쯤 걸립니다 — 백그라운드라 화면을 떠나도 됩니다. 끝나면 🔔 알림이 옵니다
