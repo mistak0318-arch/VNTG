@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_RULES, type CisRules } from "./cisTrader.js";
 import type { AiChoice } from "./aiConfig.js";
+import type { PensionMethod } from "./cisPensionRun.js";
 
 /**
  * CIS 모드 설정 — 이 계좌의 **규칙과 성격**을 벤티지가 조절하는 자리.
@@ -87,6 +88,19 @@ export interface CisConfig {
    * 가장 흔한 길이라, 이 값은 **화면과 글에만** 쓴다.
    */
   goals: number[];
+  /**
+   * 연금 계좌가 **무엇을 보고 ETF 를 고를까** (2026-08-31).
+   *
+   *   theme    이름을 테마·섹터 강세에 잇는다 (넓게 훑지만 근사)
+   *   holdings 담은 종목을 직접 본다 (정확하지만 Top10 만 보인다)
+   *   simple   품질만 — 거래대금·괴리율·추적오차
+   *
+   * 어느 쪽이 맞는지는 **성적으로만** 알 수 있어 고를 수 있게 뒀다. 고른 것은
+   * 일지에 적힌다 — 나중에 「그때 무엇으로 골랐나」를 물을 수 있어야 비교가 된다.
+   */
+  pensionMethod: PensionMethod;
+  /** 연금을 무슨 요일에 굴릴까 (0=일 … 6=토). 기본 월요일 */
+  pensionDay: number;
 }
 
 export const DEFAULT_CIS_CONFIG: CisConfig = {
@@ -110,6 +124,10 @@ export const DEFAULT_CIS_CONFIG: CisConfig = {
   useCredit: true,
   rules: { ...DEFAULT_RULES },
   goals: [500_000_000, 1_000_000_000, 2_000_000_000, 10_000_000_000],
+  /* 담은 종목을 직접 보는 쪽이 근사가 아니라서 기본으로 둔다 */
+  pensionMethod: "holdings",
+  /* 월요일 — 한 주의 판이 정해지기 전에 담는다 */
+  pensionDay: 1,
   ai: {
     narrate: true,
     screen: true,
@@ -197,6 +215,15 @@ export async function saveCisConfig(input: Partial<CisConfig>): Promise<CisConfi
           (a, b) => a - b,
         )
       : cur.goals,
+    pensionMethod: (["theme", "holdings", "simple"] as const).includes(
+      input.pensionMethod as PensionMethod,
+    )
+      ? (input.pensionMethod as PensionMethod)
+      : cur.pensionMethod,
+    pensionDay: (() => {
+      const n = Number(input.pensionDay);
+      return Number.isFinite(n) && n >= 0 && n <= 6 ? Math.round(n) : cur.pensionDay;
+    })(),
     ai: { ...cur.ai, ...(input.ai ?? {}) },
   };
   cache = next;

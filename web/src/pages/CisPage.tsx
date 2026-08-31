@@ -223,7 +223,13 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
       </div>
 
       {tab === "today" && (
-        <TodayTab account={account} busy={busy} setBusy={setBusy} enabled={config?.enabled ?? false} />
+        <TodayTab
+          account={account}
+          busy={busy}
+          setBusy={setBusy}
+          enabled={config?.enabled ?? false}
+          weekly={profile?.cadence !== "daily"}
+        />
       )}
       {tab === "review" && <ReviewTab account={account} />}
       {tab === "fills" && <FillsTab account={account} onSelectStock={onSelectStock} />}
@@ -249,11 +255,14 @@ function TodayTab({
   busy,
   setBusy,
   enabled,
+  weekly,
 }: {
   account: string;
   busy: string | null;
   setBusy: (v: string | null) => void;
   enabled: boolean;
+  /** 연금 계좌인가 — 하루 세 번이 아니라 **주 1회** 굴린다 */
+  weekly: boolean;
 }) {
   const [day, setDay] = useState<CisDay | null>(null);
   const [state, setState] = useState<CisPersonaState | null>(null);
@@ -313,6 +322,19 @@ function TodayTab({
     setJob(null);
     try {
       const { jobId } = await api.cisRun(account, slot, force);
+      jobIdRef.current = jobId;
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : String(e));
+      setBusy(null);
+    }
+  };
+
+  const runPension = async (force: boolean) => {
+    setBusy("pension");
+    setMsg(null);
+    setJob(null);
+    try {
+      const { jobId } = await api.cisPensionRun(account, force);
       jobIdRef.current = jobId;
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
@@ -400,7 +422,31 @@ function TodayTab({
       {msg && <div className="table-note cis-msg">{msg}</div>}
       {job && <ProgressSteps job={job} />}
 
-      {SLOTS.map((s) => {
+      {/*
+        연금은 **주 1회**다. 하루 세 번 칸을 세 개 그려 놓으면 늘 두 개가 비어
+        「안 돌아가나」로 읽힌다 — 성격이 다른 계좌는 화면도 달라야 한다.
+      */}
+      {weekly && (
+        <div className="cis-weekly-run">
+          <div>
+            <b>주간 배분</b>
+            <i>
+              연금은 십 년 단위로 굴리는 돈이라 <b>덜 손대는 것이 규칙</b>입니다.
+              자주 갈아타면 세금 이연의 이점을 매매비용으로 태웁니다.
+            </i>
+          </div>
+          <button
+            className="filter-btn"
+            disabled={!enabled || busy !== null}
+            onClick={() => runPension(false)}
+            title={enabled ? "" : "CIS 모드가 꺼져 있습니다"}
+          >
+            {busy === "pension" ? "…" : "지금 굴리기"}
+          </button>
+        </div>
+      )}
+
+      {(weekly ? SLOTS.filter((s) => s.key === "evening") : SLOTS).map((s) => {
         const e = day?.[s.key] ?? null;
         return (
           <section className="cis-slot" key={s.key}>
@@ -1396,6 +1442,41 @@ function ConfigTab({
             </i>
           </span>
         </label>
+      </div>
+
+      <h3 className="section-heading">연금은 무엇을 보고 고를까</h3>
+      <div className="filter-row">
+        {[
+          { k: "holdings", label: "구성종목" },
+          { k: "theme", label: "테마" },
+          { k: "simple", label: "품질만" },
+        ].map((m) => (
+          <button
+            key={m.k}
+            className={`filter-btn ${draft.pensionMethod === m.k ? "active" : ""}`}
+            onClick={() => save({ pensionMethod: m.k })}
+          >
+            {m.label}
+          </button>
+        ))}
+        <span className="cis-slot-hint">굴릴 요일</span>
+        {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
+          <button
+            key={d}
+            className={`filter-btn ${draft.pensionDay === i ? "active" : ""}`}
+            onClick={() => save({ pensionDay: i })}
+          >
+            {d}
+          </button>
+        ))}
+      </div>
+      <div className="table-note">
+        ETF 를 고르는 두 방법을 <b>나란히</b> 두었습니다 —{" "}
+        <b>구성종목</b>은 담은 종목을 직접 보고(정확하지만 Top10 만 보입니다),{" "}
+        <b>테마</b>는 이름을 테마·섹터 강세에 잇습니다(넓게 훑지만 근사입니다).
+        어느 쪽이 맞는지는 <b>성적으로만</b> 알 수 있어 고를 수 있게 뒀고,
+        고른 것은 일지에 적힙니다 — 나중에 「그때 무엇으로 골랐나」를 물을 수 있어야
+        비교가 됩니다.
       </div>
 
       <h3 className="section-heading">목표</h3>

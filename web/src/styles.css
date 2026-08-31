@@ -11974,3 +11974,26 @@ button.tpb-row:hover { background: var(--panel-2); }
 .sig-green { background: color-mix(in srgb, var(--green) 25%, transparent); }
 .sig-yellow { background: color-mix(in srgb, #c8a24a 25%, transparent); }
 .sig-red { background: color-mix(in srgb, var(--red) 25%, transparent); }
+/* 연금 주간 배분 — 하루 세 번과 성격이 다르니 모양도 다르게 */
+.cis-weekly-run {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--blue);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.cis-weekly-run > div { flex: 1 1 16rem; min-width: 0; }
+.cis-weekly-run b { font-size: 0.86rem; }
+.cis-weekly-run i {
+  display: block;
+  font-style: normal;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 3px;
+  line-height: 1.55;
+}

@@ -4,6 +4,8 @@ import { runSlot } from "./cisRun.js";
 import { loadDay } from "./cisJournal.js";
 import { today } from "./cisAccount.js";
 import type { Slot } from "./cisJournal.js";
+import { ACCOUNT_IDS, profileOf } from "./cisAccounts.js";
+import { runPension } from "./cisPensionRun.js";
 
 /**
  * CIS 하루 세 번 자동 실행.
@@ -41,10 +43,45 @@ function isWeekend(): boolean {
   return w === 0 || w === 6;
 }
 
+function weekday(): number {
+  return new Date(Date.now() + 9 * 3600_000).getUTCDay();
+}
+
+/**
+ * 연금 계좌 — **주 1회.**
+ *
+ * 트레이딩 계좌가 1분·15분으로 도는 것과 정반대다. 연금은 십 년 단위로 굴리는
+ * 돈이라 덜 손대는 것이 규칙이고, 자주 갈아타면 세금 이연의 이점을 매매비용으로
+ * 다 태운다(`cisPensionRun` 머리 주석).
+ *
+ * 저녁 시각에 맞춰 돈다 — 종가가 확정된 뒤라야 그 주의 판이 보인다.
+ */
+async function pensionTick(client: KiwoomClient): Promise<void> {
+  const cfg = await getCisConfig();
+  if (weekday() !== cfg.pensionDay) return;
+  if (nowHm() < cfg.times.evening) return;
+
+  const date = today();
+  for (const id of ACCOUNT_IDS) {
+    if (profileOf(id).cadence === "daily") continue;
+    const key = `${date}:pension:${id}`;
+    if (tried.has(key)) continue;
+    tried.add(key);
+    try {
+      await runPension(client, id);
+    } catch (e) {
+      console.error(`[cis] 연금 ${id} 실패:`, e instanceof Error ? e.message : e);
+    }
+    return; // 한 번에 하나만 — 무거운 조회가 몰리지 않게
+  }
+}
+
 async function tick(client: KiwoomClient): Promise<void> {
   const cfg = await getCisConfig();
   if (!cfg.enabled || !cfg.auto) return;
   if (isWeekend()) return;
+
+  await pensionTick(client);
 
   const date = today();
   const hm = nowHm();

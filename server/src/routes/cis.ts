@@ -10,6 +10,7 @@ import { cisStats, cisUsage } from "../cisStats.js";
 import { cisAiReady, weeklyReview } from "../cisAi.js";
 import { resetCisTried } from "../cisScheduler.js";
 import { CIS_STEPS, createJob, getJob, reporterFor } from "../reportProgress.js";
+import { METHOD_LABEL, runPension } from "../cisPensionRun.js";
 import { clearWatchEvents, watchEvents, watchStatus } from "../cisWatch.js";
 
 /**
@@ -129,6 +130,7 @@ export function createCisRouter(client: KiwoomClient): Router {
       res.json({
         config: await getCisConfig(),
         ruleLabels: RULE_LABEL,
+        methodLabels: METHOD_LABEL,
         aiReady: cisAiReady(),
       });
     } catch (err) {
@@ -233,6 +235,36 @@ export function createCisRouter(client: KiwoomClient): Router {
    * 사건만 돌려준다. 「10:31 감시함, 아무 일 없음」은 기록할 값이 아니다 —
    * 상시 기록은 보유 줄의 흔들림(worstPct/bestPct)에 새겨진다.
    */
+  /**
+   * 연금 계좌를 지금 굴린다 — 주 1회가 기본이고 이건 손으로 부르는 자리다.
+   *
+   * 무겁다(ETF 분석 한 판) — 백그라운드로 돌리고 진행률을 준다. 하루 세 번
+   * 일지와 같은 문법이다.
+   */
+  router.post("/pension-run", async (req, res, next) => {
+    try {
+      const id = acc(req.body?.account);
+      if (profileOf(id).cadence === "daily") {
+        res.status(400).json({ error: "연금 계좌가 아닙니다." });
+        return;
+      }
+      const { id: jobId, job } = createJob(`CIS ${profileOf(id).name} 주간 배분`, CIS_STEPS, "cis");
+      void runPension(client, id, req.body?.force === true, reporterFor(job))
+        .then((r) => {
+          job.status = r.ok ? "done" : "error";
+          job.report = r;
+          if (!r.ok) job.error = r.skipped;
+        })
+        .catch((e: Error) => {
+          job.status = "error";
+          job.error = e.message;
+        });
+      res.json({ jobId });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/watch", (req, res) => {
     res.json({ ...watchStatus(), events: watchEvents(acc(req.query.account), 60) });
   });

@@ -963,6 +963,9 @@ export const api = {
   cisRun: (account: string, slot: string, force = false) =>
     postJson<{ jobId: string }>("/api/cis/run", { account, slot, force }),
   cisRunProgress: (jobId: string) => getJson<PublishJob>(`/api/cis/run-progress/${jobId}`),
+  /** 연금 주간 배분 — 무거워서(ETF 분석 한 판) 작업 id 만 돌아온다 */
+  cisPensionRun: (account: string, force = false) =>
+    postJson<{ jobId: string }>("/api/cis/pension-run", { account, force }),
   cisWatch: (account: string) =>
     getJson<{
       open: boolean;
@@ -4564,6 +4567,10 @@ export interface CisConfig {
   useCredit: boolean;
   rules: CisRules;
   goals: number[];
+  /** 연금이 무엇을 보고 ETF 를 고를까 — theme·holdings·simple */
+  pensionMethod: string;
+  /** 연금을 무슨 요일에 굴릴까 (0=일 … 6=토) */
+  pensionDay: number;
   ai: {
     narrate: boolean;
     screen: boolean;
