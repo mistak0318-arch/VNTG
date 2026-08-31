@@ -12390,8 +12390,19 @@ thead .sd-emph {
 .nb-panel {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
-  width: min(420px, calc(100vw - 24px));
+  /*
+   * **왼쪽 기준으로 편다** (2026-08-31 정정 — "알림창 위치..").
+   *
+   * 처음에 `right: 0` 으로 붙였다. 오른쪽 위에 있는 종을 상상하고 쓴 값인데,
+   * 이 종은 **종목 검색창 옆(화면 왼쪽)** 에 있다. 그래서 패널이 왼쪽으로 뻗다가
+   * 화면 밖으로 나가 글이 잘렸다 — 「알림이 없습니다」가 「습니다.」로 보였다.
+   *
+   * 붙는 자리를 종의 왼쪽 끝에 맞추고, 오른쪽으로 넘치지 않게 폭을 창에 맞춰 자른다.
+   */
+  left: 0;
+  right: auto;
+  width: 420px;
+  max-width: calc(100vw - 24px);
   max-height: min(70vh, 560px);
   display: flex;
   flex-direction: column;
@@ -12565,7 +12576,7 @@ thead .sd-emph {
 @media (max-width: 720px) {
   .nb-panel {
     width: calc(100vw - 20px);
-    right: -6px;
+    left: -6px;
   }
 }
 
