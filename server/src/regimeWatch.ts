@@ -254,6 +254,52 @@ function snapAt(closes: Record<string, number[]>, k: number): RegimeSnap {
   };
 }
 
+/**
+ * **오늘 이 신호등을 믿을 만한 장세인가** — 부작용 없이 값만 낸다.
+ *
+ * `regimeCheck` 는 이력을 쓰고 알림도 만든다. 슈퍼신호등이 편입할 때마다 그걸
+ * 부르면 그 회차가 이력에 끼어든다. 여기서는 **재기만** 한다.
+ *
+ * 근거는 조건부 성적표 실측이다 — 폭 하위 1/3 에서 초록이 시장에 -2.15%p 졌고
+ * 승률이 43% 였다(앞·뒤 절반 모두 음수). 폭 상위 1/3 에서는 +2.96%p 였다.
+ * 같은 기준인데 장세에 따라 **부호가 뒤집힌다.**
+ *
+ * 캐시가 없으면 `weak: false` 다 — **모르면 막지 않는다.** 재지 못한 것을 이유로
+ * 편입을 건너뛰면 「장세가 나빠서」가 아니라 「캐시가 없어서」 안 담긴 것이 된다.
+ */
+export async function regimeTrust(): Promise<{
+  weak: boolean;
+  breadth: number | null;
+  newHigh: number | null;
+  /** 왜 약한가 — 화면·기록이 그대로 적는다 */
+  why: string | null;
+}> {
+  try {
+    const { config } = await regimeConfig();
+    const { closes } = await loadCloses();
+    if (Object.keys(closes).length === 0) {
+      return { weak: false, breadth: null, newHigh: null, why: null };
+    }
+    const t = snapAt(closes, 0);
+    const reasons: string[] = [];
+    if (t.breadth !== null && t.breadth < config.breadthTrustAt) {
+      reasons.push(`폭 ${t.breadth}% < ${config.breadthTrustAt}%`);
+    }
+    if (t.newHigh !== null && t.newHigh < config.newHighTrustAt) {
+      reasons.push(`신고가 ${t.newHigh}% < ${config.newHighTrustAt}%`);
+    }
+    return {
+      weak: reasons.length > 0,
+      breadth: t.breadth,
+      newHigh: t.newHigh,
+      why: reasons.length > 0 ? reasons.join(" · ") : null,
+    };
+  } catch {
+    /* 못 재면 막지 않는다 */
+    return { weak: false, breadth: null, newHigh: null, why: null };
+  }
+}
+
 const todayKst = (): string =>
   new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 

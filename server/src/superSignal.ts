@@ -7,6 +7,7 @@ import { getMarketSnapshot, peekSnapshot } from "./marketSnapshot.js";
 import { evaluateMarket } from "./marketSignal.js";
 import { getSectorMood } from "./sectorMood.js";
 import { configFingerprint, evaluateSignal } from "./signalLight.js";
+import { regimeTrust } from "./regimeWatch.js";
 import { stockLens, themeMapNow } from "./stockLens.js";
 import { fetchUniverse, SCREEN_UNIVERSES, type Candidate } from "./signalScreen.js";
 import {
@@ -150,6 +151,25 @@ export interface SuperEntry {
    * 바꾸기 전에 담은 것」이라는 뜻이라, 없다고 지어내지 않는다.
    */
   configHash?: string;
+  /**
+   * **편입한 날의 장세** (2026-08-31).
+   *
+   * 같은 기준이 폭 좁은 날에는 시장에 지고 넓은 날에는 이긴다(실측 -2.15%p ↔ +2.96%p).
+   * 그러면 「이 편입이 어떤 장세에서 나온 것인가」가 성적을 읽는 데 꼭 필요하다.
+   * 지문(`configHash`)이 「어떤 기준으로」라면 이건 **「어떤 장세에서」**다.
+   *
+   * ⚠️ 옛 편입분에는 없다(`undefined`). 그것도 정보다 — 재기 전에 담은 것이다.
+   */
+  regime?: {
+    /** 20일선 위 종목 비율 % */
+    breadth: number | null;
+    /** 60일 신고가 근처 비율 % */
+    newHigh: number | null;
+    /** 문턱 아래였나 — 「잘 안 듣는 장세」 */
+    weak: boolean;
+    /** 왜 약했나 — 사람이 읽는 한 줄 */
+    why?: string | null;
+  };
   /** 걸린 목록 (SCREEN_UNIVERSES key) — 마지막으로 걸린 날 기준 */
   lists: string[];
   /**
@@ -240,6 +260,25 @@ export interface SuperConfig {
    * 40 → 80 이면 이 구간이 두 배가 된다.
    */
   maxEval: number;
+  /**
+   * **폭이 좁은 날(신호등이 잘 안 듣는 장세)에 어떻게 할까** (2026-08-31).
+   *
+   * 조건부 성적표 실측: 폭 하위 1/3 에서 초록이 시장에 **-2.15%p 졌고 승률 43%**
+   * 였다(앞·뒤 절반 모두 음수). 폭 상위 1/3 에서는 +2.96%p. 같은 기준인데 장세에
+   * 따라 부호가 뒤집힌다.
+   *
+   *   `mark` (기본) — **담되 표시한다.** 화면이 흐리게 그리고 성적표가 따로 채점한다
+   *   `skip`        — 그날은 아예 안 담는다
+   *
+   * ## 왜 기본이 `mark` 인가
+   *
+   * `skip` 이 더 나아 보이지만, 그러면 **문턱이 틀렸을 때 영영 확인할 수 없다.**
+   * 안 담았으니 「그날 담았으면 어땠을까」가 기록에 없다. 이 앱은 판단과 그 결과를
+   * 한 줄에 묶어 남기는 것이 요점이라, 먼저 **재고** 나서 끊는 것이 순서다.
+   * 몇 달 뒤 성적표가 「약한 장세 편입이 정말 나빴다」를 보여 주면 그때 `skip` 으로
+   * 옮기면 된다 — 근거를 갖고.
+   */
+  weakRegimeMode: "mark" | "skip";
 }
 
 export const DEFAULT_SUPER_CONFIG: SuperConfig = {
@@ -247,6 +286,7 @@ export const DEFAULT_SUPER_CONFIG: SuperConfig = {
   rainbowDays: 3,
   universeSize: 300,
   maxEval: 40,
+  weakRegimeMode: "mark",
 };
 
 interface Store {
@@ -281,6 +321,11 @@ export async function saveSuperConfig(input: Partial<SuperConfig>): Promise<Supe
     universeSize: num(input.universeSize, 100, 500, cur.universeSize),
     /* 10 미만이면 볼 게 없고, 120 이면 신호등 평가만 몇 분이 된다 */
     maxEval: num(input.maxEval, 10, 120, cur.maxEval),
+    /* 둘 중 하나만 — 딴 값이 오면 지금 값을 지킨다 */
+    weakRegimeMode:
+      input.weakRegimeMode === "skip" || input.weakRegimeMode === "mark"
+        ? input.weakRegimeMode
+        : cur.weakRegimeMode,
   };
   await save(store);
   return store.config;
@@ -747,6 +792,14 @@ export interface SuperJob {
   total: number;
   /** 이번 실행에서 새로 담은 수 */
   added: number;
+  /**
+   * **약한 장세라 안 담은 수** (설정이 `skip` 일 때만 는다).
+   * 이게 없으면 「왜 오늘 하나도 안 늘었나」에 답할 수가 없다 — 아무것도 안 걸린
+   * 날과 걸렸는데 일부러 안 담은 날이 화면에서 똑같아 보인다.
+   */
+  skippedWeak?: number;
+  /** 그날 장세 한 줄 — 위 숫자의 이유 */
+  regimeWhy?: string | null;
   error?: string;
   at: string;
 }
@@ -770,6 +823,18 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
    * 편입마다 다시 계산하면 도는 중에 설정이 바뀌었을 때 같은 회차가 두 지문으로 갈린다.
    */
   const cfgHash = await configFingerprint().catch(() => undefined);
+  /*
+   * **오늘 장세** — 한 회차에 한 번만 잰다(조회 0회, 일봉 캐시).
+   * `skip` 이면 이 회차는 아예 안 담는다. 기본은 `mark` — 담되 표시한다.
+   */
+  const regime = await regimeTrust().catch(() => ({
+    weak: false,
+    breadth: null,
+    newHigh: null,
+    why: null,
+  }));
+  /** 약한 장세라 안 담은 수 — 화면이 「왜 오늘 하나도 안 늘었나」에 답하려면 있어야 한다 */
+  let skippedWeak = 0;
   const today = todayStr();
   if (!force && store.lastRunDate === today) return store;
   if (job.status === "running") return store;
@@ -860,6 +925,15 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
               { code: prev.code, name: prev.name, addedPrice: prev.addedPrice },
               SUPER_GROUP,
             ).catch(() => undefined);
+          } else if (regime.weak && runCfg.weakRegimeMode === "skip") {
+            /*
+             * **오늘은 안 담는다** (설정이 `skip` 일 때만).
+             *
+             * ⚠️ 기존 추적분의 `seenCount`·`lastSeenDate` 는 위에서 이미 갱신됐다 —
+             * 여기서 막는 것은 **새 편입뿐**이다. 이미 담은 것을 안 세면 원장이
+             * 끊겨 지속성 판정이 통째로 어긋난다.
+             */
+            skippedWeak += 1;
           } else {
             const entry: SuperEntry = {
               code: x.c.code,
@@ -869,6 +943,13 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
               score: sig.score,
               /* 어떤 기준으로 걸린 편입인가 — 나중에 기준이 바뀌면 이걸로 갈린다 */
               configHash: cfgHash,
+              /* 어떤 장세에서 걸린 편입인가 — 성적표가 이걸로 갈라 채점한다 */
+              regime: {
+                breadth: regime.breadth,
+                newHigh: regime.newHigh,
+                weak: regime.weak,
+                why: regime.why,
+              },
               lists: x.lists,
               seenCount: 1,
               lastSeenDate: today,
@@ -924,7 +1005,13 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
 
     store.lastRunDate = today;
     await save(store);
-    job = { ...job, status: "done", step: "완료" };
+    job = {
+      ...job,
+      status: "done",
+      step: "완료",
+      skippedWeak,
+      regimeWhy: regime.weak ? regime.why : null,
+    };
   } catch (err) {
     job = { ...job, status: "error", error: err instanceof Error ? err.message : "실패" };
   }
@@ -940,7 +1027,7 @@ export interface GradeRow {
    * 열넉 줄을 평평하게 늘어놓으면 **무엇과 무엇을 견주는 표인지가 안 보인다.**
    * 이 표는 「축마다 짝으로 낸」 표라, 그 짝이 눈에 보여야 읽힌다.
    */
-  group: "base" | "lists" | "streak" | "score" | "universe";
+  group: "base" | "lists" | "streak" | "score" | "universe" | "regime";
   d1: { avg: number | null; n: number };
   d5: { avg: number | null; n: number };
   d20: { avg: number | null; n: number };
@@ -1207,7 +1294,22 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
     /* ③ 편입 점수 — 신호등 점수가 높을수록 나은가 */
     gradeRow("편입 점수 70+", E.filter((e) => e.score >= 70), "score"),
     gradeRow("편입 점수 70 미만", E.filter((e) => e.score < 70), "score"),
-    /* ④ 어느 목록에서 왔나 — 목록마다 값어치가 다를 수 있다 */
+    /*
+     * ④ **어떤 장세에서 걸렸나** (2026-08-31).
+     *
+     * 조건부 성적표 실측이 「폭 좁은 날의 초록은 시장에 진다」고 말했다(-2.15%p,
+     * 승률 43%). 그 말이 **이 원장에서도 맞는지**를 여기서 스스로 채점한다.
+     *
+     * 기본 설정은 약한 장세에도 **담되 표시**한다(`mark`). 안 담아 버리면 이 두 줄이
+     * 영영 안 갈려 문턱이 맞았는지 확인할 길이 없기 때문이다. 몇 달 뒤 「약한 장세」
+     * 줄이 뚜렷하게 나쁘면 그때 `skip` 으로 옮기면 된다 — 근거를 갖고.
+     *
+     * ⚠️ 장세를 재기 전(2026-08-31 이전) 편입분에는 `regime` 이 없다. 그것들은
+     * 어느 줄에도 안 들어간다 — 「몰랐다」를 「좋았다」나 「나빴다」로 만들지 않는다.
+     */
+    gradeRow("정상 장세 편입", E.filter((e) => e.regime && !e.regime.weak), "regime"),
+    gradeRow("약한 장세 편입", E.filter((e) => e.regime?.weak === true), "regime"),
+    /* ⑤ 어느 목록에서 왔나 — 목록마다 값어치가 다를 수 있다 */
     ...SCREEN_UNIVERSES.map((u) =>
       gradeRow(`${u.label}에 걸림`, E.filter((e) => e.lists.includes(u.key)), "universe"),
     ),

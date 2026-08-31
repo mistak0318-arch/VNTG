@@ -94,6 +94,8 @@ export function SuperSignalPanel({
   /* 모집단·평가 상한 — 결과를 바꾸는 값인데 코드에 박혀 있었다 (2026-08-31) */
   const [universeSize, setUniverseSize] = useState(300);
   const [maxEval, setMaxEval] = useState(40);
+  /** 폭이 좁은 날(신호등이 잘 안 듣는 장세)에 어떻게 할까 */
+  const [weakMode, setWeakMode] = useState<"mark" | "skip">("mark");
   const [savingCfg, setSavingCfg] = useState(false);
   const marks = useSuperMarks();
   const [universes, setUniverses] = useState<Universe[]>([]);
@@ -117,6 +119,7 @@ export function SuperSignalPanel({
     rainbowDays?: number;
     universeSize?: number;
     maxEval?: number;
+    weakRegimeMode?: "mark" | "skip";
   }) => {
     setSavingCfg(true);
     try {
@@ -125,6 +128,7 @@ export function SuperSignalPanel({
       setRainbowDays(r.config.rainbowDays);
       setUniverseSize(r.config.universeSize);
       setMaxEval(r.config.maxEval);
+      setWeakMode(r.config.weakRegimeMode ?? "mark");
       load();
       /* 표식은 앱 전체가 나눠 보므로 그쪽도 다시 받게 한다 */
       marks.reload();
@@ -312,6 +316,25 @@ export function SuperSignalPanel({
                   {n}개
                 </option>
               ))}
+            </select>
+          </label>
+          {/*
+            약한 장세 — 조건부 성적표 실측: 폭 하위 1/3 에서 초록이 시장에 -2.15%p 지고
+            승률 43% 였다(폭 상위 1/3 은 +2.20%p, 53%). 그 칸의 **시장 자체**는
+            +3.19% 로 넓은 날(+3.91%)과 별로 안 달랐다 — 갈린 건 초록이다.
+          */}
+          <label title="폭이 좁은 날(신호등이 잘 안 듣는 장세)에 새 편입을 어떻게 할지. 기본은 「담되 표시」입니다 — 안 담으면 문턱이 맞았는지 확인할 길이 없습니다">
+            약한 장세
+            <select
+              className="ma-input"
+              value={weakMode}
+              disabled={savingCfg}
+              onChange={(e) =>
+                void saveCfg({ weakRegimeMode: e.target.value === "skip" ? "skip" : "mark" })
+              }
+            >
+              <option value="mark">담되 표시</option>
+              <option value="skip">그날은 안 담음</option>
             </select>
           </label>
         </span>

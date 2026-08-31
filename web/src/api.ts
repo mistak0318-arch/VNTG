@@ -1017,7 +1017,14 @@ export const api = {
       lastRunDate: string | null;
       minLists: number;
       /** 지금 쓰이는 문턱 — 화면이 조절 칸의 현재값으로 쓴다 */
-      config?: { minLists: number; rainbowDays: number; universeSize: number; maxEval: number };
+      config?: {
+        minLists: number;
+        rainbowDays: number;
+        universeSize: number;
+        maxEval: number;
+        /** 폭이 좁은 날 새 편입 — 담되 표시(mark) / 안 담음(skip) */
+        weakRegimeMode?: "mark" | "skip";
+      };
       grade: SuperGradeRow[];
       stats: SuperStats;
     }>("/api/signal/super"),
@@ -1030,9 +1037,18 @@ export const api = {
     rainbowDays?: number;
     universeSize?: number;
     maxEval?: number;
+    /** 폭이 좁은 날 새 편입을 어떻게 할까 — 담되 표시(mark) / 안 담음(skip) */
+    weakRegimeMode?: "mark" | "skip";
   }) =>
     putJson<{
-      config: { minLists: number; rainbowDays: number; universeSize: number; maxEval: number };
+      config: {
+        minLists: number;
+        rainbowDays: number;
+        universeSize: number;
+        maxEval: number;
+        /** 폭이 좁은 날 새 편입 — 담되 표시(mark) / 안 담음(skip) */
+        weakRegimeMode?: "mark" | "skip";
+      };
     }>("/api/signal/super/config", c),
   /** 대시보드 상세 — 주가·지수·수급 흐름. 클릭했을 때만 */
   signalSuperDetail: (code: string) => getJson<SuperDetail>(`/api/signal/super/detail/${code}`),
@@ -2213,7 +2229,7 @@ export interface SuperEntry {
 export interface SuperGradeRow {
   label: string;
   /** 어느 묶음의 줄인가 — 화면이 구획을 나눠 그린다 (서버 superSignal.ts 와 같다) */
-  group: "base" | "lists" | "streak" | "score" | "universe";
+  group: "base" | "lists" | "streak" | "score" | "universe" | "regime";
   d1: { avg: number | null; n: number };
   d5: { avg: number | null; n: number };
   d20: { avg: number | null; n: number };
