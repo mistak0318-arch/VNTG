@@ -21,11 +21,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
  *
  * ## 가로 스크롤과 안 싸우는 법
  *
- * 표(`data-table-wrap`)·차트는 저들끼리 가로로 스크롤된다. 그 위에서 시작한
+ * 표(`data-table-wrap`)는 저들끼리 가로로 스크롤된다. 그 위에서 시작한
  * 제스처를 탭 전환으로 뺏으면 표를 못 민다. 그래서 **시작점에서 조상을 훑어
  * 가로로 스크롤될 수 있는 요소가 있으면 통째로 양보한다** — 「스크롤 끝에
  * 닿았으면 전환」 같은 절충은 끝에서 표를 밀다가 화면이 홱 넘어가는 사고가 된다.
  * 시트·팝업(.overlay) 위의 제스처도 무시한다 — 뒤에 깔린 탭이 바뀌면 안 된다.
+ * **차트 위도 무시한다** — 차트는 스크롤이 아니라 캔버스를 다시 그려 움직이므로
+ * 위의 `scrollWidth` 검사에 안 걸린다. 클래스로 콕 집어 양보해야 한다.
  *
  * ## 판정
  *
@@ -146,11 +148,22 @@ export function useSwipeTabs({
          * 방은 탭이 아니라 「들어간 화면」이라 옆으로 밀어 탭을 바꾸는 건 뜻이 안 맞고,
          * 무엇보다 그때 컨테이너에 걸리는 transform 이 방 안의 fixed 단추(방 목록·
          * 맨 아래로)를 화면 밖으로 밀어내 **안 눌리게** 만들었다.
+         *
+         * **차트도 양보한다** (2026-08-31 — "차트안에서 차트 볼려고 드래그 하니깐
+         * 서브탭 변경 이벤트가 먹어버린다"). 차트에서 가로로 끄는 것은 기간을
+         * 옮기는 그 화면의 본래 조작이다. 아래의 「가로로 스크롤되나」 검사에
+         * 안 걸리는 것은, 차트가 스크롤이 아니라 캔버스를 다시 그려서 움직이기
+         * 때문이다 — scrollWidth 는 늘 clientWidth 와 같다.
+         *
+         * `tv-lightweight-charts` 는 라이브러리가 스스로 다는 클래스라 캔들차트와
+         * 추세선차트가 한 번에 걸린다(우리 쪽 `candle-host` 를 쓰면 하나만 걸린다).
          */
         if (
           node.classList?.contains("overlay") ||
           node.classList?.contains("sheet") ||
-          node.classList?.contains("tgr-room")
+          node.classList?.contains("tgr-room") ||
+          node.classList?.contains("tv-lightweight-charts") ||
+          node.classList?.contains("candle-host")
         ) {
           blocked = true;
           break;
