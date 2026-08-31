@@ -240,6 +240,8 @@ export type UsageFeature =
   | "research"
   | "pulse"
   | "vision"
+  /* CIS 일지 — 일지 문장·후보 경고·주간 복기. 하루 세 번 도는 것이라 따로 센다 */
+  | "cis"
   | "other";
 
 export const FEATURE_LABEL: Record<UsageFeature, string> = {
@@ -249,6 +251,7 @@ export const FEATURE_LABEL: Record<UsageFeature, string> = {
   research: "웹 리서치",
   pulse: "시장 흐름 요약",
   vision: "이미지 인식(캘린더)",
+  cis: "CIS 일지",
   other: "기타",
 };
 
