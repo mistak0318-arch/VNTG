@@ -616,6 +616,13 @@ export async function conditional(cfg: SignalConfig): Promise<CondResult | null>
       (i) => dayBreadth.get(S[i].date) ?? null,
     ),
     axisOf(
+      "rateBeta",
+      "금리 민감도 — 금리에 웃는 종목인가 우는 종목인가",
+      "직전 60거래일 회귀계수: 미 10년물이 1%p 오를 때 이 종목이 몇 % 움직였나. 음수면 「금리인하 기대주」(성장·고밸류), 양수면 「금리인상 수혜」(은행·보험). 이름표가 아니라 실제 움직임으로 잰 것이라 look-ahead 가 없다",
+      ["금리인하 기대주 쪽", "중립", "금리인상 수혜 쪽"],
+      (i) => S[i].rateBeta,
+    ),
+    axisOf(
       "size",
       "종목 크기 — 그날 거래대금",
       "그날 거래대금(억). 시가총액 대신 쓴다 — 「대형주 편향」을 정면으로 본다. 표본이 이미 거래대금 상위라 셋 다 큰 편이지만 그 안에서도 갈린다",

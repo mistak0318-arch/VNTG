@@ -11,6 +11,7 @@ import {
   type Sample,
 } from "./signalSamples.js";
 import { isIndexLikeTheme, loadThemes } from "./naverThemes.js";
+import { yahooChart } from "./yahooChart.js";
 
 /**
  * 신호등 백테스트 — **과거의 그날로 돌아가 같은 기준으로 다시 매긴다.**
@@ -371,7 +372,12 @@ const NO_FLOW: FlowSums = {
  * ⚠️ 뒤쪽(미래) 봉을 실수로 쓰면 백테스트가 통째로 거짓이 되므로, 자를 때 항상
  * `slice(0, at + 1)` 로 끊는다.
  */
-function featuresAt(all: Bar[], at: number, themeRate: number | null): Feat | null {
+function featuresAt(
+  all: Bar[],
+  at: number,
+  themeRate: number | null,
+  rateBeta: number | null,
+): Feat | null {
   const hist = all.slice(0, at + 1);
   if (hist.length < 65) return null; // 60일 지표를 내려면 그만큼은 있어야 한다
   const closes = hist.map((b) => b.close);
@@ -401,8 +407,51 @@ function featuresAt(all: Bar[], at: number, themeRate: number | null): Feat | nu
     over,
     volEok: (hist[hist.length - 1].vol * cur) / 100_000_000,
     theme: themeRate,
+    rateBeta,
     ...NO_FLOW,
   };
+}
+
+/**
+ * 금리 민감도 — **직전 60거래일의 회귀계수.**
+ *
+ * 금리가 1%p 움직일 때 이 종목이 몇 % 움직였나. 두 시계열을 **날짜로 맞춰** 쓴다 —
+ * 야후(미국 휴장)와 국내 일봉은 쉬는 날이 달라서, 인덱스로 맞추면 조용히 밀린다.
+ *
+ * 스무 쌍이 안 되면 `null` 이다 — 적은 표본의 회귀계수는 아무 값이나 나온다.
+ */
+function betaAt(
+  bars: Bar[],
+  at: number,
+  /** 날짜(YYYYMMDD) → 그날 금리(%) */
+  rate: Map<string, number>,
+): number | null {
+  if (rate.size === 0) return null;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  /* 그날까지 60거래일 — 뒤쪽(미래) 봉은 절대 안 본다 */
+  for (let i = Math.max(1, at - 59); i <= at; i++) {
+    const r1 = rate.get(bars[i].date);
+    const r0 = rate.get(bars[i - 1].date);
+    if (r1 === undefined || r0 === undefined) continue;
+    const px0 = bars[i - 1].close;
+    if (!(px0 > 0)) continue;
+    xs.push(r1 - r0); // 금리 변화(%p)
+    ys.push(((bars[i].close - px0) / px0) * 100); // 종목 수익률(%)
+  }
+  if (xs.length < 20) return null;
+  const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
+  const my = ys.reduce((a, b) => a + b, 0) / ys.length;
+  let cov = 0;
+  let varx = 0;
+  for (let i = 0; i < xs.length; i++) {
+    cov += (xs[i] - mx) * (ys[i] - my);
+    varx += (xs[i] - mx) ** 2;
+  }
+  /* 금리가 거의 안 움직인 구간이면 기울기가 폭발한다 — 그럴 땐 안 낸다 */
+  if (varx < 1e-6) return null;
+  const b = cov / varx;
+  return Number.isFinite(b) ? Math.round(b * 100) / 100 : null;
 }
 
 function summarize(rows: { d1: number | null; d5: number | null; d20: number | null }[]): Summary {
@@ -494,6 +543,30 @@ export async function runSignalBacktest(
   const days = Math.min(Math.max(opts.days ?? 120, 20), 400);
   const withFlow = opts.withFlow !== false;
 
+  /*
+   * **금리 시계열** (2026-08-31) — 미 10년물(^TNX) 일봉을 **한 번만** 받는다.
+   * 종목마다 부르면 500번인데, 금리는 종목과 무관한 값이라 한 번이면 된다.
+   *
+   * ⚠️ `2y` 를 쓴다. `5y` 는 **주봉**이라 국내 일봉과 날짜가 거의 안 맞아 표본이
+   * 통째로 사라진다 — yahooChart 의 RANGES 주석에 그 실측이 적혀 있다.
+   *
+   * 야후의 `^TNX` 는 금리를 **그대로** 준다(4.653 이면 4.653%). closeBet 이
+   * 2026-08-20 에 실측해 둔 것을 그대로 믿는다.
+   *
+   * 못 받으면 베타만 null 이다 — 표본 수집 전체를 막지 않는다.
+   */
+  const rateByDate = await yahooChart("^TNX", "2y")
+    .then((r) => {
+      const m = new Map<string, number>();
+      for (const c of r.candles) {
+        /* 야후는 `YYYY-MM-DD`, 국내 일봉은 `YYYYMMDD` — 열쇠를 국내 쪽에 맞춘다 */
+        const d = String(c.t).slice(0, 10).replace(/-/g, "");
+        if (/^\d{8}$/.test(d) && c.close > 0) m.set(d, c.close);
+      }
+      return m;
+    })
+    .catch(() => new Map<string, number>());
+
   running = true;
   progress = { done: 0, total: opts.codes.length };
   /* 테마 렌즈 — 일봉 캐시로 최근 60여 일을 되짚는다. 캐시가 없으면 그 기준만 빠진다 */
@@ -575,7 +648,7 @@ export async function runSignalBacktest(
           all.push(f);
 
           const tr = themeRateAt(bs[i].date);
-          const feat = featuresAt(bs, i, tr);
+          const feat = featuresAt(bs, i, tr, betaAt(bs, i, rateByDate));
           if (!feat) continue;
           /*
            * 수급은 **날짜로 맞춘다.** 일봉 인덱스를 그대로 쓰면, 어느 한쪽에만
