@@ -7,7 +7,7 @@ import { clearJournal, listDays, loadDay } from "../cisJournal.js";
 import { readState } from "../cisPersona.js";
 import { priceMap, runSlot } from "../cisRun.js";
 import { cisStats, cisUsage } from "../cisStats.js";
-import { cisAiReady, weeklyReview } from "../cisAi.js";
+import { cisAiModels, cisAiReady, weeklyReview } from "../cisAi.js";
 import { cisSchedulerState, resetCisTried } from "../cisScheduler.js";
 import { CIS_STEPS, createJob, getJob, reporterFor } from "../reportProgress.js";
 import { METHOD_LABEL, runPension } from "../cisPensionRun.js";
@@ -132,6 +132,11 @@ export function createCisRouter(client: KiwoomClient): Router {
         ruleLabels: RULE_LABEL,
         methodLabels: METHOD_LABEL,
         aiReady: cisAiReady(),
+        /*
+         * 고를 수 있는 모델. AI 가 여기서 하는 일은 **주어진 사실을 문장으로
+         * 옮기는 것**뿐이라 값비싼 추론이 필요 없다 — 싼 것부터 온다.
+         */
+        aiModels: cisAiModels(),
       });
     } catch (err) {
       next(err);

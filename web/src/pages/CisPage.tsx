@@ -148,6 +148,9 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
   const [config, setConfig] = useState<CisConfig | null>(null);
   const [ruleLabels, setRuleLabels] = useState<Record<string, CisRuleLabel>>({});
   const [aiReady, setAiReady] = useState(false);
+  const [aiModels, setAiModels] = useState<
+    { provider: string; model: string; label: string; hint: string }[]
+  >([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -161,6 +164,7 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
         setConfig(r.config);
         setRuleLabels(r.ruleLabels);
         setAiReady(r.aiReady);
+        setAiModels(r.aiModels ?? []);
       })
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -241,6 +245,7 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
           config={config}
           ruleLabels={ruleLabels}
           aiReady={aiReady}
+          aiModels={aiModels}
           onSaved={(c) => setConfig(c)}
         />
       )}
@@ -1261,11 +1266,13 @@ function ConfigTab({
   config,
   ruleLabels,
   aiReady,
+  aiModels,
   onSaved,
 }: {
   config: CisConfig;
   ruleLabels: Record<string, CisRuleLabel>;
   aiReady: boolean;
+  aiModels: { provider: string; model: string; label: string; hint: string }[];
   onSaved: (c: CisConfig) => void;
 }) {
   const [draft, setDraft] = useState<CisConfig>(config);
@@ -1463,6 +1470,45 @@ function ConfigTab({
           </span>
         </label>
       </div>
+
+      {/*
+        어떤 모델로 쓸까 (2026-08-31 — "굳이 좋은 모델 쓸 필요 없을거같은데").
+        맞는 말이다 — 여기서 AI 가 하는 일은 **주어진 사실을 문장으로 옮기는 것**
+        뿐이라 값비싼 추론이 필요 없다. 목록은 싼 것부터 온다.
+      */}
+      {aiModels.length > 0 && (
+        <>
+          <h3 className="section-heading">어떤 모델로 쓸까</h3>
+          <div className="filter-row">
+            <button
+              className={`filter-btn ${!draft.ai.model ? "active" : ""}`}
+              onClick={() => save({ ai: { ...draft.ai, model: null } })}
+            >
+              기본
+            </button>
+            {aiModels.map((m) => (
+              <button
+                key={m.model}
+                className={`filter-btn ${draft.ai.model?.model === m.model ? "active" : ""}`}
+                onClick={() => save({ ai: { ...draft.ai, model: { provider: m.provider, model: m.model } } })}
+                title={m.hint}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <div className="table-note">
+            AI 는 <b>매매 판단을 하지 않습니다</b> — 규칙이 정한 것을 문장으로 옮길 뿐입니다.
+            그래서 <b>싼 모델로 충분합니다</b>. 목록은 싼 것부터입니다.
+            {draft.ai.model && (
+              <>
+                {" "}
+                지금 고른 것: <b>{aiModels.find((m) => m.model === draft.ai.model?.model)?.hint ?? draft.ai.model.model}</b>
+              </>
+            )}
+          </div>
+        </>
+      )}
 
       <h3 className="section-heading">연금은 무엇을 보고 고를까</h3>
       <div className="filter-row">

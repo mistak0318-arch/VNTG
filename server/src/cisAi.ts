@@ -1,5 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { recordApiCall } from "./apiUsage.js";
+import { generateText, availableTextModels } from "./vision.js";
 import { getCisConfig } from "./cisConfig.js";
 import { RULE_LABEL } from "./cisConfig.js";
 import type { CisRules } from "./cisTrader.js";
@@ -21,51 +20,54 @@ import { personaPrompt, readState, type PersonaState } from "./cisPersona.js";
  * 후보를 뺀다. 그 순간 이 계좌는 재현 불가능해지므로 기본값은 꺼짐이고, 켜져
  * 있으면 일지에 그렇게 적힌다.
  *
+ * ## 모델을 고를 수 있다 (2026-08-31)
+ *
+ * 벤티지: "AI는 매매에 영향 안미치고 요약만 정리해주는거니깐 굳이 좋은 모델 쓸
+ * 필요 없을거같은데." 맞다 — 여기서 AI 가 하는 일은 **주어진 사실을 문장으로
+ * 옮기는 것**뿐이라 값비싼 추론이 필요 없다.
+ *
+ * 그래서 Anthropic SDK 를 직접 부르지 않고 `generateText` 를 쓴다. 설정에서 고른
+ * 제공자·모델이 그대로 오고, 비용 집계도 이미 그쪽에 붙어 있다.
+ *
  * ## 실패는 조용히
  *
- * API 키가 없거나 호출이 실패하면 **아무 일도 없었던 것처럼** 원래 값을 돌려준다.
+ * 키가 없거나 호출이 실패하면 **아무 일도 없었던 것처럼** 원래 값을 돌려준다.
  * 일지는 AI 없이도 완결이라(규칙이 만든 문장이 이미 있다) 여기서 던지면 멀쩡한
  * 하루가 통째로 안 써진다. 실패는 `error` 로 실어 보내 화면이 조용히 알린다.
  */
 
-const DEFAULT_MODEL = "claude-sonnet-5";
-
-function configured(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY?.trim());
-}
-
+/**
+ * 한 번 묻는다.
+ *
+ * `generateText` 는 프롬프트 하나만 받으므로 **성격을 앞에 붙여 보낸다.**
+ * 제공자마다 system 을 다루는 방식이 달라, 한 덩어리로 보내는 쪽이 결과가 고르다.
+ */
 async function ask(
   purpose: string,
   system: string,
   user: string,
   maxTokens: number,
 ): Promise<{ text: string | null; error?: string }> {
-  if (!configured()) return { text: null, error: "ANTHROPIC_API_KEY 미설정" };
   const cfg = await getCisConfig();
-  const model = cfg.ai.model?.model || process.env.CLAUDE_MODEL?.trim() || DEFAULT_MODEL;
-  try {
-    const res = await new Anthropic().messages.create({
-      model,
-      max_tokens: maxTokens,
-      system,
-      messages: [{ role: "user", content: user }],
-    });
-    await recordApiCall("anthropic", model, "ok", {
-      inputTokens: res.usage.input_tokens,
-      outputTokens: res.usage.output_tokens,
-      feature: "cis",
-    });
-    const text = res.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("\n")
-      .trim();
-    return { text: text || null };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    await recordApiCall("anthropic", model, "failed", undefined, `cis:${purpose} ${msg}`.slice(0, 80));
-    return { text: null, error: msg };
-  }
+  const choice = cfg.ai.model;
+  const r = await generateText(
+    `${system}
+
+---
+
+${user}`,
+    maxTokens,
+    choice?.provider as never,
+    choice?.model,
+    "cis",
+  );
+  if (!r.text) return { text: null, error: r.error ?? `${purpose} 응답이 비었다` };
+  return { text: r.text.trim() || null };
+}
+
+/** 화면이 「AI 를 쓸 수 있나」와 「무엇을 고를 수 있나」를 묻는다 */
+export function cisAiModels(): { provider: string; model: string; label: string; hint: string }[] {
+  return availableTextModels();
 }
 
 /* ------------------------------------------------------------------ 성격 */
@@ -261,7 +263,7 @@ export async function weeklyReview(
   };
 }
 
-/** 화면이 「AI 를 쓸 수 있나」를 물을 때 */
+/** 화면이 「AI 를 쓸 수 있나」를 물을 때 — 쓸 수 있는 모델이 하나라도 있으면 된다 */
 export function cisAiReady(): boolean {
-  return configured();
+  return availableTextModels().length > 0;
 }

@@ -949,9 +949,14 @@ export const api = {
   cisUsage: (account: string) =>
     getJson<{ rows: CisUsageRow[] }>(`/api/cis/usage?account=${account}`),
   cisConfig: () =>
-    getJson<{ config: CisConfig; ruleLabels: Record<string, CisRuleLabel>; aiReady: boolean }>(
-      "/api/cis/config",
-    ),
+    getJson<{
+      config: CisConfig;
+      ruleLabels: Record<string, CisRuleLabel>;
+      methodLabels: Record<string, string>;
+      aiReady: boolean;
+      /** 고를 수 있는 모델 — 싼 것부터 */
+      aiModels: { provider: string; model: string; label: string; hint: string }[];
+    }>("/api/cis/config"),
   cisSaveConfig: (c: Partial<CisConfig>) =>
     putJson<{ config: CisConfig }>("/api/cis/config", c),
   /**
