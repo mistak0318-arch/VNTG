@@ -49,6 +49,26 @@ export const SUBJECTS = [
    * + 종신금 174 = 9267 = orgn_netprps(기관계) 정확히 일치.
    */
   "securities",
+  /*
+   * 나머지 다섯 (2026-08-31 — "지수 수급 전체 표시하라고 했더니 위에 한줄로만
+   * 했구나 아래 표도 채워야지").
+   *
+   * 위쪽 한 줄은 그날 조회(ka10051)의 열두 주체를 다 쓰는데, **저장 스키마는
+   * 일곱뿐**이라 아래 두 표(합산·일별)가 그만큼밖에 못 그렸다. 같은 시트 안에서
+   * 위아래가 다른 주체를 보고 있었던 셈이다.
+   *
+   * ⚠️ **맨 뒤에만 붙인다** — 이 순서가 곧 저장 형식이라 중간에 끼우면 이미 쌓인
+   * 파일이 통째로 어긋난다(금융투자를 뒤에 붙였던 것과 같은 규칙). 옛 행은 이 칸이
+   * 없으므로 읽는 쪽이 `v.length` 로 가려 "-" 로 적는다 — **0 으로 채우면
+   * 「안 샀다」로 읽혀 거짓이 된다.**
+   *
+   * 필드는 marketOverview.mapFlow 에서 이미 실측된 것을 그대로 쓴다(추측 아님).
+   */
+  "insurance",
+  "bank",
+  "otherFinance",
+  "nation",
+  "otherCorp",
 ] as const;
 export type Subject = (typeof SUBJECTS)[number];
 
@@ -60,6 +80,11 @@ const FIELD_OF: Record<Subject, string> = {
   trust: "invtrt_netprps", // 투신
   private: "samo_fund_netprps", // 사모펀드
   securities: "sc_netprps", // 금융투자 (실측 2026-08-27 — 검산은 SUBJECTS 주석)
+  insurance: "insrnc_netprps",
+  bank: "bank_netprps",
+  otherFinance: "jnsinkm_netprps", // 종금·기타금융
+  nation: "natn_netprps",
+  otherCorp: "etc_corp_netprps",
 };
 
 export const SUBJECT_LABEL: Record<Subject, string> = {
@@ -70,6 +95,11 @@ export const SUBJECT_LABEL: Record<Subject, string> = {
   trust: "투신",
   private: "사모",
   securities: "금융투자",
+  insurance: "보험",
+  bank: "은행",
+  otherFinance: "기타금융",
+  nation: "국가",
+  otherCorp: "기타법인",
 };
 
 export interface SectorFlowRow {

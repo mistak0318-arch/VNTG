@@ -27,6 +27,51 @@ function sign(v: number): string {
   return v > 0 ? "positive" : v < 0 ? "negative" : "";
 }
 
+/**
+ * 아래 두 표(합산·일별)가 쓰는 **열두 주체** (2026-08-31 — "지수 수급 전체
+ * 표시하라고 했더니 위에 한줄로만 했구나 아래 표도 채워야지").
+ *
+ * 위쪽 한 줄은 그날 조회의 열두 주체를 다 썼는데 아래 두 표는 다섯·일곱뿐이었다 —
+ * **같은 시트 안에서 위아래가 다른 주체를 보고** 있었다. 저장 스키마가 일곱뿐이라
+ * 그랬고, 2026-08-31 에 다섯을 뒤에 붙였다.
+ *
+ * 순서는 위 한 줄과 **같다**: 큰손(개인·외국인·기관) → 기관 속살(금융투자·투신·
+ * 연기금·사모·보험·은행·기타금융) → 나머지(국가·기타법인). 화면마다 순서가 다르면
+ * 같은 자리를 볼 때마다 눈이 다시 맞춰야 한다.
+ *
+ * ⚠️ 뒤에 붙은 칸은 그 전 날짜에 **없다(null)** — "-" 로 적는다. 0 으로 채우면
+ * 「안 샀다」로 읽혀 거짓이 된다.
+ */
+/** 표가 읽는 칸 — 숫자(또는 「모름」)인 것만 */
+type FlowKey =
+  | "individual"
+  | "foreign"
+  | "institution"
+  | "securities"
+  | "trust"
+  | "pension"
+  | "privateFund"
+  | "insurance"
+  | "bank"
+  | "otherFinance"
+  | "nation"
+  | "otherCorp";
+
+const FLOW_COLS: { key: FlowKey; label: string; hint?: string }[] = [
+  { key: "individual", label: "개인" },
+  { key: "foreign", label: "외국인" },
+  { key: "institution", label: "기관" },
+  { key: "securities", label: "금융투자", hint: "수집을 2026-08-27 시작해 그 전 날짜는 -" },
+  { key: "trust", label: "투신" },
+  { key: "pension", label: "연기금" },
+  { key: "privateFund", label: "사모펀드" },
+  { key: "insurance", label: "보험", hint: "수집을 2026-08-31 시작해 그 전 날짜는 -" },
+  { key: "bank", label: "은행", hint: "수집을 2026-08-31 시작해 그 전 날짜는 -" },
+  { key: "otherFinance", label: "기타금융", hint: "수집을 2026-08-31 시작해 그 전 날짜는 -" },
+  { key: "nation", label: "국가", hint: "수집을 2026-08-31 시작해 그 전 날짜는 -" },
+  { key: "otherCorp", label: "기타법인", hint: "수집을 2026-08-31 시작해 그 전 날짜는 -" },
+];
+
 export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () => void }) {
   /* 뒤로가기로 닫힌다 — 폰에서 시트를 열고 뒤로 누르면 페이지가 넘어갔다 (2026-08-28) */
   useSheetBack(true, onClose);
@@ -256,11 +301,11 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
                     수급은 세 주체를 **견주면서** 읽는 값이라 그 비용이 특히 크다.
                   */}
                   <th className="sticky-col">기간</th>
-                  <th>개인</th>
-                  <th>외국인</th>
-                  <th>기관</th>
-                  <th>투신</th>
-                  <th>연기금</th>
+                  {FLOW_COLS.map((c) => (
+                    <th key={c.key} title={c.hint}>
+                      {c.label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -268,24 +313,27 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
                   // flows 는 최신순이다. 앞에서 n 개가 최근 n 거래일
                   const win = data.flows.slice(0, n);
                   const enough = data.flows.length >= n;
-                  const sum = (k: "foreign" | "institution" | "individual" | "pension" | "trust") =>
-                    win.reduce((a, f) => a + (f[k] ?? 0), 0);
                   return (
                     <tr key={n} className={enough ? "" : "idx-sum-short"}>
                       <td className="sticky-col">
                         {n}일
                         {!enough && <span className="pt-n"> ({data.flows.length}일치뿐)</span>}
                       </td>
-                      {(["individual", "foreign", "institution", "trust", "pension"] as const).map(
-                        (k) => {
-                          const v = sum(k);
-                          return (
-                            <td className={sign(v)} key={k}>
-                              {enough ? fmtNum(v) : "-"}
-                            </td>
-                          );
-                        },
-                      )}
+                      {FLOW_COLS.map((c) => {
+                        /*
+                         * **한 날이라도 모르면 합계를 안 낸다.** 아는 날만 더하면
+                         * 「5일 합」이라 적힌 값이 실제로는 이틀 합일 수 있다 —
+                         * 그건 숫자가 조용히 거짓말하는 것이다.
+                         */
+                        const vals = win.map((f) => f[c.key] as number | null);
+                        const unknown = vals.some((x) => x === null || x === undefined);
+                        const v = unknown ? null : vals.reduce((a: number, b) => a + (b ?? 0), 0);
+                        return (
+                          <td className={v === null ? "" : sign(v)} key={c.key}>
+                            {!enough || v === null ? "-" : fmtNum(v)}
+                          </td>
+                        );
+                      })}
                     </tr>
                   );
                 })}
@@ -304,29 +352,25 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
               <thead>
                 <tr>
                   <th className="sticky-col">일자</th>
-                  <th>개인</th>
-                  <th>외국인</th>
-                  <th>기관</th>
-                  {/* 기관 속살 — 종목상세 매매동향과 같은 갈래 (2026-08-27) */}
-                  <th title="금융투자(증권) — 수집을 2026-08-27 시작해 그 전 날짜는 -">금융투자</th>
-                  <th>투신</th>
-                  <th>연기금</th>
-                  <th>사모펀드</th>
+                  {FLOW_COLS.map((c) => (
+                    <th key={c.key} title={c.hint}>
+                      {c.label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {data.flows.map((f) => (
                   <tr key={f.date}>
                     <td className="sticky-col">{f.date.slice(5)}</td>
-                    <td className={sign(f.individual)}>{fmtNum(f.individual)}</td>
-                    <td className={sign(f.foreign)}>{fmtNum(f.foreign)}</td>
-                    <td className={sign(f.institution)}>{fmtNum(f.institution)}</td>
-                    <td className={f.securities === null ? "" : sign(f.securities)}>
-                      {f.securities === null ? "-" : fmtNum(f.securities)}
-                    </td>
-                    <td className={sign(f.trust)}>{fmtNum(f.trust)}</td>
-                    <td className={sign(f.pension)}>{fmtNum(f.pension)}</td>
-                    <td className={sign(f.privateFund)}>{fmtNum(f.privateFund)}</td>
+                    {FLOW_COLS.map((c) => {
+                      const v = f[c.key] as number | null;
+                      return (
+                        <td className={v === null ? "" : sign(v)} key={c.key}>
+                          {v === null ? "-" : fmtNum(v)}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>

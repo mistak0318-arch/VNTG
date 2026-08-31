@@ -1826,6 +1826,12 @@ export interface IndexFlowRow {
   privateFund: number;
   /** 금융투자 — 수집 스키마에 2026-08-27 추가돼 그 전 날짜는 null("-") */
   securities: number | null;
+  /* 아래 다섯은 2026-08-31 추가 — 그 전 날짜는 null("-"). 0 이 아니라 「모름」이다 */
+  insurance: number | null;
+  bank: number | null;
+  otherFinance: number | null;
+  nation: number | null;
+  otherCorp: number | null;
 }
 
 export interface IndexDetailData {

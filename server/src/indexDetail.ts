@@ -1,6 +1,6 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { dropPhantomToday } from "./candleGuard.js";
-import { listSectorFlow, SUBJECTS } from "./sectorFlowStore.js";
+import { listSectorFlow, SUBJECTS, type Subject } from "./sectorFlowStore.js";
 
 /**
  * 코스피·코스닥 상세.
@@ -59,6 +59,12 @@ export interface IndexFlowRow {
   privateFund: number;
   /** 금융투자 — 저장 스키마에 2026-08-27 추가돼 그 전 날짜는 null("-") */
   securities: number | null;
+  /* 아래 다섯은 2026-08-31 추가 — 그 전 날짜는 null("-") */
+  insurance: number | null;
+  bank: number | null;
+  otherFinance: number | null;
+  nation: number | null;
+  otherCorp: number | null;
 }
 
 export interface IndexDetail {
@@ -142,6 +148,17 @@ interface Row {
   trde_qty?: string;
 }
 
+/**
+ * 스키마에 **나중에 붙은** 주체를 꺼낸다.
+ *
+ * 저장 형식이 배열 순서라, 그 칸이 생기기 전에 쌓인 행은 배열이 짧다.
+ * 그때는 **`null`(모름)** 이다 — 0 으로 채우면 화면이 「안 샀다」로 적어 거짓이 된다.
+ */
+function late(v: number[], subject: Subject): number | null {
+  const i = SUBJECTS.indexOf(subject);
+  return i >= 0 && v.length > i ? v[i] : null;
+}
+
 export async function indexDetail(
   client: KiwoomClient,
   code: string,
@@ -194,8 +211,16 @@ export async function indexDetail(
         trust: at(row.v, "trust"),
         privateFund: at(row.v, "private"),
         // 금융투자는 스키마에 나중에 붙었다 — 그 전 날짜(v 가 짧다)는 0이 아니라 "모름"
-        securities:
-          row.v.length > SUBJECTS.indexOf("securities") ? at(row.v, "securities") : null,
+        securities: late(row.v, "securities"),
+        /*
+         * 나머지 다섯도 2026-08-31 에 뒤에 붙었다. 같은 규칙 — **없으면 null** 이다.
+         * 0 으로 채우면 「안 샀다」로 읽혀 거짓이 된다.
+         */
+        insurance: late(row.v, "insurance"),
+        bank: late(row.v, "bank"),
+        otherFinance: late(row.v, "otherFinance"),
+        nation: late(row.v, "nation"),
+        otherCorp: late(row.v, "otherCorp"),
       };
     })
     .filter((x): x is IndexFlowRow => x !== null)
