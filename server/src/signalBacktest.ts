@@ -81,6 +81,11 @@ export const BACKTESTABLE = new Set([
   "flowAccel",
   "smartMoney",
   "marketCap",
+  "flowRatio",
+  /* 종목당 3콜이 더 나가지만, 이걸로 「검증 못 한 기준」이 셋 줄었다 (2026-09-01) */
+  "shortSaleUp",
+  "lendingUp",
+  "foreignRatioUp",
 ]);
 
 /* ------------------------------------------------------------------ */
@@ -332,6 +337,136 @@ async function flowDays(client: KiwoomClient, code: string, want: number): Promi
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/* ------------------------------------------------------------------ */
+/* 공매도 · 대차 · 외국인 지분율 — 되짚을 수 있는 시계열 세 개          */
+/* ------------------------------------------------------------------ */
+
+const SHSA = "/api/dostk/shsa";
+const SLB = "/api/dostk/slb";
+const FRGNISTT = "/api/dostk/frgnistt";
+
+type SupplySums = Pick<
+  Feat,
+  "short5" | "short20" | "loan" | "loanUp20" | "fgnRatio" | "fgnRatioUp20"
+>;
+
+const NO_SUPPLY: SupplySums = {
+  short5: null,
+  short20: null,
+  loan: null,
+  loanUp20: null,
+  fgnRatio: null,
+  fgnRatioUp20: null,
+};
+
+/** YYYYMMDD 로 정규화 — 세 TR 이 날짜 칸 이름이 제각각이다 */
+function ymd8(v: unknown): string {
+  const t = String(v ?? "").replace(/[^0-9]/g, "");
+  return /^\d{8}$/.test(t) ? t : "";
+}
+
+/**
+ * 셋을 받아 **날짜 → 값**으로 되돌린다.
+ *
+ * ⚠️ 일봉 인덱스로 맞추지 않는다. 세 TR 은 거래일 집합이 서로 다르고(공매도가
+ * 없는 날, 대차 기록이 없는 날) 일봉과도 어긋난다. 인덱스로 맞추면 **조용히
+ * 하루씩 밀린다** — 수급에서 이미 겪은 문제다.
+ *
+ * 못 받은 TR 은 그 칸만 null 이다. 셋 다 실패해도 일봉 표본은 그대로 남는다.
+ */
+async function supplyIndex(
+  client: KiwoomClient,
+  code: string,
+  days: number,
+): Promise<Map<string, SupplySums>> {
+  const end = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10).replace(/-/g, "");
+  /* 달력일로 넉넉히 — 거래일 400 이면 달력으로 580 쯤이다 */
+  const startD = new Date(Date.now() + 9 * 3600_000 - Math.round(days * 1.5) * 86400_000);
+  const start = startD.toISOString().slice(0, 10).replace(/-/g, "");
+  const al = code.endsWith("_AL") ? code : `${code}_AL`;
+
+  const [sh, ln, fr] = await Promise.all([
+    /* 공매도 (ka10014) — 통합(_AL). KRX 단독은 매매비중 분모가 작아 비중이 부푼다 */
+    client
+      .request<Record<string, unknown>>(SHSA, "ka10014", {
+        stk_cd: al,
+        tm_tp: "1",
+        strt_dt: start,
+        end_dt: end,
+      })
+      .catch(() => null),
+    client
+      .request<Record<string, unknown>>(SLB, "ka20068", {
+        strt_dt: start,
+        end_dt: end,
+        all_tp: "0",
+        stk_cd: code,
+      })
+      .catch(() => null),
+    client
+      .request<Record<string, unknown>>(FRGNISTT, "ka10008", { stk_cd: code })
+      .catch(() => null),
+  ]);
+
+  /** 오래된 것 → 새것 순으로 정렬해 둔다 — 「그날까지」를 세려면 그 방향이라야 한다 */
+  const asc = (rows: Record<string, unknown>[], dateKey: string) =>
+    rows
+      .map((r) => ({ d: ymd8(r[dateKey]), r }))
+      .filter((x) => x.d !== "")
+      .sort((a, b) => a.d.localeCompare(b.d));
+
+  const shRows = asc((sh?.data?.shrts_trnsn ?? []) as Record<string, unknown>[], "dt");
+  const lnRows = asc((ln?.data?.dbrt_trde_trnsn ?? []) as Record<string, unknown>[], "dt");
+  const frRows = asc((fr?.data?.stk_frgnr ?? []) as Record<string, unknown>[], "dt");
+
+  const out = new Map<string, SupplySums>();
+  const touch = (d: string): SupplySums => {
+    let v = out.get(d);
+    if (!v) {
+      v = { ...NO_SUPPLY };
+      out.set(d, v);
+    }
+    return v;
+  };
+
+  /* 공매도 — 그날까지 5일 평균과 그 이전 15일 평균 */
+  for (let i = 0; i < shRows.length; i++) {
+    const v = touch(shRows[i].d);
+    const mean = (from: number, to: number): number | null => {
+      if (from < 0) return null;
+      let acc = 0;
+      for (let j = from; j <= to; j++) acc += n(shRows[j].r.trde_wght);
+      return acc / (to - from + 1);
+    };
+    v.short5 = mean(i - 4, i);
+    v.short20 = mean(i - 19, i - 5);
+  }
+
+  /* 대차잔고 — 그날 값과 20일 전 대비 */
+  for (let i = 0; i < lnRows.length; i++) {
+    const v = touch(lnRows[i].d);
+    const now = n(lnRows[i].r.rmnd);
+    v.loan = now;
+    if (i >= 20) {
+      const before = n(lnRows[i - 20].r.rmnd);
+      v.loanUp20 = before > 0 ? ((now - before) / before) * 100 : null;
+    }
+  }
+
+  /* 외국인 지분율 — 그날 값과 20일 전 대비 %p */
+  for (let i = 0; i < frRows.length; i++) {
+    const v = touch(frRows[i].d);
+    const now = n(frRows[i].r.wght);
+    v.fgnRatio = now > 0 ? now : null;
+    if (i >= 20) {
+      const before = n(frRows[i - 20].r.wght);
+      v.fgnRatioUp20 = now > 0 && before > 0 ? now - before : null;
+    }
+  }
+
+  return out;
+}
+
 type FlowSums = Pick<
   Feat,
   | "fgn5"
@@ -456,6 +591,8 @@ function featuresAt(
     volEok: (hist[hist.length - 1].vol * cur) / 100_000_000,
     /* 상장주식수 × 그날 종가 ÷ 1억 = 억원 */
     mktCap: shares !== null && shares > 0 ? (shares * cur) / 100_000_000 : null,
+    /* 아래 여섯은 별도 조회에서 온다 — 여기서는 자리만 만든다 (`NO_SUPPLY` 가 덮는다) */
+    ...NO_SUPPLY,
     theme: themeRate,
     rateBeta,
     ...NO_FLOW,
@@ -668,6 +805,20 @@ export async function runSignalBacktest(
               .catch(() => null)
           : null;
 
+        /*
+         * 공매도 · 대차 · 외국인 지분율 (2026-09-01) — 종목당 3콜이 더 나간다.
+         *
+         * 그 대가로 **한 번도 검증하지 못하던 기준 셋**이 채점 안으로 들어온다.
+         * 「공매도 비중이 높으면 위험」은 화면에도 계산에도 있었지만 표본에 없어서
+         * 맞는지 잰 적이 없었다.
+         *
+         * `withFlow` 와 같은 스위치를 쓴다 — 수급을 안 받는 가벼운 회차에서는
+         * 이것도 안 받는 게 맞다.
+         */
+        const supplyMap = withFlow
+          ? await supplyIndex(client, code, days).catch(() => null)
+          : null;
+
         const myThemes = themeCtx?.themesOf.get(code) ?? [];
         const dateToK =
           themeCtx && myThemes.length > 0
@@ -720,7 +871,8 @@ export async function runSignalBacktest(
            * 못 맞춘 날은 null 이다 — 0 으로 지어내면 「순매수 0」과 안 갈린다.
            */
           const fl = flowMap?.get(bs[i].date);
-          const full: Feat = { ...feat, ...(fl ?? NO_FLOW) };
+          const sp = supplyMap?.get(bs[i].date);
+          const full: Feat = { ...feat, ...(fl ?? NO_FLOW), ...(sp ?? NO_SUPPLY) };
           samples.push({ code, name, date: bs[i].date, ...full, ...f });
 
           /*

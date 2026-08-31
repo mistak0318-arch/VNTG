@@ -964,7 +964,8 @@
       "Bash(grep -n \"shortSale, lending, opinion, ratio\\\\|wantLending$\" -A24 server/src/signalLight.ts)",
       "Bash(npx --prefix server tsc -p server/tsconfig.json --noEmit)",
       "Bash(node --max-old-space-size=4096 \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/overlapTest.mjs\")",
-      "Bash(grep -n \"for \\(const { code, name }\\\\|codes\\\\\\)\\\\s*{\\\\|const bs = \\\\|await dailyBars\\\\|getSharesMap\" server/src/signalBacktest.ts)"
+      "Bash(grep -n \"for \\(const { code, name }\\\\|codes\\\\\\)\\\\s*{\\\\|const bs = \\\\|await dailyBars\\\\|getSharesMap\" server/src/signalBacktest.ts)",
+      "Bash(grep -n '\"smartMoney\"$\\\\|\"marketCap\"$' server/src/signalLight.ts)"
     ]
   }
 }

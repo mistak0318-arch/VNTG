@@ -101,6 +101,8 @@ export type CheckKey =
   | "flowPersist"
   | "flowAccel"
   | "smartMoney"
+  /* 시총 대비 수급 (2026-09-01) — 절대 금액의 대형주 편향에 대한 정면 해법 */
+  | "flowRatio"
   | "foreignRatioUp"
   | "programFlow"
   | "volume"
@@ -709,6 +711,45 @@ export const DEFAULT_CONFIG: SignalConfig = {
       cost: 0,
     },
     {
+      key: "flowRatio",
+      label: "수급 규모 (시총 대비)",
+      axis: "flow",
+      /*
+       * **절대 금액의 대형주 편향에 대한 정면 해법** (2026-09-01 신설).
+       *
+       * ## 무엇이 문제였나
+       *
+       * 「외국인 수급」·「기관 수급」은 순매수 **금액**을 문턱과 잰다. 그런데 100억을
+       * 넘기는 건 대형주뿐이라, 그 기준이 사실상 **대형주 필터**로 작동했다. 실측이
+       * 그걸 그대로 보여 줬다 — 그 기준을 켜면 초록 평균은 오르는데 **점수 꼭대기가
+       * 무너졌다**(90~100 구간이 +3.66% 로 시장 +4.19% 보다 못했다). 초록을 통째로
+       * 사는 게 아니라 점수 높은 것부터 고르므로, 꼭대기가 시장에 지는 설정은 쓸 수 없다.
+       *
+       * 그래서 그 둘을 껐고, 「시가총액 대비 비율로 문턱을 잡을 수 있게 되면 다시
+       * 볼 값」이라고 적어 두었다. **이제 됐다** — 상장주식수(하루 캐시) × 종가로
+       * 시총이 나오고, 표본에도 담기 시작했다(조회 0회).
+       *
+       * ## 무엇을 재나
+       *
+       *   (외국인 + 기관 20일 순매수) ÷ 시가총액 × 100  (%)
+       *
+       * 시총 1조 종목의 100억(0.1%)과 5,000억 종목의 100억(0.2%)은 다른 사건이다.
+       * 비율로 보면 중소형주에 들어온 의미 있는 돈이 대형주의 큰 금액에 안 묻힌다.
+       *
+       * ⚠️ **문턱은 아직 실측 전이다.** 0.5% 는 「20일 동안 유통 물량의 0.5%가
+       * 손바뀜했다」는 뜻으로 잡은 첫 값일 뿐이다. 재수집이 끝나면 구간별로 재서
+       * 정한다 — 그때까지 **꺼 둔다.** 재기 전에 켜는 것이 테마 강세를 -5.76%p 로
+       * 만든 그 순서다.
+       */
+      enabled: false,
+      weight: 2,
+      threshold: 0.5,
+      strongAt: 3,
+      span: 20,
+      hint: "외국인+기관 순매수 ÷ 시가총액(%). **금액이 아니라 비율** — 시총 1조의 100억과 5,000억의 100억은 다른 사건이다",
+      cost: 0,
+    },
+    {
       key: "foreignRatioUp",
       label: "외국인 지분율 상승",
       axis: "flow",
@@ -1281,13 +1322,15 @@ export async function evaluateSignal(
     need.has("flowStreak") ||
     need.has("flowPersist") ||
     need.has("flowAccel") ||
-    need.has("smartMoney");
+    need.has("smartMoney") ||
+    need.has("flowRatio");
   const wantFinance = need.has("profitGrowth");
   /* 테마 강세도 같은 조회에서 나온다 — `getSectorMood` 가 업종과 테마를 같이 준다 */
   const wantSector =
     need.has("sectorStrength") || need.has("themeStrength") || need.has("exportGrowth");
   const wantMyTheme = need.has("myThemeStrength");
-  const wantInfo = need.has("marketCap") || need.has("volume");
+  /* flowRatio 도 시총이 필요하다 — 「시가총액」 기준과 같은 응답을 나눠 쓴다 */
+  const wantInfo = need.has("marketCap") || need.has("volume") || need.has("flowRatio");
   const wantShort = need.has("shortSaleUp");
   const wantLending = need.has("lendingUp");
   const wantForeignRatio = need.has("foreignRatioUp");
@@ -1604,6 +1647,32 @@ export async function evaluateSignal(
           );
         g = grade(sum, c);
         value = `${days}일 ${sum > 0 ? "+" : ""}${Math.round(sum).toLocaleString("ko-KR")}`;
+      }
+    } else if (c.key === "flowRatio") {
+      /*
+       * (외국인 + 기관 순매수) ÷ 시가총액 × 100.
+       *
+       * 시총은 `ka10001` 의 `mac`(억원)에서 온다 — 「시가총액」 기준이 이미 그걸
+       * 쓰므로 이 기준을 켜도 조회가 안 는다. 순매수는 백만원이라 100 으로 나눠
+       * 억원으로 맞춘다.
+       */
+      /* 시총은 「시가총액」 기준과 **같은 자리**에서 온다 — 켜도 조회가 안 는다 */
+      let capEok = toNum(info?.data?.mac);
+      if (!(capEok > 0) && entry?.shares) {
+        const price = Math.abs(toNum(info?.data?.cur_prc));
+        capEok = Math.round((entry.shares * price) / 100_000_000);
+      }
+      const days = Math.max(3, c.span ?? 20);
+      if (flowRows.length >= days && capEok > 0) {
+        const net =
+          flowRows
+            .slice(0, days)
+            .reduce((s, r) => s + toNum(r.frgnr_invsr) + toNum(r.orgn), 0) / 100;
+        const pctOfCap = (net / capEok) * 100;
+        g = grade(pctOfCap, c);
+        value =
+          `${pctOfCap > 0 ? "+" : ""}${pctOfCap.toFixed(2)}% ` +
+          `(${days}일 ${Math.round(net).toLocaleString("ko-KR")}억 · 시총 ${Math.round(capEok).toLocaleString("ko-KR")}억)`;
       }
     } else if (c.key === "foreignRatioUp") {
       const rows = (foreignRatio?.data?.stk_frgnr ?? []) as Record<string, unknown>[];

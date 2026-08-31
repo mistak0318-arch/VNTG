@@ -130,6 +130,34 @@ export interface Feat {
    */
   mktCap: number | null;
 
+  /*
+   * 공매도 · 대차잔고 · 외국인 지분율 (2026-09-01 추가).
+   *
+   * ## 왜 이제야 담나
+   *
+   * 셋 다 **화면에도 있고 신호등 계산에도 있었는데 표본에만 없었다.** 그래서
+   * 「공매도 비중이 높으면 위험」 같은 판정을 **한 번도 검증하지 못한 채** 켜 두고
+   * 있었다. 벤티지가 "공매도 대차잔고도 의미있게 바꿔주고" 라고 해서 방향 중심으로
+   * 고쳤는데, 그 개편이 맞는지도 잴 수가 없었다.
+   *
+   * 셋 다 **기간 조회라 과거 시계열이 온다** — 되짚을 수 있다. 종목당 3콜이 더
+   * 나가지만(500종목이면 1,500콜), 검증 못 하는 기준 셋을 안으로 들이는 값이다.
+   *
+   * ⚠️ 못 받으면 null 이다. 코스닥 소형주는 공매도·대차 기록이 아예 없는 날이 많다.
+   */
+  /** 그날까지 5거래일 평균 공매도 거래비중(%) */
+  short5: number | null;
+  /** 그 이전 15거래일 평균(%) — 신호등의 「방향」이 이 둘의 차다 */
+  short20: number | null;
+  /** 대차잔고(주) — 그날 값 */
+  loan: number | null;
+  /** 20거래일 전 대비 증감률(%). 음수면 갚는 중(숏커버) */
+  loanUp20: number | null;
+  /** 외국인 지분율(%) — 그날 값 */
+  fgnRatio: number | null;
+  /** 20거래일 전 대비 %p 변화 */
+  fgnRatioUp20: number | null;
+
   /**
    * **금리 민감도(베타)** (2026-08-31 — "금리인하 기대주인지, 인상 시 방어주인지").
    *
@@ -310,6 +338,28 @@ export function gradeOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
     }
     case "marketCap":
       return f.mktCap === null ? null : grade(f.mktCap, c);
+    case "flowRatio": {
+      /* (외인 + 기관) ÷ 시총 × 100. 순매수는 백만원, 시총은 억원 */
+      const long = c.span ?? 20;
+      const fg = long >= 60 ? f.fgn60 : long >= 20 ? f.fgn20 : f.fgn5;
+      const it = long >= 60 ? f.inst60 : long >= 20 ? f.inst20 : f.inst5;
+      if (fg === null || it === null || f.mktCap === null || f.mktCap <= 0) return null;
+      return grade((((fg + it) / 100) / f.mktCap) * 100, c);
+    }
+    case "shortSaleUp": {
+      /*
+       * 신호등과 **같은 규칙**이어야 한다 — 최근 5일 평균에서 그 이전 15일 평균을
+       * 뺀 %p, 그리고 비중 20% 초과분만 수준으로 얹는다.
+       */
+      if (f.short5 === null) return null;
+      const diff = f.short20 === null ? 0 : f.short5 - f.short20;
+      const level = Math.max(0, (f.short5 - 20) / 20);
+      return grade(diff + level, c);
+    }
+    case "lendingUp":
+      return f.loanUp20 === null ? null : grade(f.loanUp20, c);
+    case "foreignRatioUp":
+      return f.fgnRatioUp20 === null ? null : grade(f.fgnRatioUp20, c);
 
     default:
       /* 표본에 없는 기준 — 재무·시가총액·ETF 뒷배. 채점에서 빠진다 */
