@@ -169,12 +169,60 @@ export function SignalConfigPanel() {
 
   return (
     <div className="sig-config">
+      {/*
+        **세 겹 관계도** (2026-08-31 — "니가 커밋하면 그게 추천 기본값에 설정된다는거지?
+        아 설명에 넣어줘야해 내가 이해할 수 있게 말야").
+
+        이걸 몇 번을 말로 설명해도 계속 헷갈렸다. 화면에 **안 보이기 때문**이다 —
+        「추천 기본값을 고쳤다」와 「내 화면이 그대로다」가 머릿속에서 안 이어진다.
+        그래서 그림으로 그린다. 지금 어느 단계에서 막혀 있는지가 한눈에 보여야 한다.
+      */}
+      {defaults && (
+        <div className={`sig-flow${stale.length > 0 ? " stale" : ""}`}>
+          <div className="sig-flow-step">
+            <b>① 추천 기본값</b>
+            <span>코드에 적힌 값. 검증해서 정한 값이 여기 들어옵니다</span>
+          </div>
+          <div className="sig-flow-arrow">
+            {stale.length > 0 ? (
+              <>
+                <span className="sig-flow-block">✕ 막힘</span>
+                <small>{stale.length}군데 다름</small>
+              </>
+            ) : (
+              <>
+                <span className="sig-flow-ok">= 같음</span>
+                <small>반영됨</small>
+              </>
+            )}
+          </div>
+          <div className="sig-flow-step now">
+            <b>② 내 설정</b>
+            <span>
+              <b>①보다 우선합니다.</b> 한 번이라도 저장했으면 ①을 고쳐도 안 바뀝니다
+            </span>
+          </div>
+          <div className="sig-flow-arrow">
+            <span className="sig-flow-ok">→</span>
+            <small>그대로</small>
+          </div>
+          <div className="sig-flow-step">
+            <b>③ 실제 신호등</b>
+            <span>종목 화면·신호등 찾기·슈퍼신호등이 ②를 씁니다</span>
+          </div>
+        </div>
+      )}
+
       {stale.length > 0 && defaults && (
         <div className="sig-stale">
           <b>지금 기준이 추천 기본값과 {stale.length}군데 다릅니다.</b>
           <span className="sig-stale-why">
-            저장해 둔 설정이 기본값보다 우선하기 때문입니다 — 추천값을 손봐도 한 번이라도
-            저장한 적이 있으면 그 값이 그대로 남습니다.
+            <b>①이 ②로 자동으로 넘어가지 않습니다.</b> 아래 「전부 추천 기본값으로」를
+            누르고 <b>저장</b>해야 ①이 ②로 복사됩니다. 그래야 종목 화면과 슈퍼신호등이
+            새 기준으로 돕니다.
+            <br />
+            일부러 이렇게 만들었습니다 — 추천값이 바뀔 때마다 벤티지가 맞춰 둔 설정이
+            조용히 덮이면 안 되니까요.
           </span>
           <ul className="sig-stale-list">
             {stale.map((s) => (
@@ -201,7 +249,10 @@ export function SignalConfigPanel() {
             >
               축 가중치만
             </button>
-            <span className="pt-n">바꾼 뒤 아래 「저장」을 눌러야 반영됩니다</span>
+            <span className="pt-n">
+              누른 뒤 <b>맨 아래 「저장」까지</b> 눌러야 ②가 바뀝니다 — 누르기만 하면
+              화면 값만 바뀐 상태입니다
+            </span>
           </span>
         </div>
       )}

@@ -57,6 +57,7 @@ import { createPulseRouter } from "./routes/pulse.js";
 import { createUsKrRouter } from "./routes/usKr.js";
 import { createAlertRouter } from "./routes/alert.js";
 import { createNotifyRouter } from "./routes/notify.js";
+import { startRegimeScheduler } from "./regimeScheduler.js";
 import { createBacktestRouter } from "./routes/backtest.js";
 import { createWidgetRouter } from "./routes/widget.js";
 import { createBriefingRouter } from "./routes/briefing.js";
@@ -227,6 +228,8 @@ startReportScheduler(client);
 startSnapshotRefresher(client);
 startTrackingRefresher(client);
 startAlertScheduler(client);
+/* 장세 점검 (2026-08-31) — 16:10 재고, 18:30 표본이 오래됐으면 알아서 다시 모은다 */
+startRegimeScheduler(client);
 /* CIS 일지 — 설정에서 켜야 실제로 돈다(기본 꺼짐) */
 startCisScheduler(client);
 /*
