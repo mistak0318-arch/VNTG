@@ -116,8 +116,21 @@ const IMPACT_WEIGHTS: [RegExp, number][] = [
 ];
 
 export interface ScoredChannelItem {
-  /** 대표 메시지 */
+  /**
+   * 대표 메시지 — **400자로 자른 것.**
+   *
+   * ⚠️ 이건 **AI 에게 보낼 몫**이다. 요약 프롬프트에 수십 건이 들어가므로 자르지
+   * 않으면 토큰이 몇 배로 든다. **사람에게 보여 줄 때는 `fullText` 를 써라.**
+   */
   text: string;
+  /**
+   * 자르지 않은 원문 (2026-08-31).
+   *
+   * 「채널 선별」이 텔레그램으로 보내는 글은 「원문 전체」라고 적혀 있었는데
+   * 실제로는 위의 400자짜리를 보내고 있었다 — 자르는 이유(AI 토큰)와 쓰는 곳
+   * (사람이 읽는 알림)이 달랐는데 값이 하나였다. 둘을 갈라 둔다.
+   */
+  fullText: string;
   /** 가장 최근에 언급된 시각 — 화면과 감쇠는 이걸 쓴다 */
   at: string;
   /** 이 얘기가 처음 돈 시각. at 과 벌어져 있으면 계속 회자되는 중이라는 뜻 */
@@ -316,7 +329,10 @@ export function scoreMessages(
     if (coverage === 1 && impact === 0 && mentions.length === 0 && themes.length === 0) continue;
 
     items.push({
-      text: text.slice(0, 400), // 긴 글은 잘라서 토큰을 아낀다
+      /* AI 몫은 자른다 — 요약 프롬프트에 수십 건이 들어간다 */
+      text: text.slice(0, 400),
+      /* 사람 몫은 자르지 않는다 — 「채널 선별」이 이걸 보낸다 */
+      fullText: text,
       at: g.rep.at,
       firstAt: g.firstAt,
       channelName: g.rep.channelName,

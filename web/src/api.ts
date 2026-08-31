@@ -2020,7 +2020,10 @@ export interface PinnedPost {
 }
 
 export interface ScoredChannelItem {
+  /** AI 에게 보낼 몫 — 400자로 자른 것. 사람에게 보일 때는 fullText 를 쓴다 */
   text: string;
+  /** 자르지 않은 원문 (2026-08-31) */
+  fullText?: string;
   at: string;
   channels: string[];
   channelName?: string;

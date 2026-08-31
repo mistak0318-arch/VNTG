@@ -354,8 +354,16 @@ function pickedHead(it: ScoredChannelItem): string {
 
 export function toPickedMessages(r: ChannelReport, limit = 15): string[] {
   return r.items.slice(0, limit).map((it) => {
-    // 원문 전체 (2026-08-27 — "줄이지 말고"). 넘치면 sendTelegram 이 문단 경계로 나눈다
-    const body = esc(it.text.replace(/\n{3,}/g, "\n\n"));
+    /*
+     * **원문 전체** (2026-08-27 — "줄이지 말고"). 넘치면 sendTelegram 이 문단
+     * 경계로 나눈다.
+     *
+     * ⚠️ `it.text` 가 아니라 `it.fullText` 다 (2026-08-31 — "주요채널 처럼
+     * 안잘리게"). `text` 는 AI 토큰을 아끼려고 400자로 자른 값이라, 그걸 보내면
+     * 「원문 전체」라고 적어 놓고 발췌를 보내게 된다. 실제로 그러고 있었다 —
+     * 자르는 이유(AI 토큰)와 쓰는 곳(사람이 읽는 알림)이 다른데 값이 하나였다.
+     */
+    const body = esc((it.fullText ?? it.text).replace(/\n{3,}/g, "\n\n"));
     const link = it.link ? `\n\n🔗 <a href="${it.link}">원문 보기 →</a>` : "";
     return `${pickedHead(it)}\n━━━━━━━━━━━━\n${body}${link}`;
   });
