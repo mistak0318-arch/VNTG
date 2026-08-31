@@ -80,6 +80,13 @@ export function SignalBacktestPanel({
    * 500 이면 6만 관측이라 구간별로도 읽을 만해진다 — 대신 **몇 분** 걸린다.
    */
   const [limit, setLimit] = useState(500);
+  /**
+   * 모집단의 시장 (2026-08-31) — 000 전체 · 001 코스피 · 101 코스닥.
+   *
+   * ⚠️ 이건 **판정 기준이 아니라 「검증할 표본을 고르는 기준」**이라 신호등 설정의
+   * 추천 기본값(①②③) 체계와 섞지 않는다. 여기서 고르는 값일 뿐이다.
+   */
+  const [market, setMarket] = useState("000");
   const [days, setDays] = useState(120);
   const [res, setRes] = useState<Result | null>(null);
   const [busy, setBusy] = useState(false);
@@ -139,7 +146,7 @@ export function SignalBacktestPanel({
     setError(null);
     try {
       setPick(null); // 새로 돌리면 펼쳐 둔 구간은 닫는다 — 옛 결과가 남으면 헷갈린다
-      const r = await api.signalBacktest({ limit, days, config: cfg });
+      const r = await api.signalBacktest({ limit, days, market, config: cfg });
       if (!r.started) {
         setError("이미 돌고 있습니다 — 끝나면 결과가 여기 뜹니다.");
       }
@@ -255,6 +262,14 @@ export function SignalBacktestPanel({
               onChange={(e) => setLimit(Number(e.target.value))}
             />
             <span className="pt-n">거래대금 상위</span>
+          </label>
+          <label className="sbt-num">
+            <span>시장</span>
+            <select value={market} onChange={(e) => setMarket(e.target.value)}>
+              <option value="000">전체</option>
+              <option value="001">코스피</option>
+              <option value="101">코스닥</option>
+            </select>
           </label>
           <label className="sbt-num">
             <span>기간</span>

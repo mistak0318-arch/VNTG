@@ -1411,7 +1411,13 @@ export const api = {
    * 일봉으로 되살릴 수 있는 기준만 쓴다(테마·ETF·수급·재무는 그때의 구성을 모른다).
    */
   /** 백그라운드 시작 (2026-08-28) — 결과는 /result 를 폴링해서 받는다 */
-  signalBacktest: (body: { limit: number; days: number; config: SignalConfig }) =>
+  signalBacktest: (body: {
+    limit: number;
+    days: number;
+    config: SignalConfig;
+    /** 000 전체 · 001 코스피 · 101 코스닥 */
+    market?: string;
+  }) =>
     postJson<{ started: boolean }>("/api/signal/backtest", body),
   signalBacktestProgress: () =>
     getJson<{ done: number; total: number; running: boolean }>("/api/signal/backtest/progress"),

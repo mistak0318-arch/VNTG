@@ -363,6 +363,8 @@ export function createSignalRouter(client: KiwoomClient): Router {
         config?: Partial<SignalConfig>;
         /** 수급까지 받을까 — 종목당 최대 6콜이 더 나간다(몇 배 느려진다). 기본 켬 */
         withFlow?: boolean;
+        /** 000 전체 · 001 코스피 · 101 코스닥 */
+        market?: string;
       };
       /*
        * 표본 상한 500 (2026-08-31 — "샘플은 500개 기준으로"). 150 이었는데
@@ -372,7 +374,18 @@ export function createSignalRouter(client: KiwoomClient): Router {
        * ⚠️ 500 이면 종목당 일봉 한 번씩이라 **몇 분** 걸린다. 화면이 진행률을 준다.
        */
       const limit = Math.min(Math.max(Number(body.limit) || 500, 5), 500);
-      const top = await tradeValueTop(client, "000", limit);
+      /*
+       * **모집단은 「거래대금 상위」 하나다** (2026-08-31 명시).
+       *
+       * 시가총액·수급·연속매매 같은 다른 조건은 **모집단을 고르는 데 안 쓴다** —
+       * 그것들은 신호등이 그 안에서 채점하는 값이다. 둘을 섞으면 「이미 수급이
+       * 좋은 종목만 골라 놓고 수급 기준이 잘 맞는다」는 순환이 된다.
+       *
+       * 시장은 고를 수 있다: 000 전체 · 001 코스피 · 101 코스닥.
+       */
+      const mk = String((body as { market?: string }).market ?? "000");
+      const market = ["000", "001", "101"].includes(mk) ? mk : "000";
+      const top = await tradeValueTop(client, market, limit);
       const codes = top.map((t) => ({ code: t.code, name: t.name }));
       res.json(
         startBacktestJob(client, {
