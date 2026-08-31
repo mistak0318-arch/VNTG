@@ -62,6 +62,26 @@ export interface RegimeConfig {
   lookbackDays: number;
   /** 표본이 며칠 넘으면 「다시 모으세요」를 띄울까 */
   sampleStaleDays: number;
+  /**
+   * **신호등을 믿을 수 없는 장세의 문턱** (2026-08-31 — 조건부 성적표 실측).
+   *
+   * 19만 관측을 조건별로 갈라 보니 「폭이 좁은 날」에는 **초록이 시장에 졌다:**
+   *
+   *   폭 하위 1/3 (20일선 위 41% 미만)   초과 -2.15%p · 승률 43%
+   *                                     앞 -2.64 · 뒤 -1.90 — 양쪽 다 음수
+   *   신고가 밀도 하위 1/3 (10% 미만)     초과 -1.58%p
+   *                                     앞 -1.44 · 뒤 -1.33 — 양쪽 다 음수
+   *
+   * 반대로 폭 상위 1/3 에서는 뒤쪽 **+2.96%p** 였다. 같은 기준이 장세에 따라
+   * 부호가 뒤집힌다 — 그러면 물어야 할 것은 「어느 기준이 최고인가」가 아니라
+   * **「오늘 이 도구를 믿어도 되나」**다.
+   *
+   * ⚠️ 문턱은 **표본에서 나온 값**이라 표본이 바뀌면 달라진다. 그래서 설정으로 뺀다.
+   * 그리고 여기서 재는 폭은 일봉 캐시(2,300여 종목) 기준이라, 표본(거래대금 상위
+   * 500)과 **모집단이 다르다** — 눈금이 정확히 같지는 않다.
+   */
+  breadthTrustAt: number;
+  newHighTrustAt: number;
 }
 
 export const DEFAULT_REGIME: RegimeConfig = {
@@ -86,6 +106,9 @@ export const DEFAULT_REGIME: RegimeConfig = {
    * 그보다 자주 다시 모으라고 하면 20분짜리 수집을 계속 시키는 꼴이다.
    */
   sampleStaleDays: 30,
+  /* 실측 삼등분 경계 — 폭 41%, 신고가 밀도 10% */
+  breadthTrustAt: 41,
+  newHighTrustAt: 10,
 };
 
 /** 하루치 기록 — 추세를 보려면 쌓여 있어야 한다 */
@@ -148,6 +171,8 @@ export async function saveRegimeConfig(input: Partial<RegimeConfig>): Promise<Re
     volSpikeX: clamp(input.volSpikeX ?? config.volSpikeX, 1.1, 5),
     lookbackDays: Math.round(clamp(input.lookbackDays ?? config.lookbackDays, 5, 60)),
     sampleStaleDays: Math.round(clamp(input.sampleStaleDays ?? config.sampleStaleDays, 7, 180)),
+    breadthTrustAt: clamp(input.breadthTrustAt ?? config.breadthTrustAt, 0, 100),
+    newHighTrustAt: clamp(input.newHighTrustAt ?? config.newHighTrustAt, 0, 100),
   };
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(CONF_FILE, JSON.stringify(next, null, 2), "utf-8");
@@ -335,6 +360,38 @@ export async function regimeCheck(
     }
   }
 
+  /*
+   * **오늘 이 신호등을 믿어도 되나** — 위의 「장세가 바뀌었나」와 다른 물음이다.
+   * 저건 「재정비할 때인가」이고 이건 **「오늘 초록을 사도 되나」**다.
+   */
+  if (ok(today.breadth) && today.breadth < config.breadthTrustAt) {
+    findings.push({
+      key: "trust-breadth",
+      level: "warn",
+      title: "오늘은 신호등이 잘 안 듣는 장세입니다",
+      detail:
+        `20일선 위 종목이 ${today.breadth}% 로 문턱(${config.breadthTrustAt}%) 아래입니다. ` +
+        `19만 관측 실측에서 이 구간의 초록은 시장에 **-2.15%p 졌고 승률이 43%** 였습니다 ` +
+        `(앞·뒤 절반 모두 음수). 폭이 넓은 날에는 반대로 +2.96%p 였습니다. ` +
+        `기준을 손보는 자리가 아니라 **쉬어 가는 자리**로 읽는 편이 맞습니다.`,
+      now: today.breadth,
+      then: config.breadthTrustAt,
+    });
+  }
+  if (ok(today.newHigh) && today.newHigh < config.newHighTrustAt) {
+    findings.push({
+      key: "trust-newhigh",
+      level: "warn",
+      title: "신고가가 말라 초록이 뜻을 잃는 구간입니다",
+      detail:
+        `60일 신고가 근처 종목이 ${today.newHigh}% 로 문턱(${config.newHighTrustAt}%) ` +
+        `아래입니다. 추세 축이 「60일 신고가」 하나뿐이라, 이 구간의 초록은 실측에서 ` +
+        `**-1.58%p** 였습니다(앞·뒤 모두 음수).`,
+      now: today.newHigh,
+      then: config.newHighTrustAt,
+    });
+  }
+
   if (!meta.has) {
     findings.push({
       key: "sample",
@@ -366,8 +423,12 @@ export async function regimeCheck(
         level: f.level,
         title: f.title,
         body: f.detail,
-        /* 재정비는 설정에서 한다 — 알림을 누르면 바로 그 자리로 */
-        link: "#/settings",
+        /*
+         * 누르면 **그 판단을 할 자리**로 간다.
+         *   재정비·표본 → 설정
+         *   「오늘 믿어도 되나」 → 신호등 찾기 (거기서 초록을 보고 있으니)
+         */
+        link: f.key.startsWith("trust-") ? "#/signalScreen" : "#/settings",
         dedupeKey: `regime:${f.key}`,
         /* 하루에 한 번까지만 — 같은 장세가 며칠 이어져도 매번 울리면 안 본다 */
         dedupeHours: 24,

@@ -3,6 +3,7 @@ import {
   api,
   type SignalConfig,
   type SignalSimResult,
+  type SignalCondResult,
   type SignalSweepResult,
   type BacktestSummary,
 } from "../api";
@@ -233,6 +234,7 @@ export function SignalSimPanel({ config }: { config: SignalConfig | null }) {
             </table>
           </div>
 
+          <CondBlock config={useDraft ? config : null} />
           <SweepBlock config={useDraft ? config : null} days={res.days} />
         </>
       )}
@@ -370,7 +372,121 @@ function SimHowTo() {
 }
 
 /**
- * ④ 전수 훑기 — **모든 조합**을 돌리되, 뒤쪽 절반으로 채점한다.
+ * ④ 조건부 성적표 — **어디서 먹히고 어디서 안 먹히나.**
+ *
+ * ## 왜 이게 제일 큰 물음인가
+ *
+ * 지금 신호등은 **모든 종목·모든 장세에 같은 문턱**을 쓴다. 그게 가장 큰 구조적
+ * 한계다. 같은 「60일 신고가」도 추세장과 눌림장에서 다르게 작동한다.
+ *
+ * 그 차이를 직접 봤다 — 같은 기준이 120일 표본 뒤쪽에서 **-19%p**, 400일에서
+ * **+3.39%p** 였다. 기준이 변한 게 아니라 장세가 변한 것이다. 그러면 물어야 할
+ * 것은 「어느 기준이 최고인가」가 아니라 **「언제 이 기준을 믿나」**다.
+ *
+ * ## 읽는 법
+ *
+ * 각 칸의 **초과**는 「그 칸 안에서 초록이 그 칸 평균을 얼마나 이겼나」다.
+ * 칸끼리 절대값을 견주면 안 된다 — 좁은 날은 시장 자체가 나빠서 초록도 낮다.
+ * 물음은 **「그 조건에서 신호등이 값을 하나」**다.
+ */
+function CondBlock({ config }: { config: SignalConfig | null }) {
+  const [res, setRes] = useState<SignalCondResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = useCallback(() => {
+    setBusy(true);
+    setErr(null);
+    api
+      .signalConditional(config ?? undefined)
+      .then((r) => setRes(r.result))
+      .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBusy(false));
+  }, [config]);
+
+  const pp = (v: number | null): string =>
+    v === null || !Number.isFinite(v) ? "-" : `${v > 0 ? "+" : ""}${v.toFixed(2)}%p`;
+  const pc = (v: number | null): string =>
+    v === null || !Number.isFinite(v) ? "-" : `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
+
+  return (
+    <>
+      <h4>④ 조건부 — 어디서 먹히고 어디서 안 먹히나</h4>
+      <p className="pt-n">
+        지금 신호등은 <b>모든 종목·모든 장세에 같은 문턱</b>을 씁니다. 그게 가장 큰
+        한계라, 「어느 기준이 최고인가」보다 <b>「언제 이 기준을 믿나」</b>가 더 큰
+        물음입니다. 표본 안에서 그날 시장을 되짚으므로 <b>조회가 나가지 않습니다.</b>
+      </p>
+      <div className="sim-actions">
+        <button className="filter-btn" onClick={run} disabled={busy}>
+          {busy ? "가르는 중…" : "조건별로 갈라보기"}
+        </button>
+      </div>
+      {err && <p className="sim-err">{err}</p>}
+
+      {res &&
+        res.axes.map((ax) => (
+          <div key={ax.key} className="cond-axis">
+            <h5>{ax.title}</h5>
+            <p className="pt-n">{ax.hint}</p>
+            <div className="table-wrap">
+              <table className="sim-table">
+                <thead>
+                  <tr>
+                    <th>구간</th>
+                    <th className="num">그 칸 평균</th>
+                    <th className="num">초록</th>
+                    <th className="num">초과</th>
+                    <th className="num">승률</th>
+                    <th className="num">앞</th>
+                    <th className="num">뒤(검증)</th>
+                    <th className="num">뒤 표본</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ax.cells.map((c) => {
+                    /*
+                     * 뒤쪽 표본이 얇은 칸은 **흐리게.** 실제로 「거래대금 작은 쪽」이
+                     * 97건으로 +46%p 를 냈다 — 소수 폭등주가 만든 착시다.
+                     * 숨기지는 않는다. 「표본이 얇다」도 알아야 할 사실이다.
+                     */
+                    const thin2 = c.testN < 300;
+                    return (
+                      <tr key={c.label} className={thin2 ? "sim-thin" : ""}>
+                        <td>
+                          {c.label}
+                          <span className="pt-n"> · 초록 {c.n.toLocaleString("ko-KR")}</span>
+                        </td>
+                        <td className="num pt-n">{pc(c.base)}</td>
+                        <td className={`num ${cls(c.green)}`}>{pc(c.green)}</td>
+                        <td className={`num sim-edge ${cls(c.lift)}`}>{pp(c.lift)}</td>
+                        <td className="num pt-n">{c.win === null ? "-" : `${c.win}%`}</td>
+                        <td className={`num ${cls(c.trainLift)}`}>{pp(c.trainLift)}</td>
+                        <td className={`num sim-edge ${cls(c.testLift)}`}>{pp(c.testLift)}</td>
+                        <td className="num pt-n">{c.testN.toLocaleString("ko-KR")}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+
+      {res && (
+        <p className="sim-warn">
+          ⚠️ <b>칸끼리 절대값을 견주지 마세요.</b> 좁은 날은 시장 자체가 나빠서 초록도
+          낮습니다 — 물음은 「그 조건 안에서 신호등이 값을 하나」이고, 그 답은{" "}
+          <b>초과</b> 열입니다. 그리고 <b>뒤 표본이 300 미만인 줄은 흐리게</b> 그렸습니다.
+          그런 칸의 큰 숫자는 대개 소수 종목이 만든 착시입니다.
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
+ * ⑤ 전수 훑기 — **모든 조합**을 돌리되, 뒤쪽 절반으로 채점한다.
  *
  * ## 왜 「앞/뒤」로 나누나
  *
@@ -402,7 +518,7 @@ function SweepBlock({ config, days }: { config: SignalConfig | null; days: numbe
 
   return (
     <>
-      <h4>④ 전수 훑기 — 모든 조합을 돌리고, 뒤쪽 절반으로 채점한다</h4>
+      <h4>⑤ 전수 훑기 — 모든 조합을 돌리고, 뒤쪽 절반으로 채점한다</h4>
       <p className="pt-n">
         기준을 켜고 끄는 <b>모든 조합</b>을 돌립니다. 다만 <b>순위는 전체 성적이 아니라
         「뒤쪽 절반」 성적</b>으로 매깁니다 — 표본을 날짜로 반 갈라 앞에서 고르고 뒤에서

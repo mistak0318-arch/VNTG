@@ -1418,6 +1418,12 @@ export const api = {
    */
   signalSweep: (config?: SignalConfig, top = 20) =>
     postJson<{ result: SignalSweepResult }>("/api/signal/sweep", { config, top }),
+  /**
+   * 조건부 성적표 — **어디서 먹히고 어디서 안 먹히나.**
+   * 표본 안에서 그날 시장을 되짚으므로 조회가 0회다.
+   */
+  signalConditional: (config?: SignalConfig) =>
+    postJson<{ result: SignalCondResult }>("/api/signal/conditional", { config }),
 
   /* ---------------- 알림함 + 장세 점검 (2026-08-31) ---------------- */
 
@@ -4908,6 +4914,9 @@ export interface RegimeConfig {
   volSpikeX: number;
   lookbackDays: number;
   sampleStaleDays: number;
+  /** 이 아래면 「오늘은 신호등이 잘 안 듣는 장세」로 본다 (실측 삼등분 경계) */
+  breadthTrustAt: number;
+  newHighTrustAt: number;
 }
 
 /** 어느 하루의 장세 */
@@ -4943,4 +4952,36 @@ export interface RegimeResult {
   findings: RegimeFinding[];
   sample: { has: boolean; builtAt?: string; ageDays?: number; obs?: number; codeCount?: number };
   cacheBuiltAt: string;
+}
+
+/** 조건부 성적표의 한 칸 */
+export interface SignalCondCell {
+  label: string;
+  /** 이 칸의 전체 표본 */
+  total: number;
+  /** 그중 초록 */
+  n: number;
+  /** 이 칸 전체의 20일 평균 — 초록을 여기에 대고 읽는다 */
+  base: number | null;
+  green: number | null;
+  /** 초과분(%p) */
+  lift: number | null;
+  win: number | null;
+  trainLift: number | null;
+  testLift: number | null;
+  /** 뒤쪽(검증) 구간의 초록 표본 — 이게 얇으면 그 칸은 못 믿는다 */
+  testN: number;
+}
+
+export interface SignalCondAxis {
+  key: string;
+  title: string;
+  hint: string;
+  cells: SignalCondCell[];
+}
+
+export interface SignalCondResult {
+  obs: number;
+  splitDate: string;
+  axes: SignalCondAxis[];
 }

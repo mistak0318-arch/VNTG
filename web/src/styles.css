@@ -12857,3 +12857,12 @@ thead .sd-emph {
 .pulse-ev-news a:hover {
   color: var(--blue);
 }
+
+/* 조건부 성적표 — 축마다 구획 (2026-08-31) */
+.cond-axis {
+  margin: 14px 0;
+}
+.cond-axis h5 {
+  margin: 0 0 2px;
+  font-size: 13px;
+}

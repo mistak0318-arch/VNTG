@@ -1,5 +1,5 @@
 import type { SignalConfig } from "./signalLight.js";
-import { gradeOf, loadSamples, scoreFeat, type Sample } from "./signalSamples.js";
+import { MA_PERIODS, gradeOf, loadSamples, scoreFeat, type Sample } from "./signalSamples.js";
 
 /**
  * 신호등 시뮬레이터 — **설정을 바꿔 가며 즉시 다시 채점한다.**
@@ -406,4 +406,223 @@ export async function sweep(cfg: SignalConfig, topN = 25): Promise<SweepResult |
     rows: rows.slice(0, topN),
     current,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* 조건부 성적표 (2026-08-31)                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **이 신호등이 어디서 먹히고 어디서 안 먹히나.**
+ *
+ * ## 왜 이게 제일 큰 물음인가
+ *
+ * 지금 신호등은 **모든 종목·모든 장세에 같은 문턱**을 쓴다. 그게 가장 큰 구조적
+ * 한계다. 같은 「60일 신고가」도 추세장과 눌림장에서 다르게 작동하고, 대형주와
+ * 중소형주에서 다르게 작동한다.
+ *
+ * 그 차이를 오늘 직접 봤다 — 같은 기준이 120일 표본 뒤쪽에서 **-19%p**, 400일에서
+ * **+3.39%p** 였다. 기준이 변한 게 아니라 **장세가** 변한 것이다. 그러면 물어야 할
+ * 것은 「어느 기준이 최고인가」가 아니라 **「언제 이 기준을 믿나」**다.
+ *
+ * ## 조회가 0회다
+ *
+ * 표본이 이미 **500 종목 × 400 거래일**이다. 날짜로 묶으면 **그날 시장이 어땠는지**가
+ * 표본 안에서 나온다 — 몇 %가 20일선 위였나, 몇 %가 신고가 근처였나. 종목 크기는
+ * 거래대금이 대신한다. 밖에서 받아올 것이 없다.
+ *
+ * ## 세 축
+ *
+ *   ① 그날 신고가 밀도 — 추세장인가. 이 신호등의 밥줄이 마른 날인가
+ *   ② 그날 시장의 폭   — 20일선 위 비율. 장세의 방향 그 자체
+ *   ③ 종목 거래대금    — 큰 종목인가. 「대형주 편향」을 정면으로 본다
+ *
+ * 각 축을 **삼등분**한다. 다섯으로 자르면 칸마다 표본이 얇아져 숫자가 튄다.
+ * 그리고 칸마다 **앞/뒤로 갈라** 잰다 — 한 칸이 우연히 좋아 보이는 것을 거른다.
+ */
+export interface CondCell {
+  label: string;
+  /** 이 칸의 전체 표본 */
+  total: number;
+  /** 이 칸에서 초록이던 표본 */
+  n: number;
+  /** 이 칸 전체의 20일 평균 — 초록을 여기에 대고 읽는다 */
+  base: number | null;
+  green: number | null;
+  /** 초과분(%p) */
+  lift: number | null;
+  win: number | null;
+  trainLift: number | null;
+  testLift: number | null;
+  testN: number;
+}
+
+export interface CondAxis {
+  key: string;
+  title: string;
+  hint: string;
+  cells: CondCell[];
+}
+
+export interface CondResult {
+  obs: number;
+  splitDate: string;
+  axes: CondAxis[];
+}
+
+/** 삼등분 경계 — 값 배열에서 33%·67% 자리 */
+function tertiles(vals: number[]): [number, number] {
+  const a = [...vals].sort((x, y) => x - y);
+  if (a.length === 0) return [0, 0];
+  return [a[Math.floor(a.length / 3)], a[Math.floor((a.length * 2) / 3)]];
+}
+
+export async function conditional(cfg: SignalConfig): Promise<CondResult | null> {
+  const file = await loadSamples();
+  if (!file) return null;
+  const S = file.samples;
+  if (S.length === 0) return null;
+
+  /* 초록 판정은 한 번만 — 아래 세 축이 같은 판정을 나눠 쓴다 */
+  const isGreen = S.map((s) => scoreFeat(s, cfg)?.level === "green");
+
+  /*
+   * **그날 시장** — 표본을 날짜로 묶어 낸다. 표본이 그날 거래대금 상위 500 이므로
+   * 「시장 전체」는 아니지만, 신호등이 실제로 고르는 모집단이 그것이라 오히려 맞다.
+   */
+  const byDate = new Map<string, number[]>();
+  S.forEach((s, i) => {
+    const list = byDate.get(s.date);
+    if (list) list.push(i);
+    else byDate.set(s.date, [i]);
+  });
+  const dayNewHigh = new Map<string, number>();
+  const dayBreadth = new Map<string, number>();
+  const MA20 = MA_PERIODS.indexOf(20);
+  for (const [date, idx] of byDate) {
+    let nh = 0;
+    let nhN = 0;
+    let ab = 0;
+    let abN = 0;
+    for (const i of idx) {
+      const s = S[i];
+      if (s.hiPct !== null) {
+        nhN += 1;
+        if (s.hiPct >= 97) nh += 1;
+      }
+      const m20 = s.ma[MA20];
+      if (m20 !== null && m20 !== undefined && s.cur > 0) {
+        abN += 1;
+        if (s.cur >= m20) ab += 1;
+      }
+    }
+    dayNewHigh.set(date, nhN > 0 ? (nh / nhN) * 100 : 0);
+    dayBreadth.set(date, abN > 0 ? (ab / abN) * 100 : 0);
+  }
+
+  /* 앞/뒤 — 전수 훑기와 같은 자리에서 가른다 */
+  const dates = [...byDate.keys()].sort();
+  const splitDate = dates[Math.floor(dates.length / 2)];
+
+  const d20 = S.map((s) => s.d20);
+  const stat2 = (idx: number[]) => {
+    let sum = 0;
+    let cnt = 0;
+    let win = 0;
+    for (const i of idx) {
+      const v = d20[i];
+      if (v === null || !Number.isFinite(v)) continue;
+      sum += v;
+      cnt++;
+      if (v > 0) win++;
+    }
+    return cnt === 0
+      ? { avg: null as number | null, win: null as number | null, n: 0 }
+      : { avg: sum / cnt, win: Math.round((win / cnt) * 100), n: cnt };
+  };
+  const r2 = (v: number | null): number | null => (v === null ? null : Math.round(v * 100) / 100);
+
+  /** 한 칸을 잰다 — 그 칸 안에서 「초록이 그 칸 평균을 이겼나」 */
+  const cell = (label: string, idx: number[]): CondCell => {
+    const all = stat2(idx);
+    const g = idx.filter((i) => isGreen[i]);
+    const gs = stat2(g);
+    const tr = g.filter((i) => S[i].date < splitDate);
+    const te = g.filter((i) => S[i].date >= splitDate);
+    const baseTr = stat2(idx.filter((i) => S[i].date < splitDate));
+    const baseTe = stat2(idx.filter((i) => S[i].date >= splitDate));
+    const gTr = stat2(tr);
+    const gTe = stat2(te);
+    const sub = (a: number | null, b: number | null) => (a !== null && b !== null ? a - b : null);
+    return {
+      label,
+      total: idx.length,
+      n: g.length,
+      base: r2(all.avg),
+      green: r2(gs.avg),
+      lift: r2(sub(gs.avg, all.avg)),
+      win: gs.win,
+      trainLift: r2(sub(gTr.avg, baseTr.avg)),
+      testLift: r2(sub(gTe.avg, baseTe.avg)),
+      testN: gTe.n,
+    };
+  };
+
+  /** 값으로 삼등분해 축 하나를 만든다 */
+  const axisOf = (
+    key: string,
+    title: string,
+    hint: string,
+    labels: [string, string, string],
+    valueOf: (i: number) => number | null,
+  ): CondAxis => {
+    const vals: number[] = [];
+    for (let i = 0; i < S.length; i++) {
+      const v = valueOf(i);
+      if (v !== null && Number.isFinite(v)) vals.push(v);
+    }
+    const [lo, hi] = tertiles(vals);
+    const buckets: number[][] = [[], [], []];
+    for (let i = 0; i < S.length; i++) {
+      const v = valueOf(i);
+      if (v === null || !Number.isFinite(v)) continue;
+      buckets[v < lo ? 0 : v < hi ? 1 : 2].push(i);
+    }
+    return {
+      key,
+      title,
+      hint,
+      cells: [
+        cell(`${labels[0]} (~${Math.round(lo * 10) / 10})`, buckets[0]),
+        cell(`${labels[1]} (${Math.round(lo * 10) / 10}~${Math.round(hi * 10) / 10})`, buckets[1]),
+        cell(`${labels[2]} (${Math.round(hi * 10) / 10}~)`, buckets[2]),
+      ],
+    };
+  };
+
+  const axes: CondAxis[] = [
+    axisOf(
+      "newHighDensity",
+      "그날 신고가 밀도 — 추세장인가",
+      "표본 중 60일 신고가 근처(97%↑)인 종목 비율(%). 이 신호등의 추세 축이 「60일 신고가」 하나뿐이라, 이게 마른 날은 초록 자체가 드물다",
+      ["마른 날", "보통", "무성한 날"],
+      (i) => dayNewHigh.get(S[i].date) ?? null,
+    ),
+    axisOf(
+      "breadth",
+      "그날 시장의 폭 — 20일선 위 비율",
+      "표본 중 20일선 위에 있는 종목 비율(%). 장세의 방향 그 자체다",
+      ["좁은 날", "보통", "넓은 날"],
+      (i) => dayBreadth.get(S[i].date) ?? null,
+    ),
+    axisOf(
+      "size",
+      "종목 크기 — 그날 거래대금",
+      "그날 거래대금(억). 시가총액 대신 쓴다 — 「대형주 편향」을 정면으로 본다. 표본이 이미 거래대금 상위라 셋 다 큰 편이지만 그 안에서도 갈린다",
+      ["작은 쪽", "중간", "큰 쪽"],
+      (i) => S[i].volEok,
+    ),
+  ];
+
+  return { obs: S.length, splitDate, axes };
 }

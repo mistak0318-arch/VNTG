@@ -253,8 +253,16 @@ export function RegimePanel() {
       {cfg && (
         <>
           <h4>문턱 — 언제 알릴까</h4>
+          <p className="sim-note">
+            <b>두 종류가 섞여 있습니다.</b> 위 셋(폭 하락·신고가 마름·변동성)은{" "}
+            <b>「재정비할 때인가」</b>를 묻는 <b>변화</b> 문턱이고, 아래 둘은{" "}
+            <b>「오늘 초록을 사도 되나」</b>를 묻는 <b>지금 값</b> 문턱입니다.
+            아래 둘의 기본값은 19만 관측을 조건별로 갈라 나온 실측 경계입니다 —
+            폭 하위 1/3 에서 초록이 시장에 <b>-2.15%p</b> 졌고 승률이 43% 였습니다
+            (앞·뒤 절반 모두 음수). 자세한 표는 <b>설정 &gt; 시뮬레이터 &gt; ④ 조건부</b>에 있습니다.
+          </p>
           <p className="pt-n">
-            <b>「지금 값」이 아니라 「변화」로 잡습니다.</b> 「신고가가 3% 미만이면 경고」
+            <b>변화 문턱은 「지금 값」이 아니라 「변화」로 잡습니다.</b> 「신고가가 3% 미만이면 경고」
             같은 절대 문턱은 장세마다 다시 정해야 하지만, <b>며칠 전 대비 얼마나
             변했나</b>는 장세가 달라도 뜻이 같습니다.
           </p>
@@ -306,6 +314,30 @@ export function RegimePanel() {
                 onChange={(e) => patch({ lookbackDays: Number(e.target.value) })}
               />
               <small>거래일</small>
+            </label>
+            <label>
+              <span>폭이 이 아래면 「안 듣는 장세」</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                value={cfg.breadthTrustAt}
+                onChange={(e) => patch({ breadthTrustAt: Number(e.target.value) })}
+              />
+              <small>% — 20일선 위 비율</small>
+            </label>
+            <label>
+              <span>신고가가 이 아래면</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                value={cfg.newHighTrustAt}
+                onChange={(e) => patch({ newHighTrustAt: Number(e.target.value) })}
+              />
+              <small>% — 신고가 근처 비율</small>
             </label>
             <label>
               <span>표본이 이만큼 지나면</span>

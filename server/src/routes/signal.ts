@@ -25,7 +25,7 @@ import { gradeSignalHistory, signalDays } from "../signalHistory.js";
 import { etfSeriesFor, themeSeriesFor } from "../themeSeries.js";
 import { backtestProgress, backtestResult, startBacktestJob } from "../signalBacktest.js";
 import { samplesMeta } from "../signalSamples.js";
-import { simulate, sweep } from "../signalSimulate.js";
+import { conditional, simulate, sweep } from "../signalSimulate.js";
 import { tradeValueTop } from "../signalScreen.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
@@ -433,6 +433,35 @@ export function createSignalRouter(client: KiwoomClient): Router {
         res.status(409).json({
           error: "표본이 아직 없습니다. 백테스트를 한 번 돌리면 표본이 만들어집니다.",
         });
+        return;
+      }
+      res.json({ result: r });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 조건부 성적표 — **이 신호등이 어디서 먹히고 어디서 안 먹히나.**
+   *
+   * 지금 신호등은 모든 종목·모든 장세에 같은 문턱을 쓴다. 그게 가장 큰 한계라,
+   * 「어느 기준이 최고인가」보다 「언제 이 기준을 믿나」가 더 큰 물음이다.
+   * 표본 안에서 그날 시장을 되짚으므로 **조회가 0회**다.
+   */
+  router.post("/conditional", async (req, res, next) => {
+    try {
+      const body = req.body as { config?: Partial<SignalConfig> };
+      const saved = await getConfig();
+      const cfg: SignalConfig = {
+        ...saved,
+        ...body.config,
+        axisWeights: { ...saved.axisWeights, ...(body.config?.axisWeights ?? {}) },
+        checks: body.config?.checks ?? saved.checks,
+        maLines: body.config?.maLines ?? saved.maLines,
+      };
+      const r = await conditional(cfg);
+      if (!r) {
+        res.status(409).json({ error: "표본이 아직 없습니다." });
         return;
       }
       res.json({ result: r });
