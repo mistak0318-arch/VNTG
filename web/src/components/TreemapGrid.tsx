@@ -212,19 +212,49 @@ export function TreemapGrid({
     <>
     <div className="map-tree" ref={setBoxEl}>
       {rects.map((r) => {
-        /* 넓이(%²)로 글자 크기를 정한다 — 폭만 보면 가로로 긴 타일이 과하게 커진다 */
-        const area = r.w * r.h;
-        const font = Math.max(9, Math.min(19, 8 + Math.sqrt(area) * 1.5));
+        /*
+         * 글자 크기와 표시 여부를 **실제 픽셀로** 정한다 (2026-08-31 —
+         * "모바일에서 박스안에 글자가 너무커서 하나도 안보여").
+         *
+         * ⚠️ 전엔 `r.w * r.h`(퍼센트²)로 쟀다. 퍼센트는 **해상도와 무관한 값**이라,
+         * 데스크톱의 200px 타일과 폰의 60px 타일이 같은 20%×15% 면 똑같이 19px
+         * 글자를 받았다. 상자가 4배 작아졌는데 글자만 그대로였으니 폰에서는
+         * 타일이 글자에 통째로 잡아먹혔다.
+         *
+         * 상자를 이미 재고 있으므로(`box`) 퍼센트를 픽셀로 되돌리면 된다.
+         * 아직 못 쟀으면(첫 렌더) 넉넉히 잡아 이름은 보여 준다 — 빈 상자보다는 낫다.
+         */
+        const pw = box.w > 0 ? (r.w / 100) * box.w : 999;
+        const ph = box.h > 0 ? (r.h / 100) * box.h : 999;
+        /*
+         * 짧은 변을 기준으로 — 가로로 긴 타일은 높이가 글자를 먼저 막는다.
+         * 200px 타일에 19px, 60px 에 10px 쯤 되게 골랐다.
+         */
+        const font = Math.max(8, Math.min(19, 5.5 + Math.min(pw, ph) * 0.068));
         /*
          * 꼬리가 아주 길다 — 실측에서 제일 큰 타일과 제일 작은 타일의 넓이가
          * **11,829배** 났다(반도체 516×547px vs 양자 5×5px). 시가총액 분포가
          * 원래 그렇다. 작은 타일에 글자를 넣으면 잘린 글자 조각만 남아 오히려
-         * 지저분하므로, **넓이에 따라 이름까지 지운다**(마우스를 올리면 뜬다).
+         * 지저분하므로, **들어갈 자리가 있을 때만** 적는다(마우스를 올리면 뜬다).
+         *
+         * 문턱을 넓이가 아니라 **가로·세로 각각**으로 본다. 넓이만 보면 5px × 500px
+         * 짜리 띠가 문턱을 넘어 버리는데, 거기엔 아무 글자도 안 들어간다.
          */
-        /* 상자가 커진 만큼 문턱도 같이 낮춘다 — 안 그러면 늘린 보람이 없다 */
-        const showName = area >= 1.2;
-        const showPct = area >= 12;
-        const showSub = area >= 42;
+        const showName = pw >= 34 && ph >= font + 4;
+        /*
+         * 긴 이름은 **두 줄로 접는다** — 세로로 여유가 있을 때만.
+         * 「반도체 소부장 (후공정)」이 51px 타일에서 "반도체 소…" 로 잘렸는데,
+         * 그 타일은 세로가 100px 넘게 남아 있었다. 가로가 모자라면 세로를 쓴다.
+         *
+         * 한글 한 글자는 대략 글자 크기만큼 넓다(0.95em 어림). 그것으로 한 줄에
+         * 들어가는지 재고, 안 들어가고 자리가 있으면 두 줄을 준다.
+         */
+        const nameW = r.data.name.length * font * 0.95;
+        const wrapName = showName && nameW > pw - 6 && ph >= font * 2.4 + 6;
+        const lines = wrapName ? 2 : 1;
+        /* 아래 줄들의 문턱은 이름이 몇 줄을 먹었는지에 따라 밀린다 */
+        const showPct = pw >= 38 && ph >= font * (lines + 1) + 6;
+        const showSub = pw >= 52 && ph >= font * (lines + 2) + 8;
         return (
           <button
             key={r.data.key}
@@ -242,7 +272,9 @@ export function TreemapGrid({
               sizeBy === "cap" ? "시총" : "거래대금"
             } ${money(weightOf(r.data))}`}
           >
-            {showName && <span className="map-tree-name">{r.data.name}</span>}
+            {showName && (
+              <span className={`map-tree-name${wrapName ? " wrap" : ""}`}>{r.data.name}</span>
+            )}
             {showPct && <span className="map-tree-pct num">{fmtPct(r.data.changeRate)}</span>}
             {showSub && r.data.sub && <span className="map-tree-sub">{r.data.sub}</span>}
           </button>

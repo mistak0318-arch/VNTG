@@ -11584,3 +11584,17 @@ button.tpb-row:hover { background: var(--panel-2); }
   .cis-cards { grid-template-columns: repeat(2, 1fr); }
   .cis-rules, .cis-goals-edit { grid-template-columns: 1fr; }
 }
+
+/*
+ * 긴 이름은 두 줄까지 (2026-08-31). 가로가 모자랄 때 세로 여유를 쓴다 —
+ * 「반도체 소부장 (후공정)」이 51px 타일에서 "반도체 소…" 로 잘렸는데,
+ * 그 타일은 세로가 100px 넘게 남아 있었다.
+ */
+.map-tree-name.wrap {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: keep-all;
+}
