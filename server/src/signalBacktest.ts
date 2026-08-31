@@ -1,3 +1,4 @@
+import { getSharesMap } from "./stockListCache.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { dropPhantomToday } from "./candleGuard.js";
 import { getConfig, type CheckConfig, type SignalConfig } from "./signalLight.js";
@@ -72,6 +73,14 @@ export const BACKTESTABLE = new Set([
   "foreignFlow",
   "instFlow",
   "flowStreak",
+  /*
+   * 수급 개편 (2026-09-01) — 60일·주포는 **같은 응답 안에 있어 조회가 안 는다.**
+   * 시가총액은 상장주식수(하루 캐시) × 그날 종가라 역시 안 는다.
+   */
+  "flowPersist",
+  "flowAccel",
+  "smartMoney",
+  "marketCap",
 ]);
 
 /* ------------------------------------------------------------------ */
@@ -269,6 +278,8 @@ interface FlowDay {
   date: string;
   fgn: number;
   inst: number;
+  /** 주포 — 투신 + 연기금등 + 사모펀드. 같은 응답 안에 있어 조회가 안 는다 */
+  smart: number;
 }
 
 /**
@@ -306,14 +317,35 @@ async function flowDays(client: KiwoomClient, code: string, want: number): Promi
     nextKey = more.nextKey;
   }
   return rows
-    .map((r) => ({ date: String(r.dt ?? ""), fgn: n(r.frgnr_invsr), inst: n(r.orgn) }))
+    .map((r) => ({
+      date: String(r.dt ?? ""),
+      fgn: n(r.frgnr_invsr),
+      inst: n(r.orgn),
+      /*
+       * 주포 — 투신 + 연기금등 + 사모펀드 (2026-09-01).
+       * **같은 응답 안에 있다.** 조회가 하나도 안 는다. `algoScan` 과 신호등의
+       * `smartMoney` 가 쓰는 것과 같은 세 칸이라 이름도 같게 둔다.
+       */
+      smart: n(r.invtrt) + n(r.penfnd_etc) + n(r.samo_fund),
+    }))
     .filter((r) => /^\d{8}$/.test(r.date))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 type FlowSums = Pick<
   Feat,
-  "fgn5" | "fgn10" | "fgn20" | "inst5" | "inst10" | "inst20" | "fgnStreak"
+  | "fgn5"
+  | "fgn10"
+  | "fgn20"
+  | "fgn60"
+  | "inst5"
+  | "inst10"
+  | "inst20"
+  | "inst60"
+  | "smart5"
+  | "smart20"
+  | "smart60"
+  | "fgnStreak"
 >;
 
 /**
@@ -343,9 +375,15 @@ function flowIndex(rows: FlowDay[]): Map<string, FlowSums> {
       fgn5: sum(5, (r) => r.fgn),
       fgn10: sum(10, (r) => r.fgn),
       fgn20: sum(20, (r) => r.fgn),
+      /* 60일 (2026-09-01) — 벤티지가 본다고 한 네 구간 중 마지막 */
+      fgn60: sum(60, (r) => r.fgn),
       inst5: sum(5, (r) => r.inst),
       inst10: sum(10, (r) => r.inst),
       inst20: sum(20, (r) => r.inst),
+      inst60: sum(60, (r) => r.inst),
+      smart5: sum(5, (r) => r.smart),
+      smart20: sum(20, (r) => r.smart),
+      smart60: sum(60, (r) => r.smart),
       fgnStreak: streak,
     });
   }
@@ -357,9 +395,14 @@ const NO_FLOW: FlowSums = {
   fgn5: null,
   fgn10: null,
   fgn20: null,
+  fgn60: null,
   inst5: null,
   inst10: null,
   inst20: null,
+  inst60: null,
+  smart5: null,
+  smart20: null,
+  smart60: null,
   fgnStreak: null,
 };
 
@@ -377,6 +420,11 @@ function featuresAt(
   at: number,
   themeRate: number | null,
   rateBeta: number | null,
+  /**
+   * 상장주식수 — 그날 종가와 곱해 **그날의 시총**을 낸다.
+   * `stockListCache` 가 하루 캐시로 들고 있어 조회가 안 는다. 모르면 null.
+   */
+  shares: number | null,
 ): Feat | null {
   const hist = all.slice(0, at + 1);
   if (hist.length < 65) return null; // 60일 지표를 내려면 그만큼은 있어야 한다
@@ -406,6 +454,8 @@ function featuresAt(
     ma5Gap: m5 ? Math.max(0, ((cur - m5) / m5) * 100) : null,
     over,
     volEok: (hist[hist.length - 1].vol * cur) / 100_000_000,
+    /* 상장주식수 × 그날 종가 ÷ 1억 = 억원 */
+    mktCap: shares !== null && shares > 0 ? (shares * cur) / 100_000_000 : null,
     theme: themeRate,
     rateBeta,
     ...NO_FLOW,
@@ -584,10 +634,24 @@ export async function runSignalBacktest(
    */
   const samples: Sample[] = [];
 
+  /*
+   * 상장주식수 (2026-09-01) — **조회가 안 는다.**
+   *
+   * `stockListCache` 가 하루 캐시로 전종목 상장주식수를 들고 있다(ka10099 두 번,
+   * 이미 다른 데서 부른다). 그날 종가와 곱하면 **그날의 시가총액**이 나오므로,
+   * 과거 시총을 주는 조회를 따로 부를 필요가 없었다 — 재료가 양쪽에 흩어져
+   * 있었을 뿐이다.
+   *
+   * 이게 있어야 수급 문턱을 **절대 금액 → 시총 대비 비율**로 바꿔 볼 수 있다.
+   * 지금 훑기 1위 조합의 꼭대기가 시장을 못 이기는 원인이 그 절대 금액이다.
+   */
+  const sharesMap = await getSharesMap(client).catch(() => new Map<string, number>());
+
   try {
     for (const { code, name } of opts.codes) {
       try {
         const bs = await bars(client, code);
+        const sharesOf = sharesMap.get(code) ?? null;
         /*
          * 테마 렌즈의 날짜 맞춤 — 이 종목의 캐시 종가와 일봉을 맞대 「끝에서 k번째가
          * 어느 날인가」를 정한다. 못 맞추면 이 종목의 테마 판정은 전부 null 이다.
@@ -648,7 +712,7 @@ export async function runSignalBacktest(
           all.push(f);
 
           const tr = themeRateAt(bs[i].date);
-          const feat = featuresAt(bs, i, tr, betaAt(bs, i, rateByDate));
+          const feat = featuresAt(bs, i, tr, betaAt(bs, i, rateByDate), sharesOf ?? null);
           if (!feat) continue;
           /*
            * 수급은 **날짜로 맞춘다.** 일봉 인덱스를 그대로 쓰면, 어느 한쪽에만

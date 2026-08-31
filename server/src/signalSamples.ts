@@ -75,16 +75,60 @@ export interface Feat {
    * 단위는 신호등과 **같아야 한다** — `amt_qty_tp:"1"`(금액·백만원), `unit_tp:"1000"`.
    * 다르면 저장된 문턱이 딴 값을 재게 된다.
    */
-  /** 외국인 순매수 합 — 최근 5·10·20 거래일 */
+  /** 외국인 순매수 합 — 최근 5·10·20·60 거래일 */
   fgn5: number | null;
   fgn10: number | null;
   fgn20: number | null;
+  /**
+   * 60거래일 (2026-09-01 추가).
+   *
+   * 벤티지가 「5일간 10일간 20일간 60일간」 넷을 다 본다고 했는데 60 만 없었다.
+   * **같은 응답 안에 있어 조회가 안 는다** — 안 담고 있었을 뿐이다.
+   */
+  fgn60: number | null;
   /** 기관 순매수 합 */
   inst5: number | null;
   inst10: number | null;
   inst20: number | null;
+  inst60: number | null;
+  /**
+   * **주포** — 투신 + 연기금등 + 사모펀드 (2026-09-01 추가).
+   *
+   * 「기관계」는 열두 주체의 합이라 서로 상쇄된다. 금융투자(증권사 자기매매)는
+   * 헤지·차익 물량이 섞여 방향이 아니고, 은행·보험은 잘 안 움직인다. 실제로
+   * 방향을 만드는 셋만 따로 담는다 — `algoScan` 과 신호등의 `smartMoney` 가
+   * 쓰는 것과 **같은 세 칸**이다.
+   *
+   * 이것도 같은 응답에 있어 조회가 안 는다.
+   */
+  smart5: number | null;
+  smart20: number | null;
+  smart60: number | null;
   /** 그날 기준 외국인 연속 순매수 일수 */
   fgnStreak: number | null;
+  /**
+   * **그날의 시가총액(억원)** (2026-09-01 추가).
+   *
+   * ## 왜 이게 필요한가
+   *
+   * 수급 문턱이 **절대 금액**이라 대형주 필터가 되는 문제가 계속 발목을 잡았다 —
+   * 훑기 1위 조합의 90~100점 구간이 시장을 못 이긴 이유가 그것이었다(순매수
+   * 100억을 넘기는 건 대형주뿐이고, 대형주는 20일에 덜 움직인다).
+   *
+   * 시총이 있으면 문턱을 **시총 대비 비율**로 바꿔 볼 수 있다 — 시총 1조 종목의
+   * 100억과 5,000억 종목의 100억은 다른 사건이다.
+   *
+   * ## 조회가 안 는다
+   *
+   * 상장주식수는 `stockListCache` 에 이미 있고(하루 캐시), 그날 종가는 일봉에
+   * 있다. **곱하면 그날의 시총**이다. 과거 시총을 주는 조회를 따로 부를 필요가
+   * 없었다 — 재료가 양쪽에 흩어져 있었을 뿐이다.
+   *
+   * ⚠️ 상장주식수는 **오늘 것**이다. 증자·감자·액면분할이 있었으면 그 전 구간의
+   * 시총이 어긋난다. 400거래일이면 드물지만 없지는 않다 — 정밀한 값이 아니라
+   * 「대형주냐 중소형주냐」를 가르는 자로 쓴다.
+   */
+  mktCap: number | null;
 
   /**
    * **금리 민감도(베타)** (2026-08-31 — "금리인하 기대주인지, 인상 시 방어주인지").
@@ -222,6 +266,51 @@ export function gradeOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
     }
     case "flowStreak":
       return f.fgnStreak === null ? null : grade(f.fgnStreak, c);
+
+    /* ---------------- 수급 개편 (2026-09-01) ---------------- */
+    case "flowPersist": {
+      /*
+       * 여덟 구간(외인 5·10·20·60 · 기관 5·10·20·60) 중 몇이 플러스인가.
+       * 신호등(`signalLight`)의 계산과 **같은 규칙**이어야 한다 — 못 잰 구간은
+       * 세지 않고, 절반도 못 재면 판정하지 않는다.
+       */
+      const spans = [5, 10, 20, 60].filter((n) => n <= (c.span ?? 60));
+      const byLen: Record<number, [number | null, number | null]> = {
+        5: [f.fgn5, f.inst5],
+        10: [f.fgn10, f.inst10],
+        20: [f.fgn20, f.inst20],
+        60: [f.fgn60, f.inst60],
+      };
+      const vals: (number | null)[] = [];
+      for (const n of spans) vals.push(byLen[n][0], byLen[n][1]);
+      const measured = vals.filter((v) => v !== null && Number.isFinite(v)) as number[];
+      if (measured.length < Math.max(2, spans.length)) return null;
+      return grade(measured.filter((v) => v > 0).length, c);
+    }
+    case "flowAccel": {
+      /*
+       * 짧은 쪽 ÷ 긴 쪽(일평균). 표본에는 5·10·20·60 만 있으므로 **가장 가까운
+       * 짝**으로 잰다 — span 20 이면 5÷20, span 60 이면 20÷60(=60/4 에 가장 가까움).
+       */
+      const long = c.span ?? 20;
+      const pair: [number | null, number, number | null, number] =
+        long >= 60 ? [f.fgn20, 20, f.fgn60, 60] : long >= 20 ? [f.fgn5, 5, f.fgn20, 20] : [f.fgn5, 5, f.fgn10, 10];
+      const [sv, sn, lv, ln] = pair;
+      if (sv === null || lv === null) return null;
+      const dS = sv / sn;
+      const dL = lv / ln;
+      if (dL > 0) return grade(dS / dL, c);
+      /* 긴 쪽이 순매도인데 짧은 쪽이 순매수면 전환이다 — 신호등과 같은 규칙 */
+      return dS > 0 ? grade(c.strongAt, c) : grade(0, c);
+    }
+    case "smartMoney": {
+      const long = c.span ?? 20;
+      const v = long >= 60 ? f.smart60 : long >= 20 ? f.smart20 : f.smart5;
+      return v === null ? null : grade(v, c);
+    }
+    case "marketCap":
+      return f.mktCap === null ? null : grade(f.mktCap, c);
+
     default:
       /* 표본에 없는 기준 — 재무·시가총액·ETF 뒷배. 채점에서 빠진다 */
       return null;
