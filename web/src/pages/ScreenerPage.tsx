@@ -428,6 +428,24 @@ export function ScreenerPage({
   };
 
   /*
+   * 등락률을 꺼내는 **단 하나의 자리**. 표의 칸과 위의 요약이 여기만 본다.
+   *
+   * ⚠️ 전에는 둘이 따로 꺼냈다 — 표는 `Number.isFinite(...) ? ... : null`,
+   * 요약은 `Number(r.flu_rt ?? r.jmp_rt)`. 같은 뜻으로 쓴 두 줄이었지만
+   * 다루는 값이 달라, 표엔 100줄이 다 떴는데 요약은 65 만 세는 일이 났다
+   * (2026-08-31 — "화면에는 항상 100개에 대한 등락률이 나와야지").
+   * 한 곳에서 꺼내면 그 어긋남이 **생길 수가 없다**.
+   *
+   * 실시간이 덮은 줄은 실시간 값이 먼저다. jmp_rt 는 등락률 상위 계열이 쓴다.
+   */
+  const rateOf = (r: (typeof shown)[number]): number | null => {
+    const lv = liveOf(r.code);
+    if (lv?.rate != null) return lv.rate;
+    const n = Number(r.flu_rt ?? r.jmp_rt);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  /*
    * 지금 이 쪽에 뜬 종목들의 **등락 요약** (2026-08-31 — "몇개 상승 몇개 하락
    * 상한가 하한가 이렇게. 그냥 참고용으로 알게").
    *
@@ -445,15 +463,12 @@ export function ScreenerPage({
   const tally = (() => {
     let up = 0, down = 0, flat = 0, none = 0;
     for (const r of shown) {
-      const lv = liveOf(r.code);
-      const rate = lv?.rate ?? Number(r.flu_rt ?? r.jmp_rt);
+      const rate = rateOf(r);
       /*
-       * 등락률을 못 읽은 줄은 **어느 쪽도 아니다** — 보합으로 넣으면 없는 보합이
-       * 생긴다. 대신 **셌다는 사실은 남긴다**. 조용히 빼 버렸더니 "100종목인데
-       * 합은 65" 가 됐고, 화면만 봐선 나머지 35가 어디로 갔는지 알 길이 없었다
-       * (2026-08-31 — "왜 합이 100이 안되는거야"). 표에 「-」로 뜨는 그 줄들이다.
+       * 못 읽은 줄은 **어느 쪽도 아니다** — 보합으로 넣으면 없는 보합이 생긴다.
+       * 표에도 「-」로 뜨는 그 줄이라, 화면과 요약이 같은 것을 말한다.
        */
-      if (!Number.isFinite(rate)) { none++; continue; }
+      if (rate === null) { none++; continue; }
       if (rate > 0) up++;
       else if (rate < 0) down++;
       else flat++;
@@ -886,16 +901,15 @@ export function ScreenerPage({
                   }
                 >
                   {/*
-                    앞의 숫자는 **실제로 센 개수**다 — shown.length 가 아니다
-                    (2026-08-31 — "필터 건 결과에 대한 등락률 개수를 보여주면 안되?
-                    숨긴걸 볼 필요가 없잖아").
+                    앞의 숫자는 **화면에 뜬 줄 수**다 (2026-08-31 — "화면에는 항상
+                    100개에 대한 등락률이 나와야지"). 필터를 걸어 100줄이 남았으면
+                    그 100줄을 설명해야 한다.
 
-                    ⚠️ 이 둘은 다르다. 등락률이 안 오는 종목(표에 「-」)이 있으면
-                    shown.length 는 100 인데 셋의 합은 65 가 된다. 앞에 100 을 박아
-                    두면 화면만 보고는 나머지 35 가 어디로 갔는지 알 길이 없다.
-                    센 것으로 적으면 셋이 **언제나** 그 숫자로 떨어진다.
+                    셋의 합이 여기에 떨어지는 것은 `rateOf` 하나로 표의 칸과 요약이
+                    같은 값을 보기 때문이다. 표에 숫자가 뜬 줄은 반드시 셋 중 하나로
+                    세어진다 — 표엔 뜨는데 요약은 안 세는 일이 구조적으로 없다.
                   */}
-                  <span className="scr-tally-n">{tally.up + tally.down + tally.flat}종목</span>
+                  <span className="scr-tally-n">{shown.length}종목</span>
                   <span>
                     상승 <b className="positive">{tally.up}</b>
                   </span>
@@ -1153,8 +1167,7 @@ export function ScreenerPage({
                           }
                           if (c.key === "flu_rt") {
                             const lv = liveOf(r.code);
-                            const rate =
-                              lv?.rate ?? (Number.isFinite(Number(r.flu_rt)) ? Number(r.flu_rt) : null);
+                            const rate = rateOf(r); /* 요약과 **같은 자리**에서 꺼낸다 */
                             const rc = rate === null ? "" : rate > 0 ? "positive" : rate < 0 ? "negative" : "";
                             return (
                               <td key={c.key} className={`num scr-rate ${rc}`}>
