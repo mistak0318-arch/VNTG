@@ -27,6 +27,14 @@ import { backtestProgress, backtestResult, startBacktestJob } from "../signalBac
 import { samplesMeta } from "../signalSamples.js";
 import { listTrackJob, listTrackSummary, runListTrack } from "../listTrack.js";
 import { conditional, simulate, superSim, sweep } from "../signalSimulate.js";
+import {
+  getCondJob,
+  listPresets,
+  removePreset,
+  savePreset,
+  startCondSearch,
+  type CondQuery,
+} from "../condSearch.js";
 import { tradeValueTop } from "../signalScreen.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
@@ -175,6 +183,76 @@ export function createSignalRouter(client: KiwoomClient): Router {
   /** 지금 돌고 있는 찾기 — 전역 작업 띠와 화면 복귀가 본다 */
   router.get("/screen/active", (_req, res) => {
     res.json({ jobs: activeScreenJobs() });
+  });
+
+  /*
+   * 조건 검색 (2026-09-01) — 증권사 조건검색식처럼 신호등 기준을 통과/미달로 쓴다.
+   *
+   * 신호등이 **점수**라면 이건 **이분법**이다. 점수는 한두 기준이 나빠도 나머지가
+   * 좋으면 걸리는데, 그래서 「정배열인 것만」을 못 고른다 — 점수 안에 묻힌다.
+   */
+  router.post("/cond/start", async (req, res, next) => {
+    try {
+      const b = req.body as Partial<CondQuery>;
+      const groups = Array.isArray(b.groups) ? b.groups : [];
+      if (groups.length === 0 || groups.every((g) => (g.conds ?? []).length === 0)) {
+        res.status(400).json({ error: "조건을 하나 이상 넣어야 합니다" });
+        return;
+      }
+      const id = startCondSearch(client, {
+        universe: String(b.universe ?? "trade-value"),
+        market: ["000", "001", "101"].includes(String(b.market)) ? String(b.market) : "000",
+        limit: Math.min(Math.max(Number(b.limit) || 200, 20), 500),
+        capMin: typeof b.capMin === "number" ? b.capMin : null,
+        capMax: typeof b.capMax === "number" ? b.capMax : null,
+        groups,
+      });
+      res.json({ jobId: id });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * ⚠️ **`/cond/:id` 보다 먼저 둔다.** 뒤에 두면 "presets" 를 작업 id 로 먹어
+   * 404 가 난다 — express 는 먼저 걸리는 쪽을 쓴다.
+   */
+  router.get("/cond/presets", async (_req, res, next) => {
+    try {
+      res.json({ presets: await listPresets() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/cond/presets", async (req, res, next) => {
+    try {
+      const b = req.body as { name?: string; query?: CondQuery };
+      if (!b?.name || !b?.query) {
+        res.status(400).json({ error: "이름과 조건식이 필요합니다" });
+        return;
+      }
+      res.json({ presets: await savePreset(b.name, b.query) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.delete("/cond/presets/:id", async (req, res, next) => {
+    try {
+      res.json({ presets: await removePreset(req.params.id) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/cond/:id", (req, res) => {
+    const job = getCondJob(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "없는 작업입니다" });
+      return;
+    }
+    res.json(job);
   });
 
   router.post("/screen/start", (req, res, next) => {

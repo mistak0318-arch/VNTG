@@ -13214,3 +13214,60 @@ thead .sd-emph {
   border-color: color-mix(in srgb, var(--negative, #e05260) 40%, transparent);
   color: var(--negative, #e05260);
 }
+
+/* ── 조건 검색 (2026-09-01) — 증권사 조건검색식처럼 ──────────────────
+   신호등이 점수라면 이건 이분법이다. 칩 하나가 세 상태를 갖는다:
+   ☐ 안 씀 · ☑ 통과해야 함 · ✕ 미달이어야 함. 세 번 누르면 원래대로. */
+.cond-chip.pass {
+  border-color: color-mix(in srgb, var(--positive, #4ade80) 55%, transparent);
+  color: var(--positive, #4ade80);
+}
+.cond-chip.fail {
+  border-color: color-mix(in srgb, var(--negative, #e05260) 55%, transparent);
+  color: var(--negative, #e05260);
+}
+.cond-not { font-style: normal; font-size: 0.72rem; opacity: 0.8; }
+/* 이 조건이 종목당 조회를 몇 번 더 부르나 — 누르기 전에 보여야 한다 */
+.cond-cost {
+  margin-left: 4px;
+  font-style: normal;
+  font-size: 0.68rem;
+  color: var(--warn, #d9a441);
+}
+.cond-group-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.cond-cap input { width: 6.5rem; }
+.cond-name { flex: 0 1 16rem; }
+.cond-run { align-items: center; }
+.cond-presets { align-items: center; }
+.cond-preset { display: inline-flex; align-items: center; gap: 2px; }
+/* 마지막으로 돌렸을 때 몇 개 걸렸나 — 「요즘 아무것도 안 나오는 식」이 보인다 */
+.cond-hits {
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  font-style: normal;
+  font-size: 0.7rem;
+}
+.cond-x {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 2px 4px;
+}
+.cond-x:hover { color: var(--negative, #e05260); }
+.cond-result-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}

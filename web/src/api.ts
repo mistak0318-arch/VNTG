@@ -1450,6 +1450,17 @@ export const api = {
     getJson<{ config: SignalConfig; defaults: SignalConfig }>("/api/signal/config"),
   signalConfigSave: (config: SignalConfig) =>
     putJson<{ config: SignalConfig }>("/api/signal/config", config),
+
+  /* ── 조건 검색 (2026-09-01) — 증권사 조건검색식처럼 ────────────────
+     신호등이 **점수**라면 이건 **이분법**이다. 점수는 한두 기준이 나빠도 나머지가
+     좋으면 걸리는데, 그래서 「정배열인 것만」을 못 고른다 — 점수 안에 묻힌다. */
+  condStart: (query: CondQuery) => postJson<{ jobId: string }>("/api/signal/cond/start", query),
+  condJob: (id: string) => getJson<CondJob>(`/api/signal/cond/${id}`),
+  condPresets: () => getJson<{ presets: CondPreset[] }>("/api/signal/cond/presets"),
+  condPresetSave: (name: string, query: CondQuery) =>
+    postJson<{ presets: CondPreset[] }>("/api/signal/cond/presets", { name, query }),
+  condPresetRemove: (id: string) =>
+    deleteJson<{ presets: CondPreset[] }>(`/api/signal/cond/presets/${id}`),
   /**
    * 신호등 백테스트 — 기준을 바꿔 과거를 다시 매긴다. **저장하지 않는다.**
    * 일봉으로 되살릴 수 있는 기준만 쓴다(테마·ETF·수급·재무는 그때의 구성을 모른다).
@@ -2902,6 +2913,64 @@ export interface SignalResult {
    */
   regime?: { kind: "bull" | "bear"; label: string; breadth: number; skipped: string[] };
   evaluatedAt: string;
+}
+
+/* ── 조건 검색 ──────────────────────────────────────────────────── */
+
+/** 조건 하나 — 어느 기준을 통과(또는 미달)해야 하나 */
+export interface Cond {
+  key: string;
+  /** true = 통과해야 함, false = 미달이어야 함 */
+  want: boolean;
+}
+
+/** 그룹 안은 AND 이거나 OR — **그룹끼리는 늘 AND** 다 */
+export interface CondGroup {
+  join: "and" | "or";
+  conds: Cond[];
+}
+
+export interface CondQuery {
+  universe: string;
+  market: string;
+  limit: number;
+  /** 시가총액(억원) — 조회 0회로 미리 거른다 */
+  capMin?: number | null;
+  capMax?: number | null;
+  groups: CondGroup[];
+}
+
+export interface CondHit {
+  code: string;
+  name: string;
+  price: number;
+  changeRate: number;
+  tradeValue: number;
+  marketCap: number | null;
+  /** 어느 조건에 걸렸나 — 「왜 나왔는지」를 화면이 말할 수 있게 */
+  matched: string[];
+  stale?: boolean;
+}
+
+export interface CondJob {
+  status: "running" | "done" | "error";
+  total: number;
+  done: number;
+  /** 사전 필터(시장·시총) 뒤 남은 수 — 「500 중 80을 봤다」 */
+  prefiltered: number;
+  results: CondHit[];
+  query: CondQuery;
+  startedAt: string;
+  error?: string;
+}
+
+export interface CondPreset {
+  id: string;
+  name: string;
+  query: CondQuery;
+  savedAt: string;
+  lastRunAt?: string;
+  lastHits?: number;
 }
 
 export interface SignalCheckConfig {

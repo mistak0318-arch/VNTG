@@ -39,6 +39,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { SameNetTradeRankingPage } from "./pages/SameNetTradeRankingPage";
 import { StockAnalysisPage } from "./pages/StockAnalysisPage";
 import { StockDetail } from "./components/StockDetail";
+import { CondSearchPage } from "./pages/CondSearchPage";
 import { StockDiscoveryPage } from "./pages/StockDiscoveryPage";
 import { VolumeRankingPage } from "./pages/VolumeRankingPage";
 import { BriefingPage } from "./pages/BriefingPage";
@@ -76,6 +77,7 @@ type Tab =
   | "marketFlow"
   | "customTheme"
   | "signalScreen"
+  | "condSearch"
   | "superSignal"
   | "listTrack"
   | "journal"
@@ -145,6 +147,14 @@ const MENU: {
       // 다른 창에서 고른 종목을 따라 그리는 자리 — 모니터를 여러 대 쓸 때
       { key: "board", label: "보드 (창 연동)", icon: "🖥️" },
       { key: "screener", label: "시세분석", icon: "🔬" },
+      /*
+       * 조건 검색 (2026-09-01) — 증권사 조건검색식처럼 신호등 기준을 통과/미달로 쓴다.
+       *
+       * **시세분석 옆에 둔다** (벤티지: "조건 검색은 마이페이지 말고 종목 분석에").
+       * 둘 다 **목록을 좁혀 후보를 만드는 자리**다 — 시세분석은 순위로 좁히고
+       * 이건 조건으로 좁힌다. 마이페이지는 「내가 담아 둔 것」을 보는 자리라 성격이 다르다.
+       */
+      { key: "condSearch", label: "조건 검색", icon: "🧾" },
       { key: "volume", label: "거래상위", icon: "🔥" },
       { key: "sameNet", label: "동일순매매순위", icon: "🤝" },
       { key: "continuous", label: "연속매매현황", icon: "📈" },
@@ -604,6 +614,7 @@ export default function App() {
       case "watchKiwoom": return <KiwoomWatchlistPage onSelectStock={onSelectStock} />;
       case "customTheme": return <CustomThemePage onSelectStock={onSelectStock} />;
       case "signalScreen": return <ScreenPage onSelectStock={onSelectStock} />;
+      case "condSearch": return <CondSearchPage onSelectStock={onSelectStock} />;
       case "superSignal": return <SuperDashboardPage onSelectStock={onSelectStock} />;
       case "listTrack": return <ListTrackPage onSelectStock={onSelectStock} />;
       case "cis": return <CisPage onSelectStock={onSelectStock} />;

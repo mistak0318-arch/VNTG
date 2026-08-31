@@ -1728,12 +1728,25 @@ function overheadPct(rows: Record<string, unknown>[]): number | null {
 export async function evaluateSignal(
   client: KiwoomClient,
   code: string,
-  force = false,
+  /**
+   * `true` 면 캐시를 무시하고 다시 잰다(예전 시그니처 그대로).
+   *
+   * **설정을 넘기면 그 설정으로 잰다** (2026-09-01, 조건 검색용). 조건식이
+   * 쓰는 기준만 켠 설정을 주면 신호등이 필요한 것만 조회하므로 **조회가 줄어든다** —
+   * 「정배열」만 물으면 일봉 하나면 되고, 「영업이익」을 안 물으면 DART 를 안 부른다.
+   *
+   * ⚠️ 설정을 넘기면 **캐시를 안 탄다.** 캐시 열쇠가 종목코드뿐이라, 다른 설정으로
+   * 잰 결과가 섞이면 화면과 조건 검색이 서로의 값을 덮어쓴다.
+   */
+  opts: boolean | { force?: boolean; config?: SignalConfig } = false,
 ): Promise<SignalResult> {
-  const hit = evalCache.get(code);
-  if (!force && hit && Date.now() - hit.at < EVAL_TTL_MS) return hit.data;
+  const force = typeof opts === "boolean" ? opts : Boolean(opts.force);
+  const override = typeof opts === "boolean" ? undefined : opts.config;
 
-  const cfg = await getConfig();
+  const hit = evalCache.get(code);
+  if (!override && !force && hit && Date.now() - hit.at < EVAL_TTL_MS) return hit.data;
+
+  const cfg = override ?? (await getConfig());
 
   /*
    * ## 장세에 따라 기준을 갈아 끼운다 (2026-09-01)
@@ -2599,7 +2612,8 @@ export async function evaluateSignal(
       : undefined,
     evaluatedAt: new Date().toISOString(),
   };
-  evalCache.set(code, { data: result, at: Date.now() });
+  /* 다른 설정으로 잰 것은 캐시에 안 넣는다 — 화면이 그 값을 자기 것으로 읽는다 */
+  if (!override) evalCache.set(code, { data: result, at: Date.now() });
   return result;
 }
 
