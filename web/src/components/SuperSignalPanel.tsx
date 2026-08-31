@@ -91,6 +91,9 @@ export function SuperSignalPanel({
   const [minLists, setMinLists] = useState(3);
   /* 무지개 문턱 — 며칠째 계속 걸리면 🌈 인가. 서버가 현재값을 준다 */
   const [rainbowDays, setRainbowDays] = useState(3);
+  /* 모집단·평가 상한 — 결과를 바꾸는 값인데 코드에 박혀 있었다 (2026-08-31) */
+  const [universeSize, setUniverseSize] = useState(300);
+  const [maxEval, setMaxEval] = useState(40);
   const [savingCfg, setSavingCfg] = useState(false);
   const marks = useSuperMarks();
   const [universes, setUniverses] = useState<Universe[]>([]);
@@ -109,12 +112,19 @@ export function SuperSignalPanel({
    * ⚠️ **이미 쌓인 기록의 뜻이 달라진다** — 옛 편입은 옛 문턱으로 걸린 것이다.
    * 바꾼 뒤 목록을 다시 받아 무지개 표식이 곧바로 따라오게 한다.
    */
-  const saveCfg = async (patch: { minLists?: number; rainbowDays?: number }) => {
+  const saveCfg = async (patch: {
+    minLists?: number;
+    rainbowDays?: number;
+    universeSize?: number;
+    maxEval?: number;
+  }) => {
     setSavingCfg(true);
     try {
       const r = await api.signalSuperConfig(patch);
       setMinLists(r.config.minLists);
       setRainbowDays(r.config.rainbowDays);
+      setUniverseSize(r.config.universeSize);
+      setMaxEval(r.config.maxEval);
       load();
       /* 표식은 앱 전체가 나눠 보므로 그쪽도 다시 받게 한다 */
       marks.reload();
@@ -129,10 +139,12 @@ export function SuperSignalPanel({
       .then((r) => {
         setRows(r.entries);
         setGrade((r as { grade?: GradeRow[] }).grade ?? []);
-        const cfg = (r as { config?: { minLists: number; rainbowDays: number } }).config;
+        const cfg = (r as { config?: { minLists: number; rainbowDays: number; universeSize: number; maxEval: number } }).config;
         if (cfg) {
           setMinLists(cfg.minLists);
           setRainbowDays(cfg.rainbowDays);
+          setUniverseSize(cfg.universeSize);
+          setMaxEval(cfg.maxEval);
         }
         setLastRun(r.lastRunDate);
         setMinLists(r.minLists);
@@ -270,6 +282,38 @@ export function SuperSignalPanel({
               ))}
             </select>
           </label>
+          {/* 모집단 — 이게 슈퍼신호등이 볼 수 있는 세계의 크기다 */}
+          <label title="목록마다 몇 종목까지 받을지 — 이 밖의 종목은 아무리 좋아도 후보가 될 수 없습니다">
+            모집단
+            <select
+              className="ma-input short"
+              value={universeSize}
+              disabled={savingCfg}
+              onChange={(e) => void saveCfg({ universeSize: Number(e.target.value) })}
+            >
+              {[100, 200, 300, 500].map((n) => (
+                <option key={n} value={n}>
+                  각 {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* 평가 상한 — 여기가 제일 무겁다(종목당 여러 TR) */}
+          <label title="교집합 통과분 중 몇 개까지 신호등을 잴지 — 여기가 제일 무겁습니다">
+            평가
+            <select
+              className="ma-input short"
+              value={maxEval}
+              disabled={savingCfg}
+              onChange={(e) => void saveCfg({ maxEval: Number(e.target.value) })}
+            >
+              {[20, 40, 60, 80, 120].map((n) => (
+                <option key={n} value={n}>
+                  {n}개
+                </option>
+              ))}
+            </select>
+          </label>
         </span>
         {(rows ?? []).some((r) => r.active === false) && !showExited && (
           <span className="breadth-count">
@@ -288,6 +332,21 @@ export function SuperSignalPanel({
             </span>
             <span className="pub-spinner" aria-hidden="true" />
           </div>
+        </div>
+      )}
+
+      {/*
+        **문턱과 상한이 충돌하는 경우를 말한다** (2026-08-31).
+
+        교집합 문턱을 낮추면 통과분이 크게 는다. 그런데 평가 상한이 그대로면
+        낮춘 만큼 더 보려던 것이 **조용히 잘린다** — 화면 어디에도 그 사실이
+        안 나오면 「왜 안 늘지」가 된다.
+      */}
+      {minLists <= 2 && maxEval <= 40 && (
+        <div className="page-note ss-conflict">
+          교집합을 <b>{minLists}곳</b>으로 낮췄는데 평가 상한이 <b>{maxEval}개</b>입니다.
+          통과분이 그보다 많으면 <b>넘치는 만큼은 신호등을 재지도 않고 버려집니다</b> —
+          낮춘 보람이 없어집니다. 평가 상한도 같이 올리세요.
         </div>
       )}
 

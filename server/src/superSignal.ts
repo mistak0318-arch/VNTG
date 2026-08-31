@@ -207,9 +207,36 @@ export interface SuperConfig {
    * 열에 넷이 달고 있으면 눈에 안 띈다. 그래서 기본은 사흘이다.
    */
   rainbowDays: number;
+  /**
+   * **목록마다 몇 종목까지 받을까** (2026-08-31).
+   *
+   * 이게 슈퍼신호등의 **모집단**이다. 300 이면 거래대금 301위는 아무리 좋아도
+   * 후보가 될 수 없다 — 신호등 찾기에서 500 으로 놓고 찾으면 나오는 종목이
+   * 슈퍼에는 영영 안 들어온다. 그 경계를 사람이 정할 수 있어야 한다.
+   *
+   * ⚠️ 늘리면 스캔이 길어진다. 일곱 목록을 차례로 받고 사이에 400ms 를 쉬므로
+   * (초당 5회 제한) 500 이면 목록마다 연속조회가 한두 쪽 더 붙는다.
+   */
+  universeSize: number;
+  /**
+   * **교집합 통과분 중 몇 개까지 신호등을 잴까.**
+   *
+   * ⚠️ **교집합 문턱과 직접 충돌하는 값이다.** 문턱을 2곳으로 낮추면 통과분이
+   * 크게 늘어나는데, 이 상한이 그대로면 **낮춘 만큼 더 보려던 것이 오히려
+   * 조용히 잘린다.** 둘을 같이 조절해야 뜻이 맞는다 — 화면이 그때 경고한다.
+   *
+   * 여기가 제일 무겁다: 종목당 여러 TR 이고 사이에 220ms 를 쉰다.
+   * 40 → 80 이면 이 구간이 두 배가 된다.
+   */
+  maxEval: number;
 }
 
-export const DEFAULT_SUPER_CONFIG: SuperConfig = { minLists: 3, rainbowDays: 3 };
+export const DEFAULT_SUPER_CONFIG: SuperConfig = {
+  minLists: 3,
+  rainbowDays: 3,
+  universeSize: 300,
+  maxEval: 40,
+};
 
 interface Store {
   entries: SuperEntry[];
@@ -239,6 +266,10 @@ export async function saveSuperConfig(input: Partial<SuperConfig>): Promise<Supe
     minLists: num(input.minLists, 2, 6, cur.minLists),
     /* 1 이면 편입 즉시 무지개라 등급이 아니게 된다 */
     rainbowDays: num(input.rainbowDays, 2, 10, cur.rainbowDays),
+    /* 100 미만이면 교집합이 거의 안 생기고, 500 이 키움 순위 조회의 실질 천장이다 */
+    universeSize: num(input.universeSize, 100, 500, cur.universeSize),
+    /* 10 미만이면 볼 게 없고, 120 이면 신호등 평가만 몇 분이 된다 */
+    maxEval: num(input.maxEval, 10, 120, cur.maxEval),
   };
   await save(store);
   return store.config;
@@ -721,6 +752,8 @@ export function superJob(): SuperJob {
  */
 export async function runSuperSignal(client: KiwoomClient, force = false): Promise<Store> {
   const store = await load();
+  /* 이번 회차가 쓸 설정 — 도는 도중에 바뀌어도 한 회차는 같은 값으로 끝나게 한다 */
+  const runCfg = cfgOf(store);
   const today = todayStr();
   if (!force && store.lastRunDate === today) return store;
   if (job.status === "running") return store;
@@ -735,7 +768,9 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
     const byCode = new Map<string, { c: Candidate; lists: string[] }>();
     for (const u of SCREEN_UNIVERSES) {
       job.step = `${u.label} 받는 중`;
-      const rows = await fetchUniverse(client, u.key, "000", 300).catch(() => [] as Candidate[]);
+      const rows = await fetchUniverse(client, u.key, "000", runCfg.universeSize).catch(
+        () => [] as Candidate[],
+      );
       for (const c of rows) {
         const hit = byCode.get(c.code);
         if (hit) {
@@ -764,8 +799,7 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
      * 성적표가 그 기록 위에 세워지기 때문이다.
      */
     const tracked = new Set(store.entries.filter((e) => e.active !== false).map((e) => e.code));
-    const minLists = cfgOf(store).minLists;
-    const qualified = [...byCode.values()].filter((x) => x.lists.length >= minLists);
+    const qualified = [...byCode.values()].filter((x) => x.lists.length >= runCfg.minLists);
     const inter = [
       ...qualified.filter((x) => tracked.has(x.c.code)),
       ...qualified.filter((x) => !tracked.has(x.c.code)),
@@ -777,7 +811,7 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
         if (at !== bt) return bt - at;
         return b.lists.length - a.lists.length;
       })
-      .slice(0, MAX_EVAL);
+      .slice(0, runCfg.maxEval);
 
     job.step = "신호등 평가 중";
     job.total = inter.length;

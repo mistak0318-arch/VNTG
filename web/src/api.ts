@@ -1017,7 +1017,7 @@ export const api = {
       lastRunDate: string | null;
       minLists: number;
       /** 지금 쓰이는 문턱 — 화면이 조절 칸의 현재값으로 쓴다 */
-      config?: { minLists: number; rainbowDays: number };
+      config?: { minLists: number; rainbowDays: number; universeSize: number; maxEval: number };
       grade: SuperGradeRow[];
       stats: SuperStats;
     }>("/api/signal/super"),
@@ -1025,8 +1025,15 @@ export const api = {
    * 슈퍼신호등 문턱 — 교집합 몇 곳, 무지개 며칠.
    * ⚠️ 바꾸면 **이미 쌓인 기록의 뜻이 달라진다** — 옛 편입은 옛 문턱으로 걸린 것이다.
    */
-  signalSuperConfig: (c: { minLists?: number; rainbowDays?: number }) =>
-    putJson<{ config: { minLists: number; rainbowDays: number } }>("/api/signal/super/config", c),
+  signalSuperConfig: (c: {
+    minLists?: number;
+    rainbowDays?: number;
+    universeSize?: number;
+    maxEval?: number;
+  }) =>
+    putJson<{
+      config: { minLists: number; rainbowDays: number; universeSize: number; maxEval: number };
+    }>("/api/signal/super/config", c),
   /** 대시보드 상세 — 주가·지수·수급 흐름. 클릭했을 때만 */
   signalSuperDetail: (code: string) => getJson<SuperDetail>(`/api/signal/super/detail/${code}`),
   /**
