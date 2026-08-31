@@ -335,7 +335,7 @@ export function StockTabsSection({
         {tab === "sector" && <SectorMoodPanel code={code} onSelectStock={onSelectStock} />}
         {tab === "etfHolders" && <EtfHoldersPanel code={code} name={name} onSelectStock={onSelectStock} />}
         {tab === "feed" && <NewsDisclosurePanel code={code} name={name} />}
-        {tab === "finance" && <CompanyPanel code={code} info={info} returns={returns} />}
+        {tab === "finance" && <CompanyPanel code={code} name={name} info={info} returns={returns} />}
         {tab === "etf" && <EtfPanel code={code} onSelectStock={onSelectStock} />}
         {tab === "raw" && <RawJson data={{ info, investorChart, daily }} />}
       </div>

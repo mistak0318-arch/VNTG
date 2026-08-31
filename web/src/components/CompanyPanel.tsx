@@ -1,4 +1,5 @@
 import { fmtNum, pick, type RawRecord } from "../api";
+import { CompanyAbout } from "./CompanyAbout";
 import { CompanySnapshot, type PeriodReturns } from "./CompanySnapshot";
 import { FinancePanel } from "./FinancePanel";
 
@@ -52,16 +53,27 @@ function KeyChips({ info }: { info: RawRecord }) {
 
 export function CompanyPanel({
   code,
+  name = "",
   info = null,
   returns = null,
 }: {
   code: string;
+  /** AI 엮기에 필요하다 — 뉴스를 종목명으로 찾는다. 없으면 그 버튼만 빠진다 */
+  name?: string;
   /** ka10001 — 부르는 쪽이 이미 들고 있는 것. 없으면 칩·전체 지표만 빠진다 */
   info?: RawRecord | null;
   returns?: PeriodReturns | null;
 }) {
+  /* 목표주가 상승여력을 재는 데 쓴다. 이미 들고 있는 값이라 조회가 안 는다 */
+  const cur = Math.abs(Number(String(pick(info ?? {}, ["cur_prc"]) ?? "").replace(/[+,]/g, "")));
+
   return (
     <div>
+      {/*
+        「무슨 회사인가」가 맨 위다 (2026-09-01). 재무를 보기 전에 **뭐 하는 회사인지**가
+        먼저 와야 한다 — 영업이익이 좋아진다는 말도 무슨 사업인지 모르면 안 읽힌다.
+      */}
+      {name && <CompanyAbout code={code} name={name} price={cur > 0 ? cur : null} />}
       <FinancePanel code={code} afterVerdict={info ? <KeyChips info={info} /> : undefined} />
       {info && (
         <details className="fold-note">

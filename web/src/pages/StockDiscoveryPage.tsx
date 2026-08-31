@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { removePref, setPref } from "../prefs";
 import {
   api,
   fmtNum,
@@ -11,18 +10,11 @@ import {
   type SignalResult,
   type StockSearchResult,
 } from "../api";
-import { ChartPanel } from "../components/ChartPanel";
-import { FinancePanel } from "../components/FinancePanel";
-import { InvestorTrendTable } from "../components/InvestorTrendTable";
-import { OpinionPanel } from "../components/OpinionPanel";
+import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
 import { PriceHeader } from "../components/PriceHeader";
-import { SectorMoodPanel } from "../components/SectorMoodPanel";
-import { SignalPanel, useSignals, SignalDot } from "../components/SignalLight";
-import { OrderBookPanel } from "../components/OrderBookPanel";
-import { BrokerFlowPanel } from "../components/BrokerFlowPanel";
-import { StockNotes } from "../components/StockNotes";
-import { SupplyDetailPanel } from "../components/SupplyDetailPanel";
-import { TradeSizePanel } from "../components/TradeSizePanel";
+import { useSignals, SignalDot } from "../components/SignalLight";
+import { StockSummaryPanel } from "../components/StockSummaryPanel";
+import { StockTabsSection } from "../components/StockTabsSection";
 import { useLive } from "../useLive";
 import { useStockFocus } from "../useStockFocus";
 import { WatchStar } from "../useWatchedCodes";
@@ -30,24 +22,35 @@ import { SuperMark } from "../useSuperMarks";
 import { WatchButton } from "../components/WatchButton";
 
 /**
- * 종목발굴.
+ * 종목발굴 — **넘기기 바 + 개별종목분석.**
  *
- * 키움 HTS 에서 창을 열두 개 띄워 놓고 한 종목을 훑던 걸 한 화면으로 옮긴 자리다.
- * 「개별종목분석」과 다른 점은 **탭이 없다**는 것 — 거기는 한 번에 하나씩 보지만
- * 여기는 펼쳐 놓고 위에서 아래로 훑는다.
+ * 이 화면의 중심은 종목 하나가 아니라 **넘기기**다. 검색해서 들어오는 게 아니라
+ * 거래대금 상위 100 을 ← → 로 넘겨 가며 고른다. 그래서 넘기는 바를 화면에
+ * 붙박아 두고(`.sd-nav` 가 sticky) 방향키까지 받는다.
  *
- * 그리고 이 화면의 중심은 종목 하나가 아니라 **넘기기**다.
- * 검색해서 들어오는 게 아니라 거래대금 상위 100 을 ← → 로 넘겨 가며 고른다.
- * 그래서 넘기는 바를 화면에 붙박아 두고 방향키까지 받는다.
+ * ## 아래는 개별종목분석과 같은 것이다 (2026-09-01)
+ *
+ * 벤티지: "종목발굴에서 종목 옮겨가면 그 밑에 개별종목분석 내용 나오게 해달라고
+ * 한거잖아."
+ *
+ * 예전엔 열두 블록을 격자로 깔았다. 그런데 그 블록들은 개별종목분석 탭과 **같은
+ * 컴포넌트를 두 번째로 배치한 것**이었다 — 한쪽에 기능이 붙으면 다른 쪽은 낡아 갔고,
+ * 같은 종목을 두 모양으로 보게 됐다. `StockTabsSection` 을 만들며 상세 시트와
+ * 분석 화면을 합쳤던 것과 정확히 같은 문제다.
+ *
+ * 그래서 여기도 그 모듈을 쓴다. 새 탭은 그 한 곳에만 넣으면 **세 화면에 같이 생긴다.**
+ *
+ * ## ⚠️ 상세 시트를 안 띄운다
+ *
+ * 이 화면에서 종목을 고르는 길(`goStock`)은 **모달을 부르지 않는다.** 이미 상세를
+ * 펼쳐 놓은 자리라 시트가 그 위를 덮으면 훑기를 막는다 — 원래 요청이 그것이었다.
+ * 창 연동만 따로 보내고, 목록 밖 종목은 목록 맨 앞에 끼워 넣어 넘기기를 살린다.
+ * (App 의 `StockDetail` 렌더가 `tab !== "discovery"` 로 이 화면을 뺀다.)
  *
  * ## 부하
  *
- * 한 종목을 다 펼치면 API 가 열 번 넘게 나간다. 넘기면서 보는 도구라 그게 곧 부하다.
- * 세 가지로 막는다 —
- *   1. **화면에 들어온 블록만 부른다** (`LazyBlock`). 모바일에서는 처음에 두어 개만 뜬다.
- *   2. **간단히 보기**가 기본이다. 네 블록만 켜고 시작한다.
- *   3. 블록별로 끌 수 있고 그 선택을 기억한다.
- * 목록의 신호등도 기본은 꺼 둔다 — 백 종목을 평가하면 서버가 한참 걸린다.
+ * 탭은 **고른 하나만** 그리므로 종목당 조회가 격자 시절보다 오히려 줄었다.
+ * 목록의 신호등은 기본으로 꺼 둔다 — 백 종목을 평가하면 서버가 한참 걸린다.
  */
 
 /* ------------------------------------------------------------------ */
@@ -82,117 +85,18 @@ const MARKETS: { key: string; label: string }[] = [
 /** ka10030 응답의 목록 키 — 거래상위 화면과 같은 것을 쓴다 */
 const VOLUME_LIST_KEYS = ["tdy_trde_qty_upper"];
 
-/* ------------------------------------------------------------------ */
-/* 블록                                                                */
-/* ------------------------------------------------------------------ */
-
-type BlockKey =
-  | "chart"
-  | "signal"
-  | "opinion"
-  | "investor"
-  | "supply"
-  | "tradeSize"
-  | "finance"
-  | "sector"
-  | "quote"
-  | "broker"
-  | "notes";
-
-const BLOCKS: {
-  key: BlockKey;
-  label: string;
-  /** 격자 전체 폭을 차지한다 — 표가 넓거나 차트라서 좁으면 못 읽는 것들 */
-  wide?: boolean;
-  /** 간단히 보기에 들어가는 넷 */
-  basic?: boolean;
-}[] = [
-  // 신호등이 맨 위다. 차트보다 먼저 본다 — 볼 만한 종목인지부터 갈라야
-  // 나머지를 들여다볼지 정할 수 있다. 넘기며 훑을 때 이 순서가 특히 중요하다
-  { key: "signal", label: "신호등", wide: true, basic: true },
-  { key: "chart", label: "차트", wide: true, basic: true },
-  { key: "opinion", label: "목표주가·투자의견", basic: true },
-  // 기간 상승률은 블록으로 두지 않는다 — PriceHeader 가 이미 들고 있어 두 번 나온다
-  { key: "investor", label: "투자자별 매매동향", wide: true, basic: true },
-  { key: "supply", label: "공매도·대차잔고" },
-  { key: "tradeSize", label: "체결금액대별 매매비중" },
-  { key: "finance", label: "재무" },
-  { key: "sector", label: "업종·테마" },
-  { key: "quote", label: "호가" },
-  { key: "broker", label: "거래원" },
-  { key: "notes", label: "메모", wide: true },
-];
-
-const BASIC_KEYS = BLOCKS.filter((b) => b.basic).map((b) => b.key);
-const PREF_KEY = "vntg.discovery.blocks";
-
-function loadBlockPref(): BlockKey[] {
-  try {
-    const raw = localStorage.getItem(PREF_KEY);
-    if (!raw) return BASIC_KEYS;
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return BASIC_KEYS;
-    // 블록 이름이 바뀌었을 수 있으니 지금 있는 것만 남긴다
-    const valid = parsed.filter((k): k is BlockKey => BLOCKS.some((b) => b.key === k));
-    return valid.length > 0 ? valid : BASIC_KEYS;
-  } catch {
-    return BASIC_KEYS;
-  }
-}
-
-/** 화면에 닿기 이만큼 전에 미리 부른다 — 스크롤이 멈추고 나서 뜨면 늦다 */
-const PRELOAD_PX = 300;
-
-/**
- * 화면에 들어올 때까지 자식을 만들지 않는다.
+/*
+ * 블록 격자는 없앴다 (2026-09-01).
  *
- * 블록마다 자기 API 를 부르므로 **마운트 자체가 호출**이다. 한 번 보이면 계속 둔다 —
- * 스크롤을 올렸다 내렸다 할 때마다 다시 부르면 그게 더 나쁘다.
+ * 열두 블록을 격자로 깔아 놓았었는데, 그 블록들은 개별종목분석 탭과 **같은
+ * 컴포넌트를 두 번째로 배치한 것**이었다. 한쪽에 기능이 붙으면 다른 쪽은 낡아 갔고,
+ * 같은 종목을 두 모양으로 보게 됐다.
  *
- * IntersectionObserver 를 쓰지 않는다. 그게 정석이지만 **콜백이 안 오는 환경이 있다** —
- * 화면을 그리지 않는 탭에서 그렇다. 안 오면 블록이 영영 자리만 차지한 채 남는다.
- * 자리를 직접 재면 어디서든 같은 답이 나온다.
- *
- * 묶는 데에 requestAnimationFrame 도 쓰지 않는다. 같은 이유로 굶는다 — 그리지 않는 탭에서는
- * 프레임이 안 오므로 콜백도 안 온다. 타이머는 그리든 말든 돈다.
+ * 이제 여기도 `StockTabsSection` 을 쓴다 — 시트와 개별종목분석을 합칠 때와 같은
+ * 이유다. 새 탭은 그 모듈 한 곳에만 넣으면 **세 화면에 같이 생긴다.**
+ * (`LazyBlock`·`BLOCKS`·`BlockBody` 도 같이 빠졌다. 탭은 고른 하나만 그리므로
+ * 화면에 들어올 때까지 미루는 장치가 필요 없다.)
  */
-function LazyBlock({ children }: { children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [shown, setShown] = useState(false);
-
-  useEffect(() => {
-    if (shown) return;
-    let timer = 0;
-
-    function check() {
-      timer = 0;
-      const el = ref.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      if (r.top < window.innerHeight + PRELOAD_PX && r.bottom > -PRELOAD_PX) setShown(true);
-    }
-
-    function onScroll() {
-      // 스크롤은 한 번 움직일 때 수십 번 온다. 100ms 에 한 번만 잰다
-      if (timer === 0) timer = window.setTimeout(check, 100);
-    }
-
-    check();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => {
-      if (timer !== 0) clearTimeout(timer);
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-    };
-  }, [shown]);
-
-  return (
-    <div ref={ref} className="sd-lazy">
-      {shown ? children : <div className="sd-placeholder">스크롤하면 불러옵니다</div>}
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 
@@ -222,8 +126,6 @@ export function StockDiscoveryPage({
   const [listOpen, setListOpen] = useState(false);
   /** 목록 신호등 — 백 종목 평가는 무거워서 기본은 꺼 둔다 */
   const [listSignals, setListSignals] = useState(false);
-  const [blocks, setBlocks] = useState<BlockKey[]>(loadBlockPref);
-  const [blockPanel, setBlockPanel] = useState(false);
 
   // 검색으로 모집단 밖의 종목도 볼 수 있게 한다
   const [query, setQuery] = useState("");
@@ -382,19 +284,11 @@ export function StockDiscoveryPage({
     return () => clearTimeout(timer);
   }, [list, index]);
 
-  const [investorRows, setInvestorRows] = useState<RawRecord[]>([]);
-  useEffect(() => {
-    if (!code || !blocks.includes("investor")) return;
-    let alive = true;
-    setInvestorRows([]);
-    api
-      .investorChart(code)
-      .then((r) => alive && setInvestorRows(pickList(r as RawRecord, ["stk_invsr_orgn_chart"])))
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [code, blocks]);
+  /*
+   * 투자자 수급은 여기서 안 받는다 (2026-09-01).
+   * `StockTabsSection` 이 「투자자 수급」 탭을 고를 때만 받는다 — 여기서 미리
+   * 받아 두면 그 탭을 안 보는 종목까지 조회가 나간다.
+   */
 
   /* ---------------- 검색 ---------------- */
 
@@ -414,15 +308,12 @@ export function StockDiscoveryPage({
   }, [query]);
 
   /**
-   * 검색해서 고른 종목은 **목록 맨 앞에 끼워 넣는다.**
-   * 따로 띄우면 넘기기가 안 먹어서 이 화면의 본체가 죽는다.
-   */
-  /**
    * 목록 밖 종목으로 **이 화면 안에서** 갈아탄다.
    *
-   * 검색 결과와, 블록 안에서 누른 종목(업종·테마 구성종목, 신호등 비슷한 종목)이
-   * 다 이리로 온다. 목록에 없으면 맨 앞에 끼워 넣어 자리를 만든다 —
-   * 그래야 넘기기 바의 「n / 전체」와 방향키가 계속 말이 된다.
+   * 검색 결과와, 탭 안에서 누른 종목(업종·테마 구성종목, 담은 ETF, 신호등의 비슷한
+   * 종목)이 다 이리로 온다. 따로 띄우면 넘기기가 안 먹어서 이 화면의 본체가 죽는다.
+   * 목록에 없으면 맨 앞에 끼워 넣어 자리를 만든다 — 그래야 넘기기 바의
+   * 「n / 전체」와 방향키가 계속 말이 된다.
    */
   const goStock = useCallback(
     (rawCode: string, name: string) => {
@@ -446,26 +337,6 @@ export function StockDiscoveryPage({
     setResults([]);
     goStock(r.code, r.name);
   }
-
-  /* ---------------- 블록 설정 ---------------- */
-
-  function toggleBlock(key: BlockKey) {
-    setBlocks((prev) => {
-      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
-      setPref(PREF_KEY, JSON.stringify(next));
-      return next;
-    });
-  }
-
-  function setPreset(keys: BlockKey[]) {
-    setBlocks(keys);
-    setPref(PREF_KEY, JSON.stringify(keys));
-  }
-
-  const shown = BLOCKS.filter((b) => blocks.includes(b.key));
-  const allKeys = BLOCKS.map((b) => b.key);
-  const isBasic = blocks.length === BASIC_KEYS.length && BASIC_KEYS.every((k) => blocks.includes(k));
-  const isAll = blocks.length === allKeys.length;
 
   return (
     <div className="sd-page">
@@ -578,7 +449,7 @@ export function StockDiscoveryPage({
               <PriceHeader info={info} code={code} />
               <div className="sd-head-actions">
                 {signal && (
-                  <span className={`sd-badge ${signal.level}`} title="신호등 — 자세한 것은 아래 블록">
+                  <span className={`sd-badge ${signal.level}`} title="신호등 — 자세한 것은 아래 「신호등」 탭">
                     신호등 {signal.score}점
                   </span>
                 )}
@@ -591,137 +462,43 @@ export function StockDiscoveryPage({
                   name={current?.name ?? ""}
                   price={Math.abs(Number(current?.price ?? 0)) || 0}
                 />
-                <button
-                  className="filter-btn"
-                  onClick={() => onOpenAnalysis(code, current?.name ?? "")}
-                  title="탭을 옮겨 개별종목분석에서 봅니다 — 이 화면을 덮지 않습니다"
-                >
-                  개별종목분석으로
-                </button>
               </div>
             </div>
           </section>
 
-          {/* ---------------- 블록 설정 ---------------- */}
-          <div className="filter-row sd-preset">
-            <button
-              className={`filter-btn ${isBasic ? "active" : ""}`}
-              onClick={() => setPreset(BASIC_KEYS)}
-              title="차트·신호등·목표주가·수급 넷만 — 넘겨 가며 훑을 때"
-            >
-              간단히
-            </button>
-            <button
-              className={`filter-btn ${isAll ? "active" : ""}`}
-              onClick={() => setPreset(allKeys)}
-              title="열두 블록 전부 — 한 종목을 파고들 때"
-            >
-              전체
-            </button>
-            <button className="filter-btn" onClick={() => setBlockPanel((v) => !v)}>
-              블록 고르기 ({blocks.length}/{allKeys.length}) {blockPanel ? "▲" : "▼"}
-            </button>
-          </div>
+          {/*
+            ---------------- 개별종목분석 본문 ----------------
 
-          {blockPanel && (
-            <section className="card sd-blockpick">
-              <div className="mg-picker">
-                {BLOCKS.map((b) => {
-                  const on = blocks.includes(b.key);
-                  return (
-                    <button
-                      key={b.key}
-                      className={`mg-chip${on ? " on" : ""}`}
-                      onClick={() => toggleBlock(b.key)}
-                    >
-                      {on ? "☑" : "☐"} {b.label}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="table-note">
-                끈 블록은 조회도 하지 않습니다. 켠 블록도 <b>화면에 들어올 때</b> 부릅니다 —
-                한 종목을 전부 펼치면 API 가 열 번 넘게 나갑니다.
-              </div>
-            </section>
-          )}
+            **개별종목분석과 똑같은 것을 여기 그대로 편다** (2026-09-01 벤티지:
+            "종목발굴에서 종목 옮겨가면 그 밑에 개별종목분석 내용 나오게 해달라고
+            한거잖아").
 
-          {/* ---------------- 블록 격자 ---------------- */}
-          <div className="sd-grid">
-            {shown.map((b) => (
-              <section key={b.key} className={`card sd-block${b.wide ? " wide" : ""}`}>
-                <h2>{b.label}</h2>
-                <LazyBlock>
-                  <BlockBody
-                    blockKey={b.key}
-                    code={code}
-                    name={current?.name ?? ""}
-                    price={Math.abs(Number(String(info?.cur_prc ?? "").replace(/[+,]/g, ""))) || undefined}
-                    investorRows={investorRows}
-                    onSelectStock={goStock}
-                  />
-                </LazyBlock>
-              </section>
-            ))}
-          </div>
+            예전엔 여기에 열두 블록을 격자로 깔았다. 그런데 그 블록들은 개별종목분석
+            탭들과 **같은 컴포넌트를 두 번째로 배치한 것**이었다 — 차트·수급·재무·호가가
+            양쪽에 따로 있어, 한쪽에 기능이 붙으면 다른 쪽은 낡아 갔다.
+            (`StockTabsSection` 을 만들며 시트와 분석 화면을 합친 것과 같은 이유다.)
+
+            이제 종목발굴은 **넘기기 바 + 개별종목분석**이다. 위의 붙박이 바로 넘기고,
+            아래는 늘 보던 그 화면이다. 넘겨도 `code` 만 갈리므로 보고 있던 탭이 유지된다 —
+            「수급만 훑는다」가 그대로 된다.
+          */}
+          <IntradayLevelsBar code={code} />
+          <StockSummaryPanel code={code} />
+          <StockTabsSection
+            code={code}
+            name={current?.name ?? ""}
+            info={info}
+            onSelectStock={goStock}
+          />
 
           <div className="table-note sd-foot">
-            ← → 방향키로 앞뒤 종목을 넘길 수 있습니다 · 넘겨도 이 화면이 그대로 있습니다(상세가 앞을
-            덮지 않습니다) · 목록 위치는 모집단을 바꾸면 처음으로 돌아갑니다
+            ← → 방향키로 앞뒤 종목을 넘길 수 있습니다 · 넘겨도 <b>보던 탭이 그대로 유지</b>됩니다 ·
+            목록 위치는 모집단을 바꾸면 처음으로 돌아갑니다
           </div>
         </>
       )}
     </div>
   );
-}
-
-/* ------------------------------------------------------------------ */
-
-function BlockBody({
-  blockKey,
-  code,
-  name,
-  price,
-  investorRows,
-  onSelectStock,
-}: {
-  blockKey: BlockKey;
-  code: string;
-  name: string;
-  price?: number;
-  investorRows: RawRecord[];
-  onSelectStock: (code: string, name: string) => void;
-}) {
-  switch (blockKey) {
-    case "chart":
-      return <ChartPanel code={code} name={name} />;
-    case "signal":
-      return <SignalPanel code={code} onSelectStock={onSelectStock} />;
-    case "opinion":
-      return <OpinionPanel code={code} />;
-    case "investor":
-      return investorRows.length > 0 ? (
-        <InvestorTrendTable rows={investorRows} />
-      ) : (
-        <div className="empty">불러오는 중...</div>
-      );
-    case "supply":
-      return <SupplyDetailPanel code={code} />;
-    case "tradeSize":
-      return <TradeSizePanel code={code} />;
-    case "finance":
-      return <FinancePanel code={code} />;
-    case "sector":
-      return <SectorMoodPanel code={code} onSelectStock={onSelectStock} />;
-    case "quote":
-      return <OrderBookPanel code={code} />;
-    case "broker":
-      return <BrokerFlowPanel code={code} />;
-    case "notes":
-      return <StockNotes code={code} name={name} currentPrice={price} />;
-    default:
-      return null;
-  }
 }
 
 /* ------------------------------------------------------------------ */

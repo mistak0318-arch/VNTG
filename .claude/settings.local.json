@@ -954,7 +954,9 @@
       "Bash(curl -s -m 30 -o /dev/null -w \"%{http_code}\\\\n\" -X POST http://localhost:5173/api/watchlist/bulk -H 'Content-Type: application/json' -d '{\"codes\":[],\"action\":\"remove\"}')",
       "PowerShell(npm --prefix web run typecheck 2>&1)",
       "PowerShell(npx --prefix web tsc -p web/tsconfig.json --noEmit 2>&1)",
-      "PowerShell(npx --prefix server tsc -p server/tsconfig.json --noEmit 2>&1)"
+      "PowerShell(npx --prefix server tsc -p server/tsconfig.json --noEmit 2>&1)",
+      "Bash(node \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/dartCompany.cjs\")",
+      "Bash(npx --prefix web eslint web/src/pages/StockDiscoveryPage.tsx)"
     ]
   }
 }

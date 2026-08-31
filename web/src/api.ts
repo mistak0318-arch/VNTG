@@ -938,6 +938,27 @@ export const api = {
     deleteJson<{ groups: UsWatchGroup[] }>(`/api/us-watch/groups/${groupId}/stocks/${symbol}`),
   dartToday: (force = false) =>
     getJson<{ day: string; events: DartEvent[] }>(`/api/dart/today${force ? "?force=1" : ""}`),
+
+  /* ── 종목 정보 (2026-09-01) ──────────────────────────────────────
+     정적 사실은 열 때 저절로, AI 서술은 **버튼을 눌러야만**.
+     GET 은 절대 AI 를 안 부른다 — 그래야 종목을 훑기만 해도 토큰이 나가는 일이 없다. */
+  /**
+   * 회사 명세(대표·설립·본사·업종).
+   *
+   * ⚠️ **화면은 안 쓴다.** 「무슨 일로 버나·왜 지금·벌고 있나」 어디에도 답을 안 해서
+   * 뺐다. 서버가 계속 받는 것은 모델이 회사를 특정하는 재료로 쓰기 때문이다 —
+   * 사람이 읽을 값이 아니라 모델이 읽을 값이다. 이 함수는 그 값을 눈으로 확인할
+   * 자리를 남겨 둔 것이다.
+   */
+  companyFacts: (code: string) => getJson<{ facts: CompanyFacts | null }>(`/api/company/${code}/facts`),
+  /** 이미 엮어 둔 것만 본다. 없으면 null — 화면은 그때 버튼을 보인다 */
+  companyBrief: (code: string) => getJson<{ brief: CompanyBrief | null }>(`/api/company/${code}/brief`),
+  /** ⚠️ 실제로 AI 를 부른다. 버튼에서만 */
+  companyBriefRun: (code: string, name: string, opts: { force?: boolean; price?: number | null } = {}) =>
+    postJson<{ brief: CompanyBrief | null; ran: boolean; error?: string }>(
+      `/api/company/${code}/brief`,
+      { name, force: opts.force ?? false, price: opts.price ?? null },
+    ),
   /* ── CIS 일지 — 시스가 굴리는 모의 계좌 (2026-08-31) ────────────────
      모든 조회가 account 를 받는다. 안 주면 트레이딩 계좌다. */
   /** ETF 분석 — 테마·상대강도·추세·품질. 무거우니 화면이 부를 때만 */
@@ -3776,6 +3797,48 @@ export interface DartEvent {
   amended: boolean;
 }
 
+/**
+ * 종목의 **정적** 사실 — DART 기업개황 + 한투 표준산업분류.
+ *
+ * 설립일·대표자·본사는 한 달에 한 번만 받으면 된다. 「최근 동향」처럼 낡는 값이
+ * 여기 섞이면 안 된다 — 그건 아래 `CompanyBrief` 가 날짜를 달고 따로 산다.
+ */
+export interface CompanyFacts {
+  code: string;
+  corpName: string | null;
+  corpNameEng: string | null;
+  ceo: string | null;
+  /** YYYYMMDD */
+  establishedAt: string | null;
+  accountMonth: string | null;
+  address: string | null;
+  /** 프로토콜이 없이 오기도 한다 — 링크로 쓸 땐 붙여야 한다 */
+  homepage: string | null;
+  irUrl: string | null;
+  marketName: string | null;
+  indutyCode: string | null;
+  sectorLarge: string | null;
+  sectorMid: string | null;
+  sectorSmall: string | null;
+  /** 표준산업분류 이름 — "반도체 제조업" */
+  industry: string | null;
+  fetchedAt: string;
+}
+
+/** AI 가 엮은 서술. **날짜를 달고 산다** — 같은 날이면 다시 안 엮는다 */
+export interface CompanyBrief {
+  code: string;
+  name: string;
+  /** YYYY-MM-DD (KST) */
+  day: string;
+  at: string;
+  text: string;
+  model: string | null;
+  /** 무엇을 엮었는지 */
+  sources: string[];
+  inputTokens: number;
+  outputTokens: number;
+}
 
 /** 관심종목 (미국) */
 export interface UsSearchResult {

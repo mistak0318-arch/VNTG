@@ -242,6 +242,8 @@ export type UsageFeature =
   | "vision"
   /* CIS 일지 — 일지 문장·후보 경고·주간 복기. 하루 세 번 도는 것이라 따로 센다 */
   | "cis"
+  /* 종목 정보 엮기 — 버튼을 누른 만큼만 나간다. 자동으로 도는 것들과 섞으면 안 읽힌다 */
+  | "company"
   | "other";
 
 export const FEATURE_LABEL: Record<UsageFeature, string> = {
@@ -252,6 +254,7 @@ export const FEATURE_LABEL: Record<UsageFeature, string> = {
   pulse: "시장 흐름 요약",
   vision: "이미지 인식(캘린더)",
   cis: "CIS 일지",
+  company: "종목 정보 엮기",
   other: "기타",
 };
 

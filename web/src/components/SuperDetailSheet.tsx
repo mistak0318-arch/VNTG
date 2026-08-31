@@ -270,7 +270,7 @@ export function SuperDetailSheet({
             <span className={`sd-state ${active ? "on" : "off"}`}>{active ? "추적 중" : "이탈"}</span>
           </h2>
           {onOpenStock && (
-            <button className="watch-btn" onClick={() => onOpenStock(code, name)} title="개별종목분석 화면으로 가기">
+            <button className="watch-btn" onClick={() => onOpenStock(code, name)} title="종목 상세 열기">
               📈
             </button>
           )}

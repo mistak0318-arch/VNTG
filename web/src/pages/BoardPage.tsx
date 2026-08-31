@@ -1323,7 +1323,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
       {code && onSelectStock && (
         <div className="filter-row">
           <button className="filter-btn" onClick={() => onSelectStock(code, name)}>
-            {name} 개별종목분석으로
+            {name} 상세 열기
           </button>
         </div>
       )}

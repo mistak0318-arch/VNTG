@@ -20,7 +20,15 @@ const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
 const FILE = join(DATA_DIR, "aiConfig.json");
 
-export type AiPurpose = "report" | "channel" | "research" | "ask" | "pulse" | "pinned" | "vision";
+export type AiPurpose =
+  | "report"
+  | "channel"
+  | "research"
+  | "ask"
+  | "pulse"
+  | "pinned"
+  | "vision"
+  | "company";
 
 export interface AiChoice {
   provider: VisionProvider;
@@ -64,6 +72,16 @@ export interface AiConfig {
    * 골랐고 설정에는 없었다. 여기서 고르면 그 모델을 먼저 시도한다.
    */
   vision: AiChoice | null;
+  /**
+   * 종목 정보 엮기 (2026-09-01 추가).
+   *
+   * 입력은 **한 종목의 조각들**뿐이다 — 기업개황 한 줄, 테마 편입 사유 대여섯 줄,
+   * 공시·뉴스 제목 스물넷, 분기 실적 넉 줄. 리서치처럼 부풀지 않는다.
+   *
+   * 그리고 **버튼을 눌러야만 돈다.** 자동으로 도는 자리가 아니라서 호출 수가
+   * 사람 손에 달려 있다 — 좋은 모델을 골라도 비용이 튀지 않는 자리다.
+   */
+  company: AiChoice | null;
 }
 
 /** null 이면 기존 동작(ANTHROPIC_API_KEY + CLAUDE_MODEL)을 그대로 쓴다 */
@@ -75,6 +93,7 @@ export const DEFAULT_AI_CONFIG: AiConfig = {
   pulse: null,
   pinned: null,
   vision: null,
+  company: null,
 };
 
 export const PURPOSE_LABEL: Record<AiPurpose, string> = {
@@ -85,6 +104,7 @@ export const PURPOSE_LABEL: Record<AiPurpose, string> = {
   pulse: "시장 흐름 요약",
   pinned: "고정 채널 AI 세줄",
   vision: "캘린더 이미지 인식",
+  company: "종목 정보 엮기 (버튼)",
 };
 
 let cache: AiConfig | null = null;
@@ -113,6 +133,7 @@ export async function saveAiConfig(input: AiConfig): Promise<AiConfig> {
     pulse: clean(input.pulse),
     pinned: clean(input.pinned),
     vision: clean(input.vision),
+    company: clean(input.company),
     // 질문하기는 Anthropic 만 — 검색 도구가 거기 붙어 있다
     ask: (() => {
       const c = clean(input.ask);
