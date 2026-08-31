@@ -270,7 +270,24 @@ export async function backfillSectorFlow(
 
   const fetched: SectorFlowDay[] = [];
   for (let i = 0; i < targets.length; i += 5) {
-    const chunk = targets.slice(i, i + 5).filter((d) => !have.has(dashed(d)));
+    /*
+     * ⚠️ **오늘은 이미 있어도 다시 받는다** (2026-08-31).
+     *
+     * 저장은 15:40(마감 + 집계 여유 10분)에 한 번 하고, 이미 있는 날짜는 건너뛴다.
+     * 그런데 **거래소가 그 뒤에 집계를 정정한다.** 실측(8/28 코스피 외국인):
+     *
+     *   15:40 저장분   -20,556억
+     *   16:01 재조회   -20,732억   ← 176억 차이
+     *
+     * 그래서 리포트의 「투자자 순매수」(당일 조회)와 「시장 신호등」(저장분)이
+     * 같은 값을 다르게 적었다. 신호등의 **5일 수급 누적**도 그만큼 이른 값을 쓴다.
+     *
+     * 오늘 하루만 덮어쓴다 — 과거 날짜는 이미 확정이라 다시 받을 이유가 없고,
+     * 다시 받으면 조회만 늘어난다.
+     */
+    const chunk = targets
+      .slice(i, i + 5)
+      .filter((d) => !have.has(dashed(d)) || d === todayYmd);
     if (chunk.length > 0) {
       const results = await Promise.all(
         chunk.map(async (d) => {
@@ -302,7 +319,13 @@ export async function backfillSectorFlow(
    * 예전엔 앞의 것을 남겨서 8/14 가 살아남고 **8/17 이 사라졌다.**
    * 그러면 달력에 없는 날의 수급이 기록되고 실제 거래일은 통째로 빈다.
    */
-  const merged = [...existing, ...fetched].sort((a, b) => a.date.localeCompare(b.date));
+  /*
+   * 같은 날짜가 둘이면 **나중에 받은 것**이 이긴다 — 위에서 오늘을 다시 받으므로
+   * 정정된 값이 옛 값을 덮어야 한다.
+   */
+  const byDate = new Map(existing.map((r) => [r.date, r]));
+  for (const r of fetched) byDate.set(r.date, r);
+  const merged = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
   const kept: SectorFlowDay[] = [];
   let skipped = 0;
   for (const day of merged) {

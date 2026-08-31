@@ -587,7 +587,28 @@ function mergeConfig(saved: Partial<SignalConfig> | null): SignalConfig {
   return {
     ...DEFAULT_CONFIG,
     ...saved,
-    axisWeights: { ...DEFAULT_CONFIG.axisWeights, ...(saved?.axisWeights ?? {}) },
+    /*
+     * ⚠️ **옛 기본값(1/1/1)은 새 기본값으로 이사시킨다** (2026-08-31).
+     *
+     * 축 비중을 `1.5/1.3/0.6` 으로 바꾼 것은 **「며칠에서 몇 주를 보는 매매」에 맞춘
+     * 설계 결정**이었다(위 DEFAULT_CONFIG 주석). 설정에 손잡이를 둔 것은 「바꾸고
+     * 싶으면」이지 옛 값을 지키라는 뜻이 아니었다.
+     *
+     * 그런데 저장본이 옛 기본값 `1/1/1` 을 그대로 들고 있으면 병합에서 그것이 이겨
+     * **새 설계가 적용되지 않는다.** 실측에서 그랬다 — 코드는 1.5/1.3/0.6 인데
+     * 실제로는 1/1/1 로 돌고 있었다.
+     *
+     * 셋이 **모두 정확히 1** 이면 옛 기본값이지 사람이 고른 값이 아니다. 그때만
+     * 이사시킨다. 하나라도 다르면 사람이 만진 것이므로 그대로 둔다 —
+     * 추적기 모집단(60·200 → 300) 때와 같은 규칙이다.
+     */
+    axisWeights: (() => {
+      const w = saved?.axisWeights;
+      const oldDefault = w && w.trend === 1 && w.flow === 1 && w.value === 1;
+      return oldDefault
+        ? { ...DEFAULT_CONFIG.axisWeights }
+        : { ...DEFAULT_CONFIG.axisWeights, ...(w ?? {}) };
+    })(),
     checks: DEFAULT_CONFIG.checks.map((d) => {
       const s = savedChecks.get(d.key);
       if (!s) return d;
