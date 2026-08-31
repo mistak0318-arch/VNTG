@@ -230,11 +230,24 @@ export function SuperDashboardPage({
                   accessor={(e: SuperEntry) => e.addedDate}
                   sort={sort}
                 />
+                {/*
+                  「반복」은 seenCount — **교집합에 걸린 날이 몇 번인가**이지
+                  편입 후 며칠이 아니다. 경과일은 바로 옆에 따로 낸다
+                  (2026-08-31, 신호등 찾기 쪽과 같은 값·같은 이름을 쓴다).
+                */}
                 <SortableTh
                   columnKey="seen"
                   label="반복"
                   accessor={(e: SuperEntry) => e.seenCount}
                   sort={sort}
+                  thProps={{ title: "교집합에 걸린 날이 몇 번인가 — 편입 후 며칠과는 다른 값입니다" }}
+                />
+                <SortableTh
+                  columnKey="dsince"
+                  label="경과"
+                  accessor={(e: SuperEntry) => e.daysSince ?? 0}
+                  sort={sort}
+                  thProps={{ title: "편입일로부터 며칠 — 편입 당일은 0일" }}
                 />
                 <SortableTh
                   columnKey="lists"
@@ -338,8 +351,17 @@ export function SuperDashboardPage({
                       )}{" "}
                       <span className="pt-n">{e.code}</span>
                     </td>
-                    <td>{e.addedDate.slice(5)}</td>
+                    <td>
+                      {e.addedDate.slice(5)}
+                      {/* 오늘 편입 — 첫날에만 붙는다 */}
+                      {e.isNew && (
+                        <span className="ss-new" title="오늘 편입됐습니다">
+                          N
+                        </span>
+                      )}
+                    </td>
                     <td className="num">{crossOnly ? "-" : `${e.seenCount}일`}</td>
+                    <td className="num">{e.daysSince ?? 0}일</td>
                     <td className="num">{crossOnly ? "-" : `${e.lists.length}곳`}</td>
                     <td className="num">
                       {crossOnly ? (

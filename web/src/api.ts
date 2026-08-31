@@ -2094,6 +2094,14 @@ export interface SuperExit {
 }
 
 export interface SuperEntry {
+  /**
+   * 편입일로부터 며칠 (2026-08-31). **편입 당일은 0.**
+   * `seenCount`(걸린 날 수)와 다른 질문의 답이다 — 8/28 편입 후 다시 안 걸렸으면
+   * seenCount 는 1 인데 오늘이 8/31 이면 여기는 3 이다.
+   */
+  daysSince?: number;
+  /** 오늘 편입됐나 — N 배지 */
+  isNew?: boolean;
   code: string;
   name: string;
   addedDate: string;

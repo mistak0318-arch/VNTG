@@ -25,8 +25,13 @@ interface Row {
   addedPrice: number;
   score: number;
   lists: string[];
+  /** 교집합에 걸린 날이 몇 번인가 — **편입 후 며칠이 아니다** */
   seenCount: number;
   lastSeenDate: string;
+  /** 편입일로부터 며칠 — 편입 당일은 0 */
+  daysSince?: number;
+  /** 오늘 편입됐나 — N 배지 */
+  isNew?: boolean;
   price: number | null;
   changeRate: number | null;
   sinceAdded: number | null;
@@ -238,12 +243,27 @@ export function SuperSignalPanel({
                   sort={sort}
                   className="sticky-col"
                 />
+                {/*
+                  「며칠째」를 「걸린 날」로 고쳤다 (2026-08-31 — "죄다 1일째라고
+                  적혀 있어서 편입일 기준하고 맞지를 않네").
+                  seenCount 는 **교집합에 걸린 날이 몇 번인가**이지 편입 후 며칠이
+                  아니다. 8/28 편입 후 다시 안 걸렸으면 오늘이 8/31 이어도 1 이다.
+                  「며칠째」라고 적으니 편입일과 어긋나 보였다 — 이름이 틀렸던 것이다.
+                  경과일은 바로 옆에 따로 낸다.
+                */}
                 <SortableTh
                   columnKey="seen"
-                  label="며칠째"
+                  label="걸린 날"
                   accessor={(r: Row) => r.seenCount}
                   sort={sort}
-                  thProps={{ title: "며칠째 교집합에 걸렸나 — 지속이 곧 신호" }}
+                  thProps={{ title: "교집합에 걸린 날이 몇 번인가 — 지속이 곧 신호. 편입 후 며칠과는 다른 값입니다" }}
+                />
+                <SortableTh
+                  columnKey="dsince"
+                  label="경과"
+                  accessor={(r: Row) => r.daysSince ?? 0}
+                  sort={sort}
+                  thProps={{ title: "편입일로부터 며칠 — 편입 당일은 0일" }}
                 />
                 <SortableTh
                   columnKey="lists"
@@ -302,6 +322,15 @@ export function SuperSignalPanel({
                     <b>{r.seenCount}일</b>
                     {r.lastSeenDate !== r.addedDate && (
                       <i className="pt-n"> ~{r.lastSeenDate.slice(5)}</i>
+                    )}
+                  </td>
+                  {/* 경과 — 편입일로부터. 편입 당일은 0일이고 그때만 N 이 붙는다 */}
+                  <td className="num">
+                    {r.daysSince ?? 0}일
+                    {r.isNew && (
+                      <span className="ss-new" title="오늘 편입됐습니다">
+                        N
+                      </span>
                     )}
                   </td>
                   <td>

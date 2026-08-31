@@ -20,6 +20,7 @@ import {
   CROSS_GROUP,
   ensureInGroup,
   listWatchlist,
+  removeFromGroup,
   removeWatchItem,
   SUPER_GROUP,
   updateWatchItem,
@@ -115,7 +116,14 @@ export interface SuperEntry {
   score: number;
   /** 걸린 목록 (SCREEN_UNIVERSES key) — 마지막으로 걸린 날 기준 */
   lists: string[];
-  /** 며칠째 교집합에 걸렸나 — 지속성이 곧 신호다 */
+  /**
+   * **교집합에 걸린 날이 몇 번인가** — 지속성이 곧 신호다.
+   *
+   * ⚠️ 「편입 후 며칠」이 **아니다.** 8/28 에 편입돼서 그 뒤로 한 번도 다시
+   * 안 걸렸으면, 오늘이 8/31 이어도 이 값은 1 이다. 화면이 이걸 「1일째」로
+   * 적어 편입일과 어긋나 보인다는 지적이 있었다(2026-08-31) — 그래서 경과일은
+   * `daysSince` 로 따로 낸다. 두 값은 서로 다른 질문의 답이다.
+   */
   seenCount: number;
   lastSeenDate: string;
   /**
@@ -342,6 +350,16 @@ async function recordSuperDaily(client: KiwoomClient, store: Store): Promise<Sup
           auto: true,
         });
         exited.push(e);
+        /*
+         * **관심종목 그룹에서도 뺀다** (2026-08-31).
+         *
+         * 이탈 판정이 원장에만 반영되고 관심종목은 그대로여서 목록이 쌓이기만 했다.
+         * 이탈 이력은 슈퍼신호등 메뉴가 들고 있으니(이탈 켬/끔) 관심종목에는
+         * **지금 편입된 것만** 있으면 된다.
+         *
+         * 그룹만 뺀다 — 그 종목을 벤티지가 직접 다른 그룹에 담았을 수 있다.
+         */
+        await removeFromGroup(e.code, SUPER_GROUP).catch(() => undefined);
       }
     } catch {
       /* 한 종목 실패는 다음 날 다시 */
@@ -349,6 +367,38 @@ async function recordSuperDaily(client: KiwoomClient, store: Store): Promise<Sup
     await new Promise((r) => setTimeout(r, 220));
   }
   return exited;
+}
+
+/**
+ * 관심종목 「슈퍼신호등」 그룹을 원장과 **맞춘다** (2026-08-31).
+ *
+ * 이탈할 때 그룹에서 빼는 길은 이제 있지만, 그 기능이 생기기 **전에** 이탈한
+ * 것들은 그대로 남아 있다 — 실측에서 29개 중 9개가 그랬다(한화오션·GS건설…).
+ * 앞으로만 고치면 이 아홉은 영영 남는다.
+ *
+ * 서버가 뜰 때 한 번 맞춘다. **자가 치유**이기도 하다 — 어떤 이유로든 둘이
+ * 어긋나면 다음 재시작에 제자리로 온다.
+ *
+ * ⚠️ 원장에 **없는** 종목은 건드리지 않는다. 벤티지가 손으로 그 그룹에 담았을
+ * 수 있고, 그건 우리가 지울 것이 아니다. 원장에 있으면서 이탈한 것만 뺀다.
+ */
+export async function syncSuperGroup(): Promise<{ removed: string[] }> {
+  const removed: string[] = [];
+  try {
+    const store = await load();
+    const inactive = new Set(
+      store.entries.filter((e) => e.active === false).map((e) => e.code),
+    );
+    if (inactive.size === 0) return { removed };
+    for (const w of await listWatchlist()) {
+      if (!w.groups.includes(SUPER_GROUP)) continue;
+      if (!inactive.has(w.code)) continue;
+      if (await removeFromGroup(w.code, SUPER_GROUP)) removed.push(w.name);
+    }
+  } catch {
+    /* 맞추기가 실패해도 서버는 뜬다 — 다음 재시작에 다시 시도한다 */
+  }
+  return { removed };
 }
 
 // ---------------------------------------------------------------- 텔레그램 (전용 방)
@@ -551,7 +601,11 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
             if (prev.lastSeenDate !== today) prev.seenCount += 1;
             prev.lastSeenDate = today;
             prev.lists = x.lists;
-            // 이탈했던 종목이 다시 걸렸다 — 되살린다. 이탈 이력은 그대로 남는다
+            /*
+             * 이탈했던 종목이 다시 걸렸다 — 되살린다. 이탈 이력은 그대로 남는다.
+             * 관심종목 그룹에는 바로 아래 `ensureInGroup` 이 다시 담는다 —
+             * 이탈할 때 뺐으므로(2026-08-31) 이 길이 없으면 되살아나도 목록에 안 뜬다.
+             */
             if (prev.active === false) revivedEntries.push(prev);
             prev.active = true;
             // 그룹에서 빠져 있으면 다시 담는다(기능 추가 전 편입분도 이 길로 들어온다)
@@ -680,6 +734,19 @@ export type SuperListRow = SuperEntry & {
   changeRate: number | null;
   sinceAdded: number | null;
   /**
+   * **편입일로부터 며칠 지났나** (2026-08-31).
+   *
+   * `seenCount`(걸린 날 수)와 **다른 질문의 답**이다. 8/28 에 편입돼서 그 뒤로
+   * 다시 안 걸렸으면 seenCount 는 1 인데 오늘이 8/31 이면 여기는 3 이다.
+   * 화면이 seenCount 를 「N일째」로 적어 편입일과 어긋나 보인다는 지적에서 나왔다.
+   *
+   * **편입 당일은 0** 이다 — 그날이 「신규」이고, 화면이 N 배지를 그 값으로 판단한다.
+   * 서버가 한 번 재서 두 화면(신호등 찾기·슈퍼신호등 대시보드)이 같은 값을 쓴다.
+   */
+  daysSince: number;
+  /** 오늘 편입된 것인가 — 화면의 N 배지 */
+  isNew: boolean;
+  /**
    * 지금 이 종목의 무리가 도는가 (2026-08-28, 테마 DB 개편).
    * 든 네이버 테마 중 오늘 가장 강한 것 — 편입 점수의 「테마 강세(네이버)」와
    * 같은 분류다. 걸린 종목의 테마가 식으면 이탈이 가까운 신호다. 조회 0회(파일+스냅샷).
@@ -704,6 +771,18 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
 }> {
   const store = await load();
   const snap = await getMarketSnapshot(client).catch(() => null);
+
+  /*
+   * 편입일로부터 며칠 — **달력일** 기준. 거래일로 세려면 공휴일 표가 필요한데
+   * 그게 없다(없는 데이터를 지어내지 않는다). 편입 당일은 0 이다.
+   */
+  const nowDay = todayStr();
+  const daysFrom = (d: string): number => {
+    const a = Date.parse(`${d}T00:00:00Z`);
+    const b = Date.parse(`${nowDay}T00:00:00Z`);
+    return Number.isFinite(a) && Number.isFinite(b) ? Math.max(0, Math.round((b - a) / 86400_000)) : 0;
+  };
+
   /* 교차 그룹 — 대시보드에 같이 보여 달라는 요청 (2026-08-27). 원장에는 안 섞는다 —
      점수·이탈 체계는 슈퍼(초록 교집합)의 것이고, 교차는 관찰 대상일 뿐이다.
      통계(grade/stats)도 그래서 원장만 센다. */
@@ -723,6 +802,8 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
         name: w.name,
         addedDate: w.addedAt.slice(0, 10),
         addedPrice: w.addedPrice,
+        daysSince: daysFrom(w.addedAt.slice(0, 10)),
+        isNew: w.addedAt.slice(0, 10) === nowDay,
         score: 0,
         lists: [],
         seenCount: 0,
@@ -760,6 +841,9 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
         changeRate: s?.changeRate ?? null,
         sinceAdded:
           price !== null && e.addedPrice > 0 ? ((price - e.addedPrice) / e.addedPrice) * 100 : null,
+        daysSince: daysFrom(e.addedDate),
+        /* 오늘 편입된 것 — 화면이 N 배지를 붙인다. 첫날만이다 */
+        isNew: e.addedDate === nowDay,
         groupTags: crossCodes.has(e.code)
           ? (["super", "cross"] as ("super" | "cross")[])
           : (["super"] as ("super" | "cross")[]),
@@ -824,6 +908,8 @@ export async function exitSuperEntry(
   });
   await save(store);
   activeCache = null;
+  /* 자동 이탈과 같다 — 관심종목 그룹에서도 뺀다(그룹만, 종목은 남긴다) */
+  await removeFromGroup(code, SUPER_GROUP).catch(() => undefined);
   await notifySuperRun([], [], [e]).catch(() => undefined);
   return e;
 }

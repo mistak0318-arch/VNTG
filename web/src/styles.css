@@ -11998,3 +11998,17 @@ button.tpb-row:hover { background: var(--panel-2); }
   line-height: 1.55;
 }
 .cis-fail { font-size: 0.74rem; color: var(--muted); flex: 1 1 100%; }
+
+/* 슈퍼신호등 신규 편입 배지 — **첫날에만** 붙는다 (2026-08-31) */
+.ss-new {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--red);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1.5;
+  vertical-align: middle;
+}

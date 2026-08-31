@@ -290,6 +290,38 @@ export async function ensureInGroup(
   invalidateTrackingCache();
 }
 
+/**
+ * **그룹에서만 뺀다** (2026-08-31).
+ *
+ * 슈퍼신호등에서 이탈한 종목이 관심종목의 「슈퍼신호등」 그룹에 계속 남아 목록이
+ * 쌓이기만 했다("이탈 로직이 슈퍼신호등 메뉴에서만 적용되니깐 내 관심종목
+ * 리스트는 계속 쌓이고만 있네").
+ *
+ * ⚠️ **종목을 통째로 지우지 않는다.** `removeWatchItem` 을 쓰면 그 종목이 벤티지가
+ * 직접 담은 다른 그룹에도 있을 때 그것까지 날아간다. 그룹만 뺀다.
+ *
+ * ⚠️ 마지막 그룹이었으면 **관심종목에서 빠진다.** `normalizeGroups` 가 빈 배열을
+ * 기본 그룹으로 되돌리므로, 그 경우엔 항목 자체를 지워야 뜻이 맞는다 —
+ * 안 그러면 이탈한 종목이 기본 그룹으로 옮겨 앉는다.
+ */
+export async function removeFromGroup(code: string, group: string): Promise<boolean> {
+  const items = await load();
+  const had = items.find((w) => w.code === code);
+  if (!had || !had.groups.includes(group)) return false;
+
+  const left = had.groups.filter((g) => g !== group);
+  const next =
+    left.length > 0
+      ? items.map((w) => (w.code === code ? { ...w, groups: left } : w))
+      : items.filter((w) => w.code !== code);
+  await persist(next);
+
+  /* 자동 편입과 같은 이유로 트래킹 캐시를 비운다 — ensureInGroup 주석 참고 */
+  const { invalidateTrackingCache } = await import("./watchTracking.js");
+  invalidateTrackingCache();
+  return true;
+}
+
 /** 빈 배열이면 기본 그룹으로 — 어디에도 안 속한 종목은 목록에서 사라진다 */
 function normalizeGroups(input: string[]): string[] {
   const out = [...new Set(input.map((g) => g.trim()).filter(Boolean))];

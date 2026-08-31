@@ -37,6 +37,7 @@ import { startTrackingRefresher } from "./watchTracking.js";
 import { createSettingsRouter } from "./routes/settings.js";
 import { startAlertScheduler } from "./alertScheduler.js";
 import { startCisScheduler } from "./cisScheduler.js";
+import { syncSuperGroup } from "./superSignal.js";
 import { startCisWatch } from "./cisWatch.js";
 import { startChannelScheduler } from "./channelScheduler.js";
 import { startMajorFeedLoop } from "./majorFeed.js";
@@ -225,6 +226,17 @@ startTrackingRefresher(client);
 startAlertScheduler(client);
 /* CIS 일지 — 설정에서 켜야 실제로 돈다(기본 꺼짐) */
 startCisScheduler(client);
+/*
+ * 슈퍼신호등 이탈분을 관심종목 그룹에서 정리한다 (2026-08-31) — 자가 치유.
+ * 이탈 시 빼는 길이 생기기 전에 쌓인 것들이 있고, 어긋나면 재시작에 맞춰진다.
+ */
+void syncSuperGroup()
+  .then((r) => {
+    if (r.removed.length > 0) {
+      console.log(`[super] 관심종목 그룹 정리 — 이탈분 ${r.removed.length}종목 제거`);
+    }
+  })
+  .catch(() => undefined);
 /* 장중 상시 감시 — 1분마다 팔 자리와 흔들림을 본다. AI 는 안 부른다 */
 startCisWatch(client);
 startChannelScheduler();
