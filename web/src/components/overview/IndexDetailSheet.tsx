@@ -148,20 +148,44 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
         {(() => {
           const f = code === "101" ? flow.data?.kosdaq : flow.data?.kospi;
           if (!f) return null;
+          /*
+           * **종목 상세와 같은 묶음·같은 순서** (2026-08-31 — "수급주체가 얼마
+           * 안보이니깐 답답하네 다 나열해서 보는걸로 하자. 국가, 기타법인, 이런거
+           * 빠졌잖아 보험 이런거").
+           *
+           * 예전엔 일곱만 있었고 **기타금융·국가가 아예 빠져 있었다** — 서버는
+           * 열한 주체를 다 주는데 화면이 안 쓰고 있었다. 같은 값을 두 화면이
+           * 다르게 보여 주면 「어디 값이 맞나」가 된다.
+           *
+           * 묶음은 InvestorTrendTable 과 같다: 큰손(개인·외국인·기관계) →
+           * 기관 속살(금융투자·투신·연기금·사모·보험·은행·기타금융) →
+           * 나머지(국가·기타법인). 순서를 맞춰야 두 화면을 오갈 때 눈이 안 헤맨다.
+           */
           const main = [
             { label: "개인", v: f.individual },
             { label: "외국인", v: f.foreign },
             { label: "기관", v: f.institution },
           ];
-          const subs = [
+          /*
+           * 기관 속살 — 종목 상세의 「기관 속살」 묶음과 같은 순서.
+           * ⚠️ **0 이라고 빼지 않는다** (2026-08-31). 예전엔 걸러 냈는데, 그러면
+           * 「국가가 0이다」와 「국가 칸이 없다」가 화면에서 안 갈린다 —
+           * 0 도 답이다. 대신 흐리게 그린다.
+           */
+          const orgn = [
             { label: "금융투자", v: f.financialInvestment },
             { label: "투신", v: f.investmentTrust },
             { label: "연기금", v: f.pensionFund },
-            { label: "사모", v: f.privateFund },
+            { label: "사모펀드", v: f.privateFund },
             { label: "보험", v: f.insurance },
             { label: "은행", v: f.bank },
+            { label: "기타금융", v: f.otherFinance },
+          ];
+          /* 나머지 — 국가·기타법인. 빠져 있던 국가를 여기서 되살린다 */
+          const etc = [
+            { label: "국가", v: f.nation },
             { label: "기타법인", v: f.otherCorp },
-          ].filter((s) => s.v !== 0); // 0 은 자리만 먹는다
+          ];
           const maxAbs = Math.max(...main.map((m) => Math.abs(m.v)), 1);
           return (
             <>
@@ -188,19 +212,32 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
                     </div>
                   ))}
                 </div>
-                {subs.length > 0 && (
-                  <div className="ifc-sub">
-                    {subs.map((s) => (
-                      <span key={s.label}>
-                        {s.label}{" "}
-                        <b className={sign(s.v)}>
-                          {s.v > 0 ? "+" : ""}
-                          {fmtNum(s.v)}
-                        </b>
-                      </span>
-                    ))}
-                  </div>
-                )}
+                {/* 기관 속살 — 종목 상세와 같은 일곱 */}
+                <div className="ifc-sub">
+                  <i className="ifc-sub-lbl">기관 속살</i>
+                  {orgn.map((s) => (
+                    <span key={s.label} className={s.v === 0 ? "ifc-zero" : undefined}>
+                      {s.label}{" "}
+                      <b className={sign(s.v)}>
+                        {s.v > 0 ? "+" : ""}
+                        {fmtNum(s.v)}
+                      </b>
+                    </span>
+                  ))}
+                </div>
+                {/* 나머지 — 국가·기타법인 */}
+                <div className="ifc-sub">
+                  <i className="ifc-sub-lbl">나머지</i>
+                  {etc.map((s) => (
+                    <span key={s.label} className={s.v === 0 ? "ifc-zero" : undefined}>
+                      {s.label}{" "}
+                      <b className={sign(s.v)}>
+                        {s.v > 0 ? "+" : ""}
+                        {fmtNum(s.v)}
+                      </b>
+                    </span>
+                  ))}
+                </div>
               </div>
             </>
           );

@@ -12195,3 +12195,14 @@ thead .sd-emph {
   color: var(--muted);
 }
 .ss-cfg select { font-size: 0.74rem; padding: 2px 4px; }
+
+/* 지수 시트의 수급 묶음 라벨 — 큰손 / 기관 속살 / 나머지 (2026-08-31) */
+.ifc-sub-lbl {
+  font-style: normal;
+  font-size: 0.64rem;
+  color: var(--muted);
+  margin-right: 4px;
+  opacity: 0.8;
+}
+/* 0 은 빼지 않고 흐리게 — 「0이다」와 「칸이 없다」는 다른 말이다 */
+.ifc-zero { opacity: 0.42; }
