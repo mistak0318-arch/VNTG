@@ -45,6 +45,14 @@ export interface ScreenHit {
   /** 렌즈 (2026-08-28) — 이 종목의 무리(가장 강한 사업 테마)와 ETF 뒷배. 조회 0회 */
   theme?: { key: string; name: string; changeRate: number; streak: number } | null;
   etfBack?: { rate: number; top: string } | null;
+  /**
+   * 등락률·거래대금이 **직전 거래일 값**인가 (`Candidate.stale` 이 그대로 실린다).
+   *
+   * ⚠️ 타입에만 없고 값은 원래도 넘어가고 있었다 — `...u` 로 후보를 펼쳐 담기
+   * 때문이다. 그래서 화면은 「메웠다」를 **알 수 있었는데 몰랐다.**
+   * 새벽에 돌린 결과가 오늘 값인 척 떠 있던 이유다 (2026-09-01).
+   */
+  stale?: boolean;
 }
 
 export interface ScreenJob {
@@ -171,7 +179,7 @@ export async function tradeValueTop(
     const prev = await rankByPrevDay(client, limit, market);
     if (prev && prev.length > 0) return prev;
   }
-  await fillStale(client, out);
+  await fillFromSnapshot(client, out);
   return out;
 }
 
@@ -188,22 +196,39 @@ export async function tradeValueTop(
  * 스냅샷에는 **직전 거래일 거래대금이 들어 있다**(`tradeValue`, 억). 그것으로 전 종목을
  * 다시 줄 세워 진짜 상위를 뽑는다 — 받아 온 N개 안에서만 정렬하면 「엉뚱한 40개 중의
  * 상위」가 될 뿐이다.
+ *
+ * ## 등락률 상위도 같은 함정이었다 (2026-09-01)
+ *
+ * `by: "rate"` 를 붙였다. 「등락률 상위」도 장 밖에는 등락률이 전부 0 으로 오므로
+ * **순서가 종목코드순으로 무너진다** — 거래대금 상위와 똑같은 문제인데 그쪽만
+ * 막아 두고 있었다. 스냅샷에 등락률도 있으니 같은 방법으로 다시 뽑는다.
+ *
+ * 나머지 모집단(누적등락률·외국인 연속순매매·동일순매매·기관외인 연속매매)은
+ * **정렬 기준이 수급이라 스냅샷으로 다시 뽑을 수 없다.** 대신 그 TR 들은 장 밖에도
+ * 직전 거래일 수급으로 순위를 제대로 주므로 순서는 멀쩡하다 — 빈 칸만 메우면 된다.
  */
 async function rankByPrevDay(
   client: KiwoomClient,
   limit: number,
   market: string,
+  by: "value" | "rate" = "value",
 ): Promise<Candidate[] | null> {
   const snap = await getMarketSnapshot(client).catch(() => null);
   if (!snap) return null;
   const common = await getCommonStockCodes(client).catch(() => null);
   const rows = [...snap.byCode.values()]
+    /*
+     * 거래대금이 있는 것만 — 등락률로 줄 세울 때도 마찬가지다. 거래가 거의 없는
+     * 종목은 등락률이 크게 튀어도 들어갈 자리가 아니다(상한가 잔량만 쌓인 품절주).
+     */
     .filter((s) => (s.tradeValue ?? 0) > 0 && (!common || common.has(s.code)))
     /* 시장 고르기 — "000" 은 전체, "001" 코스피, "101" 코스닥 */
     .filter((s) =>
       market === "001" ? s.market === "kospi" : market === "101" ? s.market === "kosdaq" : true,
     )
-    .sort((a, b) => (b.tradeValue ?? 0) - (a.tradeValue ?? 0))
+    .sort((a, b) =>
+      by === "rate" ? b.changeRate - a.changeRate : (b.tradeValue ?? 0) - (a.tradeValue ?? 0),
+    )
     .slice(0, limit);
   if (rows.length === 0) return null;
   return rows.map((s) => ({
@@ -218,20 +243,47 @@ async function rankByPrevDay(
 }
 
 /**
- * 개장 전이라 0 으로 온 줄을 **직전 거래일 값**으로 메운다.
+ * 빠진 칸을 **직전 거래일 스냅샷으로 메운다.**
  *
- * 전종목 스냅샷은 「거래가 반영된 것」만 저장하도록 이미 막아 뒀다(`traded`). 그래서
- * 개장 전에 읽으면 **직전 거래일 종가와 등락률**이 들어 있다 — 우리가 필요한 게 그것이다.
+ * 전종목 스냅샷은 「거래가 반영된 것」만 저장하도록 막아 뒀다(`traded`). 그래서
+ * 장 밖에 읽으면 **직전 거래일 종가·등락률·거래대금**이 들어 있다 — 필요한 게 그것이다.
  *
- * 거래대금은 스냅샷에 없다. 지어내지 않고 0 으로 두면 화면이 「-」로 적는다 —
+ * ## 왜 하나로 합쳤나 (2026-09-01)
+ *
+ * 예전엔 메우는 함수가 둘이었고 조건이 서로 달랐다:
+ *
+ *   `fillStale`   — **거래대금**이 전부 0 일 때만 (거래대금 상위 모집단 전용)
+ *   `fillMissing` — **가격**이 0 인 줄만 (연속매매 모집단 전용)
+ *
+ * 그 사이로 새는 경우가 있었다. 벤티지가 새벽 00:30 에 「외국인 연속순매매」로
+ * 돌렸더니 **현재가는 나오는데 등락률 0.00% · 거래대금 「-」**. 그 TR 은 현재가는
+ * 주고 등락률·거래대금을 안 주는데,
+ *
+ *   · `fillMissing` 은 가격이 있으니 그냥 지나갔고,
+ *   · `fillStale` 은 이 경로에서 아예 안 불렸다.
+ *
+ * 칸마다 조건을 따로 두면 이런 조합이 계속 생긴다. **칸 단위로 판단**하도록 합쳤다.
+ *
+ * ## 「전부 0」으로 판단하는 이유
+ *
+ * 등락률이 진짜 0.00% 인 종목(보합)은 있다. 그래서 한 줄만 보고는 「안 온 값」인지
+ * 「진짜 0」인지 못 가른다. 하지만 **수십 종목이 전부 0 일 수는 없다** —
+ * 그건 TR 이 그 칸을 안 준 것이다. 그때만 메운다.
+ *
+ * ## 메운 값에는 표를 단다
+ *
+ * 스냅샷 거래대금은 **어림값**(거래량 × 현재가)이고 등락률은 **직전 거래일** 것이다.
+ * 오늘 값인 척하면 안 되므로 `stale` 을 세운다 — 화면이 그걸로 「직전 거래일 기준」을
+ * 적는다. 스냅샷조차 0 이면 아무것도 안 한다. 그때는 정말 값이 없는 것이고,
  * **못 내는 값을 어림해서 채우지 않는다.**
- *
- * 스냅샷도 0 이면 아무것도 안 한다. 그때는 정말 값이 없는 것이고, `stale` 도 안 붙여
- * **거짓 표시를 만들지 않는다.**
  */
-async function fillStale(client: KiwoomClient, rows: Candidate[]): Promise<void> {
-  // 오늘 거래가 하나라도 잡혔으면 개장 전이 아니다 — 스냅샷을 부를 이유가 없다
-  if (rows.length === 0 || rows.some((r) => r.tradeValue > 0)) return;
+async function fillFromSnapshot(client: KiwoomClient, rows: Candidate[]): Promise<void> {
+  if (rows.length === 0) return;
+
+  const needPrice = rows.some((r) => r.price === 0);
+  const needRate = rows.every((r) => r.changeRate === 0);
+  const needValue = rows.every((r) => r.tradeValue <= 0);
+  if (!needPrice && !needRate && !needValue) return;
 
   const snap = await getMarketSnapshot(client).catch(() => null);
   if (!snap) return;
@@ -239,9 +291,17 @@ async function fillStale(client: KiwoomClient, rows: Candidate[]): Promise<void>
   for (const r of rows) {
     const s = snap.byCode.get(r.code);
     if (!s || (s.changeRate === 0 && s.price === 0)) continue;
-    if (s.price > 0) r.price = s.price;
-    r.changeRate = s.changeRate;
-    r.stale = true;
+
+    if (r.price === 0 && s.price > 0) r.price = s.price;
+    if (needRate && s.changeRate !== 0) {
+      r.changeRate = s.changeRate;
+      r.stale = true;
+    }
+    /* 스냅샷은 억원, `Candidate.tradeValue` 는 키움과 같은 백만원이다 */
+    if (needValue && (s.tradeValue ?? 0) > 0) {
+      r.tradeValue = Math.round((s.tradeValue ?? 0) * 100);
+      r.stale = true;
+    }
   }
 }
 
@@ -271,20 +331,6 @@ export const SCREEN_UNIVERSES: { key: string; label: string; hint: string }[] = 
 function yyyymmdd(daysAgo = 0): string {
   const d = new Date(Date.now() + 9 * 3600_000 - daysAgo * 86400_000);
   return d.toISOString().slice(0, 10).replace(/-/g, "");
-}
-
-/** 가격·등락률이 빈 줄(연속매매·장중투자자 TR 은 현재가를 안 준다)을 스냅샷으로 메운다 */
-async function fillMissing(client: KiwoomClient, rows: Candidate[]): Promise<void> {
-  if (!rows.some((r) => r.price === 0)) return;
-  const snap = await getMarketSnapshot(client).catch(() => null);
-  if (!snap) return;
-  for (const r of rows) {
-    if (r.price > 0) continue;
-    const s = snap.byCode.get(r.code);
-    if (!s) continue;
-    r.price = s.price;
-    r.changeRate = s.changeRate;
-  }
 }
 
 /** 시세분석 명세(rankSpecs)에 있는 조회를 모집단으로 — 연속조회로 limit 까지 */
@@ -337,7 +383,18 @@ async function rankSpecUniverse(
     nextKey = res.nextKey;
     await new Promise((r) => setTimeout(r, 260));
   }
-  await fillMissing(client, out);
+
+  /*
+   * 등락률로 줄 세우는 목록은 장 밖에 **순서가 무너진다** — 등락률이 전부 0 으로
+   * 오므로 종목코드순이 된다. 그때는 스냅샷의 직전 거래일 등락률로 다시 뽑는다.
+   * (거래대금 상위가 `rankByPrevDay` 로 막아 둔 것과 같은 문제다.)
+   */
+  if (specKey === "flu-rate" && out.length > 0 && out.every((r) => r.changeRate === 0)) {
+    const prev = await rankByPrevDay(client, limit, market, "rate");
+    if (prev && prev.length > 0) return prev;
+  }
+
+  await fillFromSnapshot(client, out);
   return out;
 }
 
@@ -373,7 +430,7 @@ async function sameNetUniverse(
     });
     if (out.length >= limit) break;
   }
-  await fillMissing(client, out);
+  await fillFromSnapshot(client, out);
   return out;
 }
 
@@ -422,7 +479,7 @@ async function contUniverse(
     }
     if (out.length >= limit) break;
   }
-  await fillMissing(client, out);
+  await fillFromSnapshot(client, out);
   return out;
 }
 
@@ -436,13 +493,22 @@ export async function fetchUniverse(
   if (key === "trade-value") return tradeValueTop(client, market, limit);
   if (key === "cum") {
     const r = await cumulativeRank(client, market, 5, Math.min(200, Math.max(limit, 100)));
-    return r.rows.slice(0, limit).map((c) => ({
+    const out: Candidate[] = r.rows.slice(0, limit).map((c) => ({
       code: c.code,
       name: c.name,
       price: c.price,
+      /* 누적 순위는 5일 누적으로 매겨지고, 여기 담는 것은 **오늘치**다 */
       changeRate: c.todayRate,
       tradeValue: c.tradeValue,
     }));
+    /*
+     * ⚠️ 이 경로만 메우기를 안 탔다 (2026-09-01). 다른 모집단은 다 스냅샷으로
+     * 메우는데 여기는 매핑하고 바로 돌려줬다 — 장 밖에 `todayRate` 는 0 이므로
+     * 「누적등락률 상위」의 등락률 칸이 통째로 0.00% 였다.
+     * 순위 자체는 5일 누적이라 장 밖에도 멀쩡하다. 칸만 메우면 된다.
+     */
+    await fillFromSnapshot(client, out);
+    return out;
   }
   if (key === "same-net") return sameNetUniverse(client, market, limit);
   if (key === "cont") return contUniverse(client, market, limit);

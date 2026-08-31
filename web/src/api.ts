@@ -2531,13 +2531,13 @@ export interface ScreenHit {
   name: string;
   price: number;
   changeRate: number;
-  /** 거래대금(백만원). 개장 전에 돌리면 0 — 메울 재료가 없어 화면이 「-」로 적는다 */
+  /** 거래대금(백만원). 장 밖이면 직전 거래일 어림값 — 그때 `stale` 이 선다 */
   tradeValue: number;
   level: "green" | "yellow" | "red" | "unknown";
   score: number;
   passed: string[];
   failed: string[];
-  /** 개장 전이라 등락률·현재가를 **직전 거래일 값**으로 메운 줄 */
+  /** 등락률·거래대금이 **직전 거래일 값**으로 메워진 줄 (장 밖에 돌렸을 때) */
   stale?: boolean;
   /** 렌즈 (2026-08-28) — 이 종목의 무리(가장 강한 사업 테마)와 ETF 뒷배 */
   theme?: { key: string; name: string; changeRate: number; streak: number } | null;

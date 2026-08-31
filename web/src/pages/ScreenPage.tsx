@@ -494,20 +494,32 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
                     </td>
                     <td className="num">{fmtNum(r.price)}</td>
                     {/*
-                      개장 전에 돌리면 등락률·거래대금이 0 으로 온다. 그걸 그대로 적으면
+                      장 밖에 돌리면 등락률·거래대금이 0 으로 온다. 그걸 그대로 적으면
                       「0.00% · 0억」이 줄줄이 서서, 안 움직인 것인지 아직 안 열린 것인지
-                      구별이 안 된다. 서버가 직전 거래일 값으로 메우면서 `stale` 을 달아
-                      주므로 **메운 값이라고 적는다.** 거래대금은 메울 재료가 없어 「-」다.
+                      구별이 안 된다. 서버가 직전 거래일 스냅샷으로 메우면서 `stale` 을
+                      달아 주므로 **메운 값이라고 적는다.**
+
+                      ⚠️ 2026-09-01 이전엔 서버가 이 표를 **안 달아 줬다.** 표시할 자리는
+                      여기 있었는데 「외국인 연속순매매」 같은 모집단에서는 메우기 자체가
+                      안 돌아서, 새벽에 돌린 결과가 0.00% 인 채 오늘 값인 척 떠 있었다.
                     */}
                     <td className={`num ${r.changeRate > 0 ? "positive" : r.changeRate < 0 ? "negative" : ""}`}>
                       {pct(r.changeRate)}
-                      {r.stale && <i className="scr-stale" title="개장 전이라 직전 거래일 값입니다">전일</i>}
+                      {r.stale && <i className="scr-stale" title="장이 열리지 않아 직전 거래일 값입니다">전일</i>}
                     </td>
                     <td className="num">
                       {r.tradeValue > 0 ? (
-                        `${fmtNum(Math.round(r.tradeValue / 100))}억`
+                        <>
+                          {fmtNum(Math.round(r.tradeValue / 100))}억
+                          {/* 스냅샷에서 메운 거래대금은 **어림값**(거래량 × 종가)이다 */}
+                          {r.stale && (
+                            <i className="scr-stale" title="직전 거래일 어림값입니다 (거래량 × 종가)">
+                              전일
+                            </i>
+                          )}
+                        </>
                       ) : (
-                        <span className="pt-n" title="개장 전이라 오늘 거래대금이 없습니다">
+                        <span className="pt-n" title="거래대금을 낼 재료가 없습니다">
                           -
                         </span>
                       )}
