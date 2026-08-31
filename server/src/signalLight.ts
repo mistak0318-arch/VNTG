@@ -97,6 +97,12 @@ export type CheckKey =
   | "foreignFlow"
   | "instFlow"
   | "flowStreak"
+  /* 수급 개편 (2026-09-01) — 아래 DEFAULT_CONFIG 주석에 검증 숫자가 있다 */
+  | "flowPersist"
+  | "flowAccel"
+  | "smartMoney"
+  | "foreignRatioUp"
+  | "programFlow"
   | "volume"
   | "profitGrowth"
   | "marketCap"
@@ -128,6 +134,19 @@ export interface CheckConfig {
   strongAt: number;
   /** 화면에 보여줄 설명 */
   hint: string;
+  /**
+   * **이 기준이 며칠을 되짚나** (2026-09-01 — 벤티지: "그럼 저것도 개별로
+   * 세팅하게 두자고").
+   *
+   * 위쪽 `flowDays`(수급 판정 기간)는 **한 값으로 모든 수급 기준을 묶는다.** 그게
+   * 맞을 때도 있었지만 지금은 아니다 — 지속은 5·10·20·60 을 한꺼번에 보고, 가속은
+   * 두 기간의 비를 내고, 주포는 누적 하나를 낸다. 셋의 「기간」은 서로 다른 뜻이라
+   * 한 칸으로 묶으면 어느 하나는 반드시 어긋난다.
+   *
+   * 그래서 기준마다 자기 기간을 든다. **뜻은 기준마다 다르므로 `hint` 에 적는다.**
+   * 없으면 그 기준은 기간이라는 개념이 없는 것이다(신고가·정배열처럼).
+   */
+  span?: number;
   /**
    * 이 기준을 켜면 **종목당 조회가 몇 번 더** 나가나.
    * 「신호등 찾기」는 100종목을 도는데, 여기 1이 붙은 걸 켜면 100번이 더 나간다.
@@ -241,7 +260,13 @@ export const MA_OPTIONS = [5, 10, 20, 60] as const;
 export const DEFAULT_CONFIG: SignalConfig = {
   greenAt: 70,
   yellowAt: 40,
-  flowDays: 5,
+  /*
+   * 10 일 (2026-09-01 — 벤티지가 화면에서 먼저 올렸다).
+   *
+   * ⚠️ 이 값은 이제 **옛 기준 둘(외국인 수급 · 기관 수급)에만** 쓰인다. 새로 만든
+   * 지속·가속·주포는 5·10·20·60 을 스스로 다 재므로 이 설정과 무관하다.
+   */
+  flowDays: 10,
   maLines: [5, 20, 60],
   /*
    * 축 비중 (2026-08-28 개정) — **며칠에서 몇 주를 보는 매매**에 맞춘 값이다.
@@ -306,6 +331,32 @@ export const DEFAULT_CONFIG: SignalConfig = {
      * 20일 보유」가 기준선 대비 **+3.77%p** 로, 잰 조건 중 엣지가 가장 컸다.
      * 그런데 신호등엔 52주 고가 근접만 있고 정작 이게 없었다 — 검증된 것부터
      * 넣는 게 순서다. 일봉을 재사용하므로 조회는 안 늘어난다.
+     *
+     * ## 문턱을 97 → 99 로 (2026-09-01)
+     *
+     * 벤티지가 물었다: "신고가에 대한 가중치는 한번 더 생각해보자. 다른 조합들이
+     * 걸쳐지면 이건 중요도가 떨어질수도 있어."
+     *
+     * 19만 관측 뒤쪽에서 문턱별로 재 보니 **높을수록 좋았다:**
+     *
+     *   ≥90 +1.90%p   ≥95 +1.96   ≥97 +2.23   **≥99 +2.87**   ≥100 +2.63
+     *
+     * 그래서 가중치는 그대로 두고 문턱만 올렸다. 100(완전 돌파)보다 99 가 나은 건
+     * 「막 뚫으려는 자리」까지 담기 때문이다.
+     *
+     * ## ⚠️ 수급과의 겹침은 앞뒤가 뒤집혔다
+     *
+     * 벤티지의 의심을 겹침으로 재 봤더니 **뒤쪽에서는 오히려 반대**였다:
+     *
+     *   뒤쪽  신고가만 +3.98%p  ·  신고가+수급 +0.97%p   → 수급을 더하면 **-3.01%p**
+     *   앞쪽  신고가만 -0.89%p  ·  신고가+수급 +1.90%p   → 수급을 더하면 **+2.79%p**
+     *
+     * 뒤쪽 해석은 벤티지가 예전에 한 말과 같다 — "여러 필터에 걸렸다는 건 이미 한창
+     * 뜨거운 단계라는 증거". 신고가인데 수급이 아직 안 붙었으면 붙을 여지가 남은
+     * 것이고, 이미 넉 구간 다 플러스면 살 사람은 다 산 자리다.
+     *
+     * **그런데 앞쪽이 정확히 반대다.** 어느 쪽도 못 믿으므로 가중치를 건드리지
+     * 않았다. 다음 재수집(60일 수급·시총 포함)에서 다시 볼 값이다.
      */
     {
       key: "newHigh",
@@ -314,9 +365,9 @@ export const DEFAULT_CONFIG: SignalConfig = {
       enabled: true,
       /* 자체 백테스트에서 엣지가 가장 컸던 조건이라 무게를 준다 (2026-08-28) */
       weight: 2,
-      threshold: 97,
+      threshold: 99,
       strongAt: 100,
-      hint: "현재가 ÷ 직전 60일 고가(%). 100이면 돌파 — 자체 백테스트에서 엣지가 가장 컸던 조건(20일 뒤 +3.77%p)",
+      hint: "현재가 ÷ 직전 60일 고가(%). 100이면 돌파 — 19만 관측 뒤쪽에서 99 이상이 +2.87%p 로 가장 좋았다",
       cost: 0,
     },
     /*
@@ -372,14 +423,30 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 이 숫자는 최근 60일에 근거한 것이다 — 다만 방향이 워낙 크고 일관돼 꺼 둔다.
        *
        * 테마 화면·슈퍼신호등의 테마 판정은 그대로다. 여기서 빼는 것은 **신호등 점수**뿐이다.
+       *
+       * ## 재는 방법을 고쳤다 (2026-09-01)
+       *
+       * 벤티지: "이것도 오늘 평균 등락률이 아니라 몇일 치 가중을 두면서 해야지.
+       * 오늘만 두면 의미가 없잖아. 섹터가 움직이는 걸 보자는건데."
+       *
+       * 위 -5.76%p 는 **「오늘 등락률」로 쟀을 때의 값**이다. 그 해석("테마가 강한
+       * 날 = 이미 급등한 날 = 되돌림 자리")이 맞다면, 하루가 아니라 **며칠에 걸쳐
+       * 붙는 것**을 재면 부호가 달라질 수 있다. 지금은 오늘 0.5 · 5일 0.3 · 20일 0.2
+       * 로 가중해 일평균으로 환산한다(계산부 주석 참고).
+       *
+       * ⚠️ **그래도 켜지 않는다.** 재는 법을 바꿨으면 다시 재야 하고, 아직 안 쟀다.
+       * 표본의 `theme` 칸은 옛 정의(오늘 등락률)로 저장돼 있어 이 값으로는 채점이
+       * 안 된다 — 다음 재수집에서 새 정의로 담고 그때 켤지 정한다.
+       * **재기 전에 켜는 것이 -5.76%p 를 만든 그 순서다.**
        */
       enabled: false,
       weight: 2,
       threshold: 0,
       strongAt: 2,
       hint:
-        "이 종목이 든 테마의 오늘 평균 등락률(%). 여러 테마에 들면 **가장 강한 쪽**입니다. " +
-        "테마 안에서 몇이 올랐는지(상승비율)도 값에 같이 적힙니다",
+        "이 종목이 든 테마의 **가중 등락률**(%) — 오늘 0.5 · 5일평균 0.3 · 20일평균 0.2. " +
+        "하루 등락률은 지수가 오른 날 거의 모든 테마가 오르므로 노이즈입니다. " +
+        "여러 테마에 들면 **가장 강한 쪽**입니다",
       cost: 0,
     },
     /*
@@ -500,18 +567,177 @@ export const DEFAULT_CONFIG: SignalConfig = {
     },
     {
       key: "flowStreak",
-      label: "외인 연속 순매수",
+      label: "외인 연속 순매수 (쓰지 않음)",
       axis: "flow",
-      enabled: true,
       /*
-       * 무게 2 — **하루치 큰 금액보다 이어지는 쪽이 강하다.**
-       * 하루 300억은 기관 하나가 리밸런싱한 것일 수 있지만, 닷새 연속은 방향이다.
+       * ⚠️ **껐다** (2026-09-01). 이 기준은 앞/뒤 검증에서 **부호가 뒤집혔다.**
+       *
+       *   외인 연속 5일 이상   앞 +1.71%p  →  뒤 **-1.59%p**
+       *   외인 연속 2일 이상   앞 +0.82%p  →  뒤 **-0.23%p**
+       *
+       * 벤티지가 먼저 짚었다: "요즘같은 퐁당퐁당 장세에서는 연속 순매수가 큰 의미가
+       * 없을거란 말이야."
+       *
+       * 왜 안 듣나 — 이 기준은 **끊김에만 반응하고 크기를 못 본다.** 닷새 내리
+       * 1억씩 산 종목이 사흘 사고 하루 쉬고 이틀 산 종목보다 높게 잡히는데,
+       * 후자가 500억씩 샀으면 실제로 미는 쪽은 후자다. 그리고 하루 쉬는 것이
+       * 매도 전환이 아니라 숨 고르기인 장에서는 그 하루가 지표를 통째로 지운다.
+       *
+       * 대신 아래 `flowPersist`(누적으로 사고 있나) + `flowAccel`(붙고 있나)로 옮겼다.
        */
+      enabled: false,
       weight: 2,
       threshold: 2,
       strongAt: 5,
-      hint: "외국인이 며칠 연속 순매수했나. 하루치 큰 금액보다 이어지는 게 낫다",
+      hint: "외국인이 며칠 연속 순매수했나. **검증에서 거꾸로 걸려 껐습니다** — 지속·가속을 쓰세요",
       cost: 0,
+    },
+    {
+      key: "flowPersist",
+      label: "수급 지속",
+      axis: "flow",
+      /*
+       * **누적으로 사고 있나** (2026-09-01 신설).
+       *
+       * 외국인·기관 각각 5·10·20·60거래일 누적 순매수가 **몇 구간에서 플러스인가**
+       * (0~8). 벤티지: "5일간 10일간 20일간 60일간 순매수 유지하고 있는지…
+       * 기관과 외국인, 결국 사고 있어야 하는 거잖아."
+       *
+       * ## 「높으면 좋다」가 아니라 「낮으면 나쁘다」
+       *
+       * 19만 관측 뒤쪽 채점 (그때는 60일이 표본에 없어 6구간 기준):
+       *
+       *   0구간 **-1.43%p**  1구간 -0.32  2구간 +0.06  3구간 +0.25
+       *   4구간 +0.30        5구간 -0.13  6구간 +0.28
+       *
+       * 위쪽은 단조가 아니다. **아래쪽이 확실하다** — 아무 구간도 플러스가 아닌
+       * 종목은 뒤쪽에서 시장에 1.43%p 뒤졌다. 그래서 이 기준은 **꼭대기를 올리는
+       * 축이 아니라 바닥을 걸러내는 축**이다. 문턱을 낮게(3) 두고 만점을 멀리(7)
+       * 두는 것이 그 뜻이다 — 통과 자체가 값이고 만점은 덤이다.
+       */
+      enabled: true,
+      weight: 2,
+      /* 여덟 구간 중 셋 이상 — 뒤쪽에서 2구간부터 시장을 넘겼다(+0.06 → +0.25) */
+      threshold: 3,
+      strongAt: 7,
+      /* 여기까지의 구간만 본다 — 60 이면 5·10·20·60 넷, 20 이면 5·10·20 셋 */
+      span: 60,
+      hint: "외국인·기관의 5·10·20·60일 누적 순매수 중 **몇 구간이 플러스인가**(0~8). 끊겼는지가 아니라 누적으로 사고 있는지를 본다",
+      cost: 0,
+    },
+    {
+      key: "flowAccel",
+      label: "수급 가속",
+      axis: "flow",
+      /*
+       * **붙고 있나** (2026-09-01 신설) — 최근 5일 일평균 ÷ 20일 일평균.
+       *
+       * 벤티지: "순매수 유지하고 있는지 **상승세인지** 그 부분 말야."
+       *
+       * 일평균으로 견준다 — 합계끼리 비교하면 기간이 긴 쪽이 늘 커서 뜻이 없다.
+       *
+       * ## ⚠️ 급가속은 오히려 아니다
+       *
+       * 뒤쪽 채점:
+       *
+       *   0.5배 미만(식는 중)  -0.27%p
+       *   1.5~2.5배           **+0.83%p**   ← 앞쪽도 +1.51 로 둘 다 양수
+       *   2.5배 이상(급가속)    +0.30%p
+       *
+       * 「적당히 붙는 것」이 가장 좋고 급가속은 그만 못하다 — 급가속은 이미 뉴스가
+       * 난 뒤일 때가 많다. 그래서 만점을 2.5 에 두고 그 위로는 더 안 준다.
+       *
+       * ⚠️ **가중치를 1 로 낮춰 둔다.** 앞쪽에서는 오히려 「식는 중」이 +0.95 로
+       * 좋았다 — 앞뒤가 뒤집힌 기준이라 지속만큼 못 믿는다. 혼자 두면 안 되고
+       * 지속과 함께 볼 때 값을 한다(지속 4구간+ & 가속 2배+ → 뒤쪽 +0.95%p).
+       */
+      enabled: true,
+      weight: 1,
+      threshold: 1.2,
+      strongAt: 2.5,
+      /* 견줄 긴 쪽. 짧은 쪽은 늘 그 1/4 이다 — span 20 이면 5일 ÷ 20일 */
+      span: 20,
+      hint: "외국인 최근 5일 일평균 ÷ 20일 일평균. 1보다 크면 사는 속도가 붙는 중. **급가속(2.5배 이상)은 더 좋지 않다**",
+      cost: 0,
+    },
+    {
+      key: "smartMoney",
+      label: "주포 수급 (투신·연기금·사모)",
+      axis: "flow",
+      /*
+       * **기관 안에서도 미는 쪽은 따로 있다** (2026-09-01 벤티지: "기관 수급 중에서도
+       * 연기금, 투신, 사모펀드의 수급이 중요해 가중치를 거기다가 더 줄수도 있게
+       * 세팅하자고").
+       *
+       * 「기관계」는 열두 주체의 합이라 서로 상쇄된다. 금융투자(증권사 자기매매)는
+       * 헤지·차익 물량이 섞여 방향이 아니고, 은행·보험은 잘 안 움직인다.
+       * 실제로 방향을 만드는 건 **투신·연기금·사모** 셋이다.
+       *
+       * `algoScan` 이 이미 같은 셋을 「메인 기관」으로 묶어 쓰고 있었다
+       * (`invtrt` + `penfnd_etc` + `samo_fund`). 신호등에만 없었다.
+       *
+       * ⚠️ 아직 표본으로 못 쟀다 — `signalSamples` 에 주체별 칸이 없다(외인·기관
+       * 둘만 저장한다). 다음 재수집에 넣어 확인할 값이다. 그래서 **기본 가중치를
+       * 2 로만 둔다** — 검증된 `flowPersist` 와 같은 무게까지만.
+       *
+       * 조회는 늘지 않는다. `flowPersist` 가 이미 받은 `ka10060` 응답에 들어 있다.
+       */
+      enabled: true,
+      weight: 2,
+      /* 20일 누적 주포 순매수(백만원). 절대금액이라 대형주에 유리한 것은 같은 약점이다 */
+      threshold: 500,
+      strongAt: 10000,
+      /* 누적 거래일 수 */
+      span: 20,
+      hint: "투신 + 연기금 + 사모펀드의 20일 누적 순매수(백만원). 기관계 전체는 금융투자의 헤지 물량에 상쇄되지만 이 셋은 방향이다",
+      cost: 0,
+    },
+    {
+      key: "foreignRatioUp",
+      label: "외국인 지분율 상승",
+      axis: "flow",
+      /*
+       * **지분율이 오르고 있나** (2026-09-01 벤티지 요청).
+       *
+       * 순매수 금액과 다른 것을 본다. 금액은 「이번 달에 얼마 샀나」이고 지분율은
+       * **「가지고 있는 몫이 늘었나」**다. 증자·자사주 같은 것으로 주식 수가 바뀌면
+       * 금액만으로는 안 보이는 변화가 지분율에 나온다.
+       *
+       * 20거래일 전 대비 **%p 변화**로 잰다(비율이 아니라 절대 차). 지분율 23% 가
+       * 24% 가 되면 +1.0%p 다 — 그 정도면 큰 변화다.
+       */
+      enabled: true,
+      weight: 1,
+      threshold: 0.1,
+      strongAt: 1,
+      /* 며칠 전과 견주나 */
+      span: 20,
+      hint: "외국인 지분율이 20거래일 전보다 몇 %p 올랐나. 금액이 아니라 **가진 몫**의 변화다",
+      cost: 1,
+    },
+    {
+      key: "programFlow",
+      label: "프로그램 수급 (20일)",
+      axis: "flow",
+      /*
+       * **20일 누적 프로그램 순매수** (2026-09-01 벤티지 요청).
+       *
+       * 프로그램은 대개 외국인·기관의 바스켓 주문이라 개별 수급과 겹치지만,
+       * **차익거래와 인덱스 편입** 물량은 여기서만 보인다. 지수에 새로 들어가는
+       * 종목은 프로그램이 먼저 산다.
+       *
+       * ⚠️ 키움은 종목별 장중 시간대 프로그램을 안 준다 — **일별**만 된다.
+       * 그래서 「오늘 얼마」가 아니라 20일 누적으로 본다(하루치는 노이즈다).
+       */
+      enabled: false,
+      weight: 1,
+      /* 억원. 20일 누적이라 하루 문턱보다 크게 잡는다 */
+      threshold: 50,
+      strongAt: 500,
+      /* 누적 거래일 수 */
+      span: 20,
+      hint: "최근 20거래일 프로그램 순매수 누적(억원). 차익거래·인덱스 편입 물량이 여기서 보인다",
+      cost: 1,
     },
     {
       key: "volume",
@@ -563,11 +789,27 @@ export const DEFAULT_CONFIG: SignalConfig = {
       key: "targetTrend",
       label: "목표가 눈높이 상향",
       axis: "value",
-      enabled: false,
+      /*
+       * **켠다** (2026-09-01 — 벤티지: "목표주가 데이터도 있으니 적절히 써야지.
+       * 이게 기업의 활동흐름이 녹아져 있는것이니").
+       *
+       * 맞는 말이다. 목표가는 **애널리스트가 실적 전망을 고친 결과**라, 분기에 한 번
+       * 나오는 확정 실적보다 회사의 지금을 빨리 말한다. 실적이 꺾이면 목표가가 먼저
+       * 내려온다 — 한 종목에 하향 리포트가 줄줄이 달리는 게 그 신호다.
+       *
+       * ⚠️ 「목표가 괴리율」(`targetUpside`)과는 다른 것을 본다. 괴리율은 **수준**
+       * (얼마나 남았나)이고 이건 **방향**(눈높이가 오르나)이다. 괴리율이 큰 건 목표가가
+       * 안 내려온 채 주가만 빠진 것일 수도 있어서, 방향 없이 수준만 보면 함정이 된다.
+       * 그래서 방향 쪽을 켜고 괴리율은 끈 채로 둔다.
+       *
+       * 조회는 `targetUpside` 와 **같은 응답**에서 나온다(`costGroup: hantooOpinion`).
+       * 둘 다 켜도 한 번, 하나만 켜도 한 번이다.
+       */
+      enabled: true,
       weight: 1,
       threshold: 0,
       strongAt: 5,
-      hint: "최근 3개월 컨센서스가 그 이전 3개월보다 몇 % 높은가. 목표가 괴리율과 같은 응답에서 나온다",
+      hint: "최근 3개월 컨센서스가 그 이전 3개월보다 몇 % 높은가. **수준이 아니라 방향** — 실적 전망이 고쳐진 결과라 확정 실적보다 빠르다",
       cost: 1,
       costGroup: "hantooOpinion",
     },
@@ -767,6 +1009,17 @@ function mergeConfig(saved: Partial<SignalConfig> | null): SignalConfig {
         threshold: Number.isFinite(s.threshold) ? Number(s.threshold) : d.threshold,
         // strongAt 은 예전 저장본에 없다. 없으면 기본값을 쓴다
         strongAt: Number.isFinite(s.strongAt) ? Number(s.strongAt) : d.strongAt,
+        /*
+         * 기간 — **기본값에 없는 기준에는 안 붙인다.**
+         * 저장본이 엉뚱한 기준에 기간을 들고 있어도(옛 형식·손으로 고친 파일)
+         * 기간 개념이 없는 기준에 값이 생기면 화면에 빈 칸이 뜬다.
+         */
+        span:
+          d.span === undefined
+            ? undefined
+            : Number.isFinite(s.span) && Number(s.span) > 0
+              ? Math.round(Number(s.span))
+              : d.span,
       };
     }),
     maLines: normalizeMaLines(saved?.maLines ?? DEFAULT_CONFIG.maLines),
@@ -808,7 +1061,8 @@ export async function configFingerprint(): Promise<string> {
     `ma${c.maLines.join("")}`,
     ...c.checks
       .filter((x) => x.enabled)
-      .map((x) => `${x.key}:${x.weight}:${x.threshold}:${x.strongAt}`),
+      /* 기간도 지문에 넣는다 — 같은 문턱이라도 20일과 60일은 다른 기준이다 */
+      .map((x) => `${x.key}:${x.weight}:${x.threshold}:${x.strongAt}${x.span ? `:${x.span}` : ""}`),
   ];
   let h = 0;
   const str = parts.join("|");
@@ -1005,7 +1259,13 @@ export async function evaluateSignal(
   // 둘은 한 응답에서 나온다. 하나만 켜도 부르고, 둘 다 켜도 한 번만 부른다
   const wantOpinion = need.has("targetUpside") || need.has("targetTrend");
   const wantRatio = need.has("roe") || need.has("debtRatio");
-  const wantFlow = need.has("foreignFlow") || need.has("instFlow") || need.has("flowStreak");
+  const wantFlow =
+    need.has("foreignFlow") ||
+    need.has("instFlow") ||
+    need.has("flowStreak") ||
+    need.has("flowPersist") ||
+    need.has("flowAccel") ||
+    need.has("smartMoney");
   const wantFinance = need.has("profitGrowth");
   /* 테마 강세도 같은 조회에서 나온다 — `getSectorMood` 가 업종과 테마를 같이 준다 */
   const wantSector =
@@ -1014,6 +1274,8 @@ export async function evaluateSignal(
   const wantInfo = need.has("marketCap") || need.has("volume");
   const wantShort = need.has("shortSaleUp");
   const wantLending = need.has("lendingUp");
+  const wantForeignRatio = need.has("foreignRatioUp");
+  const wantProgram = need.has("programFlow");
 
   /*
    * 내 테마는 **전부 평가한 목록**에서 이 종목이 든 것만 고른다. 종목마다 다시 평가하면
@@ -1029,7 +1291,7 @@ export async function evaluateSignal(
         .catch(() => [])
     : [];
 
-  const [chart, flow, finance, mood, entry, info, shortSale, lending, opinion, ratio] =
+  const [chart, flow, finance, mood, entry, info, shortSale, lending, opinion, ratio, foreignRatio, program] =
     await Promise.all([
     wantChart
       ? client
@@ -1083,6 +1345,22 @@ export async function evaluateSignal(
     // 현재가는 아직 모른다(같은 Promise.all 안이다). 괴리율은 아래에서 직접 잰다
     wantOpinion ? analystOpinion(code).catch(() => null) : null,
     wantRatio ? latestRatio(code) : null,
+    /* 외국인 지분율 추이 (ka10008) — 「외국인·공매도·대차」 화면이 쓰는 것과 같다 */
+    wantForeignRatio
+      ? client
+          .request<Record<string, unknown>>("/api/dostk/frgnistt", "ka10008", { stk_cd: code })
+          .catch(() => null)
+      : null,
+    /* 종목별 프로그램매매 추이 (ka90013). 통합(_AL) — 프로그램도 NXT 몫이 있다 */
+    wantProgram
+      ? client
+          .request<Record<string, unknown>>("/api/dostk/mrkcond", "ka90013", {
+            stk_cd: alCode(code),
+            date: todayYyyymmdd(),
+            amt_qty_tp: "1",
+          })
+          .catch(() => null)
+      : null,
   ]);
 
   /*
@@ -1238,6 +1516,104 @@ export async function evaluateSignal(
         g = grade(streak, c);
         value = `${streak}일 연속`;
       }
+    } else if (c.key === "flowPersist") {
+      /*
+       * 여덟 구간(외인 5·10·20·60 · 기관 5·10·20·60) 중 몇이 플러스인가.
+       *
+       * ⚠️ **못 잰 구간은 세지 않는다.** 상장한 지 얼마 안 된 종목은 60일치가
+       * 없는데, 없는 것을 0(=플러스 아님)으로 세면 「안 사고 있다」로 읽힌다.
+       * 그건 모르는 것이지 아닌 것이 아니다. 잰 구간이 절반도 안 되면 아예
+       * 판정하지 않는다(`unknown`) — 두 구간만 보고 8점 만점을 매길 수는 없다.
+       */
+      if (flowRows.length > 0) {
+        const sumOf = (field: string, n: number): number | null =>
+          flowRows.length >= n
+            ? flowRows.slice(0, n).reduce((s, r) => s + toNum(r[field]), 0)
+            : null;
+        /* 설정한 기간까지만 본다 — span 20 이면 5·10·20 셋, 60 이면 넷 */
+        const spans = [5, 10, 20, 60].filter((n) => n <= (c.span ?? 60));
+        const vals: (number | null)[] = [
+          ...spans.map((n) => sumOf("frgnr_invsr", n)),
+          ...spans.map((n) => sumOf("orgn", n)),
+        ];
+        const measured = vals.filter((v) => v !== null) as number[];
+        /* 절반은 재야 판정한다 — 두 구간 보고 만점을 매길 수는 없다 */
+        if (measured.length >= Math.max(2, spans.length)) {
+          const pos = measured.filter((v) => v > 0).length;
+          g = grade(pos, c);
+          value = `${pos}/${measured.length}구간 +`;
+        }
+      }
+    } else if (c.key === "flowAccel") {
+      /*
+       * 최근 5일 일평균 ÷ 20일 일평균.
+       *
+       * 20일 일평균이 0 이하면 나눌 수 없다. 그때는 **5일이 플러스인지**로 가른다 —
+       * 20일은 파는데 5일은 사고 있으면 그게 전환이고, 이 기준이 잡아야 할 자리다.
+       * 다만 배수로는 표현이 안 되므로 만점(`strongAt`)을 준다.
+       */
+      const long = Math.max(8, c.span ?? 20);
+      /* 짧은 쪽은 긴 쪽의 1/4 — 20일이면 5일. 비율이 고정이라야 배수의 뜻이 안 변한다 */
+      const short = Math.max(2, Math.round(long / 4));
+      if (flowRows.length >= long) {
+        const sum = (n: number) =>
+          flowRows.slice(0, n).reduce((s, r) => s + toNum(r.frgnr_invsr), 0);
+        const d5 = sum(short) / short;
+        const d20 = sum(long) / long;
+        if (d20 > 0) {
+          const ratio = d5 / d20;
+          g = grade(ratio, c);
+          value = `${ratio.toFixed(2)}배 (${short}일 ÷ ${long}일)`;
+        } else if (d5 > 0) {
+          g = grade(c.strongAt, c);
+          value = "매도 → 매수 전환";
+        } else {
+          g = grade(0, c);
+          value = "20일 순매도";
+        }
+      }
+    } else if (c.key === "smartMoney") {
+      /*
+       * 투신 + 연기금등 + 사모펀드의 20일 누적. `algoScan` 이 「메인 기관」으로
+       * 묶어 쓰던 것과 **같은 세 칸**이다 — 이름이 갈리면 나중에 두 곳이 다른
+       * 것을 재게 되므로 필드까지 같게 둔다.
+       */
+      const days = Math.max(3, c.span ?? 20);
+      if (flowRows.length >= days) {
+        const sum = flowRows
+          .slice(0, days)
+          .reduce(
+            (s, r) => s + toNum(r.invtrt) + toNum(r.penfnd_etc) + toNum(r.samo_fund),
+            0,
+          );
+        g = grade(sum, c);
+        value = `${days}일 ${sum > 0 ? "+" : ""}${Math.round(sum).toLocaleString("ko-KR")}`;
+      }
+    } else if (c.key === "foreignRatioUp") {
+      const rows = (foreignRatio?.data?.stk_frgnr ?? []) as Record<string, unknown>[];
+      const back = Math.max(2, c.span ?? 20);
+      if (rows.length > back) {
+        const now = toNum(rows[0].wght);
+        const before = toNum(rows[back].wght);
+        /* 둘 다 0 이면 못 받은 것이다 — 「안 변했다」로 읽으면 안 된다 */
+        if (now > 0 && before > 0) {
+          const diff = now - before;
+          g = grade(diff, c);
+          value = `${now.toFixed(2)}% (${back}일 ${diff > 0 ? "+" : ""}${diff.toFixed(2)}%p)`;
+        }
+      }
+    } else if (c.key === "programFlow") {
+      const rows = (program?.data?.stk_daly_prm_trde_trnsn ?? []) as Record<string, unknown>[];
+      if (rows.length > 0) {
+        /* 백만원으로 오므로 100 으로 나눠 억원 — 화면·문턱과 단위를 맞춘다 */
+        const days = Math.max(3, c.span ?? 20);
+        const net =
+          rows
+            .slice(0, days)
+            .reduce((s, r) => s + (toNum(r.prm_buy_amt) - toNum(r.prm_sell_amt)), 0) / 100;
+        g = grade(net, c);
+        value = `${days}일 ${net > 0 ? "+" : ""}${Math.round(net).toLocaleString("ko-KR")}억`;
+      }
     } else if (c.key === "profitGrowth") {
       const periods = finance?.periods ?? [];
       if (periods.length >= 2) {
@@ -1350,18 +1726,53 @@ export async function evaluateSignal(
        * 값에 상승비율과 5일 중 오른 날을 같이 적는다 — 평균 등락률만 보면
        * 「하나가 상한가라 오른 테마」와 「고르게 오른 테마」가 같아 보인다.
        */
+      /*
+       * ## 하루가 아니라 **며칠 치 가중** (2026-09-01)
+       *
+       * 벤티지: "이것도 오늘 평균 등락률이 아니라 몇일 치 가중을 두면서 해야지.
+       * 오늘만 두면 의미가 없잖아. 섹터가 움직이는 걸 보자는건데."
+       *
+       * 맞는 말이다. 하루 등락률은 **노이즈다** — 지수가 1% 오른 날은 거의 모든
+       * 테마가 오른다. 그날 어느 테마가 0.3%p 더 올랐는지는 다음 달을 말해 주지
+       * 않는다. 「섹터가 움직인다」는 건 며칠에 걸쳐 붙는 것이다.
+       *
+       * 재료는 이미 다 있었다 — `w1`(5거래일 누적) · `m1`(20거래일 누적).
+       *
+       *   가중 등락률 = 0.5×오늘 + 0.3×(5일 누적 ÷ 5) + 0.2×(20일 누적 ÷ 20)
+       *
+       * **누적을 일평균으로 환산해서** 더한다. 안 그러면 20일 누적이 늘 제일 커서
+       * 다른 항을 삼킨다. 환산하면 세 항이 다 「하루치 등락률」이라 문턱(%)의 뜻도
+       * 그대로다 — 저장된 설정을 안 깨뜨린다.
+       *
+       * 오늘에 절반을 주는 것은 **지금 움직이는 것**을 봐야 하기 때문이다. 20일에
+       * 무게를 더 주면 이미 다 오른 테마가 위로 온다.
+       *
+       * 기록이 모자라 `w1`·`m1` 이 없으면 **있는 항만으로 다시 정규화한다** —
+       * 없는 것을 0 으로 두면 「안 올랐다」가 되어 새 테마가 늘 불리해진다.
+       */
+      const themed = (t: (typeof themeRows)[number]): number => {
+        const parts: { v: number; w: number }[] = [{ v: t.changeRate, w: 0.5 }];
+        if (t.w1 !== null && Number.isFinite(t.w1)) parts.push({ v: t.w1 / 5, w: 0.3 });
+        if (t.m1 !== null && Number.isFinite(t.m1)) parts.push({ v: t.m1 / 20, w: 0.2 });
+        const wsum = parts.reduce((s, p) => s + p.w, 0);
+        return parts.reduce((s, p) => s + p.v * p.w, 0) / wsum;
+      };
+
       const best = themeRows
         .filter((t) => t.stocks.some((s) => s.code === code))
         /* 지수·제도 묶음(밸류업 등)은 무리가 아니다 — 사업 테마만 (2026-08-28) */
         .filter((t) => !isIndexLikeTheme(t.name))
-        .sort((a, b) => b.changeRate - a.changeRate)[0];
+        /* 고르는 자도 가중값이어야 한다 — 오늘로 고르고 가중으로 채점하면 어긋난다 */
+        .sort((a, b) => themed(b) - themed(a))[0];
       if (best) {
-        g = grade(best.changeRate, c);
+        const score = themed(best);
+        g = grade(score, c);
         value =
-          `${best.name} ${best.changeRate > 0 ? "+" : ""}${best.changeRate.toFixed(2)}%` +
-          ` (${best.up}/${best.stocks.length}` +
-          (best.hit5.of > 0 ? ` · ${best.hit5.of}일 중 ${best.hit5.n}일` : "") +
-          ")";
+          `${best.name} 가중 ${score > 0 ? "+" : ""}${score.toFixed(2)}%` +
+          ` (오늘 ${best.changeRate > 0 ? "+" : ""}${best.changeRate.toFixed(2)}%` +
+          (best.w1 !== null ? ` · 5일 ${best.w1 > 0 ? "+" : ""}${best.w1.toFixed(1)}%` : "") +
+          (best.m1 !== null ? ` · 20일 ${best.m1 > 0 ? "+" : ""}${best.m1.toFixed(1)}%` : "") +
+          `)`;
         link = { kind: "theme", code: best.key, name: best.name };
       }
     } else if (c.key === "etfBacking") {
@@ -1399,22 +1810,64 @@ export async function evaluateSignal(
         value = `5일선 ${away > 0 ? "+" : ""}${away.toFixed(1)}%`;
       }
     } else if (c.key === "shortSaleUp") {
+      /*
+       * **수준이 아니라 방향** (2026-09-01 개편).
+       *
+       * 예전엔 5일 평균 비중만 봤다 — 「공매도가 많으면 위험」. 그런데 그건 절반만
+       * 맞다. 공매도 비중이 높은 채로 **줄고 있으면** 그건 숏커버이고, 빌린 쪽이
+       * 되사야 하므로 오히려 밀어 올리는 힘이다.
+       *
+       * 벤티지: "공매도 대차잔고도 의미있게 바꿔주고."
+       *
+       * 그래서 **최근 5일 평균에서 그 이전 15일 평균을 뺀 %p 차**를 잰다.
+       *   양수  공매도가 붙는 중 — 위험
+       *   음수  식는 중(숏커버) — 위험 없음. 위험 축이라 낮을수록 안전으로 읽힌다
+       *
+       * 수준을 아주 버리지는 않는다 — 비중이 20% 를 넘으면 방향과 무관하게 위험을
+       * 얹는다. 그 정도면 언제 되감길지 모르는 자리다.
+       */
       const rows = (shortSale?.data?.shrts_trnsn ?? []) as Record<string, unknown>[];
-      const win = rows.slice(0, 5);
-      if (win.length > 0) {
-        const avg = win.reduce((s, r) => s + toNum(r.trde_wght), 0) / win.length;
-        g = grade(avg, c);
-        value = `5일 평균 거래비중 ${avg.toFixed(1)}%`;
+      if (rows.length >= 20) {
+        const mean = (from: number, to: number) => {
+          const win = rows.slice(from, to);
+          return win.reduce((s, r) => s + toNum(r.trde_wght), 0) / win.length;
+        };
+        const recent = mean(0, 5);
+        const before = mean(5, 20);
+        const diff = recent - before;
+        /* 비중이 아주 높으면 방향과 무관하게 얹는다 — 20% 를 1%p 위험으로 환산 */
+        const level = Math.max(0, (recent - 20) / 20);
+        g = grade(diff + level, c);
+        value =
+          `최근 ${recent.toFixed(1)}% (이전 ${before.toFixed(1)}% 대비 ` +
+          `${diff > 0 ? "+" : ""}${diff.toFixed(1)}%p${diff < 0 ? " · 식는 중" : ""})`;
+      } else if (rows.length > 0) {
+        /* 20일이 안 되면 옛 방식으로라도 — 못 재는 것보다 낫다 */
+        const win = rows.slice(0, 5);
+        const a = win.reduce((s, r) => s + toNum(r.trde_wght), 0) / win.length;
+        g = grade(Math.max(0, (a - 20) / 20), c);
+        value = `5일 평균 비중 ${a.toFixed(1)}% (추이 못 잼)`;
       }
     } else if (c.key === "lendingUp") {
+      /*
+       * ⚠️ 예전엔 `Math.max(0, up)` 이었다 — **감소를 0 으로 눌러 버렸다.**
+       *
+       * 그래서 대차잔고가 줄어드는 것(빌린 주식을 갚는 중 = 숏커버)이 「위험 없음」
+       * 까지만 되고 **좋은 신호로는 못 읽혔다.** 위험 축은 값이 낮을수록 안전인데,
+       * 음수를 못 내니 안전 쪽 끝을 못 쓰고 있었던 셈이다.
+       *
+       * 그 눌림을 풀었다. 이제 −10%(잔고 10% 감소)면 위험 축에서 확실한 안전이다.
+       * 20일 전과 견준다 — 5일은 하루 이틀 변동에 흔들린다.
+       */
       const rows = (lending?.data?.dbrt_trde_trnsn ?? []) as Record<string, unknown>[];
-      if (rows.length >= 6) {
+      const span = rows.length >= 21 ? 20 : rows.length >= 6 ? 5 : 0;
+      if (span > 0) {
         const now = toNum(rows[0].rmnd);
-        const before = toNum(rows[5].rmnd);
+        const before = toNum(rows[span].rmnd);
         if (before > 0) {
           const up = ((now - before) / before) * 100;
-          g = grade(Math.max(0, up), c);
-          value = `잔고 5일 ${up > 0 ? "+" : ""}${up.toFixed(1)}%`;
+          g = grade(up, c);
+          value = `잔고 ${span}일 ${up > 0 ? "+" : ""}${up.toFixed(1)}%${up < 0 ? " · 갚는 중" : ""}`;
         }
       }
     }

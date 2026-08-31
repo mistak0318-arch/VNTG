@@ -82,6 +82,7 @@ function diffFromDefaults(cur: SignalConfig, def: SignalConfig): string[] {
     if (c.weight !== d.weight) out.push(`${d.label} 무게 ${c.weight} → ${d.weight}`);
     if (c.threshold !== d.threshold) out.push(`${d.label} 기준값 ${c.threshold} → ${d.threshold}`);
     if (c.strongAt !== d.strongAt) out.push(`${d.label} 아주 좋음 ${c.strongAt} → ${d.strongAt}`);
+    if (c.span !== d.span) out.push(`${d.label} 기간 ${c.span ?? "-"}일 → ${d.span ?? "-"}일`);
   }
   return out;
 }
@@ -407,6 +408,35 @@ export function SignalConfigPanel() {
                           <span className="sig-unit">{UNITS[c.key] ?? ""}</span>
                         </label>
                       </>
+                    )}
+                    {/*
+                      **기간은 기준마다 따로** (2026-09-01 — "그럼 저것도 개별로
+                      세팅하게 두자고").
+
+                      위쪽 「수급 판정 기간」은 한 값으로 모든 수급 기준을 묶는데,
+                      지속은 5·10·20·60 을 한꺼번에 보고 가속은 두 기간의 비를 내고
+                      주포는 누적 하나를 낸다 — 「기간」의 뜻이 서로 달라서 한 칸으로
+                      묶으면 어느 하나는 반드시 어긋난다.
+
+                      기간 개념이 없는 기준(신고가·정배열)에는 아예 안 뜬다.
+                    */}
+                    {c.span !== undefined && (
+                      <label title="이 기준이 며칠을 되짚나 — 뜻은 기준마다 다릅니다. 아래 설명을 보세요">
+                        기간
+                        <input
+                          type="number"
+                          min={2}
+                          max={250}
+                          value={c.span}
+                          disabled={!c.enabled}
+                          onChange={(e) =>
+                            patchCheck(c.key, {
+                              span: Math.max(2, Math.min(250, Number(e.target.value) || 2)),
+                            })
+                          }
+                        />
+                        <span className="sig-unit">일</span>
+                      </label>
                     )}
                   </div>
                 </div>
