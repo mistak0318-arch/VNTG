@@ -59,6 +59,17 @@ export interface CisConfig {
    * 비용은 ka10095 하루 390회뿐이고 AI 는 안 부른다.
    */
   watch: boolean;
+  /**
+   * **몇 분마다 살 자리를 찾을까** (0 이면 안 찾는다 — 하루 세 번만).
+   *
+   * 15분이 기본이다. 1분으로 하면 후보 스캔(주도주+종목별 신호등)이 초당 5회
+   * 한도에 걸리고, 무엇보다 **후보가 1분 사이에 바뀌지 않는다** — 자주 보면
+   * 조건 경계에서 샀다 팔았다만 한다. 30분이면 오전 눌림목을 놓친다.
+   *
+   * ⚠️ 이 값이 0 보다 크면 **매수는 루프가 도맡는다.** 하루 세 번 일지는
+   * 글만 쓴다 — 안 그러면 루프가 산 것을 아침 일지가 또 사려 든다.
+   */
+  buyScanMin: number;
   /** 하루 세 번의 시각 (KST, "HH:MM") */
   times: { morning: string; noon: string; evening: string };
   /** 빌려도 되나 — 끄면 예수금만 쓴다 */
@@ -82,6 +93,7 @@ export const DEFAULT_CIS_CONFIG: CisConfig = {
   enabled: false, // 처음엔 꺼져 있다 — 켜는 것은 사람이 정한다
   auto: true,
   watch: true,
+  buyScanMin: 15,
   /*
    * 08:40 — 장 열기 20분 전. 어제 종가·간밤 해외가 다 들어와 있고, 시가에 살
    * 계획을 세울 시간이 있다.
@@ -164,6 +176,13 @@ export async function saveCisConfig(input: Partial<CisConfig>): Promise<CisConfi
     enabled: input.enabled ?? cur.enabled,
     auto: input.auto ?? cur.auto,
     watch: input.watch ?? cur.watch,
+    /* 너무 잦으면 호출 한도에 걸린다 — 0(끔) 또는 5분 이상만 받는다 */
+    buyScanMin: (() => {
+      const n = Number(input.buyScanMin);
+      if (!Number.isFinite(n)) return cur.buyScanMin;
+      if (n <= 0) return 0;
+      return Math.min(120, Math.max(5, Math.round(n)));
+    })(),
     times: {
       morning: time(t.morning, cur.times.morning),
       noon: time(t.noon, cur.times.noon),

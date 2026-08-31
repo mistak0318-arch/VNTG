@@ -720,7 +720,11 @@ function AccountTab({
 }) {
   const [v, setV] = useState<CisAccountView | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [watch, setWatch] = useState<{ open: boolean; events: CisWatchEvent[] } | null>(null);
+  const [watch, setWatch] = useState<{
+    open: boolean;
+    lastBuyScan: string | null;
+    events: CisWatchEvent[];
+  } | null>(null);
 
   useEffect(() => {
     setV(null);
@@ -866,7 +870,9 @@ function AccountTab({
           <h3 className="section-heading">
             장중 감시
             <span className={`cis-watch-dot ${watch.open ? "on" : ""}`} aria-hidden="true" />
-            <i className="cis-slot-hint">{watch.open ? "보고 있습니다 (1분마다)" : "장 밖입니다"}</i>
+            <i className="cis-slot-hint">
+              {watch.open ? "보고 있습니다 — 매도 1분 · 매수 스캔 15분" : "장 밖입니다"}
+            </i>
           </h3>
           {watch.events.length === 0 ? (
             <div className="table-note">
@@ -881,8 +887,10 @@ function AccountTab({
                     {new Date(e.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
                   </span>
                   <b>{e.name}</b>
-                  <span className={e.kind === "sell" ? "negative" : ""}>
-                    {e.kind === "sell" ? "매도" : "손절선 올림"}
+                  <span
+                    className={e.kind === "sell" ? "negative" : e.kind === "buy" ? "positive" : ""}
+                  >
+                    {e.kind === "sell" ? "매도" : e.kind === "buy" ? "매수" : "손절선 올림"}
                   </span>
                   <span className="cis-watch-why">{e.reason}</span>
                   {typeof e.pnl === "number" && (
@@ -1261,6 +1269,31 @@ function ConfigTab({
             </i>
           </span>
         </label>
+      </div>
+
+      <h3 className="section-heading">살 자리를 얼마나 자주 찾을까</h3>
+      <div className="filter-row">
+        {[0, 5, 15, 30, 60].map((n) => (
+          <button
+            key={n}
+            className={`filter-btn ${draft.buyScanMin === n ? "active" : ""}`}
+            onClick={() => save({ buyScanMin: n })}
+          >
+            {n === 0 ? "안 찾음" : `${n}분`}
+          </button>
+        ))}
+      </div>
+      <div className="table-note">
+        매도는 늘 1분마다 봅니다 — 손절선은 시간을 가리지 않으니까요.
+        <b>살 자리를 찾는 것</b>만 이 주기를 따릅니다: 후보 스캔이 무거워 1분마다
+        돌리면 호출 한도에 걸리고, 무엇보다 후보가 1분 사이에 바뀌지 않습니다.
+        {draft.buyScanMin > 0 && (
+          <>
+            {" "}
+            <b>이 값이 0 보다 크면 매수는 루프가 도맡습니다</b> — 하루 세 번 일지는
+            글만 씁니다(그래야 루프가 산 것을 아침 일지가 또 사지 않습니다).
+          </>
+        )}
       </div>
 
       <h3 className="section-heading">언제 쓸까</h3>

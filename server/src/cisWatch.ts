@@ -3,7 +3,8 @@ import { equityOf, loadAccount, markToMarket, saveAccount, sell, today } from ".
 import { ACCOUNT_IDS, profileOf, type AccountId } from "./cisAccounts.js";
 import { getCisConfig } from "./cisConfig.js";
 import { exitCalls, trailStops } from "./cisTrader.js";
-import { priceMap } from "./cisRun.js";
+import { buyRound, priceMap } from "./cisRun.js";
+import { modeOfSlot } from "./cisTrader.js";
 import type { Slot } from "./cisJournal.js";
 
 /**
@@ -40,12 +41,15 @@ import type { Slot } from "./cisJournal.js";
 const TICK_MS = 60_000;
 let timer: ReturnType<typeof setInterval> | null = null;
 let lastRun = 0;
+/** 계좌별로 마지막 매수 스캔 시각 — 주기를 지키는 데 쓴다 */
+const lastBuyScan = new Map<AccountId, number>();
+let lastBuyScanAt = 0;
 
 /** 방금 무엇을 했나 — 화면과 다음 일지가 읽는다 */
 export interface WatchEvent {
   at: string;
   account: AccountId;
-  kind: "sell" | "trail";
+  kind: "sell" | "trail" | "buy";
   name: string;
   code: string;
   qty?: number;
@@ -204,6 +208,53 @@ async function watchAccount(client: KiwoomClient, id: AccountId): Promise<void> 
   if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS);
 }
 
+/**
+ * **살 자리를 찾는다** — 몇 분마다 (2026-08-31, 기본 15분).
+ *
+ * 매도(1분)와 나눈 이유: 후보 스캔은 주도주 스캔과 종목별 신호등을 부르는
+ * 무거운 일이라 1분마다 돌리면 초당 5회 한도에 걸린다. 그리고 **후보가 1분
+ * 사이에 바뀌지 않는다** — 자주 보면 조건 경계에서 샀다 팔았다만 한다.
+ *
+ * 진입 모드는 **시각이 정한다**: 아침엔 시가배팅, 장중엔 장중배팅,
+ * 마감 무렵엔 종가배팅. 조건이 안 서면 아무것도 안 산다.
+ *
+ * ⚠️ 매수 판단은 `buyRound` 한 곳에 있다 — 하루 세 번 일지도 같은 함수를
+ * 쓴다. 두 군데 있으면 둘이 갈리고, 그러면 「어느 규칙이 나빴나」를 못 묻는다.
+ */
+async function buyScan(client: KiwoomClient, id: AccountId, everyMin: number): Promise<void> {
+  const now = Date.now();
+  const last = lastBuyScan.get(id) ?? 0;
+  if (now - last < everyMin * 60_000) return;
+  lastBuyScan.set(id, now);
+  lastBuyScanAt = now;
+
+  const cfg = await getCisConfig();
+  const a = await loadAccount(id);
+  /* 자리가 꽉 찼으면 스캔 자체를 안 돈다 — 무거운 조회를 헛되이 부르지 않는다 */
+  if (a.positions.length >= cfg.rules.maxPositions) return;
+
+  const date = today();
+  const slot = slotNow(cfg.times);
+  const r = await buyRound(client, a, id, slot, modeOfSlot(slot), date);
+  if (r.actions.length === 0) return;
+
+  for (const act of r.actions) {
+    events.push({
+      at: new Date().toISOString(),
+      account: id,
+      kind: "buy",
+      name: act.name,
+      code: act.code,
+      qty: act.qty,
+      price: act.price,
+      reason: act.why,
+    });
+  }
+  const px = await priceMap(client, a.positions.map((p) => p.code));
+  markToMarket(a, (c) => px.get(c) ?? null, date);
+  await saveAccount(a);
+}
+
 async function tick(client: KiwoomClient): Promise<void> {
   const cfg = await getCisConfig();
   if (!cfg.enabled || !cfg.watch) return;
@@ -213,7 +264,18 @@ async function tick(client: KiwoomClient): Promise<void> {
     try {
       await watchAccount(client, id);
     } catch (e) {
-      console.error(`[cis-watch] ${id} 실패:`, e instanceof Error ? e.message : e);
+      console.error(`[cis-watch] ${id} 감시 실패:`, e instanceof Error ? e.message : e);
+    }
+    /*
+     * 연금 계좌는 여기서 안 산다 — 주 단위로 담는 자리라 15분마다 볼 이유가 없고,
+     * ETF 배분은 `cisPension` 이 따로 맡는다.
+     */
+    if (cfg.buyScanMin > 0 && profileOf(id).cadence === "daily") {
+      try {
+        await buyScan(client, id, cfg.buyScanMin);
+      } catch (e) {
+        console.error(`[cis-watch] ${id} 매수 스캔 실패:`, e instanceof Error ? e.message : e);
+      }
     }
   }
 }
@@ -224,10 +286,16 @@ export function startCisWatch(client: KiwoomClient): void {
 }
 
 /** 화면이 「지금 보고 있나」를 묻는다 */
-export function watchStatus(): { open: boolean; lastRun: string | null; events: number } {
+export function watchStatus(): {
+  open: boolean;
+  lastRun: string | null;
+  lastBuyScan: string | null;
+  events: number;
+} {
   return {
     open: marketOpen(),
     lastRun: lastRun ? new Date(lastRun).toISOString() : null,
+    lastBuyScan: lastBuyScanAt ? new Date(lastBuyScanAt).toISOString() : null,
     events: events.length,
   };
 }

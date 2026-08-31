@@ -21,6 +21,7 @@ import {
   planBuys,
   trailStops,
   type Candidate,
+  type EntryMode,
 } from "./cisTrader.js";
 import {
   loadDay,
@@ -133,6 +134,130 @@ function yyyymmdd(): string {
   return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
+/**
+ * **살 자리를 찾아 산다.** 하루 세 번 일지와 15분 루프가 **같은 이 함수**를 쓴다.
+ *
+ * 매수 판단이 두 군데 있으면 둘이 갈린다 — 루프에서 고친 규칙이 일지에는 안
+ * 들어가고, 그러면 「어느 규칙이 나빴나」를 물을 수 없다. 한 곳이라야 한다.
+ */
+export async function buyRound(
+  client: KiwoomClient,
+  a: CisAccount,
+  account: AccountId,
+  slot: Slot,
+  mode: EntryMode,
+  date: string,
+  progress: ProgressReporter = noopProgress,
+): Promise<{
+  gate: Awaited<ReturnType<typeof marketGate>>;
+  candidates: Candidate[];
+  plans: ReturnType<typeof planBuys>["plans"];
+  actions: JournalAction[];
+  gateNotes: { name: string; ok: boolean; reason: string }[];
+  screenNotes: ScreenNote[];
+  aiError?: string;
+}> {
+  const cfg = await getCisConfig();
+  const rules = cfg.rules;
+  const profile = profileOf(account);
+  const actions: JournalAction[] = [];
+  const candidates: Candidate[] = [];
+  const gateNotes: { name: string; ok: boolean; reason: string }[] = [];
+  let screenNotes: ScreenNote[] = [];
+  let aiError: string | undefined;
+
+  progress.start("market");
+  const gate = await marketGate(client, rules);
+  progress.done("market", gate.reason);
+  if (!gate.ok) {
+    progress.skip("scan", "시장 문이 닫혔다");
+    progress.skip("signal");
+    return { gate, candidates, plans: [], actions, gateNotes, screenNotes };
+  }
+
+  progress.start("scan");
+  const picked = await pickCandidates(client, rules);
+  progress.done("scan", `후보 ${picked.candidates.length}종목`);
+  progress.skip("signal", "후보 스캔에 포함됨");
+
+  /*
+   * **계좌가 못 담는 것을 먼저 뺀다.** 연금 계좌는 ETF 만, 레버리지·인버스는
+   * 불가다 — 제도가 그렇다. 모의라도 못 사는 것을 샀다고 적으면 이 장부가
+   * 현실과 다른 이야기가 된다.
+   */
+  const allowed = picked.candidates.filter((c) => !rejectReason(profile, { name: c.name }));
+
+  /* AI 는 여기서 **경고만** 단다. 거부권은 설정에서 켰을 때만 */
+  progress.start("ai");
+  const screened = await screenCandidates(allowed, rules);
+  screenNotes = screened.notes;
+  aiError = screened.error;
+  const afterVeto =
+    screened.vetoed.length > 0
+      ? allowed.filter((c) => !screened.vetoed.includes(c.code))
+      : allowed;
+
+  /* 살 값은 **지금 값**이라야 한다 — 스캔이 든 값은 몇 분 전 것일 수 있다 */
+  const cpx = await priceMap(client, afterVeto.map((c) => c.code));
+  const buyPriceOf = (code: string) => cpx.get(code) ?? null;
+
+  /*
+   * **이 자리로 들어갈 만한가**를 후보마다 묻는다. 시간대가 아니라 자리의
+   * 성질이 정한다 — 조건이 안 서면 그 시간대엔 그 종목을 안 산다.
+   * 통과 못 한 이유도 남긴다. 「왜 안 샀나」가 「왜 샀나」만큼 중요하다.
+   */
+  for (const c of afterVeto) {
+    const now = buyPriceOf(c.code);
+    /* 전일 종가는 등락률에서 역산한다 — TR 을 더 부르지 않는다 */
+    const prevClose = now !== null && c.changeRate !== -100 ? now / (1 + c.changeRate / 100) : null;
+    /* 시가는 장중배팅에만 필요하다 — 필요할 때만 일봉을 부른다 */
+    const open = mode === "intra" ? await openPriceOf(client, c.code) : null;
+    const g = entryGate(mode, c, now, open, prevClose, rules);
+    gateNotes.push({ name: c.name, ok: g.ok, reason: g.reason });
+    if (g.ok) {
+      candidates.push({ ...c, mode, why: `${c.why} · ${ENTRY_LABEL[mode]}: ${g.reason}` });
+    }
+  }
+
+  const planned = planBuys(a, candidates, buyPriceOf, rules);
+  for (const p of planned.plans) {
+    const used = [...p.candidate.used, `진입:${ENTRY_LABEL[mode]}`];
+    const r = buy(
+      a,
+      {
+        code: p.candidate.code,
+        name: p.candidate.name,
+        qty: p.qty,
+        price: p.price,
+        funding: p.funding,
+        why: p.candidate.why,
+        used,
+        stop: p.stop,
+        target: p.target,
+        slot,
+        /* 퇴직연금 30% 몫인지 **살 때 정해 박는다** — 나중에 다시 판정하지 않는다 */
+        safe: profile.riskCap < 100 ? isSafeAsset(p.candidate.name) : undefined,
+      },
+      buyPriceOf,
+      date,
+    );
+    if (r.ok) {
+      actions.push({
+        side: "buy",
+        code: p.candidate.code,
+        name: p.candidate.name,
+        qty: r.qty,
+        price: p.price,
+        funding: p.funding,
+        why: p.candidate.why,
+        used,
+      });
+    }
+  }
+
+  return { gate, candidates, plans: planned.plans, actions, gateNotes, screenNotes, aiError };
+}
+
 /** 결과 — 화면이 「방금 뭘 했나」를 그대로 보여 준다 */
 export interface RunResult {
   ok: boolean;
@@ -225,96 +350,39 @@ export async function runSlot(
   /* ── ③ 손절선 끌어올리기 ───────────────────────────────── */
   const trailed = trailStops(a, priceOf, rules);
 
-  /* ── ④ 살 것 — **시간대마다 자기 모드로** ─────────────────── */
-  let gate = null;
+  /* ── ④ 살 것 ───────────────────────────────────────────── */
+  /*
+   * ⚠️ **루프가 매수를 맡으면 여기서는 안 산다** (2026-08-31).
+   *
+   * 15분 스캔이 켜져 있으면 살 자리는 그쪽이 이미 찾아 샀다. 여기서 또 사면
+   * 같은 자리를 두 번 사거나, 루프가 안 산 것을 「아침이라서」 사게 된다.
+   * 그때 이 일지는 **루프의 판단과 다른 이야기**를 적게 된다.
+   *
+   * 루프가 꺼져 있으면(하루 세 번만 쓰는 설정) 여기가 매수를 맡는다.
+   */
+  const mode = modeOfSlot(slot);
+  const loopBuys = cfg.watch && cfg.buyScanMin > 0;
+  let gate: Awaited<ReturnType<typeof marketGate>> | null = null;
   let candidates: Candidate[] = [];
   let plans: ReturnType<typeof planBuys>["plans"] = [];
-  const mode = modeOfSlot(slot);
-  const gateNotes: { name: string; ok: boolean; reason: string }[] = [];
+  let gateNotes: { name: string; ok: boolean; reason: string }[] = [];
 
-  progress.start("market");
-  gate = await marketGate(client, rules);
-  progress.done("market", gate.reason);
-  if (gate.ok) {
-    progress.start("scan");
-    const picked = await pickCandidates(client, rules);
-    progress.done("scan", `후보 ${picked.candidates.length}종목`);
-    progress.skip("signal", "후보 스캔에 포함됨");
-    /*
-     * **계좌가 못 담는 것을 먼저 뺀다.** 연금 계좌는 ETF 만, 레버리지·인버스는
-     * 불가다 — 제도가 그렇다. 모의라도 못 사는 것을 샀다고 적으면 이 장부가
-     * 현실과 다른 이야기가 된다.
-     */
-    const allowed = picked.candidates.filter((c) => !rejectReason(profile, { name: c.name }));
-
-    /* AI 는 여기서 **경고만** 단다. 거부권은 설정에서 켰을 때만 */
-    progress.start("ai");
-    const screened = await screenCandidates(allowed, rules);
-    screenNotes = screened.notes;
-    aiError = screened.error;
-    const afterVeto =
-      screened.vetoed.length > 0
-        ? allowed.filter((c) => !screened.vetoed.includes(c.code))
-        : allowed;
-
-    /* 살 값은 **지금 값**이라야 한다 — 스캔이 든 값은 몇 분 전 것일 수 있다 */
-    const cpx = await priceMap(client, afterVeto.map((c) => c.code));
-    const buyPriceOf = (code: string) => cpx.get(code) ?? px.get(code) ?? null;
-
-    /*
-     * **이 자리로 들어갈 만한가**를 후보마다 묻는다. 시간대가 아니라 자리의
-     * 성질이 정한다 — 조건이 안 서면 그 시간대엔 그 종목을 안 산다.
-     * 통과 못 한 이유도 남긴다. 「왜 안 샀나」가 「왜 샀나」만큼 중요하다.
-     */
-    for (const c of afterVeto) {
-      const now = buyPriceOf(c.code);
-      /* 전일 종가는 등락률에서 역산한다 — TR 을 더 부르지 않는다 */
-      const prevClose =
-        now !== null && c.changeRate !== -100 ? now / (1 + c.changeRate / 100) : null;
-      /* 시가는 장중배팅에만 필요하다 — 필요할 때만 일봉을 부른다 */
-      const open = mode === "intra" ? await openPriceOf(client, c.code) : null;
-      const g = entryGate(mode, c, now, open, prevClose, rules);
-      gateNotes.push({ name: c.name, ok: g.ok, reason: g.reason });
-      if (g.ok) {
-        candidates.push({ ...c, mode, why: `${c.why} · ${ENTRY_LABEL[mode]}: ${g.reason}` });
-      }
-    }
-
-    const planned = planBuys(a, candidates, buyPriceOf, rules);
-    plans = planned.plans;
-    for (const p of plans) {
-      const r = buy(
-        a,
-        {
-          code: p.candidate.code,
-          name: p.candidate.name,
-          qty: p.qty,
-          price: p.price,
-          funding: p.funding,
-          why: p.candidate.why,
-          used: [...p.candidate.used, `진입:${ENTRY_LABEL[mode]}`],
-          stop: p.stop,
-          target: p.target,
-          slot,
-          /* 퇴직연금 30% 몫인지 **살 때 정해 박는다** — 나중에 다시 판정하지 않는다 */
-          safe: profile.riskCap < 100 ? isSafeAsset(p.candidate.name) : undefined,
-        },
-        buyPriceOf,
-        date,
-      );
-      if (r.ok) {
-        actions.push({
-          side: "buy",
-          code: p.candidate.code,
-          name: p.candidate.name,
-          qty: r.qty,
-          price: p.price,
-          funding: p.funding,
-          why: p.candidate.why,
-          used: [...p.candidate.used, `진입:${ENTRY_LABEL[mode]}`],
-        });
-      }
-    }
+  if (loopBuys) {
+    /* 시장 판단은 글에 필요하므로 그것만 부른다 — 스캔은 안 돈다(호출을 아낀다) */
+    progress.start("market");
+    gate = await marketGate(client, rules);
+    progress.done("market", gate.reason);
+    progress.skip("scan", `매수는 ${cfg.buyScanMin}분 루프가 맡는다`);
+    progress.skip("signal");
+  } else {
+    const r = await buyRound(client, a, account, slot, mode, date, progress);
+    gate = r.gate;
+    candidates = r.candidates;
+    plans = r.plans;
+    gateNotes = r.gateNotes;
+    screenNotes = r.screenNotes;
+    aiError = r.aiError;
+    actions.push(...r.actions);
   }
 
   /* ── ⑤ 평가액 찍기 ─────────────────────────────────────── */
@@ -325,8 +393,31 @@ export async function runSlot(
 
   /* ── ⑥ 글 ──────────────────────────────────────────────── */
   const prev = a.equityCurve.filter((r) => r.date < date).slice(-1)[0]?.equity ?? null;
+
+  /*
+   * **그사이에 뭘 했나** (2026-08-31 — "장중 3번의 복기는 그사이에 대한 복기와
+   * 시장상황에 대해서 판단할 내용을 적어두는거").
+   *
+   * 직전 시간대를 쓴 뒤로 루프가 사고판 것을 모은다. 체결에 시각(at)을 남긴
+   * 이유가 이것이다 — 날짜만 있으면 구간을 못 자른다.
+   */
+  const prevSlot: Slot | null = slot === "noon" ? "morning" : slot === "evening" ? "noon" : null;
+  const since = prevSlot ? existing[prevSlot]?.at ?? null : null;
+  const interval = since
+    ? a.fills.filter((f) => f.at && f.at > since && !actions.some((x) => x.code === f.code && x.side === f.side))
+    : [];
   let text = narrate(slot, {
     mode,
+    loopBuys,
+    interval: interval.map((f) => ({
+      side: f.side,
+      name: f.name,
+      qty: f.qty,
+      price: f.price,
+      pnl: f.pnl,
+      why: f.why,
+      at: f.at ?? "",
+    })),
     gateNotes,
     market: gate,
     candidates,

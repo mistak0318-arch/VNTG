@@ -959,7 +959,12 @@ export const api = {
     postJson<{ jobId: string }>("/api/cis/run", { account, slot, force }),
   cisRunProgress: (jobId: string) => getJson<PublishJob>(`/api/cis/run-progress/${jobId}`),
   cisWatch: (account: string) =>
-    getJson<{ open: boolean; lastRun: string | null; events: CisWatchEvent[] }>(
+    getJson<{
+      open: boolean;
+      lastRun: string | null;
+      lastBuyScan: string | null;
+      events: CisWatchEvent[];
+    }>(
       `/api/cis/watch?account=${account}`,
     ),
   cisReset: (account: string) =>
@@ -4547,6 +4552,8 @@ export interface CisConfig {
   auto: boolean;
   /** 장중 내내 볼까 (1분마다). 끄면 하루 세 번만 본다 */
   watch: boolean;
+  /** 몇 분마다 살 자리를 찾을까 (0 이면 하루 세 번만) */
+  buyScanMin: number;
   times: { morning: string; noon: string; evening: string };
   useMisu: boolean;
   useCredit: boolean;
@@ -4566,7 +4573,7 @@ export interface CisConfig {
 export interface CisWatchEvent {
   at: string;
   account: string;
-  kind: "sell" | "trail";
+  kind: "sell" | "trail" | "buy";
   name: string;
   code: string;
   qty?: number;

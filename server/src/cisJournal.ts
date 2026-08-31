@@ -220,6 +220,15 @@ export function narrate(
   d: {
     /** 이 시간대의 진입 모드 — 시가/장중/종가배팅 */
     mode: EntryMode;
+    /** 매수를 15분 루프가 맡고 있나 — 그러면 이 글은 「그사이 복기」가 본체다 */
+    loopBuys: boolean;
+    /**
+     * **직전 시간대 이후에 루프가 사고판 것.**
+     *
+     * 하루 세 번이 각각 「그사이에 무슨 일이 있었나」를 적어야 이 일지가
+     * 이어 읽힌다 — 아침에 계획만 적고 점심에 결과만 적으면 그 사이가 빈다.
+     */
+    interval: { side: "buy" | "sell"; name: string; qty: number; price: number; pnl?: number; why: string; at: string }[];
     /** 후보마다 이 자리로 들어갈 만했나. **안 산 이유가 산 이유만큼 중요하다** */
     gateNotes: { name: string; ok: boolean; reason: string }[];
     market: MarketGate | null;
@@ -269,11 +278,33 @@ export function narrate(
   }
 
   /*
+   * **그사이에 무슨 일이 있었나.** 루프가 장중에 사고판 것을 먼저 적는다 —
+   * 이 시간대의 글에서 제일 중요한 대목이다. 계획과 결과 사이가 비면
+   * 나중에 읽을 때 「왜 그렇게 됐는지」를 알 수가 없다.
+   */
+  if (d.interval.length > 0) {
+    L.push("");
+    L.push(slot === "evening" ? "### 오후에 있었던 일" : "### 그사이에 있었던 일");
+    for (const f of d.interval) {
+      const t = f.at ? new Date(f.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "";
+      const tail = f.side === "sell" && typeof f.pnl === "number" ? ` → ${f.pnl >= 0 ? "+" : ""}${won(f.pnl)}` : "";
+      L.push(
+        `- ${t} **${f.name}** ${f.side === "buy" ? "매수" : "매도"} ` +
+          `${f.qty.toLocaleString()}주 ${won(f.price)}${tail}`,
+      );
+      if (f.why) L.push(`  - ${f.why}`);
+    }
+  } else if (d.loopBuys && slot !== "morning") {
+    L.push("");
+    L.push("그사이에 손댈 자리는 없었다. 규칙에 걸린 것이 없으면 아무것도 안 한다.");
+  }
+
+  /*
    * **이 자리로 들어갈 만했나.** 통과한 것과 못 한 것을 같이 적는다 —
    * 「왜 안 샀나」가 「왜 샀나」만큼 중요하다. 안 산 이유가 없으면 나중에
    * 「그때 왜 놓쳤지」에 답할 수가 없다.
    */
-  if (d.market?.ok) {
+  if (d.market?.ok && !d.loopBuys) {
     const passed = d.gateNotes.filter((g) => g.ok);
     const failed = d.gateNotes.filter((g) => !g.ok);
     L.push("");
