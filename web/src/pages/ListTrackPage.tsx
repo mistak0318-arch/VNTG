@@ -1,6 +1,34 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type ListTrackSummary, type ListEntry } from "../api";
 
+/**
+ * 접기 — **기기별로 기억한다** (2026-08-31 — "이것들 좀 접는 구조 좀 만들어주라
+ * 칸을 많이 차지해").
+ *
+ * 슈퍼신호등 채점표(`GradeBoard`)와 같은 문법이다. 접힌 상태에서도 **제일 중요한
+ * 한 줄은 보인다** — 펴 볼지 판단할 근거가 있어야 한다.
+ */
+function useFold(key: string, initial = false) {
+  const [open, setOpen] = useState(() => {
+    try {
+      const v = localStorage.getItem(`vntg.lt.${key}`);
+      return v === null ? initial : v === "1";
+    } catch {
+      return initial;
+    }
+  });
+  const toggle = () =>
+    setOpen((v) => {
+      try {
+        localStorage.setItem(`vntg.lt.${key}`, v ? "0" : "1");
+      } catch {
+        /* 못 적으면 다음에 또 접혀 있을 뿐 */
+      }
+      return !v;
+    });
+  return [open, toggle] as const;
+}
+
 /** 등락 색 — 0 은 색을 안 준다 */
 const cls = (v: number | null | undefined): string =>
   v === null || v === undefined || !Number.isFinite(v) ? "" : v > 0 ? "positive" : v < 0 ? "negative" : "";
@@ -47,6 +75,8 @@ export function ListTrackPage({
   } | null>(null);
   const [tab, setTab] = useState<string>("");
   const [showExited, setShowExited] = useState(false);
+  const [openSum, toggleSum] = useFold("summary", true);
+  const [openGrade, toggleGrade] = useFold("grade", false);
   const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -130,7 +160,18 @@ export function ListTrackPage({
 
       {/* ── 목록별 요약 — 어디에 초록이 몰려 있나 ── */}
       <section className="card">
-        <h3>목록별 요약</h3>
+        <button className="gb-head" onClick={toggleSum}>
+          <span className="gb-caret">{openSum ? "▾" : "▸"}</span>
+          <b>목록별 요약</b>
+          <span className="pt-n">어느 목록에 초록이 몰려 있나</span>
+          {!openSum && (
+            <span className="gb-peek">
+              추적 <b>{data.byList.reduce((a, b) => a + b.active, 0)}</b>
+              <span className="pt-n"> · 일곱 목록</span>
+            </span>
+          )}
+        </button>
+        {openSum && (
         <div className="table-wrap">
           <table className="sim-table">
             <thead>
@@ -168,17 +209,35 @@ export function ListTrackPage({
             </tbody>
           </table>
         </div>
-        <p className="pt-n">
-          <b>초록 비율</b>이 목록의 성격을 말합니다 — 높으면 그 목록이 이미 신호등과 비슷한
-          것을 보고 있다는 뜻이고, 낮으면 다른 것을 봅니다. 줄을 누르면 아래에 그 목록의
-          종목이 뜹니다.
-        </p>
+        )}
+        {openSum && (
+          <p className="pt-n">
+            <b>초록 비율</b>이 목록의 성격을 말합니다 — 높으면 그 목록이 이미 신호등과
+            비슷한 것을 보고 있다는 뜻이고, 낮으면 다른 것을 봅니다. 줄을 누르면 아래에
+            그 목록의 종목이 뜹니다.
+          </p>
+        )}
       </section>
 
       {/* ── 성적표 — 이 원장의 존재 이유 ── */}
       {data.grade.length > 0 && (
         <section className="card">
-          <h3>편입 후 성적</h3>
+          <button className="gb-head" onClick={toggleGrade}>
+            <span className="gb-caret">{openGrade ? "▾" : "▸"}</span>
+            <b>편입 후 성적</b>
+            <span className="pt-n">슈퍼신호등 채점표와 같은 자 — 두 원장을 견주려고</span>
+            {!openGrade && data.grade[0] && (
+              <span className="gb-peek">
+                전체 {data.grade[0].n}건
+                <span className="pt-n">
+                  {" "}
+                  · 1일 {data.grade[0].d1.avg === null ? "아직" : `${data.grade[0].d1.avg}%`}
+                </span>
+              </span>
+            )}
+          </button>
+          {openGrade && (
+          <>
           <p className="pt-n">
             <b>슈퍼신호등 채점표와 같은 자</b>로 잽니다(편입일 종가 대비) — 그래야 두
             원장을 나란히 놓고 「교집합이 값을 하나」에 답할 수 있습니다.
@@ -222,6 +281,8 @@ export function ListTrackPage({
             괄호는 <b>성적이 찬 표본 수</b>입니다 — 편입 수와 다릅니다(20일이 안 지난
             종목은 20일 칸이 비어 있습니다). 표본 5 미만인 줄은 흐리게 그렸습니다.
           </p>
+          </>
+          )}
         </section>
       )}
 
