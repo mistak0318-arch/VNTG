@@ -292,7 +292,7 @@ const COLS: Col[] = [
         {/* 어느 그룹에서 온 종목인지 — 🌟 슈퍼 원장 · ⚡ 교차 그룹 */}
         {e.groupTags?.includes("super") && <span title="슈퍼신호등 원장 (교집합 편입)">🌟</span>}
         {e.groupTags?.includes("cross") && (
-          <span title="관심 그룹 「슈퍼신호등+교차」 (맥박 교차 자동 편입)">⚡</span>
+          <span title="교차 — 슈퍼신호등이면서 그날 주도주 태그도 달린 종목 (주도주 ∩ 슈퍼)">⚡</span>
         )}{" "}
         <span className="pt-n">{e.code}</span>
       </>

@@ -8,6 +8,7 @@ import { evaluateMarket } from "./marketSignal.js";
 import { getSectorMood } from "./sectorMood.js";
 import { configFingerprint, evaluateSignal } from "./signalLight.js";
 import { regimeTrust } from "./regimeWatch.js";
+import { leaderScan } from "./leaderScan.js";
 import { stockLens, themeMapNow } from "./stockLens.js";
 import { fetchUniverse, SCREEN_UNIVERSES, type Candidate } from "./signalScreen.js";
 import {
@@ -160,6 +161,31 @@ export interface SuperEntry {
    *
    * ⚠️ 옛 편입분에는 없다(`undefined`). 그것도 정보다 — 재기 전에 담은 것이다.
    */
+  /**
+   * **편입 시점에 주도주였나** (2026-09-01) — ⚡ 교차 표식의 근거.
+   *
+   * ⚡ 는 `leaderScan(주도주) ∩ getActiveSuper(슈퍼신호등)` 이다. 즉 슈퍼신호등의
+   * **부분집합**이지 별도 체계가 아니다.
+   *
+   * ## 왜 지금부터 기록하나
+   *
+   * 「⚡ 가 값을 하나」를 물으려면 **편입 시점에 주도주였는지**가 남아야 한다.
+   * 그런데 원장에는 그게 없었다 — `groupTags` 의 "cross" 는 관심종목 **그룹 소속**
+   * 이지 편입 당시의 판정이 아니다(나중에 붙거나 빠질 수 있다).
+   *
+   * 그리고 **과거로 되짚을 수도 없다.** `leaderScan` 은 오늘의 주도주이고, 그
+   * 판정에는 섹터별 자금 유입·거래량 급증 같은 그날의 상태가 들어간다.
+   *
+   * 못 재는 것은 **지금부터 기록하기 시작한다** — `configHash`·`regime` 과 같다.
+   */
+  leader?: {
+    /** 주도주 태그 (신고가·거래량급증 등). 빈 배열이면 주도주였지만 태그가 없던 것 */
+    tags: string[];
+    /** 주도주 목록에 있었나 = ⚡ 였나 */
+    was: boolean;
+    /** 그때 그 종목의 섹터 — 나중에 「어느 섹터의 ⚡ 가 나았나」를 물으려면 있어야 한다 */
+    sector?: string;
+  };
   regime?: {
     /** 20일선 위 종목 비율 % */
     breadth: number | null;
@@ -871,6 +897,13 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
     newHigh: null,
     why: null,
   }));
+  /*
+   * **주도주 목록** — 한 회차에 한 번만 부른다. ⚡ 표식의 근거를 편입 시점에
+   * 박아 두려는 것이다(위 `leader` 주석 참고). 못 받으면 그 칸만 빈다.
+   */
+  const leaders = await leaderScan(client)
+    .then((r) => new Map(r.stocks.map((x) => [x.code, { tags: x.tags, sector: x.sector }])))
+    .catch(() => new Map<string, { tags: string[]; sector: string }>());
   /** 약한 장세라 안 담은 수 — 화면이 「왜 오늘 하나도 안 늘었나」에 답하려면 있어야 한다 */
   let skippedWeak = 0;
   const today = todayStr();
@@ -994,6 +1027,12 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
               score: sig.score,
               /* 어떤 기준으로 걸린 편입인가 — 나중에 기준이 바뀌면 이걸로 갈린다 */
               configHash: cfgHash,
+              /* 편입 시점에 주도주였나 — ⚡ 표식이 값을 하는지 나중에 묻는다 */
+              leader: {
+                tags: leaders.get(x.c.code)?.tags ?? [],
+                was: leaders.has(x.c.code),
+                sector: leaders.get(x.c.code)?.sector,
+              },
               /* 어떤 장세에서 걸린 편입인가 — 성적표가 이걸로 갈라 채점한다 */
               regime: {
                 breadth: regime.breadth,
@@ -1364,6 +1403,13 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
      */
     gradeRow("정상 장세 편입", E.filter((e) => e.regime && !e.regime.weak), "regime"),
     gradeRow("약한 장세 편입", E.filter((e) => e.regime?.weak === true), "regime"),
+    /*
+     * ⚡ **교차** (2026-09-01) — 주도주 태그가 같이 달렸나.
+     * 세 표식(🌟⚡🌈) 중 유일하게 안 재고 있던 축이다. 2026-09-01 이전 편입분에는
+     * `leader` 가 없어 어느 줄에도 안 들어간다 — 「몰랐다」를 「아니다」로 만들지 않는다.
+     */
+    gradeRow("⚡ 교차 (주도주 겹침)", E.filter((e) => e.leader?.was === true), "regime"),
+    gradeRow("교차 아님 (슈퍼만)", E.filter((e) => e.leader?.was === false), "regime"),
     /* ⑤ 어느 목록에서 왔나 — 목록마다 값어치가 다를 수 있다 */
     ...SCREEN_UNIVERSES.map((u) =>
       gradeRow(`${u.label}에 걸림`, E.filter((e) => e.lists.includes(u.key)), "universe"),
