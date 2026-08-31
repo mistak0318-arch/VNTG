@@ -12944,3 +12944,28 @@ thead .sd-emph {
     gap: 6px;
   }
 }
+
+/* 저장 안 된 변경 — 관계도의 ② 가 이걸 크게 알려야 한다 (2026-08-31) */
+.sig-flow-step.dirty {
+  border-color: var(--amber, #d59b23);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber, #d59b23) 45%, transparent);
+}
+.sig-flow-dirty {
+  margin-left: 5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--amber, #d59b23);
+  color: #1a1a1a;
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* 저장이 필요한 상태 — 버튼이 스스로 말한다 (2026-08-31) */
+.sig-save-need {
+  animation: sig-save-pulse 1.6s ease-in-out infinite;
+}
+@keyframes sig-save-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--amber, #d59b23) 55%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--amber, #d59b23) 0%, transparent); }
+}

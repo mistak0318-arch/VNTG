@@ -170,6 +170,9 @@ function clampRules(r: Partial<CisRules>, base: CisRules): CisRules {
     stopPct: -Math.abs(num(r.stopPct, -30, -1, base.stopPct)),
     targetPct: Math.abs(num(r.targetPct, 2, 100, base.targetPct)),
     maxHoldDays: Math.round(num(r.maxHoldDays, 1, 120, base.maxHoldDays)),
+    /* 켬/끔 — 숫자가 아니라 참거짓이다. 안 주면 지금 값을 지킨다 */
+    useRegimeGate:
+      typeof r.useRegimeGate === "boolean" ? r.useRegimeGate : base.useRegimeGate,
     minScore: num(r.minScore, 0, 100, base.minScore),
     minTradeValue: num(r.minTradeValue, 0, 100_000, base.minTradeValue),
     minMarketScore: num(r.minMarketScore, 0, 100, base.minMarketScore),
@@ -242,6 +245,14 @@ export const RULE_LABEL: Record<keyof CisRules, { label: string; unit: string; h
   minScore: { label: "신호등 최소점", unit: "점", hint: "이 아래 종목은 후보에서 뺀다" },
   minTradeValue: { label: "최소 거래대금", unit: "억", hint: "얇으면 내 주문에 값이 밀린다" },
   minMarketScore: { label: "시장 최소점", unit: "점", hint: "이 아래면 그날은 아무것도 안 산다" },
+  useRegimeGate: {
+    label: "장세 신뢰도 문",
+    unit: "",
+    hint:
+      "「시장이 좋은가」가 아니라 「내 신호등이 오늘 골라낼 수 있나」를 묻는다. " +
+      "실측: 폭 좁은 날의 초록은 시장에 -2.15%p 지고 승률 43% (넓은 날 +2.20%p, 53%). " +
+      "그런데 두 날의 시장 평균은 거의 같았다 — 시장 점수로는 못 잡는 것이다",
+  },
   trailAfterPct: { label: "본전 손절 전환", unit: "%", hint: "이만큼 벌면 손절선을 평단으로 올린다" },
   useOpen: { label: "시가배팅", unit: "", hint: "아침 — 어제 신호가 살아 있고 시가가 안 튀었을 때" },
   useIntra: { label: "장중배팅", unit: "", hint: "점심 — 눌렸다 회복하며 거래가 붙을 때" },

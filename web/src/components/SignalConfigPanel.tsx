@@ -100,6 +100,15 @@ const AXIS_META: { key: SignalAxis; label: string; hint: string }[] = [
 export function SignalConfigPanel() {
   const [config, setConfig] = useState<SignalConfig | null>(null);
   const [defaults, setDefaults] = useState<SignalConfig | null>(null);
+  /**
+   * **서버에 저장된 값** — 화면 값(`config`)과 따로 들고 있는다.
+   *
+   * ⚠️ 이걸 안 나누어서 관계도가 거짓말을 했다 (2026-08-31). 「전부 추천 기본값으로」를
+   * 누르면 `config` 만 바뀌는데, 관계도가 그걸 ②로 보고 **「= 같음 · 반영됨」**이라
+   * 적었다 — 저장은 안 됐는데 다 된 것처럼 보였다. 벤티지가 "2번은 된건지 안된건지
+   * 내가 알 수가 없네" 라고 한 그 자리다.
+   */
+  const [savedCfg, setSavedCfg] = useState<SignalConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +118,7 @@ export function SignalConfigPanel() {
       .signalConfig()
       .then((r) => {
         setConfig(r.config);
+        setSavedCfg(r.config);
         setDefaults(r.defaults);
       })
       .catch((err: Error) => setError(err.message));
@@ -133,6 +143,8 @@ export function SignalConfigPanel() {
     try {
       const r = await api.signalConfigSave(config);
       setConfig(r.config);
+      /* 저장이 성공해야 ②가 바뀐 것이다 — 그때만 갱신한다 */
+      setSavedCfg(r.config);
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "저장 실패");
@@ -165,7 +177,13 @@ export function SignalConfigPanel() {
     return n;
   })();
 
-  const stale = defaults ? diffFromDefaults(config, defaults) : [];
+  /*
+   * **`stale` 은 저장된 값 기준이다** — 「실제로 도는 신호등이 추천값과 다른가」.
+   * 화면 값으로 재면 버튼만 눌러도 「같아졌다」고 나온다(저장 전인데).
+   */
+  const stale = defaults && savedCfg ? diffFromDefaults(savedCfg, defaults) : [];
+  /** 화면에서 만졌는데 아직 저장 안 한 것이 있나 */
+  const dirty = savedCfg !== null && JSON.stringify(config) !== JSON.stringify(savedCfg);
 
   return (
     <div className="sig-config">
@@ -196,10 +214,19 @@ export function SignalConfigPanel() {
               </>
             )}
           </div>
-          <div className="sig-flow-step now">
-            <b>② 내 설정</b>
+          <div className={`sig-flow-step now${dirty ? " dirty" : ""}`}>
+            <b>② 내 설정 {dirty && <i className="sig-flow-dirty">저장 안 됨</i>}</b>
             <span>
-              <b>①보다 우선합니다.</b> 한 번이라도 저장했으면 ①을 고쳐도 안 바뀝니다
+              {dirty ? (
+                <>
+                  <b>화면에서 바꾼 값이 아직 서버에 없습니다.</b> 맨 아래 <b>「저장」</b>을
+                  눌러야 ②가 바뀌고 ③이 따라옵니다
+                </>
+              ) : (
+                <>
+                  <b>①보다 우선합니다.</b> 한 번이라도 저장했으면 ①을 고쳐도 안 바뀝니다
+                </>
+              )}
             </span>
           </div>
           <div className="sig-flow-arrow">
@@ -459,8 +486,18 @@ export function SignalConfigPanel() {
       </div>
 
       <div className="sig-config-actions">
-        <button className="primary-btn" onClick={save} disabled={saving}>
-          {saving ? "저장 중…" : "저장"}
+        {/*
+          저장 버튼이 **지금 눌러야 하는지**를 스스로 말해야 한다 (2026-08-31).
+          「기본값으로」는 화면 값만 바꾸는데, 그 뒤에 저장을 안 누르면 아무 일도
+          안 일어난다 — 그런데 화면상으로는 다 바뀐 것처럼 보인다.
+        */}
+        <button
+          className={`primary-btn${dirty ? " sig-save-need" : ""}`}
+          onClick={save}
+          disabled={saving || !dirty}
+          title={dirty ? "화면에서 바꾼 값을 서버에 저장합니다" : "바꾼 것이 없습니다"}
+        >
+          {saving ? "저장 중…" : dirty ? "저장 (바뀐 것 있음)" : "저장됨"}
         </button>
         {defaults && (
           <button
@@ -470,11 +507,17 @@ export function SignalConfigPanel() {
               setSaved(false);
             }}
             disabled={saving}
+            title="추천 기본값을 화면에 불러옵니다 — 그 뒤 「저장」까지 눌러야 반영됩니다"
           >
-            기본값으로
+            기본값 불러오기
           </button>
         )}
-        {saved && <span className="sig-saved">저장됨 · 다음 평가부터 적용</span>}
+        {dirty && (
+          <span className="sig-error">
+            ⚠️ 아직 저장 안 됨 — 지금 신호등은 <b>예전 값</b>으로 돌고 있습니다
+          </span>
+        )}
+        {saved && !dirty && <span className="sig-saved">저장됨 · 다음 평가부터 적용</span>}
         {error && <span className="sig-error">{error}</span>}
       </div>
 

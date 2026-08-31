@@ -1,6 +1,7 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { evaluateMarket } from "./marketSignal.js";
 import { evaluateSignal } from "./signalLight.js";
+import { regimeTrust } from "./regimeWatch.js";
 import { leaderScan, type LeaderStock } from "./leaderScan.js";
 import {
   addTradingDays,
@@ -102,6 +103,11 @@ export interface CisRules {
   minTradeValue: number;
   /** 시장이 이 아래면 **아무것도 안 산다** */
   minMarketScore: number;
+  /**
+   * **장세 신뢰도 문을 쓸까** — 「내 신호등이 오늘 골라낼 수 있나」.
+   * 끄면 시장 점수만 본다(2026-08-31 이전 동작).
+   */
+  useRegimeGate: boolean;
   /** 이익이 이만큼 나면 손절선을 본전으로 올린다 */
   trailAfterPct: number;
 
@@ -143,6 +149,11 @@ export const DEFAULT_RULES: CisRules = {
   /* 500억 미만은 내가 사는 수량에 값이 밀린다 — 모의라도 못 살 걸 샀다고 적지 않는다 */
   minTradeValue: 500,
   minMarketScore: 40,
+  /*
+   * 장세 신뢰도 문(2026-08-31) — 기본 켬.
+   * 폭·신고가 문턱은 장세 점검 설정(설정 > 분석 > 장세 점검)에서 조절한다.
+   */
+  useRegimeGate: true,
   /* +7% 넘어가면 손절을 본전으로 — 이익을 손실로 바꾸지 않는다 */
   trailAfterPct: 7,
 
@@ -553,6 +564,22 @@ export interface MarketGate {
   score: number;
   label: string;
   reason: string;
+  /**
+   * **내 신호등이 오늘 유효한가** (2026-08-31) — 시장 점수와 **다른 물음**이다.
+   *
+   * 19만 관측 조건부 실측에서 나온 것: 폭이 좁은 날의 초록은 시장에 **-2.15%p
+   * 지고 승률이 43%** 였다(폭 넓은 날은 +2.20%p, 53%). 그런데 그 두 날의
+   * **시장 평균은 +3.19% vs +3.91% 로 거의 같았다.**
+   *
+   * 즉 「시장이 나빠서 초록도 나빴다」가 아니다 — 시장은 비슷했는데 **초록만
+   * 갈렸다.** 신호등이 골라내는 기능이 꺼지는 것이라, 시장 점수로는 이걸 못 잡는다.
+   */
+  regime?: {
+    weak: boolean;
+    breadth: number | null;
+    newHigh: number | null;
+    why: string | null;
+  };
 }
 
 /**
@@ -567,16 +594,47 @@ export async function marketGate(
   rules: CisRules = DEFAULT_RULES,
 ): Promise<MarketGate> {
   try {
-    const m = await evaluateMarket(client);
+    /*
+     * **두 문을 따로 연다** (2026-08-31).
+     *
+     *   ① 시장 점수  — 「시장이 무너지는 중인가」
+     *   ② 장세 신뢰도 — 「내 신호등이 오늘 골라낼 수 있나」
+     *
+     * 둘은 다른 물음이고, 실측은 ②가 더 크게 갈랐다. 폭 좁은 날과 넓은 날의
+     * **시장 평균은 거의 같았는데**(+3.19% vs +3.91%) 초록만 -2.15%p ↔ +2.20%p 로
+     * 갈렸다. ①만 보면 이걸 통째로 놓친다.
+     */
+    const [m, reg] = await Promise.all([
+      evaluateMarket(client),
+      rules.useRegimeGate === false
+        ? Promise.resolve(null)
+        : regimeTrust().catch(() => null),
+    ]);
     const score = typeof m.score === "number" ? m.score : 0;
-    const ok = score >= rules.minMarketScore;
+    const scoreOk = score >= rules.minMarketScore;
+    const regimeOk = !reg?.weak;
+    const ok = scoreOk && regimeOk;
+
+    /*
+     * **왜 안 사는지가 일지에 남아야 한다.** 「오늘은 안 산다」만 적으면 나중에
+     * 그날을 다시 볼 때 이유를 알 수 없다 — 이 시스템의 값어치는 판단과 근거를
+     * 한 줄에 묶는 데 있다.
+     */
+    const reason = !scoreOk
+      ? `시장 ${score}점 < ${rules.minMarketScore}점 — 오늘은 안 산다`
+      : !regimeOk
+        ? `시장은 ${score}점으로 괜찮지만 **신호등이 잘 안 듣는 장세**다 (${reg?.why}). ` +
+          `이 구간의 초록은 실측에서 시장에 -2.15%p 지고 승률이 43% 였다 — 오늘은 쉰다`
+        : `시장 ${score}점 · 폭 ${reg?.breadth ?? "-"}% — 매수 허용`;
+
     return {
       ok,
       score,
       label: m.level ?? "",
-      reason: ok
-        ? `시장 ${score}점 — 매수 허용`
-        : `시장 ${score}점 < ${rules.minMarketScore}점, 오늘은 안 산다`,
+      reason,
+      regime: reg
+        ? { weak: reg.weak, breadth: reg.breadth, newHigh: reg.newHigh, why: reg.why }
+        : undefined,
     };
   } catch {
     /* 못 읽었으면 **안 사는 쪽**이다. 모르는 시장에서 사는 것이 가장 비싸다 */
