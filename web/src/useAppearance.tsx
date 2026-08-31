@@ -77,7 +77,20 @@ export interface Appearance {
 export const WIDTHS: { key: WidthName; label: string; css: string; read: string; hint: string }[] = [
   { key: "normal", label: "보통", css: "1400px", read: "1120px", hint: "글이 많은 화면이 읽기 좋습니다" },
   { key: "wide", label: "넓게", css: "1920px", read: "1500px", hint: "표가 넓은 화면에서 열이 더 보입니다" },
-  { key: "full", label: "화면 전체", css: "none", read: "none", hint: "울트라와이드에서 남는 자리가 없습니다" },
+  {
+    key: "full",
+    label: "화면 전체",
+    css: "none",
+    /*
+     * ⚠️ **글만은 안 늘린다** (2026-08-31).
+     *
+     * 표·차트·MAP 은 넓을수록 좋지만 **글은 아니다.** 3440 울트라와이드에서 리포트
+     * 본문이 한 줄에 200자씩 가면 눈이 다음 줄 첫머리를 못 찾는다. 「화면 전체」의
+     * 뜻은 **화면을 노는 자리 없이 쓴다**이지 글줄까지 늘리라는 것이 아니다.
+     */
+    read: "1600px",
+    hint: "표·차트는 화면을 꽉 채우고, 글은 읽기 좋은 폭까지만",
+  },
 ];
 
 export const FONTS: { key: FontName; label: string; stack: string }[] = [
@@ -106,12 +119,34 @@ export const FONT_SCALES = [75, 85, 92, 100, 110, 120, 135, 150, 175, 200];
 
 const STORAGE_KEY = "vntg.appearance";
 
+/**
+ * 옛 기본값으로 저장된 것을 새 기본값으로 옮긴다.
+ *
+ * ⚠️ 저장본이 옛 기본값을 들고 있으면 **기본값을 바꿔도 아무 일이 안 일어난다** —
+ * 병합에서 저장본이 이기기 때문이다. 신호등 축 비중에서 같은 일을 겪었다(코드는
+ * 1.5/1.3/0.6 인데 실제로는 1/1/1 로 돌고 있었다).
+ *
+ * `normal` 은 예전 기본값이라 **사람이 고른 값이 아니다.** 다른 값이면 손댄 것이니
+ * 그대로 둔다 — 추적기 모집단(60·200 → 300) 때와 같은 규칙이다.
+ */
+function migrate(a: Appearance): Appearance {
+  return a.width === "normal" ? { ...a, width: DEFAULTS.width } : a;
+}
+
 const DEFAULTS: Appearance = {
   theme: "dark",
   font: "system",
   fontScale: 100,
   navSide: "left",
-  width: "normal",
+  /*
+   * 기본을 **화면 전체**로 (2026-08-31 요청 — 「여러 기기에서 쓴다고 가정하면
+   * 최대가 낫지 않아? 그래야 다이나믹 화면이 되지」).
+   *
+   * 1400px 로 못 박아 두면 27인치에서도 폰만큼만 쓰고 오른쪽이 논다. 기기마다
+   * 다른 폭을 사람이 매번 골라야 하는 것도 이상하다 — 화면이 알아서 채우는 쪽이
+   * 기본이어야 한다. 글줄만 위 `WIDTHS.full.read` 가 잡아 준다.
+   */
+  width: "full",
   sidebarAuto: false,
   tabsSticky: true,
 };
@@ -130,10 +165,10 @@ export const GLOBAL_KEY = "vntg.appearance.global";
 function read(): Appearance {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Appearance>) };
+    if (raw) return migrate({ ...DEFAULTS, ...(JSON.parse(raw) as Partial<Appearance>) });
     // 이 기기 설정이 없으면 전체 기본으로 시작 (loadPrefs 가 렌더 전에 채워 둔다)
     const global = localStorage.getItem(GLOBAL_KEY);
-    if (global) return { ...DEFAULTS, ...(JSON.parse(global) as Partial<Appearance>) };
+    if (global) return migrate({ ...DEFAULTS, ...(JSON.parse(global) as Partial<Appearance>) });
     return DEFAULTS;
   } catch {
     return DEFAULTS;
