@@ -177,6 +177,12 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  /**
+   * 일괄로 넣거나 뺄 그룹 — **고른 그룹**이지 「지금 보고 있는 그룹」이 아니다
+   * (2026-09-01 정정). 보고 있는 그룹으로 고정했더니 옮기려는 그룹으로 먼저
+   * 이동해야 해서 순서가 거꾸로였다.
+   */
+  const [bulkGroupName, setBulkGroupName] = useState("");
 
   /*
    * 끌어서 옮기기 (2026-08-25) — 화살표와 같은 저장으로 떨어진다.
@@ -297,8 +303,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       .map((r) => r.name)
       .join(", ");
     const more = picked.size > 5 ? ` 외 ${picked.size - 5}종목` : "";
-    if (!window.confirm(`${names}${more} 을(를) 관심종목에서 뺍니다.
-편입가·메모도 같이 사라집니다. 계속할까요?`)) {
+    if (!window.confirm(`${names}${more} 을(를) 관심종목에서 삭제합니다.
+편입가·메모도 같이 사라지고 되돌릴 수 없습니다. 계속할까요?`)) {
       return;
     }
     setBulkBusy(true);
@@ -306,7 +312,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       const r = await api.watchlistBulk([...picked], "remove");
       setPicked(new Set());
       if (r.failed.length > 0) {
-        setError(`${r.done.length}종목을 뺐습니다. ${r.failed.length}종목은 실패했습니다.`);
+        setError(`${r.done.length}종목을 삭제했습니다. ${r.failed.length}종목은 실패했습니다.`);
       }
       await load();
     } catch (e) {
@@ -316,10 +322,10 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     }
   }
 
-  /** 고른 종목을 지금 보고 있는 그룹에 넣거나 뺀다 (토글) */
+  /** 고른 종목을 **고른 그룹**에 넣거나 뺀다 (토글) */
   async function bulkGroup() {
-    if (picked.size === 0 || bulkBusy) return;
-    const group = activeGroup === ALL ? DEFAULT_GROUP : activeGroup;
+    if (picked.size === 0 || bulkBusy || !bulkGroupName) return;
+    const group = bulkGroupName;
     setBulkBusy(true);
     try {
       const r = await api.watchlistBulk([...picked], "group", group);
@@ -794,31 +800,47 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
             className="filter-btn"
             onClick={() => {
               const all = sort.sorted.filter((r) => !r.divider).map((r) => r.code);
-              setPicked((p) => (p.size === all.length ? new Set() : new Set(all)));
+              setPicked((p) => (p.size === all.length && all.length > 0 ? new Set() : new Set(all)));
             }}
           >
             {picked.size === sort.sorted.filter((r) => !r.divider).length && picked.size > 0
               ? "전체 해제"
-              : "지금 보이는 것 전체"}
+              : "전체선택"}
           </button>
           <span className="mg-bulk-sep" />
+          <label className="mg-bulk-grp">
+            그룹
+            <select
+              className="ma-input"
+              value={bulkGroupName}
+              onChange={(e) => setBulkGroupName(e.target.value)}
+            >
+              <option value="">고르세요</option>
+              {groups.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             className="filter-btn"
-            disabled={picked.size === 0 || bulkBusy}
+            disabled={picked.size === 0 || bulkBusy || !bulkGroupName}
             onClick={() => void bulkGroup()}
-            title={`«${activeGroup === ALL ? DEFAULT_GROUP : activeGroup}» 그룹에 넣거나 뺍니다`}
+            title="고른 종목을 그 그룹에 넣습니다 — 이미 든 종목은 빠집니다(토글)"
           >
-            «{activeGroup === ALL ? DEFAULT_GROUP : activeGroup}» 그룹 토글
+            {bulkBusy ? "바꾸는 중…" : "그룹 넣기/빼기"}
           </button>
           <button
             className="filter-btn mg-bulk-del"
             disabled={picked.size === 0 || bulkBusy}
             onClick={() => void bulkRemove()}
           >
-            {bulkBusy ? "지우는 중…" : `🗑 ${picked.size}종목 목록에서 빼기`}
+            {bulkBusy ? "삭제 중…" : `🗑 ${picked.size}종목 삭제`}
           </button>
           <span className="pt-n">
-            ⚠️ 빼면 <b>편입가·메모도 같이 사라집니다</b> — 다시 담아도 그 기록은 안 돌아옵니다
+            ⚠️ <b>삭제</b>하면 편입가·메모도 같이 사라지고 되돌릴 수 없습니다. 그룹에서만
+            빼려면 <b>그룹 넣기/빼기</b>를 쓰세요
           </span>
         </div>
       )}
@@ -865,41 +887,6 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
           {sort.sortKey && (
             <b className="scr-idle"> 지금은 열 이름으로 정렬 중이라 옮겨도 그대로 안 보입니다 — 정렬을 풀어 주세요.</b>
           )}
-        </div>
-      )}
-      {picking && (
-        <div className={`mg-bulk${picked.size > 0 ? " on" : ""}`}>
-          <b>{picked.size}종목</b> 골랐습니다
-          <button
-            className="filter-btn"
-            onClick={() => {
-              const all = sort.sorted.filter((r) => !r.divider).map((r) => r.code);
-              setPicked((p) => (p.size === all.length ? new Set() : new Set(all)));
-            }}
-          >
-            {picked.size === sort.sorted.filter((r) => !r.divider).length && picked.size > 0
-              ? "전체 해제"
-              : "지금 보이는 것 전체"}
-          </button>
-          <span className="mg-bulk-sep" />
-          <button
-            className="filter-btn"
-            disabled={picked.size === 0 || bulkBusy}
-            onClick={() => void bulkGroup()}
-            title={`«${activeGroup === ALL ? DEFAULT_GROUP : activeGroup}» 그룹에 넣거나 뺍니다`}
-          >
-            «{activeGroup === ALL ? DEFAULT_GROUP : activeGroup}» 그룹 토글
-          </button>
-          <button
-            className="filter-btn mg-bulk-del"
-            disabled={picked.size === 0 || bulkBusy}
-            onClick={() => void bulkRemove()}
-          >
-            {bulkBusy ? "지우는 중…" : `🗑 ${picked.size}종목 목록에서 빼기`}
-          </button>
-          <span className="pt-n">
-            ⚠️ 빼면 <b>편입가·메모도 같이 사라집니다</b> — 다시 담아도 그 기록은 안 돌아옵니다
-          </span>
         </div>
       )}
       {editGroupBar && (
