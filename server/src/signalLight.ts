@@ -476,7 +476,7 @@ export const DEFAULT_CONFIG: SignalConfig = {
     // ---------------- 위험 (값이 클수록 위험하다) ----------------
     {
       key: "overhead",
-      label: "매물 부담 낮음",
+      label: "위쪽 매물 부담",
       axis: "risk",
       enabled: true,
       weight: 2,
@@ -487,7 +487,7 @@ export const DEFAULT_CONFIG: SignalConfig = {
     },
     {
       key: "disparity",
-      label: "이격도 정상 (20일)",
+      label: "20일선 이격도",
       axis: "risk",
       enabled: true,
       weight: 1,
@@ -509,7 +509,7 @@ export const DEFAULT_CONFIG: SignalConfig = {
      */
     {
       key: "ma5Gap",
-      label: "5일선 이격 좁음",
+      label: "5일선 이격",
       axis: "risk",
       enabled: true,
       /*
@@ -526,7 +526,7 @@ export const DEFAULT_CONFIG: SignalConfig = {
     },
     {
       key: "debtRatio",
-      label: "부채비율 안정",
+      label: "부채비율",
       axis: "risk",
       enabled: false,
       weight: 1,
@@ -538,7 +538,7 @@ export const DEFAULT_CONFIG: SignalConfig = {
     },
     {
       key: "shortSaleUp",
-      label: "공매도 안정",
+      label: "공매도 비중",
       axis: "risk",
       enabled: false,
       weight: 1,
@@ -549,7 +549,7 @@ export const DEFAULT_CONFIG: SignalConfig = {
     },
     {
       key: "lendingUp",
-      label: "대차 안정",
+      label: "대차잔고 증가",
       axis: "risk",
       enabled: false,
       weight: 1,
@@ -644,6 +644,23 @@ export async function getConfig(): Promise<SignalConfig> {
 
 export async function saveConfig(input: SignalConfig): Promise<SignalConfig> {
   const cfg = mergeConfig(input);
+  /*
+   * **두 값의 순서를 바로잡는다** (2026-08-31 점검).
+   *
+   * grade() 는 max/min 으로 정규화하므로 뒤집혀 있어도 점수는 맞다 — 그래서
+   * 아무도 모른 채로 남는다. 문제는 화면이다: 「기준값 1000 → 아주 좋음 500」은
+   * **500이 만점**으로 읽힌다. 실측에서 거래대금이 그렇게 저장돼 있었다.
+   *
+   * 값을 바꾸는 게 아니라 **자리를 맞바꾸는 것**이라 판정은 그대로다.
+   * 위험 축도 같은 규칙이다 — 「위험 시작」이 「심각」보다 작아야 한다.
+   */
+  for (const c of cfg.checks) {
+    if (c.threshold > c.strongAt) {
+      const t = c.threshold;
+      c.threshold = c.strongAt;
+      c.strongAt = t;
+    }
+  }
   configCache = cfg;
   await mkdir(dirname(CONFIG_FILE), { recursive: true });
   await writeFile(CONFIG_FILE, JSON.stringify(cfg, null, 2), "utf-8");
@@ -730,6 +747,15 @@ function sma(closes: number[], period: number): number | null {
  * 위험 기준도 같은 식을 쓴다 — 값이 클수록 큰 숫자가 나오는데, 위험 축에서는
  * 그 큰 숫자가 「위험하다」는 뜻이다.
  * 사용자가 두 선을 거꾸로 넣어도 무너지지 않게 크기로 정렬해 둔다.
+ */
+/**
+ * 0 / 50 / 100 세 칸으로 매긴다.
+ *
+ * ⚠️ **max/min 으로 정규화하는 것이 함정이다** (2026-08-31 점검). 두 값이
+ * 뒤집혀 저장돼도 **동작은 멀쩡해서** 아무도 모른다 — 그런데 설정 화면에는
+ * 「기준값 1000 → 아주 좋음 500」으로 떠서 **500이 만점**으로 읽힌다.
+ * 실측에서 거래대금이 그 꼴이었다. 값이 맞아도 화면이 거짓말하면 사람이
+ * 잘못 조절하므로, 저장할 때 순서를 바로잡는다(`saveConfig`).
  */
 function grade(value: number, c: CheckConfig): number {
   const hi = Math.max(c.threshold, c.strongAt);

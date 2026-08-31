@@ -356,7 +356,14 @@ export function createSignalRouter(client: KiwoomClient): Router {
   router.post("/backtest", async (req, res, next) => {
     try {
       const body = req.body as { limit?: number; days?: number; config?: Partial<SignalConfig> };
-      const limit = Math.min(Math.max(Number(body.limit) || 40, 5), 150);
+      /*
+       * 표본 상한 500 (2026-08-31 — "샘플은 500개 기준으로"). 150 이었는데
+       * 그 표본으로는 점수 구간별 성적이 톱니로 나왔다(80~89 가 70~79 보다
+       * 훨씬 나쁨) — 구간마다 관측이 100~200개뿐이라 몇 종목의 등락에 휘둘린다.
+       *
+       * ⚠️ 500 이면 종목당 일봉 한 번씩이라 **몇 분** 걸린다. 화면이 진행률을 준다.
+       */
+      const limit = Math.min(Math.max(Number(body.limit) || 500, 5), 500);
       const top = await tradeValueTop(client, "000", limit);
       const codes = top.map((t) => ({ code: t.code, name: t.name }));
       res.json(startBacktestJob(client, { codes, days: body.days, config: body.config }));

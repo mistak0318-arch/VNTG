@@ -74,7 +74,12 @@ export function SignalBacktestPanel({
   /** 지금 저장돼 있는 기준(=처음 불러온 값)과 코드가 정한 기본값 — 되돌리기용 */
   const [saved, setSavedCfg] = useState<SignalConfig | null>(null);
   const [defaults, setDefaults] = useState<SignalConfig | null>(null);
-  const [limit, setLimit] = useState(40);
+  /*
+   * 기본 500 (2026-08-31 — "샘플은 500개 기준으로 그리고 기본설정을 500개로 잡자").
+   * 40 이었을 때는 점수 구간마다 관측이 100~200개뿐이라 성적이 톱니로 나왔다.
+   * 500 이면 6만 관측이라 구간별로도 읽을 만해진다 — 대신 **몇 분** 걸린다.
+   */
+  const [limit, setLimit] = useState(500);
   const [days, setDays] = useState(120);
   const [res, setRes] = useState<Result | null>(null);
   const [busy, setBusy] = useState(false);
@@ -244,7 +249,7 @@ export function SignalBacktestPanel({
             <input
               type="number"
               min={5}
-              max={150}
+              max={500}
               step={5}
               value={limit}
               onChange={(e) => setLimit(Number(e.target.value))}

@@ -1,6 +1,6 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { dropPhantomToday } from "./candleGuard.js";
-import { DEFAULT_CONFIG, type CheckConfig, type SignalConfig } from "./signalLight.js";
+import { getConfig, type CheckConfig, type SignalConfig } from "./signalLight.js";
 import { loadCloses } from "./dailyCloses.js";
 import { isIndexLikeTheme, loadThemes } from "./naverThemes.js";
 
@@ -376,12 +376,23 @@ export async function runSignalBacktest(
   client: KiwoomClient,
   opts: { codes: { code: string; name: string }[]; days?: number; config?: Partial<SignalConfig> },
 ): Promise<BacktestResult> {
+  /*
+   * ⚠️ **바탕은 DEFAULT_CONFIG 가 아니라 「지금 저장된 설정」이다** (2026-08-31).
+   *
+   * 원래 `?? DEFAULT_CONFIG.checks` 였는데, 그래서 **화면의 신호등과 다른 것을
+   * 채점하고 있었다.** 벤티지가 켜 둔 「고점 근접」·「거래대금」이 코드 기본값에서는
+   * 꺼져 있어, 백테스트만 그 둘 없이 돌았다. 「내 설정이 맞나」를 묻는 도구가
+   * 내 설정을 안 보고 있었던 셈이다.
+   *
+   * 조합을 시험할 때는 호출자가 `config` 를 통째로 넘긴다 — 그때만 그 값이 이긴다.
+   */
+  const saved = await getConfig();
   const cfg: SignalConfig = {
-    ...DEFAULT_CONFIG,
+    ...saved,
     ...opts.config,
-    axisWeights: { ...DEFAULT_CONFIG.axisWeights, ...(opts.config?.axisWeights ?? {}) },
-    checks: opts.config?.checks ?? DEFAULT_CONFIG.checks,
-    maLines: opts.config?.maLines ?? DEFAULT_CONFIG.maLines,
+    axisWeights: { ...saved.axisWeights, ...(opts.config?.axisWeights ?? {}) },
+    checks: opts.config?.checks ?? saved.checks,
+    maLines: opts.config?.maLines ?? saved.maLines,
   };
   const days = Math.min(Math.max(opts.days ?? 120, 20), 400);
 

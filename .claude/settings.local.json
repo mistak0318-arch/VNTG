@@ -933,7 +933,9 @@
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} · %{time_total}s\\\\n\" --max-time 20 https://vntgts.com/)",
       "Bash(curl -s --max-time 20 https://vntgts.com/api/overview/status)",
       "Bash(grep -n \"className=\\\\|split\\(\\\\\"\\\\\\\\\\\\\\\\n\\\\\"\\)\\\\|\\\\*\\\\*\" web/src/components/AiSummaryCard.tsx)",
-      "Bash(grep -v \"//\")"
+      "Bash(grep -v \"//\")",
+      "Bash(npx --prefix server tsc --noEmit -p server/tsconfig.json)",
+      "Bash(npx --prefix web tsc --noEmit -p web/tsconfig.json)"
     ]
   }
 }
