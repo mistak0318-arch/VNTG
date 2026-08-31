@@ -61,8 +61,29 @@ export interface Feat {
   over: number | null;
   /** 그날 거래대금(억) */
   volEok: number | null;
-  /** 그날 이 종목의 가장 강한 테마 등락률 % — 되짚지 못한 날은 null */
+  /**
+   * 그날 이 종목의 가장 강한 테마 **가중 등락률**(%) — 되짚지 못한 날은 null.
+   *
+   * ⚠️ **정의가 바뀌었다** (2026-09-01). 예전에는 「그날 하루 등락률」이었고
+   * 그것으로 재서 -5.76%p 가 나왔다. 이제 신호등과 같은 공식을 쓴다 —
+   * 0.5×오늘 + 0.3×(5일 평균) + 0.2×(20일 평균).
+   *
+   * 그 전에는 잴 수가 없었다. 일봉 캐시가 70일뿐이라 400일 표본에서 5일·20일
+   * 누적을 되짚을 방법이 없었기 때문이다. 캐시를 400일로 늘려서 풀렸다.
+   */
   theme: number | null;
+  /**
+   * **ETF 뒷배** — 이 종목을 가장 많이 담은 ETF 셋의 그날 등락률 평균(%).
+   *
+   * 무게 2 로 켜져 있었는데 **표본에 칸이 없어 한 번도 검증하지 못했다.**
+   * 일봉 캐시에 ETF 가 아예 없었던 것이 원인이고(코드가 `0091P0` 처럼 영문이
+   * 섞여 필터에 걸렸다) 그것을 고쳐 이제 담는다.
+   *
+   * ⚠️ **look-ahead 가 남아 있다.** 「이 종목을 담은 ETF」 구성이 **오늘 것**이라,
+   * 그 이름표로 과거를 채점하면 테마 강세가 -5.76%p 로 실패한 그 병이 그대로다.
+   * 숫자를 그 한계와 함께 읽어야 한다 — 좋게 나와도 곧바로 켜면 안 된다.
+   */
+  etfBack: number | null;
 
   /*
    * 수급 (2026-08-31 추가) — `ka10060` 이 **날짜별로** 주므로 과거도 되짚힌다.
@@ -387,6 +408,8 @@ export function gradeOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
       return f.fgnRatioUp20 === null ? null : grade(f.fgnRatioUp20, c);
     case "profitGrowth":
       return f.profitYoY === null ? null : grade(f.profitYoY, c);
+    case "etfBacking":
+      return f.etfBack === null ? null : grade(f.etfBack, c);
 
     default:
       /* 표본에 없는 기준 — 재무·시가총액·ETF 뒷배. 채점에서 빠진다 */

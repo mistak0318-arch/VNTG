@@ -89,6 +89,8 @@ export const BACKTESTABLE = new Set([
   "foreignRatioUp",
   /* 영업이익 (2026-09-01) — 무게 2 인데 한 번도 검증 못 하던 기준이다 */
   "profitGrowth",
+  /* ETF 뒷배 (2026-09-01) — 일봉 캐시에 ETF 가 들어와 되짚을 수 있게 됐다 */
+  "etfBacking",
 ]);
 
 /* ------------------------------------------------------------------ */
@@ -137,7 +139,36 @@ async function buildThemeCtx(): Promise<ThemeCtx | null> {
       rates.push(sum / n2);
     }
     if (rates.length < 5) continue;
-    rate.set(t.no, rates);
+    /*
+     * **가중 등락률** (2026-09-01) — 신호등의 `naverTheme` 과 **같은 공식**이어야 한다.
+     *
+     *   0.5×오늘 + 0.3×(5일 누적 ÷ 5) + 0.2×(20일 누적 ÷ 20)
+     *
+     * 하루 등락률만 재던 옛 정의로는 -5.76%p 였다. 그 해석("테마가 강한 날 =
+     * 이미 급등한 날 = 되돌림 자리")이 맞다면 며칠에 걸쳐 붙는 것을 재면 달라질
+     * 수 있는데, **캐시가 70일뿐이라 400일 표본에서 재볼 수가 없었다.**
+     * 이제 400일이 들어와 처음으로 잰다.
+     *
+     * 누적이 모자란 구간은 **있는 항만으로 다시 정규화**한다 — 없는 것을 0 으로
+     * 두면 「안 올랐다」가 되어 배열 끝이 불리해진다.
+     */
+    const weighted: number[] = [];
+    for (let k = 0; k < rates.length; k++) {
+      const sumFrom = (n2: number): number | null => {
+        if (k + n2 > rates.length) return null;
+        let acc = 0;
+        for (let j = k; j < k + n2; j++) acc += rates[j];
+        return acc / n2;
+      };
+      const parts: { v: number; w: number }[] = [{ v: rates[k], w: 0.5 }];
+      const w5 = sumFrom(5);
+      if (w5 !== null) parts.push({ v: w5, w: 0.3 });
+      const m1 = sumFrom(20);
+      if (m1 !== null) parts.push({ v: m1, w: 0.2 });
+      const wsum = parts.reduce((a, b) => a + b.w, 0);
+      weighted.push(parts.reduce((a, b) => a + b.v * b.w, 0) / wsum);
+    }
+    rate.set(t.no, weighted);
     span = Math.max(span, rates.length);
     for (const s of t.stocks) {
       const list = themesOf.get(s.code) ?? [];
@@ -146,6 +177,65 @@ async function buildThemeCtx(): Promise<ThemeCtx | null> {
     }
   }
   return rate.size > 0 ? { rate, themesOf, span } : null;
+}
+
+/**
+ * **ETF 뒷배 렌즈** — 종목 → 그 종목을 많이 담은 ETF 셋의 날짜별 등락률 평균.
+ *
+ * `etfHolders` 가 「어느 종목을 어느 ETF 가 담았나」를 들고 있고(비중 내림차순),
+ * 일봉 캐시가 이제 ETF 종가도 들고 있으므로 되짚을 수 있다. 둘 다 파일이라
+ * **조회가 0회**다.
+ *
+ * ⚠️ 구성은 **오늘 것**이다 — look-ahead 가 남는다. `Feat.etfBack` 주석 참고.
+ */
+async function buildEtfCtx(): Promise<{
+  rate: Map<string, number[]>;
+  span: number;
+} | null> {
+  try {
+    const { readFile: rf } = await import("node:fs/promises");
+    const { dirname: dn, join: jn } = await import("node:path");
+    const { fileURLToPath: fu } = await import("node:url");
+    const dir = jn(dn(fu(import.meta.url)), "..", "data");
+    const raw = JSON.parse(await rf(jn(dir, "etfHolders.json"), "utf-8")) as {
+      byStock?: Record<string, { code?: string; weight?: number | null }[]>;
+    };
+    const { closes } = await loadCloses();
+    const rate = new Map<string, number[]>();
+    let span = 0;
+
+    for (const [stock, holders] of Object.entries(raw.byStock ?? {})) {
+      /* 비중 상위 셋 — 신호등의 `etfBacking` 과 같은 규칙 */
+      const top = [...holders]
+        .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
+        .slice(0, 3)
+        .map((h) => (h.code ? closes[h.code] : undefined))
+        .filter((a): a is number[] => Array.isArray(a) && a.length >= 2);
+      if (top.length === 0) continue;
+
+      const maxK = Math.min(...top.map((a) => a.length - 1));
+      const rates: number[] = [];
+      for (let k = 0; k < maxK; k++) {
+        let sum = 0;
+        let cnt = 0;
+        for (const a of top) {
+          const i = a.length - 1 - k;
+          if (i >= 1 && a[i - 1] > 0) {
+            sum += ((a[i] - a[i - 1]) / a[i - 1]) * 100;
+            cnt += 1;
+          }
+        }
+        if (cnt === 0) break;
+        rates.push(sum / cnt);
+      }
+      if (rates.length < 5) continue;
+      rate.set(stock, rates);
+      span = Math.max(span, rates.length);
+    }
+    return rate.size > 0 ? { rate, span } : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -636,6 +726,8 @@ function featuresAt(
     ...NO_SUPPLY,
     /* 영업이익도 별도 조회다 — 담는 곳에서 덮는다 */
     profitYoY: null,
+    /* ETF 뒷배도 렌즈에서 온다 */
+    etfBack: null,
     theme: themeRate,
     rateBeta,
     ...NO_FLOW,
@@ -800,9 +892,26 @@ export async function runSignalBacktest(
   running = true;
   progress = { done: 0, total: opts.codes.length };
   /* 테마 렌즈 — 일봉 캐시로 최근 60여 일을 되짚는다. 캐시가 없으면 그 기준만 빠진다 */
-  const themeCtx = cfg.checks.some((c) => c.enabled && c.key === "naverTheme")
-    ? await buildThemeCtx()
-    : null;
+  /*
+   * ⚠️ **꺼져 있어도 만든다** (2026-09-01 정정).
+   *
+   * 예전엔 `naverTheme` 이 켜져 있을 때만 렌즈를 만들었다. 그런데 이 기준은
+   * **「검증이 안 돼서 꺼 둔」 자리**다 — 켜져 있을 때만 담으면 영영 못 잰다.
+   * 「재기 전에 켜지 않는다」와 「켜야만 잴 수 있다」가 맞물려 빠져나갈 수 없는
+   * 고리가 된다.
+   *
+   * 파일 둘(테마 분류·일봉 캐시)을 읽을 뿐이라 **조회가 0회**다. 늘 담아 두고
+   * 시뮬레이터가 그 값으로 판단하게 한다.
+   */
+  const themeCtx = await buildThemeCtx();
+  /*
+   * ETF 뒷배 (2026-09-01) — **끄고 있어도 만든다.**
+   *
+   * 이 기준은 「검증이 안 돼서 껐다」는 자리라, 켜져 있을 때만 모으면 **영영 못
+   * 잰다.** 파일 둘을 읽을 뿐이라 조회가 0회이므로 늘 담아 두고 시뮬레이터가
+   * 그 값으로 판단하게 한다.
+   */
+  const etfCtx = await buildEtfCtx();
   const rows: BacktestRow[] = [];
   const all: { d1: number | null; d5: number | null; d20: number | null }[] = [];
   /* 점수대별로 나누려면 **초록이 아닌 것까지** 점수를 들고 있어야 한다 */
@@ -873,6 +982,21 @@ export async function runSignalBacktest(
           themeCtx && myThemes.length > 0
             ? alignDates((await loadCloses()).closes[code], bs)
             : null;
+        /*
+         * ETF 뒷배는 **테마와 같은 날짜 맞춤**을 쓴다. 캐시에는 날짜가 없고
+         * 종가 배열뿐이라, 일봉과 맞대 정한 오프셋(`dateToK`)이 있어야 한다.
+         */
+        const etfRates = etfCtx?.rate.get(code);
+        const etfDateToK =
+          etfRates && !dateToK ? alignDates((await loadCloses()).closes[code], bs) : dateToK;
+        const etfBackAt = (date: string): number | null => {
+          if (!etfRates || !etfDateToK) return null;
+          const k = etfDateToK.get(date);
+          if (k === undefined) return null;
+          const v = etfRates[k];
+          return v === undefined ? null : v;
+        };
+
         const themeRateAt = (date: string): number | null => {
           if (!themeCtx || !dateToK || myThemes.length === 0) return null;
           const k = dateToK.get(date);
@@ -926,6 +1050,7 @@ export async function runSignalBacktest(
             ...(fl ?? NO_FLOW),
             ...(sp ?? NO_SUPPLY),
             profitYoY: profitAt ? profitAt(bs[i].date) : null,
+            etfBack: etfBackAt(bs[i].date),
           };
           samples.push({ code, name, date: bs[i].date, ...full, ...f });
 
