@@ -32,8 +32,22 @@ const DIR = join(here, "..", "data");
 const FILE = join(DIR, "dailyCloses.json");
 
 const CHART = "/api/dostk/chart";
-/** 종목 하나가 갖고 있을 종가 개수 — 60일 누적까지 보니 넉넉히 */
-const KEEP = 70;
+/**
+ * 종목 하나가 갖고 있을 종가 개수.
+ *
+ * ## 70 → 400 (2026-09-01) — **조회가 안 는다**
+ *
+ * 70 이던 것은 「60일 누적까지 보니 넉넉히」라는 이유였다. 그런데 이 캐시는
+ * **표본 백테스트의 테마 렌즈**도 쓴다. 거기서 되짚는 구간이 400거래일인데
+ * 캐시가 70일뿐이라, 테마 강세는 **최근 60여 일로만 채점되고 있었다** —
+ * "표본을 3배로 늘려도 이 기준의 표본만 안 늘었다"가 그 뜻이다.
+ *
+ * `ka10081` 은 **한 번에 400개 넘게 준다**(백테스트의 `bars()` 가 연속조회
+ * 없이 400거래일을 되짚는 것이 그 증거다). 그러니 70 은 **받아 놓고 잘라
+ * 버리던 값**이었다. 400 으로 올려도 조회 수는 그대로고 파일만 0.2MB →
+ * 1.2MB 로 는다.
+ */
+const KEEP = 400;
 
 interface Store {
   /** 마지막으로 한 바퀴 돈 시각 (ISO) */
@@ -87,6 +101,28 @@ export function dailyRates(closes: number[] | undefined, days: number): number[]
 /* 받아오기                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * 캐시에 담을 ETF 코드들 — `etfHolders` 가 이미 들고 있는 것을 재사용한다.
+ *
+ * 「어느 종목을 어느 ETF 가 담았나」를 뒤집어 ETF 쪽 코드만 모은다. 파일에서
+ * 읽으므로 조회가 0회다. 파일이 없으면 빈 배열이라 캐시가 예전처럼 돈다.
+ */
+async function etfCodeList(): Promise<string[]> {
+  try {
+    const { readFile: rf } = await import("node:fs/promises");
+    const raw = JSON.parse(await rf(join(DIR, "etfHolders.json"), "utf-8")) as {
+      byStock?: Record<string, { code?: string }[]>;
+    };
+    const out = new Set<string>();
+    for (const list of Object.values(raw.byStock ?? {})) {
+      for (const h of list) if (h.code) out.add(h.code);
+    }
+    return [...out];
+  } catch {
+    return [];
+  }
+}
+
 let running: Promise<Store> | null = null;
 let progress = { done: 0, total: 0 };
 
@@ -125,9 +161,27 @@ export async function buildCloses(client: KiwoomClient): Promise<Store> {
   if (running) return running;
   running = (async () => {
     const themes = await loadThemes();
+    /*
+     * **ETF 도 받는다** (2026-09-01).
+     *
+     * 「ETF 뒷배」 기준이 표본에서 채점 밖이던 이유가 이것이다 — 캐시에 ETF 가
+     * 아예 없어서 과거 등락률을 낼 수 없었다(069500·102110·229200 확인).
+     *
+     * ⚠️ ETF 코드는 **숫자가 아니다** — `0091P0` 처럼 영문이 섞인다. 그래서
+     * 예전 필터(`^\d{6}$`)가 통째로 걸러내고 있었다. 여섯 자리 영숫자로 넓힌다.
+     *
+     * ⚠️ 이걸로 **look-ahead 가 풀리지는 않는다.** 「이 종목을 담은 ETF」 구성이
+     * 오늘 것이라, 그 이름표로 과거를 채점하면 테마 강세가 -5.76%p 로 실패한
+     * 그 병이 그대로다. 다만 **재볼 수는 있게** 된다 — 테마 강세도 그렇게 재서
+     * 결론을 얻었다. 숫자를 그 한계와 함께 읽으면 된다.
+     */
+    const etfCodes = await etfCodeList();
     const codes = [
-      ...new Set(themes.themes.flatMap((t) => t.stocks.map((s) => s.code))),
-    ].filter((c) => /^\d{6}$/.test(c));
+      ...new Set([
+        ...themes.themes.flatMap((t) => t.stocks.map((s) => s.code)),
+        ...etfCodes,
+      ]),
+    ].filter((c) => /^[0-9A-Z]{6}$/i.test(c));
 
     const prev = await loadCloses();
     const closes: Record<string, number[]> = { ...prev.closes };
