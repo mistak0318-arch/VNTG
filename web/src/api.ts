@@ -3362,6 +3362,25 @@ export interface StockSummaryData {
    * ⚠️ 장중이 아니라 일자별이다 — 개별 종목의 장중 투자자별 누적은 출처가 없다.
    */
   flowSeries: { date: string; main: Record<string, number>; inst: Record<string, number> }[];
+  /**
+   * 오늘 **장중** 누적 — 종목 화면이 부를 때마다 한 점씩 쌓인 것이다.
+   * ⚠️ **보고 있는 동안만 쌓인다.** 안 열어 둔 시간은 빈다.
+   */
+  intraday: {
+    /** HH:MM */
+    t: string;
+    ind: number;
+    frgn: number;
+    orgn: number;
+    etc: number;
+    fnnc: number;
+    invt: number;
+    penf: number;
+    samo: number;
+    insr: number;
+    bank: number;
+    etcf: number;
+  }[];
 }
 
 /** 장중 기준선 — VWAP·시가갭·전일고저·장초반 30분 */

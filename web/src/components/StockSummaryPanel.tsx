@@ -83,11 +83,14 @@ function FlowSeriesChart({
   keys,
   colors,
   labels,
+  timeAxis = false,
 }: {
   series: { date: string; v: Record<string, number> }[];
   keys: string[];
   colors: Record<string, string>;
   labels: Record<string, string>;
+  /** 참이면 `date` 를 「HH:MM」 그대로 눈금에 쓴다 (장중 곡선) */
+  timeAxis?: boolean;
 }) {
   if (series.length < 2 || keys.length === 0) return null;
 
@@ -105,7 +108,8 @@ function FlowSeriesChart({
 
   /* 억으로 접어 짧게 — 축은 값을 읽는 자리가 아니라 크기를 가늠하는 자리다 */
   const eok = (v: number) => `${Math.round(v / 100).toLocaleString("ko-KR")}억`;
-  const md = (d: string) => `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}`;
+  const md = (d: string) =>
+    timeAxis ? d : `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}`;
 
   /* 날짜 눈금은 처음·가운데·끝 셋만 — 스무 개를 다 적으면 겹쳐서 못 읽는다 */
   const ticks = [0, Math.floor((series.length - 1) / 2), series.length - 1].filter(
@@ -167,6 +171,89 @@ const MAIN_COLORS: Record<string, string> = {
   orgn: "#eab308",
   etc_corp: "#8b95a1",
 };
+/**
+ * 장중 점을 **일별과 같은 열쇠**로 옮긴다.
+ *
+ * 저장은 짧은 이름(`ind`·`frgn`…)으로 하고 화면은 일별과 같은 열쇠(`ind_invsr`…)를
+ * 쓴다. 같은 색·같은 이름표를 그대로 재활용하려는 것이다 — 두 곡선이 다른 색이면
+ * 당일과 20일을 오갈 때마다 눈이 다시 배워야 한다.
+ */
+function intraMain(p: StockSummaryData["intraday"][number]): Record<string, number> {
+  return { ind_invsr: p.ind, frgnr_invsr: p.frgn, orgn: p.orgn, etc_corp: p.etc };
+}
+function intraInst(p: StockSummaryData["intraday"][number]): Record<string, number> {
+  return {
+    fnnc_invt: p.fnnc,
+    invtrt: p.invt,
+    penfnd_etc: p.penf,
+    samo_fund: p.samo,
+    insrnc: p.insr,
+    bank: p.bank,
+    etc_fnnc: p.etcf,
+  };
+}
+
+/**
+ * 당일 장중 곡선 — **쌓인 만큼만 그린다.**
+ *
+ * 키움은 종목별 시간대별 투자자를 안 준다(거래원도 같다). 그래서 서버가 종목 화면의
+ * 30초 폴링에 얹어 한 점씩 남긴다 — **조회를 하나도 안 늘린다.**
+ *
+ * 그 대가로 **보고 있는 동안만 쌓인다.** 두 점이 안 되면 곡선이 아니므로 그리지 않고
+ * 그 사실을 적는다 — 빈 칸을 두면 「수급이 없다」로 읽힌다.
+ */
+function IntradayBlock({
+  points,
+  pick,
+  keys,
+  colors,
+  labels,
+}: {
+  points: StockSummaryData["intraday"];
+  pick: (p: StockSummaryData["intraday"][number]) => Record<string, number>;
+  keys: string[];
+  colors: Record<string, string>;
+  labels: Record<string, string>;
+}) {
+  if (points.length < 2) {
+    /*
+     * 장이 아닐 때 「0점」만 보이면 고장난 줄 안다. 언제 쌓이는지를 같이 적는다.
+     * 판정은 한국시간 벽시계로 — 서버(`inSession`)와 같은 구간이다.
+     */
+    const hm = new Date(Date.now() + 9 * 3600_000).toISOString().slice(11, 16);
+    const dow = new Date(Date.now() + 9 * 3600_000).getUTCDay();
+    const off = dow === 0 || dow === 6 || hm < "08:50" || hm > "16:00";
+    return (
+      <div className="ss-none">
+        {off && (
+          <>
+            <b>지금은 장중이 아닙니다</b> — 08:50~16:00 평일에만 쌓입니다.{" "}
+          </>
+        )}
+        장중 곡선은 <b>이 화면을 열어 둔 동안</b> 쌓입니다 — 지금 {points.length}점.
+        키움이 종목별 시간대별 투자자를 안 줘서, 30초마다 오는 「지금까지의 누적」을
+        찍어 모으는 방식입니다 <span className="pt-n">(추가 조회 없음)</span>.
+        <b> 과거로 소급되지 않습니다.</b>
+      </div>
+    );
+  }
+  return (
+    <>
+      <FlowSeriesChart
+        series={points.map((p) => ({ date: p.t, v: pick(p) }))}
+        keys={keys}
+        colors={colors}
+        labels={labels}
+        timeAxis
+      />
+      <div className="ss-note">
+        {points[0].t}~{points[points.length - 1].t} · <b>본 구간만</b> 쌓였습니다 —
+        화면을 안 열어 둔 시간은 비어 있습니다.
+      </div>
+    </>
+  );
+}
+
 const INST_COLORS: Record<string, string> = {
   fnnc_invt: "#f04452",
   invtrt: "#eab308",
@@ -212,7 +299,47 @@ export function StockSummaryPanel({ code }: { code: string }) {
    * 아래 「오늘」 막대만 남긴다(예전 화면이 그것이다). 없는 것을 그리는 척하지 않는다.
    */
   const span = spanState;
-  const series = span <= 1 ? [] : d.flowSeries.slice(-span);
+  /*
+   * ⚠️ **자른 뒤 기준을 다시 잡는다** (2026-08-31 버그 수정).
+   *
+   * 서버가 보내는 값은 **100일차부터의 누적**이다. 뒤에서 20개만 잘라 쓰면
+   * 구간은 20일인데 값은 여전히 100일 누적이라 — 「20일 누적」이라 적힌 숫자가
+   * 실제로는 100일 누적이었다(삼성전자 22,795억 → 318,149억). 게다가 큰 값이
+   * 세로 축을 다 먹어 **곡선이 평평해져 변별력이 사라졌다.**
+   *
+   * 구간 **직전 날의 누적**을 빼면 「이 구간 안에서 얼마나 샀나」가 된다.
+   * 구간이 처음부터면 뺄 것이 없다(0).
+   */
+  const series = (() => {
+    if (span <= 1) return [];
+    /*
+     * **오늘은 뺀다** (2026-08-31 — "당일 그래프는 실시간으로 변하는게 맞아.
+     * 내가 말한건 뒤에 것들 5일 20일 60일").
+     *
+     * 오늘 값은 장중에 계속 움직인다. 그게 다일 누적에 섞이면 「5일 수급」이 30초마다
+     * 흔들려 **판단 기준이 못 된다.** 완결된 날만 합해야 어제 본 값과 오늘 본 값이
+     * 같은 뜻을 갖는다. 실시간이 필요하면 그건 「당일」 곡선이 맡는다.
+     *
+     * ⚠️ 그래서 아래 「투자자 수급」 표의 같은 기간 합계와는 **오늘치만큼 다르다.**
+     * 그 표는 오늘을 포함해 합한다. 화면이 「어제까지」라고 적어 그 차이를 알린다.
+     */
+    const todayYmd = new Date(Date.now() + 9 * 3600_000)
+      .toISOString()
+      .slice(0, 10)
+      .replace(/-/g, "");
+    const raw = d.flowSeries;
+    const all = raw.length > 0 && raw[raw.length - 1].date === todayYmd ? raw.slice(0, -1) : raw;
+    if (all.length === 0) return [];
+    const start = Math.max(0, all.length - span);
+    const base = start > 0 ? all[start - 1] : null;
+    const rebase = (v: Record<string, number>, b: Record<string, number> | undefined) =>
+      b ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x - (b[k] ?? 0)])) : v;
+    return all.slice(start).map((p) => ({
+      date: p.date,
+      main: rebase(p.main, base?.main),
+      inst: rebase(p.inst, base?.inst),
+    }));
+  })();
   /** 달라고 한 만큼 없을 때 — 「100일치뿐」을 적으려고 */
   const short = span > 1 && d.flowSeries.length < span;
 
@@ -226,12 +353,24 @@ export function StockSummaryPanel({ code }: { code: string }) {
         <div className="ss-col">
           <div className="ss-sub">
             수급 흐름
-            <i>
-              {span <= 1 ? "당일" : `${series.length}일 누적`} · 금액
+            <i
+              title={
+                span > 1
+                  ? "완결된 거래일만 합합니다(오늘 제외) — 장중에 값이 흔들리지 않게 하려는 것입니다. 아래 「투자자 수급」 표는 오늘을 포함해 합하므로 오늘치만큼 다릅니다. 실시간은 「당일」에서 봅니다."
+                  : undefined
+              }
+            >
+              {span <= 1 ? "장중 누적" : `${series.length}일 누적 · 어제까지`} · 금액
               {short && ` (${d.flowSeries.length}일치뿐)`}
             </i>
             <span className="ss-spans">
-              {[1, 5, 20, 60, 120].map((n) => (
+              {/*
+                120일은 뺐다 (2026-08-31 — "그래프가 의미가 없어지네"). 그만큼 길면
+                누적이 한 방향으로 크게 벌어져 **세로 축을 다 먹고**, 최근 며칠의
+                방향 전환이 평평하게 눌린다. 이 곡선을 보는 이유는 「지금 누가 붙고
+                있나」인데 그게 안 보이면 그릴 값이 없다.
+              */}
+              {[1, 5, 20, 60].map((n) => (
                 <button
                   key={n}
                   className={`ss-span${span === n ? " active" : ""}`}
@@ -248,12 +387,22 @@ export function StockSummaryPanel({ code }: { code: string }) {
             대개 「오늘 판 게 며칠째인가」인데 막대 하나로는 그 답이 안 나온다.
             오늘 값도 지웠다가는 「그래서 오늘은 얼마」를 못 읽으므로 둘 다 둔다.
           */}
-          <FlowSeriesChart
-            series={series.map((p) => ({ date: p.date, v: p.main }))}
-            keys={d.main.map((r) => r.key)}
-            colors={MAIN_COLORS}
-            labels={Object.fromEntries(d.main.map((r) => [r.key, r.label]))}
-          />
+          {span <= 1 ? (
+            <IntradayBlock
+              points={d.intraday}
+              pick={intraMain}
+              keys={d.main.map((r) => r.key)}
+              colors={MAIN_COLORS}
+              labels={Object.fromEntries(d.main.map((r) => [r.key, r.label]))}
+            />
+          ) : (
+            <FlowSeriesChart
+              series={series.map((p) => ({ date: p.date, v: p.main }))}
+              keys={d.main.map((r) => r.key)}
+              colors={MAIN_COLORS}
+              labels={Object.fromEntries(d.main.map((r) => [r.key, r.label]))}
+            />
+          )}
           <div className="ss-sub ss-sub2">
             오늘
             <i>순매수 · 금액</i>
@@ -282,15 +431,25 @@ export function StockSummaryPanel({ code }: { code: string }) {
           <div className="ss-sub">
             기관 안쪽
             <i>
-              {span <= 1 ? "당일" : `${series.length}일 누적`} · 움직인 창구만
+              {span <= 1 ? "장중 누적" : `${series.length}일 누적 · 어제까지`} · 움직인 창구만
             </i>
           </div>
-          <FlowSeriesChart
-            series={series.map((p) => ({ date: p.date, v: p.inst }))}
-            keys={d.institution.map((r) => r.key)}
-            colors={INST_COLORS}
-            labels={Object.fromEntries(d.institution.map((r) => [r.key, r.label]))}
-          />
+          {span <= 1 ? (
+            <IntradayBlock
+              points={d.intraday}
+              pick={intraInst}
+              keys={d.institution.map((r) => r.key)}
+              colors={INST_COLORS}
+              labels={Object.fromEntries(d.institution.map((r) => [r.key, r.label]))}
+            />
+          ) : (
+            <FlowSeriesChart
+              series={series.map((p) => ({ date: p.date, v: p.inst }))}
+              keys={d.institution.map((r) => r.key)}
+              colors={INST_COLORS}
+              labels={Object.fromEntries(d.institution.map((r) => [r.key, r.label]))}
+            />
+          )}
           <div className="ss-sub ss-sub2">
             오늘
             <i>순매수 · 금액</i>

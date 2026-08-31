@@ -1,4 +1,9 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import {
+  recordStockFlow,
+  stockFlowToday,
+  type StockFlowPoint,
+} from "./stockFlowIntraday.js";
 import { alCode } from "./alCode.js";
 
 /**
@@ -111,6 +116,13 @@ export interface StockSummary {
    * 값은 **구간 시작부터의 누적**(백만원)이다 — 하루하루 막대보다 곡선이 흐름을
    * 보여 준다. 장중 수급 변화 차트와 같은 문법이다.
    */
+  /**
+   * 오늘 **장중** 누적 — 이 함수가 불릴 때마다 한 점씩 쌓인 것이다.
+   *
+   * ⚠️ **보고 있는 동안만 쌓인다.** 종목 화면을 안 열어 둔 시간은 빈다.
+   * 「09:00부터의 완전한 흐름」이 아니라 「내가 본 구간의 흐름」이다.
+   */
+  intraday: StockFlowPoint[];
   flowSeries: {
     /** YYYYMMDD */
     date: string;
@@ -234,7 +246,20 @@ export async function stockSummary(client: KiwoomClient, code: string): Promise<
    * ⚠️ 연속조회는 **안 붙인다.** 120일을 채우려면 한 쪽이 더 필요한데, 30초 폴링에
    * 조회를 두 배로 쓰는 값이 아니다. 한 쪽에 온 만큼만 주고 화면이 「몇 일치뿐」을 적는다.
    */
-  const SERIES_DAYS = 120;
+  /* 60일까지만 쓴다 — 120일은 누적이 너무 벌어져 곡선이 평평해져서 뺐다 */
+  const SERIES_DAYS = 70;
+
+  /*
+   * **장중 곡선을 여기서 찍는다** (2026-08-31 — "당일도 가능해? 시간순으로").
+   *
+   * 이 함수는 종목 화면이 30초마다 부른다. 오늘 줄에 「지금까지의 누적」이 들어
+   * 있으므로, 부를 때마다 한 점씩 남기면 **조회를 하나도 안 늘리고** 장중 곡선이 된다.
+   * 거래원(`brokerFlow`)이 같은 이유로 같은 방식을 쓴다.
+   *
+   * 못 써도 요약 자체는 낸다 — 곁들이는 값이 본체를 막으면 안 된다.
+   */
+  const todayRow = row && String(row.dt ?? "") === today ? row : null;
+  await recordStockFlow(bare, todayRow).catch(() => undefined);
   const flowSeries: StockSummary["flowSeries"] = (() => {
     const days = invRows
       .filter((r) => /^\d{8}$/.test(String(r.dt ?? "")))
@@ -300,5 +325,7 @@ export async function stockSummary(client: KiwoomClient, code: string): Promise<
     program: prog,
     missing,
     flowSeries,
+    /* 오늘 장중 곡선 — 「내가 본 구간」만 있다(위 recordStockFlow 주석) */
+    intraday: await stockFlowToday(bare).catch(() => []),
   };
 }
