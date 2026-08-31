@@ -273,6 +273,15 @@ export class RealtimeClient {
    * 밀려나면 안 되는 쪽이 정해져 있다.
    */
   private static readonly MAX_ITEMS = 200;
+
+  /**
+   * `type:item` → 어느 `grp_no` 에 등록했나 (2026-08-31).
+   *
+   * REMOVE 는 **그 그룹에만** 보내야 한다. 모르면 전 그룹에 뿌리게 되는데, 그러면
+   * REG 와 같은 `105110`(요청 건수 초과)에 걸린다 — 상한을 피하려던 것이 다른
+   * 상한을 만든다.
+   */
+  private readonly groupOf = new Map<string, string>();
   /** 스케줄러가 건 종목 — 밀려나면 안 된다 */
   private readonly keep = new Set<string>();
   /** 화면이 건 종목 — 들어온 순서대로(오래된 것이 앞) */
@@ -410,14 +419,27 @@ export class RealtimeClient {
     /*
      * `refresh: "1"` 은 **첫 그룹에만.** 그 값은 「기존 등록을 지우고 새로」라는 뜻이라
      * 그룹마다 주면 앞 그룹이 방금 등록한 것을 다음 그룹이 지운다.
+     *
+     * ⚠️ **연달아 보내면 안 된다** (2026-08-31 — 그룹 분할을 넣자마자 겪었다).
+     *
+     * 200쌍씩 나누면 REG 가 여러 번 나가는데, 한 번에 몰아 보내면 `105110`
+     * 「해당 TRNM 으로 허용된 요청 건수를 초과」가 뜬다. 상한을 피하려고 나눴는데
+     * 나누는 행위 자체가 다른 상한에 걸린 것이다.
+     *
+     * 그룹 사이에 간격을 둔다. 등록이 몇 백 밀리초 늦어도 화면은 모르지만,
+     * 거절되면 그 그룹은 **통째로 안 걸린다.**
      */
+    const GAP_MS = 400;
     groups.forEach((data, i) => {
-      this.send({
+      const payload = {
         trnm: "REG",
         grp_no: String(i + 1),
         refresh: i === 0 ? "1" : "0",
         data,
-      });
+      };
+      for (const d of data) for (const it of d.item) this.groupOf.set(`${d.type[0]}:${it}`, payload.grp_no);
+      if (i === 0) this.send(payload);
+      else setTimeout(() => this.send(payload), i * GAP_MS);
     });
   }
 
@@ -425,21 +447,19 @@ export class RealtimeClient {
     this.subs.get(type)?.delete(item);
     if (this.ws && this.ws.readyState === 1) {
       /*
-       * ⚠️ **어느 그룹에 들어갔는지 모른다.**
+       * **등록했던 그 그룹에만** 보낸다 (2026-08-31).
        *
-       * 등록은 200쌍마다 그룹을 나눠 보내지만(위 `flush`), 어떤 종목이 몇 번 그룹에
-       * 들어갔는지는 그때그때 다르다(구독 순서가 바뀐다). 그래서 REMOVE 는 **지금
-       * 쓰는 그룹 전부에** 보낸다 — 없는 그룹에 보내도 해가 없고, 하나에만 보내면
-       * 엉뚱한 그룹에 남아 **끊어지지 않는 구독**이 생긴다.
-       *
-       * 다음 `flush` 에서 어차피 `refresh: "1"` 로 전체가 다시 짜이므로 이건 그
-       * 사이의 임시 정리다.
+       * 전 그룹에 뿌리면 REG 와 같은 `105110`(요청 건수 초과)에 걸린다. 어느 그룹에
+       * 넣었는지는 `flush` 가 적어 뒀다. 기록이 없으면(아직 안 나간 구독) 1번으로
+       * 보낸다 — 다음 `flush` 가 `refresh:"1"` 로 전체를 다시 짜므로 해가 없다.
        */
-      const total = [...this.subs.values()].reduce((n, set) => n + set.size, 0);
-      const groups = Math.max(1, Math.ceil((total + 1) / 200));
-      for (let g = 1; g <= groups; g += 1) {
-        this.send({ trnm: "REMOVE", grp_no: String(g), data: [{ item: [item], type: [type] }] });
-      }
+      const key = `${type}:${item}`;
+      this.send({
+        trnm: "REMOVE",
+        grp_no: this.groupOf.get(key) ?? "1",
+        data: [{ item: [item], type: [type] }],
+      });
+      this.groupOf.delete(key);
     }
   }
 

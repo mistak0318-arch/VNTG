@@ -661,6 +661,12 @@ function KeywordSheet({
                 </a>
                 <span className="muted">
                   {s.press} · {s.at.slice(11, 16)}
+                  {/*
+                    제목에 그 낱말이 없으면 **왜 여기 있는지 말해 준다** (2026-08-31).
+                    사전 매칭은 제목 + 요약을 보는데 화면은 제목만 보여 주므로,
+                    「증권」을 눌렀더니 「정은보 이사장 뉴욕 출국」이 나오는 일이 있었다.
+                  */}
+                  {s.inTitle === false && <i className="kwf-insum"> 요약에서</i>}
                 </span>
               </li>
             ))}
@@ -669,7 +675,8 @@ function KeywordSheet({
 
         <div className="table-note">
           기사 표본은 <b>최근 6건</b>만 남깁니다 — 목록이 아니라 「왜 떴는지」를 보려는
-          칸입니다.
+          칸입니다. 낱말은 <b>제목과 요약</b>에서 찾으므로, 제목에 안 보이는 기사는
+          <b>요약에서</b> 걸린 것입니다.
         </div>
       </div>
     </div>

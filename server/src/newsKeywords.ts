@@ -82,7 +82,26 @@ interface DayFile {
    */
   presses?: Record<string, Record<string, number>>;
   /** term → 최근 기사 표본 (제목·링크·매체·시각) */
-  samples: Record<string, { title: string; link: string; press: string; at: string }[]>;
+  samples: Record<
+    string,
+    {
+      title: string;
+      link: string;
+      press: string;
+      at: string;
+      /**
+       * 제목에서 걸렸나 (2026-08-31).
+       *
+       * 사전 매칭은 **제목 + 요약**을 본다(요약에만 나오는 이름이 꽤 있다). 그런데
+       * 화면은 제목만 보여 주므로, 요약에서 걸린 기사는 **왜 여기 있는지 알 수가
+       * 없다** — 「증권」을 눌렀더니 「정은보 이사장 뉴욕 출국」이 나오는 식이었다.
+       *
+       * 어디서 걸렸는지 남겨 두면 화면이 그렇게 말할 수 있고, 제목에서 걸린 것을
+       * 앞에 세울 수도 있다.
+       */
+      inTitle?: boolean;
+    }[]
+  >;
   /**
    * 이미 센 기사 — 같은 기사를 두 번 세지 않는다.
    *
@@ -141,6 +160,16 @@ const STOP = new Set([
   "목표주", "수익률", "실적", "매출", "영업익", "순이익", "공모", "청약",
   /* 3차 실측(2026-08-30, 미니PC 화면) — 「올 들어」「다시」처럼 문장을 잇는 말 */
   "들어", "다시", "수준", "가운데", "이후", "통해", "위해", "대해", "따라", "관해",
+  /*
+   * 4차 실측(2026-08-31 요청 — 「증시 출발 뭐 이런것들」).
+   *
+   * 장 상황을 적는 **시황 기사의 어휘**다. 「강보합 출발」·「급락 마감」처럼 매일
+   * 아침저녁으로 붙는다. 뜻이 없는 말은 아니지만 **어느 종목·어느 테마 이야기인지를
+   * 하나도 말해 주지 않아** 눌러 봐도 볼 것이 없다.
+   */
+  "출발", "급등", "급락", "반등", "조정", "회복", "우려", "기대", "부담", "목표",
+  "상승세", "하락세", "강보합", "약보합", "혼조", "보합", "상승폭", "하락폭",
+  "장초반", "장마감", "전거래일", "휴장", "개인투자자",
 ]);
 
 /**
@@ -268,7 +297,13 @@ export async function collectNewsKeywords(): Promise<{ articles: number; terms: 
 
           /* 표본은 낱말당 최근 6건만 — 「왜 떴는지」를 보려는 것이지 목록이 아니다 */
           const arr = (f.samples[term] ??= []);
-          arr.unshift({ title: it.title, link: it.link, press: it.press, at: it.at });
+          const inTitle = it.title.includes(term);
+          arr.unshift({ title: it.title, link: it.link, press: it.press, at: it.at, inTitle });
+          /*
+           * **제목에서 걸린 것을 앞에 세운다.** 요약에서만 걸린 기사가 여섯 자리를
+           * 다 차지하면, 눌러 봤을 때 그 낱말이 하나도 안 보이는 목록이 나온다.
+           */
+          arr.sort((a, b) => Number(b.inTitle ?? false) - Number(a.inTitle ?? false));
           if (arr.length > 6) arr.length = 6;
           touched.add(term);
         }
@@ -312,7 +347,8 @@ export interface KeywordHit {
   /** 기준선이 0이었나 — 처음 나온 말. 이게 제일 값지다 */
   fresh: boolean;
   codes: string[];
-  samples: { title: string; link: string; press: string; at: string }[];
+  /** `inTitle` — 제목에서 걸렸나. 요약에서만 걸린 것은 화면이 그렇게 적는다 */
+  samples: { title: string; link: string; press: string; at: string; inTitle?: boolean }[];
   /** 종목 낱말이면 지금 등락률 — 이미 오른 뒤인지 판단하려고 */
   changeRate?: number;
   /** 몇 개 매체가 썼나 — 한 매체가 열 번 쓴 것과 열 매체가 한 번씩은 다르다 */
@@ -418,10 +454,22 @@ export async function keywordFlow(windowMin = 60): Promise<KeywordFlow> {
   } catch {
     /* 아직 하루도 안 쌓였다 */
   }
-  const pastDays = files
-    .map((f) => f.replace(".json", ""))
-    .filter((d) => d < windowStartDay)
-    .slice(-7);
+  /*
+   * ⚠️ **주말은 기준선에서 뺀다** (2026-08-31).
+   *
+   * 뉴스 흐름은 평일과 주말이 완전히 다르다. 주말에는 개장·마감 관련 기사가 아예
+   * 없어서, 토·일을 기준선으로 쓰면 월요일 아침에 **「출발」·「급락」 같은 개장
+   * 상용어가 전부 「처음 보는 말」로 잡힌다.** 실측에서 그게 상위를 채웠다.
+   *
+   * 평일이 하나도 없으면(수집 초기) 있는 대로 쓴다 — 기준선이 아예 없는 것보다는
+   * 낫고, 아래 바닥값이 잔챙이를 막는다.
+   */
+  const all = files.map((f) => f.replace(".json", "")).filter((d) => d < windowStartDay);
+  const weekdays = all.filter((d) => {
+    const w = new Date(`${d}T00:00:00Z`).getUTCDay();
+    return w >= 1 && w <= 5;
+  });
+  const pastDays = (weekdays.length > 0 ? weekdays : all).slice(-7);
 
   const dayTotals = new Map<string, number>(); // term → 지난 날들 총 건수
   /* 시간대 보정을 하려면 「지난 날 이 시각들에 기사가 몇 건이었나」가 필요하다 */
@@ -491,14 +539,64 @@ export async function keywordFlow(windowMin = 60): Promise<KeywordFlow> {
     }
   }
 
+  /*
+   * 창 안의 기사 수 — **기준선을 여기에 맞춘다** (아래 주석 참고).
+   */
+  let articles = 0;
+  for (const c of timeline.values()) articles += c;
+
   const hits: KeywordHit[] = [];
   for (const [term, n] of recent) {
     if (n < 2) continue; // 한 번 나온 것은 아직 흐름이 아니다
-    const base = baselineDays > 0 ? ((dayTotals.get(term) ?? 0) / baselineDays) * scale : 0;
+    /*
+     * ⚠️ **읽을 때도 거른다.** `STOP` 은 수집 단계에서 쓰지만, 목록을 늘려도
+     * **이미 쌓인 날들에는 그대로 남아 있다.** 그러면 새 규칙이 며칠 뒤에야
+     * 효과를 내고, 그동안 화면은 예전 그대로다 — 고쳤는데 안 고쳐진 것처럼 보인다.
+     */
+    if (STOP.has(term)) continue;
+    /*
+     * ⚠️ **기준선은 「건수」가 아니라 「기사당 비율」이다** (2026-08-31 요청 —
+     * 「증시가 1위고 출발이 2위고 그래. 의미없는 것들」).
+     *
+     * 예전엔 `지난 날들의 하루 평균 건수 × 창 몫` 이었다. 그러면 **기사량이 다른
+     * 날끼리 견주게 된다.** 실측:
+     *
+     *   8/29  기사  12건 · 증권  0회   ← 수집 시작일
+     *   8/30  기사  77건 · 증권  8회   ← 일요일
+     *   8/31  기사 311건 · 증권 77회   ← 오늘
+     *
+     * 기준선이 (0+8)/2 × 창몫 = **0.66** 이 나왔다. 그런데 오늘 창 안에 73회다.
+     * z 가 56 까지 뛰고, 기준선이 0 인 낱말은 `z = 건수` 가 되어 **흔한 말이 그대로
+     * 1등**이 된다. 「증시」·「출발」이 상위에 오던 이유가 이것이다.
+     *
+     * 기사량으로 정규화하면 사라진다 — 증권은 8/30 에 기사의 10.4%(8/77)에 나왔고
+     * 오늘 창에서는 29.7%(73/246)다. 기대치가 0.66 이 아니라 **25.6** 이 되어
+     * z 가 56 에서 9 로 내려간다. 흔한 말일수록 비율이 일정해 저절로 가라앉는다.
+     *
+     * 기사가 적은 날도 **비율은 멀쩡하므로** 수집 초기의 왜곡도 같이 없어진다.
+     */
+    const rate = pastArticlesAll > 0 ? (dayTotals.get(term) ?? 0) / pastArticlesAll : 0;
+    const base = rate > 0 ? rate * articles : 0;
     const fresh = baselineDays >= 2 && base < 0.35; // 사실상 처음 보는 말
     const ratio = base > 0 ? n / base : n; // 기준선이 없으면 건수 자체가 세기다
     const pressCount = presses.get(term) ?? 0;
-    const { z } = buzzPoints(n, base, pressCount, cfg);
+
+    /*
+     * ⚠️ **정말 처음 보는 말에는 바닥을 깐다** (2026-08-31).
+     *
+     * 기준선이 0 이면 `z = (n - 0) / sqrt(1) = n` 이 되어 **z 가 그대로 건수**가
+     * 된다. 그러면 흔한 말이 「기준선 없음」으로 빠져나가 1등을 한다 — 「출발」이
+     * 19건으로 상위에 오던 통로가 이것이었다.
+     *
+     * 그래서 처음 보는 말은 **창 안 기사의 0.5% 만큼은 나올 수 있었다**고 가정한다.
+     * 246건짜리 창이면 1.2 다. 진짜 새 낱말은 그래도 z 가 충분히 크고(12건이면
+     * z≈7), 아무 데나 붙는 말은 건수만큼 곧바로 오르지 못한다.
+     *
+     * 첫날에도 깐다 — 비교할 과거가 없을수록 흔한 말이 그대로 1등을 하므로,
+     * 오히려 그때 바닥이 더 필요하다.
+     */
+    const floor = Math.max(0.5, articles * 0.005);
+    const { z } = buzzPoints(n, Math.max(base, floor), pressCount, cfg);
 
     const cs = codes.get(term) ?? [];
     let changeRate: number | undefined;
@@ -531,9 +629,6 @@ export async function keywordFlow(windowMin = 60): Promise<KeywordFlow> {
    * 기준선이 없으면 z 도 의미가 없어 건수로 돌아간다.
    */
   hits.sort((a, b) => (baselineDays >= 1 ? b.z - a.z : b.recent - a.recent));
-
-  let articles = 0;
-  for (const c of timeline.values()) articles += c;
 
   return {
     windowMin: win,

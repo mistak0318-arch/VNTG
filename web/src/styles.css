@@ -11308,3 +11308,5 @@ button.tpb-row:hover { background: var(--panel-2); }
   font-size: 0.76rem; margin-bottom: 8px;
   background: color-mix(in srgb, var(--red) 8%, transparent);
 }
+/* 키워드 표본 — 요약에서 걸린 기사 표시 (2026-08-31) */
+.kwf-insum { font-style: normal; opacity: 0.7; }

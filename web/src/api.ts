@@ -360,7 +360,8 @@ export interface KeywordHit {
   /** 기준선이 사실상 0이었나 — 처음 보는 말 */
   fresh: boolean;
   codes: string[];
-  samples: { title: string; link: string; press: string; at: string }[];
+  /** inTitle — 제목에서 걸렸나 (2026-08-31) */
+  samples: { title: string; link: string; press: string; at: string; inTitle?: boolean }[];
   /** 종목 낱말이면 지금 등락률 — 이미 오른 뒤인지 */
   changeRate?: number;
   /** 몇 개 매체가 썼나 — 한 매체가 열 번 쓴 것과 열 매체가 한 번씩은 다르다 */
