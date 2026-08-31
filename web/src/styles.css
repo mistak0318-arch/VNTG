@@ -12316,3 +12316,16 @@ thead .sd-emph {
   line-height: 1.5;
   min-width: 220px;
 }
+
+/* 시뮬레이터 읽는 법 — 설정 가이드와 같은 몸통을 쓰되 위 여백만 준다 */
+.sim-howto {
+  margin: 4px 0 12px;
+}
+/* 본문 속 단서 — 경고보다 약하게, 그냥 문단보다는 눈에 띄게 */
+.sim-note {
+  padding: 6px 9px;
+  border-left: 2px solid var(--border);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
