@@ -40,16 +40,28 @@ import {
  * 추세가 꺾이면 그날 나온다. 바닥을 맞히려 하지 않는다 — 그건 다른 전략이고
  * 이 계좌의 규칙과 섞으면 둘 다 망가진다.
  *
- * ## 하루 세 번
+ * ## 하루 세 번, 그리고 **진입은 세 갈래**
  *
- *   - **아침**(장 전): 오늘 뭘 할지 정한다. 어제 종가 기준 후보와 계획.
- *   - **점심**(장중): 보유만 본다. 손절·익절에 닿았나. **새로 안 산다** —
- *     장중 추격은 이 전략의 최대 손실원이라 아예 금지한다.
- *   - **저녁**(마감 후): 오늘을 채점하고, 만기 미수를 정리하고, 내일 후보를 뽑는다.
+ *   - **아침**(장 전): 시장을 보고 계획을 세운다. **시가배팅** 자리를 잡는다.
+ *   - **점심**(장중): 보유를 점검하고, **장중배팅** 조건이 선 것만 잡는다.
+ *   - **저녁**(마감 무렵): **종가배팅** 자리를 잡고, 오늘을 채점한다.
  *
- * ⚠️ **아침에 사는 값은 그날 시가**다. 종가를 보고 그 종가에 사는 것은 불가능한데,
+ * 진입을 한 시각에 묶지 않는 이유 (2026-08-31 — "어떨때는 종가배팅도 하고 어떨때는
+ * 시가배팅. 장중배팅"): 자리마다 성질이 다르다. 마감에 강하게 끝난 것은 다음 날
+ * 갭을 노리는 자리고, 아침에 눌렸다 회복하는 것은 그날 안에 답이 나오는 자리다.
+ * **한 시각으로 묶으면 그중 하나만 잡고 나머지는 영영 못 잡는다.**
+ *
+ * 다만 아무 때나 사는 것은 아니다. 각 모드에 **들어갈 조건**이 따로 있고,
+ * 조건이 안 서면 그 시간대엔 아무것도 안 산다. 그게 「능동적」과 「충동적」의 차이다.
+ *
+ * ⚠️ **시가배팅의 값은 그날 시가다.** 어제 종가를 보고 그 종가에 사는 것은 불가능한데,
  * 그렇게 적으면 성적이 통째로 거짓이 된다(`signalBacktest` 에서 같은 이유로
- * 익일 시가 진입으로 바꿨다). 여기서도 같은 규칙을 쓴다.
+ * 익일 시가 진입으로 바꿨다).
+ *
+ * ## 매도는 버틴다
+ *
+ * 흔들린다고 팔지 않는다. **손절선·목표가·시간만료**에 닿을 때만 나간다.
+ * 중간에 마음이 바뀌어 파는 자리를 만들면, 나중에 「그때 왜 팔았나」를 물을 수 없다.
  */
 
 /* ------------------------------------------------------------------ 규칙 값 */
@@ -58,6 +70,21 @@ import {
  * 규칙의 숫자들을 **한자리에 모은다.** 코드 여기저기에 흩어지면 「왜 3% 인가」를
  * 물을 자리가 없어지고, 고칠 때 한 군데를 빠뜨린다.
  */
+/**
+ * 진입 모드 — 자리마다 성질이 다르다.
+ *
+ *   open   시가배팅 — 어제 신호가 살아 있고 시가가 안 튀었을 때. 아침.
+ *   intra  장중배팅 — 눌렸다 회복하며 거래가 붙을 때. 점심.
+ *   close  종가배팅 — 오늘 강하게 마감하고 판이 연속으로 강할 때. 저녁.
+ */
+export type EntryMode = "open" | "intra" | "close";
+
+export const ENTRY_LABEL: Record<EntryMode, string> = {
+  open: "시가배팅",
+  intra: "장중배팅",
+  close: "종가배팅",
+};
+
 export interface CisRules {
   /** 한 종목에 순자산의 몇 %까지 (분산) */
   maxPerStock: number;
@@ -77,6 +104,23 @@ export interface CisRules {
   minMarketScore: number;
   /** 이익이 이만큼 나면 손절선을 본전으로 올린다 */
   trailAfterPct: number;
+
+  /* ── 진입 모드별 문 (2026-08-31) ───────────────────────────────── */
+  /** 시가배팅을 쓸까 */
+  useOpen: boolean;
+  /** 장중배팅을 쓸까 */
+  useIntra: boolean;
+  /** 종가배팅을 쓸까 */
+  useClose: boolean;
+  /**
+   * 시가가 이만큼 넘게 갭상승했으면 **안 산다**. 갭에 다 주고 들어가면
+   * 손절선까지의 거리가 사라진다 — 사자마자 손절 사거리에 들어간다.
+   */
+  maxOpenGap: number;
+  /** 장중배팅 — 시가 대비 이만큼은 올라와 있어야(회복 확인) */
+  intraMinFromOpen: number;
+  /** 종가배팅 — 오늘 등락률이 이만큼은 되어야(강하게 마감) */
+  closeMinRate: number;
 }
 
 export const DEFAULT_RULES: CisRules = {
@@ -101,6 +145,19 @@ export const DEFAULT_RULES: CisRules = {
   minMarketScore: 40,
   /* +7% 넘어가면 손절을 본전으로 — 이익을 손실로 바꾸지 않는다 */
   trailAfterPct: 7,
+
+  useOpen: true,
+  useIntra: true,
+  useClose: true,
+  /*
+   * 갭 +4% 까지만. 손절이 -7% 인데 갭으로 5% 를 주고 들어가면 남은 거리가 2% 다 —
+   * 그 자리는 흔들림 한 번에 털린다.
+   */
+  maxOpenGap: 4,
+  /* 시가보다 +1% 위 — 눌렸다 「회복했다」의 최소 증거 */
+  intraMinFromOpen: 1,
+  /* 종가배팅은 그날 3% 이상 오른 것만. 어중간하게 끝난 것은 갭을 안 준다 */
+  closeMinRate: 3,
 };
 
 /* ------------------------------------------------------------------ 후보 */
@@ -125,6 +182,8 @@ export interface Candidate {
   why: string;
   /** 못 산 이유 (걸러졌으면) */
   rejected?: string;
+  /** 어느 자리로 들어갈까 — 시간대가 정하는 게 아니라 **자리의 성질**이 정한다 */
+  mode?: EntryMode;
 }
 
 /**
@@ -233,6 +292,89 @@ function toCandidate(s: LeaderStock, scan: Awaited<ReturnType<typeof leaderScan>
     used,
     why: bits.join(" · "),
   };
+}
+
+/* ------------------------------------------------------------------ 진입 문 */
+
+/** 이 시간대에 어느 모드로 들어가나 */
+export function modeOfSlot(slot: "morning" | "noon" | "evening"): EntryMode {
+  return slot === "morning" ? "open" : slot === "noon" ? "intra" : "close";
+}
+
+export interface EntryGate {
+  ok: boolean;
+  reason: string;
+}
+
+/**
+ * 이 후보가 **지금 이 자리로** 들어갈 만한가.
+ *
+ * 시간대마다 조건이 다르다. 같은 종목이라도 아침의 이유와 저녁의 이유가 다르고,
+ * 이유가 없으면 안 산다 — **그게 「능동적」과 「충동적」의 차이다.**
+ *
+ * ⚠️ 여기서 쓰는 값은 **지금 값과 시가**뿐이다. 우리가 확실히 아는 것만 쓴다.
+ * 시가를 못 읽으면 갭·회복을 판단할 수 없으므로 **안 사는 쪽**이다 — 모르는 자리에
+ * 들어가는 것이 가장 비싸다.
+ */
+export function entryGate(
+  mode: EntryMode,
+  c: Candidate,
+  now: number | null,
+  open: number | null,
+  prevClose: number | null,
+  rules: CisRules = DEFAULT_RULES,
+): EntryGate {
+  if (mode === "open" && !rules.useOpen) return { ok: false, reason: "시가배팅 꺼짐" };
+  if (mode === "intra" && !rules.useIntra) return { ok: false, reason: "장중배팅 꺼짐" };
+  if (mode === "close" && !rules.useClose) return { ok: false, reason: "종가배팅 꺼짐" };
+  if (now === null || now <= 0) return { ok: false, reason: "값을 못 읽었다" };
+
+  if (mode === "open") {
+    /*
+     * 시가배팅 — **갭이 크면 안 산다.** 손절이 -7% 인데 갭으로 5% 를 주고 들어가면
+     * 남은 거리가 2% 라, 그 자리는 흔들림 한 번에 털린다. 자리가 좋아도 값이 나쁘면
+     * 그 매매는 나쁜 매매다.
+     */
+    if (prevClose === null || prevClose <= 0) return { ok: false, reason: "전일 종가를 못 읽어 갭을 못 잰다" };
+    const gap = ((now - prevClose) / prevClose) * 100;
+    if (gap > rules.maxOpenGap) {
+      return { ok: false, reason: `갭 +${gap.toFixed(1)}% > 허용 ${rules.maxOpenGap}% — 손절까지 거리가 없다` };
+    }
+    if (gap < -3) {
+      return { ok: false, reason: `갭 ${gap.toFixed(1)}% — 어제 신호가 밤새 깨졌다` };
+    }
+    return { ok: true, reason: `갭 ${gap > 0 ? "+" : ""}${gap.toFixed(1)}% — 살 만한 자리` };
+  }
+
+  if (mode === "intra") {
+    /*
+     * 장중배팅 — **눌렸다 회복한 것**만. 시가부터 쭉 오른 것은 이미 늦었고,
+     * 시가 밑에 있는 것은 아직 아니다. 그 사이가 이 모드의 자리다.
+     */
+    if (open === null || open <= 0) return { ok: false, reason: "시가를 못 읽었다" };
+    const fromOpen = ((now - open) / open) * 100;
+    if (fromOpen < rules.intraMinFromOpen) {
+      return { ok: false, reason: `시가 대비 ${fromOpen.toFixed(1)}% — 아직 회복 못 했다` };
+    }
+    if (fromOpen > 8) {
+      return { ok: false, reason: `시가 대비 +${fromOpen.toFixed(1)}% — 이미 갔다, 추격은 안 한다` };
+    }
+    return { ok: true, reason: `시가 대비 +${fromOpen.toFixed(1)}% 회복` };
+  }
+
+  /*
+   * 종가배팅 — **강하게 마감한 것**만. 다음 날 갭을 노리는 자리라, 어중간하게
+   * 끝난 것은 갭을 안 준다. 판(섹터)이 연속으로 강한지도 본다 — 하루짜리는
+   * 다음 날 되돌린다.
+   */
+  if (c.changeRate < rules.closeMinRate) {
+    return { ok: false, reason: `오늘 ${c.changeRate.toFixed(1)}% < ${rules.closeMinRate}% — 강하게 끝나지 않았다` };
+  }
+  if (!c.used.includes("섹터 연속성")) {
+    return { ok: false, reason: "판이 연속으로 강하지 않다 — 하루짜리는 다음 날 되돌린다" };
+  }
+  /* 담는 자리는 NXT 애프터마켓(15:40~20:00)이다 — 마감 뒤에도 종가 근처에 살 수 있다 */
+  return { ok: true, reason: `${c.changeRate.toFixed(1)}% 로 마감 · 판이 연속 강세 (NXT 애프터에서 담는다)` };
 }
 
 /* ------------------------------------------------------------------ 매도 판단 */

@@ -931,7 +931,8 @@
       "Bash(curl -s -X POST http://127.0.0.1:4000/api/realtime/probe-nxt -H \"Content-Type: application/json\" -d '{\"code\":\"000660\",\"waitMs\":25000}' --max-time 60)",
       "Bash(cd \"K:/0000 3740 프로젝트 \\(경제적자유\\)/00. 주식/2 AI 프롬프트/260810_클로드작업\" && printf '%s\\\\n' '실시간 REG 가 200쌍 상한에서 통째로 거절되고 있었다' '' '주석은 「flush 가 200개씩 그룹을 나눈다」고 적고 있었지만 실제로는' '안 나누고 전부 grp_no:\"1\" 하나로 보냈다. 2026-08-31 09:01 구독이' '212 로 늘자 105118 로 거절이 떴다 — 소켓은 「연결됨·healthy」라' '화면상으로는 멀쩡해 보인다. 제일 알아채기 어려운 실패다.' '' '- \\(타입,종목\\) 쌍을 200 마다 끊어 grp_no 를 올린다' '- refresh:\"1\" 은 첫 그룹에만 — 그룹마다 주면 앞 그룹이 등록한 것을' '  다음 그룹이 지운다' '- REMOVE 는 지금 쓰는 그룹 전부에 보낸다. 어느 그룹에 들어갔는지' '  모르므로 하나에만 보내면 끊어지지 않는 구독이 남는다' '' '[실측] 09:05 · 거절 0 · 30초에 points +418' '  keys 668 · types {0B:228, 0w:224, 0F:216}' '  삼성전자 247,250 -3.79% 거래소 KRX' '' '[신호등은 KRX 기준 유지 확인]' '  ka10081 일봉 · ka10060 수급 · ka10001 현재가 전부 6자리 KRX 코드' '  ka10014 공매도만 _AL \\(매매비중 분모 이유, 2026-08-26 실측\\)' '  신호등은 실시간을 아예 안 읽는다 \\(REST 조회만\\)' '' '[분석·알림은 KRX 체결만]' '  통합 구독으로 NXT 체결이 섞이는데, NXT 는 호가가 얇아 한 틱에' '  손절 알림이 헛울린다. getLatestKrx 로 9081 필드를 보고 거른다.' '  실측 마지막 체결 분포 KRX 7 / NXT 3 — 필터가 굶지 않는다.' '' 'Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>' > .git/vntg-msg.txt && git add server/src && git commit -F .git/vntg-msg.txt -q && git push -q && git log --oneline -1)",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} · %{time_total}s\\\\n\" --max-time 20 https://vntgts.com/)",
-      "Bash(curl -s --max-time 20 https://vntgts.com/api/overview/status)"
+      "Bash(curl -s --max-time 20 https://vntgts.com/api/overview/status)",
+      "Bash(grep -n \"className=\\\\|split\\(\\\\\"\\\\\\\\\\\\\\\\n\\\\\"\\)\\\\|\\\\*\\\\*\" web/src/components/AiSummaryCard.tsx)"
     ]
   }
 }

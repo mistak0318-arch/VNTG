@@ -9,6 +9,7 @@ import { ScreenerPage } from "./pages/ScreenerPage";
 import { ScreenPage } from "./pages/ScreenPage";
 import { PaperTradePage } from "./pages/PaperTradePage";
 import { JournalPage } from "./pages/JournalPage";
+import { CisPage } from "./pages/CisPage";
 import { MemoPage } from "./pages/MemoPage";
 import { MiniPage } from "./pages/MiniPage";
 import { BuzzSourcePage } from "./pages/BuzzSourcePage";
@@ -57,6 +58,7 @@ import { TelegramPage } from "./pages/TelegramPage";
 import { GuidePage } from "./pages/GuidePage";
 
 type Tab =
+  | "cis"
   | "morning"
   | "briefing"
   | "overview"
@@ -161,6 +163,9 @@ const MENU: {
       { key: "signalScreen", label: "신호등 찾기", icon: "🚦" },
       /* 슈퍼신호등 검증 대시보드 (2026-08-26) — 걸린 것들이 그 뒤로 어떻게 됐나 */
       { key: "superSignal", label: "슈퍼신호등", icon: "🌟" },
+      /* CIS 일지 — 시스가 굴리는 모의 계좌 (2026-08-31). 복기 노트 바로 위에 둔다:
+         둘 다 「돌아보는 자리」이고, 사람의 복기와 시스의 복기가 나란히 있어야 비교가 된다 */
+      { key: "cis", label: "CIS 일지", icon: "🧠" },
       { key: "journal", label: "복기 노트", icon: "📓" },
       { key: "memo", label: "메모장", icon: "📝" },
       { key: "telegram", label: "텔레그램 동향", icon: "📡" },
@@ -563,6 +568,7 @@ export default function App() {
       case "customTheme": return <CustomThemePage onSelectStock={onSelectStock} />;
       case "signalScreen": return <ScreenPage onSelectStock={onSelectStock} />;
       case "superSignal": return <SuperDashboardPage onSelectStock={onSelectStock} />;
+      case "cis": return <CisPage onSelectStock={onSelectStock} />;
       case "journal": return <JournalPage onSelectStock={onSelectStock} />;
       case "memo": return <MemoPage onSelectStock={onSelectStock} />;
       case "usWatch": return <UsWatchPage />;

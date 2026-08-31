@@ -1,7 +1,7 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BuyPlan, Candidate, ExitCall, MarketGate } from "./cisTrader.js";
+import { ENTRY_LABEL, type BuyPlan, type Candidate, type EntryMode, type ExitCall, type MarketGate } from "./cisTrader.js";
 import { today } from "./cisAccount.js";
 import type { AccountId } from "./cisAccounts.js";
 
@@ -206,6 +206,10 @@ const pct = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
 export function narrate(
   slot: Slot,
   d: {
+    /** 이 시간대의 진입 모드 — 시가/장중/종가배팅 */
+    mode: EntryMode;
+    /** 후보마다 이 자리로 들어갈 만했나. **안 산 이유가 산 이유만큼 중요하다** */
+    gateNotes: { name: string; ok: boolean; reason: string }[];
     market: MarketGate | null;
     candidates: Candidate[];
     plans: BuyPlan[];
@@ -220,49 +224,25 @@ export function narrate(
 ): string {
   const L: string[] = [];
 
+  const modeName = ENTRY_LABEL[d.mode];
+
   if (slot === "morning") {
     L.push("## 오늘 어떻게 볼 것인가");
-    if (d.market) {
-      L.push(
-        d.market.ok
-          ? `시장 ${d.market.score}점(${d.market.label}). ${d.market.reason}.`
-          : `**오늘은 사지 않는다.** ${d.market.reason}.`,
-      );
-    }
-    if (d.candidates.length > 0) {
-      L.push("");
-      L.push("### 후보");
-      for (const c of d.candidates.slice(0, 8)) {
-        L.push(
-          `- **${c.name}** ${pct(c.changeRate)} · 대금 ${c.tradeValue.toLocaleString()}억 — ${c.why}` +
-            (c.signalLevel ? ` (신호등 ${c.signalLevel} ${c.signalScore}점)` : ""),
-        );
-      }
-    } else if (d.market?.ok) {
-      L.push("조건에 맞는 후보가 없었다. 억지로 만들지 않는다.");
-    }
-    if (d.plans.length > 0) {
-      L.push("");
-      L.push("### 계획");
-      for (const p of d.plans) {
-        L.push(
-          `- ${p.candidate.name} ${p.qty.toLocaleString()}주 · ${won(p.price)} (${p.funding}) ` +
-            `— 손절 ${won(p.stop)} / 목표 ${won(p.target)}`,
-        );
-      }
-    }
+  } else if (slot === "noon") {
+    L.push("## 장중 점검");
+  } else {
+    L.push("## 마감");
   }
 
-  if (slot === "noon") {
-    L.push("## 장중 점검");
-    L.push(`보유 ${d.positions}종목. 평가액 ${won(d.equity)}.`);
-    L.push("");
-    L.push("장중에는 새로 사지 않는다 — 추격매수가 이 전략의 최대 손실원이다. 보유만 본다.");
-    if (d.exits.length === 0) L.push("손절·익절에 닿은 자리는 없다. 그대로 둔다.");
+  if (d.market) {
+    L.push(
+      d.market.ok
+        ? `시장 ${d.market.score}점(${d.market.label}). ${d.market.reason}.`
+        : `**오늘은 사지 않는다.** ${d.market.reason}.`,
+    );
   }
 
   if (slot === "evening") {
-    L.push("## 오늘의 결과");
     const chg = d.prevEquity !== null ? d.equity - d.prevEquity : 0;
     const chgPct = d.prevEquity ? (chg / d.prevEquity) * 100 : 0;
     L.push(
@@ -271,6 +251,59 @@ export function narrate(
         ` · 예수금 ${won(d.cash)}` +
         (d.debt > 0 ? ` · 빌린 돈 ${won(d.debt)}` : ""),
     );
+  }
+  if (slot === "noon") {
+    L.push(`보유 ${d.positions}종목. 평가액 ${won(d.equity)}.`);
+  }
+
+  /*
+   * **이 자리로 들어갈 만했나.** 통과한 것과 못 한 것을 같이 적는다 —
+   * 「왜 안 샀나」가 「왜 샀나」만큼 중요하다. 안 산 이유가 없으면 나중에
+   * 「그때 왜 놓쳤지」에 답할 수가 없다.
+   */
+  if (d.market?.ok) {
+    const passed = d.gateNotes.filter((g) => g.ok);
+    const failed = d.gateNotes.filter((g) => !g.ok);
+    L.push("");
+    L.push(`### ${modeName} 자리`);
+    if (passed.length === 0 && failed.length === 0) {
+      L.push("후보 자체가 없었다. 억지로 만들지 않는다.");
+    } else if (passed.length === 0) {
+      L.push(`${failed.length}개를 봤지만 들어갈 자리가 없었다.`);
+    }
+    for (const g of passed) L.push(`- **${g.name}** — ${g.reason}`);
+    if (failed.length > 0) {
+      L.push("");
+      L.push("안 들어간 것:");
+      for (const g of failed.slice(0, 6)) L.push(`- ${g.name} — ${g.reason}`);
+    }
+  }
+
+  if (d.candidates.length > 0) {
+    L.push("");
+    L.push("### 후보의 근거");
+    for (const c of d.candidates.slice(0, 8)) {
+      L.push(
+        `- **${c.name}** ${pct(c.changeRate)} · 대금 ${c.tradeValue.toLocaleString()}억 — ${c.why}` +
+          (c.signalLevel ? ` (신호등 ${c.signalLevel} ${c.signalScore}점)` : ""),
+      );
+    }
+  }
+
+  if (d.plans.length > 0) {
+    L.push("");
+    L.push("### 계획");
+    for (const p of d.plans) {
+      L.push(
+        `- ${p.candidate.name} ${p.qty.toLocaleString()}주 · ${won(p.price)} (${p.funding}) ` +
+          `— 손절 ${won(p.stop)} / 목표 ${won(p.target)}`,
+      );
+    }
+  }
+
+  if (slot === "noon" && d.exits.length === 0) {
+    L.push("");
+    L.push("손절·익절에 닿은 자리는 없다. **흔들린다고 팔지 않는다** — 손절선까지는 버틴다.");
   }
 
   if (d.exits.length > 0) {

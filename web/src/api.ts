@@ -925,6 +925,36 @@ export const api = {
     deleteJson<{ groups: UsWatchGroup[] }>(`/api/us-watch/groups/${groupId}/stocks/${symbol}`),
   dartToday: (force = false) =>
     getJson<{ day: string; events: DartEvent[] }>(`/api/dart/today${force ? "?force=1" : ""}`),
+  /* ── CIS 일지 — 시스가 굴리는 모의 계좌 (2026-08-31) ────────────────
+     모든 조회가 account 를 받는다. 안 주면 트레이딩 계좌다. */
+  cisAccounts: () => getJson<{ accounts: CisProfile[] }>("/api/cis/accounts"),
+  cisAccount: (account: string) =>
+    getJson<CisAccountView>(`/api/cis/account?account=${account}`),
+  cisFills: (account: string, limit = 200) =>
+    getJson<{ fills: CisFill[]; total: number }>(
+      `/api/cis/fills?account=${account}&limit=${limit}`,
+    ),
+  cisDay: (account: string, date?: string) =>
+    getJson<CisDay>(`/api/cis/day?account=${account}${date ? `&date=${date}` : ""}`),
+  cisDays: (account: string, limit = 60) =>
+    getJson<{ days: CisDay[]; state: CisPersonaState }>(
+      `/api/cis/days?account=${account}&limit=${limit}`,
+    ),
+  cisStats: (account: string) => getJson<CisStats>(`/api/cis/stats?account=${account}`),
+  cisUsage: (account: string) =>
+    getJson<{ rows: CisUsageRow[] }>(`/api/cis/usage?account=${account}`),
+  cisConfig: () =>
+    getJson<{ config: CisConfig; ruleLabels: Record<string, CisRuleLabel>; aiReady: boolean }>(
+      "/api/cis/config",
+    ),
+  cisSaveConfig: (c: Partial<CisConfig>) =>
+    putJson<{ config: CisConfig }>("/api/cis/config", c),
+  /** 손으로 돌리기. force 는 이미 쓴 시간대를 덮는다 — 「다시 쓰기」에서만 */
+  cisRun: (account: string, slot: string, force = false) =>
+    postJson<CisRunResult>("/api/cis/run", { account, slot, force }),
+  cisReview: (account: string) =>
+    postJson<{ text: string | null; ai: boolean; error?: string }>("/api/cis/review", { account }),
+
   journal: () => getJson<JournalData>("/api/journal"),
   /** 내 판단 추적 — 종목마다 일봉을 받아 몇 십 초 걸릴 수 있다 */
   journalTrack: () => getJson<TradeTrackResult>("/api/journal/track"),
@@ -4264,4 +4294,258 @@ export interface BoardPresetDto {
   locks: Record<string, { code: string; name: string }>;
   /** 잠갔나 — 이름·순서·삭제·덮어쓰기가 막힌다 */
   locked?: boolean;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+ * CIS 일지 (2026-08-31)
+ *
+ * 시스가 굴리는 **모의 계좌**. 이 HTS 는 조회 전용이라 실제 주문은 없고,
+ * 「그때 그 값에 샀다면」을 장부로 남긴다. 서버의 cisAccount.ts 참고.
+ * ──────────────────────────────────────────────────────────────────── */
+
+export interface CisProfile {
+  id: string;
+  name: string;
+  hint: string;
+  seed: number;
+  etfOnly: boolean;
+  allowMisu: boolean;
+  allowCredit: boolean;
+  /** 위험자산 한도(%) — 퇴직연금만 70 */
+  riskCap: number;
+  allowLeveraged: boolean;
+  cadence: string;
+}
+
+export interface CisPosition {
+  code: string;
+  name: string;
+  qty: number;
+  avg: number;
+  funding: string;
+  openedAt: string;
+  dueDate?: string;
+  why: string;
+  used: string[];
+  stop: number | null;
+  target: number | null;
+  safe?: boolean;
+  /** 지금 값 — 못 읽었으면 null (0 이 아니다) */
+  price: number | null;
+  value: number;
+  pnl: number | null;
+  pnlPct: number | null;
+}
+
+export interface CisGoal {
+  stage: number;
+  next: number | null;
+  pct: number;
+  multiple: number | null;
+  finalPct: number;
+  label: string;
+}
+
+export interface CisAccountView {
+  profile: CisProfile;
+  cash: number;
+  misu: number;
+  credit: number;
+  equity: number;
+  stockValue: number;
+  debt: number;
+  leverage: number;
+  startedAt: string;
+  positions: CisPosition[];
+  risk: { risky: number; safe: number; riskyPct: number; cap: number; over: boolean };
+  goal: CisGoal;
+  curve: { date: string; equity: number; cash: number; debt: number }[];
+}
+
+export interface CisFill {
+  id: string;
+  date: string;
+  slot: string;
+  side: "buy" | "sell";
+  code: string;
+  name: string;
+  qty: number;
+  price: number;
+  funding: string;
+  cost: number;
+  pnl?: number;
+  heldDays?: number;
+  why: string;
+  used: string[];
+}
+
+export interface CisCandidate {
+  code: string;
+  name: string;
+  price: number;
+  changeRate: number;
+  tradeValue: number;
+  sector: string;
+  signalScore: number | null;
+  signalLevel: string | null;
+  leaderScore: number;
+  score: number;
+  used: string[];
+  why: string;
+  rejected?: string;
+}
+
+export interface CisSlotEntry {
+  slot: string;
+  at: string;
+  text: string;
+  market: { ok: boolean; score: number; label: string; reason: string } | null;
+  candidates: CisCandidate[];
+  plans: {
+    name: string;
+    code: string;
+    qty: number;
+    price: number;
+    funding: string;
+    stop: number;
+    target: number;
+    why: string;
+  }[];
+  actions: {
+    side: "buy" | "sell";
+    code: string;
+    name: string;
+    qty: number;
+    price: number;
+    funding: string;
+    why: string;
+    used: string[];
+    pnl?: number;
+  }[];
+  exits: { name: string; code: string; kind: string; reason: string }[];
+  used: string[];
+  equity: number;
+  cash: number;
+  debt: number;
+}
+
+export interface CisDay {
+  date: string;
+  account: string;
+  morning: CisSlotEntry | null;
+  noon: CisSlotEntry | null;
+  evening: CisSlotEntry | null;
+  review: {
+    planned: number;
+    executed: number;
+    realized: number;
+    equityChange: number;
+    violations: string[];
+    text: string;
+  } | null;
+}
+
+/** 시스의 지금 상태 — 최근 성적에서 나온다. 글에만 쓰이고 매매를 바꾸지 않는다 */
+export interface CisPersonaState {
+  condition: "cold" | "steady" | "hot" | "bruised" | "new";
+  streak: number;
+  recentPnl: number;
+  violations: string[];
+  lastWord: string | null;
+  basedOn: number;
+}
+
+export interface CisBucket {
+  key: string;
+  label: string;
+  trades: number;
+  wins: number;
+  winRate: number;
+  pnl: number;
+  avgPnl: number;
+  payoff: number | null;
+  avgHold: number;
+}
+
+export interface CisStats {
+  account: string;
+  accountName: string;
+  seed: number;
+  equity: number;
+  totalReturn: number;
+  days: number;
+  mdd: number;
+  realized: number;
+  cost: number;
+  trades: number;
+  wins: number;
+  winRate: number;
+  payoff: number | null;
+  avgHold: number;
+  best: { name: string; pnl: number; date: string } | null;
+  worst: { name: string; pnl: number; date: string } | null;
+  byExit: CisBucket[];
+  byReason: CisBucket[];
+  byFunding: CisBucket[];
+  bySlot: CisBucket[];
+  planRate: number | null;
+  violationDays: number;
+  violations: { text: string; count: number }[];
+  curve: { date: string; equity: number }[];
+}
+
+export interface CisUsageRow {
+  name: string;
+  used: number;
+  trades: number;
+  winRate: number | null;
+  pnl: number;
+}
+
+export interface CisRules {
+  maxPerStock: number;
+  maxPositions: number;
+  stopPct: number;
+  targetPct: number;
+  maxHoldDays: number;
+  minScore: number;
+  minTradeValue: number;
+  minMarketScore: number;
+  trailAfterPct: number;
+}
+
+export interface CisRuleLabel {
+  label: string;
+  unit: string;
+  hint: string;
+}
+
+export interface CisConfig {
+  enabled: boolean;
+  auto: boolean;
+  times: { morning: string; noon: string; evening: string };
+  useMisu: boolean;
+  useCredit: boolean;
+  rules: CisRules;
+  goals: number[];
+  ai: {
+    narrate: boolean;
+    screen: boolean;
+    weekly: boolean;
+    /** 켜면 AI 가 후보를 뺄 수 있다 — 그 순간 재현 불가능해진다 */
+    screenVeto: boolean;
+    model: { provider: string; model: string } | null;
+  };
+}
+
+export interface CisRunResult {
+  ok: boolean;
+  account: string;
+  slot: string;
+  date: string;
+  skipped?: string;
+  entry?: CisSlotEntry;
+  day?: CisDay;
+  screenNotes?: { code: string; name: string; verdict: string; note: string }[];
+  aiError?: string;
 }

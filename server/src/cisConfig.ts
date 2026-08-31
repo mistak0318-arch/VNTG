@@ -78,6 +78,11 @@ export const DEFAULT_CIS_CONFIG: CisConfig = {
    * 계획을 세울 시간이 있다.
    * 12:30 — 오전장이 끝난 자리. 오전의 힘이 오후에도 갈지 보이는 때다.
    * 15:45 — 마감 직후. 종가가 확정됐고 그날 채점이 가능하다.
+   *
+   * ⚠️ 마감 뒤인데 **종가배팅이 가능한 이유**: NXT 애프터마켓이 15:40~20:00 이라
+   * 종가 근처 값에 실제로 살 수 있다. 15:30 에 딱 맞춰 판단하면 종가가 아직
+   * 확정 전이라 「종가를 보고 종가에 산다」는 불가능한 기록이 된다 —
+   * 확정된 값으로 판단하고 애프터마켓에서 담는 쪽이 현실에 맞는다.
    */
   times: { morning: "08:40", noon: "12:30", evening: "15:45" },
   useMisu: true,
@@ -130,6 +135,12 @@ function clampRules(r: Partial<CisRules>, base: CisRules): CisRules {
     minTradeValue: num(r.minTradeValue, 0, 100_000, base.minTradeValue),
     minMarketScore: num(r.minMarketScore, 0, 100, base.minMarketScore),
     trailAfterPct: Math.abs(num(r.trailAfterPct, 1, 100, base.trailAfterPct)),
+    useOpen: r.useOpen ?? base.useOpen,
+    useIntra: r.useIntra ?? base.useIntra,
+    useClose: r.useClose ?? base.useClose,
+    maxOpenGap: Math.abs(num(r.maxOpenGap, 0, 30, base.maxOpenGap)),
+    intraMinFromOpen: num(r.intraMinFromOpen, -10, 20, base.intraMinFromOpen),
+    closeMinRate: num(r.closeMinRate, -10, 30, base.closeMinRate),
   };
 }
 
@@ -176,6 +187,12 @@ export const RULE_LABEL: Record<keyof CisRules, { label: string; unit: string; h
   minTradeValue: { label: "최소 거래대금", unit: "억", hint: "얇으면 내 주문에 값이 밀린다" },
   minMarketScore: { label: "시장 최소점", unit: "점", hint: "이 아래면 그날은 아무것도 안 산다" },
   trailAfterPct: { label: "본전 손절 전환", unit: "%", hint: "이만큼 벌면 손절선을 평단으로 올린다" },
+  useOpen: { label: "시가배팅", unit: "", hint: "아침 — 어제 신호가 살아 있고 시가가 안 튀었을 때" },
+  useIntra: { label: "장중배팅", unit: "", hint: "점심 — 눌렸다 회복하며 거래가 붙을 때" },
+  useClose: { label: "종가배팅", unit: "", hint: "저녁 — 오늘 강하게 마감하고 판이 연속으로 강할 때" },
+  maxOpenGap: { label: "허용 갭", unit: "%", hint: "이보다 크게 갭상승했으면 안 산다 — 손절까지 거리가 사라진다" },
+  intraMinFromOpen: { label: "장중 회복선", unit: "%", hint: "시가 대비 이만큼 위여야 「회복했다」로 본다" },
+  closeMinRate: { label: "종가배팅 최소 등락", unit: "%", hint: "어중간하게 끝난 것은 갭을 안 준다" },
 };
 
 /* ------------------------------------------------------------------ 목표 */

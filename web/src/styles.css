@@ -11403,3 +11403,184 @@ button.tpb-row:hover { background: var(--panel-2); }
 /* 총 개수 — 셋을 더해 보지 않아도 되게 앞에 세운다 */
 .scr-tally-n { opacity: 0.75; }
 .scr-tally-n::after { content: "·"; margin-left: 8px; opacity: 0.5; }
+
+/* ══════════════════════════════════════════════════════════════════
+ * CIS 일지 (2026-08-31) — 시스가 굴리는 모의 계좌
+ *
+ * 글을 읽는 화면이라 표보다 **본문**이 주인공이다. 줄 간격을 넉넉히 두고
+ * 숫자는 옆으로 물린다 — 몇 달치를 이어 읽을 글이다.
+ * ══════════════════════════════════════════════════════════════════ */
+
+.cis-sub {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* 꺼져 있을 때 — 화면이 왜 비었는지 말해 준다 */
+.cis-off {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid #c8a24a;
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
+.cis-accounts .filter-btn { display: inline-flex; align-items: baseline; gap: 6px; }
+.cis-seed { font-style: normal; font-size: 0.68rem; opacity: 0.7; }
+.cis-profile-note { margin: -2px 0 8px; }
+
+/* 시스의 지금 상태 — 사람 이름표처럼 */
+.cis-state {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--border) 22%, transparent);
+  font-size: 0.8rem;
+}
+.cis-state-name { font-weight: 700; }
+.cis-state-cond { font-weight: 600; }
+.cis-state i { font-style: normal; font-size: 0.72rem; color: var(--muted); }
+.cis-lastword {
+  flex: 1 1 100%;
+  font-size: 0.76rem;
+  color: var(--muted);
+  quotes: "\201C" "\201D";
+}
+
+.cis-slot { margin-bottom: 18px; }
+.cis-slot-hint {
+  font-style: normal;
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 6px;
+}
+.cis-at { font-size: 0.7rem; color: var(--muted); margin-left: 8px; font-weight: 400; }
+.cis-slot-btns { margin-left: auto; display: inline-flex; gap: 6px; }
+
+.cis-snapshot {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.cis-snapshot b { color: var(--text); }
+
+/* 본문 — 읽는 글이라 넉넉하게 */
+.cis-text { font-size: 0.86rem; line-height: 1.7; }
+.cis-text .ai-p { margin: 6px 0; }
+.cis-text .ai-li { margin: 3px 0 3px 2px; }
+.cis-li-sub { margin-left: 18px !important; font-size: 0.8rem; color: var(--muted); }
+.cis-h3 {
+  margin: 14px 0 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.cis-h3 i { font-style: normal; font-weight: 400; color: var(--muted); font-size: 0.72rem; }
+.cis-quote {
+  margin: 8px 0;
+  padding: 6px 10px;
+  border-left: 3px solid #c8a24a;
+  background: color-mix(in srgb, #c8a24a 8%, transparent);
+  font-size: 0.8rem;
+}
+
+/* 본 것 — 활용법 집계의 원재료라 눈에 보이게 남긴다 */
+.cis-used { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.cis-used i { font-style: normal; font-size: 0.7rem; color: var(--muted); }
+.cis-chip {
+  font-size: 0.68rem;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+}
+
+.cis-review-box { border-top: 1px solid var(--border); padding-top: 10px; }
+.cis-review-nums { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.8rem; margin-bottom: 6px; }
+.cis-weekly { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+
+.cis-row { cursor: pointer; }
+.cis-daybody { padding: 12px 16px !important; background: color-mix(in srgb, var(--border) 14%, transparent); }
+.cis-dayslot { margin-bottom: 12px; }
+.cis-dim { color: var(--muted); }
+.cis-why { font-size: 0.74rem; color: var(--muted); max-width: 26rem; }
+.cis-slot-tag { font-style: normal; font-size: 0.64rem; color: var(--muted); margin-left: 5px; }
+
+/* 카드 — 숫자를 크게, 설명을 작게 */
+.cis-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin-bottom: 14px; }
+.cis-card {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cis-card i { font-style: normal; font-size: 0.7rem; color: var(--muted); }
+.cis-card b { font-size: 1.05rem; }
+.cis-card span { font-size: 0.68rem; color: var(--muted); }
+
+/* 목표 — 지금 어디쯤인가 */
+.cis-goal { margin: 6px 0 16px; }
+.cis-goal-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 0.8rem; }
+.cis-goal-head span { color: var(--muted); font-size: 0.72rem; }
+.cis-goal-bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--border) 45%, transparent); overflow: hidden; margin: 5px 0 3px; }
+.cis-goal-bar > i { display: block; height: 100%; background: linear-gradient(90deg, #4a8bf5, #c8a24a); }
+
+.cis-safe, .cis-due { font-style: normal; font-size: 0.62rem; margin-left: 5px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); }
+
+/* 수익률 곡선 — 축 없이 모양만. 가로선(시드)이 본전이다 */
+.cis-curve { margin-top: 18px; }
+.cis-curve-svg { width: 100%; height: 120px; display: block; }
+.cis-curve-line { fill: none; stroke: #4a8bf5; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.cis-curve-base { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.5; vector-effect: non-scaling-stroke; }
+
+.cis-extreme { display: flex; gap: 18px; flex-wrap: wrap; }
+/* 표본이 적은 줄은 흐리게 — 세 번 이겨 100% 인 줄이 눈에 세게 박히면 안 된다 */
+.cis-thin { opacity: 0.55; }
+
+.cis-bar { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--border) 40%, transparent); min-width: 60px; }
+.cis-bar > i { display: block; height: 100%; border-radius: 3px; background: #4a8bf5; }
+
+/* 설정 */
+.cis-switches { display: flex; flex-direction: column; gap: 8px; margin-bottom: 6px; }
+.cis-switch { display: flex; gap: 8px; align-items: flex-start; font-size: 0.8rem; cursor: pointer; }
+.cis-switch input { margin-top: 3px; }
+.cis-switch i { display: block; font-style: normal; font-size: 0.72rem; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+.cis-danger { border-left: 3px solid #d24; padding-left: 8px; }
+.cis-saving { font-style: normal; font-size: 0.7rem; font-weight: 400; margin-left: 8px; color: var(--muted); }
+
+.cis-times { display: flex; gap: 14px; flex-wrap: wrap; }
+.cis-time { display: flex; flex-direction: column; gap: 3px; font-size: 0.78rem; }
+.cis-time i { font-style: normal; }
+.cis-time span { color: var(--muted); font-size: 0.68rem; }
+
+.cis-rules, .cis-goals-edit { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.cis-rule { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 0.78rem; }
+.cis-rule > i { font-style: normal; display: flex; flex-direction: column; }
+.cis-rule > i span { font-size: 0.66rem; color: var(--muted); }
+.cis-rule-in { display: inline-flex; align-items: baseline; gap: 4px; }
+.cis-rule-in em { font-style: normal; font-size: 0.7rem; color: var(--muted); }
+.cis-rule-in input { width: 5.5rem; text-align: right; }
+
+/* 폰에서는 카드가 두 줄로 */
+@media (max-width: 560px) {
+  .cis-cards { grid-template-columns: repeat(2, 1fr); }
+  .cis-rules, .cis-goals-edit { grid-template-columns: 1fr; }
+}
