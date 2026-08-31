@@ -32,10 +32,15 @@ import { ProgressSteps } from "../components/ProgressSteps";
  * 이 앱의 다른 화면들과 같다.
  */
 
+/**
+ * 하루 세 번. 각 시간대는 **직전 구간을 복기하고 다음 구간을 판단한다**
+ * (2026-08-31 — "장중 3번의 복기는 그사이에 대한 복기와 시장상황에 대해서
+ * 판단할 내용을 적어두는거").
+ */
 const SLOTS = [
-  { key: "morning" as const, label: "아침", hint: "계획" },
-  { key: "noon" as const, label: "점심", hint: "대응" },
-  { key: "evening" as const, label: "저녁", hint: "복기" },
+  { key: "morning" as const, label: "아침", hint: "간밤을 읽고 오늘을 계획", icon: "🌅", at: "08:40" },
+  { key: "noon" as const, label: "점심", hint: "오전을 복기하고 오후를 판단", icon: "☀️", at: "12:30" },
+  { key: "evening" as const, label: "저녁", hint: "오늘을 복기하고 내일을 준비", icon: "🌆", at: "15:45" },
 ];
 
 const TABS = [
@@ -47,6 +52,16 @@ const TABS = [
   { key: "usage", label: "HTS 활용법" },
   { key: "config", label: "CIS 모드" },
 ];
+
+/** KST 오늘 — 서버(cisAccount.today)와 같은 기준이라야 「오늘」이 어긋나지 않는다 */
+function todayStr(): string {
+  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+}
+const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
+function dateLabel(d: string): string {
+  const t = new Date(`${d}T00:00:00Z`);
+  return `${d.slice(5).replace("-", "/")} (${WEEKDAY[t.getUTCDay()]})`;
+}
 
 const won = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
 /**
@@ -173,27 +188,32 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
         </div>
       )}
 
-      {/* 계좌 — 성격이 다른 돈이라 맨 위에서 고른다 */}
-      <div className="filter-row cis-accounts">
+      {/*
+        계좌 — 성격이 다른 돈이라 맨 위에서 고른다. 단추가 아니라 **카드**인 이유는
+        셋이 서로 다른 계좌라는 것이 한눈에 보여야 해서다. 서브탭과 같은 모양이면
+        「탭이 열 개」로 읽힌다.
+      */}
+      <div className="cis-accounts">
         {profiles.map((p) => (
           <button
             key={p.id}
-            className={`filter-btn ${account === p.id ? "active" : ""}`}
+            className={`cis-acct ${account === p.id ? "on" : ""} cis-acct-${p.id}`}
             onClick={() => setAccount(p.id)}
             title={p.hint}
           >
-            {p.name}
-            <i className="cis-seed">{억(p.seed)}</i>
+            <b>{p.name}</b>
+            <i>{억(p.seed)}</i>
+            <em>{p.etfOnly ? "ETF" : "개별종목"}{p.riskCap < 100 ? ` · 위험 ${p.riskCap}%` : ""}</em>
           </button>
         ))}
       </div>
-      {profile && <div className="table-note cis-profile-note">{profile.hint}</div>}
+      {profile && <div className="cis-profile-note">{profile.hint}</div>}
 
-      <div className="filter-row">
+      <div className="cis-tabs">
         {TABS.map((t) => (
           <button
             key={t.key}
-            className={`filter-btn ${tab === t.key ? "active" : ""}`}
+            className={`cis-tab ${tab === t.key ? "on" : ""}`}
             onClick={() => setTab(t.key)}
           >
             {t.label}
@@ -239,12 +259,44 @@ function TodayTab({
   const [msg, setMsg] = useState<string | null>(null);
   const [job, setJob] = useState<PublishJob | null>(null);
   const jobIdRef = useRef<string | null>(null);
+  /**
+   * 보고 있는 날짜 (2026-08-31 — "전날 전전날 체크하기가 쉽지 않겠는데? 과거
+   * 기록도 봐야 의미가 있지. 그날의 얘는 무슨 생각을 했었는지").
+   *
+   * 오늘만 보이면 이 일지는 쌓을 이유가 없다 — 며칠 전 판단과 그 결과를 나란히
+   * 놓고 보는 것이 전부다.
+   */
+  const [date, setDate] = useState<string>(() => todayStr());
+  /** 일지가 있는 날들 — 화살표로 **글이 있는 날만** 건너뛴다(주말·공휴일을 헛돌지 않게) */
+  const [written, setWritten] = useState<string[]>([]);
+  const isToday = date === todayStr();
 
   const load = useCallback(() => {
-    api.cisDay(account).then(setDay).catch(() => setDay(null));
-    api.cisDays(account, 14).then((r) => setState(r.state)).catch(() => {});
-  }, [account]);
+    api.cisDay(account, date).then(setDay).catch(() => setDay(null));
+    api
+      .cisDays(account, 120)
+      .then((r) => {
+        setState(r.state);
+        setWritten(r.days.map((d) => d.date));
+      })
+      .catch(() => {});
+  }, [account, date]);
   useEffect(load, [load]);
+
+  /*
+   * 날짜 건너뛰기. **글이 있는 날 사이만** 오간다 — 하루씩 물러나면 주말·공휴일에
+   * 빈 화면이 이어져 몇 번을 눌러야 직전 거래일에 닿는다.
+   * 글이 없는 날에 서 있으면(직접 고른 날짜) 그 날짜 기준으로 앞뒤를 찾는다.
+   */
+  const step = (back: boolean) => {
+    const sorted = [...written].sort();
+    const next = back
+      ? [...sorted].reverse().find((d) => d < date)
+      : sorted.find((d) => d > date);
+    if (next) setDate(next);
+  };
+  const hasPrev = written.some((d) => d < date);
+  const hasNext = written.some((d) => d > date);
 
   /*
    * **뒤에서 돌리고 단계를 그린다** (2026-08-31 — "프로그래스 바가 안뜨고
@@ -297,16 +349,52 @@ function TodayTab({
   return (
     <>
       {state && (
-        <div className="cis-state">
-          <span className="cis-state-name">시스</span>
-          <span className={`cis-state-cond ${COND_LABEL[state.condition].cls}`}>
-            {COND_LABEL[state.condition].text}
-            {state.streak > 1 && ` · ${state.streak}일째`}
+        <div className={`cis-state cond-${state.condition}`}>
+          <span className="cis-avatar" aria-hidden="true">
+            🧠
           </span>
-          {state.basedOn > 0 && <i>최근 {state.basedOn}일 기준</i>}
-          {state.lastWord && <q className="cis-lastword">{state.lastWord}</q>}
+          <div className="cis-state-body">
+            <div className="cis-state-line">
+              <b>시스</b>
+              <span className={`cis-state-cond ${COND_LABEL[state.condition].cls}`}>
+                {COND_LABEL[state.condition].text}
+                {state.streak > 1 && ` · ${state.streak}일째`}
+              </span>
+              {state.basedOn > 0 && <i>최근 {state.basedOn}일 기준</i>}
+            </div>
+            {state.lastWord && <q className="cis-lastword">{state.lastWord}</q>}
+          </div>
         </div>
       )}
+
+      {/*
+        날짜 이동. 화살표는 **글이 있는 날 사이만** 오간다 — 하루씩 물러나면
+        주말·공휴일에 빈 화면이 이어져 몇 번을 눌러야 직전 거래일에 닿는다.
+      */}
+      <div className="cis-datebar">
+        <button className="filter-btn" onClick={() => step(true)} disabled={!hasPrev} title="이전 기록">
+          ◀
+        </button>
+        <input
+          type="date"
+          className="ma-input cis-date"
+          value={date}
+          max={todayStr()}
+          onChange={(e) => e.target.value && setDate(e.target.value)}
+        />
+        <b className="cis-date-label">{dateLabel(date)}</b>
+        <button className="filter-btn" onClick={() => step(false)} disabled={!hasNext} title="다음 기록">
+          ▶
+        </button>
+        {!isToday && (
+          <button className="filter-btn" onClick={() => setDate(todayStr())}>
+            오늘로
+          </button>
+        )}
+        {written.length > 0 && (
+          <span className="cis-written">기록 {written.length}일</span>
+        )}
+      </div>
 
       {msg && <div className="table-note cis-msg">{msg}</div>}
       {job && <ProgressSteps job={job} />}
@@ -315,12 +403,23 @@ function TodayTab({
         const e = day?.[s.key] ?? null;
         return (
           <section className="cis-slot" key={s.key}>
-            <h3 className="section-heading">
-              {s.label}
-              <i className="cis-slot-hint">{s.hint}</i>
-              {e && <span className="cis-at">{new Date(e.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>}
+            <h3 className={`cis-slot-head slot-${s.key}`}>
+              <span className="cis-slot-ico" aria-hidden="true">
+                {s.icon}
+              </span>
+              <span className="cis-slot-title">
+                {s.label}
+                <i className="cis-slot-hint">{s.hint}</i>
+              </span>
+              {e ? (
+                <span className="cis-at">
+                  {new Date(e.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              ) : (
+                <span className="cis-at cis-at-plan">{s.at} 예정</span>
+              )}
               <span className="cis-slot-btns">
-                {!e && (
+                {!e && isToday && (
                   <button
                     className="filter-btn"
                     disabled={!enabled || busy !== null}
@@ -330,7 +429,7 @@ function TodayTab({
                     {busy === s.key ? "…" : "지금 쓰기"}
                   </button>
                 )}
-                {e && (
+                {e && isToday && (
                   <button
                     className="filter-btn"
                     disabled={busy !== null}
@@ -348,7 +447,13 @@ function TodayTab({
                 )}
               </span>
             </h3>
-            {e ? <SlotBody entry={e} /> : <div className="empty">아직 안 썼습니다.</div>}
+            {e ? (
+              <SlotBody entry={e} />
+            ) : (
+              <div className="empty">
+                {isToday ? "아직 안 썼습니다." : "이 날은 안 썼습니다."}
+              </div>
+            )}
           </section>
         );
       })}
@@ -413,6 +518,7 @@ function SlotBody({ entry }: { entry: CisSlotEntry }) {
 function ReviewTab({ account }: { account: string }) {
   const [days, setDays] = useState<CisDay[]>([]);
   const [open, setOpen] = useState<string | null>(null);
+  const [allOpen, setAllOpen] = useState(false);
   const [ai, setAi] = useState<{ text: string | null; error?: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -439,8 +545,13 @@ function ReviewTab({ account }: { account: string }) {
     <>
       <h3 className="section-heading">
         여러 날 놓고 보기
+        <span className="breadth-count">{days.length}일</span>
         <button className="filter-btn" onClick={askReview} disabled={busy}>
           {busy ? "…" : "어느 규칙이 나빴나 (AI)"}
+        </button>
+        {/* 줄을 눌러 하나씩 펴는 게 기본이지만, 쭉 읽고 싶을 때가 있다 */}
+        <button className="filter-btn" onClick={() => setAllOpen((v) => !v)}>
+          {allOpen ? "모두 접기" : "모두 펼치기"}
         </button>
       </h3>
       {ai && (
@@ -470,6 +581,7 @@ function ReviewTab({ account }: { account: string }) {
                 >
                   <td>
                     {open === d.date ? "▾" : "▸"} {d.date}
+                    <i className="cis-wd">{dateLabel(d.date).slice(-3)}</i>
                   </td>
                   <td className="num">
                     {d.review ? `${d.review.planned} → ${d.review.executed}` : "-"}
@@ -488,7 +600,7 @@ function ReviewTab({ account }: { account: string }) {
                     )}
                   </td>
                 </tr>
-                {open === d.date && (
+                {(allOpen || open === d.date) && (
                   <tr key={`${d.date}-body`}>
                     <td colSpan={5} className="cis-daybody">
                       {SLOTS.map((s) =>
