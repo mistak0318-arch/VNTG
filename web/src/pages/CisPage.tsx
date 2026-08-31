@@ -885,6 +885,16 @@ function AccountTab({
                 <th className="num">수량</th>
                 <th className="num">평단</th>
                 <th className="num">현재가</th>
+                {/*
+                  평가금액과 비중 (2026-08-31 — "보유 종목에 대한 비율과 총 금액이
+                  빠져있네"). 서버는 value 를 이미 보내고 있었는데 화면이 안 썼다.
+                  비중은 **순자산 대비**다 — 주식 평가액 대비로 재면 현금을 많이
+                  들고 있을 때 비중이 부풀려져 「12% 규칙을 지켰나」에 답할 수 없다.
+                */}
+                <th className="num">평가금액</th>
+                <th className="num" title="순자산 대비 비중 — 한 종목 한도와 견주는 값입니다">
+                  비중
+                </th>
                 <th className="num">평가손익</th>
                 <th className="num" title="들고 있는 동안 어디까지 밀렸다 어디까지 갔나. 종가만 봐서는 안 보이는 값입니다">
                   흔들림
@@ -908,6 +918,14 @@ function AccountTab({
                   <td className="num" data-l="수량">{p.qty.toLocaleString()}</td>
                   <td className="num" data-l="평단">{p.avg.toLocaleString()}</td>
                   <td className="num" data-l="현재가">{p.price !== null ? p.price.toLocaleString() : "-"}</td>
+                  <td className="num" data-l="평가금액">{won(p.value)}</td>
+                  {/* 한 종목 한도를 넘겼으면 눈에 걸리게 — 규칙이 지켜지는지가 여기서 보인다 */}
+                  <td
+                    className={`num ${v.equity > 0 && (p.value / v.equity) * 100 > 20 ? "negative" : ""}`}
+                    data-l="비중"
+                  >
+                    {v.equity > 0 ? `${((p.value / v.equity) * 100).toFixed(1)}%` : "-"}
+                  </td>
                   <td className={`num ${p.pnl !== null ? cls(p.pnl) : ""}`} data-l="손익">
                     {p.pnl !== null ? `${signed(p.pnl)} (${p.pnlPct}%)` : "-"}
                   </td>
@@ -936,6 +954,44 @@ function AccountTab({
                 </tr>
               ))}
             </tbody>
+            {/*
+              합계 (2026-08-31). 종목별 금액만 있으면 「얼마나 태웠나」를 매번
+              더해 봐야 한다. 주식에 들어간 돈과 그것이 순자산의 몇 %인지가
+              이 화면에서 제일 먼저 알고 싶은 값이다.
+
+              ⚠️ 세 계좌가 같은 표를 쓴다 — 트레이딩은 레버리지로 100% 를 넘을 수
+              있고(빌린 돈), 연금은 못 넘는다. 넘는 것 자체는 오류가 아니라
+              **빌려 썼다는 뜻**이라 색으로 겁주지 않고 배수를 옆에 적는다.
+            */}
+            <tfoot>
+              <tr className="cis-total">
+                <td className="cis-td-date">합계 {v.positions.length}종목</td>
+                <td />
+                <td />
+                <td />
+                <td className="num" data-l="총 평가금액">
+                  <b>{won(v.stockValue)}</b>
+                </td>
+                <td className="num" data-l="주식 비중">
+                  <b>{v.equity > 0 ? `${((v.stockValue / v.equity) * 100).toFixed(1)}%` : "-"}</b>
+                  {v.leverage > 1.05 && <i className="cis-lev">{v.leverage}배</i>}
+                </td>
+                <td className="num" data-l="평가손익">
+                  {(() => {
+                    const sum = v.positions.reduce((t, p) => t + (p.pnl ?? 0), 0);
+                    return <b className={cls(sum)}>{signed(sum)}</b>;
+                  })()}
+                </td>
+                <td />
+                <td />
+                <td />
+                <td />
+                <td className="cis-td-wide cis-total-note">
+                  예수금 {won(v.cash)}
+                  {v.debt > 0 && ` · 빌린 돈 ${won(v.debt)}`} · 순자산 {won(v.equity)}
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}

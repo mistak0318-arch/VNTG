@@ -12119,3 +12119,35 @@ thead .sd-emph {
   .cis-rule-in input { width: 7.5rem; }
   .cis-goals-edit .cis-rule-in input { width: 9rem; }
 }
+
+/* CIS 보유 합계 줄 — 종목별 금액만 있으면 매번 더해 봐야 한다 (2026-08-31) */
+.cis-total td {
+  border-top: 2px solid var(--border);
+  background: var(--panel-2);
+  font-size: 0.8rem;
+}
+.cis-lev {
+  font-style: normal;
+  font-size: 0.66rem;
+  color: var(--muted);
+  margin-left: 5px;
+}
+.cis-total-note { font-size: 0.72rem; color: var(--muted); text-align: right; }
+@media (max-width: 720px) {
+  /* 카드 모드에서는 합계도 카드 하나로 — 빈 칸은 감춘다 */
+  .cis-card-table tfoot { display: block; }
+  .cis-card-table tfoot tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 12px;
+    align-items: baseline;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--panel-2);
+    padding: 8px 10px;
+  }
+  .cis-card-table tfoot td { display: block; border: none; padding: 0; text-align: left !important; }
+  /* 값 없는 칸은 카드에서 자리만 차지한다 */
+  .cis-card-table tfoot td:empty { display: none; }
+  .cis-total-note { text-align: left; flex: 0 0 100%; margin-top: 3px; }
+}
