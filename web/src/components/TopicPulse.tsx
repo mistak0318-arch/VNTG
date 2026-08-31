@@ -25,6 +25,8 @@ export function TopicPulseBlock({
   onSelectStock?: (code: string, name: string) => void;
 }) {
   const [p, setP] = useState<TopicPulse | null>(null);
+  /** 펴 놓은 낱말 — 한 번에 하나만. 여럿 펴면 카드가 화면을 다 먹는다 */
+  const [open, setOpen] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,11 +63,31 @@ export function TopicPulseBlock({
       <div className="pulse-detail">{renderDetail(p.detail)}</div>
 
       {p.items.length > 0 && (
-        <div className="pulse-terms">
-          {p.items.slice(0, variant === "full" ? 8 : 5).map((i) => (
-            <TermChip key={i.term} item={i} onSelectStock={onSelectStock} />
-          ))}
-        </div>
+        <>
+          <div className="pulse-terms">
+            {p.items.slice(0, variant === "full" ? 8 : 5).map((i) => (
+              <TermChip
+                key={i.term}
+                item={i}
+                active={open === i.term}
+                onToggle={() => setOpen((v) => (v === i.term ? null : i.term))}
+              />
+            ))}
+          </div>
+          {/*
+            **누르면 근거가 펴진다** (2026-08-31 — "누르면 뉴스 리스트나 관련된거
+            내용이라도 나와야 되지 않아?").
+            예전엔 종목이 **정확히 하나**일 때만 눌렸고 그마저 바로 그 종목으로
+            떠났다. 낱말이 왜 떴는지는 못 본 채 화면만 바뀐 셈이다.
+          */}
+          {open &&
+            (() => {
+              const it = p.items.find((x) => x.term === open);
+              return it ? (
+                <TermEvidence item={it} onSelectStock={onSelectStock} />
+              ) : null;
+            })()}
+        </>
       )}
 
       {variant === "full" && <FullEvidence pulse={p} />}
@@ -98,12 +120,14 @@ function renderDetail(s: string) {
  */
 function TermChip({
   item,
-  onSelectStock,
+  active,
+  onToggle,
 }: {
   item: PulseItem;
-  onSelectStock?: (code: string, name: string) => void;
+  active: boolean;
+  onToggle: () => void;
 }) {
-  const cls = `pulse-term ${item.where}`;
+  const cls = `pulse-term ${item.where}${active ? " open" : ""}`;
   const label =
     item.where === "both" ? "채널+뉴스" : item.where === "channel" ? "채널" : "뉴스";
   const body = (
@@ -117,17 +141,102 @@ function TermChip({
     item.sources > 0 ? ` · ${item.sources}곳` : ""
   }`;
 
-  if (onSelectStock && item.codes.length === 1) {
-    return (
-      <button className={cls} title={title} onClick={() => onSelectStock(item.codes[0], item.term)}>
-        {body}
-      </button>
-    );
-  }
+  /*
+   * **언제나 누를 수 있다.** 예전엔 종목이 정확히 하나일 때만 버튼이었는데,
+   * 낱말은 대개 종목이 없거나 여럿이라 대부분이 못 누르는 글자였다.
+   * 누르면 아래에 근거가 펴진다 — 종목으로 가는 것은 그 안에서 고른다.
+   */
   return (
-    <span className={cls} title={title}>
+    <button className={cls} title={`${title} · 눌러서 근거 보기`} onClick={onToggle}>
       {body}
-    </span>
+    </button>
+  );
+}
+
+/**
+ * 낱말 하나의 **근거** (2026-08-31).
+ *
+ * ## 무엇을 보여주나
+ *
+ *   ① 이 낱말이 어디서 몇 건 떴나 — 채널·뉴스·매체 수
+ *   ② 원문 한 줄(`quote`) — 서버가 이미 뽑아 두고 있었는데 데일리 리포트에서만 썼다
+ *   ③ 관련 종목 — 누르면 그 종목으로
+ *   ④ 뉴스 목록 — 누를 때 **그때 받는다**
+ *
+ * ④를 미리 안 받는 이유: 칩이 다섯~여덟 개인데 전부 미리 받으면 브리핑 화면
+ * 하나에 뉴스 조회가 여덟 번 나간다. 눌러야 보는 값이라 눌렀을 때 받는 것이 맞다.
+ */
+function TermEvidence({
+  item,
+  onSelectStock,
+}: {
+  item: PulseItem;
+  onSelectStock?: (code: string, name: string) => void;
+}) {
+  const [news, setNews] = useState<{ title: string; press: string; link: string }[] | null>(null);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setNews(null);
+    setErr(false);
+    api
+      .news(item.term, { display: 8 })
+      .then((r) => alive && setNews(r.items.slice(0, 8)))
+      .catch(() => alive && setErr(true));
+    return () => {
+      alive = false;
+    };
+  }, [item.term]);
+
+  return (
+    <div className="pulse-ev-box">
+      <div className="pulse-ev-head">
+        <b>{item.term}</b>
+        <span className="pt-n">
+          채널 {item.buzzCount}건 · 뉴스 {item.newsCount}건
+          {item.sources > 0 && ` · ${item.sources}곳`}
+          {item.fresh && " · 오늘 처음"}
+        </span>
+      </div>
+
+      {item.quote && (
+        <div className="pulse-ev-q">
+          「{item.quote}」{item.quoteFrom && <i> ({item.quoteFrom})</i>}
+        </div>
+      )}
+
+      {item.codes.length > 0 && onSelectStock && (
+        <div className="pulse-ev-codes">
+          {item.codes.slice(0, 8).map((c) => (
+            <button key={c} className="filter-btn" onClick={() => onSelectStock(c, item.term)}>
+              {c}
+            </button>
+          ))}
+          <span className="pt-n">눌러서 종목 화면으로</span>
+        </div>
+      )}
+
+      {news === null && !err && <div className="pt-n">뉴스 찾는 중…</div>}
+      {err && <div className="pt-n">뉴스를 못 받았습니다.</div>}
+      {news !== null && news.length === 0 && (
+        <div className="pt-n">
+          이 낱말로 걸리는 기사가 없습니다 — 채널에서만 돌고 있는 얘기일 수 있습니다.
+        </div>
+      )}
+      {news !== null && news.length > 0 && (
+        <ul className="pulse-ev-news">
+          {news.map((n) => (
+            <li key={n.link}>
+              <a href={n.link} target="_blank" rel="noreferrer">
+                {n.title}
+              </a>
+              <span className="pt-n"> {n.press}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

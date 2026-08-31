@@ -179,6 +179,8 @@ const INST_COLORS: Record<string, string> = {
 
 export function StockSummaryPanel({ code }: { code: string }) {
   const [d, setD] = useState<StockSummaryData | null>(null);
+  /** 1 = 당일(곡선 없음) */
+  const [spanState, setSpan] = useState(20);
 
   useEffect(() => {
     if (!code) return;
@@ -200,6 +202,20 @@ export function StockSummaryPanel({ code }: { code: string }) {
 
   if (!d) return null;
 
+  /*
+   * 곡선 기간 (2026-08-31 — "5일 20일 60일 120일 선택할 수 있게" + "당일도").
+   *
+   * **자르는 자리는 화면이다.** 서버가 한 쪽에 오는 만큼(100일쯤) 다 보내므로,
+   * 기간을 바꿔도 **조회가 새로 안 나간다.**
+   *
+   * `1`(당일)은 곡선이 안 된다 — 점 하나로는 선이 없다. 그때는 곡선을 안 그리고
+   * 아래 「오늘」 막대만 남긴다(예전 화면이 그것이다). 없는 것을 그리는 척하지 않는다.
+   */
+  const span = spanState;
+  const series = span <= 1 ? [] : d.flowSeries.slice(-span);
+  /** 달라고 한 만큼 없을 때 — 「100일치뿐」을 적으려고 */
+  const short = span > 1 && d.flowSeries.length < span;
+
   /* 막대 기준 — 그 표 안에서 제일 큰 것. 표마다 따로여야 작은 값이 안 사라진다 */
   const maxMain = Math.max(1, ...d.main.map((r) => Math.abs(r.amount)));
   const maxInst = Math.max(1, ...d.institution.map((r) => Math.abs(r.amount)));
@@ -210,7 +226,22 @@ export function StockSummaryPanel({ code }: { code: string }) {
         <div className="ss-col">
           <div className="ss-sub">
             수급 흐름
-            <i>{d.flowSeries.length}일 누적 · 금액</i>
+            <i>
+              {span <= 1 ? "당일" : `${series.length}일 누적`} · 금액
+              {short && ` (${d.flowSeries.length}일치뿐)`}
+            </i>
+            <span className="ss-spans">
+              {[1, 5, 20, 60, 120].map((n) => (
+                <button
+                  key={n}
+                  className={`ss-span${span === n ? " active" : ""}`}
+                  onClick={() => setSpan(n)}
+                  title={n === 1 ? "곡선 없이 오늘 막대만" : `${n}거래일 누적`}
+                >
+                  {n === 1 ? "당일" : `${n}일`}
+                </button>
+              ))}
+            </span>
           </div>
           {/*
             곡선이 먼저, 오늘 막대가 그 아래다 (2026-08-31). 이 칸을 보는 이유는
@@ -218,7 +249,7 @@ export function StockSummaryPanel({ code }: { code: string }) {
             오늘 값도 지웠다가는 「그래서 오늘은 얼마」를 못 읽으므로 둘 다 둔다.
           */}
           <FlowSeriesChart
-            series={d.flowSeries.map((p) => ({ date: p.date, v: p.main }))}
+            series={series.map((p) => ({ date: p.date, v: p.main }))}
             keys={d.main.map((r) => r.key)}
             colors={MAIN_COLORS}
             labels={Object.fromEntries(d.main.map((r) => [r.key, r.label]))}
@@ -250,10 +281,12 @@ export function StockSummaryPanel({ code }: { code: string }) {
         <div className="ss-col">
           <div className="ss-sub">
             기관 안쪽
-            <i>{d.flowSeries.length}일 누적 · 움직인 창구만</i>
+            <i>
+              {span <= 1 ? "당일" : `${series.length}일 누적`} · 움직인 창구만
+            </i>
           </div>
           <FlowSeriesChart
-            series={d.flowSeries.map((p) => ({ date: p.date, v: p.inst }))}
+            series={series.map((p) => ({ date: p.date, v: p.inst }))}
             keys={d.institution.map((r) => r.key)}
             colors={INST_COLORS}
             labels={Object.fromEntries(d.institution.map((r) => [r.key, r.label]))}

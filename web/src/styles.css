@@ -12773,3 +12773,87 @@ thead .sd-emph {
   margin-top: 6px;
   opacity: 0.85;
 }
+
+/* 수급 흐름 기간 버튼 (2026-08-31) — 머리 오른쪽에 작게 */
+.ss-spans {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+}
+.ss-span {
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+.ss-span:hover {
+  color: var(--text);
+}
+.ss-span.active {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text);
+  font-weight: 700;
+}
+.ss-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* ------------------------------------------------------------------ */
+/* 화제 낱말 근거 (2026-08-31)                                          */
+/* ------------------------------------------------------------------ */
+.pulse-term {
+  cursor: pointer;
+}
+.pulse-term.open {
+  outline: 1px solid var(--text-dim);
+  outline-offset: 1px;
+}
+.pulse-ev-box {
+  margin-top: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.pulse-ev-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.pulse-ev-box .pulse-ev-q {
+  display: block;
+  margin: 4px 0 6px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+  color: var(--text-dim);
+}
+.pulse-ev-codes {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.pulse-ev-news {
+  margin: 0;
+  padding-left: 16px;
+}
+.pulse-ev-news li {
+  margin-bottom: 3px;
+}
+.pulse-ev-news a {
+  color: var(--text);
+}
+.pulse-ev-news a:hover {
+  color: var(--blue);
+}
