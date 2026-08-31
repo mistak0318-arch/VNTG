@@ -11400,3 +11400,6 @@ button.tpb-row:hover { background: var(--panel-2); }
   border-radius: 4px;
   opacity: 0.85;
 }
+/* 총 개수 — 셋을 더해 보지 않아도 되게 앞에 세운다 */
+.scr-tally-n { opacity: 0.75; }
+.scr-tally-n::after { content: "·"; margin-left: 8px; opacity: 0.5; }
