@@ -32,6 +32,8 @@ interface Row {
   daysSince?: number;
   /** 오늘 편입됐나 — N 배지 */
   isNew?: boolean;
+  /** 추적 중인가 — 이탈하면 false */
+  active?: boolean;
   price: number | null;
   changeRate: number | null;
   sinceAdded: number | null;
@@ -61,6 +63,15 @@ export function SuperSignalPanel({
   onSelectStock: (code: string, name: string) => void;
 }) {
   const [rows, setRows] = useState<Row[] | null>(null);
+  /*
+   * **이탈분은 기본으로 안 보인다** (2026-08-31 — "슈퍼신호등에 걸렸던 애들
+   * 신호등 찾기 서브탭에 계속 남아있네").
+   *
+   * 이 화면은 「지금 뭘 보고 있나」를 묻는 자리다 — 이탈한 종목이 섞이면
+   * 그 물음의 답이 흐려진다. 이탈 후 추적은 **슈퍼신호등 대시보드**의 몫이고,
+   * 거기는 반대로 이탈 포함이 기본이다(같은 자료를 다른 물음으로 본다).
+   */
+  const [showExited, setShowExited] = useState(false);
   const [grade, setGrade] = useState<GradeRow[]>([]);
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [minLists, setMinLists] = useState(3);
@@ -69,8 +80,10 @@ export function SuperSignalPanel({
   const [error, setError] = useState<string | null>(null);
   const tabActive = useTabActive();
   const marketOpen = useMarketOpen();
+  /* 이탈분을 걸러 낸 뒤 정렬한다 — 순서를 매기는 대상 자체가 달라져야 한다 */
+  const visible = (rows ?? []).filter((r) => showExited || r.active !== false);
   /* 머리 클릭 정렬 — 훅이라 조기 return 앞에 둔다 (rows 가 없으면 빈 배열) */
-  const sort = useSortableTable<Row>(rows ?? []);
+  const sort = useSortableTable<Row>(visible);
 
   const load = useCallback(() => {
     api
@@ -165,6 +178,23 @@ export function SuperSignalPanel({
         <button className="filter-btn" onClick={() => void runNow()} disabled={job !== null}>
           {job ? "돌고 있음…" : "지금 돌리기"}
         </button>
+        {/*
+          이탈분 보기 — **기본은 끔.** 이 화면은 「지금 뭘 보고 있나」를 묻는
+          자리라 이탈한 종목이 섞이면 답이 흐려진다. 이탈 후 추적은
+          슈퍼신호등 대시보드가 맡는다(거기는 반대로 포함이 기본이다).
+        */}
+        <button
+          className={`filter-btn ${showExited ? "active" : ""}`}
+          onClick={() => setShowExited((v) => !v)}
+          title="이탈한 종목까지 볼지 — 이탈 후 성적은 슈퍼신호등 대시보드에 있습니다"
+        >
+          이탈 포함 {showExited ? "켬" : "끔"}
+        </button>
+        {(rows ?? []).some((r) => r.active === false) && !showExited && (
+          <span className="breadth-count">
+            이탈 {(rows ?? []).filter((r) => r.active === false).length}종목 숨김
+          </span>
+        )}
       </div>
 
       {job && (
@@ -225,10 +255,23 @@ export function SuperSignalPanel({
 
       {rows === null ? (
         <div className="empty">불러오는 중…</div>
-      ) : rows.length === 0 ? (
+      ) : visible.length === 0 ? (
+        /*
+         * ⚠️ `rows` 가 아니라 `visible` 을 본다 — 전부 이탈한 상태에서 이탈을
+         * 숨기면 표만 텅 비고 「왜 없지」에 답이 없다.
+         */
         <div className="page-note">
-          아직 걸린 종목이 없습니다. 목록 {minLists}곳 이상 + 신호등 초록 — 문턱이 높은 게
-          정상입니다. 「이날은 없었다」도 정보입니다.
+          {rows.length > 0 ? (
+            <>
+              추적 중인 종목이 없습니다 — {rows.length}종목 모두 이탈했습니다.
+              위의 <b>이탈 포함 켬</b>으로 지난 것을 볼 수 있습니다.
+            </>
+          ) : (
+            <>
+              아직 걸린 종목이 없습니다. 목록 {minLists}곳 이상 + 신호등 초록 — 문턱이 높은 게
+              정상입니다. 「이날은 없었다」도 정보입니다.
+            </>
+          )}
         </div>
       ) : (
         <div className="data-table-wrap">
