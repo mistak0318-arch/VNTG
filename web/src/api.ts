@@ -1083,6 +1083,16 @@ export const api = {
       total: number;
       added: number;
       error?: string;
+      /** 약한 장세라 안 담은 수 (설정이 skip 일 때만) */
+      skippedWeak?: number;
+      regimeWhy?: string | null;
+      /**
+       * **교집합을 통과한 수**와 **평가 상한에 잘린 수**.
+       * 없으면 「후보가 적었다」와 「후보는 많았는데 잘렸다」가 구분이 안 된다 —
+       * 처방이 정반대인데도.
+       */
+      qualified?: number;
+      cut?: number;
     }>("/api/signal/super/job"),
   signalSuperRun: () =>
     postJson<{ status: string }>("/api/signal/super/run", {}),

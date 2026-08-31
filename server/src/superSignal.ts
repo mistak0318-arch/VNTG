@@ -817,6 +817,15 @@ export interface SuperJob {
   skippedWeak?: number;
   /** 그날 장세 한 줄 — 위 숫자의 이유 */
   regimeWhy?: string | null;
+  /**
+   * **교집합을 통과한 수**와 **평가 상한에 잘린 수** (2026-08-31).
+   *
+   * 이게 없으면 「후보가 적어서 안 담았다」와 「후보는 많았는데 상한에 잘렸다」가
+   * 화면에서 똑같아 보인다. 잘린 쪽이면 상한을 올리는 것이 답이고, 적은 쪽이면
+   * 교집합 문턱을 내리는 것이 답이다 — 정반대 처방이다.
+   */
+  qualified?: number;
+  cut?: number;
   error?: string;
   at: string;
 }
@@ -910,6 +919,19 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
         return b.lists.length - a.lists.length;
       })
       .slice(0, runCfg.maxEval);
+
+    /*
+     * **몇 개가 잘렸나** (2026-08-31 — "슈퍼신호등 체계를 유지할 필요가 있나").
+     *
+     * 이 숫자가 아무 데도 안 남고 있었다. 교집합 통과가 하루 50개면 40개 평가는
+     * 거의 다 본 것이고, 200개면 **160개를 신호등 재보지도 못하고 버린 것**이다.
+     * 둘은 완전히 다른 얘기인데 화면에서 구분이 안 됐다.
+     *
+     * 「이 체계가 값을 하나」를 물으려면 먼저 **체계가 실제로 무엇을 보고 있는지**를
+     * 알아야 한다. 조회는 안 늘어난다 — 그냥 세기만 한다.
+     */
+    const qualifiedCount = qualified.length;
+    const cutCount = Math.max(0, qualifiedCount - inter.length);
 
     job.step = "신호등 평가 중";
     job.total = inter.length;
@@ -1028,6 +1050,8 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
       step: "완료",
       skippedWeak,
       regimeWhy: regime.weak ? regime.why : null,
+      qualified: qualifiedCount,
+      cut: cutCount,
     };
   } catch (err) {
     job = { ...job, status: "error", error: err instanceof Error ? err.message : "실패" };

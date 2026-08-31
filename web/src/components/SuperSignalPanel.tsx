@@ -99,7 +99,17 @@ export function SuperSignalPanel({
   const [savingCfg, setSavingCfg] = useState(false);
   const marks = useSuperMarks();
   const [universes, setUniverses] = useState<Universe[]>([]);
-  const [job, setJob] = useState<{ status: string; step: string; done: number; total: number; added: number; error?: string } | null>(null);
+  const [job, setJob] = useState<{
+    status: string;
+    step: string;
+    done: number;
+    total: number;
+    added: number;
+    error?: string;
+    /** 교집합 통과 수 · 평가 상한에 잘린 수 (2026-08-31) */
+    qualified?: number;
+    cut?: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tabActive = useTabActive();
   const marketOpen = useMarketOpen();
@@ -355,6 +365,30 @@ export function SuperSignalPanel({
             </span>
             <span className="pub-spinner" aria-hidden="true" />
           </div>
+        </div>
+      )}
+
+      {/*
+        **몇 개가 잘렸나** (2026-08-31 — "슈퍼신호등 체계를 유지할 필요가 있나").
+
+        이 숫자가 아무 데도 안 남고 있었다. 교집합 통과가 50개면 40개 평가는 거의
+        다 본 것이고, 200개면 160개를 **신호등 재보지도 못하고 버린 것**이다.
+        둘은 완전히 다른 얘기인데 화면에서 구분이 안 됐다 — 그리고 처방이 정반대다.
+      */}
+      {job?.qualified !== undefined && job.qualified > 0 && (
+        <div className={`table-note${(job.cut ?? 0) > 0 ? " ss-cut-warn" : ""}`}>
+          지난 실행: 교집합 <b>{job.qualified}종목</b>이 통과했고 그중{" "}
+          <b>{job.qualified - (job.cut ?? 0)}종목</b>만 신호등을 쟀습니다
+          {(job.cut ?? 0) > 0 ? (
+            <>
+              {" "}
+              — <b>{job.cut}종목이 평가 상한에 잘렸습니다.</b> 그 종목들은 초록이었을
+              수도 있는데 **재보지도 못했습니다.** 상한을 올리면 더 보지만 그만큼
+              느려집니다(종목당 여러 조회).
+            </>
+          ) : (
+            " — 상한에 안 걸렸습니다. 통과분을 전부 쟀습니다."
+          )}
         </div>
       )}
 

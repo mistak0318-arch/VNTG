@@ -12983,3 +12983,10 @@ thead .sd-emph {
   font-size: 10.5px;
   font-style: normal;
 }
+
+/* 평가 상한에 잘린 종목이 있을 때 — 그건 알아야 하는 사실이다 (2026-08-31) */
+.ss-cut-warn {
+  border-left: 3px solid var(--amber, #d59b23);
+  background: color-mix(in srgb, var(--amber, #d59b23) 7%, transparent);
+  padding-left: 8px;
+}
