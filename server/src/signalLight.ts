@@ -136,6 +136,42 @@ export interface CheckConfig {
   threshold: number;
   /** 100점 선 */
   strongAt: number;
+  /**
+   * **탈락 조건** (2026-09-01) — 이 기준이 「심각」이면 **다른 게 아무리 좋아도 빨강**.
+   *
+   * 벤티지: "오히려 신호등 체계에서 너무 높은 점수에 기대는 게 아니라 위험한
+   * 리스크한 애들을 제거하고 괜찮은 애들만 남겨 놓는 거지."
+   *
+   * ## 왜 위험 축만으로는 안 되나
+   *
+   * 위험 축은 **평균**이라 하나가 커도 나머지에 묻힌다. 실제로 신고가 종목은
+   * 위쪽 매물이 0 이라 위험 평균이 늘 낮게 나왔고, 그래서 「수급이 순매도인데
+   * 신고가라서 안전」 같은 판정이 통과했다.
+   *
+   * 탈락은 평균에 안 섞인다 — **하나라도 걸리면 그것으로 끝**이다.
+   *
+   * ## 실측 (19만 관측, 앞/뒤 분할)
+   *
+   * 나쁜 것 다섯을 빼기만 해도 뒤쪽 **+2.57%p**(남은 표본 22%)였고, 거기에
+   * 시총 1조 이하를 더하면 **+5.24%p 에 표본 10,225개**다 — 점수 70점으로
+   * 고른 무리(+6.15%p, 3,706개)와 성적이 비슷한데 **살 수 있는 종목이 세 배**다.
+   *
+   * ⚠️ **앞뒤가 일관된 것만 탈락으로 쓴다.** 차트 역배열은 앞쪽에서 오히려
+   * +0.76%p 였고 공매도가 붙는 것도 앞 +1.92 / 뒤 -0.67 로 뒤집혔다.
+   * 한쪽에서만 나쁜 것을 탈락으로 쓰면 그 장세가 오면 통째로 못 산다.
+   */
+  veto?: boolean;
+  /**
+   * 탈락 문턱 — **원래 값**이 이보다 나쁘면 탈락.
+   *
+   * 점수(0~100)가 아니라 **잰 값 그대로**로 판정한다. 점수로 하면 눈금 아래쪽이
+   * 뭉개져서 구별이 안 된다 — 시총 대비 수급이 **-0.5%(순매도)** 인 것과
+   * **+0.2%(찔끔 들어온 것)** 는 둘 다 0점이지만 뜻이 전혀 다르다.
+   *
+   * 방향은 축이 정한다: 위험 축은 **이 값 이상**이면 탈락, 나머지 축은
+   * **이 값 이하**면 탈락.
+   */
+  vetoAt?: number;
   /** 화면에 보여줄 설명 */
   hint: string;
   /**
@@ -864,6 +900,18 @@ export const DEFAULT_CONFIG: SignalConfig = {
       weight: 2,
       threshold: 0.25,
       strongAt: 0.75,
+      /*
+       * **탈락** — 시총 대비 -0.5% 이하면 다른 게 아무리 좋아도 빨강 (2026-09-01).
+       *
+       * 20일 동안 시총의 0.5% 만큼이 **순매도**로 빠져나갔다는 뜻이다. 앞뒤가
+       * 일관되게 나쁘다 — 앞 -0.75%p / 뒤 -1.19%p.
+       *
+       * ⚠️ 「찔끔 들어온 것」(0~0.25%)도 나쁘지만(뒤 -1.16~-2.80) 탈락까지는
+       * 안 시킨다. 그건 점수에서 0 점을 받는 것으로 충분하고, 탈락은 **되돌릴 수
+       * 없는 판정**이라 확실한 것만 건다.
+       */
+      veto: true,
+      vetoAt: -0.5,
       span: 20,
       hint: "외국인+기관 순매수 ÷ 시가총액(%). **금액이 아니라 비율** — 시총 1조의 100억과 5,000억의 100억은 다른 사건이다",
       cost: 0,
@@ -1070,6 +1118,18 @@ export const DEFAULT_CONFIG: SignalConfig = {
       weight: 2,
       threshold: 40,
       strongAt: 65,
+      /*
+       * **탈락** — 위쪽 매물이 60% 이상이면 빨강 (2026-09-01).
+       *
+       * 벤티지: "매물대가 너무 큰 매물대가 강한 애들은 그게 더 저항선이 돼버리니까
+       * 올라갈 가능성도 낮아지는 거지."
+       *
+       * 앞뒤가 일관되게 나쁘다 — 앞 -0.50%p / 뒤 -0.43%p. 크지는 않지만 **방향이
+       * 안 흔들린다**. 최근 120일 거래의 60% 가 지금 가격보다 위에서 이뤄졌다면
+       * 올라갈 때마다 본전 찾는 물량이 쏟아진다.
+       */
+      veto: true,
+      vetoAt: 60,
       hint: "최근 120일 매물 중 현재가 **위에** 쌓인 비중(%). 높을수록 오를 때 팔 사람이 많다",
       cost: 0,
     },
@@ -1380,6 +1440,12 @@ export interface CheckResult {
   /** 0 · 50 · 100. 판단 불가면 null */
   grade: number | null;
   /**
+   * **잰 값 그대로** — 탈락 판정(`vetoAt`)이 이걸 쓴다.
+   * 점수로 눕히기 전의 원래 숫자라 눈금 아래쪽이 안 뭉개진다.
+   * 탈락을 쓰는 기준만 채운다(나머지는 undefined).
+   */
+  raw?: number;
+  /**
    * 통과 여부. 일반 기준은 `grade >= 50`, **위험 기준은 반대로** `grade < 50`(안전)이 통과다.
    * 기존 화면과 기록이 이 값을 쓰므로 없애지 않는다.
    */
@@ -1413,6 +1479,8 @@ export interface SignalResult {
   axes: AxisResult[];
   /** 위험 때문에 초록이 막혔나 — 화면이 이유를 말해 줄 수 있게 */
   riskCapped: boolean;
+  /** 탈락 조건에 걸린 기준 이름들 — 비어 있으면 탈락 없음 */
+  vetoedBy?: string[];
   evaluatedAt: string;
 }
 
@@ -1694,6 +1762,8 @@ export async function evaluateSignal(
     let link: CheckResult["link"];
     let etfs: CheckResult["etfs"];
     let value = "-";
+    /** 잰 값 그대로 — 탈락 판정이 쓴다. 탈락을 쓰는 기준만 채운다 */
+    let raw: number | undefined;
 
     if (c.key === "trend") {
       const lines = [...cfg.maLines].sort((a, b) => a - b);
@@ -1959,6 +2029,8 @@ export async function evaluateSignal(
         const folded =
           pctOfCap <= foldAt ? pctOfCap : Math.max(0, foldAt * 2 - pctOfCap);
         g = grade(folded, c);
+        /* 탈락 판정은 **접기 전 값**으로 — 접으면 순매도와 과열이 같은 0 이 된다 */
+        raw = pctOfCap;
         value =
           `${pctOfCap > 0 ? "+" : ""}${pctOfCap.toFixed(2)}% ` +
           `(${days}일 ${Math.round(net).toLocaleString("ko-KR")}억 · 시총 ${Math.round(capEok).toLocaleString("ko-KR")}억` +
@@ -2092,6 +2164,7 @@ export async function evaluateSignal(
       const pct = overheadPct(chartRows);
       if (pct !== null) {
         g = grade(pct, c);
+        raw = pct;
         value = `위쪽 매물 ${pct.toFixed(0)}%`;
       }
     } else if (c.key === "disparity") {
@@ -2260,7 +2333,7 @@ export async function evaluateSignal(
      * 통과/미달 목록에 그대로 들어가기 때문이다.
      */
     const pass = g === null ? null : c.axis === "risk" ? g < 50 : g >= 50;
-    checks.push({ key: c.key, label: c.label, axis: c.axis, grade: g, pass, value, weight: c.weight, link, etfs });
+    checks.push({ key: c.key, label: c.label, axis: c.axis, grade: g, raw, pass, value, weight: c.weight, link, etfs });
   }
 
   // ---- 축별 점수 ----
@@ -2308,6 +2381,29 @@ export async function evaluateSignal(
   const riskCapped = cfg.riskBlocksGreen && risk?.level === "red" && level === "green";
   if (riskCapped) level = "yellow";
 
+  /*
+   * ## 탈락 조건 (2026-09-01) — **하나라도 걸리면 빨강**
+   *
+   * 위험 축은 평균이라 하나가 커도 나머지에 묻힌다. 신고가 종목은 위쪽 매물이
+   * 0 이라 위험 평균이 늘 낮게 나왔고, 그래서 「수급이 순매도인데 신고가라서
+   * 안전」 같은 판정이 통과했다.
+   *
+   * 탈락은 평균에 안 섞인다. `veto` 가 붙은 기준이 **만점(=가장 나쁨) 쪽으로
+   * 100점**이면 그것으로 끝이다 — 다른 점수를 보지 않는다.
+   *
+   * 실측: 나쁜 것을 빼기만 해도 뒤쪽 +2.57%p 였고, 남은 표본이 22% 로 넉넉했다.
+   * 「높은 점수를 좇기」보다 「나쁜 것을 빼기」가 표본을 훨씬 크게 남긴다.
+   */
+  const vetoed = checks.filter((c) => {
+    const def = cfg.checks.find((x) => x.key === c.key);
+    if (!def?.veto || c.raw === undefined || !Number.isFinite(c.raw)) return false;
+    const at = def.vetoAt;
+    if (at === undefined) return false;
+    /* 위험 축은 값이 클수록 나쁘고, 나머지는 작을수록 나쁘다 */
+    return c.axis === "risk" ? c.raw >= at : c.raw <= at;
+  });
+  if (vetoed.length > 0) level = "red";
+
   const result: SignalResult = {
     code,
     level,
@@ -2315,6 +2411,8 @@ export async function evaluateSignal(
     checks,
     axes,
     riskCapped,
+    /** 탈락시킨 기준 이름 — 화면이 「무엇 때문에 빨강인지」를 말할 수 있게 */
+    vetoedBy: vetoed.map((c) => c.label),
     evaluatedAt: new Date().toISOString(),
   };
   evalCache.set(code, { data: result, at: Date.now() });

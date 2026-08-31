@@ -13183,3 +13183,15 @@ thead .sd-emph {
   flex: 1 1 16rem;
   margin: 0;
 }
+
+/* 탈락 표시 (2026-09-01) — 위험 차단(노랑)과 달리 **되돌릴 수 없는 빨강**이라
+   더 세게 보여야 한다. 점수가 90점이어도 이게 뜨면 빨강이다. */
+.sig-vetoed {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--negative, #e05260) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--negative, #e05260) 45%, transparent);
+  color: var(--negative, #e05260);
+  font-size: 11.5px;
+  font-weight: 600;
+}

@@ -158,6 +158,22 @@ export function SignalPanel({
             위험으로 초록 차단
           </span>
         )}
+        {/*
+          **탈락** (2026-09-01) — 위험 차단과 다르다. 위험은 축 평균이 빨강일 때
+          한 칸 낮추는 것이고, 탈락은 **기준 하나가 정해진 선을 넘으면 그것으로
+          빨강**이다. 점수가 아무리 높아도 뒤집지 못한다.
+
+          무엇 때문에 걸렸는지 반드시 적는다 — 「왜 빨강인지」를 모르면 사람이
+          도구를 못 믿는다.
+        */}
+        {data.vetoedBy && data.vetoedBy.length > 0 && (
+          <span
+            className="sig-vetoed"
+            title="이 기준이 탈락선을 넘어 다른 점수와 무관하게 빨강입니다 — 실측에서 앞뒤 모두 손해였던 조건만 탈락으로 씁니다"
+          >
+            ✕ 탈락: {data.vetoedBy.join(" · ")}
+          </span>
+        )}
         <button className="filter-btn" onClick={() => load(true)} disabled={loading}>
           {loading ? "평가 중…" : "↻ 다시 평가"}
         </button>

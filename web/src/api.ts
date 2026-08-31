@@ -2883,6 +2883,14 @@ export interface SignalResult {
   axes: SignalAxisResult[];
   /** 위험이 빨강이라 초록이 막혔나 */
   riskCapped: boolean;
+  /**
+   * **탈락 조건에 걸린 기준 이름들** (2026-09-01) — 비어 있으면 탈락 없음.
+   *
+   * 탈락은 위험 축과 다르다. 위험은 평균이라 하나가 커도 묻히는데, 탈락은
+   * **하나라도 걸리면 그것으로 빨강**이다. 「점수가 높아도 이건 안 된다」를
+   * 말하는 자리다.
+   */
+  vetoedBy?: string[];
   evaluatedAt: string;
 }
 
@@ -4086,6 +4094,14 @@ export interface TrackEntry {
   /** 편입 당시 축별 점수 */
   axes: Partial<Record<"trend" | "flow" | "value" | "risk", number | null>>;
   riskCapped: boolean;
+  /**
+   * **탈락 조건에 걸린 기준 이름들** (2026-09-01) — 비어 있으면 탈락 없음.
+   *
+   * 탈락은 위험 축과 다르다. 위험은 평균이라 하나가 커도 묻히는데, 탈락은
+   * **하나라도 걸리면 그것으로 빨강**이다. 「점수가 높아도 이건 안 된다」를
+   * 말하는 자리다.
+   */
+  vetoedBy?: string[];
   basePrice: number;
   /** 그때의 신호등 기준 지문 — 기준이 바뀌면 같은 90점도 다른 뜻이다 */
   configHash: string;
