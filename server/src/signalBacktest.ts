@@ -2,6 +2,7 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { dropPhantomToday } from "./candleGuard.js";
 import { getConfig, type CheckConfig, type SignalConfig } from "./signalLight.js";
 import { loadCloses } from "./dailyCloses.js";
+import { MA_PERIODS, saveSamples, type Feat, type Sample } from "./signalSamples.js";
 import { isIndexLikeTheme, loadThemes } from "./naverThemes.js";
 
 /**
@@ -240,6 +241,46 @@ function grade(value: number, c: CheckConfig): number {
  * `at` 이 그날의 인덱스다. 뒤쪽(미래) 봉을 실수로 쓰면 백테스트가 통째로 거짓이
  * 되므로, 자를 때 항상 `slice(0, at + 1)` 로 끊는다.
  */
+/**
+ * 그날의 **원시값**만 뽑는다 — 설정은 안 본다.
+ *
+ * 채점(`scoreFeat`)과 갈라 둔 이유는 시뮬레이터 때문이다. 비싼 것은 일봉이지
+ * 채점이 아니라서, 원시값만 파일로 남겨 두면 설정을 바꿔도 다시 안 받아도 된다.
+ * 여기서 낸 값과 백테스트가 쓰는 값이 **같아야** 두 화면의 숫자가 맞는다.
+ */
+function featuresAt(all: Bar[], at: number, themeRate: number | null): Feat | null {
+  const hist = all.slice(0, at + 1);
+  if (hist.length < 65) return null; // 60일 지표를 내려면 그만큼은 있어야 한다
+  const closes = hist.map((b) => b.close);
+  const cur = closes[closes.length - 1];
+
+  const win60 = closes.slice(-61, -1);
+  const hi60 = win60.length > 0 ? Math.max(...win60) : 0;
+  const m20 = sma(closes, 20);
+  const m5 = sma(closes, 5);
+
+  const win120 = hist.slice(-120);
+  const hi = Math.max(...win120.map((b) => b.high));
+  const lo = Math.min(...win120.map((b) => b.low));
+  let over: number | null = null;
+  if (hi > lo) {
+    const above = win120.filter((b) => (b.high + b.low) / 2 > cur).reduce((s, b) => s + b.vol, 0);
+    const tot = win120.reduce((s, b) => s + b.vol, 0);
+    if (tot > 0) over = (above / tot) * 100;
+  }
+
+  return {
+    cur,
+    ma: MA_PERIODS.map((p) => sma(closes, p)),
+    hiPct: hi60 > 0 ? (cur / hi60) * 100 : null,
+    disp: m20 ? Math.max(0, ((cur - m20) / m20) * 100) : null,
+    ma5Gap: m5 ? Math.max(0, ((cur - m5) / m5) * 100) : null,
+    over,
+    volEok: (hist[hist.length - 1].vol * cur) / 100_000_000,
+    theme: themeRate,
+  };
+}
+
 function scoreAt(
   all: Bar[],
   at: number,
@@ -406,6 +447,12 @@ export async function runSignalBacktest(
   const all: { d1: number | null; d5: number | null; d20: number | null }[] = [];
   /* 점수대별로 나누려면 **초록이 아닌 것까지** 점수를 들고 있어야 한다 */
   const scored: { score: number; d1: number | null; d5: number | null; d20: number | null }[] = [];
+  /*
+   * **원시값 창고** (2026-08-31) — 이번에 받은 일봉에서 뽑은 값을 그대로 남긴다.
+   * 다음부터 설정을 바꿔 볼 때는 이 파일만 다시 채점하면 되므로 7분이 아니라
+   * 수십 밀리초에 답이 나온다. 백테스트 한 번이 시뮬레이터의 재료를 만드는 셈이다.
+   */
+  const samples: Sample[] = [];
 
   try {
     for (const { code, name } of opts.codes) {
@@ -458,7 +505,11 @@ export async function runSignalBacktest(
           const f = { d1: fwd(1), d5: fwd(5), d20: fwd(20) };
           all.push(f);
 
-          const s = scoreAt(bs, i, cfg, themeRateAt(bs[i].date));
+          const tr = themeRateAt(bs[i].date);
+          const feat = featuresAt(bs, i, tr);
+          if (feat) samples.push({ code, name, date: bs[i].date, ...feat, ...f });
+
+          const s = scoreAt(bs, i, cfg, tr);
           if (!s) continue;
           scored.push({ score: s.score, ...f });
           /*
@@ -476,6 +527,23 @@ export async function runSignalBacktest(
     }
   } finally {
     running = false;
+  }
+
+  /*
+   * 표본을 남긴다 — **중간에 끊겼어도 받은 만큼은 쓴다.** 500 종목 중 300에서
+   * 서버가 재시작돼도 그 300은 유효한 표본이라, 버리면 그만큼 또 받아야 한다.
+   */
+  if (samples.length > 0) {
+    try {
+      await saveSamples({
+        builtAt: new Date().toISOString(),
+        days,
+        codeCount: opts.codes.length,
+        samples,
+      });
+    } catch {
+      /* 못 써도 백테스트 결과 자체는 낸다 */
+    }
   }
 
   const reproducible = (c: CheckConfig): boolean =>

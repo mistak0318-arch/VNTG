@@ -1402,6 +1402,22 @@ export const api = {
     getJson<{ result: SignalBacktestResult | null; at: string; error?: string }>(
       "/api/signal/backtest/result",
     ),
+  /*
+   * 시뮬레이터 (2026-08-31) — 백테스트가 남긴 **원시값 창고**를 설정만 바꿔
+   * 다시 채점한다. API 를 안 부르므로 즉답이고, 파일이라 서버 재시작에도 남는다.
+   */
+  signalSamples: () =>
+    getJson<{ has: boolean; builtAt?: string; days?: number; codeCount?: number; obs?: number }>(
+      "/api/signal/samples",
+    ),
+  signalSimulate: (config?: SignalConfig) =>
+    postJson<{ result: SignalSimResult }>("/api/signal/simulate", config ? { config } : {}),
+  /**
+   * 전수 훑기 — 켤 수 있는 기준의 **모든 조합**.
+   * 순위는 뒤쪽 절반(검증 구간) 성적으로 매긴다 — 앞에서만 좋은 조합을 거르려는 것이다.
+   */
+  signalSweep: (config?: SignalConfig, top = 20) =>
+    postJson<{ result: SignalSweepResult }>("/api/signal/sweep", { config, top }),
   notes: (code: string) => getJson<{ name: string; notes: StockNote[] }>(`/api/notes/${code}`),
   notesRecent: (limit = 30) =>
     getJson<{ items: { code: string; name: string; note: StockNote }[] }>(
@@ -2215,6 +2231,66 @@ export interface SignalBacktestResult {
   /** 점수대별 — 위 칸이 아래 칸보다 잘 갔는지가 기준이 맞는지를 증명한다 */
   buckets: { label: string; from: number; to: number; s: BacktestSummary }[];
   note: string;
+}
+
+/** 기준 하나가 **혼자서** 무엇을 가르나 — 서버 signalSimulate.ts 와 같은 모양 */
+export interface SignalCheckStat {
+  key: string;
+  label: string;
+  axis: string;
+  weight: number;
+  threshold: number;
+  strongAt: number;
+  /** 표본으로 되짚을 수 있나 — 없으면 아래 성적이 전부 비어 있다 */
+  inSamples: boolean;
+  hit: BacktestSummary;
+  mid: BacktestSummary;
+  miss: BacktestSummary;
+  /** 만점 무리의 20일 성적에서 0점 무리를 뺀 값(%p). 0 이면 아무것도 안 가른다 */
+  edge: number | null;
+}
+
+/** 신호등 시뮬레이터 결과 */
+export interface SignalSimResult {
+  builtAt: string;
+  days: number;
+  codeCount: number;
+  obs: number;
+  used: string[];
+  skipped: string[];
+  base: BacktestSummary;
+  green: BacktestSummary;
+  yellow: BacktestSummary;
+  red: BacktestSummary;
+  buckets: { label: string; s: BacktestSummary }[];
+  checks: SignalCheckStat[];
+  /** 초록선을 옮겨 보며 잰 성적 — lift 는 전체 대비 20일 초과분(%p) */
+  cuts: { cut: number; s: BacktestSummary; lift: number | null }[];
+}
+
+/** 조합 하나의 성적 — 앞/뒤로 갈라 잰다 */
+export interface SignalSweepRow {
+  keys: string[];
+  labels: string[];
+  n: number;
+  lift: number | null;
+  win: number | null;
+  /** 앞쪽 절반(고르는 구간)에서의 초과분 */
+  trainLift: number | null;
+  /** 뒤쪽 절반(검증 구간) — **순위는 이것으로 매긴다** */
+  testLift: number | null;
+  testN: number;
+}
+
+/** 전수 훑기 결과 */
+export interface SignalSweepResult {
+  obs: number;
+  splitDate: string;
+  trainBase: number | null;
+  testBase: number | null;
+  combos: number;
+  rows: SignalSweepRow[];
+  current: SignalSweepRow | null;
 }
 
 export interface SuperSeriesPoint {

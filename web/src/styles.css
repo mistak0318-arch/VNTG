@@ -12211,3 +12211,108 @@ thead .sd-emph {
   border-left: 3px solid var(--red);
   background: color-mix(in srgb, var(--red) 7%, transparent);
 }
+
+/* ------------------------------------------------------------------ */
+/* 신호등 시뮬레이터 (2026-08-31)                                       */
+/*                                                                    */
+/* 설정 바로 아래 붙는 자리라 카드 안의 카드가 된다 — 테두리를 지우고    */
+/* 위쪽 선 하나로만 가른다. 표가 셋이라 테두리를 다 두르면 답답하다.      */
+/* ------------------------------------------------------------------ */
+.sim-card {
+  margin-top: 14px;
+}
+.sim-meta {
+  margin: -4px 0 10px;
+}
+.sim-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.sim-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sim-card h4 {
+  margin: 18px 0 6px;
+  font-size: 14px;
+}
+.sim-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.sim-table th,
+.sim-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.sim-table th {
+  font-weight: 600;
+  color: var(--text-dim);
+  text-align: left;
+}
+.sim-table th.num,
+.sim-table td.num {
+  text-align: right;
+}
+/* 비교 기준이 되는 줄 — 나머지를 이 줄에 대고 읽는다 */
+.sim-row-base td {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  font-weight: 600;
+}
+.sim-row-green td {
+  background: color-mix(in srgb, var(--green) 9%, transparent);
+  font-weight: 600;
+}
+/* 표본이 적은 줄 — 숨기지는 않는다. 「적다」도 알아야 할 사실이다 */
+.sim-thin td {
+  opacity: 0.5;
+}
+/* 되짚을 수 없는 기준 — 성적이 아니라 「잴 수 없음」이다 */
+.sim-na td {
+  opacity: 0.45;
+  font-style: italic;
+}
+.sim-edge {
+  font-weight: 700;
+}
+.sim-warn {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--amber, var(--red));
+  background: color-mix(in srgb, var(--amber, var(--red)) 7%, transparent);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.sim-err {
+  color: var(--red);
+  font-size: 13px;
+}
+.sim-empty {
+  line-height: 1.7;
+}
+
+/* 폰 — 표를 좁히지 않고 가로로 민다. 숫자 표는 줄바꿈되면 못 읽는다 */
+@media (max-width: 720px) {
+  .sim-table {
+    font-size: 12.5px;
+  }
+  .sim-table th,
+  .sim-table td {
+    padding: 6px 6px;
+  }
+}
+
+/* 조합 이름 — 여기만 줄바꿈을 허용한다. 기준이 여덟이면 한 줄에 안 들어간다 */
+.sim-combo {
+  white-space: normal !important;
+  line-height: 1.5;
+  min-width: 220px;
+}

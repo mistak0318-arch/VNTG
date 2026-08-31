@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type SignalAxis, type SignalConfig } from "../api";
+import { SignalSimPanel } from "./SignalSimPanel";
 
 /**
  * 신호등 기준 설정.
@@ -443,6 +444,13 @@ export function SignalConfigPanel() {
       </div>
 
       <SignalGuide />
+
+      {/*
+       * 시뮬레이터를 **설정 바로 아래**에 둔다 (2026-08-31). 문턱을 만지는 자리와
+       * 그 결과를 재는 자리가 떨어져 있으면, 바꾸고 나서 재러 가지를 않는다.
+       * 저장 전 화면 값(`config`)을 그대로 넘기므로 **저장하지 않고도** 재 볼 수 있다.
+       */}
+      <SignalSimPanel config={config} />
     </div>
   );
 }

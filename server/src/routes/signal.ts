@@ -24,6 +24,8 @@ import {
 import { gradeSignalHistory, signalDays } from "../signalHistory.js";
 import { etfSeriesFor, themeSeriesFor } from "../themeSeries.js";
 import { backtestProgress, backtestResult, startBacktestJob } from "../signalBacktest.js";
+import { samplesMeta } from "../signalSamples.js";
+import { simulate, sweep } from "../signalSimulate.js";
 import { tradeValueTop } from "../signalScreen.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
@@ -379,6 +381,79 @@ export function createSignalRouter(client: KiwoomClient): Router {
   /** 마지막 결과 — 탭을 떠났다 돌아와도 그대로 있다 (메모리라 서버 재시작이면 없다) */
   router.get("/backtest/result", (_req, res) => {
     res.json(backtestResult());
+  });
+
+  /* ---------------- 시뮬레이터 (2026-08-31) ----------------
+   *
+   * 백테스트가 남긴 **원시값 창고**를 설정만 바꿔 다시 채점한다. API 를 안 부르므로
+   * 즉답이다 — 문턱을 옮기며 성적을 보라고 만든 자리다.
+   *
+   * 창고는 백테스트를 한 번 돌리면 생긴다(그때 파일로 남는다). 그래서 시뮬레이터는
+   * 서버가 재시작돼도 살아 있다 — 메모리에만 있는 백테스트 결과와 다른 점이다.
+   */
+
+  /** 창고에 무엇이 있나 — 화면이 「먼저 표본을 받으세요」를 띄울지 판단한다 */
+  router.get("/samples", async (_req, res, next) => {
+    try {
+      res.json(await samplesMeta());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 이 설정이면 성적이 어떻게 되나. `config` 를 안 주면 **지금 저장된 설정**을 잰다.
+   */
+  router.post("/simulate", async (req, res, next) => {
+    try {
+      const body = req.body as { config?: Partial<SignalConfig> };
+      const saved = await getConfig();
+      const cfg: SignalConfig = {
+        ...saved,
+        ...body.config,
+        axisWeights: { ...saved.axisWeights, ...(body.config?.axisWeights ?? {}) },
+        checks: body.config?.checks ?? saved.checks,
+        maLines: body.config?.maLines ?? saved.maLines,
+      };
+      const r = await simulate(cfg);
+      if (!r) {
+        res.status(409).json({
+          error: "표본이 아직 없습니다. 백테스트를 한 번 돌리면 표본이 만들어집니다.",
+        });
+        return;
+      }
+      res.json({ result: r });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 전수 훑기 — 켤 수 있는 기준의 **모든 조합**을 돌린다.
+   *
+   * ⚠️ 표본을 날짜로 반 갈라 **뒤쪽 절반 성적으로 줄을 세운다.** 앞에서만 좋은
+   * 조합은 그 기간에 맞춘 것이라, 그걸 「최적」이라 부르면 스스로를 속이게 된다.
+   */
+  router.post("/sweep", async (req, res, next) => {
+    try {
+      const body = req.body as { config?: Partial<SignalConfig>; top?: number };
+      const saved = await getConfig();
+      const cfg: SignalConfig = {
+        ...saved,
+        ...body.config,
+        axisWeights: { ...saved.axisWeights, ...(body.config?.axisWeights ?? {}) },
+        checks: body.config?.checks ?? saved.checks,
+        maLines: body.config?.maLines ?? saved.maLines,
+      };
+      const r = await sweep(cfg, Math.min(Math.max(Number(body.top) || 25, 5), 100));
+      if (!r) {
+        res.status(409).json({ error: "표본이 아직 없습니다." });
+        return;
+      }
+      res.json({ result: r });
+    } catch (err) {
+      next(err);
+    }
   });
 
   /* ---------------- 슈퍼신호등 대시보드 (2026-08-26) ---------------- */
