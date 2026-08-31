@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BuyPlan, Candidate, ExitCall, MarketGate } from "./cisTrader.js";
 import { today } from "./cisAccount.js";
+import type { AccountId } from "./cisAccounts.js";
 
 /**
  * CIS 일지 — 시스가 하루 세 번 쓰는 글.
@@ -28,7 +29,20 @@ import { today } from "./cisAccount.js";
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const DIR = join(here, "..", "data", "cis", "journal");
+/**
+ * **계좌마다 폴더가 따로다** (2026-08-31 — "매매일지나 이런것도 일반 계좌
+ * 개인연금 퇴직금 이렇게 나눠서 써야겠지?").
+ *
+ * 한 파일에 셋을 섞으면 「개인연금은 요즘 어땠나」를 읽을 때마다 나머지 둘을
+ * 걸러내야 한다. 성격이 다른 돈은 장부도 글도 나눈다.
+ *
+ * 시장 판단은 세 계좌가 같은 것을 보지만 **글은 각자 쓴다** — 같은 시황이라도
+ * 트레이딩 계좌에 뜻하는 바와 연금 계좌에 뜻하는 바가 다르다.
+ */
+const ROOT = join(here, "..", "data", "cis", "journal");
+function dirOf(account: AccountId): string {
+  return join(ROOT, account);
+}
 
 export type Slot = "morning" | "noon" | "evening";
 
@@ -91,6 +105,7 @@ export interface SlotEntry {
 
 export interface CisDay {
   date: string;
+  account: AccountId;
   morning: SlotEntry | null;
   noon: SlotEntry | null;
   evening: SlotEntry | null;
@@ -112,30 +127,31 @@ export interface CisDay {
   } | null;
 }
 
-const empty = (date: string): CisDay => ({
+const empty = (date: string, account: AccountId): CisDay => ({
   date,
+  account,
   morning: null,
   noon: null,
   evening: null,
   review: null,
 });
 
-function fileOf(date: string): string {
-  return join(DIR, `${date}.json`);
+function fileOf(account: AccountId, date: string): string {
+  return join(dirOf(account), `${date}.json`);
 }
 
-export async function loadDay(date: string): Promise<CisDay> {
+export async function loadDay(date: string, account: AccountId = "trade"): Promise<CisDay> {
   try {
-    const raw = await readFile(fileOf(date), "utf8");
-    return { ...empty(date), ...(JSON.parse(raw) as Partial<CisDay>) };
+    const raw = await readFile(fileOf(account, date), "utf8");
+    return { ...empty(date, account), ...(JSON.parse(raw) as Partial<CisDay>), account };
   } catch {
-    return empty(date);
+    return empty(date, account);
   }
 }
 
 export async function saveDay(day: CisDay): Promise<void> {
-  await mkdir(DIR, { recursive: true });
-  await writeFile(fileOf(day.date), JSON.stringify(day, null, 2), "utf8");
+  await mkdir(dirOf(day.account), { recursive: true });
+  await writeFile(fileOf(day.account, day.date), JSON.stringify(day, null, 2), "utf8");
 }
 
 /**
@@ -145,8 +161,13 @@ export async function saveDay(day: CisDay): Promise<void> {
  * 사라진다(파일 머리 주석 참고). 다시 돌리고 싶으면 `force` 를 줘야 하고,
  * 그건 사람이 화면에서 「다시 쓰기」를 눌렀을 때만이다.
  */
-export async function writeSlot(entry: SlotEntry, date = today(), force = false): Promise<CisDay> {
-  const day = await loadDay(date);
+export async function writeSlot(
+  entry: SlotEntry,
+  account: AccountId = "trade",
+  date = today(),
+  force = false,
+): Promise<CisDay> {
+  const day = await loadDay(date, account);
   if (day[entry.slot] && !force) return day;
   day[entry.slot] = entry;
   await saveDay(day);
@@ -154,15 +175,15 @@ export async function writeSlot(entry: SlotEntry, date = today(), force = false)
 }
 
 /** 최근 며칠 — 목록 화면이 읽는다 */
-export async function listDays(limit = 60): Promise<CisDay[]> {
+export async function listDays(limit = 60, account: AccountId = "trade"): Promise<CisDay[]> {
   try {
-    const files = await readdir(DIR);
+    const files = await readdir(dirOf(account));
     const dates = files
       .filter((f) => f.endsWith(".json"))
       .map((f) => f.replace(/\.json$/, ""))
       .sort((a, b) => b.localeCompare(a))
       .slice(0, limit);
-    return await Promise.all(dates.map((d) => loadDay(d)));
+    return await Promise.all(dates.map((d) => loadDay(d, account)));
   } catch {
     return [];
   }

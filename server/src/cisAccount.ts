@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { profileOf, type AccountId } from "./cisAccounts.js";
 
 /**
  * CIS 계좌 — 시스가 굴리는 **모의 계좌**의 원장.
@@ -34,10 +35,13 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data", "cis");
-const ACCOUNT_FILE = join(DATA_DIR, "account.json");
-
-/** 처음 넣는 돈 — 벤티지가 정한 4천만 원 */
-export const SEED = 40_000_000;
+/**
+ * 계좌마다 파일이 따로다. 한 파일에 셋을 넣으면 트레이딩 계좌를 저장하다 깨졌을 때
+ * 연금 장부까지 같이 잃는다 — 성격이 다른 돈은 파일도 나눈다.
+ */
+function fileOf(id: AccountId): string {
+  return join(DATA_DIR, `account-${id}.json`);
+}
 
 /**
  * 빌릴 수 있는 한도.
@@ -86,6 +90,11 @@ export interface Position {
   /** 손절·익절 계획 — 세운 값을 남겨야 「계획대로 했나」를 물을 수 있다 */
   stop: number | null;
   target: number | null;
+  /**
+   * 안전자산인가 (퇴직연금 30% 몫). **살 때 정해 박아 둔다** — 나중에 이름으로
+   * 다시 판정하면 판정 규칙이 바뀌었을 때 옛 기록의 뜻까지 바뀐다.
+   */
+  safe?: boolean;
 }
 
 /** 체결 한 줄 — 이미 끝난 일이라 절대 고치지 않는다 */
@@ -111,6 +120,7 @@ export interface Fill {
 }
 
 export interface CisAccount {
+  id: AccountId;
   /** 예수금 — 빌린 돈은 여기 안 들어간다 */
   cash: number;
   /** 갚아야 할 미수 */
@@ -124,40 +134,44 @@ export interface CisAccount {
   startedAt: string;
 }
 
-const EMPTY: CisAccount = {
-  cash: SEED,
+const empty = (id: AccountId): CisAccount => ({
+  id,
+  cash: profileOf(id).seed,
   misu: 0,
   credit: 0,
   positions: [],
   fills: [],
   equityCurve: [],
   startedAt: "",
-};
+});
 
-let cache: CisAccount | null = null;
+const cache = new Map<AccountId, CisAccount>();
 
-export async function loadAccount(): Promise<CisAccount> {
-  if (cache) return cache;
+export async function loadAccount(id: AccountId = "trade"): Promise<CisAccount> {
+  const hit = cache.get(id);
+  if (hit) return hit;
+  let a: CisAccount;
   try {
-    const raw = await readFile(ACCOUNT_FILE, "utf8");
-    const j = JSON.parse(raw) as Partial<CisAccount>;
-    cache = {
-      ...EMPTY,
+    const j = JSON.parse(await readFile(fileOf(id), "utf8")) as Partial<CisAccount>;
+    a = {
+      ...empty(id),
       ...j,
+      id,
       positions: Array.isArray(j.positions) ? j.positions : [],
       fills: Array.isArray(j.fills) ? j.fills : [],
       equityCurve: Array.isArray(j.equityCurve) ? j.equityCurve : [],
     };
   } catch {
-    cache = { ...EMPTY, startedAt: today() };
+    a = { ...empty(id), startedAt: today() };
   }
-  return cache;
+  cache.set(id, a);
+  return a;
 }
 
 export async function saveAccount(a: CisAccount): Promise<void> {
-  cache = a;
+  cache.set(a.id, a);
   await mkdir(DATA_DIR, { recursive: true });
-  await writeFile(ACCOUNT_FILE, JSON.stringify(a, null, 2), "utf8");
+  await writeFile(fileOf(a.id), JSON.stringify(a, null, 2), "utf8");
 }
 
 /** KST 오늘 (YYYY-MM-DD) */
@@ -207,14 +221,66 @@ export function buyingPower(
   a: CisAccount,
   funding: Funding,
   priceOf: (code: string) => number | null,
+  /** 안전자산을 사는 중인가 — 퇴직연금의 위험자산 한도 계산이 갈린다 */
+  buyingSafe = false,
 ): number {
+  const p = profileOf(a.id);
+  /* 연금 계좌는 **빌릴 수 없다** — 제도가 그렇다. 설정이 아니라 계좌의 성질이다 */
+  if (funding === "misu" && !p.allowMisu) return 0;
+  if (funding === "credit" && !p.allowCredit) return 0;
+
   const { equity, stockValue } = equityOf(a, priceOf);
   if (equity <= 0) return 0;
-  /* 전체 천장 — 어느 자금이든 이걸 넘길 수 없다 */
-  const roomTotal = Math.max(0, equity * MAX_LEVERAGE - stockValue);
+
+  /* 전체 천장 — 빌릴 수 없는 계좌는 레버리지 1배가 곧 천장이다 */
+  const lev = p.allowMisu || p.allowCredit ? MAX_LEVERAGE : 1;
+  let roomTotal = Math.max(0, equity * lev - stockValue);
+
+  /*
+   * **위험자산 한도** (퇴직연금 70%). 안전자산을 살 때는 안 걸린다 — 오히려
+   * 30% 를 채우러 사는 것이라 막으면 계좌가 규정을 못 맞춘다.
+   */
+  if (p.riskCap < 100 && !buyingSafe) {
+    let risky = 0;
+    for (const pos of a.positions) {
+      if (pos.safe) continue;
+      risky += (priceOf(pos.code) ?? pos.avg) * pos.qty;
+    }
+    const cap = (equity * p.riskCap) / 100;
+    roomTotal = Math.min(roomTotal, Math.max(0, cap - risky));
+  }
+
   if (funding === "cash") return r(Math.min(a.cash, roomTotal));
   if (funding === "misu") return r(Math.min(Math.max(0, a.cash * 2 - a.misu), roomTotal));
   return r(Math.min(Math.max(0, equity - a.credit), roomTotal));
+}
+
+/**
+ * 위험자산이 몇 % 인가 — 퇴직연금 화면이 「70% 중 얼마」를 보여 준다.
+ * 규정을 지키고 있는지는 **숫자로 보여야** 사람이 믿는다.
+ */
+export function riskMix(
+  a: CisAccount,
+  priceOf: (code: string) => number | null,
+): { risky: number; safe: number; riskyPct: number; cap: number; over: boolean } {
+  const p = profileOf(a.id);
+  let risky = 0;
+  let safe = 0;
+  for (const pos of a.positions) {
+    const v = (priceOf(pos.code) ?? pos.avg) * pos.qty;
+    if (pos.safe) safe += v;
+    else risky += v;
+  }
+  /* 예수금은 안전자산 쪽으로 센다 — 현금은 위험자산이 아니다 */
+  const total = risky + safe + a.cash;
+  const riskyPct = total > 0 ? (risky / total) * 100 : 0;
+  return {
+    risky: r(risky),
+    safe: r(safe + a.cash),
+    riskyPct: Number(riskyPct.toFixed(1)),
+    cap: p.riskCap,
+    over: riskyPct > p.riskCap + 0.5,
+  };
 }
 
 function newId(): string {
@@ -244,6 +310,8 @@ export interface BuyOrder {
   stop?: number | null;
   target?: number | null;
   slot: Fill["slot"];
+  /** 안전자산인가 (퇴직연금 30% 몫) */
+  safe?: boolean;
 }
 
 /**
@@ -257,7 +325,7 @@ export function buy(
   date = today(),
 ): { ok: boolean; qty: number; reason?: string } {
   if (o.qty <= 0 || o.price <= 0) return { ok: false, qty: 0, reason: "수량·가격이 없다" };
-  const power = buyingPower(a, o.funding, priceOf);
+  const power = buyingPower(a, o.funding, priceOf, o.safe === true);
   const unit = o.price * (1 + FEE_RATE);
   let qty = Math.min(o.qty, Math.floor(power / unit));
   if (qty <= 0) return { ok: false, qty: 0, reason: `${o.funding} 여력 없음` };
@@ -293,6 +361,7 @@ export function buy(
       used: o.used,
       stop: o.stop ?? null,
       target: o.target ?? null,
+      safe: o.safe === true,
     });
   }
 

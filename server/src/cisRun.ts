@@ -31,6 +31,7 @@ import {
   type SlotEntry,
 } from "./cisJournal.js";
 import { polishJournal, screenCandidates, type ScreenNote } from "./cisAi.js";
+import { isSafeAsset, profileOf, rejectReason, type AccountId } from "./cisAccounts.js";
 
 /**
  * 하루를 실행한다 — 아침·점심·저녁.
@@ -93,6 +94,7 @@ export async function priceMap(
 /** 결과 — 화면이 「방금 뭘 했나」를 그대로 보여 준다 */
 export interface RunResult {
   ok: boolean;
+  account: AccountId;
   slot: Slot;
   date: string;
   skipped?: string;
@@ -111,18 +113,20 @@ export interface RunResult {
 export async function runSlot(
   client: KiwoomClient,
   slot: Slot,
+  account: AccountId = "trade",
   force = false,
 ): Promise<RunResult> {
   const date = today();
   const cfg = await getCisConfig();
-  if (!cfg.enabled) return { ok: false, slot, date, skipped: "CIS 모드가 꺼져 있다" };
+  if (!cfg.enabled) return { ok: false, account, slot, date, skipped: "CIS 모드가 꺼져 있다" };
 
-  const existing = await loadDay(date);
+  const existing = await loadDay(date, account);
   if (existing[slot] && !force) {
-    return { ok: false, slot, date, skipped: `${date} ${slot} 은 이미 썼다`, day: existing };
+    return { ok: false, account, slot, date, skipped: `${date} ${slot} 은 이미 썼다`, day: existing };
   }
 
-  const a = await loadAccount();
+  const profile = profileOf(account);
+  const a = await loadAccount(account);
   if (!a.startedAt) a.startedAt = date;
 
   const rules = cfg.rules;
@@ -177,7 +181,12 @@ export async function runSlot(
     gate = await marketGate(client, rules);
     if (gate.ok) {
       const picked = await pickCandidates(client, rules);
-      candidates = picked.candidates;
+      /*
+       * **계좌가 못 담는 것을 먼저 뺀다.** 연금 계좌는 ETF 만, 레버리지·인버스는
+       * 불가다 — 제도가 그렇다. 모의라도 못 사는 것을 샀다고 적으면 이 장부가
+       * 현실과 다른 이야기가 된다.
+       */
+      candidates = picked.candidates.filter((c) => !rejectReason(profile, { name: c.name }));
 
       /* AI 는 여기서 **경고만** 단다. 거부권은 설정에서 켰을 때만 */
       const screened = await screenCandidates(candidates, rules);
@@ -207,6 +216,8 @@ export async function runSlot(
             stop: p.stop,
             target: p.target,
             slot,
+            /* 퇴직연금 30% 몫인지 **살 때 정해 박는다** — 나중에 다시 판정하지 않는다 */
+            safe: profile.riskCap < 100 ? isSafeAsset(p.candidate.name) : undefined,
           },
           buyPriceOf,
           date,
@@ -306,7 +317,7 @@ export async function runSlot(
   };
 
   await saveAccount(a);
-  const day = await writeSlot(entry, date, force);
+  const day = await writeSlot(entry, account, date, force);
 
   /* 저녁이면 총평까지 — 아침 계획과 대조한다 */
   if (slot === "evening") {
@@ -314,5 +325,5 @@ export async function runSlot(
     await saveDay(day);
   }
 
-  return { ok: true, slot, date, entry, day, screenNotes, aiError };
+  return { ok: true, account, slot, date, entry, day, screenNotes, aiError };
 }
