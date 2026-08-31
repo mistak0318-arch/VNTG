@@ -12706,3 +12706,59 @@ thead .sd-emph {
 .fi-scroll svg {
   display: block;
 }
+
+/* ------------------------------------------------------------------ */
+/* 수급 누적 곡선 (2026-08-31) — 지수 시트의 장중 수급 차트와 같은 문법   */
+/* ------------------------------------------------------------------ */
+.fs-wrap {
+  margin: 4px 0 8px;
+}
+.fs-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 4px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.fs-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.fs-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.fs-key b {
+  font-weight: 700;
+}
+.fs-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.fs-scroll svg {
+  display: block;
+}
+.fs-line {
+  fill: none;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+.fs-zero {
+  stroke: var(--border);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+.fs-tick {
+  fill: var(--text-dim);
+  font-size: 9px;
+}
+/* 곡선 아래 「오늘」 머리 — 위 머리보다 한 단계 작게 */
+.ss-sub2 {
+  margin-top: 6px;
+  opacity: 0.85;
+}

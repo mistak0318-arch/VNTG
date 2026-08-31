@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, fmtNum, type StockSummaryData } from "../api";
+import { api, fmtNum, signClass, type StockSummaryData } from "../api";
 
 /**
  * **오늘 누가 샀나** — 장중 수급 요약.
@@ -56,6 +56,127 @@ function FlowRow({ label, amount, max }: { label: string; amount: number; max: n
   );
 }
 
+
+/**
+ * 수급 누적 곡선 (2026-08-31 — "그래프로 그려줄 수 있나? 반반 나눠서 주체는
+ * 똑같이 표현하면서 이렇게").
+ *
+ * ## 왜 곡선인가
+ *
+ * 가로 막대는 **오늘 하루**만 말한다. 그런데 이 칸을 보는 이유는 대개
+ * 「오늘 판 게 며칠째인가」다 — 그건 막대 하나로는 답이 안 된다.
+ *
+ * `ka10059` 응답에는 처음부터 여러 날치가 들어 있었다(오늘 줄만 쓰고 버렸다).
+ * **조회를 하나도 안 늘리고** 스무 날 누적을 그린다. 지수 시트의 「장중 수급 변화」와
+ * 같은 문법이라, 두 화면을 같은 눈으로 읽을 수 있다.
+ *
+ * ⚠️ **장중이 아니라 일자별**이다. 개별 종목의 장중 투자자별 누적은 우리 출처에
+ * 없다 — 네이버 장중 수급은 코스피·코스닥·선물 **시장 단위**만 준다.
+ *
+ * ## 읽는 법
+ *
+ * 값은 **구간 시작부터의 누적**이라, 선이 **올라가는 동안은 사는 중**이고
+ * 기울기가 곧 세기다. 0선을 넘나드는 것보다 **방향이 꺾이는 자리**가 중요하다.
+ */
+function FlowSeriesChart({
+  series,
+  keys,
+  colors,
+  labels,
+}: {
+  series: { date: string; v: Record<string, number> }[];
+  keys: string[];
+  colors: Record<string, string>;
+  labels: Record<string, string>;
+}) {
+  if (series.length < 2 || keys.length === 0) return null;
+
+  const H = 132;
+  /* 왼쪽 여백 — 첫 날짜 라벨이 가운데 정렬이라 여기가 좁으면 반이 잘린다 */
+  const PAD = { l: 20, r: 54, t: 12, b: 15 };
+  const W = Math.max(260, PAD.l + PAD.r + series.length * 12);
+
+  const vals = series.flatMap((p) => keys.map((k) => p.v[k] ?? 0));
+  const max = Math.max(1, ...vals.map(Math.abs));
+  const zero = PAD.t + (H - PAD.t - PAD.b) / 2;
+  const scale = (H - PAD.t - PAD.b) / 2 / max;
+  const xOf = (i: number) => PAD.l + ((W - PAD.l - PAD.r) * i) / (series.length - 1);
+  const yOf = (v: number) => zero - v * scale;
+
+  /* 억으로 접어 짧게 — 축은 값을 읽는 자리가 아니라 크기를 가늠하는 자리다 */
+  const eok = (v: number) => `${Math.round(v / 100).toLocaleString("ko-KR")}억`;
+  const md = (d: string) => `${Number(d.slice(4, 6))}/${Number(d.slice(6, 8))}`;
+
+  /* 날짜 눈금은 처음·가운데·끝 셋만 — 스무 개를 다 적으면 겹쳐서 못 읽는다 */
+  const ticks = [0, Math.floor((series.length - 1) / 2), series.length - 1].filter(
+    (v, i, a) => a.indexOf(v) === i,
+  );
+  const last = series[series.length - 1];
+
+  return (
+    <div className="fs-wrap">
+      <div className="fs-legend">
+        {keys.map((k) => (
+          <span className="fs-key" key={k}>
+            <i className="fs-dot" style={{ background: colors[k] }} />
+            {labels[k]}
+            <b className={signClass(last.v[k] ?? 0)}>{eok(last.v[k] ?? 0)}</b>
+          </span>
+        ))}
+      </div>
+      <div className="fs-scroll">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          role="img"
+          preserveAspectRatio="none"
+          style={{ width: `${W}px`, height: `${H}px`, minWidth: "100%" }}
+        >
+          <line className="fs-zero" x1={PAD.l} x2={W - PAD.r} y1={zero} y2={zero} />
+          <text className="fs-tick" x={W - PAD.r + 4} y={PAD.t + 8}>
+            +{eok(max)}
+          </text>
+          <text className="fs-tick" x={W - PAD.r + 4} y={H - PAD.b}>
+            -{eok(max)}
+          </text>
+          {keys.map((k) => (
+            <polyline
+              key={k}
+              className="fs-line"
+              style={{ stroke: colors[k] }}
+              points={series.map((p, i) => `${xOf(i)},${yOf(p.v[k] ?? 0)}`).join(" ")}
+            />
+          ))}
+          {ticks.map((i) => (
+            <text key={i} className="fs-tick" x={xOf(i)} y={H - 3} textAnchor="middle">
+              {md(series[i].date)}
+            </text>
+          ))}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+/*
+ * 색 — 지수 시트의 장중 수급 차트와 **같은 배정**이다(외국인 빨강·기관 노랑·개인 초록).
+ * 두 화면에서 같은 주체가 다른 색이면 눈이 매번 다시 배워야 한다.
+ */
+const MAIN_COLORS: Record<string, string> = {
+  ind_invsr: "#35c46a",
+  frgnr_invsr: "#f04452",
+  orgn: "#eab308",
+  etc_corp: "#8b95a1",
+};
+const INST_COLORS: Record<string, string> = {
+  fnnc_invt: "#f04452",
+  invtrt: "#eab308",
+  penfnd_etc: "#35c46a",
+  samo_fund: "#4b9bff",
+  insrnc: "#c084fc",
+  bank: "#8b95a1",
+  etc_fnnc: "#f59e0b",
+};
+
 export function StockSummaryPanel({ code }: { code: string }) {
   const [d, setD] = useState<StockSummaryData | null>(null);
 
@@ -88,7 +209,22 @@ export function StockSummaryPanel({ code }: { code: string }) {
       <div className="ss-flows">
         <div className="ss-col">
           <div className="ss-sub">
-            오늘 수급
+            수급 흐름
+            <i>{d.flowSeries.length}일 누적 · 금액</i>
+          </div>
+          {/*
+            곡선이 먼저, 오늘 막대가 그 아래다 (2026-08-31). 이 칸을 보는 이유는
+            대개 「오늘 판 게 며칠째인가」인데 막대 하나로는 그 답이 안 나온다.
+            오늘 값도 지웠다가는 「그래서 오늘은 얼마」를 못 읽으므로 둘 다 둔다.
+          */}
+          <FlowSeriesChart
+            series={d.flowSeries.map((p) => ({ date: p.date, v: p.main }))}
+            keys={d.main.map((r) => r.key)}
+            colors={MAIN_COLORS}
+            labels={Object.fromEntries(d.main.map((r) => [r.key, r.label]))}
+          />
+          <div className="ss-sub ss-sub2">
+            오늘
             <i>순매수 · 금액</i>
           </div>
           {d.main.length === 0 ? (
@@ -114,7 +250,17 @@ export function StockSummaryPanel({ code }: { code: string }) {
         <div className="ss-col">
           <div className="ss-sub">
             기관 안쪽
-            <i>움직인 창구만</i>
+            <i>{d.flowSeries.length}일 누적 · 움직인 창구만</i>
+          </div>
+          <FlowSeriesChart
+            series={d.flowSeries.map((p) => ({ date: p.date, v: p.inst }))}
+            keys={d.institution.map((r) => r.key)}
+            colors={INST_COLORS}
+            labels={Object.fromEntries(d.institution.map((r) => [r.key, r.label]))}
+          />
+          <div className="ss-sub ss-sub2">
+            오늘
+            <i>순매수 · 금액</i>
           </div>
           {d.institution.length === 0 ? (
             <div className="ss-none">기관 세부가 아직 없습니다.</div>

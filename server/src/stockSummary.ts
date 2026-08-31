@@ -97,6 +97,28 @@ export interface StockSummary {
   program: number | null;
   /** 어느 조각이 비었나 — 화면이 「못 받았다」와 「0이다」를 갈라 적는다 */
   missing: string[];
+  /**
+   * **일자별 누적 수급** (2026-08-31 — "이거 어차피 두칸이고 당일 시세만 하는
+   * 거잖아. 그래프로 그려줄 수 있나?").
+   *
+   * `ka10059` 응답에는 처음부터 **여러 날치가 들어 있었다.** 오늘 한 줄만 쓰고
+   * 나머지를 버리고 있었던 것이라, **조회를 하나도 안 늘리고** 추이를 그릴 수 있다.
+   *
+   * ⚠️ 개별 종목의 **장중** 누적은 못 만든다 — 네이버 장중 수급은 코스피·코스닥·
+   * 선물 **시장 단위**만 준다. 그래서 이건 **일자별**이다. 「오늘만 보인다」는
+   * 불편은 오히려 일자별이 더 잘 푼다.
+   *
+   * 값은 **구간 시작부터의 누적**(백만원)이다 — 하루하루 막대보다 곡선이 흐름을
+   * 보여 준다. 장중 수급 변화 차트와 같은 문법이다.
+   */
+  flowSeries: {
+    /** YYYYMMDD */
+    date: string;
+    /** 개인·외국인·기관·기타법인 누적 */
+    main: Record<string, number>;
+    /** 기관 안쪽 누적 */
+    inst: Record<string, number>;
+  }[];
 }
 
 /*
@@ -196,6 +218,37 @@ export async function stockSummary(client: KiwoomClient, code: string): Promise<
     : [];
 
   /*
+   * **일자별 누적** — 같은 응답의 나머지 날을 쓴다(조회 0회 추가).
+   *
+   * `ka10059` 는 최신이 앞이므로 뒤집어 옛날→최신으로 돌린다. 스무 날이면
+   * 흐름이 보이면서 곡선이 뭉개지지 않는다.
+   */
+  const SERIES_DAYS = 20;
+  const flowSeries: StockSummary["flowSeries"] = (() => {
+    const days = invRows
+      .filter((r) => /^\d{8}$/.test(String(r.dt ?? "")))
+      .slice(0, SERIES_DAYS)
+      .reverse();
+    const acc: Record<string, number> = {};
+    const add = (k: string, v: number): number => {
+      acc[k] = (acc[k] ?? 0) + v;
+      return acc[k];
+    };
+    return days.map((r) => ({
+      date: String(r.dt),
+      main: {
+        ind_invsr: add("ind_invsr", signed(r.ind_invsr)),
+        frgnr_invsr: add("frgnr_invsr", signed(r.frgnr_invsr)),
+        orgn: add("orgn", signed(r.orgn)),
+        etc_corp: add("etc_corp", signed(r.etc_corp)),
+      },
+      inst: Object.fromEntries(
+        Object.keys(INST_KEYS).map((k) => [k, add(k, signed(r[k]))]),
+      ),
+    }));
+  })();
+
+  /*
    * 프로그램 — 오늘 줄의 순매수(백만원).
    *
    * ⚠️ `prm_netprps_amt` 가 `--520995` 처럼 **부호를 두 번** 달고 온다. `signed` 가
@@ -235,5 +288,6 @@ export async function stockSummary(client: KiwoomClient, code: string): Promise<
     institution,
     program: prog,
     missing,
+    flowSeries,
   };
 }

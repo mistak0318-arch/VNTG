@@ -3351,6 +3351,11 @@ export interface StockSummaryData {
   program: number | null;
   /** 못 받은 조각 — 「0」과 「못 받음」은 다르다 */
   missing: string[];
+  /**
+   * 일자별 **누적** 수급(백만원) — 같은 응답의 나머지 날로 만든다(조회 0회 추가).
+   * ⚠️ 장중이 아니라 일자별이다 — 개별 종목의 장중 투자자별 누적은 출처가 없다.
+   */
+  flowSeries: { date: string; main: Record<string, number>; inst: Record<string, number> }[];
 }
 
 /** 장중 기준선 — VWAP·시가갭·전일고저·장초반 30분 */
