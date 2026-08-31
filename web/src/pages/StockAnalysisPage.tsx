@@ -32,6 +32,14 @@ export function StockAnalysisPage({
   const [reloadKey, setReloadKey] = useState(0);
   const watched = useWatchedCodes();
   const recent = useRecentStocks();
+  /**
+   * 검색칸에 포커스가 있나 — 최근 목록을 펼 시점을 정한다 (2026-08-31).
+   *
+   * ⚠️ 끄는 것은 **한 박자 늦춘다**(`onBlur` 에 150ms). 목록의 단추를 누르는 순간
+   * 입력창이 먼저 포커스를 잃는데, 그때 바로 닫으면 그 클릭이 허공을 친다.
+   * 목록 단추들이 `onMouseDown` 에서 기본 동작을 막는 것도 같은 이유다.
+   */
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     const q = query.trim();
@@ -86,7 +94,48 @@ export function StockAnalysisPage({
           placeholder="종목명 또는 종목코드 입력 (예: 삼성전자, 000660)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setTimeout(() => setFocused(false), 150)}
         />
+        {/*
+          포커스가 갔는데 **아무것도 안 쳤을 때** 최근 목록을 편다 (2026-08-31 요청 —
+          「밑에 포도알처럼 붙지 말고 검색 인풋에 포인트 갔을 때 아래 목록 펼쳐지고
+          바로 클릭하게」). 글자를 치면 그때부터 검색 결과가 그 자리를 쓴다.
+        */}
+        {focused && !query.trim() && recent.recent.length > 0 && (
+          <div className="search-dropdown">
+            <div className="qss-recent-head">
+              최근 본 종목
+              <button onMouseDown={(e) => e.preventDefault()} onClick={() => recent.clear()}>
+                비우기
+              </button>
+            </div>
+            {recent.recent.map((r) => (
+              <div className="qss-recent-row" key={r.code}>
+                <button
+                  className="search-result-row"
+                  /* mousedown 에서 blur 가 먼저 나면 클릭이 안 먹는다 — 막아 둔다 */
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setFocused(false);
+                    onSelectStock(r.code, r.name);
+                  }}
+                >
+                  <span className="name">{r.name}</span>
+                  <span className="sub">{r.code}</span>
+                </button>
+                <button
+                  className="qss-recent-del"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => recent.remove(r.code)}
+                  title="이 종목만 목록에서 빼기"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {query.trim() && results.length > 0 && (
           <div className="search-dropdown">
             {results.map((r) => (
@@ -101,22 +150,11 @@ export function StockAnalysisPage({
         )}
       </div>
 
-      {recent.recent.length > 0 && (
-        <div className="recent-row">
-          <span className="recent-cap">최근</span>
-          {recent.recent.map((r) => (
-            <span className={`recent-chip${stock?.code === r.code ? " active" : ""}`} key={r.code}>
-              <button onClick={() => onSelectStock(r.code, r.name)}>{r.name}</button>
-              <button className="recent-x" onClick={() => recent.remove(r.code)} title="목록에서 제거">
-                ✕
-              </button>
-            </span>
-          ))}
-          <button className="recent-clear" onClick={recent.clear} title="최근 목록 비우기">
-            지우기
-          </button>
-        </div>
-      )}
+      {/*
+        ⚠️ 최근 본 종목을 **칩 줄로 깔아 두지 않는다** (2026-08-31 요청 — 「포도알처럼
+        붙지 않아? 그거 말고」). 열두 개가 두 줄로 쌓이면 화면 위쪽을 늘 차지하는데,
+        정작 쓰는 순간은 **검색하려고 할 때**뿐이다. 그때만 검색칸 아래로 편다.
+      */}
 
       {!stock && (
         <div className="page-note">

@@ -8,6 +8,7 @@ import { NaverFinanceFrame } from "../components/NaverFinanceFrame";
 import { SectorNews } from "../components/SectorNews";
 import { KeywordFlowPanel } from "../components/KeywordFlowPanel";
 import { useDragOrder } from "../useDragOrder";
+import { useRecentStocks } from "../useRecentStocks";
 
 /*
  * 뉴스 탭 (2026-08-26 확장) — 네이버 증권의 갈래를 그대로 편다.
@@ -45,6 +46,7 @@ function loadTabOrder(): SrcTab[] {
 }
 
 export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
+  const recent = useRecentStocks();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [picked, setPicked] = useState<{ code: string; name: string } | null>(null);
@@ -90,6 +92,7 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
   }, [query]);
 
   function pick(r: StockSearchResult) {
+    recent.push(normalizeStockCode(r.code), r.name);
     setKeyword(null);
     setPicked({ code: normalizeStockCode(r.code), name: r.name });
     setQuery("");

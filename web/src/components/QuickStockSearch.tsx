@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, normalizeStockCode, type StockSearchResult } from "../api";
+import { useRecentStocks } from "../useRecentStocks";
 
 /**
  * 최상단 종목 바로가기 (2026-08-25 — 사용자 요청).
@@ -20,6 +21,14 @@ export function QuickStockSearch({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  /*
+   * 최근 본 종목 (2026-08-31 요청 — 「매번 종목명 쳐야 되서 귀찮네」).
+   *
+   * 저장소는 이미 있었다(`useRecentStocks`) — 개별종목분석 화면만 쓰고 있었다.
+   * 여기서도 **쌓고 보여 준다.** 남기는 것은 친 글자가 아니라 **고른 종목**이라,
+   * 한 번 누르면 바로 그 종목으로 간다.
+   */
+  const recent = useRecentStocks();
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -40,11 +49,16 @@ export function QuickStockSearch({
     return () => clearTimeout(t);
   }, [query]);
 
-  function pick(r: StockSearchResult) {
+  function go(code: string, name: string) {
     setOpen(false);
     setQuery("");
     setResults([]);
-    onPick(normalizeStockCode(r.code), r.name);
+    recent.push(code, name);
+    onPick(code, name);
+  }
+
+  function pick(r: StockSearchResult) {
+    go(normalizeStockCode(r.code), r.name);
   }
 
   if (!open) {
@@ -78,6 +92,37 @@ export function QuickStockSearch({
         <button className="qss-close" onClick={() => setOpen(false)} title="접기">
           ✕
         </button>
+        {/*
+          **아무것도 안 쳤을 때만** 최근 목록을 편다 (사용자 지정). 글자를 치면
+          그때부터는 검색 결과가 그 자리를 쓴다 — 두 목록이 같이 뜨면 어느 쪽을
+          누르는지 헷갈린다.
+        */}
+        {!query.trim() && recent.recent.length > 0 && (
+          <div className="search-dropdown">
+            <div className="qss-recent-head">
+              최근 본 종목
+              <button onClick={() => recent.clear()} title="목록 비우기">
+                비우기
+              </button>
+            </div>
+            {recent.recent.map((r) => (
+              <div className="qss-recent-row" key={r.code}>
+                <button className="search-result-row" onClick={() => go(r.code, r.name)}>
+                  <span className="name">{r.name}</span>
+                  <span className="sub">{r.code}</span>
+                </button>
+                {/* 잘못 눌러 들어간 것을 뺄 길이 없으면 목록이 지저분해진다 */}
+                <button
+                  className="qss-recent-del"
+                  onClick={() => recent.remove(r.code)}
+                  title="이 종목만 목록에서 빼기"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         {query.trim() && results.length > 0 && (
           <div className="search-dropdown">
             {results.map((r) => (

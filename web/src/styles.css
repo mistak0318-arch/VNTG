@@ -11353,3 +11353,50 @@ button.tpb-row:hover { background: var(--panel-2); }
     max-width: 100%;
   }
 }
+
+/* 검색칸 아래 「최근 본 종목」 (2026-08-31) — 포커스가 갔고 아무것도 안 쳤을 때만 */
+.qss-recent-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 10px; font-size: 0.72rem; color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.qss-recent-head button {
+  background: none; border: 0; color: var(--muted);
+  font-size: 0.72rem; cursor: pointer; padding: 0;
+}
+.qss-recent-head button:hover { color: var(--red); }
+/* 줄 하나가 「가기」와 「빼기」 둘로 나뉜다 — 실수로 지우지 않게 ✕ 를 끝에 둔다 */
+.qss-recent-row { display: flex; align-items: stretch; }
+.qss-recent-row .search-result-row { flex: 1; min-width: 0; }
+.qss-recent-del {
+  background: none; border: 0; color: var(--muted);
+  padding: 0 10px; cursor: pointer; font-size: 0.78rem;
+}
+.qss-recent-del:hover { color: var(--red); background: var(--panel-2); }
+
+/*
+ * 시세분석 표 머리의 등락 요약 (2026-08-31). 제목 옆에 붙는 참고용 숫자라
+ * 작고 흐리게 — 표를 읽다가 곁눈으로 보는 것이지 읽으라고 둔 게 아니다.
+ */
+.scr-tally {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-left: 10px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  vertical-align: middle;
+  cursor: help;
+}
+.scr-tally b { font-weight: 600; }
+/* 색은 표와 **같은 반**을 쓴다 — var(--up) 은 .ov/.ib 안에만 있어 여기선 투명이 된다 */
+/* 상한·하한은 드물게만 뜨는 것이라 테두리로 한 번 더 붙잡아 준다 */
+.scr-tally em {
+  font-style: normal;
+  font-size: 10px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.85;
+}

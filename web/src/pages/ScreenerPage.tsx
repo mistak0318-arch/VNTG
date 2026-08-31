@@ -428,6 +428,34 @@ export function ScreenerPage({
   };
 
   /*
+   * 지금 이 쪽에 뜬 종목들의 **등락 요약** (2026-08-31 — "몇개 상승 몇개 하락
+   * 상한가 하한가 이렇게. 그냥 참고용으로 알게").
+   *
+   * ⚠️ **보이는 것만 센다** — 거른 뒤·정렬한 뒤·잘라낸 뒤인 `shown` 이다.
+   * 「거래대금 상위 100 중 이 쪽 50」의 요약이지 시장 전체의 등락이 아니라,
+   * 쪽을 넘기면 숫자도 바뀐다. 그게 이 줄의 뜻이다(툴팁에 적어 둔다).
+   *
+   * 등락률은 표와 **같은 자리**에서 가져온다 — 실시간이 덮은 줄은 실시간 값으로.
+   * 표엔 +2% 인데 요약은 어제 값으로 세면 그 자리에서 틀린 게 보인다.
+   *
+   * 상한·하한은 기호 항목이 없어서(키움이 이 조회엔 안 준다) ±29% 로 가른다.
+   * 가격제한폭이 ±30% 라 29% 위는 사실상 상한이고, 어차피 참고용 숫자다.
+   * 값이 0 이면 아예 안 적는다 — 「상한 0」이 늘 붙어 있으면 눈이 흘린다.
+   */
+  const tally = (() => {
+    let up = 0, down = 0, flat = 0, ulim = 0, dlim = 0, unknown = 0;
+    for (const r of shown) {
+      const lv = liveOf(r.code);
+      const rate = lv?.rate ?? Number(r.flu_rt ?? r.jmp_rt);
+      if (!Number.isFinite(rate)) { unknown++; continue; }
+      if (rate > 0) { up++; if (rate >= 29) ulim++; }
+      else if (rate < 0) { down++; if (rate <= -29) dlim++; }
+      else flat++;
+    }
+    return { up, down, flat, ulim, dlim, unknown };
+  })();
+
+  /*
    * 색깔순은 **이 쪽 안에서** 다시 세운다. 평가한 것이 이 쪽뿐이라 그 밖은 셀 수가 없다.
    * 평가가 아직인 줄은 늘 아래로 — 위에 섞이면 초록이 몇 개인지 세다가 헷갈린다.
    */
@@ -839,6 +867,19 @@ export function ScreenerPage({
                 <button className="filter-btn dt-reset" onClick={cw.reset} title="칸 너비를 기본으로">
                   칸 너비 원래대로
                 </button>
+              )}
+              {shown.length > 0 && (
+                <span
+                  className="scr-tally"
+                  title={`지금 보이는 ${shown.length}종목 기준 (거르기·정렬·쪽 넘김에 따라 바뀝니다). 상한·하한은 ±29% 이상으로 셉니다.`}
+                >
+                  <b className="positive">▲{tally.up}</b>
+                  {tally.ulim > 0 && <em className="positive">상한 {tally.ulim}</em>}
+                  <b className="negative">▼{tally.down}</b>
+                  {tally.dlim > 0 && <em className="negative">하한 {tally.dlim}</em>}
+                  <b>―{tally.flat}</b>
+                  {tally.unknown > 0 && <b>?{tally.unknown}</b>}
+                </span>
               )}
             </h3>
             {(() => {

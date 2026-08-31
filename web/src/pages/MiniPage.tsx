@@ -22,6 +22,7 @@ import { BreadthPanel } from "../components/BreadthPanel";
 import { SectorFlowPanel } from "../components/SectorFlowPanel";
 import { ViPanel } from "../components/ViPanel";
 import { WatchTicker } from "../components/WatchTicker";
+import { useRecentStocks } from "../useRecentStocks";
 
 /**
  * 미니창 (2026-08-26) — **보던 페이지를 떠나지 않고 곁눈질하는 보조창.**
@@ -126,6 +127,7 @@ function StockSearchScreen({
   onSelect: (code: string, name: string) => void;
   onClear: () => void;
 }) {
+  const recent = useRecentStocks();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -149,6 +151,8 @@ function StockSearchScreen({
   }, [query]);
 
   function pick(r: StockSearchResult) {
+    /* 최근 본 종목에 쌓는다 — 어느 검색칸에서 골라도 같은 목록에 모여야 쓸모가 있다 */
+    recent.push(normalizeStockCode(r.code), r.name);
     onSelect(normalizeStockCode(r.code), r.name);
     setQuery("");
     setResults([]);
