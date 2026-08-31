@@ -577,9 +577,32 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
       await new Promise((r) => setTimeout(r, 400));
     }
 
-    const inter = [...byCode.values()]
-      .filter((x) => x.lists.length >= MIN_LISTS)
-      .sort((a, b) => b.lists.length - a.lists.length)
+    /*
+     * 교집합에서 오늘 평가할 것들.
+     *
+     * ⚠️ **이미 추적 중인 종목을 먼저 넣는다** (2026-08-31 점검에서 드러남).
+     *
+     * 예전엔 걸린 목록 수로만 세워 앞 40개를 잘랐다. 그러면 목록 4곳에 걸린
+     * **신규**가 3곳에 걸린 **기존 추적분**을 밀어낸다 — 그날 그 종목은
+     * `lastSeenDate` 가 안 갱신되고 `seenCount` 도 안 는다. 실제로는 오늘도
+     * 교집합에 걸렸는데 「안 걸린 날」로 기록되는 것이다.
+     *
+     * 원장을 정확히 유지하는 것이 새 종목 하나를 더 보는 것보다 중요하다 —
+     * 성적표가 그 기록 위에 세워지기 때문이다.
+     */
+    const tracked = new Set(store.entries.filter((e) => e.active !== false).map((e) => e.code));
+    const qualified = [...byCode.values()].filter((x) => x.lists.length >= MIN_LISTS);
+    const inter = [
+      ...qualified.filter((x) => tracked.has(x.c.code)),
+      ...qualified.filter((x) => !tracked.has(x.c.code)),
+    ]
+      .sort((a, b) => {
+        /* 추적 중인 것이 먼저, 그 안에서 걸린 목록이 많은 순 */
+        const at = tracked.has(a.c.code) ? 1 : 0;
+        const bt = tracked.has(b.c.code) ? 1 : 0;
+        if (at !== bt) return bt - at;
+        return b.lists.length - a.lists.length;
+      })
       .slice(0, MAX_EVAL);
 
     job.step = "신호등 평가 중";

@@ -1,3 +1,11 @@
+/**
+ * 교차 자동 편입을 며칠 들고 있나 (2026-08-31).
+ *
+ * 교차는 단기 신호라 일주일이면 뜻이 다한다. 이보다 오래되고 오늘 다시 안 걸린
+ * 것은 관심종목에서 뺀다 — 이력은 맥박 화면이 그날그날 다시 계산한다.
+ */
+const CROSS_KEEP_DAYS = 7;
+
 import { listBreadth, toPoints, type BreadthPoint } from "./breadthStore.js";
 import { evaluateMarket } from "./marketSignal.js";
 import { kospi200Futures } from "./kospiFutures.js";
@@ -15,7 +23,7 @@ import { exportYoyForSector, getTradeStats } from "./tradeStats.js";
 import { leaderScan } from "./leaderScan.js";
 import { getActiveSuper } from "./superSignal.js";
 import { listSectorFlow, SUBJECTS } from "./sectorFlowStore.js";
-import { CROSS_GROUP, ensureInGroup } from "./watchlist.js";
+import { CROSS_GROUP, ensureInGroup, listWatchlist, removeFromGroup } from "./watchlist.js";
 
 /**
  * 시장 맥박 — 「돈이 어디로 가고 있나」를 한 덩어리로 낸다.
@@ -315,6 +323,32 @@ async function findCross(client: KiwoomClient): Promise<PulseCross | null> {
         },
         CROSS_GROUP,
       ).catch(() => undefined);
+    }
+
+    /*
+     * **오래된 교차는 뺀다** (2026-08-31 점검에서 드러남).
+     *
+     * 담기는 길만 있고 빠지는 길이 없어서 나흘치 18종목이 쌓여 있었다.
+     * 교차는 「그날 세 화면이 동시에 가리킨 것」이라 **단기 신호**인데,
+     * 한 번 걸리면 영영 남아 관심종목이 늘기만 했다.
+     *
+     * ⚠️ **오늘 걸린 것만 남기지는 않는다.** 하루 안 걸렸다고 빼면 들락날락하고,
+     * 무엇보다 개장 전에는 거래대금이 0이라 hits 가 통째로 비는 날이 있다
+     * (그때 전부 빼 버리면 그날 관심종목이 텅 빈다). **담긴 지 오래된 것만** 뺀다.
+     *
+     * ⚠️ hits 가 0 이면 아무것도 안 한다 — 못 잰 것을 「없다」로 읽지 않는다.
+     */
+    if (hits.length > 0) {
+      const cutoff = new Date(Date.now() + 9 * 3600_000 - CROSS_KEEP_DAYS * 86400_000)
+        .toISOString()
+        .slice(0, 10);
+      const fresh = new Set(hits.map((h) => h.code));
+      for (const w of await listWatchlist().catch(() => [])) {
+        if (!w.groups.includes(CROSS_GROUP)) continue;
+        if (fresh.has(w.code)) continue; // 오늘도 걸렸다
+        if ((w.addedAt ?? "").slice(0, 10) > cutoff) continue; // 아직 신선하다
+        await removeFromGroup(w.code, CROSS_GROUP).catch(() => undefined);
+      }
     }
 
     /*
