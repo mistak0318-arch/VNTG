@@ -181,12 +181,6 @@ function timeValue(time: Time): number {
 
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 
-/*
- * 이 폭 아래로는 **좁은 화면**으로 친다 — 고·저 꼬리표에서 % 를 뗀다.
- * 「139,200 (+68.9%)」가 대략 110px, 가격 눈금 폭이 대략 70px 이라 40px 이 넘친다.
- * 560 은 그 넘침이 봉을 가리기 시작하는 언저리다(폰 세로 360~430, 태블릿 768).
- */
-const NARROW_PX = 560;
 
 /**
  * 툴팁 머리글 — 일봉은 `2026/06/11(목)`, 분봉은 `06/11 13:45`.
@@ -320,17 +314,6 @@ export function CandleChart({
    * `priceFormatter` 는 차트를 만들 때 한 번 넘기므로 **ref 여야** 최신 값을 본다 —
    * 상태로 넘기면 처음 값이 클로저에 굳는다.
    */
-  const tagRef = useRef<{ hi: number; lo: number; last: number } | null>(null);
-  /*
-   * 차트가 **좁은가**. 고·저 꼬리표에 % 를 붙일지 여기서 갈린다 (2026-08-31 —
-   * "모바일 화면에서 차트에 등락률을 표시하면서 이상해졋다").
-   *
-   * 오른쪽 축의 폭은 눈금 글자(「120,000」)에 맞춰 잡히는데, 가격선 꼬리표는
-   * 같은 축에 그려지면서도 그 폭을 넓히지 못한다. 「139,200 (+68.9%)」처럼
-   * 길어지면 **왼쪽으로 넘쳐 눈금과 봉을 덮는다** — 폰에서 눈금이 통째로 가렸다.
-   * ref 인 것은 formatter 가 차트를 만들 때의 클로저에 갇히기 때문이다(tagRef 와 같다).
-   */
-  const narrowRef = useRef(false);
 
   /* ── 선 그리기 ─────────────────────────────────────────── */
   const [tool, setTool] = useState<DrawTool>("none");
@@ -663,7 +646,6 @@ export function CandleChart({
     const el = containerRef.current;
     if (!el) return;
 
-    narrowRef.current = el.clientWidth > 0 && el.clientWidth < NARROW_PX;
     const chart = createChart(el, {
       width: el.clientWidth,
       height,
@@ -688,24 +670,16 @@ export function CandleChart({
               ? Math.round(p).toLocaleString("ko-KR")
               : p.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
           /*
-           * 고가·저가 꼬리표에만 **현재가 대비 %** 를 괄호로 붙인다 (2026-08-31 요청).
+           * ⚠️ **꼬리표에 % 를 붙이지 않는다.** 한 번 붙였다가 뺐다(2026-08-31).
            *
-           * 축에 값만 있으면 「473,000 이 지금보다 위인지 아래인지, 얼마나 먼지」를
-           * 매번 암산해야 한다. 범례에도 괴리율이 있지만 그건 구간 전체 이야기고,
-           * 눈이 머무는 자리는 선 끝의 이 꼬리표다.
+           * 고·저 가격선의 꼬리표에 「139,200 (+68.9%)」처럼 현재가 대비를 달았는데,
+           * 오른쪽 축의 폭은 눈금 글자(「120,000」)에 맞춰 잡히고 꼬리표는 그 폭을
+           * 넓히지 못한다. 110px 짜리 글이 70px 칸에 들어가니 **왼쪽으로 넘쳐
+           * 가격 눈금과 봉을 덮었다** — 폰에서 눈금이 통째로 가렸다.
            *
-           * ⚠️ 다른 눈금까지 붙이면 축이 글자로 가득 차 차트를 밀어낸다. 그래서
-           * **그 두 값일 때만** 붙인다(가격선에 넘긴 그 수를 그대로 비교한다).
-           *
-           * ⚠️ **좁은 화면에선 안 붙인다**(`narrowRef`). 폰에서는 이 꼬리표가
-           * 가격 눈금을 통째로 덮어 정작 차트를 못 보게 됐다. 괴리율은 범례 줄의
-           * 「고점 -40.8% 저점 +44.6%」에 그대로 있으니 값이 사라지는 것도 아니다.
+           * 괴리율은 범례 줄의 「고점 -40.8% 저점 +44.6%」에 이미 있다. 같은 것을
+           * 축에 또 적자고 차트를 가릴 이유가 없다.
            */
-          const t = tagRef.current;
-          if (t && t.last > 0 && !narrowRef.current && (p === t.hi || p === t.lo)) {
-            const d = ((p - t.last) / t.last) * 100;
-            return `${num} (${d > 0 ? "+" : ""}${d.toFixed(1)}%)`;
-          }
           return num;
         },
       },
@@ -865,7 +839,6 @@ export function CandleChart({
      */
     const resize = () => {
       const w = el.clientWidth;
-      if (w > 0) narrowRef.current = w < NARROW_PX;
       chart.applyOptions({ width: w, height: heightRef.current });
       /*
        * **폭이 크게 달라지면 봉을 다시 채운다** (2026-08-27).
@@ -1251,10 +1224,6 @@ export function CandleChart({
        * 값은 **오른쪽 축**에 뜬다(`axisLabelVisible`). 어느 봉인지는 화살표가 알려 준다.
        * 괴리율은 **범례 줄 오른쪽 끝**(`.chart-gap`)에 있다 — 차트 위에 겹쳐 쓸 값이 아니다.
        */
-      /* 꼬리표에 쓸 값을 먼저 적어 둔다 — 선을 만들면 그 즉시 축이 다시 그려진다 */
-      const lastClose = candles[candles.length - 1]?.close ?? 0;
-      tagRef.current = { hi: hi.high, lo: lo.low, last: lastClose };
-
       hiLineRef.current = candleSeries.createPriceLine({
         price: hi.high,
         color: c.up,
