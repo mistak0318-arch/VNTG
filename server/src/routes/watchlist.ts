@@ -288,6 +288,64 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
     }
   });
 
+  /**
+   * **일괄 처리** (2026-09-01 — "관심종목이 많으니깐 편집이 힘들다").
+   *
+   * 42종목을 하나씩 지우려면 요청이 42번 나가고, 그때마다 파일을 읽고 쓴다.
+   * 중간에 하나가 실패하면 **어디까지 됐는지도 모른다.**
+   *
+   * 여기서는 한 번에 받아 한 번에 쓴다. 어느 종목이 처리됐는지도 돌려준다 —
+   * 「42개 눌렀는데 40개만 지워졌다」를 화면이 알 수 있어야 한다.
+   *
+   * ⚠️ `/:code` 라우트보다 **먼저** 등록해야 한다. 아래 있으면 "bulk" 가
+   * 종목코드로 먹힌다.
+   */
+  router.post("/bulk", async (req, res, next) => {
+    try {
+      const body = req.body as {
+        codes?: string[];
+        /** remove = 목록에서 뺀다 · group = 그룹을 넣거나 뺀다 · status = 상태 바꾼다 */
+        action?: "remove" | "group" | "status";
+        group?: string;
+        status?: string;
+      };
+      const codes = (Array.isArray(body.codes) ? body.codes : [])
+        .map((c) => String(c).trim())
+        .filter(Boolean)
+        /* 한 번에 200개까지 — 그보다 많으면 실수로 전체를 지우는 것에 가깝다 */
+        .slice(0, 200);
+      if (codes.length === 0) {
+        res.status(400).json({ error: "종목이 없습니다" });
+        return;
+      }
+
+      const done: string[] = [];
+      const failed: string[] = [];
+      for (const code of codes) {
+        try {
+          if (body.action === "remove") {
+            await removeWatchItem(code);
+          } else if (body.action === "group" && typeof body.group === "string") {
+            await toggleWatchGroup(code, body.group);
+          } else if (body.action === "status" && typeof body.status === "string") {
+            await updateWatchItem(code, { status: body.status as WatchStatus });
+          } else {
+            failed.push(code);
+            continue;
+          }
+          done.push(code);
+        } catch {
+          failed.push(code);
+        }
+      }
+      invalidateTrackingCache();
+      /* 마지막 상태를 한 번만 읽어 돌려준다 — 화면이 다시 받을 필요가 없다 */
+      res.json({ done, failed, items: await listWatchlist() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/:code/groups/:group", async (req, res, next) => {
     try {
       res.json({ items: await toggleWatchGroup(req.params.code, decodeURIComponent(req.params.group)) });

@@ -12990,3 +12990,42 @@ thead .sd-emph {
   background: color-mix(in srgb, var(--amber, #d59b23) 7%, transparent);
   padding-left: 8px;
 }
+
+/* ------------------------------------------------------------------ */
+/* 관심종목 일괄 편집 (2026-09-01)                                      */
+/* ------------------------------------------------------------------ */
+.mg-pick {
+  margin-right: 6px;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.mg-bulk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  font-size: 12.5px;
+}
+/* 고른 게 있을 때만 눈에 띄게 — 늘 강조하면 그게 배경이 된다 */
+.mg-bulk.on {
+  border-color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+}
+.mg-bulk-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+}
+/* 지우기는 되돌릴 수 없다 — 색으로도 말한다 */
+.mg-bulk-del {
+  border-color: var(--red) !important;
+  color: var(--red) !important;
+}
+.mg-bulk-del:disabled {
+  opacity: 0.4;
+}

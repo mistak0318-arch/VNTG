@@ -706,6 +706,19 @@ export const api = {
   watchlistSetStatus: (code: string, status: WatchStatus) =>
     patchJson<{ items: WatchItem[] }>(`/api/watchlist/${code}`, { status }),
   watchlistRemove: (code: string) => deleteJson<{ items: WatchItem[] }>(`/api/watchlist/${code}`),
+  /**
+   * **일괄 처리** (2026-09-01) — 42종목을 하나씩 부르면 요청이 42번 나가고,
+   * 중간에 실패하면 어디까지 됐는지도 모른다. 한 번에 보내고 결과를 받는다.
+   *
+   * `done`/`failed` 로 갈라 오므로 화면이 「40개만 됐다」를 말할 수 있다.
+   */
+  watchlistBulk: (codes: string[], action: "remove" | "group" | "status", group?: string, status?: string) =>
+    postJson<{ done: string[]; failed: string[]; items: WatchItem[] }>("/api/watchlist/bulk", {
+      codes,
+      action,
+      group,
+      status,
+    }),
   watchlistTracking: (force = false) =>
     getJson<{ items: TrackedStock[] }>(`/api/watchlist/tracking${force ? "?force=1" : ""}`),
   kiwoomGroups: () => getJson<{ groups: KiwoomGroup[] }>("/api/watchlist/kiwoom/groups"),
