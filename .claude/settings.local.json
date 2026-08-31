@@ -935,7 +935,9 @@
       "Bash(grep -n \"className=\\\\|split\\(\\\\\"\\\\\\\\\\\\\\\\n\\\\\"\\)\\\\|\\\\*\\\\*\" web/src/components/AiSummaryCard.tsx)",
       "Bash(grep -v \"//\")",
       "Bash(npx --prefix server tsc --noEmit -p server/tsconfig.json)",
-      "Bash(npx --prefix web tsc --noEmit -p web/tsconfig.json)"
+      "Bash(npx --prefix web tsc --noEmit -p web/tsconfig.json)",
+      "Bash(echo \"SRV=$?\")",
+      "Bash(echo \"WEB=$?\")"
     ]
   }
 }
