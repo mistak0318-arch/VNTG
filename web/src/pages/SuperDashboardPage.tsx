@@ -72,13 +72,15 @@ const GRADE_GROUPS: { key: SuperGradeRow["group"]; label: string; hint: string }
   { key: "base", label: "기준선", hint: "아래 모든 줄을 이 줄에 대고 읽습니다" },
   {
     key: "lists",
-    label: "교집합 넓이 — 많이 걸릴수록 진짜인가",
-    hint: "3곳과 5곳 이상의 성적이 갈려야 「넓을수록 좋다」가 맞습니다",
+    label: "교집합 넓이 — ⚠️ 「넓을수록 좋다」는 기각됐습니다",
+    hint:
+      "19만 관측 실측: 3곳은 해가 없지만(초과 +1.36 vs 초록만 +1.40) 4곳 +1.33, 5곳 +0.90 으로 좁힐수록 나빠집니다. 여러 목록에 동시에 걸렸다는 건 「이미 뜨거운 자리」라는 뜻이라, 좁힐수록 초입이 걸러지고 늦은 것만 남습니다",
   },
   {
     key: "streak",
     label: "지속성 — 며칠째 걸리나",
-    hint: "지금까지 성적이 가장 크게 갈린 축입니다. 무지개 등급을 여기 둔 이유입니다",
+    hint:
+      "성적이 가장 크게 갈린 축입니다. 19만 관측 실측에서 이틀 연속이 최고였고(초과 +1.97%p) 사흘 이상은 +1.21 로 떨어집니다 — 그래서 무지개 문턱을 사흘에서 이틀로 내렸습니다. 원장도 같은 말을 합니다",
   },
   { key: "score", label: "편입 점수", hint: "신호등 점수가 높을수록 나은가" },
   { key: "universe", label: "어느 목록에서 왔나", hint: "목록마다 값어치가 다를 수 있습니다" },
@@ -135,7 +137,7 @@ function GradeBoard({ rows, hidden }: { rows: SuperGradeRow[]; hidden: number })
         <span className="gb-caret">{open ? "▾" : "▸"}</span>
         <b>체계 채점표</b>
         <span className="pt-n">
-          교집합이 넓을수록·오래 걸릴수록 진짜인가 — 편입 후 평균 수익률
+          편입 후 평균 수익률 — ⚠️ 「교집합이 넓을수록 좋다」는 실측에서 기각됐습니다
         </span>
         {!open && base && base.d1.n > 0 && (
           <span className="gb-peek">

@@ -680,3 +680,255 @@ export async function conditional(cfg: SignalConfig): Promise<CondResult | null>
 
   return { obs: S.length, splitDate, axes };
 }
+
+/* ------------------------------------------------------------------ */
+/* 슈퍼신호등 재구성 (2026-08-31)                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **두 겹 문이 각각 값을 하나.**
+ *
+ * "지금까지 우리는 신호등 얘기만 하고 있었던 거구나. 정작 제대로 봐야할 건
+ * 슈퍼신호등이었어."
+ *
+ * 맞는 지적이다. 19만 관측으로 검증한 것은 **신호등**이고, 실제 매매에 쓰는
+ * **슈퍼신호등**은 편입분 29건짜리 표에 기대고 있었다. 검증의 무게가 정반대로
+ * 실려 있었다.
+ *
+ * 그리고 슈퍼신호등의 **두 번째 문이 아예 안 재져 있었다:**
+ *
+ *   ① 일곱 목록 중 3곳 이상 교집합
+ *   ② 그중 신호등이 초록인 것        ← 이 문이 값을 하는지 한 번도 안 쟀다
+ *
+ * 「교집합만」과 「교집합 + 초록」을 견준 적이 없다. 둘이 같다면 ②는 없는 것과
+ * 같은데, 모르고 있었다. 여기서 그것을 잰다.
+ *
+ * ## 어떻게 되짚나 — 조회 0회
+ *
+ * 표본에 이미 자료가 다 있다. 일곱 중 여섯을 되살린다:
+ *
+ *   거래대금 상위      volEok 로 그날 순위          정확
+ *   등락률 상위        같은 종목 전날 종가로 계산     정확
+ *   누적등락률 (5일)    5일 전 종가 대비             정확
+ *   외국인 연속순매매    fgnStreak                  정확
+ *   기관·외국인 연속매매  두 수급이 같이 순매수인가     근사 (연속 일수가 없다)
+ *   동일순매매 (7일)    5일 합이 같은 방향인가        근사 (7일 합이 없다)
+ *   장중 기관 매매상위   —                          **불가** (장중 자료)
+ *
+ * ⚠️ **순위는 표본 500 안에서 매긴다.** 실제 시장 순위가 아니다 — 그날 시장
+ * 전체의 거래대금 100위가 이 표본에서는 20위일 수 있다. 그래서 교집합이 실제보다
+ * **후하게** 잡힌다. 절대 개수를 믿지 말고 **줄 사이의 차이**로 읽어야 한다.
+ */
+export interface SuperSimRow {
+  label: string;
+  n: number;
+  d20: number | null;
+  win: number | null;
+  /** 전체 대비 초과분(%p) */
+  lift: number | null;
+  trainLift: number | null;
+  testLift: number | null;
+  testN: number;
+}
+
+export interface SuperSimResult {
+  obs: number;
+  splitDate: string;
+  /** 되살린 목록 수 / 전체 */
+  listsUsed: number;
+  listsTotal: number;
+  rows: SuperSimRow[];
+  /** 교집합 몇 곳 이상을 문턱으로 봤나 */
+  minLists: number;
+}
+
+export async function superSim(cfg: SignalConfig, minLists = 3): Promise<SuperSimResult | null> {
+  const file = await loadSamples();
+  if (!file) return null;
+  const S = file.samples;
+  if (S.length === 0) return null;
+
+  /* 종목별로 날짜순 인덱스를 만든다 — 전날 종가가 있어야 등락률이 나온다 */
+  const byCode = new Map<string, number[]>();
+  S.forEach((s, i) => {
+    const l = byCode.get(s.code);
+    if (l) l.push(i);
+    else byCode.set(s.code, [i]);
+  });
+  /** i번째 표본의 「n일 전 종가」 — 같은 종목 안에서만 찾는다 */
+  const prevClose = new Map<number, { d1: number | null; d5: number | null }>();
+  for (const idx of byCode.values()) {
+    idx.sort((a, b) => S[a].date.localeCompare(S[b].date));
+    for (let k = 0; k < idx.length; k++) {
+      prevClose.set(idx[k], {
+        d1: k >= 1 ? S[idx[k - 1]].cur : null,
+        d5: k >= 5 ? S[idx[k - 5]].cur : null,
+      });
+    }
+  }
+
+  /* 그날 안에서의 순위 — 표본 500 기준(실제 시장 순위가 아니다) */
+  const byDate = new Map<string, number[]>();
+  S.forEach((s, i) => {
+    const l = byDate.get(s.date);
+    if (l) l.push(i);
+    else byDate.set(s.date, [i]);
+  });
+  /*
+   * **표본 자체가 이미 「거래대금 상위 500」이다** (2026-08-31 정정).
+   *
+   * 벤티지가 설계를 다시 짚어 줬다: 각 목록은 **시장 전체 기준 상위 500**이다.
+   * 그런데 이 표본은 이미 거래대금 상위 500으로 뽑은 것이라, **거래대금 목록은
+   * 표본 전원이 통과**한다. 처음엔 표본 안에서 다시 상위 60%를 잘랐는데 그건
+   * 「상위 500 중 상위 300」이라 실제와 다른 것을 재고 있었다.
+   *
+   * 실제 원장이 그 증거다 — 성적표의 「거래대금 상위에 걸림」이 전체와 값이
+   * 똑같았다(편입분 전부가 거기 걸린다).
+   *
+   * ⚠️ 나머지 목록은 **표본 안에서** 순위를 매긴다. 시장 전체 순위가 아니다 —
+   * 표본이 거래대금 상위라 실제 등락률 상위와 겹침이 크지만 같지는 않다.
+   * 그래서 여기 개수를 절대값으로 믿으면 안 되고 **줄 사이의 차이**로 읽어야 한다.
+   */
+  /*
+   * 등락률·누적등락률은 표본 안에서 **상위 60%** 로 자른다. 시장 전체로는
+   * 「거래대금 상위 500 중 등락률 상위 300」쯤이라, 실제 「등락률 상위 500」과
+   * 완전히 같지는 않지만 그 근처다. 더 좁히면 실제보다 엄격해진다.
+   */
+  const TOP = 0.6;
+  const inTop = new Set<number>(); // 거래대금 — 표본 전원
+  const inRate = new Set<number>(); // 등락률
+  const inCum = new Set<number>(); // 누적등락률 5일
+  for (const idx of byDate.values()) {
+    const rank = (get: (i: number) => number | null) => {
+      const ok = idx.filter((i) => get(i) !== null);
+      ok.sort((a, b) => (get(b) as number) - (get(a) as number));
+      return ok.slice(0, Math.max(1, Math.floor(ok.length * TOP)));
+    };
+    /* 거래대금 — 표본이 이미 그 목록이므로 전원 통과 */
+    for (const i of idx) inTop.add(i);
+    for (const i of rank((i) => {
+      const p = prevClose.get(i)?.d1;
+      return p && p > 0 ? ((S[i].cur - p) / p) * 100 : null;
+    })) {
+      inRate.add(i);
+    }
+    for (const i of rank((i) => {
+      const p = prevClose.get(i)?.d5;
+      return p && p > 0 ? ((S[i].cur - p) / p) * 100 : null;
+    })) {
+      inCum.add(i);
+    }
+  }
+
+  /** 그날 이 종목이 걸린 목록 수 — 되살린 여섯 개 기준 */
+  const listCount = (i: number): number => {
+    const s = S[i];
+    let n = 0;
+    if (inTop.has(i)) n += 1;
+    if (inRate.has(i)) n += 1;
+    if (inCum.has(i)) n += 1;
+    /* 외국인 연속순매매 — 이틀 이상 이어지면 목록에 든 것으로 본다 */
+    if ((s.fgnStreak ?? 0) >= 2) n += 1;
+    /* 기관·외국인 연속매매 — 둘 다 5일 순매수 (연속 일수를 못 재 근사한다) */
+    if ((s.fgn5 ?? 0) > 0 && (s.inst5 ?? 0) > 0) n += 1;
+    /* 동일순매매 7일 — 5일 합이 같은 방향 (7일 합이 없어 근사한다) */
+    if ((s.fgn5 ?? 0) > 0 && (s.inst5 ?? 0) > 0 && (s.fgn20 ?? 0) > 0) n += 1;
+    return n;
+  };
+
+  const isGreen = S.map((s) => scoreFeat(s, cfg)?.level === "green");
+  const dates = [...byDate.keys()].sort();
+  const splitDate = dates[Math.floor(dates.length / 2)];
+  const d20 = S.map((s) => s.d20);
+
+  const stat3 = (idx: number[]) => {
+    let sum = 0;
+    let cnt = 0;
+    let win = 0;
+    for (const i of idx) {
+      const v = d20[i];
+      if (v === null || !Number.isFinite(v)) continue;
+      sum += v;
+      cnt++;
+      if (v > 0) win++;
+    }
+    return cnt === 0
+      ? { avg: null as number | null, win: null as number | null, n: 0 }
+      : { avg: sum / cnt, win: Math.round((win / cnt) * 100), n: cnt };
+  };
+  const r2 = (v: number | null): number | null => (v === null ? null : Math.round(v * 100) / 100);
+
+  const all = S.map((_, i) => i);
+  const baseAll = stat3(all).avg;
+  const baseTr = stat3(all.filter((i) => S[i].date < splitDate)).avg;
+  const baseTe = stat3(all.filter((i) => S[i].date >= splitDate)).avg;
+  const sub = (a: number | null, b: number | null) => (a !== null && b !== null ? a - b : null);
+
+  const row = (label: string, idx: number[]): SuperSimRow => {
+    const a = stat3(idx);
+    const tr = stat3(idx.filter((i) => S[i].date < splitDate));
+    const te = stat3(idx.filter((i) => S[i].date >= splitDate));
+    return {
+      label,
+      n: idx.length,
+      d20: r2(a.avg),
+      win: a.win,
+      lift: r2(sub(a.avg, baseAll)),
+      trainLift: r2(sub(tr.avg, baseTr)),
+      testLift: r2(sub(te.avg, baseTe)),
+      testN: te.n,
+    };
+  };
+
+  /*
+   * **지속성(🌈 무지개)** — 며칠째 이어서 교집합에 걸렸나.
+   *
+   * 지금까지 슈퍼신호등 원장에서 **유일하게 갈린 축**이다(하루만 -1.74% ↔ 이틀
+   * 이상 +2.16% ↔ 사흘 이상 +5.19%). 다만 표본이 29건이었다. 여기서 19만 관측으로
+   * 다시 묻는다 — 그 차이가 진짜인지, 그리고 문턱이 이틀인지 사흘인지.
+   *
+   * 같은 종목의 **날짜가 이어져 있어야** 연속이다. 표본에 빠진 날이 있으면
+   * (거래정지 등) 거기서 끊는다 — 건너뛰고 세면 「이어졌다」는 거짓이 된다.
+   */
+  const streakOf = new Map<number, number>();
+  for (const idx of byCode.values()) {
+    let run = 0;
+    let prevDate = "";
+    for (const i of idx) {
+      const hit = listCount(i) >= minLists;
+      /* 표본에서 하루라도 비면 끊는다 — 이어졌다고 지어내지 않는다 */
+      const contiguous = prevDate !== "" && dates.indexOf(S[i].date) === dates.indexOf(prevDate) + 1;
+      run = hit ? (contiguous ? run + 1 : 1) : 0;
+      streakOf.set(i, run);
+      prevDate = S[i].date;
+    }
+  }
+
+  const inter = all.filter((i) => listCount(i) >= minLists);
+  const greenOnly = all.filter((i) => isGreen[i]);
+  const both = inter.filter((i) => isGreen[i]);
+  const interNotGreen = inter.filter((i) => !isGreen[i]);
+
+  return {
+    obs: S.length,
+    splitDate,
+    listsUsed: 6,
+    listsTotal: 7,
+    minLists,
+    rows: [
+      row("전체 (기준선)", all),
+      row(`교집합 ${minLists}곳 이상만`, inter),
+      row("신호등 초록만", greenOnly),
+      row(`교집합 + 초록 = 슈퍼신호등`, both),
+      row("교집합인데 초록 아님", interNotGreen),
+      /*
+       * 🌈 지속성 — **초록까지 통과한 것(슈퍼신호등)** 안에서 며칠째인가로 가른다.
+       * 교집합만으로 세면 실제 표식과 다른 것을 재게 된다.
+       */
+      row("🌟 슈퍼 · 첫날", both.filter((i) => (streakOf.get(i) ?? 0) <= 1)),
+      row("🌈 슈퍼 · 이틀 연속", both.filter((i) => (streakOf.get(i) ?? 0) === 2)),
+      row("🌈 슈퍼 · 사흘 이상", both.filter((i) => (streakOf.get(i) ?? 0) >= 3)),
+      row("🌈 슈퍼 · 닷새 이상", both.filter((i) => (streakOf.get(i) ?? 0) >= 5)),
+    ],
+  };
+}

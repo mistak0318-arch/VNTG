@@ -1448,6 +1448,12 @@ export const api = {
    */
   signalConditional: (config?: SignalConfig) =>
     postJson<{ result: SignalCondResult }>("/api/signal/conditional", { config }),
+  /**
+   * 슈퍼신호등 재구성 — **두 겹 문이 각각 값을 하나.**
+   * 표본에서 일곱 목록 중 여섯을 되살려 「교집합만」·「초록만」·「둘 다」를 견준다.
+   */
+  signalSuperSim: (config?: SignalConfig, minLists = 3) =>
+    postJson<{ result: SignalSuperSimResult }>("/api/signal/super-sim", { config, minLists }),
 
   /* ---------------- 알림함 + 장세 점검 (2026-08-31) ---------------- */
 
@@ -5008,4 +5014,27 @@ export interface SignalCondResult {
   obs: number;
   splitDate: string;
   axes: SignalCondAxis[];
+}
+
+/** 슈퍼신호등 재구성의 한 줄 */
+export interface SignalSuperSimRow {
+  label: string;
+  n: number;
+  d20: number | null;
+  win: number | null;
+  /** 전체 대비 초과분(%p) */
+  lift: number | null;
+  trainLift: number | null;
+  testLift: number | null;
+  testN: number;
+}
+
+export interface SignalSuperSimResult {
+  obs: number;
+  splitDate: string;
+  /** 되살린 목록 수 / 전체 (장중 기관 매매상위는 못 살린다) */
+  listsUsed: number;
+  listsTotal: number;
+  minLists: number;
+  rows: SignalSuperSimRow[];
 }

@@ -25,7 +25,7 @@ import { gradeSignalHistory, signalDays } from "../signalHistory.js";
 import { etfSeriesFor, themeSeriesFor } from "../themeSeries.js";
 import { backtestProgress, backtestResult, startBacktestJob } from "../signalBacktest.js";
 import { samplesMeta } from "../signalSamples.js";
-import { conditional, simulate, sweep } from "../signalSimulate.js";
+import { conditional, simulate, superSim, sweep } from "../signalSimulate.js";
 import { tradeValueTop } from "../signalScreen.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
@@ -473,6 +473,34 @@ export function createSignalRouter(client: KiwoomClient): Router {
         maLines: body.config?.maLines ?? saved.maLines,
       };
       const r = await conditional(cfg);
+      if (!r) {
+        res.status(409).json({ error: "표본이 아직 없습니다." });
+        return;
+      }
+      res.json({ result: r });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 슈퍼신호등 재구성 — **두 겹 문이 각각 값을 하나.**
+   *
+   * 원장은 편입분 수십 건뿐이라 아무 말도 못 한다. 표본(19만 관측)에서 일곱 목록 중
+   * 여섯을 되살려 「교집합만」·「초록만」·「둘 다」를 견준다. 조회 0회.
+   */
+  router.post("/super-sim", async (req, res, next) => {
+    try {
+      const body = req.body as { config?: Partial<SignalConfig>; minLists?: number };
+      const saved = await getConfig();
+      const cfg: SignalConfig = {
+        ...saved,
+        ...body.config,
+        axisWeights: { ...saved.axisWeights, ...(body.config?.axisWeights ?? {}) },
+        checks: body.config?.checks ?? saved.checks,
+        maLines: body.config?.maLines ?? saved.maLines,
+      };
+      const r = await superSim(cfg, Math.min(Math.max(Number(body.minLists) || 3, 1), 6));
       if (!r) {
         res.status(409).json({ error: "표본이 아직 없습니다." });
         return;
