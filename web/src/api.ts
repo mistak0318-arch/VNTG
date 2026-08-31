@@ -2100,6 +2100,16 @@ export interface SuperEntry {
    * seenCount 는 1 인데 오늘이 8/31 이면 여기는 3 이다.
    */
   daysSince?: number;
+  /**
+   * 지수 대비 초과수익(%p) — 같은 날짜 코스피 수익률을 뺀 값 (2026-08-31).
+   * 이게 없으면 절대수익률이 좋은 건지 나쁜 건지 알 수 없다.
+   */
+  excess?: { d1: number | null; d5: number | null; d20: number | null };
+  /**
+   * 이탈 후 성적 — 이탈일 종가 대비. **양수면 나오고 나서 올랐다는 뜻**(이탈이 일렀다).
+   * 이탈 규칙이 맞았는지 재는 유일한 길이다.
+   */
+  afterExit?: { d1: number | null; d5: number | null; d20: number | null };
   /** 오늘 편입됐나 — N 배지 */
   isNew?: boolean;
   code: string;
@@ -2134,6 +2144,10 @@ export interface SuperGradeRow {
   d1: { avg: number | null; n: number };
   d5: { avg: number | null; n: number };
   d20: { avg: number | null; n: number };
+  /** 지수 대비 초과수익 평균(%p) — 이 줄이 없으면 위의 셋은 뜻이 없다 */
+  ex1?: { avg: number | null; n: number };
+  ex5?: { avg: number | null; n: number };
+  ex20?: { avg: number | null; n: number };
 }
 
 export interface SuperStats {

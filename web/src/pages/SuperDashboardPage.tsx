@@ -9,6 +9,7 @@ import { Spark } from "../components/MiniLine";
 import { SuperDetailSheet } from "../components/SuperDetailSheet";
 import { RefreshBar } from "../components/RefreshBar";
 import { SortableTh, useSortableTable } from "../useSortableTable";
+import { useCardOrder } from "../useCardOrder";
 import { useStockFocus } from "../useStockFocus";
 
 /**
@@ -36,6 +37,307 @@ function GradeCell({ g }: { g: { avg: number | null; n: number } }) {
       <span className="pt-n"> ({g.n})</span>
     </td>
   );
+}
+
+/**
+ * 표의 열 정의 (2026-08-31 — "열이 꽤 많아졌으니 강조할 부분들이 강조해서
+ * 표시해야 눈에 띌듯. 그리고 표 순서도 변경가능하게").
+ *
+ * 열을 JSX 로 흩어 두면 **순서를 바꿀 수가 없다** — 머리와 몸이 같은 순서여야
+ * 하는데 둘이 따로 적혀 있으면 한쪽만 옮겨져 표가 어긋난다. 배열 하나로 두고
+ * 머리·몸이 같은 배열을 돈다.
+ *
+ * `emph` 는 **눈이 먼저 가야 하는 열**이다. 열다섯 개가 같은 무게로 있으면
+ * 아무것도 안 보인다 — 성적(편입 대비·지수 대비)과 지금 상태(당일)만 굵게 둔다.
+ */
+interface Ctx {
+  crossOnly: boolean;
+  daily: NonNullable<SuperEntry["daily"]>;
+  nowScore: number | null;
+  scoreDelta: number | null;
+}
+
+interface Col {
+  key: string;
+  label: string;
+  hint?: string;
+  /** 눈이 먼저 가야 하는 열 — 굵게, 배경으로 살짝 띄운다 */
+  emph?: boolean;
+  /** 숫자 열 — 오른쪽 정렬 */
+  num?: boolean;
+  sortable?: boolean;
+  accessor?: (e: SuperEntry) => string | number;
+  cell: (e: SuperEntry, x: Ctx) => React.ReactNode;
+  /** 값에 따라 색을 입힌다 (등락) */
+  tone?: (e: SuperEntry) => number | null | undefined;
+}
+
+const COLS: Col[] = [
+  {
+    key: "state",
+    label: "상태",
+    accessor: (e) => (e.active !== false ? 1 : 0),
+    cell: (e) => (e.active !== false ? "🟢" : "⛔"),
+  },
+  {
+    key: "name",
+    label: "종목",
+    accessor: (e) => e.name,
+    cell: (e) => (
+      <>
+        <b>{e.name}</b>{" "}
+        {/* 어느 그룹에서 온 종목인지 — 🌟 슈퍼 원장 · ⚡ 교차 그룹 */}
+        {e.groupTags?.includes("super") && <span title="슈퍼신호등 원장 (교집합 편입)">🌟</span>}
+        {e.groupTags?.includes("cross") && (
+          <span title="관심 그룹 「슈퍼신호등+교차」 (맥박 교차 자동 편입)">⚡</span>
+        )}{" "}
+        <span className="pt-n">{e.code}</span>
+      </>
+    ),
+  },
+  {
+    key: "added",
+    label: "편입일",
+    accessor: (e) => e.addedDate,
+    cell: (e) => (
+      <>
+        {e.addedDate.slice(5)}
+        {/* 오늘 편입 — 첫날에만 붙는다 */}
+        {e.isNew && (
+          <span className="ss-new" title="오늘 편입됐습니다">
+            N
+          </span>
+        )}
+      </>
+    ),
+  },
+  {
+    key: "seen",
+    label: "반복",
+    hint: "교집합에 걸린 날이 몇 번인가 — 편입 후 며칠과는 다른 값입니다",
+    num: true,
+    accessor: (e) => e.seenCount,
+    cell: (e, x) => (x.crossOnly ? "-" : `${e.seenCount}일`),
+  },
+  {
+    key: "dsince",
+    label: "경과",
+    hint: "편입일로부터 며칠 — 편입 당일은 0일",
+    num: true,
+    accessor: (e) => e.daysSince ?? 0,
+    cell: (e) => `${e.daysSince ?? 0}일`,
+  },
+  {
+    key: "lists",
+    label: "목록",
+    num: true,
+    accessor: (e) => e.lists.length,
+    cell: (e, x) => (x.crossOnly ? "-" : `${e.lists.length}곳`),
+  },
+  {
+    key: "score",
+    label: "점수",
+    num: true,
+    accessor: (e) => e.score,
+    cell: (e, x) =>
+      x.crossOnly ? (
+        "-"
+      ) : (
+        <>
+          {e.score}
+          {x.scoreDelta !== null && x.scoreDelta !== 0 && (
+            <i className={x.scoreDelta > 0 ? "positive" : "negative"}> →{x.nowScore}</i>
+          )}
+        </>
+      ),
+  },
+  {
+    key: "spark",
+    label: "점수 흐름",
+    sortable: false,
+    cell: (_e, x) => <Spark values={x.daily.map((d) => d.score)} color="var(--green)" />,
+  },
+  {
+    key: "price",
+    label: "현재가",
+    num: true,
+    accessor: (e) => e.price ?? -1,
+    cell: (e) => (e.price ? e.price.toLocaleString("ko-KR") : "-"),
+  },
+  {
+    key: "today",
+    label: "당일",
+    num: true,
+    emph: true,
+    accessor: (e) => e.changeRate ?? -9999,
+    tone: (e) => e.changeRate,
+    cell: (e) => pct(e.changeRate),
+  },
+  {
+    key: "theme",
+    label: "테마",
+    hint: "든 네이버 테마 중 오늘 가장 강한 것 — 식으면 이탈이 가깝다",
+    accessor: (e) => e.theme?.changeRate ?? -9999,
+    cell: (e) =>
+      e.theme ? (
+        <>
+          <span className="sd-theme-name">{e.theme.name}</span>{" "}
+          <b className={cls(e.theme.changeRate)}>{pct(e.theme.changeRate)}</b>
+          {e.theme.streak >= 2 && <i className="lens-streak">{e.theme.streak}일↑</i>}
+        </>
+      ) : (
+        "-"
+      ),
+  },
+  {
+    key: "etfBack",
+    label: "ETF 뒷배",
+    hint: "테마로 담은 상위 3 ETF 의 오늘 평균 (신호등 뒷배와 같은 규칙)",
+    num: true,
+    accessor: (e) => e.etfBack?.rate ?? -9999,
+    tone: (e) => e.etfBack?.rate,
+    cell: (e) => (e.etfBack ? pct(e.etfBack.rate) : "-"),
+  },
+  {
+    key: "since",
+    label: "편입 대비",
+    num: true,
+    emph: true,
+    accessor: (e) => e.sinceAdded ?? -9999,
+    tone: (e) => e.sinceAdded,
+    cell: (e) => pct(e.sinceAdded),
+  },
+  {
+    key: "priceSpark",
+    label: "주가 흐름",
+    sortable: false,
+    cell: (e, x) => (
+      <Spark
+        values={x.daily.map((d) => (d.close > 0 ? d.close : null))}
+        color="var(--blue)"
+        refY={e.addedPrice}
+      />
+    ),
+  },
+  {
+    key: "d1",
+    label: "+1일",
+    num: true,
+    accessor: (e) => e.returns?.d1 ?? -9999,
+    tone: (e) => e.returns?.d1,
+    cell: (e) => pct(e.returns?.d1),
+  },
+  {
+    key: "d5",
+    label: "+5일",
+    num: true,
+    accessor: (e) => e.returns?.d5 ?? -9999,
+    tone: (e) => e.returns?.d5,
+    cell: (e) => pct(e.returns?.d5),
+  },
+  {
+    key: "d20",
+    label: "+20일",
+    num: true,
+    accessor: (e) => e.returns?.d20 ?? -9999,
+    tone: (e) => e.returns?.d20,
+    cell: (e) => pct(e.returns?.d20),
+  },
+  /*
+   * **지수 대비** (2026-08-31) — 이 열이 없으면 위의 +1/+5/+20 은 뜻이 없다.
+   * 「+1일 -0.13%」가 나쁜 건지는 그날 시장을 알아야 답할 수 있다. 강조한다.
+   */
+  {
+    key: "ex1",
+    label: "지수 대비 +1",
+    hint: "같은 날짜 코스피 수익률을 뺀 값(%p) — 「남보다 나았나」",
+    num: true,
+    emph: true,
+    accessor: (e) => e.excess?.d1 ?? -9999,
+    tone: (e) => e.excess?.d1,
+    cell: (e) => pp(e.excess?.d1),
+  },
+  {
+    key: "ex5",
+    label: "지수 대비 +5",
+    hint: "같은 날짜 코스피 수익률을 뺀 값(%p)",
+    num: true,
+    accessor: (e) => e.excess?.d5 ?? -9999,
+    tone: (e) => e.excess?.d5,
+    cell: (e) => pp(e.excess?.d5),
+  },
+  {
+    key: "ex20",
+    label: "지수 대비 +20",
+    hint: "같은 날짜 코스피 수익률을 뺀 값(%p)",
+    num: true,
+    accessor: (e) => e.excess?.d20 ?? -9999,
+    tone: (e) => e.excess?.d20,
+    cell: (e) => pp(e.excess?.d20),
+  },
+  /*
+   * **이탈 후** — 이탈 규칙이 맞았는지 재는 유일한 길이다.
+   * 부호는 이탈한 사람 관점: 양수면 「나오고 나서 올랐다(아까웠다)」.
+   * 그래서 색을 **뒤집는다** — 올랐으면 빨강이 아니라 아쉬움이다.
+   */
+  {
+    key: "ax5",
+    label: "이탈 후 +5",
+    hint: "이탈일 종가 대비 — 양수면 나오고 나서 올랐다는 뜻(이탈이 일렀다)",
+    num: true,
+    accessor: (e) => e.afterExit?.d5 ?? -9999,
+    cell: (e) =>
+      e.afterExit?.d5 == null ? (
+        "-"
+      ) : (
+        <span className={e.afterExit.d5 > 0 ? "negative" : "positive"}>{pct(e.afterExit.d5)}</span>
+      ),
+  },
+  {
+    key: "ax20",
+    label: "이탈 후 +20",
+    hint: "이탈일 종가 대비 — 양수면 나오고 나서 올랐다는 뜻(이탈이 일렀다)",
+    num: true,
+    accessor: (e) => e.afterExit?.d20 ?? -9999,
+    cell: (e) =>
+      e.afterExit?.d20 == null ? (
+        "-"
+      ) : (
+        <span className={e.afterExit.d20 > 0 ? "negative" : "positive"}>{pct(e.afterExit.d20)}</span>
+      ),
+  },
+  {
+    key: "note",
+    label: "메모",
+    sortable: false,
+    cell: (e) => (
+      <>
+        {(e.exits ?? []).length > 0 && "⛔"}
+        {e.note && "📝"}
+      </>
+    ),
+  },
+];
+
+/** 칸의 클래스 — 숫자·강조·등락색을 한자리에서 정한다 */
+function cellCls(c: Col, e: SuperEntry): string {
+  const bits: string[] = [];
+  if (c.num) bits.push("num");
+  if (c.emph) bits.push("sd-emph");
+  if (c.key === "name") bits.push("sticky-col");
+  if (c.key === "theme") bits.push("sd-theme-cell");
+  if (c.key === "note") bits.push("sd-note-cell");
+  if (c.tone) {
+    const v = c.tone(e);
+    if (v !== null && v !== undefined && Number.isFinite(v)) bits.push(cls(v));
+  }
+  return bits.join(" ");
+}
+
+/** %p — 초과수익은 퍼센트포인트다. %와 섞이면 둘 다 못 읽는다 */
+function pp(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "-";
+  return `${v > 0 ? "+" : ""}${v.toFixed(2)}%p`;
 }
 
 export function SuperDashboardPage({
@@ -96,6 +398,14 @@ export function SuperDashboardPage({
     if (act !== 0) return act;
     return nowScoreOf(b) - nowScoreOf(a);
   });
+  /*
+   * 열 순서는 **사용자가 바꾼다** (2026-08-31 — "나중에 보는 우선순위가
+   * 달라질 수도 있으니깐"). 시세분석 표와 같은 훅·같은 저장소(서버, 기기 공유).
+   * ⚠️ 머리와 몸이 **같은 배열**을 돌아야 한다 — 따로 적으면 한쪽만 옮겨져 표가 어긋난다.
+   */
+  const colOrder = useCardOrder("super.cols", COLS.map((c) => c.key));
+  const orderedCols = [...COLS].sort((a, b) => colOrder.orderOf(a.key) - colOrder.orderOf(b.key));
+
   const sort = useSortableTable(ranked);
 
   /* 승률 카드의 게이지 — 50% 가 동전 던지기 선이다 */
@@ -217,106 +527,28 @@ export function SuperDashboardPage({
           <table className="data-table sd-table">
             <thead>
               <tr>
-                <SortableTh
-                  columnKey="state"
-                  label="상태"
-                  accessor={(e: SuperEntry) => (e.active !== false ? 1 : 0)}
-                  sort={sort}
-                />
-                <SortableTh columnKey="name" label="종목" accessor={(e: SuperEntry) => e.name} sort={sort} />
-                <SortableTh
-                  columnKey="added"
-                  label="편입일"
-                  accessor={(e: SuperEntry) => e.addedDate}
-                  sort={sort}
-                />
-                {/*
-                  「반복」은 seenCount — **교집합에 걸린 날이 몇 번인가**이지
-                  편입 후 며칠이 아니다. 경과일은 바로 옆에 따로 낸다
-                  (2026-08-31, 신호등 찾기 쪽과 같은 값·같은 이름을 쓴다).
-                */}
-                <SortableTh
-                  columnKey="seen"
-                  label="반복"
-                  accessor={(e: SuperEntry) => e.seenCount}
-                  sort={sort}
-                  thProps={{ title: "교집합에 걸린 날이 몇 번인가 — 편입 후 며칠과는 다른 값입니다" }}
-                />
-                <SortableTh
-                  columnKey="dsince"
-                  label="경과"
-                  accessor={(e: SuperEntry) => e.daysSince ?? 0}
-                  sort={sort}
-                  thProps={{ title: "편입일로부터 며칠 — 편입 당일은 0일" }}
-                />
-                <SortableTh
-                  columnKey="lists"
-                  label="목록"
-                  accessor={(e: SuperEntry) => e.lists.length}
-                  sort={sort}
-                />
-                <SortableTh
-                  columnKey="score"
-                  label="점수"
-                  accessor={(e: SuperEntry) => e.score}
-                  sort={sort}
-                />
-                <th>점수 흐름</th>
-                <SortableTh
-                  columnKey="price"
-                  label="현재가"
-                  accessor={(e: SuperEntry) => e.price ?? -1}
-                  sort={sort}
-                />
-                {/* 오늘 얘가 몇 % 인지 — 들어가 보지 않아도 (2026-08-27) */}
-                <SortableTh
-                  columnKey="today"
-                  label="당일"
-                  accessor={(e: SuperEntry) => e.changeRate ?? -9999}
-                  sort={sort}
-                />
-                {/* 테마·ETF 뒷배 (2026-08-28) — 걸린 종목의 무리가 지금도 도는가.
-                    편입 점수의 「테마 강세(네이버)」·「ETF 뒷배」와 같은 분류·같은 규칙이다 */}
-                <SortableTh
-                  columnKey="theme"
-                  label="테마"
-                  accessor={(e: SuperEntry) => e.theme?.changeRate ?? -9999}
-                  sort={sort}
-                  thProps={{ title: "든 네이버 테마 중 오늘 가장 강한 것 — 식으면 이탈이 가깝다" }}
-                />
-                <SortableTh
-                  columnKey="etfBack"
-                  label="ETF 뒷배"
-                  accessor={(e: SuperEntry) => e.etfBack?.rate ?? -9999}
-                  sort={sort}
-                  thProps={{ title: "테마로 담은 상위 3 ETF 의 오늘 평균 (신호등 뒷배와 같은 규칙)" }}
-                />
-                <SortableTh
-                  columnKey="since"
-                  label="편입 대비"
-                  accessor={(e: SuperEntry) => e.sinceAdded ?? -9999}
-                  sort={sort}
-                />
-                <th>주가 흐름</th>
-                <SortableTh
-                  columnKey="d1"
-                  label="+1일"
-                  accessor={(e: SuperEntry) => e.returns?.d1 ?? -9999}
-                  sort={sort}
-                />
-                <SortableTh
-                  columnKey="d5"
-                  label="+5일"
-                  accessor={(e: SuperEntry) => e.returns?.d5 ?? -9999}
-                  sort={sort}
-                />
-                <SortableTh
-                  columnKey="d20"
-                  label="+20일"
-                  accessor={(e: SuperEntry) => e.returns?.d20 ?? -9999}
-                  sort={sort}
-                />
-                <th>메모</th>
+                {orderedCols.map((c) =>
+                  c.sortable === false ? (
+                    <th
+                      key={c.key}
+                      className={c.emph ? "sd-emph" : undefined}
+                      title={c.hint}
+                      {...colOrder.drag.props(c.key)}
+                    >
+                      {c.label}
+                    </th>
+                  ) : (
+                    <SortableTh
+                      key={c.key}
+                      columnKey={c.key}
+                      label={c.label}
+                      accessor={c.accessor!}
+                      sort={sort}
+                      className={`${c.emph ? "sd-emph " : ""}${colOrder.drag.cls(c.key)}`}
+                      thProps={{ title: c.hint, ...colOrder.drag.props(c.key) }}
+                    />
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
@@ -339,89 +571,11 @@ export function SuperDashboardPage({
                       }
                     }}
                   >
-                    <td>{e.active !== false ? "🟢" : "⛔"}</td>
-                    <td className="sticky-col">
-                      <b>{e.name}</b>{" "}
-                      {/* 어느 그룹에서 온 종목인지 — 🌟 슈퍼 원장 · ⚡ 교차 그룹 */}
-                      {e.groupTags?.includes("super") && (
-                        <span title="슈퍼신호등 원장 (교집합 편입)">🌟</span>
-                      )}
-                      {e.groupTags?.includes("cross") && (
-                        <span title="관심 그룹 「슈퍼신호등+교차」 (맥박 교차 자동 편입)">⚡</span>
-                      )}{" "}
-                      <span className="pt-n">{e.code}</span>
-                    </td>
-                    <td>
-                      {e.addedDate.slice(5)}
-                      {/* 오늘 편입 — 첫날에만 붙는다 */}
-                      {e.isNew && (
-                        <span className="ss-new" title="오늘 편입됐습니다">
-                          N
-                        </span>
-                      )}
-                    </td>
-                    <td className="num">{crossOnly ? "-" : `${e.seenCount}일`}</td>
-                    <td className="num">{e.daysSince ?? 0}일</td>
-                    <td className="num">{crossOnly ? "-" : `${e.lists.length}곳`}</td>
-                    <td className="num">
-                      {crossOnly ? (
-                        "-"
-                      ) : (
-                        <>
-                          {e.score}
-                          {scoreDelta !== null && scoreDelta !== 0 && (
-                            <i className={scoreDelta > 0 ? "positive" : "negative"}>
-                              {" "}
-                              →{nowScore}
-                            </i>
-                          )}
-                        </>
-                      )}
-                    </td>
-                    <td>
-                      <Spark values={daily.map((d) => d.score)} color="var(--green)" />
-                    </td>
-                    <td className="num">{e.price ? e.price.toLocaleString("ko-KR") : "-"}</td>
-                    <td className={`num ${cls(e.changeRate)}`}>{pct(e.changeRate)}</td>
-                    <td
-                      className="sd-theme-cell"
-                      title={
-                        e.theme
-                          ? `${e.theme.name} ${pct(e.theme.changeRate)}${e.theme.streak >= 2 ? ` · ${e.theme.streak}일 연속↑` : ""}`
-                          : "든 네이버 테마가 없다"
-                      }
-                    >
-                      {e.theme ? (
-                        <>
-                          <span className="sd-theme-name">{e.theme.name}</span>{" "}
-                          <b className={cls(e.theme.changeRate)}>{pct(e.theme.changeRate)}</b>
-                          {e.theme.streak >= 2 && <i className="lens-streak">{e.theme.streak}일↑</i>}
-                        </>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                    <td
-                      className={`num ${cls(e.etfBack?.rate)}`}
-                      title={e.etfBack ? `대표 ${e.etfBack.top}` : "테마로 담은 ETF 가 없다"}
-                    >
-                      {e.etfBack ? pct(e.etfBack.rate) : "-"}
-                    </td>
-                    <td className={`num strong-col ${cls(e.sinceAdded)}`}>{pct(e.sinceAdded)}</td>
-                    <td>
-                      <Spark
-                        values={daily.map((d) => (d.close > 0 ? d.close : null))}
-                        color="var(--blue)"
-                        refY={e.addedPrice}
-                      />
-                    </td>
-                    <td className={`num ${cls(e.returns?.d1)}`}>{pct(e.returns?.d1)}</td>
-                    <td className={`num ${cls(e.returns?.d5)}`}>{pct(e.returns?.d5)}</td>
-                    <td className={`num ${cls(e.returns?.d20)}`}>{pct(e.returns?.d20)}</td>
-                    <td className="sd-note-cell" title={e.note || ""}>
-                      {(e.exits ?? []).length > 0 && "⛔"}
-                      {e.note && "📝"}
-                    </td>
+                    {orderedCols.map((c) => (
+                      <td key={c.key} className={cellCls(c, e)}>
+                        {c.cell(e, { crossOnly, daily, nowScore, scoreDelta })}
+                      </td>
+                    ))}
                   </tr>
                 );
               })}

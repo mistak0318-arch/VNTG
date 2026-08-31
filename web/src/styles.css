@@ -12012,3 +12012,21 @@ button.tpb-row:hover { background: var(--panel-2); }
   line-height: 1.5;
   vertical-align: middle;
 }
+
+/*
+ * 슈퍼신호등 표 — **강조 열** (2026-08-31 — "열이 꽤 많아졌으니 강조할 부분들이
+ * 강조해서 표시해야 눈에 띌듯").
+ *
+ * 스무 개가 같은 무게로 있으면 아무것도 안 보인다. 눈이 먼저 가야 하는 것만
+ * 살짝 띄운다 — 성적(편입 대비·지수 대비)과 지금 상태(당일).
+ * 색으로 강조하면 등락색과 싸우므로 **배경과 굵기**로만 한다.
+ */
+.sd-emph {
+  background: color-mix(in srgb, var(--blue) 7%, transparent);
+  font-weight: 600;
+}
+thead .sd-emph {
+  background: color-mix(in srgb, var(--blue) 14%, transparent);
+}
+/* 강조 열의 경계를 살짝 — 어디까지가 그 묶음인지 보이게 */
+.sd-emph { box-shadow: inset 1px 0 0 color-mix(in srgb, var(--blue) 22%, transparent); }

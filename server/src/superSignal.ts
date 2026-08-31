@@ -131,6 +131,25 @@ export interface SuperEntry {
    * 봉이 아직 안 쌓였으면 null. d20 까지 차면 더 안 잰다(끝난 성적표다).
    */
   returns?: { d1: number | null; d5: number | null; d20: number | null };
+  /**
+   * **지수 대비 초과수익**(%p) — 같은 날짜의 코스피 수익률을 뺀 값 (2026-08-31).
+   *
+   * 이게 없으면 「d1 평균 -0.13%」가 나쁜 건지 알 수가 없다 — 그날 시장이 -1%
+   * 였으면 오히려 이긴 것이다. 절대수익률만 보는 성적표는 상승장에서 전부
+   * 좋아 보이고 하락장에서 전부 나빠 보인다.
+   */
+  excess?: { d1: number | null; d5: number | null; d20: number | null };
+  /**
+   * **이탈 후 성적** — 이탈일 종가 대비 (2026-08-31).
+   *
+   * 이탈 규칙이 맞았는지 재는 **유일한 길**이다. 이탈시켰는데 그 뒤로 올랐으면
+   * 이탈이 이르렀던 것이고, 더 빠졌으면 잘 나온 것이다. 그 물음에 답할 자료가
+   * 지금까지 없었다 — 이탈은 판정만 하고 뒤를 안 봤다.
+   *
+   * 부호는 **이탈한 사람 관점**이다: 양수면 「나오고 나서 올랐다(아까웠다)」,
+   * 음수면 「나오길 잘했다」.
+   */
+  afterExit?: { d1: number | null; d5: number | null; d20: number | null };
   /** 추적 중인가 — 이탈하면 false. 교집합에 다시 걸리면 되살아난다 */
   active?: boolean;
   /** 편입 후 일별 기록 (종가·점수) — 대시보드의 점수/주가 흐름이 이걸 읽는다 */
@@ -240,8 +259,45 @@ function todayStr(d = new Date()): string {
  * 편입가 대비 %를 적어 둔다. d20 까지 찬 종목은 성적표가 끝났으니 다시
  * 조회하지 않는다 — 그래서 호출량은 「아직 성적이 진행 중인 종목 수」만큼이다.
  */
+/**
+ * 코스피 일봉 종가 — 날짜(YYYYMMDD) → 종가.
+ *
+ * 지수 대비 성적의 기준이다. **한 번만 받는다** — 종목마다 부르면 채점이
+ * 그만큼 느려지고 호출도 는다. ka20006 은 지수를 100배로 주는데, 우리는
+ * 비율만 쓰므로 그대로 둬도 된다(나눗셈에서 상쇄된다).
+ */
+async function kospiCloses(client: KiwoomClient): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  try {
+    const d = new Date(Date.now() + 9 * 3600_000);
+    const { data } = await client.request<{ inds_dt_pole_qry?: Record<string, unknown>[] }>(
+      "/api/dostk/chart",
+      "ka20006",
+      { inds_cd: "001", base_dt: d.toISOString().slice(0, 10).replace(/-/g, "") },
+    );
+    for (const r of dropPhantomToday((data.inds_dt_pole_qry ?? []) as Record<string, unknown>[])) {
+      const dt = String(r.dt ?? "");
+      const close = Math.abs(Number(String(r.cur_prc ?? "").replace(/[+,]/g, "")));
+      if (/^\d{8}$/.test(dt) && close > 0) out.set(dt, close);
+    }
+  } catch {
+    /* 지수를 못 받으면 지수 대비는 안 낸다 — 절대수익률로 대신하지 않는다 */
+  }
+  return out;
+}
+
 async function gradeEntries(client: KiwoomClient, store: Store): Promise<number> {
-  const pending = store.entries.filter((e) => e.returns?.d20 == null && e.addedPrice > 0);
+  /*
+   * 채점이 남은 것 = 편입 성적이 안 찼거나(d20) **이탈 후 성적이 안 찬 것**.
+   * 이탈분도 뒤를 봐야 이탈 규칙을 잴 수 있다(2026-08-31).
+   */
+  const pending = store.entries.filter(
+    (e) =>
+      e.addedPrice > 0 &&
+      (e.returns?.d20 == null ||
+        (e.active === false && (e.exits?.length ?? 0) > 0 && e.afterExit?.d20 == null)),
+  );
+  const kospi = pending.length > 0 ? await kospiCloses(client) : new Map<string, number>();
   let graded = 0;
   for (const e of pending) {
     try {
@@ -279,7 +335,44 @@ async function gradeEntries(client: KiwoomClient, store: Store): Promise<number>
         const bar = rows[idx + n];
         return bar ? ((bar.close - e.addedPrice) / e.addedPrice) * 100 : null;
       };
-      e.returns = { d1: pct(1), d5: pct(5), d20: pct(20) };
+      if (e.returns?.d20 == null) e.returns = { d1: pct(1), d5: pct(5), d20: pct(20) };
+
+      /*
+       * **지수 대비** — 같은 날짜의 코스피 수익률을 뺀다. 지수를 못 읽으면
+       * 안 낸다(null) — 절대수익률을 초과수익이라고 적으면 상승장에서 전부
+       * 이긴 것처럼 보인다.
+       */
+      const idxPct = (n: number): number | null => {
+        const bar = rows[idx + n];
+        const base = kospi.get(addedYmd);
+        const then = bar ? kospi.get(bar.date) : undefined;
+        if (!bar || !base || !then) return null;
+        return ((then - base) / base) * 100;
+      };
+      const minus = (a: number | null, b: number | null) => (a === null || b === null ? null : a - b);
+      e.excess = {
+        d1: minus(e.returns?.d1 ?? null, idxPct(1)),
+        d5: minus(e.returns?.d5 ?? null, idxPct(5)),
+        d20: minus(e.returns?.d20 ?? null, idxPct(20)),
+      };
+
+      /*
+       * **이탈 후 성적** — 이탈일 종가 대비. 이탈 규칙이 맞았는지 재는 유일한 길이다.
+       * 부호는 이탈한 사람 관점 — 양수면 「나오고 나서 올랐다(아까웠다)」.
+       */
+      const lastExit = e.exits?.[e.exits.length - 1];
+      if (e.active === false && lastExit) {
+        const exitYmd = lastExit.date.replace(/-/g, "");
+        const ei = rows.findIndex((r) => r.date === exitYmd);
+        const exitClose = ei >= 0 ? rows[ei].close : null;
+        if (ei >= 0 && exitClose && exitClose > 0) {
+          const after = (n: number): number | null => {
+            const bar = rows[ei + n];
+            return bar ? ((bar.close - exitClose) / exitClose) * 100 : null;
+          };
+          e.afterExit = { d1: after(1), d5: after(5), d20: after(20) };
+        }
+      }
       graded += 1;
     } catch {
       /* 한 종목 실패는 넘어간다 — 다음 실행에 다시 잰다 */
@@ -711,6 +804,13 @@ export interface GradeRow {
   d1: { avg: number | null; n: number };
   d5: { avg: number | null; n: number };
   d20: { avg: number | null; n: number };
+  /**
+   * **지수 대비 초과수익** 평균(%p) — 이 줄이 없으면 위의 세 값은 뜻이 없다.
+   * 「d1 -0.13%」가 나쁜 건지 좋은 건지는 그날 시장을 알아야 답할 수 있다.
+   */
+  ex1: { avg: number | null; n: number };
+  ex5: { avg: number | null; n: number };
+  ex20: { avg: number | null; n: number };
 }
 
 function gradeRow(label: string, entries: SuperEntry[]): GradeRow {
@@ -723,7 +823,25 @@ function gradeRow(label: string, entries: SuperEntry[]): GradeRow {
       n: vals.length,
     };
   };
-  return { label, d1: agg((r) => r.d1), d5: agg((r) => r.d5), d20: agg((r) => r.d20) };
+  /* 지수 대비는 다른 필드(excess)에 있다 — 같은 방식으로 평균 낸다 */
+  const aggEx = (pick: (r: NonNullable<SuperEntry["excess"]>) => number | null) => {
+    const vals = entries
+      .map((e) => (e.excess ? pick(e.excess) : null))
+      .filter((v): v is number => v !== null && Number.isFinite(v));
+    return {
+      avg: vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null,
+      n: vals.length,
+    };
+  };
+  return {
+    label,
+    d1: agg((r) => r.d1),
+    d5: agg((r) => r.d5),
+    d20: agg((r) => r.d20),
+    ex1: aggEx((r) => r.d1),
+    ex5: aggEx((r) => r.d5),
+    ex20: aggEx((r) => r.d20),
+  };
 }
 
 /** 지평 하나의 승률 — 「편입하고 N일 뒤 플러스였나」 */
