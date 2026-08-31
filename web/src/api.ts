@@ -927,6 +927,11 @@ export const api = {
     getJson<{ day: string; events: DartEvent[] }>(`/api/dart/today${force ? "?force=1" : ""}`),
   /* ── CIS 일지 — 시스가 굴리는 모의 계좌 (2026-08-31) ────────────────
      모든 조회가 account 를 받는다. 안 주면 트레이딩 계좌다. */
+  /** ETF 분석 — 테마·상대강도·추세·품질. 무거우니 화면이 부를 때만 */
+  etfAnalysis: (detail = 30) => getJson<EtfAnalysis>(`/api/etf/analysis?detail=${detail}`),
+  /** 구성종목 분석 — signal=true 면 구성종목마다 신호등을 잰다(무겁다) */
+  etfHoldings: (signal = false, limit = 40) =>
+    getJson<HoldingsAnalysis>(`/api/etf/holdings-analysis?limit=${limit}${signal ? "&signal=1" : ""}`),
   cisAccounts: () => getJson<{ accounts: CisProfile[] }>("/api/cis/accounts"),
   cisAccount: (account: string) =>
     getJson<CisAccountView>(`/api/cis/account?account=${account}`),
@@ -4592,4 +4597,90 @@ export interface CisRunResult {
   day?: CisDay;
   screenNotes?: { code: string; name: string; verdict: string; note: string }[];
   aiError?: string;
+}
+
+
+/* ────────────────────────────────────────────────────────────────────
+ * ETF 분석 (2026-08-31) — 테마를 축으로 본다.
+ *
+ * 개별 주도주 신호는 ETF 안에서 희석되지만 **테마·섹터 강세는 ETF 와 단위가
+ * 같다.** 「2차전지(생산)가 2일 연속 강세」면 그것을 담은 ETF 가 그 강세를
+ * 그대로 받는다. 서버의 etfAnalysis.ts 참고.
+ * ──────────────────────────────────────────────────────────────────── */
+
+export interface EtfScore {
+  code: string;
+  name: string;
+  price: number;
+  changeRate: number;
+  tradeValue: number;
+  group: string;
+  safe: boolean;
+  deviation: number | null;
+  traceErr: number | null;
+  /** 이어진 판. `via` 는 **무엇으로 이어졌나** — 잘못 이어진 것을 눈으로 잡으라고 띄운다 */
+  theme: { name: string; rate: number; streak: number; via: string } | null;
+  themeScore: number;
+  /** 지수 대비 초과수익(%p). 못 쟀으면 null — 절대수익률로 대신하지 않는다 */
+  rs20: number | null;
+  rs60: number | null;
+  rsScore: number;
+  trend: { ma20: number; ma60: number; ma120: number | null; aligned: boolean; above20: boolean } | null;
+  trendScore: number;
+  qualityScore: number;
+  score: number;
+  why: string;
+}
+
+export interface EtfAnalysis {
+  at: string;
+  boards: { name: string; rate: number; streak: number }[];
+  rows: EtfScore[];
+  /** 안전자산은 따로 — 하락장에서 늘 지수를 이겨 순위를 망친다 */
+  safe: EtfScore[];
+  benchmark: { name: string; r20: number | null; r60: number | null } | null;
+  scanned: number;
+  detailed: number;
+  note: string;
+}
+
+
+export interface EtfHoldingStock {
+  code: string;
+  name: string;
+  /** 이 ETF 안에서의 비중(%) */
+  weight: number | null;
+  changeRate: number | null;
+  sector: string | null;
+  signal?: { level: string; score: number } | null;
+}
+
+export interface EtfHoldingScore {
+  code: string;
+  name: string;
+  group: string;
+  safe: boolean;
+  aumRaw: number;
+  holdings: EtfHoldingStock[];
+  /** Top10 이 이 ETF 를 얼마나 덮나(%) — 낮으면 판단의 대표성이 떨어진다 */
+  coverage: number;
+  /** 구성종목 등락률의 비중 가중평균 */
+  weighted: number | null;
+  breadth: number | null;
+  signalAvg: number | null;
+  green: number;
+  red: number;
+  score: number;
+  why: string;
+}
+
+export interface HoldingsAnalysis {
+  at: string;
+  builtAt: string | null;
+  rows: EtfHoldingScore[];
+  /** 순위에서 뺀 것 — 안전자산이거나 Top10 이 너무 적게 덮는 ETF */
+  aside: EtfHoldingScore[];
+  scanned: number;
+  withSignal: boolean;
+  note: string;
 }

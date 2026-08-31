@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { analyzeEtfs } from "../etfAnalysis.js";
+import { analyzeHoldings } from "../etfHoldingsScore.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { buildEtfHolders, etfHoldersOf } from "../etfHolders.js";
 
@@ -165,6 +167,46 @@ export function createEtfRouter(client: KiwoomClient): Router {
       const code = String(req.params.code).replace(/_(AL|NX)$/i, "");
       if (req.query.rebuild === "1") await buildEtfHolders(client);
       res.json(await etfHoldersOf(code));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * ETF 분석 — 테마·상대강도·추세·품질 네 축 (2026-08-31).
+   *
+   * 무겁다(좁혀진 것마다 일봉 한 번). 화면이 부를 때만 돌고 캐시는 안 한다 —
+   * 테마 강세가 장중에 바뀌므로 오래된 값을 보여 주는 게 더 나쁘다.
+   */
+  router.get("/analysis", async (req, res, next) => {
+    try {
+      res.json(
+        await analyzeEtfs(client, {
+          detail: Number(req.query.detail) || undefined,
+          minTradeValue: Number(req.query.minTv) || undefined,
+        }),
+      );
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * ETF 구성종목 분석 (2026-08-31) — **담은 것을 보고 판단한다.**
+   *
+   * 이름으로 테마를 잇는 `/analysis` 와 **다른 방법**이다. 어느 쪽이 맞는지는
+   * 나란히 두고 봐야 알 수 있어 둘 다 둔다.
+   *
+   * `?signal=1` 은 구성종목마다 신호등을 잰다 — 무겁다(유니크 종목 수만큼).
+   */
+  router.get("/holdings-analysis", async (req, res, next) => {
+    try {
+      res.json(
+        await analyzeHoldings(client, {
+          withSignal: req.query.signal === "1",
+          limit: Number(req.query.limit) || undefined,
+        }),
+      );
     } catch (err) {
       next(err);
     }

@@ -1,3 +1,4 @@
+import { EtfHoldingsTab, EtfThemeTab } from "../components/EtfAnalysisTabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
@@ -32,6 +33,16 @@ import { EtfWatchTab } from "../components/EtfWatchTab";
 const SUBTABS = [
   /* 내가 굴리는 것이 먼저다 — 전체 시세는 그다음 (2026-08-27) */
   { key: "watch", label: "내 ETF" },
+  /*
+   * 분석을 앞쪽에 (2026-08-31) — 「뭘 담을까」가 「지금 얼마냐」보다 먼저 오는 물음이다.
+   *
+   * 두 가지를 **나란히** 둔다. 어느 기준이 맞는지는 비교해야만 알 수 있다
+   * (벤티지: "하나의 방법론이니깐 개별 분석 메뉴로 두던지 해서 비교분석 해보면 더 좋겠지").
+   *   - 테마 분석  : ETF 이름을 테마·섹터 강세에 잇는다
+   *   - 구성종목 분석: ETF 가 담은 종목들이 실제로 어떤가를 본다
+   */
+  { key: "analysis", label: "테마 분석" },
+  { key: "holdings", label: "구성종목 분석" },
   { key: "list", label: "시세·NAV" },
   { key: "cum", label: "기간 등락률" },
   { key: "supply", label: "수급 우위" },
@@ -492,6 +503,8 @@ export function EtfPage({ onSelectStock }: { onSelectStock: (code: string, name:
         ))}
       </div>
       {sub === "watch" && <EtfWatchTab onSelectStock={onSelectStock} />}
+      {sub === "analysis" && <EtfThemeTab onSelectStock={onSelectStock} />}
+      {sub === "holdings" && <EtfHoldingsTab onSelectStock={onSelectStock} />}
       {sub === "list" && <EtfListTab onSelectStock={onSelectStock} />}
       {sub === "cum" && <EtfCumTab onSelectStock={onSelectStock} />}
       {sub === "supply" && <EtfSupplyTab onSelectStock={onSelectStock} />}

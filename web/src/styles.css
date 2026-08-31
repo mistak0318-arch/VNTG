@@ -11922,3 +11922,55 @@ button.tpb-row:hover { background: var(--panel-2); }
 }
 .cis-swing-box > b { font-size: 0.74rem; color: var(--muted); font-weight: 600; }
 .cis-swing-box > i { font-style: normal; font-size: 0.7rem; color: var(--muted); }
+
+/* ── ETF 분석 (2026-08-31) — 테마 연계 · 구성종목 ────────────────── */
+.etf-boards { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.etf-board {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  font-size: 0.75rem;
+}
+.etf-board i { font-style: normal; font-weight: 600; }
+.etf-board em { font-style: normal; font-size: 0.66rem; color: var(--muted); }
+
+.etf-theme { font-size: 0.78rem; }
+.etf-theme i { font-style: normal; margin-left: 5px; font-weight: 600; font-size: 0.74rem; }
+.etf-theme em { font-style: normal; font-size: 0.66rem; color: var(--muted); margin-left: 4px; }
+/* 무엇으로 이어졌나 — 감추면 잘못 이어진 것을 못 고친다 */
+.etf-via {
+  font-size: 0.62rem;
+  font-weight: 400;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.etf-trend { font-size: 0.74rem; white-space: nowrap; }
+.etf-trend i { font-style: normal; font-size: 0.68rem; margin-left: 5px; }
+
+.etf-holdings { display: flex; gap: 6px; flex-wrap: wrap; }
+.etf-holding {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+.etf-holding:hover { border-color: var(--blue); }
+.etf-holding b { font-weight: 600; }
+.etf-holding i { font-style: normal; font-size: 0.66rem; color: var(--muted); }
+.etf-holding em { font-style: normal; font-weight: 600; }
+.etf-sig { font-size: 0.62rem; padding: 0 5px; border-radius: 7px; }
+.sig-green { background: color-mix(in srgb, var(--green) 25%, transparent); }
+.sig-yellow { background: color-mix(in srgb, #c8a24a 25%, transparent); }
+.sig-red { background: color-mix(in srgb, var(--red) 25%, transparent); }
