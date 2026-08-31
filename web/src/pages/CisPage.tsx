@@ -12,6 +12,7 @@ import {
   type CisSlotEntry,
   type CisStats,
   type CisUsageRow,
+  type CisWatchEvent,
   type PublishJob,
 } from "../api";
 import { ProgressSteps } from "../components/ProgressSteps";
@@ -719,10 +720,12 @@ function AccountTab({
 }) {
   const [v, setV] = useState<CisAccountView | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [watch, setWatch] = useState<{ open: boolean; events: CisWatchEvent[] } | null>(null);
 
   useEffect(() => {
     setV(null);
     api.cisAccount(account).then(setV).catch((e: Error) => setErr(e.message));
+    api.cisWatch(account).then(setWatch).catch(() => setWatch(null));
   }, [account]);
 
   if (err) return <div className="error-banner">{err}</div>;
@@ -800,6 +803,9 @@ function AccountTab({
                 <th className="num">평단</th>
                 <th className="num">현재가</th>
                 <th className="num">평가손익</th>
+                <th className="num" title="들고 있는 동안 어디까지 밀렸다 어디까지 갔나. 종가만 봐서는 안 보이는 값입니다">
+                  흔들림
+                </th>
                 <th className="num">손절</th>
                 <th className="num">목표</th>
                 <th>자금</th>
@@ -822,6 +828,24 @@ function AccountTab({
                   <td className={`num ${p.pnl !== null ? cls(p.pnl) : ""}`}>
                     {p.pnl !== null ? `${signed(p.pnl)} (${p.pnlPct}%)` : "-"}
                   </td>
+                  {/*
+                    흔들림 — 손절폭이 적당한지 판단하는 결정적 자료다.
+                    -7% 손절인데 매번 -6.5% 까지 갔다 돌아온다면 손절폭이 좁은 것이다.
+                  */}
+                  <td className="num cis-swing">
+                    {p.worstPct !== undefined ? (
+                      <>
+                        <span className="negative">{p.worstPct}%</span>
+                        <em>~</em>
+                        <span className="positive">
+                          {p.bestPct !== undefined && p.bestPct > 0 ? "+" : ""}
+                          {p.bestPct}%
+                        </span>
+                      </>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
                   <td className="num">{p.stop?.toLocaleString() ?? "-"}</td>
                   <td className="num">{p.target?.toLocaleString() ?? "-"}</td>
                   <td>{p.funding === "cash" ? "예수금" : p.funding === "misu" ? "미수" : "신용"}</td>
@@ -831,6 +855,44 @@ function AccountTab({
             </tbody>
           </table>
         </div>
+      )}
+
+      {/*
+        장중 감시가 한 일. **사건만** 적는다 — 「10:31 감시함, 아무 일 없음」을
+        390번 적으면 읽을 수 없는 로그가 된다. 상시 기록은 위 표의 흔들림 칸이다.
+      */}
+      {watch && (
+        <section className="cis-watch">
+          <h3 className="section-heading">
+            장중 감시
+            <span className={`cis-watch-dot ${watch.open ? "on" : ""}`} aria-hidden="true" />
+            <i className="cis-slot-hint">{watch.open ? "보고 있습니다 (1분마다)" : "장 밖입니다"}</i>
+          </h3>
+          {watch.events.length === 0 ? (
+            <div className="table-note">
+              아직 손댈 자리가 없었습니다. 아무 일도 없었던 것은 적지 않습니다 —
+              보유 줄의 <b>흔들림</b> 칸이 그동안의 기록입니다.
+            </div>
+          ) : (
+            <ul className="cis-watch-list">
+              {watch.events.map((e, i) => (
+                <li key={i}>
+                  <span className="cis-watch-at">
+                    {new Date(e.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <b>{e.name}</b>
+                  <span className={e.kind === "sell" ? "negative" : ""}>
+                    {e.kind === "sell" ? "매도" : "손절선 올림"}
+                  </span>
+                  <span className="cis-watch-why">{e.reason}</span>
+                  {typeof e.pnl === "number" && (
+                    <span className={cls(e.pnl)}>{signed(e.pnl)}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
 
       {v.curve.length > 1 && <EquityCurve curve={v.curve} seed={v.profile.seed} />}
@@ -933,6 +995,29 @@ function StatsTab({ account }: { account: string }) {
           </div>
         )}
       </div>
+
+      {/*
+        흔들림 — 손절폭 판단의 결정적 자료. 손절 -7% 인데 평균 최저가 -6% 언저리면
+        매번 아슬아슬하게 버틴 것이고, 그건 손절폭을 넓히라는 신호다.
+      */}
+      {s.swing.tracked > 0 && (
+        <div className="cis-swing-box">
+          <b>흔들림</b>
+          <span>
+            지금 들고 있는 {s.swing.tracked}종목이 평균{" "}
+            <b className="negative">{s.swing.avgWorst}%</b> 까지 밀렸다가{" "}
+            <b className="positive">
+              {s.swing.avgBest !== null && s.swing.avgBest > 0 ? "+" : ""}
+              {s.swing.avgBest}%
+            </b>{" "}
+            까지 갔습니다.
+          </span>
+          <i>
+            종가만 봐서는 안 보이는 값입니다. 손절선 가까이 계속 갔다 돌아온다면
+            손절폭이 좁다는 뜻입니다.
+          </i>
+        </div>
+      )}
 
       {(s.best || s.worst) && (
         <div className="table-note cis-extreme">
@@ -1159,6 +1244,21 @@ function ConfigTab({
           />
           <span>
             <b>자동 실행</b> — 끄면 「오늘」에서 손으로 눌러야 씁니다
+          </span>
+        </label>
+        <label className="cis-switch">
+          <input
+            type="checkbox"
+            checked={draft.watch}
+            onChange={(e) => save({ watch: e.target.checked })}
+          />
+          <span>
+            <b>장중 상시 감시</b> — 1분마다 팔 자리와 흔들림을 봅니다
+            <i>
+              손절선은 12시 30분에만 있는 게 아닙니다. 10시에 뚫고 12시에 되돌아오면
+              하루 세 번만 보는 계좌는 그 손절을 없었던 일로 적습니다. AI 는 안 부르므로
+              비용이 들지 않습니다(시세 조회 하루 390회).
+            </i>
           </span>
         </label>
       </div>

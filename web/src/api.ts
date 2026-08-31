@@ -958,6 +958,12 @@ export const api = {
   cisRun: (account: string, slot: string, force = false) =>
     postJson<{ jobId: string }>("/api/cis/run", { account, slot, force }),
   cisRunProgress: (jobId: string) => getJson<PublishJob>(`/api/cis/run-progress/${jobId}`),
+  cisWatch: (account: string) =>
+    getJson<{ open: boolean; lastRun: string | null; events: CisWatchEvent[] }>(
+      `/api/cis/watch?account=${account}`,
+    ),
+  cisReset: (account: string) =>
+    postJson<{ ok: boolean; seed: number }>("/api/cis/reset", { account, confirm: "초기화" }),
   cisReview: (account: string) =>
     postJson<{ text: string | null; ai: boolean; error?: string }>("/api/cis/review", { account }),
 
@@ -4336,6 +4342,14 @@ export interface CisPosition {
   stop: number | null;
   target: number | null;
   safe?: boolean;
+  /**
+   * 흔들림 — 들고 있는 동안 어디까지 밀렸고 어디까지 갔나 (MAE/MFE).
+   * 1분 감시가 갱신한다. 종가만 봐서는 절대 안 보이는 값이다.
+   */
+  worstPct?: number;
+  worstAt?: string;
+  bestPct?: number;
+  bestAt?: string;
   /** 지금 값 — 못 읽었으면 null (0 이 아니다) */
   price: number | null;
   value: number;
@@ -4497,6 +4511,8 @@ export interface CisStats {
   planRate: number | null;
   violationDays: number;
   violations: { text: string; count: number }[];
+  /** 흔들림 요약 — 손절폭이 적당한지에 숫자로 답한다 */
+  swing: { tracked: number; avgWorst: number | null; avgBest: number | null; nearStop: number | null };
   curve: { date: string; equity: number }[];
 }
 
@@ -4529,6 +4545,8 @@ export interface CisRuleLabel {
 export interface CisConfig {
   enabled: boolean;
   auto: boolean;
+  /** 장중 내내 볼까 (1분마다). 끄면 하루 세 번만 본다 */
+  watch: boolean;
   times: { morning: string; noon: string; evening: string };
   useMisu: boolean;
   useCredit: boolean;
@@ -4542,6 +4560,19 @@ export interface CisConfig {
     screenVeto: boolean;
     model: { provider: string; model: string } | null;
   };
+}
+
+/** 장중 감시가 실제로 한 일 — 「아무 일 없음」은 안 담는다 */
+export interface CisWatchEvent {
+  at: string;
+  account: string;
+  kind: "sell" | "trail";
+  name: string;
+  code: string;
+  qty?: number;
+  price?: number;
+  pnl?: number;
+  reason: string;
 }
 
 export interface CisRunResult {

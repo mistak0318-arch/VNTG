@@ -37,6 +37,7 @@ import { startTrackingRefresher } from "./watchTracking.js";
 import { createSettingsRouter } from "./routes/settings.js";
 import { startAlertScheduler } from "./alertScheduler.js";
 import { startCisScheduler } from "./cisScheduler.js";
+import { startCisWatch } from "./cisWatch.js";
 import { startChannelScheduler } from "./channelScheduler.js";
 import { startMajorFeedLoop } from "./majorFeed.js";
 import { startBuzzScheduler } from "./buzzRadar.js";
@@ -224,6 +225,8 @@ startTrackingRefresher(client);
 startAlertScheduler(client);
 /* CIS 일지 — 설정에서 켜야 실제로 돈다(기본 꺼짐) */
 startCisScheduler(client);
+/* 장중 상시 감시 — 1분마다 팔 자리와 흔들림을 본다. AI 는 안 부른다 */
+startCisWatch(client);
 startChannelScheduler();
   startKeywordScheduler();
 /* 주요 채널 — 골라 둔 채널의 글을 5분마다 빠짐없이 아카이브 (「주요 채널」 방이 읽는다) */

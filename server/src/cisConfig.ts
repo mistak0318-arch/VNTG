@@ -51,6 +51,14 @@ export interface CisConfig {
   enabled: boolean;
   /** 자동으로 하루 세 번 쓸까. 끄면 화면에서 손으로 눌러야 돈다 */
   auto: boolean;
+  /**
+   * **장중 내내 볼까** (1분마다). 끄면 하루 세 번만 본다.
+   *
+   * 손절선은 12시 30분에만 있는 게 아니다 — 10시에 뚫고 12시에 되돌아오면
+   * 세 번만 보는 계좌는 그 손절을 없었던 일로 적는다. 켜는 것이 현실에 가깝다.
+   * 비용은 ka10095 하루 390회뿐이고 AI 는 안 부른다.
+   */
+  watch: boolean;
   /** 하루 세 번의 시각 (KST, "HH:MM") */
   times: { morning: string; noon: string; evening: string };
   /** 빌려도 되나 — 끄면 예수금만 쓴다 */
@@ -73,6 +81,7 @@ export interface CisConfig {
 export const DEFAULT_CIS_CONFIG: CisConfig = {
   enabled: false, // 처음엔 꺼져 있다 — 켜는 것은 사람이 정한다
   auto: true,
+  watch: true,
   /*
    * 08:40 — 장 열기 20분 전. 어제 종가·간밤 해외가 다 들어와 있고, 시가에 살
    * 계획을 세울 시간이 있다.
@@ -154,6 +163,7 @@ export async function saveCisConfig(input: Partial<CisConfig>): Promise<CisConfi
   const next: CisConfig = {
     enabled: input.enabled ?? cur.enabled,
     auto: input.auto ?? cur.auto,
+    watch: input.watch ?? cur.watch,
     times: {
       morning: time(t.morning, cur.times.morning),
       noon: time(t.noon, cur.times.noon),

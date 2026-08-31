@@ -95,12 +95,35 @@ export interface Position {
    * 다시 판정하면 판정 규칙이 바뀌었을 때 옛 기록의 뜻까지 바뀐다.
    */
   safe?: boolean;
+  /**
+   * **흔들림** — 들고 있는 동안 어디까지 밀렸고 어디까지 갔나 (2026-08-31).
+   *
+   * 1분 감시가 남길 만한 기록을 고민한 답이다. 「10:31 감시함, 아무 일 없음」을
+   * 390번 적으면 읽을 수 없는 로그가 된다. 대신 **숫자 넷**만 갱신한다.
+   *
+   * 이 값이 왜 결정적인가:
+   *   - 손절 -7% 인데 매번 -6.5% 까지 갔다 돌아온다면 **손절폭이 좁은 것**이다.
+   *     그 증거는 이 값 말고는 어디에도 안 남는다(종가만 보면 안 보인다).
+   *   - +14% 까지 갔다가 +2% 로 끝났다면 **익절이 늦은 것**이다.
+   *
+   * 실제 트레이딩 분석에서 MAE(최대 역행)·MFE(최대 순행)라 부르는 값이다.
+   */
+  worstPct?: number;
+  worstAt?: string;
+  bestPct?: number;
+  bestAt?: string;
 }
 
 /** 체결 한 줄 — 이미 끝난 일이라 절대 고치지 않는다 */
 export interface Fill {
   id: string;
   date: string;
+  /**
+   * 몇 시에 (ISO). **구간을 잘라 읽으려면 시각이 있어야 한다** — 점심 일지가
+   * 「오전에 뭘 했나」를 말하려면 아침 일지 이후의 체결만 골라내야 하는데,
+   * 날짜만 있으면 그게 안 된다 (2026-08-31, 상시 감시 루프와 함께 들어옴).
+   */
+  at?: string;
   /** 언제 — 아침/점심/저녁 중 어느 판단에서 나왔나 */
   slot: "morning" | "noon" | "evening";
   side: "buy" | "sell";
@@ -386,6 +409,7 @@ export function buy(
   a.fills.push({
     id: newId(),
     date,
+    at: new Date().toISOString(),
     slot: o.slot,
     side: "buy",
     code: o.code,
@@ -455,6 +479,7 @@ export function sell(
   a.fills.push({
     id: newId(),
     date,
+    at: new Date().toISOString(),
     slot,
     side: "sell",
     code,

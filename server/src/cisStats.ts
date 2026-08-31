@@ -84,6 +84,21 @@ export interface CisStats {
   violationDays: number;
   violations: { text: string; count: number }[];
 
+  /**
+   * **흔들림 요약** — 손절폭이 적당한지에 숫자로 답한다 (2026-08-31).
+   *
+   * 지금 들고 있는 것들이 평균 어디까지 밀렸다 어디까지 갔나.
+   * 손절 -7% 인데 평균 최저가 -6% 언저리라면 **매번 아슬아슬하게 버틴 것**이고,
+   * 그건 손절폭을 넓히라는 신호다. 종가만 봐서는 절대 안 보인다.
+   */
+  swing: {
+    tracked: number;
+    avgWorst: number | null;
+    avgBest: number | null;
+    /** 손절선까지 얼마나 가까이 갔었나 — 평균 최저와 손절폭의 차 */
+    nearStop: number | null;
+  };
+
   /** 곡선 — 화면이 그린다 */
   curve: { date: string; equity: number }[];
 }
@@ -252,6 +267,20 @@ export async function cisStats(account: AccountId = "trade"): Promise<CisStats> 
     violations: [...vio.entries()]
       .map(([text, count]) => ({ text, count }))
       .sort((x, y) => y.count - x.count),
+
+    swing: (() => {
+      const w = a.positions.filter((p) => p.worstPct !== undefined);
+      const b = a.positions.filter((p) => p.bestPct !== undefined);
+      const avg = (xs: number[]) =>
+        xs.length ? Number((xs.reduce((x, y) => x + y, 0) / xs.length).toFixed(2)) : null;
+      const avgWorst = avg(w.map((p) => p.worstPct as number));
+      return {
+        tracked: w.length,
+        avgWorst,
+        avgBest: avg(b.map((p) => p.bestPct as number)),
+        nearStop: avgWorst,
+      };
+    })(),
 
     curve: a.equityCurve.map((r) => ({ date: r.date, equity: r.equity })),
   };

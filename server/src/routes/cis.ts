@@ -10,6 +10,7 @@ import { cisStats, cisUsage } from "../cisStats.js";
 import { cisAiReady, weeklyReview } from "../cisAi.js";
 import { resetCisTried } from "../cisScheduler.js";
 import { CIS_STEPS, createJob, getJob, reporterFor } from "../reportProgress.js";
+import { clearWatchEvents, watchEvents, watchStatus } from "../cisWatch.js";
 
 /**
  * CIS 일지 API.
@@ -219,10 +220,21 @@ export function createCisRouter(client: KiwoomClient): Router {
       const id = acc(req.body?.account);
       const a = await resetAccount(id);
       const removed = await clearJournal(id);
+      clearWatchEvents(id);
       res.json({ ok: true, account: id, seed: a.cash, journalRemoved: removed });
     } catch (err) {
       next(err);
     }
+  });
+
+  /**
+   * 장중 감시 — 지금 보고 있나, 그동안 뭘 했나.
+   *
+   * 사건만 돌려준다. 「10:31 감시함, 아무 일 없음」은 기록할 값이 아니다 —
+   * 상시 기록은 보유 줄의 흔들림(worstPct/bestPct)에 새겨진다.
+   */
+  router.get("/watch", (req, res) => {
+    res.json({ ...watchStatus(), events: watchEvents(acc(req.query.account), 60) });
   });
 
   /** 주간 복기 (AI) — 며칠치를 놓고 어느 규칙이 나빴나 */
