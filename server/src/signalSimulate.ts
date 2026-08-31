@@ -600,7 +600,54 @@ export async function conditional(cfg: SignalConfig): Promise<CondResult | null>
     };
   };
 
+  /*
+   * **겹쳤을 때** (2026-08-31) — 축마다 따로 보면 「각각 얼마나 가르나」까지만 안다.
+   * 실제 매매는 세 조건이 동시에 걸린 자리에서 일어나므로, 겹쳤을 때 더 세지는지
+   * 아니면 표본만 얇아지는지를 봐야 한다.
+   *
+   * 3축 × 3구간 = 27칸으로 펴면 칸마다 표본이 수십 건이 되어 아무 말도 못 한다.
+   * 그래서 **「좋은 조건을 몇 개 만족하나」**로 0~3점으로 접는다.
+   *
+   *   폭이 상위 1/3        +1
+   *   신고가 밀도가 상위 1/3 +1
+   *   금리 민감도가 중립     +1   ← 양 끝이 아니라 **가운데**가 좋았다
+   *
+   * 마지막 줄이 다른 둘과 방향이 다르다 — 금리는 「높을수록 좋다」가 아니라
+   * 「덜 민감할수록 좋다」였다(실측: 중립 +2.60%p vs 양 끝 -0.09/+1.68).
+   */
+  const goodOf = (getter: (i: number) => number | null, wantTop: boolean) => {
+    const vals: number[] = [];
+    for (let i = 0; i < S.length; i++) {
+      const v = getter(i);
+      if (v !== null && Number.isFinite(v)) vals.push(v);
+    }
+    const [lo, hi] = tertiles(vals);
+    return (i: number): boolean | null => {
+      const v = getter(i);
+      if (v === null || !Number.isFinite(v)) return null;
+      return wantTop ? v >= hi : v >= lo && v < hi;
+    };
+  };
+  const gBreadth = goodOf((i) => dayBreadth.get(S[i].date) ?? null, true);
+  const gNewHigh = goodOf((i) => dayNewHigh.get(S[i].date) ?? null, true);
+  const gRate = goodOf((i) => S[i].rateBeta, false);
+
+  const stackBuckets: number[][] = [[], [], [], []];
+  for (let i = 0; i < S.length; i++) {
+    const parts = [gBreadth(i), gNewHigh(i), gRate(i)];
+    /* 하나라도 못 재면 이 관측은 겹침 표에서 뺀다 — 모르는 것을 「아니오」로 세면 거짓이다 */
+    if (parts.some((x) => x === null)) continue;
+    stackBuckets[parts.filter(Boolean).length].push(i);
+  }
+
   const axes: CondAxis[] = [
+    {
+      key: "stack",
+      title: "세 조건이 겹치면 — 좋은 조건 몇 개인가",
+      hint:
+        "폭 상위 1/3 · 신고가 밀도 상위 1/3 · 금리 민감도 중립. 셋 다 「살 때 이미 알 수 있는 값」이라 실제로 쓸 수 있다. 하나라도 못 잰 관측은 뺐다",
+      cells: [0, 1, 2, 3].map((k) => cell(`${k}개 만족`, stackBuckets[k])),
+    },
     axisOf(
       "newHighDensity",
       "그날 신고가 밀도 — 추세장인가",
