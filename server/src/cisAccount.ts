@@ -174,6 +174,24 @@ export async function saveAccount(a: CisAccount): Promise<void> {
   await writeFile(fileOf(a.id), JSON.stringify(a, null, 2), "utf8");
 }
 
+/**
+ * 계좌를 **처음으로 되돌린다.**
+ *
+ * 규칙을 바꿔 가며 시험할 때 꼭 필요하다 — 옛 규칙으로 산 종목이 남아 있으면
+ * 새 규칙의 성적이 그것에 오염된다. 「손절을 -9% 로 바꿨더니 좋아졌다」가
+ * 사실은 예전에 산 것이 오른 것일 수 있다.
+ *
+ * ⚠️ **되돌릴 수 없다.** 장부와 일지가 함께 사라진다. 부르는 쪽(라우트)에서
+ * 확인을 받는다.
+ */
+export async function resetAccount(id: AccountId): Promise<CisAccount> {
+  const fresh = { ...empty(id), startedAt: today() };
+  cache.set(id, fresh);
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(fileOf(id), JSON.stringify(fresh, null, 2), "utf8");
+  return fresh;
+}
+
 /** KST 오늘 (YYYY-MM-DD) */
 export function today(): string {
   const d = new Date(Date.now() + 9 * 3600_000);

@@ -949,9 +949,15 @@ export const api = {
     ),
   cisSaveConfig: (c: Partial<CisConfig>) =>
     putJson<{ config: CisConfig }>("/api/cis/config", c),
-  /** 손으로 돌리기. force 는 이미 쓴 시간대를 덮는다 — 「다시 쓰기」에서만 */
+  /**
+   * 손으로 돌리기. force 는 이미 쓴 시간대를 덮는다 — 「다시 쓰기」에서만.
+   *
+   * ⚠️ **작업 id 만 돌아온다.** 안에서 주도주 스캔·신호등이 수십 초 걸려
+   * 동기로 기다리면 화면이 멈춘다. 진행은 cisRunProgress 로 묻는다.
+   */
   cisRun: (account: string, slot: string, force = false) =>
-    postJson<CisRunResult>("/api/cis/run", { account, slot, force }),
+    postJson<{ jobId: string }>("/api/cis/run", { account, slot, force }),
+  cisRunProgress: (jobId: string) => getJson<PublishJob>(`/api/cis/run-progress/${jobId}`),
   cisReview: (account: string) =>
     postJson<{ text: string | null; ai: boolean; error?: string }>("/api/cis/review", { account }),
 
@@ -3041,7 +3047,7 @@ export function normalizeStockCode(code: string): string {
 }
 
 /** 발행 진행 상황 — 서버가 단계별로 채운다 */
-export type JobKind = "report" | "channel";
+export type JobKind = "report" | "channel" | "cis";
 
 export interface ProgressStep {
   key: string;

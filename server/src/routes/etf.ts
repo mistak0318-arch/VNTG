@@ -47,7 +47,8 @@ function num(v: unknown): number | null {
 let listCache: { at: number; rows: EtfListRow[] } | null = null;
 const LIST_TTL = 3 * 60_000;
 
-async function fetchAll(client: KiwoomClient): Promise<EtfListRow[]> {
+/** ETF 전체 시세 — 연금 계좌 엔진(cisPension)이 모집단으로 쓴다 */
+export async function fetchAll(client: KiwoomClient): Promise<EtfListRow[]> {
   if (listCache && Date.now() - listCache.at < LIST_TTL) return listCache.rows;
   const body = {
     txon_type: "0",

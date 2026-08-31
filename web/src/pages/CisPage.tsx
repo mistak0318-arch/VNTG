@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   type CisAccountView,
@@ -12,7 +12,9 @@ import {
   type CisSlotEntry,
   type CisStats,
   type CisUsageRow,
+  type PublishJob,
 } from "../api";
+import { ProgressSteps } from "../components/ProgressSteps";
 
 /**
  * CIS 일지 — 시스가 굴리는 모의 계좌를 보는 자리.
@@ -235,6 +237,8 @@ function TodayTab({
   const [day, setDay] = useState<CisDay | null>(null);
   const [state, setState] = useState<CisPersonaState | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [job, setJob] = useState<PublishJob | null>(null);
+  const jobIdRef = useRef<string | null>(null);
 
   const load = useCallback(() => {
     api.cisDay(account).then(setDay).catch(() => setDay(null));
@@ -242,20 +246,53 @@ function TodayTab({
   }, [account]);
   useEffect(load, [load]);
 
+  /*
+   * **뒤에서 돌리고 단계를 그린다** (2026-08-31 — "프로그래스 바가 안뜨고
+   * 백그라운드 작업이 아니라 브라우저 멈추더라").
+   *
+   * 주도주 스캔과 종목별 신호등이 각각 수십 초라, 응답을 기다리면 화면이 멈춘
+   * 것처럼 보였다. 작업 id 를 받아 1.2초마다 물어 단계를 그린다 —
+   * 리포트 발행이 쓰는 것과 같은 컴포넌트다.
+   */
   const run = async (slot: string, force: boolean) => {
     setBusy(slot);
     setMsg(null);
+    setJob(null);
     try {
-      const r = await api.cisRun(account, slot, force);
-      if (!r.ok) setMsg(r.skipped ?? "돌리지 못했습니다.");
-      else if (r.aiError) setMsg(`일지는 썼습니다. AI 는 쉬었습니다 — ${r.aiError}`);
-      load();
+      const { jobId } = await api.cisRun(account, slot, force);
+      jobIdRef.current = jobId;
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
-    } finally {
       setBusy(null);
     }
   };
+
+  useEffect(() => {
+    if (!busy || !jobIdRef.current) return;
+    const id = jobIdRef.current;
+    const t = window.setInterval(async () => {
+      try {
+        const j = await api.cisRunProgress(id);
+        setJob(j);
+        if (j.status !== "running") {
+          window.clearInterval(t);
+          jobIdRef.current = null;
+          setBusy(null);
+          if (j.status === "error") setMsg(j.error ?? "돌리지 못했습니다.");
+          /* 끝난 진행률은 잠깐 두었다 치운다 — 무엇을 했는지 읽을 시간을 준다 */
+          window.setTimeout(() => setJob(null), 2500);
+          load();
+        }
+      } catch {
+        /* 작업이 사라졌다(서버 재시작 등) — 멈춘 채 두지 말고 놓아 준다 */
+        window.clearInterval(t);
+        jobIdRef.current = null;
+        setBusy(null);
+        setMsg("진행 상황을 잃었습니다. 화면을 새로 고쳐 확인하세요.");
+      }
+    }, 1200);
+    return () => window.clearInterval(t);
+  }, [busy, load]);
 
   return (
     <>
@@ -272,6 +309,7 @@ function TodayTab({
       )}
 
       {msg && <div className="table-note cis-msg">{msg}</div>}
+      {job && <ProgressSteps job={job} />}
 
       {SLOTS.map((s) => {
         const e = day?.[s.key] ?? null;

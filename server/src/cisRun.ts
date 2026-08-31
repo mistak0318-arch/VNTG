@@ -36,6 +36,7 @@ import {
 import { polishJournal, screenCandidates, type ScreenNote } from "./cisAi.js";
 import { isSafeAsset, profileOf, rejectReason, type AccountId } from "./cisAccounts.js";
 import { dropPhantomToday } from "./candleGuard.js";
+import { noopProgress, type ProgressReporter } from "./reportProgress.js";
 
 /**
  * 하루를 실행한다 — 아침·점심·저녁.
@@ -156,6 +157,12 @@ export async function runSlot(
   slot: Slot,
   account: AccountId = "trade",
   force = false,
+  /**
+   * 진행률 손잡이. 스케줄러처럼 화면이 없는 경로에서는 `noopProgress` 다.
+   * 주도주 스캔과 종목별 신호등이 각각 수십 초라, 손으로 눌렀을 때 어디쯤인지
+   * 안 보이면 멈춘 줄 안다.
+   */
+  progress: ProgressReporter = noopProgress,
 ): Promise<RunResult> {
   const date = today();
   const cfg = await getCisConfig();
@@ -176,11 +183,14 @@ export async function runSlot(
   let aiError: string | undefined;
 
   /* ── ① 값 받기 ─────────────────────────────────────────── */
+  progress.start("price");
   const held = a.positions.map((p) => p.code);
   const px = await priceMap(client, held);
+  progress.done("price", `${px.size}/${held.length}종목`);
   const priceOf = (code: string) => px.get(code) ?? null;
 
   /* ── ② 팔 것 먼저 ──────────────────────────────────────── */
+  progress.start("exit");
   const exits = exitCalls(a, priceOf, rules, date);
   for (const e of exits) {
     const r = sell(
@@ -210,6 +220,8 @@ export async function runSlot(
     }
   }
 
+  progress.done("exit", exits.length > 0 ? `${exits.length}건 정리` : "정리할 것 없음");
+
   /* ── ③ 손절선 끌어올리기 ───────────────────────────────── */
   const trailed = trailStops(a, priceOf, rules);
 
@@ -220,9 +232,14 @@ export async function runSlot(
   const mode = modeOfSlot(slot);
   const gateNotes: { name: string; ok: boolean; reason: string }[] = [];
 
+  progress.start("market");
   gate = await marketGate(client, rules);
+  progress.done("market", gate.reason);
   if (gate.ok) {
+    progress.start("scan");
     const picked = await pickCandidates(client, rules);
+    progress.done("scan", `후보 ${picked.candidates.length}종목`);
+    progress.skip("signal", "후보 스캔에 포함됨");
     /*
      * **계좌가 못 담는 것을 먼저 뺀다.** 연금 계좌는 ETF 만, 레버리지·인버스는
      * 불가다 — 제도가 그렇다. 모의라도 못 사는 것을 샀다고 적으면 이 장부가
@@ -231,6 +248,7 @@ export async function runSlot(
     const allowed = picked.candidates.filter((c) => !rejectReason(profile, { name: c.name }));
 
     /* AI 는 여기서 **경고만** 단다. 거부권은 설정에서 켰을 때만 */
+    progress.start("ai");
     const screened = await screenCandidates(allowed, rules);
     screenNotes = screened.notes;
     aiError = screened.error;
@@ -340,8 +358,14 @@ export async function runSlot(
     }
   }
 
+  if (!gate?.ok) {
+    progress.skip("scan", "시장 문이 닫혔다");
+    progress.skip("signal");
+  }
+  progress.start("ai");
   const polished = await polishJournal(slot, text, rules);
   if (polished.error && !aiError) aiError = polished.error;
+  progress.done("ai", polished.ai ? "AI 가 다듬었다" : "규칙이 쓴 글 그대로");
 
   /* 이 시간대에 실제로 쓴 화면·지표를 모은다 (활용법 집계의 원재료) */
   const used = new Set<string>();
@@ -379,6 +403,7 @@ export async function runSlot(
     debt,
   };
 
+  progress.start("write");
   await saveAccount(a);
   const day = await writeSlot(entry, account, date, force);
 
@@ -388,5 +413,6 @@ export async function runSlot(
     await saveDay(day);
   }
 
+  progress.done("write", `${actions.length}건 체결`);
   return { ok: true, account, slot, date, entry, day, screenNotes, aiError };
 }

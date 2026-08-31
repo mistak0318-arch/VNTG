@@ -34,7 +34,7 @@ export interface PublishJob {
    * **자기 작업을 되찾으려면** 이게 있어야 한다 — 리포트 화면이 채널 요약 작업에
    * 붙어 버리면 엉뚱한 진행 상황을 보게 된다.
    */
-  kind: "report" | "channel";
+  kind: "report" | "channel" | "cis";
   label: string;
   steps: ProgressStep[];
   startedAt: string;
@@ -64,6 +64,23 @@ export const PUBLISH_STEPS: { key: string; label: string }[] = [
  * 채널 200개를 읽는 데 시간이 걸리는데 「발송 중…」 한 마디만 떠 있어서 얼마나
  * 기다려야 하는지 알 수 없었다. 리포트와 같은 방식으로 어느 단계인지 보여준다.
  */
+/**
+ * CIS 일지 한 시간대가 거치는 단계 (2026-08-31 — "프로그래스 바가 안뜨고
+ * 백그라운드 작업이 아니라 브라우저 멈추더라").
+ *
+ * 주도주 스캔과 종목별 신호등이 각각 수십 초라, 동기로 돌리면 그동안 요청이
+ * 안 끝나 화면이 멈춘 것처럼 보였다. 단계로 쪼개 뒤에서 돌린다.
+ */
+export const CIS_STEPS: { key: string; label: string }[] = [
+  { key: "price", label: "보유 시세 조회" },
+  { key: "exit", label: "팔 자리 점검" },
+  { key: "market", label: "시장 판단" },
+  { key: "scan", label: "후보 스캔" },
+  { key: "signal", label: "신호등 평가" },
+  { key: "ai", label: "AI 검토·일지" },
+  { key: "write", label: "장부·일지 저장" },
+];
+
 export const CHANNEL_STEPS: { key: string; label: string }[] = [
   { key: "read", label: "채널 읽기" },
   { key: "pick", label: "선별·점수화" },

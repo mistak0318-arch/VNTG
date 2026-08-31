@@ -1,14 +1,15 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
-import { equityOf, loadAccount, riskMix, today } from "../cisAccount.js";
+import { equityOf, loadAccount, resetAccount, riskMix, today } from "../cisAccount.js";
 import { ACCOUNTS, ACCOUNT_IDS, profileOf, type AccountId } from "../cisAccounts.js";
 import { getCisConfig, goalProgress, saveCisConfig, RULE_LABEL } from "../cisConfig.js";
-import { listDays, loadDay } from "../cisJournal.js";
+import { clearJournal, listDays, loadDay } from "../cisJournal.js";
 import { readState } from "../cisPersona.js";
 import { priceMap, runSlot } from "../cisRun.js";
 import { cisStats, cisUsage } from "../cisStats.js";
 import { cisAiReady, weeklyReview } from "../cisAi.js";
 import { resetCisTried } from "../cisScheduler.js";
+import { CIS_STEPS, createJob, getJob, reporterFor } from "../reportProgress.js";
 
 /**
  * CIS 일지 API.
@@ -158,13 +159,67 @@ export function createCisRouter(client: KiwoomClient): Router {
         res.status(400).json({ error: "slot 은 morning·noon·evening 중 하나여야 합니다." });
         return;
       }
-      const result = await runSlot(
-        client,
-        slot as "morning" | "noon" | "evening",
-        acc(req.body?.account),
-        req.body?.force === true,
+      const id2 = acc(req.body?.account);
+      const force = req.body?.force === true;
+
+      /*
+       * **뒤에서 돌린다** (2026-08-31 — "프로그래스 바가 안뜨고 백그라운드 작업이
+       * 아니라 브라우저 멈추더라").
+       *
+       * 주도주 스캔과 종목별 신호등이 각각 수십 초라, 동기로 돌리면 그동안 요청이
+       * 안 끝나 화면이 멈춘 것처럼 보였다. 작업 id 를 바로 돌려주고 화면은
+       * /run-progress 를 물어 단계를 그린다 — 리포트 발행과 같은 문법이다.
+       */
+      const { id, job } = createJob(
+        `CIS ${profileOf(id2).name} ${slot === "morning" ? "아침" : slot === "noon" ? "점심" : "저녁"}`,
+        CIS_STEPS,
+        "cis",
       );
-      res.json(result);
+      void runSlot(client, slot as "morning" | "noon" | "evening", id2, force, reporterFor(job))
+        .then((r) => {
+          job.status = r.ok ? "done" : "error";
+          job.report = r;
+          if (!r.ok) job.error = r.skipped;
+        })
+        .catch((e: Error) => {
+          job.status = "error";
+          job.error = e.message;
+        });
+      res.json({ jobId: id });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 진행 상황 — 화면이 이걸 물어 단계를 그린다 */
+  router.get("/run-progress/:id", (req, res) => {
+    const job = getJob(String(req.params.id));
+    if (!job) {
+      res.status(404).json({ error: "그 작업을 찾을 수 없습니다(끝난 지 오래됐거나 서버가 다시 떴습니다)." });
+      return;
+    }
+    res.json(job);
+  });
+
+  /**
+   * 계좌 초기화 — 장부와 일지를 처음으로 되돌린다.
+   *
+   * 규칙을 바꿔 가며 시험할 때 필요하다. 옛 규칙으로 산 종목이 남아 있으면
+   * 새 규칙의 성적이 오염된다.
+   *
+   * ⚠️ 되돌릴 수 없어 `confirm: "초기화"` 를 요구한다 — 실수로 눌러 몇 달치
+   * 기록을 잃는 일을 막는다.
+   */
+  router.post("/reset", async (req, res, next) => {
+    try {
+      if (String(req.body?.confirm ?? "") !== "초기화") {
+        res.status(400).json({ error: '확인 문구가 필요합니다 (confirm: "초기화").' });
+        return;
+      }
+      const id = acc(req.body?.account);
+      const a = await resetAccount(id);
+      const removed = await clearJournal(id);
+      res.json({ ok: true, account: id, seed: a.cash, journalRemoved: removed });
     } catch (err) {
       next(err);
     }

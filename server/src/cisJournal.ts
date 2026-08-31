@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ENTRY_LABEL, type BuyPlan, type Candidate, type EntryMode, type ExitCall, type MarketGate } from "./cisTrader.js";
@@ -186,6 +186,18 @@ export async function listDays(limit = 60, account: AccountId = "trade"): Promis
     return await Promise.all(dates.map((d) => loadDay(d, account)));
   } catch {
     return [];
+  }
+}
+
+/** 그 계좌의 일지를 통째로 지운다 — 계좌 초기화와 짝이다 */
+export async function clearJournal(account: AccountId): Promise<number> {
+  try {
+    const files = await readdir(dirOf(account));
+    const targets = files.filter((f) => f.endsWith(".json"));
+    await Promise.all(targets.map((f) => rm(join(dirOf(account), f))));
+    return targets.length;
+  } catch {
+    return 0;
   }
 }
 
