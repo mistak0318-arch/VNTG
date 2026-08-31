@@ -1462,6 +1462,21 @@ export const api = {
    * 슈퍼신호등 재구성 — **두 겹 문이 각각 값을 하나.**
    * 표본에서 일곱 목록 중 여섯을 되살려 「교집합만」·「초록만」·「둘 다」를 견준다.
    */
+  /* ---------------- 신호등 분석 (목록별 추적, 2026-08-31) ---------------- */
+  listTrack: () => getJson<ListTrackSummary>("/api/signal/list-track"),
+  listTrackJob: () =>
+    getJson<{
+      status: string;
+      step: string;
+      done: number;
+      total: number;
+      added: number;
+      error?: string;
+      counts?: Record<string, { universe: number; green: number }>;
+    }>("/api/signal/list-track/job"),
+  /** 지금 돌리기 — 40분쯤, 백그라운드 */
+  listTrackRun: () => postJson<{ started: boolean }>("/api/signal/list-track/run", {}),
+
   signalSuperSim: (config?: SignalConfig, minLists = 3) =>
     postJson<{ result: SignalSuperSimResult }>("/api/signal/super-sim", { config, minLists }),
 
@@ -5047,4 +5062,31 @@ export interface SignalSuperSimResult {
   listsTotal: number;
   minLists: number;
   rows: SignalSuperSimRow[];
+}
+
+/** 목록별 추적 원장의 한 줄 — 서버 listTrack.ts 와 같은 모양 */
+export interface ListEntry {
+  code: string;
+  name: string;
+  /** 어느 목록에서 왔나 (SCREEN_UNIVERSES key) */
+  list: string;
+  addedDate: string;
+  addedPrice: number;
+  score: number;
+  /** 편입일 그 목록에서의 자리 */
+  rank: number;
+  configHash?: string;
+  regime?: { breadth: number | null; newHigh: number | null; weak: boolean };
+  seenCount: number;
+  lastSeenDate: string;
+  active?: boolean;
+  exitedDate?: string;
+}
+
+export interface ListTrackSummary {
+  entries: ListEntry[];
+  lastRunDate: string | null;
+  /** 목록별로 몇 개를 받았고 몇 개가 초록이었나 */
+  counts: Record<string, { universe: number; green: number }>;
+  byList: { key: string; label: string; active: number; exited: number; avgScore: number | null }[];
 }

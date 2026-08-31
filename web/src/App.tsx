@@ -17,6 +17,7 @@ import { BuzzSourcePage } from "./pages/BuzzSourcePage";
 import { matchesMiniHotkey, onMiniConfigChange, readMiniConfig } from "./miniConfig";
 import { TabActiveContext } from "./tabActive";
 import { SuperDashboardPage } from "./pages/SuperDashboardPage";
+import { ListTrackPage } from "./pages/ListTrackPage";
 import { UsWatchPage } from "./pages/UsWatchPage";
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
@@ -76,6 +77,7 @@ type Tab =
   | "customTheme"
   | "signalScreen"
   | "superSignal"
+  | "listTrack"
   | "journal"
   | "memo"
   | "usWatch"
@@ -164,6 +166,11 @@ const MENU: {
       { key: "signalScreen", label: "신호등 찾기", icon: "🚦" },
       /* 슈퍼신호등 검증 대시보드 (2026-08-26) — 걸린 것들이 그 뒤로 어떻게 됐나 */
       { key: "superSignal", label: "슈퍼신호등", icon: "🌟" },
+      /*
+       * 신호등 분석 (2026-08-31) — 목록별 단독 추적. 슈퍼신호등 바로 아래에 둔다:
+       * 두 원장을 견주는 것이 이 화면의 목적이라 나란히 있어야 한다.
+       */
+      { key: "listTrack", label: "신호등 분석", icon: "🔬" },
       /* CIS 일지 — 시스가 굴리는 모의 계좌 (2026-08-31). 복기 노트 바로 위에 둔다:
          둘 다 「돌아보는 자리」이고, 사람의 복기와 시스의 복기가 나란히 있어야 비교가 된다 */
       { key: "cis", label: "CIS 일지", icon: "🧠" },
@@ -569,6 +576,7 @@ export default function App() {
       case "customTheme": return <CustomThemePage onSelectStock={onSelectStock} />;
       case "signalScreen": return <ScreenPage onSelectStock={onSelectStock} />;
       case "superSignal": return <SuperDashboardPage onSelectStock={onSelectStock} />;
+      case "listTrack": return <ListTrackPage onSelectStock={onSelectStock} />;
       case "cis": return <CisPage onSelectStock={onSelectStock} />;
       case "journal": return <JournalPage onSelectStock={onSelectStock} />;
       case "memo": return <MemoPage onSelectStock={onSelectStock} />;

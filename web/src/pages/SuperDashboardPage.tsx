@@ -632,7 +632,9 @@ export function SuperDashboardPage({
       {error && <div className="error-banner">{error}</div>}
 
       <p className="page-note">
-        매일 15:45, 일곱 목록의 <b>교집합에 걸린 초록</b>을 편입해 따라갑니다. 편입 시점을
+        매일 15:45, <b>일곱 목록에서 각각 상위 500종목</b>을 받아 그중{" "}
+        <b>3곳 이상에 동시에 걸린 종목</b>을 추리고, 그 안에서 <b>신호등이 초록</b>인 것을
+        편입해 따라갑니다. 편입 시점을
         못 박아 두고 이후 주가·점수·수급·시장을 기록합니다 — <b>슈퍼신호등 체계 자체를
         검증하는 자리</b>입니다. {lastRun && <>마지막 편입 실행 {lastRun}.</>}
       </p>

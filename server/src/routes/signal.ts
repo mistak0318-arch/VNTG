@@ -25,6 +25,7 @@ import { gradeSignalHistory, signalDays } from "../signalHistory.js";
 import { etfSeriesFor, themeSeriesFor } from "../themeSeries.js";
 import { backtestProgress, backtestResult, startBacktestJob } from "../signalBacktest.js";
 import { samplesMeta } from "../signalSamples.js";
+import { listTrackJob, listTrackSummary, runListTrack } from "../listTrack.js";
 import { conditional, simulate, superSim, sweep } from "../signalSimulate.js";
 import { tradeValueTop } from "../signalScreen.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -204,6 +205,41 @@ export function createSignalRouter(client: KiwoomClient): Router {
       .then((l) => l.map((e) => e.code))
       .catch(() => [] as string[]);
     res.json({ ...job, superCodes });
+  });
+
+  /* ---------------- 신호등 분석 (목록별 추적) ---------------- */
+
+  /**
+   * 목록별 원장 — **슈퍼신호등과 나란히 놓고 견주려고 만든 것.**
+   *
+   * 편입·이탈 규칙이 슈퍼신호등과 **똑같다.** 그래야 두 원장의 차이가
+   * 「교집합을 봤나 안 봤나」 하나로 좁혀진다.
+   */
+  router.get("/list-track", async (_req, res, next) => {
+    try {
+      res.json(await listTrackSummary());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/list-track/job", (_req, res) => {
+    res.json(listTrackJob());
+  });
+
+  /** 지금 돌리기 — 백그라운드로 돈다(40분쯤). 화면은 진행률을 폴링한다 */
+  router.post("/list-track/run", (req, res, next) => {
+    try {
+      const body = req.body as { limit?: number; force?: boolean } | undefined;
+      if (listTrackJob().status === "running") {
+        res.json({ started: false, reason: "이미 돌고 있습니다" });
+        return;
+      }
+      void runListTrack(client, { limit: body?.limit, force: body?.force !== false });
+      res.json({ started: true });
+    } catch (err) {
+      next(err);
+    }
   });
 
   /* ---------------- 슈퍼신호등 ---------------- */

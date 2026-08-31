@@ -3,6 +3,7 @@ import { regimeCheck, regimeConfig } from "./regimeWatch.js";
 import { pushNotice } from "./notifyCenter.js";
 import { backtestProgress, startBacktestJob } from "./signalBacktest.js";
 import { samplesMeta } from "./signalSamples.js";
+import { runListTrack } from "./listTrack.js";
 import { simulate } from "./signalSimulate.js";
 import { getConfig } from "./signalLight.js";
 import { tradeValueTop } from "./signalScreen.js";
@@ -48,6 +49,7 @@ let timer: ReturnType<typeof setInterval> | null = null;
 /** 오늘 이미 한 일 — 하루 한 번씩만 */
 let doneCheck = "";
 let doneRebuild = "";
+let doneList = "";
 let rebuilding = false;
 
 function kst(now = new Date()): Date {
@@ -196,7 +198,20 @@ async function tick(client: KiwoomClient): Promise<void> {
       await regimeCheck(client, { notify: true });
     }
 
-    /* ② 18:30 — 표본이 오래됐으면 알아서 다시 모은다 */
+    /*
+     * ② 16:30 — **신호등 분석** (목록별 추적).
+     *
+     * 슈퍼신호등(15:45)이 끝난 뒤, 표본 재수집(18:30) 전이다. 일곱 목록 각 500 을
+     * 받아 합집합(1,200~1,800종목)의 신호등을 전부 잰다 — **상한을 안 둔다.**
+     * 슈퍼신호등의 평가 상한(40개) 때문에 「초록이었을 수도 있는데 재보지도 못한」
+     * 종목이 생기는 문제를 여기서는 원천 차단한다. 40분쯤 걸리지만 백그라운드다.
+     */
+    if (t >= "16:30" && t < "16:40" && doneList !== today) {
+      doneList = today;
+      void runListTrack(client, { limit: 500 });
+    }
+
+    /* ③ 18:30 — 표본이 오래됐으면 알아서 다시 모은다 */
     if (t >= "18:30" && t < "18:40" && doneRebuild !== today) {
       doneRebuild = today;
       const meta = await samplesMeta();
@@ -221,5 +236,5 @@ async function tick(client: KiwoomClient): Promise<void> {
 export function startRegimeScheduler(client: KiwoomClient): void {
   if (timer) return;
   timer = setInterval(() => void tick(client), TICK_MS);
-  console.log("[regime] 장세 점검 스케줄러 시작 (16:10 점검 · 18:30 표본 재수집)");
+  console.log("[regime] 스케줄러 시작 (16:10 장세 점검 · 16:30 신호등 분석 · 18:30 표본 재수집)");
 }

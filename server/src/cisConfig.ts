@@ -173,6 +173,8 @@ function clampRules(r: Partial<CisRules>, base: CisRules): CisRules {
     /* 켬/끔 — 숫자가 아니라 참거짓이다. 안 주면 지금 값을 지킨다 */
     useRegimeGate:
       typeof r.useRegimeGate === "boolean" ? r.useRegimeGate : base.useRegimeGate,
+    useListTrack:
+      typeof r.useListTrack === "boolean" ? r.useListTrack : base.useListTrack,
     minScore: num(r.minScore, 0, 100, base.minScore),
     minTradeValue: num(r.minTradeValue, 0, 100_000, base.minTradeValue),
     minMarketScore: num(r.minMarketScore, 0, 100, base.minMarketScore),
@@ -245,6 +247,15 @@ export const RULE_LABEL: Record<keyof CisRules, { label: string; unit: string; h
   minScore: { label: "신호등 최소점", unit: "점", hint: "이 아래 종목은 후보에서 뺀다" },
   minTradeValue: { label: "최소 거래대금", unit: "억", hint: "얇으면 내 주문에 값이 밀린다" },
   minMarketScore: { label: "시장 최소점", unit: "점", hint: "이 아래면 그날은 아무것도 안 산다" },
+  useListTrack: {
+    label: "신호등 분석 원장 쓰기",
+    unit: "",
+    hint:
+      "매일 16:30 에 쌓이는 목록별 추적(추적 중인 초록)을 후보에 더한다. " +
+      "이미 재놓은 종목이라 신호등 조회가 0회이고, 주도주 스캔이 못 보는 목록" +
+      "(외국인 연속순매매·동일순매매 등)에서 온 종목이 섞인다. " +
+      "⚠️ 원장은 전날 16:30 기준이라 장중 신규는 주도주 스캔이 잡는다 — 둘을 합쳐 쓴다",
+  },
   useRegimeGate: {
     label: "장세 신뢰도 문",
     unit: "",

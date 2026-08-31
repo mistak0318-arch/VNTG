@@ -2,6 +2,7 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { evaluateMarket } from "./marketSignal.js";
 import { evaluateSignal } from "./signalLight.js";
 import { regimeTrust } from "./regimeWatch.js";
+import { listTrackSummary } from "./listTrack.js";
 import { leaderScan, type LeaderStock } from "./leaderScan.js";
 import {
   addTradingDays,
@@ -97,6 +98,22 @@ export interface CisRules {
   targetPct: number;
   /** 며칠 지나도 안 움직이면 자리를 비운다 (기회비용) */
   maxHoldDays: number;
+  /**
+   * **신호등 분석 원장을 후보로 쓸까** (2026-08-31 — "CIS 도 이거 참고로 매매할 수
+   * 있게 알고리즘 세팅해주고").
+   *
+   * 켜면 매일 16:30 에 쌓이는 목록별 추적 원장(추적 중인 초록)을 후보 풀에 더한다.
+   * 두 가지가 좋아진다:
+   *
+   *   ① **신호등을 다시 안 부른다** — 이미 재서 초록으로 확정된 종목들이다.
+   *      주도주 풀은 종목당 신호등 조회가 나가는데 이쪽은 0회다
+   *   ② **주도주 스캔이 못 보는 자리**를 본다 — 외국인 연속순매매·동일순매매처럼
+   *      「오늘 많이 오른 것」이 아닌 목록에서 온 종목들이다
+   *
+   * ⚠️ 원장은 **전날 16:30 기준**이다. 장중에 새로 뜬 것은 주도주 스캔이 잡는다 —
+   * 그래서 둘을 **합쳐서** 쓴다(하나로 갈아타는 게 아니다).
+   */
+  useListTrack: boolean;
   /** 후보의 최소 신호등 점수 */
   minScore: number;
   /** 후보의 최소 거래대금 (억) */
@@ -145,6 +162,8 @@ export const DEFAULT_RULES: CisRules = {
   targetPct: 15,
   /* 열흘 안에 안 가면 내 판단이 틀린 것이다. 돈이 묶이는 게 더 비싸다 */
   maxHoldDays: 10,
+  /* 신호등 분석 원장을 후보에 더한다 — 조회를 안 늘리면서 보는 자리가 넓어진다 */
+  useListTrack: true,
   minScore: 60,
   /* 500억 미만은 내가 사는 수량에 값이 밀린다 — 모의라도 못 살 걸 샀다고 적지 않는다 */
   minTradeValue: 500,
@@ -250,6 +269,55 @@ export async function pickCandidates(
       base.used.push("신호등:조회실패");
     }
     out.push(base);
+  }
+
+  /*
+   * **신호등 분석 원장에서 더 담는다** (2026-08-31).
+   *
+   * 이미 신호등을 재서 초록으로 확정된 종목들이라 **조회가 0회**다. 그리고
+   * 주도주 스캔이 못 보는 목록(외국인 연속순매매·동일순매매 등)에서 온 종목이
+   * 섞이므로 보는 자리가 넓어진다.
+   *
+   * 중복은 제외한다 — 주도주 쪽에 이미 있으면 그쪽 점수를 쓴다(주도주 정보가
+   * 더 풍부하다).
+   */
+  if (rules.useListTrack) {
+    try {
+      const have = new Set([...out, ...bad].map((c) => c.code));
+      const lt = await listTrackSummary();
+      /** 같은 종목이 여러 목록에 있으면 한 줄로 — 걸린 목록 수를 세어 둔다 */
+      const byCode = new Map<string, { e: (typeof lt.entries)[number]; lists: string[] }>();
+      for (const e of lt.entries) {
+        if (e.active === false || have.has(e.code)) continue;
+        const prev = byCode.get(e.code);
+        if (prev) prev.lists.push(e.list);
+        else byCode.set(e.code, { e, lists: [e.list] });
+      }
+      for (const { e, lists } of byCode.values()) {
+        if (e.score < rules.minScore) continue;
+        out.push({
+          code: e.code,
+          name: e.name,
+          price: e.addedPrice,
+          changeRate: 0,
+          tradeValue: 0,
+          sector: "",
+          signalScore: e.score,
+          signalLevel: "green",
+          leaderScore: 0,
+          /*
+           * 점수는 **신호등만**으로 낸다 — 주도주 점수가 없으니 그 자리를 0 으로 두고
+           * 신호등을 온전히 반영한다. 주도주에서 온 후보와 견줄 때 불리하지만,
+           * 그건 「주도주 정보가 있는 쪽이 더 안다」는 뜻이라 맞는 순서다.
+           */
+          score: e.score,
+          used: [`신호등 분석:${lists.length}목록`, `신호등:green(${e.score})`],
+          why: `${lists.length}개 목록에서 초록 · ${e.seenCount}일째`,
+        });
+      }
+    } catch {
+      /* 원장을 못 읽어도 주도주 후보는 그대로 간다 */
+    }
   }
 
   out.sort((a, b) => b.score - a.score);
