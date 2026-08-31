@@ -443,17 +443,22 @@ export function ScreenerPage({
    * 참고용으로 곁눈질하는 자리에 그만한 값을 치를 이유가 없다.
    */
   const tally = (() => {
-    let up = 0, down = 0, flat = 0;
+    let up = 0, down = 0, flat = 0, none = 0;
     for (const r of shown) {
       const lv = liveOf(r.code);
       const rate = lv?.rate ?? Number(r.flu_rt ?? r.jmp_rt);
-      /* 등락률을 못 읽은 줄은 **어느 쪽도 아니다** — 보합으로 넣으면 없는 보합이 생긴다 */
-      if (!Number.isFinite(rate)) continue;
+      /*
+       * 등락률을 못 읽은 줄은 **어느 쪽도 아니다** — 보합으로 넣으면 없는 보합이
+       * 생긴다. 대신 **셌다는 사실은 남긴다**. 조용히 빼 버렸더니 "100종목인데
+       * 합은 65" 가 됐고, 화면만 봐선 나머지 35가 어디로 갔는지 알 길이 없었다
+       * (2026-08-31 — "왜 합이 100이 안되는거야"). 표에 「-」로 뜨는 그 줄들이다.
+       */
+      if (!Number.isFinite(rate)) { none++; continue; }
       if (rate > 0) up++;
       else if (rate < 0) down++;
       else flat++;
     }
-    return { up, down, flat };
+    return { up, down, flat, none };
   })();
 
   /*
@@ -872,14 +877,25 @@ export function ScreenerPage({
               {shown.length > 0 && (
                 <span
                   className="scr-tally"
-                  title={`지금 보이는 ${shown.length}종목 기준입니다 — 거르기·정렬·쪽 넘김에 따라 바뀝니다. 시장 전체의 등락이 아닙니다.`}
+                  title={
+                    `지금 보이는 표 기준입니다 — 거르기·정렬·쪽 넘김에 따라 바뀝니다. ` +
+                    `시장 전체의 등락이 아닙니다.` +
+                    (tally.none > 0
+                      ? ` 등락률이 안 오는 ${tally.none}종목(표에 「-」)은 세지 않았습니다.`
+                      : "")
+                  }
                 >
                   {/*
-                    총 개수를 **맨 앞에 박는다** (2026-08-31 — "화면에는 100개 나오는데
-                    숫자는 합이 100개가 안되네"). 셋을 더해 보게 만들면 안 된다.
-                    앞에 100 이 있으면 14+82+4 가 맞는지 눈이 알아서 안다.
+                    앞의 숫자는 **실제로 센 개수**다 — shown.length 가 아니다
+                    (2026-08-31 — "필터 건 결과에 대한 등락률 개수를 보여주면 안되?
+                    숨긴걸 볼 필요가 없잖아").
+
+                    ⚠️ 이 둘은 다르다. 등락률이 안 오는 종목(표에 「-」)이 있으면
+                    shown.length 는 100 인데 셋의 합은 65 가 된다. 앞에 100 을 박아
+                    두면 화면만 보고는 나머지 35 가 어디로 갔는지 알 길이 없다.
+                    센 것으로 적으면 셋이 **언제나** 그 숫자로 떨어진다.
                   */}
-                  <span className="scr-tally-n">{shown.length}종목</span>
+                  <span className="scr-tally-n">{tally.up + tally.down + tally.flat}종목</span>
                   <span>
                     상승 <b className="positive">{tally.up}</b>
                   </span>
@@ -889,6 +905,7 @@ export function ScreenerPage({
                   <span>
                     보합 <b>{tally.flat}</b>
                   </span>
+
                 </span>
               )}
             </h3>
