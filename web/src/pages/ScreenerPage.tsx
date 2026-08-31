@@ -210,6 +210,17 @@ export function ScreenerPage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>(loadFilter);
+  /*
+   * 필터가 하나라도 걸렸나. 아래쪽 `on`(필터 단추의 ● 표시)이 쓰던 판정을 위로
+   * 올렸다 — 조회를 몇 개 받아올지 정하는 데 먼저 필요하다.
+   */
+  const filterOn =
+    filter.minTv > 0 ||
+    filter.caps.length > 0 ||
+    filter.minRate !== null ||
+    filter.minTurn !== null ||
+    filter.commonOnly ||
+    filter.etfOnly;
   const [openFilter, setOpenFilter] = useState(false);
 
   const set = (patch: Partial<Filter>) => {
@@ -294,17 +305,32 @@ export function ScreenerPage({
    * `quiet` 는 **스스로 다시 받을 때** 쓴다 — 그때 로딩을 띄우면 이십 초마다 표가
    * 깜빡이고, 읽던 자리를 놓친다. 값만 조용히 갈아끼운다.
    */
+  /*
+   * 필터가 걸리면 **넉넉히 받아 온다** (2026-08-31 — "필터 걸면 그 필터 걸어서
+   * 나온 화면의 100개를 보여주는게 맞지 않냐").
+   *
+   * 「거래대금 상위 100 중 보통주」가 아니라 **「보통주 중 거래대금 상위 100」**이
+   * 보고 싶은 것이다. 백 건을 받아 놓고 깎으면 보통주 필터에 65 건으로 줄어,
+   * 정작 66~100 등 보통주는 화면에 오지도 못한다.
+   *
+   * 필터가 걸리면 **천장(500)까지 받는다**. 세 배만 부를까 하다가 재 보니
+   * 100건 343ms / 300건 395ms / 500건 416ms 였다 — 서버가 이미 연속조회로
+   * 모아 두는 터라 더 부르는 값이 거의 공짜다. 아낄 이유가 없으면 채우는 쪽이 낫다.
+   * 그래도 조건이 빡세면 못 채우는데, 그건 표 아래에 사정을 적어 준다.
+   */
+  const fetchLimit = filterOn ? 500 : limit;
+
   const fetchRank = useCallback(
     (quiet = false) => {
       if (!quiet) setLoading(true);
       setError(null);
       api
-        .rank(rankKey, market, exchange, limit)
+        .rank(rankKey, market, exchange, fetchLimit)
         .then((r) => setData(r))
         .catch((e: Error) => setError(e.message))
         .finally(() => setLoading(false));
     },
-    [rankKey, market, exchange, limit],
+    [rankKey, market, exchange, fetchLimit],
   );
 
   useEffect(() => {
@@ -374,6 +400,16 @@ export function ScreenerPage({
     return true;
   });
 
+  /*
+   * 거른 뒤 **앞에서 limit 만큼** 자른다 — 위에서 넉넉히 받아 온 나머지는 여기서
+   * 버린다. 자르는 기준은 받아 온 **원래 순서**(그 조회의 순위)다. 정렬하기 전에
+   * 잘라야 「보통주 중 거래대금 상위 100」이 된다 — 정렬한 뒤에 자르면 열 이름을
+   * 누를 때마다 표에 담기는 종목 자체가 바뀐다.
+   */
+  const capped = rows.length > limit ? rows.slice(0, limit) : rows;
+  /* 필터가 천장(500)에 막혀 limit 을 못 채웠나 — 표 아래에 사정을 적는다 */
+  const short = filterOn && capped.length < limit && (data?.rows?.length ?? 0) >= fetchLimit;
+
   const hasCap = hasCapCol;
   const hasTurn = hasTurnCol;
   /*
@@ -382,11 +418,14 @@ export function ScreenerPage({
    * 키움이 준 **순위 그대로**가 기본이다 — 「거래대금 상위」는 이미 거래대금순이고
    * 그게 이 조회의 뜻이다. 열 이름을 누르면 그때만 다시 세운다.
    *
-   * ⚠️ **이 화면에 온 백 종목 안에서만** 다시 세운다. 시가총액순으로 누른다고
+   * ⚠️ **이 화면에 온 것 안에서만** 다시 세운다. 시가총액순으로 누른다고
    * 시장 전체의 시총 순위가 나오는 게 아니다 — 거래대금 상위 100 중 시총이 큰 순서다.
    * 그 둘은 다른 질문이라 표 아래에 적어 둔다.
+   *
+   * 필터가 걸렸으면 그 100 은 **거른 뒤의 100** 이다(위 `capped` 참고). 정렬은
+   * 자른 뒤에 하므로, 열 이름을 눌러도 표에 담긴 종목은 그대로고 순서만 바뀐다.
    */
-  const sort = useSortableTable(rows);
+  const sort = useSortableTable(capped);
 
   /*
    * 한 장씩 잘라 그린다. **거른 뒤·정렬한 뒤**에 자른다 — 거르기 전에 자르면
@@ -492,14 +531,8 @@ export function ScreenerPage({
           return sigSort === "desc" ? bv - av : av - bv;
         })
       : shown;
-  const estimated = rows.some((r) => r.tvEst);
-  const on =
-    filter.minTv > 0 ||
-    filter.caps.length > 0 ||
-    filter.minRate !== null ||
-    filter.minTurn !== null ||
-    filter.commonOnly ||
-    filter.etfOnly;
+  const estimated = capped.some((r) => r.tvEst);
+  const on = filterOn;
 
   return (
     <div {...swipe}>
@@ -630,9 +663,22 @@ export function ScreenerPage({
               ))}
             </>
           )}
+          {/*
+            건수 표시. 필터가 걸리면 **거른 것 / 받아 온 것**이다 — 받아 온 쪽은
+            필터 때문에 세 배로 부른 수라 limit 과 다르다. 「65 / 300건」처럼 뜬다.
+          */}
           {data && (
             <span className="breadth-count">
-              {on ? `${rows.length} / ${all.length}건` : `${all.length}건`}
+              {on ? `${capped.length} / ${all.length}건` : `${all.length}건`}
+            </span>
+          )}
+          {/*
+            천장에 막혀 못 채운 경우. 500 건까지 뒤졌는데도 조건에 맞는 게 limit 에
+            모자라면, 화면이 적은 이유가 필터 탓인지 천장 탓인지 알 길이 없다.
+          */}
+          {short && (
+            <span className="scr-idle" title="서버가 한 번에 주는 상한이 500건입니다">
+              {all.length}건까지 뒤져 {capped.length}건
             </span>
           )}
           {/*
