@@ -21,7 +21,6 @@ import { ListTrackPage } from "./pages/ListTrackPage";
 import { UsWatchPage } from "./pages/UsWatchPage";
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
-import { StockDetail } from "./components/StockDetail";
 import { AccountInfoPage } from "./pages/AccountInfoPage";
 import { AlgoPicksPage } from "./pages/AlgoPicksPage";
 import { CalendarPage } from "./pages/CalendarPage";
@@ -338,19 +337,30 @@ export default function App() {
 
   const selected = route.stock;
 
-  /*
-   * 종목을 고르면 **열려 있는 다른 창에도 알린다.**
+  /**
+   * 종목을 고르면 **개별종목분석 화면으로 간다.**
    *
-   * 화면마다 따로 붙이지 않고 여기 한 곳에 둔다 — 종목을 고르는 길은 전부
-   * 이 함수를 지나므로, 새 화면을 만들어도 연동이 저절로 따라온다.
-   * 연동이 꺼져 있으면 `publish` 가 스스로 아무 일도 하지 않는다.
+   * ## 왜 모달을 걷어냈나 (2026-09-01 벤티지)
+   *
+   * "그냥 종목 분석에 나오는 화면을 개별종목 클릭했을때 나오는 화면으로 해줘.
+   * 이거 모달 형식말고" · "통일하자. 어차피 걔가 정보 제일 많이 들고 있는데 뭐"
+   *
+   * 예전엔 종목을 누르면 `StockDetail` 시트가 화면 위를 덮었다. 그런데 그 시트의
+   * 속은 개별종목분석과 **같은 모듈**(`PriceHeader` · `IntradayLevelsBar` ·
+   * `StockSummaryPanel` · `StockTabsSection`)이었고, 분석 화면은 거기에 검색과
+   * 최근 목록까지 더 얹은 **상위집합**이었다. 같은 것을 두 모양으로 보여 주면서
+   * 좁은 쪽이 넓은 쪽을 덮고 있었던 셈이다.
+   *
+   * 특히 종목발굴처럼 이미 상세를 펼쳐 놓은 화면에서는 방향키로 넘길 때마다
+   * 시트가 앞으로 튀어나와 훑기를 막았다.
+   *
+   * 그래서 길을 하나로 합쳤다 — 종목을 고르는 모든 길이 이 함수를 지나므로
+   * 화면 전체가 한 번에 같은 방식으로 바뀐다. 창 연동(`focus.publish`)도
+   * 여기 한 곳에 있어 새 화면을 만들어도 저절로 따라온다.
+   *
+   * ⚠️ 미니 창(`MiniPage`)과 ETF 구성종목은 **탭이 없는 자리**라 거기서는
+   * `StockDetail` 시트를 그대로 쓴다. 걷어낸 것은 본창의 모달뿐이다.
    */
-  function onSelectStock(code: string, name: string) {
-    navigate({ stock: { code, name } });
-    focus.publish(code, name);
-  }
-
-  // 종목 상세(모달) → 개별종목분석 페이지로. 종목은 유지한 채 탭만 옮긴다.
   function openAnalysis(code: string, name: string) {
     /*
      * 새 종목은 **맨 위부터** (2026-08-27 — "포커스가 중간에 잡혀 있네").
@@ -364,6 +374,9 @@ export default function App() {
     setNavOpen(false);
     setNavFrom(null);
   }
+
+  /** 예전 이름 — 종목을 고르는 길은 이제 전부 개별종목분석으로 간다 */
+  const onSelectStock = openAnalysis;
 
   function go(next: Tab) {
     // 메뉴를 옮기면 열려 있던 종목 상세는 닫는다
@@ -582,7 +595,7 @@ export default function App() {
       case "themedb": return <ThemeDbPage onSelectStock={onSelectStock} />;
       case "program": return <ProgramTradePage />;
       case "news": return <NewsPage onSelectStock={onSelectStock} />;
-      case "discovery": return <StockDiscoveryPage onSelectStock={onSelectStock} />;
+      case "discovery": return <StockDiscoveryPage onOpenAnalysis={openAnalysis} />;
       case "watchAi": return <MyPage onSelectStock={onSelectStock} />;
       case "watchKiwoom": return <KiwoomWatchlistPage onSelectStock={onSelectStock} />;
       case "customTheme": return <CustomThemePage onSelectStock={onSelectStock} />;
@@ -996,18 +1009,10 @@ export default function App() {
         </div>
       </div>
 
-      {/* 개별종목분석 탭은 종목을 페이지 안에서 직접 보여주므로 모달을 띄우지 않는다 */}
-      {selected && tab !== "stockAnalysis" && (
-        <ErrorBoundary where="종목 상세" resetKey={selected.code}>
-        <StockDetail
-          code={selected.code}
-          name={selected.name}
-          onClose={() => navigate({ stock: null })}
-          onOpenAnalysis={openAnalysis}
-          onSelectStock={onSelectStock}
-        />
-        </ErrorBoundary>
-      )}
+      {/*
+        종목 상세 모달은 없앴다 (2026-09-01). 종목을 고르면 개별종목분석 탭이
+        그 자리를 대신한다 — `openAnalysis` 주석 참고.
+      */}
     </div>
   );
 }

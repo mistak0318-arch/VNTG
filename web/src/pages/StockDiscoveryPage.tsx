@@ -24,6 +24,7 @@ import { StockNotes } from "../components/StockNotes";
 import { SupplyDetailPanel } from "../components/SupplyDetailPanel";
 import { TradeSizePanel } from "../components/TradeSizePanel";
 import { useLive } from "../useLive";
+import { useStockFocus } from "../useStockFocus";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
 import { WatchButton } from "../components/WatchButton";
@@ -196,11 +197,22 @@ function LazyBlock({ children }: { children: React.ReactNode }) {
 /* ------------------------------------------------------------------ */
 
 export function StockDiscoveryPage({
-  onSelectStock,
+  onOpenAnalysis,
 }: {
-  /** 「개별종목분석」으로 넘겨 더 깊게 보고 싶을 때 */
-  onSelectStock: (code: string, name: string) => void;
+  /**
+   * 「개별종목분석」 탭으로 아예 옮겨 갈 때. **버튼을 눌렀을 때만** 부른다.
+   *
+   * ⚠️ 예전에는 여기에 `onSelectStock`(= 상세 모달을 여는 길)이 꽂혀 있었고,
+   * 넘기기·목록 고르기·구성종목 누르기가 전부 그 길로 갔다. 그래서 방향키로
+   * 훑을 때마다 **이 화면 위로 상세 시트가 덮였다** — 정작 이 화면이 이미
+   * 열두 블록을 펼쳐 놓은 인라인 상세인데도. (2026-09-01 벤티지)
+   *
+   * 그 길이 필요했던 진짜 이유는 **창 연동**(`focus.publish`)뿐이라,
+   * 연동은 아래에서 직접 보내고 모달은 더 이상 부르지 않는다.
+   */
+  onOpenAnalysis: (code: string, name: string) => void;
 }) {
+  const focus = useStockFocus();
   const [source, setSource] = useState<SourceKey>("volume");
   const [market, setMarket] = useState("000");
   const [list, setList] = useState<Candidate[]>([]);
@@ -284,27 +296,29 @@ export function StockDiscoveryPage({
 
   /* ---------------- 넘기기 ---------------- */
 
-  /*
-   * ⚠️ **넘길 때도 연동을 보낸다.**
+  /**
+   * 자리를 옮기고 **연동만 보낸다.**
    *
-   * 종목을 눌러서 고르는 길(`onSelectStock`)에는 연동이 붙어 있었는데, **화살표로
-   * 넘기는 길에는 없었다.** 그래서 보드를 띄워 놓고 여기서 화살표로 훑으면
-   * 보드는 처음 종목에 멈춰 있었다 — 이 화면을 쓰는 방식이 바로 그 훑기인데.
-   *
-   * 목록에서 고르는 것(`setIndex`)도 같은 길로 보낸다.
+   * 보드를 띄워 놓고 여기서 화살표로 훑으면 보드도 같이 따라와야 한다 —
+   * 이 화면을 쓰는 방식이 바로 그 훑기니까. 하지만 따라오게 하려고 상세 모달까지
+   * 열 이유는 없다. 연동이 꺼져 있으면 `publish` 는 아무 일도 하지 않는다.
    */
+  const goIndex = useCallback(
+    (n: number) => {
+      const hit = list[n];
+      if (!hit) return;
+      setIndex(n);
+      setListOpen(false);
+      focus.publish(hit.code, hit.name);
+    },
+    [list, focus],
+  );
+
   const move = useCallback(
     (delta: number) => {
-      setIndex((i) => {
-        const n = i + delta;
-        if (n < 0 || n >= list.length) return i;
-        const hit = list[n];
-        if (hit) onSelectStock(hit.code, hit.name);
-        return n;
-      });
-      setListOpen(false);
+      goIndex(index + delta);
     },
-    [list, onSelectStock],
+    [goIndex, index],
   );
 
   /*
@@ -403,17 +417,34 @@ export function StockDiscoveryPage({
    * 검색해서 고른 종목은 **목록 맨 앞에 끼워 넣는다.**
    * 따로 띄우면 넘기기가 안 먹어서 이 화면의 본체가 죽는다.
    */
+  /**
+   * 목록 밖 종목으로 **이 화면 안에서** 갈아탄다.
+   *
+   * 검색 결과와, 블록 안에서 누른 종목(업종·테마 구성종목, 신호등 비슷한 종목)이
+   * 다 이리로 온다. 목록에 없으면 맨 앞에 끼워 넣어 자리를 만든다 —
+   * 그래야 넘기기 바의 「n / 전체」와 방향키가 계속 말이 된다.
+   */
+  const goStock = useCallback(
+    (rawCode: string, name: string) => {
+      const c = normalizeStockCode(rawCode);
+      if (!c) return;
+      const at = list.findIndex((i) => i.code === c);
+      if (at >= 0) {
+        goIndex(at);
+        return;
+      }
+      setList((prev) => [{ code: c, name, price: 0, changeRate: 0, tradeValue: null }, ...prev]);
+      setIndex(0);
+      setListOpen(false);
+      focus.publish(c, name);
+    },
+    [list, goIndex, focus],
+  );
+
   function jumpTo(r: StockSearchResult) {
-    const c = normalizeStockCode(r.code);
     setQuery("");
     setResults([]);
-    const at = list.findIndex((i) => i.code === c);
-    if (at >= 0) {
-      setIndex(at);
-      return;
-    }
-    setList((prev) => [{ code: c, name: r.name, price: 0, changeRate: 0, tradeValue: null }, ...prev]);
-    setIndex(0);
+    goStock(r.code, r.name);
   }
 
   /* ---------------- 블록 설정 ---------------- */
@@ -504,12 +535,7 @@ export function StockDiscoveryPage({
           index={index}
           withSignals={listSignals}
           onToggleSignals={() => setListSignals((v) => !v)}
-          onPick={(i) => {
-            setIndex(i);
-            // 목록에서 고르는 것도 연동으로 내보낸다
-            if (list[i]) onSelectStock(list[i].code, list[i].name);
-            setListOpen(false);
-          }}
+          onPick={goIndex}
         />
       )}
 
@@ -565,7 +591,11 @@ export function StockDiscoveryPage({
                   name={current?.name ?? ""}
                   price={Math.abs(Number(current?.price ?? 0)) || 0}
                 />
-                <button className="filter-btn" onClick={() => onSelectStock(code, current?.name ?? "")}>
+                <button
+                  className="filter-btn"
+                  onClick={() => onOpenAnalysis(code, current?.name ?? "")}
+                  title="탭을 옮겨 개별종목분석에서 봅니다 — 이 화면을 덮지 않습니다"
+                >
                   개별종목분석으로
                 </button>
               </div>
@@ -628,7 +658,7 @@ export function StockDiscoveryPage({
                     name={current?.name ?? ""}
                     price={Math.abs(Number(String(info?.cur_prc ?? "").replace(/[+,]/g, ""))) || undefined}
                     investorRows={investorRows}
-                    onSelectStock={onSelectStock}
+                    onSelectStock={goStock}
                   />
                 </LazyBlock>
               </section>
@@ -636,7 +666,8 @@ export function StockDiscoveryPage({
           </div>
 
           <div className="table-note sd-foot">
-            ← → 방향키로 앞뒤 종목을 넘길 수 있습니다 · 목록 위치는 모집단을 바꾸면 처음으로 돌아갑니다
+            ← → 방향키로 앞뒤 종목을 넘길 수 있습니다 · 넘겨도 이 화면이 그대로 있습니다(상세가 앞을
+            덮지 않습니다) · 목록 위치는 모집단을 바꾸면 처음으로 돌아갑니다
           </div>
         </>
       )}

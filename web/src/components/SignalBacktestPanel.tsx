@@ -518,7 +518,7 @@ export function SignalBacktestPanel({
                   </tbody>
                 </table>
               </div>
-              <div className="table-note">종목을 누르면 상세가 열립니다.</div>
+              <div className="table-note">종목을 누르면 개별종목분석 화면으로 갑니다.</div>
             </section>
           )}
 

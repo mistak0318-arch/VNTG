@@ -625,7 +625,7 @@ function MemoStocks({
                   onOpen?.(s.code, s.name);
                 }
               }}
-              title={s.code.startsWith("us:") ? "해외 차트 열기" : "종목 상세 열기"}
+              title={s.code.startsWith("us:") ? "해외 차트 열기" : "개별종목분석 화면으로 가기"}
             >
               {s.code.startsWith("us:") && "🌏 "}
               {s.name}

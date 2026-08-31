@@ -951,7 +951,10 @@
       "Bash(grep -iv \"//\")",
       "Bash(curl -s http://localhost:5173/api/signal/list-track/job)",
       "Bash(curl -s -m 30 -X POST http://localhost:5173/api/watchlist/bulk -H 'Content-Type: application/json' -d '{\"codes\":[\"000000\"],\"action\":\"remove\"}')",
-      "Bash(curl -s -m 30 -o /dev/null -w \"%{http_code}\\\\n\" -X POST http://localhost:5173/api/watchlist/bulk -H 'Content-Type: application/json' -d '{\"codes\":[],\"action\":\"remove\"}')"
+      "Bash(curl -s -m 30 -o /dev/null -w \"%{http_code}\\\\n\" -X POST http://localhost:5173/api/watchlist/bulk -H 'Content-Type: application/json' -d '{\"codes\":[],\"action\":\"remove\"}')",
+      "PowerShell(npm --prefix web run typecheck 2>&1)",
+      "PowerShell(npx --prefix web tsc -p web/tsconfig.json --noEmit 2>&1)",
+      "PowerShell(npx --prefix server tsc -p server/tsconfig.json --noEmit 2>&1)"
     ]
   }
 }

@@ -52,7 +52,7 @@ export function SuperDetailSheet({
   code: string;
   name: string;
   onClose: () => void;
-  /** 본창 종목 상세(StockDetail)를 띄운다 */
+  /** 본창을 개별종목분석 화면으로 옮긴다 (2026-09-01 이전엔 상세 모달이었다) */
   onOpenStock?: (code: string, name: string) => void;
   /** 이탈·메모 저장 뒤 목록을 다시 읽게 */
   onChanged?: () => void;
@@ -270,7 +270,7 @@ export function SuperDetailSheet({
             <span className={`sd-state ${active ? "on" : "off"}`}>{active ? "추적 중" : "이탈"}</span>
           </h2>
           {onOpenStock && (
-            <button className="watch-btn" onClick={() => onOpenStock(code, name)} title="종목 상세 열기">
+            <button className="watch-btn" onClick={() => onOpenStock(code, name)} title="개별종목분석 화면으로 가기">
               📈
             </button>
           )}
