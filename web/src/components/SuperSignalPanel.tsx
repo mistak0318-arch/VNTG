@@ -375,68 +375,20 @@ export function SuperSignalPanel({
 
       {error && <div className="error-banner">{error}</div>}
 
-      {grade.some((g) => g.d1.n > 0 || g.d5.n > 0 || g.d20.n > 0) && (
-        <div className="ss-grade">
-          <div className="ss-grade-title">
-            편입 후 성적 <i>— 편입가 대비 평균, ( ) 안은 표본 수</i>
-          </div>
-          {/*
-            정의를 밝힌다 (2026-08-31 점검). 편입 15:45 시점에 NXT 애프터마켓이
-            열려 있어 매수 자체는 가능하다 — 다만 별도 호가라 종가와 값이 다르다.
-            그 차이를 안 적으면 「종가에 샀다면」이 「종가에 샀다」로 읽힌다.
-          */}
-          <div className="table-note">
-            편입가는 <b>편입일 종가</b>입니다. 편입 시각(15:45)에는 NXT 애프터마켓이
-            열려 있어 매수는 가능하지만 <b>애프터마켓은 별도 호가라 종가와 값이
-            다릅니다</b> — 「종가에 샀다면」이라는 근삿값으로 읽으세요.
-          </div>
-          <table className="data-table ss-grade-table">
-            <thead>
-              <tr>
-                <th>가르는 축</th>
-                <th className="num">표본</th>
-                <th className="num">1일</th>
-                <th className="num">5일</th>
-                <th className="num">20일</th>
-                {/*
-                  지수 대비 — **이 열이 이 표의 핵심**이다 (2026-08-31).
-                  「1일 -0.13%」가 나쁜 건지는 그날 시장을 알아야 답할 수 있다.
-                */}
-                <th className="num ss-grade-key" title="같은 날짜 코스피를 뺀 값(%p) — 「남보다 나았나」">
-                  지수 대비 1일
-                </th>
-                <th className="num ss-grade-key">지수 대비 20일</th>
-                <th className="num" title="추세추종은 승률이 낮고 손익비가 높은 것이 정상입니다 — 평균과 같이 보세요">
-                  승률 1일
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {grade.map((g) => {
-                const n = Math.max(g.d1.n, g.d5.n, g.d20.n);
-                /* 표본이 적으면 흐리게 — 세 건으로 낸 평균이 눈에 세게 박히면 안 된다 */
-                return (
-                  <tr key={g.label} className={n < 5 ? "ss-thin" : g.label === "전체" ? "ss-base" : ""}>
-                    <td>{g.label}</td>
-                    <td className="num">{n}</td>
-                    {([g.d1, g.d5, g.d20] as const).map((h, i) => (
-                      <td key={i} className={`num ${cls(h.avg)}`}>
-                        {h.avg === null ? "-" : <b>{pct(h.avg)}</b>}
-                      </td>
-                    ))}
-                    {([g.ex1, g.ex20] as const).map((h, i) => (
-                      <td key={`x${i}`} className={`num ss-grade-key ${cls(h?.avg ?? null)}`}>
-                        {h?.avg == null ? "-" : <b>{pp(h.avg)}</b>}
-                      </td>
-                    ))}
-                    <td className="num">
-                      {g.win1?.rate == null ? "-" : `${g.win1.rate.toFixed(0)}%`}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {/*
+        **편입 후 성적표는 여기서 뺐다** (2026-08-31 — "의미 없으면 지우던지 하자").
+
+        같은 표가 슈퍼신호등 대시보드에 있고, 거기는 접기·묶음 구획·전체 대비 차이가
+        붙어 있어 훨씬 읽기 낫다. 같은 표를 두 곳에 두면 한쪽만 손보게 되고, 그러면
+        두 화면이 다른 말을 하기 시작한다.
+
+        그리고 이 화면의 역할은 「지금 무엇이 걸렸나」다 — 채점은 다른 물음이다.
+      */}
+      {grade.some((g) => g.d1.n > 0) && (
+        <div className="table-note">
+          편입 후 성적표는 <b>슈퍼신호등 대시보드</b>로 옮겼습니다 — 접기·묶음·전체 대비
+          차이가 붙어 있어 읽기 낫습니다. <b>기준을 고칠 근거</b>를 찾는 거라면 그 표
+          말고 <b>설정 &gt; 시뮬레이터</b>를 보세요(여기는 편입분 수십 건, 거기는 19만 관측입니다).
         </div>
       )}
 

@@ -945,7 +945,8 @@
       "Bash(awk 'NR>=770 && NR<=830 && \\(/async function runSuperSignal/ || /const store =/ || /const cfg =/ || /const today =/\\)' server/src/superSignal.ts)",
       "Bash(grep -n \"  return { entries:\\\\|  return {$\" server/src/superSignal.ts)",
       "Bash(awk -F'\"' '{print NR\": \"$2}')",
-      "Bash(curl -s -m 10 http://localhost:5173/api/notify?limit=3 -o /dev/null)"
+      "Bash(curl -s -m 10 http://localhost:5173/api/notify?limit=3 -o /dev/null)",
+      "Bash(awk 'NR>=400 && NR<=460 && /<\\\\/table>|<\\\\/div>|table-note|가르는 축/' web/src/components/SuperSignalPanel.tsx)"
     ]
   }
 }

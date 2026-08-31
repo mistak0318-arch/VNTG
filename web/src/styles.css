@@ -12969,3 +12969,17 @@ thead .sd-emph {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--amber, #d59b23) 55%, transparent); }
   50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--amber, #d59b23) 0%, transparent); }
 }
+
+/* 전체와 완전히 같은 줄 — 아무것도 안 가르는 줄임을 표시 (2026-08-31) */
+.gb-same td {
+  opacity: 0.62;
+}
+.gb-same-tag {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 10.5px;
+  font-style: normal;
+}

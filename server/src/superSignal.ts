@@ -1166,6 +1166,8 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
   /** 지금 쓰이는 설정 — 화면이 조절 칸의 현재값으로 쓴다 */
   config: SuperConfig;
   grade: GradeRow[];
+  /** 전체와 완전히 같아서 뺀 줄 수 (편입 규칙이 이미 요구하는 조건들) */
+  gradeHidden: number;
   stats: SuperStats;
   /**
    * 기준 지문 — **원장에 서로 다른 기준의 편입이 섞여 있나.**
@@ -1315,6 +1317,25 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
     ),
   ].filter((g) => g.d1.n > 0 || g.d5.n > 0 || g.d20.n > 0);
 
+  /*
+   * **전체와 완전히 같은 줄은 뺀다** (2026-08-31 — "의미 없으면 지우던지 하자").
+   *
+   * 「편입 점수 70+」·「거래대금 상위에 걸림」 같은 줄은 **편입 규칙이 이미 그
+   * 조건을 요구**하므로 편입분 전부가 만족한다. 그래서 표본 수도 값도 전체와
+   * 똑같다 — 아무것도 안 가르는데 자리만 먹고, 표를 훑는 눈을 흐린다.
+   *
+   * ⚠️ **몇 줄을 뺐는지는 알린다.** 조용히 사라지면 「이 축은 아예 안 재나?」로
+   * 읽힌다. 그리고 문턱을 낮추면 갈리기 시작하는 줄이라, 그때는 저절로 다시 나온다.
+   */
+  const baseRow = grade.find((g) => g.group === "base");
+  const sameAsBase = (g: GradeRow): boolean =>
+    g.group !== "base" &&
+    baseRow !== undefined &&
+    g.d1.n === baseRow.d1.n &&
+    g.d1.avg === baseRow.d1.avg;
+  const gradeHidden = grade.filter(sameAsBase).length;
+  const gradeShown = grade.filter((g) => !sameAsBase(g));
+
   const today = todayStr();
   const d20s = store.entries
     .map((e) => ({ name: e.name, v: e.returns?.d20 ?? null }))
@@ -1349,7 +1370,9 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
     lastRunDate: store.lastRunDate,
     minLists: cfg.minLists,
     config: cfg,
-    grade,
+    grade: gradeShown,
+    /** 전체와 값이 똑같아 뺀 줄 수 — 조용히 사라지면 「안 재나?」로 읽힌다 */
+    gradeHidden,
     stats,
     /** 지금 기준의 지문 · 원장에 섞여 있나 · 지금 기준으로 담긴 건 몇 건인가 */
     fingerprint: { now: nowHash, mixed, sameAsNow, kinds: hashes.size },

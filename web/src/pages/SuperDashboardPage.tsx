@@ -97,7 +97,7 @@ const GRADE_GROUPS: { key: SuperGradeRow["group"]; label: string; hint: string }
  *   ③ 빈 열을 안 그린다 — 「- (0)」 이 스물여덟 칸이나 있었다
  *   ④ 전체 대비 차이를 같이 적는다 — 이 표의 물음이 처음부터 그것이었다
  */
-function GradeBoard({ rows }: { rows: SuperGradeRow[] }) {
+function GradeBoard({ rows, hidden }: { rows: SuperGradeRow[]; hidden: number }) {
   const [open, setOpen] = useState(() => {
     try {
       return localStorage.getItem("vntg.sd.grade") === "1";
@@ -173,7 +173,13 @@ function GradeBoard({ rows }: { rows: SuperGradeRow[] }) {
                           </td>
                         </tr>
                       )}
-                      {list.map((r) => (
+                      {list.map((r) => {
+                        /*
+                         * 전체와 똑같은 줄은 **서버가 이미 뺐다** — 편입 규칙이 이미
+                         * 요구하는 조건이라 편입분 전부가 만족해서 영영 안 갈린다.
+                         * 몇 줄을 뺐는지는 `gradeHidden` 으로 와서 아래에 적는다.
+                         */
+                        return (
                         <tr
                           key={r.label}
                           className={`${r.group === "base" ? "gb-base" : ""}${
@@ -190,26 +196,43 @@ function GradeBoard({ rows }: { rows: SuperGradeRow[] }) {
                             />
                           ))}
                         </tr>
-                      ))}
+                        );
+                      })}
                     </Fragment>
                   );
                 })}
               </tbody>
             </table>
           </div>
-          <p className="pt-n sd-hint">
-            괄호는 <b>표본 수</b>, 작은 숫자는 <b>전체 대비 차이(%p)</b>입니다. 이 표의
-            물음은 「이 줄이 전체보다 나은가」 하나입니다 — 「목록 5곳 이상」과 「이틀 이상
-            반복」이 전체보다 좋아야 교집합·지속성 가설이 맞는 것입니다.
+          <p className="sim-warn">
+            ⚠️ <b>지금은 이 표로 판단하지 마세요.</b> 편입분이 {base?.d1.n ?? 0}건뿐이고{" "}
             {pending.length > 0 && (
               <>
-                {" "}
-                <b>
-                  {pending.join("·")}일 뒤 열은 아직 안 찼습니다
-                </b>{" "}
-                — 그만큼 시간이 지난 편입분이 없어서 열 자체를 안 그렸습니다.
+                <b>{pending.join("·")}일 뒤 열이 아직 안 찼습니다</b> — 그만큼 시간이 지난
+                편입분이 없어서 열 자체를 안 그렸습니다.{" "}
               </>
             )}
+            하루짜리 수익률 스무 건으로는 아무것도 증명되지 않습니다.
+            <br />
+            <b>기준을 고치려면 설정 &gt; 시뮬레이터를 보세요</b> — 거기는 19만 관측입니다.
+            이 표는 그것과 역할이 다릅니다: 시뮬레이터는 <b>가상 채점</b>이고, 여기는{" "}
+            <b>실제로 담은 것</b>의 성적입니다. 그 차이는 값어치가 있지만, 표본이 차야 뜻이
+            생깁니다.
+          </p>
+          <p className="pt-n sd-hint">
+            괄호는 <b>표본 수</b>, 작은 숫자는 <b>전체 대비 차이(%p)</b>입니다. 이 표의
+            물음은 「이 줄이 전체보다 나은가」 하나입니다.
+            <br />
+            {hidden > 0 && (
+              <>
+                <b>{hidden}줄은 뺐습니다</b> — 편입 규칙이 이미 그 조건을 요구해서 편입분
+                전부가 만족하는 줄입니다(값이 전체와 똑같습니다). 문턱을 낮추면 갈리기
+                시작하고, 그때 저절로 다시 나옵니다.
+                <br />
+              </>
+            )}
+            지금까지 실제로 갈린 축은 <b>지속성</b> 하나입니다(하루만 걸림 ↔ 이틀 이상 반복).
+            무지개 등급을 거기 둔 이유입니다.
           </p>
         </>
       )}
@@ -525,6 +548,8 @@ export function SuperDashboardPage({
 }) {
   const [entries, setEntries] = useState<SuperEntry[]>([]);
   const [grade, setGrade] = useState<SuperGradeRow[]>([]);
+  /** 전체와 값이 똑같아 서버가 뺀 줄 수 — 조용히 사라지면 「안 재나?」로 읽힌다 */
+  const [gradeHidden, setGradeHidden] = useState(0);
   const [stats, setStats] = useState<SuperStats | null>(null);
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -547,6 +572,7 @@ export function SuperDashboardPage({
       const r = await api.signalSuper();
       setEntries(r.entries);
       setGrade(r.grade);
+      setGradeHidden(r.gradeHidden ?? 0);
       setStats(r.stats);
       setLastRun(r.lastRunDate);
     } catch (e) {
@@ -653,7 +679,7 @@ export function SuperDashboardPage({
       )}
 
       {/* ── 체계 채점표 ───────────────────────────────── */}
-      {grade.length > 0 && <GradeBoard rows={grade} />}
+      {grade.length > 0 && <GradeBoard rows={grade} hidden={gradeHidden} />}
 
       {/* ── 종목 표 ──────────────────────────────────── */}
       <div className="filter-row">

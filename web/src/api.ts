@@ -1026,6 +1026,8 @@ export const api = {
         weakRegimeMode?: "mark" | "skip";
       };
       grade: SuperGradeRow[];
+      /** 전체와 값이 똑같아 서버가 뺀 줄 수 (편입 규칙이 이미 요구하는 조건들) */
+      gradeHidden?: number;
       stats: SuperStats;
     }>("/api/signal/super"),
   /**
