@@ -12242,6 +12242,24 @@ thead .sd-emph {
   margin: 18px 0 6px;
   font-size: 14px;
 }
+/*
+ * 표를 감싸는 칸 — **없는 클래스였다** (2026-09-01).
+ *
+ * 신호등 분석 · 시뮬레이터 · 장세 점검, 여덟 자리가 `.table-wrap` 을 쓰고 있었는데
+ * **CSS 에 그 클래스가 없었다.** 그래서 `overflow-x` 가 안 걸렸고, `.sim-table` 은
+ * `white-space: nowrap` 이라 칸이 많으면 **표가 화면 밖으로 삐져나갔다.**
+ * 가로 스크롤도 안 되니 오른쪽 칸은 볼 방법이 아예 없었다.
+ *
+ * `.data-table-wrap` 과 달리 테두리를 안 두른다 — 이 표들은 이미 카드 안에 있어서
+ * 테두리를 또 두르면 선이 겹쳐 보인다.
+ */
+.table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  /* 세로 스크롤이 부모로 새지 않게 — 폰에서 표를 옆으로 밀다 페이지가 튀는 것을 막는다 */
+  overscroll-behavior-x: contain;
+}
+
 .sim-table {
   width: 100%;
   border-collapse: collapse;
@@ -12329,6 +12347,11 @@ thead .sd-emph {
   font-size: 12.5px;
   line-height: 1.65;
 }
+/* 같은 뼈대에 경고 색만 — 중립 안내와 「뭔가 잘못됐다」는 달리 읽혀야 한다 */
+.sim-note.lt-warn {
+  border-left-color: var(--warn, #d9a441);
+  background: color-mix(in srgb, var(--warn, #d9a441) 10%, transparent);
+}
 
 /* ------------------------------------------------------------------ */
 /* 알림 종 (2026-08-31)                                                */
@@ -12391,13 +12414,17 @@ thead .sd-emph {
   position: absolute;
   top: calc(100% + 8px);
   /*
-   * **왼쪽 기준으로 편다** (2026-08-31 정정 — "알림창 위치..").
+   * **붙는 쪽은 화면이 정한다** (2026-09-01).
    *
-   * 처음에 `right: 0` 으로 붙였다. 오른쪽 위에 있는 종을 상상하고 쓴 값인데,
-   * 이 종은 **종목 검색창 옆(화면 왼쪽)** 에 있다. 그래서 패널이 왼쪽으로 뻗다가
-   * 화면 밖으로 나가 글이 잘렸다 — 「알림이 없습니다」가 「습니다.」로 보였다.
+   * 여기를 두 번 고쳤고 두 번 다 틀렸다. `right: 0` 이면 왼쪽으로 뻗다가
+   * 「알림이 없습니다」가 「습니다」로 잘렸고, `left: 0` 으로 바꿨더니 이번엔
+   * 오른쪽으로 뻗어 화면 밖으로 나갔다.
    *
-   * 붙는 자리를 종의 왼쪽 끝에 맞추고, 오른쪽으로 넘치지 않게 폭을 창에 맞춰 자른다.
+   * 둘 다 맞을 때가 있다 — **종의 위치가 고정이 아니기 때문**이다. 종은 검색창과
+   * 같은 줄이고 검색창이 `flex: 1` 이라, 창 폭과 검색창 접힘에 따라 종이 왼쪽에도
+   * 오른쪽에도 선다. CSS 로 한쪽을 못 박으면 반대 경우가 반드시 깨진다.
+   *
+   * 그래서 `NotifyBell` 이 열 때 자리를 재서 `.to-right` 를 붙인다. 기본은 왼쪽 기준.
    */
   left: 0;
   right: auto;
@@ -12531,11 +12558,37 @@ thead .sd-emph {
   font-size: 12px;
   line-height: 1.55;
   color: var(--text-dim);
-  /* 긴 본문은 세 줄까지 — 그 아래는 눌러서 그 화면에서 본다 */
+  /* 접힌 상태는 세 줄까지. 누르면 펼친다 — 정보가 본문에만 있는 알림이 있다 */
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  cursor: pointer;
+}
+/*
+ * 펼친 상태 — `white-space: pre-wrap` 이 핵심이다.
+ *
+ * 알림 본문은 여러 줄로 쓰여 온다(스케줄러가 `
+` 으로 항목을 나눈다). 접혀 있을
+ * 때는 어차피 세 줄로 잘려 티가 안 났지만, 펼치면 그 줄바꿈이 살아야 「초록 몇 ·
+ * 시장 몇 · 초과 몇」이 각각 한 줄로 읽힌다. 안 그러면 숫자가 한 덩어리로 뭉친다.
+ */
+.nb-text.open {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  white-space: pre-wrap;
+}
+/* 잘렸다는 표 — 모르면 안 누른다 */
+.nb-more-text {
+  align-self: flex-start;
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--blue);
+  cursor: pointer;
+}
+.nb-more-text:hover {
+  text-decoration: underline;
 }
 .nb-meta {
   font-size: 11.5px;
@@ -12572,11 +12625,34 @@ thead .sd-emph {
   text-align: center;
 }
 
-/* 폰 — 화면 폭을 거의 다 쓴다. 좁은 창에 세 줄 본문은 못 읽는다 */
+/* 오른쪽에 설 자리가 없을 때 — 종의 오른쪽 끝에 맞춰 왼쪽으로 편다 */
+.nb-panel.to-right {
+  left: auto;
+  right: 0;
+}
+
+/*
+ * 폰 — **뷰포트에 직접 맞춘다.**
+ *
+ * 좌우 어느 쪽에 붙여도 안 들어간다. 실측(375): 종이 x=182 에 서는데 패널 폭이
+ * 355 라, 오른쪽에 붙이니 **왼쪽으로 168px 삐져나갔다.** 폭이 화면만 한데 기준점이
+ * 화면 한가운데면 어느 쪽으로 붙이든 넘치는 게 당연하다 — 붙는 쪽을 고르는 것으로는
+ * 못 푸는 문제다.
+ *
+ * `fixed` 로 바꾸면 기준이 종이 아니라 **뷰포트**가 되어 넘칠 수가 없다. 세로 자리만
+ * 종을 따라가야 하므로 그 값(`--nb-top`)을 컴포넌트가 재서 넘겨 준다.
+ */
 @media (max-width: 720px) {
-  .nb-panel {
-    width: calc(100vw - 20px);
-    left: -6px;
+  .nb-panel,
+  .nb-panel.to-right {
+    position: fixed;
+    top: var(--nb-top, 64px);
+    left: 10px;
+    right: 10px;
+    width: auto;
+    max-width: none;
+    /* 아래로도 넘치면 안 된다 — 남은 높이만큼만 쓰고 그 안에서 스크롤한다 */
+    max-height: calc(100vh - var(--nb-top, 64px) - 16px);
   }
 }
 

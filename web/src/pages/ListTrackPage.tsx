@@ -226,6 +226,30 @@ export function ListTrackPage({
           </table>
         </div>
         )}
+        {/*
+          **일곱 목록이 다 같은 수면 의심한다** (2026-09-01).
+
+          8/31 실행에서 일곱 목록이 전부 정확히 60종목이었다. 각 TR 이 우연히 같은
+          수를 줄 리 없다 — 보통주 목록(`stockListCache`)이 반쪽으로 굳어 **모든
+          모집단이 거기 걸린** 것이었다. 화면에는 정직하게 60이 찍혀 있었는데도
+          그게 이상하다는 걸 알아보지 못했다.
+
+          서버에 방어를 넣었지만(반쪽이면 안 굳힌다), 그래도 **화면이 말을 해야**
+          같은 일이 또 나도 바로 안다. 숫자가 있는 것과 읽히는 것은 다르다.
+        */}
+        {(() => {
+          const sizes = Object.values(data.counts ?? {}).map((c) => c.universe);
+          const allSame = sizes.length > 1 && sizes.every((n) => n === sizes[0]);
+          if (!allSame || sizes[0] >= 400) return null;
+          return (
+            <p className="sim-note lt-warn">
+              ⚠️ 일곱 목록이 <b>전부 {sizes[0]}종목</b>으로 같습니다. 목록마다 성격이 다른데
+              같은 수가 나올 리 없습니다 — <b>보통주 목록이 반쪽으로 들어왔을 때</b> 이렇게
+              됩니다(모든 모집단이 그 목록으로 걸러지기 때문). 「지금 돌리기」로 다시
+              돌려 보세요.
+            </p>
+          );
+        })()}
         {openSum && (
           <p className="pt-n">
             <b>초록 비율</b>이 목록의 성격을 말합니다 — 높으면 그 목록이 이미 신호등과

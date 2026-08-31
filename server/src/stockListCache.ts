@@ -47,6 +47,14 @@ async function fetchMarket(client: KiwoomClient, mrktTp: string): Promise<StockE
   }));
 }
 
+/**
+ * 이만큼도 안 오면 **반쪽 응답**으로 본다.
+ *
+ * 코스피 950 + 코스닥 1,700 = 2,600 안팎이 정상이다. 1,000 은 「한 시장이 통째로
+ * 빠져도 이보다는 많다」는 뜻의 여유 있는 문턱이다.
+ */
+const MIN_SANE = 1000;
+
 async function ensureCache(client: KiwoomClient): Promise<StockEntry[]> {
   const now = Date.now();
   if (cache && now - cacheAt < TTL_MS) {
@@ -57,7 +65,39 @@ async function ensureCache(client: KiwoomClient): Promise<StockEntry[]> {
   for (const item of lists.flat()) {
     if (item.code) merged.set(item.code, item);
   }
-  cache = [...merged.values()];
+  const next = [...merged.values()];
+
+  /*
+   * ⚠️ **반쪽 응답을 24시간 굳히지 않는다** (2026-09-01).
+   *
+   * 이 목록은 앱의 **보통주 필터**다 — 신호등 찾기·백테스트·슈퍼신호등·신호등 분석의
+   * 모든 모집단이 여기 있는 코드만 남긴다. 그래서 이게 반쪽이면 **모든 모집단이
+   * 같은 수로 잘린다.**
+   *
+   * 실제로 그 일이 났다. 8/31 자정 무렵 신호등 분석이 돌았는데 일곱 목록이 전부
+   * 정확히 **60종목**이었다 — 「거래대금 상위 500」도 60, 「외국인 연속순매매 200」도
+   * 60. 각 TR 이 우연히 같은 수를 줄 리 없다. 이 캐시가 60개만 들고 있었고 모두가
+   * 거기 걸린 것이다. 화면에도 「200 중 보통주 60종목」으로 정직하게 찍혀 있었는데,
+   * 그게 이상하다는 걸 아무도 못 알아봤다.
+   *
+   * TTL 이 24시간이라 **한 번 굳으면 하루가 망가진다.** 그날 돌린 분석·백테스트가
+   * 전부 60종목짜리가 된다.
+   *
+   * `marketSnapshot` 은 이미 같은 방어를 하고 있다("절반도 못 받았으면 이전 것을
+   * 유지"). 여기만 없었다.
+   *
+   * 반쪽이면 **굳히지 않고** 그때 받은 것만 돌려준다 — 다음 호출에서 다시 받는다.
+   * 옛 캐시가 있으면 그쪽이 낫다. 하루 지난 상장 목록이 반쪽짜리보다 훨씬 정확하다.
+   */
+  if (next.length < MIN_SANE) {
+    console.warn(
+      `[stockList] 반쪽 응답 — ${next.length}종목만 왔습니다(정상 2,600 안팎). ` +
+        `${cache ? "이전 목록을 계속 씁니다" : "굳히지 않고 다음에 다시 받습니다"}.`,
+    );
+    return cache ?? next;
+  }
+
+  cache = next;
   cacheAt = now;
   return cache;
 }

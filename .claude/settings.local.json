@@ -956,7 +956,9 @@
       "PowerShell(npx --prefix web tsc -p web/tsconfig.json --noEmit 2>&1)",
       "PowerShell(npx --prefix server tsc -p server/tsconfig.json --noEmit 2>&1)",
       "Bash(node \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/dartCompany.cjs\")",
-      "Bash(npx --prefix web eslint web/src/pages/StockDiscoveryPage.tsx)"
+      "Bash(npx --prefix web eslint web/src/pages/StockDiscoveryPage.tsx)",
+      "Bash(awk '/@media/{m=$0} /\\\\.nb-/{if\\(m!=\"\"\\)print NR\": \"m\" -> \"$0}' web/src/styles.css)",
+      "Bash(npx --prefix web tsc -p web/tsconfig.json --noEmit)"
     ]
   }
 }

@@ -72,6 +72,67 @@ export function NotifyBell() {
     return () => window.clearInterval(t);
   }, [load]);
 
+  /**
+   * 어느 쪽으로 펼 것인가 — **자리를 재서 정한다** (2026-09-01).
+   *
+   * ## 왜 CSS 로 못 박으면 안 되나
+   *
+   * 붙는 쪽을 두 번 고쳤고 두 번 다 틀렸다. `right: 0` 이면 왼쪽으로 뻗다가
+   * 「알림이 없습니다」가 「습니다」로 잘렸고, `left: 0` 으로 바꿨더니 이번엔
+   * 오른쪽으로 뻗어 화면 밖으로 나갔다.
+   *
+   * 둘 다 맞을 때가 있다 — **종의 위치가 고정이 아니기 때문**이다. 종은 검색창과
+   * 같은 줄에 있고 검색창이 `flex: 1` 이라, 창 폭·검색창 접힘·「탭 모두 닫기」의
+   * 유무에 따라 종이 왼쪽에도 오른쪽에도 선다. 한쪽으로 못 박으면 반대 경우가
+   * 반드시 깨진다.
+   *
+   * 그래서 **열 때 재서** 정한다. 왼쪽 기준으로 폈을 때 오른쪽이 넘치면 오른쪽에
+   * 붙인다. 창 크기가 바뀌어도 다시 잰다.
+   */
+  /** 본문을 펼쳐 둔 알림 — 패널을 닫으면 잊는다(다시 열면 다시 요약부터) */
+  const [openText, setOpenText] = useState<Set<string>>(new Set());
+  const toggleText = useCallback((id: string) => {
+    setOpenText((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const [alignRight, setAlignRight] = useState(false);
+  /**
+   * 종의 아래끝 — **폰에서 패널을 뷰포트에 고정할 때** 쓴다.
+   *
+   * 폰(375)에서는 좌우 어느 쪽에 붙여도 안 들어간다. 실측: 종이 x=182 에 서는데
+   * 패널 폭이 355 라, 오른쪽에 붙이면 **왼쪽으로 168px 삐져나갔다.**
+   * 폭이 화면만 한데 기준점이 화면 한가운데면 어느 쪽으로 붙이든 넘치는 게 당연하다.
+   *
+   * 그래서 폰에서는 `position: fixed` 로 **화면 좌우에 직접** 맞춘다. 그러면 위치의
+   * 기준이 종이 아니라 뷰포트가 되어 넘칠 수가 없다. 다만 세로 자리는 여전히 종
+   * 아래여야 하므로 그 값만 여기서 재서 넘긴다.
+   */
+  const [bellBottom, setBellBottom] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    const measure = () => {
+      const el = boxRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      /* 패널 폭(420) + 가장자리 여백. 넘치면 오른쪽 기준 (데스크톱) */
+      setAlignRight(r.left + 420 > window.innerWidth - 12);
+      setBellBottom(r.bottom);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    /* 스크롤하면 종이 움직인다 — fixed 인 폰에서는 따라가야 한다 */
+    window.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure);
+    };
+  }, [open]);
+
   /* 바깥을 누르면 닫는다 — 드롭다운의 기본 예의다 */
   useEffect(() => {
     if (!open) return;
@@ -126,7 +187,10 @@ export function NotifyBell() {
       </button>
 
       {open && (
-        <div className="nb-panel">
+        <div
+          className={`nb-panel${alignRight ? " to-right" : ""}`}
+          style={{ "--nb-top": `${Math.round(bellBottom + 8)}px` } as React.CSSProperties}
+        >
           <div className="nb-head">
             <div className="nb-tabs">
               {(["all", "stock", "market", "system"] as const).map((k) => (
@@ -184,7 +248,42 @@ export function NotifyBell() {
                       {/* 같은 사건이 이어지는 중이면 몇 번째인지 — 새 알림과 구분된다 */}
                       {n.hits > 1 && <i className="nb-hits">×{n.hits}</i>}
                     </span>
-                    {n.body && <span className="nb-text">{n.body}</span>}
+                    {/*
+                      본문을 누르면 **펼친다** (2026-09-01).
+
+                      세 줄에서 잘려 있었다. 그런데 「신호등 분석 완료」처럼
+                      **정보가 본문에만 있는 알림**이 있다 — 어느 목록에서 몇 종목이
+                      걸렸는지는 바로가기로 가도 그 화면에 없는 요약이다.
+                      잘린 채 두면 알림이 「무슨 일이 있었다」까지만 말하고 만다.
+
+                      항목 전체가 `<button>` 이라 안에 버튼을 못 넣는다(HTML 이
+                      허락하지 않는다). 그래서 본문 자체를 누르게 하고, 그 클릭이
+                      항목의 「바로가기」로 새지 않게 막는다.
+                    */}
+                    {n.body && (
+                      <span
+                        className={`nb-text${openText.has(n.id) ? " open" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleText(n.id);
+                        }}
+                        title={openText.has(n.id) ? "접기" : "눌러서 전체 보기"}
+                      >
+                        {n.body}
+                      </span>
+                    )}
+                    {/* 접혀 있고 길면 잘렸다는 걸 알린다 — 모르면 안 누른다 */}
+                    {n.body && n.body.length > 80 && !openText.has(n.id) && (
+                      <span
+                        className="nb-more-text"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleText(n.id);
+                        }}
+                      >
+                        ⌄ 전체 보기
+                      </span>
+                    )}
                     <span className="nb-meta">
                       {n.name && <b>{n.name}</b>} {ago(n.lastAt)}
                       {n.link && <i className="nb-go">→ 바로가기</i>}
