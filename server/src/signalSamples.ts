@@ -107,6 +107,31 @@ export interface Feat {
   /** 그날 기준 외국인 연속 순매수 일수 */
   fgnStreak: number | null;
   /**
+   * **그날 알 수 있었던 영업이익 증가율(%)** (2026-09-01 추가).
+   *
+   * ## 왜 이제야
+   *
+   * 「영업이익 증가」는 실적 축에서 **무게 2**를 차지하는데 표본에 칸이 없어
+   * **한 번도 검증하지 못했다.** 벤티지가 감점 요소로도 지목한 값이라
+   * (「영업이익이 나아지지 않는 애들」) 재 볼 값이 있다.
+   *
+   * ## look-ahead 를 어떻게 막나
+   *
+   * DART 연간 재무는 **사업보고서가 나온 뒤에야** 알 수 있다. 3월 말 공시가
+   * 원칙이므로, 어느 날짜 d 에서 알 수 있는 최신 실적은
+   *
+   *   d 가 4월 이후면  d.year - 1 년 실적
+   *   d 가 1~3월이면   d.year - 2 년 실적
+   *
+   * 이다. 그 연도와 그 전년의 영업이익으로 증가율을 낸다. **그 시점에 실제로
+   * 볼 수 있던 숫자만** 쓰는 것이라 되짚어도 거짓이 안 된다.
+   *
+   * ⚠️ 3월 말이 원칙이지 전부는 아니다(연장·지연 공시가 있다). 며칠 어긋나는
+   * 종목이 있을 수 있지만, 20일 뒤 수익률을 보는 채점에서 그 정도는 방향을
+   * 바꾸지 않는다. 정확한 공시일을 쓰려면 종목당 조회가 한 번 더 든다.
+   */
+  profitYoY: number | null;
+  /**
    * **그날의 시가총액(억원)** (2026-09-01 추가).
    *
    * ## 왜 이게 필요한가
@@ -360,6 +385,8 @@ export function gradeOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
       return f.loanUp20 === null ? null : grade(f.loanUp20, c);
     case "foreignRatioUp":
       return f.fgnRatioUp20 === null ? null : grade(f.fgnRatioUp20, c);
+    case "profitGrowth":
+      return f.profitYoY === null ? null : grade(f.profitYoY, c);
 
     default:
       /* 표본에 없는 기준 — 재무·시가총액·ETF 뒷배. 채점에서 빠진다 */

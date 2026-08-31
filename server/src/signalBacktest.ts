@@ -1,3 +1,4 @@
+import { getFinance } from "./dartFinance.js";
 import { getSharesMap } from "./stockListCache.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { dropPhantomToday } from "./candleGuard.js";
@@ -86,6 +87,8 @@ export const BACKTESTABLE = new Set([
   "shortSaleUp",
   "lendingUp",
   "foreignRatioUp",
+  /* 영업이익 (2026-09-01) — 무게 2 인데 한 번도 검증 못 하던 기준이다 */
+  "profitGrowth",
 ]);
 
 /* ------------------------------------------------------------------ */
@@ -467,6 +470,44 @@ async function supplyIndex(
   return out;
 }
 
+/**
+ * **그날 알 수 있었던 영업이익 증가율.**
+ *
+ * DART 연간 재무를 한 번 받아 연도별 영업이익을 손에 들고, 날짜마다 「그때
+ * 공시돼 있던 최신 연도」를 골라 전년 대비 증가율을 낸다. 사업보고서는 3월
+ * 말이 원칙이므로 4월부터 그해 직전 연도가 보인다.
+ *
+ * 종목당 조회 1회(DART). 못 받으면 그 종목의 이 칸만 null 이다.
+ */
+async function profitIndex(code: string): Promise<((date: string) => number | null) | null> {
+  try {
+    const fin = await getFinance(code);
+    /** 연도(숫자) → 영업이익 */
+    const byYear = new Map<number, number>();
+    for (const p of fin.periods ?? []) {
+      const y = Number(String(p.label).replace(/[^0-9]/g, "").slice(0, 4));
+      if (Number.isFinite(y) && y > 1990 && p.operatingProfit !== null) {
+        byYear.set(y, p.operatingProfit);
+      }
+    }
+    if (byYear.size < 2) return null;
+
+    return (date: string): number | null => {
+      const y = Number(date.slice(0, 4));
+      const m = Number(date.slice(4, 6));
+      if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+      /* 4월부터 직전 연도 실적이 공시돼 있다 */
+      const latest = m >= 4 ? y - 1 : y - 2;
+      const cur = byYear.get(latest);
+      const prev = byYear.get(latest - 1);
+      if (cur === undefined || prev === undefined || prev === 0) return null;
+      return ((cur - prev) / Math.abs(prev)) * 100;
+    };
+  } catch {
+    return null;
+  }
+}
+
 type FlowSums = Pick<
   Feat,
   | "fgn5"
@@ -593,6 +634,8 @@ function featuresAt(
     mktCap: shares !== null && shares > 0 ? (shares * cur) / 100_000_000 : null,
     /* 아래 여섯은 별도 조회에서 온다 — 여기서는 자리만 만든다 (`NO_SUPPLY` 가 덮는다) */
     ...NO_SUPPLY,
+    /* 영업이익도 별도 조회다 — 담는 곳에서 덮는다 */
+    profitYoY: null,
     theme: themeRate,
     rateBeta,
     ...NO_FLOW,
@@ -819,6 +862,12 @@ export async function runSignalBacktest(
           ? await supplyIndex(client, code, days).catch(() => null)
           : null;
 
+        /*
+         * 영업이익 (2026-09-01) — DART 조회 1회. 키움 한도와 무관한 곳이라
+         * 초당 제한에 영향을 안 준다. 못 받으면 이 칸만 null 이다.
+         */
+        const profitAt = withFlow ? await profitIndex(code) : null;
+
         const myThemes = themeCtx?.themesOf.get(code) ?? [];
         const dateToK =
           themeCtx && myThemes.length > 0
@@ -872,7 +921,12 @@ export async function runSignalBacktest(
            */
           const fl = flowMap?.get(bs[i].date);
           const sp = supplyMap?.get(bs[i].date);
-          const full: Feat = { ...feat, ...(fl ?? NO_FLOW), ...(sp ?? NO_SUPPLY) };
+          const full: Feat = {
+            ...feat,
+            ...(fl ?? NO_FLOW),
+            ...(sp ?? NO_SUPPLY),
+            profitYoY: profitAt ? profitAt(bs[i].date) : null,
+          };
           samples.push({ code, name, date: bs[i].date, ...full, ...f });
 
           /*
