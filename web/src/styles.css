@@ -13195,3 +13195,22 @@ thead .sd-emph {
   font-size: 11.5px;
   font-weight: 600;
 }
+
+/* 지금 장세 (2026-09-01) — 기준이 장세에 따라 켜지고 꺼지므로 그 근거를 밝힌다.
+   위험·탈락과 달리 **경고가 아니라 상태**라 색을 옅게 둔다. */
+.sig-regime {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  cursor: help;
+}
+.sig-regime.bull {
+  border-color: color-mix(in srgb, var(--positive, #4ade80) 40%, transparent);
+  color: var(--positive, #4ade80);
+}
+.sig-regime.bear {
+  border-color: color-mix(in srgb, var(--negative, #e05260) 40%, transparent);
+  color: var(--negative, #e05260);
+}

@@ -2891,6 +2891,16 @@ export interface SignalResult {
    * 말하는 자리다.
    */
   vetoedBy?: string[];
+  /**
+   * **지금 장세와, 그 때문에 빠진 기준들** (2026-09-01).
+   *
+   * 같은 기준이 장세에 따라 부호가 뒤집힌다 — 60일 신고가는 강세장에서 승률
+   * +1.4%p 인데 약세장에서는 -3.9%p 다. 그래서 장세에 맞는 기준만 켠다.
+   *
+   * 자동 전환은 편하지만 **「왜 오늘은 이 점수인가」를 모르면 도구를 못 믿는다.**
+   * 무엇이 빠졌는지 화면이 말할 수 있게 실어 온다.
+   */
+  regime?: { kind: "bull" | "bear"; label: string; breadth: number; skipped: string[] };
   evaluatedAt: string;
 }
 

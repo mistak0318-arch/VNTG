@@ -166,6 +166,30 @@ export function SignalPanel({
           무엇 때문에 걸렸는지 반드시 적는다 — 「왜 빨강인지」를 모르면 사람이
           도구를 못 믿는다.
         */}
+        {/*
+          **지금 장세** (2026-09-01) — 자동 전환의 근거를 밝힌다.
+
+          기준이 장세에 따라 켜지고 꺼지므로, 그걸 안 보여주면 「어제 초록이던
+          종목이 오늘 노랑」인 이유를 알 수 없다. 무엇이 빠졌는지까지 적는다.
+        */}
+        {data.regime && (
+          <span
+            className={`sig-regime ${data.regime.kind}`}
+            title={
+              `전종목의 ${data.regime.breadth}% 가 20일선 위입니다 (50% 이상이면 강세장).
+` +
+              (data.regime.skipped.length > 0
+                ? `이 장세에서 안 맞는 기준은 점수에서 뺐습니다 — ${data.regime.skipped.join(" · ")}`
+                : "빠진 기준 없음") +
+              `
+
+같은 기준도 장세에 따라 방향이 뒤집힙니다 — 60일 신고가는 강세장 승률 +1.4%p, 약세장 -3.9%p 입니다.`
+            }
+          >
+            {data.regime.kind === "bull" ? "▲" : "▼"} {data.regime.label} {data.regime.breadth}%
+            {data.regime.skipped.length > 0 && ` · ${data.regime.skipped.length}개 뺌`}
+          </span>
+        )}
         {data.vetoedBy && data.vetoedBy.length > 0 && (
           <span
             className="sig-vetoed"
