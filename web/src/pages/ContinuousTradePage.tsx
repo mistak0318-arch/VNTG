@@ -7,6 +7,7 @@ import { RefreshBar } from "../components/RefreshBar";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
+import { SuperMark } from "../useSuperMarks";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 
 // ka10131(기관외국인연속매매현황요청) 공식 문서 기준 확인된 필드명
@@ -156,6 +157,7 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
                     <td className="sticky-col">
                       <span className="rank-cell">{String(r.rank ?? i + 1)}. </span>
                       <WatchStar code={code} />
+<SuperMark code={code} />
                       {name}
                     </td>
                     <td className={signClass(r.prid_stkpc_flu_rt)}>{fmtNum(r.prid_stkpc_flu_rt)}%</td>

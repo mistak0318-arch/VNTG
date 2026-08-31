@@ -37,6 +37,7 @@ import { useCardOrder } from "../useCardOrder";
 import { useSwipeTabs } from "../useSwipeTabs";
 import { OVERVIEW_CARDS, type OverviewSub } from "../overviewCards";
 import { WatchStar } from "../useWatchedCodes";
+import { SuperMark } from "../useSuperMarks";
 
 type SubTab = "summary" | "flow" | "rank" | "us";
 
@@ -185,6 +186,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         <span className="ov-rank num">{i + 1}</span>
         <span className="ov-nm">
           <WatchStar code={code} />
+<SuperMark code={code} />
           {r.name}
         </span>
         <span className={`ov-px num ${signCls(r.changeRate)}`}>{fmtNum(r.price)}</span>
@@ -658,6 +660,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                 >
                   <span className="ov-nm">
                     <WatchStar code={normalizeStockCode(v.code)} />
+<SuperMark code={normalizeStockCode(v.code)} />
                     {v.name}
                     <span className="ov-sub-nm">{v.motionCount}회 발동</span>
                   </span>

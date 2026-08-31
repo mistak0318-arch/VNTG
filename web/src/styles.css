@@ -12151,3 +12151,36 @@ thead .sd-emph {
   .cis-card-table tfoot td:empty { display: none; }
   .cis-total-note { text-align: left; flex: 0 0 100%; margin-top: 3px; }
 }
+
+/*
+ * 슈퍼신호등 표식 (2026-08-31) — 어느 화면에서든 같은 종목에 같은 표시.
+ * 관심종목 별표(.watch-star)와 나란히 놓이는 자리라 같은 크기·여백을 쓴다.
+ *
+ * 겹쳐서 붙는다: 🌟(원장) ⚡(교차) 🌈(사흘 이상 지속). 셋이 다 붙은 종목이
+ * 이 체계에서 제일 강한 신호라, 그때는 살짝 도드라지게 둔다.
+ */
+.super-mark {
+  font-size: 0.78em;
+  margin-left: 3px;
+  letter-spacing: -1px;
+  vertical-align: baseline;
+  cursor: help;
+}
+/* 무지개가 붙으면 눈에 걸리게 — 드물어야 배지가 제 몫을 한다 */
+.super-mark.mark-rainbow {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--green) 55%, transparent));
+}
+
+/* 도움말의 코드 블록 — 판정 흐름·수치를 표처럼 보여줄 때 (2026-08-31) */
+.guide-pre {
+  margin: 10px 0;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 0.76rem;
+  line-height: 1.7;
+  white-space: pre;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

@@ -4,6 +4,7 @@ import App from "./App";
 import { LoginGate } from "./components/LoginGate";
 import { AppearanceProvider } from "./useAppearance";
 import { WatchedCodesProvider } from "./useWatchedCodes";
+import { SuperMarksProvider } from "./useSuperMarks";
 import { applyPushedPrefs, loadPrefs } from "./prefs";
 import "./styles.css";
 import "./overview.css";
@@ -33,7 +34,13 @@ void loadPrefs().then(() => {
         */}
         <LoginGate>
           <WatchedCodesProvider>
-            <App />
+            {/*
+              슈퍼신호등 표식 — 어느 화면에서든 같은 종목에 같은 표시가 뜨게
+              (2026-08-31). 관심종목 별표와 같은 자리·같은 문법이다.
+            */}
+            <SuperMarksProvider>
+              <App />
+            </SuperMarksProvider>
           </WatchedCodesProvider>
         </LoginGate>
       </AppearanceProvider>

@@ -25,6 +25,7 @@ import { SupplyDetailPanel } from "../components/SupplyDetailPanel";
 import { TradeSizePanel } from "../components/TradeSizePanel";
 import { useLive } from "../useLive";
 import { WatchStar } from "../useWatchedCodes";
+import { SuperMark } from "../useSuperMarks";
 import { WatchButton } from "../components/WatchButton";
 
 /**
@@ -547,6 +548,7 @@ export function StockDiscoveryPage({
           <section className="card sd-head">
             <div className="sd-head-top">
               <WatchStar code={code} />
+<SuperMark code={code} />
               <PriceHeader info={info} code={code} />
               <div className="sd-head-actions">
                 {signal && (

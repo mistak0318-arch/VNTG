@@ -12,6 +12,7 @@ import { RefreshBar } from "../components/RefreshBar";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { useWatchedCodes, WatchStar } from "../useWatchedCodes";
+import { SuperMark } from "../useSuperMarks";
 import { WatchAddSheet, type WatchAddTarget } from "../components/WatchAddSheet";
 
 /** 키움 MTS/HTS에 등록해둔 관심종목 그룹을 그대로 조회 (읽기 전용) */
@@ -146,6 +147,7 @@ export function KiwoomWatchlistPage({
                   <tr key={s.code} className="clickable-row" onClick={() => onSelectStock(code, s.name)}>
                     <td className="sticky-col">
                       <WatchStar code={code} />
+<SuperMark code={code} />
                       {s.name}
                     </td>
                     <td>{fmtNum(s.price)}</td>

@@ -61,6 +61,29 @@ const MIN_LISTS = 3;
 const MAX_EVAL = 40;
 
 /**
+ * **무지개** — 초록 위의 등급 (2026-08-31).
+ *
+ * ## 왜 점수가 아니라 지속성인가
+ *
+ * 「초록 중 점수 80점 이상」처럼 점수를 더 높이 자르는 안도 있었지만,
+ * 데이터가 그것을 지지하지 않았다 — 「목록 4곳 이상」이 전체와 성적이
+ * **똑같았다**(둘 다 d1 -0.13%, n=29). 좁혔는데 안 나아진 것이다.
+ *
+ * 갈린 것은 **지속성**이었다: 「이틀 이상 반복」 12종목이 d1 +2.16% 로
+ * 전체보다 2.3%p 높았다. 그래서 무지개의 정의를 지속성에 둔다.
+ *
+ * ## 왜 사흘인가
+ *
+ * 이틀 이상은 29개 중 12개(41%)라 **배지로서 변별력이 없다** — 열에 넷이
+ * 달고 있으면 눈에 안 띈다. 사흘로 올리면 드물어져 배지가 제 몫을 한다.
+ *
+ * ⚠️ 사흘이 이틀보다 실제로 나은지는 **아직 모른다**. 확장한 성적표가
+ * 「이틀 이상」과 「사흘 이상」을 둘 다 재고 있으니, 며칠 쌓인 뒤에 이 값을
+ * 옮기면 된다. 근거 없이 정한 숫자가 아니라 **재고 있는 숫자**다.
+ */
+const RAINBOW_DAYS = 3;
+
+/**
  * 하루 한 줄 — 편입 후 이 종목이 **어떻게 흘러갔는지**의 원장 (2026-08-26).
  * 점수는 과거로 되짚어 잴 수 없으므로(신호등은 그날 데이터로만 평가된다)
  * 매일 장 마감 뒤 적어 두는 이 기록이 점수 흐름의 유일한 소스다.
@@ -811,6 +834,14 @@ export interface GradeRow {
   ex1: { avg: number | null; n: number };
   ex5: { avg: number | null; n: number };
   ex20: { avg: number | null; n: number };
+  /**
+   * 승률(%) — 평균과 **같이 봐야** 뜻이 산다. 평균 +2% 가 「열 번 중 두 번 크게
+   * 먹고 여덟 번 조금 잃었다」인지 「고르게 조금씩 벌었다」인지는 평균만으로
+   * 갈리지 않는다. 추세추종은 앞쪽이 정상인데, 그걸 모르면 승률 30% 를 보고
+   * 잘못된 결론을 내린다.
+   */
+  win1: { rate: number | null; n: number };
+  win20: { rate: number | null; n: number };
 }
 
 function gradeRow(label: string, entries: SuperEntry[]): GradeRow {
@@ -833,6 +864,15 @@ function gradeRow(label: string, entries: SuperEntry[]): GradeRow {
       n: vals.length,
     };
   };
+  const rate = (pick: (r: NonNullable<SuperEntry["returns"]>) => number | null) => {
+    const vals = entries
+      .map((e) => (e.returns ? pick(e.returns) : null))
+      .filter((v): v is number => v !== null && Number.isFinite(v));
+    return {
+      rate: vals.length > 0 ? (vals.filter((v) => v > 0).length / vals.length) * 100 : null,
+      n: vals.length,
+    };
+  };
   return {
     label,
     d1: agg((r) => r.d1),
@@ -841,6 +881,8 @@ function gradeRow(label: string, entries: SuperEntry[]): GradeRow {
     ex1: aggEx((r) => r.d1),
     ex5: aggEx((r) => r.d5),
     ex20: aggEx((r) => r.d20),
+    win1: rate((r) => r.d1),
+    win20: rate((r) => r.d20),
   };
 }
 
@@ -887,6 +929,11 @@ export type SuperListRow = SuperEntry & {
   daysSince: number;
   /** 오늘 편입된 것인가 — 화면의 N 배지 */
   isNew: boolean;
+  /**
+   * **무지개** — 초록 위의 등급. 사흘 이상 계속 교집합에 걸린 활성 종목.
+   * 지속성이 성적을 가른 유일한 축이라 거기에 등급을 둔다(RAINBOW_DAYS 주석 참고).
+   */
+  rainbow: boolean;
   /**
    * 지금 이 종목의 무리가 도는가 (2026-08-28, 테마 DB 개편).
    * 든 네이버 테마 중 오늘 가장 강한 것 — 편입 점수의 「테마 강세(네이버)」와
@@ -944,6 +991,8 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
         addedDate: w.addedAt.slice(0, 10),
         addedPrice: w.addedPrice,
         daysSince: daysFrom(w.addedAt.slice(0, 10)),
+        /* 교차 전용 줄은 슈퍼 원장이 없다 — 지속성을 잴 근거가 없으므로 무지개도 없다 */
+        rainbow: false,
         isNew: w.addedAt.slice(0, 10) === nowDay,
         score: 0,
         lists: [],
@@ -983,6 +1032,8 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
         sinceAdded:
           price !== null && e.addedPrice > 0 ? ((price - e.addedPrice) / e.addedPrice) * 100 : null,
         daysSince: daysFrom(e.addedDate),
+        /* 이탈한 것은 무지개가 아니다 — 지금 살아 있는 지속성이라야 뜻이 있다 */
+        rainbow: e.active !== false && e.seenCount >= RAINBOW_DAYS,
         /* 오늘 편입된 것 — 화면이 N 배지를 붙인다. 첫날만이다 */
         isNew: e.addedDate === nowDay,
         groupTags: crossCodes.has(e.code)
@@ -998,11 +1049,38 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
    * 채점 요약 — 「교집합이 넓을수록·오래 걸릴수록 진짜인가」에 답하는 표.
    * 표본이 몇 건 안 될 때는 화면이 n 을 함께 보여 주므로 여기서 숨기지 않는다.
    */
+  /*
+   * **가설을 하나씩 가른다** (2026-08-31 확장).
+   *
+   * 이 표는 「슈퍼신호등이 맞는가」가 아니라 **「무엇이 맞는가」**에 답해야 한다.
+   * 전체 평균 하나로는 고칠 데를 알 수 없다 — 어느 축이 성적을 가르는지가
+   * 보여야 그 축만 손볼 수 있다.
+   *
+   * 축마다 **짝으로** 낸다(3곳 vs 4곳 이상, 하루 vs 이틀 이상). 한쪽만 내면
+   * 「4곳 이상이 +2%」가 좋은 건지 알 수 없다 — 3곳이 +3% 일 수도 있다.
+   *
+   * ⚠️ 표본이 적으면 화면이 흐리게 그린다. 여기서 숨기지는 않는다 —
+   * 「표본이 적다」도 알아야 할 사실이고, 숨기면 그 사실이 사라진다.
+   */
+  const E = store.entries;
   const grade = [
-    gradeRow("전체", store.entries),
-    gradeRow("목록 4곳 이상", store.entries.filter((e) => e.lists.length >= 4)),
-    gradeRow("이틀 이상 반복", store.entries.filter((e) => e.seenCount >= 2)),
-  ];
+    gradeRow("전체", E),
+    /* ① 교집합 넓이 — 많이 걸릴수록 진짜인가 */
+    gradeRow("목록 3곳", E.filter((e) => e.lists.length === 3)),
+    gradeRow("목록 4곳", E.filter((e) => e.lists.length === 4)),
+    gradeRow("목록 5곳 이상", E.filter((e) => e.lists.length >= 5)),
+    /* ② 지속성 — 며칠째 걸리나. 지금까지 가장 크게 갈린 축이다 */
+    gradeRow("하루만 걸림", E.filter((e) => e.seenCount <= 1)),
+    gradeRow("이틀 이상 반복", E.filter((e) => e.seenCount >= 2)),
+    gradeRow("사흘 이상 반복 🌈", E.filter((e) => e.seenCount >= RAINBOW_DAYS)),
+    /* ③ 편입 점수 — 신호등 점수가 높을수록 나은가 */
+    gradeRow("편입 점수 70+", E.filter((e) => e.score >= 70)),
+    gradeRow("편입 점수 70 미만", E.filter((e) => e.score < 70)),
+    /* ④ 어느 목록에서 왔나 — 목록마다 값어치가 다를 수 있다 */
+    ...SCREEN_UNIVERSES.map((u) =>
+      gradeRow(`${u.label}에 걸림`, E.filter((e) => e.lists.includes(u.key))),
+    ),
+  ].filter((g) => g.d1.n > 0 || g.d5.n > 0 || g.d20.n > 0);
 
   const today = todayStr();
   const d20s = store.entries

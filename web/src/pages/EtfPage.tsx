@@ -13,6 +13,7 @@ import {
 import { RefreshBar } from "../components/RefreshBar";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
+import { SuperMark } from "../useSuperMarks";
 import { EtfWatchTab } from "../components/EtfWatchTab";
 
 /**
@@ -168,6 +169,7 @@ function EtfListTab({ onSelectStock }: { onSelectStock: (code: string, name: str
                 <tr key={r.code} className="clickable-row" onClick={() => onSelectStock(r.code, r.name)}>
                   <td className="sticky-col">
                     <WatchStar code={r.code} />
+<SuperMark code={r.code} />
                     {r.name}
                   </td>
                   <td className={`num ${cls(r.changeRate)}`}>{fmtNum(r.price)}</td>
@@ -289,6 +291,7 @@ function EtfCumTab({ onSelectStock }: { onSelectStock: (code: string, name: stri
                 <tr key={r.code} className="clickable-row" onClick={() => onSelectStock(r.code, r.name)}>
                   <td className="sticky-col">
                     <WatchStar code={r.code} />
+<SuperMark code={r.code} />
                     {r.name}
                   </td>
                   <td className="num">{fmtNum(r.price)}</td>
@@ -384,6 +387,7 @@ function EtfSupplyTab({ onSelectStock }: { onSelectStock: (code: string, name: s
                   <tr key={`${code}-${i}`} className="clickable-row" onClick={() => onSelectStock(code, name)}>
                     <td className="sticky-col">
                       <WatchStar code={code} />
+<SuperMark code={code} />
                       {name}
                     </td>
                     <td className={signClass(r.pred_pre)}>{fmtAbsNum(r.cur_prc)}</td>
@@ -473,6 +477,7 @@ function EtfContTab({ onSelectStock }: { onSelectStock: (code: string, name: str
                   <tr key={`${code}-${i}`} className="clickable-row" onClick={() => onSelectStock(code, name)}>
                     <td className="sticky-col">
                       <WatchStar code={code} />
+<SuperMark code={code} />
                       {name}
                     </td>
                     <td className={signClass(r.orgn_cont_netprps_dys)}>{fmtNum(r.orgn_cont_netprps_dys)}일</td>

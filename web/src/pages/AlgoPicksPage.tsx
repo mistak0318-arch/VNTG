@@ -13,6 +13,7 @@ import {
 import { CollapsibleSection } from "../components/CollapsibleSection";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
+import { SuperMark } from "../useSuperMarks";
 
 type Category = FlowSubject | "trend";
 
@@ -308,6 +309,7 @@ export function AlgoPicksPage({ onSelectStock }: { onSelectStock: (code: string,
                       <tr key={r.code} onClick={() => onSelectStock(code, r.name)} className="clickable-row">
                         <td className="sticky-col">
                           <WatchStar code={code} />
+<SuperMark code={code} />
                           {r.name}
                         </td>
                         <td>{r.market}</td>

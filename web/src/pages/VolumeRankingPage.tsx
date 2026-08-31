@@ -6,6 +6,7 @@ import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { Pager, usePager } from "../components/Pager";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
+import { SuperMark } from "../useSuperMarks";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 
 // ka10030(당일거래량상위요청) 공식 문서 기준 확인된 필드명
@@ -208,6 +209,7 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
                     <td className="sticky-col" title={name}>
                       <span className="rank-cell">{pager.from + i}. </span>
                       <WatchStar code={code} />
+<SuperMark code={code} />
                       {name}
                     </td>
                     <td className={signClass(r.pred_pre)}>{fmtAbsNum(r.cur_prc)}</td>

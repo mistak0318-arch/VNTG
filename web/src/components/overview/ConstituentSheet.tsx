@@ -3,6 +3,7 @@ import { useSheetBack } from "../../useSheetBack";
 import { api, fmtNum, normalizeStockCode, signClass, type StockRow } from "../../api";
 import { SortableTh, useSortableTable } from "../../useSortableTable";
 import { WatchStar } from "../../useWatchedCodes";
+import { SuperMark } from "../../useSuperMarks";
 
 export interface ConstituentTarget {
   kind: "theme" | "sector" | "custom";
@@ -166,6 +167,7 @@ export function ConstituentSheet({
                     >
                       <td className="sticky-col">
                         <WatchStar code={code} />
+<SuperMark code={code} />
                         {s.name}
                       </td>
                       {/*

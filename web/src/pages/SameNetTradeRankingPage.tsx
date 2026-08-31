@@ -8,6 +8,7 @@ import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { WatchStar } from "../useWatchedCodes";
+import { SuperMark } from "../useSuperMarks";
 
 // ka10062(동일순매매순위요청) 공식 문서 기준 확인된 필드명
 const LIST_KEYS = ["eql_nettrde_rank"];
@@ -152,6 +153,7 @@ export function SameNetTradeRankingPage({
                     <td className="sticky-col">
                       <span className="rank-cell">{String(r.rank ?? i + 1)}. </span>
                       <WatchStar code={code} />
+<SuperMark code={code} />
                       {name}
                     </td>
                     <td className={signClass(r.pred_pre)}>{fmtAbsNum(r.cur_prc)}</td>

@@ -2112,6 +2112,11 @@ export interface SuperEntry {
   afterExit?: { d1: number | null; d5: number | null; d20: number | null };
   /** 오늘 편입됐나 — N 배지 */
   isNew?: boolean;
+  /**
+   * **무지개** — 사흘 이상 계속 교집합에 걸린 활성 종목 (2026-08-31).
+   * 점수가 아니라 **지속성**에 등급을 뒀다 — 성적을 가른 유일한 축이라서다.
+   */
+  rainbow?: boolean;
   code: string;
   name: string;
   addedDate: string;
@@ -2148,6 +2153,9 @@ export interface SuperGradeRow {
   ex1?: { avg: number | null; n: number };
   ex5?: { avg: number | null; n: number };
   ex20?: { avg: number | null; n: number };
+  /** 승률(%) — 평균과 같이 봐야 뜻이 산다 */
+  win1?: { rate: number | null; n: number };
+  win20?: { rate: number | null; n: number };
 }
 
 export interface SuperStats {

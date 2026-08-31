@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtNum } from "../api";
 import { WatchStar } from "../useWatchedCodes";
+import { SuperMark } from "../useSuperMarks";
 import { useTabActive } from "../tabActive";
 import { useMarketOpen } from "../useLive";
 import { SortableTh, useSortableTable } from "../useSortableTable";
@@ -45,6 +46,19 @@ interface GradeRow {
   d1: { avg: number | null; n: number };
   d5: { avg: number | null; n: number };
   d20: { avg: number | null; n: number };
+  /** 지수 대비 초과수익(%p) — 절대수익만으로는 좋은지 나쁜지 모른다 */
+  ex1?: { avg: number | null; n: number };
+  ex5?: { avg: number | null; n: number };
+  ex20?: { avg: number | null; n: number };
+  /** 승률(%) — 평균과 같이 봐야 뜻이 산다 */
+  win1?: { rate: number | null; n: number };
+  win20?: { rate: number | null; n: number };
+}
+
+/** %p — 초과수익은 퍼센트포인트다. %와 섞이면 둘 다 못 읽는다 */
+function pp(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "-";
+  return `${v > 0 ? "+" : ""}${v.toFixed(2)}%p`;
 }
 
 function pct(v: number | null): string {
@@ -230,24 +244,48 @@ export function SuperSignalPanel({
           <table className="data-table ss-grade-table">
             <thead>
               <tr>
-                <th></th>
-                <th>1일 뒤</th>
-                <th>5일 뒤</th>
-                <th>20일 뒤</th>
+                <th>가르는 축</th>
+                <th className="num">표본</th>
+                <th className="num">1일</th>
+                <th className="num">5일</th>
+                <th className="num">20일</th>
+                {/*
+                  지수 대비 — **이 열이 이 표의 핵심**이다 (2026-08-31).
+                  「1일 -0.13%」가 나쁜 건지는 그날 시장을 알아야 답할 수 있다.
+                */}
+                <th className="num ss-grade-key" title="같은 날짜 코스피를 뺀 값(%p) — 「남보다 나았나」">
+                  지수 대비 1일
+                </th>
+                <th className="num ss-grade-key">지수 대비 20일</th>
+                <th className="num" title="추세추종은 승률이 낮고 손익비가 높은 것이 정상입니다 — 평균과 같이 보세요">
+                  승률 1일
+                </th>
               </tr>
             </thead>
             <tbody>
-              {grade.map((g) => (
-                <tr key={g.label}>
-                  <td>{g.label}</td>
-                  {([g.d1, g.d5, g.d20] as const).map((h, i) => (
-                    <td key={i} className={`num ${cls(h.avg)}`}>
-                      {h.avg === null ? "-" : <b>{pct(h.avg)}</b>}
-                      {h.n > 0 && <i className="pt-n"> ({h.n})</i>}
+              {grade.map((g) => {
+                const n = Math.max(g.d1.n, g.d5.n, g.d20.n);
+                /* 표본이 적으면 흐리게 — 세 건으로 낸 평균이 눈에 세게 박히면 안 된다 */
+                return (
+                  <tr key={g.label} className={n < 5 ? "ss-thin" : g.label === "전체" ? "ss-base" : ""}>
+                    <td>{g.label}</td>
+                    <td className="num">{n}</td>
+                    {([g.d1, g.d5, g.d20] as const).map((h, i) => (
+                      <td key={i} className={`num ${cls(h.avg)}`}>
+                        {h.avg === null ? "-" : <b>{pct(h.avg)}</b>}
+                      </td>
+                    ))}
+                    {([g.ex1, g.ex20] as const).map((h, i) => (
+                      <td key={`x${i}`} className={`num ss-grade-key ${cls(h?.avg ?? null)}`}>
+                        {h?.avg == null ? "-" : <b>{pp(h.avg)}</b>}
+                      </td>
+                    ))}
+                    <td className="num">
+                      {g.win1?.rate == null ? "-" : `${g.win1.rate.toFixed(0)}%`}
                     </td>
-                  ))}
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -370,6 +408,7 @@ export function SuperSignalPanel({
                 <tr key={r.code} className="clickable-row" onClick={() => onSelectStock(r.code, r.name)}>
                   <td className="sticky-col">
                     <WatchStar code={r.code} />
+<SuperMark code={r.code} />
                     {r.name}
                   </td>
                   <td className="num">

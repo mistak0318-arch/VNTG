@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { removePref, setPref } from "../prefs";
 import { api, fmtNum, type RankResult, type RankSpecGroup } from "../api";
+import { SuperMark } from "../useSuperMarks";
 import { SameNetTradeRankingPage } from "./SameNetTradeRankingPage";
 import { ContinuousTradePage } from "./ContinuousTradePage";
 import { TopTradersTable } from "../components/TopTradersTable";
@@ -1156,6 +1157,8 @@ export function ScreenerPage({
                           })()}
                         {/* 줄 전체가 눌리므로 여기선 글자만 — 버튼 모양은 남겨 둔다(눌리는 자리라는 표) */}
                         <span className="link-btn">{r.name}</span>
+                        {/* 슈퍼신호등 표식 — 어느 화면에서든 같은 종목에 같은 표시 */}
+                        <SuperMark code={r.code} />
                         {/* 시장이 「전체」면 어느 시장인지가 정보다 */}
                         {market === "000" && r.mkt && <i className="scr-mkt">{r.mkt}</i>}
                       </td>

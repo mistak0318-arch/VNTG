@@ -16,6 +16,7 @@ import {
   type PublishJob,
 } from "../api";
 import { ProgressSteps } from "../components/ProgressSteps";
+import { SuperMark } from "../useSuperMarks";
 
 /**
  * CIS 일지 — 시스가 굴리는 모의 계좌를 보는 자리.
@@ -770,6 +771,7 @@ function FillsTab({
                   <button className="link-btn" onClick={() => onSelectStock?.(f.code, f.name)}>
                     {f.name}
                   </button>
+                  <SuperMark code={f.code} />
                 </td>
                 <td className="num" data-l="수량">{f.qty.toLocaleString()}</td>
                 <td className="num" data-l="단가">{f.price.toLocaleString()}</td>
@@ -912,6 +914,7 @@ function AccountTab({
                     <button className="link-btn" onClick={() => onSelectStock?.(p.code, p.name)}>
                       {p.name}
                     </button>
+                    <SuperMark code={p.code} />
                     {p.safe && <i className="cis-safe">안전</i>}
                     {p.dueDate && <i className="cis-due">미수 {p.dueDate}</i>}
                   </td>
