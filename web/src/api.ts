@@ -1418,6 +1418,29 @@ export const api = {
    */
   signalSweep: (config?: SignalConfig, top = 20) =>
     postJson<{ result: SignalSweepResult }>("/api/signal/sweep", { config, top }),
+
+  /* ---------------- 알림함 + 장세 점검 (2026-08-31) ---------------- */
+
+  /**
+   * 종 옆 배지와 목록을 **한 번에** 받는다 — 배지 때문에 따로 부르면 폴링이 두 배다.
+   */
+  notices: (opts: { limit?: number; kind?: NoticeKind | "all"; unreadOnly?: boolean } = {}) =>
+    getJson<{ items: Notice[]; unread: number; unreadBy: Record<NoticeKind, number> }>(
+      `/api/notify?limit=${opts.limit ?? 50}&kind=${opts.kind ?? "all"}` +
+        (opts.unreadOnly ? "&unread=1" : ""),
+    ),
+  /** `ids` 를 안 주면 전부 읽음으로 */
+  noticesRead: (ids?: string[]) => postJson<{ marked: number }>("/api/notify/read", { ids }),
+  /** 읽은 것만 비운다 — 안 읽은 것은 남는다 */
+  noticesClear: () => postJson<{ removed: number }>("/api/notify/clear", {}),
+
+  regimeConfig: () =>
+    getJson<{ config: RegimeConfig; defaults: RegimeConfig }>("/api/notify/regime/config"),
+  regimeConfigSave: (config: Partial<RegimeConfig>) =>
+    putJson<{ config: RegimeConfig }>("/api/notify/regime/config", config),
+  /** `notify` 는 문턱을 넘은 항목을 알림으로도 만들지 — 화면에서 눌러 볼 땐 끈다 */
+  regimeCheck: (notify = false) =>
+    postJson<RegimeResult>("/api/notify/regime/check", { notify }),
   notes: (code: string) => getJson<{ name: string; notes: StockNote[] }>(`/api/notes/${code}`),
   notesRecent: (limit = 30) =>
     getJson<{ items: { code: string; name: string; note: StockNote }[] }>(
@@ -2177,6 +2200,8 @@ export interface SuperEntry {
 
 export interface SuperGradeRow {
   label: string;
+  /** 어느 묶음의 줄인가 — 화면이 구획을 나눠 그린다 (서버 superSignal.ts 와 같다) */
+  group: "base" | "lists" | "streak" | "score" | "universe";
   d1: { avg: number | null; n: number };
   d5: { avg: number | null; n: number };
   d20: { avg: number | null; n: number };
@@ -4821,4 +4846,71 @@ export interface HoldingsAnalysis {
   scanned: number;
   withSignal: boolean;
   note: string;
+}
+
+/** 알림 갈래 — 서버 notifyCenter.ts 와 같다 */
+export type NoticeKind = "stock" | "market" | "system";
+
+/** 알림함의 한 줄 */
+export interface Notice {
+  id: string;
+  at: string;
+  /** 같은 사건이 이어지면 여기만 올라간다 */
+  lastAt: string;
+  /** 겹쳐 들어온 횟수 */
+  hits: number;
+  kind: NoticeKind;
+  level: "info" | "warn" | "urgent";
+  title: string;
+  body?: string;
+  /** 누르면 갈 곳 — 앱 안의 해시 경로 (#/watchlist 처럼) */
+  link?: string;
+  code?: string;
+  name?: string;
+  read: boolean;
+}
+
+/** 장세 점검 설정 */
+export interface RegimeConfig {
+  enabled: boolean;
+  breadthDropPp: number;
+  newHighDropPct: number;
+  volSpikeX: number;
+  lookbackDays: number;
+  sampleStaleDays: number;
+}
+
+/** 어느 하루의 장세 */
+export interface RegimeSnap {
+  date: string;
+  /** 20일선 위 종목 비율 % */
+  breadth: number | null;
+  /** 60일 신고가 근처 종목 비율 % */
+  newHigh: number | null;
+  /** 전 종목 일간 등락률의 표준편차 % */
+  vol: number | null;
+  /** 전 종목 일간 등락률 중앙값 % */
+  med: number | null;
+  n: number;
+}
+
+export interface RegimeFinding {
+  key: string;
+  level: "info" | "warn" | "urgent";
+  title: string;
+  detail: string;
+  now: number | null;
+  then: number | null;
+}
+
+export interface RegimeResult {
+  today: RegimeSnap;
+  past: RegimeSnap | null;
+  /** 견준 대상이 실측 이력인가, 캐시에서 되짚은 것인가 */
+  pastFrom: "history" | "cache" | null;
+  lookbackDays: number;
+  history: RegimeSnap[];
+  findings: RegimeFinding[];
+  sample: { has: boolean; builtAt?: string; ageDays?: number; obs?: number; codeCount?: number };
+  cacheBuiltAt: string;
 }

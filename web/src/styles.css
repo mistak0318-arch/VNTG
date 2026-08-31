@@ -12329,3 +12329,350 @@ thead .sd-emph {
   font-size: 12.5px;
   line-height: 1.65;
 }
+
+/* ------------------------------------------------------------------ */
+/* 알림 종 (2026-08-31)                                                */
+/*                                                                    */
+/* 종목 검색창과 같은 줄에 선다. 드롭다운도 검색 결과창과 같은 문법을    */
+/* 쓴다 — 두 창이 같은 모양이면 새로 배울 것이 없다.                     */
+/* ------------------------------------------------------------------ */
+.nb {
+  position: relative;
+  flex: 0 0 auto;
+}
+.nb-bell {
+  position: relative;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text);
+}
+.nb-bell:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+/* 안 읽은 것이 있으면 종을 살짝 띄운다 — 배지만으로는 눈에 안 들어온다 */
+.nb-bell.has {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+.nb-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
+.nb-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(420px, calc(100vw - 24px));
+  max-height: min(70vh, 560px);
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  z-index: 300;
+  overflow: hidden;
+}
+.nb-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.nb-tabs {
+  display: flex;
+  gap: 4px;
+}
+.nb-tab {
+  flex: 1;
+  padding: 5px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.nb-tab.active {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+.nb-dot {
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 7px;
+  background: var(--red);
+  color: #fff;
+  font-size: 10.5px;
+  font-style: normal;
+}
+.nb-acts {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.nb-act {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+.nb-act:hover {
+  color: var(--text);
+}
+
+.nb-list {
+  overflow-y: auto;
+}
+.nb-item {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  text-align: left;
+  cursor: default;
+  color: var(--text);
+  position: relative;
+}
+/* 갈 곳이 있는 알림만 손가락 — 눌러도 아무 일 없는 줄과 갈린다 */
+.nb-item.go {
+  cursor: pointer;
+}
+.nb-item.go:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+/* 읽은 것은 흐리게. 지우지는 않는다 — 다시 보고 싶을 때가 있다 */
+.nb-item.read {
+  opacity: 0.55;
+}
+.nb-icon {
+  flex: 0 0 auto;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.nb-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nb-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.nb-hits {
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+.nb-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  /* 긴 본문은 세 줄까지 — 그 아래는 눌러서 그 화면에서 본다 */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.nb-meta {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.nb-go {
+  margin-left: 6px;
+  font-style: normal;
+  color: var(--blue);
+}
+/* 급한 것은 왼쪽 띠로 — 목록을 훑을 때 색만 보고 걸러진다 */
+.nb-item.lv-warn {
+  box-shadow: inset 3px 0 0 var(--amber, #d59b23);
+}
+.nb-item.lv-urgent {
+  box-shadow: inset 3px 0 0 var(--red);
+}
+.nb-new {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--red);
+}
+.nb-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 22px 16px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* 폰 — 화면 폭을 거의 다 쓴다. 좁은 창에 세 줄 본문은 못 읽는다 */
+@media (max-width: 720px) {
+  .nb-panel {
+    width: calc(100vw - 20px);
+    right: -6px;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 체계 채점표 (2026-08-31 개편)                                        */
+/* ------------------------------------------------------------------ */
+.gb-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0 8px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  flex-wrap: wrap;
+}
+.gb-caret {
+  color: var(--text-dim);
+}
+/* 접혀 있어도 제일 중요한 한 숫자는 보인다 — 펴 볼지 판단할 근거 */
+.gb-peek {
+  margin-left: auto;
+  font-size: 13px;
+}
+.gb-table td,
+.gb-table th {
+  padding: 4px 8px;
+}
+/* 기준선 줄 — 나머지를 여기에 대고 읽는다 */
+.gb-base td {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  font-weight: 600;
+}
+/* 묶음 머리 — 무엇과 무엇을 견주는 구획인지 */
+.gb-sep td {
+  padding-top: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.gb-thin td {
+  opacity: 0.55;
+}
+/* 전체 대비 차이 — 절대값 옆에 작게. 이게 실제로 읽는 숫자다 */
+.gb-diff {
+  margin-left: 5px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+/* ------------------------------------------------------------------ */
+/* 장세 점검 (2026-08-31)                                              */
+/* ------------------------------------------------------------------ */
+.rg-card h4 {
+  margin: 18px 0 6px;
+  font-size: 14px;
+}
+.rg-ok {
+  padding: 8px 10px;
+  border-left: 3px solid var(--green);
+  background: color-mix(in srgb, var(--green) 8%, transparent);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.rg-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0;
+}
+.rg-find {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px;
+  border-radius: 6px;
+  border-left: 3px solid var(--border);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.rg-find.lv-warn {
+  border-left-color: var(--amber, #d59b23);
+  background: color-mix(in srgb, var(--amber, #d59b23) 8%, transparent);
+}
+.rg-find.lv-urgent {
+  border-left-color: var(--red);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+.rg-steps {
+  margin: 6px 0 0 18px;
+  padding: 0;
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+.rg-steps li {
+  margin-bottom: 5px;
+}
+/* 문턱 조절 — 라벨·입력·단위가 한 줄. 좁으면 접힌다 */
+.rg-knobs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px 14px;
+  margin: 8px 0;
+}
+.rg-knobs label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.rg-knobs label > span {
+  flex: 1;
+  color: var(--text-dim);
+}
+.rg-knobs input {
+  width: 72px;
+  text-align: right;
+}
+.rg-knobs small {
+  color: var(--text-dim);
+  white-space: nowrap;
+}

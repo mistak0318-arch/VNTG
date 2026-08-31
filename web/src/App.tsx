@@ -3,6 +3,7 @@ import { api } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { RunningJobsBar } from "./components/RunningJobsBar";
 import { QuickStockSearch } from "./components/QuickStockSearch";
+import { NotifyBell } from "./components/NotifyBell";
 import { TabScroller } from "./components/TabScroller";
 import { CustomThemePage } from "./pages/CustomThemePage";
 import { ScreenerPage } from "./pages/ScreenerPage";
@@ -894,6 +895,12 @@ export default function App() {
               우측엔 탭 모두 닫기(탭이 쌓였을 때만) — 상한을 없애면서 치우는 손도 같이 준다 */}
           <div className="qss-row">
             <QuickStockSearch onPick={openAnalysis} />
+            {/*
+              알림 종 (2026-08-31) — 검색창과 **같은 줄**에 둔다. 벤티지가
+              「검색하면 밑에 나오는 창처럼」이라고 한 그 모양을 그대로 쓰려는 것이라,
+              두 드롭다운이 나란히 있는 편이 읽기도 낫다.
+            */}
+            <NotifyBell />
             {openTabs.length > 1 && (
               <button
                 className="qss-close-tabs"

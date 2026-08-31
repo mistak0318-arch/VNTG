@@ -150,6 +150,16 @@ function ThemeMap({
        * 탭을 옮겨도 따라다녀서 「테마가 다 사라졌다」로 읽힌다.
        */
       if (showHidden && !on && r.hidden.length === 0) setShowHidden(false);
+      /*
+       * **다른 화면에도 알린다** (2026-08-31 — "어제 만든 숨기기 기능 작동안한다").
+       *
+       * 서버는 한 곳(`themeStrength`)에서 걸러 주는데, **테마 MAP 이 받아 둔 목록을
+       * 다시 안 받아서** 숨겨도 지도에는 그대로 남아 있었다. 숨김은 제대로 됐고
+       * 화면만 낡아 있었던 것이라 더 헷갈렸다.
+       *
+       * 앱이 이미 쓰는 커스텀 이벤트 문법(`vntg:tg-read`)을 그대로 쓴다.
+       */
+      window.dispatchEvent(new CustomEvent("vntg:theme-hidden"));
     } finally {
       setHiding(false);
     }
@@ -354,6 +364,7 @@ function ThemeMap({
               disabled={hiding}
               onClick={() => {
                 void api.themeHideClear().then((r) => {
+                  window.dispatchEvent(new CustomEvent("vntg:theme-hidden"));
                   setHidden(r.hidden);
                   setShowHidden(false);
                 });

@@ -17,6 +17,7 @@ import { ScreenLockPanel } from "../components/ScreenLockPanel";
 import { MENU_ITEMS } from "../App";
 import { ChannelCollectPanel } from "../components/ChannelCollectPanel";
 import { SignalConfigPanel } from "../components/SignalConfigPanel";
+import { RegimePanel } from "../components/RegimePanel";
 import { LeaderConfigPanel } from "../components/LeaderConfigPanel";
 import { TelegramOverviewPanel } from "../components/TelegramOverviewPanel";
 import { SubTabOrderPanel } from "../components/SubTabOrderPanel";
@@ -361,6 +362,21 @@ export function SettingsPage() {
           맞지 않으면 계속 고쳐가면서 쓰는 것이 이 기능의 목적입니다.
         </p>
         <SignalConfigPanel />
+      </CollapsibleCard>
+      )}
+
+      {/*
+        장세 점검 (2026-08-31) — 신호등 설정 **바로 아래**에 둔다. 기준을 정하는 자리와
+        「그 기준이 아직 유효한가」를 묻는 자리가 떨어져 있으면 후자를 안 보게 된다.
+      */}
+      {tab === "analysis" && (
+      <CollapsibleCard
+        id="regime"
+        scope="global"
+        title="장세 점검 — 다시 손볼 때가 됐나"
+        hint="시장의 폭·신고가 밀도·변동성을 재서 재정비 시점을 알려줍니다 (조회 0회)."
+      >
+        <RegimePanel />
       </CollapsibleCard>
       )}
 

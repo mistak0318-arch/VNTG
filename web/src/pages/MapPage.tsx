@@ -101,6 +101,18 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
       .then((r) => setNaver(r.themes))
       .catch((e: Error) => setNaverError(e.message));
   }, [mode, naver]);
+  /*
+   * **테마를 숨기면 다시 받는다** (2026-08-31 — "어제 만든 숨기기 기능 작동안한다").
+   *
+   * 위 effect 는 `naver !== null` 이면 안 받는다 — 한 번 받으면 끝이라는 뜻이다.
+   * 그래서 테마 DB 에서 숨겨도 지도는 옛 목록을 계속 그렸다. 서버는 제대로 걸러
+   * 주고 있었는데 **화면만 낡아 있어서** 「숨기기가 안 된다」로 보였다.
+   */
+  useEffect(() => {
+    const onHidden = () => setNaver(null);
+    window.addEventListener("vntg:theme-hidden", onHidden);
+    return () => window.removeEventListener("vntg:theme-hidden", onHidden);
+  }, []);
   const naverTiles = (naver ?? [])
     .filter((t) => t.tradeValue >= 300)
     .sort((a, b) => b.changeRate - a.changeRate);

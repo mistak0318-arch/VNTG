@@ -4,7 +4,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { appendSignalDay, type SignalDayRow } from "./signalHistory.js";
-import { evaluateSignal, getConfig, type Axis } from "./signalLight.js";
+import {
+  configFingerprint,
+  evaluateSignal,
+  getConfig,
+  type Axis,
+} from "./signalLight.js";
 import { tradeValueTop } from "./signalScreen.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -155,31 +160,6 @@ async function save(s: Store): Promise<void> {
 
 function todayStr(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-/**
- * 신호등 기준의 지문.
- *
- * 켠 기준·가중치·문턱·축 가중치까지 넣는다. 하나라도 바뀌면 다른 지문이 나오고,
- * 통계에서 「기준이 바뀐 뒤 것만」을 갈라 볼 수 있다.
- */
-async function configFingerprint(): Promise<string> {
-  const c = await getConfig();
-  const parts = [
-    `g${c.greenAt}y${c.yellowAt}`,
-    `r${c.riskYellowAt}-${c.riskRedAt}${c.riskBlocksGreen ? "B" : ""}`,
-    `aw${c.axisWeights.trend}${c.axisWeights.flow}${c.axisWeights.value}`,
-    `f${c.flowDays}`,
-    `ma${c.maLines.join("")}`,
-    ...c.checks
-      .filter((x) => x.enabled)
-      .map((x) => `${x.key}:${x.weight}:${x.threshold}:${x.strongAt}`),
-  ];
-  // 짧게 줄인다 — 사람이 읽을 값이 아니라 같은지 다른지만 보면 된다
-  let h = 0;
-  const s = parts.join("|");
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return `c${(h >>> 0).toString(36)}`;
 }
 
 /** 일봉 — 편입일 이후 몇 번째 거래일인지를 세려면 이게 있어야 한다 */

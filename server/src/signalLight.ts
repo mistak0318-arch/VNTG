@@ -784,6 +784,38 @@ export async function getConfig(): Promise<SignalConfig> {
   return configCache;
 }
 
+/**
+ * 신호등 기준의 **지문** (2026-08-31 — signalTrack 에서 옮겨 왔다).
+ *
+ * 켠 기준·가중치·문턱·축 가중치까지 넣는다. 하나라도 바뀌면 다른 지문이 나오고,
+ * 통계에서 「기준이 바뀐 뒤 것만」을 갈라 볼 수 있다.
+ *
+ * ## 왜 공용으로 옮겼나
+ *
+ * 추적기(`signalTrack`)에만 있었다. 그런데 **슈퍼신호등 원장에도 같은 문제**가 있다 —
+ * 기준을 바꾸면 그 전 편입과 그 뒤 편입이 한 표에 섞이면서 평균이 뜻을 잃는다.
+ * 두 곳이 **같은 지문**을 써야 「이 기록과 저 기록이 같은 기준인가」를 물을 수 있다.
+ *
+ * 사람이 읽을 값이 아니다 — **같은지 다른지**만 보면 된다.
+ */
+export async function configFingerprint(): Promise<string> {
+  const c = await getConfig();
+  const parts = [
+    `g${c.greenAt}y${c.yellowAt}`,
+    `r${c.riskYellowAt}-${c.riskRedAt}${c.riskBlocksGreen ? "B" : ""}`,
+    `aw${c.axisWeights.trend}${c.axisWeights.flow}${c.axisWeights.value}`,
+    `f${c.flowDays}`,
+    `ma${c.maLines.join("")}`,
+    ...c.checks
+      .filter((x) => x.enabled)
+      .map((x) => `${x.key}:${x.weight}:${x.threshold}:${x.strongAt}`),
+  ];
+  let h = 0;
+  const str = parts.join("|");
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return `c${(h >>> 0).toString(36)}`;
+}
+
 export async function saveConfig(input: SignalConfig): Promise<SignalConfig> {
   const cfg = mergeConfig(input);
   /*

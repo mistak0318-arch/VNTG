@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   api,
   type SuperEntry,
@@ -30,12 +30,190 @@ const pct = (v: number | null | undefined, digits = 1): string =>
 const cls = (v: number | null | undefined): string =>
   v === null || v === undefined ? "" : v >= 0 ? "positive" : "negative";
 
-function GradeCell({ g }: { g: { avg: number | null; n: number } }) {
+function GradeCell({
+  g,
+  base,
+}: {
+  g: { avg: number | null; n: number };
+  /** 「전체」 줄의 같은 칸 — 이 값과의 차이가 이 표의 요점이다 */
+  base?: number | null;
+}) {
+  const diff =
+    g.avg !== null && base !== null && base !== undefined && Number.isFinite(base)
+      ? g.avg - base
+      : null;
   return (
     <td className={`num ${cls(g.avg)}`}>
-      {g.avg === null ? "-" : pct(g.avg)}
-      <span className="pt-n"> ({g.n})</span>
+      {g.avg === null ? (
+        <span className="pt-n">-</span>
+      ) : (
+        <>
+          {pct(g.avg)}
+          <span className="pt-n"> ({g.n})</span>
+          {/*
+            **전체 대비**를 같이 적는다 (2026-08-31). 예전엔 절대값만 있어서
+            「+0.8% 가 좋은 건가」에 답하려면 전체 줄을 눈으로 찾아 빼야 했다.
+            이 표의 물음은 처음부터 「전체보다 나은가」 하나였다.
+          */}
+          {diff !== null && Math.abs(diff) >= 0.05 && (
+            <i className={`gb-diff ${diff > 0 ? "positive" : "negative"}`}>
+              {diff > 0 ? "+" : ""}
+              {diff.toFixed(1)}
+            </i>
+          )}
+        </>
+      )}
     </td>
+  );
+}
+
+/** 묶음 머리 — 무엇과 무엇을 견주는 구획인지 한 줄로 */
+const GRADE_GROUPS: { key: SuperGradeRow["group"]; label: string; hint: string }[] = [
+  { key: "base", label: "기준선", hint: "아래 모든 줄을 이 줄에 대고 읽습니다" },
+  {
+    key: "lists",
+    label: "교집합 넓이 — 많이 걸릴수록 진짜인가",
+    hint: "3곳과 5곳 이상의 성적이 갈려야 「넓을수록 좋다」가 맞습니다",
+  },
+  {
+    key: "streak",
+    label: "지속성 — 며칠째 걸리나",
+    hint: "지금까지 성적이 가장 크게 갈린 축입니다. 무지개 등급을 여기 둔 이유입니다",
+  },
+  { key: "score", label: "편입 점수", hint: "신호등 점수가 높을수록 나은가" },
+  { key: "universe", label: "어느 목록에서 왔나", hint: "목록마다 값어치가 다를 수 있습니다" },
+];
+
+/**
+ * 체계 채점표 (2026-08-31 개편 — "이거 접을수 있게 하고 UI 개편 좀 하자").
+ *
+ * ## 무엇을 고쳤나
+ *
+ * 열넉 줄이 평평하게 늘어서 있었다. 그러면 **무엇과 무엇을 견주는 표인지가 안
+ * 보인다** — 이 표는 원래 「축마다 짝으로 낸」 표인데 그 짝이 눈에 안 들어왔다.
+ *
+ *   ① 접힌다 — 기본은 접힘. 5일·20일이 아직 안 찬 동안에는 볼 것이 적다
+ *   ② 묶음으로 나눈다 — 기준선 / 교집합 넓이 / 지속성 / 점수 / 목록
+ *   ③ 빈 열을 안 그린다 — 「- (0)」 이 스물여덟 칸이나 있었다
+ *   ④ 전체 대비 차이를 같이 적는다 — 이 표의 물음이 처음부터 그것이었다
+ */
+function GradeBoard({ rows }: { rows: SuperGradeRow[] }) {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem("vntg.sd.grade") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () => {
+    setOpen((v) => {
+      try {
+        localStorage.setItem("vntg.sd.grade", v ? "0" : "1");
+      } catch {
+        /* 못 적으면 다음에 또 접혀 있을 뿐 */
+      }
+      return !v;
+    });
+  };
+
+  const base = rows.find((r) => r.group === "base");
+  /*
+   * **아직 안 찬 열은 안 그린다.** 5일·20일이 전부 0건이면 「- (0)」 이 스물여덟 칸
+   * 생기고, 그 사이에서 실제 값을 찾아야 한다. 없는 건 없다고 아래 한 줄로 적는다.
+   */
+  const cols = ([1, 5, 20] as const)
+    .map((d) => ({
+      d,
+      key: `d${d}` as "d1" | "d5" | "d20",
+    }))
+    .filter((c) => rows.some((r) => r[c.key].n > 0));
+  const pending = ([1, 5, 20] as const).filter((d) => !cols.some((c) => c.d === d));
+
+  return (
+    <section className="card sd-grade">
+      <button className="gb-head" onClick={toggle}>
+        <span className="gb-caret">{open ? "▾" : "▸"}</span>
+        <b>체계 채점표</b>
+        <span className="pt-n">
+          교집합이 넓을수록·오래 걸릴수록 진짜인가 — 편입 후 평균 수익률
+        </span>
+        {!open && base && base.d1.n > 0 && (
+          <span className="gb-peek">
+            전체 <b className={cls(base.d1.avg)}>{pct(base.d1.avg)}</b>{" "}
+            <span className="pt-n">(1일 · {base.d1.n}건)</span>
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="data-table-wrap">
+            <table className="data-table gb-table">
+              <thead>
+                <tr>
+                  <th>구간</th>
+                  {cols.map((c) => (
+                    <th key={c.d} className="num">
+                      {c.d}일 뒤
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {GRADE_GROUPS.map((g) => {
+                  const list = rows.filter((r) => r.group === g.key);
+                  if (list.length === 0) return null;
+                  return (
+                    <Fragment key={g.key}>
+                      {g.key !== "base" && (
+                        <tr className="gb-sep">
+                          <td colSpan={cols.length + 1}>
+                            <b>{g.label}</b>
+                            <span className="pt-n"> — {g.hint}</span>
+                          </td>
+                        </tr>
+                      )}
+                      {list.map((r) => (
+                        <tr
+                          key={r.label}
+                          className={`${r.group === "base" ? "gb-base" : ""}${
+                            /* 표본이 적은 줄은 흐리게 — 숨기지는 않는다 */
+                            r.d1.n > 0 && r.d1.n < 5 ? " gb-thin" : ""
+                          }`}
+                        >
+                          <td>{r.label}</td>
+                          {cols.map((c) => (
+                            <GradeCell
+                              key={c.d}
+                              g={r[c.key]}
+                              base={r.group === "base" ? null : (base?.[c.key].avg ?? null)}
+                            />
+                          ))}
+                        </tr>
+                      ))}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="pt-n sd-hint">
+            괄호는 <b>표본 수</b>, 작은 숫자는 <b>전체 대비 차이(%p)</b>입니다. 이 표의
+            물음은 「이 줄이 전체보다 나은가」 하나입니다 — 「목록 5곳 이상」과 「이틀 이상
+            반복」이 전체보다 좋아야 교집합·지속성 가설이 맞는 것입니다.
+            {pending.length > 0 && (
+              <>
+                {" "}
+                <b>
+                  {pending.join("·")}일 뒤 열은 아직 안 찼습니다
+                </b>{" "}
+                — 그만큼 시간이 지난 편입분이 없어서 열 자체를 안 그렸습니다.
+              </>
+            )}
+          </p>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -475,37 +653,7 @@ export function SuperDashboardPage({
       )}
 
       {/* ── 체계 채점표 ───────────────────────────────── */}
-      {grade.length > 0 && (
-        <section className="card sd-grade">
-          <h3>편입 후 평균 수익률 — 교집합이 넓을수록, 오래 걸릴수록 진짜인가</h3>
-          <div className="data-table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>구간</th>
-                  <th>1일 뒤</th>
-                  <th>5일 뒤</th>
-                  <th>20일 뒤</th>
-                </tr>
-              </thead>
-              <tbody>
-                {grade.map((g) => (
-                  <tr key={g.label}>
-                    <td>{g.label}</td>
-                    <GradeCell g={g.d1} />
-                    <GradeCell g={g.d5} />
-                    <GradeCell g={g.d20} />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="pt-n sd-hint">
-            괄호는 표본 수 — 표본이 적을 때의 평균은 참고만. 「목록 4곳 이상」과 「이틀 이상
-            반복」이 전체보다 좋아야 교집합·지속성 가설이 맞는 것입니다.
-          </p>
-        </section>
-      )}
+      {grade.length > 0 && <GradeBoard rows={grade} />}
 
       {/* ── 종목 표 ──────────────────────────────────── */}
       <div className="filter-row">

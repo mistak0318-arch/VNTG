@@ -6,7 +6,7 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { getMarketSnapshot, peekSnapshot } from "./marketSnapshot.js";
 import { evaluateMarket } from "./marketSignal.js";
 import { getSectorMood } from "./sectorMood.js";
-import { evaluateSignal } from "./signalLight.js";
+import { configFingerprint, evaluateSignal } from "./signalLight.js";
 import { stockLens, themeMapNow } from "./stockLens.js";
 import { fetchUniverse, SCREEN_UNIVERSES, type Candidate } from "./signalScreen.js";
 import {
@@ -139,6 +139,17 @@ export interface SuperEntry {
   addedPrice: number;
   /** 편입 당시 신호등 점수 */
   score: number;
+  /**
+   * **편입 당시 기준의 지문** (2026-08-31).
+   *
+   * 신호등 기준은 언제든 바뀐다. 기준이 바뀌면 **그 전의 90점과 그 뒤의 90점은
+   * 다른 것**이라, 한 표에 섞으면 평균이 뜻을 잃는다. 추적기(`signalTrack`)는
+   * 처음부터 이 지문을 남기고 있었는데 이 원장에는 없었다.
+   *
+   * ⚠️ 옛 편입분에는 이 값이 없다(`undefined`). **그것도 정보다** — 「기준을
+   * 바꾸기 전에 담은 것」이라는 뜻이라, 없다고 지어내지 않는다.
+   */
+  configHash?: string;
   /** 걸린 목록 (SCREEN_UNIVERSES key) — 마지막으로 걸린 날 기준 */
   lists: string[];
   /**
@@ -754,6 +765,11 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
   const store = await load();
   /* 이번 회차가 쓸 설정 — 도는 도중에 바뀌어도 한 회차는 같은 값으로 끝나게 한다 */
   const runCfg = cfgOf(store);
+  /*
+   * 이번 회차의 **신호등 기준 지문** — 한 회차 안에서는 같은 값을 쓴다.
+   * 편입마다 다시 계산하면 도는 중에 설정이 바뀌었을 때 같은 회차가 두 지문으로 갈린다.
+   */
+  const cfgHash = await configFingerprint().catch(() => undefined);
   const today = todayStr();
   if (!force && store.lastRunDate === today) return store;
   if (job.status === "running") return store;
@@ -851,6 +867,8 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
               addedDate: today,
               addedPrice: x.c.price,
               score: sig.score,
+              /* 어떤 기준으로 걸린 편입인가 — 나중에 기준이 바뀌면 이걸로 갈린다 */
+              configHash: cfgHash,
               lists: x.lists,
               seenCount: 1,
               lastSeenDate: today,
@@ -916,6 +934,13 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
 /** 그룹 하나의 지평별 평균 — avg 는 표본 0이면 null */
 export interface GradeRow {
   label: string;
+  /**
+   * 어느 묶음의 줄인가 (2026-08-31) — 화면이 구획을 나눠 그린다.
+   *
+   * 열넉 줄을 평평하게 늘어놓으면 **무엇과 무엇을 견주는 표인지가 안 보인다.**
+   * 이 표는 「축마다 짝으로 낸」 표라, 그 짝이 눈에 보여야 읽힌다.
+   */
+  group: "base" | "lists" | "streak" | "score" | "universe";
   d1: { avg: number | null; n: number };
   d5: { avg: number | null; n: number };
   d20: { avg: number | null; n: number };
@@ -936,7 +961,11 @@ export interface GradeRow {
   win20: { rate: number | null; n: number };
 }
 
-function gradeRow(label: string, entries: SuperEntry[]): GradeRow {
+function gradeRow(
+  label: string,
+  entries: SuperEntry[],
+  group: GradeRow["group"] = "base",
+): GradeRow {
   const agg = (pick: (r: NonNullable<SuperEntry["returns"]>) => number | null) => {
     const vals = entries
       .map((e) => (e.returns ? pick(e.returns) : null))
@@ -967,6 +996,7 @@ function gradeRow(label: string, entries: SuperEntry[]): GradeRow {
   };
   return {
     label,
+    group,
     d1: agg((r) => r.d1),
     d5: agg((r) => r.d5),
     d20: agg((r) => r.d20),
@@ -1050,6 +1080,11 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
   config: SuperConfig;
   grade: GradeRow[];
   stats: SuperStats;
+  /**
+   * 기준 지문 — **원장에 서로 다른 기준의 편입이 섞여 있나.**
+   * 섞였으면 성적표의 평균이 뜻을 잃는다. 지우는 대신 화면이 그 사실을 적는다.
+   */
+  fingerprint: { now?: string; mixed: boolean; sameAsNow: number; kinds: number };
 }> {
   const store = await load();
   const snap = await getMarketSnapshot(client).catch(() => null);
@@ -1159,22 +1194,22 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
    */
   const E = store.entries;
   const grade = [
-    gradeRow("전체", E),
+    gradeRow("전체", E, "base"),
     /* ① 교집합 넓이 — 많이 걸릴수록 진짜인가 */
-    gradeRow("목록 3곳", E.filter((e) => e.lists.length === 3)),
-    gradeRow("목록 4곳", E.filter((e) => e.lists.length === 4)),
-    gradeRow("목록 5곳 이상", E.filter((e) => e.lists.length >= 5)),
+    gradeRow("목록 3곳", E.filter((e) => e.lists.length === 3), "lists"),
+    gradeRow("목록 4곳", E.filter((e) => e.lists.length === 4), "lists"),
+    gradeRow("목록 5곳 이상", E.filter((e) => e.lists.length >= 5), "lists"),
     /* ② 지속성 — 며칠째 걸리나. 지금까지 가장 크게 갈린 축이다 */
-    gradeRow("하루만 걸림", E.filter((e) => e.seenCount <= 1)),
-    gradeRow("이틀 이상 반복", E.filter((e) => e.seenCount >= 2)),
+    gradeRow("하루만 걸림", E.filter((e) => e.seenCount <= 1), "streak"),
+    gradeRow("이틀 이상 반복", E.filter((e) => e.seenCount >= 2), "streak"),
     /* 무지개 문턱은 설정값이다 — 라벨도 그 값을 따라간다(3 이 아닐 수 있다) */
-    gradeRow(`${cfg.rainbowDays}일 이상 반복 🌈`, E.filter((e) => e.seenCount >= cfg.rainbowDays)),
+    gradeRow(`${cfg.rainbowDays}일 이상 반복 🌈`, E.filter((e) => e.seenCount >= cfg.rainbowDays), "streak"),
     /* ③ 편입 점수 — 신호등 점수가 높을수록 나은가 */
-    gradeRow("편입 점수 70+", E.filter((e) => e.score >= 70)),
-    gradeRow("편입 점수 70 미만", E.filter((e) => e.score < 70)),
+    gradeRow("편입 점수 70+", E.filter((e) => e.score >= 70), "score"),
+    gradeRow("편입 점수 70 미만", E.filter((e) => e.score < 70), "score"),
     /* ④ 어느 목록에서 왔나 — 목록마다 값어치가 다를 수 있다 */
     ...SCREEN_UNIVERSES.map((u) =>
-      gradeRow(`${u.label}에 걸림`, E.filter((e) => e.lists.includes(u.key))),
+      gradeRow(`${u.label}에 걸림`, E.filter((e) => e.lists.includes(u.key)), "universe"),
     ),
   ].filter((g) => g.d1.n > 0 || g.d5.n > 0 || g.d20.n > 0);
 
@@ -1194,7 +1229,29 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
     best: d20s.length ? d20s.reduce((a, b) => (b.v > a.v ? b : a)) : null,
     worst: d20s.length ? d20s.reduce((a, b) => (b.v < a.v ? b : a)) : null,
   };
-  return { entries, lastRunDate: store.lastRunDate, minLists: cfg.minLists, config: cfg, grade, stats };
+  /*
+   * **기준이 섞였나** (2026-08-31). 신호등 기준을 바꾸면 그 전 편입과 그 뒤 편입이
+   * 한 표에 들어가면서 평균이 뜻을 잃는다. 지우는 대신 **섞였다는 사실을 알린다** —
+   * 옛 기록은 「옛 기준이 어땠나」의 유일한 증거라 지우면 비교할 대상이 사라진다.
+   *
+   * 옛 편입분에는 지문이 아예 없다(기능 추가 전). 그것도 「다른 기준」으로 센다.
+   */
+  const nowHash = await configFingerprint().catch(() => undefined);
+  const hashes = new Set(store.entries.map((e) => e.configHash ?? "(지문 없음)"));
+  const mixed =
+    hashes.size > 1 || (nowHash !== undefined && !hashes.has(nowHash) && store.entries.length > 0);
+  const sameAsNow = nowHash ? store.entries.filter((e) => e.configHash === nowHash).length : 0;
+
+  return {
+    entries,
+    lastRunDate: store.lastRunDate,
+    minLists: cfg.minLists,
+    config: cfg,
+    grade,
+    stats,
+    /** 지금 기준의 지문 · 원장에 섞여 있나 · 지금 기준으로 담긴 건 몇 건인가 */
+    fingerprint: { now: nowHash, mixed, sameAsNow, kinds: hashes.size },
+  };
 }
 
 /** 수동 이탈 — 기록을 남기고 추적만 멈춘다. 목록에서 지우지 않는다 */

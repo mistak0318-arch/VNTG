@@ -56,6 +56,7 @@ import { createSectorFlowRouter } from "./routes/sectorFlow.js";
 import { createPulseRouter } from "./routes/pulse.js";
 import { createUsKrRouter } from "./routes/usKr.js";
 import { createAlertRouter } from "./routes/alert.js";
+import { createNotifyRouter } from "./routes/notify.js";
 import { createBacktestRouter } from "./routes/backtest.js";
 import { createWidgetRouter } from "./routes/widget.js";
 import { createBriefingRouter } from "./routes/briefing.js";
@@ -196,6 +197,8 @@ app.use("/api/keyword", createKeywordRouter());
 app.use("/api/disclosure-alert", createDisclosureRouter());
 app.use("/api/breadth", createBreadthRouter(client));
 app.use("/api/alert", createAlertRouter(client));
+/* 알림함 + 장세 점검 (2026-08-31) — 종 모양이 읽는 자리 */
+app.use("/api/notify", createNotifyRouter(client));
 app.use("/api/backtest", createBacktestRouter(client));
 app.use("/api/widget", createWidgetRouter(client));
 app.use("/api/briefing", createBriefingRouter(client));
