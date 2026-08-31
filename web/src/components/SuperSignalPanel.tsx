@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtNum } from "../api";
 import { WatchStar } from "../useWatchedCodes";
-import { SuperMark } from "../useSuperMarks";
+import { SuperMark, useSuperMarks } from "../useSuperMarks";
 import { useTabActive } from "../tabActive";
 import { useMarketOpen } from "../useLive";
 import { SortableTh, useSortableTable } from "../useSortableTable";
@@ -89,6 +89,10 @@ export function SuperSignalPanel({
   const [grade, setGrade] = useState<GradeRow[]>([]);
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [minLists, setMinLists] = useState(3);
+  /* 무지개 문턱 — 며칠째 계속 걸리면 🌈 인가. 서버가 현재값을 준다 */
+  const [rainbowDays, setRainbowDays] = useState(3);
+  const [savingCfg, setSavingCfg] = useState(false);
+  const marks = useSuperMarks();
   const [universes, setUniverses] = useState<Universe[]>([]);
   const [job, setJob] = useState<{ status: string; step: string; done: number; total: number; added: number; error?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,12 +103,37 @@ export function SuperSignalPanel({
   /* 머리 클릭 정렬 — 훅이라 조기 return 앞에 둔다 (rows 가 없으면 빈 배열) */
   const sort = useSortableTable<Row>(visible);
 
+  /**
+   * 문턱을 바꾼다.
+   *
+   * ⚠️ **이미 쌓인 기록의 뜻이 달라진다** — 옛 편입은 옛 문턱으로 걸린 것이다.
+   * 바꾼 뒤 목록을 다시 받아 무지개 표식이 곧바로 따라오게 한다.
+   */
+  const saveCfg = async (patch: { minLists?: number; rainbowDays?: number }) => {
+    setSavingCfg(true);
+    try {
+      const r = await api.signalSuperConfig(patch);
+      setMinLists(r.config.minLists);
+      setRainbowDays(r.config.rainbowDays);
+      load();
+      /* 표식은 앱 전체가 나눠 보므로 그쪽도 다시 받게 한다 */
+      marks.reload();
+    } finally {
+      setSavingCfg(false);
+    }
+  };
+
   const load = useCallback(() => {
     api
       .signalSuper()
       .then((r) => {
         setRows(r.entries);
         setGrade((r as { grade?: GradeRow[] }).grade ?? []);
+        const cfg = (r as { config?: { minLists: number; rainbowDays: number } }).config;
+        if (cfg) {
+          setMinLists(cfg.minLists);
+          setRainbowDays(cfg.rainbowDays);
+        }
         setLastRun(r.lastRunDate);
         setMinLists(r.minLists);
       })
@@ -186,7 +215,8 @@ export function SuperSignalPanel({
     <div>
       <div className="filter-row ctl-ribbon">
         <span className="breadth-count">
-          목록 <b>{minLists}곳 이상</b>에 걸린 <b>초록</b>만 · 매일 15:45 자동
+          목록 <b>{minLists}곳 이상</b>에 걸린 <b>초록</b>만 · 🌈은 <b>{rainbowDays}일 이상</b> 반복
+          · 매일 15:45 자동
           {lastRun && ` · 마지막 편입 ${lastRun}`}
         </span>
         <button className="filter-btn" onClick={() => void runNow()} disabled={job !== null}>
@@ -204,6 +234,43 @@ export function SuperSignalPanel({
         >
           이탈 포함 {showExited ? "켬" : "끔"}
         </button>
+        {/*
+          문턱 조절 (2026-08-31 — "무지개 속성도 내가 조절할 수 있게").
+          둘 다 「재고 있는 숫자」다 — 성적표가 3곳/4곳/5곳과 하루/이틀/사흘을
+          각각 재고 있으니, 며칠 쌓인 뒤 여기서 옮기면 된다.
+        */}
+        <span className="ss-cfg">
+          <label>
+            교집합
+            <select
+              className="ma-input short"
+              value={minLists}
+              disabled={savingCfg}
+              onChange={(e) => void saveCfg({ minLists: Number(e.target.value) })}
+            >
+              {[2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>
+                  {n}곳 이상
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            🌈
+            <select
+              className="ma-input short"
+              value={rainbowDays}
+              disabled={savingCfg}
+              onChange={(e) => void saveCfg({ rainbowDays: Number(e.target.value) })}
+            >
+              {[2, 3, 4, 5, 7].map((n) => (
+                <option key={n} value={n}>
+                  {n}일 이상
+                </option>
+              ))}
+            </select>
+          </label>
+        </span>
         {(rows ?? []).some((r) => r.active === false) && !showExited && (
           <span className="breadth-count">
             이탈 {(rows ?? []).filter((r) => r.active === false).length}종목 숨김

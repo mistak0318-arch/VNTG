@@ -56,6 +56,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const FILE = join(here, "..", "data", "superSignal.json");
 
 /** 교집합 문턱 — 몇 개 목록에 걸려야 「슈퍼」인가 */
+/** 기본 교집합 문턱 — 설정(SuperConfig.minLists)이 이 값을 덮는다 */
 const MIN_LISTS = 3;
 /** 하루에 평가할 교집합 상한 — 종목당 조회 여러 번이라 폭주를 막는다 */
 const MAX_EVAL = 40;
@@ -81,6 +82,7 @@ const MAX_EVAL = 40;
  * 「이틀 이상」과 「사흘 이상」을 둘 다 재고 있으니, 며칠 쌓인 뒤에 이 값을
  * 옮기면 된다. 근거 없이 정한 숫자가 아니라 **재고 있는 숫자**다.
  */
+/** 기본 무지개 문턱 — 설정(SuperConfig.rainbowDays)이 이 값을 덮는다 */
 const RAINBOW_DAYS = 3;
 
 /**
@@ -188,9 +190,58 @@ export interface SuperEntry {
   notes?: SuperNote[];
 }
 
+/**
+ * 슈퍼신호등 설정 — **벤티지가 조절한다** (2026-08-31).
+ *
+ * 두 문턱 다 「재고 있는 숫자」다. 성적표가 3곳/4곳/5곳과 하루/이틀/사흘을
+ * 각각 재고 있으므로, 며칠 쌓인 뒤에 여기서 옮기면 된다.
+ * 코드에 박아 두면 그 실험을 하려고 매번 배포해야 한다.
+ */
+export interface SuperConfig {
+  /** 몇 개 목록에 걸려야 「슈퍼」인가 */
+  minLists: number;
+  /**
+   * 며칠째 계속 걸리면 **무지개**인가.
+   *
+   * 이틀 이상은 실측에서 29개 중 12개(41%)라 배지로서 변별력이 없었다 —
+   * 열에 넷이 달고 있으면 눈에 안 띈다. 그래서 기본은 사흘이다.
+   */
+  rainbowDays: number;
+}
+
+export const DEFAULT_SUPER_CONFIG: SuperConfig = { minLists: 3, rainbowDays: 3 };
+
 interface Store {
   entries: SuperEntry[];
   lastRunDate: string | null;
+  config?: SuperConfig;
+}
+
+/** 저장된 설정 + 기본값 — 항목이 늘어도 옛 파일이 그것을 지우지 않게 항목별로 합친다 */
+function cfgOf(store: Store): SuperConfig {
+  return { ...DEFAULT_SUPER_CONFIG, ...(store.config ?? {}) };
+}
+
+export async function getSuperConfig(): Promise<SuperConfig> {
+  return cfgOf(await load());
+}
+
+/** 값의 범위는 여기서 막는다 — 화면을 믿지 않는다(직접 PUT 할 수도 있다) */
+export async function saveSuperConfig(input: Partial<SuperConfig>): Promise<SuperConfig> {
+  const store = await load();
+  const cur = cfgOf(store);
+  const num = (v: unknown, lo: number, hi: number, dflt: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : dflt;
+  };
+  store.config = {
+    /* 2 미만이면 「교집합」이 아니고, 7 은 목록 전체라 아무것도 안 걸린다 */
+    minLists: num(input.minLists, 2, 6, cur.minLists),
+    /* 1 이면 편입 즉시 무지개라 등급이 아니게 된다 */
+    rainbowDays: num(input.rainbowDays, 2, 10, cur.rainbowDays),
+  };
+  await save(store);
+  return store.config;
 }
 
 const EMPTY: Store = { entries: [], lastRunDate: null };
@@ -214,6 +265,12 @@ async function load(): Promise<Store> {
     return {
       entries,
       lastRunDate: typeof raw.lastRunDate === "string" ? raw.lastRunDate : null,
+      /*
+       * ⚠️ **설정을 여기서 빠뜨리면 저장은 되는데 안 읽힌다** — 실측에서 그랬다:
+       * PUT 은 성공하고 파일에도 남는데 무지개 수가 안 바뀌었다. 읽는 쪽이
+       * 통째로 버리고 있었기 때문이다. 새 필드를 Store 에 더할 때마다 여기도 봐야 한다.
+       */
+      config: raw.config,
     };
   } catch {
     return { ...EMPTY };
@@ -707,7 +764,8 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
      * 성적표가 그 기록 위에 세워지기 때문이다.
      */
     const tracked = new Set(store.entries.filter((e) => e.active !== false).map((e) => e.code));
-    const qualified = [...byCode.values()].filter((x) => x.lists.length >= MIN_LISTS);
+    const minLists = cfgOf(store).minLists;
+    const qualified = [...byCode.values()].filter((x) => x.lists.length >= minLists);
     const inter = [
       ...qualified.filter((x) => tracked.has(x.c.code)),
       ...qualified.filter((x) => !tracked.has(x.c.code)),
@@ -954,6 +1012,8 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
   entries: SuperListRow[];
   lastRunDate: string | null;
   minLists: number;
+  /** 지금 쓰이는 설정 — 화면이 조절 칸의 현재값으로 쓴다 */
+  config: SuperConfig;
   grade: GradeRow[];
   stats: SuperStats;
 }> {
@@ -964,6 +1024,7 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
    * 편입일로부터 며칠 — **달력일** 기준. 거래일로 세려면 공휴일 표가 필요한데
    * 그게 없다(없는 데이터를 지어내지 않는다). 편입 당일은 0 이다.
    */
+  const cfg = cfgOf(store);
   const nowDay = todayStr();
   const daysFrom = (d: string): number => {
     const a = Date.parse(`${d}T00:00:00Z`);
@@ -1033,7 +1094,7 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
           price !== null && e.addedPrice > 0 ? ((price - e.addedPrice) / e.addedPrice) * 100 : null,
         daysSince: daysFrom(e.addedDate),
         /* 이탈한 것은 무지개가 아니다 — 지금 살아 있는 지속성이라야 뜻이 있다 */
-        rainbow: e.active !== false && e.seenCount >= RAINBOW_DAYS,
+        rainbow: e.active !== false && e.seenCount >= cfg.rainbowDays,
         /* 오늘 편입된 것 — 화면이 N 배지를 붙인다. 첫날만이다 */
         isNew: e.addedDate === nowDay,
         groupTags: crossCodes.has(e.code)
@@ -1072,7 +1133,8 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
     /* ② 지속성 — 며칠째 걸리나. 지금까지 가장 크게 갈린 축이다 */
     gradeRow("하루만 걸림", E.filter((e) => e.seenCount <= 1)),
     gradeRow("이틀 이상 반복", E.filter((e) => e.seenCount >= 2)),
-    gradeRow("사흘 이상 반복 🌈", E.filter((e) => e.seenCount >= RAINBOW_DAYS)),
+    /* 무지개 문턱은 설정값이다 — 라벨도 그 값을 따라간다(3 이 아닐 수 있다) */
+    gradeRow(`${cfg.rainbowDays}일 이상 반복 🌈`, E.filter((e) => e.seenCount >= cfg.rainbowDays)),
     /* ③ 편입 점수 — 신호등 점수가 높을수록 나은가 */
     gradeRow("편입 점수 70+", E.filter((e) => e.score >= 70)),
     gradeRow("편입 점수 70 미만", E.filter((e) => e.score < 70)),
@@ -1098,7 +1160,7 @@ export async function listSuperSignal(client: KiwoomClient): Promise<{
     best: d20s.length ? d20s.reduce((a, b) => (b.v > a.v ? b : a)) : null,
     worst: d20s.length ? d20s.reduce((a, b) => (b.v < a.v ? b : a)) : null,
   };
-  return { entries, lastRunDate: store.lastRunDate, minLists: MIN_LISTS, grade, stats };
+  return { entries, lastRunDate: store.lastRunDate, minLists: cfg.minLists, config: cfg, grade, stats };
 }
 
 /** 수동 이탈 — 기록을 남기고 추적만 멈춘다. 목록에서 지우지 않는다 */

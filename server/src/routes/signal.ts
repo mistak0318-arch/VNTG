@@ -15,6 +15,7 @@ import {
   listSuperSignal,
   removeSuperEntry,
   runSuperSignal,
+  saveSuperConfig,
   superDetail,
   superJob,
   superRunStatus,
@@ -209,6 +210,23 @@ export function createSignalRouter(client: KiwoomClient): Router {
   router.get("/super", async (_req, res, next) => {
     try {
       res.json(await listSuperSignal(client));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 슈퍼신호등 문턱 설정 (2026-08-31) — 교집합 몇 곳, 무지개 며칠.
+   *
+   * 둘 다 「재고 있는 숫자」다. 성적표가 3곳/4곳/5곳과 하루/이틀/사흘을 각각
+   * 재고 있으니, 며칠 쌓인 뒤 여기서 옮기면 된다.
+   *
+   * ⚠️ **문턱을 바꾸면 이미 쌓인 기록의 뜻이 달라진다** — 옛 편입은 옛 문턱으로
+   * 걸린 것이다. 화면이 그 사실을 적는다.
+   */
+  router.put("/super/config", async (req, res, next) => {
+    try {
+      res.json({ config: await saveSuperConfig(req.body ?? {}) });
     } catch (err) {
       next(err);
     }

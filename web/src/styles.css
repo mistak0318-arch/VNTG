@@ -12184,3 +12184,14 @@ thead .sd-emph {
   overflow-x: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+
+/* 슈퍼신호등 문턱 조절 — 표 위 리본에 나란히 (2026-08-31) */
+.ss-cfg { display: inline-flex; gap: 10px; align-items: center; }
+.ss-cfg label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.ss-cfg select { font-size: 0.74rem; padding: 2px 4px; }
