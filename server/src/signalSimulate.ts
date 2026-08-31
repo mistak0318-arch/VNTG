@@ -18,27 +18,66 @@ import { MA_PERIODS, gradeOf, loadSamples, scoreFeat, type Sample } from "./sign
  * (수급 3종은 2026-08-31 부터 표본에 들어왔다 — 그전 표본으로 돌리면 여전히 빠진다.)
  */
 
+/**
+ * 한 무리의 성적.
+ *
+ * ## ⚠️ 평균만 보면 속는다 (2026-09-01)
+ *
+ * 표본에 **20일 +444%**(가온전선)·+310%(인벤티지랩) 같은 것들이 있다. 그런 몇
+ * 개가 평균을 통째로 만든다 — 실제로 「초과 +5.63%p」였던 설정이 표본을 8% 바꾸자
+ * **+0.19%p** 로 무너졌다. 그렇게 쉽게 뒤집히는 값은 근거가 못 된다.
+ *
+ * 그래서 넷을 함께 낸다:
+ *
+ *   avg   평균          — 극단값이 지배한다. 참고용
+ *   med   중앙값        — 극단값에 안 흔들린다
+ *   trim  절사평균      — 위아래 2% 를 버린 평균. 평균과 중앙값의 중간 성격
+ *   win   승률          — 크기를 안 보고 방향만. 극단값과 무관하다
+ *
+ * **셋(중앙값·절사평균·승률)이 다 같은 방향일 때만 믿는다.**
+ */
 export interface Stat {
   n: number;
-  d1: { avg: number | null; win: number | null };
-  d5: { avg: number | null; win: number | null };
-  d20: { avg: number | null; win: number | null };
+  d1: Cut;
+  d5: Cut;
+  d20: Cut;
 }
+
+export interface Cut {
+  avg: number | null;
+  /** 중앙값 — 극단값에 안 흔들린다 */
+  med: number | null;
+  /** 절사평균(위아래 2% 버림) */
+  trim: number | null;
+  win: number | null;
+}
+
+const EMPTY_CUT: Cut = { avg: null, med: null, trim: null, win: null };
 
 const EMPTY: Stat = {
   n: 0,
-  d1: { avg: null, win: null },
-  d5: { avg: null, win: null },
-  d20: { avg: null, win: null },
+  d1: { ...EMPTY_CUT },
+  d5: { ...EMPTY_CUT },
+  d20: { ...EMPTY_CUT },
 };
+
+const r2 = (v: number) => Math.round(v * 100) / 100;
 
 function stat(rows: { d1: number | null; d5: number | null; d20: number | null }[]): Stat {
   if (rows.length === 0) return { ...EMPTY };
-  const one = (key: "d1" | "d5" | "d20") => {
+  const one = (key: "d1" | "d5" | "d20"): Cut => {
     const vs = rows.map((r) => r[key]).filter((v): v is number => v !== null && Number.isFinite(v));
-    if (vs.length === 0) return { avg: null, win: null };
+    if (vs.length === 0) return { ...EMPTY_CUT };
+    const sorted = [...vs].sort((a, b) => a - b);
+    const m = sorted.length >> 1;
+    const med = sorted.length % 2 ? sorted[m] : (sorted[m - 1] + sorted[m]) / 2;
+    /* 위아래 2% 를 버린다 — 50개 미만이면 버릴 것이 없어 평균 그대로 */
+    const k = sorted.length >= 50 ? Math.floor(sorted.length * 0.02) : 0;
+    const inner = k > 0 ? sorted.slice(k, sorted.length - k) : sorted;
     return {
-      avg: Math.round((vs.reduce((a, b) => a + b, 0) / vs.length) * 100) / 100,
+      avg: r2(vs.reduce((a, b) => a + b, 0) / vs.length),
+      med: r2(med),
+      trim: r2(inner.reduce((a, b) => a + b, 0) / inner.length),
       win: Math.round((vs.filter((v) => v > 0).length / vs.length) * 100),
     };
   };

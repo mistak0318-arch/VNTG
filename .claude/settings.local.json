@@ -976,7 +976,12 @@
       "Bash(awk '{printf \"현재 파일 %.1f MB\\\\n\", $5/1048576}')",
       "Bash(awk '{printf \"파일 %.1f MB\\\\n\", $5/1048576}')",
       "Bash(node --max-old-space-size=6144 \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/themeEtf.mjs\")",
-      "Bash(node --max-old-space-size=6144 -e ' *)"
+      "Bash(node --max-old-space-size=6144 -e ' *)",
+      "Bash(git checkout *)",
+      "Bash(rm -f web/src/pages/SignalHubPage.tsx)",
+      "Bash(curl -s \"http://localhost:4000/api/market/rank/intraday-investor?market=000\")",
+      "Bash(node -e 'console.log\\(new Date\\(Date.now\\(\\)+9*3600000\\).toISOString\\(\\)\\)')",
+      "Bash(curl -s -X POST http://localhost:4000/api/signal/screen -H \"Content-Type: application/json\" -d '{\"universe\":\"foreign-period\",\"market\":\"000\",\"limit\":8,\"minLevel\":\"red\"}')"
     ]
   }
 }

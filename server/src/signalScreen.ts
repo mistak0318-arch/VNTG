@@ -326,6 +326,17 @@ export const SCREEN_UNIVERSES: { key: string; label: string; hint: string }[] = 
   { key: "cont", label: "기관·외국인 연속매매", hint: "두 주체가 같이 사는 종목 (ka10131)" },
   { key: "same-net", label: "동일순매매 상위 (7일)", hint: "최근 7일 기관·외국인이 같은 방향으로 순매수" },
   { key: "intraday-investor", label: "장중 기관 매매상위", hint: "지금 장중 기관 순매수 상위 — 장중에만 값이 있다" },
+  /*
+   * 외국인 순매수 상위 (2026-09-01 벤티지 요청) — `ka10034`.
+   *
+   * 「외국인 연속순매매」와 다른 것을 본다. 연속은 **며칠 이어졌나**(일수)이고
+   * 이건 **얼마나 샀나**(수량)다. 실측에서 연속은 뒤쪽에서 부호가 뒤집혔지만
+   * (-1.59%p) 금액·수량 쪽은 다른 값이라 따로 볼 값이 있다.
+   *
+   * `rankSpecs` 에 이미 있던 조회다 — 시세분석 화면이 쓰던 것을 모집단으로도
+   * 쓰는 것이라 새 TR 이 아니다.
+   */
+  { key: "foreign-period", label: "외국인 순매수 상위", hint: "외국인이 하루 동안 가장 많이 산 종목 — 연속 일수가 아니라 수량" },
 ];
 
 function yyyymmdd(daysAgo = 0): string {
