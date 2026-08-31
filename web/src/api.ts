@@ -972,6 +972,8 @@ export const api = {
       lastRun: string | null;
       lastBuyScan: string | null;
       events: CisWatchEvent[];
+      /** 자동 실행이 실패한 것 — 화면이 「왜 안 썼나」를 말할 수 있게 */
+      failures: { key: string; fails: number; error?: string; at: string }[];
     }>(
       `/api/cis/watch?account=${account}`,
     ),

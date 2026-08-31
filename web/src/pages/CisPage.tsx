@@ -267,6 +267,7 @@ function TodayTab({
   const [day, setDay] = useState<CisDay | null>(null);
   const [state, setState] = useState<CisPersonaState | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [fails, setFails] = useState<{ key: string; fails: number; error?: string }[]>([]);
   const [job, setJob] = useState<PublishJob | null>(null);
   const jobIdRef = useRef<string | null>(null);
   /**
@@ -283,6 +284,10 @@ function TodayTab({
 
   const load = useCallback(() => {
     api.cisDay(account, date).then(setDay).catch(() => setDay(null));
+    api
+      .cisWatch(account)
+      .then((w) => setFails(w.failures ?? []))
+      .catch(() => setFails([]));
     api
       .cisDays(account, 120)
       .then((r) => {
@@ -418,6 +423,21 @@ function TodayTab({
           <span className="cis-written">기록 {written.length}일</span>
         )}
       </div>
+
+      {/*
+        자동 실행이 실패했으면 **그 자리에서 말한다.** 「아직 안 썼습니다」만
+        보여 주면 시각이 안 됐는지 실패한 건지 알 길이 없다.
+      */}
+      {fails.length > 0 && (
+        <div className="cis-off">
+          <b>자동 실행이 실패했습니다.</b>
+          {fails.map((f) => (
+            <span key={f.key} className="cis-fail">
+              {f.key} — {f.error ?? "이유 없음"} ({f.fails}번 시도)
+            </span>
+          ))}
+        </div>
+      )}
 
       {msg && <div className="table-note cis-msg">{msg}</div>}
       {job && <ProgressSteps job={job} />}

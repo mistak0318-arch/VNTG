@@ -11997,3 +11997,4 @@ button.tpb-row:hover { background: var(--panel-2); }
   margin-top: 3px;
   line-height: 1.55;
 }
+.cis-fail { font-size: 0.74rem; color: var(--muted); flex: 1 1 100%; }

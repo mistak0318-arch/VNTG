@@ -8,7 +8,7 @@ import { readState } from "../cisPersona.js";
 import { priceMap, runSlot } from "../cisRun.js";
 import { cisStats, cisUsage } from "../cisStats.js";
 import { cisAiReady, weeklyReview } from "../cisAi.js";
-import { resetCisTried } from "../cisScheduler.js";
+import { cisSchedulerState, resetCisTried } from "../cisScheduler.js";
 import { CIS_STEPS, createJob, getJob, reporterFor } from "../reportProgress.js";
 import { METHOD_LABEL, runPension } from "../cisPensionRun.js";
 import { clearWatchEvents, watchEvents, watchStatus } from "../cisWatch.js";
@@ -266,7 +266,15 @@ export function createCisRouter(client: KiwoomClient): Router {
   });
 
   router.get("/watch", (req, res) => {
-    res.json({ ...watchStatus(), events: watchEvents(acc(req.query.account), 60) });
+    res.json({
+      ...watchStatus(),
+      events: watchEvents(acc(req.query.account), 60),
+      /*
+       * 자동 실행이 실패한 것 — **화면이 말해야 한다.** 콘솔에만 두면
+       * 「아침 일지가 왜 없지」에 아무도 답할 수 없다.
+       */
+      failures: cisSchedulerState(),
+    });
   });
 
   /** 주간 복기 (AI) — 며칠치를 놓고 어느 규칙이 나빴나 */

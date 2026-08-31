@@ -29,8 +29,26 @@ import { runPension } from "./cisPensionRun.js";
 
 const TICK_MS = 60_000;
 let timer: ReturnType<typeof setInterval> | null = null;
-/** 이번 프로세스에서 이미 시도한 것 — 실패해도 1분마다 다시 때리지 않게 */
-const tried = new Set<string>();
+/**
+ * 이번 프로세스에서 시도한 것.
+ *
+ * ⚠️ **성공했을 때만 잠근다** (2026-08-31). 예전엔 시도 **전에** 잠갔는데,
+ * 그러면 아침 실행이 한 번 실패했을 때(키움 토큰 갱신 중, 네트워크 끊김…)
+ * 그날은 영영 재시도하지 않았다. 켜 두고 하루를 관찰하려는데 아침이 조용히
+ * 빠지면 그 하루가 통째로 없어진다.
+ *
+ * 대신 **무한히 다시 때리지도 않는다** — 몇 번 실패하면 그만둔다. 계속 실패하는
+ * 것을 1분마다 부르면 키움 호출만 태운다.
+ */
+const tried = new Map<string, { fails: number; error?: string; at: string }>();
+const MAX_TRY = 3;
+
+/** 화면이 「왜 안 썼나」를 물을 수 있게 — 실패는 콘솔에만 두면 아무도 못 본다 */
+export function cisSchedulerState(): { key: string; fails: number; error?: string; at: string }[] {
+  return [...tried.entries()]
+    .filter(([, v]) => v.fails > 0)
+    .map(([key, v]) => ({ key, ...v }));
+}
 
 function nowHm(): string {
   const d = new Date(Date.now() + 9 * 3600_000);
@@ -65,12 +83,19 @@ async function pensionTick(client: KiwoomClient): Promise<void> {
   for (const id of ACCOUNT_IDS) {
     if (profileOf(id).cadence === "daily") continue;
     const key = `${date}:pension:${id}`;
-    if (tried.has(key)) continue;
-    tried.add(key);
+    const st = tried.get(key);
+    if (st && (st.fails === 0 || st.fails >= MAX_TRY)) continue;
     try {
-      await runPension(client, id);
+      const r = await runPension(client, id);
+      if (r.ok || r.skipped?.includes("이미")) {
+        tried.set(key, { fails: 0, at: new Date().toISOString() });
+      } else {
+        tried.set(key, { fails: (st?.fails ?? 0) + 1, error: r.skipped, at: new Date().toISOString() });
+      }
     } catch (e) {
-      console.error(`[cis] 연금 ${id} 실패:`, e instanceof Error ? e.message : e);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[cis] 연금 ${id} 실패:`, msg);
+      tried.set(key, { fails: (st?.fails ?? 0) + 1, error: msg, at: new Date().toISOString() });
     }
     return; // 한 번에 하나만 — 무거운 조회가 몰리지 않게
   }
@@ -92,12 +117,27 @@ async function tick(client: KiwoomClient): Promise<void> {
     if (hm < at) continue; // 아직 그 시각이 아니다
     if (day[slot]) continue; // 이미 썼다
     const key = `${date}:${slot}`;
-    if (tried.has(key)) continue;
-    tried.add(key);
+    const st = tried.get(key);
+    if (st && (st.fails === 0 || st.fails >= MAX_TRY)) continue;
     try {
-      await runSlot(client, slot);
+      const r = await runSlot(client, slot);
+      /*
+       * 성공했을 때만 잠근다. `ok:false` 라도 「이미 썼다」면 잠근다 — 그건
+       * 실패가 아니라 할 일이 없는 것이다.
+       */
+      if (r.ok || r.skipped?.includes("이미")) {
+        tried.set(key, { fails: 0, at: new Date().toISOString() });
+      } else {
+        tried.set(key, {
+          fails: (st?.fails ?? 0) + 1,
+          error: r.skipped,
+          at: new Date().toISOString(),
+        });
+      }
     } catch (e) {
-      console.error(`[cis] ${slot} 실행 실패:`, e instanceof Error ? e.message : e);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[cis] ${slot} 실행 실패:`, msg);
+      tried.set(key, { fails: (st?.fails ?? 0) + 1, error: msg, at: new Date().toISOString() });
     }
     /* 한 번에 하나만 — 세 개를 몰아 돌리면 키움 호출이 한꺼번에 몰린다 */
     return;
