@@ -27,6 +27,83 @@ import { IntradayFlowChart } from "./IntradayFlowChart";
  * SVG 는 `viewBox` 라 폭에 상관없이 같은 그림이 나온다.
  */
 
+/**
+ * 야후 봉을 **차트 모듈이 받는 모양**으로 바꾼다.
+ *
+ * ## ⚠️ 중복 시각을 반드시 걸러야 한다
+ *
+ * `lightweight-charts` 는 시각이 오름차순이 **아니면 단언으로 죽는다**
+ * (`data must be asc ordered by time`). 실제로 죽었다 — 선물(NQ=F) 1일 분봉에
+ * 같은 분이 두 번 들어 있었다. 예전 SVG 는 그냥 겹쳐 그려서 아무도 몰랐다.
+ *
+ * 그래서 **같은 시각은 뒤엣것만 남긴다.** 야후가 같은 분을 두 번 줄 때 뒤엣것이
+ * 갱신본이다. 지어내거나 시각을 밀어 옮기지 않는다 — 그러면 축이 조용히 거짓이 된다.
+ *
+ * 분봉(1d·5d)은 **초 단위 시각**으로 넘긴다. 날짜로만 바꾸면 하루치 분봉이 전부
+ * 같은 날짜가 되어 같은 단언에 걸린다.
+ *
+ * ## ⚠️ 시각은 「한국시간 값을 그대로 UTC 로」 만든다
+ *
+ * `lightweight-charts` 는 눈금을 **UTC 로 그린다.** 그래서 진짜 epoch 를 넘기면
+ * 축에 UTC 가 찍힌다 — 13:00~20:48 인 봉이 축에는 04:00~11:48 로 나왔다.
+ * 아래 「시각은 한국시간입니다」와 어긋나는 조용한 거짓이다.
+ *
+ * 국내 분봉(`chartCandles.parseMinuteTime`)이 처음부터 쓰던 규약을 그대로 쓴다 —
+ * **한국시간의 벽시계 값을 UTC 로 만들어** 넘기면 화면에 그 시각이 그대로 나온다.
+ *
+ * `t` 는 서버가 한국시간으로 적은 "YYYY-MM-DD HH:mm" 이다.
+ */
+function toChartCandles(
+  raw: { t: string | number; open: number; high: number; low: number; close: number; volume?: number }[],
+) {
+  const out: {
+    key: number;
+    time: UTCTimestamp | { year: number; month: number; day: number };
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    /* 차트 모듈이 필수로 받는다 — 없는 봉은 0 (거래량 칸이 비는 것과 같다) */
+    volume: number;
+  }[] = [];
+
+  for (const c of raw) {
+    if (!(c.open > 0) || !(c.close > 0)) continue;
+    const t = String(c.t);
+    const intraday = t.length > 10;
+    const ms = intraday
+      ? Date.UTC(
+          Number(t.slice(0, 4)),
+          Number(t.slice(5, 7)) - 1,
+          Number(t.slice(8, 10)),
+          Number(t.slice(11, 13)),
+          Number(t.slice(14, 16)),
+        )
+      : Date.UTC(Number(t.slice(0, 4)), Number(t.slice(5, 7)) - 1, Number(t.slice(8, 10)));
+    if (!Number.isFinite(ms)) continue;
+    out.push({
+      key: ms,
+      time: intraday
+        ? ((ms / 1000) as UTCTimestamp)
+        : {
+            year: Number(t.slice(0, 4)),
+            month: Number(t.slice(5, 7)),
+            day: Number(t.slice(8, 10)),
+          },
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+      volume: c.volume ?? 0,
+    });
+  }
+
+  /* 시각순으로 세우고 **같은 시각은 뒤엣것만** 남긴다 */
+  out.sort((a, b) => a.key - b.key);
+  const dedup = out.filter((x, i) => i === out.length - 1 || x.key !== out[i + 1].key);
+  return dedup.map(({ key: _key, ...rest }) => rest);
+}
+
 const YAHOO_RANGES: { key: string; label: string }[] = [
   { key: "1d", label: "1일" },
   { key: "5d", label: "5일" },
@@ -464,42 +541,30 @@ export function YahooChartSheet({
             */}
 
             {/*
-              해외 종목은 **국내와 같은 캔들차트 모듈**(lightweight-charts)로 그린다
-              (2026-08-25 — 「해외만 왜 따로 그리냐」). 이평선·고저 표시·설정 색이
-              국내와 똑같이 따라온다. 차트가 먼저, 숫자 블록은 그 아래다 —
-              모양을 훑고 값은 내려가서 확인한다. 지수·원자재·선물은 SVG 그대로다
-              (선 하나짜리라 모듈이 과하고, viewBox 방식이 개발 창에서 더 안정적이었다).
+              **전부 국내와 같은 캔들차트 모듈**(lightweight-charts)로 그린다.
+              이평선·고저 표시·설정 색이 국내와 똑같이 따라온다.
+
+              2026-08-25 에는 해외 **종목**만 이 모듈로 옮기고 지수·원자재·선물은
+              SVG 로 두었다. 「선 하나짜리라 모듈이 과하다」는 이유였는데,
+              **그 전제가 틀렸다** — 실제로는 지수도 캔들을 그리고 있었다.
+              그 결과 지수 창만 축도 툴팁도 없었다 (2026-08-31 —
+              "1일 찍으면 밑에 시간도 나오고 해야지 … 얘네들만 이러네. 통일하자").
+
+              이 모듈이 주는 것: 분봉이면 **시간축**, 일봉이면 **날짜축**,
+              크로스헤어에 **직전 봉 대비 등락률**, 두 점을 찍는 구간 측정.
+              SVG 로는 그걸 다 다시 만들어야 했다.
             */}
-            {usStock ? (
+            {candles.length > 0 ? (
               <CandleChart
-                candles={candles
-                  .filter((c) => c.open > 0 && c.close > 0)
-                  .map((c) => {
-                    /*
-                     * 분봉(1d·5d)은 **초 단위 시각**으로 넘긴다 (2026-08-26).
-                     * 날짜로만 바꾸면 하루치 분봉이 전부 같은 날짜가 되어
-                     * lightweight-charts 가 「asc ordered」 단언으로 죽는다 — 실제로 죽었다.
-                     * t 는 서버가 한국시간으로 적은 "YYYY-MM-DD HH:mm" 이다.
-                     */
-                    const t = String(c.t);
-                    const time =
-                      t.length > 10
-                        ? ((new Date(`${t.replace(" ", "T")}:00+09:00`).getTime() /
-                            1000) as UTCTimestamp)
-                        : {
-                            year: Number(t.slice(0, 4)),
-                            month: Number(t.slice(5, 7)),
-                            day: Number(t.slice(8, 10)),
-                          };
-                    return {
-                      time,
-                      open: c.open,
-                      high: c.high,
-                      low: c.low,
-                      close: c.close,
-                      volume: c.volume,
-                    };
-                  })}
+                candles={toChartCandles(candles)}
+                /*
+                 * **분봉이면 시간축**을 켠다 (2026-08-31 — "1일 찍으면 밑에 시간도
+                 * 나오고 해야지"). 안 넘기면 기본이 꺼짐이라, 분봉인데 축에 날짜가
+                 * 찍혀 「1일 · 31일 · 31일 · 31일」처럼 같은 날짜가 되풀이됐다.
+                 * 판정은 서버가 준 봉의 시각 문자열 길이로 한다 — 「YYYY-MM-DD HH:mm」
+                 * 이면 분봉이다. 기간 이름(1d·5d)으로 재면 서버가 간격을 바꿨을 때 어긋난다.
+                 */
+                intraday={String(candles[0]?.t ?? "").length > 10}
                 height={340}
                 fitKey={`${target.symbol}:${range}:${longRange ? "L" : "S"}`}
                 name={target.label}
@@ -520,44 +585,6 @@ export function YahooChartSheet({
               키움만 준다. 미국(ND/NY/NA) 종목이 아니면 블록이 통째로 안 뜬다.
             */}
             {usStock && <UsKiwoomBlock symbol={target.symbol} />}
-
-            {!usStock && (
-            <svg className="yc-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img">
-              {/* 기준선 — 「1일」에서 이게 없으면 오른 건지 내린 건지 안 보인다 */}
-              {view.baseY !== null && (
-                <line
-                  className="yc-base"
-                  x1={PAD.l}
-                  x2={W - PAD.r}
-                  y1={view.baseY}
-                  y2={view.baseY}
-                />
-              )}
-              {/*
-                봉 하나 = 꼬리(고가~저가) + 몸통(시가~종가).
-                꼬리를 몸통보다 먼저 그려야 몸통이 위에 온다.
-              */}
-              {view.bars.map((b) => (
-                <g className={`yc-c ${b.up ? "up" : "down"}`} key={b.key}>
-                  <line className="yc-wick" x1={b.x} x2={b.x} y1={b.highY} y2={b.lowY} />
-                  <rect
-                    className="yc-body"
-                    x={b.x - view.bodyW / 2}
-                    y={b.bodyY}
-                    width={view.bodyW}
-                    height={b.bodyH}
-                  />
-                </g>
-              ))}
-              {/* 고·저 눈금은 오른쪽에. 값을 읽으려고 여는 창이 아니라 모양을 보려는 창이다 */}
-              <text className="yc-tick" x={W - PAD.r + 6} y={PAD.t + 10}>
-                {view.hiLabel.toLocaleString("ko-KR", { maximumFractionDigits: digits })}
-              </text>
-              <text className="yc-tick" x={W - PAD.r + 6} y={H - PAD.b}>
-                {view.loLabel.toLocaleString("ko-KR", { maximumFractionDigits: digits })}
-              </text>
-            </svg>
-            )}
 
             {/*
               지수·원자재·금리 숫자판 (2026-08-27 — 「지수나 원자재는 개별종목처럼 안 나온다」).

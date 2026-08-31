@@ -41,9 +41,21 @@ export function IntradayFlowChart({
   const pts = data.points;
   if (pts.length < 2) return null;
 
-  const W = 640;
+  /*
+   * **넓이는 점 수를 따라간다** (2026-08-31 — "시계열이 길어져서 그런가 앞에가 짤려
+   * 스크롤 될 수 있게 해줄래?").
+   *
+   * 예전엔 640 고정이었다. 2분 간격이라 장중만 195점, 시간외까지 270점이 넘는데
+   * 그걸 640 안에 밀어 넣으니 선이 눌려 붙었다. 점마다 3px 을 주고, 넘치면
+   * 감싼 칸이 **가로로 스크롤**된다(아래 `fi-scroll`).
+   *
+   * ⚠️ 왼쪽 여백이 **4** 였던 것이 진짜 잘림의 원인이다. 첫 시각 라벨이
+   * `textAnchor="middle"` 로 x=4 에 놓여 절반이 viewBox 밖으로 나갔다 —
+   * 「09시」가 「시」로 보였다. 라벨이 들어갈 만큼 준다.
+   */
   const H = 150;
-  const PAD = { l: 4, r: 52, t: 14, b: 16 };
+  const PAD = { l: 22, r: 52, t: 14, b: 16 };
+  const W = Math.max(640, PAD.l + PAD.r + pts.length * 3);
   const SERIES = [
     /*
      * 색 배정 (2026-08-26 사용자 지정) — 외국인 빨강 · 기관 찐한 노랑 · 개인 초록.
@@ -91,7 +103,18 @@ export function IntradayFlowChart({
           ))}
         </span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img">
+      <div className="fi-scroll">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          role="img"
+          /*
+           * 넓이를 px 로 못 박고 `min-width:100%` 를 준다 — 점이 적으면 칸을 채우고,
+           * 많으면 칸을 넘겨 스크롤된다. `preserveAspectRatio="none"` 이라야
+           * 높이는 150 에 고정된 채 가로만 늘어난다.
+           */
+          preserveAspectRatio="none"
+          style={{ width: `${W}px`, height: `${H}px`, minWidth: "100%" }}
+        >
         <line className="breadth-zero" x1={PAD.l} x2={W - PAD.r} y1={zero} y2={zero} />
         <text className="tc-tick" x={W - PAD.r + 4} y={PAD.t + 8}>
           +{max.toLocaleString("ko-KR")}
@@ -112,7 +135,8 @@ export function IntradayFlowChart({
             {t.label}
           </text>
         ))}
-      </svg>
+        </svg>
+      </div>
       <div className="trade-note">
         네이버 투자자별 매매동향(2분 간격 누적, ±10분 지연) · 마지막 시각 {last.t}
       </div>

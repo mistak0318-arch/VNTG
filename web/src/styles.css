@@ -12339,6 +12339,10 @@ thead .sd-emph {
 .nb {
   position: relative;
   flex: 0 0 auto;
+  /* 검색창이 한 줄일 때 높이가 안 맞아 종만 위로 떠 보였다 */
+  display: flex;
+  align-items: center;
+  align-self: stretch;
 }
 .nb-bell {
   position: relative;
@@ -12375,27 +12379,41 @@ thead .sd-emph {
   text-align: center;
 }
 
+/*
+ * ⚠️ 배경은 **`--panel`** 이다 (2026-08-31 정정 — "배경색 좀 어떻게 해야겠따. 안보여").
+ * 처음에 `--card` 로 썼는데 **그런 토큰이 없어서** 배경이 통째로 투명했고, 뒤쪽
+ * 탭바·본문 글씨가 그대로 비쳐 읽을 수가 없었다. 검색 드롭다운(`.search-dropdown`)이
+ * 쓰는 값과 같은 것을 쓴다 — 두 창이 같은 모양이어야 한다는 원래 뜻에도 맞다.
+ *
+ * `z-index` 도 올렸다. 인앱 탭바 위로 떠야 한다.
+ */
 .nb-panel {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 8px);
   right: 0;
   width: min(420px, calc(100vw - 24px));
   max-height: min(70vh, 560px);
   display: flex;
   flex-direction: column;
-  background: var(--card);
+  background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
-  z-index: 300;
+  border-radius: 12px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+  z-index: 400;
   overflow: hidden;
 }
+
 .nb-head {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
+  /* 목록이 스크롤될 때 머리 밑으로 글씨가 비치면 안 된다 */
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 .nb-tabs {
   display: flex;
@@ -12446,6 +12464,7 @@ thead .sd-emph {
 
 .nb-list {
   overflow-y: auto;
+  background: var(--panel);
 }
 .nb-item {
   display: flex;
@@ -12675,4 +12694,15 @@ thead .sd-emph {
 .rg-knobs small {
   color: var(--text-dim);
   white-space: nowrap;
+}
+
+/* 장중 수급 차트 — 점이 많으면 가로로 민다 (2026-08-31) */
+.fi-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* 스크롤바가 선을 가리지 않게 아래 여백을 조금 준다 */
+  padding-bottom: 2px;
+}
+.fi-scroll svg {
+  display: block;
 }

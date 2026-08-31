@@ -30,8 +30,29 @@ export function QuickStockSearch({
    */
   const recent = useRecentStocks();
 
+  const boxRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (open) inputRef.current?.focus();
+  }, [open]);
+
+  /*
+   * **바깥을 누르면 닫는다** (2026-08-31 — "종모양은 포커스 다른데 이동하면 자동으로
+   * 사라지는데 검색 드롭다운은 계속 유지되 엑스를 눌러야만 꺼지네").
+   *
+   * 알림 종(`NotifyBell`)과 **같은 문법**을 쓴다. 두 창이 나란히 있는데 하나는
+   * 저절로 닫히고 하나는 안 닫히면 그게 더 헷갈린다.
+   *
+   * ⚠️ `onBlur` 로는 안 된다 — 목록 항목을 누르는 순간 blur 가 먼저 나서 창이
+   * 닫히고, 그 클릭이 사라진다. 그래서 바깥을 눌렀을 때만 닫는다.
+   */
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
   useEffect(() => {
@@ -74,7 +95,7 @@ export function QuickStockSearch({
   }
 
   return (
-    <div className="qss">
+    <div className="qss" ref={boxRef}>
       <div className="search-box qss-box">
         <input
           ref={inputRef}
