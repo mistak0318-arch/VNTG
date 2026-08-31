@@ -366,19 +366,80 @@ export class RealtimeClient {
    */
   private flush(): void {
     if (!this.ws || this.ws.readyState !== 1) return;
-    const data: { item: string[]; type: string[] }[] = [];
+
+    /*
+     * ⚠️ **그룹당 200쌍을 넘기지 않는다** (2026-08-31 — 실측으로 재발 확인).
+     *
+     * 키움은 한 `grp_no` 에 200종목까지만 받는다. 넘으면 `105118` 로 **그 REG 가
+     * 통째로 거절**되는데, 소켓은 「연결됨·healthy」라 화면상으로는 멀쩡해 보인다 —
+     * 제일 알아채기 어려운 실패다.
+     *
+     * 위 주석들은 「flush 가 200개씩 그룹을 나눈다」고 적고 있었지만 **실제로는
+     * 안 나누고 있었다.** 전부 `grp_no: "1"` 하나로 보냈다. 2026-08-31 09:01 에
+     * 구독이 212 로 늘자 그대로 거절이 떴다.
+     *
+     * `(타입, 종목)` 쌍을 세어 200 마다 그룹 번호를 올린다. 한 타입이 200 을 넘으면
+     * 그 타입 안에서도 쪼갠다 — 종목 200개에 세 타입이면 600쌍이다.
+     */
+    const CHUNK = 200;
+    const groups: { item: string[]; type: string[] }[][] = [];
+    let cur: { item: string[]; type: string[] }[] = [];
+    let count = 0;
     for (const [type, items] of this.pending) {
-      if (items.size > 0) data.push({ item: [...items], type: [type] });
+      const all = [...items];
+      for (let i = 0; i < all.length; i += CHUNK) {
+        let slice = all.slice(i, i + CHUNK);
+        while (slice.length > 0) {
+          const room = CHUNK - count;
+          const take = slice.slice(0, room);
+          slice = slice.slice(room);
+          cur.push({ item: take, type: [type] });
+          count += take.length;
+          if (count >= CHUNK) {
+            groups.push(cur);
+            cur = [];
+            count = 0;
+          }
+        }
+      }
     }
+    if (cur.length > 0) groups.push(cur);
     this.pending.clear();
-    if (data.length === 0) return;
-    this.send({ trnm: "REG", grp_no: "1", refresh: "1", data });
+    if (groups.length === 0) return;
+
+    /*
+     * `refresh: "1"` 은 **첫 그룹에만.** 그 값은 「기존 등록을 지우고 새로」라는 뜻이라
+     * 그룹마다 주면 앞 그룹이 방금 등록한 것을 다음 그룹이 지운다.
+     */
+    groups.forEach((data, i) => {
+      this.send({
+        trnm: "REG",
+        grp_no: String(i + 1),
+        refresh: i === 0 ? "1" : "0",
+        data,
+      });
+    });
   }
 
   unsubscribe(type: string, item: string): void {
     this.subs.get(type)?.delete(item);
     if (this.ws && this.ws.readyState === 1) {
-      this.send({ trnm: "REMOVE", grp_no: "1", data: [{ item: [item], type: [type] }] });
+      /*
+       * ⚠️ **어느 그룹에 들어갔는지 모른다.**
+       *
+       * 등록은 200쌍마다 그룹을 나눠 보내지만(위 `flush`), 어떤 종목이 몇 번 그룹에
+       * 들어갔는지는 그때그때 다르다(구독 순서가 바뀐다). 그래서 REMOVE 는 **지금
+       * 쓰는 그룹 전부에** 보낸다 — 없는 그룹에 보내도 해가 없고, 하나에만 보내면
+       * 엉뚱한 그룹에 남아 **끊어지지 않는 구독**이 생긴다.
+       *
+       * 다음 `flush` 에서 어차피 `refresh: "1"` 로 전체가 다시 짜이므로 이건 그
+       * 사이의 임시 정리다.
+       */
+      const total = [...this.subs.values()].reduce((n, set) => n + set.size, 0);
+      const groups = Math.max(1, Math.ceil((total + 1) / 200));
+      for (let g = 1; g <= groups; g += 1) {
+        this.send({ trnm: "REMOVE", grp_no: String(g), data: [{ item: [item], type: [type] }] });
+      }
     }
   }
 

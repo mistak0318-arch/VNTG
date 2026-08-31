@@ -65,7 +65,8 @@ export interface StopBreak {
  */
 function priceOf(code: string, snap: Map<string, number> | null): { price: number; from: StopBreak["from"] } | null {
   const { store } = peekRealtime();
-  const tick = store?.getLatest("0B", code);
+  /* 손절 판정은 **KRX 체결만** — NXT 는 호가가 얇아 한 틱에 헛울린다 (2026-08-31) */
+  const tick = store?.getLatestKrx("0B", code);
   // FID 10 = 현재가. 키움은 하락이면 음수로 준다
   const raw = tick?.values?.["10"];
   if (raw) {

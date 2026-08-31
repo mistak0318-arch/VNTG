@@ -451,6 +451,25 @@ export class RealtimeStore {
     return this.latest.get(`${type}:${item}`) ?? null;
   }
 
+  /**
+   * **KRX 체결만** — 분석·알림용 (2026-08-31).
+   *
+   * 실시간을 통합(`_AL`)으로 구독하면서 프레임에 **NXT 체결이 섞인다.** 시세를
+   * 보여 주는 데는 그게 맞다(그 시각에 실제로 거래되는 값이다). 그러나 **손절
+   * 감시·체결강도 급변 같은 판정에는 쓰면 안 된다** — NXT 는 호가가 얇아 작은
+   * 주문 하나로 값이 튀고, 그 한 틱에 알림이 헛울린다.
+   *
+   * 「표시·현황은 통합, 분석·이력은 KRX」라는 이 앱의 원칙을 실시간에도 적용한다.
+   * 거래소는 값 안의 `9081` 필드가 알려 준다(실측: "KRX" / "NXT").
+   */
+  getLatestKrx(type: string, item: string): Latest | null {
+    const v = this.latest.get(`${type}:${item}`);
+    if (!v) return null;
+    const venue = String(v.values?.["9081"] ?? "").toUpperCase();
+    /* 거래소를 안 알려 주는 프레임은 예전처럼 받는다 — 모른다고 버리면 다 버린다 */
+    return venue === "NXT" ? null : v;
+  }
+
   /** 하루치 시계열 */
   getSeries(type: string, item: string): Point[] {
     return this.series[`${type}:${item}`] ?? [];

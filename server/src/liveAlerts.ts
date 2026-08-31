@@ -114,7 +114,8 @@ export async function runLiveAlerts(
   const jump = rules.get("strengthJump");
   if (jump) {
     for (const [code, name] of mine) {
-      const tick = store.getLatest("0B", code);
+      /* 체결강도도 **KRX 만** — 얇은 NXT 체결이 강도를 튀게 한다 (2026-08-31) */
+      const tick = store.getLatestKrx("0B", code);
       const now = num(tick?.values?.[FID_STRENGTH]);
       if (!Number.isFinite(now) || now <= 0) continue;
 
