@@ -939,7 +939,9 @@
       "Bash(echo \"SRV=$?\")",
       "Bash(echo \"WEB=$?\")",
       "Bash(grep -n \"wantFlow$\\\\|wantFlow\\\\b\" -A20 server/src/signalLight.ts)",
-      "Bash(curl -s http://localhost:5173/api/signal/backtest/progress)"
+      "Bash(curl -s http://localhost:5173/api/signal/backtest/progress)",
+      "Bash(curl -s http://localhost:5173/api/signal/samples)",
+      "Bash(time curl -s -m 900 -X POST http://localhost:5173/api/signal/sweep -H 'Content-Type: application/json' -d '{\"top\":15}' -o /tmp/sweep.json)"
     ]
   }
 }
