@@ -357,7 +357,13 @@ export function createSignalRouter(client: KiwoomClient): Router {
    */
   router.post("/backtest", async (req, res, next) => {
     try {
-      const body = req.body as { limit?: number; days?: number; config?: Partial<SignalConfig> };
+      const body = req.body as {
+        limit?: number;
+        days?: number;
+        config?: Partial<SignalConfig>;
+        /** 수급까지 받을까 — 종목당 최대 6콜이 더 나간다(몇 배 느려진다). 기본 켬 */
+        withFlow?: boolean;
+      };
       /*
        * 표본 상한 500 (2026-08-31 — "샘플은 500개 기준으로"). 150 이었는데
        * 그 표본으로는 점수 구간별 성적이 톱니로 나왔다(80~89 가 70~79 보다
@@ -368,7 +374,14 @@ export function createSignalRouter(client: KiwoomClient): Router {
       const limit = Math.min(Math.max(Number(body.limit) || 500, 5), 500);
       const top = await tradeValueTop(client, "000", limit);
       const codes = top.map((t) => ({ code: t.code, name: t.name }));
-      res.json(startBacktestJob(client, { codes, days: body.days, config: body.config }));
+      res.json(
+        startBacktestJob(client, {
+          codes,
+          days: body.days,
+          config: body.config,
+          withFlow: body.withFlow,
+        }),
+      );
     } catch (err) {
       next(err);
     }

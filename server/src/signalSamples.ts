@@ -25,9 +25,12 @@ const DATA_DIR = join(here, "..", "data");
  *
  * ## ⚠️ 표본이 답하지 못하는 것
  *
- * 여기 담긴 것은 **일봉으로 되짚을 수 있는 기준뿐**이다. 수급·재무·ETF 뒷배는
- * 그때의 값을 우리가 갖고 있지 않아 표본에 없고, 따라서 **그 기준들의 문턱은
- * 시뮬레이터로 정할 수 없다.** 없는 것을 지어내느니 없다고 적는다.
+ * 여기 담긴 것은 **되짚을 수 있는 기준뿐**이다 — 일봉에서 나오는 것들과,
+ * 2026-08-31 부터는 **수급 3종**(`ka10060` 이 하루하루를 준다).
+ *
+ * 아직 없는 것은 **ETF 뒷배·영업이익·시가총액**이다. 그때의 편입 비중·공시·
+ * 상장주식수를 우리가 갖고 있지 않다. 따라서 **그 셋의 문턱은 시뮬레이터로 정할 수
+ * 없다** — 없는 것을 지어내느니 없다고 적는다.
  *
  * 그리고 `theme`(테마 강세)은 **오늘의 테마 구성으로 과거를 채점한 값**이다.
  * 지금 잘나가는 테마에 속한 종목이 과거에도 좋았던 것처럼 부풀려진다
@@ -60,6 +63,28 @@ export interface Feat {
   volEok: number | null;
   /** 그날 이 종목의 가장 강한 테마 등락률 % — 되짚지 못한 날은 null */
   theme: number | null;
+
+  /*
+   * 수급 (2026-08-31 추가) — `ka10060` 이 **날짜별로** 주므로 과거도 되짚힌다.
+   *
+   * 신호등은 `flowDays` 만큼 합산해서 문턱과 잰다. 그런데 그 날수는 설정값이라
+   * 하루하루를 다 들고 있어야 시뮬레이션이 되는데, 19만 관측 × 20일치를 파일에
+   * 담으면 수십 MB 가 된다. 그래서 **쓸 만한 몇 개만 미리 합쳐 둔다** —
+   * `flowDays` 를 5·10·20 밖으로 옮기면 가장 가까운 것으로 재고, 화면이 그걸 적는다.
+   *
+   * 단위는 신호등과 **같아야 한다** — `amt_qty_tp:"1"`(금액·백만원), `unit_tp:"1000"`.
+   * 다르면 저장된 문턱이 딴 값을 재게 된다.
+   */
+  /** 외국인 순매수 합 — 최근 5·10·20 거래일 */
+  fgn5: number | null;
+  fgn10: number | null;
+  fgn20: number | null;
+  /** 기관 순매수 합 */
+  inst5: number | null;
+  inst10: number | null;
+  inst20: number | null;
+  /** 그날 기준 외국인 연속 순매수 일수 */
+  fgnStreak: number | null;
 }
 
 export interface Sample extends Feat {
@@ -129,8 +154,12 @@ function grade(value: number, c: CheckConfig): number {
   return 0;
 }
 
+/** 채점에 필요한 설정 조각 — 전체 설정을 넘기지 않아도 되게 */
+export type GradeCtx = Pick<SignalConfig, "maLines" | "flowDays">;
+
 /** 이 기준이 이 표본에서 몇 점인가 — 낼 수 없으면 null */
-export function gradeOf(f: Feat, c: CheckConfig, maLines: number[]): number | null {
+export function gradeOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
+  const { maLines, flowDays } = cfg;
   switch (c.key) {
     case "trend": {
       const vs = [...maLines]
@@ -157,10 +186,51 @@ export function gradeOf(f: Feat, c: CheckConfig, maLines: number[]): number | nu
       return f.volEok === null ? null : grade(f.volEok, c);
     case "naverTheme":
       return f.theme === null ? null : grade(f.theme, c);
+    case "foreignFlow": {
+      const v = pickFlow(f.fgn5, f.fgn10, f.fgn20, flowDays);
+      return v === null ? null : grade(v, c);
+    }
+    case "instFlow": {
+      const v = pickFlow(f.inst5, f.inst10, f.inst20, flowDays);
+      return v === null ? null : grade(v, c);
+    }
+    case "flowStreak":
+      return f.fgnStreak === null ? null : grade(f.fgnStreak, c);
     default:
-      /* 표본에 없는 기준 — 수급·재무·ETF 뒷배. 채점에서 빠진다 */
+      /* 표본에 없는 기준 — 재무·시가총액·ETF 뒷배. 채점에서 빠진다 */
       return null;
   }
+}
+
+/**
+ * `flowDays` 에 가장 가까운 합을 고른다.
+ *
+ * 하루하루를 다 담으면 파일이 수십 MB 라 5·10·20 만 미리 합쳐 뒀다. 그 사이 값을
+ * 고르면 **가장 가까운 것으로 재고**, 그 사실을 화면이 적는다 — 조용히 다른 값을
+ * 재면 「7일로 바꿨는데 왜 성적이 그대로지」에서 막힌다.
+ */
+function pickFlow(
+  d5: number | null,
+  d10: number | null,
+  d20: number | null,
+  flowDays: number,
+): number | null {
+  const opts: [number, number | null][] = [
+    [5, d5],
+    [10, d10],
+    [20, d20],
+  ];
+  let best: [number, number | null] = opts[0];
+  for (const o of opts) {
+    if (Math.abs(o[0] - flowDays) < Math.abs(best[0] - flowDays)) best = o;
+  }
+  return best[1];
+}
+
+/** 표본이 실제로 재는 수급 날수 — 화면이 「7일이라 했지만 5일로 쟀다」를 적는다 */
+export function effectiveFlowDays(flowDays: number): number {
+  const opts = [5, 10, 20];
+  return opts.reduce((a, b) => (Math.abs(b - flowDays) < Math.abs(a - flowDays) ? b : a), 5);
 }
 
 export interface Scored {
@@ -179,7 +249,7 @@ export function scoreFeat(f: Feat, cfg: SignalConfig): Scored | null {
   const axes: Record<string, { sum: number; w: number }> = {};
   for (const c of cfg.checks) {
     if (!c.enabled) continue;
-    const g = gradeOf(f, c, cfg.maLines);
+    const g = gradeOf(f, c, cfg);
     if (g === null) continue;
     (axes[c.axis] ??= { sum: 0, w: 0 });
     axes[c.axis].sum += g * c.weight;

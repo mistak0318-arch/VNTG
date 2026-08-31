@@ -937,7 +937,9 @@
       "Bash(npx --prefix server tsc --noEmit -p server/tsconfig.json)",
       "Bash(npx --prefix web tsc --noEmit -p web/tsconfig.json)",
       "Bash(echo \"SRV=$?\")",
-      "Bash(echo \"WEB=$?\")"
+      "Bash(echo \"WEB=$?\")",
+      "Bash(grep -n \"wantFlow$\\\\|wantFlow\\\\b\" -A20 server/src/signalLight.ts)",
+      "Bash(curl -s http://localhost:5173/api/signal/backtest/progress)"
     ]
   }
 }

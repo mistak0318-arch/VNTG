@@ -13,8 +13,9 @@ import { gradeOf, loadSamples, scoreFeat, type Sample } from "./signalSamples.js
  * 2. **기준별 단독 성적** — 이 기준 하나만으로 갈리나. 「쓸모없는 기준」을 찾는 자리다
  * 3. **초록선 훑기** — 초록의 커트라인을 50부터 95까지 옮겨 보며 성적을 잰다
  *
- * ⚠️ **표본에 없는 기준은 채점에서 통째로 빠진다** — 수급 4종·영업이익·시가총액·
- * ETF 뒷배. 그 기준들의 문턱은 여기서 정할 수 없다. 결과에 그 목록을 적어 보낸다.
+ * ⚠️ **표본에 없는 기준은 채점에서 통째로 빠진다** — ETF 뒷배·영업이익·시가총액.
+ * 그 기준들의 문턱은 여기서 정할 수 없다. 결과에 그 목록을 적어 보낸다.
+ * (수급 3종은 2026-08-31 부터 표본에 들어왔다 — 그전 표본으로 돌리면 여전히 빠진다.)
  */
 
 export interface Stat {
@@ -118,7 +119,7 @@ export async function simulate(cfg: SignalConfig): Promise<SimResult | null> {
     if (!c.enabled) continue;
     let ok = false;
     for (let i = 0; i < S.length && i < 4000; i++) {
-      if (gradeOf(S[i], c, cfg.maLines) !== null) {
+      if (gradeOf(S[i], c, cfg) !== null) {
         ok = true;
         break;
       }
@@ -151,7 +152,7 @@ export async function simulate(cfg: SignalConfig): Promise<SimResult | null> {
       const miss: Sample[] = [];
       if (inSamples) {
         for (const s of S) {
-          const g = gradeOf(s, c, cfg.maLines);
+          const g = gradeOf(s, c, cfg);
           if (g === null) continue;
           (g >= 100 ? hit : g >= 50 ? mid : miss).push(s);
         }
@@ -265,7 +266,7 @@ export async function sweep(cfg: SignalConfig, topN = 25): Promise<SweepResult |
   /* 되짚을 수 있고, 설정에 있는 기준만 후보다 */
   const cand = cfg.checks.filter((c) => {
     for (let i = 0; i < S.length && i < 4000; i++) {
-      if (gradeOf(S[i], c, cfg.maLines) !== null) return true;
+      if (gradeOf(S[i], c, cfg) !== null) return true;
     }
     return false;
   });
@@ -278,7 +279,7 @@ export async function sweep(cfg: SignalConfig, topN = 25): Promise<SweepResult |
   for (let ci = 0; ci < cand.length; ci++) {
     const row = G[ci];
     for (let si = 0; si < S.length; si++) {
-      const g = gradeOf(S[si], cand[ci], cfg.maLines);
+      const g = gradeOf(S[si], cand[ci], cfg);
       row[si] = g === null ? -1 : g;
     }
   }

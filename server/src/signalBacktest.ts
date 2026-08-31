@@ -2,7 +2,14 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { dropPhantomToday } from "./candleGuard.js";
 import { getConfig, type CheckConfig, type SignalConfig } from "./signalLight.js";
 import { loadCloses } from "./dailyCloses.js";
-import { MA_PERIODS, saveSamples, type Feat, type Sample } from "./signalSamples.js";
+import {
+  MA_PERIODS,
+  gradeOf,
+  saveSamples,
+  scoreFeat,
+  type Feat,
+  type Sample,
+} from "./signalSamples.js";
 import { isIndexLikeTheme, loadThemes } from "./naverThemes.js";
 
 /**
@@ -19,13 +26,19 @@ import { isIndexLikeTheme, loadThemes } from "./naverThemes.js";
  * 재현된다 — 정배열·신고가·이격도·매물 부담·거래대금. 어느 날의 일봉은 지금도
  * 그때와 같기 때문이다.
  *
- * 재현 못 하는 것은 **그때의 구성을 모르는 것들**이다:
- *   · 테마 강세 — 석 달 전에 어느 종목이 어느 테마였는지 우리에게 없다
- *   · ETF 뒷배 — 그때의 편입 비중을 모른다
- *   · 수급·재무 — 받아올 수는 있지만 종목마다 조회가 더 나간다
+ * **수급 3종도 2026-08-31 부터 재현한다** — `ka10060` 이 하루하루를 주기 때문이다.
+ * 「조회가 더 나간다」는 이유로 빼 두었는데, 채점 밖에 여섯이나 두는 편이 더 나빴다.
+ * 종목당 최대 6콜이 더 나가고 전체가 몇 배 느려진다(`withFlow` 로 끌 수 있다).
  *
- * 그래서 **이 백테스트는 일봉 기준만 쓴다.** 빠진 기준이 무엇인지 결과에 적어
- * 보낸다 — 「전부 재현했다」고 보이면 그 숫자를 잘못 믿게 된다.
+ * 아직 재현 못 하는 것은 **그때의 구성·공시를 모르는 것들**이다:
+ *   · ETF 뒷배 — 그때의 편입 비중을 모른다
+ *   · 영업이익 증가 — 그 시점에 공시돼 있던 분기가 무엇인지 알아야 한다
+ *   · 시가총액 — 그때의 상장주식수를 모른다(오늘 것으로 근사할 수는 있다)
+ *
+ * 테마 강세는 **최근 60여 일만** 되짚히고 그마저 구성은 오늘 것이다(아래 주석).
+ *
+ * 빠진 기준이 무엇인지 결과에 적어 보낸다 — 「전부 재현했다」고 보이면 그 숫자를
+ * 잘못 믿게 된다. 그리고 그 판단은 목록이 아니라 **실제 표본**으로 한다.
  *
  * 없는 것을 지어내지 않는 대신, 있는 것만으로 답할 수 있는 물음이 있다:
  * **가격이 그린 모양만으로 얼마나 갈 수 있나.**
@@ -50,6 +63,14 @@ export const BACKTESTABLE = new Set([
   "overhead",
   "volume",
   "naverTheme",
+  /*
+   * 수급 3종 (2026-08-31) — `ka10060` 이 **날짜별로** 주므로 되짚힌다.
+   * 「받아올 수는 있지만 조회가 더 나간다」는 이유로 빼 두었던 것인데, 그 조회를
+   * 감수하기로 했다(`withFlow`). 이걸로 채점 밖이 여섯에서 셋으로 줄었다.
+   */
+  "foreignFlow",
+  "instFlow",
+  "flowStreak",
 ]);
 
 /* ------------------------------------------------------------------ */
@@ -236,17 +257,119 @@ function grade(value: number, c: CheckConfig): number {
 }
 
 /**
- * 어느 하루의 점수 — **그날까지의 봉만 본다.**
- *
- * `at` 이 그날의 인덱스다. 뒤쪽(미래) 봉을 실수로 쓰면 백테스트가 통째로 거짓이
- * 되므로, 자를 때 항상 `slice(0, at + 1)` 로 끊는다.
- */
-/**
  * 그날의 **원시값**만 뽑는다 — 설정은 안 본다.
  *
  * 채점(`scoreFeat`)과 갈라 둔 이유는 시뮬레이터 때문이다. 비싼 것은 일봉이지
  * 채점이 아니라서, 원시값만 파일로 남겨 두면 설정을 바꿔도 다시 안 받아도 된다.
  * 여기서 낸 값과 백테스트가 쓰는 값이 **같아야** 두 화면의 숫자가 맞는다.
+ */
+/** 하루치 수급 — 금액(백만원), 신호등과 **같은 단위** */
+interface FlowDay {
+  date: string;
+  fgn: number;
+  inst: number;
+}
+
+/**
+ * 종목 하나의 **날짜별 수급** — `ka10060` 은 하루하루를 주므로 과거도 되짚힌다.
+ *
+ * ⚠️ 파라미터를 신호등(`signalLight`)과 **한 글자도 다르게 쓰면 안 된다.**
+ * `amt_qty_tp:"1"`(금액·백만원), `unit_tp:"1000"`, `stk_cd` 는 통합(_AL) 이 아닌
+ * 순수 코드다. 저장된 문턱이 그 단위 기준이라, 다르게 부르면 같은 종목을 놓고
+ * 신호등과 백테스트가 **다른 숫자**를 보게 된다.
+ *
+ * 한 쪽에 100줄쯤 오므로 400일을 채우려면 연속조회가 필요하다.
+ */
+async function flowDays(client: KiwoomClient, code: string, want: number): Promise<FlowDay[]> {
+  const params = {
+    stk_cd: code,
+    dt: new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10).replace(/-/g, ""),
+    amt_qty_tp: "1",
+    trde_tp: "0",
+    unit_tp: "1000",
+  };
+  const first = await client.request<Record<string, unknown>>(CHART, "ka10060", params);
+  const rows = ((first.data?.stk_invsr_orgn_chart ?? []) as Record<string, unknown>[]).slice();
+  let contYn = first.contYn;
+  let nextKey = first.nextKey;
+  /* 다섯 쪽이면 500줄 — 400일을 달라 해도 넘친다. 무한 루프 방지도 겸한다 */
+  for (let page = 0; page < 5 && rows.length < want && contYn === "Y" && nextKey; page += 1) {
+    const more = await client.request<Record<string, unknown>>(CHART, "ka10060", params, {
+      contYn: "Y",
+      nextKey,
+    });
+    const add = (more.data?.stk_invsr_orgn_chart ?? []) as Record<string, unknown>[];
+    if (add.length === 0) break;
+    rows.push(...add);
+    contYn = more.contYn;
+    nextKey = more.nextKey;
+  }
+  return rows
+    .map((r) => ({ date: String(r.dt ?? ""), fgn: n(r.frgnr_invsr), inst: n(r.orgn) }))
+    .filter((r) => /^\d{8}$/.test(r.date))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+type FlowSums = Pick<
+  Feat,
+  "fgn5" | "fgn10" | "fgn20" | "inst5" | "inst10" | "inst20" | "fgnStreak"
+>;
+
+/**
+ * 날짜 → 그날까지의 수급 요약.
+ *
+ * ⚠️ 일봉 인덱스를 그대로 쓰면 안 된다. 일봉과 수급은 **거래일이 어긋날 수 있어**
+ * (한쪽에만 있는 날) 인덱스로 맞추면 조용히 하루씩 밀린다. 그래서 수급 배열 자체의
+ * 순서로 합을 내고 **날짜를 열쇠로** 되돌려 준다.
+ */
+function flowIndex(rows: FlowDay[]): Map<string, FlowSums> {
+  const m = new Map<string, FlowSums>();
+  for (let i = 0; i < rows.length; i++) {
+    /** 그날까지 k 거래일 합 — 그만큼의 과거가 없으면 null (0 으로 지어내지 않는다) */
+    const sum = (k: number, pick: (r: FlowDay) => number): number | null => {
+      if (i + 1 < k) return null;
+      let acc = 0;
+      for (let j = i; j > i - k; j--) acc += pick(rows[j]);
+      return acc;
+    };
+    /* 그날부터 거꾸로 세는 연속 순매수 — 신호등(`flowStreak`)과 같은 규칙 */
+    let streak = 0;
+    for (let j = i; j >= 0; j--) {
+      if (rows[j].fgn > 0) streak += 1;
+      else break;
+    }
+    m.set(rows[i].date, {
+      fgn5: sum(5, (r) => r.fgn),
+      fgn10: sum(10, (r) => r.fgn),
+      fgn20: sum(20, (r) => r.fgn),
+      inst5: sum(5, (r) => r.inst),
+      inst10: sum(10, (r) => r.inst),
+      inst20: sum(20, (r) => r.inst),
+      fgnStreak: streak,
+    });
+  }
+  return m;
+}
+
+/** 수급을 못 받은 종목·날 — **없음**이지 0 이 아니다 */
+const NO_FLOW: FlowSums = {
+  fgn5: null,
+  fgn10: null,
+  fgn20: null,
+  inst5: null,
+  inst10: null,
+  inst20: null,
+  fgnStreak: null,
+};
+
+/**
+ * 그날의 **원시값**만 뽑는다 — 설정은 안 본다.
+ *
+ * 채점(`scoreFeat`)과 갈라 둔 이유는 시뮬레이터 때문이다. 비싼 것은 일봉이지
+ * 채점이 아니라서, 원시값만 파일로 남겨 두면 설정을 바꿔도 다시 안 받아도 된다.
+ *
+ * ⚠️ 뒤쪽(미래) 봉을 실수로 쓰면 백테스트가 통째로 거짓이 되므로, 자를 때 항상
+ * `slice(0, at + 1)` 로 끊는다.
  */
 function featuresAt(all: Bar[], at: number, themeRate: number | null): Feat | null {
   const hist = all.slice(0, at + 1);
@@ -264,8 +387,8 @@ function featuresAt(all: Bar[], at: number, themeRate: number | null): Feat | nu
   const lo = Math.min(...win120.map((b) => b.low));
   let over: number | null = null;
   if (hi > lo) {
-    const above = win120.filter((b) => (b.high + b.low) / 2 > cur).reduce((s, b) => s + b.vol, 0);
-    const tot = win120.reduce((s, b) => s + b.vol, 0);
+    const above = win120.filter((b) => (b.high + b.low) / 2 > cur).reduce((s2, b) => s2 + b.vol, 0);
+    const tot = win120.reduce((s2, b) => s2 + b.vol, 0);
     if (tot > 0) over = (above / tot) * 100;
   }
 
@@ -278,87 +401,8 @@ function featuresAt(all: Bar[], at: number, themeRate: number | null): Feat | nu
     over,
     volEok: (hist[hist.length - 1].vol * cur) / 100_000_000,
     theme: themeRate,
+    ...NO_FLOW,
   };
-}
-
-function scoreAt(
-  all: Bar[],
-  at: number,
-  cfg: SignalConfig,
-  /** 그날 이 종목의 가장 강한 사업 테마 등락률(%) — 재현 못 하는 날은 null */
-  themeRate: number | null = null,
-): { score: number; level: BacktestRow["level"] } | null {
-  const hist = all.slice(0, at + 1);
-  if (hist.length < 65) return null; // 60일 지표를 내려면 그만큼은 있어야 한다
-  const closes = hist.map((b) => b.close);
-  const cur = closes[closes.length - 1];
-
-  const axes: Record<string, { sum: number; w: number }> = {};
-  const add = (axis: string, g: number | null, w: number) => {
-    if (g === null) return;
-    (axes[axis] ??= { sum: 0, w: 0 });
-    axes[axis].sum += g * w;
-    axes[axis].w += w;
-  };
-
-  for (const c of cfg.checks) {
-    if (!c.enabled || !BACKTESTABLE.has(c.key)) continue;
-    let g: number | null = null;
-
-    if (c.key === "trend") {
-      const ma = [...cfg.maLines].sort((a, b) => a - b).map((p) => sma(closes, p));
-      if (ma.every((v) => v !== null)) {
-        const v = ma as number[];
-        const full = cur >= v[0] && v.every((x, i) => i === 0 || v[i - 1] >= x);
-        g = full ? 100 : cur >= v[0] ? 50 : 0;
-      }
-    } else if (c.key === "newHigh" || c.key === "nearHigh") {
-      const win = closes.slice(-61, -1);
-      const hi = win.length > 0 ? Math.max(...win) : 0;
-      if (hi > 0) g = grade((cur / hi) * 100, c);
-    } else if (c.key === "disparity") {
-      const m = sma(closes, 20);
-      if (m) g = grade(Math.max(0, ((cur - m) / m) * 100), c);
-    } else if (c.key === "ma5Gap") {
-      const m = sma(closes, 5);
-      if (m) g = grade(Math.max(0, ((cur - m) / m) * 100), c);
-    } else if (c.key === "overhead") {
-      const win = hist.slice(-120);
-      const hi = Math.max(...win.map((b) => b.high));
-      const lo = Math.min(...win.map((b) => b.low));
-      if (hi > lo) {
-        const above = win.filter((b) => (b.high + b.low) / 2 > cur).reduce((s, b) => s + b.vol, 0);
-        const tot = win.reduce((s, b) => s + b.vol, 0);
-        if (tot > 0) g = grade((above / tot) * 100, c);
-      }
-    } else if (c.key === "volume") {
-      g = grade((hist[hist.length - 1].vol * cur) / 100_000_000, c);
-    } else if (c.key === "naverTheme") {
-      /* 실제 신호등과 같은 물음: 든 테마 중 가장 강한 것이 그날 몇 % 였나 */
-      if (themeRate !== null) g = grade(themeRate, c);
-    }
-
-    add(c.axis, g, c.weight);
-  }
-
-  const risk = axes.risk ? axes.risk.sum / axes.risk.w : null;
-  const good = (["trend", "flow", "value"] as const)
-    .map((k) => ({ k, a: axes[k] }))
-    .filter((x) => x.a);
-  if (good.length === 0) return null;
-
-  const wSum = good.reduce((s, x) => s + cfg.axisWeights[x.k], 0);
-  const score = Math.round(
-    good.reduce((s, x) => s + (x.a.sum / x.a.w) * cfg.axisWeights[x.k], 0) / wSum,
-  );
-
-  /*
-   * 위험은 **섞지 않는다** — 실제 신호등과 같은 규칙이다.
-   * 위험 점수가 높으면(=위험하면) 초록을 막는다.
-   */
-  const level: BacktestRow["level"] =
-    risk !== null && risk >= 75 ? "red" : score >= 70 ? "green" : score >= 45 ? "yellow" : "red";
-  return { score, level };
 }
 
 function summarize(rows: { d1: number | null; d5: number | null; d20: number | null }[]): Summary {
@@ -394,7 +438,13 @@ export function backtestResult() {
 
 export function startBacktestJob(
   client: KiwoomClient,
-  opts: { codes: { code: string; name: string }[]; days?: number; config?: Partial<SignalConfig> },
+  opts: {
+    codes: { code: string; name: string }[];
+    days?: number;
+    config?: Partial<SignalConfig>;
+    /** 수급까지 받을까 — 종목당 최대 6콜이 더 나간다. 기본 켬 */
+    withFlow?: boolean;
+  },
 ): { started: boolean } {
   if (running) return { started: false }; // 하나면 된다 — 겹치면 키움 한도가 터진다
   void runSignalBacktest(client, opts)
@@ -415,7 +465,13 @@ export function startBacktestJob(
  */
 export async function runSignalBacktest(
   client: KiwoomClient,
-  opts: { codes: { code: string; name: string }[]; days?: number; config?: Partial<SignalConfig> },
+  opts: {
+    codes: { code: string; name: string }[];
+    days?: number;
+    config?: Partial<SignalConfig>;
+    /** 수급까지 받을까 — 종목당 최대 6콜이 더 나간다. 기본 켬 */
+    withFlow?: boolean;
+  },
 ): Promise<BacktestResult> {
   /*
    * ⚠️ **바탕은 DEFAULT_CONFIG 가 아니라 「지금 저장된 설정」이다** (2026-08-31).
@@ -436,6 +492,7 @@ export async function runSignalBacktest(
     maLines: opts.config?.maLines ?? saved.maLines,
   };
   const days = Math.min(Math.max(opts.days ?? 120, 20), 400);
+  const withFlow = opts.withFlow !== false;
 
   running = true;
   progress = { done: 0, total: opts.codes.length };
@@ -462,6 +519,18 @@ export async function runSignalBacktest(
          * 테마 렌즈의 날짜 맞춤 — 이 종목의 캐시 종가와 일봉을 맞대 「끝에서 k번째가
          * 어느 날인가」를 정한다. 못 맞추면 이 종목의 테마 판정은 전부 null 이다.
          */
+        /*
+         * 수급 (2026-08-31) — 종목당 최대 6콜이 더 나간다. 500 종목이면 조회가
+         * 세 배로 늘어 몇 분이 더 걸리지만, 그 대가로 **채점 밖이던 기준 셋**
+         * (외국인 수급·기관 수급·외인 연속)이 안으로 들어온다.
+         * 못 받으면 그 종목의 수급만 null 이다 — 일봉 표본은 그대로 남는다.
+         */
+        const flowMap = withFlow
+          ? await flowDays(client, code, days + 25)
+              .then(flowIndex)
+              .catch(() => null)
+          : null;
+
         const myThemes = themeCtx?.themesOf.get(code) ?? [];
         const dateToK =
           themeCtx && myThemes.length > 0
@@ -507,9 +576,25 @@ export async function runSignalBacktest(
 
           const tr = themeRateAt(bs[i].date);
           const feat = featuresAt(bs, i, tr);
-          if (feat) samples.push({ code, name, date: bs[i].date, ...feat, ...f });
+          if (!feat) continue;
+          /*
+           * 수급은 **날짜로 맞춘다.** 일봉 인덱스를 그대로 쓰면, 어느 한쪽에만
+           * 있는 날(거래정지 등) 때문에 하루씩 밀린 채로 조용히 틀린다.
+           * 못 맞춘 날은 null 이다 — 0 으로 지어내면 「순매수 0」과 안 갈린다.
+           */
+          const fl = flowMap?.get(bs[i].date);
+          const full: Feat = { ...feat, ...(fl ?? NO_FLOW) };
+          samples.push({ code, name, date: bs[i].date, ...full, ...f });
 
-          const s = scoreAt(bs, i, cfg, tr);
+          /*
+           * 채점은 시뮬레이터와 **같은 함수**를 쓴다 (2026-08-31).
+           *
+           * 예전엔 여기 따로 있었다(`scoreAt`). 그런데 둘이 갈라지면 화면의 두 숫자가
+           * **다른 규칙으로 나오면서도 같은 이름**을 달게 된다 — 실제로 그 부류의
+           * 버그를 겪었다(백테스트가 저장된 설정이 아니라 코드 기본값을 채점하던 건).
+           * 채점 규칙은 한 군데에만 있어야 한다.
+           */
+          const s = scoreFeat(full, cfg);
           if (!s) continue;
           scored.push({ score: s.score, ...f });
           /*
@@ -546,8 +631,21 @@ export async function runSignalBacktest(
     }
   }
 
-  const reproducible = (c: CheckConfig): boolean =>
-    BACKTESTABLE.has(c.key) && (c.key !== "naverTheme" || themeCtx !== null);
+  /*
+   * 「되짚었나」는 **목록이 아니라 실제 표본으로** 판단한다 (2026-08-31).
+   *
+   * `BACKTESTABLE` 만 보고 적으면, 수급을 안 받은 회차(`withFlow:false`)나
+   * 수급 조회가 다 실패한 경우에도 「수급을 썼다」고 적게 된다. 그건 결과를
+   * 잘못 믿게 만드는 거짓말이라, 뽑힌 표본이 실제로 값을 내는지로 정한다.
+   */
+  const reproducible = (c: CheckConfig): boolean => {
+    if (!BACKTESTABLE.has(c.key)) return false;
+    if (c.key === "naverTheme" && themeCtx === null) return false;
+    for (let i = 0; i < samples.length && i < 4000; i++) {
+      if (gradeOf(samples[i], c, cfg) !== null) return true;
+    }
+    return false;
+  };
   const used = cfg.checks.filter((c) => c.enabled && reproducible(c)).map((c) => c.label);
   const skipped = cfg.checks.filter((c) => c.enabled && !reproducible(c)).map((c) => c.label);
 
