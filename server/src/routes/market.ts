@@ -31,6 +31,7 @@ import { futuresCandles } from "../kospiFutures.js";
 import { usCandles, usDetail } from "../usDetail.js";
 import { orderBook } from "../orderBook.js";
 import { brokerFlow } from "../brokerFlow.js";
+import { brokerAutoStatus } from "../brokerAuto.js";
 import { getEtfInfo } from "../etfInfo.js";
 import { etfRowOf, etfTaxInfo } from "./etf.js";
 import { futuresFlow } from "../naverFuturesFlow.js";
@@ -1063,7 +1064,17 @@ export function createMarketRouter(client: KiwoomClient): Router {
   /*
    * 거래원 — 창구별 매매. 시간대별은 키움이 안 줘서 **부를 때마다 한 점씩 쌓는다.**
    */
-  router.get("/broker-flow/:code", async (req, res, next) => {
+    /**
+   * **거래원 자동 수집 현황** (2026-09-01) — 「지금 몇 종목을 알아서 쌓고 있나」.
+   *
+   * 이걸 안 보여 주면 사용자는 여전히 「내가 화면을 열어 둬야 쌓인다」고 믿는다.
+   * 실제로 도는지, 무엇을 따라가는지 말해 줘야 한다.
+   */
+  router.get("/broker-auto", (_req, res) => {
+    res.json(brokerAutoStatus());
+  });
+
+router.get("/broker-flow/:code", async (req, res, next) => {
     try {
       res.json(await brokerFlow(client, String(req.params.code)));
     } catch (err) {

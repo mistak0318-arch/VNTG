@@ -67,6 +67,7 @@ import { createCalendarVisionRouter } from "./routes/calendarVision.js";
 import { createFocusRouter } from "./routes/focus.js";
 import { createRealtimeRouter } from "./routes/realtime.js";
 import { startRealtimeScheduler } from "./realtimeHub.js";
+import { startBrokerAuto } from "./brokerAuto.js";
 import { createSignalRouter } from "./routes/signal.js";
 import { createPaperRouter } from "./routes/paper.js";
 import { createCisRouter } from "./routes/cis.js";
@@ -274,6 +275,18 @@ startLeaderScanScheduler(client);
 startCloseBetScheduler(client);
 /* 장 시간에 알아서 붙어 거래원·프로그램매매를 쌓는다 — 화면을 안 봐도 */
 startRealtimeScheduler(client);
+
+/*
+ * **장중 거래원 시계열 자동 수집** (2026-09-01).
+ *
+ * `ka10040` 은 누적만 주므로 부를 때마다 한 점씩 찍어야 시계열이 생긴다. 여태
+ * 그걸 부르는 게 화면뿐이라 **내가 열어 둔 종목만** 쌓였다 — 벤티지가 "한번
+ * 클릭해야 동작한다고 써있던데"라고 짚은 자리다.
+ *
+ * 전종목은 안 된다(30초 주기면 초당 81콜, 제한의 16배). 관심종목과 오늘 초록을
+ * 최대 80종목까지 **초당 1콜**로 돈다 — 제한의 20%만 쓰고 나머지는 남긴다.
+ */
+startBrokerAuto(client);
   startDisclosureScheduler();
 
 /**

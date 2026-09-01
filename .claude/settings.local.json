@@ -1001,7 +1001,9 @@
       "Bash(curl -s \"http://localhost:4000/api/rank/_probe/who?code=033790\" --max-time 30 -o w2_033790.json)",
       "Bash(sort -k5 -n -r)",
       "Bash(curl -s \"http://localhost:4000/api/signal/screen/universes\")",
-      "Bash(curl -s \"http://localhost:4000/api/signal/screen/preview?limit=15\" --max-time 90)"
+      "Bash(curl -s \"http://localhost:4000/api/signal/screen/preview?limit=15\" --max-time 90)",
+      "Bash(curl -s http://localhost:4000/api/market/broker-auto)",
+      "Bash(python -m json.tool)"
     ]
   }
 }
