@@ -287,6 +287,21 @@ export class RealtimeClient {
   /** 화면이 건 종목 — 들어온 순서대로(오래된 것이 앞) */
   private readonly transient: string[] = [];
 
+  /**
+   * **정원이 어떻게 차 있나** (2026-09-02) — 상태창이 읽는다.
+   *
+   * `subscribed` 하나만 보여 주면 200 을 넘겼을 때 **누가 넘겼는지**를 알 수 없다.
+   * 스케줄러(`keep`)가 넘긴 것과 화면(`transient`)이 넘긴 것은 고칠 자리가 다르다.
+   */
+  get seats(): { keep: number; transient: number; total: number; max: number } {
+    return {
+      keep: this.keep.size,
+      transient: this.transient.length,
+      total: this.codeCount(),
+      max: RealtimeClient.MAX_ITEMS,
+    };
+  }
+
   /** 지금 걸려 있는 **종목** 수 (타입은 안 센다 — 상한이 종목 기준이다) */
   private codeCount(): number {
     const all = new Set<string>(this.keep);
@@ -299,12 +314,59 @@ export class RealtimeClient {
    * 부르는 쪽이 이미 200 안쪽으로 잘라서 준다.
    */
   subscribeKeep(type: string, item: string): void {
-    this.keep.add(item);
     // 고정으로 올라왔으면 임시 목록에서는 뺀다 — 같은 종목을 두 번 셀 이유가 없다
     const i = this.transient.indexOf(item);
     if (i >= 0) this.transient.splice(i, 1);
+
+    /*
+     * ## ⚠️ **고정도 상한을 지킨다** (2026-09-02)
+     *
+     * 여기는 상한을 **아예 안 보고 있었다.** 주석은 「부르는 쪽이 이미 200 안쪽으로
+     * 잘라서 준다」고 했는데, 부르는 곳이 하나가 아니다:
+     *
+     *   스케줄러 국내 종목  `MAX_CODES` 190
+     *   + 지수(1h) · VI 종목 · 미국 종목(FE)
+     *
+     * 각자는 자기 몫만 지키므로 **합이 200 을 넘는지는 아무도 안 본다.**
+     * 실측(2026-09-02 08:02·08:20): 구독이 277 까지 부풀어 `105115`(연결 전체
+     * 200 초과)로 REG 가 통째로 거절됐다. 소켓은 「연결됨·healthy」라 화면상으로는
+     * 멀쩡해 보이고, 다만 **시세가 폴링 주기로 느려진다** — 제일 알아채기 어려운 실패다.
+     *
+     * 문을 지키는 자리는 **여기 하나**여야 한다(`subscribeTransient` 와 같은 원칙).
+     *
+     * ## 넘치면 어떻게 하나
+     *
+     * 먼저 **화면이 건 것부터** 밀어낸다 — 고정은 하루 종일 필요하고 화면 것은
+     * 창을 닫으면 그만이다. 그래도 자리가 없으면 **거절하고 경고를 남긴다.**
+     * 조용히 넘기면 「왜 이 종목만 안 도나」를 영영 못 찾는다.
+     */
+    if (!this.keep.has(item)) {
+      while (this.codeCount() >= RealtimeClient.MAX_ITEMS && this.transient.length > 0) {
+        const old = this.transient.shift();
+        if (!old) break;
+        for (const t of [...this.subs.keys()]) {
+          if (this.subs.get(t)?.has(old)) this.unsubscribe(t, old);
+        }
+      }
+      if (this.codeCount() >= RealtimeClient.MAX_ITEMS) {
+        /* 1분에 한 번만 — 초과가 나면 수십 종목이 한꺼번에 들어와 로그가 넘친다 */
+        const now = Date.now();
+        if (now - this.lastSeatWarn > 60_000) {
+          this.lastSeatWarn = now;
+          console.warn(
+            `[realtime] 정원 초과 — 고정 ${this.keep.size}종목이 상한(${RealtimeClient.MAX_ITEMS})에 닿아 ` +
+              `${item} 을(를) 못 겁니다. 스케줄러 정원 배분을 줄여야 합니다.`,
+          );
+        }
+        return;
+      }
+      this.keep.add(item);
+    }
     this.subscribe(type, item);
   }
+
+  /** 정원 초과 경고를 마지막으로 찍은 때 — 로그가 넘치지 않게 */
+  private lastSeatWarn = 0;
 
   /**
    * 화면이 지금 보는 종목 — **상한에 닿으면 오래된 것을 빼고 넣는다.**

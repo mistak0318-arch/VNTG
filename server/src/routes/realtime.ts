@@ -271,6 +271,14 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
        */
       subscribed: subscribedCount(),
       /*
+       * **정원이 어떻게 차 있나** (2026-09-02).
+       *
+       * `subscribed` 가 200 을 넘으면 키움이 REG 를 통째로 거절하는데(105115),
+       * **누가 넘겼는지**를 알아야 고칠 자리가 정해진다 — 스케줄러(`keep`)면
+       * 정원 배분을 줄여야 하고 화면(`transient`)이면 밀어내기가 안 도는 것이다.
+       */
+      seats: peekRealtime().client?.seats ?? null,
+      /*
        * 2번 연결 (2026-08-25 이중화) — 정원 190→380. null 이면 안 떠 있는 것
        * (밤 국면이거나 REALTIME_DUAL=0 롤백). 문제가 보이면 .env 한 줄이 롤백이다.
        */
