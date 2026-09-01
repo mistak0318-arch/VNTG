@@ -26,7 +26,14 @@ import { etfSeriesFor, themeSeriesFor } from "../themeSeries.js";
 import { backtestProgress, backtestResult, startBacktestJob } from "../signalBacktest.js";
 import { samplesMeta } from "../signalSamples.js";
 import { listTrackJob, listTrackSummary, runListTrack } from "../listTrack.js";
-import { conditional, simulate, superSim, sweep } from "../signalSimulate.js";
+import {
+  buildVerdict,
+  conditional,
+  loadVerdict,
+  simulate,
+  superSim,
+  sweep,
+} from "../signalSimulate.js";
 import {
   getCondJob,
   listPresets,
@@ -67,7 +74,14 @@ export function createSignalRouter(client: KiwoomClient): Router {
 
   router.put("/config", async (req, res, next) => {
     try {
-      res.json({ config: await saveConfig(req.body as SignalConfig) });
+      const saved = await saveConfig(req.body as SignalConfig);
+      /*
+       * 판정을 **같이 다시 낸다** (2026-09-01). 기준이 바뀌면 「55점부터 값을
+       * 한다」도 바뀌는데, 안 갱신하면 **낡은 판정이 새 설정인 척** 화면에 남는다.
+       * 파일만 읽어 채점하므로 조회 0회에 수십 밀리초다.
+       */
+      void buildVerdict(saved).catch(() => undefined);
+      res.json({ config: saved });
     } catch (err) {
       next(err);
     }
@@ -546,6 +560,30 @@ export function createSignalRouter(client: KiwoomClient): Router {
   /**
    * 이 설정이면 성적이 어떻게 되나. `config` 를 안 주면 **지금 저장된 설정**을 잰다.
    */
+  /*
+   * 판정 요약 (2026-09-01) — 「이 점수가 무슨 뜻인가」.
+   *
+   * 신호등을 돌리면 점수만 나오고 그 점수의 뜻은 안 보였다. 시뮬레이터가 앞/뒤로
+   * 갈라 낸 값을 파일에 남기고 화면이 읽는다 — **하드코딩하면 표본이 바뀌어도
+   * 그대로 남아 곧 거짓말이 된다.**
+   */
+  router.get("/verdict", async (_req, res, next) => {
+    try {
+      res.json({ verdict: await loadVerdict() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 지금 설정으로 다시 재서 남긴다 — 파일만 읽으므로 조회 0회, 수십 밀리초 */
+  router.post("/verdict/build", async (_req, res, next) => {
+    try {
+      res.json({ verdict: await buildVerdict(await getConfig()) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/simulate", async (req, res, next) => {
     try {
       const body = req.body as { config?: Partial<SignalConfig> };

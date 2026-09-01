@@ -261,6 +261,53 @@ export interface SignalConfig {
    * 얼마든지 가능한 판단이다.
    */
   bullAt: number;
+  /**
+   * **몇 %나 재고 점수를 매길까** (2026-09-01) — 이 도구에서 가장 크게 틀렸던 자리.
+   *
+   * ## 무슨 일이 있었나
+   *
+   * 신호등은 렌즈가 없는 기준을 **채점에서 빼고 남은 것으로 평균**을 냈다.
+   * 「모르는 것을 0 으로 만들지 않는다」는 옳은 원칙인데, 그다음이 틀렸다 —
+   * 남은 것만으로 낸 점수를 **다 잰 점수와 같은 눈금에 올렸다.**
+   *
+   * 무게 3짜리 시가총액과 무게 2짜리 영업이익이 빠진 종목은, 남은 추세·수급만
+   * 잘 맞으면 90점이 나온다. 실제로 다 잰 종목보다 쉽게 나온다.
+   *
+   * ## 실측 (19만 관측)
+   *
+   * | 무게 커버리지 | 70점 통과의 초과분 |
+   * |---|---|
+   * | 0.80~0.89 | 중 **-1.92** 절 **-2.18** 승 **-5.04** |
+   * | 0.90~0.99 | 중 +0.71 절 +1.17 승 +2.02 |
+   * | 1.00 | 중 +0.03 절 +0.65 승 -0.70 |
+   *
+   * 0.9 문턱 하나를 걸자 **55~90점 전 구간이 앞·뒤 여섯 값 모두 양수**가 됐다.
+   * 그전에는 55·85·90점이 앞쪽에서 음수였다 — 그게 「앞쪽만 통째로 마이너스」의
+   * 정체였고, 점수 체계가 아니라 **데이터 결손을 재고 있었던 것**이다.
+   *
+   * 덤으로 「꼭대기가 나쁘다」도 함께 사라졌다. 90~100점은 렌즈를 채우면
+   * 앞 +1.19·뒤 +1.71 로 **가장 좋은 구간**이다.
+   *
+   * ## 미달이면 어떻게 하나
+   *
+   * 점수는 그대로 낸다. 다만 **초록을 주지 않는다**(노랑까지). 「못 재서 모른다」를
+   * 「빨강」으로 찍는 것도 거짓말이고, 초록으로 찍는 것은 더 나쁘다.
+   */
+  minCoverage: number;
+  /**
+   * **초록의 상한** (2026-09-01) — 기본 100(= 상한 없음).
+   *
+   * 벤티지: "너무 과한 점수는 고점신호가 되고 약한 건 아무도 안 보는 거고."
+   *
+   * ⚠️ **실측은 지금 이 걱정을 지지하지 않는다.** 커버리지를 고친 뒤로 90~100점은
+   * 앞 +1.19·뒤 +1.71, 95~100점은 앞 +2.68 로 **가장 좋은 구간**이 됐다. 상한을
+   * 걸면 그 구간을 버린다. 눈에 띄는 것은 85~89 한 칸뿐인데(뒤 중 -2.03 승 -3.18)
+   * 표본이 1,265 로 얇아 규칙으로 삼기엔 약하다.
+   *
+   * 그래서 **칸은 열어 두고 기본은 끈다.** 「신호등 분석 > 점수 구간별」 표를 보고
+   * 사람이 정하면 된다 — 표본이 쌓여 85~89 가 계속 음수면 그때 걸면 된다.
+   */
+  greenTo: number;
 }
 
 /** 정배열 판정에 고를 수 있는 이동평균선 */
@@ -335,23 +382,32 @@ export const MA_OPTIONS = [5, 10, 20, 60] as const;
  */
 export const DEFAULT_CONFIG: SignalConfig = {
   /*
-   * **초록 70 → 55** (2026-09-01).
+   * **초록 70** (2026-09-01, 두 번 고친 끝에).
    *
-   * 문턱별로 앞/뒤 둘 다 양수인 곳은 **50점 근처뿐**이었다(중앙값·절사평균·승률
-   * 셋을 다 본 값):
+   * 아침에 55 로 내렸는데 **그때는 장세 전환도 `largeCap` 도 없는 채로 잰
+   * 값**이었다. 시뮬레이터가 실제 신호등과 다른 것을 재고 있었던 셈이다.
+   * 둘을 맞추고 다시 재니 그림이 달라졌다 (중앙·절사·승률을 다 본 초과분):
    *
-   *   70점+  앞 중앙 +1.72 승률 +3.2%p  ·  뒤 중앙 **-0.80** 승률 **-1.5%p**
-   *   60점+  앞 +1.14 +1.9            ·  뒤 -0.08 +0.1
-   *   50점+  앞 +0.70 +0.9            ·  뒤 **+0.39 +1.1**  ← 양쪽 양수
+   *          앞쪽                    뒤쪽                 표본
+   *   55점  중+0.15 절+0.36 승+0   중+0.52 절+0.80 승+2   23,622
+   *   65점  중+0.64 절+0.80 승+1   중+0.34 절+1.19 승+1   14,089  ✓
+   *   **70점  중+0.71 절+0.79 승+1   중+0.38 절+1.40 승+1   10,743  ✓**
+   *   75점  중+0.88 절+1.04 승+1   중+0.47 절+1.92 승+2    7,763  ✓
+   *   85점  중+1.11 절+1.67 승+1   중+0.41 절+2.44 승+2    2,744  ✓
+   *   90점  중-0.45 절-0.56 승-3   중-0.14 절+1.19 승+0            ✗
    *
-   * 「점수가 높을수록 좋다」가 아니었다. 꼭대기가 오히려 나쁜 것은 어제부터
-   * 여러 번 나온 패턴이다 — 여러 기준이 한꺼번에 만점이면 **이미 다 오른 자리**다.
+   * 65~85 가 앞뒤 모두 양수다. 절사평균은 문턱을 올릴수록 계속 좋아지는데
+   * (0.80 → 1.19 → 1.40 → 1.92 → 2.44) **표본이 그만큼 줄어든다** — 85 면
+   * 뒤쪽 2,744건이라 하루에 몇 종목 안 나온다.
    *
-   * 50 으로 내리면 초록이 표본의 15~18% 가 되어 「초록」의 뜻이 옅어진다.
-   * 그래서 **55** 로 둔다 — 50 의 성적을 대부분 가져가면서 수를 줄인다.
-   * 문턱을 더 만지려면 walk-forward 를 붙인 뒤에 하는 게 맞다.
+   * 70 이 균형점이다. 그리고 **90점은 또 나빠진다** — 여러 기준이 한꺼번에
+   * 만점이면 이미 다 오른 자리라는, 오늘 여러 번 나온 그 패턴이다.
+   *
+   * ⚠️ 이 표는 `signalVerdict.json` 에 저장되고 화면이 읽는다. 여기 적은 숫자는
+   * **읽는 사람을 위한 것**이지 코드가 쓰는 값이 아니다 — 표본이 바뀌면 파일이
+   * 갱신되고 화면은 새 값을 말한다.
    */
-  greenAt: 55,
+  greenAt: 70,
   yellowAt: 40,
   /*
    * 10 일 (2026-09-01 — 벤티지가 화면에서 먼저 올렸다).
@@ -387,6 +443,13 @@ export const DEFAULT_CONFIG: SignalConfig = {
   regimeSwitch: true,
   /* 표본 380거래일의 중앙값이 정확히 50 이었다 */
   bullAt: 50,
+  /*
+   * 0.9 — 실측이 고른 값이다. 0.8 로는 안 되고(그 밴드가 정확히 범인이다) 1.0 은
+   * 표본의 42% 를 버린다. 0.9 는 12% 만 버리면서 앞·뒤를 다 살렸다.
+   */
+  minCoverage: 0.9,
+  /* 100 = 상한 없음. 지금 실측은 상한을 지지하지 않는다 — 위 주석 참고 */
+  greenTo: 100,
   checks: [
     // ---------------- 추세 ----------------
     {
@@ -1556,6 +1619,22 @@ function mergeConfig(saved: Partial<SignalConfig> | null): SignalConfig {
       Number.isFinite(saved?.bullAt) && Number(saved?.bullAt) > 0 && Number(saved?.bullAt) < 100
         ? Number(saved?.bullAt)
         : DEFAULT_CONFIG.bullAt,
+    /*
+     * 0~1 밖은 안 받는다. 1 을 넘기면 아무것도 초록이 못 되고, 0 이면 규칙이 없는
+     * 것과 같아 옛 상태로 조용히 돌아간다 — 둘 다 사람이 눈치채기 어렵다.
+     */
+    minCoverage:
+      Number.isFinite(saved?.minCoverage) &&
+      Number(saved?.minCoverage) >= 0 &&
+      Number(saved?.minCoverage) <= 1
+        ? Number(saved?.minCoverage)
+        : DEFAULT_CONFIG.minCoverage,
+    greenTo:
+      Number.isFinite(saved?.greenTo) &&
+      Number(saved?.greenTo) > 0 &&
+      Number(saved?.greenTo) <= 100
+        ? Number(saved?.greenTo)
+        : DEFAULT_CONFIG.greenTo,
   };
 }
 
@@ -1587,7 +1666,9 @@ export async function getConfig(): Promise<SignalConfig> {
 export async function configFingerprint(): Promise<string> {
   const c = await getConfig();
   const parts = [
-    `g${c.greenAt}y${c.yellowAt}`,
+    `g${c.greenAt}-${c.greenTo}y${c.yellowAt}`,
+    /* 커버리지 문턱은 「무엇이 초록이 되나」를 통째로 바꾼다 — 지문에 반드시 넣는다 */
+    `mc${c.minCoverage}`,
     `r${c.riskYellowAt}-${c.riskRedAt}${c.riskBlocksGreen ? "B" : ""}`,
     /* 장세 전환은 점수를 통째로 바꾼다 — 지문에 없으면 「같은 설정」으로 오인된다 */
     `rg${c.regimeSwitch ? c.bullAt : "off"}`,
@@ -1702,6 +1783,19 @@ export interface SignalResult {
   riskCapped: boolean;
   /** 탈락 조건에 걸린 기준 이름들 — 비어 있으면 탈락 없음 */
   vetoedBy?: string[];
+  /**
+   * **몇 %나 재고 매긴 점수인가** (2026-09-01) — 무게 기준 0~1.
+   *
+   * 이걸 안 보여 주면 「덜 잰 90점」과 「다 잰 90점」이 화면에서 똑같아 보인다.
+   * 실측에서 그 차이가 초과분 중앙 -1.92 대 +0.71 이었다.
+   */
+  coverage?: number;
+  /** 커버리지가 문턱 미달이라 초록이 막혔나 */
+  lowCoverage?: boolean;
+  /** 못 잰 기준 이름들 — 「무엇이 비었나」 */
+  missing?: string[];
+  /** 상한(`greenTo`)을 넘어 초록이 막혔나 */
+  overHeated?: boolean;
   /**
    * **지금 장세와, 그 때문에 빠진 기준들** (2026-09-01).
    *
@@ -2662,8 +2756,49 @@ export async function evaluateSignal(
         )
       : 0;
 
+  /*
+   * ## **몇 %나 재고 매긴 점수인가** (2026-09-01)
+   *
+   * 렌즈가 없는 기준은 위에서 `grade === null` 로 빠졌다. 그 상태로 남은 것만
+   * 평균 내면 **덜 잰 종목이 더 쉽게 높은 점수를 받는다** — 무게 3짜리 시가총액이
+   * 없으면 추세·수급만 맞아도 90점이 나온다.
+   *
+   * 실측에서 커버리지 0.80~0.89 구간의 70점 통과가 중앙 **-1.92**·승률 **-5.04**
+   * 였다. 그 12% 가 판정표의 앞쪽을 통째로 마이너스로 끌어내리고 있었다.
+   *
+   * 여기서 재는 것은 **무게 기준**이다. 개수로 세면 무게 3 하나 빠진 것과 무게 1
+   * 하나 빠진 것이 같아 보인다.
+   *
+   * 장세 때문에 빠진 기준(`offByRegime`)은 분모에 안 넣는다 — 그건 「못 잰 것」이
+   * 아니라 **일부러 뺀 것**이다.
+   */
+  const coverPool = checks.filter((c) => {
+    const def = cfg.checks.find((x) => x.key === c.key);
+    return def?.enabled && !offByRegime.some((o) => o.key === c.key);
+  });
+  const coverAll = coverPool.reduce((s, c) => s + c.weight, 0);
+  const coverGot = coverPool.filter((c) => c.grade !== null).reduce((s, c) => s + c.weight, 0);
+  const coverage = coverAll > 0 ? coverGot / coverAll : 0;
+  const lowCoverage = coverAll > 0 && coverage < cfg.minCoverage;
+
   let level: Level =
     scored.length === 0 ? "unknown" : score >= cfg.greenAt ? "green" : score >= cfg.yellowAt ? "yellow" : "red";
+
+  /*
+   * **덜 쟀으면 초록을 안 준다.** 노랑까지만.
+   *
+   * 「못 재서 모른다」를 빨강으로 찍는 것도 거짓말이다 — 종목 잘못이 아니다.
+   * 다만 초록은 「사도 된다」는 뜻이므로, 근거의 10% 이상이 비었으면 못 준다.
+   */
+  if (lowCoverage && level === "green") level = "yellow";
+
+  /*
+   * **상한** — 기본은 100(꺼짐)이라 아무 일도 안 한다.
+   * 실측은 지금 상한을 지지하지 않지만(90~100점이 제일 좋다) 사람이 걸 수 있게
+   * 열어 둔 칸이다. 「신호등 분석 > 점수 구간별」 표를 보고 정하면 된다.
+   */
+  const overHeated = cfg.greenTo < 100 && score > cfg.greenTo && level === "green";
+  if (overHeated) level = "yellow";
 
   // 위험이 빨강이면 초록을 주지 않는다
   const risk = axes.find((a) => a.key === "risk");
@@ -2702,6 +2837,11 @@ export async function evaluateSignal(
     riskCapped,
     /** 탈락시킨 기준 이름 — 화면이 「무엇 때문에 빨강인지」를 말할 수 있게 */
     vetoedBy: vetoed.map((c) => c.label),
+    coverage: Math.round(coverage * 100) / 100,
+    lowCoverage,
+    /** 못 잰 기준 이름 — 「무엇이 비어서 초록이 막혔나」 */
+    missing: coverPool.filter((c) => c.grade === null).map((c) => c.label),
+    overHeated,
     regime: mkt
       ? {
           kind: mkt.regime,

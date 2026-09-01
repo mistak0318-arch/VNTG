@@ -13337,3 +13337,78 @@ thead .sd-emph {
 }
 .cond-join .filter-btn { padding: 1px 9px; font-size: 0.74rem; }
 .cond-editor h2 { margin-bottom: 4px; }
+
+/* 판정 바 (2026-09-01) — 「이 점수가 무슨 뜻인가」.
+   점수만 보여주고 그 뜻을 안 말하면 사람이 자기 감으로 해석하게 된다. */
+.verdict {
+  margin: 6px 0 10px;
+  border: 1px solid color-mix(in srgb, var(--blue, #4c8dff) 30%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--blue, #4c8dff) 5%, transparent);
+  overflow: hidden;
+}
+/* 낡은 판정은 색을 빼서 「이건 옛날 값」이 보이게 한다 */
+.verdict.stale {
+  border-color: var(--border);
+  background: none;
+}
+.verdict-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.verdict-caret { color: var(--muted); font-size: 0.8rem; }
+.verdict-bad { color: var(--warn, #d9a441); }
+.verdict-when { margin-left: auto; font-size: 0.72rem; color: var(--muted); }
+/* 이 종목이 근거 있는 구간에 있나 — 한눈에 갈려야 한다 */
+.verdict-here {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.verdict-here.ok {
+  background: color-mix(in srgb, var(--positive, #4ade80) 18%, transparent);
+  color: var(--positive, #4ade80);
+}
+.verdict-here.no {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--muted);
+}
+.verdict-table { font-size: 12px; }
+.verdict-sub th { font-size: 0.68rem; color: var(--muted); font-weight: 400; }
+/* 앞뒤 셋이 다 양수인 줄 — 굵게. 그게 「믿을 수 있는 구간」이다 */
+.verdict-ok td { font-weight: 600; }
+.verdict-ok td:first-child { color: var(--positive, #4ade80); }
+.verdict-row-here { background: color-mix(in srgb, var(--blue, #4c8dff) 12%, transparent); }
+.verdict-green {
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--positive, #4ade80);
+  color: #06240f;
+  font-style: normal;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+/* 「덜 쟀음」 배지 (2026-09-01) — 초록이 막힌 이유를 말한다.
+   위험 차단·탈락과 색을 나눈다: 종목이 나쁜 게 아니라 우리가 못 잰 것이다. */
+.sig-thin {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px dashed var(--border);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--muted);
+  font-size: 0.72rem;
+  cursor: help;
+}

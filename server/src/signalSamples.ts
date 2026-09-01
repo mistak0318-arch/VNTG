@@ -383,6 +383,12 @@ export function gradeOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
       return v === null ? null : grade(v, c);
     }
     case "marketCap":
+    case "largeCap":
+      /*
+       * 시총은 **U자**라 기준이 둘이다 — `marketCap`(작을수록 좋음, 장세 무관)과
+       * `largeCap`(클수록 좋음, 강세장 전용). 재는 값은 같고 눈금만 다르므로
+       * 여기서는 한 줄로 받는다. 방향은 `threshold`/`strongAt` 의 자리가 정한다.
+       */
       return f.mktCap === null ? null : grade(f.mktCap, c);
     case "flowRatio": {
       /* (외인 + 기관) ÷ 시총 × 100. 순매수는 백만원, 시총은 억원 */
@@ -453,6 +459,15 @@ export interface Scored {
   level: "green" | "yellow" | "red";
   /** 위험 축 점수 — 높을수록 위험. 낼 수 없으면 null */
   risk: number | null;
+  /**
+   * **몇 %나 재고 매긴 점수인가** (2026-09-01) — 무게 기준 0~1.
+   *
+   * 실제 신호등(`SignalResult.coverage`)과 **같은 정의**여야 한다. 다르면
+   * 검증에서 통과한 설정이 실전에서 다른 것을 고른다.
+   */
+  coverage: number;
+  /** 커버리지 미달이라 초록이 막혔나 */
+  lowCoverage: boolean;
 }
 
 /**
@@ -460,16 +475,39 @@ export interface Scored {
  *
  * 위험 축은 **섞지 않는다** — 실제 신호등과 같은 규칙이다. 위험하면 초록을 막는다.
  */
-export function scoreFeat(f: Feat, cfg: SignalConfig): Scored | null {
+export function scoreFeat(
+  f: Feat,
+  cfg: SignalConfig,
+  /**
+   * **그날의 장세** (2026-09-01) — 없으면 장세를 안 가린다(전부 쓴다).
+   *
+   * 실제 신호등은 장세에 따라 기준을 갈아 끼운다(신고가는 강세장 승률 +1.4%p,
+   * 약세장 -3.9%p). 시뮬레이터가 그걸 안 하면 **실제와 다른 것을 재게 되고**,
+   * 그 값을 화면에 「근거」로 띄우면 **틀린 근거**가 된다. 없는 것보다 나쁘다.
+   */
+  regime?: "bull" | "bear",
+): Scored | null {
   const axes: Record<string, { sum: number; w: number }> = {};
+  /*
+   * **커버리지** — 켜진 기준의 무게 중 실제로 잰 몫. 실제 신호등과 같은 정의다.
+   * 장세로 뺀 기준은 분모에 안 넣는다(못 잰 게 아니라 일부러 뺀 것).
+   */
+  let coverAll = 0;
+  let coverGot = 0;
   for (const c of cfg.checks) {
     if (!c.enabled) continue;
+    /* 장세를 못 재면 전부 쓴다 — 실제 신호등과 같은 규칙 */
+    if (cfg.regimeSwitch && c.regime && regime && c.regime !== regime) continue;
+    coverAll += c.weight;
     const g = gradeOf(f, c, cfg);
     if (g === null) continue;
+    coverGot += c.weight;
     (axes[c.axis] ??= { sum: 0, w: 0 });
     axes[c.axis].sum += g * c.weight;
     axes[c.axis].w += c.weight;
   }
+  const coverage = coverAll > 0 ? coverGot / coverAll : 0;
+  const lowCoverage = coverAll > 0 && coverage < cfg.minCoverage;
   const risk = axes.risk && axes.risk.w > 0 ? axes.risk.sum / axes.risk.w : null;
   const good = (["trend", "flow", "value"] as const)
     .map((k) => ({ k, a: axes[k] }))
@@ -480,7 +518,21 @@ export function scoreFeat(f: Feat, cfg: SignalConfig): Scored | null {
   const score = Math.round(
     good.reduce((s, x) => s + (x.a.sum / x.a.w) * cfg.axisWeights[x.k], 0) / wSum,
   );
-  const level: Scored["level"] =
-    risk !== null && risk >= 75 ? "red" : score >= 70 ? "green" : score >= 45 ? "yellow" : "red";
-  return { score, level, risk };
+  /*
+   * ⚠️ 예전엔 70/45/75 를 **박아 두었다.** 설정을 바꿔도 시뮬레이터의 초록은
+   * 안 움직였다는 뜻이다 — 「이 문턱이 좋다」를 재는 도구가 정작 그 문턱을
+   * 안 쓰고 있었다. 설정값을 쓴다.
+   */
+  let level: Scored["level"] =
+    risk !== null && risk >= cfg.riskRedAt && cfg.riskBlocksGreen
+      ? "red"
+      : score >= cfg.greenAt
+        ? "green"
+        : score >= cfg.yellowAt
+          ? "yellow"
+          : "red";
+  /* 실제 신호등과 같은 규칙 — 덜 쟀으면 초록을 안 준다 */
+  if (lowCoverage && level === "green") level = "yellow";
+  if (cfg.greenTo < 100 && score > cfg.greenTo && level === "green") level = "yellow";
+  return { score, level, risk, coverage, lowCoverage };
 }

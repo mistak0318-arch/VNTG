@@ -76,6 +76,11 @@ function diffFromDefaults(cur: SignalConfig, def: SignalConfig): string[] {
   if (cur.regimeSwitch !== def.regimeSwitch)
     out.push(`장세 전환 ${cur.regimeSwitch ? "켬 → 끔" : "끔 → 켬"}`);
   if (cur.bullAt !== def.bullAt) out.push(`강세장 기준 ${cur.bullAt}% → ${def.bullAt}%`);
+  if (cur.minCoverage !== def.minCoverage)
+    out.push(
+      `최소 커버리지 ${Math.round(cur.minCoverage * 100)}% → ${Math.round(def.minCoverage * 100)}%`,
+    );
+  if (cur.greenTo !== def.greenTo) out.push(`초록 상한 ${cur.greenTo}점 → ${def.greenTo}점`);
   for (const d of def.checks) {
     const c = cur.checks.find((x) => x.key === d.key);
     if (!c) continue;
@@ -552,6 +557,57 @@ export function SignalConfigPanel() {
           같은 기준도 장세에 따라 방향이 뒤집힙니다 — <b>60일 신고가는 강세장 승률
           +1.4%p, 약세장 −3.9%p</b>. 그래서 장세에 안 맞는 기준은 점수에서 뺍니다.
           끄면 예전처럼 전부 씁니다. 기본 50%는 표본 380거래일의 중앙값입니다.
+        </span>
+      </div>
+
+      {/*
+        **커버리지 문턱** (2026-09-01) — 이 도구에서 가장 크게 틀렸던 자리.
+
+        렌즈가 없는 기준은 채점에서 빠지고 남은 것으로 평균이 났다. 「모르는 것을
+        0 으로 만들지 않는다」는 옳았는데, 그렇게 낸 점수를 **다 잰 점수와 같은
+        눈금에 올린 것**이 틀렸다. 덜 잰 종목이 더 쉽게 높은 점수를 받았다.
+      */}
+      <div className="sig-config-line sig-regime-line">
+        <label title="켜진 기준의 무게 중 이 비율 이상을 실제로 재야 초록을 줍니다">
+          <b>최소 커버리지</b>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={5}
+            value={Math.round(config.minCoverage * 100)}
+            onChange={(e) =>
+              patch({
+                minCoverage: Math.max(0, Math.min(100, Number(e.target.value) || 0)) / 100,
+              })
+            }
+          />
+          <span className="sig-unit">% 이상 재야 초록</span>
+        </label>
+        <label title="이 점수를 넘으면 초록을 주지 않습니다. 100 이면 상한 없음">
+          초록 상한
+          <input
+            type="number"
+            min={50}
+            max={100}
+            value={config.greenTo}
+            onChange={(e) =>
+              patch({ greenTo: Math.max(50, Math.min(100, Number(e.target.value) || 100)) })
+            }
+          />
+          <span className="sig-unit">점까지 {config.greenTo >= 100 && "(상한 없음)"}</span>
+        </label>
+        <span className="table-note">
+          렌즈가 없는 기준은 채점에서 빠지고 <b>남은 것으로 평균</b>이 납니다 — 그래서
+          덜 잰 종목이 더 쉽게 높은 점수를 받습니다. 실측에서 커버리지 80~89% 구간의
+          70점 통과가 시장에 <b>중앙 1.92%p 지고 승률이 5.04%p 낮았습니다.</b> 90%
+          문턱을 걸자 40~90점 <b>전 구간이 앞·뒤 모두 양수</b>가 됐습니다. 미달이면
+          점수는 그대로 내고 <b>초록만 막습니다</b>.
+          <br />
+          상한은 기본이 <b>꺼져 있습니다(100)</b>. 「과한 점수는 고점신호」가 그럴듯해
+          보이지만, 커버리지를 고친 뒤 <b>90~100점이 뒤쪽 중앙 +1.69%p 로 가장 좋은
+          구간</b>이 됐습니다 — 「꼭대기가 나쁘다」는 렌즈 결손이 만든 착시였습니다.
+          걸면 가장 좋은 구간을 버립니다.
         </span>
       </div>
 

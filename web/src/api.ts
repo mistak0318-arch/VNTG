@@ -1450,6 +1450,8 @@ export const api = {
     getJson<{ config: SignalConfig; defaults: SignalConfig }>("/api/signal/config"),
   signalConfigSave: (config: SignalConfig) =>
     putJson<{ config: SignalConfig }>("/api/signal/config", config),
+  /** 판정 요약 — 「몇 점부터 값을 하나」. 파일에서 읽으므로 조회 0회 */
+  signalVerdict: () => getJson<{ verdict: SignalVerdict | null }>("/api/signal/verdict"),
 
   /* ── 조건 검색 (2026-09-01) — 증권사 조건검색식처럼 ────────────────
      신호등이 **점수**라면 이건 **이분법**이다. 점수는 한두 기준이 나빠도 나머지가
@@ -2912,6 +2914,19 @@ export interface SignalResult {
    * 무엇이 빠졌는지 화면이 말할 수 있게 실어 온다.
    */
   regime?: { kind: "bull" | "bear"; label: string; breadth: number; skipped: string[] };
+  /**
+   * **몇 %나 재고 매긴 점수인가** (2026-09-01, 무게 기준 0~1).
+   *
+   * 이걸 안 보여 주면 「덜 잰 90점」과 「다 잰 90점」이 화면에서 똑같아 보인다.
+   * 실측에서 그 차이가 초과분 중앙 -1.92 대 +0.71 이었다.
+   */
+  coverage?: number;
+  /** 커버리지 미달이라 초록이 막혔나 */
+  lowCoverage?: boolean;
+  /** 못 잰 기준 이름들 — 「무엇이 비어서 초록이 막혔나」 */
+  missing?: string[];
+  /** 상한을 넘어 초록이 막혔나 */
+  overHeated?: boolean;
   evaluatedAt: string;
 }
 
@@ -2983,6 +2998,63 @@ export interface CondPreset {
   lastHits?: number;
 }
 
+/* ── 판정 요약 (2026-09-01) — 「이 점수가 무슨 뜻인가」 ──────────────
+   신호등을 돌리면 점수만 나오고 그 뜻은 안 보였다. 시뮬레이터가 앞/뒤로 갈라
+   낸 값을 서버가 파일에 남기고 화면이 읽는다 — **하드코딩하면 표본이 바뀌어도
+   그대로 남아 곧 거짓말이 된다.** */
+export interface LiftCut {
+  med: number | null;
+  trim: number | null;
+  win: number | null;
+  n: number;
+}
+
+export interface SplitRow {
+  cut: number;
+  front: LiftCut;
+  back: LiftCut;
+  /** 앞뒤 여섯 값이 **전부 양수**이고 뒤쪽 표본이 넉넉한가 */
+  good: boolean;
+}
+
+/**
+ * 점수 **구간** 하나 — 「이상」이 아니다.
+ *
+ * 누적으로는 「위쪽이 고점신호인가」에 답할 수 없다. 90점 이상이 좋아 보여도
+ * 그건 70~89 가 만든 값일 수 있다.
+ */
+export interface BandRow {
+  lo: number;
+  hi: number;
+  front: LiftCut;
+  back: LiftCut;
+  good: boolean;
+}
+
+export interface SignalVerdict {
+  at: string;
+  builtAt: string;
+  obs: number;
+  codeCount: number;
+  days: number;
+  configHash?: string;
+  greenAt: number;
+  /** 초록의 상한 — 100 이면 상한 없음 */
+  greenTo: number;
+  /** 몇 %나 재야 점수를 믿나 (무게 기준 0~1) */
+  minCoverage: number;
+  /** 덜 재서 채점에서 뺀 관측 수 */
+  thin: number;
+  splitAt: string;
+  splits: SplitRow[];
+  /** 점수 구간별 */
+  bands: BandRow[];
+  /** 앞뒤 모두 통하는 문턱 중 가장 높은 것 */
+  bestCut: number | null;
+  /** 채점에서 빠진 기준 — 있으면 판정이 반쪽이다 */
+  skipped: string[];
+}
+
 export interface SignalCheckConfig {
   key: string;
   label: string;
@@ -3034,6 +3106,25 @@ export interface SignalConfig {
   regimeSwitch: boolean;
   /** 강세장으로 보는 선 — 전종목 중 20일선 위인 비율(%). 기본 50 */
   bullAt: number;
+  /**
+   * **몇 %나 재고 점수를 매길까** (2026-09-01, 무게 기준 0~1). 기본 0.9
+   *
+   * 렌즈가 없는 기준은 채점에서 빠지고 남은 것으로 평균이 난다 — 그래서 **덜 잰
+   * 종목이 더 쉽게 높은 점수를 받았다.** 실측에서 커버리지 0.80~0.89 구간의 70점
+   * 통과가 중앙 **-1.92**·승률 **-5.04** 였다. 0.9 문턱을 걸자 40~90점 전 구간이
+   * 앞·뒤 여섯 값 모두 양수가 됐다.
+   *
+   * 미달이면 점수는 그대로 내되 **초록을 안 준다**(노랑까지).
+   */
+  minCoverage: number;
+  /**
+   * **초록의 상한** — 100 이면 상한 없음(기본).
+   *
+   * ⚠️ 실측은 상한을 지지하지 않는다. 커버리지를 고친 뒤 90~100점이 앞 +1.19·뒤
+   * +1.61 로 **가장 좋은 구간**이 됐다 — 「꼭대기가 나쁘다」는 렌즈 결손이 만든
+   * 착시였다. 칸은 열어 두지만 켜면 가장 좋은 구간을 버린다.
+   */
+  greenTo: number;
 }
 
 export interface StockNote {

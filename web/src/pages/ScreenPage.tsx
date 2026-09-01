@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BacktestPanel } from "../components/BacktestPanel";
 import { SignalTrackPanel } from "../components/SignalTrackPanel";
+import { VerdictBar } from "../components/VerdictBar";
 import { api, fmtNum, type ScreenHit, type ScreenJob, type ScreenRunSummary } from "../api";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { SuperSignalPanel } from "../components/SuperSignalPanel";
@@ -447,6 +448,11 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
             </p>
           )}
 
+          {/*
+            **이 점수가 무슨 뜻인가** (2026-09-01) — 돌리고 나면 바로 보여야 한다.
+            점수만 나오고 그 뜻을 모르면 사람이 판단할 근거가 없다.
+          */}
+          <VerdictBar />
           <div className="data-table-wrap">
             <table className="data-table">
               <thead>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
+import { VerdictBar } from "./VerdictBar";
 import { api, type SignalResult, type ThemeStrength } from "../api";
 import { useMarketOpen } from "../useLive";
 import { useTabActive } from "../tabActive";
@@ -190,6 +191,35 @@ export function SignalPanel({
             {data.regime.skipped.length > 0 && ` · ${data.regime.skipped.length}개 뺌`}
           </span>
         )}
+        {/*
+          **덜 쟀다** (2026-09-01) — 이 도구에서 가장 크게 틀렸던 자리라 화면에 남긴다.
+
+          렌즈가 없는 기준은 채점에서 빠지고 남은 것으로 평균이 난다. 그래서
+          **덜 잰 종목이 더 쉽게 높은 점수를 받았다** — 실측에서 커버리지
+          0.80~0.89 구간의 70점 통과가 중앙 -1.92·승률 -5.04 였다.
+
+          점수를 안 내는 게 아니라 **초록만 막는다.** 못 재는 게 종목 잘못은
+          아니므로 빨강으로 찍는 것도 거짓말이다.
+        */}
+        {data.lowCoverage && (
+          <span
+            className="sig-thin"
+            title={
+              `켜진 기준의 무게 중 ${Math.round((data.coverage ?? 0) * 100)}% 만 쟀습니다.\n` +
+              (data.missing && data.missing.length > 0
+                ? `못 잰 기준 — ${data.missing.join(" · ")}\n\n`
+                : "\n") +
+              `덜 잰 점수는 부풀려집니다(남은 기준만으로 평균이 나므로). 실측에서 그런 관측의 70점 통과가 시장에 중앙 1.92%p 지고 승률이 5.04%p 낮았습니다. 그래서 초록만 막고 점수는 그대로 둡니다.`
+            }
+          >
+            ◐ {Math.round((data.coverage ?? 0) * 100)}% 만 쟀음 — 초록 차단
+          </span>
+        )}
+        {data.overHeated && (
+          <span className="sig-thin" title="설정한 초록 상한을 넘어 노랑으로 낮췄습니다">
+            ▲ 상한 초과 — 초록 차단
+          </span>
+        )}
         {data.vetoedBy && data.vetoedBy.length > 0 && (
           <span
             className="sig-vetoed"
@@ -202,6 +232,15 @@ export function SignalPanel({
           {loading ? "평가 중…" : "↻ 다시 평가"}
         </button>
       </div>
+
+      {/*
+        **이 점수가 무슨 뜻인가** (2026-09-01) — 점수 바로 아래.
+
+        77점이 좋은 건지 나쁜 건지는 **실측에서 몇 점부터 값을 했나**를 알아야
+        답할 수 있다. 그게 없으면 사람이 점수를 자기 감으로 해석하게 된다.
+        값은 서버가 시뮬레이터로 낸 것을 읽는다 — 하드코딩하면 곧 거짓말이 된다.
+      */}
+      <VerdictBar score={data.score} />
 
       {/*
         축을 먼저 보여 준다. 한 숫자만 보면 「실적 좋고 수급 최악」과 그 반대가

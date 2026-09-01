@@ -1,4 +1,7 @@
-import type { SignalConfig } from "./signalLight.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { configFingerprint, type SignalConfig } from "./signalLight.js";
 import { MA_PERIODS, gradeOf, loadSamples, scoreFeat, type Sample } from "./signalSamples.js";
 
 /**
@@ -78,7 +81,14 @@ function stat(rows: { d1: number | null; d5: number | null; d20: number | null }
       avg: r2(vs.reduce((a, b) => a + b, 0) / vs.length),
       med: r2(med),
       trim: r2(inner.reduce((a, b) => a + b, 0) / inner.length),
-      win: Math.round((vs.filter((v) => v > 0).length / vs.length) * 100),
+      /*
+       * ⚠️ 예전엔 `Math.round(...)` 로 **정수**였다 (2026-09-01 고침).
+       *
+       * 승률 차이가 소수점 아래에서 갈리는데 정수로 뭉개면 **+0.11%p 가 0 이 되고**,
+       * 「셋이 다 양수」 판정이 그것 때문에 거짓으로 떨어진다. 실제로 80·85점
+       * 문턱이 그렇게 탈락 표시가 났다 — 눈금이 값을 지우고 있었다.
+       */
+      win: Math.round((vs.filter((v) => v > 0).length / vs.length) * 10000) / 100,
     };
   };
   return { n: rows.length, d1: one("d1"), d5: one("d5"), d20: one("d20") };
@@ -115,8 +125,62 @@ export interface CutRow {
   lift: number | null;
 }
 
+/** 앞/뒤 한쪽의 초과분 */
+export interface LiftCut {
+  med: number | null;
+  trim: number | null;
+  win: number | null;
+  n: number;
+}
+
+/** 문턱 하나의 앞/뒤 성적 — 「몇 점부터 값을 하나」의 답 */
+export interface SplitRow {
+  cut: number;
+  front: LiftCut;
+  back: LiftCut;
+  /** 앞뒤 여섯 값이 **전부 양수**이고 뒤쪽 표본이 넉넉한가 */
+  good: boolean;
+}
+
+/**
+ * 점수 **구간** 하나의 앞/뒤 성적 — 「이상」이 아니라 구간이다.
+ *
+ * 누적으로는 「위쪽이 고점신호인가」에 답할 수 없다. 90점 이상이 좋아 보여도
+ * 그건 70~89 가 만든 값일 수 있다.
+ */
+export interface BandRow {
+  lo: number;
+  /** 포함하는 위끝 (95~100 이면 100) */
+  hi: number;
+  front: LiftCut;
+  back: LiftCut;
+  good: boolean;
+}
+
 export interface SimResult {
   builtAt: string;
+  /**
+   * **문턱별 앞/뒤 성적** (2026-09-01) — 화면이 「55점 이상이 앞뒤 모두 시장을
+   * 이긴 구간」이라고 적을 수 있게. 사람이 신호등을 돌렸을 때 그 점수가 무슨
+   * 뜻인지 알아야 쓸 수 있다.
+   */
+  splits: SplitRow[];
+  /**
+   * **점수 구간별 성적** (2026-09-01) — 「과한 점수는 고점신호인가」에 답하는 표.
+   * 누적이 아니라 구간이라, 위쪽이 정말 나쁜지 여기서만 보인다.
+   */
+  bands: BandRow[];
+  /** 앞뒤 모두 통하는 문턱 중 가장 높은 것 — 없으면 null(그런 문턱이 없다는 뜻) */
+  bestCut: number | null;
+  /** 앞/뒤를 가른 날짜 */
+  splitAt: string;
+  /**
+   * **덜 재서 뺀 관측 수** (2026-09-01).
+   *
+   * 이 숫자가 크면 표본이 얇은 것이다 — 판정이 그만큼 좁은 데서 나왔다는 뜻이라
+   * 화면이 말해 줘야 한다.
+   */
+  thin: number;
   days: number;
   codeCount: number;
   obs: number;
@@ -131,6 +195,35 @@ export interface SimResult {
   buckets: { label: string; s: Stat }[];
   checks: CheckStat[];
   cuts: CutRow[];
+}
+
+/**
+ * **날짜별 장세** — 실제 신호등과 같은 정의.
+ *
+ * 「그날 표본 종목 중 20일선 위인 비율」이 `bullAt` 이상이면 강세장. 그 시점
+ * 정보만 쓰므로 되짚어도 거짓이 안 된다.
+ *
+ * 세 곳(시뮬레이트·조건부·전수훑기)이 **같은 자**를 써야 화면끼리 말이 어긋나지
+ * 않는다. 한 번 내서 나눠 쓴다.
+ */
+function regimeMap(S: Sample[], cfg: SignalConfig): Map<string, "bull" | "bear"> {
+  const out = new Map<string, "bull" | "bear">();
+  if (!cfg.regimeSwitch) return out;
+  const byDate = new Map<string, { above: number; total: number }>();
+  for (const r of S) {
+    const m20 = r.ma[MA_PERIODS.indexOf(20)];
+    if (m20 === null || m20 === undefined || m20 <= 0) continue;
+    const acc = byDate.get(r.date) ?? { above: 0, total: 0 };
+    acc.total += 1;
+    if (r.cur >= m20) acc.above += 1;
+    byDate.set(r.date, acc);
+  }
+  for (const [d, a] of byDate) {
+    /* 그날 표본이 너무 적으면 판정하지 않는다 — 몇 종목으로 장세를 말할 수 없다 */
+    if (a.total < 20) continue;
+    out.set(d, (a.above / a.total) * 100 >= cfg.bullAt ? "bull" : "bear");
+  }
+  return out;
 }
 
 const BUCKETS: [string, number, number][] = [
@@ -167,11 +260,45 @@ export async function simulate(cfg: SignalConfig): Promise<SimResult | null> {
     (ok ? used : skipped).push(c.label);
   }
 
+  /*
+   * **날짜별 장세** (2026-09-01) — 실제 신호등과 같은 정의로 낸다.
+   *
+   * 「그날 표본 종목 중 20일선 위인 비율」이 `bullAt` 이상이면 강세장.
+   * 그 시점 정보만 쓰므로 되짚어도 거짓이 안 된다.
+   *
+   * ⚠️ 이게 없으면 시뮬레이터가 **실제와 다른 것을 잰다.** 신고가는 강세장에서
+   * 승률 +1.4%p 인데 약세장에서 -3.9%p 라, 장세를 안 가리고 채점하면 실제 점수와
+   * 다른 점수가 나온다. 그 값을 화면에 「근거」로 띄우면 틀린 근거가 된다.
+   */
+  const regimeOf = regimeMap(S, cfg);
+
+  /*
+   * ## **덜 잰 관측은 뺀다** (2026-09-01) — 이 시뮬레이터에서 가장 크게 틀렸던 자리
+   *
+   * 렌즈가 없는 기준은 채점에서 빠지고 남은 것만으로 평균이 난다. 그래서
+   * **덜 잰 관측이 더 쉽게 높은 점수를 받았고**, 그것들이 표본 앞쪽(2025년 초,
+   * 영업이익이 80% 비어 있던 구간)에 몰려 있었다.
+   *
+   * 실측: 커버리지 0.80~0.89 구간의 70점 통과가 중앙 **-1.92**·승률 **-5.04**.
+   * 그 12% 가 판정표의 앞쪽을 통째로 마이너스로 만들고 있었다 — 「앞쪽만 뒤집힌다」의
+   * 정체가 점수 체계가 아니라 **데이터 결손**이었다.
+   *
+   * 0.9 문턱을 걸자 55~90점 전 구간이 앞·뒤 여섯 값 모두 양수가 됐고, 「꼭대기가
+   * 나쁘다」도 함께 사라졌다(90~100점이 앞 +1.19·뒤 +1.71 로 가장 좋다).
+   *
+   * 실제 신호등도 같은 규칙으로 초록을 막는다. **두 곳이 같아야** 검증에서 통과한
+   * 설정이 실전에서 같은 것을 고른다.
+   */
   const scoredRows: { score: number; s: Sample }[] = [];
   const byLevel: Record<string, Sample[]> = { green: [], yellow: [], red: [] };
+  let thin = 0;
   for (const s of S) {
-    const r = scoreFeat(s, cfg);
+    const r = scoreFeat(s, cfg, regimeOf.get(s.date));
     if (!r) continue;
+    if (r.lowCoverage) {
+      thin += 1;
+      continue;
+    }
     scoredRows.push({ score: r.score, s });
     byLevel[r.level].push(s);
   }
@@ -216,7 +343,11 @@ export async function simulate(cfg: SignalConfig): Promise<SimResult | null> {
       };
     });
 
-  const base = stat(S);
+  /*
+   * 기저는 **채점된 것들**이다 — 덜 재서 뺀 관측을 기저에 넣으면 비교 상대가
+   * 달라져 초과분이 부풀거나 꺾인다.
+   */
+  const base = stat(scoredRows.map((r) => r.s));
   /* 초록선 훑기 — 커트라인을 옮겨 보며 「어디서 잘라야 하나」에 답한다 */
   const cuts: CutRow[] = [];
   for (let cut = 50; cut <= 95; cut += 5) {
@@ -230,11 +361,117 @@ export async function simulate(cfg: SignalConfig): Promise<SimResult | null> {
     });
   }
 
+  /*
+   * ## **앞/뒤 분할** — 이게 없으면 숫자가 거짓말을 한다 (2026-09-01)
+   *
+   * 표본 전체로 낸 성적은 **고른 데서 채점한 것**이라 늘 좋아 보인다. 문턱을
+   * 구간별 표를 보고 골랐으면 그 표에 맞춰진 값이기 때문이다.
+   *
+   * 날짜로 반 갈라 **뒤쪽(아직 안 본 구간)** 에서 다시 잰다. 실제로 이 분할이
+   * 「초과 +7.95%p」를 「뒤쪽 -19%p」로 잡아낸 적이 있다.
+   *
+   * ⚠️ 그리고 **중앙값·절사평균·승률을 같이 본다.** 평균만 보면 20일 +444% 짜리
+   * 몇 개가 만든 값에 속는다 — 실제로 「+5.63%p」가 표본 8% 가 바뀌자 +0.19%p 로
+   * 무너졌다. 셋이 다 같은 방향일 때만 믿는다.
+   */
+  const dates = [...new Set(S.map((r) => r.date))].sort();
+  const midDate = dates[Math.floor(dates.length / 2)] ?? "";
+  const half = (rows: { score: number; s: Sample }[], back: boolean) =>
+    rows.filter((r) => (back ? r.s.date >= midDate : r.s.date < midDate));
+
+  const cutRows = (rows: { score: number; s: Sample }[], cut: number) =>
+    rows.filter((r) => r.score >= cut).map((r) => r.s);
+
+  /**
+   * **문턱별 앞/뒤 성적** — 화면이 「몇 점부터 값을 하나」를 말할 수 있게.
+   *
+   * 「55점 이상이 앞뒤 모두 시장을 이긴 구간」 같은 한 줄이 여기서 나온다.
+   * 사람이 신호등을 돌렸을 때 **그 점수가 무슨 뜻인지** 알아야 쓸 수 있다.
+   */
+  /** 두 무리의 차이 — 「이 무리가 그 반쪽의 평균을 얼마나 이겼나」 */
+  const lift = (a: Stat, base0: Stat) => ({
+    med: a.d20.med !== null && base0.d20.med !== null ? r2(a.d20.med - base0.d20.med) : null,
+    trim: a.d20.trim !== null && base0.d20.trim !== null ? r2(a.d20.trim - base0.d20.trim) : null,
+    win: a.d20.win !== null && base0.d20.win !== null ? r2(a.d20.win - base0.d20.win) : null,
+    n: a.n,
+  });
+
+  const splits: SplitRow[] = [];
+  for (let cut = 40; cut <= 90; cut += 5) {
+    const fRows = half(scoredRows, false);
+    const bRows = half(scoredRows, true);
+    const fBase = stat(fRows.map((r) => r.s));
+    const bBase = stat(bRows.map((r) => r.s));
+    const f = stat(cutRows(fRows, cut));
+    const b = stat(cutRows(bRows, cut));
+    const fl = lift(f, fBase);
+    const bl = lift(b, bBase);
+    splits.push({
+      cut,
+      front: fl,
+      back: bl,
+      /* **셋이 다 양수일 때만** 믿는다 — 하나라도 음수면 근거가 못 된다 */
+      good:
+        [fl.med, fl.trim, fl.win, bl.med, bl.trim, bl.win].every(
+          (v) => v !== null && v > 0,
+        ) && bl.n >= 200,
+    });
+  }
+  /** 앞뒤 모두 통하는 문턱 중 **가장 높은** 것 — 화면이 「N점부터」라고 적는다 */
+  const bestCut = [...splits].reverse().find((x) => x.good)?.cut ?? null;
+
+  /*
+   * ## **점수 「구간」별** (2026-09-01) — 「이상」으로는 못 답하는 물음이 있다
+   *
+   * 벤티지: "너무 과한 점수와 약한 점수는 빼는 방향이 낫겠는데? 과한 건 고점신호가
+   * 되고 약한 건 아무도 안 보는 거고."
+   *
+   * 누적(「N점 이상」)으로는 이 물음에 답할 수 없다 — 90점 이상이 좋아 보여도
+   * 그건 70~89 가 만든 값일 수 있다. **구간을 잘라야** 위쪽이 정말 고점인지 보인다.
+   *
+   * 실측(커버리지 0.9 적용 후)이 답한 것:
+   *   0~44점   뒤 중 **-0.70** 승 **-1.92**  ← 표본의 57%. 아래쪽은 확실히 쓰레기통
+   *   85~89점  뒤 중 **-2.03** 승 **-3.18**  ← 유일한 함정. 다만 n 1,265 로 얇다
+   *   90~100점 뒤 중 **+1.71 / +1.34**       ← 가장 좋다. 고점신호가 **아니다**
+   *
+   * 「꼭대기가 나쁘다」는 렌즈 결손이 만든 착시였다. 상한을 걸면 가장 좋은 구간을
+   * 버린다. 그래서 표만 내주고 **판단은 사람에게 넘긴다** — 표본이 쌓여 85~89 가
+   * 계속 음수면 그때 `greenTo` 를 걸면 된다.
+   */
+  const bands: BandRow[] = [];
+  const BAND_EDGES = [0, 45, 55, 60, 65, 70, 75, 80, 85, 90, 95, 101];
+  for (let i = 0; i < BAND_EDGES.length - 1; i++) {
+    const lo = BAND_EDGES[i];
+    const hi = BAND_EDGES[i + 1];
+    const fRows = half(scoredRows, false);
+    const bRows = half(scoredRows, true);
+    const inBand = (rows: typeof scoredRows) =>
+      rows.filter((r) => r.score >= lo && r.score < hi).map((r) => r.s);
+    const fl = lift(stat(inBand(fRows)), stat(fRows.map((r) => r.s)));
+    const bl = lift(stat(inBand(bRows)), stat(bRows.map((r) => r.s)));
+    bands.push({
+      lo,
+      hi: hi - 1,
+      front: fl,
+      back: bl,
+      good:
+        [fl.med, fl.trim, fl.win, bl.med, bl.trim, bl.win].every((v) => v !== null && v > 0) &&
+        fl.n >= 150 &&
+        bl.n >= 150,
+    });
+  }
+
   return {
     builtAt: file.builtAt,
     days: file.days,
+    splits,
+    bands,
+    bestCut,
+    splitAt: midDate,
+    thin,
     codeCount: file.codeCount,
-    obs: S.length,
+    /* **실제로 채점한 수**다 — 덜 재서 뺀 것을 세면 판정이 실제보다 두꺼워 보인다 */
+    obs: scoredRows.length,
     used,
     skipped,
     base,
@@ -523,7 +760,8 @@ export async function conditional(cfg: SignalConfig): Promise<CondResult | null>
   if (S.length === 0) return null;
 
   /* 초록 판정은 한 번만 — 아래 세 축이 같은 판정을 나눠 쓴다 */
-  const isGreen = S.map((s) => scoreFeat(s, cfg)?.level === "green");
+  const reg = regimeMap(S, cfg);
+  const isGreen = S.map((s) => scoreFeat(s, cfg, reg.get(s.date))?.level === "green");
 
   /*
    * **그날 시장** — 표본을 날짜로 묶어 낸다. 표본이 그날 거래대금 상위 500 이므로
@@ -875,7 +1113,8 @@ export async function superSim(cfg: SignalConfig, minLists = 3): Promise<SuperSi
     return n;
   };
 
-  const isGreen = S.map((s) => scoreFeat(s, cfg)?.level === "green");
+  const reg = regimeMap(S, cfg);
+  const isGreen = S.map((s) => scoreFeat(s, cfg, reg.get(s.date))?.level === "green");
   const dates = [...byDate.keys()].sort();
   const splitDate = dates[Math.floor(dates.length / 2)];
   const d20 = S.map((s) => s.d20);
@@ -970,4 +1209,95 @@ export async function superSim(cfg: SignalConfig, minLists = 3): Promise<SuperSi
       row("🌈 슈퍼 · 닷새 이상", both.filter((i) => (streakOf.get(i) ?? 0) >= 5)),
     ],
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* 판정 요약 — 화면이 「이 점수가 무슨 뜻인가」를 말할 수 있게            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 신호등 화면에 붙일 **한 줄짜리 근거**.
+ *
+ * 벤티지: "신호등 점수가 55점일 때 점수가 가장 좋았다 이런 것도 느낌표로 딱 해서
+ * 어떤 신호등을 돌렸을 때 임팩트가 있게."
+ *
+ * 지금 신호등을 돌리면 **점수만 나오고 그 점수가 무슨 뜻인지는 안 보인다.**
+ * 55점이 왜 초록 문턱인지, 이 종목이 어느 구간인지, 그 구간이 실측에서 어땠는지.
+ *
+ * ⚠️ **하드코딩하지 않는다.** 값을 코드에 적으면 표본이 바뀌어도 그대로 남아
+ * 곧 거짓말이 된다 — 오늘 그 일을 한 번 겪었다(+5.63%p 가 +0.19%p 로 무너졌다).
+ * 시뮬레이터가 낸 값을 파일에 남기고 화면은 그걸 읽는다.
+ */
+export interface SignalVerdict {
+  /** 언제 잰 것인가 — 낡았는지 화면이 판단할 수 있어야 한다 */
+  at: string;
+  /** 무슨 표본으로 */
+  builtAt: string;
+  obs: number;
+  codeCount: number;
+  days: number;
+  /** 그때 설정의 지문 — 기준이 바뀌었으면 이 판정도 낡은 것이다 */
+  configHash?: string;
+  /** 그때의 초록 문턱 */
+  greenAt: number;
+  /** 초록의 상한 — 100 이면 상한 없음 */
+  greenTo: number;
+  /** 그때의 커버리지 문턱 — 「몇 %나 재야 점수를 믿나」 */
+  minCoverage: number;
+  /** 덜 재서 채점에서 뺀 관측 수 */
+  thin: number;
+  splitAt: string;
+  splits: SplitRow[];
+  /** 점수 구간별 — 「위쪽이 고점신호인가」 */
+  bands: BandRow[];
+  bestCut: number | null;
+  /** 채점에서 빠진 기준 — 이게 있으면 판정이 반쪽이다 */
+  skipped: string[];
+}
+
+const here2 = dirname(fileURLToPath(import.meta.url));
+const VERDICT_FILE = join(here2, "..", "data", "signalVerdict.json");
+
+let verdictCache: SignalVerdict | null = null;
+
+export async function loadVerdict(): Promise<SignalVerdict | null> {
+  if (verdictCache) return verdictCache;
+  try {
+    verdictCache = JSON.parse(await readFile(VERDICT_FILE, "utf-8")) as SignalVerdict;
+  } catch {
+    verdictCache = null;
+  }
+  return verdictCache;
+}
+
+/**
+ * 지금 설정으로 다시 재서 판정을 남긴다.
+ *
+ * 표본 재수집이 끝난 뒤와 설정을 저장한 뒤에 부르면 된다 — 파일만 읽고 채점하므로
+ * **조회가 0회**이고 수십 밀리초다.
+ */
+export async function buildVerdict(cfg: SignalConfig): Promise<SignalVerdict | null> {
+  const r = await simulate(cfg);
+  if (!r) return null;
+  const v: SignalVerdict = {
+    at: new Date().toISOString(),
+    builtAt: r.builtAt,
+    obs: r.obs,
+    codeCount: r.codeCount,
+    days: r.days,
+    configHash: await configFingerprint(),
+    greenAt: cfg.greenAt,
+    greenTo: cfg.greenTo,
+    minCoverage: cfg.minCoverage,
+    thin: r.thin,
+    splitAt: r.splitAt,
+    splits: r.splits,
+    bands: r.bands,
+    bestCut: r.bestCut,
+    skipped: r.skipped,
+  };
+  verdictCache = v;
+  await mkdir(dirname(VERDICT_FILE), { recursive: true });
+  await writeFile(VERDICT_FILE, JSON.stringify(v, null, 1), "utf-8");
+  return v;
 }
