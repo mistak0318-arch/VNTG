@@ -1039,7 +1039,11 @@
       "Bash(rm -f n.txt)",
       "Bash(curl -s http://localhost:4000/api/notify -o n.json)",
       "Bash(rm -f n.json)",
-      "Bash(cp server/data/customThemes.json server/data/customThemes.seed.json)"
+      "Bash(cp server/data/customThemes.json server/data/customThemes.seed.json)",
+      "Bash(curl -s \"http://localhost:4000/api/signal/005930\" -o s.json)",
+      "Bash(rm -f s.json)",
+      "Bash(curl -s \"http://localhost:4000/api/signal/005930?force=1\" --max-time 40 -o s.json)",
+      "Bash(rm -f server/s.json)"
     ]
   }
 }
