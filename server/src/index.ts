@@ -69,6 +69,7 @@ import { createRealtimeRouter } from "./routes/realtime.js";
 import { startRealtimeScheduler } from "./realtimeHub.js";
 import { startBrokerAuto } from "./brokerAuto.js";
 import { startCollectScheduler } from "./collectScheduler.js";
+import { syncScoreBands } from "./scoreBandSync.js";
 import { createSignalRouter } from "./routes/signal.js";
 import { createPaperRouter } from "./routes/paper.js";
 import { createCisRouter } from "./routes/cis.js";
@@ -297,6 +298,17 @@ startBrokerAuto(client);
  * 0 으로 온다) 담아 봐야 다시 받아야 한다.
  */
 startCollectScheduler(client);
+
+/*
+ * **점수대 그룹 자가 치유** (2026-09-01) — 서버가 뜰 때 한 번.
+ *
+ * 신호등 찾기·슈퍼신호등이 돌 때마다 맞추지만, 그 사이에 서버가 죽었거나 사람이
+ * 손으로 그룹을 건드렸으면 어긋난 채로 남는다. 뜰 때 한 번 맞추면 **어떤 이유로
+ * 어긋나도 다음 재시작에 제자리로 온다.**
+ *
+ * 조회 0회다 — 저장된 회차와 원장만 읽는다.
+ */
+void syncScoreBands().catch(() => undefined);
   startDisclosureScheduler();
 
 /**

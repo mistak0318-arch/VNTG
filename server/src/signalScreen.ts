@@ -760,6 +760,16 @@ export function startScreen(
         total: job.total,
         results: job.results,
       }).catch(() => undefined);
+      /*
+       * **점수대 그룹 동기화** (2026-09-01) — 회차가 저장된 **직후**다.
+       *
+       * 벤티지: "이탈되거나 삭제되는 종목은 알아서 동기화되는 구조로."
+       *
+       * 동기화가 이 회차를 읽으므로 저장보다 먼저 부르면 어제 것으로 맞춘다.
+       * 조회 0회(파일만 읽는다)라 여기 끼워도 느려지지 않는다.
+       */
+      const { syncScoreBands } = await import("./scoreBandSync.js");
+      await syncScoreBands().catch(() => undefined);
     } catch (err) {
       job.status = "error";
       job.error = err instanceof Error ? err.message : "스크리닝 실패";

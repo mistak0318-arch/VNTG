@@ -662,7 +662,25 @@ export const api = {
       `/api/overview/flow-intraday${date ? `?date=${date}` : ""}`,
     ),
   watchlist: () => getJson<{ items: WatchItem[] }>("/api/watchlist"),
-  watchGroups: () => getJson<{ groups: string[] }>("/api/watchlist/groups"),
+  /**
+   * 관심종목 그룹 — **자동 그룹 목록을 같이 받는다** (2026-09-01).
+   *
+   * 화면이 「슈퍼신호등」·「슈퍼신호등+교차」 둘을 박아 두고 있었는데, 서버가
+   * 점수대 그룹 넷(90/80/70/60점대)을 늘리자 화면만 모르는 상태가 됐다 —
+   * 자물쇠가 안 그려지고 사용자는 고칠 수 있는 줄 알고 고치다 오류를 본다.
+   */
+  watchGroups: () =>
+    getJson<{ groups: string[]; autoGroups?: string[] }>("/api/watchlist/groups"),
+  /** 점수대 그룹을 지금 맞춘다 — 조회 0회(저장된 회차·원장만 읽는다) */
+  watchSyncBands: () =>
+    postJson<{
+      counts: Record<string, number>;
+      added: number;
+      removed: number;
+      runAt?: string;
+      fromSuper: number;
+      at: string;
+    }>("/api/watchlist/groups/sync-bands", {}),
   watchGroupAdd: (name: string) => postJson<{ groups: string[] }>("/api/watchlist/groups", { name }),
   watchGroupRename: (from: string, name: string) =>
     patchJson<{ groups: string[] }>(`/api/watchlist/groups/${encodeURIComponent(from)}`, { name }),

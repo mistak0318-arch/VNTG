@@ -13453,3 +13453,34 @@ thead .sd-emph {
   padding: 1px 6px;
   font-size: 0.68rem;
 }
+
+/* ── 점수대 자동 그룹 (2026-09-01) ──────────────────────────────
+   벤티지: "화면에 표시도 다르게 해서 티가 나게 해줘."
+
+   슈퍼신호등(금)·교차(초록)와 **다른 결**로 간다. 저 둘은 「걸렸다」는 사건이고
+   이건 「지금 몇 점이다」라는 눈금이라, 점수가 높을수록 진해지는 한 계열로 둔다.
+   점선 테두리는 「손대도 다음 동기화가 덮는다」는 뜻이다 — 실선(내 그룹)과 갈린다. */
+.gt-band {
+  border-style: dashed;
+  font-variant-numeric: tabular-nums;
+}
+.gt-band-90 {
+  border-color: #a855f7;
+  background: linear-gradient(0deg, rgba(168, 85, 247, 0.16), rgba(168, 85, 247, 0.16));
+}
+.gt-band-90.active { border-color: #a855f7; }
+.gt-band-80 {
+  border-color: #6366f1;
+  background: linear-gradient(0deg, rgba(99, 102, 241, 0.13), rgba(99, 102, 241, 0.13));
+}
+.gt-band-80.active { border-color: #6366f1; }
+.gt-band-70 {
+  border-color: #3b82f6;
+  background: linear-gradient(0deg, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.1));
+}
+.gt-band-70.active { border-color: #3b82f6; }
+.gt-band-60 {
+  border-color: #64748b;
+  background: linear-gradient(0deg, rgba(100, 116, 139, 0.09), rgba(100, 116, 139, 0.09));
+}
+.gt-band-60.active { border-color: #64748b; }

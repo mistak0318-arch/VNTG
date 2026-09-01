@@ -102,6 +102,56 @@ export const SUPER_GROUP = "슈퍼신호등";
 /** 교차 신호(주도주 ∩ 슈퍼신호등) 자동 편입 그룹 — 슈퍼신호등과 같은 보호를 받는다 */
 export const CROSS_GROUP = "슈퍼신호등+교차";
 
+/**
+ * **점수대 자동 그룹** (2026-09-01) — 90/80/70/60점대.
+ *
+ * 벤티지: "관심종목에 90점대,80점대,70점대,60점대 그룹 추가해서 신호등 분석이랑
+ * 슈퍼신호등 메뉴에 있는 것들 여기에 동기화 되게 하자. 관심종목에서도 관리하게끔."
+ *
+ * ## 왜 필요한가
+ *
+ * 신호등 점수는 **찾기 화면을 열어야만** 보였다. 그 화면을 닫으면 「오늘 87점이던
+ * 그 종목」이 어디에도 안 남는다 — 관심종목에는 이름만 있고 점수가 없었다.
+ * 점수대로 갈라 두면 관심종목 한 화면에서 **지금 무엇이 몇 점대인지** 보인다.
+ *
+ * ## ⚠️ 사람이 못 건드린다
+ *
+ * 벤티지: "관심종목에서 저 그룹들은 내가 삭제하거나 그룹을 수정하거나 할수는
+ * 없어야 겠지?"
+ *
+ * 맞다. **동기화가 이름으로 찾기 때문**이다. 「90점대」를 「고득점」으로 바꾸면
+ * 다음 동기화가 「90점대」를 새로 만들고, 화면에 같은 뜻의 그룹이 둘이 된다.
+ * 삭제도 마찬가지 — 지워도 다음 동기화에 되살아나므로 지운 사람만 헷갈린다.
+ *
+ * 종목을 손으로 넣거나 빼는 것도 뜻이 없다. **다음 동기화가 덮는다.** 화면이
+ * 그 사실을 말해 줘야 한다(자물쇠 표시).
+ */
+export const SCORE_BANDS = [90, 80, 70, 60] as const;
+
+export type ScoreBand = (typeof SCORE_BANDS)[number];
+
+/** 점수 → 그룹 이름. 60점 미만은 그룹이 없다(담지 않는다) */
+export function bandGroupOf(score: number): string | null {
+  for (const b of SCORE_BANDS) if (score >= b) return `${b}점대`;
+  return null;
+}
+
+export const BAND_GROUPS: string[] = SCORE_BANDS.map((b) => `${b}점대`);
+
+/**
+ * 자동으로 채워지고 **사람이 못 고치는** 그룹들 — 화면이 자물쇠를 그린다.
+ *
+ * ⚠️ 화면이 이 목록을 **하드코딩하면 안 된다.** 서버가 그룹을 늘렸을 때(점수대
+ * 넷이 그랬다) 화면만 모르는 상태가 되고, 사용자는 고칠 수 있는 줄 알고 고치다가
+ * 서버 오류를 본다. `/api/watchlist/groups` 가 같이 실어 보낸다.
+ */
+export const AUTO_GROUPS: string[] = [SUPER_GROUP, CROSS_GROUP, ...BAND_GROUPS];
+
+/** 자동으로 채워지고 **사람이 못 고치는** 그룹인가 — 화면이 자물쇠를 그린다 */
+export function isAutoGroup(name: string): boolean {
+  return AUTO_GROUPS.includes(name);
+}
+
 /** 그룹 이름 목록 (종목이 하나도 없는 빈 그룹도 유지하기 위해 따로 저장) */
 const GROUPS_FILE = resolve(__dirname, "..", "data", "watchGroups.json");
 
@@ -356,8 +406,15 @@ async function persistGroups(groups: string[]): Promise<void> {
 export async function listGroups(): Promise<string[]> {
   const [groups, items] = await Promise.all([loadGroups(), load()]);
   const used = new Set(items.flatMap((w) => w.groups));
-  // 슈퍼신호등은 늘 있다 — 비어 있어도 자동 편입이 갈 자리가 보여야 한다
-  const merged = new Set<string>([DEFAULT_GROUP, ...groups, ...used, SUPER_GROUP, CROSS_GROUP]);
+  /*
+   * **자동 그룹은 비어 있어도 보인다.** 자동 편입이 갈 자리가 눈에 있어야 한다.
+   *
+   * 점수대 그룹에서 실제로 걸렸다 (2026-09-01): 90점짜리가 하나도 없던 날
+   * 「90점대」 그룹이 목록에서 통째로 사라졌다. 그러면 사용자는 그 그룹이
+   * **없는 건지 비어 있는 건지** 알 수가 없다 — 「오늘은 90점대가 없구나」와
+   * 「그런 그룹은 원래 없구나」는 전혀 다른 말이다.
+   */
+  const merged = new Set<string>([DEFAULT_GROUP, ...groups, ...used, ...AUTO_GROUPS]);
   return [...merged];
 }
 
@@ -377,6 +434,12 @@ export async function renameGroup(from: string, to: string): Promise<string[]> {
     throw new Error("슈퍼신호등 그룹은 이름을 바꿀 수 없습니다 — 자동 편입이 이 이름을 찾습니다.");
   if (from === CROSS_GROUP)
     throw new Error("슈퍼신호등+교차 그룹은 이름을 바꿀 수 없습니다 — 자동 편입이 이 이름을 찾습니다.");
+  /*
+   * 점수대 그룹도 같다. 이름을 바꾸면 다음 동기화가 원래 이름으로 새로 만들어
+   * **같은 뜻의 그룹이 둘**이 된다 — 바꾼 사람만 헷갈린다.
+   */
+  if (BAND_GROUPS.includes(from))
+    throw new Error(`${from} 그룹은 이름을 바꿀 수 없습니다 — 신호등이 이 이름으로 자동 동기화합니다.`);
 
   const groups = await loadGroups();
   await persistGroups(groups.map((g) => (g === from ? clean : g)));
@@ -469,6 +532,9 @@ export async function removeGroup(name: string): Promise<string[]> {
     throw new Error("슈퍼신호등 그룹은 삭제할 수 없습니다 — 자동 편입이 담기는 자리입니다.");
   if (name === CROSS_GROUP)
     throw new Error("슈퍼신호등+교차 그룹은 삭제할 수 없습니다 — 교차 신호 자동 편입이 담기는 자리입니다.");
+  /* 지워도 다음 동기화에 되살아난다 — 지운 사람만 헷갈린다 */
+  if (BAND_GROUPS.includes(name))
+    throw new Error(`${name} 그룹은 삭제할 수 없습니다 — 신호등 점수가 자동으로 담기는 자리입니다.`);
   const groups = await loadGroups();
   await persistGroups(groups.filter((g) => g !== name));
 

@@ -20,6 +20,8 @@ import {
   WATCH_STATUSES,
   type WatchStatus,
 } from "../watchlist.js";
+import { AUTO_GROUPS } from "../watchlist.js";
+import { lastBandSync, syncScoreBands } from "../scoreBandSync.js";
 
 export function createWatchlistRouter(client: KiwoomClient): Router {
   const router = Router();
@@ -207,10 +209,31 @@ export function createWatchlistRouter(client: KiwoomClient): Router {
 
   router.get("/groups", async (_req, res, next) => {
     try {
-      res.json({ groups: await listGroups() });
+      /*
+       * **자동 그룹이 무엇인지 같이 보낸다** (2026-09-01).
+       *
+       * 화면이 목록을 하드코딩하면 서버가 그룹을 늘렸을 때(점수대 넷이 그랬다)
+       * 화면만 모르는 상태가 된다 — 자물쇠가 안 그려지고, 사용자는 고칠 수 있는
+       * 줄 알고 고치다가 서버 오류를 본다.
+       */
+      res.json({ groups: await listGroups(), autoGroups: AUTO_GROUPS });
     } catch (err) {
       next(err);
     }
+  });
+
+  /** 점수대 그룹을 지금 맞춘다 — 조회 0회(저장된 회차·원장만 읽는다) */
+  router.post("/groups/sync-bands", async (_req, res, next) => {
+    try {
+      res.json(await syncScoreBands());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 마지막 동기화가 언제·무엇이었나 */
+  router.get("/groups/sync-bands", (_req, res) => {
+    res.json({ last: lastBandSync() });
   });
 
   router.post("/groups", async (req, res, next) => {

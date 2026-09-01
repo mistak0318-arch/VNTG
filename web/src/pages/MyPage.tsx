@@ -80,6 +80,17 @@ function passClass(r: TrackedStock): string {
 export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const [items, setItems] = useState<TrackedStock[]>([]);
   const [groups, setGroups] = useState<string[]>([DEFAULT_GROUP]);
+  /**
+   * **자동 그룹 — 서버가 알려 준다** (2026-09-01).
+   *
+   * 예전엔 화면이 `SUPER_GROUP`·`CROSS_GROUP` 둘을 박아 두고 있었다. 서버가
+   * 점수대 그룹 넷(90/80/70/60점대)을 늘리자 **화면만 모르는 상태**가 됐다 —
+   * 자물쇠가 안 그려지고, 사용자는 고칠 수 있는 줄 알고 고치다 서버 오류를 본다.
+   */
+  const [autoGroups, setAutoGroups] = useState<string[]>([]);
+  const isAuto = (g: string) => autoGroups.includes(g);
+  /** 점수대 그룹인가 — 「90점대」꼴. 아이콘과 색을 따로 준다 */
+  const bandOf = (g: string) => /^(\d{2})점대$/.exec(g)?.[1] ?? null;
   /** 그룹 편집을 펼친 행 — 한 번에 하나만 */
   const [editGroups, setEditGroups] = useState<string | null>(null);
   /*
@@ -246,6 +257,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       setGroups([DEFAULT_GROUP, ...next]);
       api
         .watchGroupReorder(next)
+        /* 순서만 바뀐다 — 자동 그룹 목록은 그대로다 */
         .then((r) => setGroups(r.groups))
         .catch(() => void loadGroups());
     },
@@ -353,7 +365,9 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
 
   async function loadGroups() {
     try {
-      setGroups((await api.watchGroups()).groups);
+      const g = await api.watchGroups();
+      setGroups(g.groups);
+      setAutoGroups(g.autoGroups ?? []);
     } catch {
       // 그룹 조회 실패가 목록 표시를 막지 않게 한다
     }
@@ -696,7 +710,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
             <option value={ALL}>전체 ({items.length})</option>
             {groups.map((g) => (
               <option value={g} key={g}>
-                {g === SUPER_GROUP ? "🌟 " : g === CROSS_GROUP ? "⚡ " : ""}
+                {g === SUPER_GROUP ? "🌟 " : g === CROSS_GROUP ? "⚡ " : bandOf(g) ? "🔒 " : ""}
                 {g} ({items.filter((i) => (i.groups ?? [DEFAULT_GROUP]).includes(g)).length})
               </option>
             ))}
@@ -715,8 +729,12 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
           const n = items.filter((i) => (i.groups ?? [DEFAULT_GROUP]).includes(g)).length;
           const movable = groups.filter((x) => x !== DEFAULT_GROUP);
           const mi = movable.indexOf(g);
-          /* 슈퍼신호등·교차는 자동 편입의 자리 — 이름을 못 바꾸고 못 지운다. 배지도 다르다 */
-          const locked = g === DEFAULT_GROUP || g === SUPER_GROUP || g === CROSS_GROUP;
+          /*
+           * 자동 편입의 자리 — 이름을 못 바꾸고 못 지운다. 배지도 다르다.
+           * **목록은 서버가 준다** — 화면이 박아 두면 그룹이 늘 때 화면만 모른다.
+           */
+          const locked = g === DEFAULT_GROUP || isAuto(g);
+          const band = bandOf(g);
           return (
             <span className={`gt-item${activeGroup === g ? " active" : ""}`} key={g}>
               {editGroupBar && g !== DEFAULT_GROUP && (
@@ -730,7 +748,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                 </button>
               )}
               <button
-                className={`filter-btn ${activeGroup === g ? "active" : ""}${g === SUPER_GROUP ? " gt-super" : ""}${g === CROSS_GROUP ? " gt-cross" : ""}${editGroupBar && g !== DEFAULT_GROUP ? groupDrag.cls(g) : ""}`}
+                className={`filter-btn ${activeGroup === g ? "active" : ""}${g === SUPER_GROUP ? " gt-super" : ""}${g === CROSS_GROUP ? " gt-cross" : ""}${band ? ` gt-band gt-band-${band}` : ""}${editGroupBar && g !== DEFAULT_GROUP ? groupDrag.cls(g) : ""}`}
                 {...(editGroupBar && g !== DEFAULT_GROUP ? groupDrag.props(g) : {})}
                 onClick={() => (editGroupBar && !locked ? renameGroupNow(g) : setActiveGroup(g))}
                 title={
@@ -738,13 +756,25 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                     ? "슈퍼신호등 자동 편입이 담기는 그룹 — 이름 변경·삭제가 안 됩니다"
                     : g === CROSS_GROUP
                       ? "교차 신호(주도주∩슈퍼신호등) 자동 편입 그룹 — 이름 변경·삭제가 안 됩니다"
-                      : editGroupBar && !locked
-                        ? "눌러서 이름 바꾸기"
-                        : undefined
+                      : band
+                        ? `신호등 점수 ${band}~${Number(band) + 9}점인 종목이 자동으로 담깁니다.
+
+` +
+                          `신호등 찾기의 가장 최근 회차와 슈퍼신호등 원장에서 모읍니다. 둘 다에 있으면 높은 점수를 씁니다.
+
+` +
+                          `⚠️ 손으로 넣거나 빼도 다음 동기화가 덮습니다 — 이 그룹은 「내가 고른 것」이 아니라 「오늘 점수가 그렇다는 사실」입니다.
+` +
+                          `이름 변경·삭제가 안 됩니다.`
+                        : editGroupBar && !locked
+                          ? "눌러서 이름 바꾸기"
+                          : undefined
                 }
               >
                 {g === SUPER_GROUP && "🌟 "}
                 {g === CROSS_GROUP && "⚡ "}
+                {/* 자물쇠 — 「손대도 소용없다」를 한눈에 (2026-09-01) */}
+                {band && "🔒 "}
                 {g} <span className="gt-n">{n}</span>
                 {editGroupBar && !locked && <span className="gt-pen"> ✎</span>}
               </button>

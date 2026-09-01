@@ -739,6 +739,22 @@ export async function syncSuperGroup(): Promise<{ removed: string[] }> {
 /** 추적 중인 슈퍼 종목 — 라우팅용. 발송 지점들이 1분마다 물어봐서 캐시를 둔다 */
 let activeCache: { at: number; list: { code: string; name: string }[] } | null = null;
 
+/**
+ * **살아 있는 편입 — 점수·편입가까지** (2026-09-01).
+ *
+ * `getActiveSuper` 는 코드·이름만 준다. 점수대 그룹 동기화는 **점수가 있어야**
+ * 「이 종목이 몇 점대인가」를 정할 수 있다. `listSuperSignal` 은 조회가 나가므로
+ * 쓸 수 없다 — 동기화는 조회 0회여야 한다(하루에도 여러 번 도는 자리다).
+ */
+export async function activeSuperEntries(): Promise<
+  { code: string; name: string; score: number; addedPrice: number }[]
+> {
+  const store = await load();
+  return store.entries
+    .filter((e) => e.active !== false)
+    .map((e) => ({ code: e.code, name: e.name, score: e.score, addedPrice: e.addedPrice }));
+}
+
 export async function getActiveSuper(): Promise<{ code: string; name: string }[]> {
   if (activeCache && Date.now() - activeCache.at < 60_000) return activeCache.list;
   const store = await load();
@@ -1104,6 +1120,15 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
 
     store.lastRunDate = today;
     await save(store);
+    /*
+     * **점수대 그룹 동기화** (2026-09-01) — 편입·이탈이 원장에 확정된 직후.
+     *
+     * 여기서 이탈한 종목은 `SUPER_GROUP` 에서는 빠지지만 점수대 그룹에는 남는다 —
+     * 그 둘은 다른 목록이다. 동기화가 「오늘 목록에 없는 종목은 뺀다」로 돌므로
+     * 이 자리에서 한 번 부르면 둘이 같이 맞는다.
+     */
+    const { syncScoreBands } = await import("./scoreBandSync.js");
+    await syncScoreBands().catch(() => undefined);
     job = {
       ...job,
       status: "done",
