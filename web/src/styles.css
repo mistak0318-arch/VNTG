@@ -13791,3 +13791,28 @@ thead .sd-emph {
 .ct-edit { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 6px 0 10px; }
 .ct-edit .search-input:first-child { width: 200px; flex: none; }
 .ct-edit .search-input:nth-child(2) { flex: 1; min-width: 220px; }
+
+/*
+ * 원장에서 종목 빼기 (2026-09-01) — 벤티지: "시가총액이 너무 적거나 거래대금
+ * 너무 적은건 지워버리게."
+ *
+ * 되돌릴 수 없는 단추라 **평소엔 흐리게** 둔다. 줄마다 빨간 ✕ 가 선명하면
+ * 표가 지우라고 재촉하는 것처럼 보이고, 잘못 누를 확률도 올라간다.
+ * 그 줄에 마우스를 올렸을 때만 또렷해진다.
+ */
+.lt-del { width: 34px; text-align: center; }
+.sd-del {
+  background: none;
+  border: none;
+  color: var(--muted);
+  opacity: 0.35;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+tr:hover .sd-del { opacity: 0.75; }
+.sd-del:hover { opacity: 1; color: var(--red); background: var(--panel-2); }
+/* 장세 — 「정상 / 약함」 두 글자면 충분하다. 폭 숫자는 툴팁에 있다 */
+.lt-regime { white-space: nowrap; }

@@ -27,7 +27,15 @@ import { backtestProgress, backtestResult, startBacktestJob } from "../signalBac
 import { samplesMeta } from "../signalSamples.js";
 import { buildSamplesFromLedger, ledgerSamplesProgress } from "../samplesFromLedger.js";
 import { resetSignalLedgers } from "../ledgerReset.js";
-import { listTrackJob, listTrackSummary, removeListEntry, runListTrack } from "../listTrack.js";
+import {
+  exitListEntry,
+  listTrackDetail,
+  listTrackJob,
+  listTrackSummary,
+  removeListEntry,
+  runListTrack,
+  updateListNote,
+} from "../listTrack.js";
 import {
   buildVerdict,
   conditional,
@@ -625,6 +633,44 @@ export function createSignalRouter(client: KiwoomClient): Router {
    * `?list=` 를 주면 그 목록에서만 뺀다. 안 주면 전부 — 화면의 「이 종목 삭제」는
    * 「아예 안 보겠다」는 뜻이라 그쪽이 기본이다.
    */
+  /*
+   * **신호등 분석 종목 상세** (2026-09-01) — 슈퍼신호등과 같은 모양의 응답.
+   * 화면이 두 원장을 한 컴포넌트로 그리므로 응답도 같아야 한다.
+   *
+   * ⚠️ `/list-track/:code` 보다 **먼저** 등록한다 — 아래 있으면 "detail" 이
+   * 종목코드로 먹힌다.
+   */
+  router.get("/list-track/detail/:code", async (req, res, next) => {
+    try {
+      const d = await listTrackDetail(client, req.params.code);
+      if (!d) {
+        res.status(404).json({ error: "그 종목이 원장에 없습니다." });
+        return;
+      }
+      res.json(d);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/list-track/exit/:code", async (req, res, next) => {
+    try {
+      const note = String((req.body as { note?: unknown })?.note ?? "");
+      res.json({ ok: await exitListEntry(req.params.code, note) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/list-track/note/:code", async (req, res, next) => {
+    try {
+      const text = String((req.body as { note?: unknown })?.note ?? "");
+      res.json({ ok: await updateListNote(req.params.code, text) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.delete("/list-track/:code", async (req, res, next) => {
     try {
       const list = typeof req.query.list === "string" ? req.query.list : undefined;

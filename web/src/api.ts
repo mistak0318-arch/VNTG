@@ -1253,6 +1253,22 @@ export const api = {
     postJson<{ ok: boolean }>(`/api/signal/super/exit/${code}`, { note }),
   signalSuperNote: (code: string, note: string) =>
     putJson<{ ok: boolean }>(`/api/signal/super/note/${code}`, { note }),
+  /*
+   * **신호등 분석 쪽 짝** (2026-09-01) — 응답이 슈퍼와 **같은 모양**이라
+   * `SuperDetailSheet` 하나가 두 원장을 다 그린다(`source` 로 갈린다).
+   *
+   * 두 원장은 편입 규칙만 다르고 묻는 것은 똑같다 — 시트를 두 벌로 두면
+   * 한쪽만 고쳐지는 일이 반드시 생긴다.
+   */
+  signalListTrackDetail: (code: string) =>
+    getJson<SuperDetail>(`/api/signal/list-track/detail/${code}`),
+  signalListTrackExit: (code: string, note: string) =>
+    postJson<{ ok: boolean }>(`/api/signal/list-track/exit/${code}`, { note }),
+  signalListTrackNote: (code: string, note: string) =>
+    postJson<{ ok: boolean }>(`/api/signal/list-track/note/${code}`, { note }),
+  /** 원장에서 아예 뺀다 — 못 사는 종목이 성적 평균을 오염시키지 않게 */
+  signalListTrackRemove: (code: string) =>
+    deleteJson<{ ok: boolean; removed: number }>(`/api/signal/list-track/${code}`),
   signalSuperJob: () =>
     getJson<{
       status: "idle" | "running" | "done" | "error";

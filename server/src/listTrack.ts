@@ -11,8 +11,16 @@ import { peekSnapshot } from "./marketSnapshot.js";
 /* 무리(테마·ETF 뒷배) — 슈퍼신호등이 쓰는 것과 **같은 함수**. 파일에서 읽어 조회 0회 */
 import { stockLens, themeMapNow } from "./stockLens.js";
 /* 지수 대비 — **슈퍼신호등과 같은 함수**. 채점하는 자가 같아야 두 원장을 견줄 수 있다 */
-import { kospiCloses } from "./superSignal.js";
+import {
+  indexDailySeries,
+  investorDailySeries,
+  kospiCloses,
+  stockDailySeries,
+  type DailyPoint,
+} from "./superSignal.js";
+import { getSectorMood } from "./sectorMood.js";
 import { dropFromAutoGroups } from "./watchlist.js";
+import { evaluateMarket } from "./marketSignal.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FILE = resolve(__dirname, "..", "data", "listTrack.json");
@@ -48,6 +56,41 @@ const FILE = resolve(__dirname, "..", "data", "listTrack.json");
  *   편입  그 목록 상위 500 안에 있고 신호등이 초록
  *   이탈  이틀 연속 초록 미만 (하루 노랑을 스치고 돌아오는 종목이 흔하다)
  */
+
+/**
+ * 하루치 기록 — **슈퍼신호등의 `SuperDaily` 와 같은 모양이어야 한다** (2026-09-01).
+ *
+ * 상세 시트를 두 원장이 **같은 컴포넌트**로 그리기 때문이다. 모양이 갈리면
+ * 시트도 갈라지고, 그러면 한쪽만 고쳐지는 일이 생긴다 — 이 앱이 여러 번 겪은 병이다.
+ */
+export interface ListDaily {
+  date: string;
+  close: number;
+  score: number;
+  level: string;
+  /** 그날 체크별 판정 — 「무엇 때문에 점수가 움직였나」의 재료 */
+  checks?: { l: string; g: number | null }[];
+  /** 그날의 시장 신호등 — 「종목이 죽었나 장이 죽었나」 */
+  market?: { level: string; score: number };
+}
+
+/** 메모 한 줄 */
+export interface ListNote {
+  date: string;
+  text: string;
+}
+
+/** 이탈 기록 — 슈퍼신호등의 `SuperExit` 와 같은 모양 */
+export interface ListExit {
+  date: string;
+  price: number | null;
+  score: number | null;
+  marketLevel: string | null;
+  marketScore: number | null;
+  note: string;
+  /** true = 규칙으로 자동 이탈, false = 손으로 이탈 처리 */
+  auto: boolean;
+}
 
 /** 목록 하나에서 편입된 종목 */
 export interface ListEntry {
@@ -93,6 +136,17 @@ export interface ListEntry {
    * 상승장에서 전부 이긴 것처럼 보인다.
    */
   excess?: { d1: number | null; d5: number | null; d20: number | null };
+  /**
+   * 일별 기록 (2026-09-01) — 점수·종가·체크 내역.
+   *
+   * 슈퍼신호등은 이걸 쌓으려고 종목마다 신호등을 다시 부르는데, 여기는 편입
+   * 판정에서 **이미 전 종목을 평가한 뒤**라 그 값을 그대로 쓴다 — 조회가 안 는다.
+   */
+  daily?: ListDaily[];
+  /** 이탈 이력 — 재편입돼도 지우지 않는다. 이탈→복귀 자체가 정보다 */
+  exits?: ListExit[];
+  /** 메모 이력 — 그날 무엇을 보고 무엇을 추적하려 했는지 */
+  notes?: ListNote[];
 }
 
 interface Store {
@@ -240,10 +294,27 @@ export async function runListTrack(
 
     /** 초록인 종목 → 점수 */
     const green = new Map<string, number>();
+    /**
+     * **오늘 잰 값을 들고 있는다** (2026-09-01) — 일별 기록의 재료.
+     *
+     * 슈퍼신호등은 이걸 쌓으려고 `recordSuperDaily` 에서 **종목마다 다시**
+     * 신호등을 부른다(60종목 상한 + 220ms). 여기는 그럴 필요가 없다 —
+     * 바로 위에서 이미 전 종목을 평가했기 때문이다. **조회가 한 번도 안 는다.**
+     *
+     * 원장에 있는 종목은 이 합집합에 없을 수도 있다(오늘 목록에서 빠진 경우).
+     * 그런 날은 기록이 안 쌓이는데, 그건 맞다 — 안 잰 날을 지어내면 안 된다.
+     */
+    const todayScore = new Map<string, { score: number; level: string; checks: { l: string; g: number | null }[] }>();
     for (const [code] of union) {
       try {
         const sig = await evaluateSignal(client, code);
         if (sig.level === "green") green.set(code, sig.score);
+        todayScore.set(code, {
+          score: sig.score,
+          level: sig.level,
+          /* 체크 내역 — 「무엇 때문에 점수가 움직였나」를 내일 이걸로 되짚는다 */
+          checks: sig.checks.map((c) => ({ l: c.label, g: c.grade })),
+        });
       } catch {
         /* 이 종목만 건너뛴다 */
       }
@@ -251,6 +322,11 @@ export async function runListTrack(
       /* 초당 5회 제한 — 신호등 평가는 종목당 여러 조회다 */
       await new Promise((r) => setTimeout(r, 220));
     }
+
+    /* 그날 시장 신호등 — 하루 한 번. 「종목이 죽었나 장이 죽었나」의 재료다 */
+    const marketNow: { level: string; score: number } | null = await evaluateMarket(client)
+      .then((m) => ({ level: m.level, score: m.score }))
+      .catch(() => null);
 
     /* ③ 목록별로 편입·갱신 — 같은 종목이 여러 목록이면 목록마다 한 줄이다 */
     const counts: Record<string, { universe: number; green: number }> = {};
@@ -302,8 +378,45 @@ export async function runListTrack(
     }
 
     /*
-     * ④ 이탈 — **이틀 연속** 초록 미만. 슈퍼신호등과 같은 규칙이다.
+     * ④ **일별 기록** (2026-09-01) — 슈퍼신호등과 같은 모양으로.
+     *
+     * 벤티지: "슈퍼신호등 이거 공통모듈도 만들어서 신호등 분석의 종목들에도
+     * 적용해줘."
+     *
+     * 상세 시트가 「점수 흐름 vs 주가 흐름」을 그리려면 날마다의 점수와 종가가
+     * 있어야 한다. 슈퍼는 그걸 쌓고 있었고 여기는 없었다 — 그래서 같은 시트를
+     * 붙일 수가 없었다.
+     *
+     * 점수는 위에서 이미 잰 것을 쓰고(조회 0회 추가), 종가는 스냅샷에서 읽는다.
+     */
+    const snapNow = peekSnapshot();
+    for (const e of store.entries) {
+      if (e.active === false) continue;
+      const t = todayScore.get(e.code);
+      if (!t) continue;
+      const close = snapNow?.byCode.get(e.code)?.price ?? 0;
+      const daily = (e.daily ??= []);
+      const row: ListDaily = {
+        date: today,
+        close,
+        score: t.score,
+        level: t.level,
+        checks: t.checks,
+        ...(marketNow ? { market: marketNow } : {}),
+      };
+      const last = daily[daily.length - 1];
+      if (last?.date === today) daily[daily.length - 1] = row;
+      else daily.push(row);
+      /* 넉 달이면 충분하다 — 목록마다 한 줄이라 슈퍼보다 줄 수가 많다 */
+      if (daily.length > 120) daily.splice(0, daily.length - 120);
+    }
+
+    /*
+     * ⑤ 이탈 — **이틀 연속** 초록 미만. 슈퍼신호등과 같은 규칙이다.
      * 하루 노랑을 스치고 돌아오는 종목이 흔해서 하루로는 안 뺀다.
+     *
+     * 이탈 **기록**도 슈퍼와 같은 모양으로 남긴다 — 이탈 시점의 시장 신호등을
+     * 같이 적어야 「종목이 죽었나 장이 꺾였나」를 나중에 가를 수 있다.
      */
     for (const e of store.entries) {
       if (e.active === false) continue;
@@ -312,6 +425,17 @@ export async function runListTrack(
       if (e.missStreak >= 2) {
         e.active = false;
         e.exitedDate = today;
+        const t = todayScore.get(e.code);
+        const close = snapNow?.byCode.get(e.code)?.price ?? 0;
+        (e.exits ??= []).push({
+          date: today,
+          price: close > 0 ? close : null,
+          score: t?.score ?? null,
+          marketLevel: marketNow?.level ?? null,
+          marketScore: marketNow?.score ?? null,
+          note: "목록에서 이틀 연속 빠짐",
+          auto: true,
+        });
       }
     }
 
@@ -704,4 +828,110 @@ export async function removeListEntry(code: string, list?: string): Promise<numb
     await dropFromAutoGroups(code).catch(() => undefined);
   }
   return removed;
+}
+
+/**
+ * **종목 상세** (2026-09-01) — 슈퍼신호등과 **같은 모양**의 응답.
+ *
+ * 벤티지: "슈퍼신호등 이거 공통모듈도 만들어서 신호등 분석의 종목들에도 적용해줘."
+ *
+ * 화면이 두 원장을 **한 컴포넌트**로 그리므로 응답이 같아야 한다. 다른 점은
+ * `entry` 안뿐이다 — 슈퍼는 `lists`(여러 목록), 여기는 `list`·`rank`(목록 하나).
+ *
+ * ⚠️ 같은 종목이 **여러 목록**에 걸려 있을 수 있다. 그럴 땐 **가장 오래된 편입**을
+ * 대표로 쓴다 — 「언제부터 걸리기 시작했나」가 이 화면의 물음이라서다. 나머지
+ * 목록 이름은 `lists` 로 같이 실어 화면이 「목록 3곳」처럼 적을 수 있게 한다.
+ */
+export async function listTrackDetail(client: KiwoomClient, code: string) {
+  const store = await load();
+  const mine = store.entries.filter((e) => e.code === code);
+  if (mine.length === 0) return null;
+  /* 가장 오래된 편입이 대표 — 살아 있는 것이 있으면 그중에서 */
+  const alive = mine.filter((e) => e.active !== false);
+  const pool = alive.length > 0 ? alive : mine;
+  const entry = [...pool].sort((a, b) => a.addedDate.localeCompare(b.addedDate))[0];
+
+  const [stock, flows, mood, sig, market] = await Promise.all([
+    stockDailySeries(client, code).catch(() => [] as DailyPoint[]),
+    investorDailySeries(client, code).catch(
+      () => [] as { date: string; foreign: number; inst: number }[],
+    ),
+    getSectorMood(client, code).catch(() => null),
+    evaluateSignal(client, code).catch(() => null),
+    evaluateMarket(client).catch(() => null),
+  ]);
+  const nowRow = peekSnapshot()?.byCode.get(code);
+  const now = nowRow ? { price: nowRow.price ?? null, changeRate: nowRow.changeRate ?? null } : null;
+
+  const marketIdx = mood?.sector?.marketKey === "kosdaq" ? "101" : "001";
+  const indexSeries = await indexDailySeries(client, marketIdx).catch(() => [] as DailyPoint[]);
+
+  /* 편입일 20거래일 전부터만 — 그 앞은 이 화면의 물음이 아니다 */
+  const addedYmd = entry.addedDate.replace(/-/g, "");
+  const cut = (rows: DailyPoint[]): DailyPoint[] => {
+    const i = rows.findIndex((r) => r.date >= addedYmd);
+    return i < 0 ? rows.slice(-1) : rows.slice(Math.max(0, i - 20));
+  };
+
+  return {
+    /* 화면이 슈퍼와 같은 자리를 읽는다 — `lists` 는 목록 이름 배열 */
+    entry: {
+      ...entry,
+      lists: mine.map((e) => e.list),
+      /* 여러 줄의 일별 기록은 대표 것 하나면 된다 — 점수는 목록과 무관하다 */
+      daily: entry.daily ?? [],
+      exits: entry.exits ?? [],
+      notes: entry.notes ?? [],
+    },
+    now,
+    stock: cut(stock),
+    index: { code: marketIdx, name: marketIdx === "101" ? "코스닥" : "코스피", series: cut(indexSeries) },
+    flows: (() => {
+      const i = flows.findIndex((r) => r.date >= addedYmd);
+      return i < 0 ? [] : flows.slice(Math.max(0, i - 20));
+    })(),
+    signalNow: sig ? { level: sig.level, score: sig.score } : null,
+    marketNow: market ? { level: market.level, score: market.score, summary: market.summary } : null,
+  };
+}
+
+/** 손으로 이탈 처리 — 슈퍼신호등의 `exitSuperEntry` 와 같은 규칙 */
+export async function exitListEntry(code: string, note: string): Promise<boolean> {
+  const store = await load();
+  const mine = store.entries.filter((e) => e.code === code && e.active !== false);
+  if (mine.length === 0) return false;
+  const today = todayStr();
+  const px = peekSnapshot()?.byCode.get(code)?.price ?? null;
+  for (const e of mine) {
+    e.active = false;
+    e.exitedDate = today;
+    const last = e.daily?.[e.daily.length - 1];
+    (e.exits ??= []).push({
+      date: today,
+      price: px,
+      score: last?.score ?? null,
+      marketLevel: last?.market?.level ?? null,
+      marketScore: last?.market?.score ?? null,
+      note: note || "손으로 이탈",
+      auto: false,
+    });
+  }
+  await save(store);
+  return true;
+}
+
+/** 메모 — 날짜와 함께 이력으로 쌓는다 */
+export async function updateListNote(code: string, text: string): Promise<boolean> {
+  const store = await load();
+  const mine = store.entries.filter((e) => e.code === code);
+  if (mine.length === 0) return false;
+  const today = todayStr();
+  /* 대표 줄에만 적는다 — 목록마다 같은 메모를 복사하면 고칠 때 어긋난다 */
+  const e = [...mine].sort((a, b) => a.addedDate.localeCompare(b.addedDate))[0];
+  const notes = (e.notes ??= []);
+  const i = notes.findIndex((n) => n.date === today);
+  if (i >= 0) notes[i] = { date: today, text };
+  else notes.push({ date: today, text });
+  await save(store);
+  return true;
 }

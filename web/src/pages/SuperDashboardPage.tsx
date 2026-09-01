@@ -585,6 +585,29 @@ export function SuperDashboardPage({
     }
   }
 
+  /**
+   * 원장에서 뺀다 (2026-09-01) — 벤티지: "내가 봐서 시가총액이 너무 적거나
+   * 거래대금 너무 적은건 지워버리게."
+   *
+   * 이탈과 다르다. 이탈은 「걸렸었는데 벗어났다」는 기록이라 남기고, 삭제는
+   * 「애초에 볼 게 아니었다」라 진짜로 뺀다 — 못 사는 종목이 원장에 남으면
+   * 살 수 없었던 수익률이 섞여 성적 평균을 오염시킨다.
+   */
+  function remove(code: string, name: string) {
+    if (
+      !window.confirm(
+        `${name} 을(를) 원장에서 뺍니다.
+
+관심종목의 자동 그룹에서도 같이 빠집니다. 되돌릴 수 없습니다.`,
+      )
+    )
+      return;
+    void api
+      .signalSuperRemove(code)
+      .then(() => load())
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "삭제 실패"));
+  }
+
   useEffect(() => {
     void load();
   }, []);
@@ -730,6 +753,12 @@ export function SuperDashboardPage({
                     />
                   ),
                 )}
+                {/*
+                  삭제 열은 **드래그 밖**이다 (2026-09-01). 열 순서를 바꿔도 늘
+                  맨 끝에 있어야 손이 기억한다 — 지우는 단추가 자리를 옮겨 다니면
+                  잘못 누른다.
+                */}
+                <th title="원장에서 뺍니다">삭제</th>
               </tr>
             </thead>
             <tbody>
@@ -757,6 +786,19 @@ export function SuperDashboardPage({
                         {c.cell(e, { crossOnly, daily, nowScore, scoreDelta })}
                       </td>
                     ))}
+                    {/* 시가총액·거래대금이 너무 적어 애초에 볼 게 아니었던 종목을 뺀다 */}
+                    <td className="lt-del">
+                      <button
+                        className="sd-del"
+                        title="원장에서 뺍니다 — 관심종목의 자동 그룹에서도 같이 빠집니다"
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          remove(e.code, e.name);
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </td>
                   </tr>
                 );
               })}

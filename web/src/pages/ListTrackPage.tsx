@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { SuperDetailSheet } from "../components/SuperDetailSheet";
 import { api, type ListTrackSummary, type ListTrackRow } from "../api";
 /* 접기 — 조건 검색과 **같은 훅**을 쓴다. 열쇠 접두사(`lt`)는 그대로라 접어 둔 상태가 이어진다 */
 import { useFold as useFoldBase } from "../useFold";
@@ -51,6 +52,14 @@ export function ListTrackPage({
   } | null>(null);
   const [tab, setTab] = useState<string>("");
   const [showExited, setShowExited] = useState(false);
+  /**
+   * 상세 시트 — **슈퍼신호등과 같은 컴포넌트**를 쓴다 (2026-09-01).
+   *
+   * 벤티지: "슈퍼신호등 이거 공통모듈도 만들어서 신호등 분석의 종목들에도
+   * 적용해줘." 두 원장은 편입 규칙만 다르고 묻는 것이 똑같다 —
+   * 편입 후 시장·테마 대비 어땠나, 점수는 어떻게 흘렀나, 수급은 누가 샀나.
+   */
+  const [sheet, setSheet] = useState<{ code: string; name: string } | null>(null);
   const [openSum, toggleSum, setSum] = useFold("summary", true);
   const [openGrade, toggleGrade, setGrade] = useFold("grade", false);
   /*
@@ -76,6 +85,30 @@ export function ListTrackPage({
       })
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
   }, []);
+
+  /**
+   * 원장에서 뺀다 — 벤티지: "내가 봐서 시가총액이 너무 적거나 거래대금 너무
+   * 적은건 지워버리게."
+   *
+   * 이탈과 다르다. 이탈은 「걸렸었는데 벗어났다」는 기록이라 남기고, 삭제는
+   * 「애초에 볼 게 아니었다」라 진짜로 뺀다 — 못 사는 종목이 원장에 남으면
+   * 살 수 없었던 수익률이 섞여 성적 평균을 오염시킨다.
+   *
+   * 되돌릴 수 없으므로 한 번 묻는다.
+   */
+  const remove = useCallback(
+    (code: string, name: string) => {
+      if (!window.confirm(`${name} 을(를) 원장에서 뺍니다.
+
+관심종목의 자동 그룹에서도 같이 빠집니다. 되돌릴 수 없습니다.`))
+        return;
+      void api
+        .signalListTrackRemove(code)
+        .then(() => load())
+        .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
+    },
+    [load],
+  );
 
   useEffect(() => {
     load();
@@ -379,12 +412,18 @@ export function ListTrackPage({
                 <th className="num">+5일</th>
                 <th className="num">+20일</th>
                 <th className="num" title="지수 대비 초과수익 — 이게 없으면 위의 셋은 뜻이 없다">지수대비 +20</th>
-                <th>장세</th>
+                <th title="편입일의 시장 상태 — 마우스를 올리면 폭·신고가가 나옵니다">장세</th>
+                <th title="원장에서 뺍니다">삭제</th>
               </tr>
             </thead>
             <tbody>
               {visible.map((e) => (
-                <Row key={`${e.list}:${e.code}`} e={e} onSelectStock={onSelectStock} />
+                <Row
+                  key={`${e.list}:${e.code}`}
+                  e={e}
+                  onOpen={(c, n) => setSheet({ code: c, name: n })}
+                  onRemove={remove}
+                />
               ))}
             </tbody>
           </table>
@@ -394,9 +433,25 @@ export function ListTrackPage({
       <div className="table-note">
         <b>순위</b>는 편입일 그 목록에서의 자리입니다 — 「상위권일수록 나은가」를 나중에
         물으려면 있어야 합니다. <b>반복</b>은 그 목록에 며칠째 이어서 걸렸나입니다.
-        <b>장세</b>는 편입일의 시장 상태입니다(폭이 좁은 날의 초록은 실측에서 시장에
-        -2.15%p 졌습니다).
+        <b>장세</b>는 편입일의 시장 상태입니다 — 마우스를 올리면 폭·신고가가 나옵니다
+        (폭이 좁은 날의 초록은 실측에서 시장에 -2.15%p 졌습니다). 행을 누르면{" "}
+        <b>흐름 상세</b>(주가·점수·수급·이탈 기록)가 열립니다.
       </div>
+
+      {/*
+        상세 시트 — **슈퍼신호등과 같은 컴포넌트**다 (2026-09-01).
+        `source="list"` 하나로 갈린다. 서버가 같은 모양의 응답을 준다.
+      */}
+      {sheet && (
+        <SuperDetailSheet
+          source="list"
+          code={sheet.code}
+          name={sheet.name}
+          onClose={() => setSheet(null)}
+          onOpenStock={onSelectStock}
+          onChanged={load}
+        />
+      )}
     </div>
   );
 }
@@ -415,13 +470,16 @@ function Ret({ v }: { v: number | null | undefined }) {
 
 function Row({
   e,
-  onSelectStock,
+  onOpen,
+  onRemove,
 }: {
   e: ListTrackRow;
-  onSelectStock: (code: string, name: string) => void;
+  /** 행을 누르면 상세 시트 — 슈퍼신호등과 같은 컴포넌트다 */
+  onOpen: (code: string, name: string) => void;
+  onRemove: (code: string, name: string) => void;
 }) {
   return (
-    <tr onClick={() => onSelectStock(e.code, e.name)} style={{ cursor: "pointer" }}>
+    <tr onClick={() => onOpen(e.code, e.name)} style={{ cursor: "pointer" }}>
       <td>
         {e.active !== false ? "🟢" : "⛔"}
         {e.isNew && <i className="lt-new">N</i>}
@@ -478,12 +536,37 @@ function Row({
       <td className="num">
         <Ret v={e.excess?.d20} />
       </td>
-      <td className={e.regime?.weak ? "negative" : ""}>
-        {e.regime
-          ? e.regime.weak
-            ? `약함 (폭 ${e.regime.breadth ?? "-"}%)`
-            : `정상 (폭 ${e.regime.breadth ?? "-"}%)`
-          : "-"}
+      {/*
+        **장세는 한 글자로** (2026-09-01 — 벤티지: "쟤는 쓸데없이 너무 길다").
+
+        「정상 (폭 57.1%)」이 줄마다 되풀이되면서 칸을 제일 넓게 먹고 있었다.
+        같은 날 편입한 종목은 값이 전부 같으니 그 넓이만큼 아무것도 안 알려 준다.
+        폭 숫자는 마우스를 올리면 나온다.
+      */}
+      <td
+        className={`lt-regime ${e.regime?.weak ? "negative" : ""}`}
+        title={
+          e.regime
+            ? `편입일 시장 폭 ${e.regime.breadth ?? "-"}% · 신고가 ${e.regime.newHigh ?? "-"}${
+                e.regime.weak ? " — 폭이 좁은 날의 초록은 실측에서 시장에 -2.15%p 졌습니다" : ""
+              }`
+            : "편입일 장세를 못 읽었습니다"
+        }
+      >
+        {e.regime ? (e.regime.weak ? "약함" : "정상") : "-"}
+      </td>
+      {/* 삭제 — 시가총액·거래대금이 너무 적어 애초에 볼 게 아니었던 종목 */}
+      <td className="lt-del">
+        <button
+          className="sd-del"
+          title="원장에서 뺍니다 — 관심종목의 자동 그룹에서도 같이 빠집니다"
+          onClick={(ev) => {
+            ev.stopPropagation();
+            onRemove(e.code, e.name);
+          }}
+        >
+          ✕
+        </button>
       </td>
     </tr>
   );

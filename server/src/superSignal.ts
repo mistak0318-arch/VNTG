@@ -1591,7 +1591,7 @@ export async function updateSuperNote(code: string, note: string): Promise<boole
 
 // ---------------------------------------------------------------- 상세 (온디맨드)
 
-interface DailyPoint {
+export interface DailyPoint {
   date: string;
   close: number;
 }
@@ -1604,7 +1604,7 @@ function toNum2(v: unknown): number {
 }
 
 /** 종목 일봉 — 옛날→최신 순 {date, close} */
-async function stockDailySeries(client: KiwoomClient, code: string): Promise<DailyPoint[]> {
+export async function stockDailySeries(client: KiwoomClient, code: string): Promise<DailyPoint[]> {
   const base = todayStr().replace(/-/g, "");
   const res = await client.request<Record<string, unknown>>(CHART_RESOURCE, "ka10081", {
     stk_cd: code,
@@ -1618,7 +1618,7 @@ async function stockDailySeries(client: KiwoomClient, code: string): Promise<Dai
 }
 
 /** 업종/지수 일봉(ka20006) — 옛날→최신 순. 값이 지수×100 이지만 비율만 쓰므로 그대로 */
-async function indexDailySeries(client: KiwoomClient, indsCode: string): Promise<DailyPoint[]> {
+export async function indexDailySeries(client: KiwoomClient, indsCode: string): Promise<DailyPoint[]> {
   const base = todayStr().replace(/-/g, "");
   const res = await client.request<Record<string, unknown>>(CHART_RESOURCE, "ka20006", {
     inds_cd: indsCode,

@@ -49,6 +49,7 @@ export function SuperDetailSheet({
   onClose,
   onOpenStock,
   onChanged,
+  source = "super",
 }: {
   code: string;
   name: string;
@@ -57,10 +58,28 @@ export function SuperDetailSheet({
   onOpenStock?: (code: string, name: string) => void;
   /** 이탈·메모 저장 뒤 목록을 다시 읽게 */
   onChanged?: () => void;
+  /**
+   * **어느 원장을 보나** (2026-09-01) — 벤티지: "슈퍼신호등 이거 공통모듈도
+   * 만들어서 신호등 분석의 종목들에도 적용해줘."
+   *
+   * 두 원장은 편입 규칙만 다르고(교집합을 봤나 안 봤나) **묻는 것이 똑같다** —
+   * 편입 후 주가가 시장·테마 대비 어땠나, 점수는 어떻게 흘렀나, 수급은 누가
+   * 샀나, 왜 이탈했나. 그래서 시트도 하나여야 한다.
+   *
+   * 시트를 두 벌로 두면 한쪽만 고쳐지는 일이 반드시 생긴다 — 이 앱이 여러 번
+   * 겪은 병이다(점수 흐름 겹치기도 슈퍼에만 붙일 뻔했다).
+   *
+   * 서버가 **같은 모양의 응답**을 주므로 여기서는 부를 주소만 갈라진다.
+   */
+  source?: "super" | "list";
 }) {
   /* 뒤로가기로 닫힌다 — 폰에서 시트를 열고 뒤로 누르면 페이지가 넘어갔다 (2026-08-28) */
   useSheetBack(true, onClose);
   const [data, setData] = useState<SuperDetail | null>(null);
+  /* 원장별 주소 — 응답 모양이 같으므로 부를 곳만 갈라진다 */
+  const isList = source === "list";
+  const fetchDetail = (c: string) =>
+    isList ? api.signalListTrackDetail(c) : api.signalSuperDetail(c);
   /**
    * 테마 지수 — 비교선 세 번째.
    *
@@ -82,8 +101,7 @@ export function SuperDetailSheet({
     let alive = true;
     setData(null);
     setError(null);
-    api
-      .signalSuperDetail(code)
+    fetchDetail(code)
       .then((d) => {
         if (!alive) return;
         setData(d);
@@ -234,10 +252,10 @@ export function SuperDetailSheet({
     if (!confirm(`${name} 을(를) 이탈 처리할까요? 기록은 남고 추적만 멈춥니다.`)) return;
     setBusy(true);
     try {
-      await api.signalSuperExit(code, exitNote);
+      await (isList ? api.signalListTrackExit(code, exitNote) : api.signalSuperExit(code, exitNote));
       setMsg("이탈 처리했습니다 — 기록이 남았습니다.");
       onChanged?.();
-      const d = await api.signalSuperDetail(code);
+      const d = await fetchDetail(code);
       setData(d);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "실패");
@@ -249,11 +267,11 @@ export function SuperDetailSheet({
   async function saveNote() {
     setBusy(true);
     try {
-      await api.signalSuperNote(code, note);
+      await (isList ? api.signalListTrackNote(code, note) : api.signalSuperNote(code, note));
       setMsg("메모를 저장했습니다 — 이력에 쌓였습니다.");
       onChanged?.();
       // 이력이 바로 보여야 저장됐다는 걸 안다
-      const d = await api.signalSuperDetail(code);
+      const d = await fetchDetail(code);
       setData(d);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "실패");
