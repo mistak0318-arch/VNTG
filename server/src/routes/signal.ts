@@ -45,6 +45,12 @@ import {
 } from "../condSearch.js";
 import { COND_FIELDS } from "../condFields.js";
 import { allStocksUniverse } from "../allStocks.js";
+import {
+  enabledUniverses,
+  getUniverseConfig,
+  saveUniverseConfig,
+  type UniverseConfig,
+} from "../universeConfig.js";
 import { collectProgress, startCollectDaily } from "../collectDaily.js";
 import { LEDGER_KINDS, ledgerStatus, type LedgerKind } from "../dailyStore.js";
 import { tradeValueTop } from "../signalScreen.js";
@@ -194,9 +200,37 @@ export function createSignalRouter(client: KiwoomClient): Router {
     }
   });
 
-  /** 고를 수 있는 모집단 — 화면이 버튼을 이걸로 그린다 (하드코딩하면 서버와 갈린다) */
-  router.get("/screen/universes", (_req, res) => {
-    res.json({ universes: SCREEN_UNIVERSES });
+  /**
+   * 고를 수 있는 모집단 — 화면이 버튼을 이걸로 그린다 (하드코딩하면 서버와 갈린다).
+   *
+   * **켠 것만** 준다 (2026-09-01). 벤티지: "신호등에 넣을 수 있는 그룹을 내가
+   * 고르는 거고, 고르고 나면 신호등 찾기에서 그게 보이는 거지."
+   *
+   * 카탈로그 전체는 `/screen/universes/all` 이 준다 — 설정 화면이 그걸로 그린다.
+   */
+  router.get("/screen/universes", async (_req, res, next) => {
+    try {
+      res.json({ universes: await enabledUniverses() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 카탈로그 전체 + 지금 선택 — 설정 화면용 */
+  router.get("/screen/universes/all", async (_req, res, next) => {
+    try {
+      res.json({ catalog: SCREEN_UNIVERSES, config: await getUniverseConfig() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/screen/universes/all", async (req, res, next) => {
+    try {
+      res.json({ config: await saveUniverseConfig(req.body as Partial<UniverseConfig>) });
+    } catch (err) {
+      next(err);
+    }
   });
 
   /**
@@ -282,6 +316,8 @@ export function createSignalRouter(client: KiwoomClient): Router {
       }
       const id = startCondSearch(client, {
         universe: String(b.universe ?? "trade-value"),
+        /* 기간 — 목록이 열어 둔 값만 통과한다(`fetchUniverse` 가 거른다) */
+        span: Number(b.span) > 0 ? Number(b.span) : undefined,
         market: ["000", "001", "101"].includes(String(b.market)) ? String(b.market) : "000",
         limit: Math.min(Math.max(Number(b.limit) || 200, 20), 500),
         capMin: typeof b.capMin === "number" ? b.capMin : null,

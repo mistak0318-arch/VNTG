@@ -328,3 +328,113 @@ export async function ledgerStatus(): Promise<LedgerStatus> {
     atLimit: keep > 0 && maxDays >= keep * 0.9,
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* 원장으로 만드는 순위 — 조회 0회                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **주체별 N일 순매수 상위** (2026-09-01) — 키움에 없는 순위를 우리가 세운다.
+ *
+ * 벤티지: "기관 3대장 순매수 상위는 없어? 연속매매 말고 순매수 상위 같은것들
+ * 필터 더 없어?"
+ *
+ * 없었다. 키움 순위 조회의 수급 그룹은 **전부 외국인**이다(연속순매매·한도소진율·
+ * 기간별·외국계 창구). 기관은 `ka10065`(장중 투자자별)뿐인데 **장중에만** 값이 온다.
+ *
+ * 그런데 이제 원장이 전종목 × 주체 열셋 × 일별로 쌓인다. **조회 없이 우리가
+ * 세울 수 있다** — 그것도 키움이 안 주는 조합으로:
+ *
+ *   · 투신 20일 순매수 상위
+ *   · 연기금 60일 순매수 상위
+ *   · **주포(투신+연기금+사모) 10일** 순매수 상위  ← 키움에 아예 없는 것
+ *
+ * ⚠️ **원장이 쌓인 만큼만 볼 수 있다.** 첫 수집(오늘 밤) 전에는 빈 목록이고,
+ * 60일 순위는 60거래일이 쌓여야 제대로 된다. 부르는 쪽이 그걸 알 수 있게
+ * `covered`(며칠치를 실제로 봤나)를 같이 돌려준다.
+ */
+
+/** 합산할 주체 */
+export type FlowSubject = "fgn" | "org" | "trust" | "pen" | "samo" | "ins" | "bank" | "smart";
+
+export const SUBJECT_LABEL: Record<FlowSubject, string> = {
+  fgn: "외국인",
+  org: "기관계",
+  trust: "투신",
+  pen: "연기금",
+  samo: "사모펀드",
+  ins: "보험",
+  bank: "은행",
+  smart: "주포 (투신+연기금+사모)",
+};
+
+/** 한 줄에서 그 주체의 값 — 「주포」는 셋의 합이다 */
+function subjectOf(r: FlowRow, s: FlowSubject): number | null {
+  if (s === "smart") {
+    const v = [r.trust, r.pen, r.samo].filter((x): x is number => x !== null);
+    /* 셋 다 없으면 「모른다」 — 하나라도 있으면 있는 것만 더한다 */
+    return v.length === 0 ? null : v.reduce((a, b) => a + b, 0);
+  }
+  return r[s] ?? null;
+}
+
+export interface FlowRankRow {
+  code: string;
+  /** 그 기간 순매수 합(백만원) */
+  net: number;
+  /** 실제로 더한 날 수 — 요청한 기간보다 적을 수 있다 */
+  days: number;
+}
+
+let rankCache: { key: string; at: number; rows: FlowRankRow[]; covered: number } | null = null;
+const RANK_TTL_MS = 10 * 60_000;
+
+/**
+ * 주체별 N거래일 순매수 상위.
+ *
+ * ⚠️ 파일 2,400개를 여는 작업이라 **10분 캐시**한다. 하루 한 번 갱신되는
+ * 데이터라 그 정도는 충분하다.
+ */
+export async function flowRank(
+  subject: FlowSubject,
+  days: number,
+  limit = 500,
+): Promise<{ rows: FlowRankRow[]; covered: number }> {
+  const key = `${subject}:${days}`;
+  if (rankCache && rankCache.key === key && Date.now() - rankCache.at < RANK_TTL_MS) {
+    return { rows: rankCache.rows.slice(0, limit), covered: rankCache.covered };
+  }
+
+  let names: string[] = [];
+  try {
+    names = (await readdir(DIR)).filter((f) => f.endsWith(".json"));
+  } catch {
+    return { rows: [], covered: 0 };
+  }
+
+  const rows: FlowRankRow[] = [];
+  let covered = 0;
+  for (const f of names) {
+    try {
+      const l = JSON.parse(await readFile(join(DIR, f), "utf-8")) as DailyLedger;
+      const flow = l.flow ?? [];
+      if (flow.length === 0) continue;
+      /* 최근 `days` 거래일 — 원장은 옛날 → 최신 순이다 */
+      const win = flow.slice(-days);
+      const vals = win.map((r) => subjectOf(r, subject)).filter((v): v is number => v !== null);
+      if (vals.length === 0) continue;
+      covered = Math.max(covered, vals.length);
+      rows.push({
+        code: l.code,
+        net: vals.reduce((a, b) => a + b, 0),
+        days: vals.length,
+      });
+    } catch {
+      /* 깨진 파일 하나 때문에 순위를 못 내면 안 된다 */
+    }
+  }
+
+  rows.sort((a, b) => b.net - a.net);
+  rankCache = { key, at: Date.now(), rows, covered };
+  return { rows: rows.slice(0, limit), covered };
+}

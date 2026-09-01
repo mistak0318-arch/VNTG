@@ -26,6 +26,7 @@ import { LoginSettingsPanel } from "../components/LoginSettingsPanel";
 import { BuzzConfigPanel } from "../components/BuzzConfigPanel";
 import { NaverSyncPanel } from "../components/NaverSyncPanel";
 import { DataRetentionPanel } from "../components/DataRetentionPanel";
+import { UniversePanel } from "../components/UniversePanel";
 import { RealtimeStatusPanel } from "../components/RealtimeStatusPanel";
 
 interface KeyInfo {
@@ -187,6 +188,26 @@ export function SettingsPage() {
       >
         <NaverSyncPanel />
       </CollapsibleCard>
+      )}
+
+      {/*
+        **신호등 모집단** (2026-09-01) — 어느 목록을 쓸지 사람이 고른다.
+
+        벤티지: "신호등에 넣을 수 있는 그룹을 내가 고르는 거고, 고르고 나면
+        신호등 찾기에서 그게 보이는 거지."
+
+        「분석 기준」에 둔다 — 신호등 기준 바로 옆이라야 「무엇을, 어디서 찾나」가
+        한자리에서 읽힌다.
+      */}
+      {tab === "analysis" && (
+        <CollapsibleCard
+          id="universePick"
+          scope="global"
+          title="신호등 모집단"
+          hint="어느 목록에서 찾을까 · 목록마다 며칠 기준으로 볼까"
+        >
+          <UniversePanel />
+        </CollapsibleCard>
       )}
 
       {tab === "cost" && (

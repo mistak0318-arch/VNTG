@@ -319,7 +319,36 @@ async function fillFromSnapshot(client: KiwoomClient, rows: Candidate[]): Promis
  * 전부 **이미 있는 조회**를 그대로 쓴다 — 시세분석 명세(rankSpecs)와 각 화면의
  * TR. 새 TR 을 만들지 않는다.
  */
-export const SCREEN_UNIVERSES: { key: string; label: string; hint: string }[] = [
+export const SCREEN_UNIVERSES: {
+  key: string;
+  label: string;
+  hint: string;
+  /**
+   * **고를 수 있는 기간(거래일)** (2026-09-01) — 없으면 기간 개념이 없는 목록이다.
+   *
+   * 벤티지: "이거 각각의 목록중에서 내가 설정할 수 있게 해줘. 하루치는 의미가
+   * 없잖아."
+   *
+   * 맞는 지적이었다. `ka10034` 에 `dt: "1"` 이 박혀 있었는데 **그게 진짜로
+   * 하루치**였다. 실측(2026-09-01):
+   *
+   *   dt=1   1위 LK삼양            163만주
+   *   dt=5   1위 대한항공          577만주
+   *   dt=20  1위 한화생명        1,993만주
+   *   dt=60  1위 오가닉티코스메틱 1억 8,971만주
+   *
+   * 값마다 다른 종목·다른 누적이 온다 — `dt` 는 **거래일 수**다.
+   *
+   * 우리가 실측으로 얻은 결론이 「연속보다 기간별 누적이 중요하다」였는데
+   * (벤티지가 먼저 짚은 것이다) 모집단은 정확히 그 반대인 하루치를 보고 있었다.
+   *
+   * ⚠️ `ka10035`(연속순매매)의 `base_dt_tp` 는 **기간이 아니다.** 1·2·3·5 가 전부
+   * 같은 결과였다(0 만 다르다). 그래서 그 목록에는 기간을 안 붙인다.
+   */
+  spans?: number[];
+  /** 기간을 안 고르면 쓸 값 */
+  defaultSpan?: number;
+}[] = [
   {
     key: "all",
     label: "전종목 (조회 0회 사전훑기)",
@@ -342,7 +371,60 @@ export const SCREEN_UNIVERSES: { key: string; label: string; hint: string }[] = 
    * `rankSpecs` 에 이미 있던 조회다 — 시세분석 화면이 쓰던 것을 모집단으로도
    * 쓰는 것이라 새 TR 이 아니다.
    */
-  { key: "foreign-period", label: "외국인 순매수 상위", hint: "외국인이 하루 동안 가장 많이 산 종목 — 연속 일수가 아니라 수량" },
+  /*
+   * **주체별 순매수 상위** (2026-09-01) — 키움에 없는 것을 우리가 세운다.
+   *
+   * 벤티지: "기관 3대장 순매수 상위는 없어?"
+   *
+   * 없었다. 키움 순위의 수급 그룹은 **전부 외국인**이고, 기관은 `ka10065`
+   * (장중 투자자별)뿐인데 장중에만 값이 온다.
+   *
+   * 이제 원장이 전종목 × 주체 열셋 × 일별로 쌓이므로 **조회 0회로** 세운다.
+   * 「주포 20일 순매수 상위」는 키움에 아예 없는 조합이다.
+   *
+   * ⚠️ 원장이 쌓인 만큼만 본다. 첫 수집(2026-09-01 밤) 전에는 빈 목록이고,
+   * 60일 순위는 60거래일이 쌓여야 제 뜻이 난다.
+   */
+  {
+    key: "flow-smart",
+    label: "주포 순매수 상위 (투신+연기금+사모)",
+    hint: "키움에 없는 조합 — 우리 원장으로 세운다. 기관계는 금융투자 헤지에 상쇄되지만 이 셋은 방향이다",
+    spans: [5, 10, 20, 60],
+    defaultSpan: 20,
+  },
+  {
+    key: "flow-trust",
+    label: "투신 순매수 상위",
+    hint: "우리 원장으로 세운다 (조회 0회)",
+    spans: [5, 10, 20, 60],
+    defaultSpan: 20,
+  },
+  {
+    key: "flow-pen",
+    label: "연기금 순매수 상위",
+    hint: "우리 원장으로 세운다 (조회 0회)",
+    spans: [5, 10, 20, 60],
+    defaultSpan: 20,
+  },
+  {
+    key: "flow-org",
+    label: "기관계 순매수 상위",
+    hint: "우리 원장으로 세운다. 금융투자 헤지가 섞여 방향이 상쇄될 수 있다 — 방향은 「주포」가 낫다",
+    spans: [5, 10, 20, 60],
+    defaultSpan: 20,
+  },
+  {
+    key: "foreign-period",
+    label: "외국인 순매수 상위",
+    hint: "외국인이 그 기간 동안 가장 많이 산 종목 — 연속 일수가 아니라 수량",
+    spans: [1, 5, 10, 20, 60],
+    /*
+     * **20일이 기본이다** (2026-09-01). 예전 기본이 1일이었는데, 우리 실측 결론이
+     * 「연속보다 기간별 누적」이라 하루치는 그 결론과 어긋난다. 수급 지속 기준이
+     * 보는 기간(5·10·20·60) 가운데를 잡았다.
+     */
+    defaultSpan: 20,
+  },
 ];
 
 function yyyymmdd(daysAgo = 0): string {
@@ -356,6 +438,8 @@ async function rankSpecUniverse(
   specKey: string,
   market: string,
   limit: number,
+  /** 기간(거래일) — `dt` 를 받는 조회에만 얹는다 */
+  span?: number,
 ): Promise<Candidate[]> {
   const spec = findSpec(specKey);
   if (!spec) throw new Error(`없는 조회입니다: ${specKey}`);
@@ -371,6 +455,12 @@ async function rankSpecUniverse(
       {
         ...COMMON_PARAMS,
         ...(spec.params ?? {}),
+        /*
+         * **기간을 덮어쓴다** (2026-09-01). `ka10034` 의 `dt` 는 거래일 수인데
+         * 명세에 `"1"` 이 박혀 있었다 — 하루치만 보고 있었다는 뜻이다.
+         * 목록이 기간을 열어 뒀으면(`spans`) 그 값으로 갈아 끼운다.
+         */
+        ...(span && span > 0 ? { dt: String(span) } : {}),
         mrkt_tp: market,
         // ⚠️ 항상 보낸다 — 시세분석 라우트도 그렇다. ka10035 는 exchange 표시가
         // 없는데도 stex_tp 가 필수라(1511), 조건부로 보내면 그 조회가 통째로 죽는다
@@ -506,7 +596,16 @@ export async function fetchUniverse(
   key: string,
   market: string,
   limit: number,
+  /**
+   * **기간(거래일)** — 목록이 `spans` 를 열어 뒀을 때만 쓴다 (2026-09-01).
+   * 안 주면 목록의 `defaultSpan`, 그것도 없으면 명세의 기본값이다.
+   */
+  span?: number,
 ): Promise<Candidate[]> {
+  const uni = SCREEN_UNIVERSES.find((u) => u.key === key);
+  /* 목록이 허락한 기간만 받는다 — 아무 값이나 흘리면 뜻 모르는 응답이 온다 */
+  const useSpan =
+    uni?.spans && span && uni.spans.includes(span) ? span : (uni?.defaultSpan ?? undefined);
   /**
    * **전종목** (2026-09-01) — 조회 0회.
    *
@@ -547,9 +646,31 @@ export async function fetchUniverse(
     await fillFromSnapshot(client, out);
     return out;
   }
+  /**
+   * **주체별 순매수 상위** — 원장에서 세운다. 조회 0회.
+   *
+   * 이름·가격·거래대금은 스냅샷에서 메운다(`fillFromSnapshot`) — 원장에는 코드와
+   * 금액만 있다.
+   */
+  if (key.startsWith("flow-")) {
+    const subject = key.slice(5) as import("./dailyStore.js").FlowSubject;
+    const { flowRank } = await import("./dailyStore.js");
+    const { rows } = await flowRank(subject, useSpan ?? 20, limit * 3);
+    const common = await getCommonStockCodes(client).catch(() => null);
+    const out: Candidate[] = [];
+    for (const r of rows) {
+      if (out.length >= limit) break;
+      /* 순매도는 「순매수 상위」가 아니다 — 0 이하는 뺀다 */
+      if (r.net <= 0) continue;
+      if (common && !common.has(r.code)) continue;
+      out.push({ code: r.code, name: "", price: 0, changeRate: 0, tradeValue: 0 });
+    }
+    await fillFromSnapshot(client, out);
+    return out;
+  }
   if (key === "same-net") return sameNetUniverse(client, market, limit);
   if (key === "cont") return contUniverse(client, market, limit);
-  return rankSpecUniverse(client, key, market, limit);
+  return rankSpecUniverse(client, key, market, limit, useSpan);
 }
 
 const LEVEL_RANK: Record<Level, number> = { green: 3, yellow: 2, red: 1, unknown: 0 };

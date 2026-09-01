@@ -13546,3 +13546,20 @@ thead .sd-emph {
 }
 /* 네 단계를 다 이기면 헤드라인을 강조한다 */
 .verdict-strong { color: var(--positive, #4ade80); }
+
+/* 신호등 모집단 고르기 (2026-09-01) */
+.uni-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.uni-row {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  opacity: 0.55;
+}
+/* 켠 것만 또렷하게 — 목록이 열셋이라 켠 것을 눈으로 골라낼 수 있어야 한다 */
+.uni-row.on { opacity: 1; background: color-mix(in srgb, var(--text) 3%, transparent); }
+.uni-head { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.uni-hint { margin: 3px 0 0 22px; font-size: 0.74rem; color: var(--muted); }
+.uni-spans { margin: 6px 0 0 22px; gap: 4px; align-items: center; }
+.uni-spans .filter-btn { padding: 1px 8px; font-size: 0.72rem; }
+.uni-warn { font-size: 0.72rem; color: var(--warn, #d9a441); }
+.uni-actions { margin-top: 10px; align-items: center; gap: 10px; }

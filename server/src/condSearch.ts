@@ -114,6 +114,11 @@ export interface CondLine {
 export interface CondQuery {
   /** 어느 목록에서 — `SCREEN_UNIVERSES` 의 key */
   universe: string;
+  /**
+   * **기간(거래일)** (2026-09-01) — 목록이 `spans` 를 열어 뒀을 때만 뜻이 있다.
+   * 안 주면 설정의 값, 그것도 없으면 목록의 기본값이다.
+   */
+  span?: number;
   /** 000 전체 · 001 코스피 · 101 코스닥 */
   market: string;
   limit: number;
@@ -313,7 +318,7 @@ export function startCondSearch(client: KiwoomClient, q: CondQuery): string {
 
 async function run(client: KiwoomClient, q: CondQuery, job: CondJob): Promise<void> {
   /* ① 모집단 */
-  const uni: Candidate[] = await fetchUniverse(client, q.universe, q.market, q.limit);
+  const uni: Candidate[] = await fetchUniverse(client, q.universe, q.market, q.limit, q.span);
 
   /*
    * ② **사전 필터 — 조회 0회.**

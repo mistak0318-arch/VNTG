@@ -1098,8 +1098,19 @@ export const api = {
       `/api/signal/screen/start?market=${market}&level=${level}&limit=${limit}&universe=${encodeURIComponent(universe)}`,
     ),
   /** 고를 수 있는 모집단 — 서버가 정한다. 화면에 박아 두면 서버와 갈린다 */
+  /**
+   * 신호등 찾기에 뜰 모집단 — **켠 것만** 온다 (2026-09-01).
+   * 카탈로그 전체는 `signalUniverseCatalog()` 다.
+   */
+  /** 카탈로그 전체 + 지금 선택 — 설정 화면용 */
+  signalUniverseCatalog: () =>
+    getJson<{ catalog: ScreenUniverse[]; config: { items: UniverseChoice[] } }>(
+      "/api/signal/screen/universes/all",
+    ),
+  signalUniverseSave: (items: UniverseChoice[]) =>
+    putJson<{ config: { items: UniverseChoice[] } }>("/api/signal/screen/universes/all", { items }),
   signalScreenUniverses: () =>
-    getJson<{ universes: { key: string; label: string; hint: string }[] }>(
+    getJson<{ universes: ScreenUniverse[] }>(
       "/api/signal/screen/universes",
     ),
   signalScreenStatus: (jobId: string) => getJson<ScreenJob>(`/api/signal/screen/${jobId}`),
@@ -2619,6 +2630,31 @@ export interface EvaluatedTheme {
 }
 
 /** 리포트 발행 판 하나 */
+/**
+ * 신호등 모집단 하나 — 카탈로그의 한 줄.
+ *
+ * `spans` 가 있으면 **기간을 고를 수 있는 목록**이다. 없으면 기간 개념이 없다
+ * (거래대금 상위·연속순매매 등).
+ */
+export interface ScreenUniverse {
+  key: string;
+  label: string;
+  hint: string;
+  /** 고를 수 있는 기간(거래일) */
+  spans?: number[];
+  /** 안 고르면 쓸 값 */
+  defaultSpan?: number;
+  /** 지금 고른 값 (켜진 목록 응답에만) */
+  span?: number;
+}
+
+/** 사용자가 고른 것 — 켤까, 며칠로 볼까 */
+export interface UniverseChoice {
+  key: string;
+  enabled: boolean;
+  span?: number;
+}
+
 export interface ScreenHit {
   code: string;
   name: string;

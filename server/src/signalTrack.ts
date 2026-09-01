@@ -10,7 +10,7 @@ import {
   getConfig,
   type Axis,
 } from "./signalLight.js";
-import { tradeValueTop } from "./signalScreen.js";
+import { fetchUniverse, SCREEN_UNIVERSES, tradeValueTop } from "./signalScreen.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FILE = resolve(__dirname, "..", "data", "signalTrack.json");
@@ -56,8 +56,19 @@ export type Tier = (typeof TIERS)[number];
 export interface TrackConfig {
   /** 쓸 문턱. 켠 것만 담는다 */
   tiers: Tier[];
-  /** 모집단 — 거래대금 상위 몇 종목까지 */
+  /** 모집단 — 상위 몇 종목까지 */
   universe: number;
+  /**
+   * **어느 목록에서 뽑나** (2026-09-01) — `SCREEN_UNIVERSES` 의 key.
+   *
+   * 여태 「거래대금 상위」 고정이었다. 그런데 실측에서 가장 잘 통한 것이
+   * **시총 3천억 이하 소형주**인데(장세를 안 가리고 승률 +7.6·+8.1%p) 그런 종목은
+   * 거래대금 순위에 잘 안 든다 — **우리가 제일 좋다고 잰 것을 검증 표본이 거의
+   * 안 담고 있었다.**
+   *
+   * `all`(전종목)로 두면 일봉 캐시로 사전훑기를 해서 후보를 세운다(조회 0회).
+   */
+  source: string;
   /** 시장 — 000 전체 / 001 코스피 / 101 코스닥 */
   market: "000" | "001" | "101";
   /** 최소 거래대금(억원). 거래가 얕은 종목의 신호는 검증할 값어치가 없다 */
@@ -79,6 +90,14 @@ export const DEFAULT_TRACK_CONFIG: TrackConfig = {
    * 일이라 시간이 늘어도 사람이 기다리지 않는다.
    */
   universe: 300,
+  /*
+   * **전종목** (2026-09-01) — 거래대금 상위에서 바꿨다.
+   *
+   * ⚠️ **원장이 섞인다.** 지금까지 쌓인 편입은 거래대금 300 기준이고 앞으로는
+   * 전종목이다. 그래서 편입할 때 `source` 를 같이 적는다 — 나중에 통계를 낼 때
+   * 갈라 볼 수 있어야 한다. 기준 지문(`configHash`)을 남기는 것과 같은 이유다.
+   */
+  source: "all",
   market: "000",
   minTradeValue: 100,
   includeRiskCapped: true,
@@ -242,7 +261,18 @@ export async function enrollToday(
    * 우선주가 상위를 채워, 「상위 100」이라 해놓고 실제 종목은 예순 남짓만 보게 된다.
    * 두 화면의 모집단이 다르면 추적기가 검증하는 건 신호등이 아니라 **모집단 차이**다.
    */
-  const universe = (await tradeValueTop(client, cfg.market, cfg.universe)).filter(
+  /*
+   * 모집단을 **고를 수 있다** (2026-09-01). 「거래대금 상위」 고정이었는데, 실측에서
+   * 가장 잘 통한 소형주가 그 순위에 잘 안 들어 검증 표본에서 빠지고 있었다.
+   *
+   * `fetchUniverse` 는 찾기·조건검색이 쓰는 것과 **같은 함수**다 — 모집단을
+   * 두 벌로 만들면 「추적기가 검증한 것」과 「내가 화면에서 본 것」이 갈린다.
+   */
+  const universe = (
+    cfg.source === "trade-value"
+      ? await tradeValueTop(client, cfg.market, cfg.universe)
+      : await fetchUniverse(client, cfg.source, cfg.market, cfg.universe)
+  ).filter(
     // trde_prica 는 백만원 단위다 (화면 곳곳에서 /100 해서 억으로 쓴다)
     (u) => Math.round(u.tradeValue / 100) >= cfg.minTradeValue,
   );
@@ -623,6 +653,14 @@ export async function saveTrackConfig(input: Partial<TrackConfig>): Promise<Trac
      * 종목당 2~3초라 500 이면 20분쯤 걸린다 — 그건 화면이 적어 준다.
      */
     universe: Math.min(Math.max(Number(input.universe ?? store.config.universe) || 60, 10), 500),
+    /*
+     * 모집단 목록 — 화면이 보낸 값만 받는다. `SCREEN_UNIVERSES` 밖이면 되돌린다.
+     * 없는 목록을 저장하면 그날부터 추적기가 조용히 아무것도 안 담는다.
+     */
+    source:
+      typeof input.source === "string" && SCREEN_UNIVERSES.some((u) => u.key === input.source)
+        ? input.source
+        : (store.config.source ?? DEFAULT_TRACK_CONFIG.source),
     market: (["000", "001", "101"] as const).includes(input.market as "000")
       ? (input.market as TrackConfig["market"])
       : store.config.market,

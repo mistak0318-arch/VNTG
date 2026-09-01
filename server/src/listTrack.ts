@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { configFingerprint, evaluateSignal } from "./signalLight.js";
 import { fetchUniverse, SCREEN_UNIVERSES } from "./signalScreen.js";
+import { enabledUniverses } from "./universeConfig.js";
 import { regimeTrust } from "./regimeWatch.js";
 import { pushNotice } from "./notifyCenter.js";
 import { peekSnapshot } from "./marketSnapshot.js";
@@ -154,11 +155,19 @@ export async function runListTrack(
   if (job.status === "running") return store;
 
   const limit = Math.min(Math.max(opts.limit ?? 500, 50), 500);
+  /*
+   * **켠 목록만 돈다** (2026-09-01). 예전엔 카탈로그 전부(열셋)를 돌아 40분이
+   * 걸렸다 — 안 쓰는 목록까지 500종목씩 받았다는 뜻이다.
+   *
+   * 벤티지: "신호등 분석의 지금 돌리기는 신호등 찾기에서 보이는 그룹군에 대해서만
+   * 돌아가는 거고."
+   */
+  const lists = await enabledUniverses();
   job = {
     status: "running",
     step: "목록 받는 중",
     done: 0,
-    total: SCREEN_UNIVERSES.length,
+    total: lists.length,
     added: 0,
     at: new Date().toISOString(),
   };
@@ -166,10 +175,11 @@ export async function runListTrack(
   try {
     /* ① 일곱 목록을 차례로 받는다 — 병렬로 쏘면 초당 5회 제한에 걸린다 */
     const byList = new Map<string, { code: string; name: string; price: number; rank: number }[]>();
-    for (const u of SCREEN_UNIVERSES) {
+    for (const u of lists) {
       job.step = `${u.label} 받는 중`;
       try {
-        const rows = await fetchUniverse(client, u.key, "000", limit);
+        /* 기간도 설정을 따른다 — 목록마다 며칠로 볼지 사람이 정한다 */
+        const rows = await fetchUniverse(client, u.key, "000", limit, u.span);
         byList.set(
           u.key,
           rows.map((c, i) => ({ code: c.code, name: c.name, price: c.price, rank: i + 1 })),
@@ -217,7 +227,8 @@ export async function runListTrack(
     const have = new Map(store.entries.map((e) => [`${e.list}:${e.code}`, e]));
     let added = 0;
 
-    for (const u of SCREEN_UNIVERSES) {
+    /* 편입도 켠 목록만 — 위에서 안 받은 목록은 byList 에 없다 */
+    for (const u of lists) {
       const rows = byList.get(u.key) ?? [];
       let g = 0;
       for (const r of rows) {
