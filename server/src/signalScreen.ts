@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { allStocksUniverse } from "./allStocks.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cumulativeRank } from "./cumulativeRank.js";
@@ -319,6 +320,11 @@ async function fillFromSnapshot(client: KiwoomClient, rows: Candidate[]): Promis
  * TR. 새 TR 을 만들지 않는다.
  */
 export const SCREEN_UNIVERSES: { key: string; label: string; hint: string }[] = [
+  {
+    key: "all",
+    label: "전종목 (조회 0회 사전훑기)",
+    hint: "2,400여 종목을 일봉 캐시로 훑어 후보를 세운다 — 거래대금 순위 밖도 본다",
+  },
   { key: "trade-value", label: "거래대금 상위", hint: "돈이 몰린 곳 — 기본. 최대 500까지 이어받는다" },
   { key: "flu-rate", label: "등락률 상위", hint: "오늘 가장 오른 종목 — 이미 오른 것 중에 더 갈 것을 찾는다" },
   { key: "cum", label: "누적등락률 상위 (5일)", hint: "닷새 누적으로 오른 종목 — 하루 급등보다 흐름" },
@@ -501,6 +507,26 @@ export async function fetchUniverse(
   market: string,
   limit: number,
 ): Promise<Candidate[]> {
+  /**
+   * **전종목** (2026-09-01) — 조회 0회.
+   *
+   * 벤티지: "전체종목 훑는거지? 다?" — 아니었다. 모집단이 전부 순위 조회라
+   * **거래대금 500위 밖은 아예 안 보였다.** 실측에서 가장 잘 통한 것이
+   * 「시총 3천억 이하 소형주」인데 그런 종목이 거래대금 순위에서는 아래쪽이다.
+   *
+   * ⚠️ 여기서 매기는 사전 점수는 **일봉으로 낼 수 있는 기준만**으로 낸 것이라
+   * 추세가 좋은 종목이 위로 온다. 「좋은 종목」이 아니라 「볼 만한 후보」다.
+   */
+  if (key === "all") {
+    const { rows } = await allStocksUniverse(client, market, limit);
+    return rows.map((r) => ({
+      code: r.code,
+      name: r.name,
+      price: r.price,
+      changeRate: r.changeRate,
+      tradeValue: r.tradeValue,
+    }));
+  }
   if (key === "trade-value") return tradeValueTop(client, market, limit);
   if (key === "cum") {
     const r = await cumulativeRank(client, market, 5, Math.min(200, Math.max(limit, 100)));

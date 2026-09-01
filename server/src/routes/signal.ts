@@ -44,6 +44,7 @@ import {
   type CondQuery,
 } from "../condSearch.js";
 import { COND_FIELDS } from "../condFields.js";
+import { allStocksUniverse } from "../allStocks.js";
 import { tradeValueTop } from "../signalScreen.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
@@ -194,6 +195,32 @@ export function createSignalRouter(client: KiwoomClient): Router {
   /** 고를 수 있는 모집단 — 화면이 버튼을 이걸로 그린다 (하드코딩하면 서버와 갈린다) */
   router.get("/screen/universes", (_req, res) => {
     res.json({ universes: SCREEN_UNIVERSES });
+  });
+
+  /**
+   * **전종목 사전훑기 미리보기** (2026-09-01) — 조회 0회.
+   *
+   * 「전종목」 모집단을 고르면 2,400여 종목 중 어떤 후보가 올라오는지 **돌려 보기
+   * 전에** 보여 준다. 찾기를 걸면 후보마다 수급·재무 조회가 나가므로, 무엇이
+   * 뽑혔는지 모르는 채로 몇 분을 기다리게 하면 안 된다.
+   *
+   * ⚠️ 여기 점수는 **일봉으로 낼 수 있는 기준만**으로 낸 사전 점수다. 수급·재무는
+   * 전부 빠져 있어 추세가 좋은 종목이 위로 온다. 「좋은 종목」이 아니라 「본격적으로
+   * 볼 만한 후보」다 — 화면이 그 말을 그대로 적는다.
+   *
+   * `/screen/:jobId` 보다 먼저 등록해야 한다.
+   */
+  router.get("/screen/preview", async (req, res, next) => {
+    try {
+      const market = ["000", "001", "101"].includes(String(req.query.market))
+        ? String(req.query.market)
+        : "000";
+      const limit = Math.min(Math.max(Number(req.query.limit) || 100, 10), 500);
+      const minValue = Math.max(Number(req.query.minValue) || 10, 0);
+      res.json(await allStocksUniverse(client, market, limit, minValue));
+    } catch (err) {
+      next(err);
+    }
   });
 
   /** 지금 돌고 있는 찾기 — 전역 작업 띠와 화면 복귀가 본다 */
