@@ -73,6 +73,9 @@ function diffFromDefaults(cur: SignalConfig, def: SignalConfig): string[] {
       out.push(`${label} 축 가중치 ${cur.axisWeights[k]} → ${def.axisWeights[k]}`);
     }
   }
+  if (cur.regimeSwitch !== def.regimeSwitch)
+    out.push(`장세 전환 ${cur.regimeSwitch ? "켬 → 끔" : "끔 → 켬"}`);
+  if (cur.bullAt !== def.bullAt) out.push(`강세장 기준 ${cur.bullAt}% → ${def.bullAt}%`);
   for (const d of def.checks) {
     const c = cur.checks.find((x) => x.key === d.key);
     if (!c) continue;
@@ -513,6 +516,43 @@ export function SignalConfigPanel() {
           />
           위험이 빨강이면 초록을 주지 않는다
         </label>
+      </div>
+
+      {/*
+        **장세 전환** (2026-09-01) — 벤티지: "강세장이다 약세장이다라는 판단 기준은
+        네가 정해서 하는 거야? 아니면 나한테 옵션 값을 주는 거야?"
+
+        맞는 물음이다. 문턱이 코드에 박혀 있으면 **사람이 도구를 통제하지 못한다.**
+        근거(표본 380일 중앙값 50)는 기본값으로 두되, 바꾸고 끄는 것은 사람 몫이다.
+      */}
+      <div className="sig-config-line sig-regime-line">
+        <label className="sig-block-toggle">
+          <input
+            type="checkbox"
+            checked={config.regimeSwitch}
+            onChange={(e) => patch({ regimeSwitch: e.target.checked })}
+          />
+          <b>장세에 따라 기준을 갈아 끼운다</b>
+        </label>
+        <label title="전종목 중 20일선 위인 비율이 이 값 이상이면 강세장입니다">
+          강세장 기준
+          <input
+            type="number"
+            min={10}
+            max={90}
+            value={config.bullAt}
+            disabled={!config.regimeSwitch}
+            onChange={(e) =>
+              patch({ bullAt: Math.max(10, Math.min(90, Number(e.target.value) || 50)) })
+            }
+          />
+          <span className="sig-unit">% 가 20일선 위</span>
+        </label>
+        <span className="table-note">
+          같은 기준도 장세에 따라 방향이 뒤집힙니다 — <b>60일 신고가는 강세장 승률
+          +1.4%p, 약세장 −3.9%p</b>. 그래서 장세에 안 맞는 기준은 점수에서 뺍니다.
+          끄면 예전처럼 전부 씁니다. 기본 50%는 표본 380거래일의 중앙값입니다.
+        </span>
       </div>
 
       <div className="sig-config-actions">

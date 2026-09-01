@@ -13271,3 +13271,16 @@ thead .sd-emph {
   gap: 8px;
   margin-bottom: 8px;
 }
+
+/* 장세 전환 설정 (2026-09-01) — 「내가 정한 값이 코드에 박혀 있으면 안 된다」는
+   벤티지 지적에서 나왔다. 근거는 기본값으로, 통제는 사람에게. */
+.sig-regime-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 8px 0;
+  border-top: 1px dashed var(--border);
+}
+.sig-regime-line input[type="number"] { width: 4.5rem; }
+.sig-regime-line .table-note { flex: 1 1 22rem; margin: 0; }

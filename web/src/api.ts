@@ -3015,6 +3015,15 @@ export interface SignalConfig {
   riskRedAt: number;
   /** 위험이 빨강이면 종합을 초록으로 올리지 않는다 */
   riskBlocksGreen: boolean;
+  /**
+   * **장세에 따라 기준을 갈아 끼울까** (2026-09-01).
+   *
+   * 끄면 `regime` 이 붙은 기준도 늘 쓴다 — 예전처럼 도는 것이다.
+   * 「어제 초록이던 게 오늘 노랑」인 이유가 장세일 수 있고, 그게 싫으면 끌 수 있어야 한다.
+   */
+  regimeSwitch: boolean;
+  /** 강세장으로 보는 선 — 전종목 중 20일선 위인 비율(%). 기본 50 */
+  bullAt: number;
 }
 
 export interface StockNote {

@@ -981,7 +981,8 @@
       "Bash(rm -f web/src/pages/SignalHubPage.tsx)",
       "Bash(curl -s \"http://localhost:4000/api/market/rank/intraday-investor?market=000\")",
       "Bash(node -e 'console.log\\(new Date\\(Date.now\\(\\)+9*3600000\\).toISOString\\(\\)\\)')",
-      "Bash(curl -s -X POST http://localhost:4000/api/signal/screen -H \"Content-Type: application/json\" -d '{\"universe\":\"foreign-period\",\"market\":\"000\",\"limit\":8,\"minLevel\":\"red\"}')"
+      "Bash(curl -s -X POST http://localhost:4000/api/signal/screen -H \"Content-Type: application/json\" -d '{\"universe\":\"foreign-period\",\"market\":\"000\",\"limit\":8,\"minLevel\":\"red\"}')",
+      "Bash(node -e 'const d=new Date\\(Date.now\\(\\)+9*3600000\\);console.log\\(\"지금 KST\",d.toISOString\\(\\).slice\\(11,16\\),[\"일\",\"월\",\"화\",\"수\",\"목\",\"금\",\"토\"][d.getUTCDay\\(\\)]\\)')"
     ]
   }
 }

@@ -36,8 +36,14 @@ import { loadCloses } from "./dailyCloses.js";
  * 흔들리는 편이 더 나쁘다 — 같은 종목이 오전과 오후에 다른 점수를 받는다.
  */
 
-/** 강세·약세를 가르는 선(%). 표본 380일의 중앙값이 정확히 50 이었다 */
-const BULL_AT = 50;
+/**
+ * 강세·약세를 가르는 선(%) — **기본값일 뿐, 설정이 이긴다.**
+ *
+ * 표본 380거래일의 중앙값이 정확히 50 이었다. 근거가 있는 값이지만 「나는 60% 는
+ * 돼야 강세장으로 본다」가 얼마든지 가능한 판단이라, `SignalConfig.bullAt` 으로
+ * 사람이 바꿀 수 있게 열어 두었다.
+ */
+const DEFAULT_BULL_AT = 50;
 
 export type Regime = "bull" | "bear";
 
@@ -47,6 +53,8 @@ export interface MarketRegime {
   regime: Regime;
   /** 몇 종목으로 쟀나 — 캐시가 얇으면 믿을 값이 아니다 */
   measured: number;
+  /** 무슨 선으로 갈랐나(%) — 화면이 근거를 말할 수 있게 */
+  bullAt: number;
   /** 캐시를 언제 받았나 */
   builtAt: string;
   at: string;
@@ -59,7 +67,7 @@ function ma20(closes: number[]): number | null {
   return win.reduce((a, b) => a + b, 0) / 20;
 }
 
-let cache: { data: MarketRegime; at: number } | null = null;
+let cache: { data: MarketRegime; at: number; bullAt: number } | null = null;
 /** 캐시가 하루 한 번 갱신되므로 10분이면 충분하다 */
 const TTL_MS = 10 * 60_000;
 
@@ -69,8 +77,9 @@ const TTL_MS = 10 * 60_000;
  * 캐시가 너무 얇으면(200종목 미만) **판정하지 않고 null** 을 돌려준다 —
  * 모르는 것을 「강세」로 찍으면 그 순간 기준 절반이 잘못 켜진다.
  */
-export async function marketRegime(): Promise<MarketRegime | null> {
-  if (cache && Date.now() - cache.at < TTL_MS) return cache.data;
+export async function marketRegime(bullAt = DEFAULT_BULL_AT): Promise<MarketRegime | null> {
+  /* 문턱이 바뀌면 캐시를 다시 쓸 수 없다 — 같은 폭이라도 다른 답이 나온다 */
+  if (cache && cache.bullAt === bullAt && Date.now() - cache.at < TTL_MS) return cache.data;
 
   const { closes, builtAt } = await loadCloses();
   let above = 0;
@@ -86,12 +95,13 @@ export async function marketRegime(): Promise<MarketRegime | null> {
   const breadth = (above / measured) * 100;
   const data: MarketRegime = {
     breadth: Math.round(breadth * 10) / 10,
-    regime: breadth >= BULL_AT ? "bull" : "bear",
+    regime: breadth >= bullAt ? "bull" : "bear",
     measured,
+    bullAt,
     builtAt,
     at: new Date().toISOString(),
   };
-  cache = { data, at: Date.now() };
+  cache = { data, at: Date.now(), bullAt };
   return data;
 }
 

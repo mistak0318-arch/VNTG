@@ -111,6 +111,8 @@ export type CheckKey =
   | "volume"
   | "profitGrowth"
   | "marketCap"
+  /* 대형주 (2026-09-01) — 시총은 U자라 한 눈금으로 못 담는다 */
+  | "largeCap"
   | "exportGrowth"
   | "targetUpside"
   | "targetTrend"
@@ -243,6 +245,22 @@ export interface SignalConfig {
   riskRedAt: number;
   /** 위험이 빨강이면 종합을 초록으로 올리지 않는다 */
   riskBlocksGreen: boolean;
+  /**
+   * **장세에 따라 기준을 갈아 끼울까** (2026-09-01).
+   *
+   * 끄면 `regime` 이 붙은 기준도 **늘 쓴다** — 예전처럼 도는 것이다.
+   * 자동 전환이 편하긴 하지만 「어제 초록이던 게 오늘 노랑」인 이유가 장세일 수
+   * 있고, 그게 싫으면 끌 수 있어야 한다. **판단은 사람 몫이다.**
+   */
+  regimeSwitch: boolean;
+  /**
+   * 강세장으로 보는 선 — **전종목 중 20일선 위인 비율(%)**.
+   *
+   * 기본 50 은 표본 380거래일의 중앙값이 정확히 50 이었기 때문이다. 근거가 있는
+   * 값이지만 **사람이 바꿀 수 있어야 한다** — 「나는 60% 는 돼야 강세장으로 본다」가
+   * 얼마든지 가능한 판단이다.
+   */
+  bullAt: number;
 }
 
 /** 정배열 판정에 고를 수 있는 이동평균선 */
@@ -366,6 +384,9 @@ export const DEFAULT_CONFIG: SignalConfig = {
   riskYellowAt: 40,
   riskRedAt: 70,
   riskBlocksGreen: true,
+  regimeSwitch: true,
+  /* 표본 380거래일의 중앙값이 정확히 50 이었다 */
+  bullAt: 50,
   checks: [
     // ---------------- 추세 ----------------
     {
@@ -1176,10 +1197,56 @@ export const DEFAULT_CONFIG: SignalConfig = {
        */
       enabled: true,
       weight: 3,
-      /* 3조부터 무거워지고 3천억 이하면 만점 — 자리가 거꾸로인 것이 의도다 */
-      threshold: 30000,
+      /*
+       * **3조 → 5천억으로 좁힌다** (2026-09-01, 장세별 실측).
+       *
+       * 시총은 **U자**다. 구간별 초과(중앙·절사·승률이 다 같은 방향일 때만 ✓):
+       *
+       *          강세장            약세장
+       *   3천억↓  **+8.1%p ✓**   **+7.6%p ✓**
+       *   3천~1조  -2.9    ✗      -1.7    ✗   ← 골짜기
+       *   1~3조    -1.2    ✗      -0.7    ✗
+       *   3~10조   +1.0    ✓      -1.6    ✗
+       *   10조↑    **+3.9  ✓**    +0.9    ✗   ← 강세장 전용
+       *
+       * 예전 눈금(3조 → 3천억)은 **골짜기에 중간 점수를 주고** 있었다 — 1조짜리가
+       * 나쁜데 50점을 받았다. 5천억으로 좁혀 그 구간을 0 점으로 떨어뜨린다.
+       *
+       * 오른쪽 끝(3조 이상)은 이 눈금으로 못 담는다 — 아래 `largeCap` 이 맡는다.
+       */
+      threshold: 5000,
       strongAt: 3000,
       hint: "시가총액(억원). **클수록 감점** — 20일을 보는 매매에서 대형주는 덜 움직인다(뒤쪽 3천억↓ +5.48%p · 3~10조 -3.01%p)",
+      cost: 0,
+    },
+    {
+      key: "largeCap",
+      label: "대형주 (강세장)",
+      axis: "value",
+      /*
+       * **U자의 오른쪽 끝** (2026-09-01 신설).
+       *
+       * 시총 실측이 U자였다 — 3천억 이하가 압도적으로 좋고(양쪽 장세 승률 +8.1·+7.6),
+       * 가운데(3천억~3조)가 골짜기이고, **10조 이상이 강세장에서 다시 좋다**(+3.9%p).
+       *
+       * 한 눈금으로는 U자를 못 담는다. `grade()` 는 단조이기 때문이다 — 「작을수록
+       * 좋다」로 두면 대형주가 0 점이 되고, 「클수록」으로 두면 소형주가 0 점이 된다.
+       * 그래서 **양 끝을 기준 둘로 나눈다.**
+       *
+       *   `marketCap`  5천억 → 3천억 (작을수록 좋음, 장세 무관)
+       *   `largeCap`   3조 → 10조 (클수록 좋음, **강세장에서만**)
+       *
+       * 가운데 종목은 **둘 다 0 점**이 된다 — 그게 데이터가 말하는 그대로다.
+       *
+       * ⚠️ 약세장에서는 켜지 않는다. 10조 이상이 약세장에서 중앙 +0.17 · 절사
+       * -0.15 · 승률 +0.9%p 로 셋이 안 맞았다 — 「모르겠다」에 가깝다.
+       */
+      regime: "bull",
+      enabled: true,
+      weight: 2,
+      threshold: 30000,
+      strongAt: 100000,
+      hint: "시가총액(억원) — **강세장에서만** 씁니다. 시총은 U자라(3천억 이하와 10조 이상이 좋고 가운데가 나쁨) 양 끝을 기준 둘로 나눴습니다",
       cost: 0,
     },
     {
@@ -1483,6 +1550,12 @@ function mergeConfig(saved: Partial<SignalConfig> | null): SignalConfig {
       };
     }),
     maLines: normalizeMaLines(saved?.maLines ?? DEFAULT_CONFIG.maLines),
+    regimeSwitch:
+      typeof saved?.regimeSwitch === "boolean" ? saved.regimeSwitch : DEFAULT_CONFIG.regimeSwitch,
+    bullAt:
+      Number.isFinite(saved?.bullAt) && Number(saved?.bullAt) > 0 && Number(saved?.bullAt) < 100
+        ? Number(saved?.bullAt)
+        : DEFAULT_CONFIG.bullAt,
   };
 }
 
@@ -1516,6 +1589,8 @@ export async function configFingerprint(): Promise<string> {
   const parts = [
     `g${c.greenAt}y${c.yellowAt}`,
     `r${c.riskYellowAt}-${c.riskRedAt}${c.riskBlocksGreen ? "B" : ""}`,
+    /* 장세 전환은 점수를 통째로 바꾼다 — 지문에 없으면 「같은 설정」으로 오인된다 */
+    `rg${c.regimeSwitch ? c.bullAt : "off"}`,
     `aw${c.axisWeights.trend}${c.axisWeights.flow}${c.axisWeights.value}`,
     `f${c.flowDays}`,
     `ma${c.maLines.join("")}`,
@@ -1763,7 +1838,7 @@ export async function evaluateSignal(
    *
    * 조회는 안 는다 — 일봉 캐시에서 이동평균을 내는 것뿐이다.
    */
-  const mkt = await marketRegime().catch(() => null);
+  const mkt = cfg.regimeSwitch ? await marketRegime(cfg.bullAt).catch(() => null) : null;
   const enabled = cfg.checks.filter(
     (c) => c.enabled && (!c.regime || !mkt || c.regime === mkt.regime),
   );
