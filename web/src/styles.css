@@ -3750,6 +3750,34 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .tc-head { font-size: 0.76rem; margin-bottom: 2px; }
 
 /*
+ * 차트를 갈아 끼우는 중 (2026-09-01).
+ *
+ * 탭을 옮기면 새 봉이 오기까지 몇 초가 걸리는데, 그동안 **옛 차트가 그대로**
+ * 보였다. 그건 「안 바뀐다」와 화면에서 구별이 안 된다 — 실제로 벤티지가
+ * 야간선물에서 그걸 버그로 봤다.
+ *
+ * 지우면 매번 텅 비었다 다시 차서 더 나쁘다. 흐리게 하고 배지를 얹어
+ * 「지금 것이 아니다」와 「곧 온다」를 같이 말한다.
+ */
+.chart-swapping { position: relative; opacity: 0.45; transition: opacity 0.15s; }
+.chart-swapping > *:not(.chart-swap-badge) { pointer-events: none; }
+.chart-swap-badge {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  opacity: 1;
+  pointer-events: none;
+}
+
+/*
  * 수출입 품목 표 — **넓으면 두 칸** (2026-09-01).
  *
  * 서른 줄을 한 칸에 쌓으면 아래쪽을 보려고 스크롤하는 사이 위쪽이 화면에서

@@ -340,6 +340,21 @@ async function intradayCandles(
  *
  * `"I"`(당일)만 **다른 TR** 을 쓴다 — 기간별시세에는 분 단위가 없다.
  */
+/*
+ * ## 짧은 캐시 (2026-09-01)
+ *
+ * 벤티지: "일봉에 당일로 간 다음에 좀 딜레이가 걸린다."
+ *
+ * 맞다. 특히 당일이 한투를 **여섯 번 차례로** 두드린다(102봉씩 뒤로 이어붙이기 —
+ * 앞 응답을 봐야 다음을 물으므로 병렬이 안 된다). 탭을 오가면 그걸 매번 다시 한다.
+ *
+ * 봉은 1분에 한 칸씩 늘고 일·주·월봉은 하루에 한 번 바뀐다. 그래서 **당일은
+ * 30초, 나머지는 10분**을 묶어 둔다 — 그 안에서는 탭을 오가도 즉답이다.
+ * 실시간성을 해치지 않으면서 왕복을 없앤다.
+ */
+const chartCache = new Map<string, { at: number; v: { candles: FuturesCandle[]; error: string | null } }>();
+const CHART_TTL = { intraday: 30_000, daily: 600_000 };
+
 export async function futuresCandles(
   code: string,
   market: "F" | "CM" = "CM",
@@ -347,7 +362,19 @@ export async function futuresCandles(
   days = 120,
 ): Promise<{ candles: FuturesCandle[]; error: string | null }> {
   if (!hantooReady()) return { candles: [], error: "한투 API 미설정" };
-  if (period === "I") return intradayCandles(code, market);
+
+  const key = `${code}|${market}|${period}|${days}`;
+  const ttl = period === "I" ? CHART_TTL.intraday : CHART_TTL.daily;
+  const hit = chartCache.get(key);
+  if (hit && Date.now() - hit.at < ttl) return hit.v;
+
+  /** 성공한 것만 담는다 — 빈 응답을 굳히면 그 시간 동안 계속 비어 보인다 */
+  const keep = (v: { candles: FuturesCandle[]; error: string | null }) => {
+    if (v.candles.length > 0) chartCache.set(key, { at: Date.now(), v });
+    return v;
+  };
+
+  if (period === "I") return keep(await intradayCandles(code, market));
   const fmt = fmtDay;
   const to = new Date();
   const from = new Date(to.getTime() - days * 24 * 3600_000);
@@ -387,7 +414,7 @@ export async function futuresCandles(
       .filter((c) => c.close > 0 && c.t)
       // 한투는 최신순으로 준다. 차트는 오래된 것부터다
       .sort((a, b) => a.t.localeCompare(b.t));
-    return { candles, error: candles.length === 0 ? "봉이 하나도 없습니다" : null };
+    return keep({ candles, error: candles.length === 0 ? "봉이 하나도 없습니다" : null });
   } catch (err) {
     return { candles: [], error: err instanceof Error ? err.message : "차트 조회 실패" };
   }

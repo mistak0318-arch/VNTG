@@ -594,11 +594,30 @@ export function YahooChartSheet({
           )}
         </div>
 
+        {/*
+          ## **불러오는 중이라고 말한다** (2026-09-01)
+
+          벤티지: "코스피 야간선물 당일 일봉 주봉 월봉이 모두 같다 안바껴" →
+          "아 딜레이가 있었다. 옮긴다음에 좀 기다려야해."
+
+          버그가 아니라 **화면이 그 사실을 말을 안 한 것**이었다. 조건이
+          `loading && !view` 라, 이전 탭의 차트가 남아 있으면 로딩 문구가 아예
+          안 떴다. 그래서 몇 초 동안 **옛 그림이 그대로** 보이고, 그건 「안 바뀐다」와
+          화면에서 구별이 안 된다.
+
+          그렇다고 옛 차트를 지우면 매번 화면이 텅 비었다 다시 차서 더 나쁘다.
+          **남겨 두되 흐리게 하고 배지를 얹는다** — 「지금 것이 아니다」와
+          「곧 온다」를 동시에 말하는 방법이다.
+
+          특히 야간선물 당일이 느리다. 한투가 한 번에 102봉만 줘서 뒤로 여섯 판을
+          **차례로** 이어붙이기 때문이다(앞 응답을 봐야 다음을 물으므로 병렬이 안 된다).
+        */}
         {loading && !view && <div className="empty">차트 불러오는 중…</div>}
         {!loading && data?.error && <div className="error-banner">{data.error}</div>}
 
         {view && (
-          <>
+          <div className={loading ? "chart-swapping" : undefined}>
+            {loading && <div className="chart-swap-badge">불러오는 중…</div>}
             {/*
               큰 숫자는 **전일 대비**다 — 목록에서 보고 누른 그 숫자와 같아야 한다.
               해외 종목은 compact — 정보가 많아 숫자 하나가 화면을 먹으면 안 된다
@@ -744,7 +763,7 @@ export function YahooChartSheet({
                 미결제가 <b>줄면</b> 숏 청산이 밀어 올린 것이라 힘이 약합니다.
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>
