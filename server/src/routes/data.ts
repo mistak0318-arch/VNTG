@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { CATS, compressOldLogs, dataReport, pruneData, setKeepDays } from "../dataRetention.js";
-import { ledgerStatus } from "../dailyStore.js";
-import { collectProgress } from "../collectDaily.js";
+import { ledgerStatus, loadCollectHistory } from "../dailyStore.js";
+import { collectProgress, startCollectDaily } from "../collectDaily.js";
 
 /** 데이터 보관 — 현황 보기 · 기간 정하기 · 지금 정리 (2026-08-31) */
-export function createDataRouter(): Router {
+export function createDataRouter(client: import("../kiwoomClient.js").KiwoomClient): Router {
   const router = Router();
 
   router.get("/", async (_req, res, next) => {
@@ -60,10 +60,30 @@ export function createDataRouter(): Router {
    */
   router.get("/ledger", async (_req, res, next) => {
     try {
-      res.json({ ledger: await ledgerStatus(), collect: collectProgress() });
+      res.json({
+        ledger: await ledgerStatus(),
+        collect: collectProgress(),
+        /* 언제 성공했고 언제 실패했나 — 죽은 회차는 `status: "error"` 로 남는다 */
+        history: (await loadCollectHistory()).slice(0, 30),
+      });
     } catch (err) {
       next(err);
     }
+  });
+
+  /**
+   * **다시 수집** (2026-09-01) — 실패한 날을 손으로 돌린다.
+   *
+   * 벤티지: "실패한 날에 대해서는 수동 버튼 하나 만들어서 재수집하게 하는 거야."
+   *
+   * ⚠️ **그날 값을 다시 받는 게 아니다.** 키움은 과거 시점의 수급을 안 준다 —
+   * 지금 받으면 지금까지의 최신 100일이 온다. 그래서 이 버튼은 「그날을 복구」가
+   * 아니라 **「지금 다시 받아 빈 곳을 메운다」**이다. 최근 며칠이 빠졌으면
+   * 대부분 메워지고, 100일보다 오래 빠진 구간은 못 메운다.
+   */
+  router.post("/ledger/collect", (_req, res) => {
+    void startCollectDaily(client, undefined, 120, undefined, true);
+    res.json({ started: true, progress: collectProgress() });
   });
 
   return router;

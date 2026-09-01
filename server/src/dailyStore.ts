@@ -438,3 +438,93 @@ export async function flowRank(
   rankCache = { key, at: Date.now(), rows, covered };
   return { rows: rows.slice(0, limit), covered };
 }
+
+/* ------------------------------------------------------------------ */
+/* 수집 이력 — 언제 성공했고 언제 실패했나                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **수집 이력** (2026-09-01).
+ *
+ * 벤티지: "이거 언제 성공했고 실패했는지 보여주자 화면에. 그리고 실패한 날에
+ * 대해서는 수동 버튼 하나 만들어서 재수집하게 하는 거야. 어때?"
+ *
+ * 필요한 이유가 바로 그날 드러났다. 41분짜리 수집이 도는 중에 서버가 재시작되면
+ * (배포·코드 수정·미니PC 재부팅) **작업이 통째로 죽는데 아무도 모른다.** 진행률은
+ * 메모리 변수라 재시작과 함께 0 이 되고, 화면은 죽기 직전 숫자를 붙들고 있다 —
+ * 실제로 「1005/2627 수집 중」이 화면에 남아 있는데 서버에는 아무것도 안 돌고
+ * 있었다.
+ *
+ * ## 시작할 때 적고, 끝날 때 갱신한다
+ *
+ * 끝나고 적으면 **죽은 회차는 영영 기록에 안 남는다.** 시작할 때 `running` 으로
+ * 적어 두면, 다음에 열었을 때 「그날 시작은 했는데 안 끝났다」가 보인다.
+ * 그게 곧 「그날은 실패했다」는 뜻이다.
+ */
+export interface CollectRun {
+  /** KST 날짜 (YYYY-MM-DD) */
+  day: string;
+  startedAt: string;
+  finishedAt?: string;
+  /** running 인 채로 남아 있으면 **죽은 것**이다 */
+  status: "running" | "done" | "error";
+  done: number;
+  total: number;
+  fails: number;
+  /** 종류별로 몇 줄 담았나 */
+  added: Record<string, number>;
+  error?: string;
+  /** 손으로 다시 돌린 것인가 */
+  manual?: boolean;
+}
+
+const HIST_FILE = join(here, "..", "data", "collectHistory.json");
+/** 60일치만 — 그보다 오래된 회차는 볼 일이 없다 */
+const HIST_KEEP = 60;
+
+export async function loadCollectHistory(): Promise<CollectRun[]> {
+  try {
+    const raw = JSON.parse(await readFile(HIST_FILE, "utf-8")) as CollectRun[];
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 회차 하나를 적는다 — 같은 날이 있으면 덮어쓴다.
+ *
+ * ⚠️ 하루 한 번이 원칙이지만 실패해서 다시 돌릴 수 있다. 그때는 **마지막 시도**가
+ * 그날의 결과다 — 성공했는데 「실패」로 남아 있으면 볼 때마다 다시 누르게 된다.
+ */
+export async function putCollectRun(run: CollectRun): Promise<void> {
+  const list = (await loadCollectHistory()).filter((r) => r.day !== run.day);
+  list.unshift(run);
+  await mkdir(dirname(HIST_FILE), { recursive: true });
+  await writeFile(HIST_FILE, JSON.stringify(list.slice(0, HIST_KEEP), null, 1), "utf-8");
+}
+
+/**
+ * **죽은 회차를 정리한다** — 서버가 뜰 때 한 번.
+ *
+ * `running` 인 채로 남은 회차는 그때 죽은 것이다. 그대로 두면 다음 수집이
+ * 「이미 도는 중」으로 오해받을 수 있고, 무엇보다 화면이 영영 「수집 중」을
+ * 보여 준다.
+ */
+export async function closeStaleRuns(): Promise<number> {
+  const list = await loadCollectHistory();
+  let n = 0;
+  for (const r of list) {
+    if (r.status === "running") {
+      r.status = "error";
+      r.error = "서버가 다시 시작되어 중단됐습니다";
+      r.finishedAt = new Date().toISOString();
+      n += 1;
+    }
+  }
+  if (n > 0) {
+    await mkdir(dirname(HIST_FILE), { recursive: true });
+    await writeFile(HIST_FILE, JSON.stringify(list, null, 1), "utf-8");
+  }
+  return n;
+}

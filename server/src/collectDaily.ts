@@ -15,6 +15,7 @@ import {
   type ProgRow,
   type RatioRow,
   type ShortRow,
+  putCollectRun,
 } from "./dailyStore.js";
 import { alCode } from "./alCode.js";
 
@@ -254,6 +255,8 @@ export function startCollectDaily(
   back = 120,
   /** 몇 종목만 시험 삼아 — 41분짜리를 돌리기 전에 값이 제대로 담기는지 본다 */
   only?: string[],
+  /** 사람이 눌러서 돌린 것인가 — 이력에 적어 두면 「자동이 실패해서 손으로 돌렸다」가 보인다 */
+  manual = false,
 ): Promise<CollectProgress> {
   if (running) return running;
 
@@ -272,6 +275,23 @@ export function startCollectDaily(
       fails: 0,
       startedAt: new Date().toISOString(),
     };
+
+    /*
+     * **시작할 때 적는다** (2026-09-01). 끝나고 적으면 죽은 회차가 영영 기록에
+     * 안 남는다 — 41분짜리라 그 사이 재시작이 잦다. `running` 인 채로 남아 있으면
+     * 그게 곧 「그날 실패했다」는 뜻이고, 서버가 뜰 때 `closeStaleRuns` 가 닫는다.
+     */
+    const day = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+    await putCollectRun({
+      day,
+      startedAt: progress.startedAt,
+      status: "running",
+      done: 0,
+      total: codes.length,
+      fails: 0,
+      added: {},
+      manual: only !== undefined && only.length > 0 ? undefined : manual,
+    }).catch(() => undefined);
 
     for (const code of codes) {
       progress.done += 1;
@@ -325,6 +345,19 @@ export function startCollectDaily(
     progress.finishedAt = new Date().toISOString();
     progress.at = undefined;
     void today;
+
+    await putCollectRun({
+      day,
+      startedAt: progress.startedAt,
+      finishedAt: progress.finishedAt,
+      status: "done",
+      done: progress.done,
+      total: progress.total,
+      fails: progress.fails,
+      added: { ...progress.added },
+      manual,
+    }).catch(() => undefined);
+
     return progress;
   })().finally(() => {
     running = null;

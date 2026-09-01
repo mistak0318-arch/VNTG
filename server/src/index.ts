@@ -70,6 +70,7 @@ import { startRealtimeScheduler } from "./realtimeHub.js";
 import { startBrokerAuto } from "./brokerAuto.js";
 import { startCollectScheduler } from "./collectScheduler.js";
 import { syncScoreBands } from "./scoreBandSync.js";
+import { closeStaleRuns } from "./dailyStore.js";
 import { createSignalRouter } from "./routes/signal.js";
 import { createPaperRouter } from "./routes/paper.js";
 import { createCisRouter } from "./routes/cis.js";
@@ -226,7 +227,7 @@ app.use("/api/realtime", createRealtimeRouter(client));
 app.use("/api/report", createReportRouter(client));
 app.use("/api/news-keywords", createNewsKeywordRouter());
 app.use("/api/naver-sync", createNaverSyncRouter(client));
-app.use("/api/data", createDataRouter());
+app.use("/api/data", createDataRouter(client));
 
 // 07/12/18시에 리포트를 발행한다 (AI 요약은 이때만 생성)
 startReportScheduler(client);
@@ -309,6 +310,14 @@ startCollectScheduler(client);
  * 조회 0회다 — 저장된 회차와 원장만 읽는다.
  */
 void syncScoreBands().catch(() => undefined);
+
+/*
+ * **죽은 수집 회차를 닫는다** (2026-09-01) — 서버가 뜰 때 한 번.
+ *
+ * 41분짜리 수집이 도는 중에 재시작되면 작업이 죽는데, 이력에는 `running` 인 채로
+ * 남는다. 그대로 두면 화면이 영영 「수집 중」을 보여 준다 — 실제로 그 일이 있었다.
+ */
+void closeStaleRuns().catch(() => undefined);
   startDisclosureScheduler();
 
 /**

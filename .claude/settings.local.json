@@ -1022,7 +1022,10 @@
       "Bash(node --max-old-space-size=4096 ./node_modules/tsx/dist/cli.mjs diag.ts)",
       "Bash(rm -f dt.json dt.txt)",
       "Bash(curl -s \"http://localhost:4000/api/rank/_probe/dt?api=ka10035&key=base_dt_tp&vals=0,1,2,3,5\" --max-time 90 -o b.json)",
-      "Bash(curl -s -X POST http://localhost:4000/api/signal/cond/start -H \"Content-Type: application/json\" -d '{\"universe\":\"foreign-period\",\"limit\":20,\"lines\":[{\"key\":\"trend\",\"op\":\"pass\"}]}' --max-time 20)"
+      "Bash(curl -s -X POST http://localhost:4000/api/signal/cond/start -H \"Content-Type: application/json\" -d '{\"universe\":\"foreign-period\",\"limit\":20,\"lines\":[{\"key\":\"trend\",\"op\":\"pass\"}]}' --max-time 20)",
+      "Bash(curl -s -X POST http://localhost:4000/api/signal/collect/daily -H \"Content-Type: application/json\" -d '{\"codes\":[\"005930\",\"000660\",\"035720\"],\"back\":60}' --max-time 20)",
+      "Bash(curl -s http://localhost:4000/api/data/ledger -o L.json)",
+      "Bash(rm -f L.json)"
     ]
   }
 }

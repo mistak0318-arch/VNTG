@@ -13563,3 +13563,8 @@ thead .sd-emph {
 .uni-spans .filter-btn { padding: 1px 8px; font-size: 0.72rem; }
 .uni-warn { font-size: 0.72rem; color: var(--warn, #d9a441); }
 .uni-actions { margin-top: 10px; align-items: center; gap: 10px; }
+
+/* 수집 이력 (2026-09-01) — 실패한 날이 눈에 띄어야 다시 누른다 */
+.dret-hist { margin: 8px 0; font-size: 12px; }
+.dret-fail td { color: var(--warn, #d9a441); }
+.dret-hist-act { align-items: flex-start; gap: 10px; margin: 6px 0; }

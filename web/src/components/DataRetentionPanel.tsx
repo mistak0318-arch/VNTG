@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type CollectProgress, type DataReport, type LedgerStatus } from "../api";
+import { api, type CollectProgress, type CollectRun, type DataReport, type LedgerStatus } from "../api";
 
 /**
  * 데이터 보관 (2026-08-31 요청 — 「기간별로 드는 용량 표시해주고, 최종적으로 전체
@@ -67,7 +67,11 @@ export function DataRetentionPanel() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   /** 일별 원장 — 얼마나 쌓였나 · 지금 수집 중인가 (2026-09-01) */
-  const [led, setLed] = useState<{ ledger: LedgerStatus; collect: CollectProgress } | null>(null);
+  const [led, setLed] = useState<{
+    ledger: LedgerStatus;
+    collect: CollectProgress;
+    history: CollectRun[];
+  } | null>(null);
 
   useEffect(() => {
     api.dataReport().then(setRep).catch(() => undefined);
@@ -90,6 +94,41 @@ export function DataRetentionPanel() {
    * 4일치 222MB 가 48MB 가 됐다. 「작게 오래 두기」가 「크게 짧게 두기」보다 낫다 —
    * 이 데이터는 키움이 지나간 것을 안 줘서 지우면 영영 못 받는다.
    */
+  /**
+   * **다시 수집** — 실패한 날을 손으로 돌린다.
+   *
+   * ⚠️ 그날 값을 되살리는 게 아니다. 키움은 과거 시점의 수급을 안 준다 —
+   * 지금 받으면 지금까지의 최신 100일이 온다. 최근 며칠이 빠졌으면 메워지고,
+   * 100일보다 오래 빠진 구간은 못 메운다. 버튼 옆에 그렇게 적어 둔다.
+   */
+  async function recollect() {
+    if (
+      !window.confirm(
+        [
+          "지금 다시 수집합니다 (전종목 5콜, 약 41분).",
+          "",
+          "⚠️ 그날 값을 되살리는 게 아니라 지금 다시 받아 빈 곳을 메웁니다 —",
+          "키움이 과거 시점의 수급을 안 주기 때문입니다.",
+          "",
+          "진행할까요?",
+        ].join("\n"),
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.dataLedgerCollect();
+      setMsg("수집을 시작했습니다 — 진행률이 위에 뜹니다");
+      const r = await api.dataLedger();
+      setLed(r);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "시작 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function compress() {
     setBusy(true);
     try {
@@ -199,6 +238,68 @@ export function DataRetentionPanel() {
             <code>VNTG_DAILY_TRIM=1</code> 로 켭니다. ⚠️ 지운 것은 <b>다시 못 받습니다</b> —
             키움이 과거 수급을 100일치쯤만 줍니다.
           </div>
+          {/*
+            **수집 이력** (2026-09-01) — 언제 성공했고 언제 실패했나.
+
+            벤티지: "이거 언제 성공했고 실패했는지 보여주자 화면에. 그리고 실패한
+            날에 대해서는 수동 버튼 하나 만들어서 재수집하게 하는 거야."
+
+            필요한 이유가 그날 드러났다 — 41분짜리가 도는 중에 서버가 재시작되면
+            작업이 죽는데 **아무 흔적이 없었다.** 화면에는 「1005/2627 수집 중」이
+            남아 있는데 서버에는 아무것도 안 돌고 있었다.
+          */}
+          {led.history.length > 0 && (
+            <div className="table-wrap dret-hist">
+              <table className="sim-table">
+                <thead>
+                  <tr>
+                    <th>날짜</th>
+                    <th>결과</th>
+                    <th className="num">진행</th>
+                    <th className="num">담은 줄</th>
+                    <th className="num">실패</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {led.history.slice(0, 10).map((h) => {
+                    const rows = Object.values(h.added).reduce((a, b) => a + b, 0);
+                    return (
+                      <tr key={h.day} className={h.status === "done" ? "" : "dret-fail"}>
+                        <td>
+                          {h.day.slice(5)}
+                          {h.manual && <i className="pt-n"> 수동</i>}
+                        </td>
+                        <td>
+                          {h.status === "done"
+                            ? "✅ 완료"
+                            : h.status === "running"
+                              ? "⏳ 도는 중"
+                              : `⚠️ ${h.error ?? "중단"}`}
+                        </td>
+                        <td className="num">
+                          {h.done}/{h.total}
+                        </td>
+                        <td className="num">{rows.toLocaleString("ko-KR")}</td>
+                        <td className="num">{h.fails}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="filter-row dret-hist-act">
+            <button className="filter-btn" onClick={() => void recollect()} disabled={busy || led.collect.running}>
+              {led.collect.running ? "수집 중…" : "↻ 지금 다시 수집"}
+            </button>
+            <span className="table-note">
+              전종목 5콜, 약 41분. ⚠️ <b>그날 값을 되살리는 게 아닙니다</b> — 키움이
+              과거 시점의 수급을 안 줘서, 지금 다시 받아 <b>빈 곳을 메우는</b> 것입니다.
+              최근 며칠이 빠졌으면 메워지고 100일보다 오래 빠진 구간은 못 메웁니다.
+            </span>
+          </div>
+
           {Object.keys(led.collect.added).length > 0 && (
             <div className="table-note">
               마지막 수집 —{" "}

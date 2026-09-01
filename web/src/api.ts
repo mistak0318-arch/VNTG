@@ -290,6 +290,26 @@ export interface LedgerStatus {
   atLimit: boolean;
 }
 
+/**
+ * 수집 회차 하나 — 언제 성공했고 언제 실패했나.
+ *
+ * `status: "running"` 인 채로 남은 회차는 **그때 죽은 것**이다. 41분짜리라
+ * 그 사이 서버가 재시작되면(배포·미니PC 재부팅) 작업이 통째로 죽는데,
+ * 진행률은 메모리라 아무 흔적이 없었다.
+ */
+export interface CollectRun {
+  day: string;
+  startedAt: string;
+  finishedAt?: string;
+  status: "running" | "done" | "error";
+  done: number;
+  total: number;
+  fails: number;
+  added: Record<string, number>;
+  error?: string;
+  manual?: boolean;
+}
+
 export interface CollectProgress {
   running: boolean;
   done: number;
@@ -448,7 +468,12 @@ export const api = {
     postJson<{ done: number; saved: number; report: DataReport }>("/api/data/compress", {}),
   /** 일별 원장 현황 — 며칠치 쌓였나 · 한도까지 얼마나 · 지금 수집 중인가 */
   dataLedger: () =>
-    getJson<{ ledger: LedgerStatus; collect: CollectProgress }>("/api/data/ledger"),
+    getJson<{ ledger: LedgerStatus; collect: CollectProgress; history: CollectRun[] }>(
+      "/api/data/ledger",
+    ),
+  /** 실패한 날 다시 수집 — 그날 값이 아니라 「지금 다시 받아 빈 곳을 메운다」 */
+  dataLedgerCollect: () =>
+    postJson<{ started: boolean; progress: CollectProgress }>("/api/data/ledger/collect", {}),
   dataPrune: () =>
     postJson<{ removed: number; bytes: number; report: DataReport }>("/api/data/prune"),
 
