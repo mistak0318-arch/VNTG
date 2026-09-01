@@ -333,8 +333,19 @@ export function startCollectDaily(
         } catch {
           progress.fails += 1;
         }
-        /* 초당 5건 제한 — 한 건에 220ms 면 안전하다 */
-        await new Promise((r) => setTimeout(r, 220));
+        /*
+         * ## 220 → 120ms (2026-09-01 실측)
+         *
+         * 220ms 는 「키움 초당 5회」를 그대로 옮긴 값인데, **이 수집은 다섯 가지
+         * 다른 TR 을 번갈아 부른다.** 제한은 TR당이므로 각 TR 은 1.1초에 한 번,
+         * 즉 **한도의 18%** 만 쓰고 있었다.
+         *
+         * 120ms 면 TR당 0.6초에 한 번(34%)이라 여전히 여유가 있고, 전종목 한
+         * 바퀴가 **48분 → 26분**이 된다.
+         *
+         * ⚠️ 429 가 나면 `KiwoomClient` 가 백오프한다 — 안전망은 그쪽이다.
+         */
+        await new Promise((r) => setTimeout(r, 120));
       }
 
       led.updatedAt = new Date().toISOString();

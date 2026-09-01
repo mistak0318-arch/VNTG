@@ -74,8 +74,28 @@ export interface AfterCloseRun {
 }
 
 let run: AfterCloseRun | null = null;
-let doneDay = "";
 let timer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * **오늘 이미 돌았나 — 파일에서 읽는다** (2026-09-01).
+ *
+ * ⚠️ 처음엔 `let doneDay = ""` 라는 **메모리 변수**였다. 그러면 서버가 재시작될
+ * 때마다 초기화되고, 기동 직후의 `void tick()` 이 「오늘 아직 안 돌았다」로 판단해
+ * **두 시간짜리를 처음부터 다시 시작한다.**
+ *
+ * 배포·코드 수정이 잦은 날에는 그게 하루에 몇 번씩 벌어진다. 실제로 그날
+ * 로컬과 미니PC 가 같은 수집을 동시에 돌아 키움 한도를 나눠 먹고 둘 다 느려졌다.
+ *
+ * 이력 파일(`collectHistory`)에 오늘 회차가 `done` 으로 있으면 안 돈다.
+ */
+async function alreadyDone(day: string): Promise<boolean> {
+  try {
+    const { loadCollectHistory } = await import("./dailyStore.js");
+    return (await loadCollectHistory()).some((r) => r.day === day && r.status === "done");
+  } catch {
+    return false;
+  }
+}
 
 export function afterCloseStatus(): AfterCloseRun | null {
   return run ? { ...run, steps: [...run.steps] } : null;
@@ -154,7 +174,10 @@ export async function runAfterClose(
 ): Promise<AfterCloseRun> {
   if (run?.running) return run;
   const day = dayKey();
-  if (!force && doneDay === day && run) return run;
+  /* 재시작해도 오늘 몫은 한 번이다 — 메모리가 아니라 이력을 본다 */
+  if (!force && (await alreadyDone(day))) {
+    return run ?? { day, startedAt: "", running: false, steps: [] };
+  }
 
   const want = (k: string) => !only || only.length === 0 || only.includes(k);
   run = { day, startedAt: new Date().toISOString(), running: true, steps: [] };
@@ -227,7 +250,6 @@ export async function runAfterClose(
   run.running = false;
   run.finishedAt = new Date().toISOString();
   run.at = undefined;
-  doneDay = day;
 
   /* 요약을 보낸다 — 무엇이 실패했는지 아침에 알 수 있어야 한다 */
   const bad = run.steps.filter((s) => !s.ok);
@@ -253,9 +275,9 @@ export async function runAfterClose(
 export function startAfterCloseScheduler(client: KiwoomClient): void {
   if (timer) return;
   const tick = async () => {
-    if (doneDay === dayKey()) return;
     if (!shouldStart()) return;
     if (run?.running) return;
+    /* `runAfterClose` 안에서 이력을 보고 판단한다 — 여기서 또 세지 않는다 */
     await runAfterClose(client).catch(() => undefined);
   };
   timer = setInterval(() => void tick(), TICK_MS);
