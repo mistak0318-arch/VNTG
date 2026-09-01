@@ -73,8 +73,90 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
     try {
       const market = typeof req.query.market === "string" ? req.query.market : "000";
       const days = Math.min(Math.max(Number(req.query.days) || 5, 2), 60);
-      const universe = Math.min(Math.max(Number(req.query.universe) || 100, 20), 200);
-      res.json(await cumulativeRank(client, market, days, universe));
+      /*
+       * **모집단을 500까지 연다** (2026-09-02). 예전 상한이 200 이었던 것은
+       * 종목마다 일봉을 받아 260ms 씩 쉬어야 했기 때문이다 — 200종목이면 52초.
+       * 이제 저장해 둔 전종목 일봉을 읽으므로 500도 1초대다.
+       */
+      const universe = Math.min(Math.max(Number(req.query.universe) || 100, 20), 500);
+      const r = await cumulativeRank(client, market, days, universe);
+
+      /*
+       * ## **시세분석의 다른 순위와 같은 모양으로 준다** (2026-09-02)
+       *
+       * 벤티지: "이 버튼에만 신호등 켜기 메뉴가 안보이네" / "그리고 필터 메뉴도
+       * 넣어줘"
+       *
+       * 이 조회만 화면에서 **다른 컴포넌트**로 그려지고 있었다. 그래서 신호등
+       * 켜기·필터·열 순서·쪽 넘김이 전부 없었다 — 없는 게 아니라 **그 자리에
+       * 안 붙은** 것이다.
+       *
+       * `spec` 을 같이 주면 화면이 다른 순위와 똑같이 그린다. 화면을 한 벌로
+       * 만드는 편이 낫다 — 두 벌이면 한쪽만 고쳐지는 일이 반드시 생긴다.
+       *
+       * ⚠️ 행의 키 이름을 `spec.columns` 에 맞춘다. 서버가 `cumRate`·`todayRate`
+       * 처럼 부르던 것을 그대로 두고 열 정의만 그 이름으로 적는다.
+       */
+      res.json({
+        ...r,
+        spec: {
+          key: "cumulative",
+          label: `누적등락률 상위 (${days}일)`,
+          columns: [
+            { key: "cur_prc", label: "현재가", type: "num" },
+            { key: "todayRate", label: "오늘", type: "num" },
+            { key: "r3", label: "3일", type: "num" },
+            { key: "cumRate", label: `${days}일 누적`, type: "num" },
+            { key: "r10", label: "10일", type: "num" },
+            { key: "r20", label: "20일", type: "num" },
+            { key: "r60", label: "60일", type: "num" },
+            { key: "trde_prica", label: "거래대금", type: "num" },
+          ],
+          exchange: false,
+          choices: [
+            {
+              param: "days",
+              label: "기간",
+              def: "5",
+              options: [
+                { value: "3", label: "3일" },
+                { value: "5", label: "5일" },
+                { value: "10", label: "10일" },
+                { value: "20", label: "20일" },
+                { value: "60", label: "60일" },
+              ],
+            },
+          ],
+          note: r.note,
+        },
+        exchange: "3",
+        /*
+         * 화면이 읽는 키로 맞춰 다시 낸다 — 값 자체는 그대로다.
+         *
+         * ⚠️ **`extras` 를 빼먹으면 화면이 터진다** (2026-09-02 실측:
+         * `Cannot read properties of undefined (reading 'toFixed')`). 시세분석
+         * 표는 시가총액·회전율 칸을 늘 그리는데 그건 순위 응답이 실어 주는
+         * 값이다. 다른 순위 경로는 전부 `extras()` 를 붙이고 있었고 여기만
+         * 안 붙어 있었다 — 이 조회가 원래 다른 화면으로 그려졌기 때문이다.
+         */
+        rows: await (async () => {
+          const index = await getStockIndex(client).catch(() => new Map());
+          return r.rows.map((x, i) => {
+            const ex = extras(
+              { cur_prc: String(x.price), now_trde_qty: "0", stk_cd: x.code },
+              index.get(x.code),
+            );
+            return {
+              ...x,
+              ...ex,
+              rank: i + 1,
+              cur_prc: x.price,
+              flu_rt: x.todayRate,
+              trde_prica: x.tradeValue,
+            };
+          });
+        })(),
+      });
     } catch (err) {
       next(err);
     }

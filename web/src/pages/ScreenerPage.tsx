@@ -5,7 +5,6 @@ import { SuperMark } from "../useSuperMarks";
 import { SameNetTradeRankingPage } from "./SameNetTradeRankingPage";
 import { ContinuousTradePage } from "./ContinuousTradePage";
 import { TopTradersTable } from "../components/TopTradersTable";
-import { CumulativeRank } from "../components/CumulativeRank";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { fid, krxOverlayLive, krxRegularSession, useRealtime } from "../useRealtime";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
@@ -205,7 +204,8 @@ export const SCREENER_TABS = [
   { key: "trade-value", label: "거래대금 상위", kind: "rank" as const },
   /* 키움 순위에는 없어서 시황 스냅샷으로 우리가 세운다 */
   { key: "market-cap", label: "시가총액 상위", kind: "rank" as const },
-  { key: "cum", label: "누적등락률 상위", kind: "page" as const },
+  /* `rank` 로 옮겼다 (2026-09-02) — 그래야 필터·신호등·열순서가 같이 붙는다 */
+  { key: "cumulative", label: "누적등락률 상위", kind: "rank" as const },
   /* 아래 둘은 전종목 원장에서 세운다 — 조회 0회, 기간을 마음대로 잡는다 */
   { key: "flow/fgn", label: "외국인 순매수 상위", kind: "rank" as const },
   { key: "flow/smart", label: "주포 순매수 상위", kind: "rank" as const },
@@ -656,7 +656,6 @@ export function ScreenerPage({
       {tab === "same-net" && <SameNetTradeRankingPage onSelectStock={onSelectStock ?? (() => {})} />}
       {tab === "cont" && <ContinuousTradePage onSelectStock={onSelectStock ?? (() => {})} />}
       {tab === "top-traders" && <TopTradersTable onSelectStock={onSelectStock} />}
-      {tab === "cum" && <CumulativeRank onSelectStock={onSelectStock} />}
 
       {current?.kind !== "page" && (
         /*

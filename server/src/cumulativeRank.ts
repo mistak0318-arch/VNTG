@@ -2,6 +2,7 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { dropPhantomToday } from "./candleGuard.js";
 import { etfAll } from "./routes/etf.js";
 import { tradeValueTop } from "./signalScreen.js";
+import { loadCloses } from "./dailyCloses.js";
 
 /**
  * 누적등락률 상위 — **우리가 계산한다.**
@@ -117,7 +118,8 @@ export async function cumulativeRank(
         ? (await etfAll(client))
             .sort((a, b) => b.tradeValue - a.tradeValue)
             .slice(0, universe)
-            .map((r) => ({ code: r.code, name: r.name, tradeValue: r.tradeValue }))
+            /* `price` 를 같이 담는다 — 캐시 일봉에 오늘 봉을 이을 때 쓴다 */
+            .map((r) => ({ code: r.code, name: r.name, tradeValue: r.tradeValue, price: r.price }))
         : await tradeValueTop(client, market, universe).catch((e: unknown) => {
             throw new Error(`거래대금 상위 조회 실패: ${e instanceof Error ? e.message : String(e)}`);
           });
@@ -125,9 +127,60 @@ export async function cumulativeRank(
     const rows: CumRow[] = [];
     const failed: string[] = [];
 
+    /*
+     * ## **일봉 캐시를 먼저 본다** (2026-09-02) — 조회 0회
+     *
+     * 벤티지: "우리 이제 일봉 다 가져오는데 이거 클릭할때마다 시간이 좀 걸리더라고
+     * 계산하느라 어쩔 수 없는건가?"
+     *
+     * **어쩔 수 없는 게 아니었다.** 종목마다 `ka10081` 을 부르고 260ms 씩 쉬고
+     * 있었다 — 100종목이면 26초, 200종목이면 52초다. 계산이 느린 게 아니라
+     * **조회를 기다리는** 시간이었다.
+     *
+     * 그런데 마감 뒤 파이프라인 ①이 **전종목 500봉을 파일에 채워 둔다**
+     * (2,751종목). 있는 걸 안 쓰고 있었던 것이다.
+     *
+     * 캐시에서 찾으면 조회도 대기도 없다. 못 찾은 종목만 예전처럼 받는다 —
+     * 신규 상장이나 파이프라인이 아직 안 돈 날이 그렇다.
+     *
+     * ⚠️ 캐시는 **어제까지**다(파이프라인이 마감 뒤에 돈다). 장중에 「오늘까지의
+     * 누적」을 물으면 하루가 빈다. 그래서 오늘 값은 거래대금 상위가 들고 온
+     * 현재가로 잇는다 — 그게 곧 오늘 종가 자리다.
+     */
+    const barsOf = await loadCloses()
+      .then((s) => s.bars ?? {})
+      .catch(() => ({} as Record<string, { d: string; c: number }[]>));
+    const kstNow = new Date(Date.now() + 9 * 3600 * 1000);
+    const todayKey = kstNow.toISOString().slice(0, 10).replace(/-/g, "");
+    /*
+     * **장이 열린 뒤에만 오늘 값을 잇는다** (2026-09-02).
+     *
+     * 장 전에는 「현재가」가 곧 **어제 종가**다. 그걸 캐시 뒤에 붙이면 같은 값이
+     * 두 번 들어가고, 그러면 「5일 누적」이 실제로는 4일 누적이 되며 오늘
+     * 등락률은 늘 0% 로 찍힌다 — 실측에서 그 화면이 나왔다.
+     *
+     * 주말·공휴일도 마찬가지다. 09:00 이 지나야 오늘 값이라 부를 것이 생긴다.
+     */
+    const dow = kstNow.getUTCDay();
+    const marketOpened =
+      dow !== 0 && dow !== 6 && kstNow.getUTCHours() * 60 + kstNow.getUTCMinutes() >= 9 * 60;
+    let fromCache = 0;
+
     for (const t of top) {
       try {
-        const cs = await closes(client, t.code);
+        const cached = barsOf[t.code];
+        let cs: number[] | null = null;
+        if (cached && cached.length >= days + 1) {
+          cs = cached.map((b) => b.c).filter((c) => c > 0);
+          /*
+           * 오늘 봉이 캐시에 없으면 현재가로 잇는다. 있으면 그게 이미 오늘이라
+           * 덧붙이지 않는다 — 두 번 넣으면 「오늘 등락률 0%」가 된다.
+           */
+          const last = cached[cached.length - 1];
+          if (marketOpened && last && last.d !== todayKey && t.price > 0) cs.push(t.price);
+          fromCache += 1;
+        }
+        if (!cs) cs = await closes(client, t.code);
         // 「N일 누적」인데 데이터가 모자라면 그 종목은 못 센다 — 짧은 걸로 대신 세면 거짓말이다
         if (cs.length < days + 1) continue;
         const last = cs[cs.length - 1];
@@ -156,8 +209,11 @@ export async function cumulativeRank(
         // 한 종목이 실패해도 나머지는 센다 — 다만 전부 실패하면 아래에서 알린다
         failed.push(`${t.code} ${e instanceof Error ? e.message : ""}`);
       }
-      // 키움은 TR 당 초당 5건 — 넉넉히 벌린다
-      await new Promise((r) => setTimeout(r, 260));
+      /*
+       * **캐시로 끝난 종목은 안 쉰다.** 조회를 안 했으니 쉴 이유가 없다 —
+       * 여기서 안 갈라 주면 캐시를 붙여도 100종목에 26초가 그대로 걸린다.
+       */
+      if (!barsOf[t.code]) await new Promise((r) => setTimeout(r, 260));
     }
 
     if (rows.length === 0 && failed.length > 0) {
@@ -172,7 +228,11 @@ export async function cumulativeRank(
       note:
         `거래대금 상위 ${universe}종목 중 ${rows.length}개. ` +
         `키움에 누적등락률 TR 이 없어 **일봉으로 직접 계산**한 값입니다 — ` +
-        `거래대금이 얇은 종목은 애초에 빼고 봅니다(못 사는 종목을 순위에 올릴 이유가 없습니다).`,
+        `거래대금이 얇은 종목은 애초에 빼고 봅니다(못 사는 종목을 순위에 올릴 이유가 없습니다). ` +
+        (fromCache > 0
+          ? `${fromCache}종목은 **저장해 둔 일봉**으로 계산해 조회를 안 했습니다` +
+            (fromCache < top.length ? ` (나머지 ${top.length - fromCache}종목만 새로 받았습니다).` : `.`)
+          : `일봉 캐시가 아직 없어 전부 새로 받았습니다 — 마감 뒤 정리 ①이 돌면 즉답이 됩니다.`),
     };
     cache.set(key, { at: Date.now(), result });
     return result;
