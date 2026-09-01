@@ -598,6 +598,91 @@ async function profitIndex(code: string): Promise<((date: string) => number | nu
   }
 }
 
+/**
+ * **분기 실적 렌즈** (2026-09-01) — 그날 알 수 있었던 분기만.
+ *
+ * 신호등의 `profitGrowth` 는 연간 DART 라 8월에도 마지막 줄이 작년이다. 그리고
+ * 실측이 이상했다 — **반토막(-50%↓)이 +1.68%p 로 최고**였고 증가 구간이 전부
+ * 마이너스였다. 「이미 다 오른 회사」를 걸러 낸 것이지 실적을 본 게 아닐 수 있다.
+ * 분기는 더 신선하니 다른 답이 나올 수 있다.
+ *
+ * ## look-ahead 를 어떻게 막나
+ *
+ * 오늘 받은 8분기를 400일 전체에 붙이면 **미래를 보는 것**이다. 각 날짜에서
+ * **그때 이미 공시된 분기**만 쓴다 — 분기보고서는 분기말 45일, 사업보고서(4분기)는
+ * 90일이 법정 기한이라 그걸 문턱으로 잡는다.
+ *
+ * ⚠️ 실제 공시일을 안 주므로 **기한으로 갈음**한다. 빨리 내는 회사는 그만큼 늦게
+ * 반영되지만 **늦게 잡는 쪽이 안전하다** — 이르게 잡으면 없는 정보를 쓴 셈이 된다.
+ *
+ * 종목당 조회 1회(한투, 6시간 캐시). 못 받으면 그 종목의 네 칸이 전부 null 이다.
+ */
+async function quarterIndex(
+  code: string,
+): Promise<
+  | ((date: string) => {
+      qStreak: number | null;
+      qYoY: number | null;
+      qQoQ: number | null;
+      qMargin: number | null;
+    })
+  | null
+> {
+  try {
+    const { quarterFinance } = await import("./quarterFinance.js");
+    const rows = await quarterFinance(code, 8);
+    if (rows.length < 2) return null;
+
+    /** 그 분기가 **알려진 날**(YYYYMMDD) — 결산월 말일 + 법정 기한 */
+    const knownAt = (period: string): string => {
+      const y = Number(period.slice(0, 4));
+      const m = Number(period.slice(4, 6));
+      if (!Number.isFinite(y) || !Number.isFinite(m)) return "99999999";
+      /* 그 달의 말일 = 다음 달 0일 */
+      const d = new Date(Date.UTC(y, m, 0));
+      d.setUTCDate(d.getUTCDate() + (m === 12 ? 90 : 45));
+      return d.toISOString().slice(0, 10).replace(/-/g, "");
+    };
+
+    /* 최근이 앞이다. 알려진 날을 미리 붙여 둔다 */
+    const withKnown = rows.map((r) => ({ r, known: knownAt(r.period) }));
+
+    return (date: string) => {
+      const seen = withKnown.filter((x) => x.known <= date);
+      if (seen.length === 0) {
+        return { qStreak: null, qYoY: null, qQoQ: null, qMargin: null };
+      }
+      const last = seen[0].r;
+      /*
+       * **연속 증가 분기 수** — 그 시점에 보이던 것들만으로 센다.
+       *
+       * ⚠️ 적자에서 덜 적자로도 증가로 센다(-50억 → -10억). 방향은 개선이 맞고,
+       * 「적자를 빼겠다」면 영업이익률을 같이 걸면 된다. 여기서 몰래 걸러 버리면
+       * 왜 안 걸렸는지 알 수 없다.
+       */
+      const vals = seen
+        .map((x) => x.r.operatingProfit)
+        .filter((v): v is number => v !== null);
+      let streak: number | null = null;
+      if (vals.length >= 2) {
+        streak = 0;
+        for (let i = 0; i < vals.length - 1; i++) {
+          if (vals[i] > vals[i + 1]) streak += 1;
+          else break;
+        }
+      }
+      return {
+        qStreak: streak,
+        qYoY: last.yoy,
+        qQoQ: last.qoq,
+        qMargin: last.margin,
+      };
+    };
+  } catch {
+    return null;
+  }
+}
+
 type FlowSums = Pick<
   Feat,
   | "fgn5"
@@ -726,6 +811,11 @@ function featuresAt(
     ...NO_SUPPLY,
     /* 영업이익도 별도 조회다 — 담는 곳에서 덮는다 */
     profitYoY: null,
+    /* 분기 실적도 렌즈에서 온다 */
+    qStreak: null,
+    qYoY: null,
+    qQoQ: null,
+    qMargin: null,
     /* ETF 뒷배도 렌즈에서 온다 */
     etfBack: null,
     theme: themeRate,
@@ -977,6 +1067,12 @@ export async function runSignalBacktest(
          */
         const profitAt = withFlow ? await profitIndex(code) : null;
 
+        /*
+         * 분기 실적 (2026-09-01) — 한투 조회 1회(6시간 캐시). 연간이 거꾸로였으니
+         * 분기는 다를 수 있다. 각 날짜에서 **그때 이미 공시된 분기**만 쓴다.
+         */
+        const quarterAt = withFlow ? await quarterIndex(code) : null;
+
         const myThemes = themeCtx?.themesOf.get(code) ?? [];
         const dateToK =
           themeCtx && myThemes.length > 0
@@ -1050,6 +1146,9 @@ export async function runSignalBacktest(
             ...(fl ?? NO_FLOW),
             ...(sp ?? NO_SUPPLY),
             profitYoY: profitAt ? profitAt(bs[i].date) : null,
+            ...(quarterAt
+              ? quarterAt(bs[i].date)
+              : { qStreak: null, qYoY: null, qQoQ: null, qMargin: null }),
             etfBack: etfBackAt(bs[i].date),
           };
           samples.push({ code, name, date: bs[i].date, ...full, ...f });

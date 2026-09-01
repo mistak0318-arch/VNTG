@@ -108,6 +108,11 @@ function featFromCloses(
     smart60: null,
     fgnStreak: null,
     profitYoY: null,
+    /* 분기 실적은 종목당 조회다 — 전종목 사전훑기에서는 안 쓴다 */
+    qStreak: null,
+    qYoY: null,
+    qQoQ: null,
+    qMargin: null,
     mktCap: snap.marketCap,
     short5: null,
     short20: null,

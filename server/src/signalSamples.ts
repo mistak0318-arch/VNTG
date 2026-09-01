@@ -174,6 +174,35 @@ export interface Feat {
    * 시총이 어긋난다. 400거래일이면 드물지만 없지는 않다 — 정밀한 값이 아니라
    * 「대형주냐 중소형주냐」를 가르는 자로 쓴다.
    */
+  /**
+   * ## **분기 실적** (2026-09-01) — 연간이 거꾸로였으니 분기는 다를 수 있다
+   *
+   * 신호등의 `profitGrowth` 는 **연간 DART** 다. 사업보고서 기준이라 8월에도
+   * 마지막 줄이 작년이고, 실측에서 **반토막(-50%↓)이 +1.68%p 로 최고**였다 —
+   * 증가 구간이 전부 마이너스인 이상한 모양이었다. 「이미 다 오른 회사」를
+   * 걸러 낸 것이지 실적을 본 게 아닐 수 있다.
+   *
+   * 분기는 더 신선하다(한투 `quarterFinance`, 8분기). 다른 답이 나올 수 있다.
+   *
+   * ## ⚠️ look-ahead 를 막는다
+   *
+   * 오늘 받은 8분기를 400일 표본 전체에 붙이면 **미래를 보는 것**이다. 2026년
+   * 1분기 실적으로 2025년 12월을 채점하면 당연히 잘 맞는다 — 테마 강세가
+   * -5.76%p 로 실패한 그 병이다.
+   *
+   * 그래서 각 표본 날짜에 **그때 이미 공시된 분기**만 쓴다. 분기보고서는 분기말
+   * 45일, 사업보고서(4분기)는 90일이 법정 기한이라 그걸 문턱으로 잡는다.
+   * (실제 공시일을 안 주므로 기한으로 갈음한다 — 빠른 회사는 그만큼 늦게
+   * 반영되지만, **늦게 잡는 쪽이 안전하다.**)
+   */
+  /** 그 시점 기준 영업이익 **연속 증가 분기 수** (0~7) */
+  qStreak: number | null;
+  /** 최근 분기 영업이익 전년 동기 대비(%) */
+  qYoY: number | null;
+  /** 최근 분기 영업이익 직전 분기 대비(%) */
+  qQoQ: number | null;
+  /** 최근 분기 영업이익률(%) */
+  qMargin: number | null;
   mktCap: number | null;
 
   /*
@@ -414,6 +443,13 @@ export function gradeOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
       return f.fgnRatioUp20 === null ? null : grade(f.fgnRatioUp20, c);
     case "profitGrowth":
       return f.profitYoY === null ? null : grade(f.profitYoY, c);
+    /* 분기 실적 (2026-09-01) — 그날 이미 공시된 분기만 담겨 있다 */
+    case "qStreak":
+      return f.qStreak === null ? null : grade(f.qStreak, c);
+    case "qYoY":
+      return f.qYoY === null ? null : grade(f.qYoY, c);
+    case "qMargin":
+      return f.qMargin === null ? null : grade(f.qMargin, c);
     case "etfBacking":
       return f.etfBack === null ? null : grade(f.etfBack, c);
 

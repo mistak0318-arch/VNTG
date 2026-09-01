@@ -1017,7 +1017,9 @@
       "Bash(awk '{print \"압축 \" $5}')",
       "Bash(curl -s http://localhost:4000/api/signal/config -o cfg.json)",
       "Bash(curl -s -X PUT http://localhost:4000/api/signal/config -H \"Content-Type: application/json\" --data-binary @cfg2.json -o /dev/null)",
-      "Bash(curl -s http://localhost:4000/api/signal/config)"
+      "Bash(curl -s http://localhost:4000/api/signal/config)",
+      "Bash(grep -n '\"profitGrowth\"$\\\\|| \"profitGrowth\"' server/src/signalLight.ts)",
+      "Bash(node --max-old-space-size=4096 ./node_modules/tsx/dist/cli.mjs diag.ts)"
     ]
   }
 }

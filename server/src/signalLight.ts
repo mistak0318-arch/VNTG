@@ -110,6 +110,10 @@ export type CheckKey =
   | "programFlow"
   | "volume"
   | "profitGrowth"
+  /* 분기 실적 (2026-09-01) — 연간이 거꾸로였으니 분기는 다를 수 있다. 검증 전이라 꺼 둔다 */
+  | "qStreak"
+  | "qYoY"
+  | "qMargin"
   | "marketCap"
   /* 대형주 (2026-09-01) — 시총은 U자라 한 눈금으로 못 담는다 */
   | "largeCap"
@@ -1200,6 +1204,55 @@ export const DEFAULT_CONFIG: SignalConfig = {
       strongAt: 20,
       hint: "최근 사업연도 영업이익 전년 대비 증가율(%)",
       cost: 0,
+    },
+    /*
+     * ## 분기 실적 셋 (2026-09-01 신설) — **꺼 두고 재는 중**
+     *
+     * 신호등의 `profitGrowth` 는 연간 DART 다. 8월에도 마지막 줄이 작년이고,
+     * 실측이 이상했다 — **반토막(-50%↓)이 +1.68%p 로 최고**였고 증가 구간이 전부
+     * 마이너스였다. 「이미 다 오른 회사」를 걸러 낸 것이지 실적을 본 게 아닐 수 있다.
+     *
+     * 분기는 더 신선하다(한투 8분기). 표본에 넣었으니 이제 **잴 수 있다.**
+     *
+     * ⚠️ **enabled: false 다.** 검증 안 된 것을 점수에 넣으면 신호등이 흔들린다 —
+     * 오늘 커버리지 건에서 배운 것이다. 표본 재수집 뒤 시뮬레이터로 재고, 통하면
+     * 그때 켠다. 문턱도 지금 값은 **짐작**이라 실측으로 바꿔야 한다.
+     */
+    {
+      key: "qStreak",
+      label: "영업이익 연속 증가 (분기)",
+      axis: "value",
+      enabled: false,
+      weight: 2,
+      threshold: 1,
+      strongAt: 4,
+      hint: "직전 분기보다 영업이익이 늘어난 것이 연속 몇 분기인가(최대 7). 연간 DART 와 달리 지금 벌고 있나를 본다",
+      cost: 1,
+      costGroup: "quarter",
+    },
+    {
+      key: "qYoY",
+      label: "분기 영업이익 (전년 동기)",
+      axis: "value",
+      enabled: false,
+      weight: 2,
+      threshold: 0,
+      strongAt: 30,
+      hint: "가장 최근 분기를 1년 전 같은 분기와 견준 증감률(%). 계절성이 있는 업종은 직전 분기보다 이게 맞다",
+      cost: 1,
+      costGroup: "quarter",
+    },
+    {
+      key: "qMargin",
+      label: "분기 영업이익률",
+      axis: "value",
+      enabled: false,
+      weight: 1,
+      threshold: 5,
+      strongAt: 15,
+      hint: "영업이익 ÷ 매출액(%). 음수면 적자 분기다",
+      cost: 1,
+      costGroup: "quarter",
     },
     {
       key: "marketCap",
