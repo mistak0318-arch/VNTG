@@ -10,6 +10,8 @@ import {
   type SignalCheckConfig,
 } from "../api";
 import { useSignals, SignalDot } from "../components/SignalLight";
+/* 접기 — 신호등 분석과 **같은 훅**. 「화면 차지가 꽤 되네」 (2026-09-01) */
+import { useFold } from "../useFold";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
 
@@ -117,6 +119,13 @@ export function CondSearchPage({
   const [err, setErr] = useState<string | null>(null);
   /* 점수는 **켤 때만** — 목록을 여는 것만으로 백 종목을 평가하면 안 된다 */
   const [sigOn, setSigOn] = useState(false);
+  /*
+   * 접기 — 「어디서 찾나」는 자주 바꾸니 펴 두고, 「기준 더하기」는 칩이 스물아홉
+   * 개라 **접어 둔다.** 조건을 다 넣고 나면 그 목록은 안 봐도 된다.
+   */
+  const [openWhere, toggleWhere] = useFold("where", true, "cond");
+  const [openPick, togglePick] = useFold("pick", false, "cond");
+  const [openLines, toggleLines] = useFold("lines", true, "cond");
 
   useEffect(() => {
     void api
@@ -256,7 +265,23 @@ export function CondSearchPage({
 
       {/* ── 어디서 찾나 ── */}
       <section className="card">
-        <h2>어디서 찾나</h2>
+        {/* 접혀 있어도 **지금 무엇으로 찾는지**는 보인다 — 그게 없으면 접기가 숨기기가 된다 */}
+        <button className="gb-head" onClick={toggleWhere}>
+          <span className="gb-caret">{openWhere ? "▾" : "▸"}</span>
+          <b>어디서 찾나</b>
+          <span className="gb-peek">
+            {UNIVERSES.find((u) => u.key === q.universe)?.label} ·{" "}
+            {MARKETS.find((m) => m.key === q.market)?.label} · 상위 {q.limit}
+            {(q.capMin != null || q.capMax != null) && (
+              <>
+                {" · 시총 "}
+                {q.capMin ?? ""}~{q.capMax ?? ""}억
+              </>
+            )}
+          </span>
+        </button>
+        {openWhere && (
+        <>
         <div className="filter-row">
           {UNIVERSES.map((u) => (
             <button
@@ -314,11 +339,21 @@ export function CondSearchPage({
           />
           <span className="table-note">시총은 조회 없이 걸러집니다 — 여기서 좁힐수록 빨라집니다</span>
         </div>
+        </>
+        )}
       </section>
 
       {/* ── 조건식 ── */}
       <section className="card cond-editor">
-        <h2>조건식</h2>
+        <button className="gb-head" onClick={toggleLines}>
+          <span className="gb-caret">{openLines ? "▾" : "▸"}</span>
+          <b>조건식</b>
+          <span className="gb-peek">
+            {q.lines.length === 0 ? "아직 없음" : `조건 ${q.lines.length}개`}
+          </span>
+        </button>
+        {openLines && (
+        <>
         {/*
           **줄마다 기준·부등호·값·연결자** (2026-09-01 개정).
 
@@ -415,11 +450,19 @@ export function CondSearchPage({
             <code>(A 그리고 B) 또는 C</code> 입니다. 괄호는 아직 없습니다.
           </div>
         )}
+        </>
+        )}
       </section>
 
       {/* ── 기준 고르기 ── */}
       <section className="card">
-        <h2>기준 더하기</h2>
+        <button className="gb-head" onClick={togglePick}>
+          <span className="gb-caret">{openPick ? "▾" : "▸"}</span>
+          <b>기준 더하기</b>
+          <span className="pt-n">신호등 기준 {checks.length}개</span>
+        </button>
+        {openPick && (
+        <>
         <div className="mg-picker">
           {checks.map((c) => (
             <button
@@ -440,6 +483,8 @@ export function CondSearchPage({
           가져오니 거기서 고쳐 쓰면 됩니다 — 신호등이 99 로 보든 말든 여기서는
           <b> 내가 정한 값</b>이 기준입니다.
         </div>
+        </>
+        )}
       </section>
 
       {/* ── 실행·저장 ── */}

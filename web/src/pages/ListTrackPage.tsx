@@ -1,34 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type ListTrackSummary, type ListTrackRow } from "../api";
+/* 접기 — 조건 검색과 **같은 훅**을 쓴다. 열쇠 접두사(`lt`)는 그대로라 접어 둔 상태가 이어진다 */
+import { useFold as useFoldBase } from "../useFold";
 
-/**
- * 접기 — **기기별로 기억한다** (2026-08-31 — "이것들 좀 접는 구조 좀 만들어주라
- * 칸을 많이 차지해").
- *
- * 슈퍼신호등 채점표(`GradeBoard`)와 같은 문법이다. 접힌 상태에서도 **제일 중요한
- * 한 줄은 보인다** — 펴 볼지 판단할 근거가 있어야 한다.
- */
-function useFold(key: string, initial = false) {
-  const [open, setOpen] = useState(() => {
-    try {
-      const v = localStorage.getItem(`vntg.lt.${key}`);
-      return v === null ? initial : v === "1";
-    } catch {
-      return initial;
-    }
-  });
-  /** 값을 못 박는다 — 「전체 펼치기」가 이걸 쓴다 */
-  const set = (v: boolean) => {
-    setOpen(v);
-    try {
-      localStorage.setItem(`vntg.lt.${key}`, v ? "1" : "0");
-    } catch {
-      /* 못 적으면 다음에 원래대로일 뿐 */
-    }
-  };
-  const toggle = () => set(!open);
-  return [open, toggle, set] as const;
-}
+const useFold = (key: string, initial = false) => useFoldBase(key, initial, "lt");
 
 /** 등락 색 — 0 은 색을 안 준다 */
 const cls = (v: number | null | undefined): string =>
