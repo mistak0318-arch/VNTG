@@ -13594,3 +13594,7 @@ thead .sd-emph {
 .ac-fail { font-style: normal; font-size: 0.72rem; color: var(--warn, #d9a441); }
 .ac-why { grid-column: 2; font-size: 0.72rem; color: var(--muted); }
 .ac-act { margin: 10px 0; align-items: center; gap: 8px; }
+
+/* 막대에 이름을 붙인다 — 뜻이 다른 막대가 둘이라 (2026-09-01) */
+.dret-bar-label { margin: 6px 0 2px; font-size: 0.72rem; color: var(--muted); }
+.dret-bar.collecting > span { background: var(--positive, #4ade80); }

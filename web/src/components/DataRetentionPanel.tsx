@@ -87,6 +87,21 @@ export function DataRetentionPanel() {
     return () => clearInterval(t);
   }, [led?.collect.running]);
 
+  /*
+   * **끝난 뒤에도 한 번 더 받는다** (2026-09-01).
+   *
+   * 위 폴링은 `running` 이 false 가 되면 멈춘다. 그런데 마지막 폴링과 실제 완료
+   * 사이에 최대 5초가 있어서, 그 사이에 끝나면 화면이 **끝나기 직전 숫자**를
+   * 붙들고 만다 — 실제로 「1005/2627 수집 중」이 남아 있던 일이 그것이다.
+   */
+  useEffect(() => {
+    if (led?.collect.running) return;
+    const t = setTimeout(() => {
+      void api.dataLedger().then(setLed).catch(() => undefined);
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [led?.collect.running]);
+
   /**
    * **압축** — 지우기 전에 줄인다.
    *
@@ -211,7 +226,29 @@ export function DataRetentionPanel() {
               </span>
             )}
           </div>
-          {/* 한도까지 얼마나 왔나 — 막대 하나가 표 열 줄보다 빨리 읽힌다 */}
+          {/*
+            **막대가 둘이다** (2026-09-01) — 뜻이 다른데 하나만 있으면 오해한다.
+
+            아래 막대는 **보관 한도까지 몇 %**다. 수집 진행률이 아니라서 수집이
+            도는 동안에도 안 움직인다 — 실제로 「프로그레스바가 안 움직인다」는
+            말을 들었다. 이름을 붙이고, 수집 중에는 진행률 막대를 따로 그린다.
+          */}
+          {led.collect.running && led.collect.total > 0 && (
+            <>
+              <div className="dret-bar-label">
+                수집 진행 {led.collect.done}/{led.collect.total} (
+                {Math.round((led.collect.done / led.collect.total) * 100)}%)
+              </div>
+              <div className="dret-bar collecting">
+                <span
+                  style={{ width: `${Math.round((led.collect.done / led.collect.total) * 100)}%` }}
+                />
+              </div>
+            </>
+          )}
+          <div className="dret-bar-label">
+            보관 한도까지 {led.ledger.fullPct}% ({led.ledger.maxDays}/{led.ledger.keep}일)
+          </div>
           <div className="dret-bar" title={`${led.ledger.maxDays}일 / 한도 ${led.ledger.keep}일`}>
             <span style={{ width: `${Math.min(100, led.ledger.fullPct)}%` }} />
           </div>
@@ -262,7 +299,22 @@ export function DataRetentionPanel() {
                 </thead>
                 <tbody>
                   {led.history.slice(0, 10).map((h) => {
-                    const rows = Object.values(h.added).reduce((a, b) => a + b, 0);
+                    /*
+                     * **도는 중이면 실시간 값으로 덮는다** (2026-09-01).
+                     *
+                     * 이력은 시작할 때 한 번 적고 끝날 때 갱신하는 구조라, 도는
+                     * 동안에는 `0/2627 · 0줄` 로 남는다. 그런데 바로 위 배지에는
+                     * `2305/2627 · 356,680` 이 뜬다 — 같은 화면에서 두 숫자가
+                     * 어긋나면 「멈춘 건가」로 읽힌다. 실제로 그렇게 보였다.
+                     */
+                    const live = h.status === "running" && led.collect.running;
+                    const done = live ? led.collect.done : h.done;
+                    const total = live ? led.collect.total : h.total;
+                    const rows = Object.values(live ? led.collect.added : h.added).reduce(
+                      (a, b) => a + b,
+                      0,
+                    );
+                    const fails = live ? led.collect.fails : h.fails;
                     return (
                       <tr key={h.day} className={h.status === "done" ? "" : "dret-fail"}>
                         <td>
@@ -277,10 +329,13 @@ export function DataRetentionPanel() {
                               : `⚠️ ${h.error ?? "중단"}`}
                         </td>
                         <td className="num">
-                          {h.done}/{h.total}
+                          {done}/{total}
+                          {live && total > 0 && (
+                            <i className="pt-n"> ({Math.round((done / total) * 100)}%)</i>
+                          )}
                         </td>
                         <td className="num">{rows.toLocaleString("ko-KR")}</td>
-                        <td className="num">{h.fails}</td>
+                        <td className="num">{fails}</td>
                       </tr>
                     );
                   })}
