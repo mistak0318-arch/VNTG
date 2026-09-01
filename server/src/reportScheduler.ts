@@ -1,4 +1,5 @@
 import { noopProgress, type ProgressReporter } from "./reportProgress.js";
+import { pushNotice } from "./notifyCenter.js";
 import { warmResearch } from "./webResearch.js";
 import { buildAiSummary } from "./aiSummary.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -56,6 +57,33 @@ export async function publishEdition(
   };
   await saveReport(report);
   console.log(`[report] ${date} ${meta.label} 발행 완료 (토큰 ${summary.inputTokens}/${summary.outputTokens})`);
+
+  /*
+   * **알림 센터에도 남긴다** (2026-09-01).
+   *
+   * 벤티지: "데일리 리포트도 만들어졌으면 알람 줘야 하고, 시스템적으로 돌아가는
+   * 배치들은 다 되면 나한테 알람 주는 구조로 만들어줘. 알람 메뉴 만들었잖아."
+   *
+   * 여태 텔레그램으로만 갔다. 텔레그램은 자리를 비운 사이에 오고 알림 센터는
+   * 화면에 남는다 — 서로를 대신하지 못한다. 텔레그램을 놓치면 영영 못 보고,
+   * 화면만 있으면 자리에 없을 때 모른다.
+   */
+  await pushNotice({
+    kind: "market",
+    level: "info",
+    title: `${meta.label} 발행`,
+    /* 본문 첫 줄만 — 알림에 리포트 전체를 넣으면 목록이 못 쓰게 된다 */
+    body:
+      summary.digest ??
+      summary.text
+        ?.split("\n")
+        .find((l) => l.trim())
+        ?.slice(0, 120),
+    link: "#/dailyReport",
+    /* 같은 날 같은 판은 한 번만 — 재발행하면 그건 새 소식이 아니다 */
+    dedupeKey: `report:${date}:${edition}`,
+    dedupeHours: 20,
+  }).catch(() => undefined);
 
   // 발행 직후 텔레그램·메일로 전송. 실패해도 저장분은 남으므로 나중에 재발송할 수 있다.
   if (deliver) await deliverReport(report, client).catch(() => undefined);

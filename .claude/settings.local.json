@@ -1032,7 +1032,13 @@
       "Bash(curl -s -X POST http://localhost:4000/api/signal/after-close -H \"Content-Type: application/json\" -d '{\"steps\":[\"track\"]}' --max-time 20)",
       "Bash(curl -s http://localhost:4000/api/signal/after-close)",
       "Bash(curl -s http://localhost:4000/api/signal/track/summary)",
-      "Bash(grep -vE \"^\\\\S+:[0-9]+: *\\\\*|^\\\\S+:[0-9]+: */\\\\*\")"
+      "Bash(grep -vE \"^\\\\S+:[0-9]+: *\\\\*|^\\\\S+:[0-9]+: */\\\\*\")",
+      "Bash(curl -s -X POST http://localhost:4000/api/signal/after-close -H \"Content-Type: application/json\" -d '{\"steps\":[\"trade\"]}' --max-time 20)",
+      "Bash(curl -s http://localhost:4000/api/signal/after-close -o ac.json)",
+      "Bash(rm -f ac.json)",
+      "Bash(rm -f n.txt)",
+      "Bash(curl -s http://localhost:4000/api/notify -o n.json)",
+      "Bash(rm -f n.json)"
     ]
   }
 }

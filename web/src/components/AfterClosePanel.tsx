@@ -53,7 +53,12 @@ const STEPS: { key: string; label: string; why: string; heavy?: string }[] = [
     label: "⑦ 교차 신호 (주도주 ∩ 슈퍼)",
     why: "⑥ 원장을 읽어 교집합을 냅니다. 여태 「시장 흐름」 화면을 열어야만 돌았습니다",
   },
-  { key: "samples", label: "⑧ 검증 표본", why: "얼마나 낡았는지만 봅니다 (재수집은 18:30)" },
+  {
+    key: "trade",
+    label: "⑧ 수출입 동향",
+    why: "관세청 발표(월 1일·15일 언저리)를 받아 둡니다. 여태 「수출 동향」 화면을 열어야만 받았습니다",
+  },
+  { key: "samples", label: "⑨ 검증 표본", why: "얼마나 낡았는지만 봅니다 (재수집은 18:30)" },
 ];
 
 function dur(ms: number): string {
@@ -91,7 +96,7 @@ export function AfterClosePanel() {
       ? STEPS.filter((s) => steps.includes(s.key))
           .map((s) => s.label)
           .join(" · ")
-      : "전체 (①~⑧)";
+      : "전체 (①~⑨)";
     if (!window.confirm(`${names} 을(를) 지금 돌립니다.\n\n장중에는 다른 화면이 느려집니다. 진행할까요?`)) {
       return;
     }
@@ -173,7 +178,7 @@ export function AfterClosePanel() {
           onClick={() => void run()}
           disabled={busy || st?.running}
         >
-          전체 돌리기 (①~⑧)
+          전체 돌리기 (①~⑨)
         </button>
         {msg && <span className="table-note">{msg}</span>}
       </div>

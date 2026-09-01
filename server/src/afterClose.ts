@@ -7,6 +7,8 @@ import { startEnroll } from "./signalTrack.js";
 import { runSuperSignal } from "./superSignal.js";
 import { runListTrack } from "./listTrack.js";
 import { marketPulse } from "./marketPulse.js";
+import { getTradeStats } from "./tradeStats.js";
+import { pushNotice } from "./notifyCenter.js";
 import { samplesMeta } from "./signalSamples.js";
 import { sendTelegram } from "./telegram.js";
 
@@ -266,7 +268,27 @@ export async function runAfterClose(
     });
 
   /*
-   * ⑧ 표본 — **상태만 본다.** 실제 재수집은 `regimeScheduler` 의 18:30 이 한다.
+   * ⑧ **수출입 동향** — 관세청 발표를 받아 둔다.
+   *
+   * ⚠️ 여태 **자동으로 안 받았다** (2026-09-01 발견). `getTradeStats` 를 부르는
+   * 곳이 화면 라우트뿐이라, 「수출 동향」 화면을 열어야만 갱신됐다. 발표가 나도
+   * 아무도 안 알려 준다 — 벤티지: "오늘 수출입동향 발표 나오는 날인데 내 로직은
+   * 안 읽어온 건지 읽어오고도 나한테 알림을 안 준 건지 모르겠네."
+   *
+   * 안 읽어온 쪽이었다. `tradeHistory.json` 이 8/31 에 멈춰 있었다.
+   *
+   * 발표는 매월 1일과 15일 언저리다 — 매일 불러도 값이 그대로면 캐시가 받고,
+   * 새 값이 있으면 그날 알림에 실린다.
+   */
+  if (want("trade"))
+    await step("trade", "수출입 동향", async () => {
+      const r = await getTradeStats(true);
+      const n = r.items?.length ?? 0;
+      return n > 0 ? `${n}품목${r.error ? ` · ${r.error}` : ""}` : (r.error ?? "받은 것 없음");
+    });
+
+  /*
+   * ⑨ 표본 — **상태만 본다.** 실제 재수집은 `regimeScheduler` 의 18:30 이 한다.
    *
    * 재수집은 종목당 여러 콜에 40~60분이라 이 파이프라인(이미 2시간 남짓) 뒤에
    * 붙이면 밤이 다 간다. 여기서는 「얼마나 낡았나」만 적어 요약에 싣는다.
@@ -285,7 +307,20 @@ export async function runAfterClose(
   run.finishedAt = new Date().toISOString();
   run.at = undefined;
 
-  /* 요약을 보낸다 — 무엇이 실패했는지 아침에 알 수 있어야 한다 */
+  /*
+   * ## **끝나면 알린다** — 텔레그램과 알림 센터 둘 다 (2026-09-01)
+   *
+   * 벤티지: "데일리 리포트도 만들어졌으면 알람 줘야 하고, 시스템적으로 돌아가는
+   * 배치들은 다 되면 나한테 알람 주는 구조로 만들어줘. 알람 메뉴 만들었잖아."
+   *
+   * 맞다. 여태 이 배치들은 **조용히 돌고 조용히 실패했다** — 오늘 하루에만
+   * 일봉이 자동으로 안 돌던 것, 교차 신호가 화면을 열어야만 돌던 것, 수출입을
+   * 아예 안 받던 것이 나왔는데 셋 다 **아무도 모르고 있었다.**
+   *
+   * 텔레그램은 자리를 비운 사이에 오고, 알림 센터는 화면에 남는다 — 둘은 서로를
+   * 대신하지 못한다. 텔레그램을 놓치면 영영 못 보고, 알림 센터만 있으면 화면을
+   * 안 열면 모른다.
+   */
   const bad = run.steps.filter((s) => !s.ok);
   const total = new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime();
   await sendTelegram(
@@ -302,6 +337,26 @@ export async function runAfterClose(
       ),
     ].join("\n"),
   ).catch(() => undefined);
+
+  /*
+   * 알림 센터에도 남긴다. **실패가 있으면 warn** 이라 화면에서 색이 다르다 —
+   * 「돌긴 돌았다」와 「돌았는데 세 개가 깨졌다」는 다른 소식이다.
+   */
+  await pushNotice({
+    kind: "system",
+    level: bad.length > 0 ? "warn" : "info",
+    title:
+      bad.length === 0
+        ? `마감 뒤 정리 완료 (${dur(total)})`
+        : `마감 뒤 정리 — ${bad.length}단계 실패`,
+    body: run.steps
+      .map((s) => `${s.ok ? "✅" : "⚠️"} ${s.label}${s.note ? ` — ${s.note}` : ""}${s.error ? ` — ${s.error}` : ""}`)
+      .join("\n"),
+    link: "#/settings",
+    /* 하루 한 번이면 충분하다 — 손으로 다시 돌리면 그때는 새 줄이 된다 */
+    dedupeKey: `afterClose:${run.day}:${bad.length}`,
+    dedupeHours: 12,
+  }).catch(() => undefined);
 
   return run;
 }
