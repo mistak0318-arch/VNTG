@@ -266,6 +266,41 @@ export interface DataCatStat {
   prunable: number;
   perDay: number;
 }
+/**
+ * 일별 원장 현황 (2026-09-01).
+ *
+ * 벤티지: "2년 되는날 나한테 알려줘 리셋할건지 백업할건지 말야."
+ * 알림은 텔레그램으로 가지만 **눈으로 볼 데도** 있어야 한다.
+ */
+export interface LedgerStatus {
+  codes: number;
+  bytes: number;
+  /** 가장 긴 원장이 며칠치인가 */
+  maxDays: number;
+  /** 종목별 일수의 중앙값 */
+  medDays: number;
+  from: string;
+  to: string;
+  /** 보관 한도(거래일) */
+  keep: number;
+  fullPct: number;
+  /** 자동 삭제가 켜져 있나 */
+  trim: boolean;
+  /** 한도에 닿았나 — 사람이 정해야 한다 */
+  atLimit: boolean;
+}
+
+export interface CollectProgress {
+  running: boolean;
+  done: number;
+  total: number;
+  added: Record<string, number>;
+  fails: number;
+  startedAt: string;
+  finishedAt?: string;
+  at?: string;
+}
+
 export interface DataReport {
   dir: string;
   cats: DataCatStat[];
@@ -408,6 +443,12 @@ export const api = {
   dataReport: () => getJson<DataReport>("/api/data"),
   dataKeep: (key: string, days: number | null) =>
     postJson<DataReport>(`/api/data/${key}/keep`, { days }),
+  /** 지난 로그 압축 — 지우기 전에 줄인다 (실측 4.2:1) */
+  dataCompress: () =>
+    postJson<{ done: number; saved: number; report: DataReport }>("/api/data/compress", {}),
+  /** 일별 원장 현황 — 며칠치 쌓였나 · 한도까지 얼마나 · 지금 수집 중인가 */
+  dataLedger: () =>
+    getJson<{ ledger: LedgerStatus; collect: CollectProgress }>("/api/data/ledger"),
   dataPrune: () =>
     postJson<{ removed: number; bytes: number; report: DataReport }>("/api/data/prune"),
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type DataReport } from "../api";
+import { api, type CollectProgress, type DataReport, type LedgerStatus } from "../api";
 
 /**
  * 데이터 보관 (2026-08-31 요청 — 「기간별로 드는 용량 표시해주고, 최종적으로 전체
@@ -66,10 +66,46 @@ export function DataRetentionPanel() {
   const [rep, setRep] = useState<DataReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  /** 일별 원장 — 얼마나 쌓였나 · 지금 수집 중인가 (2026-09-01) */
+  const [led, setLed] = useState<{ ledger: LedgerStatus; collect: CollectProgress } | null>(null);
 
   useEffect(() => {
     api.dataReport().then(setRep).catch(() => undefined);
+    api.dataLedger().then(setLed).catch(() => undefined);
   }, []);
+
+  /* 수집이 도는 동안에는 따라간다 — 41분짜리라 멈춘 것처럼 보이면 안 된다 */
+  useEffect(() => {
+    if (!led?.collect.running) return;
+    const t = setInterval(() => {
+      void api.dataLedger().then(setLed).catch(() => undefined);
+    }, 5000);
+    return () => clearInterval(t);
+  }, [led?.collect.running]);
+
+  /**
+   * **압축** — 지우기 전에 줄인다.
+   *
+   * 실시간 로그는 같은 JSON 키가 하루 40만 번 반복돼 4.2:1 로 눌린다. 실측에서
+   * 4일치 222MB 가 48MB 가 됐다. 「작게 오래 두기」가 「크게 짧게 두기」보다 낫다 —
+   * 이 데이터는 키움이 지나간 것을 안 줘서 지우면 영영 못 받는다.
+   */
+  async function compress() {
+    setBusy(true);
+    try {
+      const r = await api.dataCompress();
+      setRep(r.report);
+      setMsg(
+        r.done > 0
+          ? `지난 로그 ${r.done}개 압축 — ${mb(r.saved)} 절약`
+          : "압축할 것이 없었습니다 (오늘·어제 파일은 아직 쓰는 중이라 건드리지 않습니다)",
+      );
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "압축 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function prune() {
     if (!window.confirm("보관 기간이 지난 파일을 지웁니다. 되돌릴 수 없습니다. 진행할까요?")) return;
@@ -103,6 +139,9 @@ export function DataRetentionPanel() {
             </span>
           )}
         </div>
+        <button className="filter-btn" onClick={compress} disabled={busy} title="지난 날 로그를 gzip 으로 눌러 둡니다 — 실측 4.2:1. 오늘·어제 파일은 아직 쓰는 중이라 건드리지 않습니다">
+          {busy ? "…" : "🗜 지난 로그 압축"}
+        </button>
         <button className="filter-btn" onClick={prune} disabled={busy || rep.prunableBytes === 0}>
           {busy
             ? "정리 중…"
@@ -111,6 +150,67 @@ export function DataRetentionPanel() {
               : "지금 설정으로는 지울 것 없음"}
         </button>
       </div>
+      {/*
+        **일별 원장** (2026-09-01) — 전종목 수급·공매도·대차·지분율·프로그램.
+
+        벤티지: "2년 되는날 나한테 알려줘 리셋할건지 백업할건지 말야."
+        알림은 텔레그램으로 가지만 **눈으로 볼 데도** 있어야 한다. 그리고 41분짜리
+        수집이 도는 동안 진행이 안 보이면 멈춘 것처럼 느껴진다.
+      */}
+      {led && (
+        <div className={`dret-ledger${led.ledger.atLimit ? " full" : ""}`}>
+          <div className="dret-ledger-head">
+            <b>종목별 일별 원장</b>
+            <span className="pt-n">
+              {led.ledger.codes.toLocaleString("ko-KR")}종목 · {mb(led.ledger.bytes)}
+              {led.ledger.from && led.ledger.to && ` · ${led.ledger.from}~${led.ledger.to}`}
+            </span>
+            {led.collect.running && (
+              <span className="dret-run">
+                수집 중 {led.collect.done}/{led.collect.total}
+                {led.collect.at && ` · ${led.collect.at}`}
+              </span>
+            )}
+          </div>
+          {/* 한도까지 얼마나 왔나 — 막대 하나가 표 열 줄보다 빨리 읽힌다 */}
+          <div className="dret-bar" title={`${led.ledger.maxDays}일 / 한도 ${led.ledger.keep}일`}>
+            <span style={{ width: `${Math.min(100, led.ledger.fullPct)}%` }} />
+          </div>
+          <div className="table-note">
+            가장 긴 원장 <b>{led.ledger.maxDays}거래일</b> (대부분 {led.ledger.medDays}일) ·
+            한도 <b>{led.ledger.keep}일</b>
+            {" ≈ "}
+            {(led.ledger.keep / 250).toFixed(1)}년 · <b>{led.ledger.fullPct}%</b> 찼습니다.
+            <br />
+            {led.ledger.atLimit ? (
+              <b className="dret-warn">
+                ⚠️ 한도에 닿았습니다 — 백업할지, 리셋할지, 한도를 늘릴지 정해야 합니다.
+              </b>
+            ) : (
+              <>
+                자동 삭제는 {led.ledger.trim ? <b>켜져</b> : <b>꺼져</b>} 있습니다
+                {led.ledger.trim
+                  ? " — 한도를 넘으면 앞에서부터 지웁니다."
+                  : " — 지금은 계속 쌓이기만 합니다."}
+              </>
+            )}
+            <br />
+            한도는 <code>VNTG_DAILY_KEEP</code>(거래일, 최대 1300 ≈ 5년), 자동 삭제는{" "}
+            <code>VNTG_DAILY_TRIM=1</code> 로 켭니다. ⚠️ 지운 것은 <b>다시 못 받습니다</b> —
+            키움이 과거 수급을 100일치쯤만 줍니다.
+          </div>
+          {Object.keys(led.collect.added).length > 0 && (
+            <div className="table-note">
+              마지막 수집 —{" "}
+              {Object.entries(led.collect.added)
+                .map(([k, v]) => `${k} ${v.toLocaleString("ko-KR")}줄`)
+                .join(" · ")}
+              {led.collect.fails > 0 && ` · 실패 ${led.collect.fails}`}
+            </div>
+          )}
+        </div>
+      )}
+
       {/*
         「지울 것 없음」만 있으면 **다음에 뭘 해야 할지**를 말해 주지 않는다.
         지금 기준으로 얼마나 자랄지를 같이 적어 판단할 거리를 준다.

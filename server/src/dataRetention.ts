@@ -54,8 +54,38 @@ export const CATS: DataCat[] = [
     what: "장중 웹소켓으로 받은 원본 프레임. 거래원·프로그램 매매 추이가 여기서 나온다",
     kind: "daily",
     path: "realtime",
-    datePattern: /^(\d{4}-\d{2}-\d{2})\.(jsonl|json)$/,
-    defaultKeep: 30,
+    /* `.gz` 도 같은 날짜 파일이다 — 압축했다고 보관 기간에서 빠지면 안 된다 */
+    datePattern: /^(\d{4}-\d{2}-\d{2})\.(jsonl|json)(\.gz)?$/,
+    /*
+     * ## 30 → 1300 (2026-09-01) — **압축을 넣었으니 길게 둔다**
+     *
+     * 벤티지: "최대 5년치 약 100기가 정도로 두고 5년 지나면 앞에것부터 지워나가는
+     * 로직으로 해도 되겠다."
+     *
+     * 압축률을 실측했다: 64.5MB → 15.2MB, **4.2:1**. 하루 70MB 짜리가 17MB 가
+     * 되므로 5년치(1,250거래일)가 **88GB → 21GB** 다. 미니PC 여유가 200GB 니
+     * 5년을 통째로 들고 있어도 된다.
+     *
+     * ⚠️ 이건 **다시 못 만드는 데이터**다 — 키움이 지나간 실시간을 안 준다.
+     * 30일로 두면 「한 달 전 그 급등날 창구가 어땠나」를 영영 못 본다.
+     */
+    defaultKeep: 1300,
+    rebuildable: false,
+  },
+  {
+    key: "daily",
+    label: "종목별 일별 원장",
+    what: "전종목 투자자별 수급 13주체 · 공매도 · 대차잔고 · 외국인 지분율 · 프로그램. 매일 마감 뒤 한 바퀴 돈다",
+    kind: "append",
+    path: "daily",
+    /*
+     * ⚠️ `append` 다 — 종목별 파일이라 **날짜로 못 자른다.** 파일 하나에 그 종목의
+     * 2년치가 들어 있고, 자르려면 파일을 열어 다시 써야 한다. 그 정리는
+     * `dailyStore.keepDays()` 가 수집할 때 같이 한다(`VNTG_DAILY_KEEP`).
+     * 여기서는 **크기만 보여 준다** — 자를 수 없는 것을 자를 수 있는 것처럼
+     * 보여 주지 않는다.
+     */
+    defaultKeep: null,
     rebuildable: false,
   },
   {
@@ -325,6 +355,77 @@ export async function pruneData(): Promise<{ removed: number; bytes: number; per
   return { removed, bytes, per };
 }
 
+/* ------------------------------------------------------------------ */
+/* 압축 — 지난 날 파일을 gzip 으로                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **지난 날의 큰 로그를 압축한다** (2026-09-01).
+ *
+ * 벤티지: "최대 5년치 약 100기가 정도로 두고 5년 지나면 앞에것부터 지워나가는
+ * 로직으로 해도 되겠다."
+ *
+ * 지우기 전에 할 것이 하나 더 있었다. 실시간 로그는 **같은 JSON 키가 40만 번**
+ * 반복되는 파일이라 압축이 아주 잘 듣는다. 실측: 64.5MB → 15.2MB, **4.2:1**.
+ *
+ * 그래서 5년치가 88GB 가 아니라 **21GB** 다. 미니PC 여유가 200GB 니 5년을
+ * 통째로 들고 있어도 된다 — **지울 이유 자체가 줄어든다.** 이 데이터는 다시
+ * 못 받으므로(키움이 지나간 실시간을 안 준다) 그게 훨씬 낫다.
+ *
+ * ## 오늘 것은 안 건드린다
+ *
+ * 장중에는 계속 덧붙는 중이다. 압축해 버리면 그 뒤에 오는 줄을 못 쓴다.
+ * **어제 이전**만 압축한다.
+ *
+ * ## 원본은 압축이 끝난 뒤에 지운다
+ *
+ * 순서를 바꾸면 중간에 프로세스가 죽었을 때 **원본도 없고 압축본도 반쪽**인
+ * 상태가 남는다. 쓰기가 끝나고 크기를 확인한 뒤에 지운다.
+ */
+export async function compressOldLogs(): Promise<{ done: number; saved: number }> {
+  const { createReadStream, createWriteStream } = await import("node:fs");
+  const { createGzip } = await import("node:zlib");
+  const { pipeline } = await import("node:stream/promises");
+
+  let done = 0;
+  let saved = 0;
+  const today = ymd(Date.now());
+  const yesterday = ymd(Date.now() - 86400_000);
+
+  for (const cat of CATS) {
+    if (cat.kind !== "daily" || !cat.datePattern) continue;
+    const dir = join(DATA_DIR, cat.path);
+    for (const f of await dirFiles(dir)) {
+      if (f.name.endsWith(".gz")) continue;
+      const m = cat.datePattern.exec(f.name);
+      if (!m) continue;
+      /* 오늘·어제는 아직 덧붙는 중일 수 있다 */
+      if (m[1] >= yesterday || m[1] === today) continue;
+      /* 작은 파일은 압축해 봐야 얻는 게 없다 */
+      if (f.bytes < 1_000_000) continue;
+
+      const src = join(dir, f.name);
+      const dst = `${src}.gz`;
+      try {
+        await pipeline(createReadStream(src), createGzip({ level: 6 }), createWriteStream(dst));
+        const gz = await stat(dst);
+        /* 압축본이 멀쩡할 때만 원본을 지운다 */
+        if (gz.size > 0 && gz.size < f.bytes) {
+          await unlink(src);
+          done += 1;
+          saved += f.bytes - gz.size;
+        } else {
+          await unlink(dst).catch(() => undefined);
+        }
+      } catch {
+        /* 하나 실패해도 나머지는 압축한다. 반쪽 파일은 지운다 */
+        await unlink(dst).catch(() => undefined);
+      }
+    }
+  }
+  return { done, saved };
+}
+
 let timer: NodeJS.Timeout | null = null;
 
 /** 하루 한 번 정리. 기동 직후에도 한 번 — 이미 넘쳐 있을 수 있다 */
@@ -332,6 +433,14 @@ export function startRetentionScheduler(): void {
   if (timer) return;
   const tick = async () => {
     try {
+      /*
+       * **압축이 먼저다.** 지우기 전에 줄일 수 있으면 줄인다 — 이 데이터는 다시
+       * 못 받으므로 「작게 오래 두기」가 「크게 짧게 두기」보다 낫다.
+       */
+      const z = await compressOldLogs();
+      if (z.done > 0) {
+        console.log(`[data] 지난 로그 ${z.done}개 압축 — ${(z.saved / 1048576).toFixed(1)}MB 절약`);
+      }
       const r = await pruneData();
       if (r.removed > 0) {
         console.log(`[data] 오래된 파일 ${r.removed}개 정리 — ${(r.bytes / 1048576).toFixed(1)}MB`);

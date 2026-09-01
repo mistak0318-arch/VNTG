@@ -13492,3 +13492,46 @@ thead .sd-emph {
   padding-left: 12px;
   border-left: 2px solid var(--border);
 }
+
+/* 일별 원장 현황 (2026-09-01) — 며칠치 쌓였나 · 한도까지 얼마나 */
+.dret-ledger {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+/* 한도에 닿으면 색이 바뀐다 — 「정해야 할 것이 생겼다」 */
+.dret-ledger.full {
+  border-color: var(--warn, #d9a441);
+  background: color-mix(in srgb, var(--warn, #d9a441) 8%, transparent);
+}
+.dret-ledger-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.dret-run {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--blue, #4c8dff) 18%, transparent);
+  color: var(--blue, #4c8dff);
+  font-size: 0.72rem;
+}
+/* 막대 하나가 표 열 줄보다 빨리 읽힌다 */
+.dret-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  overflow: hidden;
+}
+.dret-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--blue, #4c8dff);
+}
+.dret-ledger.full .dret-bar > span { background: var(--warn, #d9a441); }
+.dret-warn { color: var(--warn, #d9a441); }
