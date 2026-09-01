@@ -69,6 +69,26 @@ const EMPTY: RealtimeState = { enabled: false, healthy: false, values: {} };
  * 08:00 부터 여는 것은 NXT 프리마켓 시작 시각이다. 20:10 까지 두는 것은 애프터가
  * 20:00 에 끝나고 마지막 체결이 조금 늦게 들어오기 때문이다.
  */
+/**
+ * **KRX 정규장 안인가** — 09:00~15:30 (2026-09-01 신설).
+ *
+ * `krxOverlayLive` 와 헷갈리면 안 된다. 저쪽은 **실시간 오버레이를 켤 시간**이라
+ * 08:00~20:10(프리·애프터 포함)이고, 이쪽은 **KRX 가 도는 시간**이다.
+ *
+ * ⚠️ 그 둘을 하나로 쓰다가 틀렸다. NXT 서브 줄이 `!krxOverlayLive()` 였는데,
+ * 그러면 **08:00~20:10 내내 숨는다** — 프리·애프터까지. 주석에는 「프리·애프터·
+ * 마감(NXT 가 그날의 주인공인 시간)엔 보여 준다」고 적혀 있었으니 **말과 코드가
+ * 정반대**였다. 벤티지: "8시 지나서 장 마감했으면 NXT 장마감 시세를 보여줘야지
+ * 왜 KRX 장마감 시세로 바뀌지?"
+ */
+export function krxRegularSession(now = new Date()): boolean {
+  const kst = new Date(now.getTime() + 9 * 3600_000);
+  const day = kst.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  const m = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+  return m >= 9 * 60 && m <= 15 * 60 + 30;
+}
+
 export function krxOverlayLive(now = new Date()): boolean {
   const kst = new Date(now.getTime() + 9 * 3600_000);
   const day = kst.getUTCDay();

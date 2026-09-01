@@ -7,7 +7,7 @@ import { ContinuousTradePage } from "./ContinuousTradePage";
 import { TopTradersTable } from "../components/TopTradersTable";
 import { CumulativeRank } from "../components/CumulativeRank";
 import { SortableTh, useSortableTable } from "../useSortableTable";
-import { fid, krxOverlayLive, useRealtime } from "../useRealtime";
+import { fid, krxOverlayLive, krxRegularSession, useRealtime } from "../useRealtime";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { useCardOrder } from "../useCardOrder";
@@ -466,11 +466,17 @@ export function ScreenerPage({
   // KRX 정규장 밖(NXT 프리·애프터)엔 오버레이를 끈다 — KRX 0% 가 통합 값을 덮어 「왜 0이냐」가 됐다
   const liveOn = (!data?.spec.exchange || exchange === "3") && krxOverlayLive();
   /*
-   * NXT 서브 줄은 **정규장엔 숨긴다** (2026-08-26 — 「정규장 돌아가는데 나타났다
-   * 사라졌다 헷갈린다」). 목록은 통합 숫자 하나면 되고, NXT 가 궁금하면 종목을
-   * 누르면 상세에 있다. 프리·애프터·마감(NXT 가 그날의 주인공인 시간)엔 보여 준다.
+   * NXT 서브 줄은 **정규장(09:00~15:30)엔 숨긴다** (2026-08-26 — 「정규장 돌아가는데
+   * 나타났다 사라졌다 헷갈린다」). 목록은 통합 숫자 하나면 되고, NXT 가 궁금하면
+   * 종목을 누르면 상세에 있다. 프리·애프터·마감(NXT 가 그날의 주인공인 시간)엔
+   * 보여 준다.
+   *
+   * ⚠️ **2026-09-01 까지 그 반대로 돌았다.** `!krxOverlayLive()` 를 썼는데 그 함수는
+   * 08:00~20:10(프리·애프터 포함)이라, **NXT 가 주인공인 시간에 오히려 숨었다.**
+   * 벤티지: "8시 지나서 장 마감했으면 NXT 장마감 시세를 보여줘야지 왜 KRX 장마감
+   * 시세로 바뀌지?" — 말과 코드가 정반대였던 것이다.
    */
-  const showNxtSub = !krxOverlayLive();
+  const showNxtSub = !krxRegularSession();
   const rt = useRealtime(liveOn ? shown.map((r) => `0B:${r.code}`) : [], 1500, { readOnly: true });
   const liveOf = (code: string): { price: number; rate: number | null } | null => {
     if (!liveOn) return null;
