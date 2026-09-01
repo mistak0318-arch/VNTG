@@ -97,7 +97,7 @@ export const BACKTESTABLE = new Set([
 /* 테마 렌즈 재구성                                                     */
 /* ------------------------------------------------------------------ */
 
-interface ThemeCtx {
+export interface ThemeCtx {
   /** 테마 no → 하루하루 평균 등락률(%). k=0 이 캐시의 마지막 날, 커질수록 과거 */
   rate: Map<number, number[]>;
   /** 종목 → 든 사업 테마 no 들 (지수성 제외) */
@@ -110,7 +110,7 @@ interface ThemeCtx {
  * 일봉 캐시에서 테마별 일일 등락률을 되짚는다 — 조회 0회.
  * 구성원 절반 이상이 값을 내야 그날을 센다(모자라면 그 날은 없음).
  */
-async function buildThemeCtx(): Promise<ThemeCtx | null> {
+export async function buildThemeCtx(): Promise<ThemeCtx | null> {
   const [{ themes }, { closes }] = await Promise.all([loadThemes(), loadCloses()]);
   if (themes.length === 0 || Object.keys(closes).length === 0) return null;
 
@@ -188,7 +188,7 @@ async function buildThemeCtx(): Promise<ThemeCtx | null> {
  *
  * ⚠️ 구성은 **오늘 것**이다 — look-ahead 가 남는다. `Feat.etfBack` 주석 참고.
  */
-async function buildEtfCtx(): Promise<{
+export async function buildEtfCtx(): Promise<{
   rate: Map<string, number[]>;
   span: number;
 } | null> {
@@ -832,8 +832,16 @@ function featuresAt(
  *
  * 스무 쌍이 안 되면 `null` 이다 — 적은 표본의 회귀계수는 아무 값이나 나온다.
  */
-function betaAt(
-  bars: Bar[],
+/**
+ * 날짜·종가 배열로 받는 형태.
+ *
+ * 표본을 만드는 곳이 둘이다 — 여기(조회로 받은 일봉)와 `samplesFromLedger`
+ * (파일로 읽은 일봉). 봉의 생김새가 서로 달라서 각자 베타를 재게 두면 **둘이
+ * 조용히 갈라진다.** 그래서 계산은 여기 하나만 두고 양쪽이 모양만 맞춰 부른다.
+ */
+export function betaFrom(
+  dates: string[],
+  closes: number[],
   at: number,
   /** 날짜(YYYYMMDD) → 그날 금리(%) */
   rate: Map<string, number>,
@@ -843,13 +851,13 @@ function betaAt(
   const ys: number[] = [];
   /* 그날까지 60거래일 — 뒤쪽(미래) 봉은 절대 안 본다 */
   for (let i = Math.max(1, at - 59); i <= at; i++) {
-    const r1 = rate.get(bars[i].date);
-    const r0 = rate.get(bars[i - 1].date);
+    const r1 = rate.get(dates[i]);
+    const r0 = rate.get(dates[i - 1]);
     if (r1 === undefined || r0 === undefined) continue;
-    const px0 = bars[i - 1].close;
+    const px0 = closes[i - 1];
     if (!(px0 > 0)) continue;
     xs.push(r1 - r0); // 금리 변화(%p)
-    ys.push(((bars[i].close - px0) / px0) * 100); // 종목 수익률(%)
+    ys.push(((closes[i] - px0) / px0) * 100); // 종목 수익률(%)
   }
   if (xs.length < 20) return null;
   const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -864,6 +872,22 @@ function betaAt(
   if (varx < 1e-6) return null;
   const b = cov / varx;
   return Number.isFinite(b) ? Math.round(b * 100) / 100 : null;
+}
+
+/**
+ * 이 파일의 봉 모양으로 부르는 얇은 껍데기.
+ *
+ * 날짜·종가 배열은 **봉 배열마다 한 번만** 만든다 — 이 함수는 날마다 불리므로
+ * 매번 `map` 을 두 번 돌면 종목당 400번 × 400봉이 된다.
+ */
+const barCols = new WeakMap<Bar[], { d: string[]; c: number[] }>();
+function betaAt(bars: Bar[], at: number, rate: Map<string, number>): number | null {
+  let cols = barCols.get(bars);
+  if (!cols) {
+    cols = { d: bars.map((b) => b.date), c: bars.map((b) => b.close) };
+    barCols.set(bars, cols);
+  }
+  return betaFrom(cols.d, cols.c, at, rate);
 }
 
 function summarize(rows: { d1: number | null; d5: number | null; d20: number | null }[]): Summary {

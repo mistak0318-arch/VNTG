@@ -1,12 +1,12 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { regimeCheck, regimeConfig } from "./regimeWatch.js";
 import { pushNotice } from "./notifyCenter.js";
-import { backtestProgress, startBacktestJob } from "./signalBacktest.js";
+import { backtestProgress } from "./signalBacktest.js";
 import { samplesMeta } from "./signalSamples.js";
+import { buildSamplesFromLedger } from "./samplesFromLedger.js";
 import { runListTrack } from "./listTrack.js";
 import { simulate } from "./signalSimulate.js";
 import { getConfig } from "./signalLight.js";
-import { tradeValueTop } from "./signalScreen.js";
 
 /**
  * 장세 점검 스케줄러 (2026-08-31).
@@ -22,10 +22,11 @@ import { tradeValueTop } from "./signalScreen.js";
  * ## 언제 도나
  *
  *   16:10  장세 점검 — 종가가 확정된 뒤다. 걸리면 🔔 알림
- *   18:30  표본 자동 재수집 — 오래됐을 때만. 장이 끝나 조회가 한가한 시간
+ *   18:30  표본 다시 만들기 — 오래됐을 때만
  *
- * 슈퍼신호등(15:45)·CIS(15:45)와 **겹치지 않게** 뒤로 뺐다. 백테스트는 조회를
- * 3,500번쯤 쓰므로 다른 자동 작업과 부딪히면 둘 다 느려진다.
+ * 18:30 은 예전에 **조회를 3,500번쯤 쓰던** 자리라 다른 자동 작업과 안 부딪히게
+ * 뒤로 뺀 시각이다. 이제 원장에서 만들어 조회가 0 이지만, 마감 뒤 파이프라인이
+ * ①일봉·②원장을 다 채운 뒤여야 하므로 시각은 그대로 둔다.
  *
  * ## ⚠️ 한 행동에 대해 충분히 알린다
  *
@@ -78,39 +79,46 @@ async function rebuildAndReport(client: KiwoomClient, why: string): Promise<void
   if (rebuilding || backtestProgress().running) return;
   rebuilding = true;
   try {
-    const top = await tradeValueTop(client, "000", 500);
-    const codes = top.map((t) => ({ code: t.code, name: t.name }));
-    if (codes.length === 0) return;
-
+    /*
+     * ## **원장에서 만든다** (2026-09-01) — 예전엔 조회로 새로 받았다
+     *
+     * 여기 있던 것: `tradeValueTop(500)` 으로 목록을 받아 400거래일 백테스트를
+     * 돌리고 그 부산물로 표본을 남기는 방식. 20~60분이 걸렸고 **거래대금 상위
+     * 500종목**이 한계였다.
+     *
+     * 그런데 그게 두 가지를 망가뜨리고 있었다:
+     *
+     * 1. **마감 뒤 파이프라인 ⑨가 만든 2,600종목 표본을 이게 덮어썼다.** 같은
+     *    파일(`signalSamples.json`)을 쓰는데 이쪽이 한 시간 뒤에 돈다. 넓은 표본을
+     *    만들어 놓고 좁은 것으로 갈아 끼우는 꼴이었다.
+     * 2. **표본이 대형주로 기울었다.** 거래대금 상위 500이면 소형주가 통째로
+     *    빠지는데, 실측에서 가장 성적이 좋았던 구간이 바로 1~3천억이다.
+     *
+     * 이제 원장(전종목 수급)과 일봉(전종목 500봉)이 매일 채워지므로 **파일만 읽어**
+     * 만든다 — 조회 0회, 몇 분, 2,600종목. 백테스트 자체는 화면에서 손으로 돌리는
+     * 도구로 남는다(표본 만들기가 그 부산물이 아니게 됐다).
+     */
     await pushNotice({
       kind: "system",
       level: "info",
-      title: "표본을 새로 모으는 중입니다",
+      title: "표본을 다시 만드는 중입니다",
       body:
-        `${why} 거래대금 상위 ${codes.length}종목 × 400거래일을 다시 받습니다 — ` +
-        `20분쯤 걸리고 백그라운드로 돕니다. 끝나면 「지금 설정이 새 표본에서도 통하나」를 ` +
-        `다시 알려 드립니다.`,
+        `${why} 원장과 일봉으로 다시 만듭니다 — **조회는 하지 않고** 몇 분이면 끝납니다. ` +
+        `끝나면 「지금 설정이 새 표본에서도 통하나」를 알려 드립니다.`,
       link: "#/settings",
       dedupeKey: "regime:rebuild-start",
       dedupeHours: 20,
     });
 
-    startBacktestJob(client, { codes, days: 400 });
-
-    /* 끝날 때까지 지켜본다 — 30초마다, 최대 한 시간 */
-    const until = Date.now() + 60 * 60_000;
-    while (Date.now() < until) {
-      await new Promise((r) => setTimeout(r, 30_000));
-      if (!backtestProgress().running) break;
-    }
-    if (backtestProgress().running) {
+    const built = await buildSamplesFromLedger(client);
+    if (built.error) {
       await pushNotice({
         kind: "system",
         level: "warn",
-        title: "표본 수집이 한 시간을 넘겼습니다",
-        body: "아직 돌고 있거나 중간에 멈췄을 수 있습니다. 신호등 찾기에서 진행률을 보세요.",
-        link: "#/signalScreen",
-        dedupeKey: "regime:rebuild-slow",
+        title: "표본을 다시 만들지 못했습니다",
+        body: `${built.error} — 원장이나 일봉이 아직 없을 수 있습니다. 설정 > 마감 뒤 정리에서 ①②를 먼저 돌려 보세요.`,
+        link: "#/settings",
+        dedupeKey: "regime:rebuild-fail",
         dedupeHours: 20,
       });
       return;

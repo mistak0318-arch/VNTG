@@ -9,7 +9,7 @@ import { runListTrack } from "./listTrack.js";
 import { marketPulse } from "./marketPulse.js";
 import { getTradeStats } from "./tradeStats.js";
 import { pushNotice } from "./notifyCenter.js";
-import { samplesMeta } from "./signalSamples.js";
+import { buildSamplesFromLedger } from "./samplesFromLedger.js";
 import { sendTelegram } from "./telegram.js";
 
 /**
@@ -38,9 +38,11 @@ import { sendTelegram } from "./telegram.js";
  *   ② 원장 전종목        수급 13주체·공매도·대차·지분율·프로그램
  *   ③ 장세 점검          ①이 있어야 20일선 위 비율이 오늘 것이다
  *   ④ 신호등 추적기      문턱별 편입
- *   ⑤ 슈퍼신호등         교집합 편입/이탈 + 점수대 그룹 동기화
- *   ⑥ 신호등 분석        **①②가 다 있어야** 열세 목록이 제 값으로 돈다
- *   ⑦ 표본 재수집        오래됐으면
+ *   ⑤ 신호등 분석        **①②가 다 있어야** 열세 목록이 제 값으로 돈다
+ *   ⑥ 슈퍼신호등         ⑤가 받아 둔 목록으로 교집합 + 점수대 그룹 동기화
+ *   ⑦ 교차 신호          주도주 태그 ∩ 슈퍼신호등
+ *   ⑧ 수출입 동향        관세청 발표
+ *   ⑨ 검증 표본          ①②로 다시 만든다 (조회 0회)
  *
  * ## ⚠️ 하나가 실패해도 멈추지 않는다
  *
@@ -288,20 +290,27 @@ export async function runAfterClose(
     });
 
   /*
-   * ⑨ 표본 — **상태만 본다.** 실제 재수집은 `regimeScheduler` 의 18:30 이 한다.
+   * ⑨ **검증 표본 — 원장으로 다시 만든다** (2026-09-01).
    *
-   * 재수집은 종목당 여러 콜에 40~60분이라 이 파이프라인(이미 2시간 남짓) 뒤에
-   * 붙이면 밤이 다 간다. 여기서는 「얼마나 낡았나」만 적어 요약에 싣는다.
+   * ⚠️ 여태 이 자리는 「얼마나 낡았나」만 적었다. 재수집이 종목당 여러 콜에
+   * 40~60분이라 두 시간짜리 파이프라인 뒤에 붙일 수가 없었기 때문이다. 그래서
+   * 표본은 **손으로 눌러야만** 갱신됐고, 실제로 며칠씩 낡은 채로 있었다.
+   *
+   * 이제 ①일봉과 ②원장이 방금 채워졌다. 그 둘이면 표본을 만들 수 있다 —
+   * **키움을 한 번도 안 부르고** 몇 분이면 끝난다. 조회가 0이니 파이프라인에
+   * 붙지 않을 이유가 없다.
+   *
+   * 그래서 표본이 **매일 하루씩 자란다.** 어제 문턱을 정하며 본 성적이 오늘도
+   * 같은 표본에서 나온다.
    */
   if (want("samples"))
-    await step("samples", "검증 표본", async () => {
-    const meta = await samplesMeta();
-    if (!meta.has) return "표본이 없어 건너뜀 — 설정에서 처음 모아야 합니다";
-    const age = meta.builtAt
-      ? Math.floor((Date.now() - new Date(meta.builtAt).getTime()) / 86_400_000)
-      : 99;
-    return age >= 7 ? `${age}일 지남 — 재수집이 필요합니다` : `${age}일 전 것 (아직 쓸 만함)`;
-  });
+    await step("samples", "검증 표본 (원장으로)", async () => {
+      const p = await buildSamplesFromLedger(client);
+      if (p.error) return `실패: ${p.error}`;
+      const note = `${p.obs.toLocaleString()}관측 · ${(p.total - p.skipped).toLocaleString()}종목`;
+      /* ①②가 깨졌으면 표본도 그만큼 낡은 것으로 만들어진 것이다 */
+      return bars.ok ? note : `${note} · ⚠️ 일봉이 실패해 어제까지로 만들어짐`;
+    });
 
   run.running = false;
   run.finishedAt = new Date().toISOString();

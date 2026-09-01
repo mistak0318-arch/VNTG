@@ -6,6 +6,7 @@ import {
   type SignalCondResult,
   type SignalSweepResult,
   type BacktestSummary,
+  type LedgerSampleProgress,
 } from "../api";
 
 /**
@@ -17,8 +18,22 @@ import {
  * 백테스트는 설정 하나를 채점하는 데 **500 종목의 일봉을 새로 받아 7분**이 걸린다.
  * 그래서 조합을 볼 수가 없었다 — 문턱 하나 옮겨 보려고 7분을 기다리면 두 번은 안 한다.
  *
- * 비싼 것은 일봉이지 채점이 아니다. 그래서 백테스트가 **원시값을 파일로 남기고**,
- * 여기서는 그 파일만 다시 채점한다. API 를 한 번도 안 부르므로 즉답이다.
+ * 비싼 것은 일봉이지 채점이 아니다. 그래서 **원시값을 파일로 남기고**, 여기서는
+ * 그 파일만 다시 채점한다. API 를 한 번도 안 부르므로 즉답이다.
+ *
+ * ## 표본은 이제 **원장에서** 나온다 (2026-09-01)
+ *
+ * 예전에는 백테스트를 돌려야 표본이 생겼다 — 그 부산물이었다. 그래서 표본은
+ * 늘 「거래대금 상위 500종목」이었고, 다시 만들려면 40~60분을 기다려야 했다.
+ *
+ * 이제 전종목 원장(수급 13주체·공매도·대차·지분율)과 전종목 일봉이 **매일 밤
+ * 저절로 쌓인다.** 그 둘이면 표본을 만들 수 있다 — 조회 0회, 몇 초, 2,600종목.
+ * 위의 「원장으로 표본 다시 만들기」가 그것이고, 마감 뒤 파이프라인 ⑨도 매일 돈다.
+ *
+ * ⚠️ **거래대금 100억 미만인 날은 뺀다.** 거래가 거의 없는 종목은 종가가 며칠씩
+ * 안 변해 수익률이 `0` 으로 쌓이는데, 그 0 들이 시장 기준선을 통째로 끌어올린다
+ * (실측: 문턱 없이 20일 중앙값 -5.36% → 10억 문턱에서 -11.23%). 게다가 그런
+ * 종목은 호가가 얇아 **살 수도 없다.**
  *
  * ## 무엇을 보라고 만든 화면인가
  *
@@ -58,6 +73,8 @@ export function SignalSimPanel({ config }: { config: SignalConfig | null }) {
   const [meta, setMeta] = useState<{ has: boolean; builtAt?: string; obs?: number; codeCount?: number; days?: number } | null>(null);
   const [res, setRes] = useState<SignalSimResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [building, setBuilding] = useState(false);
+  const [build, setBuild] = useState<LedgerSampleProgress | null>(null);
   const [err, setErr] = useState<string | null>(null);
   /** 지금 화면의 설정(저장 전)으로 잴지, 저장된 설정으로 잴지 */
   const [useDraft, setUseDraft] = useState(true);
@@ -76,19 +93,69 @@ export function SignalSimPanel({ config }: { config: SignalConfig | null }) {
       .finally(() => setBusy(false));
   }, [config, useDraft]);
 
+  /*
+   * **원장으로 표본 다시 만들기** (2026-09-01).
+   *
+   * 예전엔 이 자리에 「신호등 찾기에서 백테스트를 돌리세요」라고만 적혀 있었다 —
+   * 40~60분짜리를 다른 화면에서 시작해야 했다. 이제 원장과 일봉이 매일 쌓이므로
+   * 여기서 눌러 **몇 초 만에** 다시 만든다. 조회를 한 번도 안 한다.
+   */
+  const rebuild = useCallback(() => {
+    setBuilding(true);
+    setErr(null);
+    api
+      .signalSamplesFromLedger()
+      .then(async () => {
+        /* 끝날 때까지 지켜본다 — 보통 몇 초라 1초 간격이면 충분하다 */
+        for (;;) {
+          const p = await api.signalSamplesFromLedgerProgress();
+          setBuild(p);
+          if (!p.running) {
+            if (p.error) setErr(p.error);
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        setMeta(await api.signalSamples());
+      })
+      .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBuilding(false));
+  }, []);
+
+  const rebuildBtn = (
+    <div className="sim-actions">
+      <button className="primary-btn" onClick={rebuild} disabled={building}>
+        {building ? "만드는 중…" : "원장으로 표본 다시 만들기"}
+      </button>
+      <span className="pt-n">
+        조회 0회 · 전종목 · 몇 초. 거래대금 {build?.minVolEok ?? 100}억 미만인 날은 뺍니다
+      </span>
+    </div>
+  );
+
+  const buildNote = build && !build.running && build.finishedAt && (
+    <p className="pt-n sim-meta">
+      {build.obs.toLocaleString("ko-KR")}관측 · {(build.total - build.skipped).toLocaleString("ko-KR")}
+      종목 · 거래대금 미달로 뺀 날 {build.thinDays.toLocaleString("ko-KR")}
+    </p>
+  );
+
   if (meta && !meta.has) {
     return (
       <section className="card sim-card">
         <h3>시뮬레이터</h3>
         <p className="sim-empty">
-          아직 <b>표본이 없습니다.</b> 신호등 찾기 화면에서 <b>백테스트를 한 번</b> 돌리면
-          그때 받은 일봉에서 원시값이 파일로 남고, 그 뒤로는 여기서 설정을 바꿔 가며{" "}
-          <b>즉시</b> 성적을 볼 수 있습니다 — 일봉을 다시 받지 않습니다.
+          아직 <b>표본이 없습니다.</b> 아래 단추를 누르면 <b>전종목 원장과 일봉</b>에서 표본을
+          만듭니다 — 조회를 한 번도 안 하므로 몇 초면 끝납니다. 그 뒤로는 설정을 바꿔 가며{" "}
+          <b>즉시</b> 성적을 볼 수 있습니다.
         </p>
         <p className="pt-n">
-          백테스트는 백그라운드로 돕니다. 화면을 떠나도 계속 돌고, 표본은 파일이라 서버를
-          다시 켜도 남습니다.
+          원장이 비어 있으면 만들 게 없습니다. 그럴 땐 <b>설정 &gt; 마감 뒤 정리</b>에서 ①일봉과
+          ②원장을 먼저 돌리세요. 매일 밤 저절로 돌기도 합니다.
         </p>
+        {rebuildBtn}
+        {buildNote}
+        {err && <p className="sim-err">{err}</p>}
       </section>
     );
   }
@@ -98,12 +165,15 @@ export function SignalSimPanel({ config }: { config: SignalConfig | null }) {
       <h3>시뮬레이터 — 이 설정이면 성적이 어떻게 되나</h3>
       {meta?.has && (
         <p className="pt-n sim-meta">
-          표본 {meta.obs?.toLocaleString("ko-KR")}건 · 거래대금 상위 {meta.codeCount}종목 ×{" "}
-          {meta.days}거래일 · {meta.builtAt?.slice(0, 16).replace("T", " ")} 수집
+          표본 {meta.obs?.toLocaleString("ko-KR")}건 · {meta.codeCount?.toLocaleString("ko-KR")}종목 ·
+          되짚기 {meta.days}거래일 · {meta.builtAt?.slice(0, 16).replace("T", " ")} 만듦
         </p>
       )}
 
       <SimHowTo />
+
+      {rebuildBtn}
+      {buildNote}
 
       <div className="sim-actions">
         <label className="sim-toggle">

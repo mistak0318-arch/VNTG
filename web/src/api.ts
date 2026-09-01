@@ -1656,6 +1656,20 @@ export const api = {
     getJson<{ has: boolean; builtAt?: string; days?: number; codeCount?: number; obs?: number }>(
       "/api/signal/samples",
     ),
+  /**
+   * **원장으로 표본 만들기** (2026-09-01) — 조회 0회, 몇 초.
+   *
+   * 예전엔 백테스트를 돌려야 표본이 생겼다(40~60분 · 거래대금 상위 500종목).
+   * 이제 전종목 원장과 일봉이 매일 쌓이므로 파일만 읽어 만든다.
+   *
+   * `minVolEok` 은 **그날 거래대금 하한(억)** 이다. 기본 100 —
+   * 거래가 거의 없는 종목은 종가가 안 변해 수익률 0 이 쌓이고, 그 0 들이 시장
+   * 기준선을 끌어올려 모든 기준이 실제보다 나빠 보이게 만든다. 게다가 살 수도 없다.
+   */
+  signalSamplesFromLedger: (body?: { minFlowDays?: number; minVolEok?: number }) =>
+    postJson<LedgerSampleProgress>("/api/signal/samples/fromLedger", body ?? {}),
+  signalSamplesFromLedgerProgress: () =>
+    getJson<LedgerSampleProgress>("/api/signal/samples/fromLedger/progress"),
   signalSimulate: (config?: SignalConfig) =>
     postJson<{ result: SignalSimResult }>("/api/signal/simulate", config ? { config } : {}),
   /**
@@ -2555,6 +2569,22 @@ export interface SignalCheckStat {
 }
 
 /** 신호등 시뮬레이터 결과 */
+/** 원장으로 표본을 만드는 중 — 서버의 `BuildProgress` 와 같은 모양이어야 한다 */
+export interface LedgerSampleProgress {
+  running: boolean;
+  done: number;
+  total: number;
+  obs: number;
+  skipped: number;
+  /** 거래대금이 모자라 버린 **날** 수 */
+  thinDays: number;
+  /** 이번에 쓴 거래대금 하한(억) */
+  minVolEok: number;
+  startedAt: string;
+  finishedAt?: string;
+  error?: string;
+}
+
 export interface SignalSimResult {
   builtAt: string;
   days: number;

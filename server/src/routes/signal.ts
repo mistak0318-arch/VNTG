@@ -25,6 +25,7 @@ import { gradeSignalHistory, signalDays } from "../signalHistory.js";
 import { etfSeriesFor, themeSeriesFor } from "../themeSeries.js";
 import { backtestProgress, backtestResult, startBacktestJob } from "../signalBacktest.js";
 import { samplesMeta } from "../signalSamples.js";
+import { buildSamplesFromLedger, ledgerSamplesProgress } from "../samplesFromLedger.js";
 import { listTrackJob, listTrackSummary, runListTrack } from "../listTrack.js";
 import {
   buildVerdict,
@@ -692,6 +693,29 @@ export function createSignalRouter(client: KiwoomClient): Router {
     } catch (err) {
       next(err);
     }
+  });
+
+  /*
+   * **원장으로 표본 만들기** (2026-09-01) — 조회 0회.
+   *
+   * 백테스트로 표본을 만들면 종목마다 조회를 새로 해 40~60분이 걸리고 500종목이
+   * 한계였다. 이제 원장에 전종목 수급이 이미 있으므로 파일만 읽어 만든다 —
+   * 2,600종목, 몇 분. 중간에 죽어도 다시 돌리면 그만이라 무르다.
+   */
+  router.post("/samples/fromLedger", (req, res) => {
+    const b = req.body as { minFlowDays?: unknown; minVolEok?: unknown };
+    const min = Number(b?.minFlowDays);
+    const vol = Number(b?.minVolEok);
+    void buildSamplesFromLedger(
+      client,
+      Number.isFinite(min) ? min : undefined,
+      Number.isFinite(vol) ? vol : undefined,
+    );
+    res.json(ledgerSamplesProgress());
+  });
+
+  router.get("/samples/fromLedger/progress", (_req, res) => {
+    res.json(ledgerSamplesProgress());
   });
 
   /**

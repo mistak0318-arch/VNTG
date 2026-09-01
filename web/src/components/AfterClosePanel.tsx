@@ -58,7 +58,11 @@ const STEPS: { key: string; label: string; why: string; heavy?: string }[] = [
     label: "⑧ 수출입 동향",
     why: "관세청 발표(월 1일·15일 언저리)를 받아 둡니다. 여태 「수출 동향」 화면을 열어야만 받았습니다",
   },
-  { key: "samples", label: "⑨ 검증 표본", why: "얼마나 낡았는지만 봅니다 (재수집은 18:30)" },
+  {
+    key: "samples",
+    label: "⑨ 검증 표본",
+    why: "①일봉 + ②원장으로 다시 만듭니다 — 조회 0회, 몇 분",
+  },
 ];
 
 function dur(ms: number): string {
