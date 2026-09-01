@@ -3696,17 +3696,84 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   background: var(--panel-2);
 }
 .trade-note { font-size: 0.8333rem; color: var(--muted); margin-bottom: 8px; }
-/* 월별 수출입 막대 — 색은 전년 같은 달 대비 */
-.trade-chart { margin: 6px 0 10px; }
+/*
+ * 월별 수출입 막대 — 색은 전년 같은 달 대비.
+ *
+ * ## ⚠️ **폭을 묶는다** (2026-09-01) — 벤티지: "해상도 좀 고쳐라 너무 커…
+ * 큰 모니터에서"
+ *
+ * `width: 100%` 하나가 범인이었다. viewBox 가 720×110 인데 폭만 100% 로 주면
+ * SVG 는 **비율을 지키며 통째로 늘어난다** — 1,900px 모니터에서 2.6배다.
+ * 10px 로 잡아 둔 눈금 글자가 26px 이 되고, 높이도 110 → 290 이 된다.
+ * 「62억$」가 제목만큼 커 보이던 게 그것이다.
+ *
+ * viewBox 는 **CSS 픽셀로 설계한 도면**이라 그 크기로 그려야 의도대로 나온다.
+ * `max-width` 로 묶으면 큰 화면에서는 1:1, 좁은 화면에서는 알아서 줄어든다.
+ */
+.trade-chart { margin: 6px 0 10px; max-width: 720px; }
 .trade-chart svg { width: 100%; height: auto; display: block; }
-.tc-bar-up { fill: var(--red); opacity: 0.85; }
-.tc-bar-down { fill: var(--blue); opacity: 0.85; }
-.tc-bar-flat { fill: var(--muted); opacity: 0.35; }
-.tc-tick, .tc-max { font-size: 10px; fill: var(--muted); }
+/*
+ * **네 칸 + 모름** (2026-09-01) — 벤티지: "색깔이 의미하는 바도 모르겠고."
+ *
+ * 늘었나 줄었나만 갈랐더니 +1% 와 +40% 가 같은 빨강이었다. 진하기로 세기를
+ * 나눈다 — 진한 빨강이 크게 늘었다는 뜻이고, 연한 쪽이 조금이다.
+ * 뜻은 그래프 밑 범례(.tc-legend)가 직접 적는다. 색만 있고 설명이 없으면
+ * 사람이 매번 「이 파랑이 뭐였지」를 되짚어야 한다.
+ */
+.tc-bar-up2 { fill: var(--red); opacity: 0.95; }
+.tc-bar-up1 { fill: var(--red); opacity: 0.45; }
+.tc-bar-dn1 { fill: var(--blue); opacity: 0.45; }
+.tc-bar-dn2 { fill: var(--blue); opacity: 0.95; }
+.tc-bar-flat { fill: var(--muted); opacity: 0.3; }
+/* 마지막 달 — 「지금 여기」가 어디인지 한눈에 */
+.tc-bar-last { stroke: var(--text); stroke-width: 0.8; }
+.tc-tick, .tc-max { font-size: 9px; fill: var(--muted); }
 .tc-grid { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; }
-.tc-year { stroke: var(--border); stroke-width: 1; stroke-dasharray: 1 4; }
+/* 연도 띠 — 점선 한 줄보다 구간이 눈에 들어온다 */
+.tc-band { fill: var(--text); opacity: 0.035; }
+.tc-year-label { font-size: 9px; fill: var(--muted); opacity: 0.8; }
+/* 범례 — 색의 뜻을 그래프 옆에 적는다 */
+.tc-legend { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px 8px; margin-left: 8px; }
+.tc-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+  margin-right: 1px;
+}
+.tc-legend i.tc-bar-up2 { background: var(--red); opacity: 0.95; }
+.tc-legend i.tc-bar-up1 { background: var(--red); opacity: 0.45; }
+.tc-legend i.tc-bar-dn1 { background: var(--blue); opacity: 0.45; }
+.tc-legend i.tc-bar-dn2 { background: var(--blue); opacity: 0.95; }
+.tc-legend i.tc-bar-flat { background: var(--muted); opacity: 0.3; }
 /* 마지막 달 주석 — SVG 안에 두면 눈금과 겹쳐서 HTML 로 뺐다 */
 .tc-head { font-size: 0.76rem; margin-bottom: 2px; }
+
+/*
+ * 수출입 품목 표 — **넓으면 두 칸** (2026-09-01).
+ *
+ * 서른 줄을 한 칸에 쌓으면 아래쪽을 보려고 스크롤하는 사이 위쪽이 화면에서
+ * 사라져 서로 견줄 수가 없다. 1,200px 부터 두 칸으로 나눈다 — 그보다 좁으면
+ * 칸이 눌려서 「대응 업종」이 줄바꿈으로 터진다.
+ */
+.trade-table-cols { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 1200px) {
+  /*
+   * ⚠️ `1fr 1fr` 이면 안 된다 — 표가 제 내용만큼만 넓은데 칸은 화면을 반씩
+   * 나눠 가지므로, 남는 자리가 **두 표 사이 빈 골짜기**가 된다. 실측에서
+   * 칸이 767px 인데 표는 420·450px 이라 삼백 픽셀이 비어 있었다.
+   *
+   * `auto auto` + `justify-content: start` 로 칸을 내용에 맞춘다.
+   */
+  .trade-table-cols {
+    grid-template-columns: auto auto;
+    justify-content: start;
+    align-items: start;
+    gap: 8px 14px;
+  }
+}
+/* 펼친 줄 — 두 칸이면 상세가 표 아래라 어느 줄을 눌렀는지 표시가 있어야 한다 */
+.trade-row.is-open > td { background: var(--panel-2); box-shadow: inset 2px 0 0 var(--accent, #4c8dff); }
 
 /* 선물 투자자별 수급 (차트 시트 안) */
 .ff-wrap { margin-top: 0.8rem; }

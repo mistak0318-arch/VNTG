@@ -1016,10 +1016,12 @@ export function createMarketRouter(client: KiwoomClient): Router {
         return;
       }
       const market = req.query.market === "F" ? "F" : "CM";
-      const period = ["D", "W", "M"].includes(String(req.query.period))
-        ? (String(req.query.period) as "D" | "W" | "M")
+      /* `I` = 당일 분봉 (2026-09-01). 다른 TR 을 타므로 kospiFutures 가 갈라 준다 */
+      const period = ["I", "D", "W", "M"].includes(String(req.query.period))
+        ? (String(req.query.period) as "I" | "D" | "W" | "M")
         : "D";
-      const days = Math.min(Math.max(Number(req.query.days) || 120, 10), 800);
+      /* 월봉은 10년쯤 받아야 칸이 스물몇 개 나온다 — 상한을 800일에서 늘렸다 */
+      const days = Math.min(Math.max(Number(req.query.days) || 120, 10), 4000);
       res.json({ code, market, period, ...(await futuresCandles(code, market, period, days)) });
     } catch (err) {
       next(err);

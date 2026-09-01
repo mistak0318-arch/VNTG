@@ -117,12 +117,28 @@ const YAHOO_RANGES: { key: string; label: string }[] = [
  * 선물은 기간 선택지가 다르다.
  *
  * 한투 기간별시세는 「몇 일치를 일/주/월봉으로」다. 야후처럼 `1d`·`5d` 같은 장중 구간이
- * 없다 — 야간선물 분봉은 다른 TR 이고 아직 확인 안 했다. **없는 걸 있는 척 두면 안 된다.**
+ * 없다.
+ *
+ * ## **당일이 생겼다** (2026-09-01)
+ *
+ * 벤티지: "코스피 야간선물 그래프도 당일 그래프 좀 그려줘 일봉 주봉 월봉 이렇게 하고."
+ *
+ * 여기 「야간선물 분봉은 다른 TR 이고 아직 확인 안 했다」고 적어 뒀는데, 확인해 보니
+ * **그 TR 을 이미 쓰고 있었다** — 전광판 카드의 스파크라인이 그것으로 그려진다
+ * (`inquire-time-fuopchartprice`). 낮 선물(`F`)에만 쓰고 있었을 뿐이라 시장만
+ * `CM` 으로 갈아 끼우면 됐다.
+ *
+ * 야간선물은 「오늘 개장가의 예고편」이라 **정작 보고 싶은 게 당일 흐름**이다.
+ * 일봉 한 칸으로는 밤사이 어디서 꺾였는지가 안 보인다.
+ *
+ * 탭 이름도 기간(3개월·1년·3년)에서 **봉 단위**로 바꿨다. 「3년」이라고 적혀
+ * 있는데 실제로는 주봉이 나오면 사람이 그걸 알 방법이 없다.
  */
 const FUTURES_RANGES: { key: string; label: string }[] = [
-  { key: "3mo", label: "3개월" },
-  { key: "1y", label: "1년" },
-  { key: "3y", label: "3년" },
+  { key: "I", label: "당일" },
+  { key: "3mo", label: "일봉" },
+  { key: "1y", label: "주봉" },
+  { key: "3y", label: "월봉" },
 ];
 
 /**
@@ -138,10 +154,50 @@ const US_RANGES: { key: string; label: string }[] = [
   { key: "M", label: "월봉" },
 ];
 
-const FUTURES_SPEC: Record<string, { days: number; period: "D" | "W" | "M" }> = {
+/*
+ * 탭 열쇠 → 「며칠치를 무슨 봉으로」.
+ *
+ * ⚠️ 열쇠는 옛 이름(`3mo`·`1y`·`3y`)을 그대로 둔다. 화면에 뜨는 이름만 봉 단위로
+ * 바꿨다 — 열쇠를 바꾸면 화면이 기억하던 마지막 탭이 어긋난다.
+ *
+ * `1y` 가 예전엔 일봉 400일이었는데 주봉으로 옮겼다. 일봉과 주봉이 둘 다 있어야
+ * 「최근 흐름」과 「큰 그림」이 갈린다 — 예전 셋은 일·일·주라 앞 둘이 겹쳤다.
+ */
+const FUTURES_SPEC: Record<string, { days: number; period: "I" | "D" | "W" | "M" }> = {
+  /* 당일은 날짜를 서버가 정한다 — days 는 안 쓴다 */
+  I: { days: 1, period: "I" },
   "3mo": { days: 120, period: "D" },
-  "1y": { days: 400, period: "D" },
-  "3y": { days: 800, period: "W" },
+  "1y": { days: 800, period: "W" },
+  /* 월봉은 길어야 뜻이 있다 — 10년이면 24칸 넘게 나온다 */
+  "3y": { days: 3650, period: "M" },
+};
+
+/**
+ * **봉 단위마다 고를 수 있는 기간** (2026-09-01) — 벤티지: "기간도 정할 수 있게
+ * 해줘야지?"
+ *
+ * 봉 단위와 기간은 다른 이야기인데 예전 탭은 둘을 묶어 놨다(「3개월」이 곧 일봉,
+ * 「3년」이 곧 주봉). 그래서 **일봉을 2년 보는 것**이 아예 불가능했다.
+ *
+ * 서버 상한이 4,000일이라 그 안에서 고른다. 첫 번째가 기본값이다.
+ */
+const FUT_SPANS: Record<string, { days: number; label: string }[]> = {
+  "3mo": [
+    { days: 120, label: "3개월" },
+    { days: 240, label: "6개월" },
+    { days: 400, label: "1년" },
+    { days: 800, label: "2년" },
+  ],
+  "1y": [
+    { days: 400, label: "1년" },
+    { days: 1200, label: "3년" },
+    { days: 2000, label: "5년" },
+  ],
+  "3y": [
+    { days: 1200, label: "3년" },
+    { days: 2000, label: "5년" },
+    { days: 4000, label: "10년" },
+  ],
 };
 
 export interface ChartTarget {
@@ -214,6 +270,17 @@ export function YahooChartSheet({
   const [range, setRange] = useState(usStock ? "1d" : futures ? "3mo" : "6mo");
   /** 해외 일/주/월봉 「기간 길게」 — 한투 100봉 대신 야후 2y/5y/전체 */
   const [longRange, setLongRange] = useState(false);
+  /**
+   * 선물 기간(일). `null` 이면 그 봉 단위의 기본값(첫 칩).
+   *
+   * 봉 단위를 바꾸면 되돌린다 — 월봉에서 10년을 보다 일봉으로 가면 4,000일치
+   * 일봉을 부르게 되는데, 그건 사람이 원한 게 아니고 응답도 무겁다.
+   */
+  const [futDays, setFutDays] = useState<number | null>(null);
+  const futSpans = futures ? (FUT_SPANS[range] ?? []) : [];
+  /* 고른 값이 이 봉 단위에 없으면 기본값으로 — 탭을 옮겼다는 뜻이다 */
+  const futSpanDays =
+    futSpans.find((s) => s.days === futDays)?.days ?? futSpans[0]?.days ?? null;
   const [data, setData] = useState<YahooChart | null>(null);
   const [detail, setDetail] = useState<UsDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -257,10 +324,24 @@ export function YahooChartSheet({
               error: r.error,
             }))
         : futures
-        ? api.futuresChart(target.symbol, spec.period, spec.days, target.futMarket ?? "CM").then((r) => ({
+        ? api
+            .futuresChart(
+              target.symbol,
+              spec.period,
+              futSpanDays ?? spec.days,
+              target.futMarket ?? "CM",
+            )
+            .then((r) => ({
             symbol: target.symbol,
             range,
-            interval: spec.period === "D" ? "1일봉" : spec.period === "W" ? "주봉" : "월봉",
+            interval:
+              spec.period === "I"
+                ? "당일 1분봉"
+                : spec.period === "D"
+                ? "1일봉"
+                : spec.period === "W"
+                ? "주봉"
+                : "월봉",
             candles: r.candles,
             // 선물은 전일 종가를 따로 안 준다 — 기준선 없이 흐름만 본다
             prevClose: null,
@@ -286,7 +367,8 @@ export function YahooChartSheet({
      * 다시 받는다 — 서버 캐시가 60초라 그보다 조여도 같은 값이다. 일/주/월봉은
      * 하루에 한 번 바뀌는 값이라 그대로 둔다. 탭이 뒤에 있으면 쉰다.
      */
-    const wantsLive = range === "1d" || range === "5d";
+    /* 야간선물 당일(`I`)도 장중 값이다 — 열어 두고 보는 창이라 같이 갱신한다 */
+    const wantsLive = range === "1d" || range === "5d" || (futures && range === "I");
     const t = wantsLive
       ? setInterval(() => {
           if (document.visibilityState === "visible") void run(true);
@@ -296,7 +378,7 @@ export function YahooChartSheet({
       alive = false;
       if (t) clearInterval(t);
     };
-  }, [target.symbol, range, futures, usStock, longRange]);
+  }, [target.symbol, range, futures, usStock, longRange, futSpanDays]);
 
   /*
    * 헤더 큰 숫자의 빠른 시세 (해외종목·2026-08-26) — 목록과 같은 야후 spark 3초.
@@ -486,6 +568,30 @@ export function YahooChartSheet({
               </button>
             </>
           )}
+          {/*
+            **선물 기간** (2026-09-01) — 벤티지: "응 그리고 기간도 정할 수 있게
+            해줘야지?"
+
+            봉 단위와 기간은 다른 이야기다. 같은 일봉이라도 3개월과 2년은 보는
+            것이 다르고, 예전에는 탭 하나에 둘이 묶여 있어(「3개월」=일봉,
+            「3년」=주봉) 고를 수가 없었다.
+
+            당일에는 안 보인다 — 하루짜리라 고를 기간이 없다.
+          */}
+          {futures && futSpans.length > 0 && (
+            <>
+              <span className="news-scope-sep" />
+              {futSpans.map((s) => (
+                <button
+                  key={s.days}
+                  className={`filter-btn ${futSpanDays === s.days ? "active" : ""}`}
+                  onClick={() => setFutDays(s.days)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </>
+          )}
         </div>
 
         {loading && !view && <div className="empty">차트 불러오는 중…</div>}
@@ -566,7 +672,7 @@ export function YahooChartSheet({
                  */
                 intraday={String(candles[0]?.t ?? "").length > 10}
                 height={340}
-                fitKey={`${target.symbol}:${range}:${longRange ? "L" : "S"}`}
+                fitKey={`${target.symbol}:${range}:${longRange ? "L" : "S"}:${futSpanDays ?? ""}`}
                 name={target.label}
                 code={target.symbol}
               />

@@ -1053,7 +1053,18 @@
       "Bash(curl -s -m 300 -X POST -H \"Content-Type: application/json\" -d '{}' http://localhost:4000/api/signal/simulate)",
       "Bash(curl -s -m 15 http://localhost:4000/api/cis/config)",
       "Bash(curl -s -m 15 http://localhost:4000/api/signal/config)",
-      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const c=JSON.parse\\(s\\);console.log\\('minTradeValue',c.config?.minTradeValue??c.minTradeValue,'minCoverage',c.config?.minCoverage??c.minCoverage\\);}\\)\")"
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const c=JSON.parse\\(s\\);console.log\\('minTradeValue',c.config?.minTradeValue??c.minTradeValue,'minCoverage',c.config?.minCoverage??c.minCoverage\\);}\\)\")",
+      "Bash(curl -s -m 20 http://localhost:4000/api/market/global)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(s\\);const g=\\(j.groups||j.items||[]\\).flatMap?.\\(x=>x.items??[x]\\)??[];console.log\\(JSON.stringify\\(j\\).slice\\(0,400\\)\\);}catch\\(e\\){console.log\\(s.slice\\(0,400\\)\\)}}\\)\")",
+      "Bash(curl -s -m 25 \"http://localhost:4000/api/market/overview?part=usMajor\")",
+      "Bash(curl -s -m 30 \"http://localhost:4000/api/overview/usMajor\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(s\\);const nf=j.data?.nightFutures??j.nightFutures;console.log\\(JSON.stringify\\(nf\\)\\);}catch\\(e\\){console.log\\(s.slice\\(0,300\\)\\)}}\\)\")",
+      "Bash(curl -s -m 40 \"http://localhost:4000/api/overview/section/usMajor\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(s\\);const nf=j.data?.nightFutures??j.nightFutures;console.log\\('nightFutures:',JSON.stringify\\(nf\\)\\);}catch\\(e\\){console.log\\(s.slice\\(0,300\\)\\)}}\\)\")",
+      "Bash(curl -s -m 90 \"http://localhost:4000/api/market/futures-chart?code=A01609&period=I&market=CM\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);const c=j.candles||[];console.log\\('봉',c.length,'err',j.error\\);if\\(c.length\\){console.log\\('처음',c[0].t,c[0].close\\);console.log\\('끝  ',c[c.length-1].t,c[c.length-1].close\\);const lo=Math.min\\(...c.map\\(x=>x.low\\)\\),hi=Math.max\\(...c.map\\(x=>x.high\\)\\);console.log\\('저',lo,'고',hi\\);}}\\)\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);const c=j.candles||[];console.log\\('봉',c.length,'err',j.error\\);if\\(c.length\\){console.log\\('처음',c[0].t,c[0].close\\);console.log\\('끝  ',c[c.length-1].t,c[c.length-1].close\\);const days=[...new Set\\(c.map\\(x=>x.t.slice\\(0,10\\)\\)\\)];console.log\\('날짜',days.join\\(' '\\)\\);const bad=c.filter\\(x=>Number\\(x.t.slice\\(11,13\\)\\)>=24\\);console.log\\('24시 넘는 봉',bad.length\\);}}\\)\")",
+      "Bash(grep -n \"viewBox\\\\|<svg\\\\|height=\\\\|억\\\\\\\\$\\\\|백만\\\\\\\\$\" components/TradePanel.tsx)"
     ]
   }
 }

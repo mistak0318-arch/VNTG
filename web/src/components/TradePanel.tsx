@@ -209,6 +209,21 @@ export function TradeChart({ months, watch }: { months: TradeMonth[]; watch: "ex
       : null;
   const yOf = (v: number) => H - PAD.b - ((H - PAD.t - PAD.b) * v) / max;
 
+  /*
+   * 연도별 **구간** — 어디부터 어디까지가 25년인가.
+   *
+   * 예전엔 1월 자리에 세로 점선 하나를 긋고 그 옆에 「25년」을 적었다. 그런데
+   * 표본이 36개월이면 첫 해는 1월이 없을 수 있어 **이름이 아예 안 붙는 해**가
+   * 생긴다. 구간을 세어 두면 그런 일이 없고, 띠로 칠할 수도 있다.
+   */
+  const years: { year: string; from: number; to: number }[] = [];
+  months.forEach((m, i) => {
+    const y = m.month.slice(0, 4);
+    const last = years[years.length - 1];
+    if (last && last.year === y) last.to = i;
+    else years.push({ year: y, from: i, to: i });
+  });
+
   return (
     <div className="trade-chart">
       {/*
@@ -227,66 +242,107 @@ export function TradeChart({ months, watch }: { months: TradeMonth[]; watch: "ex
           )}
         </div>
       )}
+      {/*
+        `preserveAspectRatio` 를 안 준다 — 기본값이 「비율 지키며 꽉 채우기」라
+        큰 화면에서 통째로 늘어난다. 폭은 CSS 가 720px 로 묶는다(아래 주석 참고).
+      */}
       <svg viewBox={`0 0 ${W} ${H}`} role="img">
+        {/*
+          **연도 배경 띠** (2026-09-01) — 벤티지: "색깔도 좀 구분짓고."
+
+          예전엔 1월 자리에 세로 점선 하나였다. 점선은 얇아서 큰 화면에서 거의
+          안 보이고, 「어디부터 어디까지가 25년인가」가 눈에 안 들어온다.
+          띠로 칠하면 연도가 덩어리로 보여서 작년 같은 자리를 눈으로 찾게 된다.
+        */}
+        {years.map((y, yi) =>
+          yi % 2 === 1 ? (
+            <rect
+              key={`band${y.year}`}
+              className="tc-band"
+              x={PAD.l + y.from * bw}
+              y={PAD.t}
+              width={(y.to - y.from + 1) * bw}
+              height={H - PAD.t - PAD.b}
+            />
+          ) : null,
+        )}
         {/* 가로 눈금 — 최대와 절반. 이게 없으면 막대 높이가 서로만 견줘진다 */}
         {[max, max / 2].map((v, i) => (
           <g key={i}>
             <line className="tc-grid" x1={PAD.l} x2={W - PAD.r} y1={yOf(v)} y2={yOf(v)} />
-            <text className="tc-tick" x={W - PAD.r} y={yOf(v) - 2} textAnchor="end">
+            <text className="tc-tick" x={W - PAD.r + 4} y={yOf(v) + 3}>
               {(v / 1e8).toFixed(0)}억$
             </text>
           </g>
         ))}
-        {/* 연 경계 세로 점선 — 1월 자리. 작년 같은 자리와 견주라고 있는 선이다 */}
-        {months.map((m, i) =>
-          m.month.endsWith("-01") ? (
-            <line
-              key={`v${m.month}`}
-              className="tc-year"
-              x1={PAD.l + i * bw}
-              x2={PAD.l + i * bw}
-              y1={PAD.t}
-              y2={H - PAD.b}
-            />
-          ) : null,
-        )}
         {months.map((m, i) => {
           const h = ((H - PAD.t - PAD.b) * val(m)) / max;
           const prev = prevOf(m);
+          const yoy = prev && val(prev) > 0 ? ((val(m) - val(prev)) / val(prev)) * 100 : null;
+          /*
+            **세 색에서 다섯 색으로** (2026-09-01).
+
+            늘었나 줄었나만 갈랐더니 +1% 와 +40% 가 같은 빨강이었다. 수출은
+            10% 안쪽 등락이 잦아서, 그 구간을 진하게 칠하면 없는 이야기가 보인다.
+            ±10% 를 경계로 「크게/조금」을 갈라 네 칸으로 나눈다.
+          */
           const cls =
-            prev === undefined
+            yoy === null
               ? "tc-bar-flat"
-              : val(m) >= val(prev)
-                ? "tc-bar-up"
-                : "tc-bar-down";
+              : yoy >= 10
+                ? "tc-bar-up2"
+                : yoy >= 0
+                  ? "tc-bar-up1"
+                  : yoy > -10
+                    ? "tc-bar-dn1"
+                    : "tc-bar-dn2";
+          const isLast = i === months.length - 1;
           return (
             <rect
               key={m.month}
-              className={cls}
-              x={PAD.l + i * bw + bw * 0.15}
+              className={`${cls}${isLast ? " tc-bar-last" : ""}`}
+              x={PAD.l + i * bw + bw * 0.18}
               y={H - PAD.b - h}
-              width={bw * 0.7}
+              width={Math.max(1, bw * 0.64)}
               height={Math.max(1, h)}
+              rx={Math.min(1.5, bw * 0.2)}
             >
               <title>
                 {m.month} · {(val(m) / 1e8).toFixed(1)}억$
+                {yoy !== null ? ` · 전년동월 ${yoy > 0 ? "+" : ""}${yoy.toFixed(0)}%` : " · 전년 비교 없음"}
               </title>
             </rect>
           );
         })}
-        {/* 연 경계 눈금 — 1월 자리에만 */}
-        {months.map((m, i) =>
-          m.month.endsWith("-01") ? (
-            <text key={`y${m.month}`} className="tc-tick" x={PAD.l + i * bw} y={H - 4}>
-              {m.month.slice(2, 4)}년
-            </text>
-          ) : null,
-        )}
+        {/* 연도 이름 — 그 해 가운데에. 띠와 같이 보면 구간이 바로 읽힌다 */}
+        {years.map((y) => (
+          <text
+            key={`y${y.year}`}
+            className="tc-year-label"
+            x={PAD.l + ((y.from + y.to + 1) / 2) * bw}
+            y={H - 4}
+            textAnchor="middle"
+          >
+            {y.year.slice(2)}년
+          </text>
+        ))}
       </svg>
       <div className="trade-note">
         월 {watch === "import" ? "수입" : "수출"}액(억$) 36개월 · 막대색은{" "}
         <b>전년 같은 달 대비</b> — 계절을 타는 품목이라 전월 대비로 보면 매년 같은 자리에서
-        꺾여 보입니다. 첫 12개월은 비교 대상이 없어 회색입니다.
+        꺾여 보입니다.
+        <span className="tc-legend">
+          <i className="tc-bar-up2" />
+          +10% 이상
+          <i className="tc-bar-up1" />
+          증가
+          <i className="tc-bar-dn1" />
+          감소
+          <i className="tc-bar-dn2" />
+          -10% 이하
+          <i className="tc-bar-flat" />
+          비교 대상 없음
+        </span>
       </div>
     </div>
   );
@@ -487,34 +543,61 @@ export function TradePanel({ onSelectStock }: { onSelectStock?: (code: string, n
 
       {error && <div className="page-note">{error}</div>}
 
-      <div className="data-table-wrap">
-        <table className="data-table num">
-          <thead>
-            <tr>
-              <SortableTh columnKey="label" label="품목" accessor={(i: TradeSummary) => i.label} sort={tSort} className="sticky-col" />
-              <SortableTh columnKey="watch" label="구분" accessor={(i: TradeSummary) => i.watch} sort={tSort} />
-              <SortableTh columnKey="usd" label="금액(억$)" accessor={(i: TradeSummary) => val(i)} sort={tSort} />
-              <SortableTh columnKey="yoy" label="전년동월" accessor={(i: TradeSummary) => rate(i) ?? -999} sort={tSort} />
-              <th>대응 업종</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tSort.sorted.map((i) => (
-              <tr
-                key={i.key}
-                className="trade-row"
-                onClick={() => toggle(i.key)}
-                title={i.note}
-              >
-                <td className="sticky-col">{i.label}</td>
-                <td>{i.watch === "import" ? "수입" : "수출"}</td>
-                <td>{(val(i) / 1e8).toFixed(1)}</td>
-                <td className={rateClass(rate(i))}>{pct(rate(i))}</td>
-                <td style={{ textAlign: "left" }}>{i.sectors.join(" · ")}</td>
+      {/*
+        **두 칸으로** (2026-09-01) — 벤티지: "이쪽은 두줄로 표현해도 될듯.
+        굳이 한줄로 해서 길게 나열할 필요는 없어보이네."
+
+        서른 줄을 한 칸에 세로로 쌓으면 아래쪽 품목은 스크롤을 한참 내려야 하고,
+        그러는 사이 위쪽이 화면에서 사라져 **서로 견줄 수가 없다.** 표가 짧아야
+        「반도체가 위, 철강이 아래」가 한눈에 들어온다.
+
+        앞 절반·뒤 절반으로 갈라 나란히 둔다. 정렬 순서는 그대로라 왼쪽 칸을
+        다 읽고 오른쪽으로 넘어가면 된다. 좁은 화면에서는 CSS 가 한 칸으로 되돌린다.
+      */}
+      <div className="trade-table-cols">
+        {(() => {
+          const rows = tSort.sorted;
+          const half = Math.ceil(rows.length / 2);
+          const head = (
+            <thead>
+              <tr>
+                <SortableTh columnKey="label" label="품목" accessor={(i: TradeSummary) => i.label} sort={tSort} className="sticky-col" />
+                <SortableTh columnKey="watch" label="구분" accessor={(i: TradeSummary) => i.watch} sort={tSort} />
+                <SortableTh columnKey="usd" label="금액(억$)" accessor={(i: TradeSummary) => val(i)} sort={tSort} />
+                <SortableTh columnKey="yoy" label="전년동월" accessor={(i: TradeSummary) => rate(i) ?? -999} sort={tSort} />
+                <th>대응 업종</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+          );
+          const body = (part: TradeSummary[]) => (
+            <tbody>
+              {part.map((i) => (
+                <tr
+                  key={i.key}
+                  className={`trade-row${open === i.key ? " is-open" : ""}`}
+                  onClick={() => toggle(i.key)}
+                  title={i.note}
+                >
+                  <td className="sticky-col">{i.label}</td>
+                  <td>{i.watch === "import" ? "수입" : "수출"}</td>
+                  <td>{(val(i) / 1e8).toFixed(1)}</td>
+                  <td className={rateClass(rate(i))}>{pct(rate(i))}</td>
+                  <td style={{ textAlign: "left" }}>{i.sectors.join(" · ")}</td>
+                </tr>
+              ))}
+            </tbody>
+          );
+          /* 한 칸에 다 들어갈 만큼 짧으면 안 쪼갠다 — 두 칸이 늘 나은 건 아니다 */
+          const parts = rows.length <= 10 ? [rows] : [rows.slice(0, half), rows.slice(half)];
+          return parts.map((part, pi) => (
+            <div className="data-table-wrap" key={pi}>
+              <table className="data-table num">
+                {head}
+                {body(part)}
+              </table>
+            </div>
+          ));
+        })()}
       </div>
 
       {open && (

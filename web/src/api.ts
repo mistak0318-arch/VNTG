@@ -1338,7 +1338,13 @@ export const api = {
       candles: { t: string; open: number; high: number; low: number; close: number; volume: number }[];
       error: string | null;
     }>(`/api/market/us-chart/${encodeURIComponent(symbol)}?period=${period}`),
-  futuresChart: (code: string, period: "D" | "W" | "M", days: number, market: "F" | "CM" = "CM") =>
+  /** `I` = 당일 1분봉 (2026-09-01). 나머지는 기간별시세 일·주·월봉 */
+  futuresChart: (
+    code: string,
+    period: "I" | "D" | "W" | "M",
+    days: number,
+    market: "F" | "CM" = "CM",
+  ) =>
     getJson<{
       code: string;
       candles: { t: string; open: number; high: number; low: number; close: number; volume: number }[];
