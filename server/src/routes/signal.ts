@@ -45,6 +45,7 @@ import {
 } from "../condSearch.js";
 import { COND_FIELDS } from "../condFields.js";
 import { allStocksUniverse } from "../allStocks.js";
+import { afterCloseStatus, runAfterClose } from "../afterClose.js";
 import {
   enabledUniverses,
   getUniverseConfig,
@@ -292,6 +293,28 @@ export function createSignalRouter(client: KiwoomClient): Router {
     } catch (err) {
       next(err);
     }
+  });
+
+  /**
+   * **마감 뒤 파이프라인** (2026-09-01) — 손으로 돌린다.
+   *
+   * 벤티지: "1번과 2번을 내가 수동으로도 시작할 수 있지? 지금 한 번 돌리게."
+   *
+   * `steps` 를 주면 그 단계만 돈다. 안 주면 전부 — 일봉 → 원장 → 장세 →
+   * 추적기 → 슈퍼신호등 → 신호등 분석 → 표본 순서다.
+   *
+   * ⚠️ 응답을 기다리지 않는다. 전체가 두 시간 남짓이라 HTTP 로 붙들고 있을 수
+   * 없다 — 진행은 `GET` 으로 본다.
+   */
+  router.post("/after-close", (req, res) => {
+    const b = req.body as { steps?: string[] };
+    const steps = Array.isArray(b?.steps) ? b.steps.filter((x) => typeof x === "string") : undefined;
+    void runAfterClose(client, true, steps).catch(() => undefined);
+    res.json({ started: true, steps: steps ?? "전체", status: afterCloseStatus() });
+  });
+
+  router.get("/after-close", (_req, res) => {
+    res.json({ status: afterCloseStatus() });
   });
 
   /** 지금 돌고 있는 찾기 — 전역 작업 띠와 화면 복귀가 본다 */

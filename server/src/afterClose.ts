@@ -139,51 +139,71 @@ function dur(ms: number): string {
  *
  * @param force 이미 오늘 돌았어도 다시
  */
-export async function runAfterClose(client: KiwoomClient, force = false): Promise<AfterCloseRun> {
+export async function runAfterClose(
+  client: KiwoomClient,
+  force = false,
+  /**
+   * **어느 단계만** 돌릴까 — 안 주면 전부.
+   *
+   * 벤티지: "1번과 2번을 내가 수동으로도 시작할 수 있지? 지금 한 번 돌리게."
+   *
+   * 일봉·원장만 먼저 채워 두고 싶을 때가 있다 — 그 둘이 나머지의 바탕이라,
+   * 그것만 있으면 신호등 분석은 내일 자동으로 돌아도 제 값이 난다.
+   */
+  only?: string[],
+): Promise<AfterCloseRun> {
   if (run?.running) return run;
   const day = dayKey();
   if (!force && doneDay === day && run) return run;
 
+  const want = (k: string) => !only || only.length === 0 || only.includes(k);
   run = { day, startedAt: new Date().toISOString(), running: true, steps: [] };
 
   /* ① 일봉 — 모두가 이걸 바탕으로 한다 */
-  const bars = await step("bars", "일봉 전종목", async () => {
-    const s = await buildCloses(client);
-    return `${Object.keys(s.bars ?? {}).length}종목`;
-  });
+  const bars = !want("bars")
+    ? { ok: true, key: "bars", label: "일봉", ms: 0 }
+    : await step("bars", "일봉 전종목", async () => {
+        const s = await buildCloses(client);
+        return `${Object.keys(s.bars ?? {}).length}종목`;
+      });
 
   /* ② 원장 — 신호등 분석의 flow-* 목록이 이걸 읽는다 */
-  await step("ledger", "일별 원장 전종목", async () => {
-    if (collectProgress().running) return "이미 도는 중이라 건너뜀";
-    const p = await startCollectDaily(client);
-    const st = await ledgerStatus().catch(() => null);
-    return `${p.done}/${p.total} · 실패 ${p.fails}${st ? ` · ${st.codes}종목` : ""}`;
-  });
+  if (want("ledger"))
+    await step("ledger", "일별 원장 전종목", async () => {
+      if (collectProgress().running) return "이미 도는 중이라 건너뜀";
+      const p = await startCollectDaily(client);
+      const st = await ledgerStatus().catch(() => null);
+      return `${p.done}/${p.total} · 실패 ${p.fails}${st ? ` · ${st.codes}종목` : ""}`;
+    });
 
   /*
    * ③ 장세 — ①이 있어야 20일선 위 비율이 오늘 것이다.
    * ①이 실패했으면 낡은 캐시로 판정하게 되므로 그 사실을 적는다.
    */
-  await step("regime", "장세 점검", async () => {
+  if (want("regime"))
+    await step("regime", "장세 점검", async () => {
     await regimeCheck(client, { notify: true });
     return bars.ok ? undefined : "⚠️ 일봉이 실패해 낡은 캐시로 판정";
   });
 
   /* ④ 추적기 — 문턱별 편입 */
-  await step("track", "신호등 추적기", async () => {
+  if (want("track"))
+    await step("track", "신호등 추적기", async () => {
     const j = startEnroll(client, false);
     while (j.status === "running") await new Promise((r) => setTimeout(r, 2000));
     return j.status === "error" ? `실패: ${j.error ?? ""}` : `${j.added ?? 0}건 담음`;
   });
 
   /* ⑤ 슈퍼신호등 — 교집합 편입/이탈 + 점수대 그룹 동기화 */
-  await step("super", "슈퍼신호등", async () => {
+  if (want("super"))
+    await step("super", "슈퍼신호등", async () => {
     const s = await runSuperSignal(client);
     return `${s.entries.filter((e) => e.active !== false).length}종목 추적 중`;
   });
 
   /* ⑥ 신호등 분석 — ①②가 다 있어야 열세 목록이 제 값으로 돈다 */
-  await step("listTrack", "신호등 분석 (목록별)", async () => {
+  if (want("listTrack"))
+    await step("listTrack", "신호등 분석 (목록별)", async () => {
     const s = await runListTrack(client, { limit: 500, force: true });
     return `${s.entries.length}건`;
   });
@@ -194,7 +214,8 @@ export async function runAfterClose(client: KiwoomClient, force = false): Promis
    * 재수집은 종목당 여러 콜에 40~60분이라 이 파이프라인(이미 2시간 남짓) 뒤에
    * 붙이면 밤이 다 간다. 여기서는 「얼마나 낡았나」만 적어 요약에 싣는다.
    */
-  await step("samples", "검증 표본", async () => {
+  if (want("samples"))
+    await step("samples", "검증 표본", async () => {
     const meta = await samplesMeta();
     if (!meta.has) return "표본이 없어 건너뜀 — 설정에서 처음 모아야 합니다";
     const age = meta.builtAt

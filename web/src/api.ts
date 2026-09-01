@@ -310,6 +310,26 @@ export interface CollectRun {
   manual?: boolean;
 }
 
+/** 마감 뒤 파이프라인의 한 단계 */
+export interface StepResult {
+  key: string;
+  label: string;
+  ok: boolean;
+  ms: number;
+  note?: string;
+  error?: string;
+}
+
+export interface AfterCloseRun {
+  day: string;
+  startedAt: string;
+  finishedAt?: string;
+  running: boolean;
+  /** 지금 어느 단계인가 */
+  at?: string;
+  steps: StepResult[];
+}
+
 export interface CollectProgress {
   running: boolean;
   done: number;
@@ -472,6 +492,18 @@ export const api = {
       "/api/data/ledger",
     ),
   /** 실패한 날 다시 수집 — 그날 값이 아니라 「지금 다시 받아 빈 곳을 메운다」 */
+  /**
+   * **마감 뒤 파이프라인** — 손으로 돌린다. `steps` 를 주면 그 단계만.
+   *
+   * 일봉 → 원장 → 장세 → 추적기 → 슈퍼신호등 → 신호등 분석 → 표본 순서다.
+   * 앞의 것이 뒤의 것의 바탕이라, 순서를 지켜야 제 값이 난다.
+   */
+  afterCloseRun: (steps?: string[]) =>
+    postJson<{ started: boolean; status: AfterCloseRun | null }>("/api/signal/after-close", {
+      steps,
+    }),
+  afterCloseStatus: () =>
+    getJson<{ status: AfterCloseRun | null }>("/api/signal/after-close"),
   dataLedgerCollect: () =>
     postJson<{ started: boolean; progress: CollectProgress }>("/api/data/ledger/collect", {}),
   dataPrune: () =>

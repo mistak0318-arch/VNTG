@@ -27,6 +27,7 @@ import { BuzzConfigPanel } from "../components/BuzzConfigPanel";
 import { NaverSyncPanel } from "../components/NaverSyncPanel";
 import { DataRetentionPanel } from "../components/DataRetentionPanel";
 import { UniversePanel } from "../components/UniversePanel";
+import { AfterClosePanel } from "../components/AfterClosePanel";
 import { RealtimeStatusPanel } from "../components/RealtimeStatusPanel";
 
 interface KeyInfo {
@@ -219,6 +220,21 @@ export function SettingsPage() {
       >
         <RealtimeStatusPanel />
       </CollapsibleCard>
+      )}
+
+      {/*
+        **마감 뒤 정리** (2026-09-01) — 무엇이 언제 돌았고, 손으로 다시 돌린다.
+        데이터 보관 바로 위에 둔다 — 「무엇이 쌓이나」와 「그게 언제 쌓이나」는 한 쌍이다.
+      */}
+      {tab === "cost" && (
+        <CollapsibleCard
+          id="afterClose"
+          scope="global"
+          title="마감 뒤 정리"
+          hint="일봉 → 원장 → 장세 → 추적기 → 슈퍼신호등 → 신호등 분석 · 손으로도 돌린다"
+        >
+          <AfterClosePanel />
+        </CollapsibleCard>
       )}
 
       {tab === "cost" && (

@@ -13568,3 +13568,29 @@ thead .sd-emph {
 .dret-hist { margin: 8px 0; font-size: 12px; }
 .dret-fail td { color: var(--warn, #d9a441); }
 .dret-hist-act { align-items: flex-start; gap: 10px; margin: 6px 0; }
+
+/* 마감 뒤 정리 (2026-09-01) — 순서가 눈에 보여야 한다 */
+.ac-head {
+  display: flex; align-items: baseline; gap: 10px;
+  margin: 8px 0; padding: 6px 10px;
+  border-radius: 8px; background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+.ac-head.running { background: color-mix(in srgb, var(--blue, #4c8dff) 12%, transparent); }
+.ac-run { color: var(--blue, #4c8dff); font-size: 0.8rem; }
+.ac-list { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.ac-row {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 8px;
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+}
+.ac-row.ok { border-color: color-mix(in srgb, var(--positive, #4ade80) 40%, var(--border)); }
+.ac-row.bad { border-color: var(--warn, #d9a441); }
+.ac-name { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+/* 오래 걸리는 단계는 미리 알려 준다 — 눌러 놓고 기다리다 멈춘 줄 알면 안 된다 */
+.ac-heavy {
+  font-style: normal; font-size: 0.68rem; color: var(--muted);
+  padding: 0 5px; border: 1px solid var(--border); border-radius: 3px;
+}
+.ac-done { font-style: normal; font-size: 0.72rem; color: var(--positive, #4ade80); }
+.ac-fail { font-style: normal; font-size: 0.72rem; color: var(--warn, #d9a441); }
+.ac-why { grid-column: 2; font-size: 0.72rem; color: var(--muted); }
+.ac-act { margin: 10px 0; align-items: center; gap: 8px; }
