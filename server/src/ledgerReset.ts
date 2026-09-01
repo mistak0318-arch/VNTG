@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AUTO_GROUPS, listWatchlist, removeFromGroup } from "./watchlist.js";
+import { AUTO_GROUPS, ETF_GROUP, listWatchlist, removeFromGroup } from "./watchlist.js";
 import { configFingerprint } from "./signalLight.js";
 import { pushNotice } from "./notifyCenter.js";
 
@@ -151,7 +151,13 @@ export async function resetSignalLedgers(dryRun = false): Promise<ResetReport> {
    */
   try {
     const items = await listWatchlist();
-    for (const g of AUTO_GROUPS) {
+    /*
+     * ⚠️ **ETF 그룹은 빼고 돈다** (2026-09-01). 자물쇠가 걸린 그룹이라는 점은
+     * 같지만 성격이 반대다 — 점수대·슈퍼신호등은 **신호등이 담은** 것이고,
+     * ETF 는 **사람이 담기 단추로 담은** 것이다. 신호등 원장에 선을 긋는다고
+     * 사람이 모아 둔 ETF 가 같이 사라지면 안 된다.
+     */
+    for (const g of AUTO_GROUPS.filter((x) => x !== ETF_GROUP)) {
       const inG = items.filter((i) => i.groups?.includes(g));
       report.groups[g] = inG.length;
       if (dryRun) continue;

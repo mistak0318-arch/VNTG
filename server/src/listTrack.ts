@@ -12,6 +12,7 @@ import { peekSnapshot } from "./marketSnapshot.js";
 import { stockLens, themeMapNow } from "./stockLens.js";
 /* 지수 대비 — **슈퍼신호등과 같은 함수**. 채점하는 자가 같아야 두 원장을 견줄 수 있다 */
 import { kospiCloses } from "./superSignal.js";
+import { dropFromAutoGroups } from "./watchlist.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FILE = resolve(__dirname, "..", "data", "listTrack.json");
@@ -658,4 +659,49 @@ export async function listTrackSummary(): Promise<ListTrackSummary> {
     up,
     down,
   };
+}
+
+/**
+ * **원장에서 지운다** (2026-09-01) — 벤티지: "신호등이랑 슈퍼신호등 종목삭제
+ * 버튼 좀 만들자. 내가 봐서 시가총액이 너무 적거나 거래대금 너무 적은건
+ * 지워버리게."
+ *
+ * ## 이탈과 다르다
+ *
+ * **이탈**은 「걸렸었는데 조건에서 벗어났다」는 **기록**이다. 그래서 지우지 않고
+ * `active:false` 로 남긴다 — 이탈 시점과 그 뒤 성적이 이탈 규칙을 검증하는 재료다.
+ *
+ * **삭제**는 「애초에 볼 게 아니었다」는 뜻이다. 호가가 얇아 못 사는 종목이
+ * 원장에 남아 있으면 성적 평균을 오염시킨다 — 살 수 없었던 수익률이 섞이니까.
+ * 그래서 이건 진짜로 뺀다.
+ *
+ * ⚠️ 같은 종목이 **여러 목록**에 걸려 있을 수 있다. `list` 를 주면 그 목록에서만,
+ * 안 주면 전부 뺀다. 화면은 「이 종목을 아예 안 보겠다」는 뜻으로 부르므로 기본이
+ * 전부다.
+ */
+export async function removeListEntry(code: string, list?: string): Promise<number> {
+  const store = await load();
+  const before = store.entries.length;
+  store.entries = store.entries.filter(
+    (e) => !(e.code === code && (list === undefined || e.list === list)),
+  );
+  const removed = before - store.entries.length;
+  if (removed === 0) return 0;
+  await save(store);
+
+  /*
+   * 관심종목의 자동 그룹에서도 뺀다.
+   *
+   * ⚠️ 이 원장은 여태 **관심종목을 아예 안 건드렸다.** 점수대 그룹은
+   * `scoreBandSync` 가 「신호등 찾기 회차 + 슈퍼신호등 원장」에서 담기 때문이다.
+   * 그래서 여기서 지워도 관심종목에는 그대로 남았다 — 벤티지가 「연동되어
+   * 있지?」라고 물은 것이 정확히 이 자리다.
+   *
+   * 목록 하나만 지우는 경우(`list` 지정)에는 **안 뺀다.** 다른 목록에 아직
+   * 걸려 있을 수 있고, 그러면 관심종목에 남아 있는 게 맞다.
+   */
+  if (list === undefined) {
+    await dropFromAutoGroups(code).catch(() => undefined);
+  }
+  return removed;
 }

@@ -3,6 +3,14 @@ import { api, fmtNum, type EtfListRow, type WatchItem } from "../api";
 import type { CumRow } from "../pages/EtfPage";
 
 /**
+ * ETF 전용 자동 그룹 — **서버 `watchlist.ts` 의 `ETF_GROUP` 과 같은 문자열이어야 한다.**
+ *
+ * 서버가 `/api/watchlist/groups` 에 `autoGroups` 로 실어 보내므로 자물쇠·고정 자리는
+ * 화면이 알아서 따라간다. 여기 상수는 **담을 때** 쓰는 이름이다.
+ */
+const ETF_GROUP = "ETF";
+
+/**
  * ETF 관심종목 (2026-08-27) — **퇴직연금으로 굴리는 ETF를 따로 본다.**
  *
  * 관심종목(VNTG)은 종목·ETF가 섞여 있어서, ETF 만 보려면 매번 눈으로 걸러야 했다.
@@ -120,11 +128,24 @@ export function EtfWatchTab({ onSelectStock }: { onSelectStock: (code: string, n
   async function addEtf(r: EtfListRow) {
     setBusy(true);
     try {
+      /*
+       * **언제나 「ETF」 그룹에도 담는다** (2026-09-01).
+       *
+       * 벤티지: "ETF 메뉴에서 ETF 담기 메뉴를 통해 담으면 관심종목 「ETF」
+       * 그룹으로 가게 하자."
+       *
+       * ETF 는 판정 기준이 다르다 — 정배열·수급·재무는 바구니에 뜻이 없고 봐야
+       * 하는 건 괴리율·추적오차·유동성이다. 개별주와 한 칸에 섞이면 어느 쪽
+       * 잣대로 보는지가 흐려진다.
+       *
+       * 위에서 고른 그룹이 있으면 **거기에도 같이** 담는다 — 한 종목이 여러
+       * 그룹에 들 수 있으므로 「ETF」와 「퇴직연금」에 동시에 있어도 된다.
+       */
       await api.watchlistAdd({
         code: r.code,
         name: r.name,
         addedPrice: r.price,
-        groups: group ? [group] : undefined,
+        groups: group && group !== ETF_GROUP ? [ETF_GROUP, group] : [ETF_GROUP],
       });
       setQ("");
       await load();

@@ -145,7 +145,24 @@ export const BAND_GROUPS: string[] = SCORE_BANDS.map((b) => `${b}점대`);
  * 넷이 그랬다) 화면만 모르는 상태가 되고, 사용자는 고칠 수 있는 줄 알고 고치다가
  * 서버 오류를 본다. `/api/watchlist/groups` 가 같이 실어 보낸다.
  */
-export const AUTO_GROUPS: string[] = [SUPER_GROUP, CROSS_GROUP, ...BAND_GROUPS];
+/**
+ * **ETF 그룹** (2026-09-01) — 벤티지: "ETF 메뉴에서 ETF 담기 메뉴를 통해 담으면
+ * 관심종목 「ETF」 그룹으로 가게 하자. 이 그룹도 신호등 애들처럼 고정시키고,
+ * 강조시켜서 수정못하게 하고 위쪽 영역에 고정해줘."
+ *
+ * ## 왜 자동 그룹인가
+ *
+ * ETF 는 **판정 기준이 다르다.** 정배열·수급·재무는 바구니에 뜻이 없고, 봐야
+ * 하는 건 괴리율·추적오차·유동성이다. 그래서 개별주와 한 칸에 섞이면 어느 쪽
+ * 잣대로 보는지가 흐려진다.
+ *
+ * 이름을 바꾸거나 지울 수 있으면 ETF 담기가 갈 곳을 잃는다 — 점수대 그룹이
+ * 자물쇠인 것과 **같은 이유**다. 다만 종목을 넣고 빼는 건 자유다(그건 사람이
+ * 정하는 것이고, 동기화가 덮지도 않는다).
+ */
+export const ETF_GROUP = "ETF";
+
+export const AUTO_GROUPS: string[] = [SUPER_GROUP, CROSS_GROUP, ...BAND_GROUPS, ETF_GROUP];
 
 /** 자동으로 채워지고 **사람이 못 고치는** 그룹인가 — 화면이 자물쇠를 그린다 */
 export function isAutoGroup(name: string): boolean {
@@ -560,4 +577,45 @@ export async function removeGroup(name: string): Promise<string[]> {
     items.map((w) => ({ ...w, groups: normalizeGroups(w.groups.filter((g) => g !== name)) })),
   );
   return listGroups();
+}
+
+/**
+ * **자동 그룹에서 통째로 뺀다** (2026-09-01).
+ *
+ * 벤티지: "여기에서 지우면 관심종목에서도 사라지게 연동되어 있지?"
+ *
+ * ## 반쪽만 되어 있었다
+ *
+ * 슈퍼신호등에서 지우면 `SUPER_GROUP` 하나만 뗐다. 그런데 같은 종목이 「90점대」
+ * 같은 **점수대 그룹**에도 담겨 있다 — 그건 그대로 남았다. 신호등 분석은 아예
+ * 관심종목을 안 건드렸다.
+ *
+ * 삭제의 뜻은 「이 종목을 이제 안 보겠다」이므로, **자동으로 담긴 자리는 전부**
+ * 빼야 그 뜻과 맞는다. 한 곳만 빼면 다른 화면에서 계속 나와 사람이 또 지운다.
+ *
+ * ## ⚠️ 사람이 담은 그룹은 안 건드린다
+ *
+ * 자동 그룹에서만 뺀다. 「반도체」처럼 직접 만든 그룹에 담아 뒀다면 그건 **사람의
+ * 판단**이라, 신호등이 지운다고 같이 지우면 안 된다.
+ *
+ * 자동 그룹에만 있던 종목은 관심종목에서 통째로 사라진다(`removeWatchItem`) —
+ * 그룹 없이 떠 있는 종목이 남으면 그게 더 헷갈린다.
+ */
+export async function dropFromAutoGroups(code: string): Promise<string[]> {
+  const items = await listWatchlist();
+  const w = items.find((i) => i.code === code);
+  if (!w) return [];
+  /*
+   * ⚠️ **ETF 그룹은 빼지 않는다.** 자물쇠가 걸려 있다는 점은 같지만 성격이
+   * 반대다 — 점수대·슈퍼신호등은 **신호등이 담은** 것이고, ETF 는 **사람이
+   * 담기 단추로 담은** 것이다. 신호등에서 지운다고 사람이 담아 둔 ETF 가
+   * 같이 사라지면 안 된다.
+   */
+  const auto = (w.groups ?? []).filter((g) => AUTO_GROUPS.includes(g) && g !== ETF_GROUP);
+  if (auto.length === 0) return [];
+  const mine = (w.groups ?? []).filter((g) => !AUTO_GROUPS.includes(g));
+  /* 사람이 담은 자리가 하나도 없으면 관심종목에서 통째로 뺀다 */
+  if (mine.length === 0) await removeWatchItem(code);
+  else await updateWatchItem(code, { groups: mine });
+  return auto;
 }

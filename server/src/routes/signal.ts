@@ -27,7 +27,7 @@ import { backtestProgress, backtestResult, startBacktestJob } from "../signalBac
 import { samplesMeta } from "../signalSamples.js";
 import { buildSamplesFromLedger, ledgerSamplesProgress } from "../samplesFromLedger.js";
 import { resetSignalLedgers } from "../ledgerReset.js";
-import { listTrackJob, listTrackSummary, runListTrack } from "../listTrack.js";
+import { listTrackJob, listTrackSummary, removeListEntry, runListTrack } from "../listTrack.js";
 import {
   buildVerdict,
   conditional,
@@ -607,6 +607,29 @@ export function createSignalRouter(client: KiwoomClient): Router {
     try {
       await removeSuperEntry(req.params.code);
       res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * **신호등 분석 원장에서 지운다** (2026-09-01).
+   *
+   * 벤티지: "신호등이랑 슈퍼신호등 종목삭제 버튼 좀 만들자. 내가 봐서 시가총액이
+   * 너무 적거나 거래대금 너무 적은건 지워버리게."
+   *
+   * 이탈과 다르다 — 이탈은 「걸렸었는데 벗어났다」는 기록이라 남기고, 삭제는
+   * 「애초에 볼 게 아니었다」라 진짜로 뺀다. 못 사는 종목이 원장에 남으면
+   * 성적 평균이 오염된다(살 수 없었던 수익률이 섞이니까).
+   *
+   * `?list=` 를 주면 그 목록에서만 뺀다. 안 주면 전부 — 화면의 「이 종목 삭제」는
+   * 「아예 안 보겠다」는 뜻이라 그쪽이 기본이다.
+   */
+  router.delete("/list-track/:code", async (req, res, next) => {
+    try {
+      const list = typeof req.query.list === "string" ? req.query.list : undefined;
+      const removed = await removeListEntry(req.params.code, list);
+      res.json({ ok: true, removed });
     } catch (err) {
       next(err);
     }

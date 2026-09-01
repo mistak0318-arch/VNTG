@@ -21,6 +21,7 @@ import {
 } from "./telegram.js";
 import {
   CROSS_GROUP,
+  dropFromAutoGroups,
   ensureInGroup,
   listWatchlist,
   removeFromGroup,
@@ -1715,18 +1716,17 @@ export async function removeSuperEntry(code: string): Promise<void> {
   await save(store);
 
   /*
-   * 관심종목 쪽도 정리한다 — 슈퍼신호등 그룹에만 있던 종목이면 통째로 빼고,
-   * 다른 그룹에도 담겨 있으면 슈퍼신호등 그룹만 뗀다(사람이 담은 건 사람 것이다).
+   * 관심종목 쪽도 정리한다.
+   *
+   * ⚠️ **예전엔 `SUPER_GROUP` 하나만 뗐다** (2026-09-01 고침). 그런데 같은 종목이
+   * 「90점대」 같은 점수대 그룹에도 담겨 있어서 거기 그대로 남았다 — 지웠는데
+   * 관심종목에서 계속 보이니 사람이 또 지우게 된다.
+   *
+   * 삭제의 뜻은 「이 종목을 이제 안 보겠다」이므로 **자동으로 담긴 자리는 전부**
+   * 뺀다. 사람이 만든 그룹은 안 건드린다 — 그건 사람의 판단이다.
    */
   try {
-    const items = await listWatchlist();
-    const w = items.find((i) => i.code === code);
-    if (!w) return;
-    if (w.groups.length === 1 && w.groups[0] === SUPER_GROUP) {
-      await removeWatchItem(code);
-    } else if (w.groups.includes(SUPER_GROUP)) {
-      await updateWatchItem(code, { groups: w.groups.filter((g) => g !== SUPER_GROUP) });
-    }
+    await dropFromAutoGroups(code);
   } catch {
     /* 관심종목 정리는 부수 작업 — 실패해도 슈퍼 목록에서는 빠졌다 */
   }
