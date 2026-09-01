@@ -1038,7 +1038,8 @@
       "Bash(rm -f ac.json)",
       "Bash(rm -f n.txt)",
       "Bash(curl -s http://localhost:4000/api/notify -o n.json)",
-      "Bash(rm -f n.json)"
+      "Bash(rm -f n.json)",
+      "Bash(cp server/data/customThemes.json server/data/customThemes.seed.json)"
     ]
   }
 }

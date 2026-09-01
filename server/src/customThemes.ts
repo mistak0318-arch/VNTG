@@ -81,7 +81,27 @@ async function load(): Promise<CustomTheme[]> {
     const parsed = JSON.parse(await readFile(FILE, "utf-8")) as CustomTheme[];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return [];
+    /*
+     * **씨앗에서 시작한다** (2026-09-01).
+     *
+     * ⚠️ 실파일(`customThemes.json`)은 이제 추적하지 않는다. 서버가 등락률을
+     * 갱신하며 계속 쓰는 파일이라, 추적하면 배포 때마다 충돌한다 — 실제로
+     * 미니PC 배포가 그것 때문에 막혔다:
+     *
+     *   error: Your local changes to the following files would be overwritten
+     *          by merge: server/data/customThemes.json
+     *
+     * 대신 **씨앗**(`customThemes.seed.json`)만 보낸다. 새 PC 에서 실파일이 없으면
+     * 여기서 시작하고, 그 뒤로는 각자의 것이 된다 — 해외 관심종목과 같은 규칙이다.
+     */
+    try {
+      const seed = JSON.parse(
+        await readFile(join(DATA_DIR, "customThemes.seed.json"), "utf-8"),
+      ) as CustomTheme[];
+      return Array.isArray(seed) ? seed : [];
+    } catch {
+      return [];
+    }
   }
 }
 
