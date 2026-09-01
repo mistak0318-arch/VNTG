@@ -28,6 +28,7 @@ import { NaverSyncPanel } from "../components/NaverSyncPanel";
 import { DataRetentionPanel } from "../components/DataRetentionPanel";
 import { UniversePanel } from "../components/UniversePanel";
 import { AfterClosePanel } from "../components/AfterClosePanel";
+import { LedgerResetPanel } from "../components/LedgerResetPanel";
 import { RealtimeStatusPanel } from "../components/RealtimeStatusPanel";
 
 interface KeyInfo {
@@ -234,6 +235,7 @@ export function SettingsPage() {
           hint="일봉 → 원장 → 장세 → 추적기 → 슈퍼신호등 → 신호등 분석 · 손으로도 돌린다"
         >
           <AfterClosePanel />
+          <LedgerResetPanel />
         </CollapsibleCard>
       )}
 

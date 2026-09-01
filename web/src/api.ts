@@ -1269,6 +1269,15 @@ export const api = {
   /** 원장에서 아예 뺀다 — 못 사는 종목이 성적 평균을 오염시키지 않게 */
   signalListTrackRemove: (code: string) =>
     deleteJson<{ ok: boolean; removed: number }>(`/api/signal/list-track/${code}`),
+  /**
+   * **원장에 선 긋기** — 지우는 게 아니라 옮긴다.
+   *
+   * `preview` 는 세어만 본다. 무엇이 얼마나 비워지는지 먼저 보여 줘야 사람이
+   * 누를지 정한다 — 되돌릴 수 있다 해도 「눌렀더니 뭔가 사라졌다」는 나쁘다.
+   */
+  signalResetLedgersPreview: () =>
+    getJson<LedgerResetReport>("/api/signal/reset-ledgers/preview"),
+  signalResetLedgers: () => postJson<LedgerResetReport>("/api/signal/reset-ledgers", {}),
   signalSuperJob: () =>
     getJson<{
       status: "idle" | "running" | "done" | "error";
@@ -2591,6 +2600,17 @@ export interface SignalCheckStat {
 }
 
 /** 신호등 시뮬레이터 결과 */
+/** 원장에 선 긋기 결과 — 서버의 `ResetReport` 와 같은 모양이어야 한다 */
+export interface LedgerResetReport {
+  at: string;
+  /** 그을 때의 기준 지문 — 「여기서부터는 이 기준」 */
+  fingerprint: string | null;
+  ledgers: { label: string; file: string; moved: number; archive?: string; error?: string }[];
+  /** 자동 그룹에서 뺀(뺄) 종목 수 */
+  groups: Record<string, number>;
+  totalMoved: number;
+}
+
 /** 원장으로 표본을 만드는 중 — 서버의 `BuildProgress` 와 같은 모양이어야 한다 */
 export interface LedgerSampleProgress {
   running: boolean;

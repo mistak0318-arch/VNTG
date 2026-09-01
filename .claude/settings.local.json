@@ -1076,7 +1076,11 @@
       "Bash(node -e \"const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('superSignal.json','utf8'\\)\\);console.log\\('entries',j.entries.length\\);const d=j.entries.filter\\(e=>\\(e.daily||[]\\).length>=2\\);console.log\\('daily 2일 이상:',d.length, d.slice\\(0,3\\).map\\(e=>e.code+' '+e.name+' '+e.daily.length+'일'\\)\\)\")",
       "Bash(grep -n \"^      </div>$\" pages/ListTrackPage.tsx)",
       "Bash(node -e \"const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('listTrack.json','utf8'\\)\\);console.log\\('entries',j.entries.length,'lastRun',j.lastRunDate\\);console.log\\('active',j.entries.filter\\(e=>e.active!==false\\).length\\);console.log\\(j.entries.slice\\(0,2\\).map\\(e=>\\({c:e.code,n:e.name,a:e.active,d:e.addedDate}\\)\\)\\);\")",
-      "Bash(node -e \"const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('data/universeConfig.json','utf8'\\)\\);console.log\\(JSON.stringify\\(j\\).slice\\(0,500\\)\\)\")"
+      "Bash(node -e \"const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('data/universeConfig.json','utf8'\\)\\);console.log\\(JSON.stringify\\(j\\).slice\\(0,500\\)\\)\")",
+      "Bash(curl -s -m 40 http://localhost:4000/api/signal/reset-ledgers/preview)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('지문:',j.fingerprint\\);console.log\\('합계:',j.totalMoved\\);for\\(const l of j.ledgers\\)console.log\\('  ',l.label,l.moved+'건',l.error?\\('오류 '+l.error\\):''\\);console.log\\('자동 그룹:',JSON.stringify\\(j.groups\\)\\);}\\)\")",
+      "Bash(curl -s -m 60 -X POST -H \"Content-Type: application/json\" -d '{}' http://localhost:4000/api/signal/reset-ledgers)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('보관:',j.totalMoved+'건'\\);for\\(const l of j.ledgers\\)console.log\\('  ',l.label,'→',l.archive||\\('오류: '+l.error\\)\\);console.log\\('그룹에서 뺌:',Object.values\\(j.groups\\).reduce\\(\\(a,b\\)=>a+b,0\\)+'종목'\\);}\\)\")"
     ]
   }
 }
