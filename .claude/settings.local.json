@@ -1072,7 +1072,8 @@
       "Bash(grep -n \"^          </>$\\\\|^        \\)}$\" components/overview/YahooChartSheet.tsx)",
       "Bash(time curl -s -o /dev/null -m 90 \"http://localhost:4000/api/market/futures-chart?code=A01609&period=I&days=1&market=CM\")",
       "Bash(curl -s -m 30 http://localhost:4000/api/signal/super)",
-      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('fingerprint:',JSON.stringify\\(j.fingerprint\\)\\);console.log\\('entries:',\\(j.entries||[]\\).length\\);}\\)\")"
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('fingerprint:',JSON.stringify\\(j.fingerprint\\)\\);console.log\\('entries:',\\(j.entries||[]\\).length\\);}\\)\")",
+      "Bash(node -e \"const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('superSignal.json','utf8'\\)\\);console.log\\('entries',j.entries.length\\);const d=j.entries.filter\\(e=>\\(e.daily||[]\\).length>=2\\);console.log\\('daily 2일 이상:',d.length, d.slice\\(0,3\\).map\\(e=>e.code+' '+e.name+' '+e.daily.length+'일'\\)\\)\")"
     ]
   }
 }

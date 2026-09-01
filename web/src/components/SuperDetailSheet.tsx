@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
 import { api, type SuperDetail, type ThemeSeries } from "../api";
 import { MiniLine } from "./MiniLine";
+import { toBusinessDay, TrendLineChart } from "./TrendLineChart";
 
 /**
  * 슈퍼신호등 종목 상세 (2026-08-26) — 대시보드에서 행을 눌렀을 때.
@@ -352,25 +353,61 @@ export function SuperDetailSheet({
             )}
 
             <section className="sd-block">
-              <h3>신호등 점수 흐름</h3>
+              <h3>신호등 점수 흐름 vs 종목 주가 흐름</h3>
+              {/*
+                ## **둘을 겹친다** (2026-09-01)
+
+                벤티지: "신호등 점수흐름 그래프랑 주가 그래프 좀 겹쳐서 위에
+                그래프 아래 쪽에 와줄래? 신호등 점수흐름 vs 종목 주가 흐름
+                이렇게 해서" / "저기랑 저기를 겹쳐 보고 싶어서 말이지"
+
+                맞는 요구다. 이 시트가 묻는 것이 「**점수가 꺾일 때 주가도
+                꺾였나**」인데, 표에서 두 스파크라인이 따로 떨어져 있으면
+                눈으로 시점을 맞춰야 한다. 겹쳐야 그 물음에 바로 답이 나온다.
+
+                점수가 먼저 꺾이고 주가가 따라 내려갔다면 신호등이 앞선 것이고,
+                주가가 빠진 뒤에 점수가 따라 내려갔다면 신호등은 **뒤늦은 확인**일
+                뿐이다. 그 둘은 도구의 값어치가 전혀 다르다.
+
+                ⚠️ **축이 둘이어야 한다.** 점수는 0~100 이고 주가는 원이라, 한 축에
+                놓으면 점수 곡선이 바닥에 눌려 붙어 아무것도 안 보인다.
+                `TrendLineChart` 가 좌·우 축을 지원하므로 그걸 쓴다 — 점수 왼쪽,
+                주가 오른쪽. 개별종목 수급 그래프가 쓰는 것과 같은 모듈이다.
+
+                `daily` 한 배열에 점수와 종가가 **같이** 들어 있어서 시점이 저절로
+                맞는다(같은 실행이 같은 날 찍은 값이다).
+              */}
               {daily.length >= 2 ? (
-                <MiniLine
+                <TrendLineChart
+                  height={200}
                   series={[
                     {
-                      label: "점수",
-                      color: "var(--green)",
-                      values: daily.map((d) => d.score),
-                      width: 2,
+                      label: "신호등 점수",
+                      color: "#4ade80",
+                      axis: "left",
+                      data: daily
+                        .map((d) => ({ t: toBusinessDay(d.date.replace(/-/g, "")), v: d.score }))
+                        .filter((x): x is { t: NonNullable<typeof x.t>; v: number } => x.t !== null)
+                        .map((x) => ({ time: x.t, value: x.v })),
+                    },
+                    {
+                      label: "주가",
+                      color: "#4c8dff",
+                      axis: "right",
+                      /* 종가가 0 인 날은 그날 시세를 못 받은 것이다 — 0 으로 그리면 절벽이 된다 */
+                      data: daily
+                        .filter((d) => d.close > 0)
+                        .map((d) => ({ t: toBusinessDay(d.date.replace(/-/g, "")), v: d.close }))
+                        .filter((x): x is { t: NonNullable<typeof x.t>; v: number } => x.t !== null)
+                        .map((x) => ({ time: x.t, value: x.v })),
                     },
                   ]}
-                  labels={daily.map((d) => d.date.slice(5))}
-                  height={120}
-                  yFmt={(v) => v.toFixed(0)}
                 />
               ) : (
                 <p className="pt-n sd-hint">
-                  일별 점수는 매일 15:45 실행이 쌓는다 — 기록이 이틀 이상 모이면 여기 곡선이
-                  생깁니다. (지금 {daily.length}일치)
+                  일별 점수·종가는 매일 15:45 실행이 <b>같이</b> 쌓습니다 — 이틀 이상 모이면
+                  여기 두 곡선이 겹쳐 그려져 <b>점수가 꺾일 때 주가도 꺾였는지</b>가 보입니다.
+                  (지금 {daily.length}일치)
                 </p>
               )}
               {daily.length > 0 && (
