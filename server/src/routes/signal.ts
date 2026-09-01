@@ -26,6 +26,7 @@ import { etfSeriesFor, themeSeriesFor } from "../themeSeries.js";
 import { backtestProgress, backtestResult, startBacktestJob } from "../signalBacktest.js";
 import { samplesMeta } from "../signalSamples.js";
 import { buildSamplesFromLedger, ledgerSamplesProgress } from "../samplesFromLedger.js";
+import { resetSignalLedgers } from "../ledgerReset.js";
 import { listTrackJob, listTrackSummary, runListTrack } from "../listTrack.js";
 import {
   buildVerdict,
@@ -716,6 +717,28 @@ export function createSignalRouter(client: KiwoomClient): Router {
 
   router.get("/samples/fromLedger/progress", (_req, res) => {
     res.json(ledgerSamplesProgress());
+  });
+
+  /*
+   * **원장에 선 긋기** (2026-09-01) — 지우는 게 아니라 옮긴다.
+   *
+   * GET 은 **세어만 본다.** 무엇이 얼마나 비워지는지 먼저 보여 줘야 사람이
+   * 누를지 정한다 — 되돌릴 수 있다 해도 「눌렀더니 뭔가 사라졌다」는 나쁘다.
+   */
+  router.get("/reset-ledgers/preview", async (_req, res, next) => {
+    try {
+      res.json(await resetSignalLedgers(true));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/reset-ledgers", async (_req, res, next) => {
+    try {
+      res.json(await resetSignalLedgers(false));
+    } catch (err) {
+      next(err);
+    }
   });
 
   /**

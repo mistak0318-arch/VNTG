@@ -1070,7 +1070,9 @@
       "Bash(curl -s -m 20 -X PUT -H \"Content-Type: application/json\" -d '{\"rainbowDays\":2,\"universeSize\":500}' http://localhost:4000/api/signal/super/config)",
       "Bash(node -e \"console.log\\(JSON.stringify\\(JSON.parse\\(require\\('fs'\\).readFileSync\\('server/data/superSignal.json','utf8'\\)\\).config\\)\\)\")",
       "Bash(grep -n \"^          </>$\\\\|^        \\)}$\" components/overview/YahooChartSheet.tsx)",
-      "Bash(time curl -s -o /dev/null -m 90 \"http://localhost:4000/api/market/futures-chart?code=A01609&period=I&days=1&market=CM\")"
+      "Bash(time curl -s -o /dev/null -m 90 \"http://localhost:4000/api/market/futures-chart?code=A01609&period=I&days=1&market=CM\")",
+      "Bash(curl -s -m 30 http://localhost:4000/api/signal/super)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('fingerprint:',JSON.stringify\\(j.fingerprint\\)\\);console.log\\('entries:',\\(j.entries||[]\\).length\\);}\\)\")"
     ]
   }
 }

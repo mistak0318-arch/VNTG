@@ -10,6 +10,7 @@ import { SuperDetailSheet } from "../components/SuperDetailSheet";
 import { RefreshBar } from "../components/RefreshBar";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useCardOrder } from "../useCardOrder";
+import { OrderResetButton } from "../components/OrderResetButton";
 import { useStockFocus } from "../useStockFocus";
 
 /**
@@ -690,6 +691,8 @@ export function SuperDashboardPage({
         <button className={`filter-btn ${showExited ? "active" : ""}`} onClick={() => setShowExited((v) => !v)}>
           이탈 포함 {showExited ? "켬" : "끔"}
         </button>
+        {/* 열을 드래그로 옮길 수 있으면 되돌릴 수도 있어야 한다 (2026-09-01) */}
+        <OrderResetButton order={colOrder} what="열 순서" />
         <span className="pt-n">행을 누르면 흐름 상세(주가·점수·수급·이탈 기록)가 열립니다</span>
       </div>
 

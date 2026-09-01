@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { useSheetBack } from "../useSheetBack";
 import { api, type TgMsg, type TgRoom, type TgStar } from "../api";
 import { useCardOrder } from "../useCardOrder";
+import { OrderResetButton } from "./OrderResetButton";
 
 /**
  * 방 본문 글씨 크기 (2026-08-27 — "본문 글씨 키우고 줄이게 옵션 좀").
@@ -379,6 +380,8 @@ export function TelegramRoomsPanel() {
   /* ── 방 목록 — 순서는 끌어서 바꾼다(서버 저장, 기기 공통). CSS order 라 재마운트가 없다 ── */
   return (
     <div className="tgr-list">
+      {/* 끌어서 바꿀 수 있으면 되돌릴 수도 있어야 한다 (2026-09-01) */}
+      <OrderResetButton order={roomOrder} what="방 순서" />
       {rooms.map((r) => (
         <button
           key={r.channel}
