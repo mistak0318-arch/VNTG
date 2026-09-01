@@ -985,7 +985,11 @@
       "Bash(node -e 'const d=new Date\\(Date.now\\(\\)+9*3600000\\);console.log\\(\"지금 KST\",d.toISOString\\(\\).slice\\(11,16\\),[\"일\",\"월\",\"화\",\"수\",\"목\",\"금\",\"토\"][d.getUTCDay\\(\\)]\\)')",
       "Bash(curl -s -X POST http://localhost:4000/api/signal/verdict/build)",
       "Bash(node --max-old-space-size=6144 ./node_modules/tsx/dist/cli.mjs diag.ts)",
-      "Bash(curl -s \"http://localhost:4000/api/signal/config\")"
+      "Bash(curl -s \"http://localhost:4000/api/signal/config\")",
+      "Bash(cp /tmp/keys.txt \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/keys.txt\")",
+      "Bash(rm -f cond_keys.txt)",
+      "Bash(python)",
+      "Bash(curl -s http://localhost:4000/api/signal/cond/fields)"
     ]
   }
 }

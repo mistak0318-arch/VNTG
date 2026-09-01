@@ -1458,6 +1458,14 @@ export const api = {
      좋으면 걸리는데, 그래서 「정배열인 것만」을 못 고른다 — 점수 안에 묻힌다. */
   condStart: (query: CondQuery) => postJson<{ jobId: string }>("/api/signal/cond/start", query),
   condJob: (id: string) => getJson<CondJob>(`/api/signal/cond/${id}`),
+  /**
+   * **조건 필드 사전** (2026-09-01) — 이름 · 단위 · 뜻 · 쓸 만한 값.
+   *
+   * 예전엔 화면이 신호등 기준 목록을 그대로 깔았다. 그래서 「덩치 (클수록 안
+   * 움직인다)」 같은 것이 조건 이름으로 나왔고, 단위를 아무 데서도 말해 주지
+   * 않아 「덩치 ≥ 3000」이 3천억인지 3천만원인지 알 수 없었다.
+   */
+  condFields: () => getJson<{ fields: CondField[] }>("/api/signal/cond/fields"),
   condPresets: () => getJson<{ presets: CondPreset[] }>("/api/signal/cond/presets"),
   condPresetSave: (name: string, query: CondQuery) =>
     postJson<{ presets: CondPreset[] }>("/api/signal/cond/presets", { name, query }),
@@ -2987,6 +2995,33 @@ export interface CondJob {
   query: CondQuery;
   startedAt: string;
   error?: string;
+}
+
+/**
+ * 조건 검색의 **필드 사전** (2026-09-01).
+ *
+ * 신호등 기준을 그대로 깔던 것을 바꿨다. 신호등의 이름은 채점표의 항목 이름이라
+ * 「덩치 (클수록 안 움직인다)」처럼 채점 방향이 붙어 있고, 조건식에서는 뜻이
+ * 없거나 방해가 된다. 무엇보다 **단위를 아무 데서도 말해 주지 않았다.**
+ *
+ * 서버(`condFields.ts`)가 갖는다 — 화면에 두면 서버의 판정과 갈린다.
+ */
+export interface CondField {
+  key: string;
+  /** 조건검색용 이름 — 신호등 라벨과 다르다 */
+  label: string;
+  group: "가격·추세" | "수급" | "실적" | "규모" | "위험";
+  /** 값의 단위. 빈 문자열이면 통과/미달 전용 */
+  unit: string;
+  /** 이 숫자가 뭘 뜻하나 — 예까지 */
+  hint: string;
+  ops: ("gte" | "lte" | "pass" | "fail")[];
+  def?: number;
+  presets?: { v: number; label: string }[];
+  /** 조건 전용(신호등에 없음)인가 */
+  own?: boolean;
+  /** 이 조건을 쓰면 조회가 얼마나 느나 */
+  cost?: string;
 }
 
 export interface CondPreset {

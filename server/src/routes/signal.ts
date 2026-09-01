@@ -43,6 +43,7 @@ import {
   startCondSearch,
   type CondQuery,
 } from "../condSearch.js";
+import { COND_FIELDS } from "../condFields.js";
 import { tradeValueTop } from "../signalScreen.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
@@ -233,6 +234,19 @@ export function createSignalRouter(client: KiwoomClient): Router {
    * ⚠️ **`/cond/:id` 보다 먼저 둔다.** 뒤에 두면 "presets" 를 작업 id 로 먹어
    * 404 가 난다 — express 는 먼저 걸리는 쪽을 쓴다.
    */
+  /**
+   * **조건 필드 사전** (2026-09-01) — 이름 · 단위 · 뜻 · 쓸 만한 값.
+   *
+   * 예전엔 화면이 신호등 기준 목록을 그대로 깔았다. 그래서 「덩치 (클수록 안
+   * 움직인다)」 같은 것이 조건 이름으로 나왔고, **단위를 아무 데서도 말해 주지
+   * 않아** 「덩치 ≥ 3000」이 3천억인지 3천만원인지 알 수 없었다.
+   *
+   * ⚠️ `/cond/:id` 보다 먼저 둔다 — 뒤에 두면 "fields" 를 작업 id 로 먹는다.
+   */
+  router.get("/cond/fields", (_req, res) => {
+    res.json({ fields: COND_FIELDS });
+  });
+
   router.get("/cond/presets", async (_req, res, next) => {
     try {
       res.json({ presets: await listPresets() });

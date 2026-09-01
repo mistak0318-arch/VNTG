@@ -7,7 +7,7 @@ import {
   type CondLine,
   type CondPreset,
   type CondQuery,
-  type SignalCheckConfig,
+  type CondField,
 } from "../api";
 import { useSignals, SignalDot } from "../components/SignalLight";
 /* 접기 — 신호등 분석과 **같은 훅**. 「화면 차지가 꽤 되네」 (2026-09-01) */
@@ -63,40 +63,13 @@ const EMPTY: CondQuery = {
   lines: [],
 };
 
-/** 값이 뜻을 갖지 않는 기준 — 통과/미달로만 물을 수 있다 */
-const NO_VALUE = new Set(["trend"]);
-
-/** 기준마다 값의 단위가 다르다 — 입력칸 옆에 붙여 준다(설정 화면과 같은 표) */
-const UNITS: Record<string, string> = {
-  foreignFlow: "백만원",
-  instFlow: "백만원",
-  flowStreak: "일",
-  flowPersist: "구간",
-  flowAccel: "배",
-  smartMoney: "백만원",
-  flowRatio: "%",
-  foreignRatioUp: "%p",
-  programFlow: "억원",
-  profitGrowth: "%",
-  naverTheme: "%",
-  etfBacking: "%",
-  nearHigh: "%",
-  newHigh: "%",
-  pullback: "점",
-  marketCap: "억원",
-  largeCap: "억원",
-  volume: "억원",
-  exportGrowth: "%",
-  targetUpside: "%",
-  targetTrend: "%",
-  roe: "%",
-  debtRatio: "%",
-  overhead: "%",
-  disparity: "%",
-  ma5Gap: "%",
-  shortSaleUp: "%p",
-  lendingUp: "%",
-};
+/**
+ * 조건마다 쓸 수 있는 비교가 다르다 — 서버 사전(`CondField.ops`)이 정한다.
+ *
+ * 예전엔 화면이 `NO_VALUE = new Set(["trend"])` 를 들고 있었다. 조건 전용 필드
+ * (흑자 전환 등)가 늘 때마다 그 집합을 같이 고쳐야 했고, 안 고치면 **값 칸이
+ * 뜻 없이 열려** 사람이 못 쓸 값을 넣게 된다.
+ */
 
 const OPS: { key: CondLine["op"]; label: string; hint: string }[] = [
   { key: "gte", label: "≥", hint: "잰 값이 이 값 이상" },
@@ -110,7 +83,14 @@ export function CondSearchPage({
 }: {
   onSelectStock: (code: string, name: string) => void;
 }) {
-  const [checks, setChecks] = useState<SignalCheckConfig[]>([]);
+  /**
+   * **조건 필드 사전** — 서버가 준다.
+   *
+   * 예전엔 `signalConfig().defaults.checks` 를 그대로 깔았다. 그래서 조건 이름이
+   * 「덩치 (클수록 안 움직인다)」였고 단위가 어디에도 없었다. 벤티지: "덩치? 이건
+   * 뭐야. 해석을 해야지 넌 AI 잖아."
+   */
+  const [fields, setFields] = useState<CondField[]>([]);
   const [q, setQ] = useState<CondQuery>(EMPTY);
   const [job, setJob] = useState<CondJob | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -129,8 +109,8 @@ export function CondSearchPage({
 
   useEffect(() => {
     void api
-      .signalConfig()
-      .then((r) => setChecks(r.defaults.checks))
+      .condFields()
+      .then((r) => setFields(r.fields))
       .catch(() => undefined);
     void api
       .condPresets()
@@ -175,20 +155,22 @@ export function CondSearchPage({
 
   const totalConds = q.lines.length;
 
-  /** 조건에 쓰인 기준이 종목당 조회를 몇 번 더 부르나 — 미리 알려 준다 */
-  const cost = (() => {
+  /**
+   * 조건에 쓰인 기준이 종목당 조회를 얼마나 부르나 — **미리 말해 준다.**
+   *
+   * 사전이 사람 말로 적어 두었으므로(「수급 1콜」·「조회 없음」) 같은 응답을
+   * 나눠 쓰는 것들은 한 번만 센다. 숫자로 세지 않는 이유: 「수급 1콜」과
+   * 「지속과 같은 응답」을 더하면 2가 되는데 실제로는 1이다.
+   */
+  const costs = (() => {
     const used = new Set(q.lines.map((l) => l.key));
-    const groups = new Set<string>();
-    let n = 0;
-    for (const c of checks) {
-      if (!used.has(c.key) || c.cost <= 0) continue;
-      if (c.costGroup) {
-        if (groups.has(c.costGroup)) continue;
-        groups.add(c.costGroup);
-      }
-      n += c.cost;
+    const set = new Set<string>();
+    for (const f of fields) {
+      if (!used.has(f.key) || !f.cost || f.cost.startsWith("조회 없음")) continue;
+      /* 「수급 1콜 (지속과 같은 응답)」 → 「수급 1콜」로 묶는다 */
+      set.add(f.cost.replace(/\s*\(.*$/, ""));
     }
-    return n;
+    return [...set];
   })();
 
   /** 줄 하나 고치기 */
@@ -205,18 +187,17 @@ export function CondSearchPage({
    * 않는 기준은 「통과」로 연다. 처음 값은 그 기준의 신호등 문턱을 가져온다 —
    * 빈 칸으로 두면 뭘 넣어야 할지 모른다.
    */
+  const fieldOf = (key: string) => fields.find((x) => x.key === key);
+
   const addLine = (key: string) => {
-    const c = checks.find((x) => x.key === key);
-    const op: CondLine["op"] = NO_VALUE.has(key)
-      ? "pass"
-      : c?.axis === "risk"
-        ? "lte"
-        : "gte";
+    const f = fieldOf(key);
+    /* 첫 비교는 **사전이 정한 순서의 첫 번째**다 — 위험 항목은 `lte` 가 먼저다 */
+    const op: CondLine["op"] = f?.ops[0] ?? "gte";
     setQ((p) => ({
       ...p,
       lines: [
         ...p.lines.map((l, i) => (i === p.lines.length - 1 ? { ...l, join: l.join ?? "and" } : l)),
-        { key, op, value: NO_VALUE.has(key) ? undefined : c?.threshold },
+        { key, op, value: op === "pass" || op === "fail" ? undefined : f?.def },
       ],
     }));
   };
@@ -371,17 +352,22 @@ export function CondSearchPage({
         ) : (
           <div className="cond-lines">
             {q.lines.map((l, i) => {
-              const c = checks.find((x) => x.key === l.key);
-              const noVal = NO_VALUE.has(l.key);
+              const c = fieldOf(l.key);
+              const valued = l.op === "gte" || l.op === "lte";
               return (
                 <div className="cond-line" key={`${l.key}-${i}`}>
                   <span className="cond-no">{i + 1}</span>
                   <span className="cond-name-cell" title={c?.hint}>
                     {c?.label ?? l.key}
-                    {(c?.cost ?? 0) > 0 && <i className="cond-cost">+{c!.cost}</i>}
+                    {c?.own && (
+                      <i className="cond-own" title="신호등 점수에는 안 쓰는 조건 전용 항목입니다">
+                        조건 전용
+                      </i>
+                    )}
                   </span>
                   <span className="filter-row cond-ops">
-                    {OPS.filter((o) => !noVal || o.key === "pass" || o.key === "fail").map((o) => (
+                    {/* 쓸 수 있는 비교는 **사전이 정한다** — 화면이 짐작하지 않는다 */}
+                    {OPS.filter((o) => (c ? c.ops.includes(o.key) : true)).map((o) => (
                       <button
                         key={o.key}
                         className={`filter-btn ${l.op === o.key ? "active" : ""}`}
@@ -390,7 +376,7 @@ export function CondSearchPage({
                             op: o.key,
                             value:
                               o.key === "gte" || o.key === "lte"
-                                ? (l.value ?? c?.threshold ?? 0)
+                                ? (l.value ?? c?.def ?? 0)
                                 : undefined,
                           })
                         }
@@ -400,7 +386,7 @@ export function CondSearchPage({
                       </button>
                     ))}
                   </span>
-                  {(l.op === "gte" || l.op === "lte") && (
+                  {valued && (
                     <>
                       <input
                         type="number"
@@ -412,7 +398,24 @@ export function CondSearchPage({
                           })
                         }
                       />
-                      <span className="sig-unit">{UNITS[l.key] ?? ""}</span>
+                      <span className="sig-unit">{c?.unit ?? ""}</span>
+                      {/*
+                        **빠른 값** — 단위를 알아도 「얼마가 보통인가」는 또 다른 물음이다.
+                        3천억이 큰 건지 작은 건지 모르면 칸이 비어 있는 것과 같다.
+                      */}
+                      {c?.presets && (
+                        <span className="cond-presets">
+                          {c.presets.map((pz: { v: number; label: string }) => (
+                            <button
+                              key={pz.v}
+                              className={`filter-btn ${l.value === pz.v ? "active" : ""}`}
+                              onClick={() => patchLine(i, { value: pz.v })}
+                            >
+                              {pz.label}
+                            </button>
+                          ))}
+                        </span>
+                      )}
                     </>
                   )}
                   <button className="cond-x" onClick={() => removeLine(i)} title="이 줄을 뺍니다">
@@ -454,36 +457,56 @@ export function CondSearchPage({
         )}
       </section>
 
-      {/* ── 기준 고르기 ── */}
+      {/* ── 조건 고르기 ── */}
       <section className="card">
         <button className="gb-head" onClick={togglePick}>
           <span className="gb-caret">{openPick ? "▾" : "▸"}</span>
-          <b>기준 더하기</b>
-          <span className="pt-n">신호등 기준 {checks.length}개</span>
+          <b>조건 더하기</b>
+          <span className="pt-n">{fields.length}개</span>
         </button>
         {openPick && (
-        <>
-        <div className="mg-picker">
-          {checks.map((c) => (
-            <button
-              key={c.key}
-              className="mg-chip"
-              onClick={() => addLine(c.key)}
-              title={`${c.hint}${c.cost > 0 ? `
+          <>
+            {/*
+              **묶음으로 나눈다** (2026-09-01). 예전엔 서른 개 칩이 한 줄로
+              쏟아져 원하는 것을 눈으로 찾을 수가 없었다. 그리고 이름이 신호등
+              라벨이라 「덩치」·「고점 근접 (신고가와 중복)」 같은 게 섞여 있었다.
+            */}
+            {(["규모", "가격·추세", "수급", "실적", "위험"] as const).map((g) => {
+              const list = fields.filter((f) => f.group === g);
+              if (list.length === 0) return null;
+              return (
+                <div className="cond-group" key={g}>
+                  <div className="cond-group-name">{g}</div>
+                  <div className="mg-picker">
+                    {list.map((f) => (
+                      <button
+                        key={f.key}
+                        className="mg-chip"
+                        onClick={() => addLine(f.key)}
+                        title={`${f.hint}
 
-⚠️ 종목당 조회 ${c.cost}회 추가` : ""}`}
-            >
-              + {c.label}
-              {c.cost > 0 && <i className="cond-cost">+{c.cost}</i>}
-            </button>
-          ))}
-        </div>
-        <div className="table-note">
-          누르면 조건식에 한 줄이 더해집니다. 처음 값은 그 기준의 <b>신호등 문턱</b>을
-          가져오니 거기서 고쳐 쓰면 됩니다 — 신호등이 99 로 보든 말든 여기서는
-          <b> 내가 정한 값</b>이 기준입니다.
-        </div>
-        </>
+단위: ${f.unit || "없음 (통과/미달)"}
+${f.cost ?? ""}`}
+                      >
+                        + {f.label}
+                        {f.unit && <i className="cond-unit-chip">{f.unit}</i>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="table-note">
+              칩 위에 마우스를 올리면 <b>그 숫자가 뭘 뜻하는지</b> 나옵니다. 값 칸
+              옆의 빠른 버튼(1천억·3천억·1조…)은 자주 쓰는 값이고, 거기서 고쳐 쓰면
+              됩니다 — <b>신호등 문턱이 몇이든 여기서는 내가 정한 값</b>이 기준입니다.
+              <br />
+              <b>「조건 전용」</b>이 붙은 것은 신호등 점수에는 안 쓰는 항목입니다.
+              분기 실적(연속 증가·흑자 전환)이 그렇습니다 — 신호등의 영업이익은
+              <b> 연간 DART</b> 라 8월에도 마지막 줄이 작년이라서, 「지금 벌고 있나」는
+              분기로만 물을 수 있습니다. 아직 검증이 안 된 값이라 점수에는 안 섞습니다.
+            </div>
+          </>
         )}
       </section>
 
@@ -520,7 +543,8 @@ export function CondSearchPage({
         </button>
         <span className="pt-n">
           조건 {totalConds}개
-          {cost > 0 && ` · 종목당 조회 +${cost}회`}
+          {/* 어떤 조회가 나가는지 사람 말로 — 「+3회」보다 「수급 1콜 · 분기실적 1콜」이 낫다 */}
+          {costs.length > 0 && ` · 종목당 ${costs.join(" · ")}`}
         </span>
       </div>
 

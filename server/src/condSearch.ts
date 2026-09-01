@@ -6,6 +6,7 @@ import { evaluateSignal, getConfig, type CheckKey } from "./signalLight.js";
 import { fetchUniverse, type Candidate } from "./signalScreen.js";
 import { getSharesMap } from "./stockListCache.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
+import { condField, isOwnField, ownValues } from "./condFields.js";
 
 /**
  * 조건 검색 — **증권사 조건검색식처럼.**
@@ -46,7 +47,7 @@ import { getMarketSnapshot } from "./marketSnapshot.js";
  */
 
 export interface Cond {
-  key: CheckKey;
+  key: string;
   /**
    * **무엇과 견주나** (2026-09-01 개정).
    *
@@ -91,7 +92,8 @@ function normalizeCond(c: Cond): Cond {
  * 자유도가 낮았다.
  */
 export interface CondLine {
-  key: CheckKey;
+  /** 신호등 기준 키, 또는 조건 전용 필드 키(`q` 로 시작) */
+  key: string;
   /**
    *   gte   잰 값이 `value` 이상
    *   lte   잰 값이 `value` 이하
@@ -277,7 +279,15 @@ function prune(): void {
 /** 조건식이 실제로 쓰는 기준들 — 이것만 켠 설정으로 평가한다 */
 function usedKeys(q: CondQuery): Set<CheckKey> {
   const s = new Set<CheckKey>();
-  for (const l of linesOf(q)) s.add(l.key);
+  /* 조건 전용 필드는 신호등 기준이 아니다 — 켜 봐야 없는 기준을 켜는 셈이다 */
+  for (const l of linesOf(q)) if (!isOwnField(l.key)) s.add(l.key as CheckKey);
+  return s;
+}
+
+/** 조건식에 쓰인 **조건 전용** 키 (분기 실적 등) */
+function usedOwnKeys(q: CondQuery): Set<string> {
+  const s = new Set<string>();
+  for (const l of linesOf(q)) if (isOwnField(l.key)) s.add(l.key);
   return s;
 }
 
@@ -346,9 +356,14 @@ async function run(client: KiwoomClient, q: CondQuery, job: CondJob): Promise<vo
     checks: base.checks.map((c) => ({ ...c, enabled: keys.has(c.key) })),
   };
 
+  /* 조건 전용 필드가 쓰였나 — 안 쓰였으면 그쪽 조회는 아예 안 나간다 */
+  const ownKeys = usedOwnKeys(q);
+
   for (const c of pool) {
     try {
       const sig = await evaluateSignal(client, c.code, { config: cfg });
+      /* 분기 실적 등 — 한 번 부르고 그 응답으로 다섯 필드를 다 낸다 */
+      const own = await ownValues(c.code, ownKeys);
       /**
        * 조건 하나를 판정한다.
        *
@@ -357,6 +372,20 @@ async function run(client: KiwoomClient, q: CondQuery, job: CondJob): Promise<vo
        * 「모른다」와 「맞다」는 다른 말이다.
        */
       const judge = (l: CondLine): boolean => {
+        /*
+         * **조건 전용 필드** (2026-09-01) — 분기 실적처럼 신호등에 없는 것.
+         * 신호등의 `profitGrowth` 는 연간 DART 라 8월에도 마지막 줄이 작년이다.
+         */
+        if (isOwnField(l.key)) {
+          if (l.op === "pass" || l.op === "fail") {
+            const f = own.flag.get(l.key);
+            if (f === undefined) return false;
+            return l.op === "pass" ? f : !f;
+          }
+          const v = own.num.get(l.key);
+          if (v === undefined || !Number.isFinite(v) || l.value === undefined) return false;
+          return l.op === "gte" ? v >= l.value : v <= l.value;
+        }
         const hit = sig.checks.find((x) => x.key === l.key);
         if (!hit) return false;
         if (l.op === "pass") return hit.pass === true;
@@ -367,12 +396,21 @@ async function run(client: KiwoomClient, q: CondQuery, job: CondJob): Promise<vo
         return l.op === "gte" ? v >= l.value : v <= l.value;
       };
 
-      /** 화면에 「무슨 조건에 걸렸나」를 적기 위한 이름 */
+      /**
+       * 화면에 「무슨 조건에 걸렸나」를 적기 위한 이름.
+       *
+       * ⚠️ **신호등 라벨을 쓰지 않는다** (2026-09-01). 신호등의 이름은 채점표의
+       * 항목 이름이라 「덩치 (클수록 안 움직인다)」처럼 채점 방향이 붙어 있고,
+       * 조건식에서는 뜻이 없거나 방해가 된다. 그리고 단위가 없어서 「덩치 ≥ 3000」이
+       * 3천억인지 3천만원인지 알 수가 없었다.
+       */
       const labelOf = (l: CondLine): string => {
-        const nm = sig.checks.find((x) => x.key === l.key)?.label ?? l.key;
+        const fd = condField(l.key);
+        const nm = fd?.label ?? sig.checks.find((x) => x.key === l.key)?.label ?? l.key;
         if (l.op === "pass") return nm;
         if (l.op === "fail") return `${nm} 미달`;
-        return `${nm} ${l.op === "gte" ? "≥" : "≤"} ${l.value}`;
+        const unit = fd?.unit ? fd.unit : "";
+        return `${nm} ${l.op === "gte" ? "≥" : "≤"} ${l.value?.toLocaleString("ko-KR")}${unit}`;
       };
 
       /*

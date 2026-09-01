@@ -13412,3 +13412,44 @@ thead .sd-emph {
   font-size: 0.72rem;
   cursor: help;
 }
+
+/* 조건 사전 (2026-09-01) — 이름·단위·묶음.
+   서른 개 칩이 한 줄로 쏟아지면 눈으로 못 찾는다. */
+.cond-group { margin-bottom: 10px; }
+.cond-group-name {
+  margin: 6px 0 4px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+/* 칩에 단위를 붙여 둔다 — 「덩치 ≥ 3000」이 3천억인지 3천만원인지 몰랐던 게 문제였다 */
+.cond-unit-chip {
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--muted);
+  font-style: normal;
+  font-size: 0.64rem;
+}
+/* 신호등에 없는 조건 전용 항목 — 점수에 안 섞인다는 것을 눈에 보이게 */
+.cond-own {
+  margin-left: 5px;
+  padding: 0 5px;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--blue, #4c8dff) 40%, transparent);
+  color: var(--blue, #4c8dff);
+  font-style: normal;
+  font-size: 0.62rem;
+}
+/* 빠른 값 — 단위를 알아도 「얼마가 보통인가」는 또 다른 물음이다 */
+.cond-presets {
+  display: inline-flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.cond-presets .filter-btn {
+  padding: 1px 6px;
+  font-size: 0.68rem;
+}
