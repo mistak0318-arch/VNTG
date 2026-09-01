@@ -370,13 +370,71 @@ export async function runAfterClose(
   return run;
 }
 
+/**
+ * ## **실패한 단계는 다시 돌린다** (2026-09-02)
+ *
+ * 벤티지: "수집이 오류나서 끊기면 하루는 놓치는 거잖니."
+ *
+ * 맞았다. 파이프라인은 하루 한 번만 돌고(`alreadyDone`), 어느 단계가 실패해도
+ * **그대로 끝났다.** 실패는 요약 알림에 적히지만 그건 「알려 준다」이지
+ * 「고친다」가 아니다 — 그 알림을 놓치면 그날 원장은 영영 빈다. 그리고
+ * **편입 원장은 소급이 안 된다.**
+ *
+ * 실패의 대부분은 **일시적인 것**이다. 키움이 잠깐 막히거나, 초당 제한에
+ * 걸리거나, 네트워크가 끊긴다. 그런 건 30분 뒤에 다시 하면 대개 된다.
+ *
+ * ## 규칙
+ *
+ *   · 실패한 단계**만** 다시 돈다 (성공한 것을 또 돌리면 조회만 낭비다)
+ *   · 30분 간격, **두 번까지**. 그래도 안 되면 사람이 볼 문제다
+ *   · 마지막 시도까지 실패하면 **따로 알린다** — 요약에 묻히지 않게
+ */
+const RETRY_GAP_MS = 30 * 60_000;
+const RETRY_MAX = 2;
+let retry: { day: string; tried: number; at: number } | null = null;
+
 export function startAfterCloseScheduler(client: KiwoomClient): void {
   if (timer) return;
   const tick = async () => {
     if (!shouldStart()) return;
     if (run?.running) return;
-    /* `runAfterClose` 안에서 이력을 보고 판단한다 — 여기서 또 세지 않는다 */
-    await runAfterClose(client).catch(() => undefined);
+
+    const day = dayKey();
+
+    /* ① 실패한 단계가 있으면 그것만 다시 — 성공한 것은 안 건드린다 */
+    if (run?.day === day && !run.running && retry?.day === day) {
+      const failed = run.steps.filter((s) => !s.ok).map((s) => s.key);
+      if (failed.length > 0 && retry.tried < RETRY_MAX && Date.now() - retry.at >= RETRY_GAP_MS) {
+        retry = { day, tried: retry.tried + 1, at: Date.now() };
+        console.log(`[afterClose] 실패 단계 재시도 ${retry.tried}/${RETRY_MAX} — ${failed.join(", ")}`);
+        const r = await runAfterClose(client, true, failed).catch(() => null);
+        const still = r?.steps.filter((s) => !s.ok).map((s) => s.label) ?? [];
+        if (still.length > 0 && retry.tried >= RETRY_MAX) {
+          await pushNotice({
+            kind: "system",
+            level: "warn",
+            title: `마감 뒤 정리 — ${still.length}단계가 끝내 실패했습니다`,
+            body:
+              `${still.join(" · ")}\n\n` +
+              `30분 간격으로 ${RETRY_MAX}번 다시 시도했지만 안 됐습니다. ` +
+              `편입 원장은 소급이 안 되므로 **오늘 몫은 손으로 돌려야** 합니다 — ` +
+              `설정 > 마감 뒤 정리에서 그 단계만 누르면 됩니다.`,
+            link: "#/settings",
+            dedupeKey: `afterClose:retryFail:${day}`,
+            dedupeHours: 12,
+          }).catch(() => undefined);
+        }
+        return;
+      }
+      return;
+    }
+
+    /* ② 오늘 첫 실행 — `runAfterClose` 안에서 이력을 보고 판단한다 */
+    const r = await runAfterClose(client).catch(() => null);
+    /* 실패가 있으면 재시도 시계를 건다. 다 됐으면 걸 필요가 없다 */
+    if (r && !r.running && r.steps.some((s) => !s.ok)) {
+      retry = { day, tried: 0, at: Date.now() };
+    }
   };
   timer = setInterval(() => void tick(), TICK_MS);
   timer.unref?.();

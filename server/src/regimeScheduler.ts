@@ -4,7 +4,6 @@ import { pushNotice } from "./notifyCenter.js";
 import { backtestProgress } from "./signalBacktest.js";
 import { samplesMeta } from "./signalSamples.js";
 import { buildSamplesFromLedger } from "./samplesFromLedger.js";
-import { runListTrack } from "./listTrack.js";
 import { simulate } from "./signalSimulate.js";
 import { getConfig } from "./signalLight.js";
 
@@ -21,8 +20,11 @@ import { getConfig } from "./signalLight.js";
  *
  * ## 언제 도나
  *
- *   16:10  장세 점검 — 종가가 확정된 뒤다. 걸리면 🔔 알림
  *   18:30  표본 다시 만들기 — 오래됐을 때만
+ *
+ * ⚠️ **장세 점검(16:10)과 신호등 분석(16:30)은 여기 없다.** `afterClose`
+ * 파이프라인으로 옮겼다 — 시각으로만 잡혀 있으면 앞 작업이 안 끝나도 시작한다.
+ * 이 머리말이 그 둘을 계속 적고 있어서 지웠다(2026-09-02).
  *
  * 18:30 은 예전에 **조회를 3,500번쯤 쓰던** 자리라 다른 자동 작업과 안 부딪히게
  * 뒤로 뺀 시각이다. 이제 원장에서 만들어 조회가 0 이지만, 마감 뒤 파이프라인이
@@ -47,10 +49,14 @@ import { getConfig } from "./signalLight.js";
 const TICK_MS = 60_000;
 
 let timer: ReturnType<typeof setInterval> | null = null;
-/** 오늘 이미 한 일 — 하루 한 번씩만 */
-let doneCheck = "";
+/**
+ * 오늘 이미 한 일 — 하루 한 번씩만.
+ *
+ * ⚠️ `doneCheck`·`doneList` 는 **죽은 변수였다** (2026-09-02 정리). 장세 점검과
+ * 신호등 분석을 `afterClose` 파이프라인으로 옮기면서 여기 호출은 지웠는데
+ * 변수와 import 는 남아 있었다 — 읽는 사람이 「여기서도 도는구나」로 오해한다.
+ */
 let doneRebuild = "";
-let doneList = "";
 let rebuilding = false;
 
 function kst(now = new Date()): Date {
@@ -242,5 +248,10 @@ async function tick(client: KiwoomClient): Promise<void> {
 export function startRegimeScheduler(client: KiwoomClient): void {
   if (timer) return;
   timer = setInterval(() => void tick(client), TICK_MS);
-  console.log("[regime] 스케줄러 시작 (16:10 장세 점검 · 16:30 신호등 분석 · 18:30 표본 재수집)");
+  /*
+   * ⚠️ 문구가 **거짓말이었다** (2026-09-02). "16:10 장세 점검 · 16:30 신호등 분석"
+   * 이라고 찍고 있었는데 그 둘은 파이프라인으로 옮긴 뒤였다. 로그가 코드와
+   * 어긋나면 「그 시각에 돌겠거니」하고 아무도 안 본다.
+   */
+  console.log("[regime] 스케줄러 시작 (18:30 표본 다시 만들기 — 장세·신호등 분석은 afterClose 담당)");
 }

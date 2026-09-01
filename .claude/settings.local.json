@@ -1075,7 +1075,8 @@
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('fingerprint:',JSON.stringify\\(j.fingerprint\\)\\);console.log\\('entries:',\\(j.entries||[]\\).length\\);}\\)\")",
       "Bash(node -e \"const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('superSignal.json','utf8'\\)\\);console.log\\('entries',j.entries.length\\);const d=j.entries.filter\\(e=>\\(e.daily||[]\\).length>=2\\);console.log\\('daily 2일 이상:',d.length, d.slice\\(0,3\\).map\\(e=>e.code+' '+e.name+' '+e.daily.length+'일'\\)\\)\")",
       "Bash(grep -n \"^      </div>$\" pages/ListTrackPage.tsx)",
-      "Bash(node -e \"const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('listTrack.json','utf8'\\)\\);console.log\\('entries',j.entries.length,'lastRun',j.lastRunDate\\);console.log\\('active',j.entries.filter\\(e=>e.active!==false\\).length\\);console.log\\(j.entries.slice\\(0,2\\).map\\(e=>\\({c:e.code,n:e.name,a:e.active,d:e.addedDate}\\)\\)\\);\")"
+      "Bash(node -e \"const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('listTrack.json','utf8'\\)\\);console.log\\('entries',j.entries.length,'lastRun',j.lastRunDate\\);console.log\\('active',j.entries.filter\\(e=>e.active!==false\\).length\\);console.log\\(j.entries.slice\\(0,2\\).map\\(e=>\\({c:e.code,n:e.name,a:e.active,d:e.addedDate}\\)\\)\\);\")",
+      "Bash(node -e \"const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('data/universeConfig.json','utf8'\\)\\);console.log\\(JSON.stringify\\(j\\).slice\\(0,500\\)\\)\")"
     ]
   }
 }
