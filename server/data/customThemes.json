@@ -41,7 +41,7 @@
   {
     "id": "t_msxbrygu02",
     "name": "반도체 소부장 (후공정)",
-    "memo": "",
+    "memo": "HBM·파운드리 중심",
     "codes": [
       "042700",
       "007660",
@@ -56,7 +56,8 @@
     ],
     "color": "#f5c542",
     "createdAt": "2026-08-17T14:24:37.704Z",
-    "source": "manual"
+    "source": "manual",
+    "updatedAt": "2026-09-01T10:16:34.768Z"
   },
   {
     "id": "t_msxbryzc03",

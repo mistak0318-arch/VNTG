@@ -47,6 +47,15 @@ export function CustomThemePage({
   const [snapshotAt, setSnapshotAt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 시트에서 **이름·메모를 고치는 중**인가 (2026-09-01).
+   *
+   * 벤티지: "메모 적으면 각 태그 클릭했을 때 메모랑 종목명 나와야겠지? 수정도
+   * 되어야 하겠고."
+   *
+   * 메모는 이미 떴는데 **고칠 길이 없었다** — 오타 하나를 고치려면 태그를 지우고
+   * 다시 만들어야 했고, 그러면 담긴 종목이 다 날아간다.
+   */
   /** 시트로 연 테마 id */
   const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -63,6 +72,8 @@ export function CustomThemePage({
 
   // 종목 검색 (테마에 추가할 때)
   const [query, setQuery] = useState("");
+  /** 편집 중인 이름·메모 — null 이면 보기 모드 */
+  const [edit, setEdit] = useState<{ name: string; memo: string } | null>(null);
   const [results, setResults] = useState<StockSearchResult[]>([]);
 
   // 인포스탁에서 옮겨온 테마가 수십 개라, 내가 만든 것만 보고 싶을 때가 있다
@@ -304,12 +315,73 @@ export function CustomThemePage({
                   ▲{openTheme.risingCount} ▼{openTheme.fallingCount} · {openTheme.stocks.length}종목
                 </span>
               </h2>
-              <button className="close-btn" onClick={() => setOpen(null)}>
+              <button
+                className="close-btn"
+                onClick={() => {
+                  setOpen(null);
+                  setEdit(null);
+                }}
+              >
                 ✕
               </button>
             </div>
 
-            {openTheme.memo && <div className="ct-memo">{openTheme.memo}</div>}
+            {/*
+              **이름·메모를 그 자리에서 고친다** (2026-09-01).
+              고칠 길이 없어서 오타 하나에 태그를 지우고 다시 만들어야 했다 —
+              그러면 담긴 종목이 다 날아간다.
+            */}
+            {edit ? (
+              <div className="ct-edit">
+                <input
+                  className="search-input"
+                  value={edit.name}
+                  placeholder="태그 이름"
+                  onChange={(e) => setEdit({ ...edit, name: e.target.value })}
+                  autoFocus
+                />
+                <input
+                  className="search-input"
+                  value={edit.memo}
+                  placeholder="메모 (예: 데이터센터 전력 수요 수혜)"
+                  onChange={(e) => setEdit({ ...edit, memo: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setEdit(null);
+                  }}
+                />
+                <button
+                  className="filter-btn primary"
+                  onClick={() => {
+                    const nm = edit.name.trim();
+                    if (!nm) return;
+                    void run(async () => {
+                      await api.customThemeUpdate(openTheme.id, { name: nm, memo: edit.memo.trim() });
+                      setEdit(null);
+                    });
+                  }}
+                >
+                  저장
+                </button>
+                <button className="filter-btn" onClick={() => setEdit(null)}>
+                  취소
+                </button>
+              </div>
+            ) : (
+              <div className="ct-memo-row">
+                {openTheme.memo ? (
+                  <div className="ct-memo">{openTheme.memo}</div>
+                ) : (
+                  <div className="ct-memo empty">메모 없음 — 왜 이 태그로 묶었는지 적어 두면 나중에 도움이 됩니다</div>
+                )}
+                <button
+                  className="filter-btn ct-edit-btn"
+                  onClick={() => setEdit({ name: openTheme.name, memo: openTheme.memo ?? "" })}
+                  title="이름·메모 고치기"
+                >
+                  ✎ 고치기
+                </button>
+              </div>
+            )}
 
             {/* 가중과 단순이 크게 다르면 대형주가 끌고 있다는 뜻이라 같이 보여준다 */}
             {openTheme.changeRate !== null && openTheme.simpleRate !== null && (

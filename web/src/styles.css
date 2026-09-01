@@ -13687,3 +13687,12 @@ thead .sd-emph {
 .stag-stock:hover { background: color-mix(in srgb, var(--blue, #4c8dff) 16%, transparent); }
 .stag-stock-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stag-stock b { font-variant-numeric: tabular-nums; font-size: 0.8rem; }
+
+/* 태그 이름·메모 고치기 (2026-09-01) — 고칠 길이 없어 지우고 다시 만들어야 했다 */
+.ct-memo-row { display: flex; align-items: flex-start; gap: 10px; }
+.ct-memo-row .ct-memo { flex: 1; }
+.ct-memo.empty { color: var(--muted); font-style: italic; }
+.ct-edit-btn { flex: none; font-size: 0.74rem; padding: 3px 9px; }
+.ct-edit { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 6px 0 10px; }
+.ct-edit .search-input:first-child { width: 200px; flex: none; }
+.ct-edit .search-input:nth-child(2) { flex: 1; min-width: 220px; }
