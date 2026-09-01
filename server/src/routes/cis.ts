@@ -10,6 +10,8 @@ import { cisStats, cisUsage } from "../cisStats.js";
 import { cisAiModels, cisAiReady, weeklyReview } from "../cisAi.js";
 import { cisSchedulerState, resetCisTried } from "../cisScheduler.js";
 import { CIS_STEPS, createJob, getJob, reporterFor } from "../reportProgress.js";
+import { cisBacktest } from "../cisBacktest.js";
+import type { CisRules } from "../cisTrader.js";
 import { METHOD_LABEL, runPension } from "../cisPensionRun.js";
 import { clearWatchEvents, watchEvents, watchStatus } from "../cisWatch.js";
 
@@ -283,6 +285,40 @@ export function createCisRouter(client: KiwoomClient): Router {
   });
 
   /** 주간 복기 (AI) — 며칠치를 놓고 어느 규칙이 나빴나 */
+  /**
+   * **규칙 백테스트** (2026-09-02) — 조회 0회.
+   *
+   * 벤티지: "지금의 CIS를 더 똑똑하게 만들 방법있어?"
+   *
+   * CIS 는 아직 한 번도 켜진 적이 없어서(`data/cis` 폴더가 없다) 성적 기록이
+   * 없고, 그래서 손절 -7%·익절 +15%·보유 10일·점수 60 이 전부 짐작이다.
+   *
+   * 표본(2.8만 관측)과 전종목 일봉 OHLC 로 「이 규칙으로 굴렸으면 어땠나」를
+   * 돌린다. 표본에는 d1·d5·d20 뿐이라 중간 경로를 모르지만, **일봉에는
+   * 고가·저가가 있어서** 손절이 언제 걸렸는지를 실제로 셀 수 있다.
+   *
+   * 몸통(`rules`)으로 값을 바꿔 가며 돌려 볼 수 있다 — 안 주면 지금 설정.
+   */
+  router.post("/backtest", async (req, res, next) => {
+    try {
+      const body = (req.body ?? {}) as { rules?: Partial<CisRules>; limit?: number };
+      const cfg = await getCisConfig();
+      /* 화면이 값을 안 주면 지금 CIS 설정으로 — 「지금 규칙이 어떤가」가 첫 물음이다 */
+      const rules = { ...cfg.rules, ...(body.rules ?? {}) };
+      const limit = Math.min(Math.max(Number(body.limit) || 300, 20), 1000);
+      const r = await cisBacktest(rules, undefined, limit);
+      if (!r) {
+        res.status(404).json({
+          error: "검증 표본이 없습니다 — 설정 > 시뮬레이터에서 「원장으로 표본 다시 만들기」를 먼저 누르세요.",
+        });
+        return;
+      }
+      res.json(r);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/review", async (req, res, next) => {
     try {
       const id = acc(req.body?.account);

@@ -242,7 +242,7 @@ export interface SimResult {
  * 세 곳(시뮬레이트·조건부·전수훑기)이 **같은 자**를 써야 화면끼리 말이 어긋나지
  * 않는다. 한 번 내서 나눠 쓴다.
  */
-function regimeMap(S: Sample[], cfg: SignalConfig): Map<string, "bull" | "bear"> {
+export function regimeMap(S: Sample[], cfg: SignalConfig): Map<string, "bull" | "bear"> {
   const out = new Map<string, "bull" | "bear">();
   if (!cfg.regimeSwitch) return out;
   const byDate = new Map<string, { above: number; total: number }>();
