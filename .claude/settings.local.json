@@ -1050,7 +1050,10 @@
       "Bash(curl -s -m 20 http://localhost:4000/api/signal/samples)",
       "Bash(curl -s -m 180 -X POST -H \"Content-Type: application/json\" -d '{}' http://localhost:4000/api/signal/simulate)",
       "Bash(node --max-old-space-size=8192 -e ' *)",
-      "Bash(curl -s -m 300 -X POST -H \"Content-Type: application/json\" -d '{}' http://localhost:4000/api/signal/simulate)"
+      "Bash(curl -s -m 300 -X POST -H \"Content-Type: application/json\" -d '{}' http://localhost:4000/api/signal/simulate)",
+      "Bash(curl -s -m 15 http://localhost:4000/api/cis/config)",
+      "Bash(curl -s -m 15 http://localhost:4000/api/signal/config)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const c=JSON.parse\\(s\\);console.log\\('minTradeValue',c.config?.minTradeValue??c.minTradeValue,'minCoverage',c.config?.minCoverage??c.minCoverage\\);}\\)\")"
     ]
   }
 }

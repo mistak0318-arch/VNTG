@@ -81,6 +81,8 @@ function diffFromDefaults(cur: SignalConfig, def: SignalConfig): string[] {
       `최소 커버리지 ${Math.round(cur.minCoverage * 100)}% → ${Math.round(def.minCoverage * 100)}%`,
     );
   if (cur.greenTo !== def.greenTo) out.push(`초록 상한 ${cur.greenTo}점 → ${def.greenTo}점`);
+  if (cur.minTradeValue !== def.minTradeValue)
+    out.push(`거래대금 하한 ${cur.minTradeValue}억 → ${def.minTradeValue}억`);
   for (const d of def.checks) {
     const c = cur.checks.find((x) => x.key === d.key);
     if (!c) continue;
@@ -597,6 +599,41 @@ export function SignalConfigPanel() {
           />
           <span className="sig-unit">점까지 {config.greenTo >= 100 && "(상한 없음)"}</span>
         </label>
+        {/*
+          **거래대금 하한** (2026-09-01) — 벤티지: "신호등 말야 거래대금 최소
+          100억 이상은 되는 종목으로 해야지. 호가 슬리피지 나겠어."
+        */}
+        <label title="이만큼 안 도는 종목에는 초록을 주지 않습니다. 모집단을 만들 때도 미리 뺍니다">
+          <b>거래대금 하한</b>
+          <input
+            type="number"
+            min={0}
+            max={100000}
+            step={10}
+            value={config.minTradeValue}
+            onChange={(e) =>
+              patch({
+                minTradeValue: Math.max(0, Math.min(100_000, Number(e.target.value) || 0)),
+              })
+            }
+          />
+          <span className="sig-unit">억 이상만 초록 {config.minTradeValue === 0 && "(문턱 없음)"}</span>
+        </label>
+        <span className="table-note">
+          <b>하루 3억 도는 종목에 천만 원을 넣으면 호가가 밀립니다.</b> 화면에 +8%로
+          찍혀도 그 값을 못 받습니다 — 그래서 얇은 종목에는 초록을 주지 않습니다
+          (점수는 그대로 냅니다. 「못 산다」와 「나쁘다」는 다른 말이니까요).
+          <br />
+          <b>그리고 더 조용한 문제가 있습니다.</b> 거래가 거의 없는 종목은 종가가
+          며칠씩 안 변해서 수익률이 그냥 <b>0</b>으로 쌓입니다. 전종목 표본을 처음
+          만들었을 때 20일 중앙값이 <b>-5.36%</b>였는데, 거래대금 10억 문턱 하나를
+          걸자 <b>-11.23%</b>가 됐습니다. <b>문턱을 없앴더니 성적이 좋아진 겁니다</b> —
+          움직이지 않는 종목이 표본의 3분의 2였고, 그 0들이 시장 기준선을 끌어올려
+          모든 기준의 초과수익을 실제보다 나빠 보이게 만들고 있었습니다.
+          <br />
+          거래대금을 <b>못 잰 경우(장 전 등)에는 막지 않습니다.</b> 그걸로 막으면 매일
+          아침 초록이 통째로 사라집니다. 0으로 두면 문턱이 없습니다.
+        </span>
         {/*
           **커버리지가 뭔지부터** (2026-09-01) — 벤티지: "커버리지가 가지는 의미에
           대해서도 설명문에 붙여줘 그래야 내가 이해하지."

@@ -177,6 +177,8 @@ function clampRules(r: Partial<CisRules>, base: CisRules): CisRules {
       typeof r.useListTrack === "boolean" ? r.useListTrack : base.useListTrack,
     minScore: num(r.minScore, 0, 100, base.minScore),
     minTradeValue: num(r.minTradeValue, 0, 100_000, base.minTradeValue),
+    /* 억. 0 은 「문턱 없음」이라 유효하다 */
+    minMarketCap: num(r.minMarketCap, 0, 10_000_000, base.minMarketCap),
     minMarketScore: num(r.minMarketScore, 0, 100, base.minMarketScore),
     trailAfterPct: Math.abs(num(r.trailAfterPct, 1, 100, base.trailAfterPct)),
     useOpen: r.useOpen ?? base.useOpen,
@@ -246,6 +248,15 @@ export const RULE_LABEL: Record<keyof CisRules, { label: string; unit: string; h
   maxHoldDays: { label: "최대 보유", unit: "일", hint: "안 가면 자리를 비운다 — 돈이 묶이는 게 더 비싸다" },
   minScore: { label: "신호등 최소점", unit: "점", hint: "이 아래 종목은 후보에서 뺀다" },
   minTradeValue: { label: "최소 거래대금", unit: "억", hint: "얇으면 내 주문에 값이 밀린다" },
+  minMarketCap: {
+    label: "최소 시가총액",
+    unit: "억",
+    hint:
+      "거래대금만으로는 부족하다 — 시총 300억짜리가 테마에 걸려 하루 800억이 돌면 " +
+      "그 문턱을 통과하지만 그건 유동성이 아니라 소나기다. 다음 날 30억으로 돌아가면 " +
+      "들고 있는 물량을 못 판다. 시총은 하루 이벤트로 안 변하는 바닥 크기라, " +
+      "둘을 같이 걸어야 「오늘도 돌고 평소에도 큰」 종목만 남는다. 0 이면 문턱 없음",
+  },
   minMarketScore: { label: "시장 최소점", unit: "점", hint: "이 아래면 그날은 아무것도 안 산다" },
   useListTrack: {
     label: "신호등 분석 원장 쓰기",

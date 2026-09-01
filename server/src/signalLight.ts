@@ -312,6 +312,40 @@ export interface SignalConfig {
    * 사람이 정하면 된다 — 표본이 쌓여 85~89 가 계속 음수면 그때 걸면 된다.
    */
   greenTo: number;
+  /**
+   * **거래대금 하한(억)** — 이만큼 안 도는 종목에는 초록을 주지 않는다. 기본 100.
+   *
+   * 벤티지: "신호등 말야 거래대금 최소 100억 이상은 되는 종목으로 해야지.
+   * 호가 슬리피지 나겠어." 그리고 "거래대금이 너무 적으면 오히려 데이터가
+   * 이상해져. 신뢰할만한 데이터에 돌리는 게 맞아."
+   *
+   * ## 둘 다 맞고, 두 번째가 더 무섭다
+   *
+   * 첫 번째는 분명하다 — 하루 3억 도는 종목에 천만 원을 넣으면 호가가 밀린다.
+   * 화면에 +8% 로 찍혀도 그 값을 못 받는다.
+   *
+   * 두 번째는 조용하다. 표본을 전종목으로 처음 만들었을 때 이렇게 나왔다:
+   *
+   *   문턱 없음   207,135관측 · 20일 중앙값 **-5.36%**
+   *   10억 이상    79,814관측 · 중앙값 **-11.23%**
+   *
+   * **문턱을 없앴더니 성적이 좋아졌다.** 거래가 거의 없는 종목은 종가가 며칠씩
+   * 안 변해서 수익률이 그냥 `0` 으로 쌓이기 때문이다 — 「60일 신고가」에 걸린
+   * 관측의 20일 중앙값이 정확히 `0.00` 이었다. 오르지도 내리지도 않은 것이
+   * 표본의 3분의 2였고, 그 0 들이 시장 기준선을 끌어올려 **모든 기준의
+   * 초과수익이 실제보다 나빠 보이게** 만들고 있었다.
+   *
+   * ## 어떻게 거나
+   *
+   * 커버리지 미달과 **같은 방식**이다 — 점수는 그대로 내고 **초록만 막는다.**
+   * 「얇아서 못 산다」와 「나쁜 종목이다」는 다른 말이라 빨강으로 찍으면 거짓이 된다.
+   *
+   * 그리고 모집단을 만들 때도 미리 거른다(`fetchUniverse`). 어차피 초록이 안 될
+   * 종목에 조회를 쓰면 그만큼 아래쪽을 못 본다.
+   *
+   * 0 으로 두면 문턱이 없다.
+   */
+  minTradeValue: number;
 }
 
 /** 정배열 판정에 고를 수 있는 이동평균선 */
@@ -454,6 +488,8 @@ export const DEFAULT_CONFIG: SignalConfig = {
   minCoverage: 0.9,
   /* 100 = 상한 없음. 지금 실측은 상한을 지지하지 않는다 — 위 주석 참고 */
   greenTo: 100,
+  /* 억. 호가 슬리피지와 「안 움직여서 0 이 쌓이는」 것 둘 다 여기서 막힌다 */
+  minTradeValue: 100,
   checks: [
     // ---------------- 추세 ----------------
     {
@@ -1708,6 +1744,13 @@ function mergeConfig(saved: Partial<SignalConfig> | null): SignalConfig {
       Number(saved?.greenTo) <= 100
         ? Number(saved?.greenTo)
         : DEFAULT_CONFIG.greenTo,
+    /* 억. 0 은 「문턱 없음」이라 유효한 값이다 — 음수와 터무니없는 값만 막는다 */
+    minTradeValue:
+      Number.isFinite(saved?.minTradeValue) &&
+      Number(saved?.minTradeValue) >= 0 &&
+      Number(saved?.minTradeValue) <= 100_000
+        ? Number(saved?.minTradeValue)
+        : DEFAULT_CONFIG.minTradeValue,
   };
 }
 
@@ -1742,6 +1785,8 @@ export async function configFingerprint(): Promise<string> {
     `g${c.greenAt}-${c.greenTo}y${c.yellowAt}`,
     /* 커버리지 문턱은 「무엇이 초록이 되나」를 통째로 바꾼다 — 지문에 반드시 넣는다 */
     `mc${c.minCoverage}`,
+    /* 거래대금 하한도 마찬가지다 — 이걸 올리면 초록 집합이 통째로 달라진다 */
+    `tv${c.minTradeValue}`,
     `r${c.riskYellowAt}-${c.riskRedAt}${c.riskBlocksGreen ? "B" : ""}`,
     /* 장세 전환은 점수를 통째로 바꾼다 — 지문에 없으면 「같은 설정」으로 오인된다 */
     `rg${c.regimeSwitch ? c.bullAt : "off"}`,
@@ -1869,6 +1914,10 @@ export interface SignalResult {
   missing?: string[];
   /** 상한(`greenTo`)을 넘어 초록이 막혔나 */
   overHeated?: boolean;
+  /** 그날 거래대금(억) — 못 쟀으면 null */
+  tradeEok?: number | null;
+  /** 거래대금이 `minTradeValue` 미만이라 초록이 막혔나 — 호가가 얇아 못 산다 */
+  tooThin?: boolean;
   /**
    * **지금 장세와, 그 때문에 빠진 기준들** (2026-09-01).
    *
@@ -2184,6 +2233,28 @@ export async function evaluateSignal(
   const closes = chartRows.map((r) => Math.abs(toNum(r.cur_prc))).filter((n) => n > 0);
   const cur = closes[0];
   const flowRows = (flow?.data?.stk_invsr_orgn_chart ?? []) as Record<string, unknown>[];
+
+  /*
+   * ## **거래대금(억)** — 검사 하나가 아니라 판정 전체가 쓴다
+   *
+   * 여태 이 값은 `volume` 검사 안에서만 났다. 그런데 그 검사는 꺼져 있고,
+   * 거래대금은 **켜고 끄는 기준이 아니라 「살 수 있는 종목인가」의 문턱**이다
+   * (`minTradeValue` 주석 참고). 그래서 밖으로 꺼내 한 번만 낸다.
+   *
+   * ⚠️ **장 전에는 오늘 거래량이 0 이다.** 그걸 그대로 재면 매일 아침 모든 종목이
+   * 문턱에 걸려 초록이 하나도 안 나온다 — 「거래가 없다」가 아니라 「아직 안
+   * 열렸다」인데. 오늘이 아직이면 **마지막 거래일**로 물러선다.
+   */
+  const volQty = toNum(info?.data?.trde_qty);
+  const volPrice = Math.abs(toNum(info?.data?.cur_prc));
+  let tradeEok =
+    volQty > 0 && volPrice > 0 ? Math.round((volQty * volPrice) / 100_000_000) : 0;
+  let tradeFromPrevDay = false;
+  if (tradeEok <= 0 && chartRows.length > 0) {
+    /* 일봉은 억이 아니라 백만원이라 /100 이 억이다 */
+    tradeEok = Math.round(toNum(chartRows[0].trde_prica) / 100);
+    tradeFromPrevDay = tradeEok > 0;
+  }
 
   const checks: CheckResult[] = [];
 
@@ -2584,27 +2655,10 @@ export async function evaluateSignal(
         }
       }
     } else if (c.key === "volume") {
-      /*
-       * 거래대금(억).
-       *
-       * ⚠️ **장 전에는 오늘 거래량이 0 이다** (2026-08-31). 예전엔 그걸 그대로 재서
-       * 0억 → 0점을 줬다. 그러면 **매일 아침 모든 종목이 이 항목에서 깎인다** —
-       * 「거래가 없다」가 아니라 「아직 안 열렸다」인데 감점이 되는 것이다.
-       *
-       * 오늘이 아직이면 **마지막 거래일의 거래대금**으로 물러선다. 일봉이 억 단위가
-       * 아니라 백만원이라 /100 이 억이다.
-       */
-      const qty = toNum(info?.data?.trde_qty);
-      const price = Math.abs(toNum(info?.data?.cur_prc));
-      let amount = qty > 0 && price > 0 ? Math.round((qty * price) / 100_000_000) : 0;
-      let fromPrevDay = false;
-      if (amount <= 0 && chartRows.length > 0) {
-        amount = Math.round(toNum(chartRows[0].trde_prica) / 100);
-        fromPrevDay = amount > 0;
-      }
-      if (amount > 0) {
-        g = G(amount);
-        value = `${amount.toLocaleString("ko-KR")}억${fromPrevDay ? " (직전 거래일)" : ""}`;
+      /* 값은 위에서 한 번만 낸다 — 문턱(`minTradeValue`)이 같은 값을 봐야 한다 */
+      if (tradeEok > 0) {
+        g = G(tradeEok);
+        value = `${tradeEok.toLocaleString("ko-KR")}억${tradeFromPrevDay ? " (직전 거래일)" : ""}`;
       }
     } else if (c.key === "targetUpside") {
       /*
@@ -2886,6 +2940,22 @@ export async function evaluateSignal(
   if (lowCoverage && level === "green") level = "yellow";
 
   /*
+   * ## **얇으면 초록을 안 준다** (2026-09-01)
+   *
+   * 벤티지: "신호등 말야 거래대금 최소 100억 이상은 되는 종목으로 해야지.
+   * 호가 슬리피지 나겠어."
+   *
+   * 커버리지 미달과 **같은 방식**이다 — 점수는 그대로 내고 초록만 막는다.
+   * 「얇아서 못 산다」는 종목이 나쁘다는 뜻이 아니라서 빨강으로 찍으면 거짓이 된다.
+   *
+   * ⚠️ 거래대금을 **못 잰 경우(0)에는 막지 않는다.** 장 전이거나 응답이 비었을 때
+   * 0 이 나오는데, 그걸로 막으면 매일 아침 초록이 통째로 사라진다. 위에서 직전
+   * 거래일로 물러섰는데도 0 이면 그건 「모른다」다.
+   */
+  const tooThin = cfg.minTradeValue > 0 && tradeEok > 0 && tradeEok < cfg.minTradeValue;
+  if (tooThin && level === "green") level = "yellow";
+
+  /*
    * **상한** — 기본은 100(꺼짐)이라 아무 일도 안 한다.
    * 실측은 지금 상한을 지지하지 않지만(90~100점이 제일 좋다) 사람이 걸 수 있게
    * 열어 둔 칸이다. 「신호등 분석 > 점수 구간별」 표를 보고 정하면 된다.
@@ -2935,6 +3005,8 @@ export async function evaluateSignal(
     /** 못 잰 기준 이름 — 「무엇이 비어서 초록이 막혔나」 */
     missing: coverPool.filter((c) => c.grade === null).map((c) => c.label),
     overHeated,
+    tradeEok: tradeEok > 0 ? tradeEok : null,
+    tooThin,
     regime: mkt
       ? {
           kind: mkt.regime,

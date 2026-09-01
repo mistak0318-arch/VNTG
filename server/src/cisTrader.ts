@@ -4,6 +4,7 @@ import { evaluateSignal } from "./signalLight.js";
 import { regimeTrust } from "./regimeWatch.js";
 import { listTrackSummary } from "./listTrack.js";
 import { leaderScan, type LeaderStock } from "./leaderScan.js";
+import { getMarketSnapshot } from "./marketSnapshot.js";
 import {
   addTradingDays,
   buy,
@@ -118,6 +119,27 @@ export interface CisRules {
   minScore: number;
   /** 후보의 최소 거래대금 (억) */
   minTradeValue: number;
+  /**
+   * **후보의 최소 시가총액 (억)** — 기본 1,000 (2026-09-01).
+   *
+   * 벤티지: "CIS 말야. 얘도 시총 1000억 이상 거래대금 최소 100억 이상 되는
+   * 종목에서만 거래하게 세팅해놔. 잡주는 안되!"
+   *
+   * ## 왜 거래대금만으로는 모자라나
+   *
+   * 거래대금 문턱은 **오늘 하루**를 본다. 시총 300억짜리가 테마에 걸려 하루
+   * 800억이 돌면 그 문턱을 통과한다 — 그런데 그건 유동성이 아니라 **소나기**다.
+   * 다음 날 30억으로 돌아가면 들고 있는 물량을 못 판다.
+   *
+   * 시총은 그 종목의 **바닥 크기**라 하루 이벤트로 안 변한다. 둘을 같이 걸어야
+   * 「오늘도 돌고 평소에도 큰」 종목만 남는다.
+   *
+   * ⚠️ 이건 실측이 아니라 **벤티지가 정한 규칙**이다. 표본에서는 오히려
+   * 1~3천억 소형주가 가장 좋았고 3천억~10조가 골짜기였다(시가총액 U자).
+   * 다만 그 표본은 **못 사는 것까지 세고 있었다** — 실제로 넣을 수 있는 돈에는
+   * 그 값이 안 나온다. 0 으로 두면 문턱이 없다.
+   */
+  minMarketCap: number;
   /** 시장이 이 아래면 **아무것도 안 산다** */
   minMarketScore: number;
   /**
@@ -165,8 +187,16 @@ export const DEFAULT_RULES: CisRules = {
   /* 신호등 분석 원장을 후보에 더한다 — 조회를 안 늘리면서 보는 자리가 넓어진다 */
   useListTrack: true,
   minScore: 60,
-  /* 500억 미만은 내가 사는 수량에 값이 밀린다 — 모의라도 못 살 걸 샀다고 적지 않는다 */
+  /*
+   * 500억 미만은 내가 사는 수량에 값이 밀린다 — 모의라도 못 살 걸 샀다고 적지 않는다.
+   *
+   * 벤티지가 "거래대금 최소 100억 이상"이라고 했는데 **여기는 이미 500 이라 더
+   * 세다.** 100 으로 내리면 규칙이 느슨해지므로 그대로 둔다 — "잡주는 안되"라는
+   * 말의 방향과 반대가 되기 때문이다. 낮추고 싶으면 화면에서 바꾸면 된다.
+   */
   minTradeValue: 500,
+  /* 시총 1000억 — 하루 소나기로 통과하는 잡주를 막는 바닥 크기 문턱 */
+  minMarketCap: 1000,
   minMarketScore: 40,
   /*
    * 장세 신뢰도 문(2026-08-31) — 기본 켬.
@@ -235,6 +265,39 @@ export async function pickCandidates(
     return { candidates: [], rejected: [], note: "오늘 거래가 아직 없어 후보를 뽑지 않았다." };
   }
 
+  /*
+   * ## **잡주 거르개** (2026-09-01) — 벤티지: "잡주는 안되!"
+   *
+   * 스냅샷에 종목별 **시가총액과 거래대금**이 둘 다 들어 있다. 이미 받아 둔
+   * 것이라 조회가 안 는다. 못 받으면 맵이 비고, 그때는 **거르지 않는다** —
+   * 「모른다」로 후보를 통째로 비우는 게 더 나쁘다.
+   */
+  const capOf = new Map<string, number | null>();
+  const valOf = new Map<string, number | null>();
+  if (rules.minMarketCap > 0) {
+    try {
+      const snap = await getMarketSnapshot(client);
+      for (const [code, r] of snap.byCode) {
+        capOf.set(code, r.marketCap ?? null);
+        valOf.set(code, r.tradeValue ?? null);
+      }
+    } catch {
+      /* 못 받으면 시총 문턱만 못 건다. 거래대금 문턱은 주도주 스캔 값으로 걸린다 */
+    }
+  }
+  /** 이 종목이 문턱을 통과하나 — 못 재면 통과시킨다(「모른다」≠「작다」) */
+  const tooSmall = (code: string, tradeValue?: number): string | null => {
+    const cap = capOf.get(code);
+    if (rules.minMarketCap > 0 && cap !== null && cap !== undefined && cap < rules.minMarketCap) {
+      return `시총 ${Math.round(cap).toLocaleString("ko-KR")}억 < ${rules.minMarketCap}억`;
+    }
+    const tv = tradeValue !== undefined && tradeValue > 0 ? tradeValue : valOf.get(code);
+    if (rules.minTradeValue > 0 && tv !== null && tv !== undefined && tv > 0 && tv < rules.minTradeValue) {
+      return `거래대금 ${Math.round(tv).toLocaleString("ko-KR")}억 < ${rules.minTradeValue}억`;
+    }
+    return null;
+  };
+
   const pool = scan.stocks
     .filter((s) => s.tradeValue >= rules.minTradeValue)
     .slice(0, 30);
@@ -244,6 +307,13 @@ export async function pickCandidates(
 
   for (const s of pool) {
     const base = toCandidate(s, scan);
+    /* 거래대금은 위에서 걸렀고, 여기서 시총을 본다 */
+    const small = tooSmall(s.code, s.tradeValue);
+    if (small) {
+      base.rejected = small;
+      bad.push(base);
+      continue;
+    }
     /*
      * 신호등은 한 종목씩 부르는 무거운 조회라 **후보에만** 쓴다. 실패하면 그 종목만
      * 신호등 없이 간다 — 하나 실패했다고 그날 전체를 못 하게 만들 이유가 없다.
@@ -295,12 +365,39 @@ export async function pickCandidates(
       }
       for (const { e, lists } of byCode.values()) {
         if (e.score < rules.minScore) continue;
+        /*
+         * ⚠️ **이 갈래에는 거르개가 아예 없었다** (2026-09-01 발견).
+         *
+         * 주도주 갈래는 `minTradeValue` 로 걸렀는데 여기는 점수만 보고 `tradeValue: 0`
+         * 으로 밀어 넣었다. 원장에 담긴 초록이면 무조건 후보가 됐다는 뜻이라,
+         * 잡주가 새는 자리가 정확히 여기였다.
+         */
+        const small = tooSmall(e.code);
+        if (small) {
+          bad.push({
+            code: e.code,
+            name: e.name,
+            price: e.addedPrice,
+            changeRate: 0,
+            tradeValue: valOf.get(e.code) ?? 0,
+            sector: "",
+            signalScore: e.score,
+            signalLevel: "green",
+            leaderScore: 0,
+            score: e.score,
+            used: [`신호등 분석:${lists.length}목록`],
+            why: `${lists.length}개 목록에서 초록 · ${e.seenCount}일째`,
+            rejected: small,
+          });
+          continue;
+        }
         out.push({
           code: e.code,
           name: e.name,
           price: e.addedPrice,
           changeRate: 0,
-          tradeValue: 0,
+          /* 스냅샷에서 채운다 — 0 으로 두면 화면이 「거래 없음」으로 읽는다 */
+          tradeValue: valOf.get(e.code) ?? 0,
           sector: "",
           signalScore: e.score,
           signalLevel: "green",

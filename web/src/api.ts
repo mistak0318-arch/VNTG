@@ -3162,6 +3162,10 @@ export interface SignalResult {
   missing?: string[];
   /** 상한을 넘어 초록이 막혔나 */
   overHeated?: boolean;
+  /** 그날 거래대금(억) — 못 쟀으면 null */
+  tradeEok?: number | null;
+  /** 거래대금이 문턱 미만이라 초록이 막혔나 — 호가가 얇아 못 산다 */
+  tooThin?: boolean;
   evaluatedAt: string;
 }
 
@@ -3420,6 +3424,17 @@ export interface SignalConfig {
    * 착시였다. 칸은 열어 두지만 켜면 가장 좋은 구간을 버린다.
    */
   greenTo: number;
+  /**
+   * **거래대금 하한(억)** — 이만큼 안 도는 종목에는 초록을 주지 않는다. 기본 100.
+   *
+   * 벤티지: "호가 슬리피지 나겠어." 그리고 더 조용한 이유가 하나 더 있다 —
+   * 거래가 거의 없는 종목은 종가가 며칠씩 안 변해 수익률이 `0` 으로 쌓이고,
+   * 그 0 들이 시장 기준선을 끌어올려 **모든 기준이 실제보다 나빠 보이게** 만든다
+   * (실측: 문턱 없이 20일 중앙값 -5.36% → 10억 문턱에서 -11.23%).
+   *
+   * 점수는 그대로 내고 초록만 막는다. 못 잰 경우(0)에는 막지 않는다. 0 이면 문턱 없음.
+   */
+  minTradeValue: number;
 }
 
 /**
@@ -5395,6 +5410,13 @@ export interface CisRules {
   maxHoldDays: number;
   minScore: number;
   minTradeValue: number;
+  /**
+   * **최소 시가총액(억)** — 기본 1,000 (2026-09-01). 벤티지: "잡주는 안되!"
+   *
+   * 거래대금만으로는 부족하다 — 시총 300억짜리가 테마에 걸려 하루 800억이 돌면
+   * 통과하지만 그건 유동성이 아니라 소나기다. 다음 날 30억으로 돌아가면 못 판다.
+   */
+  minMarketCap: number;
   minMarketScore: number;
   trailAfterPct: number;
 }

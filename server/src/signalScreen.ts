@@ -6,7 +6,7 @@ import { cumulativeRank } from "./cumulativeRank.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
 import { COMMON_PARAMS, findSpec } from "./rankSpecs.js";
-import { evaluateSignal, type Level, type SignalResult } from "./signalLight.js";
+import { evaluateSignal, getConfig, type Level, type SignalResult } from "./signalLight.js";
 import { getCommonStockCodes } from "./stockListCache.js";
 import { stockLens, themeMapNow } from "./stockLens.js";
 
@@ -67,6 +67,16 @@ export interface ScreenJob {
   minLevel: Level;
   /** 어느 목록에서 찾았나 — SCREEN_UNIVERSES 의 key */
   universe: string;
+  /**
+   * 거래대금이 모자라 **보기 전에 뺀** 종목 수 (2026-09-01).
+   *
+   * 화면이 「200 중 60만 봤다」를 말할 수 있어야 한다. 안 그러면 목록이 짧게
+   * 나온 이유를 아무도 모른다 — 실제로 보통주 필터가 반쪽 응답을 굳혔을 때
+   * 「200 중 60종목」이 정직하게 찍혀 있었는데 그게 이상하다는 걸 못 알아봤다.
+   */
+  thinSkipped?: number;
+  /** 그때 쓴 거래대금 하한(억) */
+  minTradeValue?: number;
   startedAt: string;
   error?: string;
 }
@@ -842,7 +852,32 @@ export function startScreen(
 
   void (async () => {
     try {
-      const universe = await fetchUniverse(client, uniKey, market, limit);
+      const raw = await fetchUniverse(client, uniKey, market, limit);
+
+      /*
+       * ## **얇은 종목은 아예 안 본다** (2026-09-01)
+       *
+       * 벤티지: "신호등 말야 거래대금 최소 100억 이상은 되는 종목으로 해야지.
+       * 호가 슬리피지 나겠어."
+       *
+       * `evaluateSignal` 이 어차피 초록을 막지만(`tooThin`), 여기서 미리 빼야
+       * **조회를 아낀다.** 종목당 여러 TR 이 나가고 0.26초씩 쉬므로, 못 살 종목
+       * 백 개를 도는 동안 진짜 후보 백 개를 못 본다.
+       *
+       * ⚠️ 거래대금이 **0(모른다)이면 빼지 않는다.** 주체별 순매수 목록처럼
+       * 원장에서 세운 모집단은 스냅샷을 못 메우면 0 이 남는데, 그걸로 빼면
+       * 그 목록이 통째로 사라진다. 판정 단계에서 다시 걸린다.
+       *
+       * `Candidate.tradeValue` 는 키움과 같은 **백만원**이다 — /100 이 억.
+       */
+      const cfg = await getConfig();
+      const floor = cfg.minTradeValue;
+      const universe =
+        floor > 0
+          ? raw.filter((u) => u.tradeValue <= 0 || Math.round(u.tradeValue / 100) >= floor)
+          : raw;
+      job.thinSkipped = raw.length - universe.length;
+      job.minTradeValue = floor;
       job.total = universe.length;
       /* 렌즈 — 테마 강도 한 벌을 잡 시작에 받아 두고(수십 ms) 걸린 종목마다 붙인다 */
       const themeMap = await themeMapNow().catch(() => new Map() as Awaited<ReturnType<typeof themeMapNow>>);
