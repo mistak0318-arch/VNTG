@@ -1014,7 +1014,10 @@
       "Bash(time gzip -6 -c 2026-08-28.jsonl)",
       "Bash(gzip -6 -c 2026-08-28.jsonl)",
       "Read(//k/0000 3740 프로젝트 \\\\\\(경제적자유\\\\\\)/**)",
-      "Bash(awk '{print \"압축 \" $5}')"
+      "Bash(awk '{print \"압축 \" $5}')",
+      "Bash(curl -s http://localhost:4000/api/signal/config -o cfg.json)",
+      "Bash(curl -s -X PUT http://localhost:4000/api/signal/config -H \"Content-Type: application/json\" --data-binary @cfg2.json -o /dev/null)",
+      "Bash(curl -s http://localhost:4000/api/signal/config)"
     ]
   }
 }
