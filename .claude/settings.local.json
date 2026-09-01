@@ -1025,7 +1025,10 @@
       "Bash(curl -s -X POST http://localhost:4000/api/signal/cond/start -H \"Content-Type: application/json\" -d '{\"universe\":\"foreign-period\",\"limit\":20,\"lines\":[{\"key\":\"trend\",\"op\":\"pass\"}]}' --max-time 20)",
       "Bash(curl -s -X POST http://localhost:4000/api/signal/collect/daily -H \"Content-Type: application/json\" -d '{\"codes\":[\"005930\",\"000660\",\"035720\"],\"back\":60}' --max-time 20)",
       "Bash(curl -s http://localhost:4000/api/data/ledger -o L.json)",
-      "Bash(rm -f L.json)"
+      "Bash(rm -f L.json)",
+      "Bash(python -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\(f\\\\\"가동 {int\\(d['uptimeSec']\\)}초\\\\\"\\)\")",
+      "Bash(curl -s http://localhost:4000/api/data/ledger)",
+      "Bash(curl -s http://localhost:4000/api/market/daily-closes/progress)"
     ]
   }
 }

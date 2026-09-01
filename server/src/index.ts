@@ -68,7 +68,7 @@ import { createFocusRouter } from "./routes/focus.js";
 import { createRealtimeRouter } from "./routes/realtime.js";
 import { startRealtimeScheduler } from "./realtimeHub.js";
 import { startBrokerAuto } from "./brokerAuto.js";
-import { startCollectScheduler } from "./collectScheduler.js";
+import { startAfterCloseScheduler } from "./afterClose.js";
 import { syncScoreBands } from "./scoreBandSync.js";
 import { closeStaleRuns } from "./dailyStore.js";
 import { createSignalRouter } from "./routes/signal.js";
@@ -82,8 +82,6 @@ import { createKeywordRouter } from "./routes/keyword.js";
 import { createDisclosureRouter } from "./routes/disclosure.js";
 import { startDisclosureScheduler } from "./disclosureAlert.js";
 import { startKeywordScheduler } from "./keywordAlert.js";
-import { startSignalTrackScheduler } from "./signalTrack.js";
-import { startSuperSignalScheduler } from "./superSignal.js";
 import { startBacktestGridScheduler } from "./backtest.js";
 import { startLeaderScanScheduler } from "./leaderScan.js";
 import { createEventPlayRouter } from "./routes/eventPlay.js";
@@ -269,9 +267,15 @@ startEtfHoldersScheduler(client);
 startThemeScheduler();
 /* 전종목 일봉 캐시 — 하루 1회(16시 이후). 테마 5·20일 누적과 신호등이 같이 쓴다 */
 startClosesScheduler(client);
-startSignalTrackScheduler(client);
+/*
+ * ⚠️ **꺼 뒀다** (2026-09-01) — `afterClose` 파이프라인이 차례로 부른다.
+ *
+ * 시각으로만 잡혀 있어서 앞 작업이 안 끝나도 다음이 시작했다. 슈퍼신호등이
+ * 일봉보다 먼저 돌고, 신호등 분석이 원장보다 먼저 도는 식이었다.
+ */
+// startSignalTrackScheduler(client);
 /* 추적기 5분 뒤 — 신호등 캐시가 데워진 채로 교집합을 평가한다 */
-startSuperSignalScheduler(client);
+// startSuperSignalScheduler(client);  ← afterClose 가 차례로 부른다
 /* 밤 그리드 — 조건 조합을 자동으로 돌려 리더보드를 채운다 */
 startBacktestGridScheduler(client);
 startLeaderScanScheduler(client);
@@ -298,7 +302,15 @@ startBrokerAuto(client);
  * 쓴다. 장중에 돌리면 다른 화면이 다 느려지고, 장중 값은 미집계라(대차잔고가
  * 0 으로 온다) 담아 봐야 다시 받아야 한다.
  */
-startCollectScheduler(client);
+/*
+ * **마감 뒤 파이프라인** (2026-09-01) — 시각이 아니라 차례로 돈다.
+ *
+ *   일봉 → 원장 → 장세 → 추적기 → 슈퍼신호등 → 신호등 분석 → 표본
+ *
+ * 벤티지: "장 마감하고 일봉이랑 데이터 다 받아오고 나서 트리거를 통해서
+ * 신호등 분석이랑 슈퍼신호등 한번 돌려야 하는 거 아냐?"
+ */
+startAfterCloseScheduler(client);
 
 /*
  * **점수대 그룹 자가 치유** (2026-09-01) — 서버가 뜰 때 한 번.
