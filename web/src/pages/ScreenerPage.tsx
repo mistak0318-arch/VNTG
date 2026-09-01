@@ -177,15 +177,42 @@ function cell(value: unknown, type?: string): { text: string; cls: string } {
 /** 순위 칸들 — 숫자 서너 자리라 좁게 둔다 */
 const RANK_COLS = new Set(["now_rank", "pred_rank", "rank", "prev_rank"]);
 
+/**
+ * 시세분석 탭 (2026-09-02 개편).
+ *
+ * 벤티지: "시세분석에 위쪽에 이걸로 하자 — 거래대금 상위, 시가총액 상위,
+ * 누적등락률 상위, 외국인순매수 상위 (기간 : 1일, 5일, 10일, 20일, 60일),
+ * 주포 수매수 상위 (투신+연기금+사모) (기간 : 1일, 5일, 10일, 20일, 60일),
+ * 수익률 상위고객"
+ *
+ * ## 새로 붙인 둘
+ *
+ * **외국인·주포 순매수 상위**는 전종목 일별 원장에서 세운다 — **조회 0회**다.
+ * 키움 순위 TR 에도 투자자별 매매상위가 있지만 **그날 하루치**라 「닷새 동안
+ * 누가 얼마나 샀나」를 못 묻는다. 그런데 실측에서 성적을 가른 것은 연속성이
+ * 아니라 **기간 합계**였다.
+ *
+ * 기간(1·5·10·20·60일)은 서버 명세(`spec.choices`)가 들고 있어서 화면이 그걸
+ * 읽어 단추를 그린다 — 목록을 양쪽에 적으면 갈라진다.
+ *
+ * ## 앞뒤로 나눈 이유
+ *
+ * 벤티지가 꼽은 여섯을 **앞에** 둔다. 나머지(동일 순매매·연속매매·등락률)는
+ * 지우지 않고 뒤에 남긴다 — 원장을 쌓는 자리가 아니라 그냥 조회라 지울 이유가
+ * 없고, 탭 순서는 어차피 끌어서 바꿀 수 있다(「기본 순서」 단추도 있다).
+ */
 export const SCREENER_TABS = [
   { key: "trade-value", label: "거래대금 상위", kind: "rank" as const },
-  { key: "same-net", label: "기관/외국인 동일 순매매", kind: "page" as const },
-  { key: "cont", label: "기관/외국인 연속매매", kind: "page" as const },
-  { key: "cum", label: "누적등락률 상위", kind: "page" as const },
-  { key: "flu-rate", label: "등락률 상위", kind: "rank" as const },
   /* 키움 순위에는 없어서 시황 스냅샷으로 우리가 세운다 */
   { key: "market-cap", label: "시가총액 상위", kind: "rank" as const },
+  { key: "cum", label: "누적등락률 상위", kind: "page" as const },
+  /* 아래 둘은 전종목 원장에서 세운다 — 조회 0회, 기간을 마음대로 잡는다 */
+  { key: "flow/fgn", label: "외국인 순매수 상위", kind: "rank" as const },
+  { key: "flow/smart", label: "주포 순매수 상위", kind: "rank" as const },
   { key: "top-traders", label: "수익률 상위고객", kind: "page" as const },
+  { key: "same-net", label: "기관/외국인 동일 순매매", kind: "page" as const },
+  { key: "cont", label: "기관/외국인 연속매매", kind: "page" as const },
+  { key: "flu-rate", label: "등락률 상위", kind: "rank" as const },
   { key: "etc", label: "그 밖에", kind: "tree" as const },
 ];
 

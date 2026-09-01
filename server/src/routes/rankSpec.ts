@@ -5,6 +5,7 @@ import { COMMON_PARAMS, findSpec, specGroups, type RankSpec } from "../rankSpecs
 import { getMarketSnapshot } from "../marketSnapshot.js";
 import { bare, extras, toNum } from "../rankExtras.js";
 import { getStockIndex } from "../stockListCache.js";
+import { flowRank, SUBJECT_LABEL, type FlowSubject } from "../dailyStore.js";
 
 /**
  * 시세분석 — 레지스트리에 등록된 순위 조회를 하나의 라우트로 처리한다.
@@ -138,6 +139,119 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         },
         market,
         exchange: "3",
+        rows,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **주체별 순매수 상위** (2026-09-02) — 원장에서 세운다. **조회 0회.**
+   *
+   * 벤티지: "외국인순매수 상위 (기간 : 1일, 5일, 10일, 20일, 60일), 주포 순매수
+   * 상위 (투신+연기금+사모) (기간 : 1일, 5일, 10일, 20일, 60일)"
+   *
+   * ## 왜 원장인가
+   *
+   * 키움 순위 TR 에도 투자자별 매매상위가 있지만 **그날 하루치**다. 「닷새 동안
+   * 누가 얼마나 샀나」는 못 묻는다. 그런데 실측에서 성적을 가른 것은 연속성이
+   * 아니라 **기간 합계**였다 — 닷새 내리 1억씩 산 종목보다 사흘 사고 하루 쉬고
+   * 이틀 산 500억이 미는 쪽이다.
+   *
+   * 전종목 일별 원장이 매일 쌓이므로 그걸 더하면 된다. 조회가 0회이고 기간도
+   * 마음대로 잡을 수 있다 — 그게 이 경로의 존재 이유다.
+   *
+   * ⚠️ **원장이 얕으면 기간이 짧아진다.** 60일을 물어도 원장이 40일뿐이면 40일치
+   * 합이다. `days` 로 실제 더한 날 수를 같이 주고 화면이 그걸 적는다 — 「60일」이라
+   * 적어 놓고 40일을 재면 그건 조용한 거짓말이다.
+   *
+   * `/:key` 보다 **위에** 있어야 한다(아래 주석 참고).
+   */
+  router.get("/flow/:subject", async (req, res, next) => {
+    try {
+      const subject = String(req.params.subject) as FlowSubject;
+      if (!(subject in SUBJECT_LABEL)) {
+        res.status(404).json({ error: "없는 투자자 주체입니다." });
+        return;
+      }
+      /* 화면이 고르는 기간 — 그 밖의 값은 안 받는다 */
+      const span = [1, 5, 10, 20, 60].includes(Number(req.query.span))
+        ? Number(req.query.span)
+        : 5;
+      const limit = Math.min(Math.max(Number(req.query.limit) || 100, 20), 500);
+      const market = ["000", "001", "101"].includes(String(req.query.market))
+        ? String(req.query.market)
+        : "000";
+
+      const { rows: ranked, covered } = await flowRank(subject, span, limit * 3);
+      const snap = await getMarketSnapshot(client);
+      const index = await getStockIndex(client).catch(() => new Map());
+      const want = market === "001" ? "kospi" : market === "101" ? "kosdaq" : null;
+
+      const rows: Record<string, unknown>[] = [];
+      for (const r of ranked) {
+        if (rows.length >= limit) break;
+        /* 순매도는 「순매수 상위」가 아니다 */
+        if (r.net <= 0) continue;
+        const s = snap.byCode.get(r.code);
+        if (!s) continue;
+        if (want && s.market !== want) continue;
+        const e = index.get(r.code);
+        const ex = extras({ cur_prc: String(s.price), now_trde_qty: "0", stk_cd: r.code }, e);
+        rows.push({
+          code: r.code,
+          name: s.name,
+          rank: rows.length + 1,
+          cur_prc: s.price,
+          flu_rt: s.changeRate,
+          ...ex,
+          /* 백만원 → 억. 원장이 키움과 같은 단위(백만원)로 쌓인다 */
+          netEok: Math.round(r.net / 100),
+          /* 실제로 더한 날 수 — 요청한 기간보다 적을 수 있다 */
+          spanDays: r.days,
+        });
+      }
+
+      res.json({
+        spec: {
+          key: `flow-${subject}`,
+          label: `${SUBJECT_LABEL[subject]} 순매수 상위`,
+          columns: [
+            { key: "rank", label: "순위", type: "num" },
+            { key: "cur_prc", label: "현재가", type: "num" },
+            { key: "flu_rt", label: "등락률", type: "num" },
+            { key: "netEok", label: `${span}일 순매수(억)`, type: "num" },
+          ],
+          exchange: false,
+          /*
+           * 기간을 **명세가 들고 있는다** — 화면이 이걸 읽어 단추를 그리므로
+           * 여기만 고치면 화면이 따라온다. 곳마다 목록을 적으면 갈라진다.
+           */
+          choices: [
+            {
+              param: "span",
+              label: "기간",
+              def: "5",
+              options: [
+                { value: "1", label: "1일" },
+                { value: "5", label: "5일" },
+                { value: "10", label: "10일" },
+                { value: "20", label: "20일" },
+                { value: "60", label: "60일" },
+              ],
+            },
+          ],
+          note:
+            `전종목 일별 원장에서 세운 순위입니다 — **조회를 하지 않습니다.** ` +
+            `키움 순위 조회에는 그날 하루치밖에 없어서 「며칠 동안 누가 얼마나 샀나」를 ` +
+            `물을 수가 없습니다. 원장이 ${covered}일치 쌓여 있고, 종목마다 실제로 더한 ` +
+            `날 수가 다를 수 있습니다(원장이 얕으면 그만큼만 더합니다).`,
+        },
+        market,
+        exchange: "3",
+        span,
+        covered,
         rows,
       });
     } catch (err) {
