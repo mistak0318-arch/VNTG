@@ -1085,7 +1085,12 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('spec keys:',Object.keys\\(j.spec||{}\\).join\\(','\\)\\);console.log\\('cols:',\\(j.spec?.columns||[]\\).map\\(c=>c.key\\).join\\(','\\)\\);const r=j.rows?.[0]||{};console.log\\('row keys:',Object.keys\\(r\\).join\\(','\\)\\);console.log\\('row0:',JSON.stringify\\(r\\).slice\\(0,300\\)\\);const nulls=\\(j.rows||[]\\).slice\\(0,20\\).filter\\(x=>x.r60===null\\).length;console.log\\('r60 null 개수\\(20중\\):',nulls\\);}\\)\")",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\).rows?.[0]||{};console.log\\('row keys:',Object.keys\\(r\\).join\\(','\\)\\);}\\)\")",
       "Bash(node -e \"const c=JSON.parse\\(require\\('fs'\\).readFileSync\\('dailyCloses.json','utf8'\\)\\);const b=c.bars['198440']||[];console.log\\('강동씨앤엘 마지막 3봉:',b.slice\\(-3\\).map\\(x=>x.d+':'+x.c\\).join\\(' '\\)\\);console.log\\('builtAt',c.builtAt\\)\")",
-      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const r=j.rows||[];const zero=r.filter\\(x=>x.todayRate===0\\).length;console.log\\('행',r.length,'· 오늘 0% 인 줄',zero\\);console.log\\(r.slice\\(0,3\\).map\\(x=>x.name+' 오늘'+x.todayRate.toFixed\\(2\\)+'% 5일'+x.cumRate.toFixed\\(1\\)+'%'\\).join\\(' | '\\)\\);}\\)\")"
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const r=j.rows||[];const zero=r.filter\\(x=>x.todayRate===0\\).length;console.log\\('행',r.length,'· 오늘 0% 인 줄',zero\\);console.log\\(r.slice\\(0,3\\).map\\(x=>x.name+' 오늘'+x.todayRate.toFixed\\(2\\)+'% 5일'+x.cumRate.toFixed\\(1\\)+'%'\\).join\\(' | '\\)\\);}\\)\")",
+      "Bash(curl -s -m 60 http://localhost:4000/api/signal/market)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('level',j.level,'score',j.score\\);console.log\\('summary',j.summary\\);console.log\\('--- checks'\\);for\\(const c of \\(j.checks||[]\\)\\)console.log\\('  ',String\\(c.label\\).padEnd\\(22\\), 'grade='+String\\(c.grade\\).padStart\\(5\\), 'w='+c.weight, String\\(c.value||''\\).slice\\(0,40\\)\\);}\\)\")",
+      "Bash(cp listTrack.json listTrack.EMPTY.bak)",
+      "Bash(mv listTrack.EMPTY.bak listTrack.json)",
+      "Bash(node -e \"const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('listTrack.json','utf8'\\)\\);console.log\\('entries',j.entries.length,'lastRun',j.lastRunDate\\)\")"
     ]
   }
 }

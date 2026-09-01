@@ -5,7 +5,6 @@ import {
   type SuperGradeRow,
   type SuperStats,
 } from "../api";
-import { Spark } from "../components/MiniLine";
 import { SuperDetailSheet } from "../components/SuperDetailSheet";
 import { RefreshBar } from "../components/RefreshBar";
 import { SortableTh, useSortableTable } from "../useSortableTable";
@@ -356,10 +355,16 @@ const COLS: Col[] = [
       ),
   },
   {
-    key: "spark",
-    label: "점수 흐름",
-    sortable: false,
-    cell: (_e, x) => <Spark values={x.daily.map((d) => d.score)} color="var(--green)" />,
+    /*
+     * **편입가** (2026-09-02) — 신호등 분석 표에는 있는데 여기만 없었다.
+     * 「지금 얼마인가」만 있고 「얼마에 담았나」가 없으면 편입 대비 %가
+     * 어디서 나온 숫자인지 확인할 길이 없다.
+     */
+    key: "addedPrice",
+    label: "편입가",
+    num: true,
+    accessor: (e) => e.addedPrice ?? -1,
+    cell: (e) => (e.addedPrice ? e.addedPrice.toLocaleString("ko-KR") : "-"),
   },
   {
     key: "price",
@@ -379,7 +384,7 @@ const COLS: Col[] = [
   },
   {
     key: "theme",
-    label: "테마",
+    label: "무리",
     hint: "든 네이버 테마 중 오늘 가장 강한 것 — 식으면 이탈이 가깝다",
     accessor: (e) => e.theme?.changeRate ?? -9999,
     cell: (e) =>
@@ -410,18 +415,6 @@ const COLS: Col[] = [
     accessor: (e) => e.sinceAdded ?? -9999,
     tone: (e) => e.sinceAdded,
     cell: (e) => pct(e.sinceAdded),
-  },
-  {
-    key: "priceSpark",
-    label: "주가 흐름",
-    sortable: false,
-    cell: (e, x) => (
-      <Spark
-        values={x.daily.map((d) => (d.close > 0 ? d.close : null))}
-        color="var(--blue)"
-        refY={e.addedPrice}
-      />
-    ),
   },
   {
     key: "d1",
@@ -509,6 +502,34 @@ const COLS: Col[] = [
       ) : (
         <span className={e.afterExit.d20 > 0 ? "negative" : "positive"}>{pct(e.afterExit.d20)}</span>
       ),
+  },
+  {
+    /*
+     * **장세** (2026-09-02) — 편입일의 시장 상태. 신호등 분석과 같은 칸이다.
+     *
+     * 폭이 좁은 날의 초록은 실측에서 시장에 -2.15%p 졌다. 그런 날 담은
+     * 종목인지 아닌지는 성적을 읽을 때 먼저 보게 되는 값이다.
+     *
+     * 두 글자로 적고 폭·신고가는 툴팁에 둔다 — 「정상 (폭 57.1%)」이 줄마다
+     * 되풀이되면 칸만 넓게 먹고 아무것도 안 알려 준다.
+     */
+    key: "regime",
+    label: "장세",
+    sortable: false,
+    cell: (e) => (
+      <span
+        className={`lt-regime ${e.regime?.weak ? "negative" : ""}`}
+        title={
+          e.regime
+            ? `편입일 시장 폭 ${e.regime.breadth ?? "-"}% · 신고가 ${e.regime.newHigh ?? "-"}${
+                e.regime.weak ? " — 폭이 좁은 날의 초록은 실측에서 시장에 -2.15%p 졌습니다" : ""
+              }`
+            : "편입일 장세를 못 읽었습니다"
+        }
+      >
+        {e.regime ? (e.regime.weak ? "약함" : "정상") : "-"}
+      </span>
+    ),
   },
   {
     key: "note",
@@ -633,7 +654,54 @@ export function SuperDashboardPage({
    * 달라질 수도 있으니깐"). 시세분석 표와 같은 훅·같은 저장소(서버, 기기 공유).
    * ⚠️ 머리와 몸이 **같은 배열**을 돌아야 한다 — 따로 적으면 한쪽만 옮겨져 표가 어긋난다.
    */
-  const colOrder = useCardOrder("super.cols", COLS.map((c) => c.key));
+  /*
+   * ## **신호등 분석 표와 같은 차례** (2026-09-02)
+   *
+   * 벤티지: "슈퍼신호등도 일반 신호등이랑 표 똑같이 만들자" / "이거 신호등
+   * 분석이랑 동일하게 맞추라니깐 이미 클릭하면 나오는 대시보드에 차트 녹였잖아"
+   *
+   * 두 원장은 편입 규칙만 다르고 보는 것이 똑같다. 표가 다르면 눈이 매번
+   * 다시 적응해야 하고, 같은 값을 다른 이름으로 부르면(「테마」 vs 「무리」)
+   * 두 화면을 견줄 수가 없다.
+   *
+   * **COLS 배열은 안 건드리고 기본 차례만 여기서 정한다** — 배열을 옮기면
+   * 셀 정의까지 통째로 움직여서 실수가 나기 쉽다. 저장해 둔 순서가 있으면
+   * 그게 이긴다(사람이 끌어 놓은 것이 우선이다).
+   *
+   * 앞쪽 열여덟은 신호등 분석과 **같은 순서·같은 이름**이고, 뒤쪽 다섯
+   * (지수대비 +1·+5 · 이탈 후 +5·+20 · 메모)은 슈퍼 원장에만 있는 값이다.
+   *
+   * ⚠️ 「점수 흐름」·「주가 흐름」 스파크라인은 뺐다 — 행을 누르면 열리는 시트에
+   * **두 곡선을 겹쳐** 그리므로(점수 왼쪽 축, 주가 오른쪽 축) 표에서 따로 볼
+   * 이유가 없어졌다. 오히려 떨어져 있으면 시점을 눈으로 맞춰야 했다.
+   */
+  const DEFAULT_COL_ORDER = [
+    "state",
+    "name",
+    "lists",
+    "score",
+    "seen",
+    "dsince",
+    "added",
+    "addedPrice",
+    "price",
+    "today",
+    "since",
+    "theme",
+    "etfBack",
+    "d1",
+    "d5",
+    "d20",
+    "ex20",
+    "regime",
+    /* 여기부터는 슈퍼 원장에만 있는 것 */
+    "ex1",
+    "ex5",
+    "ax5",
+    "ax20",
+    "note",
+  ];
+  const colOrder = useCardOrder("super.cols", DEFAULT_COL_ORDER);
   const orderedCols = [...COLS].sort((a, b) => colOrder.orderOf(a.key) - colOrder.orderOf(b.key));
 
   const sort = useSortableTable(ranked);

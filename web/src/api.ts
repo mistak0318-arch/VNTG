@@ -2473,6 +2473,14 @@ export interface SuperExit {
 
 export interface SuperEntry {
   /**
+   * **편입 당시 장세** — 서버는 처음부터 보내고 있었는데 타입에만 없었다
+   * (2026-09-02). 그래서 화면이 이 값을 쓸 수가 없었다.
+   *
+   * 폭이 좁은 날의 초록은 실측에서 시장에 -2.15%p 졌다. 그런 날 담은 종목인지는
+   * 성적을 읽을 때 먼저 보게 되는 값이다.
+   */
+  regime?: { breadth: number | null; newHigh: number | null; weak: boolean };
+  /**
    * 편입일로부터 며칠 (2026-08-31). **편입 당일은 0.**
    * `seenCount`(걸린 날 수)와 다른 질문의 답이다 — 8/28 편입 후 다시 안 걸렸으면
    * seenCount 는 1 인데 오늘이 8/31 이면 여기는 3 이다.

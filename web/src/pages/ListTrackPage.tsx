@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { SuperDetailSheet } from "../components/SuperDetailSheet";
+import { useCardOrder } from "../useCardOrder";
+import { OrderResetButton } from "../components/OrderResetButton";
 import { api, type ListTrackSummary, type ListTrackRow } from "../api";
 /* 접기 — 조건 검색과 **같은 훅**을 쓴다. 열쇠 접두사(`lt`)는 그대로라 접어 둔 상태가 이어진다 */
 import { useFold as useFoldBase } from "../useFold";
@@ -60,6 +62,20 @@ export function ListTrackPage({
    * 편입 후 시장·테마 대비 어땠나, 점수는 어떻게 흘렀나, 수급은 누가 샀나.
    */
   const [sheet, setSheet] = useState<{ code: string; name: string } | null>(null);
+  /*
+   * **열 순서** (2026-09-02) — 슈퍼신호등 표와 같은 훅·같은 저장소(서버, 기기 공유).
+   *
+   * 벤티지: "각 표에 열을 내가 드래그해서 바꿀수 있게 해달라고 했잖아" /
+   * "기본 열 순서 버튼"
+   *
+   * 슈퍼신호등 표에만 붙어 있고 여기는 없었다 — 같은 것을 보는 두 표인데
+   * 한쪽만 만질 수 있으면 나란히 놓고 견줄 수가 없다.
+   *
+   * ⚠️ 머리와 몸이 **같은 배열**을 돌아야 한다. 따로 적으면 한쪽만 옮겨져
+   * 표가 통째로 어긋난다.
+   */
+  const colOrder = useCardOrder("listTrack.cols", LT_COLS.map((c) => c.key));
+  const orderedCols = [...LT_COLS].sort((a, b) => colOrder.orderOf(a.key) - colOrder.orderOf(b.key));
   const [openSum, toggleSum, setSum] = useFold("summary", true);
   const [openGrade, toggleGrade, setGrade] = useFold("grade", false);
   /*
@@ -368,6 +384,7 @@ export function ListTrackPage({
         >
           이탈 포함 {showExited ? "켬" : "끔"}
         </button>
+        <OrderResetButton order={colOrder} what="열 순서" />
       </div>
 
       {counts && (
@@ -395,24 +412,17 @@ export function ListTrackPage({
             */}
             <thead>
               <tr>
-                <th>상태</th>
-                <th>종목</th>
-                <th className="num" title="편입일 그 목록에서의 자리">순위</th>
-                <th className="num">점수</th>
-                <th className="num" title="그 목록에 며칠째 이어서 걸렸나">반복</th>
-                <th className="num" title="편입일로부터 며칠(달력일). 반복과 다른 질문의 답이다">경과</th>
-                <th>편입일</th>
-                <th className="num">편입가</th>
-                <th className="num">현재가</th>
-                <th className="num">당일</th>
-                <th className="num" title="편입가 대비 — 담고 나서 얼마나">편입 대비</th>
-                <th title="이 종목이 든 테마 중 오늘 가장 강한 것. 무리가 식으면 이탈이 가깝다">무리</th>
-                <th className="num" title="이 종목을 많이 담은 상위 3 ETF 의 오늘 평균">ETF 뒷배</th>
-                <th className="num">+1일</th>
-                <th className="num">+5일</th>
-                <th className="num">+20일</th>
-                <th className="num" title="지수 대비 초과수익 — 이게 없으면 위의 셋은 뜻이 없다">지수대비 +20</th>
-                <th title="편입일의 시장 상태 — 마우스를 올리면 폭·신고가가 나옵니다">장세</th>
+                {orderedCols.map((c) => (
+                  <th
+                    key={c.key}
+                    className={`${c.num ? "num" : ""}${colOrder.drag.cls(c.key)}`}
+                    title={c.hint}
+                    {...colOrder.drag.props(c.key)}
+                  >
+                    {c.label}
+                  </th>
+                ))}
+                {/* 삭제는 드래그 밖 — 늘 맨 끝이어야 손이 기억한다 */}
                 <th title="원장에서 뺍니다">삭제</th>
               </tr>
             </thead>
@@ -421,6 +431,7 @@ export function ListTrackPage({
                 <Row
                   key={`${e.list}:${e.code}`}
                   e={e}
+                  cols={orderedCols}
                   onOpen={(c, n) => setSheet({ code: c, name: n })}
                   onRemove={remove}
                 />
@@ -435,7 +446,26 @@ export function ListTrackPage({
         물으려면 있어야 합니다. <b>반복</b>은 그 목록에 며칠째 이어서 걸렸나입니다.
         <b>장세</b>는 편입일의 시장 상태입니다 — 마우스를 올리면 폭·신고가가 나옵니다
         (폭이 좁은 날의 초록은 실측에서 시장에 -2.15%p 졌습니다). 행을 누르면{" "}
-        <b>흐름 상세</b>(주가·점수·수급·이탈 기록)가 열립니다.
+        <b>흐름 상세</b>(주가·점수·수급·이탈 기록)가 열립니다. 열 머리를 끌면 순서를
+        바꿀 수 있고, 「↺ 기본 열 순서」로 되돌립니다.
+        <br />
+        {/*
+          **이탈 기준을 화면에 적는다** (2026-09-02 — 벤티지: "일반 신호등에
+          이탈 기준이랑 …").
+
+          슈퍼신호등 시트에는 「신호등이 이틀 연속 초록에서 떨어지면 자동
+          이탈됩니다」가 적혀 있는데 이 표에는 없었다. ⛔ 표시만 보고는 왜
+          빠졌는지, 다시 들어올 수 있는지를 알 수가 없다.
+        */}
+        <b>편입</b>은 그 목록 상위 500 안에 있고 신호등이 <b>초록</b>일 때입니다.{" "}
+        <b>이탈</b>은 <b>이틀 연속</b> 그 목록의 초록에서 빠졌을 때입니다 — 하루 노랑을
+        스치고 돌아오는 종목이 흔해서 하루로는 안 뺍니다. 이탈해도 <b>기록은 지우지
+        않고</b>(⛔ 로 남습니다) 다시 걸리면 자동으로 되살아납니다. 「이탈 포함 켬」으로
+        볼 수 있습니다.
+        <br />
+        <b>슈퍼신호등과 편입·이탈 규칙이 똑같습니다</b> — 그래야 두 원장의 차이가
+        「교집합을 봤나 안 봤나」 하나로 좁혀집니다. 규칙이 다르면 무엇 때문에 갈렸는지
+        알 수 없습니다.
       </div>
 
       {/*
@@ -468,83 +498,167 @@ function Ret({ v }: { v: number | null | undefined }) {
   );
 }
 
-function Row({
-  e,
-  onOpen,
-  onRemove,
-}: {
-  e: ListTrackRow;
-  /** 행을 누르면 상세 시트 — 슈퍼신호등과 같은 컴포넌트다 */
-  onOpen: (code: string, name: string) => void;
-  onRemove: (code: string, name: string) => void;
-}) {
-  return (
-    <tr onClick={() => onOpen(e.code, e.name)} style={{ cursor: "pointer" }}>
-      <td>
+
+/**
+ * 표의 열 — **정의를 한군데 둔다** (2026-09-02).
+ *
+ * 예전엔 `<thead>` 와 `Row` 가 각자 열을 적고 있었다. 그러면 열 순서를 사람이
+ * 바꿀 수가 없고(둘을 같이 돌려야 하니까), 하나만 고치면 표가 통째로 어긋난다.
+ * 슈퍼신호등 표는 처음부터 이 꼴이라 드래그가 됐고 여기만 안 됐다.
+ *
+ * ⚠️ 「삭제」는 이 목록에 **없다.** 열 순서를 바꿔도 늘 맨 끝이어야 손이
+ * 기억한다 — 지우는 단추가 자리를 옮겨 다니면 잘못 누른다.
+ */
+interface LtCol {
+  key: string;
+  label: string;
+  hint?: string;
+  num?: boolean;
+  /** 정렬용 값 — 없으면 그 열로는 정렬하지 않는다 */
+  accessor?: (e: ListTrackRow) => string | number;
+  cell: (e: ListTrackRow) => React.ReactNode;
+  className?: (e: ListTrackRow) => string;
+}
+
+const LT_COLS: LtCol[] = [
+  {
+    key: "state",
+    label: "상태",
+    accessor: (e) => (e.active !== false ? 1 : 0),
+    cell: (e) => (
+      <>
         {e.active !== false ? "🟢" : "⛔"}
         {e.isNew && <i className="lt-new">N</i>}
-      </td>
-      <td>
+      </>
+    ),
+  },
+  {
+    key: "name",
+    label: "종목",
+    accessor: (e) => e.name,
+    cell: (e) => (
+      <>
         <WatchStar code={e.code} />
         <b>{e.name}</b> <SuperMark code={e.code} />
         <span className="pt-n"> {e.code}</span>
-      </td>
-      <td className="num">{e.rank}</td>
-      <td className="num">{e.score}</td>
-      <td className="num">{e.seenCount}일</td>
-      <td className="num pt-n">{e.daysSince}일</td>
-      <td>{e.addedDate.slice(5)}</td>
-      <td className="num">{e.addedPrice.toLocaleString("ko-KR")}</td>
-      <td className="num">{e.price === null ? "-" : e.price.toLocaleString("ko-KR")}</td>
-      <td className={`num ${cls(e.changeRate)}`}>
-        {e.changeRate === null
-          ? "-"
-          : `${e.changeRate > 0 ? "+" : ""}${e.changeRate.toFixed(2)}%`}
-      </td>
-      <td className="num">
-        <Ret v={e.sinceAdded} />
-      </td>
-      {/* 무리 — 걸린 종목의 테마가 식으면 이탈이 가깝다 */}
-      <td className="pt-n">
-        {e.theme ? (
-          <>
-            {e.theme.name}{" "}
-            <span className={cls(e.theme.changeRate)}>
-              {e.theme.changeRate > 0 ? "+" : ""}
-              {e.theme.changeRate.toFixed(1)}%
-            </span>
-            {e.theme.streak > 1 && <i className="lt-streak">{e.theme.streak}일↑</i>}
-          </>
-        ) : (
-          "-"
-        )}
-      </td>
-      <td className={`num ${cls(e.etfBack?.rate ?? null)}`} title={e.etfBack?.top}>
-        {e.etfBack
-          ? `${e.etfBack.rate > 0 ? "+" : ""}${e.etfBack.rate.toFixed(2)}%`
-          : "-"}
-      </td>
-      <td className="num">
-        <Ret v={e.returns?.d1} />
-      </td>
-      <td className="num">
-        <Ret v={e.returns?.d5} />
-      </td>
-      <td className="num">
-        <Ret v={e.returns?.d20} />
-      </td>
-      <td className="num">
-        <Ret v={e.excess?.d20} />
-      </td>
-      {/*
-        **장세는 한 글자로** (2026-09-01 — 벤티지: "쟤는 쓸데없이 너무 길다").
-
-        「정상 (폭 57.1%)」이 줄마다 되풀이되면서 칸을 제일 넓게 먹고 있었다.
-        같은 날 편입한 종목은 값이 전부 같으니 그 넓이만큼 아무것도 안 알려 준다.
-        폭 숫자는 마우스를 올리면 나온다.
-      */}
-      <td
-        className={`lt-regime ${e.regime?.weak ? "negative" : ""}`}
+      </>
+    ),
+  },
+  {
+    key: "rank",
+    label: "순위",
+    hint: "편입일 그 목록에서의 자리",
+    num: true,
+    accessor: (e) => e.rank,
+    cell: (e) => e.rank,
+  },
+  { key: "score", label: "점수", num: true, accessor: (e) => e.score, cell: (e) => e.score },
+  {
+    key: "seen",
+    label: "반복",
+    hint: "그 목록에 며칠째 이어서 걸렸나",
+    num: true,
+    accessor: (e) => e.seenCount,
+    cell: (e) => `${e.seenCount}일`,
+  },
+  {
+    key: "dsince",
+    label: "경과",
+    hint: "편입일로부터 며칠(달력일). 반복과 다른 질문의 답이다",
+    num: true,
+    accessor: (e) => e.daysSince,
+    cell: (e) => <span className="pt-n">{e.daysSince}일</span>,
+  },
+  {
+    key: "added",
+    label: "편입일",
+    accessor: (e) => e.addedDate,
+    cell: (e) => e.addedDate.slice(5),
+  },
+  {
+    key: "addedPrice",
+    label: "편입가",
+    num: true,
+    accessor: (e) => e.addedPrice,
+    cell: (e) => e.addedPrice.toLocaleString("ko-KR"),
+  },
+  {
+    key: "price",
+    label: "현재가",
+    num: true,
+    accessor: (e) => e.price ?? -1,
+    cell: (e) => (e.price === null ? "-" : e.price.toLocaleString("ko-KR")),
+  },
+  {
+    key: "today",
+    label: "당일",
+    num: true,
+    accessor: (e) => e.changeRate ?? -999,
+    className: (e) => cls(e.changeRate),
+    cell: (e) =>
+      e.changeRate === null ? "-" : `${e.changeRate > 0 ? "+" : ""}${e.changeRate.toFixed(2)}%`,
+  },
+  {
+    key: "since",
+    label: "편입 대비",
+    hint: "편입가 대비 — 담고 나서 얼마나",
+    num: true,
+    accessor: (e) => e.sinceAdded ?? -999,
+    cell: (e) => <Ret v={e.sinceAdded} />,
+  },
+  {
+    key: "theme",
+    label: "무리",
+    hint: "이 종목이 든 테마 중 오늘 가장 강한 것. 무리가 식으면 이탈이 가깝다",
+    accessor: (e) => e.theme?.changeRate ?? -999,
+    cell: (e) =>
+      e.theme ? (
+        <span className="pt-n">
+          {e.theme.name}{" "}
+          <span className={cls(e.theme.changeRate)}>
+            {e.theme.changeRate > 0 ? "+" : ""}
+            {e.theme.changeRate.toFixed(1)}%
+          </span>
+          {e.theme.streak > 1 && <i className="lt-streak">{e.theme.streak}일↑</i>}
+        </span>
+      ) : (
+        "-"
+      ),
+  },
+  {
+    key: "etfBack",
+    label: "ETF 뒷배",
+    hint: "이 종목을 많이 담은 상위 3 ETF 의 오늘 평균",
+    num: true,
+    accessor: (e) => e.etfBack?.rate ?? -999,
+    className: (e) => cls(e.etfBack?.rate ?? null),
+    cell: (e) =>
+      e.etfBack ? `${e.etfBack.rate > 0 ? "+" : ""}${e.etfBack.rate.toFixed(2)}%` : "-",
+  },
+  { key: "d1", label: "+1일", num: true, accessor: (e) => e.returns?.d1 ?? -999, cell: (e) => <Ret v={e.returns?.d1} /> },
+  { key: "d5", label: "+5일", num: true, accessor: (e) => e.returns?.d5 ?? -999, cell: (e) => <Ret v={e.returns?.d5} /> },
+  { key: "d20", label: "+20일", num: true, accessor: (e) => e.returns?.d20 ?? -999, cell: (e) => <Ret v={e.returns?.d20} /> },
+  {
+    key: "ex20",
+    label: "지수대비 +20",
+    hint: "지수 대비 초과수익 — 이게 없으면 위의 셋은 뜻이 없다",
+    num: true,
+    accessor: (e) => e.excess?.d20 ?? -999,
+    cell: (e) => <Ret v={e.excess?.d20} />,
+  },
+  {
+    key: "regime",
+    label: "장세",
+    hint: "편입일의 시장 상태 — 마우스를 올리면 폭·신고가가 나옵니다",
+    accessor: (e) => (e.regime?.weak ? 0 : 1),
+    className: (e) => `lt-regime ${e.regime?.weak ? "negative" : ""}`,
+    /*
+      **장세는 두 글자로** (2026-09-01 — 벤티지: "쟤는 쓸데없이 너무 길다").
+      「정상 (폭 57.1%)」이 줄마다 되풀이되며 칸을 제일 넓게 먹고 있었다.
+      같은 날 편입한 종목은 값이 전부 같으니 그 넓이만큼 아무것도 안 알려 준다.
+    */
+    cell: (e) => (
+      <span
         title={
           e.regime
             ? `편입일 시장 폭 ${e.regime.breadth ?? "-"}% · 신고가 ${e.regime.newHigh ?? "-"}${
@@ -554,7 +668,31 @@ function Row({
         }
       >
         {e.regime ? (e.regime.weak ? "약함" : "정상") : "-"}
-      </td>
+      </span>
+    ),
+  },
+];
+
+function Row({
+  e,
+  cols,
+  onOpen,
+  onRemove,
+}: {
+  e: ListTrackRow;
+  /** 지금 차례대로의 열 — 머리와 **같은 배열**이어야 표가 안 어긋난다 */
+  cols: LtCol[];
+  /** 행을 누르면 상세 시트 — 슈퍼신호등과 같은 컴포넌트다 */
+  onOpen: (code: string, name: string) => void;
+  onRemove: (code: string, name: string) => void;
+}) {
+  return (
+    <tr onClick={() => onOpen(e.code, e.name)} style={{ cursor: "pointer" }}>
+      {cols.map((c) => (
+        <td key={c.key} className={`${c.num ? "num " : ""}${c.className?.(e) ?? ""}`.trim()}>
+          {c.cell(e)}
+        </td>
+      ))}
       {/* 삭제 — 시가총액·거래대금이 너무 적어 애초에 볼 게 아니었던 종목 */}
       <td className="lt-del">
         <button
