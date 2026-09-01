@@ -68,6 +68,7 @@ import { createFocusRouter } from "./routes/focus.js";
 import { createRealtimeRouter } from "./routes/realtime.js";
 import { startRealtimeScheduler } from "./realtimeHub.js";
 import { startBrokerAuto } from "./brokerAuto.js";
+import { startCollectScheduler } from "./collectScheduler.js";
 import { createSignalRouter } from "./routes/signal.js";
 import { createPaperRouter } from "./routes/paper.js";
 import { createCisRouter } from "./routes/cis.js";
@@ -287,6 +288,15 @@ startRealtimeScheduler(client);
  * 최대 80종목까지 **초당 1콜**로 돈다 — 제한의 20%만 쓰고 나머지는 남긴다.
  */
 startBrokerAuto(client);
+
+/*
+ * **전종목 일별 수집** (2026-09-01) — 마감 뒤 16:10 에 하루 한 번.
+ *
+ * 종목당 5콜 × 2,444종목이라 한 바퀴 약 41분이고 그동안 키움 한도를 거의 다
+ * 쓴다. 장중에 돌리면 다른 화면이 다 느려지고, 장중 값은 미집계라(대차잔고가
+ * 0 으로 온다) 담아 봐야 다시 받아야 한다.
+ */
+startCollectScheduler(client);
   startDisclosureScheduler();
 
 /**

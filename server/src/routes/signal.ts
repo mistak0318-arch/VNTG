@@ -45,6 +45,8 @@ import {
 } from "../condSearch.js";
 import { COND_FIELDS } from "../condFields.js";
 import { allStocksUniverse } from "../allStocks.js";
+import { collectProgress, startCollectDaily } from "../collectDaily.js";
+import { LEDGER_KINDS, ledgerStatus, type LedgerKind } from "../dailyStore.js";
 import { tradeValueTop } from "../signalScreen.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import {
@@ -218,6 +220,41 @@ export function createSignalRouter(client: KiwoomClient): Router {
       const limit = Math.min(Math.max(Number(req.query.limit) || 100, 10), 500);
       const minValue = Math.max(Number(req.query.minValue) || 10, 0);
       res.json(await allStocksUniverse(client, market, limit, minValue));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **전종목 일별 수집** (2026-09-01) — 종목당 5콜, 한 바퀴 약 41분.
+   *
+   * 벤티지: "지금 로직상에 수집하는 모든것 전종목 기준으로 데이터 다 받아."
+   *
+   * ⚠️ 장중에는 그날 값이 미확정이라 마감 뒤에 도는 것이 맞다. 다만 막지는
+   * 않는다 — 이어 붙이므로 다음 바퀴에 그날 값이 확정본으로 덮인다.
+   */
+  router.post("/collect/daily", (req, res) => {
+    const b = req.body as { kinds?: string[]; back?: number; codes?: string[] };
+    const kinds = (Array.isArray(b?.kinds) ? b.kinds : []).filter((k): k is LedgerKind =>
+      (LEDGER_KINDS as string[]).includes(k),
+    );
+    void startCollectDaily(
+      client,
+      kinds.length > 0 ? kinds : undefined,
+      Math.min(Math.max(Number(b?.back) || 120, 5), 400),
+      Array.isArray(b?.codes) && b.codes.length > 0 ? b.codes.slice(0, 50) : undefined,
+    );
+    res.json({ started: true, progress: collectProgress() });
+  });
+
+  router.get("/collect/daily", (_req, res) => {
+    res.json({ progress: collectProgress() });
+  });
+
+  /** 얼마나 쌓였나 · 한도에 얼마나 왔나 — 「2년 되는 날 알려줘」가 여기서 나온다 */
+  router.get("/collect/status", async (_req, res, next) => {
+    try {
+      res.json(await ledgerStatus());
     } catch (err) {
       next(err);
     }

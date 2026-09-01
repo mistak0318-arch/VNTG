@@ -1003,7 +1003,9 @@
       "Bash(curl -s \"http://localhost:4000/api/signal/screen/universes\")",
       "Bash(curl -s \"http://localhost:4000/api/signal/screen/preview?limit=15\" --max-time 90)",
       "Bash(curl -s http://localhost:4000/api/market/broker-auto)",
-      "Bash(python -m json.tool)"
+      "Bash(python -m json.tool)",
+      "Bash(curl -s -X POST http://localhost:4000/api/signal/collect/daily -H \"Content-Type: application/json\" -d '{\"codes\":[\"005930\",\"000660\",\"035720\"],\"back\":120}' --max-time 20)",
+      "Bash(curl -s http://localhost:4000/api/signal/collect/daily)"
     ]
   }
 }

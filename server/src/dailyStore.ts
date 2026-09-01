@@ -290,8 +290,16 @@ export async function ledgerStatus(): Promise<LedgerStatus> {
   for (let i = 0; i < names.length; i += step) {
     try {
       const l = JSON.parse(await readFile(join(DIR, names[i]), "utf-8")) as DailyLedger;
-      const b = l.bars ?? [];
-      if (b.length === 0) continue;
+      /*
+       * **가장 긴 줄로 잰다.** 처음엔 `bars` 로 쟀는데 이 원장에는 일봉이 없다 —
+       * 일봉은 `dailyCloses` 가 전종목을 따로 들고 있어서 여기서 또 받지 않기
+       * 때문이다. 그래서 현황이 늘 0 이었다. 「며칠치가 쌓였나」는 이 원장이
+       * 실제로 담는 것 중 가장 긴 것으로 봐야 한다.
+       */
+      const b = ([l.flow, l.short, l.loan, l.fgnRatio, l.prog, l.bars] as ({ d: string }[] | undefined)[])
+        .filter((x): x is { d: string }[] => Array.isArray(x) && x.length > 0)
+        .sort((x, y) => y.length - x.length)[0];
+      if (!b || b.length === 0) continue;
       days.push(b.length);
       const f0 = b[0].d;
       const t0 = b[b.length - 1].d;
