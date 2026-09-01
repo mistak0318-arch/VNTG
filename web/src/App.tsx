@@ -172,7 +172,7 @@ const MENU: {
       { key: "watchAi", label: "관심종목 (VNTG)", icon: "⭐" },
       { key: "watchKiwoom", label: "관심종목 (키움연동)", icon: "🔖" },
       { key: "usWatch", label: "관심종목 (해외)", icon: "🌏" },
-      { key: "customTheme", label: "내 테마", icon: "🎯" },
+      { key: "customTheme", label: "내 태그", icon: "🎯" },
       { key: "signalScreen", label: "신호등 찾기", icon: "🚦" },
       /* 슈퍼신호등 검증 대시보드 (2026-08-26) — 걸린 것들이 그 뒤로 어떻게 됐나 */
       { key: "superSignal", label: "슈퍼신호등", icon: "🌟" },

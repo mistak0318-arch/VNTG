@@ -103,12 +103,12 @@ export function SectorMoodPanel({
       */}
 
       {/*
-        내 테마 — 키움 분류 **위**에 둔다. 내가 묶은 것이 먼저 눈에 들어와야 한다.
+        내 태그 — 키움 분류 **위**에 둔다. 내가 묶은 것이 먼저 눈에 들어와야 한다.
         든 게 없으면 줄 자체를 안 그린다(빈 줄이 「없음」보다 조용하다).
       */}
       {myThemes.length > 0 && (
         <div className="mood-mine">
-          <span className="mood-mine-k">내 테마</span>
+          <span className="mood-mine-k">내 태그</span>
           {myThemes.map((t) => (
             <button
               key={t.id}
@@ -119,7 +119,7 @@ export function SectorMoodPanel({
                   kind: "custom",
                   code: t.id,
                   name: t.name,
-                  label: "내 테마",
+                  label: "내 태그",
                   /* 이미 받아온 구성종목을 그대로 넘긴다 — 다시 조회할 이유가 없다 */
                   stocks: t.stocks
                     .filter((x) => x.found)

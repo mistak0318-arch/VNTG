@@ -412,7 +412,7 @@ export function MyThemeStrip({
                 .map((s) => ({
                   code: s.code,
                   name: s.name,
-                  price: 0, // 내 테마 평가엔 가격이 없다 — 등락률만 있다
+                  price: 0, // 내 태그 평가엔 가격이 없다 — 등락률만 있다
                   changeRate: s.changeRate,
                   marketCap: s.marketCap,
                 })),
@@ -449,7 +449,7 @@ export function MyThemeStrip({
           className={`filter-btn ${tab === "kr" ? "active" : ""}`}
           onClick={() => setTab("kr")}
         >
-          내 테마
+          내 태그
         </button>
         <button
           className={`filter-btn ${tab === "us" ? "active" : ""}`}
@@ -463,7 +463,7 @@ export function MyThemeStrip({
       ) : rows.length === 0 ? (
         <div className="empty">
           {tab === "kr"
-            ? "내 테마가 비어 있습니다 — 마이페이지 > 내 테마에서 만듭니다."
+            ? "내 태그가 비어 있습니다 — 마이페이지 > 내 태그에서 만듭니다."
             : "해외 관심종목 그룹이 비어 있습니다."}
         </div>
       ) : (

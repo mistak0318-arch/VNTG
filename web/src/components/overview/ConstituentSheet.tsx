@@ -126,7 +126,7 @@ export function ConstituentSheet({
             {target.name}
             <span className="sheet-sub">
               {target.label ??
-                (target.kind === "custom" ? "내 테마" : target.kind === "theme" ? "테마" : "업종")}{" "}
+                (target.kind === "custom" ? "내 태그" : target.kind === "theme" ? "테마" : "업종")}{" "}
               구성종목
             </span>
           </h2>

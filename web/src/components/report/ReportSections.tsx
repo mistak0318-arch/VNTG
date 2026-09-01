@@ -474,7 +474,7 @@ export function KrThemeMapSection({
               })),
           },
         }))}
-        empty="「내 테마」가 없습니다. 마이페이지 > 내 테마에서 만들어 주세요."
+        empty="「내 태그」가 없습니다. 마이페이지 > 내 태그에서 만들어 주세요."
         onOpen={setTarget}
       />
       {target && (

@@ -4,7 +4,14 @@ import { api, normalizeStockCode, type EvaluatedTheme, type StockSearchResult } 
 import { tileHeat, useAppearance } from "../useAppearance";
 
 /**
- * 내 테마.
+ * 내 태그 (2026-09-01 — 「내 테마」에서 이름을 바꿨다).
+ *
+ * 벤티지: "내 테마라는 이름을 태그라는 이름으로 바꿀까? 마치 테마를 내가 태그로
+ * 만드는 거야."
+ *
+ * 저장소는 그대로다(`customThemes`). 바뀐 것은 **부르는 이름과 들어가는 문**이다 —
+ * 이제 종목 상세 메모 위 `#태그` 칸에서 바로 붙일 수 있고, 그게 곧 여기 목록이 된다.
+ * 「테마를 만들고 종목을 넣는」 길보다 훨씬 자주 손이 간다.
  *
  * 키움 테마 분류는 시장의 현재 관심사를 못 따라간다. 새로 뜨는 주제가 늦게 들어오고,
  * 분류가 너무 넓거나 좁고, 무엇보다 **내가 보는 관점과 다르다.**
@@ -118,11 +125,23 @@ export function CustomThemePage({
     const needle = themeQ.trim().toLowerCase();
     const list = themes
       .filter((t) => srcFilter === "all" || (t.source ?? "manual") === srcFilter)
+      /*
+       * **종목명으로도 찾는다** (2026-09-01).
+       *
+       * 벤티지: "여기도 태그 찾기로 바꾸고, 태그이름, 종목명 이렇게 가야겠지?"
+       *
+       * 맞다. 「삼성전기를 내가 어느 태그에 넣었더라」가 실제로 자주 생기는
+       * 물음인데, 이름·메모만 뒤지면 답할 수가 없었다 — 스물여덟 개를 하나씩
+       * 열어 봐야 했다.
+       */
       .filter(
         (t) =>
           !needle ||
           t.name.toLowerCase().includes(needle) ||
-          (t.memo ?? "").toLowerCase().includes(needle),
+          (t.memo ?? "").toLowerCase().includes(needle) ||
+          t.stocks.some(
+            (x) => x.name.toLowerCase().includes(needle) || x.code.includes(needle),
+          ),
       );
     const arr = [...list];
     if (sortBy === "rate") arr.sort((a, b) => (b.changeRate ?? -999) - (a.changeRate ?? -999));
@@ -142,22 +161,33 @@ export function CustomThemePage({
         <button className="filter-btn" onClick={() => load(true)} disabled={loading}>
           {loading ? "계산 중…" : "↻ 새로고침"}
         </button>
-        <span className="news-scope-sep" />
-        {(
-          [
-            ["all", `전체 (${themes.length})`],
-            ["manual", `내가 만든 것 (${themes.filter((t) => (t.source ?? "manual") === "manual").length})`],
-            ["infostock", `인포스탁 (${themes.filter((t) => t.source === "infostock").length})`],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            className={`filter-btn ${srcFilter === key ? "active" : ""}`}
-            onClick={() => setSrcFilter(key)}
-          >
-            {label}
-          </button>
-        ))}
+        {/*
+          **인포스탁 필터를 뺐다** (2026-09-01) — 0개인데 자리만 차지했다.
+          벤티지: "지금 내 테마에 인포스탁·내가 만든 것 이렇게 있는데 정작 내가
+          만든 것만 쓰거든. 우선 인포스탁 지워주고."
+          실제로 스물여덟 개가 전부 manual 이었다. 옮겨온 것이 다시 생기면
+          (`source === "infostock"`) 그때 아래 조건이 알아서 되살린다.
+        */}
+        {themes.some((t) => t.source === "infostock") && (
+          <>
+            <span className="news-scope-sep" />
+            {(
+              [
+                ["all", `전체 (${themes.length})`],
+                ["manual", `내가 만든 것 (${themes.filter((t) => (t.source ?? "manual") === "manual").length})`],
+                ["infostock", `옮겨온 것 (${themes.filter((t) => t.source === "infostock").length})`],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                className={`filter-btn ${srcFilter === key ? "active" : ""}`}
+                onClick={() => setSrcFilter(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </>
+        )}
         <span className="news-scope-sep" />
         {(
           [
@@ -176,7 +206,7 @@ export function CustomThemePage({
         ))}
         <input
           className="search-input ct-find"
-          placeholder="테마 찾기 (이름·메모)"
+          placeholder="태그 찾기 (태그 이름 · 종목명 · 메모)"
           value={themeQ}
           onChange={(e) => setThemeQ(e.target.value)}
         />
@@ -194,12 +224,12 @@ export function CustomThemePage({
       )}
       {!loading && themes.length === 0 && !error && (
         <div className="page-note">
-          아직 만든 테마가 없습니다. 아래 「＋ 새 테마」에서 만들고, 종목을 검색해 담으세요.
+          아직 만든 태그가 없습니다. 종목 상세의 <b>메모 위 #태그</b> 칸에서 붙이거나, 아래 「＋ 새 태그」에서 만드세요.
         </div>
       )}
       {themeQ.trim() && (
         <div className="page-note">
-          「{themeQ.trim()}」 — {visible.length}개 테마
+          「{themeQ.trim()}」 — {visible.length}개 태그
         </div>
       )}
 
@@ -229,15 +259,15 @@ export function CustomThemePage({
 
       {/* 새 테마 — 매일 쓰는 게 아니라 접어 둔다 */}
       <details className="cal-fold">
-        <summary>＋ 새 테마 만들기</summary>
+        <summary>＋ 새 태그 만들기</summary>
         <p className="page-note">
-          키움 분류에 없는 주제를 직접 만듭니다 (온디바이스AI, 전력설비, 로봇 등). 만든 테마는{" "}
-          <b>데일리 리포트와 AI 요약에 키움 테마보다 먼저</b> 들어갑니다.
+          키움 분류에 없는 주제를 직접 만듭니다 (온디바이스AI, 전력설비, 로봇 등). 만든 태그는{" "}
+          <b>데일리 리포트와 AI 요약에 남의 분류보다 먼저</b> 들어갑니다.
         </p>
         <div className="ct-create">
           <input
             className="search-input"
-            placeholder="테마 이름 (예: AI 전력인프라)"
+            placeholder="태그 이름 (예: AI 전력인프라)"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void create()}
@@ -256,7 +286,7 @@ export function CustomThemePage({
       </details>
 
       <div className="table-note">
-        등락률은 <b>시가총액 가중평균</b>입니다 — 단순평균은 소형주 한 종목이 테마 전체를 흔들어서
+        등락률은 <b>시가총액 가중평균</b>입니다 — 단순평균은 소형주 한 종목이 태그 전체를 흔들어서
         판단을 그르칩니다. 타일 색도 그 값입니다. 타일을 누르면 구성종목·종목 추가·삭제가
         열립니다. 시세는 전종목 스냅샷 5분 캐시입니다.
       </div>
@@ -318,7 +348,7 @@ export function CustomThemePage({
                   </span>
                   <button
                     className="ct-remove"
-                    title="테마에서 빼기"
+                    title="이 태그에서 빼기"
                     onClick={() => void run(() => api.customThemeToggleStock(openTheme.id, s.code))}
                   >
                     ✕
@@ -364,13 +394,15 @@ export function CustomThemePage({
               <button
                 className="filter-btn"
                 onClick={() => {
-                  if (window.confirm(`"${openTheme.name}" 테마를 삭제할까요?`)) {
+                  if (window.confirm(`"${openTheme.name}" 태그를 삭제할까요?
+
+담긴 종목은 안 지워집니다 — 이 묶음만 사라집니다.`)) {
                     setOpen(null);
                     void run(() => api.customThemeRemove(openTheme.id));
                   }
                 }}
               >
-                테마 삭제
+                태그 삭제
               </button>
             </div>
           </div>

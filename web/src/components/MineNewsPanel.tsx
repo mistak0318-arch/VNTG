@@ -54,7 +54,7 @@ export function MineNewsPanel() {
         </div>
       )}
       <div className="table-note">
-        관심종목 → 키움 첫 그룹 → 내 테마 순으로 종목명을 하나씩 검색합니다 (최신순 · 5분 캐시).
+        관심종목 → 키움 첫 그룹 → 내 태그 순으로 종목명을 하나씩 검색합니다 (최신순 · 5분 캐시).
       </div>
     </>
   );

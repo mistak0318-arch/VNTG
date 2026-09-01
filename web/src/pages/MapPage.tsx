@@ -40,11 +40,32 @@ const WATCH_MODES: { key: Mode; label: string; source: GroupSource }[] = [
  * SubTabOrderPanel 이 이 목록을 그대로 읽으므로 여기가 유일한 정의다.
  */
 export const MAP_MODES: { key: Mode; label: string }[] = [
-  { key: "mine", label: "내 테마" },
-  ...WATCH_MODES.map((m) => ({ key: m.key, label: m.label })),
+  /*
+   * **「내 테마」 → 「내 태그」** (2026-09-01).
+   *
+   * 이름만 바뀐 게 아니다. 이제 **종목 상세 메모 위에서 바로 붙인다** — 종목을
+   * 보다가 「이건 로봇이네」 싶을 때 그 자리에서 태그를 치면 그게 곧 이 판이 된다.
+   * 「테마를 만들고 종목을 넣는」 것보다 훨씬 자주 손이 간다.
+   *
+   * ⚠️ **키움 테마·업종을 뺐다** (벤티지 요청). 남의 분류라 내가 보는 판과 안 맞고,
+   * 네이버 테마가 같은 자리를 더 잘 메운다. 정의를 여기 하나만 두므로 서브탭
+   * 순서 설정(SubTabOrderPanel)에서도 함께 사라진다.
+   */
+  /*
+   * 기본 순서는 벤티지가 정한 것이다 (2026-09-01):
+   *   내 태그 → 관심종목(VNTG) → 네이버 테마 → 관심종목(해외) → 관심종목(키움연동)
+   *
+   * 내가 붙인 것이 맨 앞이고, 그다음이 내가 담아 둔 종목, 그다음이 남의 분류다.
+   *
+   * ⚠️ 여기는 **기본값**일 뿐이다. 「설정 > 화면 > 서브탭 순서」에서 끌어 옮기면
+   * 그쪽이 이긴다(`useCardOrder("map.modes")`) — 이 배열을 고쳐도 이미 저장해 둔
+   * 순서가 있으면 안 바뀐다.
+   */
+  { key: "mine", label: "내 태그" },
+  { key: "watchAi", label: "관심종목 (VNTG)" },
   { key: "naver", label: "네이버 테마" },
-  { key: "theme", label: "키움 테마" },
-  { key: "sector", label: "업종" },
+  { key: "watchUs", label: "관심종목 (해외)" },
+  { key: "watchKiwoom", label: "관심종목 (키움연동)" },
 ];
 
 
@@ -348,7 +369,8 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
           </div>
           {mode === "mine" && mineTiles.length === 0 && (
             <div className="empty">
-              아직 만든 테마가 없습니다. <b>마이페이지 &gt; 내 테마</b>에서 먼저 만들어 주세요.
+              아직 붙인 태그가 없습니다. <b>종목 상세 &gt; 메모 위 #태그</b> 칸에 적으면 바로
+              이 판에 뜹니다 — 같은 태그끼리 하나의 무리가 됩니다.
             </div>
           )}
         </>

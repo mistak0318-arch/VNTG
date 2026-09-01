@@ -1028,7 +1028,11 @@
       "Bash(rm -f L.json)",
       "Bash(python -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\(f\\\\\"가동 {int\\(d['uptimeSec']\\)}초\\\\\"\\)\")",
       "Bash(curl -s http://localhost:4000/api/data/ledger)",
-      "Bash(curl -s http://localhost:4000/api/market/daily-closes/progress)"
+      "Bash(curl -s http://localhost:4000/api/market/daily-closes/progress)",
+      "Bash(curl -s -X POST http://localhost:4000/api/signal/after-close -H \"Content-Type: application/json\" -d '{\"steps\":[\"track\"]}' --max-time 20)",
+      "Bash(curl -s http://localhost:4000/api/signal/after-close)",
+      "Bash(curl -s http://localhost:4000/api/signal/track/summary)",
+      "Bash(grep -vE \"^\\\\S+:[0-9]+: *\\\\*|^\\\\S+:[0-9]+: */\\\\*\")"
     ]
   }
 }

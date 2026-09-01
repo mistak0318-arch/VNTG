@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmtNum, signClass, type StockNote } from "../api";
+import { StockTags } from "./StockTags";
 
 /**
  * 종목 메모.
@@ -90,6 +91,15 @@ export function StockNotes({
 
   return (
     <div className="notes">
+    {/*
+      **태그가 메모 위다** (2026-09-01).
+    
+      벤티지: "각 종목 상세에 메모 적잖아. 그 위에 #태그 칸 하나 두어서 태그를 적는 거지."
+    
+      종목을 보다가 「이건 로봇이네」 싶을 때 그 자리에서 붙일 수 있어야 한다 —
+      별도 화면으로 가야 하면 안 하게 된다.
+    */}
+    <StockTags code={code} name={name} />
       {error && <div className="error-banner">{error}</div>}
 
       <div className="note-input">

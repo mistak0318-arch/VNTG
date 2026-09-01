@@ -13598,3 +13598,92 @@ thead .sd-emph {
 /* 막대에 이름을 붙인다 — 뜻이 다른 막대가 둘이라 (2026-09-01) */
 .dret-bar-label { margin: 6px 0 2px; font-size: 0.72rem; color: var(--muted); }
 .dret-bar.collecting > span { background: var(--positive, #4ade80); }
+
+/* ── 종목 태그 (2026-09-01) — 메모 위 ────────────────────────────
+   벤티지: "그 위에 #태그 칸 하나 두어서 태그를 적는 거지. 태그 있는 애들은
+   그 태그 집단의 등락률을 옆에 표시해주고." */
+.stag { margin: 0 0 10px; }
+.stag-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.stag-label { font-size: 0.86rem; color: var(--muted); font-weight: 600; }
+/* 크기를 키웠다 (2026-09-01) — "사이즈 좀만 더 키워주고" */
+.stag-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 7px 6px 12px; border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+.stag-chip:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
+/* 펼친 태그는 눌린 채로 보인다 */
+.stag-chip.on {
+  border-color: var(--blue, #4c8dff);
+  background: color-mix(in srgb, var(--blue, #4c8dff) 14%, transparent);
+}
+/* 태그 무리가 오르내리는 게 칩 자체에 보여야 한다 */
+.stag-chip.up { border-color: color-mix(in srgb, var(--positive, #ef4444) 45%, var(--border)); }
+.stag-chip.down { border-color: color-mix(in srgb, var(--negative, #3b82f6) 45%, var(--border)); }
+.stag-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.stag-rate { font-variant-numeric: tabular-nums; font-size: 0.86rem; }
+.stag-chip.up .stag-rate { color: var(--positive, #ef4444); }
+.stag-chip.down .stag-rate { color: var(--negative, #3b82f6); }
+.stag-n {
+  font-style: normal; font-size: 0.72rem; color: var(--muted);
+  padding: 0 4px; border-radius: 3px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.stag-x {
+  border: none; background: none; color: var(--muted);
+  cursor: pointer; font-size: 0.7rem; padding: 0 3px; line-height: 1;
+}
+.stag-x:hover { color: var(--warn, #d9a441); }
+.stag-input-wrap { position: relative; display: inline-block; }
+.stag-input {
+  width: 220px; padding: 6px 12px; border-radius: 999px;
+  border: 1px dashed var(--border); background: transparent;
+  color: var(--text); font-size: 0.88rem;
+}
+.stag-input:focus { border-style: solid; border-color: var(--blue, #4c8dff); outline: none; }
+/* 자동완성 — 이게 없으면 같은 뜻의 태그가 여럿 생긴다 */
+.stag-hints {
+  position: absolute; top: 100%; left: 0; z-index: 40; margin-top: 4px;
+  min-width: 220px; max-height: 260px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card, #1a1d23);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.stag-hint {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; padding: 7px 11px; border: none; background: none;
+  color: var(--text); font-size: 0.8rem; text-align: left; cursor: pointer;
+}
+.stag-hint:hover { background: color-mix(in srgb, var(--blue, #4c8dff) 14%, transparent); }
+.stag-hint.new { color: var(--blue, #4c8dff); border-bottom: 1px solid var(--border); }
+.stag-note { margin-top: 6px; font-size: 0.72rem; color: var(--muted); line-height: 1.5; }
+.stag-err { margin-top: 5px; font-size: 0.74rem; color: var(--warn, #d9a441); }
+
+/* 태그를 누르면 펴지는 구성종목 (2026-09-01) — 테마 타일을 누르는 것과 같은 결 */
+.stag-sheet {
+  margin-top: 8px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+.stag-sheet-head {
+  display: flex; align-items: baseline; gap: 9px; margin-bottom: 8px;
+  font-size: 0.92rem;
+}
+.stag-sheet-head .stag-x { margin-left: auto; font-size: 0.85rem; }
+/* 격자로 — 열다섯 종목이 세로로 늘어서면 메모가 저 아래로 밀린다 */
+.stag-stocks {
+  display: grid; gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.stag-stock {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 9px; border-radius: 6px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text); text-decoration: none; font-size: 0.84rem;
+}
+.stag-stock:hover { background: color-mix(in srgb, var(--blue, #4c8dff) 16%, transparent); }
+.stag-stock-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stag-stock b { font-variant-numeric: tabular-nums; font-size: 0.8rem; }

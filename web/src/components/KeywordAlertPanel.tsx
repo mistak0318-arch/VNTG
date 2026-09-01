@@ -178,7 +178,7 @@ export function KeywordAlertPanel() {
             className={`filter-btn ${cfg.useThemes ? "active" : ""}`}
             onClick={() => void save({ useThemes: !cfg.useThemes })}
           >
-            내 테마 이름
+            내 태그 이름
           </button>
           <span className="tg-ctl-hint">
             이미 담아 둔 것을 또 적을 이유가 없습니다 · 지금 {auto.length}개

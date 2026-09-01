@@ -128,7 +128,7 @@ export function EventPlayPanel() {
             <span className="st-cfg-k">반응할 테마</span>
             <span className="ep-themes">
               {themes.length === 0 ? (
-                <span className="pt-n">「내 테마」가 없습니다. 먼저 만들어 주세요.</span>
+                <span className="pt-n">「내 태그」가 없습니다. 먼저 만들어 주세요.</span>
               ) : (
                 themes.map((t) => (
                   <button
@@ -150,7 +150,7 @@ export function EventPlayPanel() {
             </span>
           </div>
           <div className="st-cfg-note">
-            <b>「내 테마」로만 고를 수 있습니다.</b> 증권사 분류로는 「원전」·「조선」처럼
+            <b>「내 태그」로만 고를 수 있습니다.</b> 증권사 분류로는 「원전」·「조선」처럼
             일정에 반응하는 묶음이 안 나옵니다 — 내가 정한 묶음이어야 뜻이 있습니다.
           </div>
           <div className="filter-row">

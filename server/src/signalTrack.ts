@@ -123,6 +123,17 @@ export interface TrackEntry {
   name: string;
   /** 어느 문턱으로 들어왔나 */
   tier: Tier;
+  /**
+   * **담는 방식의 판** (2026-09-01).
+   *
+   * 없거나 1 이면 옛 방식 — 「통과한 문턱 중 **가장 높은 것 하나**」에만 담았다.
+   * 2 부터는 **통과한 문턱 전부**에 담는다.
+   *
+   * ⚠️ 섞으면 안 된다. 옛 방식의 「70점 그룹」에는 90점짜리가 빠져 있어서,
+   * 새 것과 합치면 그 그룹이 두 가지 규칙의 잡탕이 된다. 통계를 낼 때 갈라야
+   * 한다 — 기준 지문(`configHash`)을 남기는 것과 같은 이유다.
+   */
+  v?: number;
   /** 편입일 (YYYY-MM-DD, 장 마감 후 기록) */
   date: string;
   /** 편입 당시 신호등 */
@@ -338,9 +349,27 @@ export async function enrollToday(
       price: u.price,
     });
 
-    // 켠 문턱 중 높은 것부터 — 90점이면 90 으로 담는다(70 으로 중복해서 담지 않는다)
-    const tier = [...cfg.tiers].sort((a, b) => b - a).find((t) => sig!.score >= t);
-    if (!tier) {
+    /*
+     * ## **통과한 문턱 **전부**에 담는다** (2026-09-01, 로직을 고쳤다)
+     *
+     * ⚠️ 예전에는 「높은 것 하나만」이었다 — 92점이면 90 에만 담고 70·80 에는
+     * 안 담았다. 그러면 「90점 그룹」과 「70점 그룹」이 **서로 겹치지 않는 다른
+     * 종목들**이 된다.
+     *
+     * 그런데 이 원장이 답하려던 물음은 **「90점 이상이 70점 이상보다 나은가」**다.
+     * 그러려면 90점 종목이 70점 그룹에도 있어야 한다 — 「이상」은 누적이다.
+     * 옛 방식으로는 「90~100점대 vs 70~79점대」를 비교한 셈이고, 그건 시뮬레이터의
+     * 구간별 표가 이미 답하는 물음이다.
+     *
+     * 실측이 그 결과를 보여 줬다: 28건이 **전부 70점**이고 80·90 은 0건이었다.
+     * 거래대금 300 안에 90점이 드물어서, 높은 문턱에는 아무것도 안 쌓였다 —
+     * 정작 알고 싶던 쪽이 비어 있었던 것이다.
+     *
+     * 건수가 늘어난다(92점 하나가 세 건). 그게 맞다 — 같은 종목이 세 문턱의
+     * 표본에 각각 들어가야 문턱끼리 견줄 수 있다.
+     */
+    const tiers = [...cfg.tiers].sort((a, b) => b - a).filter((t) => sig!.score >= t);
+    if (tiers.length === 0) {
       belowTier += 1;
       continue;
     }
@@ -348,41 +377,44 @@ export async function enrollToday(
     // 위험 축이 막은 종목을 뺄지는 설정이다. 담아 두면 「그 차단이 옳았나」를 나중에 물을 수 있다
     if (sig.riskCapped && !cfg.includeRiskCapped) continue;
 
-    /*
-     * 같은 종목·같은 문턱이 아직 추적 중이면 건너뛴다.
-     * 한 종목이 20일 연속 90점이면 스무 건이 쌓여 그 종목 하나가 통계를 지배한다.
-     */
-    const open = store.entries.some((e) => e.code === u.code && e.tier === tier && !e.closed);
-    if (open) {
-      skippedDuplicate += 1;
-      if (job) job.skippedDuplicate += 1;
-      continue;
-    }
-
     const price = await lastClose(client, u.code).catch(() => 0);
     if (!(price > 0)) continue;
 
     const axes: Partial<Record<Axis, number | null>> = {};
     for (const a of sig.axes) axes[a.key] = a.score;
 
-    store.entries.push({
-      id: `${date}-${u.code}-${tier}`,
-      code: u.code,
-      name: u.name,
-      tier,
-      date,
-      score: sig.score,
-      level: sig.level,
-      axes,
-      riskCapped: sig.riskCapped,
-      basePrice: price,
-      configHash: hash,
-      results: [],
-      closed: false,
-    });
-    added += 1;
-    if (job) job.added += 1;
-    byTier[String(tier)] = (byTier[String(tier)] ?? 0) + 1;
+    for (const tier of tiers) {
+      /*
+       * 같은 종목·같은 문턱이 아직 추적 중이면 건너뛴다.
+       * 한 종목이 20일 연속 90점이면 스무 건이 쌓여 그 종목 하나가 통계를 지배한다.
+       */
+      if (store.entries.some((e) => e.code === u.code && e.tier === tier && !e.closed)) {
+        skippedDuplicate += 1;
+        if (job) job.skippedDuplicate += 1;
+        continue;
+      }
+
+      store.entries.push({
+        id: `${date}-${u.code}-${tier}`,
+        code: u.code,
+        name: u.name,
+        tier,
+        date,
+        score: sig.score,
+        level: sig.level,
+        axes,
+        riskCapped: sig.riskCapped,
+        basePrice: price,
+        configHash: hash,
+        /* 담는 방식이 바뀐 판 — 옛 것(문턱 하나만)과 섞이지 않게 */
+        v: 2,
+        results: [],
+        closed: false,
+      });
+      added += 1;
+      if (job) job.added += 1;
+      byTier[String(tier)] = (byTier[String(tier)] ?? 0) + 1;
+    }
   }
 
   store.lastRunDate = date;
@@ -553,7 +585,18 @@ export async function trackSummary(): Promise<TrackSummary> {
   const currentConfig = await configFingerprint();
 
   const tiers: TierStat[] = TIERS.map((tier) => {
-    const mine = store.entries.filter((e) => e.tier === tier);
+    /*
+     * ## **판이 다른 것을 섞지 않는다** (2026-09-01)
+     *
+     * 2026-09-01 이전에는 「통과한 문턱 중 가장 높은 것 하나」에만 담았다. 그
+     * 방식의 「70점 그룹」에는 90점짜리가 **빠져 있다** — 새 방식(전부에 담기)과
+     * 합치면 그 그룹이 두 가지 규칙의 잡탕이 되고, 「90점이 70점보다 나은가」에
+     * 답할 수 없게 된다.
+     *
+     * 기준 지문(`configHash`)을 남기는 것과 같은 이유다. 옛 것은 28건이고 결과가
+     * 아직 하나도 없어 잃는 게 없다.
+     */
+    const mine = store.entries.filter((e) => e.tier === tier && (e.v ?? 1) >= 2);
     return {
       tier,
       count: mine.length,

@@ -78,7 +78,7 @@ export function DisclosureAlertPanel() {
   return (
     <>
       <p className="page-note">
-        관심종목·내 테마 종목에 <b>새 공시가 뜨면 바로</b> 텔레그램으로 보냅니다. 공시는
+        관심종목·내 태그 종목에 <b>새 공시가 뜨면 바로</b> 텔레그램으로 보냅니다. 공시는
         뉴스보다 빠르고 확실합니다 — 유상증자·수주·실적은 기사로 나오기 전에 DART 에 먼저
         뜹니다. 같은 공시를 두 번 보내지 않습니다.
       </p>
@@ -137,7 +137,7 @@ export function DisclosureAlertPanel() {
             className={`filter-btn ${cfg.includeThemes ? "active" : ""}`}
             onClick={() => void save({ includeThemes: !cfg.includeThemes })}
           >
-            🎯 내 테마 종목
+            🎯 내 태그 종목
           </button>
         </div>
       </div>

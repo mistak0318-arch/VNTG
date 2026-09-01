@@ -35,7 +35,7 @@ const WINDOWS = [
 ];
 
 const KIND_META: Record<KeywordKind, { label: string; hue: number }> = {
-  myTheme: { label: "내 테마", hue: 145 },
+  myTheme: { label: "내 태그", hue: 145 },
   theme: { label: "테마", hue: 175 },
   stock: { label: "종목", hue: 265 },
   event: { label: "사건", hue: 25 },

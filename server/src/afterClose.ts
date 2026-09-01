@@ -213,7 +213,12 @@ export async function runAfterClose(
   /* ④ 추적기 — 문턱별 편입 */
   if (want("track"))
     await step("track", "신호등 추적기", async () => {
-    const j = startEnroll(client, false);
+    /*
+     * **force 다.** 파이프라인이 명시적으로 부르는 자리라 lastRunDate 가드가
+     * 걸리면 안 된다 — 실제로 그것 때문에 「6초 · 0건」으로 건너뛴 적이 있다.
+     * 하루 한 번은 파이프라인 자체가 막는다.
+     */
+    const j = startEnroll(client, true);
     while (j.status === "running") await new Promise((r) => setTimeout(r, 2000));
     return j.status === "error" ? `실패: ${j.error ?? ""}` : `${j.added ?? 0}건 담음`;
   });

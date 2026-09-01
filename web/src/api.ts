@@ -1014,6 +1014,23 @@ export const api = {
       configured: boolean;
       error?: string;
     }>(`/api/trade${force ? "?force=1" : ""}`),
+  /* ── 태그 (2026-09-01) — 「내 테마」를 종목 쪽에서 본 것 ───────────
+     벤티지: "각 종목 상세에 메모 적잖아. 그 위에 #태그 칸 하나 두어서 태그를
+     적는 거지. 태그 있는 애들은 그 태그 집단의 등락률을 옆에 표시해주고." */
+  /** 이 종목에 붙은 태그 + 그 태그 집단의 오늘 등락률 */
+  stockTags: (code: string) =>
+    getJson<{ tags: StockTag[] }>(`/api/custom-themes/tags/${code}`),
+  /** `#반도` → 「반도체」·「반도체 소부장」. 없으면 태그가 부서진다 */
+  tagSuggest: (q: string) =>
+    getJson<{ tags: { name: string; count: number }[] }>(
+      `/api/custom-themes/tags?q=${encodeURIComponent(q)}`,
+    ),
+  tagAdd: (code: string, name: string) =>
+    postJson<{ tags: string[] }>(`/api/custom-themes/tags/${code}`, { name }),
+  tagRemove: (code: string, name: string) =>
+    deleteJson<{ tags: string[] }>(
+      `/api/custom-themes/tags/${code}/${encodeURIComponent(name)}`,
+    ),
   customThemes: (force = false) =>
     getJson<{ themes: EvaluatedTheme[]; snapshotAt: number; coverage: string }>(
       `/api/custom-themes${force ? "?force=1" : ""}`,
@@ -3373,6 +3390,22 @@ export interface SignalConfig {
    * 착시였다. 칸은 열어 두지만 켜면 가장 좋은 구간을 버린다.
    */
   greenTo: number;
+}
+
+/**
+ * 종목에 붙은 태그 — **그 태그 집단의 오늘 등락률까지.**
+ *
+ * 「이 종목에 로봇 태그가 붙었고, 오늘 로봇은 −3.14%」가 한 줄로 읽혀야 태그가
+ * 쓸모를 갖는다. 이름만 있으면 그냥 꼬리표다.
+ */
+export interface StockTag {
+  name: string;
+  /** 시총 가중평균 등락률(%) — 소형주 하나가 태그 전체를 흔들지 않게 */
+  rate: number | null;
+  count: number;
+  color: string;
+  /** 그 태그에 담긴 종목 — 칩을 누르면 펴진다 */
+  stocks: { code: string; name: string; changeRate: number }[];
 }
 
 export interface StockNote {

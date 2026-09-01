@@ -61,7 +61,7 @@ function inline(text: string): React.ReactNode[] {
 const HEADINGS: { canon: string; icon: string }[] = [
   { canon: "오늘 시장 한 줄", icon: "📌" },
   { canon: "자금 흐름", icon: "💰" },
-  { canon: "내 테마", icon: "🎯" },
+  { canon: "내 태그", icon: "🎯" },
   { canon: "시장 폭", icon: "🌡️" },
   { canon: "주도 섹터", icon: "🔥" },
   { canon: "관심종목 & 체크포인트", icon: "⭐" },

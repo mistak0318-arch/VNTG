@@ -317,3 +317,87 @@ export function toCustomThemeDigest(
 
   return `\n${header}\n${lines.join("\n")}`;
 }
+
+/* ------------------------------------------------------------------ */
+/* 태그 — 종목 쪽에서 본 같은 데이터 (2026-09-01)                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **「내 테마」를 종목 쪽에서 보면 태그다.**
+ *
+ * 벤티지: "내 테마라는 이름을 태그라는 이름으로 바꿀까? 각 종목 상세에 메모
+ * 적잖아. 그 위에 #태그 칸 하나 두어서 태그를 적는 거지. 그 태그가 자동으로
+ * 그룹이 돼서 태그 그룹으로 들어가고 (마치 테마를 내가 태그로 만드는 거야).
+ * #반도 이런 식으로 쓰면 비슷한 태그 목록 보여줘서 바로 추가하게 하고."
+ *
+ * ## 저장소를 새로 만들지 않는다
+ *
+ * `CustomTheme` 이 이미 `name` + `codes` 다 — **그게 곧 태그다.** 태그 이름이
+ * 테마 이름이고, 그 태그가 붙은 종목이 구성종목이다. 새 저장소를 만들면 같은
+ * 것이 두 벌이 되고, 한쪽에서 지운 게 다른 쪽에 남는다.
+ *
+ * 바뀌는 것은 **부르는 이름과 들어가는 문**뿐이다. 여태 「테마를 만들고 종목을
+ * 넣는」 길만 있었는데, 이제 **종목을 보다가 태그를 붙이는** 길이 생긴다.
+ *
+ * ## 왜 종목 쪽 입력이 중요한가
+ *
+ * 종목을 보다가 「이건 로봇이네」 싶을 때 그 자리에서 붙일 수 있어야 한다.
+ * 별도 화면으로 가야 하면 안 하게 된다 — 실제로 28개를 만든 뒤로 잘 안 늘었다.
+ */
+
+/** 이 종목에 붙은 태그 이름들 */
+export async function tagsOf(code: string): Promise<string[]> {
+  const bare = bareCode(code);
+  return (await listThemes())
+    .filter((t) => t.codes.includes(bare))
+    .map((t) => t.name);
+}
+
+/**
+ * 태그 이름 후보 — `#반도` 를 치면 「반도체」·「반도체 소부장」을 돌려준다.
+ *
+ * ⚠️ **이게 없으면 태그가 부서진다.** 「반도체」·「반도체장비」·「반도체_소부장」이
+ * 따로 생겨서 같은 뜻의 그룹이 셋이 된다. 태그 체계가 망하는 건 대부분 이것
+ * 때문이라, 자동완성은 곁다리가 아니라 **본체**다.
+ *
+ * 종목 수가 많은 것부터 준다 — 이미 많이 쓴 태그가 그 사람의 분류다.
+ */
+export async function suggestTags(
+  q: string,
+  limit = 8,
+): Promise<{ name: string; count: number }[]> {
+  const needle = q.replace(/^#/, "").trim().toLowerCase();
+  const all = (await listThemes()).map((t) => ({ name: t.name, count: t.codes.length }));
+  const hit = needle
+    ? all.filter((t) => t.name.toLowerCase().includes(needle))
+    : all;
+  return hit.sort((a, b) => b.count - a.count).slice(0, limit);
+}
+
+/**
+ * 종목에 태그를 붙인다 — **없는 태그면 만든다.**
+ *
+ * 「태그를 먼저 만들고 종목을 넣으세요」는 쓰는 사람의 흐름이 아니다. 종목을
+ * 보다가 이름을 치면 그걸로 끝나야 한다.
+ */
+export async function addTag(code: string, name: string): Promise<CustomTheme[]> {
+  const clean = name.replace(/^#/, "").trim();
+  if (!clean) throw new Error("태그 이름이 비어 있습니다");
+  const bare = bareCode(code);
+  const list = await listThemes();
+  const had = list.find((t) => t.name === clean);
+  if (had) {
+    if (had.codes.includes(bare)) return list;
+    return updateTheme(had.id, { codes: [...had.codes, bare] });
+  }
+  return createTheme({ name: clean, codes: [bare] });
+}
+
+/** 종목에서 태그를 뗀다. 그 태그가 비면 **지우지 않는다** — 이름은 남겨 둔다 */
+export async function removeTag(code: string, name: string): Promise<CustomTheme[]> {
+  const bare = bareCode(code);
+  const list = await listThemes();
+  const had = list.find((t) => t.name === name.replace(/^#/, "").trim());
+  if (!had || !had.codes.includes(bare)) return list;
+  return updateTheme(had.id, { codes: had.codes.filter((c) => c !== bare) });
+}

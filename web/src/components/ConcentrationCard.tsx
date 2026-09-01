@@ -74,7 +74,7 @@ export function ConcentrationCard() {
           <Bars rows={data.bySector} />
         </div>
         <div>
-          <h4 className="conc-h">내 테마별</h4>
+          <h4 className="conc-h">내 태그별</h4>
           <Bars
             rows={data.byTheme}
             note="한 종목이 여러 테마에 속할 수 있어 합이 100%를 넘을 수 있습니다."
