@@ -1008,7 +1008,13 @@
       "Bash(curl -s http://localhost:4000/api/signal/collect/daily)",
       "Bash(curl -s -X POST http://localhost:4000/api/watchlist/groups/sync-bands --max-time 60)",
       "Bash(curl -s http://localhost:4000/api/watchlist/groups -o /tmp/g.json)",
-      "Bash(iconv -f utf-8 -t utf-8)"
+      "Bash(iconv -f utf-8 -t utf-8)",
+      "Bash(curl -s http://localhost:4000/api/signal/collect/status)",
+      "Bash(awk '{print \"원본 \" $5}')",
+      "Bash(time gzip -6 -c 2026-08-28.jsonl)",
+      "Bash(gzip -6 -c 2026-08-28.jsonl)",
+      "Read(//k/0000 3740 프로젝트 \\\\\\(경제적자유\\\\\\)/**)",
+      "Bash(awk '{print \"압축 \" $5}')"
     ]
   }
 }

@@ -13484,3 +13484,11 @@ thead .sd-emph {
   background: linear-gradient(0deg, rgba(100, 116, 139, 0.09), rgba(100, 116, 139, 0.09));
 }
 .gt-band-60.active { border-color: #64748b; }
+
+/* 자동 그룹과 내가 만든 그룹 사이의 금 (2026-09-01).
+   서버가 순서를 갈라 주지만 눈으로는 여전히 한 줄이라, 경계에 선을 하나 넣는다. */
+.gt-mine-start {
+  margin-left: 10px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}

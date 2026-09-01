@@ -727,7 +727,14 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
         </button>
         {groups.map((g, gi) => {
           const n = items.filter((i) => (i.groups ?? [DEFAULT_GROUP]).includes(g)).length;
-          const movable = groups.filter((x) => x !== DEFAULT_GROUP);
+          /*
+           * 옮길 수 있는 것은 **내가 만든 그룹뿐**이다 (2026-09-01).
+           *
+           * 자동 그룹은 서버가 늘 앞으로 몰아서 돌려주므로, 화살표로 옮겨 봐야
+           * 다음에 열면 제자리로 온다. **안 움직이는 버튼을 보여 주면 안 된다** —
+           * 고장 난 것처럼 보인다.
+           */
+          const movable = groups.filter((x) => x !== DEFAULT_GROUP && !isAuto(x));
           const mi = movable.indexOf(g);
           /*
            * 자동 편입의 자리 — 이름을 못 바꾸고 못 지운다. 배지도 다르다.
@@ -735,9 +742,23 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
            */
           const locked = g === DEFAULT_GROUP || isAuto(g);
           const band = bandOf(g);
+          /*
+           * **자동과 내 것 사이에 금을 긋는다** (2026-09-01).
+           *
+           * 벤티지: "같이 쭈루룩 있으니깐 헷갈리네. 내가 한 건 확실하게 내가 한 것들,
+           * 자동으로 쌓이는 그룹은 따로 있는 거지."
+           *
+           * 서버가 순서를 갈라 주지만(기본 → 자동 → 내 것) 눈으로는 여전히 한 줄이다.
+           * 자동 구간이 끝나는 자리에 선을 하나 넣어 **두 덩어리로 보이게** 한다.
+           */
+          const prev = groups[gi - 1];
+          const startsMine = !isAuto(g) && g !== DEFAULT_GROUP && prev !== undefined && isAuto(prev);
           return (
-            <span className={`gt-item${activeGroup === g ? " active" : ""}`} key={g}>
-              {editGroupBar && g !== DEFAULT_GROUP && (
+            <span
+              className={`gt-item${activeGroup === g ? " active" : ""}${startsMine ? " gt-mine-start" : ""}`}
+              key={g}
+            >
+              {editGroupBar && !locked && (
                 <button
                   className="gt-move"
                   onClick={() => void moveGroup(g, -1)}
@@ -748,8 +769,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                 </button>
               )}
               <button
-                className={`filter-btn ${activeGroup === g ? "active" : ""}${g === SUPER_GROUP ? " gt-super" : ""}${g === CROSS_GROUP ? " gt-cross" : ""}${band ? ` gt-band gt-band-${band}` : ""}${editGroupBar && g !== DEFAULT_GROUP ? groupDrag.cls(g) : ""}`}
-                {...(editGroupBar && g !== DEFAULT_GROUP ? groupDrag.props(g) : {})}
+                className={`filter-btn ${activeGroup === g ? "active" : ""}${g === SUPER_GROUP ? " gt-super" : ""}${g === CROSS_GROUP ? " gt-cross" : ""}${band ? ` gt-band gt-band-${band}` : ""}${editGroupBar && !locked ? groupDrag.cls(g) : ""}`}
+                {...(editGroupBar && !locked ? groupDrag.props(g) : {})}
                 onClick={() => (editGroupBar && !locked ? renameGroupNow(g) : setActiveGroup(g))}
                 title={
                   g === SUPER_GROUP
@@ -778,7 +799,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                 {g} <span className="gt-n">{n}</span>
                 {editGroupBar && !locked && <span className="gt-pen"> ✎</span>}
               </button>
-              {editGroupBar && g !== DEFAULT_GROUP && (
+              {editGroupBar && !locked && (
                 <button
                   className="gt-move"
                   onClick={() => void moveGroup(g, 1)}

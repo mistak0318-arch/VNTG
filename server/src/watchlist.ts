@@ -415,7 +415,23 @@ export async function listGroups(): Promise<string[]> {
    * 「그런 그룹은 원래 없구나」는 전혀 다른 말이다.
    */
   const merged = new Set<string>([DEFAULT_GROUP, ...groups, ...used, ...AUTO_GROUPS]);
-  return [...merged];
+  /*
+   * ## **자동 그룹을 앞으로 몬다** (2026-09-01)
+   *
+   * 벤티지: "같이 쭈루룩 있으니깐 헷갈리네. 내가 한 건 확실하게 내가 한 것들,
+   * 그리고 자동으로 쌓이는 그룹은 따로 있는 거지."
+   *
+   * 예전 순서는 「저장된 순서 → 종목이 쓰는 순서 → 자동 그룹」이라 **섞여 나왔다** —
+   * 기본 / 반도체_핵심 / 🌟슈퍼신호등 / 🔒70점대 / ⚡교차 / 🔒80점대 …
+   * 손으로 만든 것과 서버가 채우는 것이 번갈아 나오니 어느 쪽인지 매번 읽어야 한다.
+   *
+   * 셋으로 가른다: **기본 → 자동(고정 순서) → 내가 만든 것.**
+   * 자동 안의 순서는 `AUTO_GROUPS` 가 정한다(슈퍼 → 교차 → 90 → 60점대) —
+   * 점수대는 높은 쪽이 위다.
+   */
+  const all = [...merged];
+  const mine = all.filter((g) => g !== DEFAULT_GROUP && !AUTO_GROUPS.includes(g));
+  return [DEFAULT_GROUP, ...AUTO_GROUPS.filter((g) => merged.has(g)), ...mine];
 }
 
 export async function addGroup(name: string): Promise<string[]> {
