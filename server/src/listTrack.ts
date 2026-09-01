@@ -7,6 +7,10 @@ import { fetchUniverse, SCREEN_UNIVERSES } from "./signalScreen.js";
 import { regimeTrust } from "./regimeWatch.js";
 import { pushNotice } from "./notifyCenter.js";
 import { peekSnapshot } from "./marketSnapshot.js";
+/* 무리(테마·ETF 뒷배) — 슈퍼신호등이 쓰는 것과 **같은 함수**. 파일에서 읽어 조회 0회 */
+import { stockLens, themeMapNow } from "./stockLens.js";
+/* 지수 대비 — **슈퍼신호등과 같은 함수**. 채점하는 자가 같아야 두 원장을 견줄 수 있다 */
+import { kospiCloses } from "./superSignal.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FILE = resolve(__dirname, "..", "data", "listTrack.json");
@@ -77,6 +81,16 @@ export interface ListEntry {
    * 문제가 없다** (같은 자로 잰다).
    */
   returns?: { d1: number | null; d5: number | null; d20: number | null };
+  /**
+   * **지수 대비 초과수익**(%p) — 슈퍼신호등과 같은 자 (2026-09-01).
+   *
+   * 이 줄이 없으면 `returns` 는 뜻이 없다. 「+2%」가 잘한 건지는 그날 시장이
+   * 몇 % 였는지를 알아야 답할 수 있고, 상승장에서는 아무거나 사도 오른다.
+   *
+   * 지수를 못 읽으면 **안 낸다**(null) — 절대수익률을 초과수익이라고 적으면
+   * 상승장에서 전부 이긴 것처럼 보인다.
+   */
+  excess?: { d1: number | null; d5: number | null; d20: number | null };
 }
 
 interface Store {
@@ -325,6 +339,11 @@ export async function gradeListTrack(client: KiwoomClient, limit = 200): Promise
   const base = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10).replace(/-/g, "");
   /* 같은 종목이 여러 목록에 있으면 일봉을 한 번만 받는다 */
   const barsOf = new Map<string, { date: string; close: number }[]>();
+  /*
+   * 지수 — **슈퍼신호등과 같은 함수**를 쓴다(2026-09-01). 두 원장의 차이가
+   * 「교집합을 봤나」 하나로 좁혀지려면 채점하는 자가 같아야 한다. 조회 1회.
+   */
+  const kospi = await kospiCloses(client).catch(() => new Map<string, number>());
   let graded = 0;
 
   for (const e of pending.slice(0, limit)) {
@@ -354,6 +373,21 @@ export async function gradeListTrack(client: KiwoomClient, limit = 200): Promise
         return bar ? ((bar.close - e.addedPrice) / e.addedPrice) * 100 : null;
       };
       e.returns = { d1: pct(1), d5: pct(5), d20: pct(20) };
+
+      /* 지수 대비 — 같은 날짜의 코스피를 뺀다. 못 읽으면 안 낸다(null) */
+      const idxPct = (n: number): number | null => {
+        const bar = rows![idx + n];
+        const b0 = kospi.get(addedYmd);
+        const b1 = bar ? kospi.get(bar.date) : undefined;
+        if (!bar || !b0 || !b1) return null;
+        return ((b1 - b0) / b0) * 100;
+      };
+      const minus = (a: number | null, b: number | null) => (a === null || b === null ? null : a - b);
+      e.excess = {
+        d1: minus(e.returns.d1, idxPct(1)),
+        d5: minus(e.returns.d5, idxPct(5)),
+        d20: minus(e.returns.d20, idxPct(20)),
+      };
       graded += 1;
     } catch {
       /* 이 종목만 건너뛴다 */
@@ -370,7 +404,19 @@ export interface ListGradeRow {
   d1: { avg: number | null; n: number };
   d5: { avg: number | null; n: number };
   d20: { avg: number | null; n: number };
+  /**
+   * **지수 대비 초과수익**(%p) — 슈퍼 채점표와 같은 칸 (2026-09-01).
+   * 이 줄이 없으면 위의 셋은 뜻이 없다. 상승장에서는 아무거나 사도 오른다.
+   */
+  ex1: { avg: number | null; n: number };
+  ex5: { avg: number | null; n: number };
+  ex20: { avg: number | null; n: number };
   win1: number | null;
+  /**
+   * 20일 승률 — 평균과 **같이 봐야** 뜻이 산다. 평균 +2% 가 「두 번 크게 먹고
+   * 여덟 번 조금 잃었다」인지 「고르게 벌었다」인지는 평균만으로 안 갈린다.
+   */
+  win20: number | null;
 }
 
 function gradeRow(label: string, list: ListEntry[]): ListGradeRow {
@@ -383,22 +429,72 @@ function gradeRow(label: string, list: ListEntry[]): ListGradeRow {
       n: vs.length,
     };
   };
+  /* 지수 대비는 다른 칸(excess)에 있다 — 같은 방식으로 평균 낸다 */
+  const aggEx = (pick: (r: NonNullable<ListEntry["excess"]>) => number | null) => {
+    const vs = list
+      .map((e) => (e.excess ? pick(e.excess) : null))
+      .filter((v): v is number => v !== null && Number.isFinite(v));
+    return {
+      avg: vs.length > 0 ? Math.round((vs.reduce((a, b) => a + b, 0) / vs.length) * 100) / 100 : null,
+      n: vs.length,
+    };
+  };
+  const rate = (pick: (r: NonNullable<ListEntry["returns"]>) => number | null): number | null => {
+    const vs = list
+      .map((e) => (e.returns ? pick(e.returns) : null))
+      .filter((v): v is number => v !== null && Number.isFinite(v));
+    return vs.length > 0 ? Math.round((vs.filter((v) => v > 0).length / vs.length) * 100) : null;
+  };
   const d1 = agg((r) => r.d1);
-  const wins = list
-    .map((e) => e.returns?.d1)
-    .filter((v): v is number => v !== null && v !== undefined && Number.isFinite(v));
   return {
     label,
     n: list.length,
     d1,
     d5: agg((r) => r.d5),
     d20: agg((r) => r.d20),
-    win1: wins.length > 0 ? Math.round((wins.filter((v) => v > 0).length / wins.length) * 100) : null,
+    ex1: aggEx((r) => r.d1),
+    ex5: aggEx((r) => r.d5),
+    ex20: aggEx((r) => r.d20),
+    win1: rate((r) => r.d1),
+    win20: rate((r) => r.d20),
   };
 }
 
+/**
+ * 화면용 한 줄 — **슈퍼신호등과 같은 칸을 붙인다** (2026-09-01).
+ *
+ * 벤티지: "슈퍼 신호등은 분석이 되게 디테일하게 나와… 신호등 분석은 그 표에
+ * 정보들이 되게 약하거든. 슈퍼 신호등 기준으로 똑같이 구현할 수 있겠어" ·
+ * "두 개를 조합해서 더 좋은 대시보드를 만들어 봐. 공통 적용하면 되잖아."
+ *
+ * 원장 자체는 오히려 이쪽이 더 많이 들고 있었다(순위·이탈·연속미달). 모자란 것은
+ * **화면에 붙는 값**이었다 — 지금 가격, 편입 대비, 무리(테마·ETF)가 없었다.
+ *
+ * 그 값들은 슈퍼가 이미 **조회 0회**로 만들고 있다(스냅샷 엿보기 + 파일 렌즈).
+ * 같은 함수(`stockLens`·`themeMapNow`)를 그대로 쓴다 — 두 원장을 **같은 눈**으로
+ * 봐야 「교집합을 봤나 안 봤나」의 차이만 남는다. 그게 이 원장의 존재 이유다.
+ */
+export type ListTrackRow = ListEntry & {
+  /** 지금 가격 — 스냅샷에서. 없으면 null */
+  price: number | null;
+  /** 오늘 등락률(%) */
+  changeRate: number | null;
+  /** 편입가 대비(%) — 담고 나서 얼마나 */
+  sinceAdded: number | null;
+  /**
+   * 편입일로부터 며칠 — **달력일**. `seenCount`(걸린 날 수)와 다른 질문의 답이다.
+   * 편입 당일은 0 이라 화면이 「신규」 배지를 그 값으로 판단한다.
+   */
+  daysSince: number;
+  isNew: boolean;
+  /** 지금 이 종목의 무리가 도는가 — 걸린 종목의 테마가 식으면 이탈이 가깝다 */
+  theme: { key: string; name: string; changeRate: number; streak: number } | null;
+  /** ETF 뒷배 — 이 종목을 많이 담은 상위 3 ETF 의 오늘 평균 */
+  etfBack: { rate: number; top: string } | null;
+};
+
 export interface ListTrackSummary {
-  entries: ListEntry[];
+  entries: ListTrackRow[];
   lastRunDate: string | null;
   counts: Record<string, { universe: number; green: number }>;
   /** 목록별 요약 — 추적 중·이탈·평균 점수 */
@@ -476,8 +572,45 @@ export async function listTrackSummary(): Promise<ListTrackSummary> {
     }
   }
 
+  /*
+   * **슈퍼와 같은 칸을 붙인다 — 조회 0회.**
+   *
+   * 가격은 이미 떠 있는 전종목 스냅샷을 엿보고, 무리(테마·ETF)는 파일에서 읽는다.
+   * 슈퍼신호등이 쓰는 것과 **같은 함수**라 두 화면이 같은 값을 말한다.
+   */
+  const themeMap = await themeMapNow().catch(() => null);
+  const today = todayStr();
+  const daysFrom = (d: string): number => {
+    const a = Date.parse(`${d}T00:00:00Z`);
+    const b = Date.parse(`${today}T00:00:00Z`);
+    return Number.isFinite(a) && Number.isFinite(b)
+      ? Math.max(0, Math.round((b - a) / 86_400_000))
+      : 0;
+  };
+
+  const rows: ListTrackRow[] = [];
+  for (const e of store.entries) {
+    const px = snap?.byCode.get(e.code)?.price ?? null;
+    const lens = themeMap ? await stockLens(e.code, themeMap).catch(() => null) : null;
+    const days = daysFrom(e.addedDate);
+    rows.push({
+      ...e,
+      price: px,
+      changeRate: snap?.byCode.get(e.code)?.changeRate ?? null,
+      /* 편입가가 0 이면 「모르는 것」이다 — 0 으로 나눠 Infinity 를 만들지 않는다 */
+      sinceAdded:
+        px !== null && e.addedPrice > 0
+          ? Math.round(((px - e.addedPrice) / e.addedPrice) * 10000) / 100
+          : null,
+      daysSince: days,
+      isNew: days === 0,
+      theme: lens?.theme ?? null,
+      etfBack: lens?.etfBack ?? null,
+    });
+  }
+
   return {
-    entries: store.entries,
+    entries: rows,
     lastRunDate: store.lastRunDate,
     counts: store.lastCounts ?? {},
     byList,

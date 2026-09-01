@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type ListTrackSummary, type ListEntry } from "../api";
+import { api, type ListTrackSummary, type ListTrackRow } from "../api";
 
 /**
  * 접기 — **기기별로 기억한다** (2026-08-31 — "이것들 좀 접는 구조 좀 만들어주라
@@ -291,7 +291,18 @@ export function ListTrackPage({
                   <th className="num">1일</th>
                   <th className="num">5일</th>
                   <th className="num">20일</th>
+                  {/*
+                    **지수 대비** (2026-09-01) — 슈퍼 채점표와 같은 칸.
+                    이게 없으면 위의 셋은 뜻이 없다. 「+2%」가 잘한 건지는 그날 시장이
+                    몇 % 였는지를 알아야 답할 수 있고, 상승장에서는 아무거나 사도 오른다.
+                  */}
+                  <th className="num sd-emph" title="같은 기간 코스피를 뺀 값 — 이게 진짜 성적이다">
+                    지수대비 +20
+                  </th>
                   <th className="num">승률(1일)</th>
+                  <th className="num" title="평균과 같이 봐야 뜻이 산다 — 「두 번 크게 먹고 여덟 번 잃었다」인지 「고르게 벌었다」인지">
+                    승률(20일)
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -311,7 +322,12 @@ export function ListTrackPage({
                       {g.d20.avg === null ? "-" : `${g.d20.avg > 0 ? "+" : ""}${g.d20.avg}%`}
                       <span className="pt-n"> ({g.d20.n})</span>
                     </td>
+                    <td className={`num sd-emph ${cls(g.ex20.avg)}`}>
+                      {g.ex20.avg === null ? "-" : `${g.ex20.avg > 0 ? "+" : ""}${g.ex20.avg}%p`}
+                      <span className="pt-n"> ({g.ex20.n})</span>
+                    </td>
                     <td className="num pt-n">{g.win1 === null ? "-" : `${g.win1}%`}</td>
+                    <td className="num pt-n">{g.win20 === null ? "-" : `${g.win20}%`}</td>
                   </tr>
                 ))}
               </tbody>
@@ -361,15 +377,33 @@ export function ListTrackPage({
       ) : (
         <div className="data-table-wrap">
           <table className="data-table">
+            {/*
+              **슈퍼신호등과 같은 칸** (2026-09-01 — "슈퍼 신호등에 있는 우리가 보려고
+              했던 이런 좋은 기능들을 같이 보는게 맞지").
+
+              원장 자체는 이쪽이 더 많이 들고 있었다(순위·이탈·연속미달). 모자란 것은
+              **화면에 붙는 값**이었다 — 지금 가격, 편입 대비, 무리(테마·ETF).
+              전부 조회 0회로 만들어진다(스냅샷 엿보기 + 파일 렌즈).
+            */}
             <thead>
               <tr>
                 <th>상태</th>
                 <th>종목</th>
-                <th className="num">순위</th>
+                <th className="num" title="편입일 그 목록에서의 자리">순위</th>
                 <th className="num">점수</th>
-                <th className="num">반복</th>
+                <th className="num" title="그 목록에 며칠째 이어서 걸렸나">반복</th>
+                <th className="num" title="편입일로부터 며칠(달력일). 반복과 다른 질문의 답이다">경과</th>
                 <th>편입일</th>
                 <th className="num">편입가</th>
+                <th className="num">현재가</th>
+                <th className="num">당일</th>
+                <th className="num" title="편입가 대비 — 담고 나서 얼마나">편입 대비</th>
+                <th title="이 종목이 든 테마 중 오늘 가장 강한 것. 무리가 식으면 이탈이 가깝다">무리</th>
+                <th className="num" title="이 종목을 많이 담은 상위 3 ETF 의 오늘 평균">ETF 뒷배</th>
+                <th className="num">+1일</th>
+                <th className="num">+5일</th>
+                <th className="num">+20일</th>
+                <th className="num" title="지수 대비 초과수익 — 이게 없으면 위의 셋은 뜻이 없다">지수대비 +20</th>
                 <th>장세</th>
               </tr>
             </thead>
@@ -392,16 +426,31 @@ export function ListTrackPage({
   );
 }
 
+/** 수익률 한 칸 — 없으면 「아직」이라고 적는다. 0 으로 채우면 거짓말이 된다 */
+function Ret({ v }: { v: number | null | undefined }) {
+  if (v === null || v === undefined || !Number.isFinite(v))
+    return <span className="pt-n">아직</span>;
+  return (
+    <span className={cls(v)}>
+      {v > 0 ? "+" : ""}
+      {v.toFixed(1)}%
+    </span>
+  );
+}
+
 function Row({
   e,
   onSelectStock,
 }: {
-  e: ListEntry;
+  e: ListTrackRow;
   onSelectStock: (code: string, name: string) => void;
 }) {
   return (
     <tr onClick={() => onSelectStock(e.code, e.name)} style={{ cursor: "pointer" }}>
-      <td>{e.active !== false ? "🟢" : "⛔"}</td>
+      <td>
+        {e.active !== false ? "🟢" : "⛔"}
+        {e.isNew && <i className="lt-new">N</i>}
+      </td>
       <td>
         <WatchStar code={e.code} />
         <b>{e.name}</b> <SuperMark code={e.code} />
@@ -410,8 +459,50 @@ function Row({
       <td className="num">{e.rank}</td>
       <td className="num">{e.score}</td>
       <td className="num">{e.seenCount}일</td>
+      <td className="num pt-n">{e.daysSince}일</td>
       <td>{e.addedDate.slice(5)}</td>
       <td className="num">{e.addedPrice.toLocaleString("ko-KR")}</td>
+      <td className="num">{e.price === null ? "-" : e.price.toLocaleString("ko-KR")}</td>
+      <td className={`num ${cls(e.changeRate)}`}>
+        {e.changeRate === null
+          ? "-"
+          : `${e.changeRate > 0 ? "+" : ""}${e.changeRate.toFixed(2)}%`}
+      </td>
+      <td className="num">
+        <Ret v={e.sinceAdded} />
+      </td>
+      {/* 무리 — 걸린 종목의 테마가 식으면 이탈이 가깝다 */}
+      <td className="pt-n">
+        {e.theme ? (
+          <>
+            {e.theme.name}{" "}
+            <span className={cls(e.theme.changeRate)}>
+              {e.theme.changeRate > 0 ? "+" : ""}
+              {e.theme.changeRate.toFixed(1)}%
+            </span>
+            {e.theme.streak > 1 && <i className="lt-streak">{e.theme.streak}일↑</i>}
+          </>
+        ) : (
+          "-"
+        )}
+      </td>
+      <td className={`num ${cls(e.etfBack?.rate ?? null)}`} title={e.etfBack?.top}>
+        {e.etfBack
+          ? `${e.etfBack.rate > 0 ? "+" : ""}${e.etfBack.rate.toFixed(2)}%`
+          : "-"}
+      </td>
+      <td className="num">
+        <Ret v={e.returns?.d1} />
+      </td>
+      <td className="num">
+        <Ret v={e.returns?.d5} />
+      </td>
+      <td className="num">
+        <Ret v={e.returns?.d20} />
+      </td>
+      <td className="num">
+        <Ret v={e.excess?.d20} />
+      </td>
       <td className={e.regime?.weak ? "negative" : ""}>
         {e.regime
           ? e.regime.weak

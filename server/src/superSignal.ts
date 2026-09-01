@@ -488,7 +488,16 @@ function todayStr(d = new Date()): string {
  * 그만큼 느려지고 호출도 는다. ka20006 은 지수를 100배로 주는데, 우리는
  * 비율만 쓰므로 그대로 둬도 된다(나눗셈에서 상쇄된다).
  */
-async function kospiCloses(client: KiwoomClient): Promise<Map<string, number>> {
+/**
+ * 코스피 일별 종가 — **지수 대비를 내려면 이게 있어야 한다.**
+ *
+ * 「d1 -0.13%」가 좋은 건지 나쁜 건지는 **그날 시장을 알아야** 답할 수 있다.
+ * 절대수익률만 보면 상승장에서는 전부 이긴 것처럼 보인다.
+ *
+ * 내보내는 이유: **신호등 분석(`listTrack`)도 같은 자를 써야 한다**(2026-09-01).
+ * 두 원장의 차이가 「교집합을 봤나」 하나로 좁혀지려면 채점하는 자가 같아야 한다.
+ */
+export async function kospiCloses(client: KiwoomClient): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   try {
     const d = new Date(Date.now() + 9 * 3600_000);

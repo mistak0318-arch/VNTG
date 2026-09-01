@@ -5274,10 +5274,34 @@ export interface ListEntry {
   exitedDate?: string;
   /** 편입일 종가 대비 — 슈퍼신호등과 같은 기준이라 견줄 수 있다 */
   returns?: { d1: number | null; d5: number | null; d20: number | null };
+  /**
+   * **지수 대비 초과수익**(%p) — 슈퍼신호등과 같은 자 (2026-09-01).
+   * 이 줄이 없으면 `returns` 는 뜻이 없다 — 상승장에서는 아무거나 사도 오른다.
+   */
+  excess?: { d1: number | null; d5: number | null; d20: number | null };
+}
+
+/**
+ * 화면용 한 줄 — **슈퍼신호등과 같은 칸** (2026-09-01).
+ *
+ * 원장 자체는 오히려 이쪽이 더 많이 들고 있었다(순위·이탈·연속미달). 모자란 것은
+ * 화면에 붙는 값이었다 — 지금 가격, 편입 대비, 무리(테마·ETF). 전부 조회 0회로
+ * 만들어진다(스냅샷 엿보기 + 파일 렌즈).
+ */
+export interface ListTrackRow extends ListEntry {
+  price: number | null;
+  changeRate: number | null;
+  /** 편입가 대비(%) */
+  sinceAdded: number | null;
+  /** 편입일로부터 며칠(달력일) — `seenCount`(걸린 날 수)와 다른 질문의 답 */
+  daysSince: number;
+  isNew: boolean;
+  theme: { key: string; name: string; changeRate: number; streak: number } | null;
+  etfBack: { rate: number; top: string } | null;
 }
 
 export interface ListTrackSummary {
-  entries: ListEntry[];
+  entries: ListTrackRow[];
   lastRunDate: string | null;
   /** 목록별로 몇 개를 받았고 몇 개가 초록이었나 */
   counts: Record<string, { universe: number; green: number }>;
@@ -5296,5 +5320,11 @@ export interface ListGradeRow {
   d1: { avg: number | null; n: number };
   d5: { avg: number | null; n: number };
   d20: { avg: number | null; n: number };
+  /** 지수 대비 초과수익(%p) — 이게 없으면 위의 셋은 뜻이 없다 */
+  ex1: { avg: number | null; n: number };
+  ex5: { avg: number | null; n: number };
+  ex20: { avg: number | null; n: number };
   win1: number | null;
+  /** 20일 승률 — 평균과 같이 봐야 뜻이 산다 */
+  win20: number | null;
 }

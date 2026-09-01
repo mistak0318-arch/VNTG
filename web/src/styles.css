@@ -13284,3 +13284,22 @@ thead .sd-emph {
 }
 .sig-regime-line input[type="number"] { width: 4.5rem; }
 .sig-regime-line .table-note { flex: 1 1 22rem; margin: 0; }
+
+/* 신호등 분석 표 — 슈퍼신호등과 같은 칸을 쓰면서 생긴 배지들 (2026-09-01) */
+.lt-new {
+  margin-left: 3px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--blue, #4c8dff);
+  color: #fff;
+  font-style: normal;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+/* 무리가 며칠째 오르나 — 식으면 이탈이 가깝다 */
+.lt-streak {
+  margin-left: 4px;
+  font-style: normal;
+  font-size: 0.66rem;
+  color: var(--positive, #4ade80);
+}
