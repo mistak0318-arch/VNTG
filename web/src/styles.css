@@ -13535,3 +13535,14 @@ thead .sd-emph {
 }
 .dret-ledger.full .dret-bar > span { background: var(--warn, #d9a441); }
 .dret-warn { color: var(--warn, #d9a441); }
+
+/* walk-forward 표 (2026-09-01) — 가장 엄한 검증이라 제목을 붙인다 */
+.verdict-wf-title {
+  text-align: left;
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: var(--muted);
+  padding-top: 8px;
+}
+/* 네 단계를 다 이기면 헤드라인을 강조한다 */
+.verdict-strong { color: var(--positive, #4ade80); }

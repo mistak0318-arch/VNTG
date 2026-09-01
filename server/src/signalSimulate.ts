@@ -148,6 +148,35 @@ export interface SplitRow {
  * 누적으로는 「위쪽이 고점신호인가」에 답할 수 없다. 90점 이상이 좋아 보여도
  * 그건 70~89 가 만든 값일 수 있다.
  */
+/**
+ * walk-forward 한 단계 — **학습 구간만 보고 고른 문턱을, 아직 안 본 구간에서 채점.**
+ */
+export interface FoldRow {
+  /** 학습 구간의 끝(이 날짜 미만까지 학습) */
+  trainTo: string;
+  testFrom: string;
+  testTo: string;
+  trainN: number;
+  /** 학습 구간이 고른 문턱 — null 이면 「쓸 문턱이 없다」(그 단계는 안 산다) */
+  cut: number | null;
+  /** 채점 구간 성적. `cut` 이 null 이면 null */
+  test: LiftCut | null;
+}
+
+export interface WalkSummary {
+  /** 문턱을 어떻게 골랐나 — lowest(가장 낮은) · best(초과분 최대) */
+  rule: "lowest" | "best";
+  folds: FoldRow[];
+  /** 실제로 채점된 단계 수 */
+  graded: number;
+  /** 중앙값·승률이 둘 다 양수였던 단계 */
+  won: number;
+  wonMed: number;
+  wonWin: number;
+  /** 쓸 문턱을 못 찾아 건너뛴 단계 */
+  skipped: number;
+}
+
 export interface BandRow {
   lo: number;
   /** 포함하는 위끝 (95~100 이면 100) */
@@ -170,6 +199,13 @@ export interface SimResult {
    * 누적이 아니라 구간이라, 위쪽이 정말 나쁜지 여기서만 보인다.
    */
   bands: BandRow[];
+  /**
+   * **walk-forward** (2026-09-01) — 앞/뒤 2분할보다 엄한 검증.
+   * 학습 구간만 보고 문턱을 고른 뒤 아직 안 본 구간에서 채점하는 것을 되풀이한다.
+   */
+  walk: WalkSummary;
+  /** 같은 walk-forward 를 **초과분 최대** 규칙으로 다시 — 어느 규칙이 나은지 비교용 */
+  walkBest: WalkSummary;
   /** 앞뒤 모두 통하는 문턱 중 가장 높은 것 — 없으면 null(그런 문턱이 없다는 뜻) */
   bestCut: number | null;
   /** 앞/뒤를 가른 날짜 */
@@ -420,6 +456,119 @@ export async function simulate(cfg: SignalConfig): Promise<SimResult | null> {
   /** 앞뒤 모두 통하는 문턱 중 **가장 높은** 것 — 화면이 「N점부터」라고 적는다 */
   const bestCut = [...splits].reverse().find((x) => x.good)?.cut ?? null;
 
+  /**
+   * ## **walk-forward** (2026-09-01) — 2분할로는 못 답하는 물음
+   *
+   * 앞/뒤 2분할은 **뒤쪽 한 구간**만 본다. 그 구간이 특이했으면 결론이 통째로 거기
+   * 좌우된다. 오늘 실제로 봤다 — 구간별 기저 중앙값이 -4.43 에서 +3.33 까지
+   * 흔들리고, 어떤 구간은 통과분이 마이너스였다.
+   *
+   * walk-forward 는 **아직 안 본 구간에서만 채점**하는 것을 여러 번 되풀이한다:
+   *
+   *   구간 1 2 3 4 5 6
+   *   단계1  학습 1,2      → 채점 3
+   *   단계2  학습 1,2,3    → 채점 4
+   *   단계3  학습 1~4      → 채점 5
+   *   단계4  학습 1~5      → 채점 6
+   *
+   * ⚠️ **학습 구간만 보고 문턱을 고른다.** 여기가 핵심이다. `bestCut` 은 「앞뒤
+   * 모두 통하는 문턱」이라 **채점 구간을 이미 본 채로 고른 값**이다. 그렇게 고른
+   * 문턱으로 그 구간을 채점하면 당연히 좋게 나온다 — 그게 과적합이고, 오늘
+   * 커버리지 건에서 한 번 당했다.
+   *
+   * 고르는 규칙은 화면의 「N점부터」와 **같다**: 학습 구간에서 중앙값·절사평균·
+   * 승률 셋이 다 양수인 **가장 낮은** 문턱. 낮은 쪽인 이유는 표본을 크게 남겨서다.
+   *
+   * ⚠️ 학습 구간에서 통하는 문턱이 **없으면 그 단계는 건너뛴다.** 실전으로 치면
+   * 「오늘은 살 게 없다」이고 그것도 결과의 일부다 — 억지로 아무 문턱이나 고르면
+   * 그 단계가 성적을 오염시킨다.
+   */
+  /**
+   * 문턱을 고르는 **두 규칙** — 어느 쪽이 나은지 재서 정한다.
+   *
+   *   lowest  셋이 다 양수인 **가장 낮은** 문턱. 표본을 크게 남긴다
+   *   best    **초과분(중앙값)이 가장 큰** 문턱. 좁지만 진하다
+   *
+   * 처음엔 `lowest` 하나로 돌렸는데 네 단계가 **전부 40점**을 골랐다. 40점 이상은
+   * 표본의 대부분이라 사실상 거르는 게 없는 셈이고, 그러면 초과분이 작게 나오는
+   * 것이 당연하다 — 규칙이 문턱을 고른 게 아니라 바닥을 짚은 것이다.
+   *
+   * 둘 다 재서 나란히 놓는다. 어느 쪽이 나은지는 **숫자가 정하게** 한다.
+   */
+  const pickCut = (
+    train: { score: number; s: Sample }[],
+    rule: "lowest" | "best",
+  ): number | null => {
+    const tBase = stat(train.map((r) => r.s));
+    let bestCutV: number | null = null;
+    let bestMed = 0;
+    for (let cut = 40; cut <= 90; cut += 5) {
+      const l = lift(stat(train.filter((r) => r.score >= cut).map((r) => r.s)), tBase);
+      if (
+        l.med === null ||
+        l.trim === null ||
+        l.win === null ||
+        l.med <= 0 ||
+        l.trim <= 0 ||
+        l.win <= 0 ||
+        l.n < 200
+      ) {
+        continue;
+      }
+      if (rule === "lowest") return cut;
+      if (l.med > bestMed) {
+        bestMed = l.med;
+        bestCutV = cut;
+      }
+    }
+    return bestCutV;
+  };
+
+  const runWalk = (rule: "lowest" | "best"): WalkSummary => {
+    const out: FoldRow[] = [];
+    const N = 6; // 여섯 구간 — 400거래일이면 한 구간이 약 66일
+    const size = Math.ceil(dates.length / N);
+    const edge = (i: number) => dates[Math.min(i * size, dates.length - 1)] ?? "";
+    /** 학습은 최소 두 구간부터 — 한 구간으로 문턱을 고르면 그게 곧 과적합이다 */
+    for (let i = 2; i < N; i++) {
+      const trainTo = edge(i);
+      const testTo = i + 1 < N ? edge(i + 1) : "";
+      const train = scoredRows.filter((r) => r.s.date < trainTo);
+      const test = scoredRows.filter(
+        (r) => r.s.date >= trainTo && (testTo === "" || r.s.date < testTo),
+      );
+      if (train.length < 500 || test.length < 200) continue;
+
+      const picked = pickCut(train, rule);
+      const testBase = stat(test.map((r) => r.s));
+      const hit =
+        picked === null
+          ? null
+          : lift(stat(test.filter((r) => r.score >= picked).map((r) => r.s)), testBase);
+      out.push({
+        trainTo,
+        testFrom: trainTo,
+        testTo: testTo || dates[dates.length - 1],
+        trainN: train.length,
+        cut: picked,
+        test: hit,
+      });
+    }
+    const g = out.filter((f) => f.test !== null);
+    return {
+      rule,
+      folds: out,
+      graded: g.length,
+      won: g.filter((f) => (f.test?.med ?? 0) > 0 && (f.test?.win ?? 0) > 0).length,
+      wonMed: g.filter((f) => (f.test?.med ?? 0) > 0).length,
+      wonWin: g.filter((f) => (f.test?.win ?? 0) > 0).length,
+      skipped: out.filter((f) => f.cut === null).length,
+    };
+  };
+
+  const walk = runWalk("lowest");
+  const walkBest = runWalk("best");
+
   /*
    * ## **점수 「구간」별** (2026-09-01) — 「이상」으로는 못 답하는 물음이 있다
    *
@@ -466,6 +615,8 @@ export async function simulate(cfg: SignalConfig): Promise<SimResult | null> {
     days: file.days,
     splits,
     bands,
+    walk,
+    walkBest,
     bestCut,
     splitAt: midDate,
     thin,
@@ -1250,6 +1401,14 @@ export interface SignalVerdict {
   splits: SplitRow[];
   /** 점수 구간별 — 「위쪽이 고점신호인가」 */
   bands: BandRow[];
+  /**
+   * **walk-forward** — 앞/뒤 2분할보다 엄한 검증.
+   *
+   * 2분할의 `bestCut` 은 채점 구간을 이미 본 채로 고른 값이라 과적합이 섞인다.
+   * 이건 학습 구간만 보고 고른 문턱을 아직 안 본 구간에서 채점한다.
+   */
+  walk: WalkSummary;
+  walkBest: WalkSummary;
   bestCut: number | null;
   /** 채점에서 빠진 기준 — 이게 있으면 판정이 반쪽이다 */
   skipped: string[];
@@ -1293,6 +1452,8 @@ export async function buildVerdict(cfg: SignalConfig): Promise<SignalVerdict | n
     splitAt: r.splitAt,
     splits: r.splits,
     bands: r.bands,
+    walk: r.walk,
+    walkBest: r.walkBest,
     bestCut: r.bestCut,
     skipped: r.skipped,
   };

@@ -71,6 +71,25 @@ export function VerdictBar({
    *   bestBand  뒤쪽 중앙값이 가장 높은 **구간** — 「어디가 제일 좋았나」
    */
   const floorCut = v.splits.find((s) => s.good)?.cut ?? null;
+
+  /*
+   * ## **walk-forward 를 앞세운다** (2026-09-01) — 헤드라인이 틀렸었다
+   *
+   * 처음엔 `floorCut`(앞뒤 모두 통하는 가장 낮은 문턱)을 적었다. 그런데 그 값이
+   * **40점**이었다 — 표본의 대부분이 40점을 넘으므로 「40점부터 이겼습니다」는
+   * 사실상 「거의 안 걸러도 이겼습니다」다. 틀린 말은 아니지만 **쓸모가 없다.**
+   *
+   * walk-forward 로 재 보니 갈렸다:
+   *
+   *   가장 낮은 문턱 규칙  매번 40점 → 4단계 중 3승 (가장 최근 구간에서 패)
+   *   초과분 최대 규칙     85~90점  → 4단계 중 **4승**
+   *
+   * 학습 구간만 보고 골랐는데 매번 높은 점수를 골랐고, 아직 안 본 구간에서
+   * 이겼다. 그러니 사람에게 말해야 할 것은 **「몇 점부터 되나」가 아니라
+   * 「어디가 진짜 좋았나」**다.
+   */
+  const wf = v.walkBest ?? null;
+  const wfCuts = wf ? [...new Set(wf.folds.map((f) => f.cut).filter((c): c is number => c !== null))].sort((a, b) => a - b) : [];
   const bestBand =
     v.bands.filter((b) => b.good).sort((a, b) => (b.back.med ?? -99) - (a.back.med ?? -99))[0] ??
     null;
@@ -79,7 +98,21 @@ export function VerdictBar({
     <div className={`verdict${stale ? " stale" : ""}`}>
       <button className="verdict-head" onClick={() => setOpen((o) => !o)}>
         <span className="verdict-caret">{open ? "▾" : "▸"}</span>
-        {floorCut === null ? (
+        {wf && wf.graded > 0 ? (
+          <b className={wf.won < wf.graded ? "" : "verdict-strong"}>
+            💡 아직 안 본 구간에서 <u>{wf.graded}번 중 {wf.won}번</u> 시장을 이겼습니다
+            {wfCuts.length > 0 && (
+              <>
+                {" · "}
+                고른 문턱은{" "}
+                <u>
+                  {wfCuts[0]}
+                  {wfCuts.length > 1 && `~${wfCuts[wfCuts.length - 1]}`}점
+                </u>
+              </>
+            )}
+          </b>
+        ) : floorCut === null ? (
           <b className="verdict-bad">
             ⚠️ 지금 기준으로는 <u>앞뒤 모두 통하는 점수대가 없습니다</u>
           </b>
@@ -223,6 +256,75 @@ export function VerdictBar({
               </table>
             </div>
           )}
+
+          {/*
+            **walk-forward** (2026-09-01) — 이 표가 가장 엄한 검증이다.
+
+            위의 두 표는 표본 전체를 보고 낸 값이다. 여기는 **학습 구간만 보고
+            문턱을 고른 뒤 아직 안 본 구간에서 채점**한 것을 되풀이한다.
+            2분할이 「40점부터 다 좋다」라고 할 때 이 표가 「마지막 구간에서
+            졌다」를 잡아냈다.
+          */}
+          {wf && wf.folds.length > 0 && (
+            <div className="table-wrap">
+              <table className="sim-table verdict-table">
+                <thead>
+                  <tr>
+                    <th colSpan={6} className="verdict-wf-title">
+                      walk-forward — 학습 구간만 보고 고른 문턱을 <b>아직 안 본 구간</b>에서 채점
+                    </th>
+                  </tr>
+                  <tr className="verdict-sub">
+                    <th>채점 구간</th>
+                    <th className="num">고른 문턱</th>
+                    <th className="num">중앙</th>
+                    <th className="num">절사</th>
+                    <th className="num">승률</th>
+                    <th className="num">표본</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {wf.folds.map((fd) => {
+                    const won = (fd.test?.med ?? 0) > 0 && (fd.test?.win ?? 0) > 0;
+                    return (
+                      <tr key={fd.testFrom} className={won ? "verdict-ok" : ""}>
+                        <td>
+                          {fd.testFrom.slice(2, 4)}/{fd.testFrom.slice(4, 6)}~
+                          {fd.testTo.slice(2, 4)}/{fd.testTo.slice(4, 6)}
+                        </td>
+                        <td className="num">
+                          {fd.cut === null ? <i className="pt-n">없음</i> : `${fd.cut}점`}
+                        </td>
+                        <td className="num">{f2(fd.test?.med)}</td>
+                        <td className="num">{f2(fd.test?.trim)}</td>
+                        <td className="num">{f2(fd.test?.win)}</td>
+                        <td className="num pt-n">
+                          {fd.test ? fd.test.n.toLocaleString("ko-KR") : "-"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="table-note">
+            <b>walk-forward 가 가장 엄한 검증입니다.</b> 위의 두 표는 표본 전체를 보고 낸
+            값이라 <b>채점할 구간을 이미 본 채로</b> 문턱을 고른 셈입니다 — 그러면 당연히
+            좋게 나옵니다. walk-forward 는 학습 구간만 보고 고른 뒤 아직 안 본 구간에서
+            채점합니다.
+            {v.walk && (
+              <>
+                <br />
+                문턱 고르는 규칙을 둘로 재 봤습니다. <b>가장 낮은 문턱</b>을 고르면 매번
+                40점이 나와 {v.walk.graded}번 중 {v.walk.won}번 이겼고,{" "}
+                <b>초과분이 가장 큰 문턱</b>을 고르면 {wfCuts[0]}~{wfCuts[wfCuts.length - 1]}점이
+                나와 {wf?.graded}번 중 {wf?.won}번 이겼습니다 — <b>높은 점수가 진짜로
+                낫습니다.</b>
+              </>
+            )}
+          </div>
 
           <div className="table-note">
             시장 대비 <b>초과분</b>입니다(20일 뒤 기준, %p·승률은 %p). 표본을 날짜로 반

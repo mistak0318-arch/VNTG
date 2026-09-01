@@ -418,6 +418,15 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
         </div>
       )}
 
+      {/*
+        **이 점수가 무슨 뜻인가** (2026-09-01).
+
+        처음엔 결과 표 바로 위에 뒀는데, 그 자리는 `job` 안이라 **돌리기 전에는
+        아예 안 보였다.** 그런데 이 판정이 가장 쓸모 있는 순간은 오히려 돌리기
+        전이다 — 「몇 점을 목표로 봐야 하나」를 알고 시작해야 하니까.
+      */}
+      <VerdictBar />
+
       {job && (
         <>
           {/*
@@ -448,11 +457,6 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
             </p>
           )}
 
-          {/*
-            **이 점수가 무슨 뜻인가** (2026-09-01) — 돌리고 나면 바로 보여야 한다.
-            점수만 나오고 그 뜻을 모르면 사람이 판단할 근거가 없다.
-          */}
-          <VerdictBar />
           <div className="data-table-wrap">
             <table className="data-table">
               <thead>

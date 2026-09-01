@@ -3153,6 +3153,35 @@ export interface BandRow {
   good: boolean;
 }
 
+/** walk-forward 한 단계 — 학습 구간만 보고 고른 문턱을 아직 안 본 구간에서 채점 */
+export interface FoldRow {
+  trainTo: string;
+  testFrom: string;
+  testTo: string;
+  trainN: number;
+  /** 학습 구간이 고른 문턱. null 이면 「쓸 문턱이 없다」 */
+  cut: number | null;
+  test: LiftCut | null;
+}
+
+/**
+ * **walk-forward** (2026-09-01) — 앞/뒤 2분할보다 엄한 검증.
+ *
+ * 2분할의 `bestCut` 은 채점 구간을 이미 본 채로 고른 값이라 과적합이 섞인다.
+ * 이건 학습 구간만 보고 고른 문턱을 **아직 안 본 구간**에서 채점하는 것을 되풀이한다.
+ */
+export interface WalkSummary {
+  /** 문턱을 어떻게 골랐나 — lowest(가장 낮은) · best(초과분 최대) */
+  rule: "lowest" | "best";
+  folds: FoldRow[];
+  graded: number;
+  /** 중앙값·승률이 둘 다 양수였던 단계 */
+  won: number;
+  wonMed: number;
+  wonWin: number;
+  skipped: number;
+}
+
 export interface SignalVerdict {
   at: string;
   builtAt: string;
@@ -3171,6 +3200,10 @@ export interface SignalVerdict {
   splits: SplitRow[];
   /** 점수 구간별 */
   bands: BandRow[];
+  /** walk-forward — 「가장 낮은 문턱」 규칙 */
+  walk: WalkSummary;
+  /** 같은 검증을 「초과분 최대」 규칙으로 */
+  walkBest: WalkSummary;
   /** 앞뒤 모두 통하는 문턱 중 가장 높은 것 */
   bestCut: number | null;
   /** 채점에서 빠진 기준 — 있으면 판정이 반쪽이다 */
