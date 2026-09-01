@@ -989,7 +989,16 @@
       "Bash(cp /tmp/keys.txt \"C:/Users/JAEMIN~1/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/57c27169-a3b6-4154-a764-8be5615af14b/scratchpad/keys.txt\")",
       "Bash(rm -f cond_keys.txt)",
       "Bash(python)",
-      "Bash(curl -s http://localhost:4000/api/signal/cond/fields)"
+      "Bash(curl -s http://localhost:4000/api/signal/cond/fields)",
+      "Bash(curl -s http://localhost:4000/api/signal/screen/active)",
+      "Bash(curl -s http://localhost:4000/api/signal/cond/presets)",
+      "Bash(curl -s http://localhost:4000/api/rank/_probe/orgn --max-time 60)",
+      "Bash(curl -s \"http://localhost:4000/api/rank/_probe/orgn\" --max-time 60)",
+      "Bash(curl -s \"http://localhost:4000/api/rank/_probe/orgn\" --max-time 90 -o probe1.json)",
+      "Bash(curl -s \"http://localhost:4000/api/rank/_probe/who?code=321370\" --max-time 30 -o w.json)",
+      "Bash(curl -s \"http://localhost:4000/api/rank/_probe/orgn?c=1100,1200,2100,3200,4100,5000,5100,5200,6100,7200,8000,8100,9200,9100,9999\" --max-time 90 -o p2.json)",
+      "Bash(curl -s \"http://localhost:4000/api/rank/_probe/who?code=032820\" --max-time 30 -o w_032820.json)",
+      "Bash(curl -s \"http://localhost:4000/api/rank/_probe/who?code=033790\" --max-time 30 -o w2_033790.json)"
     ]
   }
 }

@@ -174,6 +174,19 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
       const limit = Math.min(Math.max(Number(req.query.limit) || 100, 20), 500);
 
       /**
+       * **고를 수 있는 파라미터** (2026-09-01) — `spec.choices` 가 있는 조회만.
+       *
+       * ⚠️ 명세에 적힌 값만 받는다. 쿼리를 그대로 흘리면 화면에서 아무 코드나
+       * 넣을 수 있고, 그러면 **뜻을 모르는 응답이 「투신」이라는 이름으로 그려진다.**
+       * 실측으로 확정한 것만 목록에 있으므로, 목록 밖은 기본값으로 돌린다.
+       */
+      const chosen: Record<string, string> = {};
+      for (const ch of spec.choices ?? []) {
+        const want = String(req.query[ch.param] ?? "");
+        chosen[ch.param] = ch.options.some((o) => o.value === want) ? want : ch.def;
+      }
+
+      /**
        * 한 거래소에서 `limit` 만큼 모은다.
        *
        * 다음 장이 없으면 그 자리에서 멈춘다 — 코스닥 소형주처럼 목록이 짧은 조회에서
@@ -188,7 +201,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
           const res = await client.request<Record<string, unknown>>(
             `/api/dostk/${spec.uri}`,
             spec.apiId,
-            { ...COMMON_PARAMS, ...(spec.params ?? {}), mrkt_tp: market, stex_tp: stex },
+            { ...COMMON_PARAMS, ...(spec.params ?? {}), ...chosen, mrkt_tp: market, stex_tp: stex },
             page === 0 ? {} : { contYn, nextKey },
           );
           last = res;
@@ -273,10 +286,14 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
           label: spec.label,
           columns: spec.columns,
           exchange: Boolean(spec.exchange),
+          /* 화면이 버튼을 그리려면 무엇을 고를 수 있는지 알아야 한다 */
+          choices: spec.choices ?? [],
           note: spec.note ?? "",
         },
         market,
         exchange,
+        /* 지금 무엇으로 골라 부른 것인가 — 화면이 눌린 버튼을 표시한다 */
+        chosen,
         rows: rows.slice(0, limit).map((r) => {
           const code = bare(r.stk_cd);
           const k = krxOf.get(code);

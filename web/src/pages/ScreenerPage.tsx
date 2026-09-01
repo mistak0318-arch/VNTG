@@ -207,6 +207,16 @@ export function ScreenerPage({
    * 그래야 목록과 종목 상세가 같은 값을 말한다.
    */
   const [exchange, setExchange] = useState("3");
+  /**
+   * **명세가 열어 둔 파라미터** (2026-09-01) — 조회마다 다르다.
+   *
+   * 「장중 투자자별」이 `orgn_tp: "9000"` 에 묶여 있었고, 실측해 보니 그게
+   * **외국인 순매도**였다. 이름은 「투자자별 매매상위」인데 내용은 하나였던 셈이라,
+   * 무엇을 보는지 고를 수 있어야 한다.
+   *
+   * 조회를 바꾸면 비운다 — 다른 조회의 선택을 들고 가면 뜻이 없다.
+   */
+  const [chosen, setChosen] = useState<Record<string, string>>({});
   const [data, setData] = useState<RankResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -326,12 +336,12 @@ export function ScreenerPage({
       if (!quiet) setLoading(true);
       setError(null);
       api
-        .rank(rankKey, market, exchange, fetchLimit)
+        .rank(rankKey, market, exchange, fetchLimit, chosen)
         .then((r) => setData(r))
         .catch((e: Error) => setError(e.message))
         .finally(() => setLoading(false));
     },
-    [rankKey, market, exchange, fetchLimit],
+    [rankKey, market, exchange, fetchLimit, chosen],
   );
 
   useEffect(() => {
@@ -352,6 +362,11 @@ export function ScreenerPage({
   useEffect(() => {
     setPage(0);
   }, [rankKey, market, exchange, limit, pageSize, filter]);
+
+  /* 조회를 바꾸면 선택도 비운다 — 다른 조회의 `orgn_tp` 를 들고 가면 뜻이 없다 */
+  useEffect(() => {
+    setChosen({});
+  }, [rankKey]);
 
   const cols = data?.spec.columns ?? [];
   const all = data?.rows ?? [];
@@ -664,6 +679,25 @@ export function ScreenerPage({
               ))}
             </>
           )}
+          {/*
+            **명세가 열어 둔 선택** (2026-09-01) — 조회마다 다르다.
+            지금은 「장중 투자자별」의 방향(순매수/순매도)과 투자자(투신·연기금…)다.
+          */}
+          {(data?.spec.choices ?? []).map((ch) => (
+            <span key={ch.param} className="filter-row">
+              <span className="news-scope-sep" />
+              <span className="pt-n">{ch.label}</span>
+              {ch.options.map((o) => (
+                <button
+                  key={o.value}
+                  className={`filter-btn ${(chosen[ch.param] ?? data?.chosen?.[ch.param] ?? ch.def) === o.value ? "active" : ""}`}
+                  onClick={() => setChosen((p) => ({ ...p, [ch.param]: o.value }))}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </span>
+          ))}
           {/*
             건수 표시. 필터가 걸리면 **거른 것 / 받아 온 것**이다 — 받아 온 쪽은
             필터 때문에 세 배로 부른 수라 limit 과 다르다. 「65 / 300건」처럼 뜬다.

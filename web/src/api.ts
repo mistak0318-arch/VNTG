@@ -1321,8 +1321,21 @@ export const api = {
     putJson<{ presets: BoardPresetDto[] }>("/api/settings/board", { presets }),
 
   rankSpecs: () => getJson<{ groups: RankSpecGroup[] }>("/api/rank/specs"),
-  rank: (key: string, market = "000", exchange = "3", limit = 100) =>
-    getJson<RankResult>(`/api/rank/${key}?market=${market}&exchange=${exchange}&limit=${limit}`),
+  rank: (
+    key: string,
+    market = "000",
+    exchange = "3",
+    limit = 100,
+    /** 명세가 고를 수 있게 열어 둔 파라미터 (`RankResult.spec.choices`) */
+    chosen?: Record<string, string>,
+  ) => {
+    const extra = Object.entries(chosen ?? {})
+      .map(([k, v]) => `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join("");
+    return getJson<RankResult>(
+      `/api/rank/${key}?market=${market}&exchange=${exchange}&limit=${limit}${extra}`,
+    );
+  },
   sectorFlow: (subject = "foreign", window = 5) =>
     getJson<SectorFlowResult>(`/api/sector-flow?subject=${subject}&window=${window}`),
   sectorFlowStocks: (market: string, code: string) =>
@@ -2735,8 +2748,23 @@ export interface RankResult {
     label: string;
     columns: { key: string; label: string; type?: "text" | "price" | "num" | "pct" | "signed" }[];
     exchange: boolean;
+    /**
+     * **화면에서 고를 수 있는 파라미터** (2026-09-01).
+     *
+     * 여태 순위 조회의 파라미터는 고정이었다. 그래서 「장중 투자자별 매매상위」가
+     * `orgn_tp: "9000"` 하나에 묶여 있었는데 — 실측해 보니 **외국인 순매도**였다.
+     * 이름과 내용이 달랐던 것이라, 무엇을 보는지 고를 수 있어야 한다.
+     */
+    choices?: {
+      param: string;
+      label: string;
+      options: { value: string; label: string }[];
+      def: string;
+    }[];
     note: string;
   };
+  /** 지금 무엇으로 골라 부른 것인가 */
+  chosen?: Record<string, string>;
   market: string;
   exchange: string;
   /**
