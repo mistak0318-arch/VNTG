@@ -32,15 +32,28 @@ const STEPS: { key: string; label: string; why: string; heavy?: string }[] = [
     heavy: "약 41분",
   },
   { key: "regime", label: "③ 장세 점검", why: "①이 있어야 20일선 위 비율이 오늘 것입니다" },
-  { key: "track", label: "④ 신호등 추적기", why: "문턱별(70/80/90) 편입" },
-  { key: "super", label: "⑤ 슈퍼신호등", why: "교집합 편입·이탈 + 관심종목 점수대 그룹 동기화" },
+  {
+    key: "track",
+    label: "④ 신호등 추적기",
+    why: "문턱별(70/80/90)로 담아 「90점이 진짜 70점보다 나은가」를 검증합니다 — 종목을 찾는 게 아니라 신호등을 채점하는 자리입니다",
+  },
   {
     key: "listTrack",
-    label: "⑥ 신호등 분석 (목록별)",
-    why: "①②가 다 있어야 열세 목록이 제 값으로 돕니다",
+    label: "⑤ 신호등 분석 (목록별)",
+    why: "열세 목록을 각각 받아 초록을 담습니다. ①②가 다 있어야 제 값이고, ⑥이 이 목록을 그대로 씁니다",
     heavy: "약 40분",
   },
-  { key: "samples", label: "⑦ 검증 표본", why: "얼마나 낡았는지만 봅니다 (재수집은 18:30)" },
+  {
+    key: "super",
+    label: "⑥ 슈퍼신호등 (교집합)",
+    why: "⑤가 받아 둔 목록에서 여러 곳에 동시에 걸린 초록만 — 그래서 ⑤ 다음입니다. 관심종목 점수대 그룹도 여기서 동기화합니다",
+  },
+  {
+    key: "cross",
+    label: "⑦ 교차 신호 (주도주 ∩ 슈퍼)",
+    why: "⑥ 원장을 읽어 교집합을 냅니다. 여태 「시장 흐름」 화면을 열어야만 돌았습니다",
+  },
+  { key: "samples", label: "⑧ 검증 표본", why: "얼마나 낡았는지만 봅니다 (재수집은 18:30)" },
 ];
 
 function dur(ms: number): string {
@@ -78,7 +91,7 @@ export function AfterClosePanel() {
       ? STEPS.filter((s) => steps.includes(s.key))
           .map((s) => s.label)
           .join(" · ")
-      : "전체 (①~⑦)";
+      : "전체 (①~⑧)";
     if (!window.confirm(`${names} 을(를) 지금 돌립니다.\n\n장중에는 다른 화면이 느려집니다. 진행할까요?`)) {
       return;
     }
@@ -160,7 +173,7 @@ export function AfterClosePanel() {
           onClick={() => void run()}
           disabled={busy || st?.running}
         >
-          전체 돌리기 (①~⑦)
+          전체 돌리기 (①~⑧)
         </button>
         {msg && <span className="table-note">{msg}</span>}
       </div>

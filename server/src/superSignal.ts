@@ -11,6 +11,7 @@ import { regimeTrust } from "./regimeWatch.js";
 import { leaderScan } from "./leaderScan.js";
 import { stockLens, themeMapNow } from "./stockLens.js";
 import { fetchUniverse, SCREEN_UNIVERSES, type Candidate } from "./signalScreen.js";
+import { recentLists } from "./listTrack.js";
 import {
   hasDedicatedChannel,
   isTelegramConfigured,
@@ -943,11 +944,32 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
      * 각 목록 안의 연속조회 간격은 fetchUniverse 가 이미 지킨다.
      */
     const byCode = new Map<string, { c: Candidate; lists: string[] }>();
+    /*
+     * ## **신호등 분석이 방금 받은 목록을 그대로 쓴다** (2026-09-01)
+     *
+     * 벤티지: "신호등 분석이 돌고 슈퍼신호등이 돌아야 하는 거 아닌가? 신호등
+     * 분석에 있는 그룹 중에서 공통적으로 뽑힌 애들이 슈퍼신호등으로 가잖아."
+     *
+     * 맞다. 그리고 여태 **둘이 같은 목록을 따로 받고 있었다** — 각각 열세 목록을
+     * `fetchUniverse` 로 받아 조회가 두 배로 나갔다(분석 실측 8분 32초).
+     *
+     * 더 중요한 건 **같은 목록이어야 한다**는 것이다. 따로 받으면 그사이 순위가
+     * 바뀌어, 「분석에서는 걸렸는데 슈퍼에서는 안 걸린 종목」이 생긴다 — 그러면
+     * 두 원장의 차이가 「교집합을 봤나」인지 「목록이 달랐나」인지 알 수 없다.
+     *
+     * ⚠️ 30분이 지난 목록은 안 쓴다. 그때는 예전처럼 직접 받는다.
+     */
+    const shared = recentLists();
     for (const u of SCREEN_UNIVERSES) {
-      job.step = `${u.label} 받는 중`;
-      const rows = await fetchUniverse(client, u.key, "000", runCfg.universeSize).catch(
-        () => [] as Candidate[],
-      );
+      job.step = `${u.label} ${shared ? "(분석 것 재사용)" : "받는 중"}`;
+      const cached = shared?.get(u.key);
+      const rows: Candidate[] = cached
+        ? cached
+            .slice(0, runCfg.universeSize)
+            .map((r) => ({ code: r.code, name: r.name, price: r.price, changeRate: 0, tradeValue: 0 }))
+        : await fetchUniverse(client, u.key, "000", runCfg.universeSize).catch(
+            () => [] as Candidate[],
+          );
       for (const c of rows) {
         const hit = byCode.get(c.code);
         if (hit) {

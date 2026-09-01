@@ -145,6 +145,32 @@ const todayStr = (): string =>
  * ⚠️ **합집합으로 한 번만 평가한다.** 같은 종목이 여러 목록에 있는데 목록마다
  * 다시 재면 조회가 몇 배로 늘어난다 — 신호등 점수는 목록과 무관한 값이다.
  */
+/**
+ * **방금 받은 목록** — 슈퍼신호등이 다시 받지 않게 (2026-09-01).
+ *
+ * 벤티지: "신호등 분석이 돌고 슈퍼신호등이 돌아야 하는 거 아닌가? 신호등 분석에
+ * 있는 그룹 중에서 공통적으로 뽑힌 애들이 슈퍼신호등으로 가잖아."
+ *
+ * 맞다. 그리고 여태 **둘이 같은 목록을 따로 받고 있었다** — 각각 열세 목록 ×
+ * 500종목이라 조회가 두 배로 나갔다(실측 8분 32초 × 2).
+ *
+ * 분석이 받은 것을 여기 두고, 슈퍼신호등이 그대로 쓴다. **같은 목록으로 봐야**
+ * 두 원장의 차이가 「교집합을 봤나 안 봤나」 하나로 좁혀지기도 한다.
+ *
+ * ⚠️ 오래되면 안 쓴다. 아침에 받은 목록으로 저녁에 교집합을 내면 뜻이 없다.
+ */
+let lastLists: { at: number; byList: Map<string, { code: string; name: string; price: number; rank: number }[]> } | null = null;
+
+/** 30분 안에 받은 것만 — 그보다 오래면 슈퍼신호등이 새로 받는다 */
+const LISTS_TTL_MS = 30 * 60_000;
+
+export function recentLists():
+  | Map<string, { code: string; name: string; price: number; rank: number }[]>
+  | null {
+  if (!lastLists) return null;
+  return Date.now() - lastLists.at < LISTS_TTL_MS ? lastLists.byList : null;
+}
+
 export async function runListTrack(
   client: KiwoomClient,
   opts: { limit?: number; force?: boolean } = {},
@@ -191,6 +217,9 @@ export async function runListTrack(
       job.done += 1;
       await new Promise((r) => setTimeout(r, 400));
     }
+
+    /* 슈퍼신호등이 다시 안 받게 남겨 둔다 — 같은 목록이어야 두 원장이 견줘진다 */
+    lastLists = { at: Date.now(), byList };
 
     /*
      * ② **합집합으로 한 번만 평가한다.** 목록마다 다시 재면 같은 종목을 최대

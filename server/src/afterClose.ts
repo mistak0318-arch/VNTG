@@ -6,6 +6,7 @@ import { regimeCheck } from "./regimeWatch.js";
 import { startEnroll } from "./signalTrack.js";
 import { runSuperSignal } from "./superSignal.js";
 import { runListTrack } from "./listTrack.js";
+import { marketPulse } from "./marketPulse.js";
 import { samplesMeta } from "./signalSamples.js";
 import { sendTelegram } from "./telegram.js";
 
@@ -217,22 +218,50 @@ export async function runAfterClose(
     return j.status === "error" ? `실패: ${j.error ?? ""}` : `${j.added ?? 0}건 담음`;
   });
 
-  /* ⑤ 슈퍼신호등 — 교집합 편입/이탈 + 점수대 그룹 동기화 */
-  if (want("super"))
-    await step("super", "슈퍼신호등", async () => {
-    const s = await runSuperSignal(client);
-    return `${s.entries.filter((e) => e.active !== false).length}종목 추적 중`;
-  });
-
-  /* ⑥ 신호등 분석 — ①②가 다 있어야 열세 목록이 제 값으로 돈다 */
+  /*
+   * ⑤ **신호등 분석** — 열세 목록을 각각 받아 초록을 담는다.
+   *
+   * ⚠️ **슈퍼신호등보다 먼저다** (2026-09-01, 벤티지 지적으로 순서를 바꿨다).
+   *
+   * 슈퍼신호등은 「여러 목록에 **동시에** 걸린 초록」이다. 그 목록이 바로 여기서
+   * 받는 것이라 — 분석이 먼저 돌아야 슈퍼가 오늘 목록으로 교집합을 낼 수 있다.
+   *
+   * 그리고 여기서 받은 목록을 슈퍼가 **그대로 쓴다**(`recentLists`). 따로 받으면
+   * 조회가 두 배로 나가고, 그사이 순위가 바뀌어 「분석에서는 걸렸는데 슈퍼에서는
+   * 안 걸린 종목」이 생긴다.
+   */
   if (want("listTrack"))
     await step("listTrack", "신호등 분석 (목록별)", async () => {
-    const s = await runListTrack(client, { limit: 500, force: true });
-    return `${s.entries.length}건`;
-  });
+      const s2 = await runListTrack(client, { limit: 500, force: true });
+      return `${s2.entries.length}건`;
+    });
+
+  /* ⑥ 슈퍼신호등 — ⑤가 받아 둔 목록으로 교집합. 조회가 거의 안 는다 */
+  if (want("super"))
+    await step("super", "슈퍼신호등 (교집합)", async () => {
+      const s2 = await runSuperSignal(client, true);
+      return `${s2.entries.filter((e) => e.active !== false).length}종목 추적 중`;
+    });
 
   /*
-   * ⑦ 표본 — **상태만 본다.** 실제 재수집은 `regimeScheduler` 의 18:30 이 한다.
+   * ⑦ **교차 신호** — 주도주 태그 ∩ 슈퍼신호등.
+   *
+   * ⚠️ 여태 **자동으로 안 돌았다** (2026-09-01 발견). `marketPulse` 를 부르는 곳이
+   * 화면 라우트뿐이라, 「시장 흐름」 화면을 열어야만 계산되고 그때 관심종목
+   * 「슈퍼신호등+교차」 그룹 편입·이탈이 일어났다. 화면을 안 열면 그 그룹이
+   * 며칠이고 낡은 채로 남는다.
+   *
+   * ⑥ 다음이다 — 슈퍼신호등 원장을 읽어 교집합을 내기 때문이다.
+   */
+  if (want("cross"))
+    await step("cross", "교차 신호 (주도주 ∩ 슈퍼)", async () => {
+      const p2 = await marketPulse(client, true);
+      const n = p2.cross?.stocks?.length ?? 0;
+      return `${n}종목`;
+    });
+
+  /*
+   * ⑧ 표본 — **상태만 본다.** 실제 재수집은 `regimeScheduler` 의 18:30 이 한다.
    *
    * 재수집은 종목당 여러 콜에 40~60분이라 이 파이프라인(이미 2시간 남짓) 뒤에
    * 붙이면 밤이 다 간다. 여기서는 「얼마나 낡았나」만 적어 요약에 싣는다.
