@@ -2917,17 +2917,26 @@ export interface SignalResult {
 
 /* ── 조건 검색 ──────────────────────────────────────────────────── */
 
-/** 조건 하나 — 어느 기준을 통과(또는 미달)해야 하나 */
-export interface Cond {
+/**
+ * 조건 한 줄 — **기준 · 견줄 방법 · 값 · 다음 줄과의 연결자.**
+ *
+ * 예전엔 그룹 안의 모든 조건이 같은 AND/OR 을 공유해서 「A AND B OR C」를 못 썼다.
+ * 줄마다 다음 줄과의 연결자를 잡으면 그 제약이 사라진다.
+ */
+export interface CondLine {
   key: string;
-  /** true = 통과해야 함, false = 미달이어야 함 */
-  want: boolean;
-}
-
-/** 그룹 안은 AND 이거나 OR — **그룹끼리는 늘 AND** 다 */
-export interface CondGroup {
-  join: "and" | "or";
-  conds: Cond[];
+  /**
+   *   gte   잰 값이 `value` 이상
+   *   lte   잰 값이 `value` 이하
+   *   pass  신호등 기준을 통과 (문턱은 설정을 따른다)
+   *   fail  신호등 기준에 미달
+   *
+   * `pass`/`fail` 이 필요한 이유: 「정배열」처럼 값이 뜻을 갖지 않는 기준이 있다.
+   */
+  op: "gte" | "lte" | "pass" | "fail";
+  value?: number;
+  /** 다음 줄과 어떻게 잇나 — 마지막 줄에는 뜻이 없다 */
+  join?: "and" | "or";
 }
 
 export interface CondQuery {
@@ -2937,7 +2946,8 @@ export interface CondQuery {
   /** 시가총액(억원) — 조회 0회로 미리 거른다 */
   capMin?: number | null;
   capMax?: number | null;
-  groups: CondGroup[];
+  /** 조건식 — **위에서부터 차례로** 잇는다. `A AND B OR C` = `(A AND B) OR C` */
+  lines: CondLine[];
 }
 
 export interface CondHit {

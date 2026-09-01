@@ -13303,3 +13303,37 @@ thead .sd-emph {
   font-size: 0.66rem;
   color: var(--positive, #4ade80);
 }
+
+/* 조건식 편집기 (2026-09-01 개편) — 줄마다 기준·부등호·값·연결자.
+   예전엔 체크박스뿐이라 ① 값을 못 넣고 ② 그룹 안이 전부 같은 AND/OR 이었다. */
+.cond-lines { display: flex; flex-direction: column; gap: 2px; }
+.cond-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 0;
+}
+.cond-no {
+  min-width: 1.4rem;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.cond-name-cell {
+  min-width: 11rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+.cond-ops { gap: 3px; margin: 0; }
+.cond-ops .filter-btn { padding: 2px 8px; font-size: 0.78rem; }
+.cond-value { width: 6.5rem; }
+/* 연결자는 줄 전체를 차지한다 — 위아래 사이에 있다는 게 보여야 한다 */
+.cond-join {
+  flex-basis: 100%;
+  display: flex;
+  gap: 4px;
+  padding-left: 1.6rem;
+}
+.cond-join .filter-btn { padding: 1px 9px; font-size: 0.74rem; }
+.cond-editor h2 { margin-bottom: 4px; }

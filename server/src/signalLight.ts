@@ -2026,8 +2026,33 @@ export async function evaluateSignal(
     let link: CheckResult["link"];
     let etfs: CheckResult["etfs"];
     let value = "-";
-    /** 잰 값 그대로 — 탈락 판정이 쓴다. 탈락을 쓰는 기준만 채운다 */
+    /**
+     * **잰 값 그대로** — 점수로 눕히기 전의 원래 숫자.
+     *
+     * 두 곳이 쓴다:
+     *   · 탈락 판정(`vetoAt`) — 점수로 하면 눈금 아래쪽이 뭉개진다
+     *   · **조건 검색** — 「60일 신고가 ≥ 100」처럼 사람이 값을 직접 잡으려면
+     *     비교할 원래 값이 있어야 한다 (2026-09-01)
+     *
+     * 예전엔 탈락을 쓰는 기준만 채웠는데, 그러면 조건 검색이 **신호등 설정의
+     * 문턱을 그대로 따라가게** 된다 — 벤티지: "각 조건들에 대해서 세밀한 값을
+     * 내가 만들고 그걸 저장해야 내 조건이 되는 거잖아. 체크만 하는 건 의미가 없다."
+     *
+     * 그래서 아래 `G()` 로 **모든 기준이 자기 값을 남긴다.**
+     */
     let raw: number | undefined;
+
+    /**
+     * 점수를 매기면서 **잰 값도 남긴다.**
+     *
+     * `grade(v, c)` 를 그대로 쓰면 v 가 어디에도 안 남아 조건 검색이 비교할 게
+     * 없다. 서른두 곳을 하나하나 적는 대신 이 한 줄을 지나가게 한다 —
+     * **빠뜨릴 수가 없는 구조**가 적어 두는 것보다 낫다.
+     */
+    const G = (v: number): number => {
+      raw = v;
+      return grade(v, c);
+    };
 
     if (c.key === "trend") {
       const lines = [...cfg.maLines].sort((a, b) => a - b);
@@ -2049,7 +2074,7 @@ export async function evaluateSignal(
       const high = win.length > 0 ? Math.max(...win.map((r) => Math.abs(toNum(r.high_pric)))) : 0;
       if (cur && high > 0) {
         const pct = (cur / high) * 100;
-        g = grade(pct, c);
+        g = G(pct);
         value = `52주 고가의 ${pct.toFixed(0)}%`;
       }
     } else if (c.key === "newHigh") {
@@ -2062,7 +2087,7 @@ export async function evaluateSignal(
       const high = win.length >= 20 ? Math.max(...win.map((r) => Math.abs(toNum(r.high_pric)))) : 0;
       if (cur && high > 0) {
         const pct = (cur / high) * 100;
-        g = grade(pct, c);
+        g = G(pct);
         value =
           pct >= 100
             ? `60일 신고가 돌파 (+${(pct - 100).toFixed(1)}%)`
@@ -2092,7 +2117,7 @@ export async function evaluateSignal(
         } else {
           /* 90 에서 가장 멀어야 100, 85·95 에서 50 */
           const near = 1 - Math.abs(pct - 90) / 5;
-          g = grade(50 + near * 50, c);
+          g = G(50 + near * 50);
           value = `고가의 ${pct.toFixed(0)}% · 20일선 위 — 눌림목`;
         }
       }
@@ -2106,7 +2131,7 @@ export async function evaluateSignal(
        * 맞으므로, 그렇게 말하고 비워 둔다.
        */
       if (mood?.sector?.code) {
-        g = grade(mood.sector.changeRate, c);
+        g = G(mood.sector.changeRate);
         value = `${mood.sector.name} ${mood.sector.changeRate > 0 ? "+" : ""}${mood.sector.changeRate.toFixed(2)}%`;
         link = { kind: "sector", code: mood.sector.code, name: mood.sector.name };
       } else if (mood?.sector) {
@@ -2122,7 +2147,7 @@ export async function evaluateSignal(
         null,
       );
       if (best) {
-        g = grade(best.changeRate, c);
+        g = G(best.changeRate);
         value = `${best.name} ${best.changeRate > 0 ? "+" : ""}${best.changeRate.toFixed(2)}%`;
         if (best.code) link = { kind: "theme", code: best.code, name: best.name };
       }
@@ -2132,14 +2157,14 @@ export async function evaluateSignal(
         null,
       );
       if (best) {
-        g = grade(best.rate, c);
+        g = G(best.rate);
         value = `${best.name} ${best.rate > 0 ? "+" : ""}${best.rate.toFixed(2)}%`;
       }
     } else if (c.key === "foreignFlow" || c.key === "instFlow") {
       if (flowRows.length > 0) {
         const field = c.key === "foreignFlow" ? "frgnr_invsr" : "orgn";
         const sum = flowRows.slice(0, cfg.flowDays).reduce((s, r) => s + toNum(r[field]), 0);
-        g = grade(sum, c);
+        g = G(sum);
         value = `${cfg.flowDays}일 ${sum > 0 ? "+" : ""}${Math.round(sum).toLocaleString("ko-KR")}`;
       }
     } else if (c.key === "flowStreak") {
@@ -2150,7 +2175,7 @@ export async function evaluateSignal(
           if (toNum(r.frgnr_invsr) > 0) streak += 1;
           else break;
         }
-        g = grade(streak, c);
+        g = G(streak);
         value = `${streak}일 연속`;
       }
     } else if (c.key === "flowPersist") {
@@ -2177,7 +2202,7 @@ export async function evaluateSignal(
         /* 절반은 재야 판정한다 — 두 구간 보고 만점을 매길 수는 없다 */
         if (measured.length >= Math.max(2, spans.length)) {
           const pos = measured.filter((v) => v > 0).length;
-          g = grade(pos, c);
+          g = G(pos);
           value = `${pos}/${measured.length}구간 +`;
         }
       }
@@ -2199,13 +2224,13 @@ export async function evaluateSignal(
         const d20 = sum(long) / long;
         if (d20 > 0) {
           const ratio = d5 / d20;
-          g = grade(ratio, c);
+          g = G(ratio);
           value = `${ratio.toFixed(2)}배 (${short}일 ÷ ${long}일)`;
         } else if (d5 > 0) {
-          g = grade(c.strongAt, c);
+          g = G(c.strongAt);
           value = "매도 → 매수 전환";
         } else {
-          g = grade(0, c);
+          g = G(0);
           value = "20일 순매도";
         }
       }
@@ -2223,7 +2248,7 @@ export async function evaluateSignal(
             (s, r) => s + toNum(r.invtrt) + toNum(r.penfnd_etc) + toNum(r.samo_fund),
             0,
           );
-        g = grade(sum, c);
+        g = G(sum);
         value = `${days}일 ${sum > 0 ? "+" : ""}${Math.round(sum).toLocaleString("ko-KR")}`;
       }
     } else if (c.key === "flowRatio") {
@@ -2292,7 +2317,7 @@ export async function evaluateSignal(
         const foldAt = atHigh ? 0.75 : atPullback ? 1.5 : 1;
         const folded =
           pctOfCap <= foldAt ? pctOfCap : Math.max(0, foldAt * 2 - pctOfCap);
-        g = grade(folded, c);
+        g = G(folded);
         /* 탈락 판정은 **접기 전 값**으로 — 접으면 순매도와 과열이 같은 0 이 된다 */
         raw = pctOfCap;
         value =
@@ -2316,7 +2341,7 @@ export async function evaluateSignal(
         /* 둘 다 0 이면 못 받은 것이다 — 「안 변했다」로 읽으면 안 된다 */
         if (now > 0 && before > 0) {
           const diff = now - before;
-          g = grade(diff, c);
+          g = G(diff);
           value = `${now.toFixed(2)}% (${back}일 ${diff > 0 ? "+" : ""}${diff.toFixed(2)}%p)`;
         }
       }
@@ -2329,7 +2354,7 @@ export async function evaluateSignal(
           rows
             .slice(0, days)
             .reduce((s, r) => s + (toNum(r.prm_buy_amt) - toNum(r.prm_sell_amt)), 0) / 100;
-        g = grade(net, c);
+        g = G(net);
         value = `${days}일 ${net > 0 ? "+" : ""}${Math.round(net).toLocaleString("ko-KR")}억`;
       }
     } else if (c.key === "profitGrowth") {
@@ -2339,7 +2364,7 @@ export async function evaluateSignal(
         const prev = periods[periods.length - 2].operatingProfit;
         if (latest !== null && prev !== null && prev !== 0) {
           const growth = ((latest - prev) / Math.abs(prev)) * 100;
-          g = grade(growth, c);
+          g = G(growth);
           value = `${growth > 0 ? "+" : ""}${growth.toFixed(1)}%`;
         }
       }
@@ -2351,7 +2376,7 @@ export async function evaluateSignal(
         cap = Math.round((entry.shares * price) / 100_000_000);
       }
       if (cap > 0) {
-        g = grade(cap, c);
+        g = G(cap);
         value = `${Math.round(cap).toLocaleString("ko-KR")}억`;
       }
     } else if (c.key === "exportGrowth") {
@@ -2365,7 +2390,7 @@ export async function evaluateSignal(
         const trade = await getTradeStats().catch(() => null);
         const yoy = trade ? exportYoyForSector(trade.items, sector) : null;
         if (yoy !== null) {
-          g = grade(yoy, c);
+          g = G(yoy);
           value = `${sector} 수출 ${yoy > 0 ? "+" : ""}${yoy.toFixed(1)}%`;
         } else {
           value = `${sector} — 수출 지표 없음`;
@@ -2391,7 +2416,7 @@ export async function evaluateSignal(
         fromPrevDay = amount > 0;
       }
       if (amount > 0) {
-        g = grade(amount, c);
+        g = G(amount);
         value = `${amount.toLocaleString("ko-KR")}억${fromPrevDay ? " (직전 거래일)" : ""}`;
       }
     } else if (c.key === "targetUpside") {
@@ -2403,31 +2428,31 @@ export async function evaluateSignal(
       const price = cur || Math.abs(toNum(info?.data?.cur_prc));
       if (goal !== null && price > 0) {
         const up = ((goal - price) / price) * 100;
-        g = grade(up, c);
+        g = G(up);
         value = `${up > 0 ? "+" : ""}${up.toFixed(1)}% (${opinion?.brokerCount ?? 0}곳)`;
       }
     } else if (c.key === "targetTrend") {
       // 100건 상한에 걸린 응답은 오래된 쪽이 잘려 추세를 믿을 수 없다 — 판단 불가로 남긴다
       if (opinion && !opinion.truncated && opinion.goalTrend !== null) {
-        g = grade(opinion.goalTrend, c);
+        g = G(opinion.goalTrend);
         value = `${opinion.goalTrend > 0 ? "+" : ""}${opinion.goalTrend.toFixed(1)}%`;
       } else if (opinion?.truncated) {
         value = "조회 상한에 걸려 추세를 못 냅니다";
       }
     } else if (c.key === "roe") {
       if (ratio?.roe !== null && ratio?.roe !== undefined) {
-        g = grade(ratio.roe, c);
+        g = G(ratio.roe);
         value = `${ratio.roe.toFixed(1)}% (${ratio.period.slice(0, 4)}년)`;
       }
     } else if (c.key === "debtRatio") {
       if (ratio?.debtRatio !== null && ratio?.debtRatio !== undefined) {
-        g = grade(ratio.debtRatio, c);
+        g = G(ratio.debtRatio);
         value = `${ratio.debtRatio.toFixed(0)}%`;
       }
     } else if (c.key === "overhead") {
       const pct = overheadPct(chartRows);
       if (pct !== null) {
-        g = grade(pct, c);
+        g = G(pct);
         raw = pct;
         value = `위쪽 매물 ${pct.toFixed(0)}%`;
       }
@@ -2436,7 +2461,7 @@ export async function evaluateSignal(
       if (cur && ma20) {
         const away = ((cur - ma20) / ma20) * 100;
         // 아래로 벌어진 건 과열이 아니다. 위로 벌어진 것만 위험으로 친다
-        g = grade(Math.max(0, away), c);
+        g = G(Math.max(0, away));
         value = `20일선 ${away > 0 ? "+" : ""}${away.toFixed(1)}%`;
       }
     } else if (c.key === "naverTheme") {
@@ -2485,7 +2510,7 @@ export async function evaluateSignal(
         .sort((a, b) => themed(b) - themed(a))[0];
       if (best) {
         const score = themed(best);
-        g = grade(score, c);
+        g = G(score);
         value =
           `${best.name} 가중 ${score > 0 ? "+" : ""}${score.toFixed(2)}%` +
           ` (오늘 ${best.changeRate > 0 ? "+" : ""}${best.changeRate.toFixed(2)}%` +
@@ -2503,7 +2528,7 @@ export async function evaluateSignal(
       const top = etfTop3.filter((h) => h.changeRate !== null);
       if (top.length > 0) {
         const avg = top.reduce((n, h) => n + (h.changeRate ?? 0), 0) / top.length;
-        g = grade(avg, c);
+        g = G(avg);
         /* 화면이 목록으로 펼쳐 각 ETF 를 연다 (2026-08-28 — 테마는 되는데 ETF 는 안 됐다) */
         etfs = top.map((h) => ({
           code: h.code,
@@ -2525,7 +2550,7 @@ export async function evaluateSignal(
          * 20일선과 **같은 규칙**이다: 위로 벌어진 것만 위험으로 친다.
          * 아래로 벌어진 것은 이 항목이 답할 물음이 아니다 — 그건 추세 축이 본다.
          */
-        g = grade(Math.max(0, away), c);
+        g = G(Math.max(0, away));
         value = `5일선 ${away > 0 ? "+" : ""}${away.toFixed(1)}%`;
       }
     } else if (c.key === "shortSaleUp") {
@@ -2556,7 +2581,7 @@ export async function evaluateSignal(
         const diff = recent - before;
         /* 비중이 아주 높으면 방향과 무관하게 얹는다 — 20% 를 1%p 위험으로 환산 */
         const level = Math.max(0, (recent - 20) / 20);
-        g = grade(diff + level, c);
+        g = G(diff + level);
         value =
           `최근 ${recent.toFixed(1)}% (이전 ${before.toFixed(1)}% 대비 ` +
           `${diff > 0 ? "+" : ""}${diff.toFixed(1)}%p${diff < 0 ? " · 식는 중" : ""})`;
@@ -2564,7 +2589,7 @@ export async function evaluateSignal(
         /* 20일이 안 되면 옛 방식으로라도 — 못 재는 것보다 낫다 */
         const win = rows.slice(0, 5);
         const a = win.reduce((s, r) => s + toNum(r.trde_wght), 0) / win.length;
-        g = grade(Math.max(0, (a - 20) / 20), c);
+        g = G(Math.max(0, (a - 20) / 20));
         value = `5일 평균 비중 ${a.toFixed(1)}% (추이 못 잼)`;
       }
     } else if (c.key === "lendingUp") {
@@ -2585,7 +2610,7 @@ export async function evaluateSignal(
         const before = toNum(rows[span].rmnd);
         if (before > 0) {
           const up = ((now - before) / before) * 100;
-          g = grade(up, c);
+          g = G(up);
           value = `잔고 ${span}일 ${up > 0 ? "+" : ""}${up.toFixed(1)}%${up < 0 ? " · 갚는 중" : ""}`;
         }
       }

@@ -3,8 +3,8 @@ import {
   api,
   fmtNum,
   signClass,
-  type CondGroup,
   type CondJob,
+  type CondLine,
   type CondPreset,
   type CondQuery,
   type SignalCheckConfig,
@@ -58,8 +58,50 @@ const EMPTY: CondQuery = {
   limit: 200,
   capMin: null,
   capMax: null,
-  groups: [{ join: "and", conds: [] }],
+  lines: [],
 };
+
+/** 값이 뜻을 갖지 않는 기준 — 통과/미달로만 물을 수 있다 */
+const NO_VALUE = new Set(["trend"]);
+
+/** 기준마다 값의 단위가 다르다 — 입력칸 옆에 붙여 준다(설정 화면과 같은 표) */
+const UNITS: Record<string, string> = {
+  foreignFlow: "백만원",
+  instFlow: "백만원",
+  flowStreak: "일",
+  flowPersist: "구간",
+  flowAccel: "배",
+  smartMoney: "백만원",
+  flowRatio: "%",
+  foreignRatioUp: "%p",
+  programFlow: "억원",
+  profitGrowth: "%",
+  naverTheme: "%",
+  etfBacking: "%",
+  nearHigh: "%",
+  newHigh: "%",
+  pullback: "점",
+  marketCap: "억원",
+  largeCap: "억원",
+  volume: "억원",
+  exportGrowth: "%",
+  targetUpside: "%",
+  targetTrend: "%",
+  roe: "%",
+  debtRatio: "%",
+  overhead: "%",
+  disparity: "%",
+  ma5Gap: "%",
+  shortSaleUp: "%p",
+  lendingUp: "%",
+};
+
+const OPS: { key: CondLine["op"]; label: string; hint: string }[] = [
+  { key: "gte", label: "≥", hint: "잰 값이 이 값 이상" },
+  { key: "lte", label: "≤", hint: "잰 값이 이 값 이하" },
+  { key: "pass", label: "통과", hint: "신호등 기준을 통과 — 문턱은 설정을 따릅니다" },
+  { key: "fail", label: "미달", hint: "신호등 기준에 미달" },
+];
 
 export function CondSearchPage({
   onSelectStock,
@@ -122,11 +164,11 @@ export function CondSearchPage({
     }
   }, [q]);
 
-  const totalConds = q.groups.reduce((a, g) => a + g.conds.length, 0);
+  const totalConds = q.lines.length;
 
   /** 조건에 쓰인 기준이 종목당 조회를 몇 번 더 부르나 — 미리 알려 준다 */
   const cost = (() => {
-    const used = new Set(q.groups.flatMap((g) => g.conds.map((c) => c.key)));
+    const used = new Set(q.lines.map((l) => l.key));
     const groups = new Set<string>();
     let n = 0;
     for (const c of checks) {
@@ -140,29 +182,34 @@ export function CondSearchPage({
     return n;
   })();
 
-  const patchGroup = (i: number, next: Partial<CondGroup>) =>
-    setQ((p) => ({ ...p, groups: p.groups.map((g, k) => (k === i ? { ...g, ...next } : g)) }));
+  /** 줄 하나 고치기 */
+  const patchLine = (i: number, next: Partial<CondLine>) =>
+    setQ((p) => ({ ...p, lines: p.lines.map((l, k) => (k === i ? { ...l, ...next } : l)) }));
 
-  const toggleCond = (i: number, key: string) =>
+  const removeLine = (i: number) =>
+    setQ((p) => ({ ...p, lines: p.lines.filter((_, k) => k !== i) }));
+
+  /**
+   * 줄 더하기 — **기본 부등호는 기준의 성격이 정한다.**
+   *
+   * 위험 축은 「이하」가 자연스럽다(매물 부담은 낮을수록 좋다). 값이 뜻을 갖지
+   * 않는 기준은 「통과」로 연다. 처음 값은 그 기준의 신호등 문턱을 가져온다 —
+   * 빈 칸으로 두면 뭘 넣어야 할지 모른다.
+   */
+  const addLine = (key: string) => {
+    const c = checks.find((x) => x.key === key);
+    const op: CondLine["op"] = NO_VALUE.has(key)
+      ? "pass"
+      : c?.axis === "risk"
+        ? "lte"
+        : "gte";
     setQ((p) => ({
       ...p,
-      groups: p.groups.map((g, k) => {
-        if (k !== i) return g;
-        const at = g.conds.findIndex((c) => c.key === key);
-        if (at < 0) return { ...g, conds: [...g.conds, { key, want: true }] };
-        /* 통과 → 미달 → 뺀다 — 세 번 누르면 원래대로 */
-        if (g.conds[at].want) {
-          const conds = [...g.conds];
-          conds[at] = { key, want: false };
-          return { ...g, conds };
-        }
-        return { ...g, conds: g.conds.filter((c) => c.key !== key) };
-      }),
+      lines: [
+        ...p.lines.map((l, i) => (i === p.lines.length - 1 ? { ...l, join: l.join ?? "and" } : l)),
+        { key, op, value: NO_VALUE.has(key) ? undefined : c?.threshold },
+      ],
     }));
-
-  const stateOf = (i: number, key: string): "off" | "pass" | "fail" => {
-    const c = q.groups[i]?.conds.find((x) => x.key === key);
-    return !c ? "off" : c.want ? "pass" : "fail";
   };
 
   return (
@@ -269,60 +316,131 @@ export function CondSearchPage({
         </div>
       </section>
 
-      {/* ── 조건 ── */}
-      {q.groups.map((g, i) => (
-        <section className="card cond-group" key={i}>
-          <div className="cond-group-head">
-            <b>조건 {i + 1}</b>
-            <div className="filter-row">
-              {(["and", "or"] as const).map((j) => (
-                <button
-                  key={j}
-                  className={`filter-btn ${g.join === j ? "active" : ""}`}
-                  onClick={() => patchGroup(i, { join: j })}
-                  title={j === "and" ? "이 그룹의 조건을 모두 만족해야 합니다" : "하나만 만족해도 됩니다"}
-                >
-                  {j === "and" ? "모두 (AND)" : "하나라도 (OR)"}
-                </button>
-              ))}
-              {q.groups.length > 1 && (
-                <button
-                  className="filter-btn"
-                  onClick={() => setQ((p) => ({ ...p, groups: p.groups.filter((_, k) => k !== i) }))}
-                >
-                  그룹 빼기
-                </button>
-              )}
-            </div>
+      {/* ── 조건식 ── */}
+      <section className="card cond-editor">
+        <h2>조건식</h2>
+        {/*
+          **줄마다 기준·부등호·값·연결자** (2026-09-01 개정).
+
+          벤티지: "어느 하나 조건을 선택하고 그 조건에 대한 상세 값을 넣은 다음에
+          그 다음 조건을 넣고 그 사이에 AND 냐 OR 이냐 이렇게 할 수 있게끔" ·
+          "체크만 하는 건 의미가 없다고 생각하지 않아."
+
+          맞는 말이다. 예전엔 ① 값을 못 넣어 **신호등 설정의 문턱을 그대로 따라갔고**
+          ② 그룹 안 모든 조건이 같은 AND/OR 을 공유해 「A AND B OR C」를 못 썼다.
+        */}
+        {q.lines.length === 0 ? (
+          <div className="empty">
+            아래에서 기준을 눌러 조건을 더하세요. 위에서부터 차례로 이어집니다.
           </div>
-          <div className="mg-picker">
-            {checks.map((c) => {
-              const st = stateOf(i, c.key);
+        ) : (
+          <div className="cond-lines">
+            {q.lines.map((l, i) => {
+              const c = checks.find((x) => x.key === l.key);
+              const noVal = NO_VALUE.has(l.key);
               return (
-                <button
-                  key={c.key}
-                  className={`mg-chip cond-chip ${st}`}
-                  onClick={() => toggleCond(i, c.key)}
-                  title={`${c.hint}\n\n한 번 누르면 「통과」, 두 번이면 「미달」, 세 번이면 뺍니다${c.cost > 0 ? `\n⚠️ 종목당 조회 ${c.cost}회 추가` : ""}`}
-                >
-                  {st === "off" ? "☐" : st === "pass" ? "☑" : "✕"} {c.label}
-                  {st === "fail" && <i className="cond-not"> 미달</i>}
-                  {c.cost > 0 && <i className="cond-cost">+{c.cost}</i>}
-                </button>
+                <div className="cond-line" key={`${l.key}-${i}`}>
+                  <span className="cond-no">{i + 1}</span>
+                  <span className="cond-name-cell" title={c?.hint}>
+                    {c?.label ?? l.key}
+                    {(c?.cost ?? 0) > 0 && <i className="cond-cost">+{c!.cost}</i>}
+                  </span>
+                  <span className="filter-row cond-ops">
+                    {OPS.filter((o) => !noVal || o.key === "pass" || o.key === "fail").map((o) => (
+                      <button
+                        key={o.key}
+                        className={`filter-btn ${l.op === o.key ? "active" : ""}`}
+                        onClick={() =>
+                          patchLine(i, {
+                            op: o.key,
+                            value:
+                              o.key === "gte" || o.key === "lte"
+                                ? (l.value ?? c?.threshold ?? 0)
+                                : undefined,
+                          })
+                        }
+                        title={o.hint}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </span>
+                  {(l.op === "gte" || l.op === "lte") && (
+                    <>
+                      <input
+                        type="number"
+                        className="cond-value"
+                        value={l.value ?? ""}
+                        onChange={(e) =>
+                          patchLine(i, {
+                            value: e.target.value === "" ? undefined : Number(e.target.value),
+                          })
+                        }
+                      />
+                      <span className="sig-unit">{UNITS[l.key] ?? ""}</span>
+                    </>
+                  )}
+                  <button className="cond-x" onClick={() => removeLine(i)} title="이 줄을 뺍니다">
+                    ✕
+                  </button>
+
+                  {/* 다음 줄과의 연결자 — 마지막 줄에는 없다 */}
+                  {i < q.lines.length - 1 && (
+                    <span className="cond-join">
+                      {(["and", "or"] as const).map((j) => (
+                        <button
+                          key={j}
+                          className={`filter-btn ${(l.join ?? "and") === j ? "active" : ""}`}
+                          onClick={() => patchLine(i, { join: j })}
+                          title={
+                            j === "and"
+                              ? "위까지의 결과와 이 아래를 **둘 다** 만족해야 합니다"
+                              : "위까지의 결과나 이 아래 **하나만** 만족해도 됩니다"
+                          }
+                        >
+                          {j === "and" ? "그리고 (AND)" : "또는 (OR)"}
+                        </button>
+                      ))}
+                    </span>
+                  )}
+                </div>
               );
             })}
           </div>
-        </section>
-      ))}
+        )}
 
-      <div className="filter-row">
-        <button
-          className="filter-btn"
-          onClick={() => setQ((p) => ({ ...p, groups: [...p.groups, { join: "and", conds: [] }] }))}
-        >
-          + 조건 그룹 (AND 로 이어집니다)
-        </button>
-      </div>
+        {q.lines.length > 1 && (
+          <div className="table-note">
+            <b>위에서부터 차례로</b> 이어집니다 — <code>A 그리고 B 또는 C</code> 는{" "}
+            <code>(A 그리고 B) 또는 C</code> 입니다. 괄호는 아직 없습니다.
+          </div>
+        )}
+      </section>
+
+      {/* ── 기준 고르기 ── */}
+      <section className="card">
+        <h2>기준 더하기</h2>
+        <div className="mg-picker">
+          {checks.map((c) => (
+            <button
+              key={c.key}
+              className="mg-chip"
+              onClick={() => addLine(c.key)}
+              title={`${c.hint}${c.cost > 0 ? `
+
+⚠️ 종목당 조회 ${c.cost}회 추가` : ""}`}
+            >
+              + {c.label}
+              {c.cost > 0 && <i className="cond-cost">+{c.cost}</i>}
+            </button>
+          ))}
+        </div>
+        <div className="table-note">
+          누르면 조건식에 한 줄이 더해집니다. 처음 값은 그 기준의 <b>신호등 문턱</b>을
+          가져오니 거기서 고쳐 쓰면 됩니다 — 신호등이 99 로 보든 말든 여기서는
+          <b> 내가 정한 값</b>이 기준입니다.
+        </div>
+      </section>
 
       {/* ── 실행·저장 ── */}
       <div className="filter-row cond-run">

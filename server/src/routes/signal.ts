@@ -31,6 +31,7 @@ import {
   getCondJob,
   listPresets,
   removePreset,
+  linesOf,
   savePreset,
   startCondSearch,
   type CondQuery,
@@ -194,8 +195,9 @@ export function createSignalRouter(client: KiwoomClient): Router {
   router.post("/cond/start", async (req, res, next) => {
     try {
       const b = req.body as Partial<CondQuery>;
-      const groups = Array.isArray(b.groups) ? b.groups : [];
-      if (groups.length === 0 || groups.every((g) => (g.conds ?? []).length === 0)) {
+      /* 옛 형식(그룹)으로 와도 받는다 — 저장해 둔 조건식이 죽지 않게 */
+      const lines = Array.isArray(b.lines) ? b.lines : linesOf(b as CondQuery);
+      if (lines.length === 0) {
         res.status(400).json({ error: "조건을 하나 이상 넣어야 합니다" });
         return;
       }
@@ -205,7 +207,7 @@ export function createSignalRouter(client: KiwoomClient): Router {
         limit: Math.min(Math.max(Number(b.limit) || 200, 20), 500),
         capMin: typeof b.capMin === "number" ? b.capMin : null,
         capMax: typeof b.capMax === "number" ? b.capMax : null,
-        groups,
+        lines,
       });
       res.json({ jobId: id });
     } catch (err) {

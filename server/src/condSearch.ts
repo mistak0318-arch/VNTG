@@ -47,13 +47,66 @@ import { getMarketSnapshot } from "./marketSnapshot.js";
 
 export interface Cond {
   key: CheckKey;
-  /** 통과를 원하나(true), 미달을 원하나(false) */
-  want: boolean;
+  /**
+   * **무엇과 견주나** (2026-09-01 개정).
+   *
+   * 처음엔 `want: boolean` 하나였다 — 「통과냐 미달이냐」. 그런데 그 「통과」의
+   * 문턱이 **신호등 설정을 그대로 따라갔다.** 벤티지: "각 조건들에 대해서 세밀한
+   * 값을 내가 만들고 그걸 저장해야 내 조건이 되는 거잖아. 체크만 하는 건 의미가
+   * 없다고 생각하지 않아."
+   *
+   * 맞는 말이다. 조건검색식이라면 **「60일 신고가 ≥ 100」** 을 그대로 쓸 수 있어야
+   * 한다 — 신호등 문턱이 99 든 97 이든 상관없이.
+   *
+   *   gte   값 이상이어야 한다
+   *   lte   값 이하여야 한다
+   *   pass  신호등 기준을 통과 (문턱은 설정을 따른다)
+   *   fail  신호등 기준에 미달
+   *
+   * `pass`/`fail` 을 남겨 둔 이유: 「정배열」처럼 **값이 뜻을 갖지 않는** 기준이
+   * 있다. 그건 통과/미달로만 물을 수 있다.
+   */
+  op: "gte" | "lte" | "pass" | "fail";
+  /** `gte`·`lte` 일 때 견줄 값. 그 외에는 안 쓴다 */
+  value?: number;
+  /** @deprecated 옛 저장분 호환 — `op` 가 없으면 이걸로 읽는다 */
+  want?: boolean;
 }
 
-export interface CondGroup {
-  join: "and" | "or";
-  conds: Cond[];
+/** 옛 조건식(체크박스 시절)을 새 모양으로 — 저장해 둔 식이 죽지 않게 */
+function normalizeCond(c: Cond): Cond {
+  if (c.op) return c;
+  return { key: c.key, op: c.want === false ? "fail" : "pass" };
+}
+
+/**
+ * 조건 한 줄 — **기준 · 견줄 방법 · 값 · 다음 줄과의 연결자.**
+ *
+ * 벤티지: "어느 하나 조건을 선택하고 그 조건에 대한 상세 값을 넣은 다음에
+ * 그 다음 조건을 넣고 그 사이에 AND 냐 OR 이냐 이렇게 할 수 있게끔 하는 거지.
+ * 그 묶음이 하나의 조건식이 되는 거고."
+ *
+ * 예전엔 **그룹 안의 모든 조건이 같은 AND/OR 을 공유**했다. 그래서
+ * 「A AND B OR C」를 못 썼다 — 그룹 하나는 전부 AND 이거나 전부 OR 이었다.
+ * 자유도가 낮았다.
+ */
+export interface CondLine {
+  key: CheckKey;
+  /**
+   *   gte   잰 값이 `value` 이상
+   *   lte   잰 값이 `value` 이하
+   *   pass  신호등 기준을 통과 (문턱은 설정을 따른다)
+   *   fail  신호등 기준에 미달
+   *
+   * `pass`/`fail` 을 남긴 이유: 「정배열」처럼 **값이 뜻을 갖지 않는** 기준이 있다.
+   */
+  op: "gte" | "lte" | "pass" | "fail";
+  value?: number;
+  /**
+   * **다음 줄과 어떻게 잇나.** 마지막 줄에는 뜻이 없다.
+   * 없으면 `and` 로 본다 — 조건을 더할 때 좁아지는 쪽이 예상에 가깝다.
+   */
+  join?: "and" | "or";
 }
 
 export interface CondQuery {
@@ -65,7 +118,39 @@ export interface CondQuery {
   /** 시가총액(억원) 하한·상한 — 조회 0회로 미리 거른다 */
   capMin?: number | null;
   capMax?: number | null;
-  groups: CondGroup[];
+  /**
+   * 조건식 — **위에서부터 차례로** 잇는다.
+   *
+   *   A AND B OR C  →  (A AND B) OR C
+   *
+   * 괄호는 없다. 증권사 조건검색도 대개 순차 평가이고, 괄호를 넣는 순간
+   * **화면이 그 구조를 보여줄 방법**부터 만들어야 한다 — 안 보이는 괄호는
+   * 안 쓰느니만 못하다. 필요해지면 그때 넣는다.
+   */
+  lines: CondLine[];
+  /** @deprecated 옛 저장분(그룹 + 체크박스) — 있으면 `lines` 로 옮겨 읽는다 */
+  groups?: { join: "and" | "or"; conds: { key: CheckKey; want?: boolean }[] }[];
+}
+
+/**
+ * 옛 조건식을 새 모양으로 편다 — 저장해 둔 식이 죽지 않게.
+ * 그룹 안은 그 그룹의 join 으로, 그룹끼리는 AND 로 이어 붙인다(옛 규칙 그대로).
+ */
+export function linesOf(q: CondQuery): CondLine[] {
+  if (q.lines?.length) return q.lines;
+  const out: CondLine[] = [];
+  const gs = q.groups ?? [];
+  gs.forEach((g, gi) => {
+    g.conds.forEach((c, i) => {
+      out.push({
+        key: c.key,
+        op: c.want === false ? "fail" : "pass",
+        /* 그룹 안은 그 join, 그룹의 마지막 줄은 다음 그룹과 AND */
+        join: i < g.conds.length - 1 ? g.join : gi < gs.length - 1 ? "and" : undefined,
+      });
+    });
+  });
+  return out;
 }
 
 export interface CondHit {
@@ -163,8 +248,9 @@ export async function removePreset(id: string): Promise<CondPreset[]> {
 async function touchPreset(query: CondQuery, hits: number): Promise<void> {
   try {
     const list = await listPresets();
-    const key = JSON.stringify(query.groups);
-    const hit = list.find((p) => JSON.stringify(p.query.groups) === key);
+    /* 조건식이 같은지는 **펼친 줄**로 본다 — 옛 형식이 섞여 있어도 맞춰진다 */
+    const key = JSON.stringify(linesOf(query));
+    const hit = list.find((p) => JSON.stringify(linesOf(p.query)) === key);
     if (!hit) return;
     hit.lastRunAt = new Date().toISOString();
     hit.lastHits = hits;
@@ -191,7 +277,7 @@ function prune(): void {
 /** 조건식이 실제로 쓰는 기준들 — 이것만 켠 설정으로 평가한다 */
 function usedKeys(q: CondQuery): Set<CheckKey> {
   const s = new Set<CheckKey>();
-  for (const g of q.groups) for (const c of g.conds) s.add(c.key);
+  for (const l of linesOf(q)) s.add(l.key);
   return s;
 }
 
@@ -263,33 +349,53 @@ async function run(client: KiwoomClient, q: CondQuery, job: CondJob): Promise<vo
   for (const c of pool) {
     try {
       const sig = await evaluateSignal(client, c.code, { config: cfg });
-      const passOf = (k: CheckKey): boolean | null =>
-        sig.checks.find((x) => x.key === k)?.pass ?? null;
+      /**
+       * 조건 하나를 판정한다.
+       *
+       * ⚠️ **못 잰 것은 통과가 아니다.** 데이터가 없어서 null 인 것을 통과로 치면
+       * 「영업이익 증가」 조건이 재무를 못 받은 종목을 다 걸러 온다.
+       * 「모른다」와 「맞다」는 다른 말이다.
+       */
+      const judge = (l: CondLine): boolean => {
+        const hit = sig.checks.find((x) => x.key === l.key);
+        if (!hit) return false;
+        if (l.op === "pass") return hit.pass === true;
+        if (l.op === "fail") return hit.pass === false;
+        /* 값 비교 — 잰 값이 없으면 판정하지 않는다 */
+        const v = hit.raw;
+        if (v === undefined || !Number.isFinite(v) || l.value === undefined) return false;
+        return l.op === "gte" ? v >= l.value : v <= l.value;
+      };
 
-      /* 그룹 안은 join, 그룹끼리는 AND */
+      /** 화면에 「무슨 조건에 걸렸나」를 적기 위한 이름 */
+      const labelOf = (l: CondLine): string => {
+        const nm = sig.checks.find((x) => x.key === l.key)?.label ?? l.key;
+        if (l.op === "pass") return nm;
+        if (l.op === "fail") return `${nm} 미달`;
+        return `${nm} ${l.op === "gte" ? "≥" : "≤"} ${l.value}`;
+      };
+
+      /*
+       * **위에서부터 차례로 잇는다** — `A AND B OR C` = `(A AND B) OR C`.
+       *
+       * 괄호는 없다. 화면이 보여줄 수 없는 구조는 안 만든다 — 안 보이는 괄호는
+       * 안 쓰느니만 못하다.
+       *
+       * ⚠️ **중간에 끊지 않는다.** AND 로 이미 거짓이 돼도 뒤에 OR 이 오면 살아날
+       * 수 있다. 그리고 「무슨 조건에 걸렸나」를 적으려면 전부 재야 한다.
+       */
       const matched: string[] = [];
-      let ok = true;
-      for (const g of q.groups) {
-        if (g.conds.length === 0) continue;
-        const hits = g.conds.filter((cond) => {
-          const p = passOf(cond.key);
-          /*
-           * ⚠️ **못 잰 기준은 통과가 아니다.** 데이터가 없어서 null 인 것을
-           * 통과로 치면 「영업이익 증가」 조건이 재무를 못 받은 종목을 다 걸러
-           * 온다. 「모른다」와 「맞다」는 다른 말이다.
-           */
-          return p !== null && p === cond.want;
-        });
-        for (const h of hits) {
-          const label = sig.checks.find((x) => x.key === h.key)?.label ?? h.key;
-          matched.push(h.want ? label : `${label} 미달`);
+      const lines = linesOf(q);
+      let ok = false;
+      lines.forEach((l, i) => {
+        const hit = judge(l);
+        if (hit) matched.push(labelOf(l));
+        if (i === 0) {
+          ok = hit;
+          return;
         }
-        const groupOk = g.join === "and" ? hits.length === g.conds.length : hits.length > 0;
-        if (!groupOk) {
-          ok = false;
-          break;
-        }
-      }
+        ok = lines[i - 1].join === "or" ? ok || hit : ok && hit;
+      });
 
       if (ok) {
         job.results.push({
