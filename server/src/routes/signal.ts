@@ -319,7 +319,7 @@ export function createSignalRouter(client: KiwoomClient): Router {
   router.post("/after-close", (req, res) => {
     const b = req.body as { steps?: string[] };
     const steps = Array.isArray(b?.steps) ? b.steps.filter((x) => typeof x === "string") : undefined;
-    void runAfterClose(client, true, steps).catch(() => undefined);
+    void runAfterClose(client, true, steps, "손으로 눌렀다").catch(() => undefined);
     res.json({ started: true, steps: steps ?? "전체", status: afterCloseStatus() });
   });
 

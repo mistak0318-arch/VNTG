@@ -59,6 +59,22 @@ import { sendTelegram } from "./telegram.js";
 const TICK_MS = 5 * 60_000;
 const START_HHMM = 15 * 60 + 40;
 
+/**
+ * 단계의 차례와 이름 — **시작 알림이 「무엇을 돌릴 것인가」를 적을 때** 쓴다.
+ * 아래 `runAfterClose` 의 실제 차례와 같아야 한다(거기서 `want(key)` 로 거른다).
+ */
+const STEPS: { key: string; label: string }[] = [
+  { key: "bars", label: "일봉" },
+  { key: "ledger", label: "원장" },
+  { key: "regime", label: "장세" },
+  { key: "track", label: "추적기" },
+  { key: "listTrack", label: "신호등 분석" },
+  { key: "super", label: "슈퍼신호등" },
+  { key: "cross", label: "교차" },
+  { key: "trade", label: "수출입" },
+  { key: "samples", label: "표본" },
+];
+
 export interface StepResult {
   key: string;
   label: string;
@@ -176,6 +192,8 @@ export async function runAfterClose(
    * 그것만 있으면 신호등 분석은 내일 자동으로 돌아도 제 값이 난다.
    */
   only?: string[],
+  /** 왜 도는가 — 시작 알림에 적는다. 안 주면 정규 회차(15:40) */
+  reason?: string,
 ): Promise<AfterCloseRun> {
   if (run?.running) return run;
   const day = dayKey();
@@ -186,6 +204,41 @@ export async function runAfterClose(
 
   const want = (k: string) => !only || only.length === 0 || only.includes(k);
   run = { day, startedAt: new Date().toISOString(), running: true, steps: [] };
+
+  /*
+   * ## **시작할 때도 알린다** (2026-09-02)
+   *
+   * 벤티지: "마감 뒤 정리하고 돌아가는 거 시작하고 끝날 때 알람으로 알려줘야겠다.
+   * 시스템 알람 쪽으로."
+   *
+   * 끝 알림만 있으면 두 시간 동안 「지금 도는 중인가, 오늘은 안 도는 건가」를 알
+   * 길이 설정 화면뿐이다. 시작 줄이 있으면 그 사이 신호등 분석이 비어 보여도
+   * 「아직 ⑤ 전」임을 안다. 무엇을 돌리는지(전부 / 실패 단계만 / 손으로 고른 것)와
+   * 왜(정규 · 재시도 · 손으로)를 적는다.
+   *
+   * 열쇠에 날짜·범위를 넣어 한 시간 안에 같은 것이 또 시작해도(재시작 직후의
+   * 재실행 같은) 줄이 하나다 — 시각과 횟수만 올라간다.
+   */
+  const planned = STEPS.filter((s) => want(s.key));
+  const scope = !only || only.length === 0 ? "전체 9단계" : `${planned.length}단계만`;
+  const why = reason ?? "정규 회차";
+  const startTitle = `마감 뒤 정리 시작 — ${scope} (${why})`;
+  const startBody =
+    planned.map((s, i) => `${i + 1}. ${s.label}`).join(" → ") +
+    (planned.length >= 8 ? "\n\n두 시간 남짓 걸립니다. 끝나면 다시 알립니다." : "\n\n끝나면 다시 알립니다.");
+  await sendTelegram(`🌙 <b>${startTitle}</b>\n${planned.map((s) => s.label).join(" → ")}`).catch(
+    () => undefined,
+  );
+  await pushNotice({
+    source: "afterClose",
+    kind: "system",
+    level: "info",
+    title: startTitle,
+    body: startBody,
+    link: "#/settings",
+    dedupeKey: `afterClose:start:${day}:${planned.map((s) => s.key).join(",")}`,
+    dedupeHours: 1,
+  }).catch(() => undefined);
 
   /* ① 일봉 — 모두가 이걸 바탕으로 한다 */
   const bars = !want("bars")
@@ -317,7 +370,7 @@ export async function runAfterClose(
   run.at = undefined;
 
   /*
-   * ## **끝나면 알린다** — 텔레그램과 알림 센터 둘 다 (2026-09-01)
+   * ## **끝나면 알린다** — 텔레그램과 알림 센터 둘 다 (2026-09-01). 시작 알림은 위에.
    *
    * 벤티지: "데일리 리포트도 만들어졌으면 알람 줘야 하고, 시스템적으로 돌아가는
    * 배치들은 다 되면 나한테 알람 주는 구조로 만들어줘. 알람 메뉴 만들었잖아."
@@ -408,7 +461,9 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
       if (failed.length > 0 && retry.tried < RETRY_MAX && Date.now() - retry.at >= RETRY_GAP_MS) {
         retry = { day, tried: retry.tried + 1, at: Date.now() };
         console.log(`[afterClose] 실패 단계 재시도 ${retry.tried}/${RETRY_MAX} — ${failed.join(", ")}`);
-        const r = await runAfterClose(client, true, failed).catch(() => null);
+        const r = await runAfterClose(client, true, failed, `재시도 ${retry.tried}/${RETRY_MAX}`).catch(
+          () => null,
+        );
         const still = r?.steps.filter((s) => !s.ok).map((s) => s.label) ?? [];
         if (still.length > 0 && retry.tried >= RETRY_MAX) {
           await pushNotice({

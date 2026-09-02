@@ -183,7 +183,7 @@ export const NOTICE_SOURCES: {
     key: "afterClose",
     group: "system",
     label: "마감 뒤 정리",
-    hint: "밤 배치 아홉 단계의 성공·실패 요약",
+    hint: "밤 배치가 시작할 때(무엇을 돌리는지)와 끝날 때(아홉 단계의 성공·실패 요약)",
     def: true,
   },
   {
