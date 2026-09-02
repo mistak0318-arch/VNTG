@@ -1138,7 +1138,14 @@
       "Bash(node -e \"const fs=require\\('fs'\\); const d=JSON.parse\\(fs.readFileSync\\('server/data/signalSamples.json'\\)\\); console.log\\('종목 수:', Object.keys\\(d\\).length\\); console.log\\('첫 3종목:', Object.keys\\(d\\).slice\\(0,3\\)\\);\")",
       "Bash(node -e \"const fs=require\\('fs'\\); const d=JSON.parse\\(fs.readFileSync\\('server/data/signalSamples.json'\\)\\); console.log\\(JSON.stringify\\({builtAt: d.builtAt, codeCount: d.codeCount, daysCount: d.days?.length}, null,2\\)\\);\")",
       "Bash(node -e \"const fs=require\\('fs'\\); const facts=JSON.parse\\(fs.readFileSync\\('server/data/companyFacts.json'\\)\\); const briefs=JSON.parse\\(fs.readFileSync\\('server/data/companyBriefs.json'\\)\\); const sample=JSON.parse\\(fs.readFileSync\\('server/data/signalSamples.json'\\)\\); console.log\\('■ 현황'\\); console.log\\('전체 표본 종목:', sample.codeCount\\); console.log\\('정적정보\\(facts\\) 채워진:', Object.keys\\(facts\\).length\\); console.log\\('AI요약\\(briefs\\) 채워진:', Object.keys\\(briefs\\).length\\); \")",
-      "Bash(node \"C:\\\\Users\\\\Jaemin Kim\\\\.claude\\\\projects\\\\K--0000-3740--------------00-----2-AI------260810------\\\\7fd40f4e-1d14-4899-892f-e551fe467027\\\\scratchpad\\\\batchFactsFromAPI.js\")"
+      "Bash(node \"C:\\\\Users\\\\Jaemin Kim\\\\.claude\\\\projects\\\\K--0000-3740--------------00-----2-AI------260810------\\\\7fd40f4e-1d14-4899-892f-e551fe467027\\\\scratchpad\\\\batchFactsFromAPI.js\")",
+      "PowerShell($os = Get-CimInstance Win32_OperatingSystem; \"부팅: \" + $os.LastBootUpTime.ToString\\(\"HH:mm:ss\"\\) + \"  \\(지금 \" + \\(Get-Date\\).ToString\\(\"HH:mm:ss\"\\) + \"\\)\")",
+      "Bash(node --max-old-space-size=4096 -e ' *)",
+      "Bash(mv 'C:/Users/Jaemin Kim/.claude/projects/K--0000-3740--------------00-----2-AI------260810------/7fd40f4e-1d14-4899-892f-e551fe467027/scratchpad/sigtune.ts' 'C:/Users/Jaemin Kim/.claude/projects/K--0000-3740--------------00-----2-AI------260810------/7fd40f4e-1d14-4899-892f-e551fe467027/scratchpad/sigtune.mts')",
+      "Bash(mv 'C:/Users/Jaemin Kim/.claude/projects/K--0000-3740--------------00-----2-AI------260810------/7fd40f4e-1d14-4899-892f-e551fe467027/scratchpad/profitFill.ts' 'C:/Users/Jaemin Kim/.claude/projects/K--0000-3740--------------00-----2-AI------260810------/7fd40f4e-1d14-4899-892f-e551fe467027/scratchpad/profitFill.mts')",
+      "Bash(echo \"exit $?\")",
+      "Read(//c/Users/Jaemin Kim/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/7fd40f4e-1d14-4899-892f-e551fe467027/scratchpad/**)",
+      "Bash(head -3 \"C:/Users/Jaemin Kim/AppData/Local/Temp/claude/K--0000-3740--------------00-----2-AI------260810------/7fd40f4e-1d14-4899-892f-e551fe467027/tasks/b1ixcsb29.output\"; cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업/server\" && grep -n \"dotenv\\\\|process.env.HANTOO\\\\|process.env.DART\" src/index.ts src/hantooClient.ts src/dartFinance.ts src/env.ts 2>/dev/null | head -12; ls -a | grep -E \"^\\\\.env\"; sed -n 40,70p src/hantooClient.ts)"
     ]
   }
 }
