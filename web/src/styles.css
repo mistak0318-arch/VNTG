@@ -11642,6 +11642,42 @@ button.tpb-row:hover { background: var(--panel-2); }
   letter-spacing: 0;
 }
 
+/*
+ * 시스의 신조 — 「먼저 거르고, 남은 것 중에서 추세를 탄다」 (2026-09-02 밤).
+ * 벤티지: "CIS일지에 박제해둬. 내가 보고 항상 되새김할 수 있게" — 접히지 않고
+ * 늘 보인다. 세 단계가 한 줄씩, 폰에서는 세로로 쌓인다.
+ */
+.cis-creed {
+  margin: 0 0 12px;
+  padding: 10px 14px 9px;
+  border: 1px solid color-mix(in srgb, var(--cis-gold) 45%, var(--border));
+  border-left: 4px solid var(--cis-gold);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cis-gold) 6%, transparent);
+}
+.cis-creed > b {
+  display: block;
+  font-size: 0.86rem;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+.cis-creed > b::before { content: "📜 "; }
+.cis-creed ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 14px;
+}
+.cis-creed li { font-size: 0.74rem; line-height: 1.45; min-width: 0; }
+.cis-creed li b { display: block; font-size: 0.76rem; margin-bottom: 1px; }
+.cis-creed li b i { font-style: normal; color: var(--cis-gold); margin-right: 4px; }
+.cis-creed li span { color: var(--muted); }
+@media (max-width: 760px) {
+  .cis-creed ol { grid-template-columns: 1fr; }
+}
+
 /* 꺼져 있을 때 — 화면이 왜 비었는지 말해 준다 */
 .cis-off {
   display: flex;

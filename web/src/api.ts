@@ -1118,6 +1118,8 @@ export const api = {
   cisConfig: () =>
     getJson<{
       config: CisConfig;
+      /** 시스의 신조 — 화면 머리에 늘 박아 둔다 */
+      creed: CisCreed;
       ruleLabels: Record<string, CisRuleLabel>;
       methodLabels: Record<string, string>;
       aiReady: boolean;
@@ -5614,6 +5616,23 @@ export interface CisRules {
   minMarketCap: number;
   minMarketScore: number;
   trailAfterPct: number;
+  /** 🔥쏠림·⏳늦음 경보가 붙은 종목은 안 산다 — 신조 ① 의 체 */
+  rejectAlerts: boolean;
+  useListTrack: boolean;
+  useRegimeGate: boolean;
+  useOpen: boolean;
+  useIntra: boolean;
+  useClose: boolean;
+  maxOpenGap: number;
+  intraMinFromOpen: number;
+  closeMinRate: number;
+}
+
+/** 시스의 신조 — 「먼저 거르고, 남은 것 중에서 추세를 탄다」 (2026-09-02) */
+export interface CisCreed {
+  title: string;
+  steps: { n: string; head: string; body: string }[];
+  short: string;
 }
 
 export interface CisRuleLabel {

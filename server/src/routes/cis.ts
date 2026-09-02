@@ -4,7 +4,7 @@ import { equityOf, loadAccount, resetAccount, riskMix, today } from "../cisAccou
 import { ACCOUNTS, ACCOUNT_IDS, profileOf, type AccountId } from "../cisAccounts.js";
 import { getCisConfig, goalProgress, saveCisConfig, RULE_LABEL } from "../cisConfig.js";
 import { clearJournal, listDays, loadDay } from "../cisJournal.js";
-import { readState } from "../cisPersona.js";
+import { CIS_CREED, readState } from "../cisPersona.js";
 import { priceMap, runSlot } from "../cisRun.js";
 import { cisStats, cisUsage } from "../cisStats.js";
 import { cisAiModels, cisAiReady, weeklyReview } from "../cisAi.js";
@@ -131,6 +131,8 @@ export function createCisRouter(client: KiwoomClient): Router {
     try {
       res.json({
         config: await getCisConfig(),
+        /* 시스의 신조 — 화면 머리에 늘 박아 둔다 (벤티지: "내가 보고 항상 되새김할 수 있게") */
+        creed: CIS_CREED,
         ruleLabels: RULE_LABEL,
         methodLabels: METHOD_LABEL,
         aiReady: cisAiReady(),

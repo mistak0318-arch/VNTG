@@ -3,6 +3,7 @@ import {
   api,
   type CisAccountView,
   type CisConfig,
+  type CisCreed,
   type CisDay,
   type CisFill,
   type CisPersonaState,
@@ -147,6 +148,7 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
   const [tab, setTab] = useState<string>(() => localStorage.getItem("vntg.cis.tab") || "today");
   const [profiles, setProfiles] = useState<CisProfile[]>([]);
   const [config, setConfig] = useState<CisConfig | null>(null);
+  const [creed, setCreed] = useState<CisCreed | null>(null);
   const [ruleLabels, setRuleLabels] = useState<Record<string, CisRuleLabel>>({});
   const [aiReady, setAiReady] = useState(false);
   const [aiModels, setAiModels] = useState<
@@ -163,6 +165,7 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
       .cisConfig()
       .then((r) => {
         setConfig(r.config);
+        setCreed(r.creed ?? null);
         setRuleLabels(r.ruleLabels);
         setAiReady(r.aiReady);
         setAiModels(r.aiModels ?? []);
@@ -184,6 +187,28 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
       </h2>
 
       {error && <div className="error-banner">{error}</div>}
+
+      {/*
+        시스의 신조 (2026-09-02 밤) — 벤티지: "CIS일지에 박제해둬. 내가 보고 항상
+        되새김할 수 있게." 접히지 않고 계좌·탭보다 위에 늘 있다. 글은 서버
+        `CIS_CREED` 한 곳에서 온다 — AI 자기소개와 후보 고르는 순서가 같은 글을 쓴다.
+      */}
+      {creed && (
+        <div className="cis-creed" title={creed.short}>
+          <b>{creed.title}</b>
+          <ol>
+            {creed.steps.map((s) => (
+              <li key={s.n}>
+                <b>
+                  <i>{s.n}</i>
+                  {s.head}
+                </b>
+                <span>{s.body}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       {config && !config.enabled && (
         <div className="cis-off">
@@ -1363,7 +1388,7 @@ function ConfigTab({
     }
   };
 
-  const rule = (k: keyof CisRules, v: number) =>
+  const rule = (k: keyof CisRules, v: number | boolean) =>
     save({ rules: { ...draft.rules, [k]: v } });
 
   return (
@@ -1462,6 +1487,25 @@ function ConfigTab({
         {(Object.keys(draft.rules) as (keyof CisRules)[]).map((k) => {
           const L = ruleLabels[k];
           if (!L) return null;
+          const v = draft.rules[k];
+          /*
+           * 켬/끔 규칙은 체크박스다 (2026-09-02). 전에는 참거짓도 숫자 칸으로 그려
+           * `Number(true)` 가 서버로 갔다 — 서버가 참거짓만 받아 무시했으니 사고는
+           * 없었지만, 화면에서 「경보는 안 산다」를 껐다 켤 수가 없었다.
+           */
+          if (typeof v === "boolean") {
+            return (
+              <label className="cis-rule" key={k}>
+                <i>
+                  {L.label}
+                  <span>{L.hint}</span>
+                </i>
+                <span className="cis-rule-in">
+                  <input type="checkbox" checked={v} onChange={(e) => rule(k, e.target.checked)} />
+                </span>
+              </label>
+            );
+          }
           return (
             <label className="cis-rule" key={k}>
               <i>
@@ -1472,7 +1516,7 @@ function ConfigTab({
                 <input
                   type="number"
                   className="ma-input short"
-                  value={draft.rules[k]}
+                  value={v}
                   onChange={(e) =>
                     setDraft({ ...draft, rules: { ...draft.rules, [k]: Number(e.target.value) } })
                   }

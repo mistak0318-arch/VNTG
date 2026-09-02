@@ -175,6 +175,8 @@ function clampRules(r: Partial<CisRules>, base: CisRules): CisRules {
       typeof r.useRegimeGate === "boolean" ? r.useRegimeGate : base.useRegimeGate,
     useListTrack:
       typeof r.useListTrack === "boolean" ? r.useListTrack : base.useListTrack,
+    rejectAlerts:
+      typeof r.rejectAlerts === "boolean" ? r.rejectAlerts : base.rejectAlerts,
     minScore: num(r.minScore, 0, 100, base.minScore),
     minTradeValue: num(r.minTradeValue, 0, 100_000, base.minTradeValue),
     /* 억. 0 은 「문턱 없음」이라 유효하다 */
@@ -266,6 +268,15 @@ export const RULE_LABEL: Record<keyof CisRules, { label: string; unit: string; h
       "이미 재놓은 종목이라 신호등 조회가 0회이고, 주도주 스캔이 못 보는 목록" +
       "(외국인 연속순매매·동일순매매 등)에서 온 종목이 섞인다. " +
       "⚠️ 원장은 전날 16:30 기준이라 장중 신규는 주도주 스캔이 잡는다 — 둘을 합쳐 쓴다",
+  },
+  rejectAlerts: {
+    label: "🔥쏠림·⏳늦음 경보는 안 산다",
+    unit: "",
+    hint:
+      "「먼저 거르고, 남은 것 중에서 추세를 탄다」의 체. 종목 신호등은 경보를 태그로만 달지만 " +
+      "시스는 그 종목을 후보에서 뺀다 — 회전율 3%↑·진폭 12%↑·거래량 2.5배↑·갭 3%↑·σ 7%↑(쏠림), " +
+      "약세장 RS20 +20%p↑·RS60 +30%p↑·저점 대비 +50%↑(늦음). 실측: 경보 없는 초록만 남기면 " +
+      "+4.5/61 → +6.7/67. 끄면 신호등 빨강만 거른다",
   },
   useRegimeGate: {
     label: "장세 신뢰도 문",

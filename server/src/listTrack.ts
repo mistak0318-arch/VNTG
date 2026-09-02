@@ -112,6 +112,14 @@ export interface ListEntry {
   /** 이 목록에 며칠째 이어서 걸렸나 */
   seenCount: number;
   lastSeenDate: string;
+  /**
+   * **마지막으로 잰 날의 경보** 🔥쏠림·⏳늦음 라벨 (2026-09-02 밤).
+   *
+   * CIS 가 이 원장을 후보로 쓸 때 신호등을 다시 안 부른다(조회 0회). 그런데
+   * 시스의 체는 「경보 있으면 안 산다」라, 경보가 원장에 없으면 이 갈래로 온
+   * 종목은 체를 그냥 지나간다. 그래서 잰 김에 같이 적는다 — 걸린 날마다 갱신.
+   */
+  alerts?: { hot: string[]; late: string[] };
   /** 이탈했나 — 기록은 지우지 않는다 */
   active?: boolean;
   exitedDate?: string;
@@ -304,7 +312,10 @@ export async function runListTrack(
      * 원장에 있는 종목은 이 합집합에 없을 수도 있다(오늘 목록에서 빠진 경우).
      * 그런 날은 기록이 안 쌓이는데, 그건 맞다 — 안 잰 날을 지어내면 안 된다.
      */
-    const todayScore = new Map<string, { score: number; level: string; checks: { l: string; g: number | null }[] }>();
+    const todayScore = new Map<
+      string,
+      { score: number; level: string; checks: { l: string; g: number | null }[]; alerts: { hot: string[]; late: string[] } }
+    >();
     for (const [code] of union) {
       try {
         const sig = await evaluateSignal(client, code);
@@ -314,6 +325,11 @@ export async function runListTrack(
           level: sig.level,
           /* 체크 내역 — 「무엇 때문에 점수가 움직였나」를 내일 이걸로 되짚는다 */
           checks: sig.checks.map((c) => ({ l: c.label, g: c.grade })),
+          /* 경보 라벨 — CIS 의 체가 이 원장에서 조회 없이 읽는다 */
+          alerts: {
+            hot: (sig.alerts?.hot ?? []).map((a) => a.label),
+            late: (sig.alerts?.late ?? []).map((a) => a.label),
+          },
         });
       } catch {
         /* 이 종목만 건너뛴다 */
@@ -348,6 +364,7 @@ export async function runListTrack(
           prev.seenCount += 1;
           prev.lastSeenDate = today;
           prev.missStreak = 0;
+          prev.alerts = todayScore.get(r.code)?.alerts;
           if (prev.active === false) {
             prev.active = true;
             prev.exitedDate = undefined;
@@ -368,6 +385,7 @@ export async function runListTrack(
             seenCount: 1,
             lastSeenDate: today,
             active: true,
+            alerts: todayScore.get(r.code)?.alerts,
           };
           store.entries.push(entry);
           have.set(key, entry);

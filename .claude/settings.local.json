@@ -1152,7 +1152,13 @@
       "Bash(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\" && sed -i 's/Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>/Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>/' .git/vntg-msg.txt && tail -2 .git/vntg-msg.txt)",
       "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; powershell -ExecutionPolicy Bypass -File push-deploy.ps1 -NoDeploy; git status --short)",
       "Read(//tmp/**)",
-      "Bash(sed -n '/^## 6\\\\./,$p' tools/sigtune/sigtune-7.txt)"
+      "Bash(sed -n '/^## 6\\\\./,$p' tools/sigtune/sigtune-7.txt)",
+      "Bash(curl -s --max-time 10 http://100.88.182.35:3000/api/signal/config)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);const c=j.config??j;console.log\\('미니PC 세대',c.configVersion,c.configLabel,'축',JSON.stringify\\(c.axisWeights\\),'켜짐',\\(c.checks||[]\\).filter\\(x=>x.enabled\\).map\\(x=>x.key\\).join\\(' '\\)\\)}\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 8 http://100.88.182.35:4000/api/health)",
+      "Bash(curl -s --max-time 8 http://100.88.182.35:4000/api/signal/config)",
+      "Bash(ls \"//100.88.182.35/vntg-deploy\" 2>&1 | head; echo \"--- deploy.log 꼬리 ---\"; tail -15 \"//100.88.182.35/vntg-deploy/deploy.log\" 2>&1)",
+      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; powershell -ExecutionPolicy Bypass -File push-deploy.ps1; git status --short)"
     ]
   }
 }

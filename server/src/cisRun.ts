@@ -154,6 +154,8 @@ export async function buyRound(
   plans: ReturnType<typeof planBuys>["plans"];
   actions: JournalAction[];
   gateNotes: { name: string; ok: boolean; reason: string }[];
+  /** 신조 ① 의 체에 걸린 것 — 「왜 안 봤나」가 일지에 남아야 되새김이 된다 */
+  sieved: { name: string; reason: string }[];
   screenNotes: ScreenNote[];
   aiError?: string;
 }> {
@@ -163,6 +165,7 @@ export async function buyRound(
   const actions: JournalAction[] = [];
   const candidates: Candidate[] = [];
   const gateNotes: { name: string; ok: boolean; reason: string }[] = [];
+  let sieved: { name: string; reason: string }[] = [];
   let screenNotes: ScreenNote[] = [];
   let aiError: string | undefined;
 
@@ -172,12 +175,13 @@ export async function buyRound(
   if (!gate.ok) {
     progress.skip("scan", "시장 문이 닫혔다");
     progress.skip("signal");
-    return { gate, candidates, plans: [], actions, gateNotes, screenNotes };
+    return { gate, candidates, plans: [], actions, gateNotes, sieved, screenNotes };
   }
 
   progress.start("scan");
   const picked = await pickCandidates(client, rules);
-  progress.done("scan", `후보 ${picked.candidates.length}종목`);
+  sieved = picked.rejected.map((c) => ({ name: c.name, reason: c.rejected ?? "" }));
+  progress.done("scan", `후보 ${picked.candidates.length}종목 · 체에 걸림 ${sieved.length}`);
   progress.skip("signal", "후보 스캔에 포함됨");
 
   /*
@@ -255,7 +259,7 @@ export async function buyRound(
     }
   }
 
-  return { gate, candidates, plans: planned.plans, actions, gateNotes, screenNotes, aiError };
+  return { gate, candidates, plans: planned.plans, actions, gateNotes, sieved, screenNotes, aiError };
 }
 
 /** 결과 — 화면이 「방금 뭘 했나」를 그대로 보여 준다 */
@@ -366,6 +370,7 @@ export async function runSlot(
   let candidates: Candidate[] = [];
   let plans: ReturnType<typeof planBuys>["plans"] = [];
   let gateNotes: { name: string; ok: boolean; reason: string }[] = [];
+  let sieved: { name: string; reason: string }[] = [];
 
   if (loopBuys) {
     /* 시장 판단은 글에 필요하므로 그것만 부른다 — 스캔은 안 돈다(호출을 아낀다) */
@@ -380,6 +385,7 @@ export async function runSlot(
     candidates = r.candidates;
     plans = r.plans;
     gateNotes = r.gateNotes;
+    sieved = r.sieved;
     screenNotes = r.screenNotes;
     aiError = r.aiError;
     actions.push(...r.actions);
@@ -419,6 +425,7 @@ export async function runSlot(
       at: f.at ?? "",
     })),
     gateNotes,
+    sieved,
     market: gate,
     candidates,
     plans,

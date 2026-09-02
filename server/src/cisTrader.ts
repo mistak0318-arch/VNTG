@@ -43,6 +43,20 @@ import {
  * 추세가 꺾이면 그날 나온다. 바닥을 맞히려 하지 않는다 — 그건 다른 전략이고
  * 이 계좌의 규칙과 섞으면 둘 다 망가진다.
  *
+ * ## 순서 — **먼저 거르고, 남은 것 중에서 추세를 탄다** (2026-09-02 밤, `CIS_CREED`)
+ *
+ * 벤티지: "CIS 일지가 정확히 그렇게 매매를 해야한다."
+ *
+ *   ① 체   — 잡주 · 신호등 빨강/탈락 · 🔥쏠림 · ⏳늦음을 **먼저** 뺀다 (`pickCandidates`)
+ *   ② 추세 — 남은 것 안에서만 점수를 매긴다 (신호등 + 판의 폭·연속성 + 주도주)
+ *   ③ 진입 뒤 — 손절 짧게, 본전 위로, 흔들린다고 안 판다 (`exitCalls`·`trailStops`)
+ *
+ * 왜: 이 표본(2026-04~08)에서 「오르는 놈이 계속 오른다」는 시장이 오를 때만 맞았고,
+ * 꺾인 뒤엔 계속 오르던 놈이 고점이었다. 그래서 추세를 먼저 찾지 않는다.
+ * 옛 순서(주도주 = 오늘 뜨거운 것에서 시작 → 신호등으로 거름)는 풀 자체가 「뜨거운
+ * 날의 뜨거운 종목」이라 체가 있어도 그 안에서 골랐다. 이제 풀은 그대로 쓰되(호출
+ * 한도) 경보 있는 것은 점수와 무관하게 빠지고, 거래량 터진 것에 주던 가산도 없앴다.
+ *
  * ## 하루 세 번, 그리고 **진입은 세 갈래**
  *
  *   - **아침**(장 전): 시장을 보고 계획을 세운다. **시가배팅** 자리를 잡는다.
@@ -115,6 +129,15 @@ export interface CisRules {
    * 그래서 둘을 **합쳐서** 쓴다(하나로 갈아타는 게 아니다).
    */
   useListTrack: boolean;
+  /**
+   * **🔥쏠림·⏳늦음 경보가 붙은 종목은 안 산다** (2026-09-02 밤) — 신조 ① 의 체.
+   *
+   * 종목 신호등은 경보를 **태그로만** 단다(벤티지가 탈락 대신 태그를 골랐다 —
+   * 눈으로 거르려고). 시스는 눈이 없으니 규칙으로 거른다. 실측: 초록 3,158 중
+   * 경보 없는 1,614 가 +4.5/61 → +6.7/67 (시총 중립 20일, 강·약·앞·뒤 같은 방향).
+   * 끄면 옛 동작(신호등 빨강만 거름).
+   */
+  rejectAlerts: boolean;
   /** 후보의 최소 신호등 점수 */
   minScore: number;
   /** 후보의 최소 거래대금 (억) */
@@ -186,6 +209,8 @@ export const DEFAULT_RULES: CisRules = {
   maxHoldDays: 10,
   /* 신호등 분석 원장을 후보에 더한다 — 조회를 안 늘리면서 보는 자리가 넓어진다 */
   useListTrack: true,
+  /* 신조 ① — 경보 있는 종목은 점수와 무관하게 뺀다 */
+  rejectAlerts: true,
   minScore: 60,
   /*
    * 500억 미만은 내가 사는 수량에 값이 밀린다 — 모의라도 못 살 걸 샀다고 적지 않는다.
@@ -246,12 +271,22 @@ export interface Candidate {
   mode?: EntryMode;
 }
 
+/** 경보 라벨을 거절 사유 한 줄로 */
+function alertReason(hot: string[], late: string[]): string | null {
+  if (hot.length === 0 && late.length === 0) return null;
+  const parts: string[] = [];
+  if (hot.length > 0) parts.push(`🔥쏠림 ${hot.join("·")}`);
+  if (late.length > 0) parts.push(`⏳늦음 ${late.join("·")}`);
+  return `${parts.join(" / ")} — 체에 걸림`;
+}
+
 /**
  * 오늘의 후보를 뽑는다.
  *
- * 순서가 중요하다 — **주도주에서 시작해 신호등으로 거른다.** 반대로 하면(전 종목
- * 신호등 → 강한 것 고르기) 신호등을 수천 번 불러야 하고, 그건 키움 호출 한도에
- * 걸린다. 주도주가 이미 「돈이 몰린 곳」으로 좁혀 놓았으니 그 위에서만 판단한다.
+ * **풀**은 주도주 스캔이다 — 전 종목 신호등은 수천 번 조회라 키움 한도에 걸린다.
+ * 다만 주도주 풀은 「오늘 뜨거운 것」이라 신조 ① 의 체가 **점수보다 먼저** 온다:
+ * 잡주 → 신호등 빨강/탈락 → 🔥쏠림·⏳늦음 순으로 빼고, 남은 것만 점수를 매긴다.
+ * 빠진 것도 이유와 함께 돌려준다 — 일지의 「체에 걸린 것」이 그걸 적는다.
  */
 export async function pickCandidates(
   client: KiwoomClient,
@@ -324,16 +359,30 @@ export async function pickCandidates(
       base.signalLevel = sig.level;
       base.used.push(`신호등:${sig.level}(${sig.score})`);
       if (sig.level === "red") {
-        base.rejected = "신호등 빨강";
+        /* 탈락(σ·진폭·약세장 RS60·저점대비·적자·순매도)이면 그 이유를 그대로 적는다 */
+        const veto = sig.vetoedBy ?? [];
+        base.rejected = veto.length > 0 ? `신호등 탈락 — ${veto.join("·")}` : "신호등 빨강";
         bad.push(base);
         continue;
+      }
+      /* 신조 ① — 경보는 점수보다 먼저다. 초록이어도 🔥·⏳ 가 붙어 있으면 뺀다 */
+      if (rules.rejectAlerts) {
+        const why = alertReason(
+          (sig.alerts?.hot ?? []).map((a) => a.label),
+          (sig.alerts?.late ?? []).map((a) => a.label),
+        );
+        if (why) {
+          base.rejected = why;
+          bad.push(base);
+          continue;
+        }
       }
       if (sig.score < rules.minScore) {
         base.rejected = `신호등 ${sig.score}점 < ${rules.minScore}`;
         bad.push(base);
         continue;
       }
-      /* 신호등 점수를 절반 얹는다 — 주도주가 본체고 신호등은 거르개다 */
+      /* 신조 ② — 체를 지난 것 안에서 추세 점수. 신호등 절반 + 주도주·판 */
       base.score += sig.score * 0.5;
     } catch {
       base.used.push("신호등:조회실패");
@@ -365,6 +414,30 @@ export async function pickCandidates(
       }
       for (const { e, lists } of byCode.values()) {
         if (e.score < rules.minScore) continue;
+        /*
+         * 신조 ① — 원장 갈래도 같은 체를 지난다. 경보는 16:30 에 잰 것을 원장이
+         * 들고 있다(`ListEntry.alerts`, 조회 0회). 옛 원장(칸이 없음)은 통과시킨다 —
+         * 「모른다」로 비우지 않는다.
+         */
+        const why = rules.rejectAlerts && e.alerts ? alertReason(e.alerts.hot, e.alerts.late) : null;
+        if (why) {
+          bad.push({
+            code: e.code,
+            name: e.name,
+            price: e.addedPrice,
+            changeRate: 0,
+            tradeValue: valOf.get(e.code) ?? 0,
+            sector: "",
+            signalScore: e.score,
+            signalLevel: "green",
+            leaderScore: 0,
+            score: e.score,
+            used: [`신호등 분석:${lists.length}목록`],
+            why: `${lists.length}개 목록에서 초록 · ${e.seenCount}일째`,
+            rejected: why,
+          });
+          continue;
+        }
         /*
          * ⚠️ **이 갈래에는 거르개가 아예 없었다** (2026-09-01 발견).
          *
@@ -447,11 +520,16 @@ function toCandidate(s: LeaderStock, scan: Awaited<ReturnType<typeof leaderScan>
       used.push("섹터 연속성");
     }
   }
-  /* 거래량이 터진 것 — 추세의 시작은 거래량이 먼저 온다 */
+  /*
+   * 거래량 배수는 **가산하지 않는다** (2026-09-02 밤, 신조 ①).
+   *
+   * 옛 코드는 2배↑에 +6 을 줬다 — 「추세의 시작은 거래량이 먼저 온다」는 믿음.
+   * 실측(2026-04~08, 시총 중립 20일)은 반대였다: 2.5배↑ 는 시장에 지고(-0.3~-1.1),
+   * 0.8~1.7배(평소 같은 날)가 +0.2~+1.0 으로 가장 좋았다. 2.5배↑ 는 🔥쏠림으로
+   * 아예 빠지고, 2~2.5배에 상을 줄 근거도 없다. 표시는 남긴다 — 왜 후보인지의 재료.
+   */
   if (s.volumeRatio && s.volumeRatio >= 2) {
-    score += 6;
     bits.push(`거래량 ${s.volumeRatio.toFixed(1)}배`);
-    used.push("거래량 배수");
   }
 
   return {

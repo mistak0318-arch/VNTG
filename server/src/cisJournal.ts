@@ -231,6 +231,12 @@ export function narrate(
     interval: { side: "buy" | "sell"; name: string; qty: number; price: number; pnl?: number; why: string; at: string }[];
     /** 후보마다 이 자리로 들어갈 만했나. **안 산 이유가 산 이유만큼 중요하다** */
     gateNotes: { name: string; ok: boolean; reason: string }[];
+    /**
+     * 신조 ① 의 체에 걸려 **점수를 매기기도 전에** 빠진 것 (2026-09-02 밤).
+     * 벤티지: "내가 보고 항상 되새김할 수 있게" — 매일 무엇을 왜 안 봤는지가
+     * 글에 있어야 「먼저 거른다」가 말이 아니라 기록이 된다.
+     */
+    sieved?: { name: string; reason: string }[];
     market: MarketGate | null;
     candidates: Candidate[];
     plans: BuyPlan[];
@@ -320,6 +326,19 @@ export function narrate(
       L.push("안 들어간 것:");
       for (const g of failed.slice(0, 6)) L.push(`- ${g.name} — ${g.reason}`);
     }
+  }
+
+  /*
+   * **체에 걸린 것** — 신조 ① 「나쁜 자리를 먼저 지운다」의 기록.
+   * 경보·탈락·잡주가 각각 몇 개였는지가 남아야, 나중에 「체가 너무 촘촘했나」를
+   * 성적과 나란히 놓고 물을 수 있다.
+   */
+  if (d.market?.ok && !d.loopBuys && d.sieved && d.sieved.length > 0) {
+    L.push("");
+    L.push("### 체에 걸린 것 — 먼저 거르고, 남은 것 중에서 추세를 탄다");
+    const shown = d.sieved.slice(0, 8);
+    for (const s of shown) L.push(`- ${s.name} — ${s.reason}`);
+    if (d.sieved.length > shown.length) L.push(`- 그 밖에 ${d.sieved.length - shown.length}개`);
   }
 
   if (d.candidates.length > 0) {
