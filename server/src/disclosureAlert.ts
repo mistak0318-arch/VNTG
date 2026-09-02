@@ -30,8 +30,19 @@ export interface DisclosureAlertConfig {
   intervalMin: number;
   /** 관심종목 공시를 보낼지 */
   watchedOnly: boolean;
-  /** 내 테마 종목 공시도 보낼지 */
-  includeThemes: boolean;
+  /*
+   * ⚠️ **내 테마(태그) 갈래는 없앴다** (2026-09-02).
+   *
+   * 벤티지: "태그에 전체 테마 같은 걸 넣을 텐데 전체를 다 받을 수는 없지."
+   *
+   * 태그는 원래 「묶어서 보려고」 만든 것이라 크기에 제한이 없다. 업종 하나를
+   * 통째로 담은 태그가 하나만 있어도 그 업종 공시가 전부 알림이 된다 —
+   * 관심종목은 손으로 담은 수십 개지만 태그는 그렇지 않다.
+   *
+   * 「보낼지 말지」를 설정으로 두지 않고 갈래를 아예 지운 이유는, 꺼 두더라도
+   * 나중에 누가 켜면 같은 일이 되풀이되기 때문이다. 공시는 관심종목과 중요도,
+   * 두 자로만 고른다.
+   */
   /**
    * 내 종목이 아니어도 이 중요도 이상이면 보낸다. 0 이면 안 보낸다.
    * 상장폐지·유상증자 같은 건 남의 종목이라도 시장 전체에 영향이 있다.
@@ -47,7 +58,6 @@ export const DEFAULT_CONFIG: DisclosureAlertConfig = {
   enabled: false,
   intervalMin: 10,
   watchedOnly: true,
-  includeThemes: true,
   marketWeightMin: 0,
   weekdayOnly: true,
   startHour: 8,
@@ -110,9 +120,9 @@ function withinWindow(c: DisclosureAlertConfig, now = new Date()): boolean {
 }
 
 /** 이 공시를 나한테 보낼 이유가 있나 */
-function shouldSend(e: DartEvent, c: DisclosureAlertConfig): "관심종목" | "내 테마" | "중요" | null {
+function shouldSend(e: DartEvent, c: DisclosureAlertConfig): "관심종목" | "중요" | null {
   if (c.watchedOnly && e.watched) return "관심종목";
-  if (c.includeThemes && e.themes.length > 0) return "내 테마";
+  /* 내 테마(태그) 갈래는 없앴다 — 위 `DisclosureAlertConfig` 주석 참고 */
   if (c.marketWeightMin > 0 && e.weight >= c.marketWeightMin) return "중요";
   return null;
 }
@@ -128,8 +138,7 @@ function esc(s: string): string {
  * 시장 전체에 중요해서인지에 따라 읽는 무게가 다르다.
  */
 function toMessage(e: DartEvent, reason: string): string {
-  const tag =
-    reason === "관심종목" ? "⭐ 관심종목" : reason === "내 테마" ? `🎯 ${e.themes[0]}` : "🔥 주요 공시";
+  const tag = reason === "관심종목" ? "⭐ 관심종목" : "🔥 주요 공시";
   // 종목코드가 있으면 회사명이 개별종목분석 딥링크가 된다 (HTS_WEB_URL 설정 시)
   const nameHtml = e.stockCode
     ? stockNameHtml(e.stockCode, e.corpName)
@@ -216,7 +225,7 @@ export async function runDisclosureScan(
        * 관심종목 목록을 의심하게 된다 — **알림이 틀린 곳을 가리키면 없느니만 못하다.**
        * 이유가 섞였으면 어느 하나로 뭉뚱그리지 않고 그냥 「공시」라고 한다.
        */
-      const TAG: Record<string, string> = { 관심종목: "⭐", "내 테마": "🎯", 중요: "🔥" };
+      const TAG: Record<string, string> = { 관심종목: "⭐", 중요: "🔥" };
       const reasons = [...new Set(picked.map((h) => h.reason))];
       const head = picked
         .slice(0, 6)

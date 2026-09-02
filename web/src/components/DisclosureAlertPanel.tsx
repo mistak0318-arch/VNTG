@@ -133,12 +133,6 @@ export function DisclosureAlertPanel() {
           >
             ⭐ 관심종목
           </button>
-          <button
-            className={`filter-btn ${cfg.includeThemes ? "active" : ""}`}
-            onClick={() => void save({ includeThemes: !cfg.includeThemes })}
-          >
-            🎯 내 태그 종목
-          </button>
         </div>
       </div>
 

@@ -4568,7 +4568,7 @@ export interface DisclosureAlertConfig {
   enabled: boolean;
   intervalMin: number;
   watchedOnly: boolean;
-  includeThemes: boolean;
+  /* 내 테마(태그) 갈래는 2026-09-02 에 없앴다 — 서버 disclosureAlert.ts 주석 참고 */
   marketWeightMin: number;
   weekdayOnly: boolean;
   startHour: number;
