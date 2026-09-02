@@ -6931,57 +6931,54 @@ button.nav-group-toggle {
 }
 .qss-close-tabs:hover { color: var(--text); border-style: solid; }
 
-/* 상단 띠 — 코스피·코스닥 + 상승/하락 종목수 + 시장 신호등 (2026-09-02). 검색창과 같은 줄 */
+/*
+ * 상단 띠 — 코스피·코스닥 + 상승/하락 종목수 + 시장 신호등 (2026-09-02). 검색창과 같은 줄.
+ *
+ * 세로 정렬은 **종(.nb)과 똑같이** 한다 — `align-self: stretch` 로 줄 높이를 받고
+ * 안에서 가운데 정렬. 검색창이 띠보다 키가 커서, 이렇게 안 하면 띠만 위로 떠 보인다
+ * (종에서 이미 한 번 겪어서 그 주석이 남아 있다).
+ */
 .hdr-tick {
+  position: relative;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  margin-bottom: 8px;
+  align-self: stretch;
 }
+.hdr-tick-full { display: flex; align-items: center; gap: 6px; }
 .ht-idx,
-.ht-sig {
+.ht-sig,
+.ht-btn {
+  /* 종 단추(.nb-bell)와 같은 키 — 테두리·모서리·패딩을 맞춘다 */
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  height: 32px;
+  box-sizing: border-box;
   border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
   border-radius: 8px;
-  padding: 0.25rem 0.55rem;
+  background: none;
+  color: var(--text);
+  padding: 0 10px;
   font: inherit;
   font-size: 0.78rem;
-  line-height: 1.2;
+  line-height: 1;
   white-space: nowrap;
   cursor: pointer;
 }
 .ht-idx:hover,
-.ht-sig:hover { border-color: var(--muted); }
-.ht-name { color: var(--muted); font-weight: 600; }
-.ht-px { font-weight: 600; }
-.ht-ad { display: inline-flex; gap: 4px; font-size: 0.7rem; opacity: 0.85; }
-.ht-sig b { font-weight: 600; }
-.hdr-tick { position: relative; }
-.hdr-tick-full { display: flex; align-items: center; gap: 6px; }
-
-/* 좁은 화면용 단추 — 알림 종(.nb-bell)과 같은 모양. 넓을 땐 안 보인다 */
-.ht-btn {
-  display: none;
-  align-items: center;
-  gap: 6px;
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 10px;
-  font: inherit;
-  font-size: 0.8rem;
-  line-height: 1;
-  color: var(--text);
-  cursor: pointer;
-}
+.ht-sig:hover,
 .ht-btn:hover,
 .ht-btn.open { background: color-mix(in srgb, var(--text) 6%, transparent); }
-.ht-btn .sig-dot { margin: 0; }
+.ht-name { color: var(--muted); font-weight: 600; }
+.ht-px { font-weight: 600; font-size: 0.86rem; }
+.ht-ad { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; opacity: 0.85; }
+.ht-sig b { font-weight: 600; }
+/* 신호등 점은 **종 이모지와 같은 크기**로 — 벤티지: "알림종이랑 똑같이" */
+.hdr-tick .sig-dot { width: 16px; height: 16px; margin: 0; flex: 0 0 auto; }
+
+/* 좁은 화면용 단추 — 위 묶음에서 종과 같은 모양을 이미 받았다. 넓을 땐 안 보인다 */
+.ht-btn { display: none; }
 
 /* 펼침 — 종 패널(.nb-panel)과 같은 자리 규칙 */
 .ht-pop {
@@ -7046,6 +7043,8 @@ button.nav-group-toggle {
   .hdr-tick-full { display: none; }
   .ht-btn { display: inline-flex; }
 }
+/* 펼침 안의 점은 글자에 맞춘다 — 여기선 종 옆이 아니라 목록이다 */
+.ht-pop .sig-dot { width: 11px; height: 11px; }
 /* 폰 — 뷰포트에 직접 맞춘다. 세로 자리(--ht-top)는 컴포넌트가 단추를 재서 넘긴다 */
 @media (max-width: 720px) {
   .ht-pop {

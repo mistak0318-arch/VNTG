@@ -1130,7 +1130,9 @@
       "PowerShell($ts = \"C:\\\\Program Files\\\\Tailscale\\\\tailscale.exe\"; if \\(Test-Path $ts\\) { \"== tailscale status ==\"; & $ts status } else { \"tailscale 없음\" }; \"== ssh 클라이언트 ==\"; \\(Get-Command ssh -ErrorAction SilentlyContinue\\).Source)",
       "PowerShell(foreach \\($p in 22,5985,5986,445,4000\\) { $r = Test-NetConnection -ComputerName 100.88.182.35 -Port $p -WarningAction SilentlyContinue -InformationLevel Quiet; \"{0,-6} {1}\" -f $p, $\\(if \\($r\\) { \"열림\" } else { \"닫힘\" }\\) })",
       "mcp__claude-in-chrome__browser_batch",
-      "Bash(awk 'NR>=2100 && NR<=2300 && /for \\\\\\(const c of /{print NR\": \"$0}' signalLight.ts)"
+      "Bash(awk 'NR>=2100 && NR<=2300 && /for \\\\\\(const c of /{print NR\": \"$0}' signalLight.ts)",
+      "PowerShell($p = \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\deploy-watch.cmd\"; $t = [IO.File]::ReadAllText\\($p, [Text.UTF8Encoding]::new\\($false\\)\\); $t = \\($t -replace \"`r`n\", \"`n\"\\) -replace \"`n\", \"`r`n\"; [IO.File]::WriteAllText\\($p, $t, [Text.Encoding]::GetEncoding\\(949\\)\\); $b = [IO.File]::ReadAllBytes\\($p\\); \"CR={0} LF={1} bytes={2}\" -f \\($b | ? { $_ -eq 13 }\\).Count, \\($b | ? { $_ -eq 10 }\\).Count, $b.Length)",
+      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\web\"; npx tsc --noEmit; if \\($?\\) { Set-Location ..; powershell -ExecutionPolicy Bypass -File push-deploy.ps1 })"
     ]
   }
 }
