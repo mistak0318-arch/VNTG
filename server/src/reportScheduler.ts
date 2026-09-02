@@ -69,6 +69,7 @@ export async function publishEdition(
    * 화면만 있으면 자리에 없을 때 모른다.
    */
   await pushNotice({
+      source: "report",
     kind: "market",
     level: "info",
     title: `${meta.label} 발행`,

@@ -1,8 +1,12 @@
 import { Router } from "express";
 import {
   clearRead,
+  getNoticeConfig,
   listNotices,
   markRead,
+  NOTICE_SOURCES,
+  saveNoticeConfig,
+  type NoticeConfig,
   type NoticeKind,
 } from "../notifyCenter.js";
 import { regimeCheck, regimeConfig, saveRegimeConfig } from "../regimeWatch.js";
@@ -53,6 +57,33 @@ export function createNotifyRouter(client: KiwoomClient): Router {
   });
 
   /* ---------------- 장세 점검 ---------------- */
+
+  /*
+   * **알림 센터 설정** (2026-09-02) — 벤티지: "알림센터에서 받을만한 것들 좀
+   * 추리고 on off 할수있는 구조로 가자"
+   *
+   * 출처(`source`) 단위로 끈다. `kind`(stock/market/system)는 **성격**이라
+   * system 하나에 마감 뒤 정리·표본·원장·신호등 분석이 다 들어 있어서
+   * 「표본 알림만 끄기」가 안 된다.
+   *
+   * 목록(`sources`)도 서버가 준다 — 화면이 하드코딩하면 출처를 늘렸을 때
+   * 화면만 모르는 상태가 된다.
+   */
+  router.get("/config", async (_req, res, next) => {
+    try {
+      res.json({ sources: NOTICE_SOURCES, config: await getNoticeConfig() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/config", async (req, res, next) => {
+    try {
+      res.json({ config: await saveNoticeConfig(req.body as NoticeConfig) });
+    } catch (err) {
+      next(err);
+    }
+  });
 
   router.get("/regime/config", async (_req, res, next) => {
     try {

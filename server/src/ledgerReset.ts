@@ -173,6 +173,7 @@ export async function resetSignalLedgers(dryRun = false): Promise<ResetReport> {
       `[ledgerReset] 원장 ${report.totalMoved}건을 보관하고 비웠습니다 (지문 ${fingerprint ?? "?"})`,
     );
     await pushNotice({
+      source: "ledger",
       kind: "system",
       level: "info",
       title: `신호등 원장을 새로 시작했습니다 — ${report.totalMoved}건 보관`,

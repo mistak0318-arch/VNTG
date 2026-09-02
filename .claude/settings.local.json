@@ -1117,7 +1117,10 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(d\\);const n=\\(j.notices||j.items||j\\).slice?.\\(0,3\\)||[];console.log\\(n.map\\(x=>x.at?.slice\\(11,19\\)+' ['+x.kind+'] '+x.title+' — '+String\\(x.body||''\\).slice\\(0,50\\)\\).join\\('\\\\n'\\)\\)}catch\\(e\\){console.log\\(d.slice\\(0,200\\)\\)}}\\)\")",
       "Bash(curl -s -m 30 -X POST http://localhost:4000/api/calendar/alert/run)",
       "Bash(curl -s -m 20 -X PUT -H \"Content-Type: application/json\" -d '{\"telegram\":true}' http://localhost:4000/api/calendar/alert)",
-      "Bash(curl -s -m 20 -X DELETE http://localhost:4000/api/calendar/ev_mtjct9dppn0a)"
+      "Bash(curl -s -m 20 -X DELETE http://localhost:4000/api/calendar/ev_mtjct9dppn0a)",
+      "Bash(curl -s -m 20 -X PUT -H \"Content-Type: application/json\" -d '{\"enabled\":true,\"watchedOnly\":true,\"includeThemes\":false,\"marketWeightMin\":0}' http://localhost:4000/api/disclosure-alert/)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(d\\);const c=j.config??j;console.log\\(JSON.stringify\\(c,null,1\\)\\)}catch\\(e\\){console.log\\(d.slice\\(0,300\\)\\)}}\\)\")",
+      "Bash(curl -s -m 60 -X POST -H \"Content-Type: application/json\" -d '{}' http://localhost:4000/api/disclosure-alert/run)"
     ]
   }
 }

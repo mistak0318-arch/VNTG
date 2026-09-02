@@ -200,6 +200,7 @@ export async function runCalendarAlert(force = false): Promise<CalendarAlertRun>
      * 센터는 화면에 남는다 — 서로를 대신하지 못한다(마감 뒤 정리와 같은 이유).
      */
     await pushNotice({
+      source: "calendar",
       kind: "market",
       level: "info",
       title: `${r.when === "before" ? "내일" : "오늘"} 일정 ${rows.length}건`,

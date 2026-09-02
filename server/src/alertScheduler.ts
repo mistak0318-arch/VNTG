@@ -5,6 +5,7 @@ import { pruneLiveAlerts, runLiveAlerts } from "./liveAlerts.js";
 import { pruneStopWatch, runStopWatch } from "./stopWatch.js";
 import { getActiveSuper } from "./superSignal.js";
 import { hasDedicatedChannel, sendTelegram } from "./telegram.js";
+import { pushNotice } from "./notifyCenter.js";
 import { listWatchlist } from "./watchlist.js";
 
 /**
@@ -62,6 +63,39 @@ export async function runAlertScan(
   }
   const superOnes = alerts.filter((a) => superCodes.has(a.code));
   const rest = alerts.filter((a) => !superCodes.has(a.code));
+
+  /*
+   * ## **알림 센터에도 남긴다** (2026-09-02)
+   *
+   * 벤티지: "알림센터 전용 설정 메뉴 좀 만들어줄래?"
+   *
+   * 만들면서 보니 **관심종목 급변은 텔레그램으로만 가고 있었다.** 알림 센터에는
+   * 한 줄도 안 남는다 — 텔레그램을 놓치면 그 신호는 영영 못 본다.
+   *
+   * 텔레그램은 자리를 비운 사이에 오고 알림 센터는 화면에 남는다. 서로를
+   * 대신하지 못한다(마감 뒤 정리·캘린더와 같은 이유).
+   *
+   * **한 줄로 묶는다.** 종목마다 따로 넣으면 급변이 몰리는 날 알림함이 수십 줄로
+   * 덮인다 — 텔레그램 메시지가 한 통인 것과 같은 이유다. 종목 이름만 나열하고
+   * 자세한 것은 눌러서 본다.
+   */
+  if (alerts.length > 0) {
+    const head = alerts
+      .slice(0, 6)
+      .map((a) => `${a.name} ${a.ruleLabel}`)
+      .join(" · ");
+    await pushNotice({
+      source: "stockSignal",
+      kind: "stock",
+      level: "info",
+      title: `관심종목 시그널 ${alerts.length}건`,
+      body: head + (alerts.length > 6 ? ` 외 ${alerts.length - 6}건` : ""),
+      link: "#/watchlist",
+      /* 같은 종목·같은 규칙이 이어지면 한 줄에 겹친다 — 5분마다 도는 자리다 */
+      dedupeKey: `stockSignal:${alerts.map((a) => `${a.code}:${a.rule}`).sort().join(",")}`,
+      dedupeHours: 2,
+    }).catch(() => undefined);
+  }
 
   let ok = true;
   let error: string | undefined;

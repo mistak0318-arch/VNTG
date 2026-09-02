@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { todayDartEvents, type DartEvent } from "./dartEvents.js";
 import { sendTelegram, stockNameHtml } from "./telegram.js";
+import { pushNotice } from "./notifyCenter.js";
 import { superRoute } from "./superSignal.js";
 
 /**
@@ -191,6 +192,33 @@ export async function runDisclosureScan(
       sentCount += 1;
       await new Promise((r) => setTimeout(r, 400));
     }
+    /*
+     * ## **알림 센터에도 남긴다** (2026-09-02)
+     *
+     * 공시도 텔레그램으로만 가고 있었다 — 알림 센터에는 한 줄도 안 남는다.
+     * 공시는 뉴스보다 빠르고 확실한 신호라 놓치면 손해가 큰데, 텔레그램을
+     * 못 보면 그걸로 끝이었다.
+     *
+     * **한 줄로 묶는다.** 공시가 몰리는 날 종목마다 넣으면 알림함이 덮인다 —
+     * 종목 이름만 나열하고 자세한 것은 눌러서 본다.
+     */
+    if (picked.length > 0) {
+      const head = picked
+        .slice(0, 6)
+        .map((h) => `${h.event.corpName} ${h.event.title}`)
+        .join(" · ");
+      await pushNotice({
+        source: "disclosure",
+        kind: "stock",
+        level: "info",
+        title: `관심종목 공시 ${picked.length}건`,
+        body: head.slice(0, 300) + (picked.length > 6 ? ` 외 ${picked.length - 6}건` : ""),
+        link: "#/disclosure",
+        dedupeKey: `disclosure:${picked.map((h) => h.event.url).sort().join(",").slice(0, 200)}`,
+        dedupeHours: 6,
+      }).catch(() => undefined);
+    }
+
     store.lastRunAt = new Date().toISOString();
     await write(store);
   }

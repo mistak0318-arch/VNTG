@@ -51,6 +51,26 @@ export function NotifyBell() {
     system: 0,
   });
   const [filter, setFilter] = useState<NoticeKind | "all">("all");
+  /**
+   * 알림 설정 — **출처 목록은 서버가 준다.**
+   *
+   * 화면이 목록을 들고 있으면 서버가 출처를 늘렸을 때 화면만 모르는 상태가 된다
+   * (자동 그룹 목록에서 겪은 것과 같은 이유).
+   */
+  const [showCfg, setShowCfg] = useState(false);
+  const [cfgSrc, setCfgSrc] = useState<{ key: string; label: string; hint: string; def: boolean }[]>([]);
+  const [cfg, setCfg] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!showCfg || cfgSrc.length > 0) return;
+    void api
+      .noticeConfig()
+      .then((r) => {
+        setCfgSrc(r.sources);
+        setCfg(r.config);
+      })
+      .catch(() => undefined);
+  }, [showCfg, cfgSrc.length]);
   const boxRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(() => {
@@ -210,6 +230,20 @@ export function NotifyBell() {
                   모두 읽음
                 </button>
               )}
+              {/*
+                **설정** (2026-09-02) — 벤티지: "알림센터에서 받을만한 것들 좀
+                추리고 on off 할수있는 구조로 가자"
+
+                알림함 안에 둔다. 설정 화면으로 보내면 「시끄럽다」고 느낀 그
+                자리에서 손이 닿지 않는다 — 끄고 싶은 순간이 곧 보고 있는 순간이다.
+              */}
+              <button
+                className={`nb-act${showCfg ? " active" : ""}`}
+                onClick={() => setShowCfg((v) => !v)}
+                title="어떤 알림을 받을지 고릅니다"
+              >
+                ⚙ 설정
+              </button>
               <button
                 className="nb-act"
                 onClick={() => {
@@ -224,6 +258,34 @@ export function NotifyBell() {
               </button>
             </div>
           </div>
+
+          {showCfg && (
+            <div className="nb-cfg">
+              <p className="nb-cfg-head">
+                <b>어떤 알림을 받을까</b>
+                <span className="pt-n">
+                  {" "}
+                  — 끄면 알림함에 <b>담지 않습니다</b>(읽지 않음에도 안 셉니다).
+                  텔레그램은 따로 켜고 끕니다.
+                </span>
+              </p>
+              {cfgSrc.map((s2) => (
+                <label key={s2.key} className="nb-cfg-row">
+                  <input
+                    type="checkbox"
+                    checked={cfg[s2.key] ?? s2.def}
+                    onChange={(e) => {
+                      const next = { ...cfg, [s2.key]: e.target.checked };
+                      setCfg(next);
+                      void api.noticeConfigSave({ [s2.key]: e.target.checked }).catch(() => undefined);
+                    }}
+                  />
+                  <span className="nb-cfg-label">{s2.label}</span>
+                  <span className="nb-cfg-hint">{s2.hint}</span>
+                </label>
+              ))}
+            </div>
+          )}
 
           <div className="nb-list">
             {items.length === 0 ? (

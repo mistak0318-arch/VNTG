@@ -31,6 +31,43 @@ import { dirname, join } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
 const FILE = join(DATA_DIR, "notices.json");
+const CFG_FILE = join(DATA_DIR, "noticeConfig.json");
+
+/**
+ * **출처별 켬/끔** (2026-09-02).
+ *
+ * 저장에 없는 출처는 `NOTICE_SOURCES` 의 기본값을 따른다 — 나중에 출처가 늘어도
+ * 옛 설정 파일이 그걸 「꺼짐」으로 만들지 않는다. 여기 목록에 한 줄 더하면
+ * 화면까지 저절로 붙는다.
+ */
+export type NoticeConfig = Partial<Record<NoticeSource, boolean>>;
+
+let cfgCache: NoticeConfig | null = null;
+
+export async function getNoticeConfig(): Promise<Record<NoticeSource, boolean>> {
+  if (!cfgCache) {
+    try {
+      cfgCache = JSON.parse(await fs.readFile(CFG_FILE, "utf-8")) as NoticeConfig;
+    } catch {
+      cfgCache = {};
+    }
+  }
+  const out = {} as Record<NoticeSource, boolean>;
+  for (const s of NOTICE_SOURCES) out[s.key] = cfgCache[s.key] ?? s.def;
+  return out;
+}
+
+export async function saveNoticeConfig(patch: NoticeConfig): Promise<Record<NoticeSource, boolean>> {
+  const cur = await getNoticeConfig();
+  const next: NoticeConfig = {};
+  for (const s of NOTICE_SOURCES) {
+    next[s.key] = typeof patch[s.key] === "boolean" ? (patch[s.key] as boolean) : cur[s.key];
+  }
+  cfgCache = next;
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.writeFile(CFG_FILE, JSON.stringify(next, null, 2), "utf-8");
+  return getNoticeConfig();
+}
 
 /**
  * 세 갈래 (벤티지 요청: "각 종목들의 알람도, 중요한 알람도, 시스템 알람도").
@@ -40,6 +77,67 @@ const FILE = join(DATA_DIR, "notices.json");
  *   system — 도구 자체에 대한 것. 신호등 재점검 시점·수집 실패·설정 충돌
  */
 export type NoticeKind = "stock" | "market" | "system";
+
+/**
+ * **알림의 출처** (2026-09-02) — 벤티지: "알림센터 전용 설정 메뉴 좀 만들어줄래?
+ * 알림센터에서 받을만한 것들 좀 추리고 on off 할수있는 구조로 가자"
+ *
+ * `kind`(stock/market/system) 는 **성격**이지 출처가 아니다. system 하나에 마감 뒤
+ * 정리·표본·원장·신호등 분석이 다 들어 있어서, 그걸로는 「표본 알림만 끄기」가 안 된다.
+ *
+ * 끄고 켜려면 **어디서 왔는지**를 알아야 한다. 부르는 쪽이 자기 이름을 적는다.
+ */
+export type NoticeSource =
+  | "stockSignal"
+  | "disclosure"
+  | "calendar"
+  | "report"
+  | "regime"
+  | "sample"
+  | "afterClose"
+  | "listTrack"
+  | "ledger"
+  | "etc";
+
+/**
+ * 화면이 그리는 목록 — **하드코딩하면 서버와 갈린다.**
+ *
+ * 「기본으로 켤까」도 여기 있다. 매매에 바로 쓰는 것(급변·공시·일정)은 켜고,
+ * 진행 상황을 알리는 것(표본 만드는 중 같은)은 꺼 둔다 — 그건 설정 화면에서
+ * 눌러 본 사람이 결과를 보러 오는 자리라 알림까지 필요하지 않다.
+ */
+export const NOTICE_SOURCES: {
+  key: NoticeSource;
+  label: string;
+  hint: string;
+  def: boolean;
+}[] = [
+  {
+    key: "stockSignal",
+    label: "관심종목 급변",
+    hint: "급변·거래량 급증·수급 전환·신고가·정배열·VI·체결강도·거래원 이탈 (5분마다)",
+    def: true,
+  },
+  { key: "disclosure", label: "관심종목 공시", hint: "DART 공시 — 뉴스보다 빠르다 (10분마다)", def: true },
+  { key: "calendar", label: "캘린더 일정", hint: "전날 18시·당일 8시", def: true },
+  { key: "report", label: "리포트 발행", hint: "조간·장중·석간 데일리 리포트", def: true },
+  { key: "regime", label: "장세 점검", hint: "시장 폭·신고가가 문턱에 걸렸을 때", def: true },
+  { key: "listTrack", label: "신호등 분석 결과", hint: "매일 편입·이탈 요약", def: true },
+  {
+    key: "afterClose",
+    label: "마감 뒤 정리",
+    hint: "밤 배치 아홉 단계의 성공·실패 요약",
+    def: true,
+  },
+  {
+    key: "sample",
+    label: "검증 표본",
+    hint: "표본을 다시 만들 때 — 진행 상황이라 꺼 둬도 됩니다",
+    def: false,
+  },
+  { key: "ledger", label: "원장 선 긋기", hint: "기준이 바뀌어 원장을 새로 시작할 때", def: true },
+  { key: "etc", label: "그 밖에", hint: "출처를 안 적은 알림", def: true },
+];
 
 /** 급함의 정도 — 화면이 색과 정렬에 쓴다 */
 export type NoticeLevel = "info" | "warn" | "urgent";
@@ -53,6 +151,8 @@ export interface Notice {
   /** 겹쳐 들어온 횟수 — 1이면 한 번만 */
   hits: number;
   kind: NoticeKind;
+  /** 어디서 온 알림인가 (2026-09-02) — 옛 알림에는 없다 */
+  source?: NoticeSource;
   level: NoticeLevel;
   title: string;
   body?: string;
@@ -94,6 +194,8 @@ async function persist(list: Notice[]): Promise<void> {
 
 export interface PushInput {
   kind: NoticeKind;
+  /** 어디서 온 알림인가 — 안 주면 `etc`. 설정에서 이 단위로 끈다 */
+  source?: NoticeSource;
   level?: NoticeLevel;
   title: string;
   body?: string;
@@ -112,6 +214,19 @@ export interface PushInput {
  * 「텔레그램도 같이 보낼까」를 그 값으로 정할 수 있다.
  */
 export async function pushNotice(input: PushInput): Promise<Notice | null> {
+  /*
+   * **꺼 놓은 출처는 담지 않는다.**
+   *
+   * 담아 두고 화면에서 가리는 방법도 있지만 그러면 「읽지 않음」 배지가 계속
+   * 붙는다 — 끈 것이 배지로 셈해지면 끈 뜻이 없다. 아예 안 담는다.
+   *
+   * ⚠️ 텔레그램은 여기서 안 막는다. 부르는 쪽이 따로 보내고, 방마다 켜고 끄는
+   * 자리가 이미 있다 — 두 곳에서 같은 것을 막으면 왜 안 오는지 못 찾는다.
+   */
+  const src = input.source ?? "etc";
+  const cfg = await getNoticeConfig();
+  if (!cfg[src]) return null;
+
   const list = await load();
   const now = new Date().toISOString();
 

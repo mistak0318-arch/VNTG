@@ -105,6 +105,7 @@ async function rebuildAndReport(client: KiwoomClient, why: string): Promise<void
      * 도구로 남는다(표본 만들기가 그 부산물이 아니게 됐다).
      */
     await pushNotice({
+      source: "sample",
       kind: "system",
       level: "info",
       title: "표본을 다시 만드는 중입니다",
@@ -119,6 +120,7 @@ async function rebuildAndReport(client: KiwoomClient, why: string): Promise<void
     const built = await buildSamplesFromLedger(client);
     if (built.error) {
       await pushNotice({
+      source: "sample",
         kind: "system",
         level: "warn",
         title: "표본을 다시 만들지 못했습니다",
@@ -137,6 +139,7 @@ async function rebuildAndReport(client: KiwoomClient, why: string): Promise<void
 
     if (!sim) {
       await pushNotice({
+      source: "sample",
         kind: "system",
         level: "info",
         title: `표본을 새로 모았습니다 — ${meta.obs?.toLocaleString("ko-KR")}관측`,
@@ -163,6 +166,7 @@ async function rebuildAndReport(client: KiwoomClient, why: string): Promise<void
         : null;
 
     await pushNotice({
+      source: "sample",
       kind: "system",
       level: lift !== null && lift <= 0 ? "warn" : "info",
       title:
@@ -184,6 +188,7 @@ async function rebuildAndReport(client: KiwoomClient, why: string): Promise<void
     });
   } catch (err) {
     await pushNotice({
+      source: "sample",
       kind: "system",
       level: "warn",
       title: "표본 재수집이 실패했습니다",

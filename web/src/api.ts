@@ -1751,6 +1751,21 @@ export const api = {
   noticesRead: (ids?: string[]) => postJson<{ marked: number }>("/api/notify/read", { ids }),
   /** 읽은 것만 비운다 — 안 읽은 것은 남는다 */
   noticesClear: () => postJson<{ removed: number }>("/api/notify/clear", {}),
+  /**
+   * **알림 센터 설정** (2026-09-02) — 출처별 켬/끔.
+   *
+   * `kind`(stock/market/system)는 성격이라 system 하나에 마감 뒤 정리·표본·원장이
+   * 다 들어 있다. 「표본 알림만 끄기」를 하려면 출처 단위여야 한다.
+   *
+   * 목록도 서버가 준다 — 화면이 하드코딩하면 출처가 늘었을 때 화면만 모른다.
+   */
+  noticeConfig: () =>
+    getJson<{
+      sources: { key: string; label: string; hint: string; def: boolean }[];
+      config: Record<string, boolean>;
+    }>("/api/notify/config"),
+  noticeConfigSave: (patch: Record<string, boolean>) =>
+    putJson<{ config: Record<string, boolean> }>("/api/notify/config", patch),
 
   regimeConfig: () =>
     getJson<{ config: RegimeConfig; defaults: RegimeConfig }>("/api/notify/regime/config"),

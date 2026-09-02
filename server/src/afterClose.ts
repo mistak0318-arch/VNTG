@@ -352,6 +352,7 @@ export async function runAfterClose(
    * 「돌긴 돌았다」와 「돌았는데 세 개가 깨졌다」는 다른 소식이다.
    */
   await pushNotice({
+      source: "afterClose",
     kind: "system",
     level: bad.length > 0 ? "warn" : "info",
     title:
@@ -411,6 +412,7 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
         const still = r?.steps.filter((s) => !s.ok).map((s) => s.label) ?? [];
         if (still.length > 0 && retry.tried >= RETRY_MAX) {
           await pushNotice({
+      source: "afterClose",
             kind: "system",
             level: "warn",
             title: `마감 뒤 정리 — ${still.length}단계가 끝내 실패했습니다`,

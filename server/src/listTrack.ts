@@ -467,6 +467,7 @@ export async function runListTrack(
       })
       .join(" · ");
     await pushNotice({
+      source: "listTrack",
       kind: "system",
       level: "info",
       title: `신호등 분석 완료 — 초록 ${green.size}종목 · 새 편입 ${added}`,
