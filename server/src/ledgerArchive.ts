@@ -102,6 +102,7 @@ export interface ArchiveReport {
 
 export interface ConfigSummary {
   configVersion?: number;
+  configLabel?: string;
   greenAt: number;
   yellowAt: number;
   axisWeights: SignalConfig["axisWeights"];
@@ -226,6 +227,7 @@ export async function listArchives(): Promise<ArchiveMeta[]> {
 function summarize(c: SignalConfig): ConfigSummary {
   return {
     configVersion: c.configVersion,
+    configLabel: c.configLabel,
     greenAt: c.greenAt,
     yellowAt: c.yellowAt,
     axisWeights: c.axisWeights,
@@ -240,6 +242,12 @@ function summarize(c: SignalConfig): ConfigSummary {
 /** 그때 → 지금, 사람이 읽는 줄로 */
 function diffConfig(then: ConfigSummary, now: ConfigSummary): string[] {
   const out: string[] = [];
+  if (then.configVersion !== now.configVersion) {
+    out.push(
+      `세대 ${then.configVersion ?? "-"}${then.configLabel ? ` (${then.configLabel})` : ""} → ` +
+        `${now.configVersion ?? "-"}${now.configLabel ? ` (${now.configLabel})` : ""}`,
+    );
+  }
   if (then.greenAt !== now.greenAt) out.push(`초록 문턱 ${then.greenAt} → ${now.greenAt}`);
   if (then.yellowAt !== now.yellowAt) out.push(`노랑 문턱 ${then.yellowAt} → ${now.yellowAt}`);
   for (const k of ["trend", "flow", "value"] as const) {

@@ -2679,6 +2679,7 @@ export interface ArchiveRow {
 }
 export interface ArchiveConfigSummary {
   configVersion?: number;
+  configLabel?: string;
   greenAt: number;
   yellowAt: number;
   axisWeights: Record<"trend" | "flow" | "value", number>;
@@ -3563,6 +3564,13 @@ export interface SignalCheckConfig {
 }
 
 export interface SignalConfig {
+  /**
+   * **기준 세대** (2026-09-02) — 코드의 추천 기본값이 통째로 바뀐 판. 저장본이 이보다
+   * 낡으면 서버가 알아서 갈아 끼운다(`getConfig`).
+   */
+  configVersion?: number;
+  /** 그 세대의 날짜시각 — `260902_1900`. 번호만으로는 언제 것인지 못 읽는다 */
+  configLabel?: string;
   checks: SignalCheckConfig[];
   greenAt: number;
   yellowAt: number;

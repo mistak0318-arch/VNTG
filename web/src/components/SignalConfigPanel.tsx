@@ -212,6 +212,23 @@ export function SignalConfigPanel() {
   return (
     <div className="sig-config">
       {/*
+        **기준 세대** (2026-09-02 저녁 — 벤티지: "신호등 기준은 안 바꿨나보네?" /
+        "세대3 뒤에다가 날짜시간 붙이자 260902_1900 이렇게 해야 알지").
+
+        기기가 둘이라(개발PC·미니PC) 「이 기기가 새 기준으로 갈렸나」를 확인할 데가
+        없었다 — 값을 하나하나 대조하는 수밖에. 세대와 그 날짜시각을 맨 위에 박는다.
+        저장본이 낡으면 서버가 켜질 때 알아서 갈아 끼우고 알림도 남긴다.
+      */}
+      {config.configVersion !== undefined && (
+        <div className="sig-gen" title="코드의 추천 기본값이 통째로 바뀐 판입니다. 저장본이 이보다 낡으면 서버가 켜질 때 알아서 갈아 끼우고 알림을 남깁니다 — 두 기기(개발PC·미니PC)가 같은 세대인지 여기서 확인하세요">
+          기준 세대 <b>{config.configVersion}</b>
+          {config.configLabel && <span className="sig-gen-at"> · {config.configLabel}</span>}
+          {defaults?.configVersion !== undefined && defaults.configVersion !== config.configVersion && (
+            <span className="sig-gen-old"> ← 코드는 세대 {defaults.configVersion}</span>
+          )}
+        </div>
+      )}
+      {/*
         **세 겹 관계도** (2026-08-31 — "니가 커밋하면 그게 추천 기본값에 설정된다는거지?
         아 설명에 넣어줘야해 내가 이해할 수 있게 말야").
 

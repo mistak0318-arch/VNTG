@@ -380,6 +380,15 @@ export interface SignalConfig {
    * (축 비중 1/1/1 이사, largeCap 배선 때 이미 두 번 겪었다).
    */
   configVersion?: number;
+  /**
+   * **세대의 날짜시각** — `260902_1900` (2026-09-02 저녁, 벤티지: "세대3 뒤에다가
+   * 날짜시간 붙이자 260902_1900 이렇게 해야 알지").
+   *
+   * 번호만으로는 「세대 3이 언제 것인지」를 아무도 못 읽는다. 기기가 둘이라
+   * 「미니PC가 갈렸나」를 확인할 때도 번호보다 시각이 빠르다. 비교는 `configVersion`
+   * 이 하고 이건 **사람이 읽는 이름표**다.
+   */
+  configLabel?: string;
 }
 
 /** 정배열 판정에 고를 수 있는 이동평균선 */
@@ -496,6 +505,7 @@ export const DEFAULT_CONFIG: SignalConfig = {
    * 벤티지 결정 전. 켜면 세대를 4 로 올릴 것.
    */
   configVersion: 3,
+  configLabel: "260902_1900",
   greenAt: 65,
   yellowAt: 40,
   /*
@@ -1891,6 +1901,13 @@ function mergeConfig(saved: Partial<SignalConfig> | null): SignalConfig {
     ...DEFAULT_CONFIG,
     ...saved,
     /*
+     * 세대 이름표는 **늘 기본값 것**이다 (2026-09-02). 낡은 저장본은 `getConfig` 이
+     * 통째로 갈아 끼우므로, 여기까지 온 저장본은 이미 같은 세대다. 저장본의 옛
+     * 이름표가 남아 「세대 3인데 260901_1200」 같은 거짓말이 뜨는 것을 막는다.
+     */
+    configVersion: DEFAULT_CONFIG.configVersion,
+    configLabel: DEFAULT_CONFIG.configLabel,
+    /*
      * ⚠️ **옛 기본값(1/1/1)은 새 기본값으로 이사시킨다** (2026-08-31).
      *
      * 축 비중을 `1.5/1.3/0.6` 으로 바꾼 것은 **「며칠에서 몇 주를 보는 매매」에 맞춘
@@ -1994,12 +2011,15 @@ export async function getConfig(): Promise<SignalConfig> {
       configCache = mergeConfig({ configVersion: defVer });
       await mkdir(dirname(CONFIG_FILE), { recursive: true });
       await writeFile(CONFIG_FILE, JSON.stringify(configCache, null, 2), "utf-8");
-      console.log(`[signal] 신호등 설정 세대 ${savedVer} → ${defVer}: 기본값으로 갈아 끼웠다`);
+      const label = DEFAULT_CONFIG.configLabel ?? "";
+      console.log(
+        `[signal] 신호등 설정 세대 ${savedVer} → ${defVer}${label ? ` (${label})` : ""}: 기본값으로 갈아 끼웠다`,
+      );
       await pushNotice({
         source: "etc",
         kind: "system",
         level: "warn",
-        title: `신호등 기준이 새 기본값(세대 ${defVer})으로 바뀌었습니다`,
+        title: `신호등 기준이 새 기본값(세대 ${defVer}${label ? ` · ${label}` : ""})으로 바뀌었습니다`,
         body:
           "2026-09-02 전면 재검토 결과를 적용했습니다 — 외국인 시총대비·공매도 비중 수준·분기 실적을 " +
           "켜고 시총·주포·ETF 뒷배를 껐습니다. 초록 문턱 65. 설정 > 분석 > 신호등 기준에서 확인하세요.",

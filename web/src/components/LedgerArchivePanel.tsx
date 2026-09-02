@@ -127,7 +127,9 @@ export function LedgerArchivePanel() {
             {report.config ? (
               <>
                 <button className="filter-btn" onClick={() => setShowCfg((v) => !v)}>
-                  {showCfg ? "▾ 그때 옵션값 닫기" : `▸ 그때 옵션값 (세대 ${report.config.configVersion ?? "-"} · 초록 ${report.config.greenAt} · 켜진 기준 ${report.config.checks.length})`}
+                  {showCfg
+                    ? "▾ 그때 옵션값 닫기"
+                    : `▸ 그때 옵션값 (세대 ${report.config.configVersion ?? "-"}${report.config.configLabel ? ` · ${report.config.configLabel}` : ""} · 초록 ${report.config.greenAt} · 켜진 기준 ${report.config.checks.length})`}
                 </button>
                 {report.diff.length > 0 && (
                   <div className="arch-diff">
