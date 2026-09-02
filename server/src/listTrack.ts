@@ -462,6 +462,20 @@ export async function runListTrack(
     await save(store);
 
     /*
+     * **관심종목 점수대 그룹을 맞춘다** (2026-09-03 — "신호등 분석에서 돌린 종목들이
+     * 관심종목에 자동 편입이 안되네"). 원장이 바뀐 직후가 맞출 자리다. 찾기·슈퍼신호등이
+     * 제 회차 끝에 부르는 것과 같은 함수라 세 출처가 한 자로 담긴다.
+     * (scoreBandSync 가 이 파일을 import 하므로 순환을 피해 동적 import)
+     */
+    job.step = "관심종목 점수대 맞추는 중";
+    try {
+      const { syncScoreBands } = await import("./scoreBandSync.js");
+      await syncScoreBands();
+    } catch (e) {
+      console.error("[listTrack] 점수대 동기화 실패:", e instanceof Error ? e.message : e);
+    }
+
+    /*
      * ⑤ **성적을 채운다** — 편입만 하고 뒤를 안 따라가면 원장을 쌓는 뜻이 없다.
      * 이 원장의 존재 이유가 「슈퍼신호등과 견주는 것」이라 견줄 숫자가 있어야 한다.
      *
@@ -717,6 +731,34 @@ export async function listTrackLastRunDate(): Promise<string | null> {
   return (await load()).lastRunDate;
 }
 
+/**
+ * **살아 있는 편입 — 관심종목 점수대 동기화용** (2026-09-03).
+ *
+ * 벤티지: "신호등 분석에서 돌린 종목들이 관심종목에 자동 편입이 안되네 버그 고치자 연동 안되어
+ * 있네." 실측: 원장 추적 중 21 종목 중 관심종목 점수대 그룹에 9 뿐이었다. `scoreBandSync` 가
+ * 「신호등 찾기 회차 + 슈퍼신호등 원장」에서만 담고 **이 원장은 빼놓고 있었다** — 아래
+ * `removeListTrack` 의 옛 주석("이 원장은 여태 관심종목을 아예 안 건드렸다")이 그 증거다.
+ *
+ * 점수는 **가장 최근 일별 기록**을 쓴다. 편입 당시 점수로 담으면 87 → 72 로 식은 종목이
+ * 80점대에 그대로 남는다 — 점수대 그룹은 「오늘 몇 점대인가」라는 사실이어야 한다.
+ * 같은 종목이 여러 목록에 있으면 한 번만(코드로 합친다).
+ */
+export async function activeListEntries(): Promise<
+  { code: string; name: string; score: number; addedPrice: number }[]
+> {
+  const store = await load();
+  const out = new Map<string, { code: string; name: string; score: number; addedPrice: number }>();
+  for (const e of store.entries) {
+    if (e.active === false) continue;
+    const latest = e.daily?.[e.daily.length - 1];
+    const score = typeof latest?.score === "number" ? latest.score : e.score;
+    if (!Number.isFinite(score)) continue;
+    const had = out.get(e.code);
+    if (!had || had.score < score) out.set(e.code, { code: e.code, name: e.name, score, addedPrice: e.addedPrice });
+  }
+  return [...out.values()];
+}
+
 export async function listTrackSummary(): Promise<ListTrackSummary> {
   const store = await load();
   const byList = SCREEN_UNIVERSES.map((u) => {
@@ -845,10 +887,10 @@ export async function removeListEntry(code: string, list?: string): Promise<numb
   /*
    * 관심종목의 자동 그룹에서도 뺀다.
    *
-   * ⚠️ 이 원장은 여태 **관심종목을 아예 안 건드렸다.** 점수대 그룹은
-   * `scoreBandSync` 가 「신호등 찾기 회차 + 슈퍼신호등 원장」에서 담기 때문이다.
-   * 그래서 여기서 지워도 관심종목에는 그대로 남았다 — 벤티지가 「연동되어
-   * 있지?」라고 물은 것이 정확히 이 자리다.
+   * 점수대 그룹은 `scoreBandSync` 가 담는다 — 2026-09-03 부터 이 원장(`activeListEntries`)도
+   * 그 출처에 들어간다(전엔 「찾기 회차 + 슈퍼신호등」뿐이라 이 원장 종목이 관심종목에
+   * 안 들어갔다). 여기서 지운 종목은 다음 동기화가 어차피 빼지만, 사람이 지운 즉시
+   * 관심종목에서도 사라져야 「연동되어 있지?」에 예라고 답할 수 있다.
    *
    * 목록 하나만 지우는 경우(`list` 지정)에는 **안 뺀다.** 다른 목록에 아직
    * 걸려 있을 수 있고, 그러면 관심종목에 남아 있는 게 맞다.

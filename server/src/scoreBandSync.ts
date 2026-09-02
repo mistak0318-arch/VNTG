@@ -7,6 +7,7 @@ import {
 } from "./watchlist.js";
 import { listScreenRuns, getScreenRun } from "./signalScreen.js";
 import { activeSuperEntries } from "./superSignal.js";
+import { activeListEntries } from "./listTrack.js";
 
 /**
  * **점수대 그룹 동기화** (2026-09-01) — 90/80/70/60점대.
@@ -16,12 +17,15 @@ import { activeSuperEntries } from "./superSignal.js";
  *
  * ## 무엇을 담나
  *
- * 두 곳에서 모은다:
+ * 세 곳에서 모은다:
  *
  *   ① **신호등 찾기**의 가장 최근 회차 — 점수가 붙어 있는 목록이다
  *   ② **슈퍼신호등** 원장의 살아 있는 편입 — 여러 목록에 동시에 걸린 것들
+ *   ③ **신호등 분석** 원장의 살아 있는 편입 (2026-09-03 추가 — 벤티지: "신호등 분석에서
+ *      돌린 종목들이 관심종목에 자동 편입이 안되네 버그 고치자". 실측 원장 21 중 9 만 있었다.
+ *      처음 만들 때 벤티지가 「신호등 분석이랑 슈퍼신호등」이라고 했는데 분석 쪽을 빠뜨렸다.)
  *
- * 같은 종목이 둘 다에 있으면 **높은 점수를 쓴다.** 슈퍼신호등은 편입 시점 점수라
+ * 같은 종목이 여럿에 있으면 **높은 점수를 쓴다.** 슈퍼신호등은 편입 시점 점수라
  * 오늘 찾기 점수와 다를 수 있는데, 낮은 쪽으로 담으면 「어제보다 좋아졌는데 아래
  * 그룹으로 내려갔다」가 된다.
  *
@@ -58,6 +62,8 @@ export interface BandSyncResult {
   runAt?: string;
   /** 슈퍼신호등에서 몇 개를 보탰나 */
   fromSuper: number;
+  /** 신호등 분석 원장에서 몇 개를 보탰나 (2026-09-03) */
+  fromList: number;
   at: string;
 }
 
@@ -75,6 +81,7 @@ export async function syncScoreBands(): Promise<BandSyncResult> {
   let added = 0;
   let removed = 0;
   let fromSuper = 0;
+  let fromList = 0;
   let runAt: string | undefined;
 
   /** 종목 → { 점수, 이름, 가격 } — 높은 점수가 이긴다 */
@@ -113,6 +120,17 @@ export async function syncScoreBands(): Promise<BandSyncResult> {
     /* 원장을 못 읽어도 찾기 쪽은 담는다 */
   }
 
+  /* ③ 신호등 분석 원장의 살아 있는 편입 — 점수는 가장 최근 일별 기록 */
+  try {
+    for (const e of await activeListEntries()) {
+      const had = best.get(e.code);
+      if (!had || had.score < e.score) fromList += 1;
+      put(e.code, e.name, e.addedPrice, e.score);
+    }
+  } catch {
+    /* 이 원장을 못 읽어도 나머지는 담는다 */
+  }
+
   /** 종목 → 있어야 할 그룹 */
   const want = new Map<string, string>();
   for (const [code, v] of best) {
@@ -140,6 +158,6 @@ export async function syncScoreBands(): Promise<BandSyncResult> {
     added += 1;
   }
 
-  last = { counts, added, removed, runAt, fromSuper, at: new Date().toISOString() };
+  last = { counts, added, removed, runAt, fromSuper, fromList, at: new Date().toISOString() };
   return last;
 }

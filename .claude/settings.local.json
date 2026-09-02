@@ -1171,7 +1171,8 @@
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('ttlMs',j.ttlMs,'updatedAt',new Date\\(j.updatedAt\\).toLocaleTimeString\\('ko-KR',{hour12:false}\\),'fetchedAt',j.data?.fetchedAt\\);for\\(const r of \\(j.data?.rows||[]\\)\\)if\\(['irx','fvx','tnx','tyx'].includes\\(r.key\\)\\)console.log\\(' ',JSON.stringify\\(r\\)\\);console.log\\('curveNote:',j.data?.curveNote\\)}\\)\")",
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);for\\(const r of j.data.rows\\)if\\(['tnx','tyx'].includes\\(r.key\\)\\)console.log\\(' ',r.label,r.price,'변화',r.change,'시각',new Date\\(r.quotedAt\\).toLocaleTimeString\\('ko-KR',{hour12:false}\\)\\)}\\)\")",
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);for\\(const [k,v] of Object.entries\\(j.quotes||{}\\)\\)console.log\\(' ',k,v.price,'등락률',v.changeRate?.toFixed\\(3\\),'시각',v.at?new Date\\(v.at\\).toLocaleTimeString\\('ko-KR',{hour12:false}\\):'-'\\)}\\)\")",
-      "Bash(tee tools/sigtune/closeBetSig.txt)"
+      "Bash(tee tools/sigtune/closeBetSig.txt)",
+      "Bash(curl -s --max-time 60 -X POST \"http://localhost:4000/api/watchlist/score-bands/sync\")"
     ]
   }
 }
