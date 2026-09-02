@@ -163,8 +163,8 @@ export function SettingsPage() {
       <CollapsibleCard
         id="miniConfig"
         scope="global"
-        title="미니창"
-        hint="상단 버튼 1~5에 어떤 화면을 물릴지, 여는 단축키를 정합니다."
+        title="미니창 · 보드 새창"
+        hint="미니창 상단 버튼 1~7에 어떤 화면을 물릴지, 미니창·보드 새창을 여는 단축키를 정합니다."
       >
         <MiniConfigPanel />
       </CollapsibleCard>

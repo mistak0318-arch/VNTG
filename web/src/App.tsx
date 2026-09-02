@@ -14,7 +14,8 @@ import { CisPage } from "./pages/CisPage";
 import { MemoPage } from "./pages/MemoPage";
 import { MiniPage } from "./pages/MiniPage";
 import { BuzzSourcePage } from "./pages/BuzzSourcePage";
-import { matchesMiniHotkey, onMiniConfigChange, readMiniConfig } from "./miniConfig";
+import { createHotkeyMatcher } from "./hotkey";
+import { onMiniConfigChange, readMiniConfig } from "./miniConfig";
 import { TabActiveContext } from "./tabActive";
 import { SuperDashboardPage } from "./pages/SuperDashboardPage";
 import { ListTrackPage } from "./pages/ListTrackPage";
@@ -98,7 +99,8 @@ type Tab =
   | "settings"
   | "board"
   | "guide"
-  | "mini";
+  | "mini"
+  | "boardWin";
 
 /**
  * 사이드바 메뉴 구조. 그룹 아래에 항목을 추가하는 식으로 기능을 늘려간다.
@@ -146,6 +148,12 @@ const MENU: {
       { key: "stockAnalysis", label: "개별종목분석", icon: "🔍" },
       // 다른 창에서 고른 종목을 따라 그리는 자리 — 모니터를 여러 대 쓸 때
       { key: "board", label: "보드 (창 연동)", icon: "🖥️" },
+      /*
+       * 보드 새창 (2026-09-02) — 미니창처럼 **탭 전환이 아니라 새 창**을 연다(#/board?win=1).
+       * 모니터를 여러 대 쓸 때 보드 하나를 통째로 옆 화면에 두려는 것. 거기서 종목을
+       * 고르면 그 창이 아니라 **본창**이 그 종목으로 간다 — 보드 창은 보드로 남는다.
+       */
+      { key: "boardWin", label: "보드 새창 열기", icon: "🗔" },
       { key: "screener", label: "시세분석", icon: "🔬" },
       /*
        * 조건 검색 (2026-09-01) — 증권사 조건검색식처럼 신호등 기준을 통과/미달로 쓴다.
@@ -216,6 +224,9 @@ const MENU: {
   },
 ];
 
+/** 탭이 아니라 **새 창**을 여는 메뉴 — 열린 탭 목록에 안 들어가고 새 브라우저 탭으로도 안 연다 */
+const POPUP_KEYS: ReadonlySet<string> = new Set(["mini", "boardWin"]);
+
 /** 설정 화면이 메뉴 순서를 편집할 수 있도록 평평하게 내보낸다 */
 export const MENU_ITEMS = MENU.flatMap((g) =>
   g.items.map((i) => ({ key: i.key as string, label: i.label, icon: i.icon, group: g.group })),
@@ -230,6 +241,13 @@ const VALID_TABS = new Set(MENU.flatMap((g) => g.items).map((i) => i.key));
 export default function App() {
   /* 홈 = 브리핑. 앱을 열면 「오늘 시장이 어떤가」부터 — 파고들기는 대시보드로 */
   const { route, navigate } = useHashRoute("briefing");
+  /*
+   * 보드 새창인가 — `#/board?win=1` (2026-09-02). 한 번만 읽는다: `navigate` 가
+   * 해시를 다시 쓰면서 `win` 을 떨구기 때문에 매번 읽으면 첫 이동에 본창으로 변한다.
+   */
+  const [boardWin] = useState(
+    () => route.tab === "board" && /[?&]win=1(&|$)/.test(window.location.hash),
+  );
   const [navOpen, setNavOpen] = useState(false);
   const { prefs } = useMenuPrefs();
   /* 자리를 비웠을 때 화면을 가린다 — 기기마다 따로 켠다 */
@@ -433,7 +451,7 @@ export default function App() {
    * (= 메뉴 개수)까지는 열려 있어도 부담이 없다.
    */
   useEffect(() => {
-    if (tab === "mini") return;
+    if (POPUP_KEYS.has(tab)) return;
     setOpenTabs((prev) => (prev.includes(tab) ? prev : [...prev, tab]));
   }, [tab]);
 
@@ -595,7 +613,7 @@ export default function App() {
   /** 탭 모두 닫기 — 지금 보고 있는 탭 하나만 남긴다(보던 화면까지 날리면 그게 또 사고) */
   function closeAllTabs() {
     if (!window.confirm("열려 있는 모든 탭을 닫을까요?\n지금 보고 있는 화면만 남습니다.")) return;
-    setOpenTabs(tab === "mini" ? [] : [tab]);
+    setOpenTabs(POPUP_KEYS.has(tab) ? [] : [tab]);
   }
 
   /** 탭 키 → 페이지. 인앱 탭이 열린 것들을 전부 이걸로 그린다 */
@@ -663,6 +681,20 @@ export default function App() {
     setNavFrom(null);
   }
 
+  /**
+   * 보드 새창 (2026-09-02) — 보드를 통째로 새 창에. 같은 이름이라 하나만 뜬다.
+   * `win=1` 은 「사이드바 없이 보드만 그려라」는 표시다 — 아래 `boardWin` 참고.
+   */
+  function openBoardWin() {
+    window.open(
+      `${window.location.pathname}#/board?win=1`,
+      "vntg-board",
+      "width=1400,height=900,resizable=yes,scrollbars=yes",
+    );
+    setNavOpen(false);
+    setNavFrom(null);
+  }
+
   /*
    * 미니창 단축키 (2026-08-26) — 화면잠금 단축키와 같은 방식.
    * 설정 > 화면 > 미니창에서 조합을 고른다(기본 Ctrl+M). 미니창 자신(#/mini)에서는
@@ -670,28 +702,49 @@ export default function App() {
    */
   useEffect(() => {
     if (route.tab === "mini") return;
-    let hotkey = readMiniConfig().hotkey;
+    /*
+     * 2026-09-02 — 판정을 `hotkey.ts` 로 옮기고 **보드 새창**을 같은 리스너에 얹었다.
+     * 연타(m 세 번)는 누른 시각을 기억해야 해서 판정기가 상태를 든다 — 그래서 한 번
+     * 만들어 두고 리스너 안에서 계속 부른다. 설정은 `get` 으로 매번 읽으니 설정
+     * 화면에서 바꾸면 다음 키부터 새 조합으로 듣는다.
+     *
+     * 보드 새창 안에서는 보드 단축키를 안 듣는다 — 같은 이름의 창을 자기 자신에서
+     * 열면 **자기가 새로고침**된다.
+     */
+    let cfg = readMiniConfig();
     const off = onMiniConfigChange(() => {
-      hotkey = readMiniConfig().hotkey;
+      cfg = readMiniConfig();
     });
+    const isMini = createHotkeyMatcher(() => cfg.hotkey);
+    const isBoard = createHotkeyMatcher(() => (boardWin ? "off" : cfg.boardHotkey));
     const onKey = (e: KeyboardEvent) => {
-      if (!matchesMiniHotkey(e, hotkey)) return;
-      e.preventDefault();
-      openMini();
+      if (isMini(e)) {
+        e.preventDefault();
+        openMini();
+        return;
+      }
+      if (isBoard(e)) {
+        e.preventDefault();
+        openBoardWin();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {
       off();
       window.removeEventListener("keydown", onKey);
     };
-    // openMini 는 안정적(참조만 씀) — route.tab 이 mini 로/에서 바뀔 때만 다시 건다
+    // openMini·openBoardWin 은 안정적(참조만 씀) — route.tab 이 mini 로/에서 바뀔 때만 다시 건다
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route.tab]);
+  }, [route.tab, boardWin]);
 
   /** 메뉴 클릭 공통 — 미니창은 팝업, Ctrl/휠 클릭은 새 브라우저 탭, 나머지는 전환 */
   function navClick(e: React.MouseEvent, key: Tab) {
     if (key === "mini") {
       openMini();
+      return;
+    }
+    if (key === "boardWin") {
+      openBoardWin();
       return;
     }
     if (e.ctrlKey || e.metaKey) {
@@ -721,6 +774,33 @@ export default function App() {
     return (
       <div className="mini-root">
         <BuzzSourcePage />
+      </div>
+    );
+  }
+
+  /*
+   * 보드 새창(#/board?win=1) — 사이드바 없이 **보드만** 그린다 (2026-09-02).
+   *
+   * 여기서 종목을 고르면 이 창이 아니라 **연 창(opener)** 이 그 종목으로 간다 —
+   * 보드 창은 보드로 남아야 옆 모니터에 둔 뜻이 있다. 연 창이 닫혔으면 이 창에서 연다.
+   */
+  if (boardWin) {
+    const toOpener = (code: string, name: string) => {
+      const op = window.opener as Window | null;
+      if (op && !op.closed) {
+        /* 종목 상세는 어느 탭 위에서든 뜨는 모달이라 **연 창이 보던 탭을 그대로** 두고 종목만 얹는다 */
+        const curTab = op.location.hash.replace(/^#\/?/, "").split("?")[0] || "briefing";
+        const params = new URLSearchParams({ code, name });
+        op.location.hash = `#/${curTab}?${params.toString()}`;
+        op.focus();
+        focus.publish(code, name);
+        return;
+      }
+      onSelectStock(code, name);
+    };
+    return (
+      <div className="mini-root">
+        <BoardPage onSelectStock={toOpener} />
       </div>
     );
   }
@@ -851,12 +931,14 @@ export default function App() {
                   className={`nav-item${tab === item.key ? " active" : ""}`}
                   onClick={(e) => navClick(e, item.key)}
                   onAuxClick={(e) => {
-                    if (e.button === 1 && item.key !== "mini") openInNewTab(item.key);
+                    if (e.button === 1 && !POPUP_KEYS.has(item.key)) openInNewTab(item.key);
                   }}
                   title={
                     item.key === "mini"
                       ? "작은 팝업 창으로 종목을 조회합니다 — 보던 페이지는 그대로"
-                      : "Ctrl+클릭 또는 휠 클릭: 새 브라우저 탭으로 — 보던 화면이 유지됩니다"
+                      : item.key === "boardWin"
+                        ? "보드를 새 창으로 띄웁니다 — 거기서 고른 종목은 이 창이 보여줍니다"
+                        : "Ctrl+클릭 또는 휠 클릭: 새 브라우저 탭으로 — 보던 화면이 유지됩니다"
                   }
                 >
                   <span className="nav-icon" aria-hidden="true">

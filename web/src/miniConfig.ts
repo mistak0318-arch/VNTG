@@ -1,3 +1,4 @@
+import { WINDOW_HOTKEYS, type Hotkey } from "./hotkey";
 import { setPref } from "./prefs";
 
 /**
@@ -50,15 +51,12 @@ export const MINI_SCREENS: { key: MiniScreenKey; label: string; icon: string; hi
   { key: "watchTicker", label: "관심 시세판", icon: "🎯", hint: "관심종목 시세만 콤팩트하게 (보드의 시세판)" },
 ];
 
-export type MiniHotkey = "off" | "ctrl-m" | "ctrl-shift-m" | "alt-m" | "ctrl-shift-o";
-
-export const MINI_HOTKEYS: { key: MiniHotkey; label: string; hint: string }[] = [
-  { key: "ctrl-m", label: "Ctrl+M", hint: "기본값 — 브라우저에서 비어 있는 조합입니다" },
-  { key: "ctrl-shift-m", label: "Ctrl+Shift+M", hint: "왼손만으로" },
-  { key: "alt-m", label: "Alt+M", hint: "한 손으로" },
-  { key: "ctrl-shift-o", label: "Ctrl+Shift+O", hint: "Open — 북마크 관리와 겹칠 수 있습니다" },
-  { key: "off", label: "안 씀", hint: "단축키로는 안 엽니다" },
-];
+/*
+ * 단축키 목록과 판정은 2026-09-02 에 `hotkey.ts` 로 옮겼다 — 보드 새창·화면잠금과
+ * 같이 쓰고, 연타(m 세 번)가 거기서 판정된다. 여기 이름은 옛 호출부를 위해 남긴다.
+ */
+export type MiniHotkey = Hotkey;
+export const MINI_HOTKEYS = WINDOW_HOTKEYS;
 
 /** 버튼 수 — 1~7 (2026-08-27 「7개까지」. 저장된 5슬롯 구성은 기본값으로 늘려 읽힌다) */
 export const MINI_SLOT_COUNT = 7;
@@ -67,6 +65,11 @@ export interface MiniConfig {
   /** 상단 버튼 1~7 이 여는 화면 */
   slots: MiniScreenKey[];
   hotkey: MiniHotkey;
+  /**
+   * 보드 새창을 여는 단축키 (2026-09-02). 미니창과 같은 목록에서 고른다 —
+   * 설정 파일 하나에 같이 두는 이유는 「새창 단축키」가 한 화면에서 보이게 하려는 것.
+   */
+  boardHotkey: Hotkey;
 }
 
 const KEY = "vntg.mini";
@@ -75,6 +78,7 @@ const EVENT = "vntg-mini-config";
 const DEFAULT: MiniConfig = {
   slots: ["stock", "overview", "watch", "news", "superSignal", "pulse", "indexBoard"],
   hotkey: "ctrl-m",
+  boardHotkey: "ctrl-b",
 };
 
 export function readMiniConfig(): MiniConfig {
@@ -91,6 +95,9 @@ export function readMiniConfig(): MiniConfig {
       hotkey: MINI_HOTKEYS.some((h) => h.key === saved.hotkey)
         ? (saved.hotkey as MiniHotkey)
         : DEFAULT.hotkey,
+      boardHotkey: MINI_HOTKEYS.some((h) => h.key === saved.boardHotkey)
+        ? (saved.boardHotkey as Hotkey)
+        : DEFAULT.boardHotkey,
     };
   } catch {
     return DEFAULT;
@@ -116,19 +123,4 @@ export function onMiniConfigChange(fn: () => void): () => void {
   };
 }
 
-/** 눌린 키가 그 조합인가 — useScreenLock.matches 와 같은 규칙 */
-export function matchesMiniHotkey(e: KeyboardEvent, hotkey: MiniHotkey): boolean {
-  const k = e.key.toLowerCase();
-  switch (hotkey) {
-    case "ctrl-m":
-      return (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && k === "m";
-    case "ctrl-shift-m":
-      return (e.ctrlKey || e.metaKey) && e.shiftKey && k === "m";
-    case "alt-m":
-      return e.altKey && !e.ctrlKey && !e.metaKey && k === "m";
-    case "ctrl-shift-o":
-      return (e.ctrlKey || e.metaKey) && e.shiftKey && k === "o";
-    default:
-      return false;
-  }
-}
+/* 판정(`matchesMiniHotkey`)은 `hotkey.ts` 의 `createHotkeyMatcher` 로 옮겼다 — 연타 때문에 상태가 필요하다 */

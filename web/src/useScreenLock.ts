@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createHotkeyMatcher, LOCK_HOTKEYS, type Hotkey as SharedHotkey } from "./hotkey";
 import { removePref, setPref } from "./prefs";
 
 /**
@@ -56,55 +57,14 @@ export interface LockConfig {
   hotkey: Hotkey;
 }
 
-/** 「끄기」를 포함해 고를 수 있는 조합 */
-export type Hotkey =
-  | "off"
-  | "ctrl-shift-z"
-  | "ctrl-shift-x"
-  | "ctrl-shift-l"
-  | "ctrl-q"
-  | "alt-l"
-  | "ctrl-x";
-
-export const HOTKEYS: { key: Hotkey; label: string; hint: string }[] = [
-  {
-    key: "ctrl-shift-z",
-    label: "Ctrl+Shift+Z",
-    hint: "기본값 — 왼손 끝으로 눌러집니다. 「다시 실행」과 겹치지만 이 앱에서는 쓸 일이 없습니다",
-  },
-  { key: "ctrl-shift-x", label: "Ctrl+Shift+X", hint: "왼손만으로 눌러집니다" },
-  { key: "ctrl-shift-l", label: "Ctrl+Shift+L", hint: "Lock — 입력창에서 안 쓰는 조합입니다" },
-  { key: "ctrl-q", label: "Ctrl+Q", hint: "가장 빠르지만 브라우저에 따라 종료로 먹힐 수 있습니다" },
-  { key: "alt-l", label: "Alt+L", hint: "한 손으로" },
-  {
-    key: "ctrl-x",
-    label: "Ctrl+X",
-    hint: "⚠️ 잘라내기와 겹칩니다 — 메모에서 글자를 잘라내려다 화면이 잠깁니다",
-  },
-  { key: "off", label: "안 씀", hint: "단축키로는 안 잠급니다" },
-];
-
-/** 눌린 키가 그 조합인가 */
-function matches(e: KeyboardEvent, hotkey: Hotkey): boolean {
-  const k = e.key.toLowerCase();
-  switch (hotkey) {
-    case "ctrl-shift-l":
-      return (e.ctrlKey || e.metaKey) && e.shiftKey && k === "l";
-    case "ctrl-shift-z":
-      return (e.ctrlKey || e.metaKey) && e.shiftKey && k === "z";
-    case "ctrl-shift-x":
-      return (e.ctrlKey || e.metaKey) && e.shiftKey && k === "x";
-    case "ctrl-q":
-      return (e.ctrlKey || e.metaKey) && !e.shiftKey && k === "q";
-    case "alt-l":
-      return e.altKey && !e.ctrlKey && k === "l";
-    case "ctrl-x":
-      // 잘라내기와 겹치는 걸 알고도 고른 사람만 온다
-      return (e.ctrlKey || e.metaKey) && !e.shiftKey && k === "x";
-    default:
-      return false;
-  }
-}
+/*
+ * 조합 목록과 판정은 2026-09-02 에 `hotkey.ts` 로 옮겼다 — 미니창·보드 새창과 같이
+ * 쓰고, 연타(l 세 번)가 거기서 판정된다. 잠금이 고를 수 있는 것만 `LOCK_HOTKEYS` 로
+ * 갈라 둔다(Ctrl+X 같은 「알고도 쓰는」 조합이 창 열기 목록에 뜨면 안 된다).
+ * 여기 이름은 옛 호출부(ScreenLockPanel)를 위해 남긴다.
+ */
+export type Hotkey = SharedHotkey;
+export const HOTKEYS = LOCK_HOTKEYS;
 
 const DEFAULT: LockConfig = { enabled: false, minutes: 5, hotkey: "ctrl-shift-z" };
 
@@ -196,8 +156,10 @@ export function useScreenLock() {
    */
   useEffect(() => {
     if (config.hotkey === "off" || locked) return;
+    /* 연타(l 세 번)는 누른 시각을 기억해야 해서 판정기가 상태를 든다 — 한 번 만들어 계속 부른다 */
+    const matches = createHotkeyMatcher(() => config.hotkey);
     const onKey = (e: KeyboardEvent) => {
-      if (!matches(e, config.hotkey)) return;
+      if (!matches(e)) return;
       // 브라우저 기본 동작(예: Ctrl+Q 종료)보다 먼저 잠근다
       e.preventDefault();
       lock();
