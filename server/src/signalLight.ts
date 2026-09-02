@@ -2055,12 +2055,26 @@ export async function evaluateSignal(
    * 조회는 안 는다 — 일봉 캐시에서 이동평균을 내는 것뿐이다.
    */
   const mkt = cfg.regimeSwitch ? await marketRegime(cfg.bullAt).catch(() => null) : null;
-  const enabled = cfg.checks.filter(
-    (c) => c.enabled && (!c.regime || !mkt || c.regime === mkt.regime),
-  );
   /** 장세 때문에 이번에 빠진 기준 — 화면이 「왜 이 점수인가」를 말할 수 있게 */
   const offByRegime = cfg.checks.filter(
     (c) => c.enabled && c.regime && mkt && c.regime !== mkt.regime,
+  );
+  /*
+   * ## 탈락 조건은 장세로 빠져도 **평가는 한다** (2026-09-02)
+   *
+   * `flowRatio` 의 주석은 "탈락 조건(veto)은 장세와 무관하게 계속 산다"였는데
+   * 코드는 그렇지 않았다. 아래 평가 루프가 이 `enabled` 만 돌고, 여기서 장세로
+   * 걸러진 기준은 **아예 재지 않으니** `raw` 가 없고, 탈락 판정은 `raw` 로 하니
+   * 강세장에서는 순매도로 빠져나가는 종목이 그냥 통과했다.
+   *
+   * 그래서 장세로 빠진 기준이라도 **탈락이 붙어 있으면 평가 목록에 남긴다.**
+   * 다만 점수와 커버리지에는 안 섞는다 — 그건 장세로 뺀 뜻이 맞다. 아래
+   * `vetoOnly` 에 든 기준은 `grade` 를 null 로 두어 축 평균·커버리지에서 저절로
+   * 빠지고, `raw` 만 남아 탈락 판정에 쓰인다.
+   */
+  const vetoOnly = new Set(offByRegime.filter((c) => c.veto).map((c) => c.key));
+  const enabled = cfg.checks.filter(
+    (c) => c.enabled && (!c.regime || !mkt || c.regime === mkt.regime || vetoOnly.has(c.key)),
   );
   const need = new Set(enabled.map((c) => c.key));
 
@@ -2862,6 +2876,11 @@ export async function evaluateSignal(
      * 이름을 「매물 부담 낮음」처럼 안전한 상태로 적어 둔 것이 이것 때문이다 —
      * 통과/미달 목록에 그대로 들어가기 때문이다.
      */
+    /* 장세로 빠진 탈락 기준 — 잰 값(raw)은 남기고 점수에서는 뺀다 (위 `vetoOnly` 참고) */
+    if (vetoOnly.has(c.key) && g !== null) {
+      g = null;
+      value = `${value} · 장세로 점수 제외, 탈락만 봄`;
+    }
     const pass = g === null ? null : c.axis === "risk" ? g < 50 : g >= 50;
     checks.push({ key: c.key, label: c.label, axis: c.axis, grade: g, raw, pass, value, weight: c.weight, link, etfs });
   }
