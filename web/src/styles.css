@@ -6961,9 +6961,98 @@ button.nav-group-toggle {
 .ht-px { font-weight: 600; }
 .ht-ad { display: inline-flex; gap: 4px; font-size: 0.7rem; opacity: 0.85; }
 .ht-sig b { font-weight: 600; }
-/* 폰·좁은 창에서는 숨긴다 — 검색창 한 줄에 다 넣으면 검색창이 사라진다 */
+.hdr-tick { position: relative; }
+.hdr-tick-full { display: flex; align-items: center; gap: 6px; }
+
+/* 좁은 화면용 단추 — 알림 종(.nb-bell)과 같은 모양. 넓을 땐 안 보인다 */
+.ht-btn {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--text);
+  cursor: pointer;
+}
+.ht-btn:hover,
+.ht-btn.open { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.ht-btn .sig-dot { margin: 0; }
+
+/* 펼침 — 종 패널(.nb-panel)과 같은 자리 규칙 */
+.ht-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+  z-index: 400;
+}
+.ht-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 8px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.ht-row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.ht-row .ht-name { min-width: 3.2em; }
+.ht-row .ht-px { font-size: 1.05rem; }
+.ht-row .ht-ad { margin-left: auto; font-size: 0.8rem; }
+.ht-flat { color: var(--muted); }
+.ht-sum {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.ht-pop-note {
+  padding: 4px 6px 0;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+/* 좁은 창 — 띠 대신 단추. 검색창 한 줄에 띠까지 넣으면 검색창이 사라진다 */
 @media (max-width: 960px) {
-  .hdr-tick { display: none; }
+  .hdr-tick-full { display: none; }
+  .ht-btn { display: inline-flex; }
+}
+/* 폰 — 뷰포트에 직접 맞춘다. 세로 자리(--ht-top)는 컴포넌트가 단추를 재서 넘긴다 */
+@media (max-width: 720px) {
+  .ht-pop {
+    position: fixed;
+    top: var(--ht-top, 64px);
+    left: 10px;
+    right: 10px;
+    width: auto;
+    max-width: none;
+  }
+  .ht-btn-txt { display: none; }
 }
 
 /* 미국 섹터 MAP — 두 그룹 붙박이, 촘촘한 타일 */
