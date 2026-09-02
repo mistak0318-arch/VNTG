@@ -1120,7 +1120,11 @@
       "Bash(curl -s -m 20 -X DELETE http://localhost:4000/api/calendar/ev_mtjct9dppn0a)",
       "Bash(curl -s -m 20 -X PUT -H \"Content-Type: application/json\" -d '{\"enabled\":true,\"watchedOnly\":true,\"includeThemes\":false,\"marketWeightMin\":0}' http://localhost:4000/api/disclosure-alert/)",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(d\\);const c=j.config??j;console.log\\(JSON.stringify\\(c,null,1\\)\\)}catch\\(e\\){console.log\\(d.slice\\(0,300\\)\\)}}\\)\")",
-      "Bash(curl -s -m 60 -X POST -H \"Content-Type: application/json\" -d '{}' http://localhost:4000/api/disclosure-alert/run)"
+      "Bash(curl -s -m 60 -X POST -H \"Content-Type: application/json\" -d '{}' http://localhost:4000/api/disclosure-alert/run)",
+      "Bash(curl -s -m 30 http://localhost:4000/api/keyword/)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(d\\);const src=j.sources||[];console.log\\('감시 중인 키워드',src.length+'개'\\);const by={};for\\(const s of src\\)by[s.from]=\\(by[s.from]||0\\)+1;console.log\\(JSON.stringify\\(by\\)\\);console.log\\('예:',src.slice\\(0,10\\).map\\(s=>s.word+'\\('+s.from+'\\)'\\).join\\(' · '\\)\\)}catch\\(e\\){console.log\\(d.slice\\(0,300\\)\\)}}\\)\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const k=j.keywords||[];const by={};for\\(const s of k\\)by[s.from]=\\(by[s.from]||0\\)+1;console.log\\('감시 중',k.length+'개 ·',JSON.stringify\\(by\\)\\);console.log\\('관심종목:',k.filter\\(s=>s.from==='관심종목'\\).slice\\(0,12\\).map\\(s=>s.word\\).join\\(' · '\\)\\)}\\)\")",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

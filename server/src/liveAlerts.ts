@@ -3,6 +3,7 @@ import { peekRealtime } from "./realtimeHub.js";
 import { viDirText } from "./realtimeStore.js";
 import { getActiveSuper } from "./superSignal.js";
 import { hasDedicatedChannel, sendTelegram, stockNameHtml } from "./telegram.js";
+import { pushNotice } from "./notifyCenter.js";
 import { listWatchlist } from "./watchlist.js";
 
 /**
@@ -153,6 +154,22 @@ export async function runLiveAlerts(
   }
   const superOnes = out.filter((a) => superCodes.has(a.code));
   const rest = out.filter((a) => !superCodes.has(a.code));
+  /*
+   * **알림함에도 남긴다** (2026-09-02). VI 는 실시간에서 바로 오는 신호라
+   * 텔레그램을 놓치면 그 순간이 지나간다 — 화면에도 자국이 남아야 한다.
+   * 한 줄로 묶는다(종목마다 넣으면 VI 가 몰리는 날 알림함이 덮인다).
+   */
+  await pushNotice({
+    source: "live",
+    kind: "stock",
+    level: "warn",
+    title: `실시간 신호 ${out.length}건`,
+    body: out.slice(0, 6).map((a) => `${a.name} ${a.kind === "vi" ? "VI 발동" : "체결강도 급변"}`).join(" · "),
+    link: "#/watchlist",
+    dedupeKey: `live:${out.map((a) => `${a.code}:${a.kind}`).sort().join(",")}`,
+    dedupeHours: 2,
+  }).catch(() => undefined);
+
   let ok = true;
   if (superOnes.length > 0) ok = (await sendTelegram(formatLiveAlerts(superOnes), "super")).ok && ok;
   if (rest.length > 0) ok = (await sendTelegram(formatLiveAlerts(rest), "signal")).ok && ok;

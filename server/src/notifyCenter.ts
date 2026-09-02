@@ -97,6 +97,10 @@ export type NoticeSource =
   | "afterClose"
   | "listTrack"
   | "ledger"
+  | "keyword"
+  | "superSignal"
+  | "live"
+  | "stopWatch"
   | "etc";
 
 /**
@@ -106,37 +110,119 @@ export type NoticeSource =
  * 진행 상황을 알리는 것(표본 만드는 중 같은)은 꺼 둔다 — 그건 설정 화면에서
  * 눌러 본 사람이 결과를 보러 오는 자리라 알림까지 필요하지 않다.
  */
+/**
+ * **묶음** (2026-09-02) — 벤티지: "알림영역에서 보여주는 카테고리도 좀 넣던지
+ * 해야겠네. 근데 또 너무 많으면 안되니깐 적절하게"
+ *
+ * 출처가 열넷이 되면 설정 목록이 그냥 긴 줄이 된다. 셋으로 묶는다 —
+ * **더 쪼개면 묶는 뜻이 없고, 덜 쪼개면 지금과 같다.**
+ *
+ *   내 종목   내가 담은 것에서 일어난 일 — 이게 제일 급하다
+ *   시장      전체 시장·일정·리포트
+ *   시스템    앱이 스스로 돌린 배치의 결과
+ *
+ * ⚠️ `NoticeKind`(stock/market/system)와 이름이 겹치지만 **다른 것**이다.
+ * kind 는 알림 한 줄의 성격이고 이건 설정 화면의 묶음이다. 대개 같은 값이
+ * 되지만 반드시 그런 것은 아니다 — 예를 들어 「신호등 분석 결과」는 성격이
+ * system 인데 묶음은 「내 종목」에 두는 편이 찾기 쉽다.
+ */
+export type NoticeGroup = "mine" | "news" | "signal" | "market" | "system";
+
+/**
+ * 알림함 **탭**이자 설정 **묶음** — 둘을 같은 것으로 둔다.
+ *
+ * 벤티지: "지금 알림 대분류가 4개인데 이걸 6개 정도로 만들면 효율적으로
+ * 배치할 수 있지 않을까"
+ *
+ * 맞다. 예전 넷(전체·종목·시장·시스템)은 `NoticeKind` 를 그대로 쓴 것인데,
+ * **「시스템」 하나에 마감 뒤 정리·표본·원장·신호등 분석이 다 들어갔다.**
+ * 매일 도는 배치 소식에 신호등 편입이 묻힌다.
+ *
+ * 「전체」까지 여섯이다:
+ *
+ *   내 종목   급변·실시간·손절 — 지금 내 돈이 걸린 것
+ *   공시·언급  DART 공시와 채널 키워드 — 밖에서 온 소식
+ *   신호등    편입·이탈·분석·장세 — 이 앱이 판단한 것
+ *   시장      일정·리포트
+ *   시스템    배치 결과
+ *
+ * 「내 종목」과 「공시·언급」을 가른 이유는 **급함이 다르기** 때문이다. 급변은
+ * 지금 봐야 하고 공시는 읽고 판단할 시간이 있다.
+ *
+ * 설정 묶음도 같은 다섯을 쓴다 — 탭과 설정이 다르면 「이 탭을 끄려면 어디를
+ * 눌러야 하나」가 안 보인다.
+ */
+export const NOTICE_GROUPS: { key: NoticeGroup; label: string }[] = [
+  { key: "mine", label: "내 종목" },
+  { key: "news", label: "공시·언급" },
+  { key: "signal", label: "신호등" },
+  { key: "market", label: "시장" },
+  { key: "system", label: "시스템" },
+];
+
 export const NOTICE_SOURCES: {
   key: NoticeSource;
+  group: NoticeGroup;
   label: string;
   hint: string;
   def: boolean;
 }[] = [
   {
     key: "stockSignal",
+    group: "mine",
     label: "관심종목 급변",
     hint: "급변·거래량 급증·수급 전환·신고가·정배열·VI·체결강도·거래원 이탈 (5분마다)",
     def: true,
   },
-  { key: "disclosure", label: "관심종목 공시", hint: "DART 공시 — 뉴스보다 빠르다 (10분마다)", def: true },
-  { key: "calendar", label: "캘린더 일정", hint: "전날 18시·당일 8시", def: true },
-  { key: "report", label: "리포트 발행", hint: "조간·장중·석간 데일리 리포트", def: true },
-  { key: "regime", label: "장세 점검", hint: "시장 폭·신고가가 문턱에 걸렸을 때", def: true },
-  { key: "listTrack", label: "신호등 분석 결과", hint: "매일 편입·이탈 요약", def: true },
+  { key: "disclosure", group: "news", label: "관심종목 공시", hint: "DART 공시 — 뉴스보다 빠르다 (10분마다)", def: true },
+  { key: "calendar", group: "market", label: "캘린더 일정", hint: "전날 18시·당일 8시", def: true },
+  { key: "report", group: "market", label: "리포트 발행", hint: "조간·장중·석간 데일리 리포트", def: true },
+  { key: "regime", group: "signal", label: "장세 점검", hint: "시장 폭·신고가가 문턱에 걸렸을 때", def: true },
+  { key: "listTrack", group: "signal", label: "신호등 분석 결과", hint: "매일 편입·이탈 요약", def: true },
   {
     key: "afterClose",
+    group: "system",
     label: "마감 뒤 정리",
     hint: "밤 배치 아홉 단계의 성공·실패 요약",
     def: true,
   },
   {
     key: "sample",
+    group: "system",
     label: "검증 표본",
     hint: "표본을 다시 만들 때 — 진행 상황이라 꺼 둬도 됩니다",
     def: false,
   },
-  { key: "ledger", label: "원장 선 긋기", hint: "기준이 바뀌어 원장을 새로 시작할 때", def: true },
-  { key: "etc", label: "그 밖에", hint: "출처를 안 적은 알림", def: true },
+  { key: "ledger", group: "system", label: "원장 선 긋기", hint: "기준이 바뀌어 원장을 새로 시작할 때", def: true },
+  {
+    key: "keyword",
+    group: "news",
+    label: "키워드 감지",
+    hint: "텔레그램 채널에서 내 키워드·관심종목·태그 이름이 언급됐을 때 (5분마다)",
+    def: true,
+  },
+  {
+    key: "superSignal",
+    group: "signal",
+    label: "슈퍼신호등 편입·이탈",
+    hint: "여러 목록에 동시에 걸린 초록이 새로 담기거나 빠질 때",
+    def: true,
+  },
+  {
+    key: "live",
+    group: "mine",
+    label: "실시간 (VI·체결강도)",
+    hint: "변동성완화장치 발동과 체결강도 급변 — 실시간 소켓에서 바로 온다",
+    def: true,
+  },
+  {
+    key: "stopWatch",
+    group: "mine",
+    label: "손절선 감시",
+    hint: "적어 둔 손절선이 깨졌을 때",
+    def: true,
+  },
+  { key: "etc", group: "system", label: "그 밖에", hint: "출처를 안 적은 알림", def: true },
 ];
 
 /** 급함의 정도 — 화면이 색과 정렬에 쓴다 */
@@ -272,7 +358,23 @@ export async function pushNotice(input: PushInput): Promise<Notice | null> {
 export interface ListOpts {
   limit?: number;
   kind?: NoticeKind;
+  /** 묶음으로 거른다 (2026-09-02) — 화면 탭이 이걸 쓴다 */
+  group?: NoticeGroup;
   unreadOnly?: boolean;
+}
+
+/**
+ * 이 알림이 어느 묶음인가.
+ *
+ * ⚠️ **옛 알림에는 `source` 가 없다**(2026-09-02 이전 것). 그때는 `kind` 로
+ * 물러선다 — 없는 것을 「그 밖에」로 몰면 옛 알림이 통째로 한 탭에 쌓인다.
+ */
+function groupOf(n: Notice): NoticeGroup {
+  if (n.source) {
+    const hit = NOTICE_SOURCES.find((s) => s.key === n.source);
+    if (hit) return hit.group;
+  }
+  return n.kind === "stock" ? "mine" : n.kind === "market" ? "market" : "system";
 }
 
 export async function listNotices(opts: ListOpts = {}): Promise<{
@@ -280,13 +382,22 @@ export async function listNotices(opts: ListOpts = {}): Promise<{
   unread: number;
   /** 갈래별 안 읽은 수 — 종 옆 배지를 갈래로 나눠 보일 때 */
   unreadBy: Record<NoticeKind, number>;
+  /** 묶음별 안 읽은 수 — 탭 옆 배지 */
+  unreadByGroup: Record<NoticeGroup, number>;
 }> {
   const list = await load();
   const unreadBy: Record<NoticeKind, number> = { stock: 0, market: 0, system: 0 };
-  for (const n of list) if (!n.read) unreadBy[n.kind] += 1;
+  const unreadByGroup = {} as Record<NoticeGroup, number>;
+  for (const g of NOTICE_GROUPS) unreadByGroup[g.key] = 0;
+  for (const n of list) {
+    if (n.read) continue;
+    unreadBy[n.kind] += 1;
+    unreadByGroup[groupOf(n)] += 1;
+  }
 
   let items = list;
   if (opts.kind) items = items.filter((n) => n.kind === opts.kind);
+  if (opts.group) items = items.filter((n) => groupOf(n) === opts.group);
   if (opts.unreadOnly) items = items.filter((n) => !n.read);
   /* 최근 것이 위 — `lastAt` 으로 정렬해야 「이어지는 중」인 알림이 위로 온다 */
   items = [...items].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
@@ -295,6 +406,7 @@ export async function listNotices(opts: ListOpts = {}): Promise<{
     items: items.slice(0, Math.min(Math.max(opts.limit ?? 50, 1), 200)),
     unread: unreadBy.stock + unreadBy.market + unreadBy.system,
     unreadBy,
+    unreadByGroup,
   };
 }
 

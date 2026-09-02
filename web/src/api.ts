@@ -1742,9 +1742,18 @@ export const api = {
   /**
    * 종 옆 배지와 목록을 **한 번에** 받는다 — 배지 때문에 따로 부르면 폴링이 두 배다.
    */
-  notices: (opts: { limit?: number; kind?: NoticeKind | "all"; unreadOnly?: boolean } = {}) =>
-    getJson<{ items: Notice[]; unread: number; unreadBy: Record<NoticeKind, number> }>(
+  notices: (
+    opts: { limit?: number; kind?: NoticeKind | "all"; group?: string; unreadOnly?: boolean } = {},
+  ) =>
+    getJson<{
+      items: Notice[];
+      unread: number;
+      unreadBy: Record<NoticeKind, number>;
+      /** 묶음별 안 읽은 수 — 탭 배지 (2026-09-02) */
+      unreadByGroup: Record<string, number>;
+    }>(
       `/api/notify?limit=${opts.limit ?? 50}&kind=${opts.kind ?? "all"}` +
+        `&group=${opts.group ?? "all"}` +
         (opts.unreadOnly ? "&unread=1" : ""),
     ),
   /** `ids` 를 안 주면 전부 읽음으로 */
@@ -1761,7 +1770,8 @@ export const api = {
    */
   noticeConfig: () =>
     getJson<{
-      sources: { key: string; label: string; hint: string; def: boolean }[];
+      sources: { key: string; group: string; label: string; hint: string; def: boolean }[];
+      groups: { key: string; label: string }[];
       config: Record<string, boolean>;
     }>("/api/notify/config"),
   noticeConfigSave: (patch: Record<string, boolean>) =>

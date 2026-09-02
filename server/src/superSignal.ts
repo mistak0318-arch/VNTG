@@ -8,6 +8,7 @@ import { evaluateMarket } from "./marketSignal.js";
 import { getSectorMood } from "./sectorMood.js";
 import { configFingerprint, evaluateSignal } from "./signalLight.js";
 import { regimeTrust } from "./regimeWatch.js";
+import { pushNotice } from "./notifyCenter.js";
 import { leaderScan } from "./leaderScan.js";
 import { stockLens, themeMapNow } from "./stockLens.js";
 import { fetchUniverse, SCREEN_UNIVERSES, type Candidate } from "./signalScreen.js";
@@ -862,6 +863,29 @@ async function notifySuperRun(
     ).catch(() => undefined);
     return;
   }
+  /*
+   * **알림함에도 남긴다** (2026-09-02).
+   *
+   * ⚠️ **편입·이탈이 있을 때만.** 위의 「오늘 없음」 줄은 텔레그램에만 보낸다 —
+   * 그건 「어제도 돌았다」를 증명하려고 매일 보내는 것이라, 알림함에 매일 한 줄씩
+   * 쌓이면 진짜 소식이 묻힌다.
+   */
+  await pushNotice({
+    source: "superSignal",
+    kind: "stock",
+    level: "info",
+    title: `슈퍼신호등 — 편입 ${added.length} · 복귀 ${revived.length} · 이탈 ${exited.length}`,
+    body: [
+      added.length > 0 ? `편입 ${added.map((e) => e.name).slice(0, 5).join(" · ")}` : null,
+      exited.length > 0 ? `이탈 ${exited.map((e) => e.name).slice(0, 5).join(" · ")}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    link: "#/superSignal",
+    dedupeKey: `superSignal:${new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)}`,
+    dedupeHours: 20,
+  }).catch(() => undefined);
+
   await sendTelegram(formatSuperRun(added, revived, exited), ch).catch(() => undefined);
 }
 

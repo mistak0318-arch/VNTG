@@ -7,6 +7,7 @@ import { fetchNewMessages, isReaderConfigured, type ChannelMessage } from "./tel
 import { listWatchlist } from "./watchlist.js";
 import { listThemes } from "./customThemes.js";
 import { hasDedicatedChannel, sendTelegram } from "./telegram.js";
+import { pushNotice } from "./notifyCenter.js";
 import { getActiveSuper } from "./superSignal.js";
 import { hhmmKst } from "./telegramDigest.js";
 
@@ -273,6 +274,32 @@ export async function runKeywordScan(
   // 최신순으로 보여 주고, 한 번에 너무 많이 보내지 않는다
   hits.sort((a, b) => b.at.localeCompare(a.at));
   const picked = hits.slice(0, cfg.maxPerRun);
+
+  /*
+   * **알림함에도 남긴다** (2026-09-02).
+   *
+   * 키워드 감지는 관심종목 이름까지 훑으므로(`useWatchlist`) 「내 종목이 채널에서
+   * 언급됐다」는 신호다 — 텔레그램만 가면 놓치기 쉽다.
+   *
+   * 한 줄로 묶고 **걸린 키워드**를 적는다. 어느 채널에서 무슨 말이 나왔는지는
+   * 눌러서 본다 — 본문을 알림함에 다 넣으면 목록이 못 쓰게 된다.
+   */
+  if (picked.length > 0 && send) {
+    const words = [...new Set(picked.flatMap((h) => h.words))];
+    await pushNotice({
+      source: "keyword",
+      kind: "stock",
+      level: "info",
+      title: `키워드 감지 ${picked.length}건 — ${words.slice(0, 4).join(" · ")}`,
+      body: picked
+        .slice(0, 4)
+        .map((h) => `[${h.channelName}] ${h.text.replace(/\s+/g, " ").slice(0, 70)}`)
+        .join("\n"),
+      link: "#/telegram",
+      dedupeKey: `keyword:${picked.map((h) => h.key).sort().join(",").slice(0, 200)}`,
+      dedupeHours: 3,
+    }).catch(() => undefined);
+  }
 
   let sentCount = 0;
   if (send) {

@@ -13846,3 +13846,18 @@ tr:hover .sd-del { opacity: 0.75; }
 /* 설명은 작게 — 이름만 훑고 고르는 게 보통이고, 헷갈릴 때만 읽는다 */
 .nb-cfg-hint { font-size: 0.7rem; color: var(--muted); line-height: 1.35; }
 .nb-act.active { color: var(--text); background: var(--panel); }
+/* 알림 설정 묶음 — 열넷을 하나씩 누르게 하면 「시스템 다 끄기」가 열 클릭이 된다 */
+.nb-cfg-group { margin-bottom: 6px; }
+.nb-cfg-gh {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.74rem;
+  padding: 4px 2px 3px;
+  cursor: pointer;
+}
+.nb-cfg-gh:hover { background: var(--panel); }

@@ -4,9 +4,11 @@ import {
   getNoticeConfig,
   listNotices,
   markRead,
+  NOTICE_GROUPS,
   NOTICE_SOURCES,
   saveNoticeConfig,
   type NoticeConfig,
+  type NoticeGroup,
   type NoticeKind,
 } from "../notifyCenter.js";
 import { regimeCheck, regimeConfig, saveRegimeConfig } from "../regimeWatch.js";
@@ -29,6 +31,11 @@ export function createNotifyRouter(client: KiwoomClient): Router {
         await listNotices({
           limit: Number(req.query.limit) || 50,
           kind: typeof kind === "string" && kind !== "all" ? (kind as NoticeKind) : undefined,
+          /* 화면 탭은 묶음으로 거른다 (2026-09-02) — kind 는 옛 호출을 위해 남긴다 */
+          group:
+            typeof req.query.group === "string" && req.query.group !== "all"
+              ? (req.query.group as NoticeGroup)
+              : undefined,
           unreadOnly: req.query.unread === "1",
         }),
       );
@@ -71,7 +78,7 @@ export function createNotifyRouter(client: KiwoomClient): Router {
    */
   router.get("/config", async (_req, res, next) => {
     try {
-      res.json({ sources: NOTICE_SOURCES, config: await getNoticeConfig() });
+      res.json({ sources: NOTICE_SOURCES, groups: NOTICE_GROUPS, config: await getNoticeConfig() });
     } catch (err) {
       next(err);
     }

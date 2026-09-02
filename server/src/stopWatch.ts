@@ -2,6 +2,7 @@ import { getMarketSnapshot } from "./marketSnapshot.js";
 import { peekRealtime } from "./realtimeHub.js";
 import { openPositions, type OpenPosition } from "./tradeJournal.js";
 import { sendTelegram, stockNameHtml } from "./telegram.js";
+import { pushNotice } from "./notifyCenter.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 
 /**
@@ -133,6 +134,21 @@ export async function runStopWatch(
   if (breaks.length === 0 || opts.send === false) {
     return { positions: positions.length, watched: watched.length, breaks, sent: false };
   }
+
+  /*
+   * **알림함에도.** 손절선이 깨진 것은 그날 가장 급한 소식이라 두 곳 다 남긴다 —
+   * 텔레그램을 못 보면 영영 모르는 종류의 알림이 아니어야 한다.
+   */
+  await pushNotice({
+    source: "stopWatch",
+    kind: "stock",
+    level: "urgent",
+    title: `손절선 이탈 ${breaks.length}건`,
+    body: breaks.slice(0, 6).map((b) => b.name).join(" · "),
+    link: "#/watchlist",
+    dedupeKey: `stopWatch:${breaks.map((b) => b.code).sort().join(",")}`,
+    dedupeHours: 6,
+  }).catch(() => undefined);
 
   const res = await sendTelegram(formatStopBreaks(breaks), "signal");
   return { positions: positions.length, watched: watched.length, breaks, sent: res.ok };

@@ -50,7 +50,22 @@ export function NotifyBell() {
     market: 0,
     system: 0,
   });
-  const [filter, setFilter] = useState<NoticeKind | "all">("all");
+  /**
+   * 탭 — **묶음**으로 거른다 (2026-09-02).
+   *
+   * 벤티지: "지금 알림 대분류가 4개인데 이걸 6개 정도로 만들면 효율적으로
+   * 배치할 수 있지 않을까"
+   *
+   * 예전 넷(전체·종목·시장·시스템)은 `NoticeKind` 를 그대로 쓴 것이라
+   * **「시스템」 하나에 마감 뒤 정리·표본·원장·신호등 분석이 다 들어갔다** —
+   * 매일 도는 배치 소식에 신호등 편입이 묻힌다.
+   *
+   * 목록은 서버가 준다(설정 묶음과 **같은 것**을 쓴다) — 탭과 설정이 다르면
+   * 「이 탭을 끄려면 어디를 눌러야 하나」가 안 보인다.
+   */
+  const [filter, setFilter] = useState<string>("all");
+  const [groups, setGroups] = useState<{ key: string; label: string }[]>([]);
+  const [unreadByGroup, setUnreadByGroup] = useState<Record<string, number>>({});
   /**
    * 알림 설정 — **출처 목록은 서버가 준다.**
    *
@@ -58,8 +73,20 @@ export function NotifyBell() {
    * (자동 그룹 목록에서 겪은 것과 같은 이유).
    */
   const [showCfg, setShowCfg] = useState(false);
-  const [cfgSrc, setCfgSrc] = useState<{ key: string; label: string; hint: string; def: boolean }[]>([]);
+  const [cfgSrc, setCfgSrc] = useState<
+    { key: string; group: string; label: string; hint: string; def: boolean }[]
+  >([]);
+  const [cfgGroups, setCfgGroups] = useState<{ key: string; label: string }[]>([]);
   const [cfg, setCfg] = useState<Record<string, boolean>>({});
+
+  /* 탭 목록 — 알림함을 열면 바로 필요하다(설정을 안 열어도) */
+  useEffect(() => {
+    if (!open || groups.length > 0) return;
+    void api
+      .noticeConfig()
+      .then((r) => setGroups(r.groups))
+      .catch(() => undefined);
+  }, [open, groups.length]);
 
   useEffect(() => {
     if (!showCfg || cfgSrc.length > 0) return;
@@ -67,6 +94,7 @@ export function NotifyBell() {
       .noticeConfig()
       .then((r) => {
         setCfgSrc(r.sources);
+        setCfgGroups(r.groups);
         setCfg(r.config);
       })
       .catch(() => undefined);
@@ -75,11 +103,12 @@ export function NotifyBell() {
 
   const load = useCallback(() => {
     api
-      .notices({ limit: 60, kind: filter })
+      .notices({ limit: 60, group: filter })
       .then((r) => {
         setItems(r.items);
         setUnread(r.unread);
         setUnreadBy(r.unreadBy);
+        setUnreadByGroup(r.unreadByGroup ?? {});
       })
       .catch(() => {
         /* 못 받으면 종만 조용하다 — 화면은 그대로 뜬다 */
@@ -213,14 +242,16 @@ export function NotifyBell() {
         >
           <div className="nb-head">
             <div className="nb-tabs">
-              {(["all", "stock", "market", "system"] as const).map((k) => (
+              {[{ key: "all", label: "전체" }, ...groups].map((g) => (
                 <button
-                  key={k}
-                  className={`nb-tab${filter === k ? " active" : ""}`}
-                  onClick={() => setFilter(k)}
+                  key={g.key}
+                  className={`nb-tab${filter === g.key ? " active" : ""}`}
+                  onClick={() => setFilter(g.key)}
                 >
-                  {k === "all" ? "전체" : KIND_META[k].label}
-                  {k !== "all" && unreadBy[k] > 0 && <i className="nb-dot">{unreadBy[k]}</i>}
+                  {g.label}
+                  {g.key !== "all" && (unreadByGroup[g.key] ?? 0) > 0 && (
+                    <i className="nb-dot">{unreadByGroup[g.key]}</i>
+                  )}
                 </button>
               ))}
             </div>
@@ -269,8 +300,35 @@ export function NotifyBell() {
                   텔레그램은 따로 켜고 끕니다.
                 </span>
               </p>
-              {cfgSrc.map((s2) => (
-                <label key={s2.key} className="nb-cfg-row">
+              {cfgGroups.map((g) => {
+                const rows = cfgSrc.filter((x) => x.group === g.key);
+                if (rows.length === 0) return null;
+                const on = rows.filter((x) => cfg[x.key] ?? x.def).length;
+                return (
+                  <div key={g.key} className="nb-cfg-group">
+                    {/*
+                      묶음 머리 — **한 번에 켜고 끈다.** 열넷을 하나씩 누르게 하면
+                      「시스템 알림 다 끄기」 같은 흔한 일이 열 번의 클릭이 된다.
+                    */}
+                    <button
+                      className="nb-cfg-gh"
+                      onClick={() => {
+                        const next = on < rows.length;
+                        const patch: Record<string, boolean> = {};
+                        for (const x of rows) patch[x.key] = next;
+                        setCfg((c) => ({ ...c, ...patch }));
+                        void api.noticeConfigSave(patch).catch(() => undefined);
+                      }}
+                      title={on < rows.length ? "이 묶음을 모두 켭니다" : "이 묶음을 모두 끕니다"}
+                    >
+                      <b>{g.label}</b>
+                      <span className="pt-n">
+                        {" "}
+                        {on}/{rows.length}
+                      </span>
+                    </button>
+                    {rows.map((s2) => (
+                      <label key={s2.key} className="nb-cfg-row">
                   <input
                     type="checkbox"
                     checked={cfg[s2.key] ?? s2.def}
@@ -280,10 +338,13 @@ export function NotifyBell() {
                       void api.noticeConfigSave({ [s2.key]: e.target.checked }).catch(() => undefined);
                     }}
                   />
-                  <span className="nb-cfg-label">{s2.label}</span>
-                  <span className="nb-cfg-hint">{s2.hint}</span>
-                </label>
-              ))}
+                        <span className="nb-cfg-label">{s2.label}</span>
+                        <span className="nb-cfg-hint">{s2.hint}</span>
+                      </label>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           )}
 
