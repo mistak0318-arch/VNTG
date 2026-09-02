@@ -491,9 +491,10 @@ export const DEFAULT_CONFIG: SignalConfig = {
    *
    * ⚠️ 이 표본으로 고른 값이다. 12월 250거래일이 차면 `server/tools/sigtune/` 로 다시 잰다.
    *
-   * **세대 4** (같은 날 저녁): 정배열을 강세장 전용 w2 로 — 초록 3,158 → 3,443, 성적 그대로.
+   * 정배열 강세 전용 w2 는 시뮬만 했고(초록 3,158 → 3,443, 성적 그대로) **켜지 않았다** —
+   * 벤티지 결정 전. 켜면 세대를 4 로 올릴 것.
    */
-  configVersion: 4,
+  configVersion: 3,
   greenAt: 65,
   yellowAt: 40,
   /*
@@ -570,9 +571,12 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 「신고가면 대개 정배열」이라 새로 알려 주는 게 없다던 옛 결론은 신고가 무게가 3 일 때
        * 이야기다. 신고가를 1 로 낮춘 지금은 강세장 추세 축을 채워 준다.
        * 약세장 추세 축은 여전히 빈다 — 이 표본(급락→반등)이 답을 안 주는 자리다.
+       *
+       * ⚠️ **아직 안 켰다.** 벤티지: "바로 넣으면 어떻게 해, 시뮬레이션 해보라는 거였는데."
+       * 위 숫자는 후보로 남긴다 — 켜기로 하면 `regime: "bull"` 그대로 `enabled: true`.
        */
       regime: "bull",
-      enabled: true,
+      enabled: false,
       weight: 2,
       threshold: 0,
       strongAt: 0,
