@@ -1129,7 +1129,8 @@
       "PowerShell($p = \"$env:APPDATA\\\\npm\\\\claude.cmd\"; if \\(Test-Path $p\\) { \"npm global: $p\" } else { \"no npm global\" }; $n = \"$env:LOCALAPPDATA\\\\Programs\\\\claude\\\\claude.exe\"; if \\(Test-Path $n\\) { \"native: $n\" } else { \"no native installer path\" }; Get-ChildItem \"$env:LOCALAPPDATA\\\\AnthropicClaude\" -ErrorAction SilentlyContinue | Select-Object -First 5 Name)",
       "PowerShell($ts = \"C:\\\\Program Files\\\\Tailscale\\\\tailscale.exe\"; if \\(Test-Path $ts\\) { \"== tailscale status ==\"; & $ts status } else { \"tailscale 없음\" }; \"== ssh 클라이언트 ==\"; \\(Get-Command ssh -ErrorAction SilentlyContinue\\).Source)",
       "PowerShell(foreach \\($p in 22,5985,5986,445,4000\\) { $r = Test-NetConnection -ComputerName 100.88.182.35 -Port $p -WarningAction SilentlyContinue -InformationLevel Quiet; \"{0,-6} {1}\" -f $p, $\\(if \\($r\\) { \"열림\" } else { \"닫힘\" }\\) })",
-      "mcp__claude-in-chrome__browser_batch"
+      "mcp__claude-in-chrome__browser_batch",
+      "Bash(awk 'NR>=2100 && NR<=2300 && /for \\\\\\(const c of /{print NR\": \"$0}' signalLight.ts)"
     ]
   }
 }
