@@ -203,15 +203,33 @@ export async function runDisclosureScan(
      * 종목 이름만 나열하고 자세한 것은 눌러서 본다.
      */
     if (picked.length > 0) {
+      /*
+       * ## 제목이 **이유를 그대로** 말해야 한다 (2026-09-02)
+       *
+       * 벤티지: "내 관심종목에는 SNT에너지가 없는데 관심종목 공시 떴다고 알람이 오네."
+       *
+       * 여기 제목이 `관심종목 공시` 로 **박혀 있었다.** 그런데 `shouldSend` 는 세
+       * 가지 이유로 고른다 — 관심종목·내 테마·중요도. 텔레그램 쪽(`toMessage`)은
+       * ⭐🎯🔥 로 이유를 구분해 보내는데 알림 센터만 전부 「관심종목」이라고 했다.
+       *
+       * 그래서 태그에 걸려 잡힌 종목이 관심종목으로 둔갑했고, 받는 사람은 자기
+       * 관심종목 목록을 의심하게 된다 — **알림이 틀린 곳을 가리키면 없느니만 못하다.**
+       * 이유가 섞였으면 어느 하나로 뭉뚱그리지 않고 그냥 「공시」라고 한다.
+       */
+      const TAG: Record<string, string> = { 관심종목: "⭐", "내 테마": "🎯", 중요: "🔥" };
+      const reasons = [...new Set(picked.map((h) => h.reason))];
       const head = picked
         .slice(0, 6)
-        .map((h) => `${h.event.corpName} ${h.event.title}`)
+        .map((h) => `${TAG[h.reason] ?? ""}${h.event.corpName} ${h.event.title}`)
         .join(" · ");
       await pushNotice({
         source: "disclosure",
         kind: "stock",
         level: "info",
-        title: `관심종목 공시 ${picked.length}건`,
+        title:
+          reasons.length === 1
+            ? `${reasons[0]} 공시 ${picked.length}건`
+            : `공시 ${picked.length}건`,
         body: head.slice(0, 300) + (picked.length > 6 ? ` 외 ${picked.length - 6}건` : ""),
         link: "#/disclosure",
         dedupeKey: `disclosure:${picked.map((h) => h.event.url).sort().join(",").slice(0, 200)}`,
