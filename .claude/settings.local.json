@@ -1132,7 +1132,13 @@
       "mcp__claude-in-chrome__browser_batch",
       "Bash(awk 'NR>=2100 && NR<=2300 && /for \\\\\\(const c of /{print NR\": \"$0}' signalLight.ts)",
       "PowerShell($p = \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\deploy-watch.cmd\"; $t = [IO.File]::ReadAllText\\($p, [Text.UTF8Encoding]::new\\($false\\)\\); $t = \\($t -replace \"`r`n\", \"`n\"\\) -replace \"`n\", \"`r`n\"; [IO.File]::WriteAllText\\($p, $t, [Text.Encoding]::GetEncoding\\(949\\)\\); $b = [IO.File]::ReadAllBytes\\($p\\); \"CR={0} LF={1} bytes={2}\" -f \\($b | ? { $_ -eq 13 }\\).Count, \\($b | ? { $_ -eq 10 }\\).Count, $b.Length)",
-      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\web\"; npx tsc --noEmit; if \\($?\\) { Set-Location ..; powershell -ExecutionPolicy Bypass -File push-deploy.ps1 })"
+      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\web\"; npx tsc --noEmit; if \\($?\\) { Set-Location ..; powershell -ExecutionPolicy Bypass -File push-deploy.ps1 })",
+      "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; \\(Get-Content server/data/companyFacts.json | ConvertFrom-Json\\).PSObject.Properties.Count)",
+      "PowerShell(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; \\(Get-Content server/data/companyBriefs.json | ConvertFrom-Json\\).PSObject.Properties.Count)",
+      "Bash(node -e \"const fs=require\\('fs'\\); const d=JSON.parse\\(fs.readFileSync\\('server/data/signalSamples.json'\\)\\); console.log\\('종목 수:', Object.keys\\(d\\).length\\); console.log\\('첫 3종목:', Object.keys\\(d\\).slice\\(0,3\\)\\);\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const d=JSON.parse\\(fs.readFileSync\\('server/data/signalSamples.json'\\)\\); console.log\\(JSON.stringify\\({builtAt: d.builtAt, codeCount: d.codeCount, daysCount: d.days?.length}, null,2\\)\\);\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const facts=JSON.parse\\(fs.readFileSync\\('server/data/companyFacts.json'\\)\\); const briefs=JSON.parse\\(fs.readFileSync\\('server/data/companyBriefs.json'\\)\\); const sample=JSON.parse\\(fs.readFileSync\\('server/data/signalSamples.json'\\)\\); console.log\\('■ 현황'\\); console.log\\('전체 표본 종목:', sample.codeCount\\); console.log\\('정적정보\\(facts\\) 채워진:', Object.keys\\(facts\\).length\\); console.log\\('AI요약\\(briefs\\) 채워진:', Object.keys\\(briefs\\).length\\); \")",
+      "Bash(node \"C:\\\\Users\\\\Jaemin Kim\\\\.claude\\\\projects\\\\K--0000-3740--------------00-----2-AI------260810------\\\\7fd40f4e-1d14-4899-892f-e551fe467027\\\\scratchpad\\\\batchFactsFromAPI.js\")"
     ]
   }
 }
