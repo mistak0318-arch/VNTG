@@ -1,13 +1,13 @@
 @echo off
 REM ===========================================================================
-REM  ë¯¸ë‹ˆPC ì „ìš© â€” ë¬´ì¸ ë°°í¬. `update.cmd` ì˜ pause ì—†ëŠ” íŒ.
+REM  ¹Ì´ÏPC Àü¿ë ? ¹«ÀÎ ¹èÆ÷. `update.cmd` ÀÇ pause ¾ø´Â ÆÇ.
 REM
-REM  ì‚¬ëžŒì´ ë”ë¸”í´ë¦­í•˜ëŠ” update.cmd ì™€ í•˜ëŠ” ì¼ì€ ê°™ì§€ë§Œ, ë‘ ê°€ì§€ê°€ ë‹¤ë¥´ë‹¤:
-REM    Â· pause ê°€ ì—†ë‹¤ â€” ì˜ˆì•½ìž‘ì—…ì´ ë¶€ë¥´ë¯€ë¡œ ë©ˆì¶° ì„œë©´ ì•ˆ ëœë‹¤
-REM    Â· ëª¨ë“  ì¶œë ¥ì„ ê³µìœ  í´ë”ì˜ ë¡œê·¸ë¡œ ëº€ë‹¤ â€” ë©”ì¸ PC ì—ì„œ ê²°ê³¼ë¥¼ ì½ì–´ì•¼ í•˜ë¯€ë¡œ
+REM  »ç¶÷ÀÌ ´õºíÅ¬¸¯ÇÏ´Â update.cmd ¿Í ÇÏ´Â ÀÏÀº °°Áö¸¸, µÎ °¡Áö°¡ ´Ù¸£´Ù:
+REM    ¡¤ pause °¡ ¾ø´Ù ? ¿¹¾àÀÛ¾÷ÀÌ ºÎ¸£¹Ç·Î ¸ØÃç ¼­¸é ¾È µÈ´Ù
+REM    ¡¤ ¸ðµç Ãâ·ÂÀ» °øÀ¯ Æú´õÀÇ ·Î±×·Î »«´Ù ? ¸ÞÀÎ PC ¿¡¼­ °á°ú¸¦ ÀÐ¾î¾ß ÇÏ¹Ç·Î
 REM
-REM  ì‹¤íŒ¨í•˜ë©´ ì„œë¹„ìŠ¤ë¥¼ **ìž¬ì‹œìž‘í•˜ì§€ ì•ŠëŠ”ë‹¤.** ë¹Œë“œê°€ ê¹¨ì¡ŒëŠ”ë° ìž¬ì‹œìž‘í•˜ë©´
-REM  ë©€ì©¡ížˆ ëŒë˜ ê²ƒê¹Œì§€ ì£½ëŠ”ë‹¤. ì˜› ë¹Œë“œë¥¼ ê·¸ëŒ€ë¡œ êµ´ë¦¬ëŠ” íŽ¸ì´ ë‚«ë‹¤.
+REM  ½ÇÆÐÇÏ¸é ¼­ºñ½º¸¦ **Àç½ÃÀÛÇÏÁö ¾Ê´Â´Ù.** ºôµå°¡ ±úÁ³´Âµ¥ Àç½ÃÀÛÇÏ¸é
+REM  ¸ÖÂÄÈ÷ µ¹´ø °Í±îÁö Á×´Â´Ù. ¿¾ ºôµå¸¦ ±×´ë·Î ±¼¸®´Â ÆíÀÌ ³´´Ù.
 REM ===========================================================================
 setlocal
 set "PATH=C:\Program Files\nodejs;C:\Program Files\Git\cmd;%PATH%"
@@ -18,47 +18,47 @@ set "LOG=%DROP%\deploy.log"
 set "ST=%DROP%\deploy.status"
 if not exist "%DROP%" mkdir "%DROP%"
 
-echo ==== %date% %time% ë°°í¬ ì‹œìž‘ ====> "%LOG%"
+echo ==== %date% %time% ¹èÆ÷ ½ÃÀÛ ====> "%LOG%"
 
 echo.>> "%LOG%"
-echo [1/4] ìµœì‹  ì½”ë“œ ë°›ëŠ” ì¤‘...>> "%LOG%"
+echo [1/4] ÃÖ½Å ÄÚµå ¹Þ´Â Áß...>> "%LOG%"
 git pull>> "%LOG%" 2>&1 || goto :fail
 
 echo.>> "%LOG%"
-echo [2/4] ì„œë²„ ë¹Œë“œ...>> "%LOG%"
+echo [2/4] ¼­¹ö ºôµå...>> "%LOG%"
 cd server
 call npm install --no-audit --no-fund>> "%LOG%" 2>&1 || goto :fail
 call npm run build>> "%LOG%" 2>&1 || goto :fail
 cd ..
 
 echo.>> "%LOG%"
-echo [3/4] ì›¹ ë¹Œë“œ...>> "%LOG%"
+echo [3/4] À¥ ºôµå...>> "%LOG%"
 cd web
 call npm install --no-audit --no-fund>> "%LOG%" 2>&1 || goto :fail
 call npm run build>> "%LOG%" 2>&1 || goto :fail
 cd ..
 
 echo.>> "%LOG%"
-echo [4/4] ì„œë¹„ìŠ¤ ìž¬ì‹œìž‘...>> "%LOG%"
+echo [4/4] ¼­ºñ½º Àç½ÃÀÛ...>> "%LOG%"
 schtasks /End /TN "VNTG HTS" >nul 2>&1
 schtasks /Run /TN "VNTG HTS" >nul 2>&1
 
-REM ì„œë²„ê°€ ëœ¨ëŠ” ë° ì‹œê°„ì´ ê±¸ë¦°ë‹¤. 8ì´ˆ ì£¼ê³  ì‚´ì•„ ìžˆëŠ”ì§€ ë¬¼ì–´ë³¸ë‹¤
+REM ¼­¹ö°¡ ¶ß´Â µ¥ ½Ã°£ÀÌ °É¸°´Ù. 8ÃÊ ÁÖ°í »ì¾Æ ÀÖ´ÂÁö ¹°¾îº»´Ù
 timeout /t 8 /nobreak >nul
 echo.>> "%LOG%"
 echo -- /api/health -->> "%LOG%"
 curl -s -m 10 http://localhost:4000/api/health>> "%LOG%" 2>&1
 echo.>> "%LOG%"
 
-echo ==== %date% %time% ì™„ë£Œ ====>> "%LOG%"
+echo ==== %date% %time% ¿Ï·á ====>> "%LOG%"
 echo OK %date% %time%> "%ST%"
 git rev-parse --short HEAD>> "%ST%" 2>&1
 exit /b 0
 
 :fail
 echo.>> "%LOG%"
-echo *** ì‹¤íŒ¨í–ˆìŠµë‹ˆë‹¤. ìœ„ ë©”ì‹œì§€ë¥¼ í™•ì¸í•˜ì„¸ìš”. ***>> "%LOG%"
-echo ==== %date% %time% ì‹¤íŒ¨ ====>> "%LOG%"
+echo *** ½ÇÆÐÇß½À´Ï´Ù. À§ ¸Þ½ÃÁö¸¦ È®ÀÎÇÏ¼¼¿ä. ***>> "%LOG%"
+echo ==== %date% %time% ½ÇÆÐ ====>> "%LOG%"
 echo FAIL %date% %time%> "%ST%"
 git rev-parse --short HEAD>> "%ST%" 2>&1
 exit /b 1

@@ -1,31 +1,31 @@
 @echo off
-REM ë¯¸ë‹ˆPC ì „ìš© â€” ìµœì‹  ì½”ë“œë¥¼ ë°›ì•„ ë¹Œë“œí•˜ê³  ì„œë¹„ìŠ¤ë¥¼ ì¬ì‹œì‘í•œë‹¤.
-REM ë©”ì¸ PCì—ì„œ git push í•œ ë’¤ ë¯¸ë‹ˆPCì—ì„œ ì´ íŒŒì¼ì„ ë”ë¸”í´ë¦­í•˜ë©´ ë.
+REM ¹Ì´ÏPC Àü¿ë ? ÃÖ½Å ÄÚµå¸¦ ¹Ş¾Æ ºôµåÇÏ°í ¼­ºñ½º¸¦ Àç½ÃÀÛÇÑ´Ù.
+REM ¸ŞÀÎ PC¿¡¼­ git push ÇÑ µÚ ¹Ì´ÏPC¿¡¼­ ÀÌ ÆÄÀÏÀ» ´õºíÅ¬¸¯ÇÏ¸é ³¡.
 setlocal
 set "PATH=C:\Program Files\nodejs;C:\Program Files\Git\cmd;%PATH%"
 cd /d "%~dp0"
 
-echo [1/4] ìµœì‹  ì½”ë“œ ë°›ëŠ” ì¤‘...
+echo [1/4] ÃÖ½Å ÄÚµå ¹Ş´Â Áß...
 git pull || goto :fail
 
-echo [2/4] ì„œë²„ ë¹Œë“œ...
+echo [2/4] ¼­¹ö ºôµå...
 cd server
 call npm install --no-audit --no-fund || goto :fail
 call npm run build || goto :fail
 cd ..
 
-echo [3/4] ì›¹ ë¹Œë“œ...
+echo [3/4] À¥ ºôµå...
 cd web
 call npm install --no-audit --no-fund || goto :fail
 call npm run build || goto :fail
 cd ..
 
-echo [4/4] ì„œë¹„ìŠ¤ ì¬ì‹œì‘...
+echo [4/4] ¼­ºñ½º Àç½ÃÀÛ...
 schtasks /End /TN "VNTG HTS" >nul 2>&1
 schtasks /Run /TN "VNTG HTS" >nul 2>&1
 
 echo.
-echo ì™„ë£Œ. í™•ì¸:
+echo ¿Ï·á. È®ÀÎ:
 timeout /t 5 /nobreak >nul
 curl -s http://localhost:4000/api/health
 echo.
@@ -34,6 +34,6 @@ exit /b 0
 
 :fail
 echo.
-echo *** ì‹¤íŒ¨í–ˆìŠµë‹ˆë‹¤. ìœ„ ë©”ì‹œì§€ë¥¼ í™•ì¸í•˜ì„¸ìš”. ***
+echo *** ½ÇÆĞÇß½À´Ï´Ù. À§ ¸Ş½ÃÁö¸¦ È®ÀÎÇÏ¼¼¿ä. ***
 pause
 exit /b 1
