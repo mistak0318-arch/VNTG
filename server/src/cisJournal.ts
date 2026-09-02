@@ -84,7 +84,7 @@ export interface SlotEntry {
     price: number;
     funding: string;
     stop: number;
-    target: number;
+    target: number | null;
     why: string;
   }[];
   /** 실제로 한 것 */
@@ -358,7 +358,7 @@ export function narrate(
     for (const p of d.plans) {
       L.push(
         `- ${p.candidate.name} ${p.qty.toLocaleString()}주 · ${won(p.price)} (${p.funding}) ` +
-          `— 손절 ${won(p.stop)} / 목표 ${won(p.target)}`,
+          `— 손절 ${won(p.stop)} / ${p.target !== null ? `목표 ${won(p.target)}` : "목표 없음 · 고점 되돌림에 판다"}`,
       );
     }
   }

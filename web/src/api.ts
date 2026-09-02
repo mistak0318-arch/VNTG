@@ -5603,7 +5603,10 @@ export interface CisRules {
   maxPerStock: number;
   maxPositions: number;
   stopPct: number;
+  /** 0 = 익절 없음 */
   targetPct: number;
+  /** 고점 대비 되돌림 매도 (%) — 0 = 끔 */
+  trailDropPct: number;
   maxHoldDays: number;
   minScore: number;
   minTradeValue: number;

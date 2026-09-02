@@ -109,8 +109,17 @@ export interface CisRules {
   maxPositions: number;
   /** 손절 — 평단 대비 몇 % */
   stopPct: number;
-  /** 익절 — 평단 대비 몇 % */
+  /** 익절 — 평단 대비 몇 %. **0 이면 익절 없음** (추세를 고정 폭으로 안 자른다) */
   targetPct: number;
+  /**
+   * **고점 대비 되돌림** (2026-09-02 밤, 신조 ③ — 오르는 놈은 계속 오른다, 진입 뒤에).
+   *
+   * 벤티지: "응 바꾸자." 익절 +15% 고정은 추세를 자른다 — 추세추종은 이길 때 크게
+   * 먹어야 성립하는데, 15% 에서 내리면 그 뒤가 없다. 대신 들고 있는 동안의 최고가
+   * (`Position.bestPct`)에서 이만큼 내려오면 판다. 추세가 끝났다는 신호가 값 자체다.
+   * 0 이면 끔(옛 동작: 익절 고정).
+   */
+  trailDropPct: number;
   /** 며칠 지나도 안 움직이면 자리를 비운다 (기회비용) */
   maxHoldDays: number;
   /**
@@ -205,6 +214,7 @@ export const DEFAULT_RULES: CisRules = {
    */
   stopPct: -7,
   targetPct: 15,
+  trailDropPct: 0,
   /* 열흘 안에 안 가면 내 판단이 틀린 것이다. 돈이 묶이는 게 더 비싸다 */
   maxHoldDays: 10,
   /* 신호등 분석 원장을 후보에 더한다 — 조회를 안 늘리면서 보는 자리가 넓어진다 */
@@ -637,7 +647,7 @@ export interface ExitCall {
   position: Position;
   price: number;
   reason: string;
-  kind: "stop" | "target" | "stale" | "misu" | "trail";
+  kind: "stop" | "target" | "stale" | "misu" | "trail" | "drop";
 }
 
 /**
@@ -673,13 +683,44 @@ export function exitCalls(
       out.push({ position: p, price: px, kind: "stop", reason: `${pct.toFixed(1)}% (손절 ${rules.stopPct}%)` });
       continue;
     }
+    /*
+     * **흔들림을 여기서도 적는다.** 1분 감시가 꺼져 있으면 하루 세 번이 유일한
+     * 관측이라, 그때라도 최고가를 남겨야 되돌림 규칙이 볼 고점이 생긴다.
+     */
+    if (p.worstPct === undefined || pct < p.worstPct) {
+      p.worstPct = Number(pct.toFixed(2));
+      p.worstAt = new Date().toISOString();
+    }
+    if (p.bestPct === undefined || pct > p.bestPct) {
+      p.bestPct = Number(pct.toFixed(2));
+      p.bestAt = new Date().toISOString();
+    }
     if (p.target !== null && px >= p.target) {
       out.push({ position: p, price: px, kind: "target", reason: `목표가 ${p.target.toLocaleString()}원 도달` });
       continue;
     }
-    if (pct >= rules.targetPct) {
+    if (rules.targetPct > 0 && pct >= rules.targetPct) {
       out.push({ position: p, price: px, kind: "target", reason: `${pct.toFixed(1)}% (익절 ${rules.targetPct}%)` });
       continue;
+    }
+    /*
+     * **고점 대비 되돌림** (신조 ③). 들고 있는 동안의 최고가에서 `trailDropPct`
+     * 만큼 내려왔으면 추세가 끝난 것으로 보고 판다. 손절선·본전선보다 위일 때만 —
+     * 아래면 위의 손절이 먼저다.
+     */
+    if (rules.trailDropPct > 0 && p.bestPct !== undefined && p.bestPct > 0) {
+      const peak = p.avg * (1 + p.bestPct / 100);
+      const dropAt = peak * (1 - rules.trailDropPct / 100);
+      const floor = Math.max(p.stop ?? -Infinity, p.avg * (1 + rules.stopPct / 100));
+      if (dropAt > floor && px <= dropAt) {
+        out.push({
+          position: p,
+          price: px,
+          kind: "drop",
+          reason: `고점 +${p.bestPct.toFixed(1)}% 에서 ${rules.trailDropPct}% 되돌림 (지금 ${pct.toFixed(1)}%)`,
+        });
+        continue;
+      }
     }
     if (held >= rules.maxHoldDays) {
       out.push({
@@ -738,7 +779,8 @@ export interface BuyPlan {
   price: number;
   funding: Funding;
   stop: number;
-  target: number;
+  /** null = 목표가 없음 (익절 0) */
+  target: number | null;
   amount: number;
 }
 
@@ -793,7 +835,8 @@ export function planBuys(
       price,
       funding,
       stop: Math.round(price * (1 + rules.stopPct / 100)),
-      target: Math.round(price * (1 + rules.targetPct / 100)),
+      /* 익절 0 = 목표가 없음 — 되돌림 규칙이 추세의 끝을 정한다 */
+      target: rules.targetPct > 0 ? Math.round(price * (1 + rules.targetPct / 100)) : null,
       amount: qty * price,
     });
   }

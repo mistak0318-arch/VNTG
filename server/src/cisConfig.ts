@@ -168,7 +168,12 @@ function clampRules(r: Partial<CisRules>, base: CisRules): CisRules {
     maxPositions: Math.round(num(r.maxPositions, 1, 20, base.maxPositions)),
     /* 손절은 **반드시 음수** — 양수로 들어오면 사자마자 파는 계좌가 된다 */
     stopPct: -Math.abs(num(r.stopPct, -30, -1, base.stopPct)),
-    targetPct: Math.abs(num(r.targetPct, 2, 100, base.targetPct)),
+    /* 익절 0 = 없음(되돌림 규칙에 맡긴다). 1 은 뜻이 없어 2 부터 */
+    targetPct: (() => {
+      const v = Math.abs(num(r.targetPct, 0, 100, base.targetPct));
+      return v > 0 && v < 2 ? 2 : v;
+    })(),
+    trailDropPct: Math.abs(num(r.trailDropPct, 0, 50, base.trailDropPct)),
     maxHoldDays: Math.round(num(r.maxHoldDays, 1, 120, base.maxHoldDays)),
     /* 켬/끔 — 숫자가 아니라 참거짓이다. 안 주면 지금 값을 지킨다 */
     useRegimeGate:
@@ -246,7 +251,18 @@ export const RULE_LABEL: Record<keyof CisRules, { label: string; unit: string; h
   maxPerStock: { label: "한 종목 비중", unit: "%", hint: "순자산 대비. 크면 한 번에 크게 다친다" },
   maxPositions: { label: "최대 종목 수", unit: "종목", hint: "많으면 이겨도 티가 안 난다" },
   stopPct: { label: "손절", unit: "%", hint: "좁으면 흔들림에 털리고 넓으면 한 번에 크게 잃는다" },
-  targetPct: { label: "익절", unit: "%", hint: "손절의 두 배는 되어야 추세추종이 성립한다" },
+  targetPct: {
+    label: "익절 (고정)",
+    unit: "%",
+    hint: "0 이면 익절 없음 — 고점 되돌림이 추세의 끝을 정한다(신조 ③). 값을 주면 그 폭에서 자른다",
+  },
+  trailDropPct: {
+    label: "고점 되돌림 매도",
+    unit: "%",
+    hint:
+      "들고 있는 동안의 최고가에서 이만큼 내려오면 판다 — 「오르는 놈은 계속 오른다」를 진입 뒤에 " +
+      "적용하는 자리. 익절 고정과 달리 추세가 이어지는 동안은 안 판다. 0 이면 끔",
+  },
   maxHoldDays: { label: "최대 보유", unit: "일", hint: "안 가면 자리를 비운다 — 돈이 묶이는 게 더 비싸다" },
   minScore: { label: "신호등 최소점", unit: "점", hint: "이 아래 종목은 후보에서 뺀다" },
   minTradeValue: { label: "최소 거래대금", unit: "억", hint: "얇으면 내 주문에 값이 밀린다" },

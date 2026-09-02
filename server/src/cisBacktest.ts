@@ -49,8 +49,11 @@ import { DEFAULT_RULES, type CisRules } from "./cisTrader.js";
  * 그 값은 조심해서 읽어야 한다.
  */
 
+/** 도구용 — 되돌림 고점을 어제까지로 늦춘다 (`tools/sigtune/cisTrail.mts`) */
+const TRAIL_LAG = process.env.CIS_TRAIL_LAG === "1";
+
 /** 어떻게 팔렸나 */
-export type ExitKind = "stop" | "target" | "trail" | "time" | "open";
+export type ExitKind = "stop" | "target" | "trail" | "drop" | "time" | "open";
 
 export interface CisTrade {
   code: string;
@@ -131,6 +134,7 @@ const KIND_LABEL: Record<ExitKind, string> = {
   stop: "손절",
   target: "익절",
   trail: "본전 손절 (이익 반납)",
+  drop: "고점 대비 되돌림 (추세 끝)",
   time: "기간 만료",
   open: "아직 보유 중 (봉이 모자람)",
 };
@@ -160,7 +164,16 @@ function runOne(bars: DayBar[], at: number, r: CisRules): Omit<CisTrade, "code" 
   const entry = entryBar.o;
 
   const stopAt = entry * (1 + r.stopPct / 100);
-  const targetAt = entry * (1 + r.targetPct / 100);
+  /* 익절 0 = 「익절 없음」 — 추세를 고정 폭으로 자르지 않는다 (신조 ③, 2026-09-02) */
+  const targetAt = r.targetPct > 0 ? entry * (1 + r.targetPct / 100) : Infinity;
+  /*
+   * **고점 대비 되돌림** (신조 ③ — 오르는 놈은 계속 오른다, 진입 뒤에).
+   * 들고 있는 동안의 최고가(고가 기준)에서 `trailDropPct` 만큼 내려오면 판다.
+   * 같은 날 고가가 새 고점을 찍고 저가가 그 아래 되돌림선을 찍었으면 판 것으로
+   * 친다 — 순서를 모르니 나쁜 쪽. 0 이면 끔.
+   */
+  const dropOn = r.trailDropPct > 0;
+  let peak = entry;
   /*
    * **본전 손절** — 이익이 `trailAfterPct` 를 넘으면 손절선을 진입가로 올린다.
    * 「이익을 손실로 바꾸지 않는다」는 규칙인데, 그 대가로 흔들림에 털린다.
@@ -213,6 +226,30 @@ function runOne(bars: DayBar[], at: number, r: CisRules): Omit<CisTrade, "code" 
         worst,
         best,
       };
+    }
+    if (dropOn) {
+      /*
+       * 기본은 오늘 고가까지 고점에 넣고 오늘 저가와 견준다(나쁜 쪽 가정).
+       * `CIS_TRAIL_LAG=1` 이면 어제까지의 고점만 쓴다 — 후한 쪽. 둘을 같이 봐야
+       * 「같은 날 순서를 모른다」는 가정이 결론을 흔드는지 알 수 있다(도구용).
+       */
+      if (!TRAIL_LAG && b.h > peak) peak = b.h;
+      const dropAt = peak * (1 - r.trailDropPct / 100);
+      if (TRAIL_LAG && b.h > peak) peak = b.h;
+      /* 손절선·본전선보다 위에 있을 때만 뜻이 있다 — 아래면 위에서 이미 걸렸다 */
+      if (dropAt > armedStop && b.l <= dropAt) {
+        const px = Math.min(dropAt, b.o > 0 ? b.o : dropAt);
+        return {
+          entry,
+          exit: px,
+          days: k,
+          kind: "drop",
+          rate: ((px - entry) / entry) * 100,
+          hold20: null,
+          worst,
+          best,
+        };
+      }
     }
     /* 오늘 종가 기준으로 본전 손절을 켤지 정한다 — 장중에 스쳤다고 켜지 않는다 */
     if (trailOn && !trailArmed && ((b.c - entry) / entry) * 100 >= r.trailAfterPct) {
@@ -320,7 +357,7 @@ export async function cisBacktest(
   const hold = stat(holdRows);
 
   /* 청산 사유별 */
-  const kinds: ExitKind[] = ["stop", "trail", "target", "time", "open"];
+  const kinds: ExitKind[] = ["stop", "trail", "drop", "target", "time", "open"];
   const byKind = kinds
     .map((k) => {
       const rows = trades.filter((t) => t.kind === k);

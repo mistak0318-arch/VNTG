@@ -1158,7 +1158,9 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 8 http://100.88.182.35:4000/api/health)",
       "Bash(curl -s --max-time 8 http://100.88.182.35:4000/api/signal/config)",
       "Bash(ls \"//100.88.182.35/vntg-deploy\" 2>&1 | head; echo \"--- deploy.log 꼬리 ---\"; tail -15 \"//100.88.182.35/vntg-deploy/deploy.log\" 2>&1)",
-      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; powershell -ExecutionPolicy Bypass -File push-deploy.ps1; git status --short)"
+      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; powershell -ExecutionPolicy Bypass -File push-deploy.ps1; git status --short)",
+      "Bash(curl -s --max-time 10 http://localhost:4000/api/cis/config)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('rules:',JSON.stringify\\({targetPct:j.config.rules.targetPct,trailDropPct:j.config.rules.trailDropPct}\\),'| labels:',j.ruleLabels.targetPct.label,'/',j.ruleLabels.trailDropPct.label\\)}\\)\")"
     ]
   }
 }

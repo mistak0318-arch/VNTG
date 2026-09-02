@@ -109,6 +109,7 @@ const EXIT_LABEL: Record<string, string> = {
   stale: "시간 만료",
   misu: "미수 만기",
   trail: "본전 손절",
+  drop: "고점 되돌림",
 };
 
 const FUNDING_LABEL: Record<string, string> = {
