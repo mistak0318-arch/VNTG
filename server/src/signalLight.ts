@@ -15,6 +15,8 @@ import { findStock } from "./stockListCache.js";
 import { themeStrength } from "./themeStrength.js";
 import { isIndexLikeTheme } from "./naverThemes.js";
 import { etfHoldersOf } from "./etfHolders.js";
+import { quarterFinance } from "./quarterFinance.js";
+import { pushNotice } from "./notifyCenter.js";
 
 /**
  * 「ETF 뒷배」에서 **빼야 하는 ETF** — 테마가 아닌 것들.
@@ -106,6 +108,10 @@ export type CheckKey =
   | "smartMoney"
   /* 시총 대비 수급 (2026-09-01) — 절대 금액의 대형주 편향에 대한 정면 해법 */
   | "flowRatio"
+  /* 외국인만 시총 대비 (2026-09-02 재검토) — 기관은 힘이 없었고 외국인이 핵심이었다 */
+  | "fgnRatio20"
+  /* 공매도 비중 **수준** (2026-09-02) — 높을수록 좋았다. 기관·외국인이 거래하는 종목의 표지 */
+  | "shortLevel"
   | "foreignRatioUp"
   | "programFlow"
   | "volume"
@@ -196,6 +202,26 @@ export interface CheckConfig {
    * **이 값 이하**면 탈락.
    */
   vetoAt?: number;
+  /**
+   * **봉우리형 기준의 상한** (2026-09-02 재검토).
+   *
+   * `grade()` 는 단조라 「적당히가 좋고 과하면 나쁘다」를 못 그린다. 그런데 재검토에서
+   * 그런 모양이 넷 나왔다 — 수급 가속(1~2배 +2.8 · 4배↑ -0.2) · 시총 대비 수급(0~1%
+   * 좋고 1~2% 나쁨) · 분기 YoY(0~20% +2.3 · 100%↑ -0.4) · 외국인 지분율 상승(2%p↑ 꺾임).
+   * 예전엔 `flowRatio` 만 계산부에서 값을 「접어서」 흉내 냈는데, 그러면 시뮬레이터와
+   * 갈린다(감사에서 등급 18.6% 불일치). 설정에 올려 두 곳이 같은 값을 보게 한다.
+   *
+   * 값이 `capAt` 보다 크면 `capGrade`(기본 0)를 준다. 탈락(`vetoAt`)은 `raw` 로
+   * 보므로 영향이 없다.
+   */
+  capAt?: number;
+  capGrade?: 0 | 50;
+  /**
+   * **원래 없는 종목이 많은 기준** (2026-09-02) — 못 잰 것을 커버리지 결손으로 세지
+   * 않는다. 공매도·대차·외국인 지분율은 코스닥 소형주에 기록 자체가 없다. 그걸
+   * 「덜 쟀다」로 세면 그 종목들은 초록이 될 수 없다 — 데이터 결손이 아니라 구조다.
+   */
+  optional?: boolean;
   /** 화면에 보여줄 설명 */
   hint: string;
   /**
@@ -346,6 +372,13 @@ export interface SignalConfig {
    * 0 으로 두면 문턱이 없다.
    */
   minTradeValue: number;
+  /**
+   * **기본값 세대** (2026-09-02). 저장본이 이보다 낡으면 `getConfig` 가 기본값으로
+   * 갈아 끼우고 알린다 — 재검토로 기준·문턱이 통째로 바뀌었을 때 두 기기(개발PC·
+   * 미니PC)의 저장 파일이 옛 값을 붙들고 있으면 새 설계가 어디에도 적용되지 않는다
+   * (축 비중 1/1/1 이사, largeCap 배선 때 이미 두 번 겪었다).
+   */
+  configVersion?: number;
 }
 
 /** 정배열 판정에 고를 수 있는 이동평균선 */
@@ -445,7 +478,21 @@ export const DEFAULT_CONFIG: SignalConfig = {
    * **읽는 사람을 위한 것**이지 코드가 쓰는 값이 아니다 — 표본이 바뀌면 파일이
    * 갱신되고 화면은 새 값을 말한다.
    */
-  greenAt: 70,
+  /*
+   * ## **2026-09-02 전면 재검토 — 세대 3** (`docs/신호등_전면재검토_260902.md`)
+   *
+   * 벤티지가 12월 동결을 알고 풀었다. 80거래일(쏠림→급락→반등 한 계절)이라 **시총
+   * 중립 초과수익**(같은 날·같은 시총 5분위 중앙값 대비)으로 재고, 강세·약세·앞·뒤
+   * 넷 다 같은 방향인 것만 남겼다. 옛 설정의 초록은 그 눈금에서 +0.0%p·승률 50
+   * (뒤쪽 절반 -2.3), 이 설정은 +4.8/61 (문턱 65) · 20일 블록 넷 다 양수.
+   *
+   * **초록 65** — 70 은 +5.5/63 이지만 하루 34종목, 65 는 44종목. 슈퍼신호등 교집합에
+   * 들어갈 후보가 넓은 쪽을 골랐다(벤티지 결정).
+   *
+   * ⚠️ 이 표본으로 고른 값이다. 12월 250거래일이 차면 `server/tools/sigtune/` 로 다시 잰다.
+   */
+  configVersion: 3,
+  greenAt: 65,
   yellowAt: 40,
   /*
    * 10 일 (2026-09-01 — 벤티지가 화면에서 먼저 올렸다).
@@ -587,11 +634,17 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 그 숫자가 **평균**이었다 — 표본에 20일 +444% 짜리가 있어 극단값이 만든
        * 것이었고, 중앙값·승률로 보면 그만큼 강하지 않다.
        */
+      /*
+       * **97 / 99 · 무게 1** (2026-09-02 재검토). 시총 중립 exs20, 강세장:
+       *   97~99 **+3.0/57** · 99~100 +3.6/59 · 100↑ +1.3/53   ← 돌파 자체보다 직전이 낫다
+       * 약세장은 97↑ 전부 마이너스(-1.4/43, 100↑ -3.4/41) — 강세 전용은 유지.
+       * 무게 2 → 1: 강세장에서만 살고 크기도 수급 가속(+2.8)만 못하다.
+       */
       regime: "bull",
-      weight: 2,
-      threshold: 99,
-      strongAt: 100,
-      hint: "현재가 ÷ 직전 60일 고가(%). 100이면 돌파 — 19만 관측 뒤쪽에서 99 이상이 +2.87%p 로 가장 좋았다",
+      weight: 1,
+      threshold: 97,
+      strongAt: 99,
+      hint: "현재가 ÷ 직전 60일 고가(%). 97 부터 절반, 99 부터 만점 — 강세장에서만. 돌파(100↑)보다 직전(97~99)이 나았다",
       cost: 0,
     },
     {
@@ -781,7 +834,12 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 그래서 무게를 2 → 1 로 낮춰 둔다 — 방향은 믿되 크기는 덜 믿는다.
        */
       regime: "bull",
-      enabled: true,
+      /*
+       * **끈다** (2026-09-02 재검토). 시총 중립으로 재니 구간이 들쭉날쭉이다 —
+       * -1~-0.5% 가 최고(+2.6), 0.5~1% 는 마이너스(-0.3), 3%↑ 약세 -0.8. 방향이 없다.
+       * 커버리지도 40% 라 켜 두면 결손만 만든다. look-ahead(구성이 오늘 것)도 그대로다.
+       */
+      enabled: false,
       /*
        * 무게 2 — 추세 축에서 **다른 것과 안 겹치는 유일한 자금 신호**다.
        * 정배열·신고가는 가격이 그린 모양이고, 테마 강세는 이름으로 묶인 종목들의
@@ -958,8 +1016,13 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 그래서 문턱을 **2 로 낮춰** 바닥을 거르는 데 쓰고, 만점을 **5** 에 둔다.
        * 예전 값(4/7)은 60일이 없던 여섯 구간 표본에서 환산한 것이라 위쪽이 틀렸다.
        */
-      threshold: 2,
-      strongAt: 5,
+      /*
+       * **3 / 7** (2026-09-02 재검토, 시총 중립 exs20 — 넷 다 같은 방향):
+       *   0~1구간 **-0.9~-1.3/45 ❌** · 2~4 ≈0 · 5~6 +0.2~+0.5 · **7 +1.4/54 ✅** · 8 +0.3
+       * 아래쪽이 확실히 나쁘고 위쪽은 7 이 꼭대기(8 은 「다 샀다」에 가깝다).
+       */
+      threshold: 3,
+      strongAt: 7,
       /* 여기까지의 구간만 본다 — 60 이면 5·10·20·60 넷, 20 이면 5·10·20 셋 */
       span: 60,
       hint: "외국인·기관의 5·10·20·60일 누적 순매수 중 **몇 구간이 플러스인가**(0~8). 끊겼는지가 아니라 누적으로 사고 있는지를 본다",
@@ -1000,11 +1063,20 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 1.5 미만은 전부 음수라 문턱을 거기 둔다. 만점은 2.5 — 그 위는 급가속이라
        * 오히려 떨어지므로 더 주지 않는다.
        */
-      threshold: 1.5,
-      strongAt: 2.5,
+      /*
+       * **0.5 / 1.0 · 상한 4** (2026-09-02 재검토). 옛 값(1.5/2.5)은 **거꾸로**였다 —
+       * 시총 중립 exs20, 넷 다 같은 방향:
+       *   0~0.5배 +1.2/54 ✅ · 0.5~1 +1.5/56 ✅ · **1~1.5 +2.8/59 ✅** · 1.5~2 +2.3/56 ✅ ·
+       *   2~2.5 +0.9 · 2.5~4 +1.6 · **4배↑ -0.2/49** · 전환(20일 순매도·5일 순매수) **-0.9/46 ❌**
+       * 옛 설정은 2.5배↑에 만점을 줬는데 그 구간이 마이너스 쪽이었고, 「전환」에도
+       * 만점을 줬다. 이제 꾸준히 붙는 것(1~2배)이 만점, 4배 넘는 급가속은 0, 전환도 0.
+       */
+      threshold: 0.5,
+      strongAt: 1.0,
+      capAt: 4,
       /* 견줄 긴 쪽. 짧은 쪽은 늘 그 1/4 이다 — span 20 이면 5일 ÷ 20일 */
       span: 20,
-      hint: "외국인 최근 5일 일평균 ÷ 20일 일평균. 1보다 크면 사는 속도가 붙는 중. **급가속(2.5배 이상)은 더 좋지 않다**",
+      hint: "외국인 최근 5일 일평균 ÷ 20일 일평균. 0.5배부터 절반, 1배부터 만점 — **꾸준히 붙는 것**이 좋다. 4배 넘는 급가속과 「매도→매수 전환」은 0점",
       cost: 0,
     },
     {
@@ -1046,7 +1118,12 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 그래도 남긴다 — 뒤쪽에서 양수이고, 시총 대비로 다시 보면 달라질 수 있다.
        * 다만 **문턱을 0 으로 내려 「사고 있나」만 보고**, 무게를 1 로 낮춘다.
        */
-      enabled: true,
+      /*
+       * **끈다** (2026-09-02 재검토). 옛 50점 구간(0~2,000백만)이 시총 중립 **-1.5/44 로
+       * 최악**이었고, 시총 대비로 바꿔 봐도 뚜렷한 모양이 없다(0.1~0.25% +1.0, 0.25~1% ❌,
+       * 1%↑ 강세 +3.1 / 약세 -0.7). 외국인 시총대비(`fgnRatio20`)가 그 자리를 맡는다.
+       */
+      enabled: false,
       weight: 1,
       /* 20일 누적 주포 순매수(백만원). 절대금액이라 대형주에 유리한 것은 같은 약점이다 */
       threshold: 0,
@@ -1104,11 +1181,21 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 종목을 거르는 것은 어느 장세에서나 옳다 — 아래 `veto` 는 이 기준이
        * 점수에서 빠져도 판정에 남는다.
        */
-      regime: "bear",
+      /*
+       * **장세 무관 · 무게 1 · 0 / 0.25 · 상한 1 (넘으면 50점)** (2026-09-02 재검토).
+       *
+       * 시총 중립 exs20, 넷 다 같은 방향: <-1% -1.4/44 ❌ · 0~0.25 +1.1/53 ✅ ·
+       * 0.25~0.5 +1.5/54 ✅ · 0.5~0.75 +2.1/56 ✅ · 0.75~1 +1.9/56 ✅ · **1~2 -0.5~-0.9 ❌**.
+       * 옛 설정은 0.75↑ 에 만점을 줬는데 1%↑ 는 「살 사람은 다 산 자리」였다.
+       * 강세 전용을 풀어도 성적이 같아(+4.6 → +4.6) 단순하게 무관으로. 무게는 외국인
+       * 단독(`fgnRatio20`)이 더 세서 그쪽에 2, 여기 1.
+       */
       enabled: true,
-      weight: 2,
-      threshold: 0.25,
-      strongAt: 0.75,
+      weight: 1,
+      threshold: 0,
+      strongAt: 0.25,
+      capAt: 1,
+      capGrade: 50,
       /*
        * **탈락** — 시총 대비 -0.5% 이하면 다른 게 아무리 좋아도 빨강 (2026-09-01).
        *
@@ -1120,10 +1207,62 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 없는 판정**이라 확실한 것만 건다.
        */
       veto: true,
-      vetoAt: -0.5,
+      /* -0.5 → **-1** (2026-09-02). -1~-0.5 는 뒤쪽 절반에서 0.0/49 로 중립이라 확실한 쪽만 */
+      vetoAt: -1,
       span: 20,
-      hint: "외국인+기관 순매수 ÷ 시가총액(%). **금액이 아니라 비율** — 시총 1조의 100억과 5,000억의 100억은 다른 사건이다",
+      hint: "외국인+기관 순매수 ÷ 시가총액(%). **금액이 아니라 비율** — 0~1% 가 좋고 1% 를 넘으면 살 사람은 다 산 자리(50점). -1% 이하면 탈락",
       cost: 0,
+    },
+    {
+      key: "fgnRatio20",
+      label: "외국인 수급 (시총 대비 20일)",
+      axis: "flow",
+      /*
+       * **외국인만 시총 대비** (2026-09-02 재검토 신설) — 이 재검토에서 가장 센 수급 기준.
+       *
+       * 벤티지: "외국인 기관 순매수가 늘고 있나 … 이런 부분들도 중요하고."
+       *
+       * 외인+기관을 합친 `flowRatio` 보다 외국인 단독이 뚜렷했다(시총 중립 exs20):
+       *   <-1% **-2.0/42 ❌** · 0~0.25 +0.7/53 ✅ · **0.25~0.5 +2.4/56 ✅** · 0.5~1 +1.1/53 ✅ ·
+       *   1~2 +0.6/53 ✅ · 2%↑ 강세 +3.0 / 약세 -0.5
+       * 기관 단독은 힘이 없었다(어느 구간도 ✅ 없음 — 인덱스·헤지 물량이 섞인다).
+       * 조회는 안 는다 — `flowRatio` 와 같은 응답(ka10060 + ka10001).
+       */
+      enabled: true,
+      weight: 2,
+      threshold: 0,
+      strongAt: 0.25,
+      capAt: 2,
+      capGrade: 50,
+      span: 20,
+      hint: "외국인 20일 순매수 ÷ 시가총액(%). 0.25% 부터 만점, 2% 를 넘으면 과열(50점). 기관은 안 본다 — 인덱스·헤지 물량이 섞여 힘이 없었다",
+      cost: 0,
+    },
+    {
+      key: "shortLevel",
+      label: "공매도 비중 수준",
+      axis: "flow",
+      /*
+       * **공매도 비중이 높은 종목이 좋았다** (2026-09-02 재검토 신설).
+       *
+       * 위험 축의 `shortSaleUp` 이 「높을수록 위험」으로 걸려 있었는데 시총 중립으로 재니
+       * **정반대**였다 — 넷 다 같은 방향:
+       *   <1% **-4.4/36 ❌** · 1~5 -0.5~-0.8 ❌ · 5~8 0.0 · **8~12 +2.3/57 ✅ · 12~20 +4.9/65 ✅** · 20~30 +6.3/67
+       * 읽자면 공매도 비중은 「기관·외국인이 거래하는 종목」의 표지다. 비중이 0에 가까운
+       * 종목은 개인만 있는 종목이고, 그쪽이 시장에 진다. 위험이 아니라 **수급 축**이다.
+       *
+       * 코스닥 소형주는 기록 자체가 없다 → `optional`(결손으로 안 센다). 조회는
+       * `shortSaleUp` 과 같은 ka10014 한 번.
+       */
+      enabled: true,
+      weight: 1,
+      threshold: 5,
+      strongAt: 12,
+      capAt: 30,
+      optional: true,
+      hint: "최근 5일 평균 공매도 거래비중(%). 5% 부터 절반, 12% 부터 만점 — 공매도가 붙는 종목 = 기관·외국인이 거래하는 종목. 비중 1% 미만(개인만 있는 종목)이 가장 나빴다",
+      cost: 1,
+      costGroup: "short",
     },
     {
       key: "foreignRatioUp",
@@ -1149,13 +1288,24 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 계산은 그대로 두었으니 **되짚을 자료만 생기면 바로 켤 수 있다.** 지금
        * 켜면 조회를 종목당 1회 쓰면서 근거 없는 점수를 더하는 셈이다.
        */
-      enabled: false,
+      /*
+       * **켠다 — 방향만 확인, 크기는 미확정** (2026-09-02 재검토).
+       *
+       * 벤티지: "지분율이 늘고 있나 이런 부분들도 중요하고." 표본 커버 8%(원장이 50일치)
+       * 라 문턱을 정할 수는 없었지만 방향은 맞았다 — 0.5~1%p **+2.4/57**, 1~2 +0.8/54,
+       * 2%p↑ -0.1 (꺾임), 음수 -0.8~-2.1. 실전 커버리지는 높으니 w1 로 켜 두고 12월에 잰다.
+       * 지분율 기록이 없는 종목(0%)은 `optional` — 결손으로 안 센다.
+       */
+      enabled: true,
       weight: 1,
       threshold: 0.1,
-      strongAt: 1,
+      strongAt: 0.5,
+      capAt: 2,
+      capGrade: 50,
+      optional: true,
       /* 며칠 전과 견주나 */
       span: 20,
-      hint: "외국인 지분율이 20거래일 전보다 몇 %p 올랐나. 금액이 아니라 **가진 몫**의 변화다",
+      hint: "외국인 지분율이 20거래일 전보다 몇 %p 올랐나. 금액이 아니라 **가진 몫**의 변화다. 0.5%p 부터 만점, 2%p 를 넘으면 50점",
       cost: 1,
     },
     {
@@ -1233,12 +1383,19 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 벤티지가 감점 요소로 지목한 값인데("영업이익이 나아지지 않는 애들"),
        * **약세장에서만 맞는 말**이었다.
        */
+      /*
+       * **끈다 — 분기(`qYoY`)가 대신한다** (2026-09-02 재검토). 실적을 붙여 보니 연간도
+       * 봉우리형이었다: -50↓ -1.9/43 ❌ · -20~0 +0.5 ✅ · **0~10 +4.1/60 ✅** · 10~20 +2.0 ·
+       * 20↑ -0.2~-0.7 · 100↑ -0.4. 옛 설정(0/20)은 20%↑ 에 만점을 줬는데 그 구간이
+       * 마이너스 쪽이었다. 분기가 더 신선하고 같은 모양이라 그쪽만 켠다. 켜려면 -50/0·상한 50.
+       */
       regime: "bear",
-      enabled: true,
-      weight: 2,
-      threshold: 0,
-      strongAt: 20,
-      hint: "최근 사업연도 영업이익 전년 대비 증가율(%)",
+      enabled: false,
+      weight: 1,
+      threshold: -50,
+      strongAt: 0,
+      capAt: 50,
+      hint: "최근 사업연도 영업이익 전년 대비 증가율(%). -50% 부터 절반, 0% 부터 만점, **50% 를 넘으면 0점** — 폭증은 이미 다 오른 회사였다",
       cost: 0,
     },
     /*
@@ -1253,6 +1410,20 @@ export const DEFAULT_CONFIG: SignalConfig = {
      * ⚠️ **enabled: false 다.** 검증 안 된 것을 점수에 넣으면 신호등이 흔들린다 —
      * 오늘 커버리지 건에서 배운 것이다. 표본 재수집 뒤 시뮬레이터로 재고, 통하면
      * 그때 켠다. 문턱도 지금 값은 **짐작**이라 실측으로 바꿔야 한다.
+     *
+     * ## 2026-09-02 재검토 — **잰 뒤 둘을 켠다** (실전 배선도 이날 처음 넣었다)
+     *
+     * 실적을 한투 분기 8개로 붙여(그 시점에 공시된 것만, `financeCache`) 시총 중립으로 재니:
+     *   qYoY    <-50 -1.4/45 ❌ · -50~-20 +1.2 ✅ · -20~0 +0.6 ✅ · **0~10 +2.3/58 ✅ · 10~20 +1.9** ·
+     *           20~50 +0.9 ✅ · 50~100 0.0 · **100↑ -0.4~-0.6 ❌**
+     *   qMargin **적자 -2.6/42 ❌**(약세 -3.7/38) · 10~20% +1.6~+1.9 ✅
+     *   qStreak 모양 없음(4~5연속이 -2.5). 안 켠다
+     * 「이익이 좋아지고 있나」는 맞되 **폭증은 아니다** — 100% 넘게 는 회사는 이미 다 오른
+     * 회사였다. 적자 분기는 **탈락**으로(무게 0 = 점수엔 안 섞고 탈락에만 쓴다) — 초록
+     * 성적이 +4.9 → +5.6 으로 올랐다.
+     *
+     * ⚠️ 한투가 막히면 둘 다 null 이다. 무게를 1 로 둔 이유 — 3 이면 결손 3/14 = 0.79 로
+     * 커버리지 미달이 되어 **초록이 전멸**한다. 1 이면 13/14 = 0.93 으로 산다.
      */
     {
       key: "qStreak",
@@ -1270,11 +1441,12 @@ export const DEFAULT_CONFIG: SignalConfig = {
       key: "qYoY",
       label: "분기 영업이익 (전년 동기)",
       axis: "value",
-      enabled: false,
-      weight: 2,
-      threshold: 0,
-      strongAt: 30,
-      hint: "가장 최근 분기를 1년 전 같은 분기와 견준 증감률(%). 계절성이 있는 업종은 직전 분기보다 이게 맞다",
+      enabled: true,
+      weight: 1,
+      threshold: -50,
+      strongAt: 0,
+      capAt: 50,
+      hint: "가장 최근 분기 영업이익을 1년 전 같은 분기와 견준 증감률(%). -50% 부터 절반, 0% 부터 만점, **50% 를 넘으면 0점** — 폭증은 이미 다 오른 회사였다",
       cost: 1,
       costGroup: "quarter",
     },
@@ -1282,11 +1454,14 @@ export const DEFAULT_CONFIG: SignalConfig = {
       key: "qMargin",
       label: "분기 영업이익률",
       axis: "value",
-      enabled: false,
-      weight: 1,
-      threshold: 5,
-      strongAt: 15,
-      hint: "영업이익 ÷ 매출액(%). 음수면 적자 분기다",
+      enabled: true,
+      /* 무게 0 — 점수에는 안 섞고 **탈락에만** 쓴다(적자 분기). 위 절 참고 */
+      weight: 0,
+      threshold: 0,
+      strongAt: 10,
+      veto: true,
+      vetoAt: 0,
+      hint: "영업이익 ÷ 매출액(%). **적자 분기(0 이하)면 탈락** — 무게 0 이라 점수엔 안 섞이고 탈락만 본다. 시총 중립 실측 적자 -2.6%p·승률 42",
       cost: 1,
       costGroup: "quarter",
     },
@@ -1347,8 +1522,16 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 다 담지 못한다. 아래쪽이 압도적으로 크므로 우선 이렇게 두고, 대형주 쪽은
        * 강세장 전용 기준으로 따로 만들지 정해야 한다.
        */
-      enabled: true,
-      weight: 3,
+      /*
+       * **끈다** (2026-09-02 재검토). 시총은 **계절마다 방향이 뒤집힌다** — 2025 표본에선
+       * 작을수록 좋았고(3천억↓ +5.48%p), 2026-04~08 표본에선 클수록 좋았다(1천억↓ -11.4%/
+       * 승률 24 · 3조↑ +5.4%/65, 강·약·앞·뒤 넷 다). 무게 3 을 어느 쪽으로 두든 장세
+       * 베팅이다. 다른 기준을 시총 중립으로 재서 고른 뒤 이걸 다시 얹어 봐도(작을수록 w1 /
+       * 클수록 w1) 초록 성적이 ±0.1 — 값이 없다. 두 계절 이상에서 같은 방향이면 그때 켠다.
+       * (그리고 실전 `grade()` 는 이날까지 방향을 못 뒤집어 저장값대로면 큰 쪽이 100점이었다 — 고쳤다)
+       */
+      enabled: false,
+      weight: 1,
       /*
        * **3조 → 5천억으로 좁힌다** (2026-09-01, 장세별 실측).
        *
@@ -1414,8 +1597,9 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 반대다 — **기준 하나를 따로 재고 그걸로 결론 내면 안 된다.**
        */
       regime: "bull",
-      enabled: true,
-      weight: 2,
+      /* **끈다** (2026-09-02 재검토) — `marketCap` 과 같은 이유. 넣어 봐도 +0.0~+0.1 차이 */
+      enabled: false,
+      weight: 1,
       threshold: 100000,
       strongAt: 300000,
       hint: "시가총액(억원) — **강세장에서만** 씁니다. 시총은 U자라(3천억 이하와 10조 이상이 좋고 3천억~10조가 골짜기) 양 끝을 기준 둘로 나눴습니다",
@@ -1499,12 +1683,22 @@ export const DEFAULT_CONFIG: SignalConfig = {
       key: "overhead",
       label: "위쪽 매물 부담",
       axis: "risk",
+      /*
+       * **강세장 전용 · 무게 1 · 탈락 해제** (2026-09-02 재검토).
+       *
+       * 시총 중립 exs20 으로 갈라 보니 **장세에 따라 뒤집힌다**:
+       *   강세  0~5% +2.7/56 (매물 없는 쪽이 좋다)   80%↑ +1.2/55
+       *   약세  0~5% **-2.0/45**                   **80%↑ +3.1/60 ✅** (밀린 것이 되돌아온다)
+       * 옛 설정은 veto 60 으로 80%↑ 무리(n 6,007, +2.8/60 — 넷 다 양수)를 통째로 탈락시키고
+       * 있었다. 강세장에서만 위험으로 보고, 탈락은 뺀다.
+       */
+      regime: "bull",
       enabled: true,
-      weight: 2,
+      weight: 1,
       threshold: 40,
       strongAt: 65,
       /*
-       * **탈락** — 위쪽 매물이 60% 이상이면 빨강 (2026-09-01).
+       * **탈락** — 위쪽 매물이 60% 이상이면 빨강 (2026-09-01). → 2026-09-02 해제 (위 참고)
        *
        * 벤티지: "매물대가 너무 큰 매물대가 강한 애들은 그게 더 저항선이 돼버리니까
        * 올라갈 가능성도 낮아지는 거지."
@@ -1513,9 +1707,8 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 안 흔들린다**. 최근 120일 거래의 60% 가 지금 가격보다 위에서 이뤄졌다면
        * 올라갈 때마다 본전 찾는 물량이 쏟아진다.
        */
-      veto: true,
-      vetoAt: 60,
-      hint: "최근 120일 매물 중 현재가 **위에** 쌓인 비중(%). 높을수록 오를 때 팔 사람이 많다",
+      veto: false,
+      hint: "최근 120일 매물 중 현재가 **위에** 쌓인 비중(%). 강세장에서만 — 약세장에선 매물 많은(밀린) 쪽이 되돌아왔다",
       cost: 0,
     },
     {
@@ -1565,13 +1758,14 @@ export const DEFAULT_CONFIG: SignalConfig = {
        *
        * 위험 축에는 「위쪽 매물 부담」만 남는다(-0.93%p, 방향 맞음).
        */
-      enabled: false,
       /*
-       * 무게 2 — 「다른 조건이 좋은데 이격까지 좁은 자리」가 이 항목에서 나온다.
-       * 위험 축에 있으므로 **다른 축이 이미 좋을 때만** 총점을 밀어 올린다.
+       * **켠다 — 8 / 12 · 무게 1** (2026-09-02 재검토). 시총 중립, 넷 다 같은 방향:
+       *   0~4% +0.1~+0.8 · 4~8 ≈0 · **8~12 -1.6/45 ❌ · 12↑ -2.9/43 ❌**(약세 -5.9/37)
+       * 20일선 이격도와 r=0.59 겹쳐서 둘 다 켜도 성적이 같다 — 이쪽만.
        */
-      weight: 2,
-      threshold: 6,
+      enabled: true,
+      weight: 1,
+      threshold: 8,
       strongAt: 12,
       hint:
         "현재가가 5일선보다 몇 % 위인가. **좁을수록 좋은 점수**입니다 — 급하게 뜬 자리는 " +
@@ -1605,7 +1799,11 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 수준만 보던 옛 방식으로는 이 둘이 안 갈렸다. 「식는 중」이 좋다는 건
        * 숏커버가 밀어 올린다는 뜻이고, 위험 축에서 음수가 안전 쪽 끝을 쓴다.
        */
-      enabled: true,
+      /*
+       * **끈다** (2026-09-02 재검토). 시총 중립으로 재니 「붙는 중」이 위험이 아니었다 —
+       * 변화 5%p↑ +4.5/63, -1~+1%p ❌. 공매도는 수준이 뜻이 있고 그건 `shortLevel`(수급 축)이 맡는다.
+       */
+      enabled: false,
       weight: 1,
       /*
        * **0 / 5** (2026-09-01) — 값이 이제 **비중이 아니라 %p 변화**다.
@@ -1616,8 +1814,10 @@ export const DEFAULT_CONFIG: SignalConfig = {
        */
       threshold: 0,
       strongAt: 5,
-      hint: "최근 5일 평균 공매도 거래비중(%)",
+      /* 감사 3-1 — hint 가 옛 정의(비중 %)를 말하고 있었다. 값은 %p 변화 + 20% 초과분 */
+      hint: "최근 5일 평균 공매도 비중 − 이전 15일 평균(%p) + 비중 20% 초과분. 양수면 붙는 중",
       cost: 1,
+      costGroup: "short",
     },
     {
       key: "lendingUp",
@@ -1719,6 +1919,8 @@ function mergeConfig(saved: Partial<SignalConfig> | null): SignalConfig {
             : Number.isFinite(s.span) && Number(s.span) > 0
               ? Math.round(Number(s.span))
               : d.span,
+        /* 상한도 기간과 같은 규칙 — 기본값에 있는 기준만, 사람이 바꾼 값이 있으면 그것 */
+        capAt: d.capAt === undefined ? undefined : Number.isFinite(s.capAt) ? Number(s.capAt) : d.capAt,
       };
     }),
     maLines: normalizeMaLines(saved?.maLines ?? DEFAULT_CONFIG.maLines),
@@ -1758,7 +1960,36 @@ export async function getConfig(): Promise<SignalConfig> {
   if (configCache) return configCache;
   try {
     const saved = JSON.parse(await readFile(CONFIG_FILE, "utf-8")) as Partial<SignalConfig>;
-    configCache = mergeConfig(saved);
+    /*
+     * **세대가 낡은 저장본은 기본값으로 갈아 끼운다** (2026-09-02).
+     *
+     * 재검토로 켠 기준·문턱·무게가 통째로 바뀌었다. 병합은 「사용자가 정한 값이
+     * 이긴다」라 옛 저장본이 있으면 새 설계가 한 줄도 적용되지 않는다 — 기기마다
+     * 파일이 따로라 설정 화면에서 「기본값 불러오기」를 두 번 눌러야 했다.
+     * 세대가 다르면 기본값을 쓰고 파일에 다시 적는다. 사람이 그 뒤에 만진 값은 그대로 산다.
+     */
+    const savedVer = Number(saved?.configVersion ?? 0);
+    const defVer = DEFAULT_CONFIG.configVersion ?? 0;
+    if (savedVer < defVer) {
+      configCache = mergeConfig({ configVersion: defVer });
+      await mkdir(dirname(CONFIG_FILE), { recursive: true });
+      await writeFile(CONFIG_FILE, JSON.stringify(configCache, null, 2), "utf-8");
+      console.log(`[signal] 신호등 설정 세대 ${savedVer} → ${defVer}: 기본값으로 갈아 끼웠다`);
+      await pushNotice({
+        source: "etc",
+        kind: "system",
+        level: "warn",
+        title: `신호등 기준이 새 기본값(세대 ${defVer})으로 바뀌었습니다`,
+        body:
+          "2026-09-02 전면 재검토 결과를 적용했습니다 — 외국인 시총대비·공매도 비중 수준·분기 실적을 " +
+          "켜고 시총·주포·ETF 뒷배를 껐습니다. 초록 문턱 65. 설정 > 분석 > 신호등 기준에서 확인하세요.",
+        link: "#/settings",
+        dedupeKey: `signalConfig:gen${defVer}`,
+        dedupeHours: 24 * 30,
+      }).catch(() => undefined);
+    } else {
+      configCache = mergeConfig(saved);
+    }
   } catch {
     configCache = DEFAULT_CONFIG;
   }
@@ -1796,7 +2027,12 @@ export async function configFingerprint(): Promise<string> {
     ...c.checks
       .filter((x) => x.enabled)
       /* 기간도 지문에 넣는다 — 같은 문턱이라도 20일과 60일은 다른 기준이다 */
-      .map((x) => `${x.key}:${x.weight}:${x.threshold}:${x.strongAt}${x.span ? `:${x.span}` : ""}`),
+      .map(
+        (x) =>
+          `${x.key}:${x.weight}:${x.threshold}:${x.strongAt}${x.span ? `:${x.span}` : ""}` +
+          /* 상한과 탈락선도 「무엇이 초록이 되나」를 바꾼다 (2026-09-02) */
+          `${x.capAt !== undefined ? `:c${x.capAt}` : ""}${x.veto && x.vetoAt !== undefined ? `:v${x.vetoAt}` : ""}`,
+      ),
   ];
   let h = 0;
   const str = parts.join("|");
@@ -1970,13 +2206,29 @@ function sma(closes: number[], period: number): number | null {
  * 실측에서 거래대금이 그 꼴이었다. 값이 맞아도 화면이 거짓말하면 사람이
  * 잘못 조절하므로, 저장할 때 순서를 바로잡는다(`saveConfig`).
  */
-function grade(value: number, c: CheckConfig): number {
+/**
+ * ## 2026-09-02 — 상한과 방향을 여기서 처리한다 (시뮬레이터도 이 함수를 쓴다)
+ *
+ *   · `capAt` 를 넘으면 `capGrade`(기본 0) — 봉우리형 기준(`CheckConfig.capAt` 참고)
+ *   · `DESCENDING`(작을수록 좋은 기준)은 눈금을 뒤집는다. 예전엔 max/min 정렬 때문에
+ *     「작을수록 좋다」를 **표현할 수 없었다** — 시총이 저장값 5000/3000 그대로 「클수록
+ *     좋다」로 채점되고 있었다(Opus 감사 1-1: 5천억↑ 100점, 3천억↓ 0점). `DESCENDING`
+ *     은 `saveConfig` 의 자리 맞바꾸기에만 쓰이고 채점엔 닿지 않았던 것이다.
+ */
+export function gradeValue(value: number, c: CheckConfig): number {
+  if (c.capAt !== undefined && value > c.capAt) return c.capGrade ?? 0;
   const hi = Math.max(c.threshold, c.strongAt);
   const lo = Math.min(c.threshold, c.strongAt);
+  if (DESCENDING.has(c.key)) {
+    if (value <= lo) return 100;
+    if (value <= hi) return 50;
+    return 0;
+  }
   if (value >= hi) return 100;
   if (value >= lo) return 50;
   return 0;
 }
+const grade = gradeValue;
 
 /** 매물대 — 현재가 위에 쌓인 비중(%). 일봉을 그대로 쓰므로 추가 조회가 없다 */
 function overheadPct(rows: Record<string, unknown>[]): number | null {
@@ -2101,15 +2353,19 @@ export async function evaluateSignal(
     need.has("flowPersist") ||
     need.has("flowAccel") ||
     need.has("smartMoney") ||
-    need.has("flowRatio");
+    need.has("flowRatio") ||
+    need.has("fgnRatio20");
   const wantFinance = need.has("profitGrowth");
+  /* 분기 실적 셋 — 한투 1콜 (2026-09-02 배선. 그전엔 등록만 돼 있고 여기 없었다 — 감사 1-2) */
+  const wantQuarter = need.has("qStreak") || need.has("qYoY") || need.has("qMargin");
   /* 테마 강세도 같은 조회에서 나온다 — `getSectorMood` 가 업종과 테마를 같이 준다 */
   const wantSector =
     need.has("sectorStrength") || need.has("themeStrength") || need.has("exportGrowth");
   const wantMyTheme = need.has("myThemeStrength");
   /* flowRatio 도 시총이 필요하다 — 「시가총액」 기준과 같은 응답을 나눠 쓴다 */
-  const wantInfo = need.has("marketCap") || need.has("volume") || need.has("flowRatio");
-  const wantShort = need.has("shortSaleUp");
+  const wantInfo =
+    need.has("marketCap") || need.has("volume") || need.has("flowRatio") || need.has("fgnRatio20");
+  const wantShort = need.has("shortSaleUp") || need.has("shortLevel");
   const wantLending = need.has("lendingUp");
   const wantForeignRatio = need.has("foreignRatioUp");
   const wantProgram = need.has("programFlow");
@@ -2128,7 +2384,7 @@ export async function evaluateSignal(
         .catch(() => [])
     : [];
 
-  const [chart, flow, finance, mood, entry, info, shortSale, lending, opinion, ratio, foreignRatio, program] =
+  const [chart, flow, finance, mood, entry, info, shortSale, lending, opinion, ratio, foreignRatio, program, quarter] =
     await Promise.all([
     wantChart
       ? client
@@ -2198,6 +2454,8 @@ export async function evaluateSignal(
           })
           .catch(() => null)
       : null,
+    /* 분기 손익 8개 (한투, 6시간 캐시). 한투가 없으면 빈 배열 → 셋 다 null */
+    wantQuarter ? quarterFinance(code, 8).catch(() => []) : [],
   ]);
 
   /*
@@ -2479,8 +2737,13 @@ export async function evaluateSignal(
           g = G(ratio);
           value = `${ratio.toFixed(2)}배 (${short}일 ÷ ${long}일)`;
         } else if (d5 > 0) {
-          g = G(c.strongAt);
-          value = "매도 → 매수 전환";
+          /*
+           * 「전환」에 만점을 주던 것을 **0 으로** (2026-09-02 재검토). 20일은 순매도인데
+           * 5일만 순매수인 자리는 시총 중립 -0.9%p·승률 46 — 넷 다 마이너스였다.
+           * raw 는 -1 — 조건 검색이 「가속 ≥ x배」로 이걸 잡지 않게 (감사 3-7).
+           */
+          g = G(-1);
+          value = "매도 → 매수 전환 (20일은 아직 순매도)";
         } else {
           g = G(0);
           value = "20일 순매도";
@@ -2559,29 +2822,38 @@ export async function evaluateSignal(
          * 그래서 **신고가 자리에서는 더 일찍 접고**(0.75 부터), 눌림목에서는
          * 늦게 접는다(1.5 부터). 자리를 모르면 가운데(1.0)를 쓴다.
          */
-        const winHi = chartRows.slice(1, 61);
-        const hi60 = winHi.length >= 20 ? Math.max(...winHi.map((r) => Math.abs(toNum(r.high_pric)))) : 0;
-        const hiPct = cur && hi60 > 0 ? (cur / hi60) * 100 : null;
-        const m20now = sma(closes, 20);
-        const atHigh = hiPct !== null && hiPct >= 99;
-        const atPullback =
-          hiPct !== null && hiPct >= 85 && hiPct <= 95 && m20now !== null && cur >= m20now;
-        const foldAt = atHigh ? 0.75 : atPullback ? 1.5 : 1;
-        const folded =
-          pctOfCap <= foldAt ? pctOfCap : Math.max(0, foldAt * 2 - pctOfCap);
-        g = G(folded);
-        /* 탈락 판정은 **접기 전 값**으로 — 접으면 순매도와 과열이 같은 0 이 된다 */
-        raw = pctOfCap;
+        /*
+         * ## 2026-09-02 — **접기를 없앴다.** 상한(`capAt`)이 설정에 있다.
+         *
+         * 자리(신고가·눌림목)마다 접는 지점을 달리하던 것은 시뮬레이터가 못 따라 해서
+         * 등급이 18.6% 어긋났다(감사). 봉우리형은 이제 `grade()` 가 `capAt` 로 처리하고
+         * 두 곳이 같은 값을 본다. 탈락(`vetoAt`)은 raw 로 보니 그대로다.
+         */
+        g = G(pctOfCap);
         value =
           `${pctOfCap > 0 ? "+" : ""}${pctOfCap.toFixed(2)}% ` +
           `(${days}일 ${Math.round(net).toLocaleString("ko-KR")}억 · 시총 ${Math.round(capEok).toLocaleString("ko-KR")}억` +
-          (pctOfCap > foldAt
-            ? atHigh
-              ? " · 신고가에서 이만큼이면 과열 — 살 사람은 다 산 자리"
-              : " · 과열"
-            : atPullback && pctOfCap >= 0.25
-              ? " · 눌림목에서 받쳐주는 중"
-              : "") +
+          (c.capAt !== undefined && pctOfCap > c.capAt ? " · 과열 — 살 사람은 다 산 자리" : "") +
+          `)`;
+      }
+    } else if (c.key === "fgnRatio20") {
+      /*
+       * **외국인만 시총 대비** (2026-09-02 재검토) — `flowRatio` 와 같은 재료, 외국인 칸만.
+       * 이 재검토에서 가장 센 수급 기준이었다(0.25~1% 시총 중립 +1.1~+2.4%p, 넷 다 양수).
+       */
+      let capEok = toNum(info?.data?.mac);
+      if (!(capEok > 0) && entry?.shares) {
+        const price = Math.abs(toNum(info?.data?.cur_prc));
+        capEok = Math.round((entry.shares * price) / 100_000_000);
+      }
+      const days = Math.max(3, c.span ?? 20);
+      if (flowRows.length >= days && capEok > 0) {
+        const net = flowRows.slice(0, days).reduce((s, r) => s + toNum(r.frgnr_invsr), 0) / 100;
+        const pct = (net / capEok) * 100;
+        g = G(pct);
+        value =
+          `${pct > 0 ? "+" : ""}${pct.toFixed(2)}% (외국인 ${days}일 ${Math.round(net).toLocaleString("ko-KR")}억 · 시총 ${Math.round(capEok).toLocaleString("ko-KR")}억` +
+          (c.capAt !== undefined && pct > c.capAt ? " · 과열" : "") +
           `)`;
       }
     } else if (c.key === "foreignRatioUp") {
@@ -2618,6 +2890,39 @@ export async function evaluateSignal(
           const growth = ((latest - prev) / Math.abs(prev)) * 100;
           g = G(growth);
           value = `${growth > 0 ? "+" : ""}${growth.toFixed(1)}%`;
+        }
+      }
+    } else if (c.key === "qStreak" || c.key === "qYoY" || c.key === "qMargin") {
+      /*
+       * **분기 실적 셋 — 2026-09-02 에 처음 배선했다.** 그전엔 `CheckKey` 와 기본값에만
+       * 있고 여기 분기가 없어 켜면 영원히 null 이었다(감사 1-2, `largeCap` 과 같은 사고).
+       * 계산은 표본(`financeCache.quarterAt`)과 같다 — 실전은 오늘 기준이라 공시 시점
+       * 필터가 필요 없다(받아 온 최신 분기가 곧 「지금 알 수 있는 것」이다).
+       */
+      const rows = quarter ?? [];
+      if (rows.length >= 2) {
+        const last = rows[0];
+        if (c.key === "qYoY") {
+          if (last.yoy !== null) {
+            g = G(last.yoy);
+            value = `${last.label} 영업이익 ${last.yoy > 0 ? "+" : ""}${last.yoy.toFixed(1)}% (1년 전 대비)`;
+          }
+        } else if (c.key === "qMargin") {
+          if (last.margin !== null) {
+            g = G(last.margin);
+            value = `${last.label} 영업이익률 ${last.margin.toFixed(1)}%${last.margin <= 0 ? " · 적자" : ""}`;
+          }
+        } else {
+          const vals = rows.map((r) => r.operatingProfit).filter((v): v is number => v !== null);
+          if (vals.length >= 2) {
+            let streak = 0;
+            for (let i = 0; i < vals.length - 1; i++) {
+              if (vals[i] > vals[i + 1]) streak += 1;
+              else break;
+            }
+            g = G(streak);
+            value = `${streak}분기 연속 증가 (${last.label} 기준)`;
+          }
         }
       }
     } else if (c.key === "marketCap" || c.key === "largeCap") {
@@ -2847,6 +3152,19 @@ export async function evaluateSignal(
         g = G(Math.max(0, (a - 20) / 20));
         value = `5일 평균 비중 ${a.toFixed(1)}% (추이 못 잼)`;
       }
+    } else if (c.key === "shortLevel") {
+      /*
+       * **공매도 비중 수준** (2026-09-02 재검토) — 최근 5일 평균 비중(%) 그대로.
+       * 높을수록 좋다(수급 축). `shortSaleUp` 과 같은 ka10014 응답이라 조회가 안 는다.
+       * 기록이 없는 종목(코스닥 소형주 대부분)은 null — `optional` 이라 결손으로 안 센다.
+       */
+      const rows = (shortSale?.data?.shrts_trnsn ?? []) as Record<string, unknown>[];
+      if (rows.length >= 3) {
+        const win = rows.slice(0, 5);
+        const a = win.reduce((s, r) => s + toNum(r.trde_wght), 0) / win.length;
+        g = G(a);
+        value = `최근 ${win.length}일 평균 공매도 비중 ${a.toFixed(1)}%`;
+      }
     } else if (c.key === "lendingUp") {
       /*
        * ⚠️ 예전엔 `Math.max(0, up)` 이었다 — **감소를 0 으로 눌러 버렸다.**
@@ -2940,6 +3258,8 @@ export async function evaluateSignal(
    */
   const coverPool = checks.filter((c) => {
     const def = cfg.checks.find((x) => x.key === c.key);
+    /* `optional` 은 못 쟀을 때 결손으로 안 센다 — 공매도·지분율은 기록이 없는 종목이 원래 많다 */
+    if (def?.optional && c.grade === null) return false;
     return def?.enabled && !offByRegime.some((o) => o.key === c.key);
   });
   const coverAll = coverPool.reduce((s, c) => s + c.weight, 0);

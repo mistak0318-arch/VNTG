@@ -3454,6 +3454,16 @@ export interface SignalCheckConfig {
    * 없으면 기간이라는 개념이 없는 기준이다(신고가·정배열처럼).
    */
   span?: number;
+  /** 봉우리형 기준의 상한 (2026-09-02) — 값이 이보다 크면 `capGrade`(기본 0) */
+  capAt?: number;
+  capGrade?: 0 | 50;
+  /** 원래 없는 종목이 많은 기준 — 못 잰 것을 커버리지 결손으로 안 센다 */
+  optional?: boolean;
+  /** 이 기준이 「심각」이면 다른 게 아무리 좋아도 빨강 */
+  veto?: boolean;
+  vetoAt?: number;
+  /** 어느 장세에서만 쓰나 — 없으면 늘 */
+  regime?: "bull" | "bear";
   /** 켜면 종목당 조회가 몇 번 더 나가나 — 「신호등 찾기」 100종목이면 그 100배다 */
   cost: number;
   /** 같은 호출을 나눠 쓰는 기준끼리 묶는 이름. 비용을 셀 때 묶음마다 한 번만 센다 */

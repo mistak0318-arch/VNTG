@@ -44,8 +44,20 @@ const UNITS: Record<string, string> = {
   debtRatio: "%",
   overhead: "%",
   disparity: "%",
-  shortSaleUp: "%",
+  /* %p 변화 + 20% 초과분 — 비중 자체가 아니다 (2026-09-02 정정) */
+  shortSaleUp: "%p",
   lendingUp: "%",
+  /* 2026-09-02 재검토 */
+  flowRatio: "%",
+  fgnRatio20: "%",
+  shortLevel: "%",
+  flowAccel: "배",
+  flowPersist: "구간",
+  foreignRatioUp: "%p",
+  qYoY: "%",
+  qMargin: "%",
+  qStreak: "분기",
+  largeCap: "억원",
 };
 
 /** 기준값이 의미 없는 항목 (통과 여부가 계산으로만 정해진다) */
@@ -93,6 +105,7 @@ function diffFromDefaults(cur: SignalConfig, def: SignalConfig): string[] {
     if (c.threshold !== d.threshold) out.push(`${d.label} 기준값 ${c.threshold} → ${d.threshold}`);
     if (c.strongAt !== d.strongAt) out.push(`${d.label} 아주 좋음 ${c.strongAt} → ${d.strongAt}`);
     if (c.span !== d.span) out.push(`${d.label} 기간 ${c.span ?? "-"}일 → ${d.span ?? "-"}일`);
+    if (c.capAt !== d.capAt) out.push(`${d.label} 상한 ${c.capAt ?? "-"} → ${d.capAt ?? "-"}`);
   }
   return out;
 }
@@ -430,6 +443,23 @@ export function SignalConfigPanel() {
 
                       기간 개념이 없는 기준(신고가·정배열)에는 아예 안 뜬다.
                     */}
+                    {/*
+                      **상한** (2026-09-02 재검토) — 봉우리형 기준. 값이 이보다 크면 만점이
+                      아니라 0점(또는 50점)이다: 수급 가속 4배↑, 시총 대비 수급 1~2%↑,
+                      분기 YoY 50%↑. 「많을수록 좋다」가 아닌 기준에만 뜬다.
+                    */}
+                    {c.capAt !== undefined && (
+                      <label title={`이 값을 넘으면 ${c.capGrade ?? 0}점 — 과하면 오히려 나빴던 기준입니다`}>
+                        상한
+                        <input
+                          type="number"
+                          value={c.capAt}
+                          disabled={!c.enabled}
+                          onChange={(e) => patchCheck(c.key, { capAt: Number(e.target.value) || 0 })}
+                        />
+                        <span className="sig-unit">{UNITS[c.key] ?? ""} 넘으면 {c.capGrade ?? 0}점</span>
+                      </label>
+                    )}
                     {c.span !== undefined && (
                       <label title="이 기준이 며칠을 되짚나 — 뜻은 기준마다 다릅니다. 아래 설명을 보세요">
                         기간

@@ -11,6 +11,12 @@ import { getTradeStats } from "./tradeStats.js";
 import { pushNotice } from "./notifyCenter.js";
 import { buildSamplesFromLedger } from "./samplesFromLedger.js";
 import { sendTelegram } from "./telegram.js";
+import { ensureFinance } from "./financeCache.js";
+import { readdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const DAILY_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "daily");
 
 /**
  * **마감 뒤 파이프라인** (2026-09-01) — 시각이 아니라 **차례**로 돈다.
@@ -72,6 +78,7 @@ const STEPS: { key: string; label: string }[] = [
   { key: "super", label: "슈퍼신호등" },
   { key: "cross", label: "교차" },
   { key: "trade", label: "수출입" },
+  { key: "finance", label: "실적 캐시" },
   { key: "samples", label: "표본" },
 ];
 
@@ -340,6 +347,27 @@ export async function runAfterClose(
       const r = await getTradeStats(true);
       const n = r.items?.length ?? 0;
       return n > 0 ? `${n}품목${r.error ? ` · ${r.error}` : ""}` : (r.error ?? "받은 것 없음");
+    });
+
+  /*
+   * ⑧-2 **실적 캐시** (2026-09-02) — 표본의 실적 칸(연간 YoY·분기 셋)을 채울 재료.
+   *
+   * 종목당 한투 1콜 + DART 1콜. 분기 실적은 분기에 한 번 바뀌므로 **7일 지난 것만**
+   * 다시 받는다 — 평소엔 몇 초, 첫 회차와 분기마다 15~20분. 25분 예산을 넘기면 멈추고
+   * 다음 날 이어서 받는다. 한투가 없으면 연간(DART)만이라도.
+   */
+  if (want("finance"))
+    await step("finance", "실적 캐시 (주 1회)", async () => {
+      const codes = (await readdir(DAILY_DIR).catch(() => [] as string[]))
+        .filter((f) => f.endsWith(".json"))
+        .map((f) => f.slice(0, -5));
+      const p = await ensureFinance(codes, { maxAgeDays: 7, budgetMs: 25 * 60_000 });
+      return (
+        `${p.fetched}/${p.total} 받음` +
+        (p.failed ? ` · 실패 ${p.failed}` : "") +
+        (p.noQuarter ? ` · 한투 없음 ${p.noQuarter}` : "") +
+        ` · ${Math.round(p.ms / 1000)}초`
+      );
     });
 
   /*

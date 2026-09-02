@@ -8,6 +8,7 @@ import { betaFrom, buildEtfCtx, buildThemeCtx } from "./signalBacktest.js";
 import { yahooChart } from "./yahooChart.js";
 import { MA_PERIODS, saveSamples, type Feat, type Sample } from "./signalSamples.js";
 import type { DailyLedger, FlowRow } from "./dailyStore.js";
+import { loadFinanceCache, profitAt, quarterAt, type FinanceCache } from "./financeCache.js";
 
 /**
  * **원장으로 표본을 만든다** (2026-09-01) — 조회 0회.
@@ -148,7 +149,7 @@ export function buildSamplesFromLedger(
     };
 
     try {
-      const [{ bars }, index, common, themeCtx, etfCtx, rateByDate] = await Promise.all([
+      const [{ bars }, index, common, themeCtx, etfCtx, rateByDate, finDb] = await Promise.all([
         loadCloses(),
         getStockIndex(client).catch(() => new Map()),
         /*
@@ -181,6 +182,12 @@ export function buildSamplesFromLedger(
             return m;
           })
           .catch(() => new Map<string, number>()),
+        /*
+         * **실적 캐시** (2026-09-02) — 이 칸이 상수 null 이라 약세 전용 `profitGrowth`(w2)가
+         * 늘 결손 → 커버리지 0.857 → **약세장 관측이 전부 채점 밖**이었다(감사 1-4).
+         * 파이프라인 ⑧-2 가 주 1회 채운다. 없으면 예전처럼 null.
+         */
+        loadFinanceCache().catch((): FinanceCache => ({})),
       ]);
       const barsOf = bars ?? {};
 
@@ -229,6 +236,7 @@ export function buildSamplesFromLedger(
         const entry = index.get(code);
         const share = entry && entry.shares > 0 ? entry.shares : null;
         const name = entry?.name ?? code;
+        const fin = finDb[code];
 
         /* 종가 배열은 **종목당 한 번만** 만든다 — 날마다 만들면 21만 번이 된다 */
         const closesAll = bs.map((b) => b.c);
@@ -349,11 +357,9 @@ export function buildSamplesFromLedger(
             smart20: sumOf(win(20), smartOf),
             smart60: sumOf(win(60), smartOf),
             fgnStreak,
-            profitYoY: null,
-            qStreak: null,
-            qYoY: null,
-            qQoQ: null,
-            qMargin: null,
+            /* 그 날짜에 **이미 공시돼 있던** 실적만 — look-ahead 없음 (`financeCache` 참고) */
+            profitYoY: profitAt(fin, date),
+            ...quarterAt(fin, date),
             /* 그날 종가 × 오늘 상장주식수 — 증자·분할이 있었으면 그만큼 어긋난다 */
             mktCap: share !== null && share > 0 ? (share * cur) / 100_000_000 : null,
             short5:

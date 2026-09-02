@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path, { dirname, join } from "node:path";
-import type { CheckConfig, SignalConfig } from "./signalLight.js";
+import { gradeValue, type CheckConfig, type SignalConfig } from "./signalLight.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
@@ -319,12 +319,89 @@ export async function samplesMeta(): Promise<{
  * ⚠️ `hi`/`lo` 를 max/min 으로 정규화한다 — 문턱이 뒤집혀 저장돼도 동작은 맞다.
  * 대신 **화면이 거짓말할 수 있으므로** saveConfig 에서 순서를 바로잡아 저장한다.
  */
-function grade(value: number, c: CheckConfig): number {
-  const hi = Math.max(c.threshold, c.strongAt);
-  const lo = Math.min(c.threshold, c.strongAt);
-  if (value >= hi) return 100;
-  if (value >= lo) return 50;
-  return 0;
+/* 2026-09-02 — 실전과 **같은 함수**를 쓴다(상한 `capAt`·작을수록 좋은 기준의 방향까지). 두 벌이면 또 갈린다 */
+const grade = gradeValue;
+
+/**
+ * **잰 값 그대로** — 탈락(`vetoAt`) 판정용 (2026-09-02). 시뮬레이터가 탈락을 아예 안
+ * 보고 있었다(감사 1-3: 표본 53.7% 가 실전에선 빨강인데 시뮬 초록엔 들어 있었다).
+ * `gradeOf` 와 같은 값을 재되 점수로 눕히기 전 숫자를 돌려준다. 못 재면 null.
+ */
+export function rawOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
+  const { flowDays } = cfg;
+  switch (c.key) {
+    case "newHigh":
+    case "nearHigh":
+      return f.hiPct;
+    case "disparity":
+      return f.disp;
+    case "ma5Gap":
+      return f.ma5Gap;
+    case "overhead":
+      return f.over;
+    case "volume":
+      return f.volEok;
+    case "naverTheme":
+      return f.theme;
+    case "foreignFlow":
+      return pickFlow(f.fgn5, f.fgn10, f.fgn20, flowDays);
+    case "instFlow":
+      return pickFlow(f.inst5, f.inst10, f.inst20, flowDays);
+    case "flowStreak":
+      return f.fgnStreak;
+    case "flowPersist": {
+      const spans = [5, 10, 20, 60].filter((n) => n <= (c.span ?? 60));
+      const byLen: Record<number, [number | null, number | null]> = {
+        5: [f.fgn5, f.inst5],
+        10: [f.fgn10, f.inst10],
+        20: [f.fgn20, f.inst20],
+        60: [f.fgn60, f.inst60],
+      };
+      const vals: (number | null)[] = [];
+      for (const n of spans) vals.push(byLen[n][0], byLen[n][1]);
+      const measured = vals.filter((v) => v !== null && Number.isFinite(v)) as number[];
+      if (measured.length < Math.max(2, spans.length)) return null;
+      return measured.filter((v) => v > 0).length;
+    }
+    case "smartMoney": {
+      const long = c.span ?? 20;
+      return long >= 60 ? f.smart60 : long >= 20 ? f.smart20 : f.smart5;
+    }
+    case "marketCap":
+    case "largeCap":
+      return f.mktCap;
+    case "flowRatio": {
+      const long = c.span ?? 20;
+      const fg = long >= 60 ? f.fgn60 : long >= 20 ? f.fgn20 : f.fgn5;
+      const it = long >= 60 ? f.inst60 : long >= 20 ? f.inst20 : f.inst5;
+      if (fg === null || it === null || f.mktCap === null || f.mktCap <= 0) return null;
+      return ((fg + it) / 100 / f.mktCap) * 100;
+    }
+    case "fgnRatio20": {
+      const long = c.span ?? 20;
+      const fg = long >= 60 ? f.fgn60 : long >= 20 ? f.fgn20 : f.fgn5;
+      if (fg === null || f.mktCap === null || f.mktCap <= 0) return null;
+      return (fg / 100 / f.mktCap) * 100;
+    }
+    case "shortLevel":
+      return f.short5;
+    case "lendingUp":
+      return f.loanUp20;
+    case "foreignRatioUp":
+      return f.fgnRatioUp20;
+    case "profitGrowth":
+      return f.profitYoY;
+    case "qStreak":
+      return f.qStreak;
+    case "qYoY":
+      return f.qYoY;
+    case "qMargin":
+      return f.qMargin;
+    case "etfBacking":
+      return f.etfBack;
+    default:
+      return null;
+  }
 }
 
 /** 채점에 필요한 설정 조각 — 전체 설정을 넘기지 않아도 되게 */
@@ -403,9 +480,18 @@ export function gradeOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
       const dS = sv / sn;
       const dL = lv / ln;
       if (dL > 0) return grade(dS / dL, c);
-      /* 긴 쪽이 순매도인데 짧은 쪽이 순매수면 전환이다 — 신호등과 같은 규칙 */
-      return dS > 0 ? grade(c.strongAt, c) : grade(0, c);
+      /* 긴 쪽이 순매도 — 짧은 쪽이 순매수(전환)여도 0 (2026-09-02: 전환은 -0.9%p 였다). 신호등과 같은 규칙 */
+      return dS > 0 ? grade(-1, c) : grade(0, c);
     }
+    /* 2026-09-02 재검토 신설 둘 */
+    case "fgnRatio20": {
+      const long = c.span ?? 20;
+      const fg = long >= 60 ? f.fgn60 : long >= 20 ? f.fgn20 : f.fgn5;
+      if (fg === null || f.mktCap === null || f.mktCap <= 0) return null;
+      return grade((fg / 100 / f.mktCap) * 100, c);
+    }
+    case "shortLevel":
+      return f.short5 === null ? null : grade(f.short5, c);
     case "smartMoney": {
       const long = c.span ?? 20;
       const v = long >= 60 ? f.smart60 : long >= 20 ? f.smart20 : f.smart5;
@@ -530,12 +616,22 @@ export function scoreFeat(
    */
   let coverAll = 0;
   let coverGot = 0;
+  /* 탈락 (2026-09-02) — 실전과 같은 규칙. 장세로 빠진 기준도 탈락만은 본다 */
+  let vetoed = false;
   for (const c of cfg.checks) {
     if (!c.enabled) continue;
+    if (c.veto && c.vetoAt !== undefined) {
+      const raw = rawOf(f, c, cfg);
+      if (raw !== null && Number.isFinite(raw) && (c.axis === "risk" ? raw >= c.vetoAt : raw <= c.vetoAt)) {
+        vetoed = true;
+      }
+    }
     /* 장세를 못 재면 전부 쓴다 — 실제 신호등과 같은 규칙 */
     if (cfg.regimeSwitch && c.regime && regime && c.regime !== regime) continue;
-    coverAll += c.weight;
     const g = gradeOf(f, c, cfg);
+    /* `optional` 은 못 쟀을 때 결손으로 안 센다 — 실전(`coverPool`)과 같은 규칙 */
+    if (g === null && c.optional) continue;
+    coverAll += c.weight;
     if (g === null) continue;
     coverGot += c.weight;
     (axes[c.axis] ??= { sum: 0, w: 0 });
@@ -570,5 +666,7 @@ export function scoreFeat(
   /* 실제 신호등과 같은 규칙 — 덜 쟀으면 초록을 안 준다 */
   if (lowCoverage && level === "green") level = "yellow";
   if (cfg.greenTo < 100 && score > cfg.greenTo && level === "green") level = "yellow";
+  /* 탈락은 마지막 — 하나라도 걸리면 빨강 (실전 `vetoed` 와 같은 자리) */
+  if (vetoed) level = "red";
   return { score, level, risk, coverage, lowCoverage };
 }
