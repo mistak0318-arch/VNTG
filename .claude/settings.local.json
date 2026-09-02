@@ -1149,7 +1149,8 @@
       "Bash(curl -s -m 20 http://localhost:4000/api/signal/archives)",
       "Bash(curl -s -m 60 http://localhost:4000/api/signal/archives/20260902-0020)",
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(s\\); console.log\\('meta',JSON.stringify\\(r.meta\\)\\); for\\(const a of r.archived\\) console.log\\(a.label, 'total', JSON.stringify\\(a.total\\), 'groups', a.groups.map\\(g=>g.label+':'+g.n\\).join\\(' '\\)\\); for\\(const l of r.live\\) console.log\\('LIVE', l.label, JSON.stringify\\(l.total\\)\\); console.log\\('config', r.config? 'yes':'null', 'diff', r.diff.length, 'closes', r.closesBuiltAt\\); console.log\\('row0', JSON.stringify\\(r.archived[0].rows[0]\\)\\);}\\)\")",
-      "Bash(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\" && sed -i 's/Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>/Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>/' .git/vntg-msg.txt && tail -2 .git/vntg-msg.txt)"
+      "Bash(cd \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\" && sed -i 's/Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>/Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>/' .git/vntg-msg.txt && tail -2 .git/vntg-msg.txt)",
+      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; powershell -ExecutionPolicy Bypass -File push-deploy.ps1 -NoDeploy; git status --short)"
     ]
   }
 }
