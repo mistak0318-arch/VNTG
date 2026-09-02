@@ -11756,6 +11756,8 @@ button.tpb-row:hover { background: var(--panel-2); }
   background: var(--border);
 }
 .cis-acct-trade::before { background: color-mix(in srgb, var(--red) 70%, transparent); }
+/* 종배 계좌 — 저녁 한 번의 매매라 노을색 */
+.cis-acct-close::before { background: color-mix(in srgb, var(--cis-gold) 80%, transparent); }
 .cis-acct-pension::before { background: color-mix(in srgb, var(--blue) 70%, transparent); }
 .cis-acct-irp::before { background: color-mix(in srgb, var(--green) 70%, transparent); }
 .cis-acct:hover { background: var(--panel-2); }

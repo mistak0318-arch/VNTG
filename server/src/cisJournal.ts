@@ -92,6 +92,16 @@ export interface SlotEntry {
   /** 팔아야 한다고 본 것 */
   exits: { name: string; code: string; kind: string; reason: string }[];
   /**
+   * **미국장 분위기** — 종배 계좌의 저녁에만 (2026-09-02). 선물 몸통·유가·환율·금리의
+   * 판정을 그대로 남긴다. 나중에 「미국장이 나빴던 날의 종배는 어땠나」를 물으려면
+   * 그날의 판정이 글이 아니라 값으로 있어야 한다.
+   */
+  macro?: {
+    ok: boolean;
+    summary: string;
+    verdicts: { key: string; label: string; level: string; value: string; price: string; why: string }[];
+  };
+  /**
    * **이 시간대에 어떤 화면·지표를 봤나.** 벤티지가 보고 싶어 한 「HTS 활용법」이
    * 이 배열을 세어서 만들어진다. 판단에 실제로 쓴 것만 넣는다 —
    * 열어만 본 화면을 넣으면 활용도가 부풀려진다.
@@ -237,6 +247,11 @@ export function narrate(
      * 글에 있어야 「먼저 거른다」가 말이 아니라 기록이 된다.
      */
     sieved?: { name: string; reason: string }[];
+    /**
+     * 종배 계좌 (2026-09-02). 아침·점심엔 「저녁에만 산다」를, 저녁엔 미국장 분위기를
+     * 적는다. `macro` 가 있으면 저녁이다.
+     */
+    closeBet?: { macro: { ok: boolean; summary: string; lines: string[] } | null };
     market: MarketGate | null;
     candidates: Candidate[];
     plans: BuyPlan[];
@@ -267,6 +282,28 @@ export function narrate(
         ? `시장 ${d.market.score}점(${d.market.label}). ${d.market.reason}.`
         : `**오늘은 사지 않는다.** ${d.market.reason}.`,
     );
+  }
+
+  /*
+   * **종배 계좌** — 이 계좌는 저녁 한 번만 산다. 아침·점심 글이 「왜 아무것도 안 샀나」로
+   * 읽히지 않게 그 사실을 먼저 적고, 저녁엔 미국장 분위기 판정을 그대로 남긴다.
+   */
+  if (d.closeBet) {
+    if (slot !== "evening") {
+      L.push(
+        slot === "morning"
+          ? "종배 계좌다 — 어제 담은 것은 09:00 시가 근처에 판다. 매수는 저녁(원장 쌓인 뒤)에만."
+          : "종배 계좌다 — 오전에 청산이 끝났어야 한다. 매수는 저녁에만.",
+      );
+    } else if (d.closeBet.macro) {
+      const m = d.closeBet.macro;
+      L.push("");
+      L.push("### 미국장 분위기");
+      L.push(m.ok ? m.summary : `**${m.summary}**`);
+      for (const line of m.lines) L.push(`- ${line}`);
+    } else if (d.market?.ok) {
+      L.push("미국장 분위기를 못 읽었다 — 오늘은 안 산다.");
+    }
   }
 
   if (slot === "evening") {
@@ -310,7 +347,9 @@ export function narrate(
    * 「왜 안 샀나」가 「왜 샀나」만큼 중요하다. 안 산 이유가 없으면 나중에
    * 「그때 왜 놓쳤지」에 답할 수가 없다.
    */
-  if (d.market?.ok && !d.loopBuys) {
+  /* 종배 계좌의 아침·점심엔 매수 자리 자체가 없다 — 빈 「자리」 절을 만들지 않는다 */
+  const buyable = d.closeBet ? slot === "evening" && d.closeBet.macro?.ok === true : true;
+  if (d.market?.ok && !d.loopBuys && buyable) {
     const passed = d.gateNotes.filter((g) => g.ok);
     const failed = d.gateNotes.filter((g) => !g.ok);
     L.push("");
@@ -333,7 +372,7 @@ export function narrate(
    * 경보·탈락·잡주가 각각 몇 개였는지가 남아야, 나중에 「체가 너무 촘촘했나」를
    * 성적과 나란히 놓고 물을 수 있다.
    */
-  if (d.market?.ok && !d.loopBuys && d.sieved && d.sieved.length > 0) {
+  if (d.market?.ok && !d.loopBuys && buyable && d.sieved && d.sieved.length > 0) {
     L.push("");
     L.push("### 체에 걸린 것 — 먼저 거르고, 남은 것 중에서 추세를 탄다");
     const shown = d.sieved.slice(0, 8);
@@ -363,7 +402,7 @@ export function narrate(
     }
   }
 
-  if (slot === "noon" && d.exits.length === 0) {
+  if (slot === "noon" && d.exits.length === 0 && !d.closeBet) {
     L.push("");
     L.push("손절·익절에 닿은 자리는 없다. **흔들린다고 팔지 않는다** — 손절선까지는 버틴다.");
   }

@@ -707,6 +707,16 @@ export interface ListTrackSummary {
   down: number | null;
 }
 
+/**
+ * 원장이 **마지막으로 쌓인 날** — 가볍게 (2026-09-02).
+ *
+ * 종배 계좌의 스케줄러가 1분마다 「오늘 신호등이 돌았나」를 묻는다. `listTrackSummary` 는
+ * 테마·ETF 뒷배까지 붙이는 무거운 요약이라 그걸 매분 부르면 안 된다 — 파일 머리의 날짜만.
+ */
+export async function listTrackLastRunDate(): Promise<string | null> {
+  return (await load()).lastRunDate;
+}
+
 export async function listTrackSummary(): Promise<ListTrackSummary> {
   const store = await load();
   const byList = SCREEN_UNIVERSES.map((u) => {

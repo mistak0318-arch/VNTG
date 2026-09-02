@@ -647,7 +647,8 @@ export interface ExitCall {
   position: Position;
   price: number;
   reason: string;
-  kind: "stop" | "target" | "stale" | "misu" | "trail" | "drop";
+  /** gap = 종배 청산 (다음 날 시가 근처) — `cisCloseBet` */
+  kind: "stop" | "target" | "stale" | "misu" | "trail" | "drop" | "gap";
 }
 
 /**

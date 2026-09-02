@@ -18,7 +18,20 @@
  * 트레이딩이 아니다 — 그래서 규칙도 판단 주기도 다르다.
  */
 
-export type AccountId = "trade" | "pension" | "irp";
+import type { CisRules } from "./cisTrader.js";
+
+export type AccountId = "trade" | "close" | "pension" | "irp";
+
+/**
+ * 계좌의 **매매 방식**.
+ *
+ *   swing     — 하루 세 번 + 15분 루프로 사고, 손절·익절·기간으로 판다 (CIS 트레이딩)
+ *   closeBet  — **종가배팅 전용** (2026-09-02 밤, 벤티지: "CIS 트레이딩(종배) 라는거 하나 더
+ *               만들자. 얘는 신호등 결과 보고 상위 종목에 대해서 종배를 하는애야. 대신 종배할때
+ *               해당 종목의 수급, 그리고 미국장 분위기(미국 선물, 금리, 유가 등), 시장 분위기를
+ *               탐지하고 하는거지."). 저녁에만 사고 다음 날 시가에 판다. `cisCloseBet.ts`.
+ */
+export type TradeStyle = "swing" | "closeBet";
 
 export interface AccountProfile {
   id: AccountId;
@@ -39,6 +52,24 @@ export interface AccountProfile {
   allowLeveraged: boolean;
   /** 며칠에 한 번 손대나 — 연금은 매일 볼 이유가 없다 */
   cadence: "daily" | "weekly" | "monthly";
+  /** 매매 방식 — 없으면 swing */
+  style?: TradeStyle;
+  /**
+   * 저녁 실행 시각을 계좌가 따로 가진다 (KST "HH:MM"). 없으면 설정의 `times.evening`.
+   *
+   * 종배 계좌가 쓴다 — 벤티지: "얘는 신호등 돌아간 다음에 종배해야 하니깐 스케쥴러를
+   * NXT 에서 종배하는 친구로 만들어야 겠지?" 신호등 원장은 16:30 무렵 쌓이고 NXT
+   * 애프터마켓은 20:00 까지 열려 있다. 그 사이에 돈다 — 그리고 스케줄러는 시각만
+   * 보는 게 아니라 **오늘 원장이 실제로 쌓였는지**를 본다(`cisScheduler`).
+   */
+  eveningAt?: string;
+  /**
+   * 이 계좌만 덮어쓰는 규칙. 설정의 규칙은 셋이 같이 쓰는데(돈 쓰는 법은 같다 — 벤티지:
+   * "계좌 잔액이나 미수, 신용 사용 가능은 동일한 애로"), **파는 법**은 방식마다 달라야 한다.
+   * 종배는 하룻밤이라 손절이 짧다 — 벤티지: "종배하고 다음날 매도하는거니깐 매도 손절라인은
+   * 짧게 잡고." `cisConfig.rulesFor` 가 합친다.
+   */
+  ruleOverrides?: Partial<CisRules>;
 }
 
 export const ACCOUNTS: Record<AccountId, AccountProfile> = {
@@ -53,6 +84,37 @@ export const ACCOUNTS: Record<AccountId, AccountProfile> = {
     riskCap: 100,
     allowLeveraged: true,
     cadence: "daily",
+    style: "swing",
+  },
+  /*
+   * **종배 전용** (2026-09-02 밤). 트레이딩 계좌와 돈 쓰는 법은 같고(시드·미수·신용),
+   * 다른 것은 셋뿐이다 — ① 저녁 한 번만 산다(신호등 원장 상위 → 수급 → 미국장 분위기 → 시장)
+   * ② 다음 날 시가에 판다 ③ 그사이 손절 -3%. 벤티지: "종배 전용으로 테스트 해보고 싶어서
+   * 그래. 신호등 + 시장 분위기 조합으로다가."
+   */
+  close: {
+    id: "close",
+    name: "CIS 트레이딩(종배)",
+    hint: "종가배팅 전용 — 신호등 상위 + 수급 + 미국장 분위기. 저녁에만 사고 다음 날 시가에 판다. 손절 -3%.",
+    seed: 40_000_000,
+    etfOnly: false,
+    allowMisu: true,
+    allowCredit: true,
+    riskCap: 100,
+    allowLeveraged: true,
+    cadence: "daily",
+    style: "closeBet",
+    /* 원장(16:30 무렵)이 쌓인 뒤, NXT 애프터마켓(~20:00) 안 */
+    eveningAt: "17:00",
+    ruleOverrides: {
+      /* 하룻밤이라 짧게 — 벤티지: "매도 손절라인은 짧게 잡고" */
+      stopPct: -3,
+      /* 익절·되돌림·본전 전환은 안 쓴다 — 파는 자리는 다음 날 시가 하나다 */
+      targetPct: 0,
+      trailDropPct: 0,
+      trailAfterPct: 0,
+      maxHoldDays: 1,
+    },
   },
   pension: {
     id: "pension",
@@ -81,10 +143,15 @@ export const ACCOUNTS: Record<AccountId, AccountProfile> = {
   },
 };
 
-export const ACCOUNT_IDS: AccountId[] = ["trade", "pension", "irp"];
+export const ACCOUNT_IDS: AccountId[] = ["trade", "close", "pension", "irp"];
 
 export function profileOf(id: string): AccountProfile {
   return ACCOUNTS[(id as AccountId) in ACCOUNTS ? (id as AccountId) : "trade"];
+}
+
+/** 매매 방식 — 프로필에 없으면 swing */
+export function styleOf(id: string): TradeStyle {
+  return profileOf(id).style ?? "swing";
 }
 
 /* ------------------------------------------------------------------ 안전자산 */

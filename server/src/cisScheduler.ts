@@ -4,8 +4,9 @@ import { runSlot } from "./cisRun.js";
 import { loadDay } from "./cisJournal.js";
 import { today } from "./cisAccount.js";
 import type { Slot } from "./cisJournal.js";
-import { ACCOUNT_IDS, profileOf } from "./cisAccounts.js";
+import { ACCOUNT_IDS, profileOf, styleOf } from "./cisAccounts.js";
 import { runPension } from "./cisPensionRun.js";
+import { listTrackLastRunDate } from "./listTrack.js";
 
 /**
  * CIS 하루 세 번 자동 실행.
@@ -19,6 +20,20 @@ import { runPension } from "./cisPensionRun.js";
  * **「지났나」로 보는 것이 중요하다.** 정각에 딱 맞추면 그 순간 서버가 재시작 중이면
  * 그날은 영영 안 쓴다. 지났고 아직 안 썼으면 쓴다 — 미니PC 가 아침에 켜져도 그날
  * 아침 일지가 남는다.
+ *
+ * ## 계좌마다 돈다 (2026-09-02)
+ *
+ * 예전엔 트레이딩 계좌 하나만 하루 세 번 돌았다. 종배 계좌가 생기면서 **매일 계좌 전부**를
+ * 돈다 — 다만 한 틱에 하나만. 세 계좌를 몰아 돌리면 키움 호출이 한꺼번에 몰린다.
+ *
+ * ## 종배 계좌는 시각이 아니라 **원장**을 본다
+ *
+ * 벤티지: "얘는 신호등 돌아간 다음에 종배해야 하니깐 스케쥴러를 NXT 에서 종배하는 친구로
+ * 만들어야 겠지?" 신호등 분석 원장은 마감 뒤 파이프라인이 16:30 무렵 쌓는다. 그런데
+ * 그 파이프라인이 늦어지는 날이 있다(실적 캐시·표본 재작성이 앞에 있다). 시각만 보고
+ * 17:00 에 돌리면 **어제 원장으로 종배**하게 된다 — 그래서 `eveningAt` 을 지났고
+ * **오늘 원장이 실제로 쌓였을 때**만 돈다. 안 쌓였으면 실패로 세지 않고 다음 분에 다시
+ * 본다. NXT 애프터마켓은 20:00 까지라 그 안에만 오면 된다.
  *
  * ## 주말·공휴일
  *
@@ -110,37 +125,53 @@ async function tick(client: KiwoomClient): Promise<void> {
 
   const date = today();
   const hm = nowHm();
-  const day = await loadDay(date);
 
-  for (const slot of ["morning", "noon", "evening"] as Slot[]) {
-    const at = cfg.times[slot];
-    if (hm < at) continue; // 아직 그 시각이 아니다
-    if (day[slot]) continue; // 이미 썼다
-    const key = `${date}:${slot}`;
-    const st = tried.get(key);
-    if (st && (st.fails === 0 || st.fails >= MAX_TRY)) continue;
-    try {
-      const r = await runSlot(client, slot);
+  for (const id of ACCOUNT_IDS) {
+    const profile = profileOf(id);
+    if (profile.cadence !== "daily") continue;
+    const day = await loadDay(date, id);
+
+    for (const slot of ["morning", "noon", "evening"] as Slot[]) {
+      /* 저녁은 계좌가 제 시각을 가질 수 있다 — 종배 계좌는 원장이 쌓인 뒤 */
+      const at = slot === "evening" && profile.eveningAt ? profile.eveningAt : cfg.times[slot];
+      if (hm < at) continue; // 아직 그 시각이 아니다
+      if (day[slot]) continue; // 이미 썼다
+
       /*
-       * 성공했을 때만 잠근다. `ok:false` 라도 「이미 썼다」면 잠근다 — 그건
-       * 실패가 아니라 할 일이 없는 것이다.
+       * 종배 계좌의 저녁 — **오늘 원장이 쌓였나.** 안 쌓였으면 실패가 아니라 「아직」이다.
+       * 실패로 세면 세 번 만에 잠겨서 정작 원장이 쌓인 뒤엔 안 돈다.
        */
-      if (r.ok || r.skipped?.includes("이미")) {
-        tried.set(key, { fails: 0, at: new Date().toISOString() });
-      } else {
-        tried.set(key, {
-          fails: (st?.fails ?? 0) + 1,
-          error: r.skipped,
-          at: new Date().toISOString(),
-        });
+      if (slot === "evening" && styleOf(id) === "closeBet") {
+        const last = await listTrackLastRunDate().catch(() => null);
+        if (last !== date) continue;
       }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[cis] ${slot} 실행 실패:`, msg);
-      tried.set(key, { fails: (st?.fails ?? 0) + 1, error: msg, at: new Date().toISOString() });
+
+      const key = `${date}:${id}:${slot}`;
+      const st = tried.get(key);
+      if (st && (st.fails === 0 || st.fails >= MAX_TRY)) continue;
+      try {
+        const r = await runSlot(client, slot, id);
+        /*
+         * 성공했을 때만 잠근다. `ok:false` 라도 「이미 썼다」면 잠근다 — 그건
+         * 실패가 아니라 할 일이 없는 것이다.
+         */
+        if (r.ok || r.skipped?.includes("이미")) {
+          tried.set(key, { fails: 0, at: new Date().toISOString() });
+        } else {
+          tried.set(key, {
+            fails: (st?.fails ?? 0) + 1,
+            error: r.skipped,
+            at: new Date().toISOString(),
+          });
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[cis] ${id} ${slot} 실행 실패:`, msg);
+        tried.set(key, { fails: (st?.fails ?? 0) + 1, error: msg, at: new Date().toISOString() });
+      }
+      /* 한 번에 하나만 — 몰아 돌리면 키움 호출이 한꺼번에 몰린다 */
+      return;
     }
-    /* 한 번에 하나만 — 세 개를 몰아 돌리면 키움 호출이 한꺼번에 몰린다 */
-    return;
   }
 }
 

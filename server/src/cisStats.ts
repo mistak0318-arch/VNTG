@@ -110,6 +110,7 @@ const EXIT_LABEL: Record<string, string> = {
   misu: "미수 만기",
   trail: "본전 손절",
   drop: "고점 되돌림",
+  gap: "종배 청산 (다음 날 시가)",
 };
 
 const FUNDING_LABEL: Record<string, string> = {

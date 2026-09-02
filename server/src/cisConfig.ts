@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_RULES, type CisRules } from "./cisTrader.js";
+import { profileOf } from "./cisAccounts.js";
 import type { AiChoice } from "./aiConfig.js";
 import type { PensionMethod } from "./cisPensionRun.js";
 
@@ -155,6 +156,19 @@ export async function getCisConfig(): Promise<CisConfig> {
     cache = { ...DEFAULT_CIS_CONFIG };
   }
   return cache;
+}
+
+/**
+ * **이 계좌가 쓰는 규칙** — 설정의 규칙 위에 계좌 프로필의 덮어쓰기를 얹는다 (2026-09-02).
+ *
+ * 돈 쓰는 법(비중·종목 수·문턱)은 설정 하나를 셋이 같이 쓰고, 파는 법은 방식마다 다르다.
+ * 종배 계좌는 손절 -3 · 익절 없음 · 하루. 화면의 규칙 칸은 설정값을 보여 주지만 종배
+ * 계좌의 일지에는 실제로 쓴 값(덮어쓴 값)이 적힌다 — AI 자기소개도 그 값을 받는다.
+ */
+export async function rulesFor(account: string): Promise<CisRules> {
+  const cfg = await getCisConfig();
+  const over = profileOf(account).ruleOverrides;
+  return over ? { ...cfg.rules, ...over } : cfg.rules;
 }
 
 /** 값의 범위를 여기서 막는다 — 화면을 믿지 않는다(직접 POST 할 수도 있다) */

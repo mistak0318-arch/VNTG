@@ -10,7 +10,8 @@ import {
   today,
   type CisAccount,
 } from "./cisAccount.js";
-import { getCisConfig } from "./cisConfig.js";
+import { getCisConfig, rulesFor } from "./cisConfig.js";
+import { closeBetExits, closeBetRound, type MacroGauge } from "./cisCloseBet.js";
 import {
   ENTRY_LABEL,
   entryGate,
@@ -35,7 +36,7 @@ import {
   type SlotEntry,
 } from "./cisJournal.js";
 import { polishJournal, screenCandidates, type ScreenNote } from "./cisAi.js";
-import { isSafeAsset, profileOf, rejectReason, type AccountId } from "./cisAccounts.js";
+import { isSafeAsset, profileOf, rejectReason, styleOf, type AccountId } from "./cisAccounts.js";
 import { dropPhantomToday } from "./candleGuard.js";
 import { noopProgress, type ProgressReporter } from "./reportProgress.js";
 
@@ -306,7 +307,9 @@ export async function runSlot(
   const a = await loadAccount(account);
   if (!a.startedAt) a.startedAt = date;
 
-  const rules = cfg.rules;
+  /* 계좌의 규칙 — 종배 계좌는 손절 -3·익절 없음·하루로 덮어쓴다 (`cisAccounts.ruleOverrides`) */
+  const rules = await rulesFor(account);
+  const closeBet = styleOf(account) === "closeBet";
   const actions: JournalAction[] = [];
   let screenNotes: ScreenNote[] = [];
   let aiError: string | undefined;
@@ -320,7 +323,19 @@ export async function runSlot(
 
   /* ── ② 팔 것 먼저 ──────────────────────────────────────── */
   progress.start("exit");
-  const exits = exitCalls(a, priceOf, rules, date);
+  /*
+   * 종배 계좌 (2026-09-02): 아침(08:40)엔 아무것도 안 판다 — 장 전 값으로 손절을 재면
+   * 헛것을 본다. 점심·저녁엔 어제 산 것이 남아 있으면(감시가 꺼져 있던 날) 지금 값에
+   * 청산하고, 손절만 본다. 익절·기간 만료는 이 계좌에 없다.
+   */
+  const exits = closeBet
+    ? slot === "morning"
+      ? []
+      : [
+          ...closeBetExits(a, priceOf, date),
+          ...exitCalls(a, priceOf, rules, date).filter((e) => e.kind === "stop" || e.kind === "misu"),
+        ].filter((e, i, arr) => arr.findIndex((x) => x.position.code === e.position.code) === i)
+    : exitCalls(a, priceOf, rules, date);
   for (const e of exits) {
     const r = sell(
       a,
@@ -351,8 +366,8 @@ export async function runSlot(
 
   progress.done("exit", exits.length > 0 ? `${exits.length}건 정리` : "정리할 것 없음");
 
-  /* ── ③ 손절선 끌어올리기 ───────────────────────────────── */
-  const trailed = trailStops(a, priceOf, rules);
+  /* ── ③ 손절선 끌어올리기 (종배 계좌는 하룻밤이라 안 한다) ── */
+  const trailed = closeBet ? [] : trailStops(a, priceOf, rules);
 
   /* ── ④ 살 것 ───────────────────────────────────────────── */
   /*
@@ -365,14 +380,40 @@ export async function runSlot(
    * 루프가 꺼져 있으면(하루 세 번만 쓰는 설정) 여기가 매수를 맡는다.
    */
   const mode = modeOfSlot(slot);
-  const loopBuys = cfg.watch && cfg.buyScanMin > 0;
+  /* 종배 계좌는 루프가 안 산다 — 저녁 한 번, 원장이 쌓인 뒤 여기서만 */
+  const loopBuys = cfg.watch && cfg.buyScanMin > 0 && !closeBet;
   let gate: Awaited<ReturnType<typeof marketGate>> | null = null;
   let candidates: Candidate[] = [];
   let plans: ReturnType<typeof planBuys>["plans"] = [];
   let gateNotes: { name: string; ok: boolean; reason: string }[] = [];
   let sieved: { name: string; reason: string }[] = [];
+  /** 종배 계좌 저녁의 미국장 분위기 — 일지와 장부에 그대로 남는다 */
+  let macro: MacroGauge | null = null;
 
-  if (loopBuys) {
+  if (closeBet) {
+    /*
+     * **종배 계좌** (2026-09-02) — 아침·점심엔 사지 않는다. 시장 판단만 글에 남긴다.
+     * 저녁(원장이 쌓인 17:00 이후, 스케줄러가 보장)엔 `closeBetRound` 가 넷의 문을 지나 산다.
+     */
+    if (slot !== "evening") {
+      progress.start("market");
+      gate = await marketGate(client, rules);
+      progress.done("market", gate.reason);
+      progress.skip("scan", "종배 계좌는 저녁에만 산다");
+      progress.skip("signal");
+    } else {
+      const r = await closeBetRound(client, a, account, date, rules, progress);
+      gate = r.gate;
+      macro = r.macro;
+      candidates = r.candidates;
+      plans = r.plans;
+      gateNotes = r.gateNotes;
+      sieved = r.sieved;
+      screenNotes = r.screenNotes;
+      aiError = r.aiError;
+      actions.push(...r.actions);
+    }
+  } else if (loopBuys) {
     /* 시장 판단은 글에 필요하므로 그것만 부른다 — 스캔은 안 돈다(호출을 아낀다) */
     progress.start("market");
     gate = await marketGate(client, rules);
@@ -426,6 +467,9 @@ export async function runSlot(
     })),
     gateNotes,
     sieved,
+    closeBet: closeBet
+      ? { macro: macro ? { ok: macro.ok, summary: macro.summary, lines: macro.lines } : null }
+      : undefined,
     market: gate,
     candidates,
     plans,
@@ -499,6 +543,21 @@ export async function runSlot(
     equity,
     cash: Math.round(a.cash),
     debt,
+    /* 종배 저녁의 미국장 판정 — 값으로 남겨야 나중에 「미국장 나쁜 날의 종배」를 셀 수 있다 */
+    macro: macro
+      ? {
+          ok: macro.ok,
+          summary: macro.summary,
+          verdicts: macro.verdicts.map((v) => ({
+            key: v.key,
+            label: v.label,
+            level: v.level,
+            value: v.value,
+            price: v.price,
+            why: v.why,
+          })),
+        }
+      : undefined,
   };
 
   progress.start("write");

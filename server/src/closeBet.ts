@@ -217,7 +217,7 @@ export async function marketGauge(): Promise<{ day: GaugeDay; verdicts: GaugeVer
  * 야후 일봉 다섯 개(선물·유가·환율·10년물·30년물)면 된다. **날짜로 맞춰 붙인다** —
  * 다섯 시장의 휴장일이 달라서 인덱스로 맞추면 하루씩 어긋난다.
  */
-async function gaugeHistory(days: number): Promise<GaugeDay[]> {
+export async function gaugeHistory(days: number): Promise<GaugeDay[]> {
   /*
    * **반드시 일봉이 나오는 구간을 고른다.**
    * `5y` 는 주봉이라 국내 일봉과 날짜로 맞출 수가 없다 — 표본이 통째로 날아간다.

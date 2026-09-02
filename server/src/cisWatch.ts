@@ -1,10 +1,11 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { equityOf, loadAccount, markToMarket, saveAccount, sell, today } from "./cisAccount.js";
-import { ACCOUNT_IDS, profileOf, type AccountId } from "./cisAccounts.js";
-import { getCisConfig } from "./cisConfig.js";
+import { ACCOUNT_IDS, profileOf, styleOf, type AccountId } from "./cisAccounts.js";
+import { getCisConfig, rulesFor } from "./cisConfig.js";
 import { exitCalls, trailStops } from "./cisTrader.js";
 import { buyRound, priceMap } from "./cisRun.js";
 import { modeOfSlot } from "./cisTrader.js";
+import { closeBetExits } from "./cisCloseBet.js";
 import type { Slot } from "./cisJournal.js";
 
 /**
@@ -89,10 +90,14 @@ function marketOpen(): boolean {
   return m >= 8 * 60 && m <= 20 * 60; // 08:00 프리마켓 ~ 20:00 애프터마켓
 }
 
+function hmNow(): string {
+  const d = new Date(Date.now() + 9 * 3600_000);
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}
+
 /** 지금이 어느 시간대에 속하나 — 감시가 만든 체결도 구간에 담긴다 */
 function slotNow(times: { morning: string; noon: string; evening: string }): Slot {
-  const d = new Date(Date.now() + 9 * 3600_000);
-  const hm = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+  const hm = hmNow();
   if (hm < times.noon) return "morning";
   if (hm < times.evening) return "noon";
   return "evening";
@@ -151,8 +156,23 @@ async function watchAccount(client: KiwoomClient, id: AccountId): Promise<void> 
     }
   }
 
-  /* ② 팔 자리 */
-  for (const e of exitCalls(a, priceOf, cfg.rules, date)) {
+  /*
+   * ② 팔 자리.
+   *
+   * **종배 계좌는 두 가지만 판다** (2026-09-02): 어제 산 것을 09:00 이후 첫 틱에
+   * 시가 근처로 청산하고, 그 전(NXT 애프터·프리마켓)엔 짧은 손절(-3%, 프로필 덮어쓰기)만
+   * 본다. 익절·본전 전환·기간 만료는 이 계좌에 없다 — 파는 자리는 다음 날 시가 하나다.
+   * 프리마켓(08:00~09:00)에는 청산하지 않는다. 호가가 얇아 시가와 다른 값이다.
+   */
+  const rules = await rulesFor(id);
+  const closeBet = styleOf(id) === "closeBet";
+  const exits = closeBet
+    ? [
+        ...(hmNow() >= "09:00" ? closeBetExits(a, priceOf, date) : []),
+        ...exitCalls(a, priceOf, rules, date).filter((e) => e.kind === "stop" || e.kind === "misu"),
+      ].filter((e, i, arr) => arr.findIndex((x) => x.position.code === e.position.code) === i)
+    : exitCalls(a, priceOf, rules, date);
+  for (const e of exits) {
     const r = sell(
       a,
       e.position.code,
@@ -183,8 +203,8 @@ async function watchAccount(client: KiwoomClient, id: AccountId): Promise<void> 
     }
   }
 
-  /* ③ 손절선 올리기 — 이익을 손실로 바꾸지 않는다 */
-  for (const t of trailStops(a, priceOf, cfg.rules)) {
+  /* ③ 손절선 올리기 — 이익을 손실로 바꾸지 않는다 (종배 계좌는 하룻밤이라 안 한다) */
+  for (const t of closeBet ? [] : trailStops(a, priceOf, rules)) {
     changed = true;
     events.push({
       at: new Date().toISOString(),
@@ -268,9 +288,10 @@ async function tick(client: KiwoomClient): Promise<void> {
     }
     /*
      * 연금 계좌는 여기서 안 산다 — 주 단위로 담는 자리라 15분마다 볼 이유가 없고,
-     * ETF 배분은 `cisPension` 이 따로 맡는다.
+     * ETF 배분은 `cisPension` 이 따로 맡는다. **종배 계좌도 안 산다** — 저녁 한 번,
+     * 원장이 쌓인 뒤에만 산다(`cisScheduler` → `cisCloseBet`).
      */
-    if (cfg.buyScanMin > 0 && profileOf(id).cadence === "daily") {
+    if (cfg.buyScanMin > 0 && profileOf(id).cadence === "daily" && styleOf(id) !== "closeBet") {
       try {
         await buyScan(client, id, cfg.buyScanMin);
       } catch (e) {
