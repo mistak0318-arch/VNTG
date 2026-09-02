@@ -17,7 +17,7 @@ import { isIndexLikeTheme } from "./naverThemes.js";
 import { etfHoldersOf } from "./etfHolders.js";
 import { quarterFinance } from "./quarterFinance.js";
 import { pushNotice } from "./notifyCenter.js";
-import { computeAlerts, marketReturns, type SignalAlerts } from "./hotAlerts.js";
+import { computeAlerts, killAlerts, marketReturns, type SignalAlerts } from "./hotAlerts.js";
 
 /**
  * 「ETF 뒷배」에서 **빼야 하는 ETF** — 테마가 아닌 것들.
@@ -501,11 +501,25 @@ export const DEFAULT_CONFIG: SignalConfig = {
    *
    * ⚠️ 이 표본으로 고른 값이다. 12월 250거래일이 차면 `server/tools/sigtune/` 로 다시 잰다.
    *
-   * 정배열 강세 전용 w2 는 시뮬만 했고(초록 3,158 → 3,443, 성적 그대로) **켜지 않았다** —
-   * 벤티지 결정 전. 켜면 세대를 4 로 올릴 것.
+   * 정배열 강세 전용 w2 는 시뮬만 했고(초록 3,158 → 3,443, 성적 그대로) 켜지 않았다.
+   *
+   * ## **세대 4** (같은 날 밤 — `docs/신호등_체계확립_260902.md`)
+   *
+   * 성능 정의를 「날짜별 상위 K개 고정」으로 바꿔 다시 쟀다(집합 크기가 다른 비교는
+   * 거짓이었다). 셋을 바꿨다 — 벤티지: "그래 가자. 기본값도 변경해놔야겠네."
+   *
+   *   ① 탈락 승격: 경보 넷(σ20 ≥7% · 진폭 ≥12% · 약세 RS60 ≥30 · 약세 저점+50%↑)을 탈락으로.
+   *      K20 +4.9 → +6.1 · 하위 10% -21 → -17 · -10% 추락 33 → 28%. 가장 크고 가장 확실한 것
+   *   ② 위쪽 매물 · 외인 시총대비 끔 — 앞/뒤 어느 절반에서 골라도 빼는 게 낫다. 매물은 「장세
+   *      판정이 틀리면 도구가 망가지는」 자리였고(장세 끔 +4.9 → +2.9), 외인 시총대비는 지분율
+   *      상승과 r=0.80 으로 같은 것을 세 번 세며 순위를 「이미 몰린 애」 쪽으로 밀었다
+   *   ③ 무게 전부 1 · 축 1/1/1 — 성적 차이 0, 손잡이 11개가 사라진다
+   *   그 이상 빼기(7개)·정배열은 한쪽 계절에서만 좋아 안 한다.
+   *
+   * 세대 3 대비 K20 +4.9/62 → **+6.2/67**, 하루 후보 39 → 26(탈락 승격 뒤).
    */
-  configVersion: 3,
-  configLabel: "260902_1900",
+  configVersion: 4,
+  configLabel: "260902_2000",
   greenAt: 65,
   yellowAt: 40,
   /*
@@ -535,7 +549,12 @@ export const DEFAULT_CONFIG: SignalConfig = {
    *
    * 1.0 으로 낮추자 뒤쪽 초록이 +5.81 → **+6.15%p** 로 올랐고 표본도 늘었다.
    */
-  axisWeights: { trend: 1.5, flow: 1.0, value: 0.6 },
+  /*
+   * **1 / 1 / 1** (2026-09-02 밤, 세대 4). 1.5/1.0/0.6 과 성적이 같다(K20 +4.9 vs +5.0) —
+   * 같으면 단순한 쪽. 옛 「며칠~몇 주 매매엔 실적이 덜 중요하다」는 설계 의도는 실적 축에
+   * 남은 게 분기 YoY 하나뿐이라 무게로 표현할 것이 없어졌다.
+   */
+  axisWeights: { trend: 1, flow: 1, value: 1 },
   riskYellowAt: 40,
   riskRedAt: 70,
   riskBlocksGreen: true,
@@ -1022,7 +1041,8 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 크지는 않지만 **어느 장세에서도 안 깎는다**는 것이 값이다.
        */
       enabled: true,
-      weight: 2,
+      /* 2 → 1 (세대 4) — 무게는 성적을 안 바꿨다. 전부 1 */
+      weight: 1,
       /*
        * **여덟 구간 중 넷** (2026-09-01 채점으로 정함).
        *
@@ -1258,14 +1278,21 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 기관 단독은 힘이 없었다(어느 구간도 ✅ 없음 — 인덱스·헤지 물량이 섞인다).
        * 조회는 안 는다 — `flowRatio` 와 같은 응답(ka10060 + ka10001).
        */
-      enabled: true,
-      weight: 2,
+      /*
+       * **끈다** (2026-09-02 밤, 세대 4). 단독으로는 이 재검토에서 가장 센 수급 기준이었는데
+       * **순위에서는 겹침이 독**이었다 — 지분율 상승과 r=0.80, 외인+기관 시총대비와 0.48 로
+       * 같은 「외국인이 사고 있다」를 세 번 세고, 무게 2 라 상위 20 을 「외국인이 가장 많이 산
+       * 종목」 = 이미 몰린 자리로 밀었다. 빼면 K20 +4.9 → +5.4, 앞/뒤 어느 절반에서 골라도
+       * 빼는 게 낫다. 외국인 수급은 flowRatio(외인+기관)와 foreignRatioUp(지분율)이 본다.
+       */
+      enabled: false,
+      weight: 1,
       threshold: 0,
       strongAt: 0.25,
       capAt: 2,
       capGrade: 50,
       span: 20,
-      hint: "외국인 20일 순매수 ÷ 시가총액(%). 0.25% 부터 만점, 2% 를 넘으면 과열(50점). 기관은 안 본다 — 인덱스·헤지 물량이 섞여 힘이 없었다",
+      hint: "외국인 20일 순매수 ÷ 시가총액(%). 0.25% 부터 만점, 2% 를 넘으면 과열(50점). 기관은 안 본다 — 인덱스·헤지 물량이 섞여 힘이 없었다. **세대 4 에서 껐다** — 지분율 상승과 겹쳐 순위를 몰린 쪽으로 밀었다",
       cost: 0,
     },
     {
@@ -1723,7 +1750,13 @@ export const DEFAULT_CONFIG: SignalConfig = {
        * 있었다. 강세장에서만 위험으로 보고, 탈락은 뺀다.
        */
       regime: "bull",
-      enabled: true,
+      /*
+       * **끈다** (2026-09-02 밤, 세대 4). 빼도 K20 이 그대로이고(+4.9 → +5.3), 앞/뒤 어느
+       * 절반에서 골라도 첫째·셋째로 빠진다. 무엇보다 이 기준이 **장세 판정 의존의 정체**였다 —
+       * 있을 때 장세 전환을 끄면 +4.9 → +2.9 로 망가졌는데, 빼면 +6.2 → +6.1 이다. 장세를
+       * 못 재는 날에도 도구가 서 있어야 한다.
+       */
+      enabled: false,
       weight: 1,
       threshold: 40,
       strongAt: 65,
@@ -3392,6 +3425,15 @@ export async function evaluateSignal(
     const market = await marketReturns().catch(() => ({ r20: null, r60: null }));
     alerts = computeAlerts({ chartRows, tradeEok, capEok, regime: mkt?.regime ?? null, market });
   }
+  /*
+   * ## 탈락 승격 (2026-09-02 밤, 세대 4) — 경보 넷은 표시가 아니라 탈락이다
+   *
+   * σ20 ≥7% · 진폭 ≥12% · 약세장 RS60 ≥30 · 약세장 저점 대비 +50%↑ (`hotAlerts.KILL_KEYS`).
+   * 상위 20 안에 들어도 평균 아래거나 마이너스였다. 태그는 그대로 남기고(왜 빨강인지 보이게)
+   * 판정만 빨강으로. 시뮬(`scoreFeat`)도 같은 문턱으로 같은 판정을 한다.
+   */
+  const killed = alerts ? killAlerts(alerts) : [];
+  if (killed.length > 0) level = "red";
 
   const result: SignalResult = {
     code,
@@ -3400,8 +3442,8 @@ export async function evaluateSignal(
     checks,
     axes,
     riskCapped,
-    /** 탈락시킨 기준 이름 — 화면이 「무엇 때문에 빨강인지」를 말할 수 있게 */
-    vetoedBy: vetoed.map((c) => c.label),
+    /** 탈락시킨 기준 이름 — 화면이 「무엇 때문에 빨강인지」를 말할 수 있게. 경보 승격분도 같이 */
+    vetoedBy: [...vetoed.map((c) => c.label), ...killed.map((a) => a.label)],
     coverage: Math.round(coverage * 100) / 100,
     lowCoverage,
     /** 못 잰 기준 이름 — 「무엇이 비어서 초록이 막혔나」 */

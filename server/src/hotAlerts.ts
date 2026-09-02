@@ -81,8 +81,42 @@ export interface AlertInput {
   market: { r20: number | null; r60: number | null };
 }
 
-const HOT = { turnover: 3, range: 12, volRatio: 2.5, gap: 3, volat: 7 };
-const LATE = { rs20: 20, rs60: 30, lo60: 150 };
+export const HOT = { turnover: 3, range: 12, volRatio: 2.5, gap: 3, volat: 7 };
+export const LATE = { rs20: 20, rs60: 30, lo60: 150 };
+
+/**
+ * ## **탈락 승격** (2026-09-02 밤, 세대 4) — 여덟 중 넷은 표시가 아니라 탈락이다
+ *
+ * 체계 확립 검증(`docs/신호등_체계확립_260902.md` 4절)에서 날짜별 상위 20개 안에 들어도
+ * **평균 아래거나 마이너스**였던 것: σ20 ≥7% (-2.9/40) · 진폭 ≥12% (+0.6/51) ·
+ * 약세장 RS60 ≥30 (-1.7/47) · 약세장 저점 대비 +50%↑ (-2.0/45). 이 넷을 탈락으로 올리면
+ * 기준 집합이 무엇이든 K20 이 +4.9 → +6.1, 하위 10% 가 -21 → -17, -10% 추락이 33 → 28%.
+ * 강·약·앞·뒤·블록 넷 전부 좋아졌다.
+ *
+ * 나머지 넷(회전율·거래량·갭·RS20)은 상위 20 안에서 +2~+4 라 **표시로만** 남긴다 —
+ * 탈락시키면 후보만 줄고(56 → 47/일) 성적은 안 오른다.
+ *
+ * 실전(`evaluateSignal`)과 시뮬(`scoreFeat`)이 **같은 문턱**을 여기서 읽는다.
+ */
+export const KILL_KEYS = new Set(["volat", "range", "rs60", "lo60"]);
+
+export function killAlerts(a: SignalAlerts): SignalAlert[] {
+  return [...a.hot, ...a.late].filter((x) => KILL_KEYS.has(x.key));
+}
+
+/** 표본(원시값)으로 같은 판정 — `rs60` 은 시장 중앙값 대비, `late` 둘은 약세장에서만 */
+export function isHardKill(
+  f: { volat20?: number | null; range?: number | null; rs60?: number | null; lo60Pct?: number | null },
+  regime: "bull" | "bear" | undefined,
+): boolean {
+  if (f.volat20 != null && f.volat20 >= HOT.volat) return true;
+  if (f.range != null && f.range >= HOT.range) return true;
+  if (regime === "bear") {
+    if (f.rs60 != null && f.rs60 >= LATE.rs60) return true;
+    if (f.lo60Pct != null && f.lo60Pct >= LATE.lo60) return true;
+  }
+  return false;
+}
 
 function toNum(v: unknown): number {
   const n = Number(String(v ?? "").replace(/[+,]/g, "").replace(/^--/, "-"));

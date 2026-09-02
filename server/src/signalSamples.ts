@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path, { dirname, join } from "node:path";
 import { gradeValue, type CheckConfig, type SignalConfig } from "./signalLight.js";
+import { isHardKill } from "./hotAlerts.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
@@ -258,6 +259,19 @@ export interface Feat {
    * ⚠️ 회귀는 **상관이지 인과가 아니다.** 같은 기간에 같이 움직였다는 뜻일 뿐이다.
    */
   rateBeta: number | null;
+
+  /*
+   * **탈락 승격 넷의 재료** (2026-09-02 밤, 세대 4) — `hotAlerts.isHardKill` 이 본다.
+   * 옛 표본 파일에는 없다(undefined) → 못 재는 것으로 두고 탈락시키지 않는다.
+   */
+  /** 직전 20일 일수익률 표준편차(%) */
+  volat20?: number | null;
+  /** 그날 진폭 (고가−저가)÷저가 (%) */
+  range?: number | null;
+  /** 60일 수익률 − 그날 전종목 60일 수익률 중앙값 (%p) */
+  rs60?: number | null;
+  /** 현재가 ÷ 직전 60일 최저가 (%) */
+  lo60Pct?: number | null;
 }
 
 export interface Sample extends Feat {
@@ -618,6 +632,8 @@ export function scoreFeat(
   let coverGot = 0;
   /* 탈락 (2026-09-02) — 실전과 같은 규칙. 장세로 빠진 기준도 탈락만은 본다 */
   let vetoed = false;
+  /* 탈락 승격 넷 (세대 4) — 실전 `killAlerts` 와 같은 문턱. 표본에 칸이 없으면 안 건드린다 */
+  if (isHardKill(f, regime)) vetoed = true;
   for (const c of cfg.checks) {
     if (!c.enabled) continue;
     if (c.veto && c.vetoAt !== undefined) {

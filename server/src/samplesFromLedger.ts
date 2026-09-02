@@ -191,6 +191,28 @@ export function buildSamplesFromLedger(
       ]);
       const barsOf = bars ?? {};
 
+      /*
+       * **그날 전종목 60일 수익률 중앙값** (2026-09-02 밤, 세대 4) — 상대강도(rs60)의 기준선.
+       * 실전(`hotAlerts.marketReturns`)은 오늘 하나만 내지만 표본은 날짜마다 필요하다.
+       * 일봉 캐시 전종목을 한 번 훑는다 — 조회 0회, 1초 안팎.
+       */
+      const mkt60: Map<string, number[]> = new Map();
+      for (const bs of Object.values(barsOf)) {
+        for (let i = 60; i < bs.length; i++) {
+          const c0 = bs[i].c;
+          const c60 = bs[i - 60].c;
+          if (!(c0 > 0 && c60 > 0)) continue;
+          (mkt60.get(bs[i].d) ?? mkt60.set(bs[i].d, []).get(bs[i].d)!).push(((c0 - c60) / c60) * 100);
+        }
+      }
+      const mkt60Med = new Map<string, number>();
+      for (const [d, arr] of mkt60) {
+        if (arr.length < 100) continue;
+        const s = arr.sort((a, b) => a - b);
+        const m = s.length >> 1;
+        mkt60Med.set(d, s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2);
+      }
+
       const files = (await readdir(DAILY_DIR)).filter((f) => f.endsWith(".json"));
       progress.total = files.length;
 
@@ -287,6 +309,25 @@ export function buildSamplesFromLedger(
           const m20 = sma(closes, 20);
           const m5 = sma(closes, 5);
 
+          /* 탈락 승격 넷의 재료 (세대 4) — 실전 `hotAlerts.computeAlerts` 와 같은 정의 */
+          const lr: number[] = [];
+          for (let k = bi - 19; k <= bi; k++) {
+            const a = closesAll[k - 1];
+            const b = closesAll[k];
+            if (a > 0 && b > 0) lr.push(Math.log(b / a));
+          }
+          let volat20: number | null = null;
+          if (lr.length >= 15) {
+            const mean = lr.reduce((s, x) => s + x, 0) / lr.length;
+            volat20 = Math.sqrt(lr.reduce((s, x) => s + (x - mean) ** 2, 0) / lr.length) * 100;
+          }
+          const range = bs[bi].l > 0 && bs[bi].h > bs[bi].l ? ((bs[bi].h - bs[bi].l) / bs[bi].l) * 100 : null;
+          const c60 = bi >= 60 ? closesAll[bi - 60] : 0;
+          const mm60 = mkt60Med.get(date);
+          const rs60 = c60 > 0 && mm60 !== undefined ? ((cur - c60) / c60) * 100 - mm60 : null;
+          const lo60 = bi >= 60 ? Math.min(...bs.slice(bi - 60, bi).map((b) => b.l).filter((x) => x > 0)) : 0;
+          const lo60Pct = Number.isFinite(lo60) && lo60 > 0 ? (cur / lo60) * 100 : null;
+
           /*
            * **위쪽 매물** — 이제 거래량으로 잰다. 일봉에 고가·저가·거래량이
            * 들어오기 전에는 못 내던 값이고, 전종목 사전훑기에서는 날짜 비중으로
@@ -379,6 +420,10 @@ export function buildSamplesFromLedger(
                 ? null
                 : ratioRows[ri].ratio! - ratioRows[ri - 20].ratio!,
             rateBeta: betaFrom(datesAll, closesAll, bi, rateByDate),
+            volat20,
+            range,
+            rs60,
+            lo60Pct,
           };
 
           /*
