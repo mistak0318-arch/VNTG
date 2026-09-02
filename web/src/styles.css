@@ -7037,8 +7037,12 @@ button.nav-group-toggle {
   font-size: 0.72rem;
 }
 
-/* 좁은 창 — 띠 대신 단추. 검색창 한 줄에 띠까지 넣으면 검색창이 사라진다 */
-@media (max-width: 960px) {
+/*
+ * 폰(터치 기기)만 띠 대신 단추 — 벤티지: "PC 에서는 펼쳐서 보여주는 구조로 가자.
+ * PC 는 좁힐 필요 없지." 폭으로 가르면 PC 창을 좁혔을 때도 단추로 바뀌어 버린다.
+ * 기기로 가른다 — 앱의 다른 폰 전용 규칙과 같은 조건(pointer: coarse)이다.
+ */
+@media (pointer: coarse) {
   .hdr-tick-full { display: none; }
   .ht-btn { display: inline-flex; }
 }
