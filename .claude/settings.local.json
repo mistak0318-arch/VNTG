@@ -1126,7 +1126,10 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const k=j.keywords||[];const by={};for\\(const s of k\\)by[s.from]=\\(by[s.from]||0\\)+1;console.log\\('감시 중',k.length+'개 ·',JSON.stringify\\(by\\)\\);console.log\\('관심종목:',k.filter\\(s=>s.from==='관심종목'\\).slice\\(0,12\\).map\\(s=>s.word\\).join\\(' · '\\)\\)}\\)\")",
       "Bash(python3 -c ' *)",
       "PowerShell($c = Get-Command claude -ErrorAction SilentlyContinue; if \\($c\\) { $c.Source; claude --version } else { \"claude not on PATH in PowerShell\" })",
-      "PowerShell($p = \"$env:APPDATA\\\\npm\\\\claude.cmd\"; if \\(Test-Path $p\\) { \"npm global: $p\" } else { \"no npm global\" }; $n = \"$env:LOCALAPPDATA\\\\Programs\\\\claude\\\\claude.exe\"; if \\(Test-Path $n\\) { \"native: $n\" } else { \"no native installer path\" }; Get-ChildItem \"$env:LOCALAPPDATA\\\\AnthropicClaude\" -ErrorAction SilentlyContinue | Select-Object -First 5 Name)"
+      "PowerShell($p = \"$env:APPDATA\\\\npm\\\\claude.cmd\"; if \\(Test-Path $p\\) { \"npm global: $p\" } else { \"no npm global\" }; $n = \"$env:LOCALAPPDATA\\\\Programs\\\\claude\\\\claude.exe\"; if \\(Test-Path $n\\) { \"native: $n\" } else { \"no native installer path\" }; Get-ChildItem \"$env:LOCALAPPDATA\\\\AnthropicClaude\" -ErrorAction SilentlyContinue | Select-Object -First 5 Name)",
+      "PowerShell($ts = \"C:\\\\Program Files\\\\Tailscale\\\\tailscale.exe\"; if \\(Test-Path $ts\\) { \"== tailscale status ==\"; & $ts status } else { \"tailscale 없음\" }; \"== ssh 클라이언트 ==\"; \\(Get-Command ssh -ErrorAction SilentlyContinue\\).Source)",
+      "PowerShell(foreach \\($p in 22,5985,5986,445,4000\\) { $r = Test-NetConnection -ComputerName 100.88.182.35 -Port $p -WarningAction SilentlyContinue -InformationLevel Quiet; \"{0,-6} {1}\" -f $p, $\\(if \\($r\\) { \"열림\" } else { \"닫힘\" }\\) })",
+      "mcp__claude-in-chrome__browser_batch"
     ]
   }
 }
