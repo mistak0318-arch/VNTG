@@ -6983,7 +6983,9 @@ button.nav-group-toggle {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
-  width: 320px;
+  /* 320 → 400 (2026-09-02 저녁, 벤티지: "보합 표시하는 끝 부분이 사각형 박스를 벗어나네").
+     한 행이 「코스피 6,562.72 -3.99% ▲139 ▼735 ─37」이라 320 으로는 끝이 잘렸다 */
+  width: 400px;
   max-width: calc(100vw - 24px);
   display: flex;
   flex-direction: column;
@@ -7014,7 +7016,9 @@ button.nav-group-toggle {
 .ht-row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .ht-row .ht-name { min-width: 3.2em; }
 .ht-row .ht-px { font-size: 1.05rem; }
-.ht-row .ht-ad { margin-left: auto; font-size: 0.8rem; }
+.ht-row .ht-ad { margin-left: auto; font-size: 0.78rem; flex: 0 0 auto; }
+/* 행 자체는 넘치지 않게 — 넓혀도 모자라면 끝을 자르지 말고 줄인다 */
+.ht-row { min-width: 0; overflow: hidden; }
 .ht-flat { color: var(--muted); }
 .ht-sum {
   flex: 1 1 auto;
