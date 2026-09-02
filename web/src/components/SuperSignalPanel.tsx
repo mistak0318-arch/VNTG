@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, fmtNum } from "../api";
+import { api, fmtNum, type SignalAlerts } from "../api";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark, useSuperMarks } from "../useSuperMarks";
+import { AlertTags, SignalLegend } from "./AlertTags";
 import { useTabActive } from "../tabActive";
 import { useMarketOpen } from "../useLive";
 import { SortableTh, useSortableTable } from "../useSortableTable";
@@ -39,6 +40,8 @@ interface Row {
   changeRate: number | null;
   sinceAdded: number | null;
   returns?: { d1: number | null; d5: number | null; d20: number | null };
+  /** 편입 당시 경보 태그 (2026-09-02) */
+  alerts?: SignalAlerts;
 }
 
 interface GradeRow {
@@ -239,6 +242,14 @@ export function SuperSignalPanel({
 
   return (
     <div>
+      <SignalLegend
+        extra={[
+          { mark: "🌈", text: `무지개 — 교집합에 ${rainbowDays}일 이상 연속으로 걸린 종목. 실측에서 하루짜리(-1.7%)와 이틀 이상(+2.2%)이 갈렸다` },
+          { mark: "N", text: "오늘 편입" },
+          { mark: "며칠째", text: "교집합에 걸린 날 수 — 편입 후 경과일이 아니다(경과는 「경과」 칸)" },
+          { mark: "🔥N ⏳N", text: "편입 당시 경보 태그 개수 — 마우스를 올리면 무엇에 걸렸는지 전부 보인다" },
+        ]}
+      />
       <div className="filter-row ctl-ribbon">
         <span className="breadth-count">
           목록 <b>{minLists}곳 이상</b>에 걸린 <b>초록</b>만 · 🌈은 <b>{rainbowDays}일 이상</b> 반복
@@ -545,6 +556,8 @@ export function SuperSignalPanel({
                     <WatchStar code={r.code} />
 <SuperMark code={r.code} />
                     {r.name}
+                    {/* 편입 당시 경보 태그 (2026-09-02) — 숫자만(🔥2 ⏳1), 툴팁에 전부 */}
+                    <AlertTags alerts={r.alerts} compact />
                   </td>
                   <td className="num">
                     <b>{r.seenCount}일</b>

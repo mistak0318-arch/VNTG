@@ -29,6 +29,7 @@ import { DataRetentionPanel } from "../components/DataRetentionPanel";
 import { UniversePanel } from "../components/UniversePanel";
 import { AfterClosePanel } from "../components/AfterClosePanel";
 import { LedgerResetPanel } from "../components/LedgerResetPanel";
+import { LedgerArchivePanel } from "../components/LedgerArchivePanel";
 import { RealtimeStatusPanel } from "../components/RealtimeStatusPanel";
 
 interface KeyInfo {
@@ -50,13 +51,15 @@ function rateColor(rate: number | null): string {
  * 카드 열한 개가 한 화면에 쌓여 있으니 찾는 게 일이었다. 성격이 전혀 다른 것들이
  * 섞여 있었다 — 화면 꾸미기와 API 비용을 같은 목록에서 스크롤로 찾을 이유가 없다.
  */
-type SettingsTab = "display" | "analysis" | "publish" | "cost" | "security";
+type SettingsTab = "display" | "analysis" | "publish" | "cost" | "archive" | "security";
 
 const SETTINGS_TABS: { key: SettingsTab; label: string; hint: string }[] = [
   { key: "display", label: "화면", hint: "메뉴 순서 · 테마 · 글꼴" },
   { key: "analysis", label: "분석 기준", hint: "신호등 기준 · 주도주/교차 기준 · AI 모델" },
   { key: "publish", label: "발행·알림", hint: "리포트 일정 · 채널 수집 · 시그널" },
   { key: "cost", label: "비용·상태", hint: "AI 비용 · API 사용량 · 키 상태" },
+  /* 보관함 (2026-09-02) — 선 긋기로 보관한 옛 원장을 옛 기준값과 함께 계속 쫓아간다 */
+  { key: "archive", label: "보관함", hint: "선 긋기로 보관한 옛 편입 — 옛 기준도 지금 원장과 같은 자로 계속 쫓아간다" },
   /* 화면 잠금(가리개)과 달리 이쪽은 **서버로 들어오는 문**이라 따로 세운다 */
   { key: "security", label: "보안", hint: "로그인 · 2단계 인증 · 기기 관리 · 서버 문단속" },
 ];
@@ -236,6 +239,17 @@ export function SettingsPage() {
         >
           <AfterClosePanel />
           <LedgerResetPanel />
+        </CollapsibleCard>
+      )}
+
+      {tab === "archive" && (
+        <CollapsibleCard
+          id="ledgerArchive"
+          scope="global"
+          title="원장 보관함"
+          hint="선 긋기 전 편입들의 그 뒤 성적 · 그때의 신호등 옵션값 · 지금 원장과 나란히"
+        >
+          <LedgerArchivePanel />
         </CollapsibleCard>
       )}
 

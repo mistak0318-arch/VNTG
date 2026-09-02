@@ -11,6 +11,7 @@ import { useWatchedCodes } from "../useWatchedCodes";
 import { useCardOrder } from "../useCardOrder";
 import { useSwipeTabs, visualOrder } from "../useSwipeTabs";
 import { WatchAddSheet, type WatchAddTarget } from "../components/WatchAddSheet";
+import { AlertTags, SignalLegend } from "../components/AlertTags";
 
 /**
  * 신호등 스크리너.
@@ -458,6 +459,12 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
           )}
 
           <div className="data-table-wrap">
+            <SignalLegend
+              extra={[
+                { mark: "🌟", text: "슈퍼신호등 추적 중 — 여러 목록 교집합에 걸린 종목" },
+                { mark: "전일", text: "장이 열리지 않아 등락률·거래대금이 직전 거래일 값" },
+              ]}
+            />
             <table className="data-table">
               <thead>
                 <tr>
@@ -556,7 +563,11 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
                     >
                       {r.etfBack ? pct(r.etfBack.rate) : "-"}
                     </td>
-                    <td className="scr-passed">{r.passed.join(" · ")}</td>
+                    <td className="scr-passed">
+                      <AlertTags alerts={r.alerts} />
+                      {r.alerts && (r.alerts.hot.length > 0 || r.alerts.late.length > 0) ? " " : ""}
+                      {r.passed.join(" · ")}
+                    </td>
                     <td>
                       {watched.isWatched(r.code) ? (
                         <span className="scr-added">담김</span>

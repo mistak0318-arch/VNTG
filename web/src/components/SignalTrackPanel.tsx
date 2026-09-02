@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { AlertTags, SignalLegend } from "./AlertTags";
 import {
   api,
   fmtNum,
@@ -361,6 +362,12 @@ export function SignalTrackPanel({
       {/* ---------------- 목록 ---------------- */}
       <section className="card">
         <h2>담긴 종목 ({entries.length})</h2>
+        <SignalLegend
+          extra={[
+            { mark: "문턱", text: "어느 점수 문턱(70·80·90)으로 들어왔나 — 통과한 문턱 전부에 담는다" },
+            { mark: "축 4칸", text: "편입 당시 추세/수급/실적/위험 점수" },
+          ]}
+        />
         <div className="filter-row">
           {[0, 70, 80, 90].map((t) => (
             <button
@@ -448,6 +455,8 @@ function Row({
             ⚠
           </span>
         )}
+        {/* 편입 당시 경보 태그 (2026-09-02) */}
+        <AlertTags alerts={e.alerts} compact />
       </td>
       <td className="num pt-n">
         {ax("trend")}/{ax("flow")}/{ax("value")}/{ax("risk")}

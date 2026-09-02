@@ -143,6 +143,8 @@ export interface TrackEntry {
   axes: Partial<Record<Axis, number | null>>;
   /** 위험 때문에 초록이 막혔었나 */
   riskCapped: boolean;
+  /** 편입 당시 경보 태그 (2026-09-02) — 쏠림·늦음 */
+  alerts?: { hot: { key: string; label: string; value: number }[]; late: { key: string; label: string; value: number }[] };
   /** 편입일 종가 */
   basePrice: number;
   /** 그때의 신호등 기준 지문 — 기준이 바뀌면 같은 90점도 다른 뜻이다 */
@@ -404,6 +406,7 @@ export async function enrollToday(
         level: sig.level,
         axes,
         riskCapped: sig.riskCapped,
+        alerts: sig.alerts,
         basePrice: price,
         configHash: hash,
         /* 담는 방식이 바뀐 판 — 옛 것(문턱 하나만)과 섞이지 않게 */

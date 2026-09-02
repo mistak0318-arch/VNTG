@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
 import { VerdictBar } from "./VerdictBar";
+import { AlertTags } from "./AlertTags";
 import { api, type SignalResult, type ThemeStrength } from "../api";
 import { useMarketOpen } from "../useLive";
 import { useTabActive } from "../tabActive";
@@ -250,6 +251,8 @@ export function SignalPanel({
             ✕ 탈락: {data.vetoedBy.join(" · ")}
           </span>
         )}
+        {/* 경보 태그 (2026-09-02) — 점수·색은 그대로. 툴팁에 「무엇을 쟀나·왜·실측」 */}
+        <AlertTags alerts={data.alerts} />
         <button className="filter-btn" onClick={() => load(true)} disabled={loading}>
           {loading ? "평가 중…" : "↻ 다시 평가"}
         </button>

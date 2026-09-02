@@ -17,6 +17,7 @@ import { isIndexLikeTheme } from "./naverThemes.js";
 import { etfHoldersOf } from "./etfHolders.js";
 import { quarterFinance } from "./quarterFinance.js";
 import { pushNotice } from "./notifyCenter.js";
+import { computeAlerts, marketReturns, type SignalAlerts } from "./hotAlerts.js";
 
 /**
  * 「ETF 뒷배」에서 **빼야 하는 ETF** — 테마가 아닌 것들.
@@ -2180,6 +2181,12 @@ export interface SignalResult {
    * 못 믿는다. 무엇이 켜졌고 무엇이 빠졌는지 화면이 말할 수 있게 실어 보낸다.
    */
   regime?: { kind: "bull" | "bear"; label: string; breadth: number; skipped: string[] };
+  /**
+   * **경보 태그** (2026-09-02 저녁) — 쏠림(늘)·늦음(약세장만). 점수·색은 안 건드린다.
+   * 벤티지가 「탈락 말고 태그」를 골랐다 — 초록은 그대로 두고 눈으로 거른다. `hotAlerts.ts`.
+   * 조건 검색(설정을 넘긴 평가)에는 없다.
+   */
+  alerts?: SignalAlerts;
   evaluatedAt: string;
 }
 
@@ -2354,7 +2361,9 @@ export async function evaluateSignal(
    * 목표가 괴리율은 현재가가 있어야 잰다. 일봉 첫 줄이 현재가라 차트를 같이 받는다 —
    * 시세를 따로 부르는 것보다 싸다(정배열·매물대가 켜져 있으면 어차피 받는 응답이다).
    */
+  /* 경보 태그(쏠림·늦음)가 일봉을 쓴다 — 보통 평가에서는 늘 받는다. 조건 검색(override)만 예외 */
   const wantChart =
+    !override ||
     need.has("trend") ||
     need.has("nearHigh") ||
     need.has("newHigh") ||
@@ -2383,6 +2392,7 @@ export async function evaluateSignal(
   const wantMyTheme = need.has("myThemeStrength");
   /* flowRatio 도 시총이 필요하다 — 「시가총액」 기준과 같은 응답을 나눠 쓴다 */
   const wantInfo =
+    !override ||
     need.has("marketCap") || need.has("volume") || need.has("flowRatio") || need.has("fgnRatio20");
   const wantShort = need.has("shortSaleUp") || need.has("shortLevel");
   const wantLending = need.has("lendingUp");
@@ -3349,6 +3359,20 @@ export async function evaluateSignal(
   });
   if (vetoed.length > 0) level = "red";
 
+  /*
+   * ## 경보 태그 (2026-09-02 저녁) — 점수 다음, 판정과 무관
+   *
+   * 시총은 `flowRatio`/`fgnRatio20` 이 쓰는 것과 같은 자리(ka10001 `mac`, 없으면 주식수×현재가).
+   * 상대강도의 시장 기준선은 일봉 캐시 전종목 중앙값 — 조회가 없다.
+   */
+  let alerts: SignalAlerts | undefined;
+  if (!override && chartRows.length > 0) {
+    let capEok = toNum(info?.data?.mac);
+    if (!(capEok > 0) && entry?.shares) capEok = Math.round((entry.shares * Math.abs(toNum(info?.data?.cur_prc))) / 100_000_000);
+    const market = await marketReturns().catch(() => ({ r20: null, r60: null }));
+    alerts = computeAlerts({ chartRows, tradeEok, capEok, regime: mkt?.regime ?? null, market });
+  }
+
   const result: SignalResult = {
     code,
     level,
@@ -3373,6 +3397,7 @@ export async function evaluateSignal(
           skipped: offByRegime.map((c) => c.label),
         }
       : undefined,
+    alerts,
     evaluatedAt: new Date().toISOString(),
   };
   /* 다른 설정으로 잰 것은 캐시에 안 넣는다 — 화면이 그 값을 자기 것으로 읽는다 */

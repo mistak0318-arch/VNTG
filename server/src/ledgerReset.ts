@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AUTO_GROUPS, ETF_GROUP, listWatchlist, removeFromGroup } from "./watchlist.js";
-import { configFingerprint } from "./signalLight.js";
+import { configFingerprint, getConfig } from "./signalLight.js";
 import { pushNotice } from "./notifyCenter.js";
 
 /**
@@ -169,6 +169,19 @@ export async function resetSignalLedgers(dryRun = false): Promise<ResetReport> {
   }
 
   if (!dryRun) {
+    /*
+     * **그때의 신호등 옵션값도 같이 보관한다** (2026-09-02 저녁).
+     *
+     * 벤티지: "그때의 신호등 옵션값 달고 있어서 체크해볼 수 있게 말야. 좋은 신호값을
+     * 버리는 건 아닐까 싶어서." 지문(`configHash`)만으로는 「무엇이 달랐나」를 못 읽는다.
+     * 보관함(`ledgerArchive`)이 이 파일을 열어 지금 설정과의 차이를 적는다.
+     */
+    try {
+      const cfg = await getConfig();
+      await writeFile(join(DATA, `signalConfig.archive-${tag}.json`), JSON.stringify(cfg, null, 2), "utf-8");
+    } catch (e) {
+      console.error("[ledgerReset] 설정 보관 실패:", e);
+    }
     console.log(
       `[ledgerReset] 원장 ${report.totalMoved}건을 보관하고 비웠습니다 (지문 ${fingerprint ?? "?"})`,
     );
@@ -183,7 +196,7 @@ export async function resetSignalLedgers(dryRun = false): Promise<ResetReport> {
           .join("\n") +
         `\n자동 그룹에서 뺀 종목 ${Object.values(report.groups).reduce((a, b) => a + b, 0)}개` +
         `\n기준 지문 ${fingerprint ?? "?"} — 여기서부터 쌓이는 것은 모두 이 기준입니다.` +
-        `\n옛 기록은 server/data 의 .archive-${tag}.json 에 남아 있습니다.`,
+        `\n옛 기록은 설정 > 보관함에서 계속 쫓아갑니다 (그때의 기준값도 같이 보관).`,
       link: "#/settings",
       dedupeKey: `ledgerReset:${tag}`,
       dedupeHours: 1,

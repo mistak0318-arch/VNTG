@@ -43,6 +43,8 @@ export interface ScreenHit {
   passed: string[];
   /** 미달한 항목 이름 */
   failed: string[];
+  /** 경보 태그 (2026-09-02) — 쏠림·늦음. 초록은 그대로, 눈으로 거르라고 */
+  alerts?: SignalResult["alerts"];
   /** 렌즈 (2026-08-28) — 이 종목의 무리(가장 강한 사업 테마)와 ETF 뒷배. 조회 0회 */
   theme?: { key: string; name: string; changeRate: number; streak: number } | null;
   etfBack?: { rate: number; top: string } | null;
@@ -893,6 +895,7 @@ export function startScreen(
               score: sig.score,
               passed: sig.checks.filter((c) => c.pass === true).map((c) => c.label),
               failed: sig.checks.filter((c) => c.pass === false).map((c) => c.label),
+              alerts: sig.alerts,
               ...lens,
             });
             // 점수 높은 순 — 진행 중에도 화면에서 바로 볼 수 있게 매번 정렬한다

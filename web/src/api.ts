@@ -1278,6 +1278,9 @@ export const api = {
   signalResetLedgersPreview: () =>
     getJson<LedgerResetReport>("/api/signal/reset-ledgers/preview"),
   signalResetLedgers: () => postJson<LedgerResetReport>("/api/signal/reset-ledgers", {}),
+  /** 보관함 (2026-09-02) — 선 긋기로 보관한 옛 원장을 계속 쫓아간다 */
+  signalArchives: () => getJson<{ archives: ArchiveMeta[] }>("/api/signal/archives"),
+  signalArchive: (stamp: string) => getJson<ArchiveReport>(`/api/signal/archives/${encodeURIComponent(stamp)}`),
   signalSuperJob: () =>
     getJson<{
       status: "idle" | "running" | "done" | "error";
@@ -2497,6 +2500,8 @@ export interface SuperExit {
 }
 
 export interface SuperEntry {
+  /** 편입 당시 경보 태그 (2026-09-02) — 「경보 있던 편입 vs 없던 편입」을 나중에 견준다 */
+  alerts?: SignalAlerts;
   /**
    * **편입 당시 장세** — 서버는 처음부터 보내고 있었는데 타입에만 없었다
    * (2026-09-02). 그래서 화면이 이 값을 쓸 수가 없었다.
@@ -2633,6 +2638,75 @@ export interface SignalCheckStat {
 }
 
 /** 신호등 시뮬레이터 결과 */
+/* ---- 보관함 (2026-09-02) — 서버 `ledgerArchive.ts` 와 같은 모양 ---- */
+export type ArchiveKind = "superSignal" | "signalTrack" | "listTrack";
+export interface ArchiveMeta {
+  stamp: string;
+  label: string;
+  files: { kind: ArchiveKind; label: string; file: string; count: number }[];
+  configFile?: string;
+  fingerprints: Record<string, number>;
+  total: number;
+}
+export interface ArchiveHorizon {
+  n: number;
+  avg: number | null;
+  med: number | null;
+  win: number | null;
+}
+export interface ArchiveGroupStat {
+  label: string;
+  n: number;
+  d1: ArchiveHorizon;
+  d5: ArchiveHorizon;
+  d20: ArchiveHorizon;
+}
+export interface ArchiveRow {
+  kind: ArchiveKind;
+  code: string;
+  name: string;
+  date: string;
+  price: number;
+  score: number;
+  tier?: number;
+  list?: string;
+  configHash?: string;
+  alerts?: SignalAlerts;
+  d1: number | null;
+  d5: number | null;
+  d20: number | null;
+  barsAfter: number;
+}
+export interface ArchiveConfigSummary {
+  configVersion?: number;
+  greenAt: number;
+  yellowAt: number;
+  axisWeights: Record<"trend" | "flow" | "value", number>;
+  minCoverage: number;
+  regimeSwitch: boolean;
+  checks: {
+    key: string;
+    label: string;
+    axis: string;
+    weight: number;
+    threshold: number;
+    strongAt: number;
+    capAt?: number;
+    regime?: string;
+    veto?: boolean;
+    vetoAt?: number;
+    span?: number;
+  }[];
+}
+export interface ArchiveReport {
+  meta: ArchiveMeta;
+  archived: { kind: ArchiveKind; label: string; total: ArchiveGroupStat; groups: ArchiveGroupStat[]; rows: ArchiveRow[] }[];
+  live: { kind: ArchiveKind; label: string; total: ArchiveGroupStat; groups: ArchiveGroupStat[] }[];
+  config: ArchiveConfigSummary | null;
+  diff: string[];
+  closesBuiltAt: string;
+}
+
 /** 원장에 선 긋기 결과 — 서버의 `ResetReport` 와 같은 모양이어야 한다 */
 export interface LedgerResetReport {
   at: string;
@@ -2848,6 +2922,8 @@ export interface ScreenHit {
   score: number;
   passed: string[];
   failed: string[];
+  /** 경보 태그 (2026-09-02) */
+  alerts?: SignalAlerts;
   /** 등락률·거래대금이 **직전 거래일 값**으로 메워진 줄 (장 밖에 돌렸을 때) */
   stale?: boolean;
   /** 렌즈 (2026-08-28) — 이 종목의 무리(가장 강한 사업 테마)와 ETF 뒷배 */
@@ -3200,11 +3276,27 @@ export interface SignalAxisResult {
   level: SignalLevel;
 }
 
+/**
+ * **경보 태그** (2026-09-02) — 🔥쏠림(장세 무관) · ⏳늦음(약세장만). 점수·색은 안 건드린다.
+ * 서버 `hotAlerts.ts` 와 같은 모양. `label` 은 「회전율 3.4%」처럼 바로 보여 주는 글.
+ */
+export interface SignalAlert {
+  key: string;
+  label: string;
+  value: number;
+}
+export interface SignalAlerts {
+  hot: SignalAlert[];
+  late: SignalAlert[];
+}
+
 export interface SignalResult {
   code: string;
   level: SignalLevel;
   /** 추세·수급·실적 세 축의 가중평균. 위험은 섞지 않는다 */
   score: number;
+  /** 경보 태그 — 조건 검색 결과에는 없다 */
+  alerts?: SignalAlerts;
   checks: SignalCheck[];
   axes: SignalAxisResult[];
   /** 위험이 빨강이라 초록이 막혔나 */
@@ -4705,6 +4797,8 @@ export interface TrackEntry {
    * 말하는 자리다.
    */
   vetoedBy?: string[];
+  /** 편입 당시 경보 태그 (2026-09-02) */
+  alerts?: SignalAlerts;
   basePrice: number;
   /** 그때의 신호등 기준 지문 — 기준이 바뀌면 같은 90점도 다른 뜻이다 */
   configHash: string;

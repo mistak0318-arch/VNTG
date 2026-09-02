@@ -13412,6 +13412,64 @@ thead .sd-emph {
   font-weight: 600;
 }
 
+/* 경보 태그 🔥쏠림 · ⏳늦음 (2026-09-02) — 점수는 그대로, 표시만. 툴팁에 근거가 다 있다 */
+.sig-alerts { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.sig-alert {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: help;
+}
+.sig-alert.hot {
+  background: color-mix(in srgb, #ff7a1a 16%, transparent);
+  border: 1px solid color-mix(in srgb, #ff7a1a 45%, transparent);
+  color: #e86a10;
+}
+.sig-alert.late {
+  background: color-mix(in srgb, #8a7cff 16%, transparent);
+  border: 1px solid color-mix(in srgb, #8a7cff 45%, transparent);
+  color: #7a6cf0;
+}
+.sig-alerts.compact .sig-alert { padding: 0 5px; font-size: 10.5px; }
+
+/* 보관함 (2026-09-02) */
+.arch-panel .filter-row { flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.arch-meta { margin: 2px 0 8px; }
+.arch-cfg { margin: 6px 0 10px; }
+.arch-diff { margin: 6px 0; font-size: 0.8rem; }
+.arch-diff ul { margin: 4px 0 0 1.2em; padding: 0; color: var(--muted); }
+.arch-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin: 8px 0 12px; }
+.arch-stat h4 { margin: 0 0 4px; font-size: 0.86rem; }
+
+/* 기호 설명 — 접이식 범례 */
+.sig-legend { margin: 4px 0 6px; }
+.sig-legend-btn {
+  border: 1px dashed var(--border);
+  background: none;
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+.sig-legend-btn:hover { color: var(--text); border-style: solid; }
+.sig-legend-list {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  display: grid;
+  gap: 5px;
+  font-size: 0.76rem;
+}
+.sig-legend-list > div { display: grid; grid-template-columns: 6.5em 1fr; gap: 8px; }
+.sig-legend-list dt { color: var(--text); font-weight: 600; }
+.sig-legend-list dd { margin: 0; color: var(--muted); line-height: 1.45; }
+
 /* 지금 장세 (2026-09-01) — 기준이 장세에 따라 켜지고 꺼지므로 그 근거를 밝힌다.
    위험·탈락과 달리 **경고가 아니라 상태**라 색을 옅게 둔다. */
 .sig-regime {

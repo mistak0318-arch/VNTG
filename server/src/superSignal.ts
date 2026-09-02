@@ -144,6 +144,8 @@ export interface SuperEntry {
   addedPrice: number;
   /** 편입 당시 신호등 점수 */
   score: number;
+  /** 편입 당시 경보 태그 (2026-09-02) — 「경보 있던 편입 vs 없던 편입」을 나중에 묻기 위해 */
+  alerts?: { hot: { key: string; label: string; value: number }[]; late: { key: string; label: string; value: number }[] };
   /**
    * **편입 당시 기준의 지문** (2026-08-31).
    *
@@ -1097,6 +1099,7 @@ export async function runSuperSignal(client: KiwoomClient, force = false): Promi
               addedDate: today,
               addedPrice: x.c.price,
               score: sig.score,
+              alerts: sig.alerts,
               /* 어떤 기준으로 걸린 편입인가 — 나중에 기준이 바뀌면 이걸로 갈린다 */
               configHash: cfgHash,
               /* 편입 시점에 주도주였나 — ⚡ 표식이 값을 하는지 나중에 묻는다 */

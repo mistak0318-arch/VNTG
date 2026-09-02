@@ -27,6 +27,7 @@ import { backtestProgress, backtestResult, startBacktestJob } from "../signalBac
 import { samplesMeta } from "../signalSamples.js";
 import { buildSamplesFromLedger, ledgerSamplesProgress } from "../samplesFromLedger.js";
 import { resetSignalLedgers } from "../ledgerReset.js";
+import { archiveReport, listArchives } from "../ledgerArchive.js";
 import {
   exitListEntry,
   listTrackDetail,
@@ -805,6 +806,30 @@ export function createSignalRouter(client: KiwoomClient): Router {
   router.post("/reset-ledgers", async (_req, res, next) => {
     try {
       res.json(await resetSignalLedgers(false));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **보관함** (2026-09-02 저녁) — 선 긋기로 보관한 옛 원장을 계속 쫓아간다.
+   * 조회 0회 — 일봉 캐시로 읽을 때 성적을 낸다. `ledgerArchive.ts`.
+   */
+  router.get("/archives", async (_req, res, next) => {
+    try {
+      res.json({ archives: await listArchives() });
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/archives/:stamp", async (req, res, next) => {
+    try {
+      const r = await archiveReport(String(req.params.stamp));
+      if (!r) {
+        res.status(404).json({ error: "그 보관분이 없습니다" });
+        return;
+      }
+      res.json(r);
     } catch (err) {
       next(err);
     }
