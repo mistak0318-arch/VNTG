@@ -217,8 +217,8 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
                 .map((x) => ({
                   code: x.code,
                   name: x.name,
-                  price: 0,
-                  change: 0,
+                  price: x.price,
+                  change: x.change,
                   changeRate: x.changeRate,
                   marketCap: x.marketCap,
                 })),

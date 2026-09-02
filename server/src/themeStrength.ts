@@ -43,6 +43,14 @@ export interface ThemeStockRow {
   desc: string;
   /** 오늘 등락률. 스냅샷에 없는 종목은 null */
   changeRate: number | null;
+  /**
+   * 현재가·전일대비 — 2026-09-02. 구성종목 시트에서 쓴다.
+   *
+   * ⚠️ **미국 테마는 둘 다 null 이다.** 네이버 분류를 받아 저장할 때 등락률·시총만
+   * 담아 두기 때문이다(파일에 값 자체가 없다). ETF 는 현재가만 있다.
+   */
+  price?: number | null;
+  change?: number | null;
   /** 거래대금 어림값(억원) */
   tradeValue?: number | null;
   /** 시가총액(억원). 스냅샷에 없으면 null */
@@ -230,6 +238,8 @@ export async function themeStrength(
           name: s.name,
           desc: s.desc,
           changeRate: row?.changeRate ?? null,
+          price: row?.price ?? null,
+          change: row?.change ?? null,
           tradeValue: row?.tradeValue ?? null,
           marketCap: row?.marketCap ?? null,
         };
@@ -340,6 +350,7 @@ export async function themeStrength(
                 ? `NAV ${e.nav.toLocaleString("ko-KR")} · 괴리 ${(((e.price - e.nav) / e.nav) * 100).toFixed(2)}%`
                 : "",
             changeRate: e.changeRate,
+            price: e.price,
             tradeValue: e.marketCap,
           },
         ],

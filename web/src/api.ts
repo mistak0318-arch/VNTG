@@ -2795,6 +2795,9 @@ export interface EvaluatedTheme {
     code: string;
     name: string;
     changeRate: number;
+    /** 현재가·전일대비 — 스냅샷에 없는 종목(ETF·리츠 등)은 0 */
+    price: number;
+    change: number;
     marketCap: number | null;
     /** 오늘 거래대금(억원) — 내 테마도 거래대금으로 볼 수 있게 (2026-08-30) */
     tradeValue: number | null;
@@ -4842,7 +4845,12 @@ export interface ThemeStrength {
     name: string;
     desc: string;
     changeRate: number | null;
+    /** 현재가·전일대비 — 미국 테마는 둘 다 null, ETF 는 현재가만 있다 */
+    price?: number | null;
+    change?: number | null;
     tradeValue?: number | null;
+    /** 서버는 처음부터 보내고 있었는데 이 타입에만 없었다 */
+    marketCap?: number | null;
   }[];
 }
 

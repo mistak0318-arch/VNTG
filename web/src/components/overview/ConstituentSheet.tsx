@@ -86,10 +86,10 @@ export function ConstituentSheet({
             (t?.stocks ?? []).map((s) => ({
               code: s.code,
               name: s.name,
-              price: 0,
-              change: 0,
+              price: s.price ?? 0,
+              change: s.change ?? 0,
               changeRate: s.changeRate ?? 0,
-              marketCap: null,
+              marketCap: s.marketCap ?? null,
             })),
           );
         })

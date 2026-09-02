@@ -51,6 +51,9 @@ export interface EvaluatedTheme extends CustomTheme {
     code: string;
     name: string;
     changeRate: number;
+    /** 현재가·전일대비 — 스냅샷에 없는 종목(ETF·리츠 등)은 0 */
+    price: number;
+    change: number;
     marketCap: number | null;
     /**
      * 오늘 거래대금(억원) — 2026-08-30.
@@ -230,6 +233,8 @@ function evaluate(
       code,
       name: s?.name ?? nameOf?.get(code) ?? code,
       changeRate: s?.changeRate ?? 0,
+      price: s?.price ?? 0,
+      change: s?.change ?? 0,
       marketCap: s?.marketCap ?? null,
       tradeValue: s?.tradeValue ?? null,
       weight: null as number | null,

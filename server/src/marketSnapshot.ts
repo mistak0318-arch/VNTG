@@ -26,6 +26,16 @@ export interface SnapshotStock {
   name: string;
   changeRate: number;
   price: number;
+  /**
+   * 전일대비(원) — 2026-09-02.
+   *
+   * 키움이 `pred_pre` 로 주는데 스냅샷이 그동안 **버리고 있었다.** 등락률만 남으니
+   * 스냅샷을 쓰는 화면(내 테마·네이버 테마 구성종목)은 현재가·전일대비를 못 그려
+   * 「-」만 찍혔다 — 테마맵에서 타일을 눌렀을 때 등락률만 보이던 게 이것이다.
+   * 등락률과 현재가로 되짚을 수도 있지만 등락률이 소수 둘째 자리에서 잘려 오므로
+   * 고가주에서 수십 원씩 어긋난다. 원값을 그대로 싣는 게 맞다.
+   */
+  change: number;
   /** 시가총액(억원). 키움이 안 주는 종목이 있다 */
   marketCap: number | null;
   /** 거래대금 어림값(억원) — 거래량 × 현재가. `StockRow.tradeValue` 주석 참고 */
@@ -176,7 +186,8 @@ async function restore(): Promise<MarketSnapshot | null> {
     const stored = JSON.parse(await readFile(FILE, "utf-8")) as StoredSnapshot;
     if (!Array.isArray(stored.stocks) || stored.stocks.length === 0) return null;
     return {
-      byCode: new Map(stored.stocks.map((s) => [s.code, s])),
+      // `change` 가 생기기 전에 저장된 파일에는 이 값이 없다 — 다음 스냅샷이 채운다(최대 5분)
+      byCode: new Map(stored.stocks.map((s) => [s.code, { ...s, change: s.change ?? 0 }])),
       at: stored.at,
       failedSectors: stored.failedSectors ?? 0,
       totalSectors: stored.totalSectors ?? 0,
@@ -242,6 +253,7 @@ async function build(client: KiwoomClient): Promise<MarketSnapshot> {
           name: r.name,
           changeRate: r.changeRate,
           price: r.price ?? 0,
+          change: r.change ?? 0,
           marketCap: r.marketCap ?? null,
           tradeValue: r.tradeValue ?? null,
           /* 지주사를 금융에 넣는 거래소 분류를 여기서도 고친다 — `sectorFix` 참고 */
