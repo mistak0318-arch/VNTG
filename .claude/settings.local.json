@@ -1100,7 +1100,24 @@
       "Bash(curl -s -m 300 -X POST -H \"Content-Type: application/json\" -d '{}' http://localhost:4000/api/cis/backtest)",
       "Bash(curl -s -m 20 http://localhost:4000/api/realtime/status)",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('subscribed',j.subscribed,'· keys',j.keys\\);console.log\\('seats:',JSON.stringify\\(j.seats\\)\\);console.log\\('최근 오류:',\\(j.regErrors||[]\\).slice\\(-2\\).map\\(e=>e.at.slice\\(11,19\\)+' '+e.code\\).join\\(' | '\\)\\)}\\)\")",
-      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('state',j.state,'healthy',j.healthy\\);console.log\\('seats',JSON.stringify\\(j.seats\\)\\);console.log\\('오류',\\(j.regErrors||[]\\).length+'건'\\)}\\)\")"
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('state',j.state,'healthy',j.healthy\\);console.log\\('seats',JSON.stringify\\(j.seats\\)\\);console.log\\('오류',\\(j.regErrors||[]\\).length+'건'\\)}\\)\")",
+      "Bash(node -e \"const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('server/data/companyFacts.json','utf8'\\)\\);const k=Object.keys\\(j\\);console.log\\('facts',k.length,'종목:',k.slice\\(0,5\\).join\\(','\\)\\);const b=JSON.parse\\(require\\('fs'\\).readFileSync\\('server/data/companyBriefs.json','utf8'\\)\\);console.log\\('briefs',Object.keys\\(b\\).length\\)\")",
+      "Bash(node -e \"try{const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('server/data/disclosureAlert.json','utf8'\\)\\);console.log\\(JSON.stringify\\(j.config??j,null,1\\)\\)}catch\\(e\\){console.log\\('파일 없음 — 기본값으로 동작'\\)}\")",
+      "Bash(node -e \"try{const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('server/data/alertConfig.json','utf8'\\)\\);const c=j.config??j;console.log\\('enabled:',c.enabled,'· 주기:',c.intervalMin ?? c.interval,'분'\\);console.log\\('규칙:',JSON.stringify\\(c.rules??c.enabledKeys??Object.keys\\(c\\)\\).slice\\(0,300\\)\\)}catch\\(e\\){console.log\\('오류',e.message\\)}\")",
+      "Bash(node -e \"const j=JSON.parse\\(require\\('fs'\\).readFileSync\\('server/data/calendar.json','utf8'\\)\\);const e=j.events??j;const a=Array.isArray\\(e\\)?e:Object.values\\(e\\).flat\\(\\);console.log\\('총',a.length+'건'\\);const now=new Date\\(\\).toISOString\\(\\).slice\\(0,10\\);const soon=a.filter\\(x=>x.date>=now\\).sort\\(\\(p,q\\)=>p.date.localeCompare\\(q.date\\)\\);console.log\\('앞으로',soon.length+'건'\\);console.log\\(soon.slice\\(0,6\\).map\\(x=>x.date+' ['+x.kind+'] '+x.title\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(curl -s -m 20 http://localhost:4000/api/calendar/alert)",
+      "Bash(curl -s -m 40 -X POST http://localhost:4000/api/calendar/alert/run)",
+      "Bash(curl -s -m 20 -X PUT -H \"Content-Type: application/json\" -d '{\"telegram\":false}' http://localhost:4000/api/calendar/alert)",
+      "Bash(curl -s -m 20 -X POST -H 'Content-Type: application/json' -d '{\"date\":\"__TRACKED_VAR__\",\"title\":\"[임시] 알림 시험\",\"kind\":\"market\",\"memo\":\"곧 지웁니다\"}' http://localhost:4000/api/calendar/events)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);const e=\\(j.events||j\\).filter?.\\(x=>/임시/.test\\(x.title\\)\\)||[];console.log\\('추가됨:',e.map\\(x=>x.id+' '+x.date+' '+x.title\\).join\\(', '\\)\\)}\\)\")",
+      "Bash(grep -n \"router.post\\(\\\\\"/\\\\|router.get\\(\\\\\"/\\\\\"\" routes/calendar.ts)",
+      "Bash(curl -s -m 20 -X POST -H 'Content-Type: application/json' -d '{\"date\":\"__TRACKED_VAR__\",\"title\":\"[임시] 알림 시험\",\"kind\":\"market\",\"memo\":\"곧 지웁니다\"}' http://localhost:4000/api/calendar/)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(d\\);const arr=j.events||j;const e=\\(Array.isArray\\(arr\\)?arr:[]\\).filter\\(x=>/임시/.test\\(x.title\\)\\);console.log\\('추가:',e.map\\(x=>x.id\\).join\\(','\\)\\)}catch\\(err\\){console.log\\(d.slice\\(0,200\\)\\)}}\\)\")",
+      "Bash(curl -s -m 20 \"http://localhost:4000/api/notify?limit=3\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(d\\);const n=\\(j.notices||j.items||j\\).slice?.\\(0,3\\)||[];console.log\\(n.map\\(x=>x.at?.slice\\(11,19\\)+' ['+x.kind+'] '+x.title+' — '+String\\(x.body||''\\).slice\\(0,50\\)\\).join\\('\\\\n'\\)\\)}catch\\(e\\){console.log\\(d.slice\\(0,200\\)\\)}}\\)\")",
+      "Bash(curl -s -m 30 -X POST http://localhost:4000/api/calendar/alert/run)",
+      "Bash(curl -s -m 20 -X PUT -H \"Content-Type: application/json\" -d '{\"telegram\":true}' http://localhost:4000/api/calendar/alert)",
+      "Bash(curl -s -m 20 -X DELETE http://localhost:4000/api/calendar/ev_mtjct9dppn0a)"
     ]
   }
 }

@@ -81,6 +81,7 @@ import { createUsWatchRouter } from "./routes/usWatch.js";
 import { createKeywordRouter } from "./routes/keyword.js";
 import { createDisclosureRouter } from "./routes/disclosure.js";
 import { startDisclosureScheduler } from "./disclosureAlert.js";
+import { startCalendarAlertScheduler } from "./calendarAlert.js";
 import { startKeywordScheduler } from "./keywordAlert.js";
 import { startBacktestGridScheduler } from "./backtest.js";
 import { startLeaderScanScheduler } from "./leaderScan.js";
@@ -331,6 +332,8 @@ void syncScoreBands().catch(() => undefined);
  */
 void closeStaleRuns().catch(() => undefined);
   startDisclosureScheduler();
+  /* 캘린더 일정 — 전날 18시·당일 8시. 조회가 없어 켜 두는 값이 싸다 */
+  startCalendarAlertScheduler();
 
 /**
  * 프로덕션(미니PC)에서는 web을 빌드한 결과(web/dist)를 이 서버가 같이 서빙한다.

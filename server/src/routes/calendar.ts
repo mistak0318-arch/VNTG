@@ -6,6 +6,12 @@ import {
   installEconomicCalendar,
 } from "../economicCalendar.js";
 import { addSub, listSubs, maskUrl, removeSub } from "../calendarSubscription.js";
+import {
+  getCalendarAlertConfig,
+  runCalendarAlert,
+  saveCalendarAlertConfig,
+  type CalendarAlertConfig,
+} from "../calendarAlert.js";
 import { syncStatus, syncSubscriptions } from "../calendarSync.js";
 import { fetchIcs, parseCsv, parseIcs } from "../calendarImport.js";
 import {
@@ -165,6 +171,42 @@ export function createCalendarRouter(): Router {
   router.post("/economic", async (_req, res, next) => {
     try {
       res.json(await installEconomicCalendar());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * **일정 알림** (2026-09-02) — 벤티지: "캘린더 일정도 알림으로 줘"
+   *
+   * 캘린더는 지금까지 화면을 열어야만 보였다. FOMC·CPI·만기를 적어 두고 그날
+   * 그 화면을 안 열면 그냥 지나간다 — 적어 두는 뜻이 없어진다.
+   */
+  router.get("/alert", async (_req, res, next) => {
+    try {
+      res.json({ config: await getCalendarAlertConfig() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.put("/alert", async (req, res, next) => {
+    try {
+      res.json({ config: await saveCalendarAlertConfig(req.body as Partial<CalendarAlertConfig>) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 지금 보내 보기 — 시각 조건을 무시한다.
+   *
+   * ⚠️ **보낸 기록은 그대로 지킨다.** 눌러 볼 때마다 같은 일정이 또 가면
+   * 시험이 아니라 소음이다. 아직 안 보낸 것만 나간다.
+   */
+  router.post("/alert/run", async (_req, res, next) => {
+    try {
+      res.json(await runCalendarAlert(true));
     } catch (err) {
       next(err);
     }
