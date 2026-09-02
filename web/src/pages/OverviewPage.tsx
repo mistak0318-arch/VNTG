@@ -62,6 +62,30 @@ function signCls(v: number): string {
   return v > 0 ? "up" : v < 0 ? "down" : "flat";
 }
 
+/**
+ * 금리 카드가 쓰는 **미국 실시간 넷** (2026-09-02).
+ *
+ * 한투 금리 종합판은 미국·일본을 **전일 종가**로 준다(`rateBoard` 머리 주석).
+ * 실시간이 필요한 미국 만기는 `usMajor` 가 이미 야후에서 받고 있어 그걸 쓴다 —
+ * 조회가 늘지 않는다. 만기가 짧은 쪽부터라 장단기 역전이 왼→오로 읽힌다.
+ */
+const US_YIELD_KEYS = ["irx", "fvx", "tnx", "tyx"] as const;
+/** 야후에 심볼이 없어 한투에서만 오는 것 — 기준금리·일본 10년 (404 실측) */
+const HANTOO_ONLY_RATES = ["Y0204", "Y0207"];
+
+/**
+ * **오늘 값이 아니면 언제 값인지 적는다.**
+ *
+ * 날짜를 안 적으면 「+0.020%p」가 지금 움직임으로 읽힌다 — 벤티지가 걸린 자리가
+ * 정확히 그것이었다. 오늘이면 배지를 안 단다(늘 붙어 있으면 아무도 안 본다).
+ */
+function pastBadge(asOf: string | null): string | null {
+  if (!asOf || asOf.length < 10) return null;
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  if (asOf >= today) return null;
+  return `${asOf.slice(5).replace("-", "/")} 종가`;
+}
+
 function fmtPct(v: number): string {
   return `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
 }
@@ -373,78 +397,106 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         */}
 
         {/*
-          금리 — 야후는 미국 것만 준다(일본·한국은 심볼 자체가 없다). 한투가 국내
-          국고채부터 일본 10년까지 한 번에 준다. 요즘 시장을 흔드는 건 일본 금리라
-          미장 바로 뒤에 둔다 — 엔 캐리가 풀리면 전 세계 위험자산에서 돈이 빠진다.
+          금리 — **미국은 야후 실시간, 나머지는 한투** (2026-09-02 고침).
+
+          벤티지: "국채금리 부분 화면에 갱신이 늦는거 같네. 클릭하면 나오는 값이랑 다르다."
+          한투 금리 종합판은 **미국·일본 금리를 전일 종가로** 준다(응답의 `stck_bsop_date`
+          가 어제 날짜다). 그래서 미국장이 열려 있는 동안 카드는 「+0.020%p」로 멈춰 있는데
+          눌러서 뜬 야후 차트는 「-0.25%」였다 — 값도 방향도 달랐다.
+
+          미국 넷(3개월·5년·10년·30년)은 `usMajor` 가 이미 30초마다 야후에서 받고 있다.
+          그걸 쓰므로 **조회가 늘지 않는다.** 야후에 심볼이 없는 기준금리·일본 10년만
+          한투에서 오고, 그 줄에는 **기준일 배지**를 단다.
+
+          국내(국고채·CD·콜)는 한투 값이 당일이라 그대로다 — 그래도 날짜가 오늘이 아니면
+          배지가 붙는다. 규칙은 하나다: **오늘 값이 아니면 언제 값인지 적는다.**
         */}
         {show("summary") && (
           <OverviewCard
             order={cards.orderOf("rates")}
             title="금리"
-            updatedAt={rates.updatedAt}
+            updatedAt={usMajor.data?.fetchedAt ?? rates.updatedAt}
             loading={rates.loading}
             error={rates.error}
           >
             <div className="ov-card-b">
               <div className="rt-grid">
                 {/* 해외가 먼저다 (2026-08-25, PDF #6) — 요즘 시장을 흔드는 게 미국 금리라서 */}
-                {(["해외", "국내"] as const).map((g) => (
-                  <div key={g}>
-                    <div className="rt-h">{g}</div>
-                    {(rates.data ?? [])
-                      .filter((r) => r.group === g)
-                      .map((r) => {
-                        /*
-                          추이 차트는 **야후에 실제로 있는 것만** 연결한다 (실측:
-                          ^TNX 4.704 / ^TYX 5.231 — 한투 값과 단위까지 일치).
-                          국고채·CD·일본 10년·기준금리는 야후에 심볼이 없다(전부
-                          404 실측) — 없는 것을 눌리게 만들지 않는다.
-                        */
-                        const yahoo =
-                          r.code === "Y0202"
-                            ? "^TNX"
-                            : r.code === "Y0201"
-                              ? "^TYX"
-                              : null;
-                        /* 미국 10년·30년 강조 (PDF #6) — 이 카드에서 실제로 보는 두 줄 */
-                        const hot = r.code === "Y0202" || r.code === "Y0201";
-                        const body = (
-                          <>
-                            <span className={hot ? "rt-hot" : undefined}>{r.name}</span>
-                            <b className={`num${hot ? " rt-hot" : ""}`}>{r.rate?.toFixed(3)}%</b>
-                            {/* 금리는 변화폭(%p)으로 읽는다 — 등락률로 보면 감이 안 온다 */}
-                            <em className={`num ${signCls(r.change ?? 0)}`}>
-                              {(r.change ?? 0) > 0 ? "+" : ""}
-                              {(r.change ?? 0).toFixed(3)}%p
-                            </em>
-                          </>
-                        );
-                        return yahoo ? (
-                          <button
-                            type="button"
-                            className="rt-row rt-click"
-                            key={r.code}
-                            onClick={() =>
-                              setChart({ symbol: yahoo, label: r.name, digits: 3 })
-                            }
-                            title="눌러서 추이 차트"
-                          >
-                            {body}
-                          </button>
-                        ) : (
-                          <div className="rt-row" key={r.code}>
-                            {body}
-                          </div>
-                        );
-                      })}
-                  </div>
-                ))}
+                <div>
+                  <div className="rt-h">해외</div>
+                  {/* 미국 — 야후 실시간. 만기가 짧은 쪽부터라 장단기 역전이 왼→오로 읽힌다 */}
+                  {US_YIELD_KEYS.map((k) => {
+                    const r = (usMajor.data?.rows ?? []).find((x) => x.key === k);
+                    if (!r || r.price === null) return null;
+                    return (
+                      <button
+                        type="button"
+                        className="rt-row rt-click"
+                        key={k}
+                        onClick={() =>
+                          setChart({
+                            symbol: r.symbol,
+                            label: r.label,
+                            digits: 3,
+                            hintPrice: r.price ?? undefined,
+                            hintRate: r.changeRate,
+                          })
+                        }
+                        title="눌러서 추이 차트"
+                      >
+                        <span className="rt-hot">{r.label}</span>
+                        <b className="num rt-hot">{r.price.toFixed(3)}%</b>
+                        {/* 금리는 변화폭(%p)으로 읽는다 — 등락률로 보면 감이 안 온다 */}
+                        <em className={`num ${signCls(r.change ?? 0)}`}>
+                          {(r.change ?? 0) > 0 ? "+" : ""}
+                          {(r.change ?? 0).toFixed(3)}%p
+                        </em>
+                      </button>
+                    );
+                  })}
+                  {/* 야후에 없는 것 — 한투, 지난 종가 */}
+                  {(rates.data ?? [])
+                    .filter((r) => HANTOO_ONLY_RATES.includes(r.code))
+                    .map((r) => (
+                      <div className="rt-row" key={r.code}>
+                        <span>
+                          {r.name}
+                          {pastBadge(r.asOf) && <u className="rt-as">{pastBadge(r.asOf)}</u>}
+                        </span>
+                        <b className="num">{r.rate?.toFixed(3)}%</b>
+                        <em className={`num ${signCls(r.change ?? 0)}`}>
+                          {(r.change ?? 0) > 0 ? "+" : ""}
+                          {(r.change ?? 0).toFixed(3)}%p
+                        </em>
+                      </div>
+                    ))}
+                </div>
+                <div>
+                  <div className="rt-h">국내</div>
+                  {(rates.data ?? [])
+                    .filter((r) => r.group === "국내")
+                    .map((r) => (
+                      <div className="rt-row" key={r.code}>
+                        <span>
+                          {r.name}
+                          {pastBadge(r.asOf) && <u className="rt-as">{pastBadge(r.asOf)}</u>}
+                        </span>
+                        <b className="num">{r.rate?.toFixed(3)}%</b>
+                        <em className={`num ${signCls(r.change ?? 0)}`}>
+                          {(r.change ?? 0) > 0 ? "+" : ""}
+                          {(r.change ?? 0).toFixed(3)}%p
+                        </em>
+                      </div>
+                    ))}
+                </div>
               </div>
               <div className="table-note">
                 <b>%p</b> 는 등락률이 아니라 <b>변화폭</b>입니다 — 4.71% 가 4.72% 로 가는 건
                 등락률로는 0.2% 지만 시장이 반응하는 건 0.01%p 라는 폭 자체입니다.
                 <b>일본 10년</b>은 엔 캐리와 붙어 있어, 오르면 전 세계 위험자산에서 돈이
-                빠집니다. 한국투자증권 제공.
+                빠집니다. 미국 넷은 야후에서 와 미국장이 열려 있는 동안 움직이지만
+                <b> 약 15분 지연</b>입니다. 날짜 배지가 붙은 줄은 그날 <b>종가</b>로
+                멈춰 있습니다 — 한국투자증권 금리판은 미국·일본을 전일 마감으로 줍니다.
               </div>
             </div>
           </OverviewCard>

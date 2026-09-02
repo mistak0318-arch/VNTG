@@ -45,6 +45,35 @@ const BOX_KEYS = ["gspc", "ndx", "rut", "sox", "vix"] as const;
 /** 원자재 — 국채금리 아래 따로. 지수와 단위가 달라 같은 줄에 섞으면 못 읽는다 */
 const COMMODITY_KEYS = ["wti", "brent", "gold"] as const;
 
+/**
+ * **국채금리 카드는 야후 실시간으로 그린다** (2026-09-02).
+ *
+ * 벤티지: "국채금리 부분 화면에 갱신이 늦는거 같네. 클릭하면 나오는 값이랑 다르다."
+ * 카드는 30년 5.270% **+0.020%p**, 눌러서 뜬 차트는 5.256 **-0.25%** — 값도 방향도 달랐다.
+ *
+ * 원인은 갱신 주기가 아니었다. 카드가 쓰던 한투 금리 종합판은 **미국 금리를 전일 종가로**
+ * 준다(응답의 `stck_bsop_date` 가 어제 날짜다). 60초 캐시를 아무리 조여도 안 바뀐다.
+ *
+ * 그런데 **야후 실시간 값이 이미 서버에 있었다** — `usMajor` 섹션이 30초마다 `^IRX·^FVX·
+ * ^TNX·^TYX` 를 받아 두고 화면 어디서도 안 쓰고 있었다(지수 상자는 넷만 고른다).
+ * 그래서 여기로 옮긴다. **조회는 한 번도 안 는다.**
+ *
+ * 순서는 만기가 짧은 쪽부터 — 장단기 역전을 왼쪽에서 오른쪽으로 읽는다.
+ */
+const YIELD_KEYS = ["irx", "fvx", "tnx", "tyx"] as const;
+
+/**
+ * 야후에 **심볼이 없는 것**만 한투에서 온다(404 실측). 이 둘은 값의 성격상 어제 것이어도
+ * 쓸 만하다 — 정책금리는 몇 달에 한 번 바뀌고, 일본 10년은 우리 시간 낮에 정해진다.
+ * 다만 **언제 값인지는 반드시 밝힌다.**
+ */
+const HANTOO_ONLY = ["Y0204", "Y0207"];
+
+/** 2026-09-01 → 09/01 */
+function mmdd(iso: string | null): string | null {
+  return iso && iso.length >= 10 ? iso.slice(5).replace("-", "/") : null;
+}
+
 function pct(v: number | null): string {
   if (v === null || !Number.isFinite(v)) return "-";
   return `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
@@ -118,7 +147,16 @@ export function UsBoardPanel() {
   );
   /* 눌러서 차트 — 숫자 한 줄만으로는 「어디쯤인가」를 모른다 */
   const [chart, setChart] = useState<ChartTarget | null>(null);
-  const usRates = (rates.data ?? []).filter((r) => r.group === "해외");
+  /* 미국 금리는 야후 실시간(usMajor), 야후에 없는 둘만 한투 — 위 YIELD_KEYS 주석 참고 */
+  const yieldRows = YIELD_KEYS.map((k) => rows.find((r) => r.key === k)).filter(
+    (r): r is NonNullable<typeof r> => Boolean(r),
+  );
+  const otherRates = (rates.data ?? []).filter((r) => HANTOO_ONLY.includes(r.code));
+  /* 이 값들이 **언제 값인가** — 받은 시각이 아니라 야후가 찍어 준 시세 시각 */
+  const yieldQuotedAt = yieldRows.reduce<number | null>(
+    (a, r) => (typeof r.quotedAt === "number" && r.quotedAt > 0 && (a === null || r.quotedAt > a) ? r.quotedAt : a),
+    null,
+  );
 
   return (
     <div className="usb">
@@ -161,59 +199,86 @@ export function UsBoardPanel() {
       <section className="ov-card">
         <div className="ov-card-h">
           <span className="ov-card-t">미국 국채금리</span>
-          {/* 갱신 시각을 적어 둔다 — 안 적으면 「이거 살아 있나」를 매번 의심하게 된다 */}
-          <span className="ov-card-sub">
-            {rates.updatedAt
-              ? new Date(rates.updatedAt).toLocaleTimeString("ko-KR", { hour12: false })
+          {/*
+            **받은 시각이 아니라 시세 시각을 적는다** (2026-09-02).
+
+            예전엔 서버가 받아 온 시각을 적었다. 그런데 그건 「우리가 언제 물어봤나」지
+            「이 값이 언제 값인가」가 아니다 — 벤티지가 「갱신이 늦는 것 같다」고 한 자리가
+            정확히 그 틈이었다. 야후는 국채금리 심볼을 **약 15분 지연**으로 준다(실측:
+            받은 시각 22:54 인데 시세 시각은 22:39). 그 사실을 시각으로 말한다.
+          */}
+          <span className="ov-card-sub" title="야후가 준 이 시세의 기준 시각입니다. 국채금리 심볼은 약 15분 지연으로 들어옵니다.">
+            {yieldQuotedAt
+              ? `시세 ${new Date(yieldQuotedAt).toLocaleTimeString("ko-KR", { hour12: false })}`
               : ""}
           </span>
         </div>
         <div className="ov-card-b">
-          {usRates.length === 0 ? (
+          {yieldRows.length === 0 ? (
             <div className="empty">불러오는 중…</div>
           ) : (
             <div className="usb-rates">
-              {usRates.map((r) => {
-                /*
-                  추이 차트 (2026-08-27 — "국채금리는 아예 차트를 볼 수가 없어").
-                  **야후에 실제로 있는 것만** 연결한다(시황 대시보드와 같은 판단):
-                  ^TNX 10년 · ^TYX 30년 · ^FVX 5년 · ^IRX 13주. 기준금리와 일본 10년은
-                  야후에 심볼이 없어(404 실측) 누르는 시늉을 만들지 않는다.
-                */
-                const yahoo = RATE_YAHOO[r.code] ?? null;
-                const body = (
-                  <>
-                    <span className="usb-rate-nm">{r.name}</span>
-                    <b className="usb-rate-v">{r.rate === null ? "-" : `${r.rate.toFixed(3)}%`}</b>
-                    {/* 금리는 등락률이 아니라 %p 로 읽어야 한다 */}
-                    <span className={`usb-rate-d ${cls(r.change)}`}>
-                      {r.change === null
-                        ? ""
-                        : `${r.change > 0 ? "+" : ""}${r.change.toFixed(3)}%p`}
-                    </span>
-                  </>
-                );
-                return yahoo ? (
-                  <button
-                    type="button"
-                    className="usb-rate clickable"
-                    key={r.code}
-                    onClick={() => setChart({ kind: "usStock", symbol: yahoo, label: r.name })}
-                    title="눌러서 추이 차트"
-                  >
-                    {body}
-                  </button>
-                ) : (
-                  <div className="usb-rate" key={r.code}>
-                    {body}
-                  </div>
-                );
-              })}
+              {yieldRows.map((r) => (
+                <button
+                  type="button"
+                  className="usb-rate clickable"
+                  key={r.key}
+                  /* 카드가 든 값을 그대로 넘긴다 — 시트가 다시 세면 기준이 갈린다 */
+                  onClick={() =>
+                    setChart({
+                      kind: "usStock",
+                      symbol: r.symbol,
+                      label: r.label,
+                      digits: r.digits,
+                      hintPrice: r.price ?? undefined,
+                      hintRate: r.changeRate,
+                    })
+                  }
+                  title="눌러서 추이 차트"
+                >
+                  <span className="usb-rate-nm">{r.label.replace("미국 ", "")}</span>
+                  <b className="usb-rate-v">{r.price === null ? "-" : `${r.price.toFixed(3)}%`}</b>
+                  {/*
+                    금리는 등락률이 아니라 %p 로 읽는다. 야후는 등락률(changeRate)과
+                    변화폭(change)을 둘 다 주는데, 여기서 쓰는 건 **변화폭**이다.
+                  */}
+                  <span className={`usb-rate-d ${cls(r.change)}`}>
+                    {r.change === null ? "" : `${r.change > 0 ? "+" : ""}${r.change.toFixed(3)}%p`}
+                  </span>
+                </button>
+              ))}
             </div>
           )}
+
+          {/*
+            야후에 심볼이 없는 둘 — 한투에서 오고 **어제(또는 그제) 종가**다.
+            같은 줄에 섞으면 위의 실시간 값과 구별이 안 되므로 아래에 따로 두고
+            기준일을 적는다. 안 적으면 「+0.020%p」가 지금 움직임으로 읽힌다.
+          */}
+          {otherRates.length > 0 && (
+            <div className="usb-rate-past">
+              {otherRates.map((r) => (
+                <span className="usb-past" key={r.code}>
+                  <em>{r.name}</em>
+                  <b>{r.rate === null ? "-" : `${r.rate.toFixed(3)}%`}</b>
+                  {r.change !== null && r.change !== 0 && (
+                    <i className={cls(r.change)}>
+                      {r.change > 0 ? "+" : ""}
+                      {r.change.toFixed(3)}%p
+                    </i>
+                  )}
+                  {mmdd(r.asOf) && <u>{mmdd(r.asOf)} 종가</u>}
+                </span>
+              ))}
+            </div>
+          )}
+
           <div className="table-note">
             금리는 <b>%p(변화폭)</b> 로 읽습니다 — 4.71%가 4.72%로 가는 건 등락률로는 0.2%지만
-            시장이 반응하는 건 0.01%p 라는 폭 자체입니다.
+            시장이 반응하는 건 0.01%p 라는 폭 자체입니다. 위 네 줄은 야후에서 오고 미국장이
+            열려 있는 동안 움직이지만 <b>약 15분 지연</b>이라, 머리에 적힌 건 받은 시각이 아니라
+            <b> 시세 시각</b>입니다. 아래 두 줄은 야후에 심볼이 없어 한투에서 오는데
+            <b> 전일 종가</b>입니다 — 날짜를 같이 적어 둡니다.
           </div>
         </div>
       </section>
@@ -418,18 +483,17 @@ function UsWatchMap({ onOpen }: { onOpen: (symbol: string, label: string) => voi
  * 자리를 아끼려고 촘촘한 타일(dense)을 쓰고, ETF 는 ±2% 면 큰 날이라
  * 색 기준도 2% 로 낮춰 **강한 업종이 확실히 짙게** 보이게 한다.
  */
-/**
- * 금리 → 야후 심볼 (2026-08-27 실측).
+/*
+ * 「금리 → 야후 심볼」 표(`RATE_YAHOO`)는 없앴다 (2026-09-02).
  *
- * 값이 실제로 오는 것만 넣는다: `^TNX` 4.656 · `^TYX` 5.182 (같은 시각 한투 값과 일치).
- * **미국 기준금리(Y0204)와 일본 10년(Y0207)은 야후에 심볼이 없다** — 13주 국채(^IRX)가
+ * 한투 줄을 그려 놓고 누를 때만 야후로 넘기던 표였는데, 이제 미국 금리는 **처음부터
+ * 야후 값으로 그린다**(`YIELD_KEYS`). 심볼은 `usMajor` 의 줄이 이미 들고 있어
+ * 따로 짝지을 표가 필요 없다 — 짝짓는 표가 있으면 언젠가 한쪽만 고쳐진다.
+ *
+ * 미국 기준금리(Y0204)·일본 10년(Y0207)은 여전히 야후에 심볼이 없다. 13주 국채(^IRX)가
  * 기준금리와 비슷하게 움직이지만 **다른 지표**라, 「미국 기준금리」라고 적어 놓고 그걸
  * 보여주면 거짓말이 된다. 없는 것은 안 눌리게 둔다.
  */
-const RATE_YAHOO: Record<string, string> = {
-  Y0202: "^TNX", // 미국 10년
-  Y0201: "^TYX", // 미국 30년
-};
 
 const SECTOR_GROUPS = ["지수·ETF", "액티브·테마"];
 

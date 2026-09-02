@@ -6751,6 +6751,16 @@ button.nav-group-toggle {
 .rt-row b { font-variant-numeric: tabular-nums; }
 .rt-row em { font-style: normal; font-size: 0.75rem; min-width: 62px; text-align: right; }
 /*
+ * 기준일 배지 (2026-09-02) — 「오늘 값이 아니면 언제 값인지 적는다」.
+ * 한투 금리 종합판이 미국·일본을 전일 종가로 주는 걸 모르면 「+0.020%p」가
+ * 지금 움직임으로 읽힌다. 이름 옆에 작게 붙어 그 오해를 막는다.
+ */
+.rt-as {
+  text-decoration: none; font-size: 0.62rem; color: var(--muted);
+  margin-left: 5px; padding: 1px 5px;
+  border: 1px solid var(--border); border-radius: 999px; white-space: nowrap;
+}
+/*
   속보 — 훑는 화면. 시각 레일 + 갈래색 왼줄 + 방향 단어만 물들인다.
   bn- 접두. (마켓 브리핑의 bf- 타임라인과 같은 문법이라 눈이 이미 안다)
 */
@@ -8163,6 +8173,25 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .usb-rate-nm { font-size: 0.6667rem; color: var(--muted); }
 .usb-rate-v { font-size: 0.9333rem; font-variant-numeric: tabular-nums; }
 .usb-rate-d { font-size: 0.6667rem; font-variant-numeric: tabular-nums; }
+
+/*
+ * 야후에 없어 한투에서 오는 금리 — **지난 종가**다 (2026-09-02).
+ * 위의 실시간 네 칸과 같은 모양이면 「지금 값」으로 읽힌다. 한 단 작게, 한 줄로,
+ * 기준일을 달아 눈이 구별하게 둔다.
+ */
+.usb-rate-past {
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+  margin-top: 7px; padding-top: 7px;
+  border-top: 1px dashed var(--border);
+}
+.usb-past { display: inline-flex; align-items: baseline; gap: 5px; font-size: 0.72rem; }
+.usb-past em { font-style: normal; color: var(--muted); }
+.usb-past b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.usb-past i { font-style: normal; font-size: 0.68rem; font-variant-numeric: tabular-nums; }
+.usb-past u {
+  text-decoration: none; font-size: 0.62rem; color: var(--muted);
+  padding: 1px 5px; border: 1px solid var(--border); border-radius: 999px;
+}
 
 /* 야간선물 */
 .usb-night { display: flex; align-items: baseline; gap: 10px; }

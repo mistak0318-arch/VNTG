@@ -575,20 +575,44 @@ export async function marketPulse(client: KiwoomClient, force = false): Promise<
       note: "우리 지수의 절반이 여기에 묶여 있다",
     });
   }
-  for (const name of ["미국 10년", "일본 10년"]) {
-    const row = rates.find((x) => x.name === name);
-    if (row) {
-      external.push({
-        label: row.name,
-        value: row.rate === null ? "-" : `${row.rate.toFixed(3)}%`,
-        // 금리는 등락률이 아니라 %p 로 읽어야 한다. 화면이 그렇게 쓰도록 null 로 둔다
-        changeRate: null,
-        note:
-          row.change === null
-            ? undefined
-            : `전일대비 ${row.change > 0 ? "+" : ""}${row.change.toFixed(3)}%p`,
-      });
-    }
+  /*
+   * **미국 10년은 야후 실시간으로** (2026-09-02 고침).
+   *
+   * 한투 금리 종합판은 미국·일본을 **전일 종가**로 준다(`rateBoard` 머리 주석 —
+   * 응답의 `stck_bsop_date` 가 어제 날짜다). 여기서 그대로 쓰면 미국장이 열려 있는
+   * 밤에 「전일대비 +0.040%p」라고 적히는데, 그건 **그저께 대비 어제**라 지금과 무관하다.
+   * 야후 값(`usMajor` 의 tnx)은 이미 받아 둔 것이라 조회가 늘지 않는다.
+   */
+  const tnx = (usMajor?.rows ?? []).find((x) => x.key === "tnx");
+  if (tnx && tnx.price !== null) {
+    external.push({
+      label: "미국 10년",
+      value: `${tnx.price.toFixed(3)}%`,
+      // 금리는 등락률이 아니라 %p 로 읽어야 한다. 화면이 그렇게 쓰도록 null 로 둔다
+      changeRate: null,
+      note:
+        tnx.change === null
+          ? undefined
+          : `전일대비 ${tnx.change > 0 ? "+" : ""}${tnx.change.toFixed(3)}%p`,
+    });
+  }
+  /* 일본 10년은 야후에 심볼이 없어 한투뿐이다 — **언제 값인지 같이 적는다** */
+  const jgb = rates.find((x) => x.name === "일본 10년");
+  if (jgb) {
+    const asOf = jgb.asOf ? `${jgb.asOf.slice(5).replace("-", "/")} 종가` : null;
+    external.push({
+      label: "일본 10년",
+      value: jgb.rate === null ? "-" : `${jgb.rate.toFixed(3)}%`,
+      changeRate: null,
+      note: [
+        jgb.change === null
+          ? null
+          : `전일대비 ${jgb.change > 0 ? "+" : ""}${jgb.change.toFixed(3)}%p`,
+        asOf,
+      ]
+        .filter(Boolean)
+        .join(" · ") || undefined,
+    });
   }
 
   const data: MarketPulse = {

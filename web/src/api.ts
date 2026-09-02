@@ -2228,6 +2228,11 @@ export interface RateRow {
   /** 전일대비 (%p) — 등락률이 아니다 */
   change: number | null;
   group: "국내" | "해외";
+  /**
+   * 이 값의 기준영업일 (YYYY-MM-DD). **해외 금리는 전일 종가다** —
+   * 미국장이 열려 있는 동안에도 안 움직인다. 화면은 이걸 밝혀야 한다.
+   */
+  asOf: string | null;
 }
 
 /** 미장 표의 줄 단위 경고 — 신호등(green/yellow/red)과는 다른 개념이다 */

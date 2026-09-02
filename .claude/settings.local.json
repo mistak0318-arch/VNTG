@@ -1160,7 +1160,17 @@
       "Bash(ls \"//100.88.182.35/vntg-deploy\" 2>&1 | head; echo \"--- deploy.log 꼬리 ---\"; tail -15 \"//100.88.182.35/vntg-deploy/deploy.log\" 2>&1)",
       "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; powershell -ExecutionPolicy Bypass -File push-deploy.ps1; git status --short)",
       "Bash(curl -s --max-time 10 http://localhost:4000/api/cis/config)",
-      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('rules:',JSON.stringify\\({targetPct:j.config.rules.targetPct,trailDropPct:j.config.rules.trailDropPct}\\),'| labels:',j.ruleLabels.targetPct.label,'/',j.ruleLabels.trailDropPct.label\\)}\\)\")"
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('rules:',JSON.stringify\\({targetPct:j.config.rules.targetPct,trailDropPct:j.config.rules.trailDropPct}\\),'| labels:',j.ruleLabels.targetPct.label,'/',j.ruleLabels.trailDropPct.label\\)}\\)\")",
+      "Bash(curl -s --max-time 15 \"http://localhost:4000/api/overview/section?name=rates\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('updatedAt',new Date\\(j.updatedAt\\).toLocaleTimeString\\('ko-KR',{hour12:false}\\),'ttlMs',j.ttlMs\\);for\\(const r of \\(j.data||[]\\).filter\\(x=>x.group==='해외'\\)\\)console.log\\(' ',r.name,r.rate,r.change\\)}\\)\")",
+      "Bash(curl -s --max-time 15 \"http://localhost:4000/api/us/quote?symbol=%5ETYX\")",
+      "Bash(curl -s --max-time 15 \"http://localhost:4000/api/overview/section/rates\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);const r=\\(j.data||[]\\).filter\\(x=>x.name.startsWith\\('미국 10년'\\)||x.name.startsWith\\('미국 30년'\\)\\).map\\(x=>x.name+' '+x.rate+' \\('+x.change+'%p\\)'\\).join\\(' | '\\);console.log\\(r,'· 만든시각',new Date\\(j.updatedAt\\).toLocaleTimeString\\('ko-KR',{hour12:false}\\),'· stale',j.stale\\)}\\)\")",
+      "Bash(curl -s --max-time 15 \"http://localhost:4000/api/us-watch/fast?symbols=%5ETNX,%5ETYX\")",
+      "Bash(curl -s --max-time 15 \"http://localhost:4000/api/overview/section/usMajor\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('ttlMs',j.ttlMs,'updatedAt',new Date\\(j.updatedAt\\).toLocaleTimeString\\('ko-KR',{hour12:false}\\),'fetchedAt',j.data?.fetchedAt\\);for\\(const r of \\(j.data?.rows||[]\\)\\)if\\(['irx','fvx','tnx','tyx'].includes\\(r.key\\)\\)console.log\\(' ',JSON.stringify\\(r\\)\\);console.log\\('curveNote:',j.data?.curveNote\\)}\\)\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);for\\(const r of j.data.rows\\)if\\(['tnx','tyx'].includes\\(r.key\\)\\)console.log\\(' ',r.label,r.price,'변화',r.change,'시각',new Date\\(r.quotedAt\\).toLocaleTimeString\\('ko-KR',{hour12:false}\\)\\)}\\)\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);for\\(const [k,v] of Object.entries\\(j.quotes||{}\\)\\)console.log\\(' ',k,v.price,'등락률',v.changeRate?.toFixed\\(3\\),'시각',v.at?new Date\\(v.at\\).toLocaleTimeString\\('ko-KR',{hour12:false}\\):'-'\\)}\\)\")"
     ]
   }
 }
