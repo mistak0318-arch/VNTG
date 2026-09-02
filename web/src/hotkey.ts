@@ -56,7 +56,8 @@ export type Hotkey =
   | "ctrl-q"
   | "alt-l"
   | "ctrl-x"
-  | "tap-l";
+  | "tap-l"
+  | "tap-q";
 
 export interface HotkeyChoice {
   key: Hotkey;
@@ -85,6 +86,7 @@ const ALL: HotkeyChoice[] = [
   { key: "alt-l", label: "Alt+L", hint: "한 손으로" },
   { key: "ctrl-x", label: "Ctrl+X", hint: "⚠️ 잘라내기와 겹칩니다 — 메모에서 글자를 잘라내려다 화면이 잠깁니다" },
   { key: "tap-l", label: "L 세 번 연타", hint: "0.6초 안에 l l l — 입력창에 커서가 있을 땐 안 듣습니다" },
+  { key: "tap-q", label: "Q 세 번 연타", hint: "0.6초 안에 q q q — 입력창에 커서가 있을 땐 안 듣습니다" },
   { key: "off", label: "안 씀", hint: "단축키로는 안 씁니다" },
 ];
 
@@ -115,6 +117,7 @@ export const LOCK_HOTKEYS: HotkeyChoice[] = pick([
   "alt-l",
   "ctrl-x",
   "tap-l",
+  "tap-q",
   "off",
 ]);
 
@@ -177,7 +180,18 @@ function matchesCombo(e: KeyboardEvent, hotkey: Hotkey): boolean {
 }
 
 function tapLetter(hotkey: Hotkey): Letter | null {
-  return hotkey === "tap-m" ? "m" : hotkey === "tap-b" ? "b" : hotkey === "tap-l" ? "l" : null;
+  switch (hotkey) {
+    case "tap-m":
+      return "m";
+    case "tap-b":
+      return "b";
+    case "tap-l":
+      return "l";
+    case "tap-q":
+      return "q";
+    default:
+      return null;
+  }
 }
 
 /**

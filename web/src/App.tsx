@@ -14,6 +14,7 @@ import { CisPage } from "./pages/CisPage";
 import { MemoPage } from "./pages/MemoPage";
 import { MiniPage } from "./pages/MiniPage";
 import { BuzzSourcePage } from "./pages/BuzzSourcePage";
+import { HeaderTicker } from "./components/HeaderTicker";
 import { createHotkeyMatcher } from "./hotkey";
 import { onMiniConfigChange, readMiniConfig } from "./miniConfig";
 import { TabActiveContext } from "./tabActive";
@@ -1043,6 +1044,8 @@ export default function App() {
               두 드롭다운이 나란히 있는 편이 읽기도 낫다.
             */}
             <NotifyBell />
+            {/* 코스피·코스닥 + 상승/하락 종목수 + 시장 신호등 — 종 옆 빈자리 (2026-09-02). 누르면 시황 */}
+            <HeaderTicker onGo={() => go("overview")} />
             {openTabs.length > 1 && (
               <button
                 className="qss-close-tabs"

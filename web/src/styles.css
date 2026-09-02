@@ -6931,6 +6931,41 @@ button.nav-group-toggle {
 }
 .qss-close-tabs:hover { color: var(--text); border-style: solid; }
 
+/* 상단 띠 — 코스피·코스닥 + 상승/하락 종목수 + 시장 신호등 (2026-09-02). 검색창과 같은 줄 */
+.hdr-tick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+.ht-idx,
+.ht-sig {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.25rem 0.55rem;
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ht-idx:hover,
+.ht-sig:hover { border-color: var(--muted); }
+.ht-name { color: var(--muted); font-weight: 600; }
+.ht-px { font-weight: 600; }
+.ht-ad { display: inline-flex; gap: 4px; font-size: 0.7rem; opacity: 0.85; }
+.ht-sig b { font-weight: 600; }
+/* 폰·좁은 창에서는 숨긴다 — 검색창 한 줄에 다 넣으면 검색창이 사라진다 */
+@media (max-width: 960px) {
+  .hdr-tick { display: none; }
+}
+
 /* 미국 섹터 MAP — 두 그룹 붙박이, 촘촘한 타일 */
 .usm-sec + .usm-sec { margin-top: 0.6rem; }
 .usm-sec-h {
