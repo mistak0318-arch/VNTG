@@ -140,6 +140,32 @@ async function readReads(): Promise<Record<string, string>> {
  *
  * 주요 채널로 고르지 않은 방의 글은 여기 없다. 그때는 버즈가 가진 조각을 쓴다.
  */
+/**
+ * 수집분 안에서 찾기 (2026-09-03, 시스 도우미) — **텔레그램에 안 나간다.** 파일만 읽는다.
+ *
+ * `channelSearch.searchChannels` 는 채널 일흔 곳을 실시간으로 훑어 한참 걸린다(벤티지: "긁는 중이라고만
+ * 나와… 한참 기다리니깐 나오네"). 종목 하나 물을 때마다 그걸 돌릴 수는 없다. 주요 채널 피드는 5분마다
+ * 쌓이고 있으니 여기서 찾으면 수 ms 다. 대신 **주요 채널만** 본다는 한계를 화면이 적는다.
+ */
+export async function searchMajorFeed(
+  words: string[],
+  minutes = 24 * 60,
+  limit = 10,
+): Promise<{ hits: MajorMsg[]; total: number; newest: string | null }> {
+  const q = words.map((w) => w.trim().toLowerCase()).filter((w) => w.length >= 2);
+  const feed = await readFeed();
+  const since = Date.now() - minutes * 60_000;
+  const recent = feed.filter((m) => new Date(m.at).getTime() >= since);
+  const hits = q.length
+    ? recent.filter((m) => {
+        const t = m.text.toLowerCase();
+        return q.some((w) => t.includes(w));
+      })
+    : recent;
+  hits.sort((a, b) => b.at.localeCompare(a.at));
+  return { hits: hits.slice(0, limit), total: recent.length, newest: feed.length ? feed[feed.length - 1].at : null };
+}
+
 export async function fullTextByLinks(links: string[]): Promise<Map<string, string>> {
   const want = new Set(links.filter(Boolean));
   const out = new Map<string, string>();

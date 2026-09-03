@@ -84,8 +84,10 @@ export interface AiConfig {
    */
   company: AiChoice | null;
   /**
-   * 시스 도우미 AI 모드 (2026-09-03 추가) — 「시황 질문하기」와 같은 길(웹 검색)이라
-   * **Anthropic 만**. 따로 안 골랐으면 시황 질문하기 설정을 따라간다.
+   * 시스 도우미 AI 모드 (2026-09-03 추가). 따로 안 골랐으면 시황 질문하기 설정을 따라간다.
+   * **Claude 를 고르면 웹 검색이 붙고, 다른 provider 를 고르면 검색 없이 묶음만으로 답한다**
+   * (벤티지: "시스도우미는 왜 클로드밖에 못 고르는 거야?" — 검색 도구가 Anthropic SDK 쪽
+   * 서버 도구라 그랬다. 검색을 안 쓰면 못 고를 이유가 없다).
    * 입력은 질문에 맞춰 모은 묶음(종목이면 시세·수급·뉴스·텔레그램·공시·실적)이라
    * 시장을 물을 때 요약까지 얹으면 리포트만큼 커진다.
    */
@@ -114,7 +116,7 @@ export const PURPOSE_LABEL: Record<AiPurpose, string> = {
   pinned: "고정 채널 AI 세줄",
   vision: "캘린더 이미지 인식",
   company: "종목 정보 엮기 (버튼)",
-  sys: "시스 도우미 AI 모드 (Claude 만)",
+  sys: "시스 도우미 AI 모드 (Claude 면 웹 검색까지, 다른 모델은 묶음만으로)",
 };
 
 let cache: AiConfig | null = null;
@@ -149,10 +151,8 @@ export async function saveAiConfig(input: AiConfig): Promise<AiConfig> {
       const c = clean(input.ask);
       return c && c.provider === "anthropic" ? c : null;
     })(),
-    sys: (() => {
-      const c = clean(input.sys);
-      return c && c.provider === "anthropic" ? c : null;
-    })(),
+    /* 시스는 어느 provider 든 — Claude 가 아니면 askSys 가 검색 없는 길로 보낸다 */
+    sys: clean(input.sys),
   };
   cache = next;
   await mkdir(DATA_DIR, { recursive: true });

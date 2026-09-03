@@ -26,6 +26,35 @@ export const SYS_MODE_KEY = "vntg.sys.mode";
 export const SYS_SEARCH_KEY = "vntg.sys.search";
 /** 설정 화면이 바꾸면 이 이벤트로 알린다 — 같은 창 안에서는 storage 이벤트가 안 온다 */
 export const SYS_EVENT = "vntg:sys";
+/**
+ * 버튼 자리 (2026-09-03 — 벤티지: "위치도 옮길 수 있게 해줘. 모바일에서도").
+ * **이 기기만의 값**이라 setPref 를 안 거친다(`prefs.ts` LOCAL_ONLY 에도 적어 둠) — 27인치에서
+ * 둔 자리가 폰까지 따라오면 안 된다. 화면 비율로 저장해 창 크기가 바뀌어도 비슷한 자리에 선다.
+ */
+const SYS_POS_KEY = "vntg.sys.pos";
+/** 이만큼 넘게 움직였으면 「끈 것」이다 — 손가락은 가만히 있어도 몇 px 씩 떨린다 */
+const DRAG_SLOP = 6;
+
+interface Pos {
+  /** 버튼 가운데의 화면 비율 0~1 */
+  fx: number;
+  fy: number;
+}
+function readPos(): Pos | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(SYS_POS_KEY) ?? "null") as Pos | null;
+    return v && Number.isFinite(v.fx) && Number.isFinite(v.fy) ? v : null;
+  } catch {
+    return null;
+  }
+}
+function clampPx(x: number, y: number): { x: number; y: number } {
+  const m = 22;
+  return {
+    x: Math.min(Math.max(x, m), window.innerWidth - m),
+    y: Math.min(Math.max(y, m), window.innerHeight - m),
+  };
+}
 
 export function sysEnabled(): boolean {
   try {
@@ -57,6 +86,12 @@ interface Turn {
   ai?: AskResult | null;
   error?: string;
   busy?: boolean;
+  /** 서버가 어떻게 알아들었나 — 긁는 동안 먼저 보여 준다 */
+  plan?: string;
+  planTopics?: string[];
+  startedAt?: number;
+  /** 정지 버튼이 끊는 손잡이 */
+  controller?: AbortController;
 }
 
 const EXAMPLES = [
@@ -143,7 +178,19 @@ function Section({ s, onSelectStock }: { s: SysSection; onSelectStock: (code: st
         ) : (
           <b className="sys-sec-title">{s.title}</b>
         )}
-        <span className="sys-dim sys-ms">{(s.ms / 1000).toFixed(1)}초</span>
+        <span
+          className="sys-dim sys-ms"
+          title={
+            s.took
+              ? Object.entries(s.took)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([k, v]) => `${k} ${v < 0 ? "시간 초과" : `${(v / 1000).toFixed(1)}초`}`)
+                  .join("\n")
+              : undefined
+          }
+        >
+          {(s.ms / 1000).toFixed(1)}초
+        </span>
       </div>
       {s.error && <div className="error-banner">{s.error}</div>}
       {s.head && s.head.length > 0 && <Facts facts={s.head} />}
@@ -188,6 +235,65 @@ export function SysAssist({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seq = useRef(0);
 
+  /*
+   * 끌어서 옮기기 — CornerToggle 과 같은 포인터 처리(마우스·터치 한 갈래). 조금이라도
+   * 움직였으면 끈 것이라 패널을 안 연다. 모서리로 붙이지 않고 **놓은 자리 그대로** —
+   * 벤티지가 "보는 시야를 가리지 않게" 둘 자리를 직접 고른다. 화면 밖으로는 못 나간다.
+   */
+  const [pos, setPos] = useState<Pos | null>(readPos);
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const moved = useRef(false);
+  const fabRef = useRef<HTMLButtonElement>(null);
+  const onFabDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    moved.current = false;
+    fabRef.current?.setPointerCapture(e.pointerId);
+  };
+  const onFabMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const s = dragStart.current;
+    if (!s) return;
+    if (!moved.current && Math.hypot(e.clientX - s.x, e.clientY - s.y) < DRAG_SLOP) return;
+    moved.current = true;
+    setDrag(clampPx(e.clientX, e.clientY));
+  };
+  const onFabUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const s = dragStart.current;
+    dragStart.current = null;
+    setDrag(null);
+    if (!s) return;
+    if (!moved.current) {
+      setOpen(true);
+      return;
+    }
+    const p = clampPx(e.clientX, e.clientY);
+    const next: Pos = { fx: p.x / window.innerWidth, fy: p.y / window.innerHeight };
+    setPos(next);
+    try {
+      localStorage.setItem(SYS_POS_KEY, JSON.stringify(next));
+    } catch {
+      /* 저장 못 해도 이번 화면은 옮겨진다 */
+    }
+  };
+  useEffect(() => {
+    if (!drag) return;
+    const prev = document.body.style.touchAction;
+    document.body.style.touchAction = "none";
+    return () => {
+      document.body.style.touchAction = prev;
+    };
+  }, [drag]);
+  /** 버튼이 있는 쪽에 패널을 연다 — 왼쪽에 두고 오른쪽에서 열리면 옮긴 뜻이 없다 */
+  const anchor = (() => {
+    if (!pos) return { side: "right" as const, vert: "bottom" as const };
+    return { side: pos.fx < 0.5 ? ("left" as const) : ("right" as const), vert: pos.fy < 0.45 ? ("top" as const) : ("bottom" as const) };
+  })();
+  const fabStyle: React.CSSProperties | undefined = drag
+    ? { left: drag.x, top: drag.y, right: "auto", bottom: "auto", transform: "translate(-50%, -50%)" }
+    : pos
+      ? { left: `${(pos.fx * 100).toFixed(2)}vw`, top: `${(pos.fy * 100).toFixed(2)}vh`, right: "auto", bottom: "auto", transform: "translate(-50%, -50%)" }
+      : undefined;
+
   useEffect(() => {
     const sync = () => {
       setEnabled(sysEnabled());
@@ -217,6 +323,39 @@ export function SysAssist({
 
   const busy = turns.some((t) => t.busy);
 
+  /*
+   * 진행 표시 (2026-09-03 — 벤티지: "대답을 안 하고 긁는 중이라고만 나와… 멈춘 줄. 생각하는 중이라던가
+   * 프로그래스바라도 보여주던가, 아니면 중간에 멈추는 정지 버튼이라도").
+   * 보내자마자 해석(수 ms)을 먼저 받아 「종목 두산에너빌리티 · 시세·수급·신호등…」을 띄우고,
+   * 경과 초를 0.5초마다 올린다. 텔레그램을 콕 집어 물었으면 채널 진행(n/70)까지 보여 준다.
+   */
+  const [, setTick] = useState(0);
+  const [chanProg, setChanProg] = useState<{ done: number; total: number; name: string } | null>(null);
+  useEffect(() => {
+    if (!busy) {
+      setChanProg(null);
+      return;
+    }
+    const t = setInterval(() => setTick((n) => n + 1), 500);
+    const wantsChan = turns.some((x) => x.busy && x.planTopics?.includes("telegram"));
+    const p = wantsChan
+      ? setInterval(() => {
+          api
+            .sysSearchProgress()
+            .then((r) => setChanProg(r.running ? { done: r.done, total: r.total, name: r.name } : null))
+            .catch(() => undefined);
+        }, 1000)
+      : null;
+    return () => {
+      clearInterval(t);
+      if (p) clearInterval(p);
+    };
+  }, [busy, turns]);
+
+  function stop() {
+    for (const t of turns) if (t.busy) t.controller?.abort();
+  }
+
   function pickMode(m: "plain" | "ai") {
     setMode(m);
     setPref(SYS_MODE_KEY, m);
@@ -239,13 +378,24 @@ export function SysAssist({
         { role: "assistant" as const, text: t.ai?.text ?? "" },
       ])
       .slice(-8);
-    setTurns((prev) => [...prev, { id, q, mode: m, busy: true }]);
+    const controller = new AbortController();
+    setTurns((prev) => [...prev, { id, q, mode: m, busy: true, startedAt: Date.now(), controller }]);
     setInput("");
+    /* 해석은 수 ms — 긁는 동안 「무엇을」 보여 주려고 먼저 받는다. 실패해도 본 요청은 간다 */
+    api
+      .sysInterpret(q, focus)
+      .then((r) => setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, plan: r.intent.note, planTopics: r.intent.topics } : t))))
+      .catch(() => undefined);
     try {
-      const r = await api.sysAsk(q, { mode: m, history, focus, useSearch });
-      setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, pack: r.pack, ai: r.ai, busy: false } : t)));
+      const r = await api.sysAsk(q, { mode: m, history, focus, useSearch }, controller.signal);
+      setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, pack: r.pack, ai: r.ai, busy: false, controller: undefined } : t)));
     } catch (err) {
-      setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, busy: false, error: err instanceof Error ? err.message : "실패" } : t)));
+      const aborted = err instanceof DOMException && err.name === "AbortError";
+      setTurns((prev) =>
+        prev.map((t) =>
+          t.id === id ? { ...t, busy: false, controller: undefined, error: aborted ? "중단했다" : err instanceof Error ? err.message : "실패" } : t,
+        ),
+      );
     }
   }
 
@@ -254,13 +404,23 @@ export function SysAssist({
   return (
     <>
       {!open && (
-        <button type="button" className="sys-fab" onClick={() => setOpen(true)} title="시스 — 물어보기 (종목·시장·ETF·거시·뉴스·텔레그램·CIS·관심종목)">
+        <button
+          ref={fabRef}
+          type="button"
+          className={`sys-fab${drag ? " dragging" : ""}`}
+          style={fabStyle}
+          onPointerDown={onFabDown}
+          onPointerMove={onFabMove}
+          onPointerUp={onFabUp}
+          onPointerCancel={onFabUp}
+          title="시스 — 물어보기 (종목·시장·ETF·거시·뉴스·텔레그램·CIS·관심종목). 끌어서 옮길 수 있다"
+        >
           <SysIcon size="1.7em" />
           <span className="sys-fab-t">시스</span>
         </button>
       )}
       {open && (
-        <div className="sys-panel" role="dialog" aria-label="시스 도우미">
+        <div className={`sys-panel at-${anchor.side} at-${anchor.vert}`} role="dialog" aria-label="시스 도우미">
           <div className="sys-head">
             <b className="sys-title">
               <SysIcon size="1.5em" /> 시스
@@ -321,7 +481,22 @@ export function SysAssist({
                 <div className="sys-q">
                   <span className="sys-dim">{t.mode === "ai" ? "AI" : "일반"}</span> {t.q}
                 </div>
-                {t.busy && <div className="sys-dim sys-line">{t.mode === "ai" ? "긁어서 Claude 에 묻는 중…" : "긁는 중…"}</div>}
+                {t.busy && (
+                  <div className="sys-progress">
+                    <div className="sys-progress-bar">
+                      <span />
+                    </div>
+                    <div className="sys-line sys-dim">
+                      {t.plan ? `${t.plan} — ` : "알아듣는 중 — "}
+                      {t.mode === "ai" ? "긁은 뒤 AI 에 묻는 중" : "긁는 중"} · {Math.floor((Date.now() - (t.startedAt ?? Date.now())) / 1000)}초
+                      {chanProg && chanProg.total > 0 && ` · 텔레그램 채널 ${chanProg.done}/${chanProg.total} ${chanProg.name}`}
+                      {t.mode === "ai" && Date.now() - (t.startedAt ?? 0) > 15_000 && " · 웹 검색이 붙으면 1~3분 걸린다"}
+                    </div>
+                    <button type="button" className="sys-stop" onClick={stop} title="이 질문을 멈춘다">
+                      ■ 정지
+                    </button>
+                  </div>
+                )}
                 {t.error && <div className="error-banner">{t.error}</div>}
                 {t.ai && (
                   <div className="sys-ai">
@@ -377,9 +552,15 @@ export function SysAssist({
                 if (e.key === "Escape") setOpen(false);
               }}
             />
-            <button type="button" className="primary-btn" onClick={() => void send(input)} disabled={busy || !input.trim()}>
-              {busy ? "…" : mode === "ai" ? "AI" : "찾기"}
-            </button>
+            {busy ? (
+              <button type="button" className="primary-btn sys-stop-main" onClick={stop} title="멈춘다">
+                ■
+              </button>
+            ) : (
+              <button type="button" className="primary-btn" onClick={() => void send(input)} disabled={!input.trim()}>
+                {mode === "ai" ? "AI" : "찾기"}
+              </button>
+            )}
           </div>
         </div>
       )}

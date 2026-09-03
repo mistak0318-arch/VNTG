@@ -7,6 +7,10 @@ import { themeStrength } from "./themeStrength.js";
 import { etfHoldersOf } from "./etfHolders.js";
 import { getDisclosures, searchNews, breakingNews } from "./newsDisclosure.js";
 import { searchChannels } from "./channelSearch.js";
+import { searchMajorFeed } from "./majorFeed.js";
+import { choiceFor } from "./aiConfig.js";
+import { summarize } from "./summarize.js";
+import { ASK_SYSTEM } from "./askMarket.js";
 import { quarterFinance } from "./quarterFinance.js";
 import { opinionBrief } from "./analystOpinion.js";
 import { cachedBrief } from "./companyInfo.js";
@@ -98,6 +102,8 @@ export interface SysSection {
   blocks: SysBlock[];
   missing?: string[];
   ms: number;
+  /** 조각별 걸린 시간(ms) — 「무엇이 느렸나」를 화면이 말할 수 있게 */
+  took?: Record<string, number>;
   error?: string;
 }
 
@@ -135,6 +141,38 @@ const when = (iso: string) => {
 const LEVEL_KO: Record<string, string> = { green: "초록", yellow: "노랑", red: "빨강", unknown: "보류" };
 const levelTone = (l: string): SysTone | undefined => (l === "green" ? "good" : l === "yellow" ? "warn" : l === "red" ? "bad" : undefined);
 
+/**
+ * 조각 하나에 시간제한 — 느린 원천 하나(텔레그램 실시간 훑기, 한투 컨센서스)가 섹션 전체를
+ * 붙들지 않게. 넘기면 대체값으로 가고 `took` 에 「시간 초과」로 남는다.
+ */
+function part<T>(
+  took: Record<string, number>,
+  name: string,
+  p: Promise<T>,
+  fallback: T,
+  ms = 12_000,
+): Promise<T> {
+  const t0 = Date.now();
+  return new Promise<T>((resolve) => {
+    const timer = setTimeout(() => {
+      took[name] = -1;
+      resolve(fallback);
+    }, ms);
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        if (took[name] === undefined) took[name] = Date.now() - t0;
+        resolve(v);
+      },
+      () => {
+        clearTimeout(timer);
+        if (took[name] === undefined) took[name] = Date.now() - t0;
+        resolve(fallback);
+      },
+    );
+  });
+}
+
 async function timed(topic: string, key: string, title: string, fn: () => Promise<Omit<SysSection, "key" | "topic" | "title" | "ms">>): Promise<SysSection> {
   const t0 = Date.now();
   try {
@@ -149,12 +187,24 @@ function newsItems(items: { title: string; press: string; link: string; publishe
   return items.slice(0, n).map((x) => ({ text: x.title, sub: `${x.press} · ${when(x.publishedAt ?? x.at ?? "")}`, link: x.link }));
 }
 
-async function channelItems(words: string[], minutes: number, n: number): Promise<SysItem[]> {
+/** 실시간 훑기 — 채널 일흔 곳, 한참 걸린다. **텔레그램을 콕 집어 물었을 때만** 쓴다 */
+async function channelItemsLive(words: string[], minutes: number, n: number): Promise<SysItem[]> {
   const r = await searchChannels(words, minutes, n).catch(() => null);
   if (!r) return [];
   return r.hits.slice(0, n).map((h) => ({
     text: h.text.length > 400 ? `${h.text.slice(0, 400)}…` : h.text,
     sub: `[${h.channelName}] ${when(h.at)}`,
+    link: h.link || undefined,
+  }));
+}
+
+/** 수집분(주요 채널 피드, 5분마다 쌓임) 안에서 — 수 ms. 종목·시장 섹션은 이걸 쓴다 */
+async function channelItems(words: string[], minutes: number, n: number): Promise<SysItem[]> {
+  const r = await searchMajorFeed(words, minutes, n).catch(() => null);
+  if (!r) return [];
+  return r.hits.map((h) => ({
+    text: h.text.length > 400 ? `${h.text.slice(0, 400)}…` : h.text,
+    sub: `[${h.channel}] ${when(h.at)}`,
     link: h.link || undefined,
   }));
 }
@@ -271,25 +321,26 @@ function keywordsOf(q: string): string[] {
 /* ── 종목 ── */
 async function stockSection(client: KiwoomClient, s: SysStockRef): Promise<SysSection> {
   return timed("stock", `stock:${s.code}`, s.name, async () => {
+    const took: Record<string, number> = {};
     const [sum, sig, themes, strength, holders, news, disc, chan, quarters, watch, brief] = await Promise.all([
-      stockSummary(client, s.code).catch(() => null),
-      evaluateSignal(client, s.code).catch(() => null),
-      themesOfStock(s.code).catch(() => []),
-      themeStrength("kr").catch(() => ({ themes: [] })),
-      etfHoldersOf(s.code).catch(() => ({ holders: [] })),
-      searchNews(s.name, { limit: 10 }).catch(() => []),
-      getDisclosures(s.code, 30).catch(() => []),
-      channelItems([s.name, s.code], 2 * 24 * 60, 8),
-      quarterFinance(s.code, 4).catch(() => []),
-      listWatchlist().catch(() => []),
-      cachedBrief(s.code).catch(() => null),
+      part(took, "시세·수급", stockSummary(client, s.code), null),
+      part(took, "신호등", evaluateSignal(client, s.code), null, 20_000),
+      part(took, "테마", themesOfStock(s.code), []),
+      part(took, "테마 강도", themeStrength("kr").then((r) => r.themes), []),
+      part(took, "담은 ETF", etfHoldersOf(s.code).then((r) => r.holders), []),
+      part(took, "뉴스", searchNews(s.name, { limit: 10 }), []),
+      part(took, "공시", getDisclosures(s.code, 30), []),
+      part(took, "텔레그램(수집분)", channelItems([s.name, s.code], 2 * 24 * 60, 8), []),
+      part(took, "분기 실적", quarterFinance(s.code, 4), []),
+      part(took, "관심종목", listWatchlist(), []),
+      part(took, "회사 소개", cachedBrief(s.code), null),
     ]);
     const price = sum?.facts.price ?? null;
-    const opinion = await opinionBrief(s.code, price).catch(() => null);
+    const opinion = await part(took, "컨센서스", opinionBrief(s.code, price), null, 8_000);
     const missing: string[] = [];
     if (!sum) missing.push("시세·수급");
     if (!sig) missing.push("신호등");
-    const strengthOf = new Map(strength.themes.map((t) => [t.name, t.changeRate]));
+    const strengthOf = new Map(strength.map((t) => [t.name, t.changeRate]));
     const w = watch.find((x) => x.code === s.code);
 
     const head: SysFact[] = [];
@@ -319,7 +370,7 @@ async function stockSection(client: KiwoomClient, s: SysStockRef): Promise<SysSe
       });
     }
     const th = themes.filter((t) => !isIndexLikeTheme(t.name)).slice(0, 6);
-    const etfs = holders.holders.filter((h) => !isNotTheme(h.name) && (h.weight ?? 0) <= 50).slice(0, 4);
+    const etfs = holders.filter((h) => !isNotTheme(h.name) && (h.weight ?? 0) <= 50).slice(0, 4);
     if (th.length || etfs.length) {
       blocks.push({
         title: "테마 · 담은 ETF",
@@ -346,9 +397,14 @@ async function stockSection(client: KiwoomClient, s: SysStockRef): Promise<SysSe
     }
     if (news.length) blocks.push({ title: `뉴스 ${Math.min(news.length, 8)}`, items: newsItems(news, 8) });
     if (disc.length) blocks.push({ title: "공시 (30일)", items: disc.slice(0, 6).map((d) => ({ text: d.reportName, sub: d.receiptDate })) });
-    blocks.push(chan.length ? { title: `텔레그램 ${chan.length} (이틀)`, items: chan } : { title: "텔레그램", lines: [{ text: "이틀 안에 이 종목 언급 없음", tone: "muted" }] });
+    blocks.push(
+      chan.length
+        ? { title: `텔레그램 ${chan.length} (주요 채널 수집분 · 이틀)`, items: chan }
+        : { title: "텔레그램", lines: [{ text: "주요 채널 수집분 이틀 안에 이 종목 언급 없음 — 전 채널 실시간은 「텔레」를 붙여 물어봐", tone: "muted" }] },
+    );
     if (brief?.text) blocks.push({ title: "엮어 둔 회사 소개", text: brief.text });
-    return { stock: s, head, blocks, missing };
+    for (const [k, v] of Object.entries(took)) if (v === -1) missing.push(`${k}(시간 초과)`);
+    return { stock: s, head, blocks, missing, took };
   });
 }
 
@@ -674,8 +730,23 @@ async function newsSection(keywords: string[]): Promise<SysSection> {
 /* ── 텔레그램 ── */
 async function telegramSection(words: string[]): Promise<SysSection> {
   return timed("telegram", "telegram", words.length ? `텔레그램 「${words.join(" · ")}」` : "텔레그램 최근", async () => {
-    const items = await channelItems(words.length ? words : ["매수", "급등", "주목", "실적", "공시"], words.length ? 24 * 60 : 3 * 60, 12);
-    return { blocks: [items.length ? { items } : { lines: [{ text: "걸린 글이 없다 — 수집 중인 채널 안에서만 찾는다", tone: "muted" }] }] };
+    /*
+     * 콕 집어 물었으니 **전 채널 실시간**으로 — 단 25초 안에. 넘기면 수집분으로 물러선다.
+     * 화면은 그동안 채널 진행(/api/channels/search-progress)을 보여 준다.
+     */
+    const took: Record<string, number> = {};
+    const w = words.length ? words : ["매수", "급등", "주목", "실적", "공시"];
+    const minutes = words.length ? 24 * 60 : 3 * 60;
+    let items = await part(took, "실시간", channelItemsLive(w, minutes, 12), [], 25_000);
+    let note = "전 채널 실시간";
+    if (items.length === 0) {
+      items = await channelItems(w, minutes, 12);
+      note = took["실시간"] === -1 ? "실시간 훑기가 25초를 넘겨 주요 채널 수집분으로" : "실시간에 없어 주요 채널 수집분으로";
+    }
+    return {
+      blocks: [items.length ? { title: note, items } : { lines: [{ text: "걸린 글이 없다 — 수집 중인 채널 안에서만 찾는다", tone: "muted" }] }],
+      took,
+    };
   });
 }
 
@@ -713,8 +784,12 @@ const TOPICS: Topic[] = [
 
 // ---------------------------------------------------------------- 수집
 
-export async function gather(client: KiwoomClient, question: string, focus?: SysStockRef | null): Promise<SysPack> {
-  const t0 = Date.now();
+/** 해석만 — 수 ms. 화면이 「무엇을 긁는 중인지」를 먼저 띄우려고 따로 부른다 */
+export async function interpret(
+  client: KiwoomClient,
+  question: string,
+  focus?: SysStockRef | null,
+): Promise<{ ctx: Ctx; hit: Topic[]; intent: SysIntent }> {
   const q = question.trim();
   const stocks = await findStocks(client, q);
   const themes = await findThemes(q, stocks);
@@ -733,19 +808,18 @@ export async function gather(client: KiwoomClient, question: string, focus?: Sys
   }
   if (hit.length === 0) hit = TOPICS.filter((t) => t.key === "market");
 
-  const sections = (await Promise.all(hit.map((t) => t.gather(ctx)))).flat();
   if (ctx.stocks.length) notes.push(`종목 ${ctx.stocks.map((s) => s.name).join("·")}`);
   if (themes.length) notes.push(`테마 ${themes.join("·")}`);
   const others = hit.filter((t) => t.key !== "stock" && t.key !== "theme").map((t) => t.title);
   if (others.length) notes.push(others.join("·"));
+  return { ctx, hit, intent: { topics: hit.map((t) => t.key), stocks: ctx.stocks, themes, note: notes.join(" · ") } };
+}
 
-  return {
-    question,
-    at: new Date().toISOString(),
-    intent: { topics: hit.map((t) => t.key), stocks: ctx.stocks, themes, note: notes.join(" · ") },
-    sections,
-    ms: Date.now() - t0,
-  };
+export async function gather(client: KiwoomClient, question: string, focus?: SysStockRef | null): Promise<SysPack> {
+  const t0 = Date.now();
+  const { ctx, hit, intent } = await interpret(client, question, focus);
+  const sections = (await Promise.all(hit.map((t) => t.gather(ctx)))).flat();
+  return { question, at: new Date().toISOString(), intent, sections, ms: Date.now() - t0 };
 }
 
 // ---------------------------------------------------------------- AI
@@ -789,6 +863,33 @@ export async function askSys(
     const digest = await buildDigest(client).catch(() => "");
     if (digest) context += `\n\n=== 시장 요약 ===\n${digest}`;
   }
+
+  /*
+   * 어느 모델로 — Claude 면 웹 검색까지(askMarket). 다른 provider(Gemini·OpenAI)를 골랐으면
+   * 검색 도구가 없으니 **묶음만으로** 답한다(summarize 경로). 벤티지: "왜 클로드밖에 못 고르는 거야?"
+   */
+  const choice = await choiceFor("sys");
+  if (choice && choice.provider !== "anthropic") {
+    const history = (opts.history ?? []).slice(-8).map((t) => `${t.role === "user" ? "사용자" : "답"}: ${t.text}`).join("\n\n");
+    const prompt =
+      `${ASK_SYSTEM.replace(/<search_first>[\s\S]*<\/search_first>/, "").replace(/2\. web_search 도구[^\n]*\n/, "")}\n\n` +
+      `⚠️ 이 모델에는 웹 검색이 없습니다. 아래 [시스가 모은 것]에 없는 사실은 모른다고 하십시오.\n\n` +
+      `${context}\n\n${history ? `=== 앞선 대화 ===\n${history}\n\n` : ""}=== 질문 ===\n${question}`;
+    const r = await summarize(prompt, 2500, "sys");
+    return {
+      pack,
+      ai: {
+        text: r.text,
+        searches: [],
+        sources: [],
+        inputTokens: r.inputTokens,
+        outputTokens: r.outputTokens,
+        model: r.usedModel ?? choice.model,
+        error: r.error,
+      },
+    };
+  }
+
   const ai = await askMarket(client, question, opts.history ?? [], {
     useSearch: opts.useSearch !== false,
     useMarketData: false,

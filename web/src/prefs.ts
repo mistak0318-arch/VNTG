@@ -98,6 +98,8 @@ const LOCAL_ONLY = [
   "vntg.usboard.group",
   /** 보드 설정 패널 접힘 — "고른 것은 이 기기에만 남는다" */
   "vntg.board.cfgOpen",
+  /** 시스 버튼 자리 (2026-09-03) — 27인치에서 둔 자리가 폰까지 따라오면 안 된다 */
+  "vntg.sys.pos",
 ];
 
 function isGlobal(key: string): boolean {

@@ -880,10 +880,26 @@ export const api = {
   ) => postJson<AskResult>("/api/ask", { question, history, ...opts }),
   /* 시스 도우미 — 일반(우리 데이터만) / AI(묶음을 문맥으로 Claude + 웹 검색) */
   sysStatus: () => getJson<{ aiReady: boolean }>("/api/sys/status"),
-  sysAsk: (
+  sysInterpret: (question: string, focus?: SysStockRef | null) =>
+    postJson<{ intent: SysPack["intent"]; titles: string[] }>("/api/sys/interpret", { question, focus }),
+  /* 정지 버튼이 있어야 해서 signal 을 받는다 — postJson 은 그걸 못 넘긴다 */
+  sysAsk: async (
     question: string,
     opts: { mode: "plain" | "ai"; history?: AskTurn[]; focus?: SysStockRef | null; useSearch?: boolean },
-  ) => postJson<SysAnswer>("/api/sys/ask", { question, ...opts }),
+    signal?: AbortSignal,
+  ): Promise<SysAnswer> => {
+    const res = await req("/api/sys/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, ...opts }),
+      signal,
+    });
+    const parsed = (await res.json()) as SysAnswer & { error?: string };
+    if (!res.ok) throw new Error(parsed.error ?? `요청 실패 (${res.status})`);
+    return parsed;
+  },
+  sysSearchProgress: () =>
+    getJson<{ running: boolean; done: number; total: number; name: string }>("/api/channels/search-progress"),
   aiConfig: () =>
     getJson<{
       config: AiConfig;
@@ -2416,6 +2432,8 @@ export interface SysSection {
   blocks: SysBlock[];
   missing?: string[];
   ms: number;
+  /** 조각별 걸린 시간(ms) — -1 은 시간 초과 */
+  took?: Record<string, number>;
   error?: string;
 }
 export interface SysPack {

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
-import { askSys, isSysAiReady, type SysStockRef } from "../sysAssist.js";
+import { askSys, interpret, isSysAiReady, type SysStockRef } from "../sysAssist.js";
 import type { AskTurn } from "../askMarket.js";
 import { addAsk } from "../askHistory.js";
 
@@ -15,6 +15,20 @@ export function createSysRouter(client: KiwoomClient): Router {
 
   router.get("/status", (_req, res) => {
     res.json({ aiReady: isSysAiReady() });
+  });
+
+  /** 해석만 (수 ms) — 화면이 「종목 두산에너빌리티 긁는 중」을 먼저 띄운다 */
+  router.post("/interpret", async (req, res, next) => {
+    try {
+      const question = String(req.body?.question ?? "").trim();
+      const f = req.body?.focus as { code?: string; name?: string } | undefined;
+      const focus: SysStockRef | null =
+        f && typeof f.code === "string" && /^\d{6}$/.test(f.code) ? { code: f.code, name: String(f.name ?? f.code) } : null;
+      const { intent, hit } = await interpret(client, question, focus);
+      res.json({ intent, titles: hit.map((t) => t.title) });
+    } catch (err) {
+      next(err);
+    }
   });
 
   router.post("/ask", async (req, res, next) => {

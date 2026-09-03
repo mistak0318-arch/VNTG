@@ -21,7 +21,7 @@ import { listWatchlist } from "./watchlist.js";
  * 판단에 필요한 재료를 모으는 용도다.
  */
 
-const SYSTEM = `당신은 한국 주식시장 애널리스트입니다. 사용자의 질문에 답하십시오.
+export const ASK_SYSTEM = `당신은 한국 주식시장 애널리스트입니다. 사용자의 질문에 답하십시오.
 
 주어지는 것:
 1. [시장 데이터] — 사용자의 HTS가 방금 조회한 실시간 데이터 (지수·수급·테마·관심종목 등)
@@ -140,7 +140,7 @@ export async function askMarket(
     const response = await anthropic.messages.create({
       model: usedModel,
       max_tokens: 4000,
-      system: SYSTEM,
+      system: ASK_SYSTEM,
       ...(useSearch
         ? {
             tools: [
@@ -209,7 +209,7 @@ export async function askMarket(
       const alt = await choiceFor("report");
       if (alt) {
         const prompt = [
-          SYSTEM,
+          ASK_SYSTEM,
           "=== 질문 ===",
           ...messages.map((m) => `[${m.role}] ${String(m.content)}`),
         ].join("\n\n");

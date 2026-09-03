@@ -14424,3 +14424,36 @@ tr:hover .sd-del { opacity: 0.75; }
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+/* 끌어 옮기기 (2026-09-03) — 끄는 동안 손가락 한가운데, 스크롤로 안 가로채이게 */
+.sys-fab { touch-action: none; -webkit-user-select: none; user-select: none; }
+.sys-fab.dragging { opacity: 0.92; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); cursor: grabbing; }
+/* 패널은 버튼이 있는 쪽·높이에 연다 (PC). 모바일은 늘 바텀시트 */
+@media (min-width: 900px) {
+  .sys-panel.at-left { left: 1rem; right: auto; }
+  .sys-panel.at-top { top: 1rem; bottom: auto; }
+}
+/* 엑셀 모드 — 리본 색에 맞춘 회색 사각 버튼. 캐릭터 대신 글자만 */
+:root[data-theme="excel"] .sys-fab {
+  background: #f3f3f3;
+  border-color: #c6c6c6;
+  color: #333;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  padding: 5px 10px;
+  font-weight: 500;
+}
+:root[data-theme="excel"] .sys-fab .sys-icon { display: none; }
+:root[data-theme="excel"] .sys-fab .sys-fab-t { display: inline; }
+:root[data-theme="excel"] .sys-fab .sys-fab-t::before { content: "fx "; color: #217346; font-weight: 700; }
+/* 진행 표시 + 정지 (2026-09-03 — "멈춘 줄 알았다") */
+.sys-progress { display: flex; flex-direction: column; gap: 5px; padding: 6px 8px; border: 1px dashed var(--border); border-radius: 8px; }
+.sys-progress-bar { height: 4px; border-radius: 2px; background: var(--panel-2); overflow: hidden; position: relative; }
+.sys-progress-bar span {
+  position: absolute; top: 0; bottom: 0; width: 35%; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, #2fd6d0, transparent);
+  animation: sys-slide 1.2s ease-in-out infinite;
+}
+@keyframes sys-slide { 0% { left: -35%; } 100% { left: 100%; } }
+.sys-stop { align-self: flex-start; border: 1px solid var(--border); background: none; color: var(--red); font: inherit; font-size: 0.74rem; padding: 2px 8px; border-radius: 6px; cursor: pointer; }
+.sys-stop:hover { border-color: var(--red); }
+.sys-stop-main { background: var(--red) !important; border-color: var(--red) !important; }
