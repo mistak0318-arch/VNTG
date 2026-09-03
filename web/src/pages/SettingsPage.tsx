@@ -242,6 +242,21 @@ export function SettingsPage() {
         </CollapsibleCard>
       )}
 
+      {/*
+        **선 긋기는 보관함 맨 위에도** (2026-09-03 — 벤티지: "원장에 선긋기 기능이 안보이는데
+        없앤건가?"). 없앤 게 아니라 비용·상태 › 마감 뒤 정리(접힌 카드) 안에만 있어서 못 찾았다.
+        선을 그으면 여기(보관함)로 옮겨 오니 두 자리가 한 탭에 있는 게 맞다. 마감 뒤 정리에도 그대로 둔다.
+      */}
+      {tab === "archive" && (
+        <CollapsibleCard
+          id="ledgerReset"
+          scope="global"
+          title="원장에 선 긋기"
+          hint="지금까지의 편입을 보관함으로 옮기고 새로 센다 — 기준을 바꿨을 때"
+        >
+          <LedgerResetPanel />
+        </CollapsibleCard>
+      )}
       {tab === "archive" && (
         <CollapsibleCard
           id="ledgerArchive"
