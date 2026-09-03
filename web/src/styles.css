@@ -14699,18 +14699,56 @@ tr:hover .sd-del { opacity: 0.75; }
   flex-direction: column;
   gap: 0.45rem;
 }
-.ord-side { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; }
+/*
+ * 매수 · 매도 (2026-09-04 크게 — 벤티지: "두 개가 너무 작아서 헷갈릴 수 있을 것 같거든.
+ * 크게 만들어 주고 색깔도 확실하게").
+ *
+ * **이 화면에서 잘못 누르면 제일 비싼 실수**라 다른 칸과 같은 크기면 안 된다. 골라 놓은 쪽은
+ * 옅은 색이 아니라 **꽉 찬 색**이다 — 옅은 배경끼리는 폰의 밝은 데서 잘 안 갈린다.
+ * 안 고른 쪽은 회색으로 확실히 죽인다. 색은 국내 관례대로 매수 빨강 · 매도 파랑.
+ */
+.ord-side { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
 .ord-side button {
-  padding: 0.45rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  position: relative;
+  min-height: 2.9rem;
+  padding: 0.5rem;
+  border-radius: 10px;
+  border: 2px solid var(--border);
   background: var(--panel-2);
   color: var(--muted);
-  font-weight: 700;
+  font-size: 1.02rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
   cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
-.ord-side button.on.buy { background: rgba(255, 92, 92, 0.2); border-color: var(--red); color: var(--red); }
-.ord-side button.on.sell { background: rgba(76, 141, 255, 0.2); border-color: var(--blue); color: var(--blue); }
+.ord-side button:hover { border-color: var(--muted); }
+/* 고른 쪽 — 꽉 찬 색 + 체크. 글자만으로도, 색만으로도, 표시만으로도 알 수 있게 셋을 겹친다 */
+.ord-side button.on { color: #fff; }
+.ord-side button.on::after {
+  content: "✓";
+  margin-left: 0.35rem;
+  font-size: 0.9rem;
+}
+.ord-side button.on.buy {
+  background: var(--red);
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(255, 92, 92, 0.22);
+}
+.ord-side button.on.sell {
+  background: var(--blue);
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(76, 141, 255, 0.22);
+}
+
+/*
+ * 고른 쪽을 **화면 전체가** 말한다 — 단추 하나만 보고 판단하지 않게.
+ * 입력칸 묶음과 주문 단추 자리에 그 색 테두리를 두른다.
+ */
+.ord-wrap.buy .ord-fields,
+.ord-wrap.buy .ord-submit { border-color: rgba(255, 92, 92, 0.55); }
+.ord-wrap.sell .ord-fields,
+.ord-wrap.sell .ord-submit { border-color: rgba(76, 141, 255, 0.55); }
 
 .ord-lab {
   font-size: 0.8rem;
@@ -14933,6 +14971,8 @@ tr:hover .sd-del { opacity: 0.75; }
   .ord-head { flex-direction: column; gap: 0.4rem; }
   .ord-head .ord-pick { max-width: none; }
   .ord-head .ord-side { flex: none; }
+  /* 폰에서는 더 크게 — 엄지로 누르는 자리고, 잘못 누르면 방향이 뒤집힌다 */
+  .ord-side button { min-height: 3.1rem; font-size: 1.08rem; }
 
   /* 호가창을 가격·잔량 두 줄로 — 곁가지는 접는다 */
   .ord-book .ob-head,
