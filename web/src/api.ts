@@ -2444,7 +2444,7 @@ export interface SysSection {
 /** 시스가 「이렇게 할까?」 하고 내미는 것 — 「넣기」를 눌러야 저장된다 */
 export interface SysProposal {
   id: string;
-  kind: "addEvent";
+  kind: "addEvent" | "addMemo" | "addWatch" | "setStop";
   title: string;
   facts: SysFact[];
   payload: Record<string, unknown>;

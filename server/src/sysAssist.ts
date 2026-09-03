@@ -2,7 +2,8 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { getStockIndex, searchStocks } from "./stockListCache.js";
 import { stockSummary } from "./stockSummary.js";
 import { evaluateSignal, isNotTheme } from "./signalLight.js";
-import { isIndexLikeTheme, themesOfStock } from "./naverThemes.js";
+import { isIndexLikeTheme, loadThemes, themesOfStock } from "./naverThemes.js";
+import { peekSnapshot } from "./marketSnapshot.js";
 import { themeStrength } from "./themeStrength.js";
 import { etfHoldersOf } from "./etfHolders.js";
 import { getDisclosures, searchNews, breakingNews } from "./newsDisclosure.js";
@@ -34,8 +35,12 @@ import { priceMap } from "./cisRun.js";
 import { listSuperSignal } from "./superSignal.js";
 import { addEvent, EVENT_KINDS, listEventsRange, upcomingEvents, type EventKind } from "./calendar.js";
 import { todayDartEvents } from "./dartEvents.js";
-import { listMemos } from "./memoPad.js";
-import { listEntries } from "./tradeJournal.js";
+import { addMemo, listMemos, updateMemo } from "./memoPad.js";
+import { listEntries, saveEntry } from "./tradeJournal.js";
+import { addWatchItem } from "./watchlist.js";
+import { getSectorStocks, type Sectors } from "./marketOverview.js";
+import { findSectorByName } from "./sectorMood.js";
+import { listSectorFlow, SUBJECTS } from "./sectorFlowStore.js";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -134,7 +139,8 @@ export interface SysIntent {
  */
 export interface SysProposal {
   id: string;
-  kind: "addEvent";
+  /** 일정 넣기 · 메모 남기기 · 관심종목 넣기 · 손절선 걸기 (셋은 2026-09-03 저녁, TODO 3) */
+  kind: "addEvent" | "addMemo" | "addWatch" | "setStop";
   title: string;
   facts: SysFact[];
   payload: Record<string, unknown>;
@@ -255,6 +261,8 @@ interface Ctx {
   compact: string;
   stocks: SysStockRef[];
   themes: string[];
+  /** 질문에 든 업종 이름 (ka20003 업종 목록에서) — 「반도체 업종 어때?」 */
+  sectors: { market: "kospi" | "kosdaq"; code: string; name: string; changeRate: number }[];
   focus: SysStockRef | null;
 }
 
@@ -337,13 +345,48 @@ async function findStocks(client: KiwoomClient, q: string): Promise<SysStockRef[
     .map((k) => ({ code: k.code, name: k.name }));
 }
 
-async function findThemes(q: string, stocks: SysStockRef[]): Promise<string[]> {
+/**
+ * 업종 찾기 — 「반도체 업종」「전기전자 섹터」. 업종 목록(ka20003, 시황 캐시)의 이름이 질문에 들어 있으면.
+ * 이름이 「전기/전자」처럼 슬래시가 있어 「전기전자」로도 맞춘다. 종목명·테마명과 겹치면 그쪽이 우선.
+ */
+async function findSectors(client: KiwoomClient, q: string, stocks: SysStockRef[]): Promise<Ctx["sectors"]> {
+  if (!/(업종|섹터|산업)/.test(q)) return [];
+  const sec = (await getSection("sectors", client).catch(() => null)) as { data?: Sectors | null } | null;
+  const all = sec?.data;
+  if (!all) return [];
+  const compact = q.replace(/\s+/g, "").toLowerCase();
+  const out: Ctx["sectors"] = [];
+  for (const market of ["kospi", "kosdaq"] as const) {
+    for (const s of all[market]) {
+      const n = s.name.replace(/[\s/·]/g, "").toLowerCase();
+      if (n.length < 2 || !compact.includes(n)) continue;
+      if (stocks.some((x) => x.name.replace(/\s+/g, "").toLowerCase().includes(n))) continue;
+      if (!out.some((o) => o.name === s.name)) out.push({ market, code: s.code, name: s.name, changeRate: s.changeRate });
+    }
+  }
+  /* 긴 이름이 먼저 — 「전기전자」가 「전기」를 이긴다 */
+  return out.sort((a, b) => b.name.length - a.name.length).slice(0, 2);
+}
+
+async function findThemes(q: string, stocks: SysStockRef[], sectorsFound = 0): Promise<string[]> {
   const compact = q.replace(/\s+/g, "");
   const { themes } = await themeStrength("kr").catch(() => ({ themes: [] }));
   const out: string[] = [];
   for (const t of themes) {
     const n = t.name.replace(/\s+/g, "");
     if (n.length >= 3 && compact.includes(n) && !stocks.some((s) => s.name.replace(/\s+/g, "") === n)) out.push(t.name);
+  }
+  /*
+   * 「반도체 업종 어때?」 — 키움 업종 목록엔 「반도체」가 없다(전기/전자 아래). 업종·섹터·테마라고
+   * 물었는데 업종도 테마 정식 이름도 못 찾았으면, 그 낱말이 **든** 테마 중 돈이 도는 순으로 셋.
+   */
+  if (out.length === 0 && sectorsFound === 0 && /(업종|섹터|테마|쪽|주들?)/.test(q)) {
+    const words = tokensOf(q).filter((w) => !/(업종|섹터|테마|어때|오늘|수급|주도|관련)/.test(w) && w.length >= 2);
+    const cands = themes
+      .filter((t) => !isIndexLikeTheme(t.name) && words.some((w) => t.name.replace(/\s+/g, "").toLowerCase().includes(w)))
+      .sort((a, b) => (b.tradeValue ?? 0) - (a.tradeValue ?? 0))
+      .slice(0, 3);
+    for (const t of cands) out.push(t.name);
   }
   return out.slice(0, 3);
 }
@@ -441,7 +484,7 @@ const RE = {
    * 어때?」「원장 잘 가?」에 시장 카드가 덤으로 붙는다. 아무것도 못 알아들었을 때의 기본값이
    * 시장이므로(gather), 「왜 이래?」만 쳐도 시장으로 간다.
    */
-  market: /(시장|코스피|코스닥|증시|장세|장 ?분위기|국내 ?지수|외국인 ?수급|외인 ?수급|기관 ?수급|수급 (어|어느|어디|방향)|섹터|업종|테마 (뭐|어디|어떤)|주도주)/i,
+  market: /(시장|코스피|코스닥|증시|장세|장 ?분위기|국내 ?지수|외국인 ?수급|외인 ?수급|기관 ?수급|수급 (어|어느|어디|방향)|테마 (뭐|어디|어떤)|주도주)/i,
   etf: /(etf|이티에프)/i,
   usFut: /(미장|미국 ?(선물|지수|장|증시)|나스닥|다우|s&p|에스앤피|vix|공포지수|필라델피아|반도체 ?지수)/i,
   night: /(야간 ?선물|야간)/,
@@ -456,6 +499,12 @@ const RE = {
   calendar: /(일정|캘린더|이벤트|발표 (언제|있)|실적 ?발표|이번 ?주|다음 ?주|내일 (뭐|일정)|스케줄)/,
   /** 일정 넣기 — 「9/10 14시 FOMC 일정 넣어줘」「내일 오후 2시 미팅 캘린더에 추가」 */
   addEvent: /((일정|캘린더|스케줄).{0,12}(넣|추가|등록|잡아|적어))|((넣어|추가해|등록해|잡아|적어).{0,6}(일정|캘린더))/,
+  /** 메모 남기기 — 「메모 남겨줘: 하이닉스 눌림 대기」「메모: …」 */
+  addMemo: /^메모[:：]|((메모|메모장)(에|로)?\s*(남겨|적어|기록|넣어|저장|써))|((남겨|적어|기록해|써)\s?(둬|줘|놔).{0,4}$)/,
+  /** 관심종목 넣기 — 「하이닉스 관심종목에 넣어줘」「관심에 추가」 */
+  addWatch: /((관심 ?종목|관심)(에|으로|그룹에)?\s*(넣|추가|담|등록))/,
+  /** 손절선 걸기 — 「하이닉스 손절선 82000으로」「손절 1,500,000 잡아」 */
+  setStop: /(손절|손절선|손절가)\s*(을|를|은|는)?\s*[\d,.]+\s*(원|만|천)?/,
   memo: /(메모|메모장|일기|적어 ?둔|적어둔|적었|기록해 ?둔)/,
   journal: /(복기|매매 ?일지|매매일지)/,
   disclosure: /(공시)/,
@@ -558,7 +607,7 @@ async function stockSection(client: KiwoomClient, s: SysStockRef, parts: Set<Sto
         facts: [
           ...quarters.slice(0, 4).map((q) => ({
             label: q.label,
-            value: `영익 ${q.operatingProfit ?? "-"}억 (${q.margin ?? "-"}%${q.yoy !== null ? `, YoY ${pct(q.yoy, 0)}` : ""})`,
+            value: `영익 ${q.operatingProfit !== null ? num(q.operatingProfit) : "-"}억 (이익률 ${q.margin !== null ? q.margin.toFixed(1) : "-"}%${q.yoy !== null ? `, YoY ${pct(q.yoy, 0)}` : ""})`,
             tone: toneOf(q.yoy),
           })),
           ...(opinion
@@ -607,8 +656,8 @@ async function marketSection(client: KiwoomClient): Promise<SysSection> {
         ],
         facts: [
           { label: `5일 누적(${f.days5}일치)`, value: "" , tone: "muted" },
-          { label: "외국인", value: `${won(f.foreign5)}억 · ${f.foreignStreak >= 0 ? `${f.foreignStreak}일 순매수` : `${-f.foreignStreak}일 순매도`}`, tone: toneOf(f.foreign5) },
-          { label: "기관", value: `${won(f.inst5)}억 · ${f.instStreak >= 0 ? `${f.instStreak}일 순매수` : `${-f.instStreak}일 순매도`}`, tone: toneOf(f.inst5) },
+          { label: "외국인", value: `${won(f.foreign5)}억${f.foreignStreak > 0 ? ` · ${f.foreignStreak}일 연속 순매수` : f.foreignStreak < 0 ? ` · ${-f.foreignStreak}일 연속 순매도` : ""}`, tone: toneOf(f.foreign5) },
+          { label: "기관", value: `${won(f.inst5)}억${f.instStreak > 0 ? ` · ${f.instStreak}일 연속 순매수` : f.instStreak < 0 ? ` · ${-f.instStreak}일 연속 순매도` : ""}`, tone: toneOf(f.inst5) },
           { label: "개인", value: `${won(f.individual5)}억`, tone: toneOf(f.individual5) },
           ...[...new Map(pulse.risks.map((r) => [r.label, r])).values()].map((r) => ({ label: "⚠", value: r.label, tone: (r.level === "danger" ? "bad" : "warn") as SysTone, hint: r.detail })),
         ],
@@ -760,6 +809,21 @@ async function themeSection(name: string): Promise<SysSection> {
     const { themes } = await themeStrength("kr").catch(() => ({ themes: [] }));
     const t = themes.find((x) => x.name === name);
     if (!t) return { blocks: [], missing: ["테마 강도 없음"] };
+    /* 구성종목 — 네이버 테마 파일 + 전종목 스냅샷(조회 0회). 「반도체 업종 어때?」가 여기로 온다 (TODO 4) */
+    const no = Number(t.key.split(":")[1]);
+    const store = await loadThemes().catch(() => null);
+    const snap = peekSnapshot();
+    const members = (store?.themes.find((x) => x.no === no)?.stocks ?? [])
+      .map((s) => ({ ...s, q: snap?.byCode.get(s.code) ?? null }))
+      .filter((s) => s.q && s.q.price > 0);
+    const item = (s: (typeof members)[number]): SysItem => ({
+      text: s.name,
+      sub: `${num(s.q!.price)} (${pct(s.q!.changeRate)})${s.desc ? ` — ${s.desc.slice(0, 50)}` : ""}`,
+      stock: { code: s.code, name: s.name },
+      tone: toneOf(s.q!.changeRate),
+    });
+    const up = members.filter((s) => s.q!.changeRate > 0).sort((a, b) => b.q!.changeRate - a.q!.changeRate).slice(0, 6);
+    const down = members.filter((s) => s.q!.changeRate < 0).sort((a, b) => a.q!.changeRate - b.q!.changeRate).slice(0, 4);
     return {
       head: [
         { label: "오늘", value: pct(t.changeRate), tone: toneOf(t.changeRate) },
@@ -767,8 +831,15 @@ async function themeSection(name: string): Promise<SysSection> {
         { label: "폭", value: `${t.breadth}%` },
         { label: "연속", value: `${t.streak}일` },
         { label: "5일 중", value: `${t.hit5.n}/${t.hit5.of}일 상승` },
+        ...(t.tradeValue ? [{ label: "대금", value: `${num(Math.round(t.tradeValue))}억` }] : []),
       ],
-      blocks: [],
+      blocks: members.length
+        ? [
+            ...(up.length ? [{ title: `오르는 종목 (${members.length}종목 중)`, items: up.map(item) }] : []),
+            ...(down.length ? [{ title: `빠지는 종목 (${members.length}종목 중)`, items: down.map(item) }] : []),
+            ...(!up.length && !down.length ? [{ lines: [{ text: `${members.length}종목 전부 보합`, tone: "muted" as SysTone }] }] : []),
+          ]
+        : [{ lines: [{ text: "구성종목 시세가 아직 없다(스냅샷 전)", tone: "muted" }] }],
     };
   });
 }
@@ -976,6 +1047,57 @@ async function journalSection(words: string[]): Promise<SysSection> {
   });
 }
 
+/* ── 업종 (TODO 4) — 「반도체 업종 어때?」: 업종 등락 · 구성종목 위아래 · 업종 수급 5일 ── */
+async function sectorSection(client: KiwoomClient, s: Ctx["sectors"][number]): Promise<SysSection> {
+  return timed("sector", `sector:${s.market}:${s.code}`, `업종 ${s.name} (${s.market === "kospi" ? "코스피" : "코스닥"})`, async () => {
+    const took: Record<string, number> = {};
+    const [stocks, flowDays] = await Promise.all([
+      part(took, "구성종목", getSectorStocks(client, s.market, s.code), [], 15_000),
+      part(took, "업종 수급", listSectorFlow(6), []),
+    ]);
+    const live = stocks.filter((x) => (x.tradeValue ?? 0) >= 10);
+    const up = [...live].sort((a, b) => b.changeRate - a.changeRate).slice(0, 6);
+    const down = [...live].sort((a, b) => a.changeRate - b.changeRate).slice(0, 4);
+    const rising = stocks.filter((x) => x.changeRate > 0).length;
+    const falling = stocks.filter((x) => x.changeRate < 0).length;
+    const item = (x: (typeof stocks)[number]): SysItem => ({
+      text: x.name,
+      sub: `${num(x.price)} (${pct(x.changeRate)})${x.tradeValue ? ` · 대금 ${num(Math.round(x.tradeValue))}억` : ""}`,
+      stock: { code: x.code, name: x.name },
+      tone: toneOf(x.changeRate),
+    });
+    /* 업종 수급 — 저장된 일별 원장에서 이 업종 행만. SUBJECTS 순서(외국인·기관·개인…) */
+    const fi = SUBJECTS.indexOf("foreign");
+    const ii = SUBJECTS.indexOf("institution");
+    const rowsOf = (d: (typeof flowDays)[number]) => (s.market === "kospi" ? d.kospi : d.kosdaq).find((r) => r.code === s.code);
+    const days = flowDays.map((d) => ({ date: d.date, r: rowsOf(d) })).filter((x) => x.r);
+    const sum = (idx: number, n: number) => days.slice(-n).reduce((a, x) => a + (x.r?.v[idx] ?? 0), 0);
+    const today = days[days.length - 1];
+    const blocks: SysBlock[] = [];
+    if (days.length) {
+      blocks.push({
+        title: `업종 수급 (억원, 원장 ${days.length}일)`,
+        facts: [
+          ...(today ? [{ label: `${today.date.slice(5)} 외국인`, value: won(today.r?.v[fi] ?? 0), tone: toneOf(today.r?.v[fi]) }, { label: "기관", value: won(today.r?.v[ii] ?? 0), tone: toneOf(today.r?.v[ii]) }] : []),
+          { label: "5일 외국인", value: won(sum(fi, 5)), tone: toneOf(sum(fi, 5)) },
+          { label: "5일 기관", value: won(sum(ii, 5)), tone: toneOf(sum(ii, 5)) },
+        ],
+      });
+    }
+    blocks.push({ title: `오르는 종목 (대금 10억↑ 중)`, items: up.map(item) });
+    blocks.push({ title: `빠지는 종목`, items: down.map(item) });
+    for (const [k, v] of Object.entries(took)) if (v === -1) blocks.push({ lines: [{ text: `${k} 시간 초과`, tone: "muted" }] });
+    return {
+      head: [
+        { label: "업종 등락", value: pct(s.changeRate), tone: toneOf(s.changeRate) },
+        { label: "구성", value: `${stocks.length}종목 · ▲${rising} ▼${falling}` },
+      ],
+      blocks,
+      took,
+    };
+  });
+}
+
 /* ── 일정 넣기 — 제안만 만든다. 저장은 act() 가 「넣기」를 눌렀을 때 ── */
 const WEEKDAY: Record<string, number> = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 };
 function parseEventProposal(q: string): SysProposal | null {
@@ -1064,8 +1186,123 @@ function parseEventProposal(q: string): SysProposal | null {
   };
 }
 
+/* ── 메모 남기기 (TODO 3) ── */
+function parseMemoProposal(q: string, stocks: SysStockRef[]): SysProposal | null {
+  let body = q;
+  const colon = q.match(/^메모[:：]\s*(.+)$/s);
+  if (colon) body = colon[1];
+  else {
+    body = q
+      .replace(/(메모|메모장)(에|로)?\s*(남겨|적어|기록|넣어|저장|써)\s?(줘|주라|줄래|놔|둬|주세요)?[:：]?/g, " ")
+      .replace(/(남겨|적어|기록해|써)\s?(둬|줘|놔)\s*[.!]?\s*$/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  body = body.trim();
+  if (body.length < 2) return null;
+  const title = (stocks[0] ? `${stocks[0].name} — ` : "") + body.split(/[.\n]/)[0].slice(0, 40);
+  return {
+    id: `memo-${Date.now()}`,
+    kind: "addMemo",
+    title: "이렇게 메모할까?",
+    facts: [
+      { label: "제목", value: title },
+      { label: "본문", value: body.length > 120 ? `${body.slice(0, 120)}…` : body },
+      ...(stocks.length ? [{ label: "종목", value: stocks.map((s) => s.name).join("·"), tone: "muted" as SysTone }] : []),
+      { label: "태그", value: "시스", tone: "muted" },
+    ],
+    payload: { title, body, stocks },
+  };
+}
+
+/* ── 관심종목 넣기 (TODO 3) ── */
+function parseWatchProposal(q: string, stocks: SysStockRef[]): SysProposal | null {
+  if (stocks.length === 0) return null;
+  const g = q.match(/([가-힣A-Za-z0-9_]+)\s*그룹/);
+  const group = g && !/관심/.test(g[1]) ? g[1] : "기본";
+  return {
+    id: `watch-${Date.now()}`,
+    kind: "addWatch",
+    title: "관심종목에 넣을까?",
+    facts: [
+      { label: "종목", value: stocks.map((s) => `${s.name} (${s.code})`).join(" · ") },
+      { label: "그룹", value: group, tone: "muted" },
+      { label: "편입가", value: "지금 시세로", tone: "muted" },
+    ],
+    payload: { stocks, group },
+  };
+}
+
+/* ── 손절선 걸기 (TODO 3) — 복기 노트의 그 종목 매수 로트에 stop 을 적는다 ── */
+function parseStopProposal(q: string, stocks: SysStockRef[]): SysProposal | null {
+  if (stocks.length === 0) return null;
+  const m = q.match(/(손절|손절선|손절가)\s*(을|를|은|는)?\s*([\d,.]+)\s*(원|만|천)?/);
+  if (!m) return null;
+  let stop = Number(m[3].replace(/,/g, ""));
+  if (m[4] === "만") stop *= 10_000;
+  if (m[4] === "천") stop *= 1_000;
+  if (!Number.isFinite(stop) || stop <= 0) return null;
+  const s = stocks[0];
+  return {
+    id: `stop-${Date.now()}`,
+    kind: "setStop",
+    title: "손절선을 이렇게 걸까?",
+    facts: [
+      { label: "종목", value: `${s.name} (${s.code})` },
+      { label: "손절선", value: num(stop), tone: "bad" },
+      { label: "어디에", value: "복기 노트의 이 종목 매수 기록 — 손절 감시(1분)가 이 선을 본다", tone: "muted" },
+    ],
+    payload: { code: s.code, name: s.name, stop },
+  };
+}
+
 /** 「넣기」를 눌렀을 때 — 제안을 실제로 저장한다 */
-export async function act(kind: string, payload: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+export async function act(kind: string, payload: Record<string, unknown>, client?: KiwoomClient): Promise<{ ok: boolean; message: string }> {
+  if (kind === "addMemo") {
+    const title = String(payload.title ?? "").trim();
+    const body = String(payload.body ?? "").trim();
+    if (!body) return { ok: false, message: "본문이 비었다" };
+    const memo = await addMemo({ title: title || body.slice(0, 40), body, tags: ["시스"] });
+    const stocks = Array.isArray(payload.stocks) ? (payload.stocks as SysStockRef[]).filter((s) => /^\d{6}$/.test(String(s.code))) : [];
+    if (stocks.length) await updateMemo(memo.id, { stocks });
+    return { ok: true, message: `메모 「${memo.title}」 남겼다 — 메모장에서 확인${stocks.length ? ` · ${stocks.map((s) => s.name).join("·")} 종목 상세에도 보인다` : ""}` };
+  }
+  if (kind === "addWatch") {
+    if (!client) return { ok: false, message: "시세를 받을 수 없다" };
+    const stocks = Array.isArray(payload.stocks) ? (payload.stocks as SysStockRef[]).filter((s) => /^\d{6}$/.test(String(s.code))) : [];
+    if (stocks.length === 0) return { ok: false, message: "종목이 없다" };
+    const group = String(payload.group ?? "기본").trim() || "기본";
+    const prices = await priceMap(client, stocks.map((s) => s.code)).catch(() => new Map<string, number>());
+    const done: string[] = [];
+    for (const s of stocks) {
+      await addWatchItem({ code: s.code, name: s.name, addedPrice: prices.get(s.code) ?? 0, group, memo: "시스가 넣음" });
+      done.push(`${s.name}${prices.get(s.code) ? ` ${num(prices.get(s.code)!)}` : ""}`);
+    }
+    return { ok: true, message: `${done.join(" · ")} → 「${group}」 그룹에 넣었다` };
+  }
+  if (kind === "setStop") {
+    if (!client) return { ok: false, message: "저장할 수 없다" };
+    const code = String(payload.code ?? "");
+    const stop = Number(payload.stop);
+    if (!/^\d{6}$/.test(code) || !Number.isFinite(stop) || stop <= 0) return { ok: false, message: "종목·손절선이 없다" };
+    /* 복기 노트에서 이 종목의 매수 로트를 찾아 stop 을 적는다 — 손절 감시(openPositions)가 거기서 읽는다 */
+    const entries = await listEntries(365);
+    let touched = 0;
+    for (const e of entries) {
+      const trades = e.trades ?? [];
+      let hit = false;
+      for (const t of trades) {
+        if (t.kind === "buy" && t.code === code) {
+          (t as { stop?: number | null }).stop = stop;
+          hit = true;
+          touched += 1;
+        }
+      }
+      if (hit) await saveEntry(client, { ...e, trades });
+    }
+    if (touched === 0) return { ok: false, message: `${String(payload.name ?? code)} 매수 기록이 복기 노트에 없다 — 손절 감시는 복기 노트의 매수 로트에만 건다. 먼저 복기 노트에 매수를 적어 줘` };
+    return { ok: true, message: `${String(payload.name ?? code)} 손절선 ${num(stop)} — 매수 로트 ${touched}건에 걸었다. 1분 감시가 이 선을 본다` };
+  }
   if (kind === "addEvent") {
     const date = String(payload.date ?? "");
     const title = String(payload.title ?? "").trim();
@@ -1159,6 +1396,7 @@ const TOPICS: Topic[] = [
   { key: "etf", title: "ETF", match: (c) => RE.etf.test(c.q) || matchesExamples("etf", c.q), gather: (c) => etfSection(c.client, c.stocks).then((s) => [s]), examples: ["두산에너빌리티 담은 ETF들 오늘 성적 어때?", "반도체 ETF 오늘 어때?", "오늘 오르는 ETF 뭐야?"] },
   ...MACRO_KEYS.map<Topic>((k) => ({ key: `macro:${k}`, title: MACRO_TITLE[k], match: (c) => RE[k].test(c.q) || matchesExamples(`macro:${k}`, c.q), gather: () => macroSection(k).then((s) => [s]), examples: MACRO_EXAMPLES[k] })),
   { key: "theme", title: "테마", match: (c) => c.themes.length > 0, gather: (c) => Promise.all(c.themes.map(themeSection)) },
+  { key: "sector", title: "업종", match: (c) => c.sectors.length > 0, gather: (c) => Promise.all(c.sectors.map((s) => sectorSection(c.client, s))), examples: ["반도체 업종 어때?", "전기전자 섹터 오늘 수급", "건설 업종 구성종목"] },
   {
     key: "cis",
     title: "CIS 일지",
@@ -1208,8 +1446,9 @@ export async function interpret(
 ): Promise<{ ctx: Ctx; hit: Topic[]; intent: SysIntent }> {
   const q = question.trim();
   const stocks = await findStocks(client, q);
-  const themes = await findThemes(q, stocks);
-  const ctx: Ctx = { client, q, compact: q.replace(/\s+/g, ""), stocks, themes, focus: focus ?? null };
+  const sectors = await findSectors(client, q, stocks);
+  const themes = await findThemes(q, stocks, sectors.length);
+  const ctx: Ctx = { client, q, compact: q.replace(/\s+/g, ""), stocks, themes, sectors, focus: focus ?? null };
   vocabCache = await vocab();
   vocabStocks = [...stocks.map((s) => s.name.replace(/\s+/g, "").toLowerCase()), ...Object.keys(ALIAS_PUBLIC)];
 
@@ -1226,11 +1465,12 @@ export async function interpret(
     notes.push(`지금 보고 있는 ${focus.name} 얘기로 들었어`);
     hit = TOPICS.filter((t) => t.match(ctx));
   }
-  if (hit.length === 0 && !RE.addEvent.test(q)) hit = TOPICS.filter((t) => t.key === "market");
+  if (hit.length === 0 && !RE.addEvent.test(q) && !RE.addMemo.test(q)) hit = TOPICS.filter((t) => t.key === "market");
 
   if (ctx.stocks.length) notes.push(`종목 ${ctx.stocks.map((s) => s.name).join("·")}`);
   if (themes.length) notes.push(`테마 ${themes.join("·")}`);
-  const others = hit.filter((t) => t.key !== "stock" && t.key !== "theme").map((t) => t.title);
+  if (sectors.length) notes.push(`업종 ${sectors.map((s) => s.name).join("·")}`);
+  const others = hit.filter((t) => t.key !== "stock" && t.key !== "theme" && t.key !== "sector").map((t) => t.title);
   if (others.length) notes.push(others.join("·"));
   return { ctx, hit, intent: { topics: hit.map((t) => t.key), stocks: ctx.stocks, themes, note: notes.join(" · ") } };
 }
@@ -1245,7 +1485,8 @@ export async function gather(
   const { ctx, hit, intent } = await interpret(client, question, focus);
 
   /* ② 되묻기 — 종목만 있고 무엇을 볼지 없으면 */
-  if (!opts.noClarify && ctx.stocks.length > 0 && hit.every((t) => t.key === "stock") && stockPartsOf(ctx.q) === null && !/(다|전부|전체|모두)\s*[?!.]?$/.test(ctx.q)) {
+  const writing = RE.addEvent.test(ctx.q) || RE.addMemo.test(ctx.q) || RE.addWatch.test(ctx.q) || RE.setStop.test(ctx.q);
+  if (!opts.noClarify && !writing && ctx.stocks.length > 0 && hit.every((t) => t.key === "stock") && stockPartsOf(ctx.q) === null && !/(다|전부|전체|모두)\s*[?!.]?$/.test(ctx.q)) {
     const n = ctx.stocks.map((s) => s.name).join("·");
     return {
       question,
@@ -1264,17 +1505,21 @@ export async function gather(
       ms: Date.now() - t0,
     };
   }
-  /* 일정 넣기 — 긁는 게 아니라 제안이다. 종목이 같이 있으면 종목 섹션도 같이 온다 */
+  /* 쓰기 제안 — 긁는 게 아니라 제안이다. 종목이 같이 있으면(관심·손절) 종목 섹션도 같이 온다 */
   const proposals: SysProposal[] = [];
-  if (RE.addEvent.test(ctx.q)) {
-    const p = parseEventProposal(ctx.q);
-    if (p) {
-      proposals.push(p);
-      intent.topics.push("addEvent");
-      intent.note = `${intent.note ? `${intent.note} · ` : ""}일정 넣기`;
-    }
-  }
-  const only = proposals.length && hit.every((t) => t.key === "market") ? [] : hit;
+  const propose = (p: SysProposal | null, key: string, label: string) => {
+    if (!p) return;
+    proposals.push(p);
+    intent.topics.push(key);
+    intent.note = `${intent.note ? `${intent.note} · ` : ""}${label}`;
+  };
+  if (RE.addEvent.test(ctx.q)) propose(parseEventProposal(ctx.q), "addEvent", "일정 넣기");
+  else if (RE.addMemo.test(ctx.q)) propose(parseMemoProposal(ctx.q, ctx.stocks), "addMemo", "메모 남기기");
+  else if (RE.addWatch.test(ctx.q)) propose(parseWatchProposal(ctx.q, ctx.stocks), "addWatch", "관심종목 넣기");
+  else if (RE.setStop.test(ctx.q)) propose(parseStopProposal(ctx.q, ctx.stocks), "setStop", "손절선 걸기");
+  /* 메모·일정은 제안만(긁을 게 없다). 관심·손절은 종목 섹션(시세·수급)을 같이 — 넣기 전에 한 번 본다 */
+  const proposalOnly = proposals.some((p) => p.kind === "addMemo" || p.kind === "addEvent");
+  const only = proposalOnly ? hit.filter((t) => t.key !== "market" && t.key !== "stock" && t.key !== "memo" && t.key !== "calendar") : hit;
   const sections = (await Promise.all(only.map((t) => t.gather(ctx)))).flat();
   const pack: SysPack = { question, at: new Date().toISOString(), intent, sections, proposals: proposals.length ? proposals : undefined, ms: Date.now() - t0 };
   void remember(pack).catch(() => undefined);

@@ -116,6 +116,9 @@ const EXAMPLES = [
   "하이닉스 메모 적어 둔 거 있나?",
   "복기 노트에서 손절 관련 찾아줘",
   "내일 오후 2시 FOMC 결과 확인 일정 넣어줘",
+  "메모: 하이닉스 눌림 대기, 20일선 지지 보고",
+  "두산에너빌리티 관심종목에 넣어줘",
+  "반도체 업종 어때?",
 ];
 
 const TONE_CLASS: Record<string, string> = { up: "positive", down: "negative", good: "sys-good", warn: "sys-warn", bad: "negative", muted: "sys-dim" };
@@ -219,12 +222,20 @@ function Section({ s, onSelectStock }: { s: SysSection; onSelectStock: (code: st
  * 제안 카드 — 「이렇게 넣을까?」 (2026-09-03). 시스는 바로 안 쓴다. 벤티지가 「넣기」를 눌러야
  * 서버가 저장한다. 잘못 알아들은 걸 바로 넣으면 지우는 게 더 일이다.
  */
+const PROPOSAL_META: Record<SysProposal["kind"], { icon: string; verb: string }> = {
+  addEvent: { icon: "📅", verb: "넣기" },
+  addMemo: { icon: "📝", verb: "남기기" },
+  addWatch: { icon: "⭐", verb: "넣기" },
+  setStop: { icon: "🛑", verb: "걸기" },
+};
+
 function ProposalCard({ p }: { p: SysProposal }) {
   const [state, setState] = useState<{ busy: boolean; done?: string; error?: string }>({ busy: false });
+  const meta = PROPOSAL_META[p.kind] ?? { icon: "✎", verb: "넣기" };
   return (
     <div className="sys-card sys-proposal">
       <div className="sys-card-h">
-        <b className="sys-sec-title">📅 {p.title}</b>
+        <b className="sys-sec-title">{meta.icon} {p.title}</b>
       </div>
       <Facts facts={p.facts} />
       {state.done ? (
@@ -243,7 +254,7 @@ function ProposalCard({ p }: { p: SysProposal }) {
                 .catch((e: Error) => setState({ busy: false, error: e.message }));
             }}
           >
-            {state.busy ? "넣는 중…" : "넣기"}
+            {state.busy ? "저장 중…" : meta.verb}
           </button>
           <span className="sys-dim">아니면 질문을 고쳐서 다시 — 날짜·시각·제목을 그대로 적으면 잘 알아듣는다</span>
         </div>

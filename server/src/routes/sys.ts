@@ -62,7 +62,7 @@ export function createSysRouter(client: KiwoomClient): Router {
     try {
       const kind = String(req.body?.kind ?? "");
       const payload = (req.body?.payload ?? {}) as Record<string, unknown>;
-      res.json(await act(kind, payload));
+      res.json(await act(kind, payload, client));
     } catch (err) {
       next(err);
     }
