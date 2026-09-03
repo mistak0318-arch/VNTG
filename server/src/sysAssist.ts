@@ -36,6 +36,16 @@ import { addEvent, EVENT_KINDS, listEventsRange, upcomingEvents, type EventKind 
 import { todayDartEvents } from "./dartEvents.js";
 import { listMemos } from "./memoPad.js";
 import { listEntries } from "./tradeJournal.js";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { pushNotice, stockLink } from "./notifyCenter.js";
+
+const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "data");
+/** 오늘 무엇을 물었나 — 한 줄에 하나 (jsonl). 되짚기가 읽는다 */
+const MEMORY_FILE = join(DATA_DIR, "sysMemory.jsonl");
+/** 벤티지가 설정에서 보탠 예시 질문 — 주제별 */
+const TOPICS_FILE = join(DATA_DIR, "sysTopics.json");
 
 /**
  * **시스 — 플로팅 도우미** (2026-09-03).
@@ -130,12 +140,24 @@ export interface SysProposal {
   payload: Record<string, unknown>;
 }
 
+/**
+ * **되묻기** (2026-09-03 업그레이드 ②). 「하이닉스 어때?」처럼 종목만 있고 무엇을 볼지 없으면 바로
+ * 긁지 않고 한 번 묻는다 — 「이닉스」 사건처럼 잘못 알아들은 채 4초를 긁는 것보다 낫다.
+ * 화면이 선택지를 칩으로 그리고, 누르면 그 말을 붙여 다시 묻는다. 「다」를 두 번 연속 고르면
+ * 화면이 `noClarify` 를 켜서 그 뒤로는 안 묻는다.
+ */
+export interface SysClarify {
+  question: string;
+  options: { label: string; send: string }[];
+}
+
 export interface SysPack {
   question: string;
   at: string;
   intent: SysIntent;
   sections: SysSection[];
   proposals?: SysProposal[];
+  clarify?: SysClarify;
   ms: number;
 }
 
@@ -240,6 +262,9 @@ function esc(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** 줄여 부르는 이름 → 목록 이름. 예시 매칭에서 종목명으로 취급하는 데도 쓴다 */
+const ALIAS_PUBLIC: Record<string, string> = { 삼전: "삼성전자", 하닉: "SK하이닉스", 하이닉스: "SK하이닉스", 현차: "현대차", 엘지: "LG", 네이버: "NAVER", 셀트: "셀트리온", 엔씨: "엔씨소프트", 두산에너: "두산에너빌리티", 한화에어로: "한화에어로스페이스", 포스코: "POSCO홀딩스", 카뱅: "카카오뱅크" };
+
 /**
  * 질문에서 종목을 찾는다 — 전종목 이름을 질문에 대고 본다(2,700개 × includes, 수 ms).
  * 세 글자 이상은 그대로, 두 글자 이름은 앞뒤가 띄어쓰기·조사·문장 끝일 때만.
@@ -283,7 +308,7 @@ async function findStocks(client: KiwoomClient, q: string): Promise<SysStockRef[
    * 목록에 그대로 없다. 못 찾은 토큰을 종목 검색(이름 포함)에 물어 **딱 하나**로 좁혀지면 그것.
    * 흔한 낱말(「전자」)은 여럿이 나와 버려진다.
    */
-  const ALIAS: Record<string, string> = { 삼전: "삼성전자", 하닉: "SK하이닉스", 하이닉스: "SK하이닉스", 현차: "현대차", 엘지: "LG", 네이버: "NAVER", 셀트: "셀트리온", 엔씨: "엔씨소프트", 두산에너: "두산에너빌리티", 한화에어로: "한화에어로스페이스", 포스코: "POSCO홀딩스", 카뱅: "카카오뱅크" };
+  const ALIAS = ALIAS_PUBLIC;
   const tokens = q.replace(/[?!.,·]/g, " ").split(/\s+/).map((w) => w.replace(/(은|는|이|가|을|를|의|도|랑|이랑|에서|에|로|으로)$/, "")).filter((w) => w.length >= 2 && !STOP.has(w));
   for (const tok of tokens) {
     const want = ALIAS[tok] ?? tok;
@@ -332,6 +357,82 @@ interface Topic {
   gather: (c: Ctx) => Promise<SysSection[]>;
   /** 종목 없이 이 주제만 걸렸을 때 지금 보는 종목을 대상으로 삼나 (뉴스·텔레·공시) */
   wantsFocus?: boolean;
+  /** 이런 질문이면 이 주제다 — 정규식 대신 **예시**로. 설정에서 벤티지가 더 보탠다 (업그레이드 ④) */
+  examples?: string[];
+}
+
+/*
+ * ## 예시 질문으로 걸기 (2026-09-03 업그레이드 ④ — 벤티지: "정규식 말고 예시 질문 서너 개로
+ * 걸리게 바꿔줘 — 정규식은 내가 못 고쳐")
+ *
+ * 주제마다 예시 질문 몇 개를 두고, 질문의 낱말이 그 주제 예시의 **고유 낱말**과 겹치면 건다.
+ * 고유 = 다른 주제 예시엔 없는 낱말(「일정」은 일정 주제 고유, 「오늘」은 여러 주제에 있어 못 쓴다).
+ * 정규식은 남겨 둔다(둘 중 하나면 걸림) — 예시는 벤티지가 설정에서 보태는 손잡이다.
+ */
+let topicsCustom: Record<string, string[]> | null = null;
+async function loadTopicsCustom(): Promise<Record<string, string[]>> {
+  if (topicsCustom) return topicsCustom;
+  try {
+    const raw = JSON.parse(await readFile(TOPICS_FILE, "utf-8")) as Record<string, unknown>;
+    topicsCustom = {};
+    for (const [k, v] of Object.entries(raw)) if (Array.isArray(v)) topicsCustom[k] = v.map(String).filter(Boolean);
+  } catch {
+    topicsCustom = {};
+  }
+  return topicsCustom;
+}
+export async function getTopicExamples(): Promise<{ key: string; title: string; builtin: string[]; custom: string[] }[]> {
+  const custom = await loadTopicsCustom();
+  return TOPICS.map((t) => ({ key: t.key, title: t.title, builtin: t.examples ?? [], custom: custom[t.key] ?? [] }));
+}
+export async function saveTopicExamples(input: Record<string, string[]>): Promise<void> {
+  const next: Record<string, string[]> = {};
+  for (const t of TOPICS) {
+    const v = input[t.key];
+    if (Array.isArray(v)) next[t.key] = v.map((s) => String(s).trim()).filter((s) => s.length >= 2).slice(0, 30);
+  }
+  topicsCustom = next;
+  exampleVocab = null;
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(TOPICS_FILE, JSON.stringify(next, null, 2), "utf-8");
+}
+/** 주제 → 고유 낱말 집합 (예시가 바뀌면 다시 만든다) */
+let exampleVocab: Map<string, Set<string>> | null = null;
+function tokensOf(s: string): string[] {
+  return s
+    .toLowerCase()
+    .replace(/[?!.,·]/g, " ")
+    .split(/\s+/)
+    .map((w) => w.replace(/(은|는|이|가|을|를|의|도|랑|이랑|에서|에|로|으로|들|요)$/, ""))
+    .filter((w) => w.length >= 2 && !STOP.has(w));
+}
+async function vocab(): Promise<Map<string, Set<string>>> {
+  if (exampleVocab) return exampleVocab;
+  const custom = await loadTopicsCustom();
+  const per = new Map<string, Set<string>>();
+  const count = new Map<string, number>();
+  for (const t of TOPICS) {
+    const set = new Set<string>();
+    for (const ex of [...(t.examples ?? []), ...(custom[t.key] ?? [])]) for (const w of tokensOf(ex)) set.add(w);
+    per.set(t.key, set);
+    for (const w of set) count.set(w, (count.get(w) ?? 0) + 1);
+  }
+  /* 둘 이상의 주제에 나오는 낱말은 아무것도 못 가른다 — 「종목」「신호등」이 그렇다 */
+  for (const set of per.values()) for (const w of [...set]) if ((count.get(w) ?? 0) >= 2) set.delete(w);
+  /* 종목에 딸린 말은 주제를 못 가른다 — 「하이닉스 시세 수급」의 수급이 시장을 부르면 안 된다 */
+  for (const set of per.values()) for (const w of [...set]) if (STOCK_WORDS.has(w)) set.delete(w);
+  exampleVocab = per;
+  return per;
+}
+/** 종목 뒤에 붙는 말들 — 예시 매칭에서 뺀다 (종목 섹션의 세 갈래가 이걸 쓴다) */
+const STOCK_WORDS = new Set(["종목", "시세", "수급", "신호등", "뉴스", "공시", "텔레", "실적", "목표가", "테마", "etf", "차트", "주가", "가격", "회사", "소개", "메모", "정보", "상세", "분석"]);
+let vocabCache: Map<string, Set<string>> | null = null;
+let vocabStocks: string[] = [];
+function matchesExamples(key: string, q: string): boolean {
+  const set = vocabCache?.get(key);
+  if (!set || set.size === 0) return false;
+  /* 예시에 적힌 종목명(「하이닉스 뉴스 있어?」의 하이닉스)은 주제가 아니라 종목이다 */
+  return tokensOf(q).some((w) => set.has(w) && !vocabStocks.some((s) => s.includes(w) || w.includes(s)));
 }
 
 const RE = {
@@ -377,24 +478,37 @@ function keywordsOf(q: string): string[] {
 }
 
 /* ── 종목 ── */
-async function stockSection(client: KiwoomClient, s: SysStockRef): Promise<SysSection> {
+/** 종목 섹션의 세 갈래 — 되묻기 선택지와 같다. null 이면 전부 */
+type StockPart = "quote" | "news" | "fund";
+function stockPartsOf(q: string): Set<StockPart> | null {
+  const parts = new Set<StockPart>();
+  if (/(시세|주가|가격|수급|신호등|차트|얼마|외인|외국인|기관|체결)/.test(q)) parts.add("quote");
+  if (/(뉴스|기사|공시|텔레|소식|무슨 일|왜|이유)/.test(q)) parts.add("news");
+  if (/(실적|목표가|테마|etf|회사|소개|뭐 하는|사업|이익)/i.test(q)) parts.add("fund");
+  if (/(다|전부|전체|모두|다 봐|다봐|싹)\s*$|\b(다|전부|전체|모두)\b/.test(q)) return null;
+  return parts.size ? parts : null;
+}
+
+async function stockSection(client: KiwoomClient, s: SysStockRef, parts: Set<StockPart> | null = null): Promise<SysSection> {
+  const want = (p: StockPart) => parts === null || parts.has(p);
+  const off = <T,>(v: T): Promise<T> => Promise.resolve(v);
   return timed("stock", `stock:${s.code}`, s.name, async () => {
     const took: Record<string, number> = {};
     const [sum, sig, themes, strength, holders, news, disc, chan, quarters, watch, brief] = await Promise.all([
       part(took, "시세·수급", stockSummary(client, s.code), null),
-      part(took, "신호등", evaluateSignal(client, s.code), null, 20_000),
-      part(took, "테마", themesOfStock(s.code), []),
-      part(took, "테마 강도", themeStrength("kr").then((r) => r.themes), []),
-      part(took, "담은 ETF", etfHoldersOf(s.code).then((r) => r.holders), []),
-      part(took, "뉴스", searchNews(s.name, { limit: 10 }), []),
-      part(took, "공시", getDisclosures(s.code, 30), []),
-      part(took, "텔레그램(수집분)", channelItems([s.name, s.code], 2 * 24 * 60, 8), []),
-      part(took, "분기 실적", quarterFinance(s.code, 4), []),
+      want("quote") ? part(took, "신호등", evaluateSignal(client, s.code), null, 20_000) : off(null),
+      want("fund") ? part(took, "테마", themesOfStock(s.code), []) : off([] as Awaited<ReturnType<typeof themesOfStock>>),
+      want("fund") ? part(took, "테마 강도", themeStrength("kr").then((r) => r.themes), []) : off([] as Awaited<ReturnType<typeof themeStrength>>["themes"]),
+      want("fund") ? part(took, "담은 ETF", etfHoldersOf(s.code).then((r) => r.holders), []) : off([] as Awaited<ReturnType<typeof etfHoldersOf>>["holders"]),
+      want("news") ? part(took, "뉴스", searchNews(s.name, { limit: 10 }), []) : off([] as Awaited<ReturnType<typeof searchNews>>),
+      want("news") ? part(took, "공시", getDisclosures(s.code, 30), []) : off([] as Awaited<ReturnType<typeof getDisclosures>>),
+      want("news") ? part(took, "텔레그램(수집분)", channelItems([s.name, s.code], 2 * 24 * 60, 8), []) : off([] as SysItem[]),
+      want("fund") ? part(took, "분기 실적", quarterFinance(s.code, 4), []) : off([] as Awaited<ReturnType<typeof quarterFinance>>),
       part(took, "관심종목", listWatchlist(), []),
-      part(took, "회사 소개", cachedBrief(s.code), null),
+      want("fund") ? part(took, "회사 소개", cachedBrief(s.code), null) : off(null),
     ]);
     const price = sum?.facts.price ?? null;
-    const opinion = await part(took, "컨센서스", opinionBrief(s.code, price), null, 8_000);
+    const opinion = want("fund") ? await part(took, "컨센서스", opinionBrief(s.code, price), null, 8_000) : null;
     const missing: string[] = [];
     if (!sum) missing.push("시세·수급");
     if (!sig) missing.push("신호등");
@@ -455,11 +569,14 @@ async function stockSection(client: KiwoomClient, s: SysStockRef): Promise<SysSe
     }
     if (news.length) blocks.push({ title: `뉴스 ${Math.min(news.length, 8)}`, items: newsItems(news, 8) });
     if (disc.length) blocks.push({ title: "공시 (30일)", items: disc.slice(0, 6).map((d) => ({ text: d.reportName, sub: d.receiptDate })) });
-    blocks.push(
-      chan.length
-        ? { title: `텔레그램 ${chan.length} (주요 채널 수집분 · 이틀)`, items: chan }
-        : { title: "텔레그램", lines: [{ text: "주요 채널 수집분 이틀 안에 이 종목 언급 없음 — 전 채널 실시간은 「텔레」를 붙여 물어봐", tone: "muted" }] },
-    );
+    if (want("news")) {
+      blocks.push(
+        chan.length
+          ? { title: `텔레그램 ${chan.length} (주요 채널 수집분 · 이틀)`, items: chan }
+          : { title: "텔레그램", lines: [{ text: "주요 채널 수집분 이틀 안에 이 종목 언급 없음 — 전 채널 실시간은 「텔레」를 붙여 물어봐", tone: "muted" }] },
+      );
+    }
+    if (parts !== null) blocks.push({ lines: [{ text: `${[...parts].map((p) => ({ quote: "시세·수급·신호등", news: "뉴스·공시·텔레", fund: "실적·목표가·테마·ETF" })[p]).join(" + ")}만 긁었다 — 다 보려면 「${s.name} 다」`, tone: "muted" }] });
     if (brief?.text) blocks.push({ title: "엮어 둔 회사 소개", text: brief.text });
     for (const [k, v] of Object.entries(took)) if (v === -1) missing.push(`${k}(시간 초과)`);
     return { stock: s, head, blocks, missing, took };
@@ -1018,15 +1135,35 @@ async function telegramSection(words: string[]): Promise<SysSection> {
 
 const MACRO_KEYS: MacroKey[] = ["usFut", "night", "oil", "metal", "fx", "rates", "crypto"];
 
+const MACRO_EXAMPLES: Record<MacroKey, string[]> = {
+  usFut: ["지금 미장 선물 어때?", "나스닥 선물 오르고 있어?", "VIX 얼마야?"],
+  night: ["야간선물 어떻게 끝났어?", "코스피 야간선물 봐줘"],
+  oil: ["유가는?", "WTI 오늘 어때?", "원유 가격 추세"],
+  metal: ["금값 어때?", "구리 가격 올라?"],
+  fx: ["환율 지금 얼마야?", "달러 오르는 추세야?"],
+  rates: ["금리 오늘 오르는 추세야?", "미국 10년물 금리 어때?", "국채 금리 봐줘"],
+  crypto: ["비트코인 얼마야?", "코인 오늘 어때?"],
+};
+
 const TOPICS: Topic[] = [
-  { key: "stock", title: "종목", match: (c) => c.stocks.length > 0, gather: (c) => Promise.all(c.stocks.map((s) => stockSection(c.client, s))) },
-  { key: "etf", title: "ETF", match: (c) => RE.etf.test(c.q), gather: (c) => etfSection(c.client, c.stocks).then((s) => [s]) },
-  ...MACRO_KEYS.map<Topic>((k) => ({ key: `macro:${k}`, title: MACRO_TITLE[k], match: (c) => RE[k].test(c.q), gather: () => macroSection(k).then((s) => [s]) })),
+  {
+    key: "stock",
+    title: "종목",
+    match: (c) => c.stocks.length > 0,
+    gather: (c) => {
+      const parts = stockPartsOf(c.q);
+      return Promise.all(c.stocks.map((s) => stockSection(c.client, s, parts)));
+    },
+    examples: ["두산에너빌리티 시세좀", "하이닉스 뉴스 있어?", "삼성전자 실적 어때?"],
+  },
+  { key: "etf", title: "ETF", match: (c) => RE.etf.test(c.q) || matchesExamples("etf", c.q), gather: (c) => etfSection(c.client, c.stocks).then((s) => [s]), examples: ["두산에너빌리티 담은 ETF들 오늘 성적 어때?", "반도체 ETF 오늘 어때?", "오늘 오르는 ETF 뭐야?"] },
+  ...MACRO_KEYS.map<Topic>((k) => ({ key: `macro:${k}`, title: MACRO_TITLE[k], match: (c) => RE[k].test(c.q) || matchesExamples(`macro:${k}`, c.q), gather: () => macroSection(k).then((s) => [s]), examples: MACRO_EXAMPLES[k] })),
   { key: "theme", title: "테마", match: (c) => c.themes.length > 0, gather: (c) => Promise.all(c.themes.map(themeSection)) },
   {
     key: "cis",
     title: "CIS 일지",
-    match: (c) => RE.cis.test(c.q),
+    match: (c) => RE.cis.test(c.q) || matchesExamples("cis", c.q),
+    examples: ["CIS 일지 요즘 수익권이래?", "종배 계좌 어때?", "시스 계좌 보유 뭐 있어?"],
     gather: (c) => {
       const ids = (Object.keys(ACCOUNTS) as AccountId[]).filter((id) => {
         const q = c.q;
@@ -1039,12 +1176,13 @@ const TOPICS: Topic[] = [
       return Promise.all(ids.map((id) => cisSection(c.client, id)));
     },
   },
-  { key: "watch", title: "관심종목", match: (c) => RE.watch.test(c.q), gather: (c) => watchSection(c.client).then((s) => [s]) },
-  { key: "ledger", title: "신호등 원장", match: (c) => RE.ledger.test(c.q), gather: (c) => ledgerSection(c.client).then((s) => [s]) },
+  { key: "watch", title: "관심종목", match: (c) => RE.watch.test(c.q) || matchesExamples("watch", c.q), gather: (c) => watchSection(c.client).then((s) => [s]), examples: ["관심종목 오늘 어때?", "내 종목 중에 오늘 많이 빠진 거", "관심종목 쌍끌이 뭐 있어?"] },
+  { key: "ledger", title: "신호등 원장", match: (c) => RE.ledger.test(c.q) || matchesExamples("ledger", c.q), gather: (c) => ledgerSection(c.client).then((s) => [s]), examples: ["슈퍼신호등 원장 잘 가?", "신호등 초록 종목 뭐 있어?", "무지개 종목 있어?"] },
   {
     key: "calendar",
     title: "일정",
-    match: (c) => RE.calendar.test(c.q) && !RE.addEvent.test(c.q),
+    match: (c) => (RE.calendar.test(c.q) || matchesExamples("calendar", c.q)) && !RE.addEvent.test(c.q),
+    examples: ["9월 일정 뭐 있어?", "이번주 일정", "FOMC 언제야?", "실적 발표 일정 알려줘"],
     gather: (c) => {
       const m = c.q.match(/(\d{1,2})월/);
       const month = m ? `${kstToday().getUTCFullYear()}-${m[1].padStart(2, "0")}` : null;
@@ -1052,12 +1190,12 @@ const TOPICS: Topic[] = [
       return calendarSection([...words, ...c.stocks.map((s) => s.name)], month).then((s) => [s]);
     },
   },
-  { key: "memo", title: "메모", match: (c) => RE.memo.test(c.q), gather: (c) => memoSection([...keywordsOf(c.q).filter((w) => !/^(메모|메모장|일기)$/.test(w)), ...c.stocks.map((s) => s.name)]).then((s) => [s]) },
-  { key: "journal", title: "복기 노트", match: (c) => RE.journal.test(c.q), gather: (c) => journalSection([...keywordsOf(c.q).filter((w) => !/^(복기|복기노트|노트|매매일지|일지)$/.test(w)), ...c.stocks.map((s) => s.name)]).then((s) => [s]) },
-  { key: "disclosure", title: "공시", match: (c) => RE.disclosure.test(c.q) && c.stocks.length === 0, gather: () => disclosureSection().then((s) => [s]), wantsFocus: true },
-  { key: "news", title: "뉴스", match: (c) => RE.news.test(c.q) && c.stocks.length === 0 && !RE.market.test(c.q), gather: (c) => newsSection(keywordsOf(c.q).filter((w) => !c.themes.includes(w))).then((s) => [s]), wantsFocus: true },
-  { key: "telegram", title: "텔레그램", match: (c) => RE.telegram.test(c.q) && c.stocks.length === 0, gather: (c) => telegramSection(keywordsOf(c.q)).then((s) => [s]), wantsFocus: true },
-  { key: "market", title: "시장", match: (c) => RE.market.test(c.q), gather: (c) => marketSection(c.client).then((s) => [s]) },
+  { key: "memo", title: "메모", match: (c) => RE.memo.test(c.q) || matchesExamples("memo", c.q), gather: (c) => memoSection([...keywordsOf(c.q).filter((w) => !/^(메모|메모장|일기)$/.test(w)), ...c.stocks.map((s) => s.name)]).then((s) => [s]), examples: ["하이닉스 메모 적어 둔 거 있나?", "메모장에서 원전 찾아줘", "최근 메모 뭐 있어?"] },
+  { key: "journal", title: "복기 노트", match: (c) => RE.journal.test(c.q) || matchesExamples("journal", c.q), gather: (c) => journalSection([...keywordsOf(c.q).filter((w) => !/^(복기|복기노트|노트|매매일지|일지)$/.test(w)), ...c.stocks.map((s) => s.name)]).then((s) => [s]), examples: ["복기 노트에서 손절 관련 찾아줘", "지난주 복기 뭐라고 적었지?", "매매일지에서 규칙 어긴 날"] },
+  { key: "disclosure", title: "공시", match: (c) => (RE.disclosure.test(c.q) || matchesExamples("disclosure", c.q)) && c.stocks.length === 0, gather: () => disclosureSection().then((s) => [s]), wantsFocus: true, examples: ["오늘 공시 뭐 있어?", "관심종목 공시 떴어?"] },
+  { key: "news", title: "뉴스", match: (c) => (RE.news.test(c.q) || matchesExamples("news", c.q)) && c.stocks.length === 0 && !RE.market.test(c.q), gather: (c) => newsSection(keywordsOf(c.q).filter((w) => !c.themes.includes(w))).then((s) => [s]), wantsFocus: true, examples: ["오늘 주요 뉴스", "속보 있어?", "원전 관련 기사 찾아줘"] },
+  { key: "telegram", title: "텔레그램", match: (c) => (RE.telegram.test(c.q) || matchesExamples("telegram", c.q)) && c.stocks.length === 0, gather: (c) => telegramSection(keywordsOf(c.q)).then((s) => [s]), wantsFocus: true, examples: ["텔레 요즘 뭐래?", "채널에서 반도체 얘기 찾아줘"] },
+  { key: "market", title: "시장", match: (c) => RE.market.test(c.q) || matchesExamples("market", c.q), gather: (c) => marketSection(c.client).then((s) => [s]), examples: ["오늘 시장 왜 이래?", "코스피 어때?", "외국인 수급 어느 쪽이야?", "오늘 주도 테마 뭐야?"] },
 ];
 
 // ---------------------------------------------------------------- 수집
@@ -1072,6 +1210,8 @@ export async function interpret(
   const stocks = await findStocks(client, q);
   const themes = await findThemes(q, stocks);
   const ctx: Ctx = { client, q, compact: q.replace(/\s+/g, ""), stocks, themes, focus: focus ?? null };
+  vocabCache = await vocab();
+  vocabStocks = [...stocks.map((s) => s.name.replace(/\s+/g, "").toLowerCase()), ...Object.keys(ALIAS_PUBLIC)];
 
   let hit = TOPICS.filter((t) => t.match(ctx));
   /* 「일지」는 CIS 일지지만 「복기」가 같이 있으면 복기 노트 얘기다 */
@@ -1095,9 +1235,35 @@ export async function interpret(
   return { ctx, hit, intent: { topics: hit.map((t) => t.key), stocks: ctx.stocks, themes, note: notes.join(" · ") } };
 }
 
-export async function gather(client: KiwoomClient, question: string, focus?: SysStockRef | null): Promise<SysPack> {
+export async function gather(
+  client: KiwoomClient,
+  question: string,
+  focus?: SysStockRef | null,
+  opts: { noClarify?: boolean } = {},
+): Promise<SysPack> {
   const t0 = Date.now();
   const { ctx, hit, intent } = await interpret(client, question, focus);
+
+  /* ② 되묻기 — 종목만 있고 무엇을 볼지 없으면 */
+  if (!opts.noClarify && ctx.stocks.length > 0 && hit.every((t) => t.key === "stock") && stockPartsOf(ctx.q) === null && !/(다|전부|전체|모두)\s*[?!.]?$/.test(ctx.q)) {
+    const n = ctx.stocks.map((s) => s.name).join("·");
+    return {
+      question,
+      at: new Date().toISOString(),
+      intent,
+      sections: [],
+      clarify: {
+        question: `${n} — 뭘 볼까?`,
+        options: [
+          { label: "시세·수급·신호등", send: `${n} 시세 수급 신호등` },
+          { label: "뉴스·공시·텔레", send: `${n} 뉴스 공시 텔레` },
+          { label: "실적·목표가·테마·ETF", send: `${n} 실적 목표가 테마 ETF` },
+          { label: "다", send: `${n} 다` },
+        ],
+      },
+      ms: Date.now() - t0,
+    };
+  }
   /* 일정 넣기 — 긁는 게 아니라 제안이다. 종목이 같이 있으면 종목 섹션도 같이 온다 */
   const proposals: SysProposal[] = [];
   if (RE.addEvent.test(ctx.q)) {
@@ -1110,7 +1276,129 @@ export async function gather(client: KiwoomClient, question: string, focus?: Sys
   }
   const only = proposals.length && hit.every((t) => t.key === "market") ? [] : hit;
   const sections = (await Promise.all(only.map((t) => t.gather(ctx)))).flat();
-  return { question, at: new Date().toISOString(), intent, sections, proposals: proposals.length ? proposals : undefined, ms: Date.now() - t0 };
+  const pack: SysPack = { question, at: new Date().toISOString(), intent, sections, proposals: proposals.length ? proposals : undefined, ms: Date.now() - t0 };
+  void remember(pack).catch(() => undefined);
+  return pack;
+}
+
+// ---------------------------------------------------------------- ① 기억과 되짚기
+
+interface MemoryRow {
+  at: string;
+  q: string;
+  topics: string[];
+  /** 물었을 때의 가격 — 되짚기가 「그 뒤로 얼마나」를 잰다 */
+  stocks: { code: string; name: string; price: number | null; changeRate: number | null }[];
+}
+
+/** 오늘 무엇을 물었나 — 한 줄씩 붙인다. 화면·되짚기가 읽는다 */
+async function remember(pack: SysPack): Promise<void> {
+  const stocks = pack.sections
+    .filter((s) => s.stock)
+    .map((s) => {
+      const px = s.head?.find((f) => f.label === "현재가")?.value ?? "";
+      const m = px.match(/^([\d,]+)\s*\(([-+]?[\d.]+)%\)/);
+      return { code: s.stock!.code, name: s.stock!.name, price: m ? Number(m[1].replace(/,/g, "")) : null, changeRate: m ? Number(m[2]) : null };
+    });
+  const row: MemoryRow = { at: pack.at, q: pack.question, topics: pack.intent.topics, stocks };
+  await mkdir(DATA_DIR, { recursive: true });
+  await appendFile(MEMORY_FILE, `${JSON.stringify(row)}\n`, "utf-8");
+}
+
+async function readMemory(day: string): Promise<MemoryRow[]> {
+  try {
+    const text = await readFile(MEMORY_FILE, "utf-8");
+    const out: MemoryRow[] = [];
+    for (const line of text.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const r = JSON.parse(line) as MemoryRow;
+        if (new Date(new Date(r.at).getTime() + 9 * 3600_000).toISOString().slice(0, 10) === day) out.push(r);
+      } catch {
+        /* 깨진 줄 */
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export interface SysRecap {
+  day: string;
+  asked: number;
+  /** 물어본 종목마다 — 그때 → 지금 */
+  stocks: { code: string; name: string; askedAt: string; then: number | null; now: number | null; move: number | null; foreign: number | null; inst: number | null; line: string }[];
+  topics: string[];
+}
+
+/**
+ * **오늘 되짚기** (2026-09-03 업그레이드 ① — "저녁에 「오늘 네가 물어본 두산에너빌리티, 그 뒤로 +2%
+ * 더 갔고 외인은 계속 팔았어」처럼 먼저 말 걸게").
+ * 물었을 때 가격 → 지금 가격, 오늘 외인·기관 순매수. 종목 최대 여섯(많이 물은 순).
+ */
+export async function recapToday(client: KiwoomClient): Promise<SysRecap> {
+  const day = ymd(kstToday());
+  const rows = await readMemory(day);
+  const first = new Map<string, { code: string; name: string; askedAt: string; then: number | null; count: number }>();
+  for (const r of rows) {
+    for (const s of r.stocks) {
+      const hit = first.get(s.code);
+      if (hit) hit.count += 1;
+      else first.set(s.code, { code: s.code, name: s.name, askedAt: r.at, then: s.price, count: 1 });
+    }
+  }
+  const picked = [...first.values()].sort((a, b) => b.count - a.count).slice(0, 6);
+  const prices = picked.length ? await priceMap(client, picked.map((p) => p.code)).catch(() => new Map<string, number>()) : new Map<string, number>();
+  const stocks: SysRecap["stocks"] = [];
+  for (const p of picked) {
+    const now = prices.get(p.code) ?? null;
+    const sum = await stockSummary(client, p.code).catch(() => null);
+    const foreign = sum?.main.find((m) => /외국인/.test(m.label))?.amount ?? null;
+    const inst = sum?.main.find((m) => /기관/.test(m.label))?.amount ?? null;
+    const move = now !== null && p.then ? ((now - p.then) / p.then) * 100 : null;
+    const at = new Date(p.askedAt);
+    const hhmm = `${String((at.getUTCHours() + 9) % 24).padStart(2, "0")}:${String(at.getUTCMinutes()).padStart(2, "0")}`;
+    const line =
+      `${p.name}: ${hhmm}에 물었을 때 ${p.then ? num(p.then) : "?"} → 지금 ${now !== null ? num(now) : "?"}` +
+      `${move !== null ? ` (${move > 0 ? "+" : ""}${move.toFixed(1)}%)` : ""}` +
+      `${foreign !== null || inst !== null ? ` · 오늘 외인 ${foreign !== null ? won(foreign) : "-"} / 기관 ${inst !== null ? won(inst) : "-"}백만` : ""}`;
+    stocks.push({ code: p.code, name: p.name, askedAt: p.askedAt, then: p.then, now, move, foreign, inst, line });
+  }
+  return { day, asked: rows.length, stocks, topics: [...new Set(rows.flatMap((r) => r.topics))] };
+}
+
+let recapTimer: ReturnType<typeof setInterval> | null = null;
+let recapSentDay = "";
+/** 마감 뒤 15:50 KST 평일에 한 번 — 오늘 물어본 종목이 있을 때만 알림함으로 */
+export function startSysScheduler(client: KiwoomClient): void {
+  if (recapTimer) return;
+  recapTimer = setInterval(async () => {
+    const k = kstToday();
+    const day = ymd(k);
+    if (recapSentDay === day) return;
+    if (k.getUTCDay() === 0 || k.getUTCDay() === 6) return;
+    const hm = k.getUTCHours() * 60 + k.getUTCMinutes();
+    if (hm < 15 * 60 + 50 || hm > 16 * 60 + 30) return;
+    recapSentDay = day;
+    try {
+      const r = await recapToday(client);
+      if (r.stocks.length === 0) return;
+      await pushNotice({
+        source: "sys",
+        kind: "stock",
+        level: "info",
+        title: `시스 되짚기 — 오늘 물어본 ${r.stocks.length}종목, 그 뒤로`,
+        body: r.stocks.map((s) => s.line).join("\n"),
+        link: r.stocks.length === 1 ? stockLink(r.stocks[0].code, r.stocks[0].name) : "#/watchAi",
+        dedupeKey: `sys:recap:${day}`,
+        dedupeHours: 20,
+      });
+    } catch {
+      /* 되짚기가 실패해도 다음 날 다시 */
+    }
+  }, 60_000);
+  console.log("[sys] 되짚기 스케줄러 시작 (평일 15:50)");
 }
 
 // ---------------------------------------------------------------- AI
@@ -1141,12 +1429,25 @@ export function isSysAiReady(): boolean {
 }
 
 /** 일반 모드 + (AI 모드면) 묶음을 문맥으로 물어본 답 */
+/**
+ * ③ **판단 거리 두기** (2026-09-03 업그레이드) — 답 끝에 늘 세 줄. 매수·매도 추천은 계속 안 하되
+ * 「내가 본 재료 중 어느 게 제일 무거운지」는 말한다.
+ */
+const SYS_SUFFIX = `<sys_rules>
+답의 맨 끝에 다음 세 줄을 **반드시** 붙이십시오(제목 그대로, 각 한 줄):
+- 제일 무거운 재료: (위 재료 중 지금 이 종목·시장을 움직이는 데 가장 무거운 것 하나와 이유)
+- 이 답이 틀릴 수 있는 이유: (데이터 지연·표본 부족·해석의 빈틈 등 구체적으로)
+- 내가 확인 안 한 것: (이 답을 믿기 전에 사용자가 직접 봐야 할 것 하나)
+매수·매도 추천은 여전히 하지 않습니다.
+</sys_rules>`;
+
 export async function askSys(
   client: KiwoomClient,
   question: string,
-  opts: { ai?: boolean; history?: AskTurn[]; focus?: SysStockRef | null; useSearch?: boolean } = {},
+  opts: { ai?: boolean; history?: AskTurn[]; focus?: SysStockRef | null; useSearch?: boolean; noClarify?: boolean } = {},
 ): Promise<SysAnswer> {
-  const pack = await gather(client, question, opts.focus);
+  /* AI 모드는 되묻지 않는다 — 질문 자체가 「정리해 달라」는 뜻이라 다 긁어 넘긴다 */
+  const pack = await gather(client, question, opts.focus, { noClarify: opts.noClarify || opts.ai });
   if (!opts.ai) return { pack, ai: null };
 
   /* 시장을 물으면 「시황 질문하기」가 쓰던 요약도 같이 — 종목·거시만 물으면 묶음으로 충분하다 */
@@ -1165,7 +1466,7 @@ export async function askSys(
     const history = (opts.history ?? []).slice(-8).map((t) => `${t.role === "user" ? "사용자" : "답"}: ${t.text}`).join("\n\n");
     const prompt =
       `${ASK_SYSTEM.replace(/<search_first>[\s\S]*<\/search_first>/, "").replace(/2\. web_search 도구[^\n]*\n/, "")}\n\n` +
-      `⚠️ 이 모델에는 웹 검색이 없습니다. 아래 [시스가 모은 것]에 없는 사실은 모른다고 하십시오.\n\n` +
+      `⚠️ 이 모델에는 웹 검색이 없습니다. 아래 [시스가 모은 것]에 없는 사실은 모른다고 하십시오.\n\n${SYS_SUFFIX}\n\n` +
       `${context}\n\n${history ? `=== 앞선 대화 ===\n${history}\n\n` : ""}=== 질문 ===\n${question}`;
     const r = await summarize(prompt, 2500, "sys");
     return {
@@ -1187,6 +1488,7 @@ export async function askSys(
     useMarketData: false,
     context,
     purpose: "sys",
+    systemSuffix: SYS_SUFFIX,
   });
   return { pack, ai };
 }

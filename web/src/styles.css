@@ -14470,3 +14470,12 @@ tr:hover .sd-del { opacity: 0.75; }
 .sys-proposal-act { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* 알림 본문의 줄바꿈 — 접힌 상태에서도 줄마다 한 건이 보이게 (2026-09-03 알람 전수 점검) */
 .nb-text { white-space: pre-line; }
+/* 시스 업그레이드 (2026-09-03) — 되짚기·되묻기·예시 편집 */
+.sys-recap { border-color: #2fd6d0; }
+.sys-clarify { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px dashed #2fd6d0; border-radius: 10px; }
+.sys-cfg-topics { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.sys-cfg-topics-h { display: flex; flex-direction: column; gap: 2px; }
+.sys-cfg-topic { display: grid; grid-template-columns: 14rem 1fr; gap: 8px; align-items: start; }
+@media (max-width: 700px) { .sys-cfg-topic { grid-template-columns: 1fr; } }
+.sys-cfg-topic-name { display: flex; flex-direction: column; gap: 2px; font-size: 0.82rem; }
+.sys-cfg-topic textarea { width: 100%; box-sizing: border-box; resize: vertical; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; font-size: 0.8rem; padding: 6px 8px; }

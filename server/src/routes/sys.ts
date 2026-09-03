@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
-import { act, askSys, interpret, isSysAiReady, type SysStockRef } from "../sysAssist.js";
+import { act, askSys, getTopicExamples, interpret, isSysAiReady, recapToday, saveTopicExamples, type SysStockRef } from "../sysAssist.js";
 import type { AskTurn } from "../askMarket.js";
 import { addAsk } from "../askHistory.js";
 
@@ -26,6 +26,32 @@ export function createSysRouter(client: KiwoomClient): Router {
         f && typeof f.code === "string" && /^\d{6}$/.test(f.code) ? { code: f.code, name: String(f.name ?? f.code) } : null;
       const { intent, hit } = await interpret(client, question, focus);
       res.json({ intent, titles: hit.map((t) => t.title) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** ① 오늘 되짚기 — 물어본 종목이 그 뒤로 어떻게 됐나 */
+  router.get("/recap", async (_req, res, next) => {
+    try {
+      res.json(await recapToday(client));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** ④ 주제별 예시 질문 — 기본 + 벤티지가 보탠 것 */
+  router.get("/topics", async (_req, res, next) => {
+    try {
+      res.json({ topics: await getTopicExamples() });
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.put("/topics", async (req, res, next) => {
+    try {
+      await saveTopicExamples((req.body?.custom ?? {}) as Record<string, string[]>);
+      res.json({ topics: await getTopicExamples() });
     } catch (err) {
       next(err);
     }
@@ -59,6 +85,7 @@ export function createSysRouter(client: KiwoomClient): Router {
         history,
         focus,
         useSearch: req.body?.useSearch !== false,
+        noClarify: req.body?.noClarify === true,
       });
       /* AI 로 물은 것은 「시황 질문하기」 기록에 같이 남긴다 — 무엇을 몰랐는지가 답보다 값어치 있다 */
       if (r.ai) {

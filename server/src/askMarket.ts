@@ -97,6 +97,8 @@ export async function askMarket(
     context?: string;
     /** 어느 용도의 모델 설정을 쓰나 — 시스는 "sys"(안 골랐으면 ask 를 따라간다) */
     purpose?: "ask" | "sys";
+    /** 시스템 프롬프트 뒤에 덧붙일 규칙 (시스의 「판단 거리 두기」) */
+    systemSuffix?: string;
   } = {},
 ): Promise<AskResult> {
   const { useSearch = true, useMarketData = true } = opts;
@@ -140,7 +142,7 @@ export async function askMarket(
     const response = await anthropic.messages.create({
       model: usedModel,
       max_tokens: 4000,
-      system: ASK_SYSTEM,
+      system: opts.systemSuffix ? `${ASK_SYSTEM}\n\n${opts.systemSuffix}` : ASK_SYSTEM,
       ...(useSearch
         ? {
             tools: [
@@ -209,7 +211,7 @@ export async function askMarket(
       const alt = await choiceFor("report");
       if (alt) {
         const prompt = [
-          ASK_SYSTEM,
+          opts.systemSuffix ? `${ASK_SYSTEM}\n\n${opts.systemSuffix}` : ASK_SYSTEM,
           "=== 질문 ===",
           ...messages.map((m) => `[${m.role}] ${String(m.content)}`),
         ].join("\n\n");

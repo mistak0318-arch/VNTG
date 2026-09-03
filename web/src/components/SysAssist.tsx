@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type AskResult, type AskTurn, type SysBlock, type SysFact, type SysPack, type SysProposal, type SysSection, type SysStockRef } from "../api";
+import { api, type AskResult, type AskTurn, type SysBlock, type SysFact, type SysPack, type SysProposal, type SysRecap, type SysSection, type SysStockRef } from "../api";
 import { setPref } from "../prefs";
 import { SysIcon } from "./SysIcon";
 
@@ -24,6 +24,8 @@ import { SysIcon } from "./SysIcon";
 export const SYS_ENABLED_KEY = "vntg.sys.enabled";
 export const SYS_MODE_KEY = "vntg.sys.mode";
 export const SYS_SEARCH_KEY = "vntg.sys.search";
+/** 되묻기 끔 — 「다」를 두 번 연속 고르면 화면이 스스로 켠다 (업그레이드 ②) */
+export const SYS_NOASK_KEY = "vntg.sys.noask";
 /** 설정 화면이 바꾸면 이 이벤트로 알린다 — 같은 창 안에서는 storage 이벤트가 안 온다 */
 export const SYS_EVENT = "vntg:sys";
 /**
@@ -75,6 +77,13 @@ function readSearch(): boolean {
     return localStorage.getItem(SYS_SEARCH_KEY) !== "0";
   } catch {
     return true;
+  }
+}
+function readNoAsk(): boolean {
+  try {
+    return localStorage.getItem(SYS_NOASK_KEY) === "1";
+  } catch {
+    return false;
   }
 }
 
@@ -276,6 +285,11 @@ export function SysAssist({
   const [aiReady, setAiReady] = useState(true);
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [noAsk, setNoAsk] = useState(readNoAsk);
+  /** 「다」를 연속으로 몇 번 골랐나 — 둘이면 그 뒤로 안 묻는다 */
+  const allStreak = useRef(0);
+  /** ① 오늘 되짚기 — 열 때 한 번 받는다 */
+  const [recap, setRecap] = useState<SysRecap | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const seq = useRef(0);
@@ -344,6 +358,7 @@ export function SysAssist({
       setEnabled(sysEnabled());
       setMode(readMode());
       setUseSearch(readSearch());
+      setNoAsk(readNoAsk());
     };
     window.addEventListener(SYS_EVENT, sync);
     window.addEventListener("storage", sync);
@@ -359,6 +374,10 @@ export function SysAssist({
       .sysStatus()
       .then((r) => setAiReady(r.aiReady))
       .catch(() => setAiReady(false));
+    api
+      .sysRecap()
+      .then((r) => setRecap(r.stocks.length ? r : null))
+      .catch(() => undefined);
     inputRef.current?.focus();
   }, [open]);
 
@@ -432,7 +451,8 @@ export function SysAssist({
       .then((r) => setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, plan: r.intent.note, planTopics: r.intent.topics } : t))))
       .catch(() => undefined);
     try {
-      const r = await api.sysAsk(q, { mode: m, history, focus, useSearch }, controller.signal);
+      const r = await api.sysAsk(q, { mode: m, history, focus, useSearch, noClarify: noAsk }, controller.signal);
+      /* 되묻지 않고 답이 왔으면(되묻기 화면이 아니면) 「다」 연속 세기는 그대로 둔다 — 칩을 눌러야만 센다 */
       setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, pack: r.pack, ai: r.ai, busy: false, controller: undefined } : t)));
     } catch (err) {
       const aborted = err instanceof DOMException && err.name === "AbortError";
@@ -442,6 +462,20 @@ export function SysAssist({
         ),
       );
     }
+  }
+
+  /** 되묻기 칩 — 「다」를 두 번 연속 고르면 그 뒤로 안 묻는다 */
+  function pickClarify(opt: { label: string; send: string }) {
+    if (opt.label === "다") {
+      allStreak.current += 1;
+      if (allStreak.current >= 2 && !noAsk) {
+        setNoAsk(true);
+        setPref(SYS_NOASK_KEY, "1");
+      }
+    } else {
+      allStreak.current = 0;
+    }
+    void send(opt.send);
   }
 
   if (!enabled) return null;
@@ -505,6 +539,24 @@ export function SysAssist({
           </div>
 
           <div className="sys-body">
+            {/* ① 오늘 되짚기 — 시스가 먼저 말을 건다 */}
+            {recap && turns.length === 0 && (
+              <div className="sys-card sys-recap">
+                <div className="sys-card-h">
+                  <b className="sys-sec-title">오늘 물어본 종목, 그 뒤로</b>
+                  <span className="sys-dim sys-ms">{recap.asked}번 물음</span>
+                </div>
+                <ul className="sys-list">
+                  {recap.stocks.map((s) => (
+                    <li key={s.code}>
+                      <button type="button" className={`sys-item-stock ${cls(s.move === null ? undefined : s.move > 0 ? "up" : s.move < 0 ? "down" : undefined)}`} onClick={() => onSelectStock(s.code, s.name)}>
+                        {s.line}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {turns.length === 0 && (
               <div className="sys-intro">
                 <p className="sys-dim">
@@ -562,7 +614,21 @@ export function SysAssist({
                     </div>
                   </div>
                 )}
-                {t.pack && (
+                {/* ② 되묻기 — 칩을 누르면 그 말을 붙여 다시 묻는다 */}
+                {t.pack?.clarify && (
+                  <div className="sys-clarify">
+                    <div className="sys-line">{t.pack.clarify.question}</div>
+                    <div className="sys-ex">
+                      {t.pack.clarify.options.map((o) => (
+                        <button key={o.label} type="button" onClick={() => pickClarify(o)} disabled={busy}>
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="sys-dim">「다」를 두 번 연속 고르면 그 뒤로는 안 묻는다 (설정에서 되돌림)</div>
+                  </div>
+                )}
+                {t.pack && !t.pack.clarify && (
                   <details className="sys-packwrap" open={t.mode === "plain"}>
                     <summary>
                       {t.mode === "ai" ? "시스가 모은 것 (AI 가 본 재료)" : "모은 것"} — {t.pack.intent.note}
@@ -570,7 +636,7 @@ export function SysAssist({
                     <PackView pack={t.pack} onSelectStock={onSelectStock} />
                   </details>
                 )}
-                {t.pack && t.mode === "plain" && aiReady && (
+                {t.pack && !t.pack.clarify && t.mode === "plain" && aiReady && (
                   <button type="button" className="sys-toai" onClick={() => void send(t.q, "ai")} disabled={busy}>
                     이걸로 AI 에게 정리시키기 →
                   </button>

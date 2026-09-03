@@ -50,6 +50,7 @@ import { startClosesScheduler } from "./dailyCloses.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createSysRouter } from "./routes/sys.js";
+import { startSysScheduler } from "./sysAssist.js";
 import { createTradeRouter } from "./routes/trade.js";
 import { createCustomThemeRouter } from "./routes/customThemes.js";
 import { createRankSpecRouter } from "./routes/rankSpec.js";
@@ -267,6 +268,8 @@ startCalendarSyncScheduler();
 startRetentionScheduler();
 /* 「이 종목을 담은 ETF」 역인덱스 — 하루 1회(16시 이후). 화면은 파일만 읽는다 */
 startEtfHoldersScheduler(client);
+/* 시스 되짚기 — 평일 15:50, 오늘 물어본 종목이 그 뒤로 어떻게 됐나 (2026-09-03) */
+startSysScheduler(client);
 /* 네이버 테마 DB — 주 1회(일요일 04시). 구성은 매일 바뀌는 값이 아니다 */
 startThemeScheduler();
 /* 전종목 일봉 캐시 — 하루 1회(16시 이후). 테마 5·20일 누적과 신호등이 같이 쓴다 */

@@ -883,9 +883,12 @@ export const api = {
   sysInterpret: (question: string, focus?: SysStockRef | null) =>
     postJson<{ intent: SysPack["intent"]; titles: string[] }>("/api/sys/interpret", { question, focus }),
   /* 정지 버튼이 있어야 해서 signal 을 받는다 — postJson 은 그걸 못 넘긴다 */
+  sysRecap: () => getJson<SysRecap>("/api/sys/recap"),
+  sysTopics: () => getJson<{ topics: SysTopicExamples[] }>("/api/sys/topics"),
+  sysTopicsSave: (custom: Record<string, string[]>) => putJson<{ topics: SysTopicExamples[] }>("/api/sys/topics", { custom }),
   sysAsk: async (
     question: string,
-    opts: { mode: "plain" | "ai"; history?: AskTurn[]; focus?: SysStockRef | null; useSearch?: boolean },
+    opts: { mode: "plain" | "ai"; history?: AskTurn[]; focus?: SysStockRef | null; useSearch?: boolean; noClarify?: boolean },
     signal?: AbortSignal,
   ): Promise<SysAnswer> => {
     const res = await req("/api/sys/ask", {
@@ -2446,13 +2449,31 @@ export interface SysProposal {
   facts: SysFact[];
   payload: Record<string, unknown>;
 }
+export interface SysClarify {
+  question: string;
+  options: { label: string; send: string }[];
+}
 export interface SysPack {
   question: string;
   at: string;
   intent: { topics: string[]; stocks: SysStockRef[]; themes: string[]; note: string };
   sections: SysSection[];
   proposals?: SysProposal[];
+  /** 모호해서 되묻는 중 — sections 는 비어 있다 */
+  clarify?: SysClarify;
   ms: number;
+}
+export interface SysRecap {
+  day: string;
+  asked: number;
+  stocks: { code: string; name: string; askedAt: string; then: number | null; now: number | null; move: number | null; foreign: number | null; inst: number | null; line: string }[];
+  topics: string[];
+}
+export interface SysTopicExamples {
+  key: string;
+  title: string;
+  builtin: string[];
+  custom: string[];
 }
 export interface SysAnswer {
   pack: SysPack;

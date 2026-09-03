@@ -101,6 +101,7 @@ export type NoticeSource =
   | "superSignal"
   | "live"
   | "stopWatch"
+  | "sys"
   | "etc";
 
 /**
@@ -220,6 +221,13 @@ export const NOTICE_SOURCES: {
     group: "mine",
     label: "손절선 감시",
     hint: "적어 둔 손절선이 깨졌을 때",
+    def: true,
+  },
+  {
+    key: "sys",
+    group: "mine",
+    label: "시스 되짚기",
+    hint: "오늘 시스에게 물어본 종목이 그 뒤로 어떻게 됐나 — 마감 뒤 한 번 (2026-09-03)",
     def: true,
   },
   { key: "etc", group: "system", label: "그 밖에", hint: "출처를 안 적은 알림", def: true },
