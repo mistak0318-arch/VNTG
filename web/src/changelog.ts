@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T23:03:59.051Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T23:07:14.234Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "5fbfb97",
+        "subject": "매수·매도 단추를 크게, 색은 꽉 차게 — 잘못 누르면 제일 비싼 실수다"
+      },
       {
         "hash": "0e02d46",
         "subject": "종목칸을 누르면 최근 본 종목이 내려온다 · 장 밖에도 호가 틀 · 폰 비율과 새 버전 띠"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "65609e3",
         "subject": "슈퍼신호등 검증 대시보드와 전용 텔레그램 방"
-      },
-      {
-        "hash": "9a0ba03",
-        "subject": "텔레그램 발송 정리, 서브탭 순서 설정, 모바일 차트 넘침"
       }
     ]
   }

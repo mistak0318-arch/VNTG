@@ -14642,9 +14642,16 @@ tr:hover .sd-del { opacity: 0.75; }
  * 주문 폼은 저 멀리 오른쪽이다. **눈이 가격에서 수량 칸까지 가는 거리가 곧 오발주다.**
  */
 .ord-wrap { display: flex; flex-direction: column; gap: 0.7rem; max-width: 1140px; }
-.ord-head { display: flex; gap: 0.6rem; align-items: flex-start; }
-.ord-head .ord-pick { flex: 1 1 auto; max-width: 22rem; }
-.ord-head .ord-side { flex: 0 0 12rem; }
+/*
+ * 머리줄 — 종목칸과 매수·매도를 **반반** (2026-09-04).
+ *
+ * 벤티지: "높이는 아까 괜찮았어. 옆으로 버튼을 크게, 위쪽에 좀 차게, 반반씩."
+ * 매수·매도가 12rem 에 묶여 있어서 넓은 화면에서도 작은 채였다. 줄을 반씩 나눠 준다 —
+ * 커야 하는 것은 높이가 아니라 **누를 면적의 가로**다.
+ */
+.ord-head { display: flex; gap: 0.6rem; align-items: stretch; }
+.ord-head .ord-pick { flex: 1 1 0; min-width: 0; }
+.ord-head .ord-side { flex: 1 1 0; min-width: 0; }
 
 .ord-grid {
   display: grid;
@@ -14707,11 +14714,11 @@ tr:hover .sd-del { opacity: 0.75; }
  * 옅은 색이 아니라 **꽉 찬 색**이다 — 옅은 배경끼리는 폰의 밝은 데서 잘 안 갈린다.
  * 안 고른 쪽은 회색으로 확실히 죽인다. 색은 국내 관례대로 매수 빨강 · 매도 파랑.
  */
-.ord-side { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+.ord-side { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; width: 100%; }
 .ord-side button {
   position: relative;
-  min-height: 2.9rem;
-  padding: 0.5rem;
+  /* 높이는 원래대로 — 뚱뚱해지면 안 된다. 커야 하는 건 **폭**이다 */
+  padding: 0.45rem;
   border-radius: 10px;
   border: 2px solid var(--border);
   background: var(--panel-2);
@@ -14968,11 +14975,13 @@ tr:hover .sd-del { opacity: 0.75; }
   /* 주문 단추는 폭을 다 쓴다 — 엄지가 닿는 자리다 */
   .ord-submit { grid-column: 1 / -1; grid-row: 2; }
 
-  .ord-head { flex-direction: column; gap: 0.4rem; }
-  .ord-head .ord-pick { max-width: none; }
-  .ord-head .ord-side { flex: none; }
-  /* 폰에서는 더 크게 — 엄지로 누르는 자리고, 잘못 누르면 방향이 뒤집힌다 */
-  .ord-side button { min-height: 3.1rem; font-size: 1.08rem; }
+  /*
+   * 폰 — 세로로 쌓되 **둘 다 폭을 다 쓴다.** `align-items: flex-start` 였을 때는
+   * 세로로 쌓이면서 단추가 글자 폭만큼만 남아 왼쪽에 쪼그라들어 있었다.
+   */
+  .ord-head { flex-direction: column; gap: 0.4rem; align-items: stretch; }
+  .ord-head .ord-pick,
+  .ord-head .ord-side { flex: none; width: 100%; }
 
   /* 호가창을 가격·잔량 두 줄로 — 곁가지는 접는다 */
   .ord-book .ob-head,
