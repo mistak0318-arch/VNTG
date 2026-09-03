@@ -39,7 +39,7 @@ const VENUES: { key: OrderVenue; label: string; hint: string }[] = [
   { key: "SOR", label: "통합(SOR)", hint: "키움이 더 좋은 쪽으로 보낸다" },
 ];
 
-type Sub = "order" | "open" | "fills" | "balance" | "log";
+type Sub = "order" | "open" | "fills" | "balance" | "log" | "config";
 
 const SUBS: { key: Sub; label: string }[] = [
   { key: "order", label: "매수·매도" },
@@ -47,6 +47,8 @@ const SUBS: { key: Sub; label: string }[] = [
   { key: "fills", label: "체결" },
   { key: "balance", label: "잔고" },
   { key: "log", label: "기록" },
+  /* 설정 (2026-09-04) — 한도는 여기 없다. 그건 파일을 직접 연다 */
+  { key: "config", label: "설정" },
 ];
 
 function won(n: number | null | undefined): string {
@@ -251,10 +253,11 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
             ))}
           </div>
           {sub === "order" && <OrderForm status={status} prefill={prefill} onDone={load} />}
-          {sub === "open" && <OpenTab onDone={load} />}
+          {sub === "open" && <OpenTab status={status} onDone={load} />}
           {sub === "fills" && <FillsTab />}
           {sub === "balance" && <BalanceTab onSelectStock={onSelectStock} />}
           {sub === "log" && <LogTab />}
+          {sub === "config" && <ConfigTab status={status} onDone={load} />}
         </>
       )}
     </div>
@@ -481,14 +484,17 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
    * 「KRX 가 주문을 받는 시간이 아니다」만 뜨고 — NXT 를 누르면 되는데 그 말이 없었다.
    * 벤티지: "nxt에서는 거래 안되는거야?" 되는데 **화면이 안 되는 것처럼 보였다.**
    */
-  const [venue, setVenue] = useState<OrderVenue>(
-    () => VENUES.map((v) => v.key).find((k) => status.open[k]) ?? "KRX",
-  );
+  const [venue, setVenue] = useState<OrderVenue>(() => {
+    /* 설정에서 거래소를 못 박아 뒀으면 그것, 「그때 열려 있는 곳」이면 열린 데를 고른다 */
+    const fixed = status.settings?.defaultVenue;
+    if (fixed && fixed !== "auto") return fixed;
+    return VENUES.map((v) => v.key).find((k) => status.open[k]) ?? "KRX";
+  });
   /*
    * 매매구분 (2026-09-04). 예전엔 「시장가」 스위치 하나였는데 실제로는 18가지다 —
    * 목록은 **서버가 준다**(status.tradeTypes). 화면이 표를 들고 있으면 언젠가 서버와 갈린다.
    */
-  const [tradeType, setTradeType] = useState(prefill.tradeType ?? "0");
+  const [tradeType, setTradeType] = useState(prefill.tradeType ?? status.settings?.defaultTradeType ?? "0");
   const [qty, setQty] = useState(prefill.qty);
   const [price, setPrice] = useState(prefill.price);
   const [cond, setCond] = useState(prefill.cond);
@@ -498,6 +504,25 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
    * 먼저다 — 그게 본론이고, 주문단가는 대개 거기서 몇 호가 안쪽이라 뒤에 정한다.
    */
   const [condFocus, setCondFocus] = useState(true);
+  /*
+   * 「가능금액의 몇 %」·「보유의 몇 %」를 세려면 계좌를 알아야 한다 (2026-09-04).
+   * 폼을 열 때 한 번만 받는다 — 잔고 탭처럼 10초마다 부르면 주문 앱키에 조회가 계속 나간다.
+   */
+  const [acct, setAcct] = useState<OrderAccount | null>(null);
+  useEffect(() => {
+    void api
+      .orderAccount()
+      .then(setAcct)
+      .catch(() => setAcct(null));
+  }, []);
+  /**
+   * 수량과 금액은 서로를 고친다 — **누가 마지막에 손댔는지**를 알아야 무한히 되돌지 않는다.
+   * 수량을 고쳤으면 금액이 따라오고, 금액을 고쳤으면 수량이 따라온다.
+   */
+  const lastEdit = useRef<"qty" | "amount">("qty");
+  /** 「직접」을 누르면 커서를 수량 칸에 놓는다 */
+  const qtyRef = useRef<HTMLInputElement>(null);
+  const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: OrderTicket } | null>(null);
@@ -529,6 +554,30 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
   const usesCond = tt?.cond === true;
   /* 시간외 구분은 정규장 밖에 내는 것이 정상이라 「시간 아님」 경고를 띄우지 않는다 */
   const open = tt?.late ? true : status.open[venue];
+  /* 셈에 쓸 값 — 지정가면 그 값, 아니면 호가창이 아는 현재가(스톱은 발동가) */
+  const unit = Number(price) || Number(cond) || 0;
+  const held = acct?.holdings.find((h) => h.code === code)?.qty ?? 0;
+  /*
+   * 「100%」가 뜻하는 것. 매수는 **주문 가능 금액**, 매도는 **들고 있는 수량**이다.
+   * 매수는 한 건 한도(기본 100만)도 같이 본다 — 100% 를 눌렀는데 서버가 거절하면
+   * 그 단추는 없느니만 못하다. 한도에 걸려 줄었으면 그 사실을 아래에 적는다.
+   */
+  const cashBase = Math.min(acct?.deposit ?? 0, status.guard.maxOrderKrw);
+  const maxQty = side === "buy" ? (unit > 0 ? Math.floor(cashBase / unit) : 0) : held;
+  const cappedByGuard = side === "buy" && (acct?.deposit ?? 0) > status.guard.maxOrderKrw;
+
+  function setPct(pct: number) {
+    lastEdit.current = "qty";
+    setQty(String(Math.max(0, Math.floor((maxQty * pct) / 100))));
+  }
+
+  /* 수량·가격이 바뀌면 금액이 따라온다 (금액을 손대는 중이면 가만둔다) */
+  useEffect(() => {
+    if (lastEdit.current !== "qty") return;
+    const n = Number(qty) || 0;
+    setAmount(n > 0 && unit > 0 ? String(n * unit) : "");
+  }, [qty, unit]);
+
   const openVenues = VENUES.filter((v) => status.open[v.key]).map((v) => v.label);
   const ready = Boolean(code) && Boolean(qty) && (!needsPrice || Boolean(price)) && (!usesCond || Boolean(cond));
 
@@ -654,19 +703,69 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
 
           <label className="ord-lab">수량</label>
           <div className="ord-step">
-            <button type="button" onClick={() => setQty((v) => String(Math.max(0, (Number(v) || 0) - 1)))}>
+            <button
+              type="button"
+              onClick={() => {
+                lastEdit.current = "qty";
+                setQty((v) => String(Math.max(0, (Number(v) || 0) - 1)));
+              }}
+            >
               −
             </button>
             <input
+              ref={qtyRef}
               className="ord-in"
               inputMode="numeric"
               value={qty}
-              onChange={(e) => setQty(e.target.value.replace(/\D/g, ""))}
+              onChange={(e) => {
+                lastEdit.current = "qty";
+                setQty(e.target.value.replace(/\D/g, ""));
+              }}
               placeholder="주"
             />
-            <button type="button" onClick={() => setQty((v) => String((Number(v) || 0) + 1))}>
+            <button
+              type="button"
+              onClick={() => {
+                lastEdit.current = "qty";
+                setQty((v) => String((Number(v) || 0) + 1));
+              }}
+            >
               ＋
             </button>
+          </div>
+
+          {/*
+            비율 단추 (2026-09-04, 벤티지 요청). 매수는 가능금액, 매도는 보유수량 기준.
+            기준을 못 잡으면(가격이 없거나 계좌를 못 읽으면) 눌리지 않는다 — 0 주가 들어가는 게 더 나쁘다.
+          */}
+          <div className="ord-pct">
+            {[10, 25, 50, 100].map((n) => (
+              <button key={n} type="button" disabled={maxQty <= 0} onClick={() => setPct(n)}>
+                {n}%
+              </button>
+            ))}
+            <button
+              type="button"
+              className="ord-pct-self"
+              onClick={() => {
+                lastEdit.current = "qty";
+                setQty("");
+                qtyRef.current?.focus();
+              }}
+            >
+              직접
+            </button>
+          </div>
+          <div className="ord-caps">
+            {side === "buy"
+              ? acct
+                ? `가능금액 ${won(acct.deposit)}${cappedByGuard ? " (한 건 한도까지만)" : ""} → 최대 ${maxQty.toLocaleString()}주`
+                : "계좌를 못 읽어 비율을 못 셉니다"
+              : held > 0
+                ? `보유 ${held.toLocaleString()}주`
+                : code
+                  ? "이 계좌에 없는 종목입니다"
+                  : "종목을 고르면 보유 수량이 나옵니다"}
           </div>
 
           {usesCond && (
@@ -700,9 +799,27 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
             </button>
           </div>
 
-          <div className="ord-sum">
-            <span>예상 금액</span>
-            <b>{!price || !qty ? "-" : won(Number(price) * Number(qty))}</b>
+          {/*
+            예상 금액도 **적을 수 있다** (2026-09-04, 벤티지: "금액을 넣으면 수량이 자동으로
+            입력되게끔"). 「30만 원어치」로 생각할 때가 있는데, 그걸 수량으로 바꾸는 나눗셈을
+            사람이 할 이유가 없다. 딱 나누어떨어지지 않으면 **내림** — 넘치면 주문이 거절된다.
+          */}
+          <label className="ord-lab">예상 금액</label>
+          <div className="ord-amt">
+            <input
+              className="ord-in"
+              inputMode="numeric"
+              value={amount ? Number(amount).toLocaleString() : ""}
+              onChange={(e) => {
+                lastEdit.current = "amount";
+                const v = e.target.value.replace(/\D/g, "");
+                setAmount(v);
+                setQty(unit > 0 && v ? String(Math.floor(Number(v) / unit)) : "");
+              }}
+              placeholder={unit > 0 ? "원 — 적으면 수량이 따라온다" : "가격을 먼저"}
+              disabled={unit <= 0}
+            />
+            <span>원</span>
           </div>
           <div className="ord-caps">
             한 건 {won(status.guard.maxOrderKrw)} · 지정가 현재가 ±{status.guard.priceCollarPct}%
@@ -755,6 +872,7 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
           nonce={ticket.nonce}
           expiresAt={ticket.expiresAt}
           ticket={ticket.ticket}
+          status={status}
           onClose={() => setTicket(null)}
           onDone={() => {
             setTicket(null);
@@ -773,12 +891,14 @@ function Confirm({
   nonce,
   expiresAt,
   ticket,
+  status,
   onClose,
   onDone,
 }: {
   nonce: string;
   expiresAt: number;
   ticket: OrderTicket | CancelTicket;
+  status: OrderStatus;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -798,13 +918,20 @@ function Confirm({
   const isCancel = ticket.kind === "cancel";
   const sideKo = isCancel ? "취소" : ticket.side === "buy" ? "매수" : "매도";
   const [okMsg, setOkMsg] = useState<string | null>(null);
+  /*
+   * 비밀번호를 지금 안 물어도 되는 상태인가 (2026-09-04) — 설정에서 「기억하기」를 켜고
+   * 앞선 주문에서 한 번 맞힌 뒤, 아직 시한 안일 때. **비밀번호를 어디에 저장한 게 아니라**
+   * 서버가 이 주문 세션에 「확인됨」 시각을 찍어 둔 것이다.
+   */
+  const graced = status.settings.rememberPassword && status.passwordLeftSec > 0;
+  const [remember, setRemember] = useState(status.settings.rememberPassword);
 
   async function go(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const r = await api.orderExecute(nonce, pw);
+      const r = await api.orderExecute(nonce, pw, remember);
       setPw("");
       setOkMsg(`${sideKo} 접수 — 주문번호 ${r.ordNo || "?"} ${r.msg}`);
       setTimeout(onDone, 1200);
@@ -823,7 +950,7 @@ function Confirm({
         onSubmit={(e) => void go(e)}
       >
         <h3>
-          {sideKo} 확인 <span className={`ord-tick${dead ? " dead" : ""}`}>{dead ? "만료" : `${sec}초`}</span>
+          {sideKo}하시겠습니까? <span className={`ord-tick${dead ? " dead" : ""}`}>{dead ? "만료" : `${sec}초`}</span>
         </h3>
         <div className="ord-modal-name">
           {ticket.name || ticket.code} <span className="ord-code">{ticket.code}</span>
@@ -873,22 +1000,37 @@ function Confirm({
             <b>{won(ticket.amount)}</b>
           </div>
         )}
-        <input
-          ref={pwRef}
-          className="ord-in"
-          type="password"
-          autoComplete="off"
-          placeholder="주문 비밀번호"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-        />
+        {graced ? (
+          <div className="ord-graced">
+            🔓 비밀번호 기억 중 — {Math.ceil(status.passwordLeftSec / 60)}분 남음. 이번엔 안 묻습니다.
+          </div>
+        ) : (
+          <>
+            <input
+              ref={pwRef}
+              className="ord-in"
+              type="password"
+              autoComplete="off"
+              placeholder="주문 비밀번호"
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+            />
+            {status.settings.rememberPassword && (
+              <label className="ord-remember">
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+                {status.settings.rememberMinutes}분 동안 다시 묻지 않기
+                <i>비밀번호를 저장하지 않습니다 — 이 주문 세션에만, 닫으면 사라집니다</i>
+              </label>
+            )}
+          </>
+        )}
         {error && <p className="ord-err">{error}</p>}
         {okMsg && <p className="ord-ok">{okMsg}</p>}
         <div className="ord-modal-btns">
           <button type="button" className="ord-cancel" onClick={onClose}>
             그만
           </button>
-          <button type="submit" className={`ord-go ${isCancel ? "" : ticket.side}`} disabled={busy || dead || !pw}>
+          <button type="submit" className={`ord-go ${isCancel ? "" : ticket.side}`} disabled={busy || dead || (!graced && !pw)}>
             {busy ? "보내는 중…" : dead ? "만료됨 — 다시" : `${sideKo} 실행`}
           </button>
         </div>
@@ -923,7 +1065,7 @@ function useRows(fetcher: () => Promise<{ rows: OrderRow[] }>, ms: number) {
   return { rows, error, loading, reload: run };
 }
 
-function OpenTab({ onDone }: { onDone: () => void }) {
+function OpenTab({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
   const { rows, error, loading, reload } = useRows(api.orderOpen, 4000);
   const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: CancelTicket } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -998,6 +1140,7 @@ function OpenTab({ onDone }: { onDone: () => void }) {
           nonce={ticket.nonce}
           expiresAt={ticket.expiresAt}
           ticket={ticket.ticket}
+          status={status}
           onClose={() => setTicket(null)}
           onDone={() => {
             setTicket(null);
@@ -1217,6 +1360,196 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
         복기 노트의 손절선은 그대로 삽니다 — 그쪽은 <b>R 배수의 분모</b>라 「그때 정한 값」이고, 여기는 「지금 값」입니다.
         같은 종목이 양쪽에 있으면 <b>여기가 이깁니다</b>.
       </p>
+    </div>
+  );
+}
+
+/**
+ * 주문 › 설정 (2026-09-04) — 벤티지: "기록 옆에 설정 메뉴도 만들어 줘."
+ *
+ * **여기서 못 고치는 것이 무엇인지가 더 중요하다.** 한 건·하루 한도, 가격 울타리, 장중만 —
+ * 이것들은 `server/data/orderGuard.json` 을 직접 열어 고치고 서버를 다시 켜야 한다.
+ * 화면에서 고칠 수 있으면 그건 한도가 아니다(설계 L3). 여기서는 **보여만 준다.**
+ */
+function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
+  const [cfg, setCfg] = useState(status.settings);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pwA, setPwA] = useState("");
+  const [pwB, setPwB] = useState("");
+  const [pwCur, setPwCur] = useState("");
+
+  async function save(patch: Partial<typeof cfg>) {
+    setBusy(true);
+    setError(null);
+    setMsg(null);
+    try {
+      const r = await api.orderSettingsSave(patch);
+      setCfg(r.settings);
+      setMsg("저장했습니다");
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "저장 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changePw(e: React.FormEvent) {
+    e.preventDefault();
+    if (pwA !== pwB) {
+      setError("새 비밀번호 두 칸이 다릅니다");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMsg(null);
+    try {
+      await api.orderSetPassword(pwA, pwCur);
+      setPwA("");
+      setPwB("");
+      setPwCur("");
+      setMsg("주문 비밀번호를 바꿨습니다");
+    } catch (e2) {
+      setError(e2 instanceof Error ? e2.message : "실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="ord-tab ord-cfg">
+      {msg && <p className="ord-ok">{msg}</p>}
+      {error && <p className="ord-err">{error}</p>}
+
+      <section className="ord-cfg-sec">
+        <h4>주문 비밀번호 기억하기</h4>
+        <p className="ord-note">
+          켜면 한 번 맞힌 뒤 정해 둔 시간 동안 실행마다 묻지 않습니다.{" "}
+          <b>비밀번호를 저장하지 않습니다</b> — 서버가 이 주문 세션에 「확인됨」 시각만 찍어 둡니다.
+          주문 메뉴를 닫거나 잠그면 그 자리에서 사라지고, 세션의 최대 수명(60분)을 넘지 않습니다.
+        </p>
+        <div className="ord-cfg-row">
+          <label>
+            <input
+              type="checkbox"
+              checked={cfg.rememberPassword}
+              disabled={busy}
+              onChange={(e) => void save({ rememberPassword: e.target.checked })}
+            />
+            기억하기 쓰기
+          </label>
+          <select
+            className="ord-in"
+            value={cfg.rememberMinutes}
+            disabled={busy || !cfg.rememberPassword}
+            onChange={(e) => void save({ rememberMinutes: Number(e.target.value) })}
+          >
+            {[5, 10, 15, 30, 60].map((m) => (
+              <option key={m} value={m}>
+                {m}분
+              </option>
+            ))}
+          </select>
+          <span className="ord-caps">
+            {status.passwordLeftSec > 0 ? `지금 ${Math.ceil(status.passwordLeftSec / 60)}분 남음` : "지금은 매번 묻습니다"}
+          </span>
+          <button
+            type="button"
+            className="ord-x"
+            disabled={busy || status.passwordLeftSec <= 0}
+            onClick={() => void api.orderForget().then(onDone)}
+          >
+            지금 잊기
+          </button>
+        </div>
+      </section>
+
+      <section className="ord-cfg-sec">
+        <h4>기본값</h4>
+        <div className="ord-cfg-row">
+          <span className="ord-caps">거래소</span>
+          <select
+            className="ord-in"
+            value={cfg.defaultVenue}
+            disabled={busy}
+            onChange={(e) => void save({ defaultVenue: e.target.value as typeof cfg.defaultVenue })}
+          >
+            <option value="auto">그때 열려 있는 곳</option>
+            {VENUES.map((v) => (
+              <option key={v.key} value={v.key}>
+                {v.label}
+              </option>
+            ))}
+          </select>
+          <span className="ord-caps">매매구분</span>
+          <select
+            className="ord-in"
+            value={cfg.defaultTradeType}
+            disabled={busy}
+            onChange={(e) => void save({ defaultTradeType: e.target.value })}
+          >
+            {(status.tradeTypes ?? []).map((t) => (
+              <option key={t.code} value={t.code}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </section>
+
+      <form className="ord-cfg-sec" onSubmit={(e) => void changePw(e)}>
+        <h4>주문 비밀번호 바꾸기</h4>
+        <input className="ord-in" type="password" placeholder="지금 비밀번호" value={pwCur} onChange={(e) => setPwCur(e.target.value)} />
+        <input className="ord-in" type="password" placeholder="새 비밀번호 (6자 이상)" value={pwA} onChange={(e) => setPwA(e.target.value)} />
+        <input className="ord-in" type="password" placeholder="한 번 더" value={pwB} onChange={(e) => setPwB(e.target.value)} />
+        <button type="submit" className="ord-go" disabled={busy || pwA.length < 6 || !pwCur}>
+          바꾸기
+        </button>
+      </form>
+
+      <section className="ord-cfg-sec">
+        <h4>한도 — 여기서는 못 고칩니다</h4>
+        <p className="ord-note">
+          아래 값은 <code>server/data/orderGuard.json</code> 을 직접 열어 고치고 서버를 다시 켜야 바뀝니다.
+          <b> 화면에서 고칠 수 있으면 그건 한도가 아닙니다.</b> 넘으면 줄여서 내지 않고 <b>거절</b>합니다.
+        </p>
+        <dl className="ord-cfg-kv">
+          <div>
+            <dt>한 건</dt>
+            <dd>{won(status.guard.maxOrderKrw)}</dd>
+          </div>
+          <div>
+            <dt>하루 합계</dt>
+            <dd>{won(status.guard.maxDailyKrw)}</dd>
+          </div>
+          <div>
+            <dt>하루 건수</dt>
+            <dd>{status.guard.maxDailyCount}건</dd>
+          </div>
+          <div>
+            <dt>지정가 울타리</dt>
+            <dd>현재가 ±{status.guard.priceCollarPct}%</dd>
+          </div>
+          <div>
+            <dt>스톱 발동가</dt>
+            <dd>현재가 ±{status.guard.stopCollarPct}%</dd>
+          </div>
+          <div>
+            <dt>장중만</dt>
+            <dd>{status.guard.marketHoursOnly ? "예" : "아니오"}</dd>
+          </div>
+          <div>
+            <dt>허용 종목</dt>
+            <dd>{status.guard.allowedCodes?.length ? `${status.guard.allowedCodes.length}개만` : "전체"}</dd>
+          </div>
+          <div>
+            <dt>모의/실전</dt>
+            <dd>{status.mock ? "모의투자" : "실전 계좌"}</dd>
+          </div>
+        </dl>
+      </section>
     </div>
   );
 }

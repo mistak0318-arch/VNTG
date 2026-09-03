@@ -975,11 +975,16 @@ export const api = {
   }) => orderPost<{ nonce: string; expiresAt: number; ticket: OrderTicket }>("/api/order/prepare", input),
   orderCancelPrepare: (input: { ordNo: string; code: string; name: string; qty: number; venue: OrderVenue }) =>
     orderPost<{ nonce: string; expiresAt: number; ticket: CancelTicket }>("/api/order/cancel/prepare", input),
-  orderExecute: (nonce: string, password: string) =>
-    orderPost<{ ok: boolean; ordNo: string; msg: string; kind: "order" | "cancel" }>("/api/order/execute", {
-      nonce,
-      password,
-    }),
+  orderExecute: (nonce: string, password: string, remember = false) =>
+    orderPost<{ ok: boolean; ordNo: string; msg: string; kind: "order" | "cancel"; remembered: boolean }>(
+      "/api/order/execute",
+      { nonce, password, remember },
+    ),
+  orderSettings: () => getJson<{ settings: OrderSettings }>("/api/order/settings"),
+  orderSettingsSave: (patch: Partial<OrderSettings>) =>
+    orderPost<{ settings: OrderSettings }>("/api/order/settings", patch),
+  /** 비밀번호 기억을 지금 끊는다 */
+  orderForget: () => orderPost<{ ok: boolean }>("/api/order/forget"),
   orderLock: (locked: boolean, password?: string) =>
     orderPost<{ ok: boolean }>("/api/order/lock", { locked, password }),
   aiConfig: () =>
@@ -6256,6 +6261,9 @@ export interface OrderStatus {
   uiLocked: boolean;
   lockedUntilMs: number;
   guard: OrderGuard;
+  settings: OrderSettings;
+  /** 비밀번호를 다시 안 물을 남은 시간(초). 0 이면 다음 주문에 묻는다 */
+  passwordLeftSec: number;
   today: { krw: number; count: number };
   open: Record<OrderVenue, boolean>;
   tradeTypes: TradeType[];
@@ -6273,6 +6281,14 @@ export interface TradeType {
   /** 시간외 주문이라 정규장 시간창 검사를 건너뛰나 */
   late: boolean;
   hint: string;
+}
+
+/** 주문 화면 설정 — 한도(OrderGuard)와 다르다. 이쪽만 화면에서 고칠 수 있다 */
+export interface OrderSettings {
+  rememberPassword: boolean;
+  rememberMinutes: number;
+  defaultVenue: OrderVenue | "auto";
+  defaultTradeType: string;
 }
 
 export interface OrderTicket {

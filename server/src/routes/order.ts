@@ -19,6 +19,9 @@ import {
   setOrderPassword,
   setUiLock,
   checkPassword,
+  getSettings,
+  saveSettings,
+  forgetPassword,
   type OrderVenue,
 } from "../orders.js";
 import { readOrderStops, setOrderStop } from "../orderStops.js";
@@ -231,15 +234,49 @@ export function createOrderRouter(main: KiwoomClient): Router {
   /* 주문·취소 실행이 같은 문을 쓴다 — nonce 가 어느 쪽 주문서인지 안다 */
   const execute = async (req: Request, res: Response) => {
     try {
-      const { nonce, password } = (req.body ?? {}) as { nonce?: string; password?: string };
-      const r = await executePrepared(String(nonce ?? ""), String(password ?? ""), clientIp(req));
-      res.json({ ok: true, ordNo: r.ordNo, msg: r.msg, kind: r.ticket.kind });
+      const { nonce, password, remember } = (req.body ?? {}) as {
+        nonce?: string;
+        password?: string;
+        remember?: boolean;
+      };
+      const r = await executePrepared(String(nonce ?? ""), String(password ?? ""), clientIp(req), {
+        /* 「기억하기」는 **이 세션에만** 찍힌다 — 세션이 닫히면 같이 사라진다 */
+        session: sessionOf(req),
+        remember: Boolean(remember),
+      });
+      res.json({ ok: true, ordNo: r.ordNo, msg: r.msg, kind: r.ticket.kind, remembered: r.remembered });
     } catch (e) {
       res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
     }
   };
   router.post("/execute", execute);
   router.post("/cancel/execute", execute);
+
+  /** 주문 화면 설정 — 한도(orderGuard)는 여기서 못 고친다. 그건 파일을 직접 열어야 한다 */
+  router.get("/settings", async (_req, res, next) => {
+    try {
+      res.json({ settings: await getSettings() });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  router.post("/settings", async (req, res) => {
+    try {
+      const settings = await saveSettings((req.body ?? {}) as Record<string, never>);
+      /* 기억하기를 끄면 **지금 열려 있는 기억도** 끊는다 — 껐는데 이번 판만 살아 있으면 껐다고 못 한다 */
+      if (!settings.rememberPassword) forgetPassword(req);
+      res.json({ settings });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
+    }
+  });
+
+  /** 기억을 지금 끊는다 (설정의 「지금 잊기」) */
+  router.post("/forget", (req, res) => {
+    forgetPassword(req);
+    res.json({ ok: true });
+  });
 
   router.post("/lock", async (req, res) => {
     try {
@@ -253,6 +290,8 @@ export function createOrderRouter(main: KiwoomClient): Router {
         }
       }
       await setUiLock(Boolean(locked));
+      /* 잠갔으면 기억도 끊는다 — 잠근 사람은 「지금부터 아무것도 안 나간다」를 기대한다 */
+      if (locked) forgetPassword(req);
       res.json({ ok: true });
     } catch (e) {
       res.status(400).json({ error: e instanceof Error ? e.message : "실패" });

@@ -15403,3 +15403,58 @@ select.ord-in { appearance: auto; cursor: pointer; }
   .build-msg { flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .build-bar button { flex: none; padding: 5px 10px; }
 }
+
+/* ── 수량 비율 단추 · 금액 입력 (2026-09-04) ─────────────────────────── */
+.ord-pct { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.25rem; }
+.ord-pct button {
+  padding: 0.3rem 0.1rem;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.ord-pct button:hover:not(:disabled) { border-color: var(--blue); }
+.ord-pct button:disabled { opacity: 0.35; cursor: default; }
+.ord-pct .ord-pct-self { color: var(--muted); }
+.ord-amt { display: grid; grid-template-columns: 1fr auto; gap: 0.3rem; align-items: center; }
+.ord-amt .ord-in { text-align: right; }
+.ord-amt span { color: var(--muted); font-size: 0.82rem; }
+
+/* 비밀번호 기억 중 안내 · 기억하기 체크 */
+.ord-graced {
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  background: rgba(53, 196, 106, 0.12);
+  border: 1px solid rgba(53, 196, 106, 0.4);
+  color: var(--green);
+  font-size: 0.84rem;
+}
+.ord-remember { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; font-size: 0.82rem; }
+.ord-remember i {
+  flex-basis: 100%;
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+/* ── 주문 › 설정 ─────────────────────────────────────────────────────── */
+.ord-cfg-sec {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.ord-cfg-sec h4 { margin: 0; font-size: 0.95rem; }
+.ord-cfg-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.ord-cfg-row label { display: flex; align-items: center; gap: 0.3rem; font-size: 0.88rem; }
+.ord-cfg-row .ord-in { width: auto; min-width: 7rem; }
+.ord-cfg-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.3rem 1rem; margin: 0; }
+.ord-cfg-kv > div { display: flex; justify-content: space-between; gap: 0.5rem; border-bottom: 1px solid var(--border); padding: 0.2rem 0; }
+.ord-cfg-kv dt { color: var(--muted); font-size: 0.82rem; }
+.ord-cfg-kv dd { margin: 0; font-size: 0.86rem; font-variant-numeric: tabular-nums; }

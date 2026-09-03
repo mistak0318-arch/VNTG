@@ -62,6 +62,7 @@ const DATA_DIR = join(here, "..", "data");
 const AUTH_FILE = join(DATA_DIR, "orderAuth.json");
 const GUARD_FILE = join(DATA_DIR, "orderGuard.json");
 const LOG_FILE = join(DATA_DIR, "orderLog.jsonl");
+const SETTINGS_FILE = join(DATA_DIR, "orderSettings.json");
 
 const ORDER_RESOURCE = "/api/dostk/ordr";
 const ACNT_RESOURCE = "/api/dostk/acnt";
@@ -195,6 +196,66 @@ export interface OrderLogRow {
   amount?: number;
   msg?: string;
   raw?: unknown;
+}
+
+/**
+ * 주문 화면 설정 (2026-09-04) — 화면에서 고칠 수 있는 것만. **한도(orderGuard)는 여기 없다.**
+ * 한도를 화면에서 고칠 수 있으면 그건 한도가 아니다 — 그건 파일을 직접 열어야 한다.
+ */
+export interface OrderSettings {
+  /**
+   * 주문 비밀번호를 한동안 기억할까 (벤티지: "내 계좌 비밀번호 기억하기 하면 세션 1시간").
+   *
+   * ⚠️ **비밀번호를 저장하는 것이 아니다.** 한 번 맞힌 뒤 **그 주문 세션에만** 「이 세션은
+   * 확인됐다」는 시한을 찍는다. 브라우저에도, 파일에도 비밀번호는 남지 않는다.
+   * 시한은 주문 세션의 최대 수명(60분)을 절대 넘지 않는다 — 세션이 닫히면 같이 사라진다.
+   */
+  rememberPassword: boolean;
+  /** 기억할 시간(분). 1~60 */
+  rememberMinutes: number;
+  /** 주문 화면을 열 때 기본으로 고를 거래소. "auto" 면 그때 열려 있는 곳 */
+  defaultVenue: OrderVenue | "auto";
+  /** 기본 매매구분(trde_tp) */
+  defaultTradeType: string;
+}
+
+const DEFAULT_SETTINGS: OrderSettings = {
+  rememberPassword: false,
+  rememberMinutes: 60,
+  defaultVenue: "auto",
+  defaultTradeType: "0",
+};
+
+export async function getSettings(): Promise<OrderSettings> {
+  const v = await readJson(SETTINGS_FILE, DEFAULT_SETTINGS);
+  return {
+    ...v,
+    rememberMinutes: Math.min(60, Math.max(1, Math.round(v.rememberMinutes) || 60)),
+  };
+}
+
+export async function saveSettings(patch: Partial<OrderSettings>): Promise<OrderSettings> {
+  const cur = await getSettings();
+  const next: OrderSettings = {
+    rememberPassword: typeof patch.rememberPassword === "boolean" ? patch.rememberPassword : cur.rememberPassword,
+    rememberMinutes: Math.min(60, Math.max(1, Math.round(Number(patch.rememberMinutes)) || cur.rememberMinutes)),
+    defaultVenue:
+      patch.defaultVenue === "auto" || (patch.defaultVenue && VENUES.includes(patch.defaultVenue))
+        ? patch.defaultVenue
+        : cur.defaultVenue,
+    defaultTradeType: tradeTypeOf(String(patch.defaultTradeType ?? "")) ? String(patch.defaultTradeType) : cur.defaultTradeType,
+  };
+  await writeJson(SETTINGS_FILE, next);
+  await appendLog({ kind: "password", msg: `설정 변경 — 비밀번호 기억 ${next.rememberPassword ? `${next.rememberMinutes}분` : "끔"}` });
+  /* 기억하기를 켜는 것은 겹 하나를 무르는 일이라 조용히 넘어가지 않는다 */
+  if (next.rememberPassword && !cur.rememberPassword) {
+    void sendTelegram(
+      `🔓 주문 비밀번호 <b>기억하기</b>를 켰습니다 (${next.rememberMinutes}분).
+주문 세션이 열려 있는 동안 실행마다 묻지 않습니다.`,
+      "order",
+    ).catch(() => undefined);
+  }
+  return next;
 }
 
 /* ── 환경 ─────────────────────────────────────────────────────────────── */
@@ -333,6 +394,8 @@ interface OrderSession {
   idle: number;
   hard: number;
   ip: string;
+  /** 이 시각까지는 주문 비밀번호를 다시 안 묻는다 (기억하기). 0 이면 매번 묻는다 */
+  pwUntil: number;
 }
 
 const sessions = new Map<string, OrderSession>();
@@ -371,7 +434,7 @@ export function clientIp(req: Request): string {
 export function openSession(req: Request, res: Response): void {
   const token = randomBytes(24).toString("hex");
   const now = Date.now();
-  sessions.set(token, { idle: now + IDLE_MS, hard: now + HARD_MS, ip: clientIp(req) });
+  sessions.set(token, { idle: now + IDLE_MS, hard: now + HARD_MS, ip: clientIp(req), pwUntil: 0 });
   setCookie(req, res, token, HARD_MS / 1000);
 }
 
@@ -388,6 +451,21 @@ export function sessionOf(req: Request): OrderSession | null {
   }
   s.idle = Math.min(now + IDLE_MS, s.hard);
   return s;
+}
+
+/** 남은 「기억」 시간(초). 0 이면 다음 주문에 비밀번호를 묻는다 */
+export function passwordLeftSec(req: Request): number {
+  const token = cookieOf(req, ORDER_COOKIE);
+  const s = token ? sessions.get(token) : undefined;
+  if (!s) return 0;
+  return Math.max(0, Math.floor((s.pwUntil - Date.now()) / 1000));
+}
+
+/** 기억을 지금 끊는다 — 설정에서 끄거나 「잠금」을 누를 때 */
+export function forgetPassword(req: Request): void {
+  const token = cookieOf(req, ORDER_COOKIE);
+  const s = token ? sessions.get(token) : undefined;
+  if (s) s.pwUntil = 0;
 }
 
 export function sessionLeftSec(req: Request): number {
@@ -690,14 +768,34 @@ export async function executePrepared(
   nonce: string,
   password: string,
   ip: string,
-): Promise<{ ordNo: string; msg: string; ticket: Ticket }> {
+  opts: { session?: OrderSession | null; remember?: boolean } = {},
+): Promise<{ ordNo: string; msg: string; ticket: Ticket; remembered: boolean }> {
   const p = pending.get(nonce);
   if (!p || p.exp < Date.now()) {
     pending.delete(nonce);
     throw new Error("주문서가 만료됐다(30초) — 다시 만드세요");
   }
-  const pw = await checkPassword(password);
-  if (!pw.ok) throw new Error(pw.error);
+
+  /*
+   * 비밀번호 — **기억하기**가 켜져 있고 이 세션이 아직 시한 안이면 다시 안 묻는다 (2026-09-04).
+   *
+   * 기억하는 것은 비밀번호가 아니라 **「이 세션은 확인됐다」는 시각 하나**다. 브라우저에도
+   * 파일에도 비밀번호는 안 남는다. 시한은 주문 세션의 최대 수명을 못 넘고(아래 Math.min),
+   * 세션이 닫히면 같이 사라진다 — 「닫기」를 누르면 그 자리에서 무효가 된다.
+   */
+  const sess = opts.session ?? null;
+  const cfg = await getSettings();
+  const graced = Boolean(sess && cfg.rememberPassword && sess.pwUntil > Date.now());
+  let remembered = graced;
+  if (!graced) {
+    const pw = await checkPassword(password);
+    if (!pw.ok) throw new Error(pw.error);
+    if (sess && cfg.rememberPassword && opts.remember) {
+      sess.pwUntil = Math.min(Date.now() + cfg.rememberMinutes * 60_000, sess.hard);
+      remembered = true;
+      await appendLog({ kind: "password", ip, msg: `비밀번호 기억 시작 — ${cfg.rememberMinutes}분` });
+    }
+  }
   pending.delete(nonce);
   if (await uiLocked()) throw new Error("화면 잠금 중");
   if (!ordersEnabled()) throw new Error("주문 기능이 꺼져 있다");
@@ -711,7 +809,7 @@ export async function executePrepared(
       unwatch(t.ordNo);
       void sendTelegram(`🧾 ${tag} <b>취소</b> ${esc(t.name)} ${t.qty}주 (원주문 ${esc(t.ordNo)})\n${esc(r.msg)}`, "order").catch(() => undefined);
     } else {
-      await appendLog({ kind: "order", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, condPrice: t.condPrice, tradeType: t.tradeType, venue: t.venue, ordNo: r.ordNo, amount: t.amount, msg: r.msg, raw: r.raw });
+      await appendLog({ kind: "order", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, condPrice: t.condPrice, tradeType: t.tradeType, venue: t.venue, ordNo: r.ordNo, amount: t.amount, msg: graced ? `${r.msg} · 비밀번호 기억으로` : r.msg, raw: r.raw });
       const sideKo = t.side === "buy" ? "매수" : "매도";
       const priceKo = t.price === null ? "시장가" : `${t.price.toLocaleString()}원`;
       void sendTelegram(
@@ -720,7 +818,7 @@ export async function executePrepared(
       ).catch(() => undefined);
       if (r.ordNo) watch(r.ordNo, t);
     }
-    return { ordNo: r.ordNo, msg: r.msg, ticket: t };
+    return { ordNo: r.ordNo, msg: r.msg, ticket: t, remembered };
   } catch (e) {
     const msg = e instanceof KiwoomApiError ? `${e.returnCode} ${e.message}` : e instanceof Error ? e.message : String(e);
     await appendLog({ kind: "error", ip, code: t.code, name: t.name, qty: t.qty, venue: t.venue, msg, raw: e instanceof KiwoomApiError ? e.raw : undefined });
@@ -957,7 +1055,11 @@ export async function orderStatus(req: Request): Promise<Record<string, unknown>
   const enabled = ordersEnabled();
   const configured = orderClient() !== null;
   const a = await loadAuth();
-  const [guard, today] = await Promise.all([getGuard(), todayUsage().catch(() => ({ krw: 0, count: 0 }))]);
+  const [guard, today, settings] = await Promise.all([
+    getGuard(),
+    todayUsage().catch(() => ({ krw: 0, count: 0 })),
+    getSettings(),
+  ]);
   const s = sessionOf(req);
   return {
     enabled,
@@ -971,6 +1073,8 @@ export async function orderStatus(req: Request): Promise<Record<string, unknown>
     hasPassword: a.hash.length > 0,
     session: s !== null,
     sessionLeftSec: s ? sessionLeftSec(req) : 0,
+    settings,
+    passwordLeftSec: s ? passwordLeftSec(req) : 0,
     uiLocked: a.uiLocked,
     lockedUntilMs: a.lockUntil > Date.now() ? a.lockUntil : 0,
     guard,
