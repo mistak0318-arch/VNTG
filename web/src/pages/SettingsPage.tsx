@@ -31,6 +31,7 @@ import { AfterClosePanel } from "../components/AfterClosePanel";
 import { LedgerResetPanel } from "../components/LedgerResetPanel";
 import { LedgerArchivePanel } from "../components/LedgerArchivePanel";
 import { RealtimeStatusPanel } from "../components/RealtimeStatusPanel";
+import { SysConfigPanel } from "../components/SysConfigPanel";
 
 interface KeyInfo {
   name: string;
@@ -132,6 +133,18 @@ export function SettingsPage() {
         hint="사이드바 메뉴를 원하는 순서로 바꾸고 안 쓰는 것은 숨깁니다."
       >
         <MenuOrderPanel items={MENU_ITEMS} />
+      </CollapsibleCard>
+      )}
+
+      {/* 시스 도우미 (2026-09-03) — 켜기/끄기 · 기본 모드. 모델은 AI 모델 카드 */}
+      {tab === "display" && (
+      <CollapsibleCard
+        id="sysAssist"
+        scope="global"
+        title="시스 (플로팅 도우미)"
+        hint="우하단 💬 버튼 — 종목·시장·ETF·뉴스·텔레그램을 한 번에 긁어 보여주고, AI 모드는 정리까지."
+      >
+        <SysConfigPanel />
       </CollapsibleCard>
       )}
 

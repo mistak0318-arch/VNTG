@@ -49,6 +49,7 @@ import { startThemeScheduler } from "./naverThemes.js";
 import { startClosesScheduler } from "./dailyCloses.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
+import { createSysRouter } from "./routes/sys.js";
 import { createTradeRouter } from "./routes/trade.js";
 import { createCustomThemeRouter } from "./routes/customThemes.js";
 import { createRankSpecRouter } from "./routes/rankSpec.js";
@@ -210,6 +211,8 @@ app.use("/api/widget", createWidgetRouter(client));
 app.use("/api/briefing", createBriefingRouter(client));
 app.use("/api/ai", createAiRouter());
 app.use("/api/ask", createAskRouter(client));
+/* 시스 — 플로팅 도우미. 일반 모드는 우리 데이터만(비용 0), AI 모드는 묶음을 문맥으로 askMarket */
+app.use("/api/sys", createSysRouter(client));
 app.use("/api/trade", createTradeRouter(client));
 app.use("/api/custom-themes", createCustomThemeRouter(client));
 app.use("/api/sector-flow", createSectorFlowRouter(client));

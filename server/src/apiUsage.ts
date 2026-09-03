@@ -244,6 +244,8 @@ export type UsageFeature =
   | "cis"
   /* 종목 정보 엮기 — 버튼을 누른 만큼만 나간다. 자동으로 도는 것들과 섞으면 안 읽힌다 */
   | "company"
+  /* 시스 도우미 AI 모드 — 물은 만큼만. 시황 질문하기와 갈라 세야 어느 쪽이 쓰는지 보인다 */
+  | "sys"
   | "other";
 
 export const FEATURE_LABEL: Record<UsageFeature, string> = {
@@ -255,6 +257,7 @@ export const FEATURE_LABEL: Record<UsageFeature, string> = {
   vision: "이미지 인식(캘린더)",
   cis: "CIS 일지",
   company: "종목 정보 엮기",
+  sys: "시스 도우미",
   other: "기타",
 };
 

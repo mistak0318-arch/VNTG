@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { generateText } from "./vision.js";
-import { choiceFor, getAiConfig } from "./aiConfig.js";
+import { choiceFor } from "./aiConfig.js";
 import { recordApiCall } from "./apiUsage.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { buildDigest } from "./aiSummary.js";
@@ -74,8 +74,8 @@ export function isAskConfigured(): boolean {
  * SDK 쪽 기능이라, 다른 provider 를 골라도 여기선 못 쓴다 — 조용히 검색 없이 답하는
  * 것보다 기본 모델로 제대로 답하는 편이 낫다.
  */
-async function model(): Promise<string> {
-  const choice = (await getAiConfig()).ask;
+async function model(purpose: "ask" | "sys" = "ask"): Promise<string> {
+  const choice = await choiceFor(purpose);
   if (choice && choice.provider === "anthropic" && choice.model.trim()) return choice.model.trim();
   return process.env.ASK_MODEL?.trim() || "claude-sonnet-5";
 }
@@ -87,10 +87,20 @@ export async function askMarket(
   client: KiwoomClient,
   question: string,
   history: AskTurn[] = [],
-  opts: { useSearch?: boolean; useMarketData?: boolean } = {},
+  opts: {
+    useSearch?: boolean;
+    useMarketData?: boolean;
+    /**
+     * 부르는 쪽이 이미 모아 둔 문맥 (2026-09-03, 시스 도우미) — 있으면 시장 요약 대신
+     * 이것을 첫 질문에 붙인다. 질문에 맞는 데이터(종목·ETF·테마)를 넣는 길이다.
+     */
+    context?: string;
+    /** 어느 용도의 모델 설정을 쓰나 — 시스는 "sys"(안 골랐으면 ask 를 따라간다) */
+    purpose?: "ask" | "sys";
+  } = {},
 ): Promise<AskResult> {
   const { useSearch = true, useMarketData = true } = opts;
-  const usedModel = await model();
+  const usedModel = await model(opts.purpose ?? "ask");
   const empty: AskResult = {
     text: null,
     searches: [],
@@ -110,7 +120,9 @@ export async function askMarket(
   try {
     // 시장 데이터는 첫 질문에만 붙인다 — 매 턴 붙이면 토큰이 배로 든다
     let context = "";
-    if (useMarketData && history.length === 0) {
+    if (opts.context && history.length === 0) {
+      context = `\n\n${opts.context}`;
+    } else if (useMarketData && history.length === 0) {
       const digest = await buildDigest(client).catch(() => "");
       const watch = (await listWatchlist().catch(() => [])).map((w) => w.name);
       context = `\n\n=== 시장 데이터 (${new Date().toLocaleString("ko-KR", { hour12: false })} 조회) ===\n${digest}`;
@@ -165,7 +177,7 @@ export async function askMarket(
 
     const inputTokens = response.usage.input_tokens ?? 0;
     const outputTokens = response.usage.output_tokens ?? 0;
-    void recordApiCall("anthropic", usedModel, "ok", { inputTokens, outputTokens, feature: "ask" });
+    void recordApiCall("anthropic", usedModel, "ok", { inputTokens, outputTokens, feature: opts.purpose ?? "ask" });
 
     return {
       // 인용이 붙으면 한 문장이 여러 text 블록으로 쪼개진다.

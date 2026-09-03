@@ -878,6 +878,12 @@ export const api = {
     history: AskTurn[] = [],
     opts: { useSearch?: boolean; useMarketData?: boolean } = {},
   ) => postJson<AskResult>("/api/ask", { question, history, ...opts }),
+  /* 시스 도우미 — 일반(우리 데이터만) / AI(묶음을 문맥으로 Claude + 웹 검색) */
+  sysStatus: () => getJson<{ aiReady: boolean }>("/api/sys/status"),
+  sysAsk: (
+    question: string,
+    opts: { mode: "plain" | "ai"; history?: AskTurn[]; focus?: SysStockRef | null; useSearch?: boolean },
+  ) => postJson<SysAnswer>("/api/sys/ask", { question, ...opts }),
   aiConfig: () =>
     getJson<{
       config: AiConfig;
@@ -2369,6 +2375,59 @@ export interface AiConfig {
   pinned: AiChoice | null;
   /** 캘린더 이미지 인식 — 안 고르면 싼 제공자부터 시도한다 */
   vision: AiChoice | null;
+  /** 종목 정보 엮기 (버튼) */
+  company?: AiChoice | null;
+  /** 시스 도우미 AI 모드 — Claude 만. 안 고르면 ask 를 따라간다 */
+  sys?: AiChoice | null;
+}
+
+/* ── 시스 도우미 (2026-09-03) — 서버 sysAssist.ts 의 공통 섹션 모델 그대로 ── */
+export type SysTone = "up" | "down" | "good" | "warn" | "bad" | "muted";
+export interface SysStockRef {
+  code: string;
+  name: string;
+}
+export interface SysFact {
+  label: string;
+  value: string;
+  tone?: SysTone;
+  hint?: string;
+}
+export interface SysItem {
+  text: string;
+  sub?: string;
+  link?: string;
+  stock?: SysStockRef;
+  tone?: SysTone;
+}
+export interface SysBlock {
+  title?: string;
+  facts?: SysFact[];
+  items?: SysItem[];
+  lines?: { text: string; tone?: SysTone }[];
+  text?: string;
+}
+export interface SysSection {
+  key: string;
+  topic: string;
+  title: string;
+  stock?: SysStockRef;
+  head?: SysFact[];
+  blocks: SysBlock[];
+  missing?: string[];
+  ms: number;
+  error?: string;
+}
+export interface SysPack {
+  question: string;
+  at: string;
+  intent: { topics: string[]; stocks: SysStockRef[]; themes: string[]; note: string };
+  sections: SysSection[];
+  ms: number;
+}
+export interface SysAnswer {
+  pack: SysPack;
+  ai: AskResult | null;
 }
 
 export interface VisionModelOption {

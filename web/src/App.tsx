@@ -4,6 +4,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { RunningJobsBar } from "./components/RunningJobsBar";
 import { QuickStockSearch } from "./components/QuickStockSearch";
 import { NotifyBell } from "./components/NotifyBell";
+import { SysAssist } from "./components/SysAssist";
 import { TabScroller } from "./components/TabScroller";
 import { CustomThemePage } from "./pages/CustomThemePage";
 import { ScreenerPage } from "./pages/ScreenerPage";
@@ -1125,6 +1126,11 @@ export default function App() {
         />
         </ErrorBoundary>
       )}
+
+      {/* 시스 — 어느 화면에서든 우하단. 설정 › 화면에서 끌 수 있다 (2026-09-03) */}
+      <ErrorBoundary where="시스" resetKey="sys">
+        <SysAssist focus={selected ? { code: selected.code, name: selected.name } : null} onSelectStock={onSelectStock} />
+      </ErrorBoundary>
     </div>
   );
 }

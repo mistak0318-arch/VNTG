@@ -28,7 +28,8 @@ export type AiPurpose =
   | "pulse"
   | "pinned"
   | "vision"
-  | "company";
+  | "company"
+  | "sys";
 
 export interface AiChoice {
   provider: VisionProvider;
@@ -82,6 +83,13 @@ export interface AiConfig {
    * 사람 손에 달려 있다 — 좋은 모델을 골라도 비용이 튀지 않는 자리다.
    */
   company: AiChoice | null;
+  /**
+   * 시스 도우미 AI 모드 (2026-09-03 추가) — 「시황 질문하기」와 같은 길(웹 검색)이라
+   * **Anthropic 만**. 따로 안 골랐으면 시황 질문하기 설정을 따라간다.
+   * 입력은 질문에 맞춰 모은 묶음(종목이면 시세·수급·뉴스·텔레그램·공시·실적)이라
+   * 시장을 물을 때 요약까지 얹으면 리포트만큼 커진다.
+   */
+  sys: AiChoice | null;
 }
 
 /** null 이면 기존 동작(ANTHROPIC_API_KEY + CLAUDE_MODEL)을 그대로 쓴다 */
@@ -94,6 +102,7 @@ export const DEFAULT_AI_CONFIG: AiConfig = {
   pinned: null,
   vision: null,
   company: null,
+  sys: null,
 };
 
 export const PURPOSE_LABEL: Record<AiPurpose, string> = {
@@ -105,6 +114,7 @@ export const PURPOSE_LABEL: Record<AiPurpose, string> = {
   pinned: "고정 채널 AI 세줄",
   vision: "캘린더 이미지 인식",
   company: "종목 정보 엮기 (버튼)",
+  sys: "시스 도우미 AI 모드 (Claude 만)",
 };
 
 let cache: AiConfig | null = null;
@@ -139,6 +149,10 @@ export async function saveAiConfig(input: AiConfig): Promise<AiConfig> {
       const c = clean(input.ask);
       return c && c.provider === "anthropic" ? c : null;
     })(),
+    sys: (() => {
+      const c = clean(input.sys);
+      return c && c.provider === "anthropic" ? c : null;
+    })(),
   };
   cache = next;
   await mkdir(DATA_DIR, { recursive: true });
@@ -153,5 +167,7 @@ export async function choiceFor(purpose: AiPurpose): Promise<AiChoice | null> {
    * 그대로다. 분리한 이유는 「고를 수 있게」이지 「기본이 바뀌게」가 아니다.
    */
   if (purpose === "pinned") return cfg.pinned ?? cfg.report;
+  /* 시스도 같은 이유 — 따로 안 골랐으면 시황 질문하기 것 */
+  if (purpose === "sys") return cfg.sys ?? cfg.ask;
   return cfg[purpose];
 }
