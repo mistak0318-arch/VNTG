@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type AskResult, type AskTurn, type SysBlock, type SysFact, type SysPack, type SysProposal, type SysRecap, type SysSection, type SysStockRef } from "../api";
 import { setPref } from "../prefs";
 import { SysIcon } from "./SysIcon";
+import { speechText, TTS_RATES, useTts } from "../useTts";
 
 /**
  * **시스 — 플로팅 도우미** (2026-09-03).
@@ -26,6 +27,8 @@ export const SYS_MODE_KEY = "vntg.sys.mode";
 export const SYS_SEARCH_KEY = "vntg.sys.search";
 /** 되묻기 끔 — 「다」를 두 번 연속 고르면 화면이 스스로 켠다 (업그레이드 ②) */
 export const SYS_NOASK_KEY = "vntg.sys.noask";
+/** 답이 오면 스스로 읽어 줄까 (2026-09-03) — 기본 끔. 갑자기 소리가 나면 놀란다 */
+export const SYS_AUTOREAD_KEY = "vntg.sys.autoread";
 /** 설정 화면이 바꾸면 이 이벤트로 알린다 — 같은 창 안에서는 storage 이벤트가 안 온다 */
 export const SYS_EVENT = "vntg:sys";
 /**
@@ -85,6 +88,54 @@ function readNoAsk(): boolean {
   } catch {
     return false;
   }
+}
+function readAutoRead(): boolean {
+  try {
+    return localStorage.getItem(SYS_AUTOREAD_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * **낭독용 글** (2026-09-03 — 벤티지: "시스에 한글로 읽어주기 기능 추가해줄 수 있어?").
+ *
+ * AI 답이 있으면 그것을 읽는다 — 애초에 사람이 읽으라고 쓴 문장이다. 일반 모드는 카드가
+ * 숫자 격자라 **그대로 읽으면 소음**이다. 그래서 골라 읽는다:
+ *   섹션 제목 → 머리 숫자 → 블록의 줄글 → 목록은 위에서 셋까지.
+ * 뉴스·텔레그램은 제목만(본문을 다 읽으면 한 종목에 5분이 걸린다).
+ */
+function packToSpeech(pack: SysPack, aiText?: string | null): string {
+  if (aiText?.trim()) return speechText(aiText);
+  /* 값이 없는 칸(「-」)은 읽지 않는다 — 「실적 가치 마이너스」로 들린다 */
+  const fact = (f: SysFact) => (!f.value || f.value === "-" ? "" : `${f.label} ${f.value}`.trim());
+  const facts = (arr: SysFact[], n: number) => arr.slice(0, n).map(fact).filter(Boolean).join(", ");
+  const out: string[] = [];
+  for (const p of pack.proposals ?? []) out.push(`${p.title} ${facts(p.facts, 8)}.`);
+  for (const s of pack.sections) {
+    const L: string[] = [`${s.title}.`];
+    if (s.head?.length) L.push(`${facts(s.head, 8)}.`);
+    for (const b of s.blocks) {
+      const bits: string[] = [];
+      if (b.title) bits.push(`${b.title}.`);
+      if (b.facts?.length) bits.push(`${facts(b.facts, 6)}.`);
+      /* 신호등의 ＋/－ 줄은 기호가 아니라 말로 — 그냥 읽히면 「플러스」도 아니고 침묵이다 */
+      if (b.lines?.length) bits.push(b.lines.map((l) => l.text.replace(/^＋\s*/, "좋은 쪽은, ").replace(/^－\s*/, "나쁜 쪽은, ")).join(" "));
+      if (b.items?.length) {
+        /* 목록은 셋까지. 종목 줄은 「이름, 당일 +5%」가 뜻이 있으니 sub 도 읽고, 뉴스는 제목만 */
+        bits.push(
+          b.items
+            .slice(0, 3)
+            .map((i) => (i.stock && i.sub && i.sub.length <= 60 ? `${i.text}, ${i.sub}` : i.text))
+            .join(". "),
+        );
+      }
+      if (b.text) bits.push(b.text.slice(0, 400));
+      if (bits.length) L.push(bits.join(" "));
+    }
+    out.push(L.join(" "));
+  }
+  return speechText(out.join("\n")).slice(0, 4000);
 }
 
 interface Turn {
@@ -297,6 +348,12 @@ export function SysAssist({
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [noAsk, setNoAsk] = useState(readNoAsk);
+  /* 읽어주기 — 리포트와 같은 장치(백그라운드 우회·잠금화면 버튼). 어느 턴을 읽는 중인지 기억한다 */
+  const tts = useTts();
+  const [autoRead, setAutoRead] = useState(readAutoRead);
+  const [speakingId, setSpeakingId] = useState<number | null>(null);
+  const autoReadRef = useRef(autoRead);
+  autoReadRef.current = autoRead;
   /** 「다」를 연속으로 몇 번 골랐나 — 둘이면 그 뒤로 안 묻는다 */
   const allStreak = useRef(0);
   /** ① 오늘 되짚기 — 열 때 한 번 받는다 */
@@ -370,6 +427,7 @@ export function SysAssist({
       setMode(readMode());
       setUseSearch(readSearch());
       setNoAsk(readNoAsk());
+      setAutoRead(readAutoRead());
     };
     window.addEventListener(SYS_EVENT, sync);
     window.addEventListener("storage", sync);
@@ -431,6 +489,14 @@ export function SysAssist({
     for (const t of turns) if (t.busy) t.controller?.abort();
   }
 
+  /** 이 턴을 읽는다 — 버튼을 누른 그 자리에서 잠금을 풀어야 iOS 가 소리를 낸다 */
+  function speakTurn(t: Turn) {
+    if (!t.pack) return;
+    tts.unlock();
+    setSpeakingId(t.id);
+    tts.speak(packToSpeech(t.pack, t.ai?.text), { title: `시스 — ${t.q}`, artist: "VNTG 시스" });
+  }
+
   function pickMode(m: "plain" | "ai") {
     setMode(m);
     setPref(SYS_MODE_KEY, m);
@@ -456,6 +522,8 @@ export function SysAssist({
     const controller = new AbortController();
     setTurns((prev) => [...prev, { id, q, mode: m, busy: true, startedAt: Date.now(), controller }]);
     setInput("");
+    /* 자동 읽기면 **보내는 이 순간**에 잠금을 푼다 — 답이 온 뒤엔 제스처가 아니라 iOS 가 막는다 */
+    if (autoReadRef.current) tts.unlock();
     /* 해석은 수 ms — 긁는 동안 「무엇을」 보여 주려고 먼저 받는다. 실패해도 본 요청은 간다 */
     api
       .sysInterpret(q, focus)
@@ -465,6 +533,11 @@ export function SysAssist({
       const r = await api.sysAsk(q, { mode: m, history, focus, useSearch, noClarify: noAsk }, controller.signal);
       /* 되묻지 않고 답이 왔으면(되묻기 화면이 아니면) 「다」 연속 세기는 그대로 둔다 — 칩을 눌러야만 센다 */
       setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, pack: r.pack, ai: r.ai, busy: false, controller: undefined } : t)));
+      /* 자동 읽기 — 되묻는 중이면 읽지 않는다(질문이 화면에 떠 있어야 고른다) */
+      if (autoReadRef.current && !r.pack.clarify) {
+        setSpeakingId(id);
+        tts.speak(packToSpeech(r.pack, r.ai?.text), { title: `시스 — ${q}`, artist: "VNTG 시스" });
+      }
     } catch (err) {
       const aborted = err instanceof DOMException && err.name === "AbortError";
       setTurns((prev) =>
@@ -540,6 +613,12 @@ export function SysAssist({
               <span className="sys-focus" title="질문에 종목이 없으면 이 종목 얘기로 듣는다">
                 📌 {focus.name}
               </span>
+            )}
+            {/* 읽는 중이면 어느 턴을 보고 있든 여기서 멈춘다 */}
+            {tts.status !== "idle" && (
+              <button type="button" className="sys-mini on" onClick={tts.stop} title="읽기 멈추기">
+                ⏹ 읽는 중 {tts.pos}/{tts.total}
+              </button>
             )}
             {turns.length > 0 && (
               <button type="button" className="sys-mini" onClick={() => setTurns([])} disabled={busy} title="대화 지우기">
@@ -648,6 +727,39 @@ export function SysAssist({
                     </summary>
                     <PackView pack={t.pack} onSelectStock={onSelectStock} />
                   </details>
+                )}
+                {/* 읽어주기 — 화면을 못 볼 때(운전·출근길). 백그라운드·잠금화면에서도 이어진다 */}
+                {t.pack && !t.pack.clarify && tts.supported && (
+                  <div className="sys-tts">
+                    {speakingId === t.id && tts.status !== "idle" ? (
+                      <>
+                        {tts.status === "playing" ? (
+                          <button type="button" className="sys-mini on" onClick={tts.pause}>⏸ 잠깐</button>
+                        ) : (
+                          <button type="button" className="sys-mini on" onClick={tts.resume}>▶ 이어서</button>
+                        )}
+                        <button type="button" className="sys-mini" onClick={tts.stop}>⏹</button>
+                        <span className="sys-dim">{tts.pos}/{tts.total} 문장</span>
+                        {TTS_RATES.map((x) => (
+                          <button key={x} type="button" className={`sys-mini${tts.rate === x ? " on" : ""}`} onClick={() => tts.setRate(x)} title="다음 문장부터">
+                            {x}×
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className={`sys-mini${tts.keepAwake ? " on" : ""}`}
+                          onClick={() => void tts.setWake(!tts.keepAwake)}
+                          title="켜면 낭독 중 화면이 안 꺼진다 — 화면이 꺼지면 기기에 따라 낭독이 멈춘다"
+                        >
+                          🔅 화면 유지
+                        </button>
+                      </>
+                    ) : (
+                      <button type="button" className="sys-mini" onClick={() => speakTurn(t)} title="한국어로 읽어준다 — 다른 앱을 보거나 화면을 꺼도 이어진다">
+                        🔊 읽어주기
+                      </button>
+                    )}
+                  </div>
                 )}
                 {t.pack && !t.pack.clarify && t.mode === "plain" && aiReady && (
                   <button type="button" className="sys-toai" onClick={() => void send(t.q, "ai")} disabled={busy}>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type SysTopicExamples } from "../api";
 import { setPref } from "../prefs";
-import { SYS_ENABLED_KEY, SYS_EVENT, SYS_MODE_KEY, SYS_NOASK_KEY, SYS_SEARCH_KEY } from "./SysAssist";
+import { SYS_AUTOREAD_KEY, SYS_ENABLED_KEY, SYS_EVENT, SYS_MODE_KEY, SYS_NOASK_KEY, SYS_SEARCH_KEY } from "./SysAssist";
 import { SysIcon } from "./SysIcon";
 
 /**
@@ -25,6 +25,7 @@ export function SysConfigPanel() {
   const [mode, setMode] = useState(read(SYS_MODE_KEY, "plain"));
   const [search, setSearch] = useState(read(SYS_SEARCH_KEY, "1") !== "0");
   const [noAsk, setNoAsk] = useState(read(SYS_NOASK_KEY, "0") === "1");
+  const [autoRead, setAutoRead] = useState(read(SYS_AUTOREAD_KEY, "0") === "1");
   const [topics, setTopics] = useState<SysTopicExamples[] | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -113,6 +114,21 @@ export function SysConfigPanel() {
         <span>
           <b>모호하면 되묻는다</b> — 「하이닉스 어때?」처럼 종목만 있으면 시세·뉴스·실적 중 뭘 볼지 한 번 묻는다. 패널에서 「다」를
           두 번 연속 고르면 스스로 꺼진다. 여기서 다시 켠다.
+        </span>
+      </label>
+      <label className="sys-cfg-row">
+        <input
+          type="checkbox"
+          checked={autoRead}
+          onChange={(e) => {
+            setAutoRead(e.target.checked);
+            put(SYS_AUTOREAD_KEY, e.target.checked ? "1" : "0");
+          }}
+        />
+        <span>
+          <b>답이 오면 스스로 읽어준다</b> — 운전·출근길처럼 화면을 못 볼 때. 꺼 두면 답마다 붙는 「🔊 읽어주기」를 눌러 듣는다.
+          낭독은 <b>다른 앱을 보거나 화면을 꺼도 이어지고</b>(무음 오디오 앵커), 잠금화면·이어폰 버튼으로 멈추고 이어 들을 수 있다.
+          기기에 따라 화면이 꺼지면 멈추기도 하는데, 그때는 낭독 줄의 <b>🔅 화면 유지</b>를 켠다.
         </span>
       </label>
       <p className="sys-dim" style={{ margin: "6px 0 0" }}>

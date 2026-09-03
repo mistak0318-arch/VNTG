@@ -14509,3 +14509,5 @@ tr:hover .sd-del { opacity: 0.75; }
   /* 검색창을 펼쳤을 때만 줄 전체를 쓴다 */
   .qss-row .qss:has(.qss-box) { flex: 1 1 auto; }
 }
+/* 시스 읽어주기 줄 (2026-09-03) */
+.sys-tts { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
