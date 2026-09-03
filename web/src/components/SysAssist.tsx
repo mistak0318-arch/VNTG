@@ -3,6 +3,7 @@ import { api, type AskResult, type AskTurn, type SysBlock, type SysFact, type Sy
 import { setPref } from "../prefs";
 import { SysIcon } from "./SysIcon";
 import { speechText, TTS_RATES, useTts } from "../useTts";
+import { useAppearance, type AppearanceContext } from "../useAppearance";
 
 /**
  * **시스 — 플로팅 도우미** (2026-09-03).
@@ -138,10 +139,72 @@ function packToSpeech(pack: SysPack, aiText?: string | null): string {
   return speechText(out.join("\n")).slice(0, 4000);
 }
 
+/* ── 화면 명령 (2026-09-04) ───────────────────────────────────────────────
+ *
+ * 벤티지: "시스한테 명령어 좀 하나 입력하자 — 사이드바 숨겨줘 / 사이드바 숨김취소.
+ * 비슷한 명령어도 인식할 수 있게."
+ *
+ * 이건 **서버에 안 간다.** 화면 설정을 바꾸는 일이라 여기서 바로 처리하고 한 줄로 답한다 —
+ * 조회가 0회이고, 일반 모드든 AI 모드든 똑같이 즉시 듣는다.
+ *
+ * 「비슷한 말」은 정규식 하나로 받는다. **대상**(사이드바·메뉴·왼쪽 메뉴…)과 **방향**(숨겨·감춰 /
+ * 다시·취소·보여)을 따로 잡고 둘을 조합한다 — 말을 하나씩 나열하면 반드시 빠뜨린다.
+ * 방향을 안 적으면(그냥 "사이드바") **토글**이다.
+ *
+ * 새 명령을 붙일 땐 이 배열에 한 칸. `examples` 는 도움말 줄에 그대로 나간다.
+ */
+interface UiCommandCtx {
+  appearance: AppearanceContext;
+}
+
+interface UiCommand {
+  key: string;
+  test: (q: string) => boolean;
+  /** 무엇을 했는지 한 줄로. 안 바꿨으면 그 이유를 적는다 */
+  run: (q: string, ctx: UiCommandCtx) => string;
+  examples: string[];
+}
+
+/** 대상 — 사이드바를 부르는 온갖 말 */
+const RE_SIDEBAR = /(사이드\s*바|사이드바|사이드|좌측\s*메뉴|왼쪽\s*메뉴|우측\s*메뉴|오른쪽\s*메뉴|메뉴\s*바|메뉴바|네비|내비|nav|sidebar)/i;
+/** 감추는 쪽 */
+const RE_HIDE = /(숨겨|숨김|숨기|감춰|감추|접어|접기|치워|치우|없애|안\s*보이게|가려|축소|자동\s*숨김|hide)/;
+/** 되돌리는 쪽 — 「숨김취소」처럼 감추는 말과 붙어 오므로 **이쪽을 먼저** 본다 */
+const RE_SHOW = /(취소|해제|되돌|원래대로|다시\s*보|보여|보이게|펼쳐|펴|고정|끄기|끄고|풀어|show)/;
+
+const UI_COMMANDS: UiCommand[] = [
+  {
+    key: "sidebar",
+    test: (q) => RE_SIDEBAR.test(q) && (RE_HIDE.test(q) || RE_SHOW.test(q)),
+    run: (q, { appearance }) => {
+      /*
+       * 순서가 중요하다. 「사이드바 숨김취소」에는 감추는 말(숨김)과 되돌리는 말(취소)이
+       * 둘 다 들어 있다 — 되돌리는 쪽을 먼저 보지 않으면 반대로 동작한다.
+       */
+      const want = RE_SHOW.test(q) ? false : RE_HIDE.test(q) ? true : !appearance.sidebarAuto;
+      if (want === appearance.sidebarAuto) {
+        return want ? "이미 숨김이야 (☰ 로 열어)" : "이미 늘 보이는 상태야";
+      }
+      appearance.set({ sidebarAuto: want });
+      return want
+        ? "사이드바를 숨겼어 — 왼쪽 위 ☰ 로 열면 돼. 본문이 200px 넓어진다"
+        : "사이드바를 도로 붙였어 — 이제 늘 보인다";
+    },
+    examples: ["사이드바 숨겨줘", "사이드바 숨김취소", "메뉴 감춰", "왼쪽 메뉴 다시 보여줘"],
+  },
+];
+
+/** 화면 명령이면 그 명령을, 아니면 null */
+function matchUiCommand(q: string): UiCommand | null {
+  return UI_COMMANDS.find((c) => c.test(q)) ?? null;
+}
+
 interface Turn {
   id: number;
   q: string;
   mode: "plain" | "ai";
+  /** 화면 명령이면 서버에 안 간다 — 한 일을 한 줄로 (2026-09-04) */
+  done?: string;
   pack?: SysPack;
   ai?: AskResult | null;
   error?: string;
@@ -161,6 +224,8 @@ const EXAMPLES = [
   "지금 미장 선물 어때? 유가는?",
   "금리 오늘 오르는 추세야?",
   "CIS 일지 요즘 수익권이래?",
+  /* 화면 명령도 예시에 — 있는 줄 모르면 아무도 안 쓴다 */
+  "사이드바 숨겨줘",
   "관심종목 오늘 어때?",
   "슈퍼신호등 원장 잘 가?",
   "9월 일정 뭐 있어?",
@@ -340,6 +405,7 @@ export function SysAssist({
   focus: SysStockRef | null;
   onSelectStock: (code: string, name: string) => void;
 }) {
+  const appearance = useAppearance();
   const [enabled, setEnabled] = useState(sysEnabled);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"plain" | "ai">(readMode);
@@ -511,6 +577,17 @@ export function SysAssist({
     const q = text.trim();
     if (!q || busy) return;
     const id = ++seq.current;
+    /*
+     * 화면 명령이면 여기서 끝난다 (2026-09-04) — 서버·AI 를 안 부른다.
+     * 「사이드바 숨겨줘」에 조회 한 번 나가고 3초 기다리는 건 말이 안 된다.
+     */
+    const cmd = matchUiCommand(q);
+    if (cmd) {
+      const done = cmd.run(q, { appearance });
+      setTurns((prev) => [...prev, { id, q, mode: m, done }]);
+      setInput("");
+      return;
+    }
     /* AI 대화 맥락은 AI 로 주고받은 것만 — 일반 결과는 서버가 매번 새로 긁는다 */
     const history: AskTurn[] = turns
       .filter((t) => t.mode === "ai" && t.ai?.text)
@@ -686,6 +763,7 @@ export function SysAssist({
                     </button>
                   </div>
                 )}
+                {t.done && <div className="sys-done">✔ {t.done}</div>}
                 {t.error && <div className="error-banner">{t.error}</div>}
                 {t.ai && (
                   <div className="sys-ai">

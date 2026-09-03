@@ -14852,3 +14852,17 @@ tr:hover .sd-del { opacity: 0.75; }
   .ord-band { font-size: 0.8rem; }
   .ord-band-mid { flex-basis: 100%; order: 3; }
 }
+
+/*
+ * 시스 화면 명령의 답 한 줄 (2026-09-04) — 「사이드바 숨겨줘」처럼 서버에 안 가는 것.
+ * 초록 한 줄로 끝낸다: 카드도 섹션도 없다. 한 일이 한 문장이면 한 문장만 보여야 한다.
+ */
+.sys-done {
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  background: rgba(53, 196, 106, 0.12);
+  border: 1px solid rgba(53, 196, 106, 0.4);
+  color: var(--green);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}

@@ -262,6 +262,9 @@ export default function App() {
   /* 자리를 비웠을 때 화면을 가린다 — 기기마다 따로 켠다 */
   const lock = useScreenLock();
   const appearance = useAppearance();
+  /* 키 리스너가 늘 최신 설정을 보게 — 리스너를 다시 걸지 않으려고 ref 로 든다 (2026-09-04) */
+  const appearanceRef = useRef(appearance);
+  appearanceRef.current = appearance;
   /*
    * 모서리에서 안쪽으로 밀면 메뉴 (2026-08-28) — **민 쪽에서 나온다** (2026-08-29).
    * ☰ 는 한 손으로 들었을 때 엄지가 제일 안 닿는 구석이라, 폰에서는 이쪽이 본길이다.
@@ -727,6 +730,13 @@ export default function App() {
     });
     const isMini = createHotkeyMatcher(() => cfg.hotkey);
     const isBoard = createHotkeyMatcher(() => (boardWin ? "off" : cfg.boardHotkey));
+    /*
+     * 사이드바 보이기·숨기기 (2026-09-04) — 벤티지: "[ 세 번은 보이기, ] 세 번은 숨기기".
+     * 판정기는 설정을 `get` 으로 매번 읽으므로 여기서 최신 값을 들여다본다 —
+     * ref 로 읽어야 설정을 바꿔도 리스너를 다시 걸 필요가 없다.
+     */
+    const isShowSide = createHotkeyMatcher(() => appearanceRef.current.sidebarShowKey);
+    const isHideSide = createHotkeyMatcher(() => appearanceRef.current.sidebarHideKey);
     const onKey = (e: KeyboardEvent) => {
       if (isMini(e)) {
         e.preventDefault();
@@ -736,6 +746,19 @@ export default function App() {
       if (isBoard(e)) {
         e.preventDefault();
         openBoardWin();
+        return;
+      }
+      /* 보이기 = 자동숨김 끄기. 이미 붙어 있으면 아무 일도 없다(누른 티는 안 난다) */
+      if (isShowSide(e)) {
+        e.preventDefault();
+        appearanceRef.current.set({ sidebarAuto: false });
+        return;
+      }
+      if (isHideSide(e)) {
+        e.preventDefault();
+        appearanceRef.current.set({ sidebarAuto: true });
+        /* 드로어가 열려 있었다면 같이 닫는다 — 숨기랬는데 덮개가 남으면 안 숨은 것이다 */
+        setNavOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);

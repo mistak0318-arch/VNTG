@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FONTS, FONT_SCALES, GLOBAL_KEY, useAppearance, WIDTHS } from "../useAppearance";
+import { SIDEBAR_HOTKEYS, type Hotkey } from "../hotkey";
 import { pushGlobalSnapshot, setPref } from "../prefs";
 import { api, fmtNum, type ProviderUsage, type UsageTotals } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
@@ -591,6 +592,46 @@ export function SettingsPage() {
           주로 볼 때 씁니다.
         </div>
 
+        {/*
+          사이드바 단축키 (2026-09-04) — 벤티지: "[ 이거 세 번은 사이드바 보이기,
+          ] 이거 세 번은 사이드바 숨기기. 설정에도 넣어주고."
+          토글 하나가 아니라 둘로 가른다: 지금 상태를 기억하지 않아도 손가락이 맞출 수 있다.
+        */}
+        <div className="appearance-row">
+          <span className="appearance-label">사이드바 보이기 단축키</span>
+          <select
+            className="select"
+            value={appearance.sidebarShowKey}
+            onChange={(e) => appearance.set({ sidebarShowKey: e.target.value as Hotkey })}
+          >
+            {SIDEBAR_HOTKEYS.map((h) => (
+              <option key={h.key} value={h.key}>
+                {h.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="appearance-row">
+          <span className="appearance-label">사이드바 숨기기 단축키</span>
+          <select
+            className="select"
+            value={appearance.sidebarHideKey}
+            onChange={(e) => appearance.set({ sidebarHideKey: e.target.value as Hotkey })}
+          >
+            {SIDEBAR_HOTKEYS.map((h) => (
+              <option key={h.key} value={h.key}>
+                {h.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="table-note">
+          {SIDEBAR_HOTKEYS.find((h) => h.key === appearance.sidebarShowKey)?.hint}
+          {" · "}
+          입력창에 커서가 있을 땐 안 듣습니다. 시스에게 <b>"사이드바 숨겨줘"</b> ·{" "}
+          <b>"사이드바 숨김취소"</b> 라고 해도 같은 일을 합니다.
+        </div>
+
         {/* 인앱 탭바 고정 (2026-08-26) — 스크롤을 내려도 탭바가 따라온다 */}
         <div className="appearance-row">
           <span className="appearance-label">탭바 고정</span>
@@ -667,6 +708,8 @@ export function SettingsPage() {
                   navSide: appearance.navSide,
                   width: appearance.width,
                   sidebarAuto: appearance.sidebarAuto,
+                  sidebarShowKey: appearance.sidebarShowKey,
+                  sidebarHideKey: appearance.sidebarHideKey,
                   tabsSticky: appearance.tabsSticky,
                 }));
                 pushGlobalSnapshot("appearance", ["vntg.appearance"]);

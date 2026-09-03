@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { removePref, setPref } from "./prefs";
+import type { Hotkey } from "./hotkey";
 
 /**
  * 화면 외관 설정 (테마 / 글꼴 / 글자 크기).
@@ -55,6 +56,16 @@ export interface Appearance {
    * 시세분석처럼 열 많은 표를 주로 보는 사람의 옵션이다.
    */
   sidebarAuto: boolean;
+  /**
+   * 사이드바 보이기·숨기기 **단축키** (2026-09-04).
+   *
+   * 벤티지: "[ 이거 세 번은 사이드바 보이기, ] 이거 세 번은 사이드바 숨기기."
+   * 위 `sidebarAuto` 를 손 대지 않고 켰다 껐다 하는 손잡이다 — 판정은 `hotkey.ts` 공통.
+   * 하나로 토글하지 않고 **둘로 가른** 이유: 토글은 지금 상태를 기억해야 맞출 수 있는데,
+   * 사이드바가 안 보이는 이유가 「숨김」인지 「좁은 화면」인지 손가락은 모른다.
+   */
+  sidebarShowKey: Hotkey;
+  sidebarHideKey: Hotkey;
   /**
    * 인앱 탭바 고정 (2026-08-26) — 스크롤을 내려도 탭바가 따라와서 바로 갈아탄다.
    * 기본 켬. 화면 한 줄이 아쉬우면 끄면 되고, 탭이 하나뿐이면 바 자체가 없다.
@@ -148,6 +159,8 @@ const DEFAULTS: Appearance = {
    */
   width: "full",
   sidebarAuto: false,
+  sidebarShowKey: "tap-bracket-left",
+  sidebarHideKey: "tap-bracket-right",
   tabsSticky: true,
 };
 
@@ -212,7 +225,7 @@ function apply(a: Appearance): void {
   root.style.setProperty("--read-max", w?.read ?? "1120px");
 }
 
-interface AppearanceContext extends Appearance {
+export interface AppearanceContext extends Appearance {
   set: (patch: Partial<Appearance>) => void;
 }
 

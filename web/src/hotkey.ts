@@ -57,7 +57,10 @@ export type Hotkey =
   | "alt-l"
   | "ctrl-x"
   | "tap-l"
-  | "tap-q";
+  | "tap-q"
+  /* ── 사이드바 (2026-09-04) — 벤티지: "[ 이거 세 번은 보이기, ] 이거 세 번은 숨기기" ── */
+  | "tap-bracket-left"
+  | "tap-bracket-right";
 
 export interface HotkeyChoice {
   key: Hotkey;
@@ -87,6 +90,16 @@ const ALL: HotkeyChoice[] = [
   { key: "ctrl-x", label: "Ctrl+X", hint: "⚠️ 잘라내기와 겹칩니다 — 메모에서 글자를 잘라내려다 화면이 잠깁니다" },
   { key: "tap-l", label: "L 세 번 연타", hint: "0.6초 안에 l l l — 입력창에 커서가 있을 땐 안 듣습니다" },
   { key: "tap-q", label: "Q 세 번 연타", hint: "0.6초 안에 q q q — 입력창에 커서가 있을 땐 안 듣습니다" },
+  {
+    key: "tap-bracket-left",
+    label: "[ 세 번 연타",
+    hint: "0.6초 안에 [ [ [ — 입력창에 커서가 있을 땐 안 듣습니다",
+  },
+  {
+    key: "tap-bracket-right",
+    label: "] 세 번 연타",
+    hint: "0.6초 안에 ] ] ] — 입력창에 커서가 있을 땐 안 듣습니다",
+  },
   { key: "off", label: "안 씀", hint: "단축키로는 안 씁니다" },
 ];
 
@@ -121,6 +134,22 @@ export const LOCK_HOTKEYS: HotkeyChoice[] = pick([
   "off",
 ]);
 
+/**
+ * 사이드바 보이기·숨기기가 고를 수 있는 것 (2026-09-04).
+ *
+ * 대괄호 둘을 앞에 둔다 — 벤티지가 정한 기본값이고, 자판에서 나란히 있어서
+ * **왼쪽이 보이기, 오른쪽이 숨기기**가 손에 그대로 붙는다.
+ * 알파벳 연타도 고를 수 있게 남겨 둔다(대괄호가 편집기와 겹치는 사람이 있다).
+ */
+export const SIDEBAR_HOTKEYS: HotkeyChoice[] = pick([
+  "tap-bracket-left",
+  "tap-bracket-right",
+  "ctrl-shift-o",
+  "alt-b",
+  "alt-l",
+  "off",
+]);
+
 export function hotkeyLabel(key: Hotkey): string {
   return ALL.find((h) => h.key === key)?.label ?? key;
 }
@@ -130,10 +159,19 @@ const TAP_WINDOW_MS = 600;
 const TAP_COUNT = 3;
 
 type Letter = "m" | "b" | "o" | "l" | "z" | "x" | "q";
+/** 연타로 칠 수 있는 키 — 글자와 대괄호 (2026-09-04) */
+type TapKey = Letter | "[" | "]";
 
-/** 물리 키 위치로 본다 — 한글 입력 상태에서도 같은 자리면 같은 키다 */
-function keyIs(e: KeyboardEvent, letter: Letter): boolean {
-  return e.key.toLowerCase() === letter || e.code === `Key${letter.toUpperCase()}`;
+/**
+ * 물리 키 위치로 본다 — 한글 입력 상태에서도 같은 자리면 같은 키다.
+ *
+ * 대괄호는 한글 모드에서 `e.key` 가 그대로 `[` 로 오지만, 자판 배열에 따라 다를 수
+ * 있어서 `e.code`(BracketLeft/BracketRight)도 같이 본다 — 글자와 같은 규칙이다.
+ */
+function keyIs(e: KeyboardEvent, key: TapKey): boolean {
+  if (key === "[") return e.key === "[" || e.code === "BracketLeft";
+  if (key === "]") return e.key === "]" || e.code === "BracketRight";
+  return e.key.toLowerCase() === key || e.code === `Key${key.toUpperCase()}`;
 }
 
 /** 글자를 받는 곳에 커서가 있나 — 연타는 여기서 안 듣는다 */
@@ -179,7 +217,7 @@ function matchesCombo(e: KeyboardEvent, hotkey: Hotkey): boolean {
   }
 }
 
-function tapLetter(hotkey: Hotkey): Letter | null {
+function tapLetter(hotkey: Hotkey): TapKey | null {
   switch (hotkey) {
     case "tap-m":
       return "m";
@@ -189,6 +227,10 @@ function tapLetter(hotkey: Hotkey): Letter | null {
       return "l";
     case "tap-q":
       return "q";
+    case "tap-bracket-left":
+      return "[";
+    case "tap-bracket-right":
+      return "]";
     default:
       return null;
   }
