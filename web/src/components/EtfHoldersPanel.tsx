@@ -143,8 +143,8 @@ export function EtfHoldersPanel({
         거래대금 상위 <b>{data.scanned}개 ETF</b>의 <b>주요 구성종목(Top10)</b>을 뒤집어
         만든 목록입니다 — 담겨 있어도 비중이 낮으면 안 잡히니 <b>여기 없다고 안 담긴 건
         아닙니다</b>. 편입비중이 크고 순자산이 큰 ETF 일수록 그 ETF 로 들어온 돈이 이
-        종목을 많이 삽니다. 인덱스 갱신:{" "}
-        {data.builtAt ? new Date(data.builtAt).toLocaleString("ko-KR") : "-"} (하루 1회)
+        종목을 많이 삽니다. 구성·비중 인덱스 갱신:{" "}
+        {data.builtAt ? new Date(data.builtAt).toLocaleString("ko-KR") : "-"} (하루 1회) — 등락률은 오늘 시세(3분).
       </div>
     </div>
   );

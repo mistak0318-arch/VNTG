@@ -74,14 +74,64 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** 화면이 부르는 조회 — 파일만 읽는다 */
+/**
+ * **오늘 등락률은 파일이 아니라 시세에서** (2026-09-03 버그 — 벤티지: "ETF 뒷배가 현재가를
+ * 반영 안 하고 있다. 슈퍼신호등에 ETF 뒷배 상승률이 어제 꺼가 나오고 있어").
+ *
+ * 파일의 `changeRate` 는 **인덱스를 만든 순간**(16시 이후 하루 한 번)의 값이다. 다음 날
+ * 16시까지 그 값이 그대로 남으니 장중엔 늘 어제 등락률이었다 — 「매일 갱신되어 들어온다」는
+ * 주석이 틀렸었다. 구성·비중은 하루 한 번이면 되지만 등락률은 아니다.
+ *
+ * 그래서 읽을 때 키움 ETF 전체시세(ka40004, 3분 캐시)로 등락률만 덮어 쓴다. 한 번에 ~1,000
+ * 행이 오므로 종목 수와 무관하게 3분에 한 번이다. 여러 종목이 동시에 부르면(슈퍼 대시보드)
+ * 한 번만 받도록 진행 중인 약속을 나눠 쓴다. 시세를 못 받으면 파일 값으로 — 없는 것보다
+ * 어제 값이 낫다.
+ */
+let liveClient: KiwoomClient | null = null;
+let liveRates: { at: number; map: Map<string, number> } | null = null;
+let liveInflight: Promise<Map<string, number>> | null = null;
+const LIVE_TTL = 3 * 60_000;
+
+export function setEtfHoldersClient(client: KiwoomClient): void {
+  liveClient = client;
+}
+
+async function liveRateMap(): Promise<Map<string, number> | null> {
+  if (!liveClient) return null;
+  if (liveRates && Date.now() - liveRates.at < LIVE_TTL) return liveRates.map;
+  if (!liveInflight) {
+    const client = liveClient;
+    liveInflight = (async () => {
+      const { etfAll } = await import("./routes/etf.js");
+      const map = new Map<string, number>();
+      for (const r of await etfAll(client)) map.set(r.code, r.changeRate);
+      liveRates = { at: Date.now(), map };
+      return map;
+    })().finally(() => {
+      liveInflight = null;
+    });
+  }
+  try {
+    return await liveInflight;
+  } catch {
+    return liveRates?.map ?? null;
+  }
+}
+
+/** 화면이 부르는 조회 — 구성·비중은 파일, 오늘 등락률은 시세(3분 캐시) */
 export async function etfHoldersOf(code: string): Promise<{
   holders: EtfHolder[];
   builtAt: string;
   scanned: number;
 }> {
   const s = await load();
-  const holders = [...(s.byStock[code] ?? [])].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
+  const live = await liveRateMap();
+  const holders = [...(s.byStock[code] ?? [])]
+    .map((h) => {
+      const r = live?.get(h.code);
+      return r === undefined ? h : { ...h, changeRate: r };
+    })
+    .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
   return { holders, builtAt: s.builtAt, scanned: s.scanned };
 }
 
@@ -166,6 +216,7 @@ let running = false;
 
 /** 하루 한 번(장 마감 뒤) — 그리고 인덱스가 아예 없으면 기동 후 한 번 */
 export function startEtfHoldersScheduler(client: KiwoomClient): void {
+  setEtfHoldersClient(client);
   if (timer) return;
   const tick = async () => {
     if (running) return;

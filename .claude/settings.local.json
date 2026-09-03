@@ -1189,7 +1189,11 @@
       "PowerShell(\\(Get-Content web/src/pages/KiwoomWatchlistPage.tsx | Measure-Object -Line\\).Lines; Select-String -Path web/src/App.tsx -Pattern \"관심종목\" | Select-Object -First 10)",
       "PowerShell(\\(Get-Content web/src/styles.css | Measure-Object -Line\\).Lines; Get-Content web/src/styles.css -Tail 5)",
       "PowerShell(Set-Location web; npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 20; \"tsc exit $LASTEXITCODE\")",
-      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; Get-Date -Format \"HH:mm\"; Set-Location web; npx tsc --noEmit -p tsconfig.json; \"tsc exit $LASTEXITCODE\")"
+      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; Get-Date -Format \"HH:mm\"; Set-Location web; npx tsc --noEmit -p tsconfig.json; \"tsc exit $LASTEXITCODE\")",
+      "Bash(curl -s --max-time 10 -o /dev/null -w \"%{http_code} %{time_total}s\\\\n\" \"http://localhost:4000/api/health\")",
+      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 \"http://localhost:4000/api/health\"; \"health $\\($r.StatusCode\\)\" } catch { \"health fail: $\\($_.Exception.Message\\)\" }; Get-Content server\\\\run-dev.cmd -TotalCount 5)",
+      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; \\(Get-Content server\\\\package.json | ConvertFrom-Json\\).scripts.dev; $sw=[Diagnostics.Stopwatch]::StartNew\\(\\); try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 90 \"http://localhost:4000/api/etf/holders/000660\"; $j = $r.Content | ConvertFrom-Json; \"builtAt $\\($j.builtAt\\)  \\($\\([int]$sw.Elapsed.TotalSeconds\\)s\\)\"; $j.holders | Select-Object -First 5 | ForEach-Object { \"$\\($_.code\\) $\\($_.name\\) $\\($_.weight\\) $\\($_.changeRate\\)\" } } catch { \"fail: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 60 \"http://localhost:4000/api/etf/list\"; $j = $r.Content | ConvertFrom-Json; $rows = if \\($j.rows\\) { $j.rows } else { $j }; $rows | Where-Object { $_.code -in @\\('091160','494310','243880'\\) } | ForEach-Object { \"$\\($_.code\\) $\\($_.name\\) $\\($_.changeRate\\)\" } } catch { \"list fail: $\\($_.Exception.Message\\)\" })"
     ]
   }
 }

@@ -2858,9 +2858,9 @@ export async function evaluateSignal(
     : [];
 
   /*
-   * 이 종목을 가장 많이 담은 ETF 셋 — 이것도 **파일에서 읽는다.**
-   * 어느 ETF 가 얼마나 담았는지는 하루 한 번 스캔한 결과이고, 등락률은 그 파일에
-   * 매일 갱신되어 들어온다. 키움 호출이 없다.
+   * 이 종목을 가장 많이 담은 ETF 셋 — 구성·비중은 **파일에서**(하루 한 번 스캔),
+   * 오늘 등락률은 `etfHoldersOf` 가 ETF 전체시세(3분 캐시)로 덮어 준다 (2026-09-03 —
+   * 파일 값은 어제 등락률이었다). 종목마다 키움을 부르진 않는다.
    */
   const etfTop3 = need.has("etfBacking")
     ? await etfHoldersOf(code)
