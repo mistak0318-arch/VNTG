@@ -68,6 +68,22 @@ export function createSysRouter(client: KiwoomClient): Router {
     }
   });
 
+  /*
+   * ## AI 모드는 **작업으로** (2026-09-03 — 벤티지: "AI 모드에서 긁어서 물어보기가 동작을 안 하는 듯,
+   * 3분 넘게 기다렸는데 응답이 없음").
+   *
+   * 밖에서는 Cloudflare 터널로 들어오는데 터널은 한 요청을 **100초**까지만 기다린다. AI 모드는 웹 검색이
+   * 붙으면 1~3분이라 응답이 오기 전에 끊겼고, 화면은 「긁는 중」에서 멈춘 것처럼 보였다.
+   * 그래서 AI 모드는 바로 답하지 않고 **작업 번호**를 주고, 화면이 2초마다 묻는다. 서버가 다 하면
+   * 그때 결과를 준다. 일반 모드는 몇 초라 예전처럼 바로.
+   */
+  const jobs = new Map<string, { at: number; status: "running" | "done" | "error"; result?: unknown; error?: string }>();
+  const JOB_TTL = 30 * 60_000;
+  const prune = () => {
+    const now = Date.now();
+    for (const [k, v] of jobs) if (now - v.at > JOB_TTL) jobs.delete(k);
+  };
+
   router.post("/ask", async (req, res, next) => {
     try {
       const question = String(req.body?.question ?? "").trim();
@@ -80,30 +96,61 @@ export function createSysRouter(client: KiwoomClient): Router {
       const f = req.body?.focus as { code?: string; name?: string } | undefined;
       const focus: SysStockRef | null =
         f && typeof f.code === "string" && /^\d{6}$/.test(f.code) ? { code: f.code, name: String(f.name ?? f.code) } : null;
-      const r = await askSys(client, question, {
+      const opts = {
         ai,
         history,
         focus,
         useSearch: req.body?.useSearch !== false,
         noClarify: req.body?.noClarify === true,
-      });
-      /* AI 로 물은 것은 「시황 질문하기」 기록에 같이 남긴다 — 무엇을 몰랐는지가 답보다 값어치 있다 */
-      if (r.ai) {
-        await addAsk({
-          question: `[시스] ${question}`,
-          answer: r.ai.text,
-          model: r.ai.model,
-          inputTokens: r.ai.inputTokens,
-          outputTokens: r.ai.outputTokens,
-          searches: r.ai.searches,
-          sources: r.ai.sources,
-          error: r.ai.error,
-        }).catch(() => undefined);
+      };
+      const run = async () => {
+        const r = await askSys(client, question, opts);
+        /* AI 로 물은 것은 「시황 질문하기」 기록에 같이 남긴다 — 무엇을 몰랐는지가 답보다 값어치 있다 */
+        if (r.ai) {
+          await addAsk({
+            question: `[시스] ${question}`,
+            answer: r.ai.text,
+            model: r.ai.model,
+            inputTokens: r.ai.inputTokens,
+            outputTokens: r.ai.outputTokens,
+            searches: r.ai.searches,
+            sources: r.ai.sources,
+            error: r.ai.error,
+          }).catch(() => undefined);
+        }
+        return r;
+      };
+      if (!ai) {
+        res.json(await run());
+        return;
       }
-      res.json(r);
+      prune();
+      const jobId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+      const job = { at: Date.now(), status: "running" as const } as (typeof jobs) extends Map<string, infer V> ? V : never;
+      jobs.set(jobId, job);
+      void run()
+        .then((r) => {
+          job.status = "done";
+          job.result = r;
+        })
+        .catch((err) => {
+          job.status = "error";
+          job.error = err instanceof Error ? err.message : String(err);
+        });
+      res.json({ jobId });
     } catch (err) {
       next(err);
     }
+  });
+
+  /** AI 작업 상태 — 화면이 2초마다 묻는다 */
+  router.get("/job/:id", (req, res) => {
+    const j = jobs.get(req.params.id);
+    if (!j) {
+      res.status(404).json({ error: "그 작업은 없다 (30분이 지났거나 서버가 다시 켜졌다)" });
+      return;
+    }
+    res.json({ status: j.status, result: j.status === "done" ? j.result : undefined, error: j.error, elapsedMs: Date.now() - j.at });
   });
 
   return router;

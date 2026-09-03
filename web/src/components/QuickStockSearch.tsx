@@ -89,7 +89,7 @@ export function QuickStockSearch({
         onClick={() => setOpen(true)}
         title="종목 이름·코드로 바로 이동"
       >
-        🔍 종목 바로가기
+        🔍<span className="qss-toggle-label"> 종목 바로가기</span>
       </button>
     );
   }

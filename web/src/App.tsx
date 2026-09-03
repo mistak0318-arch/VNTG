@@ -5,6 +5,7 @@ import { RunningJobsBar } from "./components/RunningJobsBar";
 import { QuickStockSearch } from "./components/QuickStockSearch";
 import { NotifyBell } from "./components/NotifyBell";
 import { SysAssist } from "./components/SysAssist";
+import { useBuildWatch } from "./useBuildWatch";
 import { TabScroller } from "./components/TabScroller";
 import { CustomThemePage } from "./pages/CustomThemePage";
 import { ScreenerPage } from "./pages/ScreenerPage";
@@ -243,6 +244,8 @@ const VALID_TABS = new Set(MENU.flatMap((g) => g.items).map((i) => i.key));
 export default function App() {
   /* 홈 = 브리핑. 앱을 열면 「오늘 시장이 어떤가」부터 — 파고들기는 대시보드로 */
   const { route, navigate } = useHashRoute("briefing");
+  /* 새 번들이 올라왔는데 이 탭이 옛것인지 — 폰 PWA 탭이 아침에 연 채 남는다 (2026-09-03) */
+  const build = useBuildWatch();
   /*
    * 보드 새창인가 — `#/board?win=1` (2026-09-02). 한 번만 읽는다: `navigate` 가
    * 해시를 다시 쓰면서 `win` 을 떨구기 때문에 매번 읽으면 첫 이동에 본창으로 변한다.
@@ -1053,7 +1056,7 @@ export default function App() {
                 onClick={closeAllTabs}
                 title="열려 있는 탭을 모두 닫습니다 — 지금 화면만 남아요"
               >
-                🧹 탭 모두 닫기 ({openTabs.length})
+                🧹<span className="qss-close-label"> 탭 모두 닫기</span> ({openTabs.length})
               </button>
             )}
           </div>
@@ -1131,6 +1134,15 @@ export default function App() {
       <ErrorBoundary where="시스" resetKey="sys">
         <SysAssist focus={selected ? { code: selected.code, name: selected.name } : null} onSelectStock={onSelectStock} />
       </ErrorBoundary>
+
+      {/* 새 번들이 올라왔는데 이 탭은 옛것 — 새로고침을 권한다 (강제하지 않는다) */}
+      {build.stale && (
+        <div className="build-bar" role="status">
+          <span>새 버전이 올라왔어 — 새로고침해야 새 기능이 보인다</span>
+          <button type="button" onClick={() => window.location.reload()}>새로고침</button>
+          <button type="button" className="x" onClick={build.dismiss} title="나중에">✕</button>
+        </div>
+      )}
     </div>
   );
 }

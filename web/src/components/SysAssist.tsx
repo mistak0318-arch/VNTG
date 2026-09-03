@@ -503,6 +503,8 @@ export function SysAssist({
           onPointerMove={onFabMove}
           onPointerUp={onFabUp}
           onPointerCancel={onFabUp}
+          /* 폰에서 길게 누르면 컨텍스트 메뉴가 끼어들어 끌기가 끊긴다 */
+          onContextMenu={(e) => e.preventDefault()}
           title="시스 — 물어보기 (종목·시장·ETF·거시·뉴스·텔레그램·CIS·관심종목). 끌어서 옮길 수 있다"
         >
           <SysIcon size="1.7em" />

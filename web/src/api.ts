@@ -886,6 +886,10 @@ export const api = {
   sysRecap: () => getJson<SysRecap>("/api/sys/recap"),
   sysTopics: () => getJson<{ topics: SysTopicExamples[] }>("/api/sys/topics"),
   sysTopicsSave: (custom: Record<string, string[]>) => putJson<{ topics: SysTopicExamples[] }>("/api/sys/topics", { custom }),
+  /*
+   * 일반 모드는 바로 답이 오고, AI 모드는 **작업 번호**가 온다(터널 100초 한계 때문). 그러면 2초마다
+   * 물어서 끝날 때까지 기다린다. signal 이 끊기면 폴링만 멈춘다 — 서버는 마저 한다.
+   */
   sysAsk: async (
     question: string,
     opts: { mode: "plain" | "ai"; history?: AskTurn[]; focus?: SysStockRef | null; useSearch?: boolean; noClarify?: boolean },
@@ -897,9 +901,20 @@ export const api = {
       body: JSON.stringify({ question, ...opts }),
       signal,
     });
-    const parsed = (await res.json()) as SysAnswer & { error?: string };
+    const parsed = (await res.json()) as (SysAnswer | { jobId: string }) & { error?: string };
     if (!res.ok) throw new Error(parsed.error ?? `요청 실패 (${res.status})`);
-    return parsed;
+    if (!("jobId" in parsed)) return parsed as SysAnswer;
+    const jobId = parsed.jobId;
+    for (;;) {
+      if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+      await new Promise((r) => setTimeout(r, 2000));
+      if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+      const jr = await req(`/api/sys/job/${encodeURIComponent(jobId)}`, { signal });
+      const j = (await jr.json()) as { status: "running" | "done" | "error"; result?: SysAnswer; error?: string };
+      if (!jr.ok) throw new Error(j.error ?? `작업 조회 실패 (${jr.status})`);
+      if (j.status === "done" && j.result) return j.result;
+      if (j.status === "error") throw new Error(j.error ?? "AI 작업 실패");
+    }
   },
   sysAct: (kind: string, payload: Record<string, unknown>) =>
     postJson<{ ok: boolean; message: string }>("/api/sys/act", { kind, payload }),
