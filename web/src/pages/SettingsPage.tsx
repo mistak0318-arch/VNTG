@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FONTS, FONT_SCALES, GLOBAL_KEY, useAppearance, WIDTHS } from "../useAppearance";
 import { SIDEBAR_HOTKEYS, type Hotkey } from "../hotkey";
+import { AboutPanel } from "../components/AboutPanel";
 import { pushGlobalSnapshot, setPref } from "../prefs";
 import { api, fmtNum, type ProviderUsage, type UsageTotals } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
@@ -53,7 +54,7 @@ function rateColor(rate: number | null): string {
  * 카드 열한 개가 한 화면에 쌓여 있으니 찾는 게 일이었다. 성격이 전혀 다른 것들이
  * 섞여 있었다 — 화면 꾸미기와 API 비용을 같은 목록에서 스크롤로 찾을 이유가 없다.
  */
-type SettingsTab = "display" | "analysis" | "publish" | "cost" | "archive" | "security";
+type SettingsTab = "display" | "analysis" | "publish" | "cost" | "archive" | "security" | "about";
 
 const SETTINGS_TABS: { key: SettingsTab; label: string; hint: string }[] = [
   { key: "display", label: "화면", hint: "메뉴 순서 · 테마 · 글꼴" },
@@ -64,6 +65,8 @@ const SETTINGS_TABS: { key: SettingsTab; label: string; hint: string }[] = [
   { key: "archive", label: "보관함", hint: "선 긋기로 보관한 옛 편입 — 옛 기준도 지금 원장과 같은 자로 계속 쫓아간다" },
   /* 화면 잠금(가리개)과 달리 이쪽은 **서버로 들어오는 문**이라 따로 세운다 */
   { key: "security", label: "보안", hint: "로그인 · 2단계 인증 · 기기 관리 · 서버 문단속" },
+  /* 정보 (2026-09-04) — 벤티지: "버전별로 기록 좀 해줘. 뭘 발행했고 했는지" */
+  { key: "about", label: "정보", hint: "지금 돌고 있는 판 · 무엇을 언제 바꿨나" },
 ];
 
 export function SettingsPage() {
@@ -125,6 +128,8 @@ export function SettingsPage() {
         ))}
       </nav>
       <p className="page-note">{SETTINGS_TABS.find((t) => t.key === tab)?.hint}</p>
+
+      {tab === "about" && <AboutPanel />}
 
       {tab === "display" && (
       <CollapsibleCard

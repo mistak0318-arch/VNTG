@@ -2,7 +2,8 @@ import { getMarketSnapshot } from "./marketSnapshot.js";
 import { peekRealtime } from "./realtimeHub.js";
 import { openPositions, type OpenPosition } from "./tradeJournal.js";
 import { sendTelegram, stockNameHtml } from "./telegram.js";
-import { pushNotice, stockLink } from "./notifyCenter.js";
+import { pushNotice, stockLink, stopOrderLink } from "./notifyCenter.js";
+import { ordersEnabled } from "./orders.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 
 /**
@@ -87,11 +88,19 @@ function priceOf(code: string, snap: Map<string, number> | null): { price: numbe
 export async function runStopWatch(
   client: KiwoomClient,
   opts: { send?: boolean } = {},
-): Promise<{ positions: number; watched: number; breaks: StopBreak[]; sent: boolean }> {
+): Promise<{
+  positions: number;
+  watched: number;
+  /** 감시 중인 자리 그대로 (2026-09-04) — 화면이 여기서 스톱주문을 건다 */
+  guarded: { code: string; name: string; stop: number; qty: number; entry: number }[];
+  breaks: StopBreak[];
+  sent: boolean;
+}> {
   const positions = await openPositions();
   const watched = positions.filter((p): p is OpenPosition & { stop: number } => p.stop !== null);
+  const guarded = watched.map((p) => ({ code: p.code, name: p.name, stop: p.stop, qty: p.qty, entry: p.price }));
   if (watched.length === 0) {
-    return { positions: positions.length, watched: 0, breaks: [], sent: false };
+    return { positions: positions.length, watched: 0, guarded: [], breaks: [], sent: false };
   }
 
   /*
@@ -132,7 +141,7 @@ export async function runStopWatch(
   }
 
   if (breaks.length === 0 || opts.send === false) {
-    return { positions: positions.length, watched: watched.length, breaks, sent: false };
+    return { positions: positions.length, watched: watched.length, guarded, breaks, sent: false };
   }
 
   /*
@@ -146,20 +155,38 @@ export async function runStopWatch(
       kind: "stock",
       level: "urgent",
       title: `${b.name} 손절선 이탈 ${won(b.price)} (${b.lossPct.toFixed(1)}%)`,
-      body: `손절선 ${won(b.stop)} 아래로 — 진입 ${won(b.entry)} · ${b.qty}주 · 지금 ${won(b.price)} (${b.lossPct.toFixed(1)}%) · 값 출처 ${b.from}\n이 앱은 주문을 넣지 않습니다. 파는 건 직접.`,
+      body: `손절선 ${won(b.stop)} 아래로 — 진입 ${won(b.entry)} · ${b.qty}주 · 지금 ${won(b.price)} (${b.lossPct.toFixed(1)}%) · 값 출처 ${b.from}\n${tail()}`,
       code: b.code,
       name: b.name,
-      link: stockLink(b.code, b.name),
+      /*
+       * 주문 기능이 켜져 있으면 **값이 채워진 매도 폼**으로 보낸다 (2026-09-04).
+       * 꺼져 있으면 예전처럼 종목 화면으로 — 없는 화면으로 보내면 알림이 막다른 길이 된다.
+       */
+      link: ordersEnabled()
+        ? stopOrderLink({ code: b.code, name: b.name, stop: b.stop, qty: b.qty })
+        : stockLink(b.code, b.name),
       dedupeKey: `stopWatch:${b.code}:${b.stop}`,
       dedupeHours: 6,
     }).catch(() => undefined);
   }
 
   const res = await sendTelegram(formatStopBreaks(breaks), "signal");
-  return { positions: positions.length, watched: watched.length, breaks, sent: res.ok };
+  return { positions: positions.length, watched: watched.length, guarded, breaks, sent: res.ok };
 }
 
 const won = (n: number) => Math.round(n).toLocaleString("ko-KR");
+
+/**
+ * 알림 끝줄 — 주문 기능을 켠 뒤로는 말이 달라져야 한다 (2026-09-04).
+ *
+ * 예전 문구는 「이 앱은 주문을 넣지 않습니다」였다. 이제는 넣을 수 있지만 **여전히
+ * 사람이 누른다** — 그 사실을 정확히 적어야 한다. 문구가 실제와 다르면 그게 제일 위험하다.
+ */
+function tail(): string {
+  return ordersEnabled()
+    ? "주문 탭에서 값이 채워진 매도 폼이 열립니다 — 주문 비밀번호를 넣어야 나갑니다."
+    : "이 앱은 주문을 넣지 않습니다. 파는 건 직접.";
+}
 
 /**
  * 알림 문구.
@@ -176,7 +203,7 @@ export function formatStopBreaks(breaks: StopBreak[]): string {
   );
   return (
     `🛑 손절선이 깨졌습니다 (${breaks.length}건)\n\n${lines.join("\n\n")}\n\n` +
-    `— 이 앱은 주문을 넣지 않습니다. 파는 건 직접 하세요.`
+    `— ${tail()}`
   );
 }
 

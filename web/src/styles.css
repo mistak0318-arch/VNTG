@@ -14915,3 +14915,92 @@ select.ord-in { appearance: auto; cursor: pointer; }
 @media (max-width: 1000px) {
   .ord-book .ob { max-width: none; }
 }
+
+/* 손절 감시 → 스톱주문 걸기 (2026-09-04) */
+.sw-stops { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.sw-stop-row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.sw-stop-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 176, 32, 0.5);
+  background: rgba(255, 176, 32, 0.12);
+  color: var(--text);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+.sw-stop-btn:hover { border-color: #ffb020; }
+.sw-stop-btn i { font-style: normal; color: #ffb020; font-variant-numeric: tabular-nums; }
+
+/* ── 설정 › 정보 (2026-09-04) ─────────────────────────────────────────── */
+.about { display: flex; flex-direction: column; gap: 0.6rem; }
+.about-now { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.about-cell {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.about-cell span { color: var(--muted); font-size: 0.78rem; }
+.about-cell b { font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.about-cell small { color: var(--muted); font-size: 0.72rem; }
+.about-find {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.6rem;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.about-find:focus { outline: none; border-color: var(--blue); }
+.about-day {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+}
+.about-date {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+.about-date i { font-style: normal; color: var(--muted); font-weight: 400; font-size: 0.8rem; }
+.about-date span { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 0.78rem; }
+.about-list { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.about-list li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.about-list code {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+.about-more {
+  align-self: center;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+@media (max-width: 640px) {
+  .about-now { grid-template-columns: 1fr; }
+}

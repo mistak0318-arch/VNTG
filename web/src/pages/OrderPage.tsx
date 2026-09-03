@@ -58,11 +58,53 @@ function isGone(e: unknown): boolean {
   return e instanceof Error && /not found/i.test(e.message);
 }
 
+/**
+ * 주소로 넘어온 값 (2026-09-04) — 손절 알림이 「값이 채워진 매도 폼」으로 보낸다.
+ *
+ *   #/order?code=034020&name=두산에너빌리티&side=sell&tt=28&cond=75000&price=75000&qty=100
+ *
+ * ⚠️ **채워 주기만 한다.** 주문서 확인과 주문 비밀번호는 그대로 남아 있다 — 링크 하나로
+ * 주문이 나가면 그건 알림에 링크를 심은 사람이 주문을 낼 수 있다는 뜻이 된다.
+ */
+interface Prefill {
+  code: string;
+  name: string;
+  side: "buy" | "sell" | null;
+  tradeType: string | null;
+  price: string;
+  cond: string;
+  qty: string;
+  /** 값이 바뀌었는지 가리는 열쇠 — 같은 화면에서 링크를 또 눌러도 다시 채워진다 */
+  key: string;
+}
+
+function readPrefill(): Prefill {
+  const raw = window.location.hash.replace(/^#\/?/, "");
+  const q = new URLSearchParams(raw.split("?")[1] ?? "");
+  const num = (k: string) => {
+    const v = (q.get(k) ?? "").replace(/\D/g, "");
+    return v;
+  };
+  const side = q.get("side");
+  return {
+    code: normalizeStockCode(q.get("code") ?? ""),
+    name: q.get("name") ?? "",
+    side: side === "sell" || side === "buy" ? side : null,
+    tradeType: q.get("tt"),
+    price: num("price"),
+    cond: num("cond"),
+    qty: num("qty"),
+    key: raw,
+  };
+}
+
 export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
   const [status, setStatus] = useState<OrderStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [sub, setSub] = useState<Sub>("order");
   const [left, setLeft] = useState(0);
+  /* 주소가 값을 들고 오면 그 값으로 폼을 채운다 — 손절 알림이 이 길로 들어온다 */
+  const [prefill, setPrefill] = useState<Prefill>(readPrefill);
 
   const load = useCallback(async () => {
     try {
@@ -80,6 +122,16 @@ export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, na
     const t = setInterval(() => void load(), 30_000);
     return () => clearInterval(t);
   }, [load]);
+
+  /* 이미 주문 화면인 채로 알림을 또 누르면 해시만 바뀐다 — 그때도 채워져야 한다 */
+  useEffect(() => {
+    const onHash = () => {
+      setPrefill(readPrefill());
+      setSub("order");
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   /* 남은 시간은 눈앞에서 줄어야 한다 — 서버 값에서 시작해 1초씩 */
   const ticking = left > 0;
@@ -153,7 +205,7 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
               </button>
             ))}
           </div>
-          {sub === "order" && <OrderForm status={status} onDone={load} />}
+          {sub === "order" && <OrderForm status={status} prefill={prefill} onDone={load} />}
           {sub === "open" && <OpenTab onDone={load} />}
           {sub === "fills" && <FillsTab />}
           {sub === "balance" && <BalanceTab onSelectStock={onSelectStock} />}
@@ -435,19 +487,19 @@ function StockPick({ code, name, onPick }: { code: string; name: string; onPick:
 
 /* ── 매수·매도 ──────────────────────────────────────────────────────────── */
 
-function OrderForm({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
-  const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
+function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: Prefill; onDone: () => void }) {
+  const [side, setSide] = useState<"buy" | "sell">(prefill.side ?? "buy");
+  const [code, setCode] = useState(prefill.code);
+  const [name, setName] = useState(prefill.name);
   const [venue, setVenue] = useState<OrderVenue>("KRX");
   /*
    * 매매구분 (2026-09-04). 예전엔 「시장가」 스위치 하나였는데 실제로는 18가지다 —
    * 목록은 **서버가 준다**(status.tradeTypes). 화면이 표를 들고 있으면 언젠가 서버와 갈린다.
    */
-  const [tradeType, setTradeType] = useState("0");
-  const [qty, setQty] = useState("");
-  const [price, setPrice] = useState("");
-  const [cond, setCond] = useState("");
+  const [tradeType, setTradeType] = useState(prefill.tradeType ?? "0");
+  const [qty, setQty] = useState(prefill.qty);
+  const [price, setPrice] = useState(prefill.price);
+  const [cond, setCond] = useState(prefill.cond);
   /*
    * 호가를 누르면 **어느 칸**에 넣나 (2026-09-04). 보통은 가격 칸 하나뿐이라 고민이 없는데,
    * 스톱지정가는 발동가와 주문단가 둘이라 받을 곳을 정해야 한다. 스톱을 고르면 발동가가
@@ -457,6 +509,23 @@ function OrderForm({ status, onDone }: { status: OrderStatus; onDone: () => void
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: OrderTicket } | null>(null);
+
+  /*
+   * 링크로 새 값이 오면 갈아 끼운다. **비어 있는 칸은 안 건드린다** — 사용자가 손으로
+   * 고쳐 둔 값을 링크가 지우면 안 된다. 다만 링크가 값을 명시했으면 그쪽이 이긴다.
+   */
+  useEffect(() => {
+    if (!prefill.code) return;
+    setCode(prefill.code);
+    setName(prefill.name);
+    if (prefill.side) setSide(prefill.side);
+    if (prefill.tradeType) setTradeType(prefill.tradeType);
+    if (prefill.qty) setQty(prefill.qty);
+    if (prefill.price) setPrice(prefill.price);
+    if (prefill.cond) setCond(prefill.cond);
+    /* 발동가가 채워져 왔으면 다음 호가 클릭은 주문단가 차례다 */
+    setCondFocus(!prefill.cond);
+  }, [prefill.key]);
 
   const types: TradeType[] = status.tradeTypes ?? [];
   const tt = types.find((t) => t.code === tradeType) ?? null;
@@ -628,7 +697,15 @@ function OrderForm({ status, onDone }: { status: OrderStatus; onDone: () => void
         <button type="submit" className={`ord-go ${side}`} disabled={busy || !ready}>
           {busy ? "확인 중…" : side === "buy" ? "매수 주문서 만들기" : "매도 주문서 만들기"}
         </button>
-        <p className="ord-note">주문서를 눈으로 확인하고 비밀번호를 넣어야 실제로 나간다.</p>
+        <p className="ord-note">
+          {usesCond ? (
+            <>
+              발동가에 닿으면 주문단가로 나간다 — <b>지켜보는 쪽은 키움</b>이라 앱을 꺼 둬도 산다. 급락에서는
+              주문단가에 안 붙을 수 있으니, 확실히 털려면 주문단가를 발동가보다 조금 아래로.{" "}
+            </>
+          ) : null}
+          주문서를 눈으로 확인하고 비밀번호를 넣어야 실제로 나간다.
+        </p>
       </form>
 
       {ticket && (

@@ -305,6 +305,33 @@ export function stockLink(code: string, name: string): string {
   return `#/stockAnalysis?${q.toString()}`;
 }
 
+/**
+ * **손절선 → 스톱주문 화면** (2026-09-04) — 주문 폼을 채운 채로 연다.
+ *
+ * 벤티지: 손절선 감시가 「알림 → 네가 그때 눌러 판다」에서 「미리 걸어 두면 거래소가
+ * 들고 있다가 발동한다」로 바뀐다.
+ *
+ * ⚠️ **이 링크는 주문을 내지 않는다.** 값이 채워진 폼을 열 뿐이고, 그 뒤로도 주문서
+ * 확인과 주문 비밀번호가 그대로 남아 있다. 서버가 스스로 주문을 쏘는 길은 여전히 없다 —
+ * 사람이 방아쇠를 당기는 자리가 「알림을 보고 나서」에서 「미리 한 번」으로 옮겨갈 뿐이다.
+ *
+ * 주문단가를 발동가와 같게 채운다. 급락에서는 그 값에 안 붙을 수 있는데, 얼마나 아래로
+ * 둘지는 사람이 정할 일이라 기본값을 임의로 낮추지 않는다(화면이 그 사정을 적어 준다).
+ */
+export function stopOrderLink(o: { code: string; name: string; stop: number; qty: number }): string {
+  const q = new URLSearchParams({
+    code: o.code,
+    name: o.name,
+    side: "sell",
+    tt: "28",
+    cond: String(Math.round(o.stop)),
+    price: String(Math.round(o.stop)),
+    qty: String(Math.max(1, Math.round(o.qty))),
+  });
+  return `#/order?${q.toString()}`;
+}
+
+
 export interface PushInput {
   kind: NoticeKind;
   /** 어디서 온 알림인가 — 안 주면 `etc`. 설정에서 이 단위로 끈다 */

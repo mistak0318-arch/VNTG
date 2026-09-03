@@ -28,6 +28,7 @@ function StopWatchBlock() {
     positions: number;
     watched: number;
     unwatched: number;
+    guarded: { code: string; name: string; stop: number; qty: number; entry: number }[];
     breaks: { code: string; name: string; price: number; stop: number; lossPct: number }[];
   } | null>(null);
 
@@ -80,6 +81,35 @@ function StopWatchBlock() {
               </>
             )}
           </small>
+        )}
+        {/*
+          스톱주문으로 미리 걸어 두기 (2026-09-04).
+
+          여기까지가 「알림 → 내가 그때 판다」였다. 스톱지정가를 미리 걸어 두면
+          **지켜보는 쪽이 키움**이 되어 앱을 꺼 둬도 산다. 누르면 값이 채워진 매도 폼이
+          열릴 뿐이고, 주문서 확인과 주문 비밀번호는 그대로다 — 여기서 주문이 나가지 않는다.
+        */}
+        {(st.guarded?.length ?? 0) > 0 && (
+          <div className="sw-stops">
+            <small>
+              적어 둔 손절선을 <b>스톱주문</b>으로 미리 걸어 두면 앱을 안 보고 있어도 나갑니다 —
+              누르면 값이 채워진 매도 폼이 열립니다 (비밀번호는 그대로 묻습니다).
+            </small>
+            <div className="sw-stop-row">
+              {st.guarded.map((g) => (
+                <a
+                  key={g.code}
+                  className="sw-stop-btn"
+                  href={`#/order?code=${g.code}&name=${encodeURIComponent(g.name)}&side=sell&tt=28&cond=${Math.round(
+                    g.stop,
+                  )}&price=${Math.round(g.stop)}&qty=${g.qty}`}
+                  title={`${g.name} ${g.qty}주 · 발동가 ${Math.round(g.stop).toLocaleString()}원`}
+                >
+                  🛑 {g.name} <i>{Math.round(g.stop).toLocaleString()}</i>
+                </a>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

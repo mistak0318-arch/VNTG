@@ -30,6 +30,9 @@ Set-Location $root
 $drop = "\\100.88.182.35\vntg-deploy"
 
 if (-not $DeployOnly) {
+  # 정보 탭의 변경 이력을 굽는다 (2026-09-04). 이번 커밋은 아직 없으니 한 박자 늦게 들어간다.
+  node scripts/build-changelog.mjs
+  if ($LASTEXITCODE -ne 0) { throw "changelog 생성 실패" }
   git add -A
   if ($LASTEXITCODE -ne 0) { throw "git add failed" }
   git commit -F .git/vntg-msg.txt -q

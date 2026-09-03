@@ -475,7 +475,9 @@ export interface KeywordFlow {
 }
 
 export const api = {
-  health: () => getJson<{ ok: boolean }>("/api/health"),
+  /* 정보 탭이 「서버가 켜진 지」를 여기서 본다 (2026-09-04) */
+  health: () =>
+    getJson<{ ok: boolean; startedAt: string; uptimeSec: number }>("/api/health"),
 
   /* 버즈 대시보드 (2026-08-30) — 문턱과 무관하게 전부 본다 */
   /** 네 브리핑 화면이 같은 문장을 쓰게 하는 자리 */
@@ -1094,6 +1096,8 @@ export const api = {
       watched: number;
       /** 손절선이 없어 감시 못 하는 자리 */
       unwatched: number;
+      /** 감시 중인 자리 — 여기서 바로 스톱주문을 건다 (2026-09-04) */
+      guarded: { code: string; name: string; stop: number; qty: number; entry: number }[];
       breaks: {
         code: string;
         name: string;
