@@ -7,7 +7,7 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
 import { COMMON_PARAMS, findSpec } from "./rankSpecs.js";
 import { evaluateSignal, getConfig, type Level, type SignalResult } from "./signalLight.js";
-import { getCommonStockCodes } from "./stockListCache.js";
+import { getCommonStockCodes, getStockIndex } from "./stockListCache.js";
 import { stockLens, themeMapNow } from "./stockLens.js";
 
 /**
@@ -296,14 +296,30 @@ async function fillFromSnapshot(client: KiwoomClient, rows: Candidate[]): Promis
   const needPrice = rows.some((r) => r.price === 0);
   const needRate = rows.every((r) => r.changeRate === 0);
   const needValue = rows.every((r) => r.tradeValue <= 0);
-  if (!needPrice && !needRate && !needValue) return;
+  /*
+   * ## ⚠️ **이름이 빠져 있었다** (2026-09-03 — 벤티지: "코스닥 041460 종목명이 안 불러와지네?
+   * 다른것도 몇군데 그래")
+   *
+   * 주체별 순매수(`flow-*`) 모집단은 원장에 코드와 금액만 있어서 `name: ""` 로 밀어 넣고
+   * **이 함수가 메워 주기를 기다렸다.** 그런데 이 함수는 가격·등락률·거래대금만 채웠다 —
+   * 이름은 한 번도 안 채웠다. 게다가 위 세 칸이 다 차 있으면 `return` 이라 스냅샷을 열지도
+   * 않았다. 그래서 그 목록의 종목명이 통째로 비었다.
+   *
+   * 이름은 **결손이 한 줄만 있어도** 메운다(가격과 달리 「진짜 빈 이름」은 없다).
+   * 그리고 스냅샷에 없는 종목은 **상장 목록(ka10099, 하루 캐시)** 에서 찾는다 — 스냅샷은
+   * 업종별 조회를 합친 것이라 업종 조회가 실패한 종목이 통째로 빠질 수 있는데(`failedSectors`),
+   * 상장 목록은 전종목이라 그 구멍을 메운다. 둘 다 조회를 새로 안 늘린다(캐시).
+   */
+  const needName = rows.some((r) => !r.name);
+  if (!needPrice && !needRate && !needValue && !needName) return;
 
   const snap = await getMarketSnapshot(client).catch(() => null);
-  if (!snap) return;
 
   for (const r of rows) {
-    const s = snap.byCode.get(r.code);
-    if (!s || (s.changeRate === 0 && s.price === 0)) continue;
+    const s = snap?.byCode.get(r.code);
+    if (!s) continue;
+    if (!r.name && s.name) r.name = s.name;
+    if (s.changeRate === 0 && s.price === 0) continue;
 
     if (r.price === 0 && s.price > 0) r.price = s.price;
     if (needRate && s.changeRate !== 0) {
@@ -314,6 +330,16 @@ async function fillFromSnapshot(client: KiwoomClient, rows: Candidate[]): Promis
     if (needValue && (s.tradeValue ?? 0) > 0) {
       r.tradeValue = Math.round((s.tradeValue ?? 0) * 100);
       r.stale = true;
+    }
+  }
+
+  /* 아직 이름이 빈 줄 — 상장 목록에서. 「코드만 뜨는 줄」을 남기지 않는다 */
+  if (rows.some((r) => !r.name)) {
+    const index = await getStockIndex(client).catch(() => null);
+    if (index) {
+      for (const r of rows) {
+        if (!r.name) r.name = index.get(r.code)?.name ?? "";
+      }
     }
   }
 }

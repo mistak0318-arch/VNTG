@@ -1181,7 +1181,11 @@
       "Bash(curl -s --max-time 20 -X POST \"http://localhost:4000/api/signal/samples/fromLedger\" -H \"content-type: application/json\" -d '{}')",
       "Bash(curl -s --max-time 10 \"http://localhost:4000/api/signal/samples/fromLedger/progress\")",
       "Bash(curl -s --max-time 120 -X POST \"http://localhost:4000/api/signal/simulate\" -H \"content-type: application/json\" -d '{}')",
-      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);const r=j.result??j;console.log\\(Object.keys\\(r\\).slice\\(0,12\\).join\\(' '\\)\\);const b=r.buckets??r.byBucket??[];for\\(const x of \\(Array.isArray\\(b\\)?b:[]\\).slice\\(0,7\\)\\)console.log\\(' ',JSON.stringify\\(x\\).slice\\(0,160\\)\\);console.log\\('used:',\\(r.used??[]\\).join\\(' '\\)\\);console.log\\('skipped:',\\(r.skipped??[]\\).join\\(' '\\)\\)}\\)\")"
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);const r=j.result??j;console.log\\(Object.keys\\(r\\).slice\\(0,12\\).join\\(' '\\)\\);const b=r.buckets??r.byBucket??[];for\\(const x of \\(Array.isArray\\(b\\)?b:[]\\).slice\\(0,7\\)\\)console.log\\(' ',JSON.stringify\\(x\\).slice\\(0,160\\)\\);console.log\\('used:',\\(r.used??[]\\).join\\(' '\\)\\);console.log\\('skipped:',\\(r.skipped??[]\\).join\\(' '\\)\\)}\\)\")",
+      "Bash(curl -s --max-time 20 \"http://localhost:4000/api/market/search?q=041460\")",
+      "Bash(curl -s --max-time 20 \"http://localhost:4000/api/market/info/041460\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(s\\);console.log\\('stk_nm:',JSON.stringify\\(j.stk_nm\\),'| stk_cd:',JSON.stringify\\(j.stk_cd\\),'| cur_prc:',j.cur_prc,'| _market:',JSON.stringify\\(j._market\\)\\);console.log\\('키 일부:',Object.keys\\(j\\).slice\\(0,20\\).join\\(','\\)\\)}catch\\(e\\){console.log\\('파싱실패',s.slice\\(0,300\\)\\)}}\\)\")",
+      "Bash(curl -s --max-time 300 -X POST \"http://localhost:4000/api/sector-flow/backfill?days=70\")"
     ]
   }
 }

@@ -8103,6 +8103,8 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 
 /* 지수 수급 합산 — 쌓인 날이 모자란 줄은 흐리게 둔다 */
 .idx-sum-short { opacity: .45; }
+/* 일부 날만 더한 합계 — 값 옆에 「3일」 (2026-09-03). 값보다 작고 흐리게 */
+.idx-sum-part { margin-left: 3px; font-size: 0.62rem; }
 
 /* ==================================================================
    미국 전광판

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, normalizeStockCode, type RawRecord, type StockSearchResult } from "../api";
+import { api, normalizeStockCode, stockNameOf, type RawRecord, type StockSearchResult } from "../api";
 import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
 import { StockTabsSection } from "../components/StockTabsSection";
@@ -66,6 +66,11 @@ export function StockAnalysisPage({
     5000,
   );
   const info = (live.data ?? null) as RawRecord | null;
+  /*
+   * **보여줄 이름** (2026-09-03) — 넘어온 이름이 비었거나 코드면 서버가 준 `stk_nm` 을 쓴다.
+   * 알림 바로가기·주소창처럼 코드만 들고 들어오는 자리에서 「041460 041460」로 보였다.
+   */
+  const shownName = stock ? stockNameOf(info, stock.code, stock.name) : "";
 
   function pickResult(r: StockSearchResult) {
     const code = normalizeStockCode(r.code);
@@ -80,9 +85,10 @@ export function StockAnalysisPage({
    * 검색으로 고른 것만 기억하면 정작 자주 오가는 종목이 목록에 안 쌓인다.
    */
   useEffect(() => {
-    if (stock?.code && stock.name) recent.push(stock.code, stock.name);
+    /* 이름이 코드뿐이면 최근 목록에 안 남긴다 — 서버 이름이 오면 그때 남는다 (2026-09-03) */
+    if (stock?.code && shownName && shownName !== stock.code) recent.push(stock.code, shownName);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stock?.code]);
+  }, [stock?.code, shownName]);
 
   return (
     <div>
@@ -182,7 +188,7 @@ export function StockAnalysisPage({
                 </span>
               )}
               {watched.isWatched(stock.code) ? "★ " : ""}
-              {stock.name} <span className="analysis-code">{stock.code}</span>
+              {shownName} <span className="analysis-code">{stock.code}</span>
             </h2>
             {/* 제목줄에도 현재가 — 이미 5초 폴링 중인 info 를 그릴 뿐이다 */}
             {info && Math.abs(Number(info.cur_prc)) > 0 && (
@@ -211,7 +217,7 @@ export function StockAnalysisPage({
 
           <StockTabsSection
             code={stock.code}
-            name={stock.name}
+            name={shownName}
             info={info}
             onSelectStock={onSelectStock}
             reloadKey={reloadKey}

@@ -4050,6 +4050,23 @@ export function signClass(v: unknown): string {
  * 순서대로 시도해서 값을 찾는다. 실제 응답을 콘솔/원본 JSON 뷰로 확인 후 필요하면
  * 이 목록에 실제 필드명을 추가하면 된다.
  */
+/**
+ * **화면에 쓸 종목명** (2026-09-03 — 벤티지: "코스닥 041460 종목명이 안 불러와지네?").
+ *
+ * 넘어온 이름이 **비었거나 코드와 같으면** 서버가 준 `stk_nm` 을 쓴다. 종목 상세는 어차피
+ * `ka10001`(`/api/market/info/:code`)을 1초마다 받고 있고 거기 이름이 들어 있다 — 그런데
+ * 두 화면이 **넘겨받은 이름만** 그려서, 코드만 들고 들어온 자리(알림 바로가기·주소창·이름을
+ * 못 채운 목록)에서는 「041460 (041460)」로 보였다. 값은 이미 있는데 안 쓰고 있었다.
+ *
+ * 조회를 새로 하지 않는다 — 이미 받은 응답에서 꺼낼 뿐이다.
+ */
+export function stockNameOf(info: RawRecord | null | undefined, code: string, name?: string): string {
+  const given = (name ?? "").trim();
+  if (given && given !== code) return given;
+  const fromServer = String(info?.stk_nm ?? "").trim();
+  return fromServer || given || code;
+}
+
 export function pick(record: RawRecord | undefined, keys: string[]): string {
   if (!record) return "-";
   for (const key of keys) {

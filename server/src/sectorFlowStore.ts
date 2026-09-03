@@ -278,9 +278,32 @@ function dashed(yyyymmdd: string): string {
 export async function backfillSectorFlow(
   client: KiwoomClient,
   days = 60,
-): Promise<{ added: number; skipped: number; total: number }> {
+): Promise<{ added: number; skipped: number; total: number; refilled: number }> {
   const existing = await readAll();
   const have = new Set(existing.map((r) => r.date));
+
+  /*
+   * ## **칸이 모자란 날은 이미 있어도 다시 받는다** (2026-09-03)
+   *
+   * 벤티지: "시황대시보드에서 코스피 코스닥 눌렀을때 수급합산에 기타법인이나 보험 은행
+   * 얘네들은 집계 안된다."
+   *
+   * 원인은 두 겹이었다. ① 저장 스키마(`SUBJECTS`)가 일곱뿐이다가 2026-08-31 에 다섯을
+   * 뒤에 붙였다 — 그 전 날짜는 `v` 가 짧아 읽는 쪽이 「모름(null)」으로 적는다. ② 그런데
+   * 이 함수가 **이미 있는 날짜를 통째로 건너뛰어서**(`!have.has(...)`) 옛 행이 영영 일곱
+   * 칸으로 남았다. 실측(09-03 코스피): 70일 중 67일이 다섯 주체 null → 5·10·20·60일
+   * 합산이 전부 「-」.
+   *
+   * `ka10051` 은 `base_dt` 로 과거를 그대로 준다(이 파일 머리 주석). 그러니 **칸이 모자란
+   * 날만 다시 받으면** 되채워진다. 조회는 그 날짜들에만 든다 — 한 번 채우면 끝이다.
+   */
+  const short = new Set(
+    existing
+      .filter((d) =>
+        [...d.kospi, ...d.kosdaq].some((r) => (r.v?.length ?? 0) < SUBJECTS.length),
+      )
+      .map((r) => r.date),
+  );
 
   /*
    * 오늘부터 거꾸로 평일만 모은다.
@@ -317,7 +340,8 @@ export async function backfillSectorFlow(
      */
     const chunk = targets
       .slice(i, i + 5)
-      .filter((d) => !have.has(dashed(d)) || d === todayYmd);
+      /* 없는 날 · 오늘(정정분) · **칸이 모자란 날**(위 주석) */
+      .filter((d) => !have.has(dashed(d)) || d === todayYmd || short.has(dashed(d)));
     if (chunk.length > 0) {
       const results = await Promise.all(
         chunk.map(async (d) => {
@@ -379,13 +403,23 @@ export async function backfillSectorFlow(
   // 단순히 전후 개수를 빼면 음수가 나온다.
   const keptDates = new Set(kept.map((d) => d.date));
   const added = fetched.filter((d) => keptDates.has(d.date) && !have.has(d.date)).length;
-  return { added, skipped, total: kept.length };
+  /* 이미 있던 날인데 칸이 모자라 다시 받아 채운 것 — 「새로 추가」와 뜻이 다르다 */
+  const refilled = fetched.filter((d) => keptDates.has(d.date) && short.has(d.date)).length;
+  return { added, skipped, total: kept.length, refilled };
 }
 
-/** 오늘치 한 줄. 스케줄러가 부른다 */
+/**
+ * 오늘치 한 줄. 스케줄러가 부른다.
+ *
+ * ⚠️ **3일만 본다** — 되채우기(칸 모자란 옛 날짜)는 여기서 안 한다. 매일 60일을 훑으면
+ * 조회가 늘고, 한 번 채우면 끝나는 일이다. 손으로 「과거분 채우기」를 부르거나 마감 뒤
+ * 정리가 한 번 돌리면 된다(`/api/overview/sector-flow/backfill`).
+ */
 export async function captureSectorFlow(client: KiwoomClient): Promise<{ saved: boolean; reason?: string }> {
   const res = await backfillSectorFlow(client, 3);
-  return res.added > 0 ? { saved: true } : { saved: false, reason: "새로 채울 거래일 없음" };
+  return res.added > 0 || res.refilled > 0
+    ? { saved: true }
+    : { saved: false, reason: "새로 채울 거래일 없음" };
 }
 
 // ---------------------------------------------------------------- 파생 지표

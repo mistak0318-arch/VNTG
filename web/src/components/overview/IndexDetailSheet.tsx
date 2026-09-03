@@ -321,16 +321,43 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
                       </td>
                       {FLOW_COLS.map((c) => {
                         /*
-                         * **한 날이라도 모르면 합계를 안 낸다.** 아는 날만 더하면
-                         * 「5일 합」이라 적힌 값이 실제로는 이틀 합일 수 있다 —
-                         * 그건 숫자가 조용히 거짓말하는 것이다.
+                         * ## **아는 날만 더하되, 며칠을 더했는지 밝힌다** (2026-09-03)
+                         *
+                         * 벤티지: "코스피 코스닥 눌렀을때 수급합산에 기타법인이나 보험 은행
+                         * 얘네들은 집계 안된다."
+                         *
+                         * 예전 규칙은 「한 날이라도 모르면 합계를 안 낸다」였다. 뜻은 옳았다 —
+                         * 이틀 합을 「5일 합」이라 적으면 숫자가 조용히 거짓말한다. 그런데
+                         * 보험·은행·기타금융·국가·기타법인은 **2026-08-31 에 수집을 시작**해서
+                         * 그 전 날짜가 전부 null 이다(실측: 70일 중 67일). 그래서 그 다섯은
+                         * 5·10·20·60일 **전부 「-」** 였고, 60일 칸은 앞으로 석 달을 더 기다려야
+                         * 채워진다. 「집계 안 된다」로 보이는 게 당연했다.
+                         *
+                         * 그래서 **아는 날만 더하고 그 날 수를 같이 적는다.** 「5일」 자리에
+                         * 3일치를 더했으면 값 옆에 작게 `3일` 이 붙는다 — 거짓말도 아니고
+                         * 빈칸도 아니다. 하나도 모르면 그때만 「-」다.
                          */
                         const vals = win.map((f) => f[c.key] as number | null);
-                        const unknown = vals.some((x) => x === null || x === undefined);
-                        const v = unknown ? null : vals.reduce((a: number, b) => a + (b ?? 0), 0);
+                        const known = vals.filter((x): x is number => x !== null && x !== undefined);
+                        const v = known.length > 0 ? known.reduce((a, b) => a + b, 0) : null;
+                        const partial = known.length > 0 && known.length < win.length;
                         return (
                           <td className={v === null ? "" : sign(v)} key={c.key}>
-                            {!enough || v === null ? "-" : fmtNum(v)}
+                            {!enough || v === null ? (
+                              "-"
+                            ) : (
+                              <>
+                                {fmtNum(v)}
+                                {partial && (
+                                  <span
+                                    className="pt-n idx-sum-part"
+                                    title={`${n}일 중 값이 있는 ${known.length}일만 더한 값입니다 (나머지 날은 아직 안 모았습니다)`}
+                                  >
+                                    {known.length}일
+                                  </span>
+                                )}
+                              </>
+                            )}
                           </td>
                         );
                       })}

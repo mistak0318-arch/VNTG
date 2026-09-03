@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
-import { api, pick, type RawRecord } from "../api";
+import { api, pick, stockNameOf, type RawRecord } from "../api";
 import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
 import { IntradayLevelsBar } from "./IntradayLevelsBar";
 import { PriceHeader } from "./PriceHeader";
@@ -35,7 +35,7 @@ const CUR_PRICE_KEYS = ["cur_prc"];
 
 export function StockDetail({
   code,
-  name,
+  name: givenName,
   onClose,
   onOpenAnalysis,
   onSelectStock,
@@ -61,6 +61,8 @@ export function StockDetail({
    */
   const live = useLive(() => api.stockInfo(code), [code], 1000);
   const info = (live.data ?? null) as RawRecord | null;
+  /* 넘어온 이름이 비었거나 코드면 서버가 준 `stk_nm` 으로 (2026-09-03) — `stockNameOf` 주석 참고 */
+  const name = stockNameOf(info, code, givenName);
   const [watchBusy, setWatchBusy] = useState(false);
   const [addTarget, setAddTarget] = useState<WatchAddTarget | null>(null);
 
