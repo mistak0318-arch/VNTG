@@ -265,7 +265,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         */}
         {sub === "summary" && (
           <div className="ov-span-all">
-            <MarketSignalPanel />
+            {/* 시황 대시보드에서는 접을 수 있고 기본이 접음 (2026-09-03 — "화면차지가 너무 큰데") */}
+            <MarketSignalPanel collapsible />
           </div>
         )}
 

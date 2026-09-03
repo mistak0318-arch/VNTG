@@ -19,11 +19,36 @@ const LEVEL_TEXT: Record<string, { label: string; note: string }> = {
   unknown: { label: "판단 보류", note: "판정할 데이터가 부족합니다" },
 };
 
-export function MarketSignalPanel() {
+/**
+ * 접힘 기억 — 기기마다 (2026-09-03). 벤티지: "시황대시보드에 신호등 나오는거 화면차지가 너무
+ * 큰데 이거 접을 수 있게 좀 해줘. 기본설정이 접음이고 내가 펼칠수있게."
+ */
+const COLLAPSE_KEY = "vntg.msig.collapsed";
+function readCollapsed(): boolean {
+  try {
+    const v = localStorage.getItem(COLLAPSE_KEY);
+    return v === null ? true : v === "1";
+  } catch {
+    return true;
+  }
+}
+
+export function MarketSignalPanel({ collapsible = false }: { collapsible?: boolean } = {}) {
   const [sig, setSig] = useState<MarketSignal | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openWhy, setOpenWhy] = useState<string | null>(null);
+  /* 접을 수 있는 자리(시황 대시보드)에서만 기본 접음. 보드·미니는 그대로 편다 */
+  const [collapsed, setCollapsed] = useState<boolean>(() => (collapsible ? readCollapsed() : false));
+  const toggle = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+    } catch {
+      /* 저장 못 해도 이번 화면은 동작한다 */
+    }
+  };
 
   async function load(force = false) {
     setLoading(true);
@@ -53,8 +78,13 @@ export function MarketSignalPanel() {
    * 바로, 근거(왜)는 칩을 눌러 편다. 보드·시황·미니가 같은 컴포넌트라 전부 적용.
    */
   return (
-    <section className={`msig msig-${sig.level} msig-slim`}>
+    <section className={`msig msig-${sig.level} msig-slim${collapsible && collapsed ? " msig-collapsed" : ""}`}>
       <div className="msig-head">
+        {collapsible && (
+          <button className="msig-fold" onClick={toggle} title={collapsed ? "펼치기" : "접기"} aria-label={collapsed ? "펼치기" : "접기"}>
+            {collapsed ? "▸" : "▾"}
+          </button>
+        )}
         <span className={`sig-dot big ${sig.level}`} />
         <div className="msig-title">
           <b>
@@ -63,11 +93,18 @@ export function MarketSignalPanel() {
           </b>
           <span className="msig-note">{meta.note}</span>
         </div>
+        {/* 접혀 있으면 「통과 n/m」만 — 펴야 칩이 보인다 */}
+        {collapsible && collapsed && (
+          <span className="msig-fold-sum">
+            통과 {sig.checks.filter((c) => c.pass === true).length}/{sig.checks.length}
+          </span>
+        )}
         <button className="filter-btn" onClick={() => void load(true)} disabled={loading} title="다시 판정">
           {loading ? "…" : "↻"}
         </button>
       </div>
 
+      {!(collapsible && collapsed) && (
       <div className="msig-chips">
         {sig.checks.map((c) => (
           <button
@@ -82,7 +119,8 @@ export function MarketSignalPanel() {
           </button>
         ))}
       </div>
-      {openWhy &&
+      )}
+      {!(collapsible && collapsed) && openWhy &&
         (() => {
           const c = sig.checks.find((x) => x.key === openWhy);
           if (!c) return null;

@@ -240,7 +240,8 @@ export async function runDisclosureScan(
             ? `${reasons[0]} 공시 ${picked.length}건`
             : `공시 ${picked.length}건`,
         body: head.slice(0, 300) + (picked.length > 6 ? ` 외 ${picked.length - 6}건` : ""),
-        link: "#/disclosure",
+        /* 공시는 「뉴스·공시」 탭(`news`) — 옛 `#/disclosure` 는 없는 탭이었다 (2026-09-03) */
+        link: "#/news",
         dedupeKey: `disclosure:${picked.map((h) => h.event.url).sort().join(",").slice(0, 200)}`,
         dedupeHours: 6,
       }).catch(() => undefined);

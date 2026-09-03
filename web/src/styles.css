@@ -13526,6 +13526,17 @@ thead .sd-emph {
   .sig-engine-row { grid-template-columns: 1fr; gap: 2px; }
 }
 
+/* 시장 신호등 접기 (2026-09-03) — 시황 대시보드만. 접히면 한 줄 */
+.msig-fold {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--muted); cursor: pointer; font-size: 0.8rem; line-height: 1;
+  padding: 2px 6px; margin-right: 2px; flex: none;
+}
+.msig-fold:hover { color: var(--text); }
+.msig-fold-sum { font-size: 0.72rem; color: var(--muted); margin-right: 6px; white-space: nowrap; }
+.msig-collapsed { padding-bottom: 6px; }
+.msig-collapsed .msig-note { display: none; }
+
 .sig-gen {
   display: inline-flex;
   align-items: baseline;

@@ -3,7 +3,7 @@ import { peekRealtime } from "./realtimeHub.js";
 import { viDirText } from "./realtimeStore.js";
 import { getActiveSuper } from "./superSignal.js";
 import { hasDedicatedChannel, sendTelegram, stockNameHtml } from "./telegram.js";
-import { pushNotice } from "./notifyCenter.js";
+import { pushNotice, stockLink } from "./notifyCenter.js";
 import { listWatchlist } from "./watchlist.js";
 
 /**
@@ -95,10 +95,19 @@ export async function runLiveAlerts(
        * 있어야 지나간 것인지 지금 것인지 안다. 전부 이미 받은 이벤트에 있는 값이다.
        */
       const hhmm = v.at?.length >= 4 ? `${v.at.slice(0, 2)}:${v.at.slice(2, 4)}` : "";
+      /*
+       * **방향을 맨 앞에** (2026-09-03 — 벤티지: "VI 발동 알람오는데 상방인지 하방인지 표시가
+       * 안되네"). 기준가·괴리율로 못 정하면 마지막 단서로 그 종목의 **지금 등락률**(0B 의 FID 12)
+       * 부호를 쓴다 — 급등해서 걸렸으면 +, 급락이면 - 다. 그것도 없으면 「방향 ?」라고 적는다.
+       */
+      let dir = viDirText(v);
+      if (!dir) {
+        const rate = Number(String(store.getLatestKrx("0B", v.code)?.values?.["12"] ?? "").replace(/[,\s]/g, ""));
+        if (Number.isFinite(rate) && rate !== 0) dir = `${rate > 0 ? "▲상방" : "▼하방"} (오늘 ${rate > 0 ? "+" : ""}${rate.toFixed(1)}%)`;
+      }
       const bits = [
-        `VI 발동${hhmm ? ` ${hhmm}` : ""}`,
-        /* ▲상방/▼하방 + 몇 % (2026-08-28) — 방향 없는 VI 알림은 판단이 안 된다 */
-        viDirText(v),
+        `${dir ? dir.slice(0, 3) : "방향 ?"} VI 발동${hhmm ? ` ${hhmm}` : ""}`,
+        dir ? dir.slice(4) : "",
         v.apply || v.kind || "",
         v.price > 0 ? `발동가 ${Math.round(v.price).toLocaleString("ko-KR")}` : "",
       ].filter(Boolean);
@@ -155,20 +164,28 @@ export async function runLiveAlerts(
   const superOnes = out.filter((a) => superCodes.has(a.code));
   const rest = out.filter((a) => !superCodes.has(a.code));
   /*
-   * **알림함에도 남긴다** (2026-09-02). VI 는 실시간에서 바로 오는 신호라
-   * 텔레그램을 놓치면 그 순간이 지나간다 — 화면에도 자국이 남아야 한다.
-   * 한 줄로 묶는다(종목마다 넣으면 VI 가 몰리는 날 알림함이 덮인다).
+   * **알림함에는 종목마다** (2026-09-03 — 벤티지: "체결강도 급변 알람이 오는데 이거 바로가기
+   * 누르면 각 종목 상시로 가야하는거 아닌가? 아무 반응도 없어").
+   *
+   * 예전엔 한 줄로 묶고 `#/watchlist` 로 보냈는데, ① 그 탭은 앱에 없다(관심종목은 `watchAi`) —
+   * 그래서 눌러도 아무 일이 없었고 ② 묶으면 종목으로 갈 수가 없다. 관심종목만 보는 알림이라
+   * 하루 몇 건이다 — 종목마다 남기고 **그 종목 분석 화면**으로 바로 보낸다.
+   * (`#/{tab}?code=&name=` 이 이 앱의 종목 딥링크 형식 — `useHashRoute`)
    */
-  await pushNotice({
-    source: "live",
-    kind: "stock",
-    level: "warn",
-    title: `실시간 신호 ${out.length}건`,
-    body: out.slice(0, 6).map((a) => `${a.name} ${a.kind === "vi" ? "VI 발동" : "체결강도 급변"}`).join(" · "),
-    link: "#/watchlist",
-    dedupeKey: `live:${out.map((a) => `${a.code}:${a.kind}`).sort().join(",")}`,
-    dedupeHours: 2,
-  }).catch(() => undefined);
+  for (const a of out) {
+    await pushNotice({
+      source: "live",
+      kind: "stock",
+      level: "warn",
+      title: `${a.name} ${a.kind === "vi" ? "VI 발동" : "체결강도 급변"}`,
+      body: a.detail,
+      code: a.code,
+      name: a.name,
+      link: stockLink(a.code, a.name),
+      dedupeKey: `live:${a.code}:${a.kind}:${a.kind === "vi" ? a.detail.slice(0, 16) : day}`,
+      dedupeHours: 2,
+    }).catch(() => undefined);
+  }
 
   let ok = true;
   if (superOnes.length > 0) ok = (await sendTelegram(formatLiveAlerts(superOnes), "super")).ok && ok;

@@ -278,6 +278,16 @@ async function persist(list: Notice[]): Promise<void> {
   await fs.writeFile(FILE, JSON.stringify(list), "utf-8");
 }
 
+/**
+ * **종목 딥링크** (2026-09-03) — 알림의 「바로가기」가 그 종목 분석 화면으로 가게.
+ * 화면 라우터(`useHashRoute`) 형식이 `#/{tab}?code=&name=` 이다. 예전엔 `#/watchlist` 처럼
+ * **앱에 없는 탭**으로 보내서 눌러도 아무 일이 없었다 — 벤티지: "아무 반응도 없어 지금."
+ */
+export function stockLink(code: string, name: string): string {
+  const q = new URLSearchParams({ code, name });
+  return `#/stockAnalysis?${q.toString()}`;
+}
+
 export interface PushInput {
   kind: NoticeKind;
   /** 어디서 온 알림인가 — 안 주면 `etc`. 설정에서 이 단위로 끈다 */

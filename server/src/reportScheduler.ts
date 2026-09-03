@@ -80,7 +80,8 @@ export async function publishEdition(
         ?.split("\n")
         .find((l) => l.trim())
         ?.slice(0, 120),
-    link: "#/dailyReport",
+    /* 데일리 리포트 탭 키는 `report` — 옛 `#/dailyReport` 는 없는 탭이었다 (2026-09-03) */
+    link: "#/report",
     /* 같은 날 같은 판은 한 번만 — 재발행하면 그건 새 소식이 아니다 */
     dedupeKey: `report:${date}:${edition}`,
     dedupeHours: 20,

@@ -142,8 +142,13 @@ export interface ViEvent {
   apply: string;
   /** VI 발동가격 */
   price: number;
-  /** 기준가격(정적) */
+  /** 기준가격 — 정적(1236), 없으면 동적(1237). 둘 다 없으면 0 */
   base: number;
+  /**
+   * 괴리율/등락률(%) — 정적 괴리율(1238) · 동적 괴리율(1239) · 발동가 등락률(1489) 중 처음 있는 것.
+   * 기준가가 없을 때 방향을 정하는 두 번째 단서 (2026-09-03 — 「상방인지 하방인지 표시가 안 되네」).
+   */
+  gapPct?: number | null;
   market: string;
   firedAt: string;
   /** 채워져 있으면 해제 */
@@ -159,9 +164,19 @@ export interface ViEvent {
  * 코드표는 추측이 되지만 가격 비교는 사실이다.
  */
 export function viDirection(v: ViEvent): { dir: "up" | "down" | null; gap: number | null } {
-  if (!(v.price > 0) || !(v.base > 0)) return { dir: null, gap: null };
-  const gap = Math.round(((v.price - v.base) / v.base) * 1000) / 10;
-  return { dir: gap > 0 ? "up" : gap < 0 ? "down" : null, gap };
+  if (v.price > 0 && v.base > 0) {
+    const gap = Math.round(((v.price - v.base) / v.base) * 1000) / 10;
+    return { dir: gap > 0 ? "up" : gap < 0 ? "down" : null, gap };
+  }
+  /*
+   * 기준가가 없으면(동적 VI 가 그랬다 — 2026-09-03 벤티지: "상방인지 하방인지 표시가 안 되네")
+   * 괴리율·등락률의 **부호**로 정한다. 그것도 없으면 모른다고 한다 — 지어내지 않는다.
+   */
+  if (v.gapPct != null && Number.isFinite(v.gapPct) && v.gapPct !== 0) {
+    const gap = Math.round(v.gapPct * 10) / 10;
+    return { dir: gap > 0 ? "up" : "down", gap };
+  }
+  return { dir: null, gap: null };
 }
 
 /** 알림·타임라인이 같은 말을 쓰게 — 「▲상방 +10.0%」 / 「▼하방 -10.2%」 */
@@ -431,7 +446,15 @@ export class RealtimeStore {
       kind: String(v["9068"] ?? "").trim(),
       apply: String(v["1225"] ?? "").trim(),
       price: Number(v["1221"]) || 0,
-      base: Number(v["1236"]) || 0,
+      /* 정적 기준가(1236)가 비면 동적 기준가(1237) — 동적 VI 는 정적 칸이 0 으로 온다 */
+      base: Number(v["1236"]) || Number(v["1237"]) || 0,
+      gapPct: (() => {
+        for (const f of ["1238", "1239", "1489"]) {
+          const n = Number(String(v[f] ?? "").replace(/[,\s]/g, ""));
+          if (Number.isFinite(n) && n !== 0) return n;
+        }
+        return null;
+      })(),
       market: String(v["9008"] ?? "").trim(),
       firedAt: fired,
       clearedAt: cleared,

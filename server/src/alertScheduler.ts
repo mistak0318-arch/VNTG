@@ -5,7 +5,7 @@ import { pruneLiveAlerts, runLiveAlerts } from "./liveAlerts.js";
 import { pruneStopWatch, runStopWatch } from "./stopWatch.js";
 import { getActiveSuper } from "./superSignal.js";
 import { hasDedicatedChannel, sendTelegram } from "./telegram.js";
-import { pushNotice } from "./notifyCenter.js";
+import { pushNotice, stockLink } from "./notifyCenter.js";
 import { listWatchlist } from "./watchlist.js";
 
 /**
@@ -90,7 +90,8 @@ export async function runAlertScan(
       level: "info",
       title: `관심종목 시그널 ${alerts.length}건`,
       body: head + (alerts.length > 6 ? ` 외 ${alerts.length - 6}건` : ""),
-      link: "#/watchlist",
+      /* 관심종목 탭 키는 `watchAi` 다 — 옛 `#/watchlist` 는 없는 탭이라 눌러도 아무 일이 없었다 (2026-09-03) */
+      link: alerts.length === 1 ? stockLink(alerts[0].code, alerts[0].name) : "#/watchAi",
       /* 같은 종목·같은 규칙이 이어지면 한 줄에 겹친다 — 5분마다 도는 자리다 */
       dedupeKey: `stockSignal:${alerts.map((a) => `${a.code}:${a.rule}`).sort().join(",")}`,
       dedupeHours: 2,
