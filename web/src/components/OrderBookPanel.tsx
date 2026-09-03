@@ -1,4 +1,4 @@
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { api, fmtNum, signClass, type OrderBook } from "../api";
 import { useLive } from "../useLive";
 import { fid, useRealtime } from "../useRealtime";
@@ -148,6 +148,7 @@ function useLiveBook(code: string, base: OrderBook | null) {
 export function OrderBookPanel({
   code,
   onPickPrice,
+  onQuote,
 }: {
   code: string;
   /**
@@ -158,6 +159,14 @@ export function OrderBookPanel({
    * 읽기 전용이라 커서도 안 바뀌고 눌러도 아무 일이 없어야 한다. 주문 화면만 넘긴다.
    */
   onPickPrice?: (price: number) => void;
+  /**
+   * 지금 값을 위로 올려 준다 (2026-09-04) — 벤티지: "매수·매도 버튼 위 종목명, 거기에
+   * 현재가 등락률 좀 표시해 줘."
+   *
+   * 호가창이 이미 3초마다(+실시간) 받고 있는 값이라 **부르는 쪽이 따로 조회할 이유가 없다.**
+   * 시세를 두 곳에서 받으면 두 값이 갈리고, 그때 어느 쪽이 맞는지 사람이 판정해야 한다.
+   */
+  onQuote?: (q: { price: number; changeRate: number | null }) => void;
 }) {
   /*
    * 밑그림. 실시간이 붙으면 아래에서 갈아끼우므로 **주기를 늦춰도 된다** —
@@ -165,6 +174,17 @@ export function OrderBookPanel({
    */
   const { data: base, loading, error } = useLive<OrderBook>(() => api.orderBook(code), [code], 3000);
   const { book, live, delta } = useLiveBook(code, base ?? null);
+  /* 값이 **바뀔 때만** 올린다 — 매 렌더마다 부르면 부모가 계속 다시 그린다 */
+  const price = book?.price ?? 0;
+  const nowRate = book && book.basePrice > 0 && book.price > 0 ? ((book.price - book.basePrice) / book.basePrice) * 100 : null;
+  const quoteRef = useRef<string>("");
+  useEffect(() => {
+    if (!onQuote || price <= 0) return;
+    const key = `${price}|${nowRate ?? ""}`;
+    if (key === quoteRef.current) return;
+    quoteRef.current = key;
+    onQuote({ price, changeRate: nowRate });
+  }, [price, nowRate, onQuote]);
   /*
    * 프로그램 순매수 — HTS 호가 화면 오른쪽 아래에 붙어 있는 그 값.
    * `0w` FID 212 가 **백만원 단위 누적**이라 억으로 줄여 적는다.
@@ -262,8 +282,18 @@ export function OrderBookPanel({
           )}
         </span>
         <span className="ob-price">
-          {/* 지금 체결되는 호가에 표시 — HTS 의 그 노란 줄이다 */}
-          {now && <i className="ob-here">종</i>}
+          {/*
+            지금 값이 있는 줄 — HTS 의 그 노란 줄이다.
+
+            글자가 「종」이었다. 뜻은 「지금 체결되는」이었는데 **종가로 읽힌다** —
+            벤티지: "종가에 노란색 포커싱이 들어가 있어, 저 포커싱은 현재가에 들어가야 되는 거잖아."
+            장 밖에는 현재가와 전일 종가가 같은 값이라 더 헷갈렸다. 「현」으로 바꾼다.
+          */}
+          {now && (
+            <i className="ob-here" title="현재가 — 지금 값이 이 호가에 있습니다">
+              현
+            </i>
+          )}
           {empty ? (
             <b className="pt-n" title="이 단에는 아직 호가가 없습니다 (장전 동시호가에는 세 단만 옵니다)">
               -

@@ -8984,8 +8984,16 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .ob-flow-last i { font-style: normal; font-size: 0.62rem; }
 .ob-qty { position: relative; display: flex; align-items: center; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 .ob-qty.left { justify-content: flex-end; }
-.ob-qty.left b { position: relative; padding-right: 0.3rem; }
-.ob-qty.right b { position: relative; padding-left: 0.3rem; }
+/*
+ * 잔량 숫자는 **자리를 고정한다** (2026-09-04, 벤티지: "호가 잔량에 따라서 칸이 들쭉날쭉하거든").
+ *
+ * 예전엔 숫자가 흐르는 대로 놓여서, 「440」인 줄과 「17,259」인 줄의 시작 자리가 달랐다 —
+ * 열 줄이 다 다른 자리에서 시작하니 눈이 세로로 못 내려간다. 폭을 고정하고 그 안에서
+ * 가격 쪽으로 붙이면 **양쪽 끝이 다 가지런**해진다.
+ */
+.ob-qty b { position: relative; min-width: 4.4rem; }
+.ob-qty.left b { text-align: right; padding-right: 0.3rem; }
+.ob-qty.right b { text-align: left; padding-left: 0.3rem; }
 /* 막대는 잔량 크기를 눈으로 보게 - 숫자만 있으면 비교가 안 된다 */
 .ob-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 0.15rem; opacity: 0.28; }
 .ob-bar.ask { right: 0; background: var(--blue); }
@@ -15006,6 +15014,8 @@ tr:hover .sd-del { opacity: 0.75; }
   .ord-book .ob-price { gap: 0.15rem; }
   .ord-book .ob-price b { font-size: 0.74rem; }
   .ord-book .ob-rt { font-size: 0.58rem; }
+  /* 좁은 칸에 맞춰 잔량 자리도 줄인다 — 고정이라는 성질은 그대로 */
+  .ord-book .ob-qty b { min-width: 3.4rem; }
   .ord-book .ob-d { display: none; }
 
   .ord-venue button { font-size: 0.74rem; padding: 0.3rem 0.1rem; }
@@ -15413,7 +15423,11 @@ select.ord-in { appearance: auto; cursor: pointer; }
 }
 
 /* ── 수량 비율 단추 · 금액 입력 (2026-09-04) ─────────────────────────── */
-.ord-pct { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.25rem; }
+/*
+ * 다섯 칸을 한 줄에 못 넣는 폭이 있다 (갤럭시 S25 = 360px 에서 「직접」이 잘렸다).
+ * 억지로 한 줄에 두는 대신 **모자라면 다음 줄로** 내린다 — 잘린 글자보다 두 줄이 낫다.
+ */
+.ord-pct { display: grid; grid-template-columns: repeat(auto-fit, minmax(2.7rem, 1fr)); gap: 0.25rem; }
 .ord-pct button {
   padding: 0.3rem 0.1rem;
   border-radius: 7px;
@@ -15466,3 +15480,8 @@ select.ord-in { appearance: auto; cursor: pointer; }
 .ord-cfg-kv > div { display: flex; justify-content: space-between; gap: 0.5rem; border-bottom: 1px solid var(--border); padding: 0.2rem 0; }
 .ord-cfg-kv dt { color: var(--muted); font-size: 0.82rem; }
 .ord-cfg-kv dd { margin: 0; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+
+/* 종목 이름 옆의 지금 값 (2026-09-04) — 가격을 적기 전에 「어디쯤인가」가 먼저 보여야 한다 */
+.ord-quote { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; }
+.ord-quote i { font-style: normal; font-size: 0.78rem; margin-left: 0.3rem; font-weight: 400; }
+.ord-picked { gap: 0.4rem; }

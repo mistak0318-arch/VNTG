@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T23:23:54.089Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T23:33:39.017Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "beb82dc",
+        "subject": "주문 호가창에 등락률을 되살린다 — 폰에서도 가격 옆에 %"
+      },
       {
         "hash": "7e7db2e",
         "subject": "수량 비율 단추와 금액→수량 · 비밀번호 기억하기(세션 한정) · 주문 설정 탭"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "ee1ef4d",
         "subject": "TODO: NXT 기준 전환·웹소켓 2개·TTS 를 사용자 결정으로 제외"
-      },
-      {
-        "hash": "13f3693",
-        "subject": "위젯·워치 구현 + 고정 채널 시황 접기"
       }
     ]
   }

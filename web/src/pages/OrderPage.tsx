@@ -504,6 +504,8 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
    * 먼저다 — 그게 본론이고, 주문단가는 대개 거기서 몇 호가 안쪽이라 뒤에 정한다.
    */
   const [condFocus, setCondFocus] = useState(true);
+  /* 호가창이 올려 주는 지금 값 — 종목 이름 옆에 적는다. 따로 조회하지 않는다 */
+  const [quote, setQuote] = useState<{ price: number; changeRate: number | null } | null>(null);
   /*
    * 「가능금액의 몇 %」·「보유의 몇 %」를 세려면 계좌를 알아야 한다 (2026-09-04).
    * 폼을 열 때 한 번만 받는다 — 잔고 탭처럼 10초마다 부르면 주문 앱키에 조회가 계속 나간다.
@@ -630,12 +632,25 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
             onPick={(c, n) => {
               setCode(c);
               setName(n);
+              setQuote(null);
             }}
           />
           {code && (
             <div className="ord-picked">
               <b>{name || code}</b>
               <span className="ord-code">{code}</span>
+              {/* 지금 값 — 가격을 적기 전에 「어디쯤인가」가 먼저 보여야 한다 */}
+              {quote && quote.price > 0 && (
+                <span className={`ord-quote ${signClass(quote.changeRate)}`}>
+                  {fmtNum(quote.price)}
+                  {quote.changeRate !== null && (
+                    <i>
+                      {quote.changeRate > 0 ? "+" : ""}
+                      {quote.changeRate.toFixed(2)}%
+                    </i>
+                  )}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -660,7 +675,7 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
       <div className="ord-grid">
         <div className="ord-book">
           {code ? (
-            <OrderBookPanel code={code} onPickPrice={pickPrice} />
+            <OrderBookPanel code={code} onPickPrice={pickPrice} onQuote={setQuote} />
           ) : (
             <p className="empty">종목을 고르면 호가가 뜬다</p>
           )}
@@ -776,7 +791,7 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
                 inputMode="numeric"
                 value={cond}
                 onChange={(e) => setCond(e.target.value.replace(/\D/g, ""))}
-                placeholder="이 값에 닿으면"
+                placeholder="발동가"
               />
             </>
           )}
@@ -792,7 +807,7 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
               disabled={!usesPrice}
               value={usesPrice ? price : ""}
               onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))}
-              placeholder={usesPrice ? "원" : `${tt?.label ?? ""} — 값 없음`}
+              placeholder={usesPrice ? "원" : "값 없음"}
             />
             <button type="button" disabled={!usesPrice} onClick={() => setPrice((v) => String((Number(v) || 0) + 100))}>
               ＋
@@ -816,7 +831,7 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
                 setAmount(v);
                 setQty(unit > 0 && v ? String(Math.floor(Number(v) / unit)) : "");
               }}
-              placeholder={unit > 0 ? "원 — 적으면 수량이 따라온다" : "가격을 먼저"}
+              placeholder={unit > 0 ? "금액을 적으면 수량이" : "가격 먼저"}
               disabled={unit <= 0}
             />
             <span>원</span>
