@@ -898,6 +898,8 @@ export const api = {
     if (!res.ok) throw new Error(parsed.error ?? `요청 실패 (${res.status})`);
     return parsed;
   },
+  sysAct: (kind: string, payload: Record<string, unknown>) =>
+    postJson<{ ok: boolean; message: string }>("/api/sys/act", { kind, payload }),
   sysSearchProgress: () =>
     getJson<{ running: boolean; done: number; total: number; name: string }>("/api/channels/search-progress"),
   aiConfig: () =>
@@ -2436,11 +2438,20 @@ export interface SysSection {
   took?: Record<string, number>;
   error?: string;
 }
+/** 시스가 「이렇게 할까?」 하고 내미는 것 — 「넣기」를 눌러야 저장된다 */
+export interface SysProposal {
+  id: string;
+  kind: "addEvent";
+  title: string;
+  facts: SysFact[];
+  payload: Record<string, unknown>;
+}
 export interface SysPack {
   question: string;
   at: string;
   intent: { topics: string[]; stocks: SysStockRef[]; themes: string[]; note: string };
   sections: SysSection[];
+  proposals?: SysProposal[];
   ms: number;
 }
 export interface SysAnswer {

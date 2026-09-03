@@ -1,5 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
-import { getStockIndex } from "./stockListCache.js";
+import { getStockIndex, searchStocks } from "./stockListCache.js";
 import { stockSummary } from "./stockSummary.js";
 import { evaluateSignal, isNotTheme } from "./signalLight.js";
 import { isIndexLikeTheme, themesOfStock } from "./naverThemes.js";
@@ -32,8 +32,10 @@ import { ACCOUNTS, type AccountId } from "./cisAccounts.js";
 import { listDays } from "./cisJournal.js";
 import { priceMap } from "./cisRun.js";
 import { listSuperSignal } from "./superSignal.js";
-import { upcomingEvents } from "./calendar.js";
+import { addEvent, EVENT_KINDS, listEventsRange, upcomingEvents, type EventKind } from "./calendar.js";
 import { todayDartEvents } from "./dartEvents.js";
+import { listMemos } from "./memoPad.js";
+import { listEntries } from "./tradeJournal.js";
 
 /**
  * **시스 — 플로팅 도우미** (2026-09-03).
@@ -115,11 +117,25 @@ export interface SysIntent {
   note: string;
 }
 
+/**
+ * **하겠다고 내미는 것** (2026-09-03 — 벤티지: "캘린더에 일정 넣거나 이런 것도 할 수 있으려나?").
+ * 시스는 바로 쓰지 않는다. 알아들은 대로 카드를 내밀고 벤티지가 「넣기」를 눌러야 저장한다 —
+ * 잘못 알아들은 걸 바로 넣으면 지우는 게 더 일이다.
+ */
+export interface SysProposal {
+  id: string;
+  kind: "addEvent";
+  title: string;
+  facts: SysFact[];
+  payload: Record<string, unknown>;
+}
+
 export interface SysPack {
   question: string;
   at: string;
   intent: SysIntent;
   sections: SysSection[];
+  proposals?: SysProposal[];
   ms: number;
 }
 
@@ -237,15 +253,49 @@ async function findStocks(client: KiwoomClient, q: string): Promise<SysStockRef[
     const e = index.get(m[1]);
     if (e) found.push({ code: e.code, name: e.name, start: m.index ?? 0, end: (m.index ?? 0) + 6 });
   }
+  /*
+   * **앞 글자 경계** — 「하이닉스」 안의 「이닉스」(진짜 있는 종목)가 잡히면 안 된다. 이름 바로 앞이
+   * 한글·영숫자면 다른 말의 일부다. 뒤는 조사가 붙으므로 안 본다(「삼성전자랑」).
+   */
+  const boundaryOk = (at: number) => at === 0 || !/[가-힣A-Za-z0-9]/.test(compact[at - 1] ?? "");
   for (const e of index.values()) {
     const name = e.name.trim();
     if (name.length < 2 || /스팩|SPAC/i.test(name)) continue;
     const nc = name.replace(/\s+/g, "");
     let at = -1;
-    if (name.length >= 3) at = compact.indexOf(nc);
-    else if (new RegExp(`(^|[\\s,.?!·])${esc(name)}($|[\\s,.?!·은는이가의도를을])`).test(q)) at = compact.indexOf(nc);
+    if (name.length >= 3) {
+      let from = 0;
+      while (from <= compact.length) {
+        const i = compact.indexOf(nc, from);
+        if (i < 0) break;
+        if (boundaryOk(i)) {
+          at = i;
+          break;
+        }
+        from = i + 1;
+      }
+    } else if (new RegExp(`(^|[\\s,.?!·])${esc(name)}($|[\\s,.?!·은는이가의도를을])`).test(q)) at = compact.indexOf(nc);
     if (at < 0) continue;
     found.push({ code: e.code, name: e.name, start: at, end: at + nc.length });
+  }
+  /*
+   * **줄여 부르는 이름** — 「하이닉스」(SK하이닉스)·「두산에너」·「한화에어로」처럼 앞뒤를 뗀 말은
+   * 목록에 그대로 없다. 못 찾은 토큰을 종목 검색(이름 포함)에 물어 **딱 하나**로 좁혀지면 그것.
+   * 흔한 낱말(「전자」)은 여럿이 나와 버려진다.
+   */
+  const ALIAS: Record<string, string> = { 삼전: "삼성전자", 하닉: "SK하이닉스", 하이닉스: "SK하이닉스", 현차: "현대차", 엘지: "LG", 네이버: "NAVER", 셀트: "셀트리온", 엔씨: "엔씨소프트", 두산에너: "두산에너빌리티", 한화에어로: "한화에어로스페이스", 포스코: "POSCO홀딩스", 카뱅: "카카오뱅크" };
+  const tokens = q.replace(/[?!.,·]/g, " ").split(/\s+/).map((w) => w.replace(/(은|는|이|가|을|를|의|도|랑|이랑|에서|에|로|으로)$/, "")).filter((w) => w.length >= 2 && !STOP.has(w));
+  for (const tok of tokens) {
+    const want = ALIAS[tok] ?? tok;
+    if (found.some((f) => f.name.replace(/\s+/g, "").includes(want.replace(/\s+/g, "")))) continue;
+    if (want.length < 3 && !ALIAS[tok]) continue;
+    const hits = (await searchStocks(client, want).catch(() => [])).filter((h) => !/스팩|SPAC/i.test(h.name) && !/우(B|C)?$/.test(h.name));
+    const exact = hits.find((h) => h.name.replace(/\s+/g, "") === want.replace(/\s+/g, ""));
+    const pick = exact ?? (hits.length === 1 ? hits[0] : null);
+    if (!pick) continue;
+    const at = compact.indexOf(tok.replace(/\s+/g, ""));
+    if (at < 0) continue;
+    found.push({ code: pick.code, name: pick.name, start: at, end: at + tok.length });
   }
   found.sort((a, b) => b.end - b.start - (a.end - a.start));
   const kept: typeof found = [];
@@ -303,12 +353,20 @@ const RE = {
   watch: /(관심 ?종목|내 종목|담은 종목|내가 담은|워치)/,
   ledger: /(슈퍼 ?신호등|신호등 ?원장|원장|무지개|신호등 (뭐|어떤|초록|상위|잘)|초록 (뭐|종목))/,
   calendar: /(일정|캘린더|이벤트|발표 (언제|있)|실적 ?발표|이번 ?주|다음 ?주|내일 (뭐|일정)|스케줄)/,
+  /** 일정 넣기 — 「9/10 14시 FOMC 일정 넣어줘」「내일 오후 2시 미팅 캘린더에 추가」 */
+  addEvent: /((일정|캘린더|스케줄).{0,12}(넣|추가|등록|잡아|적어))|((넣어|추가해|등록해|잡아|적어).{0,6}(일정|캘린더))/,
+  memo: /(메모|메모장|일기|적어 ?둔|적어둔|적었|기록해 ?둔)/,
+  journal: /(복기|매매 ?일지|매매일지)/,
   disclosure: /(공시)/,
   news: /(뉴스|기사|헤드라인|속보|무슨 일|소식)/,
   telegram: /(텔레|텔레그램|채널|톡방|방에서|리딩)/,
 };
 
-const STOP = new Set(["오늘", "지금", "요즘", "어때", "어떄", "있어", "뭐래", "뭐야", "왜", "이래", "관련", "대해", "알려줘", "보여줘", "어떤", "성적", "수익권", "추세", "뉴스", "기사", "텔레", "텔레그램", "채널", "공시", "그리고", "그래서", "근데", "좀", "한번"]);
+const STOP = new Set([
+  "오늘", "지금", "요즘", "어때", "어떄", "있어", "있나", "있는지", "있음", "뭐래", "뭐야", "뭐", "왜", "이래", "관련", "대해", "알려줘", "보여줘", "찾아줘", "찾아", "찾아봐",
+  "어떤", "성적", "수익권", "추세", "뉴스", "기사", "텔레", "텔레그램", "채널", "공시", "그리고", "그래서", "근데", "좀", "한번", "적어", "적어둔", "적었", "적은", "기록",
+  "메모", "일지", "복기", "노트", "일정", "캘린더", "시세", "가격", "주가", "얼마", "어디", "어느", "거", "것", "둔", "해줘", "줘", "해봐", "하자", "정도", "부터", "까지",
+]);
 function keywordsOf(q: string): string[] {
   return q
     .replace(/[?!.,·]/g, " ")
@@ -694,11 +752,219 @@ async function ledgerSection(client: KiwoomClient): Promise<SysSection> {
 }
 
 /* ── 일정 ── */
-async function calendarSection(): Promise<SysSection> {
-  return timed("calendar", "calendar", "다가오는 일정 (2주)", async () => {
-    const ev = await upcomingEvents(14);
-    return { blocks: [{ items: ev.slice(0, 15).map((e) => ({ text: e.title, sub: `${e.date}${e.time ? ` ${e.time}` : ""}${e.kind ? ` · ${e.kind}` : ""}${e.todo ? (e.done ? " · 완료" : " · 할 일") : ""}` })) }] };
+const kindLabel = (k: string) => EVENT_KINDS.find((x) => x.key === k)?.label ?? k;
+function kstToday(): Date {
+  return new Date(Date.now() + 9 * 3600_000);
+}
+const ymd = (d: Date) => d.toISOString().slice(0, 10);
+
+/** 검색어가 있으면 **앞뒤 반년**에서 찾고, 없으면 다가오는 2주 */
+async function calendarSection(words: string[], month: string | null): Promise<SysSection> {
+  const searching = words.length > 0 || month !== null;
+  return timed("calendar", "calendar", searching ? `일정 검색 「${[...words, month ?? ""].filter(Boolean).join(" ")}」` : "다가오는 일정 (2주)", async () => {
+    let ev;
+    if (searching) {
+      const t = kstToday();
+      const from = ymd(new Date(t.getTime() - 180 * 86400_000));
+      const to = ymd(new Date(t.getTime() + 365 * 86400_000));
+      const all = await listEventsRange(from, to);
+      const low = words.map((w) => w.toLowerCase());
+      ev = all.filter((e) => {
+        const hay = `${e.title} ${e.memo ?? ""} ${kindLabel(e.kind)} ${(e as { country?: string }).country ?? ""}`.toLowerCase();
+        const wordOk = low.length === 0 || low.some((w) => hay.includes(w));
+        const monthOk = month === null || e.date.startsWith(month);
+        return wordOk && monthOk;
+      });
+    } else {
+      ev = await upcomingEvents(14);
+    }
+    const today = ymd(kstToday());
+    return {
+      head: searching ? [{ label: "건", value: String(ev.length) }] : undefined,
+      blocks: [
+        ev.length
+          ? {
+              items: ev.slice(0, 20).map((e) => ({
+                text: e.title,
+                sub: `${e.date}${e.time ? ` ${e.time}` : ""} · ${kindLabel(e.kind)}${e.todo ? (e.done ? " · 완료" : " · 할 일") : ""}${e.memo ? ` — ${e.memo.slice(0, 60)}` : ""}`,
+                tone: (e.date < today ? "muted" : e.date === today ? "good" : undefined) as SysTone | undefined,
+              })),
+            }
+          : { lines: [{ text: searching ? "그런 일정이 없다 (앞 반년 ~ 뒤 1년)" : "2주 안에 잡힌 일정이 없다", tone: "muted" }] },
+      ],
+    };
   });
+}
+
+/* ── 메모장 ── */
+async function memoSection(words: string[]): Promise<SysSection> {
+  return timed("memo", "memo", words.length ? `메모 검색 「${words.join(" ")}」` : "최근 메모", async () => {
+    const all = await listMemos("");
+    const low = words.map((w) => w.toLowerCase());
+    const hit = low.length
+      ? all.filter((m) => {
+          const hay = `${m.title} ${m.body} ${m.tags.join(" ")} ${(m.stocks ?? []).map((s) => s.name).join(" ")}`.toLowerCase();
+          return low.some((w) => hay.includes(w));
+        })
+      : all;
+    return {
+      head: [{ label: "건", value: `${hit.length}${low.length ? ` / ${all.length}` : ""}` }],
+      blocks: [
+        hit.length
+          ? {
+              items: hit.slice(0, 12).map((m) => {
+                const body = m.body.replace(/\s+/g, " ");
+                const at = low.length ? Math.max(0, ...low.map((w) => body.toLowerCase().indexOf(w)).filter((i) => i >= 0)) : 0;
+                const snippet = body.slice(Math.max(0, at - 40), at + 160);
+                return {
+                  text: `${m.pinned ? "📌 " : ""}${m.title || "(제목 없음)"}`,
+                  sub: `${m.at.slice(0, 10)}${m.tags.length ? ` · #${m.tags.join(" #")}` : ""}${(m.stocks ?? []).length ? ` · ${(m.stocks ?? []).map((s) => s.name).join("·")}` : ""} — ${snippet}`,
+                  stock: (m.stocks ?? [])[0],
+                };
+              }),
+            }
+          : { lines: [{ text: "그런 메모가 없다", tone: "muted" }] },
+      ],
+    };
+  });
+}
+
+/* ── 복기 노트 ── */
+async function journalSection(words: string[]): Promise<SysSection> {
+  return timed("journal", "journal", words.length ? `복기 노트 검색 「${words.join(" ")}」` : "최근 복기 노트", async () => {
+    const all = await listEntries(365);
+    const low = words.map((w) => w.toLowerCase());
+    const text = (e: (typeof all)[number]) =>
+      [e.what, e.why, e.lesson, e.tomorrow, e.brokenRule, e.mood, ...(e.mistakes ?? []), ...(e.watchReasons ?? []), ...(e.trades ?? []).map((t) => (t as unknown as { name?: string }).name ?? ""), ...(e.picks ?? []).map((p) => (p as unknown as { name?: string }).name ?? "")]
+        .filter(Boolean)
+        .join(" ");
+    const hit = low.length ? all.filter((e) => low.some((w) => text(e).toLowerCase().includes(w))) : all.slice(0, 5);
+    return {
+      head: [{ label: "건", value: `${hit.length}${low.length ? ` / ${all.length}` : ""}` }],
+      blocks: [
+        hit.length
+          ? {
+              items: hit.slice(0, 10).map((e) => ({
+                text: `${e.date} ${e.stance === "watch" ? "관망" : "매매"}${e.followedRules === false ? " · 규칙 어김" : ""}${e.mood ? ` · ${e.mood}` : ""}`,
+                sub: [e.what && `한 것: ${e.what}`, e.why && `왜: ${e.why}`, e.lesson && `배운 것: ${e.lesson}`, e.tomorrow && `내일: ${e.tomorrow}`, e.mistakes?.length && `실수: ${e.mistakes.join(", ")}`]
+                  .filter(Boolean)
+                  .join(" / ")
+                  .slice(0, 260),
+                tone: (e.followedRules === false ? "warn" : undefined) as SysTone | undefined,
+              })),
+            }
+          : { lines: [{ text: "그런 복기가 없다 (1년)", tone: "muted" }] },
+      ],
+    };
+  });
+}
+
+/* ── 일정 넣기 — 제안만 만든다. 저장은 act() 가 「넣기」를 눌렀을 때 ── */
+const WEEKDAY: Record<string, number> = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 };
+function parseEventProposal(q: string): SysProposal | null {
+  const now = kstToday();
+  let s = q;
+  let date: string | null = null;
+  const take = (re: RegExp, f: (m: RegExpMatchArray) => void) => {
+    const m = s.match(re);
+    if (m) {
+      f(m);
+      s = s.replace(m[0], " ");
+    }
+  };
+  /* 날짜 — 구체적인 것부터 */
+  take(/(\d{4})[-./년]\s?(\d{1,2})[-./월]\s?(\d{1,2})일?/, (m) => {
+    date = `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  });
+  if (!date) take(/(\d{1,2})\s?[/월]\s?(\d{1,2})일?/, (m) => {
+    const mo = Number(m[1]);
+    const d = Number(m[2]);
+    let y = now.getUTCFullYear();
+    if (mo < now.getUTCMonth() + 1 - 1) y += 1; // 지난달보다 이전이면 내년
+    date = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  });
+  if (!date) take(/(오늘|내일|모레|글피)/, (m) => {
+    const add = { 오늘: 0, 내일: 1, 모레: 2, 글피: 3 }[m[1]] ?? 0;
+    date = ymd(new Date(now.getTime() + add * 86400_000));
+  });
+  if (!date) take(/(이번 ?주|다음 ?주|담주)?\s?([일월화수목금토])요일/, (m) => {
+    const target = WEEKDAY[m[2]];
+    const cur = now.getUTCDay();
+    let diff = (target - cur + 7) % 7;
+    if (/다음|담주/.test(m[1] ?? "")) diff += diff === 0 ? 7 : 7 - (diff > 0 ? 0 : 0);
+    if (diff === 0 && !/이번/.test(m[1] ?? "")) diff = 7;
+    date = ymd(new Date(now.getTime() + diff * 86400_000));
+  });
+  if (!date) take(/(\d{1,2})일(?!\s?(동안|간|치))/, (m) => {
+    const d = Number(m[1]);
+    const mo = now.getUTCMonth() + 1;
+    const y = now.getUTCFullYear();
+    const cand = new Date(Date.UTC(y, mo - 1, d));
+    const next = cand.getTime() < now.getTime() - 86400_000 ? new Date(Date.UTC(y, mo, d)) : cand;
+    date = ymd(next);
+  });
+  if (!date) return null;
+
+  /* 시각 */
+  let time: string | undefined;
+  take(/(\d{1,2}):(\d{2})/, (m) => {
+    time = `${m[1].padStart(2, "0")}:${m[2]}`;
+  });
+  if (!time) take(/(오전|오후|아침|저녁|밤|새벽)?\s?(\d{1,2})\s?시\s?(반|(\d{1,2})\s?분)?/, (m) => {
+    let h = Number(m[2]);
+    const ap = m[1] ?? "";
+    if (/오후|저녁|밤/.test(ap) && h < 12) h += 12;
+    if (/새벽/.test(ap) && h === 12) h = 0;
+    const mi = m[3] === "반" ? 30 : m[4] ? Number(m[4]) : 0;
+    time = `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
+  });
+
+  /* 제목 — 명령어·조사를 걷어낸 나머지 */
+  const title = s
+    .replace(/(캘린더|일정|스케줄)(에|으로|로)?/g, " ")
+    .replace(/(넣어|추가해|등록해|잡아|적어)\s?(줘|주라|줄래|주세요|줘요)?/g, " ")
+    .replace(/(넣|추가|등록)\s?(해줘|해|하자|해 ?주라)?/g, " ")
+    .replace(/\b(좀|그리고|해줘|줘|하자|할게|에|로|으로)\b/g, " ")
+    .replace(/[,.!?]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!title) return null;
+
+  const kind: EventKind = /실적/.test(title) ? "earnings" : /fomc|cpi|고용|pce|gdp|금통위|지표/i.test(title) ? "indicator" : /휴장/.test(title) ? "holiday" : /회의|미팅|면담/.test(title) ? "meeting" : "personal";
+  const country = /fomc|cpi|연준|fed|미국/i.test(title) ? "미국" : undefined;
+  return {
+    id: `ev-${Date.now()}`,
+    kind: "addEvent",
+    title: "이렇게 넣을까?",
+    facts: [
+      { label: "날짜", value: date },
+      { label: "시각", value: time ?? "종일", tone: time ? undefined : "muted" },
+      { label: "제목", value: title },
+      { label: "종류", value: kindLabel(kind), tone: "muted" },
+      ...(country ? [{ label: "나라", value: country, tone: "muted" as SysTone }] : []),
+    ],
+    payload: { date, time, title, kind, country },
+  };
+}
+
+/** 「넣기」를 눌렀을 때 — 제안을 실제로 저장한다 */
+export async function act(kind: string, payload: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  if (kind === "addEvent") {
+    const date = String(payload.date ?? "");
+    const title = String(payload.title ?? "").trim();
+    const time = payload.time ? String(payload.time) : undefined;
+    const k = String(payload.kind ?? "personal") as EventKind;
+    await addEvent({
+      date,
+      title,
+      time,
+      kind: EVENT_KINDS.some((x) => x.key === k) ? k : "personal",
+      source: "sys",
+      ...(payload.country ? { country: String(payload.country) } : {}),
+    } as Omit<import("./calendar.js").CalendarEvent, "id">);
+    return { ok: true, message: `${date}${time ? ` ${time}` : ""} 「${title}」 넣었다 — 캘린더에서 확인` };
+  }
+  return { ok: false, message: `모르는 일: ${kind}` };
 }
 
 /* ── 공시 (오늘) ── */
@@ -775,7 +1041,19 @@ const TOPICS: Topic[] = [
   },
   { key: "watch", title: "관심종목", match: (c) => RE.watch.test(c.q), gather: (c) => watchSection(c.client).then((s) => [s]) },
   { key: "ledger", title: "신호등 원장", match: (c) => RE.ledger.test(c.q), gather: (c) => ledgerSection(c.client).then((s) => [s]) },
-  { key: "calendar", title: "일정", match: (c) => RE.calendar.test(c.q), gather: () => calendarSection().then((s) => [s]) },
+  {
+    key: "calendar",
+    title: "일정",
+    match: (c) => RE.calendar.test(c.q) && !RE.addEvent.test(c.q),
+    gather: (c) => {
+      const m = c.q.match(/(\d{1,2})월/);
+      const month = m ? `${kstToday().getUTCFullYear()}-${m[1].padStart(2, "0")}` : null;
+      const words = keywordsOf(c.q).filter((w) => !/^(일정|캘린더|스케줄|이벤트|이번주|다음주|이번|다음|언제|있어|뭐|뭐야|\d+월)$/.test(w) && !c.stocks.some((s) => s.name === w));
+      return calendarSection([...words, ...c.stocks.map((s) => s.name)], month).then((s) => [s]);
+    },
+  },
+  { key: "memo", title: "메모", match: (c) => RE.memo.test(c.q), gather: (c) => memoSection([...keywordsOf(c.q).filter((w) => !/^(메모|메모장|일기)$/.test(w)), ...c.stocks.map((s) => s.name)]).then((s) => [s]) },
+  { key: "journal", title: "복기 노트", match: (c) => RE.journal.test(c.q), gather: (c) => journalSection([...keywordsOf(c.q).filter((w) => !/^(복기|복기노트|노트|매매일지|일지)$/.test(w)), ...c.stocks.map((s) => s.name)]).then((s) => [s]) },
   { key: "disclosure", title: "공시", match: (c) => RE.disclosure.test(c.q) && c.stocks.length === 0, gather: () => disclosureSection().then((s) => [s]), wantsFocus: true },
   { key: "news", title: "뉴스", match: (c) => RE.news.test(c.q) && c.stocks.length === 0 && !RE.market.test(c.q), gather: (c) => newsSection(keywordsOf(c.q).filter((w) => !c.themes.includes(w))).then((s) => [s]), wantsFocus: true },
   { key: "telegram", title: "텔레그램", match: (c) => RE.telegram.test(c.q) && c.stocks.length === 0, gather: (c) => telegramSection(keywordsOf(c.q)).then((s) => [s]), wantsFocus: true },
@@ -796,6 +1074,8 @@ export async function interpret(
   const ctx: Ctx = { client, q, compact: q.replace(/\s+/g, ""), stocks, themes, focus: focus ?? null };
 
   let hit = TOPICS.filter((t) => t.match(ctx));
+  /* 「일지」는 CIS 일지지만 「복기」가 같이 있으면 복기 노트 얘기다 */
+  if (RE.journal.test(q) && !/cis|시스/i.test(q)) hit = hit.filter((t) => t.key !== "cis");
   const notes: string[] = [];
   /*
    * 종목이 없는데 「뉴스 있어?」「공시 떴어?」처럼 종목에 딸린 것만 물으면 — 지금 보고 있는
@@ -806,7 +1086,7 @@ export async function interpret(
     notes.push(`지금 보고 있는 ${focus.name} 얘기로 들었어`);
     hit = TOPICS.filter((t) => t.match(ctx));
   }
-  if (hit.length === 0) hit = TOPICS.filter((t) => t.key === "market");
+  if (hit.length === 0 && !RE.addEvent.test(q)) hit = TOPICS.filter((t) => t.key === "market");
 
   if (ctx.stocks.length) notes.push(`종목 ${ctx.stocks.map((s) => s.name).join("·")}`);
   if (themes.length) notes.push(`테마 ${themes.join("·")}`);
@@ -818,8 +1098,19 @@ export async function interpret(
 export async function gather(client: KiwoomClient, question: string, focus?: SysStockRef | null): Promise<SysPack> {
   const t0 = Date.now();
   const { ctx, hit, intent } = await interpret(client, question, focus);
-  const sections = (await Promise.all(hit.map((t) => t.gather(ctx)))).flat();
-  return { question, at: new Date().toISOString(), intent, sections, ms: Date.now() - t0 };
+  /* 일정 넣기 — 긁는 게 아니라 제안이다. 종목이 같이 있으면 종목 섹션도 같이 온다 */
+  const proposals: SysProposal[] = [];
+  if (RE.addEvent.test(ctx.q)) {
+    const p = parseEventProposal(ctx.q);
+    if (p) {
+      proposals.push(p);
+      intent.topics.push("addEvent");
+      intent.note = `${intent.note ? `${intent.note} · ` : ""}일정 넣기`;
+    }
+  }
+  const only = proposals.length && hit.every((t) => t.key === "market") ? [] : hit;
+  const sections = (await Promise.all(only.map((t) => t.gather(ctx)))).flat();
+  return { question, at: new Date().toISOString(), intent, sections, proposals: proposals.length ? proposals : undefined, ms: Date.now() - t0 };
 }
 
 // ---------------------------------------------------------------- AI
@@ -841,6 +1132,7 @@ export function packToText(p: SysPack): string {
     if (s.missing?.length) L.push(`(못 받은 것: ${s.missing.join(", ")})`);
     out.push(L.join("\n"));
   }
+  for (const pr of p.proposals ?? []) out.push(`### 제안: ${pr.title}\n${pr.facts.map((f) => `${f.label} ${f.value}`).join(" · ")}\n(사용자가 「넣기」를 눌러야 저장된다)`);
   return out.join("\n\n");
 }
 

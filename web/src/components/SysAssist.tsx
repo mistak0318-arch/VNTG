@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type AskResult, type AskTurn, type SysBlock, type SysFact, type SysPack, type SysSection, type SysStockRef } from "../api";
+import { api, type AskResult, type AskTurn, type SysBlock, type SysFact, type SysPack, type SysProposal, type SysSection, type SysStockRef } from "../api";
 import { setPref } from "../prefs";
 import { SysIcon } from "./SysIcon";
 
@@ -103,6 +103,10 @@ const EXAMPLES = [
   "CIS 일지 요즘 수익권이래?",
   "관심종목 오늘 어때?",
   "슈퍼신호등 원장 잘 가?",
+  "9월 일정 뭐 있어?",
+  "하이닉스 메모 적어 둔 거 있나?",
+  "복기 노트에서 손절 관련 찾아줘",
+  "내일 오후 2시 FOMC 결과 확인 일정 넣어줘",
 ];
 
 const TONE_CLASS: Record<string, string> = { up: "positive", down: "negative", good: "sys-good", warn: "sys-warn", bad: "negative", muted: "sys-dim" };
@@ -202,16 +206,57 @@ function Section({ s, onSelectStock }: { s: SysSection; onSelectStock: (code: st
   );
 }
 
+/**
+ * 제안 카드 — 「이렇게 넣을까?」 (2026-09-03). 시스는 바로 안 쓴다. 벤티지가 「넣기」를 눌러야
+ * 서버가 저장한다. 잘못 알아들은 걸 바로 넣으면 지우는 게 더 일이다.
+ */
+function ProposalCard({ p }: { p: SysProposal }) {
+  const [state, setState] = useState<{ busy: boolean; done?: string; error?: string }>({ busy: false });
+  return (
+    <div className="sys-card sys-proposal">
+      <div className="sys-card-h">
+        <b className="sys-sec-title">📅 {p.title}</b>
+      </div>
+      <Facts facts={p.facts} />
+      {state.done ? (
+        <div className="sys-line sys-good">✓ {state.done}</div>
+      ) : (
+        <div className="sys-proposal-act">
+          <button
+            type="button"
+            className="primary-btn"
+            disabled={state.busy}
+            onClick={() => {
+              setState({ busy: true });
+              api
+                .sysAct(p.kind, p.payload)
+                .then((r) => setState({ busy: false, done: r.ok ? r.message : undefined, error: r.ok ? undefined : r.message }))
+                .catch((e: Error) => setState({ busy: false, error: e.message }));
+            }}
+          >
+            {state.busy ? "넣는 중…" : "넣기"}
+          </button>
+          <span className="sys-dim">아니면 질문을 고쳐서 다시 — 날짜·시각·제목을 그대로 적으면 잘 알아듣는다</span>
+        </div>
+      )}
+      {state.error && <div className="error-banner">{state.error}</div>}
+    </div>
+  );
+}
+
 function PackView({ pack, onSelectStock }: { pack: SysPack; onSelectStock: (code: string, name: string) => void }) {
   return (
     <div className="sys-pack">
       <div className="sys-dim sys-intent">
         {pack.intent.note} · {(pack.ms / 1000).toFixed(1)}초
       </div>
+      {pack.proposals?.map((p) => (
+        <ProposalCard key={p.id} p={p} />
+      ))}
       {pack.sections.map((s) => (
         <Section key={s.key} s={s} onSelectStock={onSelectStock} />
       ))}
-      {pack.sections.length === 0 && <div className="sys-dim">아무것도 못 알아들었다 — 종목·시장·ETF·금리처럼 물어봐</div>}
+      {pack.sections.length === 0 && !pack.proposals?.length && <div className="sys-dim">아무것도 못 알아들었다 — 종목·시장·ETF·금리처럼 물어봐</div>}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
-import { askSys, interpret, isSysAiReady, type SysStockRef } from "../sysAssist.js";
+import { act, askSys, interpret, isSysAiReady, type SysStockRef } from "../sysAssist.js";
 import type { AskTurn } from "../askMarket.js";
 import { addAsk } from "../askHistory.js";
 
@@ -26,6 +26,17 @@ export function createSysRouter(client: KiwoomClient): Router {
         f && typeof f.code === "string" && /^\d{6}$/.test(f.code) ? { code: f.code, name: String(f.name ?? f.code) } : null;
       const { intent, hit } = await interpret(client, question, focus);
       res.json({ intent, titles: hit.map((t) => t.title) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 제안을 실행 — 화면에서 「넣기」를 눌렀을 때만 온다 */
+  router.post("/act", async (req, res, next) => {
+    try {
+      const kind = String(req.body?.kind ?? "");
+      const payload = (req.body?.payload ?? {}) as Record<string, unknown>;
+      res.json(await act(kind, payload));
     } catch (err) {
       next(err);
     }

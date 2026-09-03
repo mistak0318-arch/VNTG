@@ -3,7 +3,21 @@ import { useSheetBack } from "../../useSheetBack";
 import { api, fmtNum, type IndexDetailData, type IndexRange, type MarketFlow } from "../../api";
 import { CandleChart } from "../CandleChart";
 import { IntradayFlowChart } from "./IntradayFlowChart";
+import { OhlcStrip } from "./OhlcStrip";
 import { useSection } from "../../useSection";
+
+/** 오늘 봉 — 일봉의 마지막 봉이 오늘이면 그것. 기간을 주·월로 바꿔도 남아 있게 따로 든다 */
+interface DayOhlc {
+  dt: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  prevClose: number | null;
+}
+function todayKst(): string {
+  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10).replace(/-/g, "");
+}
 
 /**
  * 코스피·코스닥 상세.
@@ -83,6 +97,7 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
    * 여기로 왔다. 대시보드와 같은 섹션(서버 캐시 공유)이라 추가 호출이 없다.
    */
   const flow = useSection<MarketFlow>("flow", 30_000);
+  const [day, setDay] = useState<DayOhlc | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -90,12 +105,22 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
     setError(null);
     api
       .indexDetail(code, range)
-      .then((d) => alive && setData(d))
+      .then((d) => {
+        if (!alive) return;
+        setData(d);
+        /* 일봉일 때만 오늘 봉을 집어 둔다 — 주·월봉의 마지막 봉은 오늘이 아니다 */
+        if (range === "day" && d.candles.length >= 1) {
+          const c = d.candles[d.candles.length - 1];
+          const p = d.candles[d.candles.length - 2];
+          setDay({ dt: c.dt, open: c.open, high: c.high, low: c.low, close: c.close, prevClose: p?.close ?? null });
+        }
+      })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
     };
   }, [code, range]);
+  useEffect(() => setDay(null), [code]);
 
   const candles = (data?.candles ?? []).slice(-SHOW[range]);
   const last = candles[candles.length - 1];
@@ -122,6 +147,19 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
         </div>
 
         {error && <div className="error-banner">{error}</div>}
+
+        {/* 당일 시·고·저·현재가 (2026-09-03) — 오늘 봉이 아니면(휴장·개장 전) 마지막 거래일로 밝힌다 */}
+        {day && (
+          <OhlcStrip
+            label={day.dt === todayKst() ? "오늘" : `${day.dt.slice(4, 6)}/${day.dt.slice(6, 8)} (마지막 거래일)`}
+            open={day.open}
+            high={day.high}
+            low={day.low}
+            close={day.close}
+            prevClose={day.prevClose}
+            closeLabel={day.dt === todayKst() ? "현재가" : "종가"}
+          />
+        )}
 
         <div className="filter-row">
           {RANGES.map((r) => (

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { OhlcStrip } from "./OhlcStrip";
 import { useSheetBack } from "../../useSheetBack";
 import type { UTCTimestamp } from "lightweight-charts";
 import {
@@ -284,6 +285,28 @@ export function YahooChartSheet({
   const [data, setData] = useState<YahooChart | null>(null);
   const [detail, setDetail] = useState<UsDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  /**
+   * 선물의 **최근 세션 봉** (2026-09-03 — "당일 고점, 저점, 현재가 … 야간선물도").
+   * 일봉(`3mo`)을 받을 때 마지막 봉을 집어 둔다. 야간은 세션이 18:00 에 시작해 날짜를
+   * 넘어가므로 「오늘」이 아니라 「9/2 야간 세션」으로 밝힌다. 다른 봉 단위로 옮겨도 남는다.
+   */
+  const [futDay, setFutDay] = useState<{ t: string; open: number; high: number; low: number; close: number; prevClose: number | null } | null>(null);
+  useEffect(() => {
+    if (!futures) return;
+    let alive = true;
+    api
+      .futuresChart(target.symbol, "D", 10, target.futMarket ?? "CM")
+      .then((r) => {
+        if (!alive || r.candles.length === 0) return;
+        const c = r.candles[r.candles.length - 1];
+        const p = r.candles[r.candles.length - 2];
+        setFutDay({ t: c.t, open: c.open, high: c.high, low: c.low, close: c.close, prevClose: p?.close ?? null });
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [futures, target.symbol, target.futMarket]);
 
   // 상세 숫자는 기간을 바꿔도 그대로다 — 한 번만 받는다
   useEffect(() => {
@@ -540,6 +563,25 @@ export function YahooChartSheet({
             ✕
           </button>
         </div>
+
+        {futures && futDay && (
+          <OhlcStrip
+            label={
+              (target.futMarket ?? "CM") === "CM"
+                ? `${futDay.t.slice(5, 10).replace("-", "/")} 야간 세션 (18:00~05:00)`
+                : futDay.t.slice(0, 10) === new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
+                  ? "오늘"
+                  : `${futDay.t.slice(5, 10).replace("-", "/")} (마지막 거래일)`
+            }
+            open={futDay.open}
+            high={futDay.high}
+            low={futDay.low}
+            /* 현재가는 목록이 준 지금 값이 먼저다(hintPrice) — 일봉 종가는 몇 분 늦다 */
+            close={target.hintPrice ?? futDay.close}
+            prevClose={futDay.prevClose}
+            closeLabel={target.hintPrice != null ? "현재가" : "종가"}
+          />
+        )}
 
         <div className="filter-row">
           {ranges.map((r) => (

@@ -3,6 +3,11 @@ import { useSheetBack } from "../../useSheetBack";
 import { api, fmtNum } from "../../api";
 import { CandleChart } from "../CandleChart";
 import { IntradayFlowChart } from "./IntradayFlowChart";
+import { OhlcStrip } from "./OhlcStrip";
+
+function todayIso(): string {
+  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+}
 
 /**
  * 코스피200 선물(주간) 상세 (2026-08-26) — **코스피/코스닥 시트와 같은 골격.**
@@ -55,6 +60,8 @@ export function FuturesDetailSheet({
   const [flow, setFlow] = useState<
     { date: string; individual: number; foreign: number; institution: number }[] | null
   >(null);
+  /** 오늘 봉 (2026-09-03) — 일봉의 마지막 봉. 주·월로 바꿔도 남는다 */
+  const [day, setDay] = useState<{ t: string; open: number; high: number; low: number; close: number; prevClose: number | null } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -67,6 +74,11 @@ export function FuturesDetailSheet({
         if (!alive) return;
         setCandles(r.candles);
         setChartErr(r.error);
+        if (range === "D" && r.candles.length >= 1) {
+          const c = r.candles[r.candles.length - 1];
+          const p = r.candles[r.candles.length - 2];
+          setDay({ t: c.t, open: c.open, high: c.high, low: c.low, close: c.close, prevClose: p?.close ?? null });
+        }
       })
       .catch((e: Error) => alive && setChartErr(e.message));
     return () => {
@@ -121,6 +133,19 @@ export function FuturesDetailSheet({
             ✕
           </button>
         </div>
+
+        {/* 당일 시·고·저·현재가 (2026-09-03). 현재가는 목록이 준 지금 값 — 일봉 종가는 몇 분 늦다 */}
+        {day && (
+          <OhlcStrip
+            label={day.t.slice(0, 10) === todayIso() ? "오늘" : `${day.t.slice(5, 10).replace("-", "/")} (마지막 거래일)`}
+            open={day.open}
+            high={day.high}
+            low={day.low}
+            close={day.t.slice(0, 10) === todayIso() && target.price > 0 ? target.price : day.close}
+            prevClose={day.prevClose}
+            closeLabel={day.t.slice(0, 10) === todayIso() ? "현재가" : "종가"}
+          />
+        )}
 
         <div className="filter-row">
           {RANGES.map((r) => (
