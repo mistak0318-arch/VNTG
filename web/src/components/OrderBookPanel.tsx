@@ -133,6 +133,21 @@ function useLiveBook(code: string, base: OrderBook | null) {
       delta[`bid-${i}`] = fid(v, String(90 + i)) ?? 0;
     }
   }
+
+  /*
+   * ⚠️ **서버가 주는 것과 같은 차례로 맞춘다** (2026-09-04 고침).
+   *
+   * 벤티지: "주문 메뉴 호가창이 이상한데 종목 상세는 안 그래."
+   * 둘은 **같은 컴포넌트**다. 다른 건 그때 실시간이 붙어 있었느냐였다 —
+   * 실시간에서 만든 매도호가는 `41→50`(1호가=제일 싼 것)이라 **오름차순**인데,
+   * 서버(REST)는 이미 **내림차순**으로 정렬해 준다(`orderBook.ts`). 화면은 하나의 차례만
+   * 알고 그리므로, 실시간이 붙은 쪽만 위아래가 뒤집혀 보였다.
+   *
+   * 그리는 쪽을 고치면 반대쪽이 깨진다. **들어오는 값을 한 모양으로 맞추는 것**이 맞다 —
+   * 매도는 비싼 것이 위, 매수는 비싼 것이 위.
+   */
+  asks.sort((x, y) => y.step - x.step);
+  bids.sort((x, y) => x.step - y.step);
   if (asks.length === 0 || bids.length === 0) return { book: base, live: false, delta: null };
 
   const totalAsk = asks.reduce((a, b) => a + b.qty, 0);
