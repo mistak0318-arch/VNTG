@@ -246,6 +246,28 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
 
     const ticks = ticksOf(tick?.data as Record<string, unknown> | null);
 
+    /*
+     * **현재가는 통합(_AL)이다** (2026-09-04 고침).
+     *
+     * 벤티지: "현재가가 계속 0.00% 로 뜨거든. 현대건설 보고 있는데 지금 0.00% 아닌데."
+     *
+     * 맞다. `ka10001` 을 `noAl` 로 부르고 있어서 **KRX 단독 현재가**였다. KRX 가 열리기 전
+     * (프리 08:00~08:50)에는 KRX 에 오늘 체결이 없어 `cur_prc` 가 전일 종가로 오고,
+     * 기준가도 같은 값이라 **등락률이 늘 0.00%** 였다. NXT 에서는 이미 거래되고 있는데도.
+     *
+     * 그렇다고 조회를 하나 더 늘리지 않는다 — 호가창은 3초마다 도는 자리다.
+     * **이미 받고 있는** 통합 체결(`ka10003` `_AL`)의 첫 행이 가장 최근 체결이므로 그걸 쓴다.
+     * 오늘 체결이 아직 없으면(정말 아무 데서도 안 거래됨) KRX 값으로 떨어진다.
+     *
+     * ⚠️ `krxHigh/krxLow` 는 그대로 KRX 단독이어야 한다 — 이름이 그 뜻이다. 그래서 `i` 를
+     * 통합으로 바꾸지 않고 **가격과 등락률만** 갈아 끼운다.
+     */
+    const basePrice = num(i.base_pric);
+    const alPrice = ticks.length > 0 ? ticks[0].price : 0;
+    const price = alPrice > 0 ? alPrice : num(i.cur_prc);
+    const changeRate =
+      alPrice > 0 && basePrice > 0 ? ((alPrice - basePrice) / basePrice) * 100 : signed(i.flu_rt);
+
     const asks = levels(b, "sel");
     const bids = levels(b, "buy");
     const totalAsk = num(b.tot_sel_req);
@@ -265,8 +287,8 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
       overtimeAsk: num(b.ovt_sel_req),
       overtimeBid: num(b.ovt_buy_req),
       ratio: totalAsk > 0 ? totalBid / totalAsk : null,
-      price: num(i.cur_prc),
-      changeRate: signed(i.flu_rt),
+      price,
+      changeRate,
       open: num(i.open_pric),
       krxHigh: num(i.high_pric),
       krxLow: num(i.low_pric),
@@ -279,7 +301,7 @@ export async function orderBook(client: KiwoomClient, code: string): Promise<Ord
       volume,
       turnover: shares && shares > 0 ? (volume / shares) * 100 : null,
       /** 기준가(전일 종가) — 호가마다 등락률을 붙이려면 이게 있어야 한다 */
-      basePrice: num(i.base_pric),
+      basePrice,
       strength: strengthOf(ticks),
       /** 누적거래대금(원). `ka10003` 이 준다 — `ka10001` 에는 없다 */
       tradeValue: ticks.length > 0 ? ticks[0].accValue : 0,

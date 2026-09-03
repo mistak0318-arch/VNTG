@@ -33,10 +33,16 @@ import { StockSearchBox } from "../components/StockSearchBox";
  * 시간이 남았는지·모의인지 실전인지는 **머리띠에 상시** 붙는다. 헷갈리는 순간이 사고다.
  */
 
+/*
+ * 거래소 — **통합이 먼저** (2026-09-04, 벤티지: "통합 · KRX · NXT 이 순으로 나와 줘야지").
+ *
+ * 통합(SOR)은 키움이 두 시장을 보고 더 좋은 쪽으로 보내는 것이라 **기본으로 고를 만한 것이
+ * 맨 앞**에 있어야 한다. 「그때 열려 있는 곳」 설정도 이 차례로 훑으므로 통합이 먼저 잡힌다.
+ */
 const VENUES: { key: OrderVenue; label: string; hint: string }[] = [
+  { key: "SOR", label: "통합(SOR)", hint: "키움이 KRX·NXT 중 더 좋은 쪽으로 보낸다" },
   { key: "KRX", label: "KRX", hint: "정규장 08:30~15:30" },
   { key: "NXT", label: "NXT", hint: "프리 08:00 · 메인 09:00~15:20 · 애프터 ~20:00" },
-  { key: "SOR", label: "통합(SOR)", hint: "키움이 더 좋은 쪽으로 보낸다" },
 ];
 
 type Sub = "order" | "open" | "fills" | "balance" | "log" | "config";
