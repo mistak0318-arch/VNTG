@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T22:20:46.393Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T22:42:28.694Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "a15a3a1",
+        "subject": "주문 화면 모바일 — 폰 규칙이 덮여 있었다. 잔고·미체결은 줄마다 카드로 접는다"
+      },
       {
         "hash": "e30e121",
         "subject": "미국 탭의 금리 차트가 비어 있었다 — 한투로 보내고 있었다. 야후로"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "811612b",
         "subject": "미니창과 메뉴 새 탭 열기"
-      },
-      {
-        "hash": "228e738",
-        "subject": "표 공통 규칙 - 컬럼 클릭 정렬을 목록형 표 7곳에 확장"
       }
     ]
   }

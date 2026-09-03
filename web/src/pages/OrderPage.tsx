@@ -61,7 +61,10 @@ function isGone(e: unknown): boolean {
 /**
  * 주소로 넘어온 값 (2026-09-04) — 손절 알림이 「값이 채워진 매도 폼」으로 보낸다.
  *
- *   #/order?code=034020&name=두산에너빌리티&side=sell&tt=28&cond=75000&price=75000&qty=100
+ *   #/order?stk=034020&name=두산에너빌리티&side=sell&tt=28&cond=75000&price=75000&qty=100
+ *
+ * ⚠️ 종목 칸 이름이 `stk` 인 이유: `code` 를 쓰면 해시 라우터가 **종목 이동**으로 읽어
+ * 주문 화면 위에 종목 상세 시트를 띄운다(2026-09-04 실측). 라우터가 모르는 이름이어야 한다.
  *
  * ⚠️ **채워 주기만 한다.** 주문서 확인과 주문 비밀번호는 그대로 남아 있다 — 링크 하나로
  * 주문이 나가면 그건 알림에 링크를 심은 사람이 주문을 낼 수 있다는 뜻이 된다.
@@ -78,6 +81,45 @@ interface Prefill {
   key: string;
 }
 
+/**
+ * ⚠️ **해시 라우터보다 먼저 집어 둔다** (2026-09-04 실측).
+ *
+ * 라우터(`useHashRoute`)는 해시를 `{tab, stock}` 만으로 **다시 쓴다** — `#/order?stk=…&qty=…`
+ * 로 들어와도 곧 `#/order` 가 되어 우리 값이 사라진다. 실제로 그래서 프리필이 통째로 날아갔다.
+ *
+ * 이 파일은 App 이 import 하는 순간 실행되므로, 여기서 건 `hashchange` 리스너가 라우터의
+ * 것(첫 렌더 뒤 useEffect 에서 건다)보다 **먼저 등록되고 먼저 불린다.** 그 틈에 값을 집어
+ * 모듈 변수에 둔다. 화면은 그걸 꺼내 쓰고 비운다 — 한 번 쓰고 버리는 쪽지다.
+ */
+let pendingPrefill: Prefill | null = null;
+
+function grabPrefill(): void {
+  const p = readPrefill();
+  if (p.code) pendingPrefill = p;
+}
+
+if (typeof window !== "undefined") {
+  grabPrefill();
+  window.addEventListener("hashchange", grabPrefill);
+}
+
+const EMPTY_PREFILL: Prefill = { code: "", name: "", side: null, tradeType: null, price: "", cond: "", qty: "", key: "" };
+
+/**
+ * 쪽지를 **보기만** 한다 — 비우지 않는다.
+ *
+ * 주문 화면은 잠겨 있을 때도(세션 없음·비밀번호 없음) 뜬다. 거기서 쪽지를 비워 버리면
+ * 로그인을 마치고 폼이 뜨는 순간엔 이미 값이 없다 — 알림을 눌러 온 사람이 빈 폼을 만난다.
+ * 그래서 **폼이 실제로 값을 채운 뒤에** 비운다(`clearPrefill`).
+ */
+function peekPrefill(): Prefill {
+  return pendingPrefill ?? EMPTY_PREFILL;
+}
+
+function clearPrefill(): void {
+  pendingPrefill = null;
+}
+
 function readPrefill(): Prefill {
   const raw = window.location.hash.replace(/^#\/?/, "");
   const q = new URLSearchParams(raw.split("?")[1] ?? "");
@@ -87,7 +129,7 @@ function readPrefill(): Prefill {
   };
   const side = q.get("side");
   return {
-    code: normalizeStockCode(q.get("code") ?? ""),
+    code: normalizeStockCode(q.get("stk") ?? ""),
     name: q.get("name") ?? "",
     side: side === "sell" || side === "buy" ? side : null,
     tradeType: q.get("tt"),
@@ -104,7 +146,7 @@ export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, na
   const [sub, setSub] = useState<Sub>("order");
   const [left, setLeft] = useState(0);
   /* 주소가 값을 들고 오면 그 값으로 폼을 채운다 — 손절 알림이 이 길로 들어온다 */
-  const [prefill, setPrefill] = useState<Prefill>(readPrefill);
+  const [prefill, setPrefill] = useState<Prefill>(peekPrefill);
 
   const load = useCallback(async () => {
     try {
@@ -126,7 +168,10 @@ export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, na
   /* 이미 주문 화면인 채로 알림을 또 누르면 해시만 바뀐다 — 그때도 채워져야 한다 */
   useEffect(() => {
     const onHash = () => {
-      setPrefill(readPrefill());
+      /* 쪽지는 위 모듈 리스너가 이미 집어 뒀다 — 여기서는 보기만 한다 */
+      const p = peekPrefill();
+      if (!p.code) return;
+      setPrefill(p);
       setSub("order");
     };
     window.addEventListener("hashchange", onHash);
@@ -491,7 +536,16 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
   const [side, setSide] = useState<"buy" | "sell">(prefill.side ?? "buy");
   const [code, setCode] = useState(prefill.code);
   const [name, setName] = useState(prefill.name);
-  const [venue, setVenue] = useState<OrderVenue>("KRX");
+  /*
+   * 기본 거래소는 **지금 열려 있는 곳** (2026-09-04).
+   *
+   * 예전엔 무조건 KRX 였다. 그래서 아침 8시대(NXT 프리마켓만 열린 시간)에 들어오면
+   * 「KRX 가 주문을 받는 시간이 아니다」만 뜨고 — NXT 를 누르면 되는데 그 말이 없었다.
+   * 벤티지: "nxt에서는 거래 안되는거야?" 되는데 **화면이 안 되는 것처럼 보였다.**
+   */
+  const [venue, setVenue] = useState<OrderVenue>(
+    () => VENUES.map((v) => v.key).find((k) => status.open[k]) ?? "KRX",
+  );
   /*
    * 매매구분 (2026-09-04). 예전엔 「시장가」 스위치 하나였는데 실제로는 18가지다 —
    * 목록은 **서버가 준다**(status.tradeTypes). 화면이 표를 들고 있으면 언젠가 서버와 갈린다.
@@ -525,6 +579,8 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
     if (prefill.cond) setCond(prefill.cond);
     /* 발동가가 채워져 왔으면 다음 호가 클릭은 주문단가 차례다 */
     setCondFocus(!prefill.cond);
+    /* 다 썼으니 쪽지를 비운다 — 화면을 옮겼다 돌아왔을 때 손으로 고친 값을 덮지 않게 */
+    clearPrefill();
   }, [prefill.key]);
 
   const types: TradeType[] = status.tradeTypes ?? [];
@@ -535,6 +591,7 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
   const usesCond = tt?.cond === true;
   /* 시간외 구분은 정규장 밖에 내는 것이 정상이라 「시간 아님」 경고를 띄우지 않는다 */
   const open = tt?.late ? true : status.open[venue];
+  const openVenues = VENUES.filter((v) => status.open[v.key]).map((v) => v.label);
   const ready = Boolean(code) && Boolean(qty) && (!needsPrice || Boolean(price)) && (!usesCond || Boolean(cond));
 
   /** 호가창이 부른다 — 값을 안 쓰는 구분이면 무시한다(넣어 봐야 서버가 거절한다) */
@@ -573,39 +630,12 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
   }
 
   return (
-    <div className="ord-grid">
-      <div className="ord-book">
-        {code ? (
-          <>
-            <OrderBookPanel code={code} onPickPrice={pickPrice} />
-            <p className="ord-note">
-              호가를 누르면 {usesCond ? <b>{condFocus ? "발동가" : "주문단가"}</b> : "가격"} 칸에 들어간다
-              {usesCond && (
-                <>
-                  {" — "}
-                  <button type="button" className="ord-mk" onClick={() => setCondFocus((v) => !v)}>
-                    {condFocus ? "발동가로 받는 중" : "주문단가로 받는 중"}
-                  </button>
-                </>
-              )}
-              {!usesPrice && <> — 지금 구분({tt?.label})은 값을 안 쓴다</>}
-            </p>
-          </>
-        ) : (
-          <p className="empty">종목을 고르면 호가가 뜬다</p>
-        )}
-      </div>
-
-      <form className={`ord-form ${side}`} onSubmit={(e) => void prepare(e)}>
-        <div className="ord-side">
-          <button type="button" className={side === "buy" ? "on buy" : ""} onClick={() => setSide("buy")}>
-            매수
-          </button>
-          <button type="button" className={side === "sell" ? "on sell" : ""} onClick={() => setSide("sell")}>
-            매도
-          </button>
-        </div>
-
+    <form className={`ord-wrap ${side}`} onSubmit={(e) => void prepare(e)}>
+      {/*
+        머리는 폭을 다 쓴다 — 종목과 매수·매도는 「무엇을 어느 쪽으로」라서 제일 먼저 정한다.
+        키움 앱도 이 둘을 호가창 **위**에 두고, 그 아래를 호가 | 주문으로 가른다.
+      */}
+      <div className="ord-head">
         <StockPick
           code={code}
           name={name}
@@ -614,99 +644,165 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
             setName(n);
           }}
         />
+        <div className="ord-side">
+          <button type="button" className={side === "buy" ? "on buy" : ""} onClick={() => setSide("buy")}>
+            매수
+          </button>
+          <button type="button" className={side === "sell" ? "on sell" : ""} onClick={() => setSide("sell")}>
+            매도
+          </button>
+        </div>
+      </div>
 
-        <label className="ord-lab">거래소</label>
-        <div className="ord-venue">
-          {VENUES.map((v) => (
-            <button
-              key={v.key}
-              type="button"
-              title={v.hint}
-              className={`${venue === v.key ? "on" : ""}${status.open[v.key] ? "" : " shut"}`}
-              onClick={() => setVenue(v.key)}
-            >
-              {v.label}
-              <i>{status.open[v.key] ? "열림" : "닫힘"}</i>
-            </button>
-          ))}
+      {/*
+        호가 | 주문칸 (2026-09-04 — 벤티지: "호가창이 밀려서 안보여, 주문도 세로 배치라 불편해.
+        키움처럼 구현할 수 있겠니?").
+
+        예전엔 폰에서 폼을 세우고 호가를 **그 아래로** 내렸다. 그러면 값을 넣는 동안 호가가
+        화면 밖이라, 호가를 눌러 값을 넣는다는 이 화면의 핵심이 죽는다. 키움 앱처럼 **폰에서도
+        나란히** 둔다 — 왼쪽은 호가(좁게, 가격·잔량만), 오른쪽은 입력칸.
+      */}
+      <div className="ord-grid">
+        <div className="ord-book">
+          {code ? (
+            <OrderBookPanel code={code} onPickPrice={pickPrice} />
+          ) : (
+            <p className="empty">종목을 고르면 호가가 뜬다</p>
+          )}
         </div>
 
-        <label className="ord-lab">수량</label>
-        <input
-          className="ord-in"
-          inputMode="numeric"
-          value={qty}
-          onChange={(e) => setQty(e.target.value.replace(/\D/g, ""))}
-          placeholder="주"
-        />
+        <div className="ord-fields">
+          <label className="ord-lab">거래소</label>
+          <div className="ord-venue">
+            {VENUES.map((v) => (
+              <button
+                key={v.key}
+                type="button"
+                title={v.hint}
+                className={`${venue === v.key ? "on" : ""}${status.open[v.key] ? "" : " shut"}`}
+                onClick={() => setVenue(v.key)}
+              >
+                {v.label}
+                <i>{status.open[v.key] ? "열림" : "닫힘"}</i>
+              </button>
+            ))}
+          </div>
 
-        <label className="ord-lab">매매구분</label>
-        <select
-          className="ord-in"
-          value={tradeType}
-          onChange={(e) => {
-            setTradeType(e.target.value);
-            /* 구분이 바뀌면 호가 클릭이 갈 곳도 처음으로 — 스톱을 새로 고르면 발동가부터다 */
-            setCondFocus(true);
-          }}
-        >
-          {types.map((t) => (
-            <option key={t.code} value={t.code}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-        {tt && <div className="ord-caps">{tt.hint}</div>}
+          <label className="ord-lab">매매구분</label>
+          <select
+            className="ord-in"
+            value={tradeType}
+            onChange={(e) => {
+              setTradeType(e.target.value);
+              /* 구분이 바뀌면 호가 클릭이 갈 곳도 처음으로 — 스톱을 새로 고르면 발동가부터다 */
+              setCondFocus(true);
+            }}
+          >
+            {types.map((t) => (
+              <option key={t.code} value={t.code}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+          {tt && <div className="ord-caps">{tt.hint}</div>}
 
-        {usesCond && (
-          <>
-            <label className="ord-lab">발동가 (조건단가)</label>
+          <label className="ord-lab">수량</label>
+          <div className="ord-step">
+            <button type="button" onClick={() => setQty((v) => String(Math.max(0, (Number(v) || 0) - 1)))}>
+              −
+            </button>
             <input
               className="ord-in"
               inputMode="numeric"
-              value={cond}
-              onChange={(e) => setCond(e.target.value.replace(/\D/g, ""))}
-              placeholder="이 값에 닿으면 주문이 나간다"
+              value={qty}
+              onChange={(e) => setQty(e.target.value.replace(/\D/g, ""))}
+              placeholder="주"
             />
-          </>
-        )}
+            <button type="button" onClick={() => setQty((v) => String((Number(v) || 0) + 1))}>
+              ＋
+            </button>
+          </div>
 
-        <label className="ord-lab">{usesCond ? "주문단가 (발동 뒤 낼 값)" : "가격"}</label>
-        <input
-          className="ord-in"
-          inputMode="numeric"
-          disabled={!usesPrice}
-          value={usesPrice ? price : ""}
-          onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))}
-          placeholder={usesPrice ? (needsPrice ? "원" : "원 (안 적어도 된다)") : `${tt?.label ?? ""} — 값을 안 적는다`}
-        />
-
-        <div className="ord-sum">
-          <span>예상 금액</span>
-          <b>{!price || !qty ? "-" : won(Number(price) * Number(qty))}</b>
-        </div>
-        <div className="ord-caps">
-          한 건 {won(status.guard.maxOrderKrw)} · 지정가 현재가 ±{status.guard.priceCollarPct}%
-          {usesCond ? ` · 발동가 현재가 ±${status.guard.stopCollarPct}%` : ""} · 남은 건수{" "}
-          {Math.max(0, status.guard.maxDailyCount - status.today.count)}
-        </div>
-
-        {!open && status.guard.marketHoursOnly && <p className="ord-err">{venue} 가 주문을 받는 시간이 아니다</p>}
-        {error && <p className="ord-err">{error}</p>}
-
-        <button type="submit" className={`ord-go ${side}`} disabled={busy || !ready}>
-          {busy ? "확인 중…" : side === "buy" ? "매수 주문서 만들기" : "매도 주문서 만들기"}
-        </button>
-        <p className="ord-note">
-          {usesCond ? (
+          {usesCond && (
             <>
-              발동가에 닿으면 주문단가로 나간다 — <b>지켜보는 쪽은 키움</b>이라 앱을 꺼 둬도 산다. 급락에서는
-              주문단가에 안 붙을 수 있으니, 확실히 털려면 주문단가를 발동가보다 조금 아래로.{" "}
+              <label className="ord-lab">발동가</label>
+              <input
+                className="ord-in"
+                inputMode="numeric"
+                value={cond}
+                onChange={(e) => setCond(e.target.value.replace(/\D/g, ""))}
+                placeholder="이 값에 닿으면"
+              />
             </>
-          ) : null}
-          주문서를 눈으로 확인하고 비밀번호를 넣어야 실제로 나간다.
-        </p>
-      </form>
+          )}
+
+          <label className="ord-lab">{usesCond ? "주문단가" : "가격"}</label>
+          <div className="ord-step">
+            <button type="button" disabled={!usesPrice} onClick={() => setPrice((v) => String(Math.max(0, (Number(v) || 0) - 100)))}>
+              −
+            </button>
+            <input
+              className="ord-in"
+              inputMode="numeric"
+              disabled={!usesPrice}
+              value={usesPrice ? price : ""}
+              onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))}
+              placeholder={usesPrice ? "원" : `${tt?.label ?? ""} — 값 없음`}
+            />
+            <button type="button" disabled={!usesPrice} onClick={() => setPrice((v) => String((Number(v) || 0) + 100))}>
+              ＋
+            </button>
+          </div>
+
+          <div className="ord-sum">
+            <span>예상 금액</span>
+            <b>{!price || !qty ? "-" : won(Number(price) * Number(qty))}</b>
+          </div>
+          <div className="ord-caps">
+            한 건 {won(status.guard.maxOrderKrw)} · 지정가 현재가 ±{status.guard.priceCollarPct}%
+            {usesCond ? ` · 발동가 ±${status.guard.stopCollarPct}%` : ""} · 남은 건수{" "}
+            {Math.max(0, status.guard.maxDailyCount - status.today.count)}
+          </div>
+        </div>
+
+        <div className="ord-submit">
+          {!open && status.guard.marketHoursOnly && (
+            <p className="ord-err">
+              {venue} 는 지금 주문을 안 받는다
+              {openVenues.length > 0 ? (
+                <>
+                  {" — "}
+                  <b>{openVenues.join(" · ")}</b> 는 열려 있다
+                </>
+              ) : (
+                <> — 지금은 어느 거래소도 안 받는다 (NXT 프리 08:00 · KRX 08:30 · NXT 애프터 ~20:00)</>
+              )}
+            </p>
+          )}
+          {error && <p className="ord-err">{error}</p>}
+          <button type="submit" className={`ord-go ${side}`} disabled={busy || !ready}>
+            {busy ? "확인 중…" : side === "buy" ? "매수 주문" : "매도 주문"}
+          </button>
+          <p className="ord-note">
+            {code && (
+              <>
+                호가를 누르면 {usesCond ? <b>{condFocus ? "발동가" : "주문단가"}</b> : "가격"} 칸에 들어간다
+                {usesCond && (
+                  <>
+                    {" · "}
+                    <button type="button" className="ord-mk" onClick={() => setCondFocus((v) => !v)}>
+                      {condFocus ? "발동가로 받는 중" : "주문단가로 받는 중"}
+                    </button>
+                  </>
+                )}
+                {" · "}
+              </>
+            )}
+            {usesCond ? "발동가에 닿으면 주문단가로 나간다 — 지켜보는 쪽은 키움이라 앱을 꺼 둬도 산다. " : ""}
+            주문서를 눈으로 확인하고 비밀번호를 넣어야 실제로 나간다.
+          </p>
+        </div>
+      </div>
 
       {ticket && (
         <Confirm
@@ -721,7 +817,7 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
           }}
         />
       )}
-    </div>
+    </form>
   );
 }
 
@@ -1149,7 +1245,7 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                       {saved > 0 && (
                         <a
                           className="ord-x stop"
-                          href={`#/order?code=${h.code}&name=${encodeURIComponent(
+                          href={`#/order?stk=${h.code}&name=${encodeURIComponent(
                             h.name,
                           )}&side=sell&tt=28&cond=${saved}&price=${saved}&qty=${h.qty}`}
                           title={`${h.qty}주 · 발동가 ${saved.toLocaleString()}원으로 매도 스톱주문`}

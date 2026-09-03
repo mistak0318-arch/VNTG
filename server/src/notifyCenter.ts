@@ -319,8 +319,13 @@ export function stockLink(code: string, name: string): string {
  * 둘지는 사람이 정할 일이라 기본값을 임의로 낮추지 않는다(화면이 그 사정을 적어 준다).
  */
 export function stopOrderLink(o: { code: string; name: string; stop: number; qty: number }): string {
+  /*
+   * ⚠️ 파라미터 이름이 `code` 면 안 된다 — 해시 라우터가 그걸 **종목 이동**으로 읽어
+   * 주문 화면 위에 종목 상세 시트를 띄운다(2026-09-04 실측). 주문 폼만 채우려는 것이라
+   * 라우터가 모르는 이름(`stk`)을 쓴다.
+   */
   const q = new URLSearchParams({
-    code: o.code,
+    stk: o.code,
     name: o.name,
     side: "sell",
     tt: "28",

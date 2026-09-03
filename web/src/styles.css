@@ -14641,14 +14641,48 @@ tr:hover .sd-del { opacity: 0.75; }
  * 호가 칸이 `1fr` 이면 27인치에서 1,600px 까지 늘어난다 — 호가 열 단이 화면을 가로지르고
  * 주문 폼은 저 멀리 오른쪽이다. **눈이 가격에서 수량 칸까지 가는 거리가 곧 오발주다.**
  */
+.ord-wrap { display: flex; flex-direction: column; gap: 0.7rem; max-width: 1140px; }
+.ord-head { display: flex; gap: 0.6rem; align-items: flex-start; }
+.ord-head .ord-pick { flex: 1 1 auto; max-width: 22rem; }
+.ord-head .ord-side { flex: 0 0 12rem; }
+
 .ord-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-rows: auto auto;
   gap: 0.8rem;
   align-items: start;
-  max-width: 1140px;
 }
+/* 호가는 왼쪽 한 칸을 세로로 다 쓴다 */
+.ord-book { grid-column: 1; grid-row: 1 / span 2; }
+.ord-fields { grid-column: 2; grid-row: 1; }
+.ord-submit { grid-column: 2; grid-row: 2; }
 .ord-book .ob { max-width: 780px; }
+
+.ord-fields,
+.ord-submit {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.ord-submit .ord-go { padding: 0.7rem; font-size: 1rem; }
+
+/* 수량·가격의 −/＋ (키움 앱과 같은 자리) */
+.ord-step { display: grid; grid-template-columns: 2.2rem 1fr 2.2rem; gap: 0.25rem; }
+.ord-step button {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 8px;
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+.ord-step button:disabled { opacity: 0.35; cursor: default; }
+.ord-step .ord-in { text-align: right; }
 .ord-book {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -14875,10 +14909,45 @@ tr:hover .sd-del { opacity: 0.75; }
  * 첫 칸을 붙박이로 세운다 — 옆으로 밀어도 종목명은 남는다.
  */
 @media (max-width: 900px) {
-  .ord-grid { grid-template-columns: 1fr; max-width: none; }
-  /* 폰에서는 주문 폼이 먼저다 — 호가는 아래로 내린다 */
-  .ord-book { order: 2; }
-  .ord-form { order: 1; }
+  .ord-wrap { max-width: none; }
+  /*
+   * **폰에서도 호가와 주문칸을 나란히** (키움 앱과 같은 배치).
+   *
+   * 예전엔 한 칸으로 세우고 호가를 아래로 내렸다. 그러면 값을 넣는 동안 호가가 화면 밖이라,
+   * 「호가를 눌러 값을 넣는다」는 이 화면의 핵심이 죽는다. 왼쪽을 좁게 주고 호가는 **가격과
+   * 잔량만** 남긴다 — 시·고·저와 잔량비 같은 곁가지는 폰에서 접는다(아래 .ord-book 규칙).
+   */
+  .ord-grid { grid-template-columns: 40% minmax(0, 1fr); gap: 0.45rem; }
+  .ord-book { grid-column: 1; grid-row: 1; }
+  .ord-fields { grid-column: 2; grid-row: 1; padding: 0.5rem; gap: 0.3rem; }
+  /* 주문 단추는 폭을 다 쓴다 — 엄지가 닿는 자리다 */
+  .ord-submit { grid-column: 1 / -1; grid-row: 2; }
+
+  .ord-head { flex-direction: column; gap: 0.4rem; }
+  .ord-head .ord-pick { max-width: none; }
+  .ord-head .ord-side { flex: none; }
+
+  /* 호가창을 가격·잔량 두 줄로 — 곁가지는 접는다 */
+  .ord-book .ob-head,
+  .ord-book .ob-flow,
+  .ord-book .ob-side,
+  .ord-book .ob-total,
+  .ord-book .ob-foot,
+  /* 호가창 아래 설명문 — 폰의 좁은 왼쪽 칸에서는 호가보다 자리를 더 먹었다 */
+  .ord-book .table-note { display: none; }
+  .ord-book .ob { padding: 0; }
+  .ord-book .ob-body { display: block; }
+  .ord-book .ob-book { flex: none; width: 100%; }
+  .ord-book .ob-row { grid-template-columns: 1fr 4.6rem 1fr; height: 1.25rem; font-size: 0.72rem; }
+  .ord-book .ob-rt { display: none; }
+  .ord-book .ob-d { display: none; }
+
+  .ord-venue button { font-size: 0.74rem; padding: 0.3rem 0.1rem; }
+  .ord-venue button i { font-size: 0.6rem; }
+  .ord-lab { font-size: 0.74rem; margin-top: 0.1rem; }
+  .ord-caps { font-size: 0.68rem; }
+  .ord-sum b { font-size: 0.95rem; }
+  .ord-step { grid-template-columns: 1.9rem 1fr 1.9rem; }
 
   .ord-band { font-size: 0.8rem; padding: 0.35rem 0.55rem; gap: 0.35rem; }
   .ord-band-mid { flex-basis: 100%; order: 3; font-size: 0.74rem; }
@@ -14894,7 +14963,6 @@ tr:hover .sd-del { opacity: 0.75; }
   .ord-subs::-webkit-scrollbar { display: none; }
   .ord-sub { flex: none; }
 
-  .ord-form { padding: 0.6rem; }
   /* iOS 는 16px 아래 입력칸에 들어가면 화면을 확대한다 — 그러면 판이 통째로 밀린다 */
   .ord-in,
   .ord-stop-in { font-size: 16px; }

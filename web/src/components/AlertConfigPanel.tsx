@@ -100,7 +100,7 @@ function StopWatchBlock() {
                 <a
                   key={g.code}
                   className="sw-stop-btn"
-                  href={`#/order?code=${g.code}&name=${encodeURIComponent(g.name)}&side=sell&tt=28&cond=${Math.round(
+                  href={`#/order?stk=${g.code}&name=${encodeURIComponent(g.name)}&side=sell&tt=28&cond=${Math.round(
                     g.stop,
                   )}&price=${Math.round(g.stop)}&qty=${g.qty}`}
                   title={`${g.name} ${g.qty}주 · 발동가 ${Math.round(g.stop).toLocaleString()}원`}
