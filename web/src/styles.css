@@ -14162,3 +14162,74 @@ tr:hover .sd-del { opacity: 0.75; }
   cursor: pointer;
 }
 .nb-cfg-gh:hover { background: var(--panel); }
+
+/* ===== 관심종목 요약 카드 (2026-09-03 개편 — 접힘·일곱 묶음·숫자 누르면 나열) ===== */
+.wl-sum .collapsible-head h2 { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.wl-sum-scope { font-size: 0.72rem; font-weight: 400; color: var(--muted); }
+.wl-sum-brief {
+  margin-left: auto;
+  flex: none;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.wl-sum-brief i { font-style: normal; opacity: .6; }
+.wl-sum-warn { color: #f5c542; }
+.wl-sum-groups { display: flex; flex-direction: column; gap: 10px; }
+.wl-sum-group { display: grid; grid-template-columns: 7.5rem 1fr; gap: 6px 10px; align-items: start; }
+@media (max-width: 640px) { .wl-sum-group { grid-template-columns: 1fr; gap: 3px; } }
+.wl-sum-title { font-size: 0.78rem; color: var(--muted); padding-top: 6px; }
+.wl-sum-stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.wl-sum-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.wl-sum-stat:hover { border-color: var(--blue); }
+.wl-sum-stat .label { font-size: 0.76rem; color: var(--muted); }
+.wl-sum-stat .value { font-size: 0.98rem; font-weight: 700; }
+.wl-sum-stat.tone-up .value { color: var(--red); }
+.wl-sum-stat.tone-down .value { color: var(--blue); }
+.wl-sum-stat.tone-warn .value { color: #f5c542; }
+.wl-sum-stat.zero { opacity: .45; cursor: default; }
+.wl-sum-stat.zero .value { color: var(--muted); }
+.wl-sum-stat.on { border-color: var(--blue); background: rgba(76, 141, 255, 0.12); }
+.wl-sum-stat.on .label { color: var(--text); }
+.wl-sum-list { margin-top: 12px; border-top: 1px dashed var(--border); padding-top: 10px; }
+.wl-sum-list-head { display: flex; align-items: baseline; gap: 6px; font-size: 0.82rem; margin-bottom: 8px; }
+.wl-sum-list-head em { font-style: normal; color: var(--muted); font-size: 0.76rem; flex: 1 1 auto; min-width: 0; }
+.wl-sum-close { margin-left: auto; border: none; background: none; color: var(--muted); cursor: pointer; font: inherit; }
+.wl-sum-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 4px 10px; }
+.wl-sum-item {
+  display: grid;
+  grid-template-columns: 1fr 4.2rem 4.2rem;
+  gap: 6px;
+  align-items: baseline;
+  padding: 4px 6px;
+  border: none;
+  border-bottom: 1px dashed var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.wl-sum-item:hover { background: var(--panel-2); }
+.wl-sum-item .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-sum-item .d { text-align: right; font-size: 0.78rem; }
+.wl-sum-cols { flex: none; font-size: 0.7rem; color: var(--muted); }
+.wl-sum-list-head { flex-wrap: wrap; }
+@media (max-width: 640px) { .wl-sum-list-head em { flex: 1 1 100%; } }

@@ -1185,7 +1185,11 @@
       "Bash(curl -s --max-time 20 \"http://localhost:4000/api/market/search?q=041460\")",
       "Bash(curl -s --max-time 20 \"http://localhost:4000/api/market/info/041460\")",
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(s\\);console.log\\('stk_nm:',JSON.stringify\\(j.stk_nm\\),'| stk_cd:',JSON.stringify\\(j.stk_cd\\),'| cur_prc:',j.cur_prc,'| _market:',JSON.stringify\\(j._market\\)\\);console.log\\('키 일부:',Object.keys\\(j\\).slice\\(0,20\\).join\\(','\\)\\)}catch\\(e\\){console.log\\('파싱실패',s.slice\\(0,300\\)\\)}}\\)\")",
-      "Bash(curl -s --max-time 300 -X POST \"http://localhost:4000/api/sector-flow/backfill?days=70\")"
+      "Bash(curl -s --max-time 300 -X POST \"http://localhost:4000/api/sector-flow/backfill?days=70\")",
+      "PowerShell(\\(Get-Content web/src/pages/KiwoomWatchlistPage.tsx | Measure-Object -Line\\).Lines; Select-String -Path web/src/App.tsx -Pattern \"관심종목\" | Select-Object -First 10)",
+      "PowerShell(\\(Get-Content web/src/styles.css | Measure-Object -Line\\).Lines; Get-Content web/src/styles.css -Tail 5)",
+      "PowerShell(Set-Location web; npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 20; \"tsc exit $LASTEXITCODE\")",
+      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\"; Get-Date -Format \"HH:mm\"; Set-Location web; npx tsc --noEmit -p tsconfig.json; \"tsc exit $LASTEXITCODE\")"
     ]
   }
 }

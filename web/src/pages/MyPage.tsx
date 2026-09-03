@@ -10,6 +10,7 @@ import {
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { ScenarioCard } from "../components/ScenarioCard";
+import { WatchSummaryCard, type SummaryRow } from "../components/WatchSummaryCard";
 import { useAutoRefresh } from "../useAutoRefresh";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useDragOrder } from "../useDragOrder";
@@ -578,11 +579,21 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     }
   }
 
-  // 요약: 수급이 살아있는 종목이 몇 개인지
-  const foreignBuying = items.filter((i) => i.foreign5 > 0).length;
-  const instBuying = items.filter((i) => i.inst5 > 0).length;
-  const trendOk = items.filter((i) => i.trendPass === true).length;
-  const profitable = items.filter((i) => (i.returnRate ?? 0) > 0).length;
+  /*
+   * 요약 카드에 줄 행 — **지금 보고 있는 그룹·상태 안에서**, 구분선은 빼고, 당일·수익률은
+   * 표와 똑같이 실시간이 있으면 그것. 카드 자체는 `WatchSummaryCard` (접힘·묶음·클릭 나열).
+   */
+  const summaryRows: SummaryRow[] = visible
+    .filter((r) => !r.divider)
+    .map((r) => {
+      const lv = liveOf(r.code);
+      const ret =
+        lv && r.addedPrice > 0 ? ((lv.price - r.addedPrice) / r.addedPrice) * 100 : r.returnRate;
+      return { r, rate: lv?.rate ?? r.changeRate, ret, held: heldDays(r.addedAt) };
+    });
+  const summaryScope =
+    (activeGroup === ALL ? "전체" : activeGroup) +
+    (statusFilter ? ` · ${statuses.find((s) => s.key === statusFilter)?.label ?? statusFilter}` : "");
 
   return (
     <div>
@@ -947,31 +958,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
         </div>
       )}
 
-      <section className="card">
-        <h2>관심종목 요약 ({items.length})</h2>
-        <div className="summary-grid">
-          <div className="summary-item">
-            <div className="label">수익 중</div>
-            <div className="value">
-              {profitable} / {items.length}
-            </div>
-          </div>
-          <div className="summary-item">
-            <div className="label">정배열</div>
-            <div className="value">
-              {trendOk} / {items.length}
-            </div>
-          </div>
-          <div className="summary-item">
-            <div className="label">외인 5일 순매수</div>
-            <div className="value positive">{foreignBuying}</div>
-          </div>
-          <div className="summary-item">
-            <div className="label">기관 5일 순매수</div>
-            <div className="value positive">{instBuying}</div>
-          </div>
-        </div>
-      </section>
+      <WatchSummaryCard rows={summaryRows} scopeLabel={summaryScope} statuses={statuses} onSelectStock={onSelectStock} />
 
       {loading && items.length === 0 && <div className="empty">불러오는 중...</div>}
 
