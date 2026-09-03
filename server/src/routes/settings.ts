@@ -123,6 +123,13 @@ export function createSettingsRouter(): Router {
             lastSent: lastOf("buzz"),
           },
           {
+            key: "order",
+            label: "주문·체결",
+            enabled: (process.env.ORDERS_ENABLED ?? "").trim() === "1",
+            room: dedicated("order"),
+            lastSent: lastOf("order"),
+          },
+          {
             key: "report",
             label: "데일리 리포트",
             enabled: true, // 판별 on/off 는 리포트 일정에서

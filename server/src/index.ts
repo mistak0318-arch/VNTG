@@ -50,6 +50,7 @@ import { startClosesScheduler } from "./dailyCloses.js";
 import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createSysRouter } from "./routes/sys.js";
+import { createOrderRouter } from "./routes/order.js";
 import { startSysScheduler } from "./sysAssist.js";
 import { createTradeRouter } from "./routes/trade.js";
 import { createCustomThemeRouter } from "./routes/customThemes.js";
@@ -214,6 +215,8 @@ app.use("/api/ai", createAiRouter());
 app.use("/api/ask", createAskRouter(client));
 /* 시스 — 플로팅 도우미. 일반 모드는 우리 데이터만(비용 0), AI 모드는 묶음을 문맥으로 askMarket */
 app.use("/api/sys", createSysRouter(client));
+/* 주문 (2026-09-03) — ORDERS_ENABLED=1 + 주문 앱키 + 주문 세션이 없으면 /status 말고는 전부 404 */
+app.use("/api/order", createOrderRouter(client));
 app.use("/api/trade", createTradeRouter(client));
 app.use("/api/custom-themes", createCustomThemeRouter(client));
 app.use("/api/sector-flow", createSectorFlowRouter(client));

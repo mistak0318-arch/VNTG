@@ -102,6 +102,8 @@ export type NoticeSource =
   | "live"
   | "stopWatch"
   | "sys"
+  /** 주문 체결 (2026-09-03) — 우리가 낸 주문이 체결되면 */
+  | "order"
   | "etc";
 
 /**
@@ -228,6 +230,13 @@ export const NOTICE_SOURCES: {
     group: "mine",
     label: "시스 되짚기",
     hint: "오늘 시스에게 물어본 종목이 그 뒤로 어떻게 됐나 — 마감 뒤 한 번 (2026-09-03)",
+    def: true,
+  },
+  {
+    key: "order",
+    group: "mine",
+    label: "주문 체결",
+    hint: "주문 메뉴에서 낸 주문이 체결(일부 체결)되면 — 텔레그램 order 방에도 같이 간다 (2026-09-03)",
     def: true,
   },
   { key: "etc", group: "system", label: "그 밖에", hint: "출처를 안 적은 알림", def: true },

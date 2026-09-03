@@ -14511,3 +14511,344 @@ tr:hover .sd-del { opacity: 0.75; }
 }
 /* 시스 읽어주기 줄 (2026-09-03) */
 .sys-tts { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+
+/* ===== 주문 (2026-09-03) =====================================================
+ *
+ * 이 화면만의 규칙: **모의냐 실전이냐가 항상 눈에 있어야 한다.** 머리띠 색이 그 역할이다
+ * (모의=파랑, 실전=빨강). 매수·매도 버튼도 색을 갈라 둔다 — 헷갈리는 순간이 사고다.
+ */
+
+.ord .page-title { margin-bottom: 0.6rem; }
+
+.ord-band {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.4rem 0.7rem;
+  border-radius: 8px;
+  margin-bottom: 0.7rem;
+  font-size: 0.86rem;
+  border: 1px solid transparent;
+}
+.ord-band.mock {
+  background: rgba(76, 141, 255, 0.12);
+  border-color: rgba(76, 141, 255, 0.45);
+}
+.ord-band.real {
+  background: rgba(255, 92, 92, 0.14);
+  border-color: rgba(255, 92, 92, 0.55);
+}
+.ord-band-tag { font-weight: 700; letter-spacing: 0.02em; }
+.ord-band.mock .ord-band-tag { color: var(--blue); }
+.ord-band.real .ord-band-tag { color: var(--red); }
+.ord-band-mid { color: var(--muted); flex: 1 1 auto; }
+.ord-band-timer { font-variant-numeric: tabular-nums; color: var(--text); }
+.ord-band-btn {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.16rem 0.5rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.ord-band-btn:hover { border-color: var(--red); color: var(--red); }
+
+/* ── 닫힌 문들 ── */
+.ord-off,
+.ord-gate {
+  max-width: 460px;
+  margin: 2rem auto;
+  padding: 1.4rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  text-align: center;
+}
+.ord-off-mark,
+.ord-gate-mark { font-size: 2rem; }
+.ord-off b,
+.ord-gate b { font-size: 1.05rem; }
+.ord-off p,
+.ord-gate p { color: var(--muted); font-size: 0.86rem; margin: 0; line-height: 1.6; }
+.ord-env {
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem;
+  font-size: 0.76rem;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--muted);
+}
+.ord-in {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+}
+.ord-in:disabled { opacity: 0.45; }
+.ord-in:focus { outline: none; border-color: var(--blue); }
+.ord-err { color: var(--red); font-size: 0.85rem; margin: 0.1rem 0; }
+.ord-ok { color: var(--green); font-size: 0.85rem; margin: 0.1rem 0; }
+.ord-note { color: var(--muted); font-size: 0.78rem; line-height: 1.6; margin: 0.5rem 0 0; }
+
+.ord-go {
+  padding: 0.55rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ord-go:disabled { opacity: 0.4; cursor: default; }
+.ord-go.buy { background: rgba(255, 92, 92, 0.18); border-color: var(--red); color: var(--red); }
+.ord-go.sell { background: rgba(76, 141, 255, 0.18); border-color: var(--blue); color: var(--blue); }
+
+/* ── 서브탭 ── */
+.ord-subs { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
+.ord-sub {
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+.ord-sub.on { background: var(--panel-2); color: var(--text); border-color: var(--blue); }
+
+/* ── 주문 폼 ── */
+.ord-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 0.8rem; align-items: start; }
+.ord-book {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.5rem;
+  min-height: 200px;
+}
+.ord-form {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.ord-side { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; }
+.ord-side button {
+  padding: 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-weight: 700;
+  cursor: pointer;
+}
+.ord-side button.on.buy { background: rgba(255, 92, 92, 0.2); border-color: var(--red); color: var(--red); }
+.ord-side button.on.sell { background: rgba(76, 141, 255, 0.2); border-color: var(--blue); color: var(--blue); }
+
+.ord-lab {
+  font-size: 0.8rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.2rem;
+}
+.ord-mk {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.ord-mk.on { border-color: var(--blue); color: var(--blue); }
+
+.ord-venue { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; }
+.ord-venue button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.35rem 0.2rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.ord-venue button i { font-style: normal; font-size: 0.68rem; color: var(--green); }
+.ord-venue button.shut i { color: var(--muted); }
+.ord-venue button.on { border-color: var(--blue); }
+
+.ord-pick { position: relative; display: flex; flex-direction: column; gap: 0.3rem; }
+.ord-picked { display: flex; align-items: baseline; gap: 0.4rem; font-size: 0.95rem; }
+.ord-code { color: var(--muted); font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+.ord-pick-list {
+  position: absolute;
+  top: 2.4rem;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.ord-pick-list button {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.ord-pick-list button:last-child { border-bottom: none; }
+.ord-pick-list button:hover { background: var(--row-hover); }
+.ord-pick-list span,
+.ord-pick-list small { color: var(--muted); font-size: 0.74rem; }
+
+.ord-sum {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.45rem 0.6rem;
+  background: var(--panel-2);
+  border-radius: 8px;
+  margin-top: 0.3rem;
+}
+.ord-sum span { color: var(--muted); font-size: 0.82rem; }
+.ord-sum b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.ord-caps { color: var(--muted); font-size: 0.74rem; line-height: 1.5; }
+
+/* ── 확인 창 ── */
+.ord-modal-back {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.ord-modal {
+  width: min(420px, 100%);
+  background: var(--panel);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.ord-modal.buy { border-color: var(--red); }
+.ord-modal.sell { border-color: var(--blue); }
+.ord-modal.cancel { border-color: var(--muted); }
+.ord-modal h3 { margin: 0; display: flex; align-items: center; justify-content: space-between; font-size: 1.05rem; }
+.ord-tick {
+  font-size: 0.8rem;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+.ord-tick.dead { color: var(--red); }
+.ord-modal-name { font-size: 1.1rem; font-weight: 700; }
+.ord-modal-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem 0.8rem; margin: 0; }
+.ord-modal-kv > div { display: flex; justify-content: space-between; gap: 0.5rem; }
+.ord-modal-kv dt { color: var(--muted); font-size: 0.82rem; }
+.ord-modal-kv dd { margin: 0; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.ord-modal-amt {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.55rem 0.7rem;
+  background: var(--panel-2);
+  border-radius: 8px;
+}
+.ord-modal-amt span { color: var(--muted); font-size: 0.85rem; }
+.ord-modal-amt b { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.ord-modal-btns { display: grid; grid-template-columns: 1fr 2fr; gap: 0.4rem; }
+.ord-cancel {
+  padding: 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* ── 표 ── */
+.ord-tab { display: flex; flex-direction: column; gap: 0.5rem; }
+.ord-scroll { overflow-x: auto; }
+.ord-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.ord-table th,
+.ord-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.ord-table th { color: var(--muted); font-weight: 500; text-align: left; }
+.ord-table .r { text-align: right; font-variant-numeric: tabular-nums; }
+.ord-table tr.click { cursor: pointer; }
+.ord-table tbody tr:hover { background: var(--row-hover); }
+.ord-table tr.bad td { color: var(--red); }
+.ord-msg { white-space: normal; color: var(--muted); font-size: 0.78rem; max-width: 26rem; }
+.ord-mock {
+  font-style: normal;
+  font-size: 0.66rem;
+  margin-left: 0.25rem;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+  background: rgba(76, 141, 255, 0.18);
+  color: var(--blue);
+}
+.ord-x {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 0.12rem 0.45rem;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+.ord-x:hover { border-color: var(--red); color: var(--red); }
+.ord-dep {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.55rem 0.8rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.ord-dep span { color: var(--muted); font-size: 0.85rem; }
+.ord-dep b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 900px) {
+  .ord-grid { grid-template-columns: 1fr; }
+  /* 폰에서는 주문 폼이 먼저다 — 호가는 아래로 내린다 */
+  .ord-book { order: 2; }
+  .ord-form { order: 1; }
+  .ord-band { font-size: 0.8rem; }
+  .ord-band-mid { flex-basis: 100%; order: 3; }
+}

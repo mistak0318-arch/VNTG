@@ -33,6 +33,7 @@ import { EtfPage } from "./pages/EtfPage";
 import { DailyReportPage } from "./pages/DailyReportPage";
 import { KiwoomWatchlistPage } from "./pages/KiwoomWatchlistPage";
 import { ManualAccountPage } from "./pages/ManualAccountPage";
+import { OrderPage } from "./pages/OrderPage";
 import { MapPage } from "./pages/MapPage";
 import { ThemeDbPage } from "./pages/ThemeDbPage";
 import { MyPage } from "./pages/MyPage";
@@ -99,6 +100,7 @@ type Tab =
   | "account"
   | "manualAccount"
   | "paper"
+  | "order"
   | "settings"
   | "board"
   | "guide"
@@ -209,6 +211,8 @@ const MENU: {
       { key: "paper", label: "모의투자", icon: "🧪" },
       { key: "account", label: "연동 계좌 (키움)", icon: "💳" },
       { key: "manualAccount", label: "수동 계좌", icon: "✏️" },
+      /* 주문 (2026-09-03) — 맨 아래에. 들어갈 때 아이디·비밀번호를 한 번 더 묻는 유일한 메뉴다 */
+      { key: "order", label: "주문", icon: "🧾" },
     ],
   },
   {
@@ -659,6 +663,7 @@ export default function App() {
       case "paper": return <PaperTradePage onSelectStock={onSelectStock} />;
       case "account": return <AccountInfoPage onSelectStock={onSelectStock} />;
       case "manualAccount": return <ManualAccountPage onSelectStock={onSelectStock} />;
+      case "order": return <OrderPage onSelectStock={onSelectStock} />;
       case "board": return <BoardPage onSelectStock={onSelectStock} />;
       case "settings": return <SettingsPage />;
       case "guide": return <GuidePage />;

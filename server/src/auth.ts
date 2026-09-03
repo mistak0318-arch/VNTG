@@ -512,6 +512,21 @@ export async function login(
   };
 }
 
+/**
+ * 아이디·비밀번호만 확인 — 세션은 안 굽는다 (2026-09-03, 주문 메뉴의 두 번째 문).
+ * 앱 로그인을 안 켜 놨으면 "disabled" — 주문 메뉴는 그 상태에선 열리지 않는다.
+ */
+export async function verifyCredentials(username: string, password: string): Promise<"ok" | "bad" | "disabled"> {
+  const cfg = await load();
+  if (!cfg.enabled || !cfg.passHash) return "disabled";
+  const idOk = username.trim().toLowerCase() === cfg.username.toLowerCase();
+  const given = await hash(password, cfg.passSalt);
+  return idOk && sameHex(given, cfg.passHash) ? "ok" : "bad";
+}
+
+/** 같은 scrypt 를 주문 비밀번호도 쓴다 — 해시 방식이 둘이면 언젠가 한쪽만 약해진다 */
+export const scryptHex = hash;
+
 function codeMail(lead: string, code: string, ip: string, ua: string): string {
   return `<div style="font-family:system-ui,sans-serif">
      <p style="font-size:15px">${lead}</p>

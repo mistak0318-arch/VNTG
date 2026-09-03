@@ -73,6 +73,23 @@ async function putJson<T = RawRecord>(path: string, body?: unknown): Promise<T> 
   return parsed;
 }
 
+/**
+ * 주문 전용 POST — `X-VNTG-Order` 헤더가 붙는다 (2026-09-03).
+ *
+ * 서버는 이 헤더가 없으면 404 를 준다. 다른 사이트에 심어 둔 폼이 내 로그인 세션으로
+ * 주문을 던지는 길(CSRF)을 막는 가장 값싼 문이다 — 폼은 이 헤더를 못 붙인다.
+ */
+async function orderPost<T = RawRecord>(path: string, body?: unknown): Promise<T> {
+  const res = await req(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-VNTG-Order": "1" },
+    body: JSON.stringify(body ?? {}),
+  });
+  const parsed = (await res.json()) as T & { error?: string };
+  if (!res.ok) throw new Error((parsed as { error?: string }).error ?? `요청 실패 (${res.status})`);
+  return parsed;
+}
+
 async function deleteJson<T = RawRecord>(path: string): Promise<T> {
   const res = await req(path, { method: "DELETE" });
   const parsed = (await res.json()) as T & { error?: string };
@@ -920,6 +937,44 @@ export const api = {
     postJson<{ ok: boolean; message: string }>("/api/sys/act", { kind, payload }),
   sysSearchProgress: () =>
     getJson<{ running: boolean; done: number; total: number; name: string }>("/api/channels/search-progress"),
+
+  /*
+   * ── 주문 (2026-09-03) ───────────────────────────────────────────────────
+   *
+   * 상태를 바꾸는 요청은 전부 `X-VNTG-Order: 1` 을 달고 POST 로 간다. 이 헤더가
+   * 없으면 서버가 **404** 를 준다 — 다른 사이트에서 몰래 던지는 폼은 이 헤더를
+   * 못 붙이기 때문이다(단순 요청이 아니게 되어 프리플라이트에서 죽는다).
+   *
+   * `/status` 말고는 주문 세션 쿠키가 없으면 전부 404 라, 화면은 404 를
+   * 「세션 끊김」으로 읽고 로그인 칸을 다시 올린다.
+   */
+  orderStatus: () => getJson<OrderStatus>("/api/order/status"),
+  orderOpenSession: (username: string, password: string) =>
+    orderPost<{ ok: boolean }>("/api/order/session", { username, password }),
+  orderCloseSession: () => deleteJson<{ ok: boolean }>("/api/order/session"),
+  orderSetPassword: (nextPw: string, current: string | null) =>
+    orderPost<{ ok: boolean }>("/api/order/password", { next: nextPw, current }),
+  orderOpen: () => getJson<{ rows: OrderRow[]; error?: string }>("/api/order/open"),
+  orderFills: () => getJson<{ rows: OrderRow[]; error?: string }>("/api/order/fills"),
+  orderAccount: () => getJson<OrderAccount>("/api/order/account"),
+  orderLog: (limit = 100) => getJson<{ rows: OrderLogRow[] }>(`/api/order/log?limit=${limit}`),
+  orderPrepare: (input: {
+    side: "buy" | "sell";
+    code: string;
+    name: string;
+    qty: number;
+    price: number | null;
+    venue: OrderVenue;
+  }) => orderPost<{ nonce: string; expiresAt: number; ticket: OrderTicket }>("/api/order/prepare", input),
+  orderCancelPrepare: (input: { ordNo: string; code: string; name: string; qty: number; venue: OrderVenue }) =>
+    orderPost<{ nonce: string; expiresAt: number; ticket: CancelTicket }>("/api/order/cancel/prepare", input),
+  orderExecute: (nonce: string, password: string) =>
+    orderPost<{ ok: boolean; ordNo: string; msg: string; kind: "order" | "cancel" }>("/api/order/execute", {
+      nonce,
+      password,
+    }),
+  orderLock: (locked: boolean, password?: string) =>
+    orderPost<{ ok: boolean }>("/api/order/lock", { locked, password }),
   aiConfig: () =>
     getJson<{
       config: AiConfig;
@@ -6159,4 +6214,98 @@ export interface ListGradeRow {
   win1: number | null;
   /** 20일 승률 — 평균과 같이 봐야 뜻이 산다 */
   win20: number | null;
+}
+
+/* ── 주문 (2026-09-03) ──────────────────────────────────────────────────── */
+
+/** KRX 정규장 · NXT · SOR(통합 — 키움이 더 좋은 쪽으로 보낸다) */
+export type OrderVenue = "KRX" | "NXT" | "SOR";
+
+export interface OrderGuard {
+  maxOrderKrw: number;
+  maxDailyKrw: number;
+  maxDailyCount: number;
+  priceCollarPct: number;
+  marketHoursOnly: boolean;
+  allowedCodes: string[] | null;
+}
+
+/**
+ * 왜 이렇게 많은 「왜 안 열리나」 값을 담나 — 주문 화면이 안 열릴 때 사람이
+ * 서버 로그를 열어 볼 수는 없다. 막힌 겹의 이름을 화면이 그대로 말해야 한다.
+ */
+export interface OrderStatus {
+  enabled: boolean;
+  configured: boolean;
+  mock: boolean;
+  reason: string | null;
+  hasPassword: boolean;
+  session: boolean;
+  sessionLeftSec: number;
+  uiLocked: boolean;
+  lockedUntilMs: number;
+  guard: OrderGuard;
+  today: { krw: number; count: number };
+  open: Record<OrderVenue, boolean>;
+  watching: number;
+}
+
+export interface OrderTicket {
+  kind: "order";
+  side: "buy" | "sell";
+  code: string;
+  name: string;
+  qty: number;
+  /** null = 시장가 */
+  price: number | null;
+  venue: OrderVenue;
+  refPrice: number;
+  amount: number;
+}
+
+export interface CancelTicket {
+  kind: "cancel";
+  ordNo: string;
+  code: string;
+  name: string;
+  qty: number;
+  venue: OrderVenue;
+}
+
+/** 미체결·체결 한 줄. 필드명이 모의 실측 전이라 `raw` 를 같이 들고 다닌다 */
+export interface OrderRow {
+  ordNo: string;
+  code: string;
+  name: string;
+  side: string;
+  qty: number;
+  price: number;
+  remain: number;
+  filled: number;
+  venue: string;
+  time: string;
+  status: string;
+  raw: Record<string, unknown>;
+}
+
+export interface OrderAccount {
+  deposit: number;
+  holdings: { code: string; name: string; qty: number; avg: number; cur: number; pnl: number; pnlRate: number }[];
+}
+
+export interface OrderLogRow {
+  at: string;
+  kind: "session" | "order" | "cancel" | "fill" | "reject" | "error" | "lock" | "password" | "raw";
+  mock: boolean;
+  ip?: string;
+  side?: "buy" | "sell";
+  code?: string;
+  name?: string;
+  qty?: number;
+  price?: number | null;
+  venue?: OrderVenue;
+  ordNo?: string;
+  origOrdNo?: string;
+  amount?: number;
+  msg?: string;
 }

@@ -1208,7 +1208,8 @@
       "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\server\"; npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 20; \"server tsc exit $LASTEXITCODE\"; Set-Location ..\\\\web; npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 15; \"web tsc exit $LASTEXITCODE\")",
       "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\web\"; Start-Sleep -Seconds 2; npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 15; \"web tsc exit $LASTEXITCODE\")",
       "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\web\"; Start-Sleep -Seconds 3; npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 15; \"web tsc exit $LASTEXITCODE\"; if \\($LASTEXITCODE -ne 0\\) { exit 0 }; Set-Location ..\\\\server; npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 10; \"server tsc exit $LASTEXITCODE\"; if \\($LASTEXITCODE -ne 0\\) { exit 0 }; Set-Location ..; Get-Date -Format \"HH:mm\"; .\\\\push-deploy.ps1; git status --short; git log --oneline -1)",
-      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\web\"; npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 10; \"web tsc exit $LASTEXITCODE\")"
+      "PowerShell(Set-Location \"K:\\\\0000 3740 프로젝트 \\(경제적자유\\)\\\\00. 주식\\\\2 AI 프롬프트\\\\260810_클로드작업\\\\web\"; npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 10; \"web tsc exit $LASTEXITCODE\")",
+      "WebFetch(domain:www.pabburi.co.kr)"
     ]
   }
 }
