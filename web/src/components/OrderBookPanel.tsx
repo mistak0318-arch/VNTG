@@ -27,7 +27,7 @@ import { fid, useRealtime } from "../useRealtime";
 
 /** 호가를 못 받았을 때의 빈 판 — 열 단 틀과 이유 한 줄 */
 function EmptyBook({ why }: { why: string }) {
-  const blank = pad([]);
+  const blank = padBottom([]);
   return (
     <div className="ob ob-blank">
       <div className="ob-body">
@@ -65,16 +65,22 @@ function EmptyBook({ why }: { why: string }) {
 /**
  * 열 단을 **항상** 채운다 (2026-09-04).
  *
- * 벤티지: "nxt·krx 시간 아니더라도 종목 검색하면 호가 나오게 해 줘 — 지금은 주문을 안
- * 받는다고만 써 놨는데 호가창은 보여 줄 수 있잖아."
+ * 벤티지: "nxt·krx 시간 아니더라도 종목 검색하면 호가 나오게 해 줘."
+ * 장이 닫히면 키움이 호가를 빈 배열로 준다. 그대로 그리면 호가창 자리가 통째로 사라져서
+ * 「고장 났나」로 보인다. 값이 없는 단은 이미 「-」로 그릴 줄 아므로(`empty`) 빈 단을 채운다.
  *
- * 장이 닫히면 키움이 호가를 **빈 배열로** 준다. 그대로 그리면 호가창 자리가 통째로
- * 사라져서 「고장 났나」로 보인다. 값이 없는 단은 이미 「-」로 그릴 줄 알므로(`empty`),
- * 모자란 만큼 빈 단을 채워 **틀은 늘 서 있게** 한다. 키움 앱도 장 밖에서는 빈 호가판을 보여 준다.
+ * **어느 쪽에 채우느냐가 중요하다.** 호가창은 가운데(현재가 근처)가 실한 값이어야 한다 —
+ * 매도는 **위쪽**에, 매수는 **아래쪽**에 빈 단을 붙여야 진짜 호가가 가운데 선에 붙어 남는다.
  */
-function pad(levels: { step: number; price: number; qty: number }[]): { step: number; price: number; qty: number }[] {
+function padTop(levels: { step: number; price: number; qty: number }[]): { step: number; price: number; qty: number }[] {
   const out = [...levels];
-  for (let i = out.length; i < 10; i += 1) out.push({ step: i + 1, price: 0, qty: 0 });
+  for (let i = out.length; i < 10; i += 1) out.unshift({ step: 100 + i, price: 0, qty: 0 });
+  return out;
+}
+
+function padBottom(levels: { step: number; price: number; qty: number }[]): { step: number; price: number; qty: number }[] {
+  const out = [...levels];
+  for (let i = out.length; i < 10; i += 1) out.push({ step: 100 + i, price: 0, qty: 0 });
   return out;
 }
 
@@ -399,20 +405,18 @@ export function OrderBookPanel({
       <div className="ob-body">
         <div className="ob-book">
           {/*
-            ⚠️ **매도호가는 뒤집어 그린다.**
+            ⚠️ **여기서 뒤집지 않는다** (2026-09-04 고침 — 벤티지: "호가창 배열이 이상해,
+            밑에서 위로 갈 때 높아지는 구조로 가야 되는데 반대로 되어 있어").
 
-            키움은 매도 1호가(제일 싼 것)부터 10호가 순으로 준다. 그걸 그대로 위에서
-            아래로 늘어놓으면 **위가 싸고 아래가 비싸진다** — 호가창이 거꾸로 선다.
-
-            호가창은 **가격이 위로 갈수록 비싸야** 한다. 그래야 매도 1호가와 매수 1호가가
-            가운데에서 만나고, 현재가를 중심으로 위아래로 갈라진다. 사람이 호가창을
-            읽는 방식이 그것이다 — 「지금 값이 어디에 있고 위아래로 얼마나 두꺼운가」.
-
-            매수는 1호가(제일 비싼 것)부터 오므로 그대로 두면 맞는다.
+            예전 주석은 「키움이 매도 1호가(제일 싼 것)부터 준다」였는데, **우리 서버가 이미
+            높은 값부터 내려오게 정렬해서 준다**(`orderBook.ts` 의 `y.step - x.step`).
+            그걸 화면에서 또 뒤집으니 위가 싸고 아래가 비싼 거꾸로 선 호가창이 됐다.
+            실측: 서버가 asks 를 120,800 → 120,500 차례로, bids 를 119,700 → 119,400 차례로 준다.
+            둘 다 **위에서 아래로 그대로** 그리면 가격이 위로 갈수록 비싸진다.
           */}
-          {[...pad(book.asks)].reverse().map((l) => row(l, "ask"))}
+          {padTop(book.asks).map((l) => row(l, "ask"))}
           <div className="ob-mid" />
-          {pad(book.bids).map((l) => row(l, "bid"))}
+          {padBottom(book.bids).map((l) => row(l, "bid"))}
           {/*
             한 단도 없으면 **왜 비었는지** 적는다 — 빈 틀만 있으면 고장 난 것으로 보인다.
             값이 한 줄이라도 있으면 안 뜬다(장중에 한쪽만 비는 경우가 있다).

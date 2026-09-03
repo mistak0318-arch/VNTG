@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T23:40:48.494Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T23:43:52.930Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "0e3d810",
+        "subject": "현재가가 늘 0.00% 였던 이유 — KRX 단독으로 읽고 있었다. 통합 체결로"
+      },
       {
         "hash": "bfcbed3",
         "subject": "호가 「종」을 「현」으로 · 잔량 자리 고정 · 종목 옆에 현재가 (갤럭시 S25 360px 실측)"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "a1c876c",
         "subject": "데일리 리포트 17번 — 수출입 동향 그래프"
-      },
-      {
-        "hash": "9df8340",
-        "subject": "맥박 정직화·교차 신호·수출 경고 + 데일리 리포트 본문 개편"
       }
     ]
   }
