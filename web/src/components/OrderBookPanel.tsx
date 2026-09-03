@@ -25,6 +25,59 @@ import { fid, useRealtime } from "../useRealtime";
  * `ka10003`(체결정보)에 있었다 — 한투를 뒤질 필요가 없었다.
  */
 
+/** 호가를 못 받았을 때의 빈 판 — 열 단 틀과 이유 한 줄 */
+function EmptyBook({ why }: { why: string }) {
+  const blank = pad([]);
+  return (
+    <div className="ob ob-blank">
+      <div className="ob-body">
+        <div className="ob-book">
+          {blank.map((l) => (
+            <div className="ob-row ask empty" key={`a-${l.step}`}>
+              <span className="ob-qty left" />
+              <span className="ob-price">
+                <b className="pt-n">-</b>
+              </span>
+              <span className="ob-qty right" />
+            </div>
+          ))}
+          <div className="ob-mid" />
+          {blank.map((l) => (
+            <div className="ob-row bid empty" key={`b-${l.step}`}>
+              <span className="ob-qty left" />
+              <span className="ob-price">
+                <b className="pt-n">-</b>
+              </span>
+              <span className="ob-qty right" />
+            </div>
+          ))}
+          {/* 좁은 칸(폰의 주문 화면)에 들어가므로 짧게. 자세한 사연은 title 로 */}
+          <div className="ob-closed" title={why}>
+            호가 없음
+            <i>장 밖이라 안 옵니다. 가격은 직접</i>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 열 단을 **항상** 채운다 (2026-09-04).
+ *
+ * 벤티지: "nxt·krx 시간 아니더라도 종목 검색하면 호가 나오게 해 줘 — 지금은 주문을 안
+ * 받는다고만 써 놨는데 호가창은 보여 줄 수 있잖아."
+ *
+ * 장이 닫히면 키움이 호가를 **빈 배열로** 준다. 그대로 그리면 호가창 자리가 통째로
+ * 사라져서 「고장 났나」로 보인다. 값이 없는 단은 이미 「-」로 그릴 줄 알므로(`empty`),
+ * 모자란 만큼 빈 단을 채워 **틀은 늘 서 있게** 한다. 키움 앱도 장 밖에서는 빈 호가판을 보여 준다.
+ */
+function pad(levels: { step: number; price: number; qty: number }[]): { step: number; price: number; qty: number }[] {
+  const out = [...levels];
+  for (let i = out.length; i < 10; i += 1) out.push({ step: i + 1, price: 0, qty: 0 });
+  return out;
+}
+
 /** 막대 길이를 정할 기준 — 그 판에서 제일 두꺼운 호가 */
 function maxQty(book: OrderBook): number {
   const all = [...book.asks, ...book.bids].map((l) => l.qty);
@@ -122,9 +175,22 @@ export function OrderBookPanel({
   const program = progMil === null ? null : Math.round(progMil / 100);
 
   if (loading && !base) return <div className="empty">호가 불러오는 중…</div>;
-  if (error && !base) return <div className="error-banner">{error}</div>;
+  /*
+   * **호가를 못 받아도 틀은 세운다** (2026-09-04).
+   *
+   * 벤티지: "시간 아니더라도 종목 검색하면 호가 나오게 해 줘."
+   * 장 밖에서는 키움이 빈 배열이 아니라 **에러**를 준다(「서비스를 처리하는 중에 오류가
+   * 발생했습니다[1631]」). 그때 빨간 띠만 남기면 호가창 자리가 통째로 사라져서 고장으로
+   * 보인다 — 키움 앱도 장 밖에서는 빈 호가판을 보여 준다.
+   *
+   * 그래서 열 단짜리 빈 틀과 **왜 비었는지 한 줄**을 그린다. 값이 없다는 사실은 「-」로
+   * 이미 드러나므로 없는 값을 지어내는 것이 아니다.
+   */
+  if ((error && !base) || (book && book.error)) {
+    const why = (book?.error || error) ?? "";
+    return <EmptyBook why={why} />;
+  }
   if (!book) return null;
-  if (book.error) return <div className="error-banner">{book.error}</div>;
 
   const mx = maxQty(book);
   const pos250 =
@@ -314,9 +380,19 @@ export function OrderBookPanel({
 
             매수는 1호가(제일 비싼 것)부터 오므로 그대로 두면 맞는다.
           */}
-          {[...book.asks].reverse().map((l) => row(l, "ask"))}
+          {[...pad(book.asks)].reverse().map((l) => row(l, "ask"))}
           <div className="ob-mid" />
-          {book.bids.map((l) => row(l, "bid"))}
+          {pad(book.bids).map((l) => row(l, "bid"))}
+          {/*
+            한 단도 없으면 **왜 비었는지** 적는다 — 빈 틀만 있으면 고장 난 것으로 보인다.
+            값이 한 줄이라도 있으면 안 뜬다(장중에 한쪽만 비는 경우가 있다).
+          */}
+          {book.asks.length === 0 && book.bids.length === 0 && (
+            <div className="ob-closed">
+              호가 없음
+              <i>장 밖이라 안 옵니다. 가격은 직접</i>
+            </div>
+          )}
         </div>
 
         {/*

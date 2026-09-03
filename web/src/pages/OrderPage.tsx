@@ -11,10 +11,10 @@ import {
   type OrderStatus,
   type OrderTicket,
   type OrderVenue,
-  type StockSearchResult,
   type TradeType,
 } from "../api";
 import { OrderBookPanel } from "../components/OrderBookPanel";
+import { StockSearchBox } from "../components/StockSearchBox";
 
 /**
  * 주문 (2026-09-03) — 벤티지: "주문 메뉴 들어갈 때는 아이디랑 비밀번호를 한 번 더,
@@ -468,68 +468,6 @@ function LockedCard({ onDone }: { onDone: () => void }) {
   );
 }
 
-/* ── 종목 고르기 ────────────────────────────────────────────────────────── */
-
-function StockPick({ code, name, onPick }: { code: string; name: string; onPick: (c: string, n: string) => void }) {
-  const [q, setQ] = useState("");
-  const [rows, setRows] = useState<StockSearchResult[]>([]);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    const term = q.trim();
-    if (term.length < 1) {
-      setRows([]);
-      return;
-    }
-    timer.current = setTimeout(() => {
-      void api
-        .searchStocks(term)
-        .then((r) => setRows((r.results ?? []).slice(0, 8)))
-        .catch(() => setRows([]));
-    }, 250);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [q]);
-
-  return (
-    <div className="ord-pick">
-      <input
-        className="ord-in"
-        placeholder="종목명 또는 6자리 코드"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-      />
-      {code && (
-        <div className="ord-picked">
-          <b>{name || code}</b>
-          <span className="ord-code">{code}</span>
-        </div>
-      )}
-      {rows.length > 0 && (
-        <div className="ord-pick-list">
-          {rows.map((r) => (
-            <button
-              key={r.code}
-              type="button"
-              onClick={() => {
-                onPick(normalizeStockCode(r.code), r.name);
-                setQ("");
-                setRows([]);
-              }}
-            >
-              <b>{r.name}</b>
-              <span>{r.code}</span>
-              <small>{r.marketName}</small>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ── 매수·매도 ──────────────────────────────────────────────────────────── */
 
 function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: Prefill; onDone: () => void }) {
@@ -636,14 +574,22 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
         키움 앱도 이 둘을 호가창 **위**에 두고, 그 아래를 호가 | 주문으로 가른다.
       */}
       <div className="ord-head">
-        <StockPick
-          code={code}
-          name={name}
-          onPick={(c, n) => {
-            setCode(c);
-            setName(n);
-          }}
-        />
+        <div className="ord-pick">
+          <StockSearchBox
+            placeholder="종목명 또는 6자리 코드"
+            clearOnPick={false}
+            onPick={(c, n) => {
+              setCode(c);
+              setName(n);
+            }}
+          />
+          {code && (
+            <div className="ord-picked">
+              <b>{name || code}</b>
+              <span className="ord-code">{code}</span>
+            </div>
+          )}
+        </div>
         <div className="ord-side">
           <button type="button" className={side === "buy" ? "on buy" : ""} onClick={() => setSide("buy")}>
             매수

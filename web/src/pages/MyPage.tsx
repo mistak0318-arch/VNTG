@@ -9,6 +9,7 @@ import {
   type WatchStatus,
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
+import { StockSearchBox } from "../components/StockSearchBox";
 import { ScenarioCard } from "../components/ScenarioCard";
 import { WatchSummaryCard, type SummaryRow } from "../components/WatchSummaryCard";
 import { useAutoRefresh } from "../useAutoRefresh";
@@ -107,8 +108,6 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   // 종목 추가 — 이름으로 찾아 고르게 한다 (코드를 손으로 적으면 틀린다)
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<StockSearchResult[]>([]);
   const [adding, setAdding] = useState(false);
   const watchedCodes = useWatchedCodes();
   /*
@@ -524,21 +523,6 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     loadGroups();
   }, []);
 
-  useEffect(() => {
-    const q = query.trim();
-    if (!q) {
-      setResults([]);
-      return;
-    }
-    const timer = setTimeout(() => {
-      api
-        .searchStocks(q)
-        .then((r) => setResults(r.results))
-        .catch(() => setResults([]));
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [query]);
-
   /**
    * 관심종목에 담는다.
    *
@@ -559,8 +543,6 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
         addedPrice: price,
         group: activeGroup === ALL ? DEFAULT_GROUP : activeGroup,
       });
-      setQuery("");
-      setResults([]);
       await load(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "관심종목 추가 실패");
@@ -601,37 +583,17 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
 
       {error && <div className="error-banner">{error}</div>}
 
+      {/*
+        관심종목 담기 — 공용 검색칸으로 (2026-09-04). 눌러 놓으면 최근 본 종목이 먼저 내려온다.
+        「이미 담김」 판단은 이 화면이 한다(`note`) — 공용 상자는 관심종목이 뭔지 모른다.
+      */}
       <div className="search-box">
-        <input
-          className="search-input"
-          type="text"
-          inputMode="search"
+        <StockSearchBox
           placeholder={`종목명·코드로 검색해서 ${activeGroup === ALL ? DEFAULT_GROUP : activeGroup} 그룹에 추가`}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
           disabled={adding}
+          note={(code) => (items.some((i) => i.code === code) ? "이미 담김" : null)}
+          onPick={(code, name) => void addStock({ code, name, marketName: "" })}
         />
-        {query.trim() && results.length > 0 && (
-          <div className="search-dropdown">
-            {results.map((r) => {
-              const already = items.some((i) => i.code === normalizeStockCode(r.code));
-              return (
-                <button
-                  key={r.code}
-                  className="search-result-row"
-                  disabled={already || adding}
-                  onClick={() => void addStock(r)}
-                >
-                  <span className="name">{r.name}</span>
-                  <span className="sub">
-                    {r.code} · {r.marketName}
-                    {already && " · 이미 담김"}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/*

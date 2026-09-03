@@ -14917,9 +14917,16 @@ tr:hover .sd-del { opacity: 0.75; }
    * 「호가를 눌러 값을 넣는다」는 이 화면의 핵심이 죽는다. 왼쪽을 좁게 주고 호가는 **가격과
    * 잔량만** 남긴다 — 시·고·저와 잔량비 같은 곁가지는 폰에서 접는다(아래 .ord-book 규칙).
    */
-  .ord-grid { grid-template-columns: 40% minmax(0, 1fr); gap: 0.45rem; }
+  /*
+   * 호가 쪽을 넓게 (2026-09-04, 벤티지: "호가창이 비율이 너무 작은 거 같거든 주문 쪽 비율을
+   * 좀 줄이고 호가창을 좀 더 잘 보이게").
+   *
+   * 40% → 47%. 호가는 **가격 다섯 자리 + 잔량 여섯 자리**가 한 줄에 들어가야 읽히는데
+   * 40% 로는 잔량이 잘렸다. 주문칸은 −/＋ 와 숫자만 남으면 되므로 더 줄여도 버틴다.
+   */
+  .ord-grid { grid-template-columns: 47% minmax(0, 1fr); gap: 0.4rem; }
   .ord-book { grid-column: 1; grid-row: 1; }
-  .ord-fields { grid-column: 2; grid-row: 1; padding: 0.5rem; gap: 0.3rem; }
+  .ord-fields { grid-column: 2; grid-row: 1; padding: 0.4rem; gap: 0.25rem; }
   /* 주문 단추는 폭을 다 쓴다 — 엄지가 닿는 자리다 */
   .ord-submit { grid-column: 1 / -1; grid-row: 2; }
 
@@ -14938,7 +14945,9 @@ tr:hover .sd-del { opacity: 0.75; }
   .ord-book .ob { padding: 0; }
   .ord-book .ob-body { display: block; }
   .ord-book .ob-book { flex: none; width: 100%; }
-  .ord-book .ob-row { grid-template-columns: 1fr 4.6rem 1fr; height: 1.25rem; font-size: 0.72rem; }
+  /* 가격 칸을 넓히고 줄 높이를 키운다 — 손가락으로 눌러야 하는 줄이다 */
+  .ord-book .ob-row { grid-template-columns: 0.9fr 5.1rem 1fr; height: 1.5rem; font-size: 0.76rem; }
+  .ord-book .ob-price b { font-size: 0.8rem; }
   .ord-book .ob-rt { display: none; }
   .ord-book .ob-d { display: none; }
 
@@ -14947,7 +14956,9 @@ tr:hover .sd-del { opacity: 0.75; }
   .ord-lab { font-size: 0.74rem; margin-top: 0.1rem; }
   .ord-caps { font-size: 0.68rem; }
   .ord-sum b { font-size: 0.95rem; }
-  .ord-step { grid-template-columns: 1.9rem 1fr 1.9rem; }
+  .ord-step { grid-template-columns: 1.7rem 1fr 1.7rem; gap: 0.2rem; }
+  .ord-in { padding: 0.4rem 0.45rem; }
+  .ord-sum { padding: 0.35rem 0.45rem; }
 
   .ord-band { font-size: 0.8rem; padding: 0.35rem 0.55rem; gap: 0.35rem; }
   .ord-band-mid { flex-basis: 100%; order: 3; font-size: 0.74rem; }
@@ -15217,3 +15228,129 @@ select.ord-in { appearance: auto; cursor: pointer; }
 .ord-stop-in:focus { outline: none; border-color: #ffb020; }
 .ord-x.stop { border-color: rgba(255, 176, 32, 0.5); color: #ffb020; text-decoration: none; }
 .ord-x.stop:hover { border-color: #ffb020; }
+
+/* ── 공용 종목 검색칸 (2026-09-04) — 포커스하면 최근 본 종목이 내려온다 ────── */
+.ssb { position: relative; }
+.ssb-input { width: 100%; box-sizing: border-box; }
+.ssb-drop {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 17rem;
+  overflow-y: auto;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+.ssb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 0.6rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+  border-bottom: 1px solid var(--border);
+}
+.ssb-head button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.ssb-row { display: flex; align-items: stretch; }
+.ssb-row .ssb-pick { flex: 1; }
+.ssb-pick {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.42rem 0.6rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+.ssb-drop > .ssb-pick:last-child,
+.ssb-row:last-child .ssb-pick { border-bottom: none; }
+.ssb-pick:hover { background: var(--row-hover); }
+.ssb-pick span,
+.ssb-pick small { color: var(--muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; }
+.ssb-pick small { margin-left: auto; }
+.ssb-del {
+  flex: none;
+  width: 2rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+.ssb-del:hover { color: var(--red); }
+.ssb-pick:disabled { opacity: 0.45; cursor: default; }
+.ssb-pick:disabled:hover { background: none; }
+
+/* 호가가 통째로 빈 때 — 빈 틀만 있으면 고장 난 것으로 보인다 (2026-09-04) */
+.ob-book { position: relative; }
+.ob-closed {
+  flex-direction: column;
+  font-weight: 600;
+}
+.ob-closed i {
+  display: block;
+  font-style: normal;
+  font-size: 0.66rem;
+  font-weight: 400;
+  opacity: 0.6;
+  margin-top: 0.25rem;
+  word-break: keep-all;
+}
+.ob-blank .ob-row.empty { opacity: 0.22; }
+.ob-closed {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+/*
+ * 새 버전 띠 — 폰에서 알약이 터지던 것 (2026-09-04).
+ *
+ * `border-radius: 999px` 알약에 긴 문장이 들어가면, 좁은 화면에서 글자가 두세 줄로 접히면서
+ * **높이가 폭만큼 자라 커다란 원**이 된다. 둥근 모서리는 한 줄일 때만 알약으로 보인다.
+ * 폰에서는 뒷말을 접고(위 .build-long) 좌우로 펴서 **한 줄 띠**로 만든다.
+ */
+.build-bar { max-width: calc(100vw - 1.5rem); box-sizing: border-box; }
+.build-msg { min-width: 0; }
+@media (max-width: 899px) {
+  .build-bar {
+    left: 0.75rem;
+    right: 0.75rem;
+    transform: none;
+    border-radius: 12px;
+    padding: 8px 10px;
+    gap: 8px;
+    font-size: 0.8rem;
+    /* 시스 버튼(우하단)과 겹치지 않게 조금 올린다 */
+    bottom: 1.2rem;
+  }
+  .build-long { display: none; }
+  .build-msg { flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .build-bar button { flex: none; padding: 5px 10px; }
+}

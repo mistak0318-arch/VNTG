@@ -1166,7 +1166,14 @@ export default function App() {
       {/* 새 번들이 올라왔는데 이 탭은 옛것 — 새로고침을 권한다 (강제하지 않는다) */}
       {build.stale && (
         <div className="build-bar" role="status">
-          <span>새 버전이 올라왔어 — 새로고침해야 새 기능이 보인다</span>
+          {/*
+            폰에서는 뒷말을 접는다 (2026-09-04) — 벤티지: "모바일에서는 폰트가 많아서인지
+            깨져 가지고 되게 큰 동그라미로 글자가 튀어나와 있어." 알약 모양(radius 999px)에
+            긴 문장이 두세 줄로 접히면서 커다란 덩어리가 됐다. 폰은 「새 버전이 올라왔어」까지만.
+          */}
+          <span className="build-msg">
+            새 버전이 올라왔어<span className="build-long"> — 새로고침해야 새 기능이 보인다</span>
+          </span>
           <button type="button" onClick={() => window.location.reload()}>새로고침</button>
           <button type="button" className="x" onClick={build.dismiss} title="나중에">✕</button>
         </div>
