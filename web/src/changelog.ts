@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T16:04:09.705Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T16:15:21.678Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "37bcbe8",
+        "subject": "손절선을 계좌 잔고 줄에 — 복기 노트가 아니라 지금 들고 있는 자리에 붙는다"
+      },
       {
         "hash": "4820005",
         "subject": "손절선을 스톱주문으로 미리 걸어 둔다 · 설정 › 정보 탭에 날짜별 변경 이력"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "7c00aa2",
         "subject": "관심종목 그룹 넣고 빼기 - 즉답으로"
-      },
-      {
-        "hash": "b300330",
-        "subject": "보드 칸별 글자 크기 (가-/가+) - 기기마다 다르게"
       }
     ]
   }
