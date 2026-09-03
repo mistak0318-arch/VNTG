@@ -6,7 +6,7 @@ import { pruneStopWatch, runStopWatch } from "./stopWatch.js";
 import { getActiveSuper } from "./superSignal.js";
 import { hasDedicatedChannel, sendTelegram } from "./telegram.js";
 import { pushNotice, stockLink } from "./notifyCenter.js";
-import { listWatchlist } from "./watchlist.js";
+import { BAND_GROUPS, listWatchlist } from "./watchlist.js";
 
 /**
  * 관심종목 시그널 스케줄러.
@@ -23,6 +23,26 @@ const TICK_MS = 60_000;
 let timer: ReturnType<typeof setInterval> | null = null;
 let lastScanAt = 0;
 let scanning = false;
+
+/**
+ * **누구를 볼까** (2026-09-03 알람 전수 점검).
+ *
+ * 관심종목 전부를 훑고 있었다 — 거기엔 신호등이 매일 갈아 끼우는 60~90점대 자동 그룹이
+ * 들어 있어, 내가 담지도 않은 종목의 급변이 울리고 종목당 3콜이 그만큼 나갔다.
+ * 기본은 **내가 담은 그룹 + 슈퍼신호등·교차**. 구분선은 종목이 아니다. `scanBands` 를 켜면 전부.
+ */
+export async function alertTargets(): Promise<{ code: string; name: string; addedPrice: number }[]> {
+  const [watch, cfg] = await Promise.all([listWatchlist(), getAlertConfig()]);
+  return watch
+    .filter((w) => !w.divider)
+    .filter((w) => {
+      if (cfg.scanBands) return true;
+      const groups = w.groups ?? [];
+      /* 점수대 그룹에만 든 종목은 뺀다. 내 그룹이나 슈퍼·교차에 하나라도 들면 본다 */
+      return groups.length === 0 || groups.some((g) => !BAND_GROUPS.includes(g));
+    })
+    .map((w) => ({ code: w.code, name: w.name, addedPrice: w.addedPrice }));
+}
 
 /** 한국 시각 기준 장중인가 — 09:00~15:30 평일 */
 function isMarketHours(now = new Date()): boolean {
@@ -41,7 +61,7 @@ export async function runAlertScan(
   client: KiwoomClient,
   opts: { dryRun?: boolean; send?: boolean } = {},
 ): Promise<{ alerts: FiredAlert[]; sent: boolean; error?: string }> {
-  const watch = await listWatchlist();
+  const watch = await alertTargets();
   const alerts = await scanAlerts(
     client,
     // 편입가까지 넘긴다 — 알림에 「내것」 줄을 적으려면 필요하다
@@ -79,20 +99,43 @@ export async function runAlertScan(
    * 덮인다 — 텔레그램 메시지가 한 통인 것과 같은 이유다. 종목 이름만 나열하고
    * 자세한 것은 눌러서 본다.
    */
-  if (alerts.length > 0) {
-    const head = alerts
-      .slice(0, 6)
-      .map((a) => `${a.name} ${a.ruleLabel}`)
-      .join(" · ");
+  /*
+   * ## **열지 않고 판단할 수 있게** (2026-09-03 — 벤티지: "관심종목 급변이라고만 오니깐 얘가
+   * 어디서 어디로 급변인지 모르겠더라. 꼭 눌러야 해. 그리고 그 누른 시점에는 뭐가 급변인지
+   * 알 수가 없어").
+   *
+   * 예전 한 줄은 「두산에너빌리티 급변 · 삼성전자 거래량 급증」 — 규칙 이름뿐이라 숫자가
+   * 없었고, 바로가기가 관심종목 목록이라 거기 가도 무엇이 울렸는지 안 보였다.
+   *
+   *   · **셋 이하면 종목마다 따로** — 제목에 `종목 규칙 숫자`, 본문에 어디서 어디로, 바로가기는
+   *     그 종목. 하루 몇 건이면 이게 맞다.
+   *   · **넷 넘으면 한 통** — 몰리는 날 알림함이 덮이지 않게. 대신 본문이 줄마다 숫자다.
+   */
+  if (alerts.length > 0 && alerts.length <= 3) {
+    for (const a of alerts) {
+      await pushNotice({
+        source: "stockSignal",
+        kind: "stock",
+        level: a.rule === "priceJump" && a.changeRate < 0 ? "warn" : "info",
+        title: `${a.name} ${a.ruleLabel} ${a.brief}`,
+        body: `${a.detail}\n${a.context.join("\n")}`,
+        code: a.code,
+        name: a.name,
+        link: stockLink(a.code, a.name),
+        dedupeKey: `stockSignal:${a.code}:${a.rule}`,
+        dedupeHours: 12,
+      }).catch(() => undefined);
+    }
+  } else if (alerts.length > 3) {
+    const lines = alerts.slice(0, 8).map((a) => `${a.name} ${a.ruleLabel} ${a.brief}`);
     await pushNotice({
       source: "stockSignal",
       kind: "stock",
       level: "info",
-      title: `관심종목 시그널 ${alerts.length}건`,
-      body: head + (alerts.length > 6 ? ` 외 ${alerts.length - 6}건` : ""),
+      title: `관심종목 시그널 ${alerts.length}건 — ${alerts.slice(0, 2).map((a) => `${a.name} ${a.ruleLabel}`).join(" · ")}…`,
+      body: lines.join("\n") + (alerts.length > 8 ? `\n외 ${alerts.length - 8}건` : ""),
       /* 관심종목 탭 키는 `watchAi` 다 — 옛 `#/watchlist` 는 없는 탭이라 눌러도 아무 일이 없었다 (2026-09-03) */
-      link: alerts.length === 1 ? stockLink(alerts[0].code, alerts[0].name) : "#/watchAi",
-      /* 같은 종목·같은 규칙이 이어지면 한 줄에 겹친다 — 5분마다 도는 자리다 */
+      link: "#/watchAi",
       dedupeKey: `stockSignal:${alerts.map((a) => `${a.code}:${a.rule}`).sort().join(",")}`,
       dedupeHours: 2,
     }).catch(() => undefined);

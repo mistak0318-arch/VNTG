@@ -2574,6 +2574,8 @@ export interface AlertRule {
 export interface AlertConfig {
   enabled: boolean;
   intervalMin: number;
+  /** 점수대 자동 그룹(60~90점대)만 든 종목도 볼까 — 기본 끔 */
+  scanBands?: boolean;
   rules: AlertRule[];
 }
 

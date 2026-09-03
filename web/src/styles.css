@@ -14468,3 +14468,5 @@ tr:hover .sd-del { opacity: 0.75; }
 .ohlc-range b { color: var(--muted); font-weight: 500; }
 .sys-proposal { border-color: #2fd6d0; }
 .sys-proposal-act { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* 알림 본문의 줄바꿈 — 접힌 상태에서도 줄마다 한 건이 보이게 (2026-09-03 알람 전수 점검) */
+.nb-text { white-space: pre-line; }

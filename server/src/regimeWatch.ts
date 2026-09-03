@@ -465,6 +465,8 @@ export async function regimeCheck(
   if (opts.notify) {
     for (const f of findings) {
       await pushNotice({
+        /* 출처를 안 적어 「그 밖에」로 갔고 「장세 점검」 스위치가 헛돌았다 (2026-09-03 전수 점검) */
+        source: f.key === "sample" ? "sample" : "regime",
         kind: f.key === "sample" ? "system" : "market",
         level: f.level,
         title: f.title,

@@ -51,12 +51,21 @@ export interface AlertConfig {
   enabled: boolean;
   /** 검사 간격(분). 너무 짧으면 API 한도를 먹는다 */
   intervalMin: number;
+  /**
+   * **점수대 자동 그룹(60~90점대)만 든 종목도 볼까** (2026-09-03 알람 전수 점검).
+   *
+   * 점수대 그룹은 신호등이 매일 갈아 끼우는 수십 종목이라, 여기까지 훑으면 종목당 3콜이
+   * 그만큼 늘고 「내가 담지도 않은 종목」의 급변이 울린다. 기본은 끔 — 내가 담은 그룹과
+   * 슈퍼신호등·교차만 본다. 켜면 관심종목 전부.
+   */
+  scanBands?: boolean;
   rules: AlertRule[];
 }
 
 export const DEFAULT_ALERT_CONFIG: AlertConfig = {
   enabled: true,
   intervalMin: 10,
+  scanBands: false,
   rules: [
     {
       key: "priceJump",
@@ -197,6 +206,12 @@ export interface FiredAlert {
   ruleLabel: string;
   /** 왜 울렸는지 한 줄 */
   detail: string;
+  /**
+   * **숫자만 압축한 꼬리** (2026-09-03 — 벤티지: "관심종목 급변이라고만 오니깐 얘가 어디서 어디로
+   * 급변인지 모르겠더라. 꼭 눌러야 해"). 알림함 한 줄에 `두산에너빌리티 급변 +5.5% (81,000)` 처럼
+   * 붙는다 — 열지 않고 판단하라고 있는 것이 알림이다.
+   */
+  brief: string;
   price: number;
   changeRate: number;
   /** 부가 정보 — 메시지 본문에 같이 붙인다 */
@@ -353,26 +368,32 @@ async function evaluateStock(
   }
 
   const base = { code: item.code, name: item.name, price, changeRate, context };
+  const ratePart = `${changeRate > 0 ? "+" : ""}${changeRate.toFixed(1)}%`;
 
   // --- 급변
   const jump = rules.get("priceJump");
   if (jump && Math.abs(changeRate) >= jump.threshold) {
+    /* 어제 종가 → 지금 — 「어디서 어디로」가 한 줄에 있어야 한다 */
+    const prevClose = changeRate !== -100 ? price / (1 + changeRate / 100) : 0;
     fired.push({
       ...base,
       rule: "priceJump",
       ruleLabel: jump.label,
-      detail: `설정한 ${jump.threshold}% 를 넘었습니다 (${changeRate > 0 ? "+" : ""}${changeRate.toFixed(2)}%)`,
+      detail: `어제 ${fmtInt(prevClose)} → 지금 ${fmtInt(price)} (${ratePart}) — 기준 ±${jump.threshold}%`,
+      brief: `${ratePart} · ${fmtInt(prevClose)}→${fmtInt(price)}`,
     });
   }
 
   // --- 거래량 급증
   const surge = rules.get("volumeSurge");
   if (surge && avgVol20 && avgVol20 > 0 && todayVol / avgVol20 >= surge.threshold) {
+    const x = todayVol / avgVol20;
     fired.push({
       ...base,
       rule: "volumeSurge",
       ruleLabel: surge.label,
-      detail: `20일 평균의 ${(todayVol / avgVol20).toFixed(1)}배 — 기준 ${surge.threshold}배`,
+      detail: `20일 평균의 ${x.toFixed(1)}배 (${fmtInt(todayVol)}주 / 평균 ${fmtInt(avgVol20)}) — 기준 ${surge.threshold}배 · 주가 ${ratePart}`,
+      brief: `${x.toFixed(1)}배 · 주가 ${ratePart}`,
     });
   }
 
@@ -383,7 +404,8 @@ async function evaluateStock(
       ...base,
       rule: "flowTurn",
       ruleLabel: turn.label,
-      detail: `외국인이 5일 ${fmtInt(foreignPrev5)} 팔다가 +${fmtInt(foreign5)} 로 돌아섰습니다`,
+      detail: `외국인 5일 순매수 ${fmtInt(foreignPrev5)}백만 → +${fmtInt(foreign5)}백만 (팔다가 사는 쪽으로) · 주가 ${ratePart}`,
+      brief: `외인 5일 ${fmtInt(foreignPrev5)}→+${fmtInt(foreign5)}백만`,
     });
   }
 
@@ -398,7 +420,8 @@ async function evaluateStock(
         ...base,
         rule: "newHigh",
         ruleLabel: high.label,
-        detail: `${past.length}일 최고 ${fmtInt(prevMax)} 를 넘었습니다`,
+        detail: `${past.length}일 최고 ${fmtInt(prevMax)} 를 오늘 고가 ${fmtInt(todayHigh)} 가 넘었습니다 · 지금 ${fmtInt(price)} (${ratePart})`,
+        brief: `고점 ${fmtInt(prevMax)}→${fmtInt(todayHigh)} · ${ratePart}`,
       });
     }
   }
@@ -416,11 +439,15 @@ async function evaluateStock(
     };
     // 오늘은 정배열인데 어제는 아니었을 때만 — 계속 정배열이면 매일 울릴 이유가 없다
     if (aligned(0) === true && aligned(1) === false) {
+      const m5 = sma(closes, 5) ?? 0;
+      const m20 = sma(closes, 20) ?? 0;
+      const m60 = sma(closes, 60) ?? 0;
       fired.push({
         ...base,
         rule: "trendAlign",
         ruleLabel: align.label,
-        detail: "5일선 > 20일선 > 60일선 — 오늘 정배열이 됐습니다",
+        detail: `5일선 ${fmtInt(m5)} > 20일선 ${fmtInt(m20)} > 60일선 ${fmtInt(m60)} — 어제까진 아니었는데 오늘 정배열 · 지금 ${fmtInt(price)} (${ratePart})`,
+        brief: `5>20>60 오늘 성립 · ${ratePart}`,
       });
     }
   }
@@ -449,6 +476,7 @@ async function evaluateStock(
         detail:
           `오늘 제일 많이 산 ${top.name}(누적 ${fmtInt(top.qty)}주)이 ` +
           `직전 조회 대비 ${fmtInt(Math.abs(top.delta))}주 순매도로 돌아섰습니다`,
+        brief: `${top.name} 누적 +${fmtInt(top.qty)}주 → ${fmtInt(Math.abs(top.delta))}주 매도`,
       });
     }
   }

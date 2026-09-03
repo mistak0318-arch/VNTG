@@ -4,7 +4,7 @@ import { viDirText } from "./realtimeStore.js";
 import { getActiveSuper } from "./superSignal.js";
 import { hasDedicatedChannel, sendTelegram, stockNameHtml } from "./telegram.js";
 import { pushNotice, stockLink } from "./notifyCenter.js";
-import { listWatchlist } from "./watchlist.js";
+import { alertTargets } from "./alertScheduler.js";
 
 /**
  * 실시간에서 바로 꺼내는 알림 — **VI 발동**과 **체결강도 급변**.
@@ -51,6 +51,8 @@ export interface LiveAlert {
   code: string;
   name: string;
   detail: string;
+  /** 숫자만 압축한 꼬리 — 알림 제목에 붙는다 (「▲상방 81,000 10:12」·「120→155 · 주가 +4.2%」) */
+  brief: string;
 }
 
 /**
@@ -70,8 +72,9 @@ export async function runLiveAlerts(
   if (!cfg.enabled) return { alerts: [], sent: false, live: true };
   const rules = new Map(cfg.rules.filter((r) => r.enabled).map((r) => [r.key, r]));
 
-  const watch = await listWatchlist();
-  const mine = new Map(watch.filter((w) => !w.divider).map((w) => [w.code, w.name]));
+  /* 시그널 스캔과 같은 대상 — 점수대 자동 그룹만 든 종목은 기본으로 안 본다 (2026-09-03) */
+  const watch = await alertTargets();
+  const mine = new Map(watch.map((w) => [w.code, w.name]));
   if (mine.size === 0) return { alerts: [], sent: false, live: true };
 
   const day = kstDay();
@@ -116,6 +119,7 @@ export async function runLiveAlerts(
         code: v.code,
         name,
         detail: bits.join(" · "),
+        brief: `${dir ? dir.slice(0, 3) : "방향 ?"}${v.price > 0 ? ` ${Math.round(v.price).toLocaleString("ko-KR")}` : ""}${hhmm ? ` ${hhmm}` : ""}`,
       });
     }
   }
@@ -144,11 +148,15 @@ export async function runLiveAlerts(
       const key = `${day}:str:${code}`;
       if (sent.has(key)) continue;
       if (!preview) sent.add(key);
+      /* 지금 등락률도 같이 — 체결강도만으로는 오르는 중인지 모른다 */
+      const rate = num(store.getLatestKrx("0B", code)?.values?.["12"]);
+      const ratePart = Number.isFinite(rate) && rate !== 0 ? ` · 주가 ${rate > 0 ? "+" : ""}${rate.toFixed(1)}%` : "";
       out.push({
         kind: "strength",
         code,
         name,
-        detail: `체결강도 ${before.toFixed(0)} → ${now.toFixed(0)} (사는 쪽이 세짐)`,
+        detail: `체결강도 ${before.toFixed(0)} → ${now.toFixed(0)} (사는 쪽이 세짐, 기준 +${jump.threshold})${ratePart}`,
+        brief: `${before.toFixed(0)}→${now.toFixed(0)}${ratePart}`,
       });
     }
   }
@@ -177,7 +185,8 @@ export async function runLiveAlerts(
       source: "live",
       kind: "stock",
       level: "warn",
-      title: `${a.name} ${a.kind === "vi" ? "VI 발동" : "체결강도 급변"}`,
+      /* 제목에 숫자까지 — 열지 않고 판단하라고 있는 것이 알림이다 (2026-09-03 전수 점검) */
+      title: `${a.name} ${a.kind === "vi" ? "VI" : "체결강도"} ${a.brief}`,
       body: a.detail,
       code: a.code,
       name: a.name,

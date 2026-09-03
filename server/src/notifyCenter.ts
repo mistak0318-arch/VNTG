@@ -170,8 +170,8 @@ export const NOTICE_SOURCES: {
   {
     key: "stockSignal",
     group: "mine",
-    label: "관심종목 급변",
-    hint: "급변·거래량 급증·수급 전환·신고가·정배열·VI·체결강도·거래원 이탈 (5분마다)",
+    label: "관심종목 시그널",
+    hint: "급변·거래량 급증·수급 전환·250일 신고가·정배열 진입·거래원 이탈 — 장중 설정 간격(기본 10분)마다, 종목·규칙당 하루 한 번. 셋 이하면 종목마다, 넘으면 한 통",
     def: true,
   },
   { key: "disclosure", group: "news", label: "관심종목 공시", hint: "DART 공시 — 뉴스보다 빠르다 (10분마다)", def: true },

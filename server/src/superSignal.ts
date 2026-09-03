@@ -877,9 +877,25 @@ async function notifySuperRun(
     kind: "stock",
     level: "info",
     title: `슈퍼신호등 — 편입 ${added.length} · 복귀 ${revived.length} · 이탈 ${exited.length}`,
+    /* 이름만 있던 것에 점수·가격·편입 대비를 붙였다 (2026-09-03 전수 점검 — 열지 않고 판단할 수 있게) */
     body: [
-      added.length > 0 ? `편입 ${added.map((e) => e.name).slice(0, 5).join(" · ")}` : null,
-      exited.length > 0 ? `이탈 ${exited.map((e) => e.name).slice(0, 5).join(" · ")}` : null,
+      added.length > 0
+        ? `편입 ${added
+            .slice(0, 5)
+            .map((e) => `${e.name} ${e.score}점 ${fmtWon(e.addedPrice)} (목록 ${e.lists.length}곳)`)
+            .join(" · ")}${added.length > 5 ? ` 외 ${added.length - 5}` : ""}`
+        : null,
+      revived.length > 0 ? `복귀 ${revived.slice(0, 5).map((e) => `${e.name} ${e.seenCount}일째`).join(" · ")}` : null,
+      exited.length > 0
+        ? `이탈 ${exited
+            .slice(0, 5)
+            .map((e) => {
+              const ex = e.exits?.[e.exits.length - 1];
+              const ret = ex?.price && e.addedPrice > 0 ? ` ${(((ex.price - e.addedPrice) / e.addedPrice) * 100).toFixed(1)}%` : "";
+              return `${e.name}${ret} (${e.addedDate.slice(5)} 편입)`;
+            })
+            .join(" · ")}${exited.length > 5 ? ` 외 ${exited.length - 5}` : ""}`
+        : null,
     ]
       .filter(Boolean)
       .join("\n"),

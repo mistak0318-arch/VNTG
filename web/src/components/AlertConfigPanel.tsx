@@ -213,6 +213,21 @@ export function AlertConfigPanel() {
           />
           분
         </label>
+        <label className="sig-config-name">
+          <input
+            type="checkbox"
+            checked={Boolean(config.scanBands)}
+            disabled={!config.enabled}
+            onChange={(e) => patch({ scanBands: e.target.checked })}
+          />
+          <span>
+            <b>점수대 자동 그룹(60~90점대)까지 본다</b>
+            <small>
+              기본은 끔 — 내가 담은 그룹과 🌟슈퍼신호등·⚡교차만 봅니다. 점수대 그룹은 신호등이 매일 갈아
+              끼우는 수십 종목이라, 켜면 내가 담지 않은 종목의 급변까지 울리고 종목당 3콜이 그만큼 늘어납니다.
+            </small>
+          </span>
+        </label>
       </div>
 
       <div className={`sig-config-rows${config.enabled ? "" : " off"}`}>
