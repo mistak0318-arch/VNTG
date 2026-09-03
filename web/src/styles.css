@@ -14994,10 +14994,18 @@ tr:hover .sd-del { opacity: 0.75; }
   .ord-book .ob { padding: 0; }
   .ord-book .ob-body { display: block; }
   .ord-book .ob-book { flex: none; width: 100%; }
-  /* 가격 칸을 넓히고 줄 높이를 키운다 — 손가락으로 눌러야 하는 줄이다 */
-  .ord-book .ob-row { grid-template-columns: 0.9fr 5.1rem 1fr; height: 1.5rem; font-size: 0.76rem; }
-  .ord-book .ob-price b { font-size: 0.8rem; }
-  .ord-book .ob-rt { display: none; }
+  /*
+   * 가격 칸을 넓히고 줄 높이를 키운다 — 손가락으로 눌러야 하는 줄이다.
+   *
+   * **등락률(%)은 폰에서도 보인다** (2026-09-04, 벤티지: "호가창에 퍼센티지도 표시해 줘야지").
+   * 처음엔 자리가 없어 숨겼는데, 호가 칸을 47% 로 넓히면서 들어간다 — 호가창에서 가격만 보면
+   * 「이 값에 걸면 오늘 몇 %인가」를 매번 암산해야 한다. 그게 호가마다 %를 적는 이유다.
+   * 직전대비(ob-d)는 계속 접는다 — 폰에서 셋을 한 줄에 넣으면 다 못 읽는다.
+   */
+  .ord-book .ob-row { grid-template-columns: 1fr 5.4rem 1fr; height: 1.5rem; font-size: 0.72rem; }
+  .ord-book .ob-price { gap: 0.15rem; }
+  .ord-book .ob-price b { font-size: 0.74rem; }
+  .ord-book .ob-rt { font-size: 0.58rem; }
   .ord-book .ob-d { display: none; }
 
   .ord-venue button { font-size: 0.74rem; padding: 0.3rem 0.1rem; }
