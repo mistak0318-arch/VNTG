@@ -911,7 +911,7 @@ function OpenTab({ onDone }: { onDone: () => void }) {
       {!loading && rows.length === 0 && !error && <p className="empty">미체결 주문이 없다</p>}
       {rows.length > 0 && (
         <div className="ord-scroll">
-          <table className="ord-table">
+          <table className="ord-table stack">
             <thead>
               <tr>
                 <th>시각</th>
@@ -929,17 +929,17 @@ function OpenTab({ onDone }: { onDone: () => void }) {
             <tbody>
               {rows.map((r) => (
                 <tr key={`${r.ordNo}-${r.time}`}>
-                  <td>{r.time || "-"}</td>
-                  <td>
+                  <td data-l="시각">{r.time || "-"}</td>
+                  <td className="ord-name">
                     {r.name || r.code} <span className="ord-code">{r.code}</span>
                   </td>
-                  <td>{r.side || "-"}</td>
-                  <td className="r">{fmtNum(r.qty)}</td>
-                  <td className="r">{fmtNum(r.filled)}</td>
-                  <td className="r">{fmtNum(r.remain)}</td>
-                  <td className="r">{r.price ? r.price.toLocaleString() : "-"}</td>
-                  <td className="r">{r.stopPrice ? r.stopPrice.toLocaleString() : "-"}</td>
-                  <td>{r.status || "-"}</td>
+                  <td data-l="구분">{r.side || "-"}</td>
+                  <td className="r" data-l="주문">{fmtNum(r.qty)}</td>
+                  <td className="r" data-l="체결">{fmtNum(r.filled)}</td>
+                  <td className="r" data-l="남은">{fmtNum(r.remain)}</td>
+                  <td className="r" data-l="가격">{r.price ? r.price.toLocaleString() : "-"}</td>
+                  <td className="r" data-l="발동가">{r.stopPrice ? r.stopPrice.toLocaleString() : "-"}</td>
+                  <td data-l="상태">{r.status || "-"}</td>
                   <td>
                     <button type="button" className="ord-x" onClick={() => void cancel(r)}>
                       취소
@@ -1087,7 +1087,13 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
         <p className="empty">이 계좌에 보유 종목이 없다</p>
       ) : (
         <div className="ord-scroll">
-          <table className="ord-table">
+          {/*
+            `stack` — 폰에서는 이 표가 **줄마다 카드**로 접힌다 (2026-09-04).
+            칸이 아홉이라 폰에서 옆으로 밀리는데, 하필 제일 중요한 손절선·스톱이 오른쪽 끝이라
+            보이지도 않았다. 표를 하나 더 만드는 대신 CSS 로 접는다 — 마크업이 둘이면
+            언젠가 한쪽만 고쳐진다. 칸 이름은 `data-l` 로 들고 다닌다.
+          */}
+          <table className="ord-table stack">
             <thead>
               <tr>
                 <th>종목</th>
@@ -1111,17 +1117,17 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                 return (
                   <tr key={h.code}>
                     <td
-                      className={onSelectStock ? "click" : ""}
+                      className={`ord-name${onSelectStock ? " click" : ""}`}
                       onClick={() => onSelectStock?.(h.code, h.name)}
                     >
                       {h.name} <span className="ord-code">{h.code}</span>
                     </td>
-                    <td className="r">{fmtNum(h.qty)}</td>
-                    <td className="r">{fmtNum(h.avg)}</td>
-                    <td className="r">{fmtNum(h.cur)}</td>
-                    <td className={`r ${signClass(h.pnl)}`}>{fmtNum(h.pnl)}</td>
-                    <td className={`r ${signClass(h.pnlRate)}`}>{h.pnlRate.toFixed(2)}%</td>
-                    <td className="r">
+                    <td className="r" data-l="수량">{fmtNum(h.qty)}</td>
+                    <td className="r" data-l="평단">{fmtNum(h.avg)}</td>
+                    <td className="r" data-l="현재가">{fmtNum(h.cur)}</td>
+                    <td className={`r ${signClass(h.pnl)}`} data-l="평가손익">{fmtNum(h.pnl)}</td>
+                    <td className={`r ${signClass(h.pnlRate)}`} data-l="수익률">{h.pnlRate.toFixed(2)}%</td>
+                    <td className="r" data-l="손절선">
                       <input
                         className="ord-stop-in"
                         inputMode="numeric"
@@ -1136,7 +1142,7 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                         title="이 값 아래로 가면 알림이 옵니다. 비우면 감시를 끕니다"
                       />
                     </td>
-                    <td className={`r ${room !== null && room < 0 ? "negative" : ""}`}>
+                    <td className={`r ${room !== null && room < 0 ? "negative" : ""}`} data-l="여유">
                       {room === null ? "-" : `${room.toFixed(1)}%`}
                     </td>
                     <td>
