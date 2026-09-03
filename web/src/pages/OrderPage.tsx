@@ -12,6 +12,7 @@ import {
   type OrderTicket,
   type OrderVenue,
   type StockSearchResult,
+  type TradeType,
 } from "../api";
 import { OrderBookPanel } from "../components/OrderBookPanel";
 
@@ -439,14 +440,27 @@ function OrderForm({ status, onDone }: { status: OrderStatus; onDone: () => void
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [venue, setVenue] = useState<OrderVenue>("KRX");
-  const [market, setMarket] = useState(false);
+  /*
+   * 매매구분 (2026-09-04). 예전엔 「시장가」 스위치 하나였는데 실제로는 18가지다 —
+   * 목록은 **서버가 준다**(status.tradeTypes). 화면이 표를 들고 있으면 언젠가 서버와 갈린다.
+   */
+  const [tradeType, setTradeType] = useState("0");
   const [qty, setQty] = useState("");
   const [price, setPrice] = useState("");
+  const [cond, setCond] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: OrderTicket } | null>(null);
 
-  const open = status.open[venue];
+  const types: TradeType[] = status.tradeTypes ?? [];
+  const tt = types.find((t) => t.code === tradeType) ?? null;
+  /* 「값을 안 쓰는 구분」이면 가격 칸을 잠근다 — 넣어 봐야 서버가 거절한다 */
+  const usesPrice = tt ? tt.price !== "no" : true;
+  const needsPrice = tt?.price === "req";
+  const usesCond = tt?.cond === true;
+  /* 시간외 구분은 정규장 밖에 내는 것이 정상이라 「시간 아님」 경고를 띄우지 않는다 */
+  const open = tt?.late ? true : status.open[venue];
+  const ready = Boolean(code) && Boolean(qty) && (!needsPrice || Boolean(price)) && (!usesCond || Boolean(cond));
 
   async function prepare(e: React.FormEvent) {
     e.preventDefault();
@@ -458,7 +472,9 @@ function OrderForm({ status, onDone }: { status: OrderStatus; onDone: () => void
         code,
         name,
         qty: Number(qty),
-        price: market ? null : Number(price),
+        price: usesPrice && price ? Number(price) : null,
+        condPrice: tt?.cond && cond ? Number(cond) : null,
+        tradeType,
         venue,
       });
       setTicket(r);
@@ -520,34 +536,53 @@ function OrderForm({ status, onDone }: { status: OrderStatus; onDone: () => void
           placeholder="주"
         />
 
-        <label className="ord-lab">
-          가격
-          <button type="button" className={`ord-mk${market ? " on" : ""}`} onClick={() => setMarket((v) => !v)}>
-            시장가
-          </button>
-        </label>
+        <label className="ord-lab">매매구분</label>
+        <select className="ord-in" value={tradeType} onChange={(e) => setTradeType(e.target.value)}>
+          {types.map((t) => (
+            <option key={t.code} value={t.code}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        {tt && <div className="ord-caps">{tt.hint}</div>}
+
+        {usesCond && (
+          <>
+            <label className="ord-lab">발동가 (조건단가)</label>
+            <input
+              className="ord-in"
+              inputMode="numeric"
+              value={cond}
+              onChange={(e) => setCond(e.target.value.replace(/\D/g, ""))}
+              placeholder="이 값에 닿으면 주문이 나간다"
+            />
+          </>
+        )}
+
+        <label className="ord-lab">{usesCond ? "주문단가 (발동 뒤 낼 값)" : "가격"}</label>
         <input
           className="ord-in"
           inputMode="numeric"
-          disabled={market}
-          value={market ? "" : price}
+          disabled={!usesPrice}
+          value={usesPrice ? price : ""}
           onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))}
-          placeholder={market ? "시장가 — 값을 안 적는다" : "원"}
+          placeholder={usesPrice ? (needsPrice ? "원" : "원 (안 적어도 된다)") : `${tt?.label ?? ""} — 값을 안 적는다`}
         />
 
         <div className="ord-sum">
           <span>예상 금액</span>
-          <b>{market || !price || !qty ? "-" : won(Number(price) * Number(qty))}</b>
+          <b>{!price || !qty ? "-" : won(Number(price) * Number(qty))}</b>
         </div>
         <div className="ord-caps">
-          한 건 {won(status.guard.maxOrderKrw)} · 현재가 ±{status.guard.priceCollarPct}% · 남은 건수{" "}
+          한 건 {won(status.guard.maxOrderKrw)} · 지정가 현재가 ±{status.guard.priceCollarPct}%
+          {usesCond ? ` · 발동가 현재가 ±${status.guard.stopCollarPct}%` : ""} · 남은 건수{" "}
           {Math.max(0, status.guard.maxDailyCount - status.today.count)}
         </div>
 
         {!open && status.guard.marketHoursOnly && <p className="ord-err">{venue} 가 주문을 받는 시간이 아니다</p>}
         {error && <p className="ord-err">{error}</p>}
 
-        <button type="submit" className={`ord-go ${side}`} disabled={busy || !code || !qty || (!market && !price)}>
+        <button type="submit" className={`ord-go ${side}`} disabled={busy || !ready}>
           {busy ? "확인 중…" : side === "buy" ? "매수 주문서 만들기" : "매도 주문서 만들기"}
         </button>
         <p className="ord-note">주문서를 눈으로 확인하고 비밀번호를 넣어야 실제로 나간다.</p>
@@ -639,9 +674,20 @@ function Confirm({
           {ticket.kind === "order" && (
             <>
               <div>
-                <dt>가격</dt>
-                <dd>{ticket.price === null ? "시장가" : `${ticket.price.toLocaleString()}원`}</dd>
+                <dt>구분</dt>
+                <dd>{ticket.tradeLabel}</dd>
               </div>
+              <div>
+                <dt>가격</dt>
+                <dd>{ticket.price === null ? ticket.tradeLabel : `${ticket.price.toLocaleString()}원`}</dd>
+              </div>
+              {/* 스톱은 발동가가 본론이다 — 총액보다 먼저 눈에 들어와야 한다 */}
+              {ticket.condPrice !== null && (
+                <div className="ord-stop-kv">
+                  <dt>발동가</dt>
+                  <dd>{ticket.condPrice.toLocaleString()}원</dd>
+                </div>
+              )}
               <div>
                 <dt>현재가</dt>
                 <dd>{ticket.refPrice ? `${ticket.refPrice.toLocaleString()}원` : "-"}</dd>
@@ -661,7 +707,7 @@ function Confirm({
         </dl>
         {ticket.kind === "order" && (
           <div className="ord-modal-amt">
-            <span>총액</span>
+            <span>{ticket.condPrice !== null ? "발동되면 총액" : "총액"}</span>
             <b>{won(ticket.amount)}</b>
           </div>
         )}
@@ -755,6 +801,7 @@ function OpenTab({ onDone }: { onDone: () => void }) {
                 <th className="r">체결</th>
                 <th className="r">남은</th>
                 <th className="r">가격</th>
+                <th className="r">발동가</th>
                 <th>상태</th>
                 <th />
               </tr>
@@ -770,7 +817,8 @@ function OpenTab({ onDone }: { onDone: () => void }) {
                   <td className="r">{fmtNum(r.qty)}</td>
                   <td className="r">{fmtNum(r.filled)}</td>
                   <td className="r">{fmtNum(r.remain)}</td>
-                  <td className="r">{r.price ? r.price.toLocaleString() : "시장가"}</td>
+                  <td className="r">{r.price ? r.price.toLocaleString() : "-"}</td>
+                  <td className="r">{r.stopPrice ? r.stopPrice.toLocaleString() : "-"}</td>
                   <td>{r.status || "-"}</td>
                   <td>
                     <button type="button" className="ord-x" onClick={() => void cancel(r)}>

@@ -964,6 +964,8 @@ export const api = {
     name: string;
     qty: number;
     price: number | null;
+    condPrice: number | null;
+    tradeType: string;
     venue: OrderVenue;
   }) => orderPost<{ nonce: string; expiresAt: number; ticket: OrderTicket }>("/api/order/prepare", input),
   orderCancelPrepare: (input: { ordNo: string; code: string; name: string; qty: number; venue: OrderVenue }) =>
@@ -6226,6 +6228,8 @@ export interface OrderGuard {
   maxDailyKrw: number;
   maxDailyCount: number;
   priceCollarPct: number;
+  /** 스톱 발동가는 따로 — 손절선은 원래 멀리 둔다 */
+  stopCollarPct: number;
   marketHoursOnly: boolean;
   allowedCodes: string[] | null;
 }
@@ -6247,7 +6251,21 @@ export interface OrderStatus {
   guard: OrderGuard;
   today: { krw: number; count: number };
   open: Record<OrderVenue, boolean>;
+  tradeTypes: TradeType[];
   watching: number;
+}
+
+/** 매매구분 — 서버의 표를 그대로 받는다 (2026-09-04). 화면이 목록을 들고 있지 않다 */
+export interface TradeType {
+  code: string;
+  label: string;
+  /** 주문단가를 보내나 — "req" 꼭 · "no" 안 씀 · "opt" 넣으면 보냄 */
+  price: "req" | "no" | "opt";
+  /** 조건단가(스톱 발동가)를 쓰나 */
+  cond: boolean;
+  /** 시간외 주문이라 정규장 시간창 검사를 건너뛰나 */
+  late: boolean;
+  hint: string;
 }
 
 export interface OrderTicket {
@@ -6256,8 +6274,12 @@ export interface OrderTicket {
   code: string;
   name: string;
   qty: number;
-  /** null = 시장가 */
+  /** null = 값을 안 보내는 구분(시장가·최유리·시간외 종가 계열) */
   price: number | null;
+  /** 스톱지정가 발동가 */
+  condPrice: number | null;
+  tradeType: string;
+  tradeLabel: string;
   venue: OrderVenue;
   refPrice: number;
   amount: number;
@@ -6285,6 +6307,8 @@ export interface OrderRow {
   venue: string;
   time: string;
   status: string;
+  /** 스톱지정가 발동가 — 0 이면 스톱 주문이 아니다 */
+  stopPrice: number;
   raw: Record<string, unknown>;
 }
 
@@ -6303,6 +6327,8 @@ export interface OrderLogRow {
   name?: string;
   qty?: number;
   price?: number | null;
+  condPrice?: number | null;
+  tradeType?: string;
   venue?: OrderVenue;
   ordNo?: string;
   origOrdNo?: string;

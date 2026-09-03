@@ -41,6 +41,9 @@ import { sendTelegram } from "../telegram.js";
 export function createOrderRouter(main: KiwoomClient): Router {
   const router = Router();
 
+  /** 값을 안 보낸 칸인가 — null·빈 문자열·없음을 한 자리에서 가른다 */
+  const blank = (v: unknown): boolean => v === null || v === undefined || v === "";
+
   /* 세션 열기 실패 횟수 — 주소별. 다섯 번이면 15분 */
   const fails = new Map<string, { n: number; until: number }>();
 
@@ -172,7 +175,11 @@ export function createOrderRouter(main: KiwoomClient): Router {
           code: String(b.code ?? ""),
           name: String(b.name ?? ""),
           qty: Number(b.qty),
-          price: b.price === null || b.price === "" || b.price === undefined ? null : Number(b.price),
+          price: blank(b.price) ? null : Number(b.price),
+          /* 스톱지정가 발동가 (2026-09-04). 안 쓰는 구분이면 비워서 온다 */
+          condPrice: blank(b.condPrice) ? null : Number(b.condPrice),
+          /* 안 보내면 예전처럼 보통(지정가) — 옛 화면이 남아 있어도 동작이 안 바뀐다 */
+          tradeType: String(b.tradeType ?? "0"),
           venue: String(b.venue ?? "KRX") as OrderVenue,
         },
         clientIp(req),

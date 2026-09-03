@@ -16,8 +16,21 @@ import { sendTelegram } from "./telegram.js";
  *
  * ## 조사 (2026-09-03, openapi.kiwoom.com 가이드 · 공식 래퍼 목록)
  *   REST 가 주는 주문   = 현금 매수 kt10000 · 매도 kt10001 · 정정 kt10002 · 취소 kt10003 (신용 kt10006~9 는 안 쓴다)
- *   REST 에 **없는 것**  = 예약주문 · 스탑로스 · 자동감시주문 — 영웅문 HTS 의 기능이다. 이걸 흉내 내려면 우리
+ *   REST 에 **없는 것**  = 예약주문 · 자동감시주문 — 영웅문 HTS 의 기능이다. 이걸 흉내 내려면 우리
  *                        서버가 스스로 주문을 쏴야 하고, 그게 곧 설계가 제외한 「자동감시」다. 만들지 않는다.
+ *
+ * ## ⚠️ 정정 (2026-09-04) — 스톱지정가는 REST 로 된다
+ *
+ * 09-03 에 「스탑로스·스톱지정가도 REST 에 없다」고 적었는데 **틀렸다.** 키움이 8/27 에 공개한 공식 저장소
+ * (github.com/Kiwoom-Securities/Kiwoom-REST-API) 의 `examples/국내주식/주문/buy_domestic_stock.py` 에
+ * `trde_tp` 코드표가 있고 **28 = 스톱지정가**다. 발동가는 `cond_uv`(조건단가)로 같이 보내고, 미체결·체결
+ * 응답에 `stop_pric`(스톱가)가 돌아온다.
+ *
+ * **이건 우리 원칙에 안 걸린다.** 주문 한 번으로 조건까지 같이 넘기는 것이라 **우리 서버가 조건을 지켜보지
+ * 않는다** — 발동을 판단하는 쪽은 키움/거래소다. 설계가 뺀 「자동감시」는 *우리 서버가* 시세를 보다 스스로
+ * 주문을 쏘는 구조를 말한다. 그 성질(placeOrder 의 유일한 호출자가 executePrepared)은 그대로다.
+ *
+ * 매매구분도 0·3 둘만 쓰고 있었는데 실제로는 18개다 — 아래 `TRADE_TYPES`.
  *   조회               = 미체결 ka10075 · 체결 ka10076 · 예수금 kt00001 · 잔고 kt00018
  *   자리               = /api/dostk/ordr (주문) · /api/dostk/acnt (계좌)
  *
@@ -36,10 +49,12 @@ import { sendTelegram } from "./telegram.js";
  *   30초 nonce 와 주문 비밀번호가 있어야 지나간다. 스케줄러·시스·알림 모듈이 import 할 수 있는 「주문 함수」가
  *   없다. 이 파일을 그렇게 유지하는 것이 이 기능의 첫 번째 안전장치다.
  *
- * ## 실측 전 (2026-09-03 밤) — 필드명 주의
- *   주문 TR 의 요청 필드(dmst_stex_tp·stk_cd·ord_qty·ord_uv·trde_tp·cond_uv / orig_ord_no·cncl_qty)와 응답 ord_no 는
- *   공개 가이드·예제에서 확인했다. 미체결(ka10075 `oso`)·체결(ka10076 `cntr`)의 **행 필드명은 모의에서 실측해
- *   확정**해야 한다 — 그래서 첫 응답의 원문을 기록(kind "raw")에 남기고, 화면도 정규화 값이 비면 원문을 그대로 보여 준다.
+ * ## 필드명 (2026-09-04 공식 예제로 확인)
+ *   주문      dmst_stex_tp · stk_cd · ord_qty · ord_uv · trde_tp · cond_uv → 응답 ord_no · dmst_stex_tp
+ *   미체결    ka10075 배열 `oso` — ord_no · stk_cd · stk_nm · io_tp_nm · ord_qty · ord_pric · oso_qty · cntr_qty ·
+ *             cntr_pric · ord_stt · tm · stex_tp · stex_tp_txt · sor_yn · stop_pric · orig_ord_no
+ *   체결      ka10076 배열 `cntr` — 위와 같고 **시각이 ord_tm** (미체결은 tm) · cntr_pric · cntr_qty
+ *   남은 실측은 예수금(kt00001) 필드와 왕복 자체뿐이다. 첫 응답 원문은 그대로 기록(kind "raw")에 남긴다.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -56,6 +71,58 @@ export type OrderSide = "buy" | "sell";
 export type OrderVenue = "KRX" | "NXT" | "SOR";
 export const VENUES: OrderVenue[] = ["KRX", "NXT", "SOR"];
 
+/**
+ * 매매구분(`trde_tp`) — 키움 공식 예제의 코드표 그대로 (2026-09-04).
+ *
+ * `price`  주문단가(ord_uv)를 보내나. "req" 꼭 · "no" 안 보냄(빈 문자열) · "opt" 넣으면 보냄
+ * `cond`   조건단가(cond_uv)를 보내나 — 지금은 스톱지정가 하나뿐이다
+ * `late`   정규장 시간창 검사를 건너뛴다(시간외 주문이라 당연히 밖에서 낸다)
+ *
+ * ⚠️ **코드값과 이름은 공식 표다. 「가격을 보내야 하나」는 우리가 추론한 것**이다 — 0·3·28 만
+ * 예제로 확인했다. 중간가(29~31)와 시간외(61·81)는 모의 실측에서 틀리면 여기만 고치면 된다.
+ * 그래서 화면이 이 표를 그대로 받아 그린다 — 서버와 화면이 갈리지 않게.
+ */
+export interface TradeType {
+  code: string;
+  label: string;
+  price: "req" | "no" | "opt";
+  cond: boolean;
+  late: boolean;
+  hint: string;
+}
+
+export const TRADE_TYPES: TradeType[] = [
+  { code: "0", label: "보통(지정가)", price: "req", cond: false, late: false, hint: "값을 정해 걸어 둔다" },
+  { code: "3", label: "시장가", price: "no", cond: false, late: false, hint: "지금 나오는 값에 바로" },
+  {
+    code: "28",
+    label: "스톱지정가",
+    price: "req",
+    cond: true,
+    late: false,
+    hint: "조건단가에 닿으면 주문단가로 낸다 — 발동을 지켜보는 쪽은 키움이다",
+  },
+  { code: "5", label: "조건부지정가", price: "req", cond: false, late: false, hint: "장중엔 지정가, 안 되면 마감 동시호가에 시장가" },
+  { code: "6", label: "최유리지정가", price: "no", cond: false, late: false, hint: "반대편 첫 호가로" },
+  { code: "7", label: "최우선지정가", price: "no", cond: false, late: false, hint: "우리 편 첫 호가로" },
+  { code: "10", label: "보통 IOC", price: "req", cond: false, late: false, hint: "되는 만큼만 즉시, 나머지 취소" },
+  { code: "13", label: "시장가 IOC", price: "no", cond: false, late: false, hint: "되는 만큼만 즉시, 나머지 취소" },
+  { code: "16", label: "최유리 IOC", price: "no", cond: false, late: false, hint: "되는 만큼만 즉시, 나머지 취소" },
+  { code: "20", label: "보통 FOK", price: "req", cond: false, late: false, hint: "전부 아니면 전부 취소" },
+  { code: "23", label: "시장가 FOK", price: "no", cond: false, late: false, hint: "전부 아니면 전부 취소" },
+  { code: "26", label: "최유리 FOK", price: "no", cond: false, late: false, hint: "전부 아니면 전부 취소" },
+  { code: "29", label: "중간가", price: "opt", cond: false, late: false, hint: "양쪽 첫 호가의 가운데 — NXT 계열. 실측 전" },
+  { code: "30", label: "중간가 IOC", price: "opt", cond: false, late: false, hint: "실측 전" },
+  { code: "31", label: "중간가 FOK", price: "opt", cond: false, late: false, hint: "실측 전" },
+  { code: "61", label: "장시작전 시간외", price: "no", cond: false, late: true, hint: "전일 종가로 — 08:30~08:40. 실측 전" },
+  { code: "62", label: "시간외 단일가", price: "req", cond: false, late: true, hint: "16:00~18:00, 10분 단위 단일가. 실측 전" },
+  { code: "81", label: "장마감후 시간외", price: "no", cond: false, late: true, hint: "당일 종가로 — 15:40~16:00. 실측 전" },
+];
+
+export function tradeTypeOf(code: string): TradeType | null {
+  return TRADE_TYPES.find((t) => t.code === code) ?? null;
+}
+
 export interface OrderGuard {
   /** 주문 한 건의 상한(원). 지정가는 가격×수량, 시장가는 현재가×수량으로 잰다 */
   maxOrderKrw: number;
@@ -65,6 +132,14 @@ export interface OrderGuard {
   maxDailyCount: number;
   /** 현재가에서 이만큼(%) 넘게 벗어난 지정가는 거절 — 0 을 하나 더 친 손가락 */
   priceCollarPct: number;
+  /**
+   * 스톱 **발동가**(조건단가)는 따로 잰다 (2026-09-04).
+   *
+   * 손절 스톱은 현재가보다 한참 아래에 두는 것이 정상이다 — 지정가와 같은 ±5% 를 물리면
+   * 쓸 수 있는 손절선이 5% 안쪽뿐이라 기능이 죽는다. 넓게 두되 손가락 실수(0 하나 더)는 잡는다.
+   * 주문단가는 이 발동가에서 `priceCollarPct` 안에 있어야 한다 — 둘이 멀면 그게 오타다.
+   */
+  stopCollarPct: number;
   /** 거래소가 주문을 받는 시간에만 — 밖이면 거절 */
   marketHoursOnly: boolean;
   /** 비우면(null) 전 종목. 채우면 이 코드들만 */
@@ -76,6 +151,7 @@ const DEFAULT_GUARD: OrderGuard = {
   maxDailyKrw: 3_000_000,
   maxDailyCount: 20,
   priceCollarPct: 5,
+  stopCollarPct: 30,
   marketHoursOnly: true,
   allowedCodes: null,
 };
@@ -109,8 +185,10 @@ export interface OrderLogRow {
   code?: string;
   name?: string;
   qty?: number;
-  /** null = 시장가 */
+  /** null = 값을 안 보내는 구분 */
   price?: number | null;
+  condPrice?: number | null;
+  tradeType?: string;
   venue?: OrderVenue;
   ordNo?: string;
   origOrdNo?: string;
@@ -393,8 +471,14 @@ export interface OrderTicket {
   code: string;
   name: string;
   qty: number;
-  /** null = 시장가 */
+  /** null = 값을 안 보내는 구분(시장가·최유리·최우선·시간외 종가 계열) */
   price: number | null;
+  /** 스톱지정가의 발동가(cond_uv). 그 밖에는 null */
+  condPrice: number | null;
+  /** trde_tp */
+  tradeType: string;
+  /** 화면·텔레그램에 그대로 쓰는 이름 */
+  tradeLabel: string;
   venue: OrderVenue;
   refPrice: number;
   amount: number;
@@ -428,11 +512,13 @@ export interface PrepareInput {
   name: string;
   qty: number;
   price: number | null;
+  condPrice: number | null;
+  tradeType: string;
   venue: OrderVenue;
 }
 
 function reject(msg: string, input: Partial<PrepareInput>, ip: string): never {
-  void appendLog({ kind: "reject", ip, side: input.side, code: input.code, name: input.name, qty: input.qty, price: input.price, venue: input.venue, msg });
+  void appendLog({ kind: "reject", ip, side: input.side, code: input.code, name: input.name, qty: input.qty, price: input.price, venue: input.venue, tradeType: input.tradeType, msg });
   throw new Error(msg);
 }
 
@@ -450,14 +536,32 @@ export async function prepareOrder(
   if (!/^\d{6}$/.test(input.code)) reject("종목코드가 6자리가 아니다", input, ip);
   if (!Number.isInteger(input.qty) || input.qty <= 0 || input.qty > 100_000) reject("수량이 이상하다", input, ip);
   if (input.price !== null && (!Number.isInteger(input.price) || input.price <= 0)) reject("가격이 이상하다", input, ip);
+  if (input.condPrice !== null && (!Number.isInteger(input.condPrice) || input.condPrice <= 0)) {
+    reject("조건단가가 이상하다", input, ip);
+  }
   if (!VENUES.includes(input.venue)) reject("거래소 구분이 이상하다", input, ip);
   if (input.side !== "buy" && input.side !== "sell") reject("매수·매도 구분이 없다", input, ip);
+
+  /* 매매구분마다 「가격을 보내야 하나」가 다르다 — 표가 유일한 기준이다 (2026-09-04) */
+  const tt = tradeTypeOf(input.tradeType);
+  if (!tt) reject("매매구분을 모르겠다", input, ip);
+  if (tt.price === "req" && input.price === null) reject(`${tt.label} 는 주문단가가 있어야 한다`, input, ip);
+  if (tt.price === "no" && input.price !== null) reject(`${tt.label} 는 주문단가를 안 쓴다`, input, ip);
+  if (tt.cond && input.condPrice === null) reject(`${tt.label} 는 조건단가(발동가)가 있어야 한다`, input, ip);
+  if (!tt.cond && input.condPrice !== null) reject(`${tt.label} 는 조건단가를 안 쓴다`, input, ip);
 
   const g = await getGuard();
   if (g.allowedCodes && g.allowedCodes.length > 0 && !g.allowedCodes.includes(input.code)) {
     reject("허용 종목이 아니다 (orderGuard.allowedCodes)", input, ip);
   }
-  if (g.marketHoursOnly && !venueOpen(input.venue)) reject(`${input.venue} 가 주문을 받는 시간이 아니다`, input, ip);
+  /*
+   * 시간외 주문(61·62·81)은 **정규장 밖에 내는 것이 정상**이라 우리 시간창으로 막으면 기능이 죽는다.
+   * 그렇다고 시간외 창을 새로 박아 두지는 않는다 — 시간표는 2026-09-14 KRX 애프터시장 개편 때
+   * 한 번에 고치기로 한 자리다(docs/다음작업_TODO.md). 그때까지는 키움이 거절하게 둔다.
+   */
+  if (g.marketHoursOnly && !tt.late && !venueOpen(input.venue)) {
+    reject(`${input.venue} 가 주문을 받는 시간이 아니다`, input, ip);
+  }
 
   let ref = 0;
   try {
@@ -465,14 +569,41 @@ export async function prepareOrder(
   } catch {
     ref = 0;
   }
-  if (input.price === null && ref <= 0) reject("현재가를 못 읽어 시장가 금액을 잴 수 없다 — 지정가로", input, ip);
-  if (input.price !== null && ref > 0) {
+  if (input.price === null && ref <= 0) reject("현재가를 못 읽어 주문 금액을 잴 수 없다 — 값을 적는 구분으로", input, ip);
+
+  if (tt.cond && input.condPrice !== null) {
+    /*
+     * 스톱은 자를 둘 쓴다.
+     *   발동가 ↔ 현재가   넓게(stopCollarPct) — 손절선은 원래 멀리 둔다
+     *   주문가 ↔ 발동가   좁게(priceCollarPct) — 둘이 멀면 그건 오타다
+     */
+    if (ref > 0) {
+      const offCond = (Math.abs(input.condPrice - ref) / ref) * 100;
+      if (offCond > g.stopCollarPct) {
+        reject(
+          `발동가가 현재가(${ref.toLocaleString()})에서 ${offCond.toFixed(1)}% 벗어났다 (한도 ${g.stopCollarPct}%)`,
+          input,
+          ip,
+        );
+      }
+    }
+    if (input.price !== null) {
+      const offOrd = (Math.abs(input.price - input.condPrice) / input.condPrice) * 100;
+      if (offOrd > g.priceCollarPct) {
+        reject(
+          `주문단가가 발동가(${input.condPrice.toLocaleString()})에서 ${offOrd.toFixed(1)}% 벗어났다 (한도 ${g.priceCollarPct}%)`,
+          input,
+          ip,
+        );
+      }
+    }
+  } else if (input.price !== null && ref > 0) {
     const off = (Math.abs(input.price - ref) / ref) * 100;
     if (off > g.priceCollarPct) {
       reject(`지정가가 현재가(${ref.toLocaleString()})에서 ${off.toFixed(1)}% 벗어났다 (한도 ${g.priceCollarPct}%)`, input, ip);
     }
   }
-  const unit = input.price ?? ref;
+  const unit = input.price ?? input.condPrice ?? ref;
   const amount = unit * input.qty;
   if (amount > g.maxOrderKrw) reject(`한 건 한도 초과 — ${amount.toLocaleString()}원 > ${g.maxOrderKrw.toLocaleString()}원`, input, ip);
   const used = await todayUsage();
@@ -488,6 +619,9 @@ export async function prepareOrder(
     name: input.name.slice(0, 40),
     qty: input.qty,
     price: input.price,
+    condPrice: input.condPrice,
+    tradeType: tt.code,
+    tradeLabel: tt.label,
     venue: input.venue,
     refPrice: ref,
     amount,
@@ -535,8 +669,8 @@ async function placeOrder(t: Ticket): Promise<{ ordNo: string; msg: string; raw:
       stk_cd: t.code,
       ord_qty: String(t.qty),
       ord_uv: t.price === null ? "" : String(t.price),
-      trde_tp: t.price === null ? "3" : "0", // 0 보통(지정가) · 3 시장가
-      cond_uv: "",
+      trde_tp: t.tradeType, // 표는 TRADE_TYPES — 28 이 스톱지정가다
+      cond_uv: t.condPrice === null ? "" : String(t.condPrice), // 스톱 발동가
     };
   }
   const { data } = await oc.request<Record<string, unknown>>(ORDER_RESOURCE, apiId, body, { noAl: true });
@@ -577,7 +711,7 @@ export async function executePrepared(
       unwatch(t.ordNo);
       void sendTelegram(`🧾 ${tag} <b>취소</b> ${esc(t.name)} ${t.qty}주 (원주문 ${esc(t.ordNo)})\n${esc(r.msg)}`, "order").catch(() => undefined);
     } else {
-      await appendLog({ kind: "order", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, venue: t.venue, ordNo: r.ordNo, amount: t.amount, msg: r.msg, raw: r.raw });
+      await appendLog({ kind: "order", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, condPrice: t.condPrice, tradeType: t.tradeType, venue: t.venue, ordNo: r.ordNo, amount: t.amount, msg: r.msg, raw: r.raw });
       const sideKo = t.side === "buy" ? "매수" : "매도";
       const priceKo = t.price === null ? "시장가" : `${t.price.toLocaleString()}원`;
       void sendTelegram(
@@ -634,6 +768,8 @@ export interface OpenRow {
   venue: string;
   time: string;
   status: string;
+  /** 스톱지정가 발동가 — 0 이면 스톱 주문이 아니다 */
+  stopPrice: number;
   raw: Record<string, unknown>;
 }
 
@@ -657,9 +793,13 @@ function normOpen(r: Record<string, unknown>): OpenRow {
     price: num(pick(r, ["ord_pric", "ord_uv"])),
     remain: num(pick(r, ["oso_qty", "unfilled_qty"])),
     filled: num(pick(r, ["cntr_qty"])),
-    venue: str(pick(r, ["stex_tp", "dmst_stex_tp"])),
+    /* 공식 명세: stex_tp 는 코드(0 통합·1 KRX·2 NXT), stex_tp_txt 가 사람이 읽는 이름 */
+    venue: str(pick(r, ["stex_tp_txt", "stex_tp", "dmst_stex_tp"])),
+    /* 미체결은 tm, 체결은 ord_tm 이다 — 둘 다 본다 */
     time: str(pick(r, ["tm", "ord_tm"])),
     status: str(pick(r, ["ord_stt"])),
+    /** 스톱지정가로 낸 주문이면 발동가가 돌아온다 (2026-09-04) */
+    stopPrice: num(pick(r, ["stop_pric"])),
     raw: r,
   };
 }
@@ -836,6 +976,8 @@ export async function orderStatus(req: Request): Promise<Record<string, unknown>
     guard,
     today,
     open: Object.fromEntries(VENUES.map((v) => [v, venueOpen(v)])),
+    /* 화면이 매매구분을 하드코딩하지 않게 — 표를 고치면 화면이 따라온다 */
+    tradeTypes: TRADE_TYPES,
     watching: watching.size,
   };
 }

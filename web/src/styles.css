@@ -14866,3 +14866,16 @@ tr:hover .sd-del { opacity: 0.75; }
   font-size: 0.86rem;
   line-height: 1.5;
 }
+
+/* 스톱 발동가 — 확인 창에서 한 줄을 통째로 쓰고 색을 준다 (2026-09-04).
+   스톱 주문은 「얼마에 나가나」보다 「언제 나가나」가 본론이다 */
+.ord-modal-kv .ord-stop-kv {
+  grid-column: 1 / -1;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(255, 176, 32, 0.14);
+  border: 1px solid rgba(255, 176, 32, 0.45);
+}
+.ord-modal-kv .ord-stop-kv dt { color: #ffb020; }
+.ord-modal-kv .ord-stop-kv dd { font-weight: 700; }
+select.ord-in { appearance: auto; cursor: pointer; }
