@@ -83,16 +83,16 @@ export async function peerMarginTrend(
 const idxMemo = new Map<string, Map<string, number>>();
 
 /**
- * 회원사들의 **20일 수익률 중앙값** (%). `date`(YYYYMMDD) 를 주면 그날 기준, 없으면 마지막 봉.
- * 일봉 캐시(전종목)에서 읽는다. 셋 미만이면 null.
+ * 회원사들의 **n일 수익률 중앙값** (%). `date`(YYYYMMDD) 를 주면 그날 기준, 없으면 마지막 봉.
+ * 일봉 캐시(전종목)에서 읽는다. 셋 미만이면 null. n 은 5·10·20 (세대 5 기본 10 — 단기 스윙).
  */
-export async function peerRet20(codes: string[], date?: string): Promise<{ med: number; n: number } | null> {
+export async function peerRet(codes: string[], n: number, date?: string): Promise<{ med: number; n: number } | null> {
   const { bars } = await loadCloses();
   const barsOf = bars ?? {};
   const vals: number[] = [];
   for (const c of codes) {
     const bs = barsOf[c];
-    if (!bs || bs.length < 21) continue;
+    if (!bs || bs.length < n + 1) continue;
     let i = bs.length - 1;
     if (date) {
       let m = idxMemo.get(c);
@@ -105,11 +105,14 @@ export async function peerRet20(codes: string[], date?: string): Promise<{ med: 
       if (k === undefined) continue;
       i = k;
     }
-    if (i < 20) continue;
+    if (i < n) continue;
     const c0 = bs[i].c;
-    const c20 = bs[i - 20].c;
-    if (!(c0 > 0 && c20 > 0)) continue;
-    vals.push(((c0 - c20) / c20) * 100);
+    const cN = bs[i - n].c;
+    if (!(c0 > 0 && cN > 0)) continue;
+    vals.push(((c0 - cN) / cN) * 100);
   }
   return vals.length >= 3 ? { med: med(vals), n: vals.length } : null;
 }
+
+/** 옛 이름 — 표본 생성기가 쓴다 */
+export const peerRet20 = (codes: string[], date?: string) => peerRet(codes, 20, date);

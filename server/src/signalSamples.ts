@@ -268,10 +268,15 @@ export interface Feat {
   /*
    * ## 세대 5 칸 (2026-09-03) — 실전(`signalLight`)과 같은 정의. 없으면(옛 표본) 그 기준은 못 잰다
    */
-  /** 60일 최고 종가(당일 포함) 대비 % — 눌림목 */
+  /** 60일 최고 종가(당일 포함) 대비 % — 눌림목(기간 60) */
   dd60?: number | null;
   /** 그 고점이 60일 전 종가보다 몇 % 위였나 — 「먼저 올랐나」 */
   rise60?: number | null;
+  /** 20일 창 — 세대 5 기본 (2026-09-03, "너무 한달단위") */
+  dd20?: number | null;
+  rise20?: number | null;
+  /** 종목 10일 − 섹터 회원 중앙 10일 (%p) — 세대 5 기본. `secRel` 은 20일 */
+  secRel10?: number | null;
   /** 20일선 이격 % (부호 있음 — `disp` 는 음수를 0 으로 눌렀다) */
   gap20?: number | null;
   /** 최근 5일 평균 거래량 ÷ 20일 평균 */
@@ -434,30 +439,41 @@ export function rawOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
       return f.etfBack;
     /* 세대 5 (2026-09-03) */
     case "pullback":
-      return f.dd60 ?? null;
+      return ((c.span ?? 20) >= 60 ? f.dd60 : f.dd20) ?? null;
     case "maGap20":
       return f.gap20 ?? null;
     case "sectorRel":
-      return f.secRel ?? null;
+      return ((c.span ?? 10) >= 20 ? f.secRel : f.secRel10) ?? null;
     case "volPattern":
       return f.vGrow ?? null;
     case "qMarginTrend":
       return f.mTrend ?? null;
     case "sectorMargin":
       return f.secMT ?? null;
+    case "fgnAccum5":
+    case "fgnAccum10":
     case "fgnAccum":
+    case "instAccum5":
+    case "instAccum10":
     case "instAccum": {
-      const s20 = c.key === "fgnAccum" ? f.fgn20 : f.inst20;
-      const s60 = c.key === "fgnAccum" ? f.fgn60 : f.inst60;
-      if (s20 === null) return null;
-      if (s20 <= 0) return 0;
+      const { sN, n, s60 } = accumParts(f, c.key);
+      if (sN === null) return null;
+      if (sN <= 0) return 0;
       if (s60 === null) return 1;
       if (s60 <= 0) return 9;
-      return s20 / 20 / (s60 / 60);
+      return sN / n / (s60 / 60);
     }
     default:
       return null;
   }
+}
+
+/** 모아감 n일(5·10·20, 키 끝 숫자)의 재료 — 실전 `evaluateSignal` 과 같은 자리를 본다 */
+function accumParts(f: Feat, key: string): { sN: number | null; n: number; s60: number | null } {
+  const fgn = key.startsWith("fgn");
+  const n = key.endsWith("5") ? 5 : key.endsWith("10") ? 10 : 20;
+  const sN = fgn ? (n === 5 ? f.fgn5 : n === 10 ? f.fgn10 : f.fgn20) : n === 5 ? f.inst5 : n === 10 ? f.inst10 : f.inst20;
+  return { sN, n, s60: fgn ? f.fgn60 : f.inst60 };
 }
 
 /** 채점에 필요한 설정 조각 — 전체 설정을 넘기지 않아도 되게 */
@@ -472,11 +488,15 @@ export function gradeOf(f: Feat, c: CheckConfig, cfg: GradeCtx, regime?: "bull" 
   switch (c.key) {
     /* ---------------- 세대 5 (2026-09-03) — 실전 `evaluateSignal` 과 같은 띠 ---------------- */
     case "pullback": {
-      if (f.dd60 == null || f.rise60 == null) return null;
-      if (f.rise60 < 10) return 0;
+      /* 기간(span) 60 이면 60일 창, 아니면 20일 창 — 표본은 둘만 든다. 실전과 같은 문턱(+10 / +8) */
+      const long = (c.span ?? 20) >= 60;
+      const ddV = long ? f.dd60 : f.dd20;
+      const riseV = long ? f.rise60 : f.rise20;
+      if (ddV == null || riseV == null) return null;
+      if (riseV < (long ? 10 : 8)) return 0;
       const lo = Math.min(c.threshold, c.strongAt);
       const hi = Math.max(c.threshold, c.strongAt);
-      const dd = f.dd60;
+      const dd = ddV;
       const inZone = dd >= lo && dd <= hi;
       const nearTop = dd > hi && dd <= 0;
       const deep = dd >= lo - 10 && dd < lo;
@@ -490,21 +510,25 @@ export function gradeOf(f: Feat, c: CheckConfig, cfg: GradeCtx, regime?: "bull" 
       return a >= lo && a <= hi ? 100 : (a >= lo - 5 && a < lo) || (a > hi && a <= hi + 5) ? 50 : 0;
     }
     case "sectorRel": {
-      if (f.secRel == null) return null;
+      const rv = (c.span ?? 10) >= 20 ? f.secRel : f.secRel10;
+      if (rv == null) return null;
       const lo = Math.min(c.threshold, c.strongAt);
       const hi = Math.max(c.threshold, c.strongAt);
-      const r = f.secRel;
+      const r = rv;
       return r >= lo && r <= hi ? 100 : r > hi && r <= hi + 10 ? 50 : 0;
     }
+    case "fgnAccum5":
+    case "fgnAccum10":
     case "fgnAccum":
+    case "instAccum5":
+    case "instAccum10":
     case "instAccum": {
-      const s20 = c.key === "fgnAccum" ? f.fgn20 : f.inst20;
-      const s60 = c.key === "fgnAccum" ? f.fgn60 : f.inst60;
-      if (s20 === null) return null;
-      if (s20 <= 0) return 0;
+      const { sN, n, s60 } = accumParts(f, c.key);
+      if (sN === null) return null;
+      if (sN <= 0) return 0;
       if (s60 === null) return 50;
       if (s60 <= 0) return 100;
-      return s20 / 20 / (s60 / 60) >= Math.max(c.threshold, c.strongAt) ? 100 : 50;
+      return sN / n / (s60 / 60) >= Math.max(c.threshold, c.strongAt) ? 100 : 50;
     }
     case "volPattern": {
       if (f.vGrow == null) return null;

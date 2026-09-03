@@ -416,7 +416,15 @@ export async function backfillSectorFlow(
  * 정리가 한 번 돌리면 된다(`/api/overview/sector-flow/backfill`).
  */
 export async function captureSectorFlow(client: KiwoomClient): Promise<{ saved: boolean; reason?: string }> {
-  const res = await backfillSectorFlow(client, 3);
+  /*
+   * 칸이 모자란 옛 날짜가 남아 있으면 **이번 한 번만** 70일을 훑어 되채운다 — 미니PC 는
+   * 데이터 파일이 따로라 개발PC 에서 돌린 되채우기가 안 닿는다. 다 채워지면 다시 3일로.
+   */
+  const existing = await readAll();
+  const hasShort = existing.some((d) =>
+    [...d.kospi, ...d.kosdaq].some((r) => (r.v?.length ?? 0) < SUBJECTS.length),
+  );
+  const res = await backfillSectorFlow(client, hasShort ? 70 : 3);
   return res.added > 0 || res.refilled > 0
     ? { saved: true }
     : { saved: false, reason: "새로 채울 거래일 없음" };

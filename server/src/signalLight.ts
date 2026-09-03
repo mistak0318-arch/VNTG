@@ -17,7 +17,7 @@ import { isIndexLikeTheme } from "./naverThemes.js";
 import { etfHoldersOf } from "./etfHolders.js";
 import { quarterFinance } from "./quarterFinance.js";
 import { marginTrendAt } from "./financeCache.js";
-import { peerMarginTrend, peerRet20, sectorPeersOf } from "./sectorPeers.js";
+import { peerMarginTrend, peerRet, sectorPeersOf } from "./sectorPeers.js";
 import { pushNotice } from "./notifyCenter.js";
 import { computeAlerts, killAlerts, marketReturns, type SignalAlerts } from "./hotAlerts.js";
 
@@ -153,9 +153,17 @@ export type CheckKey =
   | "sectorMargin"
   /** 점수 ② 20일선 이격 — 붙어 있을수록 좋다(봉우리형, 계산부가 직접 띠를 매긴다) */
   | "maGap20"
-  /** 점수 ③ 외국인 모아감 — 20일 순매수가 양이고 60일 속도보다 빠르다 */
+  /**
+   * 점수 ③ 외국인·기관 모아감 — 5·10·20일 셋으로 나눈다 (2026-09-03 — 벤티지: "왜 전부 20일
+   * 기준이야? 모아감도 5일 10일 20일 나눠가지고 가중치를 따로 했음 좋겠어. 단기스윙추종이니깐").
+   * 키 끝의 숫자가 기간이다(`fgnAccum` 은 20일 — 옛 저장본과 맞추려고 이름을 안 바꿨다).
+   * n일 순매수가 양이고 n일 일평균이 60일 일평균보다 빠르면 만점.
+   */
+  | "fgnAccum5"
+  | "fgnAccum10"
   | "fgnAccum"
-  /** 점수 ③ 기관 모아감 */
+  | "instAccum5"
+  | "instAccum10"
   | "instAccum"
   /** 점수 ④ 섹터 안 상대 — 회원 중앙값보다 좋되 아직 안 튄 */
   | "sectorRel"
@@ -821,7 +829,9 @@ export const GEN4_CONFIG: SignalConfig = {
       weight: 1,
       threshold: -15,
       strongAt: -3,
-      hint: "60일 고점 대비 몇 % 아래인가(먼저 +10% 이상 올랐던 것만). 기준값~아주 좋음 사이(-15~-3%)가 만점 — 오르던 것이 잠깐 쉬는 자리. 강세장으로 놓으면 고점 근처(-3~0)가 만점",
+      /* 기간 = 고점을 찾는 창(일). 세대 5 는 20 — 단기 스윙. 60 이면 두 달 꼭대기 기준 */
+      span: 60,
+      hint: "기간(n일) 고점 대비 몇 % 아래인가(그 고점이 n일 전보다 +8%(60일이면 +10%) 이상 올랐던 것만). 기준값~아주 좋음 사이가 만점 — 오르던 것이 잠깐 쉬는 자리. 강세장으로 놓으면 고점 근처(-3~0)가 만점",
       cost: 0,
     },
     /*
@@ -2044,39 +2054,57 @@ const GEN5_NEW: CheckConfig[] = [
     weight: 1,
     threshold: -3,
     strongAt: 10,
-    hint: "이 종목 20일 수익률 − 섹터 회원사 중앙값 (%p). -3~+10 이면 섹터 안에서 좋아지는 중인데 아직 안 튄 것 — 만점. +10~+20 은 절반(이미 앞서 감). 그 밖 0",
+    /* 10일 (2026-09-03 — "너무 한달단위") — 두 주 안에서 섹터 안 순위가 바뀌는 것을 본다. 5·10·20 중 고른다 */
+    span: 10,
+    hint: "이 종목 n일 수익률 − 섹터 회원사 중앙값 (%p, n = 기간 · 기본 10일). -3~+10 이면 섹터 안에서 좋아지는 중인데 아직 안 튄 것 — 만점. +10~+20 은 절반(이미 앞서 감). 그 밖 0",
     cost: 0,
   },
-  {
-    key: "fgnAccum",
-    label: "외국인 모아감",
-    axis: "flow",
-    enabled: true,
-    weight: 0.5,
-    threshold: 0,
-    strongAt: 1,
-    span: 20,
-    hint: "20일 순매수가 양이고, 20일 일평균이 60일 일평균의 몇 배인가. 아주 좋음(1배) 이상이면 속도가 붙는 중 — 만점. 순매수인데 느려지면 절반. 60일은 팔았는데 20일에 사기 시작했으면 만점(모으기 시작). 순매도면 0",
-    cost: 0,
-  },
-  {
-    key: "instAccum",
-    label: "기관 모아감",
-    axis: "flow",
-    enabled: true,
-    weight: 0.5,
-    threshold: 0,
-    strongAt: 1,
-    span: 20,
-    hint: "기관계 20일 순매수 — 외국인 모아감과 같은 규칙",
-    cost: 0,
-  },
+  /*
+   * **모아감 — 5·10·20일 셋** (2026-09-03). 단기 스윙 추종이라 짧은 쪽이 무겁다:
+   * 5일 1.0 · 10일 0.7 · 20일 0.3 (합 2). 외인 2 + 기관 2 + 거래량 4 = 수급 축 8 → 축 무게 2 로
+   * 외인 10 · 기관 10 · 거래량 20 점이 그대로 유지된다. 5일 = 이번 주 누가 사나(5점),
+   * 10일 = 두 주(3.5점), 20일 = 한 달(1.5점). 무게는 설정에서 바꾼다.
+   */
+  ...([5, 10, 20] as const).flatMap((n): CheckConfig[] => {
+    const w = n === 5 ? 1.0 : n === 10 ? 0.7 : 0.3;
+    const sfx = n === 20 ? "" : String(n);
+    const hint =
+      `${n}일 순매수가 양이고, ${n}일 일평균이 60일 일평균의 몇 배인가. 아주 좋음(1배) 이상이면 속도가 붙는 중 — 만점. ` +
+      `순매수인데 느려지면 절반. 60일은 팔았는데 ${n}일에 사기 시작했으면 만점(모으기 시작). 순매도면 0`;
+    return [
+      {
+        key: `fgnAccum${sfx}` as CheckKey,
+        label: `외국인 모아감 ${n}일`,
+        axis: "flow",
+        enabled: true,
+        weight: w,
+        threshold: 0,
+        strongAt: 1,
+        span: n,
+        hint,
+        cost: 0,
+      },
+      {
+        key: `instAccum${sfx}` as CheckKey,
+        label: `기관 모아감 ${n}일`,
+        axis: "flow",
+        enabled: true,
+        weight: w,
+        threshold: 0,
+        strongAt: 1,
+        span: n,
+        hint: `기관계 ${n}일 순매수 — 외국인 모아감과 같은 규칙`,
+        cost: 0,
+      },
+    ];
+  }),
   {
     key: "volPattern",
     label: "거래량 패턴",
     axis: "flow",
     enabled: true,
-    weight: 1,
+    /* 4 — 외인(2)·기관(2)와 나란히 수급 축의 절반 = 20점 */
+    weight: 4,
     threshold: 0.5,
     strongAt: 1.2,
     /*
@@ -2094,13 +2122,18 @@ function buildGen5(): SignalConfig {
   const checks: CheckConfig[] = GEN4_CONFIG.checks.map((c) => {
     if (GEN5_OFF.has(c.key)) return { ...c, enabled: false };
     if (c.key === "flowRatio") return { ...c, enabled: true, weight: 0, label: "외인+기관 순매도 (체)" };
-    if (c.key === "pullback") return { ...c, enabled: true, weight: 1, label: "눌림목" };
+    /*
+     * 눌림목 — 20일 창, 띠 -12~-3 (2026-09-03 벤티지: "너무 한달단위에 치중"). 60일 창·-15~-3 는
+     * 두 달 전 꼭대기를 기준으로 삼아 단기 스윙의 「최근 올랐다 쉬는 자리」를 놓쳤다.
+     */
+    if (c.key === "pullback") return { ...c, enabled: true, weight: 1, label: "눌림목", span: 20, threshold: -12, strongAt: -3 };
     return c;
   });
   return {
     ...GEN4_CONFIG,
     configVersion: 5,
-    configLabel: "260903_0300",
+    /* 260903_1030 — 모아감 5·10·20 분리, 눌림목 20일 창, 섹터 상대 10일 (단기 스윙) */
+    configLabel: "260903_1030",
     engine: "gen5",
     greenAt: 70,
     yellowAt: 50,
@@ -2257,6 +2290,31 @@ export async function getConfig(): Promise<SignalConfig> {
      */
     const savedVer = Number(saved?.configVersion ?? 0);
     const defVer = DEFAULT_CONFIG.configVersion ?? 0;
+    /*
+     * **고른 엔진의 정의가 바뀌었으면 그 엔진의 새 값으로** (2026-09-03). 엔진 id 는 그대로인데
+     * 이름표(label)가 다르면 엔진 자체가 손질된 것이다(모아감 5·10·20 분리처럼 기준이 늘어난 경우).
+     * 옛 저장본을 그대로 두면 새 기준이 「저장본에 없는 기준 = 꺼짐」이 되어 영영 안 켜진다.
+     * 사람이 손본 값은 이때 초기화된다 — 엔진을 손질하는 것은 그런 뜻이다.
+     */
+    const { engineOf } = await import("./signalEngines.js");
+    const eng = saved?.engine ? engineOf(saved.engine) : undefined;
+    if (eng && saved?.configLabel !== eng.label) {
+      configCache = mergeConfig({ ...eng.config, engine: eng.id });
+      await mkdir(dirname(CONFIG_FILE), { recursive: true });
+      await writeFile(CONFIG_FILE, JSON.stringify(configCache, null, 2), "utf-8");
+      console.log(`[signal] 엔진 ${eng.id} 손질됨 ${saved?.configLabel ?? "-"} → ${eng.label}: 새 값으로 갈아 끼웠다`);
+      await pushNotice({
+        source: "etc",
+        kind: "system",
+        level: "info",
+        title: `신호등 엔진 ${eng.name} 이 손질됐습니다 (${eng.label})`,
+        body: eng.changes,
+        link: "#/settings",
+        dedupeKey: `signalEngine:${eng.id}:${eng.label}`,
+        dedupeHours: 24 * 30,
+      }).catch(() => undefined);
+      return configCache;
+    }
     /* 엔진을 사람이 골랐으면(`engine`) 낡았어도 안 갈아 끼운다 — 그건 낡은 게 아니라 고른 것이다 */
     if (savedVer < defVer && !saved?.engine) {
       /* 기본값의 엔진 id 도 같이 — 화면이 「어느 엔진인가」를 말할 수 있게 */
@@ -2682,8 +2740,7 @@ export async function evaluateSignal(
     need.has("smartMoney") ||
     need.has("flowRatio") ||
     need.has("fgnRatio20") ||
-    need.has("fgnAccum") ||
-    need.has("instAccum");
+    [...need].some((k) => /^(fgn|inst)Accum/.test(k));
   const wantFinance = need.has("profitGrowth");
   /* 분기 실적 — 한투 1콜 (2026-09-02 배선. 그전엔 등록만 돼 있고 여기 없었다 — 감사 1-2) */
   const wantQuarter = need.has("qStreak") || need.has("qYoY") || need.has("qMargin") || need.has("qMarginTrend");
@@ -2946,18 +3003,27 @@ export async function evaluateSignal(
        *   강세장        고점 근처 만점 · -15~-3 절반 — 오르는 놈이 계속 오르는 장이다
        * 시뮬(`signalSamples.gradeOf`)이 같은 띠를 매긴다.
        */
-      if (cur && closes.length >= 61) {
-        const win = closes.slice(0, 61);
+      /*
+       * 기간은 `span`(기본 20 — 2026-09-03 벤티지: "지금 너무 한달단위에 치중해져 있어").
+       * 단기 스윙은 최근 한 달 안에서 올랐다 쉬는 자리를 본다 — 60일 고점은 두 달 전
+       * 꼭대기를 기준으로 삼아 「이미 끝난 추세」를 눌림으로 읽었다. 먼저 오른 문턱도
+       * 창이 짧으니 +8% 로. `MIN_RISE` 를 설정으로 빼지 않은 이유: 띠(threshold·strongAt)와
+       * 기간만으로 충분히 조절되고, 손잡이가 늘수록 뜻이 흐려진다.
+       */
+      const span = Math.max(10, c.span ?? 20);
+      const minRise = span >= 60 ? 10 : 8;
+      if (cur && closes.length >= span + 1) {
+        const win = closes.slice(0, span + 1);
         const hi = Math.max(...win);
-        const base = closes[60];
+        const base = closes[span];
         const dd = (cur / hi - 1) * 100;
         const rise = base > 0 ? (hi / base - 1) * 100 : 0;
         const lo = Math.min(c.threshold, c.strongAt);
         const hiB = Math.max(c.threshold, c.strongAt);
         raw = dd;
-        if (rise < 10) {
+        if (rise < minRise) {
           g = 0;
-          value = `고점 대비 ${dd.toFixed(1)}% — 먼저 오른 적이 없다(60일 고점이 60일 전보다 +${rise.toFixed(0)}%)`;
+          value = `${span}일 고점 대비 ${dd.toFixed(1)}% — 먼저 오른 적이 없다(고점이 ${span}일 전보다 +${rise.toFixed(0)}%)`;
         } else {
           const bull = mkt?.regime === "bull";
           const inZone = dd >= lo && dd <= hiB;
@@ -2965,7 +3031,7 @@ export async function evaluateSignal(
           const deep = dd >= lo - 10 && dd < lo;
           g = bull ? (nearTop ? 100 : inZone ? 50 : 0) : inZone ? 100 : nearTop || deep ? 50 : 0;
           value =
-            `고점 대비 ${dd.toFixed(1)}% (먼저 +${rise.toFixed(0)}% 올랐음) — ` +
+            `${span}일 고점 대비 ${dd.toFixed(1)}% (먼저 +${rise.toFixed(0)}% 올랐음) — ` +
             (inZone ? "눌림목" : nearTop ? "고점 근처" : deep ? "깊은 눌림" : "무너짐") +
             (bull ? " · 강세장 기준" : "");
         }
@@ -2982,10 +3048,11 @@ export async function evaluateSignal(
         value = `20일선 ${away > 0 ? "+" : ""}${away.toFixed(1)}%${g === 100 ? " — 붙어 있음" : g === 50 ? " — 조금 벌어짐" : " — 많이 벌어짐"}`;
       }
     } else if (c.key === "sectorRel") {
-      /* 이 종목 20일 − 섹터 회원 중앙 20일 (%p). 앞서되 아직 안 튄 것이 만점 */
-      if (cur && closes.length >= 21 && closes[20] > 0 && peers) {
-        const mine = ((cur - closes[20]) / closes[20]) * 100;
-        const pr = await peerRet20(peers.codes).catch(() => null);
+      /* 이 종목 n일 − 섹터 회원 중앙 n일 (%p, n = `span` 기본 10). 앞서되 아직 안 튄 것이 만점 */
+      const span = [5, 10, 20].includes(c.span ?? 10) ? (c.span ?? 10) : 10;
+      if (cur && closes.length >= span + 1 && closes[span] > 0 && peers) {
+        const mine = ((cur - closes[span]) / closes[span]) * 100;
+        const pr = await peerRet(peers.codes, span).catch(() => null);
         if (pr) {
           const rel = mine - pr.med;
           const lo = Math.min(c.threshold, c.strongAt);
@@ -2993,7 +3060,7 @@ export async function evaluateSignal(
           raw = rel;
           g = rel >= lo && rel <= hiB ? 100 : rel > hiB && rel <= hiB + 10 ? 50 : 0;
           value =
-            `${peers.name} 회원 ${pr.n}곳 중앙 ${pr.med > 0 ? "+" : ""}${pr.med.toFixed(1)}% 대비 ${rel > 0 ? "+" : ""}${rel.toFixed(1)}%p` +
+            `${span}일 · ${peers.name} 회원 ${pr.n}곳 중앙 ${pr.med > 0 ? "+" : ""}${pr.med.toFixed(1)}% 대비 ${rel > 0 ? "+" : ""}${rel.toFixed(1)}%p` +
             (g === 100 ? " — 섹터 안에서 좋아지는 중" : g === 50 ? " — 이미 앞서 감" : rel < lo ? " — 섹터에 뒤짐" : " — 너무 튐");
         } else {
           value = `${peers.name} — 회원 일봉이 모자라 못 잼`;
@@ -3001,36 +3068,38 @@ export async function evaluateSignal(
       } else if (!peers) {
         value = "섹터(테마)를 못 찾음";
       }
-    } else if (c.key === "fgnAccum" || c.key === "instAccum") {
+    } else if (/^(fgn|inst)Accum(5|10)?$/.test(c.key)) {
       /*
-       * **모아감** — 20일 순매수가 양이고, 20일 일평균이 60일 일평균의 `strongAt`배 이상이면
-       * 속도가 붙는 중(만점). 순매수인데 느려지면 절반. 60일은 팔았는데 20일에 사기 시작한
-       * 것은 모으기 시작 — 만점. 순매도는 0. 벤티지: "외국인 기관 이런 수급 모아가고 있는 종목."
+       * **모아감** — n일(5·10·20, 키 끝 숫자) 순매수가 양이고, n일 일평균이 60일 일평균의
+       * `strongAt`배 이상이면 속도가 붙는 중(만점). 순매수인데 느려지면 절반. 60일은 팔았는데
+       * n일에 사기 시작한 것은 모으기 시작 — 만점. 순매도는 0.
+       * 벤티지: "외국인 기관 이런 수급 모아가고 있는 종목" / "5일 10일 20일 나눠가지고 가중치를 따로".
        */
-      const field = c.key === "fgnAccum" ? "frgnr_invsr" : "orgn";
-      if (flowRows.length >= 20) {
-        const sum = (n: number) => flowRows.slice(0, n).reduce((s, r) => s + toNum(r[field]), 0);
-        const s20 = sum(20);
+      const field = c.key.startsWith("fgn") ? "frgnr_invsr" : "orgn";
+      const n = c.key.endsWith("5") ? 5 : c.key.endsWith("10") ? 10 : 20;
+      if (flowRows.length >= n) {
+        const sum = (k: number) => flowRows.slice(0, k).reduce((s, r) => s + toNum(r[field]), 0);
+        const sN = sum(n);
         const s60 = flowRows.length >= 60 ? sum(60) : null;
-        const who = c.key === "fgnAccum" ? "외국인" : "기관";
+        const who = c.key.startsWith("fgn") ? "외국인" : "기관";
         const eok = (v: number) => `${v > 0 ? "+" : ""}${Math.round(v / 100).toLocaleString("ko-KR")}억`;
-        if (s20 <= 0) {
+        if (sN <= 0) {
           raw = 0;
           g = 0;
-          value = `${who} 20일 ${eok(s20)} — 순매도`;
+          value = `${who} ${n}일 ${eok(sN)} — 순매도`;
         } else if (s60 === null) {
           raw = 1;
           g = 50;
-          value = `${who} 20일 ${eok(s20)} — 60일치가 없어 속도는 못 잼`;
+          value = `${who} ${n}일 ${eok(sN)} — 60일치가 없어 속도는 못 잼`;
         } else if (s60 <= 0) {
           raw = 9;
           g = 100;
-          value = `${who} 20일 ${eok(s20)} (60일 ${eok(s60)}) — 팔다가 모으기 시작`;
+          value = `${who} ${n}일 ${eok(sN)} (60일 ${eok(s60)}) — 팔다가 모으기 시작`;
         } else {
-          const ratio = s20 / 20 / (s60 / 60);
+          const ratio = sN / n / (s60 / 60);
           raw = ratio;
           g = ratio >= Math.max(c.threshold, c.strongAt) ? 100 : 50;
-          value = `${who} 20일 ${eok(s20)} · 60일 ${eok(s60)} — 속도 ${ratio.toFixed(2)}배${g === 100 ? " (붙는 중)" : " (느려짐)"}`;
+          value = `${who} ${n}일 ${eok(sN)} · 60일 ${eok(s60)} — 속도 ${ratio.toFixed(2)}배${g === 100 ? " (붙는 중)" : " (느려짐)"}`;
         }
       }
     } else if (c.key === "volPattern") {

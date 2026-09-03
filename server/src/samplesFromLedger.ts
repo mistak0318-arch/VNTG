@@ -9,7 +9,7 @@ import { yahooChart } from "./yahooChart.js";
 import { MA_PERIODS, saveSamples, type Feat, type Sample } from "./signalSamples.js";
 import type { DailyLedger, FlowRow } from "./dailyStore.js";
 import { loadFinanceCache, marginTrendAt, profitAt, quarterAt, type FinanceCache } from "./financeCache.js";
-import { peerMarginTrend, peerRet20, sectorPeersOf } from "./sectorPeers.js";
+import { peerMarginTrend, peerRet, sectorPeersOf } from "./sectorPeers.js";
 
 /**
  * **원장으로 표본을 만든다** (2026-09-01) — 조회 0회.
@@ -294,7 +294,13 @@ export function buildSamplesFromLedger(
         const secRetAt = async (date: string): Promise<number | null> => {
           if (!peers) return null;
           const k = `${peers.no}:${date}`;
-          if (!secRetMemo.has(k)) secRetMemo.set(k, (await peerRet20(peers.codes, date))?.med ?? null);
+          if (!secRetMemo.has(k)) secRetMemo.set(k, (await peerRet(peers.codes, 20, date))?.med ?? null);
+          return secRetMemo.get(k) ?? null;
+        };
+        const secRet10At = async (date: string): Promise<number | null> => {
+          if (!peers) return null;
+          const k = `${peers.no}:10:${date}`;
+          if (!secRetMemo.has(k)) secRetMemo.set(k, (await peerRet(peers.codes, 10, date))?.med ?? null);
           return secRetMemo.get(k) ?? null;
         };
 
@@ -354,6 +360,12 @@ export function buildSamplesFromLedger(
           const hi61 = Math.max(...win61);
           const dd60 = hi61 > 0 ? (cur / hi61 - 1) * 100 : null;
           const rise60 = c60 > 0 && hi61 > 0 ? (hi61 / c60 - 1) * 100 : null;
+          /* 20일 창 — 세대 5 기본 (단기 스윙) */
+          const win21 = closesAll.slice(bi - 20, bi + 1);
+          const hi21 = Math.max(...win21);
+          const c20 = closesAll[bi - 20];
+          const dd20 = hi21 > 0 ? (cur / hi21 - 1) * 100 : null;
+          const rise20 = c20 > 0 && hi21 > 0 ? (hi21 / c20 - 1) * 100 : null;
           const gap20 = m20 ? ((cur - m20) / m20) * 100 : null;
           const vol20 = bs.slice(bi - 19, bi + 1).map((b) => b.v);
           const v5 = vol20.slice(-5).reduce((s, v) => s + v, 0) / 5;
@@ -371,6 +383,10 @@ export function buildSamplesFromLedger(
           const secRet = await secRetAt(date);
           const ret20 = bi >= 20 && closesAll[bi - 20] > 0 ? ((cur - closesAll[bi - 20]) / closesAll[bi - 20]) * 100 : null;
           const secRel = secRet !== null && ret20 !== null ? ret20 - secRet : null;
+          /* 10일 — 세대 5 기본 */
+          const secRet10 = await secRet10At(date);
+          const ret10 = bi >= 10 && closesAll[bi - 10] > 0 ? ((cur - closesAll[bi - 10]) / closesAll[bi - 10]) * 100 : null;
+          const secRel10 = secRet10 !== null && ret10 !== null ? ret10 - secRet10 : null;
 
           /*
            * **위쪽 매물** — 이제 거래량으로 잰다. 일봉에 고가·저가·거래량이
@@ -470,6 +486,9 @@ export function buildSamplesFromLedger(
             lo60Pct,
             dd60,
             rise60,
+            dd20,
+            rise20,
+            secRel10,
             gap20,
             vGrow,
             vDist,
