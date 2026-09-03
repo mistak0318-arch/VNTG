@@ -3,7 +3,8 @@ import { peekRealtime } from "./realtimeHub.js";
 import { openPositions, type OpenPosition } from "./tradeJournal.js";
 import { sendTelegram, stockNameHtml } from "./telegram.js";
 import { pushNotice, stockLink, stopOrderLink } from "./notifyCenter.js";
-import { ordersEnabled } from "./orders.js";
+import { ordersEnabled, orderAccount } from "./orders.js";
+import { readOrderStops } from "./orderStops.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 
 /**
@@ -81,6 +82,33 @@ function priceOf(code: string, snap: Map<string, number> | null): { price: numbe
 }
 
 /**
+ * 주문 계좌에서 **손절선이 걸린 자리**만. 주문 기능이 꺼져 있으면 빈 배열이라 조회도 안 나간다.
+ *
+ * 손절선을 하나도 안 적었으면 계좌 조회를 부르지 않는다 — 감시가 1분마다 도는 자리라
+ * 「볼 것이 없는데 부르는」 호출이 하루 수백 번이 된다.
+ */
+async function accountPositions(): Promise<{ code: string; name: string; stop: number; qty: number; entry: number }[]> {
+  if (!ordersEnabled()) return [];
+  const stops: Record<string, { stop: number; name: string }> = await readOrderStops().catch(() => ({}));
+  if (Object.keys(stops).length === 0) return [];
+  try {
+    const acct = await orderAccount();
+    return acct.holdings
+      .filter((h) => h.qty > 0 && (stops[h.code]?.stop ?? 0) > 0)
+      .map((h) => ({
+        code: h.code,
+        name: h.name || stops[h.code].name,
+        stop: stops[h.code].stop,
+        qty: h.qty,
+        entry: h.avg,
+      }));
+  } catch {
+    /* 계좌를 못 읽어도 복기 노트 쪽 감시는 계속 돌아야 한다 */
+    return [];
+  }
+}
+
+/**
  * 한 번 검사한다.
  *
  * @param opts.send 거짓이면 찾기만 하고 안 보낸다 (화면의 「지금 확인」용)
@@ -96,11 +124,27 @@ export async function runStopWatch(
   breaks: StopBreak[];
   sent: boolean;
 }> {
+  /*
+   * 자리는 두 곳에서 온다 (2026-09-04).
+   *   복기 노트   내가 적은 매매 — 손절선은 그 매매의 기록이고 R 의 분모다
+   *   주문 계좌   지금 실제로 들고 있는 것 — 손절선은 `orderStops.json` 에 따로 붙는다
+   * 같은 종목이 양쪽에 있으면 **계좌 쪽이 이긴다.** 그게 지금 값이다.
+   */
   const positions = await openPositions();
-  const watched = positions.filter((p): p is OpenPosition & { stop: number } => p.stop !== null);
-  const guarded = watched.map((p) => ({ code: p.code, name: p.name, stop: p.stop, qty: p.qty, entry: p.price }));
+  const acct = await accountPositions();
+  const merged = new Map<string, { code: string; name: string; stop: number; qty: number; entry: number }>();
+  for (const p of positions) {
+    if (p.stop === null) continue;
+    merged.set(p.code, { code: p.code, name: p.name, stop: p.stop, qty: p.qty, entry: p.price });
+  }
+  for (const a of acct) merged.set(a.code, a);
+
+  const watched = [...merged.values()];
+  const guarded = watched;
+  /* 「들고 있는 자리」는 둘의 합집합이다 — 계좌에만 있는 것도 자리다 */
+  const seats = new Set([...positions.map((p) => p.code), ...acct.map((a) => a.code)]);
   if (watched.length === 0) {
-    return { positions: positions.length, watched: 0, guarded: [], breaks: [], sent: false };
+    return { positions: seats.size, watched: 0, guarded: [], breaks: [], sent: false };
   }
 
   /*
@@ -133,15 +177,15 @@ export async function runStopWatch(
       name: p.name,
       price: now.price,
       stop: p.stop,
-      entry: p.price,
+      entry: p.entry,
       qty: p.qty,
-      lossPct: ((now.price - p.price) / p.price) * 100,
+      lossPct: p.entry > 0 ? ((now.price - p.entry) / p.entry) * 100 : 0,
       from: now.from,
     });
   }
 
   if (breaks.length === 0 || opts.send === false) {
-    return { positions: positions.length, watched: watched.length, guarded, breaks, sent: false };
+    return { positions: seats.size, watched: watched.length, guarded, breaks, sent: false };
   }
 
   /*
@@ -171,7 +215,7 @@ export async function runStopWatch(
   }
 
   const res = await sendTelegram(formatStopBreaks(breaks), "signal");
-  return { positions: positions.length, watched: watched.length, guarded, breaks, sent: res.ok };
+  return { positions: seats.size, watched: watched.length, guarded, breaks, sent: res.ok };
 }
 
 const won = (n: number) => Math.round(n).toLocaleString("ko-KR");

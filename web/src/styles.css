@@ -15004,3 +15004,19 @@ select.ord-in { appearance: auto; cursor: pointer; }
 @media (max-width: 640px) {
   .about-now { grid-template-columns: 1fr; }
 }
+
+/* 잔고 줄의 손절선 칸 (2026-09-04) */
+.ord-stop-in {
+  width: 5.6rem;
+  padding: 0.15rem 0.35rem;
+  text-align: right;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+.ord-stop-in:focus { outline: none; border-color: #ffb020; }
+.ord-x.stop { border-color: rgba(255, 176, 32, 0.5); color: #ffb020; text-decoration: none; }
+.ord-x.stop:hover { border-color: #ffb020; }

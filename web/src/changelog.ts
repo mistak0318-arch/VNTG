@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T15:52:53.700Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T16:04:09.705Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "4820005",
+        "subject": "손절선을 스톱주문으로 미리 걸어 둔다 · 설정 › 정보 탭에 날짜별 변경 이력"
+      },
       {
         "hash": "7de0e92",
         "subject": "호가를 누르면 값이 들어간다 · PC 폭 상한 · 장운영구분(0s)은 켜서 적기만"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "b300330",
         "subject": "보드 칸별 글자 크기 (가-/가+) - 기기마다 다르게"
-      },
-      {
-        "hash": "d3b3da1",
-        "subject": "엑셀 모드 + 사이드바 자동숨김 - 하얀 띠 제거"
       }
     ]
   }

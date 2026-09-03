@@ -959,6 +959,9 @@ export const api = {
   orderOpen: () => getJson<{ rows: OrderRow[]; error?: string }>("/api/order/open"),
   orderFills: () => getJson<{ rows: OrderRow[]; error?: string }>("/api/order/fills"),
   orderAccount: () => getJson<OrderAccount>("/api/order/account"),
+  /** 계좌 자리의 손절선 — 0 을 주면 지운다. 주문이 아니므로 주문 비밀번호는 안 묻는다 */
+  orderSetStop: (code: string, stop: number, name: string) =>
+    orderPost<{ stops: OrderAccount["stops"] }>("/api/order/stop", { code, stop, name }),
   orderLog: (limit = 100) => getJson<{ rows: OrderLogRow[] }>(`/api/order/log?limit=${limit}`),
   orderPrepare: (input: {
     side: "buy" | "sell";
@@ -6319,6 +6322,8 @@ export interface OrderRow {
 export interface OrderAccount {
   deposit: number;
   holdings: { code: string; name: string; qty: number; avg: number; cur: number; pnl: number; pnlRate: number }[];
+  /** 자리마다 적어 둔 손절선 — 종목코드로 (2026-09-04) */
+  stops: Record<string, { stop: number; name: string; at: string }>;
 }
 
 export interface OrderLogRow {

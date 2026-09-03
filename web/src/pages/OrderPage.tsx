@@ -1014,25 +1014,56 @@ function FillsTab() {
   );
 }
 
+/**
+ * 잔고 — **손절선을 여기서 적는다** (2026-09-04).
+ *
+ * 벤티지: "그걸 복기노트에서 하면 안되지 주문메뉴의 계좌에서 해야지."
+ *
+ * 맞다. 어제까지 손절선은 복기 노트의 매수 기록에만 붙었는데, 그건 「돌아보며 적는 장부」지
+ * 「지금 들고 있는 것」이 아니다. 계좌에 있는데 복기 노트에 안 적은 종목은 감시가 안 됐다.
+ * 이제 **들고 있는 줄에 바로** 적고, 그 값으로 손절 감시가 돌고, 옆 단추가 스톱주문을 연다.
+ */
 function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
   const [acc, setAcc] = useState<OrderAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** 고치는 중인 칸 — 저장 전까지는 화면 값이 이긴다 */
+  const [edit, setEdit] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
 
-  useEffect(() => {
-    const run = () =>
-      void api
-        .orderAccount()
-        .then((a) => {
-          setAcc(a);
-          setError(null);
-        })
-        .catch((e: unknown) => setError(e instanceof Error ? e.message : "조회 실패"));
-    run();
-    const t = setInterval(run, 10_000);
-    return () => clearInterval(t);
+  const load = useCallback(() => {
+    void api
+      .orderAccount()
+      .then((a) => {
+        setAcc(a);
+        setError(null);
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "조회 실패"));
   }, []);
 
-  if (error)
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 10_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  async function save(code: string, name: string, raw: string) {
+    setSaving(code);
+    try {
+      const r = await api.orderSetStop(code, Number(raw.replace(/\D/g, "")) || 0, name);
+      setAcc((prev) => (prev ? { ...prev, stops: r.stops } : prev));
+      setEdit((prev) => {
+        const next = { ...prev };
+        delete next[code];
+        return next;
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "손절선을 못 적었다");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  if (error && !acc)
     return (
       <div className="ord-tab">
         <p className="ord-err">{error}</p>
@@ -1051,6 +1082,7 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
         <span>주문 가능 금액</span>
         <b>{won(acc.deposit)}</b>
       </div>
+      {error && <p className="ord-err">{error}</p>}
       {acc.holdings.length === 0 ? (
         <p className="empty">이 계좌에 보유 종목이 없다</p>
       ) : (
@@ -1064,31 +1096,78 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                 <th className="r">현재가</th>
                 <th className="r">평가손익</th>
                 <th className="r">수익률</th>
+                <th className="r">손절선</th>
+                <th className="r">여유</th>
+                <th />
               </tr>
             </thead>
             <tbody>
-              {acc.holdings.map((h) => (
-                <tr
-                  key={h.code}
-                  className={onSelectStock ? "click" : ""}
-                  onClick={() => onSelectStock?.(h.code, h.name)}
-                >
-                  <td>
-                    {h.name} <span className="ord-code">{h.code}</span>
-                  </td>
-                  <td className="r">{fmtNum(h.qty)}</td>
-                  <td className="r">{fmtNum(h.avg)}</td>
-                  <td className="r">{fmtNum(h.cur)}</td>
-                  <td className={`r ${signClass(h.pnl)}`}>{fmtNum(h.pnl)}</td>
-                  <td className={`r ${signClass(h.pnlRate)}`}>{h.pnlRate.toFixed(2)}%</td>
-                </tr>
-              ))}
+              {acc.holdings.map((h) => {
+                const saved = acc.stops?.[h.code]?.stop ?? 0;
+                const shown = edit[h.code] ?? (saved ? String(saved) : "");
+                const dirty = edit[h.code] !== undefined && Number(shown || 0) !== saved;
+                /* 지금 값에서 손절선까지 몇 % 남았나 — 음수면 이미 깨진 것이다 */
+                const room = saved > 0 && h.cur > 0 ? ((h.cur - saved) / h.cur) * 100 : null;
+                return (
+                  <tr key={h.code}>
+                    <td
+                      className={onSelectStock ? "click" : ""}
+                      onClick={() => onSelectStock?.(h.code, h.name)}
+                    >
+                      {h.name} <span className="ord-code">{h.code}</span>
+                    </td>
+                    <td className="r">{fmtNum(h.qty)}</td>
+                    <td className="r">{fmtNum(h.avg)}</td>
+                    <td className="r">{fmtNum(h.cur)}</td>
+                    <td className={`r ${signClass(h.pnl)}`}>{fmtNum(h.pnl)}</td>
+                    <td className={`r ${signClass(h.pnlRate)}`}>{h.pnlRate.toFixed(2)}%</td>
+                    <td className="r">
+                      <input
+                        className="ord-stop-in"
+                        inputMode="numeric"
+                        placeholder="비움"
+                        value={shown}
+                        onChange={(e) => setEdit((p) => ({ ...p, [h.code]: e.target.value.replace(/\D/g, "") }))}
+                        onBlur={() => dirty && void save(h.code, h.name, shown)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
+                        disabled={saving === h.code}
+                        title="이 값 아래로 가면 알림이 옵니다. 비우면 감시를 끕니다"
+                      />
+                    </td>
+                    <td className={`r ${room !== null && room < 0 ? "negative" : ""}`}>
+                      {room === null ? "-" : `${room.toFixed(1)}%`}
+                    </td>
+                    <td>
+                      {saved > 0 && (
+                        <a
+                          className="ord-x stop"
+                          href={`#/order?code=${h.code}&name=${encodeURIComponent(
+                            h.name,
+                          )}&side=sell&tt=28&cond=${saved}&price=${saved}&qty=${h.qty}`}
+                          title={`${h.qty}주 · 발동가 ${saved.toLocaleString()}원으로 매도 스톱주문`}
+                        >
+                          🛑 스톱
+                        </a>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
       <p className="ord-note">
-        이 잔고는 <b>주문 전용 앱키의 계좌</b>다. 「연동 계좌 (키움)」가 보여 주는 조회용 계좌와 다를 수 있다.
+        <b>손절선</b>은 여기 적습니다 — 적으면 <b>손절 감시</b>가 물고(장중 1분마다, 종목당 하루 한 번),
+        깨지면 알림함과 텔레그램으로 옵니다. 비우면 감시를 끕니다. 「🛑 스톱」은 그 값으로{" "}
+        <b>스톱지정가 매도</b> 폼을 엽니다 — 미리 걸어 두면 지켜보는 쪽이 키움이라 앱을 꺼 둬도 나갑니다.
+      </p>
+      <p className="ord-note">
+        이 잔고는 <b>주문 전용 앱키의 계좌</b>입니다. 「연동 계좌 (키움)」가 보여 주는 조회용 계좌와 다를 수 있습니다.
+        복기 노트의 손절선은 그대로 삽니다 — 그쪽은 <b>R 배수의 분모</b>라 「그때 정한 값」이고, 여기는 「지금 값」입니다.
+        같은 종목이 양쪽에 있으면 <b>여기가 이깁니다</b>.
       </p>
     </div>
   );

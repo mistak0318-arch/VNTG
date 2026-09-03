@@ -21,6 +21,7 @@ import {
   checkPassword,
   type OrderVenue,
 } from "../orders.js";
+import { readOrderStops, setOrderStop } from "../orderStops.js";
 import { sendTelegram } from "../telegram.js";
 
 /**
@@ -153,9 +154,27 @@ export function createOrderRouter(main: KiwoomClient): Router {
 
   router.get("/account", async (_req, res) => {
     try {
-      res.json(await orderAccount());
+      /* 손절선을 같이 준다 — 잔고 줄마다 칸이 하나 붙는다 (2026-09-04) */
+      const [acct, stops] = await Promise.all([orderAccount(), readOrderStops()]);
+      res.json({ ...acct, stops });
     } catch (e) {
       res.status(502).json({ error: e instanceof Error ? e.message : "조회 실패" });
+    }
+  });
+
+  /**
+   * 계좌 자리의 손절선 (2026-09-04) — 벤티지: "주문메뉴의 계좌에서 해야지."
+   *
+   * 주문을 내지 않으므로 주문 비밀번호를 안 묻는다. 다만 **주문 세션 안**이라
+   * 아이디·비밀번호를 다시 넣은 사람만 고칠 수 있고, POST + 헤더 검사도 그대로다.
+   */
+  router.post("/stop", async (req, res) => {
+    try {
+      const b = (req.body ?? {}) as Record<string, unknown>;
+      const stops = await setOrderStop(String(b.code ?? ""), Number(b.stop) || 0, String(b.name ?? ""));
+      res.json({ stops });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
     }
   });
 
