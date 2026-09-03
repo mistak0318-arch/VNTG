@@ -1,6 +1,7 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { RealtimeClient } from "./realtimeClient.js";
 import { RealtimeStore } from "./realtimeStore.js";
+import { notePhaseFrame } from "./marketPhase.js";
 import { tradeValueTop } from "./signalScreen.js";
 import { usStexMap } from "./usKiwoomDetail.js";
 import { listGroups as listUsGroups } from "./usWatchlist.js";
@@ -58,6 +59,8 @@ export async function getRealtime(
     // 저장소는 붙기 전에 걸어 둔다 — 첫 프레임부터 받아야 한다
     store = new RealtimeStore(client);
     await store.start();
+    /* 장운영구분 관측 (2026-09-04) — 적기만 한다. 판단은 9/14 에 (marketPhase.ts) */
+    client.onFrame(notePhaseFrame);
   }
   return { client, store: store as RealtimeStore };
 }
@@ -97,6 +100,7 @@ async function getSecond(kiwoom: KiwoomClient): Promise<RealtimeClient> {
     client2 = new RealtimeClient(kiwoom);
     // 저장소는 1번 것을 같이 쓴다 — getRealtime 이 먼저 만들어 둔 상태다
     store?.attach(client2);
+    client2.onFrame(notePhaseFrame);
   }
   return client2;
 }
@@ -494,6 +498,21 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
         subscribed.add("__vi__");
         /* VI 는 전체 종목이 오므로 종목 하나로 족하다. 정원을 먹지 않게 고정으로 둔다 */
         rt.subscribeKeep("1h", "005930");
+      }
+
+      /*
+       * 장운영구분 `0s` (2026-09-04) — 키움이 「지금 장전·장중·장후」를 직접 말해 준다.
+       *
+       * **아직 아무도 이걸로 판단하지 않는다.** FID 215 의 값이 무엇을 뜻하는지 모르는 채로
+       * isMarketHours 를 갈아타면, 표가 틀렸을 때 장중에 알림이 멈추거나 장 끝나고 주문이
+       * 나간다. 지금은 오는 값을 적어 두기만 하고(marketPhase.ts), 2026-09-14 애프터시장
+       * 개편 작업 때 **관측된 표**를 보고 한 번에 갈아탄다.
+       *
+       * 종목과 무관한 구독이라 정원(MAX_CODES)을 안 먹고, 프레임도 국면이 바뀔 때만 온다.
+       */
+      if (phase !== "밤" && !subscribed.has("__phase__")) {
+        subscribed.add("__phase__");
+        rt.subscribeKeep("0s", "005930");
       }
 
       /*

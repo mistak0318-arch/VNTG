@@ -14879,3 +14879,39 @@ tr:hover .sd-del { opacity: 0.75; }
 .ord-modal-kv .ord-stop-kv dt { color: #ffb020; }
 .ord-modal-kv .ord-stop-kv dd { font-weight: 700; }
 select.ord-in { appearance: auto; cursor: pointer; }
+
+/* ── 주문 화면 폭·호가 클릭 (2026-09-04) ─────────────────────────────────
+ *
+ * 벤티지: "호가를 클릭하면 가격은 자동으로 입력되어야 하는 구조로 가야지? 호가 마우스
+ * 위로 올라가면 포커싱 되고, 그리고 해상도 좀 어떻게 좀 해봐. 옆으로 너무 길어진다 PC에서"
+ *
+ * 폭: 호가 칸이 `1fr` 이라 27인치에서 1,600px 까지 늘어났다 — 호가 열 단이 화면을 가로지르고
+ * 주문 폼은 저 멀리 오른쪽에 떨어진다. 눈이 가격에서 수량 칸까지 가는 거리가 곧 오발주다.
+ * 호가창은 원래 좁게 읽는 물건이라 **위로 상한을 씌운다.** 좁은 화면에서는 그대로 줄어든다.
+ */
+.ord-grid {
+  max-width: 1140px;
+  grid-template-columns: minmax(0, 1fr) 330px;
+}
+.ord-book .ob { max-width: 780px; }
+
+/* 누를 수 있는 호가 — 넘겨받은 화면(주문)에서만 붙는다 */
+.ob-row.pickable { cursor: pointer; }
+.ob-row.pickable:hover,
+.ob-row.pickable:focus-visible {
+  outline: none;
+  background: var(--row-hover);
+  box-shadow: inset 0 0 0 1px var(--row-hover-line);
+  border-radius: 4px;
+}
+/* 마우스가 얹힌 줄의 가격을 키운다 — 「이 값이 들어간다」가 한눈에 보여야 한다 */
+.ob-row.pickable:hover .ob-price b,
+.ob-row.pickable:focus-visible .ob-price b {
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 1000px) {
+  .ord-book .ob { max-width: none; }
+}

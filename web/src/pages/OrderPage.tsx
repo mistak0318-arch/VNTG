@@ -448,6 +448,12 @@ function OrderForm({ status, onDone }: { status: OrderStatus; onDone: () => void
   const [qty, setQty] = useState("");
   const [price, setPrice] = useState("");
   const [cond, setCond] = useState("");
+  /*
+   * 호가를 누르면 **어느 칸**에 넣나 (2026-09-04). 보통은 가격 칸 하나뿐이라 고민이 없는데,
+   * 스톱지정가는 발동가와 주문단가 둘이라 받을 곳을 정해야 한다. 스톱을 고르면 발동가가
+   * 먼저다 — 그게 본론이고, 주문단가는 대개 거기서 몇 호가 안쪽이라 뒤에 정한다.
+   */
+  const [condFocus, setCondFocus] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: OrderTicket } | null>(null);
@@ -461,6 +467,17 @@ function OrderForm({ status, onDone }: { status: OrderStatus; onDone: () => void
   /* 시간외 구분은 정규장 밖에 내는 것이 정상이라 「시간 아님」 경고를 띄우지 않는다 */
   const open = tt?.late ? true : status.open[venue];
   const ready = Boolean(code) && Boolean(qty) && (!needsPrice || Boolean(price)) && (!usesCond || Boolean(cond));
+
+  /** 호가창이 부른다 — 값을 안 쓰는 구분이면 무시한다(넣어 봐야 서버가 거절한다) */
+  function pickPrice(p: number) {
+    if (usesCond && condFocus) {
+      setCond(String(p));
+      /* 발동가를 찍었으면 다음 클릭은 주문단가다 — 두 번 눌러 스톱 하나를 완성한다 */
+      setCondFocus(false);
+      return;
+    }
+    if (usesPrice) setPrice(String(p));
+  }
 
   async function prepare(e: React.FormEvent) {
     e.preventDefault();
@@ -489,7 +506,25 @@ function OrderForm({ status, onDone }: { status: OrderStatus; onDone: () => void
   return (
     <div className="ord-grid">
       <div className="ord-book">
-        {code ? <OrderBookPanel code={code} /> : <p className="empty">종목을 고르면 호가가 뜬다</p>}
+        {code ? (
+          <>
+            <OrderBookPanel code={code} onPickPrice={pickPrice} />
+            <p className="ord-note">
+              호가를 누르면 {usesCond ? <b>{condFocus ? "발동가" : "주문단가"}</b> : "가격"} 칸에 들어간다
+              {usesCond && (
+                <>
+                  {" — "}
+                  <button type="button" className="ord-mk" onClick={() => setCondFocus((v) => !v)}>
+                    {condFocus ? "발동가로 받는 중" : "주문단가로 받는 중"}
+                  </button>
+                </>
+              )}
+              {!usesPrice && <> — 지금 구분({tt?.label})은 값을 안 쓴다</>}
+            </p>
+          </>
+        ) : (
+          <p className="empty">종목을 고르면 호가가 뜬다</p>
+        )}
       </div>
 
       <form className={`ord-form ${side}`} onSubmit={(e) => void prepare(e)}>
@@ -537,7 +572,15 @@ function OrderForm({ status, onDone }: { status: OrderStatus; onDone: () => void
         />
 
         <label className="ord-lab">매매구분</label>
-        <select className="ord-in" value={tradeType} onChange={(e) => setTradeType(e.target.value)}>
+        <select
+          className="ord-in"
+          value={tradeType}
+          onChange={(e) => {
+            setTradeType(e.target.value);
+            /* 구분이 바뀌면 호가 클릭이 갈 곳도 처음으로 — 스톱을 새로 고르면 발동가부터다 */
+            setCondFocus(true);
+          }}
+        >
           {types.map((t) => (
             <option key={t.code} value={t.code}>
               {t.label}

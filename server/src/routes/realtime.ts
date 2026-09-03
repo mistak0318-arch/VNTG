@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { RealtimeClient } from "../realtimeClient.js";
 import { dualEnabled, getRealtime, peekRealtime, secondInfo, shouldRun, subscribedCount } from "../realtimeHub.js";
+import { currentPhase, phaseSummary, readPhaseLog } from "../marketPhase.js";
 
 /**
  * 실시간 웹소켓 — **아직 확인 단계다.**
@@ -15,6 +16,20 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
   const router = Router();
   /* 만드는 자리는 `realtimeHub` 하나다 — 여기서 또 만들면 연결이 둘이 된다 */
   const hub = () => peekRealtime();
+
+  /**
+   * 장운영구분 관측 (2026-09-04) — `0s` 로 온 값을 **해석 없이** 돌려준다.
+   *
+   * 며칠 쌓이면 `summary` 가 「어떤 코드가 몇 시에 오는가」 표가 된다. 2026-09-14
+   * 애프터시장 개편 작업 때 그 표를 보고 시간표를 갈아탄다 — 그때는 추측이 아니라 관측이다.
+   */
+  router.get("/phase", async (_req, res, next) => {
+    try {
+      res.json({ now: currentPhase(), summary: await phaseSummary(), log: await readPhaseLog(80) });
+    } catch (e) {
+      next(e);
+    }
+  });
 
   /**
    * SSE 푸시 (2026-08-25) — **폴링 없이 틱이 오는 대로 민다.**

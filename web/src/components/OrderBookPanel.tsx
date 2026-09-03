@@ -1,3 +1,4 @@
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { api, fmtNum, signClass, type OrderBook } from "../api";
 import { useLive } from "../useLive";
 import { fid, useRealtime } from "../useRealtime";
@@ -91,7 +92,20 @@ function useLiveBook(code: string, base: OrderBook | null) {
   };
 }
 
-export function OrderBookPanel({ code }: { code: string }) {
+export function OrderBookPanel({
+  code,
+  onPickPrice,
+}: {
+  code: string;
+  /**
+   * 호가를 누르면 그 값을 받아 갈 사람 (2026-09-04, 벤티지: "호가를 클릭하면 가격은
+   * 자동으로 입력되어야 하는 구조로 가야지").
+   *
+   * **넘겨줄 때만** 줄이 눌리는 줄이 된다 — 종목상세·종목분석에서는 이 컴포넌트가
+   * 읽기 전용이라 커서도 안 바뀌고 눌러도 아무 일이 없어야 한다. 주문 화면만 넘긴다.
+   */
+  onPickPrice?: (price: number) => void;
+}) {
   /*
    * 밑그림. 실시간이 붙으면 아래에서 갈아끼우므로 **주기를 늦춰도 된다** —
    * 실시간이 죽었을 때 되돌아갈 자리로만 남겨 둔다.
@@ -143,8 +157,28 @@ export function OrderBookPanel({ code }: { code: string }) {
     // 가격이 없으면 「이 단은 비었다」로 그린다. 현재가와 같다고 착각해 「종」이 붙지도 않게
     const empty = l.price <= 0;
     const now = !empty && book.price === l.price;
+    /* 값이 없는 단은 누를 것이 없다 — 0 원이 폼에 들어가면 그게 더 나쁘다 */
+    const pick = onPickPrice && !empty ? () => onPickPrice(l.price) : undefined;
     return (
-      <div className={`ob-row ${side}${now ? " now" : ""}${empty ? " empty" : ""}`} key={`${side}-${l.step}`}>
+      <div
+        className={`ob-row ${side}${now ? " now" : ""}${empty ? " empty" : ""}${pick ? " pickable" : ""}`}
+        key={`${side}-${l.step}`}
+        {...(pick
+          ? {
+              role: "button" as const,
+              tabIndex: 0,
+              title: `${fmtNum(l.price)}원을 주문 가격으로`,
+              onClick: pick,
+              /* 키보드로도 — 호가창은 값을 고르는 자리지 장식이 아니다 */
+              onKeyDown: (e: ReactKeyboardEvent) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  pick();
+                }
+              },
+            }
+          : {})}
+      >
         {/* 매도는 왼쪽에 막대, 매수는 오른쪽에 — 가운데 가격을 기준으로 갈라진다 */}
         <span className="ob-qty left">
           {side === "ask" && !empty && (
