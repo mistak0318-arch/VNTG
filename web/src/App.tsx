@@ -17,6 +17,7 @@ import { MemoPage } from "./pages/MemoPage";
 import { MiniPage } from "./pages/MiniPage";
 import { BuzzSourcePage } from "./pages/BuzzSourcePage";
 import { HeaderTicker } from "./components/HeaderTicker";
+import { LiveDot } from "./components/LiveDot";
 import { createHotkeyMatcher } from "./hotkey";
 import { onMiniConfigChange, readMiniConfig } from "./miniConfig";
 import { TabActiveContext } from "./tabActive";
@@ -1078,6 +1079,12 @@ export default function App() {
             <NotifyBell />
             {/* 코스피·코스닥 + 상승/하락 종목수 + 시장 신호등 — 종 옆 빈자리 (2026-09-02). 누르면 시황 */}
             <HeaderTicker onGo={() => go("overview")} />
+            {/*
+              실시간 표시 (2026-09-04) — **어느 화면에서든 같은 자리**에 둔다.
+              멈춘 값으로 주문을 내는 것이 이 도구에서 가장 비싼 실수라, 값이 아니라
+              **값의 출처**를 늘 눈에 둔다. 종목을 보고 있으면 그 종목 기준으로 판단한다.
+            */}
+            <LiveDot code={selected?.code} name={selected?.name} />
             {openTabs.length > 1 && (
               <button
                 className="qss-close-tabs"

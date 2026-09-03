@@ -15485,3 +15485,38 @@ select.ord-in { appearance: auto; cursor: pointer; }
 .ord-quote { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; }
 .ord-quote i { font-style: normal; font-size: 0.78rem; margin-left: 0.3rem; font-weight: 400; }
 .ord-picked { gap: 0.4rem; }
+
+/*
+ * 실시간 표시 (2026-09-04) — 상단 줄 어디서나 같은 자리.
+ * 색만으로 판단하지 않게 **글자를 같이** 둔다(실시간 / 대기 / 조회).
+ */
+.live-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  flex: 0 0 auto;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 0.74rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+.live-dot i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.live-dot b { font-weight: 600; color: var(--muted); }
+.live-dot.on { border-color: rgba(53, 196, 106, 0.55); }
+.live-dot.on i { background: var(--green); box-shadow: 0 0 0 3px rgba(53, 196, 106, 0.2); }
+.live-dot.on b { color: var(--green); }
+.live-dot.wait { border-color: rgba(255, 176, 32, 0.5); }
+.live-dot.wait i { background: #ffb020; }
+.live-dot.wait b { color: #ffb020; }
+
+/* 폰에서는 점만 — 상단 줄은 아이콘만 남기는 규칙이 이미 있다 */
+@media (max-width: 899px) {
+  .live-dot { padding: 0.2rem 0.35rem; }
+  .live-dot b { display: none; }
+}
+/* 주문 화면에서는 종목 이름 줄에 — 좁아도 점은 남긴다 */
+.ord-picked .live-dot { padding: 0.15rem 0.4rem; font-size: 0.68rem; }
+@media (max-width: 899px) { .ord-picked .live-dot b { display: none; } }

@@ -15,6 +15,7 @@ import {
 } from "../api";
 import { OrderBookPanel } from "../components/OrderBookPanel";
 import { StockSearchBox } from "../components/StockSearchBox";
+import { LiveDot } from "../components/LiveDot";
 
 /**
  * 주문 (2026-09-03) — 벤티지: "주문 메뉴 들어갈 때는 아이디랑 비밀번호를 한 번 더,
@@ -646,6 +647,12 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
               <b>{name || code}</b>
               <span className="ord-code">{code}</span>
               {/* 지금 값 — 가격을 적기 전에 「어디쯤인가」가 먼저 보여야 한다 */}
+              {/*
+                주문 화면에서는 이 표시가 **제일 중요한 자리**다 — 멈춘 값으로 주문을 내는 것이
+                이 도구에서 가장 비싼 실수다. 상단 줄에도 같은 표시가 있지만, 가격을 적는
+                눈길이 닿는 곳에 한 번 더 둔다.
+              */}
+              <LiveDot code={code} name={name} />
               {quote && quote.price > 0 && (
                 <span className={`ord-quote ${signClass(quote.changeRate)}`}>
                   {fmtNum(quote.price)}
