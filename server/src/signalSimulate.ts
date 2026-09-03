@@ -244,6 +244,11 @@ export interface SimResult {
  */
 export function regimeMap(S: Sample[], cfg: SignalConfig): Map<string, "bull" | "bear"> {
   const out = new Map<string, "bull" | "bear">();
+  /* 사람이 고른 장세(세대 5) — 모든 날이 그 장세다. 실전 `evaluateSignal` 과 같은 규칙 */
+  if (cfg.regimeMode === "bull" || cfg.regimeMode === "bear") {
+    for (const r of S) out.set(r.date, cfg.regimeMode);
+    return out;
+  }
   if (!cfg.regimeSwitch) return out;
   const byDate = new Map<string, { above: number; total: number }>();
   for (const r of S) {

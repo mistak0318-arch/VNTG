@@ -1172,7 +1172,16 @@
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);for\\(const r of j.data.rows\\)if\\(['tnx','tyx'].includes\\(r.key\\)\\)console.log\\(' ',r.label,r.price,'변화',r.change,'시각',new Date\\(r.quotedAt\\).toLocaleTimeString\\('ko-KR',{hour12:false}\\)\\)}\\)\")",
       "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);for\\(const [k,v] of Object.entries\\(j.quotes||{}\\)\\)console.log\\(' ',k,v.price,'등락률',v.changeRate?.toFixed\\(3\\),'시각',v.at?new Date\\(v.at\\).toLocaleTimeString\\('ko-KR',{hour12:false}\\):'-'\\)}\\)\")",
       "Bash(tee tools/sigtune/closeBetSig.txt)",
-      "Bash(curl -s --max-time 60 -X POST \"http://localhost:4000/api/watchlist/score-bands/sync\")"
+      "Bash(curl -s --max-time 60 -X POST \"http://localhost:4000/api/watchlist/score-bands/sync\")",
+      "Bash(awk 'NR>=573 && NR<=1930' signalLight.ts)",
+      "Bash(grep -nE '^\\\\s+\\(key|axis|enabled|weight|threshold|strongAt|regime|veto|vetoAt|capAt|capGrade|optional|span|label\\): |^\\\\s+\\\\},?$|^\\\\s+\\\\],?$')",
+      "Bash(awk -F: '{printf \"%d:%s\\\\n\", $1+572, substr\\($0, index\\($0,\":\"\\)+1\\)}')",
+      "Bash(grep -vE '^\\\\d+:\\\\s+\\\\},?$')",
+      "Bash(awk '{print}')",
+      "Bash(curl -s --max-time 20 -X POST \"http://localhost:4000/api/signal/samples/fromLedger\" -H \"content-type: application/json\" -d '{}')",
+      "Bash(curl -s --max-time 10 \"http://localhost:4000/api/signal/samples/fromLedger/progress\")",
+      "Bash(curl -s --max-time 120 -X POST \"http://localhost:4000/api/signal/simulate\" -H \"content-type: application/json\" -d '{}')",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);const r=j.result??j;console.log\\(Object.keys\\(r\\).slice\\(0,12\\).join\\(' '\\)\\);const b=r.buckets??r.byBucket??[];for\\(const x of \\(Array.isArray\\(b\\)?b:[]\\).slice\\(0,7\\)\\)console.log\\(' ',JSON.stringify\\(x\\).slice\\(0,160\\)\\);console.log\\('used:',\\(r.used??[]\\).join\\(' '\\)\\);console.log\\('skipped:',\\(r.skipped??[]\\).join\\(' '\\)\\)}\\)\")"
     ]
   }
 }

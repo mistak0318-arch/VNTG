@@ -265,6 +265,25 @@ export interface Feat {
    * 옛 표본 파일에는 없다(undefined) → 못 재는 것으로 두고 탈락시키지 않는다.
    */
   /** 직전 20일 일수익률 표준편차(%) */
+  /*
+   * ## 세대 5 칸 (2026-09-03) — 실전(`signalLight`)과 같은 정의. 없으면(옛 표본) 그 기준은 못 잰다
+   */
+  /** 60일 최고 종가(당일 포함) 대비 % — 눌림목 */
+  dd60?: number | null;
+  /** 그 고점이 60일 전 종가보다 몇 % 위였나 — 「먼저 올랐나」 */
+  rise60?: number | null;
+  /** 20일선 이격 % (부호 있음 — `disp` 는 음수를 0 으로 눌렀다) */
+  gap20?: number | null;
+  /** 최근 5일 평균 거래량 ÷ 20일 평균 */
+  vGrow?: number | null;
+  /** 20일 동안 하락일 평균 거래량 ÷ 상승일 평균 거래량 — 내려오며 터졌나 */
+  vDist?: number | null;
+  /** 분기 이익률 개선 추세 (%p, `financeCache.marginTrendAt`) — 그날 알 수 있던 분기만 */
+  mTrend?: number | null;
+  /** 섹터(테마 회원사) 이익률 개선 중앙값 (%p) */
+  secMT?: number | null;
+  /** 종목 20일 − 섹터 회원 중앙 20일 (%p) */
+  secRel?: number | null;
   volat20?: number | null;
   /** 그날 진폭 (고가−저가)÷저가 (%) */
   range?: number | null;
@@ -413,6 +432,29 @@ export function rawOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
       return f.qMargin;
     case "etfBacking":
       return f.etfBack;
+    /* 세대 5 (2026-09-03) */
+    case "pullback":
+      return f.dd60 ?? null;
+    case "maGap20":
+      return f.gap20 ?? null;
+    case "sectorRel":
+      return f.secRel ?? null;
+    case "volPattern":
+      return f.vGrow ?? null;
+    case "qMarginTrend":
+      return f.mTrend ?? null;
+    case "sectorMargin":
+      return f.secMT ?? null;
+    case "fgnAccum":
+    case "instAccum": {
+      const s20 = c.key === "fgnAccum" ? f.fgn20 : f.inst20;
+      const s60 = c.key === "fgnAccum" ? f.fgn60 : f.inst60;
+      if (s20 === null) return null;
+      if (s20 <= 0) return 0;
+      if (s60 === null) return 1;
+      if (s60 <= 0) return 9;
+      return s20 / 20 / (s60 / 60);
+    }
     default:
       return null;
   }
@@ -421,10 +463,61 @@ export function rawOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
 /** 채점에 필요한 설정 조각 — 전체 설정을 넘기지 않아도 되게 */
 export type GradeCtx = Pick<SignalConfig, "maLines" | "flowDays">;
 
-/** 이 기준이 이 표본에서 몇 점인가 — 낼 수 없으면 null */
-export function gradeOf(f: Feat, c: CheckConfig, cfg: GradeCtx): number | null {
+/**
+ * 이 기준이 이 표본에서 몇 점인가 — 낼 수 없으면 null.
+ * `regime` 은 세대 5 눌림목이 쓴다(강세장이면 고점 근처가 만점) — 실전과 같은 띠.
+ */
+export function gradeOf(f: Feat, c: CheckConfig, cfg: GradeCtx, regime?: "bull" | "bear"): number | null {
   const { maLines, flowDays } = cfg;
   switch (c.key) {
+    /* ---------------- 세대 5 (2026-09-03) — 실전 `evaluateSignal` 과 같은 띠 ---------------- */
+    case "pullback": {
+      if (f.dd60 == null || f.rise60 == null) return null;
+      if (f.rise60 < 10) return 0;
+      const lo = Math.min(c.threshold, c.strongAt);
+      const hi = Math.max(c.threshold, c.strongAt);
+      const dd = f.dd60;
+      const inZone = dd >= lo && dd <= hi;
+      const nearTop = dd > hi && dd <= 0;
+      const deep = dd >= lo - 10 && dd < lo;
+      return regime === "bull" ? (nearTop ? 100 : inZone ? 50 : 0) : inZone ? 100 : nearTop || deep ? 50 : 0;
+    }
+    case "maGap20": {
+      if (f.gap20 == null) return null;
+      const lo = Math.min(c.threshold, c.strongAt);
+      const hi = Math.max(c.threshold, c.strongAt);
+      const a = f.gap20;
+      return a >= lo && a <= hi ? 100 : (a >= lo - 5 && a < lo) || (a > hi && a <= hi + 5) ? 50 : 0;
+    }
+    case "sectorRel": {
+      if (f.secRel == null) return null;
+      const lo = Math.min(c.threshold, c.strongAt);
+      const hi = Math.max(c.threshold, c.strongAt);
+      const r = f.secRel;
+      return r >= lo && r <= hi ? 100 : r > hi && r <= hi + 10 ? 50 : 0;
+    }
+    case "fgnAccum":
+    case "instAccum": {
+      const s20 = c.key === "fgnAccum" ? f.fgn20 : f.inst20;
+      const s60 = c.key === "fgnAccum" ? f.fgn60 : f.inst60;
+      if (s20 === null) return null;
+      if (s20 <= 0) return 0;
+      if (s60 === null) return 50;
+      if (s60 <= 0) return 100;
+      return s20 / 20 / (s60 / 60) >= Math.max(c.threshold, c.strongAt) ? 100 : 50;
+    }
+    case "volPattern": {
+      if (f.vGrow == null) return null;
+      const dry = Math.min(c.threshold, c.strongAt);
+      const grow = Math.max(c.threshold, c.strongAt);
+      if (f.vGrow < dry) return 0;
+      if (f.vGrow >= grow) return 100;
+      return f.vDist != null && f.vDist > 1.2 ? 50 : 100;
+    }
+    case "qMarginTrend":
+      return f.mTrend == null ? null : grade(f.mTrend, c);
+    case "sectorMargin":
+      return f.secMT == null ? null : grade(f.secMT, c);
     case "trend": {
       const vs = [...maLines]
         .sort((a, b) => a - b)
@@ -632,8 +725,8 @@ export function scoreFeat(
   let coverGot = 0;
   /* 탈락 (2026-09-02) — 실전과 같은 규칙. 장세로 빠진 기준도 탈락만은 본다 */
   let vetoed = false;
-  /* 탈락 승격 넷 (세대 4) — 실전 `killAlerts` 와 같은 문턱. 표본에 칸이 없으면 안 건드린다 */
-  if (isHardKill(f, regime)) vetoed = true;
+  /* 탈락 승격 넷 (세대 4) — 실전 `killAlerts` 와 같은 문턱. 세대 5 는 끈다(`alertKill` false) */
+  if (cfg.alertKill !== false && isHardKill(f, regime)) vetoed = true;
   for (const c of cfg.checks) {
     if (!c.enabled) continue;
     if (c.veto && c.vetoAt !== undefined) {
@@ -644,7 +737,7 @@ export function scoreFeat(
     }
     /* 장세를 못 재면 전부 쓴다 — 실제 신호등과 같은 규칙 */
     if (cfg.regimeSwitch && c.regime && regime && c.regime !== regime) continue;
-    const g = gradeOf(f, c, cfg);
+    const g = gradeOf(f, c, cfg, regime);
     /* `optional` 은 못 쟀을 때 결손으로 안 센다 — 실전(`coverPool`)과 같은 규칙 */
     if (g === null && c.optional) continue;
     coverAll += c.weight;
@@ -682,6 +775,8 @@ export function scoreFeat(
   /* 실제 신호등과 같은 규칙 — 덜 쟀으면 초록을 안 준다 */
   if (lowCoverage && level === "green") level = "yellow";
   if (cfg.greenTo < 100 && score > cfg.greenTo && level === "green") level = "yellow";
+  /* 기본조건 시총 (세대 5) — 실전과 같이 초록만 막는다. 20일 평균 대금은 표본에 칸이 없어 못 본다 */
+  if ((cfg.minMarketCap ?? 0) > 0 && f.mktCap !== null && f.mktCap < (cfg.minMarketCap ?? 0) && level === "green") level = "yellow";
   /* 탈락은 마지막 — 하나라도 걸리면 빨강 (실전 `vetoed` 와 같은 자리) */
   if (vetoed) level = "red";
   return { score, level, risk, coverage, lowCoverage };

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type SignalAxis, type SignalConfig } from "../api";
+import { api, type SignalAxis, type SignalConfig, type SignalEngine } from "../api";
 import { SignalSimPanel } from "./SignalSimPanel";
 
 /**
@@ -58,6 +58,15 @@ const UNITS: Record<string, string> = {
   qMargin: "%",
   qStreak: "분기",
   largeCap: "억원",
+  /* 세대 5 (2026-09-03) */
+  pullback: "% (고점 대비)",
+  maGap20: "%",
+  sectorRel: "%p",
+  fgnAccum: "배 (20일÷60일 속도)",
+  instAccum: "배 (20일÷60일 속도)",
+  volPattern: "배 (5일÷20일)",
+  qMarginTrend: "%p",
+  sectorMargin: "%p",
 };
 
 /** 기준값이 의미 없는 항목 (통과 여부가 계산으로만 정해진다) */
@@ -95,6 +104,15 @@ function diffFromDefaults(cur: SignalConfig, def: SignalConfig): string[] {
   if (cur.greenTo !== def.greenTo) out.push(`초록 상한 ${cur.greenTo}점 → ${def.greenTo}점`);
   if (cur.minTradeValue !== def.minTradeValue)
     out.push(`거래대금 하한 ${cur.minTradeValue}억 → ${def.minTradeValue}억`);
+  /* 세대 5 (2026-09-03) */
+  const rm = (c: SignalConfig) => c.regimeMode ?? "auto";
+  if (rm(cur) !== rm(def)) out.push(`장세 ${REGIME_MODE_LABEL[rm(cur)]} → ${REGIME_MODE_LABEL[rm(def)]}`);
+  if ((cur.alertKill ?? true) !== (def.alertKill ?? true))
+    out.push(`경보 탈락 승격 ${cur.alertKill ?? true ? "켬 → 끔" : "끔 → 켬"}`);
+  if ((cur.minMarketCap ?? 0) !== (def.minMarketCap ?? 0))
+    out.push(`시총 하한 ${cur.minMarketCap ?? 0}억 → ${def.minMarketCap ?? 0}억`);
+  if ((cur.minTradeValue20 ?? 0) !== (def.minTradeValue20 ?? 0))
+    out.push(`20일 평균 거래대금 하한 ${cur.minTradeValue20 ?? 0}억 → ${def.minTradeValue20 ?? 0}억`);
   for (const d of def.checks) {
     const c = cur.checks.find((x) => x.key === d.key);
     if (!c) continue;
@@ -109,6 +127,12 @@ function diffFromDefaults(cur: SignalConfig, def: SignalConfig): string[] {
   }
   return out;
 }
+
+const REGIME_MODE_LABEL: Record<"auto" | "bull" | "bear", string> = {
+  auto: "자동(20일선 위 비율)",
+  bull: "강세장 (직접)",
+  bear: "약세장 (직접)",
+};
 
 const AXIS_META: { key: SignalAxis; label: string; hint: string }[] = [
   { key: "trend", label: "추세", hint: "지금 올라가는 자리인가" },
@@ -136,6 +160,14 @@ export function SignalConfigPanel() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * **엔진 히스토리** (2026-09-03) — 벤티지: "드랍 박스를 선택하면은 그 엔진에 대한 설명 나가고
+   * 언제 수정했고 이 엔진이 가장 중요해 보는 게 뭔지 이 엔진의 세팅값들이 뭘 의미하는지."
+   * `engineSel` 은 보고 있는 엔진, `config.engine` 은 지금 도는 엔진 — 둘은 다를 수 있다.
+   */
+  const [engines, setEngines] = useState<SignalEngine[]>([]);
+  const [engineSel, setEngineSel] = useState<string>("");
+  const [applying, setApplying] = useState(false);
 
   useEffect(() => {
     api
@@ -144,9 +176,32 @@ export function SignalConfigPanel() {
         setConfig(r.config);
         setSavedCfg(r.config);
         setDefaults(r.defaults);
+        setEngineSel(r.config.engine ?? "");
       })
       .catch((err: Error) => setError(err.message));
+    api
+      .signalEngines()
+      .then((r) => {
+        setEngines(r.engines);
+        setEngineSel((s) => s || r.current || r.engines[0]?.id || "");
+      })
+      .catch(() => undefined);
   }, []);
+
+  async function applyEngine(id: string) {
+    setApplying(true);
+    setError(null);
+    try {
+      const r = await api.signalEngineApply(id);
+      setConfig(r.config);
+      setSavedCfg(r.config);
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "엔진 적용 실패");
+    } finally {
+      setApplying(false);
+    }
+  }
 
   function patch(next: Partial<SignalConfig>) {
     setConfig((c) => (c ? { ...c, ...next } : c));
@@ -209,8 +264,82 @@ export function SignalConfigPanel() {
   /** 화면에서 만졌는데 아직 저장 안 한 것이 있나 */
   const dirty = savedCfg !== null && JSON.stringify(config) !== JSON.stringify(savedCfg);
 
+  const engineNow = engines.find((e) => e.id === (savedCfg?.engine ?? ""));
+  const engineView = engines.find((e) => e.id === engineSel) ?? engineNow ?? null;
+  /** 지금 도는 설정이 그 엔진의 기본값과 어디가 다른가 — 손본 자리 */
+  const engineDrift = engineView && savedCfg ? diffFromDefaults(savedCfg, engineView.config) : [];
+  const viewingCurrent = engineView !== null && engineView.id === (savedCfg?.engine ?? "");
+
   return (
     <div className="sig-config">
+      {/*
+        **엔진 히스토리** (2026-09-03) — 벤티지: "매번 갈아엎으니깐 이전 엔진에 대한 정보가 없잖아?
+        이전 엔진이 맞을 수도 있는 건데 그게 내가 엔진을 선택해서 할 수 있게 해줘." 세대 3·4·5 가
+        여기 들어 있고, 고르면 그 값이 통째로 저장된다. 원장·보관함은 설정 지문에 엔진 id 가 들어가
+        어느 엔진으로 담았는지 갈리므로 교차 검증이 된다.
+      */}
+      {engines.length > 0 && (
+        <div className="sig-engine">
+          <div className="sig-engine-head">
+            <b>엔진</b>
+            <select value={engineSel} onChange={(e) => setEngineSel(e.target.value)}>
+              {engines.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name} · {e.label}
+                  {e.id === (savedCfg?.engine ?? "") ? " — 지금 도는 것" : ""}
+                </option>
+              ))}
+            </select>
+            {engineView && !viewingCurrent && (
+              <button
+                className="primary-btn"
+                disabled={applying}
+                onClick={() => {
+                  if (window.confirm(`「${engineView.name}」으로 바꿉니다.\n\n지금 설정(손본 값 포함)이 그 엔진의 기본값으로 통째로 바뀌고 바로 저장됩니다. 원장은 지문이 달라져 새 엔진 편입과 옛 편입이 갈립니다.`))
+                    void applyEngine(engineView.id);
+                }}
+              >
+                {applying ? "바꾸는 중…" : "이 엔진으로 바꾸기"}
+              </button>
+            )}
+            {viewingCurrent && (
+              <span className={`sig-engine-now${engineDrift.length > 0 ? " drift" : ""}`}>
+                {engineDrift.length > 0 ? `지금 도는 엔진 · 손본 곳 ${engineDrift.length}` : "지금 도는 엔진 · 기본값 그대로"}
+              </span>
+            )}
+            {!engineNow && savedCfg && (
+              <span className="sig-engine-now drift">지금 설정은 엔진을 고른 적 없음(세대 {savedCfg.configVersion ?? "-"} 기본값 기반)</span>
+            )}
+          </div>
+          {engineView && (
+            <div className="sig-engine-body">
+              <div className="sig-engine-row"><i>언제</i><span>{engineView.date}</span></div>
+              <div className="sig-engine-row"><i>한 줄</i><span>{engineView.summary}</span></div>
+              <div className="sig-engine-row"><i>가장 중요하게 보는 것</i><span>{engineView.focus}</span></div>
+              <div className="sig-engine-row">
+                <i>설정값의 뜻</i>
+                <ul>
+                  {engineView.settings.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="sig-engine-row"><i>직전 엔진과 다른 것</i><span>{engineView.changes}</span></div>
+              <div className="sig-engine-row"><i>주의</i><span>{engineView.caveat}</span></div>
+              {viewingCurrent && engineDrift.length > 0 && (
+                <div className="sig-engine-row">
+                  <i>내가 손본 곳</i>
+                  <ul>
+                    {engineDrift.map((d, i) => (
+                      <li key={i}>{d}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       {/*
         **기준 세대** (2026-09-02 저녁 — 벤티지: "신호등 기준은 안 바꿨나보네?" /
         "세대3 뒤에다가 날짜시간 붙이자 260902_1900 이렇게 해야 알지").
@@ -580,10 +709,27 @@ export function SignalConfigPanel() {
         근거(표본 380일 중앙값 50)는 기본값으로 두되, 바꾸고 끄는 것은 사람 몫이다.
       */}
       <div className="sig-config-line sig-regime-line">
+        {/*
+          **장세를 사람이 정한다** (2026-09-03, 세대 5) — 벤티지: "장세판단을 내가 할 테니까."
+          직접 고르면 아래 자동 판정(20일선 위 비율)은 안 쓴다. 눌림목 기준이 이걸 본다 —
+          강세장이면 고점 근처가 만점, 약세장이면 눌림이 만점.
+        */}
+        <label title="직접 고르면 서버의 자동 판정 대신 이 장세로 잽니다. 세대 5 눌림목이 이걸 봅니다">
+          <b>장세</b>
+          <select
+            value={config.regimeMode ?? "auto"}
+            onChange={(e) => patch({ regimeMode: e.target.value as "auto" | "bull" | "bear" })}
+          >
+            <option value="bear">약세장 — 내가 정함 (눌림목이 만점)</option>
+            <option value="bull">강세장 — 내가 정함 (고점 근처가 만점)</option>
+            <option value="auto">자동 — 20일선 위 비율로 서버가 정함</option>
+          </select>
+        </label>
         <label className="sig-block-toggle">
           <input
             type="checkbox"
             checked={config.regimeSwitch}
+            disabled={(config.regimeMode ?? "auto") !== "auto"}
             onChange={(e) => patch({ regimeSwitch: e.target.checked })}
           />
           <b>장세에 따라 기준을 갈아 끼운다</b>
@@ -595,7 +741,7 @@ export function SignalConfigPanel() {
             min={10}
             max={90}
             value={config.bullAt}
-            disabled={!config.regimeSwitch}
+            disabled={!config.regimeSwitch || (config.regimeMode ?? "auto") !== "auto"}
             onChange={(e) =>
               patch({ bullAt: Math.max(10, Math.min(90, Number(e.target.value) || 50)) })
             }
@@ -665,6 +811,39 @@ export function SignalConfigPanel() {
             }
           />
           <span className="sig-unit">억 이상만 초록 {config.minTradeValue === 0 && "(문턱 없음)"}</span>
+        </label>
+        {/* 세대 5 기본조건 (2026-09-03) — 벤티지: "최소 거래대금 유지 … 시가총액도 천 억이 넘어가 가지고" */}
+        <label title="최근 20일 평균 거래대금이 이만큼은 돼야 초록 — 하루 소나기가 아니라 「유지」">
+          <b>20일 평균 거래대금 하한</b>
+          <input
+            type="number"
+            min={0}
+            max={100000}
+            step={10}
+            value={config.minTradeValue20 ?? 0}
+            onChange={(e) => patch({ minTradeValue20: Math.max(0, Math.min(100_000, Number(e.target.value) || 0)) })}
+          />
+          <span className="sig-unit">억 {(config.minTradeValue20 ?? 0) === 0 && "(문턱 없음)"}</span>
+        </label>
+        <label title="시가총액이 이만큼은 돼야 초록 — 누군가 장난칠 수 없는 크기">
+          <b>시가총액 하한</b>
+          <input
+            type="number"
+            min={0}
+            max={10000000}
+            step={100}
+            value={config.minMarketCap ?? 0}
+            onChange={(e) => patch({ minMarketCap: Math.max(0, Math.min(10_000_000, Number(e.target.value) || 0)) })}
+          />
+          <span className="sig-unit">억 {(config.minMarketCap ?? 0) === 0 && "(문턱 없음)"}</span>
+        </label>
+        <label className="sig-block-toggle" title="🔥쏠림·⏳늦음 경보 중 넷(σ20·진폭·약세장 RS60·저점대비)을 탈락(빨강)으로 올립니다. 세대 4 가 켰고 세대 5 는 태그만 답니다">
+          <input
+            type="checkbox"
+            checked={config.alertKill ?? true}
+            onChange={(e) => patch({ alertKill: e.target.checked })}
+          />
+          <b>경보 넷을 탈락으로 승격</b>
         </label>
         <span className="table-note">
           <b>하루 3억 도는 종목에 천만 원을 넣으면 호가가 밀립니다.</b> 화면에 +8%로

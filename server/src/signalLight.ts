@@ -16,6 +16,8 @@ import { themeStrength } from "./themeStrength.js";
 import { isIndexLikeTheme } from "./naverThemes.js";
 import { etfHoldersOf } from "./etfHolders.js";
 import { quarterFinance } from "./quarterFinance.js";
+import { marginTrendAt } from "./financeCache.js";
+import { peerMarginTrend, peerRet20, sectorPeersOf } from "./sectorPeers.js";
 import { pushNotice } from "./notifyCenter.js";
 import { computeAlerts, killAlerts, marketReturns, type SignalAlerts } from "./hotAlerts.js";
 
@@ -135,7 +137,30 @@ export type CheckKey =
   | "etfBacking"
   | "shortSaleUp"
   | "lendingUp"
-  | "debtRatio";
+  | "debtRatio"
+  /*
+   * ## 세대 5 (2026-09-03) — 벤티지 안, 「정석대로 하면 오른다」
+   *
+   * 벤티지: "이 시즌에서 검증하는 게 아니야. 진짜 올려야 될 종목들을 골라야 고르는 거지.
+   * 지금 시장에서는 이거 판단할 수가 없어. 그냥 정석적으로 이러면 오르는 거다 라는 거를
+   * 들이대야 되는 게 신호등이라고. 장세판단을 내가 할 테니까."
+   *
+   * 문턱은 표본이 아니라 차트 정석에서 온 값이다. 표본 숫자는 `docs/신호등_벤티지안_검토_260903.md`.
+   */
+  /** 기본조건 ① 분기 영업이익률 개선 추세 — 탈락 전용(무게 0) */
+  | "qMarginTrend"
+  /** 기본조건 ② 섹터(테마 회원사) 이익률 개선 — 탈락 전용(무게 0) */
+  | "sectorMargin"
+  /** 점수 ② 20일선 이격 — 붙어 있을수록 좋다(봉우리형, 계산부가 직접 띠를 매긴다) */
+  | "maGap20"
+  /** 점수 ③ 외국인 모아감 — 20일 순매수가 양이고 60일 속도보다 빠르다 */
+  | "fgnAccum"
+  /** 점수 ③ 기관 모아감 */
+  | "instAccum"
+  /** 점수 ④ 섹터 안 상대 — 회원 중앙값보다 좋되 아직 안 튄 */
+  | "sectorRel"
+  /** 점수 ⑤ 거래량 — 최고 찍고 줄어들거나, 커지는 중 */
+  | "volPattern";
 
 export interface CheckConfig {
   key: CheckKey;
@@ -292,6 +317,30 @@ export interface SignalConfig {
    * 얼마든지 가능한 판단이다.
    */
   bullAt: number;
+  /**
+   * **장세를 누가 정하나** (2026-09-03, 세대 5) — 벤티지: "장세판단을 내가 할 테니까."
+   *
+   *   auto  20일선 위 비율(`bullAt`)로 서버가 정한다 (세대 4 까지의 방식, `regimeSwitch` 가 켜져 있을 때)
+   *   bull  벤티지가 강세장으로 놓음 — 눌림목 대신 고점 근처가 만점
+   *   bear  약세장으로 놓음 — 눌림목이 만점
+   * 없으면 auto.
+   */
+  regimeMode?: "auto" | "bull" | "bear";
+  /**
+   * **경보 넷을 탈락으로 승격할까** (세대 4 가 켰다). 세대 5 는 끈다 — 그 승격은 한 계절의
+   * 표본이 만든 규칙이라 「정석」이 아니다. 경보 태그는 그대로 붙는다.
+   */
+  alertKill?: boolean;
+  /** 기본조건: 시가총액 하한(억). 0 = 없음. 미달이면 초록을 안 준다 */
+  minMarketCap?: number;
+  /** 기본조건: 20일 평균 거래대금 하한(억). 0 = 없음. 「최소 거래대금 유지」 — 하루가 아니라 평균 */
+  minTradeValue20?: number;
+  /**
+   * **어느 엔진을 골랐나** (2026-09-03) — 벤티지: "엔진 히스토리를 만들어서 각 엔진을 고를 수
+   * 있게 하자 … 이전 엔진이 맞을 수도 있는 건데." `signalEngines.ENGINES` 의 id.
+   * 이 값이 있으면 서버가 켜질 때 세대가 낡았다고 갈아 끼우지 않는다 — 사람이 고른 것이다.
+   */
+  engine?: string;
   /**
    * **몇 %나 재고 점수를 매길까** (2026-09-01) — 이 도구에서 가장 크게 틀렸던 자리.
    *
@@ -461,7 +510,12 @@ export const MA_OPTIONS = [5, 10, 20, 60] as const;
  * ⚠️ **저장된 설정이 이 값보다 우선한다.** 한 번이라도 저장했으면 여기를 고쳐도
  * 안 바뀐다 — 설정 화면 위쪽의 「전부 추천 기본값으로」를 눌러야 반영된다.
  */
-export const DEFAULT_CONFIG: SignalConfig = {
+/**
+ * **세대 4 엔진** (2026-09-02 밤) — 표본으로 튜닝한 마지막 판. 2026-09-03 부터 기본값은
+ * 세대 5(`DEFAULT_CONFIG`, 아래)이고, 이 값은 `signalEngines` 가 「세대 4」로 등록해 고를 수
+ * 있게 둔다. 아래 주석들은 그때 것이다 — 지우지 않는다(왜 그 값이었는지의 기록).
+ */
+export const GEN4_CONFIG: SignalConfig = {
   /*
    * **초록 70** (2026-09-01, 두 번 고친 끝에).
    *
@@ -570,6 +624,10 @@ export const DEFAULT_CONFIG: SignalConfig = {
   greenTo: 100,
   /* 억. 호가 슬리피지와 「안 움직여서 0 이 쌓이는」 것 둘 다 여기서 막힌다 */
   minTradeValue: 100,
+  regimeMode: "auto",
+  alertKill: true,
+  minMarketCap: 0,
+  minTradeValue20: 0,
   checks: [
     // ---------------- 추세 ----------------
     {
@@ -751,12 +809,19 @@ export const DEFAULT_CONFIG: SignalConfig = {
        *
        * 눌림목만 따로 보고 싶으면 켜되, **신고가를 끄고** 켜는 게 맞다.
        */
+      /*
+       * ## 세대 5 (2026-09-03) — **정의를 벤티지 안으로 바꿨다.**
+       *
+       * 「먼저 올랐던 것(60일 고점이 60일 전 종가보다 +10%↑)이 그 고점에서 threshold~strongAt
+       * (기본 -15~-3%) 내려온 자리」가 만점. -25~-15 와 고점 근처(-3~0)는 절반. 먼저 오른 적이
+       * 없으면 0 — 내려온 것이지 눌린 것이 아니다. **강세장(`regimeMode` bull)이면 뒤집힌다**:
+       * 고점 근처가 만점, 눌림이 절반. 옛 85~95%·20일선 규칙은 없앴다(계산부 참고).
+       */
       enabled: false,
       weight: 1,
-      /* 100 이 「눌림목 한가운데(90%)」다 — 계산부에서 그렇게 환산한다 */
-      threshold: 50,
-      strongAt: 100,
-      hint: "60일 고가의 85~95% 자리이면서 20일선 위 — 오르던 것이 잠깐 쉬는 자리. **이 자리에서는 수급이 앞뒤 일관되게 듣는다**",
+      threshold: -15,
+      strongAt: -3,
+      hint: "60일 고점 대비 몇 % 아래인가(먼저 +10% 이상 올랐던 것만). 기준값~아주 좋음 사이(-15~-3%)가 만점 — 오르던 것이 잠깐 쉬는 자리. 강세장으로 놓으면 고점 근처(-3~0)가 만점",
       cost: 0,
     },
     /*
@@ -1907,6 +1972,151 @@ export const DEFAULT_CONFIG: SignalConfig = {
   ],
 };
 
+/*
+ * ## **세대 5 — 벤티지 안** (2026-09-03 새벽) → 기본값
+ *
+ * 벤티지: "일단 분기별 영업이익률이 좋아지고 있는 추세여야 해. 거래대금 백 억, 시가총액 천 억이
+ * 기본조건. 그 섹터의 영업이익률이 전체가 좋아져야 돼. 가장 베스트는 올랐다가 잠깐 내려와 있는
+ * 눌림목, 외국인·기관 수급을 모아가는 종목, 이격도가 좁아져 있는 종목, 섹터 안에서도 그 종목이
+ * 좋아지는 종목, 거래량이 최고였다가 줄거나 커지는 종목." / "이 시즌에서 검증하는 게 아니야 …
+ * 정석적으로 이러면 오르는 거다 라는 거를 들이대야 되는 게 신호등이라고. 장세판단을 내가 할 테니까."
+ *
+ * 세 층이다.
+ *   기본조건  대금 ≥100억(당일·20일 평균) · 시총 ≥1000억 · 분기 이익률 개선 추세 · 섹터 이익률 개선
+ *   체        적자 분기 · 외인+기관 20일 순매도가 시총의 -1%↓ · 🔥⏳ 경보는 **태그만**(탈락 승격 끔)
+ *   점수 100  눌림목 20 · 20일선 이격 20 · 수급 모아감 20(외인 10 + 기관 10) · 섹터 안 상대 20 · 거래량 20
+ *             → 추세 축(눌림·이격·섹터상대) 무게 3 : 수급 축(외인 ½·기관 ½·거래량 1) 무게 2
+ *             = 다섯 묶음이 각각 20%. 초록 70 · 노랑 50.
+ *   장세      자동 판정을 쓰지 않는다(`regimeMode` bear 로 시작) — 벤티지가 설정에서 고른다.
+ *
+ * 문턱(-15~-3 · -5~+3 · 1.2배 · 0.5 …)은 차트 정석에서 흔히 쓰는 값이지 표본에서 고른 게 아니다.
+ * 이 계절(쏠림→급락→반등)로 잰 숫자는 `docs/신호등_벤티지안_검토_260903.md` 에만 적어 뒀다 —
+ * 세대 4 와 나란히 굴려 정상 장이 돌아왔을 때 어느 자가 맞았는지 실전에서 답한다(`signalEngines`).
+ *
+ * 세대 4 의 점수 기준은 전부 끈다(같은 키를 유지하므로 엔진을 되돌리면 그대로 산다). 체 둘
+ * (적자 `qMargin`·순매도 `flowRatio`)은 무게 0 탈락 전용으로 남긴다.
+ */
+const GEN5_OFF = new Set<CheckKey>(["newHigh", "flowPersist", "flowAccel", "shortLevel", "foreignRatioUp", "qYoY", "ma5Gap"]);
+const GEN5_NEW: CheckConfig[] = [
+  {
+    key: "qMarginTrend",
+    label: "분기 이익률 개선 (기본조건)",
+    axis: "value",
+    enabled: true,
+    weight: 0,
+    threshold: 0,
+    strongAt: 3,
+    veto: true,
+    vetoAt: 0,
+    hint: "최근 분기 영업이익률 − 직전 분기(또는 직전 4분기 평균 중 큰 쪽) %p. 0 이하면 기본조건 미달로 탈락. 3%p 이상이면 아주 좋음(표시용 — 무게 0)",
+    cost: 1,
+    costGroup: "quarter",
+  },
+  {
+    key: "sectorMargin",
+    label: "섹터 이익률 개선 (기본조건)",
+    axis: "value",
+    enabled: true,
+    weight: 0,
+    threshold: 0,
+    strongAt: 2,
+    veto: true,
+    vetoAt: 0,
+    hint: "이 종목이 든 네이버 테마(회원이 가장 많은 것) 회원사들의 분기 이익률 개선 추세 중앙값 %p. 0 이하면 산업이 안 좋아지는 것 — 탈락. 회원 실적이 셋 미만이면 판정 안 함",
+    cost: 0,
+  },
+  {
+    key: "maGap20",
+    label: "20일선 이격",
+    axis: "trend",
+    enabled: true,
+    weight: 1,
+    threshold: -5,
+    strongAt: 3,
+    hint: "현재가가 20일선에서 몇 % 떨어져 있나(부호 있음). 기준값~아주 좋음(-5~+3%)이면 붙어 있는 것 — 만점. 그 바깥 5%p 까지 절반, 더 벌어지면 0. 벌어지면 다시 좁힌다",
+    cost: 0,
+  },
+  {
+    key: "sectorRel",
+    label: "섹터 안 상대",
+    axis: "trend",
+    enabled: true,
+    weight: 1,
+    threshold: -3,
+    strongAt: 10,
+    hint: "이 종목 20일 수익률 − 섹터 회원사 중앙값 (%p). -3~+10 이면 섹터 안에서 좋아지는 중인데 아직 안 튄 것 — 만점. +10~+20 은 절반(이미 앞서 감). 그 밖 0",
+    cost: 0,
+  },
+  {
+    key: "fgnAccum",
+    label: "외국인 모아감",
+    axis: "flow",
+    enabled: true,
+    weight: 0.5,
+    threshold: 0,
+    strongAt: 1,
+    span: 20,
+    hint: "20일 순매수가 양이고, 20일 일평균이 60일 일평균의 몇 배인가. 아주 좋음(1배) 이상이면 속도가 붙는 중 — 만점. 순매수인데 느려지면 절반. 60일은 팔았는데 20일에 사기 시작했으면 만점(모으기 시작). 순매도면 0",
+    cost: 0,
+  },
+  {
+    key: "instAccum",
+    label: "기관 모아감",
+    axis: "flow",
+    enabled: true,
+    weight: 0.5,
+    threshold: 0,
+    strongAt: 1,
+    span: 20,
+    hint: "기관계 20일 순매수 — 외국인 모아감과 같은 규칙",
+    cost: 0,
+  },
+  {
+    key: "volPattern",
+    label: "거래량 패턴",
+    axis: "flow",
+    enabled: true,
+    weight: 1,
+    threshold: 0.5,
+    strongAt: 1.2,
+    /*
+     * 벤티지(2026-09-03): "고점에서 내려왔을 때 거래량이 많이 터지지 않았다는 걸 의미했던 거야.
+     * 근데 반대로 거래량이 너무 적어지고 있는 건 시장의 관점에서 멀어지고 있다는 뜻이거든?
+     * 그건 배제를 해야 돼. 적정한 거래량은 유지하거나 거래량이 계속해서 높아지고 있거나 —
+     * 양단에서 점수를 다르게 주는 방식."
+     */
+    hint: "최근 5일 평균 ÷ 20일 평균 거래량. 기준값(0.5) 미만이면 말라붙는 중(시장이 관심을 거둠) — 0. 아주 좋음(1.2배) 이상이면 커지는 중 — 만점. 그 사이(유지)는 20일 동안 하락일 거래량이 상승일의 1.2배를 안 넘으면 만점(내려올 때 안 터졌다), 넘으면 절반(내려오며 터졌다 — 분배)",
+    cost: 0,
+  },
+];
+
+function buildGen5(): SignalConfig {
+  const checks: CheckConfig[] = GEN4_CONFIG.checks.map((c) => {
+    if (GEN5_OFF.has(c.key)) return { ...c, enabled: false };
+    if (c.key === "flowRatio") return { ...c, enabled: true, weight: 0, label: "외인+기관 순매도 (체)" };
+    if (c.key === "pullback") return { ...c, enabled: true, weight: 1, label: "눌림목" };
+    return c;
+  });
+  return {
+    ...GEN4_CONFIG,
+    configVersion: 5,
+    configLabel: "260903_0300",
+    engine: "gen5",
+    greenAt: 70,
+    yellowAt: 50,
+    axisWeights: { trend: 3, flow: 2, value: 1 },
+    regimeSwitch: true,
+    regimeMode: "bear",
+    alertKill: false,
+    minTradeValue: 100,
+    minTradeValue20: 100,
+    minMarketCap: 1000,
+    checks: [...checks, ...GEN5_NEW],
+  };
+}
+
+export const DEFAULT_CONFIG: SignalConfig = buildGen5();
+
 /** 사용자가 보낸 이평선 목록을 허용된 값·오름차순·중복제거로 정리한다 */
 function normalizeMaLines(input: unknown): number[] {
   const allowed = new Set<number>(MA_OPTIONS);
@@ -1938,33 +2148,40 @@ function mergeConfig(saved: Partial<SignalConfig> | null): SignalConfig {
      * 통째로 갈아 끼우므로, 여기까지 온 저장본은 이미 같은 세대다. 저장본의 옛
      * 이름표가 남아 「세대 3인데 260901_1200」 같은 거짓말이 뜨는 것을 막는다.
      */
-    configVersion: DEFAULT_CONFIG.configVersion,
-    configLabel: DEFAULT_CONFIG.configLabel,
     /*
-     * ⚠️ **옛 기본값(1/1/1)은 새 기본값으로 이사시킨다** (2026-08-31).
-     *
-     * 축 비중을 `1.5/1.3/0.6` 으로 바꾼 것은 **「며칠에서 몇 주를 보는 매매」에 맞춘
-     * 설계 결정**이었다(위 DEFAULT_CONFIG 주석). 설정에 손잡이를 둔 것은 「바꾸고
-     * 싶으면」이지 옛 값을 지키라는 뜻이 아니었다.
-     *
-     * 그런데 저장본이 옛 기본값 `1/1/1` 을 그대로 들고 있으면 병합에서 그것이 이겨
-     * **새 설계가 적용되지 않는다.** 실측에서 그랬다 — 코드는 1.5/1.3/0.6 인데
-     * 실제로는 1/1/1 로 돌고 있었다.
-     *
-     * 셋이 **모두 정확히 1** 이면 옛 기본값이지 사람이 고른 값이 아니다. 그때만
-     * 이사시킨다. 하나라도 다르면 사람이 만진 것이므로 그대로 둔다 —
-     * 추적기 모집단(60·200 → 300) 때와 같은 규칙이다.
+     * **엔진을 골랐으면 그 세대 이름표를 지킨다** (2026-09-03). 사람이 세대 4 엔진을 고른
+     * 저장본에 세대 5 이름표를 붙이면 화면이 거짓말을 한다. 안 골랐으면 기본값 것.
      */
-    axisWeights: (() => {
-      const w = saved?.axisWeights;
-      const oldDefault = w && w.trend === 1 && w.flow === 1 && w.value === 1;
-      return oldDefault
-        ? { ...DEFAULT_CONFIG.axisWeights }
-        : { ...DEFAULT_CONFIG.axisWeights, ...(w ?? {}) };
-    })(),
+    configVersion: saved?.engine ? (saved.configVersion ?? DEFAULT_CONFIG.configVersion) : DEFAULT_CONFIG.configVersion,
+    configLabel: saved?.engine ? (saved.configLabel ?? DEFAULT_CONFIG.configLabel) : DEFAULT_CONFIG.configLabel,
+    engine: saved?.engine,
+    /*
+     * 옛 「1/1/1 이면 새 기본값으로 이사」 규칙은 없앴다 (2026-09-03) — 세대 4 엔진이 1/1/1 이라
+     * 그 규칙이 남아 있으면 세대 4 를 고르는 순간 세대 5 무게(3/2/1)로 바뀐다. 세대 이주는
+     * `getConfig` 가 통째로 한다.
+     */
+    axisWeights: { ...DEFAULT_CONFIG.axisWeights, ...(saved?.axisWeights ?? {}) },
+    regimeMode:
+      saved?.regimeMode === "auto" || saved?.regimeMode === "bull" || saved?.regimeMode === "bear"
+        ? saved.regimeMode
+        : DEFAULT_CONFIG.regimeMode,
+    alertKill: typeof saved?.alertKill === "boolean" ? saved.alertKill : DEFAULT_CONFIG.alertKill,
+    minMarketCap:
+      Number.isFinite(saved?.minMarketCap) && Number(saved?.minMarketCap) >= 0
+        ? Number(saved?.minMarketCap)
+        : DEFAULT_CONFIG.minMarketCap,
+    minTradeValue20:
+      Number.isFinite(saved?.minTradeValue20) && Number(saved?.minTradeValue20) >= 0
+        ? Number(saved?.minTradeValue20)
+        : DEFAULT_CONFIG.minTradeValue20,
     checks: DEFAULT_CONFIG.checks.map((d) => {
       const s = savedChecks.get(d.key);
-      if (!s) return d;
+      /*
+       * **저장본에 없는 기준은 꺼진 것이다** (2026-09-03). 예전엔 기본값(켜짐)을 그대로
+       * 썼는데, 그러면 세대 4 엔진을 골라도 세대 5 의 새 기준 일곱이 켜진 채 섞인다.
+       * 저장본이 기준 목록을 아예 안 들고 있는 옛 형식만 기본값을 따른다.
+       */
+      if (!s) return savedChecks.size > 0 ? { ...d, enabled: false } : d;
       /*
        * 업종 강세는 **저장분이 켜 두었어도 끈다** (2026-08-27).
        * 기본값만 바꾸면, 이미 저장된 설정을 쓰는 쪽(=실제로 쓰던 사람)에게는
@@ -2040,8 +2257,10 @@ export async function getConfig(): Promise<SignalConfig> {
      */
     const savedVer = Number(saved?.configVersion ?? 0);
     const defVer = DEFAULT_CONFIG.configVersion ?? 0;
-    if (savedVer < defVer) {
-      configCache = mergeConfig({ configVersion: defVer });
+    /* 엔진을 사람이 골랐으면(`engine`) 낡았어도 안 갈아 끼운다 — 그건 낡은 게 아니라 고른 것이다 */
+    if (savedVer < defVer && !saved?.engine) {
+      /* 기본값의 엔진 id 도 같이 — 화면이 「어느 엔진인가」를 말할 수 있게 */
+      configCache = mergeConfig({ configVersion: defVer, engine: DEFAULT_CONFIG.engine });
       await mkdir(dirname(CONFIG_FILE), { recursive: true });
       await writeFile(CONFIG_FILE, JSON.stringify(configCache, null, 2), "utf-8");
       const label = DEFAULT_CONFIG.configLabel ?? "";
@@ -2054,8 +2273,9 @@ export async function getConfig(): Promise<SignalConfig> {
         level: "warn",
         title: `신호등 기준이 새 기본값(세대 ${defVer}${label ? ` · ${label}` : ""})으로 바뀌었습니다`,
         body:
-          "2026-09-02 전면 재검토 결과를 적용했습니다 — 외국인 시총대비·공매도 비중 수준·분기 실적을 " +
-          "켜고 시총·주포·ETF 뒷배를 껐습니다. 초록 문턱 65. 설정 > 분석 > 신호등 기준에서 확인하세요.",
+          "세대 5 = 벤티지 안(2026-09-03). 기본조건(대금 100억·시총 1000억·분기 이익률 개선·섹터 이익률 개선) → " +
+          "눌림목·20일선 이격·외인/기관 모아감·섹터 안 상대·거래량 다섯 묶음 각 20점. 장세는 설정에서 직접 고릅니다(약세장으로 시작). " +
+          "옛 엔진(세대 3·4)은 설정 > 신호등 기준 > 엔진에서 고를 수 있습니다.",
         link: "#/settings",
         dedupeKey: `signalConfig:gen${defVer}`,
         dedupeHours: 24 * 30,
@@ -2094,6 +2314,8 @@ export async function configFingerprint(): Promise<string> {
     `r${c.riskYellowAt}-${c.riskRedAt}${c.riskBlocksGreen ? "B" : ""}`,
     /* 장세 전환은 점수를 통째로 바꾼다 — 지문에 없으면 「같은 설정」으로 오인된다 */
     `rg${c.regimeSwitch ? c.bullAt : "off"}`,
+    /* 세대 5 (2026-09-03): 수동 장세·경보 승격·시총/20일 대금 하한·엔진 */
+    `rm${c.regimeMode ?? "auto"}ak${c.alertKill === false ? 0 : 1}cap${c.minMarketCap ?? 0}tv20-${c.minTradeValue20 ?? 0}e${c.engine ?? "-"}`,
     `aw${c.axisWeights.trend}${c.axisWeights.flow}${c.axisWeights.value}`,
     `f${c.flowDays}`,
     `ma${c.maLines.join("")}`,
@@ -2225,15 +2447,22 @@ export interface SignalResult {
   overHeated?: boolean;
   /** 그날 거래대금(억) — 못 쟀으면 null */
   tradeEok?: number | null;
-  /** 거래대금이 `minTradeValue` 미만이라 초록이 막혔나 — 호가가 얇아 못 산다 */
+  /** 거래대금이 `minTradeValue` 미만이라 초록이 막혔나 — 호가가 얇아 못 산다 (20일 평균 미달도 여기) */
   tooThin?: boolean;
+  /** 20일 평균 거래대금(억) — 세대 5 기본조건 (2026-09-03) */
+  tradeEok20?: number | null;
+  /** 시가총액(억) — 기본조건 판정에 쓴 값 */
+  capEok?: number | null;
+  /** 시총이 `minMarketCap` 미만이라 초록이 막혔나 */
+  tooSmall?: boolean;
   /**
    * **지금 장세와, 그 때문에 빠진 기준들** (2026-09-01).
    *
    * 자동 전환은 편하지만 「왜 오늘은 이 점수인가」를 사람이 알 수 없으면 도구를
    * 못 믿는다. 무엇이 켜졌고 무엇이 빠졌는지 화면이 말할 수 있게 실어 보낸다.
    */
-  regime?: { kind: "bull" | "bear"; label: string; breadth: number; skipped: string[] };
+  /** breadth 는 자동 판정일 때만 — 사람이 고른 장세(세대 5 `regimeMode`)는 null */
+  regime?: { kind: "bull" | "bear"; label: string; breadth: number | null; skipped: string[] };
   /**
    * **경보 태그** (2026-09-02 저녁) — 쏠림(늘)·늦음(약세장만). 점수·색은 안 건드린다.
    * 벤티지가 「탈락 말고 태그」를 골랐다 — 초록은 그대로 두고 눈으로 거른다. `hotAlerts.ts`.
@@ -2385,7 +2614,19 @@ export async function evaluateSignal(
    *
    * 조회는 안 는다 — 일봉 캐시에서 이동평균을 내는 것뿐이다.
    */
-  const mkt = cfg.regimeSwitch ? await marketRegime(cfg.bullAt).catch(() => null) : null;
+  /*
+   * **장세를 사람이 정할 수 있다** (2026-09-03, 세대 5) — 벤티지: "장세판단을 내가 할 테니까."
+   * `regimeMode` 가 bull/bear 면 그걸 쓰고, auto 면 예전처럼 20일선 위 비율로 잰다.
+   */
+  const regimeMode = cfg.regimeMode ?? "auto";
+  const mkt: { regime: "bull" | "bear"; breadth: number | null; manual: boolean } | null =
+    regimeMode === "bull" || regimeMode === "bear"
+      ? { regime: regimeMode, breadth: null, manual: true }
+      : cfg.regimeSwitch
+        ? await marketRegime(cfg.bullAt)
+            .then((r) => (r ? { regime: r.regime, breadth: r.breadth, manual: false } : null))
+            .catch(() => null)
+        : null;
   /** 장세 때문에 이번에 빠진 기준 — 화면이 「왜 이 점수인가」를 말할 수 있게 */
   const offByRegime = cfg.checks.filter(
     (c) => c.enabled && c.regime && mkt && c.regime !== mkt.regime,
@@ -2423,7 +2664,12 @@ export async function evaluateSignal(
     need.has("overhead") ||
     need.has("disparity") ||
     need.has("ma5Gap") ||
-    need.has("targetUpside");
+    need.has("targetUpside") ||
+    /* 세대 5 — 눌림목·이격·거래량·섹터 상대는 일봉으로 잰다 */
+    need.has("pullback") ||
+    need.has("maGap20") ||
+    need.has("volPattern") ||
+    need.has("sectorRel");
   // 둘은 한 응답에서 나온다. 하나만 켜도 부르고, 둘 다 켜도 한 번만 부른다
   const wantOpinion = need.has("targetUpside") || need.has("targetTrend");
   const wantRatio = need.has("roe") || need.has("debtRatio");
@@ -2435,10 +2681,14 @@ export async function evaluateSignal(
     need.has("flowAccel") ||
     need.has("smartMoney") ||
     need.has("flowRatio") ||
-    need.has("fgnRatio20");
+    need.has("fgnRatio20") ||
+    need.has("fgnAccum") ||
+    need.has("instAccum");
   const wantFinance = need.has("profitGrowth");
-  /* 분기 실적 셋 — 한투 1콜 (2026-09-02 배선. 그전엔 등록만 돼 있고 여기 없었다 — 감사 1-2) */
-  const wantQuarter = need.has("qStreak") || need.has("qYoY") || need.has("qMargin");
+  /* 분기 실적 — 한투 1콜 (2026-09-02 배선. 그전엔 등록만 돼 있고 여기 없었다 — 감사 1-2) */
+  const wantQuarter = need.has("qStreak") || need.has("qYoY") || need.has("qMargin") || need.has("qMarginTrend");
+  /* 섹터(테마 회원사) — 파일만 읽는다(테마 DB·실적 캐시·일봉 캐시). 조회 0회 */
+  const peers = need.has("sectorMargin") || need.has("sectorRel") ? await sectorPeersOf(code).catch(() => null) : null;
   /* 테마 강세도 같은 조회에서 나온다 — `getSectorMood` 가 업종과 테마를 같이 준다 */
   const wantSector =
     need.has("sectorStrength") || need.has("themeStrength") || need.has("exportGrowth");
@@ -2687,31 +2937,165 @@ export async function evaluateSignal(
       }
     } else if (c.key === "pullback") {
       /*
-       * 60일 고가의 85~95% + 20일선 위 = 눌림목.
+       * **눌림목 — 세대 5 정의** (2026-09-03). 옛 규칙(60일 고가의 85~95% + 20일선 위)은
+       * 없앴다. 벤티지: "그 이전에 올랐다가 잠깐 내려와 있는 종목."
        *
-       * 한가운데(90%)를 100점, 가장자리(85·95%)를 50점으로 환산한다 — 「85 이상
-       * 95 이하」를 통과/미달로만 보면 89.9% 와 95.1% 가 하늘과 땅 차이가 되는데,
-       * 실제로는 이어진 값이다.
-       *
-       * 20일선 아래로 빠졌으면 눌림이 아니라 이탈이다 — 점수를 주지 않는다.
+       * 60일 최고 종가(오늘 포함) 대비 몇 % 아래인가(dd). 먼저 오른 적이 있어야 한다 —
+       * 그 고점이 60일 전 종가보다 +10% 이상 위. 아니면 「내려온 것」이지 「눌린 것」이 아니다.
+       *   약세장(기본)  threshold~strongAt(-15~-3) 만점 · -25~-15 절반 · 고점 근처(-3~0) 절반
+       *   강세장        고점 근처 만점 · -15~-3 절반 — 오르는 놈이 계속 오르는 장이다
+       * 시뮬(`signalSamples.gradeOf`)이 같은 띠를 매긴다.
        */
-      const win = chartRows.slice(1, 61);
-      const high = win.length >= 20 ? Math.max(...win.map((r) => Math.abs(toNum(r.high_pric)))) : 0;
-      const m20 = sma(closes, 20);
-      if (cur && high > 0 && m20 !== null) {
-        const pct = (cur / high) * 100;
-        if (cur < m20) {
+      if (cur && closes.length >= 61) {
+        const win = closes.slice(0, 61);
+        const hi = Math.max(...win);
+        const base = closes[60];
+        const dd = (cur / hi - 1) * 100;
+        const rise = base > 0 ? (hi / base - 1) * 100 : 0;
+        const lo = Math.min(c.threshold, c.strongAt);
+        const hiB = Math.max(c.threshold, c.strongAt);
+        raw = dd;
+        if (rise < 10) {
           g = 0;
-          value = `20일선 아래 — 눌림이 아니라 이탈`;
-        } else if (pct < 85 || pct > 95) {
-          g = 0;
-          value = `고가의 ${pct.toFixed(0)}% — 눌림목 자리가 아님`;
+          value = `고점 대비 ${dd.toFixed(1)}% — 먼저 오른 적이 없다(60일 고점이 60일 전보다 +${rise.toFixed(0)}%)`;
         } else {
-          /* 90 에서 가장 멀어야 100, 85·95 에서 50 */
-          const near = 1 - Math.abs(pct - 90) / 5;
-          g = G(50 + near * 50);
-          value = `고가의 ${pct.toFixed(0)}% · 20일선 위 — 눌림목`;
+          const bull = mkt?.regime === "bull";
+          const inZone = dd >= lo && dd <= hiB;
+          const nearTop = dd > hiB && dd <= 0;
+          const deep = dd >= lo - 10 && dd < lo;
+          g = bull ? (nearTop ? 100 : inZone ? 50 : 0) : inZone ? 100 : nearTop || deep ? 50 : 0;
+          value =
+            `고점 대비 ${dd.toFixed(1)}% (먼저 +${rise.toFixed(0)}% 올랐음) — ` +
+            (inZone ? "눌림목" : nearTop ? "고점 근처" : deep ? "깊은 눌림" : "무너짐") +
+            (bull ? " · 강세장 기준" : "");
         }
+      }
+    } else if (c.key === "maGap20") {
+      /* 20일선 이격(부호 있음). 붙어 있으면 만점, 5%p 바깥까지 절반 — 벌어지면 다시 좁힌다 */
+      const ma20 = sma(closes, 20);
+      if (cur && ma20) {
+        const away = ((cur - ma20) / ma20) * 100;
+        const lo = Math.min(c.threshold, c.strongAt);
+        const hiB = Math.max(c.threshold, c.strongAt);
+        raw = away;
+        g = away >= lo && away <= hiB ? 100 : (away >= lo - 5 && away < lo) || (away > hiB && away <= hiB + 5) ? 50 : 0;
+        value = `20일선 ${away > 0 ? "+" : ""}${away.toFixed(1)}%${g === 100 ? " — 붙어 있음" : g === 50 ? " — 조금 벌어짐" : " — 많이 벌어짐"}`;
+      }
+    } else if (c.key === "sectorRel") {
+      /* 이 종목 20일 − 섹터 회원 중앙 20일 (%p). 앞서되 아직 안 튄 것이 만점 */
+      if (cur && closes.length >= 21 && closes[20] > 0 && peers) {
+        const mine = ((cur - closes[20]) / closes[20]) * 100;
+        const pr = await peerRet20(peers.codes).catch(() => null);
+        if (pr) {
+          const rel = mine - pr.med;
+          const lo = Math.min(c.threshold, c.strongAt);
+          const hiB = Math.max(c.threshold, c.strongAt);
+          raw = rel;
+          g = rel >= lo && rel <= hiB ? 100 : rel > hiB && rel <= hiB + 10 ? 50 : 0;
+          value =
+            `${peers.name} 회원 ${pr.n}곳 중앙 ${pr.med > 0 ? "+" : ""}${pr.med.toFixed(1)}% 대비 ${rel > 0 ? "+" : ""}${rel.toFixed(1)}%p` +
+            (g === 100 ? " — 섹터 안에서 좋아지는 중" : g === 50 ? " — 이미 앞서 감" : rel < lo ? " — 섹터에 뒤짐" : " — 너무 튐");
+        } else {
+          value = `${peers.name} — 회원 일봉이 모자라 못 잼`;
+        }
+      } else if (!peers) {
+        value = "섹터(테마)를 못 찾음";
+      }
+    } else if (c.key === "fgnAccum" || c.key === "instAccum") {
+      /*
+       * **모아감** — 20일 순매수가 양이고, 20일 일평균이 60일 일평균의 `strongAt`배 이상이면
+       * 속도가 붙는 중(만점). 순매수인데 느려지면 절반. 60일은 팔았는데 20일에 사기 시작한
+       * 것은 모으기 시작 — 만점. 순매도는 0. 벤티지: "외국인 기관 이런 수급 모아가고 있는 종목."
+       */
+      const field = c.key === "fgnAccum" ? "frgnr_invsr" : "orgn";
+      if (flowRows.length >= 20) {
+        const sum = (n: number) => flowRows.slice(0, n).reduce((s, r) => s + toNum(r[field]), 0);
+        const s20 = sum(20);
+        const s60 = flowRows.length >= 60 ? sum(60) : null;
+        const who = c.key === "fgnAccum" ? "외국인" : "기관";
+        const eok = (v: number) => `${v > 0 ? "+" : ""}${Math.round(v / 100).toLocaleString("ko-KR")}억`;
+        if (s20 <= 0) {
+          raw = 0;
+          g = 0;
+          value = `${who} 20일 ${eok(s20)} — 순매도`;
+        } else if (s60 === null) {
+          raw = 1;
+          g = 50;
+          value = `${who} 20일 ${eok(s20)} — 60일치가 없어 속도는 못 잼`;
+        } else if (s60 <= 0) {
+          raw = 9;
+          g = 100;
+          value = `${who} 20일 ${eok(s20)} (60일 ${eok(s60)}) — 팔다가 모으기 시작`;
+        } else {
+          const ratio = s20 / 20 / (s60 / 60);
+          raw = ratio;
+          g = ratio >= Math.max(c.threshold, c.strongAt) ? 100 : 50;
+          value = `${who} 20일 ${eok(s20)} · 60일 ${eok(s60)} — 속도 ${ratio.toFixed(2)}배${g === 100 ? " (붙는 중)" : " (느려짐)"}`;
+        }
+      }
+    } else if (c.key === "volPattern") {
+      /*
+       * 거래량 — 벤티지(2026-09-03): 마르면 시장이 관심을 거둔 것(0), 유지·증가는 좋음(만점),
+       * 고점에서 내려오며 터진 것(하락일 거래량 > 상승일)은 분배라 절반.
+       */
+      const rows = chartRows.slice(0, 20);
+      if (rows.length >= 20) {
+        const vol = rows.map((r) => Math.abs(toNum(r.trde_qty)));
+        const v5 = vol.slice(0, 5).reduce((s, v) => s + v, 0) / 5;
+        const v20 = vol.reduce((s, v) => s + v, 0) / 20;
+        if (v20 > 0) {
+          const ratio = v5 / v20;
+          /* 하락일 평균 거래량 ÷ 상승일 평균 거래량 (20일) */
+          let dn = 0, dnN = 0, up = 0, upN = 0;
+          for (let i = 0; i < rows.length - 1; i++) {
+            const c0 = Math.abs(toNum(rows[i].cur_prc));
+            const c1 = Math.abs(toNum(rows[i + 1].cur_prc));
+            if (!(c0 > 0 && c1 > 0)) continue;
+            if (c0 < c1) { dn += vol[i]; dnN += 1; } else if (c0 > c1) { up += vol[i]; upN += 1; }
+          }
+          const dist = dnN > 0 && upN > 0 ? (dn / dnN) / (up / upN) : null;
+          const dry = Math.min(c.threshold, c.strongAt);
+          const grow = Math.max(c.threshold, c.strongAt);
+          raw = ratio;
+          if (ratio < dry) {
+            g = 0;
+            value = `5일/20일 ${ratio.toFixed(2)}배 — 말라붙는 중(관심 이탈)`;
+          } else if (ratio >= grow) {
+            g = 100;
+            value = `5일/20일 ${ratio.toFixed(2)}배 — 커지는 중`;
+          } else if (dist !== null && dist > 1.2) {
+            g = 50;
+            value = `5일/20일 ${ratio.toFixed(2)}배 유지 · 하락일 거래량이 상승일의 ${dist.toFixed(1)}배 — 내려오며 터졌다`;
+          } else {
+            g = 100;
+            value = `5일/20일 ${ratio.toFixed(2)}배 유지` + (dist !== null ? ` · 하락일/상승일 ${dist.toFixed(1)}배 — 안 터졌다` : "");
+          }
+        }
+      }
+    } else if (c.key === "qMarginTrend") {
+      /* 기본조건 ① — 분기 이익률 개선 추세. 계산은 표본(`financeCache.marginTrendAt`)과 같다 */
+      const rows = quarter ?? [];
+      const t = marginTrendAt(rows.length >= 2 ? { quarters: rows, annual: [] } as never : undefined);
+      if (t) {
+        g = G(t.trend);
+        value =
+          `${t.label} 이익률 ${t.m0.toFixed(1)}%` +
+          (t.m1 !== null ? ` (직전 ${t.m1.toFixed(1)}%` : " (") +
+          (t.avg4 !== null ? ` · 4분기 평균 ${t.avg4.toFixed(1)}%` : "") +
+          `) → ${t.trend > 0 ? "개선" : "악화"} ${t.trend > 0 ? "+" : ""}${t.trend.toFixed(1)}%p`;
+      }
+    } else if (c.key === "sectorMargin") {
+      /* 기본조건 ② — 섹터(테마 회원사) 이익률 개선 중앙값 */
+      if (peers) {
+        const pm = await peerMarginTrend(peers.codes).catch(() => null);
+        if (pm) {
+          g = G(pm.med);
+          value = `${peers.name} 회원 ${pm.n}곳 이익률 변화 중앙 ${pm.med > 0 ? "+" : ""}${pm.med.toFixed(1)}%p${pm.med > 0 ? " — 산업이 좋아지는 중" : " — 산업이 안 좋아짐"}`;
+        } else {
+          value = `${peers.name} — 회원 실적이 셋 미만이라 못 잼`;
+        }
+      } else {
+        value = "섹터(테마)를 못 찾음";
       }
     } else if (c.key === "sectorStrength") {
       /*
@@ -3373,8 +3757,20 @@ export async function evaluateSignal(
    * 0 이 나오는데, 그걸로 막으면 매일 아침 초록이 통째로 사라진다. 위에서 직전
    * 거래일로 물러섰는데도 0 이면 그건 「모른다」다.
    */
-  const tooThin = cfg.minTradeValue > 0 && tradeEok > 0 && tradeEok < cfg.minTradeValue;
+  /*
+   * **기본조건 — 세대 5** (2026-09-03). 20일 평균 거래대금과 시가총액도 같은 방식으로 초록을
+   * 막는다(빨강이 아니다 — 못 사는 종목이지 나쁜 종목이 아니다). 벤티지: "최소 거래대금 유지 …
+   * 시가총액도 천 억이 넘어가 가지고 누군가가 장난을 칠 수 없는 종목이어야 해."
+   */
+  const tv20Rows = chartRows.slice(0, 20).map((r) => toNum(r.trde_prica) / 100).filter((v) => v > 0);
+  const tradeEok20 = tv20Rows.length >= 10 ? Math.round(tv20Rows.reduce((s, v) => s + v, 0) / tv20Rows.length) : 0;
+  const tooThin20 = (cfg.minTradeValue20 ?? 0) > 0 && tradeEok20 > 0 && tradeEok20 < (cfg.minTradeValue20 ?? 0);
+  const tooThin = (cfg.minTradeValue > 0 && tradeEok > 0 && tradeEok < cfg.minTradeValue) || tooThin20;
   if (tooThin && level === "green") level = "yellow";
+  let capEokNow = toNum(info?.data?.mac);
+  if (!(capEokNow > 0) && entry?.shares) capEokNow = Math.round((entry.shares * Math.abs(toNum(info?.data?.cur_prc))) / 100_000_000);
+  const tooSmall = (cfg.minMarketCap ?? 0) > 0 && capEokNow > 0 && capEokNow < (cfg.minMarketCap ?? 0);
+  if (tooSmall && level === "green") level = "yellow";
 
   /*
    * **상한** — 기본은 100(꺼짐)이라 아무 일도 안 한다.
@@ -3432,7 +3828,8 @@ export async function evaluateSignal(
    * 상위 20 안에 들어도 평균 아래거나 마이너스였다. 태그는 그대로 남기고(왜 빨강인지 보이게)
    * 판정만 빨강으로. 시뮬(`scoreFeat`)도 같은 문턱으로 같은 판정을 한다.
    */
-  const killed = alerts ? killAlerts(alerts) : [];
+  /* 세대 5 는 승격을 끈다(`alertKill` false) — 태그는 남고 판정은 안 건드린다 */
+  const killed = alerts && cfg.alertKill !== false ? killAlerts(alerts) : [];
   if (killed.length > 0) level = "red";
 
   const result: SignalResult = {
@@ -3451,10 +3848,13 @@ export async function evaluateSignal(
     overHeated,
     tradeEok: tradeEok > 0 ? tradeEok : null,
     tooThin,
+    tradeEok20: tradeEok20 > 0 ? tradeEok20 : null,
+    capEok: capEokNow > 0 ? capEokNow : null,
+    tooSmall,
     regime: mkt
       ? {
           kind: mkt.regime,
-          label: REGIME_LABEL[mkt.regime],
+          label: mkt.manual ? `${REGIME_LABEL[mkt.regime]} (직접 고름)` : REGIME_LABEL[mkt.regime],
           breadth: mkt.breadth,
           skipped: offByRegime.map((c) => c.label),
         }

@@ -1643,6 +1643,12 @@ export const api = {
     getJson<{ config: SignalConfig; defaults: SignalConfig }>("/api/signal/config"),
   signalConfigSave: (config: SignalConfig) =>
     putJson<{ config: SignalConfig }>("/api/signal/config", config),
+  /** 엔진 히스토리 (2026-09-03) — 목록과 지금 고른 것 */
+  signalEngines: () =>
+    getJson<{ engines: SignalEngine[]; current: string | null }>("/api/signal/engines"),
+  /** 엔진을 고른다 — 그 값이 통째로 저장된다 */
+  signalEngineApply: (id: string) =>
+    postJson<{ config: SignalConfig; engine: string }>(`/api/signal/engines/${id}/apply`, {}),
   /** 판정 요약 — 「몇 점부터 값을 하나」. 파일에서 읽으므로 조회 0회 */
   signalVerdict: () => getJson<{ verdict: SignalVerdict | null }>("/api/signal/verdict"),
 
@@ -3326,7 +3332,8 @@ export interface SignalResult {
    * 자동 전환은 편하지만 **「왜 오늘은 이 점수인가」를 모르면 도구를 못 믿는다.**
    * 무엇이 빠졌는지 화면이 말할 수 있게 실어 온다.
    */
-  regime?: { kind: "bull" | "bear"; label: string; breadth: number; skipped: string[] };
+  /** breadth 는 자동 판정일 때만 — 사람이 고른 장세(세대 5)는 null */
+  regime?: { kind: "bull" | "bear"; label: string; breadth: number | null; skipped: string[] };
   /**
    * **몇 %나 재고 매긴 점수인가** (2026-09-01, 무게 기준 0~1).
    *
@@ -3630,6 +3637,32 @@ export interface SignalConfig {
    * 점수는 그대로 내고 초록만 막는다. 못 잰 경우(0)에는 막지 않는다. 0 이면 문턱 없음.
    */
   minTradeValue: number;
+  /* ── 세대 5 (2026-09-03) ── */
+  /** 장세를 누가 정하나 — auto(서버, 20일선 위 비율) · bull · bear(사람이 고름) */
+  regimeMode?: "auto" | "bull" | "bear";
+  /** 🔥⏳ 경보 넷을 탈락으로 승격할까 (세대 4 켬, 세대 5 끔) */
+  alertKill?: boolean;
+  /** 기본조건: 시가총액 하한(억). 0 = 없음 */
+  minMarketCap?: number;
+  /** 기본조건: 20일 평균 거래대금 하한(억). 0 = 없음 */
+  minTradeValue20?: number;
+  /** 고른 엔진 id (`signalEngines`). 있으면 서버가 세대를 갈아 끼우지 않는다 */
+  engine?: string;
+}
+
+/** 신호등 엔진 (2026-09-03) — 기본값 한 벌 + 설명. 서버 `signalEngines.ts` */
+export interface SignalEngine {
+  id: string;
+  version: number;
+  label: string;
+  name: string;
+  date: string;
+  summary: string;
+  focus: string;
+  settings: string[];
+  changes: string;
+  caveat: string;
+  config: SignalConfig;
 }
 
 /**

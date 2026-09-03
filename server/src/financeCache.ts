@@ -152,6 +152,32 @@ const EMPTY: QuarterLens = { qStreak: null, qYoY: null, qQoQ: null, qMargin: nul
  * 어느 날짜 `date`(YYYYMMDD)에 **그때 이미 공시돼 있던** 분기 실적.
  * 최근 분기 넷(연속 증가 수 · YoY · QoQ · 이익률). 실전(오늘)은 `date` 를 안 주면 된다.
  */
+/**
+ * **분기 영업이익률 개선 추세** (2026-09-03, 세대 5 기본조건) — 벤티지: "분기별 영업이익률이
+ * 좋아지고 있는 추세여야 해."
+ *
+ * 값 = max(최근 분기 − 직전 분기, 최근 분기 − 직전 4분기 평균) (%p). 둘 중 하나만 양수면
+ * 「개선 중」으로 본다 — 한 분기 튀는 것에 흔들리지 않게 4분기 평균도 같이 본다.
+ * `date` 를 주면 그날 알 수 있던 분기만(표본용, look-ahead 없음).
+ */
+export function marginTrendAt(
+  rec: FinanceRec | undefined,
+  date?: string,
+): { trend: number; m0: number; m1: number | null; avg4: number | null; label: string } | null {
+  const rows = (rec?.quarters ?? []).filter((r) => (date ? knownAt(r.period) <= date : true));
+  const ms = rows.map((r) => r.margin);
+  if (ms.length < 2 || ms[0] === null) return null;
+  const m0 = ms[0];
+  const m1 = ms[1];
+  const prev = ms.slice(1, 5).filter((v): v is number => v !== null);
+  const avg4 = prev.length >= 2 ? prev.reduce((a, b) => a + b, 0) / prev.length : null;
+  const cands: number[] = [];
+  if (m1 !== null) cands.push(m0 - m1);
+  if (avg4 !== null) cands.push(m0 - avg4);
+  if (cands.length === 0) return null;
+  return { trend: Math.max(...cands), m0, m1, avg4, label: rows[0].label };
+}
+
 export function quarterAt(rec: FinanceRec | undefined, date?: string): QuarterLens {
   const rows = rec?.quarters ?? [];
   if (rows.length < 2) return EMPTY;

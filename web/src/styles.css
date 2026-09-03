@@ -13502,6 +13502,30 @@ thead .sd-emph {
 .sig-alerts.compact .sig-alert { padding: 0 5px; font-size: 10.5px; }
 
 /* 기준 세대 배지 (2026-09-02) — 「이 기기가 새 기준인가」를 한눈에 */
+/*
+ * 엔진 히스토리 (2026-09-03) — 드롭박스 + 설명 카드. 벤티지: "각 엔진에 대해 비교 분석할 수 있겠지?"
+ */
+.sig-engine {
+  margin: 0 0 12px;
+  border: 1px solid color-mix(in srgb, var(--blue) 40%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--blue) 5%, transparent);
+  padding: 10px 12px;
+}
+.sig-engine-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.sig-engine-head > b { font-size: 0.86rem; }
+.sig-engine-head select { font-size: 0.82rem; padding: 4px 8px; max-width: 100%; }
+.sig-engine-now { font-size: 0.72rem; color: var(--green); }
+.sig-engine-now.drift { color: var(--cis-gold, #d4a017); }
+.sig-engine-body { margin-top: 8px; display: grid; gap: 5px; }
+.sig-engine-row { display: grid; grid-template-columns: 9.5rem 1fr; gap: 8px; font-size: 0.78rem; line-height: 1.5; }
+.sig-engine-row > i { font-style: normal; color: var(--muted); }
+.sig-engine-row ul { margin: 0; padding-left: 1.1rem; }
+.sig-engine-row li { margin: 1px 0; }
+@media (max-width: 640px) {
+  .sig-engine-row { grid-template-columns: 1fr; gap: 2px; }
+}
+
 .sig-gen {
   display: inline-flex;
   align-items: baseline;

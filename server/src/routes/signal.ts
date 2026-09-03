@@ -75,6 +75,7 @@ import {
   saveConfig,
   type SignalConfig,
 } from "../signalLight.js";
+import { ENGINES, engineOf } from "../signalEngines.js";
 import {
   getTrackConfig,
   saveTrackConfig,
@@ -89,6 +90,35 @@ export function createSignalRouter(client: KiwoomClient): Router {
   router.get("/config", async (_req, res, next) => {
     try {
       res.json({ config: await getConfig(), defaults: DEFAULT_CONFIG });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **엔진 히스토리** (2026-09-03) — 벤티지: "각 엔진을 고를 수 있게 하자 … 각 엔진에 대한 설명을
+   * 붙여." 목록은 설명 + 그 엔진의 값 전부(화면이 「지금 설정과 어디가 다른가」를 그린다).
+   */
+  router.get("/engines", async (_req, res, next) => {
+    try {
+      const cur = await getConfig();
+      res.json({ engines: ENGINES, current: cur.engine ?? null });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 엔진을 고른다 — 그 값이 통째로 저장되고 `engine` 이 남는다. 판정도 같이 다시 낸다 */
+  router.post("/engines/:id/apply", async (req, res, next) => {
+    try {
+      const e = engineOf(String(req.params.id));
+      if (!e) {
+        res.status(404).json({ error: "그런 엔진이 없습니다" });
+        return;
+      }
+      const saved = await saveConfig({ ...e.config, engine: e.id });
+      void buildVerdict(saved).catch(() => undefined);
+      res.json({ config: saved, engine: e.id });
     } catch (err) {
       next(err);
     }

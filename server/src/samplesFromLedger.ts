@@ -8,7 +8,8 @@ import { betaFrom, buildEtfCtx, buildThemeCtx } from "./signalBacktest.js";
 import { yahooChart } from "./yahooChart.js";
 import { MA_PERIODS, saveSamples, type Feat, type Sample } from "./signalSamples.js";
 import type { DailyLedger, FlowRow } from "./dailyStore.js";
-import { loadFinanceCache, profitAt, quarterAt, type FinanceCache } from "./financeCache.js";
+import { loadFinanceCache, marginTrendAt, profitAt, quarterAt, type FinanceCache } from "./financeCache.js";
+import { peerMarginTrend, peerRet20, sectorPeersOf } from "./sectorPeers.js";
 
 /**
  * **원장으로 표본을 만든다** (2026-09-01) — 조회 0회.
@@ -215,6 +216,9 @@ export function buildSamplesFromLedger(
 
       const files = (await readdir(DAILY_DIR)).filter((f) => f.endsWith(".json"));
       progress.total = files.length;
+      /* 세대 5 섹터 칸 메모 — (테마 번호:날짜) → 중앙값. 종목이 달라도 같은 테마·날짜면 같은 값 */
+      const secMTMemo = new Map<string, number | null>();
+      const secRetMemo = new Map<string, number | null>();
 
       const out: Sample[] = [];
 
@@ -276,6 +280,23 @@ export function buildSamplesFromLedger(
         const etfRates = etfCtx?.rate.get(code);
         /* 금리 베타가 쓸 날짜 열 — 종목당 한 번 */
         const datesAll = bs.map((b) => b.d);
+        /*
+         * 세대 5 섹터 칸 — 종목당 섹터(테마 회원사)는 한 번, (테마·날짜)별 중앙값은 메모.
+         * 회원사 실적·일봉은 전부 파일이라 조회가 없다. ⚠️ 테마 구성은 오늘 것(`sectorPeers` 주석).
+         */
+        const peers = await sectorPeersOf(code).catch(() => null);
+        const secMTAt = async (date: string): Promise<number | null> => {
+          if (!peers) return null;
+          const k = `${peers.no}:${date}`;
+          if (!secMTMemo.has(k)) secMTMemo.set(k, (await peerMarginTrend(peers.codes, date))?.med ?? null);
+          return secMTMemo.get(k) ?? null;
+        };
+        const secRetAt = async (date: string): Promise<number | null> => {
+          if (!peers) return null;
+          const k = `${peers.no}:${date}`;
+          if (!secRetMemo.has(k)) secRetMemo.set(k, (await peerRet20(peers.codes, date))?.med ?? null);
+          return secRetMemo.get(k) ?? null;
+        };
 
         /*
          * 수급이 있는 날만 표본이 된다. 일봉은 2년치지만 수급이 100일이라,
@@ -327,6 +348,29 @@ export function buildSamplesFromLedger(
           const rs60 = c60 > 0 && mm60 !== undefined ? ((cur - c60) / c60) * 100 - mm60 : null;
           const lo60 = bi >= 60 ? Math.min(...bs.slice(bi - 60, bi).map((b) => b.l).filter((x) => x > 0)) : 0;
           const lo60Pct = Number.isFinite(lo60) && lo60 > 0 ? (cur / lo60) * 100 : null;
+
+          /* ── 세대 5 칸 (2026-09-03) — 실전 `evaluateSignal` 과 같은 정의 ── */
+          const win61 = closesAll.slice(bi - 60, bi + 1);
+          const hi61 = Math.max(...win61);
+          const dd60 = hi61 > 0 ? (cur / hi61 - 1) * 100 : null;
+          const rise60 = c60 > 0 && hi61 > 0 ? (hi61 / c60 - 1) * 100 : null;
+          const gap20 = m20 ? ((cur - m20) / m20) * 100 : null;
+          const vol20 = bs.slice(bi - 19, bi + 1).map((b) => b.v);
+          const v5 = vol20.slice(-5).reduce((s, v) => s + v, 0) / 5;
+          const v20 = vol20.reduce((s, v) => s + v, 0) / 20;
+          const vGrow = v20 > 0 ? v5 / v20 : null;
+          let dnV = 0, dnN = 0, upV = 0, upN = 0;
+          for (let k = bi - 19; k <= bi; k++) {
+            const a = closesAll[k - 1], b = closesAll[k];
+            if (!(a > 0 && b > 0)) continue;
+            if (b < a) { dnV += bs[k].v; dnN += 1; } else if (b > a) { upV += bs[k].v; upN += 1; }
+          }
+          const vDist = dnN > 0 && upN > 0 ? (dnV / dnN) / (upV / upN) : null;
+          const mTrend = marginTrendAt(fin, date)?.trend ?? null;
+          const secMT = await secMTAt(date);
+          const secRet = await secRetAt(date);
+          const ret20 = bi >= 20 && closesAll[bi - 20] > 0 ? ((cur - closesAll[bi - 20]) / closesAll[bi - 20]) * 100 : null;
+          const secRel = secRet !== null && ret20 !== null ? ret20 - secRet : null;
 
           /*
            * **위쪽 매물** — 이제 거래량으로 잰다. 일봉에 고가·저가·거래량이
@@ -424,6 +468,14 @@ export function buildSamplesFromLedger(
             range,
             rs60,
             lo60Pct,
+            dd60,
+            rise60,
+            gap20,
+            vGrow,
+            vDist,
+            mTrend,
+            secMT,
+            secRel,
           };
 
           /*
