@@ -6275,6 +6275,8 @@ export interface OrderStatus {
   passwordLeftSec: number;
   today: { krw: number; count: number };
   open: Record<OrderVenue, boolean>;
+  /** 지금 낼 수 있는 거래소 — 모의투자는 KRX 뿐 */
+  venueAllowed: OrderVenue[];
   tradeTypes: TradeType[];
   watching: number;
 }

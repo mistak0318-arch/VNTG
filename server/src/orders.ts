@@ -642,6 +642,19 @@ export async function prepareOrder(
   }
   if (!VENUES.includes(input.venue)) reject("거래소 구분이 이상하다", input, ip);
   if (input.side !== "buy" && input.side !== "sell") reject("매수·매도 구분이 없다", input, ip);
+  /*
+   * **모의투자는 KRX 만 받는다** (2026-09-04, 벤티지 실측: 통합(SOR)으로 내니 `RC9000 —
+   * 모의투자에서는 지원되지 않는다`).
+   *
+   * 생각해 보면 당연하다 — NXT 는 실제로 돌아가는 거래소고 SOR 은 키움이 두 시장을 견줘
+   * 보내는 실전 기능이다. 모의투자는 그 뒤에 있는 시장이 없다.
+   *
+   * 여기서 막는 이유: 키움이 거절해도 결과는 같지만, **거절은 기록에 「실패」로 남고 그
+   * 이유를 사람이 읽어야 안다.** 못 나갈 주문은 나가기 전에 막고 이유를 화면에 적는 편이 낫다.
+   */
+  if (orderIsMock() && input.venue !== "KRX") {
+    reject("모의투자는 KRX 만 받는다 — 통합(SOR)·NXT 는 실전에서만 (키움 RC9000)", input, ip);
+  }
 
   /* 매매구분마다 「가격을 보내야 하나」가 다르다 — 표가 유일한 기준이다 (2026-09-04) */
   const tt = tradeTypeOf(input.tradeType);
@@ -1168,6 +1181,8 @@ export async function orderStatus(req: Request): Promise<Record<string, unknown>
     guard,
     today,
     open: Object.fromEntries(VENUES.map((v) => [v, venueOpen(v)])),
+    /* 지금 낼 수 있는 거래소 — 모의는 KRX 뿐이다. 화면이 나머지를 잠근다 */
+    venueAllowed: orderIsMock() ? ["KRX"] : VENUES,
     /* 화면이 매매구분을 하드코딩하지 않게 — 표를 고치면 화면이 따라온다 */
     tradeTypes: TRADE_TYPES,
     watching: watching.size,

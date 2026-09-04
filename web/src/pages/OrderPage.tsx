@@ -576,10 +576,15 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
    * 벤티지: "nxt에서는 거래 안되는거야?" 되는데 **화면이 안 되는 것처럼 보였다.**
    */
   const [venue, setVenue] = useState<OrderVenue>(() => {
-    /* 설정에서 거래소를 못 박아 뒀으면 그것, 「그때 열려 있는 곳」이면 열린 데를 고른다 */
+    /*
+     * 설정에서 못 박아 뒀으면 그것, 「그때 열려 있는 곳」이면 열린 데를 고른다.
+     * 다만 **낼 수 없는 거래소는 애초에 안 고른다** — 모의투자는 KRX 뿐이라, 통합(SOR)이
+     * 먼저 있다고 그걸 잡으면 눌러 보고서야 RC9000 을 만난다 (2026-09-04).
+     */
+    const allowed = status.venueAllowed ?? VENUES.map((v) => v.key);
     const fixed = status.settings?.defaultVenue;
-    if (fixed && fixed !== "auto") return fixed;
-    return VENUES.map((v) => v.key).find((k) => status.open[k]) ?? "KRX";
+    if (fixed && fixed !== "auto" && allowed.includes(fixed)) return fixed;
+    return allowed.find((k) => status.open[k]) ?? allowed[0] ?? "KRX";
   });
   /*
    * 매매구분 (2026-09-04). 예전엔 「시장가」 스위치 하나였는데 실제로는 18가지다 —
@@ -794,19 +799,29 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
         <div className="ord-fields">
           <label className="ord-lab">거래소</label>
           <div className="ord-venue">
-            {VENUES.map((v) => (
-              <button
-                key={v.key}
-                type="button"
-                title={v.hint}
-                className={`${venue === v.key ? "on" : ""}${status.open[v.key] ? "" : " shut"}`}
-                onClick={() => setVenue(v.key)}
-              >
-                {v.label}
-                <i>{status.open[v.key] ? "열림" : "닫힘"}</i>
-              </button>
-            ))}
+            {VENUES.map((v) => {
+              const can = (status.venueAllowed ?? VENUES.map((x) => x.key)).includes(v.key);
+              return (
+                <button
+                  key={v.key}
+                  type="button"
+                  disabled={!can}
+                  title={can ? v.hint : "모의투자에서는 못 냅니다 — 실전 계좌에서만"}
+                  className={`${venue === v.key ? "on" : ""}${!can || !status.open[v.key] ? " shut" : ""}`}
+                  onClick={() => setVenue(v.key)}
+                >
+                  {v.label}
+                  <i>{!can ? "모의 불가" : status.open[v.key] ? "열림" : "닫힘"}</i>
+                </button>
+              );
+            })}
           </div>
+
+          {status.mock && (status.venueAllowed ?? []).length === 1 && (
+            <div className="ord-caps">
+              모의투자는 <b>KRX 만</b> 받습니다 — 통합(SOR)·NXT 는 실전 계좌에서만 (키움 RC9000)
+            </div>
+          )}
 
           <label className="ord-lab">매매구분</label>
           <select
