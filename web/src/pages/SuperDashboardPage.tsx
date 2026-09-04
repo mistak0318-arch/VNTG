@@ -6,6 +6,20 @@ import {
   type SuperStats,
 } from "../api";
 import { SuperDetailSheet } from "../components/SuperDetailSheet";
+import { GradeDetailRow } from "../components/GradeDetailRow";
+/** 속을 잰 지평과 **같은 칸**의 평균 — 다른 지평끼리 견주면 뜻이 없다 */
+function sameAvg(
+  d: { horizon: 1 | 5 | 20 | null },
+  ex1: { avg: number | null } | undefined,
+  ex5: { avg: number | null } | undefined,
+  ex20: { avg: number | null } | undefined,
+): number | null {
+  if (d.horizon === 20) return ex20?.avg ?? null;
+  if (d.horizon === 5) return ex5?.avg ?? null;
+  if (d.horizon === 1) return ex1?.avg ?? null;
+  return null;
+}
+
 import { RefreshBar } from "../components/RefreshBar";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useCardOrder } from "../useCardOrder";
@@ -100,6 +114,8 @@ const GRADE_GROUPS: { key: SuperGradeRow["group"]; label: string; hint: string }
  *   ④ 전체 대비 차이를 같이 적는다 — 이 표의 물음이 처음부터 그것이었다
  */
 function GradeBoard({ rows, hidden }: { rows: SuperGradeRow[]; hidden: number }) {
+  /* 펼쳐 둔 구간 하나 — 여럿 열면 표가 다시 길어진다 */
+  const [openRow, setOpenRow] = useState<string | null>(null);
   const [open, setOpen] = useState(() => {
     try {
       return localStorage.getItem("vntg.sd.grade") === "1";
@@ -182,14 +198,25 @@ function GradeBoard({ rows, hidden }: { rows: SuperGradeRow[]; hidden: number })
                          * 몇 줄을 뺐는지는 `gradeHidden` 으로 와서 아래에 적는다.
                          */
                         return (
+                        <Fragment key={r.label}>
+                        {/*
+                          줄을 누르면 **속**이 펼쳐진다 (2026-09-04) — 분포·중앙값·
+                          손익비·시장 이긴 비율. 신호등 분석 채점표와 **같은 조각**을 쓰고
+                          서버 셈도 한 곳이다(`gradeStats`). 두 원장을 견주는 표라
+                          자가 다르면 비교가 거짓이 된다.
+                        */}
                         <tr
-                          key={r.label}
                           className={`${r.group === "base" ? "gb-base" : ""}${
                             /* 표본이 적은 줄은 흐리게 — 숨기지는 않는다 */
                             r.d1.n > 0 && r.d1.n < 5 ? " gb-thin" : ""
-                          }`}
+                          } gd-click${openRow === r.label ? " on" : ""}`}
+                          onClick={() => setOpenRow((v) => (v === r.label ? null : r.label))}
+                          title="눌러서 이 구간의 속을 봅니다 — 분포·중앙값·손익비"
                         >
-                          <td>{r.label}</td>
+                          <td>
+                            <span className="gd-caret">{openRow === r.label ? "▾" : "▸"}</span>
+                            {r.label}
+                          </td>
                           {cols.map((c) => (
                             <GradeCell
                               key={c.d}
@@ -198,6 +225,14 @@ function GradeBoard({ rows, hidden }: { rows: SuperGradeRow[]; hidden: number })
                             />
                           ))}
                         </tr>
+                        {openRow === r.label && r.detail && (
+                          <GradeDetailRow
+                            detail={r.detail}
+                            avgSame={sameAvg(r.detail, r.ex1, r.ex5, r.ex20)}
+                            span={cols.length + 1}
+                          />
+                        )}
+                        </Fragment>
                         );
                       })}
                     </Fragment>

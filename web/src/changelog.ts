@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T09:05:07.098Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T09:22:54.439Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "3b76098",
+        "subject": "신호등 분석 채점표 마저 — 표본 수를 값 아래로 (500 → 469px)"
+      },
       {
         "hash": "7185b70",
         "subject": "채점표를 늘린 건 숫자가 아니라 문장이었다 — 표 1157px → 319px"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "96df443",
         "subject": "인앱 탭 — 브라우저 탭처럼 메뉴를 열어 두고 오간다"
-      },
-      {
-        "hash": "e602269",
-        "subject": "「슈퍼신호등+교차」 그룹 특별 표시 + 삭제 버튼 숨김"
       }
     ]
   }

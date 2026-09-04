@@ -13,6 +13,7 @@ import { leaderScan } from "./leaderScan.js";
 import { stockLens, themeMapNow } from "./stockLens.js";
 import { fetchUniverse, SCREEN_UNIVERSES, type Candidate } from "./signalScreen.js";
 import { recentLists } from "./listTrack.js";
+import { gradeDetail, pickHorizon, type GradeDetail } from "./gradeStats.js";
 import {
   hasDedicatedChannel,
   isTelegramConfigured,
@@ -1238,6 +1239,11 @@ export interface GradeRow {
    */
   win1: { rate: number | null; n: number };
   win20: { rate: number | null; n: number };
+  /**
+   * **평균 뒤에 무엇이 있었나** (2026-09-04). 신호등 분석과 **같은 셈**을 쓴다
+   * (`gradeStats`) — 두 원장을 나란히 놓고 견주는 표라, 자가 다르면 비교가 거짓이 된다.
+   */
+  detail: GradeDetail;
 }
 
 function gradeRow(
@@ -1284,6 +1290,14 @@ function gradeRow(
     ex20: aggEx((r) => r.d20),
     win1: rate((r) => r.d1),
     win20: rate((r) => r.d20),
+    detail: (() => {
+      const h = pickHorizon(
+        entries.map((e) => e.excess?.d1),
+        entries.map((e) => e.excess?.d5),
+        entries.map((e) => e.excess?.d20),
+      );
+      return gradeDetail(h.values, h.horizon);
+    })(),
   };
 }
 

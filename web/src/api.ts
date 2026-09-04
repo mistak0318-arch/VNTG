@@ -2809,6 +2809,8 @@ export interface SuperGradeRow {
   /** 승률(%) — 평균과 같이 봐야 뜻이 산다 */
   win1?: { rate: number | null; n: number };
   win20?: { rate: number | null; n: number };
+  /** 줄을 펼쳤을 때의 속 (2026-09-04) — 신호등 분석과 같은 셈 */
+  detail?: GradeDetail;
 }
 
 export interface SuperStats {
@@ -6296,6 +6298,29 @@ export interface ListTrackSummary {
 }
 
 /** 성적 한 줄 */
+/**
+ * 채점표 한 줄의 **속** (2026-09-04) — 평균 뒤에 무엇이 있었나.
+ * 서버 셈은 한 곳이다(`gradeStats`) — 신호등 분석과 슈퍼신호등이 같은 자를 쓴다.
+ */
+export interface GradeDetail {
+  /** 몇 일 뒤로 잰 것인가 — 원장이 어리면 20일이 아닐 수 있다. 화면이 적어야 한다 */
+  horizon: 1 | 5 | 20 | null;
+  /** 성적이 확정된 표본 수 — 편입 수와 다르다 */
+  n: number;
+  /** 결과별 몇 건 — 지수 대비 %p 기준 다섯 통 */
+  dist: { bad: number; down: number; flat: number; up: number; good: number };
+  /** 중앙값(%p). 평균과 벌어지면 소수가 끌고 있다는 뜻 */
+  median: number | null;
+  /** 손익비 — 이긴 것 평균 ÷ 진 것 평균. 승률과 짝으로만 뜻이 선다 */
+  payoff: number | null;
+  /** 시장을 이긴 비율(%) — 절대 승률과 다르다 */
+  exWin: number | null;
+  best: number | null;
+  worst: number | null;
+  /** 통의 경계(%p) — 지평마다 다르다 */
+  bins: { near: number; far: number };
+}
+
 export interface ListGradeRow {
   label: string;
   n: number;
@@ -6309,6 +6334,7 @@ export interface ListGradeRow {
   win1: number | null;
   /** 20일 승률 — 평균과 같이 봐야 뜻이 산다 */
   win20: number | null;
+  detail: GradeDetail;
 }
 
 /* ── 주문 (2026-09-03) ──────────────────────────────────────────────────── */

@@ -7,6 +7,7 @@ import { fetchUniverse, SCREEN_UNIVERSES } from "./signalScreen.js";
 import { enabledUniverses } from "./universeConfig.js";
 import { regimeTrust } from "./regimeWatch.js";
 import { pushNotice } from "./notifyCenter.js";
+import { gradeDetail, pickHorizon, type GradeDetail } from "./gradeStats.js";
 import { peekSnapshot } from "./marketSnapshot.js";
 /* 무리(테마·ETF 뒷배) — 슈퍼신호등이 쓰는 것과 **같은 함수**. 파일에서 읽어 조회 0회 */
 import { stockLens, themeMapNow } from "./stockLens.js";
@@ -615,6 +616,11 @@ export interface ListGradeRow {
    * 여덟 번 조금 잃었다」인지 「고르게 벌었다」인지는 평균만으로 안 갈린다.
    */
   win20: number | null;
+  /**
+   * **평균 뒤에 무엇이 있었나** (2026-09-04) — 분포·중앙값·손익비·시장을 이긴 비율.
+   * 표에는 안 그린다(칸이 늘면 폰에서 다시 옆으로 긁힌다). 줄을 눌러 펼친다.
+   */
+  detail: GradeDetail;
 }
 
 function gradeRow(label: string, list: ListEntry[]): ListGradeRow {
@@ -655,6 +661,18 @@ function gradeRow(label: string, list: ListEntry[]): ListGradeRow {
     ex20: aggEx((r) => r.d20),
     win1: rate((r) => r.d1),
     win20: rate((r) => r.d20),
+    /*
+     * 속은 **지수 대비**로 낸다 — 상승장에서는 절대 수익이 전부 오른쪽으로 쏠려
+     * 구간끼리 안 갈린다. 20일이 원칙이되 원장이 어리면 자료가 있는 가장 긴 지평으로.
+     */
+    detail: (() => {
+      const h = pickHorizon(
+        list.map((e) => e.excess?.d1),
+        list.map((e) => e.excess?.d5),
+        list.map((e) => e.excess?.d20),
+      );
+      return gradeDetail(h.values, h.horizon);
+    })(),
   };
 }
 

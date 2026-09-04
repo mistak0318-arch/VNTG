@@ -1,5 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { SuperDetailSheet } from "../components/SuperDetailSheet";
+import { GradeDetailRow } from "../components/GradeDetailRow";
+/** 속을 잰 지평과 **같은 칸**의 평균 — 다른 지평끼리 견주면 뜻이 없다 */
+function sameAvg(
+  d: { horizon: 1 | 5 | 20 | null },
+  ex1: { avg: number | null } | undefined,
+  ex5: { avg: number | null } | undefined,
+  ex20: { avg: number | null } | undefined,
+): number | null {
+  if (d.horizon === 20) return ex20?.avg ?? null;
+  if (d.horizon === 5) return ex5?.avg ?? null;
+  if (d.horizon === 1) return ex1?.avg ?? null;
+  return null;
+}
+
 import { useCardOrder } from "../useCardOrder";
 import { OrderResetButton } from "../components/OrderResetButton";
 import { api, type ListTrackSummary, type ListTrackRow } from "../api";
@@ -79,6 +93,8 @@ export function ListTrackPage({
   const orderedCols = [...LT_COLS].sort((a, b) => colOrder.orderOf(a.key) - colOrder.orderOf(b.key));
   const [openSum, toggleSum, setSum] = useFold("summary", true);
   const [openGrade, toggleGrade, setGrade] = useFold("grade", false);
+  /* 채점표에서 펼쳐 둔 구간 하나 — 여럿 열면 표가 다시 길어진다 */
+  const [openGrade2, setOpenGrade2] = useState<string | null>(null);
   /*
    * **전체 펼치기/접기** (2026-08-31 — "전체보기도 만들어야지 화면에 일일히 다
    * 누를 수는 없잖아"). 접는 칸이 늘수록 하나씩 펴는 게 더 불편해진다.
@@ -348,8 +364,22 @@ export function ListTrackPage({
               </thead>
               <tbody>
                 {data.grade.map((g, i) => (
-                  <tr key={g.label} className={i === 0 ? "gb-base" : g.n < 5 ? "sim-thin" : ""}>
-                    <td>{g.label}</td>
+                  <Fragment key={g.label}>
+                  {/*
+                    줄을 누르면 **속**이 펼쳐진다 (2026-09-04) — 분포·중앙값·손익비·
+                    시장 이긴 비율. 칸을 늘리는 대신 펼치는 이유는 머리글에 적어 뒀다
+                    (`GradeDetailRow`): 폰에서 다시 옆으로 긁히고, 이 값들은 훑을 때가
+                    아니라 **한 줄에서 멈췄을 때** 필요한 값이라서다.
+                  */}
+                  <tr
+                    className={`${i === 0 ? "gb-base" : g.n < 5 ? "sim-thin" : ""} gd-click${openGrade2 === g.label ? " on" : ""}`}
+                    onClick={() => setOpenGrade2((v) => (v === g.label ? null : g.label))}
+                    title="눌러서 이 구간의 속을 봅니다 — 분포·중앙값·손익비"
+                  >
+                    <td>
+                      <span className="gd-caret">{openGrade2 === g.label ? "▾" : "▸"}</span>
+                      {g.label}
+                    </td>
                     <td className="num">{g.n.toLocaleString("ko-KR")}</td>
                     <td className={`num ${cls(g.d1.avg)}`}>
                       {g.d1.avg === null ? "-" : `${g.d1.avg > 0 ? "+" : ""}${g.d1.avg}%`}
@@ -370,6 +400,14 @@ export function ListTrackPage({
                     <td className="num pt-n">{g.win1 === null ? "-" : `${g.win1}%`}</td>
                     <td className="num pt-n">{g.win20 === null ? "-" : `${g.win20}%`}</td>
                   </tr>
+                  {openGrade2 === g.label && (
+                    <GradeDetailRow
+                      detail={g.detail}
+                      avgSame={sameAvg(g.detail, g.ex1, g.ex5, g.ex20)}
+                      span={8}
+                    />
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

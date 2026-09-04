@@ -16038,3 +16038,71 @@ select.ord-in { appearance: auto; cursor: pointer; }
 :root[data-theme="excel"] .ob-str-pin.sell { background: var(--xl-green); }
 :root[data-theme="excel"] .ob-str-scale i.buy { background: var(--muted); opacity: 0.75; }
 :root[data-theme="excel"] .ob-str-scale i.sell { background: var(--muted); opacity: 0.3; }
+
+/* ── 채점표 펼침 (2026-09-04) ─────────────────────────────────────
+   벤티지: "각각의 케이스에 대해 결과별로 알 수 있게 해준 다음에, 조금 더
+   분석에 도움이 되는 지표들도 추가해 볼 수 있겠어."
+   칸을 늘리는 대신 줄을 펼친다 — 폰에서 다시 옆으로 긁히지 않게. */
+.gd-click { cursor: pointer; }
+.gd-click:hover { background: var(--row-hover); }
+.gd-click.on { background: var(--panel-2); }
+.gd-caret { color: var(--muted); margin-right: 4px; font-size: 0.7em; }
+.gd-row > td { background: var(--panel-2); padding: 0 !important; }
+.gd-empty { padding: 10px 12px !important; color: var(--muted); font-size: 0.72rem; }
+.gd {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-left: 2px solid color-mix(in srgb, var(--blue) 45%, transparent);
+  white-space: normal;
+}
+.gd-h { font-size: 0.68rem; color: var(--muted); }
+.gd-h b { color: var(--text); }
+.gd-dist { display: flex; flex-direction: column; gap: 5px; }
+/* 결과별 비율 — 평균 한 숫자가 못 하는 말을 이 띠가 한다 */
+.gd-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--border);
+}
+.gd-seg { display: block; height: 100%; }
+.gd-seg.bad { background: var(--blue); }
+.gd-seg.down { background: color-mix(in srgb, var(--blue) 55%, transparent); }
+.gd-seg.flat { background: var(--muted); opacity: 0.45; }
+.gd-seg.up { background: color-mix(in srgb, var(--red) 55%, transparent); }
+.gd-seg.good { background: var(--red); }
+.gd-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.64rem; color: var(--muted); }
+.gd-legend span { display: inline-flex; align-items: center; gap: 3px; }
+.gd-legend span.off { opacity: 0.35; }
+.gd-legend b { color: var(--text); font-variant-numeric: tabular-nums; }
+.gd-dot { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+.gd-dot.bad { background: var(--blue); }
+.gd-dot.down { background: color-mix(in srgb, var(--blue) 55%, transparent); }
+.gd-dot.flat { background: var(--muted); opacity: 0.45; }
+.gd-dot.up { background: color-mix(in srgb, var(--red) 55%, transparent); }
+.gd-dot.good { background: var(--red); }
+.gd-kv { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; }
+.gd-kv > div { display: flex; flex-direction: column; gap: 1px; min-width: 4.5rem; }
+.gd-kv dt { font-size: 0.62rem; color: var(--muted); }
+.gd-kv dd { margin: 0; font-size: 0.76rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* 평균이 소수에 끌릴 때만 뜨는 줄 — 늘 보이면 경고가 아니다 */
+.gd-note {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--cis-gold);
+  word-break: keep-all;
+}
+:root[data-theme="excel"] .gd { border-left-color: var(--xl-line); }
+:root[data-theme="excel"] .gd-seg.bad,
+:root[data-theme="excel"] .gd-dot.bad { background: var(--muted); }
+:root[data-theme="excel"] .gd-seg.down,
+:root[data-theme="excel"] .gd-dot.down { background: var(--muted); opacity: 0.55; }
+:root[data-theme="excel"] .gd-seg.up,
+:root[data-theme="excel"] .gd-dot.up { background: color-mix(in srgb, var(--xl-sel) 55%, transparent); }
+:root[data-theme="excel"] .gd-seg.good,
+:root[data-theme="excel"] .gd-dot.good { background: var(--xl-sel); }
+:root[data-theme="excel"] .gd-note { color: var(--text); }
