@@ -710,7 +710,20 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
   }
 
   return (
-    <form className={`ord-wrap ${side}`} onSubmit={(e) => void prepare(e)}>
+    /*
+     * ⚠️ **확인 창을 이 폼 안에 두지 말 것** (2026-09-04 실측으로 잡음).
+     *
+     * 벤티지: "매수 주문 넣어봤는데 주문도 안 들어가고 창도 안 닫히고."
+     *
+     * 확인 창도 `<form>` 이라, 주문 폼 **안에** 그리면 폼이 겹친다. HTML 은 폼 중첩을 허용하지
+     * 않아서 브라우저가 안쪽 폼 태그를 조용히 버린다 — 그러면 「매수 실행」 단추가 **바깥 폼**을
+     * 제출한다. 즉 실행 대신 `prepare` 가 다시 돌아 **새 주문서가 만들어지고**, 창은 그대로 남고,
+     * 주문은 한 건도 안 나간다. 정확히 그 증상이었다.
+     *
+     * 확인 창은 화면에 떠 있는 덮개(position: fixed)라 자리를 안 먹는다 — 폼 **밖에** 둔다.
+     */
+    <>
+      <form className={`ord-wrap ${side}`} onSubmit={(e) => void prepare(e)}>
       {/*
         머리는 폭을 다 쓴다 — 종목과 매수·매도는 「무엇을 어느 쪽으로」라서 제일 먼저 정한다.
         키움 앱도 이 둘을 호가창 **위**에 두고, 그 아래를 호가 | 주문으로 가른다.
@@ -979,6 +992,8 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
         </div>
       </div>
 
+      </form>
+
       {ticket && (
         <Confirm
           nonce={ticket.nonce}
@@ -993,7 +1008,7 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
           }}
         />
       )}
-    </form>
+    </>
   );
 }
 
