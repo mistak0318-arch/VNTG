@@ -164,6 +164,20 @@ interface OrderAuthFile {
   lockUntil: number;
   /** 화면 잠금 — 켜 두면 비밀번호로 풀기 전엔 어떤 주문도 안 나간다 */
   uiLocked: boolean;
+  /**
+   * **진입 PIN** (2026-09-04) — 주문 메뉴를 여는 네 자리.
+   *
+   * 벤티지: "주문메뉴 진입할 때 아이디 비번 말고 주문전용 비밀번호로 하자. 숫자 4개로.
+   * (비번 매번 치려니 힘듦)"
+   *
+   * ⚠️ **주문 비밀번호(위 hash)와 다른 것이어야 한다.** PIN 은 문을 여는 것이고 주문
+   * 비밀번호는 주문 한 건을 내보내는 것이다. 둘을 같게 두면 겹이 둘에서 하나로 준다 —
+   * 네 자리 하나가 뚫리면 그대로 주문까지 나간다. 그래서 저장도 따로 한다.
+   */
+  pinSalt: string;
+  pinHash: string;
+  pinFails: number;
+  pinLockUntil: number;
 }
 
 export type OrderLogKind =
@@ -226,6 +240,15 @@ export interface OrderSettings {
   idleMinutes: number;
   /** 계속 써도 닫히는 시간(분). 5~240 */
   maxMinutes: number;
+  /**
+   * 주문 메뉴를 **무엇으로 여나** (2026-09-04).
+   *   "password" 앱 아이디·비밀번호를 다시 (기본)
+   *   "pin"      네 자리 숫자 — 손이 편하다. 대신 **기기 등록이 켜져 있어야만** 고를 수 있다
+   *
+   * PIN 은 만 가지뿐이라 **혼자 서는 문이 아니다.** 앞에 등록된 기기가 있어야 뜻이 산다 —
+   * 그래서 `requireTrustedDevice` 가 꺼져 있으면 이 값을 "pin" 으로 못 바꾼다(saveSettings).
+   */
+  entryMode: "password" | "pin";
 }
 
 const DEFAULT_SETTINGS: OrderSettings = {
@@ -236,6 +259,7 @@ const DEFAULT_SETTINGS: OrderSettings = {
   requireTrustedDevice: true,
   idleMinutes: 10,
   maxMinutes: 60,
+  entryMode: "password",
 };
 
 export async function getSettings(): Promise<OrderSettings> {
@@ -262,7 +286,17 @@ export async function saveSettings(patch: Partial<OrderSettings>): Promise<Order
       typeof patch.requireTrustedDevice === "boolean" ? patch.requireTrustedDevice : cur.requireTrustedDevice,
     idleMinutes: Math.min(60, Math.max(1, Math.round(Number(patch.idleMinutes)) || cur.idleMinutes)),
     maxMinutes: Math.min(240, Math.max(5, Math.round(Number(patch.maxMinutes)) || cur.maxMinutes)),
+    entryMode: patch.entryMode === "pin" || patch.entryMode === "password" ? patch.entryMode : cur.entryMode,
   };
+
+  /*
+   * **PIN 은 기기 등록 없이는 못 쓴다.** 네 자리는 만 가지뿐이라, 앞에 「가진 것」이 없으면
+   * 앱 로그인만 뚫리면 주문 문이 사실상 열린다. 둘을 한 묶음으로 강제한다 —
+   * 「편하게」와 「위험하게」가 같은 뜻이 되지 않도록.
+   */
+  if (next.entryMode === "pin" && !next.requireTrustedDevice) {
+    throw new Error("PIN 으로 열려면 「등록된 기기에서만 주문」이 켜져 있어야 합니다");
+  }
   await writeJson(SETTINGS_FILE, next);
   await appendLog({ kind: "password", msg: `설정 변경 — 비밀번호 기억 ${next.rememberPassword ? `${next.rememberMinutes}분` : "끔"}` });
   /* 기억하기를 켜는 것은 겹 하나를 무르는 일이라 조용히 넘어가지 않는다 */
@@ -356,7 +390,17 @@ export async function getGuard(): Promise<OrderGuard> {
   return g;
 }
 
-const EMPTY_AUTH: OrderAuthFile = { salt: "", hash: "", fails: 0, lockUntil: 0, uiLocked: false };
+const EMPTY_AUTH: OrderAuthFile = {
+  salt: "",
+  hash: "",
+  fails: 0,
+  lockUntil: 0,
+  uiLocked: false,
+  pinSalt: "",
+  pinHash: "",
+  pinFails: 0,
+  pinLockUntil: 0,
+};
 
 async function loadAuth(): Promise<OrderAuthFile> {
   return readJson(AUTH_FILE, EMPTY_AUTH);
@@ -561,6 +605,88 @@ export async function setUiLock(locked: boolean): Promise<void> {
   const a = await loadAuth();
   await writeJson(AUTH_FILE, { ...a, uiLocked: locked });
   await appendLog({ kind: "lock", msg: locked ? "화면 잠금" : "화면 잠금 해제" });
+}
+
+/* ── 진입 PIN (2026-09-04) ─────────────────────────────────────────────── */
+
+const PIN_MAX_FAILS = 5;
+const PIN_LOCK_MS = 30 * 60_000;
+/** 처음에는 0000 — 벤티지 요청. 대신 안 바꾸면 화면과 점검이 계속 조른다 */
+export const DEFAULT_PIN = "0000";
+
+/** 뻔한 것은 막는다 — 만 가지 중 이 몇 개가 먼저 시도된다 */
+const TRIVIAL_PINS = new Set([
+  "0000", "1111", "2222", "3333", "4444", "5555", "6666", "7777", "8888", "9999",
+  "1234", "4321", "1212", "2580", "0123", "9876",
+]);
+
+export async function pinIsDefault(): Promise<boolean> {
+  const a = await loadAuth();
+  return a.pinHash.length === 0;
+}
+
+/**
+ * PIN 을 정한다. 처음이면 그냥, 이미 있으면 **지금 PIN 또는 주문 비밀번호**로 확인한다 —
+ * PIN 을 잊었을 때 주문 비밀번호로 되돌릴 길이 있어야 파일을 지우는 일이 안 생긴다.
+ */
+export async function setOrderPin(next: string, current: string): Promise<void> {
+  const pin = next.replace(/\D/g, "");
+  if (pin.length !== 4) throw new Error("네 자리 숫자로");
+  if (TRIVIAL_PINS.has(pin)) throw new Error("너무 뻔한 숫자입니다 — 0000·1234 같은 것은 막습니다");
+  const a = await loadAuth();
+  if (a.pinHash) {
+    const byPin = await checkPin(current, { count: false });
+    if (!byPin.ok) {
+      const byPw = await checkPassword(current);
+      if (!byPw.ok) throw new Error("지금 PIN 또는 주문 비밀번호가 다릅니다");
+    }
+  }
+  const salt = randomBytes(16).toString("hex");
+  const hash = await scryptHex(pin, salt);
+  await writeJson(AUTH_FILE, { ...a, pinSalt: salt, pinHash: hash, pinFails: 0, pinLockUntil: 0 } satisfies OrderAuthFile);
+  await appendLog({ kind: "password", msg: a.pinHash ? "진입 PIN 변경" : "진입 PIN 처음 설정" });
+}
+
+/**
+ * PIN 확인. **잠금이 이 문의 전부다** — 네 자리는 만 가지라, 마음껏 두드리게 두면 하루면 뚫린다.
+ * 다섯 번에 30분이면 하루 240번, 만 가지를 다 밟는 데 40일이 넘고 그 전에 알림이 먼저 간다.
+ */
+export async function checkPin(
+  pin: string,
+  opts: { count?: boolean } = {},
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const count = opts.count !== false;
+  const a = await loadAuth();
+  if (a.pinLockUntil > Date.now()) {
+    const min = Math.ceil((a.pinLockUntil - Date.now()) / 60_000);
+    return { ok: false, error: `PIN 잠금 — ${min}분 뒤에` };
+  }
+  const given = pin.replace(/\D/g, "");
+  /* 아직 안 정했으면 기본값과 견준다 — 화면이 「기본값이다」를 계속 알린다 */
+  const ok = a.pinHash
+    ? sameHexSafe(await scryptHex(given, a.pinSalt), a.pinHash)
+    : given === DEFAULT_PIN;
+  if (ok) {
+    if (a.pinFails && count) await writeJson(AUTH_FILE, { ...a, pinFails: 0 });
+    return { ok: true };
+  }
+  if (!count) return { ok: false, error: "PIN 이 다릅니다" };
+  const fails = a.pinFails + 1;
+  const lock = fails >= PIN_MAX_FAILS ? Date.now() + PIN_LOCK_MS : 0;
+  await writeJson(AUTH_FILE, { ...a, pinFails: lock ? 0 : fails, pinLockUntil: lock });
+  await appendLog({ kind: "lock", msg: lock ? "진입 PIN 5회 실패 — 30분 잠금" : `진입 PIN 실패 ${fails}회` });
+  if (lock) {
+    void sendTelegram(
+      "\u{1F513} <b>주문 진입 PIN 5회 실패 — 30분 잠금</b>\n본인이 아니면 지금 서버의 ORDERS_ENABLED 를 끄세요.",
+      "order",
+    ).catch(() => undefined);
+    return { ok: false, error: "5회 틀림 — 30분 잠금" };
+  }
+  return { ok: false, error: `PIN 이 다릅니다 (${fails}/${PIN_MAX_FAILS})` };
+}
+
+function sameHexSafe(a: string, b: string): boolean {
+  return a.length === b.length && a.length > 0 && Buffer.from(a, "hex").equals(Buffer.from(b, "hex"));
 }
 
 /* ── 두 단계 (L4) ─────────────────────────────────────────────────────── */
@@ -1203,6 +1329,17 @@ export async function auditAccess(hours = 24): Promise<AccessAudit> {
       (r.kind === "session" && /등록/.test(m));
     findings.push({ at: r.at, kind: r.kind, ip: r.ip, msg: m, level: warn ? "warn" : "info" });
   }
+  /* 기본 PIN 은 그 자체로 「이상」이다 — 아무도 안 바꾸면 문이 열려 있는 것과 같다 */
+  const auth = await loadAuth();
+  const cfgNow = await getSettings();
+  if (cfgNow.entryMode === "pin" && auth.pinHash.length === 0) {
+    findings.unshift({
+      at: new Date().toISOString(),
+      kind: "password",
+      msg: `진입 PIN 이 아직 기본값(${DEFAULT_PIN})입니다 — 주문 › 설정에서 바꾸세요`,
+      level: "warn",
+    });
+  }
   if (ips.length > 1) {
     findings.unshift({
       at: new Date().toISOString(),
@@ -1281,6 +1418,9 @@ export async function orderStatus(req: Request): Promise<Record<string, unknown>
         ? "서버 .env 에 KIWOOM_ORDER_APP_KEY / KIWOOM_ORDER_APP_SECRET 이 없다"
         : null,
     hasPassword: a.hash.length > 0,
+    /* 진입 PIN 을 아직 안 바꿨나 — 화면이 계속 조를 수 있게 */
+    pinIsDefault: a.pinHash.length === 0,
+    pinLockedUntilMs: a.pinLockUntil > Date.now() ? a.pinLockUntil : 0,
     session: s !== null,
     sessionLeftSec: s ? sessionLeftSec(req) : 0,
     settings,

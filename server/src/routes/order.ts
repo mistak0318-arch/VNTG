@@ -19,6 +19,8 @@ import {
   setOrderPassword,
   setUiLock,
   checkPassword,
+  checkPin,
+  setOrderPin,
   noteAccess,
   auditAccess,
   getSettings,
@@ -101,8 +103,31 @@ export function createOrderRouter(main: KiwoomClient): Router {
       res.status(429).json({ error: `잠시 뒤에 — ${Math.ceil((f.until - Date.now()) / 60_000)}분` });
       return;
     }
-    const { username, password } = (req.body ?? {}) as { username?: string; password?: string };
-    const r = await verifyCredentials(String(username ?? ""), String(password ?? ""));
+    const { username, password, pin } = (req.body ?? {}) as {
+      username?: string;
+      password?: string;
+      pin?: string;
+    };
+
+    /*
+     * 문 여는 방법 두 가지 (2026-09-04). PIN 은 **기기 등록이 켜져 있을 때만** 고를 수 있으므로
+     * (saveSettings 가 막는다), 여기 오는 PIN 은 이미 등록된 기기에서 온 것이다.
+     */
+    const entry = await getSettings();
+    let r: "ok" | "bad" | "disabled";
+    if (entry.entryMode === "pin") {
+      const pr = await checkPin(String(pin ?? ""));
+      if (!pr.ok) {
+        const n = (f?.n ?? 0) + 1;
+        fails.set(ip, { n, until: n >= 5 ? Date.now() + 15 * 60_000 : 0 });
+        await appendLog({ kind: "session", ip, msg: `PIN 으로 열기 실패 — ${pr.error}` });
+        res.status(401).json({ error: pr.error });
+        return;
+      }
+      r = "ok";
+    } else {
+      r = await verifyCredentials(String(username ?? ""), String(password ?? ""));
+    }
     if (r === "disabled") {
       res.status(403).json({ error: "앱 로그인(설정 › 보안)을 먼저 켜야 주문 메뉴가 열린다 — 주문은 로그인 없이는 안 된다" });
       return;
@@ -166,10 +191,23 @@ export function createOrderRouter(main: KiwoomClient): Router {
       res.status(404).json({ error: "not found" });
       return;
     }
-    const { username, password } = (req.body ?? {}) as { username?: string; password?: string };
-    /* 아무나 확인 메일을 쏘게 두지 않는다 — 메일 폭탄도 사고다 */
-    if ((await verifyCredentials(String(username ?? ""), String(password ?? ""))) !== "ok") {
-      res.status(401).json({ error: "아이디 또는 비밀번호가 다릅니다" });
+    const { username, password, pin } = (req.body ?? {}) as {
+      username?: string;
+      password?: string;
+      pin?: string;
+    };
+    /*
+     * 아무나 확인 메일을 쏘게 두지 않는다 — 메일 폭탄도 사고다.
+     * ⚠️ **새 기기 등록은 PIN 으로 못 한다.** PIN 은 「이미 등록된 기기에서 빨리 여는」 열쇠지
+     * 기기를 늘리는 열쇠가 아니다 — 네 자리로 새 기기를 들일 수 있으면 기기 겹이 뜻을 잃는다.
+     */
+    const cred = await verifyCredentials(String(username ?? ""), String(password ?? ""));
+    if (cred !== "ok") {
+      res.status(401).json({
+        error: pin
+          ? "새 기기 등록은 아이디·비밀번호로만 됩니다 (PIN 은 등록된 기기에서 여는 용도입니다)"
+          : "아이디 또는 비밀번호가 다릅니다",
+      });
       return;
     }
     const r = await startDeviceCheck(req);
@@ -389,6 +427,17 @@ export function createOrderRouter(main: KiwoomClient): Router {
       await removeOrderDevice(String(id ?? ""));
       await appendLog({ kind: "session", ip: clientIp(req), msg: "주문 기기 삭제" });
       res.json({ devices: await listDevices(req) });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
+    }
+  });
+
+  /** 진입 PIN 정하기·바꾸기 — 지금 PIN 또는 주문 비밀번호로 확인한다 */
+  router.post("/pin", async (req, res) => {
+    try {
+      const { next: nextPin, current } = (req.body ?? {}) as { next?: string; current?: string };
+      await setOrderPin(String(nextPin ?? ""), String(current ?? ""));
+      res.json({ ok: true });
     } catch (e) {
       res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
     }

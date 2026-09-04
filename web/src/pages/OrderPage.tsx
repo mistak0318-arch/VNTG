@@ -243,7 +243,7 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
     <div className="page ord">
       <Band status={status} left={left} onChange={load} />
       {!status.session ? (
-        <SessionGate onDone={load} />
+        <SessionGate status={status} onDone={load} />
       ) : !status.hasPassword ? (
         <PasswordSetup onDone={load} />
       ) : status.uiLocked ? (
@@ -334,7 +334,7 @@ function Band({ status, left, onChange }: { status: OrderStatus; left: number; o
 
 /* ── 문 ① 주문 메뉴 열기 ────────────────────────────────────────────────── */
 
-function SessionGate({ onDone }: { onDone: () => void }) {
+function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
   const [id, setId] = useState("");
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
@@ -347,12 +347,21 @@ function SessionGate({ onDone }: { onDone: () => void }) {
   const [code, setCode] = useState("");
   const [devName, setDevName] = useState("");
   const [sent, setSent] = useState<string | null>(null);
+  /* PIN 으로 여는 판 — 설정이 정한다. 새 기기 등록만은 아이디·비밀번호로 (서버가 막는다) */
+  const [pin, setPin] = useState("");
+  const byPin = status.settings?.entryMode === "pin";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
+      if (byPin) {
+        await api.orderOpenSessionPin(pin);
+        setPin("");
+        onDone();
+        return;
+      }
       await api.orderOpenSession(id, pw);
       setPw("");
       onDone();
@@ -432,6 +441,41 @@ function SessionGate({ onDone }: { onDone: () => void }) {
         </button>
         <button type="button" className="ord-cancel" onClick={() => setTicket(null)}>
           그만
+        </button>
+      </form>
+    );
+  }
+
+  if (byPin) {
+    return (
+      <form className="ord-gate" onSubmit={(e) => void submit(e)}>
+        <div className="ord-gate-mark">🔢</div>
+        <b>진입 PIN 네 자리</b>
+        <p>
+          <b>등록된 기기</b>에서만 열립니다 — 그래서 네 자리로 충분합니다. 다섯 번 틀리면 30분 잠기고
+          텔레그램으로 알립니다. 주문을 낼 때는 <b>주문 비밀번호</b>를 따로 묻습니다.
+        </p>
+        {status.pinIsDefault && (
+          <p className="ord-err">
+            아직 기본값 <b>0000</b> 입니다 — 열고 나서 <b>설정 › 진입 PIN</b> 에서 바꾸세요.
+          </p>
+        )}
+        <input
+          className="ord-in ord-pin"
+          type="password"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          placeholder="● ● ● ●"
+          maxLength={4}
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+        />
+        {error && <p className="ord-err">{error}</p>}
+        <button type="submit" className="ord-go" disabled={busy || pin.length !== 4}>
+          {busy ? "확인 중…" : "주문 메뉴 열기"}
+        </button>
+        <button type="button" className="ord-cancel" onClick={() => void startDevice()} disabled={busy}>
+          이 기기를 새로 등록
         </button>
       </form>
     );
@@ -1579,6 +1623,8 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
   const [pwA, setPwA] = useState("");
   const [pwB, setPwB] = useState("");
   const [pwCur, setPwCur] = useState("");
+  const [pinA, setPinA] = useState("");
+  const [pinCur, setPinCur] = useState("");
 
   async function save(patch: Partial<typeof cfg>) {
     setBusy(true);
@@ -1591,6 +1637,24 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changePin(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    setMsg(null);
+    try {
+      await api.orderSetPin(pinA, pinCur);
+      setPinA("");
+      setPinCur("");
+      setMsg("진입 PIN 을 바꿨습니다");
+      onDone();
+    } catch (e2) {
+      setError(e2 instanceof Error ? e2.message : "실패");
     } finally {
       setBusy(false);
     }
@@ -1738,6 +1802,63 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
           </select>
         </div>
       </section>
+
+      <section className="ord-cfg-sec">
+        <h4>주문 메뉴를 무엇으로 여나</h4>
+        <p className="ord-note">
+          <b>PIN 네 자리</b>는 손이 편합니다. 대신 네 자리는 만 가지뿐이라 <b>혼자 서는 문이 아닙니다</b> —
+          그래서 <b>「등록된 기기에서만 주문」이 켜져 있을 때만</b> 고를 수 있습니다(서버가 막습니다).
+          앞에 등록된 기기가 있고, 뒤에 주문 비밀번호가 따로 있어서 겹이 유지됩니다.
+          다섯 번 틀리면 30분 잠기고 텔레그램으로 알립니다.
+        </p>
+        <div className="ord-cfg-row">
+          {(["password", "pin"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={`filter-btn ${cfg.entryMode === m ? "active" : ""}`}
+              disabled={busy}
+              onClick={() => void save({ entryMode: m })}
+            >
+              {m === "password" ? "아이디·비밀번호" : "PIN 네 자리"}
+            </button>
+          ))}
+          {status.pinIsDefault && <span className="ord-err">PIN 이 아직 기본값 0000 입니다</span>}
+          {status.pinLockedUntilMs > 0 && (
+            <span className="ord-err">
+              PIN 잠금 — {Math.ceil((status.pinLockedUntilMs - Date.now()) / 60000)}분 남음
+            </span>
+          )}
+        </div>
+      </section>
+
+      <form className="ord-cfg-sec" onSubmit={(e) => void changePin(e)}>
+        <h4>진입 PIN 바꾸기</h4>
+        <p className="ord-note">
+          지금 PIN 또는 <b>주문 비밀번호</b>로 확인합니다 — PIN 을 잊어도 되돌릴 길이 있어야 합니다.
+          0000·1234 처럼 뻔한 숫자는 막습니다. <b>주문 비밀번호와 다른 것</b>으로 하세요 — 같게 두면
+          겹이 둘에서 하나로 줍니다.
+        </p>
+        <input
+          className="ord-in"
+          type="password"
+          placeholder={status.pinIsDefault ? "지금 PIN (기본값 0000) 또는 주문 비밀번호" : "지금 PIN 또는 주문 비밀번호"}
+          value={pinCur}
+          onChange={(e) => setPinCur(e.target.value)}
+        />
+        <input
+          className="ord-in ord-pin"
+          type="password"
+          inputMode="numeric"
+          placeholder="새 PIN 네 자리"
+          maxLength={4}
+          value={pinA}
+          onChange={(e) => setPinA(e.target.value.replace(/\D/g, "").slice(0, 4))}
+        />
+        <button type="submit" className="ord-go" disabled={busy || pinA.length !== 4 || !pinCur}>
+          바꾸기
+        </button>
+      </form>
 
       <form className="ord-cfg-sec" onSubmit={(e) => void changePw(e)}>
         <h4>주문 비밀번호 바꾸기</h4>

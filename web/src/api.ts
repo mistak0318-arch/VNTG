@@ -950,6 +950,10 @@ export const api = {
   /** 등록 안 된 기기면 403 + needDevice — 화면이 메일 확인으로 넘어간다 */
   orderOpenSession: (username: string, password: string) =>
     orderPost<{ ok: boolean }>("/api/order/session", { username, password }),
+  /** PIN 으로 열기 — 등록된 기기에서만 (서버가 강제) */
+  orderOpenSessionPin: (pin: string) => orderPost<{ ok: boolean }>("/api/order/session", { pin }),
+  orderSetPin: (nextPin: string, current: string) =>
+    orderPost<{ ok: boolean }>("/api/order/pin", { next: nextPin, current }),
   orderDeviceStart: (username: string, password: string) =>
     orderPost<{ ticket: string }>("/api/order/device/start", { username, password }),
   orderDeviceVerify: (ticket: string, code: string, name: string) =>
@@ -6262,6 +6266,9 @@ export interface OrderStatus {
   mock: boolean;
   reason: string | null;
   hasPassword: boolean;
+  /** 진입 PIN 이 아직 기본값(0000)인가 */
+  pinIsDefault: boolean;
+  pinLockedUntilMs: number;
   session: boolean;
   sessionLeftSec: number;
   uiLocked: boolean;
@@ -6299,6 +6306,8 @@ export interface OrderSettings {
   defaultTradeType: string;
   /** 등록된 기기에서만 주문 */
   requireTrustedDevice: boolean;
+  /** 주문 메뉴를 무엇으로 여나 — "pin" 은 기기 등록이 켜져 있을 때만 */
+  entryMode: "password" | "pin";
   /** 가만히 두면 닫히는 시간(분) */
   idleMinutes: number;
   /** 계속 써도 닫히는 시간(분) */

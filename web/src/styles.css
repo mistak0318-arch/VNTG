@@ -15660,3 +15660,11 @@ select.ord-in { appearance: auto; cursor: pointer; }
 :root[data-theme="excel"] .ord-audit.ok b { color: var(--xl-green); }
 :root[data-theme="excel"] .ord-audit.bad b { color: var(--text); }
 :root[data-theme="excel"] .ord-audit-list li.warn { border-left-color: var(--xl-green); }
+
+/* 진입 PIN — 네 자리는 크고 넓게 (2026-09-04) */
+.ord-pin {
+  letter-spacing: 0.6em;
+  text-align: center;
+  font-size: 1.4rem;
+  padding: 0.5rem;
+}
