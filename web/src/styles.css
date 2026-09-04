@@ -15490,18 +15490,30 @@ select.ord-in { appearance: auto; cursor: pointer; }
  * 실시간 표시 (2026-09-04) — 상단 줄 어디서나 같은 자리.
  * 색만으로 판단하지 않게 **글자를 같이** 둔다(실시간 / 대기 / 조회).
  */
+/*
+ * 상단 줄의 다른 칩과 **같은 규격**을 쓴다 (2026-09-04, 벤티지: "실시간 만들어 놓은 거
+ * 옆이랑 열 좀 잘 맞춰줄래? 디자인은 괜찮은데 열이 안 맞아서 거슬리네").
+ *
+ * 원인은 규격이 혼자 달랐던 것이다 — 이웃(`.qss-toggle`·`.qss-close-tabs`)은
+ * radius 8 · padding .25/.6 · font .78 · **margin-bottom 8px** 를 함께 쓰는데, 이것만
+ * 알약(999px)에 여백이 작고 아래 여백이 없어서 **혼자 15px** 로 앉아 있었다(이웃은 27~37px).
+ * 자기만의 모양을 쓰면 줄이 안 맞는다 — 새 칩은 이 규격을 그대로 따를 것.
+ */
 .live-dot {
   display: inline-flex;
   align-items: center;
-  gap: 0.28rem;
-  flex: 0 0 auto;
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  padding: 0.25rem 0.6rem;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--panel);
-  font-size: 0.74rem;
-  line-height: 1;
+  background: none;
+  font: inherit;
+  font-size: 0.78rem;
+  margin-bottom: 8px;
   white-space: nowrap;
+  line-height: 1.35;
+  box-sizing: border-box;
 }
 .live-dot i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
 .live-dot b { font-weight: 600; color: var(--muted); }
@@ -15514,8 +15526,17 @@ select.ord-in { appearance: auto; cursor: pointer; }
 
 /* 폰에서는 점만 — 상단 줄은 아이콘만 남기는 규칙이 이미 있다 */
 @media (max-width: 899px) {
-  .live-dot { padding: 0.2rem 0.35rem; }
-  .live-dot b { display: none; }
+  /*
+   * 폰에서는 글자를 접지만 **`display: none` 은 안 쓴다.**
+   * 글자를 아예 없애면 줄 높이도 같이 사라져서 칩이 이웃보다 10px 낮게 앉는다 —
+   * 그게 「열이 안 맞는다」의 정체였다. 폭만 0 으로 두면 줄 높이는 남는다.
+   */
+  .live-dot { padding: 0.25rem 0.45rem; }
+  .live-dot b {
+    width: 0;
+    overflow: hidden;
+    display: inline-block;
+  }
 }
 /* 주문 화면에서는 종목 이름 줄에 — 좁아도 점은 남긴다 */
 .ord-picked .live-dot { padding: 0.15rem 0.4rem; font-size: 0.68rem; }
@@ -15594,3 +15615,48 @@ select.ord-in { appearance: auto; cursor: pointer; }
   font-weight: 700;
 }
 :root[data-theme="excel"] .cs-mark { background: var(--xl-sel); font-weight: 700; }
+
+/* ── 주문 › 접근 점검 (2026-09-04) — 줄을 늘어놓지 않고 판정 한 줄 ────── */
+.ord-audit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.7rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+.ord-audit b { font-size: 0.98rem; }
+.ord-audit.ok b { color: var(--green); }
+.ord-audit.bad b { color: #ffb020; }
+.ord-audit span { color: var(--muted); font-size: 0.8rem; }
+.ord-audit i { margin-left: auto; font-style: normal; color: var(--muted); font-size: 0.74rem; }
+.ord-audit-list { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.ord-audit-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  background: var(--panel-2);
+  /* 긴 주소·긴 문장이 옆으로 밀어내던 자리 — 어디서든 접는다 */
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+.ord-audit-list li.warn { border-left: 3px solid #ffb020; }
+.ord-audit-at { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.ord-audit-msg { flex: 1 1 12rem; min-width: 0; }
+.ord-audit-ip { color: var(--muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+
+/* 설정 절이 표 때문에 옆으로 밀리던 것 — 자식이 부모 폭을 강제하지 못하게 */
+.ord-cfg-sec { min-width: 0; }
+.ord-cfg-sec .ord-scroll { max-width: 100%; }
+.ord-cfg-fold { display: flex; align-items: baseline; gap: 0.5rem; cursor: pointer; }
+.ord-cfg-fold i { margin-left: auto; font-style: normal; color: var(--muted); font-size: 0.78rem; font-weight: 400; }
+.ord-ip { font-variant-numeric: tabular-nums; max-width: 12rem; overflow: hidden; text-overflow: ellipsis; }
+:root[data-theme="excel"] .ord-audit { background: var(--panel-2); border-radius: 2px; border-color: var(--xl-line); }
+:root[data-theme="excel"] .ord-audit.ok b { color: var(--xl-green); }
+:root[data-theme="excel"] .ord-audit.bad b { color: var(--text); }
+:root[data-theme="excel"] .ord-audit-list li.warn { border-left-color: var(--xl-green); }

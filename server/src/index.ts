@@ -51,6 +51,7 @@ import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createSysRouter } from "./routes/sys.js";
 import { createOrderRouter } from "./routes/order.js";
+import { startOrderAudit } from "./orders.js";
 import { startSysScheduler } from "./sysAssist.js";
 import { createTradeRouter } from "./routes/trade.js";
 import { createCustomThemeRouter } from "./routes/customThemes.js";
@@ -217,6 +218,8 @@ app.use("/api/ask", createAskRouter(client));
 app.use("/api/sys", createSysRouter(client));
 /* 주문 (2026-09-03) — ORDERS_ENABLED=1 + 주문 앱키 + 주문 세션이 없으면 /status 말고는 전부 404 */
 app.use("/api/order", createOrderRouter(client));
+/* 주문 접근을 6시간마다 스스로 훑는다 — 이상이 없으면 조용하다 (2026-09-04) */
+startOrderAudit();
 app.use("/api/trade", createTradeRouter(client));
 app.use("/api/custom-themes", createCustomThemeRouter(client));
 app.use("/api/sector-flow", createSectorFlowRouter(client));

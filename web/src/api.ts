@@ -954,6 +954,7 @@ export const api = {
     orderPost<{ ticket: string }>("/api/order/device/start", { username, password }),
   orderDeviceVerify: (ticket: string, code: string, name: string) =>
     orderPost<{ ok: boolean; device: OrderDevice }>("/api/order/device/verify", { ticket, code, name }),
+  orderAudit: (hours = 24) => getJson<AccessAudit>(`/api/order/audit?hours=${hours}`),
   orderDevices: () => getJson<{ devices: OrderDevice[]; mailReady: boolean }>("/api/order/devices"),
   orderDeviceRename: (id: string, name: string) =>
     orderPost<{ devices: OrderDevice[] }>("/api/order/devices/rename", { id, name }),
@@ -6365,6 +6366,17 @@ export interface OrderAccount {
   holdings: { code: string; name: string; qty: number; avg: number; cur: number; pnl: number; pnlRate: number }[];
   /** 자리마다 적어 둔 손절선 — 종목코드로 (2026-09-04) */
   stops: Record<string, { stop: number; name: string; at: string }>;
+}
+
+/** 주문 접근 점검 — 줄을 늘어놓지 않고 판정만 (2026-09-04) */
+export interface AccessAudit {
+  hours: number;
+  records: number;
+  total: number;
+  ips: string[];
+  findings: { at: string; kind: OrderLogRow["kind"]; ip?: string; msg: string; level: "warn" | "info" }[];
+  ok: boolean;
+  checkedAt: string;
 }
 
 export interface OrderLogRow {

@@ -1150,6 +1150,115 @@ async function noteUsage(): Promise<void> {
   ).catch(() => undefined);
 }
 
+/* ── 스스로 훑기 (2026-09-04) ──────────────────────────────────────────── */
+
+/**
+ * **기록을 사람이 읽게 두지 않는다** — 벤티지: "전부를 다 보여줄 필요는 없어. 그럼 엄청
+ * 쌓일 테니깐. 「기록 중」이라고만 쓰고 「이상 행위 없었음」 이렇게 표시해줘. 니가 주기적으로
+ * 체크해주고."
+ *
+ * 맞다. 로그를 화면에 늘어놓는 건 **판정을 사람에게 미루는 것**이다. 하루 수십 줄이 쌓이면
+ * 아무도 안 읽고, 안 읽는 기록은 없는 것과 같다. 기계가 훑고 **다른 것만** 말한다.
+ *
+ * 무엇을 「이상」으로 보나 — 전부 **평소에는 0인 것**들이다:
+ *   · 주소가 둘 이상 (내 기기는 대개 한 자리에서 들어온다)
+ *   · 비밀번호·로그인 실패
+ *   · 한도에 걸려 거절 · 키움이 거절한 실패
+ *   · 기기 등록·삭제 · 화면 잠금
+ * 하나도 없으면 「이상 행위 없었음」이다. 그 한 줄이 백 줄짜리 표보다 낫다.
+ */
+export interface AccessAudit {
+  /** 훑은 구간(시간) */
+  hours: number;
+  /** 그 구간에 쌓인 줄 수 — 「기록 중」의 근거 */
+  records: number;
+  /** 통째로 쌓인 줄 수 */
+  total: number;
+  /** 들어온 주소들 */
+  ips: string[];
+  /** 이상한 것만 */
+  findings: { at: string; kind: OrderLogKind; ip?: string; msg: string; level: "warn" | "info" }[];
+  ok: boolean;
+  checkedAt: string;
+}
+
+const AUDIT_KINDS: OrderLogKind[] = ["session", "lock", "password", "reject", "error"];
+
+export async function auditAccess(hours = 24): Promise<AccessAudit> {
+  const all = await readLog(2000);
+  const since = Date.now() - hours * 3600_000;
+  const rows = all.filter((r) => new Date(r.at).getTime() >= since);
+  const gate = rows.filter((r) => AUDIT_KINDS.includes(r.kind));
+  const ips = [...new Set(gate.map((r) => r.ip).filter((v): v is string => Boolean(v)))];
+
+  const findings: AccessAudit["findings"] = [];
+  for (const r of gate) {
+    const m = r.msg ?? "";
+    /* 「열림」은 평소 일이라 세지 않는다 — 다만 주소가 여럿이면 아래에서 한 줄로 걸린다 */
+    if (r.kind === "session" && /열림/.test(m) && !/실패|등록|삭제/.test(m)) continue;
+    const warn =
+      r.kind === "reject" ||
+      r.kind === "error" ||
+      /실패|잠금|삭제/.test(m) ||
+      (r.kind === "session" && /등록/.test(m));
+    findings.push({ at: r.at, kind: r.kind, ip: r.ip, msg: m, level: warn ? "warn" : "info" });
+  }
+  if (ips.length > 1) {
+    findings.unshift({
+      at: new Date().toISOString(),
+      kind: "lock",
+      msg: `주소가 ${ips.length} 곳에서 들어왔습니다 — ${ips.join(" · ")}`,
+      level: "warn",
+    });
+  }
+
+  return {
+    hours,
+    records: rows.length,
+    total: all.length,
+    ips,
+    findings: findings.slice(0, 30),
+    ok: findings.length === 0,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 주기 점검 — **조용한 것이 기본**이다. 이상이 없으면 아무 데도 안 보낸다.
+ * 화면은 `auditAccess` 를 직접 불러 「마지막 점검·이상 없음」을 스스로 말한다.
+ */
+let lastAuditKey = "";
+
+export function startOrderAudit(): void {
+  const run = async () => {
+    if (!ordersEnabled()) return;
+    try {
+      const a = await auditAccess(24);
+      if (a.ok) return;
+      /* 같은 내용으로 하루에 두 번 울리지 않는다 — 새 발견이 있을 때만 */
+      const key = `${kstParts().date}:${a.findings.length}:${a.findings[0]?.at ?? ""}`;
+      if (key === lastAuditKey) return;
+      lastAuditKey = key;
+      const lines = a.findings
+        .filter((f) => f.level === "warn")
+        .slice(0, 6)
+        .map((f) => `• ${f.at.slice(5, 16).replace("T", " ")} ${esc(f.msg)}${f.ip ? ` (${esc(f.ip)})` : ""}`);
+      if (lines.length === 0) return;
+      const body =
+        `🔎 <b>주문 접근 점검</b> — 지난 ${a.hours}시간에 눈에 띄는 것 ${lines.length}건\n` +
+        lines.join(`\n`) +
+        `\n\n주문 › 설정 › 접근 로그에서 봅니다.`;
+      await sendTelegram(body, "order",
+      );
+    } catch {
+      /* 점검이 실패해도 주문은 돌아야 한다 */
+    }
+  };
+  void run();
+  setInterval(() => void run(), 6 * 3600_000);
+  console.log("[order] 접근 점검 6시간마다 — 이상이 없으면 조용합니다");
+}
+
 /* ── 상태 ─────────────────────────────────────────────────────────────── */
 
 export async function orderStatus(req: Request): Promise<Record<string, unknown>> {

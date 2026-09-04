@@ -8,6 +8,7 @@ import {
   type OrderAccount,
   type OrderLogRow,
   type OrderRow,
+  type AccessAudit,
   type OrderDevice,
   type OrderSettings,
   type OrderStatus,
@@ -1910,63 +1911,76 @@ function DeviceSection({
 }
 
 /**
- * 접근 로그 (2026-09-04) — 벤티지: "어느 IP 에서 들어왔고 어떤 행위를 했고."
+ * 접근 점검 (2026-09-04) — **줄을 늘어놓지 않는다.**
  *
- * 「기록」 탭이 **주문 자체**를 보여 준다면 여기는 **문에서 일어난 일**이다 — 메뉴 열기·실패,
- * 기기 등록·삭제, 잠금, 비밀번호, 거절. 둘을 한 표에 섞으면 사고를 쫓을 때 주문에 묻힌다.
+ * 벤티지: "전부를 다 보여줄 필요는 없어. 그럼 엄청 쌓일 테니깐. 「기록 중」이라고만 쓰고
+ * 「이상 행위 없었음」 이렇게 표시해줘. 니가 주기적으로 체크해주고."
+ *
+ * 맞다. 로그를 화면에 쏟는 것은 **판정을 사람에게 미루는 일**이다. 하루 수십 줄이 쌓이면
+ * 아무도 안 읽고, 안 읽는 기록은 없는 것과 같다. 서버가 6시간마다 훑고(`startOrderAudit`)
+ * **다른 것만** 말한다. 여기서는 그 판정을 한 줄로 보여 주고, 걸린 것이 있을 때만 편다.
  */
 function AccessLogSection() {
-  const [rows, setRows] = useState<OrderLogRow[]>([]);
+  const [audit, setAudit] = useState<AccessAudit | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   const load = useCallback(() => {
     void api
-      .orderLog(300)
-      .then((r) =>
-        setRows(
-          (r.rows ?? []).filter((x) => ["session", "lock", "password", "reject", "error"].includes(x.kind)),
-        ),
-      )
+      .orderAudit(24)
+      .then(setAudit)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "못 읽었다"));
   }, []);
   useEffect(load, [load]);
 
+  const warns = (audit?.findings ?? []).filter((f) => f.level === "warn");
+
   return (
     <section className="ord-cfg-sec">
-      <h4>접근 로그</h4>
-      <p className="ord-note">
-        문에서 일어난 일만 모았습니다 — 메뉴 열기·실패, 기기 등록·삭제, 잠금, 비밀번호, 거절.
-        주문 자체는 <b>기록</b> 탭에 있습니다. <b>처음 보는 주소</b>에서 열리거나, 5분에 세 번 거절되거나,
-        하루 한도의 8할을 넘기면 <b>텔레그램으로 바로</b> 갑니다.
-      </p>
+      <h4>접근 점검</h4>
       {error && <p className="ord-err">{error}</p>}
-      {rows.length === 0 ? (
-        <p className="empty">아직 기록이 없습니다</p>
+      {!audit ? (
+        <p className="empty">훑는 중…</p>
       ) : (
-        <div className="ord-scroll">
-          <table className="ord-table stack">
-            <thead>
-              <tr>
-                <th>시각</th>
-                <th>종류</th>
-                <th>주소</th>
-                <th>내용</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.slice(0, 60).map((r, i) => (
-                <tr key={`${r.at}-${i}`} className={r.kind === "reject" || r.kind === "error" ? "bad" : ""}>
-                  <td className="ord-name">{r.at.slice(5, 16).replace("T", " ")}</td>
-                  <td data-l="종류">{KIND_KO[r.kind] ?? r.kind}</td>
-                  <td data-l="주소">{r.ip ?? "-"}</td>
-                  <td data-l="내용" className="ord-msg">
-                    {r.msg ?? "-"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className={`ord-audit ${audit.ok ? "ok" : "bad"}`}>
+            <b>{audit.ok ? "이상 행위 없었음" : `눈에 띄는 것 ${audit.findings.length}건`}</b>
+            <span>
+              기록 중 · 지난 {audit.hours}시간 {audit.records}줄 (통틀어 {audit.total}줄) ·{" "}
+              {audit.ips.length > 0 ? `주소 ${audit.ips.length}곳` : "접근 없음"}
+            </span>
+            <i>
+              점검{" "}
+              {new Date(audit.checkedAt).toLocaleTimeString("ko-KR", { hour12: false, timeZone: "Asia/Seoul" })}
+            </i>
+          </div>
+          <p className="ord-note">
+            서버가 <b>6시간마다</b> 스스로 훑고, <b>이상이 있을 때만</b> 텔레그램으로 보냅니다 —
+            조용한 것이 정상입니다. 보는 것: 주소가 둘 이상 · 비밀번호·로그인 실패 · 한도 거절 ·
+            키움이 거절한 실패 · 기기 등록·삭제 · 화면 잠금. 주문 자체는 <b>기록</b> 탭에 있습니다.
+          </p>
+          {audit.findings.length > 0 && (
+            <>
+              <button type="button" className="ord-x" onClick={() => setOpen((v) => !v)}>
+                {open ? "접기" : `자세히 (${audit.findings.length}건)`}
+              </button>
+              {open && (
+                <ul className="ord-audit-list">
+                  {audit.findings.map((f, i) => (
+                    <li key={`${f.at}-${i}`} className={f.level}>
+                      <span className="ord-audit-at">{f.at.slice(5, 16).replace("T", " ")}</span>
+                      <span className="ord-audit-msg">{f.msg}</span>
+                      {f.ip && <span className="ord-audit-ip">{f.ip}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+          {warns.length === 0 && audit.findings.length > 0 && (
+            <p className="ord-caps">전부 알아 둘 만한 것뿐이고, 위험해 보이는 것은 없습니다.</p>
+          )}
+        </>
       )}
     </section>
   );

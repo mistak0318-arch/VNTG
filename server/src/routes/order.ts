@@ -20,6 +20,7 @@ import {
   setUiLock,
   checkPassword,
   noteAccess,
+  auditAccess,
   getSettings,
   saveSettings,
   forgetPassword,
@@ -349,6 +350,19 @@ export function createOrderRouter(main: KiwoomClient): Router {
   router.post("/forget", (req, res) => {
     forgetPassword(req);
     res.json({ ok: true });
+  });
+
+  /**
+   * 접근 점검 — **줄을 늘어놓지 않고 판정만** 준다 (2026-09-04).
+   * 로그를 화면에 쏟는 건 판정을 사람에게 미루는 것이다. 기계가 훑고 다른 것만 말한다.
+   */
+  router.get("/audit", async (req, res, next) => {
+    try {
+      const hours = Math.min(168, Math.max(1, Number(req.query.hours) || 24));
+      res.json(await auditAccess(hours));
+    } catch (e) {
+      next(e);
+    }
   });
 
   router.get("/devices", async (req, res, next) => {
