@@ -249,6 +249,14 @@ export interface OrderSettings {
    * 그래서 `requireTrustedDevice` 가 꺼져 있으면 이 값을 "pin" 으로 못 바꾼다(saveSettings).
    */
   entryMode: "password" | "pin";
+  /**
+   * **접근 점검을 텔레그램으로도 보낼까** (2026-09-04). 기본 켬.
+   *
+   * 끄면 점검은 그대로 6시간마다 돌고 기록도 남는다 — **알림만** 안 간다.
+   * 화면(주문 › 설정 › 접근 로그)이 「마지막 점검 · 이상 없음」을 늘 말하고 있어서,
+   * 텔레그램은 겹치는 통로다. 겹치는 통로는 끌 수 있어야 한다.
+   */
+  auditTelegram: boolean;
 }
 
 const DEFAULT_SETTINGS: OrderSettings = {
@@ -260,6 +268,7 @@ const DEFAULT_SETTINGS: OrderSettings = {
   idleMinutes: 10,
   maxMinutes: 60,
   entryMode: "password",
+  auditTelegram: true,
 };
 
 export async function getSettings(): Promise<OrderSettings> {
@@ -287,6 +296,8 @@ export async function saveSettings(patch: Partial<OrderSettings>): Promise<Order
     idleMinutes: Math.min(60, Math.max(1, Math.round(Number(patch.idleMinutes)) || cur.idleMinutes)),
     maxMinutes: Math.min(240, Math.max(5, Math.round(Number(patch.maxMinutes)) || cur.maxMinutes)),
     entryMode: patch.entryMode === "pin" || patch.entryMode === "password" ? patch.entryMode : cur.entryMode,
+    auditTelegram:
+      patch.auditTelegram === undefined ? cur.auditTelegram : Boolean(patch.auditTelegram),
   };
 
   /*
@@ -1326,11 +1337,32 @@ export async function auditAccess(hours = 24): Promise<AccessAudit> {
     const warn =
       r.kind === "reject" ||
       r.kind === "error" ||
-      /실패|잠금|삭제/.test(m) ||
-      (r.kind === "session" && /등록/.test(m));
+      /실패|잠금|삭제/.test(m);
+    /*
+     * 기기 **등록**은 경보에서 뺐다 (2026-09-04). 본인이 방금 한 일이고, 등록은 이미
+     * 메일 확인을 지나야 된다 — 지난 문을 다시 알릴 이유가 없다. 반면 기기 **삭제**는
+     * 위 `/삭제/` 에 그대로 걸린다(누가 내 기기를 지우는 것은 다른 이야기다).
+     */
     findings.push({ at: r.at, kind: r.kind, ip: r.ip, msg: m, level: warn ? "warn" : "info" });
   }
-  /* 기본 PIN 은 그 자체로 「이상」이다 — 아무도 안 바꾸면 문이 열려 있는 것과 같다 */
+  /*
+   * ⚠️ 아래 둘은 **`info` 다** (2026-09-04에 내렸다 — 벤티지: "주문 접근 점검 텔레그램
+   * 계속 오는데 이것 좀 어떻게 좀 해봐").
+   *
+   * 둘 다 `warn` 이었고, 둘 다 `at` 이 **점검한 시각**이라 매번 새 값이었다. 위의 주기
+   * 점검은 「같은 내용이면 안 보낸다」를 `findings[0].at` 으로 판정했는데, 그 값이 매번
+   * 바뀌니 **중복 방지가 통째로 무력했다.** 그래서 6시간마다 같은 소리가 왔다.
+   *
+   * 시각만 고쳐도 덜 오지만, 애초에 이 둘은 경보가 아니다:
+   *
+   *   · **주소 여럿** — 폰·태블릿·PC 를 쓰고 밖에서도 접속하면 당연히 여럿이다.
+   *     진짜 신호는 「처음 보는 주소」이고 그건 `noteAccess` 가 그 자리에서 따로 알린다.
+   *     여기서 또 세면 정상 사용이 매번 경보가 된다.
+   *   · **기본 PIN** — 이건 **할 일**이지 이상 행위가 아니다. 화면이 빨갛게 적어 두면
+   *     되고, 여섯 시간마다 찌를 일이 아니다.
+   *
+   * `info` 는 화면에는 그대로 뜨고 `ok` 를 안 깬다 — 텔레그램만 안 간다.
+   */
   const auth = await loadAuth();
   const cfgNow = await getSettings();
   if (cfgNow.entryMode === "pin" && auth.pinHash.length === 0) {
@@ -1338,7 +1370,7 @@ export async function auditAccess(hours = 24): Promise<AccessAudit> {
       at: new Date().toISOString(),
       kind: "password",
       msg: `진입 PIN 이 아직 기본값(${DEFAULT_PIN})입니다 — 주문 › 설정에서 바꾸세요`,
-      level: "warn",
+      level: "info",
     });
   }
   if (ips.length > 1) {
@@ -1346,7 +1378,7 @@ export async function auditAccess(hours = 24): Promise<AccessAudit> {
       at: new Date().toISOString(),
       kind: "lock",
       msg: `주소가 ${ips.length} 곳에서 들어왔습니다 — ${ips.join(" · ")}`,
-      level: "warn",
+      level: "info",
     });
   }
 
@@ -1356,7 +1388,8 @@ export async function auditAccess(hours = 24): Promise<AccessAudit> {
     total: all.length,
     ips,
     findings: findings.slice(0, 30),
-    ok: findings.length === 0,
+    /* 「이상 없음」은 **경보가 없다**는 뜻이다 — 적어 둘 거리(info)는 이상이 아니다 */
+    ok: findings.every((f) => f.level !== "warn"),
     checkedAt: new Date().toISOString(),
   };
 }
@@ -1373,12 +1406,20 @@ export function startOrderAudit(): void {
     try {
       const a = await auditAccess(24);
       if (a.ok) return;
-      /* 같은 내용으로 하루에 두 번 울리지 않는다 — 새 발견이 있을 때만 */
-      const key = `${kstParts().date}:${a.findings.length}:${a.findings[0]?.at ?? ""}`;
+      /* 알림만 끈다 — 점검과 기록은 그대로 돈다 */
+      if ((await getSettings()).auditTelegram === false) return;
+      /*
+       * 같은 내용이면 다시 안 울린다.
+       *
+       * ⚠️ 예전 열쇠는 `findings[0].at` 이었는데, 맨 앞 발견이 **점검한 시각**을 달고
+       * 오는 것들이라 매번 값이 달라져 **중복 방지가 아예 안 걸렸다.** 시각이 아니라
+       * **내용**으로 잰다 — 같은 경보가 그대로면 조용하다.
+       */
+      const warns = a.findings.filter((f) => f.level === "warn");
+      const key = `${kstParts().date}:${warns.map((f) => `${f.kind}|${f.msg}`).join("~")}`;
       if (key === lastAuditKey) return;
       lastAuditKey = key;
-      const lines = a.findings
-        .filter((f) => f.level === "warn")
+      const lines = warns
         .slice(0, 6)
         .map((f) => `• ${f.at.slice(5, 16).replace("T", " ")} ${esc(f.msg)}${f.ip ? ` (${esc(f.ip)})` : ""}`);
       if (lines.length === 0) return;

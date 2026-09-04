@@ -6489,6 +6489,8 @@ export interface OrderSettings {
   defaultTradeType: string;
   /** 등록된 기기에서만 주문 */
   requireTrustedDevice: boolean;
+  /** 접근 점검을 텔레그램으로도 보낼까 — 끄면 점검·기록은 그대로, 알림만 안 갑니다 */
+  auditTelegram: boolean;
   /** 주문 메뉴를 무엇으로 여나 — "pin" 은 기기 등록이 켜져 있을 때만 */
   entryMode: "password" | "pin";
   /** 가만히 두면 닫히는 시간(분) */

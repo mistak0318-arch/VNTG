@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T09:41:49.457Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T09:46:11.757Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "c640ad1",
+        "subject": "시뮬레이터를 데스크의 다섯째 진입점으로 — 서브탭이 틀린 자리였다"
+      },
       {
         "hash": "8f4e542",
         "subject": "시뮬레이터 — 조건을 걸어 종목 하나를 굴려 본다 (항해일지 새 탭)"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "a42db53",
         "subject": "안드로이드 — 실제 파일을 C:\\vntg-android 로 옮기고 저장소 쪽은 정션"
-      },
-      {
-        "hash": "c2b138a",
-        "subject": "해외 관심종목 표 — 국내 표들과 같은 전역 표 규칙을 다 붙인다"
       }
     ]
   }

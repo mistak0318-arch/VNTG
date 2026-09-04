@@ -2067,6 +2067,20 @@ function DeviceSection({
           />
           등록된 기기에서만 주문
         </label>
+        {/*
+          접근 점검 알림 (2026-09-04) — 벤티지: "주문 접근 점검 텔레그램 계속 오는데."
+          끄더라도 점검은 6시간마다 그대로 돌고 기록도 남는다. 안 가는 건 **알림뿐**이다 —
+          이 화면이 이미 「마지막 점검 · 이상 없음」을 말하고 있어서 겹치는 통로다.
+        */}
+        <label title="끄더라도 점검과 기록은 그대로입니다 — 텔레그램만 안 갑니다">
+          <input
+            type="checkbox"
+            checked={cfg.auditTelegram !== false}
+            disabled={busy}
+            onChange={(e) => void onSave({ auditTelegram: e.target.checked })}
+          />
+          접근 점검을 텔레그램으로도
+        </label>
       </div>
       {error && <p className="ord-err">{error}</p>}
       {devices.length === 0 ? (
