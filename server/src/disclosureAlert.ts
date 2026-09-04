@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { todayDartEvents, type DartEvent } from "./dartEvents.js";
 import { sendTelegram, stockNameHtml } from "./telegram.js";
-import { pushNotice } from "./notifyCenter.js";
+import { pushNotice, stockLink } from "./notifyCenter.js";
 import { superRoute } from "./superSignal.js";
 
 /**
@@ -240,8 +240,24 @@ export async function runDisclosureScan(
             ? `${reasons[0]} 공시 ${picked.length}건`
             : `공시 ${picked.length}건`,
         body: head.slice(0, 300) + (picked.length > 6 ? ` 외 ${picked.length - 6}건` : ""),
-        /* 공시는 「뉴스·공시」 탭(`news`) — 옛 `#/disclosure` 는 없는 탭이었다 (2026-09-03) */
-        link: "#/news",
+        /*
+         * **한 종목이면 그 종목으로** (2026-09-04 — 벤티지: "공시 같은 알람은 바로가기
+         * 누르면 이상한 데로 가네").
+         *
+         * 여태 무조건 「뉴스·공시」 탭으로 보냈다. 탭 이름은 맞았지만 **아무 맥락도
+         * 안 실려 있었다** — 「⭐한미사이언스 유상증자」를 눌렀는데 뉴스 탭 첫 화면이
+         * 뜨고, 거기서 다시 종목을 찾아야 했다. 알림이 데려다 놓는 자리는 「그 소식」이라야
+         * 한다. 목록의 첫 화면은 그 소식이 아니다.
+         *
+         * 여럿이면 뉴스·공시 탭이 맞다 — 한 종목으로 데려가면 나머지가 숨는다.
+         */
+        ...(() => {
+          const codes = [...new Set(picked.map((h) => h.event.stockCode).filter(Boolean))];
+          const one = codes.length === 1 ? picked.find((h) => h.event.stockCode)! : null;
+          return one
+            ? { link: stockLink(one.event.stockCode!, one.event.corpName), code: one.event.stockCode!, name: one.event.corpName }
+            : { link: "#/news" };
+        })(),
         dedupeKey: `disclosure:${picked.map((h) => h.event.url).sort().join(",").slice(0, 200)}`,
         dedupeHours: 6,
       }).catch(() => undefined);

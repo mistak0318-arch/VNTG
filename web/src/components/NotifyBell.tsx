@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Notice, type NoticeKind } from "../api";
+import { VALID_TABS } from "../App";
 
 /**
  * 알림 종 (2026-08-31 벤티지 요청).
@@ -43,6 +44,8 @@ function ago(iso: string): string {
 
 export function NotifyBell() {
   const [open, setOpen] = useState(false);
+  /* 갈 데가 없는 알림 — 그 줄에만 한 줄 적는다 */
+  const [badLink, setBadLink] = useState<string | null>(null);
   const [items, setItems] = useState<Notice[]>([]);
   const [unread, setUnread] = useState(0);
   const [unreadBy, setUnreadBy] = useState<Record<NoticeKind, number>>({
@@ -212,7 +215,25 @@ export function NotifyBell() {
       void api.noticesRead([n.id]).catch(() => undefined);
     }
     if (!n.link) return;
-    window.location.hash = n.link.startsWith("#") ? n.link : `#${n.link}`;
+
+    /*
+     * **모르는 탭이면 안 간다** (2026-09-04 — 벤티지: "바로가기 누르면 이상한 데로 가네").
+     *
+     * 라우터는 없는 탭을 만나면 말없이 시황 대시보드로 떨어진다. 그래서 옛 알림에
+     * 박힌 `#/watchlist`·`#/dailyReport` 를 누르면 매번 엉뚱한 화면이 떴고, 누르는
+     * 사람은 그게 **링크가 틀린 것**인 줄 알 수 없었다.
+     *
+     * 서버가 이미 걸러 주지만(`fixLink`) 여기서 한 번 더 본다 — 목록이 두 곳에 있으면
+     * 언젠가 한쪽이 뒤처지고, 그때 조용히 틀리는 쪽이 다시 생긴다. 못 가면 창을 안 닫고
+     * 그대로 둔다. 「눌렀는데 아무 일도 안 났다」가 「엉뚱한 데로 갔다」보다 낫다.
+     */
+    const hash = n.link.startsWith("#") ? n.link : `#${n.link}`;
+    const tabKey = hash.replace(/^#\/?/, "").split("?")[0];
+    if (!VALID_TABS.has(tabKey)) {
+      setBadLink(n.id);
+      return;
+    }
+    window.location.hash = hash;
     setOpen(false);
   };
 
@@ -411,6 +432,13 @@ export function NotifyBell() {
                       {n.name && <b>{n.name}</b>} {ago(n.lastAt)}
                       {n.link && <i className="nb-go">→ 바로가기</i>}
                     </span>
+                    {/* 갈 데가 없을 때 — 조용히 엉뚱한 화면에 데려다 놓지 않는다 */}
+                    {badLink === n.id && (
+                      <span className="nb-badlink">
+                        이 알림의 바로가기가 가리키는 화면이 지금은 없습니다 ({n.link}) — 옮겨 가지
+                        않았습니다.
+                      </span>
+                    )}
                   </span>
                   {!n.read && <span className="nb-new" />}
                 </button>

@@ -12976,6 +12976,13 @@ thead .sd-emph {
   font-size: 11.5px;
   color: var(--text-dim);
 }
+.nb-badlink {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.66rem;
+  line-height: 1.35;
+  color: var(--cis-gold);
+}
 .nb-go {
   margin-left: 6px;
   font-style: normal;
@@ -15585,6 +15592,17 @@ select.ord-in { appearance: auto; cursor: pointer; }
 @media (max-width: 899px) {
   /* 주문 화면 것도 같은 규칙 — 점만 남기고 정사각형 가운데 */
   .ord-picked .live-dot { width: 24px; padding: 0; gap: 0; justify-content: center; }
+}
+
+/* 자동으로 채워진 종목이라는 표 — 고른 것과 구별돼야 한다 */
+.ord-auto {
+  font-style: normal;
+  font-size: 0.6rem;
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  white-space: nowrap;
 }
 
 /* 종목 이름을 누르면 종목상세로 (2026-09-04) */

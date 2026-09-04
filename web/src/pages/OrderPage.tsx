@@ -18,6 +18,7 @@ import {
 } from "../api";
 import { OrderBookPanel } from "../components/OrderBookPanel";
 import { StockSearchBox } from "../components/StockSearchBox";
+import { latestStock } from "../useRecentStocks";
 import { LiveDot } from "../components/LiveDot";
 
 /**
@@ -623,8 +624,19 @@ function OrderForm({
   onSelectStock?: (code: string, name: string) => void;
 }) {
   const [side, setSide] = useState<"buy" | "sell">(prefill.side ?? "buy");
-  const [code, setCode] = useState(prefill.code);
-  const [name, setName] = useState(prefill.name);
+  /*
+   * **직전에 보던 종목으로 연다** (2026-09-04 — 벤티지: "매번 검색해야 돼서 불편").
+   *
+   * 링크로 온 값이 먼저다. 없을 때만 최근 본 종목을 채운다.
+   *
+   * ⚠️ 종목만 채우고 **수량·가격은 안 채운다.** 주문 화면에서 자동으로 채워진 값은
+   * 사람이 「내가 고른 것」으로 착각하기 쉬운데, 종목은 틀려도 주문서 확인 화면에서
+   * 이름이 보여 걸리지만 수량은 안 걸린다. 그리고 채운 사실을 칸 옆에 적어 둔다 —
+   * 자동으로 들어온 값은 자동이라고 말해야 한다.
+   */
+  const [autoPicked] = useState(() => (prefill.code ? null : latestStock()));
+  const [code, setCode] = useState(prefill.code || autoPicked?.code || "");
+  const [name, setName] = useState(prefill.name || autoPicked?.name || "");
   /*
    * 기본 거래소는 **지금 열려 있는 곳** (2026-09-04).
    *
@@ -829,6 +841,12 @@ function OrderForm({
                 {name || code}
               </button>
               <span className="ord-code">{code}</span>
+              {/* 자동으로 들어온 값은 **자동이라고 말한다** — 고른 것으로 착각하면 안 된다 */}
+              {autoPicked && code === autoPicked.code && (
+                <em className="ord-auto" title="직전에 보던 종목을 채워 뒀습니다. 위에서 다시 검색하면 바뀝니다">
+                  직전에 보던 종목
+                </em>
+              )}
               {/* 지금 값 — 가격을 적기 전에 「어디쯤인가」가 먼저 보여야 한다 */}
               {/*
                 주문 화면에서는 이 표시가 **제일 중요한 자리**다 — 멈춘 값으로 주문을 내는 것이

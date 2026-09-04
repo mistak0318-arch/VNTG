@@ -21,6 +21,17 @@ export interface RecentStock {
   at: number;
 }
 
+/**
+ * **직전에 보던 종목** (2026-09-04) — 훅을 안 쓰고 한 번만 꺼내 보는 자리용.
+ *
+ * 벤티지: "주문 메뉴 진입할 때 직전에 보고 있던 주식을 바로 보여줬으면 좋겠어.
+ * 매번 검색해야 돼서 불편." 주문 폼은 첫 렌더에 초기값을 정해야 해서 훅의 비동기
+ * 갱신(useEffect)으로는 늦다 — 빈 칸이 한 번 그려지고 나서 채워진다.
+ */
+export function latestStock(): RecentStock | null {
+  return read()[0] ?? null;
+}
+
 function read(): RecentStock[] {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "[]") as RecentStock[];

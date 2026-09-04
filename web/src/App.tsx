@@ -251,7 +251,15 @@ const TAB_LABELS = Object.fromEntries(
   MENU.flatMap((g) => g.items).map((i) => [i.key, `${i.icon} ${i.label}`]),
 ) as Record<Tab, string>;
 
-const VALID_TABS = new Set(MENU.flatMap((g) => g.items).map((i) => i.key));
+/**
+ * 메뉴에 실제로 있는 탭들. **알림의 「바로가기」도 이걸 본다** (2026-09-04) —
+ * 없는 탭으로 보내면 아래에서 말없이 `overview` 로 떨어지는데, 그러면 링크가
+ * 틀려도 아무도 모른다. 서버가 같은 목록을 들고 검사하고(`notifyCenter.KNOWN_TABS`),
+ * 여기서 한 번 더 본다.
+ */
+export const VALID_TABS: ReadonlySet<string> = new Set<string>(
+  MENU.flatMap((g) => g.items).map((i) => i.key),
+);
 
 export default function App() {
   /* 홈 = 브리핑. 앱을 열면 「오늘 시장이 어떤가」부터 — 파고들기는 대시보드로 */

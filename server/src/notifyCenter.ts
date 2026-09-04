@@ -279,12 +279,38 @@ const KEEP = 500;
 
 let cache: Notice[] | null = null;
 
+let repaired = false;
+
 async function load(): Promise<Notice[]> {
   if (cache) return cache;
   try {
     cache = JSON.parse(await fs.readFile(FILE, "utf-8")) as Notice[];
   } catch {
     cache = [];
+  }
+
+  /*
+   * **한 번 수리한다** (2026-09-04).
+   *
+   * 보내는 코드는 2026-09-03 에 고쳤는데, **이미 저장된 알림**은 옛 링크를 그대로
+   * 들고 있었다(`#/watchlist` 여덟, `#/dailyReport` 넷, `#/disclosure` 둘). 알림 하나는
+   * 며칠씩 목록에 남아 있으니, 고친 뒤로도 누를 때마다 계속 엉뚱한 데로 갔다.
+   * 「앞으로 안 그런다」로는 안 되고 **있는 것을 고쳐야** 한다.
+   */
+  if (!repaired) {
+    repaired = true;
+    let n = 0;
+    for (const it of cache) {
+      const next = fixLink(it.link);
+      if (next !== it.link) {
+        it.link = next;
+        n += 1;
+      }
+    }
+    if (n > 0) {
+      console.log(`[notify] 옛 알림 ${n}건의 바로가기를 고쳤습니다`);
+      void persist(cache).catch(() => undefined);
+    }
   }
   return cache;
 }
@@ -303,6 +329,59 @@ async function persist(list: Notice[]): Promise<void> {
 export function stockLink(code: string, name: string): string {
   const q = new URLSearchParams({ code, name });
   return `#/stockAnalysis?${q.toString()}`;
+}
+
+/**
+ * **화면이 아는 탭 이름** — `web/src/App.tsx` 의 `Tab` 과 같아야 한다 (2026-09-04).
+ *
+ * ## 왜 서버가 화면의 탭 목록을 들고 있나
+ *
+ * 알림의 「바로가기」는 `#/{tab}` 로 가는데, 없는 탭이면 라우터가 **말없이 시황
+ * 대시보드로 떨어진다.** 그래서 링크가 틀려도 아무도 모른다 — 벤티지가 "공시 같은
+ * 알람은 바로가기 누르면 이상한 데로 가네" 라고 한 것이 이것이다.
+ *
+ * 실제로 셋이 틀려 있었다. `#/watchlist`(관심종목은 `watchAi`), `#/disclosure`,
+ * `#/dailyReport`(리포트는 `report`). 2026-09-03 에 보내는 코드는 고쳤지만 **이미
+ * 쌓인 알림 열넷은 옛 링크를 그대로 들고 있었다** — 누를 때마다 계속 엉뚱한 데로 갔다.
+ *
+ * 목록을 여기 두는 이유는 **틀린 링크를 만들 때 잡기 위해서**다. 화면에 두면 서버는
+ * 검사할 방법이 없고, 검사가 없으면 이 사고는 반드시 다시 난다. 탭을 새로 만들면
+ * 여기에도 한 줄 늘려야 하고, 안 늘리면 서버 로그가 바로 짖는다.
+ */
+const KNOWN_TABS = new Set([
+  "cis", "morning", "briefing", "overview", "report", "map", "themedb", "program",
+  "news", "discovery", "watchAi", "watchKiwoom", "calendar", "marketFlow", "customTheme",
+  "signalScreen", "condSearch", "superSignal", "listTrack", "journal", "memo", "usWatch",
+  "ask", "telegram", "stockAnalysis", "screener", "volume", "sameNet", "continuous",
+  "etf", "algo", "account", "manualAccount", "paper", "order", "settings", "board",
+  "guide", "mini", "boardWin",
+]);
+
+/** 옛 알림에 박혀 있는 죽은 탭 → 지금 이름 */
+const TAB_RENAMES: Record<string, string> = {
+  watchlist: "watchAi",
+  disclosure: "news",
+  dailyReport: "report",
+};
+
+/**
+ * 링크를 손본다 — 죽은 탭이면 고치고, 그래도 모르는 탭이면 **버린다.**
+ *
+ * 버리는 쪽이 낫다. 링크가 없으면 알림은 그냥 알려 주기만 하고 창이 안 닫힌다(`NotifyBell`).
+ * 그건 사람이 「아, 갈 데가 없구나」로 읽는다 — 엉뚱한 화면에 데려다 놓는 것보다 정직하다.
+ */
+export function fixLink(link: string | undefined | null): string | undefined {
+  if (!link) return undefined;
+  /* 바깥 주소는 그대로 — 탭 이름으로 잴 것이 아니다 (지금은 없지만 막아 둘 이유도 없다) */
+  if (/^https?:\/\//i.test(link)) return link;
+  const raw = link.replace(/^#\/?/, "");
+  const [path, query] = raw.split("?");
+  if (!path) return undefined;
+  const renamed = TAB_RENAMES[path];
+  if (renamed) return `#/${renamed}${query ? `?${query}` : ""}`;
+  if (KNOWN_TABS.has(path)) return `#/${path}${query ? `?${query}` : ""}`;
+  console.warn(`[notify] 모르는 탭으로 가는 링크라 버립니다: ${link}`);
+  return undefined;
 }
 
 /**
@@ -403,7 +482,8 @@ export async function pushNotice(input: PushInput): Promise<Notice | null> {
     level: input.level ?? "info",
     title: input.title,
     body: input.body,
-    link: input.link,
+    /* 죽은 탭이면 여기서 고치거나 버린다 — 저장된 뒤에는 아무도 못 본다 */
+    link: fixLink(input.link),
     code: input.code,
     name: input.name,
     read: false,
