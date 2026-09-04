@@ -210,8 +210,16 @@ export async function runPension(
    */
   progress.start("market");
   const gate = await marketGate(client, cfg.rules).catch(() => null);
-  const canOpen = gate?.ok !== false;
-  progress.done("market", gate ? gate.reason : "시장 판단을 못 읽었다");
+  /*
+   * ⚠️ **모르면 안 사는 쪽이다** (2026-09-04 전수 점검에서 고침).
+   *
+   * 처음엔 `gate?.ok !== false` 라고 썼다. 그러면 문을 **못 읽었을 때**(null) 값이
+   * `true` 가 되어 **시장을 모르는 채 새로 담는다.** `marketGate` 는 제 안에서
+   * "못 읽었으면 안 사는 쪽이다 — 모르는 시장에서 사는 것이 가장 비싸다"고 정해 놓았는데,
+   * 부르는 쪽에서 그 원칙을 뒤집고 있었다. 「모른다」는 「괜찮다」가 아니다.
+   */
+  const canOpen = gate?.ok === true;
+  progress.done("market", gate ? gate.reason : "시장 판단을 못 읽었다 — 새로 담지 않는다");
 
   /* ── ② 줄인다 — 자리를 먼저 비운다 ── */
   progress.start("exit");
@@ -296,7 +304,14 @@ export async function runPension(
     ? planPension(a, profile, picks, buyPriceOf)
     : {
         orders: [] as ReturnType<typeof planPension>["orders"],
-        skipped: [{ name: "-", reason: `시장 문이 닫혔다 — ${gate?.reason ?? "판단 불가"}` }],
+        skipped: [
+          {
+            name: "-",
+            reason: gate
+              ? `시장 문이 닫혔다 — ${gate.reason}`
+              : "시장 판단을 못 읽어 새로 담지 않았다 (정리·리밸런싱은 했다)",
+          },
+        ],
       };
   for (const o of planned.orders) {
     const r = buy(

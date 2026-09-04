@@ -905,11 +905,27 @@ export async function marketGate(
      * **시장 평균은 거의 같았는데**(+3.19% vs +3.91%) 초록만 -2.15%p ↔ +2.20%p 로
      * 갈렸다. ①만 보면 이걸 통째로 놓친다.
      */
+    /*
+     * ⚠️ **「끈 것」과 「못 잰 것」을 갈라 둔다** (2026-09-04 전수 점검).
+     *
+     * 여태 둘 다 `null` 이었다. 그래서 `!reg?.weak` 는 양쪽 다 **통과**로 읽었고,
+     * 일지에는 그냥 「매수 허용」이라고만 남았다 — 나중에 그날을 다시 볼 때
+     * **장세를 보고 통과한 것인지 못 보고 통과한 것인지 알 수가 없다.**
+     * 이 장부의 값어치는 판단과 근거를 한 줄에 묶는 데 있는데 그 줄이 비어 있었다.
+     *
+     * 통과 여부 자체는 안 바꾼다. 장세 자료는 마감 뒤 파이프라인이 만드는 것이라
+     * 장중엔 없을 수 있고, 없다고 매수를 통째로 멈추면 그게 더 큰 고장이다.
+     * 바꾸는 것은 **적히느냐**다.
+     */
+    let regimeMissed = false;
     const [m, reg] = await Promise.all([
       evaluateMarket(client),
       rules.useRegimeGate === false
         ? Promise.resolve(null)
-        : regimeTrust().catch(() => null),
+        : regimeTrust().catch(() => {
+            regimeMissed = true;
+            return null;
+          }),
     ]);
     const score = typeof m.score === "number" ? m.score : 0;
     const scoreOk = score >= rules.minMarketScore;
@@ -926,7 +942,8 @@ export async function marketGate(
       : !regimeOk
         ? `시장은 ${score}점으로 괜찮지만 **신호등이 잘 안 듣는 장세**다 (${reg?.why}). ` +
           `이 구간의 초록은 실측에서 시장에 -2.15%p 지고 승률이 43% 였다 — 오늘은 쉰다`
-        : `시장 ${score}점 · 폭 ${reg?.breadth ?? "-"}% — 매수 허용`;
+        : `시장 ${score}점 · 폭 ${reg?.breadth ?? "-"}% — 매수 허용` +
+          (regimeMissed ? " (⚠️ 장세 신뢰도를 **못 읽어** 그 문은 안 걸렸다)" : "");
 
     return {
       ok,

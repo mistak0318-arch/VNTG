@@ -1,6 +1,7 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { asOf, backAt, maAt, series, stockBars, type Point } from "./simSeries.js";
 import type { Cond, SimRule } from "./simRules.js";
+import { FEE_RATE, TAX_RATE } from "./cisAccount.js";
 
 /**
  * 시뮬레이터 **엔진** (2026-09-04).
@@ -21,10 +22,20 @@ import type { Cond, SimRule } from "./simRules.js";
  * 왕복 0.21% 가 성적의 대부분을 먹는다. 넣지 않으면 그 사실이 안 보인다.
  */
 
-/** 왕복 비용 — 화면에도 같은 값을 적는다 */
-export const FEE_BUY = 0.00015;
-export const FEE_SELL = 0.00015;
-export const TAX_SELL = 0.0018;
+/**
+ * 왕복 비용 — **`cisAccount` 것을 그대로 쓴다** (2026-09-04 전수 점검에서 고침).
+ *
+ * 처음엔 여기에 `0.00015` · `0.0018` 을 다시 적었다. 항해일지 계좌가 이미 같은 값을
+ * 들고 있는데(`FEE_RATE` · `TAX_RATE`) 모르고 두 벌을 만든 것이다 — 이 코드베이스가
+ * 반복해서 데인 바로 그 병이다. 세율이 바뀌는 날 한쪽만 고치면, 시뮬레이터가 낸 성적과
+ * 항해일지가 낸 성적을 **더 이상 나란히 놓을 수 없다.**
+ *
+ * 이름을 남겨 두는 이유는 이 파일 안에서 「매수 수수료 / 매도 수수료 / 매도세」가
+ * 갈려 읽혀야 해서다. 값은 한 곳에서 온다.
+ */
+export const FEE_BUY = FEE_RATE;
+export const FEE_SELL = FEE_RATE;
+export const TAX_SELL = TAX_RATE;
 
 export interface SimTrade {
   d: string;
