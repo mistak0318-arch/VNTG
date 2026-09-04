@@ -2751,9 +2751,26 @@ export async function evaluateSignal(
     need.has("sectorStrength") || need.has("themeStrength") || need.has("exportGrowth");
   const wantMyTheme = need.has("myThemeStrength");
   /* flowRatio 도 시총이 필요하다 — 「시가총액」 기준과 같은 응답을 나눠 쓴다 */
+  /*
+   * ⚠️ **`largeCap` 을 빠뜨리지 말 것** (2026-09-04 전수 점검 ④회차에서 고침).
+   *
+   * 이 파일은 아래(`c.key === "marketCap" || c.key === "largeCap"`)에 「largeCap 이 한 번도
+   * 계산된 적이 없었다」는 사고를 적어 두고 있다. 그때는 **평가 분기**가 빠져 있었고,
+   * 그건 고쳤는데 **조회 관문**은 그대로 `marketCap` 만 보고 있었다. 같은 사고의 반쪽이
+   * 남아 있던 셈이다.
+   *
+   * 지금은 안 터진다 — `!override` 가 앞에 있어서 **화면 경로에서는 늘 받기** 때문이다.
+   * 터지는 것은 설정을 넘기는 경로(조건 검색)뿐이고, 거기서 「대형주」만 물으면 시총을
+   * 안 받아 영원히 `grade: null` 이 된다. **아직 조건 검색이 largeCap 을 안 쓸 뿐**이고,
+   * 쓰는 날 조용히 틀린다.
+   */
   const wantInfo =
     !override ||
-    need.has("marketCap") || need.has("volume") || need.has("flowRatio") || need.has("fgnRatio20");
+    need.has("marketCap") ||
+    need.has("largeCap") ||
+    need.has("volume") ||
+    need.has("flowRatio") ||
+    need.has("fgnRatio20");
   const wantShort = need.has("shortSaleUp") || need.has("shortLevel");
   const wantLending = need.has("lendingUp");
   const wantForeignRatio = need.has("foreignRatioUp");

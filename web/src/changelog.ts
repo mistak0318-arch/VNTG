@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T14:51:52.676Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T23:00:09.545Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "a1eed63",
+        "subject": "시스템 로그 방을 따로 판다 — 그리고 접근 점검이 계속 온 진짜 이유"
+      },
       {
         "hash": "7b80a91",
         "subject": "소스 전수 분석 ①~③회차 — 지도·중복계산·조용한 실패 (고친 것 넷)"
@@ -1646,15 +1650,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "9e9ab1c",
         "subject": "보드 지수판 — 색·그래프 복구 + 컴팩트"
-      }
-    ]
-  },
-  {
-    "date": "2026-08-26",
-    "items": [
-      {
-        "hash": "3b1ee96",
-        "subject": "보드 지수판 = 시황 세 카드 합체 + 탭바 고정 옵션"
       }
     ]
   }

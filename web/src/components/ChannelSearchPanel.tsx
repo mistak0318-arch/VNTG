@@ -96,9 +96,22 @@ const searchMemory = new Map<string, SearchMemory>();
  * 결과가 크므로 **최근 여섯 판**만, 판마다 걸린 글 **여든 건**까지 남긴다 —
  * 저장이 꽉 차면 브라우저가 통째로 거절해서 하나도 안 남는다.
  */
-const HIST_KEY = "vntg.chsearch.v1";
+/*
+ * 열쇠에 판 번호가 붙어 있다 — **모양을 바꾸면 올린다.** 옛 판을 읽다 터지느니
+ * 통째로 버리는 편이 낫다(어차피 다시 찾으면 되는 것이다). v1 은 2026-09-05 에
+ * 버렸다: `hits` 없는 판이 저장돼 있으면 렌더가 터지고 스스로 안 낫는 고장이 됐다.
+ */
+const HIST_KEY = "vntg.chsearch.v2";
 const HIST_MAX = 6;
-const HIST_HITS = 80;
+/**
+ * 판마다 남길 글 수. 80 → **40** 으로 줄였다 (2026-09-05).
+ *
+ * 채널 글은 한 건이 길다. 80건 × 6판이면 몇 MB 가 되고 `localStorage` 5MB 를 넘긴다 —
+ * 넘기면 `setItem` 이 던지고, 그게 어제 검색이 통째로 안 보이던 사고의 방아쇠였을
+ * 가능성이 가장 크다. 되살리기는 **어떤 검색이었나**를 다시 보는 것이라 40건이면 넉넉하다.
+ * (전체는 「다시 찾기」로 받는다 — 그 사실을 화면이 적어 준다.)
+ */
+const HIST_HITS = 40;
 
 interface HistEntry {
   /** 같은 검색인지 가리는 열쇠 — 검색어와 구간 */
@@ -113,22 +126,43 @@ interface HistEntry {
 function loadHist(): HistEntry[] {
   try {
     const raw = JSON.parse(localStorage.getItem(HIST_KEY) ?? "[]") as HistEntry[];
-    return Array.isArray(raw) ? raw.filter((h) => h && h.result && Array.isArray(h.words)) : [];
+    if (!Array.isArray(raw)) return [];
+    /*
+     * ⚠️ **`hits` 가 배열인지까지 본다** (2026-09-05).
+     *
+     * 여태 `h.result` 가 있기만 하면 통과시켰다. 그런데 그리는 쪽은 `h.result.hits.length`
+     * 를 읽는다 — 모양이 깨진 판이 하나라도 저장돼 있으면 **렌더가 통째로 터지고,
+     * 그 판은 localStorage 에 남아 있으니 새로고침해도 계속 터진다.** 스스로 낫지 않는
+     * 고장이라 「검색이 아예 안 된다」로 보인다.
+     *
+     * 읽을 때 거르면 나쁜 판이 저절로 빠진다.
+     */
+    return raw.filter(
+      (h) => h && h.result && Array.isArray(h.result.hits) && Array.isArray(h.words) && h.words.length > 0,
+    );
   } catch {
     return [];
   }
 }
 
 function saveHist(list: HistEntry[]): void {
-  try {
-    localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, HIST_MAX)));
-  } catch {
-    /* 자리가 모자라면 하나만 남기고 다시 — 그래도 안 되면 포기한다(화면은 그대로 돈다) */
+  /*
+   * 자리가 모자라면 **한 판씩 줄여 가며** 다시 해 본다. 예전엔 6판 → 1판 한 번만
+   * 시도했는데, 1판도 클 수 있다(긴 글 40건). 끝까지 안 되면 **비운다** —
+   * 옛 값을 남겨 두면 다음에 읽을 때 「저장은 됐다」고 오해하게 된다.
+   */
+  for (let n = Math.min(list.length, HIST_MAX); n >= 1; n -= 1) {
     try {
-      localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, 1)));
+      localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, n)));
+      return;
     } catch {
-      /* 조용히 */
+      /* 다음 바퀴에서 더 줄인다 */
     }
+  }
+  try {
+    localStorage.removeItem(HIST_KEY);
+  } catch {
+    /* 여기까지 막히면 브라우저가 저장을 통째로 막은 것이다 — 화면은 그대로 돈다 */
   }
 }
 
@@ -191,7 +225,12 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
   const memKey = code ?? "";
   const saved = searchMemory.get(memKey);
   /* 새로고침에도 남는 최근 판들 — 누르면 조회 없이 그대로 되살린다 */
-  const [hist, setHist] = useState<HistEntry[]>(() => loadHist());
+  /*
+   * 한 번만 읽는다. 예전엔 `loadHist()` 를 초기값 셋에서 각각 불렀는데(세 번),
+   * 저장된 판이 몇 MB 짜리라 첫 그림이 그만큼 늦었다. 같은 값이면 한 번이면 된다.
+   */
+  const first = useMemo(() => loadHist(), []);
+  const [hist, setHist] = useState<HistEntry[]>(first);
   const [minutes, setMinutes] = useState(saved?.minutes ?? 720);
   /** 사람이 더 넣은 말 (쉼표) */
   const [extra, setExtra] = useState(saved?.extra ?? "");
@@ -199,8 +238,8 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
    * 모듈 기억이 먼저, 없으면 **저장해 둔 맨 앞 판**을 되살린다 — 새로고침 뒤에도
    * 「다시 돌려야 되잖아」가 안 되게. 언제 찾은 것인지는 아래 줄이 적어 준다.
    */
-  const [result, setResult] = useState<Result | null>(saved?.result ?? loadHist()[0]?.result ?? null);
-  const [shownAt, setShownAt] = useState<string | null>(saved?.result ? null : (loadHist()[0]?.at ?? null));
+  const [result, setResult] = useState<Result | null>(saved?.result ?? first[0]?.result ?? null);
+  const [shownAt, setShownAt] = useState<string | null>(saved?.result ? null : (first[0]?.at ?? null));
   const [busy, setBusy] = useState(false);
   /*
    * AI 정리 — **원문을 대신하지 않는다.**
@@ -278,13 +317,31 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
       .then((j) => {
         const cur = searchMemory.get(memKey);
         if (cur) searchMemory.set(memKey, { ...cur, result: j, ran: { words: w, minutes: m }, pending: null });
-        /* 새로고침에도 남게 — 무거운 조회라 두 번 돌릴 이유가 없다 */
-        if (!j.error) {
-          setHist(pushHist(w.split(","), m, j));
-          setShownAt(null);
-        }
+
+        /*
+         * ⚠️ **보여 주는 것이 먼저다** (2026-09-05 고침).
+         *
+         * 어제까지 `pushHist(...)` 가 이 줄들 **앞**에 있었다. 그래서 히스토리를 적다가
+         * 한 번이라도 던지면 — 저장 공간이 찼거나, 응답에 `hits` 가 없거나 — 아래
+         * `setResult(j)` 가 **아예 실행되지 않고** 바깥 `.catch` 로 빠져 결과가 null 이 됐다.
+         * 검색은 제대로 돌았는데 화면에는 아무것도 안 뜬다. 벤티지: "어제 고친 이후로
+         * 검색이 안 되네 아예."
+         *
+         * **곁다리가 본 일을 막으면 안 된다.** 결과를 먼저 세우고, 저장은 그다음에,
+         * 그것도 제 안에서 조용히 실패하게 한다.
+         */
         setResult(j);
         setRan({ words: w, minutes: m });
+
+        /* 새로고침에도 남게 — 무거운 조회라 두 번 돌릴 이유가 없다. 실패해도 화면은 그대로 */
+        if (!j.error && Array.isArray(j.hits)) {
+          try {
+            setHist(pushHist(w.split(","), m, j));
+            setShownAt(null);
+          } catch {
+            /* 못 남겨도 이번 결과는 보인다 — 다음에 다시 찾으면 될 일이다 */
+          }
+        }
       })
       .catch(() => {
         const cur = searchMemory.get(memKey);
@@ -470,7 +527,7 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
               key={h.id}
               type="button"
               className={`cs-hist-btn${result && h.result === result ? " on" : ""}`}
-              title={`${h.words.join(", ")} · ${h.result.hits.length}건 · ${agoText(h.at)}`}
+              title={`${h.words.join(", ")} · ${h.result.hits?.length ?? 0}건 · ${agoText(h.at)}`}
               onClick={() => {
                 setResult(h.result);
                 setShownAt(h.at);
@@ -482,7 +539,7 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
             >
               {h.words[0]}
               {h.words.length > 1 ? ` +${h.words.length - 1}` : ""}
-              <i>{h.result.hits.length}</i>
+              <i>{h.result.hits?.length ?? 0}</i>
             </button>
           ))}
           <button
