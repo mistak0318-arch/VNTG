@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T23:11:49.499Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T23:27:31.221Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-05",
     "items": [
+      {
+        "hash": "995fa61",
+        "subject": "채널 검색이 「3일」을 골라도 몇 시간만 보고 있었다 — 구간은 거르기만 했다"
+      },
       {
         "hash": "27ea717",
         "subject": "채널 검색이 안 되던 이유 — 곁다리(히스토리)가 본 일을 막고 있었다"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "6ab199c",
         "subject": "마켓 브리핑 — 오늘 수급 아래 종목등락현황·거래대금 현황"
-      },
-      {
-        "hash": "0109955",
-        "subject": "차트 크게 버튼 이동 · 브리핑 보드 블록 · 슈퍼신호등 연동/정렬/사유/메모이력"
       }
     ]
   }

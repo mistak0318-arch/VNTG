@@ -40,6 +40,7 @@ import { startCisScheduler } from "./cisScheduler.js";
 import { syncSuperGroup } from "./superSignal.js";
 import { startCisWatch } from "./cisWatch.js";
 import { startChannelScheduler } from "./channelScheduler.js";
+import { startChannelCollector } from "./channelCollector.js";
 import { startMajorFeedLoop } from "./majorFeed.js";
 import { startBuzzScheduler } from "./buzzRadar.js";
 import { startNewsKeywordScheduler } from "./newsKeywords.js";
@@ -267,6 +268,8 @@ void syncSuperGroup()
 /* 장중 상시 감시 — 1분마다 팔 자리와 흔들림을 본다. AI 는 안 부른다 */
 startCisWatch(client);
 startChannelScheduler();
+/* 채널 글 창고 (2026-09-05) — 10분마다 조금씩. 검색이 여기만 읽는다 */
+startChannelCollector();
   startKeywordScheduler();
 /* 주요 채널 — 골라 둔 채널의 글을 5분마다 빠짐없이 아카이브 (「주요 채널」 방이 읽는다) */
 startMajorFeedLoop();

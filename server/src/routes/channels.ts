@@ -8,6 +8,8 @@ import {
   getChannelConfig,
   saveChannelConfig,
 } from "../channelConfig.js";
+import { status as channelStoreStatus } from "../channelStore.js";
+import { collectorState } from "../channelCollector.js";
 import { isMailConfigured } from "../mailer.js";
 import {
   isReaderConfigured,
@@ -210,9 +212,21 @@ export function createChannelsRouter(): Router {
         .split(",")
         .map((w) => w.trim())
         .filter(Boolean);
-      const minutes = Math.min(Math.max(Number(req.query.minutes) || 720, 5), 4320);
+      const minutes = Math.min(Math.max(Number(req.query.minutes) || 720, 5), 44_640);
       const limit = Math.min(Math.max(Number(req.query.limit) || 60, 5), 200);
       res.json(await searchChannels(q, minutes, limit));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **창고가 얼마나 찼나** (2026-09-05) — 검색이 여기서 나온다.
+   * 「검색이 얕다」 싶을 때 제일 먼저 볼 자리다.
+   */
+  router.get("/store", async (_req, res, next) => {
+    try {
+      res.json({ ...(await channelStoreStatus()), collector: collectorState() });
     } catch (err) {
       next(err);
     }
@@ -234,7 +248,7 @@ export function createChannelsRouter(): Router {
         .split(",")
         .map((w) => w.trim())
         .filter(Boolean);
-      const minutes = Math.min(Math.max(Number(req.query.minutes) || 720, 5), 4320);
+      const minutes = Math.min(Math.max(Number(req.query.minutes) || 720, 5), 44_640);
       res.json(await summarizeHits(q, minutes));
     } catch (err) {
       next(err);

@@ -1,4 +1,5 @@
 import { fetchNewMessages, type ChannelMessage } from "./telegramReader.js";
+import * as store from "./channelStore.js";
 import { summarize } from "./summarize.js";
 
 /**
@@ -129,6 +130,8 @@ export interface SearchResult {
   oldest: string | null;
   hits: SearchHit[];
   error: string | null;
+  /** 창고에서 낸 것인가 — 아니면 그 자리에서 훑은 것이다 (2026-09-05) */
+  fromStore: boolean;
 }
 
 /**
@@ -144,26 +147,50 @@ export async function searchChannels(
 ): Promise<SearchResult> {
   const query = words.map((w) => w.trim()).filter((w) => w.length >= 2);
   if (query.length === 0) {
-    return { query, minutes, scanned: 0, oldest: null, hits: [], error: "두 글자 이상으로 찾아 주세요." };
+    return { query, minutes, scanned: 0, oldest: null, hits: [], error: "두 글자 이상으로 찾아 주세요.", fromStore: false };
+  }
+
+  /*
+   * ## **창고를 먼저 본다** (2026-09-05)
+   *
+   * 벤티지: "계속 수집을 하면 한 번에 여러 개 안 훑어도 되잖아. 한 달치로 하자."
+   *
+   * 수집기(`channelCollector`)가 10분마다 조금씩 받아 창고에 쌓는다. 그래서 검색은
+   * **파일만 읽으면 된다** — 텔레그램 호출이 0 이고, 구간을 한 달로 넓혀도 공짜다.
+   * 채널당 가져오는 수의 상한 때문에 「3일을 골라도 몇 시간만 보던」 문제가 여기서 사라진다.
+   *
+   * 창고가 아직 안 찼으면(방금 켰다거나 세션이 없었다) 예전처럼 그 자리에서 훑는다.
+   * **새 길이 안 되면 옛 길로 간다** — 새로 만든 것 때문에 되던 게 안 되면 안 된다.
+   */
+  try {
+    const st = await store.search(query, minutes);
+    if (st.scanned > 0) {
+      return {
+        query,
+        minutes,
+        scanned: st.scanned,
+        oldest: st.oldest ?? null,
+        hits: st.hits.slice(0, limit),
+        error: null,
+        fromStore: true,
+      };
+    }
+  } catch {
+    /* 창고를 못 읽으면 아래 옛 길로 */
   }
 
   try {
     const messages = await load(minutes);
     /*
-     * ⚠️ **자모를 모아 놓고 견준다** (2026-09-05).
-     *
-     * 한글은 같은 글자를 두 가지로 적을 수 있다 — 「로보티즈」가 완성형 네 글자일 수도,
-     * 자모 여덟 개로 풀어진 형태(NFD)일 수도 있다. 눈에는 똑같은데 `includes` 는 **전혀
-     * 안 걸린다.** 맥·아이패드 한글 자판이나 붙여넣기가 풀어진 형태를 만들 때가 있어서,
-     * 같은 검색어가 **기기에 따라 되기도 하고 안 되기도 한다.** 조용히 0건이 되는 종류다.
-     *
-     * 양쪽을 완성형(NFC)으로 모아 놓고 견주면 그 갈림이 사라진다.
+     * ⚠️ **자모를 모아 놓고 견준다.** 한글은 같은 글자를 완성형과 풀린 형태(NFD) 두 가지로
+     * 적을 수 있다. 눈에는 똑같은데 `includes` 는 전혀 안 걸려서, **같은 검색어가 기기에
+     * 따라 되기도 하고 안 되기도 한다.** 조용히 0건이 되는 종류다.
      */
     const norm = (v: string) => v.normalize("NFC").toLowerCase();
     const lowered = query.map(norm);
     const hits: SearchHit[] = [];
     for (const m of messages) {
-      /* 글이 없는 메시지(사진만 올라온 것)도 온다 — 여기서 터지면 검색이 통째로 죽는다 */
+      /* 글이 없는 메시지(사진만)도 온다 — 여기서 터지면 검색이 통째로 죽는다 */
       const text = norm(String(m.text ?? ""));
       if (!text) continue;
       const matched = query.filter((_, i) => text.includes(lowered[i]));
@@ -171,10 +198,9 @@ export async function searchChannels(
     }
     // 최신이 위 — 텔레그램의 무기는 신속성이다
     hits.sort((a, b) => b.at.localeCompare(a.at));
-    /* 훑은 것 중 가장 오래된 글 — 요청한 구간을 실제로 채웠는지 화면이 판단한다 */
     let oldest: string | null = null;
     for (const m of messages) if (!oldest || m.at < oldest) oldest = m.at;
-    return { query, minutes, scanned: messages.length, oldest, hits: hits.slice(0, limit), error: null };
+    return { query, minutes, scanned: messages.length, oldest, hits: hits.slice(0, limit), error: null, fromStore: false };
   } catch (err) {
     return {
       query,
@@ -183,10 +209,10 @@ export async function searchChannels(
       oldest: null,
       hits: [],
       error: err instanceof Error ? err.message : "채널을 읽지 못했습니다.",
+      fromStore: false,
     };
   }
 }
-
 
 /**
  * 검색 결과를 **AI 가 정리한다.**
