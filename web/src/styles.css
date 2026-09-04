@@ -15493,6 +15493,10 @@ select.ord-in { appearance: auto; cursor: pointer; }
 /* 주문 화면에서는 종목 이름 줄에 — 좁아도 점은 남긴다 */
 .ord-picked .live-wrap { flex: none; }
 .ord-picked .live-dot { height: 24px; padding: 0 0.45rem; font-size: 0.7rem; }
+@media (max-width: 899px) {
+  /* 주문 화면 것도 같은 규칙 — 점만 남기고 정사각형 가운데 */
+  .ord-picked .live-dot { width: 24px; padding: 0; gap: 0; justify-content: center; }
+}
 
 /* 종목 이름을 누르면 종목상세로 (2026-09-04) */
 .ord-name-go {
@@ -15758,10 +15762,22 @@ select.ord-in { appearance: auto; cursor: pointer; }
 .live-pop-err { margin: 0.3rem 0 0; color: var(--red); font-size: 0.72rem; overflow-wrap: anywhere; }
 
 @media (max-width: 899px) {
-  /* 폰에서는 글자를 접되 **폭만 0** 으로 — 지우면 줄 높이까지 사라져 칩이 낮아진다 */
   .qss-row { --hdr-h: 30px; gap: 5px; }
-  .live-dot { padding: 0 0.5rem; }
-  .live-dot b { width: 0; overflow: hidden; display: inline-block; }
+  /*
+   * 폰에서는 **점 하나짜리 정사각형**이다 (2026-09-04).
+   *
+   * 벤티지: "초록색 점이 사각형 안에 가운데로 안 와! 되게 신경쓰인다고."
+   * 맞다. 글자를 「폭 0」으로만 접어 뒀더니 `gap` 과 0 폭 요소가 남아 점이 왼쪽으로 밀렸다.
+   * 그때는 글자를 지우면 줄 높이까지 사라져서 어쩔 수 없었는데, 이제 **줄이 높이를 정하므로**
+   * (`--hdr-h`) 글자를 남겨 둘 이유가 없다 — 지우고 폭도 높이와 같게 해 **가운데**에 놓는다.
+   */
+  .live-dot {
+    width: var(--hdr-h);
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+  }
+  .live-dot b { display: none; }
   .live-pop { width: min(16rem, 100%); }
 }
 
