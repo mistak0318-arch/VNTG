@@ -68,12 +68,6 @@ const TABS = [
   { key: "fills", label: "매매일지", hint: "체결 원장 — 산 이유와 판 이유" },
   { key: "account", label: "계좌", hint: "보유·현금·빚·목표 진척" },
   { key: "stats", label: "통계", hint: "승률·손익비·평가액 곡선" },
-  /*
-   * 시뮬레이터 (2026-09-04) — 통계 다음에 둔다. 앞의 여섯은 **시스가 한 것**을 보는
-   * 자리이고 이건 **내가 규칙을 걸어 보는** 자리다. 성격이 갈리므로 뒤에 두되,
-   * 설정보다는 앞이다 — 설정보다 훨씬 자주 연다.
-   */
-  { key: "sim", label: "시뮬레이터", hint: "조건을 걸어 종목 하나를 굴려 본다 — 백테스트와 실전" },
   { key: "usage", label: "활용법", hint: "어느 화면을 보고 판단했나" },
   { key: "config", label: "설정", hint: "규칙·시간대·AI·모드" },
 ];
@@ -188,6 +182,15 @@ function DeskStrip({
   onPick: (id: string) => void;
 }) {
   const [desk, setDesk] = useState<CisDesk | null>(null);
+  /* 다섯 번째 카드가 적을 값 — 규칙 몇 개 중 몇 개가 도나 */
+  const [sim, setSim] = useState<{ total: number; running: number } | null>(null);
+
+  useEffect(() => {
+    api
+      .simRules()
+      .then((r) => setSim({ total: r.rules.length, running: r.rules.filter((x) => x.enabled).length }))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -277,6 +280,42 @@ function DeskStrip({
           </button>
         );
       })}
+
+      {/*
+        **다섯 번째 진입점 — 시뮬레이터** (2026-09-04).
+
+        벤티지: "단기추세의 서브메뉴 말고 대메뉴로 만들어서 총 5가지 메뉴 진입점으로."
+
+        처음엔 서브탭으로 달았는데 그게 틀렸다. 서브탭은 **고른 계좌에 딸린** 자리라
+        계좌를 옮길 때마다 같은 화면이 네 번 나온다 — 시뮬레이터는 어느 계좌의 것도
+        아니고, 계좌 넷과 **나란한 하나**다. 여기 두면 그 관계가 이름 없이도 보인다.
+
+        앞의 넷과 다르게 성적을 안 적는다. 성적이 **규칙마다** 나오지 계좌 하나로
+        합쳐지지 않기 때문이다 — 대신 규칙 수와 진행 중인 수를 적는다.
+      */}
+      <button
+        type="button"
+        className={`cis-card cis-card-sim ${account === "sim" ? "on" : ""}`}
+        onClick={() => onPick("sim")}
+        title="조건을 걸어 종목 하나를 굴려 본다 — 백테스트와 실전 진행"
+      >
+        <span className="cis-card-h">
+          <b>시뮬레이터</b>
+        </span>
+        <span className="cis-card-pct">
+          {sim === null ? "…" : sim.total === 0 ? "새 규칙" : `${sim.running}/${sim.total}`}
+        </span>
+        <span className="cis-card-eq">
+          {sim === null ? "" : sim.total === 0 ? "아직 규칙이 없다" : "진행 중 / 전체"}
+        </span>
+        <span className={`cis-card-st ${sim && sim.running > 0 ? "ok" : "off"}`}>
+          {sim === null ? "읽는 중" : sim.running > 0 ? `${sim.running}개가 매일 따라간다` : "전부 정지"}
+        </span>
+        <span className="cis-card-tags">
+          <i>조건 매매</i>
+          <i>백테스트</i>
+        </span>
+      </button>
     </div>
   );
 }
@@ -314,6 +353,7 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
   }, []);
   useEffect(loadConfig, [loadConfig]);
 
+  /* 「sim」 은 계좌가 아니라 프로필이 없다 — 아래 계좌 화면은 그때 안 그린다 */
   const profile = profiles.find((p) => p.id === account) ?? null;
   useEffect(() => {
     api.cisAccounts().then((r) => setProfiles(r.accounts)).catch(() => {});
@@ -365,6 +405,15 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
         이 장부의 물음인데, 그 답이 카드에 이미 적혀 있어야 한다.
       */}
       <DeskStrip account={account} onPick={setAccount} />
+
+      {/*
+        시뮬레이터는 **계좌가 아니다.** 그래서 아래 서브탭(오늘·지난 날·계좌…)이
+        하나도 안 맞는다 — 여기서 갈라 통째로 다른 화면을 그린다.
+      */}
+      {account === "sim" ? (
+        <SimulatorTab />
+      ) : (
+      <>
       {profile && <div className="cis-profile-note">{profile.hint}</div>}
 
       <div className="cis-tabs">
@@ -393,7 +442,6 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
       {tab === "fills" && <FillsTab account={account} onSelectStock={onSelectStock} />}
       {tab === "account" && <AccountTab account={account} onSelectStock={onSelectStock} />}
       {tab === "stats" && <StatsTab account={account} />}
-      {tab === "sim" && <SimulatorTab />}
       {tab === "usage" && <UsageTab account={account} />}
       {tab === "config" && config && (
         <ConfigTab
@@ -403,6 +451,8 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
           aiModels={aiModels}
           onSaved={(c) => setConfig(c)}
         />
+      )}
+      </>
       )}
     </div>
   );

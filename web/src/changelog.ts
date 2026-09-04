@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T09:38:51.456Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T09:41:49.457Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "8f4e542",
+        "subject": "시뮬레이터 — 조건을 걸어 종목 하나를 굴려 본다 (항해일지 새 탭)"
+      },
       {
         "hash": "af4d88c",
         "subject": "채점표 줄을 펼치면 속이 나온다 — 평균 뒤에 무엇이 있었나"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "c2b138a",
         "subject": "해외 관심종목 표 — 국내 표들과 같은 전역 표 규칙을 다 붙인다"
-      },
-      {
-        "hash": "92d36fc",
-        "subject": "안드로이드 빌드 캐시·IDE 파일 추적 해제 — 직전 커밋에 딸려 들어간 .gradle/.idea/build/local.properties 를 .gitignore 에 넣고 인덱스에서 제거 (소스만 추적)"
       }
     ]
   }

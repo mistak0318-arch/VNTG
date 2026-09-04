@@ -11819,6 +11819,9 @@ button.tpb-row:hover { background: var(--panel-2); }
 .cis-card-close::before { background: color-mix(in srgb, var(--cis-gold) 80%, transparent); }
 .cis-card-pension::before { background: color-mix(in srgb, var(--blue) 70%, transparent); }
 .cis-card-irp::before { background: color-mix(in srgb, var(--green) 70%, transparent); }
+/* 시뮬레이터 — 계좌가 아니라 **나란한 다섯째**다. 색도 계좌들과 갈라 둔다 */
+.cis-card-sim::before { background: color-mix(in srgb, var(--blue) 45%, var(--muted)); }
+.cis-card-sim .cis-card-pct { font-size: 0.92rem; }
 .cis-card:hover { background: var(--panel-2); }
 .cis-card.on {
   border-color: color-mix(in srgb, var(--blue) 55%, var(--border));
