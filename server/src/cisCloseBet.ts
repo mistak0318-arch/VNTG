@@ -163,6 +163,43 @@ export async function closeBetRound(
   /* ③ 후보 — 오늘 원장의 초록, 점수 상위 */
   progress.start("scan");
   const lt = await listTrackSummary();
+
+  /*
+   * ⚠️ **오늘 원장인가** (2026-09-04에 추가).
+   *
+   * 여태 이 검사는 **스케줄러에만** 있었다. 그래서 두 가지가 동시에 잘못돼 있었다:
+   *   ① 스케줄러가 조용히 `continue` 해서 그날 일지가 통째로 비었다 — 안 산 것인지
+   *      못 산 것인지 화면에서 알 수 없었다
+   *   ② 손으로 「지금 쓰기」를 누르면 검사를 안 거치고 **어제 원장**으로 종배했다
+   *
+   * ②가 더 나쁘다. 종배는 「오늘 신호등이 좋다고 한 것」에 거는 것인데 어제 것으로
+   * 걸면 그건 다른 전략이고, 성적이 섞여 무엇을 시험한 것인지 알 수 없게 된다.
+   * 그래서 **판단하는 자리**로 검사를 옮긴다 — 어느 길로 들어오든 같은 문을 지난다.
+   */
+  if (lt.lastRunDate !== date && !dry.ignoreGates) {
+    const why =
+      lt.lastRunDate === null
+        ? "신호등 분석 원장이 아직 한 번도 안 돌았다"
+        : `신호등 분석 원장이 ${lt.lastRunDate} 것이다 (오늘 ${date} 것이 아니다)`;
+    progress.done("scan", why);
+    progress.skip("signal");
+    return {
+      gate: {
+        ...gate,
+        ok: false,
+        reason:
+          `${why} — 종배는 **오늘 초록**에 거는 계좌라 어제 원장으로는 사지 않는다. ` +
+          "마감 뒤 파이프라인(신호등 분석)이 끝나면 그때 산다.",
+      },
+      macro,
+      candidates,
+      plans: [],
+      actions,
+      gateNotes,
+      sieved,
+      screenNotes,
+    };
+  }
   type Pooled = ListTrackRow & { lists: number };
   const pool: Pooled[] = [];
   const best = new Map<string, Pooled>();

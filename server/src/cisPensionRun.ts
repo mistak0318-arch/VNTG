@@ -14,11 +14,14 @@ import { getCisConfig } from "./cisConfig.js";
 import {
   DEFAULT_PENSION_RULES,
   groupOf,
+  pensionTargets,
+  pensionTopUps,
   pensionTrims,
   planPension,
   pickEtfs,
   type PensionPick,
 } from "./cisPension.js";
+import { marketGate } from "./cisTrader.js";
 import { analyzeEtfs } from "./etfAnalysis.js";
 import { analyzeHoldings } from "./etfHoldingsScore.js";
 import { priceMap } from "./cisRun.js";
@@ -192,9 +195,27 @@ export async function runPension(
   const priceOf = (code: string) => px.get(code) ?? null;
   progress.done("price", `${px.size}/${held.length}종목`);
 
+  /*
+   * ── ①-b **시장 점검** (2026-09-04) ──
+   *
+   * 벤티지: "연금은 일주일에 월. 수. 금. 포트 점검하고 시장 점검하고."
+   *
+   * 연금에는 여태 시장 문이 **아예 없었다.** 트레이딩 계좌는 「오늘 사도 되는 장인가」를
+   * 묻고 시작하는데, 연금은 요일만 맞으면 담았다. 십 년 굴리는 돈이라 시장 타이밍을
+   * 재는 것은 맞지 않지만, **무너지는 날 새로 담을 이유도 없다.**
+   *
+   * 그래서 문을 이렇게 건다: 닫히면 **새로 담지 않고, 정리와 리밸런싱은 그대로 한다.**
+   * 파는 쪽을 막으면 규정(위험 한도)을 못 지키게 되고, 비중 되돌리기는 시장이 나쁠수록
+   * 더 필요한 일이다. 막는 것은 「새 자리를 여는 것」 하나다.
+   */
+  progress.start("market");
+  const gate = await marketGate(client, cfg.rules).catch(() => null);
+  const canOpen = gate?.ok !== false;
+  progress.done("market", gate ? gate.reason : "시장 판단을 못 읽었다");
+
   /* ── ② 줄인다 — 자리를 먼저 비운다 ── */
   progress.start("exit");
-  const trims = pensionTrims(a, priceOf);
+  const trims = pensionTrims(a, priceOf, profile);
   for (const t of trims) {
     const pos = a.positions.find((p) => p.code === t.code);
     if (!pos) continue;
@@ -213,7 +234,51 @@ export async function runPension(
       });
     }
   }
-  progress.done("exit", trims.length > 0 ? `${trims.length}건 정리` : "정리할 것 없음");
+
+  /*
+   * ── ②-b **모자란 자리 채우기** (2026-09-04) ──
+   *
+   * 리밸런싱이 여태 위로만 열려 있었다 — 커진 것은 잘랐지만 빠져서 목표보다 작아진
+   * 자리를 다시 채우지 않았다. 그러면 오른 것만 잘리고 내린 것은 그대로라 비중이
+   * 아래로만 흐른다. 「싼 것을 더 담는다」가 리밸런싱의 반쪽인데 그게 없었다.
+   *
+   * 시장 문이 닫혀도 한다 — **이미 정한 자리를 목표까지 되돌리는 것**이지 새 자리를
+   * 여는 것이 아니다. 둘은 다른 판단이다.
+   */
+  const topUps = pensionTopUps(a, priceOf, profile);
+  for (const o of topUps) {
+    const r = buy(
+      a,
+      {
+        code: o.pick.code,
+        name: o.pick.name,
+        qty: o.qty,
+        price: o.price,
+        funding: "cash",
+        why: o.reason,
+        used: ["연금 리밸런싱"],
+        stop: null,
+        target: null,
+        slot: "evening",
+        safe: profile.riskCap < 100 ? o.pick.safe : undefined,
+      },
+      priceOf,
+      date,
+    );
+    if (r.ok) {
+      actions.push({
+        side: "buy",
+        code: o.pick.code,
+        name: o.pick.name,
+        qty: r.qty,
+        price: o.price,
+        funding: "cash",
+        why: o.reason,
+        used: ["연금 리밸런싱"],
+      });
+    }
+  }
+  progress.done("exit", `정리 ${trims.length}건 · 채움 ${topUps.length}건`);
 
   /* ── ③ 담을 것 고르기 ── */
   progress.start("scan");
@@ -227,7 +292,12 @@ export async function runPension(
   const cpx = await priceMap(client, codes);
   const buyPriceOf = (code: string) => cpx.get(code) ?? px.get(code) ?? null;
 
-  const planned = planPension(a, profile, picks, buyPriceOf);
+  const planned = canOpen
+    ? planPension(a, profile, picks, buyPriceOf)
+    : {
+        orders: [] as ReturnType<typeof planPension>["orders"],
+        skipped: [{ name: "-", reason: `시장 문이 닫혔다 — ${gate?.reason ?? "판단 불가"}` }],
+      };
   for (const o of planned.orders) {
     const r = buy(
       a,

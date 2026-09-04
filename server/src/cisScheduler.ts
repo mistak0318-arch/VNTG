@@ -57,6 +57,11 @@ let timer: ReturnType<typeof setInterval> | null = null;
  */
 const tried = new Map<string, { fails: number; error?: string; at: string }>();
 const MAX_TRY = 3;
+/**
+ * 종배가 원장을 기다리는 **마감선** (KST). NXT 애프터마켓은 20:00 에 닫힌다 —
+ * 그 전에 한 번은 돌아서 「왜 안 샀나」를 일지에 남겨야 한다.
+ */
+const CLOSEBET_DEADLINE = "19:30";
 
 /** 화면이 「왜 안 썼나」를 물을 수 있게 — 실패는 콘솔에만 두면 아무도 못 본다 */
 export function cisSchedulerState(): { key: string; fails: number; error?: string; at: string }[] {
@@ -91,7 +96,8 @@ function weekday(): number {
  */
 async function pensionTick(client: KiwoomClient): Promise<void> {
   const cfg = await getCisConfig();
-  if (weekday() !== cfg.pensionDay) return;
+  /* 월·수·금 (2026-09-04) — 요일 목록으로 바뀌었다. 옛 설정은 `getCisConfig` 가 옮긴다 */
+  if (!cfg.pensionDays.includes(weekday())) return;
   if (nowHm() < cfg.times.evening) return;
 
   const date = today();
@@ -143,7 +149,19 @@ async function tick(client: KiwoomClient): Promise<void> {
        */
       if (slot === "evening" && styleOf(id) === "closeBet") {
         const last = await listTrackLastRunDate().catch(() => null);
-        if (last !== date) continue;
+        /*
+         * **마감선** (2026-09-04 — 벤티지: "종가배팅은 왜 일지도 안 쓰고 거래도 안 하는 거야").
+         *
+         * 여태는 원장이 안 쌓이면 `continue` 하고 끝이었다. 마감 뒤 파이프라인이 늦거나
+         * 한 번 엎어지면 **종배는 그날 아무 흔적도 안 남겼다** — 화면엔 「아직 안 썼습니다」
+         * 뿐이라, 안 산 것인지 못 산 것인지 사람이 알 길이 없었다. 조용한 고장이 이
+         * 장부에서 가장 비싸다.
+         *
+         * 그래서 기다리되 **끝까지 기다리지는 않는다.** NXT 애프터마켓이 20:00 에 닫히니
+         * 그 전(19:30)까지 원장이 안 쌓이면 그냥 돌린다 — `closeBetRound` 가 원장 날짜를
+         * 보고 「오늘 원장이 없어 종배 안 함」이라고 **일지에 적는다.**
+         */
+        if (last !== date && hm < CLOSEBET_DEADLINE) continue;
       }
 
       const key = `${date}:${id}:${slot}`;

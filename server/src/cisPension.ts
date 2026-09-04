@@ -316,6 +316,25 @@ export function planPension(
   return { orders, skipped };
 }
 
+/**
+ * **목표 비중** — 한 자리가 몇 %여야 하나 (2026-09-04).
+ *
+ * 여태 이 값이 `planPension` 안에만 있었다. 그래서 정리하는 쪽(`pensionTrims`)은
+ * 목표를 몰랐고, 대신 **상한**(`maxPerEtf` 25%)을 기준으로 쟀다. 퇴직연금의 실제
+ * 목표는 14% 인데 33% 를 넘어야 손을 댔다 — **목표의 두 배가 넘게 벌어져도 아무 일도
+ * 안 일어났다.** 밴드를 목표에 붙이려면 두 곳이 같은 값을 봐야 한다.
+ */
+export function pensionTargets(
+  profile: AccountProfile,
+  rules: PensionRules = DEFAULT_PENSION_RULES,
+): { risky: number; safe: number } {
+  const safePct = 100 - profile.riskCap;
+  return {
+    risky: Math.min(rules.maxPerEtf, profile.riskCap / rules.riskySlots),
+    safe: safePct > 0 ? Math.min(rules.maxPerEtf, safePct / rules.safeSlots) : 0,
+  };
+}
+
 /* ------------------------------------------------------------------ 정리 */
 
 export interface PensionTrim {
@@ -340,11 +359,14 @@ export interface PensionTrim {
 export function pensionTrims(
   a: CisAccount,
   priceOf: (code: string) => number | null,
+  profile: AccountProfile,
   rules: PensionRules = DEFAULT_PENSION_RULES,
 ): PensionTrim[] {
   const { equity } = equityOf(a, priceOf);
   if (equity <= 0) return [];
   const out: PensionTrim[] = [];
+  const target = pensionTargets(profile, rules);
+  const done = new Set<string>();
 
   for (const p of a.positions) {
     const px = priceOf(p.code);
@@ -362,22 +384,136 @@ export function pensionTrims(
           price: px,
           reason: `${pct.toFixed(1)}% — 절반으로 줄인다(털지는 않는다)`,
         });
+        done.add(p.code);
         continue;
       }
     }
-    if (weight > rules.maxPerEtf + rules.rebalanceBand) {
-      const target = Math.floor((equity * rules.maxPerEtf) / 100 / px);
-      const cut = p.qty - target;
+    /*
+     * **목표에서 밴드만큼 벌어지면 되돌린다** (2026-09-04에 고침).
+     * 옛 코드는 상한(25%)을 기준으로 재서 목표 14% 자리가 33% 까지 방치됐다.
+     */
+    const want = p.safe ? target.safe : target.risky;
+    if (want > 0 && weight > want + rules.rebalanceBand) {
+      const keep = Math.floor((equity * want) / 100 / px);
+      const cut = p.qty - keep;
       if (cut > 0) {
         out.push({
           code: p.code,
           name: p.name,
           qty: cut,
           price: px,
-          reason: `비중 ${weight.toFixed(1)}% — ${rules.maxPerEtf}% 로 되돌린다`,
+          reason: `비중 ${weight.toFixed(1)}% — 목표 ${want.toFixed(1)}% 로 되돌린다`,
         });
+        done.add(p.code);
       }
     }
+  }
+
+  /*
+   * **위험자산 한도** (퇴직연금 70%) — 2026-09-04에 추가.
+   *
+   * 여태 이 한도는 **살 때만** 지켜졌다(`buyingPower`). 주가가 오르면 위험 비중이
+   * 한도를 넘는데 되돌리는 코드가 없었고, 화면이 「넘었음」이라고 표시만 했다.
+   * 제도 제약을 「코드가 막는다」고 적어 놓고 실제로는 **입구만** 막고 있었던 것이다.
+   * 넘은 만큼을 **큰 자리부터** 덜어낸다 — 작은 자리를 여럿 건드리면 매매만 는다.
+   */
+  if (profile.riskCap < 100) {
+    let risky = 0;
+    for (const p of a.positions) {
+      if (p.safe) continue;
+      risky += (priceOf(p.code) ?? p.avg) * p.qty;
+    }
+    /* 이미 위에서 자르기로 한 몫은 빼고 센다 — 두 번 자르면 구멍이 난다 */
+    for (const t of out) {
+      const pos = a.positions.find((x) => x.code === t.code);
+      if (pos && !pos.safe) risky -= t.qty * t.price;
+    }
+    const cap = (equity * profile.riskCap) / 100;
+    let over = risky - cap;
+    if (over > 0) {
+      const big = a.positions
+        .filter((p) => !p.safe && !done.has(p.code) && (priceOf(p.code) ?? 0) > 0)
+        .sort((x, y) => (priceOf(y.code) ?? 0) * y.qty - (priceOf(x.code) ?? 0) * x.qty);
+      for (const p of big) {
+        if (over <= 0) break;
+        const px = priceOf(p.code) as number;
+        const qty = Math.min(p.qty, Math.ceil(over / px));
+        if (qty <= 0) continue;
+        out.push({
+          code: p.code,
+          name: p.name,
+          qty,
+          price: px,
+          reason: `위험자산이 한도 ${profile.riskCap}% 를 넘었다 — 큰 자리부터 덜어낸다`,
+        });
+        over -= qty * px;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * **모자란 자리를 다시 채운다** (2026-09-04에 추가).
+ *
+ * 여태 리밸런싱이 **위로만** 열려 있었다. 커진 것은 잘랐지만, 빠져서 목표보다 작아진
+ * 자리를 다시 채우는 코드가 없었다(`planPension` 은 이미 들고 있는 종목을 건너뛴다).
+ * 그러면 오른 것만 잘리고 내린 것은 그대로라, 시간이 갈수록 **비중이 아래로만 흐른다.**
+ * 리밸런싱의 값어치는 「싼 것을 더 담는다」는 반쪽에 있는데 그쪽이 통째로 없었다.
+ *
+ * 크게 밀린 자리(`trimBelow` 아래)는 **안 채운다** — 그쪽은 줄이기로 한 자리다.
+ */
+export function pensionTopUps(
+  a: CisAccount,
+  priceOf: (code: string) => number | null,
+  profile: AccountProfile,
+  rules: PensionRules = DEFAULT_PENSION_RULES,
+): PensionOrder[] {
+  const { equity } = equityOf(a, priceOf);
+  if (equity <= 0) return [];
+  const target = pensionTargets(profile, rules);
+  const out: PensionOrder[] = [];
+  let room = a.cash;
+
+  for (const p of a.positions) {
+    const px = priceOf(p.code);
+    if (px === null || px <= 0) continue;
+    const pct = ((px - p.avg) / p.avg) * 100;
+    if (pct <= rules.trimBelow) continue; // 줄이기로 한 자리는 안 채운다
+    const weight = ((px * p.qty) / equity) * 100;
+    const want = p.safe ? target.safe : target.risky;
+    if (want <= 0 || weight >= want - rules.rebalanceBand) continue;
+
+    const need = ((want - weight) / 100) * equity;
+    const qty = Math.floor(Math.min(need, room) / px);
+    if (qty <= 0) continue;
+    room -= qty * px;
+    out.push({
+      pick: {
+        code: p.code,
+        name: p.name,
+        price: px,
+        changeRate: 0,
+        tradeValue: 0,
+        sector: "",
+        signalScore: null,
+        signalLevel: null,
+        leaderScore: 0,
+        score: 0,
+        used: ["연금 리밸런싱"],
+        why: `비중 ${weight.toFixed(1)}% → 목표 ${want.toFixed(1)}%`,
+        group: p.safe ? "safe" : "other",
+        groupLabel: p.safe ? "안전자산" : "위험자산",
+        safe: Boolean(p.safe),
+        deviation: null,
+        traceErr: null,
+      },
+      qty,
+      price: px,
+      amount: qty * px,
+      targetPct: Number(want.toFixed(1)),
+      reason: `비중 ${weight.toFixed(1)}% 로 밀렸다 — 목표 ${want.toFixed(1)}% 까지 채운다`,
+    });
   }
   return out;
 }

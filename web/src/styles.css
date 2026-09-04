@@ -11804,6 +11804,30 @@ button.tpb-row:hover { background: var(--panel-2); }
 .cis-card-eq em { font-style: normal; font-size: 0.68rem; }
 .cis-card-day { font-size: 0.68rem; font-variant-numeric: tabular-nums; }
 .cis-card-day em { font-style: normal; }
+/* 「지금 무엇을 기다리나」 — 이 줄이 없어서 종배가 왜 안 도는지 몰랐다 */
+.cis-card-st {
+  font-size: 0.63rem;
+  margin-top: 2px;
+  padding-left: 9px;
+  position: relative;
+}
+.cis-card-st::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.cis-card-st.ok { color: var(--green); }
+.cis-card-st.wait { color: var(--cis-gold); }
+.cis-card-st.off { color: var(--muted); }
+:root[data-theme="excel"] .cis-card-st.ok { color: var(--xl-sel); }
+:root[data-theme="excel"] .cis-card-st.wait,
+:root[data-theme="excel"] .cis-card-st.off { color: var(--muted); }
 .cis-card-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
 .cis-card-tags i {
   font-style: normal;

@@ -253,6 +253,9 @@ function DeskStrip({
               )}
             </span>
 
+            {/* 왜 안 도나 — 조용한 고장을 이 한 줄이 막는다 */}
+            <span className={`cis-card-st ${r.status.tone}`}>{r.status.text}</span>
+
             <span className="cis-card-tags">
               <i>{r.etfOnly ? "ETF" : "개별종목"}</i>
               <i>{r.style === "closeBet" ? "종배" : r.cadence === "daily" ? "매일" : "주 1회"}</i>
@@ -1754,16 +1757,33 @@ function ConfigTab({
             {m.label}
           </button>
         ))}
-        <span className="cis-slot-hint">굴릴 요일</span>
-        {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => (
-          <button
-            key={d}
-            className={`filter-btn ${draft.pensionDay === i ? "active" : ""}`}
-            onClick={() => save({ pensionDay: i })}
-          >
-            {d}
-          </button>
-        ))}
+        {/*
+          굴릴 요일 — **여럿** 고른다 (2026-09-04, 벤티지: "연금은 일주일에 월. 수. 금.").
+          하나도 안 고르면 연금이 영영 안 도는데 그 고장은 조용해서 찾기 어렵다 —
+          마지막 하나는 못 끄게 막는다(서버도 같은 것을 막는다).
+        */}
+        <span className="cis-slot-hint">점검할 요일</span>
+        {["일", "월", "화", "수", "목", "금", "토"].map((d, i) => {
+          const on = draft.pensionDays.includes(i);
+          const last = on && draft.pensionDays.length === 1;
+          return (
+            <button
+              key={d}
+              className={`filter-btn ${on ? "active" : ""}`}
+              disabled={last}
+              title={last ? "적어도 하루는 있어야 합니다" : undefined}
+              onClick={() =>
+                save({
+                  pensionDays: on
+                    ? draft.pensionDays.filter((x) => x !== i)
+                    : [...draft.pensionDays, i].sort(),
+                })
+              }
+            >
+              {d}
+            </button>
+          );
+        })}
       </div>
       <div className="table-note">
         ETF 를 고르는 두 방법을 <b>나란히</b> 두었습니다 —{" "}

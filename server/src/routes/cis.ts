@@ -4,6 +4,7 @@ import { equityOf, loadAccount, resetAccount, riskMix, today } from "../cisAccou
 import { ACCOUNTS, ACCOUNT_IDS, profileOf, type AccountId } from "../cisAccounts.js";
 import { getCisConfig, goalProgress, saveCisConfig, RULE_LABEL } from "../cisConfig.js";
 import { clearJournal, listDays, loadDay } from "../cisJournal.js";
+import { listTrackLastRunDate } from "../listTrack.js";
 import { CIS_CREED, readState } from "../cisPersona.js";
 import { priceMap, runSlot } from "../cisRun.js";
 import { cisStats, cisUsage } from "../cisStats.js";
@@ -54,7 +55,23 @@ export function createCisRouter(client: KiwoomClient): Router {
       const priceOf = (code: string) => px.get(code) ?? null;
       const date = today();
 
-      const rows = accounts.map((a) => {
+      /*
+       * **왜 안 도나** (2026-09-04 — 벤티지: "종가배팅은 왜 일지도 안 쓰고 거래도 안 하는 거야").
+       *
+       * 종배는 「오늘 신호등 원장이 쌓였나」에 걸려 있었는데, 스케줄러가 그걸 실패로
+       * 세지 않고 조용히 넘겼다. 화면엔 「아직 안 썼습니다」만 남아서 **안 산 것인지
+       * 못 산 것인지** 알 길이 없었다. 조용한 고장이 이 장부에서 가장 비싸다 —
+       * 성적이 안 나오는 게 아니라 **성적이 없다는 것을 모르는** 상태가 되기 때문이다.
+       *
+       * 그래서 카드마다 한 줄을 적는다. 스케줄러와 **같은 조건**을 본다.
+       */
+      const cfg2 = await getCisConfig();
+      const ledger = await listTrackLastRunDate().catch(() => null);
+      const days = await Promise.all(ACCOUNT_IDS.map((id) => loadDay(date, id)));
+      const wd = new Date(Date.now() + 9 * 3600_000).getUTCDay();
+      const DAY = ["일", "월", "화", "수", "목", "금", "토"];
+
+      const rows = accounts.map((a, i) => {
         const p = profileOf(a.id);
         const e = equityOf(a, priceOf);
         /*
@@ -88,8 +105,42 @@ export function createCisRouter(client: KiwoomClient): Router {
           startedAt: a.startedAt,
           /* 퇴직연금만 뜻이 있다 — 규정을 지키고 있는지가 카드에서 바로 보여야 한다 */
           risk: p.riskCap < 100 ? riskMix(a, priceOf) : null,
+          status: statusOf(a.id, p, days[i]),
         };
       });
+
+      /** 지금 이 계좌가 무엇을 기다리고 있나 — 스케줄러와 같은 조건을 본다 */
+      function statusOf(
+        id: AccountId,
+        p: ReturnType<typeof profileOf>,
+        day: Awaited<ReturnType<typeof loadDay>>,
+      ): { tone: "ok" | "wait" | "off"; text: string } {
+        if (!cfg2.enabled) return { tone: "off", text: "항해가 멈춰 있음 — 설정에서 켠다" };
+        if (!cfg2.auto) return { tone: "off", text: "자동이 꺼져 있음 — 손으로만 돈다" };
+
+        if (p.cadence !== "daily") {
+          if (!cfg2.pensionDays.includes(wd)) {
+            const next = [...cfg2.pensionDays].sort().find((d) => d > wd) ?? cfg2.pensionDays[0];
+            return { tone: "ok", text: `다음 점검 ${DAY[next]}요일` };
+          }
+          if (day.evening) return { tone: "ok", text: "오늘 점검 마침" };
+          return { tone: "wait", text: `오늘 점검 예정 (${cfg2.times.evening})` };
+        }
+
+        const wrote = (["morning", "noon", "evening"] as const).filter((sl) => day[sl]).length;
+        if (p.style === "closeBet") {
+          if (day.evening) return { tone: "ok", text: "오늘 종배 판단 마침" };
+          if (ledger !== date) {
+            return {
+              tone: "wait",
+              text: `신호등 원장 대기 중${ledger ? ` (마지막 ${ledger.slice(5)})` : " (아직 안 돎)"}`,
+            };
+          }
+          return { tone: "wait", text: `원장 준비됨 — ${p.eveningAt ?? cfg2.times.evening} 이후 판단` };
+        }
+        if (wrote === 3) return { tone: "ok", text: "오늘 세 번 다 씀" };
+        return { tone: "wait", text: `오늘 ${wrote}/3 시간대` };
+      }
 
       res.json({ date, rows });
     } catch (err) {

@@ -100,9 +100,49 @@ export interface CisConfig {
    * 일지에 적힌다 — 나중에 「그때 무엇으로 골랐나」를 물을 수 있어야 비교가 된다.
    */
   pensionMethod: PensionMethod;
-  /** 연금을 무슨 요일에 굴릴까 (0=일 … 6=토). 기본 월요일 */
+  /** @deprecated `pensionDays` 로 옮겼다 (2026-09-04). 옛 설정을 읽을 때만 쓴다 */
   pensionDay: number;
+  /**
+   * 연금을 **무슨 요일마다** 굴릴까 (0=일 … 6=토) — 기본 월·수·금 (2026-09-04).
+   *
+   * 벤티지: "연금은 일주일에 월. 수. 금. 포트 점검하고 시장 점검하고."
+   *
+   * 주 1회에서 주 3회로 늘렸는데 **매매가 세 배가 되는 것은 아니다.** 리밸런싱 밴드가
+   * 그대로라 손댈 것이 없으면 아무것도 안 사고 안 판다 — 늘어난 것은 **보는 횟수**다.
+   * 연금에서 잦은 매매가 비싼 이유는 비용인데, 비용은 매매에서 나지 보는 데서 안 난다.
+   */
+  pensionDays: number[];
+  /**
+   * **규칙 판 번호** (2026-09-04).
+   *
+   * 저장된 설정은 규칙을 **항목별로** 덮어쓴다(아래 `getCisConfig`). 그래서 기본값을
+   * 고쳐도 이미 한 번 저장한 기기에서는 옛 값이 그대로 산다 — 「적극 모드로 바꿨다」고
+   * 적어 놓고 실제로는 안 바뀌는 일이 생긴다. 판 번호가 다르면 **이번 판이 건드린
+   * 항목만** 새 기본값으로 되돌리고 번호를 올린다. 사람이 직접 만진 다른 값은 남는다.
+   */
+  rulesVersion: number;
 }
+
+/**
+ * 지금 판 — 올릴 때 `MIGRATIONS` 에 **무엇을 되돌릴지**를 같이 적는다.
+ * 적지 않으면 번호만 올라가고 아무 일도 안 일어난다.
+ */
+export const RULES_VERSION = 2;
+
+/** 판마다 새 기본값으로 되돌릴 규칙 항목들 */
+const MIGRATIONS: Record<number, (keyof CisRules)[]> = {
+  /* 2 — 적극 모드 (2026-09-04): 사는 쪽을 넓히고, 지키는 쪽을 한 칸 앞당겼다 */
+  2: [
+    "maxPositions",
+    "maxHoldDays",
+    "minScore",
+    "minTradeValue",
+    "minMarketCap",
+    "minMarketScore",
+    "maxOpenGap",
+    "trailAfterPct",
+  ],
+};
 
 export const DEFAULT_CIS_CONFIG: CisConfig = {
   enabled: false, // 처음엔 꺼져 있다 — 켜는 것은 사람이 정한다
@@ -127,8 +167,11 @@ export const DEFAULT_CIS_CONFIG: CisConfig = {
   goals: [500_000_000, 1_000_000_000, 2_000_000_000, 10_000_000_000],
   /* 담은 종목을 직접 보는 쪽이 근사가 아니라서 기본으로 둔다 */
   pensionMethod: "holdings",
-  /* 월요일 — 한 주의 판이 정해지기 전에 담는다 */
+  /* 옛 항목 — `pensionDays` 가 대신한다 */
   pensionDay: 1,
+  /* 월·수·금 — 한 주의 판이 정해지기 전(월), 가운데(수), 마무리(금) */
+  pensionDays: [1, 3, 5],
+  rulesVersion: RULES_VERSION,
   ai: {
     narrate: true,
     screen: true,
@@ -144,12 +187,40 @@ export async function getCisConfig(): Promise<CisConfig> {
   if (cache) return cache;
   try {
     const saved = JSON.parse(await readFile(FILE, "utf8")) as Partial<CisConfig>;
+    /* 규칙은 **항목별로** 합친다 — 새 규칙이 생겼을 때 저장된 옛 설정이 그것을 지우면 안 된다 */
+    let rules: CisRules = { ...DEFAULT_CIS_CONFIG.rules, ...(saved.rules ?? {}) };
+
+    /*
+     * **판 이주** — 기본값을 고쳤는데 저장된 설정이 옛 값을 붙들고 있으면, 코드에는
+     * 「적극 모드」라 적혀 있고 실제로는 안 바뀐 채로 돈다. 그 어긋남이 이 장부에서
+     * 가장 비싼 종류의 거짓말이라(무엇을 시험한 것인지 알 수 없게 된다) 여기서 맞춘다.
+     * 이번 판이 건드린 항목만 되돌리고, 사람이 만진 나머지는 그대로 둔다.
+     */
+    const from = typeof saved.rulesVersion === "number" ? saved.rulesVersion : 1;
+    if (from < RULES_VERSION) {
+      for (let v = from + 1; v <= RULES_VERSION; v += 1) {
+        /* 같은 키에서 같은 키로 옮기는 것이라 형이 맞는데, TS 가 배열 원소로는 못 좁힌다 */
+        for (const k of MIGRATIONS[v] ?? []) {
+          rules = { ...rules, [k]: DEFAULT_CIS_CONFIG.rules[k] };
+        }
+      }
+      console.log(`[cis] 규칙 판 ${from} → ${RULES_VERSION} 이주`);
+    }
+
+    /* 옛 설정은 `pensionDay` 하나만 갖고 있다 — 판 이주 때 월·수·금으로 옮긴다 */
+    const days = Array.isArray(saved.pensionDays)
+      ? saved.pensionDays
+      : from < RULES_VERSION
+        ? DEFAULT_CIS_CONFIG.pensionDays
+        : [saved.pensionDay ?? DEFAULT_CIS_CONFIG.pensionDay];
+
     cache = {
       ...DEFAULT_CIS_CONFIG,
       ...saved,
       times: { ...DEFAULT_CIS_CONFIG.times, ...(saved.times ?? {}) },
-      /* 규칙은 **항목별로** 합친다 — 새 규칙이 생겼을 때 저장된 옛 설정이 그것을 지우면 안 된다 */
-      rules: { ...DEFAULT_CIS_CONFIG.rules, ...(saved.rules ?? {}) },
+      rules,
+      pensionDays: days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort(),
+      rulesVersion: RULES_VERSION,
       ai: { ...DEFAULT_CIS_CONFIG.ai, ...(saved.ai ?? {}) },
     };
   } catch {
@@ -252,6 +323,20 @@ export async function saveCisConfig(input: Partial<CisConfig>): Promise<CisConfi
       const n = Number(input.pensionDay);
       return Number.isFinite(n) && n >= 0 && n <= 6 ? Math.round(n) : cur.pensionDay;
     })(),
+    /*
+     * 요일은 **하나도 안 고르면 안 된다** — 빈 배열로 저장되면 연금이 영영 안 돈다.
+     * 이 장부에서 「조용히 아무것도 안 함」이 가장 찾기 어려운 고장이라 여기서 막는다.
+     */
+    pensionDays: (() => {
+      if (!Array.isArray(input.pensionDays)) return cur.pensionDays;
+      const d = [
+        ...new Set(
+          input.pensionDays.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6),
+        ),
+      ].sort();
+      return d.length > 0 ? d : cur.pensionDays;
+    })(),
+    rulesVersion: RULES_VERSION,
     ai: { ...cur.ai, ...(input.ai ?? {}) },
   };
   cache = next;

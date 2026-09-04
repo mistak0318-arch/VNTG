@@ -5729,6 +5729,11 @@ export interface CisDeskRow {
   startedAt: string;
   /** 퇴직연금만 — 위험자산 비중이 한도 안인가 */
   risk: { risky: number; safe: number; riskyPct: number; cap: number; over: boolean } | null;
+  /**
+   * **지금 무엇을 기다리나.** 서버가 스케줄러와 **같은 조건**을 보고 낸다 —
+   * 「아직 안 썼습니다」만 있으면 안 산 것인지 못 산 것인지 알 수 없다.
+   */
+  status: { tone: "ok" | "wait" | "off"; text: string };
 }
 
 export interface CisDesk {
@@ -5954,7 +5959,12 @@ export interface CisConfig {
   /** 연금이 무엇을 보고 ETF 를 고를까 — theme·holdings·simple */
   pensionMethod: string;
   /** 연금을 무슨 요일에 굴릴까 (0=일 … 6=토) */
+  /** @deprecated `pensionDays` 로 옮겼습니다 (2026-09-04) */
   pensionDay: number;
+  /** 연금을 점검할 요일들 (0=일 … 6=토). 기본 월·수·금 */
+  pensionDays: number[];
+  /** 규칙 판 번호 — 기본값이 바뀌면 서버가 이 항목들만 되돌립니다 */
+  rulesVersion: number;
   ai: {
     narrate: boolean;
     screen: boolean;
