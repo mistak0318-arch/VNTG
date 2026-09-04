@@ -18,8 +18,23 @@ export type RawRecord = Record<string, unknown>;
 async function req(path: string, init?: RequestInit): Promise<Response> {
   try {
     const res = await fetch(path, init);
-    /* 로그인 창구 자체의 401(비밀번호가 틀림)은 신호가 아니다 — 이미 로그인 칸 안이다 */
-    if (res.status === 401 && !path.startsWith("/api/auth/")) markNeedLogin();
+    /*
+     * 401 이 「앱 세션이 끝났다」는 신호인가 — **자체 인증 창구는 아니다.**
+     *
+     * 로그인 창구(`/api/auth/`)의 401 은 비밀번호가 틀린 것이고, 이미 로그인 칸 안이라
+     * 신호가 아니다. **주문 창구(`/api/order/`)도 마찬가지다** (2026-09-04에 추가).
+     *
+     * 벤티지: "태블릿에서 알맞은 비밀번호를 입력해도 다시 로그인 화면으로 가버려.
+     * 이 기기를 새로 등록을 눌러도 로그인 화면으로 가버리거든."
+     *
+     * `/api/order/session` 은 PIN 이 틀리면 401 을 주고, `/api/order/device/start` 는
+     * 아이디·비밀번호가 틀리면 401 을 준다. 둘 다 **주문 문 앞의 실패**이지 앱 세션이
+     * 끊긴 것이 아니다. 그런데 여기서 뭉뚱그려 `markNeedLogin()` 을 부르는 바람에
+     * 주문 화면이 통째로 사라지고 **앱 로그인 칸이 떴다** — 사람은 자기가 로그아웃된 줄
+     * 안다. 실패한 자리에서 실패를 말해야 다음에 무엇을 할지 알 수 있다.
+     */
+    const selfAuth = path.startsWith("/api/auth/") || path.startsWith("/api/order/");
+    if (res.status === 401 && !selfAuth) markNeedLogin();
     return res;
   } catch (e) {
     noteFetchFailure();

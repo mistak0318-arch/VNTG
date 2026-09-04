@@ -350,10 +350,30 @@ function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => vo
   const [sent, setSent] = useState<string | null>(null);
   /* PIN 으로 여는 판 — 설정이 정한다. 새 기기 등록만은 아이디·비밀번호로 (서버가 막는다) */
   const [pin, setPin] = useState("");
-  const byPin = status.settings?.entryMode === "pin";
+  /*
+   * **등록하러 아이디·비밀번호 칸으로 건너간다** (2026-09-04).
+   *
+   * 벤티지: "태블릿에서 알맞은 비밀번호를 입력해도 다시 로그인 화면으로 가버려.
+   * 이 기기를 새로 등록을 눌러도 로그인 화면으로."
+   *
+   * PIN 판에는 아이디·비밀번호 칸이 없어서 `id`·`pw` 가 **늘 빈 문자열**이었다. 그 상태로
+   * 「이 기기를 새로 등록」을 누르면 빈 자격증명이 서버로 갔고, 서버는 당연히 401 을 줬다.
+   * 그 401 이 앱 로그인 칸을 올렸다(`api.ts` 에서 같이 고쳤다). 즉 **PIN 판에서는 새 기기를
+   * 등록할 길이 아예 없었다** — 단추만 있고 길이 없었던 것이다.
+   *
+   * 「새 기기는 아이디·비밀번호로만」이라는 규칙 자체는 그대로 둔다. 네 자리로 기기를
+   * 늘릴 수 있으면 기기 겹이 뜻을 잃는다. 대신 **물어볼 자리를 만든다.**
+   */
+  const [regMode, setRegMode] = useState(false);
+  const byPin = status.settings?.entryMode === "pin" && !regMode;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    /* 등록 판에서 엔터를 치면 **등록**이다 — 세션을 열려 하면 아직 등록이 없어 되돌아온다 */
+    if (regMode) {
+      void startDevice();
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -370,6 +390,16 @@ function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => vo
       const msg = e2 instanceof Error ? e2.message : "열지 못했다";
       /* 서버가 준 문구에 「등록」이 있으면 기기 단계다 — 상태 코드는 api 층이 안 넘긴다 */
       if (/등록/.test(msg)) {
+        /*
+         * PIN 으로 들어왔으면 **곧장 메일을 못 쏜다** — 등록은 아이디·비밀번호로만 되고
+         * 그 값이 이 판엔 없다. 빈 값으로 보내면 401 만 받는다(여태 그랬다).
+         * 칸을 먼저 내주고, 왜 또 묻는지 적는다.
+         */
+        if (byPin) {
+          setRegMode(true);
+          setError("이 기기는 주문에 등록돼 있지 않습니다 — 등록은 아이디·비밀번호로만 됩니다");
+          return;
+        }
         setError(null);
         void startDevice();
         return;
@@ -381,6 +411,12 @@ function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => vo
   }
 
   async function startDevice() {
+    /* 아이디·비밀번호가 없으면 보내지 않는다 — 빈 값은 401 만 받고 사람은 이유를 모른다 */
+    if (!id || !pw) {
+      setRegMode(true);
+      setError("등록하려면 앱 아이디와 비밀번호를 넣어 주세요 (PIN 으로는 새 기기를 못 들입니다)");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -400,11 +436,16 @@ function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => vo
     setError(null);
     try {
       await api.orderDeviceVerify(ticket ?? "", code, devName);
-      /* 등록됐으면 곧바로 세션을 연다 — 비밀번호를 또 치게 하지 않는다 */
+      /*
+       * 등록됐으면 곧바로 세션을 연다 — 비밀번호를 또 치게 하지 않는다.
+       * PIN 판에서도 이 길이 통한다(2026-09-04 서버에서 같이 고쳤다): 아이디·비밀번호는
+       * PIN 보다 약한 열쇠가 아니라, PIN 이 안 오면 원래 길로 본다.
+       */
       await api.orderOpenSession(id, pw);
       setPw("");
       setCode("");
       setTicket(null);
+      setRegMode(false);
       onDone();
     } catch (e2) {
       setError(e2 instanceof Error ? e2.message : "확인 실패");
@@ -475,7 +516,11 @@ function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => vo
         <button type="submit" className="ord-go" disabled={busy || pin.length !== 4}>
           {busy ? "확인 중…" : "주문 메뉴 열기"}
         </button>
-        <button type="button" className="ord-cancel" onClick={() => void startDevice()} disabled={busy}>
+        {/*
+          여태 여기서 곧장 메일을 쏘려 했다 — 그런데 이 판엔 아이디·비밀번호 칸이 없어
+          빈 값이 나갔고 401 만 돌아왔다. 이제 **칸부터 내준다.**
+        */}
+        <button type="button" className="ord-cancel" onClick={() => setRegMode(true)} disabled={busy}>
           이 기기를 새로 등록
         </button>
       </form>
@@ -484,9 +529,19 @@ function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => vo
 
   return (
     <form className="ord-gate" onSubmit={(e) => void submit(e)}>
-      <div className="ord-gate-mark">🔐</div>
-      <b>주문 메뉴는 한 번 더 확인한다</b>
-      <p>앱 로그인과 같은 아이디·비밀번호입니다. 등록 안 된 기기라면 메일 확인이 한 번 더 있습니다.</p>
+      <div className="ord-gate-mark">{regMode ? "🆕" : "🔐"}</div>
+      <b>{regMode ? "이 기기를 주문에 등록합니다" : "주문 메뉴는 한 번 더 확인한다"}</b>
+      <p>
+        {regMode ? (
+          <>
+            앱 로그인과 같은 <b>아이디·비밀번호</b>를 넣으면 등록 확인 메일을 보냅니다.
+            <b> PIN 으로는 새 기기를 못 들입니다</b> — 네 자리로 기기를 늘릴 수 있으면 「등록된
+            기기에서만」이라는 겹이 뜻을 잃기 때문입니다.
+          </>
+        ) : (
+          "앱 로그인과 같은 아이디·비밀번호입니다. 등록 안 된 기기라면 메일 확인이 한 번 더 있습니다."
+        )}
+      </p>
       <input
         className="ord-in"
         autoComplete="username"
@@ -503,9 +558,33 @@ function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => vo
         onChange={(e) => setPw(e.target.value)}
       />
       {error && <p className="ord-err">{error}</p>}
-      <button type="submit" className="ord-go" disabled={busy || !id || !pw}>
-        {busy ? "확인 중…" : "주문 메뉴 열기"}
-      </button>
+      {regMode ? (
+        <>
+          <button
+            type="button"
+            className="ord-go"
+            disabled={busy || !id || !pw}
+            onClick={() => void startDevice()}
+          >
+            {busy ? "메일 보내는 중…" : "확인 메일 보내기"}
+          </button>
+          <button
+            type="button"
+            className="ord-cancel"
+            onClick={() => {
+              setRegMode(false);
+              setError(null);
+            }}
+            disabled={busy}
+          >
+            PIN 으로 돌아가기
+          </button>
+        </>
+      ) : (
+        <button type="submit" className="ord-go" disabled={busy || !id || !pw}>
+          {busy ? "확인 중…" : "주문 메뉴 열기"}
+        </button>
+      )}
     </form>
   );
 }

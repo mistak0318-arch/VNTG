@@ -115,7 +115,21 @@ export function createOrderRouter(main: KiwoomClient): Router {
      */
     const entry = await getSettings();
     let r: "ok" | "bad" | "disabled";
-    if (entry.entryMode === "pin") {
+    /*
+     * **PIN 판이어도 아이디·비밀번호는 늘 받는다** (2026-09-04).
+     *
+     * 여태 `entryMode === "pin"` 이면 PIN 만 봤다. 그런데 새 기기를 등록한 **직후**에는
+     * 화면이 아이디·비밀번호를 들고 있고(등록이 그것으로만 되므로) PIN 은 안 물어본
+     * 상태다 — 그 길로 세션을 열려다 401 을 받고 「확인 실패」로 끝났다. 기기는 등록됐는데
+     * 문은 안 열리는 자리가 생긴 것이다.
+     *
+     * 아이디·비밀번호는 PIN 보다 **약한 열쇠가 아니다.** PIN 은 등록된 기기에서 빨리 여는
+     * 지름길일 뿐이고, 어느 쪽으로 들어와도 아래 기기 검사는 똑같이 지난다. 그래서 PIN 이
+     * 안 왔으면 원래 길로 본다.
+     */
+    if (entry.entryMode === "pin" && blank(pin) && !blank(username)) {
+      r = await verifyCredentials(String(username ?? ""), String(password ?? ""));
+    } else if (entry.entryMode === "pin") {
       const pr = await checkPin(String(pin ?? ""));
       if (!pr.ok) {
         const n = (f?.n ?? 0) + 1;
