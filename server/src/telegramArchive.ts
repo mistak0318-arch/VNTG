@@ -36,11 +36,14 @@ export const ROOM_LABELS: Record<string, string> = {
   disclosure: "공시",
   keyword: "키워드",
   super: "슈퍼신호등",
+  /* 주문·체결 (2026-09-04) — 돈이 움직인 것만 담는다. 메뉴 여닫이는 기록에만 */
+  order: "주문·체결",
   log: "로그",
 };
 /** 방 나열 순서(기본값) — 시장 흐름을 읽는 순서대로. 로그는 맨 뒤(운영 소음).
     화면(받은 방)은 이 순서를 기본으로 하고 사용자가 끌어서 바꾼 순서를 얹는다 */
-export const ROOM_ORDER = ["signal", "buzz", "super", "channel", "keyword", "disclosure", "report", "log"];
+/* 주문은 맨 앞이다 — 내 돈이 실제로 움직인 자리라 제일 먼저 봐야 한다 */
+export const ROOM_ORDER = ["order", "signal", "buzz", "super", "channel", "keyword", "disclosure", "report", "log"];
 
 export interface TgMsg {
   /** at + 순번 — 별표가 이 id 로 메시지를 가리킨다 */

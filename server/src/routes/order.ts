@@ -137,10 +137,16 @@ export function createOrderRouter(main: KiwoomClient): Router {
     await noteDeviceUse(req, false);
     /* 처음 보는 주소면 그 자리에서 알린다 — 기록만 남기면 사고 뒤에야 안다 */
     void noteAccess(ip, "주문 메뉴를 열었습니다");
-    await appendLog({ kind: "session", ip, msg: "주문 메뉴 열림" });
-    void sendTelegram(`🔓 주문 메뉴 열림 · ${ip}\n기기: ${String(req.headers["user-agent"] ?? "?").slice(0, 60)}`, "order").catch(
-      () => undefined,
-    );
+    /*
+     * 메뉴를 연 것은 **기록에만** 남긴다 (2026-09-04). 하루에도 여러 번 여는 일이라
+     * 텔레그램에 실으면 방이 그것으로 찬다 — 그 방은 「돈이 움직였다」를 보는 곳이다.
+     * 다만 **처음 보는 주소**에서 열렸으면 그건 아래 noteAccess 가 따로 보낸다.
+     */
+    await appendLog({
+      kind: "session",
+      ip,
+      msg: `주문 메뉴 열림 · ${String(req.headers["user-agent"] ?? "?").slice(0, 60)}`,
+    });
     res.json({ ok: true });
   });
 
