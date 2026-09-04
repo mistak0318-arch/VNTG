@@ -1567,7 +1567,25 @@ body {
   background: var(--panel-2);
   position: sticky;
   top: 0;
+  /*
+   * **머리글은 줄을 바꾼다** (2026-09-04 — 벤티지: "슈퍼신호등이랑 신호등 분석에
+   * 채점표 문구가 줄바꿈이 안 돼서 불편하거든").
+   *
+   * 표 전체가 `nowrap` 이었다. 값에는 그게 맞다 — 「1,219,000」이 두 줄로 갈리면
+   * 못 읽는다. 그런데 **머리글은 값이 아니라 이름표**다. 「지수 대비 +20」·「이탈 후 +20」
+   * 처럼 띄어쓰기가 있는 이름이 한 줄을 고집하는 바람에, 아래 값이 「-」 한 글자인 칸도
+   * 머리글 폭만큼 벌어졌다. 슈퍼신호등 표가 665px 자리에 **1529px** 로 누워 있던 이유다.
+   *
+   * `keep-all` 은 한글에서 **낱말 안을 안 자른다** — 이게 없으면 「지수 대」/「비」로
+   * 갈린다. 띄어쓴 자리에서만 접힌다.
+   */
+  white-space: normal;
+  word-break: keep-all;
+  line-height: 1.25;
+  vertical-align: bottom;
 }
+/* 정렬 단추가 붙은 머리글도 같이 — 예전엔 여기서 다시 nowrap 으로 못 박았다 */
+.data-table .sortable-th { white-space: normal; }
 
 .sortable-th {
   cursor: pointer;
@@ -10806,12 +10824,21 @@ button.tpb-row:hover { background: var(--panel-2); }
 
 /* 슈퍼신호등 표 — 테마 칸 (2026-08-28). 이름은 줄이고 %가 주인공 */
 .sd-theme-cell { text-align: left; }
+/*
+ * 무리(테마) 이름 — **자르지 말고 접는다** (2026-09-04).
+ *
+ * 7rem 에서 말줄임이라 「전후 재건(우크라/중동…」처럼 잘렸다. 그런데 테마 이름은
+ * 종목명과 다르다 — 종목명은 앞 몇 글자로 알아보지만, 테마는 괄호 안이 정체인 경우가
+ * 많다(「우주항공산업(누리호/인공위성 등)」). 잘린 이름은 뜻이 반만 남는다.
+ * 두 줄로 접으면 다 보이고 칸도 오히려 좁아진다.
+ */
 .sd-theme-name {
   display: inline-block;
-  max-width: 7rem;
+  max-width: 6rem;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: keep-all;
+  line-height: 1.25;
   vertical-align: bottom;
   font-size: 0.7rem;
   color: var(--muted);
@@ -13070,6 +13097,27 @@ thead .sd-emph {
   margin-left: auto;
   font-size: 13px;
 }
+/*
+ * **채점표의 글은 접힌다** (2026-09-04 — 벤티지: "슈퍼신호등이랑 신호등 분석에
+ * 채점표 문구가 줄바꿈이 안 돼서 불편하거든").
+ *
+ * 묶음 머리줄(`gb-sep`)은 칸을 통째로 가로지르는 **설명 문장**이다. 「지속성 — 며칠째
+ * 걸리나 — 성적이 가장 크게 갈린 축입니다.」 같은 한 문장이 `nowrap` 이라 표의 최소 폭을
+ * 혼자 정해 버렸다. 폰에서 감싸개는 321px 인데 표가 **1157px** 이었고, 그중 「구간」 칸
+ * 하나가 758px 이었다. 값이 아니라 **문장이 표를 늘린 것**이다.
+ *
+ * 값은 그대로 `nowrap` 이다 — 「1,219,000」이 갈리면 못 읽는다. 접는 건 글인 칸뿐이다.
+ */
+.gb-sep td,
+.gb-table td:first-child,
+.gb-table th:first-child,
+.sim-table td:first-child,
+.sim-table th:first-child {
+  white-space: normal;
+  word-break: keep-all;
+  line-height: 1.35;
+}
+
 .gb-table td,
 .gb-table th {
   padding: 4px 8px;
