@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T06:00:17.439Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T06:31:19.167Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "f76277c",
+        "subject": "폰의 실시간 점을 정사각형 한가운데로"
+      },
       {
         "hash": "7398f9a",
         "subject": "상단 줄 칩 다섯을 한 규격으로 · 실시간을 눌러 상태를 연다"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "500e0be",
         "subject": "브리핑 온도계에 미국 10년·30년물 금리(값+방향 화살표)·WTI(가격+등락률) 추가"
-      },
-      {
-        "hash": "b7238ae",
-        "subject": "수급판 파란 배경 수정 — bf-fg 가 거래원 외국계 뱃지(파란 배경)와 클래스 충돌, bf-supply 로 개명"
       }
     ]
   }
