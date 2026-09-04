@@ -698,3 +698,244 @@
 :root[data-theme="excel"] .overlay {
   z-index: 40;
 }
+
+/* =====================================================================
+ * 주문 화면 · 오늘 붙인 것들 — 엑셀 모드 (2026-09-04)
+ *
+ * 벤티지: "주문 메뉴 엑셀모드화가 덜 됐다. 싹 다 잡아."
+ *
+ * 이 파일 위쪽이 이미 정한 규칙을 그대로 따른다: **빨강·파랑을 뺀다.**
+ * 「빨강·파랑 숫자가 깔려 있으면 리본을 아무리 잘 그려도 주식창으로 읽힌다」 —
+ * 주문 화면은 그게 제일 심한 자리다. 꽉 찬 빨강 「매수」 단추 하나면 위장이 통째로 깨진다.
+ *
+ * 뜻은 안 잃는다. 매수·매도는 **글자와 ✓**가 말하고, 고른 쪽은 엑셀이 고른 칸을 칠하는
+ * 그 연둣빛(--xl-sel)으로 칠한다. 색이 아니라 **명암과 글자**로 가르는 것이라, 흘끗 보면
+ * 조건부 서식이 걸린 표이고 들여다보면 뜻이 그대로다.
+ * ===================================================================== */
+
+/* ── 머리띠 (모의/실전) ── 색 띠는 곧 매매 화면이다. 시트 제목 줄처럼 */
+:root[data-theme="excel"] .ord-band.mock,
+:root[data-theme="excel"] .ord-band.real {
+  background: var(--xl-head-bg);
+  border-color: var(--xl-line);
+  border-radius: 0;
+}
+:root[data-theme="excel"] .ord-band.mock .ord-band-tag,
+:root[data-theme="excel"] .ord-band.real .ord-band-tag {
+  color: var(--xl-green);
+}
+:root[data-theme="excel"] .ord-band-btn {
+  border-radius: 2px;
+  background: var(--panel-2);
+}
+
+/* ── 서브탭 ── 시트 탭과 같은 말투로 */
+:root[data-theme="excel"] .ord-sub {
+  border-radius: 2px;
+  background: var(--panel-2);
+  border-color: var(--xl-line);
+}
+:root[data-theme="excel"] .ord-sub.on {
+  background: var(--xl-sel);
+  border-color: var(--xl-green);
+  color: var(--text);
+}
+
+/* ── 매수·매도 ── 뜻은 글자와 ✓ 가 지킨다 */
+:root[data-theme="excel"] .ord-side button {
+  border-radius: 2px;
+  border-width: 1px;
+  border-color: var(--xl-line);
+  background: var(--panel-2);
+}
+:root[data-theme="excel"] .ord-side button.on.buy,
+:root[data-theme="excel"] .ord-side button.on.sell {
+  background: var(--xl-sel);
+  border-color: var(--xl-green);
+  color: var(--text);
+  box-shadow: none;
+}
+:root[data-theme="excel"] .ord-wrap.buy .ord-fields,
+:root[data-theme="excel"] .ord-wrap.buy .ord-submit,
+:root[data-theme="excel"] .ord-wrap.sell .ord-fields,
+:root[data-theme="excel"] .ord-wrap.sell .ord-submit {
+  border-color: var(--xl-line);
+}
+
+/* ── 칸과 단추 ── 모서리를 죽이고 얇은 선만 */
+:root[data-theme="excel"] .ord-fields,
+:root[data-theme="excel"] .ord-submit,
+:root[data-theme="excel"] .ord-book,
+:root[data-theme="excel"] .ord-gate,
+:root[data-theme="excel"] .ord-off,
+:root[data-theme="excel"] .ord-cfg-sec,
+:root[data-theme="excel"] .ord-dep,
+:root[data-theme="excel"] .ord-env {
+  border-radius: 2px;
+  border-color: var(--xl-line);
+  box-shadow: none;
+}
+:root[data-theme="excel"] .ord-in,
+:root[data-theme="excel"] .ord-stop-in,
+:root[data-theme="excel"] .ssb-input,
+:root[data-theme="excel"] .about-find {
+  border-radius: 2px;
+  border-color: var(--xl-line);
+  background: var(--panel);
+}
+:root[data-theme="excel"] .ord-in:focus,
+:root[data-theme="excel"] .ord-stop-in:focus,
+:root[data-theme="excel"] .about-find:focus {
+  border-color: var(--xl-green);
+}
+:root[data-theme="excel"] .ord-step button,
+:root[data-theme="excel"] .ord-pct button,
+:root[data-theme="excel"] .ord-venue button,
+:root[data-theme="excel"] .ord-x,
+:root[data-theme="excel"] .ord-cancel,
+:root[data-theme="excel"] .ord-mk,
+:root[data-theme="excel"] .about-more {
+  border-radius: 2px;
+  border-color: var(--xl-line);
+  background: var(--panel-2);
+  color: var(--text);
+}
+:root[data-theme="excel"] .ord-venue button.on,
+:root[data-theme="excel"] .ord-mk.on {
+  background: var(--xl-sel);
+  border-color: var(--xl-green);
+  color: var(--text);
+}
+:root[data-theme="excel"] .ord-venue button i { color: var(--muted); }
+
+/* 주문 단추 — 색을 빼되 「이 줄이 실행이다」는 굵기로 남긴다 */
+:root[data-theme="excel"] .ord-go,
+:root[data-theme="excel"] .ord-go.buy,
+:root[data-theme="excel"] .ord-go.sell {
+  border-radius: 2px;
+  background: var(--xl-sel);
+  border: 1px solid var(--xl-green);
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* ── 확인 창 ── 엑셀 대화상자처럼 각지게 */
+:root[data-theme="excel"] .ord-modal-back { background: rgba(0, 0, 0, 0.25); }
+:root[data-theme="excel"] .ord-modal,
+:root[data-theme="excel"] .ord-modal.buy,
+:root[data-theme="excel"] .ord-modal.sell,
+:root[data-theme="excel"] .ord-modal.cancel {
+  border-radius: 2px;
+  border: 1px solid var(--xl-line);
+  border-top: 3px solid var(--xl-green);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+:root[data-theme="excel"] .ord-tick { color: var(--muted); }
+:root[data-theme="excel"] .ord-modal-kv .ord-stop-kv {
+  background: var(--panel-2);
+  border-color: var(--xl-line);
+}
+:root[data-theme="excel"] .ord-modal-kv .ord-stop-kv dt { color: var(--muted); }
+
+/* ── 알림 줄 셋 ── 초록·빨강 띠는 스프레드시트에 없다 */
+:root[data-theme="excel"] .ord-ok,
+:root[data-theme="excel"] .ord-graced,
+:root[data-theme="excel"] .sys-done {
+  background: var(--panel-2);
+  border: 1px solid var(--xl-line);
+  border-radius: 2px;
+  color: var(--text);
+}
+:root[data-theme="excel"] .ord-err { color: var(--muted); font-weight: 600; }
+
+/* ── 표 ── 다른 표와 같은 말투(고정폭·격자) */
+:root[data-theme="excel"] .ord-table { font-variant-numeric: tabular-nums; }
+:root[data-theme="excel"] .ord-table th { background: var(--xl-head-bg); color: var(--muted); }
+:root[data-theme="excel"] .ord-table th,
+:root[data-theme="excel"] .ord-table td { border-color: var(--xl-grid); }
+:root[data-theme="excel"] .ord-table tr.bad td { color: var(--text); background: #f0f0f0; }
+:root[data-theme="excel"] .ord-table.stack tr {
+  border-radius: 2px;
+  border-color: var(--xl-line);
+}
+:root[data-theme="excel"] .ord-mock {
+  background: var(--panel-2);
+  color: var(--muted);
+  border-radius: 2px;
+}
+
+/* ── 손절선 · 스톱 ── 주황 알약은 눈에 제일 먼저 띈다 */
+:root[data-theme="excel"] .sw-stop-btn,
+:root[data-theme="excel"] .ord-x.stop {
+  border-radius: 2px;
+  border-color: var(--xl-line);
+  background: var(--panel-2);
+  color: var(--text);
+}
+:root[data-theme="excel"] .sw-stop-btn i { color: var(--muted); }
+
+/* ── 종목 검색 드롭다운 ── 그림자를 빼면 시트 위의 칸이 된다 */
+:root[data-theme="excel"] .ssb-drop {
+  border-radius: 2px;
+  border-color: var(--xl-line);
+  box-shadow: none;
+}
+:root[data-theme="excel"] .ssb-head { background: var(--xl-head-bg); }
+
+/* ── 실시간 표시 ── 초록 점이 켜져 있으면 시세창이다 */
+:root[data-theme="excel"] .live-dot,
+:root[data-theme="excel"] .live-dot.on,
+:root[data-theme="excel"] .live-dot.wait {
+  border-radius: 2px;
+  border-color: var(--xl-line);
+  background: var(--panel-2);
+}
+:root[data-theme="excel"] .live-dot.on i { background: var(--xl-green); box-shadow: none; }
+:root[data-theme="excel"] .live-dot.wait i { background: var(--muted); }
+:root[data-theme="excel"] .live-dot b { color: var(--muted); }
+
+/* ── 새 버전 띠 ── 남색 알약은 어느 표에도 없다 */
+:root[data-theme="excel"] .build-bar {
+  background: var(--xl-head-bg);
+  color: var(--text);
+  border: 1px solid var(--xl-line);
+  border-radius: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+:root[data-theme="excel"] .build-bar button {
+  background: var(--xl-sel);
+  border: 1px solid var(--xl-green);
+  color: var(--text);
+  border-radius: 2px;
+}
+:root[data-theme="excel"] .build-bar .x { background: none; border: none; color: var(--muted); }
+
+/* ── 호가창 ── 잔량 막대의 빨강·파랑이 제일 크게 튄다 */
+:root[data-theme="excel"] .ob-bar.ask,
+:root[data-theme="excel"] .ob-bar.bid {
+  background: var(--muted);
+  opacity: 0.16;
+}
+:root[data-theme="excel"] .ob-row.now .ob-price {
+  background: var(--xl-sel);
+  border-color: var(--xl-green);
+  border-radius: 2px;
+}
+:root[data-theme="excel"] .ob-here {
+  background: var(--xl-green);
+  color: #fff;
+  border-radius: 2px;
+}
+:root[data-theme="excel"] .ob-d.up,
+:root[data-theme="excel"] .ob-d.down { color: var(--muted); }
+:root[data-theme="excel"] .ob-flow-bar.buy,
+:root[data-theme="excel"] .ob-flow-bar.sell { background: var(--muted); }
+:root[data-theme="excel"] .ob-live.on { color: var(--muted); }
+
+/* ── 정보 탭 ── 오늘 붙인 카드들도 같이 */
+:root[data-theme="excel"] .about-cell,
+:root[data-theme="excel"] .about-day {
+  border-radius: 2px;
+  border-color: var(--xl-line);
+}
+:root[data-theme="excel"] .about-date { color: var(--xl-green); }
