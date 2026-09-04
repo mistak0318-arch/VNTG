@@ -217,6 +217,15 @@ export interface OrderSettings {
   defaultVenue: OrderVenue | "auto";
   /** 기본 매매구분(trde_tp) */
   defaultTradeType: string;
+  /**
+   * **등록된 기기에서만 주문** (2026-09-04). 메일이 설정돼 있어야 켤 수 있다 —
+   * 확인할 길이 없는데 막으면 주문 기능이 통째로 잠긴다. 그건 안전이 아니라 고장이다.
+   */
+  requireTrustedDevice: boolean;
+  /** 주문 세션이 가만히 있을 때 닫히는 시간(분). 1~60 */
+  idleMinutes: number;
+  /** 계속 써도 닫히는 시간(분). 5~240 */
+  maxMinutes: number;
 }
 
 const DEFAULT_SETTINGS: OrderSettings = {
@@ -224,6 +233,9 @@ const DEFAULT_SETTINGS: OrderSettings = {
   rememberMinutes: 60,
   defaultVenue: "auto",
   defaultTradeType: "0",
+  requireTrustedDevice: true,
+  idleMinutes: 10,
+  maxMinutes: 60,
 };
 
 export async function getSettings(): Promise<OrderSettings> {
@@ -231,6 +243,8 @@ export async function getSettings(): Promise<OrderSettings> {
   return {
     ...v,
     rememberMinutes: Math.min(60, Math.max(1, Math.round(v.rememberMinutes) || 60)),
+    idleMinutes: Math.min(60, Math.max(1, Math.round(v.idleMinutes) || 10)),
+    maxMinutes: Math.min(240, Math.max(5, Math.round(v.maxMinutes) || 60)),
   };
 }
 
@@ -244,6 +258,10 @@ export async function saveSettings(patch: Partial<OrderSettings>): Promise<Order
         ? patch.defaultVenue
         : cur.defaultVenue,
     defaultTradeType: tradeTypeOf(String(patch.defaultTradeType ?? "")) ? String(patch.defaultTradeType) : cur.defaultTradeType,
+    requireTrustedDevice:
+      typeof patch.requireTrustedDevice === "boolean" ? patch.requireTrustedDevice : cur.requireTrustedDevice,
+    idleMinutes: Math.min(60, Math.max(1, Math.round(Number(patch.idleMinutes)) || cur.idleMinutes)),
+    maxMinutes: Math.min(240, Math.max(5, Math.round(Number(patch.maxMinutes)) || cur.maxMinutes)),
   };
   await writeJson(SETTINGS_FILE, next);
   await appendLog({ kind: "password", msg: `설정 변경 — 비밀번호 기억 ${next.rememberPassword ? `${next.rememberMinutes}분` : "끔"}` });
@@ -387,8 +405,6 @@ async function todayUsage(): Promise<{ krw: number; count: number }> {
 /* ── 주문 세션 (L1) ────────────────────────────────────────────────────── */
 
 export const ORDER_COOKIE = "vntg_o";
-const IDLE_MS = 10 * 60_000;
-const HARD_MS = 60 * 60_000;
 
 interface OrderSession {
   idle: number;
@@ -396,6 +412,8 @@ interface OrderSession {
   ip: string;
   /** 이 시각까지는 주문 비밀번호를 다시 안 묻는다 (기억하기). 0 이면 매번 묻는다 */
   pwUntil: number;
+  /** 이 세션이 쓰는 유휴 시한(ms) — 열 때 설정에서 굳힌다 */
+  idleMs: number;
 }
 
 const sessions = new Map<string, OrderSession>();
@@ -431,11 +449,15 @@ export function clientIp(req: Request): string {
   return req.socket.remoteAddress ?? "?";
 }
 
-export function openSession(req: Request, res: Response): void {
+/** 시한은 설정에서 온다 — 여는 순간의 값으로 굳는다(도중에 바꿔도 열린 세션은 안 늘어난다) */
+export async function openSession(req: Request, res: Response): Promise<void> {
+  const cfg = await getSettings();
+  const idleMs = cfg.idleMinutes * 60_000;
+  const hardMs = cfg.maxMinutes * 60_000;
   const token = randomBytes(24).toString("hex");
   const now = Date.now();
-  sessions.set(token, { idle: now + IDLE_MS, hard: now + HARD_MS, ip: clientIp(req), pwUntil: 0 });
-  setCookie(req, res, token, HARD_MS / 1000);
+  sessions.set(token, { idle: now + idleMs, hard: now + hardMs, ip: clientIp(req), pwUntil: 0, idleMs });
+  setCookie(req, res, token, Math.round(hardMs / 1000));
 }
 
 /** 살아 있으면 유휴 시한을 민다. 죽었으면 null */
@@ -449,7 +471,7 @@ export function sessionOf(req: Request): OrderSession | null {
     sessions.delete(token);
     return null;
   }
-  s.idle = Math.min(now + IDLE_MS, s.hard);
+  s.idle = Math.min(now + s.idleMs, s.hard);
   return s;
 }
 
@@ -596,6 +618,7 @@ export interface PrepareInput {
 }
 
 function reject(msg: string, input: Partial<PrepareInput>, ip: string): never {
+  noteReject();
   void appendLog({ kind: "reject", ip, side: input.side, code: input.code, name: input.name, qty: input.qty, price: input.price, venue: input.venue, tradeType: input.tradeType, msg });
   throw new Error(msg);
 }
@@ -817,6 +840,7 @@ export async function executePrepared(
         "order",
       ).catch(() => undefined);
       if (r.ordNo) watch(r.ordNo, t);
+      void noteUsage();
     }
     return { ordNo: r.ordNo, msg: r.msg, ticket: t, remembered };
   } catch (e) {
@@ -1047,6 +1071,70 @@ async function tick(): Promise<void> {
   } finally {
     ticking = false;
   }
+}
+
+/**
+ * **이상한 낌새를 알린다** (2026-09-04) — 벤티지: "이상 징후가 있는 경우 나한테 알림을."
+ *
+ * 겹을 아무리 쌓아도 **뚫렸을 때 알아채는 것**과는 다른 일이다. 기록만 남기면 사고가 난 뒤
+ * 파일을 열어 봐야 알고, 그때는 이미 늦다. 그래서 「평소와 다른 것」은 그 자리에서 보낸다.
+ *
+ * 무엇을 이상하다고 보나 — 셋 다 **평소에는 안 울리는 것**이어야 한다. 자주 울리는 경보는
+ * 아무도 안 본다.
+ *   ① 처음 보는 주소(IP)에서 주문 메뉴를 열었다
+ *   ② 하루 한도의 8할을 넘겼다 (금액 또는 건수)
+ *   ③ 거절이 잇달았다 (5분에 세 번 — 뭔가를 더듬고 있다는 뜻이다)
+ */
+const seenIps = new Set<string>();
+let ipsLoaded = false;
+const rejectTimes: number[] = [];
+
+async function loadSeenIps(): Promise<void> {
+  if (ipsLoaded) return;
+  ipsLoaded = true;
+  for (const r of await readLog(2000)) if (r.ip) seenIps.add(r.ip);
+}
+
+/** 처음 보는 주소인가 — 기록 전체를 한 번만 훑어 기억해 둔다 */
+export async function noteAccess(ip: string, what: string): Promise<void> {
+  await loadSeenIps();
+  if (seenIps.has(ip)) return;
+  seenIps.add(ip);
+  await appendLog({ kind: "lock", ip, msg: `처음 보는 주소에서 ${what}` });
+  void sendTelegram(
+    `🚨 <b>처음 보는 주소에서 ${esc(what)}</b>
+주소 ${esc(ip)}
+본인이 아니면 지금 서버의 ORDERS_ENABLED 를 끄세요.`,
+    "order",
+  ).catch(() => undefined);
+}
+
+/** 거절이 잇달으면 — 누군가 한도를 더듬고 있다 */
+function noteReject(): void {
+  const now = Date.now();
+  rejectTimes.push(now);
+  while (rejectTimes.length > 0 && now - rejectTimes[0] > 5 * 60_000) rejectTimes.shift();
+  if (rejectTimes.length === 3) {
+    void sendTelegram("⚠️ 5분 안에 주문이 <b>세 번 거절</b>됐습니다 — 주문 › 설정 › 로그를 보세요.", "order").catch(
+      () => undefined,
+    );
+  }
+}
+
+/** 한도의 8할을 넘겼을 때 한 번 — 평소에는 안 울린다 */
+let warnedToday = "";
+async function noteUsage(): Promise<void> {
+  const { date } = kstParts();
+  if (warnedToday === date) return;
+  const [g, u] = await Promise.all([getGuard(), todayUsage()]);
+  const hotKrw = u.krw >= g.maxDailyKrw * 0.8;
+  const hotCnt = u.count >= g.maxDailyCount * 0.8;
+  if (!hotKrw && !hotCnt) return;
+  warnedToday = date;
+  void sendTelegram(
+    `📊 오늘 주문이 한도의 8할을 넘었습니다 — ${u.count}/${g.maxDailyCount}건 · ${won(u.krw)} / ${won(g.maxDailyKrw)}`,
+    "order",
+  ).catch(() => undefined);
 }
 
 /* ── 상태 ─────────────────────────────────────────────────────────────── */

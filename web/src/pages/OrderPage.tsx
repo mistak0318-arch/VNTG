@@ -8,6 +8,8 @@ import {
   type OrderAccount,
   type OrderLogRow,
   type OrderRow,
+  type OrderDevice,
+  type OrderSettings,
   type OrderStatus,
   type OrderTicket,
   type OrderVenue,
@@ -334,6 +336,14 @@ function SessionGate({ onDone }: { onDone: () => void }) {
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * 등록 안 된 기기면 서버가 `needDevice` 로 돌려보낸다 (2026-09-04). 그때만 메일 확인
+   * 단계로 넘어간다 — 등록된 기기는 이 화면을 평생 안 본다.
+   */
+  const [ticket, setTicket] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [devName, setDevName] = useState("");
+  const [sent, setSent] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -344,17 +354,91 @@ function SessionGate({ onDone }: { onDone: () => void }) {
       setPw("");
       onDone();
     } catch (e2) {
-      setError(e2 instanceof Error ? e2.message : "열지 못했다");
+      const msg = e2 instanceof Error ? e2.message : "열지 못했다";
+      /* 서버가 준 문구에 「등록」이 있으면 기기 단계다 — 상태 코드는 api 층이 안 넘긴다 */
+      if (/등록/.test(msg)) {
+        setError(null);
+        void startDevice();
+        return;
+      }
+      setError(msg);
     } finally {
       setBusy(false);
     }
+  }
+
+  async function startDevice() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.orderDeviceStart(id, pw);
+      setTicket(r.ticket);
+      setSent("메일로 6자리 숫자를 보냈습니다 (10분)");
+    } catch (e2) {
+      setError(e2 instanceof Error ? e2.message : "확인 메일을 못 보냈다");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verify(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.orderDeviceVerify(ticket ?? "", code, devName);
+      /* 등록됐으면 곧바로 세션을 연다 — 비밀번호를 또 치게 하지 않는다 */
+      await api.orderOpenSession(id, pw);
+      setPw("");
+      setCode("");
+      setTicket(null);
+      onDone();
+    } catch (e2) {
+      setError(e2 instanceof Error ? e2.message : "확인 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (ticket) {
+    return (
+      <form className="ord-gate" onSubmit={(e) => void verify(e)}>
+        <div className="ord-gate-mark">📧</div>
+        <b>이 기기를 주문에 등록합니다</b>
+        <p>
+          아이디·비밀번호는 <b>아는 것</b>이라 새어 나가면 어디서든 쓸 수 있습니다. 기기는{" "}
+          <b>가진 것</b>이라, 둘 다 알아도 등록 안 된 기기에서는 주문 메뉴가 열리지 않습니다.
+        </p>
+        {sent && <p className="ord-ok">{sent}</p>}
+        <input
+          className="ord-in"
+          inputMode="numeric"
+          placeholder="메일로 받은 6자리"
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+        />
+        <input
+          className="ord-in"
+          placeholder="이 기기 이름 (예: 갤럭시 S25)"
+          value={devName}
+          onChange={(e) => setDevName(e.target.value)}
+        />
+        {error && <p className="ord-err">{error}</p>}
+        <button type="submit" className="ord-go" disabled={busy || code.length !== 6}>
+          {busy ? "확인 중…" : "등록하고 열기"}
+        </button>
+        <button type="button" className="ord-cancel" onClick={() => setTicket(null)}>
+          그만
+        </button>
+      </form>
+    );
   }
 
   return (
     <form className="ord-gate" onSubmit={(e) => void submit(e)}>
       <div className="ord-gate-mark">🔐</div>
       <b>주문 메뉴는 한 번 더 확인한다</b>
-      <p>앱 로그인과 같은 아이디·비밀번호다. 열어 두면 10분, 계속 써도 60분 뒤엔 닫힌다.</p>
+      <p>앱 로그인과 같은 아이디·비밀번호입니다. 등록 안 된 기기라면 메일 확인이 한 번 더 있습니다.</p>
       <input
         className="ord-in"
         autoComplete="username"
@@ -1495,6 +1579,46 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
       </section>
 
       <section className="ord-cfg-sec">
+        <h4>주문 메뉴가 닫히는 시간</h4>
+        <p className="ord-note">
+          열어 두면 잊고 자리를 뜨게 됩니다. <b>가만히 두면</b> 그 시간에 닫히고, 계속 쓰더라도{" "}
+          <b>최대 시간</b>이 지나면 닫습니다. 짧을수록 안전하고 길수록 편합니다 — 기기를 잃어버렸을 때
+          남에게 열려 있는 시간이 이 값입니다.
+        </p>
+        <div className="ord-cfg-row">
+          <span className="ord-caps">가만히 두면</span>
+          <select
+            className="ord-in"
+            value={cfg.idleMinutes}
+            disabled={busy}
+            onChange={(e) => void save({ idleMinutes: Number(e.target.value) })}
+          >
+            {[3, 5, 10, 20, 30, 60].map((m) => (
+              <option key={m} value={m}>
+                {m}분
+              </option>
+            ))}
+          </select>
+          <span className="ord-caps">최대</span>
+          <select
+            className="ord-in"
+            value={cfg.maxMinutes}
+            disabled={busy}
+            onChange={(e) => void save({ maxMinutes: Number(e.target.value) })}
+          >
+            {[30, 60, 120, 240].map((m) => (
+              <option key={m} value={m}>
+                {m}분
+              </option>
+            ))}
+          </select>
+          <span className="ord-caps">바꾼 값은 다음에 열 때부터</span>
+        </div>
+      </section>
+
+      <DeviceSection cfg={cfg} busy={busy} onSave={save} />
+
+      <section className="ord-cfg-sec">
         <h4>기본값</h4>
         <div className="ord-cfg-row">
           <span className="ord-caps">거래소</span>
@@ -1536,6 +1660,8 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
           바꾸기
         </button>
       </form>
+
+      <AccessLogSection />
 
       <section className="ord-cfg-sec">
         <h4>한도 — 여기서는 못 고칩니다</h4>
@@ -1579,6 +1705,183 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
         </dl>
       </section>
     </div>
+  );
+}
+
+/**
+ * 등록된 기기 (2026-09-04) — 벤티지: "등록되어 있는 걸 삭제하고 수정할 수 있는 메뉴도."
+ *
+ * 지금 쓰는 기기도 지울 수 있게 둔다 — 빌린 컴퓨터에서 열었다면 지우고 싶을 것이다.
+ * 대신 「지금 이 기기」라고 적어 **모르고 지우는 일**만 막는다.
+ */
+function DeviceSection({
+  cfg,
+  busy,
+  onSave,
+}: {
+  cfg: OrderSettings;
+  busy: boolean;
+  onSave: (patch: Partial<OrderSettings>) => Promise<void>;
+}) {
+  const [devices, setDevices] = useState<OrderDevice[]>([]);
+  const [mailReady, setMailReady] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    void api
+      .orderDevices()
+      .then((r) => {
+        setDevices(r.devices);
+        setMailReady(r.mailReady);
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "못 읽었다"));
+  }, []);
+  useEffect(load, [load]);
+
+  return (
+    <section className="ord-cfg-sec">
+      <h4>주문할 수 있는 기기</h4>
+      <p className="ord-note">
+        아이디·비밀번호는 <b>아는 것</b>이라 새어 나가면 어디서든 쓸 수 있습니다. 기기는 <b>가진 것</b>이라
+        성질이 다릅니다 — 켜 두면 둘 다 알아도 <b>등록 안 된 기기에서는 주문 메뉴가 열리지 않습니다</b>.
+        새 기기는 메일로 받은 6자리로 등록합니다.
+      </p>
+      {!mailReady && (
+        <p className="ord-err">
+          메일이 설정돼 있지 않아 기기 확인을 할 수 없습니다 — 이 설정은 켜도 동작하지 않습니다.
+        </p>
+      )}
+      <div className="ord-cfg-row">
+        <label>
+          <input
+            type="checkbox"
+            checked={cfg.requireTrustedDevice}
+            disabled={busy}
+            onChange={(e) => void onSave({ requireTrustedDevice: e.target.checked })}
+          />
+          등록된 기기에서만 주문
+        </label>
+      </div>
+      {error && <p className="ord-err">{error}</p>}
+      {devices.length === 0 ? (
+        <p className="empty">아직 등록된 기기가 없습니다</p>
+      ) : (
+        <div className="ord-scroll">
+          <table className="ord-table stack">
+            <thead>
+              <tr>
+                <th>이름</th>
+                <th>등록</th>
+                <th>마지막</th>
+                <th>주소</th>
+                <th className="r">주문</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {devices.map((d) => (
+                <tr key={d.id}>
+                  <td className="ord-name">
+                    {d.name} {d.current && <span className="ord-code">지금 이 기기</span>}
+                  </td>
+                  <td data-l="등록">{d.addedAt.slice(0, 10)}</td>
+                  <td data-l="마지막">{d.lastAt.slice(5, 16).replace("T", " ")}</td>
+                  <td data-l="주소">{d.lastIp}</td>
+                  <td className="r" data-l="주문">
+                    {d.orders}
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="ord-x"
+                      onClick={() => {
+                        const name = window.prompt("이 기기의 새 이름", d.name);
+                        if (name) void api.orderDeviceRename(d.id, name).then((r) => setDevices(r.devices));
+                      }}
+                    >
+                      이름
+                    </button>{" "}
+                    <button
+                      type="button"
+                      className="ord-x"
+                      onClick={() => {
+                        if (!window.confirm(`${d.name} 을 지웁니다. 그 기기는 다음에 열 때 메일 확인을 다시 거칩니다.`)) return;
+                        void api.orderDeviceRemove(d.id).then((r) => setDevices(r.devices));
+                      }}
+                    >
+                      삭제
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * 접근 로그 (2026-09-04) — 벤티지: "어느 IP 에서 들어왔고 어떤 행위를 했고."
+ *
+ * 「기록」 탭이 **주문 자체**를 보여 준다면 여기는 **문에서 일어난 일**이다 — 메뉴 열기·실패,
+ * 기기 등록·삭제, 잠금, 비밀번호, 거절. 둘을 한 표에 섞으면 사고를 쫓을 때 주문에 묻힌다.
+ */
+function AccessLogSection() {
+  const [rows, setRows] = useState<OrderLogRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    void api
+      .orderLog(300)
+      .then((r) =>
+        setRows(
+          (r.rows ?? []).filter((x) => ["session", "lock", "password", "reject", "error"].includes(x.kind)),
+        ),
+      )
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "못 읽었다"));
+  }, []);
+  useEffect(load, [load]);
+
+  return (
+    <section className="ord-cfg-sec">
+      <h4>접근 로그</h4>
+      <p className="ord-note">
+        문에서 일어난 일만 모았습니다 — 메뉴 열기·실패, 기기 등록·삭제, 잠금, 비밀번호, 거절.
+        주문 자체는 <b>기록</b> 탭에 있습니다. <b>처음 보는 주소</b>에서 열리거나, 5분에 세 번 거절되거나,
+        하루 한도의 8할을 넘기면 <b>텔레그램으로 바로</b> 갑니다.
+      </p>
+      {error && <p className="ord-err">{error}</p>}
+      {rows.length === 0 ? (
+        <p className="empty">아직 기록이 없습니다</p>
+      ) : (
+        <div className="ord-scroll">
+          <table className="ord-table stack">
+            <thead>
+              <tr>
+                <th>시각</th>
+                <th>종류</th>
+                <th>주소</th>
+                <th>내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.slice(0, 60).map((r, i) => (
+                <tr key={`${r.at}-${i}`} className={r.kind === "reject" || r.kind === "error" ? "bad" : ""}>
+                  <td className="ord-name">{r.at.slice(5, 16).replace("T", " ")}</td>
+                  <td data-l="종류">{KIND_KO[r.kind] ?? r.kind}</td>
+                  <td data-l="주소">{r.ip ?? "-"}</td>
+                  <td data-l="내용" className="ord-msg">
+                    {r.msg ?? "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 

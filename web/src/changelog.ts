@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-03T23:55:30.745Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T00:02:58.509Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "ca85064",
+        "subject": "호가창이 화면마다 달랐던 진짜 이유 — 실시간과 REST 가 서로 반대 차례를 냈다"
+      },
       {
         "hash": "0726526",
         "subject": "실시간 표시를 모든 화면에 — 지금 이 값이 실시간인지 한 자리에서"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "1c7a6af",
         "subject": "발송 한눈에: 로그 갈래는 같은 방 겹침 계산에서 제외 (보내는 코드 없음 — 슈퍼신호등이 옛 로그 방 재활용)"
-      },
-      {
-        "hash": "195c689",
-        "subject": "텔레그램 방 배정 바꾸기 — .env 안 고치고 화면에서"
       }
     ]
   }

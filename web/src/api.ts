@@ -951,8 +951,17 @@ export const api = {
    * 「세션 끊김」으로 읽고 로그인 칸을 다시 올린다.
    */
   orderStatus: () => getJson<OrderStatus>("/api/order/status"),
+  /** 등록 안 된 기기면 403 + needDevice — 화면이 메일 확인으로 넘어간다 */
   orderOpenSession: (username: string, password: string) =>
     orderPost<{ ok: boolean }>("/api/order/session", { username, password }),
+  orderDeviceStart: (username: string, password: string) =>
+    orderPost<{ ticket: string }>("/api/order/device/start", { username, password }),
+  orderDeviceVerify: (ticket: string, code: string, name: string) =>
+    orderPost<{ ok: boolean; device: OrderDevice }>("/api/order/device/verify", { ticket, code, name }),
+  orderDevices: () => getJson<{ devices: OrderDevice[]; mailReady: boolean }>("/api/order/devices"),
+  orderDeviceRename: (id: string, name: string) =>
+    orderPost<{ devices: OrderDevice[] }>("/api/order/devices/rename", { id, name }),
+  orderDeviceRemove: (id: string) => orderPost<{ devices: OrderDevice[] }>("/api/order/devices/remove", { id }),
   orderCloseSession: () => deleteJson<{ ok: boolean }>("/api/order/session"),
   orderSetPassword: (nextPw: string, current: string | null) =>
     orderPost<{ ok: boolean }>("/api/order/password", { next: nextPw, current }),
@@ -6289,6 +6298,24 @@ export interface OrderSettings {
   rememberMinutes: number;
   defaultVenue: OrderVenue | "auto";
   defaultTradeType: string;
+  /** 등록된 기기에서만 주문 */
+  requireTrustedDevice: boolean;
+  /** 가만히 두면 닫히는 시간(분) */
+  idleMinutes: number;
+  /** 계속 써도 닫히는 시간(분) */
+  maxMinutes: number;
+}
+
+/** 주문에 등록된 기기 */
+export interface OrderDevice {
+  id: string;
+  name: string;
+  ua: string;
+  addedAt: string;
+  lastAt: string;
+  lastIp: string;
+  orders: number;
+  current: boolean;
 }
 
 export interface OrderTicket {

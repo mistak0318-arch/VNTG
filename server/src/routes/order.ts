@@ -19,12 +19,23 @@ import {
   setOrderPassword,
   setUiLock,
   checkPassword,
+  noteAccess,
   getSettings,
   saveSettings,
   forgetPassword,
   type OrderVenue,
 } from "../orders.js";
 import { readOrderStops, setOrderStop } from "../orderStops.js";
+import {
+  deviceCheckPossible,
+  deviceOf,
+  finishDeviceCheck,
+  listDevices,
+  noteDeviceUse,
+  removeDevice as removeOrderDevice,
+  renameDevice,
+  startDeviceCheck,
+} from "../orderDevices.js";
 import { sendTelegram } from "../telegram.js";
 
 /**
@@ -106,7 +117,26 @@ export function createOrderRouter(main: KiwoomClient): Router {
       return;
     }
     fails.delete(ip);
-    openSession(req, res);
+
+    /*
+     * **등록된 기기인가** (2026-09-04). 아이디·비밀번호는 「아는 것」이라 새어 나가면 어디서든
+     * 쓸 수 있다. 기기는 「가진 것」이라 성질이 다르다 — 둘 다 알아도 등록 안 된 기기에서는
+     * 주문 메뉴가 안 열린다. 메일이 없으면 확인할 길이 없으므로 요구하지 않는다.
+     */
+    const cfg = await getSettings();
+    if (cfg.requireTrustedDevice && deviceCheckPossible() && (await deviceOf(req)) === null) {
+      await appendLog({ kind: "session", ip, msg: "등록 안 된 기기 — 메일 확인 필요" });
+      res.status(403).json({
+        needDevice: true,
+        error: "이 기기는 주문에 등록돼 있지 않습니다 — 메일로 확인하세요",
+      });
+      return;
+    }
+
+    await openSession(req, res);
+    await noteDeviceUse(req, false);
+    /* 처음 보는 주소면 그 자리에서 알린다 — 기록만 남기면 사고 뒤에야 안다 */
+    void noteAccess(ip, "주문 메뉴를 열었습니다");
     await appendLog({ kind: "session", ip, msg: "주문 메뉴 열림" });
     void sendTelegram(`🔓 주문 메뉴 열림 · ${ip}\n기기: ${String(req.headers["user-agent"] ?? "?").slice(0, 60)}`, "order").catch(
       () => undefined,
@@ -117,6 +147,42 @@ export function createOrderRouter(main: KiwoomClient): Router {
   router.delete("/session", (req, res) => {
     closeSession(req, res);
     res.json({ ok: true });
+  });
+
+  /*
+   * 기기 등록은 **주문 세션 밖**이다 — 세션을 열려면 등록이 필요하고, 등록하려면 여기를
+   * 지나야 하기 때문이다. 대신 아이디·비밀번호를 먼저 맞힌 사람만 온다(아래에서 다시 본다).
+   */
+  router.post("/device/start", async (req, res) => {
+    if (!mutating(req, res)) return;
+    if (!ordersEnabled()) {
+      res.status(404).json({ error: "not found" });
+      return;
+    }
+    const { username, password } = (req.body ?? {}) as { username?: string; password?: string };
+    /* 아무나 확인 메일을 쏘게 두지 않는다 — 메일 폭탄도 사고다 */
+    if ((await verifyCredentials(String(username ?? ""), String(password ?? ""))) !== "ok") {
+      res.status(401).json({ error: "아이디 또는 비밀번호가 다릅니다" });
+      return;
+    }
+    const r = await startDeviceCheck(req);
+    if ("error" in r) {
+      res.status(400).json({ error: r.error });
+      return;
+    }
+    res.json(r);
+  });
+
+  router.post("/device/verify", async (req, res) => {
+    if (!mutating(req, res)) return;
+    const { ticket, code, name } = (req.body ?? {}) as { ticket?: string; code?: string; name?: string };
+    const r = await finishDeviceCheck(req, res, String(ticket ?? ""), String(code ?? ""), String(name ?? ""));
+    if (!r.ok) {
+      res.status(400).json({ error: r.error });
+      return;
+    }
+    await appendLog({ kind: "session", ip: clientIp(req), msg: `주문 기기 등록 — ${r.device.name}` });
+    res.json({ ok: true, device: r.device });
   });
 
   /* ── 여기부터 주문 세션 필수 ── */
@@ -244,6 +310,7 @@ export function createOrderRouter(main: KiwoomClient): Router {
         session: sessionOf(req),
         remember: Boolean(remember),
       });
+      await noteDeviceUse(req, r.ticket.kind === "order");
       res.json({ ok: true, ordNo: r.ordNo, msg: r.msg, kind: r.ticket.kind, remembered: r.remembered });
     } catch (e) {
       res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
@@ -276,6 +343,35 @@ export function createOrderRouter(main: KiwoomClient): Router {
   router.post("/forget", (req, res) => {
     forgetPassword(req);
     res.json({ ok: true });
+  });
+
+  router.get("/devices", async (req, res, next) => {
+    try {
+      res.json({ devices: await listDevices(req), mailReady: deviceCheckPossible() });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  router.post("/devices/rename", async (req, res) => {
+    try {
+      const { id, name } = (req.body ?? {}) as { id?: string; name?: string };
+      await renameDevice(String(id ?? ""), String(name ?? ""));
+      res.json({ devices: await listDevices(req) });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
+    }
+  });
+
+  router.post("/devices/remove", async (req, res) => {
+    try {
+      const { id } = (req.body ?? {}) as { id?: string };
+      await removeOrderDevice(String(id ?? ""));
+      await appendLog({ kind: "session", ip: clientIp(req), msg: "주문 기기 삭제" });
+      res.json({ devices: await listDevices(req) });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
+    }
   });
 
   router.post("/lock", async (req, res) => {
