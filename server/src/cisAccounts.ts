@@ -75,7 +75,7 @@ export interface AccountProfile {
 export const ACCOUNTS: Record<AccountId, AccountProfile> = {
   trade: {
     id: "trade",
-    name: "CIS 트레이딩",
+    name: "단기 추세",
     hint: "개별종목 단기 추세추종 스윙. 신용·미수를 쓴다.",
     seed: 40_000_000,
     etfOnly: false,
@@ -94,7 +94,7 @@ export const ACCOUNTS: Record<AccountId, AccountProfile> = {
    */
   close: {
     id: "close",
-    name: "CIS 트레이딩(종배)",
+    name: "종가배팅",
     hint: "종가배팅 전용 — 신호등 상위 + 수급 + 미국장 분위기. 저녁에만 사고 다음 날 시가에 판다. 손절 -3%.",
     seed: 40_000_000,
     etfOnly: false,
@@ -118,7 +118,7 @@ export const ACCOUNTS: Record<AccountId, AccountProfile> = {
   },
   pension: {
     id: "pension",
-    name: "개인연금 (연금저축)",
+    name: "개인연금",
     hint: "ETF 만. 위험자산 100% 까지 담을 수 있다. 빌려 쓸 수 없다.",
     seed: 90_000_000,
     etfOnly: true,
@@ -131,7 +131,7 @@ export const ACCOUNTS: Record<AccountId, AccountProfile> = {
   },
   irp: {
     id: "irp",
-    name: "퇴직연금 (IRP)",
+    name: "퇴직연금",
     hint: "ETF 만. 위험자산 70% 한도 — 나머지 30% 는 안전자산이어야 한다.",
     seed: 110_000_000,
     etfOnly: true,

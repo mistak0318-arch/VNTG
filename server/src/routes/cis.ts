@@ -16,7 +16,7 @@ import { METHOD_LABEL, runPension } from "../cisPensionRun.js";
 import { clearWatchEvents, watchEvents, watchStatus } from "../cisWatch.js";
 
 /**
- * CIS 일지 API.
+ * 항해일지 API (옛 이름 「CIS 일지」 — 2026-09-04 개명).
  *
  * ⚠️ **조회 전용 원칙은 그대로다.** 여기서 실제 주문은 나가지 않는다 —
  * 이 라우터가 다루는 것은 모의 장부뿐이다.
@@ -34,6 +34,67 @@ export function createCisRouter(client: KiwoomClient): Router {
   /** 계좌 목록과 성질 — 화면이 탭을 그리는 재료 */
   router.get("/accounts", (_req, res) => {
     res.json({ accounts: ACCOUNT_IDS.map((id) => ACCOUNTS[id]) });
+  });
+
+  /**
+   * **데스크** — 계좌 넷을 한 줄로 (2026-09-04).
+   *
+   * 벤티지: "내부에 메뉴 구성도 좀 세련되게 바꿔줬으면 좋겠다. 트레이딩 룸처럼 꾸며주던가."
+   *
+   * 전엔 계좌를 고르고 나서야 그 계좌의 평가액이 보였다 — **넷을 견주려면 네 번 눌러야
+   * 했다.** 그런데 이 장부의 물음은 처음부터 「어느 항로가 낫나」다. 한 번에 보여야 한다.
+   *
+   * 값은 **한 번의 시세 조회**로 낸다. 네 계좌의 보유 종목을 합쳐 `priceMap` 에 한 번
+   * 넣는다(ka10095 는 50종목씩 받는다) — 계좌마다 따로 부르면 조회가 네 배가 된다.
+   */
+  router.get("/desk", async (_req, res, next) => {
+    try {
+      const accounts = await Promise.all(ACCOUNT_IDS.map((id) => loadAccount(id)));
+      const px = await priceMap(client, accounts.flatMap((a) => a.positions.map((p) => p.code)));
+      const priceOf = (code: string) => px.get(code) ?? null;
+      const date = today();
+
+      const rows = accounts.map((a) => {
+        const p = profileOf(a.id);
+        const e = equityOf(a, priceOf);
+        /*
+         * 오늘 얼마나 움직였나 — **어제 찍은 평가액**과 견준다. 곡선의 마지막 점이
+         * 오늘이면 그 앞을 쓴다(하루에 여러 번 찍히므로).
+         */
+        const curve = a.equityCurve;
+        const prev = [...curve].reverse().find((c) => c.date < date) ?? null;
+        const dayPnl = prev ? e.equity - prev.equity : null;
+
+        return {
+          id: a.id,
+          name: p.name,
+          hint: p.hint,
+          seed: p.seed,
+          etfOnly: p.etfOnly,
+          riskCap: p.riskCap,
+          cadence: p.cadence,
+          style: p.style ?? "swing",
+          equity: Math.round(e.equity),
+          cash: Math.round(a.cash),
+          debt: Math.round(e.debt),
+          positions: a.positions.length,
+          /* 시드 대비 — 계좌마다 시드가 달라 금액으로는 못 견준다 */
+          totalPct: p.seed > 0 ? Number((((e.equity - p.seed) / p.seed) * 100).toFixed(2)) : 0,
+          dayPnl: dayPnl === null ? null : Math.round(dayPnl),
+          dayPct:
+            dayPnl !== null && prev && prev.equity > 0
+              ? Number(((dayPnl / prev.equity) * 100).toFixed(2))
+              : null,
+          startedAt: a.startedAt,
+          /* 퇴직연금만 뜻이 있다 — 규정을 지키고 있는지가 카드에서 바로 보여야 한다 */
+          risk: p.riskCap < 100 ? riskMix(a, priceOf) : null,
+        };
+      });
+
+      res.json({ date, rows });
+    } catch (err) {
+      next(err);
+    }
   });
 
   /** 지금 계좌 상태 — 보유·현금·빚·목표 진척 */

@@ -382,6 +382,77 @@ export function OrderBookPanel({
         )}
       </div>
 
+      {/*
+        체결강도 — **저울과 눈금으로** (2026-09-04 다시 그림).
+
+        벤티지: "체결강도 적어놓고 막대그래프로 표현해 놨는데 이게 이해가 잘 안 되거든?
+        알기 쉽게 좀 표현해 줄래? 너무 키워서 호가창 가리지는 말고. 차라리 호가창 밑에 표현해도 되고."
+
+        옛 그림은 최근 스무 건을 **낱개 막대**로 세웠다. 방향은 색, 크기는 높이였는데 —
+        낱개는 「지금 어느 쪽이 이기고 있나」를 **사람이 눈으로 합산**해야 답이 나온다.
+        그게 어려웠던 것이다. 합은 기계가 해야 한다.
+
+        그래서 둘로 바꿨다. 자리는 오히려 줄었고 **머리줄 바로 아래** — 호가창 위에 둔다
+        (2026-09-04 벤티지: "한눈에 보기 좋다. 호가창 위에 배치하는 게 좋겠어").
+        값을 먼저 읽고 호가를 보는 순서라 위가 맞다:
+          ① 눈금  체결강도 한 값을 50~150 자 위에 점으로. 100 이 가운데 선이다
+          ② 저울  최근 체결 스무 건의 **매수량 : 매도량**을 한 줄로 갈라 칠한다
+        ①은 하루 전체의 누적이고 ②는 방금이다 — 둘이 어긋나면 그게 바뀌는 순간이다.
+      */}
+      {(book.strength !== null || book.ticks.length > 0) && (
+        <div className="ob-str">
+          {book.strength !== null && (
+            <div className="ob-str-row">
+              <span className="ob-str-label">체결강도</span>
+              <span className={`ob-str-val ${book.strength >= 100 ? "positive" : "negative"}`}>
+                {book.strength.toFixed(0)}%
+              </span>
+              {/* 눈금 — 100 이 가운데. 값이 오른쪽이면 사자, 왼쪽이면 팔자가 셌다 */}
+              <span className="ob-str-gauge" title="체결강도 — 100 을 넘으면 사자가 우세. 오늘 누적입니다">
+                <i className="ob-str-mid" />
+                <i
+                  className={`ob-str-pin ${book.strength >= 100 ? "buy" : "sell"}`}
+                  style={{ left: `${Math.min(100, Math.max(0, ((book.strength - 50) / 100) * 100))}%` }}
+                />
+              </span>
+              <span className="ob-str-say">
+                {book.strength >= 120
+                  ? "사자가 세다"
+                  : book.strength >= 100
+                    ? "사자가 조금 우세"
+                    : book.strength >= 80
+                      ? "팔자가 조금 우세"
+                      : "팔자가 세다"}
+              </span>
+            </div>
+          )}
+
+          {book.ticks.length > 0 &&
+            (() => {
+              /* 방금 스무 건의 무게를 잰다 — 부호가 방향, 절대값이 양이다 */
+              const buy = book.ticks.reduce((a, t) => a + (t.qty > 0 ? t.qty : 0), 0);
+              const sell = book.ticks.reduce((a, t) => a + (t.qty < 0 ? -t.qty : 0), 0);
+              const sum = buy + sell;
+              const bp = sum > 0 ? (buy / sum) * 100 : 50;
+              return (
+                <div className="ob-str-row">
+                  <span className="ob-str-label" title="지금 화면에 든 최근 체결 스무 건의 수량 비율입니다">
+                    최근 {book.ticks.length}건
+                  </span>
+                  <span className="ob-str-scale">
+                    <i className="buy" style={{ width: `${bp}%` }} />
+                    <i className="sell" style={{ width: `${100 - bp}%` }} />
+                  </span>
+                  <span className="ob-str-say">
+                    사자 <b className="positive">{bp.toFixed(0)}%</b> · 팔자{" "}
+                    <b className="negative">{(100 - bp).toFixed(0)}%</b>
+                  </span>
+                </div>
+              );
+            })()}
+        </div>
+      )}
+
       <div className="ob-body">
         <div className="ob-book">
           {/*
@@ -486,75 +557,6 @@ export function OrderBookPanel({
       </div>
 
       {/* 총잔량 — HTS 는 호가창 맨 아래에 이 줄을 둔다 */}
-      {/*
-        체결강도 — **저울과 눈금으로** (2026-09-04 다시 그림).
-
-        벤티지: "체결강도 적어놓고 막대그래프로 표현해 놨는데 이게 이해가 잘 안 되거든?
-        알기 쉽게 좀 표현해 줄래? 너무 키워서 호가창 가리지는 말고. 차라리 호가창 밑에 표현해도 되고."
-
-        옛 그림은 최근 스무 건을 **낱개 막대**로 세웠다. 방향은 색, 크기는 높이였는데 —
-        낱개는 「지금 어느 쪽이 이기고 있나」를 **사람이 눈으로 합산**해야 답이 나온다.
-        그게 어려웠던 것이다. 합은 기계가 해야 한다.
-
-        그래서 둘로 바꿨다. 자리는 오히려 줄었고 호가창 **아래**에 둔다:
-          ① 눈금  체결강도 한 값을 50~150 자 위에 점으로. 100 이 가운데 선이다
-          ② 저울  최근 체결 스무 건의 **매수량 : 매도량**을 한 줄로 갈라 칠한다
-        ①은 하루 전체의 누적이고 ②는 방금이다 — 둘이 어긋나면 그게 바뀌는 순간이다.
-      */}
-      {(book.strength !== null || book.ticks.length > 0) && (
-        <div className="ob-str">
-          {book.strength !== null && (
-            <div className="ob-str-row">
-              <span className="ob-str-label">체결강도</span>
-              <span className={`ob-str-val ${book.strength >= 100 ? "positive" : "negative"}`}>
-                {book.strength.toFixed(0)}%
-              </span>
-              {/* 눈금 — 100 이 가운데. 값이 오른쪽이면 사자, 왼쪽이면 팔자가 셌다 */}
-              <span className="ob-str-gauge" title="체결강도 — 100 을 넘으면 사자가 우세. 오늘 누적입니다">
-                <i className="ob-str-mid" />
-                <i
-                  className={`ob-str-pin ${book.strength >= 100 ? "buy" : "sell"}`}
-                  style={{ left: `${Math.min(100, Math.max(0, ((book.strength - 50) / 100) * 100))}%` }}
-                />
-              </span>
-              <span className="ob-str-say">
-                {book.strength >= 120
-                  ? "사자가 세다"
-                  : book.strength >= 100
-                    ? "사자가 조금 우세"
-                    : book.strength >= 80
-                      ? "팔자가 조금 우세"
-                      : "팔자가 세다"}
-              </span>
-            </div>
-          )}
-
-          {book.ticks.length > 0 &&
-            (() => {
-              /* 방금 스무 건의 무게를 잰다 — 부호가 방향, 절대값이 양이다 */
-              const buy = book.ticks.reduce((a, t) => a + (t.qty > 0 ? t.qty : 0), 0);
-              const sell = book.ticks.reduce((a, t) => a + (t.qty < 0 ? -t.qty : 0), 0);
-              const sum = buy + sell;
-              const bp = sum > 0 ? (buy / sum) * 100 : 50;
-              return (
-                <div className="ob-str-row">
-                  <span className="ob-str-label" title="지금 화면에 든 최근 체결 스무 건의 수량 비율입니다">
-                    최근 {book.ticks.length}건
-                  </span>
-                  <span className="ob-str-scale">
-                    <i className="buy" style={{ width: `${bp}%` }} />
-                    <i className="sell" style={{ width: `${100 - bp}%` }} />
-                  </span>
-                  <span className="ob-str-say">
-                    사자 <b className="positive">{bp.toFixed(0)}%</b> · 팔자{" "}
-                    <b className="negative">{(100 - bp).toFixed(0)}%</b>
-                  </span>
-                </div>
-              );
-            })()}
-        </div>
-      )}
-
       <div className="ob-total">
         <b className="negative">{fmtNum(book.totalAsk)}</b>
         <span>총잔량</span>

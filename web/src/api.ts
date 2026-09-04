@@ -1213,7 +1213,7 @@ export const api = {
       `/api/company/${code}/brief`,
       { name, force: opts.force ?? false, price: opts.price ?? null },
     ),
-  /* ── CIS 일지 — 시스가 굴리는 모의 계좌 (2026-08-31) ────────────────
+  /* ── 항해일지 — 시스가 굴리는 모의 계좌 (2026-08-31, 2026-09-04 개명) ──
      모든 조회가 account 를 받는다. 안 주면 트레이딩 계좌다. */
   /** ETF 분석 — 테마·상대강도·추세·품질. 무거우니 화면이 부를 때만 */
   etfAnalysis: (detail = 30) => getJson<EtfAnalysis>(`/api/etf/analysis?detail=${detail}`),
@@ -1223,6 +1223,8 @@ export const api = {
   cisAccounts: () => getJson<{ accounts: CisProfile[] }>("/api/cis/accounts"),
   cisAccount: (account: string) =>
     getJson<CisAccountView>(`/api/cis/account?account=${account}`),
+  /** 데스크 — 계좌 넷을 한 줄로. 시세 조회 한 번으로 낸다 */
+  cisDesk: () => getJson<CisDesk>("/api/cis/desk"),
   cisFills: (account: string, limit = 200) =>
     getJson<{ fills: CisFill[]; total: number }>(
       `/api/cis/fills?account=${account}&limit=${limit}`,
@@ -5644,7 +5646,7 @@ export interface BoardPresetDto {
 }
 
 /* ────────────────────────────────────────────────────────────────────
- * CIS 일지 (2026-08-31)
+ * 항해일지 (2026-08-31 · 2026-09-04 개명)
  *
  * 시스가 굴리는 **모의 계좌**. 이 HTS 는 조회 전용이라 실제 주문은 없고,
  * 「그때 그 값에 샀다면」을 장부로 남긴다. 서버의 cisAccount.ts 참고.
@@ -5699,6 +5701,39 @@ export interface CisGoal {
   multiple: number | null;
   finalPct: number;
   label: string;
+}
+
+/**
+ * 데스크 한 줄 — 계좌 넷을 견주는 재료 (2026-09-04).
+ *
+ * 시드가 계좌마다 달라 **금액으로는 못 견준다.** 그래서 `totalPct`(시드 대비)를
+ * 같이 보낸다 — 카드가 나란히 설 때 비교되는 것은 이 값이다.
+ */
+export interface CisDeskRow {
+  id: string;
+  name: string;
+  hint: string;
+  seed: number;
+  etfOnly: boolean;
+  riskCap: number;
+  cadence: "daily" | "weekly" | "monthly";
+  style: "swing" | "closeBet";
+  equity: number;
+  cash: number;
+  debt: number;
+  positions: number;
+  totalPct: number;
+  /** 어제 찍은 평가액과의 차이. 곡선이 하루뿐이면 null */
+  dayPnl: number | null;
+  dayPct: number | null;
+  startedAt: string;
+  /** 퇴직연금만 — 위험자산 비중이 한도 안인가 */
+  risk: { risky: number; safe: number; riskyPct: number; cap: number; over: boolean } | null;
+}
+
+export interface CisDesk {
+  date: string;
+  rows: CisDeskRow[];
 }
 
 export interface CisAccountView {

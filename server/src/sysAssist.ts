@@ -493,7 +493,7 @@ const RE = {
   fx: /(환율|달러|원화|엔화|위안)/,
   rates: /(금리|국채|채권|국고채|tnx|연준|fomc)/i,
   crypto: /(비트코인|이더리움|코인|암호화폐|가상화폐)/,
-  cis: /(cis|시스 ?일지|일지|계좌|수익권|모의 ?투자|페이퍼|종배 ?계좌|연금 ?계좌|irp|트레이딩 ?계좌)/i,
+  cis: /(cis|항해 ?일지|시스 ?일지|일지|계좌|수익권|모의 ?투자|페이퍼|종배 ?계좌|연금 ?계좌|irp|트레이딩 ?계좌)/i,
   watch: /(관심 ?종목|내 종목|담은 종목|내가 담은|워치)/,
   ledger: /(슈퍼 ?신호등|신호등 ?원장|원장|무지개|신호등 (뭐|어떤|초록|상위|잘)|초록 (뭐|종목))/,
   calendar: /(일정|캘린더|이벤트|발표 (언제|있)|실적 ?발표|이번 ?주|다음 ?주|내일 (뭐|일정)|스케줄)/,
@@ -1399,9 +1399,9 @@ const TOPICS: Topic[] = [
   { key: "sector", title: "업종", match: (c) => c.sectors.length > 0, gather: (c) => Promise.all(c.sectors.map((s) => sectorSection(c.client, s))), examples: ["반도체 업종 어때?", "전기전자 섹터 오늘 수급", "건설 업종 구성종목"] },
   {
     key: "cis",
-    title: "CIS 일지",
+    title: "항해일지",
     match: (c) => RE.cis.test(c.q) || matchesExamples("cis", c.q),
-    examples: ["CIS 일지 요즘 수익권이래?", "종배 계좌 어때?", "시스 계좌 보유 뭐 있어?"],
+    examples: ["항해일지 요즘 수익권이래?", "종배 계좌 어때?", "시스 계좌 보유 뭐 있어?"],
     gather: (c) => {
       const ids = (Object.keys(ACCOUNTS) as AccountId[]).filter((id) => {
         const q = c.q;

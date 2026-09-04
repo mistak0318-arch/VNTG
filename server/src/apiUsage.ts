@@ -255,7 +255,7 @@ export const FEATURE_LABEL: Record<UsageFeature, string> = {
   research: "웹 리서치",
   pulse: "시장 흐름 요약",
   vision: "이미지 인식(캘린더)",
-  cis: "CIS 일지",
+  cis: "항해일지",
   company: "종목 정보 엮기",
   sys: "시스 도우미",
   other: "기타",

@@ -296,7 +296,7 @@ export async function runSlot(
 ): Promise<RunResult> {
   const date = today();
   const cfg = await getCisConfig();
-  if (!cfg.enabled) return { ok: false, account, slot, date, skipped: "CIS 모드가 꺼져 있다" };
+  if (!cfg.enabled) return { ok: false, account, slot, date, skipped: "항해가 멈춰 있다 (설정에서 켠다)" };
 
   const existing = await loadDay(date, account);
   if (existing[slot] && !force) {

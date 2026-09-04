@@ -169,7 +169,7 @@ export async function runPension(
   const profile = profileOf(account);
 
   if (!cfg.enabled) {
-    return { ok: false, account, date, skipped: "CIS 모드가 꺼져 있다", method, actions: [], note: "" };
+    return { ok: false, account, date, skipped: "항해가 멈춰 있다 (설정에서 켠다)", method, actions: [], note: "" };
   }
   if (profile.cadence === "daily") {
     return { ok: false, account, date, skipped: "연금 계좌가 아니다", method, actions: [], note: "" };

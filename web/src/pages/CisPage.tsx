@@ -5,6 +5,7 @@ import {
   type CisConfig,
   type CisCreed,
   type CisDay,
+  type CisDesk,
   type CisFill,
   type CisPersonaState,
   type CisProfile,
@@ -20,7 +21,12 @@ import { ProgressSteps } from "../components/ProgressSteps";
 import { SuperMark } from "../useSuperMarks";
 
 /**
- * CIS 일지 — 시스가 굴리는 모의 계좌를 보는 자리.
+ * 항해일지 — 시스가 굴리는 모의 계좌 넷을 보는 자리 (2026-09-04 개명).
+ *
+ * 옛 이름은 「CIS 일지」였다. 안에 「복기 노트」 서브탭이 있어 바로 아래 메뉴와
+ * 이름이 겹쳤고, 계좌가 넷으로 늘면서 **서로 다른 항로를 나란히 굴리는 자리**가
+ * 됐는데 사람 이름이 앞에 붙어 있으면 그게 안 읽힌다. 신조는 그대로 CIS 의 것이고
+ * 그건 머리의 신조 띠가 말한다.
  *
  * ⚠️ **모의다.** 이 HTS 는 조회 전용이고 주문 API 가 없다. 화면 어디에도
  * 「주문」이 없는 이유이고, 머리에 그렇게 적어 둔다 — 몇 달 뒤에 봤을 때
@@ -46,14 +52,23 @@ const SLOTS = [
   { key: "evening" as const, label: "저녁", hint: "오늘을 복기하고 내일을 준비", icon: "🌆", at: "15:45" },
 ];
 
+/**
+ * 서브탭 — **자주 여는 것이 앞**이라는 원칙은 그대로 두고, 이름만 겹치지 않게
+ * 고쳤다 (2026-09-04).
+ *
+ *   복기 노트 → **지난 날**   바로 아래 메뉴가 「복기 노트」다. 같은 이름이 두 번
+ *                            나오면 어느 쪽을 눌러야 할지 매번 생각해야 한다.
+ *   HTS 활용법 → **활용법**    탭 줄에서 「HTS」는 아무것도 안 가른다(전부 HTS 다).
+ *   CIS 모드 → **설정**       이 화면의 설정이라는 뜻이 이름에 있어야 한다.
+ */
 const TABS = [
-  { key: "today", label: "오늘" },
-  { key: "review", label: "복기 노트" },
-  { key: "fills", label: "매매일지" },
-  { key: "account", label: "계좌" },
-  { key: "stats", label: "통계" },
-  { key: "usage", label: "HTS 활용법" },
-  { key: "config", label: "CIS 모드" },
+  { key: "today", label: "오늘", hint: "오늘 세 시간대에 무엇을 보고 무엇을 했나" },
+  { key: "review", label: "지난 날", hint: "날짜별 일지와 주간 복기" },
+  { key: "fills", label: "매매일지", hint: "체결 원장 — 산 이유와 판 이유" },
+  { key: "account", label: "계좌", hint: "보유·현금·빚·목표 진척" },
+  { key: "stats", label: "통계", hint: "승률·손익비·평가액 곡선" },
+  { key: "usage", label: "활용법", hint: "어느 화면을 보고 판단했나" },
+  { key: "config", label: "설정", hint: "규칙·시간대·AI·모드" },
 ];
 
 /** KST 오늘 — 서버(cisAccount.today)와 같은 기준이라야 「오늘」이 어긋나지 않는다 */
@@ -141,6 +156,121 @@ const COND_LABEL: Record<CisPersonaState["condition"], { text: string; cls: stri
   bruised: { text: "얻어맞은 뒤", cls: "negative" },
 };
 
+/**
+ * **데스크** — 계좌 넷을 한 줄로 (2026-09-04).
+ *
+ * 벤티지: "트레이딩 룸처럼 꾸며주던가, 일지나 이런 거 잘 볼 수 있게 해주던가."
+ *
+ * 전엔 이 자리에 **시드와 성질만 적힌 단추 넷**이 있었다. 눌러야 그 계좌의 평가액이
+ * 나왔고, 넷을 견주려면 네 번 눌러야 했다 — 그런데 이 장부가 존재하는 이유가
+ * 「어느 항로가 낫나」다. **물음이 한 번에 답해져야 한다.**
+ *
+ * 그래서 카드마다 세 줄을 적는다:
+ *   ① 이름과 성질 (개별종목/ETF · 매일/주1회 · 종배)
+ *   ② **시드 대비 %** — 시드가 4천만~1.1억으로 달라 금액으로는 못 견준다
+ *   ③ 평가액 · 오늘 손익 · 보유 수
+ *
+ * 값은 서버가 **시세 조회 한 번**으로 낸다(`/api/cis/desk`). 30초마다 다시 받는다 —
+ * 이건 하루 세 번 도는 장부라 초 단위로 볼 것이 없다.
+ */
+function DeskStrip({
+  account,
+  onPick,
+}: {
+  account: string;
+  onPick: (id: string) => void;
+}) {
+  const [desk, setDesk] = useState<CisDesk | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      api
+        .cisDesk()
+        .then((d) => {
+          if (alive) setDesk(d);
+        })
+        .catch(() => undefined);
+    };
+    load();
+    const t = setInterval(load, 30_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  if (!desk) return <div className="cis-desk cis-desk-wait">계좌를 읽는 중…</div>;
+
+  /* 가장 잘 가는 항로에 표시를 한다 — 넷 중 어느 것인지가 카드에서 바로 보여야 한다 */
+  const best = desk.rows.reduce<number | null>(
+    (m, r) => (m === null || r.totalPct > m ? r.totalPct : m),
+    null,
+  );
+
+  return (
+    <div className="cis-desk">
+      {desk.rows.map((r) => {
+        const started = r.startedAt ? "" : " (아직 시작 안 함)";
+        return (
+          <button
+            key={r.id}
+            type="button"
+            className={`cis-card ${account === r.id ? "on" : ""} cis-card-${r.id}`}
+            onClick={() => onPick(r.id)}
+            title={`${r.hint}${started}`}
+          >
+            <span className="cis-card-h">
+              <b>{r.name}</b>
+              {best !== null && r.totalPct === best && r.totalPct !== 0 && (
+                <i className="cis-card-best" title="시드 대비로 넷 중 가장 앞선 계좌">
+                  선두
+                </i>
+              )}
+            </span>
+
+            <span className={`cis-card-pct ${cls(r.totalPct)}`}>
+              {r.totalPct > 0 ? "+" : ""}
+              {r.totalPct.toFixed(2)}%
+            </span>
+
+            <span className="cis-card-eq">
+              {억(r.equity)}
+              <em className="pt-n"> / {억(r.seed)}</em>
+            </span>
+
+            <span className="cis-card-day">
+              {r.dayPnl === null ? (
+                <em className="pt-n">오늘 변화 없음</em>
+              ) : (
+                <>
+                  오늘{" "}
+                  <b className={cls(r.dayPnl)}>
+                    {signed(r.dayPnl)}
+                    {r.dayPct !== null ? ` (${r.dayPct > 0 ? "+" : ""}${r.dayPct.toFixed(2)}%)` : ""}
+                  </b>
+                </>
+              )}
+            </span>
+
+            <span className="cis-card-tags">
+              <i>{r.etfOnly ? "ETF" : "개별종목"}</i>
+              <i>{r.style === "closeBet" ? "종배" : r.cadence === "daily" ? "매일" : "주 1회"}</i>
+              <i>{r.positions}종목</i>
+              {r.debt > 0 && <i className="warn">빚 {억(r.debt)}</i>}
+              {r.risk && (
+                <i className={r.risk.over ? "bad" : ""} title={`위험자산 한도 ${r.risk.cap}%`}>
+                  위험 {r.risk.riskyPct}%/{r.risk.cap}%
+                </i>
+              )}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
   const [account, setAccount] = useState<string>(
     () => localStorage.getItem("vntg.cis.account") || "trade",
@@ -182,8 +312,8 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
   return (
     <div className="cis-page">
       <h2 className="page-title">
-        🧠 CIS 일지
-        <span className="cis-sub">시스가 굴리는 모의 계좌 — 실제 주문은 나가지 않습니다</span>
+        🧭 항해일지
+        <span className="cis-sub">시스가 굴리는 모의 계좌 넷 — 실제 주문은 나가지 않습니다</span>
       </h2>
 
       {error && <div className="error-banner">{error}</div>}
@@ -212,7 +342,7 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
 
       {config && !config.enabled && (
         <div className="cis-off">
-          <b>CIS 모드가 꺼져 있습니다.</b> 켜야 시스가 판단하고 일지를 씁니다.
+          <b>항해가 멈춰 있습니다.</b> 켜야 시스가 판단하고 일지를 씁니다.
           <button className="filter-btn" onClick={() => setTab("config")}>
             설정으로
           </button>
@@ -220,24 +350,11 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
       )}
 
       {/*
-        계좌 — 성격이 다른 돈이라 맨 위에서 고른다. 단추가 아니라 **카드**인 이유는
-        셋이 서로 다른 계좌라는 것이 한눈에 보여야 해서다. 서브탭과 같은 모양이면
-        「탭이 열 개」로 읽힌다.
+        데스크 — 계좌 넷을 나란히. 여기서 고른 계좌를 아래 탭들이 따라간다.
+        옛 단추 넷(시드와 성질만 적혀 있던 것)을 대신한다 — 「어느 항로가 낫나」가
+        이 장부의 물음인데, 그 답이 카드에 이미 적혀 있어야 한다.
       */}
-      <div className="cis-accounts">
-        {profiles.map((p) => (
-          <button
-            key={p.id}
-            className={`cis-acct ${account === p.id ? "on" : ""} cis-acct-${p.id}`}
-            onClick={() => setAccount(p.id)}
-            title={p.hint}
-          >
-            <b>{p.name}</b>
-            <i>{억(p.seed)}</i>
-            <em>{p.etfOnly ? "ETF" : "개별종목"}{p.riskCap < 100 ? ` · 위험 ${p.riskCap}%` : ""}</em>
-          </button>
-        ))}
-      </div>
+      <DeskStrip account={account} onPick={setAccount} />
       {profile && <div className="cis-profile-note">{profile.hint}</div>}
 
       <div className="cis-tabs">
@@ -246,6 +363,7 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
             key={t.key}
             className={`cis-tab ${tab === t.key ? "on" : ""}`}
             onClick={() => setTab(t.key)}
+            title={t.hint}
           >
             {t.label}
           </button>
@@ -490,7 +608,7 @@ function TodayTab({
             className="filter-btn"
             disabled={!enabled || busy !== null}
             onClick={() => runPension(false)}
-            title={enabled ? "" : "CIS 모드가 꺼져 있습니다"}
+            title={enabled ? "" : "항해가 멈춰 있습니다 — 설정에서 켜세요"}
           >
             {busy === "pension" ? "…" : "지금 굴리기"}
           </button>
@@ -522,7 +640,7 @@ function TodayTab({
                     className="filter-btn"
                     disabled={!enabled || busy !== null}
                     onClick={() => run(s.key, false)}
-                    title={enabled ? "" : "CIS 모드가 꺼져 있습니다"}
+                    title={enabled ? "" : "항해가 멈춰 있습니다 — 설정에서 켜세요"}
                   >
                     {busy === s.key ? "…" : "지금 쓰기"}
                   </button>
@@ -1406,7 +1524,7 @@ function ConfigTab({
             onChange={(e) => save({ enabled: e.target.checked })}
           />
           <span>
-            <b>CIS 모드</b> — 끄면 시스가 아무것도 하지 않습니다
+            <b>항해</b> — 끄면 시스가 아무것도 하지 않습니다
           </span>
         </label>
         <label className="cis-switch">
