@@ -137,7 +137,9 @@ export function createOrderRouter(main: KiwoomClient): Router {
       fails.set(ip, { n, until: n >= 5 ? Date.now() + 15 * 60_000 : 0 });
       await appendLog({ kind: "session", ip, msg: `주문 메뉴 열기 실패 ${n}회` });
       if (n === 1 || n % 5 === 0) {
-        void sendTelegram(`🔐 주문 메뉴 열기 실패 ${n}회 · ${ip}`, "order").catch(() => undefined);
+        /* 로그 방으로 (2026-09-04) — 실패할 때마다 오던 줄이라 주문 방을 가장 많이 채웠다.
+           진짜 위험(5회 잠금)은 그대로 주문 방으로 간다 */
+        void sendTelegram(`🔐 주문 메뉴 열기 실패 ${n}회 · ${ip}`, "log").catch(() => undefined);
       }
       res.status(401).json({ error: "아이디 또는 비밀번호가 다릅니다" });
       return;

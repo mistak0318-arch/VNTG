@@ -1205,7 +1205,8 @@ async function tick(): Promise<void> {
     if (worst === 30) {
       const msg = e instanceof Error ? e.message : String(e);
       await appendLog({ kind: "error", msg: `체결 감시 실패 30회 — ${msg}` });
-      void sendTelegram(`⚠️ 체결 감시가 계속 실패한다 — 미체결 탭에서 직접 확인\n${esc(msg)}`, "order").catch(() => undefined);
+      /* 로그 방으로 (2026-09-04) — 주문이 아니라 조회가 고장 난 것이다 */
+      void sendTelegram(`⚠️ 체결 감시가 계속 실패한다 — 미체결 탭에서 직접 확인\n${esc(msg)}`, "log").catch(() => undefined);
     }
   } finally {
     ticking = false;

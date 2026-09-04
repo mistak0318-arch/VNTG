@@ -3045,7 +3045,18 @@ export interface AlertHealth {
 
 export interface TelegramChannelStatus {
   /** 서버 telegram.ts 의 TelegramChannel 과 같은 목록이어야 한다 */
-  channel: "report" | "signal" | "log" | "channel" | "disclosure" | "keyword" | "super" | "buzz";
+  /** 서버 `TelegramChannel` 과 같은 목록이어야 한다 — 갈래가 빠지면 화면에서 안 보인다 */
+  channel:
+    | "report"
+    | "signal"
+    | "log"
+    | "channel"
+    | "disclosure"
+    | "keyword"
+    | "super"
+    | "buzz"
+    /** 주문·체결 (2026-09-04에 추가 — 방은 09-03 에 팠는데 이 목록에 빠져 있었다) */
+    | "order";
   chatId: string;
   dedicated: boolean;
   /** 화면에서 재배정된 갈래인가 (.env 대신 저장된 배정이 정함) */

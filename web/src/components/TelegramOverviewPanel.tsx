@@ -80,6 +80,19 @@ const SENDERS: SenderRow[] = [
     where: "전용 방(.env TELEGRAM_CHAT_ID_SUPER)이 있을 때만 — 없으면 각자 원래 방으로",
   },
   {
+    /*
+     * 주문·체결 (2026-09-04에 표에 넣음) — 방을 판 것은 09-03 인데 **이 표에 안 넣었다.**
+     * 그래서 어느 방으로 가는지 볼 수도, 화면에서 옮길 수도 없었다. 벤티지가
+     * "주문 방에 메시지가 너무 많이 와" 라고 했을 때 **어디로 가는지부터 알 수 없었던**
+     * 이유가 이것이다 — 전용 방이 없으면 `chatIdFor` 가 조용히 기본 방으로 떨어진다.
+     */
+    icon: "🧾",
+    name: "주문·체결",
+    what: "체결·일부 체결, 주문 실패·취소, 거절이 몰릴 때 — 돈이 움직인 것만",
+    channel: "order",
+    where: "전용 방(.env TELEGRAM_CHAT_ID_ORDER) — 없으면 기본 방으로 섞인다. 이 표의 「방」 칸에서 옮길 수 있다",
+  },
+  {
     icon: "🌋",
     name: "버즈 레이더",
     what: "30분 간격 판정 — 채널 언급이 평소의 몇 배로 커진 주제(기준선 3일 후 발송)",
@@ -235,10 +248,15 @@ const ASSIGN_LABEL: Record<string, string> = {
   channel: "📡 채널 수집",
   disclosure: "📄 공시",
   keyword: "🔍 키워드",
+  /* 주문·체결 (2026-09-04에 추가) — 여기 없어서 화면에서 방을 못 옮겼다 */
+  order: "🧾 주문·체결",
   log: "🪵 로그(예비)",
 };
-/** 화면에 보여줄 순서 — 서버 enum 순서가 아니라 쓰는 빈도 순 */
-const ASSIGN_ORDER = ["report", "signal", "buzz", "super", "channel", "disclosure", "keyword", "log"];
+/**
+ * 화면에 보여줄 순서 — 서버 enum 순서가 아니라 쓰는 빈도 순.
+ * 주문은 **맨 앞**이다. 내 돈이 움직이는 갈래라 어느 방으로 가는지가 제일 먼저 궁금하다.
+ */
+const ASSIGN_ORDER = ["order", "report", "signal", "buzz", "super", "channel", "disclosure", "keyword", "log"];
 
 function RoomAssignEditor() {
   const [data, setData] = useState<TelegramRoomsData | null>(null);

@@ -78,6 +78,26 @@ export function hasDedicatedChannel(channel: TelegramChannel): boolean {
   return Boolean(assignedChatId(channel) || process.env[CHANNEL_ENV[channel]]?.trim());
 }
 
+/**
+ * **한 번만 짖는다** (2026-09-04) — 전용 방이 없는 갈래가 기본 방으로 떨어질 때.
+ *
+ * 벤티지: "주문 체결 텔레그램 방에 주문 관련된 메시지만 전달해, 지금 메시지가 너무 많이 와."
+ * 그런데 주문 방으로 보내는 코드는 다섯 줄뿐이었다 — 많이 오는 게 아니라 **주문이 남의
+ * 방에 가 있었다.** `TELEGRAM_CHAT_ID_ORDER` 가 비어 있으면 `chatIdFor` 가 조용히 기본
+ * 방으로 떨어지고, 기본 방은 갈래를 안 판 다른 알림들이 모이는 자리다.
+ *
+ * 이 조용함이 문제였다. 갈래별로 처음 한 번, 서버 로그에 남긴다.
+ */
+const warned = new Set<TelegramChannel>();
+function warnIfShared(channel: TelegramChannel): void {
+  if (warned.has(channel) || hasDedicatedChannel(channel)) return;
+  warned.add(channel);
+  console.warn(
+    `[telegram] ${channel} 갈래에 전용 방이 없어 **기본 방**으로 보냅니다 — ` +
+      `.env 의 ${CHANNEL_ENV[channel]} 를 채우거나 「텔레그램 동향 > 방 배정」에서 옮기세요.`,
+  );
+}
+
 /** 어느 방이 어디로 가는지 — 설정 화면에서 확인용 */
 export function telegramChannelStatus(): {
   channel: TelegramChannel;
@@ -188,6 +208,7 @@ export async function sendTelegram(
   channel: TelegramChannel = "report",
 ): Promise<{ ok: boolean; error?: string }> {
   if (!isTelegramConfigured(channel)) return { ok: false, error: "텔레그램 키 미설정" };
+  warnIfShared(channel);
 
   const chatId = chatIdFor(channel);
   // 로그는 조용히 — 알림음 없이 보낸다

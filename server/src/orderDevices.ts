@@ -204,7 +204,11 @@ export async function startDeviceCheck(req: Request): Promise<{ ticket: string }
     pending.delete(ticket);
     return { error: sent.error ?? "메일을 못 보냈다" };
   }
-  void sendTelegram(`📧 주문 기기 등록 확인 메일을 보냈습니다 · ${esc(ipOf(req))}`, "order").catch(() => undefined);
+  /*
+   * 로그 방으로 (2026-09-04 — 벤티지: "주문 방에 주문 관련된 메시지만 전달해, 지금 너무 많이 와").
+   * 이건 **돈이 안 움직인 일**이다. 메일을 보냈다는 사실은 메일함이 이미 말해 준다.
+   */
+  void sendTelegram(`📧 주문 기기 등록 확인 메일을 보냈습니다 · ${esc(ipOf(req))}`, "log").catch(() => undefined);
   return { ticket };
 }
 
