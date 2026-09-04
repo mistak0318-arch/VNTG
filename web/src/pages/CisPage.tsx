@@ -18,6 +18,7 @@ import {
   type PublishJob,
 } from "../api";
 import { ProgressSteps } from "../components/ProgressSteps";
+import { SimulatorTab } from "../components/SimulatorTab";
 import { SuperMark } from "../useSuperMarks";
 
 /**
@@ -67,6 +68,12 @@ const TABS = [
   { key: "fills", label: "매매일지", hint: "체결 원장 — 산 이유와 판 이유" },
   { key: "account", label: "계좌", hint: "보유·현금·빚·목표 진척" },
   { key: "stats", label: "통계", hint: "승률·손익비·평가액 곡선" },
+  /*
+   * 시뮬레이터 (2026-09-04) — 통계 다음에 둔다. 앞의 여섯은 **시스가 한 것**을 보는
+   * 자리이고 이건 **내가 규칙을 걸어 보는** 자리다. 성격이 갈리므로 뒤에 두되,
+   * 설정보다는 앞이다 — 설정보다 훨씬 자주 연다.
+   */
+  { key: "sim", label: "시뮬레이터", hint: "조건을 걸어 종목 하나를 굴려 본다 — 백테스트와 실전" },
   { key: "usage", label: "활용법", hint: "어느 화면을 보고 판단했나" },
   { key: "config", label: "설정", hint: "규칙·시간대·AI·모드" },
 ];
@@ -386,6 +393,7 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
       {tab === "fills" && <FillsTab account={account} onSelectStock={onSelectStock} />}
       {tab === "account" && <AccountTab account={account} onSelectStock={onSelectStock} />}
       {tab === "stats" && <StatsTab account={account} />}
+      {tab === "sim" && <SimulatorTab />}
       {tab === "usage" && <UsageTab account={account} />}
       {tab === "config" && config && (
         <ConfigTab

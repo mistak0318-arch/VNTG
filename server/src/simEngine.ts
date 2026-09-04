@@ -1,0 +1,273 @@
+import type { KiwoomClient } from "./kiwoomClient.js";
+import { asOf, backAt, maAt, series, stockBars, type Point } from "./simSeries.js";
+import type { Cond, SimRule } from "./simRules.js";
+
+/**
+ * 시뮬레이터 **엔진** (2026-09-04).
+ *
+ * ## 하루를 처리하는 함수는 **하나뿐**이다
+ *
+ * 백테스트와 실전 진행이 같은 `step()` 을 지난다. 이게 이 파일의 전부다.
+ *
+ * 두 길로 만들면 반드시 어긋난다 — 이 코드베이스에서 세 번 겪었다(호가 정렬, 버즈
+ * 문턱, 현재가 출처). 그리고 여기서 어긋나면 **백테스트가 실전과 다른 성적을 낸다.**
+ * 그건 이 도구의 존재 이유를 무너뜨린다. 「과거에 이랬으면 이랬다」가 거짓이면
+ * 안 만드느니만 못하다.
+ *
+ * ## 수수료와 세금
+ *
+ * 매수 0.015%, 매도 0.015% + 거래세 0.18%(2026년 코스피·코스닥 기준).
+ * 안 넣으면 잦은 매매 규칙이 실제보다 훨씬 좋아 보인다 — 하루짜리 규칙에서는
+ * 왕복 0.21% 가 성적의 대부분을 먹는다. 넣지 않으면 그 사실이 안 보인다.
+ */
+
+/** 왕복 비용 — 화면에도 같은 값을 적는다 */
+export const FEE_BUY = 0.00015;
+export const FEE_SELL = 0.00015;
+export const TAX_SELL = 0.0018;
+
+export interface SimTrade {
+  d: string;
+  side: "buy" | "sell";
+  qty: number;
+  price: number;
+  amount: number;
+  /** 매도일 때 — 이 거래로 확정된 손익(비용 뺀 뒤) */
+  pnl?: number;
+  why: string;
+}
+
+export interface SimState {
+  cash: number;
+  qty: number;
+  /** 평단 — 비용을 얹은 값이라 실제 본전이다 */
+  avg: number;
+  trades: SimTrade[];
+  /** 날마다 찍는 평가액 — 곡선과 최대낙폭의 재료 */
+  curve: { d: string; equity: number }[];
+}
+
+export function newState(seed: number): SimState {
+  return { cash: seed, qty: 0, avg: 0, trades: [], curve: [] };
+}
+
+/** 조건 하나가 그날 맞았나 — 못 재면 `null`(= 「모른다」, 안 맞은 것과 다르다) */
+function evalCond(
+  c: Cond,
+  d: string,
+  stock: Point[],
+  ext: Map<string, Point[]>,
+): { ok: boolean | null; text: string } {
+  const rows = c.src === "stock" ? stock : (ext.get(c.key ?? "") ?? []);
+  const label = c.src === "stock" ? "종목" : (c.key ?? "?");
+  const now = asOf(rows, d);
+  if (now === null) return { ok: null, text: `${label} 값을 못 읽음` };
+
+  let v: number | null = null;
+  let unit = "";
+  if (c.metric === "close") {
+    v = now;
+  } else if (c.metric === "chg1") {
+    const prev = backAt(rows, d, 1);
+    v = prev !== null && prev !== 0 ? ((now - prev) / prev) * 100 : null;
+    unit = "%";
+  } else if (c.metric === "chgN") {
+    const prev = backAt(rows, d, c.n ?? 5);
+    v = prev !== null && prev !== 0 ? ((now - prev) / prev) * 100 : null;
+    unit = "%";
+  } else if (c.metric === "vsMa") {
+    const ma = maAt(rows, d, c.n ?? 20);
+    v = ma !== null && ma !== 0 ? ((now - ma) / ma) * 100 : null;
+    unit = "%";
+  }
+  if (v === null) return { ok: null, text: `${label} ${c.metric} 을 못 잼` };
+
+  const ok =
+    c.op === "lt" ? v < c.value : c.op === "lte" ? v <= c.value : c.op === "gt" ? v > c.value : v >= c.value;
+  const sign = c.op === "lt" ? "<" : c.op === "lte" ? "≤" : c.op === "gt" ? ">" : "≥";
+  return { ok, text: `${label} ${v.toFixed(2)}${unit} ${sign} ${c.value}${unit}` };
+}
+
+/**
+ * 조건 묶음 — **모두** 맞아야 한다.
+ *
+ * ⚠️ 조건이 **하나도 없으면 안 맞은 것**으로 본다. 빈 조건을 「늘 참」으로 두면
+ * 규칙을 만들다 만 사람이 매일 사는 규칙을 갖게 된다.
+ *
+ * ⚠️ 못 잰 조건이 하나라도 있으면 **안 맞은 것**이다. 「모른다」를 「맞았다」로
+ * 세면 자료가 빈 구간에서 거래가 쏟아진다.
+ */
+function evalAll(
+  list: Cond[],
+  d: string,
+  stock: Point[],
+  ext: Map<string, Point[]>,
+): { ok: boolean; why: string } {
+  if (list.length === 0) return { ok: false, why: "조건 없음" };
+  const parts: string[] = [];
+  for (const c of list) {
+    const r = evalCond(c, d, stock, ext);
+    parts.push(r.text);
+    if (r.ok !== true) return { ok: false, why: parts.join(" · ") };
+  }
+  return { ok: true, why: parts.join(" · ") };
+}
+
+/**
+ * **하루를 진행한다.** 백테스트도 실전도 이 함수만 부른다.
+ *
+ * 순서는 **팔고 나서 산다.** 같은 날 둘 다 맞으면 자리를 비운 뒤 다시 잡는 것이
+ * 사람이 하는 순서이고, 반대로 하면 예수금이 없어 못 사는 날이 생겨 규칙이 아니라
+ * 잔고가 성적을 정한다.
+ */
+export function step(
+  rule: SimRule,
+  st: SimState,
+  d: string,
+  price: number,
+  stock: Point[],
+  ext: Map<string, Point[]>,
+): void {
+  if (price <= 0) return;
+
+  /* ① 판다 — 들고 있을 때만 */
+  if (st.qty > 0) {
+    const s = evalAll(rule.sell, d, stock, ext);
+    if (s.ok) {
+      const gross = st.qty * price;
+      const net = gross * (1 - FEE_SELL - TAX_SELL);
+      const cost = st.qty * st.avg;
+      st.trades.push({
+        d,
+        side: "sell",
+        qty: st.qty,
+        price,
+        amount: Math.round(net),
+        pnl: Math.round(net - cost),
+        why: s.why,
+      });
+      st.cash += net;
+      st.qty = 0;
+      st.avg = 0;
+    }
+  }
+
+  /* ② 산다 — 이미 들고 있으면 `addOn` 이 켜져 있을 때만 */
+  if (st.qty === 0 || rule.addOn) {
+    const b = evalAll(rule.buy, d, stock, ext);
+    if (b.ok) {
+      const budget = Math.min(rule.buyAmount, st.cash);
+      const qty = Math.floor(budget / (price * (1 + FEE_BUY)));
+      if (qty > 0) {
+        const spend = qty * price * (1 + FEE_BUY);
+        /* 평단은 비용을 얹은 값 — 그래야 「본전」이 실제 본전이다 */
+        st.avg = (st.avg * st.qty + spend) / (st.qty + qty);
+        st.qty += qty;
+        st.cash -= spend;
+        st.trades.push({ d, side: "buy", qty, price, amount: Math.round(spend), why: b.why });
+      }
+    }
+  }
+
+  st.curve.push({ d, equity: Math.round(st.cash + st.qty * price) });
+}
+
+export interface SimResult {
+  from: string;
+  to: string;
+  days: number;
+  seed: number;
+  equity: number;
+  /** 시드 대비(%) */
+  ret: number;
+  /** 같은 기간 그 종목을 그냥 들고 있었다면(%) — 규칙이 값을 했는지 견줄 자 */
+  buyHold: number | null;
+  trades: SimTrade[];
+  /** 판 거래 수와 그중 이긴 수 */
+  closed: number;
+  wins: number;
+  /** 최대낙폭(%) — 곡선의 고점 대비 */
+  mdd: number;
+  curve: { d: string; equity: number }[];
+  /** 왜 한 건도 없었나 — 빈 결과는 이유를 말해야 한다 */
+  note: string | null;
+}
+
+/** 결과를 요약한다 — 백테스트와 실전이 같은 요약을 쓴다 */
+export function summarize(
+  rule: SimRule,
+  st: SimState,
+  bars: { d: string; c: number }[],
+): SimResult {
+  const first = bars[0];
+  const last = bars[bars.length - 1];
+  const equity = st.curve.length > 0 ? st.curve[st.curve.length - 1].equity : rule.seed;
+
+  let peak = 0;
+  let mdd = 0;
+  for (const p of st.curve) {
+    if (p.equity > peak) peak = p.equity;
+    if (peak > 0) mdd = Math.min(mdd, ((p.equity - peak) / peak) * 100);
+  }
+
+  const sells = st.trades.filter((t) => t.side === "sell");
+  return {
+    from: first?.d ?? "",
+    to: last?.d ?? "",
+    days: bars.length,
+    seed: rule.seed,
+    equity,
+    ret: rule.seed > 0 ? Number((((equity - rule.seed) / rule.seed) * 100).toFixed(2)) : 0,
+    buyHold:
+      first && last && first.c > 0 ? Number((((last.c - first.c) / first.c) * 100).toFixed(2)) : null,
+    trades: st.trades,
+    closed: sells.length,
+    wins: sells.filter((t) => (t.pnl ?? 0) > 0).length,
+    mdd: Number(mdd.toFixed(2)),
+    curve: st.curve,
+    /*
+     * 빈 결과는 **왜 비었는지**를 말해야 한다. 셋을 갈라 적는다 —
+     * 「아직 안 갔다」와 「조건이 안 맞았다」를 뭉뚱그리면, 방금 켠 실전 규칙이
+     * 마치 조건이 나쁜 것처럼 읽힌다(2026-09-04 화면에서 실제로 그렇게 보였다).
+     */
+    note:
+      st.curve.length === 0
+        ? "아직 하루도 안 갔습니다 — 다음 일봉이 들어오면 한 걸음 나갑니다"
+        : st.trades.length === 0
+          ? rule.buy.length === 0
+            ? "매수 조건이 비어 있습니다 — 조건이 없으면 사지 않습니다"
+            : "이 구간에서 매수 조건이 한 번도 다 맞지 않았습니다"
+          : null,
+  };
+}
+
+/**
+ * **백테스트** — 저장해 둔 일봉으로 과거를 다시 산다.
+ *
+ * ⚠️ 창고가 500일뿐이라 그보다 길게는 못 본다. 못 하는 것을 되는 척하지 않고
+ * 실제로 쓴 구간(`from`~`to`)을 결과에 적어 화면이 그대로 보여 준다.
+ */
+export async function backtest(
+  client: KiwoomClient,
+  rule: SimRule,
+  days = 250,
+): Promise<SimResult> {
+  const all = await stockBars(rule.code);
+  const bars = all.slice(-Math.max(20, Math.min(500, days)));
+  if (bars.length === 0) {
+    return {
+      ...summarize(rule, newState(rule.seed), []),
+      note: "이 종목의 일봉이 창고에 없습니다 — 설정 › 일봉 수집에서 받아야 합니다",
+    };
+  }
+
+  /* 바깥 변수는 규칙이 실제로 쓰는 것만 받는다 — 안 쓰는 것을 받으면 조회만 는다 */
+  const keys = [...new Set([...rule.buy, ...rule.sell].filter((c) => c.src === "series").map((c) => c.key ?? ""))].filter(Boolean);
+  const ext = new Map<string, Point[]>();
+  for (const k of keys) ext.set(k, await series(client, k));
+
+  const stock: Point[] = all.map((b) => ({ d: b.d, c: b.c }));
+  const st = newState(rule.seed);
+  for (const b of bars) step(rule, st, b.d, b.c, stock, ext);
+  return summarize(rule, st, bars);
+}

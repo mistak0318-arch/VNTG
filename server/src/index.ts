@@ -78,6 +78,8 @@ import { closeStaleRuns } from "./dailyStore.js";
 import { createSignalRouter } from "./routes/signal.js";
 import { createPaperRouter } from "./routes/paper.js";
 import { createCisRouter } from "./routes/cis.js";
+import { createSimRouter } from "./routes/sim.js";
+import { startSimScheduler } from "./simLive.js";
 import { createJournalRouter } from "./routes/journal.js";
 import { createDartRouter } from "./routes/dart.js";
 import { createCompanyRouter } from "./routes/company.js";
@@ -199,6 +201,8 @@ app.use("/api/tg-feed", createTelegramFeedRouter());
 app.use("/api/signal", createSignalRouter(client));
 app.use("/api/paper", createPaperRouter(client));
 app.use("/api/cis", createCisRouter(client));
+/* 시뮬레이터 (2026-09-04) — 장부만 만진다. 실제 주문은 /api/order 하나뿐이다 */
+app.use("/api/sim", createSimRouter(client));
 app.use("/api/journal", createJournalRouter(client));
 app.use("/api/dart", createDartRouter());
 app.use("/api/company", createCompanyRouter());
@@ -247,6 +251,8 @@ startAlertScheduler(client);
 startRegimeScheduler(client);
 /* CIS 일지 — 설정에서 켜야 실제로 돈다(기본 꺼짐) */
 startCisScheduler(client);
+/* 시뮬레이터 실전 진행 (2026-09-04) — 시각이 아니라 일봉이 왔는지를 본다 */
+startSimScheduler(client);
 /*
  * 슈퍼신호등 이탈분을 관심종목 그룹에서 정리한다 (2026-08-31) — 자가 치유.
  * 이탈 시 빼는 길이 생기기 전에 쌓인 것들이 있고, 어긋나면 재시작에 맞춰진다.

@@ -1240,6 +1240,18 @@ export const api = {
     getJson<CisAccountView>(`/api/cis/account?account=${account}`),
   /** 데스크 — 계좌 넷을 한 줄로. 시세 조회 한 번으로 낸다 */
   cisDesk: () => getJson<CisDesk>("/api/cis/desk"),
+  /* ── 시뮬레이터 ── */
+  simSeries: () => getJson<{ series: SimSeriesDef[] }>("/api/sim/series"),
+  simRules: () => getJson<{ rules: SimRule[] }>("/api/sim/rules"),
+  simSaveRule: (r: Partial<SimRule>) => putJson<{ rule: SimRule }>("/api/sim/rules", r),
+  simDeleteRule: (id: string) => deleteJson<{ ok: boolean }>(`/api/sim/rules/${id}`),
+  /** 저장된 규칙이면 id, 아직 안 저장한 초안이면 rule — 초안은 창고에 안 들어간다 */
+  simBacktest: (body: { id?: string; rule?: Partial<SimRule>; days?: number }) =>
+    postJson<{ rule: SimRule; result: SimResult }>("/api/sim/backtest", body),
+  simLive: (id: string) => getJson<{ result: SimResult | null }>(`/api/sim/live/${id}`),
+  simLiveStep: (id: string) =>
+    postJson<{ steps: number; result: SimResult | null }>(`/api/sim/live/${id}/step`),
+  simLiveReset: (id: string) => postJson<{ ok: boolean }>(`/api/sim/live/${id}/reset`),
   cisFills: (account: string, limit = 200) =>
     getJson<{ fills: CisFill[]; total: number }>(
       `/api/cis/fills?account=${account}&limit=${limit}`,
@@ -5737,6 +5749,80 @@ export interface CisGoal {
  * 시드가 계좌마다 달라 **금액으로는 못 견준다.** 그래서 `totalPct`(시드 대비)를
  * 같이 보낸다 — 카드가 나란히 설 때 비교되는 것은 이 값이다.
  */
+
+/* ── 시뮬레이터 (2026-09-04) ──────────────────────────────────────
+   조건을 걸어 종목 하나를 굴려 본다. 백테스트와 실전이 **같은 엔진**을 쓴다 —
+   두 길로 만들면 「과거에 이랬으면 이랬다」가 거짓이 된다. */
+export type SimCondSrc = "stock" | "series";
+export type SimCondMetric = "chg1" | "chgN" | "close" | "vsMa";
+export type SimCondOp = "lt" | "lte" | "gt" | "gte";
+
+export interface SimCond {
+  src: SimCondSrc;
+  /** src:"series" 일 때 — 아래 SimSeriesDef 의 key */
+  key?: string;
+  metric: SimCondMetric;
+  op: SimCondOp;
+  value: number;
+  /** chgN·vsMa 가 쓰는 날 수 */
+  n?: number;
+}
+
+export interface SimRule {
+  id: string;
+  name: string;
+  code: string;
+  stockName: string;
+  seed: number;
+  buyAmount: number;
+  buy: SimCond[];
+  sell: SimCond[];
+  /** 이미 들고 있어도 또 살까 */
+  addOn: boolean;
+  /** 진행/정지 — 실전에만 걸린다. 백테스트는 정지 중이어도 돌아간다 */
+  enabled: boolean;
+  createdAt: string;
+  note?: string;
+}
+
+export interface SimSeriesDef {
+  key: string;
+  label: string;
+  kind: "stock" | "index" | "macro";
+  unit: string;
+  hint: string;
+}
+
+export interface SimTrade {
+  d: string;
+  side: "buy" | "sell";
+  qty: number;
+  price: number;
+  amount: number;
+  pnl?: number;
+  why: string;
+}
+
+export interface SimResult {
+  from: string;
+  to: string;
+  days: number;
+  seed: number;
+  equity: number;
+  ret: number;
+  /** 같은 기간 그냥 들고 있었다면 — 규칙이 값을 했는지 견줄 자 */
+  buyHold: number | null;
+  trades: SimTrade[];
+  closed: number;
+  wins: number;
+  mdd: number;
+  curve: { d: string; equity: number }[];
+  /** 거래가 없었으면 그 이유 */
+  note: string | null;
+  /** 실전 성적일 때만 */
+  startedAt?: string | null;
+}
+
 export interface CisDeskRow {
   id: string;
   name: string;
