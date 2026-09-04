@@ -15668,3 +15668,32 @@ select.ord-in { appearance: auto; cursor: pointer; }
   font-size: 1.4rem;
   padding: 0.5rem;
 }
+
+/* 채널 검색 — 최근 찾기 (2026-09-04). 무거운 조회라 받아 둔 것을 되살린다 */
+.cs-hist { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; margin: 0.4rem 0; }
+.cs-hist > .pt-n { font-size: 0.72rem; margin-right: 0.15rem; }
+.cs-hist-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.76rem;
+  cursor: pointer;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cs-hist-btn:hover { border-color: var(--blue); }
+.cs-hist-btn.on { border-color: var(--blue); background: rgba(76, 141, 255, 0.14); }
+.cs-hist-btn i { font-style: normal; color: var(--muted); font-size: 0.68rem; }
+.cs-hist-clear {
+  background: none; border: none; color: var(--muted);
+  font-size: 0.72rem; cursor: pointer; text-decoration: underline;
+}
+:root[data-theme="excel"] .cs-hist-btn { border-radius: 2px; border-color: var(--xl-line); }
+:root[data-theme="excel"] .cs-hist-btn.on { background: var(--xl-sel); border-color: var(--xl-green); }

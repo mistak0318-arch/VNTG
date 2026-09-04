@@ -83,6 +83,76 @@ interface SearchMemory {
 const searchMemory = new Map<string, SearchMemory>();
 
 /**
+ * **찾은 것을 남긴다** (2026-09-04).
+ *
+ * 벤티지: "채널에서 찾기 한 거 돌려놓고 다른 데 갔다왔더니 다 지워져버렸네. 히스토리 좀
+ * 남게 해주면 안 되나. 다시 돌려야 되잖아."
+ *
+ * 위 `searchMemory` 는 **모듈 변수**라 탭을 옮기는 것은 견디지만 **새로고침에는 날아간다.**
+ * 그런데 이 검색은 채널 일흔 곳을 텔레그램에서 통째로 끌어오는 무거운 조회다 —
+ * 날아가면 돈과 시간이 다시 든다. 그래서 브라우저에 적어 둔다.
+ *
+ * 기기마다 다른 것이고 서버가 알 이유가 없어 `localStorage` 에만 둔다(동기화 설정 아님).
+ * 결과가 크므로 **최근 여섯 판**만, 판마다 걸린 글 **여든 건**까지 남긴다 —
+ * 저장이 꽉 차면 브라우저가 통째로 거절해서 하나도 안 남는다.
+ */
+const HIST_KEY = "vntg.chsearch.v1";
+const HIST_MAX = 6;
+const HIST_HITS = 80;
+
+interface HistEntry {
+  /** 같은 검색인지 가리는 열쇠 — 검색어와 구간 */
+  id: string;
+  words: string[];
+  minutes: number;
+  /** 찾은 시각 (ISO) */
+  at: string;
+  result: Result;
+}
+
+function loadHist(): HistEntry[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(HIST_KEY) ?? "[]") as HistEntry[];
+    return Array.isArray(raw) ? raw.filter((h) => h && h.result && Array.isArray(h.words)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHist(list: HistEntry[]): void {
+  try {
+    localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, HIST_MAX)));
+  } catch {
+    /* 자리가 모자라면 하나만 남기고 다시 — 그래도 안 되면 포기한다(화면은 그대로 돈다) */
+    try {
+      localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, 1)));
+    } catch {
+      /* 조용히 */
+    }
+  }
+}
+
+/** 새 결과를 히스토리 맨 앞에. 같은 검색이면 갈아 끼운다 */
+function pushHist(words: string[], minutes: number, result: Result): HistEntry[] {
+  const id = `${words.join(",")}|${minutes}`;
+  const trimmed: Result = { ...result, hits: result.hits.slice(0, HIST_HITS) };
+  const entry: HistEntry = { id, words, minutes, at: new Date().toISOString(), result: trimmed };
+  const next = [entry, ...loadHist().filter((h) => h.id !== id)].slice(0, HIST_MAX);
+  saveHist(next);
+  return next;
+}
+
+function agoText(iso: string): string {
+  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return "방금";
+  if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}시간 전`;
+  return `${Math.floor(h / 24)}일 전`;
+}
+
+
+/**
  * 찾은 낱말을 **원문 안에서 칠한다** (2026-09-04).
  *
  * 벤티지: "로보티즈라고 검색했으면 해당 문구는 강조 처리되어서 어디에 포함되었는지
@@ -120,10 +190,17 @@ function mark(text: string, words: string[]): React.ReactNode {
 export function ChannelSearchPanel({ code, name }: { code?: string; name?: string }) {
   const memKey = code ?? "";
   const saved = searchMemory.get(memKey);
+  /* 새로고침에도 남는 최근 판들 — 누르면 조회 없이 그대로 되살린다 */
+  const [hist, setHist] = useState<HistEntry[]>(() => loadHist());
   const [minutes, setMinutes] = useState(saved?.minutes ?? 720);
   /** 사람이 더 넣은 말 (쉼표) */
   const [extra, setExtra] = useState(saved?.extra ?? "");
-  const [result, setResult] = useState<Result | null>(saved?.result ?? null);
+  /*
+   * 모듈 기억이 먼저, 없으면 **저장해 둔 맨 앞 판**을 되살린다 — 새로고침 뒤에도
+   * 「다시 돌려야 되잖아」가 안 되게. 언제 찾은 것인지는 아래 줄이 적어 준다.
+   */
+  const [result, setResult] = useState<Result | null>(saved?.result ?? loadHist()[0]?.result ?? null);
+  const [shownAt, setShownAt] = useState<string | null>(saved?.result ? null : (loadHist()[0]?.at ?? null));
   const [busy, setBusy] = useState(false);
   /*
    * AI 정리 — **원문을 대신하지 않는다.**
@@ -201,6 +278,11 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
       .then((j) => {
         const cur = searchMemory.get(memKey);
         if (cur) searchMemory.set(memKey, { ...cur, result: j, ran: { words: w, minutes: m }, pending: null });
+        /* 새로고침에도 남게 — 무거운 조회라 두 번 돌릴 이유가 없다 */
+        if (!j.error) {
+          setHist(pushHist(w.split(","), m, j));
+          setShownAt(null);
+        }
         setResult(j);
         setRan({ words: w, minutes: m });
       })
@@ -375,11 +457,59 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
 
       {result?.error && <div className="error-banner">{result.error}</div>}
 
+      {/*
+        최근 찾기 (2026-09-04) — 누르면 **조회 없이** 그때 결과를 되살린다.
+        채널 일흔 곳을 훑는 무거운 조회라, 이미 받아 둔 것을 다시 받을 이유가 없다.
+        새로 받고 싶으면 되살린 뒤 「다시 찾기」를 누른다.
+      */}
+      {hist.length > 0 && (
+        <div className="cs-hist">
+          <span className="pt-n">최근 찾기</span>
+          {hist.map((h) => (
+            <button
+              key={h.id}
+              type="button"
+              className={`cs-hist-btn${result && h.result === result ? " on" : ""}`}
+              title={`${h.words.join(", ")} · ${h.result.hits.length}건 · ${agoText(h.at)}`}
+              onClick={() => {
+                setResult(h.result);
+                setShownAt(h.at);
+                setAi(null);
+                setExtra(h.words.join(", "));
+                setMinutes(h.minutes);
+                setRan({ words: h.words.join(","), minutes: h.minutes });
+              }}
+            >
+              {h.words[0]}
+              {h.words.length > 1 ? ` +${h.words.length - 1}` : ""}
+              <i>{h.result.hits.length}</i>
+            </button>
+          ))}
+          <button
+            type="button"
+            className="cs-hist-clear"
+            onClick={() => {
+              saveHist([]);
+              setHist([]);
+            }}
+            title="최근 찾기를 비웁니다"
+          >
+            비우기
+          </button>
+        </div>
+      )}
+
       {result && !result.error && (
         <>
           <div className="table-note">
             원문 <b>{result.scanned.toLocaleString("ko-KR")}건</b> 중{" "}
             <b>{result.hits.length}건</b>이 걸렸습니다.
+            {shownAt && (
+              <>
+                {" "}
+                — <b>{agoText(shownAt)}</b> 받아 둔 것입니다. 새로 보려면 「다시 찾기」.
+              </>
+            )}
           </div>
           <div className="cs-list">
             {result.hits.map((h) => (
