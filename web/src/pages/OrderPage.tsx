@@ -261,7 +261,9 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
               </button>
             ))}
           </div>
-          {sub === "order" && <OrderForm status={status} prefill={prefill} onDone={load} />}
+          {sub === "order" && (
+            <OrderForm status={status} prefill={prefill} onDone={load} onSelectStock={onSelectStock} />
+          )}
           {sub === "open" && <OpenTab status={status} onDone={load} />}
           {sub === "fills" && <FillsTab />}
           {sub === "balance" && <BalanceTab onSelectStock={onSelectStock} />}
@@ -564,7 +566,17 @@ function LockedCard({ onDone }: { onDone: () => void }) {
 
 /* ── 매수·매도 ──────────────────────────────────────────────────────────── */
 
-function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: Prefill; onDone: () => void }) {
+function OrderForm({
+  status,
+  prefill,
+  onDone,
+  onSelectStock,
+}: {
+  status: OrderStatus;
+  prefill: Prefill;
+  onDone: () => void;
+  onSelectStock?: (code: string, name: string) => void;
+}) {
   const [side, setSide] = useState<"buy" | "sell">(prefill.side ?? "buy");
   const [code, setCode] = useState(prefill.code);
   const [name, setName] = useState(prefill.name);
@@ -601,7 +613,14 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
    */
   const [condFocus, setCondFocus] = useState(true);
   /* 호가창이 올려 주는 지금 값 — 종목 이름 옆에 적는다. 따로 조회하지 않는다 */
-  const [quote, setQuote] = useState<{ price: number; changeRate: number | null } | null>(null);
+  const [quote, setQuote] = useState<{
+    price: number;
+    changeRate: number | null;
+    krxHigh: number;
+    krxLow: number;
+    nxtHigh: number | null;
+    nxtLow: number | null;
+  } | null>(null);
   /*
    * 「가능금액의 몇 %」·「보유의 몇 %」를 세려면 계좌를 알아야 한다 (2026-09-04).
    * 폼을 열 때 한 번만 받는다 — 잔고 탭처럼 10초마다 부르면 주문 앱키에 조회가 계속 나간다.
@@ -746,7 +765,24 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
           />
           {code && (
             <div className="ord-picked">
-              <b>{name || code}</b>
+              {/*
+                이름을 누르면 종목상세 (2026-09-04) — 값을 적기 전에 그 종목을 한 번 더 보는 길.
+                **새 브라우저 탭으로 연다.** 이 화면 안에서 옮겨 가면 적어 둔 수량·가격이 날아간다 —
+                종목을 보러 갔다가 주문을 처음부터 다시 치게 만들 수는 없다.
+              */}
+              <button
+                type="button"
+                className="ord-name-go"
+                onClick={() =>
+                  window.open(
+                    `${window.location.pathname}#/stockAnalysis?code=${code}&name=${encodeURIComponent(name || code)}`,
+                    "_blank",
+                  )
+                }
+                title="종목 상세 — 새 탭으로 (적어 둔 값은 그대로 남습니다)"
+              >
+                {name || code}
+              </button>
               <span className="ord-code">{code}</span>
               {/* 지금 값 — 가격을 적기 전에 「어디쯤인가」가 먼저 보여야 한다 */}
               {/*
@@ -766,6 +802,27 @@ function OrderForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
                   )}
                 </span>
               )}
+            </div>
+          )}
+          {/*
+            당일 고·저 — **KRX 와 NXT 를 갈라서** (2026-09-04). 두 시장은 고저가 다르고,
+            지금 어느 쪽에 내는지에 따라 「위쪽이 어디였나」가 달라진다.
+            호가창이 이미 받은 값이라 조회가 늘지 않는다.
+          */}
+          {code && quote && (quote.krxHigh > 0 || quote.nxtHigh) && (
+            <div className="ord-hl">
+              {quote.krxHigh > 0 && (
+                <span>
+                  <i>KRX</i> 고 <b className="positive">{fmtNum(quote.krxHigh)}</b> 저{" "}
+                  <b className="negative">{fmtNum(quote.krxLow)}</b>
+                </span>
+              )}
+              {quote.nxtHigh ? (
+                <span>
+                  <i>NXT</i> 고 <b className="positive">{fmtNum(quote.nxtHigh)}</b> 저{" "}
+                  <b className="negative">{fmtNum(quote.nxtLow ?? 0)}</b>
+                </span>
+              ) : null}
             </div>
           )}
         </div>

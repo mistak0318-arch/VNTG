@@ -187,7 +187,15 @@ export function OrderBookPanel({
    * 호가창이 이미 3초마다(+실시간) 받고 있는 값이라 **부르는 쪽이 따로 조회할 이유가 없다.**
    * 시세를 두 곳에서 받으면 두 값이 갈리고, 그때 어느 쪽이 맞는지 사람이 판정해야 한다.
    */
-  onQuote?: (q: { price: number; changeRate: number | null }) => void;
+  onQuote?: (q: {
+    price: number;
+    changeRate: number | null;
+    /** 당일 고·저 — **KRX 와 NXT 를 갈라서** 준다. 두 시장은 고저가 다르다 */
+    krxHigh: number;
+    krxLow: number;
+    nxtHigh: number | null;
+    nxtLow: number | null;
+  }) => void;
 }) {
   /*
    * 밑그림. 실시간이 붙으면 아래에서 갈아끼우므로 **주기를 늦춰도 된다** —
@@ -201,11 +209,15 @@ export function OrderBookPanel({
   const quoteRef = useRef<string>("");
   useEffect(() => {
     if (!onQuote || price <= 0) return;
-    const key = `${price}|${nowRate ?? ""}`;
+    const hi = book?.krxHigh ?? 0;
+    const lo = book?.krxLow ?? 0;
+    const nhi = book?.nxtHigh ?? null;
+    const nlo = book?.nxtLow ?? null;
+    const key = `${price}|${nowRate ?? ""}|${hi}|${lo}|${nhi}|${nlo}`;
     if (key === quoteRef.current) return;
     quoteRef.current = key;
-    onQuote({ price, changeRate: nowRate });
-  }, [price, nowRate, onQuote]);
+    onQuote({ price, changeRate: nowRate, krxHigh: hi, krxLow: lo, nxtHigh: nhi, nxtLow: nlo });
+  }, [price, nowRate, book?.krxHigh, book?.krxLow, book?.nxtHigh, book?.nxtLow, onQuote]);
   /*
    * 프로그램 순매수 — HTS 호가 화면 오른쪽 아래에 붙어 있는 그 값.
    * `0w` FID 212 가 **백만원 단위 누적**이라 억으로 줄여 적는다.

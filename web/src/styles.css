@@ -15520,3 +15520,39 @@ select.ord-in { appearance: auto; cursor: pointer; }
 /* 주문 화면에서는 종목 이름 줄에 — 좁아도 점은 남긴다 */
 .ord-picked .live-dot { padding: 0.15rem 0.4rem; font-size: 0.68rem; }
 @media (max-width: 899px) { .ord-picked .live-dot b { display: none; } }
+
+/* 종목 이름을 누르면 종목상세로 (2026-09-04) */
+.ord-name-go {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border);
+}
+.ord-name-go:hover { text-decoration-color: var(--blue); }
+
+/* 당일 고·저 — KRX·NXT 를 갈라서 (2026-09-04). 좁으면 두 줄로 */
+.ord-hl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.9rem;
+  margin-top: 0.2rem;
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ord-hl i {
+  font-style: normal;
+  font-size: 0.66rem;
+  padding: 0 0.25rem;
+  border-radius: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  margin-right: 0.2rem;
+}
+.ord-hl b { font-weight: 700; }
