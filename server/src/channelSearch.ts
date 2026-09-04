@@ -74,7 +74,26 @@ async function load(minutes: number): Promise<ChannelMessage[]> {
      * `useOffsets: false` — 오프셋을 쓰면 **이미 읽은 글을 건너뛴다.**
      * 정기 수집은 그게 맞지만 검색은 「그 구간 전체」를 봐야 한다.
      */
+    /*
+     * ⚠️ **구간을 넓히려면 개수도 같이 넓혀야 한다** (2026-09-05 고침).
+     *
+     * 벤티지: "로보티즈라고 검색했는데 하나도 안 나온다. 3일치로 검색했는데도 안 나왔어."
+     *
+     * `sinceMinutes` 는 **가져온 것을 거르기만** 한다. 얼마나 가져올지는
+     * `maxPerChannel` 이 정하는데 그 기본이 **40** 이었고, 검색은 그 값을 안 넘겼다.
+     * 활발한 채널은 글 40개가 **몇 시간치**다. 그래서 구간을 3일로 골라도 실제로는
+     * 몇 시간만 본 것이고, **구간을 넓혀도 결과가 안 변했다.**
+     *
+     * 「연준·금리」가 걸리고 「로보티즈」가 안 걸린 이유가 이것이다 — 거시 이야기는
+     * 최근 40개 안에 늘 있고, 개별종목 한 번 언급은 그 밖으로 밀린다.
+     *
+     * 구간에 맞춰 늘린다. 대략 6분에 한 건꼴로 잡고 40~300 사이로 묶는다 —
+     * 위로 열어 두면 채널 일흔 개 × 수백 건이라 FLOOD_WAIT 을 부른다.
+     * (3분 캐시가 있어 검색어만 바꾸는 것은 호출이 아예 없다.)
+     */
+    const perChannel = Math.max(40, Math.min(300, Math.round(minutes / 6)));
     const { messages } = await fetchNewMessages({
+      maxPerChannel: perChannel,
       sinceMinutes: minutes,
       useOffsets: false,
       onProgress: (done, total, name) => {
@@ -102,6 +121,12 @@ export interface SearchResult {
   minutes: number;
   /** 훑은 원문 수 */
   scanned: number;
+  /**
+   * **실제로 닿은 가장 오래된 글**(ISO). 요청한 구간보다 짧을 수 있다 —
+   * 채널마다 가져오는 개수에 상한이 있어서다. 화면이 이걸로 「어디까지 봤는지」를 적는다.
+   * 못 재면 null.
+   */
+  oldest: string | null;
   hits: SearchHit[];
   error: string | null;
 }
@@ -119,26 +144,43 @@ export async function searchChannels(
 ): Promise<SearchResult> {
   const query = words.map((w) => w.trim()).filter((w) => w.length >= 2);
   if (query.length === 0) {
-    return { query, minutes, scanned: 0, hits: [], error: "두 글자 이상으로 찾아 주세요." };
+    return { query, minutes, scanned: 0, oldest: null, hits: [], error: "두 글자 이상으로 찾아 주세요." };
   }
 
   try {
     const messages = await load(minutes);
-    const lowered = query.map((q) => q.toLowerCase());
+    /*
+     * ⚠️ **자모를 모아 놓고 견준다** (2026-09-05).
+     *
+     * 한글은 같은 글자를 두 가지로 적을 수 있다 — 「로보티즈」가 완성형 네 글자일 수도,
+     * 자모 여덟 개로 풀어진 형태(NFD)일 수도 있다. 눈에는 똑같은데 `includes` 는 **전혀
+     * 안 걸린다.** 맥·아이패드 한글 자판이나 붙여넣기가 풀어진 형태를 만들 때가 있어서,
+     * 같은 검색어가 **기기에 따라 되기도 하고 안 되기도 한다.** 조용히 0건이 되는 종류다.
+     *
+     * 양쪽을 완성형(NFC)으로 모아 놓고 견주면 그 갈림이 사라진다.
+     */
+    const norm = (v: string) => v.normalize("NFC").toLowerCase();
+    const lowered = query.map(norm);
     const hits: SearchHit[] = [];
     for (const m of messages) {
-      const text = m.text.toLowerCase();
+      /* 글이 없는 메시지(사진만 올라온 것)도 온다 — 여기서 터지면 검색이 통째로 죽는다 */
+      const text = norm(String(m.text ?? ""));
+      if (!text) continue;
       const matched = query.filter((_, i) => text.includes(lowered[i]));
       if (matched.length > 0) hits.push({ ...m, matched });
     }
     // 최신이 위 — 텔레그램의 무기는 신속성이다
     hits.sort((a, b) => b.at.localeCompare(a.at));
-    return { query, minutes, scanned: messages.length, hits: hits.slice(0, limit), error: null };
+    /* 훑은 것 중 가장 오래된 글 — 요청한 구간을 실제로 채웠는지 화면이 판단한다 */
+    let oldest: string | null = null;
+    for (const m of messages) if (!oldest || m.at < oldest) oldest = m.at;
+    return { query, minutes, scanned: messages.length, oldest, hits: hits.slice(0, limit), error: null };
   } catch (err) {
     return {
       query,
       minutes,
       scanned: 0,
+      oldest: null,
       hits: [],
       error: err instanceof Error ? err.message : "채널을 읽지 못했습니다.",
     };

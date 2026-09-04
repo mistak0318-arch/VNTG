@@ -16164,3 +16164,17 @@ select.ord-in { appearance: auto; cursor: pointer; }
   .sim-rule-btns { margin-left: 0; width: 100%; }
   .sim-cond select.ord-in { min-width: 5rem; font-size: 0.7rem; }
 }
+
+/* 채널 검색이 0건일 때 — 「고장」과 「안 나옴」을 가른다 (2026-09-05) */
+.cs-empty {
+  margin: 6px 0 10px;
+  padding: 10px 12px;
+  font-size: 0.76rem;
+  line-height: 1.6;
+  word-break: keep-all;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--cis-gold);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.cs-empty-more { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 7px; }

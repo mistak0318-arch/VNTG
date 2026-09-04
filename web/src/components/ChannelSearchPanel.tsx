@@ -33,6 +33,8 @@ interface Result {
   query: string[];
   minutes: number;
   scanned: number;
+  /** 실제로 닿은 가장 오래된 글 — 고른 구간보다 짧을 수 있다 (2026-09-05) */
+  oldest?: string | null;
   hits: Hit[];
   error: string | null;
 }
@@ -561,6 +563,28 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
           <div className="table-note">
             원문 <b>{result.scanned.toLocaleString("ko-KR")}건</b> 중{" "}
             <b>{result.hits.length}건</b>이 걸렸습니다.
+            {/*
+              **고른 구간과 실제로 본 구간은 다를 수 있다** (2026-09-05).
+              채널마다 가져오는 글 수에 상한이 있어서, 활발한 채널은 상한이 먼저 찬다.
+              이걸 안 적어 두면 「3일을 골랐는데 안 나온다」가 고장으로 보인다.
+            */}
+            {(() => {
+              const o = result.oldest;
+              if (!o) return null;
+              const reachedMin = (Date.now() - new Date(o).getTime()) / 60_000;
+              if (!Number.isFinite(reachedMin) || reachedMin >= result.minutes * 0.8) return null;
+              const h = reachedMin / 60;
+              return (
+                <>
+                  {" "}
+                  <b className="negative">
+                    실제로는 {h < 1 ? `${Math.round(reachedMin)}분` : `${h.toFixed(h < 10 ? 1 : 0)}시간`}치까지만
+                    닿았습니다
+                  </b>{" "}
+                  — 채널마다 가져오는 글 수에 상한이 있어, 글이 잦은 채널은 그 위로 못 올라갑니다.
+                </>
+              );
+            })()}
             {shownAt && (
               <>
                 {" "}
@@ -568,6 +592,50 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
               </>
             )}
           </div>
+
+          {/*
+            **0건은 고장이 아니다 — 그런데 고장처럼 보인다** (2026-09-05).
+
+            벤티지: "로보티즈라고 검색했는데 하나도 안 나온다. 어제는 잘 나왔는데."
+            그런데 같은 자리에서 「연준」·「금리」는 나왔다. 즉 수집도 매칭도 도는데
+            **그 구간에 그 말이 없었을 뿐**이다 — 아침 12시간 창은 대개 간밤이고,
+            그때 채널은 미국장 이야기를 하지 국내 개별종목 얘기는 잘 안 한다.
+            원문 수까지 적어 두고도 「0건」만 크게 보이니 검색이 죽은 것으로 읽혔다.
+
+            그래서 **0건일 때만** 왜 0인지 말하고, 넓히는 단추를 그 자리에 둔다.
+            사람이 다음에 뭘 해야 하는지가 화면에 있어야 한다.
+          */}
+          {result.hits.length === 0 && result.scanned > 0 && (
+            <div className="cs-empty">
+              <b>이 구간에는 그 말이 없었습니다.</b>{" "}
+              원문 {result.scanned.toLocaleString("ko-KR")}건을 다 봤지만{" "}
+              <b>{(result.query ?? []).join(" · ")}</b> 가 안 나옵니다 — 검색이 멈춘 것이
+              아니라 <b>안 나온 것</b>입니다.
+              {(() => {
+                const wider = WINDOWS.filter((w) => w.min > minutes);
+                if (wider.length === 0) return null;
+                return (
+                  <span className="cs-empty-more">
+                    구간을 넓혀 보세요:
+                    {wider.map((w) => (
+                      <button
+                        key={w.min}
+                        type="button"
+                        className="filter-btn"
+                        disabled={busy}
+                        onClick={() => {
+                          setMinutes(w.min);
+                          runFetch(wordKey, w.min);
+                        }}
+                      >
+                        {w.label}
+                      </button>
+                    ))}
+                  </span>
+                );
+              })()}
+            </div>
+          )}
           <div className="cs-list">
             {result.hits.map((h) => (
               <div className="cs-item" key={`${h.channelId}-${h.messageId}`}>

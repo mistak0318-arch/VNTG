@@ -6,8 +6,17 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T23:00:09.545Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T23:11:49.499Z */
 export const CHANGELOG: ChangeDay[] = [
+  {
+    "date": "2026-09-05",
+    "items": [
+      {
+        "hash": "27ea717",
+        "subject": "채널 검색이 안 되던 이유 — 곁다리(히스토리)가 본 일을 막고 있었다"
+      }
+    ]
+  },
   {
     "date": "2026-09-04",
     "items": [
@@ -1646,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "0109955",
         "subject": "차트 크게 버튼 이동 · 브리핑 보드 블록 · 슈퍼신호등 연동/정렬/사유/메모이력"
-      },
-      {
-        "hash": "9e9ab1c",
-        "subject": "보드 지수판 — 색·그래프 복구 + 컴팩트"
       }
     ]
   }
