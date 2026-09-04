@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T13:58:26.408Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T14:51:52.676Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "7b80a91",
+        "subject": "소스 전수 분석 ①~③회차 — 지도·중복계산·조용한 실패 (고친 것 넷)"
+      },
       {
         "hash": "a9a22fc",
         "subject": "주문 접근 점검이 여섯 시간마다 울린 이유 — 중복 방지가 아예 안 걸려 있었다"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "3b1ee96",
         "subject": "보드 지수판 = 시황 세 카드 합체 + 탭바 고정 옵션"
-      },
-      {
-        "hash": "7b54e59",
-        "subject": "안드로이드 위젯·워치 프로젝트 취소 — 저장소에서 걷어냄 (사용자 결정)"
       }
     ]
   }

@@ -135,7 +135,7 @@ export async function removeDevice(id: string): Promise<void> {
   if (gone) {
     void sendTelegram(
       `🗑️ 주문 기기 삭제 — <b>${esc(gone.name)}</b>\n그 기기는 다음에 열 때 메일 확인을 다시 거칩니다.`,
-      "order",
+      "syslog",
     ).catch(() => undefined);
   }
 }
@@ -208,7 +208,7 @@ export async function startDeviceCheck(req: Request): Promise<{ ticket: string }
    * 로그 방으로 (2026-09-04 — 벤티지: "주문 방에 주문 관련된 메시지만 전달해, 지금 너무 많이 와").
    * 이건 **돈이 안 움직인 일**이다. 메일을 보냈다는 사실은 메일함이 이미 말해 준다.
    */
-  void sendTelegram(`📧 주문 기기 등록 확인 메일을 보냈습니다 · ${esc(ipOf(req))}`, "log").catch(() => undefined);
+  void sendTelegram(`📧 주문 기기 등록 확인 메일을 보냈습니다 · ${esc(ipOf(req))}`, "syslog").catch(() => undefined);
   return { ticket };
 }
 
@@ -255,7 +255,7 @@ export async function finishDeviceCheck(
   setDeviceCookie(req, res, device.id);
   void sendTelegram(
     `🔐 <b>주문 기기 등록</b> — ${esc(device.name)}\n주소 ${esc(device.lastIp)}\n본인이 아니면 설정 › 주문 › 기기에서 지우세요.`,
-    "order",
+    "syslog",
   ).catch(() => undefined);
   return { ok: true, device };
 }

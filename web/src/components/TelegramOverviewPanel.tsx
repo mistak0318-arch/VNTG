@@ -93,6 +93,18 @@ const SENDERS: SenderRow[] = [
     where: "전용 방(.env TELEGRAM_CHAT_ID_ORDER) — 없으면 기본 방으로 섞인다. 이 표의 「방」 칸에서 옮길 수 있다",
   },
   {
+    /*
+     * 시스템 로그 (2026-09-04) — 벤티지: "주문 접근 점검이나 이런 시스템 로그 다
+     * 여기에다가 전달해. 다른 채팅방은 실무적인 채팅 메시지만 전달할 수 있도록."
+     * 매매에 쓰는 방과 **기계가 스스로를 감시하는 방**을 가른 것이다.
+     */
+    icon: "🩺",
+    name: "시스템 로그",
+    what: "접근 점검(6시간) · 로그인·PIN 잠금 · 기기 등록 · 감시 고장 — 알림음 없이",
+    channel: "syslog",
+    where: "전용 방(.env TELEGRAM_CHAT_ID_SYSTEM_LOG) — 없으면 기본 방으로 섞인다",
+  },
+  {
     icon: "🌋",
     name: "버즈 레이더",
     what: "30분 간격 판정 — 채널 언급이 평소의 몇 배로 커진 주제(기준선 3일 후 발송)",
@@ -250,13 +262,14 @@ const ASSIGN_LABEL: Record<string, string> = {
   keyword: "🔍 키워드",
   /* 주문·체결 (2026-09-04에 추가) — 여기 없어서 화면에서 방을 못 옮겼다 */
   order: "🧾 주문·체결",
-  log: "🪵 로그(예비)",
+  syslog: "🩺 시스템 로그",
+  log: "🪵 로그(옛)",
 };
 /**
  * 화면에 보여줄 순서 — 서버 enum 순서가 아니라 쓰는 빈도 순.
  * 주문은 **맨 앞**이다. 내 돈이 움직이는 갈래라 어느 방으로 가는지가 제일 먼저 궁금하다.
  */
-const ASSIGN_ORDER = ["order", "report", "signal", "buzz", "super", "channel", "disclosure", "keyword", "log"];
+const ASSIGN_ORDER = ["order", "report", "signal", "buzz", "super", "channel", "disclosure", "keyword", "syslog", "log"];
 
 function RoomAssignEditor() {
   const [data, setData] = useState<TelegramRoomsData | null>(null);

@@ -3085,7 +3085,9 @@ export interface TelegramChannelStatus {
     | "super"
     | "buzz"
     /** 주문·체결 (2026-09-04에 추가 — 방은 09-03 에 팠는데 이 목록에 빠져 있었다) */
-    | "order";
+    | "order"
+    /** 시스템 로그 (2026-09-04) — 접근 점검·잠금·기기 등록·감시 고장 */
+    | "syslog";
   chatId: string;
   dedicated: boolean;
   /** 화면에서 재배정된 갈래인가 (.env 대신 저장된 배정이 정함) */

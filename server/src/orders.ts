@@ -315,7 +315,7 @@ export async function saveSettings(patch: Partial<OrderSettings>): Promise<Order
     void sendTelegram(
       `🔓 주문 비밀번호 <b>기억하기</b>를 켰습니다 (${next.rememberMinutes}분).
 주문 세션이 열려 있는 동안 실행마다 묻지 않습니다.`,
-      "order",
+      "syslog",
     ).catch(() => undefined);
   }
   return next;
@@ -600,7 +600,7 @@ export async function checkPassword(pw: string): Promise<{ ok: true } | { ok: fa
   await writeJson(AUTH_FILE, { ...a, fails: lockUntil ? 0 : fails, lockUntil });
   await appendLog({ kind: "lock", msg: lockUntil ? "주문 비밀번호 5회 실패 — 30분 잠금" : `주문 비밀번호 실패 ${fails}회` });
   if (lockUntil) {
-    void sendTelegram("🔐 <b>주문 비밀번호 5회 실패 — 30분 잠금</b>\n본인이 아니면 지금 서버의 ORDERS_ENABLED 를 끄세요.", "order").catch(
+    void sendTelegram("🔐 <b>주문 비밀번호 5회 실패 — 30분 잠금</b>\n본인이 아니면 지금 서버의 ORDERS_ENABLED 를 끄세요.", "syslog").catch(
       () => undefined,
     );
     return { ok: false, error: "5회 틀림 — 30분 잠금" };
@@ -689,7 +689,7 @@ export async function checkPin(
   if (lock) {
     void sendTelegram(
       "\u{1F513} <b>주문 진입 PIN 5회 실패 — 30분 잠금</b>\n본인이 아니면 지금 서버의 ORDERS_ENABLED 를 끄세요.",
-      "order",
+      "syslog",
     ).catch(() => undefined);
     return { ok: false, error: "5회 틀림 — 30분 잠금" };
   }
@@ -1256,7 +1256,7 @@ export async function noteAccess(ip: string, what: string): Promise<void> {
     `🚨 <b>처음 보는 주소에서 ${esc(what)}</b>
 주소 ${esc(ip)}
 본인이 아니면 지금 서버의 ORDERS_ENABLED 를 끄세요.`,
-    "order",
+    "syslog",
   ).catch(() => undefined);
 }
 
@@ -1266,7 +1266,7 @@ function noteReject(): void {
   rejectTimes.push(now);
   while (rejectTimes.length > 0 && now - rejectTimes[0] > 5 * 60_000) rejectTimes.shift();
   if (rejectTimes.length === 3) {
-    void sendTelegram("⚠️ 5분 안에 주문이 <b>세 번 거절</b>됐습니다 — 주문 › 설정 › 로그를 보세요.", "order").catch(
+    void sendTelegram("⚠️ 5분 안에 주문이 <b>세 번 거절</b>됐습니다 — 주문 › 설정 › 로그를 보세요.", "syslog").catch(
       () => undefined,
     );
   }
@@ -1400,42 +1400,84 @@ export async function auditAccess(hours = 24): Promise<AccessAudit> {
  */
 let lastAuditKey = "";
 
+/**
+ * 점검 물때 — **어디까지 알렸나.** 파일에 적는 이유는 위 주석 그대로다:
+ * 메모리에만 두면 재시작이 초기화하고, 배포가 잦은 날 같은 소리가 반복된다.
+ */
+const MARK_FILE = join(DATA_DIR, "orderAuditMark.json");
+
+async function readAuditMark(): Promise<string> {
+  try {
+    const j = JSON.parse(await fs.readFile(MARK_FILE, "utf8")) as { at?: string };
+    return typeof j.at === "string" ? j.at : "";
+  } catch {
+    return "";
+  }
+}
+
+async function writeAuditMark(at: string): Promise<void> {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(MARK_FILE, JSON.stringify({ at }), "utf8");
+  } catch {
+    /* 못 적으면 다음에 한 번 더 올 뿐이다 — 주문을 막을 일이 아니다 */
+  }
+}
+
 export function startOrderAudit(): void {
   const run = async () => {
     if (!ordersEnabled()) return;
     try {
       const a = await auditAccess(24);
-      if (a.ok) return;
-      /* 알림만 끈다 — 점검과 기록은 그대로 돈다 */
       if ((await getSettings()).auditTelegram === false) return;
+
       /*
-       * 같은 내용이면 다시 안 울린다.
+       * **아직 안 알린 것만.** (2026-09-04 두 번째 고침)
        *
-       * ⚠️ 예전 열쇠는 `findings[0].at` 이었는데, 맨 앞 발견이 **점검한 시각**을 달고
-       * 오는 것들이라 매번 값이 달라져 **중복 방지가 아예 안 걸렸다.** 시각이 아니라
-       * **내용**으로 잰다 — 같은 경보가 그대로면 조용하다.
+       * 벤티지: "얘는 왜 계속 알람 오냐… 적당히 오라고 해, 문제 없었던 거니깐."
+       *
+       * 첫 번째 고침(중복 열쇠를 내용으로)은 **재시작을 못 견뎠다.** 열쇠가 메모리에만
+       * 있고 뜰 때 `void run()` 이 한 번 도니까, **배포할 때마다 같은 소리가 다시 갔다.**
+       * 오늘 여섯 번 배포했고 여섯 번 왔다. 그래서 물때(watermark)를 **파일에 적는다.**
        */
-      const warns = a.findings.filter((f) => f.level === "warn");
-      const key = `${kstParts().date}:${warns.map((f) => `${f.kind}|${f.msg}`).join("~")}`;
-      if (key === lastAuditKey) return;
-      lastAuditKey = key;
-      const lines = warns
+      const mark = await readAuditMark();
+      const fresh = a.findings.filter((f) => f.level === "warn" && f.at > mark);
+      if (fresh.length === 0) return;
+
+      /*
+       * **끝이 좋았으면 안 알린다.**
+       *
+       * 「PIN 실패 1/5 · 2/5」 뒤에 열렸으면 그건 **오타지 사건이 아니다.** 사람이
+       * 손가락을 헛디딘 것을 여섯 시간마다 알리면, 정작 진짜일 때 안 읽게 된다.
+       * 알리는 것은 **잠금까지 간 것**과 **거절·오류·기기 삭제**뿐이다.
+       */
+      const serious = fresh.filter((f) => !/실패 \d+회|열기 실패|잠금 해제/.test(f.msg));
+      await writeAuditMark(a.checkedAt);
+      if (serious.length === 0) return;
+
+      const lines = serious
         .slice(0, 6)
         .map((f) => `• ${f.at.slice(5, 16).replace("T", " ")} ${esc(f.msg)}${f.ip ? ` (${esc(f.ip)})` : ""}`);
-      if (lines.length === 0) return;
       const body =
-        `🔎 <b>주문 접근 점검</b> — 지난 ${a.hours}시간에 눈에 띄는 것 ${lines.length}건\n` +
-        lines.join(`\n`) +
-        `\n\n주문 › 설정 › 접근 로그에서 봅니다.`;
-      await sendTelegram(body, "order",
-      );
+        `🔎 <b>주문 접근 점검</b> — 새로 눈에 띄는 것 ${serious.length}건
+` +
+        lines.join(`
+`) +
+        `
+
+주문 › 설정 › 접근 로그에서 봅니다.`;
+      await sendTelegram(body, "syslog");
     } catch {
       /* 점검이 실패해도 주문은 돌아야 한다 */
     }
   };
-  void run();
+  /*
+   * 뜨자마자 돌리지 않는다 — 배포가 잦은 날 재시작마다 한 번씩 울렸다.
+   * 5분 뒤 첫 점검이면 사고를 놓치지 않으면서 배포 소음이 사라진다.
+   */
+  setTimeout(() => void run(), 5 * 60_000);
   setInterval(() => void run(), 6 * 3600_000);
-  console.log("[order] 접근 점검 6시간마다 — 이상이 없으면 조용합니다");
+  console.log("[order] 접근 점검 6시간마다 — 새 사건이 있고 심각할 때만 알립니다");
 }
 
 /* ── 상태 ─────────────────────────────────────────────────────────────── */

@@ -30,8 +30,17 @@ export type TelegramChannel =
   | "super"
   /** 밤사이 버즈 레이더 (2026-08-27) — 채널 언급 급증 감지가 보낸다 */
   | "buzz"
-  /** 주문·체결·주문 메뉴 열림 (2026-09-03) — 벤티지: "방 하나 만들어서, 임시로" */
-  | "order";
+  /** 주문·체결 (2026-09-03) — **돈이 움직인 것만.** 보안·점검은 아래 `syslog` 로 */
+  | "order"
+  /**
+   * **시스템 로그** (2026-09-04) — 벤티지: "주문 접근 점검이나 이런 시스템 로그
+   * 다 여기에다가 전달해. 다른 채팅방은 실무적인 채팅 메시지만."
+   *
+   * 사람이 매매 판단에 쓰는 방과 **기계가 스스로를 감시하는 방**을 가른다.
+   * 접근 점검·로그인 실패·잠금·기기 등록·감시 고장이 여기로 온다. 이 방을 안 봐도
+   * 매매에는 지장이 없고, 대신 **다른 방에는 매매에 쓰는 것만** 남는다.
+   */
+  | "syslog";
 
 const CHANNEL_ENV: Record<TelegramChannel, string> = {
   report: "TELEGRAM_CHAT_ID_REPORT",
@@ -44,6 +53,7 @@ const CHANNEL_ENV: Record<TelegramChannel, string> = {
   // 사용자가 판 방의 .env 키 이름이 SUPERSIGNAL 이다 — 갈래 이름(buzz)과 키 이름이 다름에 주의
   buzz: "TELEGRAM_CHAT_ID_SUPERSIGNAL",
   order: "TELEGRAM_CHAT_ID_ORDER",
+  syslog: "TELEGRAM_CHAT_ID_SYSTEM_LOG",
 };
 
 /**
@@ -129,6 +139,7 @@ export function telegramEnvRooms(): { key: string; label: string; chatId: string
     super: "슈퍼신호등 방",
     buzz: "버즈 레이더 방",
     order: "주문·체결 방",
+    syslog: "시스템 로그 방",
   };
   const out: { key: string; label: string; chatId: string }[] = [];
   const base = process.env.TELEGRAM_CHAT_ID?.trim();
@@ -212,7 +223,8 @@ export async function sendTelegram(
 
   const chatId = chatIdFor(channel);
   // 로그는 조용히 — 알림음 없이 보낸다
-  const silent = channel === "log";
+  /* 로그·시스템 로그는 조용히 — 알림음 없이 보낸다 */
+  const silent = channel === "log" || channel === "syslog";
   const url = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN!.trim()}/sendMessage`;
   const chunks = split(html);
 
@@ -251,3 +263,4 @@ export async function sendTelegram(
   }
   return { ok: true };
 }
+
