@@ -3,6 +3,7 @@ import { useCardOrder } from "../useCardOrder";
 import { useSwipeTabs, visualOrder } from "../useSwipeTabs";
 import { ChannelDigestPanel } from "../components/ChannelDigestPanel";
 import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
+import { ChannelStorePanel } from "../components/ChannelStorePanel";
 import { MajorChannelPanel } from "../components/MajorChannelPanel";
 import { TelegramRoomsPanel, TelegramStarsPanel } from "../components/TelegramRoomsPanel";
 import { BuzzBoardPanel } from "../components/BuzzBoardPanel";
@@ -73,7 +74,16 @@ export function TelegramPage({ onSelectStock }: { onSelectStock: (code: string, 
       {tab === "rooms" && <TelegramRoomsPanel />}
       {tab === "digest" && <ChannelDigestPanel />}
       {tab === "major" && <MajorChannelPanel />}
-      {tab === "search" && <ChannelSearchPanel />}
+      {tab === "search" && (
+        <>
+          {/*
+            창고가 검색의 재료다 — 얕으면 검색이 얕아진다. 그런데 검색 화면에서는
+            그게 「0건」으로만 보인다(2026-09-05). 재료 상태를 바로 위에 둔다.
+          */}
+          <ChannelStorePanel />
+          <ChannelSearchPanel />
+        </>
+      )}
       {tab === "stars" && <TelegramStarsPanel />}
     </div>
   );

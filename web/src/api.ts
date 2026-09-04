@@ -1240,6 +1240,11 @@ export const api = {
     getJson<CisAccountView>(`/api/cis/account?account=${account}`),
   /** 데스크 — 계좌 넷을 한 줄로. 시세 조회 한 번으로 낸다 */
   cisDesk: () => getJson<CisDesk>("/api/cis/desk"),
+  /* ── 채널 글 창고 ── */
+  channelStore: () => getJson<ChannelStoreStatus>("/api/channels/store"),
+  channelStoreSeed: () =>
+    postJson<{ ran: boolean; added: number; why: string }>("/api/channels/store/seed"),
+
   /* ── 시뮬레이터 ── */
   simSeries: () => getJson<{ series: SimSeriesDef[] }>("/api/sim/series"),
   simRules: () => getJson<{ rules: SimRule[] }>("/api/sim/rules"),
@@ -5823,6 +5828,19 @@ export interface SimResult {
   note: string | null;
   /** 실전 성적일 때만 */
   startedAt?: string | null;
+}
+
+
+/** 채널 글 창고 상태 (2026-09-05) — 검색이 여기서 나온다 */
+export interface ChannelStoreStatus {
+  days: { day: string; bytes: number; lines: number }[];
+  totalLines: number;
+  totalBytes: number;
+  oldest: string | null;
+  newest: string | null;
+  keepDays: number;
+  /** 마지막 수집 결과 — 없으면 아직 한 번도 안 돌았다 */
+  collector: { at: string; got: number; added: number; error: string | null } | null;
 }
 
 export interface CisDeskRow {
