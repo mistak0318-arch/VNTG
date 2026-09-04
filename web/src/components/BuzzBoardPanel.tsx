@@ -259,8 +259,7 @@ export function BuzzBoardPanel({
             <b>✂</b> 표시는 그 낱말의 언급 상당수가 <b>채널 서명</b>이라 뺐다는 뜻입니다 —
             「[하나증권 …]」처럼 방이 자기 소속을 밝히는 것은 시장의 화제가 아닙니다.
             <br />
-            문턱(<b>{board.threshold.minCount}건·{board.threshold.minRatio}배</b> 또는{" "}
-            <b>{board.threshold.sharpCount}건·{board.threshold.sharpRatio}배</b>)을 넘은 것에만
+            문턱(<b>{board.threshold.minCount}건 이상</b>이면서 뜻밖의 정도 <b>z {board.threshold.zMin}</b> 이상)을 넘은 것에만
             금색 「급증」이 붙고 그때만 텔레그램으로 갑니다. <b>문턱 아래도 다 보여 주는</b>{" "}
             이유는, 안 보여 주면 조용한 날에 정말 조용한 건지 문턱이 높은 건지 알 수 없기
             때문입니다.

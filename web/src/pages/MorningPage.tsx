@@ -354,9 +354,8 @@ export function MorningPage() {
               </div>
               {buzz.threshold && (
                 <p className="pt-n">
-                  발송 문턱은 <b>{buzz.threshold.minCount}건 이상 · {buzz.threshold.minRatio}배 이상</b>
-                  {" 또는 "}
-                  <b>{buzz.threshold.sharpCount}건 이상 · {buzz.threshold.sharpRatio}배 이상</b>입니다.
+                  발송 문턱은 <b>{buzz.threshold.minCount}건 이상</b>이면서 뜻밖의 정도가{" "}
+                  <b>z {buzz.threshold.zMin}</b> 이상일 때입니다.
                   {buzz.health && <> 오늘 센 것 <b>{buzz.health.todayCount}건</b>.</>}
                 </p>
               )}

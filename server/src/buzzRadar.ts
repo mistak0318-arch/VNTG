@@ -424,7 +424,8 @@ export interface BuzzResult {
    */
   nearMiss: BuzzHit[];
   /** 지금 걸려 있는 문턱 — 화면이 「몇 건 넘어야 하는지」를 말할 수 있게 */
-  threshold: { minCount: number; minRatio: number; sharpCount: number; sharpRatio: number };
+  /** 지금 걸려 있는 진짜 문턱 — 화면이 「무엇을 넘어야 하는지」를 옳게 말할 수 있게 */
+  threshold: { minCount: number; zMin: number };
   windowHours: number;
   at: string;
 }
@@ -435,11 +436,9 @@ export interface BuzzResult {
  * 「왜 안 오나」를 묻는 사람에게 「6건 넘어야 하는데 지금 제일 큰 게 4건」이라고
  * 답할 수 있어야 한다.
  */
-const MIN_COUNT = 6;
-const MIN_RATIO = 3;
+/* 옛 규칙 — 2026-09-04 z점수로 갈아탔다. 지운 자리를 남겨 둔다: 왜 사라졌는지 알아야 되살리지 않는다.
+   6건·3배 = z 2.31 · 3건·8배 = z 2.24 였고, 그 사이 2.2 가 지금의 zMin 이다 (buzzScore DEFAULTS). */
 /** 적지만 아주 날카롭게 뛴 것 */
-const SHARP_COUNT = 3;
-const SHARP_RATIO = 8;
 
 /**
  * 창 안의 언급 수.
@@ -561,14 +560,34 @@ export async function evaluateBuzz(windowHours = 12): Promise<BuzzResult> {
   const today = winFiles.get(dayStr(now)) ?? EMPTY_DAY;
   const yesterday = winFiles.get(dayStr(new Date(now.getTime() - 86400_000))) ?? EMPTY_DAY;
 
-  /* 기준선 — 지난 7일(오늘 제외) 총 건수의 하루 평균 ÷ 2 (12시간 상당) */
+  /*
+   * ⚠️ **화면과 같은 잣대를 쓴다** (2026-09-04 고침).
+   *
+   * 벤티지: "버즈랑 뉴스 쪽 키워드 흐름도 알고리즘 다시 한 번 점검해보고."
+   *
+   * 점검하다 **판정이 두 벌이었던 것**을 찾았다. 화면(`buzzBoard`)은 z점수·출처 다양성·
+   * 상투어 깎기·시간대 보정에 설정값(`buzzConfig`)까지 쓰는데, **알림을 내보내는 이 길만**
+   * 옛 규칙(6건·3배 / 3건·8배)에 시간대 보정 없이 남아 있었다. `buzzPoints` 의 주석이
+   * 「화면 정렬과 알림 판정에 함께 쓰는 최종 점수」인데 여기서 안 부르고 있었다.
+   *
+   * 그래서 이런 일이 있었다:
+   *   · 설정에서 문턱(zMin)을 바꿔도 **알림은 안 바뀌었다**
+   *   · 새벽에는 기준선이 낮아 과하게 울리고 장중에는 덜 울렸다(시간대 보정이 없어서)
+   *   · 한 방에서만 나온 낱말도 알림은 그냥 울렸다(화면은 절반으로 깎는데)
+   *   · 방 서명(「DS투자증권 …」)이 알림에는 그대로 셈에 들어갔다
+   *
+   * 같은 값이 두 길로 들어오면 언젠가 한쪽이 틀린다 — 이 저장소가 오늘만 세 번 겪은 일이다.
+   */
+  const cfg = await getBuzzConfig();
   const pastDays: DayFile[] = [];
-  for (let i = 1; i <= 7; i += 1) {
+  for (let i = 1; i <= cfg.baselineDays; i += 1) {
     const day = dayStr(new Date(now.getTime() - i * 86400_000));
     const f = await readDay(day);
     if (Object.keys(f.total).length > 0) pastDays.push(f);
   }
   const baselineDays = pastDays.length;
+  /* 하루평균을 이 창 몫으로 — 시간대 쏠림을 반영한다(화면과 같은 함수) */
+  const share = hourShare(pastDays, windowHours, cfg.timeOfDay);
 
   /* 지금 창에서 한 번이라도 언급된 항목만 후보로 — 사전 전체를 돌 필요가 없다 */
   const candidates = new Set<string>([...Object.keys(today.total), ...Object.keys(yesterday.total)]);
@@ -595,12 +614,15 @@ export async function evaluateBuzz(windowHours = 12): Promise<BuzzResult> {
     if (baselineDays < 3) continue; // 기준선이 서기 전에는 판정하지 않는다
 
     const avgDaily = pastDays.reduce((a, f) => a + (f.total[term] ?? 0), 0) / baselineDays;
-    const baseline = Math.max(avgDaily * (windowHours / 24), 0.5);
-    const ratio = recent / baseline;
+    const baseline = Math.max(avgDaily * share, 0.5);
+    /* 방 서명은 깎고, 방 수도 서명 아닌 방만 센다 — 화면과 같은 셈 */
+    const { drop, realChannels } = boilerplateDiscount(term, winFiles);
+    const adjusted = Math.round(recent * (1 - drop));
+    const ratio = adjusted / baseline;
     const hit: BuzzHit = {
       term,
       kind,
-      recent,
+      recent: adjusted,
       baseline: Math.round(baseline * 10) / 10,
       ratio: Math.round(ratio * 10) / 10,
       codes,
@@ -618,9 +640,10 @@ export async function evaluateBuzz(windowHours = 12): Promise<BuzzResult> {
      * 드물다. 평소 0.4건이던 게 3건이면 그건 분명한 사건인데 ①만으로는 영영 안 걸린다.
      * 배수를 높게 잡아 소음은 막는다.
      */
-    if ((recent >= MIN_COUNT && ratio >= MIN_RATIO) || (recent >= SHARP_COUNT && ratio >= SHARP_RATIO)) {
+    const { alert } = buzzPoints(adjusted, baseline, realChannels.size, cfg);
+    if (alert) {
       hits.push(hit);
-    } else if (recent >= 2) {
+    } else if (adjusted >= 2) {
       nearMiss.push(hit);
     }
   }
@@ -641,12 +664,7 @@ export async function evaluateBuzz(windowHours = 12): Promise<BuzzResult> {
     baselineDays,
     topToday: topToday.slice(0, 10),
     nearMiss: nearMiss.slice(0, 8),
-    threshold: {
-      minCount: MIN_COUNT,
-      minRatio: MIN_RATIO,
-      sharpCount: SHARP_COUNT,
-      sharpRatio: SHARP_RATIO,
-    },
+    threshold: { minCount: cfg.minCount, zMin: cfg.zMin },
     windowHours,
     at: new Date().toISOString(),
   };
@@ -781,7 +799,7 @@ export interface BuzzBoard {
   total: number;
   /** 시각별 총 매칭 (0~23시) — 흐름 띠 */
   byHour: { hour: number; count: number }[];
-  threshold: { minCount: number; minRatio: number; sharpCount: number; sharpRatio: number };
+  threshold: { minCount: number; zMin: number };
   reader: boolean;
   at: string;
 }
@@ -871,12 +889,7 @@ export async function buzzBoard(windowHours = 12): Promise<BuzzBoard> {
     rows: rows.slice(0, 120),
     total,
     byHour: [...hourly.entries()].sort((a, b) => a[0] - b[0]).map(([hour, count]) => ({ hour, count })),
-    threshold: {
-      minCount: MIN_COUNT,
-      minRatio: MIN_RATIO,
-      sharpCount: SHARP_COUNT,
-      sharpRatio: SHARP_RATIO,
-    },
+    threshold: { minCount: cfg.minCount, zMin: cfg.zMin },
     reader: isReaderConfigured(),
     at: new Date().toISOString(),
   };

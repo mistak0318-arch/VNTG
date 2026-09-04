@@ -593,7 +593,7 @@ function BuzzWhy({ buzz }: { buzz: BuzzBoard }) {
     <>
       <p className="kwf-buzz-lead">
         문턱은 <b>{buzz.threshold.minCount}건 이상</b>이면서 뜻밖의 정도가{" "}
-        <b>{buzz.threshold.minRatio}</b> 이상일 때입니다.
+        <b>z {buzz.threshold.zMin}</b> 이상일 때입니다.
       </p>
       {buzz.rows.length > 0 ? (
         <>

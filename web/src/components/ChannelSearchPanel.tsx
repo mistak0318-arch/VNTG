@@ -82,6 +82,41 @@ interface SearchMemory {
 }
 const searchMemory = new Map<string, SearchMemory>();
 
+/**
+ * 찾은 낱말을 **원문 안에서 칠한다** (2026-09-04).
+ *
+ * 벤티지: "로보티즈라고 검색했으면 해당 문구는 강조 처리되어서 어디에 포함되었는지
+ * 알 수 있게 해줘야겠지?"
+ *
+ * 맞다. 원문이 길면 어디서 걸렸는지 눈으로 찾아야 했다 — 그 찾는 일을 사람이 할 이유가 없다.
+ *
+ * ⚠️ `dangerouslySetInnerHTML` 을 쓰지 않는다. 여기 들어오는 글은 **남이 쓴 텔레그램 원문**이라
+ * HTML 로 심으면 그게 곧 XSS 다. 조각으로 잘라 React 가 그리게 한다.
+ * 정규식에 넣기 전에 특수문자를 막고(`esc`), 대소문자를 안 가린다(영문 종목명·티커).
+ */
+function mark(text: string, words: string[]): React.ReactNode {
+  const ws = words.map((w) => w.trim()).filter((w) => w.length > 0);
+  if (ws.length === 0) return text;
+  const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let re: RegExp;
+  try {
+    re = new RegExp(`(${ws.map(esc).join("|")})`, "gi");
+  } catch {
+    return text;
+  }
+  const parts = text.split(re);
+  return parts.map((p, i) =>
+    /* split 의 홀수 자리가 잡힌 조각이다 — 값으로 다시 견주면 겹치는 낱말에서 어긋난다 */
+    i % 2 === 1 ? (
+      <mark className="cs-mark" key={i}>
+        {p}
+      </mark>
+    ) : (
+      p
+    ),
+  );
+}
+
 export function ChannelSearchPanel({ code, name }: { code?: string; name?: string }) {
   const memKey = code ?? "";
   const saved = searchMemory.get(memKey);
@@ -330,7 +365,7 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
             <b>AI 정리</b>
             {ai.model && <span className="pt-n">{ai.model}</span>}
           </div>
-          <div className="cs-ai-b">{ai.text}</div>
+          <div className="cs-ai-b">{mark(ai.text, words)}</div>
           <div className="table-note">
             ⚠️ <b>원문을 대신하지 않습니다.</b> AI 는 숫자를 잘못 옮기고 뉘앙스를 지웁니다 —
             눈에 걸리는 게 있으면 아래 원문을 보세요.
@@ -363,7 +398,7 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
                     </a>
                   )}
                 </div>
-                <div className="cs-text">{h.text}</div>
+                <div className="cs-text">{mark(h.text, words)}</div>
               </div>
             ))}
             {result.hits.length === 0 && (

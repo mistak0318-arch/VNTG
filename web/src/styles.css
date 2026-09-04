@@ -15570,3 +15570,27 @@ select.ord-in { appearance: auto; cursor: pointer; }
 }
 .lt-select:focus { outline: none; border-color: var(--blue); }
 @media (max-width: 700px) { .lt-select { max-width: 100%; flex: 1 1 100%; } }
+
+/*
+ * 텔레그램 검색 (2026-09-04).
+ *
+ * ① 글자 잘림 — `.cs-ai-b`·`.cs-text` 는 `white-space: pre-wrap` 이라 줄바꿈은 살지만
+ *    **띄어쓰기 없는 긴 덩어리**(URL·붙여 쓴 한글·해시태그)는 안 접혀 칸 밖으로 나갔다.
+ *    `overflow-wrap: anywhere` 로 어디서든 접고, `word-break: keep-all` 로 한글은 낱말째 넘긴다.
+ * ② 찾은 낱말 강조 — 어디서 걸렸는지 눈으로 찾을 일이 없게.
+ */
+.cs-ai-b,
+.cs-text {
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+.cs-ai,
+.cs-item { min-width: 0; }
+.cs-mark {
+  background: rgba(255, 214, 0, 0.28);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 0.1rem;
+  font-weight: 700;
+}
+:root[data-theme="excel"] .cs-mark { background: var(--xl-sel); font-weight: 700; }

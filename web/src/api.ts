@@ -420,7 +420,8 @@ export interface BuzzBoard {
   rows: BuzzBoardRow[];
   total: number;
   byHour: { hour: number; count: number }[];
-  threshold: { minCount: number; minRatio: number; sharpCount: number; sharpRatio: number };
+  /** 지금 걸려 있는 진짜 문턱 — 건수와 뜻밖의 정도(z) */
+  threshold: { minCount: number; zMin: number };
   reader: boolean;
   at: string;
 }
@@ -710,12 +711,7 @@ export const api = {
         ratio: number;
       }[];
       /** 지금 걸려 있는 문턱 */
-      threshold?: {
-        minCount: number;
-        minRatio: number;
-        sharpCount: number;
-        sharpRatio: number;
-      };
+      threshold?: { minCount: number; zMin: number };
       windowHours: number;
       at: string;
       /** 살아 있나 — 「안 온다」가 고장인지 조용한 것인지 (2026-08-27) */
