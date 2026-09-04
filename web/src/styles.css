@@ -15556,3 +15556,17 @@ select.ord-in { appearance: auto; cursor: pointer; }
   margin-right: 0.2rem;
 }
 .ord-hl b { font-weight: 700; }
+
+/* 신호등 분석 — 목록 고르기 (2026-09-04). 알약 열셋이 네 줄로 접히던 자리 */
+.lt-pick { align-items: center; }
+.lt-select {
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.9rem;
+  max-width: 22rem;
+}
+.lt-select:focus { outline: none; border-color: var(--blue); }
+@media (max-width: 700px) { .lt-select { max-width: 100%; flex: 1 1 100%; } }

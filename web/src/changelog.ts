@@ -6,11 +6,15 @@ export interface ChangeDay {
   items: { hash: string; subject: string }[];
 }
 
-/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T02:45:53.183Z */
+/** 최근 400 개 커밋을 날짜로 묶은 것. 구운 시각: 2026-09-04T03:35:43.137Z */
 export const CHANGELOG: ChangeDay[] = [
   {
     "date": "2026-09-04",
     "items": [
+      {
+        "hash": "58749ae",
+        "subject": "주문 화면에 당일 고·저(KRX·NXT 갈라서) · 종목 이름을 누르면 종목상세"
+      },
       {
         "hash": "b6db8a0",
         "subject": "주문 방은 돈이 움직인 것만 — 메뉴 여닫이는 기록에만 · 받은 방에 「주문·체결」"
@@ -1651,10 +1655,6 @@ export const CHANGELOG: ChangeDay[] = [
       {
         "hash": "0284608",
         "subject": "미니창 후보에 보드 블록 7종 추가"
-      },
-      {
-        "hash": "8e65e15",
-        "subject": "미니창 확장 — 상단 버튼 1~5 + 화면 배정 설정 + 여는 단축키"
       }
     ]
   }

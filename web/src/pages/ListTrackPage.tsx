@@ -13,6 +13,7 @@ const cls = (v: number | null | undefined): string =>
   v === null || v === undefined || !Number.isFinite(v) ? "" : v > 0 ? "positive" : v < 0 ? "negative" : "";
 import { SuperMark } from "../useSuperMarks";
 import { WatchStar } from "../useWatchedCodes";
+import { SortableTh, useSortableTable } from "../useSortableTable";
 
 /**
  * 신호등 분석 — **목록별 단독 추적.**
@@ -142,12 +143,20 @@ export function ListTrackPage({
   }, [load]);
 
   if (err) return <div className="error-banner">{err}</div>;
-  if (!data) return <div className="empty">불러오는 중…</div>;
-
-  const mine = data.entries.filter((e) => e.list === tab);
-  const visible = mine
+  /*
+   * ⚠️ **정렬 훅은 조기 return 위에 있어야 한다.** 아래 `if (!data)` 뒤에 뒀더니
+   * 「Rendered more hooks than during the previous render」로 화면이 통째로 죽었다 —
+   * 첫 렌더(데이터 없음)에는 훅이 하나 적고, 데이터가 온 렌더에는 하나 많아진다.
+   * 데이터가 없을 때는 빈 배열로 돌린다.
+   */
+  const mine = (data?.entries ?? []).filter((e) => e.list === tab);
+  const base = mine
     .filter((e) => showExited || e.active !== false)
     .sort((a, b) => b.addedDate.localeCompare(a.addedDate) || a.rank - b.rank);
+  const sort = useSortableTable(base);
+  const visible = sort.sorted;
+
+  if (!data) return <div className="empty">불러오는 중…</div>;
   const counts = data.counts[tab];
 
   return (
@@ -366,18 +375,24 @@ export function ListTrackPage({
         </section>
       )}
 
-      {/* ── 목록 고르기 ── */}
-      <div className="filter-row">
-        {data.byList.map((b) => (
-          <button
-            key={b.key}
-            className={`filter-btn ${tab === b.key ? "active" : ""}`}
-            onClick={() => setTab(b.key)}
-          >
-            {b.label}
-            {b.active > 0 && <i className="pt-n"> {b.active}</i>}
-          </button>
-        ))}
+      {/*
+        ── 목록 고르기 ── **드롭다운 하나로** (2026-09-04).
+
+        벤티지: "위에 리스트도 많아서 포도알처럼 보여."
+        맞다. 목록이 열셋인데 이름이 「주포 순매수 상위 (투신+연기금+사모)」처럼 길어서,
+        알약이 네 줄로 접히며 화면 위쪽을 다 먹었다. **고르는 자리가 보는 자리보다 크면** 안 된다.
+        칩은 서넛일 때 좋고 열셋이면 목록이다 — 목록에는 드롭다운이 맞다.
+        괄호 안 숫자(추적 중)는 그대로 남긴다. 열지 않고도 어디에 살이 붙었는지 보여야 한다.
+      */}
+      <div className="filter-row lt-pick">
+        <select className="lt-select" value={tab} onChange={(e) => setTab(e.target.value)}>
+          {data.byList.map((b) => (
+            <option key={b.key} value={b.key}>
+              {b.label}
+              {b.active > 0 ? ` (${b.active})` : ""}
+            </option>
+          ))}
+        </select>
         <button
           className={`filter-btn ${showExited ? "active" : ""}`}
           onClick={() => setShowExited((v) => !v)}
@@ -385,6 +400,11 @@ export function ListTrackPage({
           이탈 포함 {showExited ? "켬" : "끔"}
         </button>
         <OrderResetButton order={colOrder} what="열 순서" />
+        {sort.sortKey && (
+          <button className="filter-btn" onClick={() => sort.toggle(sort.sortKey!, () => 0)} title="원래 차례로">
+            ↺ 정렬 풀기
+          </button>
+        )}
       </div>
 
       {counts && (
@@ -412,16 +432,29 @@ export function ListTrackPage({
             */}
             <thead>
               <tr>
-                {orderedCols.map((c) => (
-                  <th
-                    key={c.key}
-                    className={`${c.num ? "num" : ""}${colOrder.drag.cls(c.key)}`}
-                    title={c.hint}
-                    {...colOrder.drag.props(c.key)}
-                  >
-                    {c.label}
-                  </th>
-                ))}
+                {orderedCols.map((c) =>
+                  /* 정렬값이 있는 열만 눌린다 — 없는 열을 누르면 아무 일도 안 일어나 고장으로 보인다 */
+                  c.accessor ? (
+                    <SortableTh
+                      key={c.key}
+                      columnKey={c.key}
+                      label={c.label}
+                      accessor={c.accessor}
+                      sort={sort}
+                      className={c.num ? "num" : undefined}
+                      thProps={{ title: c.hint, ...colOrder.drag.props(c.key) }}
+                    />
+                  ) : (
+                    <th
+                      key={c.key}
+                      className={`${c.num ? "num" : ""}${colOrder.drag.cls(c.key)}`}
+                      title={c.hint}
+                      {...colOrder.drag.props(c.key)}
+                    >
+                      {c.label}
+                    </th>
+                  ),
+                )}
                 {/* 삭제는 드래그 밖 — 늘 맨 끝이어야 손이 기억한다 */}
                 <th title="원장에서 뺍니다">삭제</th>
               </tr>
