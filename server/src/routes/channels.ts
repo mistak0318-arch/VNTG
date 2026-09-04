@@ -9,7 +9,7 @@ import {
   saveChannelConfig,
 } from "../channelConfig.js";
 import { status as channelStoreStatus } from "../channelStore.js";
-import { collectorState } from "../channelCollector.js";
+import { collectorState, seedOnce } from "../channelCollector.js";
 import { isMailConfigured } from "../mailer.js";
 import {
   isReaderConfigured,
@@ -227,6 +227,21 @@ export function createChannelsRouter(): Router {
   router.get("/store", async (_req, res, next) => {
     try {
       res.json({ ...(await channelStoreStatus()), collector: collectorState() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **손으로 첫 채우기** (2026-09-05) — 창고를 뒤로 한 번 더 긁는다.
+   *
+   * 평소엔 켤 때 저절로 한 번만 돈다. 여기는 「더 깊이 긁어 봐라」가 필요할 때 쓴다 —
+   * 채널을 새로 여럿 넣었거나, 창고를 지우고 다시 채울 때.
+   * ⚠️ 채널 일흔 곳을 깊게 긁으므로 **자주 누르면 FLOOD_WAIT 이 온다.**
+   */
+  router.post("/store/seed", async (_req, res, next) => {
+    try {
+      res.json(await seedOnce(true));
     } catch (err) {
       next(err);
     }

@@ -1,5 +1,8 @@
 import { fetchNewMessages, isReaderConfigured } from "./telegramReader.js";
-import { prune, record, status } from "./channelStore.js";
+import { coverage, prune, record, status } from "./channelStore.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * 채널 글 **수집기** — 조금씩, 자주 (2026-09-05).
@@ -69,6 +72,76 @@ export async function collectOnce(): Promise<number> {
   }
 }
 
+
+/* ── 첫 채우기 ──────────────────────────────────────────────────────── */
+
+const here = dirname(fileURLToPath(import.meta.url));
+const SEED_FILE = join(here, "..", "data", "channelSeed.json");
+
+/**
+ * 한 번에 채널당 몇 건까지 긁어 올까 (첫 채우기).
+ *
+ * 평소 수집은 60건이면 되지만 **첫날은 창고가 비어 있다.** 앞으로만 쌓으면 한 달치가
+ * 되는 데 한 달이 걸린다 — 벤티지: "지금 첫 배포 시에는 일단 수집하는 로직 넣어놨어?"
+ *
+ * ⚠️ **이 값이 곧 뒤로 닿는 깊이다.** 그리고 채널마다 다르다 — 글이 잦은 채널은
+ * 400건이 며칠치고, 뜸한 채널은 몇 주치다. 한 달을 다 못 채울 수 있고, **못 채운다는
+ * 사실을 숨기지 않는다**(`/api/channels/store` 가 실제로 닿은 날짜를 보여 준다).
+ * 더 깊이 긁으려면 이 값을 올리면 되는데, 그만큼 FLOOD_WAIT 에 가까워진다.
+ */
+const SEED_PER_CHANNEL = 400;
+
+/** 창고가 이만큼도 안 차 있으면 「비었다」로 본다 */
+const SEED_MIN_LINES = 500;
+
+async function seedDone(): Promise<string | null> {
+  try {
+    const j = JSON.parse(await readFile(SEED_FILE, "utf8")) as { at?: string };
+    return typeof j.at === "string" ? j.at : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * **첫 채우기** — 창고가 비어 있을 때 한 번만 깊게 긁는다.
+ *
+ * 배포가 잦아서 재시작마다 돌면 안 된다(그때마다 채널 일흔 곳을 400건씩 긁는다).
+ * 그래서 **한 번 했다는 표시를 파일에 남긴다.** 다만 창고가 정말 비어 있으면
+ * 표시가 있어도 다시 한다 — 표시만 남고 자료가 없는 상태가 더 나쁘다.
+ */
+export async function seedOnce(force = false): Promise<{ ran: boolean; added: number; why: string }> {
+  if (!isReaderConfigured()) return { ran: false, added: 0, why: "텔레그램 세션이 없다" };
+
+  const cov = await coverage().catch(() => ({ oldest: null, newest: null, lines: 0 }));
+  const done = await seedDone();
+  if (!force && done && cov.lines >= SEED_MIN_LINES) {
+    return { ran: false, added: 0, why: `이미 채웠다 (${done.slice(0, 16)}, ${cov.lines}건)` };
+  }
+
+  try {
+    const { messages } = await fetchNewMessages({
+      sinceMinutes: 44_640, // 31일
+      useOffsets: false,
+      maxPerChannel: SEED_PER_CHANNEL,
+    });
+    const added = await record(messages);
+    try {
+      await mkdir(dirname(SEED_FILE), { recursive: true });
+      await writeFile(SEED_FILE, JSON.stringify({ at: new Date().toISOString(), added }), "utf8");
+    } catch {
+      /* 표시를 못 남기면 다음 재시작에 한 번 더 돈다 — 아프지만 안 망가진다 */
+    }
+    const after = await coverage().catch(() => cov);
+    console.log(
+      `[channels] 첫 채우기 — ${messages.length}건 받아 ${added}건 저장 · 뒤로 ${after.oldest?.slice(0, 10) ?? "?"} 까지`,
+    );
+    return { ran: true, added, why: "채웠다" };
+  } catch (e) {
+    return { ran: false, added: 0, why: e instanceof Error ? e.message : "실패" };
+  }
+}
+
 export function startChannelCollector(): void {
   if (timer) return;
   if (!isReaderConfigured()) {
@@ -77,9 +150,18 @@ export function startChannelCollector(): void {
   }
   /*
    * 뜨자마자 돌리지 않는다 — 배포 직후엔 다른 것도 같이 깨어난다.
-   * 1분 뒤 첫 수집이면 충분히 이르다.
+   *
+   * 순서가 있다: **첫 채우기 → 평소 수집.** 창고가 비어 있으면 깊게 한 번 긁고,
+   * 이미 차 있으면 그 자리에서 넘어간다(`seedOnce` 가 스스로 판단한다).
    */
-  setTimeout(() => void collectOnce(), 60_000);
+  setTimeout(() => {
+    void seedOnce()
+      .then((r) => {
+        if (!r.ran) console.log(`[channels] 첫 채우기 건너뜀 — ${r.why}`);
+      })
+      .catch(() => undefined)
+      .finally(() => void collectOnce());
+  }, 60_000);
   timer = setInterval(() => void collectOnce(), EVERY_MS);
 
   /* 하루 한 번 오래된 날을 지운다 — 한 달을 넘기면 오래된 것부터 */
