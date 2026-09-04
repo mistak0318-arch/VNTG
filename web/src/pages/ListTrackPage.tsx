@@ -316,7 +316,8 @@ export function ListTrackPage({
             원장을 나란히 놓고 「교집합이 값을 하나」에 답할 수 있습니다.
           </p>
           <div className="table-wrap">
-            <table className="sim-table">
+            {/* `lt-grade` — 표본 수를 값 아래로 내리는 규칙이 이 표에만 걸린다 */}
+            <table className="sim-table lt-grade">
               <thead>
                 <tr>
                   <th>구간</th>
@@ -330,11 +331,18 @@ export function ListTrackPage({
                     몇 % 였는지를 알아야 답할 수 있고, 상승장에서는 아무거나 사도 오른다.
                   */}
                   <th className="num sd-emph" title="같은 기간 코스피를 뺀 값 — 이게 진짜 성적이다">
-                    지수대비 +20
+                    지수 대비 +20
                   </th>
-                  <th className="num">승률(1일)</th>
+                  {/*
+                    「승률(1일)」 → **「승률 (1일)」** (2026-09-04).
+                    머리글은 이제 줄을 바꾸는데, `word-break: keep-all` 은 **띄어쓴 자리에서만**
+                    접는다 — 괄호 앞에 공백이 없으면 한 덩어리라 못 접고 칸이 그 폭으로 굳는다.
+                    폰에서 이 표가 계속 옆으로 긁히던 마지막 이유가 이 두 칸이었다.
+                    한글 표기로도 「승률 (1일)」이 틀리지 않는다.
+                  */}
+                  <th className="num">승률 (1일)</th>
                   <th className="num" title="평균과 같이 봐야 뜻이 산다 — 「두 번 크게 먹고 여덟 번 잃었다」인지 「고르게 벌었다」인지">
-                    승률(20일)
+                    승률 (20일)
                   </th>
                 </tr>
               </thead>
