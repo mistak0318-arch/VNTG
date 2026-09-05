@@ -28,19 +28,135 @@ import { StockSearchBox } from "./StockSearchBox";
  *    먹는데, 안 넣으면 그 사실이 안 보인다.
  */
 
-const METRICS: { key: SimCondMetric; label: string; needsN: boolean; unit: string }[] = [
-  { key: "chg1", label: "전일 대비", needsN: false, unit: "%" },
-  { key: "chgN", label: "N일 전 대비", needsN: true, unit: "%" },
-  { key: "vsMa", label: "N일 이동평균 대비", needsN: true, unit: "%" },
-  { key: "close", label: "값 그 자체", needsN: false, unit: "" },
+const METRICS: { key: SimCondMetric; label: string; needsN: boolean }[] = [
+  { key: "chg1", label: "전일 대비", needsN: false },
+  { key: "chgN", label: "N일 전 대비", needsN: true },
+  { key: "vsMa", label: "N일 이동평균 대비", needsN: true },
+  { key: "close", label: "값 자체", needsN: false },
 ];
 
-const OPS: { key: SimCondOp; label: string }[] = [
-  { key: "lt", label: "<" },
-  { key: "lte", label: "≤" },
-  { key: "gt", label: ">" },
-  { key: "gte", label: "≥" },
+/**
+ * 부등호를 **말로 적는다** (2026-09-05).
+ *
+ * 벤티지: "기호만 있어서 전일 대비 상승에 거는 건지 하락에 거는 건지도 모르겠고."
+ * 맞다 — `<` 는 왼쪽에 무엇이 오느냐에 따라 뜻이 뒤집히는데, 화면에서 그 왼쪽은
+ * 세 칸 앞에 있다. 화살표를 붙여 방향이 눈에 먼저 걸리게 한다.
+ *
+ * 그리고 **값이 부등호보다 앞에 온다.** 한국어 어순이 그렇다 —
+ * 「0% 미만이면」이지 「미만 0%」가 아니다.
+ */
+const OPS: { key: SimCondOp; label: string; say: string }[] = [
+  { key: "lt", label: "▼ 미만이면", say: "미만" },
+  { key: "lte", label: "▼ 이하면", say: "이하" },
+  { key: "gt", label: "▲ 초과면", say: "초과" },
+  { key: "gte", label: "▲ 이상이면", say: "이상" },
+  { key: "absLte", label: "± 이내면", say: "이내" },
+  { key: "absGt", label: "± 밖이면", say: "밖" },
 ];
+
+/* ── 조건을 한국어 문장으로 ───────────────────────────────────────────
+   같은 조건이 세 곳에 나온다 — 편집기 밑줄, 규칙 카드 요약, 빈 규칙 안내.
+   문장을 만드는 곳은 **하나**여야 한다. 세 곳이 따로 적으면 한 곳만 고쳐지는 날이 온다. */
+
+/** 「가/이」. S&P 500 처럼 숫자로 끝나는 이름이 있어서 숫자도 본다 */
+const DIGIT_JONG = [true, true, false, true, false, false, true, true, true, false]; // 영일이삼사오육칠팔구
+function ga(w: string): string {
+  const last = w.trim().slice(-1);
+  const c = last.charCodeAt(0);
+  if (c >= 0xac00 && c <= 0xd7a3) return (c - 0xac00) % 28 === 0 ? "가" : "이";
+  if (last >= "0" && last <= "9") return DIGIT_JONG[Number(last)] ? "이" : "가";
+  return "가";
+}
+
+type Way = "up" | "down" | "flat" | "raw";
+
+/**
+ * 지금 이 조건이 **세 갈래 중 무엇인가.** 저장하는 값에 모드를 따로 두지 않고
+ * 부등호와 값에서 읽어 낸다 — 모드를 따로 저장하면 값과 어긋나는 날이 오고,
+ * 그러면 화면이 「상승」이라 적어 두고 실제로는 하락을 재게 된다.
+ */
+function wayOf(c: SimCond): Way {
+  if (c.op === "absLte") return "flat";
+  if (c.value === 0 && (c.op === "gt" || c.op === "gte")) return "up";
+  if (c.value === 0 && (c.op === "lt" || c.op === "lte")) return "down";
+  return "raw";
+}
+
+interface WayWord {
+  btn: string;
+  say: string;
+}
+
+/**
+ * 세 갈래의 말. **지표마다 다르다** — 등락률은 「상승/하락」, 이평 이격은 「위/아래」,
+ * 프리장 봉은 「양봉/음봉」이다. 한 벌로 뭉뚱그리면 「이동평균 대비 상승」 같은
+ * 말이 나오는데, 그건 뜻이 다른 말이다.
+ *
+ * `null` 이면 세 갈래를 안 내놓는다 — VIX·금리의 「값 자체」는 늘 양수라
+ * 「상승/하락」이라는 물음 자체가 성립하지 않는다.
+ */
+function waysFor(
+  c: SimCond,
+  def: SimSeriesDef | undefined,
+): { up: WayWord; down: WayWord; flat: WayWord } | null {
+  if (c.metric === "close") {
+    const z = def?.zero;
+    return z
+      ? {
+          up: { btn: z.up, say: `${z.up}인` },
+          down: { btn: z.down, say: `${z.down}인` },
+          flat: { btn: z.flat, say: `${z.flat}인` },
+        }
+      : null;
+  }
+  if (c.metric === "vsMa") {
+    return {
+      up: { btn: "위", say: "위인" },
+      down: { btn: "아래", say: "아래인" },
+      flat: { btn: "비슷", say: "비슷한" },
+    };
+  }
+  return {
+    up: { btn: "상승", say: "오른" },
+    down: { btn: "하락", say: "내린" },
+    flat: { btn: "보합", say: "보합인" },
+  };
+}
+
+/** 조건 한 줄을 사람 문장으로. 「이렇게 읽습니다」의 그 문장이다 */
+export function condSay(c: SimCond, series: SimSeriesDef[]): string {
+  const def = c.src === "series" ? series.find((x) => x.key === c.key) : undefined;
+  const subj = c.src === "stock" ? "이 종목" : (def?.label ?? c.key ?? "?");
+  const n = c.n ?? (c.metric === "chgN" ? 5 : 20);
+  const unit = c.metric === "close" ? (def?.unit ?? "원") : "%";
+  const meas =
+    c.metric === "chg1"
+      ? "전일 대비 "
+      : c.metric === "chgN"
+        ? `${n}일 전 대비 `
+        : c.metric === "vsMa"
+          ? `${n}일 이동평균 대비 `
+          : "";
+  const head = `${subj}${ga(subj)} ${meas}`;
+  const w = waysFor(c, def);
+  const way = wayOf(c);
+
+  if (w && way !== "raw") {
+    if (way === "flat") return `${head}${w.flat.say}(±${Math.abs(c.value)}${unit}) 날`;
+    return `${head}${(way === "up" ? w.up : w.down).say} 날`;
+  }
+  const op = OPS.find((o) => o.key === c.op) ?? OPS[0];
+  const bound =
+    c.op === "absLte" || c.op === "absGt"
+      ? `±${Math.abs(c.value)}${unit}`
+      : `${c.value}${unit}`;
+  return `${head}${bound} ${op.say}인 날`;
+}
+
+/** 여러 줄은 **모두** 맞아야 한다 — 그래서 「그리고」로 잇는다 */
+export function condsSay(list: SimCond[], series: SimSeriesDef[]): string {
+  return list.map((c) => condSay(c, series)).join(" 그리고 ");
+}
 
 const won = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
 const 억 = (n: number) =>
@@ -103,8 +219,27 @@ function CondEditor({
       {list.map((c, i) => {
         const m = METRICS.find((x) => x.key === c.metric) ?? METRICS[0];
         const def = c.src === "series" ? series.find((x) => x.key === c.key) : undefined;
-        /* 「값 그 자체」의 단위는 지표가 아니라 **그 변수**의 것이다 — VIX 는 p, 금리는 % */
-        const unit = m.key === "close" ? (def?.unit ?? "원") : m.unit;
+        /* 「값 자체」의 단위는 지표가 아니라 **그 변수**의 것이다 — VIX 는 p, 금리는 % */
+        const unit = m.key === "close" ? (def?.unit ?? "원") : "%";
+        const ways = waysFor(c, def);
+        const way = wayOf(c);
+        /* 세 갈래로 고른 뒤에는 숫자와 부등호를 감춘다 — 안 쓰는 칸이 남아 있으면
+           사람은 그 칸이 뜻을 가진다고 믿는다. 「보합」만 문턱이 필요해서 남긴다 */
+        const showRaw = !ways || way === "raw";
+
+        const pick = (w: Way) =>
+          set(
+            i,
+            w === "up"
+              ? { op: "gt", value: 0 }
+              : w === "down"
+                ? { op: "lt", value: 0 }
+                : w === "flat"
+                  ? { op: "absLte", value: Math.abs(c.value) || 0.1 }
+                  : /* 직접 — 세 갈래에서 빠져나올 땐 0 이 아닌 값을 줘야 다시 세 갈래로 안 읽힌다 */
+                    { op: "lt", value: c.value || -1 },
+          );
+
         return (
           <div className="sim-cond-wrap" key={i}>
           <div className="sim-cond">
@@ -160,26 +295,64 @@ function CondEditor({
               />
             )}
 
-            <select
-              className="ord-in sim-op"
-              value={c.op}
-              onChange={(e) => set(i, { op: e.target.value as SimCondOp })}
-            >
-              {OPS.map((x) => (
-                <option key={x.key} value={x.key}>
-                  {x.label}
-                </option>
-              ))}
-            </select>
+            {/*
+              세 갈래 단추 — 벤티지: "봉 기준이면 양봉인지 음봉인지 보합인지 물어봐야
+              되는데." 대부분의 조건은 결국 이 셋 중 하나인데, 그걸 「> 0」으로 적게
+              하면 만드는 사람이 매번 머리로 번역해야 한다. 번역은 화면이 한다.
+            */}
+            {ways && (
+              <span className="sim-way">
+                {(["up", "down", "flat"] as const).map((w) => (
+                  <button
+                    type="button"
+                    key={w}
+                    className={`sim-way-b ${way === w ? "on" : ""} sim-way-${w}`}
+                    onClick={() => pick(w)}
+                  >
+                    {ways[w].btn}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`sim-way-b ${way === "raw" ? "on" : ""}`}
+                  onClick={() => pick("raw")}
+                  title="숫자로 직접 문턱을 정합니다"
+                >
+                  직접
+                </button>
+              </span>
+            )}
 
-            <input
-              className="ord-in sim-v"
-              type="number"
-              step="0.1"
-              value={c.value}
-              onChange={(e) => set(i, { value: Number(e.target.value) })}
-            />
-            <span className="pt-n">{unit}</span>
+            {/* 「보합」은 문턱이 있어야 뜻이 정해진다 — ±얼마까지가 보합인지 */}
+            {(showRaw || way === "flat") && (
+              <>
+                <input
+                  className="ord-in sim-v"
+                  type="number"
+                  step="0.1"
+                  value={c.value}
+                  onChange={(e) => set(i, { value: Number(e.target.value) })}
+                />
+                <span className="pt-n">
+                  {way === "flat" ? `${unit} 이내` : unit}
+                </span>
+              </>
+            )}
+
+            {/* 값이 부등호보다 **앞**이다 — 「0% 미만이면」이지 「미만 0%」가 아니다 */}
+            {showRaw && (
+              <select
+                className="ord-in sim-op"
+                value={c.op}
+                onChange={(e) => set(i, { op: e.target.value as SimCondOp })}
+              >
+                {OPS.map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </select>
+            )}
 
             <button
               type="button"
@@ -192,10 +365,12 @@ function CondEditor({
           </div>
 
           {/*
-            고른 변수가 무엇인지 한 줄로 적는다. 특히 **시계**와 **뒤로 닿는 길이** —
-            이 둘을 모르면 사람은 「오늘 값으로 판단한다」와 「구간 전체를 덮는다」를
-            둘 다 믿어 버린다. 둘 다 사실이 아닐 수 있다.
+            **이렇게 읽습니다.** 칸을 아무리 잘 줄 세워도 조건 한 줄은 결국 문장으로
+            읽히는 것이고, 사람이 머릿속에서 그 문장을 만들게 두면 틀린 문장을 만든다.
+            만들어서 보여 준다 — 이게 틀렸으면 조건이 틀린 것이다.
           */}
+          <p className="sim-cond-say">{condSay(c, series)}</p>
+
           {def && (
             <p className="sim-cond-hint">
               {def.hint}
@@ -570,8 +745,8 @@ export function SimulatorTab() {
         <div className="card sim-empty">
           <b>아직 규칙이 없습니다.</b>
           <p className="pt-n">
-            예: <b>코스피가 전일 대비 &lt; 0</b> 이면 KODEX 200 을 1억 사고,{" "}
-            <b>코스피가 &gt; 0</b> 이면 판다.
+            예: <b>코스피가 전일 대비 내린 날</b> KODEX 200 을 1억 사고,{" "}
+            <b>코스피가 전일 대비 오른 날</b> 판다.
           </p>
         </div>
       )}
@@ -615,12 +790,27 @@ export function SimulatorTab() {
             </span>
           </div>
 
+          {/*
+            카드에 「매수 3조건」이라고만 적혀 있었다. 그건 **개수**지 규칙이 아니다 —
+            무엇을 재는 규칙인지 보려면 매번 「고치기」를 눌러 들어가야 했다.
+            편집기가 쓰는 것과 **같은 문장 만들기**(`condsSay`)를 쓴다.
+          */}
           <div className="sim-rule-cond">
             <span>
-              <b className="positive">매수</b> {r.buy.length}조건
+              <b className="positive">매수</b>{" "}
+              {r.buy.length === 0 ? (
+                <i className="pt-n">조건 없음 — 사지 않습니다</i>
+              ) : (
+                condsSay(r.buy, series)
+              )}
             </span>
             <span>
-              <b className="negative">매도</b> {r.sell.length}조건
+              <b className="negative">매도</b>{" "}
+              {r.sell.length === 0 ? (
+                <i className="pt-n">조건 없음 — 팔지 않습니다</i>
+              ) : (
+                condsSay(r.sell, series)
+              )}
             </span>
           </div>
 

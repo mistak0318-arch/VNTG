@@ -77,34 +77,93 @@ function evalCond(
    * 이 한 칸이 백테스트의 진위를 가른다(`simSeries` 머리말의 표).
    */
   const lag = c.src === "series" && isLagged(key);
-  const label =
-    c.src === "stock" ? "종목" : `${seriesDef(key)?.label ?? (key || "?")}${lag ? "(전일)" : ""}`;
+  const def = c.src === "series" ? seriesDef(key) : null;
+  const label = c.src === "stock" ? "종목" : `${def?.label ?? (key || "?")}${lag ? "(전일)" : ""}`;
   const now = asOf(rows, d, lag);
   if (now === null) return { ok: null, text: `${label} 값을 못 읽음` };
 
   let v: number | null = null;
   let unit = "";
+  /** 무엇을 잰 값인지 — 이게 없으면 기록의 `-0.53%` 가 등락률인지 이평 이격인지 모른다 */
+  let measure = "";
   if (c.metric === "close") {
     v = now;
+    unit = c.src === "series" ? (def?.unit ?? "") : "원";
   } else if (c.metric === "chg1") {
     const prev = backAt(rows, d, 1, lag);
     v = prev !== null && prev !== 0 ? ((now - prev) / prev) * 100 : null;
     unit = "%";
+    measure = "전일비 ";
   } else if (c.metric === "chgN") {
-    const prev = backAt(rows, d, c.n ?? 5, lag);
+    const n = c.n ?? 5;
+    const prev = backAt(rows, d, n, lag);
     v = prev !== null && prev !== 0 ? ((now - prev) / prev) * 100 : null;
     unit = "%";
+    measure = `${n}일전비 `;
   } else if (c.metric === "vsMa") {
-    const ma = maAt(rows, d, c.n ?? 20, lag);
+    const n = c.n ?? 20;
+    const ma = maAt(rows, d, n, lag);
     v = ma !== null && ma !== 0 ? ((now - ma) / ma) * 100 : null;
     unit = "%";
+    measure = `${n}일선비 `;
   }
-  if (v === null) return { ok: null, text: `${label} ${c.metric} 을 못 잼` };
+  if (v === null) return { ok: null, text: `${label} ${measure}을 못 잼` };
 
+  /*
+   * `absLte`·`absGt` 는 **부호를 뺀 크기**를 잰다 — 「보합(0 근처)」을 부등호 하나로
+   * 적기 위한 것이다. 문턱도 절대값으로 읽는다: 사람이 `-0.1` 을 넣어도 ±0.1 로 본다.
+   */
+  const target = Math.abs(c.value);
   const ok =
-    c.op === "lt" ? v < c.value : c.op === "lte" ? v <= c.value : c.op === "gt" ? v > c.value : v >= c.value;
-  const sign = c.op === "lt" ? "<" : c.op === "lte" ? "≤" : c.op === "gt" ? ">" : "≥";
-  return { ok, text: `${label} ${v.toFixed(2)}${unit} ${sign} ${c.value}${unit}` };
+    c.op === "lt"
+      ? v < c.value
+      : c.op === "lte"
+        ? v <= c.value
+        : c.op === "gt"
+          ? v > c.value
+          : c.op === "gte"
+            ? v >= c.value
+            : c.op === "absLte"
+              ? Math.abs(v) <= target
+              : Math.abs(v) > target;
+
+  /*
+   * **기호로 적지 않는다** (2026-09-05). 벤티지: "기호만 있어서 전일 대비 상승에 거는
+   * 건지 하락에 거는 건지도 모르겠고." 거래 기록의 이 줄은 나중에 「왜 샀나」를 되짚는
+   * 유일한 자리라, 되짚는 사람이 부등호 방향을 머리로 뒤집어야 하면 안 된다.
+   */
+  const word =
+    c.op === "lt"
+      ? "미만"
+      : c.op === "lte"
+        ? "이하"
+        : c.op === "gt"
+          ? "초과"
+          : c.op === "gte"
+            ? "이상"
+            : c.op === "absLte"
+              ? "이내"
+              : "밖";
+  const bound =
+    c.op === "absLte" || c.op === "absGt" ? `±${target}${unit}` : `${c.value}${unit}`;
+  /*
+   * 부호에 뜻이 있는 변수(프리장)가 0 을 기준으로 걸렸으면 **그 말로 적는다.**
+   * 「+3.01% (0% 초과)」보다 「+3.01% 양봉」이 되짚을 때 한 박자 빠르다.
+   */
+  const named =
+    def?.zero && target === 0 && c.op !== "absGt"
+      ? c.op === "gt" || c.op === "gte"
+        ? def.zero.up
+        : c.op === "absLte"
+          ? def.zero.flat
+          : def.zero.down
+      : null;
+  /* 등락률은 부호와 소수 둘째 자리까지, 값 자체(지수·주가)는 그냥 그 값으로 */
+  const shown =
+    unit === "%"
+      ? `${v > 0 ? "+" : ""}${v.toFixed(2)}%`
+      : `${(Math.round(v * 100) / 100).toLocaleString("ko-KR")}${unit}`;
+  return { ok, text: `${label} ${measure}${shown} ${named ?? `(${bound} ${word})`}` };
 }
 
 /**

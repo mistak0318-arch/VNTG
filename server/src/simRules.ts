@@ -48,7 +48,20 @@ export type CondMetric =
   /** N일 이동평균 대비 몇 %(양수면 위) */
   | "vsMa";
 
-export type CondOp = "lt" | "lte" | "gt" | "gte";
+/**
+ * 부등호. 뒤의 둘은 **부호를 뺀 크기**를 잰다 (2026-09-05).
+ *
+ * 벤티지: "봉 기준이면 양봉인지 음봉인지 보합인지 물어봐야 되는데."
+ *
+ * 양봉은 `gt 0`, 음봉은 `lt 0` 으로 되는데 **보합은 안 된다** — 「0 근처」는 위아래
+ * 두 줄이라 부등호 하나로 못 적는다. 조건을 둘로 쪼개 AND 로 묶을 수도 있지만,
+ * 그러면 화면에서 「보합」이라는 한 가지 뜻이 두 줄로 흩어져 읽는 사람이 다시
+ * 합쳐야 한다. 그래서 `|값| ≤ 문턱` 을 부등호 하나로 둔다.
+ *
+ * `absGt` 는 그 반대다 — 「방향은 모르겠고 크게 움직인 날」. 보합을 넣으면 따라 나오는
+ * 짝이라 같이 둔다.
+ */
+export type CondOp = "lt" | "lte" | "gt" | "gte" | "absLte" | "absGt";
 
 export interface Cond {
   src: CondSrc;
@@ -132,7 +145,9 @@ function clean(input: Partial<SimRule>, base?: SimRule): SimRule {
         metric: (["chg1", "chgN", "close", "vsMa"] as CondMetric[]).includes(c.metric as CondMetric)
           ? (c.metric as CondMetric)
           : "chg1",
-        op: (["lt", "lte", "gt", "gte"] as CondOp[]).includes(c.op as CondOp) ? (c.op as CondOp) : "lt",
+        op: (["lt", "lte", "gt", "gte", "absLte", "absGt"] as CondOp[]).includes(c.op as CondOp)
+          ? (c.op as CondOp)
+          : "lt",
         value: Number.isFinite(Number(c.value)) ? Number(c.value) : 0,
         n: Number.isFinite(Number(c.n)) ? Math.max(1, Math.min(250, Math.round(Number(c.n)))) : undefined,
       }));

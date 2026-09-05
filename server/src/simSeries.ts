@@ -72,6 +72,18 @@ export interface SeriesDef {
   group: string;
   /** 뒤로 얼마나 있나 — 화면이 그대로 적는다. 없는 구간은 조건이 **안 맞은 것**으로 센다 */
   span: string;
+  /**
+   * **값 그 자체의 부호에 뜻이 있는 변수**의 말 (2026-09-05).
+   *
+   * 프리장 봉은 `+0.3` 이 「양봉」이고 `-0.3` 이 「음봉」이다. 그런데 VIX 나 금리는
+   * `close` 가 늘 양수라 부호에 아무 뜻이 없다 — 「VIX 가 상승인 날」 같은 조건은
+   * 만들어질 수 없어야 한다. **이 칸이 있는 변수에만** 화면이 세 갈래 단추
+   * (양봉·음봉·보합)를 내놓는다. 없으면 안 내놓는다.
+   *
+   * 말이 변수마다 다르다 — 봉은 「양봉/음봉」, 갭은 「상승/하락」이다. 화면이 짐작하지
+   * 않게 여기서 준다.
+   */
+  zero?: { up: string; down: string; flat: string };
 }
 
 /**
@@ -96,10 +108,10 @@ export const SERIES: SeriesDef[] = [
    * 프리장 넷. **뒤로 60일뿐이다** — 야후가 분봉을 그만큼만 준다.
    * 이 사실을 `span` 에 적어 두고, 백테스트 결과가 구간이 모자라면 한 줄을 더 적는다.
    */
-  { key: "NVDA_PRE", label: "엔비디아 프리장 봉", kind: "macro", unit: "%", clock: "us", group: "미국 프리장", span: PREMARKET_SPAN, hint: "프리장 시가 → 종가(%). 0 보다 크면 양봉입니다. 첫 체결 한 건에 흔들릴 수 있어 「갭」도 같이 보세요" },
-  { key: "NVDA_PREGAP", label: "엔비디아 프리장 갭", kind: "macro", unit: "%", clock: "us", group: "미국 프리장", span: PREMARKET_SPAN, hint: "전일 정규장 종가 → 프리장 종가(%). 「간밤에 어디까지 갔나」는 이쪽이 덜 흔들립니다" },
-  { key: "MU_PRE", label: "마이크론 프리장 봉", kind: "macro", unit: "%", clock: "us", group: "미국 프리장", span: PREMARKET_SPAN, hint: "프리장 시가 → 종가(%). 0 보다 크면 양봉입니다" },
-  { key: "MU_PREGAP", label: "마이크론 프리장 갭", kind: "macro", unit: "%", clock: "us", group: "미국 프리장", span: PREMARKET_SPAN, hint: "전일 정규장 종가 → 프리장 종가(%)" },
+  { key: "NVDA_PRE", label: "엔비디아 프리장 봉", kind: "macro", unit: "%", clock: "us", group: "미국 프리장", span: PREMARKET_SPAN, zero: { up: "양봉", down: "음봉", flat: "보합" }, hint: "프리장 시가 → 종가(%). 0 보다 크면 양봉입니다. 첫 체결 한 건에 흔들릴 수 있어 「갭」도 같이 보세요" },
+  { key: "NVDA_PREGAP", label: "엔비디아 프리장 갭", kind: "macro", unit: "%", clock: "us", group: "미국 프리장", span: PREMARKET_SPAN, zero: { up: "상승", down: "하락", flat: "보합" }, hint: "전일 정규장 종가 → 프리장 종가(%). 「간밤에 어디까지 갔나」는 이쪽이 덜 흔들립니다" },
+  { key: "MU_PRE", label: "마이크론 프리장 봉", kind: "macro", unit: "%", clock: "us", group: "미국 프리장", span: PREMARKET_SPAN, zero: { up: "양봉", down: "음봉", flat: "보합" }, hint: "프리장 시가 → 종가(%). 0 보다 크면 양봉입니다" },
+  { key: "MU_PREGAP", label: "마이크론 프리장 갭", kind: "macro", unit: "%", clock: "us", group: "미국 프리장", span: PREMARKET_SPAN, zero: { up: "상승", down: "하락", flat: "보합" }, hint: "전일 정규장 종가 → 프리장 종가(%)" },
 ];
 
 const BY_KEY = new Map(SERIES.map((d) => [d.key, d]));

@@ -5762,7 +5762,11 @@ export interface CisGoal {
    두 길로 만들면 「과거에 이랬으면 이랬다」가 거짓이 된다. */
 export type SimCondSrc = "stock" | "series";
 export type SimCondMetric = "chg1" | "chgN" | "close" | "vsMa";
-export type SimCondOp = "lt" | "lte" | "gt" | "gte";
+/**
+ * 뒤의 둘은 **부호를 뺀 크기**를 잰다 (2026-09-05) — 「보합(0 근처)」은 위아래 두 줄이라
+ * 부등호 하나로 못 적는다. `absLte` = ±문턱 이내, `absGt` = ±문턱 밖.
+ */
+export type SimCondOp = "lt" | "lte" | "gt" | "gte" | "absLte" | "absGt";
 
 export interface SimCond {
   src: SimCondSrc;
@@ -5808,6 +5812,11 @@ export interface SimSeriesDef {
   group: string;
   /** 뒤로 얼마나 있나. 프리장은 60일뿐이다 */
   span: string;
+  /**
+   * **값 자체의 부호에 뜻이 있는 변수**의 말. 프리장 봉은 +면 「양봉」이다.
+   * VIX·금리는 값이 늘 양수라 이 칸이 없고, 그래서 화면이 세 갈래 단추를 안 내놓는다.
+   */
+  zero?: { up: string; down: string; flat: string };
 }
 
 export interface SimTrade {
