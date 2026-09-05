@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type ChannelStoreStatus } from "../api";
+import { useFold } from "../useFold";
 
 /**
  * **채널 글 창고** — 얼마나 찼나 (2026-09-05).
@@ -15,6 +16,18 @@ import { api, type ChannelStoreStatus } from "../api";
  *
  * 창고가 안 차면 검색이 얕아지는데, 그 사실이 검색 화면에서는 「0건」으로만 보인다.
  * 원인을 볼 자리를 따로 두는 이유가 그것이다.
+ *
+ * ## 그런데 **기본은 접혀 있다** (2026-09-05)
+ *
+ * 벤티지: "상단에 보여주는 거는 접힘 메뉴로 해서 기본이 접힌 상태로. 접힌 상태에서는
+ * 수집 동향만 간략하게. 지금 사각형이 너무 길어짐."
+ *
+ * 맞다. 이건 **평소에 볼 것이 아니라 이상할 때 여는 자리**다. 검색하러 온 사람 앞을
+ * 여섯 칸짜리 표가 늘 막고 있을 이유가 없다.
+ *
+ * 대신 접혀 있어도 **한 줄은 남긴다** — 「3.2만건 · 뒤로 12일 · 방금 수집」.
+ * 펴 볼지 판단할 근거가 없으면 접기가 그냥 숨기기가 된다. 그리고 **뭔가 잘못되면
+ * 접힌 줄이 빨개진다** — 수집이 멎었는데 접혀 있다고 조용하면 접은 것이 사고가 된다.
  */
 
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)}MB`;
@@ -34,6 +47,8 @@ export function ChannelStorePanel() {
   const [st, setSt] = useState<ChannelStoreStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  /* 기본은 접힘 — 평소에 볼 것이 아니라 이상할 때 여는 자리다 */
+  const [open, toggleFold] = useFold("store", false, "tg");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -74,18 +89,36 @@ export function ChannelStorePanel() {
     ? Math.max(0, (Date.now() - new Date(st.oldest).getTime()) / 86400_000)
     : 0;
   const stale = st.collector ? Date.now() - new Date(st.collector.at).getTime() > 25 * 60_000 : true;
+  /* 접힌 줄을 빨갛게 만들 조건 — 접어 뒀다고 고장이 조용하면 안 된다 */
+  const bad = st.totalLines === 0 || stale || Boolean(st.collector?.error);
 
   return (
     <section className="card cst">
-      <div className="cst-h">
+      <button className="cst-head" onClick={toggleFold} title={open ? "접기" : "펴기"}>
+        <span className="cst-caret">{open ? "▾" : "▸"}</span>
         <b>채널 글 창고</b>
-        <span className="pt-n">
-          검색은 여기서 나옵니다 — 텔레그램을 다시 부르지 않습니다
+        {/* 접혀 있어도 한 줄 — 펴 볼지 판단할 근거 */}
+        <span className={`cst-peek${bad ? " bad" : ""}`}>
+          {st.totalLines === 0
+            ? "아직 비어 있음"
+            : `${num(st.totalLines)}건 · 뒤로 ${reachDays.toFixed(reachDays < 10 ? 1 : 0)}일 · 수집 ${
+                st.collector ? ago(st.collector.at) : "아직"
+              }`}
         </span>
+      </button>
+
+      {!open && st.collector?.error && (
+        <p className="ord-err">마지막 수집이 실패했습니다 — {st.collector.error}</p>
+      )}
+
+      {open && (
+      <>
+      <p className="pt-n">
+        검색은 여기서 나옵니다 — 텔레그램을 다시 부르지 않습니다.{" "}
         <button className="filter-btn" onClick={() => void seed()} disabled={busy}>
           {busy ? "긁는 중…" : "뒤로 더 긁기"}
         </button>
-      </div>
+      </p>
 
       {msg && <p className="pt-n">{msg}</p>}
 
@@ -163,6 +196,8 @@ export function ChannelStorePanel() {
             </tbody>
           </table>
         </div>
+      )}
+      </>
       )}
     </section>
   );

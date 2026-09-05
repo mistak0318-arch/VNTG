@@ -9673,6 +9673,8 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .cs-ai { border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.6rem; margin: 0.4rem 0; }
 .cs-ai-h { display: flex; gap: 0.4rem; align-items: baseline; font-size: 0.78rem; margin-bottom: 0.25rem; }
 .cs-ai-b { font-size: 0.85rem; line-height: 1.6; white-space: pre-wrap; }
+/* 덜 온 것이지 실패가 아니다 — 빨간 띠 대신 상자 안 한 줄 */
+.cs-ai-cut { margin: 0 0 0.35rem; font-size: 0.7rem; color: var(--cis-gold); word-break: keep-all; }
 
 /* 차트 판독 줄 접기 — 보고 싶은 값이지만 늘 펴 두면 자리를 먹는다 */
 .chart-insights-toggle {
@@ -16181,9 +16183,25 @@ select.ord-in { appearance: auto; cursor: pointer; }
 
 /* 채널 글 창고 판 (2026-09-05) — 검색의 재료가 얼마나 찼나 */
 .cst { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-.cst-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cst-h > b { font-size: 0.86rem; }
-.cst-h > .filter-btn { margin-left: auto; }
+/* 머리줄 — 접혀 있어도 한 줄은 남는다. 접기가 그냥 숨기기가 되면 안 된다 */
+.cst-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.86rem;
+}
+.cst-caret { color: var(--muted); font-size: 0.7em; }
+.cst-peek { margin-left: auto; font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* 접어 뒀다고 고장이 조용하면 안 된다 */
+.cst-peek.bad { color: var(--cis-gold); font-weight: 600; }
 .cst-kv { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; }
 .cst-kv > div { display: flex; flex-direction: column; gap: 1px; min-width: 5rem; }
 .cst-kv dt { font-size: 0.62rem; color: var(--muted); }

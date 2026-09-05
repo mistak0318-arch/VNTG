@@ -507,13 +507,22 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
         </span>
       </div>
 
-      {ai?.error && <div className="error-banner">{ai.error}</div>}
+      {/*
+        **글이 있는데 오류 띠가 뜨는 자리** (2026-09-05에 고침).
+
+        상한에 걸려 뒷부분이 잘렸을 때 서버는 `text` 와 `error` 를 **둘 다** 준다.
+        그런데 화면은 그걸 빨간 오류 띠로 위에 띄우고 아래에 글을 붙여서, 읽는 사람에게는
+        「실패했는데 뭔가 나왔다」로 보였다. 실패가 아니라 **덜 온 것**이다.
+        글이 없을 때만 오류 띠고, 글이 있으면 그 상자 안에 한 줄로 적는다.
+      */}
+      {ai?.error && !ai.text && <div className="error-banner">{ai.error}</div>}
       {ai?.text && (
         <div className="cs-ai">
           <div className="cs-ai-h">
             <b>AI 정리</b>
             {ai.model && <span className="pt-n">{ai.model}</span>}
           </div>
+          {ai.error && <p className="cs-ai-cut">✂️ {ai.error}</p>}
           <div className="cs-ai-b">{mark(ai.text, words)}</div>
           <div className="table-note">
             ⚠️ <b>원문을 대신하지 않습니다.</b> AI 는 숫자를 잘못 옮기고 뉘앙스를 지웁니다 —
