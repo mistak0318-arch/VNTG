@@ -4,6 +4,7 @@ import { backtest } from "../simEngine.js";
 import { draftRule, getRule, listRules, removeRule, upsertRule } from "../simRules.js";
 import { SERIES } from "../simSeries.js";
 import { advance, dropLive, liveResult, resetLive } from "../simLive.js";
+import { analyze } from "../simAnalyze.js";
 
 /**
  * /api/sim — 시뮬레이터 (2026-09-04).
@@ -102,6 +103,28 @@ export function createSimRouter(client: KiwoomClient): Router {
       }
       const days = Number.isFinite(Number(body.days)) ? Number(body.days) : 250;
       res.json({ rule, result: await backtest(client, rule, days) });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  /**
+   * **상세 분석** (2026-09-05) — 요약이 답하지 않는 둘: 「어떤 조건이 무엇을 했나」와
+   * 「언제 벌고 언제 잃었나」.
+   *
+   * 조건을 하나씩 빼고 다시 돌리므로 조회가 아니라 **계산**이 는다. 일봉은 이미 창고에
+   * 있고 바깥 변수는 캐시라, 조건 열두 개짜리 규칙이어도 조회는 그대로다.
+   */
+  router.post("/analyze", async (req, res, next) => {
+    try {
+      const body = (req.body ?? {}) as { id?: string; days?: number; rule?: unknown };
+      const rule = body.id ? await getRule(String(body.id)) : draftRule((body.rule ?? {}) as object);
+      if (!rule) {
+        res.status(404).json({ error: "규칙을 못 찾았습니다" });
+        return;
+      }
+      const days = Number.isFinite(Number(body.days)) ? Number(body.days) : 250;
+      res.json({ analysis: await analyze(client, rule, days) });
     } catch (e) {
       next(e);
     }

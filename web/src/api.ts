@@ -1253,6 +1253,9 @@ export const api = {
   /** 저장된 규칙이면 id, 아직 안 저장한 초안이면 rule — 초안은 창고에 안 들어간다 */
   simBacktest: (body: { id?: string; rule?: Partial<SimRule>; days?: number }) =>
     postJson<{ rule: SimRule; result: SimResult }>("/api/sim/backtest", body),
+  /** 상세 분석 — 조건별 영향과 달마다의 흐름 */
+  simAnalyze: (body: { id?: string; rule?: Partial<SimRule>; days?: number }) =>
+    postJson<{ analysis: SimAnalysis }>("/api/sim/analyze", body),
   simLive: (id: string) => getJson<{ result: SimResult | null }>(`/api/sim/live/${id}`),
   simLiveStep: (id: string) =>
     postJson<{ steps: number; result: SimResult | null }>(`/api/sim/live/${id}/step`),
@@ -5852,6 +5855,57 @@ export interface SimResult {
   limits?: string[];
   /** 실전 성적일 때만 */
   startedAt?: string | null;
+}
+
+/* ── 백테스트 상세 분석 (2026-09-05) ────────────────────────────────
+   요약은 「얼마 벌었나」만 답한다. 규칙을 고치려면 **어떤 조건이 무엇을 했나**와
+   **언제 벌고 언제 잃었나**를 알아야 한다. */
+
+export interface SimLeg {
+  buyD: string;
+  sellD: string;
+  /** 낀 거래일 수 */
+  held: number;
+  pnl: number;
+  pnlPct: number;
+  buyWhy: string;
+  sellWhy: string;
+}
+
+export interface SimCondStat {
+  side: "buy" | "sell";
+  /** 규칙 안 몇 번째 조건인가 — 화면이 이 번호로 문장을 붙인다 */
+  index: number;
+  hit: number;
+  /** 못 잰 날. 자료가 없으면 「안 맞음」으로 세어지므로 갈라 본다 */
+  unknown: number;
+  alone: { ret: number; closed: number } | null;
+  /** `emptied` 면 이 조건이 그쪽 조건의 전부였다는 뜻 */
+  without: { ret: number; closed: number; emptied: boolean } | null;
+}
+
+export interface SimMonthRow {
+  m: string;
+  ret: number;
+  legs: number;
+  exposure: number;
+}
+
+export interface SimAnalysis {
+  rule: SimRule;
+  result: SimResult;
+  days: string[];
+  /** 그냥 보유했다면의 평가액 — 규칙 곡선과 겹쳐 그린다 */
+  hold: number[];
+  /** 그날 들고 있었나 (0/1) */
+  pos: number[];
+  exposure: number;
+  months: SimMonthRow[];
+  legs: SimLeg[];
+  conds: SimCondStat[];
+  buyAllDays: number;
+  sellAllDays: number;
+  worstSpell: { from: string; to: string; dd: number; days: number; recovered: boolean } | null;
 }
 
 

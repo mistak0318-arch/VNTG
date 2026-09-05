@@ -62,8 +62,14 @@ export function newState(seed: number): SimState {
   return { cash: seed, qty: 0, avg: 0, trades: [], curve: [] };
 }
 
-/** 조건 하나가 그날 맞았나 — 못 재면 `null`(= 「모른다」, 안 맞은 것과 다르다) */
-function evalCond(
+/**
+ * 조건 하나가 그날 맞았나 — 못 재면 `null`(= 「모른다」, 안 맞은 것과 다르다).
+ *
+ * **밖으로 연다** (2026-09-05). 상세 분석이 「이 조건은 며칠이나 맞았나」를 세는데,
+ * 그걸 세는 코드를 따로 쓰면 표의 숫자와 실제 매매가 갈린다 — 그러면 그 표는
+ * 성적을 설명하는 게 아니라 **다른 이야기**를 하는 것이 된다.
+ */
+export function evalCond(
   c: Cond,
   d: string,
   stock: Point[],
@@ -330,12 +336,32 @@ export function summarize(
 }
 
 /**
+ * 규칙이 **실제로 쓰는** 바깥 변수만 받는다 — 안 쓰는 것을 받으면 조회만 는다.
+ *
+ * 백테스트·실전 진행·상세 분석 셋이 같은 모양을 따로 적고 있었다(2026-09-05 에 하나로).
+ * 셋이 다른 변수를 받으면 같은 규칙이 세 군데서 다른 성적을 낸다.
+ */
+export async function loadSeriesFor(
+  client: KiwoomClient,
+  rule: SimRule,
+): Promise<Map<string, Point[]>> {
+  const keys = [
+    ...new Set(
+      [...rule.buy, ...rule.sell].filter((c) => c.src === "series").map((c) => c.key ?? ""),
+    ),
+  ].filter(Boolean);
+  const ext = new Map<string, Point[]>();
+  for (const k of keys) ext.set(k, await series(client, k));
+  return ext;
+}
+
+/**
  * 쓴 바깥 변수가 구간을 **덮었나**.
  *
  * 백테스트에만 붙인다. 실전 진행은 켠 날부터 앞으로만 가서 60일짜리 변수로도 안 모자라고,
  * 조회가 통째로 실패하는 경우는 백테스트를 한 번 돌리면 여기서 바로 보인다.
  */
-function coverageLimits(ext: Map<string, Point[]>, bars: { d: string }[]): string[] {
+export function coverageLimits(ext: Map<string, Point[]>, bars: { d: string }[]): string[] {
   const out: string[] = [];
   const from = bars[0]?.d ?? "";
   for (const [k, rows] of ext) {
@@ -375,10 +401,7 @@ export async function backtest(
     };
   }
 
-  /* 바깥 변수는 규칙이 실제로 쓰는 것만 받는다 — 안 쓰는 것을 받으면 조회만 는다 */
-  const keys = [...new Set([...rule.buy, ...rule.sell].filter((c) => c.src === "series").map((c) => c.key ?? ""))].filter(Boolean);
-  const ext = new Map<string, Point[]>();
-  for (const k of keys) ext.set(k, await series(client, k));
+  const ext = await loadSeriesFor(client, rule);
 
   const stock: Point[] = all.map((b) => ({ d: b.d, c: b.c }));
   const st = newState(rule.seed);

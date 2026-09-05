@@ -52,6 +52,7 @@ import { BriefingPage } from "./pages/BriefingPage";
 import { MorningPage } from "./pages/MorningPage";
 import { useDragOrder } from "./useDragOrder";
 import { useHashRoute } from "./useHashRoute";
+import { SimAnalysisWindow } from "./components/SimAnalysisView";
 import { useEdgeSwipe } from "./useEdgeSwipe";
 import { applyOrder, parseSection, useMenuPrefs } from "./useMenuOrder";
 import { useScreenLock } from "./useScreenLock";
@@ -270,6 +271,20 @@ export default function App() {
    * 보드 새창인가 — `#/board?win=1` (2026-09-02). 한 번만 읽는다: `navigate` 가
    * 해시를 다시 쓰면서 `win` 을 떨구기 때문에 매번 읽으면 첫 이동에 본창으로 변한다.
    */
+  /**
+   * 백테스트 분석 새 창 — `#/simwin?rule=<id>&days=<n>` (2026-09-05).
+   *
+   * 보드 새창과 같은 틀이다. 규칙 **id 만** 주소로 넘긴다 — 창 사이로 객체를 못 넘기고,
+   * 넘길 수 있다 해도 넘긴 순간 두 창의 규칙이 갈릴 수 있다. id 로 넘기면 이 창이
+   * 서버에서 지금 규칙을 다시 읽으므로 **늘 저장된 그것**을 본다.
+   */
+  const [simWin] = useState(() => {
+    if (route.tab !== "simwin") return null;
+    const q = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+    const rule = q.get("rule");
+    return rule ? { rule, days: Number(q.get("days")) || 250 } : null;
+  });
+
   const [boardWin] = useState(
     () => route.tab === "board" && /[?&]win=1(&|$)/.test(window.location.hash),
   );
@@ -833,6 +848,15 @@ export default function App() {
    * 여기서 종목을 고르면 이 창이 아니라 **연 창(opener)** 이 그 종목으로 간다 —
    * 보드 창은 보드로 남아야 옆 모니터에 둔 뜻이 있다. 연 창이 닫혔으면 이 창에서 연다.
    */
+  /* 분석 새 창 — 사이드바 없이 분석만. 옆 모니터에 두라고 만든 창이다 */
+  if (simWin) {
+    return (
+      <div className="mini-root">
+        <SimAnalysisWindow ruleId={simWin.rule} days={simWin.days} />
+      </div>
+    );
+  }
+
   if (boardWin) {
     const toOpener = (code: string, name: string) => {
       const op = window.opener as Window | null;

@@ -4,11 +4,13 @@ import {
   type SimCond,
   type SimCondMetric,
   type SimCondOp,
+  type SimAnalysis,
   type SimResult,
   type SimRule,
   type SimSeriesDef,
 } from "../api";
 import { StockSearchBox } from "./StockSearchBox";
+import { SimAnalysisView } from "./SimAnalysisView";
 
 /**
  * **시뮬레이터** — 조건을 걸어 종목 하나를 굴려 본다 (2026-09-04).
@@ -165,7 +167,18 @@ const 억 = (n: number) =>
     : `${Math.round(n / 10_000).toLocaleString("ko-KR")}만`;
 const pct = (n: number | null) => (n === null ? "-" : `${n > 0 ? "+" : ""}${n.toFixed(2)}%`);
 const cls = (n: number | null) => (n === null ? "" : n > 0 ? "positive" : n < 0 ? "negative" : "");
-const dt = (d: string) => (d.length === 8 ? `${d.slice(4, 6)}/${d.slice(6)}` : d);
+/**
+ * 백테스트는 250일 — **해가 바뀐다** (2026-09-05).
+ *
+ * 여태 `09/03` 이라고만 적었다. 두 해에 걸친 구간에서 그건 두 날을 가리키는 말이다.
+ * 표 안은 `26/09/03`, 구간 머리말은 `2026-09-03` 으로 적는다 — 표는 좁고 머리말은
+ * 한 번만 나오므로 각자 감당할 수 있는 만큼 적는다.
+ */
+export const dtY = (d: string) =>
+  d.length === 8 ? `${d.slice(2, 4)}/${d.slice(4, 6)}/${d.slice(6)}` : d;
+export const dtFull = (d: string) =>
+  d.length === 8 ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}` : d;
+const dt = dtY;
 
 const EMPTY: Partial<SimRule> = {
   name: "",
@@ -410,7 +423,7 @@ function ResultView({ r, title }: { r: SimResult; title: string }) {
       <div className="sim-res-h">
         <b>{title}</b>
         <span className="pt-n">
-          {dt(r.from)} ~ {dt(r.to)} · {r.days}거래일
+          {dtFull(r.from)} ~ {dtFull(r.to)} · {r.days}거래일
         </span>
       </div>
 
@@ -533,6 +546,7 @@ function RuleForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [test, setTest] = useState<SimResult | null>(null);
+  const [deep, setDeep] = useState<SimAnalysis | null>(null);
 
   const set = (patch: Partial<SimRule>) => setD((p) => ({ ...p, ...patch }));
 
@@ -556,6 +570,21 @@ function RuleForm({
       /* 저장하지 않고 시험한다 — 시험한 것이 다 목록에 쌓이면 「진행 중」이 뭔지 흐려진다 */
       const r = await api.simBacktest({ rule: d, days });
       setTest(r.result);
+      setDeep(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /* 초안도 분석은 된다 — 저장하지 않고 본문으로 규칙을 보낸다. 새 창만 못 연다(주소에 못 담는다) */
+  async function tryDeep() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.simAnalyze({ rule: d, days });
+      setDeep(r.analysis);
     } catch (e) {
       setError(e instanceof Error ? e.message : "실패");
     } finally {
@@ -629,6 +658,14 @@ function RuleForm({
         <button className="filter-btn" onClick={() => void tryIt()} disabled={busy || !d.code}>
           {busy ? "돌리는 중…" : `저장 없이 ${days}일 시험`}
         </button>
+        <button
+          className={`filter-btn ${deep ? "active" : ""}`}
+          onClick={() => (deep ? setDeep(null) : void tryDeep())}
+          disabled={busy || !d.code}
+          title="조건 하나하나가 성적에 무엇을 했는지까지"
+        >
+          자세히
+        </button>
         <button className="ord-go" onClick={() => void save()} disabled={busy || !d.code || !d.name}>
           저장
         </button>
@@ -638,6 +675,7 @@ function RuleForm({
       </div>
 
       {test && <ResultView r={test} title={`시험 ${days}일`} />}
+      {deep && <SimAnalysisView a={deep} series={series} />}
     </section>
   );
 }
@@ -650,6 +688,7 @@ export function SimulatorTab() {
   const [error, setError] = useState<string | null>(null);
   const [back, setBack] = useState<Record<string, SimResult>>({});
   const [live, setLive] = useState<Record<string, SimResult | null>>({});
+  const [deep, setDeep] = useState<Record<string, SimAnalysis>>({});
   const [days, setDays] = useState(250);
 
   const load = useCallback(() => {
@@ -678,6 +717,43 @@ export function SimulatorTab() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /**
+   * 상세 분석 — 조건을 하나씩 빼고 다시 돌리므로 **몇 초 걸린다.**
+   * 그래서 눌러야 돈다. 백테스트를 누를 때마다 같이 돌리면 규칙 목록이 무거워진다.
+   */
+  async function deepen(rule: SimRule) {
+    if (deep[rule.id]) {
+      setDeep((p) => {
+        const n = { ...p };
+        delete n[rule.id];
+        return n;
+      });
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.simAnalyze({ id: rule.id, days });
+      setDeep((p) => ({ ...p, [rule.id]: r.analysis }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * **새 창** — 옆 모니터에 띄워 두고 규칙을 고치라고 만든 창이다.
+   * 규칙마다 창 이름이 달라 여러 규칙을 나란히 놓고 견줄 수 있다.
+   */
+  function openWin(rule: SimRule) {
+    window.open(
+      `${window.location.pathname}#/simwin?rule=${encodeURIComponent(rule.id)}&days=${days}`,
+      `vntg-sim-${rule.id}`,
+      "width=1280,height=940,resizable=yes,scrollbars=yes",
+    );
   }
 
   async function toggle(rule: SimRule) {
@@ -771,6 +847,21 @@ export function SimulatorTab() {
               <button className="filter-btn" onClick={() => void run(r)} disabled={busy}>
                 백테스트
               </button>
+              <button
+                className={`filter-btn ${deep[r.id] ? "active" : ""}`}
+                onClick={() => void deepen(r)}
+                disabled={busy}
+                title="조건 하나하나가 성적에 무엇을 했는지, 달마다 어떻게 흘렀는지"
+              >
+                자세히
+              </button>
+              <button
+                className="filter-btn"
+                onClick={() => openWin(r)}
+                title="새 창으로 — 옆에 띄워 두고 규칙을 고칠 수 있습니다"
+              >
+                🗔 새 창
+              </button>
               <button className="filter-btn" onClick={() => void showLive(r)} disabled={busy}>
                 실전 성적
               </button>
@@ -815,6 +906,7 @@ export function SimulatorTab() {
           </div>
 
           {back[r.id] && <ResultView r={back[r.id]} title={`백테스트 ${days}일`} />}
+          {deep[r.id] && <SimAnalysisView a={deep[r.id]} series={series} />}
           {live[r.id] !== undefined &&
             (live[r.id] ? (
               <ResultView r={live[r.id] as SimResult} title="실전 진행" />

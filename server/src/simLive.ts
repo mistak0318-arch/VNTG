@@ -3,8 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { listRules, type SimRule } from "./simRules.js";
-import { newState, step, summarize, type SimResult, type SimState } from "./simEngine.js";
-import { series, stockBars, type Point } from "./simSeries.js";
+import { loadSeriesFor, newState, step, summarize, type SimResult, type SimState } from "./simEngine.js";
+import { stockBars, type Point } from "./simSeries.js";
 
 /**
  * 시뮬레이터 **실전 진행** (2026-09-04).
@@ -90,11 +90,7 @@ export async function advance(client: KiwoomClient, rule: SimRule): Promise<numb
   const pending = all.filter((b) => b.d > (row.lastDate as string));
   if (pending.length === 0) return 0;
 
-  const keys = [
-    ...new Set([...rule.buy, ...rule.sell].filter((c) => c.src === "series").map((c) => c.key ?? "")),
-  ].filter(Boolean);
-  const ext = new Map<string, Point[]>();
-  for (const k of keys) ext.set(k, await series(client, k));
+  const ext = await loadSeriesFor(client, rule);
   const stock: Point[] = all.map((b) => ({ d: b.d, c: b.c }));
 
   for (const b of pending) {
