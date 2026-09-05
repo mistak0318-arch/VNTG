@@ -134,6 +134,17 @@ function GradeBoard({ rows, hidden }: { rows: SuperGradeRow[]; hidden: number })
     });
   };
 
+  /*
+   * **정렬** (2026-09-05) — 벤티지: "거기 표에 정렬 기능이 없다, 추가."
+   *
+   * ⚠️ 이 표는 **묶음으로 나뉘어 있다**(기준선·교집합·지속성·점수·목록). 정렬을 걸면
+   * 그 묶음이 깨진다 — 그런데 그게 맞다. 「어느 구간이 제일 나았나」를 물을 때는 묶음이
+   * 오히려 방해다. 그래서 **정렬 중에는 평평하게 펴고**, 정렬을 풀면(머리를 세 번 누르면)
+   * 묶음이 돌아온다. 어느 쪽인지 표 아래 한 줄이 말해 준다.
+   */
+  const gSort = useSortableTable(rows);
+  const flat = gSort.sortKey !== null && gSort.sortDir !== null;
+
   const base = rows.find((r) => r.group === "base");
   /*
    * **아직 안 찬 열은 안 그린다.** 5일·20일이 전부 0건이면 「- (0)」 이 스물여덟 칸
@@ -169,16 +180,54 @@ function GradeBoard({ rows, hidden }: { rows: SuperGradeRow[]; hidden: number })
             <table className="data-table gb-table">
               <thead>
                 <tr>
-                  <th>구간</th>
+                  <SortableTh columnKey="label" label="구간" accessor={(r) => r.label} sort={gSort} />
                   {cols.map((c) => (
-                    <th key={c.d} className="num">
-                      {c.d}일 뒤
-                    </th>
+                    <SortableTh
+                      key={c.d}
+                      columnKey={c.key}
+                      label={`${c.d}일 뒤`}
+                      /* 못 잰 것은 가장 작게 — 안 찬 구간이 1등처럼 보이면 안 된다 */
+                      accessor={(r) => r[c.key].avg ?? -Infinity}
+                      sort={gSort}
+                      className="num"
+                    />
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {GRADE_GROUPS.map((g) => {
+                {flat &&
+                  gSort.sorted.map((r) => (
+                    <Fragment key={r.label}>
+                      <tr
+                        className={`${r.group === "base" ? "gb-base" : ""}${
+                          r.d1.n > 0 && r.d1.n < 5 ? " gb-thin" : ""
+                        } gd-click${openRow === r.label ? " on" : ""}`}
+                        onClick={() => setOpenRow((v) => (v === r.label ? null : r.label))}
+                        title="눌러서 이 구간의 속을 봅니다 — 분포·중앙값·손익비"
+                      >
+                        <td>
+                          <span className="gd-caret">{openRow === r.label ? "▾" : "▸"}</span>
+                          {r.label}
+                        </td>
+                        {cols.map((c) => (
+                          <GradeCell
+                            key={c.d}
+                            g={r[c.key]}
+                            base={r.group === "base" ? null : (base?.[c.key].avg ?? null)}
+                          />
+                        ))}
+                      </tr>
+                      {openRow === r.label && r.detail && (
+                        <GradeDetailRow
+                          detail={r.detail}
+                          avgSame={sameAvg(r.detail, r.ex1, r.ex5, r.ex20)}
+                          span={cols.length + 1}
+                        />
+                      )}
+                    </Fragment>
+                  ))}
+                {!flat &&
+                  GRADE_GROUPS.map((g) => {
                   const list = rows.filter((r) => r.group === g.key);
                   if (list.length === 0) return null;
                   return (
@@ -241,6 +290,12 @@ function GradeBoard({ rows, hidden }: { rows: SuperGradeRow[]; hidden: number })
               </tbody>
             </table>
           </div>
+          {/* 지금 묶음이 살아 있나 아닌가 — 안 적으면 「묶음이 왜 사라졌지」가 된다 */}
+          <p className="pt-n">
+            {flat
+              ? "정렬 중이라 묶음(기준선·교집합·지속성…)을 폈습니다 — 머리를 한 번 더 누르면 원래 순서로 돌아갑니다."
+              : "머리를 누르면 정렬합니다 (내림 → 오름 → 원래). 정렬하면 묶음이 잠시 펴집니다."}
+          </p>
           <p className="sim-warn">
             ⚠️ <b>지금은 이 표로 판단하지 마세요.</b> 편입분이 {base?.d1.n ?? 0}건뿐이고{" "}
             {pending.length > 0 && (

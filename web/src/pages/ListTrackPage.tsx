@@ -165,12 +165,26 @@ export function ListTrackPage({
    * 첫 렌더(데이터 없음)에는 훅이 하나 적고, 데이터가 온 렌더에는 하나 많아진다.
    * 데이터가 없을 때는 빈 배열로 돌린다.
    */
+/**
+ * 정렬용 값 — **못 잰 것(null)은 가장 작게** 본다.
+ *
+ * 내림차순(대개 「제일 좋은 구간이 뭐야」)에서 아직 성적이 안 찬 줄이 맨 위에 오면
+ * 그게 1등처럼 보인다. 그걸 막는 게 목적이라 아래로 보낸다 —
+ * 오름차순에서는 반대로 맨 위에 온다(그때는 「제일 나쁜 것」을 보는 것이라 뜻이 맞는다).
+ */
+const low = (v: number | null | undefined) => (v === null || v === undefined ? -Infinity : v);
+
   const mine = (data?.entries ?? []).filter((e) => e.list === tab);
   const base = mine
     .filter((e) => showExited || e.active !== false)
     .sort((a, b) => b.addedDate.localeCompare(a.addedDate) || a.rank - b.rank);
   const sort = useSortableTable(base);
   const visible = sort.sorted;
+  /*
+   * 채점표 정렬 (2026-09-05). 훅은 조건 밖에 둔다 — 표가 접혀 있을 때도 불려야 한다.
+   * `data` 가 아직 없으면 빈 배열로 시작한다.
+   */
+  const gSort = useSortableTable(data?.grade ?? []);
 
   if (!data) return <div className="empty">불러오는 중…</div>;
   const counts = data.counts[tab];
@@ -335,20 +349,31 @@ export function ListTrackPage({
             {/* `lt-grade` — 표본 수를 값 아래로 내리는 규칙이 이 표에만 걸린다 */}
             <table className="sim-table lt-grade">
               <thead>
+                {/*
+                  **정렬** (2026-09-05) — 벤티지: "거기 표에 정렬 기능이 없다, 추가."
+                  「어느 구간이 제일 나았나」가 이 표의 물음인데, 열여덟 줄을 눈으로
+                  훑어야 했다. 값이 없는 줄(`null`)은 **늘 아래로** 보낸다 — 위로 올리면
+                  아직 성적이 안 찬 구간이 1등처럼 보인다.
+                */}
                 <tr>
-                  <th>구간</th>
-                  <th className="num">편입</th>
-                  <th className="num">1일</th>
-                  <th className="num">5일</th>
-                  <th className="num">20일</th>
+                  <SortableTh columnKey="label" label="구간" accessor={(g) => g.label} sort={gSort} />
+                  <SortableTh columnKey="n" label="편입" accessor={(g) => g.n} sort={gSort} className="num" />
+                  <SortableTh columnKey="d1" label="1일" accessor={(g) => low(g.d1.avg)} sort={gSort} className="num" />
+                  <SortableTh columnKey="d5" label="5일" accessor={(g) => low(g.d5.avg)} sort={gSort} className="num" />
+                  <SortableTh columnKey="d20" label="20일" accessor={(g) => low(g.d20.avg)} sort={gSort} className="num" />
                   {/*
                     **지수 대비** (2026-09-01) — 슈퍼 채점표와 같은 칸.
                     이게 없으면 위의 셋은 뜻이 없다. 「+2%」가 잘한 건지는 그날 시장이
                     몇 % 였는지를 알아야 답할 수 있고, 상승장에서는 아무거나 사도 오른다.
                   */}
-                  <th className="num sd-emph" title="같은 기간 코스피를 뺀 값 — 이게 진짜 성적이다">
-                    지수 대비 +20
-                  </th>
+                  <SortableTh
+                    columnKey="ex20"
+                    label="지수 대비 +20"
+                    accessor={(g) => low(g.ex20.avg)}
+                    sort={gSort}
+                    className="num sd-emph"
+                    thProps={{ title: "같은 기간 코스피를 뺀 값 — 이게 진짜 성적이다" }}
+                  />
                   {/*
                     「승률(1일)」 → **「승률 (1일)」** (2026-09-04).
                     머리글은 이제 줄을 바꾸는데, `word-break: keep-all` 은 **띄어쓴 자리에서만**
@@ -356,14 +381,19 @@ export function ListTrackPage({
                     폰에서 이 표가 계속 옆으로 긁히던 마지막 이유가 이 두 칸이었다.
                     한글 표기로도 「승률 (1일)」이 틀리지 않는다.
                   */}
-                  <th className="num">승률 (1일)</th>
-                  <th className="num" title="평균과 같이 봐야 뜻이 산다 — 「두 번 크게 먹고 여덟 번 잃었다」인지 「고르게 벌었다」인지">
-                    승률 (20일)
-                  </th>
+                  <SortableTh columnKey="win1" label="승률 (1일)" accessor={(g) => low(g.win1)} sort={gSort} className="num" />
+                  <SortableTh
+                    columnKey="win20"
+                    label="승률 (20일)"
+                    accessor={(g) => low(g.win20)}
+                    sort={gSort}
+                    className="num"
+                    thProps={{ title: "평균과 같이 봐야 뜻이 산다 — 「두 번 크게 먹고 여덟 번 잃었다」인지 「고르게 벌었다」인지" }}
+                  />
                 </tr>
               </thead>
               <tbody>
-                {data.grade.map((g, i) => (
+                {gSort.sorted.map((g, i) => (
                   <Fragment key={g.label}>
                   {/*
                     줄을 누르면 **속**이 펼쳐진다 (2026-09-04) — 분포·중앙값·손익비·
@@ -372,7 +402,8 @@ export function ListTrackPage({
                     아니라 **한 줄에서 멈췄을 때** 필요한 값이라서다.
                   */}
                   <tr
-                    className={`${i === 0 ? "gb-base" : g.n < 5 ? "sim-thin" : ""} gd-click${openGrade2 === g.label ? " on" : ""}`}
+                    /* 정렬하면 첫 줄이 바뀐다 — 「전체」는 **자리가 아니라 이름**으로 가린다 */
+                    className={`${g.label === "전체" ? "gb-base" : g.n < 5 ? "sim-thin" : ""} gd-click${openGrade2 === g.label ? " on" : ""}`}
                     onClick={() => setOpenGrade2((v) => (v === g.label ? null : g.label))}
                     title="눌러서 이 구간의 속을 봅니다 — 분포·중앙값·손익비"
                   >
