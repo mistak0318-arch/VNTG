@@ -16129,6 +16129,14 @@ select.ord-in { appearance: auto; cursor: pointer; }
 .sim-conds { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
 .sim-conds-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sim-cond { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+/* 조건 한 줄 + 그 밑의 설명을 한 덩이로 (2026-09-05) */
+.sim-cond-wrap { display: flex; flex-direction: column; gap: 2px; }
+.sim-cond-hint { margin: 0 0 2px 2px; font-size: 0.68rem; line-height: 1.45; color: var(--text-dim); word-break: keep-all; }
+/* 「전날 값」은 성적의 진위를 가르는 말이라 눈에 걸려야 한다 */
+.sim-cond-hint .sim-lag { color: var(--cis-gold); font-weight: 600; }
+.sim-limits { margin: 4px 0 0; padding-left: 1.1rem; list-style: none; }
+.sim-limits li { position: relative; margin: 2px 0; font-size: 0.72rem; line-height: 1.5; color: var(--cis-gold); word-break: keep-all; }
+.sim-limits li::before { content: "⚠"; position: absolute; left: -1.1rem; }
 .sim-cond select.ord-in { width: auto; min-width: 6rem; }
 .sim-cond .sim-op { min-width: 3.4rem; }
 .sim-cond .sim-n { width: 4rem; }

@@ -86,6 +86,132 @@ export const CHART_RANGES = Object.keys(RANGES);
 const cache = new Map<string, { data: YahooChart; at: number }>();
 const TTL_MS = 60_000;
 
+/**
+ * **한 겹 아래 — 봉을 날것으로** (2026-09-05).
+ *
+ * 시뮬레이터가 미국 **프리장**을 재려고 하면서 필요해졌다. 프리장을 가르려면 봉마다
+ * 「그때 뉴욕이 몇 시였나」를 알아야 하는데, 위쪽 `yahooChart` 는 시각을 **한국시간
+ * 문자열로 구워서** 넘긴다(화면이 읽을 것이라 그게 맞다). 구운 뒤에는 되돌릴 수 없다.
+ *
+ * 그렇다고 야후 응답을 읽는 코드를 하나 더 쓰지는 않았다. **이 코드베이스가 반복해서
+ * 데인 병이 그것**이다(호가 정렬·버즈 문턱·현재가 출처·수수료). 읽는 곳은 여전히
+ * 하나이고, `yahooChart` 는 여기서 나온 것을 화면 모양으로 바꾸기만 한다.
+ */
+export interface YahooBar {
+  /** 유닉스 초 — **가공 전.** 어느 시간대로 읽을지는 부르는 쪽이 정한다 */
+  ts: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+interface RawMeta {
+  chartPreviousClose?: number;
+  previousClose?: number;
+  regularMarketPrice?: number;
+  regularMarketDayHigh?: number;
+  regularMarketDayLow?: number;
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
+  regularMarketVolume?: number;
+  currency?: string;
+  fullExchangeName?: string;
+  exchangeName?: string;
+  longName?: string;
+  shortName?: string;
+}
+
+export interface YahooBarsQuery {
+  /** `range=1mo` 류. `period1`/`period2` 를 주면 무시한다 */
+  range?: string;
+  /** 유닉스 초 — 60일을 꽉 채워 받을 때 쓴다(`range` 낱말로는 60일이 안 나온다) */
+  period1?: number;
+  period2?: number;
+  interval: string;
+  /**
+   * 장전·장후를 포함할까. **분봉일 때만 뜻이 있다** — 일봉은 야후가 정규장만 담는다.
+   * 그래서 프리장은 5분봉으로만 잴 수 있고, 5분봉은 60일까지만 준다.
+   */
+  prepost?: boolean;
+}
+
+export async function yahooBars(
+  symbol: string,
+  q: YahooBarsQuery,
+): Promise<{ bars: YahooBar[]; meta: RawMeta | null; error: string | null }> {
+  const p = new URLSearchParams();
+  if (q.period1 && q.period2) {
+    p.set("period1", String(Math.floor(q.period1)));
+    p.set("period2", String(Math.floor(q.period2)));
+  } else {
+    p.set("range", q.range ?? "6mo");
+  }
+  p.set("interval", q.interval);
+  if (q.prepost) {
+    p.set("includePrePost", "true");
+    /* 이 둘이 없으면 야후가 프리장 봉을 빼고 준다 */
+    p.set("events", "div,splits");
+  }
+
+  try {
+    const res = await fetch(`${BASE}/${encodeURIComponent(symbol)}?${p.toString()}`, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    if (!res.ok) {
+      void recordApiCall("yahoo", symbol, res.status === 429 ? "rateLimited" : "failed");
+      return { bars: [], meta: null, error: `야후 응답 ${res.status}` };
+    }
+    void recordApiCall("yahoo", symbol, "ok");
+
+    const body = (await res.json()) as {
+      chart?: {
+        result?: Array<{
+          meta?: RawMeta;
+          timestamp?: number[];
+          indicators?: {
+            quote?: Array<{
+              open?: (number | null)[];
+              high?: (number | null)[];
+              low?: (number | null)[];
+              close?: (number | null)[];
+              volume?: (number | null)[];
+            }>;
+          };
+        }>;
+        error?: { description?: string };
+      };
+    };
+
+    if (body.chart?.error) return { bars: [], meta: null, error: body.chart.error.description ?? "야후 오류" };
+    const r = body.chart?.result?.[0];
+    if (!r) return { bars: [], meta: null, error: "값이 없습니다" };
+
+    const ts = r.timestamp ?? [];
+    const qq = r.indicators?.quote?.[0] ?? {};
+    const bars: YahooBar[] = [];
+    for (let i = 0; i < ts.length; i++) {
+      const c = qq.close?.[i];
+      /* 종가가 없는 칸은 **건너뛴다.** 0 으로 채우면 차트가 바닥까지 떨어진다 */
+      if (typeof c !== "number" || !Number.isFinite(c)) continue;
+      bars.push({
+        ts: ts[i],
+        /* 시·고·저가 비면 종가로 메운다. 봉이 사라지는 것보단 낫다 */
+        open: num(qq.open?.[i], c),
+        high: num(qq.high?.[i], c),
+        low: num(qq.low?.[i], c),
+        close: c,
+        volume: num(qq.volume?.[i], 0),
+      });
+    }
+    return { bars, meta: r.meta ?? null, error: null };
+  } catch (err) {
+    void recordApiCall("yahoo", symbol, "failed");
+    return { bars: [], meta: null, error: err instanceof Error ? err.message : "차트 조회 실패" };
+  }
+}
+
 export async function yahooChart(symbol: string, key = "6mo"): Promise<YahooChart> {
   const pick = RANGES[key] ?? RANGES["6mo"];
   const cacheKey = `${symbol}|${key}`;
@@ -102,101 +228,46 @@ export async function yahooChart(symbol: string, key = "6mo"): Promise<YahooChar
     error: null,
   };
 
-  try {
-    const url = `${BASE}/${encodeURIComponent(symbol)}?range=${pick.range}&interval=${pick.interval}`;
-    const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-    if (!res.ok) {
-      void recordApiCall("yahoo", symbol, res.status === 429 ? "rateLimited" : "failed");
-      return { ...empty, error: `야후 응답 ${res.status}` };
-    }
-    void recordApiCall("yahoo", symbol, "ok");
+  const { bars, meta, error } = await yahooBars(symbol, { range: pick.range, interval: pick.interval });
+  if (error) return { ...empty, error };
 
-    const body = (await res.json()) as {
-      chart?: {
-        result?: Array<{
-          meta?: {
-            chartPreviousClose?: number;
-            previousClose?: number;
-            regularMarketPrice?: number;
-            regularMarketDayHigh?: number;
-            regularMarketDayLow?: number;
-            fiftyTwoWeekHigh?: number;
-            fiftyTwoWeekLow?: number;
-            regularMarketVolume?: number;
-            currency?: string;
-            fullExchangeName?: string;
-            exchangeName?: string;
-            longName?: string;
-            shortName?: string;
-          };
-          timestamp?: number[];
-          indicators?: {
-            quote?: Array<{
-              open?: (number | null)[];
-              high?: (number | null)[];
-              low?: (number | null)[];
-              close?: (number | null)[];
-              volume?: (number | null)[];
-            }>;
-          };
-        }>;
-        error?: { description?: string };
-      };
+  const intraday = pick.interval.endsWith("m") || pick.interval.endsWith("h");
+  const candles: Candle[] = bars.map((b) => {
+    const d = new Date(b.ts * 1000);
+    return {
+      // 장중은 한국시간으로 적는다 — 미국 현지 시각으로 적으면 언제인지 감이 안 온다
+      t: intraday
+        ? new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 16).replace("T", " ")
+        : d.toISOString().slice(0, 10),
+      open: b.open,
+      high: b.high,
+      low: b.low,
+      close: b.close,
+      volume: b.volume,
     };
+  });
 
-    if (body.chart?.error) return { ...empty, error: body.chart.error.description ?? "야후 오류" };
-    const r = body.chart?.result?.[0];
-    if (!r) return { ...empty, error: "값이 없습니다" };
-
-    const ts = r.timestamp ?? [];
-    const q = r.indicators?.quote?.[0] ?? {};
-    const intraday = pick.interval.endsWith("m") || pick.interval.endsWith("h");
-
-    const candles: Candle[] = [];
-    for (let i = 0; i < ts.length; i++) {
-      const c = q.close?.[i];
-      // 종가가 없는 칸은 **건너뛴다.** 0 으로 채우면 차트가 바닥까지 떨어진다
-      if (typeof c !== "number" || !Number.isFinite(c)) continue;
-      const d = new Date(ts[i] * 1000);
-      candles.push({
-        // 장중은 한국시간으로 적는다 — 미국 현지 시각으로 적으면 언제인지 감이 안 온다
-        t: intraday
-          ? new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 16).replace("T", " ")
-          : d.toISOString().slice(0, 10),
-        // 시가·고가·저가가 비면 종가로 메운다. 봉이 사라지는 것보단 낫다
-        open: num(q.open?.[i], c),
-        high: num(q.high?.[i], c),
-        low: num(q.low?.[i], c),
-        close: c,
-        volume: num(q.volume?.[i], 0),
-      });
-    }
-
-    const data: YahooChart = {
-      ...empty,
-      candles,
-      prevClose: r.meta?.chartPreviousClose ?? r.meta?.previousClose ?? null,
-      meta: r.meta
-        ? {
-            price: fin(r.meta.regularMarketPrice),
-            dayHigh: fin(r.meta.regularMarketDayHigh),
-            dayLow: fin(r.meta.regularMarketDayLow),
-            high52: fin(r.meta.fiftyTwoWeekHigh),
-            low52: fin(r.meta.fiftyTwoWeekLow),
-            volume: fin(r.meta.regularMarketVolume),
-            currency: r.meta.currency ?? "",
-            exchange: r.meta.fullExchangeName ?? r.meta.exchangeName ?? "",
-            name: r.meta.longName ?? r.meta.shortName ?? "",
-          }
-        : null,
-      error: candles.length === 0 ? "봉이 하나도 없습니다" : null,
-    };
-    cache.set(cacheKey, { data, at: Date.now() });
-    return data;
-  } catch (err) {
-    void recordApiCall("yahoo", symbol, "failed");
-    return { ...empty, error: err instanceof Error ? err.message : "차트 조회 실패" };
-  }
+  const data: YahooChart = {
+    ...empty,
+    candles,
+    prevClose: meta?.chartPreviousClose ?? meta?.previousClose ?? null,
+    meta: meta
+      ? {
+          price: fin(meta.regularMarketPrice),
+          dayHigh: fin(meta.regularMarketDayHigh),
+          dayLow: fin(meta.regularMarketDayLow),
+          high52: fin(meta.fiftyTwoWeekHigh),
+          low52: fin(meta.fiftyTwoWeekLow),
+          volume: fin(meta.regularMarketVolume),
+          currency: meta.currency ?? "",
+          exchange: meta.fullExchangeName ?? meta.exchangeName ?? "",
+          name: meta.longName ?? meta.shortName ?? "",
+        }
+      : null,
+    error: candles.length === 0 ? "봉이 하나도 없습니다" : null,
+  };
+  cache.set(cacheKey, { data, at: Date.now() });
+  return data;
 }
 
 function num(v: number | null | undefined, fallback: number): number {

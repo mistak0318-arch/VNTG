@@ -102,11 +102,16 @@ function CondEditor({
 
       {list.map((c, i) => {
         const m = METRICS.find((x) => x.key === c.metric) ?? METRICS[0];
+        const def = c.src === "series" ? series.find((x) => x.key === c.key) : undefined;
+        /* 「값 그 자체」의 단위는 지표가 아니라 **그 변수**의 것이다 — VIX 는 p, 금리는 % */
+        const unit = m.key === "close" ? (def?.unit ?? "원") : m.unit;
         return (
-          <div className="sim-cond" key={i}>
+          <div className="sim-cond-wrap" key={i}>
+          <div className="sim-cond">
             <select
               className="ord-in"
               value={c.src === "stock" ? "stock" : (c.key ?? "KOSPI")}
+              title={def?.hint}
               onChange={(e) =>
                 set(
                   i,
@@ -117,10 +122,17 @@ function CondEditor({
               }
             >
               <option value="stock">이 종목</option>
-              {series.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
+              {/* 묶어서 보여 준다 — 열넷을 한 줄로 늘어놓으면 무엇이 무엇인지 안 보인다 */}
+              {[...new Set(series.map((x) => x.group))].map((g) => (
+                <optgroup key={g} label={g}>
+                  {series
+                    .filter((x) => x.group === g)
+                    .map((x) => (
+                      <option key={x.key} value={x.key}>
+                        {x.label}
+                      </option>
+                    ))}
+                </optgroup>
               ))}
             </select>
 
@@ -167,7 +179,7 @@ function CondEditor({
               value={c.value}
               onChange={(e) => set(i, { value: Number(e.target.value) })}
             />
-            <span className="pt-n">{m.unit}</span>
+            <span className="pt-n">{unit}</span>
 
             <button
               type="button"
@@ -177,6 +189,26 @@ function CondEditor({
             >
               ✕
             </button>
+          </div>
+
+          {/*
+            고른 변수가 무엇인지 한 줄로 적는다. 특히 **시계**와 **뒤로 닿는 길이** —
+            이 둘을 모르면 사람은 「오늘 값으로 판단한다」와 「구간 전체를 덮는다」를
+            둘 다 믿어 버린다. 둘 다 사실이 아닐 수 있다.
+          */}
+          {def && (
+            <p className="sim-cond-hint">
+              {def.hint}
+              {def.clock === "us" && (
+                <>
+                  {" · "}
+                  <b className="sim-lag">한국 종가엔 전날 값</b>
+                </>
+              )}
+              {" · 뒤로 "}
+              {def.span}
+            </p>
+          )}
           </div>
         );
       })}
@@ -208,6 +240,19 @@ function ResultView({ r, title }: { r: SimResult; title: string }) {
       </div>
 
       {r.note && <p className="sim-note">{r.note}</p>}
+
+      {/*
+        빈 성적이 규칙 탓인지 **자료 탓인지**를 가른다. 프리장처럼 뒤로 60일뿐인 변수를
+        250일 구간에 쓰면 앞의 190일은 「못 잼」이라 안 맞은 것으로 세어지는데,
+        그 사실이 안 적히면 멀쩡한 규칙이 나쁜 규칙으로 보인다.
+      */}
+      {(r.limits ?? []).length > 0 && (
+        <ul className="sim-limits">
+          {(r.limits ?? []).map((t, i) => (
+            <li key={i}>{t}</li>
+          ))}
+        </ul>
+      )}
 
       <dl className="sim-kpis">
         <div>

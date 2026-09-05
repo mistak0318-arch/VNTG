@@ -1,5 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
-import { asOf, backAt, maAt, series, stockBars, type Point } from "./simSeries.js";
+import { asOf, backAt, isLagged, maAt, series, seriesDef, stockBars, type Point } from "./simSeries.js";
 import type { Cond, SimRule } from "./simRules.js";
 import { FEE_RATE, TAX_RATE } from "./cisAccount.js";
 
@@ -69,9 +69,17 @@ function evalCond(
   stock: Point[],
   ext: Map<string, Point[]>,
 ): { ok: boolean | null; text: string } {
-  const rows = c.src === "stock" ? stock : (ext.get(c.key ?? "") ?? []);
-  const label = c.src === "stock" ? "종목" : (c.key ?? "?");
-  const now = asOf(rows, d);
+  const key = c.key ?? "";
+  const rows = c.src === "stock" ? stock : (ext.get(key) ?? []);
+  /*
+   * **바깥 시계로 도는 변수는 그날 값을 못 쓴다.** 한국 종가 15:30 에 미국장·프리장은
+   * 아직 시작도 안 했다. `lag` 가 켜지면 조회가 그날을 빼고 그 이전 마지막 값을 읽는다.
+   * 이 한 칸이 백테스트의 진위를 가른다(`simSeries` 머리말의 표).
+   */
+  const lag = c.src === "series" && isLagged(key);
+  const label =
+    c.src === "stock" ? "종목" : `${seriesDef(key)?.label ?? (key || "?")}${lag ? "(전일)" : ""}`;
+  const now = asOf(rows, d, lag);
   if (now === null) return { ok: null, text: `${label} 값을 못 읽음` };
 
   let v: number | null = null;
@@ -79,15 +87,15 @@ function evalCond(
   if (c.metric === "close") {
     v = now;
   } else if (c.metric === "chg1") {
-    const prev = backAt(rows, d, 1);
+    const prev = backAt(rows, d, 1, lag);
     v = prev !== null && prev !== 0 ? ((now - prev) / prev) * 100 : null;
     unit = "%";
   } else if (c.metric === "chgN") {
-    const prev = backAt(rows, d, c.n ?? 5);
+    const prev = backAt(rows, d, c.n ?? 5, lag);
     v = prev !== null && prev !== 0 ? ((now - prev) / prev) * 100 : null;
     unit = "%";
   } else if (c.metric === "vsMa") {
-    const ma = maAt(rows, d, c.n ?? 20);
+    const ma = maAt(rows, d, c.n ?? 20, lag);
     v = ma !== null && ma !== 0 ? ((now - ma) / ma) * 100 : null;
     unit = "%";
   }
@@ -202,6 +210,15 @@ export interface SimResult {
   curve: { d: string; equity: number }[];
   /** 왜 한 건도 없었나 — 빈 결과는 이유를 말해야 한다 */
   note: string | null;
+  /**
+   * **이 성적을 믿을 수 없게 만드는 것들** (2026-09-05).
+   *
+   * 조건에 쓴 바깥 변수가 백테스트 구간을 다 못 덮으면 여기 적힌다. 프리장처럼 뒤로
+   * 60일뿐인 변수를 250일 구간에서 쓰면 **앞의 190일은 조건이 「못 잼」이라 안 맞은
+   * 것으로 세어진다** — 거래가 없는 것이 규칙 탓인지 자료 탓인지 화면에서 구분이
+   * 안 되면 이 도구는 거짓말을 하는 것이다. 비어 있으면 덮은 것이다.
+   */
+  limits: string[];
 }
 
 /** 결과를 요약한다 — 백테스트와 실전이 같은 요약을 쓴다 */
@@ -249,7 +266,34 @@ export function summarize(
             ? "매수 조건이 비어 있습니다 — 조건이 없으면 사지 않습니다"
             : "이 구간에서 매수 조건이 한 번도 다 맞지 않았습니다"
           : null,
+    limits: [],
   };
+}
+
+/**
+ * 쓴 바깥 변수가 구간을 **덮었나**.
+ *
+ * 백테스트에만 붙인다. 실전 진행은 켠 날부터 앞으로만 가서 60일짜리 변수로도 안 모자라고,
+ * 조회가 통째로 실패하는 경우는 백테스트를 한 번 돌리면 여기서 바로 보인다.
+ */
+function coverageLimits(ext: Map<string, Point[]>, bars: { d: string }[]): string[] {
+  const out: string[] = [];
+  const from = bars[0]?.d ?? "";
+  for (const [k, rows] of ext) {
+    const name = seriesDef(k)?.label ?? k;
+    if (rows.length === 0) {
+      out.push(`「${name}」 값을 하나도 못 받았습니다 — 이 조건은 이 구간 내내 안 맞은 것으로 셌습니다`);
+      continue;
+    }
+    if (from && rows[0].d > from) {
+      const miss = bars.filter((b) => b.d < rows[0].d).length;
+      out.push(
+        `「${name}」 는 ${rows[0].d.slice(0, 4)}-${rows[0].d.slice(4, 6)}-${rows[0].d.slice(6)} 부터만 있습니다 — ` +
+          `앞의 ${miss}거래일은 못 재서 안 맞은 것으로 셌습니다. 구간을 줄여서 다시 보세요`,
+      );
+    }
+  }
+  return out;
 }
 
 /**
@@ -280,5 +324,5 @@ export async function backtest(
   const stock: Point[] = all.map((b) => ({ d: b.d, c: b.c }));
   const st = newState(rule.seed);
   for (const b of bars) step(rule, st, b.d, b.c, stock, ext);
-  return summarize(rule, st, bars);
+  return { ...summarize(rule, st, bars), limits: coverageLimits(ext, bars) };
 }

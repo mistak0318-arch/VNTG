@@ -5798,6 +5798,16 @@ export interface SimSeriesDef {
   kind: "stock" | "index" | "macro";
   unit: string;
   hint: string;
+  /**
+   * 어느 시계로 도나 (2026-09-05). `"us"` 면 한국 종가 15:30 에 **그날 값이 아직
+   * 없어서**, 엔진이 그 이전 마지막 값을 쓴다. 화면은 그 사실을 적어야 한다 —
+   * 안 적으면 사람은 오늘 값으로 판단한다고 믿는다.
+   */
+  clock: "kr" | "us";
+  /** 목록을 묶는 이름 */
+  group: string;
+  /** 뒤로 얼마나 있나. 프리장은 60일뿐이다 */
+  span: string;
 }
 
 export interface SimTrade {
@@ -5826,6 +5836,11 @@ export interface SimResult {
   curve: { d: string; equity: number }[];
   /** 거래가 없었으면 그 이유 */
   note: string | null;
+  /**
+   * 이 성적을 믿을 수 없게 만드는 것들 — 쓴 바깥 변수가 구간을 못 덮었을 때.
+   * 백테스트에만 붙는다(옛 서버는 안 보낸다 — 그래서 optional).
+   */
+  limits?: string[];
   /** 실전 성적일 때만 */
   startedAt?: string | null;
 }
