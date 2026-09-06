@@ -543,6 +543,7 @@ const low = (v: number | null | undefined) => (v === null || v === undefined ? -
                   e={e}
                   cols={orderedCols}
                   onOpen={(c, n) => setSheet({ code: c, name: n })}
+                  onOpenStock={onSelectStock}
                   onRemove={remove}
                 />
               ))}
@@ -787,6 +788,7 @@ function Row({
   e,
   cols,
   onOpen,
+  onOpenStock,
   onRemove,
 }: {
   e: ListTrackRow;
@@ -794,12 +796,39 @@ function Row({
   cols: LtCol[];
   /** 행을 누르면 상세 시트 — 슈퍼신호등과 같은 컴포넌트다 */
   onOpen: (code: string, name: string) => void;
+  /**
+   * **종목명 칸을 누르면 종목 상세** (2026-09-06).
+   *
+   * 벤티지: "종목 누르면 종목상세가 안 들어가져." 배선이 끊긴 게 아니라 **이 화면에만
+   * 없던 길**이었다 — 이 앱의 다른 종목 목록 서른 곳은 전부 행을 누르면 종목 상세가
+   * 뜨는데, 여기와 슈퍼신호등 둘만 제 상세 시트를 연다. 그건 그것대로 이 화면의
+   * 본체라 뺄 수 없고, 종목 상세로 가는 길은 시트 안 아이콘 하나뿐이라 못 찾는다.
+   *
+   * 그래서 **종목명 칸만** 종목 상세로 보낸다. 종목 이름을 누르면 그 종목이 나오는 것이
+   * 이 앱 어디서나 참인 규칙이고, 나머지 칸(점수·편입일·수익률)은 여전히 신호등
+   * 이야기라 시트로 간다. 이름 밑줄이 「여기는 다르다」를 미리 알린다.
+   */
+  onOpenStock: (code: string, name: string) => void;
   onRemove: (code: string, name: string) => void;
 }) {
   return (
     <tr onClick={() => onOpen(e.code, e.name)} style={{ cursor: "pointer" }}>
       {cols.map((c) => (
-        <td key={c.key} className={`${c.num ? "num " : ""}${c.className?.(e) ?? ""}`.trim()}>
+        <td
+          key={c.key}
+          className={`${c.num ? "num " : ""}${c.className?.(e) ?? ""}${
+            c.key === "name" ? " stk-cell" : ""
+          }`.trim()}
+          title={c.key === "name" ? "종목 상세 — 다른 칸을 누르면 신호등 상세입니다" : undefined}
+          onClick={
+            c.key === "name"
+              ? (ev) => {
+                  ev.stopPropagation();
+                  onOpenStock(e.code, e.name);
+                }
+              : undefined
+          }
+        >
           {c.cell(e)}
         </td>
       ))}

@@ -939,8 +939,36 @@ export function SuperDashboardPage({
                       }
                     }}
                   >
+                    {/*
+                      **종목명 칸만 종목 상세로** (2026-09-06).
+
+                      벤티지: "종목 누르면 종목상세가 안 들어가져." 이 앱의 다른 종목
+                      목록은 전부 행을 누르면 종목 상세가 뜨는데, 이 화면과 신호등
+                      분석 둘만 제 상세 시트를 연다. 시트가 이 화면의 본체라 그건
+                      그대로 두되, 종목 상세로 가는 길이 시트 안 아이콘 하나뿐이라
+                      **못 찾는 게 당연했다.**
+
+                      종목 이름을 누르면 그 종목이 나오는 것은 이 앱 어디서나 참이어야
+                      하는 규칙이다. 나머지 칸은 여전히 슈퍼 이야기라 시트로 간다.
+                    */}
                     {orderedCols.map((c) => (
-                      <td key={c.key} className={cellCls(c, e)}>
+                      <td
+                        key={c.key}
+                        className={`${cellCls(c, e)}${c.key === "name" ? " stk-cell" : ""}`}
+                        title={
+                          c.key === "name"
+                            ? "종목 상세 — 다른 칸을 누르면 슈퍼 상세입니다"
+                            : undefined
+                        }
+                        onClick={
+                          c.key === "name"
+                            ? (ev) => {
+                                ev.stopPropagation();
+                                onSelectStock(e.code, e.name);
+                              }
+                            : undefined
+                        }
+                      >
                         {c.cell(e, { crossOnly, daily, nowScore, scoreDelta })}
                       </td>
                     ))}

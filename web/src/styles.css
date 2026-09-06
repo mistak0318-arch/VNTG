@@ -16285,3 +16285,13 @@ select.ord-in { appearance: auto; cursor: pointer; }
 .sa-win-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .sa-win-days { margin-left: auto; display: inline-flex; gap: 4px; }
 .sa-win .sa { border: 0; background: transparent; padding: 0; }
+
+/* ── 종목명 칸 = 종목 상세로 가는 길 (2026-09-06) ─────────────────────
+   신호등 분석과 슈퍼신호등은 행을 누르면 **제 상세 시트**가 뜬다(그게 그 화면의
+   본체다). 그래서 이 앱의 다른 목록 서른 곳과 달리 종목 상세로 가는 길이 없었다.
+   종목 이름을 누르면 그 종목이 나오는 것은 어디서나 참이어야 하는 규칙이라,
+   **이름 칸만** 따로 뺐다. 밑줄이 「여기는 다르다」를 미리 알린다. */
+td.stk-cell { cursor: pointer; }
+td.stk-cell b { text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-color: var(--muted); }
+td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: currentColor; color: var(--accent); }
+.sd-open-stock { white-space: nowrap; font-size: 0.74rem; }

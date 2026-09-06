@@ -288,9 +288,19 @@ export function SuperDetailSheet({
             🌟 {name} <span className="pt-n">{code}</span>
             <span className={`sd-state ${active ? "on" : "off"}`}>{active ? "추적 중" : "이탈"}</span>
           </h2>
+          {/*
+            **글자를 붙였다** (2026-09-06). 여기가 이 화면에서 종목 상세로 가는
+            유일한 길인데 아이콘 하나뿐이라 아무도 못 찾았다 — 벤티지가 「종목상세가
+            안 들어가져」라고 한 것이 이 자리다. 이제 종목명 칸에서 바로 갈 수도 있지만,
+            시트를 열고 나서 생각이 바뀌는 경우도 있어 여기도 남긴다.
+          */}
           {onOpenStock && (
-            <button className="watch-btn" onClick={() => onOpenStock(code, name)} title="종목 상세 열기">
-              📈
+            <button
+              className="watch-btn sd-open-stock"
+              onClick={() => onOpenStock(code, name)}
+              title="종목 상세(호가·차트·수급)를 엽니다"
+            >
+              📈 종목 상세
             </button>
           )}
           <button className="close-btn" onClick={onClose}>
