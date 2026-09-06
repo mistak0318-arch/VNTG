@@ -16395,3 +16395,14 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .sc-list a { color: var(--text); text-decoration: none; }
 .sc-list a:hover { text-decoration: underline; }
 .sc-wait { margin: 12px 0; }
+
+/* ── 지수 분석 서브탭 (2026-09-07) ──────────────────────────────────── */
+.idx-sub { margin: 6px 0 4px; }
+.ia { padding-bottom: 8px; }
+.ia-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.2rem, 1fr)); gap: 4px 10px; margin: 6px 0 4px; }
+.ia-kv div { display: flex; justify-content: space-between; gap: 6px; font-size: 0.78rem; padding: 3px 6px; border-radius: 6px; background: var(--panel-2); }
+.ia-kv dt { color: var(--muted); white-space: nowrap; }
+.ia-kv dd { margin: 0; font-weight: 700; text-align: right; }
+.ia-subj td, .ia-subj th { font-size: 0.74rem; }
+.ia-subj tr.ia-main td { font-weight: 700; }
+.ia-note { margin: 4px 0 10px; line-height: 1.55; word-break: keep-all; }

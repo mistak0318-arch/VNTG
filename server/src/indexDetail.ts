@@ -49,6 +49,7 @@ export interface IndexCandle {
 export interface IndexFlowRow {
   /** YYYY-MM-DD */
   date: string;
+  /** 그날 지수 등락률(%) — 창고엔 100배로 들어 있고 여기서 나눈다 */
   changeRate: number;
   foreign: number;
   institution: number;
@@ -203,7 +204,13 @@ export async function indexDetail(
       if (!row) return null;
       return {
         date: d.date,
-        changeRate: row.changeRate,
+        /*
+         * ⚠️ `ka10051` 의 `flu_rt` 는 **100배**다 — -580 이 -5.80% 다(2026-09-07 실측,
+         * 지수값과 같은 규약). 창고(`sectorFlowStore`)는 받은 그대로 두고 있고, 이 칸을
+         * 화면에 처음 적으면서(일별 표의 「등락」) 드러났다. 여기서 퍼센트로 바꾼다 —
+         * 이 필드를 읽는 곳은 이 시트뿐이다.
+         */
+        changeRate: row.changeRate / 100,
         foreign: at(row.v, "foreign"),
         institution: at(row.v, "institution"),
         individual: at(row.v, "individual"),

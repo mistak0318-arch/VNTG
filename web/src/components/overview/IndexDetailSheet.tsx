@@ -5,6 +5,7 @@ import { CandleChart } from "../CandleChart";
 import { IntradayFlowChart } from "./IntradayFlowChart";
 import { OhlcStrip } from "./OhlcStrip";
 import { useSection } from "../../useSection";
+import { IndexAnalysis } from "./IndexAnalysis";
 
 /** 오늘 봉 — 일봉의 마지막 봉이 오늘이면 그것. 기간을 주·월로 바꿔도 남아 있게 따로 든다 */
 interface DayOhlc {
@@ -98,6 +99,25 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
    */
   const flow = useSection<MarketFlow>("flow", 30_000);
   const [day, setDay] = useState<DayOhlc | null>(null);
+  /*
+   * 서브탭 (2026-09-07) — 개요(봉·오늘·일별)와 **분석**(자리·흐름·주체·상관).
+   * 벤티지: "서브탭 하나 구성해서 각 지수별 수급 주체 변화, 지수의 흐름 변화 정밀하게."
+   * 분석은 늘 **일봉**으로 잰다 — 위의 일/주/월 토글과 무관하게 따로 받아 둔다.
+   */
+  const [sub, setSub] = useState<"overview" | "analysis">("overview");
+  const [dayData, setDayData] = useState<IndexDetailData | null>(null);
+  useEffect(() => {
+    if (sub !== "analysis") return;
+    if (range === "day" && data) {
+      setDayData(data);
+      return;
+    }
+    let alive = true;
+    api.indexDetail(code, "day").then((d) => alive && setDayData(d)).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [sub, code, range, data]);
 
   useEffect(() => {
     let alive = true;
@@ -161,6 +181,33 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
           />
         )}
 
+        <nav className="detail-tabs idx-sub">
+          <button className={`detail-tab${sub === "overview" ? " active" : ""}`} onClick={() => setSub("overview")}>
+            개요
+          </button>
+          <button
+            className={`detail-tab${sub === "analysis" ? " active" : ""}`}
+            onClick={() => setSub("analysis")}
+            title="지수의 자리(이동평균·고점·연속)와 흐름, 주체별 누적·연속·상관"
+          >
+            🔎 분석
+          </button>
+        </nav>
+
+        {sub === "analysis" && (
+          !dayData ? (
+            <div className="page-note">분석할 일봉을 받는 중…</div>
+          ) : (
+            <IndexAnalysis
+              name={dayData.name}
+              daily={dayData.candles.map((c) => ({ d: c.dt, close: c.close, tradeValue: c.tradeValue }))}
+              flows={dayData.flows}
+            />
+          )
+        )}
+
+        {sub === "overview" && (
+        <>
         <div className="filter-row">
           {RANGES.map((r) => (
             <button
@@ -417,6 +464,8 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
               <thead>
                 <tr>
                   <th className="sticky-col">일자</th>
+                  {/* 벤티지(2026-09-07): "일별 수급 표 일자 바로 뒤에 그날의 등락률도" — 수급을 지수 방향과 같이 읽어야 뜻이 선다 */}
+                  <th title="그날 지수 등락률">등락</th>
                   {FLOW_COLS.map((c) => (
                     <th key={c.key} title={c.hint}>
                       {c.label}
@@ -428,6 +477,10 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
                 {data.flows.map((f) => (
                   <tr key={f.date}>
                     <td className="sticky-col">{f.date.slice(5)}</td>
+                    <td className={sign(f.changeRate)}>
+                      {f.changeRate > 0 ? "+" : ""}
+                      {f.changeRate.toFixed(2)}%
+                    </td>
                     {FLOW_COLS.map((c) => {
                       const v = f[c.key] as number | null;
                       return (
@@ -448,6 +501,8 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
           따로 주지 않습니다. 일별 수급은 이미 쌓아 둔 것에서 꺼내므로 <b>추가 호출이
           없습니다</b>.
         </div>
+        </>
+        )}
       </div>
     </div>
   );

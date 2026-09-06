@@ -12,6 +12,7 @@ import {
 } from "../../api";
 import { CandleChart } from "../CandleChart";
 import { IntradayFlowChart } from "./IntradayFlowChart";
+import { IndexAnalysis, type DailyPt } from "./IndexAnalysis";
 
 /**
  * 지수·원자재 차트.
@@ -285,6 +286,44 @@ export function YahooChartSheet({
   const [data, setData] = useState<YahooChart | null>(null);
   const [detail, setDetail] = useState<UsDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  /*
+   * **분석** 서브탭 (2026-09-07) — 코스피 시트와 같은 부품(`IndexAnalysis`).
+   * 벤티지: "미국 탭의 S&P 500·나스닥 100·필라델피아 반도체 등도 같은 기능을."
+   *
+   * 미국 지수는 투자자별 매매가 없으니 수급 절 대신 **S&P 500 대비 상대강도**를 준다.
+   * S&P 자신은 나스닥100 과 견준다(성장 대 전체). 국내 야간선물은 상대 없이 자리·흐름만.
+   * 해외 개별종목은 제 상세가 따로 있어 이 탭이 없다.
+   */
+  const [sub, setSub] = useState<"overview" | "analysis">("overview");
+  const [anaDaily, setAnaDaily] = useState<DailyPt[] | null>(null);
+  const [anaBench, setAnaBench] = useState<{ name: string; daily: DailyPt[] } | null>(null);
+  const benchSym = target.symbol === "^GSPC" ? "^NDX" : "^GSPC";
+  const benchName = benchSym === "^NDX" ? "나스닥 100" : "S&P 500";
+  useEffect(() => {
+    if (sub !== "analysis" || usStock) return;
+    let alive = true;
+    setAnaDaily(null);
+    const toPts = (c: { t: string | number; close: number }[]): DailyPt[] =>
+      c.map((k) => ({ d: String(k.t).slice(0, 10), close: k.close })).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k.d) && k.close > 0);
+    if (futures) {
+      api
+        .futuresChart(target.symbol, "D", 300, target.futMarket ?? "CM")
+        .then((r) => alive && setAnaDaily(toPts(r.candles)))
+        .catch(() => alive && setAnaDaily([]));
+      setAnaBench(null);
+      return;
+    }
+    Promise.all([api.yahooChart(target.symbol, "2y"), api.yahooChart(benchSym, "2y")])
+      .then(([a, b]) => {
+        if (!alive) return;
+        setAnaDaily(toPts(a.candles));
+        setAnaBench({ name: benchName, daily: toPts(b.candles) });
+      })
+      .catch(() => alive && setAnaDaily([]));
+    return () => {
+      alive = false;
+    };
+  }, [sub, target.symbol, futures, usStock, benchSym, benchName, target.futMarket]);
   /**
    * 선물의 **최근 세션 봉** (2026-09-03 — "당일 고점, 저점, 현재가 … 야간선물도").
    * 일봉(`3mo`)을 받을 때 마지막 봉을 집어 둔다. 야간은 세션이 18:00 에 시작해 날짜를
@@ -583,6 +622,31 @@ export function YahooChartSheet({
           />
         )}
 
+        {!usStock && (
+          <nav className="detail-tabs idx-sub">
+            <button className={`detail-tab${sub === "overview" ? " active" : ""}`} onClick={() => setSub("overview")}>
+              개요
+            </button>
+            <button
+              className={`detail-tab${sub === "analysis" ? " active" : ""}`}
+              onClick={() => setSub("analysis")}
+              title="자리(이동평균·고점·연속)와 흐름, S&P 500 대비 상대강도"
+            >
+              🔎 분석
+            </button>
+          </nav>
+        )}
+
+        {sub === "analysis" && !usStock && (
+          anaDaily === null ? (
+            <div className="page-note">분석할 일봉을 받는 중…</div>
+          ) : (
+            <IndexAnalysis name={target.label} daily={anaDaily} bench={futures ? null : anaBench} unit="" />
+          )
+        )}
+
+        {(sub === "overview" || usStock) && (
+        <>
         <div className="filter-row">
           {ranges.map((r) => (
             <button
@@ -806,6 +870,8 @@ export function YahooChartSheet({
               </div>
             )}
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

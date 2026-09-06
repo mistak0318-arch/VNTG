@@ -4,6 +4,7 @@ import { api, fmtNum } from "../../api";
 import { CandleChart } from "../CandleChart";
 import { IntradayFlowChart } from "./IntradayFlowChart";
 import { OhlcStrip } from "./OhlcStrip";
+import { IndexAnalysis, type DailyPt, type LooseFlow } from "./IndexAnalysis";
 
 function todayIso(): string {
   return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -98,6 +99,37 @@ export function FuturesDetailSheet({
   }, []);
 
   const last = flow?.[flow.length - 1];
+
+  /*
+   * **분석** 서브탭 (2026-09-07) — 코스피·미국 지수 시트와 같은 부품.
+   * 분석은 늘 일봉으로 잰다(위의 일/주/월과 무관). 수급은 네이버의 세 주체(계약)라
+   * 기관 속살은 없다 — 그래서 `fewSubjects`. 등락률은 일봉에서 그날 종가 대비로 센다.
+   */
+  const [sub, setSub] = useState<"overview" | "analysis">("overview");
+  const [anaDaily, setAnaDaily] = useState<DailyPt[] | null>(null);
+  useEffect(() => {
+    if (sub !== "analysis") return;
+    let alive = true;
+    setAnaDaily(null);
+    api
+      .futuresChart(target.code, "D", 300, "F")
+      .then((r) => alive && setAnaDaily(r.candles.map((c) => ({ d: c.t.slice(0, 10), close: c.close })).filter((c) => c.close > 0)))
+      .catch(() => alive && setAnaDaily([]));
+    return () => {
+      alive = false;
+    };
+  }, [sub, target.code]);
+  const anaFlows: LooseFlow[] | undefined = (() => {
+    if (!flow || !anaDaily) return undefined;
+    const closeAt = new Map(anaDaily.map((d, i) => [d.d, { c: d.close, p: anaDaily[i - 1]?.close ?? null }]));
+    return [...flow]
+      .reverse()
+      .map((f) => {
+        const k = closeAt.get(f.date);
+        const changeRate = k && k.p ? ((k.c - k.p) / k.p) * 100 : 0;
+        return { date: f.date, changeRate, individual: f.individual, foreign: f.foreign, institution: f.institution };
+      });
+  })();
   /** 계약 → 억원 환산 (지수 × 25만원). 평균 체결가가 아니라 현재가라 추정치다 */
   const eok = (n: number) =>
     target.price > 0 ? `${n > 0 ? "+" : ""}${fmtNum(Math.round((n * target.price) / 400))}` : "-";
@@ -147,6 +179,29 @@ export function FuturesDetailSheet({
           />
         )}
 
+        <nav className="detail-tabs idx-sub">
+          <button className={`detail-tab${sub === "overview" ? " active" : ""}`} onClick={() => setSub("overview")}>
+            개요
+          </button>
+          <button
+            className={`detail-tab${sub === "analysis" ? " active" : ""}`}
+            onClick={() => setSub("analysis")}
+            title="자리(이동평균·고점·연속)와 흐름, 세 주체의 누적·연속·상관 (계약)"
+          >
+            🔎 분석
+          </button>
+        </nav>
+
+        {sub === "analysis" && (
+          anaDaily === null ? (
+            <div className="page-note">분석할 일봉을 받는 중…</div>
+          ) : (
+            <IndexAnalysis name="코스피200 선물" daily={anaDaily} flows={anaFlows} unit="" flowUnit="계약" fewSubjects />
+          )
+        )}
+
+        {sub === "overview" && (
+        <>
         <div className="filter-row">
           {RANGES.map((r) => (
             <button
@@ -315,6 +370,8 @@ export function FuturesDetailSheet({
           음수(백워데이션)면 프로그램 매도가 붙기 쉽습니다. <b>미결제약정</b>은 살아 있는
           계약 수 — 오르며 늘면 새 돈이 들어오는 추세, 오르며 줄면 숏 청산 반등입니다.
         </div>
+        </>
+        )}
       </div>
     </div>
   );
