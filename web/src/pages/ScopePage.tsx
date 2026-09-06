@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type ScopeDetail, type ScopeFlow, type ScopeRow } from "../api";
 import { MiniLine } from "../components/MiniLine";
 import { SortableTh, useSortableTable } from "../useSortableTable";
+import { useWatchedCodes } from "../useWatchedCodes";
 
 /**
  * **매수직전** — 현미경 그룹의 관리 화면 (2026-09-07).
@@ -446,6 +447,7 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
   const [open, setOpen] = useState<string | null>(null);
   const [at, setAt] = useState<Date | null>(null);
   const sort = useSortableTable(rows);
+  const watched = useWatchedCodes();
 
   const load = useCallback(async () => {
     setError(null);
@@ -467,6 +469,12 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
     const t = setInterval(() => void load(), 60_000);
     return () => clearInterval(t);
   }, [load]);
+
+  /* 어느 화면에서든 담기 시트에서 「현미경」에 체크하면 여기도 바로 */
+  useEffect(() => {
+    if (watched.version === 0) return;
+    void load();
+  }, [watched.version, load]);
 
   /* 표 위 요약 — 오늘 외국인·기관이 이 바구니를 통째로 어떻게 대했나 */
   const sumToday = (k: "fgn" | "org") =>

@@ -54,6 +54,19 @@ export interface TrackedStock extends WatchItem {
   error: string | null;
 }
 
+/**
+ * **지표만** — 관심종목 항목(그룹·메모·순서·상태)을 뺀 나머지 (2026-09-07).
+ *
+ * 예전엔 `TrackedStock` 통째로 캐시했다. 그러면 그룹 하나 바꿔도 캐시를 버려야 했고,
+ * 버리면 다음 진입에서 74종목 × 키움 조회를 처음부터 다시 했다(수십 초). 안 버리면
+ * 그룹이 옛것으로 보였다. 벤티지: "관심종목 들어갈 때 너무 오래 걸린다. 다른 그룹
+ * 추가했는데 새로고침해야만 보이네?" — **둘이 같은 뿌리**였다.
+ *
+ * 지표는 종목별로 캐시하고, 응답 때 **지금 목록**과 합친다. 그룹·메모·순서는 언제나
+ * 지금 값이고, 지표는 만료 전까지 재사용한다. 새로 담긴 종목만 그 자리에서 채운다.
+ */
+type Metrics = Omit<TrackedStock, keyof WatchItem>;
+
 type Row = Record<string, unknown>;
 
 function toNum(v: unknown): number {
@@ -78,13 +91,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedStock> {
+async function trackOne(client: KiwoomClient, item: WatchItem): Promise<Metrics> {
   /*
    * 구분선은 **종목이 아니다.** 시세를 물으면 없는 코드라 오류만 나고, 그 오류가 목록
    * 전체를 느리게 만든다. 자리만 지키는 줄이므로 값 없이 그대로 돌려준다.
    */
-  const base: TrackedStock = {
-    ...item,
+  const base: Metrics = {
     price: 0,
     changeRate: 0,
     returnRate: null,
@@ -135,9 +147,6 @@ async function trackOne(client: KiwoomClient, item: WatchItem): Promise<TrackedS
       if (closes.length > 1) {
         const prev = closes[1];
         base.changeRate = prev ? ((closes[0] - prev) / prev) * 100 : 0;
-      }
-      if (item.addedPrice > 0) {
-        base.returnRate = ((closes[0] - item.addedPrice) / item.addedPrice) * 100;
       }
       if (closes.length >= 120) {
         base.ma5 = avg(closes.slice(0, 5));
@@ -308,19 +317,20 @@ function daysAgoYyyymmdd(days: number): string {
 /** 공매도·대차 추세는 하루 한 번만 받는다 (일별 데이터라 장중에 안 바뀐다) */
 const trendCache = new Map<string, { day: string; short: number | null; lending: number | null }>();
 
-let cache: { data: TrackedStock[]; at: number } | null = null;
+/** 종목별 지표 캐시 — 목록이 바뀌어도 살아남는다 */
+const metricCache = new Map<string, { at: number; m: Metrics }>();
 /** 만드는 중이면 같은 약속을 돌려줘 중복 조회를 막는다 */
-let building: Promise<TrackedStock[]> | null = null;
+let building: Promise<void> | null = null;
 
 /**
- * 쌓아 둔 결과를 **버린다** — 목록 자체가 바뀌었을 때 부른다.
+ * **아무것도 안 한다** — 남겨 둔 이유는 열두 곳이 부르기 때문이다.
  *
- * ⚠️ 종목 순서를 바꿨는데 새로고침하면 **옛 순서로 되돌아왔다.** 저장은 제대로 됐는데
- * 이 캐시가 예전 목록을 들고 있었기 때문이다. 시세를 다시 받는 게 비싸서 캐시를 길게
- * 잡아 뒀는데, **목록이 바뀐 것과 시세가 낡은 것은 다른 일**이다.
+ * 예전엔 목록이 바뀌면 캐시를 통째로 버렸다(순서를 바꿨는데 옛 순서로 돌아오던 사고).
+ * 이제 응답이 목록과 지표를 **매번 합치므로** 목록 변경은 버릴 것이 없다 — 지표는
+ * 그 종목의 시세·수급이고, 그건 그룹을 옮겼다고 달라지지 않는다.
  */
 export function invalidateTracking(): void {
-  cache = null;
+  /* 의도적으로 비어 있다 */
 }
 
 /**
@@ -349,22 +359,86 @@ function expiryOf(at: number): number {
   return at + (next.getTime() - kst.getTime());
 }
 
-export async function getTrackedWatchlist(client: KiwoomClient, force = false): Promise<TrackedStock[]> {
-  if (!force && cache && Date.now() < expiryOf(cache.at)) return cache.data;
+function emptyMetrics(): Metrics {
+  return {
+    price: 0,
+    changeRate: 0,
+    returnRate: null,
+    foreign5: 0,
+    foreign10: 0,
+    foreign20: 0,
+    inst5: 0,
+    inst20: 0,
+    inst60: 0,
+    trendPass: null,
+    ma5: null,
+    ma20: null,
+    ma60: null,
+    ma120: null,
+    above5: null,
+    above20: null,
+    shortTrend: null,
+    lendingTrend: null,
+    profitUp: null,
+    sectorStrong: null,
+    passCount: 0,
+    passTotal: 0,
+    upside: null,
+    opinionMove: null,
+    brokerCount: null,
+    error: null,
+  };
+}
 
-  /*
-   * **낡은 값이라도 먼저 준다.**
-   *
-   * 종목이 늘수록 다 만드는 데 오래 걸린다(200종목이면 몇 분). 그동안 화면을 비워 두면
-   * 관심종목에 들어갈 때마다 기다려야 하는데, 10분 지난 값이라도 있는 게 낫다.
-   * 갱신은 뒤에서 돌고, 다음에 들어오면 새 값을 받는다.
-   */
-  if (!force && cache) {
-    if (!building) void rebuild(client);
-    return cache.data;
+/** 항목(지금 값) + 지표(캐시) — 편입가 대비는 여기서 센다. 편입가는 항목 쪽 값이다 */
+function merge(item: WatchItem, m: Metrics | null): TrackedStock {
+  const base = m ?? emptyMetrics();
+  const returnRate =
+    m && item.addedPrice > 0 && base.price > 0 ? ((base.price - item.addedPrice) / item.addedPrice) * 100 : null;
+  return { ...item, ...base, returnRate, error: m ? base.error : "아직 지표를 못 받았습니다 — 잠시 뒤 채워집니다" };
+}
+
+/** 몇 종목만 채운다 — 새로 담긴 것. 넷씩, 사이 300ms (아래 rebuild 와 같은 박자) */
+async function fillSome(client: KiwoomClient, items: WatchItem[]): Promise<void> {
+  const CONCURRENCY = 4;
+  for (let i = 0; i < items.length; i += CONCURRENCY) {
+    const chunk = items.slice(i, i + CONCURRENCY);
+    const got = await Promise.all(chunk.map((it) => trackOne(client, it)));
+    const at = Date.now();
+    chunk.forEach((it, k) => metricCache.set(it.code, { at, m: got[k] }));
+    if (i + CONCURRENCY < items.length) await sleep(300);
   }
-  if (building) return building;
-  return rebuild(client);
+}
+
+export async function getTrackedWatchlist(client: KiwoomClient, force = false): Promise<TrackedStock[]> {
+  const items = await listWatchlist();
+  const stocks = items.filter((i) => !i.divider);
+  const now = Date.now();
+  const missing = stocks.filter((i) => !metricCache.has(i.code));
+  const stale = stocks.some((i) => {
+    const c = metricCache.get(i.code);
+    return c !== undefined && now >= expiryOf(c.at);
+  });
+
+  if (force || missing.length === stocks.length) {
+    /* 처음이거나 강제 — 다 만들고 준다. 빈 표를 주느니 한 번 기다리는 게 낫다 */
+    await rebuild(client, items);
+  } else {
+    /*
+     * **새로 담긴 것만** 그 자리에서 채운다. 여섯까지는 기다려도 몇 초다.
+     * 그보다 많으면(그룹 동기화가 한꺼번에 스무 개를 넣는 날) 뒤에서 채우고,
+     * 그동안은 지표 없이 항목만 보인다 — 「아직 못 받았다」가 칸에 적힌다.
+     */
+    if (missing.length > 0 && missing.length <= 6) await fillSome(client, missing);
+    else if (missing.length > 0 && !building) void rebuild(client, items);
+    /* 만료된 지표는 뒤에서 — 낡은 값이라도 있는 게 빈 화면보다 낫다 */
+    if (stale && !building) void rebuild(client, items);
+  }
+  /* 목록에서 빠진 종목의 지표는 버린다 — 안 버리면 영영 쌓인다 */
+  const live = new Set(stocks.map((i) => i.code));
+  for (const code of metricCache.keys()) if (!live.has(code)) metricCache.delete(code);
+
+  return items.map((it) => merge(it, it.divider ? null : (metricCache.get(it.code)?.m ?? null)));
 }
 
 /**
@@ -375,45 +449,40 @@ export async function getTrackedWatchlist(client: KiwoomClient, force = false): 
  * 키움의 초당 5회 제한은 TR 단위라, 서로 다른 종목을 넷씩 묶어 돌려도 같은 TR 은
  * 초당 4회를 넘지 않는다.
  */
-async function rebuild(client: KiwoomClient): Promise<TrackedStock[]> {
+async function rebuild(client: KiwoomClient, items: WatchItem[]): Promise<void> {
   if (building) return building;
-  building = (async () => {
-    const items = await listWatchlist();
-    const results: TrackedStock[] = [];
-    const CONCURRENCY = 4;
-    for (let i = 0; i < items.length; i += CONCURRENCY) {
-      const chunk = items.slice(i, i + CONCURRENCY);
-      results.push(...(await Promise.all(chunk.map((it) => trackOne(client, it)))));
-      if (i + CONCURRENCY < items.length) await sleep(300);
-    }
-    cache = { data: results, at: Date.now() };
-    return results;
-  })().finally(() => {
+  building = fillSome(
+    client,
+    items.filter((i) => !i.divider),
+  ).finally(() => {
     building = null;
   });
-
   return building;
 }
 
 /**
  * 백그라운드 갱신.
  * 만료된 뒤 사용자가 들어오면 그때부터 만들기 시작해 기다리게 된다.
- * 만료 1분 전에 미리 채워 둔다 — 아직 만료 전이므로 반드시 force 로 불러야 실제로 갱신된다.
+ * 만료 1분 전에 미리 채워 둔다.
  */
 export function startTrackingRefresher(client: KiwoomClient): void {
   const tick = () => {
     if (building) return;
-    if (cache && Date.now() < expiryOf(cache.at) - 60_000) return;
-    void getTrackedWatchlist(client, true).catch((err: unknown) => {
-      console.error("[watch] 관심종목 갱신 실패:", err instanceof Error ? err.message : err);
-    });
+    if (metricCache.size === 0) return; // 아직 아무도 안 열었으면 만들지 않는다 — 열 때 만든다
+    const oldest = Math.min(...[...metricCache.values()].map((c) => c.at));
+    if (Date.now() < expiryOf(oldest) - 60_000) return;
+    void listWatchlist()
+      .then((items) => rebuild(client, items))
+      .catch((err: unknown) => {
+        console.error("[watch] 관심종목 갱신 실패:", err instanceof Error ? err.message : err);
+      });
   };
   setTimeout(tick, 25_000);
   setInterval(tick, 60_000);
   console.log("[watch] 관심종목 백그라운드 갱신 시작 (장중 10분 주기)");
 }
 
-/** 관심종목이 바뀌면 다음 조회 때 새로 집계하도록 캐시를 비운다 */
+/** `invalidateTracking` 과 같다 — 이제 할 일이 없다(응답이 목록과 지표를 매번 합친다) */
 export function invalidateTrackingCache(): void {
-  cache = null;
+  /* 의도적으로 비어 있다 */
 }

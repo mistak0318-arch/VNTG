@@ -133,8 +133,14 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
    *
    * 40초다. 시세만 있는 목록(20초)보다 느린 이유는 여기가 **수급·재무까지 붙은 무거운
    * 조회**라서다 — 20초로 잡으면 갱신이 끝나기 전에 다음 갱신이 걸린다.
+   *
+   * ⚠️ **`force` 를 안 준다** (2026-09-07). 여기가 40초마다 `load(true)` 였다 — 서버가
+   * 74종목 × 키움 조회를 처음부터 다시 하는 요청이고, 한 바퀴가 25초쯤이라 거의 늘
+   * 「만드는 중」이었다. 그때 관심종목에 들어오면 그 바퀴를 기다렸다. 벤티지: "관심종목
+   * 들어갈 때 너무 오래 걸린다." 지표는 서버가 종목별로 캐시하고 만료되면 뒤에서
+   * 갱신한다. 화면은 그냥 달라고만 하면 된다 — 시세는 어차피 실시간 겹으로 온다.
    */
-  const auto = useAutoRefresh(() => void load(true), {
+  const auto = useAutoRefresh(() => void load(), {
     storeKey: "vntg.auto.watch",
     intervalMs: 40_000,
   });
@@ -363,7 +369,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     try {
       await api.watchAddDivider(g, label);
       /* 새 줄은 우리가 만든 게 아니라 서버가 코드를 지어 주므로 다시 받아야 한다 */
-      await load(true);
+      await load();
     } catch {
       /* 실패는 다음 조회에서 드러난다 */
     }
@@ -529,6 +535,16 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     loadGroups();
   }, []);
 
+  /*
+   * 다른 화면(종목 상세의 담기 시트 등)에서 관심종목이 바뀌면 **여기도 다시 받는다.**
+   * 서버가 목록과 지표를 매번 합치므로 이 조회는 가볍다 — 새로 담긴 종목만 채운다.
+   */
+  useEffect(() => {
+    if (watchedCodes.version === 0) return;
+    void load();
+    void loadGroups();
+  }, [watchedCodes.version]);
+
   /**
    * 관심종목에 담는다.
    *
@@ -549,7 +565,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
         addedPrice: price,
         group: activeGroup === ALL ? DEFAULT_GROUP : activeGroup,
       });
-      await load(true);
+      /* 새로 담긴 한 종목만 서버가 그 자리에서 채운다 — 전체를 다시 받지 않는다 */
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "관심종목 추가 실패");
     } finally {
@@ -585,7 +602,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
 
   return (
     <div>
-      <RefreshBar onRefresh={() => load(true)} loading={loading} updatedAt={updatedAt} auto={auto} />
+      <RefreshBar onRefresh={() => load()} loading={loading} updatedAt={updatedAt} auto={auto} />
 
       {error && <div className="error-banner">{error}</div>}
 
