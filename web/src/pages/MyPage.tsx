@@ -54,6 +54,12 @@ const DEFAULT_GROUP = "기본";
 const SUPER_GROUP = "슈퍼신호등";
 /** 교차 신호(주도주 ∩ 슈퍼신호등) 자동 편입 그룹 — 같은 보호·같은 특별 표시 (2026-08-26) */
 const CROSS_GROUP = "슈퍼신호등+교차";
+/**
+ * 현미경 (2026-09-07) — **매수 직전** 종목. 사람이 여러 잣대를 다 보고 좁힌 자리라
+ * 자동 편입이 없고, 서버가 넣거나 빼지도 않는다. 이름·삭제만 잠긴다(「매수직전」 화면이
+ * 이 이름을 찾는다). 맨 앞에 선다 — 기본 그룹보다도 앞.
+ */
+const SCOPE_GROUP = "현미경";
 
 
 /** 통과=O, 미달=빈칸, 모름=- . 빈칸이 낫다 — X 가 많으면 눈이 그리로 쏠린다 */
@@ -683,7 +689,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
             <option value={ALL}>전체 ({items.length})</option>
             {groups.map((g) => (
               <option value={g} key={g}>
-                {g === SUPER_GROUP ? "🌟 " : g === CROSS_GROUP ? "⚡ " : bandOf(g) ? "🔒 " : ""}
+                {g === SCOPE_GROUP ? "🧨 " : g === SUPER_GROUP ? "🌟 " : g === CROSS_GROUP ? "⚡ " : bandOf(g) ? "🔒 " : ""}
                 {g} ({items.filter((i) => (i.groups ?? [DEFAULT_GROUP]).includes(g)).length})
               </option>
             ))}
@@ -742,11 +748,13 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                 </button>
               )}
               <button
-                className={`filter-btn ${activeGroup === g ? "active" : ""}${g === SUPER_GROUP ? " gt-super" : ""}${g === CROSS_GROUP ? " gt-cross" : ""}${band ? ` gt-band gt-band-${band}` : ""}${editGroupBar && !locked ? groupDrag.cls(g) : ""}`}
+                className={`filter-btn ${activeGroup === g ? "active" : ""}${g === SCOPE_GROUP ? " gt-scope" : ""}${g === SUPER_GROUP ? " gt-super" : ""}${g === CROSS_GROUP ? " gt-cross" : ""}${band ? ` gt-band gt-band-${band}` : ""}${editGroupBar && !locked ? groupDrag.cls(g) : ""}`}
                 {...(editGroupBar && !locked ? groupDrag.props(g) : {})}
                 onClick={() => (editGroupBar && !locked ? renameGroupNow(g) : setActiveGroup(g))}
                 title={
-                  g === SUPER_GROUP
+                  g === SCOPE_GROUP
+                    ? "현미경 — 매수 직전으로 본 종목. 모든 그룹과 지표를 보고 내가 좁힌 자리입니다.\n마이페이지 › 매수직전에서 수급·공매도·차트·뉴스를 한 자리에서 봅니다.\n이름 변경·삭제가 안 됩니다. 종목은 자유롭게 넣고 뺍니다"
+                    : g === SUPER_GROUP
                     ? "슈퍼신호등 자동 편입이 담기는 그룹 — 이름 변경·삭제가 안 됩니다"
                     : g === CROSS_GROUP
                       ? "교차 신호(주도주∩슈퍼신호등) 자동 편입 그룹 — 이름 변경·삭제가 안 됩니다"
@@ -765,6 +773,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                           : undefined
                 }
               >
+                {g === SCOPE_GROUP && "🧨 "}
                 {g === SUPER_GROUP && "🌟 "}
                 {g === CROSS_GROUP && "⚡ "}
                 {/* 자물쇠 — 「손대도 소용없다」를 한눈에 (2026-09-01) */}

@@ -7234,6 +7234,13 @@ button.nav-group-toggle {
 .etf-bar i { display: block; height: 100%; background: var(--blue); border-radius: 4px; }
 .etf-w { text-align: right; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 
+/* 현미경 (2026-09-07) — 매수 직전. 자동 그룹들보다 한 급 위라 빨강 계열로, 굵게 */
+.gt-scope {
+  border-color: #ef4444;
+  background: linear-gradient(0deg, rgba(239, 68, 68, 0.14), rgba(239, 68, 68, 0.14));
+  font-weight: 700;
+}
+.gt-scope.active { border-color: #ef4444; box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.5); }
 /* 슈퍼신호등 그룹 — 자동 편입의 자리라는 걸 색으로 말한다 */
 .gt-super {
   border-color: #d4a017;
@@ -16331,3 +16338,60 @@ td.stk-cell { cursor: pointer; }
 td.stk-cell b { text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-color: var(--muted); }
 td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: currentColor; color: var(--accent); }
 .sd-open-stock { white-space: nowrap; font-size: 0.74rem; }
+
+/* ── 매수직전 · 현미경 (2026-09-07) ──────────────────────────────────
+   관심종목 「현미경」 그룹을 같은 잣대로 나란히 — 이 중에서 무엇을 사나. */
+.gt-scope-inline { color: #ef4444; }
+.sc-ledger-note { margin: 0 0 8px; font-size: 0.76rem; color: var(--cis-gold); word-break: keep-all; }
+.sc-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: 0.8rem; }
+.sc-strip b { font-size: 0.92rem; }
+.sc-at { margin-left: auto; }
+.sc-empty { padding: 16px; }
+.sc-empty p { margin: 6px 0 0; line-height: 1.6; word-break: keep-all; }
+
+.sc-table th { font-size: 0.7rem; line-height: 1.25; white-space: nowrap; }
+.sc-table td { font-size: 0.78rem; line-height: 1.3; vertical-align: middle; }
+.sc-table td div { font-size: 0.68rem; }
+.sc-row { cursor: pointer; }
+.sc-row.on td { background: rgba(239, 68, 68, 0.08); }
+.sc-row:hover td { background: rgba(239, 68, 68, 0.05); }
+.sc-name b { white-space: nowrap; }
+/* 「오늘」 칸은 지금 값 — 나머지(원장)와 다른 시각이라 배경으로 가른다 */
+.sc-today-col { background: rgba(245, 197, 66, 0.07); }
+.sc-streak { display: inline-block; padding: 0 4px; border-radius: 4px; font-size: 0.64rem; font-weight: 700; line-height: 1.4; }
+.sc-streak.up { color: var(--red); background: rgba(239, 68, 68, 0.12); }
+.sc-streak.down { color: var(--blue); background: rgba(59, 130, 246, 0.12); }
+.sc-spark-col { width: 84px; }
+.sc-spark { width: 80px; height: 22px; display: block; }
+.sc-spark path { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.sc-spark path.up { stroke: var(--red); }
+.sc-spark path.down { stroke: var(--blue); }
+.sc-memo { max-width: 14rem; font-size: 0.72rem; color: var(--muted); word-break: keep-all; }
+
+/* 현미경 — 한 종목 상세 */
+.sc-detail { margin-top: 12px; padding: 12px 14px; border: 1px solid #ef4444; border-radius: 12px; background: var(--panel); }
+.sc-detail-h { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
+.sc-detail-h > b { font-size: 1.05rem; }
+.sc-price { font-weight: 700; font-size: 0.95rem; }
+.sc-detail-btns { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.sc-order { text-decoration: none; }
+.sc-note { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 10px; }
+.sc-note-in { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 0.8rem; line-height: 1.5; resize: vertical; }
+.sc-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 1100px) { .sc-grid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 1700px) { .sc-grid { grid-template-columns: 1fr 1fr 1fr; } }
+.sc-card { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); min-width: 0; }
+.sc-card h4 { margin: 0 0 6px; font-size: 0.86rem; }
+.sc-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: 4px 10px; margin: 6px 0 0; }
+.sc-kv div { display: flex; justify-content: space-between; gap: 6px; font-size: 0.76rem; }
+.sc-kv dt { color: var(--muted); white-space: nowrap; }
+.sc-kv dd { margin: 0; font-weight: 600; text-align: right; }
+.sc-today dd { font-size: 0.86rem; }
+.sc-inst { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0; font-size: 0.74rem; }
+.sc-hint { margin: 6px 0 0; line-height: 1.5; word-break: keep-all; }
+.sc-feed h4 + h4 { margin-top: 10px; }
+.sc-list { margin: 0; padding-left: 1rem; font-size: 0.76rem; line-height: 1.55; }
+.sc-list li { margin: 2px 0; word-break: keep-all; }
+.sc-list a { color: var(--text); text-decoration: none; }
+.sc-list a:hover { text-decoration: underline; }
+.sc-wait { margin: 12px 0; }

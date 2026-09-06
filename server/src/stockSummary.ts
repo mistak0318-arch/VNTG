@@ -49,7 +49,7 @@ function abs(v: unknown): number {
  * 실제로 온다). `Number()` 에 그대로 넣으면 NaN 이 되고, 그럼 **−5,210억이 0 으로** 적힌다.
  * 부호 개수로 판단해 하나로 접는다 — `rankExtras.toNum` 이 같은 이유로 같은 일을 한다.
  */
-function signed(v: unknown): number {
+export function signed(v: unknown): number {
   const raw = String(v ?? "").replace(/[,\s]/g, "");
   if (!raw) return 0;
   const m = /^([+-]*)(\d*\.?\d+)$/.exec(raw);
@@ -139,7 +139,7 @@ export interface StockSummary {
  * 이름을 우리가 새로 지으면 나중에 다른 화면과 말이 안 맞는다. 순서는 실제로 크게
  * 움직이는 것부터다 — 금융투자(증권사 자기매매)와 투신·연기금이 국내 수급의 대부분이다.
  */
-const INST_KEYS = {
+export const INST_KEYS = {
   fnnc_invt: "금융투자",
   invtrt: "투신",
   penfnd_etc: "연기금",

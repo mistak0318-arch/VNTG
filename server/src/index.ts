@@ -95,6 +95,7 @@ import { startLeaderScanScheduler } from "./leaderScan.js";
 import { createEventPlayRouter } from "./routes/eventPlay.js";
 import { startCloseBetScheduler } from "./closeBetLog.js";
 import { createWatchlistRouter } from "./routes/watchlist.js";
+import { createScopeRouter } from "./routes/scope.js";
 
 const app = express();
 
@@ -190,6 +191,8 @@ app.use("/api/ranking", createRankingRouter(client));
 app.use("/api/algo", createAlgoRouter(client));
 app.use("/api/overview", createOverviewRouter(client));
 app.use("/api/watchlist", createWatchlistRouter(client));
+/* 현미경 — 매수 직전 종목 (2026-09-07) */
+app.use("/api/scope", createScopeRouter(client));
 app.use("/api/feed", createNewsRouter(client));
 app.use("/api/settings", createSettingsRouter());
 app.use("/api/calendar", createCalendarRouter());

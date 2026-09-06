@@ -65,6 +65,7 @@ import { ScrollTopButton } from "./components/ScrollTopButton";
 import { AuthExpiredBar } from "./components/AuthExpiredBar";
 import { useStockFocus } from "./useStockFocus";
 import { TelegramPage } from "./pages/TelegramPage";
+import { ScopePage } from "./pages/ScopePage";
 import { GuidePage } from "./pages/GuidePage";
 
 type Tab =
@@ -79,6 +80,7 @@ type Tab =
   | "news"
   | "discovery"
   | "watchAi"
+  | "scope"
   | "watchKiwoom"
   | "calendar"
   | "marketFlow"
@@ -185,6 +187,12 @@ const MENU: {
       // 발굴을 맨 위에 — 관심종목은 이미 고른 것이고, 이건 고르는 자리다
       { key: "discovery", label: "종목발굴", icon: "⛏️" },
       { key: "watchAi", label: "관심종목 (VNTG)", icon: "⭐" },
+      /*
+       * 매수직전 (2026-09-07) — 관심종목 「현미경」 그룹의 관리 화면. 관심종목 바로
+       * 아래: 관심종목에서 좁힌 것이 여기로 온다. 아이콘은 🧨 — 벤티지: "시세분석
+       * 아이콘(🔬)이랑 현미경이랑 비슷하다. 좀 더 강렬하고 중요한 이미지로."
+       */
+      { key: "scope", label: "매수직전", icon: "🧨" },
       { key: "watchKiwoom", label: "관심종목 (키움연동)", icon: "🔖" },
       { key: "usWatch", label: "관심종목 (해외)", icon: "🌏" },
       { key: "customTheme", label: "내 태그", icon: "🎯" },
@@ -672,6 +680,7 @@ export default function App() {
       case "news": return <NewsPage onSelectStock={onSelectStock} />;
       case "discovery": return <StockDiscoveryPage onOpenAnalysis={openAnalysis} />;
       case "watchAi": return <MyPage onSelectStock={onSelectStock} />;
+      case "scope": return <ScopePage onSelectStock={onSelectStock} />;
       case "watchKiwoom": return <KiwoomWatchlistPage onSelectStock={onSelectStock} />;
       case "customTheme": return <CustomThemePage onSelectStock={onSelectStock} />;
       case "signalScreen": return <ScreenPage onSelectStock={onSelectStock} />;

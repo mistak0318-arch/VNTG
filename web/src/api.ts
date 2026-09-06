@@ -1070,6 +1070,12 @@ export const api = {
     ),
   /** 종목 한 장 요약 — 몸값 + 오늘 수급. 서버가 조회 넷을 합쳐 준다 */
   stockSummary: (code: string) => getJson<StockSummaryData>(`/api/market/summary/${code}`),
+  /* 현미경 (2026-09-07) */
+  scopeList: () => getJson<{ rows: ScopeRow[]; ledgerNote: string | null }>("/api/scope"),
+  scopeDetail: (code: string) => getJson<ScopeDetail>(`/api/scope/${code}`),
+  scopeNote: (code: string, note: string) =>
+    putJson<{ note: { note: string; updatedAt: string } }>(`/api/scope/${code}/note`, { note }),
+  scopeRemove: (code: string) => deleteJson<{ ok: boolean }>(`/api/scope/${code}`),
   /** 장중 기준선 — 분봉+일봉 2회 조회다. 종목을 「들여다보는」 화면에서만 부른다 */
   intraday: (code: string) =>
     getJson<{ levels: IntradayLevels | null }>(`/api/market/intraday/${code}`),
@@ -4512,6 +4518,91 @@ export interface StockSummaryData {
     bank: number;
     etcf: number;
   }[];
+}
+
+
+/* ── 현미경 — 매수 직전 종목 (2026-09-07) ──────────────────────────
+   관심종목 「현미경」 그룹에 담긴 종목을 수급·공매도·차트·뉴스까지 한 자리에서.
+   여기서 주문은 안 나간다 — 「뭘 살지 고르는」 화면이다. */
+
+export interface ScopeFlow {
+  /** 억원 */
+  d1: number | null;
+  d5: number | null;
+  d20: number | null;
+  /** 연속 순매수(+)/순매도(−) 일수 */
+  streak: number;
+}
+
+export interface ScopeRow {
+  code: string;
+  name: string;
+  sector: string | null;
+  marketCap: number | null;
+  price: number | null;
+  changeRate: number | null;
+  tradeValue: number | null;
+  since: string;
+  sincePrice: number | null;
+  /** 담은 뒤 등락(%) */
+  sinceRet: number | null;
+  note: string;
+  /** 원장 마지막 날짜(YYYYMMDD) */
+  ledgerAt: string | null;
+  /** 오늘 수급(억원) — 장 시작 전이면 null */
+  today: {
+    fgn: number | null;
+    org: number | null;
+    ind: number | null;
+    pen: number | null;
+    trust: number | null;
+    samo: number | null;
+  } | null;
+  fgn: ScopeFlow;
+  org: ScopeFlow;
+  pen: ScopeFlow;
+  trust: ScopeFlow;
+  samo: ScopeFlow;
+  /** 연기금+투신+사모 */
+  big3: ScopeFlow;
+  short: { ratio: number | null; ratio5: number | null; ratio20: number | null };
+  loan: { rmnd: number | null; chg5: number | null; chg20: number | null };
+  fgnRatio: { now: number | null; chg20: number | null };
+  chart: {
+    closes: number[];
+    ma5Gap: number | null;
+    ma20Gap: number | null;
+    ma60Gap: number | null;
+    hi20Gap: number | null;
+    ret5: number | null;
+    ret20: number | null;
+    volRatio: number | null;
+  };
+}
+
+export interface LedgerBar { d: string; o: number; h: number; l: number; c: number; v: number }
+/** 하루치 투자자별 순매수(백만원) — 열세 주체 */
+export interface LedgerFlow {
+  d: string;
+  ind: number | null; fgn: number | null; org: number | null;
+  fin: number | null; ins: number | null; trust: number | null; bank: number | null;
+  pen: number | null; samo: number | null; natn: number | null; corp: number | null;
+  natfor: number | null; etcFin: number | null;
+}
+
+export interface ScopeDetail {
+  row: ScopeRow;
+  bars: LedgerBar[];
+  flow: LedgerFlow[];
+  short: { d: string; qty: number | null; ratio: number | null }[];
+  loan: { d: string; rmnd: number | null }[];
+  fgnRatio: { d: string; ratio: number | null }[];
+  prog: { d: string; net: number | null }[];
+  today: StockSummaryData | null;
+  news: NewsItem[];
+  telegram: { channelId: string; channelName: string; messageId: number; at: string; text: string; link: string }[];
+  telegramOldest: string | null;
+  instLabels: Record<string, string>;
 }
 
 /** 장중 기준선 — VWAP·시가갭·전일고저·장초반 30분 */

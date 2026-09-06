@@ -162,7 +162,35 @@ export const BAND_GROUPS: string[] = SCORE_BANDS.map((b) => `${b}점대`);
  */
 export const ETF_GROUP = "ETF";
 
-export const AUTO_GROUPS: string[] = [SUPER_GROUP, CROSS_GROUP, ...BAND_GROUPS, ETF_GROUP];
+/**
+ * **현미경** (2026-09-07) — 매수 직전 종목.
+ *
+ * 벤티지: "관심종목 그룹의 최상단에 「현미경」이라는 슈퍼그룹을 만들어줘. 슈퍼신호등,
+ * 교차, 90점대 등 모든 관심종목 그룹 그리고 다른 지표들을 보고 **매수 직전으로 본**
+ * 주식들이야. 다른 고정 그룹들처럼 강조하고 지우거나 할 수 없게."
+ *
+ * ## 다른 자동 그룹과 무엇이 다른가
+ *
+ * 슈퍼신호등·점수대는 **신호등이 담고** 신호등이 뺀다. ETF 는 사람이 담기 단추로
+ * 담는다. 현미경은 그중 **사람이 고른 것만** 들어온다 — 자동 편입이 없다. 여러
+ * 잣대를 다 보고 나서 「이제 이것만 남았다」로 좁힌 자리라, 서버가 무엇을 넣거나
+ * 빼는 순간 그 판단이 훼손된다. 그래서 `dropFromAutoGroups` 도 이 그룹은 건너뛴다
+ * (ETF 와 같은 이유).
+ *
+ * 이름·삭제를 막는 이유는 셋과 같다 — 「매수직전」 화면이 **이 이름으로** 찾는다.
+ *
+ * ## 최상단
+ *
+ * `AUTO_GROUPS` 의 맨 앞이 아니라 **기본 그룹보다도 앞**이다(`listGroups`).
+ * 매수 직전 종목은 관심종목을 열었을 때 제일 먼저 보여야 한다 — 그게 이 그룹의
+ * 존재 이유라, 「기본 → 자동」이라는 규칙을 이 하나만 앞선다.
+ */
+export const SCOPE_GROUP = "현미경";
+
+export const AUTO_GROUPS: string[] = [SCOPE_GROUP, SUPER_GROUP, CROSS_GROUP, ...BAND_GROUPS, ETF_GROUP];
+
+/** 사람이 담는 자물쇠 그룹 — 신호등이 지운다고 같이 사라지면 안 되는 것들 */
+export const HUMAN_LOCKED_GROUPS: string[] = [SCOPE_GROUP, ETF_GROUP];
 
 /** 자동으로 채워지고 **사람이 못 고치는** 그룹인가 — 화면이 자물쇠를 그린다 */
 export function isAutoGroup(name: string): boolean {
@@ -448,7 +476,13 @@ export async function listGroups(): Promise<string[]> {
    */
   const all = [...merged];
   const mine = all.filter((g) => g !== DEFAULT_GROUP && !AUTO_GROUPS.includes(g));
-  return [DEFAULT_GROUP, ...AUTO_GROUPS.filter((g) => merged.has(g)), ...mine];
+  /* 현미경만 기본보다 앞 — 매수 직전 종목이 관심종목을 열자마자 보여야 한다 */
+  return [
+    SCOPE_GROUP,
+    DEFAULT_GROUP,
+    ...AUTO_GROUPS.filter((g) => g !== SCOPE_GROUP && merged.has(g)),
+    ...mine,
+  ];
 }
 
 export async function addGroup(name: string): Promise<string[]> {
@@ -463,6 +497,8 @@ export async function renameGroup(from: string, to: string): Promise<string[]> {
   const clean = to.trim();
   if (!clean) throw new Error("그룹 이름이 비어 있습니다.");
   if (from === DEFAULT_GROUP) throw new Error("기본 그룹은 이름을 바꿀 수 없습니다.");
+  if (from === SCOPE_GROUP)
+    throw new Error("현미경 그룹은 이름을 바꿀 수 없습니다 — 매수직전 화면이 이 이름을 찾습니다.");
   if (from === SUPER_GROUP)
     throw new Error("슈퍼신호등 그룹은 이름을 바꿀 수 없습니다 — 자동 편입이 이 이름을 찾습니다.");
   if (from === CROSS_GROUP)
@@ -561,6 +597,8 @@ export async function reorderGroups(order: string[]): Promise<string[]> {
 /** 그룹을 지우면 소속 종목은 기본 그룹으로 옮긴다 (종목이 사라지지 않게) */
 export async function removeGroup(name: string): Promise<string[]> {
   if (name === DEFAULT_GROUP) throw new Error("기본 그룹은 삭제할 수 없습니다.");
+  if (name === SCOPE_GROUP)
+    throw new Error("현미경 그룹은 삭제할 수 없습니다 — 매수 직전 종목이 담기는 자리입니다.");
   if (name === SUPER_GROUP)
     throw new Error("슈퍼신호등 그룹은 삭제할 수 없습니다 — 자동 편입이 담기는 자리입니다.");
   if (name === CROSS_GROUP)
@@ -611,9 +649,10 @@ export async function dropFromAutoGroups(code: string): Promise<string[]> {
    * 담기 단추로 담은** 것이다. 신호등에서 지운다고 사람이 담아 둔 ETF 가
    * 같이 사라지면 안 된다.
    */
-  const auto = (w.groups ?? []).filter((g) => AUTO_GROUPS.includes(g) && g !== ETF_GROUP);
+  const auto = (w.groups ?? []).filter((g) => AUTO_GROUPS.includes(g) && !HUMAN_LOCKED_GROUPS.includes(g));
   if (auto.length === 0) return [];
-  const mine = (w.groups ?? []).filter((g) => !AUTO_GROUPS.includes(g));
+  /* 「사람이 담은 자리」에는 현미경·ETF 도 든다 — 자물쇠가 있어도 담은 건 사람이다 */
+  const mine = (w.groups ?? []).filter((g) => !AUTO_GROUPS.includes(g) || HUMAN_LOCKED_GROUPS.includes(g));
   /* 사람이 담은 자리가 하나도 없으면 관심종목에서 통째로 뺀다 */
   if (mine.length === 0) await removeWatchItem(code);
   else await updateWatchItem(code, { groups: mine });
