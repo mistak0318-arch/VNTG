@@ -521,6 +521,24 @@ export function CandleChart({
     window.dispatchEvent(new CustomEvent("vntg-chart-draw", { detail: code }));
   };
 
+  /**
+   * **그리기 마침** (2026-09-07) — 벤티지: "선 그리다가 마우스 오른쪽 버튼 누르면 그리기
+   * 마침으로 하게 해줘. 이게 그리는 게 안 끝나네."
+   *
+   * 도구를 고르면 끄는 길이 단추 하나뿐이었다 — 클릭할 때마다 선이 하나씩 더 생기고,
+   * 찍다 만 점은 어디에도 안 붙은 채 커서를 따라다녔다. 오른쪽 클릭과 Esc 가 이걸
+   * 부른다: 찍다 만 점·측정·미리보기를 버리고 도구를 내려놓는다. **이미 그린 선은 그대로다.**
+   */
+  const finishDraw = () => {
+    pendingRef.current = null;
+    measureRef.current = null;
+    previewRef.current = null;
+    setTool("none");
+    requestAnimationFrame(() => redrawRef.current());
+  };
+  const finishDrawRef = useRef(finishDraw);
+  finishDrawRef.current = finishDraw;
+
   /* 종목이 바뀌면 그 종목의 선을 다시 읽는다. 찍다 만 점·선택·측정도 버린다 */
   useEffect(() => {
     setDrawings(loadDraw(code));
@@ -529,6 +547,18 @@ export function CandleChart({
     setSelectedIdx(null);
     setTool("none");
   }, [code]);
+
+  /* Esc — 마우스를 올려 둔 차트에서만. 도구가 켜져 있거나 찍다 만 게 있을 때만 먹는다 */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !hoverRef.current) return;
+      if (toolRef.current === "none" && !pendingRef.current && !measureRef.current) return;
+      e.preventDefault();
+      finishDrawRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   /* 같은 창의 다른 차트(보드 두 칸)·다른 창(보드 창)과 동기화 */
   useEffect(() => {
@@ -1087,11 +1117,24 @@ export function CandleChart({
     };
     el.addEventListener("pointerdown", onDown, true);
 
+    /*
+     * 오른쪽 클릭 = 그리기 마침. 도구가 꺼져 있고 찍다 만 것도 없으면 브라우저 메뉴를
+     * 그대로 둔다 — 아무것도 안 하는데 메뉴까지 막으면 「오른쪽 클릭이 고장났다」로 읽힌다.
+     */
+    const onCtx = (ev: MouseEvent) => {
+      if (toolRef.current === "none" && !pendingRef.current && !measureRef.current) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      finishDrawRef.current();
+    };
+    el.addEventListener("contextmenu", onCtx);
+
     return () => {
       chart.unsubscribeClick(onClick);
       chart.unsubscribeCrosshairMove(onMove);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
       el.removeEventListener("pointerdown", onDown, true);
+      el.removeEventListener("contextmenu", onCtx);
       window.removeEventListener("pointermove", onDragMove);
       window.removeEventListener("pointerup", onDragUp);
     };
