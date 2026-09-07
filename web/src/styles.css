@@ -17182,3 +17182,14 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
   .ls-sec-leaders { display: none; }
   .ls-sec.open .ls-sec-leaders { display: flex; }
 }
+
+/* AI 모델 설정 — 고른 모델이 글자로 보인다 (2026-09-08) */
+.ai-now { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; font-size: 0.78rem; margin-bottom: 0.5rem; padding: 0.4rem 0.6rem; border: 1px dashed var(--border); border-radius: 6px; }
+.ai-now-item i { font-style: normal; color: var(--muted); margin-right: 0.25rem; }
+.ai-chosen { font-size: 0.82rem; white-space: nowrap; }
+.ai-chosen.dim { color: var(--muted); font-weight: 500; }
+.ai-select { min-width: 15rem; max-width: 100%; }
+@media (max-width: 720px) {
+  .sig-config-inputs { flex-wrap: wrap; }
+  .ai-select { min-width: 12rem; }
+}

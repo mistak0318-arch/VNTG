@@ -112,8 +112,31 @@ export function AiModelPanel() {
     );
   }
 
+  /*
+   * 벤티지 (2026-09-08): "설정에 AI 모델 뭘 설정했는지 눌러야 확인 가능하네."
+   * 셀렉트가 좁아 「Claude · Cla▾」로 잘렸다. 고른 모델을 셀렉트 앞에 **글자로** 박고, 셀렉트는 넓힌다.
+   * 「기본」이면 무엇으로 흘러가는지도 글자로.
+   */
+  const defaultOf = (key: string) => (key === "pulse" ? "데일리 리포트와 같게" : key === "sys" ? "시황 질문하기와 같게" : (fallback ?? "설정된 키 없음"));
+  const nowText = (key: string) => {
+    const current = (config as unknown as Record<string, { model: string } | null>)[key];
+    const chosen = models.find((m) => m.model === current?.model);
+    if (!chosen) return `기본 → ${defaultOf(key)}`;
+    const prov = PROVIDER_LABEL[chosen.provider] ?? chosen.provider;
+    /* 「Gemini Gemini 3.5 Flash Lite」처럼 겹치지 않게 */
+    return chosen.label.startsWith(prov) ? chosen.label : `${prov} ${chosen.label}`;
+  };
+
   return (
     <div className="sig-config">
+      {/* 한눈에 — 용도 → 모델 (누르지 않아도 보인다) */}
+      <div className="ai-now">
+        {Object.entries(purposes).map(([key, label]) => (
+          <span className="ai-now-item" key={key}>
+            <i>{label}</i> {nowText(key)}
+          </span>
+        ))}
+      </div>
       <div className="sig-config-rows">
         {Object.entries(purposes).map(([key, label]) => {
           const current = (config as unknown as Record<string, { model: string } | null>)[key];
@@ -127,8 +150,11 @@ export function AiModelPanel() {
                 </span>
               </span>
               <div className="sig-config-inputs">
+                <b className={`ai-chosen ${chosen ? "" : "dim"}`} title={chosen ? chosen.model : "기본값을 따라간다"}>
+                  {nowText(key)}
+                </b>
                 <select
-                  className="group-select"
+                  className="group-select ai-select"
                   value={current?.model ?? ""}
                   onChange={(e) => pick(key, e.target.value)}
                 >
