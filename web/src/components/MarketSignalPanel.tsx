@@ -86,6 +86,8 @@ export function MarketSignalPanel({ collapsible = false }: { collapsible?: boole
   if (!sig) return null;
 
   const meta = LEVEL_TEXT[sig.level] ?? LEVEL_TEXT.unknown;
+  /** 접어 둔 상태 — 접을 수 있는 자리(시황 대시보드)에서만 성립한다 */
+  const folded = collapsible && collapsed;
 
   /*
    * 컴팩트 (2026-08-27 — "전해주는 내용에 비해 박스가 너무 커").
@@ -93,7 +95,7 @@ export function MarketSignalPanel({ collapsible = false }: { collapsible?: boole
    * 바로, 근거(왜)는 칩을 눌러 편다. 보드·시황·미니가 같은 컴포넌트라 전부 적용.
    */
   return (
-    <section className={`msig msig-${sig.level} msig-slim${collapsible && collapsed ? " msig-collapsed" : ""}`}>
+    <section className={`msig msig-${sig.level} msig-slim${folded ? " msig-collapsed" : ""}`}>
       <div className="msig-head">
         {collapsible && (
           <button className="msig-fold" onClick={toggle} title={collapsed ? "펼치기" : "접기"} aria-label={collapsed ? "펼치기" : "접기"}>
@@ -103,16 +105,37 @@ export function MarketSignalPanel({ collapsible = false }: { collapsible?: boole
         <span className={`sig-dot big ${sig.level}`} />
         <div className="msig-title">
           <b>
-            {sig.regime ? sig.regime.name : `시장 신호등 ${meta.label}`}
-            {sig.level !== "unknown" && <span className="msig-score num"> {sig.score}점</span>}
-            {sig.regime && <span className="msig-lv"> · {meta.label}</span>}
+            {/*
+              이름을 span 으로 뺀 이유 — 좁은 화면에서 제목만 말줄임하려고.
+              한 덩어리로 두면 「한쪽만 / 도는 장 / (코스 / 피)」로 네 줄이 나면서
+              접어 둔 카드가 되레 세로로 붇는다(2026-09-08 폰에서 확인).
+            */}
+            <span className="msig-name">{sig.regime ? sig.regime.name : `시장 신호등 ${meta.label}`}</span>
+            {!folded && sig.level !== "unknown" && <span className="msig-score num">{sig.score}점</span>}
           </b>
-          <span className="msig-note">{sig.regime ? sig.regime.action : meta.note}</span>
+          {/*
+            **등급은 부연 줄에 둔다.** 제목·점수·등급 셋을 한 줄에 밀어 넣으면
+            폰(390px 에서 제목 칸이 217px)에서 반드시 하나가 넘쳐 줄이 늘어난다.
+            접었을 때와 위계를 맞춘 것이기도 하다 — 윗줄은 「무슨 장이고 몇 점인가」,
+            아랫줄은 「어느 등급이고 그래서 어쩌라는 건가」.
+          */}
+          <span className="msig-note">
+            {sig.regime && (
+              <>
+                <b className="msig-lv-in">{meta.label}</b>
+                {" · "}
+              </>
+            )}
+            {sig.regime ? sig.regime.action : meta.note}
+          </span>
           {sig.note && <span className="msig-note msig-early">{sig.note}</span>}
         </div>
-        {/* 접혀 있으면 「통과 n/m」만 — 펴야 칩이 보인다 */}
-        {collapsible && collapsed && (
+        {folded && sig.level !== "unknown" && <span className="msig-score num msig-score-fold">{sig.score}점</span>}
+        {/* 접혀 있으면 등급 + 「우호 n · 중립 n」만 — 펴야 칩이 보인다 */}
+        {folded && (
           <span className="msig-fold-sum">
+            {sig.regime && <b className="msig-fold-lv">{meta.label}</b>}
+            {sig.regime && " · "}
             우호 {sig.checks.filter((c) => c.pass === true).length} · 중립 {sig.checks.filter((c) => c.pass === null && c.neutral).length} · 비우호{" "}
             {sig.checks.filter((c) => c.pass === false).length}
             {sig.checks.some((c) => c.pass === null && !c.neutral) ? ` · 모름 ${sig.checks.filter((c) => c.pass === null && !c.neutral).length}` : ""}
@@ -123,7 +146,7 @@ export function MarketSignalPanel({ collapsible = false }: { collapsible?: boole
         </button>
       </div>
 
-      {!(collapsible && collapsed) && (
+      {!folded && (
       <div className="msig-chips">
         {sig.checks.map((c) => (
           <button
@@ -140,7 +163,7 @@ export function MarketSignalPanel({ collapsible = false }: { collapsible?: boole
         ))}
       </div>
       )}
-      {!(collapsible && collapsed) && sig.regime && sig.regime.why.length > 0 && (
+      {!folded && sig.regime && sig.regime.why.length > 0 && (
         <p className="msig-regime-why">
           왜 {sig.regime.name}인가 — {sig.regime.why.join(" · ")}
           <button className="ord-mk" onClick={() => void openVerify()}>
@@ -148,7 +171,7 @@ export function MarketSignalPanel({ collapsible = false }: { collapsible?: boole
           </button>
         </p>
       )}
-      {!(collapsible && collapsed) && verify && verify !== "loading" && (
+      {!folded && verify && verify !== "loading" && (
         <div className="msig-verify">
           <div className="msig-verify-h">
             판정 뒤 코스피 수익률 — {verify.days}일치{verify.backfilled > 0 ? ` (그중 ${verify.backfilled}일은 지수·수급만으로 되짚은 부분 백필)` : ""}
@@ -192,7 +215,7 @@ export function MarketSignalPanel({ collapsible = false }: { collapsible?: boole
           <div className="table-note">문턱은 그대로다. 이 표가 나쁘게 쌓이면 그때 고칠 근거가 된다 (15:35 판정을 하루 한 줄 기록).</div>
         </div>
       )}
-      {!(collapsible && collapsed) && openWhy &&
+      {!folded && openWhy &&
         (() => {
           const c = sig.checks.find((x) => x.key === openWhy);
           if (!c) return null;

@@ -6010,10 +6010,21 @@ button.nav-group-toggle {
 .msig-red { border-left-color: var(--red); }
 .msig-unknown { border-left-color: var(--muted); }
 .msig-head { display: flex; align-items: center; gap: 10px; }
-.msig-title { display: flex; flex-direction: column; gap: 1px; }
-.msig-title b { font-size: 1.0rem; }
+/*
+ * `flex: 1 1 0` 이다 — basis 를 auto 로 두면 제목이 제 콘텐츠 폭만큼 자리를 먼저
+ * 차지해서 뒤의 새로고침 단추를 아랫줄로 밀어낸다. 0 에서 시작해 **남는 만큼만**
+ * 가져가게 한다. min-width:0 이 없으면 flex 아이템이 콘텐츠보다 못 줄어든다.
+ */
+.msig-title { display: flex; flex-direction: column; gap: 1px; flex: 1 1 0; min-width: 0; }
+/* 직계 자식만 — `b` 로 두면 부연 줄 안의 등급 <b> 까지 제목 크기의 flex 상자가 된다 */
+.msig-title > b { font-size: 1.0rem; display: flex; align-items: baseline; gap: 6px; min-width: 0; flex-wrap: wrap; }
+/* 이름만 한 줄로 눕히고 넘치면 …. 점수·등급은 항상 보여야 하므로 줄이지 않는다 */
+.msig-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .msig-note { font-size: 0.7333rem; color: var(--muted); }
-.msig-score { margin-left: auto; font-size: 1.3333rem; font-weight: 700; }
+/* 부연 줄로 내려온 등급 — 그 줄에서 가장 중요한 말이라 한 번 눌러 준다 */
+.msig-lv-in { color: var(--text); font-weight: 600; }
+/* margin-left:auto — 제목이 짧으면 점수가 오른쪽 끝에 붙어 자리가 고정된다 */
+.msig-score { margin-left: auto; font-size: 1.3333rem; font-weight: 700; flex: none; }
 .msig-summary { font-size: 0.8rem; color: var(--muted); margin: 8px 0 10px; }
 .msig-checks { display: grid; gap: 3px; }
 .msig-check-row { display: flex; align-items: baseline; gap: 8px; font-size: 0.8rem; padding: 3px 0; border-top: 1px solid var(--border); }
@@ -13756,6 +13767,27 @@ thead .sd-emph {
 .msig-fold-sum { font-size: 0.72rem; color: var(--muted); margin-right: 6px; white-space: nowrap; }
 .msig-collapsed { padding-bottom: 6px; }
 .msig-collapsed .msig-note { display: none; }
+/* 접었을 때 점수는 제목 바로 옆. 접은 판이니 펼쳤을 때만큼 클 이유가 없다 */
+.msig-score-fold { margin-left: 0; font-size: 1.15rem; flex: none; }
+/* 등급은 요약 줄로 내려왔지만 거기서 가장 중요한 말이라 한 번 눌러 준다 */
+.msig-fold-lv { color: var(--text); font-weight: 600; }
+/*
+ * 좁은 화면에서는 「노랑 · 우호 4 · 중립 3 · 비우호 0」을 아랫줄로 내린다.
+ *
+ * 이게 nowrap 이라 한 줄에 190px 쯤을 그냥 가져가는데, 그만큼 제목이 눌려서
+ * 네 줄로 깨졌다 — **접어 둔 카드가 펼친 것보다 세로로 길어지는** 상태였다.
+ * 요약에 한 줄을 내주면 제목·점수·단추가 첫 줄에 들어가고 전체 높이는 오히려 준다.
+ */
+@media (max-width: 560px) {
+  .msig-collapsed .msig-head { flex-wrap: wrap; gap: 8px; }
+  .msig-collapsed .msig-fold-sum { order: 10; flex-basis: 100%; margin: 3px 0 0; white-space: normal; }
+  /*
+   * 폰(360px)에서 국면 이름이 말줄임에 걸리지 않게 점수를 눕히고 좌우 여백을 4px 줄인다.
+   * 「한쪽만 도는 장 (코스피)」에 159px 이 드는데 딱 그만큼이 모자랐다.
+   */
+  .msig-collapsed .msig-score-fold { font-size: 1.05rem; }
+  .msig-collapsed { padding-left: 10px; padding-right: 10px; }
+}
 
 .sig-gen {
   display: inline-flex;
