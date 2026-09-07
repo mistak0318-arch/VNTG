@@ -2824,6 +2824,22 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   width: 110px;
 }
 .ma-input.wide { flex: 1; min-width: 160px; width: auto; }
+
+/*
+ * 보유 종목 고치기 — 표 줄 밑에 펼쳐지는 편집기 (2026-09-08).
+ * 매도·추가 매수·직접 세 손을 탭으로, 결과(남는 수량·새 평단)를 저장 전에 보여 준다.
+ */
+.ma-row-acts { white-space: nowrap; }
+.ma-edit-btn { margin-right: 4px; }
+.ma-edit-btn.on { color: var(--accent, #e6a23c); border-color: var(--accent, #e6a23c); }
+.ma-edit-row > td { padding: 0 !important; background: color-mix(in srgb, var(--accent, #e6a23c) 6%, var(--panel)); }
+.ma-editor { padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.ma-editor-tabs { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.ma-editor-name { font-size: 0.85rem; color: var(--muted); margin-right: auto; }
+.ma-editor-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.ma-editor-row .ma-input { width: 7rem; }
+.ma-editor-note { margin: 0; font-size: 0.85rem; color: var(--text); }
+.ma-editor-note.bad { color: var(--red); }
 .ma-picked { font-size: 0.8667rem; font-weight: 600; }
 .ma-account { margin-top: 12px; }
 .ma-head {

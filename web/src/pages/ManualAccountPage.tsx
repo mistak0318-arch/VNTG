@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   api,
   fmtNum,
@@ -269,6 +269,21 @@ export function ManualAccountPage({
     }
   }
 
+  /**
+   * 보유 종목 고치기 (2026-09-08 — 벤티지 "일부매도 반영하려니깐 안되네").
+   *
+   * 서버 upsert 는 같은 종목이면 덮어쓰므로 **최종 평단·수량만 보내면 된다.**
+   * 계산(매도 뒤 남는 수량, 추가 매수 뒤 새 평단)은 표 안에서 미리 보여 주고 한다.
+   * 수량이 0 이 되면 삭제다 — 0주짜리 줄을 남길 이유가 없다.
+   */
+  async function saveHolding(id: string, h: { code: string; name: string; avgPrice: number; qty: number }) {
+    if (h.qty <= 0) {
+      await deleteHolding(id, h.code);
+      return;
+    }
+    setAccounts((await api.manualHoldingAdd(id, h)).accounts);
+  }
+
   return (
     <div>
       <RefreshBar onRefresh={load} loading={loading} updatedAt={updatedAt} />
@@ -471,6 +486,7 @@ export function ManualAccountPage({
               holdings={a.holdings}
               onRow={onSelectStock}
               onDelete={(code) => deleteHolding(a.id, code)}
+              onSave={(h) => saveHolding(a.id, h)}
             />
           )}
 
@@ -483,6 +499,121 @@ export function ManualAccountPage({
 }
 
 /**
+ * 보유 종목 고치기 (2026-09-08 — 벤티지 "일부매도 반영하려니깐 안되네 추가 매수한
+ * 경우에는 어떻게 되는지도 봐야겠다").
+ *
+ * 세 가지 손이 있다. 결과를 **저장하기 전에** 보여 준다 — 평단이 어떻게 되는지
+ * 모르고 저장하면 나중에 「이 평단이 맞나」를 못 믿는다.
+ *
+ *   매도      수량만 줄인다. 평단은 그대로 — 판 것은 평단을 안 바꾼다.
+ *   추가 매수  수량·단가를 받아 새 평단을 낸다: (옛 수량×옛 평단 + 새 수량×단가) ÷ 총수량
+ *   직접      평단·수량을 그냥 적는다. 증권사 앱에서 본 값을 옮길 때.
+ *
+ * 전량 매도(남는 수량 0)는 삭제로 간다 — 0주짜리 줄을 남기지 않는다.
+ */
+function HoldingEditor({
+  h,
+  onCancel,
+  onSave,
+}: {
+  h: EvaluatedHolding;
+  onCancel: () => void;
+  onSave: (next: { avgPrice: number; qty: number }) => Promise<void>;
+}) {
+  const [mode, setMode] = useState<"sell" | "buy" | "set">("sell");
+  const [a, setA] = useState("");
+  const [b, setB] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const n = (s: string) => Number(String(s).replace(/[^\d.]/g, "")) || 0;
+
+  /* 저장될 값 — 모드마다 다르게 낸다 */
+  let next: { avgPrice: number; qty: number } | null = null;
+  let note = "";
+  if (mode === "sell") {
+    const sellQty = n(a);
+    if (sellQty > 0 && sellQty <= h.qty) {
+      next = { avgPrice: h.avgPrice, qty: h.qty - sellQty };
+      note = next.qty === 0 ? "전량 매도 — 이 줄이 지워집니다" : `남는 수량 ${fmtNum(next.qty)}주 · 평단 그대로 ${fmtNum(h.avgPrice)}`;
+    } else if (sellQty > h.qty) note = `보유 ${fmtNum(h.qty)}주보다 많습니다`;
+  } else if (mode === "buy") {
+    const buyQty = n(a), buyPx = n(b);
+    if (buyQty > 0 && buyPx > 0) {
+      const totalQty = h.qty + buyQty;
+      const avg = Math.round((h.qty * h.avgPrice + buyQty * buyPx) / totalQty);
+      next = { avgPrice: avg, qty: totalQty };
+      note = `총 ${fmtNum(totalQty)}주 · 새 평단 ${fmtNum(avg)} (${fmtNum(h.avgPrice)} → ${avg > h.avgPrice ? "↑" : avg < h.avgPrice ? "↓" : "="})`;
+    }
+  } else {
+    const px = n(a), q = n(b);
+    if (px > 0 && q > 0) {
+      next = { avgPrice: px, qty: q };
+      note = `평단 ${fmtNum(px)} · ${fmtNum(q)}주로 바꿉니다`;
+    }
+  }
+
+  async function save() {
+    if (!next) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await onSave(next);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "저장 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const pick = (m: typeof mode) => {
+    setMode(m);
+    setA("");
+    setB("");
+    setErr(null);
+  };
+
+  return (
+    <div className="ma-editor" onClick={(e) => e.stopPropagation()}>
+      <div className="ma-editor-tabs">
+        <span className="ma-editor-name">
+          {h.name} · {fmtNum(h.qty)}주 @ {fmtNum(h.avgPrice)}
+        </span>
+        {(["sell", "buy", "set"] as const).map((m) => (
+          <button key={m} type="button" className={`filter-btn ${mode === m ? "active" : ""}`} onClick={() => pick(m)}>
+            {m === "sell" ? "매도" : m === "buy" ? "추가 매수" : "직접"}
+          </button>
+        ))}
+      </div>
+      <div className="ma-editor-row">
+        {mode === "sell" && (
+          <input className="ma-input" type="number" inputMode="numeric" placeholder="판 수량" value={a} onChange={(e) => setA(e.target.value)} autoFocus />
+        )}
+        {mode === "buy" && (
+          <>
+            <input className="ma-input" type="number" inputMode="numeric" placeholder="산 수량" value={a} onChange={(e) => setA(e.target.value)} autoFocus />
+            <input className="ma-input" type="number" inputMode="numeric" placeholder="산 단가" value={b} onChange={(e) => setB(e.target.value)} />
+          </>
+        )}
+        {mode === "set" && (
+          <>
+            <input className="ma-input" type="number" inputMode="numeric" placeholder="평단가" value={a} onChange={(e) => setA(e.target.value)} autoFocus />
+            <input className="ma-input" type="number" inputMode="numeric" placeholder="수량" value={b} onChange={(e) => setB(e.target.value)} />
+          </>
+        )}
+        <button type="button" className="filter-btn active" disabled={!next || busy} onClick={() => void save()}>
+          {busy ? "저장 중" : "저장"}
+        </button>
+        <button type="button" className="filter-btn" onClick={onCancel} disabled={busy}>
+          취소
+        </button>
+      </div>
+      {note && <p className={`ma-editor-note${next ? "" : " bad"}`}>{note}</p>}
+      {err && <p className="ma-editor-note bad">{err}</p>}
+    </div>
+  );
+}
+
+/**
  * 계좌 보유 표 — 컬럼 정렬(모든 표 공통 규칙, 2026-08-26).
  * 계좌마다 표가 하나씩이라(맵 안) 훅을 못 쓰던 것을 컴포넌트로 떼어 정렬을 달았다.
  */
@@ -490,12 +621,16 @@ function HoldingsTable({
   holdings,
   onRow,
   onDelete,
+  onSave,
 }: {
   holdings: EvaluatedHolding[];
   onRow: (code: string, name: string) => void;
   onDelete: (code: string) => void;
+  onSave: (h: { code: string; name: string; avgPrice: number; qty: number }) => Promise<void>;
 }) {
   const sort = useSortableTable<EvaluatedHolding>(holdings);
+  /** 지금 고치는 중인 종목 — 한 번에 하나 */
+  const [editing, setEditing] = useState<string | null>(null);
   return (
     <div className="data-table-wrap">
       <table className="data-table">
@@ -514,31 +649,57 @@ function HoldingsTable({
         </thead>
         <tbody>
           {sort.sorted.map((h) => (
-            <tr key={h.code} className="clickable-row" onClick={() => onRow(h.code, h.name)}>
-              <td className="sticky-col">{h.name}</td>
-              <td>{fmtNum(h.avgPrice)}</td>
-              <td>{fmtNum(h.qty)}</td>
-              <td>{fmtNum(h.price)}</td>
-              <td className={signClass(h.changeRate)}>{pct(h.changeRate)}</td>
-              <td>{fmtNum(Math.round(h.value))}</td>
-              <td className={signClass(h.profit)}>
-                {h.profit > 0 ? "+" : ""}
-                {fmtNum(Math.round(h.profit))}
-              </td>
-              <td className={signClass(h.returnRate)}>{pct(h.returnRate)}</td>
-              <td>
-                <button
-                  className="row-del-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(h.code);
-                  }}
-                  title="이 종목 삭제"
-                >
-                  ✕
-                </button>
-              </td>
-            </tr>
+            <Fragment key={h.code}>
+              <tr className="clickable-row" onClick={() => onRow(h.code, h.name)}>
+                <td className="sticky-col">{h.name}</td>
+                <td>{fmtNum(h.avgPrice)}</td>
+                <td>{fmtNum(h.qty)}</td>
+                <td>{fmtNum(h.price)}</td>
+                <td className={signClass(h.changeRate)}>{pct(h.changeRate)}</td>
+                <td>{fmtNum(Math.round(h.value))}</td>
+                <td className={signClass(h.profit)}>
+                  {h.profit > 0 ? "+" : ""}
+                  {fmtNum(Math.round(h.profit))}
+                </td>
+                <td className={signClass(h.returnRate)}>{pct(h.returnRate)}</td>
+                <td className="ma-row-acts">
+                  <button
+                    className={`row-del-btn ma-edit-btn${editing === h.code ? " on" : ""}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(editing === h.code ? null : h.code);
+                    }}
+                    title="수량·평단 고치기 (매도·추가 매수)"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className="row-del-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(h.code);
+                    }}
+                    title="이 종목 삭제"
+                  >
+                    ✕
+                  </button>
+                </td>
+              </tr>
+              {editing === h.code && (
+                <tr className="ma-edit-row">
+                  <td colSpan={9}>
+                    <HoldingEditor
+                      h={h}
+                      onCancel={() => setEditing(null)}
+                      onSave={async (next) => {
+                        await onSave({ code: h.code, name: h.name, ...next });
+                        setEditing(null);
+                      }}
+                    />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>
