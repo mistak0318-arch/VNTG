@@ -16380,7 +16380,7 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .sc-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 @media (min-width: 1100px) { .sc-grid { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 1700px) { .sc-grid { grid-template-columns: 1fr 1fr 1fr; } }
-.sc-card { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); min-width: 0; }
+.sc-card { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); min-width: 0; overflow: hidden; }
 .sc-card h4 { margin: 0 0 6px; font-size: 0.86rem; }
 .sc-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: 4px 10px; margin: 6px 0 0; }
 .sc-kv div { display: flex; justify-content: space-between; gap: 6px; font-size: 0.76rem; }
@@ -16390,9 +16390,15 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .sc-inst { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 6px 0; font-size: 0.74rem; }
 .sc-hint { margin: 6px 0 0; line-height: 1.5; word-break: keep-all; }
 .sc-feed h4 + h4 { margin-top: 10px; }
-.sc-list { margin: 0; padding-left: 1rem; font-size: 0.76rem; line-height: 1.55; }
-.sc-list li { margin: 2px 0; word-break: keep-all; }
-.sc-list a { color: var(--text); text-decoration: none; }
+.sc-list { margin: 0; padding-left: 1rem; font-size: 0.76rem; line-height: 1.55; min-width: 0; }
+/*
+ * `keep-all` 은 한글 어절을 안 자르지만 **띄어쓰기 없는 긴 URL 은 못 꺾는다** — 그대로
+ * 카드 옆으로 삐져나와 화면 전체가 옆으로 밀렸다(2026-09-07, 벤티지 지적). 텔레그램 글엔
+ * 링크가 그대로 들어온다. `overflow-wrap: anywhere` 가 그 한 줄만 아무 데서나 꺾는다 —
+ * 한글 어절은 여전히 keep-all 이 지킨다.
+ */
+.sc-list li { margin: 2px 0; word-break: keep-all; overflow-wrap: anywhere; }
+.sc-list a { color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
 .sc-list a:hover { text-decoration: underline; }
 .sc-wait { margin: 12px 0; }
 
