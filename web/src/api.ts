@@ -1021,6 +1021,12 @@ export const api = {
       fallback: string | null;
     }>("/api/ai/config"),
   aiConfigSave: (config: AiConfig) => putJson<{ config: AiConfig }>("/api/ai/config", config),
+  /** 목록의 모델을 실제로 불러 본다 — 죽은 모델이 목록에 산 것처럼 남는 걸 막는다 */
+  aiCheck: () =>
+    postJson<{ results: { model: string; provider: string; ok: boolean; ms: number; error: string | null }[]; at: string }>(
+      "/api/ai/check",
+      {},
+    ),
   calendarEconomic: () =>
     getJson<{ verifiedAt: string; events: { date: string; title: string }[] }>(
       "/api/calendar/economic",

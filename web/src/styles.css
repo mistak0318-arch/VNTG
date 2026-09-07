@@ -16431,3 +16431,9 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .peek-axes { font-size: 0.7rem; }
 .peek-more { margin-top: 8px; width: 100%; }
 .peek-err { margin: 0; color: var(--red); }
+
+/* ── AI 모델 점검 (2026-09-07) ── */
+.ai-check { margin: 10px 0 4px; }
+.ai-check-list { margin: 8px 0 0; padding-left: 0; list-style: none; font-size: 0.78rem; line-height: 1.6; }
+.ai-check-list li.bad { color: var(--text); }
+.ai-check-err { color: var(--red); word-break: break-all; }

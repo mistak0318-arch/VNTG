@@ -31,9 +31,13 @@ export function availableVisionProviders(): VisionProvider[] {
   return out;
 }
 
+/*
+ * 제공자별 기본 모델 (2026-09-07 최신화). `gemini-2.5-flash` 는 404 가 오고(신규 사용자에게
+ * 닫힘), `gpt-4o-mini` 는 GPT-5.6 세대에 밀렸다. 목록·단가표(`apiUsage`)와 같이 움직인다.
+ */
 const MODELS: Record<VisionProvider, string> = {
-  gemini: "gemini-2.5-flash",
-  openai: "gpt-4o-mini",
+  gemini: "gemini-3.5-flash-lite",
+  openai: "gpt-5.6-luna",
   anthropic: "claude-haiku-4-5-20251001",
 };
 
@@ -54,38 +58,20 @@ export interface VisionModelOption {
 }
 
 export const VISION_MODELS: VisionModelOption[] = [
-  {
-    provider: "gemini",
-    model: "gemini-2.5-flash-lite",
-    label: "Gemini 2.5 Flash Lite",
-    hint: "가장 저렴 · 단순한 표만",
-  },
-  {
-    provider: "gemini",
-    model: "gemini-2.5-flash",
-    label: "Gemini 2.5 Flash",
-    hint: "저렴 · 일반적인 일정표",
-  },
-  {
-    provider: "gemini",
-    model: "gemini-2.5-pro",
-    label: "Gemini 2.5 Pro",
-    hint: "복잡한 표·손글씨에 강함",
-  },
-  { provider: "openai", model: "gpt-4o-mini", label: "GPT-4o mini", hint: "저렴 · 무난" },
-  { provider: "openai", model: "gpt-4o", label: "GPT-4o", hint: "표 인식 정확도 높음" },
-  {
-    provider: "anthropic",
-    model: "claude-haiku-4-5-20251001",
-    label: "Claude Haiku 4.5",
-    hint: "저렴 · 한글 표에 강함",
-  },
-  {
-    provider: "anthropic",
-    model: "claude-sonnet-5",
-    label: "Claude Sonnet 5",
-    hint: "복잡한 이미지에 가장 안정적",
-  },
+  /*
+   * 2026-09-07 최신화. 벤티지: "AI API 모델 리스트 최신화 되어 있나?" — 안 돼 있었다.
+   * `gemini-2.5-flash` 는 실측 404 인데 여기 남아 있었고, GPT 는 4o 세대였다.
+   * ⚠️ 이 목록은 또 낡는다. 설정 › AI 모델의 「모델 점검」이 각 줄을 실제로 불러
+   * 살았는지 표시한다 — 목록을 믿지 말고 점검을 믿을 것.
+   */
+  { provider: "gemini", model: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", hint: "가장 저렴 · 단순한 표만" },
+  { provider: "gemini", model: "gemini-3.6-flash", label: "Gemini 3.6 Flash", hint: "저렴 · 일반적인 일정표 · 혼합 입력에 강함" },
+  { provider: "gemini", model: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", hint: "복잡한 표·손글씨에 강함" },
+  { provider: "openai", model: "gpt-5.6-luna", label: "GPT-5.6 Luna", hint: "저렴 · 무난" },
+  { provider: "openai", model: "gpt-5.6-terra", label: "GPT-5.6 Terra", hint: "표 인식 정확도 높음" },
+  { provider: "anthropic", model: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5", hint: "저렴 · 한글 표에 강함" },
+  { provider: "anthropic", model: "claude-sonnet-5", label: "Claude Sonnet 5", hint: "복잡한 이미지에 가장 안정적" },
+  { provider: "anthropic", model: "claude-opus-5", label: "Claude Opus 5", hint: "가장 정확 · 비싸다" },
 ];
 
 /** 키가 있는 제공자의 모델만 */
@@ -179,10 +165,15 @@ async function callOpenAI(
       "content-type": "application/json",
       authorization: `Bearer ${process.env.OPENAI_API_KEY!.trim()}`,
     },
+    /*
+     * GPT-5.x·6 은 `max_tokens` 를 거절하고(`max_completion_tokens` 만 받는다) 추론 모델이라
+     * `temperature` 도 기본값만 받는다. 4o 세대 호출을 그대로 보내면 400 이 온다.
+     * 새 이름은 모든 현행 모델이 받으므로 그쪽으로 통일한다.
+     */
     body: JSON.stringify({
       model,
-      temperature: 0,
-      max_tokens: maxTokens,
+      ...(/^gpt-[5-9]/.test(model) ? {} : { temperature: 0 }),
+      max_completion_tokens: maxTokens,
       messages: [
         {
           role: "user",
@@ -357,41 +348,24 @@ export async function readImage(
  */
 export const TEXT_MODELS: VisionModelOption[] = [
   /*
-   * gemini-2.5-flash 는 목록에는 남아 있지만 실제로 부르면 404 가 온다
-   * ("no longer available to new users"). 실측으로 확인하고 갈아끼웠다.
+   * 2026-09-07 최신화 — 단가는 `apiUsage.MODEL_PRICING` 과 짝이다. 한쪽만 고치면
+   * 사용량 화면이 엉뚱한 단가로 곱한다. ⚠️ 모델 ID 는 공식 문서 기준이지만 살았는지는
+   * 「모델 점검」으로 확인한다 — `gemini-2.5-flash` 가 목록에 남은 채 404 를 내던 일이 있었다.
+   *
+   * 힌트의 「월」은 데일리 리포트 기준(74회, 입력 86만·출력 24만 토큰)이다.
    */
-  {
-    provider: "gemini",
-    model: "gemini-3.5-flash-lite",
-    label: "Gemini 3.5 Flash Lite",
-    hint: "가장 저렴 · 검색 그라운딩 됨 · 생각 토큰 안 씀",
-  },
-  {
-    provider: "gemini",
-    model: "gemini-3.5-flash",
-    label: "Gemini 3.5 Flash",
-    hint: "조금 비싸지만 정리 품질이 낫다",
-  },
-  {
-    provider: "gemini",
-    model: "gemini-2.5-pro",
-    label: "Gemini 2.5 Pro",
-    hint: "맥락 파악이 필요할 때",
-  },
-  { provider: "openai", model: "gpt-4o-mini", label: "GPT-4o mini", hint: "저렴 · 무난" },
-  { provider: "openai", model: "gpt-4o", label: "GPT-4o", hint: "정리 품질 높음" },
-  {
-    provider: "anthropic",
-    model: "claude-haiku-4-5-20251001",
-    label: "Claude Haiku 4.5",
-    hint: "저렴 · 한국어 자연스러움",
-  },
-  {
-    provider: "anthropic",
-    model: "claude-sonnet-5",
-    label: "Claude Sonnet 5",
-    hint: "가장 안정적 (기본값)",
-  },
+  { provider: "gemini", model: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite", hint: "가장 저렴(월 $1 아래) · 검색 그라운딩 됨 · 분량을 요구보다 짧게 쓰는 경향" },
+  { provider: "gemini", model: "gemini-3.5-flash", label: "Gemini 3.5 Flash", hint: "월 $3.5 · 정리 품질이 Lite 보다 낫다" },
+  { provider: "gemini", model: "gemini-3.6-flash", label: "Gemini 3.6 Flash", hint: "월 $3 · 3.5 Flash 의 후속, 출력 단가가 조금 싸다" },
+  { provider: "gemini", model: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", hint: "월 $4.6 · 구글 플래그십 — 플래그십 중 가장 싸다" },
+  { provider: "openai", model: "gpt-5.6-luna", label: "GPT-5.6 Luna", hint: "월 $0.5 · 오픈AI 경량" },
+  { provider: "openai", model: "gpt-5.6-terra", label: "GPT-5.6 Terra", hint: "월 $4.6 · 중간 — 일반 업무의 기본" },
+  { provider: "openai", model: "gpt-5.6-sol", label: "GPT-5.6 Sol", hint: "월 $8.3 · 오픈AI 플래그십" },
+  { provider: "openai", model: "gpt-6-astra", label: "GPT-6 Astra", hint: "월 $21 · 최상위 (9/3 출시) — 출력 $50/M" },
+  { provider: "anthropic", model: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5", hint: "월 $2 · 저렴 · 한국어 자연스러움" },
+  { provider: "anthropic", model: "claude-sonnet-5", label: "Claude Sonnet 5", hint: "월 $6 · 가장 안정적 (기본값)" },
+  { provider: "anthropic", model: "claude-opus-5", label: "Claude Opus 5", hint: "월 $10 · 판단이 들어가는 판에" },
+  { provider: "anthropic", model: "claude-fable-5-1", label: "Claude Fable 5.1", hint: "단가 미확인 — 사용량 화면이 소넷 단가로 어림한다" },
 ];
 
 export function availableTextModels(): VisionModelOption[] {

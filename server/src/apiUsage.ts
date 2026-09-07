@@ -80,12 +80,24 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   // 2026-08-31 까지 인트로 단가($2/$10). 그 뒤 $3/$15 로 오른다
   "claude-sonnet-5": { input: 2, output: 10 },
   "claude-haiku-4-5-20251001": { input: 1, output: 5 },
+  /*
+   * 2026-09-07 최신화 — 제3자 가격 정리(cloudzero·benchlm·aipricing.guru) 기준.
+   * ⚠️ 공식 요금표로 한 번 더 맞출 것. 특히 3.5 Flash-Lite 는 예전 표가 **2.5** Lite 값
+   * ($0.1/$0.4)을 쓰고 있어서 사용량 화면이 3~6배 적게 보였을 수 있다.
+   */
   "gemini-2.5-flash": { input: 0.3, output: 2.5 },
   "gemini-2.5-flash-lite": { input: 0.1, output: 0.4 },
-  // 공개 단가는 바뀔 수 있다. 정확한 청구는 Google Cloud 결제 콘솔에서 본다
-  "gemini-3.5-flash-lite": { input: 0.1, output: 0.4 },
-  "gemini-3.5-flash": { input: 0.3, output: 2.5 },
+  "gemini-3.1-flash-lite": { input: 0.3, output: 2.5 },
+  "gemini-3.5-flash-lite": { input: 0.3, output: 2.5 },
+  "gemini-3.5-flash": { input: 1.5, output: 9 },
+  "gemini-3.6-flash": { input: 1.5, output: 7.5 },
+  "gemini-3.1-pro-preview": { input: 2, output: 12 },
   "gpt-4o-mini": { input: 0.15, output: 0.6 },
+  "gpt-5.6-luna": { input: 0.2, output: 1.2 },
+  "gpt-5.6-terra": { input: 2, output: 12 },
+  "gpt-5.6-sol": { input: 4, output: 20 },
+  "gpt-5.5": { input: 5, output: 30 },
+  "gpt-6-astra": { input: 10, output: 50 },
 };
 
 /** 인트로 단가가 끝나는 날. 이 날이 지나면 정상가로 계산한다 */
@@ -106,8 +118,12 @@ function priceFor(model: string, day?: string): { input: number; output: number 
     return hit;
   }
   if (/lite/.test(model) && model.startsWith("gemini")) return MODEL_PRICING["gemini-3.5-flash-lite"];
+  if (/pro/.test(model) && model.startsWith("gemini")) return MODEL_PRICING["gemini-3.1-pro-preview"];
   if (model.startsWith("gemini")) return MODEL_PRICING["gemini-3.5-flash"];
-  if (model.startsWith("gpt")) return MODEL_PRICING["gpt-4o-mini"];
+  if (/sol/.test(model) && model.startsWith("gpt")) return MODEL_PRICING["gpt-5.6-sol"];
+  if (/terra/.test(model) && model.startsWith("gpt")) return MODEL_PRICING["gpt-5.6-terra"];
+  if (model.startsWith("gpt-6")) return MODEL_PRICING["gpt-6-astra"];
+  if (model.startsWith("gpt")) return MODEL_PRICING["gpt-5.6-luna"];
   if (model.includes("opus")) return MODEL_PRICING["claude-opus-5"];
   if (model.includes("haiku")) return MODEL_PRICING["claude-haiku-4-5-20251001"];
   return MODEL_PRICING["claude-sonnet-5"];

@@ -47,6 +47,22 @@ export function AiModelPanel() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* 모델 점검 결과 — 모델명 → 살았나·몇 ms·왜 죽었나 */
+  const [check, setCheck] = useState<Record<string, { ok: boolean; ms: number; error: string | null }> | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  async function runCheck() {
+    setChecking(true);
+    setError(null);
+    try {
+      const r = await api.aiCheck();
+      setCheck(Object.fromEntries(r.results.map((x) => [x.model, { ok: x.ok, ms: x.ms, error: x.error }])));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "점검 실패");
+    } finally {
+      setChecking(false);
+    }
+  }
 
   useEffect(() => {
     api
@@ -129,6 +145,7 @@ export function AiModelPanel() {
                   </option>
                   {models.map((m) => (
                     <option key={m.model} value={m.model}>
+                      {check?.[m.model] ? (check[m.model].ok ? "✅ " : "❌ ") : ""}
                       {PROVIDER_LABEL[m.provider] ?? m.provider} · {m.label}
                     </option>
                   ))}
@@ -138,6 +155,30 @@ export function AiModelPanel() {
             </div>
           );
         })}
+      </div>
+
+      {/*
+        모델 점검 (2026-09-07) — 목록을 믿지 말고 불러 본다. 죽은 모델이 목록에 산 것처럼
+        남아 있던 일(gemini-2.5-flash 404)이 있었다. 모델마다 5토큰짜리라 다 합쳐도 몇 원이다.
+      */}
+      <div className="ai-check">
+        <button className="filter-btn" onClick={() => void runCheck()} disabled={checking}>
+          {checking ? "부르는 중… (최대 20초)" : "🩺 모델 점검 — 목록의 모델을 실제로 불러 봅니다"}
+        </button>
+        {check && (
+          <ul className="ai-check-list">
+            {models.map((m) => {
+              const c = check[m.model];
+              if (!c) return null;
+              return (
+                <li key={m.model} className={c.ok ? "ok" : "bad"}>
+                  {c.ok ? "✅" : "❌"} <b>{m.label}</b> <span className="pt-n">{m.model}</span>
+                  {c.ok ? <span className="pt-n"> · {c.ms}ms</span> : <span className="ai-check-err"> — {c.error}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       <div className="sig-config-actions">
