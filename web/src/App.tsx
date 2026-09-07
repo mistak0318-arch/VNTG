@@ -39,7 +39,7 @@ import { MapPage } from "./pages/MapPage";
 import { ThemeDbPage } from "./pages/ThemeDbPage";
 import { MyPage } from "./pages/MyPage";
 import { NewsPage } from "./pages/NewsPage";
-import { OverviewPage } from "./pages/OverviewPage";
+import { MarketBoardPage } from "./pages/MarketBoardPage";
 import { ProgramTradePage } from "./pages/ProgramTradePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SameNetTradeRankingPage } from "./pages/SameNetTradeRankingPage";
@@ -140,8 +140,7 @@ const MENU: {
        * 브리핑이 첫 탭(홈), 맥박·로테이션·주도주·자금 흐름이 그 뒤 탭이다.
        * key 는 "briefing" 을 남겼다 — 홈 라우트·탭 복원·즐겨찾기가 이 키를 기억한다.
        */
-      { key: "briefing", label: "마켓 브리핑·흐름", icon: "🌊" },
-      { key: "overview", label: "시황 대시보드", icon: "📊" },
+      { key: "briefing", label: "전광판", icon: "🟢" },
       { key: "report", label: "데일리 리포트", icon: "📰" },
       { key: "map", label: "테마/업종 MAP", icon: "🗺️" },
       /* 테마 DB (2026-08-28) — 네이버 분류를 우리 눈금(등락률·상승비율·연속성)으로 다시 그린다 */
@@ -674,9 +673,10 @@ export default function App() {
   /** 탭 키 → 페이지. 인앱 탭이 열린 것들을 전부 이걸로 그린다 */
   function renderPage(t: Tab) {
     switch (t) {
-      case "briefing": return <MarketFlowPage onSelectStock={onSelectStock} />;
+      /* 전광판 (2026-09-07 밤) — 시황 대시보드 + 마켓 브리핑·흐름을 한 화면으로. 옛 두 키는 다 여기로 온다 */
+      case "briefing": return <MarketBoardPage onSelectStock={onSelectStock} />;
       case "morning": return <MorningPage />;
-      case "overview": return <OverviewPage onSelectStock={onSelectStock} />;
+      case "overview": return <MarketBoardPage onSelectStock={onSelectStock} />;
       case "report": return <DailyReportPage onSelectStock={onSelectStock} />;
       case "map": return <MapPage onSelectStock={onSelectStock} />;
       case "themedb": return <ThemeDbPage onSelectStock={onSelectStock} />;
