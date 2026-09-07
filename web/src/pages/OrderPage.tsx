@@ -12,6 +12,7 @@ import {
   type AutoWatch,
   type WatchBasis,
   type WatchExec,
+  type WatchLeg,
   type WatchSpec,
   type AccessAudit,
   type OrderDevice,
@@ -56,12 +57,14 @@ const VENUES: { key: OrderVenue; label: string; hint: string }[] = [
   { key: "NXT", label: "NXT", hint: "프리 08:00 · 메인 09:00~15:20 · 애프터 ~20:00" },
 ];
 
-type Sub = "order" | "watch" | "open" | "fills" | "balance" | "log" | "config";
+type Sub = "order" | "watch" | "watchHistory" | "open" | "fills" | "balance" | "log" | "config";
 
 const SUBS: { key: Sub; label: string }[] = [
   { key: "order", label: "매수·매도" },
   /* 자동감시 (2026-09-07 밤) — 벤티지: "어떤 종목이 얼만큼 하락하면 매수… 매수 이후 얼마 이하 하락하면 매도" */
   { key: "watch", label: "자동감시" },
+  /* 감시 히스토리 (2026-09-07 밤) — 벤티지: "지난 감시 카드가 너무 크네. 히스토리는 따로 확인할 수 있게" */
+  { key: "watchHistory", label: "감시 히스토리" },
   { key: "open", label: "미체결" },
   { key: "fills", label: "체결" },
   { key: "balance", label: "잔고" },
@@ -175,6 +178,92 @@ function readPrefill(): Prefill {
   };
 }
 
+function legsSay(legs: WatchLeg[]): string {
+  return legs.map((l) => `${l.pct > 0 ? "+" : ""}${l.pct}%에 ${l.qtyPct}% ${l.exec === "market" ? "시장가" : "지정가"}`).join(" · ");
+}
+
+/**
+ * 단계 편집기 (2026-09-07 밤) — 벤티지: "스탑로스 기능에 몇 프로만 팔 건지도 설정해야지."
+ * 한 줄이 한 단계: 기준 대비 % · 수량의 % · 시장가/지정가. 합이 100 을 넘으면 빨갛게. 자주 쓰는 모양은 단추로.
+ */
+const LEG_PRESETS: { label: string; legs: WatchLeg[] }[] = [
+  { label: "−5% 전량", legs: [{ pct: -5, qtyPct: 100, exec: "market" }] },
+  { label: "−3% 반 · −7% 반", legs: [{ pct: -3, qtyPct: 50, exec: "market" }, { pct: -7, qtyPct: 50, exec: "market" }] },
+  { label: "+10% 반 익절 · −5% 손절", legs: [{ pct: 10, qtyPct: 50, exec: "market" }, { pct: -5, qtyPct: 100, exec: "market" }] },
+  { label: "3단 −3/−5/−8", legs: [{ pct: -3, qtyPct: 30, exec: "market" }, { pct: -5, qtyPct: 30, exec: "market" }, { pct: -8, qtyPct: 40, exec: "market" }] },
+];
+
+function LegsEditor({ legs, onChange, total, basisPrice, disabled }: { legs: WatchLeg[]; onChange: (l: WatchLeg[]) => void; total: number; basisPrice: number; disabled?: boolean }) {
+  const sum = legs.reduce((a, l) => a + (Number(l.qtyPct) || 0), 0);
+  const set = (i: number, patch: Partial<WatchLeg>) => onChange(legs.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const qtyOf = (i: number) => {
+    if (total <= 0) return 0;
+    const raw = legs.map((l) => Math.floor((total * (Number(l.qtyPct) || 0)) / 100));
+    if (sum === 100) raw[raw.length - 1] += total - raw.reduce((a, b) => a + b, 0);
+    return raw[i];
+  };
+  return (
+    <div className={`ord-legs${disabled ? " off" : ""}`}>
+      <div className="ord-legs-presets">
+        {LEG_PRESETS.map((pr) => (
+          <button key={pr.label} type="button" disabled={disabled} onClick={() => onChange(pr.legs.map((l) => ({ ...l })))}>
+            {pr.label}
+          </button>
+        ))}
+      </div>
+      {legs.map((l, i) => {
+        const tr = basisPrice > 0 && Number(l.pct) ? toTick(basisPrice * (1 + Number(l.pct) / 100)) : 0;
+        return (
+          <div key={i} className={`ord-leg ${Number(l.pct) < 0 ? "loss" : "gain"}`}>
+            <span className="ord-leg-n">{i + 1}단계</span>
+            <input
+              className="ord-in ord-watch-in sm"
+              inputMode="decimal"
+              value={String(l.pct)}
+              disabled={disabled}
+              onChange={(e) => set(i, { pct: Number(e.target.value.replace(/[^-\d.]/g, "")) || 0 })}
+              title="기준가 대비 % — 음수 손절, 양수 익절"
+            />
+            <span className="ord-watch-unit">%에</span>
+            <input
+              className="ord-in ord-watch-in sm"
+              inputMode="numeric"
+              value={String(l.qtyPct)}
+              disabled={disabled}
+              onChange={(e) => set(i, { qtyPct: Math.min(100, Number(e.target.value.replace(/\D/g, "")) || 0) })}
+              title="대상 수량의 몇 %"
+            />
+            <span className="ord-watch-unit">%</span>
+            <select className="ord-in ord-watch-sel" value={l.exec} disabled={disabled} onChange={(e) => set(i, { exec: e.target.value as WatchLeg["exec"] })}>
+              <option value="market">시장가</option>
+              <option value="limit_now">그때 현재가 지정가</option>
+            </select>
+            <span className="ord-leg-est">
+              {tr > 0 ? `${tr.toLocaleString()}원` : ""}
+              {total > 0 ? ` · ${qtyOf(i)}주` : ""}
+            </span>
+            {legs.length > 1 && (
+              <button type="button" className="ord-leg-x" disabled={disabled} onClick={() => onChange(legs.filter((_, j) => j !== i))} title="이 단계 빼기">
+                ✕
+              </button>
+            )}
+          </div>
+        );
+      })}
+      <div className="ord-legs-foot">
+        {legs.length < 4 && (
+          <button type="button" className="ord-mk" disabled={disabled} onClick={() => onChange([...legs, { pct: -5, qtyPct: Math.max(0, 100 - sum), exec: "market" }])}>
+            ＋ 단계 추가
+          </button>
+        )}
+        <span className={`ord-legs-sum${sum > 100 ? " ord-bad" : ""}`}>
+          합 {sum}%{sum > 100 ? " — 100 을 넘는다" : sum < 100 ? ` · ${100 - sum}% 는 남긴다` : " · 전량"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /** 감시 조건을 한 줄로 — 서버 watchSay 와 같은 말 */
 function watchSay(s: WatchSpec): string {
   const basisKo = s.basis === "prevClose" ? "전일 종가" : s.basis === "avg" ? "평단" : "등록 때 값";
@@ -184,7 +273,8 @@ function watchSay(s: WatchSpec): string {
       : `${basisKo}(${(s.basisPrice ?? 0).toLocaleString()}) 대비 ${(s.pct ?? 0) > 0 ? "+" : ""}${s.pct}% → ${s.trigger.toLocaleString()}원 ${s.dir === "le" ? "이하" : "이상"}`;
   const exec =
     s.exec === "market" ? "시장가" : s.exec === "limit_trigger" ? "발동가 지정가" : s.exec === "limit_now" ? "그때 현재가 지정가" : `${(s.limitPrice ?? 0).toLocaleString()}원 지정가`;
-  const then = s.then ? ` · 체결되면 체결가 대비 ${s.then.pct}% 에 ${s.then.exec === "market" ? "시장가" : "지정가"} 매도 감시` : "";
+  const then = s.then && s.then.length > 0 ? ` · 체결되면 체결가 대비 ${legsSay(s.then)} 매도 감시` : "";
+  if (s.legs && s.legs.length > 0) return `${basisKo}(${(s.basisPrice ?? 0).toLocaleString()}) 대비 ${legsSay(s.legs)} — ${s.legs.length}단계 매도`;
   return `${cond}면 ${exec}${then}`;
 }
 
@@ -350,7 +440,8 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
           {sub === "order" && (
             <OrderForm status={status} prefill={prefill} onDone={load} onSelectStock={onSelectStock} />
           )}
-          {sub === "watch" && <WatchTab status={status} prefill={prefill} onDone={load} />}
+          {sub === "watch" && <WatchTab status={status} prefill={prefill} onDone={load} onHistory={() => setSub("watchHistory")} />}
+          {sub === "watchHistory" && <WatchHistoryTab />}
           {sub === "open" && <OpenTab status={status} onDone={load} />}
           {sub === "fills" && <FillsTab />}
           {sub === "balance" && <BalanceTab onSelectStock={onSelectStock} />}
@@ -1736,9 +1827,11 @@ function WatchForm({
   const [wExec, setWExec] = useState<WatchExec>(es?.exec ?? prefill.watchExec ?? "market");
   const [wLimit, setWLimit] = useState(es?.limitPrice ? String(es.limitPrice) : "");
   const [wUntil, setWUntil] = useState(es && es.validUntil !== kstToday() ? es.validUntil : "");
-  const [wThenOn, setWThenOn] = useState(Boolean(es?.then));
-  const [wThenPct, setWThenPct] = useState(es?.then ? String(es.then.pct) : "-5");
-  const [wThenExec, setWThenExec] = useState<"market" | "limit_now">(es?.then?.exec ?? "market");
+  const [wThenOn, setWThenOn] = useState(Boolean(es?.then && es.then.length > 0));
+  const [wThen, setWThen] = useState<WatchLeg[]>(es?.then && es.then.length > 0 ? es.then.map((l) => ({ ...l })) : [{ pct: -5, qtyPct: 100, exec: "market" }]);
+  /* 매도를 단계로 — 켜면 조건 줄 대신 단계 편집기. 기준은 평단(없으면 지금 값) */
+  const [wSplit, setWSplit] = useState(false);
+  const [wLegs, setWLegs] = useState<WatchLeg[]>([{ pct: -3, qtyPct: 50, exec: "market" }, { pct: -7, qtyPct: 50, exec: "market" }]);
   const [q, setQ] = useState<{ price: number; prevClose: number; changeRate: number; avg: number | null; held: number; ableQty: number; deposit: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1793,13 +1886,16 @@ function WatchForm({
   const guardQty = unit > 0 ? Math.floor(status.guard.maxOrderKrw / unit) : 0;
   const maxQty = side === "buy" ? Math.min(guardQty, unit > 0 ? Math.floor((q?.deposit ?? 0) / unit) : 0) : (q?.ableQty ?? 0);
   const alreadyHit = q && trigger > 0 ? (wDir === "le" ? q.price <= trigger : q.price >= trigger) : false;
+  const legsOk = (ls: WatchLeg[]) => ls.length > 0 && ls.every((l) => Number(l.pct) !== 0 && l.qtyPct >= 1) && ls.reduce((s, l) => s + l.qtyPct, 0) <= 100 && new Set(ls.map((l) => l.pct)).size === ls.length;
+  const splitOn = side === "sell" && wSplit;
+  const splitHit = splitOn && q && basisPrice > 0 ? wLegs.some((l) => { const tr = toTick(basisPrice * (1 + l.pct / 100)); return l.pct < 0 ? q.price <= tr : q.price >= tr; }) : false;
   const ready =
     Boolean(code) &&
     Number(qty) > 0 &&
-    trigger > 0 &&
-    !alreadyHit &&
-    (wExec !== "limit_fixed" || Number(wLimit) > 0) &&
-    (!wThenOn || (Number(wThenPct) !== 0 && Number.isFinite(Number(wThenPct))));
+    (splitOn
+      ? basisPrice > 0 && legsOk(wLegs) && !splitHit
+      : trigger > 0 && !alreadyHit && (wExec !== "limit_fixed" || Number(wLimit) > 0)) &&
+    (!wThenOn || side !== "buy" || legsOk(wThen));
   const allowed = status.guard.allowAutoWatch !== false && status.autoWatch?.allowed !== false;
 
   async function prepare(e: React.FormEvent) {
@@ -1807,29 +1903,56 @@ function WatchForm({
     setBusy(true);
     setError(null);
     try {
-      const r = await api.orderPrepare({
-        side,
-        code,
-        name,
-        qty: Number(qty),
-        price: wExec === "market" ? null : wExec === "limit_fixed" ? Number(wLimit) || null : trigger || null,
-        condPrice: null,
-        tradeType: wExec === "market" ? "3" : "0",
-        venue: "KRX",
-        credit: false,
-        loanDate: null,
-        watch: {
-          dir: wDir,
-          basis: wBasis,
-          pct: wBasis === "price" ? null : Number(wPct),
-          price: wBasis === "price" ? Number(wPrice) || null : null,
-          exec: wExec,
-          limitPrice: wExec === "limit_fixed" ? Number(wLimit) || null : null,
-          validUntil: wUntil || null,
-          then: side === "buy" && wThenOn ? { pct: Number(wThenPct), exec: wThenExec } : null,
-          replaceId: edit?.id ?? null,
-        },
-      });
+      const r = splitOn
+        ? await api.orderPrepare({
+            side,
+            code,
+            name,
+            qty: Number(qty),
+            /* 단계 매도 — 틀만 보낸다. 첫 단계 값으로 모양을 맞추고, 실제 단계는 서버가 나눈다 */
+            price: null,
+            condPrice: null,
+            tradeType: "3",
+            venue: "KRX",
+            credit: false,
+            loanDate: null,
+            watch: {
+              dir: wLegs[0].pct < 0 ? "le" : "ge",
+              basis: wBasis === "price" ? "avg" : wBasis,
+              pct: wLegs[0].pct,
+              price: null,
+              exec: "market",
+              limitPrice: null,
+              validUntil: wUntil || null,
+              then: null,
+              legs: wLegs.map((l) => ({ pct: Number(l.pct), qtyPct: Number(l.qtyPct), exec: l.exec })),
+              replaceId: edit?.id ?? null,
+            },
+          })
+        : await api.orderPrepare({
+            side,
+            code,
+            name,
+            qty: Number(qty),
+            price: wExec === "market" ? null : wExec === "limit_fixed" ? Number(wLimit) || null : trigger || null,
+            condPrice: null,
+            tradeType: wExec === "market" ? "3" : "0",
+            venue: "KRX",
+            credit: false,
+            loanDate: null,
+            watch: {
+              dir: wDir,
+              basis: wBasis,
+              pct: wBasis === "price" ? null : Number(wPct),
+              price: wBasis === "price" ? Number(wPrice) || null : null,
+              exec: wExec,
+              limitPrice: wExec === "limit_fixed" ? Number(wLimit) || null : null,
+              validUntil: wUntil || null,
+              then: side === "buy" && wThenOn ? wThen.map((l) => ({ pct: Number(l.pct), qtyPct: Number(l.qtyPct), exec: l.exec })) : null,
+              legs: null,
+              replaceId: edit?.id ?? null,
+            },
+          });
       setTicket(r);
     } catch (e2) {
       setError(e2 instanceof Error ? e2.message : "감시 주문서를 못 만들었다");
@@ -1891,6 +2014,21 @@ function WatchForm({
         </div>
 
         <div className="ord-watch-body">
+          {side === "sell" && !edit && (
+            <label className="ord-watch-split">
+              <input
+                type="checkbox"
+                checked={wSplit}
+                onChange={(e) => {
+                  setWSplit(e.target.checked);
+                  if (e.target.checked && (wBasis === "price" || (wBasis === "avg" && !q?.avg))) setWBasis(q?.avg ? "avg" : "now");
+                }}
+              />
+              <span>
+                <b>단계로 나눠 팔기</b> — 「−3%에 반, −7%에 나머지」처럼. 단계마다 감시가 하나씩 걸린다
+              </span>
+            </label>
+          )}
           <div className="ord-watch-row">
             <span className="ord-watch-lab">기준</span>
             <div className="ord-basis">
@@ -1899,7 +2037,7 @@ function WatchForm({
                   ["now", "지금 값 대비"],
                   ["prevClose", "전일 종가 대비"],
                   ...(side === "sell" ? [["avg", "평단 대비"]] : []),
-                  ["price", "값 직접"],
+                  ...(splitOn ? [] : [["price", "값 직접"]]),
                 ] as [WatchBasis, string][]
               ).map(([k, label]) => (
                 <button key={k} type="button" className={wBasis === k ? "on" : ""} onClick={() => setWBasis(k)}>
@@ -1908,6 +2046,16 @@ function WatchForm({
               ))}
             </div>
           </div>
+          {splitOn ? (
+            <>
+              <div className="ord-caps">
+                기준가 {basisPrice > 0 ? `${Math.round(basisPrice).toLocaleString()}원` : "(아직 모름 — 평단이 없으면 지금 값)"}
+                {splitHit ? <b className="ord-bad"> — 어느 단계가 지금 값에서 이미 조건 안이다</b> : null}
+              </div>
+              <LegsEditor legs={wLegs} onChange={setWLegs} total={Number(qty) || 0} basisPrice={basisPrice} />
+            </>
+          ) : null}
+          {!splitOn && (
           <div className="ord-watch-row">
             <span className="ord-watch-lab">조건</span>
             {wBasis === "price" ? (
@@ -1936,13 +2084,17 @@ function WatchForm({
               </>
             )}
           </div>
+          )}
+          {!splitOn && (
           <div className={`ord-caps${alreadyHit ? " ord-bad" : ""}`}>
             {wBasis !== "price" && (basisPrice > 0 ? `기준가 ${Math.round(basisPrice).toLocaleString()}원 → ` : "기준가를 아직 모른다 · ")}
             {trigger > 0 ? `발동가 ${trigger.toLocaleString()}원 ${wDir === "le" ? "이하" : "이상"}` : "발동가 미정"}
             {alreadyHit ? " — 지금 값이 이미 조건 안이다. 그건 감시가 아니라 바로 주문이다" : ""}
             {wBasis === "prevClose" ? " · 전일 종가 기준은 당일만" : ""}
           </div>
+          )}
 
+          {!splitOn && (
           <div className="ord-watch-row">
             <span className="ord-watch-lab">닿으면</span>
             <div className="ord-basis">
@@ -1963,9 +2115,10 @@ function WatchForm({
               <input className="ord-in ord-watch-in" inputMode="numeric" placeholder="지정가" value={wLimit} onChange={(e) => setWLimit(e.target.value.replace(/\D/g, ""))} />
             )}
           </div>
+          )}
 
           <div className="ord-watch-row">
-            <span className="ord-watch-lab">수량</span>
+            <span className="ord-watch-lab">{splitOn ? "대상 수량" : "수량"}</span>
             <input className="ord-in ord-watch-in" inputMode="numeric" placeholder="주" value={qty} onChange={(e) => setQty(e.target.value.replace(/\D/g, ""))} />
             <div className="ord-watch-chips">
               {[10, 25, 50, 100].map((pc) => (
@@ -1993,24 +2146,20 @@ function WatchForm({
           </div>
 
           {side === "buy" && (
-            <label className="ord-watch-then">
-              <input type="checkbox" checked={wThenOn} onChange={(e) => setWThenOn(e.target.checked)} />
-              <span>
-                체결되면 <b>체결가 대비</b>
-                <input className="ord-in ord-watch-in sm" inputMode="decimal" value={wThenPct} disabled={!wThenOn} onChange={(e) => setWThenPct(e.target.value.replace(/[^-\d.]/g, ""))} />
-                % 에{" "}
-                <select className="ord-in ord-watch-sel" value={wThenExec} disabled={!wThenOn} onChange={(e) => setWThenExec(e.target.value as "market" | "limit_now")}>
-                  <option value="market">시장가</option>
-                  <option value="limit_now">그때 현재가 지정가</option>
-                </select>{" "}
-                매도 감시를 자동으로 건다
-              </span>
-            </label>
+            <div className="ord-watch-then">
+              <label className="ord-watch-then-head">
+                <input type="checkbox" checked={wThenOn} onChange={(e) => setWThenOn(e.target.checked)} />
+                <span>
+                  <b>체결되면 매도 감시를 자동으로 건다</b> — 체결가 대비, 체결 수량의 몇 %씩
+                </span>
+              </label>
+              {wThenOn && <LegsEditor legs={wThen} onChange={setWThen} total={Number(qty) || 0} basisPrice={trigger > 0 ? trigger : (q?.price ?? 0)} />}
+            </div>
           )}
 
           {error && <p className="ord-err">{error}</p>}
           <button type="submit" className={`ord-go ${side} deferred`} disabled={busy || !ready}>
-            {busy ? "확인 중…" : edit ? "이렇게 고치기" : side === "buy" ? "매수 감시 걸기" : "매도 감시 걸기"}
+            {busy ? "확인 중…" : edit ? "이렇게 고치기" : side === "buy" ? "매수 감시 걸기" : splitOn ? `${wLegs.length}단계 매도 감시 걸기` : "매도 감시 걸기"}
           </button>
           <p className="ord-note">
             KRX · 현금만 · 정규장 09:00~15:30 에만 발동 · <b>한 번뿐</b> · 발동 순간 한도와 가격 자(±{status.guard.priceCollarPct}%)를 다시 잰다.
@@ -2037,7 +2186,7 @@ function WatchForm({
   );
 }
 
-function WatchTab({ status, prefill, onDone }: { status: OrderStatus; prefill: Prefill; onDone: () => void }) {
+function WatchTab({ status, prefill, onDone, onHistory }: { status: OrderStatus; prefill: Prefill; onDone: () => void; onHistory: () => void }) {
   const [rows, setRows] = useState<AutoWatch[]>([]);
   const [prices, setPrices] = useState<Record<string, { price: number; from: string }>>({});
   const [error, setError] = useState<string | null>(null);
@@ -2141,19 +2290,130 @@ function WatchTab({ status, prefill, onDone }: { status: OrderStatus; prefill: P
       )}
 
       {done.length > 0 && (
-        <>
-          <h4 className="ord-h4">지난 감시</h4>
-          <div className="ord-wcards done">
-            {done.map((r) => (
-              <WatchCard key={r.id} r={r} cur={null} busy={false} onCancel={null} onEdit={null} editing={false} />
-            ))}
-          </div>
-        </>
+        <p className="ord-caps">
+          지난 감시 {done.length}건 —{" "}
+          <button type="button" className="ord-mk" onClick={onHistory}>
+            감시 히스토리 탭에서
+          </button>
+        </p>
       )}
       <p className="ord-note">
         자동감시는 <b>서버가 값을 보다가 조건에 닿으면</b> 미리 승인해 둔 주문서를 <b>한 번</b> 내는 것이다. 발동 순간 종목 허용·한 건·하루
         한도·가격 자(그때 값 ±{status.guard.priceCollarPct}%)를 다시 잰다. 실패해도 다시 안 낸다. 잔고 줄의 「👁 감시매도」를 누르면 폼이 채워진다.
       </p>
+    </div>
+  );
+}
+
+/**
+ * 감시 히스토리 탭 (2026-09-07 밤) — 지난 감시를 한 줄씩. 누르면 카드로 펼쳐진다. 삭제·모두 지우기.
+ * 지우는 것은 이 목록에서만이다 — 주문 기록(orderLog)엔 남는다.
+ */
+function WatchHistoryTab() {
+  const [rows, setRows] = useState<AutoWatch[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | AutoWatch["status"]>("all");
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api.orderWatch();
+      setRows((r.rows ?? []).filter((x) => x.status !== "waiting" && x.status !== "fired"));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "조회 실패");
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function remove(r: AutoWatch) {
+    setBusy(r.id);
+    try {
+      await api.orderWatchDelete(r.id);
+      setRows((prev) => prev.filter((x) => x.id !== r.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "삭제 실패");
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function clearAll() {
+    if (!window.confirm(`지난 감시 ${rows.length}건을 모두 지울까요? 주문 기록에는 남습니다.`)) return;
+    setBusy("*");
+    try {
+      await api.orderWatchClear();
+      setRows([]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "삭제 실패");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const shown = filter === "all" ? rows : rows.filter((r) => r.status === filter);
+  const counts = rows.reduce<Record<string, number>>((m, r) => ({ ...m, [r.status]: (m[r.status] ?? 0) + 1 }), {});
+
+  return (
+    <div className="ord-tab">
+      {error && <p className="ord-err">{error}</p>}
+      <div className="ord-wt-head">
+        <h4 className="ord-h4">
+          감시 히스토리 {rows.length > 0 && <span className="ord-count">{rows.length}</span>}
+          <i className="ord-h4-sub">줄을 누르면 펼쳐진다 · 지워도 주문 기록엔 남는다</i>
+        </h4>
+        {rows.length > 0 && (
+          <button type="button" className="ord-x" disabled={busy === "*"} onClick={() => void clearAll()}>
+            모두 지우기
+          </button>
+        )}
+      </div>
+      {rows.length > 0 && (
+        <div className="ord-wh-filter">
+          {(["all", "filled", "failed", "expired", "cancelled"] as const).map((k) => (
+            <button key={k} type="button" className={filter === k ? "on" : ""} onClick={() => setFilter(k)}>
+              {k === "all" ? "전체" : WATCH_STATUS_KO[k]}
+              {k !== "all" && counts[k] ? ` ${counts[k]}` : ""}
+            </button>
+          ))}
+        </div>
+      )}
+      {shown.length === 0 ? (
+        <p className="empty">지난 감시가 없다</p>
+      ) : (
+        <div className="ord-wh-list">
+          {shown.map((r) => {
+            const t = r.ticket;
+            const s = r.spec;
+            const isOpen = Boolean(open[r.id]);
+            return (
+              <div key={r.id} className={`ord-wh-row ${t.side}${isOpen ? " open" : ""}`}>
+                <button type="button" className="ord-wh-line" onClick={() => setOpen((m) => ({ ...m, [r.id]: !isOpen }))}>
+                  <span className="ord-wh-when">{localTs(r.firedAt ?? r.at)}</span>
+                  <b className={`ord-side ${t.side}`}>{t.side === "buy" ? "매수" : "매도"}</b>
+                  <span className="ord-wh-name">{t.name || t.code}</span>
+                  <span className="ord-wh-cond">
+                    {s.trigger.toLocaleString()} {s.dir === "le" ? "이하" : "이상"} · {t.qty}주
+                  </span>
+                  <b className={`ord-rsv-st ${r.status}`}>{WATCH_STATUS_KO[r.status]}</b>
+                  {r.status === "filled" && r.fillPrice ? <span className="ord-wh-fill">@ {r.fillPrice.toLocaleString()}</span> : null}
+                  <i className="ord-wh-arrow">{isOpen ? "▲" : "▼"}</i>
+                </button>
+                {isOpen && (
+                  <div className="ord-wh-body">
+                    <WatchCard r={r} cur={null} busy={false} onCancel={null} onEdit={null} editing={false} />
+                    <button type="button" className="ord-x" disabled={busy === r.id} onClick={() => void remove(r)}>
+                      {busy === r.id ? "…" : "이 기록 지우기"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -2196,6 +2456,7 @@ function WatchCard({
           {t.name || t.code} <span className="ord-code">{t.code}</span>
         </span>
         {r.parentId && <i className="ord-watch-tag">체결 뒤 자동</i>}
+        {r.groupId && <i className="ord-watch-tag">단계 {r.groupId.slice(0, 4)}</i>}
         <span className={`ord-rsv-st ${r.status}`}>{stKo}</span>
         {onEdit && r.status === "waiting" && (
           <button type="button" className={`ord-x edit${editing ? " on" : ""}`} disabled={busy} onClick={onEdit} title="값을 고쳐 새 주문서로 바꾼다 — 확인·비밀번호를 다시 지난다">
@@ -2265,10 +2526,10 @@ function WatchCard({
           <i style={{ width: `${walked}%` }} />
         </div>
       )}
-      {s.then && (
+      {s.then && s.then.length > 0 && (
         <div className="ord-wcard-then">
-          ↳ 체결되면 체결가 대비 <b>{s.then.pct}%</b> 에 {s.then.exec === "market" ? "시장가" : "그때 현재가 지정가"} 매도 감시를 자동으로 건다
-          {r.childId ? " · 걸렸다" : ""}
+          ↳ 체결되면 체결가 대비 <b>{legsSay(s.then)}</b> 매도 감시를 자동으로 건다
+          {r.childIds?.length ? ` · ${r.childIds.length}건 걸렸다` : r.childId ? " · 걸렸다" : ""}
         </div>
       )}
       {r.status === "fired" && (

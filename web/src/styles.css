@@ -16558,3 +16558,42 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-wcard.editing { outline: 2px dashed var(--accent, #e6a23c); }
 .ord-wform.editing { border-style: dashed; }
 .ord-wform-edit { padding: 0.5rem 0.7rem; background: color-mix(in srgb, var(--accent, #e6a23c) 14%, var(--panel-2)); font-size: 0.85rem; display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+
+/* 감시 히스토리 (2026-09-07 밤) */
+.ord-wh-filter { display: flex; gap: 0.3rem; flex-wrap: wrap; margin: 0.2rem 0 0.6rem; }
+.ord-wh-filter button { padding: 0.2rem 0.6rem; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 0.78rem; cursor: pointer; }
+.ord-wh-filter button.on { color: var(--text); border-color: var(--accent, #e6a23c); }
+.ord-wh-list { display: flex; flex-direction: column; gap: 0.3rem; }
+.ord-wh-row { border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 8px; background: var(--panel-2); }
+.ord-wh-row.buy { border-left-color: var(--red); }
+.ord-wh-row.sell { border-left-color: var(--blue); }
+.ord-wh-line { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.45rem 0.6rem; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 0.86rem; cursor: pointer; text-align: left; }
+.ord-wh-when { color: var(--muted); font-size: 0.76rem; flex: 0 0 5.6rem; }
+.ord-wh-name { font-weight: 700; }
+.ord-wh-cond { color: var(--muted); }
+.ord-wh-fill { color: var(--muted); font-size: 0.8rem; }
+.ord-wh-arrow { margin-left: auto; font-style: normal; color: var(--muted); font-size: 0.7rem; }
+.ord-wh-body { padding: 0 0.6rem 0.6rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-start; }
+.ord-wh-body .ord-wcard { width: 100%; }
+
+/* 단계 편집기 (2026-09-07 밤) */
+.ord-legs { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.45rem 0.55rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.ord-legs.off { opacity: 0.5; }
+.ord-legs-presets { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.ord-legs-presets button { padding: 0.15rem 0.5rem; border: 1px solid var(--border); border-radius: 999px; background: var(--panel-2); color: var(--text); font-size: 0.76rem; cursor: pointer; }
+.ord-leg { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; padding-left: 0.4rem; border-left: 3px solid var(--muted); }
+.ord-leg.loss { border-left-color: var(--blue); }
+.ord-leg.gain { border-left-color: var(--red); }
+.ord-leg-n { font-size: 0.74rem; color: var(--muted); flex: 0 0 2.6rem; }
+.ord-leg-est { font-size: 0.78rem; color: var(--muted); }
+.ord-leg-x { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.ord-legs-foot { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; font-size: 0.8rem; }
+.ord-legs-sum { color: var(--muted); }
+.ord-watch-split { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.85rem; padding: 0.4rem 0.55rem; border-radius: 6px; background: var(--panel); border: 1px solid var(--border); }
+.ord-watch-split input { margin-top: 0.2rem; }
+.ord-watch-then { display: flex; flex-direction: column; gap: 0.4rem; }
+.ord-watch-then-head { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.85rem; cursor: pointer; }
+.ord-watch-then-head input { margin-top: 0.2rem; }
+/* 히스토리 줄 — 좁은 폭에서 이름이 세로로 깨지던 것 */
+.ord-wh-line { flex-wrap: wrap; }
+.ord-wh-name, .ord-wh-cond, .ord-wh-when { white-space: nowrap; }

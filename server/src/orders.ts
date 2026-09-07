@@ -775,8 +775,16 @@ export interface WatchSpec {
   limitPrice: number | null;
   /** 유효한 마지막 날(KST) — 그날 장이 끝나면 만료 */
   validUntil: string;
-  /** 매수 감시가 체결되면 자동으로 거는 매도 감시 — 체결가 대비 pct */
-  then: { pct: number; exec: "market" | "limit_now" } | null;
+  /**
+   * 매수 감시가 체결되면 자동으로 거는 매도 감시 — **단계**(2026-09-07 밤, 벤티지: "몇 프로만 팔 건지도
+   * 설정해야지"). 체결가 대비 pct 에 체결 수량의 qtyPct 만큼. 예: [−3%·50%·시장가, −7%·50%·시장가].
+   */
+  then: WatchLeg[] | null;
+  /**
+   * 매도 감시를 **단계로 나눠** 거는 틀 — 기준가 대비 pct 에 대상 수량의 qtyPct. 실행 단계에서 단계마다
+   * 감시 한 건씩 태어나고(같은 groupId), 이 틀 자체는 저장되지 않는다.
+   */
+  legs?: WatchLeg[] | null;
   /**
    * **수정** (2026-09-07 밤) — 이 감시가 등록되는 순간 `replaceId` 의 옛 감시를 「수정으로 대체」로 접는다.
    * 수정도 새 주문서다: 확인 창·비밀번호를 그대로 지난다. 옛것을 제자리에서 고치는 길은 없다.
@@ -828,6 +836,14 @@ export interface PrepareInput {
   watch?: WatchInput | null;
 }
 
+export interface WatchLeg {
+  /** 기준가(체결가·평단…) 대비 % — 음수면 손절, 양수면 익절 */
+  pct: number;
+  /** 대상 수량의 몇 % 를 파나 (1~100). 단계 합은 100 을 못 넘는다 */
+  qtyPct: number;
+  exec: "market" | "limit_now";
+}
+
 export interface WatchInput {
   dir: WatchDir;
   basis: WatchBasis;
@@ -837,9 +853,42 @@ export interface WatchInput {
   exec: WatchExec;
   limitPrice: number | null;
   validUntil: string | null;
-  then: { pct: number; exec: "market" | "limit_now" } | null;
+  then: WatchLeg[] | null;
+  legs: WatchLeg[] | null;
   /** 수정 — 이 id 의 감시를 대체한다 */
   replaceId?: string | null;
+}
+
+/** 단계 목록을 검사한다 — 하나라도 어긋나면 이유를 돌려준다 */
+function checkLegs(legs: WatchLeg[], what: string): string | null {
+  if (legs.length === 0 || legs.length > 4) return `${what}는 1~4단계`;
+  let sum = 0;
+  const seen = new Set<number>();
+  for (const l of legs) {
+    if (!Number.isFinite(l.pct) || l.pct === 0 || Math.abs(l.pct) > 30) return `${what}의 %가 이상하다 (0 아닌 ±30 이내)`;
+    if (!Number.isInteger(l.qtyPct) || l.qtyPct < 1 || l.qtyPct > 100) return `${what}의 수량 %는 1~100`;
+    if (l.exec !== "market" && l.exec !== "limit_now") return `${what}는 시장가 또는 지정가(그때 현재가)`;
+    if (seen.has(l.pct)) return `${what}에 같은 %가 두 번 있다`;
+    seen.add(l.pct);
+    sum += l.qtyPct;
+  }
+  if (sum > 100) return `${what}의 수량 % 합이 ${sum} — 100 을 넘는다`;
+  return null;
+}
+
+/** 대상 수량을 단계별로 나눈다 — 내림하고, 합이 100 이면 마지막 단계가 나머지를 가져간다 */
+function splitQty(total: number, legs: WatchLeg[]): number[] {
+  const out = legs.map((l) => Math.floor((total * l.qtyPct) / 100));
+  const sum = legs.reduce((a, l) => a + l.qtyPct, 0);
+  if (sum === 100) {
+    const used = out.reduce((a, b) => a + b, 0);
+    out[out.length - 1] += total - used;
+  }
+  return out;
+}
+
+function legsSay(legs: WatchLeg[]): string {
+  return legs.map((l) => `${l.pct > 0 ? "+" : ""}${l.pct}%에 ${l.qtyPct}% ${l.exec === "market" ? "시장가" : "지정가"}`).join(" · ");
 }
 
 function reject(msg: string, input: Partial<PrepareInput>, ip: string): never {
@@ -962,11 +1011,29 @@ export async function prepareOrder(
     if (validUntil > addDays(today, 30)) reject("유효기간은 30일까지", input, ip);
     if (wi.basis === "prevClose" && validUntil !== today) reject("전일 종가 기준은 당일만 — 내일은 기준가가 다르다", input, ip);
     let then: WatchSpec["then"] = null;
-    if (wi.then) {
+    if (wi.then && wi.then.length > 0) {
       if (input.side !== "buy") reject("「체결되면 매도 감시」는 매수 감시에만 붙는다", input, ip);
-      if (!Number.isFinite(wi.then.pct) || wi.then.pct === 0 || Math.abs(wi.then.pct) > 30) reject("체결 뒤 매도 %가 이상하다", input, ip);
-      if (wi.then.exec !== "market" && wi.then.exec !== "limit_now") reject("체결 뒤 매도는 시장가 또는 지정가(그때 현재가)", input, ip);
-      then = { pct: wi.then.pct, exec: wi.then.exec };
+      const bad = checkLegs(wi.then, "체결 뒤 매도 단계");
+      if (bad) reject(bad, input, ip);
+      then = wi.then.map((l) => ({ pct: l.pct, qtyPct: l.qtyPct, exec: l.exec }));
+    }
+    let legs: WatchSpec["legs"] = null;
+    if (wi.legs && wi.legs.length > 0) {
+      if (input.side !== "sell") reject("단계로 나눠 파는 것은 매도 감시에서만", input, ip);
+      if (wi.basis === "price") reject("단계 매도는 기준가(평단·지금 값·전일 종가) 대비로만", input, ip);
+      const bad = checkLegs(wi.legs, "매도 단계");
+      if (bad) reject(bad, input, ip);
+      legs = wi.legs.map((l) => ({ pct: l.pct, qtyPct: l.qtyPct, exec: l.exec }));
+      const qs = splitQty(input.qty, legs);
+      if (qs.some((n) => n <= 0)) reject("수량이 적어 어느 단계가 0주가 된다 — 단계를 줄이거나 수량을 늘려야 한다", input, ip);
+      /* 단계마다 이미 조건 안이면 안 된다 — 그 단계는 등록 즉시 나간다 */
+      for (const l of legs) {
+        const tr = toTick((basisPrice ?? 0) * (1 + l.pct / 100));
+        const d = l.pct < 0 ? "le" : "ge";
+        if ((d === "le" && q.price <= tr) || (d === "ge" && q.price >= tr)) {
+          reject(`${l.pct > 0 ? "+" : ""}${l.pct}% 단계(${tr.toLocaleString()})는 지금 값(${q.price.toLocaleString()})이 이미 조건 안이다`, input, ip);
+        }
+      }
     }
     const replaceId = wi.replaceId ?? null;
     const all = await listAutoWatches();
@@ -976,9 +1043,26 @@ export async function prepareOrder(
       if (old.status !== "waiting") reject(`수정하려는 감시가 이미 ${autoWatchStatusKo(old.status)} — 새로 걸어야 한다`, input, ip);
     }
     const active = all.filter((r) => r.status === "waiting" && r.id !== replaceId);
-    if (active.length >= WATCH_MAX) reject(`자동감시는 ${WATCH_MAX}건까지 — 기다리는 것을 먼저 정리해야 한다`, input, ip);
-    if (active.some((r) => r.ticket.code === input.code && r.ticket.side === input.side)) {
-      reject(`${input.name || input.code} ${input.side === "buy" ? "매수" : "매도"} 감시가 이미 있다 — 겹쳐 걸지 않는다`, input, ip);
+    /*
+     * 겹침 — 매수는 종목당 하나. 매도는 **단계**가 있으니 종목당 여럿이되 같은 발동가는 안 된다.
+     * 단계 매도(legs)는 단계 수만큼 자리를 쓴다.
+     */
+    const legCount = legs ? legs.length : 1;
+    if (active.length + legCount > WATCH_MAX) reject(`자동감시는 ${WATCH_MAX}건까지 — 기다리는 것을 먼저 정리해야 한다`, input, ip);
+    const sameSide = active.filter((r) => r.ticket.code === input.code && r.ticket.side === input.side);
+    if (input.side === "buy" && sameSide.length > 0) {
+      reject(`${input.name || input.code} 매수 감시가 이미 있다 — 겹쳐 걸지 않는다`, input, ip);
+    }
+    if (input.side === "sell") {
+      const triggers = legs ? legs.map((l) => toTick((basisPrice ?? 0) * (1 + l.pct / 100))) : [trigger];
+      const dup = sameSide.find((r) => triggers.includes(r.spec.trigger));
+      if (dup) reject(`${input.name || input.code} 매도 감시에 발동가 ${dup.spec.trigger.toLocaleString()}원이 이미 있다`, input, ip);
+      const held = sameSide.reduce((a, r) => a + r.ticket.qty, 0);
+      const acct = await orderAccount().catch(() => null);
+      const able = acct?.holdings.filter((x) => x.code === input.code && !x.creditType).reduce((a, x) => a + x.ableQty, 0) ?? null;
+      if (able !== null && held + input.qty > able) {
+        reject(`매도 감시 수량 합(${held + input.qty}주)이 매매가능수량(${able}주)을 넘는다`, input, ip);
+      }
     }
     watchSpec = {
       dir: wi.dir,
@@ -990,6 +1074,7 @@ export async function prepareOrder(
       limitPrice: wi.exec === "limit_fixed" ? wi.limitPrice : null,
       validUntil,
       then,
+      legs,
       replaceId,
     };
   }
@@ -1195,6 +1280,47 @@ export async function executePrepared(
   const t = p.ticket;
   const mock = orderIsMock();
   const tag = mock ? "[모의]" : "[실전]";
+  if (t.kind === "order" && t.watch && t.watch.legs && t.watch.legs.length > 0) {
+    /* 단계 매도 — 단계마다 감시 한 건. 같은 groupId. 한 번의 비밀번호로 여럿이 걸린다(확인 창에 단계가 다 적혀 있었다) */
+    const legs = t.watch.legs;
+    const qs = splitQty(t.qty, legs);
+    const groupId = randomBytes(4).toString("hex");
+    const ids: string[] = [];
+    for (let i = 0; i < legs.length; i++) {
+      const l = legs[i];
+      const trigger = toTick((t.watch.basisPrice ?? 0) * (1 + l.pct / 100));
+      const spec: WatchSpec = {
+        dir: l.pct < 0 ? "le" : "ge",
+        basis: t.watch.basis,
+        pct: l.pct,
+        basisPrice: t.watch.basisPrice,
+        trigger,
+        exec: l.exec,
+        limitPrice: null,
+        validUntil: t.watch.validUntil,
+        then: null,
+      };
+      const leg: OrderTicket = {
+        ...t,
+        qty: qs[i],
+        price: null,
+        condPrice: null,
+        tradeType: l.exec === "market" ? "3" : "0",
+        tradeLabel: l.exec === "market" ? "시장가" : "보통(지정가)",
+        amount: trigger * qs[i],
+        watch: spec,
+      };
+      const row = await addAutoWatch(leg, ip, undefined, groupId);
+      ids.push(row.id);
+    }
+    if (t.watch.replaceId) await retireAutoWatch(t.watch.replaceId, ids[0]);
+    await appendLog({ kind: "watch", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, tradeType: t.tradeType, venue: t.venue, amount: t.amount, msg: `단계 매도 감시 ${legs.length}건 등록 (${ids.join(",")}) — ${legsSay(legs)}` });
+    void sendTelegram(
+      `👁 ${tag} <b>단계 매도 감시 등록</b> ${esc(t.name)} ${t.qty}주를 ${legs.length}단계로\n${esc(legsSay(legs))}\n${t.watch.validUntil} 까지 · 주문 › 자동감시 탭`,
+      "order",
+    ).catch(() => undefined);
+    return { ordNo: "", msg: `단계 매도 감시 ${legs.length}건 등록 — ${legsSay(legs)}`, ticket: t, remembered };
+  }
   if (t.kind === "order" && t.watch) {
     const row = await addAutoWatch(t, ip);
     const sideKo = t.side === "buy" ? "매수" : "매도";
@@ -1554,9 +1680,12 @@ export interface AutoWatch {
   fillQty?: number;
   fillPrice?: number;
   msg?: string;
-  /** 「체결되면 매도 감시」로 태어난 자식이면 부모, 부모면 자식 */
+  /** 「체결되면 매도 감시」로 태어난 자식이면 부모, 부모면 자식(들) */
   parentId?: string;
   childId?: string;
+  childIds?: string[];
+  /** 단계 매도로 함께 태어난 형제들의 묶음 */
+  groupId?: string;
 }
 
 const WATCH_FILE = join(DATA_DIR, "orderWatch.json");
@@ -1598,13 +1727,25 @@ export function watchSay(s: WatchSpec): string {
       : `${basisKo}(${(s.basisPrice ?? 0).toLocaleString()}) 대비 ${s.pct! > 0 ? "+" : ""}${s.pct}% → ${s.trigger.toLocaleString()}원 ${s.dir === "le" ? "이하" : "이상"}`;
   const exec =
     s.exec === "market" ? "시장가" : s.exec === "limit_trigger" ? "발동가 지정가" : s.exec === "limit_now" ? "그때 현재가 지정가" : `${(s.limitPrice ?? 0).toLocaleString()}원 지정가`;
-  const then = s.then ? ` · 체결되면 체결가 대비 ${s.then.pct}% 에 ${s.then.exec === "market" ? "시장가" : "지정가"} 매도 감시` : "";
+  const then = s.then && s.then.length > 0 ? ` · 체결되면 체결가 대비 ${legsSay(s.then)} 매도 감시` : "";
+  if (s.legs && s.legs.length > 0) {
+    return `${basisKo}(${(s.basisPrice ?? 0).toLocaleString()}) 대비 ${legsSay(s.legs)} — ${s.legs.length}단계 매도`;
+  }
   return `${cond}면 ${exec}${then}`;
 }
 
 async function readWatches(): Promise<AutoWatch[]> {
   const v = await readJson<{ rows: AutoWatch[] }>(WATCH_FILE, { rows: [] });
-  return Array.isArray(v.rows) ? v.rows : [];
+  const rows = Array.isArray(v.rows) ? v.rows : [];
+  /* 옛 모양(then 이 객체 하나)은 단계 하나·전량으로 읽는다 */
+  for (const r of rows) {
+    const th = r.spec?.then as unknown;
+    if (th && !Array.isArray(th) && typeof th === "object") {
+      const one = th as { pct: number; exec: "market" | "limit_now" };
+      r.spec.then = [{ pct: one.pct, qtyPct: 100, exec: one.exec }];
+    }
+  }
+  return rows;
 }
 
 async function writeWatches(rows: AutoWatch[]): Promise<void> {
@@ -1618,22 +1759,27 @@ export async function listAutoWatches(): Promise<AutoWatch[]> {
   return (await readWatches()).sort((a, b) => rank(a.status) - rank(b.status) || b.at.localeCompare(a.at));
 }
 
-async function addAutoWatch(t: OrderTicket, ip: string, parentId?: string): Promise<AutoWatch> {
+async function addAutoWatch(t: OrderTicket, ip: string, parentId?: string, groupId?: string): Promise<AutoWatch> {
   if (!t.watch) throw new Error("감시 조건이 없다");
   const rows = await readWatches();
+  const { legs: _legs, replaceId: _rid, ...spec } = t.watch;
   const row: AutoWatch = {
     id: randomBytes(6).toString("hex"),
     at: new Date().toISOString(),
     ip,
-    ticket: t,
-    spec: t.watch,
+    ticket: { ...t, watch: spec },
+    spec,
     status: "waiting",
     ...(parentId ? { parentId } : {}),
+    ...(groupId ? { groupId } : {}),
   };
   rows.push(row);
   if (parentId) {
     const p = rows.find((r) => r.id === parentId);
-    if (p) p.childId = row.id;
+    if (p) {
+      p.childId = row.id;
+      p.childIds = [...(p.childIds ?? []), row.id];
+    }
   }
   await writeWatches(rows);
   void ensureLiveCode(t.code);
@@ -1654,6 +1800,28 @@ async function retireAutoWatch(oldId: string, newId: string): Promise<boolean> {
   old.msg = `수정으로 대체 → ${newId}`;
   await writeWatches(rows);
   return true;
+}
+
+/** 지난 감시 한 건을 목록에서 지운다 — 기록(orderLog)은 남는다. 살아 있는 것(waiting/fired)은 못 지운다 */
+export async function deleteAutoWatch(id: string, ip: string): Promise<void> {
+  const rows = await readWatches();
+  const row = rows.find((r) => r.id === id);
+  if (!row) throw new Error("그 감시가 없다");
+  if (row.status === "waiting" || row.status === "fired") throw new Error("살아 있는 감시는 지우지 않는다 — 먼저 취소");
+  await writeWatches(rows.filter((r) => r.id !== id));
+  await appendLog({ kind: "watch", ip, code: row.ticket.code, name: row.ticket.name, msg: `감시 히스토리 삭제 (${id}, ${autoWatchStatusKo(row.status)})` });
+}
+
+/** 지난 감시를 모두 지운다 — 살아 있는 것만 남긴다 */
+export async function clearAutoWatchHistory(ip: string): Promise<number> {
+  const rows = await readWatches();
+  const keep = rows.filter((r) => r.status === "waiting" || r.status === "fired");
+  const n = rows.length - keep.length;
+  if (n > 0) {
+    await writeWatches(keep);
+    await appendLog({ kind: "watch", ip, msg: `감시 히스토리 ${n}건 모두 삭제` });
+  }
+  return n;
 }
 
 export async function cancelAutoWatch(id: string, ip: string): Promise<AutoWatch> {
@@ -1845,36 +2013,48 @@ async function onAutoWatchFill(id: string, ev: { filled: number; price: number; 
     r.status = ev.filled > 0 ? "filled" : "failed";
     if (ev.filled === 0) r.msg = `체결 없이 끝났다 — ${ev.status}`;
   }
-  if (ev.done && ev.filled > 0 && r.spec.then && r.ticket.side === "buy" && !r.childId) {
+  if (ev.done && ev.filled > 0 && r.spec.then && r.spec.then.length > 0 && r.ticket.side === "buy" && !r.childId) {
     const fillPx = r.fillPrice && r.fillPrice > 0 ? r.fillPrice : r.firePrice ?? r.spec.trigger;
-    const trigger = toTick(fillPx * (1 + r.spec.then.pct / 100));
-    const childSpec: WatchSpec = {
-      dir: r.spec.then.pct < 0 ? "le" : "ge",
-      basis: "avg",
-      pct: r.spec.then.pct,
-      basisPrice: fillPx,
-      trigger,
-      exec: r.spec.then.exec,
-      limitPrice: null,
-      validUntil: addDays(kstParts().date, 30),
-      then: null,
-    };
-    const child: OrderTicket = {
-      ...r.ticket,
-      side: "sell",
-      qty: ev.filled,
-      price: null,
-      condPrice: null,
-      tradeType: r.spec.then.exec === "market" ? "3" : "0",
-      tradeLabel: r.spec.then.exec === "market" ? "시장가" : "보통(지정가)",
-      refPrice: fillPx,
-      amount: trigger * ev.filled,
-      watch: childSpec,
-    };
+    const legs = r.spec.then;
+    const qs = splitQty(ev.filled, legs);
     await writeWatches(rows);
-    const c = await addAutoWatch(child, r.ip, r.id);
-    await appendLog({ kind: "watch", ip: r.ip, side: "sell", code: child.code, name: child.name, qty: child.qty, venue: child.venue, amount: child.amount, msg: `체결 뒤 매도 감시 자동 등록 (${c.id}, 부모 ${r.id}) — ${watchSay(childSpec)}` });
-    void sendTelegram(`👁 ${orderIsMock() ? "[모의]" : "[실전]"} <b>매도 감시 자동 등록</b> ${esc(child.name)} ${child.qty}주\n${esc(watchSay(childSpec))}\n${childSpec.validUntil} 까지`, "order").catch(() => undefined);
+    const groupId = randomBytes(4).toString("hex");
+    const made: string[] = [];
+    for (let i = 0; i < legs.length; i++) {
+      if (qs[i] <= 0) continue;
+      const l = legs[i];
+      const trigger = toTick(fillPx * (1 + l.pct / 100));
+      const childSpec: WatchSpec = {
+        dir: l.pct < 0 ? "le" : "ge",
+        basis: "avg",
+        pct: l.pct,
+        basisPrice: fillPx,
+        trigger,
+        exec: l.exec,
+        limitPrice: null,
+        validUntil: addDays(kstParts().date, 30),
+        then: null,
+      };
+      const child: OrderTicket = {
+        ...r.ticket,
+        side: "sell",
+        qty: qs[i],
+        price: null,
+        condPrice: null,
+        tradeType: l.exec === "market" ? "3" : "0",
+        tradeLabel: l.exec === "market" ? "시장가" : "보통(지정가)",
+        refPrice: fillPx,
+        amount: trigger * qs[i],
+        watch: childSpec,
+      };
+      const c = await addAutoWatch(child, r.ip, r.id, groupId);
+      made.push(c.id);
+      await appendLog({ kind: "watch", ip: r.ip, side: "sell", code: child.code, name: child.name, qty: child.qty, venue: child.venue, amount: child.amount, msg: `체결 뒤 매도 감시 자동 등록 (${c.id}, 부모 ${r.id}) — ${watchSay(childSpec)}` });
+    }
+    void sendTelegram(
+      `👁 ${orderIsMock() ? "[모의]" : "[실전]"} <b>매도 감시 자동 등록</b> ${esc(r.ticket.name)} ${ev.filled}주 체결 → ${made.length}단계\n체결가 ${fillPx.toLocaleString()} 대비 ${esc(legsSay(legs))}\n30일 유효`,
+      "order",
+    ).catch(() => undefined);
     return;
   }
   await writeWatches(rows);

@@ -28,9 +28,12 @@ import {
   forgetPassword,
   type OrderVenue,
   type WatchInput,
+  type WatchLeg,
   autoWatchSummary,
   buyPower,
   cancelAutoWatch,
+  clearAutoWatchHistory,
+  deleteAutoWatch,
   listAutoWatches,
   watchPrices,
   watchQuote,
@@ -68,9 +71,18 @@ function watchInputOf(v: unknown): WatchInput | null {
   if (!v || typeof v !== "object") return null;
   const w = v as Record<string, unknown>;
   const numOr = (x: unknown): number | null => (x === null || x === undefined || x === "" ? null : Number(x));
-  const then =
-    w.then && typeof w.then === "object"
-      ? { pct: Number((w.then as Record<string, unknown>).pct), exec: String((w.then as Record<string, unknown>).exec ?? "market") as "market" | "limit_now" }
+  const legsOf = (x: unknown): WatchLeg[] | null => {
+    if (!Array.isArray(x) || x.length === 0) return null;
+    return x.slice(0, 8).map((l) => {
+      const o2 = (l && typeof l === "object" ? l : {}) as Record<string, unknown>;
+      return { pct: Number(o2.pct), qtyPct: Number(o2.qtyPct), exec: (o2.exec === "limit_now" ? "limit_now" : "market") as "market" | "limit_now" };
+    });
+  };
+  /* 옛 화면이 then 을 객체 하나로 보내도 받는다 */
+  const then = Array.isArray(w.then)
+    ? legsOf(w.then)
+    : w.then && typeof w.then === "object"
+      ? [{ pct: Number((w.then as Record<string, unknown>).pct), qtyPct: 100, exec: ((w.then as Record<string, unknown>).exec === "limit_now" ? "limit_now" : "market") as "market" | "limit_now" }]
       : null;
   return {
     dir: w.dir === "ge" ? "ge" : "le",
@@ -81,6 +93,7 @@ function watchInputOf(v: unknown): WatchInput | null {
     limitPrice: numOr(w.limitPrice),
     validUntil: w.validUntil ? String(w.validUntil) : null,
     then,
+    legs: legsOf(w.legs),
     replaceId: w.replaceId ? String(w.replaceId).replace(/[^0-9a-f]/g, "").slice(0, 12) || null : null,
   };
 }
@@ -380,6 +393,22 @@ export function createOrderRouter(main: KiwoomClient): Router {
       res.json(await watchQuote(main, code));
     } catch (e) {
       res.status(502).json({ error: e instanceof Error ? e.message : "조회 실패" });
+    }
+  });
+  router.post("/watch/delete", async (req, res) => {
+    try {
+      const b = (req.body ?? {}) as Record<string, unknown>;
+      await deleteAutoWatch(String(b.id ?? ""), clientIp(req));
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
+    }
+  });
+  router.post("/watch/clear", async (req, res) => {
+    try {
+      res.json({ ok: true, removed: await clearAutoWatchHistory(clientIp(req)) });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
     }
   });
   router.post("/watch/cancel", async (req, res) => {

@@ -1011,6 +1011,8 @@ export const api = {
     getJson<{ price: number; prevClose: number; changeRate: number; avg: number | null; held: number; ableQty: number; deposit: number }>(
       `/api/order/watch/quote?code=${code}`,
     ),
+  orderWatchDelete: (id: string) => orderPost<{ ok: boolean }>("/api/order/watch/delete", { id }),
+  orderWatchClear: () => orderPost<{ ok: boolean; removed: number }>("/api/order/watch/clear", {}),
   orderWatchCancel: (id: string) => orderPost<{ ok: boolean; row: AutoWatch }>("/api/order/watch/cancel", { id }),
   /** 어느 가격에 몇 주까지 — 현금만·증거금·신용 셋을 한 번에 (주문 세션 안에서만) */
   orderBuyPower: (code: string, price: number) =>
@@ -6766,6 +6768,11 @@ export interface OrderTicket {
 export type WatchDir = "le" | "ge";
 export type WatchBasis = "price" | "prevClose" | "avg" | "now";
 export type WatchExec = "market" | "limit_trigger" | "limit_now" | "limit_fixed";
+export interface WatchLeg {
+  pct: number;
+  qtyPct: number;
+  exec: "market" | "limit_now";
+}
 export interface WatchSpec {
   dir: WatchDir;
   basis: WatchBasis;
@@ -6775,7 +6782,8 @@ export interface WatchSpec {
   exec: WatchExec;
   limitPrice: number | null;
   validUntil: string;
-  then: { pct: number; exec: "market" | "limit_now" } | null;
+  then: WatchLeg[] | null;
+  legs?: WatchLeg[] | null;
   replaceId?: string | null;
 }
 export interface WatchInput {
@@ -6786,7 +6794,8 @@ export interface WatchInput {
   exec: WatchExec;
   limitPrice: number | null;
   validUntil: string | null;
-  then: { pct: number; exec: "market" | "limit_now" } | null;
+  then: WatchLeg[] | null;
+  legs: WatchLeg[] | null;
   /** 수정 — 이 id 의 감시를 대체 (2026-09-07 밤) */
   replaceId?: string | null;
 }
@@ -6805,6 +6814,8 @@ export interface AutoWatch {
   msg?: string;
   parentId?: string;
   childId?: string;
+  childIds?: string[];
+  groupId?: string;
 }
 
 export interface CancelTicket {
