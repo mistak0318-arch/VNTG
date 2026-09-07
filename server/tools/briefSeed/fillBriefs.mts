@@ -98,30 +98,55 @@ let done = 0;
 let ok = 0;
 let skip = 0;
 let fail = 0;
+/**
+ * 연속 실패. **API 가 죽으면 즉시 멈추려고 센다.**
+ *
+ * 2026-09-08 새벽에 Anthropic 크레딧이 318 종목에서 떨어졌는데, 남은 2,400 종목을
+ * 그대로 두드리며 「재료없음」만 쌓았다. 사유를 안 찍은 탓에 한참 뒤에 알았다.
+ */
+let streak = 0;
+let lastWhy = "";
+let aborted = false;
 const failures: { code: string; name: string; why: string }[] = [];
 const started = Date.now();
+/** 이만큼 내리 실패하면 뭔가 근본이 고장 난 것이다 — 종목 문제가 아니다 */
+const ABORT_AFTER = 20;
 
 async function work(s: SnapStock): Promise<void> {
   try {
     const r = await companyBrief(s.code, s.name, { run: true, force: FORCE });
-    if (r.brief && r.ran) ok++;
-    else if (r.error) {
+    if (r.brief && r.ran) {
+      ok++;
+      streak = 0;
+    } else {
       skip++;
-      failures.push({ code: s.code, name: s.name, why: r.error });
-    } else skip++;
+      streak++;
+      if (r.error) {
+        lastWhy = r.error;
+        failures.push({ code: s.code, name: s.name, why: r.error });
+      }
+    }
   } catch (e) {
     fail++;
-    failures.push({ code: s.code, name: s.name, why: String(e).slice(0, 120) });
+    streak++;
+    lastWhy = String(e).slice(0, 160);
+    failures.push({ code: s.code, name: s.name, why: lastWhy });
   } finally {
     done++;
+    if (streak >= ABORT_AFTER && !aborted) {
+      aborted = true;
+      console.error(`\n⚠ ${ABORT_AFTER}종목 내리 실패해 멈춥니다. 마지막 사유:\n  ${lastWhy}\n`);
+    }
     if (done % 10 === 0 || done === todo.length) {
       const el = (Date.now() - started) / 1000;
       const rate = done / el;
       const left = (todo.length - done) / rate;
       console.log(
         `  ${done}/${todo.length} (${((done / todo.length) * 100).toFixed(1)}%) ` +
-          `· 성공 ${ok} 재료없음 ${skip} 오류 ${fail} ` +
-          `· ${rate.toFixed(2)}종목/초 · 남은 시간 약 ${Math.round(left / 60)}분`,
+          `· 성공 ${ok} 못만듦 ${skip} 오류 ${fail} ` +
+          `· ${rate.toFixed(2)}종목/초 · 남은 시간 약 ${Math.round(left / 60)}분` +
+          /* 사유를 여기서 같이 보여 준다. 끝나고 나서 알면 이미 다 헛돈 뒤다 */
+          (streak > 0 && lastWhy ? `\n     ↳ 최근 실패(${streak}연속): ${lastWhy.slice(0, 100)}` : ""),
       );
     }
   }
@@ -131,6 +156,7 @@ async function work(s: SnapStock): Promise<void> {
 let cursor = 0;
 async function worker(): Promise<void> {
   for (;;) {
+    if (aborted) return;
     const i = cursor++;
     if (i >= todo.length) return;
     await work(todo[i]);
@@ -139,7 +165,8 @@ async function worker(): Promise<void> {
 await Promise.all(Array.from({ length: CONC }, () => worker()));
 
 const mins = ((Date.now() - started) / 60000).toFixed(1);
-console.log(`\n끝. ${mins}분 · 성공 ${ok} · 재료없음 ${skip} · 오류 ${fail}`);
+console.log(`\n${aborted ? "중단" : "끝"}. ${mins}분 · 성공 ${ok} · 못만듦 ${skip} · 오류 ${fail}`);
+if (aborted) console.log(`남은 ${todo.length - done}종목은 원인을 고치고 같은 명령을 다시 주면 이어서 간다.`);
 
 if (failures.length > 0) {
   /* 왜 못 만들었는지를 사유별로 묶어 준다. 하나씩 보면 3천 줄이라 안 읽힌다 */
