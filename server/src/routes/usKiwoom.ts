@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { usKiwoomDetail } from "../usKiwoomDetail.js";
+import { usRich } from "../usRich.js";
 
 /**
  * 키움 미국주식.
@@ -44,6 +45,18 @@ export function createUsKiwoomRouter(client: KiwoomClient): Router {
   router.get("/detail/:symbol", async (req, res, next) => {
     try {
       res.json(await usKiwoomDetail(client, req.params.symbol));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 풍부한 상세 (2026-09-07 밤) — 키움 추가 필드·업종·동종·SEC 재무·야후 의견/실적/보유/내부자·뉴스·국내 연동.
+   * 조각마다 따로 실패한다(`missing`). `?summary=1` 이면 뉴스 한글 요약(하루 1회 캐시)까지.
+   */
+  router.get("/rich/:symbol", async (req, res, next) => {
+    try {
+      res.json(await usRich(client, req.params.symbol, { summary: req.query.summary === "1" }));
     } catch (err) {
       next(err);
     }

@@ -1111,6 +1111,9 @@ export const api = {
   /** 키움 미국 세부 — 업종·프리장·52주·10호가. 한투 상세에 **얹는** 값이다(교체 아님) */
   usKiwoomDetail: (symbol: string) =>
     getJson<UsKiwoomDetailData>(`/api/us-kiwoom/detail/${encodeURIComponent(symbol)}`),
+  /** 풍부한 해외 상세 (2026-09-07) — SEC·야후·키움·국내 연동. summary=true 면 뉴스 한글 요약까지 */
+  usRich: (symbol: string, summary = false) =>
+    getJson<UsRich>(`/api/us-kiwoom/rich/${encodeURIComponent(symbol)}${summary ? "?summary=1" : ""}`),
   /* 마켓 브리핑 — 셋 다 서버 캐시·파일만 읽는다. 외부 호출 0 */
   briefingTimeline: (limit = 60) =>
     /* eventDay: 로그 이벤트(급증·시그널·손절·키워드)가 어느 날 것인가 — 자정 넘어 오늘 것이 없으면 마지막 장일 */
@@ -4657,6 +4660,105 @@ export interface IntradayLevels {
 }
 
 /* ── 키움 미국 세부 ────────────────────────────────────────── */
+
+/* ── 풍부한 해외 상세 (2026-09-07) — 서버 usRich.ts 와 같은 모양 ── */
+export interface FinPeriod {
+  frame: string;
+  end: string;
+  fy: number;
+  fp: string;
+  revenue: number | null;
+  operatingIncome: number | null;
+  netIncome: number | null;
+  eps: number | null;
+  operatingCashFlow: number | null;
+  assets: number | null;
+  liabilities: number | null;
+  equity: number | null;
+}
+export interface UsRich {
+  symbol: string;
+  at: string;
+  extra: {
+    uncertainty: string;
+    competitiveAdvantage: string;
+    yearHigh: number | null;
+    yearHighDate: string;
+    yearHighGap: number | null;
+    yearLow: number | null;
+    yearLowDate: string;
+    yearLowGap: number | null;
+    upperLimit: number | null;
+    lowerLimit: number | null;
+    settleMonth: string;
+    prevOpen: number | null;
+    prevHigh: number | null;
+    prevLow: number | null;
+    open: number | null;
+    high: number | null;
+    low: number | null;
+    suspended: string;
+    sectorLg: string;
+    sectorSm: string;
+    stex: string;
+  } | null;
+  sector: { lg: UsSectorPerf | null; sm: UsSectorPerf | null; all: UsSectorPerf[] } | null;
+  peers: { symbol: string; name: string; price: number | null; changeRate: number | null; marketCap: number | null; volume: number | null }[] | null;
+  financials: { cik: string; entity: string; quarterly: FinPeriod[]; annual: FinPeriod[]; concepts: Record<string, string> } | null;
+  opinion: {
+    currentPrice: number | null;
+    targetHigh: number | null;
+    targetLow: number | null;
+    targetMean: number | null;
+    targetMedian: number | null;
+    recommendationMean: number | null;
+    recommendationKey: string;
+    analysts: number | null;
+    revenueTtm: number | null;
+    revenueGrowth: number | null;
+    grossMargin: number | null;
+    operatingMargin: number | null;
+    profitMargin: number | null;
+    returnOnEquity: number | null;
+    debtToEquity: number | null;
+    freeCashflow: number | null;
+    forwardPE: number | null;
+    trailingPE: number | null;
+    peg: number | null;
+    beta: number | null;
+    shortRatio: number | null;
+    shortPctFloat: number | null;
+    floatShares: number | null;
+    enterpriseValue: number | null;
+    evToEbitda: number | null;
+    trend: { period: string; strongBuy: number; buy: number; hold: number; sell: number; strongSell: number }[];
+    epsHistory: { quarter: string; actual: number | null; estimate: number | null; surprisePct: number | null }[];
+    nextEarnings: string;
+    nextEarningsIsEstimate: boolean;
+    epsEstimateNext: number | null;
+    revenueEstimateNext: number | null;
+    holders: { insidersPct: number | null; institutionsPct: number | null; institutionsCount: number | null };
+    insiders: { name: string; relation: string; text: string; shares: number | null; value: number | null; date: string }[];
+    profile: { sector: string; industry: string; employees: number | null; website: string; summary: string; city: string; country: string };
+    pre: { price: number | null; changeRate: number | null } | null;
+    post: { price: number | null; changeRate: number | null } | null;
+  } | null;
+  news: { title: string; link: string; at: string; source: string }[] | null;
+  newsKo: string | null;
+  krLinks: { label: string; krThemes: { name: string; changeRate: number | null }[]; gap: number | null; nextDay: number | null; beta: number | null; samples: number }[] | null;
+  missing: { part: string; why: string }[];
+}
+export interface UsSectorPerf {
+  code: string;
+  name: string;
+  d1: number | null;
+  d5: number | null;
+  m1: number | null;
+  m3: number | null;
+  m6: number | null;
+  ytd: number | null;
+  y1: number | null;
+}
 
 export interface UsKiwoomDetailData {
   summary: {

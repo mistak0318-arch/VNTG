@@ -13,6 +13,7 @@ import {
 import { CandleChart } from "../CandleChart";
 import { IntradayFlowChart } from "./IntradayFlowChart";
 import { IndexAnalysis, type DailyPt } from "./IndexAnalysis";
+import { UsRichPanel, type UsRichTab } from "./UsRichPanel";
 
 /**
  * 지수·원자재 차트.
@@ -295,6 +296,11 @@ export function YahooChartSheet({
    * 해외 개별종목은 제 상세가 따로 있어 이 탭이 없다.
    */
   const [sub, setSub] = useState<"overview" | "analysis">("overview");
+  /*
+   * 해외 개별종목 서브탭 (2026-09-07 밤) — 벤티지: "해외주식 눌렀을 때 나오는 정보가 굉장히 적어."
+   * 요약(있던 것) · 재무·실적 · 밸류·의견 · 수급 대체 · 뉴스 · 업종·동종 · 국내 연동.
+   */
+  const [usTab, setUsTab] = useState<"overview" | UsRichTab>("overview");
   const [anaDaily, setAnaDaily] = useState<DailyPt[] | null>(null);
   const [anaBench, setAnaBench] = useState<{ name: string; daily: DailyPt[] } | null>(null);
   const benchSym = target.symbol === "^GSPC" ? "^NDX" : "^GSPC";
@@ -622,6 +628,27 @@ export function YahooChartSheet({
           />
         )}
 
+        {usStock && (
+          <nav className="detail-tabs idx-sub us-sub">
+            {(
+              [
+                ["overview", "요약"],
+                ["fin", "재무·실적"],
+                ["value", "밸류·의견"],
+                ["flow", "수급 대체"],
+                ["news", "뉴스"],
+                ["sector", "업종·동종"],
+                ["kr", "국내 연동"],
+              ] as const
+            ).map(([k, label]) => (
+              <button key={k} className={`detail-tab${usTab === k ? " active" : ""}`} onClick={() => setUsTab(k)}>
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
+        {usStock && usTab !== "overview" && <UsRichPanel symbol={target.symbol} tab={usTab} />}
+
         {!usStock && (
           <nav className="detail-tabs idx-sub">
             <button className={`detail-tab${sub === "overview" ? " active" : ""}`} onClick={() => setSub("overview")}>
@@ -645,7 +672,7 @@ export function YahooChartSheet({
           )
         )}
 
-        {(sub === "overview" || usStock) && (
+        {((!usStock && sub === "overview") || (usStock && usTab === "overview")) && (
         <>
         <div className="filter-row">
           {ranges.map((r) => (
