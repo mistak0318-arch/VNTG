@@ -81,6 +81,7 @@ function watchInputOf(v: unknown): WatchInput | null {
     limitPrice: numOr(w.limitPrice),
     validUntil: w.validUntil ? String(w.validUntil) : null,
     then,
+    replaceId: w.replaceId ? String(w.replaceId).replace(/[^0-9a-f]/g, "").slice(0, 12) || null : null,
   };
 }
 

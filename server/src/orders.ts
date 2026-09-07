@@ -777,6 +777,11 @@ export interface WatchSpec {
   validUntil: string;
   /** 매수 감시가 체결되면 자동으로 거는 매도 감시 — 체결가 대비 pct */
   then: { pct: number; exec: "market" | "limit_now" } | null;
+  /**
+   * **수정** (2026-09-07 밤) — 이 감시가 등록되는 순간 `replaceId` 의 옛 감시를 「수정으로 대체」로 접는다.
+   * 수정도 새 주문서다: 확인 창·비밀번호를 그대로 지난다. 옛것을 제자리에서 고치는 길은 없다.
+   */
+  replaceId?: string | null;
 }
 
 export interface CancelTicket {
@@ -833,6 +838,8 @@ export interface WatchInput {
   limitPrice: number | null;
   validUntil: string | null;
   then: { pct: number; exec: "market" | "limit_now" } | null;
+  /** 수정 — 이 id 의 감시를 대체한다 */
+  replaceId?: string | null;
 }
 
 function reject(msg: string, input: Partial<PrepareInput>, ip: string): never {
@@ -961,7 +968,14 @@ export async function prepareOrder(
       if (wi.then.exec !== "market" && wi.then.exec !== "limit_now") reject("체결 뒤 매도는 시장가 또는 지정가(그때 현재가)", input, ip);
       then = { pct: wi.then.pct, exec: wi.then.exec };
     }
-    const active = (await listAutoWatches()).filter((r) => r.status === "waiting");
+    const replaceId = wi.replaceId ?? null;
+    const all = await listAutoWatches();
+    if (replaceId) {
+      const old = all.find((r) => r.id === replaceId);
+      if (!old) reject("수정하려는 감시가 없다", input, ip);
+      if (old.status !== "waiting") reject(`수정하려는 감시가 이미 ${autoWatchStatusKo(old.status)} — 새로 걸어야 한다`, input, ip);
+    }
+    const active = all.filter((r) => r.status === "waiting" && r.id !== replaceId);
     if (active.length >= WATCH_MAX) reject(`자동감시는 ${WATCH_MAX}건까지 — 기다리는 것을 먼저 정리해야 한다`, input, ip);
     if (active.some((r) => r.ticket.code === input.code && r.ticket.side === input.side)) {
       reject(`${input.name || input.code} ${input.side === "buy" ? "매수" : "매도"} 감시가 이미 있다 — 겹쳐 걸지 않는다`, input, ip);
@@ -976,6 +990,7 @@ export async function prepareOrder(
       limitPrice: wi.exec === "limit_fixed" ? wi.limitPrice : null,
       validUntil,
       then,
+      replaceId,
     };
   }
   if (!watchSpec && g.marketHoursOnly && !tt.late && !venueOpen(input.venue)) {
@@ -1028,7 +1043,7 @@ export async function prepareOrder(
   const amount = unit * input.qty;
   if (amount > g.maxOrderKrw) reject(`한 건 한도 초과 — ${amount.toLocaleString()}원 > ${g.maxOrderKrw.toLocaleString()}원`, input, ip);
   if (watchSpec) {
-    const active = (await listAutoWatches()).filter((r) => r.status === "waiting");
+    const active = (await listAutoWatches()).filter((r) => r.status === "waiting" && r.id !== (watchSpec.replaceId ?? null));
     const sum = active.reduce((a, r) => a + r.ticket.amount, 0);
     if (sum + amount > g.maxDailyKrw) {
       reject(`감시 합이 하루 한도를 넘는다 — 기다리는 ${sum.toLocaleString()}원 + 이번 ${amount.toLocaleString()}원 > ${g.maxDailyKrw.toLocaleString()}원`, input, ip);
@@ -1183,12 +1198,13 @@ export async function executePrepared(
   if (t.kind === "order" && t.watch) {
     const row = await addAutoWatch(t, ip);
     const sideKo = t.side === "buy" ? "매수" : "매도";
-    await appendLog({ kind: "watch", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.watch.limitPrice, tradeType: t.tradeType, venue: t.venue, amount: t.amount, msg: `감시 등록 (${row.id}) — ${watchSay(t.watch)}` });
+    const replaced = t.watch.replaceId ? await retireAutoWatch(t.watch.replaceId, row.id) : false;
+    await appendLog({ kind: "watch", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.watch.limitPrice, tradeType: t.tradeType, venue: t.venue, amount: t.amount, msg: `${replaced ? `감시 수정 (${t.watch.replaceId} → ${row.id})` : `감시 등록 (${row.id})`} — ${watchSay(t.watch)}` });
     void sendTelegram(
-      `👁 ${tag} <b>자동감시 ${sideKo} 등록</b> ${esc(t.name)} ${t.qty}주\n${esc(watchSay(t.watch))}\n${t.watch.validUntil} 까지 · 주문 › 자동감시 탭에서 취소`,
+      `👁 ${tag} <b>자동감시 ${sideKo} ${replaced ? "수정" : "등록"}</b> ${esc(t.name)} ${t.qty}주\n${esc(watchSay(t.watch))}\n${t.watch.validUntil} 까지 · 주문 › 자동감시 탭에서 취소`,
       "order",
     ).catch(() => undefined);
-    return { ordNo: "", msg: `감시 등록 — ${watchSay(t.watch)}`, ticket: t, remembered };
+    return { ordNo: "", msg: `감시 ${replaced ? "수정" : "등록"} — ${watchSay(t.watch)}`, ticket: t, remembered };
   }
   try {
     const r = await placeOrder(t);
@@ -1622,6 +1638,22 @@ async function addAutoWatch(t: OrderTicket, ip: string, parentId?: string): Prom
   await writeWatches(rows);
   void ensureLiveCode(t.code);
   return row;
+}
+
+/** 수정으로 대체된 옛 감시를 접는다 — 아직 기다리는 중일 때만. 발동해 버렸으면 새것과 둘 다 산다(알린다) */
+async function retireAutoWatch(oldId: string, newId: string): Promise<boolean> {
+  const rows = await readWatches();
+  const old = rows.find((r) => r.id === oldId);
+  if (!old) return false;
+  if (old.status !== "waiting") {
+    void sendTelegram(`⚠️ 감시 수정 — 옛 감시(${esc(old.ticket.name)})가 그새 ${autoWatchStatusKo(old.status)}이라 접지 못했다. 새 감시와 둘 다 있다 — 자동감시 탭을 확인`, "order").catch(() => undefined);
+    return false;
+  }
+  old.status = "cancelled";
+  old.firedAt = new Date().toISOString();
+  old.msg = `수정으로 대체 → ${newId}`;
+  await writeWatches(rows);
+  return true;
 }
 
 export async function cancelAutoWatch(id: string, ip: string): Promise<AutoWatch> {

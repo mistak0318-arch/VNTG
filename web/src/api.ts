@@ -6776,6 +6776,7 @@ export interface WatchSpec {
   limitPrice: number | null;
   validUntil: string;
   then: { pct: number; exec: "market" | "limit_now" } | null;
+  replaceId?: string | null;
 }
 export interface WatchInput {
   dir: WatchDir;
@@ -6786,6 +6787,8 @@ export interface WatchInput {
   limitPrice: number | null;
   validUntil: string | null;
   then: { pct: number; exec: "market" | "limit_now" } | null;
+  /** 수정 — 이 id 의 감시를 대체 (2026-09-07 밤) */
+  replaceId?: string | null;
 }
 export interface AutoWatch {
   id: string;

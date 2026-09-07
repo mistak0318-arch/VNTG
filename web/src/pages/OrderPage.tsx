@@ -201,6 +201,11 @@ const WATCH_STATUS_KO: Record<AutoWatch["status"], string> = {
  * 서버 시각(ISO, UTC)을 **보는 사람의 시계**로 (2026-09-07). 여태 `at.slice(5,16)` 로 UTC 를 그대로
  * 적어 기록·접근 로그가 아홉 시간 이르게 보였다 — 자동감시 탭을 만들다 눈에 띄었다.
  */
+/** 오늘(KST) YYYY-MM-DD — 폼의 「당일」 판정 */
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+}
+
 function localTs(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(5, 16).replace("T", " ");
@@ -1585,6 +1590,7 @@ function Confirm({
           <div className="ord-modal-deferred">
             👁 지금 나가지 않습니다 — <b>{watchSay(ticket.watch)}</b>. {ticket.watch.validUntil} 까지 정규장에 지켜보다 닿으면 한 번 냅니다.
             그 전엔 자동감시 탭에서 취소할 수 있습니다.
+            {ticket.watch.replaceId ? <b> · 기존 감시는 이것으로 바뀝니다.</b> : null}
           </div>
         )}
         <h3>
@@ -1703,30 +1709,44 @@ function Confirm({
  * 자동감시 폼 (2026-09-07 밤, 두 번째) — 벤티지: "자동감시주문이랑 호가창 주문이랑 섞어놨는데 아예 따로 빼줘.
  * 헷갈린다." 호가창 없이 조건만 적는 폼. 종목을 고르면 지금 값·전일 종가·평단을 서버가 한 번에 준다.
  */
-function WatchForm({ status, prefill, onDone }: { status: OrderStatus; prefill: Prefill; onDone: () => void }) {
-  const [autoPicked] = useState(() => (prefill.code ? null : latestStock()));
-  const [code, setCode] = useState(prefill.code || autoPicked?.code || "");
-  const [name, setName] = useState(prefill.name || autoPicked?.name || "");
-  const [side, setSide] = useState<"buy" | "sell">(prefill.side ?? "buy");
-  const [qty, setQty] = useState(prefill.qty);
-  const [wDir, setWDir] = useState<"le" | "ge">((Number(prefill.watchPct) || 0) > 0 ? "ge" : "le");
-  const [wBasis, setWBasis] = useState<WatchBasis>(prefill.watchBasis ?? "now");
-  const [wPct, setWPct] = useState(prefill.watchPct || "-5");
-  const [wPrice, setWPrice] = useState("");
-  const [wExec, setWExec] = useState<WatchExec>(prefill.watchExec ?? "market");
-  const [wLimit, setWLimit] = useState("");
-  const [wUntil, setWUntil] = useState("");
-  const [wThenOn, setWThenOn] = useState(false);
-  const [wThenPct, setWThenPct] = useState("-5");
-  const [wThenExec, setWThenExec] = useState<"market" | "limit_now">("market");
+function WatchForm({
+  status,
+  prefill,
+  edit,
+  onDone,
+  onCancelEdit,
+}: {
+  status: OrderStatus;
+  prefill: Prefill;
+  /** 수정 — 이 감시의 값으로 채우고, 등록되면 이것을 대체한다 (2026-09-07 밤) */
+  edit: AutoWatch | null;
+  onDone: () => void;
+  onCancelEdit?: () => void;
+}) {
+  const es = edit?.spec ?? null;
+  const [autoPicked] = useState(() => (prefill.code || edit ? null : latestStock()));
+  const [code, setCode] = useState(edit?.ticket.code || prefill.code || autoPicked?.code || "");
+  const [name, setName] = useState(edit?.ticket.name || prefill.name || autoPicked?.name || "");
+  const [side, setSide] = useState<"buy" | "sell">(edit?.ticket.side ?? prefill.side ?? "buy");
+  const [qty, setQty] = useState(edit ? String(edit.ticket.qty) : prefill.qty);
+  const [wDir, setWDir] = useState<"le" | "ge">(es ? es.dir : (Number(prefill.watchPct) || 0) > 0 ? "ge" : "le");
+  const [wBasis, setWBasis] = useState<WatchBasis>(es?.basis ?? prefill.watchBasis ?? "now");
+  const [wPct, setWPct] = useState(es && es.pct !== null ? String(es.pct) : prefill.watchPct || "-5");
+  const [wPrice, setWPrice] = useState(es && es.basis === "price" ? String(es.trigger) : "");
+  const [wExec, setWExec] = useState<WatchExec>(es?.exec ?? prefill.watchExec ?? "market");
+  const [wLimit, setWLimit] = useState(es?.limitPrice ? String(es.limitPrice) : "");
+  const [wUntil, setWUntil] = useState(es && es.validUntil !== kstToday() ? es.validUntil : "");
+  const [wThenOn, setWThenOn] = useState(Boolean(es?.then));
+  const [wThenPct, setWThenPct] = useState(es?.then ? String(es.then.pct) : "-5");
+  const [wThenExec, setWThenExec] = useState<"market" | "limit_now">(es?.then?.exec ?? "market");
   const [q, setQ] = useState<{ price: number; prevClose: number; changeRate: number; avg: number | null; held: number; ableQty: number; deposit: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: OrderTicket } | null>(null);
 
-  /* 링크로 다시 들어오면 채운다 */
+  /* 링크로 다시 들어오면 채운다 (수정 중엔 수정 값이 이긴다) */
   useEffect(() => {
-    if (!prefill.code) return;
+    if (!prefill.code || edit) return;
     setCode(prefill.code);
     setName(prefill.name);
     if (prefill.side) setSide(prefill.side);
@@ -1807,6 +1827,7 @@ function WatchForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
           limitPrice: wExec === "limit_fixed" ? Number(wLimit) || null : null,
           validUntil: wUntil || null,
           then: side === "buy" && wThenOn ? { pct: Number(wThenPct), exec: wThenExec } : null,
+          replaceId: edit?.id ?? null,
         },
       });
       setTicket(r);
@@ -1822,7 +1843,17 @@ function WatchForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
 
   return (
     <>
-      <form className={`ord-wform ${side}`} onSubmit={(e) => void prepare(e)}>
+      <form className={`ord-wform ${side}${edit ? " editing" : ""}`} onSubmit={(e) => void prepare(e)}>
+        {edit && (
+          <div className="ord-wform-edit">
+            ✏️ <b>{edit.ticket.name}</b> {edit.ticket.side === "buy" ? "매수" : "매도"} 감시를 고치는 중 — 확인하고 비밀번호를 넣으면 옛 감시는 이것으로 바뀐다.
+            {onCancelEdit && (
+              <button type="button" className="ord-mk" onClick={onCancelEdit}>
+                그만두기
+              </button>
+            )}
+          </div>
+        )}
         <div className="ord-wform-head">
           <StockSearchBox
             placeholder="종목명 또는 6자리 코드"
@@ -1979,7 +2010,7 @@ function WatchForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
 
           {error && <p className="ord-err">{error}</p>}
           <button type="submit" className={`ord-go ${side} deferred`} disabled={busy || !ready}>
-            {busy ? "확인 중…" : side === "buy" ? "매수 감시 걸기" : "매도 감시 걸기"}
+            {busy ? "확인 중…" : edit ? "이렇게 고치기" : side === "buy" ? "매수 감시 걸기" : "매도 감시 걸기"}
           </button>
           <p className="ord-note">
             KRX · 현금만 · 정규장 09:00~15:30 에만 발동 · <b>한 번뿐</b> · 발동 순간 한도와 가격 자(±{status.guard.priceCollarPct}%)를 다시 잰다.
@@ -2012,6 +2043,7 @@ function WatchTab({ status, prefill, onDone }: { status: OrderStatus; prefill: P
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [showForm, setShowForm] = useState<boolean>(Boolean(prefill.watch));
+  const [editing, setEditing] = useState<AutoWatch | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -2077,16 +2109,31 @@ function WatchTab({ status, prefill, onDone }: { status: OrderStatus; prefill: P
       ) : (
         <div className="ord-wcards">
           {live.map((r) => (
-            <WatchCard key={r.id} r={r} cur={prices[r.ticket.code] ?? null} busy={busy === r.id} onCancel={() => void cancel(r)} />
+            <WatchCard
+              key={r.id}
+              r={r}
+              cur={prices[r.ticket.code] ?? null}
+              busy={busy === r.id}
+              onCancel={() => void cancel(r)}
+              onEdit={() => {
+                setEditing(r);
+                setShowForm(true);
+              }}
+              editing={editing?.id === r.id}
+            />
           ))}
         </div>
       )}
 
       {showForm && (
         <WatchForm
+          key={editing?.id ?? "new"}
           status={status}
           prefill={prefill}
+          edit={editing}
+          onCancelEdit={() => setEditing(null)}
           onDone={() => {
+            setEditing(null);
             void load();
             onDone();
           }}
@@ -2098,7 +2145,7 @@ function WatchTab({ status, prefill, onDone }: { status: OrderStatus; prefill: P
           <h4 className="ord-h4">지난 감시</h4>
           <div className="ord-wcards done">
             {done.map((r) => (
-              <WatchCard key={r.id} r={r} cur={null} busy={false} onCancel={null} />
+              <WatchCard key={r.id} r={r} cur={null} busy={false} onCancel={null} onEdit={null} editing={false} />
             ))}
           </div>
         </>
@@ -2112,7 +2159,21 @@ function WatchTab({ status, prefill, onDone }: { status: OrderStatus; prefill: P
 }
 
 /** 감시 한 장 — 조건을 칸으로 쪼개고, 지금 값과 발동까지 남은 거리를 막대로 */
-function WatchCard({ r, cur, busy, onCancel }: { r: AutoWatch; cur: { price: number; from: string } | null; busy: boolean; onCancel: (() => void) | null }) {
+function WatchCard({
+  r,
+  cur,
+  busy,
+  onCancel,
+  onEdit,
+  editing,
+}: {
+  r: AutoWatch;
+  cur: { price: number; from: string } | null;
+  busy: boolean;
+  onCancel: (() => void) | null;
+  onEdit: (() => void) | null;
+  editing: boolean;
+}) {
   const t = r.ticket;
   const s = r.spec;
   const sideKo = t.side === "buy" ? "매수" : "매도";
@@ -2128,7 +2189,7 @@ function WatchCard({ r, cur, busy, onCancel }: { r: AutoWatch; cur: { price: num
   const walked = cur && span > 0 ? Math.min(100, Math.max(0, (Math.abs(cur.price - start) / span) * 100 * (s.dir === "le" ? (cur.price <= start ? 1 : 0) : (cur.price >= start ? 1 : 0)))) : 0;
   const stKo = WATCH_STATUS_KO[r.status];
   return (
-    <div className={`ord-wcard ${t.side} st-${r.status}`}>
+    <div className={`ord-wcard ${t.side} st-${r.status}${editing ? " editing" : ""}`}>
       <div className="ord-wcard-top">
         <b className={`ord-side ${t.side}`}>{sideKo}</b>
         <span className="ord-wcard-name">
@@ -2136,6 +2197,11 @@ function WatchCard({ r, cur, busy, onCancel }: { r: AutoWatch; cur: { price: num
         </span>
         {r.parentId && <i className="ord-watch-tag">체결 뒤 자동</i>}
         <span className={`ord-rsv-st ${r.status}`}>{stKo}</span>
+        {onEdit && r.status === "waiting" && (
+          <button type="button" className={`ord-x edit${editing ? " on" : ""}`} disabled={busy} onClick={onEdit} title="값을 고쳐 새 주문서로 바꾼다 — 확인·비밀번호를 다시 지난다">
+            ✏️ 수정
+          </button>
+        )}
         {onCancel && r.status === "waiting" && (
           <button type="button" className="ord-x" disabled={busy} onClick={onCancel}>
             {busy ? "…" : "취소"}
