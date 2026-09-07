@@ -164,6 +164,17 @@ export interface OrderGuard {
    * 안 받고 **기다리던 감시도 발동하지 않는다.**
    */
   allowAutoWatch: boolean;
+  /**
+   * 계좌 단위 위험 한도 (2026-09-07 밤, 개편 ⑤).
+   *   maxPositionPct  종목 하나에 계좌(예수금+평가)의 몇 %까지 — 넘는 매수는 거절
+   *   maxDailyLossKrw 오늘 자동감시 매도로 실현한 손실이 이만큼을 넘으면 그날 신규 매수 잠금 (0 = 안 씀)
+   *   rebuyCooldownMin 손절 매도가 발동한 종목은 이 분 동안 다시 안 산다
+   *   dualStop        「이하면 판다」 감시에 키움 스톱지정가를 아침마다 같이 건다(서버가 죽어도 키움이 판다)
+   */
+  maxPositionPct: number;
+  maxDailyLossKrw: number;
+  rebuyCooldownMin: number;
+  dualStop: boolean;
 }
 
 const DEFAULT_GUARD: OrderGuard = {
@@ -176,6 +187,10 @@ const DEFAULT_GUARD: OrderGuard = {
   allowedCodes: null,
   allowCredit: false,
   allowAutoWatch: true,
+  maxPositionPct: 40,
+  maxDailyLossKrw: 0,
+  rebuyCooldownMin: 30,
+  dualStop: true,
 };
 
 interface OrderAuthFile {
@@ -756,6 +771,11 @@ export interface OrderTicket {
    * `orderWatch.json` 에 적힌다 — 서버가 값을 보다가 `spec.trigger` 에 닿으면 `spec.exec` 대로 낸다.
    */
   watch: WatchSpec | null;
+  /**
+   * **출구 계획** (2026-09-07 밤, 개편 ①) — 지금 내는 매수에 붙는 단계. 체결되면 단계마다 매도 감시가
+   * 자동으로 걸린다. 벤티지: "매수할 때 출구를 같이 정한다." 없이 사려면 화면에서 일부러 꺼야 한다.
+   */
+  exit: WatchLeg[] | null;
 }
 
 export type WatchDir = "le" | "ge";
@@ -790,6 +810,11 @@ export interface WatchSpec {
    * 수정도 새 주문서다: 확인 창·비밀번호를 그대로 지난다. 옛것을 제자리에서 고치는 길은 없다.
    */
   replaceId?: string | null;
+  /**
+   * **이중 손절** (개편 ②) — 「이하면 판다」 감시에 키움 스톱지정가(trde_tp 28)를 거래일 아침마다 같이 건다.
+   * 키움이 지켜보니 서버가 죽어도 판다. 서버 감시가 먼저 닿으면 그 스톱을 취소하고 시장가로 낸다.
+   */
+  dual?: boolean;
 }
 
 export interface CancelTicket {
@@ -834,6 +859,8 @@ export interface PrepareInput {
   loanDate?: string | null;
   /** 자동감시 — 조건에 닿으면 내 달라 (2026-09-07 밤) */
   watch?: WatchInput | null;
+  /** 지금 내는 매수에 붙는 출구 계획 — 체결되면 단계마다 매도 감시 (개편 ①) */
+  exit?: WatchLeg[] | null;
 }
 
 export interface WatchLeg {
@@ -857,6 +884,7 @@ export interface WatchInput {
   legs: WatchLeg[] | null;
   /** 수정 — 이 id 의 감시를 대체한다 */
   replaceId?: string | null;
+  dual?: boolean;
 }
 
 /** 단계 목록을 검사한다 — 하나라도 어긋나면 이유를 돌려준다 */
@@ -1059,7 +1087,9 @@ export async function prepareOrder(
       if (dup) reject(`${input.name || input.code} 매도 감시에 발동가 ${dup.spec.trigger.toLocaleString()}원이 이미 있다`, input, ip);
       const held = sameSide.reduce((a, r) => a + r.ticket.qty, 0);
       const acct = await orderAccount().catch(() => null);
-      const able = acct?.holdings.filter((x) => x.code === input.code && !x.creditType).reduce((a, x) => a + x.ableQty, 0) ?? null;
+      /* 이중 스톱이 물고 있는 수는 매매가능에서 빠져 보이지만 우리 감시 몫이다 — 되돌려 센다 */
+      const dualLocked = sameSide.filter((r) => r.dualOrdNo).reduce((a, r) => a + r.ticket.qty, 0);
+      const able = acct ? acct.holdings.filter((x) => x.code === input.code && !x.creditType).reduce((a, x) => a + x.ableQty, 0) + dualLocked : null;
       if (able !== null && held + input.qty > able) {
         reject(`매도 감시 수량 합(${held + input.qty}주)이 매매가능수량(${able}주)을 넘는다`, input, ip);
       }
@@ -1076,10 +1106,25 @@ export async function prepareOrder(
       then,
       legs,
       replaceId,
+      dual: wi.dual !== false,
     };
   }
   if (!watchSpec && g.marketHoursOnly && !tt.late && !venueOpen(input.venue)) {
     reject(`${input.venue} 가 주문을 받는 시간이 아니다`, input, ip);
+  }
+  let exit: WatchLeg[] | null = null;
+  if (input.exit && input.exit.length > 0) {
+    if (input.side !== "buy") reject("출구 계획은 매수에만 붙는다", input, ip);
+    if (watchSpec) reject("감시 매수는 「체결되면」 단계로 — 출구 계획과 겹친다", input, ip);
+    if (credit) reject("신용 매수엔 출구 계획을 못 붙인다", input, ip);
+    const bad = checkLegs(input.exit, "출구 계획");
+    if (bad) reject(bad, input, ip);
+    exit = input.exit.map((l) => ({ pct: l.pct, qtyPct: l.qtyPct, exec: l.exec }));
+  }
+  if (input.side === "buy") {
+    /* 계좌 단위 위험 한도 (개편 ⑤) — 손절 뒤 쿨다운 · 오늘 실현손실 잠금 */
+    const block = await buyBlockReason(input.code, g);
+    if (block) reject(block, input, ip);
   }
 
   let ref = 0;
@@ -1126,6 +1171,17 @@ export async function prepareOrder(
   }
   const unit = watchSpec ? (watchSpec.limitPrice ?? watchSpec.trigger) : (input.price ?? input.condPrice ?? ref);
   const amount = unit * input.qty;
+  if (input.side === "buy" && g.maxPositionPct > 0 && g.maxPositionPct < 100) {
+    /* 종목 하나가 계좌의 몇 %까지 — 이미 든 것 + 이번 것 */
+    const acct = await orderAccount().catch(() => null);
+    if (acct) {
+      const equity = acct.deposit + acct.holdings.reduce((a, h) => a + h.cur * h.qty, 0);
+      const already = acct.holdings.filter((h) => h.code === input.code).reduce((a, h) => a + h.cur * h.qty, 0);
+      if (equity > 0 && ((already + amount) / equity) * 100 > g.maxPositionPct) {
+        reject(`한 종목 비중 초과 — ${input.name || input.code} ${(((already + amount) / equity) * 100).toFixed(0)}% > ${g.maxPositionPct}% (orderGuard.maxPositionPct)`, input, ip);
+      }
+    }
+  }
   if (amount > g.maxOrderKrw) reject(`한 건 한도 초과 — ${amount.toLocaleString()}원 > ${g.maxOrderKrw.toLocaleString()}원`, input, ip);
   if (watchSpec) {
     const active = (await listAutoWatches()).filter((r) => r.status === "waiting" && r.id !== (watchSpec.replaceId ?? null));
@@ -1157,8 +1213,47 @@ export async function prepareOrder(
     credit,
     loanDate: credit && input.side === "sell" ? loanDate : null,
     watch: watchSpec,
+    exit,
   };
   return { ...issueNonce(ticket, owner), ticket };
+}
+
+/**
+ * 신규 매수를 막을 이유 (개편 ⑤). 자동감시의 매수 발동도 같은 자를 쓴다.
+ *   · 손절 매도 감시가 발동한 종목은 rebuyCooldownMin 동안 다시 안 산다
+ *   · 오늘 자동감시 매도로 실현한 손실이 maxDailyLossKrw 를 넘으면 신규 매수 잠금
+ */
+async function buyBlockReason(code: string, g: OrderGuard): Promise<string | null> {
+  const rows = await readWatches().catch(() => [] as AutoWatch[]);
+  const now = Date.now();
+  if (g.rebuyCooldownMin > 0) {
+    const cool = rows.find(
+      (r) => r.ticket.code === code && r.ticket.side === "sell" && r.spec.dir === "le" && r.firedAt && (r.status === "fired" || r.status === "filled") && now - Date.parse(r.firedAt) < g.rebuyCooldownMin * 60_000,
+    );
+    if (cool) return `손절 뒤 쿨다운 — ${cool.ticket.name} 은 ${g.rebuyCooldownMin}분 동안 다시 안 산다 (${localHm(cool.firedAt!)} 발동)`;
+  }
+  if (g.maxDailyLossKrw > 0) {
+    const loss = realizedLossToday(rows);
+    if (loss <= -g.maxDailyLossKrw) return `오늘 실현손실 ${won(loss)} — 하루 한도(−${won(g.maxDailyLossKrw)})를 넘어 신규 매수를 잠갔다`;
+  }
+  return null;
+}
+
+/** 오늘 자동감시 매도가 체결되며 실현한 손익의 합 — 발동 순간의 평단(avgAtFire)과 체결가로 */
+function realizedLossToday(rows: AutoWatch[]): number {
+  const { date } = kstParts();
+  let sum = 0;
+  for (const r of rows) {
+    if (r.ticket.side !== "sell" || r.status !== "filled" || !r.fillPrice || !r.fillQty || !r.avgAtFire) continue;
+    if (!r.firedAt || kstParts(new Date(r.firedAt)).date !== date) continue;
+    sum += (r.fillPrice - r.avgAtFire) * r.fillQty;
+  }
+  return sum;
+}
+
+function localHm(iso: string): string {
+  const t = new Date(new Date(iso).getTime() + 9 * 3600_000);
+  return t.toISOString().slice(11, 16);
 }
 
 export async function prepareCancel(
@@ -1349,6 +1444,28 @@ export async function executePrepared(
       ).catch(() => undefined);
       if (r.ordNo) watch(r.ordNo, t);
       void noteUsage();
+      /*
+       * 출구 계획 (개편 ①) — 지금 낸 매수가 체결되면 단계마다 매도 감시가 걸리도록, 「발동된 감시」 모양의
+       * 줄을 하나 적어 두고 체결 감시에 갈고리를 건다. 자동감시 매수와 같은 길(onAutoWatchFill)이라
+       * 포지션 카드도 같은 모양으로 보인다.
+       */
+      if (t.side === "buy" && t.exit && t.exit.length > 0 && r.ordNo) {
+        const spec: WatchSpec = {
+          dir: "le",
+          basis: "price",
+          pct: null,
+          basisPrice: null,
+          trigger: t.price ?? t.refPrice,
+          exec: t.price === null ? "market" : "limit_fixed",
+          limitPrice: t.price,
+          validUntil: kstParts().date,
+          then: t.exit,
+        };
+        const row = await addAutoWatch({ ...t, watch: spec, exit: null }, ip, undefined, undefined, { status: "fired", ordNo: r.ordNo, origin: "order", firePrice: t.refPrice });
+        const id = row.id;
+        fillHooks.set(r.ordNo, (ev) => void onAutoWatchFill(id, ev).catch(() => undefined));
+        await appendLog({ kind: "watch", ip, side: "buy", code: t.code, name: t.name, qty: t.qty, msg: `출구 계획 붙임 (${id}) — 체결되면 체결가 대비 ${legsSay(t.exit)} 매도 감시` });
+      }
     }
     return { ordNo: r.ordNo, msg: r.msg, ticket: t, remembered };
   } catch (e) {
@@ -1714,6 +1831,14 @@ export interface AutoWatch {
   childIds?: string[];
   /** 단계 매도로 함께 태어난 형제들의 묶음 */
   groupId?: string;
+  /** 어디서 왔나 — 감시 폼(watch) · 즉시 매수의 출구 계획(order) */
+  origin?: "watch" | "order";
+  /** 매도 발동 순간의 평단 — 실현손익을 셀 때 */
+  avgAtFire?: number;
+  /** 이중 손절 — 오늘 아침 키움에 건 스톱지정가 주문번호와 날짜 */
+  dualOrdNo?: string;
+  dualDate?: string;
+  dualMsg?: string;
 }
 
 const WATCH_FILE = join(DATA_DIR, "orderWatch.json");
@@ -1787,7 +1912,7 @@ export async function listAutoWatches(): Promise<AutoWatch[]> {
   return (await readWatches()).sort((a, b) => rank(a.status) - rank(b.status) || b.at.localeCompare(a.at));
 }
 
-async function addAutoWatch(t: OrderTicket, ip: string, parentId?: string, groupId?: string): Promise<AutoWatch> {
+async function addAutoWatch(t: OrderTicket, ip: string, parentId?: string, groupId?: string, init: Partial<AutoWatch> = {}): Promise<AutoWatch> {
   if (!t.watch) throw new Error("감시 조건이 없다");
   const rows = await readWatches();
   const { legs: _legs, replaceId: _rid, ...spec } = t.watch;
@@ -1798,8 +1923,11 @@ async function addAutoWatch(t: OrderTicket, ip: string, parentId?: string, group
     ticket: { ...t, watch: spec },
     spec,
     status: "waiting",
+    origin: "watch",
     ...(parentId ? { parentId } : {}),
     ...(groupId ? { groupId } : {}),
+    ...init,
+    ...(init.status === "fired" ? { firedAt: new Date().toISOString() } : {}),
   };
   rows.push(row);
   if (parentId) {
@@ -1826,6 +1954,7 @@ async function retireAutoWatch(oldId: string, newId: string): Promise<boolean> {
   old.status = "cancelled";
   old.firedAt = new Date().toISOString();
   old.msg = `수정으로 대체 → ${newId}`;
+  await cancelDualStop(old);
   await writeWatches(rows);
   return true;
 }
@@ -1861,6 +1990,7 @@ export async function cancelAutoWatch(id: string, ip: string): Promise<AutoWatch
   row.status = "cancelled";
   row.firedAt = new Date().toISOString();
   row.msg = "사람이 취소";
+  await cancelDualStop(row);
   await writeWatches(rows);
   const t = row.ticket;
   await appendLog({ kind: "watch", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, venue: t.venue, amount: t.amount, msg: `감시 취소 (${row.id})` });
@@ -1915,9 +2045,13 @@ async function livePrices(main: KiwoomClient, codes: string[]): Promise<Map<stri
 /**
  * 3초마다. 정규장 밖이면 만료만 정리한다. 안이면 값을 읽어 조건에 닿은 것을 **한 번** 낸다.
  */
+let lastWatchTick = 0;
+let lastDualDay = "";
+
 async function runAutoWatch(main: KiwoomClient): Promise<void> {
   if (watchFiring) return;
   if (!ordersEnabled() || !orderClient()) return;
+  lastWatchTick = Date.now();
   const rows = await readWatches();
   const waiting = rows.filter((r) => r.status === "waiting");
   if (waiting.length === 0) return;
@@ -1939,6 +2073,15 @@ async function runAutoWatch(main: KiwoomClient): Promise<void> {
       }
     }
     const live = waiting.filter((r) => r.status === "waiting");
+    /* 이중 손절 (개편 ②) — 거래일 08:31~08:59 에 한 번, 「이하면 판다」 감시마다 키움 스톱지정가 */
+    if (isTradingDate(date) && minute >= 511 && minute <= 539 && lastDualDay !== date) {
+      lastDualDay = date;
+      if (await placeDualStops(rows, date)) changed = true;
+    }
+    /* 이중 스톱이 먼저 팔았나 — 정규장에 확인. 날이 지난 스톱 번호는 지운다(당일 유효) */
+    if (live.some((r) => r.dualOrdNo)) {
+      if (await syncDualStops(rows, date, minute)) changed = true;
+    }
     if (live.length > 0 && isTradingDate(date) && minute >= WATCH_FROM && minute <= WATCH_TO) {
       for (const r of live) void ensureLiveCode(r.ticket.code);
       const prices = await livePrices(main, [...new Set(live.map((r) => r.ticket.code))]);
@@ -1976,6 +2119,7 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
     if (off > g.priceCollarPct) why = `지정가(${price.toLocaleString()})가 그때 값(${cur.toLocaleString()})에서 ${off.toFixed(1)}% 벗어났다 (한도 ${g.priceCollarPct}%)`;
   }
   const amount = (price ?? cur) * base.qty;
+  if (!why && base.side === "buy") why = await buyBlockReason(base.code, g);
   if (!why) {
     if (!g.allowAutoWatch) why = "자동감시가 꺼져 있다(orderGuard.allowAutoWatch)";
     else if (g.allowedCodes && g.allowedCodes.length > 0 && !g.allowedCodes.includes(base.code)) why = "허용 종목이 아니다";
@@ -2003,7 +2147,39 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
     refPrice: cur,
     amount,
     watch: null,
+    exit: null,
   };
+  if (base.side === "sell") {
+    /* 실현손익용 평단, 그리고 이중 스톱이 걸려 있으면 그것부터 취소한다(그 스톱이 수량을 물고 있다) */
+    const acct = await orderAccount().catch(() => null);
+    const h = acct?.holdings.find((x) => x.code === base.code && !x.creditType);
+    if (h && h.avg > 0) r.avgAtFire = h.avg;
+    if (r.dualOrdNo) {
+      const open = await openOrders().catch(() => []);
+      const still = open.find((x) => x.ordNo === r.dualOrdNo);
+      if (still) {
+        try {
+          await placeOrder({ kind: "cancel", ordNo: r.dualOrdNo, code: base.code, name: base.name, qty: still.remain || still.qty, venue: "KRX" });
+          await appendLog({ kind: "cancel", code: base.code, name: base.name, origOrdNo: r.dualOrdNo, msg: `이중 스톱 취소 — 서버 감시가 먼저 닿았다 (${r.id})` });
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e);
+          await appendLog({ kind: "error", code: base.code, name: base.name, msg: `이중 스톱 취소 실패 (${r.id}) — ${m}. 그래도 시장가 매도를 낸다` });
+        }
+      } else if (still === undefined) {
+        /* 미체결에 없다 = 키움 스톱이 이미 나갔거나 체결됐다. 우리 매도는 수량이 없어 거절될 것 — 낼 것 없다 */
+        const fl = await fills().catch(() => []);
+        const f = fl.find((x) => x.ordNo === r.dualOrdNo);
+        if (f && f.filled > 0) {
+          r.status = "filled";
+          r.fillQty = f.filled;
+          r.fillPrice = f.price;
+          r.msg = `키움 스톱이 먼저 팔았다 (주문번호 ${r.dualOrdNo})`;
+          await appendLog({ kind: "fill", side: "sell", code: base.code, name: base.name, qty: f.filled, price: f.price, ordNo: r.dualOrdNo, msg: `이중 스톱 체결 — 서버 감시 ${r.id} 는 낼 것 없음` });
+          return;
+        }
+      }
+    }
+  }
   try {
     const res = await placeOrder(t);
     r.status = "fired";
@@ -2117,6 +2293,271 @@ export async function watchQuote(main: KiwoomClient, code: string): Promise<{
     ableQty: h?.ableQty ?? 0,
     deposit: acct?.deposit ?? 0,
   };
+}
+
+/**
+ * 이중 손절 — 아침마다 「이하면 판다」 감시에 키움 스톱지정가를 건다 (개편 ②).
+ * 발동가 = 감시 발동가, 주문가 = 발동가의 1.5% 아래(호가 단위) — 발동되면 곧 체결되게.
+ * 서버가 죽어도 키움이 판다. 서버 감시가 먼저 닿으면 이 스톱을 취소하고 시장가로 낸다(fireAutoWatch).
+ * 모의투자가 28 을 거절하면 dualMsg 에 남기고 서버 감시만으로 간다.
+ */
+async function placeDualStops(rows: AutoWatch[], date: string): Promise<boolean> {
+  const g = await getGuard();
+  if (!g.dualStop) return false;
+  let changed = false;
+  for (const r of rows) {
+    if (r.status !== "waiting" || r.ticket.side !== "sell" || r.spec.dir !== "le" || r.spec.dual === false) continue;
+    if (r.dualDate === date && r.dualOrdNo) continue;
+    if (r.ticket.credit) continue;
+    const trigger = r.spec.trigger;
+    const limit = toTick(trigger * 0.985);
+    const t: OrderTicket = {
+      ...r.ticket,
+      price: limit,
+      condPrice: trigger,
+      tradeType: "28",
+      tradeLabel: "스톱지정가",
+      refPrice: trigger,
+      amount: limit * r.ticket.qty,
+      watch: null,
+      exit: null,
+    };
+    try {
+      const res = await placeOrder(t);
+      r.dualOrdNo = res.ordNo;
+      r.dualDate = date;
+      r.dualMsg = res.msg;
+      changed = true;
+      await appendLog({ kind: "order", ip: r.ip, side: "sell", code: t.code, name: t.name, qty: t.qty, price: limit, condPrice: trigger, tradeType: "28", venue: "KRX", ordNo: res.ordNo, amount: t.amount, credit: false, msg: `이중 손절 스톱 (${r.id}) → ${res.msg}`, raw: res.raw });
+    } catch (e) {
+      const msg = e instanceof KiwoomApiError ? `${e.returnCode} ${e.message}` : e instanceof Error ? e.message : String(e);
+      r.dualDate = date;
+      r.dualOrdNo = undefined;
+      r.dualMsg = `키움 스톱 못 걸음 — ${msg}`;
+      changed = true;
+      await appendLog({ kind: "error", code: t.code, name: t.name, qty: t.qty, msg: `이중 손절 스톱 실패 (${r.id}) — ${msg}. 서버 감시만으로 간다` });
+    }
+    await new Promise((ok) => setTimeout(ok, 350));
+  }
+  if (changed) {
+    const n = rows.filter((r) => r.dualDate === date && r.dualOrdNo).length;
+    const bad = rows.filter((r) => r.dualDate === date && !r.dualOrdNo && r.dualMsg).length;
+    void sendTelegram(`🛡 ${orderIsMock() ? "[모의]" : "[실전]"} 이중 손절 — 키움 스톱 ${n}건 걸음${bad > 0 ? ` · 못 건 것 ${bad}건(기록 탭)` : ""}`, "order").catch(() => undefined);
+  }
+  return changed;
+}
+
+/** 이중 스톱이 먼저 팔았으면 감시를 「체결」로 접는다. 장이 끝나면 당일 스톱 번호를 비운다 */
+async function syncDualStops(rows: AutoWatch[], date: string, minute: number): Promise<boolean> {
+  let changed = false;
+  const targets = rows.filter((r) => r.status === "waiting" && r.dualOrdNo);
+  if (targets.length === 0) return false;
+  if (minute > WATCH_TO || !isTradingDate(date) || targets.some((r) => r.dualDate !== date)) {
+    for (const r of targets) {
+      if (r.dualDate !== date || minute > WATCH_TO) {
+        r.dualOrdNo = undefined;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+  if (minute < WATCH_FROM) return false;
+  const fl = await fills().catch(() => null);
+  if (!fl) return false;
+  for (const r of targets) {
+    const f = fl.find((x) => x.ordNo === r.dualOrdNo && x.filled > 0);
+    if (!f) continue;
+    const acct = await orderAccount().catch(() => null);
+    const h = acct?.holdings.find((x) => x.code === r.ticket.code && !x.creditType);
+    r.status = "filled";
+    r.firedAt = new Date().toISOString();
+    r.firePrice = f.price;
+    r.fillQty = f.filled;
+    r.fillPrice = f.price;
+    r.avgAtFire = h?.avg ?? r.spec.basisPrice ?? undefined;
+    r.msg = `키움 스톱이 팔았다 (주문번호 ${r.dualOrdNo})`;
+    changed = true;
+    await appendLog({ kind: "fill", side: "sell", code: r.ticket.code, name: r.ticket.name, qty: f.filled, price: f.price, ordNo: r.dualOrdNo, msg: `이중 손절 스톱 체결 (${r.id})` });
+    void sendTelegram(`🛡🧾 ${orderIsMock() ? "[모의]" : "[실전]"} <b>이중 손절 체결</b> ${esc(r.ticket.name)} ${f.filled}주 @ ${f.price.toLocaleString()} — 키움 스톱이 팔았다`, "order").catch(() => undefined);
+  }
+  return changed;
+}
+
+/** 감시를 취소할 때 오늘 걸린 이중 스톱도 거둔다 */
+async function cancelDualStop(r: AutoWatch): Promise<void> {
+  if (!r.dualOrdNo) return;
+  try {
+    const open = await openOrders();
+    const still = open.find((x) => x.ordNo === r.dualOrdNo);
+    if (still) {
+      await placeOrder({ kind: "cancel", ordNo: r.dualOrdNo, code: r.ticket.code, name: r.ticket.name, qty: still.remain || still.qty, venue: "KRX" });
+      await appendLog({ kind: "cancel", code: r.ticket.code, name: r.ticket.name, origOrdNo: r.dualOrdNo, msg: `이중 스톱 취소 — 감시 취소에 따라 (${r.id})` });
+    }
+  } catch (e) {
+    await appendLog({ kind: "error", code: r.ticket.code, name: r.ticket.name, msg: `이중 스톱 취소 실패 (${r.id}) — ${e instanceof Error ? e.message : String(e)}. 미체결 탭에서 직접 취소` });
+  }
+  r.dualOrdNo = undefined;
+}
+
+/* ── 포지션 (개편 ①) ────────────────────────────────────────────────────── */
+
+export interface Position {
+  code: string;
+  name: string;
+  qty: number;
+  ableQty: number;
+  avg: number;
+  cur: number;
+  pnl: number;
+  pnlRate: number;
+  creditType: string | null;
+  loanDate: string | null;
+  /** 감시에 걸린 수 · 미체결 매도에 묶인 수 · 아직 자유로운 수 */
+  watchQty: number;
+  pendingQty: number;
+  freeQty: number;
+  /** 이 종목의 살아 있는 감시(대기·발동) */
+  watches: AutoWatch[];
+  /** 오늘 미체결·체결 */
+  open: OpenRow[];
+  fills: OpenRow[];
+  /** 출구 — 손절선(제일 먼저 닿을 「이하면 판다」)과 익절선(제일 먼저 닿을 「이상이면 판다」) */
+  stopLine: number | null;
+  takeLine: number | null;
+  /** 키움 스톱지정가가 미체결로 걸려 있나 */
+  kiwoomStop: OpenRow | null;
+  /** 출구가 하나도 없다 — 카드가 빨갛게 */
+  noExit: boolean;
+  /** 자동감시로 산 것인가 */
+  boughtByWatch: boolean;
+}
+
+export async function positions(main: KiwoomClient): Promise<{
+  deposit: number;
+  equity: number;
+  positions: Position[];
+  /** 아직 안 산 매수 감시(진입 대기) */
+  entries: AutoWatch[];
+  /** 보유가 없는 종목의 미체결 */
+  orphanOpen: OpenRow[];
+  prices: Record<string, { price: number; from: string }>;
+  todayLoss: number;
+  buyLocked: string | null;
+}> {
+  const [acct, rows, open, fl, g] = await Promise.all([orderAccount(), readWatches(), openOrders().catch(() => [] as OpenRow[]), fills().catch(() => [] as OpenRow[]), getGuard()]);
+  const live = rows.filter((r) => r.status === "waiting" || r.status === "fired");
+  const held = new Set(acct.holdings.map((h) => h.code));
+  const positionsOut: Position[] = acct.holdings.map((h) => {
+    const ws = live.filter((r) => r.ticket.code === h.code);
+    const sells = ws.filter((r) => r.ticket.side === "sell" && r.status === "waiting");
+    const watchQty = sells.reduce((a, r) => a + r.ticket.qty, 0);
+    const myOpen = open.filter((x) => x.code === h.code);
+    /* 이중 스톱이 미체결로 물고 있는 수는 「감시」이지 「주문 중」이 아니다 — 두 번 세지 않는다 */
+    const dualLocked = sells.filter((r) => r.dualOrdNo && myOpen.some((x) => x.ordNo === r.dualOrdNo)).reduce((a, r) => a + r.ticket.qty, 0);
+    const pendingQty = Math.max(0, h.qty - h.ableQty - dualLocked);
+    const kiwoomStop = myOpen.find((x) => x.stopPrice > 0 && /매도/.test(x.side)) ?? null;
+    const stopLine = sells.filter((r) => r.spec.dir === "le").sort((a, b) => b.spec.trigger - a.spec.trigger)[0]?.spec.trigger ?? kiwoomStop?.stopPrice ?? null;
+    const takeLine = sells.filter((r) => r.spec.dir === "ge").sort((a, b) => a.spec.trigger - b.spec.trigger)[0]?.spec.trigger ?? null;
+    const boughtByWatch = rows.some((r) => r.ticket.code === h.code && r.ticket.side === "buy" && (r.status === "filled" || r.status === "fired"));
+    return {
+      code: h.code,
+      name: h.name,
+      qty: h.qty,
+      ableQty: h.ableQty,
+      avg: h.avg,
+      cur: h.cur,
+      pnl: h.pnl,
+      pnlRate: h.pnlRate,
+      creditType: h.creditType,
+      loanDate: h.loanDate,
+      watchQty,
+      pendingQty,
+      freeQty: Math.max(0, h.ableQty + dualLocked - watchQty),
+      watches: ws,
+      open: myOpen,
+      fills: fl.filter((x) => x.code === h.code),
+      stopLine,
+      takeLine,
+      kiwoomStop,
+      noExit: stopLine === null && !h.creditType,
+      boughtByWatch,
+    };
+  });
+  const codes = [...new Set([...positionsOut.map((p) => p.code), ...live.map((r) => r.ticket.code)])];
+  const prices = await watchPrices(main, codes).catch(() => ({}));
+  const equity = acct.deposit + acct.holdings.reduce((a, h) => a + h.cur * h.qty, 0);
+  const todayLoss = realizedLossToday(rows);
+  const buyLocked = g.maxDailyLossKrw > 0 && todayLoss <= -g.maxDailyLossKrw ? `오늘 실현손실 ${won(todayLoss)} — 신규 매수 잠김` : null;
+  return {
+    deposit: acct.deposit,
+    equity,
+    positions: positionsOut,
+    entries: live.filter((r) => r.ticket.side === "buy" && !held.has(r.ticket.code) || (r.ticket.side === "buy" && r.status === "waiting")),
+    orphanOpen: open.filter((x) => !held.has(x.code)),
+    prices,
+    todayLoss,
+    buyLocked,
+  };
+}
+
+/* ── 살아 있다는 신호 · 아침 인사 · 저녁 정합성 (개편 ②) ──────────────────── */
+
+let lastDeadAlert = 0;
+let greetedDay = "";
+let reconciledDay = "";
+
+export function startOrderHeartbeat(main: KiwoomClient): void {
+  const run = async () => {
+    if (!ordersEnabled() || !orderClient()) return;
+    const { date, minute } = kstParts();
+    const trading = isTradingDate(date);
+    /* ① 감시 루프가 멎었나 — 정규장에 90초 넘게 안 돌았고 기다리는 감시가 있으면 10분에 한 번 알린다 */
+    if (trading && minute >= WATCH_FROM && minute <= WATCH_TO && lastWatchTick > 0 && Date.now() - lastWatchTick > 90_000) {
+      const rows = await readWatches().catch(() => [] as AutoWatch[]);
+      if (rows.some((r) => r.status === "waiting") && Date.now() - lastDeadAlert > 600_000) {
+        lastDeadAlert = Date.now();
+        void sendTelegram(`🚨 <b>자동감시 루프가 ${Math.round((Date.now() - lastWatchTick) / 1000)}초 동안 안 돌았다</b> — 기다리는 감시가 있다. 서버를 확인하라`, "order").catch(() => undefined);
+      }
+    }
+    /* ② 08:55 아침 인사 — 오늘 살아 있는 것들 */
+    if (trading && minute === 535 && greetedDay !== date) {
+      greetedDay = date;
+      const rows = await readWatches().catch(() => [] as AutoWatch[]);
+      const waiting = rows.filter((r) => r.status === "waiting");
+      const dual = waiting.filter((r) => r.dualDate === date && r.dualOrdNo).length;
+      const { store, client } = peekRealtime();
+      const rt = client ? (client.healthy ? "실시간 연결 정상" : "실시간 연결 불안정") : "실시간 연결 없음 — 조회로 판정";
+      const keys = store?.health?.keys ?? 0;
+      void sendTelegram(
+        `🌅 ${orderIsMock() ? "[모의]" : "[실전]"} <b>주문 서버 아침 점검</b>\n자동감시 ${waiting.length}건 기다리는 중 (매수 ${waiting.filter((r) => r.ticket.side === "buy").length} · 매도 ${waiting.filter((r) => r.ticket.side === "sell").length}) · 이중 스톱 ${dual}건\n${rt}${keys ? ` · 시세 ${keys}종목` : ""}\n09:00 부터 3초마다 봅니다.`,
+        "order",
+      ).catch(() => undefined);
+    }
+    /* ③ 15:40 정합성 — 키움 체결 중 우리 기록에 없는 주문번호 */
+    if (trading && minute === 940 && reconciledDay !== date) {
+      reconciledDay = date;
+      try {
+        const [fl, log] = await Promise.all([fills(), readLog(3000)]);
+        const ours = new Set(log.filter((r) => r.kind === "order" && r.ordNo).map((r) => r.ordNo));
+        const strangers = fl.filter((f) => f.filled > 0 && !ours.has(f.ordNo));
+        const mine = fl.filter((f) => f.filled > 0 && ours.has(f.ordNo));
+        const sum = (xs: OpenRow[]) => xs.reduce((a, f) => a + f.price * f.filled, 0);
+        const body =
+          `🧮 ${orderIsMock() ? "[모의]" : "[실전]"} <b>저녁 정합성</b> — 오늘 체결 ${fl.filter((f) => f.filled > 0).length}건\n` +
+          `우리가 낸 것 ${mine.length}건 · ${won(sum(mine))}\n` +
+          (strangers.length > 0
+            ? `⚠️ <b>우리 기록에 없는 체결 ${strangers.length}건</b>: ${strangers.map((f) => `${esc(f.name)} ${f.side} ${f.filled}주 #${f.ordNo}`).join(", ")}\n이 앱 밖(영웅문 등)에서 낸 주문이 아니면 앱키를 의심하라`
+            : "우리 기록과 어긋나는 체결 없음");
+        void sendTelegram(body, "order").catch(() => undefined);
+        await appendLog({ kind: "session", msg: `저녁 정합성 — 체결 ${fl.length}건, 기록 밖 ${strangers.length}건` });
+      } catch (e) {
+        await appendLog({ kind: "error", msg: `저녁 정합성 실패 — ${e instanceof Error ? e.message : String(e)}` });
+      }
+    }
+    void main;
+  };
+  setInterval(() => void run().catch(() => undefined), 30_000);
+  console.log("[order] 심장 박동 — 루프 멎음 알림 · 08:55 아침 점검 · 15:40 저녁 정합성");
 }
 
 export async function autoWatchSummary(): Promise<{ allowed: boolean; waiting: number; fired: number }> {
@@ -2528,5 +2969,7 @@ export async function orderStatus(req: Request): Promise<Record<string, unknown>
     watching: watching.size,
     /* 자동감시 (2026-09-07 밤) — 몇 건 지켜보나·발동해서 체결 기다리나 */
     autoWatch: await autoWatchSummary().catch(() => ({ allowed: false, waiting: 0, fired: 0 })),
+    /* 살아 있다는 신호 — 감시 루프가 마지막으로 돈 때 (개편 ②) */
+    watchTickAgoSec: lastWatchTick > 0 ? Math.round((Date.now() - lastWatchTick) / 1000) : null,
   };
 }

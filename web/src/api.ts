@@ -1002,7 +1002,10 @@ export const api = {
     loanDate?: string | null;
     /** 자동감시 — 조건에 닿으면 (2026-09-07 밤) */
     watch?: WatchInput | null;
+    /** 즉시 매수의 출구 계획 (개편 ①) */
+    exit?: WatchLeg[] | null;
   }) => orderPost<{ nonce: string; expiresAt: number; ticket: OrderTicket }>("/api/order/prepare", input),
+  orderPositions: () => getJson<PositionsView>("/api/order/positions"),
   orderWatch: () =>
     getJson<{ rows: AutoWatch[]; prices: Record<string, { price: number; from: string }>; allowed: boolean; waiting: number; fired: number }>(
       "/api/order/watch",
@@ -6655,6 +6658,10 @@ export interface OrderGuard {
   allowCredit?: boolean;
   /** 자동감시 허용 — 기본 true (2026-09-07 밤) */
   allowAutoWatch?: boolean;
+  maxPositionPct?: number;
+  maxDailyLossKrw?: number;
+  rebuyCooldownMin?: number;
+  dualStop?: boolean;
 }
 
 /** 매수 가능 수량 — 현금만 · 증거금 적용 · 신용 (2026-09-07) */
@@ -6698,6 +6705,8 @@ export interface OrderStatus {
   watching: number;
   /** 자동감시 요약 (2026-09-07 밤) */
   autoWatch: { allowed: boolean; waiting: number; fired: number };
+  /** 감시 루프가 마지막으로 돈 지 몇 초 — null 이면 아직 */
+  watchTickAgoSec?: number | null;
 }
 
 /** 매매구분 — 서버의 표를 그대로 받는다 (2026-09-04). 화면이 목록을 들고 있지 않다 */
@@ -6763,6 +6772,8 @@ export interface OrderTicket {
   loanDate?: string | null;
   /** 자동감시 (2026-09-07 밤) — 있으면 실행이 곧 등록이다 */
   watch?: WatchSpec | null;
+  /** 즉시 매수에 붙는 출구 계획 — 체결되면 단계마다 매도 감시 (개편 ①) */
+  exit?: WatchLeg[] | null;
 }
 
 export type WatchDir = "le" | "ge";
@@ -6785,6 +6796,8 @@ export interface WatchSpec {
   then: WatchLeg[] | null;
   legs?: WatchLeg[] | null;
   replaceId?: string | null;
+  /** 이중 손절 — 키움 스톱지정가를 아침마다 같이 (개편 ②) */
+  dual?: boolean;
 }
 export interface WatchInput {
   dir: WatchDir;
@@ -6798,6 +6811,7 @@ export interface WatchInput {
   legs: WatchLeg[] | null;
   /** 수정 — 이 id 의 감시를 대체 (2026-09-07 밤) */
   replaceId?: string | null;
+  dual?: boolean;
 }
 export interface AutoWatch {
   id: string;
@@ -6816,6 +6830,46 @@ export interface AutoWatch {
   childId?: string;
   childIds?: string[];
   groupId?: string;
+  origin?: "watch" | "order";
+  avgAtFire?: number;
+  dualOrdNo?: string;
+  dualDate?: string;
+  dualMsg?: string;
+}
+
+/** 포지션 (개편 ①) — 종목 하나의 잔고·감시·미체결·체결·출구를 한 장으로 */
+export interface Position {
+  code: string;
+  name: string;
+  qty: number;
+  ableQty: number;
+  avg: number;
+  cur: number;
+  pnl: number;
+  pnlRate: number;
+  creditType: string | null;
+  loanDate: string | null;
+  watchQty: number;
+  pendingQty: number;
+  freeQty: number;
+  watches: AutoWatch[];
+  open: OrderRow[];
+  fills: OrderRow[];
+  stopLine: number | null;
+  takeLine: number | null;
+  kiwoomStop: OrderRow | null;
+  noExit: boolean;
+  boughtByWatch: boolean;
+}
+export interface PositionsView {
+  deposit: number;
+  equity: number;
+  positions: Position[];
+  entries: AutoWatch[];
+  orphanOpen: OrderRow[];
+  prices: Record<string, { price: number; from: string }>;
+  todayLoss: number;
+  buyLocked: string | null;
 }
 
 export interface CancelTicket {

@@ -35,6 +35,7 @@ import {
   clearAutoWatchHistory,
   deleteAutoWatch,
   listAutoWatches,
+  positions,
   watchPrices,
   watchQuote,
 } from "../orders.js";
@@ -66,18 +67,20 @@ import { sendTelegram } from "../telegram.js";
  * L7: 상태 바꾸는 요청은 POST 만, `X-VNTG-Order: 1` 헤더가 있어야 하고, Origin 이 오면 우리 호스트여야 한다.
  * 브라우저가 다른 사이트에서 폼을 던져도 이 헤더는 못 붙인다(단순 요청이 아니라 CORS 프리플라이트에서 죽는다).
  */
+function legsOfAny(x: unknown): WatchLeg[] | null {
+  if (!Array.isArray(x) || x.length === 0) return null;
+  return x.slice(0, 8).map((l) => {
+    const o2 = (l && typeof l === "object" ? l : {}) as Record<string, unknown>;
+    return { pct: Number(o2.pct), qtyPct: Number(o2.qtyPct), exec: (o2.exec === "limit_now" ? "limit_now" : "market") as "market" | "limit_now" };
+  });
+}
+
 /** 화면이 보낸 감시 조건을 모양만 맞춘다 — 뜻이 맞는지는 prepareOrder 가 잰다 */
 function watchInputOf(v: unknown): WatchInput | null {
   if (!v || typeof v !== "object") return null;
   const w = v as Record<string, unknown>;
   const numOr = (x: unknown): number | null => (x === null || x === undefined || x === "" ? null : Number(x));
-  const legsOf = (x: unknown): WatchLeg[] | null => {
-    if (!Array.isArray(x) || x.length === 0) return null;
-    return x.slice(0, 8).map((l) => {
-      const o2 = (l && typeof l === "object" ? l : {}) as Record<string, unknown>;
-      return { pct: Number(o2.pct), qtyPct: Number(o2.qtyPct), exec: (o2.exec === "limit_now" ? "limit_now" : "market") as "market" | "limit_now" };
-    });
-  };
+  const legsOf = legsOfAny;
   /* 옛 화면이 then 을 객체 하나로 보내도 받는다 */
   const then = Array.isArray(w.then)
     ? legsOf(w.then)
@@ -94,6 +97,7 @@ function watchInputOf(v: unknown): WatchInput | null {
     validUntil: w.validUntil ? String(w.validUntil) : null,
     then,
     legs: legsOf(w.legs),
+    dual: w.dual !== false,
     replaceId: w.replaceId ? String(w.replaceId).replace(/[^0-9a-f]/g, "").slice(0, 12) || null : null,
   };
 }
@@ -373,6 +377,14 @@ export function createOrderRouter(main: KiwoomClient): Router {
    * 그대로 지난다. 취소는 세션만(돈이 안 나가는 방향).
    * ⚠️ 09-07 예약을 걷어낼 때 이 라우트가 같이 잘려 나가 탭이 404 를 받았다 — 벤티지가 잡았다.
    */
+  /** 포지션 (개편 ①) — 잔고·감시·미체결·체결을 종목 카드 하나로 */
+  router.get("/positions", async (_req, res) => {
+    try {
+      res.json(await positions(main));
+    } catch (e) {
+      res.status(502).json({ error: e instanceof Error ? e.message : "조회 실패" });
+    }
+  });
   router.get("/watch", async (_req, res) => {
     try {
       const [rows, summary] = await Promise.all([listAutoWatches(), autoWatchSummary()]);
@@ -448,6 +460,8 @@ export function createOrderRouter(main: KiwoomClient): Router {
           loanDate: blank(b.loanDate) ? null : String(b.loanDate),
           /* 자동감시 (2026-09-07 밤) — 조건 덩어리. 값 검증은 prepareOrder 가 한다 */
           watch: watchInputOf(b.watch),
+          /* 출구 계획 (개편 ①) — 즉시 매수에 붙는 단계 */
+          exit: legsOfAny(b.exit),
         },
         clientIp(req),
         sessionOf(req),

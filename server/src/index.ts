@@ -52,7 +52,7 @@ import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createSysRouter } from "./routes/sys.js";
 import { createOrderRouter } from "./routes/order.js";
-import { startAutoWatch, startOrderAudit } from "./orders.js";
+import { startAutoWatch, startOrderAudit, startOrderHeartbeat } from "./orders.js";
 import { startSysScheduler } from "./sysAssist.js";
 import { createTradeRouter } from "./routes/trade.js";
 import { createCustomThemeRouter } from "./routes/customThemes.js";
@@ -230,6 +230,8 @@ app.use("/api/order", createOrderRouter(client));
 startOrderAudit();
 /* 자동감시주문 (2026-09-07 밤) — 정규장에 값을 보다가 조건에 닿으면 미리 승인된 주문서를 한 번 낸다 */
 startAutoWatch(client);
+/* 살아 있다는 신호 · 08:55 아침 점검 · 15:40 저녁 정합성 (개편 ②) */
+startOrderHeartbeat(client);
 app.use("/api/trade", createTradeRouter(client));
 app.use("/api/custom-themes", createCustomThemeRouter(client));
 app.use("/api/sector-flow", createSectorFlowRouter(client));

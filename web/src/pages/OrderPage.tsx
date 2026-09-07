@@ -7,6 +7,8 @@ import {
   type CancelTicket,
   type OrderAccount,
   type OrderHolding,
+  type Position,
+  type PositionsView,
   type BuyPower,
   type OrderLogRow,
   type OrderRow,
@@ -58,20 +60,20 @@ const VENUES: { key: OrderVenue; label: string; hint: string }[] = [
   { key: "NXT", label: "NXT", hint: "프리 08:00 · 메인 09:00~15:20 · 애프터 ~20:00" },
 ];
 
-type Sub = "order" | "watch" | "watchHistory" | "open" | "fills" | "balance" | "log" | "config";
+/*
+ * 탭 넷 (2026-09-07 밤, 개편 ④) — 벤티지: "니가 나라면 어떻게 개편하라고 할래?" → "가자."
+ * 여덟 탭(매수·매도 / 자동감시 / 감시 히스토리 / 미체결 / 체결 / 잔고 / 기록 / 설정)을 사람이 실제로 하는
+ * 세 가지로 접었다: **사고(주문) · 출구를 걸고 상태를 보고(포지션) · 지난 일을 본다(기록)**. 설정은 톱니.
+ * 포지션 탭이 잔고·자동감시·미체결·체결을 종목 카드 하나로 합친다.
+ */
+type Sub = "order" | "positions" | "history" | "config";
 
 const SUBS: { key: Sub; label: string }[] = [
-  { key: "order", label: "매수·매도" },
-  /* 자동감시 (2026-09-07 밤) — 벤티지: "어떤 종목이 얼만큼 하락하면 매수… 매수 이후 얼마 이하 하락하면 매도" */
-  { key: "watch", label: "자동감시" },
-  /* 감시 히스토리 (2026-09-07 밤) — 벤티지: "지난 감시 카드가 너무 크네. 히스토리는 따로 확인할 수 있게" */
-  { key: "watchHistory", label: "감시 히스토리" },
-  { key: "open", label: "미체결" },
-  { key: "fills", label: "체결" },
-  { key: "balance", label: "잔고" },
-  { key: "log", label: "기록" },
+  { key: "order", label: "주문" },
+  { key: "positions", label: "포지션" },
+  { key: "history", label: "기록" },
   /* 설정 (2026-09-04) — 한도는 여기 없다. 그건 파일을 직접 연다 */
-  { key: "config", label: "설정" },
+  { key: "config", label: "⚙ 설정" },
 ];
 
 /**
@@ -363,7 +365,7 @@ function orderLink(h: { code: string; name: string; ableQty: number; creditType:
 export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
   const [status, setStatus] = useState<OrderStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [sub, setSub] = useState<Sub>(() => (peekPrefill().watch ? "watch" : "order"));
+  const [sub, setSub] = useState<Sub>(() => (peekPrefill().watch ? "positions" : "order"));
   const [left, setLeft] = useState(0);
   /* 주소가 값을 들고 오면 그 값으로 폼을 채운다 — 손절 알림이 이 길로 들어온다 */
   const [prefill, setPrefill] = useState<Prefill>(peekPrefill);
@@ -392,8 +394,8 @@ export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, na
       const p = peekPrefill();
       if (!p.code) return;
       setPrefill(p);
-      /* 자동감시 링크(watch=1)는 자기 탭으로 — 호가창 주문과 섞지 않는다 (2026-09-07 밤) */
-      setSub(p.watch ? "watch" : "order");
+      /* 자동감시 링크(watch=1)는 포지션 탭(감시 폼)으로 — 호가창 주문과 섞지 않는다 */
+      setSub(p.watch ? "positions" : "order");
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -468,8 +470,8 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
                 onClick={() => setSub(s.key)}
               >
                 {s.label}
-                {s.key === "watch" && (status.autoWatch?.waiting ?? 0) + (status.autoWatch?.fired ?? 0) > 0 && (
-                  <i className="ord-sub-n">{(status.autoWatch?.waiting ?? 0) + (status.autoWatch?.fired ?? 0)}</i>
+                {s.key === "positions" && (status.autoWatch?.waiting ?? 0) + (status.autoWatch?.fired ?? 0) > 0 && (
+                  <i className="ord-sub-n" title="지켜보는 감시">{(status.autoWatch?.waiting ?? 0) + (status.autoWatch?.fired ?? 0)}</i>
                 )}
               </button>
             ))}
@@ -477,13 +479,25 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
           {sub === "order" && (
             <OrderForm status={status} prefill={prefill} onDone={load} onSelectStock={onSelectStock} />
           )}
-          {sub === "watch" && <WatchTab status={status} prefill={prefill} onDone={load} onHistory={() => setSub("watchHistory")} />}
-          {sub === "watchHistory" && <WatchHistoryTab />}
-          {sub === "open" && <OpenTab status={status} onDone={load} />}
-          {sub === "fills" && <FillsTab />}
-          {sub === "balance" && <BalanceTab status={status} onSelectStock={onSelectStock} onDone={load} />}
-          {sub === "log" && <LogTab />}
+          {sub === "positions" && <PositionsTab status={status} prefill={prefill} onDone={load} onSelectStock={onSelectStock} />}
+          {sub === "history" && <HistoryTab status={status} onDone={load} />}
           {sub === "config" && <ConfigTab status={status} onDone={load} />}
+          {/* 폰 하단 바 (개편 ④) — 엄지로 닿는 곳에 셋. 데스크톱에선 CSS 가 숨긴다 */}
+          <nav className="ord-bottombar">
+            <button type="button" className={sub === "order" ? "on" : ""} onClick={() => setSub("order")}>
+              🧾 주문
+            </button>
+            <button type="button" className={sub === "positions" ? "on" : ""} onClick={() => setSub("positions")}>
+              📦 포지션
+              {(status.autoWatch?.waiting ?? 0) > 0 && <i>{status.autoWatch.waiting}</i>}
+            </button>
+            <button type="button" className={sub === "history" ? "on" : ""} onClick={() => setSub("history")}>
+              🕘 기록
+            </button>
+            <button type="button" className={`sm${sub === "config" ? " on" : ""}`} onClick={() => setSub("config")} title="설정">
+              ⚙
+            </button>
+          </nav>
         </>
       )}
     </div>
@@ -1012,6 +1026,13 @@ function OrderForm({
    * 매도는 잔고 줄이 정한다 — 융자 줄을 고르면 신용 매도(융자 상환)이고 대출일이 따라온다.
    */
   const [basis, setBasis] = useState<"cash" | "margin" | "credit">("cash");
+  /*
+   * **출구 계획이 기본** (개편 ①) — 매수엔 손절·익절 단계가 붙은 채로 열린다. 체결되면 단계마다 매도
+   * 감시가 자동으로 걸린다. 출구 없이 사려면 스위치를 일부러 꺼야 한다 — 벤티지: "걸어 두면 팔리는 줄 알았다"는
+   * 사고는 구조가 막아야 한다.
+   */
+  const [exitOn, setExitOn] = useState(true);
+  const [exitLegs, setExitLegs] = useState<WatchLeg[]>([{ pct: -5, qtyPct: 100, exec: "market" }]);
   const [loanDate, setLoanDate] = useState<string | null>(prefill.credit ? prefill.loanDate || null : null);
   const [sellCredit, setSellCredit] = useState<boolean>(prefill.credit);
   const [power, setPower] = useState<BuyPower | null>(null);
@@ -1149,6 +1170,7 @@ function OrderForm({
         venue,
         credit,
         loanDate: credit && side === "sell" ? loanDate : null,
+        exit: side === "buy" && exitOn && !credit && !usesCond ? exitLegs.map((l) => ({ pct: Number(l.pct), qtyPct: Number(l.qtyPct), exec: l.exec })) : null,
       });
       setTicket(r);
     } catch (e2) {
@@ -1600,6 +1622,19 @@ function OrderForm({
             {usesCond && <span>발동가 <b>±{status.guard.stopCollarPct}%</b></span>}
             <span>남은 <b>{Math.max(0, status.guard.maxDailyCount - status.today.count)}</b>건</span>
           </div>
+
+          {side === "buy" && !credit && !usesCond && (
+            <div className={`ord-exit${exitOn ? " on" : " off"}`}>
+              <label className="ord-exit-head">
+                <input type="checkbox" checked={exitOn} onChange={(e) => setExitOn(e.target.checked)} />
+                <span>
+                  <b>🛡 출구 계획</b> — 체결되면 손절·익절 감시를 자동으로 건다
+                  {!exitOn && <i className="ord-bad"> · 출구 없이 산다</i>}
+                </span>
+              </label>
+              {exitOn && <LegsEditor legs={exitLegs} onChange={setExitLegs} total={Number(qty) || 0} basisPrice={unit} />}
+            </div>
+          )}
         </div>
 
         <div className="ord-submit">
@@ -1726,6 +1761,15 @@ function Confirm({
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => void go(e)}
       >
+        {ticket.kind === "order" && !isWatch && ticket.side === "buy" && (
+          ticket.exit && ticket.exit.length > 0 ? (
+            <div className="ord-modal-plan">
+              🛡 체결되면 체결가 대비 <b>{legsSay(ticket.exit)}</b> 매도 감시가 자동으로 걸립니다.
+            </div>
+          ) : (
+            <div className="ord-modal-plan bad">⚠️ 출구 계획 없이 삽니다 — 손절선이 없는 포지션이 됩니다.</div>
+          )
+        )}
         {isWatch && ticket.kind === "order" && ticket.watch && (
           <div className="ord-modal-deferred">
             👁 지금 나가지 않습니다 — <b>{watchSay(ticket.watch)}</b>. {ticket.watch.validUntil} 까지 정규장에 지켜보다 닿으면 한 번 냅니다.
@@ -2235,144 +2279,6 @@ function WatchForm({
   );
 }
 
-function WatchTab({ status, prefill, onDone, onHistory }: { status: OrderStatus; prefill: Prefill; onDone: () => void; onHistory: () => void }) {
-  const [rows, setRows] = useState<AutoWatch[]>([]);
-  const [prices, setPrices] = useState<Record<string, { price: number; from: string }>>({});
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState<boolean>(Boolean(prefill.watch));
-  const [editing, setEditing] = useState<AutoWatch | null>(null);
-  /* 접힘이 기본 — 폰에서 카드 하나가 화면을 다 먹었다 */
-  const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
-  const toggle = (id: string) => setOpenIds((m) => ({ ...m, [id]: !m[id] }));
-
-  const load = useCallback(async () => {
-    try {
-      const r = await api.orderWatch();
-      setRows(r.rows ?? []);
-      setPrices(r.prices ?? {});
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "조회 실패");
-    }
-  }, []);
-  useEffect(() => {
-    void load();
-    const t = setInterval(() => void load(), 5_000);
-    return () => clearInterval(t);
-  }, [load]);
-  useEffect(() => {
-    if (prefill.watch) setShowForm(true);
-  }, [prefill.key, prefill.watch]);
-
-  async function cancel(r: AutoWatch) {
-    if (!window.confirm(`${r.ticket.name} ${r.ticket.side === "buy" ? "매수" : "매도"} ${r.ticket.qty}주 감시를 취소할까요?`)) return;
-    setBusy(r.id);
-    try {
-      await api.orderWatchCancel(r.id);
-      await load();
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "취소 실패");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  const live = rows.filter((r) => r.status === "waiting" || r.status === "fired");
-  const done = rows.filter((r) => r.status !== "waiting" && r.status !== "fired");
-  const allowed = status.guard.allowAutoWatch !== false;
-
-  return (
-    <div className="ord-tab">
-      {/*
-        지켜보는 중이 맨 위 (2026-09-07 밤, 세 번째) — 벤티지: "지켜보는 중 부분을 맨 위로 빼야겠다. 표 안에
-        조건→주문 텍스트가 너무 길어서 무슨 글자인지 확인이 안 돼. 제일 중요한 부분이잖아."
-        표를 버리고 카드로 — 발동가·기준·방향·지금 값·발동까지 남은 %·닿으면·수량을 칸으로 쪼갠다.
-      */}
-      {error && <p className="ord-err">{error}</p>}
-      {!allowed && (
-        <p className="ord-err">
-          자동감시가 꺼져 있다 — orderGuard.json 의 allowAutoWatch. 기다리던 것도 발동하지 않는다.
-        </p>
-      )}
-      <div className="ord-wt-head">
-        <h4 className="ord-h4">
-          👁 지켜보는 중 {live.length > 0 && <span className="ord-count">{live.length}</span>}
-          <i className="ord-h4-sub">정규장 09:00~15:30 · KRX 체결로 판정 · 5초마다 새로 읽음</i>
-        </h4>
-        <span className="ord-wt-btns">
-          {live.length > 1 && (
-            <button
-              type="button"
-              className="ord-mk"
-              onClick={() => {
-                const allOpen = live.every((r) => openIds[r.id]);
-                setOpenIds(Object.fromEntries(live.map((r) => [r.id, !allOpen])));
-              }}
-            >
-              {live.every((r) => openIds[r.id]) ? "모두 접기" : "모두 펼치기"}
-            </button>
-          )}
-          <button type="button" className={`ord-wt-new${showForm ? " on" : ""}`} onClick={() => setShowForm((v) => !v)}>
-            {showForm ? "폼 접기" : "＋ 새 감시 걸기"}
-          </button>
-        </span>
-      </div>
-      {live.length === 0 ? (
-        <p className="empty">지켜보는 감시가 없다 — 「＋ 새 감시 걸기」</p>
-      ) : (
-        <div className="ord-wcards">
-          {live.map((r) => (
-            <WatchCard
-              key={r.id}
-              r={r}
-              cur={prices[r.ticket.code] ?? null}
-              busy={busy === r.id}
-              onCancel={() => void cancel(r)}
-              onEdit={() => {
-                setEditing(r);
-                setShowForm(true);
-              }}
-              editing={editing?.id === r.id}
-              open={Boolean(openIds[r.id])}
-              onToggle={() => toggle(r.id)}
-            />
-          ))}
-        </div>
-      )}
-
-      {showForm && (
-        <WatchForm
-          key={editing?.id ?? "new"}
-          status={status}
-          prefill={prefill}
-          edit={editing}
-          onCancelEdit={() => setEditing(null)}
-          onDone={() => {
-            setEditing(null);
-            void load();
-            onDone();
-          }}
-        />
-      )}
-
-      {done.length > 0 && (
-        <p className="ord-caps">
-          지난 감시 {done.length}건 —{" "}
-          <button type="button" className="ord-mk" onClick={onHistory}>
-            감시 히스토리 탭에서
-          </button>
-        </p>
-      )}
-      <p className="ord-note">
-        자동감시는 <b>서버가 값을 보다가 조건에 닿으면</b> 미리 승인해 둔 주문서를 <b>한 번</b> 내는 것이다. 발동 순간 종목 허용·한 건·하루
-        한도·가격 자(그때 값 ±{status.guard.priceCollarPct}%)를 다시 잰다. 실패해도 다시 안 낸다. 잔고 줄의 「👁 감시매도」를 누르면 폼이 채워진다.
-      </p>
-    </div>
-  );
-}
-
 /**
  * 감시 히스토리 탭 (2026-09-07 밤) — 지난 감시를 한 줄씩. 누르면 카드로 펼쳐진다. 삭제·모두 지우기.
  * 지우는 것은 이 목록에서만이다 — 주문 기록(orderLog)엔 남는다.
@@ -2849,31 +2755,74 @@ function FillsTab() {
  * 「지금 들고 있는 것」이 아니다. 계좌에 있는데 복기 노트에 안 적은 종목은 감시가 안 됐다.
  * 이제 **들고 있는 줄에 바로** 적고, 그 값으로 손절 감시가 돌고, 옆 단추가 스톱주문을 연다.
  */
-function BalanceTab({ status, onSelectStock, onDone }: { status: OrderStatus; onSelectStock?: (code: string, name: string) => void; onDone: () => void }) {
-  const [acc, setAcc] = useState<OrderAccount | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  /** 고치는 중인 칸 — 저장 전까지는 화면 값이 이긴다 */
-  const [edit, setEdit] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState<string | null>(null);
-  /*
-   * **자동 손절** (2026-09-07 밤) — 벤티지: "자동감시주문이나 스탑로스도 내가 추가 손댈 거 없이 그 조건에
-   * 오면 자동으로 매도가 되어야지." 여태 잔고의 손절선은 **알림만** 보냈다. 이제 값을 넣고 Enter 하면
-   * 「그 값 이하면 시장가 매도」 감시 주문서가 만들어져 확인 창·비밀번호를 지나 걸린다 — 팔리는 쪽은 서버다.
-   */
-  const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: OrderTicket } | null>(null);
-  const [preparing, setPreparing] = useState<string | null>(null);
+/* ── 포지션 (개편 ①) ────────────────────────────────────────────────────── */
 
-  async function armStop(h: OrderHolding, raw: string, qty: number, replaceId: string | null) {
+/**
+ * 포지션 탭 — 종목 하나가 카드 하나. 잔고·감시·미체결·체결·출구가 한 장에 있고, **출구 없는 포지션은 빨갛다.**
+ * 위에는 진입 대기(매수 감시), 아래에는 보유가 없는 미체결. 「＋ 감시 걸기」가 감시 폼을 연다.
+ */
+function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: OrderStatus; prefill: Prefill; onDone: () => void; onSelectStock?: (code: string, name: string) => void }) {
+  const [view, setView] = useState<PositionsView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState<boolean>(Boolean(prefill.watch));
+  const [editing, setEditing] = useState<AutoWatch | null>(null);
+  const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
+  const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: OrderTicket } | null>(null);
+  const [stopEdit, setStopEdit] = useState<Record<string, string>>({});
+  const inflight = useRef(false);
+
+  const load = useCallback(async () => {
+    if (inflight.current) return;
+    inflight.current = true;
+    try {
+      const v = await api.orderPositions();
+      setView(v);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "조회 실패");
+    } finally {
+      inflight.current = false;
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+    const t = setInterval(() => void load(), 5_000);
+    return () => clearInterval(t);
+  }, [load]);
+  useEffect(() => {
+    if (prefill.watch) setShowForm(true);
+  }, [prefill.key, prefill.watch]);
+
+  const toggle = (id: string) => setOpenIds((m) => ({ ...m, [id]: !m[id] }));
+
+  async function cancelWatch(r: AutoWatch) {
+    if (!window.confirm(`${r.ticket.name} ${r.ticket.side === "buy" ? "매수" : "매도"} ${r.ticket.qty}주 감시를 취소할까요?`)) return;
+    setBusy(r.id);
+    try {
+      await api.orderWatchCancel(r.id);
+      await load();
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "취소 실패");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** 자동 손절 — 값 이하면 남은 수량을 시장가로. 확인 창·비밀번호를 지난다 */
+  async function armStop(pos: Position, raw: string) {
     const price = Number(raw.replace(/\D/g, "")) || 0;
+    const qty = pos.freeQty;
     if (price <= 0 || qty <= 0) return;
-    setPreparing(h.code);
+    setBusy(pos.code);
     setError(null);
     try {
       const until = new Date(Date.now() + 30 * 86400_000 + 9 * 3600_000).toISOString().slice(0, 10);
       const r = await api.orderPrepare({
         side: "sell",
-        code: h.code,
-        name: h.name,
+        code: pos.code,
+        name: pos.name,
         qty,
         price: null,
         condPrice: null,
@@ -2881,269 +2830,158 @@ function BalanceTab({ status, onSelectStock, onDone }: { status: OrderStatus; on
         venue: "KRX",
         credit: false,
         loanDate: null,
-        watch: { dir: "le", basis: "price", pct: null, price, exec: "market", limitPrice: null, validUntil: until, then: null, legs: null, replaceId },
+        watch: { dir: "le", basis: "price", pct: null, price, exec: "market", limitPrice: null, validUntil: until, then: null, legs: null, replaceId: null, dual: true },
       });
       setTicket(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : "자동 손절 주문서를 못 만들었다");
       if (isGone(e)) onDone();
     } finally {
-      setPreparing(null);
+      setBusy(null);
     }
   }
 
-  async function disarmStop(w: AutoWatch) {
-    if (!window.confirm(`${w.ticket.name} 자동 손절(${w.spec.trigger.toLocaleString()}원 이하 · ${w.ticket.qty}주)을 끌까요?`)) return;
-    setSaving(w.ticket.code);
-    try {
-      await api.orderWatchCancel(w.id);
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "못 껐다");
-    } finally {
-      setSaving(null);
-    }
-  }
-  /* 자동감시 — 잔고 줄에 「감시로 산 것」·「걸린 매도 감시」를 적는다 (2026-09-07 밤) */
-  const [watches, setWatches] = useState<AutoWatch[]>([]);
-
-  const load = useCallback(() => {
-    void api
-      .orderAccount()
-      .then((a) => {
-        setAcc(a);
-        setError(null);
-      })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "조회 실패"));
-    void api
-      .orderWatch()
-      .then((w) => setWatches(w.rows ?? []))
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 10_000);
-    return () => clearInterval(t);
-  }, [load]);
-
-  async function save(code: string, name: string, raw: string) {
-    setSaving(code);
-    try {
-      const r = await api.orderSetStop(code, Number(raw.replace(/\D/g, "")) || 0, name);
-      setAcc((prev) => (prev ? { ...prev, stops: r.stops } : prev));
-      setEdit((prev) => {
-        const next = { ...prev };
-        delete next[code];
-        return next;
-      });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "손절선을 못 적었다");
-    } finally {
-      setSaving(null);
-    }
-  }
-
-  if (error && !acc)
+  if (error && !view)
     return (
       <div className="ord-tab">
         <p className="ord-err">{error}</p>
       </div>
     );
-  if (!acc)
+  if (!view)
     return (
       <div className="ord-tab">
         <p className="empty">불러오는 중…</p>
       </div>
     );
 
+  const noExitCount = view.positions.filter((x) => x.noExit).length;
+  const tickAgo = status.watchTickAgoSec;
+  const loopBad = tickAgo !== null && tickAgo !== undefined && tickAgo > 90;
+
   return (
     <div className="ord-tab">
-      <div className="ord-dep">
-        <span>주문 가능 금액</span>
-        <Krw n={acc.deposit} />
-      </div>
       {error && <p className="ord-err">{error}</p>}
-      {acc.holdings.length === 0 ? (
-        <p className="empty">이 계좌에 보유 종목이 없다</p>
+      {/* 계좌 요약 — 예수금·평가·오늘 실현·감시 루프 */}
+      <div className="ord-acct">
+        <span className="ord-stat">
+          <i>주문 가능</i>
+          <b>{manwon(view.deposit)}</b>
+        </span>
+        <span className="ord-stat">
+          <i>평가 합</i>
+          <b>{manwon(view.equity)}</b>
+        </span>
+        {view.todayLoss !== 0 && (
+          <span className={`ord-stat ${signClass(view.todayLoss)}`}>
+            <i>오늘 실현</i>
+            <b>{manwon(view.todayLoss)}</b>
+          </span>
+        )}
+        <span className={`ord-stat${loopBad ? " bad" : ""}`} title="자동감시 루프가 마지막으로 돈 지">
+          <i>감시</i>
+          <b>{tickAgo === null || tickAgo === undefined ? "아직" : loopBad ? `${tickAgo}초 멎음` : "살아 있음"}</b>
+        </span>
+        {view.buyLocked && <span className="ord-stat bad">🔒 {view.buyLocked}</span>}
+        {noExitCount > 0 && <span className="ord-stat bad">⚠️ 출구 없는 포지션 {noExitCount}</span>}
+      </div>
+
+      <div className="ord-wt-head">
+        <h4 className="ord-h4">
+          진입 대기 {view.entries.length > 0 && <span className="ord-count">{view.entries.length}</span>}
+          <i className="ord-h4-sub">조건에 닿으면 사는 매수 감시</i>
+        </h4>
+        <button type="button" className={`ord-wt-new${showForm ? " on" : ""}`} onClick={() => setShowForm((v) => !v)}>
+          {showForm ? "폼 접기" : "＋ 감시 걸기"}
+        </button>
+      </div>
+      {view.entries.length === 0 ? (
+        <p className="empty">기다리는 매수 감시가 없다</p>
       ) : (
-        <div className="ord-scroll">
-          {/*
-            `stack` — 폰에서는 이 표가 **줄마다 카드**로 접힌다 (2026-09-04).
-            칸이 아홉이라 폰에서 옆으로 밀리는데, 하필 제일 중요한 손절선·스톱이 오른쪽 끝이라
-            보이지도 않았다. 표를 하나 더 만드는 대신 CSS 로 접는다 — 마크업이 둘이면
-            언젠가 한쪽만 고쳐진다. 칸 이름은 `data-l` 로 들고 다닌다.
-          */}
-          <table className="ord-table stack ord-bal">
-            <thead>
-              <tr>
-                <th>종목</th>
-                <th className="r">수량</th>
-                <th className="r">평단</th>
-                <th className="r">현재가</th>
-                <th className="r">평가손익</th>
-                <th className="r">수익률</th>
-                <th className="r">자동 손절</th>
-                <th className="r">여유</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {acc.holdings.map((h) => {
-                const saved = acc.stops?.[h.code]?.stop ?? 0;
-                const boughtByWatch = watches.find((w) => w.ticket.code === h.code && w.ticket.side === "buy" && (w.status === "filled" || w.status === "fired"));
-                const sellWatches = watches.filter((w) => w.ticket.code === h.code && w.ticket.side === "sell" && w.status === "waiting");
-                /* 잔량 — 보유 · 매매가능(미체결 매도가 빠진 수) · 감시에 걸린 수 · 아직 아무 데도 안 걸린 수 */
-                const watchQty = sellWatches.reduce((a, w) => a + w.ticket.qty, 0);
-                const pendingQty = h.qty - h.ableQty;
-                const freeQty = Math.max(0, h.ableQty - watchQty);
-                /* 자동 손절 = 「이하면 파는」 매도 감시 중 제일 먼저 닿을 것(발동가가 높은 것) */
-                const stopW = sellWatches.filter((w) => w.spec.dir === "le").sort((a, b) => b.spec.trigger - a.spec.trigger)[0] ?? null;
-                const stopLine = stopW ? stopW.spec.trigger : saved;
-                const roomW = stopLine > 0 && h.cur > 0 ? ((h.cur - stopLine) / h.cur) * 100 : null;
-                return (
-                  <tr key={h.code}>
-                    <td
-                      className={`ord-name${onSelectStock ? " click" : ""}`}
-                      onClick={() => onSelectStock?.(h.code, h.name)}
-                    >
-                      {h.name} <span className="ord-code">{h.code}</span>
-                      {/* 융자 줄은 이름부터 다르게 — 갚을 날이 있는 돈이다 */}
-                      {h.creditType && (
-                        <span className="ord-crd-badge" title={`대출일 ${h.loanDate ?? "?"}`}>
-                          {h.creditType} {h.loanDate ? `${h.loanDate.slice(4, 6)}/${h.loanDate.slice(6)}` : ""}
-                        </span>
-                      )}
-                      {boughtByWatch && (
-                        <span className="ord-watch-badge" title={`자동감시로 산 것 — ${watchSay(boughtByWatch.spec)}${boughtByWatch.fillPrice ? ` · 체결 ${boughtByWatch.fillPrice.toLocaleString()}` : ""}`}>
-                          👁 감시로 삼
-                        </span>
-                      )}
-                      {/*
-                        잔량 띠 (2026-09-07 밤) — 벤티지: "몇 주 남았고 이런 것도 눈에 띄게." 보유 → 미체결 매도에
-                        묶인 수 → 감시에 걸린 수 → **아직 자유로운 수**. 자유로운 수가 0 이면 흐리게, 있으면 굵게.
-                      */}
-                      <div className="ord-qs">
-                        <span className="ord-qs-c">
-                          보유 <b>{fmtNum(h.qty)}</b>주
-                        </span>
-                        {pendingQty > 0 && (
-                          <span className="ord-qs-c dim" title="미체결 매도 주문에 묶여 있다">
-                            주문 중 {fmtNum(pendingQty)}
-                          </span>
-                        )}
-                        {watchQty > 0 && (
-                          <span className="ord-qs-c watch" title={sellWatches.map((w) => watchSay(w.spec)).join(" / ")}>
-                            👁 감시 {fmtNum(watchQty)}
-                          </span>
-                        )}
-                        <span className={`ord-qs-c free${freeQty > 0 ? " on" : ""}`} title="매도 가능한 수에서 감시에 걸린 수를 뺀 것">
-                          남은 <b>{fmtNum(freeQty)}</b>주
-                        </span>
-                      </div>
-                      {sellWatches.length > 0 && (
-                        <div className="ord-watch-lines">
-                          {sellWatches.map((w) => (
-                            <div key={w.id} className="pt-n ord-watch-line" title={watchSay(w.spec)}>
-                              👁 {w.spec.pct !== null ? `${w.spec.pct > 0 ? "+" : ""}${w.spec.pct}%` : ""} {w.spec.trigger.toLocaleString()} {w.spec.dir === "le" ? "↓" : "↑"} · {w.ticket.qty}주 {w.spec.exec === "market" ? "시장가" : "지정가"}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="r" data-l="수량">{fmtNum(h.qty)}</td>
-                    <td className="r" data-l="평단">{fmtNum(h.avg)}</td>
-                    <td className="r" data-l="현재가">{fmtNum(h.cur)}</td>
-                    <td className={`r ${signClass(h.pnl)}`} data-l="평가손익">{fmtNum(h.pnl)}</td>
-                    <td className={`r ${signClass(h.pnlRate)}`} data-l="수익률">{h.pnlRate.toFixed(2)}%</td>
-                    <td className="r ord-stop-cell" data-l="자동 손절">
-                      {stopW ? (
-                        <div className="ord-stop-on" title={watchSay(stopW.spec)}>
-                          <b>{stopW.spec.trigger.toLocaleString()}</b>
-                          <i>이하 · {stopW.ticket.qty}주 {stopW.spec.exec === "market" ? "시장가" : "지정가"}</i>
-                          <button type="button" className="ord-mk ord-stop-x" disabled={saving === h.code} onClick={() => void disarmStop(stopW)} title="자동 손절 끄기">
-                            끄기
-                          </button>
-                        </div>
-                      ) : h.creditType ? (
-                        <span className="ord-caps">융자 줄은 폼에서</span>
-                      ) : freeQty <= 0 ? (
-                        <span className="ord-caps">남은 수량 없음</span>
-                      ) : (
-                        <input
-                          className="ord-stop-in"
-                          inputMode="numeric"
-                          placeholder={`값 + Enter (${freeQty}주)`}
-                          value={edit[h.code] ?? ""}
-                          onChange={(e) => setEdit((p) => ({ ...p, [h.code]: e.target.value.replace(/\D/g, "") }))}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void armStop(h, edit[h.code] ?? "", freeQty, null);
-                          }}
-                          disabled={preparing === h.code}
-                          title="이 값 이하가 되면 남은 수량을 시장가로 판다 — Enter 하면 확인 창"
-                        />
-                      )}
-                      {!stopW && saved > 0 && (
-                        <div className="ord-stop-old">
-                          🔔 알림선 {saved.toLocaleString()} <span className="ord-caps">(알림만)</span>
-                          {!h.creditType && freeQty > 0 && (
-                            <button type="button" className="ord-mk" onClick={() => void armStop(h, String(saved), freeQty, null)}>
-                              자동 손절로
-                            </button>
-                          )}
-                          <button type="button" className="ord-mk" onClick={() => void save(h.code, h.name, "")}>
-                            끄기
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                    <td className={`r ${roomW !== null && roomW < 0 ? "negative" : ""}`} data-l="여유">
-                      {roomW === null ? "-" : `${roomW.toFixed(1)}%`}
-                    </td>
-                    <td className="ord-row-acts">
-                      {/*
-                        줄에서 바로 (2026-09-07) — 벤티지: "잔고 종목 클릭하면 매수할지 매도할지 고르는
-                        버튼들이 나와서 선택하면 매수·매도 칸으로." 주소로 넘긴다(잔고 링크와 같은 길).
-                        매도는 매매가능수량이 채워져 가고, 융자 줄이면 신용 매도(대출일 포함)로 간다.
-                      */}
-                      <a className="ord-x buy" href={orderLink(h, "buy")} title="이 종목 매수 폼으로">
-                        매수
-                      </a>
-                      <a className="ord-x sell" href={orderLink(h, "sell")} title={`매매가능 ${h.ableQty}주가 채워진 매도 폼으로`}>
-                        매도
-                      </a>
-                      {stopLine > 0 && !h.creditType && (
-                        <a
-                          className="ord-x stop"
-                          href={orderLink(h, "sell", `&tt=28&cond=${stopLine}&price=${stopLine}`)}
-                          title={`${h.ableQty}주 · 발동가 ${stopLine.toLocaleString()}원으로 키움 스톱지정가 매도 폼`}
-                        >
-                          🛑 스톱
-                        </a>
-                      )}
-                      {!h.creditType && freeQty > 0 && (
-                        <a
-                          className="ord-x watch"
-                          href={`${orderLink(h, "sell", `&watch=1&wb=avg&wp=-5&wx=market&tt=3`).replace(/&qty=\d+/, "")}&qty=${freeQty}`}
-                          title={`남은 ${freeQty}주 · 평단 대비 −5% 에 시장가 매도 감시(폼에서 고친다)`}
-                        >
-                          👁 감시매도 {freeQty}주
-                        </a>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="ord-wcards">
+          {view.entries.map((r) => (
+            <WatchCard
+              key={r.id}
+              r={r}
+              cur={view.prices[r.ticket.code] ?? null}
+              busy={busy === r.id}
+              onCancel={() => void cancelWatch(r)}
+              onEdit={() => {
+                setEditing(r);
+                setShowForm(true);
+              }}
+              editing={editing?.id === r.id}
+              open={Boolean(openIds[r.id])}
+              onToggle={() => toggle(r.id)}
+            />
+          ))}
         </div>
       )}
+
+      {showForm && (
+        <WatchForm
+          key={editing?.id ?? "new"}
+          status={status}
+          prefill={prefill}
+          edit={editing}
+          onCancelEdit={() => setEditing(null)}
+          onDone={() => {
+            setEditing(null);
+            void load();
+            onDone();
+          }}
+        />
+      )}
+
+      <h4 className="ord-h4">
+        보유 포지션 {view.positions.length > 0 && <span className="ord-count">{view.positions.length}</span>}
+        <i className="ord-h4-sub">출구(손절·익절)가 없는 카드는 빨갛다</i>
+      </h4>
+      {view.positions.length === 0 ? (
+        <p className="empty">이 계좌에 보유 종목이 없다</p>
+      ) : (
+        <div className="ord-pcards">
+          {view.positions.map((pos) => (
+            <PositionCard
+              key={pos.code}
+              pos={pos}
+              cur={view.prices[pos.code] ?? null}
+              busy={busy === pos.code}
+              stopValue={stopEdit[pos.code] ?? ""}
+              onStopChange={(v) => setStopEdit((m) => ({ ...m, [pos.code]: v }))}
+              onArmStop={() => void armStop(pos, stopEdit[pos.code] ?? "")}
+              onCancelWatch={(w) => void cancelWatch(w)}
+              onEditWatch={(w) => {
+                setEditing(w);
+                setShowForm(true);
+              }}
+              openIds={openIds}
+              onToggle={toggle}
+              onSelectStock={onSelectStock}
+            />
+          ))}
+        </div>
+      )}
+
+      {view.orphanOpen.length > 0 && (
+        <>
+          <h4 className="ord-h4">보유가 없는 미체결</h4>
+          <div className="ord-plines">
+            {view.orphanOpen.map((o) => (
+              <div key={o.ordNo} className="ord-pline">
+                <SideChip side={o.side} /> {o.name} <span className="ord-code">{o.code}</span> · {o.remain}/{o.qty}주 · {o.price ? `${o.price.toLocaleString()}원` : "시장가"} · {o.time} {o.status}
+              </div>
+            ))}
+          </div>
+          <p className="ord-caps">취소는 기록 탭 › 미체결에서</p>
+        </>
+      )}
+
       <p className="ord-note">
-        <b>자동 손절</b> — 값을 넣고 Enter 하면 「그 값 이하가 되면 남은 수량을 시장가로 판다」는 감시 주문서가 뜹니다.
-        확인하고 비밀번호를 넣으면 걸리고, 그 뒤는 <b>서버가 정규장에 값을 보다가 알아서 팝니다</b>(30일 유효, 자동감시 탭에도 보입니다).
-        ✕ 로 끕니다. 단계로 나눠 팔거나 익절을 섞으려면 「👁 감시매도」로 폼에서. 「🛑 스톱」은 같은 값으로 <b>키움 스톱지정가</b> 폼 —
-        지켜보는 쪽이 키움이라 서버가 꺼져도 나갑니다. 예전의 알림선(🔔)은 알림만 보냈던 것 — 「자동 손절로」 한 번 눌러 바꾸세요.
+        <b>자동 손절</b> — 값 + Enter → 「그 값 이하면 남은 수량 시장가 매도」 감시 주문서 → 확인·비밀번호. 그 뒤는 서버가 정규장에 보다가 팔고,
+        {status.guard.dualStop !== false ? " 아침마다 키움 스톱지정가도 같이 걸어 서버가 죽어도 키움이 판다(🛡)." : " 키움 스톱은 꺼져 있다(orderGuard.dualStop)."}
+        {" "}단계로 나누거나 익절을 섞으려면 「출구 걸기」.
       </p>
+
       {ticket && (
         <Confirm
           nonce={ticket.nonce}
@@ -3153,17 +2991,187 @@ function BalanceTab({ status, onSelectStock, onDone }: { status: OrderStatus; on
           onClose={() => setTicket(null)}
           onDone={() => {
             setTicket(null);
-            setEdit({});
-            load();
+            setStopEdit({});
+            void load();
             onDone();
           }}
         />
       )}
-      <p className="ord-note">
-        이 잔고는 <b>주문 전용 앱키의 계좌</b>입니다. 「연동 계좌 (키움)」가 보여 주는 조회용 계좌와 다를 수 있습니다.
-        복기 노트의 손절선은 그대로 삽니다 — 그쪽은 <b>R 배수의 분모</b>라 「그때 정한 값」이고, 여기는 「지금 값」입니다.
-        같은 종목이 양쪽에 있으면 <b>여기가 이깁니다</b>.
-      </p>
+    </div>
+  );
+}
+
+function PositionCard({
+  pos,
+  cur,
+  busy,
+  stopValue,
+  onStopChange,
+  onArmStop,
+  onCancelWatch,
+  onEditWatch,
+  openIds,
+  onToggle,
+  onSelectStock,
+}: {
+  pos: Position;
+  cur: { price: number; from: string } | null;
+  busy: boolean;
+  stopValue: string;
+  onStopChange: (v: string) => void;
+  onArmStop: () => void;
+  onCancelWatch: (w: AutoWatch) => void;
+  onEditWatch: (w: AutoWatch) => void;
+  openIds: Record<string, boolean>;
+  onToggle: (id: string) => void;
+  onSelectStock?: (code: string, name: string) => void;
+}) {
+  const price = cur?.price ?? pos.cur;
+  const pnl = (price - pos.avg) * pos.qty;
+  const pnlRate = pos.avg > 0 ? ((price - pos.avg) / pos.avg) * 100 : 0;
+  const room = pos.stopLine && price > 0 ? ((price - pos.stopLine) / price) * 100 : null;
+  const h: OrderHolding = { code: pos.code, name: pos.name, qty: pos.qty, ableQty: pos.ableQty, avg: pos.avg, cur: pos.cur, pnl: pos.pnl, pnlRate: pos.pnlRate, creditType: pos.creditType, loanDate: pos.loanDate };
+  const sells = pos.watches.filter((w) => w.ticket.side === "sell");
+  const stopW = sells.find((w) => w.status === "waiting" && w.spec.dir === "le" && w.spec.trigger === pos.stopLine) ?? null;
+  return (
+    <div className={`ord-pcard${pos.noExit ? " noexit" : ""}${pnl < 0 ? " down" : " up"}`}>
+      <div className="ord-pcard-top">
+        <button type="button" className="ord-pcard-name" onClick={() => onSelectStock?.(pos.code, pos.name)} title="종목 상세">
+          {pos.name} <span className="ord-code">{pos.code}</span>
+        </button>
+        {pos.creditType && (
+          <span className="ord-crd-badge" title={`대출일 ${pos.loanDate ?? "?"}`}>
+            {pos.creditType} {pos.loanDate ? `${pos.loanDate.slice(4, 6)}/${pos.loanDate.slice(6)}` : ""}
+          </span>
+        )}
+        {pos.boughtByWatch && <span className="ord-watch-badge">👁 감시로 삼</span>}
+        {pos.noExit ? <span className="ord-noexit">⚠️ 출구 없음</span> : <span className="ord-hasexit">🛡 출구 있음</span>}
+        <span className={`ord-pcard-pnl ${signClass(pnl)}`}>
+          {pnl >= 0 ? "+" : ""}
+          {manwon(pnl)} <small>({pnlRate >= 0 ? "+" : ""}{pnlRate.toFixed(2)}%)</small>
+        </span>
+      </div>
+
+      <div className="ord-qs">
+        <span className="ord-qs-c">
+          보유 <b>{fmtNum(pos.qty)}</b>주
+        </span>
+        {pos.pendingQty > 0 && <span className="ord-qs-c dim">주문 중 {fmtNum(pos.pendingQty)}</span>}
+        {pos.watchQty > 0 && <span className="ord-qs-c watch">👁 감시 {fmtNum(pos.watchQty)}</span>}
+        <span className={`ord-qs-c free${pos.freeQty > 0 ? " on" : ""}`}>
+          남은 <b>{fmtNum(pos.freeQty)}</b>주
+        </span>
+      </div>
+
+      <div className="ord-pcard-grid">
+        <div className="ord-wcard-cell">
+          <dt>평단</dt>
+          <dd>{fmtNum(pos.avg)}</dd>
+        </div>
+        <div className="ord-wcard-cell">
+          <dt>지금 값</dt>
+          <dd>
+            {fmtNum(price)}
+            {cur && <small>({cur.from})</small>}
+          </dd>
+        </div>
+        <div className="ord-wcard-cell">
+          <dt>손절선</dt>
+          <dd className={pos.stopLine ? "" : "ord-bad"}>
+            {pos.stopLine ? `${fmtNum(pos.stopLine)}` : "없음"}
+            {pos.kiwoomStop && <small title={`키움 스톱지정가 미체결 #${pos.kiwoomStop.ordNo}`}>🛡 키움</small>}
+          </dd>
+          {room !== null && <small className={room < 0 ? "ord-bad" : ""}>여유 {room.toFixed(1)}%</small>}
+        </div>
+        <div className="ord-wcard-cell">
+          <dt>익절선</dt>
+          <dd>{pos.takeLine ? fmtNum(pos.takeLine) : "-"}</dd>
+        </div>
+      </div>
+
+      {pos.watches.length > 0 && (
+        <div className="ord-pcard-watches">
+          {pos.watches.map((w) => (
+            <WatchCard key={w.id} r={w} cur={cur} busy={busy} onCancel={() => onCancelWatch(w)} onEdit={() => onEditWatch(w)} editing={false} open={Boolean(openIds[w.id])} onToggle={() => onToggle(w.id)} />
+          ))}
+        </div>
+      )}
+
+      {(pos.open.length > 0 || pos.fills.length > 0) && (
+        <div className="ord-plines">
+          {pos.open.map((o) => (
+            <div key={o.ordNo} className="ord-pline">
+              미체결 <SideChip side={o.side} /> {o.remain}/{o.qty}주 · {o.price ? `${o.price.toLocaleString()}원` : "시장가"}
+              {o.stopPrice ? ` · 발동 ${o.stopPrice.toLocaleString()}` : ""} · {o.time}
+            </div>
+          ))}
+          {pos.fills.map((f, i) => (
+            <div key={`${f.ordNo}-${i}`} className="ord-pline dim">
+              오늘 체결 <SideChip side={f.side} /> {f.filled}주 @ {f.price.toLocaleString()} · {f.time}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="ord-pcard-acts">
+        {!stopW && !pos.creditType && pos.freeQty > 0 && (
+          <div className="ord-stop-arm">
+            <input
+              className="ord-stop-in"
+              inputMode="numeric"
+              placeholder={`자동 손절 값 + Enter (${pos.freeQty}주)`}
+              value={stopValue}
+              onChange={(e) => onStopChange(e.target.value.replace(/\D/g, ""))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") onArmStop();
+              }}
+              disabled={busy}
+            />
+            <button type="button" className="ord-mk" disabled={busy || !stopValue} onClick={onArmStop}>
+              걸기
+            </button>
+          </div>
+        )}
+        <a className="ord-x buy" href={orderLink(h, "buy")}>
+          매수
+        </a>
+        <a className="ord-x sell" href={orderLink(h, "sell")}>
+          매도
+        </a>
+        {!pos.creditType && pos.freeQty > 0 && (
+          <a className="ord-x watch" href={`${orderLink(h, "sell", `&watch=1&wb=avg&wp=-5&wx=market`).replace(/&qty=\d+/, "")}&qty=${pos.freeQty}`} title="단계·익절을 섞어 출구를 건다">
+            🛡 출구 걸기 {pos.freeQty}주
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── 기록 (개편 ④) — 미체결·체결·주문 기록·감시 히스토리를 한 탭에 ─────── */
+
+function HistoryTab({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
+  const [sec, setSec] = useState<"open" | "fills" | "log" | "watch">("open");
+  return (
+    <div className="ord-tab">
+      <div className="ord-hist-tabs">
+        {(
+          [
+            ["open", "미체결"],
+            ["fills", "오늘 체결"],
+            ["log", "주문 기록"],
+            ["watch", "감시 히스토리"],
+          ] as const
+        ).map(([k, label]) => (
+          <button key={k} type="button" className={sec === k ? "on" : ""} onClick={() => setSec(k)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {sec === "open" && <OpenTab status={status} onDone={onDone} />}
+      {sec === "fills" && <FillsTab />}
+      {sec === "log" && <LogTab />}
+      {sec === "watch" && <WatchHistoryTab />}
     </div>
   );
 }
