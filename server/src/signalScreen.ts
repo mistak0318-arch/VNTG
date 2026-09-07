@@ -357,6 +357,16 @@ async function fillFromSnapshot(client: KiwoomClient, rows: Candidate[]): Promis
  * 전부 **이미 있는 조회**를 그대로 쓴다 — 시세분석 명세(rankSpecs)와 각 화면의
  * TR. 새 TR 을 만들지 않는다.
  */
+/** 목록 키 → 한글 라벨 (표식 근거·툴팁용, 2026-09-08). 모르는 키는 그대로 */
+export function universeLabel(key: string): string {
+  const hit = SCREEN_UNIVERSES.find((u) => u.key === key);
+  return hit ? hit.label.replace(/\s*\(.*\)$/, "") : key;
+}
+/** 전체 라벨 지도 — 화면이 한 번 받아 두고 쓴다 */
+export function universeLabels(): Record<string, string> {
+  return Object.fromEntries(SCREEN_UNIVERSES.map((u) => [u.key, u.label.replace(/\s*\(.*\)$/, "")]));
+}
+
 export const SCREEN_UNIVERSES: {
   key: string;
   label: string;

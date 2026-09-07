@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, fmtAbsNum, fmtNum, type ExchangeQuote, type RawRecord } from "../api";
+import { api, fmtAbsNum, fmtNum, type ExchangeQuote, type MarkWhy, type RawRecord } from "../api";
 import { PeriodReturns, type LastSession } from "./PeriodReturns";
 
 /**
@@ -49,6 +49,51 @@ function vsBase(value: unknown, base: number): { cls: string; rate: string } {
     cls: rate > 0 ? "positive" : rate < 0 ? "negative" : "",
     rate: `${rate > 0 ? "+" : ""}${rate.toFixed(2)}%`,
   };
+}
+
+/**
+ * **표식 칩 줄** (2026-09-08) — 벤티지: "모바일에서는 마우스를 못 올리니 종목 상세 머리에 마크랑 간단한 설명."
+ * 🌟⚡🌈 · 신호등 색·점수 · 🔥⏳ 경보 · ★ 관심 · ⤴ 이탈. 칩을 누르면 한 줄 근거가 펼쳐진다. 넓은 화면은 툴팁으로도.
+ * 표식이 하나도 없으면 줄을 안 그린다 — 빈 줄은 정보가 아니다.
+ */
+function MarkChips({ code }: { code: string }) {
+  const [marks, setMarks] = useState<MarkWhy[] | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setMarks(null);
+    setOpen(null);
+    api
+      .markWhy(code)
+      .then((r) => alive && setMarks(r.marks))
+      .catch(() => alive && setMarks([]));
+    return () => {
+      alive = false;
+    };
+  }, [code]);
+  if (!marks || marks.length === 0) return null;
+  const cur = marks.find((m) => m.key === open);
+  return (
+    <div className="ph-marks">
+      <div className="ph-marks-row">
+        {marks.map((m) => (
+          <button
+            key={m.key}
+            className={`ph-mark k-${m.key}${m.level ? ` lv-${m.level}` : ""}${open === m.key ? " on" : ""}`}
+            title={m.why}
+            onClick={() => setOpen(open === m.key ? null : m.key)}
+          >
+            <i>{m.icon}</i> {m.label}
+          </button>
+        ))}
+      </div>
+      {cur && (
+        <div className="ph-mark-why">
+          <b>{cur.icon} {cur.label}</b> {cur.why}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function PriceHeader({ info, code }: { info: RawRecord | null; code?: string }) {
@@ -278,6 +323,7 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
             );
           })()}
         </div>
+        {code && <MarkChips code={code} />}
         <div className={`ph-price ${preOpen && !hasCur ? "" : sign}`}>{fmtAbsNum(mainPrice)}</div>
         {/* 통합 값이 있으면 프리장에도 등락을 적는다(NXT 체결 기준). 없을 때만 생략 */}
         {!(preOpen && !hasCur) && (

@@ -33,6 +33,8 @@ export type SuperMark = "super" | "cross" | "rainbow";
 interface MarksValue {
   /** 이 종목이 가진 표식 **전부** — 겹치는 것이 곧 정보다 */
   marksOf: (code: string) => SuperMark[];
+  /** 이 종목의 표식 근거 한 줄 — 툴팁에 (2026-09-08). 원장에서 만들어 요청 0회 */
+  whyOf: (code: string) => string;
   /** 몇 종목이 표식을 갖고 있나 — 화면이 「아직 안 받았다」를 구분할 때 */
   size: number;
   reload: () => void;
@@ -48,12 +50,17 @@ const TTL_MS = 5 * 60_000;
 
 export function SuperMarksProvider({ children }: { children: React.ReactNode }) {
   const [marks, setMarks] = useState<Map<string, SuperMark[]>>(new Map());
+  const [whys, setWhys] = useState<Map<string, string>>(new Map());
 
   const load = useCallback(() => {
     api
       .signalSuper()
       .then((r) => {
         const m = new Map<string, SuperMark[]>();
+        const w = new Map<string, string>();
+        const rainbowDays = r.config?.rainbowDays ?? 2;
+        const lab = (k: string) => r.listLabels?.[k] ?? k;
+        const pct = (v: number | null | undefined) => (v === null || v === undefined ? null : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
         for (const e of r.entries ?? []) {
           /* 이탈한 것은 표식이 없다 — 「지금 그런가」를 말하는 표시다 */
           if (e.active === false) continue;
@@ -74,8 +81,20 @@ export function SuperMarksProvider({ children }: { children: React.ReactNode }) 
           if (tags.includes("cross")) list.push("cross");
           if (e.rainbow) list.push("rainbow");
           if (list.length > 0) m.set(e.code, list);
+          /* 근거 — 벤티지: "마우스 올렸을 때 왜 그랬는지" */
+          const lines: string[] = [];
+          if (list.includes("super")) {
+            lines.push(`🌟 ${(e.lists ?? []).length}개 목록 교집합(${(e.lists ?? []).map(lab).join("·") || "-"}) · 편입 때 ${e.score}점 · ${e.addedDate} 편입${e.sinceAdded !== null && e.sinceAdded !== undefined ? ` 뒤 ${pct(e.sinceAdded)}` : ""}${e.excess?.d5 !== null && e.excess?.d5 !== undefined ? ` (5일 시장 대비 ${pct(e.excess.d5)})` : ""}`);
+          }
+          if (list.includes("cross")) {
+            const t = e.leader?.tags ?? [];
+            lines.push(`⚡ ${t.length > 0 ? `주도주 태그 ${t.join("·")}${e.leader?.sector ? ` (${e.leader.sector})` : ""} ∩ 슈퍼신호등` : "슈퍼신호등이면서 그날 주도주 탐색에도 걸림"}`);
+          }
+          if (list.includes("rainbow")) lines.push(`🌈 ${e.seenCount}일째 계속 교집합(문턱 ${rainbowDays}일) — 지속성`);
+          if (lines.length > 0) w.set(e.code, lines.join("\n"));
         }
         setMarks(m);
+        setWhys(w);
       })
       .catch(() => {
         /* 못 받으면 표식만 없다 — 화면은 그대로 뜬다 */
@@ -89,8 +108,8 @@ export function SuperMarksProvider({ children }: { children: React.ReactNode }) 
   }, [load]);
 
   const value = useMemo<MarksValue>(
-    () => ({ marksOf: (code) => marks.get(code) ?? [], size: marks.size, reload: load }),
-    [marks, load],
+    () => ({ marksOf: (code) => marks.get(code) ?? [], whyOf: (code) => whys.get(code) ?? "", size: marks.size, reload: load }),
+    [marks, whys, load],
   );
   return <MarksContext.Provider value={value}>{children}</MarksContext.Provider>;
 }
@@ -102,7 +121,7 @@ export function useSuperMarks(): MarksValue {
    * 화면이 못 뜨면 안 된다 — 별표(useWatchedCodes)는 없으면 던지지만 그건 그
    * 화면의 본체이기 때문이다. 여기는 다르다.
    */
-  return ctx ?? { marksOf: () => [], size: 0, reload: () => undefined };
+  return ctx ?? { marksOf: () => [], whyOf: () => "", size: 0, reload: () => undefined };
 }
 
 const LABEL: Record<SuperMark, { icon: string; short: string; title: string }> = {
@@ -130,18 +149,21 @@ const LABEL: Record<SuperMark, { icon: string; short: string; title: string }> =
  * 없으면 아무것도 안 그린다 — 빈 자리를 남기면 이름 정렬이 어긋난다.
  */
 export function SuperMark({ code }: { code: string }) {
-  const { marksOf } = useSuperMarks();
+  const { marksOf, whyOf } = useSuperMarks();
   const marks = marksOf(code);
   if (marks.length === 0) return null;
+  const why = whyOf(code);
   /*
    * 겹친 것은 **하나로 묶어** 설명한다 — 표식마다 툴팁이 따로면 무엇이 겹쳤는지가
    * 안 읽힌다. 셋 다면 「세 관점이 동시에 가리키고 사흘째 유지되는 종목」이다.
    */
+  /* 종목별 근거가 있으면 그것, 없으면 옛 일반 설명 (2026-09-08) */
   const title =
-    marks.length === 1
+    why ||
+    (marks.length === 1
       ? LABEL[marks[0]].title
       : marks.map((k) => `${LABEL[k].icon} ${LABEL[k].short}`).join(" · ") +
-        (marks.length >= 3 ? " — 세 가지가 다 겹친 종목입니다" : "");
+        (marks.length >= 3 ? " — 세 가지가 다 겹친 종목입니다" : ""));
   return (
     <span className={`super-mark ${marks.map((k) => `mark-${k}`).join(" ")}`} title={title}>
       {marks.map((k) => LABEL[k].icon).join("")}

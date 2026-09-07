@@ -1716,6 +1716,12 @@ export async function investorDailySeries(
  * 편입일 20거래일 전부터의 주가·지수·업종 시리즈와 일별 수급을 준다.
  * 상대 비교(편입일=0% 정규화)는 화면이 한다 — 서버는 원자료만.
  */
+/** 원장 항목 하나 — 표식 근거(`markWhy`)가 조회 0회로 읽는다 (2026-09-08) */
+export async function superEntryOf(code: string): Promise<{ entry: SuperEntry | null; rainbowDays: number }> {
+  const store = await load();
+  return { entry: store.entries.find((e) => e.code === code) ?? null, rainbowDays: cfgOf(store).rainbowDays };
+}
+
 export async function superDetail(client: KiwoomClient, code: string) {
   const store = await load();
   const entry = store.entries.find((e) => e.code === code);

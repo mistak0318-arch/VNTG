@@ -1393,6 +1393,8 @@ export const api = {
     ),
   signalScreenStatus: (jobId: string) => getJson<ScreenJob>(`/api/signal/screen/${jobId}`),
   /** 슈퍼신호등 — 여러 목록에 동시에 걸린 초록의 관찰 목록 */
+  /** 표식 근거 — 이 종목은 왜 🌟⚡🌈·신호등·★ 가 붙었나 (2026-09-08) */
+  markWhy: (code: string) => getJson<{ code: string; marks: MarkWhy[]; at: string }>(`/api/signal/super/why/${code}`),
   signalSuper: () =>
     getJson<{
       entries: SuperEntry[];
@@ -1408,6 +1410,8 @@ export const api = {
         weakRegimeMode?: "mark" | "skip";
       };
       grade: SuperGradeRow[];
+      /** 목록 키 → 한글 라벨 (2026-09-08) */
+      listLabels?: Record<string, string>;
       /** 전체와 값이 똑같아 서버가 뺀 줄 수 (편입 규칙이 이미 요구하는 조건들) */
       gradeHidden?: number;
       stats: SuperStats;
@@ -2798,6 +2802,14 @@ export interface SuperExit {
   auto: boolean;
 }
 
+export interface MarkWhy {
+  key: "super" | "cross" | "rainbow" | "signal" | "hot" | "late" | "watch" | "exited";
+  icon: string;
+  label: string;
+  why: string;
+  level?: "green" | "yellow" | "red" | "unknown";
+}
+
 export interface SuperEntry {
   /** 편입 당시 경보 태그 (2026-09-02) — 「경보 있던 편입 vs 없던 편입」을 나중에 견준다 */
   alerts?: SignalAlerts;
@@ -2832,6 +2844,8 @@ export interface SuperEntry {
    * 점수가 아니라 **지속성**에 등급을 뒀다 — 성적을 가른 유일한 축이라서다.
    */
   rainbow?: boolean;
+  /** ⚡ 근거 — 편입 때 주도주 탐색 태그 (2026-09-08 화면이 읽기 시작) */
+  leader?: { tags: string[]; was: boolean; sector?: string };
   code: string;
   name: string;
   addedDate: string;

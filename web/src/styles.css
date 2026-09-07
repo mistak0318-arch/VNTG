@@ -17109,3 +17109,18 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .cis-basis { margin: 0.25rem 0 0.2rem; padding-left: 1.1rem; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
 .cis-basis li { list-style: "· "; }
 .slot-intraday { border-left-color: #8a7bd6; }
+
+/* 표식 칩 줄 — 종목 상세 머리 (2026-09-08) */
+.ph-marks { margin: 0.2rem 0 0.15rem; }
+.ph-marks-row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.ph-mark { display: inline-flex; align-items: center; gap: 0.2rem; font: inherit; font-size: 0.74rem; padding: 0.1rem 0.45rem; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--fg, inherit); cursor: pointer; line-height: 1.4; }
+.ph-mark i { font-style: normal; }
+.ph-mark.on { border-color: var(--accent, #6c8cff); background: rgba(108, 140, 255, 0.12); }
+.ph-mark.lv-green i { color: #2e9e5b; }
+.ph-mark.lv-yellow i { color: #e6a23c; }
+.ph-mark.lv-red i { color: var(--red); }
+.ph-mark.lv-unknown i { color: var(--muted); }
+.ph-mark.k-hot, .ph-mark.k-late { color: var(--muted); }
+.ph-mark.k-exited { color: var(--muted); border-style: dashed; }
+.ph-mark-why { font-size: 0.78rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.45; border-left: 2px solid var(--border); padding-left: 0.5rem; word-break: break-word; }
+.ph-mark-why b { color: inherit; font-weight: 600; }

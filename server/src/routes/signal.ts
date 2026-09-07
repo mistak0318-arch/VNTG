@@ -22,6 +22,8 @@ import {
   updateSuperNote,
 } from "../superSignal.js";
 import { gradeSignalHistory, signalDays } from "../signalHistory.js";
+import { markWhy } from "../markWhy.js";
+import { universeLabels } from "../signalScreen.js";
 import { etfSeriesFor, themeSeriesFor } from "../themeSeries.js";
 import { backtestProgress, backtestResult, startBacktestJob } from "../signalBacktest.js";
 import { samplesMeta } from "../signalSamples.js";
@@ -525,9 +527,18 @@ export function createSignalRouter(client: KiwoomClient): Router {
   /* ---------------- 슈퍼신호등 ---------------- */
 
   /** 관찰 목록 — 지금 가격·편입가 대비까지 붙여서 */
+  /** 표식 근거 — 이 종목은 왜 🌟⚡🌈·신호등·★ 가 붙었나 (2026-09-08) */
+  router.get("/super/why/:code", async (req, res, next) => {
+    try {
+      res.json(await markWhy(client, String(req.params.code).replace(/_(AL|NX)$/i, "")));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/super", async (_req, res, next) => {
     try {
-      res.json(await listSuperSignal(client));
+      res.json({ ...(await listSuperSignal(client)), listLabels: universeLabels() });
     } catch (err) {
       next(err);
     }
