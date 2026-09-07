@@ -1685,6 +1685,8 @@ export const api = {
     getJson<LeaderScan>(`/api/pulse/leaders${withNews ? "" : "?news=0"}`),
   /** 탐색기 성적 — 종목마다 일봉을 받아 몇 십 초 걸린다 */
   leaderTrack: () => getJson<LeaderTrackResult>("/api/pulse/leaders/track"),
+  /** 판의 흐름 — 날짜 × 섹터 격자 (2026-09-08) */
+  leaderFlow: (days = 10) => getJson<LeaderFlow>(`/api/pulse/leaders/flow?days=${days}`),
   leaderConfig: () => getJson<LeaderConfig>("/api/pulse/leaders/config"),
   leaderConfigSave: (c: LeaderConfig) => putJson<LeaderConfig>("/api/pulse/leaders/config", c),
   pulse: (force = false) => getJson<MarketPulse>(`/api/pulse${force ? "?force=1" : ""}`),
@@ -5700,6 +5702,22 @@ export interface LeaderConfig {
   minMembers: number;
 }
 
+/** 태그 하나 = 근거 한 줄 (2026-09-08) */
+export interface LeaderTagDetail {
+  tag: string;
+  value: number;
+  text: string;
+  hint: string;
+}
+/** 표식 — 조회 0회 원장에서. signal null = 안 잼 */
+export interface LeaderMark {
+  super: boolean;
+  cross: boolean;
+  rainbow: boolean;
+  signal: { level: "green"; score: number } | null;
+  hot: string[];
+  late: string[];
+}
 export interface LeaderStock {
   code: string;
   name: string;
@@ -5711,7 +5729,37 @@ export interface LeaderStock {
   marketCap: number | null;
   volumeRatio: number | null;
   tags: string[];
+  tagDetail?: LeaderTagDetail[];
+  mark?: LeaderMark;
+  isNew?: boolean;
   score: number;
+}
+/** 조용한 후보 — 판은 도는데 아직 안 움직인 놈 (2026-09-08) */
+export interface LeaderQuiet {
+  code: string;
+  name: string;
+  sector: string;
+  sectorBreadth: number;
+  sectorStreak: number | null;
+  price: number;
+  changeRate: number;
+  tradeValue: number;
+  ma5Gap: number | null;
+  mark: LeaderMark;
+}
+export interface LeaderTagCard {
+  tag: string;
+  n: number;
+  green: number;
+  sectors: { name: string; n: number }[];
+  top: { code: string; name: string; changeRate: number }[];
+}
+/** 판의 흐름 — 날짜 × 섹터 (2026-09-08) */
+export interface LeaderFlow {
+  dates: string[];
+  sectors: { name: string; days: number; streak: number; today: boolean }[];
+  cells: Record<string, Record<string, { picks: number; breadth: number | null; rate: number | null }>>;
+  overlap: Record<string, number | null>;
 }
 
 export interface LeaderScan {
@@ -5720,6 +5768,8 @@ export interface LeaderScan {
   config: LeaderConfig;
   sectors: {
     name: string;
+    /** 어제 폭 — 화살표용 (2026-09-08) */
+    prevBreadth?: number | null;
     /** 거래대금 가중 등락률 */
     weightedRate: number;
     simpleRate: number;
@@ -5736,7 +5786,12 @@ export interface LeaderScan {
   stocks: LeaderStock[];
   scanned: number;
   belowThreshold: number;
+  quiet?: LeaderQuiet[];
+  newCount?: number;
+  tagCards?: LeaderTagCard[];
   note: string;
+  noTrade?: boolean;
+  intraday?: boolean;
 }
 
 

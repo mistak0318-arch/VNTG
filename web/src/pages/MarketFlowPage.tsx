@@ -267,7 +267,20 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
             <ThermoPanel />
           </>
         )}
-        {tab === "leaders" && <LeaderScanPanel onSelectStock={onSelectStock} />}
+        {tab === "leaders" && (
+          <section className="card">
+            <h2>주도주 탐색은 「주도주」 메뉴로 옮겼다 (2026-09-08)</h2>
+            <div className="page-note">
+              오늘 한 장에 판의 흐름(10일 격자)·조용한 후보·성적이 붙어 단독 메뉴가 됐다. 여기 탭은 길잡이만 남긴다.
+            </div>
+            <button className="primary-btn" onClick={() => (window.location.hash = "#/leaders")}>
+              🏁 주도주 메뉴 열기
+            </button>
+            <div style={{ marginTop: "0.8rem" }}>
+              <LeaderScanPanel onSelectStock={onSelectStock} hideTrack />
+            </div>
+          </section>
+        )}
         {tab === "events" && <EventPlayPanel />}
         {tab === "closebet" && <CloseBetPanel />}
         {tab === "money" && <MoneyFlowTab onSelectStock={onSelectStock} />}

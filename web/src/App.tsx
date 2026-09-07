@@ -40,6 +40,7 @@ import { ThemeDbPage } from "./pages/ThemeDbPage";
 import { MyPage } from "./pages/MyPage";
 import { NewsPage } from "./pages/NewsPage";
 import { MarketBoardPage } from "./pages/MarketBoardPage";
+import { LeadersPage } from "./pages/LeadersPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ProgramTradePage } from "./pages/ProgramTradePage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -76,6 +77,7 @@ type Tab =
   | "briefing"
   | "overview"
   | "marketBoard"
+  | "leaders"
   | "report"
   | "map"
   | "themedb"
@@ -146,6 +148,8 @@ const MENU: {
       { key: "marketBoard", label: "전광판", icon: "🟢" },
       { key: "briefing", label: "마켓 브리핑·흐름", icon: "🌊" },
       { key: "overview", label: "시황 대시보드", icon: "📊" },
+      /* 주도주 (2026-09-08) — 마켓브리핑 안 탭이었던 주도주 탐색을 단독 메뉴로. 판의 흐름·조용한 후보·성적까지 */
+      { key: "leaders", label: "주도주", icon: "🏁" },
       { key: "report", label: "데일리 리포트", icon: "📰" },
       { key: "map", label: "테마/업종 MAP", icon: "🗺️" },
       /* 테마 DB (2026-08-28) — 네이버 분류를 우리 눈금(등락률·상승비율·연속성)으로 다시 그린다 */
@@ -679,6 +683,7 @@ export default function App() {
   function renderPage(t: Tab) {
     switch (t) {
       case "marketBoard": return <MarketBoardPage onSelectStock={onSelectStock} />;
+      case "leaders": return <LeadersPage onSelectStock={onSelectStock} />;
       case "briefing": return <MarketFlowPage onSelectStock={onSelectStock} />;
       case "morning": return <MorningPage />;
       case "overview": return <OverviewPage onSelectStock={onSelectStock} />;

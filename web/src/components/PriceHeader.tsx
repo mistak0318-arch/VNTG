@@ -73,9 +73,13 @@ function MarkChips({ code }: { code: string }) {
   }, [code]);
   if (!marks || marks.length === 0) return null;
   const cur = marks.find((m) => m.key === open);
+  /*
+   * 벤티지 (2026-09-08): "마크가 가격 앞에 있으면 안 되지. 기존 UI는 그대로 두고 얘네가 붙어야지."
+   * → 「종가 · 장 마감」 줄 **오른쪽에 같은 줄**로. 근거는 아래로 펼쳐 가격을 밀지 않고 **겹쳐 뜨는 말풍선**.
+   */
   return (
-    <div className="ph-marks">
-      <div className="ph-marks-row">
+    <span className="ph-marks">
+      <span className="ph-marks-row">
         {marks.map((m) => (
           <button
             key={m.key}
@@ -86,13 +90,13 @@ function MarkChips({ code }: { code: string }) {
             <i>{m.icon}</i> {m.label}
           </button>
         ))}
-      </div>
+      </span>
       {cur && (
-        <div className="ph-mark-why">
+        <span className="ph-mark-why" role="tooltip" onClick={() => setOpen(null)}>
           <b>{cur.icon} {cur.label}</b> {cur.why}
-        </div>
+        </span>
       )}
-    </div>
+    </span>
   );
 }
 
@@ -322,8 +326,8 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
               </em>
             );
           })()}
+          {code && <MarkChips code={code} />}
         </div>
-        {code && <MarkChips code={code} />}
         <div className={`ph-price ${preOpen && !hasCur ? "" : sign}`}>{fmtAbsNum(mainPrice)}</div>
         {/* 통합 값이 있으면 프리장에도 등락을 적는다(NXT 체결 기준). 없을 때만 생략 */}
         {!(preOpen && !hasCur) && (

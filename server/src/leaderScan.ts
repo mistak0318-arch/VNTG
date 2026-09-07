@@ -5,6 +5,7 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { tradeValueTop } from "./signalScreen.js";
 import { getMarketSnapshot, isRealSector } from "./marketSnapshot.js";
 import { searchNews, type NewsItem } from "./newsDisclosure.js";
+import { loadCloses } from "./dailyCloses.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FILE = resolve(__dirname, "..", "data", "leaderScan.json");
@@ -80,24 +81,68 @@ export const DEFAULT_LEADER_CONFIG: LeaderConfig = {
 /** 왜 이 종목이 걸렸나 */
 export type LeaderTag = "신고가" | "거래량급증" | "급등" | "대금상위";
 
+/**
+ * 태그 하나 = 근거 한 줄 (2026-09-08). 벤티지: "태그에 숫자를 붙여라" — 「거래량급증」인데 몇 배인지가 없었다.
+ */
+export interface TagDetail {
+  tag: LeaderTag;
+  value: number;
+  text: string;
+  /** 문턱까지 — 툴팁용 */
+  hint: string;
+}
+
+/** 표식 — 조회 0회. 슈퍼신호등 원장·신호등 분석 원장에서. 원장에 없으면 신호등은 「안 잼」(null) */
+export interface LeaderMark {
+  super: boolean;
+  cross: boolean;
+  rainbow: boolean;
+  /** 신호등 분석 원장에 살아 있으면 초록 + 최근 점수. 없으면 null = 안 잼(거짓 초록 금지) */
+  signal: { level: "green"; score: number } | null;
+  hot: string[];
+  late: string[];
+}
+
 export interface LeaderStock {
   code: string;
   name: string;
   sector: string;
   price: number;
   changeRate: number;
-  /** 억원 */
   tradeValue: number;
   marketCap: number | null;
-  /** 전일 거래량 대비 배수 */
   volumeRatio: number | null;
   tags: LeaderTag[];
-  /** 태그 가중합 — 목록 순서를 정한다 */
+  tagDetail: TagDetail[];
+  mark: LeaderMark;
+  /** 오늘 처음 걸렸나 — 어제 기록에 없던 종목 */
+  isNew: boolean;
   score: number;
+}
+
+/**
+ * **조용한 후보** (2026-09-08) — 판은 도는데 아직 안 움직인 놈.
+ * 폭 60% 넘는 섹터의 구성원 중 오늘 +3% 미만·신고가 아님·거래량 2배 미만인 것. 4~8월 표본에서
+ * 이긴 자리가 「조용하고 아직 안 몰린」 쪽이었다(신조). 뜨거운 표(걸린 종목)와 같은 줄 모양.
+ */
+export interface QuietPick {
+  code: string;
+  name: string;
+  sector: string;
+  sectorBreadth: number;
+  sectorStreak: number | null;
+  price: number;
+  changeRate: number;
+  tradeValue: number;
+  /** 5일선 이격(%) — 일봉 파일에서. 없으면 null */
+  ma5Gap: number | null;
+  mark: LeaderMark;
 }
 
 export interface LeaderSector {
   name: string;
+  /** 어제 폭 — 「어제 폭 → 오늘 폭」 화살 (어제 기록에 있을 때만) */
+  prevBreadth?: number | null;
   /** 거래대금 가중 등락률 — 돈이 어디로 갔나 */
   weightedRate: number;
   /** 단순평균. 가중과 크게 벌어지면 대형주 혼자 끌고 있다는 뜻 */
@@ -128,6 +173,11 @@ export interface LeaderScan {
   scanned: number;
   /** 500억 문턱에서 잘린 수 — 문턱이 적당한지 판단하는 근거 */
   belowThreshold: number;
+  quiet: QuietPick[];
+  /** 오늘 처음 걸린 종목 수 */
+  newCount: number;
+  /** 태그별 요약 — 카드 넷 */
+  tagCards: { tag: LeaderTag; n: number; green: number; sectors: { name: string; n: number }[]; top: { code: string; name: string; changeRate: number }[] }[];
   note: string;
   /** 오늘 거래가 아직 없어 판단 자체가 불가능한 상태인가 (2026-08-31) */
   noTrade?: boolean;
@@ -162,6 +212,10 @@ interface DayRecord {
     tradeValue: number;
     tags: string[];
   }[];
+  /** 섹터별 폭·가중 등락률 — 「판의 흐름」 격자 (2026-09-08부터 쌓인다) */
+  sectorStats?: Record<string, { breadth: number; weightedRate: number; members: number }>;
+  /** 조용한 후보 — 뜨거운 쪽과 나란히 5·20일 성적을 재려고 남긴다 */
+  quiet?: { code: string; name: string; sector: string; price: number; changeRate: number }[];
 }
 
 interface Store {
@@ -318,6 +372,28 @@ export async function leaderScan(
     volumeSpikes(client),
   ]);
 
+  /* 표식 색인 — 조회 0회 (2026-09-08). 못 읽으면 표식만 빈다 */
+  /* superSignal·listTrack 은 이 파일을 import 한다(⚡ 교차) — 정적 import 면 순환이라 지연 import */
+  const [superIdx, listActive] = await Promise.all([
+    import("./superSignal.js").then((m) => m.superMarkIndex()).catch(() => new Map<string, { super: boolean; rainbow: boolean; cross: boolean; seenCount: number; score: number; alerts?: { hot: { label: string }[]; late: { label: string }[] } }>()),
+    import("./listTrack.js").then((m) => m.activeListEntries()).catch(() => [] as { code: string; score: number }[]),
+  ]);
+  const listScore = new Map(listActive.map((e) => [e.code, e.score]));
+  const markOf = (code: string): LeaderMark => {
+    const s = superIdx.get(code);
+    const sc = listScore.get(code);
+    return {
+      super: s?.super ?? false,
+      cross: s?.cross ?? false,
+      rainbow: s?.rainbow ?? false,
+      signal: typeof sc === "number" ? { level: "green", score: Math.round(sc) } : s?.super && s.score > 0 ? { level: "green", score: s.score } : null,
+      hot: (s?.alerts?.hot ?? []).map((a) => a.label),
+      late: (s?.alerts?.late ?? []).map((a) => a.label),
+    };
+  };
+  const prevRec = store.days[store.days.length - 1];
+  const prevCodes = new Set((prevRec?.date !== date ? prevRec : store.days[store.days.length - 2])?.picks?.map((p) => p.code) ?? []);
+
   let belowThreshold = 0;
   const stocks: LeaderStock[] = [];
   for (const u of universe) {
@@ -331,9 +407,19 @@ export async function leaderScan(
     const ratio = spikes.get(u.code) ?? null;
 
     const tags: LeaderTag[] = [];
-    if (highs.has(u.code)) tags.push("신고가");
-    if (ratio !== null && ratio >= cfg.volumeSpike) tags.push("거래량급증");
-    if (u.changeRate >= cfg.surgeRate) tags.push("급등");
+    const tagDetail: TagDetail[] = [];
+    if (highs.has(u.code)) {
+      tags.push("신고가");
+      tagDetail.push({ tag: "신고가", value: 250, text: "250일 신고가", hint: "거래일 250일(≈1년) 최고가를 오늘 넘었다" });
+    }
+    if (ratio !== null && ratio >= cfg.volumeSpike) {
+      tags.push("거래량급증");
+      tagDetail.push({ tag: "거래량급증", value: ratio, text: `거래량 ${ratio.toFixed(1)}배`, hint: `문턱 ${cfg.volumeSpike}배 · 지금 ${ratio.toFixed(1)}배 (전일 대비)` });
+    }
+    if (u.changeRate >= cfg.surgeRate) {
+      tags.push("급등");
+      tagDetail.push({ tag: "급등", value: u.changeRate, text: `+${u.changeRate.toFixed(1)}%`, hint: `문턱 +${cfg.surgeRate}% · 지금 +${u.changeRate.toFixed(1)}%` });
+    }
     /*
      * 태그가 하나도 없으면 **목록에 안 넣는다.**
      * 거래대금만 큰 종목(삼성전자 등)은 늘 상위에 있어서, 그냥 두면 매일 같은 얼굴이
@@ -341,7 +427,10 @@ export async function leaderScan(
      */
     if (tags.length === 0) continue;
     // 대금이 아주 크면 그것도 근거다 — 다만 단독으로는 못 들어온다
-    if (tradeValue >= cfg.minTradeValue * 4) tags.push("대금상위");
+    if (tradeValue >= cfg.minTradeValue * 4) {
+      tags.push("대금상위");
+      tagDetail.push({ tag: "대금상위", value: tradeValue, text: `대금 ${tradeValue.toLocaleString()}억`, hint: `문턱 ${cfg.minTradeValue}억의 4배(${(cfg.minTradeValue * 4).toLocaleString()}억) 이상` });
+    }
 
     stocks.push({
       code: u.code,
@@ -354,6 +443,9 @@ export async function leaderScan(
       marketCap: snapshot?.marketCap ?? null,
       volumeRatio: ratio,
       tags,
+      tagDetail,
+      mark: markOf(u.code),
+      isNew: !prevCodes.has(u.code),
       score:
         tags.reduce((a, t) => a + TAG_WEIGHT[t], 0) +
         // 같은 태그면 더 오른 쪽이 먼저다. 등락률을 점수에 살짝만 섞는다
@@ -420,6 +512,7 @@ export async function leaderScan(
 
       return {
         name,
+        prevBreadth: yesterday?.date !== date ? (yesterday?.sectorStats?.[name]?.breadth ?? null) : (store.days[store.days.length - 2]?.sectorStats?.[name]?.breadth ?? null),
         weightedRate: weighted,
         simpleRate: simple,
         tradeValue: totalValue,
@@ -459,10 +552,100 @@ export async function leaderScan(
     );
   }
 
+  /* ---------------- 조용한 후보 (2026-09-08) ---------------- */
+  const QUIET_BREADTH = 60;
+  const QUIET_MAX_RATE = 3;
+  const sectorStatsAll: Record<string, { breadth: number; weightedRate: number; members: number }> = {};
+  for (const [name, all] of sectorAll) {
+    if (!isRealSector(name) || all.length < cfg.minMembers) continue;
+    const totalValue = all.reduce((a, x) => a + x.value, 0);
+    sectorStatsAll[name] = {
+      breadth: all.length > 0 ? (all.filter((x) => x.rate > 0).length / all.length) * 100 : 0,
+      weightedRate: totalValue > 0 ? all.reduce((a, x) => a + x.rate * x.value, 0) / totalValue : 0,
+      members: all.length,
+    };
+  }
+  const streakOf = (name: string): number | null => {
+    if (store.days.length === 0) return null;
+    let n = 0;
+    for (let i = store.days.length - 1; i >= 0; i--) {
+      if (store.days[i].date === date) continue;
+      if (store.days[i].sectors[name]?.length) n += 1;
+      else break;
+    }
+    return n;
+  };
+  /* 오늘 상위 섹터면 오늘까지 세서 「오늘」 탭의 「N일째」와 같은 수가 되게 (2026-09-08) */
+  const topToday = new Set(sectors.map((s) => s.name));
+  const streakWithToday = (name: string): number | null => {
+    const prior = streakOf(name);
+    if (prior === null) return topToday.has(name) ? 1 : null;
+    return prior + (topToday.has(name) ? 1 : 0);
+  };
+  const pickedCodes = new Set(stocks.map((s) => s.code));
+  let barsOf: Record<string, { c: number }[]> = {};
+  try {
+    barsOf = ((await loadCloses()).bars ?? {}) as Record<string, { c: number }[]>;
+  } catch {
+    /* 일봉 파일이 없으면 이격만 빈다 */
+  }
+  const ma5GapOf = (code: string, price: number): number | null => {
+    const bs = barsOf[code];
+    if (!bs || bs.length < 5 || price <= 0) return null;
+    const last = bs.slice(-5).map((b) => b.c).filter((v) => v > 0);
+    if (last.length < 5) return null;
+    const ma = last.reduce((a, b) => a + b, 0) / 5;
+    return ((price - ma) / ma) * 100;
+  };
+  const quiet: QuietPick[] = [];
+  for (const u of universe) {
+    const tv = Math.round(u.tradeValue / 100);
+    if (tv < cfg.minTradeValue) continue;
+    const sec = snap?.byCode.get(u.code)?.sector ?? "";
+    const st = sectorStatsAll[sec];
+    if (!st || st.breadth < QUIET_BREADTH) continue;
+    if (pickedCodes.has(u.code)) continue;
+    if (u.changeRate >= QUIET_MAX_RATE || u.changeRate < -3) continue;
+    if (highs.has(u.code)) continue;
+    const ratio = spikes.get(u.code) ?? null;
+    if (ratio !== null && ratio >= cfg.volumeSpike) continue;
+    quiet.push({
+      code: u.code,
+      name: u.name,
+      sector: sec,
+      sectorBreadth: st.breadth,
+      sectorStreak: streakWithToday(sec),
+      price: u.price,
+      changeRate: u.changeRate,
+      tradeValue: tv,
+      ma5Gap: ma5GapOf(u.code, u.price),
+      mark: markOf(u.code),
+    });
+  }
+  /* 판이 센 순 → 신호등 있는 것 먼저 → 이격 작은 순 */
+  quiet.sort((a, b) => b.sectorBreadth - a.sectorBreadth || Number(!!b.mark.signal) - Number(!!a.mark.signal) || (a.ma5Gap ?? 99) - (b.ma5Gap ?? 99));
+
+  /* ---------------- 태그 카드 넷 ---------------- */
+  const TAGS: LeaderTag[] = ["신고가", "거래량급증", "급등", "대금상위"];
+  const tagCards = TAGS.map((tag) => {
+    const rows = stocks.filter((s) => s.tags.includes(tag));
+    const bySec = new Map<string, number>();
+    for (const r of rows) if (r.sector) bySec.set(r.sector, (bySec.get(r.sector) ?? 0) + 1);
+    return {
+      tag,
+      n: rows.length,
+      green: rows.filter((r) => r.mark.signal?.level === "green").length,
+      sectors: [...bySec.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([name, n]) => ({ name, n })),
+      top: rows.slice(0, 3).map((r) => ({ code: r.code, name: r.name, changeRate: r.changeRate })),
+    };
+  });
+
   /* ---------------- 오늘을 기록 ---------------- */
   const today: DayRecord = {
     date,
     sectors: Object.fromEntries(sectors.map((s) => [s.name, s.leaders.map((l) => l.code)])),
+    sectorStats: Object.fromEntries(Object.entries(sectorStatsAll).map(([k, v]) => [k, { breadth: Math.round(v.breadth), weightedRate: Math.round(v.weightedRate * 100) / 100, members: v.members }])),
+    quiet: quiet.slice(0, 40).map((q) => ({ code: q.code, name: q.name, sector: q.sector, price: q.price, changeRate: q.changeRate })),
     /*
      * 걸린 종목을 **값까지 통째로** 남긴다.
      * 장중에 여러 번 훑으면 마지막 것으로 덮인다 — 그게 그날의 최종 모습이라 맞다.
@@ -529,6 +712,9 @@ export async function leaderScan(
     stocks: stocks.slice(0, 60),
     scanned: universe.length,
     belowThreshold,
+    quiet: quiet.slice(0, 40),
+    newCount: stocks.filter((s) => s.isNew).length,
+    tagCards,
     /*
      * `noTrade` 를 밖으로 알린다 — 화면이 「없다」와 「아직 모른다」를 갈라
      * 말할 수 있어야 한다. 빈 목록만 던지면 둘이 똑같아 보인다.
@@ -547,6 +733,55 @@ export async function leaderScan(
         ? "오늘이 첫 기록입니다. 지속성(연속일·유지율)은 내일부터 나옵니다."
         : `${store.days.length}일치 기록으로 지속성을 셉니다.${prevDate ? ` (직전 ${prevDate})` : ""}`,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* 판의 흐름 — 날짜 × 섹터 격자 (2026-09-08)                              */
+/* ------------------------------------------------------------------ */
+
+export interface LeaderFlow {
+  dates: string[];
+  /** 창 안에 한 번이라도 상위에 든 섹터 — 등장 횟수 많은 순 */
+  sectors: { name: string; days: number; streak: number; today: boolean }[];
+  /** [섹터][날짜] — 상위에 들었으면 picks>0. breadth·rate 는 09-08 뒤 기록에만 */
+  cells: Record<string, Record<string, { picks: number; breadth: number | null; rate: number | null }>>;
+  /** 날짜별 「어제와 같은 섹터 비율」 — 순환인가 지속인가 */
+  overlap: Record<string, number | null>;
+}
+
+export async function leaderFlow(days = 10): Promise<LeaderFlow> {
+  const store = await load();
+  const win = store.days.slice(-Math.max(2, Math.min(days, 40)));
+  const dates = win.map((d) => d.date);
+  const count = new Map<string, number>();
+  for (const d of win) for (const s of Object.keys(d.sectors)) count.set(s, (count.get(s) ?? 0) + 1);
+  const last = win[win.length - 1];
+  const streakOf = (name: string) => {
+    let n = 0;
+    for (let i = win.length - 1; i >= 0; i--) {
+      if (win[i].sectors[name]?.length) n += 1;
+      else break;
+    }
+    return n;
+  };
+  const sectors = [...count.entries()]
+    .map(([name, n]) => ({ name, days: n, streak: streakOf(name), today: !!last?.sectors[name]?.length }))
+    .sort((a, b) => Number(b.today) - Number(a.today) || b.streak - a.streak || b.days - a.days);
+  const cells: LeaderFlow["cells"] = {};
+  for (const s of sectors) {
+    cells[s.name] = {};
+    for (const d of win) {
+      const st = d.sectorStats?.[s.name];
+      cells[s.name][d.date] = { picks: d.sectors[s.name]?.length ?? 0, breadth: st ? st.breadth : null, rate: st ? st.weightedRate : null };
+    }
+  }
+  const overlap: Record<string, number | null> = {};
+  for (let i = 0; i < win.length; i++) {
+    const cur = new Set(Object.keys(win[i].sectors));
+    const prev = i > 0 ? new Set(Object.keys(win[i - 1].sectors)) : null;
+    overlap[win[i].date] = prev && prev.size > 0 ? ([...cur].filter((x) => prev.has(x)).length / prev.size) * 100 : null;
+  }
+  return { dates, sectors, cells, overlap };
 }
 
 /* ------------------------------------------------------------------ */

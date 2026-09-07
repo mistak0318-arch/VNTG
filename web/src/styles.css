@@ -17110,17 +17110,75 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .cis-basis li { list-style: "· "; }
 .slot-intraday { border-left-color: #8a7bd6; }
 
-/* 표식 칩 줄 — 종목 상세 머리 (2026-09-08) */
-.ph-marks { margin: 0.2rem 0 0.15rem; }
-.ph-marks-row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-.ph-mark { display: inline-flex; align-items: center; gap: 0.2rem; font: inherit; font-size: 0.74rem; padding: 0.1rem 0.45rem; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--fg, inherit); cursor: pointer; line-height: 1.4; }
+/* 표식 칩 줄 — 종목 상세 머리 (2026-09-08). 「종가 · 장 마감」 줄 오른쪽에 같은 줄, 가격을 밀지 않는다 */
+.ph-main-label { display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem 0.45rem; }
+.ph-marks { position: relative; display: inline-flex; align-items: center; margin-left: auto; }
+.ph-marks-row { display: inline-flex; flex-wrap: wrap; gap: 0.2rem; justify-content: flex-end; }
+.ph-mark { display: inline-flex; align-items: center; gap: 0.15rem; font: inherit; font-size: 0.68rem; line-height: 1.25; padding: 0.02rem 0.35rem; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .ph-mark i { font-style: normal; }
-.ph-mark.on { border-color: var(--accent, #6c8cff); background: rgba(108, 140, 255, 0.12); }
+.ph-mark.on { border-color: var(--accent, #6c8cff); color: inherit; }
 .ph-mark.lv-green i { color: #2e9e5b; }
 .ph-mark.lv-yellow i { color: #e6a23c; }
 .ph-mark.lv-red i { color: var(--red); }
 .ph-mark.lv-unknown i { color: var(--muted); }
-.ph-mark.k-hot, .ph-mark.k-late { color: var(--muted); }
-.ph-mark.k-exited { color: var(--muted); border-style: dashed; }
-.ph-mark-why { font-size: 0.78rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.45; border-left: 2px solid var(--border); padding-left: 0.5rem; word-break: break-word; }
-.ph-mark-why b { color: inherit; font-weight: 600; }
+.ph-mark.k-exited { border-style: dashed; }
+/* 근거 말풍선 — 겹쳐 뜬다. 레이아웃을 안 건드린다 */
+.ph-mark-why { position: absolute; right: 0; top: calc(100% + 0.3rem); z-index: 20; max-width: min(22rem, 90vw); font-size: 0.76rem; line-height: 1.45; color: var(--fg, inherit); background: var(--panel, #1c1f26); border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.4rem 0.55rem; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); text-align: left; white-space: normal; word-break: break-word; cursor: pointer; }
+.ph-mark-why b { font-weight: 600; }
+@media (max-width: 720px) {
+  .ph-mark { font-size: 0.64rem; padding: 0.02rem 0.3rem; }
+  .ph-mark-why { right: auto; left: 0; }
+}
+
+/* 주도주 메뉴 (2026-09-08) — 표식·태그 숫자·카드·격자 */
+.ls-marks { display: inline-flex; gap: 0.15rem; align-items: center; margin-left: 0.25rem; vertical-align: middle; font-size: 0.78em; white-space: nowrap; }
+.ls-sig { display: inline-flex; align-items: center; gap: 0.15rem; font-size: 0.72rem; color: var(--muted); }
+.ls-sig .sig-dot { width: 8px; height: 8px; }
+.ls-sig.none { opacity: 0.5; }
+.ls-alert { font-size: 0.8rem; }
+.ls-dim td { opacity: 0.62; }
+.ls-new { display: inline-block; margin-left: 0.25rem; font-style: normal; font-size: 0.66rem; font-weight: 700; padding: 0 0.28rem; border-radius: 3px; background: var(--red); color: #fff; vertical-align: middle; }
+.ls-new-count { color: var(--red); font-weight: 600; }
+.ls-tag.tag-신고가 { border-color: #d64c7f; }
+.ls-tag.tag-거래량급증 { border-color: #3d8bfd; }
+.ls-tag.tag-급등 { border-color: #e6a23c; }
+.ls-tag.tag-대금상위 { border-color: var(--muted); }
+.ls-arrow { font-size: 0.8rem; color: var(--muted); }
+.ls-arrow.up { color: var(--red); }
+.ls-arrow.down { color: var(--blue); }
+.ls-streak { font-size: 0.74rem; font-style: normal; padding: 0.05rem 0.35rem; border-radius: 3px; background: color-mix(in srgb, var(--green) 20%, transparent); margin-left: 0.3rem; }
+.ls-cards-wrap { margin: 0.6rem 0; }
+.ls-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
+.ls-card { text-align: left; font: inherit; color: inherit; background: var(--panel-2); border: 1px solid var(--border); border-radius: 0.45rem; padding: 0.5rem 0.65rem; cursor: pointer; }
+.ls-card.on { border-color: var(--accent, #6c8cff); box-shadow: 0 0 0 1px var(--accent, #6c8cff) inset; }
+.ls-card.tag-신고가 .ls-card-h b { color: #d64c7f; }
+.ls-card.tag-거래량급증 .ls-card-h b { color: #3d8bfd; }
+.ls-card.tag-급등 .ls-card-h b { color: #e6a23c; }
+.ls-card-h { display: flex; align-items: baseline; gap: 0.4rem; }
+.ls-card-n { font-size: 1.35rem; font-weight: 700; }
+.ls-card-g { font-style: normal; font-size: 0.74rem; color: #2e9e5b; }
+.ls-card-sec { font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem; }
+.ls-card-top { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.3rem; font-size: 0.82rem; }
+.ls-card-stock { cursor: pointer; }
+.ls-card-stock:hover { text-decoration: underline; }
+.ls-card-stock em { font-style: normal; }
+.ls-card-track { font-size: 0.74rem; color: var(--muted); margin-top: 0.3rem; border-top: 1px dashed var(--border); padding-top: 0.25rem; }
+.ls-cards-read { font-size: 0.82rem; color: var(--muted); margin-top: 0.35rem; }
+.ls-flow-wrap { overflow-x: auto; }
+.ls-flow th.today { color: var(--accent, #6c8cff); }
+.ls-flow td.ls-cell { text-align: center; font-size: 0.78rem; min-width: 2.4rem; }
+.ls-flow td.b1 { background: color-mix(in srgb, var(--green) 12%, transparent); }
+.ls-flow td.b2 { background: color-mix(in srgb, var(--green) 24%, transparent); }
+.ls-flow td.b3 { background: color-mix(in srgb, var(--green) 40%, transparent); }
+.ls-flow td.b4 { background: color-mix(in srgb, var(--green) 58%, transparent); font-weight: 600; }
+.ls-flow td.b-na { background: color-mix(in srgb, var(--muted) 25%, transparent); }
+.ls-flow tr.ls-flow-strong td { font-weight: 700; }
+.ls-flow tr.ls-flow-today td.sticky-col { color: var(--accent, #6c8cff); }
+.ls-flow tr.ls-flow-overlap td { color: var(--muted); font-size: 0.78rem; border-top: 1px dashed var(--border); }
+.filter-row.inline { display: inline-flex; gap: 0.3rem; margin-left: 0.6rem; }
+@media (max-width: 720px) {
+  .ls-cards { grid-template-columns: repeat(2, 1fr); }
+  .ls-card-top { display: none; }
+  .ls-sec-leaders { display: none; }
+  .ls-sec.open .ls-sec-leaders { display: flex; }
+}

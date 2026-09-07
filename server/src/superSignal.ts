@@ -1716,6 +1716,27 @@ export async function investorDailySeries(
  * 편입일 20거래일 전부터의 주가·지수·업종 시리즈와 일별 수급을 준다.
  * 상대 비교(편입일=0% 정규화)는 화면이 한다 — 서버는 원자료만.
  */
+/**
+ * 표식 색인 — 코드 → {슈퍼·무지개·교차·점수·경보}. 주도주 탐색 표가 조회 0회로 표식을 단다 (2026-09-08).
+ */
+export async function superMarkIndex(): Promise<Map<string, { super: boolean; rainbow: boolean; cross: boolean; seenCount: number; score: number; alerts?: SuperEntry["alerts"] }>> {
+  const store = await load();
+  const cfg = cfgOf(store);
+  const out = new Map<string, { super: boolean; rainbow: boolean; cross: boolean; seenCount: number; score: number; alerts?: SuperEntry["alerts"] }>();
+  let crossCodes = new Set<string>();
+  try {
+    crossCodes = new Set((await listWatchlist()).filter((w) => w.groups.includes(CROSS_GROUP)).map((w) => w.code));
+  } catch {
+    /* 관심종목을 못 읽으면 교차만 빈다 */
+  }
+  for (const e of store.entries) {
+    if (e.active === false) continue;
+    out.set(e.code, { super: true, rainbow: e.seenCount >= cfg.rainbowDays, cross: crossCodes.has(e.code) || e.leader?.was === true, seenCount: e.seenCount, score: e.score, alerts: e.alerts });
+  }
+  for (const c of crossCodes) if (!out.has(c)) out.set(c, { super: false, rainbow: false, cross: true, seenCount: 0, score: 0 });
+  return out;
+}
+
 /** 원장 항목 하나 — 표식 근거(`markWhy`)가 조회 0회로 읽는다 (2026-09-08) */
 export async function superEntryOf(code: string): Promise<{ entry: SuperEntry | null; rainbowDays: number }> {
   const store = await load();

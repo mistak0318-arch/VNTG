@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { marketPulse, pulseBrief } from "../marketPulse.js";
-import { getLeaderConfig, leaderScan, saveLeaderConfig } from "../leaderScan.js";
+import { getLeaderConfig, leaderScan, saveLeaderConfig, leaderFlow } from "../leaderScan.js";
 import { leaderTrack } from "../leaderTrack.js";
 import { betBacktest, marketGauge, DEFAULT_CONDITION } from "../closeBet.js";
 import { logSummary, recordAndScore } from "../closeBetLog.js";
@@ -50,6 +50,15 @@ export function createPulseRouter(client: KiwoomClient): Router {
    * 성적 — **`/leaders/config` 보다 위든 아래든 상관없지만 `/leaders` 뒤여야 한다.**
    * 종목마다 일봉을 받아 몇 십 초 걸리므로 화면이 눌렀을 때만 부른다.
    */
+  /** 판의 흐름 — 날짜 × 섹터 격자 (2026-09-08). 파일만 읽는다 */
+  router.get("/leaders/flow", async (req, res, next) => {
+    try {
+      res.json(await leaderFlow(Number(req.query.days) || 10));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/leaders/track", async (_req, res, next) => {
     try {
       res.json(await leaderTrack(client));

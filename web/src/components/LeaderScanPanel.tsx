@@ -9,6 +9,134 @@ import {
   type LeaderTrackResult,
 } from "../api";
 import { LeaderConfigPanel } from "./LeaderConfigPanel";
+import { SuperMark } from "../useSuperMarks";
+import { WatchStar } from "../useWatchedCodes";
+import type { LeaderMark, LeaderStock, LeaderTagCard } from "../api";
+
+/**
+ * 표식 묶음 — 종목명 옆 (2026-09-08). ★ 관심 · 🌟⚡🌈 · 신호등 점(원장에 있을 때만, 없으면 「안 잼」) · 🔥⏳.
+ * 조회 0회 — 서버가 원장에서 붙여 보낸 `mark` 를 그린다. `SuperMark` 는 화면 쪽 원장 캐시라 둘이 같은 원장을 본다.
+ */
+export function MarkRow({ code, mark }: { code: string; mark?: LeaderMark }) {
+  return (
+    <span className="ls-marks">
+      <WatchStar code={code} />
+      <SuperMark code={code} />
+      {mark?.signal ? (
+        <span className="ls-sig" title={`신호등 분석 원장에 살아 있음 — 최근 ${mark.signal.score}점`}>
+          <i className="sig-dot green" /> {mark.signal.score}
+        </span>
+      ) : (
+        <span className="ls-sig none" title="신호등 원장에 없음 — 안 잼 (초록도 빨강도 아니다)">·</span>
+      )}
+      {mark && mark.hot.length > 0 && <span className="ls-alert" title={`🔥쏠림 ${mark.hot.join(" · ")}`}>🔥</span>}
+      {mark && mark.late.length > 0 && <span className="ls-alert" title={`⏳늦음 ${mark.late.join(" · ")}`}>⏳</span>}
+    </span>
+  );
+}
+
+/** 태그 칩 — 숫자 붙은 것 (2026-09-08). 서버가 `tagDetail` 을 안 주면 이름만 */
+export function TagChips({ t }: { t: Pick<LeaderStock, "tags" | "tagDetail"> }) {
+  if (t.tagDetail && t.tagDetail.length > 0) {
+    return (
+      <>
+        {t.tagDetail.map((d) => (
+          <span className={`ls-tag tag-${d.tag}`} key={d.tag} title={d.hint}>
+            {d.text}
+          </span>
+        ))}
+      </>
+    );
+  }
+  return (
+    <>
+      {t.tags.map((g) => (
+        <span className="ls-tag" key={g}>
+          {g}
+        </span>
+      ))}
+    </>
+  );
+}
+
+const TAG_ORDER = ["신고가", "거래량급증", "급등", "대금상위"];
+const TAG_HINT: Record<string, string> = {
+  신고가: "250일 최고가를 오늘 넘은 종목 — 추세장의 신호. 많을수록 판이 넓다",
+  거래량급증: "전일 대비 거래량 2배↑ — 돈이 새로 들어온 자리. 신고가 없이 이것만 많으면 뜨거운 날",
+  급등: "오늘 +5%↑ — 이미 오른 것. 이것만 많고 신고가가 적으면 하루 반짝일 확률이 높다",
+  대금상위: "거래대금 문턱의 4배↑ — 단독으로는 못 들어오고 다른 태그와 겹칠 때만 붙는다",
+};
+
+/** 태그 카드 넷 — 「어떤 신호가 오늘 시장을 끌고 있나」 (2026-09-08) */
+export function TagCards({
+  cards,
+  active,
+  onPick,
+  track,
+  onSelectStock,
+}: {
+  cards: LeaderTagCard[];
+  active: string | null;
+  onPick: (tag: string | null) => void;
+  /** 성적 탭에서 온 태그별 5일 평균·승률 — 있을 때만 */
+  track?: Record<string, { avg5: number | null; win5: number | null; n: number }>;
+  onSelectStock?: (code: string, name: string) => void;
+}) {
+  const by = new Map(cards.map((c) => [c.tag, c]));
+  const nHigh = by.get("신고가")?.n ?? 0;
+  const nSurge = by.get("급등")?.n ?? 0;
+  const nVol = by.get("거래량급증")?.n ?? 0;
+  const read =
+    nHigh === 0 && nSurge === 0 && nVol === 0
+      ? "걸린 게 없다 — 장 전이거나 조용한 날"
+      : nHigh >= nSurge
+        ? `신고가 ${nHigh} ≥ 급등 ${nSurge} — 추세가 넓다. 새 고점을 쓰는 판이다`
+        : nSurge >= nHigh * 3 && nSurge >= 6
+          ? `급등 ${nSurge} ≫ 신고가 ${nHigh} — 뜨거운 날. 이미 오른 것이 많고 새 고점은 적다 (체를 먼저)`
+          : `급등 ${nSurge} > 신고가 ${nHigh} — 반등 또는 순환. 거래량 ${nVol} 이 어느 판에 몰렸나를 본다`;
+  return (
+    <div className="ls-cards-wrap">
+      <div className="ls-cards">
+        {TAG_ORDER.map((tag) => {
+          const c = by.get(tag) ?? { tag, n: 0, green: 0, sectors: [], top: [] };
+          const tr = track?.[tag];
+          return (
+            <button key={tag} className={`ls-card tag-${tag} ${active === tag ? "on" : ""}`} onClick={() => onPick(active === tag ? null : tag)} title={TAG_HINT[tag]}>
+              <div className="ls-card-h">
+                <b>{tag}</b>
+                <span className="ls-card-n">{c.n}</span>
+                {c.n > 0 && <i className="ls-card-g" title="신호등 원장에 살아 있는 것">초록 {c.green}</i>}
+              </div>
+              <div className="ls-card-sec">{c.sectors.length > 0 ? c.sectors.map((s) => `${s.name} ${s.n}`).join(" · ") : "—"}</div>
+              <div className="ls-card-top">
+                {c.top.map((t) => (
+                  <span
+                    key={t.code}
+                    className="ls-card-stock"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectStock?.(t.code, t.name);
+                    }}
+                  >
+                    {t.name}
+                    <em className={signClass(t.changeRate)}> {pct(t.changeRate)}</em>
+                    <SuperMark code={t.code} />
+                  </span>
+                ))}
+              </div>
+              {tr && tr.n > 0 && (
+                <div className="ls-card-track">
+                  5일 뒤 {tr.avg5 !== null ? pct(tr.avg5) : "-"} · 승률 {tr.win5 !== null ? `${tr.win5.toFixed(0)}%` : "-"} (n {tr.n})
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="ls-cards-read">{read}</div>
+    </div>
+  );
+}
 
 /**
  * 주도주 탐색기 — **오늘 시장이 어디에 반응하는가.**
@@ -26,10 +154,14 @@ function pct(v: number): string {
 
 export function LeaderScanPanel({
   onSelectStock,
+  hideTrack = false,
 }: {
   onSelectStock?: (code: string, name: string) => void;
+  /** 주도주 메뉴는 성적을 제 탭에 두므로 여기선 숨긴다 (2026-09-08) */
+  hideTrack?: boolean;
 }) {
   const [data, setData] = useState<LeaderScan | null>(null);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   // 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26)
   const stockSort = useSortableTable<LeaderScan["stocks"][number]>(data?.stocks ?? []);
   const [cfgOpen, setCfgOpen] = useState(false);
@@ -54,6 +186,13 @@ export function LeaderScanPanel({
      * 돌면 하루 할당량이 녹는다. 「왜 강한가」는 눌러서 받는다.
      */
     void load(false);
+    /* 장중엔 10분마다 스스로 (2026-09-08) — 09:00~15:40 만. 마감 뒤엔 하루의 결론이라 다시 볼 이유가 없다 */
+    const t = window.setInterval(() => {
+      const d = new Date();
+      const m = d.getHours() * 60 + d.getMinutes();
+      if (d.getDay() >= 1 && d.getDay() <= 5 && m >= 9 * 60 && m <= 15 * 60 + 40) void load(false);
+    }, 10 * 60_000);
+    return () => window.clearInterval(t);
   }, [load]);
 
   const hasNews = (data?.sectors ?? []).some((s) => s.news.length > 0);
@@ -76,7 +215,8 @@ export function LeaderScanPanel({
         {data && (
           <span className="pt-n">
             거래대금 상위 {data.scanned}종목 · {data.config.minTradeValue}억 미만{" "}
-            {data.belowThreshold}개 제외
+            {data.belowThreshold}개 제외 · {new Date(data.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 갱신{data.intraday ? " (장중, 10분마다)" : ""}
+            {typeof data.newCount === "number" && data.newCount > 0 && <b className="ls-new-count"> · 오늘 처음 걸린 것 {data.newCount}</b>}
           </span>
         )}
       </div>
@@ -125,6 +265,12 @@ export function LeaderScanPanel({
                     >
                       폭 {s.breadth.toFixed(0)}% ({s.rising}/{s.members})
                     </span>
+                    {s.prevBreadth !== null && s.prevBreadth !== undefined && (
+                      <span className={`ls-arrow ${s.breadth > s.prevBreadth + 5 ? "up" : s.breadth < s.prevBreadth - 5 ? "down" : ""}`} title="어제 폭 → 오늘 폭">
+                        어제 {s.prevBreadth.toFixed(0)}% {s.breadth > s.prevBreadth + 5 ? "↗" : s.breadth < s.prevBreadth - 5 ? "↘" : "→"}
+                      </span>
+                    )}
+                    {s.streak !== null && s.streak >= 2 && <span className="ls-streak" title="며칠째 상위 섹터">{s.streak}일째</span>}
                     <span className="pt-n">{fmtNum(s.tradeValue)}억</span>
                   </div>
 
@@ -179,10 +325,20 @@ export function LeaderScanPanel({
         </section>
       )}
 
+      {/* ---------------- 태그 카드 넷 (2026-09-08) ---------------- */}
+      {data && data.tagCards && <TagCards cards={data.tagCards} active={tagFilter} onPick={setTagFilter} onSelectStock={onSelectStock} />}
+
       {/* ---------------- 걸린 종목 ---------------- */}
       {data && (
         <section className="card">
-          <h2>걸린 종목 ({data.stocks.length})</h2>
+          <h2>
+            걸린 종목 ({tagFilter ? `${data.stocks.filter((s) => s.tags.includes(tagFilter)).length} / ` : ""}{data.stocks.length})
+            {tagFilter && (
+              <button className="filter-btn" onClick={() => setTagFilter(null)}>
+                {tagFilter} 만 보는 중 — 전부
+              </button>
+            )}
+          </h2>
           {data.stocks.length === 0 ? (
             <div className="page-note">조건에 맞는 종목이 없습니다.</div>
           ) : (
@@ -199,13 +355,18 @@ export function LeaderScanPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {stockSort.sorted.map((t) => (
+                  {stockSort.sorted.filter((t) => !tagFilter || t.tags.includes(tagFilter)).map((t) => (
                     <tr
-                      className="clickable-row"
+                      className={`clickable-row ${t.mark && (t.mark.hot.length > 0 || t.mark.late.length > 0) ? "ls-dim" : ""}`}
                       key={t.code}
                       onClick={() => onSelectStock?.(t.code, t.name)}
+                      title={t.mark && (t.mark.hot.length > 0 || t.mark.late.length > 0) ? "🔥쏠림·⏳늦음 경보 — 뜨겁다는 뜻이지 좋다는 뜻이 아니다 (신조 ①체)" : undefined}
                     >
-                      <td className="sticky-col">{t.name}</td>
+                      <td className="sticky-col">
+                        {t.name}
+                        {t.isNew && <i className="ls-new" title="오늘 처음 걸렸다 (어제 기록에 없음)">N</i>}
+                        <MarkRow code={t.code} mark={t.mark} />
+                      </td>
                       {/* 업종을 모르는 종목도 목록에는 남는다 — 신규상장은 스냅샷이 아직 못 담는다 */}
                       <td className="pt-n">{t.sector || "-"}</td>
                       <td className={`num ${signClass(t.changeRate)}`}>{pct(t.changeRate)}</td>
@@ -214,11 +375,7 @@ export function LeaderScanPanel({
                         {t.volumeRatio === null ? "-" : `${t.volumeRatio.toFixed(1)}배`}
                       </td>
                       <td>
-                        {t.tags.map((g) => (
-                          <span className="ls-tag" key={g}>
-                            {g}
-                          </span>
-                        ))}
+                        <TagChips t={t} />
                       </td>
                     </tr>
                   ))}
@@ -234,7 +391,7 @@ export function LeaderScanPanel({
         </section>
       )}
 
-      <LeaderTrackSection onSelectStock={onSelectStock} />
+      {!hideTrack && <LeaderTrackSection onSelectStock={onSelectStock} />}
     </div>
   );
 }
@@ -245,7 +402,7 @@ export function LeaderScanPanel({
  * 고르는 것만으로는 눈이 안 자란다. 골라 놓고 결과를 안 보면 **맞은 것만 기억**한다.
  * 진짜 물음은 「탐색기가 맞나」가 아니라 **「나는 어떤 종류의 신호를 잘 고르나」**다.
  */
-function LeaderTrackSection({
+export function LeaderTrackSection({
   onSelectStock,
 }: {
   onSelectStock?: (code: string, name: string) => void;
