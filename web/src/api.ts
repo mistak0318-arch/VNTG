@@ -1134,6 +1134,9 @@ export const api = {
    * 네이버 뉴스 카테고리 + 페이지 (2026-08-26) —
    * main 주요 · flash 속보 · market 시황·전망 · company 기업·종목 · world 해외증시 · estate 부동산
    */
+  /** 뉴스 카드 채우기 — 본문 앞 400자 + 관련 종목 (2026-09-08) */
+  newsLeads: (items: { link: string; title: string; summary: string }[]) =>
+    postJson<{ leads: { link: string; lead: string; stocks: { code: string; name: string }[] }[] }>("/api/feed/news/naver/leads", { items }),
   newsNaver: (cat: NaverNewsCat, page = 1) =>
     getJson<{ items: NaverNewsItem[]; hasMore: boolean }>(
       `/api/feed/news/naver?cat=${cat}&page=${page}`,

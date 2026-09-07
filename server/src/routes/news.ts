@@ -6,6 +6,7 @@ import { quarterFinance } from "../quarterFinance.js";
 import { peekSnapshot } from "../marketSnapshot.js";
 import { breakingNews, getDisclosures, newsCounts, searchNews, sectorNews } from "../newsDisclosure.js";
 import { mainNews, naverNews, type NaverCat } from "../naverMainNews.js";
+import { newsLeads } from "../newsLead.js";
 import { listWatchlist } from "../watchlist.js";
 import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -161,6 +162,16 @@ export function createNewsRouter(client: KiwoomClient): Router {
    * main 주요 · flash 속보 · market 시황·전망 · company 기업·종목 ·
    * world 해외증시 · estate 부동산. 한 쪽 20건, page 로 넘긴다.
    */
+  /** 뉴스 카드 채우기 — 본문 앞 400자 + 관련 종목 (2026-09-08). 한 쪽치 링크를 한 번에 */
+  router.post("/news/naver/leads", async (req, res, next) => {
+    try {
+      const items = Array.isArray(req.body?.items) ? (req.body.items as { link: string; title: string; summary: string }[]) : [];
+      res.json({ leads: await newsLeads(items.filter((x) => typeof x?.link === "string")) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/news/naver", async (req, res, next) => {
     try {
       const cat = String(req.query.cat ?? "main") as NaverCat;

@@ -17193,3 +17193,19 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
   .sig-config-inputs { flex-wrap: wrap; }
   .ai-select { min-width: 12rem; }
 }
+
+/* 뉴스 카드 채우기 (2026-09-08) — 본문 앞머리·관련 종목 칩 */
+.mn-stocks { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.15rem; }
+.mn-stock { font: inherit; font-size: 0.7rem; line-height: 1.3; padding: 0.05rem 0.4rem; border-radius: 999px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer; }
+.mn-stock:hover { border-color: var(--blue); color: var(--blue); }
+.mn-sum.lead { color: var(--text); opacity: 0.85; }
+@media (min-width: 900px) {
+  .mn-sum.lead { -webkit-line-clamp: 4; }
+}
+@media (min-width: 1400px) {
+  .mn-sum.lead { -webkit-line-clamp: 5; font-size: 0.82rem; line-height: 1.5; }
+  .mn-thumb { width: 200px; height: 134px; }
+  /* 종목 칩이 오른쪽 아래 언론사 줄과 안 겹치게 */
+  .mn-body { padding-bottom: 0.2rem; }
+  .mn-stocks { padding-right: 11rem; }
+}

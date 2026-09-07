@@ -31,8 +31,14 @@ const NOTE: Record<NaverNewsCat, string> = {
   estate: "네이버 뉴스 「부동산」 갈래입니다.",
 };
 
-export function MainNewsPanel({ cat = "main" }: { cat?: NaverNewsCat }) {
+export function MainNewsPanel({ cat = "main", onSelectStock }: { cat?: NaverNewsCat; onSelectStock?: (code: string, name: string) => void }) {
   const [items, setItems] = useState<NaverNewsItem[] | null>(null);
+  /*
+   * 카드 채우기 (2026-09-08) — 벤티지: "안에 내용이 좀 덜 채워져 있네?"
+   * 목록 요약은 120자가 전부라 줄을 늘려도 비었다. 목록이 오면 본문 앞 400자와 관련 종목을 따로 받아
+   * 요약 자리에 넣는다. 늦게 와도 되고 못 와도 된다 — 그동안은 목록 요약이 있다.
+   */
+  const [leads, setLeads] = useState<Record<string, { lead: string; stocks: { code: string; name: string }[] }>>({});
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +57,15 @@ export function MainNewsPanel({ cat = "main" }: { cat?: NaverNewsCat }) {
         if (!alive) return;
         setItems(r.items);
         setHasMore(r.hasMore);
+        api
+          .newsLeads(r.items.map((x) => ({ link: x.link, title: x.title, summary: x.summary })))
+          .then((l) => {
+            if (!alive) return;
+            const m: Record<string, { lead: string; stocks: { code: string; name: string }[] }> = {};
+            for (const x of l.leads) m[x.link] = { lead: x.lead, stocks: x.stocks };
+            setLeads(m);
+          })
+          .catch(() => undefined);
       })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
@@ -97,7 +112,25 @@ export function MainNewsPanel({ cat = "main" }: { cat?: NaverNewsCat }) {
               )}
               <div className="mn-body">
                 <b className="mn-tit">{n.title}</b>
-                <span className="mn-sum">{n.summary}</span>
+                <span className={`mn-sum ${leads[n.link]?.lead ? "lead" : ""}`}>{leads[n.link]?.lead || n.summary}</span>
+                {leads[n.link]?.stocks && leads[n.link].stocks.length > 0 && (
+                  <span className="mn-stocks">
+                    {leads[n.link].stocks.map((s) => (
+                      <button
+                        key={s.code}
+                        className="mn-stock"
+                        title={`${s.name} 종목 상세 열기`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onSelectStock?.(s.code, s.name);
+                        }}
+                      >
+                        {s.name}
+                      </button>
+                    ))}
+                  </span>
+                )}
                 <span className="mn-meta">
                   {n.press} · {ago(n.at)}
                 </span>

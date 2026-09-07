@@ -242,7 +242,7 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
           ) : srcTab === "naver" ? (
             <NaverFinanceFrame />
           ) : (
-            <MainNewsPanel cat={srcTab} />
+            <MainNewsPanel cat={srcTab} onSelectStock={onSelectStock} />
           )}
         </>
       )}
