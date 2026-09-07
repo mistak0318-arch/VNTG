@@ -6,6 +6,7 @@ import {
   signClass,
   type CancelTicket,
   type OrderAccount,
+  type OrderHolding,
   type BuyPower,
   type OrderLogRow,
   type OrderRow,
@@ -72,6 +73,42 @@ const SUBS: { key: Sub; label: string }[] = [
   /* 설정 (2026-09-04) — 한도는 여기 없다. 그건 파일을 직접 연다 */
   { key: "config", label: "설정" },
 ];
+
+/**
+ * 큰 돈은 **만원**으로 (2026-09-07 밤) — 벤티지: "숫자 표시하는 UI 들이 굉장히 어색해."
+ * 1,350,000원 / 5,000,000원 처럼 자리수 긴 숫자를 나란히 두면 눈이 못 센다. 요약 자리는
+ * 「135만 / 500만」, 정확한 값이 필요한 자리는 「1,350,000원 <small>(135만)</small>」.
+ */
+function manwon(n: number | null | undefined): string {
+  const v = Math.round(n ?? 0);
+  const a = Math.abs(v);
+  const sign = v < 0 ? "−" : "";
+  if (a >= 100_000_000) return `${sign}${(a / 100_000_000).toFixed(a >= 1_000_000_000 ? 0 : 1)}억`;
+  if (a >= 1_000_000) return `${sign}${Math.round(a / 10_000).toLocaleString()}만`;
+  if (a >= 10_000) return `${sign}${(a / 10_000).toFixed(1).replace(/\.0$/, "")}만`;
+  return `${sign}${a.toLocaleString()}원`;
+}
+
+/** 정확한 값 + 만원 어림을 한 자리에 — 총액·예수금처럼 두 번 읽는 숫자 */
+function Krw({ n, unit = "원" }: { n: number | null | undefined; unit?: string }) {
+  const v = Math.round(n ?? 0);
+  return (
+    <span className="krw">
+      <b>{v.toLocaleString()}</b>
+      <i>{unit}</i>
+      {Math.abs(v) >= 10_000 && <em>{manwon(v)}</em>}
+    </span>
+  );
+}
+
+/** 매수/매도 색 칩 — 표·카드 어디서나 같은 모양 */
+function SideChip({ side }: { side: string | null | undefined }) {
+  const s = String(side ?? "");
+  const buy = /매수|buy/i.test(s);
+  const sell = /매도|sell/i.test(s);
+  if (!buy && !sell) return <span className="ord-wchip none">{s || "-"}</span>;
+  return <span className={`ord-wchip ${buy ? "buy" : "sell"}`}>{buy ? "매수" : "매도"}</span>;
+}
 
 function won(n: number | null | undefined): string {
   return n === null || n === undefined ? "-" : `${Math.round(n).toLocaleString()}원`;
@@ -444,7 +481,7 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
           {sub === "watchHistory" && <WatchHistoryTab />}
           {sub === "open" && <OpenTab status={status} onDone={load} />}
           {sub === "fills" && <FillsTab />}
-          {sub === "balance" && <BalanceTab onSelectStock={onSelectStock} />}
+          {sub === "balance" && <BalanceTab status={status} onSelectStock={onSelectStock} onDone={load} />}
           {sub === "log" && <LogTab />}
           {sub === "config" && <ConfigTab status={status} onDone={load} />}
         </>
@@ -488,9 +525,20 @@ function Band({ status, left, onChange }: { status: OrderStatus; left: number; o
     <div className={`ord-band ${status.mock ? "mock" : "real"}`}>
       <span className="ord-band-tag">{status.mock ? "모의투자" : "실전 계좌"}</span>
       <span className="ord-band-mid">
-        오늘 {status.today.count}/{status.guard.maxDailyCount}건 · {won(status.today.krw)} /{" "}
-        {won(status.guard.maxDailyKrw)}
-        {status.watching > 0 ? ` · 체결 감시 ${status.watching}` : ""}
+        <span className="ord-stat" title="오늘 나간 주문 건수 / 하루 건수 한도">
+          <i>오늘</i>
+          <b>{status.today.count}</b>/{status.guard.maxDailyCount}건
+        </span>
+        <span className="ord-stat" title={`오늘 나간 금액 ${won(status.today.krw)} / 하루 한도 ${won(status.guard.maxDailyKrw)}`}>
+          <i>금액</i>
+          <b>{manwon(status.today.krw)}</b>/{manwon(status.guard.maxDailyKrw)}
+        </span>
+        {status.watching > 0 && (
+          <span className="ord-stat" title="체결을 지켜보는 주문">
+            <i>체결 감시</i>
+            <b>{status.watching}</b>
+          </span>
+        )}
       </span>
       {status.session && (
         <>
@@ -1400,7 +1448,7 @@ function OrderForm({
                     ? "가능 수량 재는 중…"
                     : unit > 0
                       ? acct
-                        ? `가능금액 ${won(acct.deposit)} → 어림 ${maxQty.toLocaleString()}주${cappedByGuard ? " (한 건 한도까지만)" : ""}`
+                        ? `가능금액 ${manwon(acct.deposit)} → 어림 ${maxQty.toLocaleString()}주${cappedByGuard ? " (한 건 한도까지만)" : ""}`
                         : "계좌를 못 읽어 비율을 못 셉니다"
                       : "가격이 서면 가능 수량이 나옵니다"}
                 </div>
@@ -1409,7 +1457,7 @@ function OrderForm({
                   <div className="ord-basis">
                     <button type="button" className={basis === "cash" ? "on" : ""} onClick={() => setBasis("cash")} title="미수·신용 없이 예수금만으로">
                       현금만 <b>{power.cashOnly.qty.toLocaleString()}주</b>
-                      <i>{won(power.cashOnly.amt)}</i>
+                      <i>{manwon(power.cashOnly.amt)}</i>
                     </button>
                     <button
                       type="button"
@@ -1418,7 +1466,7 @@ function OrderForm({
                       title={`종목 증거금율 ${power.margin.rate}% 만 현금으로 걸고 나머지는 미수 — 이틀 뒤(T+2) 갚아야 합니다`}
                     >
                       증거금 {power.margin.rate}% <b>{power.margin.qty.toLocaleString()}주</b>
-                      <i>{won(power.margin.amt)} · 미수 포함</i>
+                      <i>{manwon(power.margin.amt)} · 미수 포함</i>
                     </button>
                     {power.creditEnabled ? (
                       <button
@@ -1436,7 +1484,7 @@ function OrderForm({
                       >
                         신용 {power.credit?.rate ? `${power.credit.rate}%` : ""}{" "}
                         <b>{!power.credit ? "못 잼" : power.credit.allowed ? `${power.credit.qty.toLocaleString()}주` : "불가 종목"}</b>
-                        <i>{power.credit?.allowed ? `${won(power.credit.amt)} · 융자` : "신용 불가"}</i>
+                        <i>{power.credit?.allowed ? `${manwon(power.credit.amt)} · 융자` : "신용 불가"}</i>
                       </button>
                     ) : (
                       <span className="ord-basis-off" title='server/data/orderGuard.json 에 "allowCredit": true'>
@@ -1447,7 +1495,7 @@ function OrderForm({
                   <div className="ord-caps">
                     {basis === "credit" ? "🔴 신용(융자) 매수" : basis === "margin" ? "증거금 매수 — 미수는 T+2 결제" : "현금 매수"}
                     {" · "}최대 <b>{maxQty.toLocaleString()}주</b>
-                    {cappedByGuard ? ` (한 건 한도 ${won(status.guard.maxOrderKrw)} 까지만)` : ""}
+                    {cappedByGuard ? ` (한 건 한도 ${manwon(status.guard.maxOrderKrw)}원까지)` : ""}
                     {power.missing.length > 0 ? ` · 못 받음: ${power.missing.join(", ")}` : ""}
                   </div>
                 </>
@@ -1541,15 +1589,16 @@ function OrderForm({
                 setAmount(v);
                 setQty(unit > 0 && v ? String(Math.floor(Number(v) / unit)) : "");
               }}
-              placeholder={unit > 0 ? "금액을 적으면 수량이" : "가격 먼저"}
+              placeholder={unit > 0 ? "금액 → 수량" : "가격 먼저"}
               disabled={unit <= 0}
             />
             <span>원</span>
           </div>
-          <div className="ord-caps">
-            한 건 {won(status.guard.maxOrderKrw)} · 지정가 현재가 ±{status.guard.priceCollarPct}%
-            {usesCond ? ` · 발동가 ±${status.guard.stopCollarPct}%` : ""} · 남은 건수{" "}
-            {Math.max(0, status.guard.maxDailyCount - status.today.count)}
+          <div className="ord-caps ord-caps-row">
+            <span>한 건 <b>{manwon(status.guard.maxOrderKrw)}</b></span>
+            <span>지정가 현재가 <b>±{status.guard.priceCollarPct}%</b></span>
+            {usesCond && <span>발동가 <b>±{status.guard.stopCollarPct}%</b></span>}
+            <span>남은 <b>{Math.max(0, status.guard.maxDailyCount - status.today.count)}</b>건</span>
           </div>
         </div>
 
@@ -1752,7 +1801,7 @@ function Confirm({
         {ticket.kind === "order" && (
           <div className="ord-modal-amt">
             <span>{ticket.condPrice !== null || isWatch ? "발동되면 총액(어림)" : "총액"}</span>
-            <b>{won(ticket.amount)}</b>
+            <Krw n={ticket.amount} />
           </div>
         )}
         {graced ? (
@@ -2590,19 +2639,39 @@ function WatchCard({
 
 /* ── 미체결·체결 ────────────────────────────────────────────────────────── */
 
+/**
+ * 주기 조회 (2026-09-07 밤 손질) — 벤티지: "체결/미체결은 클릭하면 반응도 느리고 미체결은 아예 화면이 안 나오네."
+ * ① 겹치지 않는다 — 앞 조회가 안 끝났으면 다음 틱은 건너뛴다(느린 키움에 요청이 쌓이던 것)
+ * ② 실패해도 **옛 줄은 남긴다** — 화면이 비는 대신 「읽기 실패 · 마지막 hh:mm:ss」
+ * ③ 읽은 시각·걸린 시간을 돌려준다 — 「느리다」가 몇 초인지 화면에 적힌다
+ */
 function useRows(fetcher: () => Promise<{ rows: OrderRow[] }>, ms: number) {
   const [rows, setRows] = useState<OrderRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [readAt, setReadAt] = useState<Date | null>(null);
+  const [tookMs, setTookMs] = useState(0);
+  const inflight = useRef(false);
 
   const run = useCallback(() => {
+    if (inflight.current) return;
+    inflight.current = true;
+    setBusy(true);
+    const t0 = Date.now();
     void fetcher()
       .then((r) => {
         setRows(r.rows ?? []);
         setError(null);
+        setReadAt(new Date());
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "조회 실패"))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        inflight.current = false;
+        setTookMs(Date.now() - t0);
+        setBusy(false);
+        setLoading(false);
+      });
   }, [fetcher]);
 
   useEffect(() => {
@@ -2611,11 +2680,22 @@ function useRows(fetcher: () => Promise<{ rows: OrderRow[] }>, ms: number) {
     return () => clearInterval(t);
   }, [run, ms]);
 
-  return { rows, error, loading, reload: run };
+  return { rows, error, loading, busy, readAt, tookMs, reload: run };
+}
+
+function ReadMeta({ readAt, tookMs, busy, error }: { readAt: Date | null; tookMs: number; busy: boolean; error: string | null }) {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return (
+    <div className={`ord-readmeta${error ? " bad" : ""}`}>
+      {busy ? "읽는 중…" : readAt ? `${p(readAt.getHours())}:${p(readAt.getMinutes())}:${p(readAt.getSeconds())} 읽음` : "아직 못 읽음"}
+      {tookMs > 0 && ` · ${tookMs >= 1000 ? `${(tookMs / 1000).toFixed(1)}초` : `${tookMs}ms`}`}
+      {error && ` · 마지막 읽기 실패: ${error}`}
+    </div>
+  );
 }
 
 function OpenTab({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
-  const { rows, error, loading, reload } = useRows(api.orderOpen, 4000);
+  const { rows, error, loading, busy, readAt, tookMs, reload } = useRows(api.orderOpen, 5000);
   const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: CancelTicket } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -2638,10 +2718,11 @@ function OpenTab({ status, onDone }: { status: OrderStatus; onDone: () => void }
 
   return (
     <div className="ord-tab">
+      <ReadMeta readAt={readAt} tookMs={tookMs} busy={busy} error={error} />
       {loading && <p className="empty">불러오는 중…</p>}
-      {error && <p className="ord-err">{error}</p>}
       {msg && <p className="ord-err">{msg}</p>}
       {!loading && rows.length === 0 && !error && <p className="empty">미체결 주문이 없다</p>}
+      {!loading && rows.length === 0 && error && <p className="empty">미체결을 못 읽었다 — 위 이유. 5초마다 다시 시도한다</p>}
       {rows.length > 0 && (
         <div className="ord-scroll">
           <table className="ord-table stack">
@@ -2664,14 +2745,19 @@ function OpenTab({ status, onDone }: { status: OrderStatus; onDone: () => void }
                 <tr key={`${r.ordNo}-${r.time}`}>
                   <td data-l="시각">{r.time || "-"}</td>
                   <td className="ord-name">
-                    {r.name || r.code} <span className="ord-code">{r.code}</span>
+                    <SideChip side={r.side} /> {r.name || r.code} <span className="ord-code">{r.code}</span>
+                    <span className="ord-name-sub">
+                      {r.time || ""} · {r.status || "접수"}
+                    </span>
                   </td>
                   <td data-l="구분">{r.side || "-"}</td>
-                  <td className="r" data-l="주문">{fmtNum(r.qty)}</td>
-                  <td className="r" data-l="체결">{fmtNum(r.filled)}</td>
-                  <td className="r" data-l="남은">{fmtNum(r.remain)}</td>
-                  <td className="r" data-l="가격">{r.price ? r.price.toLocaleString() : "-"}</td>
-                  <td className="r" data-l="발동가">{r.stopPrice ? r.stopPrice.toLocaleString() : "-"}</td>
+                  <td className="r" data-l="주문">{fmtNum(r.qty)}주</td>
+                  <td className="r" data-l="체결">{fmtNum(r.filled)}주</td>
+                  <td className="r" data-l="남은">
+                    <b>{fmtNum(r.remain)}주</b>
+                  </td>
+                  <td className="r" data-l="가격">{r.price ? `${r.price.toLocaleString()}원` : "시장가"}</td>
+                  <td className="r" data-l="발동가">{r.stopPrice ? `${r.stopPrice.toLocaleString()}원` : ""}</td>
                   <td data-l="상태">{r.status || "-"}</td>
                   <td>
                     <button type="button" className="ord-x" onClick={() => void cancel(r)}>
@@ -2703,15 +2789,16 @@ function OpenTab({ status, onDone }: { status: OrderStatus; onDone: () => void }
 }
 
 function FillsTab() {
-  const { rows, error, loading } = useRows(api.orderFills, 6000);
+  const { rows, error, loading, busy, readAt, tookMs } = useRows(api.orderFills, 8000);
   return (
     <div className="ord-tab">
+      <ReadMeta readAt={readAt} tookMs={tookMs} busy={busy} error={error} />
       {loading && <p className="empty">불러오는 중…</p>}
-      {error && <p className="ord-err">{error}</p>}
       {!loading && rows.length === 0 && !error && <p className="empty">오늘 체결이 없다</p>}
+      {!loading && rows.length === 0 && error && <p className="empty">체결을 못 읽었다 — 위 이유. 8초마다 다시 시도한다</p>}
       {rows.length > 0 && (
         <div className="ord-scroll">
-          <table className="ord-table">
+          <table className="ord-table stack">
             <thead>
               <tr>
                 <th>시각</th>
@@ -2719,6 +2806,7 @@ function FillsTab() {
                 <th>구분</th>
                 <th className="r">체결</th>
                 <th className="r">체결가</th>
+                <th className="r">체결 금액</th>
                 <th>주문번호</th>
                 <th>상태</th>
               </tr>
@@ -2726,15 +2814,19 @@ function FillsTab() {
             <tbody>
               {rows.map((r, i) => (
                 <tr key={`${r.ordNo}-${i}`}>
-                  <td>{r.time || "-"}</td>
-                  <td>
-                    {r.name || r.code} <span className="ord-code">{r.code}</span>
+                  <td data-l="시각">{r.time || "-"}</td>
+                  <td className="ord-name">
+                    <SideChip side={r.side} /> {r.name || r.code} <span className="ord-code">{r.code}</span>
+                    <span className="ord-name-sub">
+                      {r.time || ""} · {r.status || "체결"} · #{r.ordNo}
+                    </span>
                   </td>
-                  <td>{r.side || "-"}</td>
-                  <td className="r">{fmtNum(r.filled || r.qty)}</td>
-                  <td className="r">{r.price ? r.price.toLocaleString() : "-"}</td>
-                  <td>{r.ordNo}</td>
-                  <td>{r.status || "-"}</td>
+                  <td data-l="구분">{r.side || "-"}</td>
+                  <td className="r" data-l="체결">{fmtNum(r.filled || r.qty)}주</td>
+                  <td className="r" data-l="체결가">{r.price ? `${r.price.toLocaleString()}원` : "-"}</td>
+                  <td className="r" data-l="체결 금액">{r.price ? manwon(r.price * (r.filled || r.qty)) : "-"}</td>
+                  <td data-l="주문번호">{r.ordNo}</td>
+                  <td data-l="상태">{r.status || "-"}</td>
                 </tr>
               ))}
             </tbody>
@@ -2757,12 +2849,61 @@ function FillsTab() {
  * 「지금 들고 있는 것」이 아니다. 계좌에 있는데 복기 노트에 안 적은 종목은 감시가 안 됐다.
  * 이제 **들고 있는 줄에 바로** 적고, 그 값으로 손절 감시가 돌고, 옆 단추가 스톱주문을 연다.
  */
-function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
+function BalanceTab({ status, onSelectStock, onDone }: { status: OrderStatus; onSelectStock?: (code: string, name: string) => void; onDone: () => void }) {
   const [acc, setAcc] = useState<OrderAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** 고치는 중인 칸 — 저장 전까지는 화면 값이 이긴다 */
   const [edit, setEdit] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
+  /*
+   * **자동 손절** (2026-09-07 밤) — 벤티지: "자동감시주문이나 스탑로스도 내가 추가 손댈 거 없이 그 조건에
+   * 오면 자동으로 매도가 되어야지." 여태 잔고의 손절선은 **알림만** 보냈다. 이제 값을 넣고 Enter 하면
+   * 「그 값 이하면 시장가 매도」 감시 주문서가 만들어져 확인 창·비밀번호를 지나 걸린다 — 팔리는 쪽은 서버다.
+   */
+  const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: OrderTicket } | null>(null);
+  const [preparing, setPreparing] = useState<string | null>(null);
+
+  async function armStop(h: OrderHolding, raw: string, qty: number, replaceId: string | null) {
+    const price = Number(raw.replace(/\D/g, "")) || 0;
+    if (price <= 0 || qty <= 0) return;
+    setPreparing(h.code);
+    setError(null);
+    try {
+      const until = new Date(Date.now() + 30 * 86400_000 + 9 * 3600_000).toISOString().slice(0, 10);
+      const r = await api.orderPrepare({
+        side: "sell",
+        code: h.code,
+        name: h.name,
+        qty,
+        price: null,
+        condPrice: null,
+        tradeType: "3",
+        venue: "KRX",
+        credit: false,
+        loanDate: null,
+        watch: { dir: "le", basis: "price", pct: null, price, exec: "market", limitPrice: null, validUntil: until, then: null, legs: null, replaceId },
+      });
+      setTicket(r);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "자동 손절 주문서를 못 만들었다");
+      if (isGone(e)) onDone();
+    } finally {
+      setPreparing(null);
+    }
+  }
+
+  async function disarmStop(w: AutoWatch) {
+    if (!window.confirm(`${w.ticket.name} 자동 손절(${w.spec.trigger.toLocaleString()}원 이하 · ${w.ticket.qty}주)을 끌까요?`)) return;
+    setSaving(w.ticket.code);
+    try {
+      await api.orderWatchCancel(w.id);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "못 껐다");
+    } finally {
+      setSaving(null);
+    }
+  }
   /* 자동감시 — 잔고 줄에 「감시로 산 것」·「걸린 매도 감시」를 적는다 (2026-09-07 밤) */
   const [watches, setWatches] = useState<AutoWatch[]>([]);
 
@@ -2820,7 +2961,7 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
     <div className="ord-tab">
       <div className="ord-dep">
         <span>주문 가능 금액</span>
-        <b>{won(acc.deposit)}</b>
+        <Krw n={acc.deposit} />
       </div>
       {error && <p className="ord-err">{error}</p>}
       {acc.holdings.length === 0 ? (
@@ -2833,7 +2974,7 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
             보이지도 않았다. 표를 하나 더 만드는 대신 CSS 로 접는다 — 마크업이 둘이면
             언젠가 한쪽만 고쳐진다. 칸 이름은 `data-l` 로 들고 다닌다.
           */}
-          <table className="ord-table stack">
+          <table className="ord-table stack ord-bal">
             <thead>
               <tr>
                 <th>종목</th>
@@ -2842,7 +2983,7 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                 <th className="r">현재가</th>
                 <th className="r">평가손익</th>
                 <th className="r">수익률</th>
-                <th className="r">손절선</th>
+                <th className="r">자동 손절</th>
                 <th className="r">여유</th>
                 <th />
               </tr>
@@ -2850,16 +2991,16 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
             <tbody>
               {acc.holdings.map((h) => {
                 const saved = acc.stops?.[h.code]?.stop ?? 0;
-                const shown = edit[h.code] ?? (saved ? String(saved) : "");
-                const dirty = edit[h.code] !== undefined && Number(shown || 0) !== saved;
-                /* 지금 값에서 손절선까지 몇 % 남았나 — 음수면 이미 깨진 것이다 */
-                const room = saved > 0 && h.cur > 0 ? ((h.cur - saved) / h.cur) * 100 : null;
                 const boughtByWatch = watches.find((w) => w.ticket.code === h.code && w.ticket.side === "buy" && (w.status === "filled" || w.status === "fired"));
                 const sellWatches = watches.filter((w) => w.ticket.code === h.code && w.ticket.side === "sell" && w.status === "waiting");
                 /* 잔량 — 보유 · 매매가능(미체결 매도가 빠진 수) · 감시에 걸린 수 · 아직 아무 데도 안 걸린 수 */
                 const watchQty = sellWatches.reduce((a, w) => a + w.ticket.qty, 0);
                 const pendingQty = h.qty - h.ableQty;
                 const freeQty = Math.max(0, h.ableQty - watchQty);
+                /* 자동 손절 = 「이하면 파는」 매도 감시 중 제일 먼저 닿을 것(발동가가 높은 것) */
+                const stopW = sellWatches.filter((w) => w.spec.dir === "le").sort((a, b) => b.spec.trigger - a.spec.trigger)[0] ?? null;
+                const stopLine = stopW ? stopW.spec.trigger : saved;
+                const roomW = stopLine > 0 && h.cur > 0 ? ((h.cur - stopLine) / h.cur) * 100 : null;
                 return (
                   <tr key={h.code}>
                     <td
@@ -2915,23 +3056,49 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                     <td className="r" data-l="현재가">{fmtNum(h.cur)}</td>
                     <td className={`r ${signClass(h.pnl)}`} data-l="평가손익">{fmtNum(h.pnl)}</td>
                     <td className={`r ${signClass(h.pnlRate)}`} data-l="수익률">{h.pnlRate.toFixed(2)}%</td>
-                    <td className="r" data-l="손절선">
-                      <input
-                        className="ord-stop-in"
-                        inputMode="numeric"
-                        placeholder="비움"
-                        value={shown}
-                        onChange={(e) => setEdit((p) => ({ ...p, [h.code]: e.target.value.replace(/\D/g, "") }))}
-                        onBlur={() => dirty && void save(h.code, h.name, shown)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                        }}
-                        disabled={saving === h.code}
-                        title="이 값 아래로 가면 알림이 옵니다. 비우면 감시를 끕니다"
-                      />
+                    <td className="r ord-stop-cell" data-l="자동 손절">
+                      {stopW ? (
+                        <div className="ord-stop-on" title={watchSay(stopW.spec)}>
+                          <b>{stopW.spec.trigger.toLocaleString()}</b>
+                          <i>이하 · {stopW.ticket.qty}주 {stopW.spec.exec === "market" ? "시장가" : "지정가"}</i>
+                          <button type="button" className="ord-mk ord-stop-x" disabled={saving === h.code} onClick={() => void disarmStop(stopW)} title="자동 손절 끄기">
+                            끄기
+                          </button>
+                        </div>
+                      ) : h.creditType ? (
+                        <span className="ord-caps">융자 줄은 폼에서</span>
+                      ) : freeQty <= 0 ? (
+                        <span className="ord-caps">남은 수량 없음</span>
+                      ) : (
+                        <input
+                          className="ord-stop-in"
+                          inputMode="numeric"
+                          placeholder={`값 + Enter (${freeQty}주)`}
+                          value={edit[h.code] ?? ""}
+                          onChange={(e) => setEdit((p) => ({ ...p, [h.code]: e.target.value.replace(/\D/g, "") }))}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void armStop(h, edit[h.code] ?? "", freeQty, null);
+                          }}
+                          disabled={preparing === h.code}
+                          title="이 값 이하가 되면 남은 수량을 시장가로 판다 — Enter 하면 확인 창"
+                        />
+                      )}
+                      {!stopW && saved > 0 && (
+                        <div className="ord-stop-old">
+                          🔔 알림선 {saved.toLocaleString()} <span className="ord-caps">(알림만)</span>
+                          {!h.creditType && freeQty > 0 && (
+                            <button type="button" className="ord-mk" onClick={() => void armStop(h, String(saved), freeQty, null)}>
+                              자동 손절로
+                            </button>
+                          )}
+                          <button type="button" className="ord-mk" onClick={() => void save(h.code, h.name, "")}>
+                            끄기
+                          </button>
+                        </div>
+                      )}
                     </td>
-                    <td className={`r ${room !== null && room < 0 ? "negative" : ""}`} data-l="여유">
-                      {room === null ? "-" : `${room.toFixed(1)}%`}
+                    <td className={`r ${roomW !== null && roomW < 0 ? "negative" : ""}`} data-l="여유">
+                      {roomW === null ? "-" : `${roomW.toFixed(1)}%`}
                     </td>
                     <td className="ord-row-acts">
                       {/*
@@ -2945,11 +3112,11 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                       <a className="ord-x sell" href={orderLink(h, "sell")} title={`매매가능 ${h.ableQty}주가 채워진 매도 폼으로`}>
                         매도
                       </a>
-                      {saved > 0 && !h.creditType && (
+                      {stopLine > 0 && !h.creditType && (
                         <a
                           className="ord-x stop"
-                          href={orderLink(h, "sell", `&tt=28&cond=${saved}&price=${saved}`)}
-                          title={`${h.ableQty}주 · 발동가 ${saved.toLocaleString()}원으로 매도 스톱주문`}
+                          href={orderLink(h, "sell", `&tt=28&cond=${stopLine}&price=${stopLine}`)}
+                          title={`${h.ableQty}주 · 발동가 ${stopLine.toLocaleString()}원으로 키움 스톱지정가 매도 폼`}
                         >
                           🛑 스톱
                         </a>
@@ -2972,10 +3139,26 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
         </div>
       )}
       <p className="ord-note">
-        <b>손절선</b>은 여기 적습니다 — 적으면 <b>손절 감시</b>가 물고(장중 1분마다, 종목당 하루 한 번),
-        깨지면 알림함과 텔레그램으로 옵니다. 비우면 감시를 끕니다. 「🛑 스톱」은 그 값으로{" "}
-        <b>스톱지정가 매도</b> 폼을 엽니다 — 미리 걸어 두면 지켜보는 쪽이 키움이라 앱을 꺼 둬도 나갑니다.
+        <b>자동 손절</b> — 값을 넣고 Enter 하면 「그 값 이하가 되면 남은 수량을 시장가로 판다」는 감시 주문서가 뜹니다.
+        확인하고 비밀번호를 넣으면 걸리고, 그 뒤는 <b>서버가 정규장에 값을 보다가 알아서 팝니다</b>(30일 유효, 자동감시 탭에도 보입니다).
+        ✕ 로 끕니다. 단계로 나눠 팔거나 익절을 섞으려면 「👁 감시매도」로 폼에서. 「🛑 스톱」은 같은 값으로 <b>키움 스톱지정가</b> 폼 —
+        지켜보는 쪽이 키움이라 서버가 꺼져도 나갑니다. 예전의 알림선(🔔)은 알림만 보냈던 것 — 「자동 손절로」 한 번 눌러 바꾸세요.
       </p>
+      {ticket && (
+        <Confirm
+          nonce={ticket.nonce}
+          expiresAt={ticket.expiresAt}
+          ticket={ticket.ticket}
+          status={status}
+          onClose={() => setTicket(null)}
+          onDone={() => {
+            setTicket(null);
+            setEdit({});
+            load();
+            onDone();
+          }}
+        />
+      )}
       <p className="ord-note">
         이 잔고는 <b>주문 전용 앱키의 계좌</b>입니다. 「연동 계좌 (키움)」가 보여 주는 조회용 계좌와 다를 수 있습니다.
         복기 노트의 손절선은 그대로 삽니다 — 그쪽은 <b>R 배수의 분모</b>라 「그때 정한 값」이고, 여기는 「지금 값」입니다.
@@ -3538,7 +3721,7 @@ function LogTab() {
         <p className="empty">아직 기록이 없다</p>
       ) : (
         <div className="ord-scroll">
-          <table className="ord-table">
+          <table className="ord-table stack">
             <thead>
               <tr>
                 <th>시각</th>
@@ -3552,14 +3735,20 @@ function LogTab() {
             <tbody>
               {rows.map((r, i) => (
                 <tr key={`${r.at}-${i}`} className={r.kind === "reject" || r.kind === "error" ? "bad" : ""}>
-                  <td>{localTs(r.at)}</td>
-                  <td>
+                  <td data-l="시각">{localTs(r.at)}</td>
+                  <td data-l="종류">
                     {KIND_KO[r.kind] ?? r.kind}
                     {r.mock ? <i className="ord-mock">모의</i> : null}
                   </td>
-                  <td>{r.name || r.code || "-"}</td>
-                  <td className="r">{r.qty ? fmtNum(r.qty) : "-"}</td>
-                  <td className="r">{r.price ? fmtNum(r.price) : "-"}</td>
+                  <td className="ord-name">
+                    {r.side && <SideChip side={r.side} />} {r.name || r.code || KIND_KO[r.kind] || "-"}
+                    <span className="ord-name-sub">
+                      {localTs(r.at)} · {KIND_KO[r.kind] ?? r.kind}
+                      {r.mock ? " · 모의" : ""}
+                    </span>
+                  </td>
+                  <td className="r" data-l="수량">{r.qty ? `${fmtNum(r.qty)}주` : ""}</td>
+                  <td className="r" data-l="가격">{r.price ? `${fmtNum(r.price)}원` : ""}</td>
                   <td className="ord-msg">{r.msg || "-"}</td>
                 </tr>
               ))}

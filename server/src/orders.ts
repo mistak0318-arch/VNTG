@@ -1434,7 +1434,31 @@ function normOpen(r: Record<string, unknown>): OpenRow {
   };
 }
 
+/**
+ * 짧은 캐시 + 겹침 합치기 (2026-09-07 밤). 미체결 탭(5초)·체결 탭(8초)·체결 감시(5초)·잔고 탭이 같은
+ * 조회를 각자 부르면 주문 앱키에 초당 몇 번씩 나가고, 키움이 429 로 밀어내면 화면이 느려진다 —
+ * 벤티지: "체결/미체결은 클릭하면 반응도 느리고." 2.5초 안의 같은 조회는 한 번만 나간다.
+ */
+const shortCache = new Map<string, { at: number; p: Promise<unknown> }>();
+function memo<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  const hit = shortCache.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.p as Promise<T>;
+  const p = fn().catch((e) => {
+    shortCache.delete(key);
+    throw e;
+  });
+  shortCache.set(key, { at: Date.now(), p });
+  return p;
+}
+
 export async function openOrders(): Promise<OpenRow[]> {
+  return memo("open", 2_500, openOrdersRaw);
+}
+export async function fills(): Promise<OpenRow[]> {
+  return memo("fills", 2_500, fillsRaw);
+}
+
+async function openOrdersRaw(): Promise<OpenRow[]> {
   const oc = orderClient();
   if (!oc) return [];
   const { data } = await oc.request<Record<string, unknown>>(ACNT_RESOURCE, "ka10075", {
@@ -1447,7 +1471,7 @@ export async function openOrders(): Promise<OpenRow[]> {
   return listOf(data, ["oso"]).map(normOpen);
 }
 
-export async function fills(): Promise<OpenRow[]> {
+async function fillsRaw(): Promise<OpenRow[]> {
   const oc = orderClient();
   if (!oc) return [];
   const { data } = await oc.request<Record<string, unknown>>(ACNT_RESOURCE, "ka10076", {
@@ -1489,6 +1513,10 @@ export async function orderAccount(): Promise<{
   creditLoan: number;
   holdings: Holding[];
 }> {
+  return memo("account", 2_500, orderAccountRaw);
+}
+
+async function orderAccountRaw(): Promise<{ deposit: number; creditLoan: number; holdings: Holding[] }> {
   const oc = orderClient();
   if (!oc) return { deposit: 0, creditLoan: 0, holdings: [] };
   const [dep, bal] = await Promise.all([
@@ -2144,6 +2172,9 @@ async function tick(): Promise<void> {
     const rows = await fills();
     for (const [ordNo, w] of [...watching]) {
       if (Date.now() - w.since > WATCH_MAX_MS) {
+        /* 시한이 다한 주문 — 자동감시가 붙어 있으면 「끝났다」고 알려 줘야 카드가 「체결 대기」에 안 머문다 (2026-09-07 밤 점검) */
+        fillHooks.get(ordNo)?.({ filled: w.filled, price: 0, full: false, done: true, status: "감시 시한(5시간) 종료" });
+        fillHooks.delete(ordNo);
         unwatch(ordNo);
         continue;
       }

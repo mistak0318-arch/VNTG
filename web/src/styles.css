@@ -16650,8 +16650,52 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-watch-lines { margin-top: 0.15rem; }
 @media (max-width: 900px) {
   .ord-table.stack td.ord-name { display: block; }
-  .ord-table.stack td[data-l="수량"] { display: none; } /* 잔량 띠가 대신 말한다 */
+  .ord-table.stack.ord-bal td[data-l="수량"] { display: none; } /* 잔량 띠가 대신 말한다 */
   .ord-table.stack td[data-l="손절선"] .ord-stop-in { width: 100%; max-width: 8rem; text-align: left; }
   .ord-table.stack td.ord-row-acts { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.2rem; }
   .ord-qs { font-size: 0.8rem; }
+}
+
+/* 숫자 표시 손질 (2026-09-07 밤) */
+.krw { white-space: nowrap; }
+.krw b { font-variant-numeric: tabular-nums; }
+.krw i { font-style: normal; font-size: 0.8em; color: var(--muted); margin-left: 0.1em; }
+.krw em { font-style: normal; font-size: 0.78em; color: var(--muted); margin-left: 0.4em; }
+.ord-band-mid { display: flex; gap: 0.7rem; flex-wrap: wrap; align-items: baseline; }
+.ord-stat { display: inline-flex; align-items: baseline; gap: 0.25rem; font-variant-numeric: tabular-nums; }
+.ord-stat i { font-style: normal; font-size: 0.72rem; color: var(--muted); }
+.ord-stat b { font-size: 1em; }
+.ord-caps-row { display: flex; flex-wrap: wrap; gap: 0.25rem 0.8rem; }
+.ord-caps-row b { color: var(--text); }
+.ord-readmeta { font-size: 0.74rem; color: var(--muted); margin-bottom: 0.4rem; }
+.ord-readmeta.bad { color: var(--red); }
+
+/* 자동 손절 칸 (2026-09-07 밤) */
+.ord-stop-on { display: inline-flex; align-items: baseline; gap: 0.35rem; flex-wrap: wrap; }
+.ord-stop-on b { color: var(--accent, #e6a23c); font-variant-numeric: tabular-nums; }
+.ord-stop-on i { font-style: normal; font-size: 0.74rem; color: var(--muted); }
+.ord-stop-x { border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 999px; width: 1.4rem; height: 1.4rem; line-height: 1; cursor: pointer; font-size: 0.7rem; }
+.ord-stop-old { margin-top: 0.2rem; font-size: 0.76rem; color: var(--muted); display: flex; gap: 0.4rem; align-items: baseline; flex-wrap: wrap; }
+.ord-stop-in { width: 9.5rem; }
+
+/* 모바일 손질 (2026-09-07 밤) */
+.ord-stat { gap: 0; }
+.ord-stat i { margin-right: 0.3rem; }
+.ord-wchip.none { background: var(--panel); color: var(--muted); border: 1px solid var(--border); }
+.ord-table .ord-wchip { font-size: 0.72rem; padding: 0.05rem 0.4rem; margin-right: 0.15rem; vertical-align: 1px; }
+.ord-name-sub { display: none; }
+.ord-stop-x { padding: 0.1rem 0.5rem; font-size: 0.74rem; border: 1px solid var(--border); border-radius: 999px; }
+@media (max-width: 900px) {
+  /* 폰 카드: 제목 줄에 시각·상태를 작게 붙이고, 같은 값을 말하는 칸(시각·구분·상태·종류)은 숨긴다 */
+  .ord-name-sub { display: block; font-size: 0.74rem; color: var(--muted); font-weight: 400; margin-top: 0.1rem; }
+  .ord-table.stack td[data-l="시각"],
+  .ord-table.stack td[data-l="구분"],
+  .ord-table.stack td[data-l="상태"],
+  .ord-table.stack td[data-l="종류"],
+  .ord-table.stack td[data-l="주문번호"] { display: none; }
+  .ord-table.stack td.ord-msg { grid-column: 1 / -1; font-weight: 400; font-size: 0.86rem; white-space: normal; }
+  .ord-table.stack tr.bad td.ord-msg { color: var(--red); }
+  .ord-stop-old { flex-wrap: nowrap; overflow-x: auto; }
+  .ord-band { flex-wrap: wrap; row-gap: 0.25rem; }
+  .ord-band-mid { width: 100%; order: 9; gap: 0.6rem; }
 }

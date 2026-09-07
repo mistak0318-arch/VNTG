@@ -179,17 +179,30 @@ export class KiwoomClient {
     let reissued = 0;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      const res = await fetch(`${this.baseUrl}${resourceUrl}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json;charset=UTF-8",
-          "api-id": apiId,
-          "cont-yn": opts.contYn ?? "N",
-          "next-key": opts.nextKey ?? "",
-          authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
+      /*
+       * 20초 시한 (2026-09-07 밤). 여태 시한이 없어서 키움이 응답을 안 주면 **영원히** 기다렸다 —
+       * 주문 › 미체결 탭이 「불러오는 중…」인 채 안 뜨던 것의 한 원인. 화면은 실패를 받아야 옛 값이라도
+       * 보여 주고 다시 시도한다.
+       */
+      let res: Response;
+      try {
+        res = await fetch(`${this.baseUrl}${resourceUrl}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json;charset=UTF-8",
+            "api-id": apiId,
+            "cont-yn": opts.contYn ?? "N",
+            "next-key": opts.nextKey ?? "",
+            authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(20_000),
+        });
+      } catch (e) {
+        const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+        void recordApiCall("kiwoom", apiId, "failed", undefined, timedOut ? "20초 응답 없음" : String(e));
+        throw new Error(timedOut ? `키움이 20초 안에 응답하지 않았다 (${apiId})` : `키움 연결 실패 (${apiId}): ${e instanceof Error ? e.message : String(e)}`);
+      }
 
       // HTTP 429: "허용된 요청 개수를 초과하였습니다" - 잠시 대기 후 재시도
       if (res.status === 429) {
