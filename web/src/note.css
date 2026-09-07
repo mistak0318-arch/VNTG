@@ -300,8 +300,13 @@
   display: none !important;
 }
 @media (max-width: 899px) {
+  /*
+   * ⚠️ `.tabscroll` 을 통째로 숨기면 안 된다 (2026-09-07 벤티지: "종목 상세에서 호가창
+   * 보거나 뉴스 보거나 하는 서브 메뉴가 없어졌다"). 종목 상세·테마 DB 의 서브탭도 같은
+   * 부품(TabScroller)이라 같이 사라졌다. 인앱 탭 띠(`.app-tabs`)를 품은 것만 숨긴다.
+   */
   :root[data-theme="note"] .qss-row,
-  :root[data-theme="note"] .tabscroll,
+  :root[data-theme="note"] .tabscroll:has(> .app-tabs),
   :root[data-theme="note"] .app-tabs {
     display: none !important;
   }
