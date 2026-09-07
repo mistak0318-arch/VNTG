@@ -14,6 +14,19 @@ import { SuperDashboardPage } from "./SuperDashboardPage";
 import { TelegramPage } from "./TelegramPage";
 import { MemoPage } from "./MemoPage";
 import { DailyReportPage } from "./DailyReportPage";
+/* 2026-09-07 추가 — 기능이 늘어 미니창에도 (벤티지: "매수직전, 시세분석, 테마MAP 등… 주문도") */
+import { ScopePage } from "./ScopePage";
+import { OrderPage } from "./OrderPage";
+import { ScreenerPage } from "./ScreenerPage";
+import { MapPage } from "./MapPage";
+import { ListTrackPage } from "./ListTrackPage";
+import { ScreenPage } from "./ScreenPage";
+import { VolumeRankingPage } from "./VolumeRankingPage";
+import { CisPage } from "./CisPage";
+import { EtfPage } from "./EtfPage";
+import { MarketFlowPage } from "./MarketFlowPage";
+import { CondSearchPage } from "./CondSearchPage";
+import { ThemeDbPage } from "./ThemeDbPage";
 /* 보드의 시장 무관 블록들 — 종목이 없어도 그려져서 미니창에 딱 맞다 (2026-08-26) */
 import { IndexBoard } from "../components/IndexBoard";
 import { MarketSignalPanel } from "../components/MarketSignalPanel";
@@ -45,12 +58,37 @@ export function MiniPage({
 }) {
   const [cfg, setCfg] = useState(readMiniConfig);
   const [slot, setSlot] = useState(0);
+  /*
+   * **바로 열기** (2026-09-07) — `#/mini?screen=order` 로 열리면 그 화면부터.
+   * 주문 단축키(o 연타)가 이 길로 온다. 버튼에 배정돼 있지 않아도 뜬다 — 단추를 누르면
+   * 그때부터 배정된 화면으로 돌아간다. 라우터가 해시를 `{tab, stock}` 으로만 다시 쓰기
+   * 전, 처음 뜰 때 한 번만 읽는다(`useState` 초기값).
+   */
+  const readForced = (): MiniScreenKey | null => {
+    const q = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+    const k = q.get("screen");
+    return k && MINI_SCREENS.some((s) => s.key === k) ? (k as MiniScreenKey) : null;
+  };
+  const [forced, setForced] = useState<MiniScreenKey | null>(readForced);
+  /*
+   * 미니창이 **이미 떠 있을 때** 단축키를 누르면 같은 이름의 창이라 새로 뜨지 않고
+   * 주소만 바뀐다(해시만 다르면 새로고침도 없다). 그때도 주문으로 넘어가야 하므로
+   * `hashchange` 를 듣는다 — 안 들으면 창은 안 뜨고 아무 일도 안 일어난 것처럼 보인다.
+   */
+  useEffect(() => {
+    const onHash = () => {
+      const k = readForced();
+      if (k) setForced(k);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   /* 종목검색이 아닌 화면에서 종목을 눌렀을 때 — 보통 오버레이 시트로 */
   const [popupStock, setPopupStock] = useState<{ code: string; name: string } | null>(null);
 
   useEffect(() => onMiniConfigChange(() => setCfg(readMiniConfig())), []);
 
-  const screenKey: MiniScreenKey = cfg.slots[slot] ?? "stock";
+  const screenKey: MiniScreenKey = forced ?? cfg.slots[slot] ?? "stock";
   const openPopup = (code: string, name: string) => setPopupStock({ code, name });
 
   return (
@@ -62,14 +100,22 @@ export function MiniPage({
           return (
             <button
               key={i}
-              className={`mini-tab${slot === i ? " active" : ""}`}
-              onClick={() => setSlot(i)}
+              className={`mini-tab${!forced && slot === i ? " active" : ""}`}
+              onClick={() => {
+                setForced(null);
+                setSlot(i);
+              }}
               title={def?.hint}
             >
               <i>{i + 1}</i> {def?.icon} {def?.label}
             </button>
           );
         })}
+        {forced && !cfg.slots.includes(forced) && (
+          <button className="mini-tab active" title="단축키로 연 화면 — 다른 단추를 누르면 사라집니다">
+            {MINI_SCREENS.find((s) => s.key === forced)?.icon} {MINI_SCREENS.find((s) => s.key === forced)?.label}
+          </button>
+        )}
         <button
           className="mini-tab mini-tab-cfg"
           title="버튼 배정·단축키는 본창 설정 > 화면 > 미니창에서 — 새 탭으로 엽니다"
@@ -88,6 +134,19 @@ export function MiniPage({
         {screenKey === "telegram" && <TelegramPage onSelectStock={openPopup} />}
         {screenKey === "memo" && <MemoPage />}
         {screenKey === "report" && <DailyReportPage onSelectStock={openPopup} />}
+        {screenKey === "scope" && <ScopePage onSelectStock={openPopup} />}
+        {/* 주문 — 겹(기기 등록·PIN·비밀번호)은 페이지 안에 있다. 미니창이라고 건너뛰는 건 없다 */}
+        {screenKey === "order" && <OrderPage onSelectStock={openPopup} />}
+        {screenKey === "screener" && <ScreenerPage onSelectStock={openPopup} />}
+        {screenKey === "map" && <MapPage onSelectStock={openPopup} />}
+        {screenKey === "listTrack" && <ListTrackPage onSelectStock={openPopup} />}
+        {screenKey === "signalScreen" && <ScreenPage onSelectStock={openPopup} />}
+        {screenKey === "volume" && <VolumeRankingPage onSelectStock={openPopup} />}
+        {screenKey === "cis" && <CisPage onSelectStock={openPopup} />}
+        {screenKey === "etf" && <EtfPage onSelectStock={openPopup} />}
+        {screenKey === "marketFlow" && <MarketFlowPage onSelectStock={openPopup} />}
+        {screenKey === "condSearch" && <CondSearchPage onSelectStock={openPopup} />}
+        {screenKey === "themedb" && <ThemeDbPage onSelectStock={openPopup} />}
         {/* 보드 블록들 */}
         {screenKey === "indexBoard" && <IndexBoard />}
         {screenKey === "marketSignal" && <MarketSignalPanel />}

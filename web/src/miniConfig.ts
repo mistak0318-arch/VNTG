@@ -23,6 +23,23 @@ export type MiniScreenKey =
   | "telegram"
   | "memo"
   | "report"
+  /*
+   * ── 2026-09-07 추가 — 벤티지: "우리 기능들이 많아졌잖아. 매수직전, 시세분석, 테마MAP 등
+   * 한번 추려보고 추가해보자. 주문도 넣어줘." 팝업 폭(560px)에서도 서는 것만 골랐다 —
+   * 전부 폰 폭에 맞춰 둔 화면이라 미니창에서도 깨지지 않는다.
+   */
+  | "scope"
+  | "order"
+  | "screener"
+  | "map"
+  | "listTrack"
+  | "signalScreen"
+  | "volume"
+  | "cis"
+  | "etf"
+  | "marketFlow"
+  | "condSearch"
+  | "themedb"
   /* ── 보드 블록 ── */
   | "indexBoard"
   | "marketSignal"
@@ -41,6 +58,19 @@ export const MINI_SCREENS: { key: MiniScreenKey; label: string; icon: string; hi
   { key: "telegram", label: "텔레그램", icon: "📡", hint: "텔레그램 동향" },
   { key: "memo", label: "메모장", icon: "📝", hint: "메모장 + 일기" },
   { key: "report", label: "리포트", icon: "📰", hint: "데일리 리포트" },
+  /* ── 2026-09-07 추가 ── */
+  { key: "scope", label: "매수직전", icon: "🧨", hint: "현미경 그룹 — 매수 직전 종목을 같은 잣대로 나란히" },
+  { key: "order", label: "주문", icon: "🛒", hint: "주문 화면 — 기기 등록·PIN·주문 비밀번호는 본창과 같습니다" },
+  { key: "screener", label: "시세분석", icon: "🔬", hint: "시세분석 — 조건으로 종목을 좁힌다" },
+  { key: "map", label: "테마 MAP", icon: "🗺️", hint: "테마/업종 MAP" },
+  { key: "listTrack", label: "신호등 분석", icon: "🔬", hint: "목록별 신호등 추적" },
+  { key: "signalScreen", label: "신호등 찾기", icon: "🚦", hint: "신호등 찾기 — 오늘 초록" },
+  { key: "volume", label: "거래상위", icon: "🔥", hint: "거래대금·시가총액·등락률 상위" },
+  { key: "cis", label: "항해일지", icon: "🧭", hint: "시스가 굴리는 모의 계좌 넷 + 시뮬레이터" },
+  { key: "etf", label: "ETF", icon: "🧺", hint: "ETF 화면" },
+  { key: "marketFlow", label: "마켓 브리핑", icon: "🌊", hint: "마켓 브리핑·흐름" },
+  { key: "condSearch", label: "조건 검색", icon: "🧾", hint: "조건 검색" },
+  { key: "themedb", label: "테마 DB", icon: "🧭", hint: "테마 DB" },
   /* ── 보드 블록 (가볍고 미니창 폭에 맞음) ── */
   { key: "indexBoard", label: "지수판", icon: "🧮", hint: "보드의 지수판 — 국내외 지수·환율·선물 전광판" },
   { key: "marketSignal", label: "시장 신호등", icon: "🚥", hint: "지금이 살 자리인가 — 시장 신호등 판정" },
@@ -70,6 +100,12 @@ export interface MiniConfig {
    * 설정 파일 하나에 같이 두는 이유는 「새창 단축키」가 한 화면에서 보이게 하려는 것.
    */
   boardHotkey: Hotkey;
+  /**
+   * **주문 미니창** 단축키 (2026-09-07) — 벤티지: "o 빠르게 세 번 누르면 주문 메뉴 뜨도록.
+   * 미니창 모드로 해서 빠르게 주문 넣을 수 있게." 미니창을 **주문 화면으로** 연다
+   * (`#/mini?screen=order`). 같은 창 이름이라 미니창이 이미 떠 있으면 그 창이 주문으로 바뀐다.
+   */
+  orderHotkey: Hotkey;
 }
 
 const KEY = "vntg.mini";
@@ -79,6 +115,7 @@ const DEFAULT: MiniConfig = {
   slots: ["stock", "overview", "watch", "news", "superSignal", "pulse", "indexBoard"],
   hotkey: "ctrl-m",
   boardHotkey: "ctrl-b",
+  orderHotkey: "tap-o",
 };
 
 export function readMiniConfig(): MiniConfig {
@@ -98,6 +135,9 @@ export function readMiniConfig(): MiniConfig {
       boardHotkey: MINI_HOTKEYS.some((h) => h.key === saved.boardHotkey)
         ? (saved.boardHotkey as Hotkey)
         : DEFAULT.boardHotkey,
+      orderHotkey: MINI_HOTKEYS.some((h) => h.key === saved.orderHotkey)
+        ? (saved.orderHotkey as Hotkey)
+        : DEFAULT.orderHotkey,
     };
   } catch {
     return DEFAULT;

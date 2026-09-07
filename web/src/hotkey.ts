@@ -47,8 +47,11 @@ export type Hotkey =
   | "ctrl-shift-b"
   | "alt-b"
   | "ctrl-shift-o"
+  | "alt-o"
   | "tap-m"
   | "tap-b"
+  /* 주문 미니창 (2026-09-07) — 벤티지: "o 빠르게 세 번 누르면 주문 메뉴 뜨도록" */
+  | "tap-o"
   /* ── 잠금 ── */
   | "ctrl-shift-z"
   | "ctrl-shift-x"
@@ -78,6 +81,8 @@ const ALL: HotkeyChoice[] = [
   { key: "ctrl-shift-o", label: "Ctrl+Shift+O", hint: "Open — 북마크 관리와 겹칠 수 있습니다" },
   { key: "tap-m", label: "M 세 번 연타", hint: "0.6초 안에 m m m — 입력창에 커서가 있을 땐 안 듣습니다" },
   { key: "tap-b", label: "B 세 번 연타", hint: "0.6초 안에 b b b — 입력창에 커서가 있을 땐 안 듣습니다" },
+  { key: "alt-o", label: "Alt+O", hint: "Order — 한 손으로" },
+  { key: "tap-o", label: "O 세 번 연타", hint: "0.6초 안에 o o o — 입력창에 커서가 있을 땐 안 듣습니다" },
   {
     key: "ctrl-shift-z",
     label: "Ctrl+Shift+Z",
@@ -116,8 +121,10 @@ export const WINDOW_HOTKEYS: HotkeyChoice[] = pick([
   "ctrl-shift-b",
   "alt-b",
   "ctrl-shift-o",
+  "alt-o",
   "tap-m",
   "tap-b",
+  "tap-o",
   "off",
 ]);
 
@@ -197,6 +204,8 @@ function matchesCombo(e: KeyboardEvent, hotkey: Hotkey): boolean {
       return ctrl && e.shiftKey && keyIs(e, "b");
     case "alt-b":
       return e.altKey && !ctrl && keyIs(e, "b");
+    case "alt-o":
+      return e.altKey && !ctrl && keyIs(e, "o");
     case "ctrl-shift-o":
       return ctrl && e.shiftKey && keyIs(e, "o");
     case "ctrl-shift-z":
@@ -223,6 +232,8 @@ function tapLetter(hotkey: Hotkey): TapKey | null {
       return "m";
     case "tap-b":
       return "b";
+    case "tap-o":
+      return "o";
     case "tap-l":
       return "l";
     case "tap-q":

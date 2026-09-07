@@ -739,6 +739,22 @@ export default function App() {
   }
 
   /**
+   * **주문 미니창** (2026-09-07) — 벤티지: "o 빠르게 세 번 누르면 주문 메뉴 뜨도록.
+   * 미니창 모드로 해서 빠르게 주문 넣을 수 있게."
+   * 미니창과 **같은 창 이름**이다 — 미니창이 떠 있으면 그 창이 주문으로 바뀌고, 없으면
+   * 새로 뜬다. 창이 둘이 되면 어느 쪽에 주문을 넣었는지 헷갈린다.
+   */
+  function openMiniOrder() {
+    window.open(
+      `${window.location.pathname}#/mini?screen=order`,
+      "vntg-mini",
+      "width=560,height=880,resizable=yes,scrollbars=yes",
+    );
+    setNavOpen(false);
+    setNavFrom(null);
+  }
+
+  /**
    * 보드 새창 (2026-09-02) — 보드를 통째로 새 창에. 같은 이름이라 하나만 뜬다.
    * `win=1` 은 「사이드바 없이 보드만 그려라」는 표시다 — 아래 `boardWin` 참고.
    */
@@ -774,6 +790,8 @@ export default function App() {
     });
     const isMini = createHotkeyMatcher(() => cfg.hotkey);
     const isBoard = createHotkeyMatcher(() => (boardWin ? "off" : cfg.boardHotkey));
+    /* 주문 미니창 — 미니창 자신(#/mini)에서는 안 듣는다. 이미 그 창이다 */
+    const isOrder = createHotkeyMatcher(() => (route.tab === "mini" ? "off" : cfg.orderHotkey));
     /*
      * 사이드바 보이기·숨기기 (2026-09-04) — 벤티지: "[ 세 번은 보이기, ] 세 번은 숨기기".
      * 판정기는 설정을 `get` 으로 매번 읽으므로 여기서 최신 값을 들여다본다 —
@@ -790,6 +808,11 @@ export default function App() {
       if (isBoard(e)) {
         e.preventDefault();
         openBoardWin();
+        return;
+      }
+      if (isOrder(e)) {
+        e.preventDefault();
+        openMiniOrder();
         return;
       }
       /* 보이기 = 자동숨김 끄기. 이미 붙어 있으면 아무 일도 없다(누른 티는 안 난다) */
