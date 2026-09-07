@@ -20,6 +20,7 @@ import { OrderBookPanel } from "../components/OrderBookPanel";
 import { StockSearchBox } from "../components/StockSearchBox";
 import { latestStock } from "../useRecentStocks";
 import { LiveDot } from "../components/LiveDot";
+import { StockPeek } from "../components/StockPeek";
 
 /**
  * 주문 (2026-09-03) — 벤티지: "주문 메뉴 들어갈 때는 아이디랑 비밀번호를 한 번 더,
@@ -902,23 +903,23 @@ function OrderForm({
           {code && (
             <div className="ord-picked">
               {/*
-                이름을 누르면 종목상세 (2026-09-04) — 값을 적기 전에 그 종목을 한 번 더 보는 길.
-                **새 브라우저 탭으로 연다.** 이 화면 안에서 옮겨 가면 적어 둔 수량·가격이 날아간다 —
-                종목을 보러 갔다가 주문을 처음부터 다시 치게 만들 수는 없다.
+                이름을 누르면 **그 자리에 작은 카드** (2026-09-07) — 값을 적기 전에 그 종목을 한 번
+                더 보는 길. 예전(09-04)엔 새 탭으로 개별종목분석을 열었는데, 「지금 어디쯤인가」
+                하나 보자고 앱을 하나 더 띄우는 건 과했고 미니창에서는 더 이상했다.
+                벤티지: "미니 팝업이나 플로팅으로도 충분한 기능일 거 같은데."
+                적어 둔 수량·가격은 그대로다 — 이 화면을 안 떠난다.
               */}
-              <button
-                type="button"
+              <StockPeek
+                code={code}
+                name={name || code}
                 className="ord-name-go"
-                onClick={() =>
+                onOpenDetail={() =>
                   window.open(
                     `${window.location.pathname}#/stockAnalysis?code=${code}&name=${encodeURIComponent(name || code)}`,
                     "_blank",
                   )
                 }
-                title="종목 상세 — 새 탭으로 (적어 둔 값은 그대로 남습니다)"
-              >
-                {name || code}
-              </button>
+              />
               <span className="ord-code">{code}</span>
               {/* 자동으로 들어온 값은 **자동이라고 말한다** — 고른 것으로 착각하면 안 된다 */}
               {autoPicked && code === autoPicked.code && (

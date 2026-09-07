@@ -29,7 +29,15 @@ interface Status {
   subscribed?: number;
   seats?: { keep: number; transient: number; total: number; max: number };
   keys?: number;
-  regErrors?: string[];
+  /**
+   * 등록이 거절된 기록 — **객체**다 (`{at, code, msg}`).
+   *
+   * ⚠️ 2026-09-07 까지 `string[]` 로 알고 `{regErrors[0]}` 을 그대로 그렸다. 객체를 React
+   * 자식으로 넣으면 컴포넌트가 통째로 죽는다 — 미니PC 엔 거절 기록(105118 등)이 남아 있어
+   * 점을 누르는 순간 오류 화면이 떴다. 벤티지: "그거 클릭하면 뭐 에러 나오는데."
+   * 서버 타입(`realtimeClient.regErrors`)과 같은 모양으로 맞춘다.
+   */
+  regErrors?: { at: string; code: number; msg: string }[];
 }
 
 function agoText(iso?: string | null): string {
@@ -149,9 +157,18 @@ export function LiveDot({ code, name }: { code?: string | null; name?: string | 
                   : "방금 열어 아직 안 물렸습니다 — 잠시 뒤 초록으로 바뀝니다. 그때까지는 3초 조회입니다."
                 : "실시간이 끊겨 3초 조회로 채웁니다. 값이 멈춰 보이면 새로고침하세요."}
           </p>
-          {st?.regErrors && st.regErrors.length > 0 && (
-            <p className="live-pop-err">등록 오류 {st.regErrors.length}건 — {st.regErrors[0]}</p>
-          )}
+          {/*
+            거절 기록은 **참고**다 — 지금 이 종목이 초록이면 그건 지나간 일이다. 마지막 것만,
+            언제였는지와 같이 적는다. 초록인데도 빨간 줄이 뜨면 「오류」로 읽힌다.
+          */}
+          {st?.regErrors && st.regErrors.length > 0 && level !== "on" && (() => {
+            const e = st.regErrors[st.regErrors.length - 1];
+            return (
+              <p className="live-pop-err">
+                등록 거절 {st.regErrors.length}건 · 마지막 {agoText(e.at)} — [{e.code}] {e.msg}
+              </p>
+            );
+          })()}
         </div>
       )}
     </div>

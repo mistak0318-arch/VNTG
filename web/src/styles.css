@@ -16406,3 +16406,28 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ia-subj td, .ia-subj th { font-size: 0.74rem; }
 .ia-subj tr.ia-main td { font-weight: 700; }
 .ia-note { margin: 4px 0 10px; line-height: 1.55; word-break: keep-all; }
+
+/* ── 종목 살짝 보기 (2026-09-07) — 이름을 누르면 그 자리에 뜨는 카드 ── */
+.peek-wrap { position: relative; display: inline-block; }
+.peek-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--text); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.peek-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  width: min(92vw, 340px); padding: 10px 12px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: 0.78rem;
+}
+.peek-pop.flip { left: auto; right: 0; }
+.peek-h { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.peek-h > b { font-size: 0.95rem; }
+.peek-price { margin-left: auto; font-weight: 700; font-size: 0.95rem; }
+.peek-price i { font-style: normal; font-size: 0.74rem; margin-left: 4px; }
+.peek-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; margin: 0; }
+.peek-kv div { display: flex; justify-content: space-between; gap: 6px; }
+.peek-kv dt { color: var(--muted); }
+.peek-kv dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.peek-flow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); font-weight: 600; }
+.peek-sig { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
+.peek-axes { font-size: 0.7rem; }
+.peek-more { margin-top: 8px; width: 100%; }
+.peek-err { margin: 0; color: var(--red); }
