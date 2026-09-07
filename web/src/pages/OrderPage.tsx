@@ -2193,6 +2193,9 @@ function WatchTab({ status, prefill, onDone, onHistory }: { status: OrderStatus;
   const [busy, setBusy] = useState<string | null>(null);
   const [showForm, setShowForm] = useState<boolean>(Boolean(prefill.watch));
   const [editing, setEditing] = useState<AutoWatch | null>(null);
+  /* 접힘이 기본 — 폰에서 카드 하나가 화면을 다 먹었다 */
+  const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
+  const toggle = (id: string) => setOpenIds((m) => ({ ...m, [id]: !m[id] }));
 
   const load = useCallback(async () => {
     try {
@@ -2249,9 +2252,23 @@ function WatchTab({ status, prefill, onDone, onHistory }: { status: OrderStatus;
           👁 지켜보는 중 {live.length > 0 && <span className="ord-count">{live.length}</span>}
           <i className="ord-h4-sub">정규장 09:00~15:30 · KRX 체결로 판정 · 5초마다 새로 읽음</i>
         </h4>
-        <button type="button" className={`ord-wt-new${showForm ? " on" : ""}`} onClick={() => setShowForm((v) => !v)}>
-          {showForm ? "폼 접기" : "＋ 새 감시 걸기"}
-        </button>
+        <span className="ord-wt-btns">
+          {live.length > 1 && (
+            <button
+              type="button"
+              className="ord-mk"
+              onClick={() => {
+                const allOpen = live.every((r) => openIds[r.id]);
+                setOpenIds(Object.fromEntries(live.map((r) => [r.id, !allOpen])));
+              }}
+            >
+              {live.every((r) => openIds[r.id]) ? "모두 접기" : "모두 펼치기"}
+            </button>
+          )}
+          <button type="button" className={`ord-wt-new${showForm ? " on" : ""}`} onClick={() => setShowForm((v) => !v)}>
+            {showForm ? "폼 접기" : "＋ 새 감시 걸기"}
+          </button>
+        </span>
       </div>
       {live.length === 0 ? (
         <p className="empty">지켜보는 감시가 없다 — 「＋ 새 감시 걸기」</p>
@@ -2269,6 +2286,8 @@ function WatchTab({ status, prefill, onDone, onHistory }: { status: OrderStatus;
                 setShowForm(true);
               }}
               editing={editing?.id === r.id}
+              open={Boolean(openIds[r.id])}
+              onToggle={() => toggle(r.id)}
             />
           ))}
         </div>
@@ -2403,7 +2422,7 @@ function WatchHistoryTab() {
                 </button>
                 {isOpen && (
                   <div className="ord-wh-body">
-                    <WatchCard r={r} cur={null} busy={false} onCancel={null} onEdit={null} editing={false} />
+                    <WatchCard r={r} cur={null} busy={false} onCancel={null} onEdit={null} editing={false} open onToggle={() => undefined} />
                     <button type="button" className="ord-x" disabled={busy === r.id} onClick={() => void remove(r)}>
                       {busy === r.id ? "…" : "이 기록 지우기"}
                     </button>
@@ -2418,7 +2437,11 @@ function WatchHistoryTab() {
   );
 }
 
-/** 감시 한 장 — 조건을 칸으로 쪼개고, 지금 값과 발동까지 남은 거리를 막대로 */
+/**
+ * 감시 한 장 (2026-09-07 밤, 네 번째) — 벤티지: "핸드폰에서 보려니깐 카드가 너무 크다. 접을 수 있게.
+ * 매수/매도 확실히 구분." **접힌 두 줄이 기본**: ① 매수/매도 칩 · 종목 · 발동가(↓이하/↑이상) · 상태
+ * ② 지금 값 · 발동까지 % · 수량·방법 · 유효. 누르면 상세(기준·단계·수정·취소)가 열린다.
+ */
 function WatchCard({
   r,
   cur,
@@ -2426,6 +2449,8 @@ function WatchCard({
   onCancel,
   onEdit,
   editing,
+  open,
+  onToggle,
 }: {
   r: AutoWatch;
   cur: { price: number; from: string } | null;
@@ -2433,114 +2458,130 @@ function WatchCard({
   onCancel: (() => void) | null;
   onEdit: (() => void) | null;
   editing: boolean;
+  open: boolean;
+  onToggle: () => void;
 }) {
   const t = r.ticket;
   const s = r.spec;
   const sideKo = t.side === "buy" ? "매수" : "매도";
   const basisKo = s.basis === "price" ? null : s.basis === "prevClose" ? "전일 종가" : s.basis === "avg" ? "평단" : "등록 때 값";
-  const execKo = s.exec === "market" ? "시장가" : s.exec === "limit_trigger" ? "지정가 · 발동가로" : s.exec === "limit_now" ? "지정가 · 그때 현재가로" : `지정가 ${(s.limitPrice ?? 0).toLocaleString()}원`;
+  const execShort = s.exec === "market" ? "시장가" : s.exec === "limit_trigger" ? "발동가 지정" : s.exec === "limit_now" ? "현재가 지정" : `${(s.limitPrice ?? 0).toLocaleString()} 지정`;
   const est = (s.limitPrice ?? s.trigger) * t.qty;
-  /* 발동까지 — 이하 조건이면 값이 내려와야 하고, 이상이면 올라가야 한다. 남은 %는 지금 값 기준 */
   const gap = cur && cur.price > 0 ? ((s.trigger - cur.price) / cur.price) * 100 : null;
   const hit = gap !== null && (s.dir === "le" ? gap >= 0 : gap <= 0);
-  /* 막대 — 등록 때 기준(또는 지금 값)에서 발동가까지를 100 으로 보고 지금이 어디쯤인가 */
+  const near = gap !== null && !hit && Math.abs(gap) <= 1;
   const start = s.basisPrice ?? cur?.price ?? s.trigger;
   const span = Math.abs(s.trigger - start);
-  const walked = cur && span > 0 ? Math.min(100, Math.max(0, (Math.abs(cur.price - start) / span) * 100 * (s.dir === "le" ? (cur.price <= start ? 1 : 0) : (cur.price >= start ? 1 : 0)))) : 0;
+  const walked = cur && span > 0 ? Math.min(100, Math.max(0, (Math.abs(cur.price - start) / span) * 100 * (s.dir === "le" ? (cur.price <= start ? 1 : 0) : cur.price >= start ? 1 : 0))) : 0;
   const stKo = WATCH_STATUS_KO[r.status];
+  const waiting = r.status === "waiting";
   return (
-    <div className={`ord-wcard ${t.side} st-${r.status}${editing ? " editing" : ""}`}>
-      <div className="ord-wcard-top">
-        <b className={`ord-side ${t.side}`}>{sideKo}</b>
+    <div className={`ord-wcard ${t.side} st-${r.status}${editing ? " editing" : ""}${open ? " open" : ""}`}>
+      <button type="button" className="ord-wcard-sum" onClick={onToggle} aria-expanded={open}>
+        <span className={`ord-wchip ${t.side}`}>{sideKo}</span>
         <span className="ord-wcard-name">
-          {t.name || t.code} <span className="ord-code">{t.code}</span>
+          {t.name || t.code}
+          {r.parentId && <i className="ord-watch-tag">자동</i>}
+          {r.groupId && <i className="ord-watch-tag">단계</i>}
         </span>
-        {r.parentId && <i className="ord-watch-tag">체결 뒤 자동</i>}
-        {r.groupId && <i className="ord-watch-tag">단계 {r.groupId.slice(0, 4)}</i>}
-        <span className={`ord-rsv-st ${r.status}`}>{stKo}</span>
-        {onEdit && r.status === "waiting" && (
-          <button type="button" className={`ord-x edit${editing ? " on" : ""}`} disabled={busy} onClick={onEdit} title="값을 고쳐 새 주문서로 바꾼다 — 확인·비밀번호를 다시 지난다">
-            ✏️ 수정
-          </button>
-        )}
-        {onCancel && r.status === "waiting" && (
-          <button type="button" className="ord-x" disabled={busy} onClick={onCancel}>
-            {busy ? "…" : "취소"}
-          </button>
-        )}
-      </div>
-      <div className="ord-wcard-grid">
-        <div className="ord-wcard-cell big">
-          <dt>발동가</dt>
-          <dd>
-            <b>{s.trigger.toLocaleString()}</b>원 {s.dir === "le" ? "이하" : "이상"}
-          </dd>
-          {basisKo && (
-            <small>
-              {basisKo} {(s.basisPrice ?? 0).toLocaleString()} 대비 {(s.pct ?? 0) > 0 ? "+" : ""}
-              {s.pct}%
-            </small>
-          )}
-        </div>
-        <div className="ord-wcard-cell">
-          <dt>지금 값</dt>
-          <dd>
-            {r.status === "waiting" ? (
-              cur ? (
-                <>
-                  <b>{cur.price.toLocaleString()}</b>원 <small>({cur.from})</small>
-                </>
-              ) : (
-                <span className="ord-caps">값 없음(장 밖)</span>
-              )
-            ) : r.firePrice ? (
+        <span className={`ord-wtrig ${s.dir}`}>
+          {s.trigger.toLocaleString()}
+          <i>{s.dir === "le" ? "↓이하" : "↑이상"}</i>
+        </span>
+        <span className={`ord-rsv-st ${r.status}`}>{waiting ? "" : stKo}</span>
+        <i className="ord-wcard-arrow">{open ? "▲" : "▼"}</i>
+        <span className="ord-wcard-line2">
+          {waiting ? (
+            cur ? (
               <>
-                발동 <b>{r.firePrice.toLocaleString()}</b>원
+                <b>{cur.price.toLocaleString()}</b>
+                <em className={hit ? "hit" : near ? "near" : ""}>
+                  {" "}
+                  {hit ? "닿음" : `${gap! > 0 ? "+" : ""}${gap!.toFixed(1)}%`}
+                </em>
               </>
             ) : (
-              "-"
-            )}
-          </dd>
-          {r.status === "waiting" && gap !== null && (
-            <small className={hit ? "ord-bad" : ""}>
-              발동까지 {gap > 0 ? "+" : ""}
-              {gap.toFixed(2)}%{hit ? " — 닿았다" : ""}
-            </small>
+              <span className="ord-caps">값 없음</span>
+            )
+          ) : r.status === "fired" ? (
+            <b>발동 {r.firePrice?.toLocaleString() ?? "-"}</b>
+          ) : r.status === "filled" && r.fillPrice ? (
+            <b>체결 {r.fillPrice.toLocaleString()}</b>
+          ) : (
+            <span>{r.msg?.slice(0, 22) ?? ""}</span>
           )}
-        </div>
-        <div className="ord-wcard-cell">
-          <dt>닿으면</dt>
-          <dd>{execKo}</dd>
-          <small>
-            {t.qty.toLocaleString()}주 · 어림 {won(est)}
-          </small>
-        </div>
-        <div className="ord-wcard-cell">
-          <dt>유효</dt>
-          <dd>{s.validUntil.slice(5).replace("-", "/")} 까지</dd>
-          <small>걸어 둔 때 {localTs(r.at)}</small>
-        </div>
-      </div>
-      {r.status === "waiting" && cur && span > 0 && (
-        <div className="ord-wbar" title="등록 때 기준에서 발동가까지 얼마나 왔나">
-          <i style={{ width: `${walked}%` }} />
-        </div>
-      )}
-      {s.then && s.then.length > 0 && (
-        <div className="ord-wcard-then">
-          ↳ 체결되면 체결가 대비 <b>{legsSay(s.then)}</b> 매도 감시를 자동으로 건다
-          {r.childIds?.length ? ` · ${r.childIds.length}건 걸렸다` : r.childId ? " · 걸렸다" : ""}
-        </div>
-      )}
-      {r.status === "fired" && (
-        <div className="ord-wcard-foot">
-          발동 {r.firedAt ? localTs(r.firedAt) : ""} · 주문번호 {r.ordNo || "?"} · {r.msg || "체결 대기"}
-        </div>
-      )}
-      {(r.status === "filled" || r.status === "failed" || r.status === "expired" || r.status === "cancelled") && (
-        <div className={`ord-wcard-foot${r.status === "failed" ? " bad" : ""}`}>
-          {r.status === "filled" && r.fillPrice ? `${(r.fillQty ?? 0).toLocaleString()}주 @ ${r.fillPrice.toLocaleString()} 체결 · ` : ""}
-          {r.msg || ""} {r.firedAt ? `· ${localTs(r.firedAt)}` : ""}
+          <span className="ord-wsep">·</span>
+          {t.qty.toLocaleString()}주 {execShort}
+          <span className="ord-wsep">·</span>
+          {s.validUntil.slice(5).replace("-", "/")}
+          {s.then && s.then.length > 0 && (
+            <>
+              <span className="ord-wsep">·</span>↳{s.then.length}단계
+            </>
+          )}
+        </span>
+        {waiting && cur && span > 0 && (
+          <span className="ord-wbar">
+            <i style={{ width: `${walked}%` }} />
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="ord-wcard-body">
+          <div className="ord-wcard-grid">
+            <div className="ord-wcard-cell">
+              <dt>기준</dt>
+              <dd>{basisKo ? `${basisKo} ${(s.basisPrice ?? 0).toLocaleString()} 대비 ${(s.pct ?? 0) > 0 ? "+" : ""}${s.pct}%` : "값 직접"}</dd>
+            </div>
+            <div className="ord-wcard-cell">
+              <dt>닿으면</dt>
+              <dd>
+                {s.exec === "market" ? "시장가" : s.exec === "limit_trigger" ? "지정가 · 발동가로" : s.exec === "limit_now" ? "지정가 · 그때 현재가로" : `지정가 ${(s.limitPrice ?? 0).toLocaleString()}원`}
+              </dd>
+              <small>어림 {won(est)}</small>
+            </div>
+            <div className="ord-wcard-cell">
+              <dt>지금 값</dt>
+              <dd>{cur ? `${cur.price.toLocaleString()}원 (${cur.from})` : r.firePrice ? `발동 ${r.firePrice.toLocaleString()}원` : "-"}</dd>
+              {waiting && gap !== null && <small>발동까지 {gap > 0 ? "+" : ""}{gap.toFixed(2)}%</small>}
+            </div>
+            <div className="ord-wcard-cell">
+              <dt>걸어 둔 때</dt>
+              <dd>{localTs(r.at)}</dd>
+              <small>{s.validUntil} 까지</small>
+            </div>
+          </div>
+          {s.then && s.then.length > 0 && (
+            <div className="ord-wcard-then">
+              ↳ 체결되면 체결가 대비 <b>{legsSay(s.then)}</b> 매도 감시
+              {r.childIds?.length ? ` · ${r.childIds.length}건 걸렸다` : r.childId ? " · 걸렸다" : ""}
+            </div>
+          )}
+          {r.status === "fired" && (
+            <div className="ord-wcard-foot">
+              발동 {r.firedAt ? localTs(r.firedAt) : ""} · 주문번호 {r.ordNo || "?"} · {r.msg || "체결 대기"}
+            </div>
+          )}
+          {(r.status === "filled" || r.status === "failed" || r.status === "expired" || r.status === "cancelled") && (
+            <div className={`ord-wcard-foot${r.status === "failed" ? " bad" : ""}`}>
+              {r.status === "filled" && r.fillPrice ? `${(r.fillQty ?? 0).toLocaleString()}주 @ ${r.fillPrice.toLocaleString()} 체결 · ` : ""}
+              {r.msg || ""} {r.firedAt ? `· ${localTs(r.firedAt)}` : ""}
+            </div>
+          )}
+          {waiting && (onEdit || onCancel) && (
+            <div className="ord-wcard-acts">
+              {onEdit && (
+                <button type="button" className={`ord-x edit${editing ? " on" : ""}`} disabled={busy} onClick={onEdit}>
+                  ✏️ 수정
+                </button>
+              )}
+              {onCancel && (
+                <button type="button" className="ord-x" disabled={busy} onClick={onCancel}>
+                  {busy ? "…" : "취소"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -2814,7 +2855,11 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                 /* 지금 값에서 손절선까지 몇 % 남았나 — 음수면 이미 깨진 것이다 */
                 const room = saved > 0 && h.cur > 0 ? ((h.cur - saved) / h.cur) * 100 : null;
                 const boughtByWatch = watches.find((w) => w.ticket.code === h.code && w.ticket.side === "buy" && (w.status === "filled" || w.status === "fired"));
-                const sellWatch = watches.find((w) => w.ticket.code === h.code && w.ticket.side === "sell" && w.status === "waiting");
+                const sellWatches = watches.filter((w) => w.ticket.code === h.code && w.ticket.side === "sell" && w.status === "waiting");
+                /* 잔량 — 보유 · 매매가능(미체결 매도가 빠진 수) · 감시에 걸린 수 · 아직 아무 데도 안 걸린 수 */
+                const watchQty = sellWatches.reduce((a, w) => a + w.ticket.qty, 0);
+                const pendingQty = h.qty - h.ableQty;
+                const freeQty = Math.max(0, h.ableQty - watchQty);
                 return (
                   <tr key={h.code}>
                     <td
@@ -2833,16 +2878,39 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                           👁 감시로 삼
                         </span>
                       )}
-                      {sellWatch && (
-                        <div className="pt-n ord-watch-line" title={watchSay(sellWatch.spec)}>
-                          👁 매도 감시 {sellWatch.spec.pct !== null ? `${sellWatch.spec.pct > 0 ? "+" : ""}${sellWatch.spec.pct}%` : ""} @ {sellWatch.spec.trigger.toLocaleString()} {sellWatch.spec.dir === "le" ? "이하" : "이상"} · {sellWatch.ticket.qty}주
+                      {/*
+                        잔량 띠 (2026-09-07 밤) — 벤티지: "몇 주 남았고 이런 것도 눈에 띄게." 보유 → 미체결 매도에
+                        묶인 수 → 감시에 걸린 수 → **아직 자유로운 수**. 자유로운 수가 0 이면 흐리게, 있으면 굵게.
+                      */}
+                      <div className="ord-qs">
+                        <span className="ord-qs-c">
+                          보유 <b>{fmtNum(h.qty)}</b>주
+                        </span>
+                        {pendingQty > 0 && (
+                          <span className="ord-qs-c dim" title="미체결 매도 주문에 묶여 있다">
+                            주문 중 {fmtNum(pendingQty)}
+                          </span>
+                        )}
+                        {watchQty > 0 && (
+                          <span className="ord-qs-c watch" title={sellWatches.map((w) => watchSay(w.spec)).join(" / ")}>
+                            👁 감시 {fmtNum(watchQty)}
+                          </span>
+                        )}
+                        <span className={`ord-qs-c free${freeQty > 0 ? " on" : ""}`} title="매도 가능한 수에서 감시에 걸린 수를 뺀 것">
+                          남은 <b>{fmtNum(freeQty)}</b>주
+                        </span>
+                      </div>
+                      {sellWatches.length > 0 && (
+                        <div className="ord-watch-lines">
+                          {sellWatches.map((w) => (
+                            <div key={w.id} className="pt-n ord-watch-line" title={watchSay(w.spec)}>
+                              👁 {w.spec.pct !== null ? `${w.spec.pct > 0 ? "+" : ""}${w.spec.pct}%` : ""} {w.spec.trigger.toLocaleString()} {w.spec.dir === "le" ? "↓" : "↑"} · {w.ticket.qty}주 {w.spec.exec === "market" ? "시장가" : "지정가"}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </td>
-                    <td className="r" data-l="수량">
-                      {fmtNum(h.qty)}
-                      {h.ableQty !== h.qty && <div className="pt-n">가능 {fmtNum(h.ableQty)}</div>}
-                    </td>
+                    <td className="r" data-l="수량">{fmtNum(h.qty)}</td>
                     <td className="r" data-l="평단">{fmtNum(h.avg)}</td>
                     <td className="r" data-l="현재가">{fmtNum(h.cur)}</td>
                     <td className={`r ${signClass(h.pnl)}`} data-l="평가손익">{fmtNum(h.pnl)}</td>
@@ -2886,13 +2954,13 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                           🛑 스톱
                         </a>
                       )}
-                      {!h.creditType && !sellWatch && (
+                      {!h.creditType && freeQty > 0 && (
                         <a
                           className="ord-x watch"
-                          href={orderLink(h, "sell", `&watch=1&wb=avg&wp=-5&wx=market&tt=3`)}
-                          title={`${h.ableQty}주 · 평단 대비 −5% 에 시장가 매도 감시(폼에서 고친다)`}
+                          href={`${orderLink(h, "sell", `&watch=1&wb=avg&wp=-5&wx=market&tt=3`).replace(/&qty=\d+/, "")}&qty=${freeQty}`}
+                          title={`남은 ${freeQty}주 · 평단 대비 −5% 에 시장가 매도 감시(폼에서 고친다)`}
                         >
-                          👁 감시매도
+                          👁 감시매도 {freeQty}주
                         </a>
                       )}
                     </td>

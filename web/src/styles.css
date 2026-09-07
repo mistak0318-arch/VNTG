@@ -15283,21 +15283,28 @@ tr:hover .sd-del { opacity: 0.75; }
   .ord-table.stack tbody { display: flex; flex-direction: column; gap: 0.45rem; }
   .ord-table.stack tr {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.15rem 0.5rem;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.35rem 0.5rem;
     padding: 0.5rem 0.6rem;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 10px;
   }
   .ord-table.stack tbody tr:hover { background: var(--panel); }
+  /*
+   * 이름표는 **위**, 값은 **아래** (2026-09-07 밤). 예전엔 이름표 왼쪽·값 오른쪽 2열이라 숫자가
+   * 양끝으로 벌어지고 「가능 7」 같은 덧말이 사이에 끼었다 — 벤티지: "숫자가 너무 띄어쓰기 되어 있고."
+   */
   .ord-table.stack td {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.4rem;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 0.05rem;
     padding: 0;
     border: none;
+    font-size: 0.92rem;
+    font-weight: 600;
     white-space: normal;
     text-align: left;
     font-variant-numeric: tabular-nums;
@@ -16597,3 +16604,54 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 /* 히스토리 줄 — 좁은 폭에서 이름이 세로로 깨지던 것 */
 .ord-wh-line { flex-wrap: wrap; }
 .ord-wh-name, .ord-wh-cond, .ord-wh-when { white-space: nowrap; }
+
+/* 감시 카드 — 컴팩트·접힘 (2026-09-07 밤, 네 번째) */
+.ord-wcards { gap: 0.4rem; }
+.ord-wcard { padding: 0; overflow: hidden; }
+.ord-wcard.buy { background: color-mix(in srgb, var(--red) 6%, var(--panel-2)); }
+.ord-wcard.sell { background: color-mix(in srgb, var(--blue) 6%, var(--panel-2)); }
+.ord-wcard-sum { display: grid; grid-template-columns: auto 1fr auto auto auto; grid-template-areas: "chip name trig st arrow" "line2 line2 line2 line2 line2" "bar bar bar bar bar"; align-items: center; column-gap: 0.5rem; row-gap: 0.15rem; width: 100%; padding: 0.5rem 0.6rem; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.ord-wchip { grid-area: chip; display: inline-block; padding: 0.1rem 0.5rem; border-radius: 6px; font-weight: 800; font-size: 0.82rem; color: #fff; }
+.ord-wchip.buy { background: var(--red); }
+.ord-wchip.sell { background: var(--blue); }
+.ord-wcard-sum .ord-wcard-name { grid-area: name; font-size: 0.98rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ord-wtrig { grid-area: trig; font-weight: 800; font-size: 1.05rem; white-space: nowrap; }
+.ord-wtrig i { font-style: normal; font-size: 0.72rem; font-weight: 600; margin-left: 0.2rem; color: var(--muted); }
+.ord-wtrig.le i { color: var(--blue); }
+.ord-wtrig.ge i { color: var(--red); }
+.ord-wcard-sum .ord-rsv-st { grid-area: st; font-size: 0.76rem; white-space: nowrap; }
+.ord-wcard-arrow { grid-area: arrow; font-style: normal; color: var(--muted); font-size: 0.7rem; }
+.ord-wcard-line2 { grid-area: line2; font-size: 0.8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ord-wcard-line2 b { color: var(--text); }
+.ord-wcard-line2 em { font-style: normal; font-weight: 700; }
+.ord-wcard-line2 em.near { color: var(--accent, #e6a23c); }
+.ord-wcard-line2 em.hit { color: var(--red); }
+.ord-wsep { margin: 0 0.35rem; opacity: 0.6; }
+.ord-wcard-sum .ord-wbar { grid-area: bar; display: block; margin-top: 0.15rem; height: 3px; }
+.ord-wcard-body { padding: 0.2rem 0.6rem 0.6rem; border-top: 1px dashed var(--border); }
+.ord-wcard-body .ord-wcard-grid { margin-top: 0.4rem; }
+.ord-wcard-acts { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+.ord-wt-btns { display: flex; gap: 0.4rem; align-items: center; }
+@media (max-width: 480px) {
+  .ord-wcards { grid-template-columns: 1fr; }
+  .ord-wcard-sum { padding: 0.45rem 0.5rem; column-gap: 0.4rem; }
+  .ord-wtrig { font-size: 0.98rem; }
+}
+
+/* 잔고 잔량 띠 (2026-09-07 밤) */
+.ord-qs { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.25rem; font-size: 0.76rem; font-weight: 400; }
+.ord-qs-c { padding: 0.05rem 0.45rem; border-radius: 999px; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+.ord-qs-c b { color: var(--text); }
+.ord-qs-c.dim { opacity: 0.8; }
+.ord-qs-c.watch { border-color: var(--accent, #e6a23c); color: var(--accent, #e6a23c); }
+.ord-qs-c.free { opacity: 0.7; }
+.ord-qs-c.free.on { opacity: 1; border-color: var(--green, #4ade80); color: var(--text); background: color-mix(in srgb, var(--green, #4ade80) 14%, var(--panel-2)); }
+.ord-qs-c.free.on b { color: var(--green, #4ade80); font-size: 0.95em; }
+.ord-watch-lines { margin-top: 0.15rem; }
+@media (max-width: 900px) {
+  .ord-table.stack td.ord-name { display: block; }
+  .ord-table.stack td[data-l="수량"] { display: none; } /* 잔량 띠가 대신 말한다 */
+  .ord-table.stack td[data-l="손절선"] .ord-stop-in { width: 100%; max-width: 8rem; text-align: left; }
+  .ord-table.stack td.ord-row-acts { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.2rem; }
+  .ord-qs { font-size: 0.8rem; }
+}
