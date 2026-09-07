@@ -6913,6 +6913,8 @@ export interface PositionsView {
   valueTotal: number;
   pnlTotal: number;
   pnlRateTotal: number;
+  totalAsset: number | null;
+  realizedToday: number | null;
   positions: Position[];
   entries: AutoWatch[];
   orphanOpen: OrderRow[];

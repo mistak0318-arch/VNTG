@@ -2775,7 +2775,11 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
   /* 폰에서는 포지션 카드가 접혀서 시작한다 — 벤티지: "카드들이 너무 커서 모바일로 보기에는 불편해" */
   const narrow = useNarrow();
   const [openPos, setOpenPos] = useState<Record<string, boolean>>({});
-  const posOpen = (code: string) => (openPos[code] !== undefined ? openPos[code] : !narrow);
+  /* 표에서는 모두 접혀서 시작 — 줄을 누르면 그 종목만 펼친다 (영웅문S 도 그렇다) */
+  const posOpen = (code: string) => Boolean(openPos[code]);
+  const [kbOpen, setKbOpen] = useState(true);
+  const [twoLine, setTwoLine] = useState(true);
+  void narrow;
 
   const load = useCallback(async () => {
     if (inflight.current) return;
@@ -2867,37 +2871,47 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
     <div className="ord-tab">
       {error && <p className="ord-err">{error}</p>}
       {/*
-        총액이 첫 줄 (2026-09-07 밤) — 벤티지: "현재 매수한 종목의 총 금액과 등락률은 보여줘야지. 수익권인지
-        손실권인지도. 그게 제일 중요하잖아." 평가금액을 크게, 그 옆에 손익(원·%)을 색으로.
+        영웅문S 잔고 화면을 따라 (2026-09-07 밤, 벤티지가 캡처를 보내며 "유사하게 만들어봐"):
+        「총 손익 | −710 원 | −3.80%」 머리 → 총 매입 / 총 평가 / 실현손익 / 추정자산 2×2 → 종목 표(두 줄 칸).
       */}
-      <div className={`ord-total ${view.pnlTotal > 0 ? "up" : view.pnlTotal < 0 ? "down" : ""}`}>
-        <div className="ord-total-main">
-          <i>보유 평가금액</i>
-          <Krw n={view.valueTotal} />
-        </div>
-        <div className="ord-total-pnl">
-          <i>평가손익</i>
-          <b>
-            {view.pnlTotal > 0 ? "+" : ""}
-            {Math.round(view.pnlTotal).toLocaleString()}원
+      <div className={`kb ${view.pnlTotal > 0 ? "up" : view.pnlTotal < 0 ? "down" : ""}`}>
+        <button type="button" className="kb-head" onClick={() => setKbOpen((v) => !v)} aria-expanded={kbOpen}>
+          <span className="kb-title">총 손익</span>
+          <b className="kb-pnl">
+            {view.pnlTotal > 0 ? "+" : view.pnlTotal < 0 ? "−" : ""}
+            {Math.abs(Math.round(view.pnlTotal)).toLocaleString()} <i>원</i>
           </b>
-          <em>
-            {view.pnlRateTotal > 0 ? "+" : ""}
-            {view.pnlRateTotal.toFixed(2)}%
-          </em>
-          <small>{view.pnlTotal > 0 ? "수익권" : view.pnlTotal < 0 ? "손실권" : "본전"}</small>
-        </div>
-        <div className="ord-total-sub">
-          <span>
-            매입 <b>{Math.round(view.investTotal).toLocaleString()}</b>원
-          </span>
-          <span>
-            주문 가능 <b>{Math.round(view.deposit).toLocaleString()}</b>원
-          </span>
-          <span>
-            계좌 합 <b>{Math.round(view.equity).toLocaleString()}</b>원
-          </span>
-        </div>
+          <em className="kb-rate">{pctKo(view.pnlRateTotal)}</em>
+          <span className="kb-arrow">{kbOpen ? "︿" : "﹀"}</span>
+        </button>
+        {kbOpen && (
+          <div className="kb-grid">
+            <div className="kb-cell">
+              <span>총 매입</span>
+              <b>{Math.round(view.investTotal).toLocaleString()}</b>
+            </div>
+            <div className="kb-cell">
+              <span>총 평가</span>
+              <b>{Math.round(view.valueTotal).toLocaleString()}</b>
+            </div>
+            <div className="kb-cell">
+              <span>실현손익</span>
+              <b className={signClass(view.realizedToday ?? 0)}>{view.realizedToday === null ? "-" : Math.round(view.realizedToday).toLocaleString()}</b>
+            </div>
+            <div className="kb-cell">
+              <span>추정자산</span>
+              <b>{Math.round(view.totalAsset ?? view.equity).toLocaleString()}</b>
+            </div>
+            <div className="kb-cell">
+              <span>예수금</span>
+              <b>{Math.round(view.deposit).toLocaleString()}</b>
+            </div>
+            <div className="kb-cell">
+              <span>오늘 감시 실현</span>
+              <b className={signClass(view.todayLoss)}>{view.todayLoss !== 0 ? Math.round(view.todayLoss).toLocaleString() : "0"}</b>
+            </div>
+          </div>
+        )}
       </div>
       <div className="ord-acct">
         {view.todayLoss !== 0 && (
@@ -2913,6 +2927,93 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
         {view.buyLocked && <span className="ord-stat bad">🔒 {view.buyLocked}</span>}
         {noExitCount > 0 && <span className="ord-stat bad">⚠️ 출구 없는 포지션 {noExitCount}</span>}
       </div>
+
+      <div className="kb-bar">
+        <span className="kb-bar-l">
+          보유 <b>{view.positions.length}</b>종목
+          {noExitCount > 0 && <i className="ord-noexit">⚠️ 출구 없음 {noExitCount}</i>}
+        </span>
+        <span className="kb-seg">
+          <button type="button" className={twoLine ? "on" : ""} onClick={() => setTwoLine(true)}>
+            2줄
+          </button>
+          <button type="button" className={!twoLine ? "on" : ""} onClick={() => setTwoLine(false)}>
+            1줄
+          </button>
+        </span>
+      </div>
+      {view.positions.length === 0 ? (
+        <p className="empty">이 계좌에 보유 종목이 없다</p>
+      ) : (
+        <div className={`kb-table${twoLine ? " two" : " one"}`}>
+          <div className="kb-th">
+            <span className="kb-c-name">종목명</span>
+            <span className="kb-c">
+              매입가{twoLine && <small>현재가</small>}
+            </span>
+            <span className="kb-c">
+              보유수량{twoLine && <small>가능수량</small>}
+            </span>
+            <span className="kb-c">
+              평가손익{twoLine && <small>수익률</small>}
+            </span>
+          </div>
+          {view.positions.map((pos) => {
+            const price = view.prices[pos.code]?.price ?? pos.cur;
+            const pnl = (price - pos.avg) * pos.qty;
+            const rate = pos.avg > 0 ? ((price - pos.avg) / pos.avg) * 100 : 0;
+            const isOpen = posOpen(pos.code);
+            return (
+              <div key={pos.code} className={`kb-row${isOpen ? " open" : ""}${pos.noExit ? " noexit" : ""}`}>
+                <button type="button" className="kb-tr" onClick={() => setOpenPos((m) => ({ ...m, [pos.code]: !isOpen }))}>
+                  <span className="kb-c-name">
+                    <b>{pos.name || pos.code}</b>
+                    <small>
+                      {pos.creditType ? `${pos.creditType} · ` : ""}
+                      {pos.noExit ? <i className="ord-bad">출구 없음</i> : <i>손절 {pos.stopLine ? fmtNum(pos.stopLine) : "-"}</i>}
+                      {pos.watchQty > 0 ? ` · 👁${pos.watchQty}` : ""}
+                    </small>
+                  </span>
+                  <span className="kb-c">
+                    <b>{fmtNum(pos.avg)}</b>
+                    {twoLine && <small className={signClass(pnl)}>{fmtNum(price)}</small>}
+                  </span>
+                  <span className="kb-c">
+                    <b>{fmtNum(pos.qty)}</b>
+                    {twoLine && <small>{fmtNum(pos.ableQty)}</small>}
+                  </span>
+                  <span className={`kb-c ${signClass(pnl)}`}>
+                    <b>{Math.round(pnl).toLocaleString()}</b>
+                    {twoLine && <small>{pctKo(rate)}</small>}
+                  </span>
+                </button>
+                {isOpen && (
+                  <div className="kb-detail">
+                    <PositionCard
+                      pos={pos}
+                      cur={view.prices[pos.code] ?? null}
+                      busy={busy === pos.code}
+                      stopValue={stopEdit[pos.code] ?? ""}
+                      onStopChange={(v) => setStopEdit((m) => ({ ...m, [pos.code]: v }))}
+                      onArmStop={() => void armStop(pos, stopEdit[pos.code] ?? "")}
+                      onCancelWatch={(w) => void cancelWatch(w)}
+                      onEditWatch={(w) => {
+                        setEditing(w);
+                        setShowForm(true);
+                      }}
+                      openIds={openIds}
+                      onToggle={toggle}
+                      onSelectStock={onSelectStock}
+                      open
+                      onToggleOpen={() => setOpenPos((m) => ({ ...m, [pos.code]: false }))}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="ord-wt-head">
         <h4 className="ord-h4">
@@ -2959,38 +3060,6 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
             onDone();
           }}
         />
-      )}
-
-      <h4 className="ord-h4">
-        보유 포지션 {view.positions.length > 0 && <span className="ord-count">{view.positions.length}</span>}
-        <i className="ord-h4-sub">출구(손절·익절)가 없는 카드는 빨갛다</i>
-      </h4>
-      {view.positions.length === 0 ? (
-        <p className="empty">이 계좌에 보유 종목이 없다</p>
-      ) : (
-        <div className="ord-pcards">
-          {view.positions.map((pos) => (
-            <PositionCard
-              key={pos.code}
-              pos={pos}
-              cur={view.prices[pos.code] ?? null}
-              busy={busy === pos.code}
-              stopValue={stopEdit[pos.code] ?? ""}
-              onStopChange={(v) => setStopEdit((m) => ({ ...m, [pos.code]: v }))}
-              onArmStop={() => void armStop(pos, stopEdit[pos.code] ?? "")}
-              onCancelWatch={(w) => void cancelWatch(w)}
-              onEditWatch={(w) => {
-                setEditing(w);
-                setShowForm(true);
-              }}
-              openIds={openIds}
-              onToggle={toggle}
-              onSelectStock={onSelectStock}
-              open={posOpen(pos.code)}
-              onToggleOpen={() => setOpenPos((m) => ({ ...m, [pos.code]: !posOpen(pos.code) }))}
-            />
-          ))}
-        </div>
       )}
 
       {view.orphanOpen.length > 0 && (

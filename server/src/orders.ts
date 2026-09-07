@@ -2440,6 +2440,9 @@ export async function positions(main: KiwoomClient): Promise<{
   valueTotal: number;
   pnlTotal: number;
   pnlRateTotal: number;
+  /** 키움 잔고 화면의 「추정자산」(kt00003)과 「실현손익」(오늘, ka10074) — 못 받으면 null */
+  totalAsset: number | null;
+  realizedToday: number | null;
   positions: Position[];
   /** 아직 안 산 매수 감시(진입 대기) */
   entries: AutoWatch[];
@@ -2449,7 +2452,19 @@ export async function positions(main: KiwoomClient): Promise<{
   todayLoss: number;
   buyLocked: string | null;
 }> {
-  const [acct, rows, open, fl, g] = await Promise.all([orderAccount(), readWatches(), openOrders().catch(() => [] as OpenRow[]), fills().catch(() => [] as OpenRow[]), getGuard()]);
+  const oc = orderClient();
+  const today = kstParts().date.replace(/-/g, "");
+  const [acct, rows, open, fl, g, assetRes, rlzRes] = await Promise.all([
+    orderAccount(),
+    readWatches(),
+    openOrders().catch(() => [] as OpenRow[]),
+    fills().catch(() => [] as OpenRow[]),
+    getGuard(),
+    oc ? memo("asset", 30_000, () => oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00003", { qry_tp: "0" })).catch(() => null) : Promise.resolve(null),
+    oc ? memo("rlzToday", 30_000, () => oc.request<Record<string, unknown>>(ACNT_RESOURCE, "ka10074", { strt_dt: today, end_dt: today })).catch(() => null) : Promise.resolve(null),
+  ]);
+  const totalAsset = assetRes ? num(assetRes.data.prsm_dpst_aset_amt) || null : null;
+  const realizedToday = rlzRes ? num(rlzRes.data.rlzt_pl) : null;
   const live = rows.filter((r) => r.status === "waiting" || r.status === "fired");
   const held = new Set(acct.holdings.map((h) => h.code));
   const positionsOut: Position[] = acct.holdings.map((h) => {
@@ -2504,6 +2519,8 @@ export async function positions(main: KiwoomClient): Promise<{
     valueTotal,
     pnlTotal,
     pnlRateTotal,
+    totalAsset,
+    realizedToday,
     positions: positionsOut,
     entries: live.filter((r) => r.ticket.side === "buy" && !held.has(r.ticket.code) || (r.ticket.side === "buy" && r.status === "waiting")),
     orphanOpen: open.filter((x) => !held.has(x.code)),
