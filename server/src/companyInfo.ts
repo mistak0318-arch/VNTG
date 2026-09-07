@@ -51,6 +51,14 @@ const here = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(here, "..", "data");
 const FACTS_FILE = join(DATA_DIR, "companyFacts.json");
 const BRIEF_FILE = join(DATA_DIR, "companyBriefs.json");
+/**
+ * 전 종목 **바닥값**. `tools/briefSeed/` 가 만들어 저장소에 올려 둔 것이다.
+ *
+ * `server/data/*` 는 .gitignore 라서 만든 것이 미니PC 로 안 간다. seed 만 예외로
+ * 추적해서 배포에 태우고, 서버는 이걸 **빈자리에만** 채워 넣는다 —
+ * 버튼을 눌러 만든 최신 brief 가 있으면 그게 언제나 이긴다.
+ */
+const BRIEF_SEED_FILE = join(DATA_DIR, "companyBriefs.seed.json");
 
 const DART_BASE = "https://opendart.fss.or.kr/api";
 
@@ -257,6 +265,32 @@ async function loadBriefs(): Promise<BriefStore> {
   return briefCache;
 }
 
+/**
+ * 바닥값. **여기에 합치지 않고 따로 든다.**
+ *
+ * 합쳐 두면 저장할 때 같이 쓰여서 두 가지가 망가진다 —
+ * 파일이 몇 배로 붇고, seed 를 새로 배포해도 옛 값이 `companyBriefs.json` 에
+ * 남아 있어 안 먹는다. 「만든 것」과 「깔아 둔 것」은 끝까지 갈라 둔다.
+ */
+let seedCache: BriefStore | null = null;
+
+async function loadSeed(): Promise<BriefStore> {
+  if (seedCache) return seedCache;
+  try {
+    seedCache = JSON.parse(await readOrEmpty(BRIEF_SEED_FILE)) as BriefStore;
+    const n = Object.keys(seedCache).length;
+    if (n > 0) console.log(`[companyInfo] 바닥값 ${n}종목`);
+  } catch {
+    seedCache = {};
+  }
+  return seedCache;
+}
+
+/** 이 종목을 **실제로 엮은 적이 있나** — 바닥값은 안 친다. 배치 도구가 건너뛸 때 쓴다 */
+export async function generatedBrief(code: string): Promise<CompanyBrief | null> {
+  return (await loadBriefs())[code] ?? null;
+}
+
 async function saveBriefs(): Promise<void> {
   if (!briefCache) return;
   await fs.mkdir(DATA_DIR, { recursive: true });
@@ -296,16 +330,33 @@ function cleanText(raw: string): string {
   return s;
 }
 
+/**
+ * 억 단위 숫자를 **사람이 읽는 단위로 미리 접어서** 프롬프트에 싣는다.
+ *
+ * `894924억` 을 그대로 주면 모델이 조로 옮기다가 자릿수를 틀린다 —
+ * 실제로 「영업이익 894.9조원」이라고 썼다(2026-09-08, 맞는 값은 89.5조).
+ * 변환을 모델에게 맡기지 않는 게 답이다.
+ */
+function won(v: number | null): string {
+  if (v === null) return "-";
+  if (Math.abs(v) >= 10_000) return `${(v / 10_000).toFixed(1)}조원`;
+  return `${Math.round(v).toLocaleString("ko-KR")}억원`;
+}
+
 function kstDay(): string {
   const now = new Date();
   const kst = new Date(now.getTime() + (9 * 60 + now.getTimezoneOffset()) * 60_000);
   return kst.toISOString().slice(0, 10);
 }
 
-/** 이미 만들어 둔 것 — 조회 0회. 화면이 열릴 때 이걸로 먼저 그린다 */
+/**
+ * 이미 있는 것 — 조회 0회. 화면이 열릴 때 이걸로 먼저 그린다.
+ * 엮어 둔 게 있으면 그것, 없으면 바닥값.
+ */
 export async function cachedBrief(code: string): Promise<CompanyBrief | null> {
-  const store = await loadBriefs();
-  return store[code] ?? null;
+  const made = (await loadBriefs())[code];
+  if (made) return made;
+  return (await loadSeed())[code] ?? null;
 }
 
 /**
@@ -323,10 +374,17 @@ export async function companyBrief(
 ): Promise<{ brief: CompanyBrief | null; ran: boolean; error?: string }> {
   const store = await loadBriefs();
   const today = kstDay();
-  const hit = store[code] ?? null;
+  /** 엮어 둔 것 */
+  const made = store[code] ?? null;
+  /** 화면에 내보낼 것 — 엮은 게 없으면 바닥값이라도 */
+  const hit = made ?? (await loadSeed())[code] ?? null;
 
   if (!opts.run) return { brief: hit, ran: false };
-  if (hit && hit.day === today && !opts.force) return { brief: hit, ran: false };
+  /*
+   * 「오늘 이미 엮었나」는 **엮은 것만** 보고 판단한다. 바닥값의 날짜로 막으면
+   * 버튼을 눌러도 아무 일이 안 일어난다 — 그날 재료로 새로 엮으려고 누른 건데.
+   */
+  if (made && made.day === today && !opts.force) return { brief: made, ran: false };
 
   /*
    * 재료를 모은다. **하나가 실패해도 나머지로 엮는다** — 목표주가가 없는 종목,
@@ -370,15 +428,40 @@ export async function companyBrief(
     parts.push(`[속한 테마와 편입 사유]\n${lines}`);
   }
 
-  if (quarters.length > 0) {
+  /*
+   * 회계적으로 불가능한 줄만 뺀다 (2026-09-08).
+   *
+   * ## 여기서 한 번 잘못 짚었다 — 남겨 둔다
+   *
+   * 처음엔 「이익률 52% 는 말이 안 된다」며 순이익이 매출을 넘는 줄까지 걷어냈다.
+   * 벤티지가 삼성전자 2026 2Q 실적 자료를 가져와 확인해 줬다:
+   * **매출 171.5조 · 영업이익 89.5조 · 이익률 52.2%** — 한투 값과 소수점까지 맞았다.
+   * DS 부문이 영업이익률 70% 를 찍는 국면이라 전사 52% 가 나온 것이다.
+   *
+   * 교훈은 **모델의 상식으로 데이터를 판정하지 말 것**이다. 학습 시점이 지나면
+   * 「불가능하다」는 감각이 먼저 낡는다. 그래서 지금은 회계 항등식으로만 거른다:
+   *
+   *   · 영업이익 = 매출 − 원가 − 판관비 → **매출을 넘을 수 없다**
+   *   · 순이익은 영업외수익(지분법·평가익·매각익)이 붙으므로 **넘을 수 있다**
+   *     (SK하이닉스 2026 2Q 가 그렇다. 이상해 보여도 사실일 수 있어 살린다)
+   */
+  const saneQuarters = quarters.filter((q) => {
+    if (q.revenue === null || q.revenue <= 0) return false;
+    if (q.operatingProfit !== null && Math.abs(q.operatingProfit) > q.revenue) return false;
+    return true;
+  });
+
+  if (saneQuarters.length > 0) {
     sources.push("분기 재무");
-    const lines = quarters
+    const lines = saneQuarters
       .slice(0, 4)
       .map(
+        /* 반올림해서 싣는다. 날것은 `이익률 52.18230956941565%` 로 가는데,
+           토큰만 먹는 게 아니라 **모델이 그 소수점을 그대로 베껴 쓴다** */
         (q) =>
-          `- ${q.label}: 매출 ${q.revenue ?? "-"}억 · 영업이익 ${q.operatingProfit ?? "-"}억` +
-          `${q.margin !== null ? ` (이익률 ${q.margin}%)` : ""}` +
-          `${q.yoy !== null ? ` · 전년동기 대비 ${q.yoy > 0 ? "+" : ""}${q.yoy}%` : ""}`,
+          `- ${q.label}: 매출 ${won(q.revenue)} · 영업이익 ${won(q.operatingProfit)}` +
+          `${q.margin !== null ? ` (이익률 ${q.margin.toFixed(1)}%)` : ""}` +
+          `${q.yoy !== null ? ` · 전년동기 대비 ${q.yoy > 0 ? "+" : ""}${q.yoy.toFixed(0)}%` : ""}`,
       )
       .join("\n");
     parts.push(`[최근 분기 실적]\n${lines}`);

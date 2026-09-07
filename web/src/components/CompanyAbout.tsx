@@ -106,8 +106,19 @@ export function CompanyAbout({
           <div className="co-about-text">{brief.text}</div>
           <div className="table-note co-about-src">
             {brief.sources.length > 0 && <>엮은 것: {brief.sources.join(" · ")} · </>}
-            {brief.model ?? "기본 모델"} · 입력 {brief.inputTokens.toLocaleString("ko-KR")} / 출력{" "}
-            {brief.outputTokens.toLocaleString("ko-KR")} 토큰
+            {/*
+              모델이 없는 것은 **AI 를 안 쓴 글**이다 — ETF 설명은 이름과 추적지수에서
+              규칙으로 만든다. 그걸 「기본 모델」이라고 적으면 AI 가 쓴 것처럼 보인다.
+              토큰도 그때는 0 이라, 「입력 0 / 출력 0」을 굳이 보여 줄 이유가 없다.
+            */}
+            {brief.model ?? "AI 없이 규칙으로 정리"}
+            {brief.inputTokens + brief.outputTokens > 0 && (
+              <>
+                {" "}
+                · 입력 {brief.inputTokens.toLocaleString("ko-KR")} / 출력{" "}
+                {brief.outputTokens.toLocaleString("ko-KR")} 토큰
+              </>
+            )}
           </div>
         </>
       ) : (

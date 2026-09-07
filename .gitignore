@@ -38,6 +38,8 @@ server/data/*
 # 씨앗만 보내고, 실제 파일은 각 PC 것을 쓴다.
 !server/data/calendar.seed.json
 !server/data/stockNotes.seed.json
+!server/data/companyBriefs.seed.json
+!server/data/etfIndex.seed.json
 
 # usWatchlist.json 은 처음엔 위쪽(내려보내는 것)에 뒀는데 그게 틀렸다.
 # **미니PC 화면에서도 그룹을 고친다** — 담고, 빼고, 순서를 바꾼다. 그래서 양쪽이 같은
