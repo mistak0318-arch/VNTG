@@ -123,6 +123,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
   const [statuses, setStatuses] = useState<{ key: WatchStatus; label: string; hint: string }[]>([]);
   /** 상태로 좁혀 보기. `null` 이면 전부 */
   const [statusFilter, setStatusFilter] = useState<WatchStatus | null>(null);
+  /** ETF 만 볼 것인가 — 꺼져 있으면 목록에서 ETF 를 뺀다 */
+  const [etfOnly, setEtfOnly] = useState(false);
   /** 「보유」 전환 관문 — 열려 있으면 시나리오 카드가 뜬다 */
   const [scenario, setScenario] = useState<{ code: string; name: string; price: number | null } | null>(null);
   /** 섹터 집중도 — 관심·보유가 어느 업종에 쏠렸나 */
@@ -167,10 +169,22 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
    *
    * 상태를 안 정한 종목은 「관찰」로 친다. 기본값이라 굳이 눌러 두지 않아도 되게.
    */
+  /*
+   * **ETF 는 기본으로 뺀다** (2026-09-08 — 벤티지 "관심종목 전체볼때 etf는 포함되지
+   * 않게해줘 etf는 따로 보게").
+   *
+   * 회사와 ETF 를 한 표에 세우면 눈이 자꾸 걸린다 — ETF 에는 수급도 정배열도 재무도
+   * 없어서 그 칸들이 비어 있고, 「수익 50/76」 같은 집계도 성격이 다른 것을 섞어 센다.
+   * 그래서 종류는 **상태와 다른 축**으로 두고, 칩을 눌렀을 때만 ETF 쪽을 본다.
+   * 구분선은 어느 쪽에서도 남긴다 — 목록을 나눠 놓은 사람의 표시다.
+   */
+  const byKind = etfOnly
+    ? byGroup.filter((i) => i.isEtf || i.divider)
+    : byGroup.filter((i) => !i.isEtf || i.divider);
   const visible =
     statusFilter === null
-      ? byGroup
-      : byGroup.filter((i) => (i.status ?? "watching") === statusFilter);
+      ? byKind
+      : byKind.filter((i) => (i.status ?? "watching") === statusFilter);
   /*
    * **내가 정한 자리대로** 세운다.
    *
@@ -598,6 +612,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     });
   const summaryScope =
     (activeGroup === ALL ? "전체" : activeGroup) +
+    /* ETF 만 보는 중이면 「전체」가 아니다 — 요약 숫자가 무엇을 센 것인지 밝힌다 */
+    (etfOnly ? " · ETF" : "") +
     (statusFilter ? ` · ${statuses.find((s) => s.key === statusFilter)?.label ?? statusFilter}` : "");
 
   return (
@@ -673,7 +689,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
             전체
           </button>
           {statuses.map((s) => {
-            const n = byGroup.filter((i) => (i.status ?? "watching") === s.key).length;
+            const n = byKind.filter((i) => (i.status ?? "watching") === s.key).length;
             return (
               <button
                 key={s.key}
@@ -685,6 +701,16 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
               </button>
             );
           })}
+          {/* 종류는 상태와 다른 축이라 오른쪽 끝에 따로 세운다 */}
+          {byGroup.some((i) => i.isEtf) && (
+            <button
+              className={`filter-btn my-etf-chip ${etfOnly ? "active" : ""}`}
+              title={etfOnly ? "회사 종목으로 돌아갑니다" : "ETF 만 봅니다 — 평소에는 목록에서 빠져 있습니다"}
+              onClick={() => setEtfOnly(!etfOnly)}
+            >
+              ETF <span className="gt-n">{byGroup.filter((i) => i.isEtf).length}</span>
+            </button>
+          )}
         </div>
       )}
 

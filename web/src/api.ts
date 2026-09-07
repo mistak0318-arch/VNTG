@@ -2176,6 +2176,8 @@ export interface KiwoomGroupStock {
 }
 
 export interface TrackedStock extends WatchItem {
+  /** ETF 인가 — 목록에서 기본으로 빼고 「ETF」 칩을 눌렀을 때만 본다 */
+  isEtf: boolean;
   price: number;
   changeRate: number;
   returnRate: number | null;

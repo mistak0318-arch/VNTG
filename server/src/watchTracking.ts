@@ -1,3 +1,6 @@
+import { promises as fs } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { dropPhantomToday } from "./candleGuard.js";
 import { alCode } from "./alCode.js";
@@ -12,6 +15,15 @@ import { listWatchlist, type WatchItem } from "./watchlist.js";
  */
 
 export interface TrackedStock extends WatchItem {
+  /**
+   * ETF 인가 (2026-09-08 — 벤티지 "관심종목 전체볼때 etf는 포함되지 않게해줘").
+   *
+   * 회사와 ETF 는 같은 표에서 볼 것이 아니다. ETF 에는 수급도 재무도 정배열도 없고,
+   * 있어야 할 자리가 비어 있으면 표를 읽는 눈이 자꾸 걸린다.
+   * 판별은 키움이 준 ETF 목록(`etfIndex.seed.json`)으로 한다 — 이름 규칙으로
+   * 때려 맞히면 「PLUS 글로벌HBM반도체」 같은 것을 놓치거나 「한화솔루션」을 잡는다.
+   */
+  isEtf: boolean;
   price: number; // 현재가
   changeRate: number; // 당일 등락률
   returnRate: number | null; // 편입가 대비 수익률
@@ -65,7 +77,11 @@ export interface TrackedStock extends WatchItem {
  * 지표는 종목별로 캐시하고, 응답 때 **지금 목록**과 합친다. 그룹·메모·순서는 언제나
  * 지금 값이고, 지표는 만료 전까지 재사용한다. 새로 담긴 종목만 그 자리에서 채운다.
  */
-type Metrics = Omit<TrackedStock, keyof WatchItem>;
+/**
+ * 조회로 채우는 값들만. `isEtf` 는 빼는데, 그건 **조회가 아니라 분류**여서
+ * 캐시에 들어갈 것이 아니기 때문이다 — 종목이 하루아침에 ETF 가 되지 않는다.
+ */
+type Metrics = Omit<TrackedStock, keyof WatchItem | "isEtf">;
 
 type Row = Record<string, unknown>;
 
@@ -322,6 +338,68 @@ const metricCache = new Map<string, { at: number; m: Metrics }>();
 /** 만드는 중이면 같은 약속을 돌려줘 중복 조회를 막는다 */
 let building: Promise<void> | null = null;
 
+/* ------------------------------------------------------------------ */
+/* 디스크에 남기기                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **캐시를 파일에도 둔다** (2026-09-08).
+ *
+ * 벤티지: "관심종목이 70개가 넘어가니깐 화면에서 로딩이 엄청 길어지네."
+ *
+ * 캐시가 메모리뿐이라 **서버가 재시작하면 통째로 날아갔다.** 그 상태로 화면을 열면
+ * 76종목을 넷씩 300ms 간격으로 새로 받는데, 종목당 1초 가까이 걸리므로 70초를
+ * 기다리게 된다. 배포할 때마다 한 번씩 이 일이 났다.
+ *
+ * 게다가 갱신기는 `metricCache.size === 0` 이면 아무것도 안 한다 — 아무도 안 쓰는
+ * 서버가 조회를 낭비하지 않게 한 것인데, 재시작 직후엔 **사용자가 열 때까지 영영
+ * 비어 있다**는 뜻이기도 했다. 파일에서 되살리면 그 상태 자체가 없어진다.
+ *
+ * 낡은 값이라도 싣는다. 만료된 것은 갱신기가 뒤에서 다시 채우고, 그동안 화면은
+ * 빈 표 대신 어제 값을 본다 — 이 파일이 줄곧 지켜 온 「빈 화면보다 낫다」 그대로다.
+ */
+const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "data");
+const METRICS_FILE = join(DATA_DIR, "watchMetrics.json");
+
+let restored = false;
+
+async function restoreMetrics(): Promise<void> {
+  if (restored) return;
+  restored = true;
+  try {
+    const raw = JSON.parse(await fs.readFile(METRICS_FILE, "utf-8")) as Record<string, { at: number; m: Metrics }>;
+    let n = 0;
+    for (const [code, v] of Object.entries(raw)) {
+      /* 이미 이번 실행에서 받은 게 있으면 그게 이긴다 */
+      if (!metricCache.has(code) && v && typeof v.at === "number" && v.m) {
+        metricCache.set(code, v);
+        n++;
+      }
+    }
+    if (n > 0) console.log(`[watch] 지표 캐시 ${n}종목 되살림`);
+  } catch {
+    /* 파일이 없으면 그만 — 처음 한 번은 원래 만들어야 한다 */
+  }
+}
+
+let saveTimer: NodeJS.Timeout | null = null;
+
+/** 몰아서 쓴다 — 넷씩 채우는 사이사이 열아홉 번 쓸 이유가 없다 */
+function saveMetricsSoon(): void {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    void (async () => {
+      try {
+        await fs.mkdir(DATA_DIR, { recursive: true });
+        await fs.writeFile(METRICS_FILE, JSON.stringify(Object.fromEntries(metricCache)), "utf-8");
+      } catch (err) {
+        console.error("[watch] 지표 캐시 저장 실패:", err instanceof Error ? err.message : err);
+      }
+    })();
+  }, 3_000);
+}
+
 /**
  * **아무것도 안 한다** — 남겨 둔 이유는 열두 곳이 부르기 때문이다.
  *
@@ -390,12 +468,37 @@ function emptyMetrics(): Metrics {
   };
 }
 
+/**
+ * ETF 코드 — 키움 ETF 전체시세로 만든 seed 를 그대로 쓴다.
+ * 없으면 빈 집합이라 **아무것도 ETF 로 보지 않는다**(있는 것을 없다고 하는 쪽이 덜 나쁘다).
+ */
+let etfCodes: Set<string> | null = null;
+
+async function loadEtfCodes(): Promise<Set<string>> {
+  if (etfCodes) return etfCodes;
+  try {
+    const raw = JSON.parse(await fs.readFile(join(DATA_DIR, "etfIndex.seed.json"), "utf-8")) as {
+      etfs: Record<string, unknown>;
+    };
+    etfCodes = new Set(Object.keys(raw.etfs ?? {}));
+  } catch {
+    etfCodes = new Set();
+  }
+  return etfCodes;
+}
+
 /** 항목(지금 값) + 지표(캐시) — 편입가 대비는 여기서 센다. 편입가는 항목 쪽 값이다 */
-function merge(item: WatchItem, m: Metrics | null): TrackedStock {
+function merge(item: WatchItem, m: Metrics | null, etf: Set<string>): TrackedStock {
   const base = m ?? emptyMetrics();
   const returnRate =
     m && item.addedPrice > 0 && base.price > 0 ? ((base.price - item.addedPrice) / item.addedPrice) * 100 : null;
-  return { ...item, ...base, returnRate, error: m ? base.error : "아직 지표를 못 받았습니다 — 잠시 뒤 채워집니다" };
+  return {
+    ...item,
+    ...base,
+    isEtf: etf.has(item.code),
+    returnRate,
+    error: m ? base.error : "아직 지표를 못 받았습니다 — 잠시 뒤 채워집니다",
+  };
 }
 
 /** 몇 종목만 채운다 — 새로 담긴 것. 넷씩, 사이 300ms (아래 rebuild 와 같은 박자) */
@@ -408,9 +511,11 @@ async function fillSome(client: KiwoomClient, items: WatchItem[]): Promise<void>
     chunk.forEach((it, k) => metricCache.set(it.code, { at, m: got[k] }));
     if (i + CONCURRENCY < items.length) await sleep(300);
   }
+  saveMetricsSoon();
 }
 
 export async function getTrackedWatchlist(client: KiwoomClient, force = false): Promise<TrackedStock[]> {
+  await restoreMetrics();
   const items = await listWatchlist();
   const stocks = items.filter((i) => !i.divider);
   const now = Date.now();
@@ -438,7 +543,8 @@ export async function getTrackedWatchlist(client: KiwoomClient, force = false): 
   const live = new Set(stocks.map((i) => i.code));
   for (const code of metricCache.keys()) if (!live.has(code)) metricCache.delete(code);
 
-  return items.map((it) => merge(it, it.divider ? null : (metricCache.get(it.code)?.m ?? null)));
+  const etf = await loadEtfCodes();
+  return items.map((it) => merge(it, it.divider ? null : (metricCache.get(it.code)?.m ?? null), etf));
 }
 
 /**
@@ -466,9 +572,14 @@ async function rebuild(client: KiwoomClient, items: WatchItem[]): Promise<void> 
  * 만료 1분 전에 미리 채워 둔다.
  */
 export function startTrackingRefresher(client: KiwoomClient): void {
+  /*
+   * 파일에 남은 캐시를 먼저 되살린다. 이게 없으면 재시작 뒤 `size === 0` 이라
+   * 갱신기가 손을 놓고, 사용자가 화면을 여는 순간 70초를 기다리게 된다.
+   */
+  void restoreMetrics();
   const tick = () => {
     if (building) return;
-    if (metricCache.size === 0) return; // 아직 아무도 안 열었으면 만들지 않는다 — 열 때 만든다
+    if (metricCache.size === 0) return; // 아직 한 번도 안 만들었으면 만들지 않는다 — 열 때 만든다
     const oldest = Math.min(...[...metricCache.values()].map((c) => c.at));
     if (Date.now() < expiryOf(oldest) - 60_000) return;
     void listWatchlist()

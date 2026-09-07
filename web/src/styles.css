@@ -4540,6 +4540,17 @@ button:active:not(:disabled) {
   .my-chip-row .gt-item { flex-shrink: 0; }
 }
 
+/*
+ * ETF 칩은 **다른 축**이다 — 나머지는 상태(관찰·대기·보유·청산)인데 이것만 종류다.
+ * 사이를 벌리고 세로 금을 그어 「여기서부터 다른 이야기」를 눈으로 알게 한다.
+ */
+.my-etf-chip {
+  margin-left: 10px;
+  border-left: 1px solid var(--border);
+  padding-left: 14px;
+  border-radius: 0 6px 6px 0;
+}
+
 /* ── 끌어서 순서 바꾸기 (useDragOrder) — 모든 순서 UI 공통 ── */
 /* 손바닥(grab)이 아니라 손가락(pointer) — 버튼 위 커서가 갑자기 바뀌면 이상하다는 지적 */
 [draggable="true"] { cursor: pointer; }
