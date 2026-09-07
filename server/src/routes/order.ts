@@ -306,8 +306,8 @@ export function createOrderRouter(main: KiwoomClient): Router {
 
   router.post("/password", async (req, res) => {
     try {
-      const { next: nextPw, current } = (req.body ?? {}) as { next?: string; current?: string };
-      await setOrderPassword(String(nextPw ?? ""), current === undefined ? null : String(current));
+      const { next: nextPw, current, kind } = (req.body ?? {}) as { next?: string; current?: string; kind?: string };
+      await setOrderPassword(String(nextPw ?? ""), current === undefined ? null : String(current), kind === "pattern" ? "pattern" : "text");
       res.json({ ok: true });
     } catch (e) {
       res.status(400).json({ error: e instanceof Error ? e.message : "실패" });

@@ -295,6 +295,15 @@ export interface OrderSettings {
    */
   entryMode: "password" | "pin" | "pattern";
   /**
+   * **주문 비밀번호를 무엇으로 받나** (2026-09-08 — 벤티지 "주문비밀번호도 패턴쓸수 잇게").
+   *   "text"     글자 비밀번호 6자 이상 (기본)
+   *   "pattern"  3×3 패턴 — 진입 패턴과 같은 숫자열 형식이고 같은 해시 방식이다. 자리는 다르다.
+   *
+   * 진입 패턴과 **같은 패턴을 쓰면 겹이 둘에서 하나로 준다** — 화면이 경고하지만 막지는
+   * 않는다. 서버는 해시만 들고 있어 둘이 같은지 알 수 없다.
+   */
+  passwordMode: "text" | "pattern";
+  /**
    * **접근 점검을 텔레그램으로도 보낼까** (2026-09-04). 기본 켬.
    *
    * 끄면 점검은 그대로 6시간마다 돌고 기록도 남는다 — **알림만** 안 간다.
@@ -313,6 +322,7 @@ const DEFAULT_SETTINGS: OrderSettings = {
   idleMinutes: 10,
   maxMinutes: 60,
   entryMode: "password",
+  passwordMode: "text",
   auditTelegram: true,
 };
 
@@ -344,6 +354,7 @@ export async function saveSettings(patch: Partial<OrderSettings>): Promise<Order
       patch.entryMode === "pin" || patch.entryMode === "password" || patch.entryMode === "pattern"
         ? patch.entryMode
         : cur.entryMode,
+    passwordMode: patch.passwordMode === "pattern" || patch.passwordMode === "text" ? patch.passwordMode : cur.passwordMode ?? "text",
     auditTelegram:
       patch.auditTelegram === undefined ? cur.auditTelegram : Boolean(patch.auditTelegram),
   };
@@ -615,17 +626,26 @@ export async function hasOrderPassword(): Promise<boolean> {
   return a.hash.length > 0;
 }
 
-export async function setOrderPassword(next: string, current: string | null): Promise<void> {
+export async function setOrderPassword(next: string, current: string | null, kind: "text" | "pattern" = "text"): Promise<void> {
   const a = await loadAuth();
   if (a.hash) {
     const r = await checkPassword(current ?? "");
     if (!r.ok) throw new Error(r.error);
   }
-  if (next.length < 6) throw new Error("주문 비밀번호는 6자 이상");
+  if (kind === "pattern") {
+    /* 진입 패턴과 같은 규칙 — 네 점 이상, 같은 점 두 번 금지, 한 줄로만 긋기 금지 */
+    if (next.length < 4) throw new Error("패턴은 점 네 개 이상을 이어야 합니다");
+    if (next.length > 9) throw new Error("패턴이 너무 깁니다");
+    if (/[^0-8]/.test(next)) throw new Error("패턴 값이 이상합니다");
+    if (new Set(next).size !== next.length) throw new Error("같은 점을 두 번 지났습니다");
+    if (/^(012|345|678|036|147|258|048|246)/.test(next) && next.length <= 4)
+      throw new Error("너무 뻔한 패턴입니다 — 한 줄로만 긋는 것은 막습니다");
+  } else if (next.length < 6) throw new Error("주문 비밀번호는 6자 이상");
   const salt = randomBytes(16).toString("hex");
   const hash = await scryptHex(next, salt);
   await writeJson(AUTH_FILE, { ...a, salt, hash, fails: 0, lockUntil: 0 } satisfies OrderAuthFile);
-  await appendLog({ kind: "password", msg: a.hash ? "주문 비밀번호 변경" : "주문 비밀번호 처음 설정" });
+  const what = kind === "pattern" ? "주문 패턴" : "주문 비밀번호";
+  await appendLog({ kind: "password", msg: a.hash ? `${what} 변경` : `${what} 처음 설정` });
 }
 
 /** 틀리면 세고, 다섯 번이면 30분 잠그고 텔레그램 */

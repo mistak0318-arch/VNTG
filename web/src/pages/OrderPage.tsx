@@ -475,7 +475,7 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
       ) : !status.hasPassword ? (
         <PasswordSetup onDone={load} />
       ) : status.uiLocked ? (
-        <LockedCard onDone={load} />
+        <LockedCard status={status} onDone={load} />
       ) : (
         <>
           <div className="ord-subs">
@@ -913,7 +913,7 @@ function PasswordSetup({ onDone }: { onDone: () => void }) {
   );
 }
 
-function LockedCard({ onDone }: { onDone: () => void }) {
+function LockedCard({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -938,13 +938,17 @@ function LockedCard({ onDone }: { onDone: () => void }) {
       <div className="ord-gate-mark">🛑</div>
       <b>주문이 잠겨 있다</b>
       <p>잠금이 걸린 동안에는 어떤 주문도 나가지 않는다. 풀려면 주문 비밀번호가 필요하다.</p>
-      <input
-        className="ord-in"
-        type="password"
-        placeholder="주문 비밀번호"
-        value={pw}
-        onChange={(e) => setPw(e.target.value)}
-      />
+      {status.settings.passwordMode === "pattern" ? (
+        <PatternPad value={pw} onChange={setPw} disabled={busy} />
+      ) : (
+        <input
+          className="ord-in"
+          type="password"
+          placeholder="주문 비밀번호"
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+        />
+      )}
       {error && <p className="ord-err">{error}</p>}
       <button type="submit" className="ord-go" disabled={busy || !pw}>
         잠금 풀기
@@ -1880,15 +1884,24 @@ function Confirm({
           </div>
         ) : (
           <>
-            <input
-              ref={pwRef}
-              className="ord-in"
-              type="password"
-              autoComplete="off"
-              placeholder="주문 비밀번호"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-            />
+            {/*
+              패턴 모드면 패드로 (2026-09-08 — 벤티지 "주문비밀번호도 패턴쓸수 잇게").
+              손을 떼면 그대로 실행하지는 않는다 — 주문은 돈이 나가는 자리라 「실행」을
+              한 번 더 누르게 둔다. 진입 문과 다른 점이다.
+            */}
+            {status.settings.passwordMode === "pattern" ? (
+              <PatternPad value={pw} onChange={setPw} disabled={busy || dead} />
+            ) : (
+              <input
+                ref={pwRef}
+                className="ord-in"
+                type="password"
+                autoComplete="off"
+                placeholder="주문 비밀번호"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
+              />
+            )}
             {status.settings.rememberPassword && (
               <label className="ord-remember">
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
@@ -3817,9 +3830,17 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
     }
   }
 
+  /**
+   * 주문 비밀번호도 글자 ↔ 패턴을 오간다 (2026-09-08). 진입 PIN 과 같은 순서 —
+   * **새 값을 먼저 받고 그다음에 방식을 바꾼다.** 방식만 먼저 바꾸면 저장된 것은 아직
+   * 글자인데 주문 모달은 패턴을 그리라고 하는 상태가 된다.
+   */
+  const [pendingPwMode, setPendingPwMode] = useState<"text" | "pattern" | null>(null);
+  const pwPadMode: "text" | "pattern" = pendingPwMode ?? cfg.passwordMode ?? "text";
+
   async function changePw(e: React.FormEvent) {
     e.preventDefault();
-    if (pwA !== pwB) {
+    if (pwPadMode === "text" && pwA !== pwB) {
       setError("새 비밀번호 두 칸이 다릅니다");
       return;
     }
@@ -3827,11 +3848,16 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
     setError(null);
     setMsg(null);
     try {
-      await api.orderSetPassword(pwA, pwCur);
+      await api.orderSetPassword(pwA, pwCur, pwPadMode);
+      if (pendingPwMode && pendingPwMode !== cfg.passwordMode) {
+        const r = await api.orderSettingsSave({ passwordMode: pendingPwMode });
+        setCfg(r.settings);
+        setPendingPwMode(null);
+      }
       setPwA("");
       setPwB("");
       setPwCur("");
-      setMsg("주문 비밀번호를 바꿨습니다");
+      setMsg(pwPadMode === "pattern" ? "주문 패턴을 등록했습니다 — 이제 주문할 때 패턴을 그립니다" : "주문 비밀번호를 바꿨습니다");
     } catch (e2) {
       setError(e2 instanceof Error ? e2.message : "실패");
     } finally {
@@ -4059,11 +4085,61 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
       </form>
 
       <form className="ord-cfg-sec" onSubmit={(e) => void changePw(e)}>
-        <h4>주문 비밀번호 바꾸기</h4>
-        <input className="ord-in" type="password" placeholder="지금 비밀번호" value={pwCur} onChange={(e) => setPwCur(e.target.value)} />
-        <input className="ord-in" type="password" placeholder="새 비밀번호 (6자 이상)" value={pwA} onChange={(e) => setPwA(e.target.value)} />
-        <input className="ord-in" type="password" placeholder="한 번 더" value={pwB} onChange={(e) => setPwB(e.target.value)} />
-        <button type="submit" className="ord-go" disabled={busy || pwA.length < 6 || !pwCur}>
+        <h4>주문 비밀번호 {pwPadMode === "pattern" ? "— 패턴" : "바꾸기"}</h4>
+        <p className="ord-note">
+          주문을 실행할 때마다 묻는 것입니다. 글자 6자 이상이나 3×3 패턴 중 고릅니다.{" "}
+          {(cfg.entryMode === "pattern" || pendingMode === "pattern") && pwPadMode === "pattern" && (
+            <b className="ord-err">진입 패턴과 다른 패턴으로 하세요 — 같으면 문이 하나로 줍니다.</b>
+          )}
+        </p>
+        <div className="ord-cfg-row">
+          {(["text", "pattern"] as const).map((m) => {
+            const active = pendingPwMode ? pendingPwMode === m : (cfg.passwordMode ?? "text") === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                className={`filter-btn ${active ? "active" : ""}${pendingPwMode === m ? " pending" : ""}`}
+                disabled={busy}
+                onClick={() => {
+                  setPendingPwMode(m === (cfg.passwordMode ?? "text") ? null : m);
+                  setPwA("");
+                  setPwB("");
+                  setMsg(null);
+                  setError(null);
+                }}
+              >
+                {m === "text" ? "글자" : "패턴"}
+              </button>
+            );
+          })}
+          {pendingPwMode && <span className="ord-note">아래에서 새 {pendingPwMode === "pattern" ? "패턴을 등록" : "비밀번호를 정"}하면 그때 바뀝니다</span>}
+        </div>
+        <input
+          className="ord-in"
+          type="password"
+          autoComplete="off"
+          placeholder={(cfg.passwordMode ?? "text") === "pattern" ? "지금 패턴(숫자열) 또는 옛 비밀번호" : "지금 비밀번호"}
+          value={pwCur}
+          onChange={(e) => setPwCur(e.target.value)}
+        />
+        {pwPadMode === "pattern" ? (
+          <div className="ord-cfg-pad">
+            <span className="ord-note">새 패턴을 그리세요</span>
+            <PatternPad value={pwA} onChange={setPwA} disabled={busy} />
+            {pwA.length > 0 && <small className="ord-note">{pwA.length}점 이음{pwA.length < 4 ? " — 네 점 이상" : ""}</small>}
+          </div>
+        ) : (
+          <>
+            <input className="ord-in" type="password" autoComplete="new-password" placeholder="새 비밀번호 (6자 이상)" value={pwA} onChange={(e) => setPwA(e.target.value)} />
+            <input className="ord-in" type="password" autoComplete="new-password" placeholder="한 번 더" value={pwB} onChange={(e) => setPwB(e.target.value)} />
+          </>
+        )}
+        <button
+          type="submit"
+          className="ord-go"
+          disabled={busy || !pwCur || (pwPadMode === "pattern" ? pwA.length < 4 : pwA.length < 6)}
+        >
           바꾸기
         </button>
       </form>

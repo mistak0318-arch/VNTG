@@ -988,8 +988,9 @@ export const api = {
     orderPost<{ devices: OrderDevice[] }>("/api/order/devices/rename", { id, name }),
   orderDeviceRemove: (id: string) => orderPost<{ devices: OrderDevice[] }>("/api/order/devices/remove", { id }),
   orderCloseSession: () => deleteJson<{ ok: boolean }>("/api/order/session"),
-  orderSetPassword: (nextPw: string, current: string | null) =>
-    orderPost<{ ok: boolean }>("/api/order/password", { next: nextPw, current }),
+  /** kind 가 "pattern" 이면 3×3 점 인덱스를 이은 숫자열(4~9자리)로 본다 */
+  orderSetPassword: (nextPw: string, current: string | null, kind: "text" | "pattern" = "text") =>
+    orderPost<{ ok: boolean }>("/api/order/password", { next: nextPw, current, kind }),
   orderOpen: () => getJson<{ rows: OrderRow[]; error?: string }>("/api/order/open"),
   orderFills: () => getJson<{ rows: OrderRow[]; error?: string }>("/api/order/fills"),
   orderAccount: () => getJson<OrderAccount>("/api/order/account"),
@@ -6976,6 +6977,8 @@ export interface OrderSettings {
   auditTelegram: boolean;
   /** 주문 메뉴를 무엇으로 여나 — "pin" 은 기기 등록이 켜져 있을 때만 */
   entryMode: "password" | "pin" | "pattern";
+  /** 주문 비밀번호를 글자로 받나 패턴으로 받나 */
+  passwordMode: "text" | "pattern";
   /** 가만히 두면 닫히는 시간(분) */
   idleMinutes: number;
   /** 계속 써도 닫히는 시간(분) */
