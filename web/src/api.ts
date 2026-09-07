@@ -975,8 +975,9 @@ export const api = {
     orderPost<{ ok: boolean }>("/api/order/session", { username, password }),
   /** PIN 으로 열기 — 등록된 기기에서만 (서버가 강제) */
   orderOpenSessionPin: (pin: string) => orderPost<{ ok: boolean }>("/api/order/session", { pin }),
-  orderSetPin: (nextPin: string, current: string) =>
-    orderPost<{ ok: boolean }>("/api/order/pin", { next: nextPin, current }),
+  /** kind 가 "pattern" 이면 3×3 점 인덱스를 이은 숫자열(4~9자리)로 본다 */
+  orderSetPin: (nextPin: string, current: string, kind: "pin" | "pattern" = "pin") =>
+    orderPost<{ ok: boolean }>("/api/order/pin", { next: nextPin, current, kind }),
   orderDeviceStart: (username: string, password: string) =>
     orderPost<{ ticket: string }>("/api/order/device/start", { username, password }),
   orderDeviceVerify: (ticket: string, code: string, name: string) =>
@@ -6974,7 +6975,7 @@ export interface OrderSettings {
   /** 접근 점검을 텔레그램으로도 보낼까 — 끄면 점검·기록은 그대로, 알림만 안 갑니다 */
   auditTelegram: boolean;
   /** 주문 메뉴를 무엇으로 여나 — "pin" 은 기기 등록이 켜져 있을 때만 */
-  entryMode: "password" | "pin";
+  entryMode: "password" | "pin" | "pattern";
   /** 가만히 두면 닫히는 시간(분) */
   idleMinutes: number;
   /** 계속 써도 닫히는 시간(분) */

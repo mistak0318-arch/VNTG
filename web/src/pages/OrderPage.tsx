@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { NumPad, PatternPad } from "../components/EntryPads";
 import {
   api,
   fmtNum,
@@ -604,7 +605,33 @@ function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => vo
    * 늘릴 수 있으면 기기 겹이 뜻을 잃는다. 대신 **물어볼 자리를 만든다.**
    */
   const [regMode, setRegMode] = useState(false);
-  const byPin = status.settings?.entryMode === "pin" && !regMode;
+  const entry = status.settings?.entryMode ?? "password";
+  /* PIN 과 패턴은 같은 문이다 — 서버도 같은 자리에서 본다. 다른 것은 **입력하는 손**뿐 */
+  const byPin = (entry === "pin" || entry === "pattern") && !regMode;
+  const byPattern = entry === "pattern" && !regMode;
+
+  /** 패드가 다 찼을 때 — 단추를 안 눌러도 보낸다. 네 자리 치고 또 「열기」를 누르게 하지 않는다 */
+  async function openWith(code: string) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.orderOpenSessionPin(code);
+      setPin("");
+      onDone();
+    } catch (e2) {
+      const msg = e2 instanceof Error ? e2.message : "열지 못했다";
+      setPin("");
+      if (/등록/.test(msg)) {
+        setRegMode(true);
+        setError("이 기기는 주문에 등록돼 있지 않습니다 — 등록은 아이디·비밀번호로만 됩니다");
+        return;
+      }
+      setError(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -730,31 +757,29 @@ function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => vo
   if (byPin) {
     return (
       <form className="ord-gate" onSubmit={(e) => void submit(e)}>
-        <div className="ord-gate-mark">🔢</div>
-        <b>진입 PIN 네 자리</b>
+        <div className="ord-gate-mark">{byPattern ? "✦" : "🔢"}</div>
+        <b>{byPattern ? "진입 패턴" : "진입 PIN 네 자리"}</b>
         <p>
-          <b>등록된 기기</b>에서만 열립니다 — 그래서 네 자리로 충분합니다. 다섯 번 틀리면 30분 잠기고
-          텔레그램으로 알립니다. 주문을 낼 때는 <b>주문 비밀번호</b>를 따로 묻습니다.
+          <b>등록된 기기</b>에서만 열립니다 — 그래서 {byPattern ? "패턴" : "네 자리"}로 충분합니다. 다섯 번 틀리면 30분
+          잠기고 텔레그램으로 알립니다. 주문을 낼 때는 <b>주문 비밀번호</b>를 따로 묻습니다.
         </p>
-        {status.pinIsDefault && (
+        {status.pinIsDefault && !byPattern && (
           <p className="ord-err">
             아직 기본값 <b>0000</b> 입니다 — 열고 나서 <b>설정 › 진입 PIN</b> 에서 바꾸세요.
           </p>
         )}
-        <input
-          className="ord-in ord-pin"
-          type="password"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          placeholder="● ● ● ●"
-          maxLength={4}
-          value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-        />
+        {/*
+          입력칸 대신 **화면에 그린 패드** (2026-09-08). type="password" 칸은 브라우저가 저장된
+          비밀번호를 들이밀어 걸리적거렸다. 패드는 키보드를 안 띄우니 그럴 자리가 없고,
+          다 누르면 그대로 보낸다 — 「열기」를 한 번 더 누를 일이 없다.
+        */}
+        {byPattern ? (
+          <PatternPad value={pin} onChange={setPin} disabled={busy} onComplete={(v) => void openWith(v)} />
+        ) : (
+          <NumPad value={pin} onChange={setPin} disabled={busy} onComplete={(v) => void openWith(v)} />
+        )}
         {error && <p className="ord-err">{error}</p>}
-        <button type="submit" className="ord-go" disabled={busy || pin.length !== 4}>
-          {busy ? "확인 중…" : "주문 메뉴 열기"}
-        </button>
+        {busy && <p className="ord-note">확인 중…</p>}
         {/*
           여태 여기서 곧장 메일을 쏘려 했다 — 그런데 이 판엔 아이디·비밀번호 칸이 없어
           빈 값이 나갔고 401 만 돌아왔다. 이제 **칸부터 내준다.**
@@ -3740,6 +3765,17 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
   const [pwCur, setPwCur] = useState("");
   const [pinA, setPinA] = useState("");
   const [pinCur, setPinCur] = useState("");
+  /**
+   * PIN ↔ 패턴 사이를 오갈 때 **새 값을 먼저 받고 그다음에 문을 바꾼다** (2026-09-08).
+   *
+   * 둘은 같은 해시 자리를 쓴다. 문만 먼저 패턴으로 바꿔 두면 저장된 것은 아직 PIN 이라,
+   * 그 사이에 앱을 닫은 사람은 **PIN 숫자를 점으로 그려야 열리는** 문 앞에 서게 된다.
+   * 그래서 「패턴」을 누르면 저장하지 않고 여기에 적어 두기만 하고, 아래에서 새 패턴을
+   * 등록하는 순간에 비로소 모드를 바꾼다. 아이디·비밀번호로 가는 것은 해시와 무관하니 곧장.
+   */
+  const [pendingMode, setPendingMode] = useState<"pin" | "pattern" | null>(null);
+  /** 바꾸기 폼이 지금 어느 손을 받나 — 바꾸려는 중이면 그쪽, 아니면 지금 문 */
+  const padMode: "pin" | "pattern" = pendingMode ?? (cfg.entryMode === "pattern" ? "pattern" : "pin");
 
   async function save(patch: Partial<typeof cfg>) {
     setBusy(true);
@@ -3763,10 +3799,16 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
     setError(null);
     setMsg(null);
     try {
-      await api.orderSetPin(pinA, pinCur);
+      await api.orderSetPin(pinA, pinCur, padMode);
+      /* 새 값이 들어갔으니 이제 문을 바꿔도 안전하다 */
+      if (pendingMode && pendingMode !== cfg.entryMode) {
+        const r = await api.orderSettingsSave({ entryMode: pendingMode });
+        setCfg(r.settings);
+        setPendingMode(null);
+      }
       setPinA("");
       setPinCur("");
-      setMsg("진입 PIN 을 바꿨습니다");
+      setMsg(padMode === "pattern" ? "진입 패턴을 등록했습니다 — 이제 패턴으로 엽니다" : "진입 PIN 을 바꿨습니다 — 이제 PIN 으로 엽니다");
       onDone();
     } catch (e2) {
       setError(e2 instanceof Error ? e2.message : "실패");
@@ -3927,17 +3969,40 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
           다섯 번 틀리면 30분 잠기고 텔레그램으로 알립니다.
         </p>
         <div className="ord-cfg-row">
-          {(["password", "pin"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={`filter-btn ${cfg.entryMode === m ? "active" : ""}`}
-              disabled={busy}
-              onClick={() => void save({ entryMode: m })}
-            >
-              {m === "password" ? "아이디·비밀번호" : "PIN 네 자리"}
-            </button>
-          ))}
+          {(["password", "pin", "pattern"] as const).map((m) => {
+            const active = pendingMode ? pendingMode === m : cfg.entryMode === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                className={`filter-btn ${active ? "active" : ""}${pendingMode === m ? " pending" : ""}`}
+                disabled={busy}
+                onClick={() => {
+                  if (m === "password") {
+                    setPendingMode(null);
+                    void save({ entryMode: m });
+                    return;
+                  }
+                  /* PIN·패턴은 새 값을 먼저 받는다 — 아래 폼이 그 손으로 바뀐다 */
+                  if (m === cfg.entryMode) {
+                    setPendingMode(null);
+                    return;
+                  }
+                  setPendingMode(m);
+                  setPinA("");
+                  setMsg(null);
+                  setError(null);
+                }}
+              >
+                {m === "password" ? "아이디·비밀번호" : m === "pin" ? "PIN 네 자리" : "패턴"}
+              </button>
+            );
+          })}
+          {pendingMode && (
+            <span className="ord-note">
+              아래에서 새 {pendingMode === "pattern" ? "패턴을 등록" : "PIN 을 정"}하면 그때 바뀝니다
+            </span>
+          )}
           {status.pinIsDefault && <span className="ord-err">PIN 이 아직 기본값 0000 입니다</span>}
           {status.pinLockedUntilMs > 0 && (
             <span className="ord-err">
@@ -3948,29 +4013,47 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
       </section>
 
       <form className="ord-cfg-sec" onSubmit={(e) => void changePin(e)}>
-        <h4>진입 PIN 바꾸기</h4>
+        <h4>{padMode === "pattern" ? "진입 패턴 바꾸기" : "진입 PIN 바꾸기"}</h4>
         <p className="ord-note">
-          지금 PIN 또는 <b>주문 비밀번호</b>로 확인합니다 — PIN 을 잊어도 되돌릴 길이 있어야 합니다.
-          0000·1234 처럼 뻔한 숫자는 막습니다. <b>주문 비밀번호와 다른 것</b>으로 하세요 — 같게 두면
-          겹이 둘에서 하나로 줍니다.
+          지금 {padMode === "pattern" ? "패턴" : "PIN"} 또는 <b>주문 비밀번호</b>로 확인합니다 — 잊어도 되돌릴 길이 있어야
+          합니다.{" "}
+          {padMode === "pattern"
+            ? "네 점 이상을 이어야 하고, 한 줄로만 긋는 것은 막습니다."
+            : "0000·1234 처럼 뻔한 숫자는 막습니다."}{" "}
+          <b>주문 비밀번호와 다른 것</b>으로 하세요 — 같게 두면 겹이 둘에서 하나로 줍니다.
         </p>
+        {/*
+          「지금 것」은 글자 칸으로 둔다 — 주문 비밀번호가 올 수도 있어서 패드로는 못 받는다.
+          「새 것」은 패드로 — 정하는 손과 여는 손이 같아야 나중에 헷갈리지 않는다.
+        */}
         <input
           className="ord-in"
           type="password"
-          placeholder={status.pinIsDefault ? "지금 PIN (기본값 0000) 또는 주문 비밀번호" : "지금 PIN 또는 주문 비밀번호"}
+          autoComplete="off"
+          placeholder={
+            status.pinIsDefault && padMode !== "pattern"
+              ? "지금 PIN (기본값 0000) 또는 주문 비밀번호"
+              : `지금 ${padMode === "pattern" ? "패턴(숫자열)" : "PIN"} 또는 주문 비밀번호`
+          }
           value={pinCur}
           onChange={(e) => setPinCur(e.target.value)}
         />
-        <input
-          className="ord-in ord-pin"
-          type="password"
-          inputMode="numeric"
-          placeholder="새 PIN 네 자리"
-          maxLength={4}
-          value={pinA}
-          onChange={(e) => setPinA(e.target.value.replace(/\D/g, "").slice(0, 4))}
-        />
-        <button type="submit" className="ord-go" disabled={busy || pinA.length !== 4 || !pinCur}>
+        <div className="ord-cfg-pad">
+          <span className="ord-note">새 {padMode === "pattern" ? "패턴을 그리세요" : "PIN 네 자리"}</span>
+          {padMode === "pattern" ? (
+            <PatternPad value={pinA} onChange={setPinA} disabled={busy} />
+          ) : (
+            <NumPad value={pinA} onChange={setPinA} disabled={busy} />
+          )}
+          {padMode === "pattern" && pinA.length > 0 && (
+            <small className="ord-note">{pinA.length}점 이음{pinA.length < 4 ? " — 네 점 이상" : ""}</small>
+          )}
+        </div>
+        <button
+          type="submit"
+          className="ord-go"
+          disabled={busy || !pinCur || (padMode === "pattern" ? pinA.length < 4 : pinA.length !== 4)}
+        >
           바꾸기
         </button>
       </form>

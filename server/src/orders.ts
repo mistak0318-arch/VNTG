@@ -281,14 +281,19 @@ export interface OrderSettings {
   /** 계속 써도 닫히는 시간(분). 5~240 */
   maxMinutes: number;
   /**
-   * 주문 메뉴를 **무엇으로 여나** (2026-09-04).
+   * 주문 메뉴를 **무엇으로 여나** (2026-09-04, 패턴은 09-08).
    *   "password" 앱 아이디·비밀번호를 다시 (기본)
    *   "pin"      네 자리 숫자 — 손이 편하다. 대신 **기기 등록이 켜져 있어야만** 고를 수 있다
+   *   "pattern"  3×3 점을 잇는 패턴 — 벤티지 "매번 입력하려니 귀찮고 숫자 넣으려니깐
+   *              저장된 비밀번호 계속나와서 걸리적 거리네". 점을 이은 순서를 숫자열로
+   *              ("0125" = 좌상→상→우상→가운데) 보고 PIN 과 **같은 해시 자리**에 둔다.
+   *              그래서 잠금·실패 횟수·확인 로직이 전부 그대로다. 길이만 4~9다.
    *
    * PIN 은 만 가지뿐이라 **혼자 서는 문이 아니다.** 앞에 등록된 기기가 있어야 뜻이 산다 —
-   * 그래서 `requireTrustedDevice` 가 꺼져 있으면 이 값을 "pin" 으로 못 바꾼다(saveSettings).
+   * 그래서 `requireTrustedDevice` 가 꺼져 있으면 "pin"·"pattern" 으로 못 바꾼다(saveSettings).
+   * 패턴은 4점 이상이면 경우의 수가 PIN 보다 많지만, 같은 겹 안에 둔다 — 문의 성격이 같다.
    */
-  entryMode: "password" | "pin";
+  entryMode: "password" | "pin" | "pattern";
   /**
    * **접근 점검을 텔레그램으로도 보낼까** (2026-09-04). 기본 켬.
    *
@@ -335,7 +340,10 @@ export async function saveSettings(patch: Partial<OrderSettings>): Promise<Order
       typeof patch.requireTrustedDevice === "boolean" ? patch.requireTrustedDevice : cur.requireTrustedDevice,
     idleMinutes: Math.min(60, Math.max(1, Math.round(Number(patch.idleMinutes)) || cur.idleMinutes)),
     maxMinutes: Math.min(240, Math.max(5, Math.round(Number(patch.maxMinutes)) || cur.maxMinutes)),
-    entryMode: patch.entryMode === "pin" || patch.entryMode === "password" ? patch.entryMode : cur.entryMode,
+    entryMode:
+      patch.entryMode === "pin" || patch.entryMode === "password" || patch.entryMode === "pattern"
+        ? patch.entryMode
+        : cur.entryMode,
     auditTelegram:
       patch.auditTelegram === undefined ? cur.auditTelegram : Boolean(patch.auditTelegram),
   };
@@ -345,8 +353,8 @@ export async function saveSettings(patch: Partial<OrderSettings>): Promise<Order
    * 앱 로그인만 뚫리면 주문 문이 사실상 열린다. 둘을 한 묶음으로 강제한다 —
    * 「편하게」와 「위험하게」가 같은 뜻이 되지 않도록.
    */
-  if (next.entryMode === "pin" && !next.requireTrustedDevice) {
-    throw new Error("PIN 으로 열려면 「등록된 기기에서만 주문」이 켜져 있어야 합니다");
+  if ((next.entryMode === "pin" || next.entryMode === "pattern") && !next.requireTrustedDevice) {
+    throw new Error(`${next.entryMode === "pin" ? "PIN" : "패턴"}으로 열려면 「등록된 기기에서만 주문」이 켜져 있어야 합니다`);
   }
   await writeJson(SETTINGS_FILE, next);
   await appendLog({ kind: "password", msg: `설정 변경 — 비밀번호 기억 ${next.rememberPassword ? `${next.rememberMinutes}분` : "끔"}` });
@@ -679,10 +687,24 @@ export async function pinIsDefault(): Promise<boolean> {
  * PIN 을 정한다. 처음이면 그냥, 이미 있으면 **지금 PIN 또는 주문 비밀번호**로 확인한다 —
  * PIN 을 잊었을 때 주문 비밀번호로 되돌릴 길이 있어야 파일을 지우는 일이 안 생긴다.
  */
-export async function setOrderPin(next: string, current: string): Promise<void> {
+export async function setOrderPin(next: string, current: string, kind: "pin" | "pattern" = "pin"): Promise<void> {
   const pin = next.replace(/\D/g, "");
-  if (pin.length !== 4) throw new Error("네 자리 숫자로");
-  if (TRIVIAL_PINS.has(pin)) throw new Error("너무 뻔한 숫자입니다 — 0000·1234 같은 것은 막습니다");
+  if (kind === "pattern") {
+    /*
+     * 패턴 — 3×3 점 인덱스(0~8)를 이은 순서. 네 점부터, 같은 점을 두 번 못 밟는다.
+     * 화면(PatternPad)이 이미 막지만, 서버가 믿을 것은 서버가 본 값뿐이다.
+     */
+    if (pin.length < 4) throw new Error("패턴은 점 네 개 이상을 이어야 합니다");
+    if (pin.length > 9) throw new Error("패턴이 너무 깁니다");
+    if (/[^0-8]/.test(pin)) throw new Error("패턴 값이 이상합니다");
+    if (new Set(pin).size !== pin.length) throw new Error("같은 점을 두 번 지났습니다");
+    /* 한 줄·한 열·대각선을 그대로 긋는 것은 PIN 의 1234 다 */
+    if (/^(012|345|678|036|147|258|048|246)/.test(pin) && pin.length <= 4)
+      throw new Error("너무 뻔한 패턴입니다 — 한 줄로만 긋는 것은 막습니다");
+  } else {
+    if (pin.length !== 4) throw new Error("네 자리 숫자로");
+    if (TRIVIAL_PINS.has(pin)) throw new Error("너무 뻔한 숫자입니다 — 0000·1234 같은 것은 막습니다");
+  }
   const a = await loadAuth();
   if (a.pinHash) {
     const byPin = await checkPin(current, { count: false });
@@ -694,7 +716,8 @@ export async function setOrderPin(next: string, current: string): Promise<void> 
   const salt = randomBytes(16).toString("hex");
   const hash = await scryptHex(pin, salt);
   await writeJson(AUTH_FILE, { ...a, pinSalt: salt, pinHash: hash, pinFails: 0, pinLockUntil: 0 } satisfies OrderAuthFile);
-  await appendLog({ kind: "password", msg: a.pinHash ? "진입 PIN 변경" : "진입 PIN 처음 설정" });
+  const what = kind === "pattern" ? "진입 패턴" : "진입 PIN";
+  await appendLog({ kind: "password", msg: a.pinHash ? `${what} 변경` : `${what} 처음 설정` });
 }
 
 /**
@@ -2843,7 +2866,7 @@ export async function auditAccess(hours = 24): Promise<AccessAudit> {
    */
   const auth = await loadAuth();
   const cfgNow = await getSettings();
-  if (cfgNow.entryMode === "pin" && auth.pinHash.length === 0) {
+  if ((cfgNow.entryMode === "pin" || cfgNow.entryMode === "pattern") && auth.pinHash.length === 0) {
     findings.unshift({
       at: new Date().toISOString(),
       kind: "password",

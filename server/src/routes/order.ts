@@ -174,9 +174,10 @@ export function createOrderRouter(main: KiwoomClient): Router {
      * 지름길일 뿐이고, 어느 쪽으로 들어와도 아래 기기 검사는 똑같이 지난다. 그래서 PIN 이
      * 안 왔으면 원래 길로 본다.
      */
-    if (entry.entryMode === "pin" && blank(pin) && !blank(username)) {
+    const byPinLike = entry.entryMode === "pin" || entry.entryMode === "pattern";
+    if (byPinLike && blank(pin) && !blank(username)) {
       r = await verifyCredentials(String(username ?? ""), String(password ?? ""));
-    } else if (entry.entryMode === "pin") {
+    } else if (byPinLike) {
       const pr = await checkPin(String(pin ?? ""));
       if (!pr.ok) {
         const n = (f?.n ?? 0) + 1;
@@ -595,8 +596,8 @@ export function createOrderRouter(main: KiwoomClient): Router {
   /** 진입 PIN 정하기·바꾸기 — 지금 PIN 또는 주문 비밀번호로 확인한다 */
   router.post("/pin", async (req, res) => {
     try {
-      const { next: nextPin, current } = (req.body ?? {}) as { next?: string; current?: string };
-      await setOrderPin(String(nextPin ?? ""), String(current ?? ""));
+      const { next: nextPin, current, kind } = (req.body ?? {}) as { next?: string; current?: string; kind?: string };
+      await setOrderPin(String(nextPin ?? ""), String(current ?? ""), kind === "pattern" ? "pattern" : "pin");
       res.json({ ok: true });
     } catch (e) {
       res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
