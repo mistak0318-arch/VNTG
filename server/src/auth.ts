@@ -165,7 +165,7 @@ function hash(pw: string, salt: string): Promise<string> {
 }
 
 /** 길이가 다르면 timingSafeEqual 이 던진다 — 그것부터 막고 시간 일정 비교로 간다 */
-function sameHex(a: string, b: string): boolean {
+export function sameHex(a: string, b: string): boolean {
   if (a.length !== b.length || a.length === 0) return false;
   return timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
 }
@@ -258,9 +258,26 @@ function clearCookie(req: Request, res: Response, name: string) {
  * 믿고(그 길로 온 것은 문지기를 지난 것이다), 없으면 실제 소켓 주소를 쓴다.
  */
 function who(req: Request): string {
+  return peerIp(req);
+}
+
+/**
+ * **접속자 주소 — 헤더는 터널이 같은 기계에서 붙였을 때만 믿는다** (2026-09-07 보안 점검).
+ *
+ * 여태 `cf-connecting-ip` 가 있으면 무조건 그 값을 썼다. 그런데 서버는 `0.0.0.0` 에 열려
+ * 있어서 테일스케일·집 안 LAN 에서 **직접** 들어올 수 있고, 그 길로 오는 사람은 헤더를
+ * 마음대로 적을 수 있다. 그러면
+ *   · 로그인·주문 메뉴의 「주소별 5회 잠금」을 헤더만 바꿔 가며 피한다
+ *   · 「처음 보는 주소」 알림이 가짜 주소로 채워져 진짜가 묻힌다
+ * 이 헤더가 진짜인 경우는 하나뿐이다 — cloudflared 가 **같은 기계**에서 붙여 넘길 때.
+ * 그때 소켓 상대는 루프백이다. 그 밖에서 온 헤더는 버리고 소켓 주소를 쓴다.
+ */
+export function peerIp(req: Request): string {
+  const sock = req.socket.remoteAddress ?? "?";
+  const loopback = sock === "127.0.0.1" || sock === "::1" || sock === "::ffff:127.0.0.1";
   const cf = req.headers["cf-connecting-ip"];
-  if (typeof cf === "string" && cf.trim()) return cf.trim();
-  return req.socket.remoteAddress ?? "?";
+  if (loopback && typeof cf === "string" && cf.trim()) return cf.trim();
+  return sock;
 }
 
 /**

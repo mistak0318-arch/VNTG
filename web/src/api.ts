@@ -997,7 +997,13 @@ export const api = {
     condPrice: number | null;
     tradeType: string;
     venue: OrderVenue;
+    /** 신용(융자) — 안 보내면 현금 */
+    credit?: boolean;
+    loanDate?: string | null;
   }) => orderPost<{ nonce: string; expiresAt: number; ticket: OrderTicket }>("/api/order/prepare", input),
+  /** 어느 가격에 몇 주까지 — 현금만·증거금·신용 셋을 한 번에 (주문 세션 안에서만) */
+  orderBuyPower: (code: string, price: number) =>
+    getJson<BuyPower>(`/api/order/buy-power?code=${code}&price=${Math.round(price)}`),
   orderCancelPrepare: (input: { ordNo: string; code: string; name: string; qty: number; venue: OrderVenue }) =>
     orderPost<{ nonce: string; expiresAt: number; ticket: CancelTicket }>("/api/order/cancel/prepare", input),
   orderExecute: (nonce: string, password: string, remember = false) =>
@@ -6632,6 +6638,20 @@ export interface OrderGuard {
   stopCollarPct: number;
   marketHoursOnly: boolean;
   allowedCodes: string[] | null;
+  /** 신용 주문 허용 — orderGuard.json 에서만 켠다 (2026-09-07) */
+  allowCredit?: boolean;
+}
+
+/** 매수 가능 수량 — 현금만 · 증거금 적용 · 신용 (2026-09-07) */
+export interface BuyPower {
+  code: string;
+  price: number;
+  cash: number;
+  cashOnly: { amt: number; qty: number };
+  margin: { rate: number; amt: number; qty: number };
+  credit: { allowed: boolean; rate: number | null; amt: number; qty: number } | null;
+  creditEnabled: boolean;
+  missing: string[];
 }
 
 /**
@@ -6721,6 +6741,9 @@ export interface OrderTicket {
   venue: OrderVenue;
   refPrice: number;
   amount: number;
+  /** 신용(융자) 주문 — 확인 창이 크게 적어야 한다 */
+  credit?: boolean;
+  loanDate?: string | null;
 }
 
 export interface CancelTicket {
@@ -6750,9 +6773,27 @@ export interface OrderRow {
   raw: Record<string, unknown>;
 }
 
+export interface OrderHolding {
+  code: string;
+  name: string;
+  qty: number;
+  /** 매매가능수량 — 미체결 매도·미결제가 빠진 수. 「전량 매도」의 기준 */
+  ableQty: number;
+  avg: number;
+  cur: number;
+  pnl: number;
+  pnlRate: number;
+  /** 신용 줄이면 「융자」 같은 구분명, 현금 줄이면 null */
+  creditType: string | null;
+  /** 신용 줄의 대출일(YYYYMMDD) — 신용 매도에 꼭 필요하다 */
+  loanDate: string | null;
+}
+
 export interface OrderAccount {
   deposit: number;
-  holdings: { code: string; name: string; qty: number; avg: number; cur: number; pnl: number; pnlRate: number }[];
+  /** 총융자금액 — 0 이면 신용 없음 */
+  creditLoan: number;
+  holdings: OrderHolding[];
   /** 자리마다 적어 둔 손절선 — 종목코드로 (2026-09-04) */
   stops: Record<string, { stop: number; name: string; at: string }>;
 }

@@ -27,6 +27,7 @@ import {
   saveSettings,
   forgetPassword,
   type OrderVenue,
+  buyPower,
 } from "../orders.js";
 import { readOrderStops, setOrderStop } from "../orderStops.js";
 import {
@@ -293,6 +294,24 @@ export function createOrderRouter(main: KiwoomClient): Router {
   });
 
   /**
+   * **매수 가능 수량** (2026-09-07) — 현금만 · 증거금 적용 · 신용, 셋을 한 번에.
+   * 조회만이라 주문 비밀번호는 안 묻지만 주문 세션 안이어야 한다(계좌 사정이 드러난다).
+   */
+  router.get("/buy-power", async (req, res) => {
+    try {
+      const code = String(req.query.code ?? "");
+      const price = Number(req.query.price);
+      if (!/^\d{6}$/.test(code) || !Number.isFinite(price) || price <= 0) {
+        res.status(400).json({ error: "code(6자리)와 price 가 있어야 한다" });
+        return;
+      }
+      res.json(await buyPower(code, price));
+    } catch (e) {
+      res.status(502).json({ error: e instanceof Error ? e.message : "조회 실패" });
+    }
+  });
+
+  /**
    * 계좌 자리의 손절선 (2026-09-04) — 벤티지: "주문메뉴의 계좌에서 해야지."
    *
    * 주문을 내지 않으므로 주문 비밀번호를 안 묻는다. 다만 **주문 세션 안**이라
@@ -330,8 +349,12 @@ export function createOrderRouter(main: KiwoomClient): Router {
           /* 안 보내면 예전처럼 보통(지정가) — 옛 화면이 남아 있어도 동작이 안 바뀐다 */
           tradeType: String(b.tradeType ?? "0"),
           venue: String(b.venue ?? "KRX") as OrderVenue,
+          /* 신용 (2026-09-07) — 안 보내면 현금. 켜져 있는지는 prepareOrder 가 가드로 잰다 */
+          credit: b.credit === true,
+          loanDate: blank(b.loanDate) ? null : String(b.loanDate),
         },
         clientIp(req),
+        sessionOf(req),
       );
       res.json(r);
     } catch (e) {
@@ -351,6 +374,7 @@ export function createOrderRouter(main: KiwoomClient): Router {
           venue: String(b.venue ?? "KRX") as OrderVenue,
         },
         clientIp(req),
+        sessionOf(req),
       );
       res.json(r);
     } catch (e) {

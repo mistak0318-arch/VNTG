@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Request, Response } from "express";
-import { scryptHex } from "./auth.js";
+import { peerIp, sameHex, scryptHex } from "./auth.js";
 import { priceMap } from "./cisRun.js";
 import { KiwoomApiError, KiwoomClient } from "./kiwoomClient.js";
 import { pushNotice, stockLink } from "./notifyCenter.js";
@@ -66,6 +66,8 @@ const SETTINGS_FILE = join(DATA_DIR, "orderSettings.json");
 
 const ORDER_RESOURCE = "/api/dostk/ordr";
 const ACNT_RESOURCE = "/api/dostk/acnt";
+/** 신용 주문은 자리가 다르다 — kt10006~9 는 `/crdordr` 다 */
+const CREDIT_ORDER_RESOURCE = "/api/dostk/crdordr";
 
 export type OrderSide = "buy" | "sell";
 /** KRX 정규장 · NXT · SOR(통합 — 키움이 더 좋은 쪽으로 보내는 최선집행) */
@@ -145,6 +147,14 @@ export interface OrderGuard {
   marketHoursOnly: boolean;
   /** 비우면(null) 전 종목. 채우면 이 코드들만 */
   allowedCodes: string[] | null;
+  /**
+   * **신용 주문을 허용하나** (2026-09-07). 기본 false — 한도처럼 파일에서 손으로 켠다.
+   *
+   * 벤티지: "신용 기능도 넣어서… 신용 섞어서 매수하는 거 체크해주고." 넣되, 켜는 것은
+   * 사람이다. 신용은 빚이라 한 건 한도보다 한 급 위의 결정이고, 그 결정이 화면 단추 하나로
+   * 내려지면 안 된다. `orderGuard.json` 에 `"allowCredit": true` 를 적는 순간부터 신용 칸이 열린다.
+   */
+  allowCredit: boolean;
 }
 
 const DEFAULT_GUARD: OrderGuard = {
@@ -155,6 +165,7 @@ const DEFAULT_GUARD: OrderGuard = {
   stopCollarPct: 30,
   marketHoursOnly: true,
   allowedCodes: null,
+  allowCredit: false,
 };
 
 interface OrderAuthFile {
@@ -210,6 +221,8 @@ export interface OrderLogRow {
   amount?: number;
   msg?: string;
   raw?: unknown;
+  /** 신용(융자) 주문이었나 — 기록에서 현금과 갈라 봐야 한다 */
+  credit?: boolean;
 }
 
 /**
@@ -498,10 +511,9 @@ function setCookie(req: Request, res: Response, value: string, maxAgeSec: number
   res.append("Set-Cookie", bits.join("; "));
 }
 
+/** 접속자 주소 — 판정은 auth.ts 하나에 둔다(헤더를 언제 믿나가 거기 적혀 있다) */
 export function clientIp(req: Request): string {
-  const cf = req.headers["cf-connecting-ip"];
-  if (typeof cf === "string" && cf.trim()) return cf.trim();
-  return req.socket.remoteAddress ?? "?";
+  return peerIp(req);
 }
 
 /** 시한은 설정에서 온다 — 여는 순간의 값으로 굳는다(도중에 바꿔도 열린 세션은 안 늘어난다) */
@@ -590,7 +602,7 @@ export async function checkPassword(pw: string): Promise<{ ok: true } | { ok: fa
     return { ok: false, error: `비밀번호 잠금 — ${min}분 뒤에` };
   }
   const given = await scryptHex(pw, a.salt);
-  const same = given.length === a.hash.length && Buffer.from(given, "hex").equals(Buffer.from(a.hash, "hex"));
+  const same = sameHexSafe(given, a.hash);
   if (same) {
     if (a.fails) await writeJson(AUTH_FILE, { ...a, fails: 0 });
     return { ok: true };
@@ -696,8 +708,9 @@ export async function checkPin(
   return { ok: false, error: `PIN 이 다릅니다 (${fails}/${PIN_MAX_FAILS})` };
 }
 
+/** 시간 일정 비교 — `Buffer.equals` 는 첫 다른 바이트에서 멈춘다. 해시 비교엔 그것도 안 쓴다 */
 function sameHexSafe(a: string, b: string): boolean {
-  return a.length === b.length && a.length > 0 && Buffer.from(a, "hex").equals(Buffer.from(b, "hex"));
+  return sameHex(a, b);
 }
 
 /* ── 두 단계 (L4) ─────────────────────────────────────────────────────── */
@@ -719,6 +732,13 @@ export interface OrderTicket {
   venue: OrderVenue;
   refPrice: number;
   amount: number;
+  /**
+   * **신용** (2026-09-07). 매수는 `kt10006`(융자), 매도는 `kt10007`(융자 상환)로 `/crdordr` 에 낸다.
+   * 매도엔 **대출일**이 있어야 한다 — 잔고 줄의 `crd_loan_dt`. 같은 종목을 두 날 나눠 융자로
+   * 샀으면 잔고에 두 줄이라, 어느 줄을 파는지 사람이 고른다(화면의 「잔고에서 고르기」).
+   */
+  credit: boolean;
+  loanDate: string | null;
 }
 
 export interface CancelTicket {
@@ -733,13 +753,18 @@ export interface CancelTicket {
 export type Ticket = OrderTicket | CancelTicket;
 
 const NONCE_MS = 30_000;
-const pending = new Map<string, { exp: number; ticket: Ticket }>();
+/**
+ * 주문서는 **만든 세션만** 실행할 수 있다 (2026-09-07 보안 점검).
+ * nonce 는 128비트라 못 맞히지만, 맞히는 것과 별개로 「내가 만든 주문서를 내가 실행한다」는
+ * 성질은 코드로 못 박아 둔다 — 세션이 하나 새면 그 세션이 만든 것만 나간다.
+ */
+const pending = new Map<string, { exp: number; ticket: Ticket; owner: OrderSession | null }>();
 
-function issueNonce(ticket: Ticket): { nonce: string; expiresAt: number } {
+function issueNonce(ticket: Ticket, owner: OrderSession | null): { nonce: string; expiresAt: number } {
   for (const [k, v] of pending) if (v.exp < Date.now()) pending.delete(k);
   const nonce = randomBytes(16).toString("hex");
   const expiresAt = Date.now() + NONCE_MS;
-  pending.set(nonce, { exp: expiresAt, ticket });
+  pending.set(nonce, { exp: expiresAt, ticket, owner });
   return { nonce, expiresAt };
 }
 
@@ -752,6 +777,10 @@ export interface PrepareInput {
   condPrice: number | null;
   tradeType: string;
   venue: OrderVenue;
+  /** 신용(융자) 주문 — 기본 false */
+  credit?: boolean;
+  /** 신용 매도의 대출일(YYYYMMDD). 신용 매수엔 없다 */
+  loanDate?: string | null;
 }
 
 function reject(msg: string, input: Partial<PrepareInput>, ip: string): never {
@@ -768,6 +797,7 @@ export async function prepareOrder(
   main: KiwoomClient,
   input: PrepareInput,
   ip: string,
+  owner: OrderSession | null = null,
 ): Promise<{ nonce: string; expiresAt: number; ticket: OrderTicket }> {
   if (!ordersEnabled() || !orderClient()) reject("주문 기능이 꺼져 있다", input, ip);
   if (await uiLocked()) reject("화면 잠금 중 — 먼저 풀어야 한다", input, ip);
@@ -804,6 +834,16 @@ export async function prepareOrder(
   const g = await getGuard();
   if (g.allowedCodes && g.allowedCodes.length > 0 && !g.allowedCodes.includes(input.code)) {
     reject("허용 종목이 아니다 (orderGuard.allowedCodes)", input, ip);
+  }
+  const credit = input.credit === true;
+  const loanDate = input.loanDate ?? null;
+  if (credit) {
+    if (!g.allowCredit) reject('신용 주문이 꺼져 있다 — orderGuard.json 에 "allowCredit": true 를 적어야 켜진다', input, ip);
+    if (orderIsMock()) reject("모의투자는 신용 주문을 받지 않는다 (키움 모의는 현금만)", input, ip);
+    if (input.side === "sell" && !/^\d{8}$/.test(loanDate ?? "")) {
+      reject("신용 매도엔 대출일(YYYYMMDD)이 있어야 한다 — 잔고에서 줄을 골라야 한다", input, ip);
+    }
+    if (tt.cond) reject("신용 주문엔 스톱지정가를 쓰지 않는다 — 현금 주문으로", input, ip);
   }
   /*
    * 시간외 주문(61·62·81)은 **정규장 밖에 내는 것이 정상**이라 우리 시간창으로 막으면 기능이 죽는다.
@@ -876,13 +916,16 @@ export async function prepareOrder(
     venue: input.venue,
     refPrice: ref,
     amount,
+    credit,
+    loanDate: credit && input.side === "sell" ? loanDate : null,
   };
-  return { ...issueNonce(ticket), ticket };
+  return { ...issueNonce(ticket, owner), ticket };
 }
 
 export async function prepareCancel(
   input: { ordNo: string; code: string; name: string; qty: number; venue: OrderVenue },
   ip: string,
+  owner: OrderSession | null = null,
 ): Promise<{ nonce: string; expiresAt: number; ticket: CancelTicket }> {
   if (!ordersEnabled() || !orderClient()) reject("주문 기능이 꺼져 있다", input, ip);
   if (await uiLocked()) reject("화면 잠금 중", input, ip);
@@ -896,7 +939,7 @@ export async function prepareCancel(
     qty: input.qty,
     venue: input.venue,
   };
-  return { ...issueNonce(ticket), ticket };
+  return { ...issueNonce(ticket, owner), ticket };
 }
 
 /* ── 실행 ─────────────────────────────────────────────────────────────── */
@@ -913,6 +956,22 @@ async function placeOrder(t: Ticket): Promise<{ ordNo: string; msg: string; raw:
   if (t.kind === "cancel") {
     apiId = "kt10003";
     body = { dmst_stex_tp: t.venue, orig_ord_no: t.ordNo, stk_cd: t.code, cncl_qty: "0" }; // 0 = 잔량 전부
+  } else if (t.credit) {
+    /*
+     * 신용(융자) — 공식 예제 `examples/국내주식/신용주문/*.py` (2026-09-07 확인).
+     *   매수 kt10006: 현금 매수와 같은 몸통. 융자 종류는 계좌 설정을 따른다(몸통에 칸이 없다)
+     *   매도 kt10007: `crd_deal_tp` 33(융자) + `crd_loan_dt` 대출일 — 어느 융자를 갚는지
+     */
+    apiId = t.side === "buy" ? "kt10006" : "kt10007";
+    body = {
+      dmst_stex_tp: t.venue,
+      stk_cd: t.code,
+      ord_qty: String(t.qty),
+      ord_uv: t.price === null ? "" : String(t.price),
+      trde_tp: t.tradeType,
+      cond_uv: "",
+      ...(t.side === "sell" ? { crd_deal_tp: "33", crd_loan_dt: t.loanDate ?? "" } : {}),
+    };
   } else {
     apiId = t.side === "buy" ? "kt10000" : "kt10001";
     body = {
@@ -924,7 +983,8 @@ async function placeOrder(t: Ticket): Promise<{ ordNo: string; msg: string; raw:
       cond_uv: t.condPrice === null ? "" : String(t.condPrice), // 스톱 발동가
     };
   }
-  const { data } = await oc.request<Record<string, unknown>>(ORDER_RESOURCE, apiId, body, { noAl: true });
+  const resource = t.kind === "order" && t.credit ? CREDIT_ORDER_RESOURCE : ORDER_RESOURCE;
+  const { data } = await oc.request<Record<string, unknown>>(resource, apiId, body, { noAl: true });
   return { ordNo: String(data.ord_no ?? ""), msg: String(data.return_msg ?? ""), raw: data };
 }
 
@@ -947,6 +1007,12 @@ export async function executePrepared(
   if (!p || p.exp < Date.now()) {
     pending.delete(nonce);
     throw new Error("주문서가 만료됐다(30초) — 다시 만드세요");
+  }
+  /* 다른 세션이 만든 주문서는 실행하지 않는다 — 그리고 그 주문서는 태운다 */
+  if (p.owner !== (opts.session ?? null)) {
+    pending.delete(nonce);
+    await appendLog({ kind: "reject", ip, msg: "다른 세션의 주문서를 실행하려 했다 — 주문서 폐기" });
+    throw new Error("이 주문서는 이 세션의 것이 아니다 — 다시 만드세요");
   }
 
   /*
@@ -982,8 +1048,9 @@ export async function executePrepared(
       unwatch(t.ordNo);
       void sendTelegram(`🧾 ${tag} <b>취소</b> ${esc(t.name)} ${t.qty}주 (원주문 ${esc(t.ordNo)})\n${esc(r.msg)}`, "order").catch(() => undefined);
     } else {
-      await appendLog({ kind: "order", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, condPrice: t.condPrice, tradeType: t.tradeType, venue: t.venue, ordNo: r.ordNo, amount: t.amount, msg: graced ? `${r.msg} · 비밀번호 기억으로` : r.msg, raw: r.raw });
-      const sideKo = t.side === "buy" ? "매수" : "매도";
+      await appendLog({ kind: "order", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, condPrice: t.condPrice, tradeType: t.tradeType, venue: t.venue, ordNo: r.ordNo, amount: t.amount, credit: t.credit, msg: graced ? `${r.msg} · 비밀번호 기억으로` : r.msg, raw: r.raw });
+      /* 신용은 이름부터 다르게 — 알림에서 「매수」와 「신용매수」가 같아 보이면 빚이 조용히 는다 */
+      const sideKo = (t.credit ? "신용" : "") + (t.side === "buy" ? "매수" : "매도");
       const priceKo = t.price === null ? "시장가" : `${t.price.toLocaleString()}원`;
       void sendTelegram(
         `🧾 ${tag} <b>${sideKo} 주문</b> ${esc(t.name)} ${t.qty}주 @ ${priceKo} · ${t.venue}\n금액 ${won(t.amount)} · 주문번호 ${esc(r.ordNo || "?")}\n${esc(r.msg)}`,
@@ -1109,29 +1176,158 @@ export async function fills(): Promise<OpenRow[]> {
 }
 
 /** 예수금(kt00001)·잔고(kt00018) — **주문 계좌**의 것. /api/account 는 조회용 앱키의 계좌라 다를 수 있다 */
+export interface Holding {
+  code: string;
+  name: string;
+  /** 보유수량 */
+  qty: number;
+  /** **매매가능수량** — 미체결 매도·미결제가 빠진 수. 「전량 매도」는 이걸 써야 한다 */
+  ableQty: number;
+  avg: number;
+  cur: number;
+  pnl: number;
+  pnlRate: number;
+  /** 신용 줄이면 구분명(「융자」 등)과 대출일 — 현금 줄은 null. 신용 매도의 열쇠다 */
+  creditType: string | null;
+  loanDate: string | null;
+}
+
 export async function orderAccount(): Promise<{
   deposit: number;
-  holdings: Array<{ code: string; name: string; qty: number; avg: number; cur: number; pnl: number; pnlRate: number }>;
+  /** 총융자금액 — 신용으로 산 것의 합. 0 이면 신용 없음 */
+  creditLoan: number;
+  holdings: Holding[];
 }> {
   const oc = orderClient();
-  if (!oc) return { deposit: 0, holdings: [] };
+  if (!oc) return { deposit: 0, creditLoan: 0, holdings: [] };
   const [dep, bal] = await Promise.all([
     oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00001", { qry_tp: "3" }).catch(() => null),
-    oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00018", { qry_tp: "1", dmst_stex_tp: "KRX" }).catch(() => null),
+    oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00018", { qry_tp: "2", dmst_stex_tp: "KRX" }).catch(() => null),
   ]);
   const deposit = dep ? num(pick(dep.data, ["100stk_ord_alow_amt", "ord_alow_amt", "entr"])) : 0;
-  const holdings = bal
-    ? listOf(bal.data, ["acnt_evlt_remn_indv_tot"]).map((r) => ({
-        code: str(pick(r, ["stk_cd"])).replace(/^A/, "").replace(/_.*$/, ""),
-        name: str(pick(r, ["stk_nm"])),
-        qty: num(pick(r, ["rmnd_qty"])),
-        avg: num(pick(r, ["pur_pric"])),
-        cur: num(pick(r, ["cur_prc"])),
-        pnl: num(pick(r, ["evltv_prft"])),
-        pnlRate: num(pick(r, ["prft_rt"])),
-      }))
+  /*
+   * qry_tp "2"(개별) — 현금 줄과 신용 줄을 **따로** 준다. "1"(합산)이면 융자로 산 것이 현금과
+   * 한 줄로 합쳐져 대출일을 잃는다 — 신용 매도에 대출일이 필요하니 개별로 받는다.
+   */
+  const holdings: Holding[] = bal
+    ? listOf(bal.data, ["acnt_evlt_remn_indv_tot"]).map((r) => {
+        const crd = str(pick(r, ["crd_tp_nm"])).trim();
+        const crdTp = str(pick(r, ["crd_tp"])).trim();
+        const isCredit = Boolean(crd) && crdTp !== "" && crdTp !== "00" && !/현금/.test(crd);
+        const qty = num(pick(r, ["rmnd_qty"]));
+        const able = num(pick(r, ["trde_able_qty"]));
+        return {
+          code: str(pick(r, ["stk_cd"])).replace(/^A/, "").replace(/_.*$/, ""),
+          name: str(pick(r, ["stk_nm"])),
+          qty,
+          ableQty: able > 0 ? able : qty,
+          avg: num(pick(r, ["pur_pric"])),
+          cur: num(pick(r, ["cur_prc"])),
+          pnl: num(pick(r, ["evltv_prft"])),
+          pnlRate: num(pick(r, ["prft_rt"])),
+          creditType: isCredit ? crd : null,
+          loanDate: isCredit ? str(pick(r, ["crd_loan_dt"])).replace(/\D/g, "").slice(0, 8) || null : null,
+        };
+      })
     : [];
-  return { deposit, holdings };
+  const creditLoan = bal ? num(pick(bal.data, ["tot_crd_loan_amt", "tot_loan_amt"])) : 0;
+  return { deposit, creditLoan, holdings };
+}
+
+/* ── 매수 가능 수량 — 현금·증거금·신용 (2026-09-07) ───────────────────── */
+
+export interface BuyPower {
+  code: string;
+  /** 잰 가격 — 이 값으로 나눈 수량이다 */
+  price: number;
+  /** 주문가능현금(예수금 기준) */
+  cash: number;
+  /**
+   * **현금만** — 미수를 안 쓰는 100% 현금 매수. 「신용 안 쓰고 현금으로」의 그 수.
+   * kt00011 의 `min_ord_alow*`(미수불가) 다.
+   */
+  cashOnly: { amt: number; qty: number };
+  /**
+   * **증거금 적용** — 종목 증거금율(예: 40%)만큼만 현금을 걸고 나머지는 미수(T+2 결제).
+   * 키움 앱의 「매수가능」이 보통 이 수다. 미수는 이틀 뒤 갚아야 하는 돈이라 갈라 적는다.
+   */
+  margin: { rate: number; amt: number; qty: number };
+  /**
+   * **신용(융자)** — 이 종목이 신용 가능일 때만. kt20017 로 가능 여부, kt00012 로 수량.
+   * 보증금율(예: 45%)만큼 현금을 걸고 나머지는 융자다. `allowed:false` 면 종목이 신용 불가,
+   * `null` 이면 조회를 못 했거나 신용이 꺼져 있다(가드).
+   */
+  credit: { allowed: boolean; rate: number | null; amt: number; qty: number } | null;
+  /** 신용이 가드에서 꺼져 있나 — 화면이 「켜는 법」을 적는다 */
+  creditEnabled: boolean;
+  /** 못 받은 조각 — 「0주」와 「못 잼」은 다르다 */
+  missing: string[];
+}
+
+/**
+ * 어느 가격에 몇 주까지 살 수 있나 — 셋을 나란히.
+ *
+ * 벤티지: "신용 안 쓰고 현금으로 매수했을 때 총 가능한 금액과 신용 썼을 때 총 매수 가능한
+ * 수량이 나올 수 있도록." 키움이 셋을 각각 다른 창구로 준다:
+ *
+ *   kt00011  증거금율별 주문가능수량 — 20/30/40/50/60/100% 칸과 **미수불가**(현금만) 칸
+ *   kt00012  신용보증금율별 주문가능수량 — 30/40/50/60% 칸, 종목보증금율
+ *   kt20017  신용가능여부 — `crd_alow_yn`
+ *
+ * 증거금 칸은 `aplc_rt`(적용증거금율)에 맞는 것을 고른다. 없는 율(예: 45%)이면 **더 높은 쪽**
+ * (더 적은 수량)을 쓴다 — 못 사는 수를 살 수 있다고 적는 것이 더 나쁘다.
+ */
+export async function buyPower(code: string, price: number): Promise<BuyPower> {
+  const oc = orderClient();
+  if (!oc) throw new Error("주문 앱키가 없다");
+  const uv = String(Math.max(1, Math.round(price)));
+  const g = await getGuard();
+  const missing: string[] = [];
+
+  const [m, c, y] = await Promise.all([
+    oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00011", { stk_cd: code, uv }).catch(() => null),
+    g.allowCredit
+      ? oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00012", { stk_cd: code, uv }).catch(() => null)
+      : Promise.resolve(null),
+    g.allowCredit
+      ? oc.request<Record<string, unknown>>("/api/dostk/stkinfo", "kt20017", { stk_cd: code }).catch(() => null)
+      : Promise.resolve(null),
+  ]);
+  if (m) void noteRaw("kt00011", m.data);
+  if (c) void noteRaw("kt00012", c.data);
+
+  const md = m?.data ?? {};
+  if (!m) missing.push("증거금 조회");
+  const cashOnly = { amt: num(md.min_ord_alow_amt), qty: num(md.min_ord_alowq) };
+  const rate = num(md.aplc_rt) || num(md.stk_profa_rt) || 100;
+  /* 적용률에 맞는 칸 — 없으면 바로 위 칸. 20→30→40→50→60→100 */
+  const tiers = [20, 30, 40, 50, 60, 100];
+  const tier = tiers.find((t) => t >= rate) ?? 100;
+  const margin = {
+    rate,
+    amt: num(md[`profa_${tier}ord_alow_amt`]),
+    qty: num(md[`profa_${tier}ord_alowq`]),
+  };
+  const cash = num(md.ord_alowa) || num(md.entr);
+
+  let credit: BuyPower["credit"] = null;
+  if (g.allowCredit) {
+    const allowed = y ? String(y.data.crd_alow_yn ?? "").toUpperCase() === "Y" : false;
+    if (!y) missing.push("신용가능여부");
+    if (!c) missing.push("신용 수량");
+    const cd = c?.data ?? {};
+    const crRate = num(cd.stk_assr_rt) || null;
+    const ctiers = [30, 40, 50, 60];
+    const ctier = crRate ? (ctiers.find((t) => t >= crRate) ?? 60) : 60;
+    credit = {
+      allowed,
+      rate: crRate,
+      amt: allowed ? num(cd[`assr_${ctier}ord_alow_amt`]) : 0,
+      qty: allowed ? num(cd[`assr_${ctier}ord_alowq`]) : 0,
+    };
+  }
+
+  return { code, price: Number(uv), cash, cashOnly, margin, credit, creditEnabled: g.allowCredit, missing };
 }
 
 /* ── 체결 감시 → 종 + 텔레그램 ────────────────────────────────────────── */

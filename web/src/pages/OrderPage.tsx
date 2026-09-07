@@ -6,6 +6,7 @@ import {
   signClass,
   type CancelTicket,
   type OrderAccount,
+  type BuyPower,
   type OrderLogRow,
   type OrderRow,
   type AccessAudit,
@@ -91,6 +92,9 @@ interface Prefill {
   price: string;
   cond: string;
   qty: string;
+  /** 신용(융자) 줄에서 온 매도 — `credit=1&loan=YYYYMMDD` (2026-09-07) */
+  credit: boolean;
+  loanDate: string;
   /** 값이 바뀌었는지 가리는 열쇠 — 같은 화면에서 링크를 또 눌러도 다시 채워진다 */
   key: string;
 }
@@ -117,7 +121,7 @@ if (typeof window !== "undefined") {
   window.addEventListener("hashchange", grabPrefill);
 }
 
-const EMPTY_PREFILL: Prefill = { code: "", name: "", side: null, tradeType: null, price: "", cond: "", qty: "", key: "" };
+const EMPTY_PREFILL: Prefill = { code: "", name: "", side: null, tradeType: null, price: "", cond: "", qty: "", credit: false, loanDate: "", key: "" };
 
 /**
  * 쪽지를 **보기만** 한다 — 비우지 않는다.
@@ -150,8 +154,30 @@ function readPrefill(): Prefill {
     price: num("price"),
     cond: num("cond"),
     qty: num("qty"),
+    credit: q.get("credit") === "1",
+    loanDate: num("loan").slice(0, 8),
     key: raw,
   };
+}
+
+/** 호가 단위 (KRX 2023-01 개편) — 손절 % 를 발동가로 바꿀 때 호가에 맞춘다 */
+function tickOf(p: number): number {
+  if (p < 2_000) return 1;
+  if (p < 5_000) return 5;
+  if (p < 20_000) return 10;
+  if (p < 50_000) return 50;
+  if (p < 200_000) return 100;
+  if (p < 500_000) return 500;
+  return 1_000;
+}
+const toTick = (p: number) => Math.floor(p / tickOf(p)) * tickOf(p);
+
+/** 잔고 줄 → 주문 폼으로 가는 주소 — 잔고 탭·「잔고에서 고르기」가 같은 길을 쓴다 */
+function orderLink(h: { code: string; name: string; ableQty: number; creditType: string | null; loanDate: string | null }, side: "buy" | "sell", extra = ""): string {
+  const base = `#/order?stk=${h.code}&name=${encodeURIComponent(h.name)}&side=${side}`;
+  const qty = side === "sell" ? `&qty=${h.ableQty}` : "";
+  const credit = side === "sell" && h.creditType ? `&credit=1&loan=${h.loanDate ?? ""}` : "";
+  return `${base}${qty}${credit}${extra}`;
 }
 
 export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
@@ -782,6 +808,19 @@ function OrderForm({
   const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: OrderTicket } | null>(null);
 
   /*
+   * **신용** (2026-09-07). 벤티지: "신용 기능도 넣어서 최대 얼마까지 매수 가능한지, 신용 섞어서
+   * 매수하는 거 체크, 각 종목이 신용이 가능한지, 현금만일 때와 신용 썼을 때 총 매수 가능 수량."
+   *
+   * 매수는 「기준」으로 고른다 — 현금만 / 증거금(미수 포함) / 신용. 기준이 곧 「최대」의 뜻이다.
+   * 매도는 잔고 줄이 정한다 — 융자 줄을 고르면 신용 매도(융자 상환)이고 대출일이 따라온다.
+   */
+  const [basis, setBasis] = useState<"cash" | "margin" | "credit">("cash");
+  const [loanDate, setLoanDate] = useState<string | null>(prefill.credit ? prefill.loanDate || null : null);
+  const [sellCredit, setSellCredit] = useState<boolean>(prefill.credit);
+  const [power, setPower] = useState<BuyPower | null>(null);
+  const [powerBusy, setPowerBusy] = useState(false);
+
+  /*
    * 링크로 새 값이 오면 갈아 끼운다. **비어 있는 칸은 안 건드린다** — 사용자가 손으로
    * 고쳐 둔 값을 링크가 지우면 안 된다. 다만 링크가 값을 명시했으면 그쪽이 이긴다.
    */
@@ -794,6 +833,8 @@ function OrderForm({
     if (prefill.qty) setQty(prefill.qty);
     if (prefill.price) setPrice(prefill.price);
     if (prefill.cond) setCond(prefill.cond);
+    setSellCredit(prefill.credit);
+    setLoanDate(prefill.credit ? prefill.loanDate || null : null);
     /* 발동가가 채워져 왔으면 다음 호가 클릭은 주문단가 차례다 */
     setCondFocus(!prefill.cond);
     /* 다 썼으니 쪽지를 비운다 — 화면을 옮겼다 돌아왔을 때 손으로 고친 값을 덮지 않게 */
@@ -809,16 +850,66 @@ function OrderForm({
   /* 시간외 구분은 정규장 밖에 내는 것이 정상이라 「시간 아님」 경고를 띄우지 않는다 */
   const open = tt?.late ? true : status.open[venue];
   /* 셈에 쓸 값 — 지정가면 그 값, 아니면 호가창이 아는 현재가(스톱은 발동가) */
-  const unit = Number(price) || Number(cond) || 0;
-  const held = acct?.holdings.find((h) => h.code === code)?.qty ?? 0;
+  const unit = Number(price) || Number(cond) || Number(quote?.price) || 0;
   /*
-   * 「100%」가 뜻하는 것. 매수는 **주문 가능 금액**, 매도는 **들고 있는 수량**이다.
-   * 매수는 한 건 한도(기본 100만)도 같이 본다 — 100% 를 눌렀는데 서버가 거절하면
-   * 그 단추는 없느니만 못하다. 한도에 걸려 줄었으면 그 사실을 아래에 적는다.
+   * 매도의 기준 줄 — 같은 종목이 현금 줄·융자 줄로 나뉘어 있을 수 있다. 융자 줄을 골랐으면
+   * (대출일이 있으면) 그 줄, 아니면 현금 줄. 「전량 매도」는 **매매가능수량**이다.
    */
-  const cashBase = Math.min(acct?.deposit ?? 0, status.guard.maxOrderKrw);
-  const maxQty = side === "buy" ? (unit > 0 ? Math.floor(cashBase / unit) : 0) : held;
-  const cappedByGuard = side === "buy" && (acct?.deposit ?? 0) > status.guard.maxOrderKrw;
+  const rows = acct?.holdings.filter((h) => h.code === code) ?? [];
+  const heldRow =
+    (sellCredit && loanDate ? rows.find((h) => h.creditType && h.loanDate === loanDate) : rows.find((h) => !h.creditType)) ??
+    rows[0] ??
+    null;
+  const held = heldRow?.ableQty ?? 0;
+
+  /*
+   * **매수 가능 수량** — 종목·가격이 서면 서버에 묻는다(kt00011·12·kt20017). 0.6초 뒤에 한 번.
+   * 가격 칸을 치는 동안 매 글자마다 키움을 부르면 안 된다.
+   */
+  useEffect(() => {
+    if (side !== "buy" || !/^\d{6}$/.test(code) || unit <= 0) {
+      setPower(null);
+      return;
+    }
+    let alive = true;
+    setPowerBusy(true);
+    const t = setTimeout(() => {
+      api
+        .orderBuyPower(code, unit)
+        .then((r) => alive && setPower(r))
+        .catch(() => alive && setPower(null))
+        .finally(() => alive && setPowerBusy(false));
+    }, 600);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [side, code, unit]);
+
+  /* 신용을 못 쓰는 상황이면 기준을 현금으로 되돌린다 — 「신용」이 눌린 채 현금 주문이 나가면 안 된다 */
+  const creditOk = Boolean(power?.creditEnabled && power?.credit?.allowed);
+  useEffect(() => {
+    if (basis === "credit" && power && !creditOk) setBasis("cash");
+  }, [basis, power, creditOk]);
+
+  /*
+   * 「100%·최대」가 뜻하는 것. 매수는 **고른 기준의 가능 수량**(서버가 잰 것), 매도는 **매매가능수량**.
+   * 서버 값이 아직 없으면 예수금/단가로 어림한다. 한 건 한도(기본 100만)도 같이 본다 —
+   * 100% 를 눌렀는데 서버가 거절하면 그 단추는 없느니만 못하다. 줄었으면 아래에 적는다.
+   */
+  const guardQty = unit > 0 ? Math.floor(status.guard.maxOrderKrw / unit) : 0;
+  const powerQty = power
+    ? basis === "credit"
+      ? (power.credit?.qty ?? 0)
+      : basis === "margin"
+        ? power.margin.qty
+        : power.cashOnly.qty
+    : unit > 0
+      ? Math.floor((acct?.deposit ?? 0) / unit)
+      : 0;
+  const maxQty = side === "buy" ? Math.min(powerQty, guardQty) : held;
+  const cappedByGuard = side === "buy" && powerQty > guardQty;
+  const credit = side === "buy" ? basis === "credit" : sellCredit;
 
   function setPct(pct: number) {
     lastEdit.current = "qty";
@@ -860,6 +951,8 @@ function OrderForm({
         condPrice: tt?.cond && cond ? Number(cond) : null,
         tradeType,
         venue,
+        credit,
+        loanDate: credit && side === "sell" ? loanDate : null,
       });
       setTicket(r);
     } catch (e2) {
@@ -980,6 +1073,46 @@ function OrderForm({
       </div>
 
       {/*
+        **잔고에서 고르기** (2026-09-07). 벤티지: "매도할 때 잔고 버튼이 보여서 잔고에서 뭘 매도할지
+        고르는 기능." 매도만이 아니라 매수에도 둔다 — 들고 있는 것을 더 사는 일이 잦다.
+        줄을 누르면 종목이 들어오고, 매도면 수량도 **매매가능수량**으로 채워진다. 융자 줄이면
+        신용 매도(융자 상환)가 되고 대출일이 따라온다 — 같은 종목이 현금·융자 두 줄이면 둘 다 뜬다.
+      */}
+      {acct && acct.holdings.length > 0 && (
+        <div className="ord-hold">
+          <span className="ord-hold-t">잔고에서</span>
+          {acct.holdings.map((h) => {
+            const on = h.code === code && (side !== "sell" || (h.creditType ? sellCredit && loanDate === h.loanDate : !sellCredit));
+            return (
+              <button
+                key={`${h.code}:${h.loanDate ?? "cash"}`}
+                type="button"
+                className={`ord-hold-b${on ? " on" : ""}${h.creditType ? " crd" : ""}`}
+                title={`${h.name} · 보유 ${h.qty}주 · 매매가능 ${h.ableQty}주 · 평단 ${h.avg.toLocaleString()}${h.creditType ? ` · ${h.creditType} ${h.loanDate ?? ""}` : ""}`}
+                onClick={() => {
+                  setCode(h.code);
+                  setName(h.name);
+                  setQuote(null);
+                  if (side === "sell") {
+                    lastEdit.current = "qty";
+                    setQty(String(h.ableQty));
+                    setSellCredit(Boolean(h.creditType));
+                    setLoanDate(h.creditType ? h.loanDate : null);
+                  }
+                }}
+              >
+                {h.name}
+                <i>
+                  {h.ableQty}주{h.creditType ? ` · ${h.creditType}` : ""}
+                  <b className={signClass(h.pnlRate)}> {h.pnlRate > 0 ? "+" : ""}{h.pnlRate.toFixed(1)}%</b>
+                </i>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/*
         호가 | 주문칸 (2026-09-04 — 벤티지: "호가창이 밀려서 안보여, 주문도 세로 배치라 불편해.
         키움처럼 구현할 수 있겠니?").
 
@@ -1079,11 +1212,21 @@ function OrderForm({
             기준을 못 잡으면(가격이 없거나 계좌를 못 읽으면) 눌리지 않는다 — 0 주가 들어가는 게 더 나쁘다.
           */}
           <div className="ord-pct">
-            {[10, 25, 50, 100].map((n) => (
+            {[10, 25, 50].map((n) => (
               <button key={n} type="button" disabled={maxQty <= 0} onClick={() => setPct(n)}>
                 {n}%
               </button>
             ))}
+            {/* 「최대」 = 100%. 벤티지: "매수할 때도 최대, 매도할 때도 최대 이런 버튼" — 무엇의 최대인지는 아래 줄이 말한다 */}
+            <button
+              type="button"
+              className="ord-pct-max"
+              disabled={maxQty <= 0}
+              onClick={() => setPct(100)}
+              title={side === "buy" ? "고른 기준(현금만·증거금·신용)으로 살 수 있는 최대" : "매매가능수량 전부"}
+            >
+              최대
+            </button>
             <button
               type="button"
               className="ord-pct-self"
@@ -1096,21 +1239,115 @@ function OrderForm({
               직접
             </button>
           </div>
-          <div className="ord-caps">
-            {side === "buy"
-              ? acct
-                ? `가능금액 ${won(acct.deposit)}${cappedByGuard ? " (한 건 한도까지만)" : ""} → 최대 ${maxQty.toLocaleString()}주`
-                : "계좌를 못 읽어 비율을 못 셉니다"
-              : held > 0
-                ? `보유 ${held.toLocaleString()}주`
+          {side === "buy" ? (
+            /*
+             * **가능 수량 판** — 현금만 · 증거금(미수) · 신용, 셋을 나란히. 하나를 고르면 그게 「최대」다.
+             * 「0주」와 「못 잼」을 가른다 — 못 재면 그렇게 적는다. 신용은 셋 중 가장 위험한 돈이라
+             * 종목이 신용 불가면 그 자리에 그렇게 쓰고, 가드가 꺼져 있으면 켜는 법을 적는다.
+             */
+            <div className="ord-power">
+              {!power ? (
+                <div className="ord-caps">
+                  {powerBusy
+                    ? "가능 수량 재는 중…"
+                    : unit > 0
+                      ? acct
+                        ? `가능금액 ${won(acct.deposit)} → 어림 ${maxQty.toLocaleString()}주${cappedByGuard ? " (한 건 한도까지만)" : ""}`
+                        : "계좌를 못 읽어 비율을 못 셉니다"
+                      : "가격이 서면 가능 수량이 나옵니다"}
+                </div>
+              ) : (
+                <>
+                  <div className="ord-basis">
+                    <button type="button" className={basis === "cash" ? "on" : ""} onClick={() => setBasis("cash")} title="미수·신용 없이 예수금만으로">
+                      현금만 <b>{power.cashOnly.qty.toLocaleString()}주</b>
+                      <i>{won(power.cashOnly.amt)}</i>
+                    </button>
+                    <button
+                      type="button"
+                      className={basis === "margin" ? "on" : ""}
+                      onClick={() => setBasis("margin")}
+                      title={`종목 증거금율 ${power.margin.rate}% 만 현금으로 걸고 나머지는 미수 — 이틀 뒤(T+2) 갚아야 합니다`}
+                    >
+                      증거금 {power.margin.rate}% <b>{power.margin.qty.toLocaleString()}주</b>
+                      <i>{won(power.margin.amt)} · 미수 포함</i>
+                    </button>
+                    {power.creditEnabled ? (
+                      <button
+                        type="button"
+                        className={`crd${basis === "credit" ? " on" : ""}`}
+                        disabled={!creditOk}
+                        onClick={() => setBasis("credit")}
+                        title={
+                          !power.credit
+                            ? "신용 조회를 못 했습니다"
+                            : !power.credit.allowed
+                              ? "이 종목은 신용 불가 종목입니다"
+                              : `보증금율 ${power.credit.rate ?? "?"}% — 나머지는 융자(이자가 붙습니다)`
+                        }
+                      >
+                        신용 {power.credit?.rate ? `${power.credit.rate}%` : ""}{" "}
+                        <b>{!power.credit ? "못 잼" : power.credit.allowed ? `${power.credit.qty.toLocaleString()}주` : "불가 종목"}</b>
+                        <i>{power.credit?.allowed ? `${won(power.credit.amt)} · 융자` : "신용 불가"}</i>
+                      </button>
+                    ) : (
+                      <span className="ord-basis-off" title='server/data/orderGuard.json 에 "allowCredit": true'>
+                        신용 <i>꺼짐 — orderGuard.json</i>
+                      </span>
+                    )}
+                  </div>
+                  <div className="ord-caps">
+                    {basis === "credit" ? "🔴 신용(융자) 매수" : basis === "margin" ? "증거금 매수 — 미수는 T+2 결제" : "현금 매수"}
+                    {" · "}최대 <b>{maxQty.toLocaleString()}주</b>
+                    {cappedByGuard ? ` (한 건 한도 ${won(status.guard.maxOrderKrw)} 까지만)` : ""}
+                    {power.missing.length > 0 ? ` · 못 받음: ${power.missing.join(", ")}` : ""}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="ord-caps">
+              {heldRow
+                ? `${sellCredit && heldRow.creditType ? `🔴 신용 매도(융자 상환 · 대출일 ${loanDate ?? "?"}) · ` : ""}매매가능 ${held.toLocaleString()}주 (보유 ${heldRow.qty.toLocaleString()}주 · 평단 ${heldRow.avg.toLocaleString()})`
                 : code
                   ? "이 계좌에 없는 종목입니다"
                   : "종목을 고르면 보유 수량이 나옵니다"}
-          </div>
+            </div>
+          )}
 
           {usesCond && (
             <>
               <label className="ord-lab">발동가</label>
+              {/*
+                손절 % 칩 (2026-09-07) — 벤티지: "스탑로스 기능도 사용자 편의성 좋게." 평단에서
+                몇 % 아래를 발동가로. 호가 단위에 맞춰 내림한다. 주문단가는 발동가와 같게 두면
+                발동 즉시 그 값 지정가가 나간다 — 한두 호가 아래로 두려면 호가창에서 누른다.
+              */}
+              {side === "sell" && sellCredit && (
+                <div className="ord-caps">신용(융자) 줄에는 스톱지정가를 못 겁니다 — 현금 줄로 걸거나 보통 매도로</div>
+              )}
+              {side === "sell" && !sellCredit && heldRow && heldRow.avg > 0 && (
+                <div className="ord-stopchips">
+                  <span className="pt-n">평단 {heldRow.avg.toLocaleString()} 대비</span>
+                  {[3, 5, 7, 10].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => {
+                        const v = toTick(heldRow.avg * (1 - pct / 100));
+                        setCond(String(v));
+                        if (!price) setPrice(String(v));
+                        setCondFocus(false);
+                      }}
+                    >
+                      −{pct}%
+                    </button>
+                  ))}
+                  {quote && quote.price > 0 && (
+                    <span className="pt-n">현재가 {quote.price.toLocaleString()}</span>
+                  )}
+                </div>
+              )}
               <input
                 className="ord-in"
                 inputMode="numeric"
@@ -1258,7 +1495,7 @@ function Confirm({
 
   const dead = sec <= 0;
   const isCancel = ticket.kind === "cancel";
-  const sideKo = isCancel ? "취소" : ticket.side === "buy" ? "매수" : "매도";
+  const sideKo = isCancel ? "취소" : `${!isCancel && ticket.credit ? "신용" : ""}${ticket.side === "buy" ? "매수" : "매도"}`;
   const [okMsg, setOkMsg] = useState<string | null>(null);
   /*
    * 비밀번호를 지금 안 물어도 되는 상태인가 (2026-09-04) — 설정에서 「기억하기」를 켜고
@@ -1648,8 +1885,17 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                       onClick={() => onSelectStock?.(h.code, h.name)}
                     >
                       {h.name} <span className="ord-code">{h.code}</span>
+                      {/* 융자 줄은 이름부터 다르게 — 갚을 날이 있는 돈이다 */}
+                      {h.creditType && (
+                        <span className="ord-crd-badge" title={`대출일 ${h.loanDate ?? "?"}`}>
+                          {h.creditType} {h.loanDate ? `${h.loanDate.slice(4, 6)}/${h.loanDate.slice(6)}` : ""}
+                        </span>
+                      )}
                     </td>
-                    <td className="r" data-l="수량">{fmtNum(h.qty)}</td>
+                    <td className="r" data-l="수량">
+                      {fmtNum(h.qty)}
+                      {h.ableQty !== h.qty && <div className="pt-n">가능 {fmtNum(h.ableQty)}</div>}
+                    </td>
                     <td className="r" data-l="평단">{fmtNum(h.avg)}</td>
                     <td className="r" data-l="현재가">{fmtNum(h.cur)}</td>
                     <td className={`r ${signClass(h.pnl)}`} data-l="평가손익">{fmtNum(h.pnl)}</td>
@@ -1672,14 +1918,23 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                     <td className={`r ${room !== null && room < 0 ? "negative" : ""}`} data-l="여유">
                       {room === null ? "-" : `${room.toFixed(1)}%`}
                     </td>
-                    <td>
-                      {saved > 0 && (
+                    <td className="ord-row-acts">
+                      {/*
+                        줄에서 바로 (2026-09-07) — 벤티지: "잔고 종목 클릭하면 매수할지 매도할지 고르는
+                        버튼들이 나와서 선택하면 매수·매도 칸으로." 주소로 넘긴다(잔고 링크와 같은 길).
+                        매도는 매매가능수량이 채워져 가고, 융자 줄이면 신용 매도(대출일 포함)로 간다.
+                      */}
+                      <a className="ord-x buy" href={orderLink(h, "buy")} title="이 종목 매수 폼으로">
+                        매수
+                      </a>
+                      <a className="ord-x sell" href={orderLink(h, "sell")} title={`매매가능 ${h.ableQty}주가 채워진 매도 폼으로`}>
+                        매도
+                      </a>
+                      {saved > 0 && !h.creditType && (
                         <a
                           className="ord-x stop"
-                          href={`#/order?stk=${h.code}&name=${encodeURIComponent(
-                            h.name,
-                          )}&side=sell&tt=28&cond=${saved}&price=${saved}&qty=${h.qty}`}
-                          title={`${h.qty}주 · 발동가 ${saved.toLocaleString()}원으로 매도 스톱주문`}
+                          href={orderLink(h, "sell", `&tt=28&cond=${saved}&price=${saved}`)}
+                          title={`${h.ableQty}주 · 발동가 ${saved.toLocaleString()}원으로 매도 스톱주문`}
                         >
                           🛑 스톱
                         </a>
