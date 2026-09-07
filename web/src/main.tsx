@@ -10,6 +10,7 @@ import "./styles.css";
 import "./overview.css";
 /* 엑셀 모드는 색뿐 아니라 모양까지 바꿔서 규칙이 많다 — 파일을 따로 둔다 */
 import "./excel.css";
+import "./note.css";
 import "./login.css";
 import "./keywordFlow.css";
 

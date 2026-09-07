@@ -58,6 +58,7 @@ import { applyOrder, parseSection, useMenuPrefs } from "./useMenuOrder";
 import { useScreenLock } from "./useScreenLock";
 import { ScreenLock } from "./components/ScreenLock";
 import { ExcelChrome } from "./components/ExcelChrome";
+import { NoteChrome } from "./components/NoteChrome";
 import { useAppearance } from "./useAppearance";
 import { BoardPage } from "./pages/BoardPage";
 import { CornerToggle } from "./components/CornerToggle";
@@ -320,12 +321,15 @@ export default function App() {
     },
   });
   const excel = appearance.theme === "excel";
+  /* 메모 모드 (2026-09-07) — 엑셀과 같은 급의 위장. 둘 중 하나면 동그란 메뉴 버튼을 내린다 */
+  const note = appearance.theme === "note";
+  const disguised = excel || note;
   /* 창들을 한 프로그램처럼 묶는다 — 꺼져 있으면 아무 일도 안 한다 */
   const focus = useStockFocus();
-  /* 엑셀 모드를 끌 때 돌아갈 곳 — 엑셀이 아니었던 마지막 테마 */
+  /* 위장을 끌 때 돌아갈 곳 — 위장이 아니었던 마지막 테마 */
   const prevTheme = useRef<"dark" | "light">("dark");
   useEffect(() => {
-    if (appearance.theme !== "excel") prevTheme.current = appearance.theme;
+    if (appearance.theme === "dark" || appearance.theme === "light") prevTheme.current = appearance.theme;
   }, [appearance.theme]);
 
   /*
@@ -913,6 +917,13 @@ export default function App() {
           onMenu={() => setNavOpen(true)}
         />
       )}
+      {/* 메모 껍데기 — 「‹ 폴더」가 메뉴, 「완료」가 위장 해제 */}
+      {note && (
+        <NoteChrome
+          onMenu={() => setNavOpen(true)}
+          onExit={() => appearance.set({ theme: prevTheme.current ?? "dark" })}
+        />
+      )}
 
       {/*
         메뉴 여는 동그란 버튼.
@@ -925,7 +936,7 @@ export default function App() {
         리본을 아무리 잘 그려도 그것 하나로 위장이 깨진다. 그 모드에서는 리본의
         「파일」 탭이 같은 일을 한다.
       */}
-      {!excel && (
+      {!disguised && (
         <CornerToggle
           onOpen={() => setNavOpen(true)}
           label="메뉴 열기"
@@ -1078,6 +1089,17 @@ export default function App() {
             >
               <span className="nav-icon">📊</span>
               <span className="nav-label">{excel ? "엑셀 모드 끄기" : "엑셀 모드"}</span>
+            </button>
+            {/* 메모 모드 — 폰용 위장. 같은 자리에 같은 방식으로 (2026-09-07) */}
+            <button
+              className="nav-item foot-btn"
+              onClick={() =>
+                appearance.set({ theme: note ? (prevTheme.current ?? "dark") : "note" })
+              }
+              title={note ? "메모 모드 끄기" : "메모 모드"}
+            >
+              <span className="nav-icon">📝</span>
+              <span className="nav-label">{note ? "메모 모드 끄기" : "메모 모드"}</span>
             </button>
             {/*
               누르면 **바로** 잠긴다. 예전엔 비밀번호를 안 정했으면 설정으로 보냈는데,

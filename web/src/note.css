@@ -1,0 +1,279 @@
+/*
+ * ===== 메모 모드 (2026-09-07) =====
+ *
+ * 폰에서 흘끗 봤을 때 메모 앱으로 읽히게 하는 테마. 엑셀(excel.css, 941줄)과 달리
+ * **짧다** — 메모 앱은 모양이 없는 게 모양이라, 위장을 만드는 건 대부분 뺀 것들이다:
+ * 그림자·진한 테두리·형광색·둥근 알약·동그란 버튼.
+ *
+ * 규칙은 전부 `:root[data-theme="note"]` 아래에만 있다. 다른 테마에서는 죽은 규칙이다.
+ */
+
+:root[data-theme="note"] {
+  color-scheme: light;
+
+  /* 종이 */
+  --bg: #fbf9f3;
+  --panel: #fbf9f3;
+  --panel-2: #f3efe6;
+  --border: #e4dfd3;
+  --text: #2b2924;
+  --muted: #8a8578;
+  /* 색펜 — 빨강·파랑을 없애지 않고 펜 톤으로 누른다. 메모엔 색펜이 자연스럽다 */
+  --red: #b4533f;
+  --blue: #4a6a94;
+  --green: #5b7d52;
+  --accent: #b4533f;
+  --cis-gold: #9a7b2f;
+  --live-on: #5b7d52;
+  --row-hover: rgba(43, 41, 36, 0.05);
+  --row-hover-line: rgba(43, 41, 36, 0.2);
+
+  --nt-top-h: 44px;
+  --nt-head-h: 58px;
+  --nt-foot-h: 46px;
+  /* PC 에서 사이드바가 옆에 붙어 있으면 그만큼 비운다 — excel.css 와 같은 규칙 */
+  --nt-left: 200px;
+  --nt-right: 0px;
+}
+@media (min-width: 900px) {
+  :root[data-theme="note"][data-nav="right"] {
+    --nt-left: 0px;
+    --nt-right: 200px;
+  }
+}
+:root[data-theme="note"][data-sidebar="auto"] {
+  --nt-left: 0px;
+  --nt-right: 0px;
+}
+@media (max-width: 899px) {
+  :root[data-theme="note"] {
+    --nt-left: 0px;
+    --nt-right: 0px;
+  }
+}
+
+:root[data-theme="note"] body {
+  background: var(--bg);
+}
+
+/* 본문 — 위아래 껍데기만큼 비운다. 옆 여백은 메모처럼 넉넉히 */
+:root[data-theme="note"] .main-inner {
+  padding-top: calc(var(--nt-top-h) + var(--nt-head-h) + 8px);
+  padding-bottom: calc(var(--nt-foot-h) + 20px);
+}
+
+/* ── 껍데기 ─────────────────────────────────────────────────────── */
+:root[data-theme="note"] .nt-top,
+:root[data-theme="note"] .nt-head,
+:root[data-theme="note"] .nt-foot {
+  position: fixed;
+  left: var(--nt-left);
+  right: var(--nt-right);
+  /* 메뉴 서랍(40)보다 아래, 본문(1)보다 위 — 엑셀 껍데기와 같은 층 */
+  z-index: 30;
+  background: var(--bg);
+  font-family: var(--app-font);
+}
+:root[data-theme="note"] .nt-top {
+  top: 0;
+  height: var(--nt-top-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+:root[data-theme="note"] .nt-back,
+:root[data-theme="note"] .nt-done {
+  background: none;
+  border: 0;
+  padding: 6px 4px;
+  font: inherit;
+  font-size: 1rem;
+  color: #c0653f;
+  cursor: pointer;
+}
+:root[data-theme="note"] .nt-done {
+  font-weight: 700;
+}
+:root[data-theme="note"] .nt-top-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+:root[data-theme="note"] .nt-head {
+  top: var(--nt-top-h);
+  height: var(--nt-head-h);
+  padding: 8px 18px 0;
+}
+:root[data-theme="note"] .nt-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+:root[data-theme="note"] .nt-stamp {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+:root[data-theme="note"] .nt-foot {
+  bottom: 0;
+  height: var(--nt-foot-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+:root[data-theme="note"] .nt-tool {
+  font-size: 1.15rem;
+  color: #c0653f;
+  opacity: 0.85;
+  cursor: default;
+  user-select: none;
+}
+
+/* ── 뺀 것들 — 위장은 여기서 생긴다 ─────────────────────────────── */
+
+/* 그림자 없음. 메모지 위에 떠 있는 카드는 없다 */
+:root[data-theme="note"] .main-inner * {
+  box-shadow: none !important;
+}
+
+/* 카드는 얇은 선 하나. 메모 앱의 표 블록처럼 */
+:root[data-theme="note"] .card,
+:root[data-theme="note"] .sf-block,
+:root[data-theme="note"] .sc-card,
+:root[data-theme="note"] .sa,
+:root[data-theme="note"] .sim-rule,
+:root[data-theme="note"] .sim-form {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 8px;
+}
+:root[data-theme="note"] .card h2,
+:root[data-theme="note"] .page-header h2,
+:root[data-theme="note"] h2,
+:root[data-theme="note"] h3,
+:root[data-theme="note"] h4 {
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* 표 — 헤더를 진하게 칠하지 않는다. 메모 표는 줄만 있다 */
+:root[data-theme="note"] .data-table th {
+  background: var(--panel);
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+:root[data-theme="note"] .data-table td {
+  border-bottom: 1px solid #efeae0;
+}
+
+/* 단추 — 알약 대신 글자만. 골라진 것은 밑줄 */
+:root[data-theme="note"] .filter-btn,
+:root[data-theme="note"] .refresh-btn,
+:root[data-theme="note"] .detail-tab,
+:root[data-theme="note"] .ov-subtab {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+  border-radius: 6px;
+}
+:root[data-theme="note"] .filter-btn.active,
+:root[data-theme="note"] .detail-tab.active,
+:root[data-theme="note"] .ov-subtab.active {
+  background: var(--panel-2);
+  border-color: #c9c2b2;
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 #c0653f !important;
+}
+
+/* 사이드바·헤더 — 폰에서는 서랍이라 안 보이고, PC 에선 종이색으로 */
+:root[data-theme="note"] .sidebar,
+:root[data-theme="note"] .nav,
+:root[data-theme="note"] .app-tabs,
+:root[data-theme="note"] .mobile-header {
+  background: var(--panel-2);
+  border-color: var(--border);
+}
+
+/* 배지·점은 펜 톤. 형광 초록 「실시간」 점은 메모에 없다 */
+:root[data-theme="note"] .live-dot,
+:root[data-theme="note"] .sim-dot.on,
+:root[data-theme="note"] .sd-state.on {
+  background: var(--green);
+  color: var(--green);
+  box-shadow: none !important;
+}
+
+/* 시황 대시보드의 지수 타일·전광판 — 배경을 종이로 */
+:root[data-theme="note"] .ov-idx,
+:root[data-theme="note"] .ht-pop,
+:root[data-theme="note"] .sc-strip,
+:root[data-theme="note"] .sa-kpis > div,
+:root[data-theme="note"] .sim-kpis > div {
+  background: var(--panel-2);
+  border-color: var(--border);
+}
+
+/* 시스 플로팅 단추 — 메모 앱에 없는 물건이다 */
+:root[data-theme="note"] .sys-fab {
+  display: none !important;
+}
+
+/* 좁은 화면의 인앱 탭 띠는 메모에 없다 — 종이색으로 눌러 두고 글자만 남긴다 */
+@media (max-width: 899px) {
+  :root[data-theme="note"] .app-tabs {
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  :root[data-theme="note"] .mobile-header {
+    display: none;
+  }
+  :root[data-theme="note"] .main-inner {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
+/* ── 시황·보드 카드는 제 변수(--ov-*)를 쓴다 — 종이색으로 갈아끼운다 ── */
+:root[data-theme="note"] .ov,
+:root[data-theme="note"] .ib {
+  --up: #b4533f;
+  --down: #4a6a94;
+  --flat: #8a8578;
+  --accent: #9a7b2f;
+  --ov-panel: #fbf9f3;
+  --ov-panel-2: #f3efe6;
+  --ov-line: #d9d3c5;
+  --ov-line-soft: #e6e1d4;
+  --ov-txt: #2b2924;
+  --ov-txt-2: #6b665b;
+  --ov-txt-3: #9a958a;
+  --up-fill: #c9836f;
+  --down-fill: #8aa0bf;
+}
+:root[data-theme="note"] .ov-dot.open {
+  box-shadow: 0 0 0 3px rgba(180, 83, 63, 0.15);
+}
+
+/*
+ * ── 앱 티가 나는 것들을 내린다 ──
+ * 99+ 알림 배지와 새 빌드 띠는 어디서든. 검색·알림·연결 점이 늘어선 도구줄과 ✕ 달린
+ * 인앱 탭 띠는 **폰에서만** — 이 모드가 폰용이고, PC 에선 그 둘이 있어야 일을 한다.
+ * 폰에서 탭 사이 이동은 「‹ 폴더」(메뉴)로 한다.
+ */
+:root[data-theme="note"] .nb-badge,
+:root[data-theme="note"] .build-bar {
+  display: none !important;
+}
+@media (max-width: 899px) {
+  :root[data-theme="note"] .qss-row,
+  :root[data-theme="note"] .tabscroll,
+  :root[data-theme="note"] .app-tabs {
+    display: none !important;
+  }
+}

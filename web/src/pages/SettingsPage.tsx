@@ -499,6 +499,7 @@ export function SettingsPage() {
               { key: "dark" as const, label: "다크" },
               { key: "light" as const, label: "라이트" },
               { key: "excel" as const, label: "엑셀" },
+              { key: "note" as const, label: "메모" },
             ]).map((t) => (
               <button
                 key={t.key}
@@ -510,6 +511,14 @@ export function SettingsPage() {
             ))}
           </div>
         </div>
+        {appearance.theme === "note" && (
+          <div className="st-cfg-note">
+            메모 모드는 <b>폰의 메모 앱</b>처럼 보이게 합니다 — 종이색 바탕, 그 기기의 시스템 글꼴,
+            빨강·파랑은 색펜 톤. 위의 <b>‹ 폴더</b>가 메뉴를 열고 <b>완료</b>가 이 모드를 끕니다.
+            메뉴 맨 아래 <b>📝</b> 버튼으로도 껐다 켤 수 있습니다. 엑셀 위장은 흔해졌고 폰에서
+            엑셀을 보고 있는 것도 어색해서 만든 모드입니다.
+          </div>
+        )}
         {appearance.theme === "excel" && (
           <div className="st-cfg-note">
             엑셀 모드는 <b>리본·행번호·시트탭</b>까지 붙여 스프레드시트처럼 보이게 합니다.

@@ -16,7 +16,13 @@ import type { Hotkey } from "./hotkey";
  * `excel` 은 색만 바꾸는 게 아니라 **엑셀처럼 보이게 하는 모드**다 —
  * 리본·행번호·열문자·시트탭이 함께 붙는다. 자세한 건 `components/ExcelChrome.tsx`.
  */
-export type ThemeName = "dark" | "light" | "excel";
+/**
+ * `note` 는 **메모 앱처럼 보이게 하는 모드**다 (2026-09-07). 벤티지: "엑셀 위장한
+ * 프로그램들이 요새 많고, 핸드폰 하면서 엑셀 화면 보고 있다는 것도 좀 어색하다."
+ * 폰에서 자연스러운 화면은 메모다 — 종이색 바탕, 시스템 글꼴, 빨강·파랑은 색펜 톤으로.
+ * 위엔 「‹ 폴더 · 완료」, 아래엔 메모 앱 도구줄. 자세한 건 `components/NoteChrome.tsx`.
+ */
+export type ThemeName = "dark" | "light" | "excel" | "note";
 export type FontName = "system" | "pretendard" | "noto" | "gothic" | "mono";
 /** 메뉴바를 어느 쪽에 둘지 */
 export type NavSide = "left" | "right";
@@ -190,6 +196,9 @@ function read(): Appearance {
 
 /** 한국어 윈도우의 엑셀 기본 글꼴 */
 const EXCEL_FONT = '"맑은 고딕", "Malgun Gothic", "Segoe UI", sans-serif';
+/** 폰 메모 앱의 글꼴 — 그 기기의 시스템 글꼴 그대로. 다른 걸 쓰면 「앱」으로 보인다 */
+const NOTE_FONT =
+  '-apple-system, "Apple SD Gothic Neo", "SF Pro Text", "Samsung Sans", "Roboto", "Noto Sans KR", "Malgun Gothic", sans-serif';
 
 /** <html>에 속성을 찍어두면 CSS가 알아서 변수를 바꾼다 */
 function apply(a: Appearance): void {
@@ -206,7 +215,9 @@ function apply(a: Appearance): void {
     "--app-font",
     a.theme === "excel"
       ? EXCEL_FONT
-      : (FONTS.find((f) => f.key === a.font)?.stack ?? FONTS[0].stack),
+      : a.theme === "note"
+        ? NOTE_FONT
+        : (FONTS.find((f) => f.key === a.font)?.stack ?? FONTS[0].stack),
   );
   root.style.setProperty("--app-font-size", `${(15 * a.fontScale) / 100}px`);
   // 차트 라이브러리는 CSS 변수를 못 읽으므로 색상 스키마도 알려준다
@@ -281,6 +292,16 @@ export function chartColors(theme: ThemeName) {
       up: "#4a4a4a",
       down: "#a6a6a6",
     };
+  /* 메모 — 종이 위에 색펜. 봉은 벽돌색·슬레이트색, 격자는 종이 결 */
+  if (theme === "note")
+    return {
+      text: "#6b665b",
+      grid: "#ece7dc",
+      border: "#d9d3c5",
+      volume: "#ddd7c9",
+      up: "#b4533f",
+      down: "#4a6a94",
+    };
   return theme === "light"
     ? { text: "#5b6673", grid: "#e8ecf1", border: "#d0d7e0", volume: "#c9d2dc", up: "#ff5c5c", down: "#4c8dff" }
     : { text: "#8b98a5", grid: "#1a232d", border: "#223040", volume: "#3a4553", up: "#ff5c5c", down: "#4c8dff" };
@@ -307,10 +328,16 @@ export function tileHeat(
   max = 5,
 ): React.CSSProperties {
   if (rate === null || !Number.isFinite(rate)) {
-    return { background: theme === "excel" ? "#f2f2f2" : "rgba(139, 150, 165, .12)" };
+    return { background: theme === "excel" ? "#f2f2f2" : theme === "note" ? "#f1ede4" : "rgba(139, 150, 165, .12)" };
   }
   const capped = Math.min(Math.abs(rate), max) / max;
   const alpha = 0.12 + capped * 0.55;
+  /* 메모 — 형광펜 칠한 칸처럼. 색은 펜 톤이고 세기는 옅게만 */
+  if (theme === "note") {
+    if (rate > 0) return { background: `rgba(180, 83, 63, ${0.08 + capped * 0.32})` };
+    if (rate < 0) return { background: `rgba(74, 106, 148, ${0.08 + capped * 0.32})` };
+    return { background: "#f1ede4" };
+  }
   if (theme === "excel") {
     if (rate === 0) return { background: "#f2f2f2" };
     /*

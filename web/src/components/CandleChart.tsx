@@ -119,7 +119,7 @@ function loadDraw(code?: string): DrawItem[] {
 
 /** 그린 선 색 — 캔버스는 CSS 변수를 못 읽어 리터럴로. 엑셀 모드는 회색 */
 function drawColor(theme: string): string {
-  return theme === "excel" ? "#5a5a5a" : "#f5c542";
+  return theme === "excel" ? "#5a5a5a" : theme === "note" ? "#9a7b2f" : "#f5c542";
 }
 
 function sma(candles: Candle[], period: number): { time: Time; value: number }[] {
@@ -263,8 +263,23 @@ export function CandleChart({
   const tipRef = useRef<HTMLDivElement>(null);
   const { theme } = useAppearance();
   const { prefs } = useChartPrefs();
-  /** 켜 둔 이평선만. 설정이 바뀌면 이 배열이 바뀌고 차트를 다시 만든다 */
-  const maLines = prefs.ma.filter((m) => m.on);
+  /**
+   * 켜 둔 이평선만. 설정이 바뀌면 이 배열이 바뀌고 차트를 다시 만든다.
+   *
+   * 위장 모드에서는 **색을 덮어쓴다** (2026-09-07). 봉·거래량은 테마 색을 받는데 이평선은
+   * 사용자 설정색(형광 빨강·초록·파랑)이라, 메모 모드 종이 위에 그 셋만 앱 색으로 남았다.
+   * 엑셀은 회색 농담, 메모는 펜 톤(벽돌·올리브·슬레이트·갈색). 설정값은 안 건드린다 —
+   * 다크/라이트로 돌아오면 고른 색 그대로다.
+   */
+  const maLines = prefs.ma
+    .filter((m) => m.on)
+    .map((m, i) =>
+      theme === "excel"
+        ? { ...m, color: ["#3a3a3a", "#6a6a6a", "#8f8f8f", "#adadad", "#c4c4c4", "#d6d6d6", "#e2e2e2"][i % 7] }
+        : theme === "note"
+          ? { ...m, color: ["#b4533f", "#6f8a4a", "#4a6a94", "#8a6a4a", "#9a7b2f", "#7a6a8a", "#8a8578"][i % 7] }
+          : m,
+    );
   /** effect 의존성으로 쓸 지문 — 배열은 매 렌더 새 객체라 그대로는 못 쓴다 */
   const maKey = maLines.map((m) => `${m.period}:${m.color}`).join(",");
 
@@ -389,9 +404,10 @@ export function CandleChart({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     const excel = themeRef.current === "excel";
+    const note = themeRef.current === "note";
     const col = drawColor(themeRef.current);
-    const upCol = excel ? "#4a4a4a" : "#f0555f";
-    const downCol = excel ? "#8a8a8a" : "#4a8bf5";
+    const upCol = excel ? "#4a4a4a" : note ? "#b4533f" : "#f0555f";
+    const downCol = excel ? "#8a8a8a" : note ? "#4a6a94" : "#4a8bf5";
     const ts = chart.timeScale();
     const xyOf = (pt: { t: Time; p: number }): [number, number] | null => {
       const x = ts.timeToCoordinate(pt.t);
