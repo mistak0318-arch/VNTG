@@ -4421,6 +4421,8 @@ export interface PublishJob {
 
 /** 시장 전체 신호등 */
 export interface MarketCheck {
+  /** 값은 있으나 방향 없음 — pass 가 null 이어도 「모름」이 아니다 (2026-09-07) */
+  neutral?: boolean;
   key: string;
   label: string;
   pass: boolean | null;

@@ -27,6 +27,7 @@ import {
   type StockRow,
   type ThemeRow,
   type IndexCandle,
+  type MarketSignal,
 } from "../api";
 import { useSection } from "../useSection";
 import { useMarketLens } from "../components/MarketLensPanel";
@@ -53,8 +54,13 @@ const eok = (n: number | null | undefined): string => {
   return `${s}${Math.round(a).toLocaleString()}억`;
 };
 
-/** 시장 국면 — 새 규칙이 아니라 있는 판정들의 합. 각 근거는 좋음(true)·나쁨(false)·중립(null) */
+/**
+ * 시장 국면 — **시장 신호등이 기준**이다 (2026-09-07 밤). 벤티지: "시황 대시보드의 시장 신호등이랑 전광판이랑 다르네."
+ * 두 화면이 서로 다른 셈을 하면 어느 쪽도 못 믿는다. 신호등(7항목·가중)이 국내 판정이고, 여기선 그 위에
+ * 미장 신호등·VIX·야간선물만 얹는다. 신호등이 없을 때만 예전 셈(체온계·수급)으로 메운다.
+ */
 function judge(args: {
+  sig: MarketSignal | null;
   kospi: IndexCard | undefined;
   above20: number | null;
   above20Trend: number | null;
@@ -66,7 +72,56 @@ function judge(args: {
 }): Regime {
   const r: Regime["reasons"] = [];
   let score = 0;
-  const { kospi, above20, above20Trend, riseNow, flow, usLevel, vix, nightFut } = args;
+  const { sig, kospi, above20, above20Trend, riseNow, flow, usLevel, vix, nightFut } = args;
+  if (sig && sig.level !== "unknown") {
+    /* 신호등 점수(0~100)를 −3~+3 로 — 70 이상 +2, 85 이상 +3, 40 미만 −2, 25 미만 −3 */
+    const s = sig.score;
+    const base = s >= 85 ? 3 : s >= 70 ? 2 : s >= 55 ? 1 : s >= 40 ? 0 : s >= 25 ? -2 : -3;
+    score += base;
+    r.push({ text: `신호등 ${sig.level === "green" ? "초록" : sig.level === "yellow" ? "노랑" : "빨강"} ${s}점`, good: sig.level === "green" ? true : sig.level === "red" ? false : null });
+    for (const c of sig.checks) {
+      const short = c.value.length > 22 ? `${c.value.slice(0, 22)}…` : c.value;
+      r.push({ text: `${c.label} ${short}`, good: c.pass === true ? true : c.pass === false ? false : null });
+    }
+    if (usLevel) {
+      const good = usLevel === "green" ? true : usLevel === "red" ? false : null;
+      r.push({ text: `미장 ${usLevel === "green" ? "양호" : usLevel === "red" ? "경고" : "주의"}`, good });
+      if (good === true) score += 1;
+      if (good === false) score -= 1;
+    }
+    if (vix !== null) {
+      r.push({ text: `VIX ${vix.toFixed(1)}`, good: vix < 18 ? true : vix >= 30 ? false : null });
+      if (vix >= 30) score -= 2;
+      else if (vix >= 25) score -= 1;
+    }
+    if (nightFut !== null) r.push({ text: `야간선물 ${pct(nightFut)}`, good: nightFut > 0.3 ? true : nightFut < -0.3 ? false : null });
+    const trendNeutral = sig.checks.some((c) => c.key === "trend" && c.pass === null);
+    let level: Level;
+    let name: string;
+    let verdict: string;
+    if (vix !== null && vix >= 30) {
+      level = "red";
+      name = "공포";
+      verdict = "새로 사지 말고 손절선만 지킨다";
+    } else if (score >= 2 && sig.level === "green") {
+      level = "green";
+      name = "상승 추세";
+      verdict = "사도 되는 날 — 거르고, 추세를 따른다";
+    } else if (score <= -2 || sig.level === "red") {
+      level = "red";
+      name = "하락 추세";
+      verdict = "새로 사지 않는다. 출구만 본다";
+    } else if (trendNeutral || (above20Trend !== null && above20Trend > 3)) {
+      level = "yellow";
+      name = trendNeutral ? "한쪽만 도는 장" : "반등 시도";
+      verdict = trendNeutral ? "코스피·코스닥이 갈렸다 — 도는 쪽만, 소량" : "소량만 — 확인되면 추종";
+    } else {
+      level = "yellow";
+      name = "횡보";
+      verdict = "관망 — 감시만 걸어 둔다";
+    }
+    return { level, name, verdict, reasons: r, score };
+  }
   if (kospi) {
     const good = kospi.changeRate > 0.3 ? true : kospi.changeRate < -0.3 ? false : null;
     r.push({ text: `코스피 ${pct(kospi.changeRate)}`, good });
@@ -148,6 +203,7 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
   const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 60_000);
   const { lens } = useMarketLens();
   const [brief, setBrief] = useState<{ date: string; label: string; text: string } | null>(null);
+  const [sig, setSig] = useState<MarketSignal | null>(null);
   const [briefOpen, setBriefOpen] = useState(false);
   const [turn, setTurn] = useState<Record<string, IndexCandle[]>>({});
   const [mine, setMine] = useState<{ pnl: number; rate: number; value: number; waiting: number; today: number } | null | "none">(null);
@@ -159,6 +215,9 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
   };
   useEffect(() => {
     void api.briefingBrief().then((r) => setBrief(r.brief)).catch(() => undefined);
+    const pullSig = () => void api.marketSignal().then(setSig).catch(() => undefined);
+    pullSig();
+    const ts = setInterval(pullSig, 60_000);
     let alive = true;
     (async () => {
       for (const code of ["001", "101"]) {
@@ -189,6 +248,7 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
     return () => {
       alive = false;
       clearInterval(t);
+      clearInterval(ts);
     };
   }, []);
 
@@ -214,6 +274,7 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
   const regime = useMemo(
     () =>
       judge({
+        sig,
         kospi,
         above20,
         above20Trend,
@@ -223,7 +284,7 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
         vix: vixQ?.price ?? null,
         nightFut: night?.changeRate ?? null,
       }),
-    [kospi, above20, above20Trend, riseNow, flow.data, usMajor.data, vixQ, night],
+    [sig, kospi, above20, above20Trend, riseNow, flow.data, usMajor.data, vixQ, night],
   );
 
   const turnOf = (code: string) => {

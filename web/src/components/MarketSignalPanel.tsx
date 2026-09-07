@@ -96,7 +96,9 @@ export function MarketSignalPanel({ collapsible = false }: { collapsible?: boole
         {/* 접혀 있으면 「통과 n/m」만 — 펴야 칩이 보인다 */}
         {collapsible && collapsed && (
           <span className="msig-fold-sum">
-            통과 {sig.checks.filter((c) => c.pass === true).length}/{sig.checks.length}
+            우호 {sig.checks.filter((c) => c.pass === true).length} · 중립 {sig.checks.filter((c) => c.pass === null && c.neutral).length} · 비우호{" "}
+            {sig.checks.filter((c) => c.pass === false).length}
+            {sig.checks.some((c) => c.pass === null && !c.neutral) ? ` · 모름 ${sig.checks.filter((c) => c.pass === null && !c.neutral).length}` : ""}
           </span>
         )}
         <button className="filter-btn" onClick={() => void load(true)} disabled={loading} title="다시 판정">
@@ -109,7 +111,7 @@ export function MarketSignalPanel({ collapsible = false }: { collapsible?: boole
         {sig.checks.map((c) => (
           <button
             key={c.key}
-            className={`msig-chip ${c.pass === true ? "ok" : c.pass === false ? "bad" : "mid"}${openWhy === c.key ? " open" : ""}`}
+            className={`msig-chip ${c.pass === true ? "ok" : c.pass === false ? "bad" : c.neutral ? "mid" : "none"}${openWhy === c.key ? " open" : ""}`}
             onClick={() => setOpenWhy(openWhy === c.key ? null : c.key)}
             title={`${c.value}${c.why ? ` — 눌러서 근거 보기` : ""}`}
           >

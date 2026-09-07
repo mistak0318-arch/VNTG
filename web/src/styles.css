@@ -17055,3 +17055,7 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .bd-views { display: flex; gap: 0.35rem; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 0.1rem; }
 .bd-view { flex: 0 0 auto; padding: 0.35rem 0.8rem; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--muted); font: inherit; font-size: 0.86rem; cursor: pointer; }
 .bd-view.on { color: var(--text); border-color: var(--accent, #e6a23c); background: var(--panel-2); font-weight: 700; }
+
+.msig-chip.none i { background: var(--border); }
+.bd-regime-why { max-height: 4.2rem; overflow: hidden; }
+.bd-regime-why:hover { max-height: none; }

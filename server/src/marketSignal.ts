@@ -50,8 +50,15 @@ const IDX_INSTITUTION = 1;
 export interface MarketCheck {
   key: string;
   label: string;
-  /** true=우호적, false=비우호적, null=판단 불가 */
+  /** true=우호적, false=비우호적, null=판단 불가 **또는 중립** — 중립이면 `neutral` 이 true */
   pass: boolean | null;
+  /**
+   * **중립** (2026-09-07 밤) — 값은 있는데 방향이 없는 것(폭 45~55%, 에너지 65~100%, 지수 둘이 갈림…).
+   * 「모름」(데이터 없음)과 갈라야 한다. 여태 둘을 같이 `null` 로 두고 「판정 가능한 무게 50% 미만이면 보류」로
+   * 굴렸더니, 중립이 셋만 겹치면 나머지가 다 우호(100점)여도 「판단할 데이터가 부족하다」가 떴다 — 벤티지:
+   * "시장 신호등 제대로 동작하는 거 맞아? 전광판이랑 다르네." 중립은 반 점을 받고 판정에 들어간다.
+   */
+  neutral?: boolean;
   /** 화면에 그대로 보여줄 실제 값 */
   value: string;
   /** 왜 이 항목을 보는가 — 화면에서 펼쳐 읽는다 */
@@ -128,6 +135,7 @@ async function checkTrend(client: KiwoomClient): Promise<MarketCheck> {
     key: "trend",
     label: "지수 추세",
     pass: known.length === 0 ? null : good === known.length ? true : good === 0 ? false : null,
+    neutral: known.length > 0 && good > 0 && good < known.length,
     value: results.map((r) => r.text).join(" / "),
     why: "지수가 20일선 위에 있고 그 선이 우상향이면 추세가 살아 있는 것이다. 선 위라도 선 자체가 내려오는 중이면 추세가 아니라 반등이다. 코스피·코스닥이 갈리면 한쪽 시장만 도는 장이므로 '판단 보류'로 둔다.",
     weight: 30,
@@ -173,6 +181,7 @@ function checkBreadth(rates: number[]): MarketCheck {
     label: "시장 폭",
     // 55% 위면 확산, 45% 아래면 위축. 그 사이는 방향이 없는 것이지 좋은 것도 나쁜 것도 아니다
     pass: pct >= 55 ? true : pct <= 45 ? false : null,
+    neutral: pct > 45 && pct < 55,
     /*
      * ⚠️ **모집단을 값에 적는다** (2026-08-31 점검).
      *
@@ -228,6 +237,7 @@ function checkSectorSpread(bySector: Map<string, number[]>): MarketCheck {
     key: "sectorSpread",
     label: "업종 확산",
     pass: pct >= 55 ? true : pct <= 40 ? false : null,
+    neutral: pct > 40 && pct < 55,
     value: `${up}/${movedSectors.length} 업종 상승 (${pct.toFixed(0)}%)`,
     why: "오른 업종의 비율. 업종마다 구성종목 등락률의 중앙값으로 판정한다. 종목은 많이 올랐는데 업종 수가 적으면 한 테마에 쏠린 장이라, 그 테마가 식으면 시장이 같이 꺼진다. 여러 업종이 함께 오르는 장이 오래간다.",
     weight: 10,
@@ -281,6 +291,7 @@ function checkFlow(
     label,
     // 5일 누적이 0 근처면 방향이 없는 것이다. ±1,000억 안쪽은 중립으로 둔다
     pass: sum > 1000 ? true : sum < -1000 ? false : null,
+    neutral: sum >= -1000 && sum <= 1000,
     value: `5일 누적 ${fmt(sum)} (${lastLabel} ${fmt(today)})`,
     why,
     weight: recent.length >= 5 ? weight : Math.round(weight / 2), // 표본이 얕으면 무게를 줄인다
@@ -340,6 +351,7 @@ async function checkEnergy(client: KiwoomClient): Promise<MarketCheck> {
       key: "energy",
       label: "거래 에너지",
       pass: ratio >= 100 ? true : ratio <= 65 ? false : null,
+      neutral: ratio > 65 && ratio < 100,
       value: `20일 평균의 ${ratio.toFixed(0)}%${note}`,
       why,
       weight: 10,
@@ -369,6 +381,7 @@ async function checkFutForeign(): Promise<MarketCheck> {
       key: "futForeign",
       label: "외인 선물",
       pass: v > 2000 ? true : v < -2000 ? false : null,
+      neutral: v >= -2000 && v <= 2000,
       value: `${last.date.slice(5)} ${v > 0 ? "+" : ""}${Math.round(v).toLocaleString("ko-KR")}계약`,
       why,
       weight: 10,
@@ -435,12 +448,13 @@ export async function evaluateMarket(client: KiwoomClient, force = false): Promi
    * 데이터가 없는 항목을 미달로 세면 수집이 덜 된 초기에 항상 빨간불이 된다 —
    * 시장이 나쁜 게 아니라 우리가 모르는 것인데, 둘을 섞으면 화면을 믿을 수 없게 된다.
    */
-  const decidable = checks.filter((c) => c.pass !== null);
+  /* 중립(값은 있으나 방향 없음)은 반 점 — 「모름」(데이터 없음)만 판정에서 뺀다 (2026-09-07 밤) */
+  const decidable = checks.filter((c) => c.pass !== null || c.neutral === true);
   const totalWeight = decidable.reduce((s, c) => s + c.weight, 0);
-  const gained = decidable.filter((c) => c.pass).reduce((s, c) => s + c.weight, 0);
+  const gained = decidable.reduce((s, c) => s + (c.pass === true ? c.weight : c.neutral ? c.weight / 2 : 0), 0);
   const score = totalWeight > 0 ? Math.round((gained / totalWeight) * 100) : 0;
 
-  // 판단 가능한 무게가 절반도 안 되면 점수를 매기지 않는다
+  // 데이터가 있는 무게가 절반도 안 되면 점수를 매기지 않는다
   const allWeight = checks.reduce((s, c) => s + c.weight, 0);
   const raw: Level =
     totalWeight < allWeight * 0.5 ? "unknown" : score >= 70 ? "green" : score >= 40 ? "yellow" : "red";
@@ -456,14 +470,18 @@ export async function evaluateMarket(client: KiwoomClient, force = false): Promi
   const trendUnclear = trend.pass === null;
   const level: Level = raw === "green" && trendUnclear ? "yellow" : raw;
 
-  const good = decidable.filter((c) => c.pass).map((c) => c.label);
+  const good = decidable.filter((c) => c.pass === true).map((c) => c.label);
+  const mid = decidable.filter((c) => c.pass === null && c.neutral).map((c) => c.label);
   const bad = decidable.filter((c) => c.pass === false).map((c) => c.label);
-  const body = `${good.length > 0 ? `우호: ${good.join("·")}` : "우호 항목 없음"}${bad.length > 0 ? ` / 비우호: ${bad.join("·")}` : ""}`;
+  const unknownN = checks.length - decidable.length;
+  const body = [good.length > 0 ? `우호 ${good.join("·")}` : "", mid.length > 0 ? `중립 ${mid.join("·")}` : "", bad.length > 0 ? `비우호 ${bad.join("·")}` : "", unknownN > 0 ? `모름 ${unknownN}` : ""]
+    .filter(Boolean)
+    .join(" / ");
   const summary =
     level === "unknown"
-      ? "판단할 데이터가 부족하다"
+      ? `판단할 데이터가 부족하다 (${body})`
       : raw === "green" && trendUnclear
-        ? `${score}점이지만 지수 추세가 확인되지 않아 노랑 — ${body}`
+        ? `${score}점이지만 코스피·코스닥이 갈려 노랑 — ${body}`
         : `${score}점 — ${body}`;
 
   const data: MarketSignal = { level, score, checks, summary, evaluatedAt: new Date().toISOString() };
