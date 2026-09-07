@@ -151,10 +151,24 @@ export function SignalPanel({
 
   return (
     <div className="sig-panel">
+      {/*
+        **두 줄로 나눈다** (2026-09-08 — 벤티지 "종목상세에서 모바일로 볼때 줄이 난리다").
+
+        점·등급·점수·단추·장세·차단·탈락·경보를 한 flex 줄에 두고 wrap 을 안 걸었더니,
+        폰에서는 단추와 점수가 자리를 잡은 뒤 칩들이 남은 몇십 px 을 나눠 가지며
+        **한 글자 폭까지 눌려 세로로 늘어졌다.** 「탈락: 외인+기관순매도」가 열여덟 줄이었다.
+
+        윗줄은 「무슨 등급 몇 점」과 단추, 아랫줄은 칩들 — 칩은 넘치면 다음 줄로 흐른다.
+      */}
       <div className="sig-head">
         <span className={`sig-dot big ${data.level}`} />
         <span className="sig-level">{LEVEL_LABEL[data.level]}</span>
         <span className="sig-score">{data.score}점</span>
+        <button className="filter-btn" onClick={() => load(true)} disabled={loading}>
+          {loading ? "평가 중…" : "↻ 다시 평가"}
+        </button>
+      </div>
+      <div className="sig-tags">
         {data.riskCapped && (
           <span className="sig-capped" title="추세·수급·실적은 초록이지만 위험 축이 빨강이라 노랑으로 낮췄습니다">
             위험으로 초록 차단
@@ -253,9 +267,6 @@ export function SignalPanel({
         )}
         {/* 경보 태그 (2026-09-02) — 점수·색은 그대로. 툴팁에 「무엇을 쟀나·왜·실측」 */}
         <AlertTags alerts={data.alerts} />
-        <button className="filter-btn" onClick={() => load(true)} disabled={loading}>
-          {loading ? "평가 중…" : "↻ 다시 평가"}
-        </button>
       </div>
 
       {/*

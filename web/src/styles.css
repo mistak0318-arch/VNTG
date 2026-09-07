@@ -3335,9 +3335,21 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   padding: 12px 14px;
   margin-bottom: 10px;
 }
-.sig-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.sig-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .sig-level { font-size: 1.0rem; font-weight: 700; }
 .sig-score { font-size: 0.8333rem; color: var(--muted); margin-right: auto; }
+/*
+ * 칩 줄 (2026-09-08) — 장세·차단·탈락·경보. 머리줄에서 떼어 냈다: 한 줄에 다 두고 wrap 이
+ * 없으니 폰에서 칩이 한 글자 폭까지 눌려 세로로 늘어졌다. 여기서는 넘치면 다음 줄로.
+ * 칩 하나는 안에서 안 꺾인다(nowrap) — 「약세장 (직접 고름)」이 두 줄로 갈라지면 못 읽는다.
+ * 탈락만 예외: 기준 이름을 둘씩 「·」로 잇는 긴 글이라 nowrap 이면 화면을 넘는다.
+ */
+.sig-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.sig-tags:empty { display: none; }
+.sig-tags > .sig-regime,
+.sig-tags > .sig-thin,
+.sig-tags > .sig-capped { white-space: nowrap; flex: none; }
+.sig-tags > .sig-vetoed { max-width: 100%; line-height: 1.45; }
 .sig-checks { display: grid; grid-template-columns: 1fr; gap: 4px; }
 @media (min-width: 700px) { .sig-checks { grid-template-columns: 1fr 1fr; } }
 .sig-check {
