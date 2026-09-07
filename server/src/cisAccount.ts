@@ -115,6 +115,15 @@ export interface Position {
 }
 
 /** 체결 한 줄 — 이미 끝난 일이라 절대 고치지 않는다 */
+export interface FillVerify {
+  ok: boolean;
+  /** 어긋난 것들. 비어 있으면 통과 */
+  notes: string[];
+  /** 검증에 쓴 값 — 나중에 「그때 봤던 값」이 남아야 한다 */
+  seen?: { open: number | null; high: number | null; low: number | null; close: number | null; prevClose: number | null };
+  /** 언제 찍었나 (ISO) */
+  at?: string;
+}
 export interface Fill {
   id: string;
   date: string;
@@ -138,6 +147,8 @@ export interface Fill {
   pnl?: number;
   /** 매도일 때만 — 며칠 들고 있었나 */
   heldDays?: number;
+  /** 검증 도장 (2026-09-07 밤) — 사고 팔 때 그날 일봉·규칙과 맞춰 본 결과. 없으면 「아직 안 잰」 옛 체결 */
+  verify?: FillVerify;
   why: string;
   used: string[];
 }

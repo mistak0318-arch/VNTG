@@ -17071,3 +17071,19 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .msig-verify-h { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.3rem; }
 .msig-verify-t td, .msig-verify-t th { font-size: 0.8rem; }
 .msig-verify-rg td { color: var(--muted); }
+
+/* 항해일지 체결 검증 도장 · 장부 점검 (2026-09-07 밤) */
+.cis-stamp { display: inline-block; margin-left: 0.3rem; font-style: normal; font-size: 0.72em; padding: 0 0.3em; border-radius: 3px; border: 1px solid var(--border); color: var(--muted); }
+.cis-stamp.ok { color: #2e9e5b; border-color: #2e9e5b; }
+.cis-stamp.bad { color: #fff; background: var(--red); border-color: var(--red); font-weight: 700; }
+.cis-fill-bad td { background: rgba(230, 80, 80, 0.07); }
+.cis-stamp-notes { color: var(--red); font-size: 0.8em; margin-top: 0.15rem; }
+.cis-planned-missing { border: 1px dashed var(--red); border-radius: 6px; padding: 0.4rem 0.6rem; margin: 0.4rem 0 0.8rem; font-size: 0.82rem; }
+.cis-planned-missing b { display: block; margin-bottom: 0.2rem; color: var(--red); }
+.cis-card-bad { border-color: var(--red); }
+.cis-card b.warn { color: #e6a23c; }
+.cis-audit { border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.6rem; margin: -0.3rem 0 0.8rem; font-size: 0.82rem; }
+.cis-audit-item { padding: 0.15rem 0; }
+.cis-audit-item.bad b { color: var(--red); }
+.cis-audit-item.warn b { color: #e6a23c; }
+.empty.small { padding: 0.5rem 0; font-size: 0.85rem; }

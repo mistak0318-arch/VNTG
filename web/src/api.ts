@@ -1299,9 +1299,14 @@ export const api = {
     postJson<{ steps: number; result: SimResult | null }>(`/api/sim/live/${id}/step`),
   simLiveReset: (id: string) => postJson<{ ok: boolean }>(`/api/sim/live/${id}/reset`),
   cisFills: (account: string, limit = 200) =>
-    getJson<{ fills: CisFill[]; total: number }>(
+    getJson<{ fills: CisFill[]; total: number; today: string; todayCount: number; unverified: number; badStamps: number }>(
       `/api/cis/fills?account=${account}&limit=${limit}`,
     ),
+  /** 장부 자가점검 (2026-09-07 밤) */
+  cisAudit: (account: string) => getJson<CisAudit>(`/api/cis/audit?account=${account}`),
+  /** 도장 없는 옛 체결에 뒤늦게 도장 */
+  cisVerifyFills: (account: string, limit = 30) =>
+    postJson<{ stamped: number; bad: number; left: number }>("/api/cis/fills/verify", { account, limit }),
   cisDay: (account: string, date?: string) =>
     getJson<CisDay>(`/api/cis/day?account=${account}${date ? `&date=${date}` : ""}`),
   cisDays: (account: string, limit = 60) =>
@@ -6228,6 +6233,22 @@ export interface CisFill {
   heldDays?: number;
   why: string;
   used: string[];
+  /** 검증 도장 (2026-09-07 밤). 없으면 도장 전 옛 체결 */
+  verify?: {
+    ok: boolean;
+    notes: string[];
+    seen?: { open: number | null; high: number | null; low: number | null; close: number | null; prevClose: number | null };
+    at?: string;
+  };
+}
+
+export interface CisAudit {
+  account: string;
+  at: string;
+  items: { level: "bad" | "warn"; what: string; detail: string }[];
+  rebuilt: { cash: number; misu: number; credit: number; positions: { code: string; name: string; qty: number; avg: number; funding: string; firstBuy: string }[] };
+  fillsToday: number;
+  badStamps: number;
 }
 
 export interface CisCandidate {

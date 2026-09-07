@@ -10,6 +10,7 @@ import {
   today,
   type CisAccount,
 } from "./cisAccount.js";
+import { stampLast } from "./cisVerify.js";
 import { getCisConfig, rulesFor } from "./cisConfig.js";
 import { closeBetExits, closeBetRound, type MacroGauge } from "./cisCloseBet.js";
 import {
@@ -247,6 +248,8 @@ export async function buyRound(
       date,
     );
     if (r.ok) {
+      /* 도장 — 그날 시가·고저, 비중 한도, 시장 문과 맞춰 본다 (2026-09-07 밤) */
+      await stampLast(client, a, { mode, maxPerStockPct: rules.maxPerStock, equity: equityOf(a, buyPriceOf).equity }, { side: "buy", code: p.candidate.code });
       actions.push({
         side: "buy",
         code: p.candidate.code,
@@ -350,6 +353,7 @@ export async function runSlot(
       date,
     );
     if (r.ok) {
+      await stampLast(client, a, { exitKind: e.kind, position: e.position }, { side: "sell", code: e.position.code });
       actions.push({
         side: "sell",
         code: e.position.code,

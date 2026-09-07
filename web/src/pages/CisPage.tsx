@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   type CisAccountView,
+  type CisAudit,
   type CisConfig,
   type CisCreed,
   type CisDay,
@@ -927,68 +928,185 @@ function FillsTab({
 }) {
   const [fills, setFills] = useState<CisFill[]>([]);
   const [total, setTotal] = useState(0);
+  const [meta, setMeta] = useState<{ today: string; todayCount: number; unverified: number; badStamps: number } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [day, setDay] = useState<CisDay | null>(null);
+  const [stamping, setStamping] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
-  useEffect(() => {
-    api
-      .cisFills(account, 500)
-      .then((r) => {
+  /*
+   * 벤티지 (2026-09-07): "오늘 매수했는데 체결 내역도 안 나오고". 여태는 실패를 삼키고 「아직 체결이
+   * 없습니다」로 보였고, 한 번 읽고 끝이라 장중에 산 게 안 보였다. 이제 ① 오류는 오류로 보이고
+   * ② 30초마다 다시 읽고 ③ 오늘 것은 맨 위에 따로 센다 — 원장에 있는데 안 보이는 일은 없게.
+   */
+  const load = useCallback(() => {
+    return Promise.all([api.cisFills(account, 500), api.cisDay(account).catch(() => null)])
+      .then(([r, d]) => {
         setFills(r.fills);
         setTotal(r.total);
+        setMeta({ today: r.today, todayCount: r.todayCount, unverified: r.unverified, badStamps: r.badStamps });
+        setDay(d);
+        setErr(null);
       })
-      .catch(() => setFills([]));
+      .catch((e: Error) => setErr(e.message))
+      .finally(() => setLoaded(true));
   }, [account]);
 
-  if (fills.length === 0) return <div className="empty">아직 체결이 없습니다.</div>;
+  useEffect(() => {
+    setLoaded(false);
+    setFills([]);
+    void load();
+    const t = setInterval(() => void load(), 30_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  async function stampOld() {
+    setStamping(true);
+    try {
+      await api.cisVerifyFills(account, 30);
+      await load();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setStamping(false);
+    }
+  }
+
+  if (err && fills.length === 0) return <div className="error-banner">체결 원장을 못 읽었다: {err}</div>;
+  if (!loaded) return <div className="empty">불러오는 중…</div>;
+
+  const todayStr = meta?.today ?? "";
+  const todays = fills.filter((f) => f.date === todayStr);
+  /* 오늘 계획했는데 원장에 없는 매수 — 「왜 안 샀나」가 보여야 한다 */
+  const plannedMissing: { name: string; code: string; qty: number; price: number; slot: string }[] = [];
+  if (day) {
+    for (const slot of ["morning", "noon", "evening"] as const) {
+      const e = day[slot];
+      if (!e) continue;
+      for (const pl of e.plans) {
+        const done = e.actions.some((x) => x.side === "buy" && x.code === pl.code) || todays.some((f) => f.side === "buy" && f.code === pl.code);
+        if (!done) plannedMissing.push({ name: pl.name, code: pl.code, qty: pl.qty, price: pl.price, slot });
+      }
+    }
+  }
+  const slotKo = (s: string) => (s === "morning" ? "아침" : s === "noon" ? "점심" : "저녁");
+  const rows = showAll ? fills : fills.slice(0, 200);
+
+  const renderRow = (f: CisFill) => {
+    const bad = f.verify && !f.verify.ok;
+    return (
+      <tr key={f.id} className={bad ? "cis-fill-bad" : undefined}>
+        <td className="cis-td-date">
+          {f.date}
+          <i className="cis-slot-tag">{slotKo(f.slot)}</i>
+        </td>
+        <td className={f.side === "buy" ? "positive" : "negative"}>
+          {f.side === "buy" ? "매수" : "매도"}
+          {f.verify ? (
+            <i className={`cis-stamp ${f.verify.ok ? "ok" : "bad"}`} title={f.verify.ok ? "검증 통과" : f.verify.notes.join(" / ")}>
+              {f.verify.ok ? "✓" : "!"}
+            </i>
+          ) : (
+            <i className="cis-stamp none" title="도장 전 체결">·</i>
+          )}
+        </td>
+        <td>
+          <button className="link-btn" onClick={() => onSelectStock?.(f.code, f.name)}>
+            {f.name}
+          </button>
+          <SuperMark code={f.code} />
+        </td>
+        <td className="num" data-l="수량">{f.qty.toLocaleString()}</td>
+        <td className="num" data-l="단가">{f.price.toLocaleString()}</td>
+        <td className={`num ${f.pnl !== undefined ? cls(f.pnl) : ""}`} data-l="손익">
+          {f.pnl !== undefined ? signed(f.pnl) : "-"}
+        </td>
+        <td className="num" data-l="보유">{f.heldDays !== undefined ? `${f.heldDays}일` : "-"}</td>
+        <td data-l="자금">{f.funding === "cash" ? "예수금" : f.funding === "misu" ? "미수" : "신용"}</td>
+        <td className="cis-why cis-td-wide">
+          {f.why}
+          {bad && <div className="cis-stamp-notes">⚠ {f.verify!.notes.join(" · ")}</div>}
+        </td>
+      </tr>
+    );
+  };
+
+  const head = (
+    <thead>
+      <tr>
+        <th>날짜</th>
+        <th>구분</th>
+        <th>종목</th>
+        <th className="num">수량</th>
+        <th className="num">단가</th>
+        <th className="num">손익</th>
+        <th className="num">보유</th>
+        <th>자금</th>
+        <th>근거</th>
+      </tr>
+    </thead>
+  );
 
   return (
     <>
+      {err && <div className="error-banner">다시 읽기 실패 (옛 값 표시 중): {err}</div>}
+      <h3 className="section-heading">
+        오늘 ({todayStr})
+        <span className="breadth-count">{todays.length}건</span>
+        {plannedMissing.length > 0 && <span className="breadth-count negative">계획만 {plannedMissing.length}건</span>}
+      </h3>
+      {todays.length === 0 && plannedMissing.length === 0 && (
+        <div className="empty small">
+          오늘 원장에 체결이 없다{day && (day.morning || day.noon || day.evening) ? " — 일지는 썼지만 산 것도 판 것도 없었다" : " — 오늘 일지도 아직 없다"}.
+        </div>
+      )}
+      {todays.length > 0 && (
+        <div className="data-table-wrap">
+          <table className="data-table cis-card-table">
+            {head}
+            <tbody>{todays.map(renderRow)}</tbody>
+          </table>
+        </div>
+      )}
+      {plannedMissing.length > 0 && (
+        <div className="cis-planned-missing">
+          <b>계획했는데 원장에 없는 매수</b>
+          {plannedMissing.map((m) => (
+            <div key={`${m.slot}-${m.code}`}>
+              <i className="cis-slot-tag">{slotKo(m.slot)}</i> {m.name} {m.qty.toLocaleString()}주 @ {m.price.toLocaleString()} — 여력 부족·수량 0 으로 매수가 거절됐거나, 저장 전에 끊겼다. 계좌 탭 「장부 점검」으로 확인.
+            </div>
+          ))}
+        </div>
+      )}
+
       <h3 className="section-heading">
         체결 원장
         <span className="breadth-count">{total}건</span>
+        {meta && meta.badStamps > 0 && <span className="breadth-count negative">검증 실패 {meta.badStamps}</span>}
+        {meta && meta.unverified > 0 && (
+          <button className="ord-mk" disabled={stamping} onClick={() => void stampOld()}>
+            {stamping ? "도장 찍는 중…" : `도장 없는 ${meta.unverified}건 검증 (30건씩)`}
+          </button>
+        )}
       </h3>
-      <div className="data-table-wrap">
-        <table className="data-table cis-card-table">
-          <thead>
-            <tr>
-              <th>날짜</th>
-              <th>구분</th>
-              <th>종목</th>
-              <th className="num">수량</th>
-              <th className="num">단가</th>
-              <th className="num">손익</th>
-              <th className="num">보유</th>
-              <th>자금</th>
-              <th>근거</th>
-            </tr>
-          </thead>
-          <tbody>
-            {fills.map((f) => (
-              <tr key={f.id}>
-                <td className="cis-td-date">
-                  {f.date}
-                  <i className="cis-slot-tag">{f.slot === "morning" ? "아침" : f.slot === "noon" ? "점심" : "저녁"}</i>
-                </td>
-                <td className={f.side === "buy" ? "positive" : "negative"}>
-                  {f.side === "buy" ? "매수" : "매도"}
-                </td>
-                <td>
-                  <button className="link-btn" onClick={() => onSelectStock?.(f.code, f.name)}>
-                    {f.name}
-                  </button>
-                  <SuperMark code={f.code} />
-                </td>
-                <td className="num" data-l="수량">{f.qty.toLocaleString()}</td>
-                <td className="num" data-l="단가">{f.price.toLocaleString()}</td>
-                <td className={`num ${f.pnl !== undefined ? cls(f.pnl) : ""}`} data-l="손익">
-                  {f.pnl !== undefined ? signed(f.pnl) : "-"}
-                </td>
-                <td className="num" data-l="보유">{f.heldDays !== undefined ? `${f.heldDays}일` : "-"}</td>
-                <td data-l="자금">{f.funding === "cash" ? "예수금" : f.funding === "misu" ? "미수" : "신용"}</td>
-                <td className="cis-why cis-td-wide">{f.why}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {fills.length === 0 ? (
+        <div className="empty">아직 체결이 없습니다.</div>
+      ) : (
+        <div className="data-table-wrap">
+          <table className="data-table cis-card-table">
+            {head}
+            <tbody>{rows.map(renderRow)}</tbody>
+          </table>
+          {fills.length > 200 && !showAll && (
+            <button className="ord-mk" onClick={() => setShowAll(true)}>
+              나머지 {fills.length - 200}건 더 보기
+            </button>
+          )}
+        </div>
+      )}
+      <div className="table-note">
+        도장: ✓ 그날 고저(KRX+NXT 통합)·전일 종가 ±15%·시가/종가배팅 ±2%·비중 한도·시장 문·중복을 통과 / ! 어긋남(근거 칸에 이유) / · 도장 전 옛 체결. 검증은 기록만 하고 매매를 막지 않는다.
       </div>
     </>
   );
@@ -1010,11 +1128,16 @@ function AccountTab({
     lastBuyScan: string | null;
     events: CisWatchEvent[];
   } | null>(null);
+  /* 장부 자가점검 (2026-09-07 밤) — 포지션·현금을 체결 원장에서 재구성해 맞춰 본다 */
+  const [audit, setAudit] = useState<CisAudit | null | "err">(null);
+  const [auditOpen, setAuditOpen] = useState(false);
 
   useEffect(() => {
     setV(null);
+    setAudit(null);
     api.cisAccount(account).then(setV).catch((e: Error) => setErr(e.message));
     api.cisWatch(account).then(setWatch).catch(() => setWatch(null));
+    api.cisAudit(account).then(setAudit).catch(() => setAudit("err"));
   }, [account]);
 
   if (err) return <div className="error-banner">{err}</div>;
@@ -1047,6 +1170,20 @@ function AccountTab({
             </span>
           </div>
         )}
+        <div className={`cis-card ${audit && audit !== "err" && audit.items.some((i) => i.level === "bad") ? "cis-card-bad" : ""}`}>
+          <i>장부 점검</i>
+          <b className={audit === "err" ? "" : audit && audit.items.length > 0 ? (audit.items.some((i) => i.level === "bad") ? "negative" : "warn") : "positive"}>
+            {audit === null ? "…" : audit === "err" ? "못 함" : audit.items.length === 0 ? "맞음" : `${audit.items.length}건`}
+          </b>
+          <span>
+            {audit && audit !== "err" ? `오늘 체결 ${audit.fillsToday}건 · 원장에서 재구성해 비교` : "원장 ↔ 장부"}
+            {audit && audit !== "err" && audit.items.length > 0 && (
+              <button className="link-btn" onClick={() => setAuditOpen((o) => !o)}>
+                {auditOpen ? " 접기" : " 보기"}
+              </button>
+            )}
+          </span>
+        </div>
         {v.profile.riskCap < 100 && (
           <div className="cis-card">
             <i>위험자산</i>
@@ -1058,6 +1195,18 @@ function AccountTab({
           </div>
         )}
       </div>
+      {auditOpen && audit && audit !== "err" && audit.items.length > 0 && (
+        <div className="cis-audit">
+          {audit.items.map((i, k) => (
+            <div key={k} className={`cis-audit-item ${i.level}`}>
+              <b>{i.level === "bad" ? "✕" : "△"} {i.what}</b> {i.detail}
+            </div>
+          ))}
+          <div className="table-note">
+            ✕ 는 장부와 원장이 실제로 어긋난 것(수량·예수금·없는 포지션). △ 는 평단·산 날·일지 건수·도장처럼 뜻은 같아도 값이 다른 것. 저녁 일지 뒤 자동으로 한 번 더 재고, ✕ 가 있으면 텔레그램 로그 방으로 알린다.
+          </div>
+        </div>
+      )}
 
       {/* 목표 — 지금 어디쯤인가 */}
       <section className="cis-goal">

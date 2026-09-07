@@ -1,8 +1,8 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
-import { equityOf, loadAccount, resetAccount, riskMix, today } from "../cisAccount.js";
+import { equityOf, loadAccount, resetAccount, riskMix, saveAccount, today } from "../cisAccount.js";
 import { ACCOUNTS, ACCOUNT_IDS, profileOf, type AccountId } from "../cisAccounts.js";
-import { getCisConfig, goalProgress, saveCisConfig, RULE_LABEL } from "../cisConfig.js";
+import { getCisConfig, goalProgress, rulesFor, saveCisConfig, RULE_LABEL } from "../cisConfig.js";
 import { clearJournal, listDays, loadDay } from "../cisJournal.js";
 import { listTrackLastRunDate } from "../listTrack.js";
 import { CIS_CREED, readState } from "../cisPersona.js";
@@ -15,6 +15,7 @@ import { cisBacktest } from "../cisBacktest.js";
 import type { CisRules } from "../cisTrader.js";
 import { METHOD_LABEL, runPension } from "../cisPensionRun.js";
 import { clearWatchEvents, watchEvents, watchStatus } from "../cisWatch.js";
+import { auditAccount, verifyFill } from "../cisVerify.js";
 
 /**
  * 항해일지 API (옛 이름 「CIS 일지」 — 2026-09-04 개명).
@@ -187,12 +188,52 @@ export function createCisRouter(client: KiwoomClient): Router {
     }
   });
 
-  /** 매매일지 — 체결 원장 */
+  /** 매매일지 — 체결 원장. `today` 와 `todayCount` 를 따로 준다 — 「오늘 산 게 안 보인다」가 원장 문제인지 화면 문제인지 갈라야 한다 */
   router.get("/fills", async (req, res, next) => {
     try {
       const a = await loadAccount(acc(req.query.account));
       const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 2000);
-      res.json({ fills: [...a.fills].reverse().slice(0, limit), total: a.fills.length });
+      const d = today();
+      res.json({
+        fills: [...a.fills].reverse().slice(0, limit),
+        total: a.fills.length,
+        today: d,
+        todayCount: a.fills.filter((f) => f.date === d).length,
+        unverified: a.fills.filter((f) => !f.verify).length,
+        badStamps: a.fills.filter((f) => f.verify && !f.verify.ok).length,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 장부 자가점검 (2026-09-07 밤) — 포지션·현금을 체결 원장에서 재구성해 맞춰 본다 */
+  router.get("/audit", async (req, res, next) => {
+    try {
+      res.json(await auditAccount(acc(req.query.account)));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 도장 없는 옛 체결에 뒤늦게 도장 찍기 — 최근 N건. 장부는 건드리지 않고 `verify` 만 붙인다.
+   * 일봉을 건마다 한 번 부르니 한 번에 30건까지.
+   */
+  router.post("/fills/verify", async (req, res, next) => {
+    try {
+      const id = acc(req.body?.account);
+      const a = await loadAccount(id);
+      const max = Math.min(Math.max(Number(req.body?.limit) || 30, 1), 30);
+      const targets = [...a.fills].reverse().filter((f) => !f.verify).slice(0, max);
+      let bad = 0;
+      for (const f of targets) {
+        const pos = a.positions.find((p) => p.code === f.code) ?? null;
+        const v = await verifyFill(client, a, f, { position: pos, maxPerStockPct: (await rulesFor(id)).maxPerStock, equity: equityOf(a, () => null).equity });
+        if (!v.ok) bad += 1;
+      }
+      if (targets.length > 0) await saveAccount(a);
+      res.json({ stamped: targets.length, bad, left: a.fills.filter((f) => !f.verify).length });
     } catch (err) {
       next(err);
     }

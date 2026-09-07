@@ -7,6 +7,7 @@ import type { Slot } from "./cisJournal.js";
 import { ACCOUNT_IDS, profileOf, styleOf } from "./cisAccounts.js";
 import { runPension } from "./cisPensionRun.js";
 import { listTrackLastRunDate } from "./listTrack.js";
+import { auditAndTell } from "./cisVerify.js";
 
 /**
  * CIS 하루 세 번 자동 실행.
@@ -175,6 +176,8 @@ async function tick(client: KiwoomClient): Promise<void> {
          */
         if (r.ok || r.skipped?.includes("이미")) {
           tried.set(key, { fails: 0, at: new Date().toISOString() });
+          /* 저녁 일지를 쓴 뒤 장부 자가점검 — 어긋나면 텔레그램 (2026-09-07 밤). 점검이 터져도 일지는 이미 썼다 */
+          if (slot === "evening" && r.ok) void auditAndTell(id).catch((e) => console.warn(`[cis] 장부 점검 실패 ${id}: ${(e as Error).message}`));
         } else {
           tried.set(key, {
             fails: (st?.fails ?? 0) + 1,

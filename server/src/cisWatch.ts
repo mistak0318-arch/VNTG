@@ -1,6 +1,7 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { equityOf, loadAccount, markToMarket, saveAccount, sell, today } from "./cisAccount.js";
 import { ACCOUNT_IDS, profileOf, styleOf, type AccountId } from "./cisAccounts.js";
+import { stampLast } from "./cisVerify.js";
 import { getCisConfig, rulesFor } from "./cisConfig.js";
 import { exitCalls, trailStops } from "./cisTrader.js";
 import { buyRound, priceMap } from "./cisRun.js";
@@ -189,6 +190,7 @@ async function watchAccount(client: KiwoomClient, id: AccountId): Promise<void> 
     );
     if (r.ok) {
       changed = true;
+      await stampLast(client, a, { exitKind: e.kind, position: e.position }, { side: "sell", code: e.position.code });
       events.push({
         at: new Date().toISOString(),
         account: id,

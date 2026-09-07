@@ -4,7 +4,8 @@ import { listTrackSummary, type ListTrackRow } from "./listTrack.js";
 import { evaluateSignal } from "./signalLight.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
 import { marketGate, planBuys, type Candidate, type CisRules, type ExitCall, type MarketGate } from "./cisTrader.js";
-import { buy, type CisAccount } from "./cisAccount.js";
+import { buy, equityOf, type CisAccount } from "./cisAccount.js";
+import { stampLast } from "./cisVerify.js";
 import { screenCandidates, type ScreenNote } from "./cisAi.js";
 import { isSafeAsset, profileOf, rejectReason, type AccountId } from "./cisAccounts.js";
 import type { JournalAction } from "./cisJournal.js";
@@ -365,6 +366,7 @@ export async function closeBetRound(
       date,
     );
     if (r.ok) {
+      await stampLast(client, a, { mode: "close", maxPerStockPct: rules.maxPerStock, equity: equityOf(a, buyPriceOf).equity }, { side: "buy", code: p.candidate.code });
       actions.push({
         side: "buy",
         code: p.candidate.code,
