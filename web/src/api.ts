@@ -101,7 +101,15 @@ async function orderPost<T = RawRecord>(path: string, body?: unknown): Promise<T
     body: JSON.stringify(body ?? {}),
   });
   const parsed = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error((parsed as { error?: string }).error ?? `요청 실패 (${res.status})`);
+  if (!res.ok) {
+    /*
+     * 서버는 주문 세션이 없으면 일부러 404 「not found」를 준다 — 주문 기능이 있다는
+     * 것 자체를 밖에 안 알리려고. 하지만 **그 말이 화면에 그대로 뜨면** 사용자는
+     * 취소 버튼이 고장 난 줄 안다(2026-09-08). 여기서 사람 말로 바꾼다.
+     */
+    if (res.status === 404) throw new Error("주문 세션이 닫혔습니다 — 주문 메뉴를 다시 열어 주세요");
+    throw new Error((parsed as { error?: string }).error ?? `요청 실패 (${res.status})`);
+  }
   return parsed;
 }
 

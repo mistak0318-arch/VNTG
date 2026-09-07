@@ -2411,7 +2411,8 @@ function WatchCard({
   r: AutoWatch;
   cur: { price: number; from: string } | null;
   busy: boolean;
-  onCancel: (() => void) | null;
+  /** 취소. 실패하면 던진다 — 카드가 받아서 **그 자리에** 적는다 */
+  onCancel: (() => Promise<void>) | null;
   onEdit: (() => void) | null;
   editing: boolean;
   open: boolean;
@@ -2419,6 +2420,29 @@ function WatchCard({
 }) {
   const t = r.ticket;
   const s = r.spec;
+  /*
+   * 취소 확인을 **카드 안에서** 받는다 (2026-09-08 — 벤티지 "매도감시 취소 로직이 안 먹는다").
+   *
+   * 전엔 `window.confirm` 이었다. 홈 화면에 깐 앱(PWA standalone)에서는 그 창이
+   * 안 뜨고 곧장 false 를 돌려주는 기기가 있다 — 그러면 취소를 눌러도 **아무 일도
+   * 안 일어난다.** 게다가 실패했을 때 사유는 화면 맨 위에 적혀서, 카드를 보려고
+   * 스크롤을 내린 사람은 그것도 못 본다.
+   *
+   * 그래서 취소를 누르면 그 버튼 자리가 「정말? [취소하기] [아니오]」로 바뀌고,
+   * 실패 사유도 바로 그 밑에 적힌다. 확인창을 안 쓰니 어떤 기기에서도 같다.
+   */
+  const [confirming, setConfirming] = useState(false);
+  const [cancelErr, setCancelErr] = useState<string | null>(null);
+  async function doCancel() {
+    if (!onCancel) return;
+    setCancelErr(null);
+    try {
+      await onCancel();
+      setConfirming(false);
+    } catch (e) {
+      setCancelErr(e instanceof Error ? e.message : "취소 실패");
+    }
+  }
   const sideKo = t.side === "buy" ? "매수" : "매도";
   const basisKo = s.basis === "price" ? null : s.basis === "prevClose" ? "전일 종가" : s.basis === "avg" ? "평단" : "등록 때 값";
   const execShort = s.exec === "market" ? "시장가" : s.exec === "limit_trigger" ? "발동가 지정" : s.exec === "limit_now" ? "현재가 지정" : `${(s.limitPrice ?? 0).toLocaleString()} 지정`;
@@ -2526,18 +2550,32 @@ function WatchCard({
           )}
           {waiting && (onEdit || onCancel) && (
             <div className="ord-wcard-acts">
-              {onEdit && (
+              {onEdit && !confirming && (
                 <button type="button" className={`ord-x edit${editing ? " on" : ""}`} disabled={busy} onClick={onEdit}>
                   ✏️ 수정
                 </button>
               )}
-              {onCancel && (
-                <button type="button" className="ord-x" disabled={busy} onClick={onCancel}>
-                  {busy ? "…" : "취소"}
+              {onCancel && !confirming && (
+                <button type="button" className="ord-x" disabled={busy} onClick={() => setConfirming(true)}>
+                  취소
                 </button>
+              )}
+              {onCancel && confirming && (
+                <div className="ord-wcard-confirm">
+                  <span>
+                    {t.name} {sideKo} {t.qty}주 감시를 취소할까요?
+                  </span>
+                  <button type="button" className="ord-x danger" disabled={busy} onClick={() => void doCancel()}>
+                    {busy ? "…" : "취소하기"}
+                  </button>
+                  <button type="button" className="ord-x" disabled={busy} onClick={() => setConfirming(false)}>
+                    아니오
+                  </button>
+                </div>
               )}
             </div>
           )}
+          {cancelErr && <p className="ord-err ord-wcard-err">{cancelErr}</p>}
         </div>
       )}
     </div>
@@ -2805,15 +2843,17 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
 
   const toggle = (id: string) => setOpenIds((m) => ({ ...m, [id]: !m[id] }));
 
+  /**
+   * 감시 취소. 확인은 카드가 받고(`WatchCard`), 실패도 카드가 받아 그 자리에 적는다 —
+   * 그래서 여기서는 묻지도 잡지도 않는다. `window.confirm` 을 쓰던 시절엔 홈 화면
+   * 앱에서 창이 안 떠 취소가 통째로 무시됐다.
+   */
   async function cancelWatch(r: AutoWatch) {
-    if (!window.confirm(`${r.ticket.name} ${r.ticket.side === "buy" ? "매수" : "매도"} ${r.ticket.qty}주 감시를 취소할까요?`)) return;
     setBusy(r.id);
     try {
       await api.orderWatchCancel(r.id);
       await load();
       onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "취소 실패");
     } finally {
       setBusy(null);
     }
@@ -2996,7 +3036,7 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
                       stopValue={stopEdit[pos.code] ?? ""}
                       onStopChange={(v) => setStopEdit((m) => ({ ...m, [pos.code]: v }))}
                       onArmStop={() => void armStop(pos, stopEdit[pos.code] ?? "")}
-                      onCancelWatch={(w) => void cancelWatch(w)}
+                      onCancelWatch={(w) => cancelWatch(w)}
                       onEditWatch={(w) => {
                         setEditing(w);
                         setShowForm(true);
@@ -3034,7 +3074,7 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
               r={r}
               cur={view.prices[r.ticket.code] ?? null}
               busy={busy === r.id}
-              onCancel={() => void cancelWatch(r)}
+              onCancel={() => cancelWatch(r)}
               onEdit={() => {
                 setEditing(r);
                 setShowForm(true);
@@ -3122,7 +3162,7 @@ function PositionCard({
   stopValue: string;
   onStopChange: (v: string) => void;
   onArmStop: () => void;
-  onCancelWatch: (w: AutoWatch) => void;
+  onCancelWatch: (w: AutoWatch) => Promise<void>;
   onEditWatch: (w: AutoWatch) => void;
   openIds: Record<string, boolean>;
   onToggle: (id: string) => void;

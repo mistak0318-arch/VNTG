@@ -177,10 +177,17 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
    * 없어서 그 칸들이 비어 있고, 「수익 50/76」 같은 집계도 성격이 다른 것을 섞어 센다.
    * 그래서 종류는 **상태와 다른 축**으로 두고, 칩을 눌렀을 때만 ETF 쪽을 본다.
    * 구분선은 어느 쪽에서도 남긴다 — 목록을 나눠 놓은 사람의 표시다.
+   *
+   * **빼는 것은 「전체」에서만이다** (2026-09-08 아침 정정 — 벤티지 "etf그룹에 들어가도
+   * 안나오네 여기에서는 나오게 해야지"). 그룹을 골랐으면 그 그룹에 담은 그대로 본다 —
+   * ETF 그룹을 만들어 거기 넣어 둔 사람이 그 그룹을 열었는데 비어 있으면 안 된다.
    */
-  const byKind = etfOnly
-    ? byGroup.filter((i) => i.isEtf || i.divider)
-    : byGroup.filter((i) => !i.isEtf || i.divider);
+  const byKind =
+    activeGroup !== ALL
+      ? byGroup
+      : etfOnly
+        ? byGroup.filter((i) => i.isEtf || i.divider)
+        : byGroup.filter((i) => !i.isEtf || i.divider);
   const visible =
     statusFilter === null
       ? byKind
@@ -613,7 +620,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
   const summaryScope =
     (activeGroup === ALL ? "전체" : activeGroup) +
     /* ETF 만 보는 중이면 「전체」가 아니다 — 요약 숫자가 무엇을 센 것인지 밝힌다 */
-    (etfOnly ? " · ETF" : "") +
+    (activeGroup === ALL && etfOnly ? " · ETF" : "") +
     (statusFilter ? ` · ${statuses.find((s) => s.key === statusFilter)?.label ?? statusFilter}` : "");
 
   return (
@@ -701,8 +708,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
               </button>
             );
           })}
-          {/* 종류는 상태와 다른 축이라 오른쪽 끝에 따로 세운다 */}
-          {byGroup.some((i) => i.isEtf) && (
+          {/* 종류는 상태와 다른 축이라 오른쪽 끝에 따로 세운다. 「전체」에서만 — 그룹을 골랐으면 그룹이 곧 답이다 */}
+          {activeGroup === ALL && byGroup.some((i) => i.isEtf) && (
             <button
               className={`filter-btn my-etf-chip ${etfOnly ? "active" : ""}`}
               title={etfOnly ? "회사 종목으로 돌아갑니다" : "ETF 만 봅니다 — 평소에는 목록에서 빠져 있습니다"}

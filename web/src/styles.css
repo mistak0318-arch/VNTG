@@ -16602,6 +16602,16 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-wcard-foot { margin-top: 0.4rem; font-size: 0.78rem; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 0.35rem; }
 .ord-wcard-foot.bad { color: var(--red); }
 
+/*
+ * 감시 취소 확인 — 카드 안에서 (2026-09-08). window.confirm 은 홈 화면 앱에서 안 뜨는
+ * 기기가 있어 취소가 통째로 무시됐다. 버튼 자리가 「정말? [취소하기] [아니오]」로 바뀐다.
+ */
+.ord-wcard-confirm { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; font-size: 0.85rem; }
+.ord-wcard-confirm > span { color: var(--text); }
+.ord-x.danger { border-color: var(--red); color: var(--red); font-weight: 600; }
+.ord-x.danger:hover { background: color-mix(in srgb, var(--red) 15%, var(--panel)); }
+.ord-wcard-err { margin-top: 0.35rem; font-size: 0.8rem; }
+
 /* 자동감시 수정 (2026-09-07 밤) */
 .ord-x.edit { border-color: var(--accent, #e6a23c); }
 .ord-x.edit.on { background: color-mix(in srgb, var(--accent, #e6a23c) 20%, var(--panel)); }
