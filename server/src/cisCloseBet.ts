@@ -48,6 +48,13 @@ import { noopProgress, type ProgressReporter } from "./reportProgress.js";
 const POOL = 15;
 /** 수급 축 문턱 (0~100). 50 = 수급 기준 절반은 통과 */
 const FLOW_MIN = 50;
+/**
+ * **마감 강도** — 오늘 거래대금이 직전 20일 평균의 몇 배인가 (2026-09-07 밤, `tools/sigtune/cisGuide.mts`).
+ * 표본 04~08월 초록 상위 3 종가매수→다음 날 시가: 문 없음 갭 +0.46 승률 54 → 1.5배 문 +0.82 승률 63,
+ * 앞뒤 반 다 플러스. 수급 문과 겹쳐도(상위 5) +0.78/61 로 유지. 윗꼬리 3% 문은 안 갈라서 안 넣었다.
+ * 3배 넘는 과열은 더 좋지 않았지만(+0.50) 나쁘지도 않아 위 뚜껑은 안 둔다. 못 쟀으면 막지 않는다.
+ */
+const CLOSE_VOL_X = 1.5;
 
 export interface MacroGauge {
   ok: boolean;
@@ -301,6 +308,18 @@ export async function closeBetRound(
       sieved.push({ name: e.name, reason: `수급 축 ${flow}점 < ${FLOW_MIN} — 수급이 안 받친다` });
       continue;
     }
+    /* 마감 강도 — `tradeEok20` 은 오늘을 포함한 평균이라 직전 20일 평균으로 되돌려 잰다 */
+    const tEok = sig.tradeEok ?? 0;
+    const t20 = sig.tradeEok20 ?? 0;
+    let volX: number | null = null;
+    if (tEok > 0 && t20 > 0) {
+      const prior = Math.max(1, (20 * t20 - tEok) / 19);
+      volX = Math.round((tEok / prior) * 10) / 10;
+      if (volX < CLOSE_VOL_X) {
+        sieved.push({ name: e.name, reason: `거래대금 20일 평균의 ${volX.toFixed(1)}배 < ${CLOSE_VOL_X} — 마감이 약하다` });
+        continue;
+      }
+    }
 
     const chg = e.changeRate ?? 0;
     candidates.push({
@@ -315,9 +334,10 @@ export async function closeBetRound(
       leaderScore: 0,
       /* 순위는 신호등 점수 — 이 계좌의 물음이 「신호등 상위에 종배하면」이다 */
       score: sig.score,
-      used: ["신호등 분석 원장", `신호등:green(${sig.score})`, `수급축:${flow}`, "미국장 분위기", "시장 신호등"],
+      used: ["신호등 분석 원장", `신호등:green(${sig.score})`, `수급축:${flow}`, ...(volX !== null ? [`대금배수:${volX}`] : []), "미국장 분위기", "시장 신호등"],
       why:
         `원장 ${e.lists}목록 ${e.seenCount}일째 · 신호등 ${sig.score}점 · 수급 축 ${flow} · ` +
+        (volX !== null ? `대금 ${volX.toFixed(1)}배 · ` : "대금 배수 못 잼 · ") +
         `오늘 ${chg > 0 ? "+" : ""}${chg.toFixed(1)}%`,
       mode: "close",
     });

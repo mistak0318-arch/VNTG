@@ -28,6 +28,37 @@ import { priceMap } from "./cisRun.js";
 import { narrate, review, saveDay, writeSlot, loadDay, type JournalAction, type SlotEntry } from "./cisJournal.js";
 import { polishJournal } from "./cisAi.js";
 import { noopProgress, type ProgressReporter } from "./reportProgress.js";
+import { dropPhantomToday } from "./candleGuard.js";
+import { alCode } from "./alCode.js";
+
+/**
+ * **60일선 문** (2026-09-07 밤, `tools/sigtune/cisGuide.mts` ③).
+ *
+ * KODEX200 2년 일봉: 상시 보유 +242% / MDD -41 → 「종가 > 60일선일 때만」 +235% / MDD -21, 갈아탐 14번.
+ * 코스닥150: +18 / -50 → +13 / -31. 20일선은 갈아탐 54~60번에 수익이 반토막(휩소). 골든(20>60)도
+ * 비슷하게 좋았지만 규칙은 하나만 — 60일선. 수익은 거의 그대로 두고 **최대 낙폭을 반으로** 줄이는
+ * 문이라 연금에 맞다. 안전자산(채권)엔 안 건다. 못 읽었으면 「모름」 — 새로 담지 않고, 들고 있는 건 안 판다.
+ * 월·수·금에만 보니 일봉 백테스트보다 하루 이틀 늦다 — 그만큼은 감수한다.
+ */
+async function ma60Of(client: KiwoomClient, code: string): Promise<{ close: number; ma60: number; above: boolean } | null> {
+  try {
+    const d = new Date(Date.now() + 9 * 3600_000);
+    const base = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
+    const { data } = await client.request<{ stk_dt_pole_chart_qry?: Record<string, unknown>[] }>("/api/dostk/chart", "ka10081", {
+      stk_cd: alCode(code),
+      base_dt: base,
+      upd_stkpc_tp: "1",
+    });
+    const rows = dropPhantomToday(Array.isArray(data.stk_dt_pole_chart_qry) ? data.stk_dt_pole_chart_qry : []);
+    const closes = rows.slice(0, 60).map((r) => Math.abs(Number(String(r.cur_prc ?? "").replace(/[+,\s]/g, "")))).filter((v) => v > 0);
+    if (closes.length < 60) return null;
+    const ma60 = closes.reduce((s, v) => s + v, 0) / 60;
+    return { close: closes[0], ma60: Math.round(ma60), above: closes[0] > ma60 };
+  } catch {
+    return null;
+  }
+}
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * 연금 계좌를 굴린다 — **주 1회.**
@@ -243,6 +274,40 @@ export async function runPension(
     }
   }
 
+  /* ── ②-a **60일선 이탈** — 위험자산 ETF 가 60일선 아래로 마감했으면 비운다 (안전자산은 안 본다) ── */
+  const ma60Cache = new Map<string, Awaited<ReturnType<typeof ma60Of>>>();
+  const ma60 = async (code: string) => {
+    if (!ma60Cache.has(code)) {
+      ma60Cache.set(code, await ma60Of(client, code));
+      await pause(220);
+    }
+    return ma60Cache.get(code) ?? null;
+  };
+  let maExits = 0;
+  for (const pos of [...a.positions]) {
+    if (pos.safe) continue;
+    const still = a.positions.find((x) => x.code === pos.code);
+    if (!still || still.qty <= 0) continue;
+    const m = await ma60(pos.code);
+    if (!m || m.above) continue;
+    const px = priceOf(pos.code) ?? m.close;
+    const r = sell(a, pos.code, still.funding, still.qty, px, `종가 ${m.close.toLocaleString()} < 60일선 ${m.ma60.toLocaleString()} — 추세가 꺾였다, 비운다`, ["연금 60일선"], "evening", date);
+    if (r.ok) {
+      maExits += 1;
+      actions.push({
+        side: "sell",
+        code: pos.code,
+        name: pos.name,
+        qty: still.qty,
+        price: px,
+        funding: still.funding,
+        why: `60일선 이탈 (${m.close.toLocaleString()} < ${m.ma60.toLocaleString()})`,
+        used: ["연금 60일선"],
+        pnl: r.pnl,
+      });
+    }
+  }
+
   /*
    * ── ②-b **모자란 자리 채우기** (2026-09-04) ──
    *
@@ -286,12 +351,28 @@ export async function runPension(
       });
     }
   }
-  progress.done("exit", `정리 ${trims.length}건 · 채움 ${topUps.length}건`);
+  progress.done("exit", `정리 ${trims.length}건 · 60일선 ${maExits}건 · 채움 ${topUps.length}건`);
 
   /* ── ③ 담을 것 고르기 ── */
   progress.start("scan");
-  const picks = await pickBy(client, method, account);
-  progress.done("scan", `위험 ${picks.risky.length} · 안전 ${picks.safe.length}`);
+  const picked = await pickBy(client, method, account);
+  /* 60일선 아래 ETF 는 안 담는다 — 못 읽은 것도 안 담는다(모르면 안 사는 쪽) */
+  const belowMa: { name: string; reason: string }[] = [];
+  const risky: typeof picked.risky = [];
+  for (const pk of picked.risky) {
+    const m = await ma60(pk.code);
+    if (!m) {
+      belowMa.push({ name: pk.name, reason: "60일선을 못 읽었다 — 모르면 안 담는다" });
+      continue;
+    }
+    if (!m.above) {
+      belowMa.push({ name: pk.name, reason: `종가 ${m.close.toLocaleString()} < 60일선 ${m.ma60.toLocaleString()} — 추세가 안 받친다` });
+      continue;
+    }
+    risky.push({ ...pk, used: [...pk.used, "60일선 위"], why: `${pk.why} · 60일선 위(${m.ma60.toLocaleString()})` });
+  }
+  const picks = { ...picked, risky };
+  progress.done("scan", `위험 ${picks.risky.length}(60일선 아래 ${belowMa.length}) · 안전 ${picks.safe.length}`);
   progress.skip("signal", "ETF 는 신호등을 쓰지 않는다");
   progress.skip("ai");
 
@@ -385,6 +466,7 @@ export async function runPension(
       : "") +
     text.replace(/^## [^\n]*\n/, "");
 
+  planned.skipped.push(...belowMa);
   if (planned.skipped.length > 0) {
     text +=
       "\n\n### 안 담은 것\n" + planned.skipped.map((s) => `- ${s.name} — ${s.reason}`).join("\n");
