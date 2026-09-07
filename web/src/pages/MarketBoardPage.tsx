@@ -95,30 +95,22 @@ function judge(args: {
       else if (vix >= 25) score -= 1;
     }
     if (nightFut !== null) r.push({ text: `야간선물 ${pct(nightFut)}`, good: nightFut > 0.3 ? true : nightFut < -0.3 ? false : null });
-    const trendNeutral = sig.checks.some((c) => c.key === "trend" && c.pass === null);
-    let level: Level;
-    let name: string;
-    let verdict: string;
+    /* 국면 이름·행동은 서버 판정 그대로 — 미장·VIX 는 색만 한 단계 내린다(공포는 여기서도) */
+    const rg = sig.regime;
+    let level: Level = sig.level === "green" ? "green" : sig.level === "red" ? "red" : "yellow";
+    let name = rg?.name ?? (sig.level === "green" ? "상승 추세" : sig.level === "red" ? "하락 추세" : "횡보");
+    let verdict = rg?.action ?? "";
     if (vix !== null && vix >= 30) {
       level = "red";
       name = "공포";
       verdict = "새로 사지 말고 손절선만 지킨다";
-    } else if (score >= 2 && sig.level === "green") {
-      level = "green";
-      name = "상승 추세";
-      verdict = "사도 되는 날 — 거르고, 추세를 따른다";
-    } else if (score <= -2 || sig.level === "red") {
+    } else if (rg?.key === "up" && (usLevel === "red" || (vix !== null && vix >= 25))) {
+      level = "yellow";
+      verdict = `${verdict} · 단, 미장이 흔들린다`;
+    } else if (rg?.key === "down" || rg?.key === "fear") {
       level = "red";
-      name = "하락 추세";
-      verdict = "새로 사지 않는다. 출구만 본다";
-    } else if (trendNeutral || (above20Trend !== null && above20Trend > 3)) {
+    } else if (rg?.key !== "up") {
       level = "yellow";
-      name = trendNeutral ? "한쪽만 도는 장" : "반등 시도";
-      verdict = trendNeutral ? "코스피·코스닥이 갈렸다 — 도는 쪽만, 소량" : "소량만 — 확인되면 추종";
-    } else {
-      level = "yellow";
-      name = "횡보";
-      verdict = "관망 — 감시만 걸어 둔다";
     }
     return { level, name, verdict, reasons: r, score };
   }

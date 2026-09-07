@@ -17059,3 +17059,15 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .msig-chip.none i { background: var(--border); }
 .bd-regime-why { max-height: 4.2rem; overflow: hidden; }
 .bd-regime-why:hover { max-height: none; }
+
+/* 신호등 국면 판정기 (2026-09-07 밤) */
+.msig-lv { font-weight: 400; color: var(--muted); font-size: 0.85em; }
+.msig-early { display: block; color: #e6a23c; }
+.msig-arrow { font-size: 0.8em; margin-left: 0.15rem; }
+.msig-arrow.up { color: var(--red); }
+.msig-arrow.down { color: var(--blue); }
+.msig-regime-why { margin: 0.35rem 0 0; font-size: 0.8rem; color: var(--muted); display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.msig-verify { margin-top: 0.4rem; border-top: 1px dashed var(--border); padding-top: 0.4rem; }
+.msig-verify-h { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.3rem; }
+.msig-verify-t td, .msig-verify-t th { font-size: 0.8rem; }
+.msig-verify-rg td { color: var(--muted); }

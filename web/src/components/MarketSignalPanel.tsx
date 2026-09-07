@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type MarketSignal } from "../api";
+import { api, type MarketSignal, type SignalVerification } from "../api";
 
 /**
  * 시장 전체 신호등.
@@ -38,6 +38,21 @@ export function MarketSignalPanel({ collapsible = false }: { collapsible?: boole
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openWhy, setOpenWhy] = useState<string | null>(null);
+  /* 검증 표 (2026-09-07 밤) — 초록/노랑/빨강이었던 날의 5·20거래일 뒤 코스피 수익률 */
+  const [verify, setVerify] = useState<SignalVerification | null | "loading">(null);
+  const REGIME_KO: Record<string, string> = { up: "상승 추세", rebound: "반등 시도", range: "횡보", down: "하락 추세", fear: "공포", split: "한쪽만 도는 장" };
+  async function openVerify() {
+    if (verify !== null && verify !== "loading") {
+      setVerify(null);
+      return;
+    }
+    setVerify("loading");
+    try {
+      setVerify(await api.marketSignalVerify());
+    } catch {
+      setVerify(null);
+    }
+  }
   /* 접을 수 있는 자리(시황 대시보드)에서만 기본 접음. 보드·미니는 그대로 편다 */
   const [collapsed, setCollapsed] = useState<boolean>(() => (collapsible ? readCollapsed() : false));
   const toggle = () => {
@@ -88,10 +103,12 @@ export function MarketSignalPanel({ collapsible = false }: { collapsible?: boole
         <span className={`sig-dot big ${sig.level}`} />
         <div className="msig-title">
           <b>
-            시장 신호등 {meta.label}
+            {sig.regime ? sig.regime.name : `시장 신호등 ${meta.label}`}
             {sig.level !== "unknown" && <span className="msig-score num"> {sig.score}점</span>}
+            {sig.regime && <span className="msig-lv"> · {meta.label}</span>}
           </b>
-          <span className="msig-note">{meta.note}</span>
+          <span className="msig-note">{sig.regime ? sig.regime.action : meta.note}</span>
+          {sig.note && <span className="msig-note msig-early">{sig.note}</span>}
         </div>
         {/* 접혀 있으면 「통과 n/m」만 — 펴야 칩이 보인다 */}
         {collapsible && collapsed && (
@@ -117,10 +134,63 @@ export function MarketSignalPanel({ collapsible = false }: { collapsible?: boole
           >
             <i />
             {c.label}
-            <em className="num">{c.value.length > 26 ? `${c.value.slice(0, 26)}…` : c.value}</em>
+            {c.arrow && c.arrow !== "flat" && <span className={`msig-arrow ${c.arrow}`}>{c.arrow === "up" ? "↗" : "↘"}</span>}
+            <em className="num">{c.value.length > 30 ? `${c.value.slice(0, 30)}…` : c.value}</em>
           </button>
         ))}
       </div>
+      )}
+      {!(collapsible && collapsed) && sig.regime && sig.regime.why.length > 0 && (
+        <p className="msig-regime-why">
+          왜 {sig.regime.name}인가 — {sig.regime.why.join(" · ")}
+          <button className="ord-mk" onClick={() => void openVerify()}>
+            {verify === "loading" ? "…" : verify ? "검증 닫기" : "맞았나? (검증)"}
+          </button>
+        </p>
+      )}
+      {!(collapsible && collapsed) && verify && verify !== "loading" && (
+        <div className="msig-verify">
+          <div className="msig-verify-h">
+            판정 뒤 코스피 수익률 — {verify.days}일치{verify.backfilled > 0 ? ` (그중 ${verify.backfilled}일은 지수·수급만으로 되짚은 부분 백필)` : ""}
+          </div>
+          <table className="ord-table msig-verify-t">
+            <thead>
+              <tr>
+                <th>판정</th>
+                <th className="r">일수</th>
+                <th className="r">5일 뒤 평균</th>
+                <th className="r">5일 승률</th>
+                <th className="r">20일 뒤 평균</th>
+                <th className="r">20일 승률</th>
+              </tr>
+            </thead>
+            <tbody>
+              {verify.rows.map((r) => (
+                <tr key={r.level}>
+                  <td>
+                    <span className={`sig-dot ${r.level}`} /> {LEVEL_TEXT[r.level]?.label ?? r.level}
+                  </td>
+                  <td className="r">{r.n}</td>
+                  <td className={`r ${r.avg5 !== null ? (r.avg5 > 0 ? "positive" : "negative") : ""}`}>{r.avg5 !== null ? `${r.avg5 > 0 ? "+" : ""}${r.avg5.toFixed(2)}%` : "-"}</td>
+                  <td className="r">{r.win5 !== null ? `${r.win5.toFixed(0)}%` : "-"}</td>
+                  <td className={`r ${r.avg20 !== null ? (r.avg20 > 0 ? "positive" : "negative") : ""}`}>{r.avg20 !== null ? `${r.avg20 > 0 ? "+" : ""}${r.avg20.toFixed(2)}%` : "-"}</td>
+                  <td className="r">{r.win20 !== null ? `${r.win20.toFixed(0)}%` : "-"}</td>
+                </tr>
+              ))}
+              {verify.byRegime.map((r) => (
+                <tr key={`rg-${r.regime}`} className="msig-verify-rg">
+                  <td>{REGIME_KO[r.regime] ?? r.regime}</td>
+                  <td className="r">{r.n}</td>
+                  <td className={`r ${r.avg5 !== null ? (r.avg5 > 0 ? "positive" : "negative") : ""}`}>{r.avg5 !== null ? `${r.avg5 > 0 ? "+" : ""}${r.avg5.toFixed(2)}%` : "-"}</td>
+                  <td className="r">{r.win5 !== null ? `${r.win5.toFixed(0)}%` : "-"}</td>
+                  <td className={`r ${r.avg20 !== null ? (r.avg20 > 0 ? "positive" : "negative") : ""}`}>{r.avg20 !== null ? `${r.avg20 > 0 ? "+" : ""}${r.avg20.toFixed(2)}%` : "-"}</td>
+                  <td className="r">-</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="table-note">문턱은 그대로다. 이 표가 나쁘게 쌓이면 그때 고칠 근거가 된다 (15:35 판정을 하루 한 줄 기록).</div>
+        </div>
       )}
       {!(collapsible && collapsed) && openWhy &&
         (() => {

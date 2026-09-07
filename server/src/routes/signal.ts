@@ -8,7 +8,7 @@ import {
   SCREEN_UNIVERSES,
   startScreen,
 } from "../signalScreen.js";
-import { evaluateMarket } from "../marketSignal.js";
+import { evaluateMarket, verifyMarketSignal } from "../marketSignal.js";
 import {
   exitSuperEntry,
   getActiveSuper,
@@ -168,6 +168,14 @@ export function createSignalRouter(client: KiwoomClient): Router {
   router.get("/market", async (req, res, next) => {
     try {
       res.json(await evaluateMarket(client, req.query.force === "1"));
+    } catch (e) {
+      next(e);
+    }
+  });
+  /** 신호등 검증 — 초록/노랑/빨강이었던 날의 5·20거래일 뒤 코스피 수익률 (2026-09-07 밤) */
+  router.get("/market/verify", async (_req, res, next) => {
+    try {
+      res.json(await verifyMarketSignal(client));
     } catch (err) {
       next(err);
     }

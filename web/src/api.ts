@@ -1365,6 +1365,7 @@ export const api = {
   paperTradeRemove: (id: string) => deleteJson<PaperResult>(`/api/paper/${id}`),
   marketSignal: (force = false) =>
     getJson<MarketSignal>(`/api/signal/market${force ? "?force=1" : ""}`),
+  marketSignalVerify: () => getJson<SignalVerification>("/api/signal/market/verify"),
   signalScreenStart: (market: string, level: "green" | "yellow", limit: number, universe = "trade-value") =>
     postJson<{ jobId: string }>(
       `/api/signal/screen/start?market=${market}&level=${level}&limit=${limit}&universe=${encodeURIComponent(universe)}`,
@@ -4423,6 +4424,8 @@ export interface PublishJob {
 export interface MarketCheck {
   /** 값은 있으나 방향 없음 — pass 가 null 이어도 「모름」이 아니다 (2026-09-07) */
   neutral?: boolean;
+  /** 개선 중 / 악화 중 / 그대로 */
+  arrow?: "up" | "down" | "flat" | null;
   key: string;
   label: string;
   pass: boolean | null;
@@ -4431,12 +4434,29 @@ export interface MarketCheck {
   weight: number;
 }
 
+export interface MarketRegime {
+  key: "up" | "rebound" | "range" | "down" | "fear" | "split";
+  name: string;
+  action: string;
+  side?: "코스피" | "코스닥";
+  why: string[];
+}
 export interface MarketSignal {
   level: "green" | "yellow" | "red" | "unknown";
   score: number;
   checks: MarketCheck[];
   summary: string;
   evaluatedAt: string;
+  /** 국면 판정 (2026-09-07 밤) */
+  regime?: MarketRegime;
+  note?: string;
+}
+export interface SignalVerification {
+  days: number;
+  backfilled: number;
+  rows: { level: "green" | "yellow" | "red"; n: number; avg5: number | null; avg20: number | null; win5: number | null; win20: number | null }[];
+  byRegime: { regime: string; n: number; avg5: number | null; avg20: number | null; win5: number | null }[];
+  latest: { date: string; level: string; score: number; regime: string; kospi: number | null; backfilled?: boolean }[];
 }
 
 
