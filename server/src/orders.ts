@@ -1848,6 +1848,30 @@ async function onAutoWatchFill(id: string, ev: { filled: number; price: number; 
   await writeWatches(rows);
 }
 
+/** 감시 폼이 종목을 고르면 — 지금 값·전일 종가·(있으면) 평단·매매가능수량·예수금을 한 번에 */
+export async function watchQuote(main: KiwoomClient, code: string): Promise<{
+  price: number;
+  prevClose: number;
+  changeRate: number;
+  avg: number | null;
+  held: number;
+  ableQty: number;
+  deposit: number;
+}> {
+  const [q, acct] = await Promise.all([quoteOf(main, code), orderAccount().catch(() => null)]);
+  if (!q) throw new Error("현재가를 못 읽었다");
+  const h = acct?.holdings.find((x) => x.code === code && !x.creditType) ?? null;
+  return {
+    price: q.price,
+    prevClose: q.prevClose,
+    changeRate: q.prevClose > 0 ? ((q.price - q.prevClose) / q.prevClose) * 100 : 0,
+    avg: h && h.avg > 0 ? h.avg : null,
+    held: h?.qty ?? 0,
+    ableQty: h?.ableQty ?? 0,
+    deposit: acct?.deposit ?? 0,
+  };
+}
+
 export async function autoWatchSummary(): Promise<{ allowed: boolean; waiting: number; fired: number }> {
   const [g, rows] = await Promise.all([getGuard(), readWatches()]);
   return { allowed: g.allowAutoWatch, waiting: rows.filter((r) => r.status === "waiting").length, fired: rows.filter((r) => r.status === "fired").length };

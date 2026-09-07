@@ -32,6 +32,7 @@ import {
   buyPower,
   cancelAutoWatch,
   listAutoWatches,
+  watchQuote,
 } from "../orders.js";
 import { readOrderStops, setOrderStop } from "../orderStops.js";
 import {
@@ -347,6 +348,41 @@ export function createOrderRouter(main: KiwoomClient): Router {
       const b = (req.body ?? {}) as Record<string, unknown>;
       const stops = await setOrderStop(String(b.code ?? ""), Number(b.stop) || 0, String(b.name ?? ""));
       res.json({ stops });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
+    }
+  });
+
+  /**
+   * 자동감시주문 (2026-09-07 밤) — 목록·취소·종목 값. 등록은 /prepare 에 `watch` 를 실어 /execute(비밀번호)를
+   * 그대로 지난다. 취소는 세션만(돈이 안 나가는 방향).
+   * ⚠️ 09-07 예약을 걷어낼 때 이 라우트가 같이 잘려 나가 탭이 404 를 받았다 — 벤티지가 잡았다.
+   */
+  router.get("/watch", async (_req, res) => {
+    try {
+      const [rows, summary] = await Promise.all([listAutoWatches(), autoWatchSummary()]);
+      res.json({ rows, ...summary });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : "조회 실패", rows: [] });
+    }
+  });
+  router.get("/watch/quote", async (req, res) => {
+    try {
+      const code = String(req.query.code ?? "");
+      if (!/^\d{6}$/.test(code)) {
+        res.status(400).json({ error: "code(6자리)가 있어야 한다" });
+        return;
+      }
+      res.json(await watchQuote(main, code));
+    } catch (e) {
+      res.status(502).json({ error: e instanceof Error ? e.message : "조회 실패" });
+    }
+  });
+  router.post("/watch/cancel", async (req, res) => {
+    try {
+      const b = (req.body ?? {}) as Record<string, unknown>;
+      const row = await cancelAutoWatch(String(b.id ?? ""), clientIp(req));
+      res.json({ ok: true, row });
     } catch (e) {
       res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
     }

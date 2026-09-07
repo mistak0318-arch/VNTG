@@ -16513,3 +16513,14 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-rsv-st.fired { color: var(--accent, #e6a23c); }
 .ord-rsv-st.filled { color: var(--green, #4ade80); }
 .ord-rsv-st.expired { color: var(--muted); }
+
+/* 자동감시 전용 폼 (2026-09-07 밤, 호가창 주문과 분리) */
+.ord-wform { margin-bottom: 1rem; border: 1px solid var(--accent, #e6a23c); border-radius: 10px; background: var(--panel-2); overflow: hidden; }
+.ord-wform-head { padding: 0.7rem 0.7rem 0.4rem; display: flex; flex-direction: column; gap: 0.45rem; }
+.ord-wform-quote { font-size: 0.86rem; line-height: 1.4; }
+.ord-side-tabs { display: flex; gap: 0.35rem; }
+.ord-side-tabs button { flex: 1; padding: 0.45rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--text); font-weight: 700; cursor: pointer; }
+.ord-side-tabs button.buy.on { border-color: var(--red); color: var(--red); background: color-mix(in srgb, var(--red) 12%, var(--panel)); }
+.ord-side-tabs button.sell.on { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, var(--panel)); }
+.ord-wform .ord-watch-body { padding: 0.3rem 0.7rem 0.7rem; }
+.ord-wform .ord-go { margin-top: 0.3rem; }

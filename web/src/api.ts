@@ -1004,6 +1004,10 @@ export const api = {
     watch?: WatchInput | null;
   }) => orderPost<{ nonce: string; expiresAt: number; ticket: OrderTicket }>("/api/order/prepare", input),
   orderWatch: () => getJson<{ rows: AutoWatch[]; allowed: boolean; waiting: number; fired: number }>("/api/order/watch"),
+  orderWatchQuote: (code: string) =>
+    getJson<{ price: number; prevClose: number; changeRate: number; avg: number | null; held: number; ableQty: number; deposit: number }>(
+      `/api/order/watch/quote?code=${code}`,
+    ),
   orderWatchCancel: (id: string) => orderPost<{ ok: boolean; row: AutoWatch }>("/api/order/watch/cancel", { id }),
   /** 어느 가격에 몇 주까지 — 현금만·증거금·신용 셋을 한 번에 (주문 세션 안에서만) */
   orderBuyPower: (code: string, price: number) =>
