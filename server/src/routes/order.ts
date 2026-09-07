@@ -27,10 +27,11 @@ import {
   saveSettings,
   forgetPassword,
   type OrderVenue,
+  type WatchInput,
+  autoWatchSummary,
   buyPower,
-  cancelReservation,
-  listReservations,
-  reservedSummary,
+  cancelAutoWatch,
+  listAutoWatches,
 } from "../orders.js";
 import { readOrderStops, setOrderStop } from "../orderStops.js";
 import {
@@ -60,6 +61,27 @@ import { sendTelegram } from "../telegram.js";
  * L7: 상태 바꾸는 요청은 POST 만, `X-VNTG-Order: 1` 헤더가 있어야 하고, Origin 이 오면 우리 호스트여야 한다.
  * 브라우저가 다른 사이트에서 폼을 던져도 이 헤더는 못 붙인다(단순 요청이 아니라 CORS 프리플라이트에서 죽는다).
  */
+/** 화면이 보낸 감시 조건을 모양만 맞춘다 — 뜻이 맞는지는 prepareOrder 가 잰다 */
+function watchInputOf(v: unknown): WatchInput | null {
+  if (!v || typeof v !== "object") return null;
+  const w = v as Record<string, unknown>;
+  const numOr = (x: unknown): number | null => (x === null || x === undefined || x === "" ? null : Number(x));
+  const then =
+    w.then && typeof w.then === "object"
+      ? { pct: Number((w.then as Record<string, unknown>).pct), exec: String((w.then as Record<string, unknown>).exec ?? "market") as "market" | "limit_now" }
+      : null;
+  return {
+    dir: w.dir === "ge" ? "ge" : "le",
+    basis: (["price", "prevClose", "avg", "now"].includes(String(w.basis)) ? String(w.basis) : "price") as WatchInput["basis"],
+    pct: numOr(w.pct),
+    price: numOr(w.price),
+    exec: (["market", "limit_trigger", "limit_now", "limit_fixed"].includes(String(w.exec)) ? String(w.exec) : "market") as WatchInput["exec"],
+    limitPrice: numOr(w.limitPrice),
+    validUntil: w.validUntil ? String(w.validUntil) : null,
+    then,
+  };
+}
+
 export function createOrderRouter(main: KiwoomClient): Router {
   const router = Router();
 
@@ -330,29 +352,6 @@ export function createOrderRouter(main: KiwoomClient): Router {
     }
   });
 
-  /**
-   * 예약주문 (2026-09-07) — 목록·취소. 새 예약은 /prepare 에 `reserve:true` 로 들어와
-   * /execute(비밀번호)를 그대로 지난다 — 문이 하나 더 생긴 게 아니다.
-   * 취소는 돈이 안 나가는 방향이라 세션만 본다(POST + 헤더 검사는 위 문지기가 한다).
-   */
-  router.get("/reserved", async (_req, res) => {
-    try {
-      const [rows, summary] = await Promise.all([listReservations(), reservedSummary()]);
-      res.json({ rows, ...summary });
-    } catch (e) {
-      res.status(500).json({ error: e instanceof Error ? e.message : "조회 실패", rows: [] });
-    }
-  });
-  router.post("/reserved/cancel", async (req, res) => {
-    try {
-      const b = (req.body ?? {}) as Record<string, unknown>;
-      const row = await cancelReservation(String(b.id ?? ""), clientIp(req));
-      res.json({ ok: true, row });
-    } catch (e) {
-      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
-    }
-  });
-
   router.get("/log", async (req, res) => {
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
     const rows = (await readLog(limit)).filter((r) => r.kind !== "raw");
@@ -378,8 +377,8 @@ export function createOrderRouter(main: KiwoomClient): Router {
           /* 신용 (2026-09-07) — 안 보내면 현금. 켜져 있는지는 prepareOrder 가 가드로 잰다 */
           credit: b.credit === true,
           loanDate: blank(b.loanDate) ? null : String(b.loanDate),
-          /* 예약 (2026-09-07) — 안 보내면 지금 내는 주문 */
-          reserve: b.reserve === true,
+          /* 자동감시 (2026-09-07 밤) — 조건 덩어리. 값 검증은 prepareOrder 가 한다 */
+          watch: watchInputOf(b.watch),
         },
         clientIp(req),
         sessionOf(req),

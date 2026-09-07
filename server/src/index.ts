@@ -52,7 +52,7 @@ import { createAiRouter } from "./routes/ai.js";
 import { createAskRouter } from "./routes/ask.js";
 import { createSysRouter } from "./routes/sys.js";
 import { createOrderRouter } from "./routes/order.js";
-import { startOrderAudit, startReservedOrders } from "./orders.js";
+import { startAutoWatch, startOrderAudit } from "./orders.js";
 import { startSysScheduler } from "./sysAssist.js";
 import { createTradeRouter } from "./routes/trade.js";
 import { createCustomThemeRouter } from "./routes/customThemes.js";
@@ -228,8 +228,8 @@ app.use("/api/sys", createSysRouter(client));
 app.use("/api/order", createOrderRouter(client));
 /* 주문 접근을 6시간마다 스스로 훑는다 — 이상이 없으면 조용하다 (2026-09-04) */
 startOrderAudit();
-/* 예약주문 (2026-09-07) — 거래일 08:30 에 기다리는 주문서를 낸다. 조건 없음, 한 번뿐 */
-startReservedOrders(client);
+/* 자동감시주문 (2026-09-07 밤) — 정규장에 값을 보다가 조건에 닿으면 미리 승인된 주문서를 한 번 낸다 */
+startAutoWatch(client);
 app.use("/api/trade", createTradeRouter(client));
 app.use("/api/custom-themes", createCustomThemeRouter(client));
 app.use("/api/sector-flow", createSectorFlowRouter(client));

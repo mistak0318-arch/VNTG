@@ -1000,12 +1000,11 @@ export const api = {
     /** 신용(융자) — 안 보내면 현금 */
     credit?: boolean;
     loanDate?: string | null;
-    /** 예약 — 다음 거래일 08:30 에 (2026-09-07) */
-    reserve?: boolean;
+    /** 자동감시 — 조건에 닿으면 (2026-09-07 밤) */
+    watch?: WatchInput | null;
   }) => orderPost<{ nonce: string; expiresAt: number; ticket: OrderTicket }>("/api/order/prepare", input),
-  /** 예약 목록 + 요약 (주문 세션 안에서만) */
-  orderReserved: () => getJson<{ rows: Reservation[]; allowed: boolean; waiting: number; nextFireDate: string }>("/api/order/reserved"),
-  orderReservedCancel: (id: string) => orderPost<{ ok: boolean; row: Reservation }>("/api/order/reserved/cancel", { id }),
+  orderWatch: () => getJson<{ rows: AutoWatch[]; allowed: boolean; waiting: number; fired: number }>("/api/order/watch"),
+  orderWatchCancel: (id: string) => orderPost<{ ok: boolean; row: AutoWatch }>("/api/order/watch/cancel", { id }),
   /** 어느 가격에 몇 주까지 — 현금만·증거금·신용 셋을 한 번에 (주문 세션 안에서만) */
   orderBuyPower: (code: string, price: number) =>
     getJson<BuyPower>(`/api/order/buy-power?code=${code}&price=${Math.round(price)}`),
@@ -6645,8 +6644,8 @@ export interface OrderGuard {
   allowedCodes: string[] | null;
   /** 신용 주문 허용 — orderGuard.json 에서만 켠다 (2026-09-07) */
   allowCredit?: boolean;
-  /** 예약주문 허용 — 기본 true, orderGuard.json 에서 끈다 (2026-09-07) */
-  allowReserved?: boolean;
+  /** 자동감시 허용 — 기본 true (2026-09-07 밤) */
+  allowAutoWatch?: boolean;
 }
 
 /** 매수 가능 수량 — 현금만 · 증거금 적용 · 신용 (2026-09-07) */
@@ -6688,8 +6687,8 @@ export interface OrderStatus {
   venueAllowed: OrderVenue[];
   tradeTypes: TradeType[];
   watching: number;
-  /** 예약주문 요약 (2026-09-07) */
-  reserved: { allowed: boolean; waiting: number; nextFireDate: string };
+  /** 자동감시 요약 (2026-09-07 밤) */
+  autoWatch: { allowed: boolean; waiting: number; fired: number };
 }
 
 /** 매매구분 — 서버의 표를 그대로 받는다 (2026-09-04). 화면이 목록을 들고 있지 않다 */
@@ -6753,22 +6752,49 @@ export interface OrderTicket {
   /** 신용(융자) 주문 — 확인 창이 크게 적어야 한다 */
   credit?: boolean;
   loanDate?: string | null;
-  /** 예약 (2026-09-07) — 실행을 누르면 키움에 안 가고 `fireDate` 08:30 에 서버가 낸다 */
-  reserve?: boolean;
-  fireDate?: string | null;
+  /** 자동감시 (2026-09-07 밤) — 있으면 실행이 곧 등록이다 */
+  watch?: WatchSpec | null;
 }
 
-/** 예약주문 한 건 (2026-09-07) */
-export interface Reservation {
+export type WatchDir = "le" | "ge";
+export type WatchBasis = "price" | "prevClose" | "avg" | "now";
+export type WatchExec = "market" | "limit_trigger" | "limit_now" | "limit_fixed";
+export interface WatchSpec {
+  dir: WatchDir;
+  basis: WatchBasis;
+  pct: number | null;
+  basisPrice: number | null;
+  trigger: number;
+  exec: WatchExec;
+  limitPrice: number | null;
+  validUntil: string;
+  then: { pct: number; exec: "market" | "limit_now" } | null;
+}
+export interface WatchInput {
+  dir: WatchDir;
+  basis: WatchBasis;
+  pct: number | null;
+  price: number | null;
+  exec: WatchExec;
+  limitPrice: number | null;
+  validUntil: string | null;
+  then: { pct: number; exec: "market" | "limit_now" } | null;
+}
+export interface AutoWatch {
   id: string;
   at: string;
   ip: string;
   ticket: OrderTicket;
-  fireDate: string;
-  status: "waiting" | "sent" | "failed" | "missed" | "cancelled";
+  spec: WatchSpec;
+  status: "waiting" | "fired" | "filled" | "failed" | "expired" | "cancelled";
   firedAt?: string;
+  firePrice?: number;
   ordNo?: string;
+  fillQty?: number;
+  fillPrice?: number;
   msg?: string;
+  parentId?: string;
+  childId?: string;
 }
 
 export interface CancelTicket {
@@ -6836,7 +6862,7 @@ export interface AccessAudit {
 
 export interface OrderLogRow {
   at: string;
-  kind: "session" | "order" | "cancel" | "fill" | "reject" | "error" | "lock" | "password" | "raw" | "reserve";
+  kind: "session" | "order" | "cancel" | "fill" | "reject" | "error" | "lock" | "password" | "raw" | "watch";
   mock: boolean;
   ip?: string;
   side?: "buy" | "sell";

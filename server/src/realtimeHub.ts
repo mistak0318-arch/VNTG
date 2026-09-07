@@ -116,6 +116,21 @@ export function peekRealtime(): { client: RealtimeClient | null; store: Realtime
 }
 
 /**
+ * 자동감시가 부른다 (2026-09-07) — 이 종목의 체결(0B)이 **꼭** 들어와야 한다. 고정 자리(subscribeKeep)로
+ * 건다. 연결이 아직 없으면(밤) 아무것도 안 한다 — 스케줄러가 뜰 때 다시 부른다.
+ */
+const ensured = new Set<string>();
+export function ensureLiveCode(code: string): void {
+  if (!client || ensured.has(code)) return;
+  ensured.add(code);
+  try {
+    client.subscribeKeep("0B", subCode(code));
+  } catch {
+    ensured.delete(code);
+  }
+}
+
+/**
  * 지금 **몇 종목을 걸어 뒀나.**
  *
  * 스케줄러가 시작될 때 실제 함수로 바뀐다. 안 돌고 있으면 0 이다.

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Request, Response } from "express";
 import { peerIp, sameHex, scryptHex } from "./auth.js";
 import { priceMap } from "./cisRun.js";
+import { ensureLiveCode, peekRealtime } from "./realtimeHub.js";
 import { KiwoomApiError, KiwoomClient } from "./kiwoomClient.js";
 import { pushNotice, stockLink } from "./notifyCenter.js";
 import { sendTelegram } from "./telegram.js";
@@ -16,8 +17,9 @@ import { sendTelegram } from "./telegram.js";
  *
  * ## 조사 (2026-09-03, openapi.kiwoom.com 가이드 · 공식 래퍼 목록)
  *   REST 가 주는 주문   = 현금 매수 kt10000 · 매도 kt10001 · 정정 kt10002 · 취소 kt10003 (신용 kt10006~9 는 안 쓴다)
- *   REST 에 **없는 것**  = 예약주문 · 자동감시주문 — 영웅문 HTS 의 기능이다. 이걸 흉내 내려면 우리
- *                        서버가 스스로 주문을 쏴야 하고, 그게 곧 설계가 제외한 「자동감시」다. 만들지 않는다.
+ *   REST 에 **없는 것**  = 예약주문 · 자동감시주문 — 영웅문 HTS 의 기능이다. 09-03 엔 「만들지 않는다」였고,
+ *                        **09-07 밤 벤티지 지시로 자동감시를 우리 서버가 한다** (예약은 그날 만들었다 걷어냈다).
+ *                        어떻게 못 박았는지는 아래 「자동감시주문」 절.
  *
  * ## ⚠️ 정정 (2026-09-04) — 스톱지정가는 REST 로 된다
  *
@@ -156,11 +158,12 @@ export interface OrderGuard {
    */
   allowCredit: boolean;
   /**
-   * **예약주문을 허용하나** (2026-09-07). 기본 true — 벤티지가 직접 요청한 기능이라 켜 두되,
-   * 끄는 자리는 파일이다. 예약은 「서버가 사람 대신 시각만 미뤄 내는 주문」이라 다른 한도와
-   * 같은 급의 결정으로 본다. false 로 적으면 새 예약을 안 받고 **기다리던 것도 안 나간다.**
+   * **자동감시주문을 허용하나** (2026-09-07 밤). 벤티지: "예약이 아니라 자동감시주문이 더 맞는
+   * 표현이겠다." 서버가 값을 보다가 조건에 닿으면 사람이 미리 비밀번호까지 넣어 둔 주문서를 낸다.
+   * 09-03 설계가 뺀 자리를 벤티지 지시로 연 것이라, 끄는 자리는 여기 파일이다. false 면 새로
+   * 안 받고 **기다리던 감시도 발동하지 않는다.**
    */
-  allowReserved: boolean;
+  allowAutoWatch: boolean;
 }
 
 const DEFAULT_GUARD: OrderGuard = {
@@ -172,7 +175,7 @@ const DEFAULT_GUARD: OrderGuard = {
   marketHoursOnly: true,
   allowedCodes: null,
   allowCredit: false,
-  allowReserved: true,
+  allowAutoWatch: true,
 };
 
 interface OrderAuthFile {
@@ -208,8 +211,8 @@ export type OrderLogKind =
   | "lock"
   | "password"
   | "raw"
-  /** 예약주문 — 접수·취소·놓침. 실제로 나간 것은 "order" 로 남는다(한도는 그걸 센다) */
-  | "reserve";
+  /** 자동감시 — 등록·취소·만료·발동. 실제로 나간 것은 "order" */
+  | "watch";
 
 export interface OrderLogRow {
   at: string;
@@ -749,11 +752,31 @@ export interface OrderTicket {
   credit: boolean;
   loanDate: string | null;
   /**
-   * **예약** (2026-09-07). true 면 실행 단계에서 키움에 안 내고 `orderReserved.json` 에 적어 두며,
-   * `fireDate`(KST, YYYY-MM-DD) 08:30 에 서버가 낸다. 조건은 없다 — **시각만** 미룬다.
+   * **자동감시** (2026-09-07 밤). null 이면 보통 주문. 있으면 실행 단계에서 키움에 안 내고
+   * `orderWatch.json` 에 적힌다 — 서버가 값을 보다가 `spec.trigger` 에 닿으면 `spec.exec` 대로 낸다.
    */
-  reserve: boolean;
-  fireDate: string | null;
+  watch: WatchSpec | null;
+}
+
+export type WatchDir = "le" | "ge";
+export type WatchBasis = "price" | "prevClose" | "avg" | "now";
+export type WatchExec = "market" | "limit_trigger" | "limit_now" | "limit_fixed";
+export interface WatchSpec {
+  /** le: 이하가 되면 · ge: 이상이 되면 */
+  dir: WatchDir;
+  /** price: 값을 바로 적음 · prevClose/avg/now: 기준가 대비 pct */
+  basis: WatchBasis;
+  pct: number | null;
+  basisPrice: number | null;
+  /** 발동가(절대값, 호가 단위) */
+  trigger: number;
+  /** 닿으면 어떻게 내나 — 시장가 · 지정가(발동가) · 지정가(그때 현재가) · 지정가(적은 값) */
+  exec: WatchExec;
+  limitPrice: number | null;
+  /** 유효한 마지막 날(KST) — 그날 장이 끝나면 만료 */
+  validUntil: string;
+  /** 매수 감시가 체결되면 자동으로 거는 매도 감시 — 체결가 대비 pct */
+  then: { pct: number; exec: "market" | "limit_now" } | null;
 }
 
 export interface CancelTicket {
@@ -796,8 +819,20 @@ export interface PrepareInput {
   credit?: boolean;
   /** 신용 매도의 대출일(YYYYMMDD). 신용 매수엔 없다 */
   loanDate?: string | null;
-  /** 예약 — 다음 접수 시작(08:30)에 내 달라 */
-  reserve?: boolean;
+  /** 자동감시 — 조건에 닿으면 내 달라 (2026-09-07 밤) */
+  watch?: WatchInput | null;
+}
+
+export interface WatchInput {
+  dir: WatchDir;
+  basis: WatchBasis;
+  pct: number | null;
+  /** basis=price 일 때의 발동가 */
+  price: number | null;
+  exec: WatchExec;
+  limitPrice: number | null;
+  validUntil: string | null;
+  then: { pct: number; exec: "market" | "limit_now" } | null;
 }
 
 function reject(msg: string, input: Partial<PrepareInput>, ip: string): never {
@@ -867,28 +902,83 @@ export async function prepareOrder(
    * 그렇다고 시간외 창을 새로 박아 두지는 않는다 — 시간표는 2026-09-14 KRX 애프터시장 개편 때
    * 한 번에 고치기로 한 자리다(docs/다음작업_TODO.md). 그때까지는 키움이 거절하게 둔다.
    */
-  const reserve = input.reserve === true;
-  let fireDate: string | null = null;
-  if (reserve) {
+  const wi = input.watch ?? null;
+  let watchSpec: WatchSpec | null = null;
+  if (wi) {
     /*
-     * 예약은 **좁게** 받는다 (2026-09-07). 영웅문·한투 MTS 의 예약주문이 받는 것과 같은 폭이다.
-     *   거래소 KRX 만 — 08:30 동시호가 접수가 예약의 뜻이다. NXT 프리마켓은 다른 물건이다
-     *   구분 보통·시장가·조건부지정가·최유리·최우선 — 동시호가에 IOC/FOK·스톱·시간외는 없다
-     *   신용 없음 — 빚은 사람이 그 자리에서 낸다
-     * 그리고 한 번뿐이다. 「기간 예약(매일 반복)」은 안 만든다 — 전날 체결 여부를 서버가 잘못
-     * 읽으면 같은 종목을 이틀 사게 된다. 그 위험이 편의보다 크다.
+     * 자동감시 (2026-09-07 밤). 영웅문S 「자동감시주문」과 같은 폭 — 조건은 가격 하나(이하/이상),
+     * 기준가는 값·전일 종가·평단·지금 값. 닿으면 시장가 또는 지정가(발동가·그때 현재가·적은 값).
+     * KRX 체결로만 판정한다(NXT 는 호가가 얇아 한 틱에 헛발동한다 — 손절 감시와 같은 원칙).
      */
-    if (!g.allowReserved) reject('예약주문이 꺼져 있다 — orderGuard.json 의 "allowReserved" 를 true 로', input, ip);
-    if (input.venue !== "KRX") reject("예약주문은 KRX 로만 낸다 — 08:30 동시호가에 들어가는 것이 예약이다", input, ip);
-    if (!RESERVE_TRADE_TYPES.has(tt.code)) reject(`예약주문은 ${tt.label} 로 못 낸다 — 보통·시장가·조건부지정가·최유리·최우선만`, input, ip);
-    if (credit) reject("예약주문은 신용으로 못 낸다", input, ip);
-    const waiting = (await listReservations()).filter((r) => r.status === "waiting");
-    if (waiting.length >= RESERVE_MAX) reject(`예약은 ${RESERVE_MAX}건까지 — 기다리는 것을 먼저 정리해야 한다`, input, ip);
-    if (waiting.some((r) => r.ticket.code === input.code && r.ticket.side === input.side)) {
-      reject(`${input.name || input.code} ${input.side === "buy" ? "매수" : "매도"} 예약이 이미 기다리고 있다 — 겹쳐 내지 않는다`, input, ip);
+    if (!g.allowAutoWatch) reject('자동감시가 꺼져 있다 — orderGuard.json 의 "allowAutoWatch" 를 true 로', input, ip);
+    if (input.venue !== "KRX") reject("자동감시는 KRX 로만 낸다 — 판정도 KRX 체결로 한다", input, ip);
+    if (credit) reject("자동감시는 신용으로 못 낸다", input, ip);
+    if (tt.cond) reject("자동감시엔 스톱지정가를 쓰지 않는다 — 감시가 곧 스톱이다", input, ip);
+    if (wi.exec === "market" && tt.code !== "3") reject("시장가로 내는 감시는 매매구분이 시장가여야 한다", input, ip);
+    if (wi.exec !== "market" && tt.code !== "0") reject("지정가로 내는 감시는 매매구분이 보통이어야 한다", input, ip);
+    const q = await quoteOf(main, input.code);
+    if (!q || q.price <= 0) reject("현재가를 못 읽어 감시 조건을 잴 수 없다", input, ip);
+    let basisPrice: number | null = null;
+    let trigger = 0;
+    if (wi.basis === "price") {
+      if (!wi.price || !Number.isInteger(wi.price) || wi.price <= 0) reject("발동가가 이상하다", input, ip);
+      trigger = wi.price;
+    } else {
+      if (wi.pct === null || !Number.isFinite(wi.pct) || wi.pct === 0 || Math.abs(wi.pct) > 30) reject("기준가 대비 %가 이상하다 (0 아닌 ±30 이내)", input, ip);
+      if (wi.basis === "prevClose") basisPrice = q.prevClose;
+      else if (wi.basis === "now") basisPrice = q.price;
+      else {
+        if (input.side !== "sell") reject("평단 기준은 매도 감시에서만 — 매수엔 평단이 없다", input, ip);
+        const acct = await orderAccount().catch(() => null);
+        const h = acct?.holdings.find((x) => x.code === input.code && !x.creditType);
+        if (!h || h.avg <= 0) reject("잔고에 그 종목이 없어 평단을 모른다", input, ip);
+        basisPrice = h.avg;
+      }
+      if (!basisPrice || basisPrice <= 0) reject("기준가를 못 읽었다", input, ip);
+      trigger = toTick(basisPrice * (1 + wi.pct / 100));
     }
-    fireDate = nextFireDate();
-  } else if (g.marketHoursOnly && !tt.late && !venueOpen(input.venue)) {
+    if (trigger <= 0) reject("발동가를 못 정했다", input, ip);
+    /* 이미 조건 안이면 감시가 아니라 그냥 주문이다 — 등록 즉시 나가는 것은 사람이 뜻한 게 아니다 */
+    if ((wi.dir === "le" && q.price <= trigger) || (wi.dir === "ge" && q.price >= trigger)) {
+      reject(`지금 값(${q.price.toLocaleString()})이 이미 조건 안이다 — 감시가 아니라 바로 주문으로`, input, ip);
+    }
+    const offNow = (Math.abs(trigger - q.price) / q.price) * 100;
+    if (offNow > 30) reject(`발동가가 지금 값에서 ${offNow.toFixed(1)}% 떨어져 있다 (30% 이내)`, input, ip);
+    if (wi.exec === "limit_fixed") {
+      if (!wi.limitPrice || !Number.isInteger(wi.limitPrice) || wi.limitPrice <= 0) reject("지정가 값이 이상하다", input, ip);
+      const off = (Math.abs(wi.limitPrice - trigger) / trigger) * 100;
+      if (off > g.priceCollarPct) reject(`지정가가 발동가에서 ${off.toFixed(1)}% 벗어났다 (한도 ${g.priceCollarPct}%)`, input, ip);
+    }
+    const today = kstParts().date;
+    let validUntil = wi.validUntil && /^\d{4}-\d{2}-\d{2}$/.test(wi.validUntil) ? wi.validUntil : today;
+    if (validUntil < today) validUntil = today;
+    if (validUntil > addDays(today, 30)) reject("유효기간은 30일까지", input, ip);
+    if (wi.basis === "prevClose" && validUntil !== today) reject("전일 종가 기준은 당일만 — 내일은 기준가가 다르다", input, ip);
+    let then: WatchSpec["then"] = null;
+    if (wi.then) {
+      if (input.side !== "buy") reject("「체결되면 매도 감시」는 매수 감시에만 붙는다", input, ip);
+      if (!Number.isFinite(wi.then.pct) || wi.then.pct === 0 || Math.abs(wi.then.pct) > 30) reject("체결 뒤 매도 %가 이상하다", input, ip);
+      if (wi.then.exec !== "market" && wi.then.exec !== "limit_now") reject("체결 뒤 매도는 시장가 또는 지정가(그때 현재가)", input, ip);
+      then = { pct: wi.then.pct, exec: wi.then.exec };
+    }
+    const active = (await listAutoWatches()).filter((r) => r.status === "waiting");
+    if (active.length >= WATCH_MAX) reject(`자동감시는 ${WATCH_MAX}건까지 — 기다리는 것을 먼저 정리해야 한다`, input, ip);
+    if (active.some((r) => r.ticket.code === input.code && r.ticket.side === input.side)) {
+      reject(`${input.name || input.code} ${input.side === "buy" ? "매수" : "매도"} 감시가 이미 있다 — 겹쳐 걸지 않는다`, input, ip);
+    }
+    watchSpec = {
+      dir: wi.dir,
+      basis: wi.basis,
+      pct: wi.basis === "price" ? null : wi.pct,
+      basisPrice,
+      trigger,
+      exec: wi.exec,
+      limitPrice: wi.exec === "limit_fixed" ? wi.limitPrice : null,
+      validUntil,
+      then,
+    };
+  }
+  if (!watchSpec && g.marketHoursOnly && !tt.late && !venueOpen(input.venue)) {
     reject(`${input.venue} 가 주문을 받는 시간이 아니다`, input, ip);
   }
 
@@ -898,9 +988,11 @@ export async function prepareOrder(
   } catch {
     ref = 0;
   }
-  if (input.price === null && ref <= 0) reject("현재가를 못 읽어 주문 금액을 잴 수 없다 — 값을 적는 구분으로", input, ip);
+  if (input.price === null && ref <= 0 && !watchSpec) reject("현재가를 못 읽어 주문 금액을 잴 수 없다 — 값을 적는 구분으로", input, ip);
 
-  if (tt.cond && input.condPrice !== null) {
+  if (watchSpec) {
+    /* 감시는 발동가가 멀리 있는 게 정상이다 — 가격 자는 **발동하는 순간** 그때 값으로 잰다 */
+  } else if (tt.cond && input.condPrice !== null) {
     /*
      * 스톱은 자를 둘 쓴다.
      *   발동가 ↔ 현재가   넓게(stopCollarPct) — 손절선은 원래 멀리 둔다
@@ -932,15 +1024,14 @@ export async function prepareOrder(
       reject(`지정가가 현재가(${ref.toLocaleString()})에서 ${off.toFixed(1)}% 벗어났다 (한도 ${g.priceCollarPct}%)`, input, ip);
     }
   }
-  const unit = input.price ?? input.condPrice ?? ref;
+  const unit = watchSpec ? (watchSpec.limitPrice ?? watchSpec.trigger) : (input.price ?? input.condPrice ?? ref);
   const amount = unit * input.qty;
   if (amount > g.maxOrderKrw) reject(`한 건 한도 초과 — ${amount.toLocaleString()}원 > ${g.maxOrderKrw.toLocaleString()}원`, input, ip);
-  if (reserve) {
-    /* 예약끼리의 합이 하루 한도 안이어야 한다 — 나가는 날 아침에 한 번 더 잰다(그날 이미 나간 것과 함께) */
-    const waiting = (await listReservations()).filter((r) => r.status === "waiting");
-    const sum = waiting.reduce((a, r) => a + r.ticket.amount, 0);
+  if (watchSpec) {
+    const active = (await listAutoWatches()).filter((r) => r.status === "waiting");
+    const sum = active.reduce((a, r) => a + r.ticket.amount, 0);
     if (sum + amount > g.maxDailyKrw) {
-      reject(`예약 합이 하루 한도를 넘는다 — 기다리는 ${sum.toLocaleString()}원 + 이번 ${amount.toLocaleString()}원 > ${g.maxDailyKrw.toLocaleString()}원`, input, ip);
+      reject(`감시 합이 하루 한도를 넘는다 — 기다리는 ${sum.toLocaleString()}원 + 이번 ${amount.toLocaleString()}원 > ${g.maxDailyKrw.toLocaleString()}원`, input, ip);
     }
   } else {
     const used = await todayUsage();
@@ -965,8 +1056,7 @@ export async function prepareOrder(
     amount,
     credit,
     loanDate: credit && input.side === "sell" ? loanDate : null,
-    reserve,
-    fireDate,
+    watch: watchSpec,
   };
   return { ...issueNonce(ticket, owner), ticket };
 }
@@ -1090,21 +1180,15 @@ export async function executePrepared(
   const t = p.ticket;
   const mock = orderIsMock();
   const tag = mock ? "[모의]" : "[실전]";
-  /*
-   * **예약** — 여기서 키움에 안 낸다. 비밀번호까지 맞힌 주문서를 파일에 적어 두고 끝.
-   * 실제로 내는 것은 `fireReserved()` 다 — 그 함수가 이 파일에서 읽는 것은 **이 자리를 지나온
-   * 주문서뿐**이다. 사람이 보고·비밀번호 넣고·「예약」이라고 크게 쓰인 확인 창을 누른 것.
-   */
-  if (t.kind === "order" && t.reserve && t.fireDate) {
-    const row = await addReservation(t, ip);
+  if (t.kind === "order" && t.watch) {
+    const row = await addAutoWatch(t, ip);
     const sideKo = t.side === "buy" ? "매수" : "매도";
-    const priceKo = t.price === null ? t.tradeLabel : `${t.price.toLocaleString()}원`;
-    await appendLog({ kind: "reserve", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, tradeType: t.tradeType, venue: t.venue, amount: t.amount, msg: `예약 접수 — ${t.fireDate} 08:30 에 낸다 (${row.id})` });
+    await appendLog({ kind: "watch", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.watch.limitPrice, tradeType: t.tradeType, venue: t.venue, amount: t.amount, msg: `감시 등록 (${row.id}) — ${watchSay(t.watch)}` });
     void sendTelegram(
-      `⏰ ${tag} <b>예약 ${sideKo}</b> ${esc(t.name)} ${t.qty}주 @ ${priceKo}\n${esc(fireDateKo(t.fireDate))} 08:30 에 나갑니다 · 금액 ${won(t.amount)}\n주문 › 예약 탭에서 취소할 수 있습니다.`,
+      `👁 ${tag} <b>자동감시 ${sideKo} 등록</b> ${esc(t.name)} ${t.qty}주\n${esc(watchSay(t.watch))}\n${t.watch.validUntil} 까지 · 주문 › 자동감시 탭에서 취소`,
       "order",
     ).catch(() => undefined);
-    return { ordNo: "", msg: `예약 접수 — ${fireDateKo(t.fireDate)} 08:30 에 나간다`, ticket: t, remembered };
+    return { ordNo: "", msg: `감시 등록 — ${watchSay(t.watch)}`, ticket: t, remembered };
   }
   try {
     const r = await placeOrder(t);
@@ -1395,53 +1479,10 @@ export async function buyPower(code: string, price: number): Promise<BuyPower> {
   return { code, price: Number(uv), cash, cashOnly, margin, credit, creditEnabled: g.allowCredit, missing };
 }
 
-/* ── 예약주문 (2026-09-07) ─────────────────────────────────────────────── */
+/* ── 거래일 (2026-09-07) — 자동감시가 쓴다 ──────────────────────────── */
 
 /**
- * 벤티지: "예약 주문이 키움 REST 에 없으면 니가 서브메뉴 하나 만들어서 할 수 있잖아."
- * "기존의 예약 주문 메뉴들 다 검토해서… 사용성과 정밀성 보안을 최우선 고려해서 구현해봐."
- *
- * **무엇인가.** 영웅문S·한투 MTS 의 「예약주문」은 장 밖에서 받아 뒀다가 다음 영업일 장 시작 전
- * (영웅문은 08:20 무렵, 한투는 08:30)에 대신 넣어 주는 것이다. 조건이 없다 — **시각만** 미룬다.
- * 키움 REST 엔 이 창구가 없어서(한투 REST 엔 CTSC0008U 가 있다) 여기서 같은 일을 한다.
- *
- * **설계가 뺀 「자동감시주문」과 어떻게 다른가.** 자동감시는 서버가 값을 지켜보다 **판단**해서
- * 낸다. 예약은 판단이 없다 — 사람이 값·수량·구분을 다 정하고 비밀번호까지 넣은 주문서를,
- * 정해진 시각에 그대로 낸다. 방아쇠는 여전히 사람이 당겼고, 서버는 손가락을 08:30 까지 붙들고
- * 있을 뿐이다. 그래도 서버가 스스로 키움을 부르는 첫 자리라 아래를 못 박는다:
- *   · 이 파일에서 읽는 주문서는 **executePrepared 를 지나온 것뿐** — 만드는 함수가 그것 하나
- *   · **한 번뿐** — 실패해도 다시 안 낸다(재시도 루프는 자동주문의 시작이다). 사람이 다시 건다
- *   · **놓치면 안 낸다** — 08:30~08:59 창을 서버가 꺼진 채 지나면 「놓침」으로 알리고 끝.
- *     09:10 에 뒤늦게 내는 것은 사람이 정한 값(전날 종가 기준)과 다른 시장에 내는 것이다
- *   · 나가는 아침에 **한도를 다시 잰다** — 종목 허용·한 건·하루 합·건수·가격 자(전일 종가 대비)
- *   · 취소는 언제든, 예약 탭에서 — 주문 세션만 있으면 된다(돈이 안 나가는 방향)
- *   · `orderGuard.json` 의 `allowReserved:false` 면 새로 안 받고 기다리던 것도 안 나간다
- */
-export interface Reservation {
-  id: string;
-  /** 접수 시각·주소 */
-  at: string;
-  ip: string;
-  ticket: OrderTicket;
-  /** 나가는 날 (KST YYYY-MM-DD) — 08:30 */
-  fireDate: string;
-  status: "waiting" | "sent" | "failed" | "missed" | "cancelled";
-  /** 결과 */
-  firedAt?: string;
-  ordNo?: string;
-  msg?: string;
-}
-
-const RESERVED_FILE = join(DATA_DIR, "orderReserved.json");
-/** 예약이 받는 매매구분 — 동시호가에 들어갈 수 있는 것만 */
-const RESERVE_TRADE_TYPES = new Set(["0", "3", "5", "6", "7"]);
-const RESERVE_MAX = 10;
-/** 나가는 창 — KRX 접수 시작(08:30)부터 시가 결정(09:00) 전까지. 그 뒤는 「놓침」 */
-const FIRE_FROM = 510;
-const FIRE_TO = 539;
-/**
- * KRX 휴장일 — 주말 말고 쉬는 날. 여기 없는 휴일이면 그날 아침 키움이 거절하고 「실패」로 남는다
- * (한 번뿐이라 다음 날로 안 넘어간다 — 알림을 보고 사람이 다시 건다). 해가 바뀌면 채울 것.
+ * KRX 휴장일 — 주말 말고 쉬는 날. 자동감시는 이 날엔 발동하지 않는다(값도 안 온다). 해가 바뀌면 채울 것.
  */
 const KRX_HOLIDAYS = new Set([
   "2026-09-24", "2026-09-25", // 추석
@@ -1464,173 +1505,357 @@ function addDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** 다음에 08:30 창이 열리는 날 — 오늘 08:30 전이면 오늘, 아니면 다음 거래일 */
-export function nextFireDate(now = new Date()): string {
-  const { date, minute } = kstParts(now);
-  let d = minute < FIRE_FROM && isTradingDate(date) ? date : addDays(date, 1);
-  for (let i = 0; i < 14 && !isTradingDate(d); i++) d = addDays(d, 1);
-  return d;
+/* ── 자동감시주문 (2026-09-07 밤) ──────────────────────────────────────── */
+
+/**
+ * 벤티지: "어떤 종목이 얼만큼 하락하면 매수, 이런 걸 하려고 했었지. 매수 이후 얼마 이하 하락하면
+ * 매도(시장가인지, 현재가인지도 다 체크 가능하게끔). 잔고에서도 예약주문으로 체결된 건에 대해서는
+ * 표시해 주고 관리할 수 있는 기능. 예약이 아니라 자동감시주문이 더 맞는 표현이겠다."
+ *
+ * **이 자리는 09-03 설계가 「안 한다」로 뺀 자동감시주문이다.** 그날 벤티지가 "자동주문은 아니어야겠지"
+ * 라고 했고, 09-07 밤에 뒤집었다. 서버가 값을 보다가 **판단**해서 낸다는 성질이 처음 생겼다.
+ * 그래서 겹은 하나도 안 빼고 그 위에 올린다:
+ *   · 감시는 **주문서**다 — prepare(한도) → 확인 창 → **주문 비밀번호** → 파일. 만드는 길이 그것 하나
+ *   · **한 번뿐** — 닿으면 한 번 내고 끝. 실패해도 재시도 없음. 같은 종목·방향 감시는 하나만
+ *   · 판정은 **KRX 체결**(실시간 0B, 없으면 ka10095 조회)로 — NXT 틱은 안 본다
+ *   · 발동하는 순간 검문을 다시 한다 — 허용·한 건·하루 합·건수 + 지정가 ↔ 그때 값 ±priceCollarPct
+ *   · 정규장 09:00~15:30 에만 발동한다. 유효기간은 30일까지, 지나면 「만료」
+ *   · `allowAutoWatch:false` 면 새로 안 받고 기다리던 것도 발동하지 않는다
+ *   · 「체결되면 매도 감시」는 매수 감시를 등록하는 확인 창에 **글자로 적혀** 같은 비밀번호로 승인된다.
+ *     자식 감시의 금액은 부모의 체결 금액을 못 넘는다
+ */
+export interface AutoWatch {
+  id: string;
+  at: string;
+  ip: string;
+  ticket: OrderTicket;
+  spec: WatchSpec;
+  status: "waiting" | "fired" | "filled" | "failed" | "expired" | "cancelled";
+  firedAt?: string;
+  /** 발동 순간의 값 */
+  firePrice?: number;
+  ordNo?: string;
+  fillQty?: number;
+  fillPrice?: number;
+  msg?: string;
+  /** 「체결되면 매도 감시」로 태어난 자식이면 부모, 부모면 자식 */
+  parentId?: string;
+  childId?: string;
 }
 
-const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
-function fireDateKo(date: string): string {
-  const wd = new Date(date + "T00:00:00Z").getUTCDay();
-  return `${date.slice(5).replace("-", "/")}(${WEEKDAY_KO[wd]})`;
+const WATCH_FILE = join(DATA_DIR, "orderWatch.json");
+const WATCH_MAX = 20;
+/** 발동 창 — 정규장. 동시호가(08:30~09:00)의 예상체결가로는 발동하지 않는다 */
+const WATCH_FROM = 540;
+const WATCH_TO = 930;
+
+/** 호가 단위 (KRX 2023-01) */
+function tickOf(p: number): number {
+  return p < 2000 ? 1 : p < 5000 ? 5 : p < 20000 ? 10 : p < 50000 ? 50 : p < 200000 ? 100 : p < 500000 ? 500 : 1000;
+}
+function toTick(p: number): number {
+  const t = tickOf(p);
+  return Math.floor(p / t) * t;
 }
 
-async function readReserved(): Promise<Reservation[]> {
-  const v = await readJson<{ rows: Reservation[] }>(RESERVED_FILE, { rows: [] });
+/** 지금 값과 전일 종가 — ka10095 한 번 */
+async function quoteOf(main: KiwoomClient, code: string): Promise<{ price: number; prevClose: number } | null> {
+  try {
+    const { data } = await main.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10095", { stk_cd: `${code}_AL` });
+    const rows = Array.isArray(data.atn_stk_infr) ? (data.atn_stk_infr as Record<string, unknown>[]) : [];
+    const q = rows.find((r) => String(r.stk_cd ?? "").replace(/_(AL|NX)$/i, "") === code) ?? rows[0];
+    if (!q) return null;
+    const price = Math.abs(num(q.cur_prc));
+    const chg = num(q.pred_pre);
+    return { price, prevClose: price - chg };
+  } catch {
+    return null;
+  }
+}
+
+export function watchSay(s: WatchSpec): string {
+  const basisKo =
+    s.basis === "price" ? "" : s.basis === "prevClose" ? "전일 종가" : s.basis === "avg" ? "평단" : "등록 때 값";
+  const cond =
+    s.basis === "price"
+      ? `${s.trigger.toLocaleString()}원 ${s.dir === "le" ? "이하" : "이상"}`
+      : `${basisKo}(${(s.basisPrice ?? 0).toLocaleString()}) 대비 ${s.pct! > 0 ? "+" : ""}${s.pct}% → ${s.trigger.toLocaleString()}원 ${s.dir === "le" ? "이하" : "이상"}`;
+  const exec =
+    s.exec === "market" ? "시장가" : s.exec === "limit_trigger" ? "발동가 지정가" : s.exec === "limit_now" ? "그때 현재가 지정가" : `${(s.limitPrice ?? 0).toLocaleString()}원 지정가`;
+  const then = s.then ? ` · 체결되면 체결가 대비 ${s.then.pct}% 에 ${s.then.exec === "market" ? "시장가" : "지정가"} 매도 감시` : "";
+  return `${cond}면 ${exec}${then}`;
+}
+
+async function readWatches(): Promise<AutoWatch[]> {
+  const v = await readJson<{ rows: AutoWatch[] }>(WATCH_FILE, { rows: [] });
   return Array.isArray(v.rows) ? v.rows : [];
 }
 
-async function writeReserved(rows: Reservation[]): Promise<void> {
-  /* 끝난 것은 최근 60건만 남긴다 — 기록은 orderLog 가 다 갖고 있다 */
-  const waiting = rows.filter((r) => r.status === "waiting");
-  const done = rows.filter((r) => r.status !== "waiting").slice(-60);
-  await writeJson(RESERVED_FILE, { rows: [...waiting, ...done] });
+async function writeWatches(rows: AutoWatch[]): Promise<void> {
+  const live = rows.filter((r) => r.status === "waiting" || r.status === "fired");
+  const done = rows.filter((r) => r.status !== "waiting" && r.status !== "fired").slice(-80);
+  await writeJson(WATCH_FILE, { rows: [...live, ...done] });
 }
 
-export async function listReservations(): Promise<Reservation[]> {
-  return (await readReserved()).sort((a, b) => (a.status === "waiting" ? 0 : 1) - (b.status === "waiting" ? 0 : 1) || b.at.localeCompare(a.at));
+export async function listAutoWatches(): Promise<AutoWatch[]> {
+  const rank = (s: AutoWatch["status"]) => (s === "waiting" ? 0 : s === "fired" ? 1 : 2);
+  return (await readWatches()).sort((a, b) => rank(a.status) - rank(b.status) || b.at.localeCompare(a.at));
 }
 
-async function addReservation(t: OrderTicket, ip: string): Promise<Reservation> {
-  const rows = await readReserved();
-  const row: Reservation = {
+async function addAutoWatch(t: OrderTicket, ip: string, parentId?: string): Promise<AutoWatch> {
+  if (!t.watch) throw new Error("감시 조건이 없다");
+  const rows = await readWatches();
+  const row: AutoWatch = {
     id: randomBytes(6).toString("hex"),
     at: new Date().toISOString(),
     ip,
     ticket: t,
-    fireDate: t.fireDate ?? nextFireDate(),
+    spec: t.watch,
     status: "waiting",
+    ...(parentId ? { parentId } : {}),
   };
   rows.push(row);
-  await writeReserved(rows);
+  if (parentId) {
+    const p = rows.find((r) => r.id === parentId);
+    if (p) p.childId = row.id;
+  }
+  await writeWatches(rows);
+  void ensureLiveCode(t.code);
   return row;
 }
 
-export async function cancelReservation(id: string, ip: string): Promise<Reservation> {
-  const rows = await readReserved();
+export async function cancelAutoWatch(id: string, ip: string): Promise<AutoWatch> {
+  const rows = await readWatches();
   const row = rows.find((r) => r.id === id);
-  if (!row) throw new Error("그 예약이 없다");
-  if (row.status !== "waiting") throw new Error(`이미 ${reservationStatusKo(row.status)} 예약이다`);
-  if (firing) throw new Error("지금 예약이 나가는 중이다 — 잠시 뒤 미체결 탭에서 취소하세요");
+  if (!row) throw new Error("그 감시가 없다");
+  if (row.status !== "waiting") throw new Error(`이미 ${autoWatchStatusKo(row.status)} 감시다`);
+  if (watchFiring) throw new Error("지금 감시가 발동 중이다 — 잠시 뒤 다시");
   row.status = "cancelled";
   row.firedAt = new Date().toISOString();
   row.msg = "사람이 취소";
-  await writeReserved(rows);
+  await writeWatches(rows);
   const t = row.ticket;
-  await appendLog({ kind: "reserve", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, venue: t.venue, amount: t.amount, msg: `예약 취소 (${row.id})` });
-  void sendTelegram(`⏰ 예약 취소 — ${esc(t.name)} ${t.side === "buy" ? "매수" : "매도"} ${t.qty}주`, "order").catch(() => undefined);
+  await appendLog({ kind: "watch", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, venue: t.venue, amount: t.amount, msg: `감시 취소 (${row.id})` });
+  void sendTelegram(`👁 감시 취소 — ${esc(t.name)} ${t.side === "buy" ? "매수" : "매도"} ${t.qty}주`, "order").catch(() => undefined);
   return row;
 }
 
-export function reservationStatusKo(s: Reservation["status"]): string {
-  return s === "waiting" ? "기다리는 중" : s === "sent" ? "나감" : s === "failed" ? "실패" : s === "missed" ? "놓침" : "취소됨";
+export function autoWatchStatusKo(s: AutoWatch["status"]): string {
+  return s === "waiting" ? "지켜보는 중" : s === "fired" ? "발동 — 체결 대기" : s === "filled" ? "체결" : s === "failed" ? "실패" : s === "expired" ? "만료" : "취소됨";
 }
 
-let firing = false;
+let watchFiring = false;
+let lastPoll = 0;
+const pollCache = new Map<string, { price: number; at: number }>();
+
+/** 지금 값 — 실시간 KRX 체결이 20초 안이면 그것, 아니면 조회(5초에 한 번 묶어서) */
+async function livePrices(main: KiwoomClient, codes: string[]): Promise<Map<string, { price: number; from: "실시간" | "조회" }>> {
+  const out = new Map<string, { price: number; from: "실시간" | "조회" }>();
+  const { store } = peekRealtime();
+  const need: string[] = [];
+  for (const code of codes) {
+    const tick = store?.getLatestKrx("0B", code);
+    const raw = tick?.values?.["10"];
+    const fresh = tick && Date.now() - tick.at < 20_000;
+    if (raw && fresh) {
+      const n = Math.abs(Number(String(raw).replace(/[+,\s]/g, "")));
+      if (Number.isFinite(n) && n > 0) {
+        out.set(code, { price: n, from: "실시간" });
+        continue;
+      }
+    }
+    need.push(code);
+  }
+  if (need.length > 0) {
+    if (Date.now() - lastPoll > 5_000) {
+      lastPoll = Date.now();
+      try {
+        const m = await priceMap(main, need);
+        for (const [c, p] of m) pollCache.set(c, { price: p, at: Date.now() });
+      } catch {
+        /* 이번 틱은 캐시로 */
+      }
+    }
+    for (const c of need) {
+      const v = pollCache.get(c);
+      if (v && Date.now() - v.at < 30_000) out.set(c, { price: v.price, from: "조회" });
+    }
+  }
+  return out;
+}
 
 /**
- * 창이 열려 있으면 오늘 것을 낸다. 지난 것은 「놓침」으로 접는다. 15초마다 불린다.
- * 한 번에 하나씩, 순서대로 — 키움이 초당 요청을 제한한다.
+ * 3초마다. 정규장 밖이면 만료만 정리한다. 안이면 값을 읽어 조건에 닿은 것을 **한 번** 낸다.
  */
-async function fireReserved(main: KiwoomClient): Promise<void> {
-  if (firing) return;
+async function runAutoWatch(main: KiwoomClient): Promise<void> {
+  if (watchFiring) return;
   if (!ordersEnabled() || !orderClient()) return;
-  const rows = await readReserved();
+  const rows = await readWatches();
   const waiting = rows.filter((r) => r.status === "waiting");
   if (waiting.length === 0) return;
   const { date, minute } = kstParts();
   const tag = orderIsMock() ? "[모의]" : "[실전]";
-  firing = true;
+  watchFiring = true;
   try {
     let changed = false;
+    /* 만료 — 유효한 마지막 날의 장이 끝났거나 날이 지났다 */
     for (const r of waiting) {
-      const t = r.ticket;
-      const sideKo = t.side === "buy" ? "매수" : "매도";
-      /* 날이 지났다 — 서버가 꺼져 있었거나 창을 놓쳤다. 뒤늦게 내지 않는다 */
-      if (r.fireDate < date || (r.fireDate === date && minute > FIRE_TO)) {
-        r.status = "missed";
+      if (r.spec.validUntil < date || (r.spec.validUntil === date && minute > WATCH_TO)) {
+        r.status = "expired";
         r.firedAt = new Date().toISOString();
-        r.msg = "08:30~08:59 창을 지나쳤다(서버가 꺼져 있었나) — 다시 걸어야 한다";
+        r.msg = "유효기간이 지났다 — 닿지 않았다";
         changed = true;
-        await appendLog({ kind: "reserve", side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, venue: t.venue, amount: t.amount, msg: `예약 놓침 (${r.id}) — ${r.msg}` });
-        void sendTelegram(`⚠️ ${tag} <b>예약 놓침</b> ${esc(t.name)} ${sideKo} ${t.qty}주\n${esc(r.msg)}`, "order").catch(() => undefined);
-        continue;
+        const t = r.ticket;
+        await appendLog({ kind: "watch", side: t.side, code: t.code, name: t.name, qty: t.qty, venue: t.venue, msg: `감시 만료 (${r.id}) — ${watchSay(r.spec)}` });
+        void sendTelegram(`👁 ${tag} 감시 만료 — ${esc(t.name)} ${t.side === "buy" ? "매수" : "매도"} ${t.qty}주\n${esc(watchSay(r.spec))}`, "order").catch(() => undefined);
       }
-      if (r.fireDate !== date || minute < FIRE_FROM) continue;
-
-      /* 나가는 아침의 검문 — 접수 때 통과했어도 밤사이 바뀌었을 수 있다 */
-      let why: string | null = null;
-      const g = await getGuard();
-      if (!g.allowReserved) why = "예약주문이 꺼져 있다(orderGuard.allowReserved)";
-      else if (g.allowedCodes && g.allowedCodes.length > 0 && !g.allowedCodes.includes(t.code)) why = "허용 종목이 아니다";
-      else if (t.amount > g.maxOrderKrw) why = `한 건 한도 초과 — ${won(t.amount)} > ${won(g.maxOrderKrw)}`;
-      else {
-        const used = await todayUsage();
-        if (used.krw + t.amount > g.maxDailyKrw) why = `오늘 한도 초과 — 이미 ${won(used.krw)} + ${won(t.amount)}`;
-        else if (used.count + 1 > g.maxDailyCount) why = `오늘 건수 한도 초과 — ${used.count}/${g.maxDailyCount}`;
-      }
-      if (!why && t.price !== null) {
-        /* 전일 종가 자 — 밤사이 사람이 정한 값이 시장에서 멀어졌으면 안 낸다(오타·급변 둘 다) */
-        let ref = 0;
-        try {
-          ref = (await priceMap(main, [t.code])).get(t.code) ?? 0;
-        } catch {
-          ref = 0;
-        }
-        if (ref > 0) {
-          const off = (Math.abs(t.price - ref) / ref) * 100;
-          if (off > g.priceCollarPct) why = `지정가가 전일 종가(${ref.toLocaleString()})에서 ${off.toFixed(1)}% 벗어났다 (한도 ${g.priceCollarPct}%)`;
-        }
-      }
-      r.firedAt = new Date().toISOString();
-      changed = true;
-      if (why) {
-        r.status = "failed";
-        r.msg = why;
-        await appendLog({ kind: "reject", side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, venue: t.venue, tradeType: t.tradeType, msg: `예약 안 냄 (${r.id}) — ${why}` });
-        void sendTelegram(`⚠️ ${tag} <b>예약 안 냄</b> ${esc(t.name)} ${sideKo} ${t.qty}주\n${esc(why)}`, "order").catch(() => undefined);
-        continue;
-      }
-      try {
-        const res = await placeOrder(t);
-        r.status = "sent";
-        r.ordNo = res.ordNo;
-        r.msg = res.msg;
-        await appendLog({ kind: "order", ip: r.ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, condPrice: null, tradeType: t.tradeType, venue: t.venue, ordNo: res.ordNo, amount: t.amount, credit: false, msg: `예약 → ${res.msg}`, raw: res.raw });
-        const priceKo = t.price === null ? t.tradeLabel : `${t.price.toLocaleString()}원`;
-        void sendTelegram(
-          `⏰🧾 ${tag} <b>예약 ${sideKo} 나감</b> ${esc(t.name)} ${t.qty}주 @ ${priceKo} · KRX\n금액 ${won(t.amount)} · 주문번호 ${esc(res.ordNo || "?")}\n${esc(res.msg)}`,
-          "order",
-        ).catch(() => undefined);
-        if (res.ordNo) watch(res.ordNo, t);
-        void noteUsage();
-      } catch (e) {
-        const msg = e instanceof KiwoomApiError ? `${e.returnCode} ${e.message}` : e instanceof Error ? e.message : String(e);
-        r.status = "failed";
-        r.msg = msg;
-        await appendLog({ kind: "error", code: t.code, name: t.name, qty: t.qty, venue: t.venue, msg: `예약 실패 (${r.id}) — ${msg}`, raw: e instanceof KiwoomApiError ? e.raw : undefined });
-        void sendTelegram(`⚠️ ${tag} <b>예약 실패</b> ${esc(t.name)} ${sideKo} ${t.qty}주\n${esc(msg)}\n다시 안 냅니다 — 필요하면 직접 거세요.`, "order").catch(() => undefined);
-      }
-      await new Promise((ok) => setTimeout(ok, 400));
     }
-    if (changed) await writeReserved(rows);
+    const live = waiting.filter((r) => r.status === "waiting");
+    if (live.length > 0 && isTradingDate(date) && minute >= WATCH_FROM && minute <= WATCH_TO) {
+      for (const r of live) void ensureLiveCode(r.ticket.code);
+      const prices = await livePrices(main, [...new Set(live.map((r) => r.ticket.code))]);
+      for (const r of live) {
+        const q = prices.get(r.ticket.code);
+        if (!q) continue;
+        const hit = r.spec.dir === "le" ? q.price <= r.spec.trigger : q.price >= r.spec.trigger;
+        if (!hit) continue;
+        changed = true;
+        await fireAutoWatch(r, q.price, q.from, rows, tag);
+        await new Promise((ok) => setTimeout(ok, 400));
+      }
+    }
+    if (changed) await writeWatches(rows);
   } finally {
-    firing = false;
+    watchFiring = false;
   }
 }
 
-/** 예약 상태 요약 — 화면 띠와 탭 배지가 쓴다 */
-export async function reservedSummary(): Promise<{ allowed: boolean; waiting: number; nextFireDate: string }> {
-  const [g, rows] = await Promise.all([getGuard(), readReserved()]);
-  return { allowed: g.allowReserved, waiting: rows.filter((r) => r.status === "waiting").length, nextFireDate: nextFireDate() };
+/** 조건에 닿았다 — 검문 다시, 그리고 한 번 낸다 */
+async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: AutoWatch[], tag: string): Promise<void> {
+  const base = r.ticket;
+  const s = r.spec;
+  const sideKo = base.side === "buy" ? "매수" : "매도";
+  r.firedAt = new Date().toISOString();
+  r.firePrice = cur;
+  const g = await getGuard();
+  let why: string | null = null;
+  let price: number | null = null;
+  let tradeType = "3";
+  if (s.exec !== "market") {
+    tradeType = "0";
+    price = s.exec === "limit_trigger" ? s.trigger : s.exec === "limit_now" ? toTick(cur) : (s.limitPrice ?? s.trigger);
+    const off = (Math.abs(price - cur) / cur) * 100;
+    if (off > g.priceCollarPct) why = `지정가(${price.toLocaleString()})가 그때 값(${cur.toLocaleString()})에서 ${off.toFixed(1)}% 벗어났다 (한도 ${g.priceCollarPct}%)`;
+  }
+  const amount = (price ?? cur) * base.qty;
+  if (!why) {
+    if (!g.allowAutoWatch) why = "자동감시가 꺼져 있다(orderGuard.allowAutoWatch)";
+    else if (g.allowedCodes && g.allowedCodes.length > 0 && !g.allowedCodes.includes(base.code)) why = "허용 종목이 아니다";
+    else if (amount > g.maxOrderKrw) why = `한 건 한도 초과 — ${won(amount)} > ${won(g.maxOrderKrw)}`;
+    else {
+      const used = await todayUsage();
+      if (used.krw + amount > g.maxDailyKrw) why = `오늘 한도 초과 — 이미 ${won(used.krw)} + ${won(amount)}`;
+      else if (used.count + 1 > g.maxDailyCount) why = `오늘 건수 한도 초과 — ${used.count}/${g.maxDailyCount}`;
+    }
+  }
+  if (why) {
+    r.status = "failed";
+    r.msg = why;
+    await appendLog({ kind: "reject", side: base.side, code: base.code, name: base.name, qty: base.qty, price, venue: base.venue, tradeType, msg: `감시 발동했으나 안 냄 (${r.id}) — ${why}` });
+    void sendTelegram(`⚠️ ${tag} <b>감시 발동 — 안 냄</b> ${esc(base.name)} ${sideKo} ${base.qty}주 (값 ${cur.toLocaleString()})\n${esc(why)}`, "order").catch(() => undefined);
+    return;
+  }
+  const tt = tradeTypeOf(tradeType);
+  const t: OrderTicket = {
+    ...base,
+    price,
+    condPrice: null,
+    tradeType,
+    tradeLabel: tt?.label ?? (tradeType === "3" ? "시장가" : "보통(지정가)"),
+    refPrice: cur,
+    amount,
+    watch: null,
+  };
+  try {
+    const res = await placeOrder(t);
+    r.status = "fired";
+    r.ordNo = res.ordNo;
+    r.msg = res.msg;
+    await appendLog({ kind: "order", ip: r.ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, condPrice: null, tradeType: t.tradeType, venue: t.venue, ordNo: res.ordNo, amount: t.amount, credit: false, msg: `감시 발동(${from} ${cur.toLocaleString()}) → ${res.msg}`, raw: res.raw });
+    const priceKo = t.price === null ? "시장가" : `${t.price.toLocaleString()}원`;
+    void sendTelegram(
+      `👁🧾 ${tag} <b>감시 발동 — ${sideKo} 나감</b> ${esc(t.name)} ${t.qty}주 @ ${priceKo}\n${esc(watchSay(s))}\n그때 값 ${cur.toLocaleString()}(${from}) · 금액 ${won(t.amount)} · 주문번호 ${esc(res.ordNo || "?")}\n${esc(res.msg)}`,
+      "order",
+    ).catch(() => undefined);
+    void noteUsage();
+    if (res.ordNo) {
+      watch(res.ordNo, t);
+      const id = r.id;
+      fillHooks.set(res.ordNo, (ev) => void onAutoWatchFill(id, ev).catch(() => undefined));
+    }
+  } catch (e) {
+    const msg = e instanceof KiwoomApiError ? `${e.returnCode} ${e.message}` : e instanceof Error ? e.message : String(e);
+    r.status = "failed";
+    r.msg = msg;
+    await appendLog({ kind: "error", code: t.code, name: t.name, qty: t.qty, venue: t.venue, msg: `감시 발동 실패 (${r.id}) — ${msg}`, raw: e instanceof KiwoomApiError ? e.raw : undefined });
+    void sendTelegram(`⚠️ ${tag} <b>감시 발동 실패</b> ${esc(t.name)} ${sideKo} ${t.qty}주\n${esc(msg)}\n다시 안 냅니다.`, "order").catch(() => undefined);
+  }
 }
 
-export function startReservedOrders(main: KiwoomClient): void {
-  setInterval(() => void fireReserved(main).catch(() => undefined), 15_000);
-  console.log("[order] 예약주문 — 거래일 08:30~08:59 에 기다리는 주문서를 낸다 (한 번뿐, 놓치면 안 냄)");
+/** 발동한 주문이 체결됐다 — 기록하고, 「체결되면 매도 감시」가 있으면 자식을 건다 */
+async function onAutoWatchFill(id: string, ev: { filled: number; price: number; full: boolean; done: boolean; status: string }): Promise<void> {
+  const rows = await readWatches();
+  const r = rows.find((x) => x.id === id);
+  if (!r) return;
+  r.fillQty = ev.filled;
+  if (ev.price > 0) r.fillPrice = ev.price;
+  if (ev.done) {
+    r.status = ev.filled > 0 ? "filled" : "failed";
+    if (ev.filled === 0) r.msg = `체결 없이 끝났다 — ${ev.status}`;
+  }
+  if (ev.done && ev.filled > 0 && r.spec.then && r.ticket.side === "buy" && !r.childId) {
+    const fillPx = r.fillPrice && r.fillPrice > 0 ? r.fillPrice : r.firePrice ?? r.spec.trigger;
+    const trigger = toTick(fillPx * (1 + r.spec.then.pct / 100));
+    const childSpec: WatchSpec = {
+      dir: r.spec.then.pct < 0 ? "le" : "ge",
+      basis: "avg",
+      pct: r.spec.then.pct,
+      basisPrice: fillPx,
+      trigger,
+      exec: r.spec.then.exec,
+      limitPrice: null,
+      validUntil: addDays(kstParts().date, 30),
+      then: null,
+    };
+    const child: OrderTicket = {
+      ...r.ticket,
+      side: "sell",
+      qty: ev.filled,
+      price: null,
+      condPrice: null,
+      tradeType: r.spec.then.exec === "market" ? "3" : "0",
+      tradeLabel: r.spec.then.exec === "market" ? "시장가" : "보통(지정가)",
+      refPrice: fillPx,
+      amount: trigger * ev.filled,
+      watch: childSpec,
+    };
+    await writeWatches(rows);
+    const c = await addAutoWatch(child, r.ip, r.id);
+    await appendLog({ kind: "watch", ip: r.ip, side: "sell", code: child.code, name: child.name, qty: child.qty, venue: child.venue, amount: child.amount, msg: `체결 뒤 매도 감시 자동 등록 (${c.id}, 부모 ${r.id}) — ${watchSay(childSpec)}` });
+    void sendTelegram(`👁 ${orderIsMock() ? "[모의]" : "[실전]"} <b>매도 감시 자동 등록</b> ${esc(child.name)} ${child.qty}주\n${esc(watchSay(childSpec))}\n${childSpec.validUntil} 까지`, "order").catch(() => undefined);
+    return;
+  }
+  await writeWatches(rows);
+}
+
+export async function autoWatchSummary(): Promise<{ allowed: boolean; waiting: number; fired: number }> {
+  const [g, rows] = await Promise.all([getGuard(), readWatches()]);
+  return { allowed: g.allowAutoWatch, waiting: rows.filter((r) => r.status === "waiting").length, fired: rows.filter((r) => r.status === "fired").length };
+}
+
+export function startAutoWatch(main: KiwoomClient): void {
+  setInterval(() => void runAutoWatch(main).catch(() => undefined), 3_000);
+  console.log("[order] 자동감시주문 — 정규장에 3초마다 값을 보고 조건에 닿은 주문서를 한 번 낸다");
 }
 
 /* ── 체결 감시 → 종 + 텔레그램 ────────────────────────────────────────── */
@@ -1651,6 +1876,9 @@ function watch(ordNo: string, t: OrderTicket): void {
   watching.set(ordNo, { t, filled: 0, since: Date.now(), errors: 0 });
   if (!timer) timer = setInterval(() => void tick(), WATCH_MS);
 }
+
+/** 체결 감시가 알려 줄 곳 — 자동감시가 「체결되면 매도 감시」를 걸 때 쓴다 */
+const fillHooks = new Map<string, (ev: { filled: number; price: number; full: boolean; done: boolean; status: string }) => void>();
 
 function unwatch(ordNo: string): void {
   watching.delete(ordNo);
@@ -1702,10 +1930,16 @@ async function tick(): Promise<void> {
           dedupeHours: 24,
         });
         void sendTelegram(`${tag} ${esc(title)}\n주문번호 ${esc(ordNo)} · ${w.t.venue}`, "order").catch(() => undefined);
-        if (full) unwatch(ordNo);
+        fillHooks.get(ordNo)?.({ filled, price: px, full, done: full, status });
+        if (full) {
+          unwatch(ordNo);
+          fillHooks.delete(ordNo);
+        }
       } else if (done) {
         await appendLog({ kind: "fill", code: w.t.code, name: w.t.name, ordNo, msg: `감시 종료 — ${status}` });
+        fillHooks.get(ordNo)?.({ filled: w.filled, price: mine[0].price, full: false, done: true, status });
         unwatch(ordNo);
+        fillHooks.delete(ordNo);
       }
     }
   } catch (e) {
@@ -2018,7 +2252,7 @@ export async function orderStatus(req: Request): Promise<Record<string, unknown>
     /* 화면이 매매구분을 하드코딩하지 않게 — 표를 고치면 화면이 따라온다 */
     tradeTypes: TRADE_TYPES,
     watching: watching.size,
-    /* 예약 (2026-09-07) — 몇 건 기다리나, 다음 창은 언제인가 */
-    reserved: await reservedSummary().catch(() => ({ allowed: false, waiting: 0, nextFireDate: "" })),
+    /* 자동감시 (2026-09-07 밤) — 몇 건 지켜보나·발동해서 체결 기다리나 */
+    autoWatch: await autoWatchSummary().catch(() => ({ allowed: false, waiting: 0, fired: 0 })),
   };
 }

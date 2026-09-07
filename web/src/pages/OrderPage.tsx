@@ -9,7 +9,10 @@ import {
   type BuyPower,
   type OrderLogRow,
   type OrderRow,
-  type Reservation,
+  type AutoWatch,
+  type WatchBasis,
+  type WatchExec,
+  type WatchSpec,
   type AccessAudit,
   type OrderDevice,
   type OrderSettings,
@@ -53,12 +56,12 @@ const VENUES: { key: OrderVenue; label: string; hint: string }[] = [
   { key: "NXT", label: "NXT", hint: "프리 08:00 · 메인 09:00~15:20 · 애프터 ~20:00" },
 ];
 
-type Sub = "order" | "reserved" | "open" | "fills" | "balance" | "log" | "config";
+type Sub = "order" | "watch" | "open" | "fills" | "balance" | "log" | "config";
 
 const SUBS: { key: Sub; label: string }[] = [
   { key: "order", label: "매수·매도" },
-  /* 예약 (2026-09-07) — 벤티지: "예약 주문이 키움 REST 에 없으면 니가 서브메뉴 하나 만들어서 할 수 있잖아" */
-  { key: "reserved", label: "예약" },
+  /* 자동감시 (2026-09-07 밤) — 벤티지: "어떤 종목이 얼만큼 하락하면 매수… 매수 이후 얼마 이하 하락하면 매도" */
+  { key: "watch", label: "자동감시" },
   { key: "open", label: "미체결" },
   { key: "fills", label: "체결" },
   { key: "balance", label: "잔고" },
@@ -98,8 +101,11 @@ interface Prefill {
   /** 신용(융자) 줄에서 온 매도 — `credit=1&loan=YYYYMMDD` (2026-09-07) */
   credit: boolean;
   loanDate: string;
-  /** 예약으로 열기 — `reserve=1` (2026-09-07) */
-  reserve: boolean;
+  /** 자동감시로 열기 — `watch=1&wb=avg&wp=-5&wx=market` (2026-09-07 밤) */
+  watch: boolean;
+  watchBasis: WatchBasis | null;
+  watchPct: string;
+  watchExec: WatchExec | null;
   /** 값이 바뀌었는지 가리는 열쇠 — 같은 화면에서 링크를 또 눌러도 다시 채워진다 */
   key: string;
 }
@@ -126,7 +132,7 @@ if (typeof window !== "undefined") {
   window.addEventListener("hashchange", grabPrefill);
 }
 
-const EMPTY_PREFILL: Prefill = { code: "", name: "", side: null, tradeType: null, price: "", cond: "", qty: "", credit: false, loanDate: "", reserve: false, key: "" };
+const EMPTY_PREFILL: Prefill = { code: "", name: "", side: null, tradeType: null, price: "", cond: "", qty: "", credit: false, loanDate: "", watch: false, watchBasis: null, watchPct: "", watchExec: null, key: "" };
 
 /**
  * 쪽지를 **보기만** 한다 — 비우지 않는다.
@@ -161,30 +167,45 @@ function readPrefill(): Prefill {
     qty: num("qty"),
     credit: q.get("credit") === "1",
     loanDate: num("loan").slice(0, 8),
-    reserve: q.get("reserve") === "1",
+    watch: q.get("watch") === "1",
+    watchBasis: (["price", "prevClose", "avg", "now"].includes(q.get("wb") ?? "") ? q.get("wb") : null) as WatchBasis | null,
+    watchPct: (q.get("wp") ?? "").replace(/[^-\d.]/g, ""),
+    watchExec: (["market", "limit_trigger", "limit_now", "limit_fixed"].includes(q.get("wx") ?? "") ? q.get("wx") : null) as WatchExec | null,
     key: raw,
   };
 }
 
-/** 예약이 받는 매매구분 — 서버의 RESERVE_TRADE_TYPES 와 같은 다섯. 동시호가에 들어갈 수 있는 것만 */
-const RESERVE_TT = new Set(["0", "3", "5", "6", "7"]);
+/** 감시 조건을 한 줄로 — 서버 watchSay 와 같은 말 */
+function watchSay(s: WatchSpec): string {
+  const basisKo = s.basis === "prevClose" ? "전일 종가" : s.basis === "avg" ? "평단" : "등록 때 값";
+  const cond =
+    s.basis === "price"
+      ? `${s.trigger.toLocaleString()}원 ${s.dir === "le" ? "이하" : "이상"}`
+      : `${basisKo}(${(s.basisPrice ?? 0).toLocaleString()}) 대비 ${(s.pct ?? 0) > 0 ? "+" : ""}${s.pct}% → ${s.trigger.toLocaleString()}원 ${s.dir === "le" ? "이하" : "이상"}`;
+  const exec =
+    s.exec === "market" ? "시장가" : s.exec === "limit_trigger" ? "발동가 지정가" : s.exec === "limit_now" ? "그때 현재가 지정가" : `${(s.limitPrice ?? 0).toLocaleString()}원 지정가`;
+  const then = s.then ? ` · 체결되면 체결가 대비 ${s.then.pct}% 에 ${s.then.exec === "market" ? "시장가" : "지정가"} 매도 감시` : "";
+  return `${cond}면 ${exec}${then}`;
+}
+
+const WATCH_STATUS_KO: Record<AutoWatch["status"], string> = {
+  waiting: "지켜보는 중",
+  fired: "발동 — 체결 대기",
+  filled: "체결",
+  failed: "실패",
+  expired: "만료",
+  cancelled: "취소됨",
+};
 
 /**
  * 서버 시각(ISO, UTC)을 **보는 사람의 시계**로 (2026-09-07). 여태 `at.slice(5,16)` 로 UTC 를 그대로
- * 적어 기록·접근 로그가 아홉 시간 이르게 보였다 — 예약 탭을 만들다 눈에 띄었다.
+ * 적어 기록·접근 로그가 아홉 시간 이르게 보였다 — 자동감시 탭을 만들다 눈에 띄었다.
  */
 function localTs(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(5, 16).replace("T", " ");
   const p = (n: number) => String(n).padStart(2, "0");
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
-const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
-function fireDateKo(date: string | null | undefined): string {
-  if (!date) return "다음 거래일";
-  const wd = new Date(date + "T00:00:00Z").getUTCDay();
-  return `${date.slice(5).replace("-", "/")}(${WEEKDAY_KO[wd]})`;
 }
 
 /** 호가 단위 (KRX 2023-01 개편) — 손절 % 를 발동가로 바꿀 때 호가에 맞춘다 */
@@ -314,8 +335,8 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
                 onClick={() => setSub(s.key)}
               >
                 {s.label}
-                {s.key === "reserved" && (status.reserved?.waiting ?? 0) > 0 && (
-                  <i className="ord-sub-n">{status.reserved.waiting}</i>
+                {s.key === "watch" && (status.autoWatch?.waiting ?? 0) + (status.autoWatch?.fired ?? 0) > 0 && (
+                  <i className="ord-sub-n">{(status.autoWatch?.waiting ?? 0) + (status.autoWatch?.fired ?? 0)}</i>
                 )}
               </button>
             ))}
@@ -323,7 +344,7 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
           {sub === "order" && (
             <OrderForm status={status} prefill={prefill} onDone={load} onSelectStock={onSelectStock} />
           )}
-          {sub === "reserved" && <ReservedTab status={status} onDone={load} />}
+          {sub === "watch" && <WatchTab status={status} onDone={load} />}
           {sub === "open" && <OpenTab status={status} onDone={load} />}
           {sub === "fills" && <FillsTab />}
           {sub === "balance" && <BalanceTab onSelectStock={onSelectStock} />}
@@ -798,11 +819,21 @@ function OrderForm({
    */
   const [tradeType, setTradeType] = useState(prefill.tradeType ?? status.settings?.defaultTradeType ?? "0");
   /*
-   * **예약** (2026-09-07) — 지금 안 내고 다음 거래일 08:30 에 서버가 낸다. 링크가 `reserve=1` 로
-   * 왔으면 켜진 채로 연다. 장이 닫힌 시간에 폼을 열면 스위치를 권하되 **자동으로 켜지는 않는다** —
-   * 「지금 나가는 주문」과 「내일 아침 나가는 주문」은 사람이 고른 것이어야 한다.
+   * **자동감시** (2026-09-07 밤). 조건에 닿으면 서버가 낸다. 조건은 가격 하나(이하/이상), 기준은
+   * 값·전일 종가·지금 값·평단(매도만). 닿으면 시장가 또는 지정가(발동가·그때 현재가·직접 값).
+   * 매수 감시엔 「체결되면 −N% 매도 감시」를 붙일 수 있다.
    */
-  const [reserve, setReserve] = useState<boolean>(prefill.reserve);
+  const [watchOn, setWatchOn] = useState<boolean>(prefill.watch);
+  const [wDir, setWDir] = useState<"le" | "ge">(prefill.side === "sell" && (Number(prefill.watchPct) || 0) > 0 ? "ge" : "le");
+  const [wBasis, setWBasis] = useState<WatchBasis>(prefill.watchBasis ?? "price");
+  const [wPct, setWPct] = useState(prefill.watchPct);
+  const [wPrice, setWPrice] = useState("");
+  const [wExec, setWExec] = useState<WatchExec>(prefill.watchExec ?? "market");
+  const [wLimit, setWLimit] = useState("");
+  const [wUntil, setWUntil] = useState("");
+  const [wThenOn, setWThenOn] = useState(false);
+  const [wThenPct, setWThenPct] = useState("-5");
+  const [wThenExec, setWThenExec] = useState<"market" | "limit_now">("market");
   const [qty, setQty] = useState(prefill.qty);
   const [price, setPrice] = useState(prefill.price);
   const [cond, setCond] = useState(prefill.cond);
@@ -872,7 +903,13 @@ function OrderForm({
     if (prefill.cond) setCond(prefill.cond);
     setSellCredit(prefill.credit);
     setLoanDate(prefill.credit ? prefill.loanDate || null : null);
-    setReserve(prefill.reserve);
+    setWatchOn(prefill.watch);
+    if (prefill.watchBasis) setWBasis(prefill.watchBasis);
+    if (prefill.watchPct) {
+      setWPct(prefill.watchPct);
+      setWDir((Number(prefill.watchPct) || 0) > 0 ? "ge" : "le");
+    }
+    if (prefill.watchExec) setWExec(prefill.watchExec);
     /* 발동가가 채워져 왔으면 다음 호가 클릭은 주문단가 차례다 */
     setCondFocus(!prefill.cond);
     /* 다 썼으니 쪽지를 비운다 — 화면을 옮겼다 돌아왔을 때 손으로 고친 값을 덮지 않게 */
@@ -947,15 +984,40 @@ function OrderForm({
       : 0;
   const maxQty = side === "buy" ? Math.min(powerQty, guardQty) : held;
   const cappedByGuard = side === "buy" && powerQty > guardQty;
-  const credit = reserve ? false : side === "buy" ? basis === "credit" : sellCredit;
-  /* 예약이 못 받는 구분·거래소를 골라 둔 채 스위치를 켜면 서버가 거절한다 — 켤 때 맞춰 준다 */
-  const reserveAllowed = status.guard.allowReserved !== false && status.reserved?.allowed !== false;
+  const credit = watchOn ? false : side === "buy" ? basis === "credit" : sellCredit;
+  const watchAllowed = status.guard.allowAutoWatch !== false && status.autoWatch?.allowed !== false;
   useEffect(() => {
-    if (!reserve) return;
+    if (!watchOn) return;
     if (venue !== "KRX") setVenue("KRX");
-    if (!RESERVE_TT.has(tradeType)) setTradeType("0");
-  }, [reserve, venue, tradeType]);
-  const nextFire = status.reserved?.nextFireDate ?? "";
+    const want = wExec === "market" ? "3" : "0";
+    if (tradeType !== want) setTradeType(want);
+  }, [watchOn, venue, tradeType, wExec]);
+  useEffect(() => {
+    /* 방향은 %의 부호가 정한다 — 「−5%면」은 이하, 「+5%면」은 이상 */
+    if (wBasis === "price") return;
+    const p = Number(wPct);
+    if (p < 0) setWDir("le");
+    else if (p > 0) setWDir("ge");
+  }, [wBasis, wPct]);
+  useEffect(() => {
+    if (wBasis === "avg" && side !== "sell") setWBasis("price");
+  }, [wBasis, side]);
+  /* 발동가 어림 — 확정은 서버가 한다(호가 단위·기준가). 화면은 「대략 얼마」만 */
+  const wBasisPrice =
+    wBasis === "prevClose"
+      ? quote && quote.changeRate !== null
+        ? quote.price / (1 + quote.changeRate / 100)
+        : 0
+      : wBasis === "now"
+        ? (quote?.price ?? 0)
+        : wBasis === "avg"
+          ? (heldRow?.avg ?? 0)
+          : 0;
+  const wTriggerEst =
+    wBasis === "price" ? Number(wPrice) || 0 : wBasisPrice > 0 && Number(wPct) ? toTick(wBasisPrice * (1 + Number(wPct) / 100)) : 0;
+  const watchReady =
+    !watchOn ||
+    (wTriggerEst > 0 && (wExec !== "limit_fixed" || Number(wLimit) > 0) && (!wThenOn || (Number(wThenPct) !== 0 && Number.isFinite(Number(wThenPct)))));
 
   function setPct(pct: number) {
     lastEdit.current = "qty";
@@ -970,7 +1032,7 @@ function OrderForm({
   }, [qty, unit]);
 
   const openVenues = VENUES.filter((v) => status.open[v.key]).map((v) => v.label);
-  const ready = Boolean(code) && Boolean(qty) && (!needsPrice || Boolean(price)) && (!usesCond || Boolean(cond));
+  const ready = Boolean(code) && Boolean(qty) && (watchOn ? watchReady : (!needsPrice || Boolean(price)) && (!usesCond || Boolean(cond)));
 
   /** 호가창이 부른다 — 값을 안 쓰는 구분이면 무시한다(넣어 봐야 서버가 거절한다) */
   function pickPrice(p: number) {
@@ -988,18 +1050,39 @@ function OrderForm({
     setBusy(true);
     setError(null);
     try {
+      const watchIn = watchOn
+        ? {
+            dir: wDir,
+            basis: wBasis,
+            pct: wBasis === "price" ? null : Number(wPct),
+            price: wBasis === "price" ? Number(wPrice) || null : null,
+            exec: wExec,
+            limitPrice: wExec === "limit_fixed" ? Number(wLimit) || null : null,
+            validUntil: wUntil || null,
+            then: side === "buy" && wThenOn ? { pct: Number(wThenPct), exec: wThenExec } : null,
+          }
+        : null;
       const r = await api.orderPrepare({
         side,
         code,
         name,
         qty: Number(qty),
-        price: usesPrice && price ? Number(price) : null,
-        condPrice: tt?.cond && cond ? Number(cond) : null,
+        /* 감시는 값을 서버가 발동 때 정한다 — 지정가 계열이면 어림값을 실어 모양만 맞춘다 */
+        price: watchOn
+          ? wExec === "market"
+            ? null
+            : wExec === "limit_fixed"
+              ? Number(wLimit) || null
+              : wTriggerEst || null
+          : usesPrice && price
+            ? Number(price)
+            : null,
+        condPrice: !watchOn && tt?.cond && cond ? Number(cond) : null,
         tradeType,
         venue,
         credit,
         loanDate: credit && side === "sell" ? loanDate : null,
-        reserve,
+        watch: watchIn,
       });
       setTicket(r);
     } catch (e2) {
@@ -1454,25 +1537,156 @@ function OrderForm({
 
         <div className="ord-submit">
           {/*
-            예약 스위치 (2026-09-07). 영웅문·한투의 「예약주문」 — 장 밖에서 받아 뒀다가 다음 거래일
-            08:30 동시호가에 넣는다. 조건은 없다, 시각만 미룬다. KRX·현금·보통/시장가/조건부/최유리/최우선.
+            자동감시 (2026-09-07 밤). 영웅문S 의 「자동감시주문」과 같은 폭 — 조건(가격 이하/이상, 기준가 대비 %)에
+            닿으면 서버가 미리 승인된 주문서를 한 번 낸다. 같은 날 만들었던 「예약(08:30 에 대신 내기)」은
+            벤티지가 "할 일이 없을 듯"이라 해서 걷어냈다.
           */}
-          {reserveAllowed && (
-            <label className={`ord-reserve${reserve ? " on" : ""}`}>
-              <input type="checkbox" checked={reserve} onChange={(e) => setReserve(e.target.checked)} />
-              <span>
-                <b>⏰ 예약</b> — {fireDateKo(nextFire)} 08:30 에 서버가 낸다
-                <i>
-                  {reserve
-                    ? "KRX · 현금만 · 보통/시장가/조건부지정가/최유리/최우선. 한 번뿐이고 나가는 아침에 한도·가격 자를 다시 잰다"
-                    : !open && status.guard.marketHoursOnly
-                      ? "지금은 안 받는 시간 — 예약으로 걸어 두면 아침 동시호가에 들어간다"
-                      : "지금 내지 않고 다음 장 시작 전에 내고 싶을 때"}
-                </i>
-              </span>
-            </label>
+          {watchAllowed && (
+            <div className={`ord-watch${watchOn ? " on" : ""}`}>
+              <label className="ord-watch-head">
+                <input type="checkbox" checked={watchOn} onChange={(e) => setWatchOn(e.target.checked)} />
+                <span>
+                  <b>👁 자동감시</b> — 조건에 닿으면 서버가 낸다
+                  {!watchOn && <i>「얼마 이하로 떨어지면 매수」 「평단 대비 −5%면 매도」 같은 것. 정규장에 KRX 체결로 판정</i>}
+                </span>
+              </label>
+              {watchOn && (
+                <div className="ord-watch-body">
+                  <div className="ord-watch-row">
+                    <span className="ord-watch-lab">기준</span>
+                    <div className="ord-basis">
+                      {(
+                        [
+                          ["price", "값 직접"],
+                          ["prevClose", "전일 종가 대비"],
+                          ["now", "지금 값 대비"],
+                          ...(side === "sell" ? [["avg", "평단 대비"]] : []),
+                        ] as [WatchBasis, string][]
+                      ).map(([k, label]) => (
+                        <button key={k} type="button" className={wBasis === k ? "on" : ""} onClick={() => setWBasis(k)}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="ord-watch-row">
+                    <span className="ord-watch-lab">조건</span>
+                    {wBasis === "price" ? (
+                      <>
+                        <input
+                          className="ord-in ord-watch-in"
+                          inputMode="numeric"
+                          placeholder="발동가"
+                          value={wPrice}
+                          onChange={(e) => setWPrice(e.target.value.replace(/\D/g, ""))}
+                        />
+                        <div className="ord-basis">
+                          <button type="button" className={wDir === "le" ? "on" : ""} onClick={() => setWDir("le")}>
+                            이하면
+                          </button>
+                          <button type="button" className={wDir === "ge" ? "on" : ""} onClick={() => setWDir("ge")}>
+                            이상이면
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <input
+                          className="ord-in ord-watch-in"
+                          inputMode="decimal"
+                          placeholder="−5"
+                          value={wPct}
+                          onChange={(e) => setWPct(e.target.value.replace(/[^-\d.]/g, ""))}
+                        />
+                        <span className="ord-watch-unit">%</span>
+                        <div className="ord-watch-chips">
+                          {(side === "buy" ? [-3, -5, -7, -10] : [-3, -5, -7, 5, 10]).map((p) => (
+                            <button key={p} type="button" onClick={() => setWPct(String(p))}>
+                              {p > 0 ? `+${p}` : p}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {wBasis !== "price" && (
+                    <div className="ord-caps">
+                      기준가 {wBasisPrice > 0 ? `${Math.round(wBasisPrice).toLocaleString()}원` : "(아직 모름)"}
+                      {wTriggerEst > 0 ? ` → 발동가 약 ${wTriggerEst.toLocaleString()}원 ${wDir === "le" ? "이하" : "이상"}` : ""}
+                      {wBasis === "prevClose" ? " · 전일 종가 기준은 당일만" : ""}
+                    </div>
+                  )}
+                  <div className="ord-watch-row">
+                    <span className="ord-watch-lab">닿으면</span>
+                    <div className="ord-basis">
+                      {(
+                        [
+                          ["market", "시장가"],
+                          ["limit_trigger", "발동가 지정가"],
+                          ["limit_now", "그때 현재가 지정가"],
+                          ["limit_fixed", "지정가 직접"],
+                        ] as [WatchExec, string][]
+                      ).map(([k, label]) => (
+                        <button key={k} type="button" className={wExec === k ? "on" : ""} onClick={() => setWExec(k)}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {wExec === "limit_fixed" && (
+                      <input
+                        className="ord-in ord-watch-in"
+                        inputMode="numeric"
+                        placeholder="지정가"
+                        value={wLimit}
+                        onChange={(e) => setWLimit(e.target.value.replace(/\D/g, ""))}
+                      />
+                    )}
+                  </div>
+                  <div className="ord-watch-row">
+                    <span className="ord-watch-lab">유효</span>
+                    <div className="ord-basis">
+                      <button type="button" className={!wUntil ? "on" : ""} onClick={() => setWUntil("")}>
+                        당일
+                      </button>
+                      <input
+                        type="date"
+                        className="ord-in ord-watch-in"
+                        value={wUntil}
+                        disabled={wBasis === "prevClose"}
+                        onChange={(e) => setWUntil(e.target.value)}
+                        title="30일까지"
+                      />
+                    </div>
+                  </div>
+                  {side === "buy" && (
+                    <label className="ord-watch-then">
+                      <input type="checkbox" checked={wThenOn} onChange={(e) => setWThenOn(e.target.checked)} />
+                      <span>
+                        체결되면 <b>체결가 대비</b>
+                        <input
+                          className="ord-in ord-watch-in sm"
+                          inputMode="decimal"
+                          value={wThenPct}
+                          disabled={!wThenOn}
+                          onChange={(e) => setWThenPct(e.target.value.replace(/[^-\d.]/g, ""))}
+                        />
+                        % 에{" "}
+                        <select className="ord-in ord-watch-sel" value={wThenExec} disabled={!wThenOn} onChange={(e) => setWThenExec(e.target.value as "market" | "limit_now")}>
+                          <option value="market">시장가</option>
+                          <option value="limit_now">그때 현재가 지정가</option>
+                        </select>{" "}
+                        매도 감시를 자동으로 건다
+                      </span>
+                    </label>
+                  )}
+                  <div className="ord-caps">
+                    KRX · 현금만 · 정규장 09:00~15:30 에만 발동 · <b>한 번뿐</b> · 발동 순간 한도와 가격 자(±{status.guard.priceCollarPct}%)를 다시 잰다
+                  </div>
+                </div>
+              )}
+            </div>
           )}
-          {!open && !reserve && status.guard.marketHoursOnly && (
+          {!open && !watchOn && status.guard.marketHoursOnly && (
             <p className="ord-err">
               {venue} 는 지금 주문을 안 받는다
               {openVenues.length > 0 ? (
@@ -1486,8 +1700,8 @@ function OrderForm({
             </p>
           )}
           {error && <p className="ord-err">{error}</p>}
-          <button type="submit" className={`ord-go ${side}${reserve ? " reserve" : ""}`} disabled={busy || !ready}>
-            {busy ? "확인 중…" : `${reserve ? "예약 " : ""}${side === "buy" ? "매수 주문" : "매도 주문"}`}
+          <button type="submit" className={`ord-go ${side}${watchOn ? " deferred" : ""}`} disabled={busy || !ready}>
+            {busy ? "확인 중…" : `${watchOn ? "감시 " : ""}${side === "buy" ? "매수 주문" : "매도 주문"}`}
           </button>
           <p className="ord-note">
             {code && (
@@ -1561,8 +1775,8 @@ function Confirm({
 
   const dead = sec <= 0;
   const isCancel = ticket.kind === "cancel";
-  const isReserve = ticket.kind === "order" && ticket.reserve === true;
-  const sideKo = isCancel ? "취소" : `${isReserve ? "예약 " : ""}${!isCancel && ticket.credit ? "신용" : ""}${ticket.side === "buy" ? "매수" : "매도"}`;
+  const isWatch = ticket.kind === "order" && Boolean(ticket.watch);
+  const sideKo = isCancel ? "취소" : `${isWatch ? "자동감시 " : ""}${!isCancel && ticket.credit ? "신용" : ""}${ticket.side === "buy" ? "매수" : "매도"}`;
   const [okMsg, setOkMsg] = useState<string | null>(null);
   /*
    * 비밀번호를 지금 안 물어도 되는 상태인가 (2026-09-04) — 설정에서 「기억하기」를 켜고
@@ -1579,7 +1793,7 @@ function Confirm({
     try {
       const r = await api.orderExecute(nonce, pw, remember);
       setPw("");
-      setOkMsg(isReserve ? r.msg : `${sideKo} 접수 — 주문번호 ${r.ordNo || "?"} ${r.msg}`);
+      setOkMsg(isWatch ? r.msg : `${sideKo} 접수 — 주문번호 ${r.ordNo || "?"} ${r.msg}`);
       setTimeout(onDone, 1200);
     } catch (e2) {
       setError(e2 instanceof Error ? e2.message : "실패");
@@ -1591,13 +1805,14 @@ function Confirm({
   return (
     <div className="ord-modal-back" onClick={onClose}>
       <form
-        className={`ord-modal ${isCancel ? "cancel" : ticket.side}${isReserve ? " reserve" : ""}`}
+        className={`ord-modal ${isCancel ? "cancel" : ticket.side}${isWatch ? " deferred" : ""}`}
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => void go(e)}
       >
-        {isReserve && ticket.kind === "order" && (
-          <div className="ord-modal-reserve">
-            ⏰ 지금 나가지 않습니다 — <b>{fireDateKo(ticket.fireDate)} 08:30</b> 에 서버가 냅니다. 그 전엔 예약 탭에서 취소할 수 있습니다.
+        {isWatch && ticket.kind === "order" && ticket.watch && (
+          <div className="ord-modal-deferred">
+            👁 지금 나가지 않습니다 — <b>{watchSay(ticket.watch)}</b>. {ticket.watch.validUntil} 까지 정규장에 지켜보다 닿으면 한 번 냅니다.
+            그 전엔 자동감시 탭에서 취소할 수 있습니다.
           </div>
         )}
         <h3>
@@ -1619,8 +1834,28 @@ function Confirm({
               </div>
               <div>
                 <dt>가격</dt>
-                <dd>{ticket.price === null ? ticket.tradeLabel : `${ticket.price.toLocaleString()}원`}</dd>
+                <dd>
+                  {isWatch && ticket.watch
+                    ? ticket.watch.exec === "market"
+                      ? "시장가"
+                      : ticket.watch.exec === "limit_fixed"
+                        ? `${(ticket.watch.limitPrice ?? 0).toLocaleString()}원 지정가`
+                        : ticket.watch.exec === "limit_trigger"
+                          ? `발동가(${ticket.watch.trigger.toLocaleString()}) 지정가`
+                          : "그때 현재가 지정가"
+                    : ticket.price === null
+                      ? ticket.tradeLabel
+                      : `${ticket.price.toLocaleString()}원`}
+                </dd>
               </div>
+              {isWatch && ticket.watch && (
+                <div className="ord-stop-kv">
+                  <dt>발동가</dt>
+                  <dd>
+                    {ticket.watch.trigger.toLocaleString()}원 {ticket.watch.dir === "le" ? "이하" : "이상"}
+                  </dd>
+                </div>
+              )}
               {/* 스톱은 발동가가 본론이다 — 총액보다 먼저 눈에 들어와야 한다 */}
               {ticket.condPrice !== null && (
                 <div className="ord-stop-kv">
@@ -1629,15 +1864,9 @@ function Confirm({
                 </div>
               )}
               <div>
-                <dt>{isReserve ? "지금 값" : "현재가"}</dt>
+                <dt>현재가</dt>
                 <dd>{ticket.refPrice ? `${ticket.refPrice.toLocaleString()}원` : "-"}</dd>
               </div>
-              {isReserve && (
-                <div className="ord-stop-kv">
-                  <dt>나가는 때</dt>
-                  <dd>{fireDateKo(ticket.fireDate)} 08:30</dd>
-                </div>
-              )}
             </>
           )}
           {ticket.kind === "cancel" && (
@@ -1653,7 +1882,7 @@ function Confirm({
         </dl>
         {ticket.kind === "order" && (
           <div className="ord-modal-amt">
-            <span>{ticket.condPrice !== null ? "발동되면 총액" : "총액"}</span>
+            <span>{ticket.condPrice !== null || isWatch ? "발동되면 총액(어림)" : "총액"}</span>
             <b>{won(ticket.amount)}</b>
           </div>
         )}
@@ -1696,31 +1925,17 @@ function Confirm({
   );
 }
 
-/* ── 예약 (2026-09-07) ─────────────────────────────────────────────────── */
+/* ── 자동감시 (2026-09-07 밤) ──────────────────────────────────────────── */
 
-const RSV_STATUS_KO: Record<Reservation["status"], string> = {
-  waiting: "기다리는 중",
-  sent: "나감",
-  failed: "실패",
-  missed: "놓침",
-  cancelled: "취소됨",
-};
-
-/**
- * 예약 탭 — 기다리는 것과 끝난 것. 취소는 여기서만(비밀번호 없이 — 돈이 안 나가는 방향).
- * 새 예약은 매수·매도 폼의 ⏰ 스위치로 만든다 — 문이 하나 더 있는 게 아니다.
- */
-function ReservedTab({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
-  const [rows, setRows] = useState<Reservation[]>([]);
+function WatchTab({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
+  const [rows, setRows] = useState<AutoWatch[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [next, setNext] = useState(status.reserved?.nextFireDate ?? "");
 
   const load = useCallback(async () => {
     try {
-      const r = await api.orderReserved();
+      const r = await api.orderWatch();
       setRows(r.rows ?? []);
-      setNext(r.nextFireDate);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "조회 실패");
@@ -1728,15 +1943,15 @@ function ReservedTab({ status, onDone }: { status: OrderStatus; onDone: () => vo
   }, []);
   useEffect(() => {
     void load();
-    const t = setInterval(() => void load(), 15_000);
+    const t = setInterval(() => void load(), 5_000);
     return () => clearInterval(t);
   }, [load]);
 
-  async function cancel(r: Reservation) {
-    if (!window.confirm(`${r.ticket.name} ${r.ticket.side === "buy" ? "매수" : "매도"} ${r.ticket.qty}주 예약을 취소할까요?`)) return;
+  async function cancel(r: AutoWatch) {
+    if (!window.confirm(`${r.ticket.name} ${r.ticket.side === "buy" ? "매수" : "매도"} ${r.ticket.qty}주 감시를 취소할까요?`)) return;
     setBusy(r.id);
     try {
-      await api.orderReservedCancel(r.id);
+      await api.orderWatchCancel(r.id);
       await load();
       onDone();
     } catch (e) {
@@ -1746,66 +1961,69 @@ function ReservedTab({ status, onDone }: { status: OrderStatus; onDone: () => vo
     }
   }
 
-  const waiting = rows.filter((r) => r.status === "waiting");
-  const done = rows.filter((r) => r.status !== "waiting");
-  const allowed = status.guard.allowReserved !== false;
+  const live = rows.filter((r) => r.status === "waiting" || r.status === "fired");
+  const done = rows.filter((r) => r.status !== "waiting" && r.status !== "fired");
+  const allowed = status.guard.allowAutoWatch !== false;
 
   return (
     <div className="ord-tab">
       <p className="ord-note">
-        예약은 <b>조건 없이 시각만 미룬</b> 주문이다 — 사람이 값·수량·구분을 다 정하고 비밀번호까지 넣은 주문서를, 다음 거래일{" "}
-        <b>08:30</b>(KRX 동시호가 접수 시작)에 서버가 그대로 낸다. <b>한 번뿐</b>이라 실패해도 다시 안 내고, 08:30~08:59 창을
-        서버가 꺼진 채 지나면 「놓침」으로 알리고 만다. 나가는 아침에 종목 허용·한 건·하루 한도·가격 자(전일 종가 ±
-        {status.guard.priceCollarPct}%)를 다시 잰다.
+        자동감시는 <b>서버가 값을 보다가 조건에 닿으면</b> 미리 승인해 둔 주문서를 <b>한 번</b> 내는 것이다. 정규장 09:00~15:30 에
+        KRX 체결로 판정하고(실시간, 없으면 조회), 발동 순간 종목 허용·한 건·하루 한도·가격 자(그때 값 ±{status.guard.priceCollarPct}%)를 다시 잰다.
+        실패해도 다시 안 낸다. 새 감시는 매수·매도 폼의 👁 스위치로, 잔고 줄의 「👁 감시매도」로 건다.
         {!allowed && (
           <>
             {" "}
-            <b className="ord-bad">지금은 꺼져 있다</b> — orderGuard.json 의 allowReserved.
+            <b className="ord-bad">지금은 꺼져 있다</b> — orderGuard.json 의 allowAutoWatch.
           </>
         )}
       </p>
       {error && <p className="ord-err">{error}</p>}
       <h4 className="ord-h4">
-        기다리는 예약 {waiting.length > 0 && <span className="ord-count">{waiting.length}</span>}
-        {next && <i className="ord-h4-sub">다음 창 {fireDateKo(next)} 08:30</i>}
+        지켜보는 중 {live.length > 0 && <span className="ord-count">{live.length}</span>}
       </h4>
-      {waiting.length === 0 ? (
-        <p className="empty">기다리는 예약이 없다 — 매수·매도 폼의 ⏰ 예약 스위치로 건다</p>
+      {live.length === 0 ? (
+        <p className="empty">지켜보는 감시가 없다</p>
       ) : (
         <div className="ord-scroll">
           <table className="ord-table">
             <thead>
               <tr>
-                <th>나가는 때</th>
                 <th>종목</th>
-                <th>구분</th>
+                <th>조건 → 주문</th>
                 <th className="r">수량</th>
-                <th className="r">가격</th>
-                <th className="r">금액</th>
+                <th>유효</th>
+                <th>상태</th>
                 <th>걸어 둔 때</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {waiting.map((r) => (
+              {live.map((r) => (
                 <tr key={r.id} className={r.ticket.side}>
                   <td>
-                    <b>{fireDateKo(r.fireDate)}</b> 08:30
+                    <b className={`ord-side ${r.ticket.side}`}>{r.ticket.side === "buy" ? "매수" : "매도"}</b> {r.ticket.name || r.ticket.code}{" "}
+                    <span className="ord-code">{r.ticket.code}</span>
+                    {r.parentId && <i className="ord-watch-tag">체결 뒤 자동</i>}
                   </td>
-                  <td>
-                    {r.ticket.name || r.ticket.code} <span className="ord-code">{r.ticket.code}</span>
-                  </td>
-                  <td>
-                    <b className={`ord-side ${r.ticket.side}`}>{r.ticket.side === "buy" ? "매수" : "매도"}</b> · {r.ticket.tradeLabel}
-                  </td>
+                  <td className="ord-msg">{watchSay(r.spec)}</td>
                   <td className="r">{fmtNum(r.ticket.qty)}</td>
-                  <td className="r">{r.ticket.price === null ? r.ticket.tradeLabel : fmtNum(r.ticket.price)}</td>
-                  <td className="r">{won(r.ticket.amount)}</td>
+                  <td>{r.spec.validUntil.slice(5).replace("-", "/")}</td>
+                  <td>
+                    <b className={`ord-rsv-st ${r.status}`}>{WATCH_STATUS_KO[r.status]}</b>
+                    {r.status === "fired" && (
+                      <div className="pt-n">
+                        {r.firePrice ? `${r.firePrice.toLocaleString()}에 발동` : ""} {r.ordNo ? `· ${r.ordNo}` : ""}
+                      </div>
+                    )}
+                  </td>
                   <td>{localTs(r.at)}</td>
                   <td>
-                    <button type="button" className="ord-x" disabled={busy === r.id} onClick={() => void cancel(r)}>
-                      {busy === r.id ? "…" : "취소"}
-                    </button>
+                    {r.status === "waiting" && (
+                      <button type="button" className="ord-x" disabled={busy === r.id} onClick={() => void cancel(r)}>
+                        {busy === r.id ? "…" : "취소"}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -1815,35 +2033,33 @@ function ReservedTab({ status, onDone }: { status: OrderStatus; onDone: () => vo
       )}
       {done.length > 0 && (
         <>
-          <h4 className="ord-h4">지난 예약</h4>
+          <h4 className="ord-h4">지난 감시</h4>
           <div className="ord-scroll">
             <table className="ord-table">
               <thead>
                 <tr>
-                  <th>나가는 때</th>
                   <th>종목</th>
-                  <th>구분</th>
+                  <th>조건 → 주문</th>
                   <th className="r">수량</th>
-                  <th className="r">가격</th>
                   <th>결과</th>
                   <th>내용</th>
+                  <th>때</th>
                 </tr>
               </thead>
               <tbody>
                 {done.map((r) => (
-                  <tr key={r.id} className={r.status === "failed" || r.status === "missed" ? "bad" : ""}>
-                    <td>{fireDateKo(r.fireDate)}</td>
-                    <td>{r.ticket.name || r.ticket.code}</td>
+                  <tr key={r.id} className={r.status === "failed" ? "bad" : ""}>
                     <td>
-                      {r.ticket.side === "buy" ? "매수" : "매도"} · {r.ticket.tradeLabel}
+                      {r.ticket.side === "buy" ? "매수" : "매도"} {r.ticket.name || r.ticket.code}
                     </td>
+                    <td className="ord-msg">{watchSay(r.spec)}</td>
                     <td className="r">{fmtNum(r.ticket.qty)}</td>
-                    <td className="r">{r.ticket.price === null ? "-" : fmtNum(r.ticket.price)}</td>
                     <td>
-                      <b className={`ord-rsv-st ${r.status}`}>{RSV_STATUS_KO[r.status]}</b>
-                      {r.ordNo ? <span className="ord-code"> {r.ordNo}</span> : null}
+                      <b className={`ord-rsv-st ${r.status}`}>{WATCH_STATUS_KO[r.status]}</b>
+                      {r.status === "filled" && r.fillPrice ? <div className="pt-n">{fmtNum(r.fillQty ?? 0)}주 @ {fmtNum(r.fillPrice)}</div> : null}
                     </td>
                     <td className="ord-msg">{r.msg || "-"}</td>
+                    <td>{localTs(r.firedAt ?? r.at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2030,6 +2246,8 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
   /** 고치는 중인 칸 — 저장 전까지는 화면 값이 이긴다 */
   const [edit, setEdit] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
+  /* 자동감시 — 잔고 줄에 「감시로 산 것」·「걸린 매도 감시」를 적는다 (2026-09-07 밤) */
+  const [watches, setWatches] = useState<AutoWatch[]>([]);
 
   const load = useCallback(() => {
     void api
@@ -2039,6 +2257,10 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
         setError(null);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "조회 실패"));
+    void api
+      .orderWatch()
+      .then((w) => setWatches(w.rows ?? []))
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -2115,6 +2337,8 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                 const dirty = edit[h.code] !== undefined && Number(shown || 0) !== saved;
                 /* 지금 값에서 손절선까지 몇 % 남았나 — 음수면 이미 깨진 것이다 */
                 const room = saved > 0 && h.cur > 0 ? ((h.cur - saved) / h.cur) * 100 : null;
+                const boughtByWatch = watches.find((w) => w.ticket.code === h.code && w.ticket.side === "buy" && (w.status === "filled" || w.status === "fired"));
+                const sellWatch = watches.find((w) => w.ticket.code === h.code && w.ticket.side === "sell" && w.status === "waiting");
                 return (
                   <tr key={h.code}>
                     <td
@@ -2127,6 +2351,16 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                         <span className="ord-crd-badge" title={`대출일 ${h.loanDate ?? "?"}`}>
                           {h.creditType} {h.loanDate ? `${h.loanDate.slice(4, 6)}/${h.loanDate.slice(6)}` : ""}
                         </span>
+                      )}
+                      {boughtByWatch && (
+                        <span className="ord-watch-badge" title={`자동감시로 산 것 — ${watchSay(boughtByWatch.spec)}${boughtByWatch.fillPrice ? ` · 체결 ${boughtByWatch.fillPrice.toLocaleString()}` : ""}`}>
+                          👁 감시로 삼
+                        </span>
+                      )}
+                      {sellWatch && (
+                        <div className="pt-n ord-watch-line" title={watchSay(sellWatch.spec)}>
+                          👁 매도 감시 {sellWatch.spec.pct !== null ? `${sellWatch.spec.pct > 0 ? "+" : ""}${sellWatch.spec.pct}%` : ""} @ {sellWatch.spec.trigger.toLocaleString()} {sellWatch.spec.dir === "le" ? "이하" : "이상"} · {sellWatch.ticket.qty}주
+                        </div>
                       )}
                     </td>
                     <td className="r" data-l="수량">
@@ -2174,6 +2408,15 @@ function BalanceTab({ onSelectStock }: { onSelectStock?: (code: string, name: st
                           title={`${h.ableQty}주 · 발동가 ${saved.toLocaleString()}원으로 매도 스톱주문`}
                         >
                           🛑 스톱
+                        </a>
+                      )}
+                      {!h.creditType && !sellWatch && (
+                        <a
+                          className="ord-x watch"
+                          href={orderLink(h, "sell", `&watch=1&wb=avg&wp=-5&wx=market&tt=3`)}
+                          title={`${h.ableQty}주 · 평단 대비 −5% 에 시장가 매도 감시(폼에서 고친다)`}
+                        >
+                          👁 감시매도
                         </a>
                       )}
                     </td>
@@ -2721,7 +2964,7 @@ const KIND_KO: Record<OrderLogRow["kind"], string> = {
   lock: "잠금",
   password: "비밀번호",
   raw: "원문",
-  reserve: "예약",
+  watch: "감시",
 };
 
 function LogTab() {
