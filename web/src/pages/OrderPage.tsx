@@ -107,6 +107,18 @@ function Krw({ n, unit = "원" }: { n: number | null | undefined; unit?: string 
   );
 }
 
+/** 폰 폭인가 — 카드 접힘 기본 같은 「폰에서만」 판단에 (2026-09-07 밤) */
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(() => (typeof window !== "undefined" ? window.matchMedia("(max-width: 900px)").matches : false));
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 900px)");
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return narrow;
+}
+
 /** 매수/매도 색 칩 — 표·카드 어디서나 같은 모양 */
 function SideChip({ side }: { side: string | null | undefined }) {
   const s = String(side ?? "");
@@ -487,25 +499,6 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
           {sub === "ledger" && <LedgerTab />}
           {sub === "history" && <HistoryTab status={status} onDone={load} />}
           {sub === "config" && <ConfigTab status={status} onDone={load} />}
-          {/* 폰 하단 바 (개편 ④) — 엄지로 닿는 곳에 셋. 데스크톱에선 CSS 가 숨긴다 */}
-          <nav className="ord-bottombar">
-            <button type="button" className={sub === "order" ? "on" : ""} onClick={() => setSub("order")}>
-              🧾 주문
-            </button>
-            <button type="button" className={sub === "positions" ? "on" : ""} onClick={() => setSub("positions")}>
-              📦 포지션
-              {(status.autoWatch?.waiting ?? 0) > 0 && <i>{status.autoWatch.waiting}</i>}
-            </button>
-            <button type="button" className={sub === "ledger" ? "on" : ""} onClick={() => setSub("ledger")}>
-              💰 잔고
-            </button>
-            <button type="button" className={sub === "history" ? "on" : ""} onClick={() => setSub("history")}>
-              🕘 기록
-            </button>
-            <button type="button" className={`sm${sub === "config" ? " on" : ""}`} onClick={() => setSub("config")} title="설정">
-              ⚙
-            </button>
-          </nav>
         </>
       )}
     </div>
@@ -2779,6 +2772,10 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
   const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: OrderTicket } | null>(null);
   const [stopEdit, setStopEdit] = useState<Record<string, string>>({});
   const inflight = useRef(false);
+  /* 폰에서는 포지션 카드가 접혀서 시작한다 — 벤티지: "카드들이 너무 커서 모바일로 보기에는 불편해" */
+  const narrow = useNarrow();
+  const [openPos, setOpenPos] = useState<Record<string, boolean>>({});
+  const posOpen = (code: string) => (openPos[code] !== undefined ? openPos[code] : !narrow);
 
   const load = useCallback(async () => {
     if (inflight.current) return;
@@ -2989,6 +2986,8 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
               openIds={openIds}
               onToggle={toggle}
               onSelectStock={onSelectStock}
+              open={posOpen(pos.code)}
+              onToggleOpen={() => setOpenPos((m) => ({ ...m, [pos.code]: !posOpen(pos.code) }))}
             />
           ))}
         </div>
@@ -3045,6 +3044,8 @@ function PositionCard({
   openIds,
   onToggle,
   onSelectStock,
+  open,
+  onToggleOpen,
 }: {
   pos: Position;
   cur: { price: number; from: string } | null;
@@ -3057,6 +3058,8 @@ function PositionCard({
   openIds: Record<string, boolean>;
   onToggle: (id: string) => void;
   onSelectStock?: (code: string, name: string) => void;
+  open: boolean;
+  onToggleOpen: () => void;
 }) {
   const price = cur?.price ?? pos.cur;
   const pnl = (price - pos.avg) * pos.qty;
@@ -3066,9 +3069,17 @@ function PositionCard({
   const sells = pos.watches.filter((w) => w.ticket.side === "sell");
   const stopW = sells.find((w) => w.status === "waiting" && w.spec.dir === "le" && w.spec.trigger === pos.stopLine) ?? null;
   return (
-    <div className={`ord-pcard${pos.noExit ? " noexit" : ""}${pnl < 0 ? " down" : " up"}`}>
-      <div className="ord-pcard-top">
-        <button type="button" className="ord-pcard-name" onClick={() => onSelectStock?.(pos.code, pos.name)} title="종목 상세">
+    <div className={`ord-pcard${pos.noExit ? " noexit" : ""}${pnl < 0 ? " down" : " up"}${open ? " open" : " closed"}`}>
+      <div className="ord-pcard-top" onClick={onToggleOpen} role="button" tabIndex={0}>
+        <button
+          type="button"
+          className="ord-pcard-name"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelectStock?.(pos.code, pos.name);
+          }}
+          title="종목 상세"
+        >
           {pos.name} <span className="ord-code">{pos.code}</span>
         </button>
         {pos.creditType && (
@@ -3082,7 +3093,19 @@ function PositionCard({
           {pnl >= 0 ? "+" : ""}
           {Math.round(pnl).toLocaleString()}원 <small>({pnlRate >= 0 ? "+" : ""}{pnlRate.toFixed(2)}%)</small>
         </span>
+        <i className="ord-wcard-arrow">{open ? "▲" : "▼"}</i>
       </div>
+      {!open && (
+        <div className="ord-pcard-brief">
+          <span>{fmtNum(pos.qty)}주 · 평가 {manwon(price * pos.qty)}</span>
+          <span className={pos.stopLine ? "" : "ord-bad"}>손절 {pos.stopLine ? fmtNum(pos.stopLine) : "없음"}</span>
+          {pos.takeLine && <span>익절 {fmtNum(pos.takeLine)}</span>}
+          {pos.watchQty > 0 && <span>👁 {pos.watchQty}</span>}
+          {pos.freeQty > 0 && <span className="positive">남은 {pos.freeQty}</span>}
+        </div>
+      )}
+      {open && (
+      <>
       <div className="ord-pcard-money">
         매입 <b>{Math.round(pos.avg * pos.qty).toLocaleString()}</b>원 → 평가 <b className={signClass(pnl)}>{Math.round(price * pos.qty).toLocaleString()}</b>원
       </div>
@@ -3179,6 +3202,8 @@ function PositionCard({
           </a>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

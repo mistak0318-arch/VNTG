@@ -16791,3 +16791,77 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-lchart-legend b { color: var(--text); }
 .ord-lchart-legend em { font-style: normal; font-weight: 700; }
 .ord-ltabs { margin-top: 0.2rem; }
+
+/* ── 폰 되감기 (2026-09-07 밤, 다섯 번째) — 벤티지: "아이콘도 크고 서브메뉴가 아래로 들어가 있고 카드가 너무 커" ── */
+.ord-bottombar { display: none !important; }
+.ord-pcard-brief { display: flex; flex-wrap: wrap; gap: 0.25rem 0.7rem; font-size: 0.8rem; color: var(--muted); margin-top: 0.2rem; }
+.ord-pcard-brief span.positive { color: var(--green, #4ade80); }
+.ord-pcard-top { cursor: pointer; }
+.ord-pcard.closed { padding: 0.45rem 0.65rem; }
+@media (max-width: 900px) {
+  .ord-subs { display: flex !important; flex-wrap: nowrap; overflow-x: auto; gap: 0.3rem; margin-bottom: 0.5rem; padding-bottom: 0.15rem; -webkit-overflow-scrolling: touch; }
+  .ord-sub { flex: 0 0 auto; padding: 0.3rem 0.7rem; font-size: 0.82rem; }
+  .page.ord { padding-bottom: 1rem; }
+  .ord-band { padding: 0.3rem 0.55rem; font-size: 0.78rem; gap: 0.35rem; }
+  .ord-band-mid { gap: 0.5rem; }
+  .ord-band-btn { padding: 0.15rem 0.5rem; font-size: 0.76rem; }
+  /* 총액 상자 — 두 줄로 */
+  .ord-total { padding: 0.5rem 0.65rem; gap: 0.15rem 0.6rem; margin-bottom: 0.4rem; }
+  .ord-total-main .krw b { font-size: 1.25rem; }
+  .ord-total-main .krw i { font-size: 0.85rem; }
+  .ord-total-main .krw em { display: none; }
+  .ord-total-main i, .ord-total-pnl i { font-size: 0.68rem; }
+  .ord-total-pnl b { font-size: 0.98rem; }
+  .ord-total-pnl em { font-size: 0.85rem; }
+  .ord-total-pnl small { font-size: 0.68rem; }
+  .ord-total-sub { font-size: 0.72rem; gap: 0.15rem 0.6rem; }
+  .ord-acct { padding: 0.35rem 0.55rem; gap: 0.25rem 0.7rem; font-size: 0.78rem; margin-bottom: 0.5rem; }
+  .ord-acct .ord-stat i { font-size: 0.66rem; }
+  .ord-h4 { margin: 0.6rem 0 0.3rem; font-size: 0.86rem; }
+  .ord-h4-sub { display: none; }
+  .ord-wt-new { padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+  .ord-pcard { padding: 0.45rem 0.6rem; border-left-width: 4px; border-radius: 10px; }
+  .ord-pcard-name { font-size: 0.95rem; }
+  .ord-pcard-pnl { font-size: 0.9rem; }
+  .ord-pcard-pnl small { font-size: 0.72rem; }
+  .ord-noexit, .ord-hasexit, .ord-watch-badge, .ord-crd-badge { font-size: 0.68rem; }
+  .ord-pcard-grid { gap: 0.25rem 0.5rem; margin: 0.35rem 0; }
+  .ord-pcard-grid dd { font-size: 0.9rem; }
+  .ord-pcard-money { font-size: 0.76rem; }
+  .ord-x { padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+  .ord-qs { font-size: 0.72rem; gap: 0.25rem; }
+  .ord-wcard-sum { padding: 0.35rem 0.5rem; }
+  .ord-wtrig { font-size: 0.92rem; }
+  .ord-wcard-sum .ord-wcard-name { font-size: 0.9rem; }
+  .ord-wcard-line2 { font-size: 0.74rem; }
+  .ord-lstats { gap: 0.4rem; }
+  .ord-lstat { padding: 0.4rem 0.55rem; }
+  .ord-lstat b { font-size: 0.95rem; }
+  .ord-lchart svg { height: 140px; }
+  .ord-hist-tabs button { padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+  .ord-note { font-size: 0.78rem; }
+}
+.ord-pcard-top { position: relative; padding-right: 1.3rem; }
+.ord-pcard-top .ord-wcard-arrow { position: absolute; right: 0; top: 0.25rem; }
+@media (max-width: 900px) {
+  .ord-hasexit { display: none; }
+  .ord-pcard-top { gap: 0.3rem; }
+}
+@media (max-width: 900px) {
+  /* 주문 폼 — 매수/매도 토글·거래소 단추를 손가락 크기로만 (벤티지: "아이콘들이 너무 크다") */
+  .ord-side button { padding: 0.35rem 0.9rem; font-size: 0.9rem; min-height: 2rem; }
+  .ord-venue button { padding: 0.3rem 0.4rem; min-height: 2.4rem; font-size: 0.82rem; }
+  .ord-venue button i { font-size: 0.62rem; }
+  .ord-head { gap: 0.3rem; }
+  .ord-picked { font-size: 0.9rem; }
+  .ord-lab { font-size: 0.72rem; margin-top: 0.35rem; }
+  .ord-in { padding: 0.35rem 0.5rem; font-size: 0.92rem; }
+  .ord-step button { width: 2rem; height: 2rem; }
+  .ord-pct button { padding: 0.3rem 0.4rem; font-size: 0.8rem; }
+  .ord-basis button { padding: 4px 6px; font-size: 0.68rem; }
+  .ord-basis button b { font-size: 0.8rem; }
+  .ord-go { padding: 0.6rem; font-size: 1rem; }
+  .ord-exit { padding: 0.4rem 0.5rem; }
+  .ord-legs { padding: 0.35rem 0.45rem; }
+  .ord-legs-presets button { font-size: 0.7rem; padding: 0.1rem 0.45rem; }
+}
