@@ -119,7 +119,7 @@ function loadDraw(code?: string): DrawItem[] {
 
 /** 그린 선 색 — 캔버스는 CSS 변수를 못 읽어 리터럴로. 엑셀 모드는 회색 */
 function drawColor(theme: string): string {
-  return theme === "excel" ? "#5a5a5a" : theme === "note" ? "#9a7b2f" : "#f5c542";
+  return theme === "excel" ? "#5a5a5a" : theme === "note" ? "#6b665b" : "#f5c542";
 }
 
 function sma(candles: Candle[], period: number): { time: Time; value: number }[] {
@@ -277,7 +277,7 @@ export function CandleChart({
       theme === "excel"
         ? { ...m, color: ["#3a3a3a", "#6a6a6a", "#8f8f8f", "#adadad", "#c4c4c4", "#d6d6d6", "#e2e2e2"][i % 7] }
         : theme === "note"
-          ? { ...m, color: ["#b4533f", "#6f8a4a", "#4a6a94", "#8a6a4a", "#9a7b2f", "#7a6a8a", "#8a8578"][i % 7] }
+          ? { ...m, color: ["#3a3631", "#6b665b", "#8f8a7e", "#a8a399", "#bdb8ad", "#cdc8bd", "#d9d3c5"][i % 7] }
           : m,
     );
   /** effect 의존성으로 쓸 지문 — 배열은 매 렌더 새 객체라 그대로는 못 쓴다 */
@@ -406,8 +406,8 @@ export function CandleChart({
     const excel = themeRef.current === "excel";
     const note = themeRef.current === "note";
     const col = drawColor(themeRef.current);
-    const upCol = excel ? "#4a4a4a" : note ? "#b4533f" : "#f0555f";
-    const downCol = excel ? "#8a8a8a" : note ? "#4a6a94" : "#4a8bf5";
+    const upCol = excel ? "#4a4a4a" : note ? "#3a3631" : "#f0555f";
+    const downCol = excel ? "#8a8a8a" : note ? "#b0aba0" : "#4a8bf5";
     const ts = chart.timeScale();
     const xyOf = (pt: { t: Time; p: number }): [number, number] | null => {
       const x = ts.timeToCoordinate(pt.t);

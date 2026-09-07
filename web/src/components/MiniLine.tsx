@@ -15,8 +15,20 @@ export interface MiniSeries {
   width?: number;
 }
 
+import { useAppearance } from "../useAppearance";
+
+/**
+ * 위장 모드의 선 색 (2026-09-07). 부르는 쪽이 헥스(연기금 주황·투신 초록…)를 넘기는데
+ * CSS 로는 못 덮는다. 엑셀·메모 모드에서는 여기서 **회색 농담**으로 바꿔 그린다 —
+ * 첫 선이 제일 진하고 뒤로 갈수록 옅다. 범례가 같은 색을 쓰므로 어느 선인지는 남는다.
+ */
+const DISGUISE_RAMP: Record<string, string[]> = {
+  excel: ["#2a2a2a", "#5a5a5a", "#8a8a8a", "#ababab", "#c4c4c4", "#d6d6d6"],
+  note: ["#2b2924", "#5c574d", "#8f8a7e", "#aaa59a", "#c4bfb3", "#d9d3c5"],
+};
+
 export function MiniLine({
-  series,
+  series: seriesIn,
   labels,
   height = 160,
   yFmt = (v) => v.toFixed(0),
@@ -37,6 +49,10 @@ export function MiniLine({
   markX?: number;
   markXLabel?: string;
 }) {
+  const { theme } = useAppearance();
+  const ramp = DISGUISE_RAMP[theme];
+  const series = ramp ? seriesIn.map((s, i) => ({ ...s, color: ramp[i % ramp.length] })) : seriesIn;
+
   const W = 720;
   const H = height;
   const padL = 46;

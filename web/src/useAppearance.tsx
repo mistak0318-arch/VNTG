@@ -292,15 +292,15 @@ export function chartColors(theme: ThemeName) {
       up: "#4a4a4a",
       down: "#a6a6a6",
     };
-  /* 메모 — 종이 위에 색펜. 봉은 벽돌색·슬레이트색, 격자는 종이 결 */
+  /* 메모 — 흑백 인쇄한 메모. 오름은 진한 잉크, 내림은 옅은 잉크 (엑셀과 같은 규칙, 종이색 위에) */
   if (theme === "note")
     return {
       text: "#6b665b",
       grid: "#ece7dc",
       border: "#d9d3c5",
-      volume: "#ddd7c9",
-      up: "#b4533f",
-      down: "#4a6a94",
+      volume: "#d9d3c5",
+      up: "#3a3631",
+      down: "#b0aba0",
     };
   return theme === "light"
     ? { text: "#5b6673", grid: "#e8ecf1", border: "#d0d7e0", volume: "#c9d2dc", up: "#ff5c5c", down: "#4c8dff" }
@@ -332,11 +332,15 @@ export function tileHeat(
   }
   const capped = Math.min(Math.abs(rate), max) / max;
   const alpha = 0.12 + capped * 0.55;
-  /* 메모 — 형광펜 칠한 칸처럼. 색은 펜 톤이고 세기는 옅게만 */
+  /* 메모 — 엑셀과 같은 규칙(세기는 명암, 내림은 왼쪽 띠)을 종이색 위에 */
   if (theme === "note") {
-    if (rate > 0) return { background: `rgba(180, 83, 63, ${0.08 + capped * 0.32})` };
-    if (rate < 0) return { background: `rgba(74, 106, 148, ${0.08 + capped * 0.32})` };
-    return { background: "#f1ede4" };
+    if (rate === 0) return { background: "#f1ede4" };
+    if (rate > 0) {
+      const lum = 88 - capped * 45;
+      return { background: `hsl(40 12% ${lum}%)`, ...(capped > 0.6 ? { color: "#fbf9f3" } : {}) };
+    }
+    const lum = 94 - capped * 14;
+    return { background: `hsl(40 12% ${lum}%)`, boxShadow: `inset 3px 0 0 hsl(40 8% ${50 - capped * 20}%)` };
   }
   if (theme === "excel") {
     if (rate === 0) return { background: "#f2f2f2" };

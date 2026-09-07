@@ -939,3 +939,56 @@
   border-color: var(--xl-line);
 }
 :root[data-theme="excel"] .about-date { color: var(--xl-green); }
+
+/* ── 관심종목·신호등 표의 작은 표시들 (2026-09-07, 메모 모드 훑다 발견 — 엑셀도 새고 있었다) ──
+   통과(em.ok)·미달(em.bad)·점수 알약(wl-pass)·관심 별·슈퍼 표시·연속 배지·시장 신호등 칩 */
+:root[data-theme="excel"] em.ok,
+:root[data-theme="excel"] em.bad,
+:root[data-theme="excel"] .msig-chip.ok,
+:root[data-theme="excel"] .msig-chip.bad,
+:root[data-theme="excel"] .msig-mark.ok,
+:root[data-theme="excel"] .msig-mark.bad,
+:root[data-theme="excel"] .wl-pass,
+:root[data-theme="excel"] .wl-pass.good,
+:root[data-theme="excel"] .wl-pass.mid,
+:root[data-theme="excel"] .wl-pass.bad,
+:root[data-theme="excel"] .wl-super,
+:root[data-theme="excel"] .lt-streak,
+:root[data-theme="excel"] .um-dot.ok,
+:root[data-theme="excel"] .ov-g-row.ov-g-click {
+  color: var(--text) !important;
+  background: #f3f3f3 !important;
+  border-color: #c8c8c8 !important;
+}
+:root[data-theme="excel"] .watch-star { color: #7a7a7a !important; }
+:root[data-theme="excel"] em.bad,
+:root[data-theme="excel"] .wl-pass.bad,
+:root[data-theme="excel"] .msig-mark.bad { color: var(--muted) !important; }
+
+/* ── 종목 상세 안에서 남아 있던 색 (2026-09-07) ──
+   합계 줄의 파란 바탕 · 수급 누적선(fs-line, 인라인 stroke) · NXT 배지 · 이평 칩 */
+:root[data-theme="excel"] .data-table .totals-row td { background: #f3f3f3 !important; }
+:root[data-theme="excel"] .fs-line,
+:root[data-theme="excel"] .tct-line { stroke: #2a2a2a !important; }
+:root[data-theme="excel"] .fs-line:nth-of-type(2),
+:root[data-theme="excel"] .tct-line:nth-of-type(2) { stroke: #6a6a6a !important; }
+:root[data-theme="excel"] .fs-line:nth-of-type(3),
+:root[data-theme="excel"] .tct-line:nth-of-type(3) { stroke: #a6a6a6 !important; }
+:root[data-theme="excel"] .fs-line:nth-of-type(n+4),
+:root[data-theme="excel"] .tct-line:nth-of-type(n+4) { stroke: #c4c4c4 !important; }
+:root[data-theme="excel"] .fs-dot { background: #6a6a6a !important; fill: #6a6a6a !important; }
+:root[data-theme="excel"] .ph-ex.nxt,
+:root[data-theme="excel"] .ph-ex { background: #f3f3f3 !important; color: var(--text) !important; }
+:root[data-theme="excel"] .ci-ma-item.up,
+:root[data-theme="excel"] .ci-ma-item.down { border-color: #c8c8c8 !important; }
+:root[data-theme="excel"] .ci-ma-item.up .ci-ma-gap,
+:root[data-theme="excel"] .ci-ma-item.down .ci-ma-gap { color: var(--text) !important; }
+
+/* 기본 링크색(파랑)·시장 배지·장세 글자 — 마지막까지 남아 있던 것들 (2026-09-07) */
+:root[data-theme="excel"] .main-inner a { color: var(--accent); }
+:root[data-theme="excel"] .mkt-badge,
+:root[data-theme="excel"] .mkt-badge.ks,
+:root[data-theme="excel"] .mkt-badge.kq { color: var(--muted) !important; border-color: #c8c8c8 !important; background: transparent !important; }
+:root[data-theme="excel"] .sig-regime,
+:root[data-theme="excel"] .sig-regime.bear,
+:root[data-theme="excel"] .sig-regime.bull { color: var(--text) !important; }

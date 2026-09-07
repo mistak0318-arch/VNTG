@@ -18,13 +18,20 @@
   --border: #e4dfd3;
   --text: #2b2924;
   --muted: #8a8578;
-  /* 색펜 — 빨강·파랑을 없애지 않고 펜 톤으로 누른다. 메모엔 색펜이 자연스럽다 */
-  --red: #b4533f;
-  --blue: #4a6a94;
-  --green: #5b7d52;
-  --accent: #b4533f;
-  --cis-gold: #9a7b2f;
-  --live-on: #5b7d52;
+  /*
+   * **무채색** (2026-09-07 두 번째). 처음엔 빨강·파랑을 「색펜 톤」으로 눌렀는데 —
+   * 벤티지: "차트나 등락률 이런 거 색상이 빨강 파랑이라 누가 봐도 주식 보는 거 같아.
+   * 엑셀 모드에서처럼 주식하는 거 아닌 것처럼." 맞다. 톤을 눌러도 빨강은 빨강이다.
+   *
+   * 방향은 **명암**으로만 가른다 — 오름은 진한 잉크, 내림은 옅은 잉크. 숫자엔 ▲▼·+− 가
+   * 이미 붙어 있어 방향은 안 잃는다. 흑백 인쇄한 메모가 이 모양이다.
+   */
+  --red: #2b2924;
+  --blue: #8f8a7e;
+  --green: #5c574d;
+  --accent: #5c574d;
+  --cis-gold: #6b665b;
+  --live-on: #5c574d;
   --row-hover: rgba(43, 41, 36, 0.05);
   --row-hover-line: rgba(43, 41, 36, 0.2);
 
@@ -54,6 +61,27 @@
 
 :root[data-theme="note"] body {
   background: var(--bg);
+}
+
+/*
+ * **뿌리에서 채도를 뺀다** (2026-09-07). 벤티지: "차트나 등락률 이런 거 색상이 빨강
+ * 파랑이라 누가 봐도 주식 보는 거 같아. 차트나 이런 것도 다."
+ *
+ * 색이 박힌 자리를 하나씩 찾아 끄는 방식은 끝이 없다 — 엑셀 모드가 08-27 에 전수
+ * 점검을 하고도 관심종목의 ✓✗·별·연속 배지가 새고 있었고, 오늘 종목 상세를 훑으니
+ * 합계 줄·수급 선·NXT 배지·이평 칩·장세 글자·TradingView 로고가 또 나왔다. 화면을 새로
+ * 만들 때마다 늘어난다.
+ *
+ * 그래서 `html` 에 grayscale 필터 한 줄. 캔버스(봉차트)·SVG·인라인 style·배지 전부
+ * 한 번에 무채색이 된다. 위의 변수 규칙들은 그대로 둔다 — 명암(오름 진하게·내림
+ * 옅게)은 필터가 못 만드는 것이라 그쪽이 맡는다.
+ *
+ * ⚠️ `html` 에 거는 이유: `.main-inner` 에 걸면 filter 가 containing block 이 되어
+ * 그 안에서 뜨는 `position: fixed` 시트(슈퍼 상세·지수 상세…)가 본문 안에 갇힌다.
+ * `html` 은 viewport 크기(height:100%)라 fixed 가 그대로 뷰포트 기준이다. 실측함.
+ */
+:root[data-theme="note"] {
+  filter: grayscale(1);
 }
 
 /* 본문 — 위아래 껍데기만큼 비운다. 옆 여백은 메모처럼 넉넉히 */
@@ -239,13 +267,13 @@
   }
 }
 
-/* ── 시황·보드 카드는 제 변수(--ov-*)를 쓴다 — 종이색으로 갈아끼운다 ── */
+/* ── 시황·보드 카드는 제 변수(--ov-*)를 쓴다 — 종이색·잉크 농담으로 갈아끼운다 ── */
 :root[data-theme="note"] .ov,
 :root[data-theme="note"] .ib {
-  --up: #b4533f;
-  --down: #4a6a94;
-  --flat: #8a8578;
-  --accent: #9a7b2f;
+  --up: #2b2924;
+  --down: #8f8a7e;
+  --flat: #b0aba0;
+  --accent: #5c574d;
   --ov-panel: #fbf9f3;
   --ov-panel-2: #f3efe6;
   --ov-line: #d9d3c5;
@@ -253,11 +281,12 @@
   --ov-txt: #2b2924;
   --ov-txt-2: #6b665b;
   --ov-txt-3: #9a958a;
-  --up-fill: #c9836f;
-  --down-fill: #8aa0bf;
+  /* 막대 채움도 명암 — 좌우 방향이 이미 매수·매도를 말한다 */
+  --up-fill: #5c574d;
+  --down-fill: #c4bfb3;
 }
 :root[data-theme="note"] .ov-dot.open {
-  box-shadow: 0 0 0 3px rgba(180, 83, 63, 0.15);
+  box-shadow: 0 0 0 3px rgba(43, 41, 36, 0.12);
 }
 
 /*
@@ -277,3 +306,197 @@
     display: none !important;
   }
 }
+
+/* ═══ 색으로 그리는 것들 — 엑셀 모드의 전수 점검 목록을 종이 톤으로 (2026-09-07) ═══
+   excel.css 의 「.positive/.negative → 텍스트색」부터 「복기 노트 태그」까지를 그대로
+   가져와 회색만 종이 톤으로 바꿨다. 엑셀이 08-27 에 하나씩 찾아 둔 자리들이라 여기서
+   다시 찾지 않는다. 엑셀 쪽에 줄이 늘면 여기도 같이 늘려야 한다. */
+:root[data-theme="note"] .positive,
+:root[data-theme="note"] .negative {
+  color: var(--text);
+}
+
+:root[data-theme="note"] .data-table,
+:root[data-theme="note"] .num,
+:root[data-theme="note"] table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 칸에만 깐다 — 인라인 글자에 배경이 붙으면 얼룩덜룩해진다 */
+:root[data-theme="note"] td.negative {
+  background: #f3efe6;
+}
+
+/* 위아래 화살표·삼각형도 색을 뺀다 */
+:root[data-theme="note"] .up,
+:root[data-theme="note"] .down {
+  color: var(--text);
+}
+
+/* ===== 색으로 그리는 것들 — 그래프·막대·배지 (2026-08-27 전수 점검) =====
+ *
+ * 숫자 색은 위에서 뺐는데 **그림은 그대로 빨강·파랑**이었다. 장중 수급 선, 체결
+ * 막대, 수급 막대, 집중도 막대 같은 것들이다. 회계 장부 위에 형광색 그래프가
+ * 하나만 있어도 위장이 통째로 깨진다 — 여기서는 **명암 3단계**로 갈린다.
+ * (인라인 style 로 칠하는 것은 !important 로만 덮인다)
+ */
+
+/* 장중 수급 — 개인·외국인·기관 세 선을 짙기로 가른다 */
+:root[data-theme="note"] .fi-svg path:nth-of-type(1) { stroke: #8f8a7e !important; }
+:root[data-theme="note"] .fi-svg path:nth-of-type(2) { stroke: #3a3631 !important; }
+:root[data-theme="note"] .fi-svg path:nth-of-type(3) { stroke: #b8b3a8 !important; }
+:root[data-theme="note"] .fi-legend span:nth-of-type(1) i { background: #8f8a7e !important; }
+:root[data-theme="note"] .fi-legend span:nth-of-type(2) i { background: #3a3631 !important; }
+:root[data-theme="note"] .fi-legend span:nth-of-type(3) i { background: #b8b3a8 !important; }
+
+/* 매수·매도 방향 막대 — 오름은 짙게, 내림은 옅게 (봉 차트와 같은 규칙) */
+:root[data-theme="note"] .sp-bar.buy,
+:root[data-theme="note"] .bf-bar.buy,
+:root[data-theme="note"] .bar-up,
+:root[data-theme="note"] .conc-fill { background: #4a463f !important; }
+:root[data-theme="note"] .sp-bar.sell,
+:root[data-theme="note"] .bf-bar.sell,
+:root[data-theme="note"] .bar-down { background: #b0aba0 !important; }
+
+/* 브리핑 「오늘 수급」 밑줄 막대 · 등락 현황 · 거래대금 — #f04452/#3182f6 이 박혀 있었다 */
+:root[data-theme="note"] .bf-supply-bar > i.up,
+:root[data-theme="note"] .bf-ud-bar i.u { background: #4a463f !important; }
+:root[data-theme="note"] .bf-supply-bar > i.down,
+:root[data-theme="note"] .bf-ud-bar i.d { background: #b0aba0 !important; }
+
+/* ===== 배지·태그·칩 일괄 무채색 (2026-08-27) =====
+ *
+ * 색이 박힌 자리를 하나씩 찾아 끄는 방식은 **끝이 없다** — 화면을 새로 만들 때마다
+ * 또 생긴다. 이 모드에서 색을 쓰는 물건은 거의 **작은 알약(배지·태그·칩)**이므로,
+ * 그 부류를 통째로 회색 테두리 + 회색 글자로 눌러 둔다. 뜻은 글자가 이미 말한다.
+ * (등락 숫자·표 배경은 위에서 따로 처리했고, 여기서 덮지 않는다)
+ */
+:root[data-theme="note"] .news-tag,
+:root[data-theme="note"] .chan-tag,
+:root[data-theme="note"] .cal-badge,
+:root[data-theme="note"] .vi-badge,
+:root[data-theme="note"] .vi-tag,
+:root[data-theme="note"] .tl-badge,
+:root[data-theme="note"] .tl-kind,
+:root[data-theme="note"] .ev-tag,
+:root[data-theme="note"] .bf-tile-g,
+:root[data-theme="note"] .uw-etf-badge,
+:root[data-theme="note"] .dart-amend,
+:root[data-theme="note"] .jn-trade-kind,
+:root[data-theme="note"] .scr-rank-pre {
+  background: #f3efe6 !important;
+  border-color: #cdc8bd !important;
+  color: #3a3631 !important;
+}
+
+/* VI 발동 — 상승/하락 구분은 명암으로. 깜빡임(펄스)도 장부에는 안 맞는다 */
+:root[data-theme="note"] .ph-vi,
+:root[data-theme="note"] [class*="vi-"][class*="up"],
+:root[data-theme="note"] [class*="vi-"][class*="down"] {
+  animation: none !important;
+}
+:root[data-theme="note"] .conc-fill.heavy { background: #2b2924 !important; }
+
+/* 알림 배지·점 — 빨간 알약은 장부 위에서 제일 먼저 튄다 */
+:root[data-theme="note"] .tgr-badge,
+:root[data-theme="note"] .uw-live-dot,
+:root[data-theme="note"] .rt-dot {
+  background: #6b665b !important;
+  color: #fbf9f3 !important;
+}
+
+/* 신호등 점 — 초록·노랑·빨강 대신 명암. 옆의 글자가 이미 색을 말한다 */
+:root[data-theme="note"] .sig-dot.green { background: #4a463f !important; }
+:root[data-theme="note"] .sig-dot.yellow { background: #a8a399 !important; }
+:root[data-theme="note"] .sig-dot.red { background: #d9d3c5 !important; border: 1px solid #9a958a; }
+
+/* 복기 노트 — 저장 버튼·태그·달력 선택도 파랑을 뺀다 */
+:root[data-theme="note"] .jn-save-btn {
+  background: var(--accent) !important;
+  box-shadow: none !important;
+}
+:root[data-theme="note"] .jn-cal-cell.on { background: #4a463f !important; }
+:root[data-theme="note"] .jn-cal-cell.has::after { background: #8f8a7e !important; }
+:root[data-theme="note"] .jn-tag.on,
+:root[data-theme="note"] .jn-tag.mood.on {
+  background: #efeae0 !important;
+  border-color: #8f8a7e !important;
+  color: #2b2924 !important;
+}
+
+
+/* ── 메모 모드에서 실측으로 남아 있던 색 (2026-09-07, 폰 화면을 훑어 찾음) ── */
+/* 시장 신호등 카드의 왼쪽 띠 — 초록·노랑·빨강 대신 명암 */
+:root[data-theme="note"] .msig-green { border-left-color: #4a463f; }
+:root[data-theme="note"] .msig-yellow { border-left-color: #a8a399; }
+:root[data-theme="note"] .msig-red { border-left-color: #d9d3c5; }
+/* 실시간 점·알림 종·맥박 용어 칩·브리핑 배지 */
+:root[data-theme="note"] .live-dot,
+:root[data-theme="note"] .live-dot.on,
+:root[data-theme="note"] .live-dot.wait { border-color: var(--border); background: var(--panel-2); }
+:root[data-theme="note"] .live-dot.on i { background: #4a463f; box-shadow: none; }
+:root[data-theme="note"] .live-dot.wait i { background: var(--muted); }
+:root[data-theme="note"] .live-dot b { color: var(--muted); }
+:root[data-theme="note"] .nb-bell.has { color: var(--text) !important; }
+:root[data-theme="note"] .pulse-term,
+:root[data-theme="note"] .pulse-term.news,
+:root[data-theme="note"] .bf-badge,
+:root[data-theme="note"] .bf-badge-strength,
+:root[data-theme="note"] .bf-badge-signal {
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+/* ── 관심종목·신호등 표의 작은 표시들 (2026-09-07, 메모 모드 훑다 발견 — 엑셀도 새고 있었다) ──
+   통과(em.ok)·미달(em.bad)·점수 알약(wl-pass)·관심 별·슈퍼 표시·연속 배지·시장 신호등 칩 */
+:root[data-theme="note"] em.ok,
+:root[data-theme="note"] em.bad,
+:root[data-theme="note"] .msig-chip.ok,
+:root[data-theme="note"] .msig-chip.bad,
+:root[data-theme="note"] .msig-mark.ok,
+:root[data-theme="note"] .msig-mark.bad,
+:root[data-theme="note"] .wl-pass,
+:root[data-theme="note"] .wl-pass.good,
+:root[data-theme="note"] .wl-pass.mid,
+:root[data-theme="note"] .wl-pass.bad,
+:root[data-theme="note"] .wl-super,
+:root[data-theme="note"] .lt-streak,
+:root[data-theme="note"] .um-dot.ok,
+:root[data-theme="note"] .ov-g-row.ov-g-click {
+  color: var(--text) !important;
+  background: var(--panel-2) !important;
+  border-color: var(--border) !important;
+}
+:root[data-theme="note"] .watch-star { color: #8f8a7e !important; }
+:root[data-theme="note"] em.bad,
+:root[data-theme="note"] .wl-pass.bad,
+:root[data-theme="note"] .msig-mark.bad { color: var(--muted) !important; }
+
+/* ── 종목 상세 안에서 남아 있던 색 (2026-09-07) ──
+   합계 줄의 파란 바탕 · 수급 누적선(fs-line, 인라인 stroke) · NXT 배지 · 이평 칩 */
+:root[data-theme="note"] .data-table .totals-row td { background: var(--panel-2) !important; }
+:root[data-theme="note"] .fs-line,
+:root[data-theme="note"] .tct-line { stroke: #2b2924 !important; }
+:root[data-theme="note"] .fs-line:nth-of-type(2),
+:root[data-theme="note"] .tct-line:nth-of-type(2) { stroke: #6b665b !important; }
+:root[data-theme="note"] .fs-line:nth-of-type(3),
+:root[data-theme="note"] .tct-line:nth-of-type(3) { stroke: #a8a399 !important; }
+:root[data-theme="note"] .fs-line:nth-of-type(n+4),
+:root[data-theme="note"] .tct-line:nth-of-type(n+4) { stroke: #c4bfb3 !important; }
+:root[data-theme="note"] .fs-dot { background: #6b665b !important; fill: #6b665b !important; }
+:root[data-theme="note"] .ph-ex.nxt,
+:root[data-theme="note"] .ph-ex { background: var(--panel-2) !important; color: var(--text) !important; }
+:root[data-theme="note"] .ci-ma-item.up,
+:root[data-theme="note"] .ci-ma-item.down { border-color: var(--border) !important; }
+:root[data-theme="note"] .ci-ma-item.up .ci-ma-gap,
+:root[data-theme="note"] .ci-ma-item.down .ci-ma-gap { color: var(--text) !important; }
+
+/* 기본 링크색(파랑)·시장 배지·장세 글자 — 마지막까지 남아 있던 것들 (2026-09-07) */
+:root[data-theme="note"] .main-inner a { color: var(--accent); }
+:root[data-theme="note"] .mkt-badge,
+:root[data-theme="note"] .mkt-badge.ks,
+:root[data-theme="note"] .mkt-badge.kq { color: var(--muted) !important; border-color: var(--border) !important; background: transparent !important; }
+:root[data-theme="note"] .sig-regime,
+:root[data-theme="note"] .sig-regime.bear,
+:root[data-theme="note"] .sig-regime.bull { color: var(--text) !important; }
