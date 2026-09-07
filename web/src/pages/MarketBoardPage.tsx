@@ -9,11 +9,12 @@
  *   ① 국면 한 줄 — 있는 판정(체온계·수급·미장 신호등·VIX)만 조합. 신호등 문턱은 건드리지 않는다
  *   ② 타일 12개, 숫자 하나씩, 눌러야 상세
  *   ③ AI 브리핑 3줄
- *   ④ 깊이 보기 — 옛 두 화면이 접힌 채 그대로. 기본 접힘, 마지막에 연 것만 기억
+ *   ④ 옛 두 화면(마켓 브리핑·흐름, 시황 대시보드)은 **그대로 제 메뉴에** — 합치려다 벤티지가 "지우고 합치니 더
+ *      이상해진다"로 되돌렸다. 전광판은 셋째 메뉴다. 타일을 누르면 그쪽으로 간다
  *
  * 새 조회는 없다. 두 화면이 쓰던 서버 섹션 캐시(useSection)를 그대로 집어 온다.
  */
-import { useEffect, useMemo, useState, lazy, Suspense } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   api,
   signClass,
@@ -32,9 +33,6 @@ import { useMarketLens } from "../components/MarketLensPanel";
 import { IndexDetailSheet } from "../components/overview/IndexDetailSheet";
 import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
 import { Sparkline } from "../components/overview/Sparkline";
-
-const OverviewPage = lazy(() => import("./OverviewPage").then((m) => ({ default: m.OverviewPage })));
-const MarketFlowPage = lazy(() => import("./MarketFlowPage").then((m) => ({ default: m.MarketFlowPage })));
 
 type Level = "green" | "yellow" | "red";
 interface Regime {
@@ -155,21 +153,10 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
   const [mine, setMine] = useState<{ pnl: number; rate: number; value: number; waiting: number; today: number } | null | "none">(null);
   const [indexDetail, setIndexDetail] = useState<string | null>(null);
   const [chart, setChart] = useState<ChartTarget | null>(null);
-  const [deep, setDeep] = useState<"" | "overview" | "flow">(() => {
-    try {
-      return (localStorage.getItem("board.deep") as "" | "overview" | "flow") ?? "";
-    } catch {
-      return "";
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem("board.deep", deep);
-    } catch {
-      /* 저장 못 해도 화면은 된다 */
-    }
-  }, [deep]);
-
+  /* 타일을 누르면 옛 화면으로 간다 — 전광판은 요약이고, 깊이는 원래 메뉴에 있다(벤티지: "합치니 더 이상해진다") */
+  const go = (hash: string) => {
+    window.location.hash = hash;
+  };
   useEffect(() => {
     void api.briefingBrief().then((r) => setBrief(r.brief)).catch(() => undefined);
     let alive = true;
@@ -315,7 +302,7 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
     value: flowK ? `외인 ${eok(flowK.foreign)}` : "…",
     sub: flowK ? `기관 ${eok(flowK.institution)} · 개인 ${eok(flowK.individual)}${flowQ ? ` · 코스닥 외인 ${eok(flowQ.foreign)}` : ""}` : undefined,
     cls: flowK ? (flowK.foreign > 0 && flowK.institution > 0 ? "positive" : flowK.foreign < 0 && flowK.institution < 0 ? "negative" : "") : "",
-    onClick: () => setDeep("flow"),
+    onClick: () => go("#/briefing"),
     hint: "눌러서 흐름 상세(누적·업종별)",
   });
   const breadthTile = T({
@@ -325,7 +312,7 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
     sub: `20일선 위 ${above20 !== null ? `${above20.toFixed(0)}%` : "-"} · 신고 ${highN ?? "-"} / 신저 ${lowN ?? "-"} · VI ${viN ?? "-"}`,
     cls: riseNow !== null ? (riseNow >= 55 ? "positive" : riseNow < 40 ? "negative" : "") : "",
     spark: above20Series.slice(-30),
-    onClick: () => setDeep("overview"),
+    onClick: () => go("#/overview"),
   });
   const turnTile = T({
     k: "turn",
@@ -333,7 +320,7 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
     value: turnTotal !== null ? `${(turnTotal / 10_000).toFixed(1)}조` : "…",
     sub: turnVs !== null ? `20일 평균의 ${turnVs.toFixed(0)}% · 코스피 ${tk ? (tk.today / 10_000).toFixed(1) : "-"}조 / 코스닥 ${tq ? (tq.today / 10_000).toFixed(1) : "-"}조` : undefined,
     cls: turnVs !== null ? (turnVs >= 120 ? "positive" : turnVs < 80 ? "negative" : "") : "",
-    onClick: () => setDeep("overview"),
+    onClick: () => go("#/overview"),
   });
   const rateTile = T({
     k: "rate",
@@ -359,7 +346,7 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
     value: themeTop.length ? `${themeTop[0].name.replace(/_/g, " ")} ${pct(themeTop[0].changeRate, 1)}` : upSectors.length ? `${upSectors[0].name} ${pct(upSectors[0].changeRate, 1)}` : "…",
     sub: `${themeTop.slice(1, 3).map((t) => `${t.name.replace(/_/g, " ")} ${pct(t.changeRate, 1)}`).join(" · ")}${themeBottom.length ? ` · ↓ ${themeBottom[0].name.replace(/_/g, " ")} ${pct(themeBottom[0].changeRate, 1)}` : ""}`,
     cls: themeTop.length ? "positive" : "",
-    onClick: () => setDeep("flow"),
+    onClick: () => go("#/briefing"),
     hint: "눌러서 테마 로테이션·주도주",
   });
   const cmdTile = T({
@@ -429,23 +416,6 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
               <li key={i}>{l}</li>
             ))}
           </ul>
-        </div>
-      )}
-
-      {/* ④ 깊이 보기 — 옛 두 화면, 접힌 채로 */}
-      <div className="bd-deep-tabs">
-        <button type="button" className={deep === "flow" ? "on" : ""} onClick={() => setDeep(deep === "flow" ? "" : "flow")}>
-          🌊 흐름 · 맥박 · 로테이션 · 주도주 · 종가배팅 {deep === "flow" ? "▲" : "▼"}
-        </button>
-        <button type="button" className={deep === "overview" ? "on" : ""} onClick={() => setDeep(deep === "overview" ? "" : "overview")}>
-          📊 시황 상세 (지수·수급·순위·테마·VI) {deep === "overview" ? "▲" : "▼"}
-        </button>
-      </div>
-      {deep && (
-        <div className="bd-deep">
-          <Suspense fallback={<div className="page-note">불러오는 중…</div>}>
-            {deep === "flow" ? <MarketFlowPage onSelectStock={onSelectStock} /> : <OverviewPage onSelectStock={onSelectStock} />}
-          </Suspense>
         </div>
       )}
 
