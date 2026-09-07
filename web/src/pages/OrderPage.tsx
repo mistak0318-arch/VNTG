@@ -2008,13 +2008,16 @@ function WatchForm({ status, prefill, onDone }: { status: OrderStatus; prefill: 
 
 function WatchTab({ status, prefill, onDone }: { status: OrderStatus; prefill: Prefill; onDone: () => void }) {
   const [rows, setRows] = useState<AutoWatch[]>([]);
+  const [prices, setPrices] = useState<Record<string, { price: number; from: string }>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState<boolean>(Boolean(prefill.watch));
 
   const load = useCallback(async () => {
     try {
       const r = await api.orderWatch();
       setRows(r.rows ?? []);
+      setPrices(r.prices ?? {});
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "조회 실패");
@@ -2025,6 +2028,9 @@ function WatchTab({ status, prefill, onDone }: { status: OrderStatus; prefill: P
     const t = setInterval(() => void load(), 5_000);
     return () => clearInterval(t);
   }, [load]);
+  useEffect(() => {
+    if (prefill.watch) setShowForm(true);
+  }, [prefill.key, prefill.watch]);
 
   async function cancel(r: AutoWatch) {
     if (!window.confirm(`${r.ticket.name} ${r.ticket.side === "buy" ? "매수" : "매도"} ${r.ticket.qty}주 감시를 취소할까요?`)) return;
@@ -2046,113 +2052,169 @@ function WatchTab({ status, prefill, onDone }: { status: OrderStatus; prefill: P
 
   return (
     <div className="ord-tab">
-      <WatchForm
-        status={status}
-        prefill={prefill}
-        onDone={() => {
-          void load();
-          onDone();
-        }}
-      />
-      <p className="ord-note">
-        자동감시는 <b>서버가 값을 보다가 조건에 닿으면</b> 미리 승인해 둔 주문서를 <b>한 번</b> 내는 것이다. 정규장 09:00~15:30 에
-        KRX 체결로 판정하고(실시간, 없으면 조회), 발동 순간 종목 허용·한 건·하루 한도·가격 자(그때 값 ±{status.guard.priceCollarPct}%)를 다시 잰다.
-        실패해도 다시 안 낸다. 잔고 줄의 「👁 감시매도」를 누르면 위 폼이 채워진다.
-        {!allowed && (
-          <>
-            {" "}
-            <b className="ord-bad">지금은 꺼져 있다</b> — orderGuard.json 의 allowAutoWatch.
-          </>
-        )}
-      </p>
+      {/*
+        지켜보는 중이 맨 위 (2026-09-07 밤, 세 번째) — 벤티지: "지켜보는 중 부분을 맨 위로 빼야겠다. 표 안에
+        조건→주문 텍스트가 너무 길어서 무슨 글자인지 확인이 안 돼. 제일 중요한 부분이잖아."
+        표를 버리고 카드로 — 발동가·기준·방향·지금 값·발동까지 남은 %·닿으면·수량을 칸으로 쪼갠다.
+      */}
       {error && <p className="ord-err">{error}</p>}
-      <h4 className="ord-h4">
-        지켜보는 중 {live.length > 0 && <span className="ord-count">{live.length}</span>}
-      </h4>
+      {!allowed && (
+        <p className="ord-err">
+          자동감시가 꺼져 있다 — orderGuard.json 의 allowAutoWatch. 기다리던 것도 발동하지 않는다.
+        </p>
+      )}
+      <div className="ord-wt-head">
+        <h4 className="ord-h4">
+          👁 지켜보는 중 {live.length > 0 && <span className="ord-count">{live.length}</span>}
+          <i className="ord-h4-sub">정규장 09:00~15:30 · KRX 체결로 판정 · 5초마다 새로 읽음</i>
+        </h4>
+        <button type="button" className={`ord-wt-new${showForm ? " on" : ""}`} onClick={() => setShowForm((v) => !v)}>
+          {showForm ? "폼 접기" : "＋ 새 감시 걸기"}
+        </button>
+      </div>
       {live.length === 0 ? (
-        <p className="empty">지켜보는 감시가 없다</p>
+        <p className="empty">지켜보는 감시가 없다 — 「＋ 새 감시 걸기」</p>
       ) : (
-        <div className="ord-scroll">
-          <table className="ord-table">
-            <thead>
-              <tr>
-                <th>종목</th>
-                <th>조건 → 주문</th>
-                <th className="r">수량</th>
-                <th>유효</th>
-                <th>상태</th>
-                <th>걸어 둔 때</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {live.map((r) => (
-                <tr key={r.id} className={r.ticket.side}>
-                  <td>
-                    <b className={`ord-side ${r.ticket.side}`}>{r.ticket.side === "buy" ? "매수" : "매도"}</b> {r.ticket.name || r.ticket.code}{" "}
-                    <span className="ord-code">{r.ticket.code}</span>
-                    {r.parentId && <i className="ord-watch-tag">체결 뒤 자동</i>}
-                  </td>
-                  <td className="ord-msg">{watchSay(r.spec)}</td>
-                  <td className="r">{fmtNum(r.ticket.qty)}</td>
-                  <td>{r.spec.validUntil.slice(5).replace("-", "/")}</td>
-                  <td>
-                    <b className={`ord-rsv-st ${r.status}`}>{WATCH_STATUS_KO[r.status]}</b>
-                    {r.status === "fired" && (
-                      <div className="pt-n">
-                        {r.firePrice ? `${r.firePrice.toLocaleString()}에 발동` : ""} {r.ordNo ? `· ${r.ordNo}` : ""}
-                      </div>
-                    )}
-                  </td>
-                  <td>{localTs(r.at)}</td>
-                  <td>
-                    {r.status === "waiting" && (
-                      <button type="button" className="ord-x" disabled={busy === r.id} onClick={() => void cancel(r)}>
-                        {busy === r.id ? "…" : "취소"}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="ord-wcards">
+          {live.map((r) => (
+            <WatchCard key={r.id} r={r} cur={prices[r.ticket.code] ?? null} busy={busy === r.id} onCancel={() => void cancel(r)} />
+          ))}
         </div>
       )}
+
+      {showForm && (
+        <WatchForm
+          status={status}
+          prefill={prefill}
+          onDone={() => {
+            void load();
+            onDone();
+          }}
+        />
+      )}
+
       {done.length > 0 && (
         <>
           <h4 className="ord-h4">지난 감시</h4>
-          <div className="ord-scroll">
-            <table className="ord-table">
-              <thead>
-                <tr>
-                  <th>종목</th>
-                  <th>조건 → 주문</th>
-                  <th className="r">수량</th>
-                  <th>결과</th>
-                  <th>내용</th>
-                  <th>때</th>
-                </tr>
-              </thead>
-              <tbody>
-                {done.map((r) => (
-                  <tr key={r.id} className={r.status === "failed" ? "bad" : ""}>
-                    <td>
-                      {r.ticket.side === "buy" ? "매수" : "매도"} {r.ticket.name || r.ticket.code}
-                    </td>
-                    <td className="ord-msg">{watchSay(r.spec)}</td>
-                    <td className="r">{fmtNum(r.ticket.qty)}</td>
-                    <td>
-                      <b className={`ord-rsv-st ${r.status}`}>{WATCH_STATUS_KO[r.status]}</b>
-                      {r.status === "filled" && r.fillPrice ? <div className="pt-n">{fmtNum(r.fillQty ?? 0)}주 @ {fmtNum(r.fillPrice)}</div> : null}
-                    </td>
-                    <td className="ord-msg">{r.msg || "-"}</td>
-                    <td>{localTs(r.firedAt ?? r.at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="ord-wcards done">
+            {done.map((r) => (
+              <WatchCard key={r.id} r={r} cur={null} busy={false} onCancel={null} />
+            ))}
           </div>
         </>
+      )}
+      <p className="ord-note">
+        자동감시는 <b>서버가 값을 보다가 조건에 닿으면</b> 미리 승인해 둔 주문서를 <b>한 번</b> 내는 것이다. 발동 순간 종목 허용·한 건·하루
+        한도·가격 자(그때 값 ±{status.guard.priceCollarPct}%)를 다시 잰다. 실패해도 다시 안 낸다. 잔고 줄의 「👁 감시매도」를 누르면 폼이 채워진다.
+      </p>
+    </div>
+  );
+}
+
+/** 감시 한 장 — 조건을 칸으로 쪼개고, 지금 값과 발동까지 남은 거리를 막대로 */
+function WatchCard({ r, cur, busy, onCancel }: { r: AutoWatch; cur: { price: number; from: string } | null; busy: boolean; onCancel: (() => void) | null }) {
+  const t = r.ticket;
+  const s = r.spec;
+  const sideKo = t.side === "buy" ? "매수" : "매도";
+  const basisKo = s.basis === "price" ? null : s.basis === "prevClose" ? "전일 종가" : s.basis === "avg" ? "평단" : "등록 때 값";
+  const execKo = s.exec === "market" ? "시장가" : s.exec === "limit_trigger" ? "지정가 · 발동가로" : s.exec === "limit_now" ? "지정가 · 그때 현재가로" : `지정가 ${(s.limitPrice ?? 0).toLocaleString()}원`;
+  const est = (s.limitPrice ?? s.trigger) * t.qty;
+  /* 발동까지 — 이하 조건이면 값이 내려와야 하고, 이상이면 올라가야 한다. 남은 %는 지금 값 기준 */
+  const gap = cur && cur.price > 0 ? ((s.trigger - cur.price) / cur.price) * 100 : null;
+  const hit = gap !== null && (s.dir === "le" ? gap >= 0 : gap <= 0);
+  /* 막대 — 등록 때 기준(또는 지금 값)에서 발동가까지를 100 으로 보고 지금이 어디쯤인가 */
+  const start = s.basisPrice ?? cur?.price ?? s.trigger;
+  const span = Math.abs(s.trigger - start);
+  const walked = cur && span > 0 ? Math.min(100, Math.max(0, (Math.abs(cur.price - start) / span) * 100 * (s.dir === "le" ? (cur.price <= start ? 1 : 0) : (cur.price >= start ? 1 : 0)))) : 0;
+  const stKo = WATCH_STATUS_KO[r.status];
+  return (
+    <div className={`ord-wcard ${t.side} st-${r.status}`}>
+      <div className="ord-wcard-top">
+        <b className={`ord-side ${t.side}`}>{sideKo}</b>
+        <span className="ord-wcard-name">
+          {t.name || t.code} <span className="ord-code">{t.code}</span>
+        </span>
+        {r.parentId && <i className="ord-watch-tag">체결 뒤 자동</i>}
+        <span className={`ord-rsv-st ${r.status}`}>{stKo}</span>
+        {onCancel && r.status === "waiting" && (
+          <button type="button" className="ord-x" disabled={busy} onClick={onCancel}>
+            {busy ? "…" : "취소"}
+          </button>
+        )}
+      </div>
+      <div className="ord-wcard-grid">
+        <div className="ord-wcard-cell big">
+          <dt>발동가</dt>
+          <dd>
+            <b>{s.trigger.toLocaleString()}</b>원 {s.dir === "le" ? "이하" : "이상"}
+          </dd>
+          {basisKo && (
+            <small>
+              {basisKo} {(s.basisPrice ?? 0).toLocaleString()} 대비 {(s.pct ?? 0) > 0 ? "+" : ""}
+              {s.pct}%
+            </small>
+          )}
+        </div>
+        <div className="ord-wcard-cell">
+          <dt>지금 값</dt>
+          <dd>
+            {r.status === "waiting" ? (
+              cur ? (
+                <>
+                  <b>{cur.price.toLocaleString()}</b>원 <small>({cur.from})</small>
+                </>
+              ) : (
+                <span className="ord-caps">값 없음(장 밖)</span>
+              )
+            ) : r.firePrice ? (
+              <>
+                발동 <b>{r.firePrice.toLocaleString()}</b>원
+              </>
+            ) : (
+              "-"
+            )}
+          </dd>
+          {r.status === "waiting" && gap !== null && (
+            <small className={hit ? "ord-bad" : ""}>
+              발동까지 {gap > 0 ? "+" : ""}
+              {gap.toFixed(2)}%{hit ? " — 닿았다" : ""}
+            </small>
+          )}
+        </div>
+        <div className="ord-wcard-cell">
+          <dt>닿으면</dt>
+          <dd>{execKo}</dd>
+          <small>
+            {t.qty.toLocaleString()}주 · 어림 {won(est)}
+          </small>
+        </div>
+        <div className="ord-wcard-cell">
+          <dt>유효</dt>
+          <dd>{s.validUntil.slice(5).replace("-", "/")} 까지</dd>
+          <small>걸어 둔 때 {localTs(r.at)}</small>
+        </div>
+      </div>
+      {r.status === "waiting" && cur && span > 0 && (
+        <div className="ord-wbar" title="등록 때 기준에서 발동가까지 얼마나 왔나">
+          <i style={{ width: `${walked}%` }} />
+        </div>
+      )}
+      {s.then && (
+        <div className="ord-wcard-then">
+          ↳ 체결되면 체결가 대비 <b>{s.then.pct}%</b> 에 {s.then.exec === "market" ? "시장가" : "그때 현재가 지정가"} 매도 감시를 자동으로 건다
+          {r.childId ? " · 걸렸다" : ""}
+        </div>
+      )}
+      {r.status === "fired" && (
+        <div className="ord-wcard-foot">
+          발동 {r.firedAt ? localTs(r.firedAt) : ""} · 주문번호 {r.ordNo || "?"} · {r.msg || "체결 대기"}
+        </div>
+      )}
+      {(r.status === "filled" || r.status === "failed" || r.status === "expired" || r.status === "cancelled") && (
+        <div className={`ord-wcard-foot${r.status === "failed" ? " bad" : ""}`}>
+          {r.status === "filled" && r.fillPrice ? `${(r.fillQty ?? 0).toLocaleString()}주 @ ${r.fillPrice.toLocaleString()} 체결 · ` : ""}
+          {r.msg || ""} {r.firedAt ? `· ${localTs(r.firedAt)}` : ""}
+        </div>
       )}
     </div>
   );

@@ -1003,7 +1003,10 @@ export const api = {
     /** 자동감시 — 조건에 닿으면 (2026-09-07 밤) */
     watch?: WatchInput | null;
   }) => orderPost<{ nonce: string; expiresAt: number; ticket: OrderTicket }>("/api/order/prepare", input),
-  orderWatch: () => getJson<{ rows: AutoWatch[]; allowed: boolean; waiting: number; fired: number }>("/api/order/watch"),
+  orderWatch: () =>
+    getJson<{ rows: AutoWatch[]; prices: Record<string, { price: number; from: string }>; allowed: boolean; waiting: number; fired: number }>(
+      "/api/order/watch",
+    ),
   orderWatchQuote: (code: string) =>
     getJson<{ price: number; prevClose: number; changeRate: number; avg: number | null; held: number; ableQty: number; deposit: number }>(
       `/api/order/watch/quote?code=${code}`,

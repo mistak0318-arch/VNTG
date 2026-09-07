@@ -16524,3 +16524,30 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-side-tabs button.sell.on { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, var(--panel)); }
 .ord-wform .ord-watch-body { padding: 0.3rem 0.7rem 0.7rem; }
 .ord-wform .ord-go { margin-top: 0.3rem; }
+
+/* 자동감시 카드 (2026-09-07 밤, 세 번째) */
+.ord-wt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.ord-wt-head .ord-h4 { margin-top: 0.2rem; }
+.ord-wt-new { padding: 0.35rem 0.8rem; border: 1px solid var(--accent, #e6a23c); border-radius: 999px; background: var(--panel); color: var(--text); font-weight: 700; cursor: pointer; }
+.ord-wt-new.on { background: color-mix(in srgb, var(--accent, #e6a23c) 16%, var(--panel)); }
+.ord-wcards { display: grid; gap: 0.55rem; margin-bottom: 0.9rem; }
+@media (min-width: 900px) { .ord-wcards { grid-template-columns: 1fr 1fr; } }
+.ord-wcard { border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 10px; background: var(--panel-2); padding: 0.6rem 0.75rem; }
+.ord-wcard.buy { border-left-color: var(--red); }
+.ord-wcard.sell { border-left-color: var(--blue); }
+.ord-wcard.st-fired { border-color: var(--accent, #e6a23c); }
+.ord-wcards.done .ord-wcard { opacity: 0.8; }
+.ord-wcard-top { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.45rem; }
+.ord-wcard-top .ord-side { font-size: 1rem; }
+.ord-wcard-name { font-weight: 700; font-size: 1rem; flex: 1; }
+.ord-wcard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 0.4rem 0.7rem; }
+.ord-wcard-cell dt { font-size: 0.7rem; color: var(--muted); margin: 0; }
+.ord-wcard-cell dd { margin: 0.05rem 0 0; font-size: 0.95rem; }
+.ord-wcard-cell.big dd { font-size: 1.2rem; }
+.ord-wcard-cell dd b { font-size: 1.15em; }
+.ord-wcard-cell small { display: block; color: var(--muted); font-size: 0.74rem; margin-top: 0.05rem; }
+.ord-wbar { margin-top: 0.5rem; height: 5px; border-radius: 999px; background: var(--panel); overflow: hidden; }
+.ord-wbar i { display: block; height: 100%; background: var(--accent, #e6a23c); transition: width 0.4s; }
+.ord-wcard-then { margin-top: 0.45rem; font-size: 0.8rem; color: var(--muted); }
+.ord-wcard-foot { margin-top: 0.4rem; font-size: 0.78rem; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 0.35rem; }
+.ord-wcard-foot.bad { color: var(--red); }

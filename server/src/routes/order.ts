@@ -32,6 +32,7 @@ import {
   buyPower,
   cancelAutoWatch,
   listAutoWatches,
+  watchPrices,
   watchQuote,
 } from "../orders.js";
 import { readOrderStops, setOrderStop } from "../orderStops.js";
@@ -361,7 +362,9 @@ export function createOrderRouter(main: KiwoomClient): Router {
   router.get("/watch", async (_req, res) => {
     try {
       const [rows, summary] = await Promise.all([listAutoWatches(), autoWatchSummary()]);
-      res.json({ rows, ...summary });
+      const live = rows.filter((x) => x.status === "waiting").map((x) => x.ticket.code);
+      const prices = await watchPrices(main, live).catch(() => ({}));
+      res.json({ rows, prices, ...summary });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : "조회 실패", rows: [] });
     }

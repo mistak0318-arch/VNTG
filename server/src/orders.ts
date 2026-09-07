@@ -1848,6 +1848,13 @@ async function onAutoWatchFill(id: string, ev: { filled: number; price: number; 
   await writeWatches(rows);
 }
 
+/** 감시 목록에 붙일 지금 값 — 실시간이면 실시간, 아니면 조회(5초 캐시). 카드가 「발동까지 몇 %」를 그린다 */
+export async function watchPrices(main: KiwoomClient, codes: string[]): Promise<Record<string, { price: number; from: string }>> {
+  if (codes.length === 0) return {};
+  const m = await livePrices(main, [...new Set(codes)]);
+  return Object.fromEntries([...m].map(([c, v]) => [c, { price: v.price, from: v.from }]));
+}
+
 /** 감시 폼이 종목을 고르면 — 지금 값·전일 종가·(있으면) 평단·매매가능수량·예수금을 한 번에 */
 export async function watchQuote(main: KiwoomClient, code: string): Promise<{
   price: number;
