@@ -258,7 +258,11 @@ export async function runPension(
   for (const t of trims) {
     const pos = a.positions.find((p) => p.code === t.code);
     if (!pos) continue;
-    const r = sell(a, t.code, pos.funding, t.qty, t.price, t.reason, ["연금 리밸런싱"], "evening", date);
+    const r = sell(a, t.code, pos.funding, t.qty, t.price, t.reason, ["연금 리밸런싱"], "evening", date, [
+      `규칙: 연금 리밸런싱 — ${t.reason}`,
+      `산 값: ${pos.avg.toLocaleString()} (${pos.openedAt}) · 판 값 ${t.price.toLocaleString()} (${pos.avg > 0 ? (((t.price - pos.avg) / pos.avg) * 100).toFixed(1) : "?"}%)`,
+      `살 때 이유: ${pos.why}`,
+    ]);
     if (r.ok) {
       actions.push({
         side: "sell",
@@ -291,7 +295,11 @@ export async function runPension(
     const m = await ma60(pos.code);
     if (!m || m.above) continue;
     const px = priceOf(pos.code) ?? m.close;
-    const r = sell(a, pos.code, still.funding, still.qty, px, `종가 ${m.close.toLocaleString()} < 60일선 ${m.ma60.toLocaleString()} — 추세가 꺾였다, 비운다`, ["연금 60일선"], "evening", date);
+    const r = sell(a, pos.code, still.funding, still.qty, px, `종가 ${m.close.toLocaleString()} < 60일선 ${m.ma60.toLocaleString()} — 추세가 꺾였다, 비운다`, ["연금 60일선"], "evening", date, [
+      `규칙: 60일선 이탈 — 종가 ${m.close.toLocaleString()} < 60일선 ${m.ma60.toLocaleString()} (KODEX200 2년 실측: 수익 그대로, 최대 낙폭 반)`,
+      `산 값: ${still.avg.toLocaleString()} (${still.openedAt}) · 판 값 ${px.toLocaleString()} (${still.avg > 0 ? (((px - still.avg) / still.avg) * 100).toFixed(1) : "?"}%)`,
+      `살 때 이유: ${still.why}`,
+    ]);
     if (r.ok) {
       maExits += 1;
       actions.push({
@@ -332,6 +340,7 @@ export async function runPension(
         used: ["연금 리밸런싱"],
         stop: null,
         target: null,
+        basis: [`규칙: 연금 리밸런싱(모자란 자리 채움) — ${o.reason}`, `시장: ${gate ? gate.reason : "못 읽음 — 채움은 새 자리가 아니라 한다"}`, `종목: ${o.pick.why}`],
         slot: "evening",
         safe: profile.riskCap < 100 ? o.pick.safe : undefined,
       },
@@ -409,6 +418,13 @@ export async function runPension(
         /* 연금은 손절로 털지 않는다 — 계획선을 안 세운다(pensionTrims 가 줄인다) */
         stop: null,
         target: null,
+        basis: [
+          `시장: ${gate ? `${gate.label} ${gate.score}점 — ${gate.reason}` : "못 읽음"}`,
+          `고른 기준: ${METHOD_LABEL[method]}`,
+          `종목: ${o.pick.why}`,
+          `자리: ${o.reason}${o.pick.safe ? " · 안전자산 몫" : " · 위험자산, 60일선 위"}`,
+          `출구: 손절 없음 — 60일선 아래로 마감하면 비우고, 비중이 밴드를 넘으면 줄인다`,
+        ],
         slot: "evening",
         safe: profile.riskCap < 100 ? o.pick.safe : undefined,
       },

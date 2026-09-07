@@ -24,6 +24,7 @@ import {
   trailStops,
   type Candidate,
   type EntryMode,
+  sellBasis,
 } from "./cisTrader.js";
 import {
   loadDay,
@@ -226,8 +227,18 @@ export async function buyRound(
   }
 
   const planned = planBuys(a, candidates, buyPriceOf, rules);
+  const eqNow = equityOf(a, buyPriceOf).equity;
   for (const p of planned.plans) {
     const used = [...p.candidate.used, `진입:${ENTRY_LABEL[mode]}`];
+    const gNote = gateNotes.find((g) => g.name === p.candidate.name);
+    const basis = [
+      `시장: ${gate.label} ${gate.score}점 — ${gate.reason}`,
+      `종목: ${p.candidate.why}`,
+      `자리: ${ENTRY_LABEL[mode]} — ${gNote?.reason ?? "조건 통과"}`,
+      `계획: 손절 ${p.stop.toLocaleString()} (${rules.stopPct}%) · 목표 ${p.target ? `${p.target.toLocaleString()} (+${rules.targetPct}%)` : "없음"} · 본전 전환 +${rules.trailAfterPct}% · 최대 ${rules.maxHoldDays}일`,
+      `비중: ${eqNow > 0 ? ((p.amount / eqNow) * 100).toFixed(1) : "?"}% (한도 ${rules.maxPerStock}%) · ${p.funding === "cash" ? "예수금" : p.funding === "misu" ? "미수" : "신용"} · ${p.qty.toLocaleString()}주 @ ${p.price.toLocaleString()}`,
+      ...(screenNotes.filter((n) => n.code === p.candidate.code).map((n) => `AI: ${n.note}`)),
+    ];
     const r = buy(
       a,
       {
@@ -240,6 +251,7 @@ export async function buyRound(
         used,
         stop: p.stop,
         target: p.target,
+        basis,
         slot,
         /* 퇴직연금 30% 몫인지 **살 때 정해 박는다** — 나중에 다시 판정하지 않는다 */
         safe: profile.riskCap < 100 ? isSafeAsset(p.candidate.name) : undefined,
@@ -351,6 +363,7 @@ export async function runSlot(
       [`매도규칙:${e.kind}`],
       slot,
       date,
+      sellBasis(e, [`언제: ${slot === "morning" ? "아침" : slot === "noon" ? "점심" : "저녁"} 일지`]),
     );
     if (r.ok) {
       await stampLast(client, a, { exitKind: e.kind, position: e.position }, { side: "sell", code: e.position.code });

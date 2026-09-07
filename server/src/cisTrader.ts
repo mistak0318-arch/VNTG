@@ -665,6 +665,34 @@ export interface ExitCall {
   kind: "stop" | "target" | "stale" | "misu" | "trail" | "drop" | "gap";
 }
 
+export const EXIT_LABEL: Record<ExitCall["kind"], string> = {
+  stop: "손절",
+  target: "익절",
+  stale: "기간 만료",
+  misu: "미수 만기",
+  trail: "본전 손절",
+  drop: "고점 되돌림",
+  gap: "종배 청산(다음 날 시가)",
+};
+
+/**
+ * **매도 근거 줄들** (2026-09-08) — 팔 때 fill 에 남긴다. 규칙 · 산 값 · 흔들림 · 손익.
+ * 글이 아니라 값이 남아야 나중에 「왜 팔았나」를 되짚을 수 있다.
+ */
+export function sellBasis(e: ExitCall, extra: string[] = []): string[] {
+  const p = e.position;
+  const pct = p.avg > 0 ? ((e.price - p.avg) / p.avg) * 100 : 0;
+  const held = Math.max(0, Math.round((Date.parse(today()) - Date.parse(p.openedAt)) / 86400_000));
+  const lines = [
+    `규칙: ${EXIT_LABEL[e.kind]} — ${e.reason}`,
+    `산 값: ${p.avg.toLocaleString()} (${p.openedAt}, ${held}일) · 판 값 ${e.price.toLocaleString()} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%)`,
+  ];
+  if (p.stop || p.target) lines.push(`계획선: 손절 ${p.stop ? p.stop.toLocaleString() : "없음"} · 목표 ${p.target ? p.target.toLocaleString() : "없음"}`);
+  if (p.worstPct !== undefined || p.bestPct !== undefined) lines.push(`흔들림: 보유 중 ${p.worstPct ?? 0}% ~ +${p.bestPct ?? 0}%`);
+  if (p.why) lines.push(`살 때 이유: ${p.why}`);
+  return [...lines, ...extra];
+}
+
 /**
  * 지금 팔아야 할 것들. **판단은 여기 한 곳**이고, 아침·점심·저녁이 모두 이걸 부른다 —
  * 시간대마다 따로 적으면 손절 규칙이 셋으로 갈라져 서로 달라진다.

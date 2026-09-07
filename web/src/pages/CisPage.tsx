@@ -6,6 +6,7 @@ import {
   type CisConfig,
   type CisCreed,
   type CisDay,
+  type CisIntradayNote,
   type CisDesk,
   type CisFill,
   type CisPersonaState,
@@ -416,6 +417,7 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
       ) : (
       <>
       {profile && <div className="cis-profile-note">{profile.hint}</div>}
+      {profile && config && <PrinciplePanel account={account} config={config} />}
 
       <div className="cis-tabs">
         {TABS.map((t) => (
@@ -460,6 +462,125 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
 }
 
 /* ══════════════════════════════════════════════════════════ 오늘 */
+
+
+/* ══════════════════════════════════════════════════════════ 원리 — 이 계좌는 이렇게 돈다 (2026-09-08) */
+
+/**
+ * 벤티지: "각각의 탭에 해당 알고리즘의 원리에 대해서 설명해 주고".
+ * 규칙 값은 설정(`config.rules`)에서 그대로 읽는다 — 글과 코드가 갈리면 글이 거짓말이 된다.
+ */
+function PrinciplePanel({ account, config }: { account: string; config: CisConfig }) {
+  const [open, setOpen] = useState(false);
+  const r = config.rules;
+  const t = config.times;
+  const days = (config.pensionDays ?? []).map((d) => ["일", "월", "화", "수", "목", "금", "토"][d]).join("·");
+  const steps: { h: string; body: React.ReactNode }[] =
+    account === "trade"
+      ? [
+          { h: "언제 돈다", body: <>아침 {t.morning} 시가배팅 · 점심 {t.noon} 장중배팅 · 저녁 {t.evening} 정리와 내일 계획. 장중엔 1분마다 팔 자리를, {config.buyScanMin}분마다 살 자리를 본다.</> },
+          { h: "① 체 — 사지 말 것부터 지운다", body: <>시총 {r.minMarketCap.toLocaleString()}억·거래대금 {r.minTradeValue.toLocaleString()}억 미만(잡주), 신호등 빨강·탈락, 🔥쏠림·⏳늦음 경보{r.rejectAlerts ? "(켬)" : "(끔)"}, 시장 점수 {r.minMarketScore} 미만이면 그날은 안 산다{r.useRegimeGate ? " · 국면 문 켬" : ""}.</> },
+          { h: "② 추세 — 남은 것 안에서만", body: <>신호등 분석 원장{r.useListTrack ? "(켬)" : "(끔)"}에서 초록 {r.minScore}점 이상을 점수순으로. 자리 조건: 시가배팅은 갭 {r.maxOpenGap}% 이내, 장중배팅은 시가 대비 +{r.intraMinFromOpen}% 위, 종가배팅은 +{r.closeMinRate}% 이상 마감. 조건 밖이면 그 종목은 그날 없는 것.</> },
+          { h: "얼마나 사나", body: <>한 종목 {r.maxPerStock}% · 최대 {r.maxPositions}종목. 예수금이 먼저고 미수·신용은 여력이 있을 때만. 살 값은 스캔 값이 아니라 그 순간의 통합(KRX+NXT) 시세.</> },
+          { h: "③ 산 뒤에 추세를 믿는다 — 출구", body: <>손절 {r.stopPct}% · +{r.trailAfterPct}% 넘으면 손절선을 본전으로 · 익절 {r.targetPct > 0 ? `+${r.targetPct}% 고정` : "없음"}{r.trailDropPct > 0 ? ` · 고점 되돌림 -${r.trailDropPct}%` : ""} · {r.maxHoldDays}일 안 가면 비운다 · 미수는 만기에. 1분 감시가 지금 값으로 재고, 걸리면 그 자리에서 판다.</> },
+          { h: "기록", body: <>체결마다 매수 근거·매도 근거 줄이 붙고 검증 도장(그날 고저·중복·비중·시장 문)이 찍힌다. 장중 스캔은 안 샀어도 「왜 안 샀나」를 장중 일기에 적는다. 저녁엔 장부 자가점검.</> },
+        ]
+      : account === "close"
+        ? [
+            { h: "언제 돈다", body: <>저녁 한 번(원장이 쌓인 17:00 이후, NXT 애프터마켓 안). 아침엔 아무것도 안 판다 — 파는 자리는 다음 날 09:00 첫 틱 하나.</> },
+            { h: "문 넷", body: <>① 시장 문(시장 점수 {r.minMarketScore} 이상) → ② 미국장 게이지(선물 몸통·유가·환율·금리) → ③ 오늘 신호등 원장 상위 → ④ 종목 문: 잡주 체 · 신호등 다시 재서 초록 {r.minScore}점 이상 · 수급 축 50 이상 · <b>거래대금이 직전 20일 평균의 1.5배 이상</b>(2026-09-07 실측: 갭 +0.46→+0.82, 승률 54→63).</> },
+            { h: "얼마나 사나", body: <>NXT 애프터 값으로, 한 종목 {r.maxPerStock}%. 신호등 점수순.</> },
+            { h: "출구", body: <>손절 -3%(밤 NXT 에서도 1분마다 본다) · 익절·본전 전환·되돌림 없음 · 다음 날 09:00 첫 틱에 시가 청산. 프리마켓(08:00~09:00)엔 안 판다 — 호가가 얇다.</> },
+            { h: "이 계좌의 물음", body: <>「신호등 상위 + 시장 분위기에 종가배팅하면 다음 날 시가가 먹히나」. 승률·손익비가 두 달 연속 나쁘면 접자는 제안이 나온다.</> },
+          ]
+        : [
+            { h: "언제 돈다", body: <>{days || "월·수·금"} 저녁 {t.evening}, 주 단위. 장중 감시는 값만 새기고 아무것도 안 판다 — 지수 자리라 손절로 털면 회복할 때 자리에 없다.</> },
+            { h: "순서", body: <>① 시장 점검(문이 닫히면 새로 담지 않고 정리·리밸런싱만) → ② 줄이기: 비중이 목표 밴드를 넘은 것·크게 빠진 것 절반 · <b>위험 ETF 가 60일선 아래로 마감했으면 비운다</b>(KODEX200 2년 실측: 수익 그대로, 최대 낙폭 -41→-21) → ③ 모자란 자리 채우기 → ④ 새로 담기.</> },
+            { h: "무엇을 담나", body: <>ETF 만. 고르는 기준은 설정의 「{config.pensionMethod === "theme" ? "테마 분석" : config.pensionMethod === "holdings" ? "구성종목 분석" : "품질만"}」 — 담은 종목의 신호등을 직접 보거나 이름을 테마에 잇고, 괴리율·추적오차·거래대금으로 거른다. <b>60일선 위인 ETF 만</b> 담는다. 레버리지·인버스는 제도상 못 산다.</> },
+            { h: account === "irp" ? "위험자산 70% 한도" : "위험자산 100%", body: account === "irp" ? <>30%는 언제나 안전자산(채권형). 위험자산이 70%를 넘으면 그 주에 넘친 만큼 줄인다 — 규칙이 아니라 제도라 어기면 장부 점검 ✕.</> : <>연금저축은 위험자산 한도가 없다. 대신 빚도 레버리지도 없다 — 무기는 회전이 아니라 자리.</> },
+            { h: "출구", body: <>손절 없음. 비중 밴드 리밸런싱 · 크게 빠지면 절반 · 60일선 이탈이면 전량. 익절도 밴드가 한다(오른 것이 목표를 넘으면 잘린다).</> },
+          ];
+  return (
+    <div className={`cis-principle ${open ? "open" : ""}`}>
+      <button className="cis-principle-h" onClick={() => setOpen((o) => !o)}>
+        <span>{open ? "▾" : "▸"} 이 계좌는 이렇게 돈다 — 알고리즘의 원리</span>
+        <i>{open ? "접기" : "펼치기"}</i>
+      </button>
+      {open && (
+        <ol className="cis-principle-body">
+          {steps.map((s) => (
+            <li key={s.h}>
+              <b>{s.h}</b>
+              <span>{s.body}</span>
+            </li>
+          ))}
+          <li className="cis-principle-foot">
+            값은 설정 탭의 규칙을 그대로 읽는다. 순서(①체 → ②추세 → ③산 뒤 추종)는 2026-09-02 신조 — 뜨거운 날의 뜨거운 종목이 고점이었다.
+          </li>
+        </ol>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════ 장중 일기 (2026-09-08) */
+
+function IntradaySection({ notes }: { notes: CisIntradayNote[] }) {
+  const [showScans, setShowScans] = useState(false);
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const scans = notes.filter((n) => n.kind === "scan");
+  const shown = showScans ? notes : notes.filter((n) => n.kind !== "scan");
+  const lastScan = scans[scans.length - 1];
+  const KIND: Record<CisIntradayNote["kind"], string> = { scan: "스캔", buy: "매수", sell: "매도", trail: "본전", status: "상태", note: "메모" };
+  const hm = (iso: string) => new Date(iso).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+  return (
+    <section className="cis-slot cis-intraday">
+      <h3 className="cis-slot-head slot-intraday">
+        <span className="cis-slot-ico" aria-hidden="true">⏱</span>
+        <span className="cis-slot-title">
+          장중
+          <i className="cis-slot-hint">1분 매도 감시 · 스캔 · 시간마다 상태 — 사건만이 아니라 「왜 안 샀나」도</i>
+        </span>
+        <span className="cis-at">{notes.length}줄</span>
+      </h3>
+      {scans.length > 0 && !showScans && lastScan && (
+        <div className="cis-intraday-scan-sum">
+          스캔 {scans.length}번 · 마지막 {hm(lastScan.at)}: {lastScan.text.replace(/^스캔[^—]*— /, "")}
+          <button className="link-btn" onClick={() => setShowScans(true)}> 전부 보기</button>
+        </div>
+      )}
+      {showScans && (
+        <div className="cis-intraday-scan-sum">
+          스캔 {scans.length}번 표시 중 <button className="link-btn" onClick={() => setShowScans(false)}> 접기</button>
+        </div>
+      )}
+      <ul className="cis-intraday-list">
+        {shown.map((n, i) => (
+          <li key={`${n.at}-${i}`} className={`k-${n.kind}`}>
+            <span className="cis-intraday-at">{hm(n.at)}</span>
+            <i className={`cis-intraday-k k-${n.kind}`}>{KIND[n.kind]}</i>
+            <span className="cis-intraday-text">
+              {n.text}
+              {n.basis && n.basis.length > 0 && (
+                <button className="link-btn" onClick={() => setOpenIdx(openIdx === i ? null : i)}>
+                  {openIdx === i ? " 근거 접기" : " 근거 ▸"}
+                </button>
+              )}
+              {openIdx === i && n.basis && (
+                <ul className="cis-basis">
+                  {n.basis.map((b, k) => (
+                    <li key={k}>{b}</li>
+                  ))}
+                </ul>
+              )}
+            </span>
+          </li>
+        ))}
+        {shown.length === 0 && <li className="empty small">장중 사건이 아직 없다{scans.length > 0 ? " — 스캔만 돌았다" : ""}.</li>}
+      </ul>
+    </section>
+  );
+}
 
 function TodayTab({
   account,
@@ -734,7 +855,10 @@ function TodayTab({
             )}
           </section>
         );
-      })}
+      }).flatMap((sec, i) =>
+        /* 아침 다음에 「장중」 — 시간 순서가 곧 일기의 순서다 */
+        i === 0 && !weekly && day?.intraday && day.intraday.length > 0 ? [sec, <IntradaySection key="intraday" notes={day.intraday} />] : [sec],
+      )}
 
       {day?.review && (
         <section className="cis-slot cis-review-box">
@@ -934,6 +1058,7 @@ function FillsTab({
   const [day, setDay] = useState<CisDay | null>(null);
   const [stamping, setStamping] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [openBasis, setOpenBasis] = useState<string | null>(null);
 
   /*
    * 벤티지 (2026-09-07): "오늘 매수했는데 체결 내역도 안 나오고". 여태는 실패를 삼키고 「아직 체결이
@@ -1026,6 +1151,18 @@ function FillsTab({
         <td data-l="자금">{f.funding === "cash" ? "예수금" : f.funding === "misu" ? "미수" : "신용"}</td>
         <td className="cis-why cis-td-wide">
           {f.why}
+          {f.basis && f.basis.length > 0 && (
+            <button className="link-btn" onClick={() => setOpenBasis(openBasis === f.id ? null : f.id)}>
+              {openBasis === f.id ? " 근거 접기" : ` ${f.side === "buy" ? "매수" : "매도"} 근거 ▸`}
+            </button>
+          )}
+          {openBasis === f.id && f.basis && (
+            <ul className="cis-basis">
+              {f.basis.map((b, k) => (
+                <li key={k}>{b}</li>
+              ))}
+            </ul>
+          )}
           {bad && <div className="cis-stamp-notes">⚠ {f.verify!.notes.join(" · ")}</div>}
         </td>
       </tr>

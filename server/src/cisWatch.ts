@@ -3,11 +3,11 @@ import { equityOf, loadAccount, markToMarket, saveAccount, sell, today } from ".
 import { ACCOUNT_IDS, profileOf, styleOf, type AccountId } from "./cisAccounts.js";
 import { stampLast } from "./cisVerify.js";
 import { getCisConfig, rulesFor } from "./cisConfig.js";
-import { exitCalls, trailStops } from "./cisTrader.js";
+import { exitCalls, sellBasis, trailStops } from "./cisTrader.js";
 import { buyRound, priceMap } from "./cisRun.js";
 import { modeOfSlot } from "./cisTrader.js";
 import { closeBetExits } from "./cisCloseBet.js";
-import type { Slot } from "./cisJournal.js";
+import { addIntraday, type Slot } from "./cisJournal.js";
 
 /**
  * 상시 감시 — **시스가 장중 내내 보고 있다.**
@@ -187,10 +187,18 @@ async function watchAccount(client: KiwoomClient, id: AccountId): Promise<void> 
       [`매도규칙:${e.kind}`, "장중 감시"],
       slot,
       date,
+      sellBasis(e, [`언제: 장중 감시 ${hmNow()} (1분마다 지금 값으로 잰다)`]),
     );
     if (r.ok) {
       changed = true;
       await stampLast(client, a, { exitKind: e.kind, position: e.position }, { side: "sell", code: e.position.code });
+      await addIntraday(id, {
+        kind: "sell",
+        name: e.position.name,
+        code: e.position.code,
+        text: `${e.position.name} ${e.position.qty.toLocaleString()}주 @ ${e.price.toLocaleString()} 팔았다 — ${e.reason} · 손익 ${r.pnl >= 0 ? "+" : ""}${r.pnl.toLocaleString()}`,
+        basis: a.fills[a.fills.length - 1]?.basis,
+      }).catch(() => undefined);
       events.push({
         at: new Date().toISOString(),
         account: id,
@@ -208,6 +216,7 @@ async function watchAccount(client: KiwoomClient, id: AccountId): Promise<void> 
   /* ③ 손절선 올리기 — 이익을 손실로 바꾸지 않는다 (종배 계좌는 하룻밤이라 안 한다) */
   for (const t of closeBet ? [] : trailStops(a, priceOf, rules)) {
     changed = true;
+    await addIntraday(id, { kind: "trail", name: t.name, code: t.code, text: `${t.name} 손절선을 본전 ${t.to.toLocaleString()}원으로 올렸다 (+${rules.trailAfterPct}% 넘김)` }).catch(() => undefined);
     events.push({
       at: new Date().toISOString(),
       account: id,
@@ -227,7 +236,37 @@ async function watchAccount(client: KiwoomClient, id: AccountId): Promise<void> 
     await saveAccount(a);
   }
 
+  /*
+   * ⑤ **시간마다 상태 한 줄** (2026-09-08) — 사건이 없어도 「지금 어디쯤인가」는 남긴다.
+   * 09:05 · 10:00 · 11:00 · 13:00 · 14:00 · 15:00 · 15:20(마감 전) — 종목마다 수익률과 손절선까지 거리.
+   */
+  const hm = hmNow();
+  const marks = ["09:05", "10:00", "11:00", "13:00", "14:00", "15:00", "15:20"];
+  const mark = marks.find((m) => hm >= m && hm < addMin(m, 2));
+  if (mark && statusDone.get(`${id}:${date}:${mark}`) !== true) {
+    statusDone.set(`${id}:${date}:${mark}`, true);
+    const parts = a.positions.map((p) => {
+      const now = priceOf(p.code);
+      if (now === null || p.avg <= 0) return `${p.name} 값 못 읽음`;
+      const pct = ((now - p.avg) / p.avg) * 100;
+      const toStop = p.stop ? ((now - p.stop) / now) * 100 : null;
+      return `${p.name} ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%${toStop !== null ? ` (손절선까지 ${toStop.toFixed(1)}%)` : ""}`;
+    });
+    const { equity } = equityOf(a, priceOf);
+    await addIntraday(id, {
+      kind: "status",
+      text: `${mark === "15:20" ? "마감 전 " : ""}보유 ${a.positions.length}종목 · 평가 ${Math.round(equity).toLocaleString()} — ${parts.join(" · ")}`,
+    }).catch(() => undefined);
+  }
+
   if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS);
+}
+
+const statusDone = new Map<string, boolean>();
+function addMin(hm: string, n: number): string {
+  const [h, m] = hm.split(":").map(Number);
+  const t = h * 60 + m + n;
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 }
 
 /**
@@ -258,6 +297,18 @@ async function buyScan(client: KiwoomClient, id: AccountId, everyMin: number): P
   const date = today();
   const slot = slotNow(cfg.times);
   const r = await buyRound(client, a, id, slot, modeOfSlot(slot), date);
+
+  /*
+   * **스캔은 결과가 없어도 적는다** (2026-09-08). 「왜 안 샀나」가 「왜 샀나」만큼 중요한데
+   * 여태 15분마다 돈 스캔은 사면 사건 하나, 안 사면 아무것도 안 남겼다.
+   */
+  const gateBad = r.gateNotes.filter((g) => !g.ok);
+  const top = (xs: { name: string; reason: string }[], n: number) => xs.slice(0, n).map((x) => `${x.name}(${x.reason})`).join(", ") + (xs.length > n ? ` 외 ${xs.length - n}` : "");
+  const text = !r.gate.ok
+    ? `스캔 — 시장 문 닫힘: ${r.gate.reason}`
+    : `스캔(${modeOfSlot(slot) === "open" ? "시가" : modeOfSlot(slot) === "intra" ? "장중" : "종가"}배팅) — 시장 ${r.gate.label} ${r.gate.score}점 · 체에 걸림 ${r.sieved.length}${r.sieved.length > 0 ? ` [${top(r.sieved, 3)}]` : ""} · 자리 조건 미달 ${gateBad.length}${gateBad.length > 0 ? ` [${top(gateBad, 3)}]` : ""} · 통과 ${r.candidates.length} · 계획 ${r.plans.length} · 샀다 ${r.actions.length}` +
+      (r.aiError ? ` · AI 오류: ${r.aiError}` : "");
+  await addIntraday(id, { kind: "scan", text }).catch(() => undefined);
   if (r.actions.length === 0) return;
 
   for (const act of r.actions) {
@@ -271,6 +322,14 @@ async function buyScan(client: KiwoomClient, id: AccountId, everyMin: number): P
       price: act.price,
       reason: act.why,
     });
+    const fill = [...a.fills].reverse().find((f) => f.side === "buy" && f.code === act.code && f.date === date);
+    await addIntraday(id, {
+      kind: "buy",
+      name: act.name,
+      code: act.code,
+      text: `${act.name} ${act.qty.toLocaleString()}주 @ ${act.price.toLocaleString()} 샀다 — ${act.why}`,
+      basis: fill?.basis,
+    }).catch(() => undefined);
   }
   const px = await priceMap(client, a.positions.map((p) => p.code));
   markToMarket(a, (c) => px.get(c) ?? null, date);

@@ -17087,3 +17087,25 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .cis-audit-item.bad b { color: var(--red); }
 .cis-audit-item.warn b { color: #e6a23c; }
 .empty.small { padding: 0.5rem 0; font-size: 0.85rem; }
+
+/* 항해일지 — 원리 패널 · 장중 일기 · 근거 (2026-09-08) */
+.cis-principle { border: 1px solid var(--border); border-radius: 8px; margin: 0.4rem 0 0.6rem; background: var(--panel, transparent); }
+.cis-principle-h { width: 100%; display: flex; justify-content: space-between; align-items: center; background: none; border: 0; color: inherit; font: inherit; padding: 0.5rem 0.7rem; cursor: pointer; text-align: left; font-weight: 600; }
+.cis-principle-h i { font-style: normal; color: var(--muted); font-size: 0.8em; }
+.cis-principle-body { margin: 0; padding: 0 0.9rem 0.6rem 1.8rem; font-size: 0.84rem; line-height: 1.5; }
+.cis-principle-body li { margin: 0.25rem 0; }
+.cis-principle-body li b { display: block; }
+.cis-principle-foot { list-style: none; margin-left: -1rem; color: var(--muted); font-size: 0.78rem; border-top: 1px dashed var(--border); padding-top: 0.35rem; }
+.cis-intraday-list { list-style: none; margin: 0; padding: 0; font-size: 0.84rem; }
+.cis-intraday-list li { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.25rem 0; border-bottom: 1px dotted var(--border); }
+.cis-intraday-list li:last-child { border-bottom: 0; }
+.cis-intraday-at { color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 3.2rem; }
+.cis-intraday-k { flex: 0 0 auto; font-style: normal; font-size: 0.72em; padding: 0.05rem 0.35rem; border-radius: 3px; border: 1px solid var(--border); color: var(--muted); margin-top: 0.15rem; }
+.cis-intraday-k.k-buy { color: var(--red); border-color: var(--red); }
+.cis-intraday-k.k-sell { color: var(--blue); border-color: var(--blue); }
+.cis-intraday-k.k-trail { color: #2e9e5b; border-color: #2e9e5b; }
+.cis-intraday-text { flex: 1 1 auto; min-width: 0; word-break: break-word; }
+.cis-intraday-scan-sum { font-size: 0.8rem; color: var(--muted); padding: 0.3rem 0; }
+.cis-basis { margin: 0.25rem 0 0.2rem; padding-left: 1.1rem; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
+.cis-basis li { list-style: "· "; }
+.slot-intraday { border-left-color: #8a7bd6; }

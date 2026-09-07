@@ -149,6 +149,12 @@ export interface Fill {
   heldDays?: number;
   /** 검증 도장 (2026-09-07 밤) — 사고 팔 때 그날 일봉·규칙과 맞춰 본 결과. 없으면 「아직 안 잰」 옛 체결 */
   verify?: FillVerify;
+  /**
+   * **근거** (2026-09-08) — 벤티지: "각각에 매수 근거·매도 근거 이유 붙여 줘".
+   * `why` 는 한 줄 요약이고 이건 줄마다 「시장 · 종목 · 자리 · 계획 · 비중」(매수) /
+   * 「규칙 · 산 값 · 흔들림 · 손익」(매도)을 그대로 남긴 것. 없으면 옛 체결.
+   */
+  basis?: string[];
   why: string;
   used: string[];
 }
@@ -364,6 +370,8 @@ export interface BuyOrder {
   slot: Fill["slot"];
   /** 안전자산인가 (퇴직연금 30% 몫) */
   safe?: boolean;
+  /** 매수 근거 줄들 — `Fill.basis` */
+  basis?: string[];
 }
 
 /**
@@ -423,6 +431,7 @@ export function buy(
     at: new Date().toISOString(),
     slot: o.slot,
     side: "buy",
+    basis: o.basis,
     code: o.code,
     name: o.name,
     qty,
@@ -449,6 +458,7 @@ export function sell(
   used: string[],
   slot: Fill["slot"],
   date = today(),
+  basis?: string[],
 ): { ok: boolean; pnl: number; reason?: string } {
   const p = a.positions.find((x) => x.code === code && x.funding === funding);
   if (!p) return { ok: false, pnl: 0, reason: "보유 없음" };
@@ -493,6 +503,7 @@ export function sell(
     at: new Date().toISOString(),
     slot,
     side: "sell",
+    basis,
     code,
     name: p.name,
     qty: n,

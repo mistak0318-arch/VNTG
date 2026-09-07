@@ -365,8 +365,17 @@ export async function closeBetRound(
   }
 
   const planned = planBuys(a, afterVeto, buyPriceOf, rules);
+  const eqNow = equityOf(a, buyPriceOf).equity;
   for (const p of planned.plans) {
     const used = [...p.candidate.used, "진입:종가배팅"];
+    const basis = [
+      `시장: ${gate.label} ${gate.score}점 — ${gate.reason}`,
+      `미국장: ${macro.summary}`,
+      `종목: ${p.candidate.why}`,
+      `자리: 종가배팅 — 원장이 쌓인 뒤 NXT 애프터 값으로. 파는 자리는 내일 09:00 첫 틱 하나`,
+      `계획: 손절 ${p.stop.toLocaleString()} (${rules.stopPct}%, 밤 NXT 에서도 본다) · 익절 없음 · 하룻밤`,
+      `비중: ${eqNow > 0 ? ((p.amount / eqNow) * 100).toFixed(1) : "?"}% · ${p.qty.toLocaleString()}주 @ ${p.price.toLocaleString()}`,
+    ];
     const r = buy(
       a,
       {
@@ -379,6 +388,7 @@ export async function closeBetRound(
         used,
         stop: p.stop,
         target: p.target,
+        basis,
         slot: "evening",
         safe: profile.riskCap < 100 ? isSafeAsset(p.candidate.name) : undefined,
       },

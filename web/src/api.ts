@@ -6233,6 +6233,8 @@ export interface CisFill {
   heldDays?: number;
   why: string;
   used: string[];
+  /** 근거 줄들 (2026-09-08) — 매수: 시장·종목·자리·계획·비중 / 매도: 규칙·산 값·흔들림·살 때 이유 */
+  basis?: string[];
   /** 검증 도장 (2026-09-07 밤). 없으면 도장 전 옛 체결 */
   verify?: {
     ok: boolean;
@@ -6301,12 +6303,23 @@ export interface CisSlotEntry {
   debt: number;
 }
 
+/** 장중 일기 한 줄 (2026-09-08) */
+export interface CisIntradayNote {
+  at: string;
+  kind: "scan" | "buy" | "sell" | "trail" | "status" | "note";
+  text: string;
+  name?: string;
+  code?: string;
+  basis?: string[];
+}
+
 export interface CisDay {
   date: string;
   account: string;
   morning: CisSlotEntry | null;
   noon: CisSlotEntry | null;
   evening: CisSlotEntry | null;
+  intraday?: CisIntradayNote[];
   review: {
     planned: number;
     executed: number;

@@ -113,12 +113,29 @@ export interface SlotEntry {
   debt: number;
 }
 
+/**
+ * **장중 일기 한 줄** (2026-09-08) — 벤티지: "장중에 일기 쓰는 것도 보완해 줘".
+ * 여태 장중 감시(1분 매도·15분 매수 스캔)는 메모리 사건 목록에만 남겨 서버가 다시 뜨면 사라졌고,
+ * 스캔에서 **안 산 이유**는 아예 안 남았다. 이제 그날 파일에 시간순으로 쌓인다.
+ */
+export interface IntradayNote {
+  at: string;
+  kind: "scan" | "buy" | "sell" | "trail" | "status" | "note";
+  text: string;
+  name?: string;
+  code?: string;
+  /** 근거 줄들 — 매수·매도면 fill.basis 와 같은 것 */
+  basis?: string[];
+}
+
 export interface CisDay {
   date: string;
   account: AccountId;
   morning: SlotEntry | null;
   noon: SlotEntry | null;
   evening: SlotEntry | null;
+  /** 장중 일기 — 시간순 */
+  intraday?: IntradayNote[];
   /**
    * 하루 총평 — 저녁에 만든다. **아침 계획과 대조한 결과**라
    * 세 시간대가 다 있어야 뜻이 있다.
@@ -162,6 +179,17 @@ export async function loadDay(date: string, account: AccountId = "trade"): Promi
 export async function saveDay(day: CisDay): Promise<void> {
   await mkdir(dirOf(day.account), { recursive: true });
   await writeFile(fileOf(day.account, day.date), JSON.stringify(day, null, 2), "utf8");
+}
+
+const INTRADAY_MAX = 400;
+/** 장중 일기에 한 줄 보탠다 — 읽고 붙이고 저장. 하루 400줄 넘으면 앞을 버린다(스캔이 15분마다라 하루 30줄쯤) */
+export async function addIntraday(account: AccountId, note: Omit<IntradayNote, "at"> & { at?: string }, date = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)): Promise<void> {
+  const day = await loadDay(date, account);
+  const rows = day.intraday ?? [];
+  rows.push({ ...note, at: note.at ?? new Date().toISOString() });
+  if (rows.length > INTRADAY_MAX) rows.splice(0, rows.length - INTRADAY_MAX);
+  day.intraday = rows;
+  await saveDay(day);
 }
 
 /**
