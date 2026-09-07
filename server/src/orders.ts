@@ -155,6 +155,12 @@ export interface OrderGuard {
    * 내려지면 안 된다. `orderGuard.json` 에 `"allowCredit": true` 를 적는 순간부터 신용 칸이 열린다.
    */
   allowCredit: boolean;
+  /**
+   * **예약주문을 허용하나** (2026-09-07). 기본 true — 벤티지가 직접 요청한 기능이라 켜 두되,
+   * 끄는 자리는 파일이다. 예약은 「서버가 사람 대신 시각만 미뤄 내는 주문」이라 다른 한도와
+   * 같은 급의 결정으로 본다. false 로 적으면 새 예약을 안 받고 **기다리던 것도 안 나간다.**
+   */
+  allowReserved: boolean;
 }
 
 const DEFAULT_GUARD: OrderGuard = {
@@ -166,6 +172,7 @@ const DEFAULT_GUARD: OrderGuard = {
   marketHoursOnly: true,
   allowedCodes: null,
   allowCredit: false,
+  allowReserved: true,
 };
 
 interface OrderAuthFile {
@@ -200,7 +207,9 @@ export type OrderLogKind =
   | "error"
   | "lock"
   | "password"
-  | "raw";
+  | "raw"
+  /** 예약주문 — 접수·취소·놓침. 실제로 나간 것은 "order" 로 남는다(한도는 그걸 센다) */
+  | "reserve";
 
 export interface OrderLogRow {
   at: string;
@@ -739,6 +748,12 @@ export interface OrderTicket {
    */
   credit: boolean;
   loanDate: string | null;
+  /**
+   * **예약** (2026-09-07). true 면 실행 단계에서 키움에 안 내고 `orderReserved.json` 에 적어 두며,
+   * `fireDate`(KST, YYYY-MM-DD) 08:30 에 서버가 낸다. 조건은 없다 — **시각만** 미룬다.
+   */
+  reserve: boolean;
+  fireDate: string | null;
 }
 
 export interface CancelTicket {
@@ -781,6 +796,8 @@ export interface PrepareInput {
   credit?: boolean;
   /** 신용 매도의 대출일(YYYYMMDD). 신용 매수엔 없다 */
   loanDate?: string | null;
+  /** 예약 — 다음 접수 시작(08:30)에 내 달라 */
+  reserve?: boolean;
 }
 
 function reject(msg: string, input: Partial<PrepareInput>, ip: string): never {
@@ -850,7 +867,28 @@ export async function prepareOrder(
    * 그렇다고 시간외 창을 새로 박아 두지는 않는다 — 시간표는 2026-09-14 KRX 애프터시장 개편 때
    * 한 번에 고치기로 한 자리다(docs/다음작업_TODO.md). 그때까지는 키움이 거절하게 둔다.
    */
-  if (g.marketHoursOnly && !tt.late && !venueOpen(input.venue)) {
+  const reserve = input.reserve === true;
+  let fireDate: string | null = null;
+  if (reserve) {
+    /*
+     * 예약은 **좁게** 받는다 (2026-09-07). 영웅문·한투 MTS 의 예약주문이 받는 것과 같은 폭이다.
+     *   거래소 KRX 만 — 08:30 동시호가 접수가 예약의 뜻이다. NXT 프리마켓은 다른 물건이다
+     *   구분 보통·시장가·조건부지정가·최유리·최우선 — 동시호가에 IOC/FOK·스톱·시간외는 없다
+     *   신용 없음 — 빚은 사람이 그 자리에서 낸다
+     * 그리고 한 번뿐이다. 「기간 예약(매일 반복)」은 안 만든다 — 전날 체결 여부를 서버가 잘못
+     * 읽으면 같은 종목을 이틀 사게 된다. 그 위험이 편의보다 크다.
+     */
+    if (!g.allowReserved) reject('예약주문이 꺼져 있다 — orderGuard.json 의 "allowReserved" 를 true 로', input, ip);
+    if (input.venue !== "KRX") reject("예약주문은 KRX 로만 낸다 — 08:30 동시호가에 들어가는 것이 예약이다", input, ip);
+    if (!RESERVE_TRADE_TYPES.has(tt.code)) reject(`예약주문은 ${tt.label} 로 못 낸다 — 보통·시장가·조건부지정가·최유리·최우선만`, input, ip);
+    if (credit) reject("예약주문은 신용으로 못 낸다", input, ip);
+    const waiting = (await listReservations()).filter((r) => r.status === "waiting");
+    if (waiting.length >= RESERVE_MAX) reject(`예약은 ${RESERVE_MAX}건까지 — 기다리는 것을 먼저 정리해야 한다`, input, ip);
+    if (waiting.some((r) => r.ticket.code === input.code && r.ticket.side === input.side)) {
+      reject(`${input.name || input.code} ${input.side === "buy" ? "매수" : "매도"} 예약이 이미 기다리고 있다 — 겹쳐 내지 않는다`, input, ip);
+    }
+    fireDate = nextFireDate();
+  } else if (g.marketHoursOnly && !tt.late && !venueOpen(input.venue)) {
     reject(`${input.venue} 가 주문을 받는 시간이 아니다`, input, ip);
   }
 
@@ -897,11 +935,20 @@ export async function prepareOrder(
   const unit = input.price ?? input.condPrice ?? ref;
   const amount = unit * input.qty;
   if (amount > g.maxOrderKrw) reject(`한 건 한도 초과 — ${amount.toLocaleString()}원 > ${g.maxOrderKrw.toLocaleString()}원`, input, ip);
-  const used = await todayUsage();
-  if (used.krw + amount > g.maxDailyKrw) {
-    reject(`오늘 한도 초과 — 이미 ${used.krw.toLocaleString()}원 + 이번 ${amount.toLocaleString()}원 > ${g.maxDailyKrw.toLocaleString()}원`, input, ip);
+  if (reserve) {
+    /* 예약끼리의 합이 하루 한도 안이어야 한다 — 나가는 날 아침에 한 번 더 잰다(그날 이미 나간 것과 함께) */
+    const waiting = (await listReservations()).filter((r) => r.status === "waiting");
+    const sum = waiting.reduce((a, r) => a + r.ticket.amount, 0);
+    if (sum + amount > g.maxDailyKrw) {
+      reject(`예약 합이 하루 한도를 넘는다 — 기다리는 ${sum.toLocaleString()}원 + 이번 ${amount.toLocaleString()}원 > ${g.maxDailyKrw.toLocaleString()}원`, input, ip);
+    }
+  } else {
+    const used = await todayUsage();
+    if (used.krw + amount > g.maxDailyKrw) {
+      reject(`오늘 한도 초과 — 이미 ${used.krw.toLocaleString()}원 + 이번 ${amount.toLocaleString()}원 > ${g.maxDailyKrw.toLocaleString()}원`, input, ip);
+    }
+    if (used.count + 1 > g.maxDailyCount) reject(`오늘 건수 한도 초과 — ${used.count}/${g.maxDailyCount}`, input, ip);
   }
-  if (used.count + 1 > g.maxDailyCount) reject(`오늘 건수 한도 초과 — ${used.count}/${g.maxDailyCount}`, input, ip);
 
   const ticket: OrderTicket = {
     kind: "order",
@@ -918,6 +965,8 @@ export async function prepareOrder(
     amount,
     credit,
     loanDate: credit && input.side === "sell" ? loanDate : null,
+    reserve,
+    fireDate,
   };
   return { ...issueNonce(ticket, owner), ticket };
 }
@@ -1041,6 +1090,22 @@ export async function executePrepared(
   const t = p.ticket;
   const mock = orderIsMock();
   const tag = mock ? "[모의]" : "[실전]";
+  /*
+   * **예약** — 여기서 키움에 안 낸다. 비밀번호까지 맞힌 주문서를 파일에 적어 두고 끝.
+   * 실제로 내는 것은 `fireReserved()` 다 — 그 함수가 이 파일에서 읽는 것은 **이 자리를 지나온
+   * 주문서뿐**이다. 사람이 보고·비밀번호 넣고·「예약」이라고 크게 쓰인 확인 창을 누른 것.
+   */
+  if (t.kind === "order" && t.reserve && t.fireDate) {
+    const row = await addReservation(t, ip);
+    const sideKo = t.side === "buy" ? "매수" : "매도";
+    const priceKo = t.price === null ? t.tradeLabel : `${t.price.toLocaleString()}원`;
+    await appendLog({ kind: "reserve", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, tradeType: t.tradeType, venue: t.venue, amount: t.amount, msg: `예약 접수 — ${t.fireDate} 08:30 에 낸다 (${row.id})` });
+    void sendTelegram(
+      `⏰ ${tag} <b>예약 ${sideKo}</b> ${esc(t.name)} ${t.qty}주 @ ${priceKo}\n${esc(fireDateKo(t.fireDate))} 08:30 에 나갑니다 · 금액 ${won(t.amount)}\n주문 › 예약 탭에서 취소할 수 있습니다.`,
+      "order",
+    ).catch(() => undefined);
+    return { ordNo: "", msg: `예약 접수 — ${fireDateKo(t.fireDate)} 08:30 에 나간다`, ticket: t, remembered };
+  }
   try {
     const r = await placeOrder(t);
     if (t.kind === "cancel") {
@@ -1328,6 +1393,244 @@ export async function buyPower(code: string, price: number): Promise<BuyPower> {
   }
 
   return { code, price: Number(uv), cash, cashOnly, margin, credit, creditEnabled: g.allowCredit, missing };
+}
+
+/* ── 예약주문 (2026-09-07) ─────────────────────────────────────────────── */
+
+/**
+ * 벤티지: "예약 주문이 키움 REST 에 없으면 니가 서브메뉴 하나 만들어서 할 수 있잖아."
+ * "기존의 예약 주문 메뉴들 다 검토해서… 사용성과 정밀성 보안을 최우선 고려해서 구현해봐."
+ *
+ * **무엇인가.** 영웅문S·한투 MTS 의 「예약주문」은 장 밖에서 받아 뒀다가 다음 영업일 장 시작 전
+ * (영웅문은 08:20 무렵, 한투는 08:30)에 대신 넣어 주는 것이다. 조건이 없다 — **시각만** 미룬다.
+ * 키움 REST 엔 이 창구가 없어서(한투 REST 엔 CTSC0008U 가 있다) 여기서 같은 일을 한다.
+ *
+ * **설계가 뺀 「자동감시주문」과 어떻게 다른가.** 자동감시는 서버가 값을 지켜보다 **판단**해서
+ * 낸다. 예약은 판단이 없다 — 사람이 값·수량·구분을 다 정하고 비밀번호까지 넣은 주문서를,
+ * 정해진 시각에 그대로 낸다. 방아쇠는 여전히 사람이 당겼고, 서버는 손가락을 08:30 까지 붙들고
+ * 있을 뿐이다. 그래도 서버가 스스로 키움을 부르는 첫 자리라 아래를 못 박는다:
+ *   · 이 파일에서 읽는 주문서는 **executePrepared 를 지나온 것뿐** — 만드는 함수가 그것 하나
+ *   · **한 번뿐** — 실패해도 다시 안 낸다(재시도 루프는 자동주문의 시작이다). 사람이 다시 건다
+ *   · **놓치면 안 낸다** — 08:30~08:59 창을 서버가 꺼진 채 지나면 「놓침」으로 알리고 끝.
+ *     09:10 에 뒤늦게 내는 것은 사람이 정한 값(전날 종가 기준)과 다른 시장에 내는 것이다
+ *   · 나가는 아침에 **한도를 다시 잰다** — 종목 허용·한 건·하루 합·건수·가격 자(전일 종가 대비)
+ *   · 취소는 언제든, 예약 탭에서 — 주문 세션만 있으면 된다(돈이 안 나가는 방향)
+ *   · `orderGuard.json` 의 `allowReserved:false` 면 새로 안 받고 기다리던 것도 안 나간다
+ */
+export interface Reservation {
+  id: string;
+  /** 접수 시각·주소 */
+  at: string;
+  ip: string;
+  ticket: OrderTicket;
+  /** 나가는 날 (KST YYYY-MM-DD) — 08:30 */
+  fireDate: string;
+  status: "waiting" | "sent" | "failed" | "missed" | "cancelled";
+  /** 결과 */
+  firedAt?: string;
+  ordNo?: string;
+  msg?: string;
+}
+
+const RESERVED_FILE = join(DATA_DIR, "orderReserved.json");
+/** 예약이 받는 매매구분 — 동시호가에 들어갈 수 있는 것만 */
+const RESERVE_TRADE_TYPES = new Set(["0", "3", "5", "6", "7"]);
+const RESERVE_MAX = 10;
+/** 나가는 창 — KRX 접수 시작(08:30)부터 시가 결정(09:00) 전까지. 그 뒤는 「놓침」 */
+const FIRE_FROM = 510;
+const FIRE_TO = 539;
+/**
+ * KRX 휴장일 — 주말 말고 쉬는 날. 여기 없는 휴일이면 그날 아침 키움이 거절하고 「실패」로 남는다
+ * (한 번뿐이라 다음 날로 안 넘어간다 — 알림을 보고 사람이 다시 건다). 해가 바뀌면 채울 것.
+ */
+const KRX_HOLIDAYS = new Set([
+  "2026-09-24", "2026-09-25", // 추석
+  "2026-10-05", // 개천절 대체휴일
+  "2026-10-09", // 한글날
+  "2026-12-25", // 성탄절
+  "2026-12-31", // 연말 휴장
+  "2027-01-01",
+]);
+
+function isTradingDate(date: string): boolean {
+  const d = new Date(date + "T00:00:00Z");
+  const wd = d.getUTCDay();
+  return wd !== 0 && wd !== 6 && !KRX_HOLIDAYS.has(date);
+}
+
+function addDays(date: string, n: number): string {
+  const d = new Date(date + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** 다음에 08:30 창이 열리는 날 — 오늘 08:30 전이면 오늘, 아니면 다음 거래일 */
+export function nextFireDate(now = new Date()): string {
+  const { date, minute } = kstParts(now);
+  let d = minute < FIRE_FROM && isTradingDate(date) ? date : addDays(date, 1);
+  for (let i = 0; i < 14 && !isTradingDate(d); i++) d = addDays(d, 1);
+  return d;
+}
+
+const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
+function fireDateKo(date: string): string {
+  const wd = new Date(date + "T00:00:00Z").getUTCDay();
+  return `${date.slice(5).replace("-", "/")}(${WEEKDAY_KO[wd]})`;
+}
+
+async function readReserved(): Promise<Reservation[]> {
+  const v = await readJson<{ rows: Reservation[] }>(RESERVED_FILE, { rows: [] });
+  return Array.isArray(v.rows) ? v.rows : [];
+}
+
+async function writeReserved(rows: Reservation[]): Promise<void> {
+  /* 끝난 것은 최근 60건만 남긴다 — 기록은 orderLog 가 다 갖고 있다 */
+  const waiting = rows.filter((r) => r.status === "waiting");
+  const done = rows.filter((r) => r.status !== "waiting").slice(-60);
+  await writeJson(RESERVED_FILE, { rows: [...waiting, ...done] });
+}
+
+export async function listReservations(): Promise<Reservation[]> {
+  return (await readReserved()).sort((a, b) => (a.status === "waiting" ? 0 : 1) - (b.status === "waiting" ? 0 : 1) || b.at.localeCompare(a.at));
+}
+
+async function addReservation(t: OrderTicket, ip: string): Promise<Reservation> {
+  const rows = await readReserved();
+  const row: Reservation = {
+    id: randomBytes(6).toString("hex"),
+    at: new Date().toISOString(),
+    ip,
+    ticket: t,
+    fireDate: t.fireDate ?? nextFireDate(),
+    status: "waiting",
+  };
+  rows.push(row);
+  await writeReserved(rows);
+  return row;
+}
+
+export async function cancelReservation(id: string, ip: string): Promise<Reservation> {
+  const rows = await readReserved();
+  const row = rows.find((r) => r.id === id);
+  if (!row) throw new Error("그 예약이 없다");
+  if (row.status !== "waiting") throw new Error(`이미 ${reservationStatusKo(row.status)} 예약이다`);
+  if (firing) throw new Error("지금 예약이 나가는 중이다 — 잠시 뒤 미체결 탭에서 취소하세요");
+  row.status = "cancelled";
+  row.firedAt = new Date().toISOString();
+  row.msg = "사람이 취소";
+  await writeReserved(rows);
+  const t = row.ticket;
+  await appendLog({ kind: "reserve", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, venue: t.venue, amount: t.amount, msg: `예약 취소 (${row.id})` });
+  void sendTelegram(`⏰ 예약 취소 — ${esc(t.name)} ${t.side === "buy" ? "매수" : "매도"} ${t.qty}주`, "order").catch(() => undefined);
+  return row;
+}
+
+export function reservationStatusKo(s: Reservation["status"]): string {
+  return s === "waiting" ? "기다리는 중" : s === "sent" ? "나감" : s === "failed" ? "실패" : s === "missed" ? "놓침" : "취소됨";
+}
+
+let firing = false;
+
+/**
+ * 창이 열려 있으면 오늘 것을 낸다. 지난 것은 「놓침」으로 접는다. 15초마다 불린다.
+ * 한 번에 하나씩, 순서대로 — 키움이 초당 요청을 제한한다.
+ */
+async function fireReserved(main: KiwoomClient): Promise<void> {
+  if (firing) return;
+  if (!ordersEnabled() || !orderClient()) return;
+  const rows = await readReserved();
+  const waiting = rows.filter((r) => r.status === "waiting");
+  if (waiting.length === 0) return;
+  const { date, minute } = kstParts();
+  const tag = orderIsMock() ? "[모의]" : "[실전]";
+  firing = true;
+  try {
+    let changed = false;
+    for (const r of waiting) {
+      const t = r.ticket;
+      const sideKo = t.side === "buy" ? "매수" : "매도";
+      /* 날이 지났다 — 서버가 꺼져 있었거나 창을 놓쳤다. 뒤늦게 내지 않는다 */
+      if (r.fireDate < date || (r.fireDate === date && minute > FIRE_TO)) {
+        r.status = "missed";
+        r.firedAt = new Date().toISOString();
+        r.msg = "08:30~08:59 창을 지나쳤다(서버가 꺼져 있었나) — 다시 걸어야 한다";
+        changed = true;
+        await appendLog({ kind: "reserve", side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, venue: t.venue, amount: t.amount, msg: `예약 놓침 (${r.id}) — ${r.msg}` });
+        void sendTelegram(`⚠️ ${tag} <b>예약 놓침</b> ${esc(t.name)} ${sideKo} ${t.qty}주\n${esc(r.msg)}`, "order").catch(() => undefined);
+        continue;
+      }
+      if (r.fireDate !== date || minute < FIRE_FROM) continue;
+
+      /* 나가는 아침의 검문 — 접수 때 통과했어도 밤사이 바뀌었을 수 있다 */
+      let why: string | null = null;
+      const g = await getGuard();
+      if (!g.allowReserved) why = "예약주문이 꺼져 있다(orderGuard.allowReserved)";
+      else if (g.allowedCodes && g.allowedCodes.length > 0 && !g.allowedCodes.includes(t.code)) why = "허용 종목이 아니다";
+      else if (t.amount > g.maxOrderKrw) why = `한 건 한도 초과 — ${won(t.amount)} > ${won(g.maxOrderKrw)}`;
+      else {
+        const used = await todayUsage();
+        if (used.krw + t.amount > g.maxDailyKrw) why = `오늘 한도 초과 — 이미 ${won(used.krw)} + ${won(t.amount)}`;
+        else if (used.count + 1 > g.maxDailyCount) why = `오늘 건수 한도 초과 — ${used.count}/${g.maxDailyCount}`;
+      }
+      if (!why && t.price !== null) {
+        /* 전일 종가 자 — 밤사이 사람이 정한 값이 시장에서 멀어졌으면 안 낸다(오타·급변 둘 다) */
+        let ref = 0;
+        try {
+          ref = (await priceMap(main, [t.code])).get(t.code) ?? 0;
+        } catch {
+          ref = 0;
+        }
+        if (ref > 0) {
+          const off = (Math.abs(t.price - ref) / ref) * 100;
+          if (off > g.priceCollarPct) why = `지정가가 전일 종가(${ref.toLocaleString()})에서 ${off.toFixed(1)}% 벗어났다 (한도 ${g.priceCollarPct}%)`;
+        }
+      }
+      r.firedAt = new Date().toISOString();
+      changed = true;
+      if (why) {
+        r.status = "failed";
+        r.msg = why;
+        await appendLog({ kind: "reject", side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, venue: t.venue, tradeType: t.tradeType, msg: `예약 안 냄 (${r.id}) — ${why}` });
+        void sendTelegram(`⚠️ ${tag} <b>예약 안 냄</b> ${esc(t.name)} ${sideKo} ${t.qty}주\n${esc(why)}`, "order").catch(() => undefined);
+        continue;
+      }
+      try {
+        const res = await placeOrder(t);
+        r.status = "sent";
+        r.ordNo = res.ordNo;
+        r.msg = res.msg;
+        await appendLog({ kind: "order", ip: r.ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, condPrice: null, tradeType: t.tradeType, venue: t.venue, ordNo: res.ordNo, amount: t.amount, credit: false, msg: `예약 → ${res.msg}`, raw: res.raw });
+        const priceKo = t.price === null ? t.tradeLabel : `${t.price.toLocaleString()}원`;
+        void sendTelegram(
+          `⏰🧾 ${tag} <b>예약 ${sideKo} 나감</b> ${esc(t.name)} ${t.qty}주 @ ${priceKo} · KRX\n금액 ${won(t.amount)} · 주문번호 ${esc(res.ordNo || "?")}\n${esc(res.msg)}`,
+          "order",
+        ).catch(() => undefined);
+        if (res.ordNo) watch(res.ordNo, t);
+        void noteUsage();
+      } catch (e) {
+        const msg = e instanceof KiwoomApiError ? `${e.returnCode} ${e.message}` : e instanceof Error ? e.message : String(e);
+        r.status = "failed";
+        r.msg = msg;
+        await appendLog({ kind: "error", code: t.code, name: t.name, qty: t.qty, venue: t.venue, msg: `예약 실패 (${r.id}) — ${msg}`, raw: e instanceof KiwoomApiError ? e.raw : undefined });
+        void sendTelegram(`⚠️ ${tag} <b>예약 실패</b> ${esc(t.name)} ${sideKo} ${t.qty}주\n${esc(msg)}\n다시 안 냅니다 — 필요하면 직접 거세요.`, "order").catch(() => undefined);
+      }
+      await new Promise((ok) => setTimeout(ok, 400));
+    }
+    if (changed) await writeReserved(rows);
+  } finally {
+    firing = false;
+  }
+}
+
+/** 예약 상태 요약 — 화면 띠와 탭 배지가 쓴다 */
+export async function reservedSummary(): Promise<{ allowed: boolean; waiting: number; nextFireDate: string }> {
+  const [g, rows] = await Promise.all([getGuard(), readReserved()]);
+  return { allowed: g.allowReserved, waiting: rows.filter((r) => r.status === "waiting").length, nextFireDate: nextFireDate() };
+}
+
+export function startReservedOrders(main: KiwoomClient): void {
+  setInterval(() => void fireReserved(main).catch(() => undefined), 15_000);
+  console.log("[order] 예약주문 — 거래일 08:30~08:59 에 기다리는 주문서를 낸다 (한 번뿐, 놓치면 안 냄)");
 }
 
 /* ── 체결 감시 → 종 + 텔레그램 ────────────────────────────────────────── */
@@ -1715,5 +2018,7 @@ export async function orderStatus(req: Request): Promise<Record<string, unknown>
     /* 화면이 매매구분을 하드코딩하지 않게 — 표를 고치면 화면이 따라온다 */
     tradeTypes: TRADE_TYPES,
     watching: watching.size,
+    /* 예약 (2026-09-07) — 몇 건 기다리나, 다음 창은 언제인가 */
+    reserved: await reservedSummary().catch(() => ({ allowed: false, waiting: 0, nextFireDate: "" })),
   };
 }

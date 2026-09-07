@@ -9,6 +9,7 @@ import {
   type BuyPower,
   type OrderLogRow,
   type OrderRow,
+  type Reservation,
   type AccessAudit,
   type OrderDevice,
   type OrderSettings,
@@ -52,10 +53,12 @@ const VENUES: { key: OrderVenue; label: string; hint: string }[] = [
   { key: "NXT", label: "NXT", hint: "프리 08:00 · 메인 09:00~15:20 · 애프터 ~20:00" },
 ];
 
-type Sub = "order" | "open" | "fills" | "balance" | "log" | "config";
+type Sub = "order" | "reserved" | "open" | "fills" | "balance" | "log" | "config";
 
 const SUBS: { key: Sub; label: string }[] = [
   { key: "order", label: "매수·매도" },
+  /* 예약 (2026-09-07) — 벤티지: "예약 주문이 키움 REST 에 없으면 니가 서브메뉴 하나 만들어서 할 수 있잖아" */
+  { key: "reserved", label: "예약" },
   { key: "open", label: "미체결" },
   { key: "fills", label: "체결" },
   { key: "balance", label: "잔고" },
@@ -95,6 +98,8 @@ interface Prefill {
   /** 신용(융자) 줄에서 온 매도 — `credit=1&loan=YYYYMMDD` (2026-09-07) */
   credit: boolean;
   loanDate: string;
+  /** 예약으로 열기 — `reserve=1` (2026-09-07) */
+  reserve: boolean;
   /** 값이 바뀌었는지 가리는 열쇠 — 같은 화면에서 링크를 또 눌러도 다시 채워진다 */
   key: string;
 }
@@ -121,7 +126,7 @@ if (typeof window !== "undefined") {
   window.addEventListener("hashchange", grabPrefill);
 }
 
-const EMPTY_PREFILL: Prefill = { code: "", name: "", side: null, tradeType: null, price: "", cond: "", qty: "", credit: false, loanDate: "", key: "" };
+const EMPTY_PREFILL: Prefill = { code: "", name: "", side: null, tradeType: null, price: "", cond: "", qty: "", credit: false, loanDate: "", reserve: false, key: "" };
 
 /**
  * 쪽지를 **보기만** 한다 — 비우지 않는다.
@@ -156,8 +161,30 @@ function readPrefill(): Prefill {
     qty: num("qty"),
     credit: q.get("credit") === "1",
     loanDate: num("loan").slice(0, 8),
+    reserve: q.get("reserve") === "1",
     key: raw,
   };
+}
+
+/** 예약이 받는 매매구분 — 서버의 RESERVE_TRADE_TYPES 와 같은 다섯. 동시호가에 들어갈 수 있는 것만 */
+const RESERVE_TT = new Set(["0", "3", "5", "6", "7"]);
+
+/**
+ * 서버 시각(ISO, UTC)을 **보는 사람의 시계**로 (2026-09-07). 여태 `at.slice(5,16)` 로 UTC 를 그대로
+ * 적어 기록·접근 로그가 아홉 시간 이르게 보였다 — 예약 탭을 만들다 눈에 띄었다.
+ */
+function localTs(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(5, 16).replace("T", " ");
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
+function fireDateKo(date: string | null | undefined): string {
+  if (!date) return "다음 거래일";
+  const wd = new Date(date + "T00:00:00Z").getUTCDay();
+  return `${date.slice(5).replace("-", "/")}(${WEEKDAY_KO[wd]})`;
 }
 
 /** 호가 단위 (KRX 2023-01 개편) — 손절 % 를 발동가로 바꿀 때 호가에 맞춘다 */
@@ -287,12 +314,16 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
                 onClick={() => setSub(s.key)}
               >
                 {s.label}
+                {s.key === "reserved" && (status.reserved?.waiting ?? 0) > 0 && (
+                  <i className="ord-sub-n">{status.reserved.waiting}</i>
+                )}
               </button>
             ))}
           </div>
           {sub === "order" && (
             <OrderForm status={status} prefill={prefill} onDone={load} onSelectStock={onSelectStock} />
           )}
+          {sub === "reserved" && <ReservedTab status={status} onDone={load} />}
           {sub === "open" && <OpenTab status={status} onDone={load} />}
           {sub === "fills" && <FillsTab />}
           {sub === "balance" && <BalanceTab onSelectStock={onSelectStock} />}
@@ -766,6 +797,12 @@ function OrderForm({
    * 목록은 **서버가 준다**(status.tradeTypes). 화면이 표를 들고 있으면 언젠가 서버와 갈린다.
    */
   const [tradeType, setTradeType] = useState(prefill.tradeType ?? status.settings?.defaultTradeType ?? "0");
+  /*
+   * **예약** (2026-09-07) — 지금 안 내고 다음 거래일 08:30 에 서버가 낸다. 링크가 `reserve=1` 로
+   * 왔으면 켜진 채로 연다. 장이 닫힌 시간에 폼을 열면 스위치를 권하되 **자동으로 켜지는 않는다** —
+   * 「지금 나가는 주문」과 「내일 아침 나가는 주문」은 사람이 고른 것이어야 한다.
+   */
+  const [reserve, setReserve] = useState<boolean>(prefill.reserve);
   const [qty, setQty] = useState(prefill.qty);
   const [price, setPrice] = useState(prefill.price);
   const [cond, setCond] = useState(prefill.cond);
@@ -835,6 +872,7 @@ function OrderForm({
     if (prefill.cond) setCond(prefill.cond);
     setSellCredit(prefill.credit);
     setLoanDate(prefill.credit ? prefill.loanDate || null : null);
+    setReserve(prefill.reserve);
     /* 발동가가 채워져 왔으면 다음 호가 클릭은 주문단가 차례다 */
     setCondFocus(!prefill.cond);
     /* 다 썼으니 쪽지를 비운다 — 화면을 옮겼다 돌아왔을 때 손으로 고친 값을 덮지 않게 */
@@ -909,7 +947,15 @@ function OrderForm({
       : 0;
   const maxQty = side === "buy" ? Math.min(powerQty, guardQty) : held;
   const cappedByGuard = side === "buy" && powerQty > guardQty;
-  const credit = side === "buy" ? basis === "credit" : sellCredit;
+  const credit = reserve ? false : side === "buy" ? basis === "credit" : sellCredit;
+  /* 예약이 못 받는 구분·거래소를 골라 둔 채 스위치를 켜면 서버가 거절한다 — 켤 때 맞춰 준다 */
+  const reserveAllowed = status.guard.allowReserved !== false && status.reserved?.allowed !== false;
+  useEffect(() => {
+    if (!reserve) return;
+    if (venue !== "KRX") setVenue("KRX");
+    if (!RESERVE_TT.has(tradeType)) setTradeType("0");
+  }, [reserve, venue, tradeType]);
+  const nextFire = status.reserved?.nextFireDate ?? "";
 
   function setPct(pct: number) {
     lastEdit.current = "qty";
@@ -953,6 +999,7 @@ function OrderForm({
         venue,
         credit,
         loanDate: credit && side === "sell" ? loanDate : null,
+        reserve,
       });
       setTicket(r);
     } catch (e2) {
@@ -1406,7 +1453,26 @@ function OrderForm({
         </div>
 
         <div className="ord-submit">
-          {!open && status.guard.marketHoursOnly && (
+          {/*
+            예약 스위치 (2026-09-07). 영웅문·한투의 「예약주문」 — 장 밖에서 받아 뒀다가 다음 거래일
+            08:30 동시호가에 넣는다. 조건은 없다, 시각만 미룬다. KRX·현금·보통/시장가/조건부/최유리/최우선.
+          */}
+          {reserveAllowed && (
+            <label className={`ord-reserve${reserve ? " on" : ""}`}>
+              <input type="checkbox" checked={reserve} onChange={(e) => setReserve(e.target.checked)} />
+              <span>
+                <b>⏰ 예약</b> — {fireDateKo(nextFire)} 08:30 에 서버가 낸다
+                <i>
+                  {reserve
+                    ? "KRX · 현금만 · 보통/시장가/조건부지정가/최유리/최우선. 한 번뿐이고 나가는 아침에 한도·가격 자를 다시 잰다"
+                    : !open && status.guard.marketHoursOnly
+                      ? "지금은 안 받는 시간 — 예약으로 걸어 두면 아침 동시호가에 들어간다"
+                      : "지금 내지 않고 다음 장 시작 전에 내고 싶을 때"}
+                </i>
+              </span>
+            </label>
+          )}
+          {!open && !reserve && status.guard.marketHoursOnly && (
             <p className="ord-err">
               {venue} 는 지금 주문을 안 받는다
               {openVenues.length > 0 ? (
@@ -1420,8 +1486,8 @@ function OrderForm({
             </p>
           )}
           {error && <p className="ord-err">{error}</p>}
-          <button type="submit" className={`ord-go ${side}`} disabled={busy || !ready}>
-            {busy ? "확인 중…" : side === "buy" ? "매수 주문" : "매도 주문"}
+          <button type="submit" className={`ord-go ${side}${reserve ? " reserve" : ""}`} disabled={busy || !ready}>
+            {busy ? "확인 중…" : `${reserve ? "예약 " : ""}${side === "buy" ? "매수 주문" : "매도 주문"}`}
           </button>
           <p className="ord-note">
             {code && (
@@ -1495,7 +1561,8 @@ function Confirm({
 
   const dead = sec <= 0;
   const isCancel = ticket.kind === "cancel";
-  const sideKo = isCancel ? "취소" : `${!isCancel && ticket.credit ? "신용" : ""}${ticket.side === "buy" ? "매수" : "매도"}`;
+  const isReserve = ticket.kind === "order" && ticket.reserve === true;
+  const sideKo = isCancel ? "취소" : `${isReserve ? "예약 " : ""}${!isCancel && ticket.credit ? "신용" : ""}${ticket.side === "buy" ? "매수" : "매도"}`;
   const [okMsg, setOkMsg] = useState<string | null>(null);
   /*
    * 비밀번호를 지금 안 물어도 되는 상태인가 (2026-09-04) — 설정에서 「기억하기」를 켜고
@@ -1512,7 +1579,7 @@ function Confirm({
     try {
       const r = await api.orderExecute(nonce, pw, remember);
       setPw("");
-      setOkMsg(`${sideKo} 접수 — 주문번호 ${r.ordNo || "?"} ${r.msg}`);
+      setOkMsg(isReserve ? r.msg : `${sideKo} 접수 — 주문번호 ${r.ordNo || "?"} ${r.msg}`);
       setTimeout(onDone, 1200);
     } catch (e2) {
       setError(e2 instanceof Error ? e2.message : "실패");
@@ -1524,10 +1591,15 @@ function Confirm({
   return (
     <div className="ord-modal-back" onClick={onClose}>
       <form
-        className={`ord-modal ${isCancel ? "cancel" : ticket.side}`}
+        className={`ord-modal ${isCancel ? "cancel" : ticket.side}${isReserve ? " reserve" : ""}`}
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => void go(e)}
       >
+        {isReserve && ticket.kind === "order" && (
+          <div className="ord-modal-reserve">
+            ⏰ 지금 나가지 않습니다 — <b>{fireDateKo(ticket.fireDate)} 08:30</b> 에 서버가 냅니다. 그 전엔 예약 탭에서 취소할 수 있습니다.
+          </div>
+        )}
         <h3>
           {sideKo}하시겠습니까? <span className={`ord-tick${dead ? " dead" : ""}`}>{dead ? "만료" : `${sec}초`}</span>
         </h3>
@@ -1557,9 +1629,15 @@ function Confirm({
                 </div>
               )}
               <div>
-                <dt>현재가</dt>
+                <dt>{isReserve ? "지금 값" : "현재가"}</dt>
                 <dd>{ticket.refPrice ? `${ticket.refPrice.toLocaleString()}원` : "-"}</dd>
               </div>
+              {isReserve && (
+                <div className="ord-stop-kv">
+                  <dt>나가는 때</dt>
+                  <dd>{fireDateKo(ticket.fireDate)} 08:30</dd>
+                </div>
+              )}
             </>
           )}
           {ticket.kind === "cancel" && (
@@ -1614,6 +1692,165 @@ function Confirm({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/* ── 예약 (2026-09-07) ─────────────────────────────────────────────────── */
+
+const RSV_STATUS_KO: Record<Reservation["status"], string> = {
+  waiting: "기다리는 중",
+  sent: "나감",
+  failed: "실패",
+  missed: "놓침",
+  cancelled: "취소됨",
+};
+
+/**
+ * 예약 탭 — 기다리는 것과 끝난 것. 취소는 여기서만(비밀번호 없이 — 돈이 안 나가는 방향).
+ * 새 예약은 매수·매도 폼의 ⏰ 스위치로 만든다 — 문이 하나 더 있는 게 아니다.
+ */
+function ReservedTab({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
+  const [rows, setRows] = useState<Reservation[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [next, setNext] = useState(status.reserved?.nextFireDate ?? "");
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api.orderReserved();
+      setRows(r.rows ?? []);
+      setNext(r.nextFireDate);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "조회 실패");
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+    const t = setInterval(() => void load(), 15_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  async function cancel(r: Reservation) {
+    if (!window.confirm(`${r.ticket.name} ${r.ticket.side === "buy" ? "매수" : "매도"} ${r.ticket.qty}주 예약을 취소할까요?`)) return;
+    setBusy(r.id);
+    try {
+      await api.orderReservedCancel(r.id);
+      await load();
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "취소 실패");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const waiting = rows.filter((r) => r.status === "waiting");
+  const done = rows.filter((r) => r.status !== "waiting");
+  const allowed = status.guard.allowReserved !== false;
+
+  return (
+    <div className="ord-tab">
+      <p className="ord-note">
+        예약은 <b>조건 없이 시각만 미룬</b> 주문이다 — 사람이 값·수량·구분을 다 정하고 비밀번호까지 넣은 주문서를, 다음 거래일{" "}
+        <b>08:30</b>(KRX 동시호가 접수 시작)에 서버가 그대로 낸다. <b>한 번뿐</b>이라 실패해도 다시 안 내고, 08:30~08:59 창을
+        서버가 꺼진 채 지나면 「놓침」으로 알리고 만다. 나가는 아침에 종목 허용·한 건·하루 한도·가격 자(전일 종가 ±
+        {status.guard.priceCollarPct}%)를 다시 잰다.
+        {!allowed && (
+          <>
+            {" "}
+            <b className="ord-bad">지금은 꺼져 있다</b> — orderGuard.json 의 allowReserved.
+          </>
+        )}
+      </p>
+      {error && <p className="ord-err">{error}</p>}
+      <h4 className="ord-h4">
+        기다리는 예약 {waiting.length > 0 && <span className="ord-count">{waiting.length}</span>}
+        {next && <i className="ord-h4-sub">다음 창 {fireDateKo(next)} 08:30</i>}
+      </h4>
+      {waiting.length === 0 ? (
+        <p className="empty">기다리는 예약이 없다 — 매수·매도 폼의 ⏰ 예약 스위치로 건다</p>
+      ) : (
+        <div className="ord-scroll">
+          <table className="ord-table">
+            <thead>
+              <tr>
+                <th>나가는 때</th>
+                <th>종목</th>
+                <th>구분</th>
+                <th className="r">수량</th>
+                <th className="r">가격</th>
+                <th className="r">금액</th>
+                <th>걸어 둔 때</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {waiting.map((r) => (
+                <tr key={r.id} className={r.ticket.side}>
+                  <td>
+                    <b>{fireDateKo(r.fireDate)}</b> 08:30
+                  </td>
+                  <td>
+                    {r.ticket.name || r.ticket.code} <span className="ord-code">{r.ticket.code}</span>
+                  </td>
+                  <td>
+                    <b className={`ord-side ${r.ticket.side}`}>{r.ticket.side === "buy" ? "매수" : "매도"}</b> · {r.ticket.tradeLabel}
+                  </td>
+                  <td className="r">{fmtNum(r.ticket.qty)}</td>
+                  <td className="r">{r.ticket.price === null ? r.ticket.tradeLabel : fmtNum(r.ticket.price)}</td>
+                  <td className="r">{won(r.ticket.amount)}</td>
+                  <td>{localTs(r.at)}</td>
+                  <td>
+                    <button type="button" className="ord-x" disabled={busy === r.id} onClick={() => void cancel(r)}>
+                      {busy === r.id ? "…" : "취소"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {done.length > 0 && (
+        <>
+          <h4 className="ord-h4">지난 예약</h4>
+          <div className="ord-scroll">
+            <table className="ord-table">
+              <thead>
+                <tr>
+                  <th>나가는 때</th>
+                  <th>종목</th>
+                  <th>구분</th>
+                  <th className="r">수량</th>
+                  <th className="r">가격</th>
+                  <th>결과</th>
+                  <th>내용</th>
+                </tr>
+              </thead>
+              <tbody>
+                {done.map((r) => (
+                  <tr key={r.id} className={r.status === "failed" || r.status === "missed" ? "bad" : ""}>
+                    <td>{fireDateKo(r.fireDate)}</td>
+                    <td>{r.ticket.name || r.ticket.code}</td>
+                    <td>
+                      {r.ticket.side === "buy" ? "매수" : "매도"} · {r.ticket.tradeLabel}
+                    </td>
+                    <td className="r">{fmtNum(r.ticket.qty)}</td>
+                    <td className="r">{r.ticket.price === null ? "-" : fmtNum(r.ticket.price)}</td>
+                    <td>
+                      <b className={`ord-rsv-st ${r.status}`}>{RSV_STATUS_KO[r.status]}</b>
+                      {r.ordNo ? <span className="ord-code"> {r.ordNo}</span> : null}
+                    </td>
+                    <td className="ord-msg">{r.msg || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -2456,7 +2693,7 @@ function AccessLogSection() {
                 <ul className="ord-audit-list">
                   {audit.findings.map((f, i) => (
                     <li key={`${f.at}-${i}`} className={f.level}>
-                      <span className="ord-audit-at">{f.at.slice(5, 16).replace("T", " ")}</span>
+                      <span className="ord-audit-at">{localTs(f.at)}</span>
                       <span className="ord-audit-msg">{f.msg}</span>
                       {f.ip && <span className="ord-audit-ip">{f.ip}</span>}
                     </li>
@@ -2484,6 +2721,7 @@ const KIND_KO: Record<OrderLogRow["kind"], string> = {
   lock: "잠금",
   password: "비밀번호",
   raw: "원문",
+  reserve: "예약",
 };
 
 function LogTab() {
@@ -2527,7 +2765,7 @@ function LogTab() {
             <tbody>
               {rows.map((r, i) => (
                 <tr key={`${r.at}-${i}`} className={r.kind === "reject" || r.kind === "error" ? "bad" : ""}>
-                  <td>{r.at.slice(5, 16).replace("T", " ")}</td>
+                  <td>{localTs(r.at)}</td>
                   <td>
                     {KIND_KO[r.kind] ?? r.kind}
                     {r.mock ? <i className="ord-mock">모의</i> : null}

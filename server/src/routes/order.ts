@@ -28,6 +28,9 @@ import {
   forgetPassword,
   type OrderVenue,
   buyPower,
+  cancelReservation,
+  listReservations,
+  reservedSummary,
 } from "../orders.js";
 import { readOrderStops, setOrderStop } from "../orderStops.js";
 import {
@@ -327,6 +330,29 @@ export function createOrderRouter(main: KiwoomClient): Router {
     }
   });
 
+  /**
+   * 예약주문 (2026-09-07) — 목록·취소. 새 예약은 /prepare 에 `reserve:true` 로 들어와
+   * /execute(비밀번호)를 그대로 지난다 — 문이 하나 더 생긴 게 아니다.
+   * 취소는 돈이 안 나가는 방향이라 세션만 본다(POST + 헤더 검사는 위 문지기가 한다).
+   */
+  router.get("/reserved", async (_req, res) => {
+    try {
+      const [rows, summary] = await Promise.all([listReservations(), reservedSummary()]);
+      res.json({ rows, ...summary });
+    } catch (e) {
+      res.status(500).json({ error: e instanceof Error ? e.message : "조회 실패", rows: [] });
+    }
+  });
+  router.post("/reserved/cancel", async (req, res) => {
+    try {
+      const b = (req.body ?? {}) as Record<string, unknown>;
+      const row = await cancelReservation(String(b.id ?? ""), clientIp(req));
+      res.json({ ok: true, row });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
+    }
+  });
+
   router.get("/log", async (req, res) => {
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
     const rows = (await readLog(limit)).filter((r) => r.kind !== "raw");
@@ -352,6 +378,8 @@ export function createOrderRouter(main: KiwoomClient): Router {
           /* 신용 (2026-09-07) — 안 보내면 현금. 켜져 있는지는 prepareOrder 가 가드로 잰다 */
           credit: b.credit === true,
           loanDate: blank(b.loanDate) ? null : String(b.loanDate),
+          /* 예약 (2026-09-07) — 안 보내면 지금 내는 주문 */
+          reserve: b.reserve === true,
         },
         clientIp(req),
         sessionOf(req),

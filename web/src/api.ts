@@ -1000,7 +1000,12 @@ export const api = {
     /** 신용(융자) — 안 보내면 현금 */
     credit?: boolean;
     loanDate?: string | null;
+    /** 예약 — 다음 거래일 08:30 에 (2026-09-07) */
+    reserve?: boolean;
   }) => orderPost<{ nonce: string; expiresAt: number; ticket: OrderTicket }>("/api/order/prepare", input),
+  /** 예약 목록 + 요약 (주문 세션 안에서만) */
+  orderReserved: () => getJson<{ rows: Reservation[]; allowed: boolean; waiting: number; nextFireDate: string }>("/api/order/reserved"),
+  orderReservedCancel: (id: string) => orderPost<{ ok: boolean; row: Reservation }>("/api/order/reserved/cancel", { id }),
   /** 어느 가격에 몇 주까지 — 현금만·증거금·신용 셋을 한 번에 (주문 세션 안에서만) */
   orderBuyPower: (code: string, price: number) =>
     getJson<BuyPower>(`/api/order/buy-power?code=${code}&price=${Math.round(price)}`),
@@ -6640,6 +6645,8 @@ export interface OrderGuard {
   allowedCodes: string[] | null;
   /** 신용 주문 허용 — orderGuard.json 에서만 켠다 (2026-09-07) */
   allowCredit?: boolean;
+  /** 예약주문 허용 — 기본 true, orderGuard.json 에서 끈다 (2026-09-07) */
+  allowReserved?: boolean;
 }
 
 /** 매수 가능 수량 — 현금만 · 증거금 적용 · 신용 (2026-09-07) */
@@ -6681,6 +6688,8 @@ export interface OrderStatus {
   venueAllowed: OrderVenue[];
   tradeTypes: TradeType[];
   watching: number;
+  /** 예약주문 요약 (2026-09-07) */
+  reserved: { allowed: boolean; waiting: number; nextFireDate: string };
 }
 
 /** 매매구분 — 서버의 표를 그대로 받는다 (2026-09-04). 화면이 목록을 들고 있지 않다 */
@@ -6744,6 +6753,22 @@ export interface OrderTicket {
   /** 신용(융자) 주문 — 확인 창이 크게 적어야 한다 */
   credit?: boolean;
   loanDate?: string | null;
+  /** 예약 (2026-09-07) — 실행을 누르면 키움에 안 가고 `fireDate` 08:30 에 서버가 낸다 */
+  reserve?: boolean;
+  fireDate?: string | null;
+}
+
+/** 예약주문 한 건 (2026-09-07) */
+export interface Reservation {
+  id: string;
+  at: string;
+  ip: string;
+  ticket: OrderTicket;
+  fireDate: string;
+  status: "waiting" | "sent" | "failed" | "missed" | "cancelled";
+  firedAt?: string;
+  ordNo?: string;
+  msg?: string;
 }
 
 export interface CancelTicket {
@@ -6811,7 +6836,7 @@ export interface AccessAudit {
 
 export interface OrderLogRow {
   at: string;
-  kind: "session" | "order" | "cancel" | "fill" | "reject" | "error" | "lock" | "password" | "raw";
+  kind: "session" | "order" | "cancel" | "fill" | "reject" | "error" | "lock" | "password" | "raw" | "reserve";
   mock: boolean;
   ip?: string;
   side?: "buy" | "sell";
