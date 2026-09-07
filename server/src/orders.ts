@@ -2435,6 +2435,11 @@ export interface Position {
 export async function positions(main: KiwoomClient): Promise<{
   deposit: number;
   equity: number;
+  /** 총 매입금액 · 총 평가금액 · 총 평가손익(원, %) — 벤티지: "총액과 등락률은 보여줘야지. 그게 제일 중요하잖아" */
+  investTotal: number;
+  valueTotal: number;
+  pnlTotal: number;
+  pnlRateTotal: number;
   positions: Position[];
   /** 아직 안 산 매수 감시(진입 대기) */
   entries: AutoWatch[];
@@ -2485,12 +2490,20 @@ export async function positions(main: KiwoomClient): Promise<{
   });
   const codes = [...new Set([...positionsOut.map((p) => p.code), ...live.map((r) => r.ticket.code)])];
   const prices = await watchPrices(main, codes).catch(() => ({}));
-  const equity = acct.deposit + acct.holdings.reduce((a, h) => a + h.cur * h.qty, 0);
+  const investTotal = acct.holdings.reduce((a, h) => a + h.avg * h.qty, 0);
+  const valueTotal = acct.holdings.reduce((a, h) => a + h.cur * h.qty, 0);
+  const equity = acct.deposit + valueTotal;
+  const pnlTotal = valueTotal - investTotal;
+  const pnlRateTotal = investTotal > 0 ? (pnlTotal / investTotal) * 100 : 0;
   const todayLoss = realizedLossToday(rows);
   const buyLocked = g.maxDailyLossKrw > 0 && todayLoss <= -g.maxDailyLossKrw ? `오늘 실현손실 ${won(todayLoss)} — 신규 매수 잠김` : null;
   return {
     deposit: acct.deposit,
     equity,
+    investTotal,
+    valueTotal,
+    pnlTotal,
+    pnlRateTotal,
     positions: positionsOut,
     entries: live.filter((r) => r.ticket.side === "buy" && !held.has(r.ticket.code) || (r.ticket.side === "buy" && r.status === "waiting")),
     orphanOpen: open.filter((x) => !held.has(x.code)),

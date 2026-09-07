@@ -51,6 +51,7 @@ import {
   startDeviceCheck,
 } from "../orderDevices.js";
 import { sendTelegram } from "../telegram.js";
+import { ledger } from "../orderLedger.js";
 
 /**
  * /api/order — 주문 창구 (2026-09-03). 겹은 orders.ts 머리글.
@@ -377,6 +378,15 @@ export function createOrderRouter(main: KiwoomClient): Router {
    * 그대로 지난다. 취소는 세션만(돈이 안 나가는 방향).
    * ⚠️ 09-07 예약을 걷어낼 때 이 라우트가 같이 잘려 나가 탭이 404 를 받았다 — 벤티지가 잡았다.
    */
+  /** 잔고·수익률 현황 — 총 잔액·예수금·자산 추이·일/주/월/종목별 실현손익 (2026-09-07 밤) */
+  router.get("/ledger", async (req, res) => {
+    try {
+      const days = Math.min(730, Math.max(7, Number(req.query.days) || 90));
+      res.json(await ledger(days));
+    } catch (e) {
+      res.status(502).json({ error: e instanceof Error ? e.message : "조회 실패" });
+    }
+  });
   /** 포지션 (개편 ①) — 잔고·감시·미체결·체결을 종목 카드 하나로 */
   router.get("/positions", async (_req, res) => {
     try {

@@ -9,6 +9,8 @@ import {
   type OrderHolding,
   type Position,
   type PositionsView,
+  type LedgerView,
+  type LedgerPeriodRow,
   type BuyPower,
   type OrderLogRow,
   type OrderRow,
@@ -66,11 +68,13 @@ const VENUES: { key: OrderVenue; label: string; hint: string }[] = [
  * 세 가지로 접었다: **사고(주문) · 출구를 걸고 상태를 보고(포지션) · 지난 일을 본다(기록)**. 설정은 톱니.
  * 포지션 탭이 잔고·자동감시·미체결·체결을 종목 카드 하나로 합친다.
  */
-type Sub = "order" | "positions" | "history" | "config";
+type Sub = "order" | "positions" | "ledger" | "history" | "config";
 
 const SUBS: { key: Sub; label: string }[] = [
   { key: "order", label: "주문" },
   { key: "positions", label: "포지션" },
+  /* 잔고 (2026-09-07 밤) — 벤티지: "총 잔액과 예수금 이런 것도 한 번에. 수익률 현황 일별·주별·월별·종목별" */
+  { key: "ledger", label: "잔고" },
   { key: "history", label: "기록" },
   /* 설정 (2026-09-04) — 한도는 여기 없다. 그건 파일을 직접 연다 */
   { key: "config", label: "⚙ 설정" },
@@ -480,6 +484,7 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
             <OrderForm status={status} prefill={prefill} onDone={load} onSelectStock={onSelectStock} />
           )}
           {sub === "positions" && <PositionsTab status={status} prefill={prefill} onDone={load} onSelectStock={onSelectStock} />}
+          {sub === "ledger" && <LedgerTab />}
           {sub === "history" && <HistoryTab status={status} onDone={load} />}
           {sub === "config" && <ConfigTab status={status} onDone={load} />}
           {/* 폰 하단 바 (개편 ④) — 엄지로 닿는 곳에 셋. 데스크톱에선 CSS 가 숨긴다 */}
@@ -490,6 +495,9 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
             <button type="button" className={sub === "positions" ? "on" : ""} onClick={() => setSub("positions")}>
               📦 포지션
               {(status.autoWatch?.waiting ?? 0) > 0 && <i>{status.autoWatch.waiting}</i>}
+            </button>
+            <button type="button" className={sub === "ledger" ? "on" : ""} onClick={() => setSub("ledger")}>
+              💰 잔고
             </button>
             <button type="button" className={sub === "history" ? "on" : ""} onClick={() => setSub("history")}>
               🕘 기록
@@ -2861,16 +2869,40 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
   return (
     <div className="ord-tab">
       {error && <p className="ord-err">{error}</p>}
-      {/* 계좌 요약 — 예수금·평가·오늘 실현·감시 루프 */}
+      {/*
+        총액이 첫 줄 (2026-09-07 밤) — 벤티지: "현재 매수한 종목의 총 금액과 등락률은 보여줘야지. 수익권인지
+        손실권인지도. 그게 제일 중요하잖아." 평가금액을 크게, 그 옆에 손익(원·%)을 색으로.
+      */}
+      <div className={`ord-total ${view.pnlTotal > 0 ? "up" : view.pnlTotal < 0 ? "down" : ""}`}>
+        <div className="ord-total-main">
+          <i>보유 평가금액</i>
+          <Krw n={view.valueTotal} />
+        </div>
+        <div className="ord-total-pnl">
+          <i>평가손익</i>
+          <b>
+            {view.pnlTotal > 0 ? "+" : ""}
+            {Math.round(view.pnlTotal).toLocaleString()}원
+          </b>
+          <em>
+            {view.pnlRateTotal > 0 ? "+" : ""}
+            {view.pnlRateTotal.toFixed(2)}%
+          </em>
+          <small>{view.pnlTotal > 0 ? "수익권" : view.pnlTotal < 0 ? "손실권" : "본전"}</small>
+        </div>
+        <div className="ord-total-sub">
+          <span>
+            매입 <b>{Math.round(view.investTotal).toLocaleString()}</b>원
+          </span>
+          <span>
+            주문 가능 <b>{Math.round(view.deposit).toLocaleString()}</b>원
+          </span>
+          <span>
+            계좌 합 <b>{Math.round(view.equity).toLocaleString()}</b>원
+          </span>
+        </div>
+      </div>
       <div className="ord-acct">
-        <span className="ord-stat">
-          <i>주문 가능</i>
-          <b>{manwon(view.deposit)}</b>
-        </span>
-        <span className="ord-stat">
-          <i>평가 합</i>
-          <b>{manwon(view.equity)}</b>
-        </span>
         {view.todayLoss !== 0 && (
           <span className={`ord-stat ${signClass(view.todayLoss)}`}>
             <i>오늘 실현</i>
@@ -3048,8 +3080,11 @@ function PositionCard({
         {pos.noExit ? <span className="ord-noexit">⚠️ 출구 없음</span> : <span className="ord-hasexit">🛡 출구 있음</span>}
         <span className={`ord-pcard-pnl ${signClass(pnl)}`}>
           {pnl >= 0 ? "+" : ""}
-          {manwon(pnl)} <small>({pnlRate >= 0 ? "+" : ""}{pnlRate.toFixed(2)}%)</small>
+          {Math.round(pnl).toLocaleString()}원 <small>({pnlRate >= 0 ? "+" : ""}{pnlRate.toFixed(2)}%)</small>
         </span>
+      </div>
+      <div className="ord-pcard-money">
+        매입 <b>{Math.round(pos.avg * pos.qty).toLocaleString()}</b>원 → 평가 <b className={signClass(pnl)}>{Math.round(price * pos.qty).toLocaleString()}</b>원
       </div>
 
       <div className="ord-qs">
@@ -3144,6 +3179,384 @@ function PositionCard({
           </a>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ── 잔고·수익률 현황 (2026-09-07 밤) ─────────────────────────────────── */
+
+const LEDGER_RANGES: { days: number; label: string }[] = [
+  { days: 7, label: "1주" },
+  { days: 30, label: "1개월" },
+  { days: 90, label: "3개월" },
+  { days: 180, label: "6개월" },
+  { days: 365, label: "1년" },
+];
+
+function pctKo(v: number, digits = 2): string {
+  return `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
+}
+function signedWon(v: number): string {
+  return `${v > 0 ? "+" : ""}${Math.round(v).toLocaleString()}원`;
+}
+
+/** 자산 곡선 + 일별 실현손익 막대 — 라이브러리 없이 SVG 하나 */
+function LedgerChart({ assets, daily }: { assets: LedgerView["assets"]; daily: LedgerView["daily"] }) {
+  const W = 640;
+  const H = 180;
+  const padL = 8;
+  const padR = 8;
+  const top = 10;
+  const lineH = 110;
+  const barTop = top + lineH + 14;
+  const barH = H - barTop - 4;
+  if (assets.length < 2 && daily.length === 0) return <p className="empty">추이가 아직 없다</p>;
+  const dates = [...new Set([...assets.map((a) => a.date), ...daily.map((d) => d.date)])].sort();
+  const x = (date: string) => padL + ((W - padL - padR) * dates.indexOf(date)) / Math.max(1, dates.length - 1);
+  const vals = assets.map((a) => a.asset);
+  const lo = Math.min(...vals);
+  const hi = Math.max(...vals);
+  const y = (v: number) => top + lineH - (hi === lo ? lineH / 2 : ((v - lo) / (hi - lo)) * lineH);
+  const path = assets.map((a, i) => `${i === 0 ? "M" : "L"}${x(a.date).toFixed(1)},${y(a.asset).toFixed(1)}`).join(" ");
+  const area = assets.length > 1 ? `${path} L${x(assets[assets.length - 1].date).toFixed(1)},${top + lineH} L${x(assets[0].date).toFixed(1)},${top + lineH} Z` : "";
+  const pmax = Math.max(1, ...daily.map((d) => Math.abs(d.pnl)));
+  const mid = barTop + barH / 2;
+  const bw = Math.max(2, ((W - padL - padR) / Math.max(1, dates.length)) * 0.7);
+  const first = assets[0];
+  const last = assets[assets.length - 1];
+  return (
+    <div className="ord-lchart">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="자산 추이와 일별 실현손익">
+        {area && <path d={area} className="ord-lchart-area" />}
+        {path && <path d={path} className="ord-lchart-line" />}
+        <line x1={padL} x2={W - padR} y1={mid} y2={mid} className="ord-lchart-axis" />
+        {daily.map((d) => {
+          const h = (Math.abs(d.pnl) / pmax) * (barH / 2);
+          return <rect key={d.date} x={x(d.date) - bw / 2} y={d.pnl >= 0 ? mid - h : mid} width={bw} height={Math.max(1, h)} className={d.pnl >= 0 ? "ord-lchart-up" : "ord-lchart-down"} />;
+        })}
+      </svg>
+      <div className="ord-lchart-legend">
+        {first && last && (
+          <span>
+            자산 {first.date.slice(5).replace("-", "/")} <b>{manwon(first.asset)}</b> → {last.date.slice(5).replace("-", "/")} <b>{manwon(last.asset)}</b>
+            {first.asset > 0 && <em className={signClass(last.asset - first.asset)}> {pctKo(((last.asset - first.asset) / first.asset) * 100)}</em>}
+          </span>
+        )}
+        <span className="ord-caps">아래 막대 = 일별 실현손익(빨강 이익·파랑 손실)</span>
+      </div>
+    </div>
+  );
+}
+
+function LedgerTab() {
+  const [days, setDays] = useState(90);
+  const [view, setView] = useState<LedgerView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [sec, setSec] = useState<"daily" | "weekly" | "monthly" | "stock" | "trades">("daily");
+
+  const load = useCallback(async (d: number) => {
+    setBusy(true);
+    try {
+      setView(await api.orderLedger(d));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "조회 실패");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+  useEffect(() => {
+    void load(days);
+  }, [days, load]);
+
+  if (error && !view)
+    return (
+      <div className="ord-tab">
+        <p className="ord-err">{error}</p>
+      </div>
+    );
+  if (!view)
+    return (
+      <div className="ord-tab">
+        <p className="empty">잔고를 읽는 중… (키움에 여섯 가지를 묻는다)</p>
+      </div>
+    );
+  const n = view.now;
+  const total = n.totalAsset ?? n.deposit + n.valueTotal;
+  const pr = view.period;
+  const netRate = pr && pr.netStart > 0 ? ((pr.netEnd - pr.deposits + pr.withdrawals - pr.netStart) / pr.netStart) * 100 : null;
+
+  return (
+    <div className="ord-tab ord-ledger">
+      {error && <p className="ord-err">{error}</p>}
+      {/* ① 총 잔액 — 제일 큰 숫자 */}
+      <div className={`ord-total ${n.pnlTotal > 0 ? "up" : n.pnlTotal < 0 ? "down" : ""}`}>
+        <div className="ord-total-main">
+          <i>총 잔액 (추정예탁자산)</i>
+          <Krw n={total} />
+        </div>
+        <div className="ord-total-pnl">
+          <i>보유 평가손익</i>
+          <b>{signedWon(n.pnlTotal)}</b>
+          <em>{pctKo(n.pnlRateTotal)}</em>
+          <small>{n.pnlTotal > 0 ? "수익권" : n.pnlTotal < 0 ? "손실권" : "본전"}</small>
+        </div>
+        <div className="ord-total-sub">
+          <span>
+            예수금 <b>{Math.round(n.deposit).toLocaleString()}</b>원
+          </span>
+          <span>
+            주문 가능 <b>{Math.round(n.orderable).toLocaleString()}</b>원
+          </span>
+          {n.withdrawable !== null && (
+            <span>
+              출금 가능 <b>{Math.round(n.withdrawable).toLocaleString()}</b>원
+            </span>
+          )}
+          {n.d1Deposit !== null && (
+            <span title="내일 결제 뒤 예수금">
+              D+1 <b>{Math.round(n.d1Deposit).toLocaleString()}</b>
+            </span>
+          )}
+          {n.d2Deposit !== null && (
+            <span title="모레 결제 뒤 예수금">
+              D+2 <b>{Math.round(n.d2Deposit).toLocaleString()}</b>
+            </span>
+          )}
+          <span>
+            보유 평가 <b>{Math.round(n.valueTotal).toLocaleString()}</b>원 ({n.holdings}종목)
+          </span>
+          <span>
+            매입 <b>{Math.round(n.investTotal).toLocaleString()}</b>원
+          </span>
+          {n.receivable > 0 && (
+            <span className="ord-bad">
+              미수 <b>{Math.round(n.receivable).toLocaleString()}</b>원
+            </span>
+          )}
+          {n.loan > 0 && (
+            <span className="ord-bad">
+              융자 <b>{Math.round(n.loan).toLocaleString()}</b>원
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ② 기간 */}
+      <div className="ord-wt-head">
+        <h4 className="ord-h4">
+          수익률 현황 <i className="ord-h4-sub">{view.range.from.slice(5).replace("-", "/")} ~ {view.range.to.slice(5).replace("-", "/")}{busy ? " · 읽는 중…" : ""}</i>
+        </h4>
+        <div className="ord-hist-tabs">
+          {LEDGER_RANGES.map((r) => (
+            <button key={r.days} type="button" className={days === r.days ? "on" : ""} onClick={() => setDays(r.days)}>
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="ord-lstats">
+        {pr && (
+          <>
+            <div className="ord-lstat">
+              <i>순자산 (기간 초 → 말)</i>
+              <b>
+                {manwon(pr.netStart)} → {manwon(pr.netEnd)}
+              </b>
+              <small>
+                입금 {manwon(pr.deposits)} · 출금 {manwon(pr.withdrawals)}
+              </small>
+            </div>
+            <div className={`ord-lstat ${signClass(pr.evalPnl)}`}>
+              <i>기간 손익 (입출금 제외)</i>
+              <b>{signedWon(pr.evalPnl)}</b>
+              <small>수익률 {pctKo(pr.rate)}{netRate !== null && Math.abs(netRate - pr.rate) > 0.5 ? ` · 우리 셈 ${pctKo(netRate)}` : ""}</small>
+            </div>
+          </>
+        )}
+        <div className={`ord-lstat ${signClass(view.realized.pnl)}`}>
+          <i>실현손익 (매도로 확정)</i>
+          <b>{signedWon(view.realized.pnl)}</b>
+          <small>
+            {view.realized.wins + view.realized.losses}번 매매 · 승률 {view.realized.winRate.toFixed(0)}% · 수수료+세금 {manwon(view.realized.fee + view.realized.tax)}
+          </small>
+        </div>
+        <div className="ord-lstat">
+          <i>매매 규모</i>
+          <b>
+            매수 {manwon(view.realized.buyAmt)} · 매도 {manwon(view.realized.sellAmt)}
+          </b>
+          <small>{view.daily.length}일 거래</small>
+        </div>
+      </div>
+
+      <LedgerChart assets={view.assets} daily={view.daily} />
+
+      {/* ③ 표 */}
+      <div className="ord-hist-tabs ord-ltabs">
+        {(
+          [
+            ["daily", "일별"],
+            ["weekly", "주별"],
+            ["monthly", "월별"],
+            ["stock", "종목별"],
+            ["trades", "매매 내역"],
+          ] as const
+        ).map(([k, label]) => (
+          <button key={k} type="button" className={sec === k ? "on" : ""} onClick={() => setSec(k)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {sec === "daily" && (
+        <LedgerPeriodTable
+          rows={[...view.daily].reverse().map((d) => {
+            const a = view.assets.find((x) => x.date === d.date);
+            const i = view.assets.findIndex((x) => x.date === d.date);
+            const prev = i > 0 ? view.assets[i - 1] : null;
+            return {
+              key: d.date,
+              label: d.date.slice(2).replace(/-/g, "."),
+              from: d.date,
+              to: d.date,
+              assetEnd: a?.asset ?? null,
+              assetChange: a && prev ? a.asset - prev.asset : null,
+              assetChangeRate: a && prev && prev.asset > 0 ? ((a.asset - prev.asset) / prev.asset) * 100 : null,
+              pnl: d.pnl,
+              buyAmt: d.buyAmt,
+              sellAmt: d.sellAmt,
+              cost: d.fee + d.tax,
+              days: 1,
+            };
+          })}
+          unit="일"
+        />
+      )}
+      {sec === "weekly" && <LedgerPeriodTable rows={view.weekly} unit="주" />}
+      {sec === "monthly" && <LedgerPeriodTable rows={view.monthly} unit="월" />}
+      {sec === "stock" &&
+        (view.byStock.length === 0 ? (
+          <p className="empty">이 기간에 판 종목이 없다</p>
+        ) : (
+          <div className="ord-scroll">
+            <table className="ord-table stack">
+              <thead>
+                <tr>
+                  <th>종목</th>
+                  <th className="r">실현손익</th>
+                  <th className="r">평균 수익률</th>
+                  <th className="r">매매</th>
+                  <th className="r">승률</th>
+                  <th className="r">최고 / 최저</th>
+                  <th>마지막</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.byStock.map((s) => (
+                  <tr key={s.code}>
+                    <td className="ord-name">
+                      {s.name || s.code} <span className="ord-code">{s.code}</span>
+                    </td>
+                    <td className={`r ${signClass(s.pnl)}`} data-l="실현손익">{signedWon(s.pnl)}</td>
+                    <td className={`r ${signClass(s.avgRate)}`} data-l="평균 수익률">{pctKo(s.avgRate)}</td>
+                    <td className="r" data-l="매매">{s.trades}번 · {fmtNum(s.qty)}주</td>
+                    <td className="r" data-l="승률">{s.trades > 0 ? `${((s.wins / s.trades) * 100).toFixed(0)}%` : "-"}</td>
+                    <td className="r" data-l="최고 / 최저">
+                      <span className="positive">{pctKo(s.bestRate)}</span> / <span className="negative">{pctKo(s.worstRate)}</span>
+                    </td>
+                    <td data-l="마지막">{s.lastDate.slice(5).replace("-", "/")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      {sec === "trades" &&
+        (view.trades.length === 0 ? (
+          <p className="empty">이 기간에 매도 체결이 없다</p>
+        ) : (
+          <div className="ord-scroll">
+            <table className="ord-table stack">
+              <thead>
+                <tr>
+                  <th>일자</th>
+                  <th>종목</th>
+                  <th className="r">수량</th>
+                  <th className="r">매입가 → 매도가</th>
+                  <th className="r">손익</th>
+                  <th className="r">수익률</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.trades.map((t, i) => (
+                  <tr key={`${t.date}-${t.code}-${i}`}>
+                    <td data-l="일자">{t.date.slice(2).replace(/-/g, ".")}</td>
+                    <td className="ord-name">
+                      {t.name || t.code} <span className="ord-code">{t.code}</span>
+                      <span className="ord-name-sub">{t.date.slice(5).replace("-", "/")}</span>
+                    </td>
+                    <td className="r" data-l="수량">{fmtNum(t.qty)}주</td>
+                    <td className="r" data-l="매입가 → 매도가">
+                      {fmtNum(t.buyPrice)} → {fmtNum(t.sellPrice)}
+                    </td>
+                    <td className={`r ${signClass(t.pnl)}`} data-l="손익">{signedWon(t.pnl)}</td>
+                    <td className={`r ${signClass(t.pnlRate)}`} data-l="수익률">{pctKo(t.pnlRate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+
+      {view.missing.length > 0 && (
+        <p className="ord-caps">
+          키움이 안 준 것: {view.missing.join(" · ")} — 모의투자는 일부 계좌 조회를 안 준다. 실전 계좌에서 다시 확인.
+        </p>
+      )}
+      <p className="ord-note">
+        <b>총 잔액</b>은 키움의 추정예탁자산(예수금 + 보유 평가 − 미수·융자), <b>기간 손익</b>은 키움이 입출금을 뺀 순자산으로 잰 값, <b>실현손익</b>은 매도로 확정된 것만(수수료·세금 별도).
+        보유 중인 종목의 평가손익은 실현손익에 안 들어간다. 60초마다 새로 읽는다.
+      </p>
+    </div>
+  );
+}
+
+function LedgerPeriodTable({ rows, unit }: { rows: LedgerPeriodRow[]; unit: string }) {
+  if (rows.length === 0) return <p className="empty">이 기간에 기록이 없다</p>;
+  return (
+    <div className="ord-scroll">
+      <table className="ord-table stack">
+        <thead>
+          <tr>
+            <th>{unit}</th>
+            <th className="r">자산 (말)</th>
+            <th className="r">증감</th>
+            <th className="r">실현손익</th>
+            <th className="r">매수 / 매도</th>
+            <th className="r">수수료+세금</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key}>
+              <td className="ord-name">
+                {r.label}
+                {unit !== "일" && <span className="ord-name-sub">{r.from.slice(5).replace("-", "/")} ~ {r.to.slice(5).replace("-", "/")} · {r.days}일 거래</span>}
+              </td>
+              <td className="r" data-l="자산 (말)">{r.assetEnd !== null ? `${Math.round(r.assetEnd).toLocaleString()}원` : "-"}</td>
+              <td className={`r ${signClass(r.assetChange ?? 0)}`} data-l="증감">
+                {r.assetChange !== null ? `${signedWon(r.assetChange)}${r.assetChangeRate !== null ? ` (${pctKo(r.assetChangeRate)})` : ""}` : "-"}
+              </td>
+              <td className={`r ${signClass(r.pnl)}`} data-l="실현손익">{r.pnl !== 0 ? signedWon(r.pnl) : "-"}</td>
+              <td className="r" data-l="매수 / 매도">{r.buyAmt || r.sellAmt ? `${manwon(r.buyAmt)} / ${manwon(r.sellAmt)}` : "-"}</td>
+              <td className="r" data-l="수수료+세금">{r.cost ? `${Math.round(r.cost).toLocaleString()}원` : "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

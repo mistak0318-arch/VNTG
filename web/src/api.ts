@@ -1006,6 +1006,7 @@ export const api = {
     exit?: WatchLeg[] | null;
   }) => orderPost<{ nonce: string; expiresAt: number; ticket: OrderTicket }>("/api/order/prepare", input),
   orderPositions: () => getJson<PositionsView>("/api/order/positions"),
+  orderLedger: (days: number) => getJson<LedgerView>(`/api/order/ledger?days=${days}`),
   orderWatch: () =>
     getJson<{ rows: AutoWatch[]; prices: Record<string, { price: number; from: string }>; allowed: boolean; waiting: number; fired: number }>(
       "/api/order/watch",
@@ -6861,9 +6862,57 @@ export interface Position {
   noExit: boolean;
   boughtByWatch: boolean;
 }
+/** 잔고·수익률 현황 (2026-09-07 밤) — 서버 orderLedger.ts 와 같은 모양 */
+export interface LedgerView {
+  asOf: string;
+  range: { from: string; to: string; days: number };
+  now: {
+    totalAsset: number | null;
+    deposit: number;
+    orderable: number;
+    withdrawable: number | null;
+    d1Deposit: number | null;
+    d2Deposit: number | null;
+    receivable: number;
+    loan: number;
+    investTotal: number;
+    valueTotal: number;
+    pnlTotal: number;
+    pnlRateTotal: number;
+    holdings: number;
+  };
+  period: { netStart: number; netEnd: number; deposits: number; withdrawals: number; evalPnl: number; rate: number } | null;
+  assets: { date: string; asset: number; deposit: number }[];
+  daily: { date: string; buyAmt: number; sellAmt: number; pnl: number; fee: number; tax: number }[];
+  weekly: LedgerPeriodRow[];
+  monthly: LedgerPeriodRow[];
+  byStock: { code: string; name: string; trades: number; qty: number; pnl: number; wins: number; avgRate: number; bestRate: number; worstRate: number; lastDate: string }[];
+  trades: { date: string; code: string; name: string; qty: number; buyPrice: number; sellPrice: number; pnl: number; pnlRate: number; fee: number; tax: number }[];
+  realized: { pnl: number; buyAmt: number; sellAmt: number; fee: number; tax: number; wins: number; losses: number; winRate: number };
+  missing: string[];
+}
+export interface LedgerPeriodRow {
+  key: string;
+  label: string;
+  from: string;
+  to: string;
+  assetEnd: number | null;
+  assetChange: number | null;
+  assetChangeRate: number | null;
+  pnl: number;
+  buyAmt: number;
+  sellAmt: number;
+  cost: number;
+  days: number;
+}
+
 export interface PositionsView {
   deposit: number;
   equity: number;
+  investTotal: number;
+  valueTotal: number;
+  pnlTotal: number;
+  pnlRateTotal: number;
   positions: Position[];
   entries: AutoWatch[];
   orphanOpen: OrderRow[];
