@@ -1088,6 +1088,8 @@ function AccountTab({
             <thead>
               <tr>
                 <th>종목</th>
+                {/* 산 날 (2026-09-07) — 벤티지: "계좌에 이 종목을 언제 샀는지가 안 나오네." 서버는 openedAt 을 늘 보내고 있었다 */}
+                <th title="산 날과 들고 있는 일수 — 최대 보유일 규칙과 견주는 값입니다">산 날</th>
                 <th className="num">수량</th>
                 <th className="num">평단</th>
                 <th className="num">현재가</th>
@@ -1121,6 +1123,10 @@ function AccountTab({
                     <SuperMark code={p.code} />
                     {p.safe && <i className="cis-safe">안전</i>}
                     {p.dueDate && <i className="cis-due">미수 {p.dueDate}</i>}
+                  </td>
+                  <td className="cis-td-date" data-l="산 날">
+                    {p.openedAt.slice(5)}
+                    <span className="pt-n"> {Math.max(0, Math.round((Date.now() - Date.parse(p.openedAt)) / 86400_000))}일</span>
                   </td>
                   <td className="num" data-l="수량">{p.qty.toLocaleString()}</td>
                   <td className="num" data-l="평단">{p.avg.toLocaleString()}</td>
@@ -1173,6 +1179,7 @@ function AccountTab({
             <tfoot>
               <tr className="cis-total">
                 <td className="cis-td-date">합계 {v.positions.length}종목</td>
+                <td />
                 <td />
                 <td />
                 <td />

@@ -21,10 +21,16 @@
   --border: #d0d0d0;
   --text: #000000;
   --muted: #5a5a5a;
-  /* 등락 색은 그대로 둔다 — 엑셀처럼 보이자고 빨강·파랑을 바꾸면 숫자를 잘못 읽는다 */
-  --red: #c00000;
-  --blue: #0f6fc6;
-  --green: #217346;
+  /*
+   * 등락 색 — **무채색** (2026-09-07). 여태 「빨강·파랑을 바꾸면 숫자를 잘못 읽는다」며 진한
+   * 빨강·파랑을 남겨 뒀는데, 벤티지: "안에 컨텐츠들의 색깔이나 아이콘들이 색이 들어가서 엑셀
+   * 같아 보이다가 마는 거 같아." 맞다 — 장부에 빨간 숫자가 열 개면 그건 주식 화면이다.
+   * 오름은 검정, 내림은 중간 회색. 방향은 +−·▲▼ 와 내림 칸의 옅은 바탕이 이미 말한다.
+   * 리본의 초록은 둔다 — 벤티지가 「엑셀 테두리는 엑셀 같아서 좋다」고 했다.
+   */
+  --red: #1f1f1f;
+  --blue: #6b6b6b;
+  --green: #3a3a3a;
 
   --xl-green: #217346;
   --xl-grid: #d4d4d4;
@@ -992,3 +998,77 @@
 :root[data-theme="excel"] .sig-regime,
 :root[data-theme="excel"] .sig-regime.bear,
 :root[data-theme="excel"] .sig-regime.bull { color: var(--text) !important; }
+
+
+/* ── 메모 모드(2026-09-07)에서 실측으로 찾은 새는 자리 — 엑셀에도 같이 ──
+   시장 신호등 카드 띠 · 실시간 점 · 알림 종 · 맥박 용어 칩 · 브리핑 배지 · 매수직전 표 */
+:root[data-theme="excel"] .msig-green { border-left-color: #4a4a4a; }
+:root[data-theme="excel"] .msig-yellow { border-left-color: #9a9a9a; }
+:root[data-theme="excel"] .msig-red { border-left-color: #d0d0d0; }
+:root[data-theme="excel"] .nb-bell.has { color: var(--text) !important; border-color: var(--xl-line) !important; background: var(--panel-2) !important; }
+:root[data-theme="excel"] .pulse-term,
+:root[data-theme="excel"] .pulse-term.news,
+:root[data-theme="excel"] .bf-badge,
+:root[data-theme="excel"] .bf-badge-strength,
+:root[data-theme="excel"] .bf-badge-signal,
+:root[data-theme="excel"] .gt-scope,
+:root[data-theme="excel"] .gt-super,
+:root[data-theme="excel"] .gt-cross,
+:root[data-theme="excel"] .gt-band {
+  background: #f3f3f3 !important;
+  color: var(--text) !important;
+  border-color: #c8c8c8 !important;
+}
+:root[data-theme="excel"] .sc-row.on td { background: #ececec !important; }
+:root[data-theme="excel"] .sc-today-col { background: #f5f5f5 !important; }
+:root[data-theme="excel"] .sc-streak.up { background: #e0e0e0 !important; color: #1f1f1f !important; }
+:root[data-theme="excel"] .sc-streak.down { background: #f0f0f0 !important; color: #6b6b6b !important; }
+:root[data-theme="excel"] .sc-detail { border-color: #7a7a7a !important; }
+:root[data-theme="excel"] .sa-band-on,
+:root[data-theme="excel"] .sa-mk-buy { fill: #4a4a4a !important; }
+:root[data-theme="excel"] .sa-mk-sell { fill: #a6a6a6 !important; }
+:root[data-theme="excel"] .sa-rule.up { stroke: #1f1f1f !important; }
+:root[data-theme="excel"] .sa-rule.down { stroke: #8a8a8a !important; }
+:root[data-theme="excel"] .sim-way-b.on.sim-way-up { color: #1f1f1f !important; }
+:root[data-theme="excel"] .sim-way-b.on.sim-way-down { color: #6b6b6b !important; }
+/* 사이드바 그룹 색띠·메뉴 아이콘의 이모지는 못 뺀다(글자다) — 대신 흐리게 */
+:root[data-theme="excel"] .nav-icon { filter: grayscale(1); opacity: 0.8; }
+:root[data-theme="excel"] .nt-tool,
+:root[data-theme="excel"] .mini-tab,
+:root[data-theme="excel"] .detail-tab,
+:root[data-theme="excel"] .ord-sub,
+:root[data-theme="excel"] .filter-btn,
+:root[data-theme="excel"] .page-title,
+:root[data-theme="excel"] h2,
+:root[data-theme="excel"] h3 { filter: grayscale(1); }
+
+/* 2026-09-07 두 번째 훑기 — 종목상세·매수직전·관심종목에 남아 있던 색 */
+:root[data-theme="excel"] .sig-alert,
+:root[data-theme="excel"] .sig-alert.hot,
+:root[data-theme="excel"] .sig-alert.late {
+  color: var(--text) !important;
+  background: #f3f3f3 !important;
+  border-color: #c8c8c8 !important;
+}
+:root[data-theme="excel"] .sig-regime,
+:root[data-theme="excel"] .sig-regime.bear,
+:root[data-theme="excel"] .sig-regime.bull { border-color: #9a9a9a !important; color: var(--text) !important; background: #f3f3f3 !important; }
+:root[data-theme="excel"] .verdict { border-color: #9a9a9a !important; background: #f7f7f7 !important; }
+:root[data-theme="excel"] .verdict-bad,
+:root[data-theme="excel"] .verdict-good,
+:root[data-theme="excel"] .wl-sum-warn,
+:root[data-theme="excel"] .gt-scope-inline { color: #1f1f1f !important; }
+
+/*
+   2026-09-07 — 클래스를 하나씩 쫓는 것은 끝이 없다(인라인 색 점·축 채움·이모지까지).
+   메모 모드처럼 **필터로 통째** 무채색을 만든다. 다만 메모 모드는 html 에 걸었고, 여기는
+   리본·격자·시트 탭(= 엑셀의 초록)을 살려야 하니 **본문(.main)과 시트(.overlay)에만** 건다.
+
+   filter 는 그 안의 position:fixed 를 자기 상자에 묶는다 — 주문 확인창·전체 차트·보드 닫기
+   단추·텔레그램 fab 처럼 본문 안에서 화면에 붙는 것이 있는 동안은 필터를 잠깐 내린다(:has).
+   그 순간 색이 돌아오지만, 그 위에 뜬 창을 보고 있는 때다.
+*/
+:root[data-theme="excel"] .main:not(:has(.ord-modal-back, .chart-full, .board-solo-close, .board-x, .tgr-fab, .tgr-jump, .ht-pop)),
+:root[data-theme="excel"] .overlay {
+  filter: grayscale(1);
+}
