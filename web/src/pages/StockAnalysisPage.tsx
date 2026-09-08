@@ -47,7 +47,7 @@ export function StockAnalysisPage({
    * 같은 모양이어야 한다. 서버가 한 시간 캐시라 종목을 옮겨 다녀도 조회가 늘지 않고,
    * 주문 앱키가 없으면 `allowed: null` 로 와서 아무것도 안 단다.
    */
-  const [credit, setCredit] = useState<{ allowed: boolean | null; grade: string | null; text: string | null } | null>(null);
+  const [credit, setCredit] = useState<{ allowed: boolean | null; grade: string | null; text: string | null; why?: string | null } | null>(null);
   useEffect(() => {
     setCredit(null);
     if (!stock?.code) return;
@@ -55,7 +55,8 @@ export function StockAnalysisPage({
     void api
       .stockCredit(stock.code)
       .then((c) => alive && setCredit(c))
-      .catch(() => undefined);
+      /* 길 자체가 막힌 것(옛 서버·401)도 「못 읽었다」로 — 조용히 사라지면 원인을 못 찾는다 */
+      .catch((e) => alive && setCredit({ allowed: null, grade: null, text: null, why: e instanceof Error ? e.message : "조회 실패" }));
     return () => {
       alive = false;
     };
@@ -236,6 +237,18 @@ export function StockAnalysisPage({
               {credit && credit.allowed !== null && (
                 <em className={`ord-crd${credit.allowed ? " ok" : " no"}`} title={credit.text ?? (credit.allowed ? "신용 가능" : "신용 불가")}>
                   {credit.allowed ? `신용${credit.grade ?? ""}` : "신용불가"}
+                </em>
+              )}
+              {/*
+                **못 읽었으면 못 읽었다고 말한다** (2026-09-08 — 벤티지 "신용정보는 안 읽는데?").
+                조용히 아무것도 안 달면 「신용 불가」인지 「조회가 안 된 것」인지 구별이 안 되고,
+                고칠 실마리도 없다. 눌러서 이유를 편다.
+              */}
+              {credit && credit.allowed === null && credit.why && (
+                <em className="ord-crd dim" title={credit.why} onClick={() => window.alert(`신용가능여부를 못 읽었다
+
+${credit.why}`)}>
+                  신용 ?
                 </em>
               )}
               {watched.isWatched(stock.code) ? "★ " : ""}

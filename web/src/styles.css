@@ -17822,8 +17822,13 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
  */
 .ov-g-row:disabled {
   cursor: default; opacity: 1; background: transparent; color: inherit;
-  border-top-width: 1px; border-top-style: solid; border-top-color: var(--border);
-  border-right: 0; border-bottom: 0;
+  /*
+   * ⚠️ **없애기만 한다. 색을 정하지 않는다.** 처음엔 여기서 `border-top-color: var(--border)`
+   * 까지 못 박았는데, 눌리는 줄의 윗선은 그보다 **어두운 색**을 다른 규칙에서 받고 있었다.
+   * 그래서 한투 금리 줄만 윗선이 밝아져 여섯 줄이 통째로 상자를 두른 것처럼 보였다 —
+   * 벤티지 "이게 뭐야 더 이상해졌잖아". 브라우저 기본 outset 이 붙는 오른쪽·아래만 지운다.
+   */
+  border-right-width: 0; border-bottom-width: 0;
 }
 .ov-g-row:disabled:hover { background: transparent; }
 /* 종목명 옆 신용 표 — 키움 앱의 「신용A」 (2026-09-08) */
@@ -17932,3 +17937,7 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-price-tools .filter-btn { padding: 0.15rem 0.6rem; font-size: 0.78rem; }
 .ord-auto-chk { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.76rem; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .ord-auto-chk.off { opacity: 0.45; cursor: default; }
+/* 검색이 도는 중 — 빈 상자는 「없다」로 읽힌다 (2026-09-08) */
+.ssb-busy { padding: 0.5rem 0.7rem; color: var(--muted); font-size: 0.82rem; }
+/* 신용 여부를 못 읽었다 — 「불가」와 다른 세 번째 상태 (2026-09-08). 누르면 이유를 편다 */
+.ord-crd.dim { color: var(--muted); border-color: var(--border); background: transparent; cursor: help; }

@@ -2228,22 +2228,32 @@ export async function buyPower(code: string, price: number): Promise<BuyPower> {
  * 신용 가능 여부는 하루에 몇 번 바뀌는 값이 아니다 — **한 시간 캐시**. 종목 상세를 열 때마다
  * TR 을 쏘면 하루 수백 번이 된다.
  */
-const creditCache = new Map<string, { at: number; v: { allowed: boolean | null; grade: string | null; text: string | null } }>();
-export async function creditInfo(code: string): Promise<{ allowed: boolean | null; grade: string | null; text: string | null }> {
+interface CreditInfo {
+  allowed: boolean | null;
+  grade: string | null;
+  text: string | null;
+  /** 못 읽었으면 **왜** — null 이면 정상. 조용히 빈 값을 주면 「불가」와 구별이 안 된다 (2026-09-08) */
+  why?: string | null;
+}
+const creditCache = new Map<string, { at: number; v: CreditInfo }>();
+export async function creditInfo(code: string): Promise<CreditInfo> {
   const hit = creditCache.get(code);
   if (hit && Date.now() - hit.at < 3_600_000) return hit.v;
+  if (!/^\d{6}$/.test(code)) return { allowed: null, grade: null, text: null, why: `종목코드가 6자리가 아니다 (${code || "빈 값"})` };
   const oc = orderClient();
-  if (!oc) return { allowed: null, grade: null, text: null };
+  if (!oc) return { allowed: null, grade: null, text: null, why: "주문 앱키가 없다 — .env 의 KIWOOM_ORDER_APP_KEY" };
   const y = await oc.request<Record<string, unknown>>("/api/dostk/stkinfo", "kt20017", { stk_cd: code }).catch((e) => noteTrError("kt20017", e));
-  if (!y) return { allowed: null, grade: null, text: null };
+  if (!y) return { allowed: null, grade: null, text: null, why: `신용가능여부(kt20017) 조회 실패 — ${lastTrError.get("kt20017") ?? "이유 없음"}` };
   /* 응답은 Y/N 이 아니라 「< A군 신용융자 가능 >」 같은 **문장**이다 (2026-09-08 실측) */
   const yn = String(y.data.crd_alow_yn ?? "");
-  const v = {
+  const v: CreditInfo = {
     allowed: yn ? /가능/.test(yn) && !/불가/.test(yn) : null,
     grade: /([A-Za-z])군/.exec(yn)?.[1] ?? null,
     text: yn || null,
+    why: yn ? null : `키움이 crd_alow_yn 을 안 줬다 — ${JSON.stringify(Object.fromEntries(Object.entries(y.data).filter(([k]) => !/^return_/.test(k)))).slice(0, 160)}`,
   };
-  creditCache.set(code, { at: Date.now(), v });
+  /* 못 읽은 것은 캐시하지 않는다 — 한 번 튄 조회 때문에 한 시간을 「모름」으로 살면 안 된다 */
+  if (v.allowed !== null) creditCache.set(code, { at: Date.now(), v });
   return v;
 }
 
