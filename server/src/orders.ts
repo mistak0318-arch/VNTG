@@ -166,7 +166,10 @@ export interface OrderGuard {
   allowAutoWatch: boolean;
   /**
    * 계좌 단위 위험 한도 (2026-09-07 밤, 개편 ⑤).
-   *   maxPositionPct  종목 하나에 계좌(예수금+평가)의 몇 %까지 — 넘는 매수는 거절
+   *   maxPositionPct  종목 하나에 계좌(예수금+평가)의 몇 %까지 — 넘는 매수는 거절.
+   *                   **기본 0 = 안 씀** (2026-09-08 — 벤티지 "주문에 왜 한종목 비중초과를
+   *                   걸어놨어? 이런거 빼"). 40 으로 박아 둔 것을 삼성전자 45% 에서 걸렸다.
+   *                   화면에 바꾸는 자리가 없어 파일을 열어야 했다. 쓰려면 파일에 값을 적는다.
    *   maxDailyLossKrw 오늘 자동감시 매도로 실현한 손실이 이만큼을 넘으면 그날 신규 매수 잠금 (0 = 안 씀)
    *   rebuyCooldownMin 손절 매도가 발동한 종목은 이 분 동안 다시 안 산다
    *   dualStop        「이하면 판다」 감시에 키움 스톱지정가를 아침마다 같이 건다(서버가 죽어도 키움이 판다)
@@ -187,7 +190,7 @@ const DEFAULT_GUARD: OrderGuard = {
   allowedCodes: null,
   allowCredit: false,
   allowAutoWatch: true,
-  maxPositionPct: 40,
+  maxPositionPct: 0,
   maxDailyLossKrw: 0,
   rebuyCooldownMin: 30,
   dualStop: true,
@@ -452,6 +455,12 @@ async function writeJson(file: string, v: unknown): Promise<void> {
 
 export async function getGuard(): Promise<OrderGuard> {
   const g = await readJson(GUARD_FILE, DEFAULT_GUARD);
+  /*
+   * 옛 기본값 40 이 파일에 굳어 있으면 0 으로 읽는다. 벤티지가 직접 적은 값이 아니라
+   * 처음 파일을 만들 때 기본값이 박힌 것이라, 그걸 존중할 이유가 없다.
+   * 40 이 아닌 다른 값이면 사람이 적은 것이니 그대로 둔다.
+   */
+  if (g.maxPositionPct === 40) g.maxPositionPct = 0;
   try {
     await fs.access(GUARD_FILE);
   } catch {
