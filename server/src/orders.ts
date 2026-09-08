@@ -396,6 +396,26 @@ export function orderIsMock(): boolean {
   return (process.env.KIWOOM_ORDER_IS_MOCK ?? "true").trim().toLowerCase() !== "false";
 }
 
+/**
+ * **하드 천장** (2026-09-08) — `.env` 에만 있고 화면에서는 못 넘긴다.
+ *
+ * 규칙·한도를 화면에서 고칠 수 있게 열면서(벤티지 지시) 한도가 「피해 상한」 역할을 잃었다 —
+ * 문 넷을 다 통과한 침입자는 한도를 올리고 크게 낼 수 있다. 그래서 그 위에 하나 더:
+ * `.env` 의 천장은 미니PC 안에서 파일을 고쳐야만 바뀐다. 실전 계좌로 넘어가면서 넣는다.
+ *
+ *   ORDER_HARD_MAX_ORDER_KRW   한 건 최대 (원). 없으면 천장 없음
+ *   ORDER_HARD_MAX_DAILY_KRW   하루 합계 최대 (원)
+ *
+ * 천장보다 큰 값이 파일(orderGuard.json)에 있으면 읽을 때 천장으로 눌러 둔다.
+ */
+export function hardCeiling(): { maxOrderKrw: number | null; maxDailyKrw: number | null } {
+  const n = (v: string | undefined) => {
+    const x = Number((v ?? "").trim());
+    return Number.isFinite(x) && x > 0 ? Math.round(x) : null;
+  };
+  return { maxOrderKrw: n(process.env.ORDER_HARD_MAX_ORDER_KRW), maxDailyKrw: n(process.env.ORDER_HARD_MAX_DAILY_KRW) };
+}
+
 let orderClientCache: KiwoomClient | null | undefined;
 
 /** 주문 전용 앱키의 클라이언트 — 조회용 앱키와 **섞지 않는다**(토큰이 서로를 죽인다) */
@@ -463,6 +483,10 @@ export async function getGuard(): Promise<OrderGuard> {
    * 40 이 아닌 다른 값이면 사람이 적은 것이니 그대로 둔다.
    */
   if (g.maxPositionPct === 40) g.maxPositionPct = 0;
+  /* 천장 — 파일에 더 큰 값이 있어도 여기서 눌린다 */
+  const cap = hardCeiling();
+  if (cap.maxOrderKrw !== null && g.maxOrderKrw > cap.maxOrderKrw) g.maxOrderKrw = cap.maxOrderKrw;
+  if (cap.maxDailyKrw !== null && g.maxDailyKrw > cap.maxDailyKrw) g.maxDailyKrw = cap.maxDailyKrw;
   try {
     await fs.access(GUARD_FILE);
   } catch {
@@ -492,15 +516,19 @@ export async function saveGuard(patch: Partial<OrderGuard>): Promise<OrderGuard>
   const num = (k: keyof OrderGuard, v: unknown, min: number, max: number, int = true): void => {
     if (v === undefined) return;
     const n = Number(v);
-    if (!Number.isFinite(n) || n < min || n > max) throw new Error(`${k}: ${min}~${max} 사이여야 한다`);
+    if (!Number.isFinite(n) || n < min || n > max) {
+      const capped = (k === "maxOrderKrw" && hardCeiling().maxOrderKrw !== null) || (k === "maxDailyKrw" && hardCeiling().maxDailyKrw !== null);
+      throw new Error(`${k}: ${min.toLocaleString()}~${max.toLocaleString()} 사이여야 한다${capped ? " — 위쪽은 .env 의 하드 천장이다. 미니PC 에서만 바꿀 수 있다" : ""}`);
+    }
     (next as unknown as Record<string, unknown>)[k] = int ? Math.round(n) : n;
   };
   const bool = (k: keyof OrderGuard, v: unknown): void => {
     if (v === undefined) return;
     (next as unknown as Record<string, unknown>)[k] = Boolean(v);
   };
-  num("maxOrderKrw", patch.maxOrderKrw, 10_000, 1_000_000_000);
-  num("maxDailyKrw", patch.maxDailyKrw, 10_000, 10_000_000_000);
+  const cap = hardCeiling();
+  num("maxOrderKrw", patch.maxOrderKrw, 10_000, cap.maxOrderKrw ?? 1_000_000_000);
+  num("maxDailyKrw", patch.maxDailyKrw, 10_000, cap.maxDailyKrw ?? 10_000_000_000);
   num("maxDailyCount", patch.maxDailyCount, 1, 1000);
   num("priceCollarPct", patch.priceCollarPct, 1, 30, false);
   num("stopCollarPct", patch.stopCollarPct, 1, 90, false);
@@ -3107,6 +3135,8 @@ export async function orderStatus(req: Request): Promise<Record<string, unknown>
     uiLocked: a.uiLocked,
     lockedUntilMs: a.lockUntil > Date.now() ? a.lockUntil : 0,
     guard,
+    /* 하드 천장 — 화면이 「이 위로는 못 올린다」를 적는다 (2026-09-08) */
+    hardCeiling: hardCeiling(),
     today,
     open: Object.fromEntries(VENUES.map((v) => [v, venueOpen(v)])),
     /* 지금 낼 수 있는 거래소 — 모의는 KRX 뿐이다. 화면이 나머지를 잠근다 */

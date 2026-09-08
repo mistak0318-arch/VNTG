@@ -6943,6 +6943,8 @@ export interface OrderStatus {
   enabled: boolean;
   configured: boolean;
   mock: boolean;
+  /** .env 의 하드 천장 — 규칙 편집에서 이 위로는 못 올린다. null = 천장 없음 (2026-09-08) */
+  hardCeiling?: { maxOrderKrw: number | null; maxDailyKrw: number | null };
   reason: string | null;
   hasPassword: boolean;
   /** 진입 PIN 이 아직 기본값(0000)인가 */

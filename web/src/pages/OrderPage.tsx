@@ -4288,7 +4288,7 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
       <AccessLogSection />
 
       {/* 저장되면 status 를 다시 읽는다(onDone) — 위 잔고 띠의 한도 숫자도 같이 바뀌어야 한다 */}
-      <GuardSection guard={status.guard} mock={status.mock} onSaved={() => onDone()} />
+      <GuardSection guard={status.guard} mock={status.mock} cap={status.hardCeiling} onSaved={() => onDone()} />
     </div>
   );
 }
@@ -4306,7 +4306,7 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
  * 바꾸려면 **주문 비밀번호**를 다시 넣는다 — 주문을 내는 것과 같은 무게. 바뀐 값은 기록에 남는다.
  * 켜고 끄는 것은 스위치로, 값은 숫자로. 0 이면 「안 씀」인 것들은 스위치를 끄면 0 을 보낸다.
  */
-function GuardSection({ guard, mock, onSaved }: { guard: OrderGuard; mock: boolean; onSaved: (g: OrderGuard) => void }) {
+function GuardSection({ guard, mock, cap, onSaved }: { guard: OrderGuard; mock: boolean; cap?: { maxOrderKrw: number | null; maxDailyKrw: number | null }; onSaved: (g: OrderGuard) => void }) {
   const [d, setD] = useState<OrderGuard>(guard);
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
@@ -4385,8 +4385,8 @@ function GuardSection({ guard, mock, onSaved }: { guard: OrderGuard; mock: boole
       <Row k="maxPositionPct" label="한 종목 비중 제한" hint="사고 나면 종목 하나가 계좌(예수금+평가)의 몇 %를 넘게 되는 매수는 거절" unit="%" fallback={40} min={1} max={100} />
 
       <h5 className="ord-guard-h">주문 한도</h5>
-      <Fixed k="maxOrderKrw" label="한 건" hint="주문 한 건의 상한. 지정가는 가격×수량, 시장가는 현재가×수량" unit="원" min={10_000} max={1_000_000_000} step={100_000} />
-      <Fixed k="maxDailyKrw" label="하루 합계" hint="오늘 낸 주문(매수+매도)의 합 상한" unit="원" min={10_000} max={10_000_000_000} step={100_000} />
+      <Fixed k="maxOrderKrw" label="한 건" hint={`주문 한 건의 상한. 지정가는 가격×수량, 시장가는 현재가×수량${cap?.maxOrderKrw ? ` · 천장 ${won(cap.maxOrderKrw)} (.env, 미니PC 에서만)` : ""}`} unit="원" min={10_000} max={cap?.maxOrderKrw ?? 1_000_000_000} step={100_000} />
+      <Fixed k="maxDailyKrw" label="하루 합계" hint={`오늘 낸 주문(매수+매도)의 합 상한${cap?.maxDailyKrw ? ` · 천장 ${won(cap.maxDailyKrw)} (.env, 미니PC 에서만)` : ""}`} unit="원" min={10_000} max={cap?.maxDailyKrw ?? 10_000_000_000} step={100_000} />
       <Fixed k="maxDailyCount" label="하루 건수" hint="오늘 낸 주문 건수 상한 (취소는 안 센다)" unit="건" min={1} max={1000} />
       <Fixed k="priceCollarPct" label="지정가 울타리" hint="현재가에서 이만큼 넘게 벗어난 지정가는 거절 — 0 을 하나 더 친 손가락을 잡는다" unit="%" min={1} max={30} step={0.5} />
       <Fixed k="stopCollarPct" label="스톱 발동가 울타리" hint="손절 발동가는 원래 멀리 두므로 따로 넓게. 그래도 오타는 잡는다" unit="%" min={1} max={90} />
