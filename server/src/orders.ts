@@ -1359,6 +1359,21 @@ export async function prepareOrder(
     }
     if (used.count + 1 > g.maxDailyCount) reject(`오늘 건수 한도 초과 — ${used.count}/${g.maxDailyCount}`, input, ip);
   }
+  /*
+   * **일반 매도도 보유를 잰다** (2026-09-08 정밀검진 🟠10). 감시 분기에만 있던 검사. 보유보다 큰
+   * 수량은 키움이 거절하지만 그때마다 error 기록이 쌓이고 「5분 3회 거절」 경보가 헛울렸다.
+   * 신용 매도는 그 융자 줄의 수량, 현금 매도는 현금 줄 합. 계좌를 못 읽으면 검사 없이 통과 —
+   * 조회 실패가 매도를 막으면 안 된다.
+   */
+  if (input.side === "sell" && !watchSpec) {
+    const acct = await orderAccount().catch(() => null);
+    if (acct) {
+      const mine = acct.holdings.filter((x) => x.code === input.code && (credit ? Boolean(x.creditType) && (!loanDate || x.loanDate === loanDate) : !x.creditType));
+      const able = mine.reduce((a, x) => a + (x.ableQty > 0 ? x.ableQty : x.qty), 0);
+      if (mine.length === 0) reject(`${input.name || input.code} ${credit ? "신용 " : ""}보유가 없다`, input, ip);
+      if (input.qty > able) reject(`매도 수량 ${input.qty}주가 매매가능수량 ${able}주를 넘는다`, input, ip);
+    }
+  }
 
   const ticket: OrderTicket = {
     kind: "order",
@@ -1596,6 +1611,13 @@ export async function executePrepared(
     const r = await placeOrder(t);
     if (t.kind === "cancel") {
       await appendLog({ kind: "cancel", ip, code: t.code, name: t.name, qty: t.qty, venue: t.venue, origOrdNo: t.ordNo, ordNo: r.ordNo, msg: r.msg, raw: r.raw });
+      /*
+       * 갈고리에 「끝났다」를 알린 뒤 지운다 (2026-09-08 정밀검진 🟠8). 예전엔 watching 만 지워서
+       * 감시 발동으로 나간 주문을 사람이 취소하면 감시가 fired 에 영영 머물고 카드가 「체결 대기」였다.
+       */
+      const w = watching.get(t.ordNo);
+      fillHooks.get(t.ordNo)?.({ filled: w?.filled ?? 0, price: 0, full: false, done: true, status: "사람이 취소" });
+      fillHooks.delete(t.ordNo);
       unwatch(t.ordNo);
       void sendTelegram(`🧾 ${tag} <b>취소</b> ${esc(t.name)} ${t.qty}주 (원주문 ${esc(t.ordNo)})\n${esc(r.msg)}`, "order").catch(() => undefined);
     } else {
@@ -2352,7 +2374,7 @@ async function runAutoWatchLocked(main: KiwoomClient): Promise<void> {
      * 실전으로 바꾼 뒤 모의 때 건 감시가 남아 있으면 실전 계좌에 주문이 나간다 — 모의 잔고의
      * 삼성전자 74주 매도 감시는 실전엔 팔 게 없어 거절로 끝나겠지만, 매수 감시는 실제로 산다.
      */
-    for (const r of waiting) {
+    for (const r of rows.filter((x) => x.status === "waiting" || x.status === "fired")) {
       const rowMock = r.mock ?? true;
       if (rowMock !== orderIsMock()) {
         r.status = "expired";
@@ -2379,6 +2401,14 @@ async function runAutoWatchLocked(main: KiwoomClient): Promise<void> {
     /* 이중 손절 (개편 ②) — 거래일 08:31~08:59 에 한 번, 「이하면 판다」 감시마다 키움 스톱지정가 */
     if (isTradingDate(date) && minute >= 511 && minute <= 539 && lastDualDay !== date) {
       lastDualDay = date;
+      if (await placeDualStops(rows, date)) changed = true;
+    }
+    /*
+     * **장중에 새로 건 손절도 스톱을 받는다** (2026-09-08 정밀검진 🟠13). 아침 창에만 걸면 10시에
+     * 등록한 감시는 그날 하루 키움 스톱 없이 서버만 믿었다. 정규장 동안 오늘 아직 안 시도한
+     * 매도 감시가 있으면 걸어 준다 — placeDualStops 는 오늘 시도한 것을 건너뛰므로 값이 없을 땐 공짜다.
+     */
+    if (isTradingDate(date) && minute >= WATCH_FROM && minute <= 920 && live.some((r) => r.ticket.side === "sell" && r.spec.dir === "le" && r.spec.dual !== false && !r.ticket.credit && r.dualDate !== date)) {
       if (await placeDualStops(rows, date)) changed = true;
     }
     /* 이중 스톱이 먼저 팔았나 — 정규장에 확인. 날이 지난 스톱 번호는 지운다(당일 유효) */
@@ -2680,7 +2710,7 @@ async function placeDualStops(rows: AutoWatch[], date: string): Promise<boolean>
   let changed = false;
   for (const r of rows) {
     if (r.status !== "waiting" || r.ticket.side !== "sell" || r.spec.dir !== "le" || r.spec.dual === false) continue;
-    if (r.dualDate === date && r.dualOrdNo) continue;
+    if (r.dualDate === date) continue; // 오늘 이미 걸었거나 시도했다 — 실패는 내일 다시(3초마다 두드리지 않는다)
     if (r.ticket.credit) continue;
     const trigger = r.spec.trigger;
     const limit = toTick(trigger * 0.985);
@@ -2850,7 +2880,7 @@ export async function positions(main: KiwoomClient): Promise<{
 }> {
   const oc = orderClient();
   const today = kstParts().date.replace(/-/g, "");
-  const [acct, rows, open, fl, g, assetRes, rlzRes] = await Promise.all([
+  const [acct, rowsAll, open, fl, g, assetRes, rlzRes] = await Promise.all([
     orderAccount(),
     readWatches(),
     openOrders().catch(() => [] as OpenRow[]),
@@ -2859,6 +2889,8 @@ export async function positions(main: KiwoomClient): Promise<{
     oc ? memo("asset", 30_000, () => oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00003", { qry_tp: "0" })).catch(() => null) : Promise.resolve(null),
     oc ? memo("rlzToday", 30_000, () => oc.request<Record<string, unknown>>(ACNT_RESOURCE, "ka10074", { strt_dt: today, end_dt: today })).catch(() => null) : Promise.resolve(null),
   ]);
+  /* 지금 모드(모의/실전)의 감시만 — 모의 때 발동·체결된 것이 실전 카드에 「감시로 삼」 표를 달았다 (2026-09-08) */
+  const rows = rowsAll.filter((r) => (r.mock ?? true) === orderIsMock());
   const totalAsset = assetRes ? num(assetRes.data.prsm_dpst_aset_amt) || null : null;
   const realizedToday = rlzRes ? num(rlzRes.data.rlzt_pl) : null;
   const live = rows.filter((r) => r.status === "waiting" || r.status === "fired");
@@ -2918,7 +2950,8 @@ export async function positions(main: KiwoomClient): Promise<{
     totalAsset,
     realizedToday,
     positions: positionsOut,
-    entries: live.filter((r) => r.ticket.side === "buy" && !held.has(r.ticket.code) || (r.ticket.side === "buy" && r.status === "waiting")),
+    /* 매수 감시 중 「아직 안 든 종목」이거나 「기다리는 중」 — 괄호가 잘못 묶여 매수 전부였다 (정밀검진 🟡) */
+    entries: live.filter((r) => r.ticket.side === "buy" && (!held.has(r.ticket.code) || r.status === "waiting")),
     orphanOpen: open.filter((x) => !held.has(x.code)),
     prices,
     todayLoss,
@@ -2994,6 +3027,30 @@ export async function autoWatchSummary(): Promise<{ allowed: boolean; waiting: n
 }
 
 export function startAutoWatch(main: KiwoomClient): void {
+  /*
+   * **재시작하면 갈고리를 다시 건다** (2026-09-08 정밀검진 🟠7). watching·fillHooks 는 메모리라
+   * 매수가 접수된 뒤 체결 전에 서버가 다시 뜨면 갈고리가 사라졌다 — 부모 감시는 fired 에 멈추고
+   * 출구(체결 뒤 매도 감시)가 영영 안 태어난다. fired 에 주문번호가 있는 감시를 전부 다시 건다.
+   * 장중 배포가 잦은 이 프로젝트에서 이 창은 예외가 아니라 일상이다.
+   */
+  void (async () => {
+    try {
+      const rows = await readWatches();
+      let n = 0;
+      for (const r of rows) {
+        if (r.status !== "fired" || !r.ordNo) continue;
+        if ((r.mock ?? true) !== orderIsMock()) continue;
+        const t: OrderTicket = { ...r.ticket, watch: null };
+        watch(r.ordNo, t);
+        const id = r.id;
+        fillHooks.set(r.ordNo, (ev) => void onAutoWatchFill(id, ev).catch(() => undefined));
+        n += 1;
+      }
+      if (n > 0) console.log(`[order] 재시작 — 발동된 감시 ${n}건의 체결 갈고리를 다시 걸었다`);
+    } catch (e) {
+      console.warn("[order] 재시작 갈고리 복구 실패", e instanceof Error ? e.message : e);
+    }
+  })();
   setInterval(() => void runAutoWatch(main).catch(() => undefined), 3_000);
   console.log("[order] 자동감시주문 — 정규장에 3초마다 값을 보고 조건에 닿은 주문서를 한 번 낸다");
 }
