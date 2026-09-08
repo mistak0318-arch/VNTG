@@ -10,6 +10,7 @@ import {
   type StockSearchResult,
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
+import { useListKeys } from "../useListKeys";
 
 /**
  * 모의투자.
@@ -79,6 +80,10 @@ export function PaperTradePage({
       // 현재가를 못 받아도 직접 적으면 되므로 조용히 넘어간다
     }
   }
+
+  /* 화면에 그리는 것도 여덟 개까지라 훅에 넘기는 목록도 똑같이 잘라 인덱스를 맞춘다 */
+  const cands = results.slice(0, 8);
+  const keys = useListKeys(cands, (r) => void choose(r), { itemClass: "" });
 
   async function load() {
     setLoading(true);
@@ -202,12 +207,13 @@ export function PaperTradePage({
               placeholder="종목 검색"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              {...keys.inputProps}
             />
-            {results.length > 0 && (
-              <ul className="pt-results">
-                {results.slice(0, 8).map((r) => (
+            {cands.length > 0 && (
+              <ul className="pt-results" role="listbox">
+                {cands.map((r, i) => (
                   <li key={r.code}>
-                    <button onClick={() => void choose(r)}>
+                    <button {...keys.itemProps(i)} onClick={() => void choose(r)}>
                       {r.name} <span className="pt-n">{normalizeStockCode(r.code)}</span>
                     </button>
                   </li>

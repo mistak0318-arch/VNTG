@@ -35,6 +35,8 @@ interface Result {
   scanned: number;
   /** 실제로 닿은 가장 오래된 글 — 고른 구간보다 짧을 수 있다 (2026-09-05) */
   oldest?: string | null;
+  /** 창고(한 달치 수집분)에서 찾았나 — 그러면 채널당 상한이 없다 */
+  fromStore?: boolean;
   hits: Hit[];
   error: string | null;
 }
@@ -586,6 +588,14 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
               이걸 안 적어 두면 「3일을 골랐는데 안 나온다」가 고장으로 보인다.
             */}
             {(() => {
+              /*
+               * ⚠️ **창고에서 찾은 결과엔 이 경고를 안 띄운다** (2026-09-08 — 벤티지 "우리 이제
+               * 텔레그램 전부 긁어오니깐 저 경고는 해당 안 되는 거 아냐?"). 맞다. 창고(한 달치)는
+               * 채널당 상한이 없다. 게다가 창고의 `oldest` 는 **걸린 글 중 제일 오래된 것**이라,
+               * 12시간에서 3건 걸리고 그중 오래된 게 4시간 전이면 「4시간치만 닿았다」고 거짓말했다.
+               * 상한 경고는 텔레그램을 그 자리에서 훑은(fromStore=false) 옛 길에서만 뜻이 있다.
+               */
+              if (result.fromStore) return null;
               const o = result.oldest;
               if (!o) return null;
               const reachedMin = (Date.now() - new Date(o).getTime()) / 60_000;

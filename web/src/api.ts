@@ -1039,6 +1039,9 @@ export const api = {
       "/api/order/execute",
       { nonce, password, remember },
     ),
+  /** 한도·규칙 편집 — 비밀번호를 같이 (2026-09-08) */
+  orderGuardSave: (password: string, patch: Partial<OrderGuard>) =>
+    orderPost<{ guard: OrderGuard }>("/api/order/guard", { password, patch }),
   orderSettings: () => getJson<{ settings: OrderSettings }>("/api/order/settings"),
   orderSettingsSave: (patch: Partial<OrderSettings>) =>
     orderPost<{ settings: OrderSettings }>("/api/order/settings", patch),

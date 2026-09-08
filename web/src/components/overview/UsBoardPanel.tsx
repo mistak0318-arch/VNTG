@@ -11,6 +11,7 @@ import {
   type UsSearchResult,
 } from "../../api";
 import { useSection } from "../../useSection";
+import { useListKeys } from "../../useListKeys";
 import { YahooChartSheet, type ChartTarget } from "./YahooChartSheet";
 import { UsSpark } from "./UsSpark";
 import { UsWatchTable, sideNameOf } from "../UsWatchTable";
@@ -779,6 +780,21 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
     await run(() => api.usWatchStockOrder(current.id, order));
   }
 
+  /*
+   * 검색 패널은 `editing && current` 일 때만 뜨지만, 훅은 조건 없이 늘 불러야 한다 —
+   * 닫혀 있으면 `found` 도 비어 있어 실질적으론 no-op. 담는 중(`busy`)엔 건너뛴다.
+   */
+  const searchKeys = useListKeys(
+    found,
+    (f) => {
+      if (busy || !current) return;
+      setQuery("");
+      setFound([]);
+      void run(() => api.usWatchStockAdd(current.id, f.symbol, f.name));
+    },
+    { itemClass: "search-result-row" },
+  );
+
   return (
     <section className="ov-card">
       <div className="ov-card-h">
@@ -817,13 +833,14 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
               placeholder={`「${current.name}」에 넣을 종목 — 티커나 이름으로`}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              {...searchKeys.inputProps}
             />
             {query.trim() && found.length > 0 && (
-              <div className="search-dropdown">
-                {found.map((f) => (
+              <div className="search-dropdown" role="listbox">
+                {found.map((f, i) => (
                   <button
                     key={f.symbol}
-                    className="search-result-row"
+                    {...searchKeys.itemProps(i)}
                     disabled={busy}
                     onClick={() => {
                       setQuery("");

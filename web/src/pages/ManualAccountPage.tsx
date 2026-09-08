@@ -8,6 +8,7 @@ import {
   type EvaluatedHolding,
   type StockSearchResult,
 } from "../api";
+import { useListKeys } from "../useListKeys";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { CollapsibleCard } from "../components/CollapsibleCard";
 import { RefreshBar } from "../components/RefreshBar";
@@ -89,6 +90,12 @@ function AddHoldingForm({ accountId, onDone }: { accountId: string; onDone: (a: 
     return () => clearTimeout(t);
   }, [query, picked]);
 
+  const keys = useListKeys(
+    results,
+    (r) => setPicked({ code: normalizeStockCode(r.code), name: r.name }),
+    { itemClass: "search-result-row" },
+  );
+
   async function submit() {
     if (!picked) return;
     setBusy(true);
@@ -152,13 +159,14 @@ function AddHoldingForm({ accountId, onDone }: { accountId: string; onDone: (a: 
             placeholder="종목명 또는 종목코드로 검색해서 추가"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            {...keys.inputProps}
           />
           {results.length > 0 && (
-            <div className="search-dropdown">
-              {results.map((r) => (
+            <div className="search-dropdown" role="listbox">
+              {results.map((r, i) => (
                 <button
                   key={r.code}
-                  className="search-result-row"
+                  {...keys.itemProps(i)}
                   onClick={() => setPicked({ code: normalizeStockCode(r.code), name: r.name })}
                 >
                   <span className="name">{r.name}</span>

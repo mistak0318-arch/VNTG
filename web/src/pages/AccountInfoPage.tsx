@@ -4,6 +4,7 @@ import { RawJson } from "../components/RawJson";
 import { CollapsibleCard } from "../components/CollapsibleCard";
 import { ConcentrationCard } from "../components/ConcentrationCard";
 import { RefreshBar } from "../components/RefreshBar";
+import { useListKeys } from "../useListKeys";
 
 // 아래 필드명은 키움 REST API 공식 문서(kt00018 계좌평가잔고내역요청) 기준으로 확인된 값.
 /** 당일 손익금 — `kt00004` 계좌평가현황이 준다 */
@@ -73,6 +74,10 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
     setSearchResults([]);
   }
 
+  const keys = useListKeys(searchResults, (r) => openStock(r.code, r.name), {
+    itemClass: "search-result-row",
+  });
+
   async function load() {
     try {
       /*
@@ -119,18 +124,15 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
           placeholder="종목명 또는 종목코드 검색"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          {...keys.inputProps}
         />
         {query.trim() && (
-          <div className="search-dropdown">
+          <div className="search-dropdown" role="listbox">
             {searching && <div className="empty">검색 중...</div>}
             {!searching && searchResults.length === 0 && <div className="empty">검색 결과 없음</div>}
             {!searching &&
-              searchResults.map((r) => (
-                <button
-                  key={r.code}
-                  className="search-result-row"
-                  onClick={() => openStock(r.code, r.name)}
-                >
+              searchResults.map((r, i) => (
+                <button key={r.code} {...keys.itemProps(i)} onClick={() => openStock(r.code, r.name)}>
                   <span className="name">{r.name}</span>
                   <span className="sub">
                     {r.code} · {r.marketName}

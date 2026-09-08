@@ -9,6 +9,7 @@ import { SectorNews } from "../components/SectorNews";
 import { KeywordFlowPanel } from "../components/KeywordFlowPanel";
 import { useDragOrder } from "../useDragOrder";
 import { useRecentStocks } from "../useRecentStocks";
+import { useListKeys } from "../useListKeys";
 
 /*
  * 뉴스 탭 (2026-08-26 확장) — 네이버 증권의 갈래를 그대로 편다.
@@ -107,6 +108,16 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
     setResults([]);
   }
 
+  /*
+   * Enter 의 기본 동작은 **키워드 검색**이다 — 종목을 고르고 싶으면 방향키로
+   * 후보를 짚어야 한다(`enterPicksFirst: false`). 그래서 훅의 onKeyDown 을 먼저
+   * 태우고, `e.defaultPrevented` 가 아니면(=짚은 게 없으면) 종전대로 키워드 검색으로 흘린다.
+   */
+  const keys = useListKeys(results, (r) => pick(r), {
+    itemClass: "search-result-row",
+    enterPicksFirst: false,
+  });
+
   return (
     <div>
       <div className="search-box">
@@ -118,22 +129,28 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            // Enter = 키워드 검색. 종목을 고르고 싶으면 아래 후보를 누른다
-            if (e.key === "Enter") pickKeyword(query.trim());
+            keys.inputProps.onKeyDown(e);
+            // 방향키로 후보를 짚었을 때만 훅이 처리한다 — 안 짚었으면 종전대로 키워드 검색
+            if (!e.defaultPrevented && e.key === "Enter") pickKeyword(query.trim());
           }}
+          role={keys.inputProps.role}
+          aria-expanded={keys.inputProps["aria-expanded"]}
+          aria-activedescendant={keys.inputProps["aria-activedescendant"]}
+          autoComplete={keys.inputProps.autoComplete}
         />
         {query.trim() && (
-          <div className="search-dropdown">
+          <div className="search-dropdown" role="listbox">
             {/*
               키워드 검색 (2026-08-26) — 종목이 아니어도 검색할 수 있게.
-              맨 위에 두면 오타 종목명도 일단 키워드로는 찾아진다.
+              맨 위에 두면 오타 종목명도 일단 키워드로는 찾아진다. 방향키 목록에는 안 낀다 —
+              고정된 동작이라 훅의 인덱스에 넣을 이유가 없다.
             */}
             <button className="search-result-row" onClick={() => pickKeyword(query.trim())}>
               <span className="name">🔎 “{query.trim()}” 뉴스 검색</span>
               <span className="sub">종목이 아니어도 됩니다 · Enter</span>
             </button>
-            {results.map((r) => (
-              <button key={r.code} className="search-result-row" onClick={() => pick(r)}>
+            {results.map((r, i) => (
+              <button key={r.code} {...keys.itemProps(i)} onClick={() => pick(r)}>
                 <span className="name">{r.name}</span>
                 <span className="sub">
                   {r.code} · {r.marketName}

@@ -3,6 +3,7 @@ import { useSheetBack } from "../useSheetBack";
 import { api, type MemoEntry, type MemoFile } from "../api";
 import { MemoBody, toggleTaskLine } from "../components/MemoBody";
 import { YahooChartSheet } from "../components/overview/YahooChartSheet";
+import { useListKeys } from "../useListKeys";
 
 /**
  * 메모장 (2026-08-26) — **메모장 + 일기장.**
@@ -611,6 +612,20 @@ function MemoStocks({
     return () => clearTimeout(t);
   }, [q]);
 
+  function pick(f: { code: string; name: string; sub: string }) {
+    /* 해외(us:)는 심볼 그대로, 국내는 숫자만 남긴 6자리 코드 */
+    const code = f.code.startsWith("us:")
+      ? f.code
+      : f.code.replace(/[^0-9A-Z]/gi, "").slice(0, 6);
+    if (!stocks.some((x) => x.code === code)) {
+      onChange([...stocks, { code, name: f.name }]);
+    }
+    setQ("");
+    setFound([]);
+  }
+
+  const keys = useListKeys(found, pick, { itemClass: "search-result-row" });
+
   return (
     <div className="memo-stocks">
       <div className="memo-stock-chips">
@@ -645,25 +660,16 @@ function MemoStocks({
           placeholder="+ 종목 잇기 (국내·해외 이름이나 코드)"
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          {...keys.inputProps}
         />
       </div>
       {found.length > 0 && (
-        <div className="search-dropdown memo-stock-drop">
-          {found.map((f) => (
+        <div className="search-dropdown memo-stock-drop" role="listbox">
+          {found.map((f, i) => (
             <button
               key={f.code}
-              className="search-result-row"
-              onClick={() => {
-                /* 해외(us:)는 심볼 그대로, 국내는 숫자만 남긴 6자리 코드 */
-                const code = f.code.startsWith("us:")
-                  ? f.code
-                  : f.code.replace(/[^0-9A-Z]/gi, "").slice(0, 6);
-                if (!stocks.some((x) => x.code === code)) {
-                  onChange([...stocks, { code, name: f.name }]);
-                }
-                setQ("");
-                setFound([]);
-              }}
+              {...keys.itemProps(i)}
+              onClick={() => pick(f)}
             >
               <span className="name">
                 {f.code.startsWith("us:") && "🌏 "}

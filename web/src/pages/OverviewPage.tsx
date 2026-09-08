@@ -137,6 +137,47 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const [futDetail, setFutDetail] = useState<FuturesDetailTarget | null>(null);
   /* 글로벌·미장·미국 금리 줄을 누르면 — 추이 차트. 숫자 한 줄로는 「어디쯤인가」를 모른다 */
   const [chart, setChart] = useState<ChartTarget | null>(null);
+  /*
+   * **글로벌 판의 줄을 고른다** (2026-09-08 — 벤티지: "원/엔은 제외해줘. 글로벌 글자 옆에
+   * 톱니바퀴 넣어서 뭘 넣고 뺄지 정할 수 있게. 나중에 내가 넣고 빼고 순서 바꾸고").
+   * 서버가 주는 줄은 그대로 두고, **이 기기**에서 무엇을 어떤 차례로 볼지만 여기서 정한다.
+   * 원/엔은 기본으로 숨긴다 — 달러/엔이 있으면 남는 정보가 없다.
+   */
+  const [gRows, setGRows] = useState<{ hidden: string[]; order: string[] }>(() => {
+    try {
+      const raw = localStorage.getItem("vntg.global.rows");
+      if (raw) return JSON.parse(raw) as { hidden: string[]; order: string[] };
+    } catch {
+      /* 처음 */
+    }
+    return { hidden: ["jpykrw"], order: [] };
+  });
+  const [gEdit, setGEdit] = useState(false);
+  const saveGRows = (next: { hidden: string[]; order: string[] }) => {
+    setGRows(next);
+    try {
+      localStorage.setItem("vntg.global.rows", JSON.stringify(next));
+    } catch {
+      /* 비공개 창 */
+    }
+  };
+  /* 순서 — 적어 둔 차례 먼저, 나머지는 서버 차례. 새 줄이 생겨도 뒤에 붙는다 */
+  const gOrdered = (() => {
+    const all = global.data ?? [];
+    const idx = new Map(gRows.order.map((k, i) => [k, i]));
+    return [...all].sort((a, b) => (idx.get(a.key) ?? 1e9 + all.indexOf(a)) - (idx.get(b.key) ?? 1e9 + all.indexOf(b)));
+  })();
+  const gVisible = gOrdered.filter((g) => !gRows.hidden.includes(g.key));
+  const gMove = (key: string, d: -1 | 1) => {
+    const keys = gOrdered.map((g) => g.key);
+    const i = keys.indexOf(key);
+    const j = i + d;
+    if (i < 0 || j < 0 || j >= keys.length) return;
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+    saveGRows({ ...gRows, order: keys });
+  };
+  const gToggle = (key: string) =>
+    saveGRows({ ...gRows, hidden: gRows.hidden.includes(key) ? gRows.hidden.filter((k) => k !== key) : [...gRows.hidden, key] });
 
   /** 모든 섹션을 한 번에 다시 불러온다 */
   function refreshAll() {
@@ -313,16 +354,51 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           한참 내려가야 나왔는데, 그러면 국내와 견주는 일이 안 된다.
         */}
         {show("summary") && (
-          <OverviewCard title="글로벌" order={cards.orderOf("global")} updatedAt={global.updatedAt} loading={global.loading} error={global.error}>
+          <OverviewCard
+            title="글로벌"
+            badge={
+              <button type="button" className={`ov-gear${gEdit ? " on" : ""}`} title="무엇을 어떤 차례로 볼지" onClick={() => setGEdit((v) => !v)}>
+                ⚙
+              </button>
+            }
+            order={cards.orderOf("global")}
+            updatedAt={global.updatedAt}
+            loading={global.loading}
+            error={global.error}
+          >
             <div className="ov-card-b">
+              {gEdit && (
+                <div className="ov-g-edit">
+                  <div className="ov-g-edit-h">
+                    줄마다 켜고 끄고, ▲▼ 로 차례를 바꿉니다. 이 기기에만 남습니다.
+                    <button type="button" className="filter-btn" onClick={() => saveGRows({ hidden: ["jpykrw"], order: [] })}>
+                      처음대로
+                    </button>
+                  </div>
+                  {gOrdered.map((g) => (
+                    <div key={g.key} className={`ov-g-edit-row${gRows.hidden.includes(g.key) ? " off" : ""}`}>
+                      <label>
+                        <input type="checkbox" checked={!gRows.hidden.includes(g.key)} onChange={() => gToggle(g.key)} />
+                        <span className="ov-g-edit-grp" style={{ color: g.color }}>{g.group}</span>
+                        <b>{g.label}</b>
+                        <i>{g.symbol}</i>
+                      </label>
+                      <span className="ov-g-edit-mv">
+                        <button type="button" className="gt-move" onClick={() => gMove(g.key, -1)} title="위로">▲</button>
+                        <button type="button" className="gt-move" onClick={() => gMove(g.key, 1)} title="아래로">▼</button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {/*
                 섹터별로 묶는다. 스무 줄을 그냥 나열하면 **어디까지가 원자재이고
                 어디부터가 아시아 지수인지** 알 수 없다 — 서버는 이미 group 을 주는데
                 화면이 그걸 버리고 있었다.
               */}
-              {[...new Set((global.data ?? []).map((g) => g.group))].map((grp) => {
+              {[...new Set(gVisible.map((g) => g.group))].map((grp) => {
                 // 색은 서버가 정한다 — 리포트도 같은 색을 쓴다
-                const color = (global.data ?? []).find((g) => g.group === grp)?.color ?? "#8b98a5";
+                const color = gVisible.find((g) => g.group === grp)?.color ?? "#8b98a5";
                 return (
                 <div className="ov-g-sec" key={grp} style={{ ["--g" as string]: color }}>
                   {/*
@@ -334,7 +410,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                     {grp}
                     {kindOfGroup(grp) && <SessionBadge kind={kindOfGroup(grp)!} />}
                   </div>
-                  {(global.data ?? [])
+                  {gVisible
                     .filter((g) => g.group === grp)
                     /*
                       줄 전체가 눌린다 — 환율·선물·원자재 전부 야후 심볼이라 같은 차트

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
 import { api, normalizeStockCode, type EvaluatedTheme, type StockSearchResult } from "../api";
 import { tileHeat, useAppearance } from "../useAppearance";
+import { useListKeys } from "../useListKeys";
 
 /**
  * 내 태그 (2026-09-01 — 「내 테마」에서 이름을 바꿨다).
@@ -164,6 +165,22 @@ export function CustomThemePage({
   const openTheme = themes.find((t) => t.id === open) ?? null;
   /* 뒤로가기로 테마 시트를 닫는다 (2026-08-28) */
   useSheetBack(openTheme !== null, () => setOpen(null));
+
+  /*
+   * 태그 시트가 열려 있을 때만 뜻이 있는 목록이지만, 훅은 조건 없이 늘 불러야 한다 —
+   * 시트가 닫혀 있으면(`openTheme` 이 null) `results` 도 비어 있으니 실질적으론 no-op.
+   */
+  const keys = useListKeys(
+    results,
+    (r) => {
+      if (!openTheme) return;
+      void run(async () => {
+        await api.customThemeToggleStock(openTheme.id, normalizeStockCode(r.code));
+        setQuery("");
+      });
+    },
+    { itemClass: "search-result-row" },
+  );
 
   return (
     <div>
@@ -440,13 +457,14 @@ export function CustomThemePage({
                     setEditing(openTheme.id);
                     setQuery(e.target.value);
                   }}
+                  {...keys.inputProps}
                 />
                 {editing === openTheme.id && query.trim() && results.length > 0 && (
-                  <div className="search-dropdown">
-                    {results.map((r) => (
+                  <div className="search-dropdown" role="listbox">
+                    {results.map((r, i) => (
                       <button
                         key={r.code}
-                        className="search-result-row"
+                        {...keys.itemProps(i)}
                         onClick={() =>
                           void run(async () => {
                             await api.customThemeToggleStock(openTheme.id, normalizeStockCode(r.code));

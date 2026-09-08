@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { useListKeys } from "../useListKeys";
 
 /**
  * 보드의 칸 하나 — **사람이 크기를 정한다.**
@@ -356,6 +357,11 @@ export function CellStockFinder({
     onPick(code, name);
   };
 
+  const keys = useListKeys(hits, (h) => pick(h.code, h.name), {
+    itemClass: "board-find-hit",
+    onEscape: onClose,
+  });
+
   useEffect(() => {
     const text = q.trim();
     if (text.length < 1) {
@@ -384,15 +390,12 @@ export function CellStockFinder({
         placeholder="종목명 또는 코드"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
-          if (e.key === "Enter" && hits[0]) pick(hits[0].code, hits[0].name);
-        }}
+        {...keys.inputProps}
       />
       {hits.length > 0 && (
-        <div className="board-find-hits">
-          {hits.map((h) => (
-            <button key={h.code} className="board-find-hit" onClick={() => pick(h.code, h.name)}>
+        <div className="board-find-hits" role="listbox">
+          {hits.map((h, i) => (
+            <button key={h.code} {...keys.itemProps(i)} onClick={() => pick(h.code, h.name)}>
               <b>{h.name}</b>
               <span className="pt-n">{h.code}</span>
             </button>

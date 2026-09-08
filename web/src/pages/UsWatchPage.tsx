@@ -5,6 +5,7 @@ import { liveQuote } from "../usSession";
 import { UsWatchTable } from "../components/UsWatchTable";
 import { useDragOrder } from "../useDragOrder";
 import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
+import { useListKeys } from "../useListKeys";
 
 /**
  * 관심종목 (해외).
@@ -266,6 +267,8 @@ export function UsWatchPage() {
     }
   }
 
+  const searchKeys = useListKeys(results, (r) => void addStock(r), { itemClass: "" });
+
   /** ＋ 그룹 — 편집 모드 없이 그 자리에서 */
   async function addGroup() {
     const name = newGroup.trim();
@@ -475,13 +478,18 @@ export function UsWatchPage() {
                 placeholder="한국어·영어·티커 (예: 테슬라, 도요타, 텐센트, rocket lab, 7203)"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                {...searchKeys.inputProps}
               />
               {(results.length > 0 || searching) && query.trim() && (
-                <ul className="pt-results">
+                <ul className="pt-results" role="listbox">
                   {searching && results.length === 0 && <li className="pt-n uw-searching">찾는 중…</li>}
-                  {results.map((r) => (
+                  {results.map((r, i) => (
                     <li key={r.symbol}>
-                      <button onClick={() => void addStock(r)} title={`${r.symbol} · ${r.exchange}`}>
+                      <button
+                        {...searchKeys.itemProps(i)}
+                        onClick={() => void addStock(r)}
+                        title={`${r.symbol} · ${r.exchange}`}
+                      >
                         <span className="uw-flag">{flagOf(r)}</span>
                         <b>{r.name}</b> <span className="pt-n">{r.symbol}</span>
                         {r.type === "ETF" && <em className="uw-etf-badge">ETF</em>}

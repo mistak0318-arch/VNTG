@@ -230,7 +230,9 @@ export type OrderLogKind =
   | "password"
   | "raw"
   /** 자동감시 — 등록·취소·만료·발동. 실제로 나간 것은 "order" */
-  | "watch";
+  | "watch"
+  /** 한도·규칙(orderGuard)을 화면에서 바꿨다 (2026-09-08) */
+  | "guard";
 
 export interface OrderLogRow {
   at: string;
@@ -467,6 +469,63 @@ export async function getGuard(): Promise<OrderGuard> {
     await writeJson(GUARD_FILE, g); // 손으로 고칠 수 있게 파일을 만들어 둔다
   }
   return g;
+}
+
+/**
+ * **규칙을 화면에서 바꾼다** (2026-09-08).
+ *
+ * 벤티지: "이거 뭐야? 이런 규칙들 어디에 있는 거야? 이거 설정에서 ON/OFF 할 수 있게 해줘봐
+ * 다 찾아가지고." — 손절 뒤 쿨다운에 걸려서 삼성전자를 30분 못 산 자리에서.
+ *
+ * 여태 L3 설계는 「한도는 파일을 손으로 고쳐야 바뀐다」였다. 화면 단추 하나로 한도가 풀리면
+ * 한도가 아니라는 생각이었다. 그런데 파일이 어디 있는지, 무슨 규칙이 있는지조차 화면이
+ * 말해 주지 않으니 **규칙에 걸린 사람이 왜 걸렸는지 알 길이 없었다.** 그건 안전이 아니라 불투명이다.
+ *
+ * 절충: 화면에서 고칠 수 있게 하되 **주문 비밀번호를 다시 받고**, 바뀐 값은 로그(orderLog)에
+ * 남긴다. 주문을 내는 것과 같은 무게로 취급한다.
+ *
+ * 값은 여기서 한 번 더 거른다 — 화면이 이상한 값을 보내도 파일이 망가지면 안 된다.
+ */
+export async function saveGuard(patch: Partial<OrderGuard>): Promise<OrderGuard> {
+  const cur = await getGuard();
+  const next: OrderGuard = { ...cur };
+  const num = (k: keyof OrderGuard, v: unknown, min: number, max: number, int = true): void => {
+    if (v === undefined) return;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < min || n > max) throw new Error(`${k}: ${min}~${max} 사이여야 한다`);
+    (next as unknown as Record<string, unknown>)[k] = int ? Math.round(n) : n;
+  };
+  const bool = (k: keyof OrderGuard, v: unknown): void => {
+    if (v === undefined) return;
+    (next as unknown as Record<string, unknown>)[k] = Boolean(v);
+  };
+  num("maxOrderKrw", patch.maxOrderKrw, 10_000, 1_000_000_000);
+  num("maxDailyKrw", patch.maxDailyKrw, 10_000, 10_000_000_000);
+  num("maxDailyCount", patch.maxDailyCount, 1, 1000);
+  num("priceCollarPct", patch.priceCollarPct, 1, 30, false);
+  num("stopCollarPct", patch.stopCollarPct, 1, 90, false);
+  num("maxPositionPct", patch.maxPositionPct, 0, 100, false);
+  num("maxDailyLossKrw", patch.maxDailyLossKrw, 0, 10_000_000_000);
+  num("rebuyCooldownMin", patch.rebuyCooldownMin, 0, 24 * 60);
+  bool("marketHoursOnly", patch.marketHoursOnly);
+  bool("allowCredit", patch.allowCredit);
+  bool("allowAutoWatch", patch.allowAutoWatch);
+  bool("dualStop", patch.dualStop);
+  if (patch.allowedCodes !== undefined) {
+    if (patch.allowedCodes === null) next.allowedCodes = null;
+    else if (Array.isArray(patch.allowedCodes)) {
+      const codes = patch.allowedCodes.map((c) => String(c).trim()).filter((c) => /^\d{6}$/.test(c));
+      next.allowedCodes = codes.length > 0 ? codes : null;
+    }
+  }
+  /* 뭐가 바뀌었는지 한 줄 — 나중에 「누가 언제 쿨다운을 껐나」를 이 줄로 찾는다 */
+  const changed = (Object.keys(next) as (keyof OrderGuard)[])
+    .filter((k) => JSON.stringify(cur[k]) !== JSON.stringify(next[k]))
+    .map((k) => `${k}: ${JSON.stringify(cur[k])} → ${JSON.stringify(next[k])}`);
+  if (changed.length === 0) return cur;
+  await writeJson(GUARD_FILE, next);
+  await appendLog({ kind: "guard", msg: `규칙 변경 — ${changed.join(" · ")}` });
+  return next;
 }
 
 const EMPTY_AUTH: OrderAuthFile = {

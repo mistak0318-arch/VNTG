@@ -20,6 +20,7 @@ import { useStockFocus } from "../useStockFocus";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
 import { WatchButton } from "../components/WatchButton";
+import { useListKeys } from "../useListKeys";
 
 /**
  * 종목발굴 — **넘기기 바 + 개별종목분석.**
@@ -338,6 +339,8 @@ export function StockDiscoveryPage({
     goStock(r.code, r.name);
   }
 
+  const keys = useListKeys(results, jumpTo, { itemClass: "search-result-row" });
+
   return (
     <div className="sd-page">
       {/* ---------------- 모집단 고르기 ---------------- */}
@@ -418,11 +421,12 @@ export function StockDiscoveryPage({
           placeholder="목록에 없는 종목 찾기 (초성도 됩니다)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          {...keys.inputProps}
         />
         {query.trim() && results.length > 0 && (
-          <div className="search-dropdown">
-            {results.map((r) => (
-              <button key={r.code} className="search-result-row" onClick={() => jumpTo(r)}>
+          <div className="search-dropdown" role="listbox">
+            {results.map((r, i) => (
+              <button key={r.code} {...keys.itemProps(i)} onClick={() => jumpTo(r)}>
                 <span className="name">{r.name}</span>
                 <span className="sub">
                   {r.code} · {r.marketName}

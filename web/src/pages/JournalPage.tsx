@@ -13,6 +13,7 @@ import {
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { TradeTrackPanel } from "../components/TradeTrackPanel";
+import { useListKeys } from "../useListKeys";
 
 /**
  * 복기 노트.
@@ -557,6 +558,12 @@ export function JournalPage({
     setPickResults([]);
   }
 
+  /* 화면에 그리는 것도 여덟 개까지라 훅에 넘기는 목록도 똑같이 잘라 인덱스를 맞춘다 */
+  const tradeCands = results.slice(0, 8);
+  const tradeKeys = useListKeys(tradeCands, addTrade, { itemClass: "" });
+  const pickCands = pickResults.slice(0, 8);
+  const pickKeys = useListKeys(pickCands, addPick, { itemClass: "" });
+
   function patchPick(id: string, patch: Partial<JournalPick>) {
     setForm({
       ...form,
@@ -875,12 +882,13 @@ export function JournalPage({
                 placeholder="종목 검색해서 추가"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                {...tradeKeys.inputProps}
               />
-              {results.length > 0 && (
-                <ul className="pt-results">
-                  {results.slice(0, 8).map((r) => (
+              {tradeCands.length > 0 && (
+                <ul className="pt-results" role="listbox">
+                  {tradeCands.map((r, i) => (
                     <li key={r.code}>
-                      <button onClick={() => addTrade(r)}>
+                      <button {...tradeKeys.itemProps(i)} onClick={() => addTrade(r)}>
                         {r.name} <span className="pt-n">{normalizeStockCode(r.code)}</span>
                       </button>
                     </li>
@@ -1068,12 +1076,13 @@ export function JournalPage({
                 placeholder="예측할 종목 검색"
                 value={pickQuery}
                 onChange={(e) => setPickQuery(e.target.value)}
+                {...pickKeys.inputProps}
               />
-              {pickResults.length > 0 && (
-                <ul className="pt-results">
-                  {pickResults.slice(0, 8).map((r) => (
+              {pickCands.length > 0 && (
+                <ul className="pt-results" role="listbox">
+                  {pickCands.map((r, i) => (
                     <li key={r.code}>
-                      <button onClick={() => addPick(r)}>
+                      <button {...pickKeys.itemProps(i)} onClick={() => addPick(r)}>
                         {r.name} <span className="pt-n">{normalizeStockCode(r.code)}</span>
                       </button>
                     </li>

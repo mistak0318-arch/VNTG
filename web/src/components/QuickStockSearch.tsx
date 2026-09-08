@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, normalizeStockCode, type StockSearchResult } from "../api";
-import { useRecentStocks } from "../useRecentStocks";
+import { useRecentStocks, type RecentStock } from "../useRecentStocks";
+import { useListKeys } from "../useListKeys";
 
 /**
  * 최상단 종목 바로가기 (2026-08-25 — 사용자 요청).
@@ -82,6 +83,24 @@ export function QuickStockSearch({
     go(normalizeStockCode(r.code), r.name);
   }
 
+  /*
+   * 최근 목록과 검색 결과 중 **지금 보이는 쪽**을 훅에 준다 — 둘이 같이 뜨지 않으니
+   * 하나로 충분하다. 훅은 `open` 과 무관하게 항상 불러야 한다(아래 접힌 상태 조기
+   * return 보다 위에 둔 이유) — 훅 호출을 조건부로 하면 리액트 규칙 위반이다.
+   */
+  const showRecent = !query.trim() && recent.recent.length > 0;
+  const showResults = query.trim().length > 0 && results.length > 0;
+  const activeList: (RecentStock | StockSearchResult)[] = showRecent
+    ? recent.recent
+    : showResults
+      ? results
+      : [];
+  const keys = useListKeys(
+    activeList,
+    (r) => go(normalizeStockCode(r.code), r.name),
+    { itemClass: "search-result-row", onEscape: () => setOpen(false) },
+  );
+
   if (!open) {
     return (
       <button
@@ -105,10 +124,7 @@ export function QuickStockSearch({
           placeholder="종목명·코드 — 고르면 개별종목분석으로 갑니다"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setOpen(false);
-            if (e.key === "Enter" && results[0]) pick(results[0]);
-          }}
+          {...keys.inputProps}
         />
         <button className="qss-close" onClick={() => setOpen(false)} title="접기">
           ✕
@@ -118,17 +134,17 @@ export function QuickStockSearch({
           그때부터는 검색 결과가 그 자리를 쓴다 — 두 목록이 같이 뜨면 어느 쪽을
           누르는지 헷갈린다.
         */}
-        {!query.trim() && recent.recent.length > 0 && (
-          <div className="search-dropdown">
+        {showRecent && (
+          <div className="search-dropdown" role="listbox">
             <div className="qss-recent-head">
               최근 본 종목
               <button onClick={() => recent.clear()} title="목록 비우기">
                 비우기
               </button>
             </div>
-            {recent.recent.map((r) => (
+            {recent.recent.map((r, i) => (
               <div className="qss-recent-row" key={r.code}>
-                <button className="search-result-row" onClick={() => go(r.code, r.name)}>
+                <button {...keys.itemProps(i)} onClick={() => go(r.code, r.name)}>
                   <span className="name">{r.name}</span>
                   <span className="sub">{r.code}</span>
                 </button>
@@ -144,10 +160,10 @@ export function QuickStockSearch({
             ))}
           </div>
         )}
-        {query.trim() && results.length > 0 && (
-          <div className="search-dropdown">
-            {results.map((r) => (
-              <button key={r.code} className="search-result-row" onClick={() => pick(r)}>
+        {showResults && (
+          <div className="search-dropdown" role="listbox">
+            {results.map((r, i) => (
+              <button key={r.code} {...keys.itemProps(i)} onClick={() => pick(r)}>
                 <span className="name">{r.name}</span>
                 <span className="sub">
                   {r.code} · {r.marketName}

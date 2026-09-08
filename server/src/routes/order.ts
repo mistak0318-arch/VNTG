@@ -25,7 +25,9 @@ import {
   auditAccess,
   getSettings,
   saveSettings,
+  saveGuard,
   forgetPassword,
+  type OrderGuard,
   type OrderVenue,
   type WatchInput,
   type WatchLeg,
@@ -525,7 +527,26 @@ export function createOrderRouter(main: KiwoomClient): Router {
   router.post("/execute", execute);
   router.post("/cancel/execute", execute);
 
-  /** 주문 화면 설정 — 한도(orderGuard)는 여기서 못 고친다. 그건 파일을 직접 열어야 한다 */
+  /**
+   * 한도·규칙(orderGuard) 편집 (2026-09-08). 비밀번호를 다시 받는다 — 주문과 같은 무게.
+   * 읽기는 `/status` 가 이미 guard 를 준다.
+   */
+  router.post("/guard", async (req, res) => {
+    try {
+      const { password, patch } = (req.body ?? {}) as { password?: string; patch?: Record<string, unknown> };
+      const r = await checkPassword(String(password ?? ""));
+      if (!r.ok) {
+        res.status(401).json({ error: r.error });
+        return;
+      }
+      const guard = await saveGuard((patch ?? {}) as Partial<OrderGuard>);
+      res.json({ guard });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
+    }
+  });
+
+  /** 주문 화면 설정 — 한도(orderGuard)는 위 /guard 에서 (2026-09-08 전까지는 파일만이었다) */
   router.get("/settings", async (_req, res, next) => {
     try {
       res.json({ settings: await getSettings() });

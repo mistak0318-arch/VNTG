@@ -22,6 +22,7 @@ import {
   type WatchSpec,
   type AccessAudit,
   type OrderDevice,
+  type OrderGuard,
   type OrderSettings,
   type OrderStatus,
   type OrderTicket,
@@ -4275,48 +4276,140 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
 
       <AccessLogSection />
 
-      <section className="ord-cfg-sec">
-        <h4>한도 — 여기서는 못 고칩니다</h4>
-        <p className="ord-note">
-          아래 값은 <code>server/data/orderGuard.json</code> 을 직접 열어 고치고 서버를 다시 켜야 바뀝니다.
-          <b> 화면에서 고칠 수 있으면 그건 한도가 아닙니다.</b> 넘으면 줄여서 내지 않고 <b>거절</b>합니다.
-        </p>
-        <dl className="ord-cfg-kv">
-          <div>
-            <dt>한 건</dt>
-            <dd>{won(status.guard.maxOrderKrw)}</dd>
-          </div>
-          <div>
-            <dt>하루 합계</dt>
-            <dd>{won(status.guard.maxDailyKrw)}</dd>
-          </div>
-          <div>
-            <dt>하루 건수</dt>
-            <dd>{status.guard.maxDailyCount}건</dd>
-          </div>
-          <div>
-            <dt>지정가 울타리</dt>
-            <dd>현재가 ±{status.guard.priceCollarPct}%</dd>
-          </div>
-          <div>
-            <dt>스톱 발동가</dt>
-            <dd>현재가 ±{status.guard.stopCollarPct}%</dd>
-          </div>
-          <div>
-            <dt>장중만</dt>
-            <dd>{status.guard.marketHoursOnly ? "예" : "아니오"}</dd>
-          </div>
-          <div>
-            <dt>허용 종목</dt>
-            <dd>{status.guard.allowedCodes?.length ? `${status.guard.allowedCodes.length}개만` : "전체"}</dd>
-          </div>
-          <div>
-            <dt>모의/실전</dt>
-            <dd>{status.mock ? "모의투자" : "실전 계좌"}</dd>
-          </div>
-        </dl>
-      </section>
+      {/* 저장되면 status 를 다시 읽는다(onDone) — 위 잔고 띠의 한도 숫자도 같이 바뀌어야 한다 */}
+      <GuardSection guard={status.guard} mock={status.mock} onSaved={() => onDone()} />
     </div>
+  );
+}
+
+/**
+ * **규칙·한도 편집** (2026-09-08).
+ *
+ * 벤티지: "이거 뭐야? 이런 규칙들 어디에 있는 거야? 이거 설정에서 ON/OFF 할 수 있게 해줘봐
+ * 다 찾아가지고." — 손절 뒤 쿨다운에 걸려 삼성전자를 30분 못 산 자리에서.
+ *
+ * 여태는 「한도 — 여기서는 못 고칩니다」 표였고, 그마저 열셋 중 일곱만 보여줬다. 쿨다운·
+ * 하루 손실 한도·비중 제한·신용·자동감시·이중 스톱은 **있는지도 화면이 말하지 않았다.**
+ * 규칙에 걸린 사람이 왜 걸렸는지 찾을 수 없으면 그건 안전이 아니라 불투명이다.
+ *
+ * 바꾸려면 **주문 비밀번호**를 다시 넣는다 — 주문을 내는 것과 같은 무게. 바뀐 값은 기록에 남는다.
+ * 켜고 끄는 것은 스위치로, 값은 숫자로. 0 이면 「안 씀」인 것들은 스위치를 끄면 0 을 보낸다.
+ */
+function GuardSection({ guard, mock, onSaved }: { guard: OrderGuard; mock: boolean; onSaved: (g: OrderGuard) => void }) {
+  const [d, setD] = useState<OrderGuard>(guard);
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => setD(guard), [guard]);
+  const dirty = JSON.stringify(d) !== JSON.stringify(guard);
+  const set = (patch: Partial<OrderGuard>) => setD((p) => ({ ...p, ...patch }));
+
+  async function save() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api.orderGuardSave(pw, d);
+      onSaved(r.guard);
+      setPw("");
+      setMsg({ ok: true, text: "저장했다 — 바뀐 값은 기록 탭에 남는다" });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "저장 실패" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /* 스위치 + 숫자 한 줄. 0 = 안 씀인 것은 스위치가 0 과 기본값 사이를 오간다 */
+  const Row = ({ k, label, hint, unit, fallback, min, max, step }: { k: keyof OrderGuard; label: string; hint: string; unit: string; fallback: number; min: number; max: number; step?: number }) => {
+    const v = Number(d[k] ?? 0);
+    const on = v > 0;
+    return (
+      <div className="ord-guard-row">
+        <label className="ord-guard-sw">
+          <input type="checkbox" checked={on} onChange={(e) => set({ [k]: e.target.checked ? fallback : 0 } as Partial<OrderGuard>)} />
+          <b>{label}</b>
+        </label>
+        <span className="ord-guard-val">
+          <input type="number" value={on ? v : ""} placeholder="안 씀" disabled={!on} min={min} max={max} step={step ?? 1} onChange={(e) => set({ [k]: Number(e.target.value) } as Partial<OrderGuard>)} onKeyDown={(e) => e.key === "Enter" && pw && dirty && void save()} />
+          <i>{unit}</i>
+        </span>
+        <small>{hint}</small>
+      </div>
+    );
+  };
+  const Fixed = ({ k, label, hint, unit, min, max, step }: { k: keyof OrderGuard; label: string; hint: string; unit: string; min: number; max: number; step?: number }) => (
+    <div className="ord-guard-row">
+      <span className="ord-guard-sw fixed">
+        <b>{label}</b>
+      </span>
+      <span className="ord-guard-val">
+        <input type="number" value={Number(d[k] ?? 0)} min={min} max={max} step={step ?? 1} onChange={(e) => set({ [k]: Number(e.target.value) } as Partial<OrderGuard>)} onKeyDown={(e) => e.key === "Enter" && pw && dirty && void save()} />
+        <i>{unit}</i>
+      </span>
+      <small>{hint}</small>
+    </div>
+  );
+  const Sw = ({ k, label, hint, danger }: { k: keyof OrderGuard; label: string; hint: string; danger?: boolean }) => (
+    <div className="ord-guard-row">
+      <label className={`ord-guard-sw${danger ? " danger" : ""}`}>
+        <input type="checkbox" checked={Boolean(d[k])} onChange={(e) => set({ [k]: e.target.checked } as Partial<OrderGuard>)} />
+        <b>{label}</b>
+      </label>
+      <span className="ord-guard-val" />
+      <small>{hint}</small>
+    </div>
+  );
+
+  return (
+    <section className="ord-cfg-sec">
+      <h4>규칙·한도</h4>
+      <p className="ord-note">
+        주문을 <b>거절</b>하거나 <b>막는</b> 규칙 전부다. 넘으면 줄여서 내지 않고 거절한다. 바꾸려면 주문 비밀번호를 다시 넣는다 —
+        주문을 내는 것과 같은 무게이고, 바뀐 값은 기록에 남는다. {mock ? "지금은 모의투자다." : "지금은 실전 계좌다."}
+      </p>
+
+      <h5 className="ord-guard-h">매수를 막는 규칙</h5>
+      <Row k="rebuyCooldownMin" label="손절 뒤 쿨다운" hint="손절 감시로 판 종목은 이 시간 동안 다시 안 산다. 방금 손절한 걸 홧김에 되사는 손을 막는다" unit="분" fallback={30} min={1} max={1440} />
+      <Row k="maxDailyLossKrw" label="하루 실현손실 한도" hint="오늘 자동감시 매도로 실현한 손실이 이만큼을 넘으면 그날 신규 매수를 잠근다" unit="원" fallback={500_000} min={10_000} max={10_000_000_000} step={10_000} />
+      <Row k="maxPositionPct" label="한 종목 비중 제한" hint="사고 나면 종목 하나가 계좌(예수금+평가)의 몇 %를 넘게 되는 매수는 거절" unit="%" fallback={40} min={1} max={100} />
+
+      <h5 className="ord-guard-h">주문 한도</h5>
+      <Fixed k="maxOrderKrw" label="한 건" hint="주문 한 건의 상한. 지정가는 가격×수량, 시장가는 현재가×수량" unit="원" min={10_000} max={1_000_000_000} step={100_000} />
+      <Fixed k="maxDailyKrw" label="하루 합계" hint="오늘 낸 주문(매수+매도)의 합 상한" unit="원" min={10_000} max={10_000_000_000} step={100_000} />
+      <Fixed k="maxDailyCount" label="하루 건수" hint="오늘 낸 주문 건수 상한 (취소는 안 센다)" unit="건" min={1} max={1000} />
+      <Fixed k="priceCollarPct" label="지정가 울타리" hint="현재가에서 이만큼 넘게 벗어난 지정가는 거절 — 0 을 하나 더 친 손가락을 잡는다" unit="%" min={1} max={30} step={0.5} />
+      <Fixed k="stopCollarPct" label="스톱 발동가 울타리" hint="손절 발동가는 원래 멀리 두므로 따로 넓게. 그래도 오타는 잡는다" unit="%" min={1} max={90} />
+
+      <h5 className="ord-guard-h">켜고 끄기</h5>
+      <Sw k="marketHoursOnly" label="장중에만 주문" hint="거래소가 주문을 받는 시간 밖이면 거절" />
+      <Sw k="allowAutoWatch" label="자동감시주문 허용" hint="끄면 새로 안 받고, 기다리던 감시도 발동하지 않는다" />
+      <Sw k="dualStop" label="손절 감시에 키움 스톱도 같이" hint="「이하면 판다」 감시에 키움 서버 스톱지정가를 아침마다 같이 건다 — 우리 서버가 죽어도 키움이 판다" />
+      <Sw k="allowCredit" label="신용 주문 허용" hint="신용은 빚이다. 켜는 순간부터 주문서에 신용 칸이 열린다" danger />
+
+      <div className="ord-guard-save">
+        <input
+          type="password"
+          className="ord-input"
+          placeholder="주문 비밀번호"
+          value={pw}
+          autoComplete="current-password"
+          onChange={(e) => setPw(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && pw && dirty && void save()}
+        />
+        <button type="button" className="ord-go" disabled={!dirty || !pw || busy} onClick={() => void save()}>
+          {busy ? "저장 중…" : dirty ? "저장" : "바뀐 것 없음"}
+        </button>
+        {dirty && (
+          <button type="button" className="filter-btn" onClick={() => setD(guard)}>
+            되돌리기
+          </button>
+        )}
+        {msg && <span className={msg.ok ? "ord-ok" : "ord-bad"}>{msg.text}</span>}
+      </div>
+      <p className="ord-note">
+        허용 종목 목록(<code>allowedCodes</code>)만은 아직 파일이다 — {guard.allowedCodes?.length ? `${guard.allowedCodes.length}개만 허용 중` : "지금은 전 종목"}.
+      </p>
+    </section>
   );
 }
 

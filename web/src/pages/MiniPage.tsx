@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, normalizeStockCode, type StockSearchResult } from "../api";
 import { useStockFocus } from "../useStockFocus";
+import { useListKeys } from "../useListKeys";
 import { StockDetail } from "../components/StockDetail";
 import {
   MINI_SCREENS,
@@ -247,6 +248,12 @@ function StockSearchScreen({
     setResults([]);
   }
 
+  /* Escape 는 원래 입력을 지우는 동작이었다 — onEscape 로 그대로 옮긴다 */
+  const keys = useListKeys(results, pick, {
+    itemClass: "mini-result-row",
+    onEscape: () => setQuery(""),
+  });
+
   const q = query.trim();
 
   return (
@@ -262,19 +269,16 @@ function StockSearchScreen({
           placeholder="종목명 또는 종목코드 검색"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && results[0]) pick(results[0]);
-            if (e.key === "Escape") setQuery("");
-          }}
+          {...keys.inputProps}
         />
       </div>
 
       {/* 입력 중이면 결과 목록이 본문 — 보던 상세는 입력을 지우면 그대로 다시 나온다 */}
       {q ? (
         results.length > 0 ? (
-          <div className="mini-results">
-            {results.map((r) => (
-              <button key={r.code} className="mini-result-row" onClick={() => pick(r)}>
+          <div className="mini-results" role="listbox">
+            {results.map((r, i) => (
+              <button key={r.code} {...keys.itemProps(i)} onClick={() => pick(r)}>
                 <span className="name">{r.name}</span>
                 <span className="sub">
                   {r.code} · {r.marketName}

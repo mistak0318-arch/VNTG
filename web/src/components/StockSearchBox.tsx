@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, normalizeStockCode, type StockSearchResult } from "../api";
-import { useRecentStocks } from "../useRecentStocks";
+import { useRecentStocks, type RecentStock } from "../useRecentStocks";
+import { useListKeys } from "../useListKeys";
 
 /**
  * 종목 검색칸 — **누르면 최근 본 종목이 먼저 내려온다** (2026-09-04).
@@ -90,6 +91,25 @@ export function StockSearchBox({
   const showRecent = open && !query.trim() && recent.recent.length > 0;
   const showResults = open && results.length > 0;
 
+  /*
+   * 최근 목록과 검색 결과가 **동시에는 안 뜨므로** 훅 하나를 같이 쓴다 — 어느 쪽이
+   * 떠 있든 지금 보이는 목록(`activeList`)이 그 자리를 채운다. 이미 담긴 종목(`note`
+   * 가 있는 줄)은 원래 클릭도 막혀 있었으니 방향키로 짚어 엔터를 눌러도 건너뛴다.
+   */
+  const activeList: (RecentStock | StockSearchResult)[] = showRecent
+    ? recent.recent
+    : showResults
+      ? results
+      : [];
+  const keys = useListKeys(
+    activeList,
+    (r) => {
+      if (note?.(normalizeStockCode(r.code), r.name)) return;
+      pick(r.code, r.name);
+    },
+    { itemClass: "ssb-pick", onEscape: () => setOpen(false) },
+  );
+
   return (
     <div className="ssb" ref={boxRef}>
       <input
@@ -102,27 +122,20 @@ export function StockSearchBox({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => setOpen(true)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") setOpen(false);
-          if (e.key === "Enter") {
-            e.preventDefault();
-            const first = results[0];
-            if (first) pick(first.code, first.name);
-          }
-        }}
+        {...keys.inputProps}
       />
 
       {showRecent && (
-        <div className="ssb-drop">
+        <div className="ssb-drop" role="listbox">
           <div className="ssb-head">
             최근 본 종목
             <button type="button" onClick={() => recent.clear()} title="목록 비우기">
               비우기
             </button>
           </div>
-          {recent.recent.map((r) => (
+          {recent.recent.map((r, i) => (
             <div className="ssb-row" key={r.code}>
-              <button type="button" className="ssb-pick" onClick={() => pick(r.code, r.name)}>
+              <button type="button" {...keys.itemProps(i)} onClick={() => pick(r.code, r.name)}>
                 <b>{r.name}</b>
                 <span>{r.code}</span>
               </button>
@@ -141,16 +154,16 @@ export function StockSearchBox({
       )}
 
       {showResults && (
-        <div className="ssb-drop">
-          {results.map((r) => {
+        <div className="ssb-drop" role="listbox">
+          {results.map((r, i) => {
             const n = note?.(normalizeStockCode(r.code), r.name) ?? null;
             return (
               <button
                 type="button"
-                className="ssb-pick"
                 key={r.code}
                 disabled={Boolean(n)}
                 onClick={() => pick(r.code, r.name)}
+                {...keys.itemProps(i)}
               >
                 <b>{r.name}</b>
                 <span>{r.code}</span>

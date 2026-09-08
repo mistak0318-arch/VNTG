@@ -7,7 +7,8 @@ import { PriceHeader } from "../components/PriceHeader";
 import { RefreshBar } from "../components/RefreshBar";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { useLive } from "../useLive";
-import { useRecentStocks } from "../useRecentStocks";
+import { useRecentStocks, type RecentStock } from "../useRecentStocks";
+import { useListKeys } from "../useListKeys";
 
 /**
  * 개별종목분석 — 종목 하나를 **넓은 화면에서** 파고드는 페이지.
@@ -81,6 +82,31 @@ export function StockAnalysisPage({
   }
 
   /*
+   * 최근 목록·검색 결과가 같이 뜨지 않으므로 방향키·엔터는 훅 하나로 처리한다.
+   * 어느 쪽이 떠 있는지는 매 렌더마다 다시 계산되므로, 고르는 방식(최근 목록은
+   * `onSelectStock` 만, 검색 결과는 `pickResult` 로 최근 목록에도 쌓는다)도 그때그때 갈린다.
+   */
+  const showRecent = focused && !query.trim() && recent.recent.length > 0;
+  const showResults = query.trim().length > 0 && results.length > 0;
+  const activeList: (RecentStock | StockSearchResult)[] = showRecent
+    ? recent.recent
+    : showResults
+      ? results
+      : [];
+  const keys = useListKeys(
+    activeList,
+    (r) => {
+      if (showRecent) {
+        setFocused(false);
+        onSelectStock(r.code, r.name);
+      } else {
+        pickResult(r as StockSearchResult);
+      }
+    },
+    { itemClass: "search-result-row", onEscape: () => setFocused(false) },
+  );
+
+  /*
    * 주소로 바로 들어온 경우(관심종목 클릭, 링크 공유)도 최근 목록에 남긴다.
    * 검색으로 고른 것만 기억하면 정작 자주 오가는 종목이 목록에 안 쌓인다.
    */
@@ -109,24 +135,25 @@ export function StockAnalysisPage({
            */
           onClick={() => setFocused(true)}
           onBlur={() => setTimeout(() => setFocused(false), 150)}
+          {...keys.inputProps}
         />
         {/*
           포커스가 갔는데 **아무것도 안 쳤을 때** 최근 목록을 편다 (2026-08-31 요청 —
           「밑에 포도알처럼 붙지 말고 검색 인풋에 포인트 갔을 때 아래 목록 펼쳐지고
           바로 클릭하게」). 글자를 치면 그때부터 검색 결과가 그 자리를 쓴다.
         */}
-        {focused && !query.trim() && recent.recent.length > 0 && (
-          <div className="search-dropdown">
+        {showRecent && (
+          <div className="search-dropdown" role="listbox">
             <div className="qss-recent-head">
               최근 본 종목
               <button onMouseDown={(e) => e.preventDefault()} onClick={() => recent.clear()}>
                 비우기
               </button>
             </div>
-            {recent.recent.map((r) => (
+            {recent.recent.map((r, i) => (
               <div className="qss-recent-row" key={r.code}>
                 <button
-                  className="search-result-row"
+                  {...keys.itemProps(i)}
                   /* mousedown 에서 blur 가 먼저 나면 클릭이 안 먹는다 — 막아 둔다 */
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
@@ -149,10 +176,10 @@ export function StockAnalysisPage({
             ))}
           </div>
         )}
-        {query.trim() && results.length > 0 && (
-          <div className="search-dropdown">
-            {results.map((r) => (
-              <button key={r.code} className="search-result-row" onClick={() => pickResult(r)}>
+        {showResults && (
+          <div className="search-dropdown" role="listbox">
+            {results.map((r, i) => (
+              <button key={r.code} {...keys.itemProps(i)} onClick={() => pickResult(r)}>
                 <span className="name">{r.name}</span>
                 <span className="sub">
                   {r.code} · {r.marketName}

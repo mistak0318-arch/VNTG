@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type StockTag } from "../api";
+import { useListKeys } from "../useListKeys";
 
 /**
  * **종목 태그** (2026-09-01) — 메모 바로 위.
@@ -127,6 +128,17 @@ export function StockTags({ code, name }: { code: string; name: string }) {
     !hints.some((h) => h.name === q.replace(/^#/, "").trim()) &&
     !mine.has(q.replace(/^#/, "").trim());
 
+  /*
+   * Enter 의 기본 동작은 「후보가 하나면 그거, 아니면 친 글자로 새 태그」다 — 오타로
+   * 새 태그가 생기는 걸 막던 규칙을 건드리면 안 된다. 그래서 `enterPicksFirst: false`
+   * 로 두고, **방향키로 후보를 짚었을 때만** 훅이 그 후보를 고른다.
+   */
+  const keys = useListKeys(fresh, (h) => void add(h.name), {
+    itemClass: "stag-hint",
+    enterPicksFirst: false,
+    onEscape: () => setOpen(false),
+  });
+
   return (
     <div className="stag" ref={box}>
       <div className="stag-row">
@@ -174,26 +186,30 @@ export function StockTags({ code, name }: { code: string; name: string }) {
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={(e) => {
+              keys.inputProps.onKeyDown(e);
+              if (e.defaultPrevented) return;
               if (e.key === "Enter") {
                 e.preventDefault();
-                /* 후보가 하나면 그걸로 — 오타로 새 태그가 생기는 것을 막는다 */
+                /* 방향키로 안 짚었을 때만 여기로 온다 — 후보가 하나면 그걸로, 아니면 친 글자로 */
                 void add(fresh.length === 1 && !isNew ? fresh[0].name : q);
-              } else if (e.key === "Escape") {
-                setOpen(false);
               }
             }}
+            role={keys.inputProps.role}
+            aria-expanded={keys.inputProps["aria-expanded"]}
+            aria-activedescendant={keys.inputProps["aria-activedescendant"]}
+            autoComplete={keys.inputProps.autoComplete}
             disabled={busy}
           />
 
           {open && (fresh.length > 0 || isNew) && (
-            <div className="stag-hints">
+            <div className="stag-hints" role="listbox">
               {isNew && (
                 <button className="stag-hint new" onClick={() => void add(q)}>
                   + <b>{q.replace(/^#/, "").trim()}</b> 새로 만들기
                 </button>
               )}
-              {fresh.map((h) => (
-                <button className="stag-hint" key={h.name} onClick={() => void add(h.name)}>
+              {fresh.map((h, i) => (
+                <button {...keys.itemProps(i)} key={h.name} onClick={() => void add(h.name)}>
                   {h.name}
                   <i className="stag-n">{h.count}</i>
                 </button>

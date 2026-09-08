@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, fmtNum, type EtfListRow, type WatchItem } from "../api";
 import type { CumRow } from "../pages/EtfPage";
+import { useListKeys } from "../useListKeys";
 
 /**
  * ETF 전용 자동 그룹 — **서버 `watchlist.ts` 의 `ETF_GROUP` 과 같은 문자열이어야 한다.**
@@ -155,6 +156,8 @@ export function EtfWatchTab({ onSelectStock }: { onSelectStock: (code: string, n
       setBusy(false);
     }
   }
+
+  const candKeys = useListKeys(candidates, (r) => void addEtf(r), { itemClass: "" });
 
   /* ── 그룹 편집 (2026-08-27) — 저장소가 관심종목과 같으니 그룹도 그쪽 API 를 그대로 쓴다 ── */
   async function addGroup() {
@@ -322,12 +325,13 @@ export function EtfWatchTab({ onSelectStock }: { onSelectStock: (code: string, n
                 placeholder="ETF 이름·추적지수·코드 (예: KODEX 반도체, S&P500, 미국배당)"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                {...candKeys.inputProps}
               />
               {candidates.length > 0 && (
-                <ul className="pt-results">
-                  {candidates.map((r) => (
+                <ul className="pt-results" role="listbox">
+                  {candidates.map((r, i) => (
                     <li key={r.code}>
-                      <button onClick={() => void addEtf(r)} disabled={busy}>
+                      <button {...candKeys.itemProps(i)} onClick={() => void addEtf(r)} disabled={busy}>
                         <b>{r.name}</b> <span className="pt-n">{r.code}</span>
                         <span className="pt-n"> · {r.index}</span>
                       </button>
