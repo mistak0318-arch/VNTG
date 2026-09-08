@@ -252,6 +252,25 @@ const LEG_PRESETS: { label: string; legs: WatchLeg[] }[] = [
 function LegsEditor({ legs, onChange, total, basisPrice, disabled }: { legs: WatchLeg[]; onChange: (l: WatchLeg[]) => void; total: number; basisPrice: number; disabled?: boolean }) {
   const sum = legs.reduce((a, l) => a + (Number(l.qtyPct) || 0), 0);
   const set = (i: number, patch: Partial<WatchLeg>) => onChange(legs.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  /*
+   * % 칸에 **치는 중인 글자**를 따로 든다 (2026-09-08 — 벤티지 "여기에 소수점이 안들어간다").
+   *
+   * 값이 숫자로만 저장되니 "1." 을 치면 Number("1.") = 1 → 화면이 "1" 로 되돌아가 점이
+   * 사라졌다. 소수점을 넣을 길이 없었다. 칸마다 문자열을 들고, 숫자로 읽히면 그때 저장한다.
+   * 단계가 지워지거나 프리셋을 누르면 draft 도 지운다 — 옛 글자가 새 값 위에 떠 있으면 안 된다.
+   */
+  const [draft, setDraft] = useState<Record<number, string>>({});
+  const pctShown = (i: number, v: number) => (draft[i] !== undefined ? draft[i] : String(Math.abs(v)));
+  const onPctInput = (i: number, raw: string, down: boolean) => {
+    const cleaned = raw.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1");
+    setDraft((d) => ({ ...d, [i]: cleaned }));
+    const abs = Number(cleaned);
+    if (cleaned !== "" && Number.isFinite(abs)) set(i, { pct: down ? -abs : abs });
+  };
+  const changeAll = (next: WatchLeg[]) => {
+    setDraft({});
+    onChange(next);
+  };
   const qtyOf = (i: number) => {
     if (total <= 0) return 0;
     const raw = legs.map((l) => Math.floor((total * (Number(l.qtyPct) || 0)) / 100));
@@ -262,7 +281,7 @@ function LegsEditor({ legs, onChange, total, basisPrice, disabled }: { legs: Wat
     <div className={`ord-legs${disabled ? " off" : ""}`}>
       <div className="ord-legs-presets">
         {LEG_PRESETS.map((pr) => (
-          <button key={pr.label} type="button" disabled={disabled} onClick={() => onChange(pr.legs.map((l) => ({ ...l })))}>
+          <button key={pr.label} type="button" disabled={disabled} onClick={() => changeAll(pr.legs.map((l) => ({ ...l })))}>
             {pr.label}
           </button>
         ))}
@@ -289,7 +308,10 @@ function LegsEditor({ legs, onChange, total, basisPrice, disabled }: { legs: Wat
                   type="button"
                   className={`ord-leg-dir ${down ? "loss" : "gain"}`}
                   disabled={disabled}
-                  onClick={() => set(i, { pct: down ? Math.abs(v) || 5 : -Math.abs(v) })}
+                  onClick={() => {
+                    setDraft((d) => { const n = { ...d }; delete n[i]; return n; });
+                    set(i, { pct: down ? Math.abs(v) || 5 : -Math.abs(v) });
+                  }}
                   title={down ? "하락하면 (손절) — 눌러서 상승으로" : "상승하면 (익절) — 눌러서 하락으로"}
                 >
                   {down ? "▼ 하락" : "▲ 상승"}
@@ -299,13 +321,11 @@ function LegsEditor({ legs, onChange, total, basisPrice, disabled }: { legs: Wat
             <input
               className="ord-in ord-watch-in sm"
               inputMode="decimal"
-              value={String(Math.abs(Number(l.pct)))}
+              value={pctShown(i, Number(l.pct))}
               disabled={disabled}
-              onChange={(e) => {
-                const abs = Number(e.target.value.replace(/[^\d.]/g, "")) || 0;
-                set(i, { pct: Number(l.pct) <= 0 ? -abs : abs });
-              }}
-              title="기준가 대비 몇 %"
+              onChange={(e) => onPctInput(i, e.target.value, Number(l.pct) <= 0)}
+              onBlur={() => setDraft((d) => { const n = { ...d }; delete n[i]; return n; })}
+              title="기준가 대비 몇 % — 소수점 됩니다 (1.5)"
             />
             <span className="ord-watch-unit">%에</span>
             <input
@@ -326,7 +346,7 @@ function LegsEditor({ legs, onChange, total, basisPrice, disabled }: { legs: Wat
               {total > 0 ? ` · ${qtyOf(i)}주` : ""}
             </span>
             {legs.length > 1 && (
-              <button type="button" className="ord-leg-x" disabled={disabled} onClick={() => onChange(legs.filter((_, j) => j !== i))} title="이 단계 빼기">
+              <button type="button" className="ord-leg-x" disabled={disabled} onClick={() => changeAll(legs.filter((_, j) => j !== i))} title="이 단계 빼기">
                 ✕
               </button>
             )}
@@ -335,7 +355,7 @@ function LegsEditor({ legs, onChange, total, basisPrice, disabled }: { legs: Wat
       })}
       <div className="ord-legs-foot">
         {legs.length < 4 && (
-          <button type="button" className="ord-mk" disabled={disabled} onClick={() => onChange([...legs, { pct: -5, qtyPct: Math.max(0, 100 - sum), exec: "market" }])}>
+          <button type="button" className="ord-mk" disabled={disabled} onClick={() => changeAll([...legs, { pct: -5, qtyPct: Math.max(0, 100 - sum), exec: "market" }])}>
             ＋ 단계 추가
           </button>
         )}
