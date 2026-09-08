@@ -17701,3 +17701,6 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
   .ord-guard-row { grid-template-columns: 1fr auto; }
   .ord-guard-row small { grid-column: 1 / -1; }
 }
+.ord-reset { margin-top: 0.5rem; font-size: 0.82rem; }
+.ord-reset summary { cursor: pointer; color: var(--muted); }
+.ord-reset[open] summary { color: var(--text); }

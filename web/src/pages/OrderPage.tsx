@@ -4174,6 +4174,8 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
   const [error, setError] = useState<string | null>(null);
   /* 어느 폼이 마지막으로 눌렸나 — 결과를 그 폼 밑에만 적는다 */
   const [last, setLast] = useState<"pin" | "pw" | null>(null);
+  const [resetU, setResetU] = useState("");
+  const [resetP, setResetP] = useState("");
   const [pwA, setPwA] = useState("");
   const [pwB, setPwB] = useState("");
   const [pwCur, setPwCur] = useState("");
@@ -4569,6 +4571,49 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
         {last === "pw" && error && <p className="ord-err">❌ 저장 안 됨 — {error}{/잠금/.test(error) ? "" : ". 위 「지금 패턴 또는 옛 비밀번호」 칸이 맞는지 확인"}</p>}
         {/* 잠금이면 풀기 카드를 **바로 여기** — 글로만 「풀기」라고 하면 어디서 푸는지 모른다 (벤티지 "지금 풀기 어떻게 하라는 거야") */}
         {last === "pw" && error && /잠금/.test(error) && <UnlockCard onDone={() => { setError(null); setMsg("잠금을 풀었습니다 — 다시 바꾸기를 누르세요"); onDone(); }} />}
+        {/*
+          옛 비밀번호를 모르면 — 앱 아이디·비밀번호로 새로 정한다 (2026-09-08 벤티지 "초기화 좀").
+          위 칸의 새 값(글자 6자 이상 또는 패턴)을 그대로 쓴다. 옛 것 칸은 비워도 된다.
+        */}
+        <details className="ord-reset">
+          <summary>옛 비밀번호를 모른다 — 앱 아이디·비밀번호로 새로 정하기</summary>
+          <p className="ord-note">위에 새 {pwPadMode === "pattern" ? "패턴을 그린" : "비밀번호를 적은"} 채로, 여기 앱 로그인을 넣으면 옛 것 없이 그 값으로 바뀐다. 잠금·실패 횟수도 지워진다.</p>
+          <div className="ord-unlock-row">
+            <input className="ord-in" placeholder="아이디" autoComplete="username" value={resetU} onChange={(e) => setResetU(e.target.value)} />
+            <input className="ord-in" type="password" placeholder="앱 비밀번호" autoComplete="current-password" value={resetP} onChange={(e) => setResetP(e.target.value)} />
+            <button
+              type="button"
+              className="ord-mk"
+              disabled={busy || !resetU || !resetP || (pwPadMode === "pattern" ? pwA.length < 4 : pwA.length < 6)}
+              onClick={async () => {
+                setLast("pw");
+                setBusy(true);
+                setError(null);
+                setMsg(null);
+                try {
+                  await api.orderPasswordReset(resetU, resetP, pwA, pwPadMode);
+                  if (pendingPwMode && pendingPwMode !== cfg.passwordMode) {
+                    const r = await api.orderSettingsSave({ passwordMode: pendingPwMode });
+                    setCfg(r.settings);
+                    setPendingPwMode(null);
+                  }
+                  setPwA("");
+                  setPwB("");
+                  setPwCur("");
+                  setResetP("");
+                  setMsg(pwPadMode === "pattern" ? "주문 패턴을 새로 정했습니다 — 이제 주문할 때 이 패턴을 그립니다" : "주문 비밀번호를 새로 정했습니다");
+                  onDone();
+                } catch (e2) {
+                  setError(e2 instanceof Error ? e2.message : "실패");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              새로 정하기
+            </button>
+          </div>
+        </details>
       </form>
 
       <AccessLogSection />

@@ -774,6 +774,19 @@ export async function setOrderPassword(next: string, current: string | null, kin
  * 아이디 패스워드 넣어서 풀 수 있게"). 잠금 자체는 둔다 — 그게 무차별 대입을 막는 전부다. 대신
  * 앱 로그인이라는 **다른 비밀**을 맞히면 그 자리에서 푼다. 실패 횟수도 같이 지운다.
  */
+/**
+ * **옛 비밀번호 없이** 새로 정한다 — 앱 아이디·비밀번호를 맞힌 사람만 (2026-09-08, 벤티지
+ * "주문 비밀번호 초기화 좀 해줘"). 잠금 풀기와 같은 논리: 다른 비밀을 맞혔으면 이 겹을 다시 세울
+ * 자격이 있다. 실패 횟수·잠금도 같이 지운다.
+ */
+export async function resetOrderPassword(next: string, kind: "text" | "pattern"): Promise<void> {
+  const a = await loadAuth();
+  await writeJson(AUTH_FILE, { ...a, hash: "", fails: 0, lockUntil: 0 } satisfies OrderAuthFile);
+  await setOrderPassword(next, null, kind);
+  await appendLog({ kind: "password", msg: `주문 ${kind === "pattern" ? "패턴" : "비밀번호"} 초기화 — 앱 아이디·비밀번호로` });
+  void sendTelegram("🔐 <b>주문 비밀번호가 초기화됐다</b> — 앱 아이디·비밀번호로. 본인이 아니면 지금 ORDERS_ENABLED 를 끄라", "syslog").catch(() => undefined);
+}
+
 export async function unlockAuth(): Promise<void> {
   const a = await loadAuth();
   await writeJson(AUTH_FILE, { ...a, fails: 0, lockUntil: 0, pinFails: 0, pinLockUntil: 0 } satisfies OrderAuthFile);

@@ -979,6 +979,9 @@ export const api = {
   /** kind 가 "pattern" 이면 3×3 점 인덱스를 이은 숫자열(4~9자리)로 본다 */
   /** 잠금(비밀번호·PIN 5회 실패)을 앱 아이디·비밀번호로 푼다 (2026-09-08) */
   orderUnlock: (username: string, password: string) => orderPost<{ ok: boolean }>("/api/order/unlock", { username, password }),
+  /** 주문 비밀번호를 옛 것 없이 새로 — 앱 아이디·비밀번호로 (2026-09-08) */
+  orderPasswordReset: (username: string, password: string, next: string, kind: "text" | "pattern") =>
+    orderPost<{ ok: boolean }>("/api/order/password/reset", { username, password, next, kind }),
   orderSetPin: (nextPin: string, current: string, kind: "pin" | "pattern" = "pin") =>
     orderPost<{ ok: boolean }>("/api/order/pin", { next: nextPin, current, kind }),
   orderDeviceStart: (username: string, password: string) =>
