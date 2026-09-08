@@ -288,13 +288,17 @@ export function FlowSeries({
                 <td className="negative">{r.sell === 0 ? "-" : num(r.sell)}</td>
                 <td className="positive">{r.buy === 0 ? "-" : num(r.buy)}</td>
                 <td className={r.net >= 0 ? "positive" : "negative"}>
-                  <b>{num(r.net)}</b>
-                  {r.delta !== 0 && (
-                    <i className={`fs-d ${r.delta > 0 ? "up" : "down"}`}>
-                      {r.delta > 0 ? "+" : ""}
-                      {num(r.delta)}
+                  {/*
+                    증감 칸을 **고정 폭**으로 (2026-09-08 — 벤티지 "숫자 열 좀 잘 맞춰줘봐
+                    들쭉날쭉해"). 큰 숫자 뒤에 증감이 제 폭대로 붙어서, 증감이 길면 큰 숫자가
+                    왼쪽으로 밀렸다. 증감 없는 줄도 빈 칸을 남겨 큰 숫자의 오른쪽 끝을 맞춘다.
+                  */}
+                  <span className="fs-net">
+                    <b>{num(r.net)}</b>
+                    <i className={`fs-d ${r.delta > 0 ? "up" : r.delta < 0 ? "down" : ""}`}>
+                      {r.delta !== 0 ? `${r.delta > 0 ? "+" : ""}${num(r.delta)}` : ""}
                     </i>
-                  )}
+                  </span>
                 </td>
                 {price && (
                   <td className="pt-n">

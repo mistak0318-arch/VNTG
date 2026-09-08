@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TopScrollTable } from "../TopScrollTable";
 import { useSheetBack } from "../../useSheetBack";
 import { api, fmtNum } from "../../api";
 import { CandleChart } from "../CandleChart";
@@ -340,7 +341,7 @@ export function FuturesDetailSheet({
           <div className="empty">선물 수급을 받지 못했습니다.</div>
         )}
         {flow !== null && flow.length > 0 && (
-          <div className="data-table-wrap">
+          <TopScrollTable>
             <table className="data-table">
               <thead>
                 <tr>
@@ -361,7 +362,7 @@ export function FuturesDetailSheet({
                 ))}
               </tbody>
             </table>
-          </div>
+          </TopScrollTable>
         )}
 
         <div className="table-note">

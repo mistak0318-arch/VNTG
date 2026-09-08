@@ -6,6 +6,7 @@ import { IntradayFlowChart } from "./IntradayFlowChart";
 import { OhlcStrip } from "./OhlcStrip";
 import { useSection } from "../../useSection";
 import { IndexAnalysis } from "./IndexAnalysis";
+import { TopScrollTable } from "../TopScrollTable";
 
 /** 오늘 봉 — 일봉의 마지막 봉이 오늘이면 그것. 기간을 주·월로 바꿔도 남아 있게 따로 든다 */
 interface DayOhlc {
@@ -105,6 +106,28 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
    * 분석은 늘 **일봉**으로 잰다 — 위의 일/주/월 토글과 무관하게 따로 받아 둔다.
    */
   const [sub, setSub] = useState<"overview" | "analysis">("overview");
+  /*
+   * 일별 수급 표 줄 수 (벤티지 2026-09-08: "10일치, 20일치 등등 옵션 해주고 좀 짧게").
+   * 0 은 전체. 한 번 고르면 다음 지수에서도 그대로 — 매번 고르게 하면 안 쓴다.
+   */
+  const [flowDays, setFlowDays] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem("vntg.idx.flowDays");
+      if (raw === null) return 10; // Number(null) 은 0 = 「전체」라 첫 화면이 길어진다
+      const n = Number(raw);
+      return [10, 20, 60, 0].includes(n) ? n : 10;
+    } catch {
+      return 10;
+    }
+  });
+  const pickDays = (n: number) => {
+    setFlowDays(n);
+    try {
+      localStorage.setItem("vntg.idx.flowDays", String(n));
+    } catch {
+      /* 비공개 창 */
+    }
+  };
   const [dayData, setDayData] = useState<IndexDetailData | null>(null);
   useEffect(() => {
     if (sub !== "analysis") return;
@@ -375,7 +398,7 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
 
         <h3 className="idx-h3">수급 합산 (억원)</h3>
         {data && data.flows.length > 0 && (
-          <div className="data-table-wrap">
+          <TopScrollTable>
             <table className="data-table num idx-sum">
               <thead>
                 <tr>
@@ -451,15 +474,29 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
                 })}
               </tbody>
             </table>
-          </div>
+          </TopScrollTable>
         )}
 
-        <h3 className="idx-h3">일별 수급 (억원)</h3>
+        <h3 className="idx-h3 idx-h3-row">
+          일별 수급 (억원)
+          <span className="idx-days">
+            {[10, 20, 60, 0].map((n) => (
+              <button
+                key={n}
+                type="button"
+                className={`filter-btn ${flowDays === n ? "active" : ""}`}
+                onClick={() => pickDays(n)}
+              >
+                {n === 0 ? "전체" : `${n}일`}
+              </button>
+            ))}
+          </span>
+        </h3>
         {data && data.flows.length === 0 && (
           <div className="empty">아직 쌓인 일별 수급이 없습니다.</div>
         )}
         {data && data.flows.length > 0 && (
-          <div className="data-table-wrap">
+          <TopScrollTable>
             <table className="data-table">
               <thead>
                 <tr>
@@ -474,7 +511,7 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
                 </tr>
               </thead>
               <tbody>
-                {data.flows.map((f) => (
+                {(flowDays > 0 ? data.flows.slice(0, flowDays) : data.flows).map((f) => (
                   <tr key={f.date}>
                     <td className="sticky-col">{f.date.slice(5)}</td>
                     <td className={sign(f.changeRate)}>
@@ -493,7 +530,7 @@ export function IndexDetailSheet({ code, onClose }: { code: string; onClose: () 
                 ))}
               </tbody>
             </table>
-          </div>
+          </TopScrollTable>
         )}
 
         <div className="table-note">

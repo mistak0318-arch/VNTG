@@ -6774,6 +6774,12 @@ button.nav-group-toggle {
 .ov-idx.clickable:hover { background: var(--panel-2); }
 .idx-sheet { max-width: 760px; }
 .idx-h3 { font-size: 0.8667rem; margin: 14px 0 6px; }
+.idx-h3-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.idx-days { display: inline-flex; gap: 4px; }
+.idx-days .filter-btn { padding: 2px 8px; font-size: 0.7rem; }
+/* 긴 표 위의 가로 스크롤 바 — 아래 표와 scrollLeft 를 맞춘다 (TopScrollTable) */
+.tscroll { overflow-x: auto; overflow-y: hidden; height: 12px; margin: 10px 0 -8px; }
+.tscroll > div { height: 1px; }
 
 /* 데일리 리포트 새 섹션들 */
 .rp-kv { display: flex; gap: 16px; flex-wrap: wrap; align-items: baseline; }
@@ -9611,7 +9617,9 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .fs-table td, .fs-table th { padding-top: 0.24rem; padding-bottom: 0.24rem; }
 .fs-table tr.on td { background: var(--hover, rgba(128, 128, 128, 0.14)); }
 /* 증감 — 누적 옆에 작게. 「지금 붙고 있나」가 여기 있다 */
-.fs-d { font-style: normal; font-size: 0.66rem; margin-left: 0.25rem; opacity: 0.85; }
+.fs-net { display: inline-flex; align-items: baseline; justify-content: flex-end; gap: 0.3rem; }
+.fs-net b { min-width: 5.2em; text-align: right; }
+.fs-d { font-style: normal; font-size: 0.66rem; opacity: 0.85; min-width: 4.4em; text-align: left; white-space: nowrap; }
 .fs-d.up { color: var(--red); }
 .fs-d.down { color: var(--blue); }
 
