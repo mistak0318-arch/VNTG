@@ -82,8 +82,27 @@ function signalOf(group: string, label: string, rate: number | null): RowSignal 
   if (rate === null || !Number.isFinite(rate)) return null;
   const a = Math.abs(rate);
 
+  /*
+   * VIX — **거꾸로다** (2026-09-08 — 벤티지 "VIX 지수가 올라가면 어떻게 초록색이야?
+   * 빨간색이잖아 공포지수 올라가면"). 「미국 지수선물」 묶음에 들어 있어서 지수 로직
+   * (2% 오르면 ok)을 타고 있었다. 공포지수는 오르는 게 나쁜 것이다.
+   * 문턱은 지수보다 높게 — VIX 는 하루 5% 는 흔하고 10% 가 넘어야 사건이다.
+   */
+  if (label === "VIX") {
+    if (rate >= 12) return { level: "danger", why: "공포지수 급등 — 위험 회피가 세졌다" };
+    if (rate >= 5) return { level: "warn", why: "공포지수 상승 — 심리가 흔들린다" };
+    if (rate <= -5) return { level: "ok", why: "공포지수 하락 — 심리가 안정되는 쪽이다" };
+    return null;
+  }
+
   if (group === "환율") {
-    // 원화 약세(상승)가 문제다. 외국인은 환차손을 먼저 본다
+    /*
+     * 원화 약세(달러/원 상승)가 문제다. 외국인은 환차손을 먼저 본다.
+     * **달러/원만** 판단한다 (2026-09-08). 달러/엔·원/엔까지 같은 로직을 타고 있었는데
+     * 방향이 다르다 — 달러/엔 상승은 엔 약세(수출 경쟁에 불리)고, 원/엔은 부호가 뒤집힌다.
+     * 하나로 못 묶으면 안 하는 게 맞다.
+     */
+    if (!/달러\/원/.test(label)) return null;
     if (rate >= 1.5) return { level: "danger", why: "원화가 크게 약해졌다 — 외국인이 팔 이유가 된다" };
     if (rate >= 0.8) return { level: "warn", why: "원화 약세 — 외국인 수급에 부담이다" };
     if (rate <= -0.8) return { level: "ok", why: "원화 강세 — 외국인이 들어오기 좋은 쪽이다" };
