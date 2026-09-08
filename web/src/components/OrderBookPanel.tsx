@@ -415,7 +415,8 @@ export function OrderBookPanel({
                   style={{ left: `${Math.min(100, Math.max(0, ((book.strength - 50) / 100) * 100))}%` }}
                 />
               </span>
-              <span className="ob-str-say">
+              {/* 말도 색으로 (2026-09-08 벤티지 "잘 보이는 색깔로, 눈에 띄게") — 흐린 회색이라 값과 따로 놀았다 */}
+              <span className={`ob-str-say ${book.strength >= 120 ? "hot buy" : book.strength >= 100 ? "buy" : book.strength >= 80 ? "sell" : "hot sell"}`}>
                 {book.strength >= 120
                   ? "사자가 세다"
                   : book.strength >= 100

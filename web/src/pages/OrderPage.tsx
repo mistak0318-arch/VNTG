@@ -1584,22 +1584,35 @@ function OrderForm({
             지금 어느 쪽에 내는지에 따라 「위쪽이 어디였나」가 달라진다.
             호가창이 이미 받은 값이라 조회가 늘지 않는다.
           */}
-          {code && quote && (quote.krxHigh > 0 || quote.nxtHigh) && (
-            <div className="ord-hl">
-              {quote.krxHigh > 0 && (
-                <span>
-                  <i>KRX</i> 고 <b className="positive">{fmtNum(quote.krxHigh)}</b> 저{" "}
-                  <b className="negative">{fmtNum(quote.krxLow)}</b>
-                </span>
-              )}
-              {quote.nxtHigh ? (
-                <span>
-                  <i>NXT</i> 고 <b className="positive">{fmtNum(quote.nxtHigh)}</b> 저{" "}
-                  <b className="negative">{fmtNum(quote.nxtLow ?? 0)}</b>
-                </span>
-              ) : null}
-            </div>
-          )}
+          {code && quote && (quote.krxHigh > 0 || quote.nxtHigh) && (() => {
+            /*
+             * 고·저 옆에 **전일 종가 대비 등락률** (2026-09-08 벤티지). 값만 있으면 「오늘 얼마나
+             * 벌어졌나」를 머리로 나눠야 한다. 기준가는 현재가와 등락률에서 되돌려 낸다
+             * (현재가 = 기준가 × (1+등락률)) — 서버에 새로 물을 필요가 없다.
+             */
+            const base = quote.changeRate !== null && quote.changeRate !== -100 ? quote.price / (1 + quote.changeRate / 100) : 0;
+            const rate = (v: number) => (base > 0 && v > 0 ? `${((v - base) / base) * 100 > 0 ? "+" : ""}${(((v - base) / base) * 100).toFixed(2)}%` : "");
+            return (
+              <div className="ord-hl">
+                {quote.krxHigh > 0 && (
+                  <span>
+                    <i>KRX</i> 고 <b className="positive">{fmtNum(quote.krxHigh)}</b>
+                    <em className="positive">{rate(quote.krxHigh) && ` (${rate(quote.krxHigh)})`}</em> 저{" "}
+                    <b className="negative">{fmtNum(quote.krxLow)}</b>
+                    <em className="negative">{rate(quote.krxLow) && ` (${rate(quote.krxLow)})`}</em>
+                  </span>
+                )}
+                {quote.nxtHigh ? (
+                  <span>
+                    <i>NXT</i> 고 <b className="positive">{fmtNum(quote.nxtHigh)}</b>
+                    <em className="positive">{rate(quote.nxtHigh) && ` (${rate(quote.nxtHigh)})`}</em> 저{" "}
+                    <b className="negative">{fmtNum(quote.nxtLow ?? 0)}</b>
+                    <em className="negative">{rate(quote.nxtLow ?? 0) && ` (${rate(quote.nxtLow ?? 0)})`}</em>
+                  </span>
+                ) : null}
+              </div>
+            );
+          })()}
         </div>
         <div className="ord-side">
           <button type="button" className={side === "buy" ? "on buy" : ""} onClick={() => setSide("buy")}>

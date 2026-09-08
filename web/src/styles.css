@@ -15966,6 +15966,7 @@ select.ord-in { appearance: auto; cursor: pointer; }
   margin-right: 0.2rem;
 }
 .ord-hl b { font-weight: 700; }
+.ord-hl em { font-style: normal; font-size: 0.72rem; opacity: 0.85; margin-right: 0.15rem; }
 
 /* 신호등 분석 — 목록 고르기 (2026-09-04). 알약 열셋이 네 줄로 접히던 자리 */
 .lt-pick { align-items: center; }
@@ -16286,7 +16287,11 @@ select.ord-in { appearance: auto; cursor: pointer; }
 }
 .ob-str-row { display: flex; align-items: center; gap: 0.45rem; font-size: 0.78rem; min-width: 0; }
 .ob-str-label { color: var(--muted); flex: none; }
-.ob-str-val { font-weight: 700; font-variant-numeric: tabular-nums; flex: none; min-width: 3rem; }
+/* 체결강도 — 값과 말을 같은 색으로, 한 급 크게 (2026-09-08) */
+.ob-str-val { font-weight: 800; font-size: 0.92rem; font-variant-numeric: tabular-nums; flex: none; min-width: 3.2rem; }
+.ob-str-say.buy { color: var(--red); }
+.ob-str-say.sell { color: var(--blue); }
+.ob-str-say.hot { font-weight: 800; }
 .ob-str-gauge {
   position: relative;
   flex: 1 1 4rem;
