@@ -73,6 +73,7 @@ import { createCalendarVisionRouter } from "./routes/calendarVision.js";
 import { createFocusRouter } from "./routes/focus.js";
 import { createRealtimeRouter } from "./routes/realtime.js";
 import { startRealtimeScheduler } from "./realtimeHub.js";
+import { startHealthFile } from "./healthFile.js";
 import { startBrokerAuto } from "./brokerAuto.js";
 import { startAfterCloseScheduler } from "./afterClose.js";
 import { syncScoreBands } from "./scoreBandSync.js";
@@ -314,6 +315,12 @@ startLeaderScanScheduler(client);
 startCloseBetScheduler(client);
 /* 장 시간에 알아서 붙어 거래원·프로그램매매를 쌓는다 — 화면을 안 봐도 */
 startRealtimeScheduler(client);
+
+/*
+ * 상태 파일 (2026-09-09) — 배포 공유 폴더에 30초마다. 자격증명 없이 밖에서 상태를 보는 길이다.
+ * `HEALTH_OUT_DIR` 이 없으면 아무 일도 안 한다(개발 PC 는 그래서 꺼져 있다).
+ */
+startHealthFile();
 
 /*
  * **장중 거래원 시계열 자동 수집** (2026-09-01).
