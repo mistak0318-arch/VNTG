@@ -204,9 +204,16 @@ export class KiwoomClient {
         throw new Error(timedOut ? `키움이 20초 안에 응답하지 않았다 (${apiId})` : `키움 연결 실패 (${apiId}): ${e instanceof Error ? e.message : String(e)}`);
       }
 
+      /*
+       * ⚠️ **주문 TR(kt1000x) 은 같은 몸통을 다시 보내지 않는다** (2026-09-08 정밀검진 🔴5).
+       * 멱등키가 없어서 429 뒤 재전송이 실제 접수됐던 주문과 겹치면 두 번 나간다. 레이트리밋이면
+       * 「이번엔 못 냈다」로 끝내고 사람이 다시 누른다 — 자동감시는 다음 틱에 다시 본다.
+       */
+      const orderTr = /^kt100\d\d$/.test(apiId);
       // HTTP 429: "허용된 요청 개수를 초과하였습니다" - 잠시 대기 후 재시도
       if (res.status === 429) {
         void recordApiCall("kiwoom", apiId, "rateLimited");
+        if (orderTr) throw new Error(`키움이 요청을 받지 않았다 (429, ${apiId}) — 주문은 접수되지 않았다. 잠시 뒤 다시`);
         if (attempt < maxRetries) {
           await sleep(400 * (attempt + 1));
           continue;
@@ -225,6 +232,7 @@ export class KiwoomClient {
       // return_code 5: 레이트리밋 초과 (문서상 HTTP 200으로도 내려올 수 있음)
       if (returnCode === 5) {
         void recordApiCall("kiwoom", apiId, "rateLimited");
+        if (orderTr) throw new Error(`키움이 요청을 받지 않았다 (return 5, ${apiId}) — 주문은 접수되지 않았다. 잠시 뒤 다시`);
         if (attempt < maxRetries) {
           await sleep(400 * (attempt + 1));
           continue;

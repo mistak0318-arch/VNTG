@@ -1204,7 +1204,6 @@ function OrderForm({
    * 거추장스러웠다. 머리를 누르면 펼쳐지고, 펼친 채 체크해야 걸린다.
    */
   const [exitOn, setExitOn] = useState(false);
-  const [exitOpen, setExitOpen] = useState(false);
   const [exitLegs, setExitLegs] = useState<WatchLeg[]>([{ pct: -5, qtyPct: 100, exec: "market" }]);
   const [loanDate, setLoanDate] = useState<string | null>(prefill.credit ? prefill.loanDate || null : null);
   const [sellCredit, setSellCredit] = useState<boolean>(prefill.credit);
@@ -1825,22 +1824,15 @@ function OrderForm({
             <span>남은 <b>{Math.max(0, status.guard.maxDailyCount - status.today.count)}</b>건</span>
           </div>
 
+          {/* 출구 계획 — 체크 하나로 켜면 펼쳐지고 끄면 접힌다 (벤티지 "지금은 이중으로 해야 되네") */}
           {side === "buy" && !credit && !usesCond && (
-            <div className={`ord-exit${exitOn ? " on" : ""}${exitOpen ? " open" : " folded"}`}>
-              <div className="ord-exit-head">
-                <button type="button" className="ord-exit-fold" onClick={() => setExitOpen((v) => !v)} aria-expanded={exitOpen}>
-                  <i className="ord-cfg-caret">{exitOpen ? "▾" : "▸"}</i>
-                  <b>🛡 출구 계획</b>
-                  <small>{exitOn ? "켜짐 — 체결되면 손절·익절 감시를 건다" : "꺼짐 — 출구 없이 산다. 펼쳐서 켠다"}</small>
-                </button>
-                {exitOpen && (
-                  <label className="ord-exit-sw">
-                    <input type="checkbox" checked={exitOn} onChange={(e) => setExitOn(e.target.checked)} />
-                    켜기
-                  </label>
-                )}
-              </div>
-              {exitOpen && exitOn && <LegsEditor legs={exitLegs} onChange={setExitLegs} total={Number(qty) || 0} basisPrice={unit} />}
+            <div className={`ord-exit${exitOn ? " on open" : " folded"}`}>
+              <label className="ord-exit-head">
+                <input type="checkbox" checked={exitOn} onChange={(e) => setExitOn(e.target.checked)} />
+                <b>🛡 출구 계획</b>
+                <small>{exitOn ? "체결되면 손절·익절 감시를 건다" : "꺼짐 — 출구 없이 산다"}</small>
+              </label>
+              {exitOn && <LegsEditor legs={exitLegs} onChange={setExitLegs} total={Number(qty) || 0} basisPrice={unit} />}
             </div>
           )}
         </div>
