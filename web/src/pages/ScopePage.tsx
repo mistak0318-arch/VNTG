@@ -3,6 +3,7 @@ import { api, type ScopeDetail, type ScopeFlow, type ScopeRow } from "../api";
 import { MiniLine } from "../components/MiniLine";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useWatchedCodes } from "../useWatchedCodes";
+import { fid, useRealtime } from "../useRealtime";
 
 /**
  * **매수직전** — 현미경 그룹의 관리 화면 (2026-09-07).
@@ -100,11 +101,17 @@ function cumul(rows: { d: string }[], pick: (r: any) => number | null): (number 
 
 function Detail({
   code,
+  live,
   onSelectStock,
   onRemoved,
   onNote,
 }: {
   code: string;
+  /**
+   * 실시간이 준 지금 값 — 표와 **같은 값**을 보게 한다 (2026-09-09).
+   * 이 카드는 열 때 한 번만 받으므로, 안 넘기면 표는 움직이는데 카드만 멈춰 있다.
+   */
+  live?: { price: number; rate: number | null } | null;
   onSelectStock: (code: string, name: string) => void;
   onRemoved: () => void;
   onNote: (code: string, note: string) => void;
@@ -166,8 +173,9 @@ function Detail({
       <div className="sc-detail-h">
         <b>🧨 {r.name}</b>
         <span className="pt-n">{r.code}{r.sector ? ` · ${r.sector}` : ""}{r.marketCap ? ` · 시총 ${억크기(r.marketCap)}` : ""}</span>
-        <span className={`sc-price ${cls(r.changeRate)}`}>
-          {won(r.price)}원 {pct(r.changeRate, 2)}
+        {/* 실시간이 있으면 그것 — 표와 어긋나면 어느 쪽이 맞는지 알 수 없다 */}
+        <span className={`sc-price ${cls(live?.rate ?? r.changeRate)}`}>
+          {won(live?.price ?? r.price)}원 {pct(live?.rate ?? r.changeRate, 2)}
         </span>
         <span className="sc-detail-btns">
           <button className="filter-btn" onClick={() => onSelectStock(r.code, r.name)}>
@@ -446,8 +454,43 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [at, setAt] = useState<Date | null>(null);
-  const sort = useSortableTable(rows);
   const watched = useWatchedCodes();
+
+  /*
+   * **실시간을 얹는다** (2026-09-09 — 벤티지 "매수직전 메뉴에서 각 종목들의 현재가가
+   * 실시간으로 반영이 안 되는 것 같거든").
+   *
+   * 맞다. 이 화면은 **60초 폴링뿐**이었다 — 시세분석·관심종목은 실시간을 얹는데 여기만
+   * 빠져 있었다. 매수 직전에 보는 화면이 제일 늦게 움직이고 있었던 셈이다.
+   *
+   * **읽기 전용**이다(`sub=0`). 여기 종목은 관심종목 「현미경」 그룹이고, 스케줄러가
+   * 관심종목을 맨 먼저 걸어 두므로(`targets`) 값은 이미 와 있다 — 새로 구독을 걸어
+   * 정원(200)을 먹을 이유가 없다. 값이 없으면 그냥 폴링 값이 그대로 보인다.
+   */
+  const rt = useRealtime(
+    rows.map((r) => `0B:${r.code}`),
+    2000,
+    { readOnly: true },
+  );
+  /** 실시간이 준 현재가·등락률 — 없으면 null 이고, 그때는 폴링 값을 쓴다 */
+  const liveOf = (code: string): { price: number; rate: number | null } | null => {
+    const v = rt.values[`0B:${code}`];
+    if (!v) return null;
+    const price = fid(v, "10");
+    if (price === null || price === 0) return null;
+    return { price: Math.abs(price), rate: fid(v, "12") };
+  };
+  /* 정렬·표시는 실시간이 얹힌 값으로 — 안 그러면 값만 바뀌고 순서가 옛날 것으로 남는다 */
+  const shown = useMemo(
+    () =>
+      rows.map((r) => {
+        const lv = liveOf(r.code);
+        return lv ? { ...r, price: lv.price, changeRate: lv.rate ?? r.changeRate } : r;
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, rt.values],
+  );
+  const sort = useSortableTable(shown);
 
   const load = useCallback(async () => {
     setError(null);
@@ -594,6 +637,7 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
       {open && rows.some((r) => r.code === open) && (
         <Detail
           code={open}
+          live={liveOf(open)}
           onSelectStock={onSelectStock}
           onRemoved={() => {
             setOpen(null);
