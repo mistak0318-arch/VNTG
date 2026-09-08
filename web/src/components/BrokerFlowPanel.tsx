@@ -142,11 +142,17 @@ export function BrokerFlowPanel({ code }: { code: string }) {
   /* 고른 창구의 시간대별 순매수 — 서버가 실시간으로 쌓은 것 */
   const picks = series;
 
+  /*
+   * 키움 앱 거래원 화면을 따랐다 (2026-09-08 — 벤티지 "ui 도 수정 좀").
+   *
+   * 폰에서 매수 5줄·매도 5줄이 세로로 쌓여 열 줄이었다. 키움은 **매도 | 매수 를 좌우로**
+   * 놓고 같은 순위끼리 한 줄에 둔다 — 1위 매도 창구와 1위 매수 창구가 나란히 보여서
+   * 「키움이 양쪽 다 1위인 날」이 한눈에 잡힌다. 매도 쪽은 숫자를 안쪽(오른쪽)에, 매수는
+   * 바깥(오른쪽)에 두어 거울처럼 만든다. 증감은 큰 숫자 밑에 작게.
+   */
   const side = (rows: BrokerFlow["buy"], kind: "buy" | "sell") => (
-    <div className="bf-col">
-      <div className={`bf-h ${kind === "buy" ? "positive" : "negative"}`}>
-        {kind === "buy" ? "매수 상위" : "매도 상위"}
-      </div>
+    <div className={`bf-col ${kind}`}>
+      <div className={`bf-h ${kind === "buy" ? "positive" : "negative"}`}>{kind === "buy" ? "매수 상위" : "매도 상위"}</div>
       {rows.map((b) => (
         <button
           key={`${kind}-${b.rank}`}
@@ -154,18 +160,15 @@ export function BrokerFlowPanel({ code }: { code: string }) {
           onClick={() => setPicked(picked === b.code ? null : b.code)}
           title="눌러서 시간대별 보기"
         >
+          <Bar v={b.qty} mx={mx} cls={kind} />
           <span className="bf-nm">
             {b.name}
             {b.foreign && <span className="bf-fg">외</span>}
           </span>
-          <span className="bf-qty">
-            <Bar v={b.qty} mx={mx} cls={kind} />
+          <span className="bf-num">
             <b>{fmtNum(b.qty)}</b>
-          </span>
-          {/* 증감 — 지금 붙고 있는 창구를 가른다 */}
-          <span className="bf-delta">
-            <Bar v={b.delta} mx={mxDelta} cls={`${kind} d`} />
-            <b>+{fmtNum(b.delta)}</b>
+            {/* 증감 — 지금 붙고 있는 창구를 가른다. 0 이면 안 적는다 */}
+            {b.delta > 0 && <small className={b.delta >= mxDelta * 0.5 ? "hot" : ""}>+{fmtNum(b.delta)}</small>}
           </span>
         </button>
       ))}
@@ -174,20 +177,26 @@ export function BrokerFlowPanel({ code }: { code: string }) {
 
   return (
     <div className="bf">
-      <div className="filter-row">
+      <div className="filter-row bf-fx">
         <span className="pt-n">{data.at} 기준</span>
-        <span>
-          외국계 순매수{" "}
+        {/*
+          외국계 합계 — **키움이 주는 값** (2026-09-08). 여태 상위 5 창구 이름으로 세서
+          상위 5 가 전부 국내 증권사인 날은 0 이었다. 이제 응답의 frgn_*_prsm_sum 을 그대로.
+        */}
+        <span className="bf-fx-sum">
+          <em>외국계</em>
+          <span className="negative">매도 {fmtNum(data.foreignSell)}</span>
+          <span className="positive">매수 {fmtNum(data.foreignBuy)}</span>
           <b className={signClass(data.foreignNet)}>
-            {data.foreignNet > 0 ? "+" : ""}
+            순매수 {data.foreignNet > 0 ? "+" : ""}
             {fmtNum(data.foreignNet)}
           </b>
         </span>
       </div>
 
       <div className="bf-body">
-        {side(data.buy, "buy")}
         {side(data.sell, "sell")}
+        {side(data.buy, "buy")}
       </div>
 
       {picked && (

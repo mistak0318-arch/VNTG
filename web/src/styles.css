@@ -9132,22 +9132,39 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .dt-reset { margin-left: 0.5rem; }
 
 /* 거래원 */
-.bf-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: 0.8rem; }
-.bf-h { font-weight: 700; padding-bottom: 0.2rem; border-bottom: 1px solid var(--border); }
+/*
+ * 거래원 — 키움 앱 모양 (2026-09-08). 매도 | 매수 를 **항상 두 열**로. 폰에서도 그렇다 —
+ * 한 열로 쌓으면 열 줄이 되고, 같은 순위끼리 나란히 보는 값어치가 사라진다.
+ * 매도 열은 거울(row-reverse)이라 숫자가 안쪽에 온다.
+ */
+.bf-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.bf-h { font-weight: 700; font-size: 0.85rem; padding-bottom: 0.2rem; border-bottom: 1px solid var(--border); text-align: center; }
 .bf-row {
-  display: grid; grid-template-columns: 7rem 1fr 6.5rem; align-items: center; gap: 0.4rem;
-  width: 100%; padding: 0.3rem 0.2rem; border: none; border-bottom: 1px solid var(--border);
-  background: none; color: inherit; font: inherit; cursor: pointer; text-align: left;
+  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 0.4rem;
+  width: 100%; min-height: 2.6rem; padding: 0.25rem 0.4rem; border: none; border-bottom: 1px solid var(--border);
+  background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; overflow: hidden;
 }
+.bf-col.sell .bf-row { flex-direction: row-reverse; text-align: right; }
 .bf-row.on { background: var(--panel-2); }
-.bf-nm { display: flex; align-items: center; gap: 0.25rem; font-size: 0.9rem; }
-.bf-fg { font-size: 0.7rem; padding: 0 0.2rem; border-radius: 0.2rem; background: var(--blue); color: #fff; }
-.bf-qty, .bf-delta { position: relative; display: flex; align-items: center; justify-content: flex-end; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
-.bf-qty b, .bf-delta b { position: relative; }
-.bf-bar { position: absolute; left: 0; top: 2px; bottom: 2px; border-radius: 0.15rem; opacity: 0.25; }
+.bf-nm { position: relative; display: flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.bf-col.sell .bf-nm { flex-direction: row-reverse; }
+.bf-fg { font-size: 0.65rem; padding: 0 0.2rem; border-radius: 0.2rem; background: var(--blue); color: #fff; flex: none; }
+.bf-num { position: relative; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; flex: none; font-variant-numeric: tabular-nums; }
+.bf-col.sell .bf-num { align-items: flex-start; }
+.bf-num b { font-size: 0.95rem; }
+.bf-num small { font-size: 0.7rem; color: var(--muted); }
+.bf-num small.hot { color: var(--accent, #e6a23c); font-weight: 600; }
+/* 막대는 배경. 매도는 오른쪽에서, 매수는 왼쪽에서 자란다 — 가운데를 향해 마주 본다 */
+.bf-bar { position: absolute; top: 3px; bottom: 3px; border-radius: 0.15rem; opacity: 0.18; }
+.bf-col.buy .bf-bar { left: 0; }
+.bf-col.sell .bf-bar { right: 0; }
 .bf-bar.buy { background: var(--red); }
 .bf-bar.sell { background: var(--blue); }
-.bf-bar.d { opacity: 0.5; }
+/* 외국계 줄 */
+.bf-fx { flex-wrap: wrap; }
+.bf-fx-sum { display: inline-flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.bf-fx-sum em { font-style: normal; color: var(--muted); }
+.bf-fx-sum b { font-size: 0.95rem; }
 .bf-series { display: grid; gap: 0.15rem; }
 .bf-pt { display: grid; grid-template-columns: 3.5rem 1fr 6rem; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
 .bf-pt-t { color: var(--muted); }

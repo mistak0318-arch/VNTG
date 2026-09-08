@@ -6006,7 +6006,12 @@ export interface BrokerFlow {
   at: string;
   sell: { rank: number; code: string; name: string; qty: number; delta: number; foreign: boolean }[];
   buy: { rank: number; code: string; name: string; qty: number; delta: number; foreign: boolean }[];
+  /** 키움이 주는 전체 외국계 추정 합계 — 상위 5 와 무관 */
+  foreignSell: number;
+  foreignBuy: number;
   foreignNet: number;
+  /** @deprecated 상위 5 이름으로 센 옛 값 */
+  foreignNetTop5: number;
   /** 우리가 쌓은 시간대별 — 화면을 안 본 시간은 빈다 */
   series: { t: string; net: Record<string, number> }[];
   names: Record<string, string>;

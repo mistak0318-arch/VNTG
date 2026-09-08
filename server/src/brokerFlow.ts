@@ -76,8 +76,24 @@ export interface BrokerFlow {
   at: string;
   sell: BrokerSide[];
   buy: BrokerSide[];
-  /** 상위 5개 안에서 본 외국계 순매수 */
+  /**
+   * 외국계 합계 — **키움이 주는 값** (2026-09-08).
+   *
+   * 여태 상위 5개 창구 이름에 「모건」「골드만」이 들어 있나로 세고 있었다. 그래서 상위 5가
+   * 전부 국내 증권사인 날은 외국계가 0 으로 찍혔다 — 벤티지: "거래원에 외국계 현황이
+   * 키움이랑 안 맞네?" 그날 키움 앱은 매도 17,077 / 매수 30,917 이었다.
+   *
+   * ka10040 응답에 `frgn_sel_prsm_sum`·`frgn_buy_prsm_sum` 이 따로 온다. 상위 5 와 무관한
+   * **전체 외국계 추정 합계**다. 그걸 그대로 싣는다.
+   */
+  foreignSell: number;
+  foreignBuy: number;
+  /** 매수 − 매도. 키움 값에서 */
   foreignNet: number;
+  /**
+   * @deprecated 상위 5 이름으로 센 옛 값. 화면이 「상위5 내」라고 적던 자리에만 남긴다.
+   */
+  foreignNetTop5: number;
   /** 우리가 쌓아 온 시간대별. 화면을 안 본 시간은 빈다 */
   series: BrokerPoint[];
   /** 창구코드 → 이름 (시계열을 읽을 때 필요) */
@@ -119,7 +135,10 @@ export async function brokerFlow(client: KiwoomClient, code: string): Promise<Br
     at: "",
     sell: [],
     buy: [],
+    foreignSell: 0,
+    foreignBuy: 0,
     foreignNet: 0,
+    foreignNetTop5: 0,
     series: [],
     names: {},
     error: null,
@@ -167,9 +186,13 @@ export async function brokerFlow(client: KiwoomClient, code: string): Promise<Br
       names[s.code] = s.name;
     }
 
-    const foreignNet =
+    const foreignNetTop5 =
       buy.filter((b) => b.foreign).reduce((a, b) => a + b.qty, 0) -
       sell.filter((s) => s.foreign).reduce((a, s) => a + s.qty, 0);
+    /* 키움이 주는 전체 외국계 합계 — 부호가 붙어 오므로 절대값으로 */
+    const foreignSell = num(data.frgn_sel_prsm_sum);
+    const foreignBuy = num(data.frgn_buy_prsm_sum);
+    const foreignNet = foreignBuy - foreignSell;
 
     /* ---------- 시계열에 한 점 찍는다 ---------- */
     const { date, hm } = kstNow();
@@ -191,7 +214,10 @@ export async function brokerFlow(client: KiwoomClient, code: string): Promise<Br
       at: hm,
       sell,
       buy,
+      foreignSell,
+      foreignBuy,
       foreignNet,
+      foreignNetTop5,
       series: entry.points,
       names: entry.names,
     };
