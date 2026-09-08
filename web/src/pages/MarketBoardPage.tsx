@@ -1,33 +1,38 @@
 /**
- * 전광판 (2026-09-07 밤) — 시황 대시보드와 마켓 브리핑·흐름을 하나로.
+ * 전광판 (2026-09-08 다시) — **지금 시장에 무슨 일이 있나**를 한 장에.
  *
- * 벤티지: "시장의 흐름을 한눈에 볼 수 있는 전광판 기능을 하나 만들고 이 둘을 통합. 메뉴가 많은 건 좋은 게
- * 아니니까 결국 핵심을 집어내는 정보들이 중요한 거지. 시장의 흐름, 섹터의 흐름, 시장참여자의 흐름, 유동성,
- * 금리, 환율, 선물지수, 지수…" → 시스 프롬프트 5절대로.
+ * 벤티지 스케치(09-08 10:23, 갤럭시 노트):
  *
- * 열면 10초 안에 「오늘 시장이 어느 국면인지 · 돈이 어디로 가는지 · 내가 뭘 해야 하는지」.
- *   ① 국면 한 줄 — 있는 판정(체온계·수급·미장 신호등·VIX)만 조합. 신호등 문턱은 건드리지 않는다
- *   ② 타일 12개, 숫자 하나씩, 눌러야 상세
- *   ③ AI 브리핑 3줄
- *   ④ 옛 두 화면(마켓 브리핑·흐름, 시황 대시보드)은 **그대로 제 메뉴에** — 합치려다 벤티지가 "지우고 합치니 더
- *      이상해진다"로 되돌렸다. 전광판은 셋째 메뉴다. 타일을 누르면 그쪽으로 간다
+ *   ┌ 코스피 · 코스닥 지수정보 ─────────────────────────────┐
+ *   │ 시장 이슈 (뉴스·텔레그램 키워드 버블) │ 오늘의 주도주   │
+ *   │ 거래대금 상위                        │ 관심종목 현황   │
+ *   │ 주요 뉴스                                              │
+ *   └────────────────────────────────────────────────────────┘
  *
- * 새 조회는 없다. 두 화면이 쓰던 서버 섹션 캐시(useSection)를 그대로 집어 온다.
+ * "지금 우리 전광판은 이렇게 설계하려고 만들어달라고 한 게 아니야. 실시간 시장의 정보에 집중해서
+ *  보여주는 거거든. 현재 시장이 이런 분위기고, 어떻게 흘러가고 있고, 내가 관심 있는 것들은 이렇고,
+ *  주요 뉴스는 이렇고, 텔레그램 뉴스의 키워드는 이렇게 해가지고 얘네가 뜨는 거구나."
+ *
+ * 그래서 첫 판(09-07, 타일 12개 + 국면 + 브리핑)을 접었다. 금리·원자재·섹터 타일은 시황 대시보드에 그대로
+ * 있다. 여기 남긴 건 **지수 띠 하나**와 스케치의 다섯 칸. 국면 판정(`judge`)은 띠 맨 앞의 칸 하나로 줄였다.
+ *
+ * 조회 — 지수·수급은 섹션 캐시. 화제(topic-pulse)·거래대금 상위(ka10030 한 콜)·관심종목 시세·주요뉴스는
+ * 각자 제 주기로. 주도주 스캔은 4콜쯤이라 5분에 한 번.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   api,
+  normalizeStockCode,
   signClass,
   type GlobalQuote,
   type IndexCard,
+  type LeaderScan,
   type MarketFlow,
-  type RateRow,
-  type UsMajorResult,
-  type ViRow,
-  type StockRow,
-  type ThemeRow,
-  type IndexCandle,
   type MarketSignal,
+  type NaverNewsItem,
+  type TopicPulse,
+  type UsMajorResult,
+  type WatchItem,
 } from "../api";
 import { useSection } from "../useSection";
 import { useMarketLens } from "../components/MarketLensPanel";
@@ -184,64 +189,199 @@ function judge(args: {
   return { level, name, verdict, reasons: r, score };
 }
 
+/* ------------------------------------------------------------------ */
+/* 폴링 하나 — 칸마다 제 주기로 다시 묻는다. 실패하면 지난 값을 둔다        */
+/* ------------------------------------------------------------------ */
+function usePoll<T>(fn: () => Promise<T>, ms: number): { data: T | null; error: string | null; at: number } {
+  const [st, setSt] = useState<{ data: T | null; error: string | null; at: number }>({ data: null, error: null, at: 0 });
+  useEffect(() => {
+    let alive = true;
+    const pull = async () => {
+      try {
+        const d = await fn();
+        if (alive) setSt({ data: d, error: null, at: Date.now() });
+      } catch (e) {
+        if (alive) setSt((p) => ({ ...p, error: e instanceof Error ? e.message : "실패" }));
+      }
+    };
+    void pull();
+    const t = setInterval(() => void pull(), ms);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return st;
+}
+
+/* ------------------------------------------------------------------ */
+/* 시장 이슈 — 키워드 버블                                               */
+/* ------------------------------------------------------------------ */
+interface Bubble {
+  term: string;
+  r: number;
+  x: number;
+  y: number;
+  where: "both" | "channel" | "news";
+  fresh: boolean;
+  n: number;
+  codes: string[];
+}
+
+/**
+ * 원 채우기 — 큰 것부터 가운데에, 다음 것은 **이미 놓인 원 둘레를 돌며** 겹치지 않는 자리 중
+ * 가운데에 제일 가까운 곳에. d3 없이 이 정도면 열댓 개는 보기 좋게 모인다.
+ */
+function packBubbles(items: TopicPulse["items"], w: number, h: number): Bubble[] {
+  const top = items.slice(0, 14);
+  if (top.length === 0) return [];
+  const max = Math.max(...top.map((i) => i.score), 1);
+  const rMin = Math.min(w, h) * 0.085;
+  const rMax = Math.min(w, h) * 0.2;
+  const pad = 3;
+  const placed: Bubble[] = [];
+  const cx = w / 2;
+  const cy = h / 2;
+  for (const it of top) {
+    const r = rMin + (rMax - rMin) * Math.sqrt(it.score / max);
+    const b: Bubble = { term: it.term, r, x: cx, y: cy, where: it.where, fresh: it.fresh, n: it.buzzCount + it.newsCount, codes: it.codes };
+    if (placed.length === 0) {
+      placed.push(b);
+      continue;
+    }
+    let best: { x: number; y: number; d: number } | null = null;
+    for (const p of placed) {
+      const dist = p.r + r + pad;
+      for (let k = 0; k < 36; k++) {
+        const a = (k / 36) * Math.PI * 2;
+        const x = p.x + Math.cos(a) * dist;
+        const y = p.y + Math.sin(a) * dist;
+        if (x - r < 0 || x + r > w || y - r < 0 || y + r > h) continue;
+        const hit = placed.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + r + pad - 0.5);
+        if (hit) continue;
+        const d = Math.hypot(x - cx, y - cy);
+        if (!best || d < best.d) best = { x, y, d };
+      }
+    }
+    if (!best) continue; // 자리가 없으면 이 낱말은 뺀다 — 열네 개가 다 들어갈 필요는 없다
+    b.x = best.x;
+    b.y = best.y;
+    placed.push(b);
+  }
+  return placed;
+}
+
+function IssueBubbles({ pulse, onSelectStock }: { pulse: TopicPulse | null; onSelectStock: (code: string, name: string) => void }) {
+  const W = 480;
+  const H = 300;
+  const bubbles = useMemo(() => (pulse ? packBubbles(pulse.items, W, H) : []), [pulse]);
+  if (!pulse) return <div className="bd-empty">화제를 모으는 중…</div>;
+  if (bubbles.length === 0) return <div className="bd-empty">{pulse.headline || "아직 도드라진 낱말이 없습니다"}</div>;
+  return (
+    <svg className="bd-bubbles" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="시장 이슈 키워드">
+      {bubbles.map((b) => {
+        const fs = Math.max(10, Math.min(20, b.r * 0.42 - (b.term.length > 4 ? (b.term.length - 4) * 1.2 : 0)));
+        const go = () => {
+          if (b.codes.length > 0) onSelectStock(b.codes[0], b.term);
+          else window.location.hash = "#/news";
+        };
+        return (
+          <g key={b.term} className={`bd-bub ${b.where}${b.fresh ? " fresh" : ""}`} transform={`translate(${b.x.toFixed(1)} ${b.y.toFixed(1)})`} onClick={go} style={{ cursor: "pointer" }}>
+            <title>
+              {b.term} · {b.where === "both" ? "뉴스·텔레그램 둘 다" : b.where === "channel" ? "텔레그램" : "뉴스"} {b.n}건{b.fresh ? " · 처음 보는 말" : ""}
+              {b.codes.length ? ` · 종목 ${b.codes.length}` : ""}
+            </title>
+            <circle r={b.r} />
+            <text y={fs * 0.35} textAnchor="middle" fontSize={fs} fontWeight={700}>
+              {b.term}
+            </text>
+            {b.r >= 26 && (
+              <text y={fs * 0.35 + fs * 0.9} textAnchor="middle" fontSize={Math.max(8, fs * 0.55)} className="bd-bub-n">
+                {b.n}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 칸 틀                                                                */
+/* ------------------------------------------------------------------ */
+function Panel({ title, sub, more, moreLabel = "더 보기", cls, children }: { title: string; sub?: string; more?: string; moreLabel?: string; cls?: string; children: ReactNode }) {
+  return (
+    <section className={`bd-panel ${cls ?? ""}`}>
+      <header className="bd-panel-h">
+        <b>{title}</b>
+        {sub && <small>{sub}</small>}
+        {more && (
+          <a href={more} className="bd-more">
+            {moreLabel} ›
+          </a>
+        )}
+      </header>
+      <div className="bd-panel-b">{children}</div>
+    </section>
+  );
+}
+
+const hm = (iso: string): string => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
+type VolRow = { code: string; name: string; price: number; changeRate: number; tv: number };
+type WatchRow = { code: string; name: string; price: number; changeRate: number };
+
 export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const indices = useSection<IndexCard[]>("indices", 5_000);
   const flow = useSection<MarketFlow>("flow", 20_000);
   const global = useSection<GlobalQuote[]>("global", 15_000);
   const usMajor = useSection<UsMajorResult>("usMajor", 15_000);
-  const rates = useSection<RateRow[]>("rates", 30_000);
-  const vi = useSection<ViRow[]>("vi", 20_000);
-  const highLow = useSection<{ high: StockRow[]; low: StockRow[] }>("highLow", 120_000);
-  const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 60_000);
   const { lens } = useMarketLens();
-  const [brief, setBrief] = useState<{ date: string; label: string; text: string } | null>(null);
   const [sig, setSig] = useState<MarketSignal | null>(null);
-  const [briefOpen, setBriefOpen] = useState(false);
-  const [turn, setTurn] = useState<Record<string, IndexCandle[]>>({});
-  const [mine, setMine] = useState<{ pnl: number; rate: number; value: number; waiting: number; today: number } | null | "none">(null);
   const [indexDetail, setIndexDetail] = useState<string | null>(null);
   const [chart, setChart] = useState<ChartTarget | null>(null);
-  /* 타일을 누르면 옛 화면으로 간다 — 전광판은 요약이고, 깊이는 원래 메뉴에 있다(벤티지: "합치니 더 이상해진다") */
-  const go = (hash: string) => {
-    window.location.hash = hash;
-  };
+
+  /* 다섯 칸의 재료 — 각자 제 주기 */
+  const pulse = usePoll<TopicPulse>(() => api.topicPulse("now"), 60_000);
+  const leaders = usePoll<LeaderScan>(() => api.leaderScan(false), 300_000);
+  const volume = usePoll<VolRow[]>(async () => {
+    const raw = (await api.volumeRanking("000", "3")) as { tdy_trde_qty_upper?: Record<string, unknown>[] };
+    return (raw.tdy_trde_qty_upper ?? []).slice(0, 12).map((r) => ({
+      code: normalizeStockCode(String(r.stk_cd ?? "")),
+      name: String(r.stk_nm ?? ""),
+      price: Math.abs(Number(r.cur_prc)) || 0,
+      changeRate: Number(r.flu_rt) || 0,
+      /* trde_amt 는 백만원 → 억원 */
+      tv: Math.round((Number(r.trde_amt) || 0) / 100),
+    }));
+  }, 60_000);
+  const watch = usePoll<{ items: WatchItem[]; quotes: Record<string, { price: number; changeRate: number }> }>(async () => {
+    const [w, q] = await Promise.all([api.watchlist(), api.watchQuotes()]);
+    return { items: w.items.filter((i) => !i.divider), quotes: q.quotes };
+  }, 30_000);
+  const news = usePoll<{ items: NaverNewsItem[]; leads: Record<string, { code: string; name: string }[]> }>(async () => {
+    const r = await api.newsNaver("main", 1);
+    const items = r.items.slice(0, 10);
+    const leads: Record<string, { code: string; name: string }[]> = {};
+    try {
+      const l = await api.newsLeads(items.map((x) => ({ link: x.link, title: x.title, summary: x.summary })));
+      for (const x of l.leads) leads[x.link] = x.stocks;
+    } catch {
+      /* 종목 칩만 빈다 */
+    }
+    return { items, leads };
+  }, 180_000);
+
   useEffect(() => {
-    void api.briefingBrief().then((r) => setBrief(r.brief)).catch(() => undefined);
     const pullSig = () => void api.marketSignal().then(setSig).catch(() => undefined);
     pullSig();
     const ts = setInterval(pullSig, 60_000);
-    let alive = true;
-    (async () => {
-      for (const code of ["001", "101"]) {
-        try {
-          const r = await api.indexDetail(code, "day");
-          if (alive) setTurn((p) => ({ ...p, [code]: r.candles }));
-        } catch {
-          /* 거래대금 타일만 빈다 */
-        }
-      }
-    })();
-    const pullMine = async () => {
-      try {
-        const s = await api.orderStatus();
-        if (!s.enabled || !s.session) {
-          if (alive) setMine("none");
-          return;
-        }
-        const v = await api.orderPositions();
-        const waiting = v.entries.filter((w) => w.status === "waiting").length + v.positions.reduce((a, q) => a + q.watches.filter((w) => w.status === "waiting").length, 0);
-        if (alive) setMine({ pnl: v.pnlTotal, rate: v.pnlRateTotal, value: v.valueTotal, waiting, today: v.todayLoss });
-      } catch {
-        if (alive) setMine("none");
-      }
-    };
-    void pullMine();
-    const t = setInterval(() => void pullMine(), 30_000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-      clearInterval(ts);
-    };
+    return () => clearInterval(ts);
   }, []);
 
   const kospi = indices.data?.find((c) => c.code === "001");
@@ -251,17 +391,12 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
   const vixQ = g("vix") ?? um("vix");
   const night = usMajor.data?.nightFutures ?? g("krNightFut");
   const es = g("esF");
-  const nq = g("nqF");
   const usdkrw = g("usdkrw");
-  const wti = g("wti") ?? um("wti");
-  const gold = g("gold") ?? um("gold");
-  const copper = g("copper");
-  const tnx = um("tnx");
-  const kr3 = rates.data?.find((r) => r.group === "국내" && /3년/.test(r.name)) ?? rates.data?.find((r) => r.group === "국내") ?? null;
   const above20Series = lens?.thermo.series.above20 ?? [];
   const above20 = above20Series.length ? above20Series[above20Series.length - 1] : null;
   const above20Trend = above20Series.length > 5 ? above20Series[above20Series.length - 1] - above20Series[above20Series.length - 6] : null;
   const riseNow = lens?.thermo.riseNow ?? (kospi && kospi.rising + kospi.falling > 0 ? (kospi.rising / (kospi.rising + kospi.falling)) * 100 : null);
+  const flowK = flow.data?.kospi ?? null;
 
   const regime = useMemo(
     () =>
@@ -279,198 +414,226 @@ export function MarketBoardPage({ onSelectStock }: { onSelectStock: (code: strin
     [sig, kospi, above20, above20Trend, riseNow, flow.data, usMajor.data, vixQ, night],
   );
 
-  const turnOf = (code: string) => {
-    const cs = turn[code];
-    if (!cs || cs.length < 2) return null;
-    const today = cs[cs.length - 1];
-    const past = cs.slice(-21, -1);
-    const avg = past.length ? past.reduce((a, c) => a + c.tradeValue, 0) / past.length : 0;
-    return { today: today.tradeValue, vsAvg: avg > 0 ? (today.tradeValue / avg) * 100 : null };
-  };
-  const tk = turnOf("001");
-  const tq = turnOf("101");
-  const turnTotal = tk && tq ? tk.today + tq.today : null;
-  const turnVs = tk?.vsAvg !== null && tq?.vsAvg !== null && tk && tq ? (tk.vsAvg! + tq.vsAvg!) / 2 : null;
-
-  const lead = lens?.rotation.lead ?? [];
-  const themeTop = (themes.data?.top ?? []).slice(0, 3);
-  const themeBottom = (themes.data?.bottom ?? []).slice(0, 3);
-  const upSectors = lead.filter((t) => t.changeRate > 0).slice(0, 3);
-  const highN = highLow.data?.high.length ?? null;
-  const lowN = highLow.data?.low.length ?? null;
-  const viN = vi.data?.length ?? null;
-  const flowK = flow.data?.kospi ?? null;
-  const flowQ = flow.data?.kosdaq ?? null;
-
   const isNight = (() => {
     const h = new Date(Date.now() + 9 * 3600_000).getUTCHours();
     return h >= 16 || h < 8;
   })();
 
-  const yahoo = (q: GlobalQuote | null, label: string, digits = 2): ChartTarget | null => (q ? { kind: "yahoo", symbol: q.symbol, label, digits, hintRate: q.changeRate ?? undefined } : null);
-
-  const tiles: JSX.Element[] = [];
-  const T = ({ k, label, value, sub, cls, spark, onClick, hint }: { k: string; label: string; value: string; sub?: string; cls?: string; spark?: number[]; onClick?: () => void; hint?: string }) => (
-    <button key={k} type="button" className={`bd-tile ${cls ?? ""}${onClick ? " click" : ""}`} onClick={onClick} title={hint}>
-      <span className="bd-tile-l">{label}</span>
-      <b className="bd-tile-v">{value}</b>
-      {sub && <small className="bd-tile-s">{sub}</small>}
-      {spark && spark.length > 2 && (
-        <span className="bd-spark">
-          <Sparkline values={spark} up={spark[spark.length - 1] >= spark[0]} />
+  /* ── 지수 띠 ── */
+  const idxCell = (c: IndexCard | undefined, label: string, code: string) => (
+    <button key={code} type="button" className={`bd-cell idx ${signClass(c?.changeRate ?? 0)}`} onClick={() => setIndexDetail(code)}>
+      <span className="bd-cell-l">{label}</span>
+      <b className="bd-cell-v">{c ? fmt(c.price) : "…"}</b>
+      <span className="bd-cell-s">
+        {c ? pct(c.changeRate) : ""}
+        {c && (
+          <i>
+            ▲{c.rising} ▼{c.falling}
+          </i>
+        )}
+      </span>
+      {c && c.sparkline.length > 2 && (
+        <span className="bd-cell-spark">
+          <Sparkline values={c.sparkline} up={c.changeRate >= 0} />
         </span>
       )}
     </button>
   );
+  const cell = (key: string, label: string, value: string, sub?: string, cls?: string, onClick?: () => void) => (
+    <button key={key} type="button" className={`bd-cell ${cls ?? ""}${onClick ? " click" : ""}`} onClick={onClick} disabled={!onClick}>
+      <span className="bd-cell-l">{label}</span>
+      <b className="bd-cell-v">{value}</b>
+      {sub && <span className="bd-cell-s">{sub}</span>}
+    </button>
+  );
 
-  const idxTile = (c: IndexCard | undefined, label: string, code: string) =>
-    T({
-      k: code,
-      label,
-      value: c ? fmt(c.price) : "…",
-      sub: c ? `${pct(c.changeRate)} · ↑${c.rising} ↓${c.falling}` : undefined,
-      cls: signClass(c?.changeRate ?? 0),
-      spark: c?.sparkline,
-      onClick: () => setIndexDetail(code),
-    });
-  const futTile = T({
-    k: "fut",
-    label: isNight ? "미국 선물 (ES · NQ)" : "야간선물 · ES",
-    value: isNight ? `${pct(es?.changeRate)} · ${pct(nq?.changeRate)}` : night ? pct(night.changeRate) : "…",
-    sub: isNight ? `야간선물 ${pct(night?.changeRate)}` : `ES ${pct(es?.changeRate)} · NQ ${pct(nq?.changeRate)}`,
-    cls: signClass(isNight ? (es?.changeRate ?? 0) : (night?.changeRate ?? 0)),
-    onClick: es ? () => setChart(yahoo(es, "US 500 선물")) : undefined,
-  });
-  const vixTile = T({
-    k: "vix",
-    label: "VIX",
-    value: vixQ ? fmt(vixQ.price ?? null, 1) : "…",
-    sub: vixQ ? `${pct(vixQ.changeRate)} · ${(vixQ.price ?? 0) >= 30 ? "공포" : (vixQ.price ?? 0) >= 20 ? "불안" : "안정"}` : undefined,
-    cls: vixQ ? ((vixQ.price ?? 0) >= 30 ? "negative" : (vixQ.price ?? 0) < 18 ? "positive" : "") : "",
-    onClick: vixQ ? () => setChart({ kind: "yahoo", symbol: "^VIX", label: "VIX", digits: 2 }) : undefined,
-  });
-  const flowTile = T({
-    k: "flow",
-    label: "시장참여자 (코스피 오늘)",
-    value: flowK ? `외인 ${eok(flowK.foreign)}` : "…",
-    sub: flowK ? `기관 ${eok(flowK.institution)} · 개인 ${eok(flowK.individual)}${flowQ ? ` · 코스닥 외인 ${eok(flowQ.foreign)}` : ""}` : undefined,
-    cls: flowK ? (flowK.foreign > 0 && flowK.institution > 0 ? "positive" : flowK.foreign < 0 && flowK.institution < 0 ? "negative" : "") : "",
-    onClick: () => go("#/briefing"),
-    hint: "눌러서 흐름 상세(누적·업종별)",
-  });
-  const breadthTile = T({
-    k: "breadth",
-    label: "시장 폭",
-    value: kospi ? `↑${kospi.rising + (kosdaq?.rising ?? 0)} : ↓${kospi.falling + (kosdaq?.falling ?? 0)}` : "…",
-    sub: `20일선 위 ${above20 !== null ? `${above20.toFixed(0)}%` : "-"} · 신고 ${highN ?? "-"} / 신저 ${lowN ?? "-"} · VI ${viN ?? "-"}`,
-    cls: riseNow !== null ? (riseNow >= 55 ? "positive" : riseNow < 40 ? "negative" : "") : "",
-    spark: above20Series.slice(-30),
-    onClick: () => go("#/overview"),
-  });
-  const turnTile = T({
-    k: "turn",
-    label: "유동성 (거래대금)",
-    value: turnTotal !== null ? `${(turnTotal / 10_000).toFixed(1)}조` : "…",
-    sub: turnVs !== null ? `20일 평균의 ${turnVs.toFixed(0)}% · 코스피 ${tk ? (tk.today / 10_000).toFixed(1) : "-"}조 / 코스닥 ${tq ? (tq.today / 10_000).toFixed(1) : "-"}조` : undefined,
-    cls: turnVs !== null ? (turnVs >= 120 ? "positive" : turnVs < 80 ? "negative" : "") : "",
-    onClick: () => go("#/overview"),
-  });
-  const rateTile = T({
-    k: "rate",
-    label: "금리 (美10년 · 韓3년)",
-    value: tnx ? `${fmt(tnx.price, 2)}%` : "…",
-    sub: `${tnx ? `${(tnx.change ?? 0) > 0 ? "+" : ""}${((tnx.change ?? 0) * 100).toFixed(0)}bp` : "-"} · 韓3년 ${kr3 ? `${fmt(kr3.rate, 2)}% ${(kr3.change ?? 0) > 0 ? "+" : ""}${((kr3.change ?? 0) * 100).toFixed(0)}bp` : "-"}`,
-    /* 금리 상승은 주식에 나쁜 쪽 — 파랑 */
-    cls: tnx ? ((tnx.change ?? 0) > 0.03 ? "negative" : (tnx.change ?? 0) < -0.03 ? "positive" : "") : "",
-    onClick: tnx ? () => setChart({ kind: "yahoo", symbol: "^TNX", label: "미국 10년물", digits: 3 }) : undefined,
-  });
-  const fxTile = T({
-    k: "fx",
-    label: "환율 (달러/원)",
-    value: usdkrw ? fmt(usdkrw.price, 1) : "…",
-    sub: usdkrw ? `${pct(usdkrw.changeRate)} · ${(usdkrw.changeRate ?? 0) < 0 ? "원화 강세(외인에 유리)" : (usdkrw.changeRate ?? 0) > 0 ? "원화 약세" : "보합"}` : undefined,
-    /* 환율 하락(원화 강세)이 주식에 좋은 쪽 — 빨강 */
-    cls: usdkrw ? ((usdkrw.changeRate ?? 0) < -0.2 ? "positive" : (usdkrw.changeRate ?? 0) > 0.2 ? "negative" : "") : "",
-    onClick: usdkrw ? () => setChart(yahoo(usdkrw, "달러/원", 1)) : undefined,
-  });
-  const sectorTile = T({
-    k: "sector",
-    label: "섹터 흐름",
-    value: themeTop.length ? `${themeTop[0].name.replace(/_/g, " ")} ${pct(themeTop[0].changeRate, 1)}` : upSectors.length ? `${upSectors[0].name} ${pct(upSectors[0].changeRate, 1)}` : "…",
-    sub: `${themeTop.slice(1, 3).map((t) => `${t.name.replace(/_/g, " ")} ${pct(t.changeRate, 1)}`).join(" · ")}${themeBottom.length ? ` · ↓ ${themeBottom[0].name.replace(/_/g, " ")} ${pct(themeBottom[0].changeRate, 1)}` : ""}`,
-    cls: themeTop.length ? "positive" : "",
-    onClick: () => go("#/briefing"),
-    hint: "눌러서 테마 로테이션·주도주",
-  });
-  const cmdTile = T({
-    k: "cmd",
-    label: "원자재 (WTI · 금 · 구리)",
-    value: wti ? `$${fmt(wti.price, 1)}` : "…",
-    sub: `WTI ${pct(wti?.changeRate)} · 금 ${pct(gold?.changeRate)} · 구리 ${pct(copper?.changeRate)}`,
-    cls: "",
-    onClick: wti ? () => setChart({ kind: "yahoo", symbol: "CL=F", label: "WTI", digits: 2 }) : undefined,
-  });
-  const mineTile = T({
-    k: "mine",
-    label: "내 것",
-    value: mine === null ? "…" : mine === "none" ? "주문 세션 없음" : `${mine.pnl >= 0 ? "+" : ""}${Math.round(mine.pnl).toLocaleString()}원`,
-    sub: mine && mine !== "none" ? `${pct(mine.rate)} · 평가 ${Math.round(mine.value / 10_000).toLocaleString()}만 · 감시 ${mine.waiting}건${mine.today ? ` · 오늘 실현 ${Math.round(mine.today).toLocaleString()}` : ""}` : "주문 메뉴에서 세션을 열면 보인다",
-    cls: mine && mine !== "none" ? signClass(mine.pnl) : "",
-    onClick: () => {
-      window.location.hash = "#/order";
-    },
-  });
+  /* ── 주도주: 섹터 위주로 다섯, 그 밑에 종목 칩 ── */
+  const leadSectors = (leaders.data?.sectors ?? []).slice(0, 5);
 
-  const kospiTile = idxTile(kospi, "코스피", "001");
-  const kosdaqTile = idxTile(kosdaq, "코스닥", "101");
-  /* 밤엔 미국 선물·VIX·환율이 앞으로 */
-  if (isNight) tiles.push(futTile, vixTile, fxTile, rateTile, kospiTile, kosdaqTile, flowTile, breadthTile, turnTile, sectorTile, cmdTile, mineTile);
-  else tiles.push(kospiTile, kosdaqTile, futTile, vixTile, flowTile, breadthTile, turnTile, rateTile, fxTile, sectorTile, cmdTile, mineTile);
+  /* ── 관심종목: 오른 것·내린 것 ── */
+  const watchRows = useMemo(() => {
+    if (!watch.data) return null;
+    const quotes = watch.data.quotes;
+    const rows: WatchRow[] = [];
+    for (const i of watch.data.items) {
+      const q = quotes[i.code];
+      if (q) rows.push({ code: i.code, name: i.name, price: q.price, changeRate: q.changeRate });
+    }
+    const up = rows.filter((r) => r.changeRate > 0).sort((a, b) => b.changeRate - a.changeRate);
+    const down = rows.filter((r) => r.changeRate < 0).sort((a, b) => a.changeRate - b.changeRate);
+    const flat = rows.length - up.length - down.length;
+    const avg = rows.length ? rows.reduce((a, r) => a + r.changeRate, 0) / rows.length : 0;
+    return { total: rows.length, up, down, flat, avg };
+  }, [watch.data]);
 
-  /* 브리핑은 문장 단위로 — 한 문단으로 오면 「다.」에서 끊어 3줄만 보인다 */
-  const briefLines = (brief?.text ?? "")
-    .split(/\n+|(?<=다\.)\s+|(?<=요\.)\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const tvMax = Math.max(1, ...(volume.data ?? []).map((v) => v.tv));
+  const newsLeads = news.data?.leads ?? {};
 
   return (
-    <div className="page board">
-      {/* ① 국면 */}
-      <div className={`bd-regime ${regime.level}`}>
-        <div className="bd-regime-main">
+    <div className="page board bd2">
+      {/* ① 지수 띠 — 국면 점 · 코스피 · 코스닥 · 오늘 수급 · 선물 · VIX · 환율 */}
+      <div className="bd-strip">
+        <div className={`bd-cell regime ${regime.level}`} title={regime.reasons.map((r) => r.text).join(" · ")}>
           <span className="bd-regime-dot" />
-          <b>{regime.name}</b>
-          <span className="bd-regime-verdict">{regime.verdict}</span>
+          <span className="bd-cell-l">국면</span>
+          <b className="bd-cell-v">{regime.name}</b>
+          <span className="bd-cell-s">{regime.verdict}</span>
         </div>
-        <div className="bd-regime-why">
-          {regime.reasons.map((r, i) => (
-            <span key={i} className={r.good === true ? "good" : r.good === false ? "bad" : ""}>
-              {r.text}
-            </span>
-          ))}
-          {regime.reasons.length === 0 && <span>판정 근거를 받는 중…</span>}
-        </div>
+        {idxCell(kospi, "코스피", "001")}
+        {idxCell(kosdaq, "코스닥", "101")}
+        {cell(
+          "flow",
+          "오늘 수급 (코스피)",
+          flowK ? `외인 ${eok(flowK.foreign)}` : "…",
+          flowK ? `기관 ${eok(flowK.institution)} · 개인 ${eok(flowK.individual)}` : undefined,
+          flowK ? (flowK.foreign > 0 && flowK.institution > 0 ? "positive" : flowK.foreign < 0 && flowK.institution < 0 ? "negative" : "") : "",
+          () => {
+            window.location.hash = "#/briefing";
+          },
+        )}
+        {cell(
+          "fut",
+          isNight ? "미국 선물 ES" : "야간선물",
+          isNight ? pct(es?.changeRate) : night ? pct(night.changeRate) : "…",
+          isNight ? `야간선물 ${pct(night?.changeRate)}` : `ES ${pct(es?.changeRate)}`,
+          signClass(isNight ? (es?.changeRate ?? 0) : (night?.changeRate ?? 0)),
+          es ? () => setChart({ kind: "yahoo", symbol: es.symbol, label: "US 500 선물", digits: 2, hintRate: es.changeRate ?? undefined }) : undefined,
+        )}
+        {cell(
+          "vix",
+          "VIX",
+          vixQ ? fmt(vixQ.price ?? null, 1) : "…",
+          vixQ ? `${pct(vixQ.changeRate)} · ${(vixQ.price ?? 0) >= 30 ? "공포" : (vixQ.price ?? 0) >= 20 ? "불안" : "안정"}` : undefined,
+          /* 공포지수는 오르면 나쁜 쪽 — 파랑 */
+          vixQ ? ((vixQ.changeRate ?? 0) >= 5 || (vixQ.price ?? 0) >= 30 ? "negative" : (vixQ.changeRate ?? 0) <= -5 ? "positive" : "") : "",
+          vixQ ? () => setChart({ kind: "yahoo", symbol: "^VIX", label: "VIX", digits: 2 }) : undefined,
+        )}
+        {cell(
+          "fx",
+          "달러/원",
+          usdkrw ? fmt(usdkrw.price, 1) : "…",
+          usdkrw ? `${pct(usdkrw.changeRate)} · ${(usdkrw.changeRate ?? 0) < 0 ? "원화 강세" : (usdkrw.changeRate ?? 0) > 0 ? "원화 약세" : "보합"}` : undefined,
+          usdkrw ? ((usdkrw.changeRate ?? 0) < -0.2 ? "positive" : (usdkrw.changeRate ?? 0) > 0.2 ? "negative" : "") : "",
+          usdkrw ? () => setChart({ kind: "yahoo", symbol: usdkrw.symbol, label: "달러/원", digits: 1, hintRate: usdkrw.changeRate ?? undefined }) : undefined,
+        )}
       </div>
 
-      {/* ② 타일 */}
-      <div className="bd-tiles">{tiles}</div>
-
-      {/* ③ AI 브리핑 3줄 */}
-      {brief && briefLines.length > 0 && (
-        <div className="bd-brief">
-          <div className="bd-brief-h">
-            <b>브리핑</b> <small>{brief.label} · {brief.date}</small>
-            <button type="button" className="ord-mk" onClick={() => setBriefOpen((v) => !v)}>
-              {briefOpen ? "접기" : "전체"}
-            </button>
+      {/* ② 다섯 칸 */}
+      <div className="bd-grid">
+        <Panel title="시장 이슈" sub={pulse.data ? `${pulse.data.hours}시간 · 뉴스 ${pulse.data.health.newsArticles}건${pulse.data.health.channelReady ? " · 텔레그램" : ""}` : undefined} more="#/news" cls="issue">
+          {pulse.data?.headline && <div className={`bd-headline${pulse.data.hot ? " hot" : ""}`}>{pulse.data.headline}</div>}
+          <IssueBubbles pulse={pulse.data} onSelectStock={onSelectStock} />
+          <div className="bd-legend">
+            <span className="both">뉴스·텔레그램 둘 다</span>
+            <span className="channel">텔레그램</span>
+            <span className="news">뉴스</span>
+            <span className="fresh">처음 보는 말</span>
           </div>
-          <ul>
-            {(briefOpen ? briefLines : briefLines.slice(0, 3)).map((l, i) => (
-              <li key={i}>{l}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+        </Panel>
+
+        <Panel title="오늘의 주도주" sub={leaders.data ? (leaders.data.intraday ? "장중 중간 모습" : leaders.data.date) : undefined} more="#/leaders" cls="leaders">
+          {!leaders.data && !leaders.error && <div className="bd-empty">주도주를 훑는 중…</div>}
+          {leaders.error && !leaders.data && <div className="bd-empty">{leaders.error}</div>}
+          {leaders.data && leadSectors.length === 0 && <div className="bd-empty">{leaders.data.note}</div>}
+          {leadSectors.map((s) => (
+            <div key={s.name} className="bd-lead">
+              <div className="bd-lead-h">
+                <b>{s.name}</b>
+                <span className={signClass(s.weightedRate)}>{pct(s.weightedRate, 1)}</span>
+                <small>
+                  {s.rising}/{s.members} 상승{s.streak && s.streak > 1 ? ` · ${s.streak}일째` : ""}
+                </small>
+                <i className="bd-lead-bar">
+                  <i style={{ width: `${Math.max(4, Math.min(100, s.breadth))}%` }} />
+                </i>
+              </div>
+              <div className="bd-lead-stocks">
+                {s.leaders.slice(0, 4).map((l) => (
+                  <button key={l.code} type="button" className={`bd-chip ${signClass(l.changeRate)}`} onClick={() => onSelectStock(l.code, l.name)} title={l.tags.join(" · ")}>
+                    {l.name} <b>{pct(l.changeRate, 1)}</b>
+                    {l.mark?.super && <em title="슈퍼신호등">★</em>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </Panel>
+
+        <Panel title="거래대금 상위" sub={volume.data ? "통합 · 억원" : undefined} more="#/volume" cls="volume">
+          {!volume.data && <div className="bd-empty">{volume.error ?? "순위를 받는 중…"}</div>}
+          {volume.data && (
+            <ol className="bd-rank">
+              {volume.data.slice(0, 10).map((v, i) => (
+                <li key={v.code}>
+                  <button type="button" onClick={() => onSelectStock(v.code, v.name)}>
+                    <span className="bd-rank-n">{i + 1}</span>
+                    <span className="bd-rank-name">{v.name}</span>
+                    <span className={`bd-rank-rate ${signClass(v.changeRate)}`}>{pct(v.changeRate)}</span>
+                    <span className="bd-rank-tv">{v.tv >= 10_000 ? `${(v.tv / 10_000).toFixed(2)}조` : `${v.tv.toLocaleString()}억`}</span>
+                    <i className="bd-rank-bar" style={{ width: `${(v.tv / tvMax) * 100}%` }} />
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
+        </Panel>
+
+        <Panel
+          title="관심종목 현황"
+          sub={watchRows ? `${watchRows.total}종목 · 평균 ${pct(watchRows.avg)} · ▲${watchRows.up.length} ▼${watchRows.down.length}${watchRows.flat ? ` ·${watchRows.flat}` : ""}` : undefined}
+          more="#/watchAi"
+          cls="watch"
+        >
+          {!watchRows && <div className="bd-empty">{watch.error ?? "관심종목 시세를 받는 중…"}</div>}
+          {watchRows && watchRows.total === 0 && <div className="bd-empty">관심종목이 비어 있습니다</div>}
+          {watchRows && watchRows.total > 0 && (
+            <div className="bd-watch">
+              <div className="bd-watch-col up">
+                <small>오른 것</small>
+                {watchRows.up.slice(0, 7).map((r) => (
+                  <button key={r.code} type="button" onClick={() => onSelectStock(r.code, r.name)}>
+                    <span>{r.name}</span>
+                    <b className="positive">{pct(r.changeRate)}</b>
+                  </button>
+                ))}
+                {watchRows.up.length === 0 && <span className="bd-dim">없음</span>}
+              </div>
+              <div className="bd-watch-col down">
+                <small>내린 것</small>
+                {watchRows.down.slice(0, 7).map((r) => (
+                  <button key={r.code} type="button" onClick={() => onSelectStock(r.code, r.name)}>
+                    <span>{r.name}</span>
+                    <b className="negative">{pct(r.changeRate)}</b>
+                  </button>
+                ))}
+                {watchRows.down.length === 0 && <span className="bd-dim">없음</span>}
+              </div>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="주요 뉴스" sub={news.data?.items[0] ? `마지막 ${hm(news.data.items[0].at)}` : undefined} more="#/news" cls="news">
+          {!news.data && <div className="bd-empty">{news.error ?? "뉴스를 받는 중…"}</div>}
+          {news.data && (
+            <ul className="bd-news">
+              {news.data.items.slice(0, 8).map((n) => (
+                <li key={n.link}>
+                  <span className="bd-news-t">{hm(n.at)}</span>
+                  <a href={n.link} target="_blank" rel="noreferrer" className="bd-news-title">
+                    {n.title}
+                  </a>
+                  <span className="bd-news-press">{n.press}</span>
+                  {(newsLeads[n.link] ?? []).slice(0, 3).map((s) => (
+                    <button key={s.code} type="button" className="bd-chip tiny" onClick={() => onSelectStock(s.code, s.name)}>
+                      {s.name}
+                    </button>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
 
       {indexDetail && <IndexDetailSheet code={indexDetail} onClose={() => setIndexDetail(null)} />}
       {chart && <YahooChartSheet target={chart} onClose={() => setChart(null)} />}
