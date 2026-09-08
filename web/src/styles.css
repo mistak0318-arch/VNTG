@@ -17510,3 +17510,63 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
   .mn-body { padding-bottom: 0.2rem; }
   .mn-stocks { padding-right: 11rem; }
 }
+
+/* ══ 체결 토스트 · 알림 소리 설정 (2026-09-08) ══════════════════════════════
+   벤티지: "체결되었을 때에는 토스트 메시지 보여주든지 해야겠다. 지금 되었는지 안
+   되었는지 모르겠네." 알림함(종)은 「놓치지 않게」이고 이건 「지금 당장」이다. */
+.nt-host {
+  position: fixed; right: 14px; bottom: 14px; z-index: 4000;
+  display: flex; flex-direction: column; gap: 8px;
+  width: min(360px, calc(100vw - 28px)); pointer-events: none;
+}
+.nt-toast {
+  display: flex; align-items: stretch; gap: 0; pointer-events: auto;
+  border: 1px solid var(--border); border-left: 4px solid var(--muted);
+  border-radius: 10px; background: var(--panel-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: nt-in 0.22s ease-out;
+}
+.nt-toast.info { border-left-color: var(--blue); }
+.nt-toast.warn { border-left-color: #e6a23c; }
+.nt-toast.urgent { border-left-color: var(--red); }
+.nt-toast.out { animation: nt-out 0.2s ease-in forwards; }
+.nt-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;
+  padding: 0.55rem 0.2rem 0.55rem 0.7rem;
+  border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.nt-title { font-size: 0.88rem; font-weight: 700; line-height: 1.35; }
+.nt-body { font-size: 0.78rem; color: var(--muted); line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.nt-go { font-size: 0.7rem; color: var(--blue); margin-top: 1px; }
+.nt-x {
+  flex: none; width: 2rem; border: 0; background: transparent; color: var(--muted);
+  font-size: 0.8rem; cursor: pointer; border-radius: 0 10px 10px 0;
+}
+.nt-x:hover { color: var(--text); background: var(--panel); }
+@keyframes nt-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes nt-out { to { opacity: 0; transform: translateX(20px); } }
+@media (prefers-reduced-motion: reduce) { .nt-toast, .nt-toast.out { animation: none; } }
+/* 폰에선 위로 — 아래는 엄지와 하단 바가 차지한다 */
+@media (max-width: 720px) {
+  .nt-host { right: 8px; left: 8px; bottom: auto; top: 8px; width: auto; }
+  @keyframes nt-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+}
+
+/* 설정 판 */
+.ns-panel { display: flex; flex-direction: column; gap: 0.55rem; }
+.ns-row { display: flex; align-items: flex-start; gap: 0.55rem; cursor: pointer; }
+.ns-row input { margin-top: 0.2rem; flex: none; }
+.ns-row span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ns-row b { font-size: 0.88rem; }
+.ns-row small { font-size: 0.74rem; color: var(--muted); line-height: 1.45; }
+.ns-row.off { opacity: 0.6; cursor: default; }
+.ns-sub { display: flex; flex-direction: column; gap: 0.45rem; padding-left: 1.6rem; }
+.ns-sounds { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.ns-vol { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: var(--muted); }
+.ns-vol input { flex: 1; max-width: 12rem; }
+.ns-vol b { font-variant-numeric: tabular-nums; color: var(--text); }
+.ns-scope { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.15rem; }
+.ns-scope-l { font-size: 0.8rem; color: var(--muted); margin-right: 0.2rem; }
+.ns-test { display: flex; align-items: flex-start; gap: 0.6rem; margin-top: 0.25rem; flex-wrap: wrap; }
+.ns-test small { flex: 1; min-width: 14rem; font-size: 0.72rem; color: var(--muted); line-height: 1.5; }

@@ -7,6 +7,7 @@ import { api, fmtNum, type ProviderUsage, type UsageTotals } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { AiModelPanel } from "../components/AiModelPanel";
 import { AlertConfigPanel } from "../components/AlertConfigPanel";
+import { NotifySoundPanel } from "../components/NotifySoundPanel";
 import { KeywordAlertPanel } from "../components/KeywordAlertPanel";
 import { DisclosureAlertPanel } from "../components/DisclosureAlertPanel";
 import { PickAutoPanel } from "../components/PickAutoPanel";
@@ -385,6 +386,18 @@ export function SettingsPage() {
           뽑아냅니다. 채널 하나가 떠드는 건 노이즈지만, 열 개가 같은 종목을 말하면 신호입니다.
         </p>
         <ChannelCollectPanel />
+      </CollapsibleCard>
+      )}
+
+      {/* 체결 알림 — 이 기기에서 어떻게 울릴지 (2026-09-08). 텔레그램(어디로 보낼까)과 층이 다르다 */}
+      {tab === "publish" && (
+      <CollapsibleCard
+        id="notifySound"
+        scope="device"
+        title="체결 알림 (이 기기)"
+        hint="체결되면 화면에 띄우고 소리·진동으로 알립니다. 기기마다 따로 정합니다."
+      >
+        <NotifySoundPanel />
       </CollapsibleCard>
       )}
 

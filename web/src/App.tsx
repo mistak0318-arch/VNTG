@@ -67,6 +67,8 @@ import { CornerToggle } from "./components/CornerToggle";
 import { ScrollTopButton } from "./components/ScrollTopButton";
 import { AuthExpiredBar } from "./components/AuthExpiredBar";
 import { useStockFocus } from "./useStockFocus";
+import { NotifyToasts } from "./components/NotifyToasts";
+import { armAudio } from "./notifySound";
 import { TelegramPage } from "./pages/TelegramPage";
 import { ScopePage } from "./pages/ScopePage";
 import { GuidePage } from "./pages/GuidePage";
@@ -334,6 +336,8 @@ export default function App() {
   const disguised = excel || note;
   /* 창들을 한 프로그램처럼 묶는다 — 꺼져 있으면 아무 일도 안 한다 */
   const focus = useStockFocus();
+  /* 첫 클릭에 소리 장치를 깨운다 — 자동재생 정책 때문에 사용자 몸짓 안에서여야 한다 (2026-09-08) */
+  useEffect(() => armAudio(), []);
   /* 위장을 끌 때 돌아갈 곳 — 위장이 아니었던 마지막 테마 */
   const prevTheme = useRef<"dark" | "light">("dark");
   useEffect(() => {
@@ -941,6 +945,8 @@ export default function App() {
         반투명이면 계좌 잔고가 비친다.
       */}
       {lock.locked && <ScreenLock onUnlock={lock.unlock} />}
+      {/* 체결 토스트 — 잠금보다 뒤, 본문보다 앞. 잠긴 화면 위에 체결 내용이 뜨면 안 된다 */}
+      {!lock.locked && <NotifyToasts />}
       {/* 엑셀 껍데기 — 리본·행번호·시트탭. 잠금보다는 뒤, 본문보다는 앞 */}
       {excel && (
         <ExcelChrome
