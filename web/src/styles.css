@@ -9162,7 +9162,13 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 .bf-bar.sell { background: var(--blue); }
 /* 외국계 줄 */
 .bf-fx { flex-wrap: wrap; }
-.bf-fx-sum { display: inline-flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.bf-fx-sum {
+  display: inline-flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap; font-size: 0.85rem; font-variant-numeric: tabular-nums;
+  /* 단추다 — 눌러서 시간별. 창구 줄과 같은 손 */
+  border: none; background: none; color: inherit; font: inherit; padding: 0.15rem 0.35rem; margin-left: -0.35rem; border-radius: 6px; cursor: pointer; text-align: left;
+}
+.bf-fx-sum:hover { background: var(--panel-2); }
+.bf-fx-sum.on { background: var(--panel-2); outline: 1px solid var(--border); }
 .bf-fx-sum em { font-style: normal; color: var(--muted); }
 .bf-fx-sum b { font-size: 0.95rem; }
 .bf-fx-unit { font-style: normal; font-size: 0.7rem; color: var(--muted); }

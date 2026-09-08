@@ -69,6 +69,15 @@ export interface BrokerPoint {
   t: string;
   /** 창구코드 → 그 시각의 누적 순매수(매수−매도) */
   net: Record<string, number>;
+  /**
+   * 외국계 합계·프로그램 순매수 — 그 시각의 누적 (2026-09-08 — 벤티지 "외국계랑
+   * 프로그램 클릭하면 다른 거래원들처럼 밑에 그래프 나와서 추이 볼 수 있도록").
+   * 창구는 실시간(0F)이 있지만 이 둘은 REST 에만 있어서 **화면이 열려 있는 동안**
+   * 30초마다 여기 찍는다. 옛 점에는 없을 수 있다.
+   */
+  fx?: { sell: number; buy: number };
+  /** 백만원 */
+  prog?: number;
 }
 
 export interface BrokerFlow {
@@ -90,6 +99,8 @@ export interface BrokerFlow {
   foreignBuy: number;
   /** 매수 − 매도. 키움 값에서 */
   foreignNet: number;
+  /** 프로그램 순매수(백만원). 못 받으면 null */
+  program: number | null;
   /**
    * @deprecated 상위 5 이름으로 센 옛 값. 화면이 「상위5 내」라고 적던 자리에만 남긴다.
    */
@@ -139,16 +150,35 @@ export async function brokerFlow(client: KiwoomClient, code: string): Promise<Br
     foreignBuy: 0,
     foreignNet: 0,
     foreignNetTop5: 0,
+    program: null,
     series: [],
     names: {},
     error: null,
   };
 
   try {
-    const { data } = await client.request<Record<string, unknown>>(RKINFO, "ka10040", {
-      // 통합(_AL) — KRX 단독은 NXT 물량 창구(키움 등)가 반토막으로 보였다 (2026-08-26)
-      stk_cd: alCode(bare),
-    });
+    const { date: todayKst } = kstNow();
+    const today = todayKst.replace(/-/g, "");
+    const [{ data }, progRes] = await Promise.all([
+      client.request<Record<string, unknown>>(RKINFO, "ka10040", {
+        // 통합(_AL) — KRX 단독은 NXT 물량 창구(키움 등)가 반토막으로 보였다 (2026-08-26)
+        stk_cd: alCode(bare),
+      }),
+      /* 프로그램 순매수 — 종합 탭(stockSummary)과 같은 TR·같은 줄. 시계열에 찍으려고 여기서도 */
+      client
+        .request<Record<string, unknown>>("/api/dostk/mrkcond", "ka90013", { stk_cd: alCode(bare), date: today, amt_qty_tp: "1" })
+        .catch(() => null),
+    ]);
+    let prog: number | null = null;
+    const progRows = Array.isArray(progRes?.data?.stk_daly_prm_trde_trnsn)
+      ? (progRes!.data.stk_daly_prm_trde_trnsn as Record<string, unknown>[])
+      : [];
+    if (progRows.length > 0) {
+      const p = progRows.find((r) => String(r.dt ?? "") === today) ?? progRows[0];
+      const raw = String(p.prm_netprps_amt ?? "").replace(/[+,\s]/g, "");
+      const n = Number(raw);
+      if (raw !== "" && Number.isFinite(n)) prog = n;
+    }
 
     const side = (kind: "sel" | "buy"): BrokerSide[] => {
       const out: BrokerSide[] = [];
@@ -200,9 +230,11 @@ export async function brokerFlow(client: KiwoomClient, code: string): Promise<Br
     const cur = store[bare];
     const entry = cur && cur.date === date ? cur : { date, points: [], names: {} };
     // 같은 분에 여러 번 부르면 마지막 것으로 덮는다 — 1분 간격이면 충분하다
+    const point: BrokerPoint = { t: hm, net, fx: { sell: foreignSell, buy: foreignBuy } };
+    if (prog !== null) point.prog = prog;
     const last = entry.points[entry.points.length - 1];
-    if (last && last.t === hm) entry.points[entry.points.length - 1] = { t: hm, net };
-    else entry.points.push({ t: hm, net });
+    if (last && last.t === hm) entry.points[entry.points.length - 1] = point;
+    else entry.points.push(point);
     entry.names = { ...entry.names, ...names };
     store[bare] = entry;
     // 종목이 늘어도 파일이 안 커지게 — 오늘 것만 남긴다
@@ -218,6 +250,7 @@ export async function brokerFlow(client: KiwoomClient, code: string): Promise<Br
       foreignBuy,
       foreignNet,
       foreignNetTop5,
+      program: prog,
       series: entry.points,
       names: entry.names,
     };

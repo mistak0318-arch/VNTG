@@ -127,7 +127,7 @@ export function BrokerFlowPanel({ code }: { code: string }) {
    * 아래에 로딩·오류로 일찍 돌아가는 길이 있어서, 그 뒤에 두면 렌더마다 훅 개수가
    * 달라져 React 가 터진다.
    */
-  const series = useBrokerSeries(code, picked);
+  const series = useBrokerSeries(code, picked && !picked.startsWith("__") ? picked : null);
   /* 추정가격 칸과 주가 선 — 창구가 산 자리가 어느 가격이었나 */
   const prices = useMinutePrices(code, series.day || undefined);
   /*
@@ -137,7 +137,37 @@ export function BrokerFlowPanel({ code }: { code: string }) {
    * 읽는 짝이라 한 줄에 있어야 한다. 백만원 단위라 억으로 접는다.
    */
   const { data: summary } = useLive(() => api.stockSummary(code), [code], 60_000);
-  const program = summary?.program ?? null;
+  /* 서버가 거래원 조회에 같이 실어 주면 그것, 아직 옛 서버면 summary 것 */
+  const program = data?.program ?? summary?.program ?? null;
+
+  /*
+   * 외국계·프로그램도 누르면 시간별 (2026-09-08 — 벤티지 "외국계랑 프로그램 클릭하면
+   * 다른 거래원들처럼 밑에 그래프 나와서 추이 볼 수 있도록").
+   *
+   * 창구는 실시간(0F)이 하루 종일 쌓이지만 이 둘은 REST 에만 있어서, 서버가 거래원을 조회할
+   * 때(화면이 열려 있는 동안 30초마다) 시계열에 같이 찍어 둔 것을 읽는다. 그래서 창구 그래프보다
+   * 점이 성글고, 화면을 안 본 시간은 빈다 — 밑에 그렇게 적는다.
+   */
+  const special: FlowSeriesData | null =
+    picked === "__fx" || picked === "__prog"
+      ? {
+          pts: (data?.series ?? [])
+            .map((p): FlowSample | null => {
+              if (picked === "__fx") {
+                if (!p.fx) return null;
+                return { t: p.t, buy: p.fx.buy, sell: p.fx.sell, net: p.fx.buy - p.fx.sell };
+              }
+              if (p.prog === undefined) return null;
+              /* 프로그램은 순매수만 있다 — 백만원을 억으로 접어 넣는다 */
+              const eok = Math.round(p.prog / 100);
+              return { t: p.t, buy: Math.max(0, eok), sell: Math.max(0, -eok), net: eok };
+            })
+            .filter((x): x is FlowSample => x !== null),
+          day: "",
+          stale: false,
+          live: true,
+        }
+      : null;
 
   if (loading && !data) return <div className="empty">거래원 불러오는 중…</div>;
   if (error && !data) return <div className="error-banner">{error}</div>;
@@ -191,7 +221,12 @@ export function BrokerFlowPanel({ code }: { code: string }) {
           외국계 합계 — **키움이 주는 값** (2026-09-08). 여태 상위 5 창구 이름으로 세서
           상위 5 가 전부 국내 증권사인 날은 0 이었다. 이제 응답의 frgn_*_prsm_sum 을 그대로.
         */}
-        <span className="bf-fx-sum">
+        <button
+          type="button"
+          className={`bf-fx-sum${picked === "__fx" ? " on" : ""}`}
+          onClick={() => setPicked(picked === "__fx" ? null : "__fx")}
+          title="눌러서 시간대별 보기"
+        >
           <em>외국계</em>
           <span className="negative">매도 {fmtNum(data.foreignSell)}</span>
           <span className="positive">매수 {fmtNum(data.foreignBuy)}</span>
@@ -200,16 +235,21 @@ export function BrokerFlowPanel({ code }: { code: string }) {
             {fmtNum(data.foreignNet)}
           </b>
           <i className="bf-fx-unit">주</i>
-        </span>
+        </button>
         {program !== null && (
-          <span className="bf-fx-sum">
+          <button
+            type="button"
+            className={`bf-fx-sum${picked === "__prog" ? " on" : ""}`}
+            onClick={() => setPicked(picked === "__prog" ? null : "__prog")}
+            title="눌러서 시간대별 보기"
+          >
             <em>프로그램</em>
             <b className={signClass(program)}>
               순매수 {program > 0 ? "+" : ""}
               {fmtNum(Math.round(program / 100))}
             </b>
             <i className="bf-fx-unit">억</i>
-          </span>
+          </button>
         )}
       </div>
 
@@ -218,31 +258,56 @@ export function BrokerFlowPanel({ code }: { code: string }) {
         {side(data.buy, "buy")}
       </div>
 
-      {picked && (
-        <section className="card">
-          <h3 className="section-heading">
-            {data.names[picked] ?? picked} — 시간별 매매
-            <button className="filter-btn" onClick={() => setPicked(null)}>
-              닫기
-            </button>
-          </h3>
-          {picks.pts.length < 2 ? (
-            <div className="page-note">
-              아직 점이 <b>{picks.pts.length}개</b>뿐입니다. 서버가 실시간으로 30초마다 쌓으므로
-              <b>화면을 안 보고 있어도</b> 늘어납니다 — 장중에 조금 기다리면 채워집니다.
-              (장이 닫혀 있으면 더 안 쌓입니다)
-            </div>
-          ) : (
-            <FlowSeries
-              samples={picks.pts}
-              unit="주"
-              unitLabel="(주)"
-              asOf={picks.stale ? picks.day : undefined}
-              price={prices.size > 0 ? prices : undefined}
-            />
-          )}
-        </section>
-      )}
+      {picked &&
+        (() => {
+          const isSpecial = special !== null;
+          const shown = isSpecial ? special : picks;
+          const label = picked === "__fx" ? "외국계 합계" : picked === "__prog" ? "프로그램" : (data.names[picked] ?? picked);
+          const unit = picked === "__prog" ? "억" : "주";
+          return (
+            <section className="card">
+              <h3 className="section-heading">
+                {label} — 시간별 {picked === "__prog" ? "순매수" : "매매"}
+                <button className="filter-btn" onClick={() => setPicked(null)}>
+                  닫기
+                </button>
+              </h3>
+              {shown.pts.length < 2 ? (
+                <div className="page-note">
+                  아직 점이 <b>{shown.pts.length}개</b>뿐입니다.{" "}
+                  {isSpecial ? (
+                    <>
+                      외국계·프로그램은 키움이 REST 로만 주어서 <b>이 화면이 열려 있는 동안</b> 30초마다
+                      쌓입니다 — 열어 두고 조금 기다리면 채워집니다.
+                    </>
+                  ) : (
+                    <>
+                      서버가 실시간으로 30초마다 쌓으므로 <b>화면을 안 보고 있어도</b> 늘어납니다 — 장중에
+                      조금 기다리면 채워집니다.
+                    </>
+                  )}{" "}
+                  (장이 닫혀 있으면 더 안 쌓입니다)
+                </div>
+              ) : (
+                <>
+                  <FlowSeries
+                    samples={shown.pts}
+                    unit={unit}
+                    unitLabel={`(${unit})`}
+                    asOf={shown.stale ? shown.day : undefined}
+                    price={prices.size > 0 ? prices : undefined}
+                  />
+                  {isSpecial && (
+                    <p className="table-note">
+                      외국계·프로그램은 이 화면이 열려 있는 동안만 쌓입니다 — 안 본 시간은 빕니다.
+                      {picked === "__prog" && " 프로그램은 순매수 한 줄이라 매수·매도 막대는 부호만 가릅니다."}
+                    </p>
+                  )}
+                </>
+              )}
+            </section>
+          );
+        })()}
 
       <div className="table-note">
         <b>증감</b>이 핵심입니다 — 누적만 보면 아침에 크게 산 창구가 하루 종일 1위로 남습니다.

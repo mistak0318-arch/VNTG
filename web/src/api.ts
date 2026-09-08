@@ -6013,7 +6013,10 @@ export interface BrokerFlow {
   /** @deprecated 상위 5 이름으로 센 옛 값 */
   foreignNetTop5: number;
   /** 우리가 쌓은 시간대별 — 화면을 안 본 시간은 빈다 */
-  series: { t: string; net: Record<string, number> }[];
+  /** 프로그램 순매수(백만원). 못 받으면 null */
+  program: number | null;
+  /** fx·prog 는 REST 라 화면이 열려 있는 동안만 찍힌다 — 옛 점엔 없을 수 있다 */
+  series: { t: string; net: Record<string, number>; fx?: { sell: number; buy: number }; prog?: number }[];
   names: Record<string, string>;
   error: string | null;
 }
