@@ -314,7 +314,13 @@ async function fetchOne(target: {
   };
 
   try {
-    const url = `${YAHOO_BASE}/${encodeURIComponent(target.symbol)}?range=1d&interval=1d`;
+    /*
+     * ⚠️ range=1d 는 **장이 닫힌 뒤 전일 종가를 잃는다** (2026-09-08 — 벤티지 "금리 부분이 업데이트가
+     * 안 되는 거 같네?"). 마감 뒤엔 1일 창의 chartPreviousClose 가 오늘 종가와 같아져 변화가 0.000 이
+     * 됐다(미국 노동절 연휴 뒤 금리 넷이 전부 0.000%p). 5일 일봉을 받아 「오늘 세션 전 마지막 종가」를
+     * 직접 집는다 — 장중이든 마감 뒤든 같은 답이 나온다. 호출 수는 같다(한 번).
+     */
+    const url = `${YAHOO_BASE}/${encodeURIComponent(target.symbol)}?range=5d&interval=1d`;
     const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     if (!res.ok) {
       void recordApiCall("yahoo", target.symbol, res.status === 429 ? "rateLimited" : "failed");
@@ -324,16 +330,36 @@ async function fetchOne(target: {
     void recordApiCall("yahoo", target.symbol, "ok");
 
     const body = (await res.json()) as {
-      chart?: { result?: Array<{ meta?: Record<string, unknown> }> };
+      chart?: {
+        result?: Array<{
+          meta?: Record<string, unknown>;
+          timestamp?: number[];
+          indicators?: { quote?: Array<{ close?: Array<number | null> }> };
+        }>;
+      };
     };
-    const meta = body.chart?.result?.[0]?.meta;
+    const r0 = body.chart?.result?.[0];
+    const meta = r0?.meta;
     if (!meta) {
       base.error = "응답 형식 오류";
       return base;
     }
 
     const price = Number(meta.regularMarketPrice);
-    const prev = Number(meta.chartPreviousClose ?? meta.previousClose);
+    /* 오늘 세션(regularMarketTime)보다 12시간 넘게 앞선 마지막 일봉 종가 = 전일 종가. 없으면 meta 값 */
+    const mt = Number(meta.regularMarketTime) || 0;
+    let prev = NaN;
+    const ts = r0?.timestamp ?? [];
+    const closes = r0?.indicators?.quote?.[0]?.close ?? [];
+    for (let i = ts.length - 1; i >= 0; i--) {
+      const c = closes[i];
+      if (c === null || c === undefined || !Number.isFinite(c)) continue;
+      if (mt && ts[i] < mt - 12 * 3600) {
+        prev = c;
+        break;
+      }
+    }
+    if (!Number.isFinite(prev)) prev = Number(meta.chartPreviousClose ?? meta.previousClose);
     if (Number.isFinite(price)) base.price = price;
     if (Number.isFinite(price) && Number.isFinite(prev) && prev !== 0) {
       base.change = price - prev;
