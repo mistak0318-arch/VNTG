@@ -303,7 +303,12 @@ function readPrefill(): Prefill {
     watchBasis: (["price", "prevClose", "avg", "now"].includes(q.get("wb") ?? "") ? q.get("wb") : null) as WatchBasis | null,
     watchPct: (q.get("wp") ?? "").replace(/[^-\d.]/g, ""),
     watchExec: (["market", "limit_trigger", "limit_now", "limit_fixed"].includes(q.get("wx") ?? "") ? q.get("wx") : null) as WatchExec | null,
-    key: raw,
+    /*
+     * 열쇠에 시각을 붙인다 (2026-09-08 — 벤티지 "포지션에서 매도 버튼이 잘 동작을 안 하네").
+     * 열쇠가 주소 문자열뿐이라 **같은 종목 매도를 두 번째 누르면** 같은 쪽지로 보고 폼이 안
+     * 바뀌었다(effect 가 key 로만 다시 돈다). 눌릴 때마다 새 쪽지여야 한다.
+     */
+    key: `${raw}#${Date.now()}`,
   };
 }
 
@@ -1204,6 +1209,21 @@ function OrderForm({
    * 링크로 새 값이 오면 갈아 끼운다. **비어 있는 칸은 안 건드린다** — 사용자가 손으로
    * 고쳐 둔 값을 링크가 지우면 안 된다. 다만 링크가 값을 명시했으면 그쪽이 이긴다.
    */
+  /*
+   * **가격 칸을 현재가로 미리 채운다** (2026-09-08 — 벤티지 "처음 들어가면 해당 가격이 자동
+   * 입력되도록. 지금은 일일이 클릭해야 되네"). 종목마다 한 번, 칸이 비어 있을 때만 — 손으로
+   * 고친 값이나 링크가 준 값은 안 건드린다. 시장가는 가격이 없으니 안 채운다.
+   */
+  const autoPricedFor = useRef<string>("");
+  useEffect(() => {
+    if (!code || !quote || !(quote.price > 0)) return;
+    if (autoPricedFor.current === code) return;
+    if (tradeType === "3") return;
+    autoPricedFor.current = code;
+    if (price === "") setPrice(String(Math.round(quote.price)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, quote?.price]);
+
   useEffect(() => {
     if (!prefill.code) return;
     setCode(prefill.code);

@@ -15063,10 +15063,15 @@ tr:hover .sd-del { opacity: 0.75; }
 .ord-head .ord-pick { flex: 1 1 0; min-width: 0; }
 .ord-head .ord-side { flex: 1 1 0; min-width: 0; }
 
+/*
+ * 줄 높이 auto / 1fr (2026-09-08 — 벤티지 "매도 버튼이 너무 아래에 있음").
+ * 호가가 두 줄을 세로로 다 쓰는데 `auto auto` 면 남는 높이를 두 줄이 반씩 나눠 가져서
+ * 주문 단추가 호가 한가운데쯤에 떠 있었다. 남는 높이는 아랫줄에만 — 단추는 입력칸 바로 밑.
+ */
 .ord-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 330px;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto 1fr;
   gap: 0.8rem;
   align-items: start;
 }
