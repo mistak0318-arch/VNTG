@@ -269,7 +269,18 @@ export class KiwoomClient {
   }
 }
 
+let envClient: KiwoomClient | null = null;
+
+/**
+ * 조회용 클라이언트 — **프로세스에 하나**다 (2026-09-08).
+ *
+ * 키움은 같은 앱키로 토큰을 새로 내면 **앞 토큰을 폐기한다.** 그래서 같은 키로 클라이언트를 둘
+ * 만들면 둘이 번갈아 서로의 토큰을 죽인다. 실전 전환 때 조회용과 주문용에 같은 키(소액 계좌
+ * 하나)를 넣자 증거금·신용 조회가 전부 실패한 것이 이것이다. 한 번 만든 것을 돌려준다 —
+ * 주문 쪽(`orderClient`)은 키가 같으면 이걸 같이 쓴다.
+ */
 export function createKiwoomClientFromEnv(): KiwoomClient {
+  if (envClient) return envClient;
   const appKey = process.env.KIWOOM_APP_KEY;
   const appSecret = process.env.KIWOOM_APP_SECRET;
   if (!appKey || !appSecret) {
@@ -278,5 +289,6 @@ export function createKiwoomClientFromEnv(): KiwoomClient {
     );
   }
   const isMock = process.env.KIWOOM_IS_MOCK === "true";
-  return new KiwoomClient({ appKey, appSecret, isMock });
+  envClient = new KiwoomClient({ appKey, appSecret, isMock });
+  return envClient;
 }

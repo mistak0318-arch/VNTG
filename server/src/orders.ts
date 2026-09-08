@@ -6,7 +6,7 @@ import type { Request, Response } from "express";
 import { peerIp, sameHex, scryptHex } from "./auth.js";
 import { priceMap } from "./cisRun.js";
 import { ensureLiveCode, peekRealtime } from "./realtimeHub.js";
-import { KiwoomApiError, KiwoomClient } from "./kiwoomClient.js";
+import { createKiwoomClientFromEnv, KiwoomApiError, KiwoomClient } from "./kiwoomClient.js";
 import { pushNotice, stockLink } from "./notifyCenter.js";
 import { sendTelegram } from "./telegram.js";
 
@@ -418,12 +418,24 @@ export function hardCeiling(): { maxOrderKrw: number | null; maxDailyKrw: number
 
 let orderClientCache: KiwoomClient | null | undefined;
 
-/** 주문 전용 앱키의 클라이언트 — 조회용 앱키와 **섞지 않는다**(토큰이 서로를 죽인다) */
+/**
+ * 주문 클라이언트.
+ *
+ * 키움은 같은 앱키로 토큰을 새로 내면 앞 토큰을 폐기한다. 그래서 원칙은 조회용과 **다른 키**였다.
+ * 그런데 실전은 소액 계좌 하나에 키 하나라(2026-09-08 벤티지 확인), 같은 키를 두 클라이언트가
+ * 쓰면 둘이 번갈아 서로를 죽인다 — 실전 전환 직후 증거금·신용 조회가 전부 실패한 원인.
+ * **키가 같으면 조회 클라이언트를 그대로 쓴다.** 모의/실전이 서로 다르면 같이 못 쓰므로 그땐 따로.
+ */
 export function orderClient(): KiwoomClient | null {
   if (orderClientCache !== undefined) return orderClientCache;
   const key = (process.env.KIWOOM_ORDER_APP_KEY ?? "").trim();
   const secret = (process.env.KIWOOM_ORDER_APP_SECRET ?? "").trim();
-  orderClientCache = key && secret ? new KiwoomClient({ appKey: key, appSecret: secret, isMock: orderIsMock() }) : null;
+  if (!key || !secret) {
+    orderClientCache = null;
+    return null;
+  }
+  const sameAsQuery = key === (process.env.KIWOOM_APP_KEY ?? "").trim() && orderIsMock() === (process.env.KIWOOM_IS_MOCK === "true");
+  orderClientCache = sameAsQuery ? createKiwoomClientFromEnv() : new KiwoomClient({ appKey: key, appSecret: secret, isMock: orderIsMock() });
   return orderClientCache;
 }
 
@@ -1963,6 +1975,11 @@ export interface AutoWatch {
   ticket: OrderTicket;
   spec: WatchSpec;
   status: "waiting" | "fired" | "filled" | "failed" | "expired" | "cancelled";
+  /**
+   * 모의투자 때 건 것인가 (2026-09-08). 실전으로 넘어가면 모의 때 건 감시는 만료시킨다 —
+   * 모의 잔고 기준으로 건 매도·매수가 실전 계좌에 나가면 안 된다. 없으면(옛 줄) 모의로 본다.
+   */
+  mock?: boolean;
   firedAt?: string;
   /** 발동 순간의 값 */
   firePrice?: number;
@@ -2068,6 +2085,7 @@ async function addAutoWatch(t: OrderTicket, ip: string, parentId?: string, group
     ticket: { ...t, watch: spec },
     spec,
     status: "waiting",
+    mock: orderIsMock(),
     origin: "watch",
     ...(parentId ? { parentId } : {}),
     ...(groupId ? { groupId } : {}),
@@ -2205,8 +2223,24 @@ async function runAutoWatch(main: KiwoomClient): Promise<void> {
   watchFiring = true;
   try {
     let changed = false;
+    /*
+     * 모드가 다른 감시는 만료 (2026-09-08 — 벤티지 "포지션도 모의계좌 포지션이 살아 있는 듯").
+     * 실전으로 바꾼 뒤 모의 때 건 감시가 남아 있으면 실전 계좌에 주문이 나간다 — 모의 잔고의
+     * 삼성전자 74주 매도 감시는 실전엔 팔 게 없어 거절로 끝나겠지만, 매수 감시는 실제로 산다.
+     */
+    for (const r of waiting) {
+      const rowMock = r.mock ?? true;
+      if (rowMock !== orderIsMock()) {
+        r.status = "expired";
+        r.firedAt = new Date().toISOString();
+        r.msg = rowMock ? "모의투자 때 건 감시 — 실전 전환으로 만료" : "실전 때 건 감시 — 모의 전환으로 만료";
+        changed = true;
+        await appendLog({ kind: "watch", side: r.ticket.side, code: r.ticket.code, name: r.ticket.name, qty: r.ticket.qty, msg: `감시 만료 (${r.id}) — ${r.msg}` });
+      }
+    }
     /* 만료 — 유효한 마지막 날의 장이 끝났거나 날이 지났다 */
     for (const r of waiting) {
+      if (r.status !== "waiting") continue;
       if (r.spec.validUntil < date || (r.spec.validUntil === date && minute > WATCH_TO)) {
         r.status = "expired";
         r.firedAt = new Date().toISOString();
