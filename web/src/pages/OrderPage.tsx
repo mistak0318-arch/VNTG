@@ -270,15 +270,42 @@ function LegsEditor({ legs, onChange, total, basisPrice, disabled }: { legs: Wat
       {legs.map((l, i) => {
         const tr = basisPrice > 0 && Number(l.pct) ? toTick(basisPrice * (1 + Number(l.pct) / 100)) : 0;
         return (
-          <div key={i} className={`ord-leg ${Number(l.pct) < 0 ? "loss" : "gain"}`}>
+          <div key={i} className={`ord-leg ${Number(l.pct) <= 0 ? "loss" : "gain"}`}>
             <span className="ord-leg-n">{i + 1}단계</span>
+            {/*
+              부호는 단추로, 숫자는 절대값으로 (2026-09-08 — 벤티지 "- 표시가 안먹히네.
+              차라리 상승 하락시 버튼 만들고 앞에는 숫자 쓰는게 낫겠다").
+
+              전엔 한 칸에 "-5" 를 치게 했는데 `Number("-")` 가 NaN 이라 `-` 를 치는 순간
+              0 으로 지워졌다 — **음수를 넣을 길이 없었다.** 폰에서 `-` 키 찾기도 일이다.
+              단추를 누르면 부호가 뒤집히고 색이 따라 바뀐다. 0 은 하락으로 친다 —
+              출구 계획은 손절이 기본이라, 숫자를 지웠다 다시 치면 손절이 되어야 한다.
+            */}
+            {(() => {
+              const v = Number(l.pct);
+              const down = v <= 0;
+              return (
+                <button
+                  type="button"
+                  className={`ord-leg-dir ${down ? "loss" : "gain"}`}
+                  disabled={disabled}
+                  onClick={() => set(i, { pct: down ? Math.abs(v) || 5 : -Math.abs(v) })}
+                  title={down ? "하락하면 (손절) — 눌러서 상승으로" : "상승하면 (익절) — 눌러서 하락으로"}
+                >
+                  {down ? "▼ 하락" : "▲ 상승"}
+                </button>
+              );
+            })()}
             <input
               className="ord-in ord-watch-in sm"
               inputMode="decimal"
-              value={String(l.pct)}
+              value={String(Math.abs(Number(l.pct)))}
               disabled={disabled}
-              onChange={(e) => set(i, { pct: Number(e.target.value.replace(/[^-\d.]/g, "")) || 0 })}
-              title="기준가 대비 % — 음수 손절, 양수 익절"
+              onChange={(e) => {
+                const abs = Number(e.target.value.replace(/[^\d.]/g, "")) || 0;
+                set(i, { pct: Number(l.pct) <= 0 ? -abs : abs });
+              }}
+              title="기준가 대비 몇 %"
             />
             <span className="ord-watch-unit">%에</span>
             <input

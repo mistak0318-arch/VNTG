@@ -16736,6 +16736,14 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-leg.loss { border-left-color: var(--blue); }
 .ord-leg.gain { border-left-color: var(--red); }
 .ord-leg-n { font-size: 0.74rem; color: var(--muted); flex: 0 0 2.6rem; }
+/* 방향 단추 — 손절(하락)은 파랑, 익절(상승)은 빨강. 단계 줄의 왼쪽 금과 같은 색 */
+.ord-leg-dir {
+  flex: none; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer; white-space: nowrap;
+}
+.ord-leg-dir.loss { border-color: color-mix(in srgb, var(--blue) 60%, var(--border)); color: var(--blue); }
+.ord-leg-dir.gain { border-color: color-mix(in srgb, var(--red) 60%, var(--border)); color: var(--red); }
+.ord-leg-dir:disabled { opacity: 0.4; cursor: default; }
 .ord-leg-est { font-size: 0.78rem; color: var(--muted); }
 .ord-leg-x { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .ord-legs-foot { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; font-size: 0.8rem; }
