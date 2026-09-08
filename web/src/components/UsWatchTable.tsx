@@ -1,5 +1,6 @@
 import type { UsQuoteRow } from "../api";
 import { sideQuote, usFeActive } from "../usSession";
+import { flagOfSymbol } from "../yahooFlag";
 import { useDragOrder } from "../useDragOrder";
 import { fid, useRealtime } from "../useRealtime";
 import { SortableTh, useSortableTable } from "../useSortableTable";
@@ -293,7 +294,8 @@ export function UsWatchTable({
                 {/* 이름이 길면 잘린다(CSS) — 티커는 안 잘리고, 전체 이름은 마우스로 본다 */}
                 <td className="sticky-col" title={`${s.symbol} ${s.name}`}>
                   {/* 나라가 섞이니 국기를 앞에 — 78.89 가 달러인지 엔인지 알아야 한다 */}
-                  <span className="uw-flag">{s.flag ?? (s.symbol.includes(".") ? "🇪🇺" : "")}</span>
+                  {/* 한투가 준 깃발이 먼저, 없으면 야후 꼬리로 (2026-09-08 — 키옥시아가 EU 였다) */}
+                  <span className="uw-flag">{s.flag ?? flagOfSymbol(s.symbol)}</span>
                   <button
                     type="button"
                     className="usb-open"
