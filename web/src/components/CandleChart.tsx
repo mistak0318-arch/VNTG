@@ -39,8 +39,28 @@ export interface Candle {
  */
 const LOCK_KEY = "vntg.chart.lock";
 
-function lockedPref(): boolean {
+/**
+ * 잠금이 **어디까지 미치나** (2026-09-08).
+ *
+ * 벤티지: "차트카드 3개 띄워놓고 하나에서 자물쇠 거니깐 나머지도 똑같이 그러네."
+ * 8/26 에는 반대 요구였다 — "보드 차트가 자꾸 드래그된다" → 한 번 잠그면 모든 창의
+ * 모든 차트에. 둘 다 맞다. 화면 옮길 때마다 또 잠그기 싫은 것과, 보드에 셋을 띄워 놓고
+ * 하나만 잠그고 싶은 것은 **자리가 다르다.**
+ *
+ * 그래서 `lockScope` 가 있으면(보드 카드 — 인스턴스 id) 그 차트만의 자물쇠고, 없으면
+ * (종목상세·미니창 등) 예전처럼 전역이다. 보드 카드는 처음엔 전역값을 물려받아 시작한다 —
+ * 전역이 잠겨 있는데 새 카드가 풀려서 뜨면 8/26 의 그 문제로 돌아간다.
+ */
+function lockKeyOf(scope?: string): string {
+  return scope ? `${LOCK_KEY}:${scope}` : LOCK_KEY;
+}
+
+function lockedPref(scope?: string): boolean {
   try {
+    if (scope) {
+      const own = localStorage.getItem(lockKeyOf(scope));
+      if (own !== null) return own === "1";
+    }
     return localStorage.getItem(LOCK_KEY) === "1";
   } catch {
     return false;
@@ -229,9 +249,12 @@ export function CandleChart({
   height = 320,
   sizeTick = 0,
   fitKey = "",
+  lockScope,
 }: {
   candles: Candle[];
   intraday?: boolean;
+  /** 자물쇠를 이 차트만의 것으로 — 보드 카드가 인스턴스 id 를 준다. 없으면 전역 */
+  lockScope?: string;
   /** 차트 높이(px). 전체화면에서 화면 높이만큼 키운다 */
   height?: number;
   /**
@@ -610,20 +633,20 @@ export function CandleChart({
   );
 
   /* 자물쇠 — 전역 기억. ref 는 차트 생성 시점(위 effect)에서 최신값을 읽기 위한 것 */
-  const [locked, setLocked] = useState(lockedPref);
+  const [locked, setLocked] = useState(() => lockedPref(lockScope));
   const lockRef = useRef(locked);
   lockRef.current = locked;
   function toggleLock() {
     const next = !locked;
     setLocked(next);
     try {
-      localStorage.setItem(LOCK_KEY, next ? "1" : "0");
+      localStorage.setItem(lockKeyOf(lockScope), next ? "1" : "0");
     } catch {
       /* 저장 못 해도 이번 화면에는 적용된다 */
     }
     chartRef.current?.applyOptions(scrollOptions(next));
-    // 같은 화면의 다른 차트에도 그 자리에서 — 「전역」이라 해 놓고 새로고침해야 먹으면 거짓말이다
-    window.dispatchEvent(new CustomEvent("vntg-chart-lock", { detail: next }));
+    // 전역일 때만 다른 차트에 알린다 — 「전역」이라 해 놓고 새로고침해야 먹으면 거짓말이다
+    if (!lockScope) window.dispatchEvent(new CustomEvent("vntg-chart-lock", { detail: next }));
   }
 
   /*
@@ -635,6 +658,8 @@ export function CandleChart({
    * 잠금이 **모든 창의 모든 차트에 그 자리에서** 걸리게 한다.
    */
   useEffect(() => {
+    /* 제 자물쇠를 가진 차트(보드 카드)는 전역 신호를 안 듣는다 — 그게 이 기능의 뜻이다 */
+    if (lockScope) return;
     const apply = (v: boolean) => {
       setLocked(v);
       chartRef.current?.applyOptions(scrollOptions(v));
@@ -649,7 +674,7 @@ export function CandleChart({
       window.removeEventListener("vntg-chart-lock", onLocal);
       window.removeEventListener("storage", onStorage);
     };
-  }, []);
+  }, [lockScope]);
 
   /*
    * 키보드 조작 (2026-08-26 요청) — **+/− 확대·축소, ←/→ 좌우 이동.**

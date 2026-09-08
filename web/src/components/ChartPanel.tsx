@@ -533,6 +533,7 @@ export function ChartPanel({
             name={name ? `${name} · ${VENUES.find((v) => v.key === venue)?.label}` : undefined}
             code={code}
             sizeTick={sizeTick}
+            lockScope={viewId}
           />
         </div>
       )}

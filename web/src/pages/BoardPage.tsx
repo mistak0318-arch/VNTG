@@ -223,6 +223,26 @@ function nextInstance(pick: string[], key: string): string {
   return `${key}#${Date.now()}`;
 }
 
+/**
+ * 같은 id 가 둘 이상이면 뒤의 것에 번호를 붙인다 (2026-09-08).
+ *
+ * 벤티지: "차트카드 3개 띄워놓고 하나에서 자물쇠 거니깐 나머지도 똑같이 그러네."
+ * 자물쇠·크기·핀은 전부 인스턴스 id 로 저장되므로, `["chart","chart","chart"]` 처럼
+ * id 가 겹치면 **셋이 한 자물쇠를 나눠 쓴다.** 저장된 구성이나 옛 데이터에 그런 게
+ * 있어도 읽는 자리에서 걸러 두면 다시는 겹치지 않는다.
+ */
+function dedupeIds(list: string[]): string[] {
+  const out: string[] = [];
+  for (const id of list) {
+    if (!out.includes(id)) {
+      out.push(id);
+      continue;
+    }
+    out.push(nextInstance(out, blockOf(id)));
+  }
+  return out;
+}
+
 const MARKET_KEYS = new Set<string>(["mktIndex", "mktIndexChart", "mktSignal", "mktPulse", "mktBreadth", "mktSector", "mktVi", "mktWatch", "mktBrief", "mktTelegram"]);
 const isMarket = (id: string) => MARKET_KEYS.has(blockOf(id));
 
@@ -396,7 +416,7 @@ function readPick(): string[] {
     if (!Array.isArray(raw)) return DEFAULT_PICK;
     const keys = new Set(BLOCKS.map((b) => b.key as string));
     // 인스턴스 id 라 `#` 뒤를 떼고 실제 있는 칸인지 본다
-    const out = raw.filter((k): k is string => typeof k === "string" && keys.has(blockOf(k)));
+    const out = dedupeIds(raw.filter((k): k is string => typeof k === "string" && keys.has(blockOf(k))));
     return out.length > 0 ? out : DEFAULT_PICK;
   } catch {
     return DEFAULT_PICK;
@@ -790,7 +810,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
       const p = presets.find((x) => x.id === id);
       if (!p) return;
       const keys = new Set(BLOCKS.map((b) => b.key as string));
-      const nextPick = (p.pick ?? []).filter((k): k is string => keys.has(blockOf(k)));
+      const nextPick = dedupeIds((p.pick ?? []).filter((k): k is string => keys.has(blockOf(k))));
       setPick(nextPick.length > 0 ? nextPick : DEFAULT_PICK);
       setSizes(p.sizes ?? {});
       setPins(p.pins ?? []);
