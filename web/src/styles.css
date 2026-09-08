@@ -7390,6 +7390,27 @@ button.nav-group-toggle {
 }
 .rt-click:hover { background: var(--panel-hover, rgba(128, 128, 128, 0.08)); }
 
+/* ── 장 상태 표 (2026-09-08) ─────────────────────────────────────────────
+   벤티지: "장이 시작된 건지 끝난 건지를 모르겠네." 열려 있으면 점이 뛰고, 닫혀 있으면
+   잿빛으로 가만히 있다 — 글자보다 움직임이 먼저 눈에 들어와야 한다. */
+.sess {
+  display: inline-flex; align-items: center; gap: 0.28em; flex: none;
+  padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--panel-2);
+  color: var(--muted); font-size: 0.6667rem; font-weight: 700; white-space: nowrap;
+}
+.sess i { width: 0.42em; height: 0.42em; border-radius: 50%; background: currentColor; flex: none; }
+.sess.open { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); background: color-mix(in srgb, var(--green) 12%, transparent); }
+.sess.open i { animation: sess-beat 1.8s ease-in-out infinite; }
+.sess.pre, .sess.after { color: #e6a23c; border-color: rgba(230,162,60,.4); background: rgba(230,162,60,.12); }
+.sess.closed { opacity: 0.75; }
+.sess.sess-sub { font-weight: 400; }
+@keyframes sess-beat { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.8); } }
+@media (prefers-reduced-motion: reduce) { .sess.open i { animation: none; } }
+/* 묶음 머리는 이름과 표를 양쪽 끝으로 */
+.ov-g-sec-h { display: flex; align-items: center; gap: 6px; }
+.ov-g-sec-h .sess { margin-left: auto; }
+
 /* 글로벌 — 섹터별 묶음 */
 .ov-g-sec + .ov-g-sec { margin-top: 8px; }
 .ov-g-sec-h { font-size: 0.72rem; color: var(--muted); font-weight: 600;
@@ -7596,6 +7617,12 @@ button.nav-group-toggle {
    눈으로 세는 건 사람이 할 일이 아니다. 차트를 여는 순간 같이 나온다.
    ================================================================== */
 
+/*
+ * 판독 줄의 배치는 **자기 칸 폭**으로 갈린다 (2026-09-08).
+ * 화면 폭으로 갈랐더니 보드의 좁은 카드에서 2단이 유지돼 숫자가 잘렸다.
+ */
+.ci-outer { container: ciCard / inline-size; }
+
 .ci-wrap {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -7605,12 +7632,13 @@ button.nav-group-toggle {
   margin-bottom: 10px;
 }
 
-/* 넓으면 이동평균과 매물대를 나란히 — 매물대 막대는 세로로 길어서 옆에 두는 게 낫다 */
-@media (min-width: 720px) {
+/* 칸이 넓으면 이동평균과 매물대를 나란히 — 매물대 막대는 세로로 길어서 옆에 두는 게 낫다 */
+@container ciCard (min-width: 640px) {
   .ci-wrap { grid-template-columns: minmax(0, 1fr) minmax(0, 15rem); }
 }
 
-.ci-col { min-width: 0; }
+/* 두 칸도 각자 제 폭을 잰다 — 이평 넷이 몇 줄로 앉을지는 「이 칸」 폭의 문제다 */
+.ci-col { min-width: 0; container: ciCol / inline-size; }
 
 .ci-head {
   display: flex;
@@ -7652,11 +7680,18 @@ button.nav-group-toggle {
 
 /* 이동평균 넷 ----------------------------------------------------- */
 
+/*
+ * 넷을 한 줄로 고집하지 않는다 — 칸이 좁으면 **2×2 로 접힌다** (벤티지 제안).
+ * auto-fit 을 쓰면 3+1 처럼 어정쩡하게 갈라져서, 둘 아니면 넷으로 못박았다.
+ */
 .ci-ma {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   margin-bottom: 8px;
+}
+@container ciCol (min-width: 400px) {
+  .ci-ma { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 .ci-ma-item {
@@ -7675,7 +7710,7 @@ button.nav-group-toggle {
 .ci-ma-item.none { opacity: .45; }
 
 .ci-ma-label { font-size: 0.6667rem; color: var(--muted); font-weight: 700; }
-.ci-ma-value { font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ci-ma-value { font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; white-space: nowrap; }
 .ci-ma-gap { font-size: 0.6667rem; font-variant-numeric: tabular-nums; }
 .ci-ma-item.up .ci-ma-gap { color: var(--red); }
 .ci-ma-item.down .ci-ma-gap { color: var(--blue); }
@@ -7712,6 +7747,16 @@ button.nav-group-toggle {
 .ci-bar-track { flex: 1 1 auto; height: 9px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
 .ci-bar-fill { display: block; height: 100%; background: var(--muted); opacity: .55; border-radius: 3px; }
 .ci-bar-share { flex: 0 0 2.4em; text-align: right; color: var(--muted); }
+
+/*
+ * 아주 좁은 칸에서는 이격(%)을 접는다 — 가격·막대·비중이 먼저다.
+ * 막대는 눌리면 뜻을 잃으므로 최소 폭을 준다.
+ */
+.ci-bar-track { min-width: 2.5em; }
+@container ciCol (max-width: 240px) {
+  .ci-bar-gap { display: none; }
+  .ci-bar-price { flex-basis: 4.8em; }
+}
 
 /* 가장 두꺼운 칸 — 여기가 저항이자 지지다 */
 .ci-bar-row.top .ci-bar-fill { background: var(--blue); opacity: 1; }

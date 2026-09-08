@@ -293,6 +293,16 @@ export function ChartInsights({
   const orderClass = ins.order === "up" ? "up" : ins.order === "down" ? "down" : "mix";
 
   return (
+    /*
+     * 껍데기 하나 더 — **카드 폭**을 재는 자리다 (2026-09-08).
+     *
+     * 벤티지: "보드에서 이동평균 매물대 카드가 작아지면 글자가 이렇게 밀려나거든?"
+     * 배치를 화면 폭(@media 720px)으로 갈랐던 게 원인이다. 보드에서는 화면이 넓어도
+     * **카드가 좁다** — 그러면 2단을 그대로 쓰다가 이평 넷이 짓눌려 「1,396,35」로 잘렸다.
+     * 여기에 container-type 을 걸고 아래 규칙을 @container 로 바꾸면 자기 칸 폭으로 갈린다.
+     * 컨테이너 쿼리를 모르는 브라우저는 1단으로 남는데, 그건 잘리는 것보다 낫다.
+     */
+    <div className="ci-outer">
     <div className="ci-wrap">
       {/* ---- 이동평균 ---- */}
       <div className="ci-col">
@@ -442,6 +452,7 @@ export function ChartInsights({
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

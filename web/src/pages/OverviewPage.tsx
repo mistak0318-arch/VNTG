@@ -33,6 +33,8 @@ import {
 } from "../components/overview/DomesticIndexGrid";
 import { TurnoverPanel } from "../components/overview/TurnoverPanel";
 import { useSection } from "../useSection";
+import { SessionBadge } from "../components/SessionBadge";
+import { kindOfGroup } from "../marketSession";
 import { useCardOrder } from "../useCardOrder";
 import { useSwipeTabs } from "../useSwipeTabs";
 import { OVERVIEW_CARDS, type OverviewSub } from "../overviewCards";
@@ -271,7 +273,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
         {show("summary") && (
-          <OverviewCard title="국내 지수" order={cards.orderOf("indices")} updatedAt={indices.updatedAt} loading={indices.loading} error={indices.error}>
+          <OverviewCard title="국내 지수" badge={<SessionBadge kind="kr" />} order={cards.orderOf("indices")} updatedAt={indices.updatedAt} loading={indices.loading} error={indices.error}>
             {/* 본문은 보드 지수판과 공용 (DomesticIndexGrid) — 두 번 그리면 갈라진다 */}
             <DomesticIndexGrid
               idx={idx}
@@ -323,7 +325,15 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                 const color = (global.data ?? []).find((g) => g.group === grp)?.color ?? "#8b98a5";
                 return (
                 <div className="ov-g-sec" key={grp} style={{ ["--g" as string]: color }}>
-                  <div className="ov-g-sec-h">{grp}</div>
+                  {/*
+                    묶음마다 **지금 도는 장인지**를 붙인다 (2026-09-08 — 벤티지 "장이 시작된
+                    건지 끝난 건지를 모르겠네"). 한 카드에 야간선물·환율·미국선물·아시아가
+                    같이 있는데, 숫자만 보면 지금 뛰는 값과 몇 시간 전에 끝난 값이 똑같이 생겼다.
+                  */}
+                  <div className="ov-g-sec-h">
+                    {grp}
+                    {kindOfGroup(grp) && <SessionBadge kind={kindOfGroup(grp)!} />}
+                  </div>
                   {(global.data ?? [])
                     .filter((g) => g.group === grp)
                     /*

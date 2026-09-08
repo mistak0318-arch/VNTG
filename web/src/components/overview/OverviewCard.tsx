@@ -21,6 +21,7 @@ export interface CardMove {
 
 export function OverviewCard({
   title,
+  badge,
   updatedAt,
   subtitle,
   loading,
@@ -31,6 +32,8 @@ export function OverviewCard({
   children,
 }: {
   title: string;
+  /** 제목 옆에 붙는 표 — 지금은 장중 여부(SessionBadge) 뿐이다 (2026-09-08) */
+  badge?: ReactNode;
   updatedAt?: number | null;
   subtitle?: string;
   loading?: boolean;
@@ -46,6 +49,7 @@ export function OverviewCard({
     <div className={`ov-card${span2 ? " ov-span2" : ""}`} style={order === undefined ? undefined : { order }}>
       <div className="ov-card-h">
         <span className="ov-card-t">{title}</span>
+        {badge}
         {move ? (
           <span className="ov-move">
             <button className="gt-move" onClick={move.onBack} disabled={move.first} title="앞으로">

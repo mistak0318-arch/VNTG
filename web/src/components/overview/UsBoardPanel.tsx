@@ -17,6 +17,7 @@ import { UsWatchTable, sideNameOf } from "../UsWatchTable";
 import { tileHeat, useAppearance } from "../../useAppearance";
 import { useWatchGroupTiles } from "../../useWatchGroupTiles";
 import { ConstituentSheet, type ConstituentTarget } from "./ConstituentSheet";
+import { SessionBadge } from "../SessionBadge";
 
 /**
  * 미국 전광판.
@@ -173,6 +174,9 @@ export function UsBoardPanel() {
       <section className="ov-card">
         <div className="ov-card-h">
           <span className="ov-card-t">미국 지수 · 원자재</span>
+          {/* 지수는 미국 정규장, 원자재는 CME — 둘이 시간표가 달라 나란히 적는다 (2026-09-08) */}
+          <SessionBadge kind="us" />
+          <SessionBadge kind="commodity" className="sess-sub" />
           <span className="ov-card-sub">
             {usMajor.data?.fetchedAt
               ? new Date(usMajor.data.fetchedAt).toLocaleTimeString("ko-KR", { hour12: false })
@@ -199,6 +203,7 @@ export function UsBoardPanel() {
       <section className="ov-card">
         <div className="ov-card-h">
           <span className="ov-card-t">미국 국채금리</span>
+          <SessionBadge kind="us" />
           {/*
             **받은 시각이 아니라 시세 시각을 적는다** (2026-09-02).
 
@@ -300,6 +305,7 @@ export function UsBoardPanel() {
       <section className="ov-card">
         <div className="ov-card-h">
           <span className="ov-card-t">코스피 야간선물</span>
+          <SessionBadge kind="krNight" />
           <span className="ov-card-sub">
             {usMajor.data?.fetchedAt
               ? new Date(usMajor.data.fetchedAt).toLocaleTimeString("ko-KR", { hour12: false })
