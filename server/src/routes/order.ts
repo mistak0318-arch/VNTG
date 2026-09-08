@@ -26,6 +26,7 @@ import {
   getSettings,
   saveSettings,
   saveGuard,
+  unlockAuth,
   forgetPassword,
   type OrderGuard,
   type OrderVenue,
@@ -139,6 +140,23 @@ export function createOrderRouter(main: KiwoomClient): Router {
     }
     return true;
   }
+
+  /* 잠금 풀기 — 세션 문 앞에서도 되어야 한다(진입 PIN 잠금이 문 앞이다). 앱 아이디·비밀번호로 */
+  router.post("/unlock", async (req, res) => {
+    if (!mutating(req, res)) return;
+    try {
+      const { username, password } = (req.body ?? {}) as { username?: string; password?: string };
+      const r = await verifyCredentials(String(username ?? ""), String(password ?? ""));
+      if (r !== "ok") {
+        res.status(401).json({ error: r === "disabled" ? "로그인이 꺼져 있다" : "아이디 또는 비밀번호가 틀렸다" });
+        return;
+      }
+      await unlockAuth();
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
+    }
+  });
 
   router.post("/session", async (req, res) => {
     if (!mutating(req, res)) return;

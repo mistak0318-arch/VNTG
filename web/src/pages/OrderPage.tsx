@@ -712,6 +712,46 @@ function Band({ status, left, onChange }: { status: OrderStatus; left: number; o
 
 /* ── 문 ① 주문 메뉴 열기 ────────────────────────────────────────────────── */
 
+/**
+ * 잠금 풀기 (2026-09-08 — 벤티지 "5분 잠금 이런 거 하지 말고 아이디 패스워드 넣어서 풀 수 있게").
+ * 잠금 문구가 뜬 자리마다 이 카드가 따라온다 — 진입 문·주문 모달·설정.
+ */
+function UnlockCard({ onDone }: { onDone: () => void }) {
+  const [u, setU] = useState("");
+  const [p, setP] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function go() {
+    if (!u || !p) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.orderUnlock(u, p);
+      setU("");
+      setP("");
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="ord-unlock">
+      <b>🔓 잠금 풀기</b>
+      <small>앱 아이디·비밀번호를 넣으면 바로 풀린다 — 틀린 횟수도 지워진다</small>
+      <div className="ord-unlock-row">
+        <input className="ord-in" placeholder="아이디" autoComplete="username" value={u} onChange={(e) => setU(e.target.value)} />
+        <input className="ord-in" type="password" placeholder="앱 비밀번호" autoComplete="current-password" value={p} onChange={(e) => setP(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void go()} />
+        <button type="button" className="ord-mk" disabled={busy || !u || !p} onClick={() => void go()}>
+          {busy ? "…" : "풀기"}
+        </button>
+      </div>
+      {err && <span className="ord-err">{err}</span>}
+    </div>
+  );
+}
+
 function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
   const [id, setId] = useState("");
   const [pw, setPw] = useState("");
@@ -881,6 +921,8 @@ function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => vo
           onChange={(e) => setDevName(e.target.value)}
         />
         {error && <p className="ord-err">{error}</p>}
+      {error && /잠금/.test(error) && <UnlockCard onDone={() => { setError(null); onDone(); }} />}
+        {error && /잠금/.test(error) && <UnlockCard onDone={() => { setError(null); onDone(); }} />}
         <button type="submit" className="ord-go" disabled={busy || code.length !== 6}>
           {busy ? "확인 중…" : "등록하고 열기"}
         </button>
@@ -916,6 +958,7 @@ function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => vo
           <NumPad value={pin} onChange={setPin} disabled={busy} onComplete={(v) => void openWith(v)} />
         )}
         {error && <p className="ord-err">{error}</p>}
+        {error && /잠금/.test(error) && <UnlockCard onDone={() => { setError(null); onDone(); }} />}
         {busy && <p className="ord-note">확인 중…</p>}
         {/*
           여태 여기서 곧장 메일을 쏘려 했다 — 그런데 이 판엔 아이디·비밀번호 칸이 없어
@@ -1852,6 +1895,7 @@ function OrderForm({
             </p>
           )}
           {error && <p className="ord-err">{error}</p>}
+        {error && /잠금/.test(error) && <UnlockCard onDone={() => { setError(null); onDone(); }} />}
           <button type="submit" className={`ord-go ${side}`} disabled={busy || !ready}>
             {busy ? "확인 중…" : side === "buy" ? "매수 주문" : "매도 주문"}
           </button>
@@ -2082,6 +2126,7 @@ function Confirm({
           </>
         )}
         {error && <p className="ord-err">{error}</p>}
+        {error && /잠금/.test(error) && <UnlockCard onDone={() => { setError(null); onDone(); }} />}
         {okMsg && <p className="ord-ok">{okMsg}</p>}
         <div className="ord-modal-btns">
           <button type="button" className="ord-cancel" onClick={onClose}>
@@ -2460,6 +2505,7 @@ function WatchForm({
           )}
 
           {error && <p className="ord-err">{error}</p>}
+        {error && /잠금/.test(error) && <UnlockCard onDone={() => { setError(null); onDone(); }} />}
           <button type="submit" className={`ord-go ${side} deferred`} disabled={busy || !ready}>
             {busy ? "확인 중…" : edit ? "이렇게 고치기" : side === "buy" ? "매수 감시 걸기" : splitOn ? `${wLegs.length}단계 매도 감시 걸기` : "매도 감시 걸기"}
           </button>
@@ -4308,6 +4354,7 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
               PIN 잠금 — {Math.ceil((status.pinLockedUntilMs - Date.now()) / 60000)}분 남음
             </span>
           )}
+          {(status.pinLockedUntilMs > 0 || status.lockedUntilMs > 0) && <UnlockCard onDone={onDone} />}
         </div>
       </section>
 

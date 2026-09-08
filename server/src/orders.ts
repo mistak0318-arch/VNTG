@@ -765,13 +765,24 @@ export async function setOrderPassword(next: string, current: string | null, kin
   await appendLog({ kind: "password", msg: a.hash ? `${what} 변경` : `${what} 처음 설정` });
 }
 
+/**
+ * **잠금을 아이디·비밀번호로 푼다** (2026-09-08 — 벤티지 "비밀번호 틀려서 5분 잠금 이런 거 하지 말고
+ * 아이디 패스워드 넣어서 풀 수 있게"). 잠금 자체는 둔다 — 그게 무차별 대입을 막는 전부다. 대신
+ * 앱 로그인이라는 **다른 비밀**을 맞히면 그 자리에서 푼다. 실패 횟수도 같이 지운다.
+ */
+export async function unlockAuth(): Promise<void> {
+  const a = await loadAuth();
+  await writeJson(AUTH_FILE, { ...a, fails: 0, lockUntil: 0, pinFails: 0, pinLockUntil: 0 } satisfies OrderAuthFile);
+  await appendLog({ kind: "lock", msg: "잠금 해제 — 아이디·비밀번호로" });
+}
+
 /** 틀리면 세고, 다섯 번이면 30분 잠그고 텔레그램 */
 export async function checkPassword(pw: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const a = await loadAuth();
   if (!a.hash) return { ok: false, error: "주문 비밀번호가 아직 없다 — 먼저 정하세요" };
   if (a.lockUntil > Date.now()) {
     const min = Math.ceil((a.lockUntil - Date.now()) / 60_000);
-    return { ok: false, error: `비밀번호 잠금 — ${min}분 뒤에` };
+    return { ok: false, error: `비밀번호 잠금 — ${min}분 뒤에, 또는 아이디·비밀번호로 지금 풀기` };
   }
   const given = await scryptHex(pw, a.salt);
   const same = sameHexSafe(given, a.hash);
@@ -787,7 +798,7 @@ export async function checkPassword(pw: string): Promise<{ ok: true } | { ok: fa
     void sendTelegram("🔐 <b>주문 비밀번호 5회 실패 — 30분 잠금</b>\n본인이 아니면 지금 서버의 ORDERS_ENABLED 를 끄세요.", "syslog").catch(
       () => undefined,
     );
-    return { ok: false, error: "5회 틀림 — 30분 잠금" };
+    return { ok: false, error: "5회 틀림 — 잠금. 아이디·비밀번호로 지금 풀 수 있다" };
   }
   return { ok: false, error: `주문 비밀번호가 다릅니다 (${fails}/${PW_MAX_FAILS})` };
 }
@@ -869,7 +880,7 @@ export async function checkPin(
   const a = await loadAuth();
   if (a.pinLockUntil > Date.now()) {
     const min = Math.ceil((a.pinLockUntil - Date.now()) / 60_000);
-    return { ok: false, error: `PIN 잠금 — ${min}분 뒤에` };
+    return { ok: false, error: `PIN 잠금 — ${min}분 뒤에, 또는 아이디·비밀번호로 지금 풀기` };
   }
   const given = pin.replace(/\D/g, "");
   /* 아직 안 정했으면 기본값과 견준다 — 화면이 「기본값이다」를 계속 알린다 */
@@ -890,7 +901,7 @@ export async function checkPin(
       "\u{1F513} <b>주문 진입 PIN 5회 실패 — 30분 잠금</b>\n본인이 아니면 지금 서버의 ORDERS_ENABLED 를 끄세요.",
       "syslog",
     ).catch(() => undefined);
-    return { ok: false, error: "5회 틀림 — 30분 잠금" };
+    return { ok: false, error: "5회 틀림 — 잠금. 아이디·비밀번호로 지금 풀 수 있다" };
   }
   return { ok: false, error: `PIN 이 다릅니다 (${fails}/${PIN_MAX_FAILS})` };
 }
