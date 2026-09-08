@@ -58,7 +58,7 @@ import {
 } from "../condSearch.js";
 import { COND_FIELDS } from "../condFields.js";
 import { allStocksUniverse } from "../allStocks.js";
-import { afterCloseStatus, runAfterClose } from "../afterClose.js";
+import { afterCloseHistory, afterCloseLastByStep, afterCloseStatus, runAfterClose } from "../afterClose.js";
 import {
   enabledUniverses,
   getUniverseConfig,
@@ -364,8 +364,18 @@ export function createSignalRouter(client: KiwoomClient): Router {
     res.json({ started: true, steps: steps ?? "전체", status: afterCloseStatus() });
   });
 
-  router.get("/after-close", (_req, res) => {
-    res.json({ status: afterCloseStatus() });
+  /**
+   * 지금 상태 + **이력** (2026-09-08). 이력은 파일이라 서버가 다시 떠도 남는다 —
+   * 예전엔 메모리뿐이라 아침에 열면 어젯밤에 뭐가 돌았는지 화면에 아무것도 없었다.
+   */
+  router.get("/after-close", async (_req, res) => {
+    try {
+      const [history, lastByStep] = await Promise.all([afterCloseHistory(), afterCloseLastByStep()]);
+      res.json({ status: afterCloseStatus(), history, lastByStep });
+    } catch (e) {
+      /* 이력을 못 읽어도 지금 상태는 보여야 한다 */
+      res.json({ status: afterCloseStatus(), history: [], lastByStep: {}, historyError: e instanceof Error ? e.message : "이력 읽기 실패" });
+    }
   });
 
   /** 지금 돌고 있는 찾기 — 전역 작업 띠와 화면 복귀가 본다 */

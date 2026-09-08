@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type AfterCloseRun } from "../api";
+import { api, type AfterCloseRun, type StepResult } from "../api";
 
 /**
  * **마감 뒤 정리** (2026-09-01) — 무엇이 언제 돌았고, 손으로 다시 돌린다.
@@ -70,8 +70,34 @@ function dur(ms: number): string {
   return s < 60 ? `${s}초` : `${Math.floor(s / 60)}분 ${s % 60}초`;
 }
 
+/** ISO → 09/08 15:42 (KST) */
+function when(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const k = new Date(d.getTime() + 9 * 3600_000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(k.getUTCMonth() + 1)}/${p(k.getUTCDate())} ${p(k.getUTCHours())}:${p(k.getUTCMinutes())}`;
+}
+
+/** 09/08 15:42 → 15:42 */
+function hm(iso?: string): string {
+  const w = when(iso);
+  return w ? w.slice(6) : "";
+}
+
 export function AfterClosePanel() {
   const [st, setSt] = useState<AfterCloseRun | null>(null);
+  /**
+   * **단계별 마지막 성적** (2026-09-08 — 벤티지 "최근 진행한 히스토리 좀 각 메뉴별로 달아줘.
+   * 언제 했는지 뭘 성공했는지 알 수가 없네").
+   *
+   * 여태 결과는 서버 **메모리**에만 있었다. 재시작하면 사라지므로 아침에 열면 어젯밤에 뭐가
+   * 돌았는지 화면에 아무것도 없었다 — 텔레그램을 뒤지는 수밖에. 이제 파일에서 읽어 온다.
+   */
+  const [last, setLast] = useState<Record<string, StepResult & { day: string }>>({});
+  const [history, setHistory] = useState<AfterCloseRun[]>([]);
+  const [showHist, setShowHist] = useState(false);
   const [pick, setPick] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -79,16 +105,26 @@ export function AfterClosePanel() {
   const load = () => {
     void api
       .afterCloseStatus()
-      .then((r) => setSt(r.status))
+      .then((r) => {
+        setSt(r.status);
+        setLast(r.lastByStep ?? {});
+        setHistory(r.history ?? []);
+      })
       .catch(() => undefined);
   };
 
   useEffect(load, []);
 
-  /* 도는 동안 따라간다 — 두 시간짜리라 안 보이면 멈춘 것처럼 느껴진다 */
+  /*
+   * 도는 동안은 2.5초, 아닐 때도 6초에 한 번 (2026-09-08).
+   *
+   * 예전엔 **「도는 중」일 때만** 물었다. 그러면 15:40 에 자동 회차가 시작돼도 열어 둔 화면은
+   * 영영 모른다 — 새로고침해야 그제야 「도는 중」이 되고 그때부터 따라간다. 진행 막대를
+   * 붙여 놓고 정작 시작을 못 보면 소용이 없다. 쉬는 동안의 6초는 우리 서버의 메모리를
+   * 읽는 값이라 조회가 안 나간다.
+   */
   useEffect(() => {
-    if (!st?.running) return;
-    const t = setInterval(load, 5000);
+    const t = setInterval(load, st?.running ? 2500 : 6000);
     return () => clearInterval(t);
   }, [st?.running]);
 
@@ -130,22 +166,39 @@ export function AfterClosePanel() {
         <div className={`ac-head${st.running ? " running" : ""}`}>
           <b>{st.day}</b>
           {st.running ? (
-            <span className="ac-run">도는 중 — {st.at ?? "…"}</span>
+            <span className="ac-run">
+              도는 중 — {st.at ?? "…"}
+              {st.stepTotal ? ` (${st.stepNo ?? 0}/${st.stepTotal}단계)` : ""}
+            </span>
           ) : (
             <span className="pt-n">
-              {st.finishedAt
-                ? `${st.startedAt.slice(11, 16)} ~ ${st.finishedAt.slice(11, 16)} 완료`
-                : "안 끝남"}
+              {st.finishedAt ? `${when(st.startedAt)} ~ ${hm(st.finishedAt)} 완료` : "안 끝남"}
+              {st.reason ? ` · ${st.reason}` : ""}
             </span>
           )}
+          {/* 전체가 어디쯤인지 — 두 시간짜리라 막대가 없으면 멈춘 것처럼 느껴진다 */}
+          {st.running && st.stepTotal ? (
+            <span className="ac-bar" title={`${st.stepNo ?? 0}/${st.stepTotal}단계`}>
+              <i style={{ width: `${Math.round(((st.stepNo ?? 0) / st.stepTotal) * 100)}%` }} />
+            </span>
+          ) : null}
         </div>
       )}
 
       <div className="ac-list">
         {STEPS.map((s) => {
-          const d = doneOf(s.key);
+          /* 이번 회차 결과가 있으면 그것, 없으면 **지난 회차의 마지막 성적** */
+          const today = doneOf(s.key);
+          const d = today ?? last[s.key];
+          const old = !today && Boolean(last[s.key]);
+          const nowHere = Boolean(st?.running && st.atKey === s.key);
+          const pr = st?.progress && st.progress.key === s.key ? st.progress : null;
+          const pct = pr && pr.total > 0 ? Math.min(100, Math.round((pr.done / pr.total) * 100)) : null;
           return (
-            <label className={`ac-row${d ? (d.ok ? " ok" : " bad") : ""}`} key={s.key}>
+            <label
+              className={`ac-row${d ? (d.ok ? " ok" : " bad") : ""}${nowHere ? " now" : ""}`}
+              key={s.key}
+            >
               <input
                 type="checkbox"
                 checked={pick.includes(s.key)}
@@ -155,14 +208,32 @@ export function AfterClosePanel() {
               <span className="ac-name">
                 <b>{s.label}</b>
                 {s.heavy && <i className="ac-heavy">{s.heavy}</i>}
-                {d && (
-                  <i className={d.ok ? "ac-done" : "ac-fail"}>
-                    {d.ok ? "✅" : "⚠️"} {dur(d.ms)}
+                {/*
+                  **언제 · 성공 · 몇 건.** 지난 회차 것이면 날짜를 앞에 적는다 — 어제 성적을
+                  오늘 것으로 읽으면 「돌았구나」 하고 넘어가게 된다.
+                */}
+                {d && !nowHere && (
+                  <i className={d.ok ? "ac-done" : "ac-fail"} title={d.error ?? d.note ?? ""}>
+                    {d.ok ? "✅" : "⚠️"} {old ? `${when(d.at) || (d as { day?: string }).day || ""} · ` : ""}
+                    {dur(d.ms)}
                     {d.note ? ` — ${d.note}` : ""}
                     {d.error ? ` — ${d.error}` : ""}
                   </i>
                 )}
+                {/* 지금 도는 단계 — 몇 개 중 몇 개까지 왔나 */}
+                {nowHere && (
+                  <i className="ac-now">
+                    {pr
+                      ? `⏳ ${pr.done.toLocaleString()}/${pr.total.toLocaleString()}${pct !== null ? ` (${pct}%)` : ""}${pr.note ? ` · ${pr.note}` : ""}`
+                      : "⏳ 도는 중 — 이 단계는 진행을 못 재는 작업입니다"}
+                  </i>
+                )}
               </span>
+              {pct !== null && (
+                <span className="ac-bar step">
+                  <i style={{ width: `${pct}%` }} />
+                </span>
+              )}
               <span className="ac-why">{s.why}</span>
             </label>
           );
@@ -186,6 +257,47 @@ export function AfterClosePanel() {
         </button>
         {msg && <span className="table-note">{msg}</span>}
       </div>
+
+      {/* **지난 회차** — 오늘 것만 보면 「어제는 됐었나」를 알 수 없다 (2026-09-08) */}
+      {history.length > 0 && (
+        <div className="ac-hist">
+          <button type="button" className="filter-btn" onClick={() => setShowHist((v) => !v)}>
+            지난 회차 {history.length}개 {showHist ? "접기" : "보기"}
+          </button>
+          {showHist && (
+            <div className="ac-hist-list">
+              {history.map((r) => {
+                const bad = r.steps.filter((x) => !x.ok);
+                return (
+                  <div className={`ac-hist-run${bad.length ? " bad" : ""}`} key={r.startedAt}>
+                    <div className="ac-hist-h">
+                      <b>{r.day}</b>
+                      <span className="pt-n">
+                        {when(r.startedAt)}
+                        {r.finishedAt ? ` ~ ${hm(r.finishedAt)}` : " · 안 끝남"}
+                        {r.reason ? ` · ${r.reason}` : ""}
+                      </span>
+                      <span className={bad.length ? "ac-fail" : "ac-done"}>
+                        {bad.length ? `⚠️ ${bad.length}단계 실패` : `✅ ${r.steps.length}단계`}
+                      </span>
+                    </div>
+                    <div className="ac-hist-steps">
+                      {r.steps.map((x) => (
+                        <span className={x.ok ? "ac-done" : "ac-fail"} key={x.key}>
+                          {x.ok ? "✅" : "⚠️"} {x.label}
+                          {x.note ? ` · ${x.note}` : ""}
+                          {x.error ? ` · ${x.error}` : ""}
+                          <i className="pt-n"> {dur(x.ms)}</i>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="table-note">
         ⚠️ 전체는 <b>두 시간 남짓</b> 걸리고 그동안 키움 조회를 거의 다 씁니다 — 다른

@@ -358,6 +358,17 @@ export interface StepResult {
   ms: number;
   note?: string;
   error?: string;
+  /** 이 단계가 끝난 시각 (2026-09-08) */
+  at?: string;
+}
+
+/** 지금 도는 단계의 진행 — 창구가 있는 단계(①②⑤⑨)만 */
+export interface StepProgress {
+  key: string;
+  label: string;
+  done: number;
+  total: number;
+  note?: string;
 }
 
 export interface AfterCloseRun {
@@ -367,7 +378,13 @@ export interface AfterCloseRun {
   running: boolean;
   /** 지금 어느 단계인가 */
   at?: string;
+  /** 지금 어느 단계인가 — 열쇠 */
+  atKey?: string;
   steps: StepResult[];
+  reason?: string;
+  stepNo?: number;
+  stepTotal?: number;
+  progress?: StepProgress | null;
 }
 
 export interface CollectProgress {
@@ -546,7 +563,14 @@ export const api = {
       steps,
     }),
   afterCloseStatus: () =>
-    getJson<{ status: AfterCloseRun | null }>("/api/signal/after-close"),
+    getJson<{
+      status: AfterCloseRun | null;
+      /** 최근 회차 — 새 것부터. 파일이라 서버가 다시 떠도 남는다 (2026-09-08) */
+      history?: AfterCloseRun[];
+      /** 단계별 마지막 성적 — 줄마다 「언제 · 성공 · 몇 건」을 다는 데 쓴다 */
+      lastByStep?: Record<string, StepResult & { day: string }>;
+      historyError?: string;
+    }>("/api/signal/after-close"),
   dataLedgerCollect: () =>
     postJson<{ started: boolean; progress: CollectProgress }>("/api/data/ledger/collect", {}),
   dataPrune: () =>

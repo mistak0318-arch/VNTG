@@ -12,11 +12,16 @@ import { pushNotice } from "./notifyCenter.js";
 import { buildSamplesFromLedger } from "./samplesFromLedger.js";
 import { sendTelegram } from "./telegram.js";
 import { ensureFinance } from "./financeCache.js";
-import { readdir } from "node:fs/promises";
+import { closesProgress } from "./dailyCloses.js";
+import { listTrackJob } from "./listTrack.js";
+import { ledgerSamplesProgress } from "./samplesFromLedger.js";
+import { readdir, readFile, writeFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const DAILY_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "daily");
+const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "data");
+const DAILY_DIR = join(DATA_DIR, "daily");
+const HISTORY_FILE = join(DATA_DIR, "afterCloseHistory.json");
 
 /**
  * **마감 뒤 파이프라인** (2026-09-01) — 시각이 아니라 **차례**로 돈다.
@@ -89,6 +94,17 @@ export interface StepResult {
   ms: number;
   note?: string;
   error?: string;
+  /** 이 단계가 **끝난 시각**(ISO) — 이력에서 「언제 했는지」를 말하려면 필요하다 (2026-09-08) */
+  at?: string;
+}
+
+/** 지금 도는 단계의 진행 — 물어볼 때마다 그 작업의 창구에서 새로 받는다 */
+export interface StepProgress {
+  key: string;
+  label: string;
+  done: number;
+  total: number;
+  note?: string;
 }
 
 export interface AfterCloseRun {
@@ -96,13 +112,30 @@ export interface AfterCloseRun {
   startedAt: string;
   finishedAt?: string;
   running: boolean;
-  /** 지금 어느 단계인가 */
+  /** 지금 어느 단계인가 — 사람이 읽는 이름 */
   at?: string;
+  /** 지금 어느 단계인가 — **열쇠**. 화면이 줄을 짚을 때는 이름이 아니라 이걸로 (2026-09-08) */
+  atKey?: string;
   steps: StepResult[];
+  /** 왜 돌았나 — 정규 회차 · 손으로 · 재시도 */
+  reason?: string;
+  /** 이번 회차가 돌기로 한 단계 수 / 몇 번째인가 — 전체 막대 (2026-09-08) */
+  stepNo?: number;
+  stepTotal?: number;
+  /** 지금 단계의 진행 — 창구가 있는 단계(①②⑤⑨)만. 없으면 null */
+  progress?: StepProgress | null;
 }
 
 let run: AfterCloseRun | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
+/**
+ * **지금 단계의 진행을 물어볼 창구** (2026-09-08 — 벤티지 "각 단계에서 프로그래스 바 돌아가는
+ * 것도 표현해줘. 어느 부분이 어느 정도 돌아갔는지 알 수가 없어").
+ *
+ * 값을 밀어 넣지 않고 **물어본다**. 수집기들은 이미 자기 진행을 들고 있고(`closesProgress`
+ * 같은 것), 그걸 5초마다 복사해 두면 두 곳이 어긋난다. 화면이 물을 때 그 자리에서 받는다.
+ */
+let probe: (() => StepProgress | null) | null = null;
 
 /**
  * **오늘 이미 돌았나 — 파일에서 읽는다** (2026-09-01).
@@ -126,7 +159,69 @@ async function alreadyDone(day: string): Promise<boolean> {
 }
 
 export function afterCloseStatus(): AfterCloseRun | null {
-  return run ? { ...run, steps: [...run.steps] } : null;
+  if (!run) return null;
+  return { ...run, steps: [...run.steps], progress: run.running ? (probe?.() ?? null) : null };
+}
+
+/* ── 이력 (2026-09-08) ──────────────────────────────────────────────────
+ *
+ * 벤티지: "설정의 마감 뒤 정리 부분 최근 진행한 히스토리 좀 각 메뉴별로 달아줘. 언제 했는지
+ * 뭘 성공했는지 알 수가 없네."
+ *
+ * 여태 결과는 **메모리에만** 있었다(`run`). 서버가 다시 뜨면 사라지므로, 아침에 열어 보면
+ * 어젯밤에 뭐가 돌았는지 알 길이 화면에 없었다 — 텔레그램을 뒤지는 수밖에. 파일로 남긴다.
+ * 회차 스무 개면 한 달 치다. 단계마다 저장하므로 도는 중에 죽어도 거기까지는 남는다.
+ */
+const HISTORY_KEEP = 20;
+let history: AfterCloseRun[] = [];
+let historyLoaded = false;
+
+async function loadHistory(): Promise<void> {
+  if (historyLoaded) return;
+  historyLoaded = true;
+  try {
+    const raw = await readFile(HISTORY_FILE, "utf8");
+    const v = JSON.parse(raw) as { runs?: AfterCloseRun[] };
+    history = Array.isArray(v.runs) ? v.runs : [];
+  } catch {
+    history = [];
+  }
+}
+
+async function saveHistory(): Promise<void> {
+  if (!run) return;
+  await loadHistory();
+  const snap: AfterCloseRun = { ...run, steps: [...run.steps], progress: null };
+  const i = history.findIndex((r) => r.startedAt === snap.startedAt);
+  if (i >= 0) history[i] = snap;
+  else history.unshift(snap);
+  history = history.slice(0, HISTORY_KEEP);
+  /* 임시 파일 → 이름 바꾸기. 쓰는 도중에 죽어도 반쪽 파일이 안 남는다 */
+  const tmp = `${HISTORY_FILE}.tmp`;
+  await writeFile(tmp, JSON.stringify({ runs: history }, null, 2), "utf8");
+  await rename(tmp, HISTORY_FILE);
+}
+
+/** 최근 회차들 — 새 것부터 */
+export async function afterCloseHistory(): Promise<AfterCloseRun[]> {
+  await loadHistory();
+  return history.map((r) => ({ ...r, steps: [...r.steps] }));
+}
+
+/**
+ * **단계별 마지막 성적** — 화면이 줄마다 「언제 · 성공 · 몇 건」을 다는 데 쓴다.
+ * 회차를 새 것부터 훑어 각 단계의 **가장 최근 한 번**만 남긴다.
+ */
+export async function afterCloseLastByStep(): Promise<Record<string, StepResult & { day: string }>> {
+  await loadHistory();
+  const runs = run ? [{ ...run, steps: [...run.steps] }, ...history.filter((r) => r.startedAt !== run?.startedAt)] : history;
+  const out: Record<string, StepResult & { day: string }> = {};
+  for (const r of runs) {
+    for (const s of r.steps) {
+      if (!out[s.key]) out[s.key] = { ...s, day: r.day };
+    }
+  }
+  return out;
 }
 
 function kst(at = Date.now()): Date {
@@ -155,24 +250,34 @@ async function step(
   key: string,
   label: string,
   fn: () => Promise<string | void>,
+  /** 도는 동안 진행을 물어볼 창구 — 있는 단계만 (①②⑤⑨) */
+  watch?: () => { done: number; total: number; note?: string } | null,
 ): Promise<StepResult> {
   const t0 = Date.now();
-  if (run) run.at = label;
+  if (run) {
+    run.at = label;
+    run.atKey = key;
+    run.stepNo = (run.stepNo ?? 0) + 1;
+  }
+  probe = watch
+    ? () => {
+        const p = watch();
+        return p && p.total > 0 ? { key, label, done: p.done, total: p.total, note: p.note } : null;
+      }
+    : null;
+  const end = (r: StepResult) => {
+    r.at = new Date().toISOString();
+    run?.steps.push(r);
+    probe = null;
+    /* 단계마다 남긴다 — 중간에 서버가 죽어도 여기까지는 남는다 */
+    void saveHistory().catch(() => undefined);
+    return r;
+  };
   try {
     const note = await fn();
-    const r: StepResult = { key, label, ok: true, ms: Date.now() - t0, note: note ?? undefined };
-    run?.steps.push(r);
-    return r;
+    return end({ key, label, ok: true, ms: Date.now() - t0, note: note ?? undefined });
   } catch (e) {
-    const r: StepResult = {
-      key,
-      label,
-      ok: false,
-      ms: Date.now() - t0,
-      error: e instanceof Error ? e.message : String(e),
-    };
-    run?.steps.push(r);
-    return r;
+    return end({ key, label, ok: false, ms: Date.now() - t0, error: e instanceof Error ? e.message : String(e) });
   }
 }
 
@@ -210,7 +315,16 @@ export async function runAfterClose(
   }
 
   const want = (k: string) => !only || only.length === 0 || only.includes(k);
-  run = { day, startedAt: new Date().toISOString(), running: true, steps: [] };
+  run = {
+    day,
+    startedAt: new Date().toISOString(),
+    running: true,
+    steps: [],
+    reason: reason ?? "정규 회차",
+    stepNo: 0,
+    stepTotal: STEPS.filter((s) => want(s.key)).length,
+  };
+  await saveHistory().catch(() => undefined);
 
   /*
    * ## **시작할 때도 알린다** (2026-09-02)
@@ -250,19 +364,35 @@ export async function runAfterClose(
   /* ① 일봉 — 모두가 이걸 바탕으로 한다 */
   const bars = !want("bars")
     ? { ok: true, key: "bars", label: "일봉", ms: 0 }
-    : await step("bars", "일봉 전종목", async () => {
-        const s = await buildCloses(client);
-        return `${Object.keys(s.bars ?? {}).length}종목`;
-      });
+    : await step(
+        "bars",
+        "일봉 전종목",
+        async () => {
+          const s = await buildCloses(client);
+          return `${Object.keys(s.bars ?? {}).length}종목`;
+        },
+        () => {
+          const p = closesProgress();
+          return p.running ? { done: p.done, total: p.total, note: "종목" } : null;
+        },
+      );
 
   /* ② 원장 — 신호등 분석의 flow-* 목록이 이걸 읽는다 */
   if (want("ledger"))
-    await step("ledger", "일별 원장 전종목", async () => {
-      if (collectProgress().running) return "이미 도는 중이라 건너뜀";
-      const p = await startCollectDaily(client);
-      const st = await ledgerStatus().catch(() => null);
-      return `${p.done}/${p.total} · 실패 ${p.fails}${st ? ` · ${st.codes}종목` : ""}`;
-    });
+    await step(
+      "ledger",
+      "일별 원장 전종목",
+      async () => {
+        if (collectProgress().running) return "이미 도는 중이라 건너뜀";
+        const p = await startCollectDaily(client);
+        const st = await ledgerStatus().catch(() => null);
+        return `${p.done}/${p.total} · 실패 ${p.fails}${st ? ` · ${st.codes}종목` : ""}`;
+      },
+      () => {
+        const p = collectProgress();
+        return p.running ? { done: p.done, total: p.total, note: p.fails ? `실패 ${p.fails}` : "종목" } : null;
+      },
+    );
 
   /*
    * ③ 장세 — ①이 있어야 20일선 위 비율이 오늘 것이다.
@@ -300,10 +430,18 @@ export async function runAfterClose(
    * 안 걸린 종목」이 생긴다.
    */
   if (want("listTrack"))
-    await step("listTrack", "신호등 분석 (목록별)", async () => {
-      const s2 = await runListTrack(client, { limit: 500, force: true });
-      return `${s2.entries.length}건`;
-    });
+    await step(
+      "listTrack",
+      "신호등 분석 (목록별)",
+      async () => {
+        const s2 = await runListTrack(client, { limit: 500, force: true });
+        return `${s2.entries.length}건`;
+      },
+      () => {
+        const j = listTrackJob();
+        return j.status === "running" ? { done: j.done, total: j.total, note: j.step || "목록" } : null;
+      },
+    );
 
   /* ⑥ 슈퍼신호등 — ⑤가 받아 둔 목록으로 교집합. 조회가 거의 안 는다 */
   if (want("super"))
@@ -391,11 +529,16 @@ export async function runAfterClose(
       const note = `${p.obs.toLocaleString()}관측 · ${(p.total - p.skipped).toLocaleString()}종목`;
       /* ①②가 깨졌으면 표본도 그만큼 낡은 것으로 만들어진 것이다 */
       return bars.ok ? note : `${note} · ⚠️ 일봉이 실패해 어제까지로 만들어짐`;
+    }, () => {
+      const p = ledgerSamplesProgress();
+      return p.total > 0 && p.done < p.total ? { done: p.done, total: p.total, note: `${p.obs.toLocaleString()}관측` } : null;
     });
 
   run.running = false;
   run.finishedAt = new Date().toISOString();
   run.at = undefined;
+  run.atKey = undefined;
+  await saveHistory().catch(() => undefined);
 
   /*
    * ## **끝나면 알린다** — 텔레그램과 알림 센터 둘 다 (2026-09-01). 시작 알림은 위에.
