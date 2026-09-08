@@ -939,8 +939,28 @@ export function CandleChart({
      * 기본값(300×150)으로 굳고 **차트가 통째로 안 보였다**(일반 모드는 우연히
      * 처음부터 폭이 있어서 멀쩡했다). 컨테이너를 직접 지켜보면 그 창이 닫힌다.
      */
+    /*
+     * **숨겨졌다 돌아오면 다시 맞춘다** (2026-09-08 — 벤티지 "보드에 차트 띄워놓고 다른탭
+     * 다녀오면 차트가 이렇게 좁아지거든").
+     *
+     * 탭을 떠나면 칸이 display:none 이 되어 폭이 0 이다. 그동안 실시간 봉이 계속
+     * 들어오는데, 폭 0 인 차트에 봉을 밀어 넣으면 보이는 구간이 오른쪽 끝으로 쏠린다.
+     * 돌아오면 폭은 **떠나기 전과 같아서** 위의 1.25배 문턱에 안 걸리고, 그대로
+     * 왼쪽이 텅 빈 채 남았다. 0 을 거쳐 왔는지를 따로 기억해 두고, 그때는 문턱과 무관하게
+     * 다시 채운다.
+     */
+    let wasHidden = false;
     const ro = new ResizeObserver(() => {
-      if (el.clientWidth > 0) resize();
+      const w = el.clientWidth;
+      if (w === 0) {
+        wasHidden = true;
+        return;
+      }
+      resize();
+      if (wasHidden) {
+        wasHidden = false;
+        chart.timeScale().fitContent();
+      }
     });
     ro.observe(el);
 
