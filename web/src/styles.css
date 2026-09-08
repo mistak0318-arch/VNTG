@@ -15904,7 +15904,10 @@ select.ord-in { appearance: auto; cursor: pointer; }
 
 /* 종목 이름 옆의 지금 값 (2026-09-04) — 가격을 적기 전에 「어디쯤인가」가 먼저 보여야 한다 */
 /* 현재가는 종목명 **바로 옆**에 — 오른쪽 끝에 밀어 두니 눈에 안 띄었다 (2026-09-08 벤티지). 조금 크게 */
-.ord-quote { margin-left: 0.5rem; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 1.05em; padding: 0.02rem 0.45rem; border-radius: 0.4rem; background: var(--panel-2); }
+.ord-quote { margin-left: 0.5rem; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 1.45rem; line-height: 1.1; padding: 0.05rem 0.55rem; border-radius: 0.5rem; background: var(--panel-2); }
+.ord-quote.positive { color: var(--red); }
+.ord-quote.negative { color: var(--blue); }
+.ord-quote i { font-size: 0.85rem; }
 .ord-quote i { font-style: normal; font-size: 0.78rem; margin-left: 0.3rem; font-weight: 400; }
 .ord-picked { gap: 0.4rem; }
 
@@ -15913,12 +15916,9 @@ select.ord-in { appearance: auto; cursor: pointer; }
  * 색만으로 판단하지 않게 **글자를 같이** 둔다(실시간 / 대기 / 조회).
  */
 /* 주문 화면에서는 종목 이름 줄에 — 좁아도 점은 남긴다 */
+/* 주문 화면의 실시간 표는 좁은 화면에서도 **「● 실시간」 글자째** (2026-09-08 벤티지 "실시간 표시도 이걸로") — 점만 남기면 뭔지 모른다 */
 .ord-picked .live-wrap { flex: none; }
-.ord-picked .live-dot { height: 24px; padding: 0 0.45rem; font-size: 0.7rem; }
-@media (max-width: 899px) {
-  /* 주문 화면 것도 같은 규칙 — 점만 남기고 정사각형 가운데 */
-  .ord-picked .live-dot { width: 24px; padding: 0; gap: 0; justify-content: center; }
-}
+.ord-picked .live-dot { height: 26px; padding: 0 0.6rem; font-size: 0.78rem; border-radius: 999px; }
 
 /* 자동으로 채워진 종목이라는 표 — 고른 것과 구별돼야 한다 */
 .ord-auto {
