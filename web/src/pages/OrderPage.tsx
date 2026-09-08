@@ -1198,7 +1198,13 @@ function OrderForm({
    * 감시가 자동으로 걸린다. 출구 없이 사려면 스위치를 일부러 꺼야 한다 — 벤티지: "걸어 두면 팔리는 줄 알았다"는
    * 사고는 구조가 막아야 한다.
    */
-  const [exitOn, setExitOn] = useState(true);
+  /*
+   * 출구 계획은 **기본 꺼짐·접힘** (2026-09-08 — 벤티지 "자동 선택되어 있게 하지 말고 접힘 메뉴로").
+   * 09-07 개편은 켜짐이 기본이었는데, 1주 왕복 같은 손 매매마다 손절 감시가 딸려 나가는 게
+   * 거추장스러웠다. 머리를 누르면 펼쳐지고, 펼친 채 체크해야 걸린다.
+   */
+  const [exitOn, setExitOn] = useState(false);
+  const [exitOpen, setExitOpen] = useState(false);
   const [exitLegs, setExitLegs] = useState<WatchLeg[]>([{ pct: -5, qtyPct: 100, exec: "market" }]);
   const [loanDate, setLoanDate] = useState<string | null>(prefill.credit ? prefill.loanDate || null : null);
   const [sellCredit, setSellCredit] = useState<boolean>(prefill.credit);
@@ -1414,6 +1420,16 @@ function OrderForm({
                 }
               />
               <span className="ord-code">{code}</span>
+              {/*
+                신용 표 (2026-09-08 — 벤티지 "종목명 앞에 신용 가능인지 아닌지도 표시. 키움에서 어떻게
+                표시하는지 참고"). 키움 앱은 종목명 옆에 「신용A」처럼 군을 단다. 같은 모양으로 —
+                가능이면 군을, 불가면 「신용불가」, 아직 못 받았으면 안 단다.
+              */}
+              {power?.creditEnabled && power.credit && power.credit.allowed !== null && (
+                <em className={`ord-crd${power.credit.allowed ? " ok" : " no"}`} title={power.credit.text ?? (power.credit.allowed ? "신용 가능" : "신용 불가")}>
+                  {power.credit.allowed ? `신용${power.credit.grade ?? ""}` : "신용불가"}
+                </em>
+              )}
               {/* 자동으로 들어온 값은 **자동이라고 말한다** — 고른 것으로 착각하면 안 된다 */}
               {autoPicked && code === autoPicked.code && (
                 <em className="ord-auto" title="직전에 보던 종목을 채워 뒀습니다. 위에서 다시 검색하면 바뀝니다">
@@ -1810,15 +1826,21 @@ function OrderForm({
           </div>
 
           {side === "buy" && !credit && !usesCond && (
-            <div className={`ord-exit${exitOn ? " on" : " off"}`}>
-              <label className="ord-exit-head">
-                <input type="checkbox" checked={exitOn} onChange={(e) => setExitOn(e.target.checked)} />
-                <span>
-                  <b>🛡 출구 계획</b> — 체결되면 손절·익절 감시를 자동으로 건다
-                  {!exitOn && <i className="ord-bad"> · 출구 없이 산다</i>}
-                </span>
-              </label>
-              {exitOn && <LegsEditor legs={exitLegs} onChange={setExitLegs} total={Number(qty) || 0} basisPrice={unit} />}
+            <div className={`ord-exit${exitOn ? " on" : ""}${exitOpen ? " open" : " folded"}`}>
+              <div className="ord-exit-head">
+                <button type="button" className="ord-exit-fold" onClick={() => setExitOpen((v) => !v)} aria-expanded={exitOpen}>
+                  <i className="ord-cfg-caret">{exitOpen ? "▾" : "▸"}</i>
+                  <b>🛡 출구 계획</b>
+                  <small>{exitOn ? "켜짐 — 체결되면 손절·익절 감시를 건다" : "꺼짐 — 출구 없이 산다. 펼쳐서 켠다"}</small>
+                </button>
+                {exitOpen && (
+                  <label className="ord-exit-sw">
+                    <input type="checkbox" checked={exitOn} onChange={(e) => setExitOn(e.target.checked)} />
+                    켜기
+                  </label>
+                )}
+              </div>
+              {exitOpen && exitOn && <LegsEditor legs={exitLegs} onChange={setExitLegs} total={Number(qty) || 0} basisPrice={unit} />}
             </div>
           )}
         </div>

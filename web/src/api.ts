@@ -6930,7 +6930,8 @@ export interface BuyPower {
   cashOnly: { amt: number; qty: number };
   margin: { rate: number; amt: number; qty: number };
   /** allowed null = 조회를 못 했다(모의투자) — 불가와 다르다 */
-  credit: { allowed: boolean | null; rate: number | null; amt: number; qty: number; why?: string } | null;
+  /** grade: 신용 군(A/B/C) · text: 키움 원문 「< A군 신용융자 가능 >」 */
+  credit: { allowed: boolean | null; rate: number | null; amt: number; qty: number; why?: string; grade?: string | null; text?: string } | null;
   creditEnabled: boolean;
   missing: string[];
 }

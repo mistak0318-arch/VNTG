@@ -17011,7 +17011,11 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-hist-tabs button.on { color: var(--text); border-color: var(--accent, #e6a23c); }
 .ord-exit { margin-top: 0.6rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 0.5rem 0.6rem; display: flex; flex-direction: column; gap: 0.4rem; }
 .ord-exit.on { border-color: var(--green, #4ade80); }
-.ord-exit.off { border-color: var(--red); }
+.ord-exit.folded { padding: 0.35rem 0.6rem; }
+.ord-exit-head { display: flex; align-items: center; gap: 0.5rem; }
+.ord-exit-fold { flex: 1; display: flex; align-items: center; gap: 0.4rem; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; padding: 0; min-width: 0; }
+.ord-exit-fold small { color: var(--muted); font-size: 0.74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ord-exit-sw { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.84rem; flex: none; }
 .ord-exit-head { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.86rem; cursor: pointer; }
 .ord-exit-head input { margin-top: 0.2rem; }
 .ord-exit-head i { font-style: normal; }
@@ -17678,3 +17682,7 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 /* 글로벌 줄의 심볼 자리에 온 「MM/DD 종가」 — 오늘 값이 아니라는 표 */
 .ov-g-as { color: #e6a23c; opacity: 0.9; }
 .ov-g-row:disabled { cursor: default; }
+/* 종목명 옆 신용 표 — 키움 앱의 「신용A」 (2026-09-08) */
+.ord-crd { font-style: normal; font-size: 0.66rem; font-weight: 700; padding: 0.05rem 0.4rem; border-radius: 0.3rem; margin-left: 0.35rem; vertical-align: 1px; }
+.ord-crd.ok { color: #e6a23c; border: 1px solid rgba(230, 162, 60, 0.55); background: rgba(230, 162, 60, 0.12); }
+.ord-crd.no { color: var(--muted); border: 1px solid var(--border); }

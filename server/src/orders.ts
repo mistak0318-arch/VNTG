@@ -1874,7 +1874,7 @@ export interface BuyPower {
    * `null` 이면 조회를 못 했거나 신용이 꺼져 있다(가드).
    */
   /** allowed null = 신용가능여부를 못 받았다(모의투자는 신용 TR 자체가 없다) — 「불가」와 다르다 (2026-09-08) */
-  credit: { allowed: boolean | null; rate: number | null; amt: number; qty: number; why?: string } | null;
+  credit: { allowed: boolean | null; rate: number | null; amt: number; qty: number; why?: string; grade?: string | null; text?: string } | null;
   /** 신용이 가드에서 꺼져 있나 — 화면이 「켜는 법」을 적는다 */
   creditEnabled: boolean;
   /** 못 받은 조각 — 「0주」와 「못 잼」은 다르다 */
@@ -1934,7 +1934,15 @@ export async function buyPower(code: string, price: number): Promise<BuyPower> {
      * 하이닉스는 신용 가능인데. 모의투자라 그런 건가?"). 맞다 — 모의 서버는 kt20017·kt00012 를
      * 안 받아서 둘 다 실패하는데, 그걸 false 로 눌러 「불가 종목」이라고 거짓말했다.
      */
-    const allowed: boolean | null = y ? String(y.data.crd_alow_yn ?? "").toUpperCase() === "Y" : null;
+    /*
+     * ⚠️ `crd_alow_yn` 은 Y/N 이 아니다 (2026-09-08 키움 공식 스펙 실측). 응답 예시가
+     * `"< A군 신용융자 가능 >"` — **문장**이고 군(A/B/C)까지 들어 있다. Y 만 찾던 옛 코드는 신용
+     * 약정된 실전 계좌에서도 전 종목을 「불가」로 읽었다(벤티지: "왜 신용불가종목이라고 다 뜨지?").
+     * 「가능」이 있고 「불가」가 없으면 가능. 군은 화면에 「신용A」로 단다 — 키움 앱과 같은 모양.
+     */
+    const yn = y ? String(y.data.crd_alow_yn ?? "").trim() : "";
+    const allowed: boolean | null = y ? /가능/.test(yn) && !/불가/.test(yn) : null;
+    const grade = /([A-Za-z])군/.exec(yn)?.[1]?.toUpperCase() ?? null;
     if (y) void noteRaw("kt20017", y.data);
     /*
      * 「불가」면 **왜인지 원문을 같이** (2026-09-08 — 벤티지 "왜 신용불가종목이라고 다 뜨지?").
@@ -1951,6 +1959,8 @@ export async function buyPower(code: string, price: number): Promise<BuyPower> {
     credit = {
       allowed,
       why,
+      grade,
+      text: yn || undefined,
       rate: crRate,
       amt: allowed === true ? num(cd[`assr_${ctier}ord_alow_amt`]) : 0,
       qty: allowed === true ? num(cd[`assr_${ctier}ord_alowq`]) : 0,
