@@ -4504,6 +4504,7 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
         {/* 결과는 **단추 바로 밑**에 (2026-09-08 — 벤티지 "바꾸기 하면 저장되었습니다 라고 문구 표시 좀"). 탭 맨 위에만 찍혀서 아래서 누른 사람은 못 봤다 */}
         {last === "pin" && msg && <p className="ord-ok">✅ 저장되었습니다 — {msg}</p>}
         {last === "pin" && error && <p className="ord-err">❌ 저장 안 됨 — {error}</p>}
+        {last === "pin" && error && /잠금/.test(error) && <UnlockCard onDone={() => { setError(null); setMsg("잠금을 풀었습니다 — 다시 바꾸기를 누르세요"); onDone(); }} />}
       </form>
 
       <form className={cfgSecClass(fold.open("password"))} onSubmit={(e) => void changePw(e)}>
@@ -4565,7 +4566,9 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
           {busy ? "저장 중…" : "바꾸기"}
         </button>
         {last === "pw" && msg && <p className="ord-ok">✅ 저장되었습니다 — {msg}</p>}
-        {last === "pw" && error && <p className="ord-err">❌ 저장 안 됨 — {error}. 위 「지금 패턴 또는 옛 비밀번호」 칸이 맞는지 확인</p>}
+        {last === "pw" && error && <p className="ord-err">❌ 저장 안 됨 — {error}{/잠금/.test(error) ? "" : ". 위 「지금 패턴 또는 옛 비밀번호」 칸이 맞는지 확인"}</p>}
+        {/* 잠금이면 풀기 카드를 **바로 여기** — 글로만 「풀기」라고 하면 어디서 푸는지 모른다 (벤티지 "지금 풀기 어떻게 하라는 거야") */}
+        {last === "pw" && error && /잠금/.test(error) && <UnlockCard onDone={() => { setError(null); setMsg("잠금을 풀었습니다 — 다시 바꾸기를 누르세요"); onDone(); }} />}
       </form>
 
       <AccessLogSection />
