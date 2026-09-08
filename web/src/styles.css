@@ -15903,7 +15903,8 @@ select.ord-in { appearance: auto; cursor: pointer; }
 .ord-cfg-kv dd { margin: 0; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
 
 /* 종목 이름 옆의 지금 값 (2026-09-04) — 가격을 적기 전에 「어디쯤인가」가 먼저 보여야 한다 */
-.ord-quote { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; }
+/* 현재가는 종목명 **바로 옆**에 — 오른쪽 끝에 밀어 두니 눈에 안 띄었다 (2026-09-08 벤티지). 조금 크게 */
+.ord-quote { margin-left: 0.5rem; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 1.05em; padding: 0.02rem 0.45rem; border-radius: 0.4rem; background: var(--panel-2); }
 .ord-quote i { font-style: normal; font-size: 0.78rem; margin-left: 0.3rem; font-weight: 400; }
 .ord-picked { gap: 0.4rem; }
 
