@@ -221,8 +221,22 @@
   padding: 7px 0;
   border-top: 1px solid var(--ov-line-soft);
 }
-/* 줄이 버튼이 됐다(눌러서 차트) — 버튼 기본 모양을 지우고 줄 모양을 그대로 쓴다 */
-.ov-g-click {
+/*
+ * ⚠️ **줄은 전부 버튼이다 — 차트가 없는 줄도.** (2026-09-08)
+ *
+ * 여기서 버튼 기본 모양을 지우는데, 예전엔 이 규칙이 `.ov-g-click`(=심볼이 있어 **눌리는**
+ * 줄)에만 걸려 있었다. 차트가 없는 한투 금리 줄(미국 기준금리·일본 10년·국고채·CD·콜)은
+ * `<button disabled>` 그대로 남아
+ *
+ *   · `width: 100%` 를 못 받아 **글자 길이만큼만** 넓어졌다 → 값 칸이 줄마다 다른 자리에
+ *     서서 표가 어긋났다 (벤티지 "금리쪽 표 배열이 안 맞잖아")
+ *   · 브라우저 기본 배경·테두리가 남아 그 줄만 **회색 상자**로 보였다
+ *     (벤티지 "여기 박스 아직도 그대로야")
+ *
+ * 두 증상이 같은 원인이었다. 모양을 지우는 일은 `.ov-g-row` 전부에 걸고, `.ov-g-click` 은
+ * **누를 수 있다는 것**(커서·hover)만 맡는다.
+ */
+.ov-g-row {
   width: 100%;
   background: none;
   border-right: none;
@@ -230,6 +244,10 @@
   font: inherit;
   color: inherit;
   text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.ov-g-click {
   cursor: pointer;
 }
 .ov-g-click:hover { background: var(--panel-hover, rgba(128, 128, 128, 0.08)); }
