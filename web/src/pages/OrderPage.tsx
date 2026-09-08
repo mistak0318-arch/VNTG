@@ -4172,6 +4172,8 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* 어느 폼이 마지막으로 눌렸나 — 결과를 그 폼 밑에만 적는다 */
+  const [last, setLast] = useState<"pin" | "pw" | null>(null);
   const [pwA, setPwA] = useState("");
   const [pwB, setPwB] = useState("");
   const [pwCur, setPwCur] = useState("");
@@ -4207,6 +4209,7 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
 
   async function changePin(e: React.FormEvent) {
     e.preventDefault();
+    setLast("pin");
     setBusy(true);
     setError(null);
     setMsg(null);
@@ -4239,6 +4242,7 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
 
   async function changePw(e: React.FormEvent) {
     e.preventDefault();
+    setLast("pw");
     if (pwPadMode === "text" && pwA !== pwB) {
       setError("새 비밀번호 두 칸이 다릅니다");
       return;
@@ -4495,8 +4499,11 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
           className="ord-go"
           disabled={busy || !pinCur || (padMode === "pattern" ? pinA.length < 4 : pinA.length !== 4)}
         >
-          바꾸기
+          {busy ? "저장 중…" : "바꾸기"}
         </button>
+        {/* 결과는 **단추 바로 밑**에 (2026-09-08 — 벤티지 "바꾸기 하면 저장되었습니다 라고 문구 표시 좀"). 탭 맨 위에만 찍혀서 아래서 누른 사람은 못 봤다 */}
+        {last === "pin" && msg && <p className="ord-ok">✅ 저장되었습니다 — {msg}</p>}
+        {last === "pin" && error && <p className="ord-err">❌ 저장 안 됨 — {error}</p>}
       </form>
 
       <form className={cfgSecClass(fold.open("password"))} onSubmit={(e) => void changePw(e)}>
@@ -4555,8 +4562,10 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
           className="ord-go"
           disabled={busy || !pwCur || (pwPadMode === "pattern" ? pwA.length < 4 : pwA.length < 6)}
         >
-          바꾸기
+          {busy ? "저장 중…" : "바꾸기"}
         </button>
+        {last === "pw" && msg && <p className="ord-ok">✅ 저장되었습니다 — {msg}</p>}
+        {last === "pw" && error && <p className="ord-err">❌ 저장 안 됨 — {error}. 위 「지금 패턴 또는 옛 비밀번호」 칸이 맞는지 확인</p>}
       </form>
 
       <AccessLogSection />
