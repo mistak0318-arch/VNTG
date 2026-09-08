@@ -1407,7 +1407,7 @@ function OrderForm({
         venue,
         credit,
         loanDate: credit && side === "sell" ? loanDate : null,
-        exit: side === "buy" && exitOn && !credit && !usesCond ? exitLegs.map((l) => ({ pct: Number(l.pct), qtyPct: Number(l.qtyPct), exec: l.exec })) : null,
+        exit: side === "buy" && exitOn && !usesCond ? exitLegs.map((l) => ({ pct: Number(l.pct), qtyPct: Number(l.qtyPct), exec: l.exec })) : null,
       });
       setTicket(r);
     } catch (e2) {
@@ -1885,7 +1885,8 @@ function OrderForm({
           </div>
 
           {/* 출구 계획 — 체크 하나로 켜면 펼쳐지고 끄면 접힌다 (벤티지 "지금은 이중으로 해야 되네") */}
-          {side === "buy" && !credit && !usesCond && (
+          {/* 신용 매수도 출구를 건다 — 매도 감시는 체결 때 잔고의 대출일을 붙여 신용 매도로 나간다 (2026-09-08) */}
+          {side === "buy" && !usesCond && (
             <div className={`ord-exit${exitOn ? " on open" : " folded"}`}>
               <label className="ord-exit-head">
                 <input type="checkbox" checked={exitOn} onChange={(e) => setExitOn(e.target.checked)} />

@@ -1325,7 +1325,7 @@ export async function prepareOrder(
   if (input.exit && input.exit.length > 0) {
     if (input.side !== "buy") reject("출구 계획은 매수에만 붙는다", input, ip);
     if (watchSpec) reject("감시 매수는 「체결되면」 단계로 — 출구 계획과 겹친다", input, ip);
-    if (credit) reject("신용 매수엔 출구 계획을 못 붙인다", input, ip);
+    /* 신용 매수도 붙는다 (2026-09-08) — 자식 매도 감시가 체결 때 잔고의 대출일을 찾아 신용 매도로 나간다 */
     const bad = checkLegs(input.exit, "출구 계획");
     if (bad) reject(bad, input, ip);
     exit = input.exit.map((l) => ({ pct: l.pct, qtyPct: l.qtyPct, exec: l.exec }));
@@ -2744,7 +2744,12 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
      * 접으면, 발동 순간 조회가 한 번 튄 것만으로 그날 손절이 사라진다. 실패면 물러선다.
      */
     if (!acct || lastTrError.has("kt00018")) return holdOff("잔고 조회 실패 — 보유를 모른 채 낼 수 없다");
-    const h = acct.holdings.find((x) => x.code === base.code && !x.creditType);
+    /* 신용 매도는 융자 줄(대출일이 맞는 것, 없으면 가장 최근) — 현금 줄과 섞지 않는다 */
+    const creditRows = base.credit ? acct.holdings.filter((x) => x.code === base.code && x.creditType) : [];
+    const h = base.credit
+      ? (creditRows.find((x) => base.loanDate && x.loanDate === base.loanDate) ?? [...creditRows].sort((a, b) => (b.loanDate ?? "").localeCompare(a.loanDate ?? ""))[0])
+      : acct.holdings.find((x) => x.code === base.code && !x.creditType);
+    if (base.credit && h && !base.loanDate && h.loanDate) base.loanDate = h.loanDate; // 체결 때 못 찾았던 대출일을 지금
     if (h && h.avg > 0) r.avgAtFire = h.avg;
     if (!h || h.qty <= 0) {
       r.status = "failed";
@@ -2871,6 +2876,18 @@ async function onAutoWatchFill(id: string, ev: { filled: number; price: number; 
       const fillPx = r.fillPrice && r.fillPrice > 0 ? r.fillPrice : r.firePrice ?? r.spec.trigger;
       const legs = r.spec.then;
       const qs = splitQty(ev.filled, legs);
+      /*
+       * 신용 매수의 출구 (2026-09-08 — 벤티지 "신용으로 거래할 때 출구계획 체크가 없어진다").
+       * 신용 매도(kt10007)는 **대출일**이 있어야 한다 — 매수 티켓엔 없으니 체결 직후 잔고의 융자 줄에서
+       * 찾는다. 못 찾으면(아직 잔고에 안 잡혔거나 조회 실패) 대출일 없이 걸어 두고, 발동 때 다시 찾는다.
+       */
+      let loanDate: string | null = r.ticket.loanDate ?? null;
+      if (r.ticket.credit && !loanDate) {
+        const acct = await orderAccount().catch(() => null);
+        const cr = acct?.holdings.filter((x) => x.code === r.ticket.code && x.creditType && x.loanDate) ?? [];
+        cr.sort((a, b) => (b.loanDate ?? "").localeCompare(a.loanDate ?? "")); // 가장 최근 융자
+        loanDate = cr[0]?.loanDate ?? null;
+      }
       await writeWatches(rows);
       const groupId = randomBytes(4).toString("hex");
       const made: string[] = [];
@@ -2900,6 +2917,7 @@ async function onAutoWatchFill(id: string, ev: { filled: number; price: number; 
           refPrice: fillPx,
           amount: trigger * qs[i],
           watch: childSpec,
+          loanDate,
         };
         const c = addAutoWatchInto(rows, child, r.ip, r.id, groupId);
         made.push(c.id);
