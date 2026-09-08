@@ -165,14 +165,24 @@ export function UsWatchTable({
     2500,
     { readOnly: true },
   );
-  const live = (symbol: string): { price: number; rate: number | null } | null => {
-    if (!rt.healthy) return null;
-    /* 값 자체의 나이로 판단한다 — 아래 90초 검사가 그것이다 */
+  /*
+   * ⚠️ **묵은 실시간 값이 신선한 3초 값을 막으면 안 된다** (2026-09-08 — 벤티지 "그래도
+   * 갱신이 느리다" / "차라리 키움으로 해놨었을 때가 더 빠른 듯").
+   *
+   * 예전 창은 **90초**였다. 실시간이 최상위라 그 안이면 무조건 이겼는데, 소켓이 잠깐이라도
+   * 끊기거나 그 종목 체결이 뜸하면 **60초 된 값이 3초짜리 spark 을 밀어냈다.** 실시간을
+   * 붙이고 오히려 느려지는 길이 여기였다.
+   *
+   * 15초로 좁힌다 — 초당 몇 틱씩 오는 창구라 15초를 넘겼으면 그건 이미 실시간이 아니다.
+   * 그 뒤로는 spark(3초)가 받는다.
+   */
+  const LIVE_FRESH_MS = 15_000;
+  const live = (symbol: string): { price: number; rate: number | null; at: number } | null => {
     const v = rt.values[`FE:${symbol.toUpperCase()}`];
-    if (!v || Date.now() - v.at > 90_000) return null;
+    if (!v || Date.now() - v.at > LIVE_FRESH_MS) return null;
     const price = fid(v, "10");
     if (price === null || price === 0) return null;
-    return { price: Math.abs(price), rate: fid(v, "12") };
+    return { price: Math.abs(price), rate: fid(v, "12"), at: v.at };
   };
 
   /*
@@ -288,6 +298,11 @@ export function UsWatchTable({
           {rows.map((s, i, arr) => {
             const side = sideQuote(s);
             /* FE 실시간 → spark 3초 → 본 시세(1분 캐시) 순 — 점(●)이 그 표시다 */
+            /*
+             * 실시간이 살아 있으면 그것, 아니면 3초 겹. **둘 중 새 것**이 아니라 이 순서다 —
+             * spark 의 `at` 은 1분봉의 시각이라 갓 받아도 최대 1분 뒤처져 보여서, 시각으로
+             * 견주면 늘 소켓이 이긴다. 대신 위에서 소켓 값의 나이를 15초로 조였다.
+             */
             const lv = live(s.symbol) ?? fastOf(s.symbol);
             const shownPrice = lv ? lv.price : s.price;
             const shownRate = lv && lv.rate !== null ? lv.rate : s.changeRate;
