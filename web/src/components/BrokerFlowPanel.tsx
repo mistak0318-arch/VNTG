@@ -130,6 +130,14 @@ export function BrokerFlowPanel({ code }: { code: string }) {
   const series = useBrokerSeries(code, picked);
   /* 추정가격 칸과 주가 선 — 창구가 산 자리가 어느 가격이었나 */
   const prices = useMinutePrices(code, series.day || undefined);
+  /*
+   * 프로그램 순매수 — 외국계 줄 밑에 같이 (2026-09-08 — 벤티지 "외국계 순매수 밑에
+   * 프로그램 순매수 현황도 넣어줘 한번에 볼 수 있게"). 종합 탭이 이미 받는 summary 에서
+   * 그 숫자 하나만 꺼내 쓴다. 외국계·프로그램은 「기관 밖에서 누가 밀고 있나」를 같이
+   * 읽는 짝이라 한 줄에 있어야 한다. 백만원 단위라 억으로 접는다.
+   */
+  const { data: summary } = useLive(() => api.stockSummary(code), [code], 60_000);
+  const program = summary?.program ?? null;
 
   if (loading && !data) return <div className="empty">거래원 불러오는 중…</div>;
   if (error && !data) return <div className="error-banner">{error}</div>;
@@ -191,7 +199,18 @@ export function BrokerFlowPanel({ code }: { code: string }) {
             순매수 {data.foreignNet > 0 ? "+" : ""}
             {fmtNum(data.foreignNet)}
           </b>
+          <i className="bf-fx-unit">주</i>
         </span>
+        {program !== null && (
+          <span className="bf-fx-sum">
+            <em>프로그램</em>
+            <b className={signClass(program)}>
+              순매수 {program > 0 ? "+" : ""}
+              {fmtNum(Math.round(program / 100))}
+            </b>
+            <i className="bf-fx-unit">억</i>
+          </span>
+        )}
       </div>
 
       <div className="bf-body">
