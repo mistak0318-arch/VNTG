@@ -2827,17 +2827,16 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 
 /*
  * 보유 종목 고치기 — 표 줄 밑에 펼쳐지는 편집기 (2026-09-08).
- * 매도·추가 매수·직접 세 손을 탭으로, 결과(남는 수량·새 평단)를 저장 전에 보여 준다.
+ * 지금 수량·평단이 채워진 두 칸. 바꿀 것만 고치고 저장. 계산기는 없다 — 증권사 앱에 보이는 값을 옮기는 자리다.
  */
 .ma-row-acts { white-space: nowrap; }
 .ma-edit-btn { margin-right: 4px; }
 .ma-edit-btn.on { color: var(--accent, #e6a23c); border-color: var(--accent, #e6a23c); }
-.ma-edit-row > td { padding: 0 !important; background: color-mix(in srgb, var(--accent, #e6a23c) 6%, var(--panel)); }
-.ma-editor { padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
-.ma-editor-tabs { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
-.ma-editor-name { font-size: 0.85rem; color: var(--muted); margin-right: auto; }
-.ma-editor-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
-.ma-editor-row .ma-input { width: 7rem; }
+.ma-editor { margin-top: 0.4rem; padding: 0.6rem 0.8rem; border: 1px solid color-mix(in srgb, var(--accent, #e6a23c) 45%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--accent, #e6a23c) 6%, var(--panel)); display: flex; flex-direction: column; gap: 0.4rem; }
+.ma-editor-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.ma-editor-name { font-size: 0.9rem; font-weight: 600; margin-right: 0.3rem; }
+.ma-editor-field { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; color: var(--muted); }
+.ma-editor-field .ma-input { width: 7rem; }
 .ma-editor-note { margin: 0; font-size: 0.85rem; color: var(--text); }
 .ma-editor-note.bad { color: var(--red); }
 .ma-picked { font-size: 0.8667rem; font-weight: 600; }
