@@ -1,4 +1,4 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
@@ -33,19 +33,52 @@ const EVERY_MS = 30_000;
  * 실패를 조용히 삼키고 있었기 때문이다. 배포 로그에 찍히는 `/api/health` 에 이걸 실어
  * 밖에서 원인을 읽을 수 있게 한다. 경로만 적고 **값은 안 적는다**(경로는 비밀이 아니다).
  */
-export const healthFileState: { dir: string | null; wrote: number; lastOk: string | null; lastError: string | null } = {
-  dir: null,
-  wrote: 0,
-  lastOk: null,
-  lastError: null,
-};
+export const healthFileState: {
+  dir: string | null;
+  /** 그 경로를 어디서 알았나 — 환경변수인지 자동 탐지인지 */
+  source: string | null;
+  wrote: number;
+  lastOk: string | null;
+  lastError: string | null;
+} = { dir: null, source: null, wrote: 0, lastOk: null, lastError: null };
 
-function outDir(): string {
-  return (process.env.HEALTH_OUT_DIR ?? "").trim();
+/**
+ * 어디에 적을까.
+ *
+ * `HEALTH_OUT_DIR` 이 먼저다. 없으면 **배포 폴더를 스스로 찾는다** — 실측(2026-09-09):
+ * 환경변수를 넣었다는데 서버는 `dir: null` 이었다. `server/.env` 가 아닌 다른 자리에
+ * 넣으면 안 닿는데, 그걸 사람이 매번 맞추게 할 이유가 없다.
+ *
+ * ⚠️ **아무 데나 안 쓴다.** 후보 폴더에 `deploy.status` 가 **있을 때만** 그 자리를 쓴다 —
+ * 그 파일이 있다는 것은 배포가 실제로 쓰는 폴더라는 증거다. 없으면 아무 일도 안 한다.
+ */
+let resolved: string | null | undefined;
+
+async function findDir(): Promise<string | null> {
+  const fromEnv = (process.env.HEALTH_OUT_DIR ?? "").trim();
+  if (fromEnv) return fromEnv;
+  for (const c of ["C:\\vntg-deploy", "D:\\vntg-deploy", "/vntg-deploy"]) {
+    try {
+      await stat(join(c, "deploy.status"));
+      return c;
+    } catch {
+      /* 그 자리가 아니다 */
+    }
+  }
+  return null;
+}
+
+async function outDir(): Promise<string> {
+  if (resolved === undefined) {
+    resolved = await findDir();
+    healthFileState.dir = resolved;
+    healthFileState.source = process.env.HEALTH_OUT_DIR?.trim() ? "환경변수" : resolved ? "배포 폴더 자동 탐지" : null;
+  }
+  return resolved ?? "";
 }
 
 async function writeOnce(): Promise<void> {
-  const dir = outDir();
+  const dir = await outDir();
   if (!dir) return;
 
   const { client: rt, store } = peekRealtime();
@@ -98,12 +131,14 @@ async function writeOnce(): Promise<void> {
 }
 
 export function startHealthFile(): void {
-  healthFileState.dir = outDir() || null;
-  if (!outDir()) {
-    console.log("[상태파일] HEALTH_OUT_DIR 이 없어 꺼짐");
-    return;
-  }
-  void writeOnce();
-  setInterval(() => void writeOnce(), EVERY_MS);
-  console.log(`[상태파일] ${outDir()} 에 30초마다 health.json`);
+  void (async () => {
+    const dir = await outDir();
+    if (!dir) {
+      console.log("[상태파일] 쓸 자리를 못 찾아 꺼짐 (HEALTH_OUT_DIR 또는 deploy.status 가 있는 폴더)");
+      return;
+    }
+    await writeOnce();
+    setInterval(() => void writeOnce(), EVERY_MS);
+    console.log(`[상태파일] ${dir} 에 30초마다 health.json (${healthFileState.source})`);
+  })();
 }
