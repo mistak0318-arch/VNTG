@@ -7,6 +7,7 @@ import {
   normalizeStockCode,
   signClass,
   type CancelTicket,
+  type ModifyTicket,
   type OrderAccount,
   type OrderHolding,
   type Position,
@@ -1263,12 +1264,17 @@ function OrderForm({
    * 고친 값이나 링크가 준 값은 안 건드린다. 시장가는 가격이 없으니 안 채운다.
    */
   const autoPricedFor = useRef<string>("");
+  /* 자동으로 채운 값은 자동이라고 말한다 — 채운 시각을 들고 있다가 사람이 칸을 만지면 지운다 */
+  const [autoPriceAt, setAutoPriceAt] = useState<number | null>(null);
   useEffect(() => {
     if (!code || !quote || !(quote.price > 0)) return;
     if (autoPricedFor.current === code) return;
     if (tradeType === "3") return;
     autoPricedFor.current = code;
-    if (price === "") setPrice(String(Math.round(quote.price)));
+    if (price === "") {
+      setPrice(String(Math.round(quote.price)));
+      setAutoPriceAt(Date.now());
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, quote?.price]);
 
@@ -1298,7 +1304,8 @@ function OrderForm({
   /* 시간외 구분은 정규장 밖에 내는 것이 정상이라 「시간 아님」 경고를 띄우지 않는다 */
   const open = tt?.late ? true : status.open[venue];
   /* 셈에 쓸 값 — 지정가면 그 값, 아니면 호가창이 아는 현재가(스톱은 발동가) */
-  const unit = Number(price) || Number(cond) || Number(quote?.price) || 0;
+  /* 시장가면 지정가 칸에 남은 옛 값을 셈에 안 쓴다 — 예상 금액·최대 수량이 그 값으로 나왔다 (2차 검진 🟡) */
+  const unit = (usesPrice ? Number(price) : 0) || Number(cond) || Number(quote?.price) || 0;
   /*
    * 매도의 기준 줄 — 같은 종목이 현금 줄·융자 줄로 나뉘어 있을 수 있다. 융자 줄을 골랐으면
    * (대출일이 있으면) 그 줄, 아니면 현금 줄. 「전량 매도」는 **매매가능수량**이다.
@@ -1371,7 +1378,7 @@ function OrderForm({
   }, [qty, unit]);
 
   const openVenues = VENUES.filter((v) => status.open[v.key]).map((v) => v.label);
-  const ready = Boolean(code) && Boolean(qty) && (!needsPrice || Boolean(price)) && (!usesCond || Boolean(cond));
+  const ready = Boolean(code) && Number(qty) > 0 && (!needsPrice || Number(price) > 0) && (!usesCond || Number(cond) > 0);
 
   /** 호가창이 부른다 — 값을 안 쓰는 구분이면 무시한다(넣어 봐야 서버가 거절한다) */
   function pickPrice(p: number) {
@@ -1752,8 +1759,8 @@ function OrderForm({
                         <i>{power.credit?.allowed === true ? `${manwon(power.credit.amt)} · 융자` : status.mock && power.credit?.allowed !== false ? "실전에서만" : "신용 불가"}</i>
                       </button>
                     ) : (
-                      <span className="ord-basis-off" title='server/data/orderGuard.json 에 "allowCredit": true'>
-                        신용 <i>꺼짐 — orderGuard.json</i>
+                      <span className="ord-basis-off" title="설정 › 규칙·한도 › 「신용 주문 허용」을 켜면 열린다 (주문 비밀번호)">
+                        신용 <i>꺼짐 — 설정 › 규칙·한도</i>
                       </span>
                     )}
                   </div>
@@ -1830,13 +1837,23 @@ function OrderForm({
               inputMode="numeric"
               disabled={!usesPrice}
               value={usesPrice ? price : ""}
-              onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))}
+              onChange={(e) => {
+                setPrice(e.target.value.replace(/\D/g, ""));
+                setAutoPriceAt(null);
+              }}
               placeholder={usesPrice ? "원" : "값 없음"}
             />
             <button type="button" disabled={!usesPrice} onClick={() => setPrice((v) => String((Number(v) || 0) + 100))}>
               ＋
             </button>
           </div>
+          {/* 자동으로 들어온 값은 자동이라고 말한다 (2차 검진 🟠C-3) — 묵으면 「묵은 값」 */}
+          {autoPriceAt !== null && usesPrice && price !== "" && (
+            <em className="ord-auto" title="들어올 때 현재가로 채웠다. 호가를 누르거나 손으로 고치면 그 값이 된다">
+              {Date.now() - autoPriceAt > 60_000 ? "⚠ 현재가로 채운 지 1분 넘음 — 값을 확인" : "현재가로 채움"}
+              {quote && quote.price > 0 && Number(price) !== Math.round(quote.price) ? ` · 지금 ${fmtNum(Math.round(quote.price))}` : ""}
+            </em>
+          )}
 
           {/*
             예상 금액도 **적을 수 있다** (2026-09-04, 벤티지: "금액을 넣으면 수량이 자동으로
@@ -1952,7 +1969,7 @@ function Confirm({
 }: {
   nonce: string;
   expiresAt: number;
-  ticket: OrderTicket | CancelTicket;
+  ticket: OrderTicket | CancelTicket | ModifyTicket;
   status: OrderStatus;
   onClose: () => void;
   onDone: () => void;
@@ -1971,8 +1988,9 @@ function Confirm({
 
   const dead = sec <= 0;
   const isCancel = ticket.kind === "cancel";
+  const isModify = ticket.kind === "modify";
   const isWatch = ticket.kind === "order" && Boolean(ticket.watch);
-  const sideKo = isCancel ? "취소" : `${isWatch ? "자동감시 " : ""}${!isCancel && ticket.credit ? "신용" : ""}${ticket.side === "buy" ? "매수" : "매도"}`;
+  const sideKo = isCancel ? "취소" : isModify ? `${ticket.side === "buy" ? "매수" : "매도"} 정정` : `${isWatch ? "자동감시 " : ""}${ticket.credit ? "신용" : ""}${ticket.side === "buy" ? "매수" : "매도"}`;
   const [okMsg, setOkMsg] = useState<string | null>(null);
   /*
    * 비밀번호를 지금 안 물어도 되는 상태인가 (2026-09-04) — 설정에서 「기억하기」를 켜고
@@ -2080,6 +2098,28 @@ function Confirm({
               <dt>원주문</dt>
               <dd>{ticket.ordNo}</dd>
             </div>
+          )}
+          {ticket.kind === "modify" && (
+            <>
+              <div>
+                <dt>원주문</dt>
+                <dd>{ticket.ordNo}</dd>
+              </div>
+              <div>
+                <dt>정정 수량</dt>
+                <dd>{ticket.qty.toLocaleString()}주</dd>
+              </div>
+              <div>
+                <dt>정정 단가</dt>
+                <dd>{ticket.price.toLocaleString()}원</dd>
+              </div>
+              {ticket.condPrice !== null && (
+                <div>
+                  <dt>발동가</dt>
+                  <dd>{ticket.condPrice.toLocaleString()}원</dd>
+                </div>
+              )}
+            </>
           )}
           <div>
             <dt>거래소</dt>
@@ -2932,9 +2972,32 @@ function ReadMeta({ readAt, tookMs, busy, error }: { readAt: Date | null; tookMs
 
 function OpenTab({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
   const { rows, error, loading, busy, readAt, tookMs, reload } = useRows(api.orderOpen, 5000);
-  const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: CancelTicket } | null>(null);
+  const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: CancelTicket | ModifyTicket } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
+  const [editing, setEditing] = useState<{ ordNo: string; price: string; qty: string } | null>(null);
+  async function modify(r: OrderRow) {
+    if (!editing) return;
+    setMsg(null);
+    try {
+      const t = await api.orderModifyPrepare({
+        ordNo: r.ordNo,
+        code: r.code,
+        name: r.name,
+        side: /매도/.test(r.side) ? "sell" : "buy",
+        qty: Number(editing.qty) || 0,
+        price: Number(editing.price) || 0,
+        condPrice: r.stopPrice ? r.stopPrice : null,
+        venue: (r.venue as OrderVenue) || "KRX",
+        remain: r.remain || r.qty,
+      });
+      setEditing(null);
+      setTicket(t);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "정정 주문서를 못 만들었다");
+      if (isGone(e)) onDone();
+    }
+  }
   async function cancel(r: OrderRow) {
     setMsg(null);
     try {
@@ -2995,7 +3058,11 @@ function OpenTab({ status, onDone }: { status: OrderStatus; onDone: () => void }
                   <td className="r" data-l="가격">{r.price ? `${r.price.toLocaleString()}원` : "시장가"}</td>
                   <td className="r" data-l="발동가">{r.stopPrice ? `${r.stopPrice.toLocaleString()}원` : ""}</td>
                   <td data-l="상태">{r.status || "-"}</td>
-                  <td>
+                  <td className="ord-open-acts">
+                    {/* 정정 (2026-09-08 — 벤티지 "미체결에서 주문 수정하는 기능. 수정 취소 이렇게") */}
+                    <button type="button" className="ord-x" onClick={() => setEditing(editing?.ordNo === r.ordNo ? null : { ordNo: r.ordNo, price: String(r.price || ""), qty: String(r.remain || r.qty) })}>
+                      {editing?.ordNo === r.ordNo ? "닫기" : "수정"}
+                    </button>
                     <button type="button" className="ord-x" onClick={() => void cancel(r)}>
                       취소
                     </button>
@@ -3006,6 +3073,29 @@ function OpenTab({ status, onDone }: { status: OrderStatus; onDone: () => void }
           </table>
         </div>
       )}
+      {editing && (() => {
+        const r = rows.find((x) => x.ordNo === editing.ordNo);
+        if (!r) return null;
+        return (
+          <div className="ord-modify">
+            <b>{r.name || r.code}</b> <span className="ord-code">{r.code}</span> · 원주문 {r.ordNo} · 남은 {fmtNum(r.remain || r.qty)}주
+            <div className="ord-modify-row">
+              <label>
+                단가
+                <input className="ord-in" inputMode="numeric" value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value.replace(/\D/g, "") })} onKeyDown={(e) => e.key === "Enter" && void modify(r)} />
+              </label>
+              <label>
+                수량
+                <input className="ord-in" inputMode="numeric" value={editing.qty} onChange={(e) => setEditing({ ...editing, qty: e.target.value.replace(/\D/g, "") })} onKeyDown={(e) => e.key === "Enter" && void modify(r)} />
+              </label>
+              <button type="button" className="ord-mk" disabled={!Number(editing.price) || !Number(editing.qty)} onClick={() => void modify(r)}>
+                정정 주문서
+              </button>
+            </div>
+            <small className="ord-note">단가·수량을 고쳐 같은 주문번호를 정정한다 — 취소 뒤 다시 내는 것보다 호가 순번을 덜 잃는다. 확인 창과 비밀번호는 같다.</small>
+          </div>
+        );
+      })()}
       {ticket && (
         <Confirm
           nonce={ticket.nonce}
@@ -3168,7 +3258,11 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
   async function armStop(pos: Position, raw: string) {
     const price = Number(raw.replace(/\D/g, "")) || 0;
     const qty = pos.freeQty;
-    if (price <= 0 || qty <= 0) return;
+    if (price <= 0) return;
+    if (qty <= 0) {
+      setError(`${pos.name} — 남은 수량이 없다. 감시를 하나 지우거나 미체결 매도를 취소해야 건다`);
+      return;
+    }
     setBusy(pos.code);
     setError(null);
     try {
@@ -3507,7 +3601,8 @@ function PositionCard({
   const pnl = (price - pos.avg) * pos.qty;
   const pnlRate = pos.avg > 0 ? ((price - pos.avg) / pos.avg) * 100 : 0;
   const room = pos.stopLine && price > 0 ? ((price - pos.stopLine) / price) * 100 : null;
-  const h: OrderHolding = { code: pos.code, name: pos.name, qty: pos.qty, ableQty: pos.ableQty, avg: pos.avg, cur: pos.cur, pnl: pos.pnl, pnlRate: pos.pnlRate, creditType: pos.creditType, loanDate: pos.loanDate };
+  /* 매도 링크 수량은 ableQty 가 아니라 freeQty+watchQty — ableQty 엔 이중 스톱이 문 수량이 빠져 폼이 0주로 열렸다 (2차 검진 🟠C-4) */
+  const h: OrderHolding = { code: pos.code, name: pos.name, qty: pos.qty, ableQty: Math.max(pos.ableQty, pos.freeQty + pos.watchQty), avg: pos.avg, cur: pos.cur, pnl: pos.pnl, pnlRate: pos.pnlRate, creditType: pos.creditType, loanDate: pos.loanDate };
   const sells = pos.watches.filter((w) => w.ticket.side === "sell");
   const stopW = sells.find((w) => w.status === "waiting" && w.spec.dir === "le" && w.spec.trigger === pos.stopLine) ?? null;
   return (
@@ -4472,6 +4567,63 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
   );
 }
 
+/*
+ * 규칙·한도 줄 컴포넌트 — **반드시 모듈 최상위** (2차 검진 🟠C-1). GuardSection 안에서 정의하면
+ * 렌더마다 새 컴포넌트라 React 가 같은 자리를 언마운트·재마운트해서 **한 글자 칠 때마다
+ * 포커스가 날아갔다.** 「1000000」을 치려면 일곱 번 다시 눌러야 했다.
+ */
+interface GuardRowCtx {
+  d: OrderGuard;
+  set: (patch: Partial<OrderGuard>) => void;
+  onEnter: () => void;
+}
+interface GuardRowProps { ctx: GuardRowCtx; k: keyof OrderGuard; label: string; hint: string; unit: string; fallback: number; min: number; max: number; step?: number }
+function GuardRow({ ctx, k, label, hint, unit, fallback, min, max, step }: GuardRowProps) {
+  const v = Number(ctx.d[k] ?? 0);
+  const on = v > 0;
+  return (
+    <div className="ord-guard-row">
+      <label className="ord-guard-sw">
+        <input type="checkbox" checked={on} onChange={(e) => ctx.set({ [k]: e.target.checked ? fallback : 0 } as Partial<OrderGuard>)} />
+        <b>{label}</b>
+      </label>
+      <span className="ord-guard-val">
+        <input type="number" value={on ? v : ""} placeholder="안 씀" disabled={!on} min={min} max={max} step={step ?? 1} onChange={(e) => ctx.set({ [k]: Number(e.target.value) } as Partial<OrderGuard>)} onKeyDown={(e) => e.key === "Enter" && ctx.onEnter()} />
+        <i>{unit}</i>
+      </span>
+      <small>{hint}</small>
+    </div>
+  );
+}
+interface GuardFixedProps { ctx: GuardRowCtx; k: keyof OrderGuard; label: string; hint: string; unit: string; min: number; max: number; step?: number }
+function GuardFixed({ ctx, k, label, hint, unit, min, max, step }: GuardFixedProps) {
+  return (
+    <div className="ord-guard-row">
+      <span className="ord-guard-sw fixed">
+        <b>{label}</b>
+      </span>
+      <span className="ord-guard-val">
+        <input type="number" value={Number(ctx.d[k] ?? 0)} min={min} max={max} step={step ?? 1} onChange={(e) => ctx.set({ [k]: Number(e.target.value) } as Partial<OrderGuard>)} onKeyDown={(e) => e.key === "Enter" && ctx.onEnter()} />
+        <i>{unit}</i>
+      </span>
+      <small>{hint}</small>
+    </div>
+  );
+}
+interface GuardSwProps { ctx: GuardRowCtx; k: keyof OrderGuard; label: string; hint: string; danger?: boolean }
+function GuardSw({ ctx, k, label, hint, danger }: GuardSwProps) {
+  return (
+    <div className="ord-guard-row">
+      <label className={`ord-guard-sw${danger ? " danger" : ""}`}>
+        <input type="checkbox" checked={Boolean(ctx.d[k])} onChange={(e) => ctx.set({ [k]: e.target.checked } as Partial<OrderGuard>)} />
+        <b>{label}</b>
+      </label>
+      <span className="ord-guard-val" />
+      <small>{hint}</small>
+    </div>
+  );
+}
+
 /**
  * **규칙·한도 편집** (2026-09-08).
  *
@@ -4510,46 +4662,7 @@ function GuardSection({ guard, mock, cap, onSaved }: { guard: OrderGuard; mock: 
     }
   }
 
-  /* 스위치 + 숫자 한 줄. 0 = 안 씀인 것은 스위치가 0 과 기본값 사이를 오간다 */
-  const Row = ({ k, label, hint, unit, fallback, min, max, step }: { k: keyof OrderGuard; label: string; hint: string; unit: string; fallback: number; min: number; max: number; step?: number }) => {
-    const v = Number(d[k] ?? 0);
-    const on = v > 0;
-    return (
-      <div className="ord-guard-row">
-        <label className="ord-guard-sw">
-          <input type="checkbox" checked={on} onChange={(e) => set({ [k]: e.target.checked ? fallback : 0 } as Partial<OrderGuard>)} />
-          <b>{label}</b>
-        </label>
-        <span className="ord-guard-val">
-          <input type="number" value={on ? v : ""} placeholder="안 씀" disabled={!on} min={min} max={max} step={step ?? 1} onChange={(e) => set({ [k]: Number(e.target.value) } as Partial<OrderGuard>)} onKeyDown={(e) => e.key === "Enter" && pw && dirty && void save()} />
-          <i>{unit}</i>
-        </span>
-        <small>{hint}</small>
-      </div>
-    );
-  };
-  const Fixed = ({ k, label, hint, unit, min, max, step }: { k: keyof OrderGuard; label: string; hint: string; unit: string; min: number; max: number; step?: number }) => (
-    <div className="ord-guard-row">
-      <span className="ord-guard-sw fixed">
-        <b>{label}</b>
-      </span>
-      <span className="ord-guard-val">
-        <input type="number" value={Number(d[k] ?? 0)} min={min} max={max} step={step ?? 1} onChange={(e) => set({ [k]: Number(e.target.value) } as Partial<OrderGuard>)} onKeyDown={(e) => e.key === "Enter" && pw && dirty && void save()} />
-        <i>{unit}</i>
-      </span>
-      <small>{hint}</small>
-    </div>
-  );
-  const Sw = ({ k, label, hint, danger }: { k: keyof OrderGuard; label: string; hint: string; danger?: boolean }) => (
-    <div className="ord-guard-row">
-      <label className={`ord-guard-sw${danger ? " danger" : ""}`}>
-        <input type="checkbox" checked={Boolean(d[k])} onChange={(e) => set({ [k]: e.target.checked } as Partial<OrderGuard>)} />
-        <b>{label}</b>
-      </label>
-      <span className="ord-guard-val" />
-      <small>{hint}</small>
-    </div>
-  );
+  const rowCtx: GuardRowCtx = { d, set, onEnter: () => pw && dirty && void save() };
 
   return (
     <section className={cfgSecClass(fold.open("guard"))}>
@@ -4560,22 +4673,22 @@ function GuardSection({ guard, mock, cap, onSaved }: { guard: OrderGuard; mock: 
       </p>
 
       <h5 className="ord-guard-h">매수를 막는 규칙</h5>
-      <Row k="rebuyCooldownMin" label="손절 뒤 쿨다운" hint="손절 감시로 판 종목은 이 시간 동안 다시 안 산다. 방금 손절한 걸 홧김에 되사는 손을 막는다" unit="분" fallback={30} min={1} max={1440} />
-      <Row k="maxDailyLossKrw" label="하루 실현손실 한도" hint="오늘 자동감시 매도로 실현한 손실이 이만큼을 넘으면 그날 신규 매수를 잠근다" unit="원" fallback={500_000} min={10_000} max={10_000_000_000} step={10_000} />
-      <Row k="maxPositionPct" label="한 종목 비중 제한" hint="사고 나면 종목 하나가 계좌(예수금+평가)의 몇 %를 넘게 되는 매수는 거절" unit="%" fallback={40} min={1} max={100} />
+      <GuardRow ctx={rowCtx} k="rebuyCooldownMin" label="손절 뒤 쿨다운" hint="손절 감시로 판 종목은 이 시간 동안 다시 안 산다. 방금 손절한 걸 홧김에 되사는 손을 막는다" unit="분" fallback={30} min={1} max={1440} />
+      <GuardRow ctx={rowCtx} k="maxDailyLossKrw" label="하루 실현손실 한도" hint="오늘 자동감시 매도로 실현한 손실이 이만큼을 넘으면 그날 신규 매수를 잠근다" unit="원" fallback={500_000} min={10_000} max={10_000_000_000} step={10_000} />
+      <GuardRow ctx={rowCtx} k="maxPositionPct" label="한 종목 비중 제한" hint="사고 나면 종목 하나가 계좌(예수금+평가)의 몇 %를 넘게 되는 매수는 거절" unit="%" fallback={40} min={1} max={100} />
 
       <h5 className="ord-guard-h">주문 한도</h5>
-      <Fixed k="maxOrderKrw" label="한 건" hint={`주문 한 건의 상한. 지정가는 가격×수량, 시장가는 현재가×수량${cap?.maxOrderKrw ? ` · 천장 ${won(cap.maxOrderKrw)} (.env, 미니PC 에서만)` : ""}`} unit="원" min={10_000} max={cap?.maxOrderKrw ?? 1_000_000_000} step={100_000} />
-      <Fixed k="maxDailyKrw" label="하루 합계" hint={`오늘 낸 주문(매수+매도)의 합 상한${cap?.maxDailyKrw ? ` · 천장 ${won(cap.maxDailyKrw)} (.env, 미니PC 에서만)` : ""}`} unit="원" min={10_000} max={cap?.maxDailyKrw ?? 10_000_000_000} step={100_000} />
-      <Fixed k="maxDailyCount" label="하루 건수" hint="오늘 낸 주문 건수 상한 (취소는 안 센다)" unit="건" min={1} max={1000} />
-      <Fixed k="priceCollarPct" label="지정가 울타리" hint="현재가에서 이만큼 넘게 벗어난 지정가는 거절 — 0 을 하나 더 친 손가락을 잡는다" unit="%" min={1} max={30} step={0.5} />
-      <Fixed k="stopCollarPct" label="스톱 발동가 울타리" hint="손절 발동가는 원래 멀리 두므로 따로 넓게. 그래도 오타는 잡는다" unit="%" min={1} max={90} />
+      <GuardFixed ctx={rowCtx} k="maxOrderKrw" label="한 건" hint={`주문 한 건의 상한. 지정가는 가격×수량, 시장가는 현재가×수량${cap?.maxOrderKrw ? ` · 천장 ${won(cap.maxOrderKrw)} (.env, 미니PC 에서만)` : ""}`} unit="원" min={10_000} max={cap?.maxOrderKrw ?? 1_000_000_000} step={100_000} />
+      <GuardFixed ctx={rowCtx} k="maxDailyKrw" label="하루 합계" hint={`오늘 낸 주문(매수+매도)의 합 상한${cap?.maxDailyKrw ? ` · 천장 ${won(cap.maxDailyKrw)} (.env, 미니PC 에서만)` : ""}`} unit="원" min={10_000} max={cap?.maxDailyKrw ?? 10_000_000_000} step={100_000} />
+      <GuardFixed ctx={rowCtx} k="maxDailyCount" label="하루 건수" hint="오늘 낸 주문 건수 상한 (취소는 안 센다)" unit="건" min={1} max={1000} />
+      <GuardFixed ctx={rowCtx} k="priceCollarPct" label="지정가 울타리" hint="현재가에서 이만큼 넘게 벗어난 지정가는 거절 — 0 을 하나 더 친 손가락을 잡는다" unit="%" min={1} max={30} step={0.5} />
+      <GuardFixed ctx={rowCtx} k="stopCollarPct" label="스톱 발동가 울타리" hint="손절 발동가는 원래 멀리 두므로 따로 넓게. 그래도 오타는 잡는다" unit="%" min={1} max={90} />
 
       <h5 className="ord-guard-h">켜고 끄기</h5>
-      <Sw k="marketHoursOnly" label="장중에만 주문" hint="거래소가 주문을 받는 시간 밖이면 거절" />
-      <Sw k="allowAutoWatch" label="자동감시주문 허용" hint="끄면 새로 안 받고, 기다리던 감시도 발동하지 않는다" />
-      <Sw k="dualStop" label="손절 감시에 키움 스톱도 같이" hint="「이하면 판다」 감시에 키움 서버 스톱지정가를 아침마다 같이 건다 — 우리 서버가 죽어도 키움이 판다" />
-      <Sw k="allowCredit" label="신용 주문 허용" hint="신용은 빚이다. 켜는 순간부터 주문서에 신용 칸이 열린다" danger />
+      <GuardSw ctx={rowCtx} k="marketHoursOnly" label="장중에만 주문" hint="거래소가 주문을 받는 시간 밖이면 거절" />
+      <GuardSw ctx={rowCtx} k="allowAutoWatch" label="자동감시주문 허용" hint="끄면 새로 안 받고, 기다리던 감시도 발동하지 않는다" />
+      <GuardSw ctx={rowCtx} k="dualStop" label="손절 감시에 키움 스톱도 같이" hint="「이하면 판다」 감시에 키움 서버 스톱지정가를 아침마다 같이 건다 — 우리 서버가 죽어도 키움이 판다" />
+      <GuardSw ctx={rowCtx} k="allowCredit" label="신용 주문 허용" hint="신용은 빚이다. 켜는 순간부터 주문서에 신용 칸이 열린다" danger />
 
       <div className="ord-guard-save">
         <input
@@ -4821,6 +4934,8 @@ const KIND_KO: Record<OrderLogRow["kind"], string> = {
   password: "비밀번호",
   raw: "원문",
   watch: "감시",
+  guard: "규칙",
+  modify: "정정",
 };
 
 function LogTab() {

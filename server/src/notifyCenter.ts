@@ -88,6 +88,7 @@ export type NoticeKind = "stock" | "market" | "system";
  * 끄고 켜려면 **어디서 왔는지**를 알아야 한다. 부르는 쪽이 자기 이름을 적는다.
  */
 export type NoticeSource =
+  | "autoWatch"
   | "stockSignal"
   | "disclosure"
   | "calendar"
@@ -129,7 +130,7 @@ export type NoticeSource =
  * 되지만 반드시 그런 것은 아니다 — 예를 들어 「신호등 분석 결과」는 성격이
  * system 인데 묶음은 「내 종목」에 두는 편이 찾기 쉽다.
  */
-export type NoticeGroup = "mine" | "news" | "signal" | "market" | "system";
+export type NoticeGroup = "order" | "mine" | "news" | "signal" | "market" | "system";
 
 /**
  * 알림함 **탭**이자 설정 **묶음** — 둘을 같은 것으로 둔다.
@@ -156,6 +157,8 @@ export type NoticeGroup = "mine" | "news" | "signal" | "market" | "system";
  * 눌러야 하나」가 안 보인다.
  */
 export const NOTICE_GROUPS: { key: NoticeGroup; label: string }[] = [
+  /* 주문 (2026-09-08 — 벤티지 "알림 카테고리 맨 앞에 주문 넣고 주문 관련 알림 여기에다가"). 돈이 나가는 소식이 맨 앞 */
+  { key: "order", label: "주문" },
   { key: "mine", label: "내 종목" },
   { key: "news", label: "공시·언급" },
   { key: "signal", label: "신호등" },
@@ -220,7 +223,7 @@ export const NOTICE_SOURCES: {
   },
   {
     key: "stopWatch",
-    group: "mine",
+    group: "order",
     label: "손절선 감시",
     hint: "적어 둔 손절선이 깨졌을 때",
     def: true,
@@ -234,9 +237,16 @@ export const NOTICE_SOURCES: {
   },
   {
     key: "order",
-    group: "mine",
+    group: "order",
     label: "주문 체결",
     hint: "주문 메뉴에서 낸 주문이 체결(일부 체결)되면 — 텔레그램 order 방에도 같이 간다 (2026-09-03)",
+    def: true,
+  },
+  {
+    key: "autoWatch",
+    group: "order",
+    label: "자동감시",
+    hint: "감시가 발동해 주문이 나갔거나, 못 냈거나(보류·실패), 이중 손절 스톱이 팔았을 때 (2026-09-08)",
     def: true,
   },
   { key: "etc", group: "system", label: "그 밖에", hint: "출처를 안 적은 알림", def: true },

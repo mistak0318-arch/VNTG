@@ -1034,6 +1034,8 @@ export const api = {
   /** 어느 가격에 몇 주까지 — 현금만·증거금·신용 셋을 한 번에 (주문 세션 안에서만) */
   orderBuyPower: (code: string, price: number) =>
     getJson<BuyPower>(`/api/order/buy-power?code=${code}&price=${Math.round(price)}`),
+  orderModifyPrepare: (input: { ordNo: string; code: string; name: string; side: "buy" | "sell"; qty: number; price: number; condPrice: number | null; venue: OrderVenue; remain: number }) =>
+    orderPost<{ nonce: string; expiresAt: number; ticket: ModifyTicket }>("/api/order/modify/prepare", input),
   orderCancelPrepare: (input: { ordNo: string; code: string; name: string; qty: number; venue: OrderVenue }) =>
     orderPost<{ nonce: string; expiresAt: number; ticket: CancelTicket }>("/api/order/cancel/prepare", input),
   orderExecute: (nonce: string, password: string, remember = false) =>
@@ -7199,6 +7201,20 @@ export interface CancelTicket {
   venue: OrderVenue;
 }
 
+/** 정정 (2026-09-08) — 미체결의 단가·수량을 고쳐 다시 낸다 */
+export interface ModifyTicket {
+  kind: "modify";
+  ordNo: string;
+  code: string;
+  name: string;
+  side: "buy" | "sell";
+  qty: number;
+  price: number;
+  condPrice: number | null;
+  venue: OrderVenue;
+  amount: number;
+}
+
 /** 미체결·체결 한 줄. 필드명이 모의 실측 전이라 `raw` 를 같이 들고 다닌다 */
 export interface OrderRow {
   ordNo: string;
@@ -7255,7 +7271,7 @@ export interface AccessAudit {
 
 export interface OrderLogRow {
   at: string;
-  kind: "session" | "order" | "cancel" | "fill" | "reject" | "error" | "lock" | "password" | "raw" | "watch";
+  kind: "session" | "order" | "cancel" | "fill" | "reject" | "error" | "lock" | "password" | "raw" | "watch" | "guard" | "modify";
   mock: boolean;
   ip?: string;
   side?: "buy" | "sell";

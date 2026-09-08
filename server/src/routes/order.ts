@@ -13,6 +13,7 @@ import {
   orderStatus,
   ordersEnabled,
   prepareCancel,
+  prepareModify,
   prepareOrder,
   readLog,
   sessionOf,
@@ -493,6 +494,30 @@ export function createOrderRouter(main: KiwoomClient): Router {
           watch: watchInputOf(b.watch),
           /* 출구 계획 (개편 ①) — 즉시 매수에 붙는 단계 */
           exit: legsOfAny(b.exit),
+        },
+        clientIp(req),
+        sessionOf(req),
+      );
+      res.json(r);
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "실패" });
+    }
+  });
+
+  router.post("/modify/prepare", async (req, res) => {
+    try {
+      const b = (req.body ?? {}) as Record<string, unknown>;
+      const r = await prepareModify(
+        {
+          ordNo: String(b.ordNo ?? ""),
+          code: String(b.code ?? ""),
+          name: String(b.name ?? ""),
+          side: b.side === "sell" ? "sell" : "buy",
+          qty: Number(b.qty) || 0,
+          price: Number(b.price) || 0,
+          condPrice: b.condPrice === null || b.condPrice === undefined || b.condPrice === "" ? null : Number(b.condPrice) || null,
+          venue: String(b.venue ?? "KRX") as OrderVenue,
+          remain: Number(b.remain) || 0,
         },
         clientIp(req),
         sessionOf(req),
