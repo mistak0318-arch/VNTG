@@ -15091,6 +15091,7 @@ tr:hover .sd-del { opacity: 0.75; }
 
 .ord-fields,
 .ord-submit {
+  min-width: 0; /* 안의 긴 글자가 칸을 벌리지 못하게 (2026-09-08) */
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -15418,8 +15419,12 @@ tr:hover .sd-del { opacity: 0.75; }
   .ord-hl { font-size: 0.72rem; gap: 0.1rem 0.5rem; }
   .ord-hl em { font-size: 0.66rem; }
   /* 정정/취소까지 셋이면 폰에서 글자가 눌린다 — 한 줄에 셋, 글자 작게 */
-  .ord-side.three { grid-template-columns: 1fr 1fr 1.3fr; }
-  .ord-side.three button { font-size: 0.9rem; padding: 0.4rem 0.2rem; }
+  /* 폰 — 넷이 한 줄에 들어가야 한다. 글자를 줄이고 여백을 좁힌다 */
+  .ord-side.three { grid-template-columns: 1fr 1fr 1.25fr 0.95fr; gap: 0.25rem; }
+  .ord-side.three button,
+  .ord-hold-tab { font-size: 0.84rem; padding: 0.4rem 0.1rem; }
+  .ord-hold-main { grid-template-columns: 1fr auto auto; }
+  .ord-hold-avg { display: none; }
 
   /* 호가창을 가격·잔량 두 줄로 — 곁가지는 접는다 */
   .ord-book .ob-head,
@@ -15944,14 +15949,22 @@ select.ord-in { appearance: auto; cursor: pointer; }
 .ord-picked .live-dot { height: 26px; padding: 0 0.6rem; font-size: 0.78rem; border-radius: 999px; }
 
 /* 자동으로 채워진 종목이라는 표 — 고른 것과 구별돼야 한다 */
+/*
+ * ⚠️ `white-space: nowrap` 이 주문 폼을 옆으로 밀었다 (2026-09-08 폰 실측 — 벤티지 "저 부분 때문에
+ * 주문화면 해상도가 깨진다"). 「현재가로 채운 지 1분 넘음 — 값을 확인 · 지금 89,900」은 폰 폭보다
+ * 길어서, 안 접히니 격자 칸이 그 길이만큼 벌어지고 오른쪽이 화면 밖으로 나갔다. 접히게 둔다.
+ */
 .ord-auto {
+  display: inline-block;
+  max-width: 100%;
   font-style: normal;
   font-size: 0.6rem;
   padding: 1px 5px;
-  border-radius: 999px;
+  border-radius: 8px;
   color: var(--muted);
   border: 1px dashed var(--border);
-  white-space: nowrap;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 /* 종목 이름을 누르면 종목상세로 (2026-09-04) */
@@ -17739,14 +17752,17 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-reset summary { cursor: pointer; color: var(--muted); }
 .ord-reset[open] summary { color: var(--text); }
 /* 주문 폼 — 잔고에서 고르기 (2026-09-08) */
-.ord-pick-row { display: flex; gap: 0.4rem; align-items: stretch; }
-.ord-pick-row .ssb { flex: 1; min-width: 0; }
-.ord-hold-btn { flex: none; padding: 0 0.8rem; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); color: var(--text); font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; }
-.ord-hold-btn.on { border-color: var(--accent, #e6a23c); color: var(--accent, #e6a23c); }
-.ord-hold-list { margin-top: 0.35rem; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); max-height: 16rem; overflow-y: auto; padding: 0.25rem; }
-.ord-hold-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 0.5rem; align-items: center; width: 100%; padding: 0.4rem 0.6rem; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+/* 잔고 — 매수·매도·정정 옆의 넷째 자리 (2026-09-08, 키움 배치) */
+.ord-side.three { grid-template-columns: 1fr 1fr 1.2fr 1fr; }
+.ord-hold-tab { border-radius: 10px; border: 2px solid var(--border); background: var(--panel-2); color: var(--muted); font: inherit; font-size: 1.02rem; font-weight: 700; padding: 0.45rem; cursor: pointer; }
+.ord-hold-tab.on { border-color: var(--accent, #e6a23c); color: var(--accent, #e6a23c); background: color-mix(in srgb, var(--accent, #e6a23c) 14%, var(--panel-2)); }
+.ord-hold-list { margin-top: 0.4rem; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); max-height: 18rem; overflow-y: auto; padding: 0.25rem; }
+.ord-hold-row { display: flex; align-items: center; gap: 0.4rem; padding: 0.15rem 0.35rem; border-radius: 8px; }
 .ord-hold-row:hover { background: var(--panel-2); }
-.ord-hold-row .num { font-variant-numeric: tabular-nums; }
+.ord-hold-main { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 0.5rem; align-items: center; padding: 0.35rem 0.25rem; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.ord-hold-main .num { font-variant-numeric: tabular-nums; }
+.ord-hold-avg { color: var(--muted); font-size: 0.78rem; }
+.ord-hold-acts { display: inline-flex; gap: 0.25rem; flex: none; }
 
 /* ══ 연동 계좌(키움) 개편 (2026-09-08) ═════════════════════════════════════ */
 .page.acct2 { max-width: 1400px; display: flex; flex-direction: column; gap: 0.7rem; }

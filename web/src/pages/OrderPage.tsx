@@ -1343,6 +1343,23 @@ function OrderForm({
   const [autoPriceAt, setAutoPriceAt] = useState<number | null>(null);
   /** 「가격 자동」 — 켜 두면 현재가(정정이면 원주문가)를 계속 따라간다 */
   const [autoPrice, setAutoPrice] = useState(false);
+  /*
+   * ⚠️ **종목이 바뀌면 가격·발동가를 비운다** (2026-09-08 — 벤티지 "종목을 옮길 때 자꾸 현금이
+   * 0원으로 잡혀서 매수가 안 된다"). 옛 종목의 값이 칸에 남아 있으면 그 값으로 가능수량을
+   * 조회한다 — 90,000원짜리를 보다 2,400원짜리로 옮기면 「현금만 0주」가 나온다. 값도 틀리고
+   * 주문도 그 값으로 나갈 뻔한다. 링크가 값을 주고 온 경우(prefill)는 아래 effect 가 다시 채운다.
+   */
+  const lastCode = useRef(code);
+  useEffect(() => {
+    if (lastCode.current === code) return;
+    lastCode.current = code;
+    setPrice("");
+    setCond("");
+    setQty("");
+    setAmount("");
+    setAutoPriceAt(null);
+    autoPricedFor.current = "";
+  }, [code]);
   useEffect(() => {
     if (!code || !quote || !(quote.price > 0)) return;
     if (autoPricedFor.current === code) return;
@@ -1544,47 +1561,55 @@ function OrderForm({
       */}
       <div className="ord-head">
         <div className="ord-pick">
-          <div className="ord-pick-row">
-            <StockSearchBox
-              placeholder="종목명 또는 6자리 코드"
-              clearOnPick={false}
-              onPick={(c, n) => {
-                setCode(c);
-                setName(n);
-                setQuote(null);
-              }}
-            />
-            {/* 잔고에서 고르기 (2026-09-08 — 벤티지 "잔고 버튼 만들어서 내 계좌에서 매수한 종목 리스트에서 매도할 거 선택") */}
-            <button type="button" className={`ord-hold-btn${holdOpen ? " on" : ""}`} onClick={() => { setHoldOpen((v) => !v); pullAcct(); }} title="내 계좌 보유 종목에서 고른다">
-              잔고{acct ? ` ${acct.holdings.length}` : ""}
-            </button>
-          </div>
+          <StockSearchBox
+            placeholder="종목명 또는 6자리 코드"
+            clearOnPick={false}
+            onPick={(c, n) => {
+              setCode(c);
+              setName(n);
+              setQuote(null);
+            }}
+          />
           {holdOpen && (
             <div className="ord-hold-list" role="listbox">
               {!acct && <div className="ord-caps">잔고를 읽는 중…</div>}
               {acct && acct.holdings.length === 0 && <div className="ord-caps">보유 종목이 없다</div>}
-              {acct?.holdings.map((h) => (
-                <button
-                  key={`${h.code}-${h.creditType ?? ""}-${h.loanDate ?? ""}`}
-                  type="button"
-                  className="ord-hold-row"
-                  onClick={() => {
-                    setCode(h.code);
-                    setName(h.name);
-                    setQuote(null);
-                    setSide("sell");
-                    setSellCredit(Boolean(h.creditType));
-                    setLoanDate(h.creditType ? h.loanDate ?? null : null);
-                    setQty(String(h.ableQty > 0 ? h.ableQty : h.qty));
-                    setHoldOpen(false);
-                  }}
-                >
-                  <b>{h.name}</b>
-                  {h.creditType && <i className="ord-crd ok">신용</i>}
-                  <span className="num">{h.qty.toLocaleString()}주</span>
-                  <span className={`num ${signClass(h.pnl)}`}>{h.pnlRate > 0 ? "+" : ""}{h.pnlRate.toFixed(2)}%</span>
-                </button>
-              ))}
+              {acct?.holdings.map((h) => {
+                /* 그 종목으로 폼을 세운다 — 매도면 수량까지 채운다(키움 잔고에서 매도를 누른 것과 같다) */
+                const go = (sd: "buy" | "sell") => {
+                  setCode(h.code);
+                  setName(h.name);
+                  setQuote(null);
+                  setSide(sd);
+                  setAmend(null);
+                  setSellCredit(sd === "sell" ? Boolean(h.creditType) : false);
+                  setLoanDate(sd === "sell" && h.creditType ? h.loanDate ?? null : null);
+                  setQty(sd === "sell" ? String(h.ableQty > 0 ? h.ableQty : h.qty) : "");
+                  setHoldOpen(false);
+                };
+                return (
+                  <div key={`${h.code}-${h.creditType ?? ""}-${h.loanDate ?? ""}`} className="ord-hold-row">
+                    <button type="button" className="ord-hold-main" onClick={() => go("sell")}>
+                      <b>{h.name}</b>
+                      {h.creditType && <i className="ord-crd ok">신용</i>}
+                      <span className="num">{h.qty.toLocaleString()}주</span>
+                      <span className="num ord-hold-avg">평단 {h.avg.toLocaleString()}</span>
+                      <span className={`num ${signClass(h.pnl)}`}>
+                        {h.pnlRate > 0 ? "+" : ""}
+                        {h.pnlRate.toFixed(2)}%
+                      </span>
+                    </button>
+                    <span className="ord-hold-acts">
+                      <button type="button" className="ord-x buy" onClick={() => go("buy")}>
+                        매수
+                      </button>
+                      <button type="button" className="ord-x sell" onClick={() => go("sell")}>
+                        매도
+                      </button>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
           {code && (
@@ -1693,6 +1718,14 @@ function OrderForm({
           </button>
           <button type="button" className={amend ? "on amend" : ""} onClick={() => setAmend((v) => (v ? null : { ordNo: "", side: "buy", qty: 0, price: 0, name: "", code: "", venue: "KRX", remain: 0 }))}>
             정정/취소
+          </button>
+          {/*
+            **잔고도 여기** (2026-09-08 — 벤티지가 키움 매도 탭을 가리키며 "저 위치에 잔고 넣고 해당
+            잔고 메뉴에서 바로 매수 매도 할 수 있게"). 키움도 매수·매도 옆에 두고, 누르면 보유 목록이
+            펼쳐진다. 검색칸 옆에 있던 것을 옮겼다 — 손이 가는 자리가 여기다.
+          */}
+          <button type="button" className={`ord-hold-tab${holdOpen ? " on" : ""}`} onClick={() => { setHoldOpen((v) => !v); pullAcct(); }} title="내 계좌 보유 종목">
+            잔고{acct ? ` ${acct.holdings.length}` : ""}
           </button>
         </div>
       </div>
@@ -1943,6 +1976,10 @@ function OrderForm({
                     <button type="button" className={basis === "cash" ? "on" : ""} onClick={() => setBasis("cash")} title="미수·신용 없이 예수금만으로">
                       현금만 <b>{power.cashOnly.qty.toLocaleString()}주</b>
                       <i>{manwon(power.cashOnly.amt)}</i>
+                      {/* 0 주면 왜 0 인지 — 「돈이 없다」와 「값이 이상하다」를 가른다 (2026-09-08) */}
+                      {power.cashOnly.qty === 0 && unit > 0 && (
+                        <i className="ord-bad">{power.cashOnly.amt > 0 ? `${fmtNum(unit)}원짜리 1주도 안 된다` : "주문가능금액 0"}</i>
+                      )}
                     </button>
                     <button
                       type="button"
