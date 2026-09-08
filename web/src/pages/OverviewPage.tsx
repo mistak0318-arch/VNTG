@@ -71,6 +71,9 @@ function signCls(v: number): string {
  * 실시간이 필요한 미국 만기는 `usMajor` 가 이미 야후에서 받고 있어 그걸 쓴다 —
  * 조회가 늘지 않는다. 만기가 짧은 쪽부터라 장단기 역전이 왼→오로 읽힌다.
  */
+/** 글로벌 줄 + 금리 줄이 같이 쓰는 모양 — asOf 는 한투 금리에만 있다 */
+type GRow = GlobalQuote & { asOf?: string | null };
+
 const US_YIELD_KEYS = ["irx", "fvx", "tnx", "tyx"] as const;
 /** 야후에 심볼이 없어 한투에서만 오는 것 — 기준금리·일본 10년 (404 실측) */
 const HANTOO_ONLY_RATES = ["Y0204", "Y0207"];
@@ -161,11 +164,56 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
       /* 비공개 창 */
     }
   };
+  /*
+   * **금리를 글로벌 안에** (2026-09-08 — 벤티지: "글로벌 카드에 금리 합치자. 미국 지수선물 밑에
+   * 금리 섹션 넣어줘. 금리도 톱니바퀴 옵션에 넣어서").
+   *
+   * 금리 카드가 따로 있었다. 야간선물·환율·선물·아시아·원자재·암호화폐는 한 판에 있는데 금리만
+   * 딴 카드라, 「밤사이 무슨 일이 있었나」를 읽으려면 두 곳을 봐야 했다. 서버는 안 건드린다 —
+   * 미국 넷은 usMajor(야후, 15분 지연), 나머지는 한투 금리판(rates)을 그대로 글로벌 줄 모양으로
+   * 바꿔 끼운다. 그래서 ⚙ 에서 숨기고 차례를 바꾸는 것도 다른 줄과 똑같이 된다.
+   * 오늘 값이 아닌 줄은 심볼 자리에 「MM/DD 종가」를 적는다 — 규칙은 하나, 오늘 값이 아니면 언제 값인지.
+   */
+  const rateQuotes: GRow[] = (() => {
+    const out: GRow[] = [];
+    const color = "#c9a227";
+    for (const k of US_YIELD_KEYS) {
+      const r = (usMajor.data?.rows ?? []).find((x) => x.key === k);
+      if (!r || r.price === null) continue;
+      out.push({ key: `rate:${k}`, label: r.label, group: "금리", symbol: r.symbol, price: r.price, change: r.change ?? null, changeRate: null, isRate: true, error: null, color, signal: null });
+    }
+    const hantoo = (rates.data ?? []).filter((r) => r.group !== "해외" || HANTOO_ONLY_RATES.includes(r.code));
+    /* 해외(기준금리·일본)가 먼저 — 요즘 시장을 흔드는 게 미국 금리라서. 국내는 그 뒤 */
+    for (const r of [...hantoo.filter((r) => r.group === "해외"), ...hantoo.filter((r) => r.group !== "해외")]) {
+      out.push({ key: `rate:${r.code}`, label: r.name, group: "금리", symbol: "", price: r.rate, change: r.change, changeRate: null, isRate: true, error: null, color, signal: null, asOf: r.asOf });
+    }
+    return out;
+  })();
+  const gAll: GRow[] = (() => {
+    const base: GRow[] = global.data ?? [];
+    if (rateQuotes.length === 0) return base;
+    const i = base.map((g) => g.group).lastIndexOf("미국 지수선물");
+    return i < 0 ? [...base, ...rateQuotes] : [...base.slice(0, i + 1), ...rateQuotes, ...base.slice(i + 1)];
+  })();
+
   /* 순서 — 적어 둔 차례 먼저, 나머지는 서버 차례. 새 줄이 생겨도 뒤에 붙는다 */
   const gOrdered = (() => {
-    const all = global.data ?? [];
+    const all = gAll;
     const idx = new Map(gRows.order.map((k, i) => [k, i]));
-    return [...all].sort((a, b) => (idx.get(a.key) ?? 1e9 + all.indexOf(a)) - (idx.get(b.key) ?? 1e9 + all.indexOf(b)));
+    /*
+     * 적어 둔 차례에 없는 줄(새로 생긴 줄, 예: 금리)은 **끝으로 밀지 않고 제자리 근처에** 둔다 —
+     * 바로 앞의 아는 줄 뒤에. 안 그러면 순서를 한 번이라도 저장한 사람에겐 새 묶음이 늘 맨 아래로 갔다.
+     */
+    const pos = new Map<string, number>();
+    let last = -1;
+    all.forEach((g, i) => {
+      const k = idx.get(g.key);
+      if (k !== undefined) {
+        last = k;
+        pos.set(g.key, k);
+      } else pos.set(g.key, last + 0.5 + i * 1e-6);
+    });
+    return [...all].sort((a, b) => (pos.get(a.key) ?? 0) - (pos.get(b.key) ?? 0));
   })();
   const gVisible = gOrdered.filter((g) => !gRows.hidden.includes(g.key));
   const gMove = (key: string, d: -1 | 1) => {
@@ -406,7 +454,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                     건지 끝난 건지를 모르겠네"). 한 카드에 야간선물·환율·미국선물·아시아가
                     같이 있는데, 숫자만 보면 지금 뛰는 값과 몇 시간 전에 끝난 값이 똑같이 생겼다.
                   */}
-                  <div className="ov-g-sec-h">
+                  <div className="ov-g-sec-h" title={grp === "금리" ? "%p 는 등락률이 아니라 변화폭입니다. 미국 넷은 야후(약 15분 지연), 기준금리·일본·국내는 한국투자증권 금리판 — 오늘 값이 아니면 「MM/DD 종가」를 적습니다" : undefined}>
                     {grp}
                     {kindOfGroup(grp) && <SessionBadge kind={kindOfGroup(grp)!} />}
                   </div>
@@ -420,9 +468,11 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                     .map((g) => (
                 <button
                   type="button"
-                  className="ov-g-row ov-g-click"
+                  className={`ov-g-row${g.symbol ? " ov-g-click" : ""}`}
                   key={g.key}
+                  disabled={!g.symbol}
                   onClick={() =>
+                    g.symbol &&
                     setChart({
                       /* 야간선물 줄은 야후가 아니라 한투 CM — 심볼이 월물코드다 */
                       kind: g.key === "krNightFut" ? "futures" : undefined,
@@ -442,7 +492,8 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                   />
                   <span className="ov-g-nm">
                     {g.label}
-                    <span className="ov-g-tk">{g.symbol}</span>
+                    {/* 금리(한투)는 심볼이 없다 — 그 자리에 「MM/DD 종가」. 오늘 값이면 비운다 */}
+                    <span className={`ov-g-tk${g.asOf && pastBadge(g.asOf) ? " ov-g-as" : ""}`}>{g.symbol || (g.asOf ? pastBadge(g.asOf) : "")}</span>
                   </span>
                   {g.error ? (
                     <span className="ov-g-pct" style={{ color: "var(--flat)" }}>
@@ -451,14 +502,16 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                   ) : (
                     <>
                       <span className="ov-g-px num">
-                        {g.price === null ? "-" : fmtNum(Number(g.price.toFixed(g.isRate ? 3 : 2)))}
+                        {/* 금리는 소수 셋째 자리까지 그대로 — 4.550 을 4.55 로 줄이면 자릿수가 들쭉날쭉해진다 */}
+                        {g.price === null ? "-" : g.isRate ? `${g.price.toFixed(3)}%` : fmtNum(Number(g.price.toFixed(2)))}
                       </span>
-                      <span className={`ov-g-pct num ${signCls(g.changeRate ?? 0)}`}>
+                      {/* 금리는 변화폭(%p)만 — 등락률로 보면 감이 안 온다 (4.71→4.72 는 0.2% 지만 0.01%p 가 뜻) */}
+                      <span className={`ov-g-pct num ${signCls(g.isRate ? (g.change ?? 0) : (g.changeRate ?? 0))}`}>
                         {g.change === null
                           ? "-"
-                          : `${g.change > 0 ? "+" : ""}${g.change.toFixed(g.isRate ? 3 : 2)} (${fmtPct(
-                              g.changeRate ?? 0,
-                            )})`}
+                          : g.isRate
+                            ? `${g.change > 0 ? "+" : ""}${g.change.toFixed(3)}%p`
+                            : `${g.change > 0 ? "+" : ""}${g.change.toFixed(2)} (${fmtPct(g.changeRate ?? 0)})`}
                       </span>
                     </>
                   )}
@@ -483,111 +536,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           미국 현물 전광판은 「미국」 서브탭에 그대로 있다.
         */}
 
-        {/*
-          금리 — **미국은 야후 실시간, 나머지는 한투** (2026-09-02 고침).
-
-          벤티지: "국채금리 부분 화면에 갱신이 늦는거 같네. 클릭하면 나오는 값이랑 다르다."
-          한투 금리 종합판은 **미국·일본 금리를 전일 종가로** 준다(응답의 `stck_bsop_date`
-          가 어제 날짜다). 그래서 미국장이 열려 있는 동안 카드는 「+0.020%p」로 멈춰 있는데
-          눌러서 뜬 야후 차트는 「-0.25%」였다 — 값도 방향도 달랐다.
-
-          미국 넷(3개월·5년·10년·30년)은 `usMajor` 가 이미 30초마다 야후에서 받고 있다.
-          그걸 쓰므로 **조회가 늘지 않는다.** 야후에 심볼이 없는 기준금리·일본 10년만
-          한투에서 오고, 그 줄에는 **기준일 배지**를 단다.
-
-          국내(국고채·CD·콜)는 한투 값이 당일이라 그대로다 — 그래도 날짜가 오늘이 아니면
-          배지가 붙는다. 규칙은 하나다: **오늘 값이 아니면 언제 값인지 적는다.**
-        */}
-        {show("summary") && (
-          <OverviewCard
-            order={cards.orderOf("rates")}
-            title="금리"
-            updatedAt={usMajor.data?.fetchedAt ?? rates.updatedAt}
-            loading={rates.loading}
-            error={rates.error}
-          >
-            <div className="ov-card-b">
-              <div className="rt-grid">
-                {/* 해외가 먼저다 (2026-08-25, PDF #6) — 요즘 시장을 흔드는 게 미국 금리라서 */}
-                <div>
-                  <div className="rt-h">해외</div>
-                  {/* 미국 — 야후 실시간. 만기가 짧은 쪽부터라 장단기 역전이 왼→오로 읽힌다 */}
-                  {US_YIELD_KEYS.map((k) => {
-                    const r = (usMajor.data?.rows ?? []).find((x) => x.key === k);
-                    if (!r || r.price === null) return null;
-                    return (
-                      <button
-                        type="button"
-                        className="rt-row rt-click"
-                        key={k}
-                        onClick={() =>
-                          setChart({
-                            symbol: r.symbol,
-                            label: r.label,
-                            digits: 3,
-                            hintPrice: r.price ?? undefined,
-                            hintRate: r.changeRate,
-                          })
-                        }
-                        title="눌러서 추이 차트"
-                      >
-                        <span className="rt-hot">{r.label}</span>
-                        <b className="num rt-hot">{r.price.toFixed(3)}%</b>
-                        {/* 금리는 변화폭(%p)으로 읽는다 — 등락률로 보면 감이 안 온다 */}
-                        <em className={`num ${signCls(r.change ?? 0)}`}>
-                          {(r.change ?? 0) > 0 ? "+" : ""}
-                          {(r.change ?? 0).toFixed(3)}%p
-                        </em>
-                      </button>
-                    );
-                  })}
-                  {/* 야후에 없는 것 — 한투, 지난 종가 */}
-                  {(rates.data ?? [])
-                    .filter((r) => HANTOO_ONLY_RATES.includes(r.code))
-                    .map((r) => (
-                      <div className="rt-row" key={r.code}>
-                        <span>
-                          {r.name}
-                          {pastBadge(r.asOf) && <u className="rt-as">{pastBadge(r.asOf)}</u>}
-                        </span>
-                        <b className="num">{r.rate?.toFixed(3)}%</b>
-                        <em className={`num ${signCls(r.change ?? 0)}`}>
-                          {(r.change ?? 0) > 0 ? "+" : ""}
-                          {(r.change ?? 0).toFixed(3)}%p
-                        </em>
-                      </div>
-                    ))}
-                </div>
-                <div>
-                  <div className="rt-h">국내</div>
-                  {(rates.data ?? [])
-                    .filter((r) => r.group === "국내")
-                    .map((r) => (
-                      <div className="rt-row" key={r.code}>
-                        <span>
-                          {r.name}
-                          {pastBadge(r.asOf) && <u className="rt-as">{pastBadge(r.asOf)}</u>}
-                        </span>
-                        <b className="num">{r.rate?.toFixed(3)}%</b>
-                        <em className={`num ${signCls(r.change ?? 0)}`}>
-                          {(r.change ?? 0) > 0 ? "+" : ""}
-                          {(r.change ?? 0).toFixed(3)}%p
-                        </em>
-                      </div>
-                    ))}
-                </div>
-              </div>
-              <div className="table-note">
-                <b>%p</b> 는 등락률이 아니라 <b>변화폭</b>입니다 — 4.71% 가 4.72% 로 가는 건
-                등락률로는 0.2% 지만 시장이 반응하는 건 0.01%p 라는 폭 자체입니다.
-                <b>일본 10년</b>은 엔 캐리와 붙어 있어, 오르면 전 세계 위험자산에서 돈이
-                빠집니다. 미국 넷은 야후에서 와 미국장이 열려 있는 동안 움직이지만
-                <b> 약 15분 지연</b>입니다. 날짜 배지가 붙은 줄은 그날 <b>종가</b>로
-                멈춰 있습니다 — 한국투자증권 금리판은 미국·일본을 전일 마감으로 줍니다.
-              </div>
-            </div>
-          </OverviewCard>
-        )}
+        {/* 금리 카드는 글로벌 안 「금리」 묶음으로 합쳤다 (2026-09-08) — 위 rateQuotes */}
 
         {/*
           시장 체온계 (2026-08-28) — 「시장 폭 추이」를 갈아끼웠다.

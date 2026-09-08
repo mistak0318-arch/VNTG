@@ -25,7 +25,7 @@ export const OVERVIEW_CARDS: Record<OverviewSub, CardDef[]> = {
     { key: "turnover", label: "거래대금 현황" },
     { key: "global", label: "글로벌" },
     /* 미장 주요지수 카드는 숨김 (2026-08-25) — 야간선물·VIX·유가는 글로벌로 옮겼다 */
-    { key: "rates", label: "금리" },
+    /* 금리 카드도 글로벌 안 「금리」 묶음으로 (2026-09-08) — 저장된 배치에 rates 가 남아 있어도 무시된다 */
     /*
      * 두 카드를 갈아끼웠다 (2026-08-28, 테마 DB 개편).
      * - 시장 폭 추이 → **시장 체온계**: 하루씩 쌓던 폭은 일봉 캐시가 40일치를

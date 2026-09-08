@@ -17659,3 +17659,6 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ov-g-edit-grp { font-size: 0.68rem; width: 5.5rem; flex: none; opacity: 0.85; }
 .ov-g-edit-row i { font-style: normal; font-size: 0.68rem; color: var(--muted); }
 .ov-g-edit-mv { display: inline-flex; gap: 0.2rem; flex: none; }
+/* 글로벌 줄의 심볼 자리에 온 「MM/DD 종가」 — 오늘 값이 아니라는 표 */
+.ov-g-as { color: #e6a23c; opacity: 0.9; }
+.ov-g-row:disabled { cursor: default; }
