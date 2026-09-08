@@ -241,6 +241,8 @@ interface Prefill {
   watchPct: string;
   watchExec: WatchExec | null;
   /** 값이 바뀌었는지 가리는 열쇠 — 같은 화면에서 링크를 또 눌러도 다시 채워진다 */
+  /** 미체결 정정으로 열기 — 주문 탭의 「정정/취소」가 이 주문번호를 고른다 (2026-09-08) */
+  amend: string;
   key: string;
 }
 
@@ -266,7 +268,7 @@ if (typeof window !== "undefined") {
   window.addEventListener("hashchange", grabPrefill);
 }
 
-const EMPTY_PREFILL: Prefill = { code: "", name: "", side: null, tradeType: null, price: "", cond: "", qty: "", credit: false, loanDate: "", watch: false, watchBasis: null, watchPct: "", watchExec: null, key: "" };
+const EMPTY_PREFILL: Prefill = { code: "", name: "", side: null, tradeType: null, price: "", cond: "", qty: "", credit: false, loanDate: "", watch: false, watchBasis: null, watchPct: "", watchExec: null, amend: "", key: "" };
 
 /**
  * 쪽지를 **보기만** 한다 — 비우지 않는다.
@@ -310,6 +312,8 @@ function readPrefill(): Prefill {
      * 열쇠가 주소 문자열뿐이라 **같은 종목 매도를 두 번째 누르면** 같은 쪽지로 보고 폼이 안
      * 바뀌었다(effect 가 key 로만 다시 돈다). 눌릴 때마다 새 쪽지여야 한다.
      */
+    /** 미체결 정정으로 열기 — 주문 탭의 「정정/취소」가 이 주문번호를 고른다 (2026-09-08) */
+    amend: q.get("amend") ?? "",
     key: `${raw}#${Date.now()}`,
   };
 }
@@ -1190,6 +1194,52 @@ function OrderForm({
    */
   const [tradeType, setTradeType] = useState(prefill.tradeType ?? status.settings?.defaultTradeType ?? "0");
   const [qty, setQty] = useState(prefill.qty);
+  /*
+   * 정정/취소 갈래 — 고른 미체결. null 이면 평범한 주문 화면이다.
+   * 목록은 이 갈래를 켤 때만 부른다(미체결은 5초 폴링이 따로 있고, 여기서 또 돌 이유가 없다).
+   */
+  const [amend, setAmend] = useState<{ ordNo: string; side: "buy" | "sell"; qty: number; price: number; name: string; code: string; venue: string; remain: number } | null>(null);
+  const [openRows, setOpenRows] = useState<OrderRow[] | null>(null);
+  /* 링크(#/order?amend=…)로 들어오면 정정 갈래를 켠다 */
+  useEffect(() => {
+    if (!prefill.amend) return;
+    setAmend({ ordNo: "", side: "buy", qty: 0, price: 0, name: "", code: "", venue: "KRX", remain: 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill.key]);
+  useEffect(() => {
+    if (!amend) return;
+    let alive = true;
+    const pull = () =>
+      void api
+        .orderOpen()
+        .then((r) => alive && setOpenRows(r.rows))
+        .catch(() => alive && setOpenRows([]));
+    pull();
+    const t = setInterval(pull, 5_000);
+    const f = () => pull();
+    window.addEventListener("vntg:fill", f);
+    return () => {
+      alive = false;
+      clearInterval(t);
+      window.removeEventListener("vntg:fill", f);
+    };
+  }, [amend !== null]);
+  /* 링크가 준 주문번호가 목록에 있으면 골라 둔다 — 사람이 한 번 더 안 눌러도 되게 */
+  const pickedAmend = useRef("");
+  useEffect(() => {
+    if (!prefill.amend || !openRows || pickedAmend.current === prefill.amend) return;
+    const r = openRows.find((x) => x.ordNo === prefill.amend);
+    if (!r) return;
+    pickedAmend.current = prefill.amend;
+    const sd: "buy" | "sell" = /매도/.test(r.side) ? "sell" : "buy";
+    setAmend({ ordNo: r.ordNo, side: sd, qty: r.remain || r.qty, price: r.price, name: r.name, code: r.code, venue: r.venue || "KRX", remain: r.remain || r.qty });
+    setCode(r.code);
+    setName(r.name);
+    setSide(sd);
+    setQty(String(r.remain || r.qty));
+    setPrice(r.price ? String(r.price) : "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRows, prefill.amend]);
   const [price, setPrice] = useState(prefill.price);
   const [cond, setCond] = useState(prefill.cond);
   /*
@@ -1614,15 +1664,70 @@ function OrderForm({
             );
           })()}
         </div>
-        <div className="ord-side">
+        {/*
+          매수 · 매도 · **정정/취소** (2026-09-08 — 벤티지가 키움 MTS 화면을 보내며 "미체결 수정은
+          주문 메뉴에서, 키움 같은 MTS 처럼"). 키움도 주문 화면 안에 셋째 갈래를 두고 미체결을
+          고르면 원주문가·수량이 채워진다. 호가를 눌러 값을 고치는 손이 그대로 이어진다.
+        */}
+        <div className="ord-side three">
           <button type="button" className={side === "buy" ? "on buy" : ""} onClick={() => setSide("buy")}>
             매수
           </button>
           <button type="button" className={side === "sell" ? "on sell" : ""} onClick={() => setSide("sell")}>
             매도
           </button>
+          <button type="button" className={amend ? "on amend" : ""} onClick={() => setAmend((v) => (v ? null : { ordNo: "", side: "buy", qty: 0, price: 0, name: "", code: "", venue: "KRX", remain: 0 }))}>
+            정정/취소
+          </button>
         </div>
       </div>
+
+      {amend && (
+        <div className="ord-amend">
+          <div className="ord-amend-h">
+            <b>정정/취소</b>
+            <small>미체결을 고르면 원주문가·남은 수량이 채워진다. 값을 고쳐 「정정」, 그대로 두고 「취소」.</small>
+          </div>
+          {openRows === null && <div className="ord-caps">미체결을 읽는 중…</div>}
+          {openRows?.length === 0 && <div className="ord-caps">미체결 주문이 없다</div>}
+          {openRows && openRows.length > 0 && (
+            <div className="ord-amend-list" role="listbox">
+              {openRows.map((r) => {
+                const on = amend.ordNo === r.ordNo;
+                return (
+                  <button
+                    key={r.ordNo}
+                    type="button"
+                    className={`ord-amend-row${on ? " on" : ""}`}
+                    onClick={() => {
+                      const sd: "buy" | "sell" = /매도/.test(r.side) ? "sell" : "buy";
+                      setAmend({ ordNo: r.ordNo, side: sd, qty: r.remain || r.qty, price: r.price, name: r.name, code: r.code, venue: r.venue || "KRX", remain: r.remain || r.qty });
+                      setCode(r.code);
+                      setName(r.name);
+                      setSide(sd);
+                      setQty(String(r.remain || r.qty));
+                      setPrice(r.price ? String(r.price) : "");
+                      setQuote(null);
+                    }}
+                  >
+                    <SideChip side={r.side} />
+                    <b>{r.name || r.code}</b>
+                    <span className="num">{fmtNum(r.remain || r.qty)}주</span>
+                    <span className="num">{r.price ? `${fmtNum(r.price)}원` : "시장가"}</span>
+                    <span className="ord-caps">{hms(r.time)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {amend.ordNo && (
+            <div className="ord-amend-cur">
+              원주문 <b>{amend.ordNo}</b> · {amend.name} · {amend.side === "buy" ? "매수" : "매도"} 남은 <b>{fmtNum(amend.remain)}주</b> @ <b>{amend.price ? fmtNum(amend.price) : "시장가"}</b>
+              <span className="ord-caps"> — 아래 수량·가격을 고치고 「정정」</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/*
         **잔고에서 고르기** (2026-09-07). 벤티지: "매도할 때 잔고 버튼이 보여서 잔고에서 뭘 매도할지
@@ -2006,9 +2111,62 @@ function OrderForm({
           )}
           {error && <p className="ord-err">{error}</p>}
         {error && /잠금/.test(error) && <UnlockCard onDone={() => { setError(null); onDone(); }} />}
-          <button type="submit" className={`ord-go ${side}`} disabled={busy || !ready}>
-            {busy ? "확인 중…" : side === "buy" ? "매수 주문" : "매도 주문"}
-          </button>
+          {amend ? (
+            <div className="ord-amend-go">
+              <button
+                type="button"
+                className="ord-go amend"
+                disabled={busy || !amend.ordNo || Number(qty) <= 0 || Number(price) <= 0}
+                onClick={async () => {
+                  setBusy(true);
+                  setError(null);
+                  try {
+                    const t = await api.orderModifyPrepare({
+                      ordNo: amend.ordNo,
+                      code: amend.code,
+                      name: amend.name,
+                      side: amend.side,
+                      qty: Number(qty) || 0,
+                      price: Number(price) || 0,
+                      condPrice: usesCond && cond ? Number(cond) : null,
+                      venue: (amend.venue as OrderVenue) || "KRX",
+                      remain: amend.remain,
+                    });
+                    setTicket(t as unknown as { nonce: string; expiresAt: number; ticket: OrderTicket });
+                  } catch (e2) {
+                    setError(e2 instanceof Error ? e2.message : "정정 주문서를 못 만들었다");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {busy ? "확인 중…" : "정정"}
+              </button>
+              <button
+                type="button"
+                className="ord-go cancel"
+                disabled={busy || !amend.ordNo}
+                onClick={async () => {
+                  setBusy(true);
+                  setError(null);
+                  try {
+                    const t = await api.orderCancelPrepare({ ordNo: amend.ordNo, code: amend.code, name: amend.name, qty: amend.remain, venue: (amend.venue as OrderVenue) || "KRX" });
+                    setTicket(t as unknown as { nonce: string; expiresAt: number; ticket: OrderTicket });
+                  } catch (e2) {
+                    setError(e2 instanceof Error ? e2.message : "취소 주문서를 못 만들었다");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                취소
+              </button>
+            </div>
+          ) : (
+            <button type="submit" className={`ord-go ${side}`} disabled={busy || !ready}>
+              {busy ? "확인 중…" : side === "buy" ? "매수 주문" : "매도 주문"}
+            </button>
+          )}
           <p className="ord-note">
             {code && (
               <>
@@ -3068,29 +3226,6 @@ function OpenTab({ status, onDone }: { status: OrderStatus; onDone: () => void }
   const [ticket, setTicket] = useState<{ nonce: string; expiresAt: number; ticket: CancelTicket | ModifyTicket } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const [editing, setEditing] = useState<{ ordNo: string; price: string; qty: string } | null>(null);
-  async function modify(r: OrderRow) {
-    if (!editing) return;
-    setMsg(null);
-    try {
-      const t = await api.orderModifyPrepare({
-        ordNo: r.ordNo,
-        code: r.code,
-        name: r.name,
-        side: /매도/.test(r.side) ? "sell" : "buy",
-        qty: Number(editing.qty) || 0,
-        price: Number(editing.price) || 0,
-        condPrice: r.stopPrice ? r.stopPrice : null,
-        venue: (r.venue as OrderVenue) || "KRX",
-        remain: r.remain || r.qty,
-      });
-      setEditing(null);
-      setTicket(t);
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "정정 주문서를 못 만들었다");
-      if (isGone(e)) onDone();
-    }
-  }
   async function cancel(r: OrderRow) {
     setMsg(null);
     try {
@@ -3152,10 +3287,10 @@ function OpenTab({ status, onDone }: { status: OrderStatus; onDone: () => void }
                   <td className="r" data-l="발동가">{r.stopPrice ? `${r.stopPrice.toLocaleString()}원` : ""}</td>
                   <td data-l="상태">{r.status || "-"}</td>
                   <td className="ord-open-acts">
-                    {/* 정정 (2026-09-08 — 벤티지 "미체결에서 주문 수정하는 기능. 수정 취소 이렇게") */}
-                    <button type="button" className="ord-x" onClick={() => setEditing(editing?.ordNo === r.ordNo ? null : { ordNo: r.ordNo, price: String(r.price || ""), qty: String(r.remain || r.qty) })}>
-                      {editing?.ordNo === r.ordNo ? "닫기" : "수정"}
-                    </button>
+                    {/* 정정은 주문 탭의 「정정/취소」에서 — 호가를 눌러 값을 고치는 손이 거기 있다 (2026-09-08) */}
+                    <a className="ord-x" href={`#/order?stk=${r.code}&name=${encodeURIComponent(r.name)}&amend=${r.ordNo}`}>
+                      정정
+                    </a>
                     <button type="button" className="ord-x" onClick={() => void cancel(r)}>
                       취소
                     </button>
@@ -3166,29 +3301,6 @@ function OpenTab({ status, onDone }: { status: OrderStatus; onDone: () => void }
           </table>
         </div>
       )}
-      {editing && (() => {
-        const r = rows.find((x) => x.ordNo === editing.ordNo);
-        if (!r) return null;
-        return (
-          <div className="ord-modify">
-            <b>{r.name || r.code}</b> <span className="ord-code">{r.code}</span> · 원주문 {r.ordNo} · 남은 {fmtNum(r.remain || r.qty)}주
-            <div className="ord-modify-row">
-              <label>
-                단가
-                <input className="ord-in" inputMode="numeric" value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value.replace(/\D/g, "") })} onKeyDown={(e) => e.key === "Enter" && void modify(r)} />
-              </label>
-              <label>
-                수량
-                <input className="ord-in" inputMode="numeric" value={editing.qty} onChange={(e) => setEditing({ ...editing, qty: e.target.value.replace(/\D/g, "") })} onKeyDown={(e) => e.key === "Enter" && void modify(r)} />
-              </label>
-              <button type="button" className="ord-mk" disabled={!Number(editing.price) || !Number(editing.qty)} onClick={() => void modify(r)}>
-                정정 주문서
-              </button>
-            </div>
-            <small className="ord-note">단가·수량을 고쳐 같은 주문번호를 정정한다 — 취소 뒤 다시 내는 것보다 호가 순번을 덜 잃는다. 확인 창과 비밀번호는 같다.</small>
-          </div>
-        );
-      })()}
       {ticket && (
         <Confirm
           nonce={ticket.nonce}
