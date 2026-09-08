@@ -1540,6 +1540,16 @@ export async function executePrepared(
   const cfg = await getSettings();
   const graced = Boolean(sess && cfg.rememberPassword && sess.pwUntil > Date.now());
   let remembered = graced;
+  /*
+   * **넘어온 비밀번호가 있으면 기억 중이라도 본다** (2026-09-08 — 벤티지 "주문할 때 넣는 패턴이
+   * 화면 잠금 패턴으로 먹는 거 같아"). 기억이 시작된 직후엔 화면이 아직 모르고(상태는 30초마다)
+   * 패드를 그대로 띄우는데, 서버가 그 값을 안 보니 아무 패턴이나 통과했다 — 틀린 걸 쳤는데
+   * 나가는 것은 「묻지 않는 것」과 다르다. 빈 값만 기억으로 통과시킨다.
+   */
+  if (graced && password) {
+    const pw = await checkPassword(password);
+    if (!pw.ok) throw new Error(pw.error);
+  }
   if (!graced) {
     const pw = await checkPassword(password);
     if (!pw.ok) throw new Error(pw.error);
