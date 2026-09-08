@@ -351,6 +351,8 @@ export class RealtimeClient {
       if (this.codeCount() >= RealtimeClient.MAX_ITEMS) {
         /* 1분에 한 번만 — 초과가 나면 수십 종목이 한꺼번에 들어와 로그가 넘친다 */
         const now = Date.now();
+        this.seatRefusals += 1;
+        this.lastRefused = `${item} (${new Date().toISOString().slice(11, 19)})`;
         if (now - this.lastSeatWarn > 60_000) {
           this.lastSeatWarn = now;
           console.warn(
@@ -367,6 +369,16 @@ export class RealtimeClient {
 
   /** 정원 초과 경고를 마지막으로 찍은 때 — 로그가 넘치지 않게 */
   private lastSeatWarn = 0;
+  /**
+   * **자리가 없어 못 건 횟수** (2026-09-09).
+   *
+   * 여태 `console.warn` 뿐이었다 — 서버 콘솔을 안 보면 아무도 모른다. 실제로 아침에
+   * 정원이 200/200 으로 꽉 차 화면 몫이 0 이었는데, 상태창에 아무 표시가 없어서
+   * 「소켓은 연결됨·healthy」로만 보였다. 이 프로젝트가 제일 무서워하는 조용한 실패다.
+   * 상태에 실어 밖에서 보이게 한다.
+   */
+  seatRefusals = 0;
+  lastRefused: string | null = null;
 
   /**
    * 화면이 지금 보는 종목 — **상한에 닿으면 오래된 것을 빼고 넣는다.**

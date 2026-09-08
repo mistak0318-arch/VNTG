@@ -404,6 +404,9 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
        */
       second: secondInfo(),
       dual: dualEnabled(),
+      /* 자리가 없어 못 건 구독 — 0 이 아니면 정원 배분을 줄여야 한다 (2026-09-09) */
+      seatRefusals: rt?.seatRefusals ?? 0,
+      lastRefused: rt?.lastRefused ?? null,
       keys: store?.health.keys ?? 0,
       /*
        * **등록이 거절된 기록.** 비어 있어야 정상이다.
