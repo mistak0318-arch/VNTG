@@ -17969,3 +17969,5 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
   .ac-hist-steps { flex-direction: column; gap: 0.12rem; }
   .ac-hist-steps > span { white-space: normal; }
 }
+/* 실시간 체결(한투 소켓)로 온 값 — 3초 폴링과 구별한다 (2026-09-08) */
+.uw-live-dot.rt { background: var(--green, #35c46a); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green, #35c46a) 22%, transparent); }

@@ -150,12 +150,24 @@ export function UsWatchTable({
    * 실시간은 얹는 것이지 대체하는 게 아니다.
    */
   const feOn = usFeActive();
+  /*
+   * **읽기 전용으로 받는다** (2026-09-08 — 해외 실시간을 한투 웹소켓으로 받으면서).
+   *
+   * 두 가지가 같이 좋아진다:
+   *   · 읽기 전용은 **SSE** 로 온다 — 값의 나이가 폴링 2.5초에서 0.2초로 준다.
+   *     한투 소켓은 종목당 초당 네 틱쯤 보내는데, 2.5초로 물으면 그 대부분을 버리는 셈이다.
+   *   · 키움 쪽에 **임시구독을 안 건다.** 여기 열쇠는 `FE:` 인데 키움 FE 는 프레임을 안
+   *     준다(같은 날 실측) — 그동안 값도 없는 구독이 키움 정원(200)을 갉아먹고 있었다.
+   *     해외 값은 이제 한투 소켓이 저장소에 넣어 주므로 키움에 걸 이유가 없다.
+   */
   const rt = useRealtime(
     feOn ? stocks.map((s) => `FE:${s.symbol.toUpperCase()}`) : [],
     2500,
+    { readOnly: true },
   );
   const live = (symbol: string): { price: number; rate: number | null } | null => {
     if (!rt.healthy) return null;
+    /* 값 자체의 나이로 판단한다 — 아래 90초 검사가 그것이다 */
     const v = rt.values[`FE:${symbol.toUpperCase()}`];
     if (!v || Date.now() - v.at > 90_000) return null;
     const price = fid(v, "10");
@@ -330,9 +342,21 @@ export function UsWatchTable({
                         <td
                           key={c.key}
                           className="num"
-                          title={lv ? `${s.currency ?? ""} · 빠른 시세(3초)` : (s.currency ?? "")}
+                          /* 어디서 온 값인지 그대로 적는다 — 문구가 실제와 다른 것이 제일 위험하다 */
+                          title={
+                            live(s.symbol)
+                              ? `${s.currency ?? ""} · 실시간 체결(한투 소켓)`
+                              : lv
+                                ? `${s.currency ?? ""} · 빠른 시세(3초)`
+                                : (s.currency ?? "")
+                          }
                         >
-                          {lv && <span className="uw-live-dot" title="빠른 시세 — 3초마다 갱신" />}
+                          {lv && (
+                            <span
+                              className={`uw-live-dot${live(s.symbol) ? " rt" : ""}`}
+                              title={live(s.symbol) ? "실시간 체결 — 한투 소켓" : "빠른 시세 — 3초마다 갱신"}
+                            />
+                          )}
                           {price(shownPrice, s.currency)}
                           {/* 괄호는 그대로 둔다 — 실시간이 끊길 때마다 붙었다 떨어지면 화면이 덜컹인다 */}
                           {side && (

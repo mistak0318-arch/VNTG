@@ -3,8 +3,7 @@ import { RealtimeClient } from "./realtimeClient.js";
 import { RealtimeStore } from "./realtimeStore.js";
 import { notePhaseFrame } from "./marketPhase.js";
 import { tradeValueTop } from "./signalScreen.js";
-import { usStexMap } from "./usKiwoomDetail.js";
-import { listGroups as listUsGroups } from "./usWatchlist.js";
+import { startHantooRealtime } from "./hantooRealtime.js";
 import { listWatchlist } from "./watchlist.js";
 
 /**
@@ -70,6 +69,11 @@ export async function getRealtime(
     await store.start();
     /* 장운영구분 관측 (2026-09-04) — 적기만 한다. 판단은 9/14 에 (marketPhase.ts) */
     client.onFrame(notePhaseFrame);
+    /*
+     * 해외 실시간(한투 웹소켓)도 **같은 저장소**로 (2026-09-08). 키움 FE 는 프레임을 안
+     * 줘서(실측) 해외만 폴링이었다. 화면이 보는 그룹을 `/api/us-watch/fast` 가 넘겨 준다.
+     */
+    startHantooRealtime(store);
   }
   return { client, store: store as RealtimeStore };
 }
@@ -293,12 +297,14 @@ const PER_MARKET = 90;
 const DUAL_PER_MARKET = 95;
 /** 순위 캐시를 몇 위까지 받아 둘지 — 1번(95) + 2번(95) 몫 */
 const RANK_DEPTH = PER_MARKET + DUAL_PER_MARKET;
-/** 저녁(국내 애프터 + 미국 프리장 겹침)의 국내 몫 — 미국에 60 을 내준다 */
+/**
+ * 저녁(국내 애프터 15:40~20:00)의 시장당 몫.
+ *
+ * 예전 주석은 「미국에 60 을 내준다」였는데, 그 60 은 **값이 안 오는 해외 구독**이었다
+ * (2026-09-08 실측으로 걷어냈다). 몫 자체는 그대로 두고 상한만 190 으로 되돌렸다 —
+ * 저녁의 관심종목이 130 에 걸려 잘리던 것이 풀린다.
+ */
 const PER_MARKET_EVENING = 50;
-/** 저녁의 미국 몫. 관심(해외) 앞 그룹부터 이만큼 */
-const US_EVENING = 60;
-/** 밤의 미국 몫 — 국내는 닫혔으니 크게. 화면 몫 10 은 여전히 비워 둔다 */
-const US_NIGHT = 150;
 /**
  * 스케줄러가 채우는 몫.
  *
@@ -379,36 +385,6 @@ async function refreshRank(kiwoom: KiwoomClient): Promise<void> {
   }
 }
 
-/**
- * 미국 FE 로 걸 티커 — 관심종목(해외) **그룹 순서대로**, 미국 거래소만.
- *
- * 그룹 순서가 곧 우선순위다(첫 그룹이 늘 제일 자주 보는 묶음). 유럽·일본 티커는
- * FE 가 안 받으므로 usExchanges 지도(ND/NY/NA)에 있는 것만 남긴다.
- */
-const US_REFRESH_MS = 5 * 60 * 1000;
-let usCache: { at: number; symbols: string[] } = { at: 0, symbols: [] };
-
-async function usSymbols(): Promise<string[]> {
-  if (Date.now() - usCache.at < US_REFRESH_MS) return usCache.symbols;
-  try {
-    const [groups, stex] = await Promise.all([listUsGroups(), usStexMap()]);
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const g of groups) {
-      for (const s of g.stocks) {
-        const sym = s.symbol.toUpperCase();
-        if (seen.has(sym) || !stex[sym]) continue;
-        seen.add(sym);
-        out.push(sym);
-      }
-    }
-    usCache = { at: Date.now(), symbols: out };
-  } catch (e) {
-    console.log("실시간: 해외 관심종목 읽기 실패 —", e instanceof Error ? e.message : e);
-    usCache = { ...usCache, at: 0 };
-  }
-  return usCache.symbols;
-}
 
 /**
  * 무엇을 구독할까 — **관심종목이 먼저, 그다음 거래대금 상위.**
@@ -542,16 +518,20 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
       /*
        * 국면별 정원. 합이 MAX_CODES(190)를 넘지 않아야 한다 — 나머지 10 은 화면 몫.
        *
-       *   낮    국내 190 (관심 + 95/95) · 미국 0
-       *   저녁  국내 관심 + 50/50 · 미국 60  (관심 ~25 로 잡으면 185)
-       *   밤    국내 0 · 미국 150
+       *   낮    국내 190 (관심 + 95/95)
+       *   저녁  국내 190 (관심 + 50/50)   ← 예전엔 60 을 미국에 떼주고 130 만 썼다
+       *   밤    국내 0
+       *
+       * ⚠️ **미국 몫은 없앴다** (2026-09-08). 해외 체결은 키움 소켓으로 **한 프레임도 안 온다**
+       * (실측 두 번). 그런데 저녁 60자리·밤 150자리를 그 빈 구독에 쓰고 있었다 — 저녁의
+       * 국내 실시간이 190 이 아니라 130 종목이었다는 뜻이다. 해외는 이제 한투 웹소켓이
+       * 준다(`hantooRealtime.ts`). 이 연결은 **국내 전용**이다.
        */
       let added = 0;
 
       if (phase !== "밤") {
         const perMarket = phase === "저녁" ? PER_MARKET_EVENING : PER_MARKET;
-        const usAllow = phase === "저녁" ? US_EVENING : 0;
-        const codes = await targets(kiwoom, perMarket, MAX_CODES - usAllow);
+        const codes = await targets(kiwoom, perMarket, MAX_CODES);
         for (const code of codes) {
           if (subscribed.has(code)) continue;
           subscribed.add(code);
@@ -571,19 +551,21 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
         }
       }
 
-      if (phase !== "낮") {
-        /*
-         * 미국 FE — 해외 관심종목, 그룹 순서대로. ⚠️ 프레임 실측은 아직이다
-         * (등록은 통과 — regErrors 0). 안 오면 밤에 로그로 원인이 남는다.
-         */
-        const allow = phase === "밤" ? US_NIGHT : US_EVENING;
-        for (const sym of (await usSymbols()).slice(0, allow)) {
-          if (subscribed.has(sym)) continue;
-          subscribed.add(sym);
-          rt.subscribeKeep("FE", sym);
-          added += 1;
-        }
-      }
+      /*
+       * ⚠️ **미국 FE 구독은 걷어냈다** (2026-09-08).
+       *
+       * 여기서 밤에 최대 150자리(US_NIGHT), 저녁에 60자리를 해외 종목에 쓰고 있었다.
+       * 그런데 **그 자리로는 값이 하나도 안 온다** — 그날 정규장 한복판에 여덟 가지 종목코드
+       * 형식으로 35초를 기다려도 0건이었다(`POST /api/realtime/probe-fe`). 등록은 통과하니
+       * regErrors 도 비어 있어 여태 아무도 몰랐다.
+       *
+       * 즉 **한 연결 200자리 중 최대 150을 빈 구독이 먹고 있었다.** 국내 실시간이 그만큼
+       * 밀린다 — 이 프로젝트가 제일 무서워하는 「조용한 실패」다(소켓은 연결됨·healthy 인데
+       * 시세만 폴링 주기로 느려진다).
+       *
+       * 해외 체결은 이제 **한투 웹소켓**이 준다(`hantooRealtime.ts`). 저장소는 같으므로
+       * 화면이 보는 `FE:<심볼>` 열쇠는 그대로다. 여기서 키움에 걸 이유가 없다.
+       */
 
       /*
        * 2번 연결 — 낮·저녁에만 (밤은 국내가 닫혔고 FE 는 프레임을 안 준다 — 실측).

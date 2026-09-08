@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { hantooRealtimeStatus } from "../hantooRealtime.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { RealtimeClient } from "../realtimeClient.js";
 import { dualEnabled, getRealtime, peekRealtime, secondInfo, shouldRun, subCode, subscribedCount } from "../realtimeHub.js";
@@ -331,6 +332,11 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
    * 상태 — **화면이 폴링으로 되돌릴지 정하는 근거.**
    * `healthy` 가 거짓이면 실시간을 믿지 말고 평소대로 폴링하면 된다.
    */
+  /** 해외 실시간(한투 웹소켓) 상태 — 붙었나·몇 종목·프레임이 오나 (2026-09-08) */
+  router.get("/us-status", (_req, res) => {
+    res.json(hantooRealtimeStatus());
+  });
+
   router.get("/status", (_req, res) => {
     const { client: rt, store } = hub();
     res.json({

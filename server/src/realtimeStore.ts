@@ -354,6 +354,17 @@ export class RealtimeStore {
   }
 
   /** 프레임 하나를 받아 넣는다 */
+  /**
+   * **다른 소켓에서 온 값도 여기로** (2026-09-08 — 해외 실시간을 한투 웹소켓으로 받으면서).
+   *
+   * 키움 프레임 모양(`REAL`)으로 감싸 같은 길로 보낸다. 저장소가 둘이면 그때부터 값이
+   * 갈린다 — 이중 연결 때 이미 정한 원칙이라(`attach`) 해외도 같은 자리를 쓴다.
+   * 화면은 `FE:<심볼>` 한 열쇠만 보면 되고, 어느 소켓에서 왔는지는 몰라도 된다.
+   */
+  takeExternal(type: string, item: string, values: Record<string, string>): void {
+    this.take({ trnm: "REAL", data: [{ type, item, values }] } as RealtimeFrame);
+  }
+
   private take(f: RealtimeFrame): void {
     if (f.trnm !== "REAL" || !Array.isArray(f.data)) return;
 
