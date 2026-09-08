@@ -15882,6 +15882,13 @@ select.ord-in { appearance: auto; cursor: pointer; }
   gap: 0.45rem;
 }
 .ord-cfg-sec h4 { margin: 0; font-size: 0.95rem; }
+/* 접히는 절 (2026-09-08) — 기본은 전부 접힘. 머리만 남는다 */
+.ord-cfg-h4 { cursor: pointer; display: flex; align-items: center; gap: 0.4rem; user-select: none; }
+.ord-cfg-caret { font-style: normal; color: var(--muted); width: 0.8rem; }
+.ord-cfg-sec.folded > :not(.ord-cfg-h4) { display: none; }
+.ord-cfg-sec.folded { padding: 0.55rem 0.75rem; }
+.ord-tab-order { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.ord-tab-order-row { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0.3rem 0.15rem 0.6rem; border: 1px solid var(--border); border-radius: 999px; background: var(--panel-2); font-size: 0.84rem; }
 .ord-cfg-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .ord-cfg-row label { display: flex; align-items: center; gap: 0.3rem; font-size: 0.88rem; }
 .ord-cfg-row .ord-in { width: auto; min-width: 7rem; }

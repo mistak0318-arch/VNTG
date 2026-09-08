@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { setPref } from "../prefs";
 import { NumPad, PatternPad } from "../components/EntryPads";
 import {
   api,
@@ -71,6 +72,77 @@ const VENUES: { key: OrderVenue; label: string; hint: string }[] = [
  * 포지션 탭이 잔고·자동감시·미체결·체결을 종목 카드 하나로 합친다.
  */
 type Sub = "order" | "positions" | "ledger" | "history" | "config";
+
+/*
+ * 설정 절 접기 (2026-09-08 — 벤티지 "설정의 메뉴들 너무 기니깐 접었다가 펼 수 있게. 기본은 모두 접음").
+ * 절이 아홉 개고 컴포넌트가 넷으로 갈라져 있어 상태를 모듈에 둔다. 펼친 것만 기억한다(기기별).
+ */
+const CFG_FOLD_KEY = "vntg.order.cfgOpen";
+let cfgOpenSet: Set<string> = (() => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(CFG_FOLD_KEY) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+})();
+const cfgFoldSubs = new Set<() => void>();
+function useCfgFold(): { open: (id: string) => boolean; toggle: (id: string) => void } {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const f = () => bump((n) => n + 1);
+    cfgFoldSubs.add(f);
+    return () => {
+      cfgFoldSubs.delete(f);
+    };
+  }, []);
+  return {
+    open: (id) => cfgOpenSet.has(id),
+    toggle: (id) => {
+      const next = new Set(cfgOpenSet);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      cfgOpenSet = next;
+      try {
+        localStorage.setItem(CFG_FOLD_KEY, JSON.stringify([...next]));
+      } catch {
+        /* 비공개 창 */
+      }
+      for (const f of cfgFoldSubs) f();
+    },
+  };
+}
+/** 절 머리 — 누르면 접힌다 */
+function CfgH4({ id, children }: { id: string; children: ReactNode }) {
+  const f = useCfgFold();
+  return (
+    <h4 className="ord-cfg-h4" onClick={() => f.toggle(id)} role="button" aria-expanded={f.open(id)}>
+      <i className="ord-cfg-caret">{f.open(id) ? "▾" : "▸"}</i>
+      {children}
+    </h4>
+  );
+}
+function cfgSecClass(open: boolean): string {
+  return `ord-cfg-sec${open ? "" : " folded"}`;
+}
+
+/*
+ * 탭 차례 (2026-09-08 — 벤티지 "주문 포지션 기록 잔고 설정 이 순서로. 설정에서 바꿀 수도 있게").
+ * `vntg.` 로 시작하는 키라 setPref 가 서버에도 올린다 — 기기마다 다르면 손이 헷갈린다.
+ */
+const SUB_ORDER_KEY = "vntg.order.subOrder";
+const SUB_ORDER_DEFAULT: Sub[] = ["order", "positions", "history", "ledger", "config"];
+function readSubOrder(): Sub[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SUB_ORDER_KEY) ?? "null") as Sub[] | null;
+    if (Array.isArray(raw)) {
+      const keep = raw.filter((k) => SUB_ORDER_DEFAULT.includes(k));
+      return [...keep, ...SUB_ORDER_DEFAULT.filter((k) => !keep.includes(k))];
+    }
+  } catch {
+    /* 처음 */
+  }
+  return SUB_ORDER_DEFAULT;
+}
 
 const SUBS: { key: Sub; label: string }[] = [
   { key: "order", label: "주문" },
@@ -440,6 +512,7 @@ function orderLink(h: { code: string; name: string; ableQty: number; creditType:
 
 export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
   const [status, setStatus] = useState<OrderStatus | null>(null);
+  const [subOrder, setSubOrder] = useState<Sub[]>(readSubOrder);
   const [err, setErr] = useState<string | null>(null);
   const [sub, setSub] = useState<Sub>(() => (peekPrefill().watch ? "positions" : "order"));
   const [left, setLeft] = useState(0);
@@ -538,7 +611,7 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
       ) : (
         <>
           <div className="ord-subs">
-            {SUBS.map((s) => (
+            {subOrder.map((k) => SUBS.find((x) => x.key === k)!).map((s) => (
               <button
                 key={s.key}
                 type="button"
@@ -558,7 +631,7 @@ TELEGRAM_CHAT_ID_ORDER=...     # 주문·체결이 갈 방`}</pre>
           {sub === "positions" && <PositionsTab status={status} prefill={prefill} onDone={load} onSelectStock={onSelectStock} />}
           {sub === "ledger" && <LedgerTab />}
           {sub === "history" && <HistoryTab status={status} onDone={load} />}
-          {sub === "config" && <ConfigTab status={status} onDone={load} />}
+          {sub === "config" && <ConfigTab status={status} onDone={load} subOrder={subOrder} onSubOrder={(o) => { setSubOrder(o); setPref(SUB_ORDER_KEY, JSON.stringify(o)); }} />}
         </>
       )}
     </div>
@@ -3917,7 +3990,8 @@ function HistoryTab({ status, onDone }: { status: OrderStatus; onDone: () => voi
  * 이것들은 `server/data/orderGuard.json` 을 직접 열어 고치고 서버를 다시 켜야 한다.
  * 화면에서 고칠 수 있으면 그건 한도가 아니다(설계 L3). 여기서는 **보여만 준다.**
  */
-function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void }) {
+function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStatus; onDone: () => void; subOrder: Sub[]; onSubOrder: (o: Sub[]) => void }) {
+  const fold = useCfgFold();
   const [cfg, setCfg] = useState(status.settings);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -4019,8 +4093,23 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
       {msg && <p className="ord-ok">{msg}</p>}
       {error && <p className="ord-err">{error}</p>}
 
-      <section className="ord-cfg-sec">
-        <h4>주문 비밀번호 기억하기</h4>
+      <section className={cfgSecClass(fold.open("tabs"))}>
+        <CfgH4 id="tabs">탭 차례</CfgH4>
+        <p className="ord-note">주문 메뉴 위쪽 탭의 차례. ▲▼ 로 옮긴다 — 어느 기기에서나 같다.</p>
+        <div className="ord-tab-order">
+          {subOrder.map((k, i) => (
+            <span key={k} className="ord-tab-order-row">
+              <b>{SUBS.find((x) => x.key === k)?.label}</b>
+              <button type="button" className="gt-move" disabled={i === 0} onClick={() => { const o = [...subOrder]; [o[i - 1], o[i]] = [o[i], o[i - 1]]; onSubOrder(o); }} title="앞으로">▲</button>
+              <button type="button" className="gt-move" disabled={i === subOrder.length - 1} onClick={() => { const o = [...subOrder]; [o[i + 1], o[i]] = [o[i], o[i + 1]]; onSubOrder(o); }} title="뒤로">▼</button>
+            </span>
+          ))}
+          <button type="button" className="filter-btn" onClick={() => onSubOrder(SUB_ORDER_DEFAULT)}>처음대로</button>
+        </div>
+      </section>
+
+      <section className={cfgSecClass(fold.open("remember"))}>
+        <CfgH4 id="remember">주문 비밀번호 기억하기</CfgH4>
         <p className="ord-note">
           켜면 한 번 맞힌 뒤 정해 둔 시간 동안 실행마다 묻지 않습니다.{" "}
           <b>비밀번호를 저장하지 않습니다</b> — 서버가 이 주문 세션에 「확인됨」 시각만 찍어 둡니다.
@@ -4062,8 +4151,8 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
         </div>
       </section>
 
-      <section className="ord-cfg-sec">
-        <h4>주문 메뉴가 닫히는 시간</h4>
+      <section className={cfgSecClass(fold.open("close"))}>
+        <CfgH4 id="close">주문 메뉴가 닫히는 시간</CfgH4>
         <p className="ord-note">
           열어 두면 잊고 자리를 뜨게 됩니다. <b>가만히 두면</b> 그 시간에 닫히고, 계속 쓰더라도{" "}
           <b>최대 시간</b>이 지나면 닫습니다. 짧을수록 안전하고 길수록 편합니다 — 기기를 잃어버렸을 때
@@ -4102,8 +4191,8 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
 
       <DeviceSection cfg={cfg} busy={busy} onSave={save} />
 
-      <section className="ord-cfg-sec">
-        <h4>기본값</h4>
+      <section className={cfgSecClass(fold.open("defaults"))}>
+        <CfgH4 id="defaults">기본값</CfgH4>
         <div className="ord-cfg-row">
           <span className="ord-caps">거래소</span>
           <select
@@ -4135,8 +4224,8 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
         </div>
       </section>
 
-      <section className="ord-cfg-sec">
-        <h4>주문 메뉴를 무엇으로 여나</h4>
+      <section className={cfgSecClass(fold.open("entry"))}>
+        <CfgH4 id="entry">주문 메뉴를 무엇으로 여나</CfgH4>
         <p className="ord-note">
           <b>PIN 네 자리</b>는 손이 편합니다. 대신 네 자리는 만 가지뿐이라 <b>혼자 서는 문이 아닙니다</b> —
           그래서 <b>「등록된 기기에서만 주문」이 켜져 있을 때만</b> 고를 수 있습니다(서버가 막습니다).
@@ -4187,8 +4276,8 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
         </div>
       </section>
 
-      <form className="ord-cfg-sec" onSubmit={(e) => void changePin(e)}>
-        <h4>{padMode === "pattern" ? "진입 패턴 바꾸기" : "진입 PIN 바꾸기"}</h4>
+      <form className={cfgSecClass(fold.open("pin"))} onSubmit={(e) => void changePin(e)}>
+        <CfgH4 id="pin">{padMode === "pattern" ? "진입 패턴 바꾸기" : "진입 PIN 바꾸기"}</CfgH4>
         <p className="ord-note">
           지금 {padMode === "pattern" ? "패턴" : "PIN"} 또는 <b>주문 비밀번호</b>로 확인합니다 — 잊어도 되돌릴 길이 있어야
           합니다.{" "}
@@ -4233,8 +4322,8 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
         </button>
       </form>
 
-      <form className="ord-cfg-sec" onSubmit={(e) => void changePw(e)}>
-        <h4>주문 비밀번호 {pwPadMode === "pattern" ? "— 패턴" : "바꾸기"}</h4>
+      <form className={cfgSecClass(fold.open("password"))} onSubmit={(e) => void changePw(e)}>
+        <CfgH4 id="password">주문 비밀번호 {pwPadMode === "pattern" ? "— 패턴" : "바꾸기"}</CfgH4>
         <p className="ord-note">
           주문을 실행할 때마다 묻는 것입니다. 글자 6자 이상이나 3×3 패턴 중 고릅니다.{" "}
           {(cfg.entryMode === "pattern" || pendingMode === "pattern") && pwPadMode === "pattern" && (
@@ -4315,6 +4404,7 @@ function ConfigTab({ status, onDone }: { status: OrderStatus; onDone: () => void
  * 켜고 끄는 것은 스위치로, 값은 숫자로. 0 이면 「안 씀」인 것들은 스위치를 끄면 0 을 보낸다.
  */
 function GuardSection({ guard, mock, cap, onSaved }: { guard: OrderGuard; mock: boolean; cap?: { maxOrderKrw: number | null; maxDailyKrw: number | null }; onSaved: (g: OrderGuard) => void }) {
+  const fold = useCfgFold();
   const [d, setD] = useState<OrderGuard>(guard);
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
@@ -4380,8 +4470,8 @@ function GuardSection({ guard, mock, cap, onSaved }: { guard: OrderGuard; mock: 
   );
 
   return (
-    <section className="ord-cfg-sec">
-      <h4>규칙·한도</h4>
+    <section className={cfgSecClass(fold.open("guard"))}>
+      <CfgH4 id="guard">규칙·한도</CfgH4>
       <p className="ord-note">
         주문을 <b>거절</b>하거나 <b>막는</b> 규칙 전부다. 넘으면 줄여서 내지 않고 거절한다. 바꾸려면 주문 비밀번호를 다시 넣는다 —
         주문을 내는 것과 같은 무게이고, 바뀐 값은 기록에 남는다. {mock ? "지금은 모의투자다." : "지금은 실전 계좌다."}
@@ -4447,6 +4537,7 @@ function DeviceSection({
   busy: boolean;
   onSave: (patch: Partial<OrderSettings>) => Promise<void>;
 }) {
+  const fold = useCfgFold();
   const [devices, setDevices] = useState<OrderDevice[]>([]);
   const [mailReady, setMailReady] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -4463,8 +4554,8 @@ function DeviceSection({
   useEffect(load, [load]);
 
   return (
-    <section className="ord-cfg-sec">
-      <h4>주문할 수 있는 기기</h4>
+    <section className={cfgSecClass(fold.open("devices"))}>
+      <CfgH4 id="devices">주문할 수 있는 기기</CfgH4>
       <p className="ord-note">
         아이디·비밀번호는 <b>아는 것</b>이라 새어 나가면 어디서든 쓸 수 있습니다. 기기는 <b>가진 것</b>이라
         성질이 다릅니다 — 켜 두면 둘 다 알아도 <b>등록 안 된 기기에서는 주문 메뉴가 열리지 않습니다</b>.
@@ -4571,6 +4662,7 @@ function DeviceSection({
  * **다른 것만** 말한다. 여기서는 그 판정을 한 줄로 보여 주고, 걸린 것이 있을 때만 편다.
  */
 function AccessLogSection() {
+  const fold = useCfgFold();
   const [audit, setAudit] = useState<AccessAudit | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -4586,8 +4678,8 @@ function AccessLogSection() {
   const warns = (audit?.findings ?? []).filter((f) => f.level === "warn");
 
   return (
-    <section className="ord-cfg-sec">
-      <h4>접근 점검</h4>
+    <section className={cfgSecClass(fold.open("audit"))}>
+      <CfgH4 id="audit">접근 점검</CfgH4>
       {error && <p className="ord-err">{error}</p>}
       {!audit ? (
         <p className="empty">훑는 중…</p>
