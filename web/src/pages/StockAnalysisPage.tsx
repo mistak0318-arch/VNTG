@@ -41,6 +41,25 @@ export function StockAnalysisPage({
    * 목록 단추들이 `onMouseDown` 에서 기본 동작을 막는 것도 같은 이유다.
    */
   const [focused, setFocused] = useState(false);
+  /*
+   * **신용으로 살 수 있는 종목인가** (2026-09-08 — 벤티지 "종목상세에 코스피 써놨잖아 그 옆에
+   * 주문메뉴처럼 신용 관련 아이콘도 하나"). 주문 화면과 같은 칩(`ord-crd`)을 쓴다 — 같은 뜻이면
+   * 같은 모양이어야 한다. 서버가 한 시간 캐시라 종목을 옮겨 다녀도 조회가 늘지 않고,
+   * 주문 앱키가 없으면 `allowed: null` 로 와서 아무것도 안 단다.
+   */
+  const [credit, setCredit] = useState<{ allowed: boolean | null; grade: string | null; text: string | null } | null>(null);
+  useEffect(() => {
+    setCredit(null);
+    if (!stock?.code) return;
+    let alive = true;
+    void api
+      .stockCredit(stock.code)
+      .then((c) => alive && setCredit(c))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [stock?.code]);
 
   useEffect(() => {
     const q = query.trim();
@@ -213,6 +232,11 @@ export function StockAnalysisPage({
                 <span className={`mkt-badge ${String(info._market).includes("코스닥") ? "kq" : "ks"}`}>
                   {String(info._market).includes("코스닥") ? "코스닥" : "코스피"}
                 </span>
+              )}
+              {credit && credit.allowed !== null && (
+                <em className={`ord-crd${credit.allowed ? " ok" : " no"}`} title={credit.text ?? (credit.allowed ? "신용 가능" : "신용 불가")}>
+                  {credit.allowed ? `신용${credit.grade ?? ""}` : "신용불가"}
+                </em>
               )}
               {watched.isWatched(stock.code) ? "★ " : ""}
               {shownName} <span className="analysis-code">{stock.code}</span>

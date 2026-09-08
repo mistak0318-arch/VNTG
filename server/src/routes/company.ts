@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { cachedBrief, companyBrief, companyFacts } from "../companyInfo.js";
+import { creditInfo } from "../orders.js";
 
 /**
  * 6자리만 남긴다.
@@ -33,6 +34,22 @@ export function createCompanyRouter(): Router {
     try {
       const code = code6(req.params.code);
       res.json({ facts: await companyFacts(code, req.query.force === "1") });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **신용으로 살 수 있는 종목인가** (2026-09-08 — 벤티지 "종목상세에 종목명 앞에 코스피 써놨잖아
+   * 그 옆에 주문메뉴처럼 신용 관련 아이콘도 하나 넣어줄래?").
+   *
+   * 주문 라우터가 아니라 **여기**다. kt20017 은 계좌가 아니라 종목의 성질이라(키움 앱도 로그인
+   * 없이 보여 준다) 주문 세션을 요구할 이유가 없다. 주문 앱키가 없으면 `allowed: null` —
+   * 화면은 그때 아무것도 안 단다. 한 시간 캐시라 상세를 여닫아도 조회가 늘지 않는다.
+   */
+  router.get("/:code/credit", async (req, res, next) => {
+    try {
+      res.json(await creditInfo(code6(req.params.code)));
     } catch (err) {
       next(err);
     }

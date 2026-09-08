@@ -2216,6 +2216,37 @@ export async function buyPower(code: string, price: number): Promise<BuyPower> {
   return { code, price: Number(uv), cash, cashOnly, margin, credit, creditEnabled: g.allowCredit, missing };
 }
 
+/**
+ * **이 종목이 신용으로 살 수 있나** — 종목 하나만 (2026-09-08 — 벤티지 "종목상세에 종목명 앞에
+ * 코스피 써놨잖아 그 옆에 주문메뉴처럼 신용 관련 아이콘도 하나").
+ *
+ * `buyPower` 와 갈라 둔 이유는 **계좌가 안 드러나기 때문**이다. kt20017 은 `/api/dostk/stkinfo`
+ * 에 있는 **종목 정보**라 얼마 있는지·몇 주 살 수 있는지가 없다 — 키움 앱도 로그인 없이 보여
+ * 준다. 그래서 주문 세션 밖(종목 상세)에서도 쓸 수 있다. 계좌 수량이 필요한 자리는 그대로
+ * `buyPower` 다.
+ *
+ * 신용 가능 여부는 하루에 몇 번 바뀌는 값이 아니다 — **한 시간 캐시**. 종목 상세를 열 때마다
+ * TR 을 쏘면 하루 수백 번이 된다.
+ */
+const creditCache = new Map<string, { at: number; v: { allowed: boolean | null; grade: string | null; text: string | null } }>();
+export async function creditInfo(code: string): Promise<{ allowed: boolean | null; grade: string | null; text: string | null }> {
+  const hit = creditCache.get(code);
+  if (hit && Date.now() - hit.at < 3_600_000) return hit.v;
+  const oc = orderClient();
+  if (!oc) return { allowed: null, grade: null, text: null };
+  const y = await oc.request<Record<string, unknown>>("/api/dostk/stkinfo", "kt20017", { stk_cd: code }).catch((e) => noteTrError("kt20017", e));
+  if (!y) return { allowed: null, grade: null, text: null };
+  /* 응답은 Y/N 이 아니라 「< A군 신용융자 가능 >」 같은 **문장**이다 (2026-09-08 실측) */
+  const yn = String(y.data.crd_alow_yn ?? "");
+  const v = {
+    allowed: yn ? /가능/.test(yn) && !/불가/.test(yn) : null,
+    grade: /([A-Za-z])군/.exec(yn)?.[1] ?? null,
+    text: yn || null,
+  };
+  creditCache.set(code, { at: Date.now(), v });
+  return v;
+}
+
 /* ── 거래일 (2026-09-07) — 자동감시가 쓴다 ──────────────────────────── */
 
 /**

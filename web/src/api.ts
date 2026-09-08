@@ -1282,6 +1282,8 @@ export const api = {
    * 자리를 남겨 둔 것이다.
    */
   companyFacts: (code: string) => getJson<{ facts: CompanyFacts | null }>(`/api/company/${code}/facts`),
+  /** 이 종목이 신용으로 살 수 있나 — 계좌와 무관한 종목 성질 (2026-09-08). allowed:null = 못 받았다 */
+  stockCredit: (code: string) => getJson<{ allowed: boolean | null; grade: string | null; text: string | null }>(`/api/company/${code}/credit`),
   /** 이미 엮어 둔 것만 본다. 없으면 null — 화면은 그때 버튼을 보인다 */
   companyBrief: (code: string) => getJson<{ brief: CompanyBrief | null }>(`/api/company/${code}/brief`),
   /** ⚠️ 실제로 AI 를 부른다. 버튼에서만 */
