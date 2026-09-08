@@ -175,6 +175,10 @@ function Detail({
         <span className="pt-n">{r.code}{r.sector ? ` · ${r.sector}` : ""}{r.marketCap ? ` · 시총 ${억크기(r.marketCap)}` : ""}</span>
         {/* 실시간이 있으면 그것 — 표와 어긋나면 어느 쪽이 맞는지 알 수 없다 */}
         <span className={`sc-price ${cls(live?.rate ?? r.changeRate)}`}>
+          <span
+            className={`uw-live-dot${live ? " rt" : " off"}`}
+            title={live ? "실시간 체결 — 값이 오는 대로 갱신됩니다" : "실시간 값이 아직 없습니다 — 60초 조회로 채웁니다"}
+          />
           {won(live?.price ?? r.price)}원 {pct(live?.rate ?? r.changeRate, 2)}
         </span>
         <span className="sc-detail-btns">
@@ -597,7 +601,20 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
                     <span className="pt-n"> {r.code}</span>
                     {r.sector && <div className="pt-n">{r.sector}</div>}
                   </td>
+                  {/*
+                    **실시간으로 오는 값인지 점으로 말한다** (2026-09-09 — 벤티지 "실시간 표시가
+                    되어 있으면 얘가 실시간 받는구나 더 잘 알 수 있을 것 같은데"). 해외 표와 같은
+                    점이다. 점이 없으면 60초 폴링 값이고, 그때는 왜 없는지도 손에 올리면 나온다.
+                  */}
                   <td className={`num ${cls(r.changeRate)}`}>
+                    <span
+                      className={`uw-live-dot${liveOf(r.code) ? " rt" : " off"}`}
+                      title={
+                        liveOf(r.code)
+                          ? "실시간 체결 — 값이 오는 대로 갱신됩니다"
+                          : "실시간 값이 아직 없습니다 — 60초 조회로 채웁니다"
+                      }
+                    />
                     {won(r.price)}
                     <div>{pct(r.changeRate, 2)}</div>
                   </td>
