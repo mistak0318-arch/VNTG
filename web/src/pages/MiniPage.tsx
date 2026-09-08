@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, normalizeStockCode, type StockSearchResult } from "../api";
+import { useStockFocus } from "../useStockFocus";
 import { StockDetail } from "../components/StockDetail";
 import {
   MINI_SCREENS,
@@ -89,7 +90,36 @@ export function MiniPage({
   useEffect(() => onMiniConfigChange(() => setCfg(readMiniConfig())), []);
 
   const screenKey: MiniScreenKey = forced ?? cfg.slots[slot] ?? "stock";
-  const openPopup = (code: string, name: string) => setPopupStock({ code, name });
+  /*
+   * ⚠️ **미니창도 창이다** (2026-09-08 — 벤티지: "미니창에서 종목 클릭하면 다른 창이랑
+   * 종목 연동이 안 된다").
+   *
+   * 본창은 `onSelectStock` 한 곳에서 `focus.publish` 를 부르는데(App.tsx), 미니창은
+   * 제 라우팅을 따로 써서 그 자리를 안 지났다. 그래서 미니창에서 고른 종목은 저 혼자만
+   * 바뀌었다. 종목을 고르는 길이 둘로 갈렸으면 **양쪽 다 알려야** 한다.
+   */
+  const { focus, publish } = useStockFocus();
+  const openPopup = (code: string, name: string) => {
+    setPopupStock({ code, name });
+    publish(code, name);
+  };
+  /* 종목검색 화면에서 고른 것도 같이 알린다 — 미니창의 본업이 이쪽이다 */
+  const selectAndPublish = (code: string, name: string) => {
+    onSelect(code, name);
+    publish(code, name);
+  };
+  /*
+   * 반대 방향도 — **다른 창이 고른 종목을 미니창이 따라간다.**
+   * 연동은 한쪽으로만 흐르면 반쪽이다. 본창에서 종목을 누르면 옆에 띄워 둔 미니창이
+   * 같이 바뀌어야 「한 프로그램」이 된다. 내가 보낸 메아리는 useStockFocus 가 거른다.
+   */
+  const seenFocusAt = useRef(focus?.at);
+  useEffect(() => {
+    if (!focus || seenFocusAt.current === focus.at) return;
+    seenFocusAt.current = focus.at;
+    onSelect(focus.code, focus.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.at]);
 
   return (
     <div className="mini-root">
@@ -126,7 +156,7 @@ export function MiniPage({
       </div>
 
       <div className="mini-body">
-        {screenKey === "stock" && <StockSearchScreen stock={stock} onSelect={onSelect} onClear={onClear} />}
+        {screenKey === "stock" && <StockSearchScreen stock={stock} onSelect={selectAndPublish} onClear={onClear} />}
         {screenKey === "overview" && <OverviewPage onSelectStock={openPopup} />}
         {screenKey === "watch" && <MyPage onSelectStock={openPopup} />}
         {screenKey === "news" && <NewsPage onSelectStock={openPopup} />}
