@@ -17714,3 +17714,44 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-hold-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 0.5rem; align-items: center; width: 100%; padding: 0.4rem 0.6rem; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .ord-hold-row:hover { background: var(--panel-2); }
 .ord-hold-row .num { font-variant-numeric: tabular-nums; }
+
+/* ══ 연동 계좌(키움) 개편 (2026-09-08) ═════════════════════════════════════ */
+.page.acct2 { max-width: 1400px; display: flex; flex-direction: column; gap: 0.7rem; }
+.acct2-band { display: flex; gap: 1rem; align-items: stretch; flex-wrap: wrap; padding: 0.7rem 0.9rem; border: 1px solid var(--border); border-left: 6px solid var(--muted); border-radius: 12px; background: var(--panel-2); }
+.acct2-band.positive { border-left-color: var(--red); }
+.acct2-band.negative { border-left-color: var(--blue); }
+.acct2-main { display: flex; flex-direction: column; gap: 0.15rem; min-width: 14rem; flex: 1 1 14rem; }
+.acct2-l { font-size: 0.72rem; color: var(--muted); }
+.acct2-big { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.acct2-sub { font-size: 0.74rem; color: var(--muted); }
+.acct2-bar { display: block; height: 5px; border-radius: 999px; background: var(--border); overflow: hidden; margin-top: 0.3rem; max-width: 18rem; }
+.acct2-bar i { display: block; height: 100%; background: var(--accent, #2563eb); }
+.acct2-cells { display: flex; gap: 0.5rem; flex: 2 1 28rem; flex-wrap: wrap; }
+.acct2-cell { flex: 1 1 7rem; display: flex; flex-direction: column; gap: 0.1rem; padding: 0.4rem 0.6rem; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); }
+.acct2-cell span { font-size: 0.7rem; color: var(--muted); }
+.acct2-cell b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.acct2-cell small { font-size: 0.74rem; font-variant-numeric: tabular-nums; }
+.acct2-cell.positive b, .acct2-cell.positive small { color: var(--red); }
+.acct2-cell.negative b, .acct2-cell.negative small { color: var(--blue); }
+.acct2-cell.today { border-left: 3px solid var(--accent, #2563eb); }
+.acct2-hold { padding: 0.7rem 0.9rem; }
+.acct2-hold-h { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+.acct2-hold-h b { font-size: 0.98rem; }
+.acct2-hold-h small { color: var(--muted); font-size: 0.74rem; flex: 1; }
+.acct2-table th.on { color: var(--text); }
+.acct2-table th { cursor: pointer; user-select: none; white-space: nowrap; }
+.acct2-row { cursor: pointer; }
+.acct2-row:hover td { background: var(--panel-2); }
+.acct2-name { white-space: nowrap; }
+.acct2-name b { margin-right: 0.35rem; }
+.acct2-today { display: block; font-size: 0.68rem; color: var(--muted); }
+.acct2-dim { color: var(--muted); font-size: 0.72rem; }
+.acct2-w { display: inline-block; width: 3.4rem; height: 5px; border-radius: 999px; background: var(--border); overflow: hidden; margin-right: 0.4rem; vertical-align: middle; }
+.acct2-w i { display: block; height: 100%; background: var(--accent, #2563eb); }
+.acct2-acts { white-space: nowrap; }
+.acct2-acts .ord-x + .ord-x { margin-left: 0.3rem; }
+@media (max-width: 720px) {
+  .acct2-big { font-size: 1.3rem; }
+  .acct2-cells { flex: 1 1 100%; }
+  .acct2-w { display: none; }
+}

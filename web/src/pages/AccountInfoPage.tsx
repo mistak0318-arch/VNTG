@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, normalizeStockCode, pick, pickList, type RawRecord, type StockSearchResult } from "../api";
 import { RawJson } from "../components/RawJson";
 import { CollapsibleCard } from "../components/CollapsibleCard";
@@ -6,41 +6,58 @@ import { ConcentrationCard } from "../components/ConcentrationCard";
 import { RefreshBar } from "../components/RefreshBar";
 import { useListKeys } from "../useListKeys";
 
-// 아래 필드명은 키움 REST API 공식 문서(kt00018 계좌평가잔고내역요청) 기준으로 확인된 값.
-/** 당일 손익금 — `kt00004` 계좌평가현황이 준다 */
+/**
+ * 연동 계좌(키움) — **한 장으로 읽히게** (2026-09-08 다시).
+ *
+ * 벤티지: "연동계좌 부분 해상도가 길어지니까 내용도 너무 길어지네. 효율적으로 볼 수 있게 전면 개편."
+ * 예전엔 왼쪽에 좁은 카드 둘(요약·보유)과 오른쪽에 집중도 막대가 있어서, 넓은 화면에서는 오른쪽이
+ * 통째로 비고 보유 종목은 좁은 칸에 세로로 늘어졌다.
+ *
+ *   ① 요약 띠 — 총자산을 크게, 예수금·평가·손익·당일을 한 줄로
+ *   ② 보유 표 — 화면 폭을 다 쓰는 표. 열을 눌러 정렬. 줄을 누르면 상세, 매수·매도는 주문으로
+ *   ③ 집중도 — 접힘이 기본. 쏠림을 확인할 때만 편다
+ *
+ * 필드는 키움 공식 스펙(kt00018 계좌평가잔고내역·kt00001 예수금·kt00004 계좌평가현황) 기준.
+ */
+
 const TODAY_PNL_KEYS = ["tdy_lspft", "tdy_lspft_amt"];
-/** 당일 손익률 */
 const TODAY_PNL_RATE_KEYS = ["tdy_lspft_rt"];
-
 const HOLDINGS_LIST_KEYS = ["acnt_evlt_remn_indv_tot"];
-const NAME_KEYS = ["stk_nm"];
-const CODE_KEYS = ["stk_cd"];
-const QTY_KEYS = ["rmnd_qty"];
-const CUR_PRICE_KEYS = ["cur_prc"];
-const EVAL_AMT_KEYS = ["evlt_amt"];
-const PNL_KEYS = ["evltv_prft"];
-const PNL_RATE_KEYS = ["prft_rt"];
-
-// 계좌 요약: kt00018 응답의 총계 필드 (예수금은 kt00001에서 별도 조회)
 const TOTAL_EVAL_KEYS = ["tot_evlt_amt"];
+const TOTAL_PUR_KEYS = ["tot_pur_amt"];
 const TOTAL_PNL_KEYS = ["tot_evlt_pl"];
 const TOTAL_PNL_RATE_KEYS = ["tot_prft_rt"];
+const TOTAL_ASSET_KEYS = ["prsm_dpst_aset_amt"];
 const DEPOSIT_KEYS = ["entr"];
 
-function fmtNumber(v: string): string {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return v;
-  return n.toLocaleString("ko-KR");
+interface Row {
+  code: string;
+  name: string;
+  qty: number;
+  able: number;
+  buy: number;
+  cur: number;
+  evalAmt: number;
+  pnl: number;
+  rate: number;
+  weight: number;
+  credit: string;
+  loanDate: string;
+  todayBuy: number;
+  todaySell: number;
 }
 
-function signClass(v: string): string {
-  const n = Number(v);
-  if (!Number.isFinite(n) || n === 0) return "";
-  return n > 0 ? "positive" : "negative";
-}
+const num = (v: string): number => {
+  const n = Number(String(v ?? "").replace(/[+,\s]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+};
+const fmt = (n: number, d = 0): string => n.toLocaleString("ko-KR", { maximumFractionDigits: d, minimumFractionDigits: d });
+const signOf = (n: number): string => (n > 0 ? "positive" : n < 0 ? "negative" : "");
+const pctKo = (n: number): string => `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
+
+type SortKey = keyof Pick<Row, "name" | "qty" | "buy" | "cur" | "evalAmt" | "pnl" | "rate" | "weight">;
 
 export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
-  /** 계좌평가현황 — **당일 손익이 여기에만 있다** */
   const [summary, setSummary] = useState<RawRecord | null>(null);
   const [deposit, setDeposit] = useState<RawRecord | null>(null);
   const [holdings, setHoldings] = useState<RawRecord | null>(null);
@@ -50,6 +67,7 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<StockSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "evalAmt", dir: -1 });
 
   useEffect(() => {
     const q = query.trim();
@@ -74,22 +92,11 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
     setSearchResults([]);
   }
 
-  const keys = useListKeys(searchResults, (r) => openStock(r.code, r.name), {
-    itemClass: "search-result-row",
-  });
+  const keys = useListKeys(searchResults, (r) => openStock(r.code, r.name), { itemClass: "search-result-row" });
 
   async function load() {
     try {
-      /*
-       * 계좌평가현황(`kt00004`)을 같이 받는다.
-       * **당일 손익은 여기에만 있다** — `tdy_lspft`(당일 손익금) · `tdy_lspft_rt`(당일 손익률).
-       * 보유종목 조회(`kt00018`)는 누적만 준다.
-       */
-      const [depositRes, holdingsRes, summaryRes] = await Promise.all([
-        api.accountDeposit(),
-        api.holdings(),
-        api.accountSummary().catch(() => null),
-      ]);
+      const [depositRes, holdingsRes, summaryRes] = await Promise.all([api.accountDeposit(), api.holdings(), api.accountSummary().catch(() => null)]);
       setDeposit(depositRes as RawRecord);
       setHoldings(holdingsRes as RawRecord);
       setSummary(summaryRes as RawRecord | null);
@@ -103,24 +110,71 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
   }
 
   useEffect(() => {
-    load();
-    const timer = setInterval(load, 20_000);
-    return () => clearInterval(timer);
+    void load();
+    const timer = setInterval(() => void load(), 20_000);
+    /* 체결 알림이 오면 즉시 — 주문 화면과 같은 방아쇠 */
+    const f = () => void load();
+    window.addEventListener("vntg:fill", f);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("vntg:fill", f);
+    };
   }, []);
 
-  const rows = pickList(holdings ?? undefined, HOLDINGS_LIST_KEYS);
+  const rows: Row[] = useMemo(
+    () =>
+      pickList(holdings ?? undefined, HOLDINGS_LIST_KEYS).map((r) => ({
+        code: normalizeStockCode(pick(r, ["stk_cd"])),
+        name: pick(r, ["stk_nm"]),
+        qty: num(pick(r, ["rmnd_qty"])),
+        able: num(pick(r, ["trde_able_qty"])),
+        buy: num(pick(r, ["pur_pric"])),
+        cur: num(pick(r, ["cur_prc"])),
+        evalAmt: num(pick(r, ["evlt_amt"])),
+        pnl: num(pick(r, ["evltv_prft"])),
+        rate: num(pick(r, ["prft_rt"])),
+        weight: num(pick(r, ["poss_rt"])),
+        credit: pick(r, ["crd_tp_nm"]).trim(),
+        loanDate: pick(r, ["crd_loan_dt"]).replace(/\D/g, "").slice(0, 8),
+        todayBuy: num(pick(r, ["tdy_buyq"])),
+        todaySell: num(pick(r, ["tdy_sellq"])),
+      })),
+    [holdings],
+  );
+  const sorted = useMemo(() => {
+    const k = sort.key;
+    return [...rows].sort((a, b) => {
+      const x = a[k];
+      const y = b[k];
+      if (typeof x === "string" && typeof y === "string") return x.localeCompare(y) * sort.dir;
+      return ((Number(x) || 0) - (Number(y) || 0)) * sort.dir;
+    });
+  }, [rows, sort]);
+  const th = (key: SortKey, label: string, right = true) => (
+    <th className={`${right ? "r" : ""}${sort.key === key ? " on" : ""}`} onClick={() => setSort((s) => ({ key, dir: s.key === key ? ((s.dir * -1) as 1 | -1) : -1 }))} title="눌러서 정렬">
+      {label}
+      {sort.key === key ? (sort.dir < 0 ? " ▼" : " ▲") : ""}
+    </th>
+  );
+
+  const cash = num(pick(deposit ?? undefined, DEPOSIT_KEYS));
+  const evalTotal = num(pick(holdings ?? undefined, TOTAL_EVAL_KEYS));
+  const purTotal = num(pick(holdings ?? undefined, TOTAL_PUR_KEYS));
+  const pnlTotal = num(pick(holdings ?? undefined, TOTAL_PNL_KEYS));
+  const rateTotal = num(pick(holdings ?? undefined, TOTAL_PNL_RATE_KEYS));
+  const assetTotal = num(pick(holdings ?? undefined, TOTAL_ASSET_KEYS)) || cash + evalTotal;
+  const todayPnl = num(pick(summary ?? undefined, TODAY_PNL_KEYS));
+  const todayRate = num(pick(summary ?? undefined, TODAY_PNL_RATE_KEYS));
+  const stockPct = assetTotal > 0 ? (evalTotal / assetTotal) * 100 : 0;
 
   return (
-    <div>
+    <div className="page acct2">
       <RefreshBar onRefresh={load} loading={loading} updatedAt={lastUpdated} />
-
       {error && <div className="error-banner">{error}</div>}
 
       <div className="search-box">
         <input
           className="search-input"
-          type="text"
-          inputMode="search"
           placeholder="종목명 또는 종목코드 검색"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -130,101 +184,147 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
           <div className="search-dropdown" role="listbox">
             {searching && <div className="empty">검색 중...</div>}
             {!searching && searchResults.length === 0 && <div className="empty">검색 결과 없음</div>}
-            {!searching &&
-              searchResults.map((r, i) => (
-                <button key={r.code} {...keys.itemProps(i)} onClick={() => openStock(r.code, r.name)}>
-                  <span className="name">{r.name}</span>
-                  <span className="sub">
-                    {r.code} · {r.marketName}
-                  </span>
-                </button>
-              ))}
+            {searchResults.map((r, i) => (
+              <button key={r.code} {...keys.itemProps(i)} onClick={() => openStock(r.code, r.name)}>
+                <span className="name">{r.name}</span>
+                <span className="sub">
+                  {r.code} · {r.marketName}
+                </span>
+              </button>
+            ))}
           </div>
         )}
       </div>
 
-      <div className="account-grid">
-      <CollapsibleCard id="acctSummary" title="계좌 요약" hint="예수금 · 평가금액 · 손익" defaultOpen>
-        {loading && !holdings ? (
-          <div className="empty">불러오는 중...</div>
-        ) : (
-          <div className="summary-grid">
-            <div className="summary-item">
-              <div className="label">예수금</div>
-              <div className="value">{fmtNumber(pick(deposit ?? undefined, DEPOSIT_KEYS))}</div>
-            </div>
-            <div className="summary-item">
-              <div className="label">총평가금액</div>
-              <div className="value">{fmtNumber(pick(holdings ?? undefined, TOTAL_EVAL_KEYS))}</div>
-            </div>
-            <div className="summary-item">
-              <div className="label">평가손익</div>
-              <div className={`value ${signClass(pick(holdings ?? undefined, TOTAL_PNL_KEYS))}`}>
-                {fmtNumber(pick(holdings ?? undefined, TOTAL_PNL_KEYS))}
-              </div>
-            </div>
-            <div className="summary-item">
-              <div className="label">누적 수익률</div>
-              <div className={`value ${signClass(pick(holdings ?? undefined, TOTAL_PNL_RATE_KEYS))}`}>
-                {pick(holdings ?? undefined, TOTAL_PNL_RATE_KEYS)}%
-              </div>
-            </div>
-            {/*
-              **당일을 따로 세운다.**
-              누적 수익률만 보면 오늘 계좌가 어느 쪽으로 갔는지 알 수가 없다 —
-              누적 +30%인 계좌가 오늘 −3% 인 날과 +3% 인 날은 완전히 다른 하루다.
-            */}
-            <div className="summary-item today">
-              <div className="label">당일 손익</div>
-              <div className={`value ${signClass(pick(summary ?? undefined, TODAY_PNL_KEYS))}`}>
-                {fmtNumber(pick(summary ?? undefined, TODAY_PNL_KEYS))}
-              </div>
-            </div>
-            <div className="summary-item today">
-              <div className="label">당일 등락률</div>
-              <div className={`value ${signClass(pick(summary ?? undefined, TODAY_PNL_RATE_KEYS))}`}>
-                {pick(summary ?? undefined, TODAY_PNL_RATE_KEYS) || "0.00"}%
-              </div>
-            </div>
+      {/* ① 요약 띠 */}
+      <div className={`acct2-band ${signOf(pnlTotal)}`}>
+        <div className="acct2-main">
+          <span className="acct2-l">총자산 (추정예탁자산)</span>
+          <b className="acct2-big">{fmt(assetTotal)}</b>
+          <span className="acct2-sub">
+            주식 {stockPct.toFixed(0)}% · 현금 {(100 - stockPct).toFixed(0)}%
+          </span>
+          {assetTotal > 0 && (
+            <span className="acct2-bar" title={`주식 ${stockPct.toFixed(0)}% · 현금 ${(100 - stockPct).toFixed(0)}%`}>
+              <i style={{ width: `${stockPct}%` }} />
+            </span>
+          )}
+        </div>
+        <div className="acct2-cells">
+          <div className="acct2-cell">
+            <span>예수금</span>
+            <b>{fmt(cash)}</b>
+          </div>
+          <div className="acct2-cell">
+            <span>매입금액</span>
+            <b>{fmt(purTotal)}</b>
+          </div>
+          <div className="acct2-cell">
+            <span>평가금액</span>
+            <b>{fmt(evalTotal)}</b>
+          </div>
+          <div className={`acct2-cell ${signOf(pnlTotal)}`}>
+            <span>평가손익</span>
+            <b>
+              {pnlTotal > 0 ? "+" : ""}
+              {fmt(pnlTotal)}
+            </b>
+            <small>{pctKo(rateTotal)}</small>
+          </div>
+          <div className={`acct2-cell today ${signOf(todayPnl)}`}>
+            <span>당일 손익</span>
+            <b>
+              {todayPnl > 0 ? "+" : ""}
+              {fmt(todayPnl)}
+            </b>
+            <small>{pctKo(todayRate)}</small>
+          </div>
+        </div>
+      </div>
+
+      {/* ② 보유 표 */}
+      <section className="card acct2-hold">
+        <div className="acct2-hold-h">
+          <b>보유종목 {rows.length}</b>
+          <small>열을 누르면 정렬 · 줄을 누르면 종목 상세 · 매수·매도는 주문 메뉴로</small>
+          <RawJson data={holdings} />
+        </div>
+        {rows.length === 0 && !loading && <div className="empty">보유종목이 없습니다.</div>}
+        {rows.length > 0 && (
+          <div className="ord-scroll">
+            <table className="ord-table acct2-table">
+              <thead>
+                <tr>
+                  {th("name", "종목", false)}
+                  {th("qty", "수량")}
+                  {th("buy", "매입가")}
+                  {th("cur", "현재가")}
+                  {th("evalAmt", "평가금액")}
+                  {th("pnl", "평가손익")}
+                  {th("rate", "수익률")}
+                  {th("weight", "비중")}
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((r, i) => (
+                  <tr key={`${r.code}-${r.credit}-${i}`} className="acct2-row" onClick={() => onSelectStock(r.code, r.name)}>
+                    <td className="acct2-name">
+                      <b>{r.name}</b>
+                      <span className="ord-code">{r.code}</span>
+                      {r.credit && r.credit !== "현금" && (
+                        <i className="ord-crd ok" title={r.loanDate ? `대출일 ${r.loanDate}` : undefined}>
+                          {r.credit}
+                        </i>
+                      )}
+                      {(r.todayBuy > 0 || r.todaySell > 0) && (
+                        <small className="acct2-today">
+                          오늘 {r.todayBuy > 0 ? `+${fmt(r.todayBuy)}` : ""}
+                          {r.todaySell > 0 ? ` −${fmt(r.todaySell)}` : ""}
+                        </small>
+                      )}
+                    </td>
+                    <td className="r num">
+                      {fmt(r.qty)}
+                      {r.able !== r.qty && <small className="acct2-dim"> / 가능 {fmt(r.able)}</small>}
+                    </td>
+                    <td className="r num">{fmt(r.buy)}</td>
+                    <td className={`r num ${signOf(r.cur - r.buy)}`}>{fmt(r.cur)}</td>
+                    <td className="r num">{fmt(r.evalAmt)}</td>
+                    <td className={`r num ${signOf(r.pnl)}`}>
+                      {r.pnl > 0 ? "+" : ""}
+                      {fmt(r.pnl)}
+                    </td>
+                    <td className={`r num ${signOf(r.rate)}`}>{pctKo(r.rate)}</td>
+                    <td className="r num">
+                      <span className="acct2-w">
+                        <i style={{ width: `${Math.min(100, r.weight)}%` }} />
+                      </span>
+                      {r.weight.toFixed(1)}%
+                    </td>
+                    <td className="acct2-acts" onClick={(e) => e.stopPropagation()}>
+                      <a className="ord-x buy" href={`#/order?stk=${r.code}&name=${encodeURIComponent(r.name)}&side=buy`}>
+                        매수
+                      </a>
+                      <a
+                        className="ord-x sell"
+                        href={`#/order?stk=${r.code}&name=${encodeURIComponent(r.name)}&side=sell&qty=${r.able || r.qty}${r.credit && r.credit !== "현금" ? `&credit=1&loan=${r.loanDate}` : ""}`}
+                      >
+                        매도
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-        {deposit && holdings && <RawJson data={{ deposit, holdings }} />}
-      </CollapsibleCard>
+      </section>
 
-      {/* 집중도 (2026-08-27) — 업종·테마 비중. 종목 리스트에선 쏠림이 안 보인다 */}
-      <CollapsibleCard id="acctConc" title="보유 집중도" hint="업종·내 테마별 비중 — 쏠림 확인" defaultOpen>
+      {/* ③ 집중도 — 접힘이 기본 */}
+      <CollapsibleCard id="acctConc" title="보유 집중도" hint="업종·내 테마별 비중 — 쏠림을 확인할 때만 편다">
         <ConcentrationCard />
       </CollapsibleCard>
-
-      <CollapsibleCard id="acctHoldings" title={`보유종목 (${rows.length})`} hint="종목별 평가손익" defaultOpen>
-        {rows.length === 0 && !loading && <div className="empty">보유종목이 없습니다.</div>}
-        {rows.map((row, i) => {
-          const code = normalizeStockCode(pick(row, CODE_KEYS));
-          const name = pick(row, NAME_KEYS);
-          const pnlRate = pick(row, PNL_RATE_KEYS);
-          return (
-            <button
-              key={`${code}-${i}`}
-              className="holding-row"
-              onClick={() => onSelectStock(code, name)}
-            >
-              <div>
-                <div className="name">{name}</div>
-                <div className="sub">
-                  {fmtNumber(pick(row, QTY_KEYS))}주 · 평가 {fmtNumber(pick(row, EVAL_AMT_KEYS))}
-                </div>
-              </div>
-              <div className="right">
-                <div className="price">{fmtNumber(pick(row, CUR_PRICE_KEYS))}</div>
-                <div className={`pnl ${signClass(pnlRate)}`}>
-                  {fmtNumber(pick(row, PNL_KEYS))} ({pnlRate}%)
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </CollapsibleCard>
-      </div>
     </div>
   );
 }
