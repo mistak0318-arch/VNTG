@@ -6929,7 +6929,8 @@ export interface BuyPower {
   cash: number;
   cashOnly: { amt: number; qty: number };
   margin: { rate: number; amt: number; qty: number };
-  credit: { allowed: boolean; rate: number | null; amt: number; qty: number } | null;
+  /** allowed null = 조회를 못 했다(모의투자) — 불가와 다르다 */
+  credit: { allowed: boolean | null; rate: number | null; amt: number; qty: number } | null;
   creditEnabled: boolean;
   missing: string[];
 }

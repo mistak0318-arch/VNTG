@@ -1194,7 +1194,7 @@ function OrderForm({
   }, [side, code, unit]);
 
   /* 신용을 못 쓰는 상황이면 기준을 현금으로 되돌린다 — 「신용」이 눌린 채 현금 주문이 나가면 안 된다 */
-  const creditOk = Boolean(power?.creditEnabled && power?.credit?.allowed);
+  const creditOk = Boolean(power?.creditEnabled && power?.credit?.allowed === true);
   useEffect(() => {
     if (basis === "credit" && power && !creditOk) setBasis("cash");
   }, [basis, power, creditOk]);
@@ -1586,16 +1586,19 @@ function OrderForm({
                         disabled={!creditOk}
                         onClick={() => setBasis("credit")}
                         title={
-                          !power.credit
-                            ? "신용 조회를 못 했습니다"
+                          !power.credit || power.credit.allowed === null
+                            ? status.mock
+                              ? "모의투자는 신용 조회·주문을 받지 않습니다 — 실전 계좌에서 열립니다"
+                              : "신용 조회를 못 했습니다 — 잠시 뒤 다시"
                             : !power.credit.allowed
                               ? "이 종목은 신용 불가 종목입니다"
                               : `보증금율 ${power.credit.rate ?? "?"}% — 나머지는 융자(이자가 붙습니다)`
                         }
                       >
                         신용 {power.credit?.rate ? `${power.credit.rate}%` : ""}{" "}
-                        <b>{!power.credit ? "못 잼" : power.credit.allowed ? `${power.credit.qty.toLocaleString()}주` : "불가 종목"}</b>
-                        <i>{power.credit?.allowed ? `${manwon(power.credit.amt)} · 융자` : "신용 불가"}</i>
+                        {/* 못 받은 것(모의)과 불가 종목을 갈라 적는다 — 「불가 종목」은 종목에 대한 단정이라 틀리면 안 된다 */}
+                        <b>{!power.credit || power.credit.allowed === null ? (status.mock ? "모의 불가" : "못 잼") : power.credit.allowed ? `${power.credit.qty.toLocaleString()}주` : "불가 종목"}</b>
+                        <i>{power.credit?.allowed === true ? `${manwon(power.credit.amt)} · 융자` : status.mock && power.credit?.allowed !== false ? "실전에서만" : "신용 불가"}</i>
                       </button>
                     ) : (
                       <span className="ord-basis-off" title='server/data/orderGuard.json 에 "allowCredit": true'>

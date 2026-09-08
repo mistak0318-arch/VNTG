@@ -1804,7 +1804,8 @@ export interface BuyPower {
    * 보증금율(예: 45%)만큼 현금을 걸고 나머지는 융자다. `allowed:false` 면 종목이 신용 불가,
    * `null` 이면 조회를 못 했거나 신용이 꺼져 있다(가드).
    */
-  credit: { allowed: boolean; rate: number | null; amt: number; qty: number } | null;
+  /** allowed null = 신용가능여부를 못 받았다(모의투자는 신용 TR 자체가 없다) — 「불가」와 다르다 (2026-09-08) */
+  credit: { allowed: boolean | null; rate: number | null; amt: number; qty: number } | null;
   /** 신용이 가드에서 꺼져 있나 — 화면이 「켜는 법」을 적는다 */
   creditEnabled: boolean;
   /** 못 받은 조각 — 「0주」와 「못 잼」은 다르다 */
@@ -1859,7 +1860,12 @@ export async function buyPower(code: string, price: number): Promise<BuyPower> {
 
   let credit: BuyPower["credit"] = null;
   if (g.allowCredit) {
-    const allowed = y ? String(y.data.crd_alow_yn ?? "").toUpperCase() === "Y" : false;
+    /*
+     * 못 받은 것과 불가는 다르다 (2026-09-08 — 벤티지 "신용주문 허용했는데 주문에서는 안 바뀌네?
+     * 하이닉스는 신용 가능인데. 모의투자라 그런 건가?"). 맞다 — 모의 서버는 kt20017·kt00012 를
+     * 안 받아서 둘 다 실패하는데, 그걸 false 로 눌러 「불가 종목」이라고 거짓말했다.
+     */
+    const allowed: boolean | null = y ? String(y.data.crd_alow_yn ?? "").toUpperCase() === "Y" : null;
     if (!y) missing.push("신용가능여부");
     if (!c) missing.push("신용 수량");
     const cd = c?.data ?? {};
@@ -1869,8 +1875,8 @@ export async function buyPower(code: string, price: number): Promise<BuyPower> {
     credit = {
       allowed,
       rate: crRate,
-      amt: allowed ? num(cd[`assr_${ctier}ord_alow_amt`]) : 0,
-      qty: allowed ? num(cd[`assr_${ctier}ord_alowq`]) : 0,
+      amt: allowed === true ? num(cd[`assr_${ctier}ord_alow_amt`]) : 0,
+      qty: allowed === true ? num(cd[`assr_${ctier}ord_alowq`]) : 0,
     };
   }
 
