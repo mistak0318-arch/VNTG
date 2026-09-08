@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type UsSearchResult, type UsWatchGroup , type UsQuoteRow } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
-import { liveQuote } from "../usSession";
+import { liveQuote, usSideSession } from "../usSession";
 import { UsWatchTable } from "../components/UsWatchTable";
 import { useDragOrder } from "../useDragOrder";
 import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";

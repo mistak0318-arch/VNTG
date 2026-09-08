@@ -420,6 +420,42 @@ async function quoteOne(symbol: string): Promise<Quote> {
 const cache = new Map<string, { at: number; data: Quote }>();
 const TTL_MS = 60_000;
 /**
+ * **프리장·애프터장에는 캐시를 짧게** (2026-09-08 — 벤티지 "해외주식 갱신주기가 왜케 느리냐").
+ *
+ * 화면은 두 겹으로 돈다: 야후 spark 을 3초로 덮는 **빠른 겹**과, 한투 종목별 조회인 이 **본
+ * 시세**. 그런데 spark 은 **프리·애프터 봉을 안 준다** — 실측(2026-09-08 09:37 ET):
+ *
+ *     spark ?range=1d&interval=1m  → 첫 점이 09:30:00 ET (정규장 개장)
+ *     chart ?includePrePost=true   → 첫 점이 04:00:00 ET (프리장부터)
+ *
+ * 그래서 프리장 동안 빠른 겹은 **아무 일도 안 한다.** 화면에 남는 것은 이 60초 캐시뿐이라
+ * 값이 최대 1분 묵는다. 그 시간대에는 캐시를 15초로 줄인다 — 한투는 그때도 「무료실시간」으로
+ * 값을 주고 있으니 창구가 없는 게 아니라 **우리가 안 물어본 것**이었다.
+ *
+ * 정규장은 60초 그대로다(빠른 겹이 3초로 덮으니 더 줄일 이유가 없다). 마감 뒤도 60초.
+ * spark 을 chart 로 갈아타는 길은 막혔다 — chart 는 **한 요청에 한 종목**이라 30종목이면
+ * 3초마다 30콜이 되고, 배치+프리장을 같이 주는 v7/quote 는 **401**이다(둘 다 실측).
+ */
+const SIDE_TTL_MS = 15_000;
+
+/** 프리장(04:00~09:30 ET)이나 애프터장(16:00~20:00 ET)인가 — 그때만 캐시를 짧게 */
+function usSideSession(now = new Date()): boolean {
+  const f = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = Object.fromEntries(f.formatToParts(now).map((p) => [p.type, p.value]));
+  const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(String(parts.weekday));
+  if (day === 0 || day === 6) return false;
+  const mins = (Number(parts.hour) % 24) * 60 + Number(parts.minute);
+  const pre = mins >= 4 * 60 && mins < 9 * 60 + 30;
+  const post = mins >= 16 * 60 && mins < 20 * 60;
+  return pre || post;
+}
+/**
  * **실패는 짧게만 기억한다** (2026-08-28).
  *
  * 종목을 잇달아 담으면 야후가 뒤쪽 몇 개를 막는다(429·빈 응답). 그때 돌아온
@@ -435,7 +471,7 @@ const FAIL_TTL_MS = 5_000;
 /** 이 시세를 캐시에서 계속 쓸 수 있나 — 실패한 것은 훨씬 빨리 만료된다 */
 function fresh(hit: { at: number; data: Quote } | undefined): boolean {
   if (!hit) return false;
-  const ttl = hit.data.price === null ? FAIL_TTL_MS : TTL_MS;
+  const ttl = hit.data.price === null ? FAIL_TTL_MS : usSideSession() ? SIDE_TTL_MS : TTL_MS;
   return Date.now() - hit.at < ttl;
 }
 

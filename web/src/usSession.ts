@@ -51,6 +51,21 @@ export function usFeActive(now = new Date()): boolean {
 }
 
 /**
+ * **프리장(04:00~09:30 ET)이나 애프터장(16:00~20:00 ET)인가** (2026-09-08).
+ *
+ * 이 시간대에는 3초 빠른 겹(야후 spark)이 **아무 값도 안 준다** — spark 은 프리·애프터 봉을
+ * 빼고 주기 때문이다(실측: `range=1d&interval=1m` 의 첫 점이 09:30 ET). 그래서 화면이 본
+ * 시세를 더 자주 물어야 하는 유일한 시간대다. 서버도 같은 시간대만 캐시를 15초로 줄인다.
+ */
+export function usSideSession(now = new Date()): boolean {
+  const { day, mins } = etNow(now);
+  if (day === 0 || day === 6) return false;
+  const pre = mins >= 4 * 60 && mins < 9 * 60 + 30;
+  const post = mins >= 16 * 60 && mins < 20 * 60;
+  return pre || post;
+}
+
+/**
  * 괄호에 무엇을 넣을 것인가.
  *
  * 괄호는 **「지금 도는 다른 세션」**이다. 미국 종목은 하루에 세 판이 돌기 때문에

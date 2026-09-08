@@ -515,6 +515,9 @@ export interface KeywordFlow {
   updatedAt: string;
 }
 
+/** 지금 날아가 있는 해외 관심종목 요청 — 겹쳐 부르는 화면들이 같이 쓴다 (2026-09-08) */
+let usWatchInFlight: Promise<UsWatchResult> | null = null;
+
 export const api = {
   /* 정보 탭이 「서버가 켜진 지」를 여기서 본다 (2026-09-04) */
   health: () =>
@@ -1271,7 +1274,24 @@ export const api = {
     putJson<{ config: KeywordConfig; keywords: KeywordSource[] }>("/api/keyword", config),
   keywordRun: (send: boolean) =>
     postJson<KeywordRunResult>(`/api/keyword/run${send ? "?send=1" : ""}`),
-  usWatch: (force = false) => getJson<UsWatchResult>(`/api/us-watch${force ? "?force=1" : ""}`),
+  /**
+   * 해외 관심종목 본 시세.
+   *
+   * ⚠️ **같은 순간의 요청은 하나로 묶는다** (2026-09-08 실측). 이 앱은 탭을 열어 두면 그 판이
+   * 안 보여도 계속 도는 구조라, 시황 대시보드·전광판·관심종목(해외)가 각자 이걸 부른다 —
+   * 재 보니 **한 주기에 세 번**이 같은 밀리초에 나갔다. 한투·야후 부하가 세 배고, 막히면
+   * 그때부터 화면이 느려진다(제일 알아채기 어려운 실패다). 이미 날아간 요청이 있으면 그
+   * 약속을 같이 쓴다 — 서버 캐시와 달리 **여기서 아끼는 것은 요청 수 자체**다.
+   */
+  usWatch: (force = false) => {
+    if (force) return getJson<UsWatchResult>("/api/us-watch?force=1");
+    if (!usWatchInFlight) {
+      usWatchInFlight = getJson<UsWatchResult>("/api/us-watch").finally(() => {
+        usWatchInFlight = null;
+      });
+    }
+    return usWatchInFlight;
+  },
   /** 빠른 시세(야후 spark 배치) — 현재가·등락률만, 4초 캐시. 표 오버레이용 */
   usWatchFast: (symbols: string[]) =>
     getJson<{ quotes: Record<string, { price: number; changeRate: number | null; at: number }> }>(

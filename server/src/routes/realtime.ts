@@ -180,6 +180,68 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
     }
   });
 
+  /**
+   * **해외 실시간(FE) 종목코드 형식 탐침** (2026-09-08 — 벤티지 "이것도 소켓 연결해서 갱신
+   * 주기를 더 빨리 가져갈 수 있을 거 같은데. 국내주식이랑 비슷하게").
+   *
+   * 8월에 「FE 는 등록만 받고 프레임을 안 준다」로 접었는데, 그때 **item 을 맨 티커**
+   * (`NVDA`)로 보냈다. 키움 REST 해외 조회는 거래소를 `stex_tp` 로 **따로** 받는데
+   * (`{stex_tp:"ND", stk_cd:"NVDA"}`), 실시간 REG 에는 그런 칸이 없다 — 그러니 item 자체가
+   * 거래소를 품은 다른 형식일 가능성이 크다. 등록은 어차피 거절이 안 나므로(키움이 형식을
+   * 안 따진다) **프레임이 오는가**로만 가릴 수 있다.
+   *
+   * 후보를 한꺼번에 걸고 기다렸다가 **어느 형식에 값이 꽂혔는지**를 돌려준다.
+   * 미국 정규장(22:30~05:00 KST)에 돌려야 뜻이 있다 — 거래가 없으면 다 false 다.
+   */
+  router.post("/probe-fe", async (req, res, next) => {
+    try {
+      const sym = String(req.body?.symbol ?? "NVDA").toUpperCase().replace(/[^A-Z0-9.]/g, "");
+      const stex = String(req.body?.stex ?? "ND").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const waitMs = Math.min(90_000, Math.max(5_000, Number(req.body?.waitMs) || 30_000));
+      const { client: rt, store } = await getRealtime(client);
+
+      /* 문서가 없으니 흔한 꼴을 전부 건다 — 자리는 임시 구독이라 끝나면 밀려난다 */
+      const cands = [
+        sym,
+        `${stex}@${sym}`,
+        `${sym}.${stex}`,
+        `${stex}${sym}`,
+        `${sym}${stex}`,
+        `NAS@${sym}`,
+        `${sym}.O`,
+        `${sym}.N`,
+      ];
+      const before: Record<string, number | null> = {};
+      for (const c of cands) before[c] = store.getLatest("FE", c)?.at ?? null;
+      const errs0 = rt.registrationErrors.length;
+
+      for (const c of cands) rt.subscribeTransient("FE", c);
+      await new Promise((r) => setTimeout(r, waitMs));
+
+      const got: string[] = [];
+      const after: Record<string, number | null> = {};
+      for (const c of cands) {
+        after[c] = store.getLatest("FE", c)?.at ?? null;
+        if (after[c] !== null && after[c] !== before[c]) got.push(c);
+      }
+      res.json({
+        symbol: sym,
+        stex,
+        waitedMs: waitMs,
+        /** 프레임이 온 형식들 — 비어 있으면 어느 꼴로도 안 온다 */
+        worked: got,
+        before,
+        after,
+        newRegErrors: rt.registrationErrors.slice(errs0),
+        note:
+          "worked 가 비어 있고 그 시각에 미국 정규장이 열려 있었다면, 키움 FE 는 이 계좌로는 " +
+          "프레임을 안 주는 것이다(시세 이용 신청이 따로 필요할 수 있다).",
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/probe-second", async (_req, res, next) => {
     try {
       const { client: rt } = await getRealtime(client);
