@@ -956,6 +956,36 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
           </button>
         </h2>
 
+        {/*
+          **접어도 손이 닿아야 하는 둘** (2026-09-08 — 벤티지: "상단 메뉴 접었을 때에도 종목
+          검색 할 수 있게" / "접혔을 때에도 화면 구성 저장한 부분들은 클릭할 수 있게 옆에").
+
+          설정을 접는 건 화면을 넓게 쓰려는 것이지 보드를 못 쓰게 하려는 게 아니다. 그런데
+          종목을 바꾸려면, 구성을 갈아타려면 매번 펼쳤다 접어야 했다. 이 둘은 「설정」이
+          아니라 **보드를 쓰는 동작**이라 접힌 줄에 남긴다. 편집(이름·순서·삭제)은 여전히
+          펼쳐야 한다 — 그건 설정이다.
+        */}
+        {!cfgOpen && (
+          <div className="board-fold-bar">
+            <CellStockFinder
+              onPick={(c, n) => {
+                setOwnStock({ code: c, name: n });
+                publish(c, n);
+              }}
+              onClose={() => undefined}
+            />
+            {presets.length > 0 && (
+              <span className="board-fold-presets">
+                {presets.map((p) => (
+                  <button key={p.id} className="filter-btn" onClick={() => loadFrom(p.id)} title={`${p.name} — ${summarize(p.pick)}`}>
+                    {p.name}
+                  </button>
+                ))}
+              </span>
+            )}
+          </div>
+        )}
+
         {cfgOpen && (
         <>
         {/*

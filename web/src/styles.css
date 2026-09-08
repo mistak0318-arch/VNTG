@@ -9969,6 +9969,11 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
 
 /* 보드 설정의 종목 검색 — 칸 안의 검색과 같은 모양을 쓴다 */
 .board-cfg-find { align-items: flex-start; }
+/* 접힌 줄 — 종목 찾기와 구성 단추만 남는다 (2026-09-08) */
+.board-fold-bar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.45rem; }
+.board-fold-bar .board-find-box { position: relative; flex: 0 1 260px; min-width: 160px; padding: 0; border: 0; }
+.board-fold-presets { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.board-fold-presets .filter-btn { padding: 0.2rem 0.6rem; font-size: 0.78rem; }
 .board-cfg-find .board-find-box { position: relative; flex: 1; max-width: 320px; }
 
 /* 구성 잠금 자물쇠 */
