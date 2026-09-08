@@ -17971,3 +17971,10 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 }
 /* 실시간 체결(한투 소켓)로 온 값 — 3초 폴링과 구별한다 (2026-09-08) */
 .uw-live-dot.rt { background: var(--green, #35c46a); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green, #35c46a) 22%, transparent); }
+/* 보드 가격 요약 칸의 관심종목 별 — 오른쪽 위 (2026-09-08). `.bd-watch` 는 이미 다른 뜻이라 별도 이름 */
+.bd-star { display: flex; justify-content: flex-end; margin: -0.1rem 0 0.2rem; }
+.watch-btn.wt-inline { border: 0; background: transparent; padding: 0 0.2rem; font-size: 1.05rem; vertical-align: middle; }
+/* 메모에 이어 둔 종목 — 적을 때의 신호등·값 (2026-09-08). 지금 값이 아니라 그때 값이다 */
+.memo-stock-at { display: inline-flex; align-items: center; gap: 0.25rem; margin-left: 0.3rem; font-style: normal; font-size: 0.68rem; color: var(--muted); cursor: help; }
+.memo-stock-at b { color: var(--accent, #e6a23c); font-weight: 700; }
+.memo-stock-super { font-size: 0.72rem; }

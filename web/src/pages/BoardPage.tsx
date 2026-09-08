@@ -30,6 +30,7 @@ import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
 import { SupplyMini } from "../components/SupplyMini";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
 import { PriceHeader } from "../components/PriceHeader";
+import { WatchToggleButton } from "../components/WatchToggleButton";
 import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
 import { useLive } from "../useLive";
 import { useStockFocus } from "../useStockFocus";
@@ -457,11 +458,15 @@ function summarize(pick: string[]): string {
  * **같은 컴포넌트 셋**이라 두 화면이 다른 값을 말할 일이 없다.
  * 현재가는 3초로 산다 — 보드는 곁눈 화면이라 1초까지는 필요 없다.
  */
-function PriceSummaryCell({ code }: { code: string }) {
+function PriceSummaryCell({ code, name }: { code: string; name?: string }) {
   const live = useLive(() => api.stockInfo(code), [code], 3000);
   const info = (live.data ?? null) as Record<string, unknown> | null;
   return (
     <>
+      {/* 관심종목 담기 (2026-09-08 — 벤티지 "여기에도 넣어줘야지") */}
+      <div className="bd-star">
+        <WatchToggleButton code={code} name={name ?? code} price={Math.abs(Number(info?.cur_prc ?? 0))} />
+      </div>
       <PriceHeader info={info} code={code} />
       <IntradayLevelsBar code={code} />
       <StockSummaryPanel code={code} />
@@ -1299,7 +1304,7 @@ export function BoardPage({ onSelectStock }: { onSelectStock?: (c: string, n: st
                     사용자가 가리킨 건 그 위의 종가·장마감 블록(PriceHeader)이다.
                     상세 종합과 같은 조합(가격 헤더 + 수급)을 그대로 쓴다.
                   */}
-                  {b.key === "priceSummary" && <PriceSummaryCell key={code} code={code} />}
+                  {b.key === "priceSummary" && <PriceSummaryCell key={code} code={code} name={name} />}
                   {/*
                     `key={code}` 를 준다. 종목이 바뀌면 패널을 **새로 만든다** —
                     안 그러면 어떤 패널은 이전 종목의 값을 그대로 들고 있다가

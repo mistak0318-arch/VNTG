@@ -362,7 +362,17 @@ export class RealtimeStore {
    * 화면은 `FE:<심볼>` 한 열쇠만 보면 되고, 어느 소켓에서 왔는지는 몰라도 된다.
    */
   takeExternal(type: string, item: string, values: Record<string, string>): void {
-    this.take({ trnm: "REAL", data: [{ type, item, values }] } as RealtimeFrame);
+    /*
+     * ⚠️ **`take()` 를 부르지 않는다** (2026-09-08 재검토).
+     *
+     * `take()` 는 맨 앞에서 「날짜가 넘어갔나」를 보고 넘어갔으면 **국내 시계열을 저장하고
+     * 비운다.** 그런데 해외는 한국 자정에 한창 돌아가므로, 그대로 두면 **해외 체결 한 건이
+     * 국내 저장소의 날짜 넘김을 대신 일으킨다.** 국내 실시간 구조에 영향을 주면 안 된다는
+     * 원칙(벤티지)과 정면으로 어긋난다.
+     *
+     * 해외 값이 필요한 것은 **최신값 한 칸**뿐이다(FE 는 시계열 타입도 아니다). 그것만 넣는다.
+     */
+    this.latest.set(`${type}:${item}`, { at: Date.now(), values });
     /*
      * ⚠️ **SSE 에도 알려야 한다** (2026-09-08).
      *

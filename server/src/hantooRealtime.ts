@@ -84,6 +84,11 @@ let frames = 0;
 const rejects: string[] = [];
 /** 지금 걸려 있는 tr_key → 심볼 */
 const subs = new Map<string, string>();
+/**
+ * **상한(41)에 걸려 거절당한 자리** — 다시 걸어 봐야 또 거절이다 (2026-09-08 재검토).
+ * 기억하지 않으면 목록이 조금 흔들릴 때마다 같은 거절이 반복된다. 재연결하면 비운다.
+ */
+const refused = new Set<string>();
 /** 화면이 원하는 심볼(대문자) — 순서가 곧 우선순위다 */
 let wanted: string[] = [];
 let store: RealtimeStore | null = null;
@@ -100,6 +105,22 @@ let connectedAt = 0;
  * 기본은 **켜짐**이다(배포본이 늘 이겨야 한다). 개발 PC 는 제 `.env` 에 `HANTOO_RT=0` 을
  * 적어 끈다 — 그 파일은 깃에 안 올라가므로 배포본에는 영향이 없다.
  */
+/** 미국이 도는 시간인가 — 프리 04:00 ~ 애프터 20:00 ET. 그때만 「값이 없다」가 이상한 것이다 */
+function usTradingWindow(now = new Date()): boolean {
+  const f = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const p = Object.fromEntries(f.formatToParts(now).map((x) => [x.type, x.value]));
+  const day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(String(p.weekday));
+  if (day === 0 || day === 6) return false;
+  const mins = (Number(p.hour) % 24) * 60 + Number(p.minute);
+  return mins >= 4 * 60 && mins < 20 * 60;
+}
+
 function enabled(): boolean {
   const flag = (process.env.HANTOO_RT ?? "").trim().toLowerCase();
   if (flag === "0" || flag === "false" || flag === "off") return false;
@@ -154,7 +175,7 @@ function resync(): void {
     }
   }
   for (const [key, sym] of want) {
-    if (subs.has(key)) continue;
+    if (subs.has(key) || refused.has(key)) continue;
     subs.set(key, sym);
     sub(key, true);
   }
@@ -193,7 +214,10 @@ function onText(text: string): void {
         rejects.unshift(line);
         rejects.splice(20);
         /* 상한 초과면 그 자리는 포기한다 — 다시 걸어 봐야 또 거절이다 */
-        if (/OPSP0008/.test(j.body?.msg_cd ?? "") && j.header?.tr_key) subs.delete(j.header.tr_key);
+        if (/OPSP0008/.test(j.body?.msg_cd ?? "") && j.header?.tr_key) {
+          subs.delete(j.header.tr_key);
+          refused.add(j.header.tr_key);
+        }
         /*
          * ⚠️ **앱키당 세션 하나다** (2026-09-08 실측 `OPSP8996 ALREADY IN USE appkey`).
          *
@@ -270,7 +294,9 @@ function connect(): void {
          * 이력은 로그가 아니라 **지금 무엇이 막고 있나**를 말하는 자리다.
          */
         rejects.length = 0;
+        refused.clear();
         connectedAt = Date.now();
+        lastFrameAt = 0;
         void recordApiCall("hantoo", "ws:HDFSCNT0", "ok");
         resync();
       };
@@ -355,6 +381,22 @@ export function startHantooRealtime(s: RealtimeStore): void {
   /* 끊기면 다시 붙는다 — 하루 종일 물고 있어야 하므로 끊김이 정상 상태다 */
   setInterval(() => {
     if (wanted.length > 0) connect();
+    /*
+     * **좀비 연결 감시** (2026-09-08 재검토). TCP 는 살아 있는데 한투가 조용해지면
+     * `onclose` 가 안 오고 우리는 영영 기다린다 — 소켓은 「연결됨」인데 값만 안 오는,
+     * 이 프로젝트가 제일 무서워하는 조용한 실패다. 미국이 도는 시간(프리 04:00 ~ 애프터
+     * 20:00 ET)에 구독이 있는데 **3분 넘게 프레임이 없으면** 끊고 다시 붙는다.
+     * 거래가 뜸한 종목만 담긴 그룹일 수도 있으니 3분은 넉넉하게 잡았다.
+     */
+    if (state === "연결됨" && subs.size > 0 && usTradingWindow() && lastFrameAt > 0 && Date.now() - lastFrameAt > 3 * 60_000) {
+      rejects.unshift(`프레임이 ${Math.round((Date.now() - lastFrameAt) / 1000)}초째 없어 다시 붙는다`);
+      rejects.splice(20);
+      try {
+        ws?.close();
+      } catch {
+        /* 이미 닫히는 중일 수 있다 */
+      }
+    }
   }, 5_000);
   /* `connect` 는 `retryAt` 을 보므로 「다른 곳이 쓰는 중」이면 10분 뒤에야 다시 시도한다 */
   console.log("[해외실시간] 한투 웹소켓 준비 — 보고 있는 그룹만 최대 41종목");

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { CreditChip, useStockCredit } from "../components/CreditChip";
+import { WatchToggleButton } from "../components/WatchToggleButton";
 import { api, normalizeStockCode, stockNameOf, type RawRecord, type StockSearchResult } from "../api";
 import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
@@ -218,6 +219,8 @@ export function StockAnalysisPage({
                 </span>
               )}
               <CreditChip credit={credit} />
+              {/* 관심종목 담기 (2026-09-08 — 벤티지 "여기에도 넣어줘야지"). 클릭 시트와 같은 단추다 */}
+              <WatchToggleButton code={stock.code} name={shownName} price={Number(info?.cur_prc ?? 0)} className="wt-inline" />
               {watched.isWatched(stock.code) ? "★ " : ""}
               {shownName} <span className="analysis-code">{stock.code}</span>
             </h2>

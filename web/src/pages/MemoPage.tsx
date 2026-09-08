@@ -5,6 +5,9 @@ import { MemoBody, toggleTaskLine } from "../components/MemoBody";
 import { YahooChartSheet } from "../components/overview/YahooChartSheet";
 import { useListKeys } from "../useListKeys";
 
+/** 메모에 이어 둔 종목 — 적을 때의 값까지 (서버 `MemoEntry.stocks` 와 같은 모양) */
+type MemoStockLink = NonNullable<MemoEntry["stocks"]>[number];
+
 /**
  * 메모장 (2026-08-26) — **메모장 + 일기장.**
  *
@@ -61,7 +64,7 @@ interface Draft {
   body: string;
   tags: string;
   pinned: boolean;
-  stocks: { code: string; name: string }[];
+  stocks: MemoStockLink[];
 }
 
 const EMPTY: Draft = { id: null, title: "", body: "", tags: "", pinned: false, stocks: [] };
@@ -570,8 +573,8 @@ function MemoStocks({
   onChange,
   onOpen,
 }: {
-  stocks: { code: string; name: string }[];
-  onChange: (s: { code: string; name: string }[]) => void;
+  stocks: MemoStockLink[];
+  onChange: (s: MemoStockLink[]) => void;
   onOpen?: (code: string, name: string) => void;
 }) {
   const [q, setQ] = useState("");
@@ -645,6 +648,26 @@ function MemoStocks({
               {s.code.startsWith("us:") && "🌏 "}
               {s.name}
             </button>
+            {/*
+              **적을 때의 그 종목** (2026-09-08 — 벤티지 "메모 넣을 때 당시의 해당 종목의
+              신호등 점수도 넣어줘. 슈퍼신호등이었는지도"). 지금 값이 아니라 **그때 값**이다 —
+              지금으로 다시 재면 그날의 판단이 아니라 오늘의 판단이 된다.
+            */}
+            {(s.atScore != null || s.atSuper || s.atPrice != null) && (
+              <i
+                className="memo-stock-at"
+                title={
+                  `적을 때: ${s.atPrice != null ? `${s.atPrice.toLocaleString()}원` : "값 없음"}` +
+                  (s.atChangeRate != null ? ` (${s.atChangeRate > 0 ? "+" : ""}${s.atChangeRate.toFixed(2)}%)` : "") +
+                  (s.atScore != null ? ` · 신호등 ${s.atScore}점${s.atLevel ? ` ${s.atLevel}` : ""}${s.atScoreDate ? ` (${s.atScoreDate} 채점)` : ""}` : " · 신호등 기록 없음") +
+                  (s.atSuper ? " · 🌟 슈퍼신호등" : "")
+                }
+              >
+                {s.atSuper && <b className="memo-stock-super">🌟</b>}
+                {s.atScore != null && <b>{s.atScore}점</b>}
+                {s.atPrice != null && <span>{s.atPrice.toLocaleString()}</span>}
+              </i>
+            )}
             <button
               className="memo-stock-x"
               onClick={() => onChange(stocks.filter((x) => x.code !== s.code))}

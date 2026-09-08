@@ -2317,7 +2317,17 @@ export interface MemoEntry {
   /** 옛 메모에는 이 칸이 없다 */
   files?: MemoFile[];
   /** 이어 둔 종목 — 종목 상세에서도 이 메모가 보인다 */
-  stocks?: { code: string; name: string }[];
+  stocks?: {
+    code: string;
+    name: string;
+    /** **적을 때의 값** — 나중에 「그때 왜 이렇게 봤나」를 되짚는 자리 (2026-09-08) */
+    atPrice?: number | null;
+    atChangeRate?: number | null;
+    atScore?: number | null;
+    atLevel?: string | null;
+    atScoreDate?: string | null;
+    atSuper?: boolean | null;
+  }[];
 }
 
 /** 장중 투자자별 누적 순매수 한 점 — 코스피/코스닥 억원, 선물 계약 */

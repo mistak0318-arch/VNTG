@@ -92,6 +92,24 @@ async function readDay(date: string): Promise<SignalDayRow[]> {
 }
 
 /**
+ * **한 종목의 가장 최근 신호등 채점** (2026-09-08 — 메모에 「그때 몇 점이었나」를 남기려고).
+ *
+ * 가장 최근 날부터 거슬러 며칠만 본다. 오늘 채점 전(장중)에 메모를 쓰면 어제 것이 나오는데,
+ * 그게 맞다 — 신호등은 **종가 기준**이라 장중에는 어제 점수가 지금 아는 전부다.
+ * 며칠을 봐도 없으면 null 이다(그 종목이 신호등 모집단에 없었다는 뜻).
+ */
+export async function lastSignalOf(
+  code: string,
+  lookbackDays = 5,
+): Promise<{ score: number; level: string; date: string } | null> {
+  for (const d of (await signalDays()).slice(0, lookbackDays)) {
+    const hit = (await readDay(d)).find((r) => r.code === code);
+    if (hit) return { score: hit.score, level: hit.level, date: d };
+  }
+  return null;
+}
+
+/**
  * 백테스트용 점수 지도 — **날짜(YYYYMMDD) → 종목 → 점수** (2026-08-25).
  *
  * 「신호등 N점 이상」을 백테스트 조건으로 쓰려면 과거 점수가 있어야 하는데,
