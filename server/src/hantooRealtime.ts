@@ -88,7 +88,17 @@ let store: RealtimeStore | null = null;
 let retryAt = 0;
 let retryMs = 3_000;
 
+/**
+ * ⚠️ **앱키당 세션이 하나다.** 그래서 개발 PC 와 미니PC 가 같이 켜면 **먼저 붙은 쪽이 이기고
+ * 나머지는 계속 거절**된다(`OPSP8996 ALREADY IN USE appkey`). 실제로 그 일이 났다 —
+ * 개발 PC 가 물고 있는 동안 미니PC 화면의 해외 시세가 통째로 멈췄다.
+ *
+ * 기본은 **켜짐**이다(배포본이 늘 이겨야 한다). 개발 PC 는 제 `.env` 에 `HANTOO_RT=0` 을
+ * 적어 끈다 — 그 파일은 깃에 안 올라가므로 배포본에는 영향이 없다.
+ */
 function enabled(): boolean {
+  const flag = (process.env.HANTOO_RT ?? "").trim().toLowerCase();
+  if (flag === "0" || flag === "false" || flag === "off") return false;
   return Boolean(process.env.HANTOO_APP_KEY?.trim() && process.env.HANTOO_APP_SECRET?.trim());
 }
 
@@ -183,14 +193,15 @@ function onText(text: string): void {
         /*
          * ⚠️ **앱키당 세션 하나다** (2026-09-08 실측 `OPSP8996 ALREADY IN USE appkey`).
          *
-         * 미니PC 가 물고 있으면 다른 곳(개발 PC)은 붙어도 거절만 돌아온다. 5초마다 다시
-         * 시도하면 거절 로그만 쌓이고 한투에 부담만 준다 — **10분 쉬었다** 본다. 배포본이
-         * 재시작하며 자리를 놓는 순간이 오면 그때 붙는다. 키움 앱키가 아침에 겪은 것과
-         * 같은 성질이다(같은 키로 둘이 붙으면 서로 죽인다).
+         * 다른 곳이 물고 있으면 붙어도 거절만 돌아온다. 5초마다 다시 시도하면 거절 로그만
+         * 쌓이므로 쉬었다 본다 — 다만 **너무 길면 안 된다.** 개발 PC 를 끄고 배포본이
+         * 자리를 이어받아야 하는 순간이 바로 그 사이라, 10분은 「해외 시세가 10분 멈춤」이다.
+         * 45초로 둔다. 키움 앱키가 아침에 겪은 것과 같은 성질이다(같은 키로 둘이 붙으면
+         * 서로 죽인다) — 다른 점은 이쪽은 **나중에 온 쪽이 진다**는 것뿐이다.
          */
         if (/OPSP8996/.test(j.body?.msg_cd ?? "")) {
           state = "다른 곳이 쓰는 중";
-          retryAt = Date.now() + 10 * 60_000;
+          retryAt = Date.now() + 45_000;
           try {
             ws?.close();
           } catch {
