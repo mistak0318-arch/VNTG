@@ -747,12 +747,8 @@ export async function hasOrderPassword(): Promise<boolean> {
   return a.hash.length > 0;
 }
 
-export async function setOrderPassword(next: string, current: string | null, kind: "text" | "pattern" = "text"): Promise<void> {
-  const a = await loadAuth();
-  if (a.hash) {
-    const r = await checkPassword(current ?? "");
-    if (!r.ok) throw new Error(r.error);
-  }
+/** 새 비밀번호·패턴이 규칙에 맞나 — **쓰기 전에** 본다. 초기화도 같은 자를 쓴다 (검진 3) */
+function validateSecret(next: string, kind: "text" | "pattern"): void {
   if (kind === "pattern") {
     /* 진입 패턴과 같은 규칙 — 네 점 이상, 같은 점 두 번 금지, 한 줄로만 긋기 금지 */
     if (next.length < 4) throw new Error("패턴은 점 네 개 이상을 이어야 합니다");
@@ -762,6 +758,15 @@ export async function setOrderPassword(next: string, current: string | null, kin
     if (/^(012|345|678|036|147|258|048|246)/.test(next) && next.length <= 4)
       throw new Error("너무 뻔한 패턴입니다 — 한 줄로만 긋는 것은 막습니다");
   } else if (next.length < 6) throw new Error("주문 비밀번호는 6자 이상");
+}
+
+export async function setOrderPassword(next: string, current: string | null, kind: "text" | "pattern" = "text"): Promise<void> {
+  const a = await loadAuth();
+  if (a.hash) {
+    const r = await checkPassword(current ?? "");
+    if (!r.ok) throw new Error(r.error);
+  }
+  validateSecret(next, kind);
   const salt = randomBytes(16).toString("hex");
   const hash = await scryptHex(next, salt);
   await writeJson(AUTH_FILE, { ...a, salt, hash, fails: 0, lockUntil: 0 } satisfies OrderAuthFile);
@@ -780,9 +785,16 @@ export async function setOrderPassword(next: string, current: string | null, kin
  * 자격이 있다. 실패 횟수·잠금도 같이 지운다.
  */
 export async function resetOrderPassword(next: string, kind: "text" | "pattern"): Promise<void> {
+  /*
+   * ⚠️ **한 번에 쓴다** (2026-09-08 검진 3). 예전엔 옛 해시를 먼저 지우고 그 다음 새로 정했다.
+   * 새 값이 규칙에 안 맞아 던지면 그 사이에 **주문 비밀번호가 빈 문자열**로 남았다 — 「기억」이
+   * 살아 있으면 비밀번호 없는 계좌로 주문이 나가고, 누구나 옛 비밀번호 없이 새로 정할 수 있었다.
+   */
+  validateSecret(next, kind);
   const a = await loadAuth();
-  await writeJson(AUTH_FILE, { ...a, hash: "", fails: 0, lockUntil: 0 } satisfies OrderAuthFile);
-  await setOrderPassword(next, null, kind);
+  const salt = randomBytes(16).toString("hex");
+  const hash = await scryptHex(next, salt);
+  await writeJson(AUTH_FILE, { ...a, salt, hash, fails: 0, lockUntil: 0 } satisfies OrderAuthFile);
   await appendLog({ kind: "password", msg: `주문 ${kind === "pattern" ? "패턴" : "비밀번호"} 초기화 — 앱 아이디·비밀번호로` });
   void sendTelegram("🔐 <b>주문 비밀번호가 초기화됐다</b> — 앱 아이디·비밀번호로. 본인이 아니면 지금 ORDERS_ENABLED 를 끄라", "syslog").catch(() => undefined);
 }
@@ -1419,7 +1431,19 @@ export async function prepareOrder(
     const acct = await orderAccount().catch(() => null);
     if (acct) {
       const mine = acct.holdings.filter((x) => x.code === input.code && (credit ? Boolean(x.creditType) && (!loanDate || x.loanDate === loanDate) : !x.creditType));
-      const able = mine.reduce((a, x) => a + (x.ableQty > 0 ? x.ableQty : x.qty), 0);
+      const held = mine.reduce((a, x) => a + x.qty, 0);
+      /*
+       * ⚠️ **`ableQty === 0` 은 「못 읽었다」가 아니다** (2026-09-08 검진 8). 예전엔 0 이면 총보유로
+       * 되돌렸다. 그런데 0 의 정상적인 뜻은 **「이미 낸 주문이 전부 물고 있다」**다 — 손절 스톱이
+       * 100주를 물고 있는데 또 100주 매도를 통과시키면 스톱이 취소되는 찰나에 이중으로 나간다.
+       *
+       * 다만 계좌가 매매가능수량을 아예 안 주는 경우와는 갈라야 한다. **미체결에 그 종목 매도가
+       * 하나도 없는데** 전 줄이 0 이면 「못 읽었다」로 보고 총보유로 잰다.
+       */
+      const open = await openOrders().catch(() => [] as OpenRow[]);
+      const restingSell = open.filter((x) => x.code === input.code && /매도/.test(x.side)).reduce((a, x) => a + (x.remain || 0), 0);
+      const ableRaw = mine.reduce((a, x) => a + x.ableQty, 0);
+      const able = ableRaw > 0 || restingSell > 0 ? ableRaw : held;
       if (mine.length === 0) {
         const other = acct.holdings.filter((x) => x.code === input.code && (credit ? !x.creditType : Boolean(x.creditType)));
         const otherQty = other.reduce((a, x) => a + x.qty, 0);
@@ -1431,7 +1455,16 @@ export async function prepareOrder(
           ip,
         );
       }
-      if (input.qty > able) reject(`매도 수량 ${input.qty}주가 매매가능수량 ${able}주를 넘는다`, input, ip);
+      if (input.qty > able) {
+        /* 왜 모자란지까지 말한다 — 「매매가능 0」만 보면 왜 못 파는지 알 길이 없다 (검진 8) */
+        reject(
+          restingSell > 0
+            ? `매도 수량 ${input.qty}주가 매매가능수량 ${able}주를 넘는다 — 보유 ${held}주 중 ${restingSell}주는 이미 낸 매도 주문(손절 스톱 포함)이 물고 있다. 미체결에서 먼저 취소하라`
+            : `매도 수량 ${input.qty}주가 매매가능수량 ${able}주를 넘는다 (보유 ${held}주)`,
+          input,
+          ip,
+        );
+      }
     }
   }
 
@@ -1729,8 +1762,29 @@ export async function executePrepared(
     ).catch(() => undefined);
     return { ordNo: "", msg: `감시 ${replaced ? "수정" : "등록"} — ${watchSay(t.watch)}`, ticket: t, remembered };
   }
+  /*
+   * ⚠️ **접수된 뒤의 실패는 「거절」이 아니다** (2026-09-08 검진 4).
+   *
+   * 예전엔 `placeOrder` 부터 출구 계획 등록까지 한 try 안에 있었다. 주문은 접수됐는데 그 뒤
+   * `addAutoWatch` 나 기록이 던지면 화면에 **「키움이 거절했다」**가 떴다 — 사람은 안 나갔다고
+   * 믿고 다시 누른다. **그게 이중 매수다.** 그래서 접수 자체와 뒷정리를 갈라 둔다: 접수에
+   * 실패하면 예전처럼 던지고, 접수 뒤에 실패하면 **성공을 돌려주되** 무엇이 안 붙었는지를
+   * 메시지·텔레그램·기록에 남긴다.
+   */
+  let r: { ordNo: string; msg: string; raw?: unknown };
   try {
-    const r = await placeOrder(t);
+    r = await placeOrder(t);
+  } catch (e) {
+    const msg = e instanceof KiwoomApiError ? `${e.returnCode} ${e.message}` : e instanceof Error ? e.message : String(e);
+    await appendLog({ kind: "error", ip, code: t.code, name: t.name, qty: t.qty, venue: t.venue, msg, raw: e instanceof KiwoomApiError ? e.raw : undefined });
+    /* 응답 없음은 거절이 아니다 — 「거절」이라 하면 사람은 다시 누르고, 그게 이중 주문이다 (2차 검진 🟠A-8) */
+    const maybeSent = /응답하지 않았다/.test(msg);
+    void sendTelegram(`⚠️ ${tag} ${maybeSent ? "주문 응답 없음 — 접수됐을 수 있다" : "주문 실패"} ${esc(t.name)}\n${esc(msg)}`, "order").catch(() => undefined);
+    throw new Error(maybeSent ? `키움이 응답하지 않았다 — 주문이 접수됐을 수 있다. 다시 누르지 말고 미체결·체결 탭을 먼저 확인하라 (${msg})` : `키움이 거절했다: ${msg}`);
+  }
+  /** 접수 뒤에 어긋난 것 — 주문은 나갔으니 실패로 돌리지 않고 말로 남긴다 */
+  let after = "";
+  try {
     dropAccountCache();
     if (t.kind === "cancel") {
       await appendLog({ kind: "cancel", ip, code: t.code, name: t.name, qty: t.qty, venue: t.venue, origOrdNo: t.ordNo, ordNo: r.ordNo, msg: r.msg, raw: r.raw });
@@ -1802,15 +1856,16 @@ export async function executePrepared(
         await appendLog({ kind: "watch", ip, side: "buy", code: t.code, name: t.name, qty: t.qty, msg: `출구 계획 붙임 (${id}) — 체결되면 체결가 대비 ${legsSay(t.exit)} 매도 감시` });
       }
     }
-    return { ordNo: r.ordNo, msg: r.msg, ticket: t, remembered };
   } catch (e) {
     const msg = e instanceof KiwoomApiError ? `${e.returnCode} ${e.message}` : e instanceof Error ? e.message : String(e);
-    await appendLog({ kind: "error", ip, code: t.code, name: t.name, qty: t.qty, venue: t.venue, msg, raw: e instanceof KiwoomApiError ? e.raw : undefined });
-    /* 응답 없음은 거절이 아니다 — 「거절」이라 하면 사람은 다시 누르고, 그게 이중 주문이다 (2차 검진 🟠A-8) */
-    const maybeSent = /응답하지 않았다/.test(msg);
-    void sendTelegram(`⚠️ ${tag} ${maybeSent ? "주문 응답 없음 — 접수됐을 수 있다" : "주문 실패"} ${esc(t.name)}\n${esc(msg)}`, "order").catch(() => undefined);
-    throw new Error(maybeSent ? `키움이 응답하지 않았다 — 주문이 접수됐을 수 있다. 다시 누르지 말고 미체결·체결 탭을 먼저 확인하라 (${msg})` : `키움이 거절했다: ${msg}`);
+    after = ` · ⚠️ 주문은 접수됐다(${r.ordNo || "번호 없음"}) — 뒷정리 실패: ${msg}`;
+    await appendLog({ kind: "error", ip, code: t.code, name: t.name, qty: t.qty, venue: t.venue, ordNo: r.ordNo, msg: `접수 뒤 실패 — ${msg}` });
+    void sendTelegram(
+      `🚨 ${tag} <b>주문은 나갔다 · 뒷정리 실패</b> ${esc(t.name)} ${t.qty}주 (주문번호 ${esc(r.ordNo || "?")})\n${esc(msg)}\n<b>다시 누르지 마라</b> — 출구 계획·체결 감시가 안 붙었을 수 있다. 미체결 탭을 확인하라`,
+      "order",
+    ).catch(() => undefined);
   }
+  return { ordNo: r.ordNo, msg: r.msg + after, ticket: t, remembered };
 }
 
 /* ── 조회 (주문 계좌 기준) ────────────────────────────────────────────── */
@@ -2688,9 +2743,17 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
     tradeType = "0";
     price = s.exec === "limit_trigger" ? s.trigger : s.exec === "limit_now" ? toTick(cur) : (s.limitPrice ?? s.trigger);
     const off = (Math.abs(price - cur) / cur) * 100;
-    if (off > g.priceCollarPct) why = `지정가(${price.toLocaleString()})가 그때 값(${cur.toLocaleString()})에서 ${off.toFixed(1)}% 벗어났다 (한도 ${g.priceCollarPct}%)`;
+    /*
+     * 값이 지정가에서 멀어졌다. **매수는 실패**로 접지만 **매도(출구)는 보류**다 (검진 2 확장) —
+     * 갭으로 잠깐 벌어진 것뿐인데 손절을 영영 죽이면 안 된다. 값이 돌아오면 다음 틱에 나간다.
+     */
+    if (off > g.priceCollarPct) {
+      const say = `지정가(${price.toLocaleString()})가 그때 값(${cur.toLocaleString()})에서 ${off.toFixed(1)}% 벗어났다 (한도 ${g.priceCollarPct}%)`;
+      if (base.side === "sell") return holdOff(`${say} — 값이 돌아오면 다시 본다`);
+      why = say;
+    }
   }
-  const amount = (price ?? cur) * base.qty;
+  let amount = (price ?? cur) * base.qty;
   /*
    * VI 중엔 내지 않는다 (2차 검진 🟠B-18). 정지 직전 값이 얼어붙어 조건에 걸리면 해제 단일가에
    * 최악의 값으로 체결된다. 실시간 VI 사건(1h)은 이미 창고에 있다 — 해제되면 다음 틱에 정상 발동.
@@ -2707,13 +2770,32 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
   if (s.exec === "market" && nowMin > 920) {
     tradeType = "0";
     price = s.trigger;
+    /* 값이 바뀌었으면 금액도 바뀐다 — 한도 판정과 알림이 옛 값으로 남았다 (2026-09-08 검진 17) */
+    amount = price * base.qty;
     await appendLog({ kind: "watch", side: base.side, code: base.code, name: base.name, qty: base.qty, msg: `마감 동시호가 — 시장가 대신 발동가 ${s.trigger.toLocaleString()} 지정가로 (${r.id})` });
+    /*
+     * 이 바꿔치기는 **안 나갈 수도 있다** (2026-09-08 검진 16) — 갭으로 발동가 아래에서 놀면
+     * 지정가에 안 닿고 그대로 종가를 맞는다. 조용히 두면 손절이 안 된 줄도 모른다. 알린다.
+     */
+    void sendTelegram(
+      `⏳ ${tag} <b>마감 동시호가 — 발동가 지정가로 바꿔 낸다</b> ${esc(base.name)} ${sideKo} ${base.qty}주
+발동가 ${s.trigger.toLocaleString()}원. <b>값이 그 아래면 안 체결된다</b> — 미체결 탭을 확인하라`,
+      "order",
+    ).catch(() => undefined);
   }
   if (!why && base.side === "buy") why = await buyBlockReason(base.code, g);
-  if (!why && (await uiLocked())) why = "화면 잠금 중 — 잠금은 감시 발동도 막는다";
+  /*
+   * ⚠️ **잠금·스위치는 「보류」지 「실패」가 아니다** (2026-09-08 검진 2).
+   *
+   * 화면 잠금(`uiLocked`)은 세션 만료가 아니라 **사람이 켜 두는 영구 플래그**다. 예전엔 여기서
+   * `failed` 로 접었는데, 그러면 밤에 잠가 둔 채 다음 날 손절선이 닿으면 **감시가 그 자리에서
+   * 죽고 잠금을 풀어도 되살아나지 않았다.** 손절이 통째로 사라진다. 자동감시 스위치도 같다 —
+   * 다시 켤 수 있는 것은 보류로 두고 다음 틱에 본다.
+   */
+  if (!why && (await uiLocked())) return holdOff("화면 잠금 중 — 풀면 다시 본다");
+  if (!why && !g.allowAutoWatch) return holdOff("자동감시가 꺼져 있다 — 켜면 다시 본다");
   if (!why) {
-    if (!g.allowAutoWatch) why = "자동감시가 꺼져 있다(orderGuard.allowAutoWatch)";
-    else if (g.allowedCodes && g.allowedCodes.length > 0 && !g.allowedCodes.includes(base.code)) why = "허용 종목이 아니다";
+    if (g.allowedCodes && g.allowedCodes.length > 0 && !g.allowedCodes.includes(base.code)) why = "허용 종목이 아니다";
     /*
      * **한도는 매수에만** (2026-09-08 정밀검진 🔴4). 매도에도 걸면 지켜야 할 손절이 「오늘 한도
      * 초과」로 안 나간다 — 하이닉스 1주 174만이 한 건 100만에 막히는 식. 출구는 한도가 아니다.
@@ -3173,12 +3255,23 @@ export async function positions(main: KiwoomClient): Promise<{
   prices: Record<string, { price: number; from: string }>;
   todayLoss: number;
   buyLocked: string | null;
+  /** 감시 파일을 못 읽었다 — null 이면 정상. 이 값이 있으면 손절·감시 표시가 비어 있는 것이다 */
+  watchError: string | null;
 }> {
   const oc = orderClient();
   const today = kstParts().date.replace(/-/g, "");
+  /*
+   * 감시 파일을 못 읽어도 **보이는 것은 보여야 한다** (2026-09-08 검진 9). 던지게 바꾼 뒤로
+   * 파일이 깨지면 포지션 탭이 통째로 500 이었다 — 그때가 감시 상태를 가장 봐야 할 때다.
+   * 경보는 readWatches 안에서 이미 텔레그램으로 나간다. 여기서는 이유를 화면에 실어 보낸다.
+   */
+  let watchError: string | null = null;
   const [acct, rowsAll, open, fl, g, assetRes, rlzRes] = await Promise.all([
     orderAccount(),
-    readWatches(),
+    readWatches().catch((e: unknown) => {
+      watchError = e instanceof Error ? e.message : String(e);
+      return [] as AutoWatch[];
+    }),
     openOrders().catch(() => [] as OpenRow[]),
     fills().catch(() => [] as OpenRow[]),
     getGuard(),
@@ -3254,6 +3347,7 @@ export async function positions(main: KiwoomClient): Promise<{
     /* 계좌 조회가 실패했으면 그 이유 — 예수금 0 이 「없다」인지 「못 읽었다」인지 화면이 말해야 한다 (2026-09-08) */
     accountError: [lastTrError.has("kt00001") ? `예수금(kt00001): ${lastTrError.get("kt00001")}` : "", lastTrError.has("kt00018") ? `잔고(kt00018): ${lastTrError.get("kt00018")}` : ""].filter(Boolean).join(" · ") || null,
     buyLocked,
+    watchError,
   };
 }
 

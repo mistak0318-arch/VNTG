@@ -521,6 +521,22 @@ function orderLink(h: { code: string; name: string; ableQty: number; creditType:
   return `${base}${qty}${credit}${extra}`;
 }
 
+/**
+ * **화면 미리보기** — 로컬 개발 서버에서만 산다 (2026-09-08).
+ *
+ * 주문 화면은 세션·비밀번호를 통과해야 폼이 나온다. 그래서 로컬에서는 폼을 아예 못 봤고,
+ * 「타입 검사만 하고 배포」→「폰에서 깨짐」을 그날 네 번 반복했다. 이제
+ * `#/order?preview=1` 이면 세션이 있는 척하고 폼을 그린다. 그 안의 시세·잔고 호출은
+ * 서버가 막아 실패하지만, **폭과 배치는 눈으로 확인된다** — 그게 목적이다.
+ *
+ * **개발 서버(localhost:5173)에서만** 산다. 미니PC 배포본은 다른 포트라 이 길이 아예 안 열리고,
+ * 열려 봐야 서버가 주문을 전부 거절한다 — 화면만 그려 보는 문이다.
+ */
+const devPreview = () =>
+  window.location.port === "5173" &&
+  /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname) &&
+  /[?&]preview=1/.test(window.location.hash);
+
 export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
   const [status, setStatus] = useState<OrderStatus | null>(null);
   const [subOrder, setSubOrder] = useState<Sub[]>(readSubOrder);
@@ -533,8 +549,12 @@ export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, na
   const load = useCallback(async () => {
     try {
       const s = await api.orderStatus();
-      setStatus(s);
-      setLeft(s.sessionLeftSec);
+      /* 미리보기는 「열려 있고 세션도 있다」로 갈아 끼운다 — 로컬 개발 서버에서만 (위 devPreview 주석) */
+      const shown: OrderStatus = devPreview()
+        ? { ...s, enabled: true, configured: true, session: true, hasPassword: true, uiLocked: false, sessionLeftSec: 900, reason: null }
+        : s;
+      setStatus(shown);
+      setLeft(shown.sessionLeftSec);
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "상태를 못 읽었다");
@@ -688,7 +708,7 @@ function Band({ status, left, onChange }: { status: OrderStatus; left: number; o
           <i>오늘</i>
           <b>{status.today.count}</b>/{status.guard.maxDailyCount}건
         </span>
-        <span className="ord-stat" title={`오늘 나간 금액 ${won(status.today.krw)} / 하루 한도 ${won(status.guard.maxDailyKrw)}`}>
+        <span className="ord-stat" title={`오늘 나간 매수 금액 ${won(status.today.krw)} / 하루 한도 ${won(status.guard.maxDailyKrw)} — 매도(출구)는 한도에 안 센다`}>
           <i>금액</i>
           <b>{manwon(status.today.krw)}</b>/{manwon(status.guard.maxDailyKrw)}
         </span>
@@ -927,7 +947,7 @@ function SessionGate({ status, onDone }: { status: OrderStatus; onDone: () => vo
           onChange={(e) => setDevName(e.target.value)}
         />
         {error && <p className="ord-err">{error}</p>}
-      {error && /잠금/.test(error) && <UnlockCard onDone={() => { setError(null); onDone(); }} />}
+        {/* 잠금 풀기 카드는 한 장이면 된다 — 두 줄이 겹쳐 두 장이 떴다 (2026-09-08 검진 11) */}
         {error && /잠금/.test(error) && <UnlockCard onDone={() => { setError(null); onDone(); }} />}
         <button type="submit" className="ord-go" disabled={busy || code.length !== 6}>
           {busy ? "확인 중…" : "등록하고 열기"}
@@ -1223,6 +1243,7 @@ function OrderForm({
       clearInterval(t);
       window.removeEventListener("vntg:fill", f);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amend !== null]);
   /* 링크가 준 주문번호가 목록에 있으면 골라 둔다 — 사람이 한 번 더 안 눌러도 되게 */
   const pickedAmend = useRef("");
@@ -1233,8 +1254,7 @@ function OrderForm({
     pickedAmend.current = prefill.amend;
     const sd: "buy" | "sell" = /매도/.test(r.side) ? "sell" : "buy";
     setAmend({ ordNo: r.ordNo, side: sd, qty: r.remain || r.qty, price: r.price, name: r.name, code: r.code, venue: r.venue || "KRX", remain: r.remain || r.qty });
-    setCode(r.code);
-    setName(r.name);
+    takeCode(r.code, r.name);
     setSide(sd);
     setQty(String(r.remain || r.qty));
     setPrice(r.price ? String(r.price) : "");
@@ -1350,16 +1370,40 @@ function OrderForm({
    * 주문도 그 값으로 나갈 뻔한다. 링크가 값을 주고 온 경우(prefill)는 아래 effect 가 다시 채운다.
    */
   const lastCode = useRef(code);
-  useEffect(() => {
-    if (lastCode.current === code) return;
-    lastCode.current = code;
+  /** 종목이 바뀌면 옛 값을 턴다 — 값과 표식을 한자리에 둔다 */
+  const wipeFor = useCallback((c: string) => {
+    lastCode.current = c;
     setPrice("");
     setCond("");
     setQty("");
     setAmount("");
     setAutoPriceAt(null);
     autoPricedFor.current = "";
-  }, [code]);
+    /* 옛 종목의 신용·대출일도 같이 턴다 — 남으면 엉뚱한 대출일로 신용 매도가 나간다 (검진 6) */
+    setSellCredit(false);
+    setLoanDate(null);
+  }, []);
+  useEffect(() => {
+    if (lastCode.current === code) return;
+    wipeFor(code);
+  }, [code, wipeFor]);
+  /**
+   * **종목을 바꾸면서 값을 같이 넣는 자리**는 이걸 쓴다 (2026-09-08 검진 1).
+   *
+   * 위 effect 는 `code` 가 바뀐 **다음 커밋**에 값을 턴다. 그래서 종목과 수량을 같이 넣는
+   * 자리(잔고에서 고르기 · 정정 목록 · 계좌 매도 링크)는 방금 넣은 값이 한 박자 뒤에
+   * 지워졌다 — 정정과 잔고 매도가 통째로 못 쓸 뻔했다. 여기서 **먼저 털고 표식을 갱신**해
+   * 두면 뒤이어 부르는 setQty·setPrice 가 살아남는다. 같은 종목이면 아무것도 안 턴다.
+   */
+  const takeCode = useCallback(
+    (c: string, n: string) => {
+      if (lastCode.current !== c) wipeFor(c);
+      setCode(c);
+      setName(n);
+      setQuote(null);
+    },
+    [wipeFor],
+  );
   useEffect(() => {
     if (!code || !quote || !(quote.price > 0)) return;
     if (autoPricedFor.current === code) return;
@@ -1374,8 +1418,7 @@ function OrderForm({
 
   useEffect(() => {
     if (!prefill.code) return;
-    setCode(prefill.code);
-    setName(prefill.name);
+    takeCode(prefill.code, prefill.name);
     if (prefill.side) setSide(prefill.side);
     if (prefill.tradeType) setTradeType(prefill.tradeType);
     if (prefill.qty) setQty(prefill.qty);
@@ -1408,6 +1451,15 @@ function OrderForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoPrice, usesPrice, quote?.price, amend?.price]);
   const usesCond = tt?.cond === true;
+  /*
+   * **이 종목이 NXT 에서 도는가.** 오늘 NXT 고가가 왔는지로 본다 (아래 거래소 단추의 설명 참고).
+   * 여기서 한 번 재고, 도는 곳이 아니면 **거래소를 KRX 로 되돌린다** (2026-09-08 검진 6) —
+   * NXT 종목을 보다 미거래 종목으로 옮기면 NXT 가 선택된 채 남아 주문이 거절됐다.
+   */
+  const nxtDead = Boolean(code) && quote !== null && !quote.nxtHigh;
+  useEffect(() => {
+    if (nxtDead && venue === "NXT") setVenue("KRX");
+  }, [nxtDead, venue]);
   /* 시간외 구분은 정규장 밖에 내는 것이 정상이라 「시간 아님」 경고를 띄우지 않는다 */
   const open = tt?.late ? true : status.open[venue];
   /* 셈에 쓸 값 — 지정가면 그 값, 아니면 호가창이 아는 현재가(스톱은 발동가) */
@@ -1564,11 +1616,7 @@ function OrderForm({
           <StockSearchBox
             placeholder="종목명 또는 6자리 코드"
             clearOnPick={false}
-            onPick={(c, n) => {
-              setCode(c);
-              setName(n);
-              setQuote(null);
-            }}
+            onPick={(c, n) => takeCode(c, n)}
           />
           {holdOpen && (
             <div className="ord-hold-list" role="listbox">
@@ -1577,9 +1625,7 @@ function OrderForm({
               {acct?.holdings.map((h) => {
                 /* 그 종목으로 폼을 세운다 — 매도면 수량까지 채운다(키움 잔고에서 매도를 누른 것과 같다) */
                 const go = (sd: "buy" | "sell") => {
-                  setCode(h.code);
-                  setName(h.name);
-                  setQuote(null);
+                  takeCode(h.code, h.name);
                   setSide(sd);
                   setAmend(null);
                   setSellCredit(sd === "sell" ? Boolean(h.creditType) : false);
@@ -1710,10 +1756,11 @@ function OrderForm({
           고르면 원주문가·수량이 채워진다. 호가를 눌러 값을 고치는 손이 그대로 이어진다.
         */}
         <div className="ord-side three">
-          <button type="button" className={side === "buy" ? "on buy" : ""} onClick={() => setSide("buy")}>
+          {/* 매수·매도를 누르면 정정 갈래에서 빠져나온다 — 안 그러면 제출 단추가 「정정/취소」에 갇힌다 (검진 6) */}
+          <button type="button" className={side === "buy" ? "on buy" : ""} onClick={() => { setSide("buy"); setAmend(null); }}>
             매수
           </button>
-          <button type="button" className={side === "sell" ? "on sell" : ""} onClick={() => setSide("sell")}>
+          <button type="button" className={side === "sell" ? "on sell" : ""} onClick={() => { setSide("sell"); setAmend(null); }}>
             매도
           </button>
           <button type="button" className={amend ? "on amend" : ""} onClick={() => setAmend((v) => (v ? null : { ordNo: "", side: "buy", qty: 0, price: 0, name: "", code: "", venue: "KRX", remain: 0 }))}>
@@ -1750,12 +1797,10 @@ function OrderForm({
                     onClick={() => {
                       const sd: "buy" | "sell" = /매도/.test(r.side) ? "sell" : "buy";
                       setAmend({ ordNo: r.ordNo, side: sd, qty: r.remain || r.qty, price: r.price, name: r.name, code: r.code, venue: r.venue || "KRX", remain: r.remain || r.qty });
-                      setCode(r.code);
-                      setName(r.name);
+                      takeCode(r.code, r.name);
                       setSide(sd);
                       setQty(String(r.remain || r.qty));
                       setPrice(r.price ? String(r.price) : "");
-                      setQuote(null);
                     }}
                   >
                     <SideChip side={r.side} />
@@ -1795,9 +1840,7 @@ function OrderForm({
                 className={`ord-hold-b${on ? " on" : ""}${h.creditType ? " crd" : ""}`}
                 title={`${h.name} · 보유 ${h.qty}주 · 매매가능 ${h.ableQty}주 · 평단 ${h.avg.toLocaleString()}${h.creditType ? ` · ${h.creditType} ${h.loanDate ?? ""}` : ""}`}
                 onClick={() => {
-                  setCode(h.code);
-                  setName(h.name);
-                  setQuote(null);
+                  takeCode(h.code, h.name);
                   if (side === "sell") {
                     lastEdit.current = "qty";
                     setQty(String(h.ableQty));
@@ -1846,7 +1889,7 @@ function OrderForm({
                * **오늘 NXT 고가가 왔는지**로 본다 — 값이 오면 확실히 되는 것이고, 안 오면 장 초반이라
                * 아직 체결이 없을 수도 있으니 막지는 않고 「거래 없음」이라 적는다.
                */
-              const noNxt = v.key === "NXT" && Boolean(code) && quote !== null && !quote.nxtHigh;
+              const noNxt = v.key === "NXT" && nxtDead;
               const shut = !can || !status.open[v.key] || noNxt;
               return (
                 <button
@@ -3692,6 +3735,17 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
         {noExitCount > 0 && <span className="ord-stat bad">⚠️ 출구 없는 포지션 {noExitCount}</span>}
       </div>
 
+      {/*
+        감시 파일을 못 읽었다 (2026-09-08 검진 9). 카드에 손절선이 안 보이는 것이 「없다」가
+        아니라 「못 읽었다」임을 말해야 한다 — 이 띠가 없으면 출구가 사라진 줄도 모른다.
+      */}
+      {view.watchError && (
+        <div className="error-banner">
+          ⚠️ 자동감시 기록(orderWatch.json)을 못 읽었다 — 아래 카드의 손절·출구 표시는 <b>비어 있는 것</b>이지
+          없는 것이 아니다. 서버에서 파일을 확인하라. ({view.watchError})
+        </div>
+      )}
+
       <div className="kb-bar">
         <span className="kb-bar-l">
           보유 <b>{view.positions.length}</b>종목
@@ -4960,15 +5014,37 @@ interface GuardRowCtx {
 interface GuardRowProps { ctx: GuardRowCtx; k: keyof OrderGuard; label: string; hint: string; unit: string; fallback: number; min: number; max: number; step?: number }
 function GuardRow({ ctx, k, label, hint, unit, fallback, min, max, step }: GuardRowProps) {
   const v = Number(ctx.d[k] ?? 0);
-  const on = v > 0;
+  /*
+   * ⚠️ **고치는 중에는 칸을 잠그지 않는다** (2026-09-08 검진 10). 값이 0 이면 스위치가 꺼지고
+   * 칸이 `disabled` 가 되는데, 값을 다 지우는 순간 0 이 되므로 **백스페이스 한 번에 포커스가
+   * 날아갔다.** 손이 칸에 있는 동안(draft)은 0 이어도 열어 둔다 — 떠날 때 비어 있으면 그때 끈다.
+   */
+  const [draft, setDraft] = useState<string | null>(null);
+  const editing = draft !== null;
+  const usable = v > 0 || editing;
   return (
     <div className="ord-guard-row">
       <label className="ord-guard-sw">
-        <input type="checkbox" checked={on} onChange={(e) => ctx.set({ [k]: e.target.checked ? fallback : 0 } as Partial<OrderGuard>)} />
+        <input type="checkbox" checked={v > 0} onChange={(e) => ctx.set({ [k]: e.target.checked ? fallback : 0 } as Partial<OrderGuard>)} />
         <b>{label}</b>
       </label>
       <span className="ord-guard-val">
-        <input type="number" value={on ? v : ""} placeholder="안 씀" disabled={!on} min={min} max={max} step={step ?? 1} onChange={(e) => ctx.set({ [k]: Number(e.target.value) } as Partial<OrderGuard>)} onKeyDown={(e) => e.key === "Enter" && ctx.onEnter()} />
+        <input
+          type="number"
+          value={editing ? draft : v > 0 ? v : ""}
+          placeholder="안 씀"
+          disabled={!usable}
+          min={min}
+          max={max}
+          step={step ?? 1}
+          onFocus={() => setDraft(v > 0 ? String(v) : "")}
+          onBlur={() => setDraft(null)}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            ctx.set({ [k]: Number(e.target.value) || 0 } as Partial<OrderGuard>);
+          }}
+          onKeyDown={(e) => e.key === "Enter" && ctx.onEnter()}
+        />
         <i>{unit}</i>
       </span>
       <small>{hint}</small>
@@ -5059,8 +5135,8 @@ function GuardSection({ guard, mock, cap, onSaved }: { guard: OrderGuard; mock: 
 
       <h5 className="ord-guard-h">주문 한도</h5>
       <GuardFixed ctx={rowCtx} k="maxOrderKrw" label="한 건" hint={`주문 한 건의 상한. 지정가는 가격×수량, 시장가는 현재가×수량${cap?.maxOrderKrw ? ` · 천장 ${won(cap.maxOrderKrw)} (.env, 미니PC 에서만)` : ""}`} unit="원" min={10_000} max={cap?.maxOrderKrw ?? 1_000_000_000} step={100_000} />
-      <GuardFixed ctx={rowCtx} k="maxDailyKrw" label="하루 합계" hint={`오늘 낸 주문(매수+매도)의 합 상한${cap?.maxDailyKrw ? ` · 천장 ${won(cap.maxDailyKrw)} (.env, 미니PC 에서만)` : ""}`} unit="원" min={10_000} max={cap?.maxDailyKrw ?? 10_000_000_000} step={100_000} />
-      <GuardFixed ctx={rowCtx} k="maxDailyCount" label="하루 건수" hint="오늘 낸 주문 건수 상한 (취소는 안 센다)" unit="건" min={1} max={1000} />
+      <GuardFixed ctx={rowCtx} k="maxDailyKrw" label="하루 합계" hint={`오늘 낸 「매수」 주문의 합 상한 — 매도(출구)는 안 센다${cap?.maxDailyKrw ? ` · 천장 ${won(cap.maxDailyKrw)} (.env, 미니PC 에서만)` : ""}`} unit="원" min={10_000} max={cap?.maxDailyKrw ?? 10_000_000_000} step={100_000} />
+      <GuardFixed ctx={rowCtx} k="maxDailyCount" label="하루 건수" hint="오늘 낸 매수 주문 건수 상한 (매도·취소는 안 센다)" unit="건" min={1} max={1000} />
       <GuardFixed ctx={rowCtx} k="priceCollarPct" label="지정가 울타리" hint="현재가에서 이만큼 넘게 벗어난 지정가는 거절 — 0 을 하나 더 친 손가락을 잡는다" unit="%" min={1} max={30} step={0.5} />
       <GuardFixed ctx={rowCtx} k="stopCollarPct" label="스톱 발동가 울타리" hint="손절 발동가는 원래 멀리 두므로 따로 넓게. 그래도 오타는 잡는다" unit="%" min={1} max={90} />
 

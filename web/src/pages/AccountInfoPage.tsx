@@ -175,6 +175,8 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
       <div className="search-box">
         <input
           className="search-input"
+          type="text"
+          inputMode="search"
           placeholder="종목명 또는 종목코드 검색"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -268,7 +270,7 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
               </thead>
               <tbody>
                 {sorted.map((r, i) => (
-                  <tr key={`${r.code}-${r.credit}-${i}`} className="acct2-row" onClick={() => onSelectStock(r.code, r.name)}>
+                  <tr key={`${r.code}-${r.credit}-${r.loanDate ?? ""}`} className="acct2-row" onClick={() => onSelectStock(r.code, r.name)}>
                     <td className="acct2-name">
                       <b>{r.name}</b>
                       <span className="ord-code">{r.code}</span>

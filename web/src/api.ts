@@ -7193,6 +7193,8 @@ export interface PositionsView {
   prices: Record<string, { price: number; from: string }>;
   todayLoss: number;
   buyLocked: string | null;
+  /** 감시 파일을 못 읽었다 — 이 값이 있으면 손절·감시 표시가 **비어 있는 것**이다 (2026-09-08) */
+  watchError?: string | null;
 }
 
 export interface CancelTicket {

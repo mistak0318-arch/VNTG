@@ -15139,6 +15139,14 @@ tr:hover .sd-del { opacity: 0.75; }
  * 안 고른 쪽은 회색으로 확실히 죽인다. 색은 국내 관례대로 매수 빨강 · 매도 파랑.
  */
 .ord-side { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; width: 100%; }
+/*
+ * ⚠️ **이름이 겹친다** (2026-09-08 검진 5). 표 안의 「매수/매도」 글자 칩도 `.ord-side` 인데
+ * 그 쪽은 `display: inline` 이고 이 파일 **뒤에** 있어서, 주문 폼의 갈래 단추가 격자가 아니라
+ * 줄글로 흘렀다 — 넷째 단추(잔고)가 둘째 줄로 떨어졌다. 폼 쪽은 언제나 `.ord-head` 안에
+ * 있으므로 그 자리로 못 박는다. 칸 수도 여기 한 곳에서만 정한다.
+ */
+.ord-head .ord-side { display: grid; }
+.ord-head .ord-side.three { grid-template-columns: 1fr 1fr 1.2fr 1fr; }
 .ord-side button {
   position: relative;
   /* 높이는 원래대로 — 뚱뚱해지면 안 된다. 커야 하는 건 **폭**이다 */
@@ -15420,10 +15428,11 @@ tr:hover .sd-del { opacity: 0.75; }
   .ord-hl em { font-size: 0.66rem; }
   /* 정정/취소까지 셋이면 폰에서 글자가 눌린다 — 한 줄에 셋, 글자 작게 */
   /* 폰 — 넷이 한 줄에 들어가야 한다. 글자를 줄이고 여백을 좁힌다 */
-  .ord-side.three { grid-template-columns: 1fr 1fr 1.25fr 0.95fr; gap: 0.25rem; }
+  .ord-head .ord-side.three { grid-template-columns: 1fr 1fr 1.25fr 0.95fr; gap: 0.25rem; }
   .ord-side.three button,
   .ord-hold-tab { font-size: 0.84rem; padding: 0.4rem 0.1rem; }
-  .ord-hold-main { grid-template-columns: 1fr auto auto; }
+  .ord-hold-main { grid-template-columns: 1fr auto auto auto; gap: 0.3rem; }
+  .ord-hold-main b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ord-hold-avg { display: none; }
 
   /* 호가창을 가격·잔량 두 줄로 — 곁가지는 접는다 */
@@ -15445,20 +15454,35 @@ tr:hover .sd-del { opacity: 0.75; }
    * 「이 값에 걸면 오늘 몇 %인가」를 매번 암산해야 한다. 그게 호가마다 %를 적는 이유다.
    * 직전대비(ob-d)는 계속 접는다 — 폰에서 셋을 한 줄에 넣으면 다 못 읽는다.
    */
-  .ord-book .ob-row { grid-template-columns: 1fr 5.4rem 1fr; height: 1.5rem; font-size: 0.72rem; }
+  /*
+   * 가격 칸 5.4rem → 5.7rem (2026-09-08, 390px 실측). 「1,804,000 +1.18%」 처럼 **일곱 자리
+   * 값**이면 81px 칸에 83px 이 들어가 % 끝이 잘렸다. 삼성전자(여섯 자리)로만 봐서 못 봤다.
+   */
+  .ord-book .ob-row { grid-template-columns: 1fr 5.9rem 1fr; height: 1.5rem; font-size: 0.72rem; }
   .ord-book .ob-price { gap: 0.15rem; }
   .ord-book .ob-price b { font-size: 0.74rem; }
   .ord-book .ob-rt { font-size: 0.58rem; }
   /* 좁은 칸에 맞춰 잔량 자리도 줄인다 — 고정이라는 성질은 그대로 */
-  .ord-book .ob-qty b { min-width: 3.4rem; }
+  .ord-book .ob-qty b { min-width: 3rem; }
   .ord-book .ob-d { display: none; }
+  /*
+   * 현재가 줄의 「현」 딱지는 폰에서 접는다 (2026-09-08, 390px 실측) — 그 줄만 딱지·테두리
+   * 만큼 넓어서 값이 잘렸다. 노란 칠과 빨간 테두리가 이미 「여기가 지금」을 말한다.
+   */
+  .ord-book .ob-here { display: none; }
 
   .ord-venue button { font-size: 0.74rem; padding: 0.3rem 0.1rem; }
   .ord-venue button i { font-size: 0.6rem; }
   .ord-lab { font-size: 0.74rem; margin-top: 0.1rem; }
   .ord-caps { font-size: 0.68rem; }
   .ord-sum b { font-size: 0.95rem; }
-  .ord-step { grid-template-columns: 1.7rem 1fr 1.7rem; gap: 0.2rem; }
+  /*
+   * −/＋ 는 제 최소폭이 28px 인데 칸을 1.7rem(25.5px) 로 줘서 양쪽으로 2.5px 씩 삐져나왔다
+   * (2026-09-08, 390px 실측). 칸을 넓히고 좌우 여백을 지운다.
+   */
+  .ord-step { grid-template-columns: 1.9rem minmax(0, 1fr) 1.9rem; gap: 0.2rem; }
+  .ord-step button { padding-left: 0; padding-right: 0; }
+  .ord-step .ord-in { min-width: 0; }
   .ord-in { padding: 0.4rem 0.45rem; }
   .ord-sum { padding: 0.35rem 0.45rem; }
 
@@ -15935,7 +15959,6 @@ select.ord-in { appearance: auto; cursor: pointer; }
 .ord-quote { margin-left: 0.5rem; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 1.45rem; line-height: 1.1; padding: 0.05rem 0.55rem; border-radius: 0.5rem; background: var(--panel-2); }
 .ord-quote.positive { color: var(--red); }
 .ord-quote.negative { color: var(--blue); }
-.ord-quote i { font-size: 0.85rem; }
 .ord-quote i { font-style: normal; font-size: 0.78rem; margin-left: 0.3rem; font-weight: 400; }
 .ord-picked { gap: 0.4rem; }
 
@@ -17054,10 +17077,10 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-exit { margin-top: 0.6rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 0.5rem 0.6rem; display: flex; flex-direction: column; gap: 0.4rem; }
 .ord-exit.on { border-color: var(--green, #4ade80); }
 .ord-exit.folded { padding: 0.35rem 0.6rem; }
-.ord-exit-head { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; min-width: 0; }
+/* 접힘 머리 — 한 곳에서만 정한다 (2026-09-08 검진 18, 뒤 선언이 align-items 를 되돌리고 있었다) */
+.ord-exit-head { display: flex; align-items: center; gap: 0.5rem; font-size: 0.86rem; cursor: pointer; min-width: 0; }
 .ord-exit-head b { white-space: nowrap; flex: none; }
 .ord-exit-head small { color: var(--muted); font-size: 0.74rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ord-exit-head { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.86rem; cursor: pointer; }
 .ord-exit-head input { margin-top: 0.2rem; }
 .ord-exit-head i { font-style: normal; }
 .ord-modal-plan { margin: 0.2rem 0 0.6rem; padding: 0.5rem 0.65rem; border-radius: 8px; background: color-mix(in srgb, var(--green, #4ade80) 12%, var(--panel-2)); font-size: 0.86rem; line-height: 1.4; }
@@ -17751,9 +17774,7 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-reset { margin-top: 0.5rem; font-size: 0.82rem; }
 .ord-reset summary { cursor: pointer; color: var(--muted); }
 .ord-reset[open] summary { color: var(--text); }
-/* 주문 폼 — 잔고에서 고르기 (2026-09-08) */
-/* 잔고 — 매수·매도·정정 옆의 넷째 자리 (2026-09-08, 키움 배치) */
-.ord-side.three { grid-template-columns: 1fr 1fr 1.2fr 1fr; }
+/* 주문 폼 — 잔고에서 고르기 (2026-09-08). 칸 수는 위 `.ord-head .ord-side.three` 한 곳에서 */
 .ord-hold-tab { border-radius: 10px; border: 2px solid var(--border); background: var(--panel-2); color: var(--muted); font: inherit; font-size: 1.02rem; font-weight: 700; padding: 0.45rem; cursor: pointer; }
 .ord-hold-tab.on { border-color: var(--accent, #e6a23c); color: var(--accent, #e6a23c); background: color-mix(in srgb, var(--accent, #e6a23c) 14%, var(--panel-2)); }
 .ord-hold-list { margin-top: 0.4rem; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); max-height: 18rem; overflow-y: auto; padding: 0.25rem; }
@@ -17786,7 +17807,12 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .acct2-hold { padding: 0.7rem 0.9rem; }
 .acct2-hold-h { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
 .acct2-hold-h b { font-size: 0.98rem; }
-.acct2-hold-h small { color: var(--muted); font-size: 0.74rem; flex: 1; }
+.acct2-hold-h small { color: var(--muted); font-size: 0.74rem; flex: 1 1 12rem; min-width: 0; }
+/* 폰 — 설명이 제목 옆에서 세 줄로 접히며 「원본 JSON」을 밀었다 (2026-09-08 실측) */
+@media (max-width: 720px) {
+  .acct2-hold-h { gap: 0.3rem; }
+  .acct2-hold-h small { flex-basis: 100%; order: 3; }
+}
 .acct2-table th.on { color: var(--text); }
 .acct2-table th { cursor: pointer; user-select: none; white-space: nowrap; }
 .acct2-row { cursor: pointer; }
@@ -17805,7 +17831,6 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
   .acct2-w { display: none; }
 }
 /* 주문 폼의 정정/취소 (2026-09-08 — 키움 MTS 처럼 주문 화면 안에서) */
-.ord-side.three { grid-template-columns: 1fr 1fr 1.2fr; }
 .ord-side button.on.amend { border-color: var(--accent, #e6a23c); color: var(--accent, #e6a23c); background: color-mix(in srgb, var(--accent, #e6a23c) 14%, var(--panel-2)); }
 .ord-amend { margin-top: 0.5rem; padding: 0.55rem 0.7rem; border: 1px solid var(--accent, #e6a23c); border-radius: 10px; background: color-mix(in srgb, var(--accent, #e6a23c) 7%, var(--panel-2)); }
 .ord-amend-h { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
@@ -17815,6 +17840,14 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-amend-row:hover { background: var(--panel-2); }
 .ord-amend-row.on { border-color: var(--accent, #e6a23c); background: var(--panel-2); }
 .ord-amend-row .num { font-variant-numeric: tabular-nums; }
+/* 줄 안의 칸들이 안 줄어들어 폰에서 폭을 밀었다 (2026-09-08 검진 12) */
+.ord-amend-row > * { min-width: 0; }
+.ord-amend-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) {
+  .ord-amend-row { grid-template-columns: auto 1fr auto auto; gap: 0.35rem; font-size: 0.8rem; }
+  /* 시각은 접는다 — 어느 줄인지는 종목·수량·값으로 안다 */
+  .ord-amend-row .ord-caps { display: none; }
+}
 .ord-amend-cur { margin-top: 0.4rem; font-size: 0.84rem; }
 .ord-amend-go { display: grid; grid-template-columns: 2fr 1fr; gap: 0.4rem; }
 .ord-go.amend { background: rgba(230, 162, 60, 0.18); border-color: var(--accent, #e6a23c); color: var(--accent, #e6a23c); }
