@@ -467,8 +467,9 @@ export function KrThemeMapSection({
               .map((x) => ({
                 code: x.code,
                 name: x.name,
-                price: 0,
-                change: 0,
+                /* 값은 이미 실려 온다 — 0 으로 덮으면 시트가 「-」를 찍는다 (2026-09-08) */
+                price: x.price,
+                change: x.change,
                 changeRate: x.changeRate,
                 marketCap: x.marketCap,
               })),

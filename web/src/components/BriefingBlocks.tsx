@@ -412,7 +412,8 @@ export function MyThemeStrip({
                 .map((s) => ({
                   code: s.code,
                   name: s.name,
-                  price: 0, // 내 태그 평가엔 가격이 없다 — 등락률만 있다
+                  /* 주석이 틀렸었다 — 「가격이 없다」가 아니라 **안 넘긴 것**이다 (2026-09-08) */
+                  price: s.price,
                   changeRate: s.changeRate,
                   marketCap: s.marketCap,
                 })),

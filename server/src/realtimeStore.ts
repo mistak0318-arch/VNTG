@@ -363,6 +363,30 @@ export class RealtimeStore {
    */
   takeExternal(type: string, item: string, values: Record<string, string>): void {
     this.take({ trnm: "REAL", data: [{ type, item, values }] } as RealtimeFrame);
+    /*
+     * ⚠️ **SSE 에도 알려야 한다** (2026-09-08).
+     *
+     * `/api/realtime/stream` 은 키움 클라이언트의 `onFrame` 을 듣는다. 밖에서 들어온 값은
+     * 그 길을 안 지나므로, 스트림을 쓰는 화면은 **붙을 때의 첫 값만 받고 그대로 얼었다** —
+     * 해외 표를 읽기 전용(SSE)으로 바꾸자마자 「화면이 안 바뀐다」가 됐다.
+     *
+     * 국내 경로는 손대지 않는다 — 여기(밖에서 온 값)에서만 부른다. 듣는 이가 없으면 공짜다.
+     */
+    if (this.externalListeners.size === 0) return;
+    for (const fn of this.externalListeners) {
+      try {
+        fn(`${type}:${item}`, Date.now(), values);
+      } catch {
+        /* 듣는 쪽 하나가 터져도 저장은 이미 끝났다 */
+      }
+    }
+  }
+
+  /** 밖에서 들어온 값(해외 실시간)을 흘려 받는다 — SSE 가 쓴다 */
+  private readonly externalListeners = new Set<(key: string, at: number, values: Record<string, string>) => void>();
+  onExternal(fn: (key: string, at: number, values: Record<string, string>) => void): () => void {
+    this.externalListeners.add(fn);
+    return () => this.externalListeners.delete(fn);
   }
 
   private take(f: RealtimeFrame): void {

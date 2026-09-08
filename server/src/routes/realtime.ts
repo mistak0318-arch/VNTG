@@ -103,10 +103,24 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
         }
       });
 
+      /*
+       * **해외 실시간(한투)도 같은 스트림으로** (2026-09-08). 그 값은 키움 `onFrame` 을
+       * 안 지나고 저장소로 바로 들어온다 — 이 줄이 없으면 붙을 때의 첫 값만 가고 화면이
+       * 그대로 언다(벤티지 "바꾸고 나서 갱신주기가 더 느려진 거 같은데? 화면이 안 바껴").
+       */
+      const offExt = store?.onExternal((key, at, values) => {
+        if (!want.has(key)) return;
+        const now = Date.now();
+        if (now - (lastSent.get(key) ?? 0) < 250) return;
+        lastSent.set(key, now);
+        send(key, at, values);
+      });
+
       // 끊김 감지용 심장박동 — 프록시가 조용한 연결을 자르는 걸 막는 겸
       const beat = setInterval(() => res.write(`: beat ${rt.healthy ? 1 : 0}\n\n`), 15_000);
       req.on("close", () => {
         clearInterval(beat);
+        offExt?.();
         off();
       });
     } catch (err) {
@@ -332,6 +346,29 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
    * 상태 — **화면이 폴링으로 되돌릴지 정하는 근거.**
    * `healthy` 가 거짓이면 실시간을 믿지 말고 평소대로 폴링하면 된다.
    */
+  /**
+   * **개발용 값 주입** (2026-09-08) — `localhost` 에서만.
+   *
+   * 한투 웹소켓은 **앱키당 세션 하나**라(실측 `OPSP8996`) 미니PC 가 물고 있으면 개발 PC 는
+   * 붙을 수가 없다. 그러면 「밖에서 온 값이 SSE 로 잘 밀리는가」를 눈으로 볼 길이 없어진다 —
+   * 실제로 그것 때문에 화면이 얼어붙은 회귀를 냈다. 그 길을 여기 만들어 둔다.
+   */
+  router.post("/inject", async (req, res, next) => {
+    try {
+      const host = String(req.hostname ?? "");
+      if (!/^(localhost|127\.0\.0\.1|::1)$/.test(host)) {
+        res.status(403).json({ error: "개발 PC 에서만" });
+        return;
+      }
+      const b = req.body as { type?: string; item?: string; values?: Record<string, string> };
+      const { store } = await getRealtime(client);
+      store.takeExternal(String(b?.type ?? "FE"), String(b?.item ?? "TEST"), b?.values ?? { "10": "1" });
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /** 해외 실시간(한투 웹소켓) 상태 — 붙었나·몇 종목·프레임이 오나 (2026-09-08) */
   router.get("/us-status", (_req, res) => {
     res.json(hantooRealtimeStatus());

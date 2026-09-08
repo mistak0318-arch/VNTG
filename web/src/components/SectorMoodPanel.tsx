@@ -120,14 +120,22 @@ export function SectorMoodPanel({
                   code: t.id,
                   name: t.name,
                   label: "내 태그",
-                  /* 이미 받아온 구성종목을 그대로 넘긴다 — 다시 조회할 이유가 없다 */
+                  /*
+                   * 이미 받아온 구성종목을 그대로 넘긴다 — 다시 조회할 이유가 없다.
+                   *
+                   * ⚠️ 예전엔 `price: 0, change: 0` 으로 **덮어서** 넘겼다. 값이 없어서가
+                   * 아니라 안 넘긴 것이다 — `EvaluatedTheme.stocks` 는 현재가·전일대비를
+                   * 이미 들고 있었다. 시트는 0 을 「모른다」로 읽어 「-」를 찍으므로,
+                   * 등락률·시가총액은 나오는데 현재가·전일대비만 비는 화면이 됐다
+                   * (2026-09-08 벤티지 "현재가랑 전일대비가 비어있네").
+                   */
                   stocks: t.stocks
                     .filter((x) => x.found)
                     .map((x) => ({
                       code: x.code,
                       name: x.name,
-                      price: 0,
-                      change: 0,
+                      price: x.price,
+                      change: x.change,
                       changeRate: x.changeRate,
                       marketCap: x.marketCap,
                     })),

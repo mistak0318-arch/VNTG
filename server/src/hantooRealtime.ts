@@ -64,7 +64,7 @@ const EXCD3: Record<string, string> = {
 
 export interface HantooRtStatus {
   enabled: boolean;
-  state: "꺼짐" | "연결 중" | "연결됨" | "끊김";
+  state: "꺼짐" | "연결 중" | "연결됨" | "끊김" | "다른 곳이 쓰는 중";
   /** 마지막 체결 프레임이 온 지 몇 초 — null 이면 아직 */
   lastFrameAgoSec: number | null;
   subscribed: string[];
@@ -180,6 +180,23 @@ function onText(text: string): void {
         rejects.splice(20);
         /* 상한 초과면 그 자리는 포기한다 — 다시 걸어 봐야 또 거절이다 */
         if (/OPSP0008/.test(j.body?.msg_cd ?? "") && j.header?.tr_key) subs.delete(j.header.tr_key);
+        /*
+         * ⚠️ **앱키당 세션 하나다** (2026-09-08 실측 `OPSP8996 ALREADY IN USE appkey`).
+         *
+         * 미니PC 가 물고 있으면 다른 곳(개발 PC)은 붙어도 거절만 돌아온다. 5초마다 다시
+         * 시도하면 거절 로그만 쌓이고 한투에 부담만 준다 — **10분 쉬었다** 본다. 배포본이
+         * 재시작하며 자리를 놓는 순간이 오면 그때 붙는다. 키움 앱키가 아침에 겪은 것과
+         * 같은 성질이다(같은 키로 둘이 붙으면 서로 죽인다).
+         */
+        if (/OPSP8996/.test(j.body?.msg_cd ?? "")) {
+          state = "다른 곳이 쓰는 중";
+          retryAt = Date.now() + 10 * 60_000;
+          try {
+            ws?.close();
+          } catch {
+            /* 이미 닫혔을 수 있다 */
+          }
+        }
       }
     } catch {
       /* 우리가 모르는 제어 프레임 — 무시한다 */
@@ -267,17 +284,42 @@ function connect(): void {
  * 미국 장이 아예 안 도는 시간에도 붙여 둔다 — 프리장 04:00 ET 부터 체결이 오고,
  * 그때가 이 기능이 제일 필요한 시간이다.
  */
+/**
+ * 요청한 목록들 — **덮어쓰지 않고 합친다.**
+ *
+ * ⚠️ 화면이 하나가 아니다. 관심종목(해외) 페이지와 시황 전광판이 **각자 다른 그룹**으로
+ * 같은 창구(`/api/us-watch/fast`)를 3초마다 부른다. 마지막 것으로 갈아치우면 둘이 41자리를
+ * 서로 뺏어 3초마다 구독이 뒤집히고, 그때마다 프레임이 끊긴다 — 화면은 「안 바뀐다」가 된다.
+ * 그래서 목록마다 마지막으로 물어본 시각을 들고 있다가 **합집합**을 건다. 30초 넘게 안
+ * 물어본 목록은 화면이 닫힌 것으로 보고 뺀다.
+ */
+const asked = new Map<string, { syms: string[]; at: number }>();
+
 export function setUsRealtimeSymbols(symbols: string[]): void {
   if (!enabled()) return;
   /*
-   * ⚠️ **한두 종목짜리 요청은 목록으로 삼지 않는다.** 같은 창구(`/api/us-watch/fast`)를
-   * 차트 시트가 **종목 하나**로도 부른다 — 그걸 그대로 받으면 보고 있던 그룹 구독이 통째로
-   * 날아가고 시트를 닫으면 다시 걸린다(깜빡임). 목록을 정하는 것은 **표**뿐이다.
+   * ⚠️ **한두 종목짜리 요청은 목록으로 삼지 않는다.** 같은 창구를 차트 시트가 **종목 하나**로도
+   * 부른다 — 그것까지 자리를 먹으면 표가 밀린다. 목록을 정하는 것은 **표**뿐이다.
    */
   if (symbols.length < 3) return;
-  const next = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean).slice(0, MAX_SUBS);
-  const same = next.length === wanted.length && next.every((s, i) => s === wanted[i]);
-  wanted = next;
+  const syms = symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
+  asked.set(syms.join(","), { syms, at: Date.now() });
+
+  /* 오래된 화면은 뺀다 — 3초마다 물어보므로 30초면 닫힌 것이다 */
+  const now = Date.now();
+  for (const [k, v] of asked) if (now - v.at > 30_000) asked.delete(k);
+
+  /* 최근에 물어본 목록부터 채운다 — 방금 보고 있는 화면이 먼저다 */
+  const order = [...asked.values()].sort((a, b) => b.at - a.at);
+  const merged: string[] = [];
+  for (const g of order) {
+    for (const sym of g.syms) {
+      if (merged.length >= MAX_SUBS) break;
+      if (!merged.includes(sym)) merged.push(sym);
+    }
+  }
+  const same = merged.length === wanted.length && merged.every((s, i) => s === wanted[i]);
+  wanted = merged;
   connect();
   if (!same) resync();
 }
@@ -292,6 +334,7 @@ export function startHantooRealtime(s: RealtimeStore): void {
   setInterval(() => {
     if (wanted.length > 0) connect();
   }, 5_000);
+  /* `connect` 는 `retryAt` 을 보므로 「다른 곳이 쓰는 중」이면 10분 뒤에야 다시 시도한다 */
   console.log("[해외실시간] 한투 웹소켓 준비 — 보고 있는 그룹만 최대 41종목");
 }
 
