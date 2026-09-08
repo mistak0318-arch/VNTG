@@ -34,8 +34,17 @@ import { listWatchlist } from "./watchlist.js";
  * `REALTIME_VENUE=krx` 를 .env 에 넣으면 예전처럼 KRX 단독으로 건다. 정규장에서
  * 통합 프레임이 기대와 다르면 그것으로 즉시 되돌릴 수 있게 남겨 둔다.
  */
-function subCode(code: string): string {
-  if ((process.env.REALTIME_VENUE ?? "").toLowerCase() === "krx") return code;
+/**
+ * 구독에 쓰는 종목 키 — 여섯 자리 국내 코드는 통합(`_AL`)으로.
+ *
+ * ⚠️ **구독을 거는 자리는 전부 이걸 거쳐야 한다** (2026-09-08). 스케줄러는 `_AL` 로,
+ * 화면이 물어본 `/series`·`/latest` 는 맨 코드로 걸어서 **같은 종목이 두 줄기로**
+ * 들어왔다 — KRX 단독과 통합. 저장할 때 접미를 떼니 둘이 한 키에 번갈아 쌓여,
+ * 프로그램 매매 그림이 톱니가 되고 누적 순매수가 -722억 ↔ +325억 사이를 튀었다
+ * (SK하이닉스, 벤티지 실측). 이미 `_AL`/`_NX` 가 붙은 건 그대로 둔다.
+ */
+export function subCode(code: string): string {
+  if ((process.env.REALTIME_VENUE ?? "").toLowerCase() === "krx") return code.replace(/_(AL|NX)$/i, "");
   return /^\d{6}$/.test(code) ? `${code}_AL` : code;
 }
 

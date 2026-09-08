@@ -73,15 +73,33 @@ function useProgramSeries(code: string): FlowSeriesData {
           live?: boolean;
         };
         if (!alive) return;
+        /*
+         * **누적은 하루 안에서 줄지 않는다** (2026-09-08).
+         *
+         * 서버가 같은 종목을 맨 코드와 통합(`_AL`)으로 두 번 구독하던 날, KRX 단독과
+         * 통합 줄기가 한 키에 번갈아 쌓여 그림이 톱니가 됐다(SK하이닉스 -722억 ↔ +325억).
+         * 구독은 고쳤지만 그날 이미 쌓인 점은 남는다. 매도·매수 누적이 **지금까지의
+         * 최대보다 작아지는 점**은 다른 줄기이므로 버린다 — 통합이 늘 KRX 단독보다
+         * 크니 남는 건 통합 쪽이다.
+         */
+        let maxBuy = 0;
+        let maxSell = 0;
+        const clean = (j.points ?? [])
+          .map((p) => ({
+            t: p.t,
+            buy: Number(p.v["208"]) || 0,
+            sell: Number(p.v["204"]) || 0,
+            net: Number(p.v["212"]) || 0,
+          }))
+          .filter((p) => p.buy !== 0 || p.sell !== 0 || p.net !== 0)
+          .filter((p) => {
+            if (p.buy < maxBuy || p.sell < maxSell) return false;
+            maxBuy = p.buy;
+            maxSell = p.sell;
+            return true;
+          });
         setS({
-          pts: (j.points ?? [])
-            .map((p) => ({
-              t: p.t,
-              buy: Number(p.v["208"]) || 0,
-              sell: Number(p.v["204"]) || 0,
-              net: Number(p.v["212"]) || 0,
-            }))
-            .filter((p) => p.buy !== 0 || p.sell !== 0 || p.net !== 0),
+          pts: clean,
           day: j.day ?? "",
           stale: Boolean(j.stale),
           live: Boolean(j.live),

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { RealtimeClient } from "../realtimeClient.js";
-import { dualEnabled, getRealtime, peekRealtime, secondInfo, shouldRun, subscribedCount } from "../realtimeHub.js";
+import { dualEnabled, getRealtime, peekRealtime, secondInfo, shouldRun, subCode, subscribedCount } from "../realtimeHub.js";
 import { currentPhase, phaseSummary, readPhaseLog } from "../marketPhase.js";
 
 /**
@@ -81,7 +81,7 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
       for (const key of keys) {
         const [type, item] = key.split(":");
         if (!type || !item) continue;
-        if (wantSub) rt.subscribeTransient(type, item);
+        if (wantSub) rt.subscribeTransient(type, subCode(item));
         const got = store?.getLatest(type, item);
         if (got) send(key, got.at, got.values as Record<string, string>);
       }
@@ -261,7 +261,7 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
       return;
     }
     /* 손으로 거는 자리 — 화면과 같은 갈래다. 200 정원을 넘기면 오래된 것부터 빠진다 */
-    rt.subscribeTransient(type, item);
+    rt.subscribeTransient(type, subCode(item));
     res.json({ ok: true, state: rt.state });
   });
 
@@ -370,7 +370,7 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
           스케줄러가 건 관심종목·순위는 안 밀린다. 밀려나면 안 되는 쪽이 정해져 있다.
           읽기 전용(sub=0)은 안 건다 — 목록 오버레이가 정원을 먹으면 안 된다.
         */
-        if (!readOnly) rt.subscribeTransient(type, item);
+        if (!readOnly) rt.subscribeTransient(type, subCode(item));
         values[key] = store?.getLatest(type, item) ?? null;
       }
       res.json({ enabled: true, healthy: rt.healthy, lastSeen: rt.lastSeen, values });
@@ -410,7 +410,7 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
        * 쓰는 방식인데 그때마다 빈 화면이었다.
        * 화면이 물어본 종목은 사람이 지금 보고 있는 종목이므로 구독할 값어치가 있다.
        */
-      if (live && rt && type && item) rt.subscribeTransient(type, item);
+      if (live && rt && type && item) rt.subscribeTransient(type, subCode(item));
 
       const got = store
         ? live
