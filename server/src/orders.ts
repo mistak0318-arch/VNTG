@@ -1874,7 +1874,7 @@ export interface BuyPower {
    * `null` 이면 조회를 못 했거나 신용이 꺼져 있다(가드).
    */
   /** allowed null = 신용가능여부를 못 받았다(모의투자는 신용 TR 자체가 없다) — 「불가」와 다르다 (2026-09-08) */
-  credit: { allowed: boolean | null; rate: number | null; amt: number; qty: number } | null;
+  credit: { allowed: boolean | null; rate: number | null; amt: number; qty: number; why?: string } | null;
   /** 신용이 가드에서 꺼져 있나 — 화면이 「켜는 법」을 적는다 */
   creditEnabled: boolean;
   /** 못 받은 조각 — 「0주」와 「못 잼」은 다르다 */
@@ -1935,6 +1935,13 @@ export async function buyPower(code: string, price: number): Promise<BuyPower> {
      * 안 받아서 둘 다 실패하는데, 그걸 false 로 눌러 「불가 종목」이라고 거짓말했다.
      */
     const allowed: boolean | null = y ? String(y.data.crd_alow_yn ?? "").toUpperCase() === "Y" : null;
+    if (y) void noteRaw("kt20017", y.data);
+    /*
+     * 「불가」면 **왜인지 원문을 같이** (2026-09-08 — 벤티지 "왜 신용불가종목이라고 다 뜨지?").
+     * 필드 이름(crd_alow_yn)이 짐작이라, 이름이 다르면 전 종목이 N 으로 읽힌다. 계좌에 신용
+     * 약정이 없어도 전부 N 이다. 둘을 화면에서 가르려면 응답 그대로가 보여야 한다.
+     */
+    const why = y && !allowed ? JSON.stringify(Object.fromEntries(Object.entries(y.data).filter(([k]) => !/^return_/.test(k)))).slice(0, 200) : undefined;
     if (!y) missing.push(trFail("신용가능여부", "kt20017"));
     if (!c) missing.push(trFail("신용 수량", "kt00012"));
     const cd = c?.data ?? {};
@@ -1943,6 +1950,7 @@ export async function buyPower(code: string, price: number): Promise<BuyPower> {
     const ctier = crRate ? (ctiers.find((t) => t >= crRate) ?? 60) : 60;
     credit = {
       allowed,
+      why,
       rate: crRate,
       amt: allowed === true ? num(cd[`assr_${ctier}ord_alow_amt`]) : 0,
       qty: allowed === true ? num(cd[`assr_${ctier}ord_alowq`]) : 0,

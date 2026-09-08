@@ -1684,7 +1684,7 @@ function OrderForm({
                               ? "모의투자는 신용 조회·주문을 받지 않습니다 — 실전 계좌에서 열립니다"
                               : "신용 조회를 못 했습니다 — 잠시 뒤 다시"
                             : !power.credit.allowed
-                              ? "이 종목은 신용 불가 종목입니다"
+                              ? `키움 응답이 「불가」 — ${power.credit.why ?? ""}`
                               : `보증금율 ${power.credit.rate ?? "?"}% — 나머지는 융자(이자가 붙습니다)`
                         }
                       >
@@ -1704,6 +1704,7 @@ function OrderForm({
                     {" · "}최대 <b>{maxQty.toLocaleString()}주</b>
                     {cappedByGuard ? ` (한 건 한도 ${manwon(status.guard.maxOrderKrw)}원까지)` : ""}
                     {power.missing.length > 0 ? ` · 못 받음: ${power.missing.join(", ")}` : ""}
+            {power.credit && power.credit.allowed === false && power.credit.why ? ` · 신용 응답: ${power.credit.why}` : ""}
                   </div>
                 </>
               )}
