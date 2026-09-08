@@ -194,14 +194,15 @@ export function BrokerFlowPanel({ code }: { code: string }) {
       {rows.map((b) => (
         <button
           key={`${kind}-${b.rank}`}
-          className={`bf-row${picked === b.code ? " on" : ""}`}
+          className={`bf-row${picked === b.code ? " on" : ""}${b.foreign ? " fg" : ""}`}
           onClick={() => setPicked(picked === b.code ? null : b.code)}
           title="눌러서 시간대별 보기"
         >
           <Bar v={b.qty} mx={mx} cls={kind} />
           <span className="bf-nm">
             {b.name}
-            {b.foreign && <span className="bf-fg">외</span>}
+            {/* 외국계 — 배지 하나로는 눈에 안 띄어서 줄 전체 색을 가른다 (2026-09-08 벤티지) */}
+            {b.foreign && <span className="bf-fg" title="외국계 창구">외국계</span>}
           </span>
           <span className="bf-num">
             <b>{fmtNum(b.qty)}</b>

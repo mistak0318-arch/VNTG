@@ -181,6 +181,7 @@ export function WatchAddSheet({
           placeholder="메모 — 왜 담는지 한 줄 (비워도 됩니다)"
           value={memo}
           onChange={(e) => setMemo(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !busy && void submit()}
         />
 
         <div className="filter-row" style={{ marginTop: 10 }}>

@@ -656,8 +656,9 @@ export const api = {
     postJson<{ accounts: EvaluatedAccount[] }>("/api/account/manual", { broker, name }),
   manualAccountRemove: (id: string) =>
     deleteJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}`),
-  manualAccountCash: (id: string, cash: number) =>
-    putJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/cash`, { cash }),
+  /** anchor "total" 이면 총자산을 붙박이로 둔다 — 예수금이 주식평가액을 따라 저절로 (2026-09-08) */
+  manualAccountCash: (id: string, cash: number, anchor: "cash" | "total" = "cash") =>
+    putJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/cash`, { cash, anchor }),
   manualHoldingAdd: (id: string, h: { code: string; name: string; avgPrice: number; qty: number }) =>
     postJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings`, h),
   manualHoldingRemove: (id: string, code: string) =>
@@ -2558,6 +2559,9 @@ export interface EvaluatedAccount {
   /** 총자산 대비 주식 비중(%) */
   stockRatio: number | null;
   cashUpdatedAt?: string;
+  /** 무엇을 붙박이로 두나 — 안 적혀 있으면 예수금 (2026-09-08) */
+  anchor?: "cash" | "total";
+  totalAnchor?: number;
 }
 
 export interface AskTurn {

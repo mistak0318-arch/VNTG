@@ -273,7 +273,10 @@ export function FlowSeries({
               <th className="sticky-col">시간</th>
               <th>매도{unitLabel ? ` ${unitLabel}` : ""}</th>
               <th>매수{unitLabel ? ` ${unitLabel}` : ""}</th>
-              <th title="그 시점까지의 누적. 작은 글씨는 앞 줄 대비 증감입니다">순매수</th>
+              {/* 머리글도 큰 숫자 위에 — 증감 칸(고정 폭)만큼 안쪽에 둔다 (벤티지 "순매수 글자가 좀 앞에") */}
+              <th className="fs-net-h" title="그 시점까지의 누적. 작은 글씨는 앞 줄 대비 증감입니다">
+                순매수<i className="fs-d" />
+              </th>
               {price && <th title="그 시각 분봉 종가">추정가격</th>}
             </tr>
           </thead>

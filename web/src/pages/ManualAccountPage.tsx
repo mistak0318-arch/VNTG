@@ -127,6 +127,7 @@ function AddHoldingForm({ accountId, onDone }: { accountId: string; onDone: (a: 
             placeholder="평단가"
             value={avgPrice}
             onChange={(e) => setAvgPrice(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !busy && submit()}
           />
           <input
             className="ma-input"
@@ -135,6 +136,7 @@ function AddHoldingForm({ accountId, onDone }: { accountId: string; onDone: (a: 
             placeholder="수량"
             value={qty}
             onChange={(e) => setQty(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !busy && submit()}
           />
           <button className="filter-btn active" onClick={submit} disabled={busy}>
             {busy ? "저장 중" : "추가"}
@@ -233,13 +235,22 @@ export function ManualAccountPage({
     }
   }
 
-  /** 예수금 저장 — 입력 중인 값은 계좌별로 따로 들고 있는다 */
+  /**
+   * 예수금 또는 총자산 저장 — 입력 중인 값은 계좌별로 따로 들고 있는다.
+   *
+   * 어느 쪽을 붙박이로 둘지는 계좌마다 고른다(`anchorDraft`, 없으면 저장된 anchor).
+   * 총자산 기준이면 서버가 예수금을 `총자산 − 주식평가액` 으로 매번 다시 낸다 —
+   * 벤티지: "잔고 기준이면 따로 예수금 수정 안 해도 되잖아".
+   */
+  const [anchorDraft, setAnchorDraft] = useState<Record<string, "cash" | "total">>({});
+  const anchorOf = (a: { id: string; anchor?: "cash" | "total" }) => anchorDraft[a.id] ?? a.anchor ?? "cash";
   async function saveCash(id: string) {
     const raw = cashDraft[id];
     if (raw === undefined) return;
+    const a = accounts.find((x) => x.id === id);
     setCashBusy(id);
     try {
-      setAccounts((await api.manualAccountCash(id, Number(raw))).accounts);
+      setAccounts((await api.manualAccountCash(id, Number(raw), a ? anchorOf(a) : "cash")).accounts);
       setCashDraft((p) => {
         const next = { ...p };
         delete next[id];
@@ -455,21 +466,44 @@ export function ManualAccountPage({
             예수금은 받아올 수가 없어 직접 적는다.
             주식 평가액만 보면 같은 계좌라도 전액 매수한 상태인지 절반이 현금인지 구분이 안 된다.
           */}
+          {/*
+            **예수금 대신 총자산을 적을 수 있다** (2026-09-08 — 벤티지 "잔고에 총자산 입력할 수
+            있게 해줘. 그래야 매도 매수 할 때마다 자동으로 예수금이랑 주식잔고랑 연동되지").
+            예수금을 붙박이로 두면 종목을 담을 때마다 총자산이 늘어난 것처럼 보여서 예수금을
+            손으로 깎아야 했다. 총자산을 붙박이로 두면 예수금 = 총자산 − 주식평가액이라
+            종목을 담고 빼는 대로 예수금이 따라온다. 돈을 넣거나 뺐을 때만 총자산을 고친다.
+          */}
           <div className="ma-cash">
-            <span className="ma-cash-label">예수금</span>
+            <span className="ma-anchor">
+              {(["total", "cash"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={`filter-btn${anchorOf(a) === k ? " active" : ""}`}
+                  title={k === "total" ? "총자산을 적으면 예수금은 주식평가액을 빼서 알아서 냅니다 — 매매할 때마다 예수금을 고칠 필요가 없습니다" : "예수금을 직접 적습니다 — 종목을 담으면 총자산이 그만큼 늘어납니다"}
+                  onClick={() => {
+                    setAnchorDraft((p) => ({ ...p, [a.id]: k }));
+                    /* 기준을 바꾸면 입력칸엔 지금 값이 들어간다 — 빈 칸에서 시작하면 뭘 적어야 할지 모른다 */
+                    setCashDraft((p) => ({ ...p, [a.id]: String(k === "total" ? Math.round(a.totalAssets) : Math.round(a.cash)) }));
+                  }}
+                >
+                  {k === "total" ? "총자산" : "예수금"}
+                </button>
+              ))}
+            </span>
             <input
               className="search-input"
               type="number"
               min={0}
               step={10000}
-              value={cashDraft[a.id] ?? String(a.cash)}
+              value={cashDraft[a.id] ?? String(anchorOf(a) === "total" ? Math.round(a.totalAssets) : a.cash)}
               onChange={(e) => setCashDraft((p) => ({ ...p, [a.id]: e.target.value }))}
               onKeyDown={(e) => e.key === "Enter" && void saveCash(a.id)}
             />
             <button
               className="filter-btn"
               onClick={() => void saveCash(a.id)}
-              disabled={cashBusy === a.id || (cashDraft[a.id] ?? String(a.cash)) === String(a.cash)}
+              disabled={cashBusy === a.id || cashDraft[a.id] === undefined}
             >
               {cashBusy === a.id ? "저장 중…" : "저장"}
             </button>
@@ -477,6 +511,10 @@ export function ManualAccountPage({
               <span className="ma-cash-note">
                 주식 {a.stockRatio.toFixed(0)}% · 현금 {(100 - a.stockRatio).toFixed(0)}%
                 {a.cashUpdatedAt && ` · ${a.cashUpdatedAt.slice(5, 10)} 입력`}
+                {a.anchor === "total" && " · 총자산 기준 — 예수금은 알아서"}
+                {a.anchor === "total" && a.totalAnchor !== undefined && a.totalValue > a.totalAnchor && (
+                  <b className="negative"> · 주식이 총자산보다 큽니다 — 총자산을 고쳐 주세요</b>
+                )}
               </span>
             )}
           </div>
@@ -547,17 +585,27 @@ function HoldingEditor({
     }
   }
 
+  const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && valid && changed && !busy) {
+      e.preventDefault();
+      void save();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onCancel();
+    }
+  };
   return (
     <div className="ma-editor" onClick={(e) => e.stopPropagation()}>
       <div className="ma-editor-row">
         <span className="ma-editor-name">{h.name}</span>
         <label className="ma-editor-field">
           <span>수량</span>
-          <input className="ma-input" type="number" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} autoFocus onFocus={(e) => e.target.select()} />
+          {/* 엔터로 저장 (2026-09-08 — 벤티지 "꼭 저장을 마우스로 눌러야 되네"). Esc 는 취소 */}
+          <input className="ma-input" type="number" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} autoFocus onFocus={(e) => e.target.select()} onKeyDown={onKey} />
         </label>
         <label className="ma-editor-field">
           <span>평단가</span>
-          <input className="ma-input" type="number" inputMode="numeric" value={avg} onChange={(e) => setAvg(e.target.value)} onFocus={(e) => e.target.select()} />
+          <input className="ma-input" type="number" inputMode="numeric" value={avg} onChange={(e) => setAvg(e.target.value)} onFocus={(e) => e.target.select()} onKeyDown={onKey} />
         </label>
         <button type="button" className="filter-btn active" disabled={!valid || !changed || busy} onClick={() => void save()}>
           {busy ? "저장 중" : nextQty === 0 ? "지우기" : "저장"}

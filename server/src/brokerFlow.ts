@@ -32,9 +32,10 @@ const RKINFO = "/api/dostk/rkinfo";
 
 /** 외국계 창구 — 이름에 이게 들어가면 외국계로 본다 */
 const FOREIGN_HINTS = [
-  "모건", "골드만", "메릴", "씨티", "제이피", "JP", "노무라", "다이와",
+  "모건", "모간", "골드만", "메릴", "씨티", "제이피", "JP", "노무라", "다이와",
   "맥쿼리", "UBS", "CS", "홍콩", "HSBC", "BNP", "도이치", "바클", "크레디",
-  "뱅크오브", "미즈호", "소시에", "뉴엣지", "CLSA", "다이스",
+  "뱅크오브", "미즈호", "소시에", "뉴엣지", "CLSA", "다이스", "SG", "CIMB", "CGS",
+  "스탠다드", "스탠더드", "유안타",
 ];
 
 /**
@@ -44,8 +45,13 @@ const FOREIGN_HINTS = [
  * 공백을 지우고 비교하지 않으면 못 잡는다. (실측에서 HSBC 를 국내로 세고 있었다)
  */
 function isForeign(name: string): boolean {
-  const flat = name.replace(/\s/g, "").toUpperCase();
-  return FOREIGN_HINTS.some((h) => flat.includes(h.replace(/\s/g, "").toUpperCase()));
+  /*
+   * 점·공백을 다 뗀다 (2026-09-08). 키움은 「C.L.S.A 증권」처럼 점을 찍어 주는데
+   * 힌트 「CLSA」와 안 맞아서 외국계인데 표가 안 붙었다 (벤티지 실측, SK하이닉스 매도 5위).
+   * ⚠️ 유안타는 대만계라 넣었다.
+   */
+  const flat = name.replace(/[\s.·]/g, "").toUpperCase();
+  return FOREIGN_HINTS.some((h) => flat.includes(h.replace(/[\s.·]/g, "").toUpperCase()));
 }
 
 function num(v: unknown): number {

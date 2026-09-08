@@ -170,7 +170,9 @@ export function createAccountRouter(client: KiwoomClient): Router {
   /** 예수금 입력 — 수동 계좌는 현금을 받아올 방법이 없어 직접 적는다 */
   router.put("/manual/:id/cash", async (req, res, next) => {
     try {
-      await setCash(req.params.id, Number(req.body?.cash));
+      /* anchor: "total" 이면 총자산을 붙박이로 — 예수금은 주식평가액을 빼서 낸다 (2026-09-08) */
+      const anchor = req.body?.anchor === "total" ? "total" : "cash";
+      await setCash(req.params.id, Number(req.body?.cash), anchor);
       res.json({ accounts: await evaluateAccounts(client) });
     } catch (err) {
       next(err);

@@ -296,6 +296,7 @@ export function AlertConfigPanel() {
                     value={r.threshold}
                     disabled={!config.enabled || !r.enabled}
                     onChange={(e) => patchRule(r.key, { threshold: Number(e.target.value) || 0 })}
+                    onKeyDown={(e) => e.key === "Enter" && !saving && save()}
                   />
                   <span className="sig-unit">{UNITS[r.key] ?? ""}</span>
                 </label>

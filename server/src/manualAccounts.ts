@@ -55,6 +55,25 @@ export interface ManualAccount {
   cash?: number;
   /** 예수금을 마지막으로 손댄 시각 — 오래된 값을 그대로 믿지 않도록 */
   cashUpdatedAt?: string;
+  /**
+   * **무엇을 붙박이로 둘 것인가** (2026-09-08).
+   *
+   * 벤티지: "잔고에 총자산 입력할 수 있게 해줘. 그래야 매도 매수 할 때마다 자동으로
+   * 예수금이랑 주식잔고랑 연동되지. 지금은 내가 예수금을 수동으로 넣어야 되네."
+   *
+   * 예수금을 붙박이로 두면 **주식을 살 때마다 총자산이 늘어난다** — 계좌 안에서 현금이
+   * 주식으로 바뀐 것뿐인데 없던 돈이 생긴 것처럼 보인다. 그래서 살 때마다 예수금을
+   * 손으로 깎아야 했다.
+   *
+   * 총자산을 붙박이로 두면 그 일이 없어진다. `예수금 = 총자산 − 주식평가액` 으로 매번
+   * 다시 내므로, 종목을 담거나 빼면 예수금이 알아서 따라온다. 계좌에 돈을 넣거나 뺐을
+   * 때만 총자산을 고치면 된다 — 그게 실제로 일어난 일과 같다.
+   *
+   * `cash`(기본) 는 옛 계좌를 위해 남긴다. 안 적혀 있으면 예전처럼 예수금 기준이다.
+   */
+  anchor?: "cash" | "total";
+  /** anchor 가 "total" 일 때 붙박이로 두는 값 */
+  totalAnchor?: number;
 }
 
 let cache: ManualAccount[] | null = null;
@@ -98,15 +117,30 @@ export async function addAccount(broker: string, name: string): Promise<ManualAc
  * 수동 계좌는 시세를 받아올 수 없으니 현금도 사람이 직접 넣는 수밖에 없다.
  * 대신 마지막으로 손댄 시각을 남겨 화면에서 "언제 적은 값인지"를 알 수 있게 한다.
  */
-export async function setCash(id: string, cash: number): Promise<ManualAccount[]> {
+export async function setCash(
+  id: string,
+  cash: number,
+  anchor: "cash" | "total" = "cash",
+): Promise<ManualAccount[]> {
   const items = await load();
   const target = items.find((a) => a.id === id);
   if (!target) throw new Error("계좌를 찾을 수 없습니다.");
   const value = Number(cash);
-  if (!Number.isFinite(value) || value < 0) throw new Error("예수금은 0 이상의 숫자여야 합니다.");
+  const what = anchor === "total" ? "총자산" : "예수금";
+  if (!Number.isFinite(value) || value < 0) throw new Error(`${what}은 0 이상의 숫자여야 합니다.`);
 
   const next = items.map((a) =>
-    a.id === id ? { ...a, cash: Math.round(value), cashUpdatedAt: new Date().toISOString() } : a,
+    a.id === id
+      ? {
+          ...a,
+          /*
+            총자산 기준이면 `cash` 는 안 쓴다 — 평가할 때 총자산에서 주식평가액을 빼서 낸다.
+            그래도 지워 두지는 않는다. 기준을 되돌렸을 때 예전 예수금이 살아 있어야 한다.
+          */
+          ...(anchor === "total" ? { anchor: "total" as const, totalAnchor: Math.round(value) } : { anchor: "cash" as const, cash: Math.round(value) }),
+          cashUpdatedAt: new Date().toISOString(),
+        }
+      : a,
   );
   await persist(next);
   return next;
@@ -225,8 +259,14 @@ export async function evaluateAccounts(client: KiwoomClient): Promise<EvaluatedA
     const totalCost = holdings.reduce((s, h) => s + h.cost, 0);
     const totalValue = holdings.reduce((s, h) => s + h.value, 0);
     const totalProfit = totalValue - totalCost;
-    const cash = Math.max(a.cash ?? 0, 0);
-    const totalAssets = totalValue + cash;
+    /*
+      총자산 기준이면 **예수금을 매번 다시 낸다** — 종목을 담거나 빼면 예수금이 따라온다.
+      주식이 총자산보다 커지면 예수금은 0 이다(마이너스 현금은 표시할 뜻이 없다).
+      그때는 화면이 「총자산보다 주식이 많다」고 알려 주므로 여기서는 0 으로 눌러 둔다.
+    */
+    const byTotal = a.anchor === "total" && Number.isFinite(a.totalAnchor ?? NaN);
+    const cash = byTotal ? Math.max((a.totalAnchor ?? 0) - totalValue, 0) : Math.max(a.cash ?? 0, 0);
+    const totalAssets = byTotal ? Math.max(a.totalAnchor ?? 0, totalValue) : totalValue + cash;
     return {
       ...a,
       holdings,
