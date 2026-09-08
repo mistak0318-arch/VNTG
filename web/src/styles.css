@@ -9797,6 +9797,21 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   font-size: 0.78rem; font-variant-numeric: tabular-nums;
 }
 .ma-hint-cash i { font-style: normal; color: var(--muted); font-size: 0.7rem; }
+/* 09-08 판 — 주식 | 예수금 위, 총자산 아래, 보유 칩 */
+.ma-hint-split2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.ma-hint-cell { display: flex; align-items: baseline; gap: 0.3rem; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.ma-hint-cell b { font-size: 1rem; }
+.ma-hint-cell i { font-style: normal; color: var(--muted); font-size: 0.7rem; }
+.ma-hint-cell.cash { justify-content: flex-end; }
+.ma-hint-total { display: flex; align-items: baseline; gap: 0.3rem; margin-top: 0.15rem; font-variant-numeric: tabular-nums; }
+.ma-hint-total b { font-size: 1.12rem; font-weight: 800; }
+.ma-hint-total i { font-style: normal; font-size: 0.64rem; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 0 0.35rem; }
+.ma-hint-hold { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.35rem; }
+.ma-hold-chip { display: inline-flex; align-items: baseline; gap: 0.25rem; padding: 0.08rem 0.45rem; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); font-size: 0.72rem; white-space: nowrap; }
+.ma-hold-chip b { font-variant-numeric: tabular-nums; }
+.ma-hold-chip.positive b { color: var(--red); }
+.ma-hold-chip.negative b { color: var(--blue); }
+.ma-hold-chip.more { color: var(--muted); }
 
 /* 차트 도구줄 — 거래소는 드롭박스로 접어 기간 버튼 자리를 지킨다 */
 .period-select {

@@ -381,41 +381,57 @@ export function ManualAccountPage({
             </span>
           }
           /*
-            ⚠️ 셋을 「총자산 X · 주식 Y · 예수금 Z」로 **나열했더니 안 읽혔다.**
-            같은 크기 같은 색 숫자가 셋이면 눈이 어디를 봐야 할지 모른다.
+            **접힌 계좌 한 줄** (2026-09-08 다시 — 벤티지: "총자산이 밑에 오고 주식하고 예수금이
+            위에 있고 표시를 좀 더 명확히. 한눈에 들어오게. 보유종목도 접힘에서 표시해서 수익률도").
 
-            총자산이 그 계좌의 크기이므로 **그것만 크게** 두고, 주식과 예수금은
-            그것을 나눈 것이니 **아래에 작게, 막대로 비율까지** 보인다.
-            현금 비중이 눈에 보이는 게 특히 쓸모 있다 — 지금처럼 관망이 많은 장에서는
-            「얼마나 쉬고 있나」가 곧 그 계좌의 자세다.
+            09-04 판은 총자산만 크게 두고 주식·예수금을 밑에 작게 뒀다 — 그러자 「얼마가 어디에
+            있나」를 읽으려면 작은 글씨를 봐야 했다. 이번엔 **나뉜 돈 둘을 위에 같은 급으로**
+            놓고(주식 | 예수금, 각각 이름표·금액·비중), 그 합인 총자산을 아래에 한 줄로 둔다.
+            막대는 둘 사이에 그대로 — 현금 비중이 눈에 보이는 게 여전히 쓸모 있다.
+            보유 종목은 이름과 수익률만 칩으로 — 펼치지 않아도 「뭘 들고 있고 어떤가」가 보인다.
           */
           hint={
             <span className="ma-hint">
-              <span className="ma-hint-top">
-                <em>총자산</em>
-                <b>{fmtNum(Math.round(a.totalAssets))}</b>
+              <span className="ma-hint-split2">
+                <span className="ma-hint-cell">
+                  <em>주식</em>
+                  <b>{fmtNum(Math.round(a.totalValue))}</b>
+                  {cashPct(a) !== null && <i>{100 - cashPct(a)!}%</i>}
+                  {a.holdings.length > 0 && <i>· {a.holdings.length}종목</i>}
+                </span>
+                <span className="ma-hint-cell cash">
+                  <em>예수금</em>
+                  <b>{fmtNum(Math.round(a.cash))}</b>
+                  {cashPct(a) !== null && <i>{cashPct(a)}%</i>}
+                </span>
               </span>
               {/*
                 ⚠️ 총자산이 0 이면 **막대를 아예 안 그린다.** 빈 계좌에 파란 막대가 꽉 차
                 있으면 「주식 100%」로 읽힌다 — 아무것도 없는 것과 다 주식인 것은 정반대다.
               */}
               {cashPct(a) !== null && (
-                <span
-                  className="ma-hint-bar"
-                  title={`주식 ${100 - cashPct(a)!}% · 예수금 ${cashPct(a)}%`}
-                >
+                <span className="ma-hint-bar" title={`주식 ${100 - cashPct(a)!}% · 예수금 ${cashPct(a)}%`}>
                   <i className="ma-hint-stock" style={{ width: `${100 - cashPct(a)!}%` }} />
                 </span>
               )}
-              <span className="ma-hint-split">
-                <span>
-                  <em>주식</em> {fmtNum(Math.round(a.totalValue))}
-                </span>
-                <span className="ma-hint-cash">
-                  <em>예수금</em> {fmtNum(Math.round(a.cash))}
-                  {cashPct(a) !== null && <i> {cashPct(a)}%</i>}
-                </span>
+              <span className="ma-hint-total">
+                <em>총자산</em>
+                <b>{fmtNum(Math.round(a.totalAssets))}</b>
+                {a.anchor === "total" && <i title="총자산을 적어 두고 예수금은 주식평가액을 빼서 낸다">기준</i>}
               </span>
+              {a.holdings.length > 0 && (
+                <span className="ma-hint-hold">
+                  {[...a.holdings]
+                    .sort((x, y) => y.value - x.value)
+                    .slice(0, 8)
+                    .map((h) => (
+                      <span key={h.code} className={`ma-hold-chip ${signClass(h.profit)}`} title={`${h.name} · ${fmtNum(h.qty)}주 · 평가 ${fmtNum(Math.round(h.value))} · 손익 ${h.profit > 0 ? "+" : ""}${fmtNum(Math.round(h.profit))}`}>
+                        {h.name} <b>{h.returnRate === null ? "-" : pct(h.returnRate)}</b>
+                      </span>
+                    ))}
+                  {a.holdings.length > 8 && <span className="ma-hold-chip more">+{a.holdings.length - 8}</span>}
+                </span>
+              )}
             </span>
           }
         >
