@@ -219,6 +219,37 @@ export function UsWatchPage() {
   }, [openMarket]);
 
   /*
+   * **화면으로 돌아오면 그 자리에서 한 번 받는다** (2026-09-08).
+   *
+   * 위 두 폴러는 창이 뒤에 있으면 쉰다 — 안 보는 화면 때문에 한도를 쓸 이유가 없으니 맞다.
+   * 그런데 **돌아왔을 때 즉시 받는 길이 없었다.** 다음 틱까지 기다리므로 폰을 켜거나 창을
+   * 앞으로 가져온 직후에 최대 3초(빠른 겹)·15~30초(본 시세)를 묵은 값으로 보게 된다.
+   * 거기에 서버 캐시까지 겹치면 「왜 안 바뀌지」가 된다.
+   *
+   * 실측으로 확인한 자리다 — 판이 뒤에 있을 때 재 보니 39초 동안 빠른 겹 호출이 **0건**이었다.
+   * 쉬는 것 자체는 맞고, 빠진 것은 **돌아올 때의 한 번**이었다.
+   */
+  useEffect(() => {
+    const onBack = () => {
+      if (document.visibilityState !== "visible") return;
+      void load(false, true);
+      if (fastSymbols) {
+        api
+          .usWatchFast(fastSymbols.split(","))
+          .then((r) => setFast(r.quotes))
+          .catch(() => undefined);
+      }
+    };
+    document.addEventListener("visibilitychange", onBack);
+    window.addEventListener("focus", onBack);
+    return () => {
+      document.removeEventListener("visibilitychange", onBack);
+      window.removeEventListener("focus", onBack);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fastSymbols]);
+
+  /*
    * 틱 깜빡임은 **없앴다** (2026-08-26 사용자 요청). 등락률 칸만 0.7초 붉게/푸르게
    * 물들이던 것인데, 3초 빠른 시세가 붙은 뒤로는 상시 명멸이 되어 눈만 피로했다.
    */
