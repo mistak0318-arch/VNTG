@@ -16909,6 +16909,10 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-qs-c b { color: var(--text); }
 .ord-qs-c.dim { opacity: 0.8; }
 .ord-qs-c.watch { border-color: var(--accent, #e6a23c); color: var(--accent, #e6a23c); }
+.ord-qs-c.watch b { color: var(--text); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+/* 이모지는 제 상자에 — 뒤따르는 글자가 이모지 글꼴로 이어지지 않게 (폰에서 「1 6 5」로 벌어졌다) */
+.ord-eye { font-style: normal; display: inline-block; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; line-height: 1; }
+.kb-watch b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
 .ord-qs-c.free { opacity: 0.7; }
 .ord-qs-c.free.on { opacity: 1; border-color: var(--green, #4ade80); color: var(--text); background: color-mix(in srgb, var(--green, #4ade80) 14%, var(--panel-2)); }
 .ord-qs-c.free.on b { color: var(--green, #4ade80); font-size: 0.95em; }

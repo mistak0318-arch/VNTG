@@ -3176,7 +3176,7 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
                       */}
                       {pos.watchQty > 0 && (
                         <i className="kb-watch" title={`매도 감시가 걸린 수량입니다 — 보유 ${fmtNum(pos.qty)}주 중 ${fmtNum(pos.watchQty)}주`}>
-                          · 👁 감시 {fmtNum(pos.watchQty)}주
+                          · <i className="ord-eye">👁</i> 감시 <b>{fmtNum(pos.watchQty)}</b>주
                         </i>
                       )}
                     </small>
@@ -3367,7 +3367,7 @@ function PositionCard({
             {pos.creditType} {pos.loanDate ? `${pos.loanDate.slice(4, 6)}/${pos.loanDate.slice(6)}` : ""}
           </span>
         )}
-        {pos.boughtByWatch && <span className="ord-watch-badge">👁 감시로 삼</span>}
+        {pos.boughtByWatch && <span className="ord-watch-badge"><i className="ord-eye">👁</i> 감시로 삼</span>}
         {pos.noExit ? <span className="ord-noexit">⚠️ 출구 없음</span> : <span className="ord-hasexit">🛡 출구 있음</span>}
         <span className={`ord-pcard-pnl ${signClass(pnl)}`}>
           {pnl >= 0 ? "+" : ""}
@@ -3395,7 +3395,15 @@ function PositionCard({
           보유 <b>{fmtNum(pos.qty)}</b>주
         </span>
         {pos.pendingQty > 0 && <span className="ord-qs-c dim">주문 중 {fmtNum(pos.pendingQty)}</span>}
-        {pos.watchQty > 0 && <span className="ord-qs-c watch">👁 감시 {fmtNum(pos.watchQty)}</span>}
+        {/*
+          이모지 바로 뒤의 숫자는 폰에서 이모지 글꼴로 이어져 찍혀 「1 6 5」처럼 벌어지고 흐렸다
+          (2026-09-08 벤티지 "감시 안에 숫자 좀 잘 보이게"). 이모지를 제 상자에 가두고 숫자는 <b>.
+        */}
+        {pos.watchQty > 0 && (
+          <span className="ord-qs-c watch">
+            <i className="ord-eye">👁</i> 감시 <b>{fmtNum(pos.watchQty)}</b>주
+          </span>
+        )}
         <span className={`ord-qs-c free${pos.freeQty > 0 ? " on" : ""}`}>
           남은 <b>{fmtNum(pos.freeQty)}</b>주
         </span>
