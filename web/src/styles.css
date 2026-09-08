@@ -16838,6 +16838,18 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-wcard-line2 em.near { color: var(--accent, #e6a23c); }
 .ord-wcard-line2 em.hit { color: var(--red); }
 .ord-wsep { margin: 0 0.35rem; opacity: 0.6; }
+/* 요약줄의 이름표 — 숫자 앞에 「무엇인지」를 붙인다 (2026-09-08) */
+.ord-wcard-line2 .ord-wlbl { font-style: normal; font-size: 0.68rem; opacity: 0.72; margin: 0 0.22rem 0 0.4rem; }
+.ord-wcard-line2 .ord-wlbl:first-child { margin-left: 0; }
+/* 카드가 뭘 한다는 건지 한 문장 */
+.ord-wcard-say { margin: 0 0 0.5rem; padding: 0.45rem 0.6rem; border-radius: 8px; background: var(--panel); font-size: 0.82rem; line-height: 1.55; color: var(--text); }
+.ord-wcard-say b { font-weight: 800; }
+/* 보유 줄의 감시 수량 */
+.kb-watch { font-style: normal; }
+/* 기록 표 — 시각은 자릿수를 맞춰 세로로 읽히게, 원 단위는 한 급 작게 */
+.ord-when { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ord-dim { opacity: 0.55; }
+.ord-dim2 { display: block; font-size: 0.68rem; opacity: 0.6; font-variant-numeric: tabular-nums; }
 .ord-wcard-sum .ord-wbar { grid-area: bar; display: block; margin-top: 0.15rem; height: 3px; }
 .ord-wcard-body { padding: 0.2rem 0.6rem 0.6rem; border-top: 1px dashed var(--border); }
 .ord-wcard-body .ord-wcard-grid { margin-top: 0.4rem; }
@@ -17099,7 +17111,8 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .kb-seg button { padding: 0.25rem 0.7rem; border: 0; background: var(--panel); color: var(--muted); font: inherit; font-size: 0.82rem; cursor: pointer; }
 .kb-seg button.on { background: var(--panel-2); color: var(--text); font-weight: 700; box-shadow: inset 0 -2px 0 var(--accent, #e6a23c); }
 .kb-table { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel-2); margin-bottom: 0.8rem; }
-.kb-th, .kb-tr { display: grid; grid-template-columns: 1.4fr 1fr 0.8fr 1fr; gap: 0.4rem; align-items: center; padding: 0.45rem 0.7rem; }
+/* 칸 다섯 — 매수금액을 넣었다 (2026-09-08) */
+.kb-th, .kb-tr { display: grid; grid-template-columns: 1.5fr 0.9fr 0.7fr 1.1fr 1.1fr; gap: 0.4rem; align-items: center; padding: 0.45rem 0.7rem; }
 .kb-th { background: var(--panel); color: var(--muted); font-size: 0.78rem; border-bottom: 1px solid var(--border); }
 .kb-th .kb-c { text-align: right; }
 .kb-th .kb-c small { display: block; font-size: 0.72rem; }
@@ -17131,7 +17144,9 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
   .kb-cell { padding: 0.35rem 0.7rem; }
   .kb-cell span { font-size: 0.78rem; }
   .kb-cell b { font-size: 0.92rem; }
+  /* 폰에선 매수금액 칸을 접는다 — 다섯이면 숫자가 다 눌린다 */
   .kb-th, .kb-tr { grid-template-columns: 1.3fr 1fr 0.7fr 1fr; padding: 0.4rem 0.5rem; gap: 0.25rem; }
+  .kb-th .kb-c:nth-child(4), .kb-tr .kb-c:nth-child(4) { display: none; }
   .kb-c b { font-size: 0.92rem; }
   .kb-c small { font-size: 0.78rem; }
   .kb-c-name b { font-size: 0.92rem; }

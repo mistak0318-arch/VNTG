@@ -399,6 +399,17 @@ function kstToday(): string {
   return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 }
 
+/**
+ * 키움이 주는 `HHMMSS` 를 **읽는 시각**으로 (2026-09-08 — 벤티지 "시간도 좀 한번에 보기 좋게").
+ * 「111620」은 눈으로 자릿수를 세야 읽힌다. 표는 훑는 곳이지 푸는 곳이 아니다.
+ */
+function hms(t: string): string {
+  const d = String(t ?? "").replace(/\D/g, "");
+  if (d.length === 6) return `${d.slice(0, 2)}:${d.slice(2, 4)}:${d.slice(4, 6)}`;
+  if (d.length === 4) return `${d.slice(0, 2)}:${d.slice(2, 4)}`;
+  return t || "-";
+}
+
 function localTs(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(5, 16).replace("T", " ");
@@ -2555,13 +2566,22 @@ function WatchCard({
         </span>
         <span className={`ord-rsv-st ${r.status}`}>{waiting ? "" : stKo}</span>
         <i className="ord-wcard-arrow">{open ? "▲" : "▼"}</i>
+        {/*
+          ⚠️ **숫자마다 이름을 붙인다** (2026-09-08 — 벤티지: "저것만 봐서는 -3.6이 뭘 의미하는
+          건지, 37주 시장가의 의미는 뭔지, 이 카드가 의미하는 바가 뭔지").
+
+          예전 줄은 「277,000 -3.6% · 37주 시장가 · 09/08」이었다. 값 넷이 라벨 없이 붙어 있으니
+          277,000 이 발동가인지 현재가인지, -3.6% 가 손익인지 남은 거리인지 알 길이 없었다.
+          (실은 현재가 · 발동까지 남은 거리 · 낼 수량 · 감시 마감일이다.)
+        */}
         <span className="ord-wcard-line2">
           {waiting ? (
             cur ? (
               <>
+                <i className="ord-wlbl">지금</i>
                 <b>{cur.price.toLocaleString()}</b>
+                <i className="ord-wlbl">발동까지</i>
                 <em className={hit ? "hit" : near ? "near" : ""}>
-                  {" "}
                   {hit ? "닿음" : `${gap! > 0 ? "+" : ""}${gap!.toFixed(1)}%`}
                 </em>
               </>
@@ -2569,15 +2589,25 @@ function WatchCard({
               <span className="ord-caps">값 없음</span>
             )
           ) : r.status === "fired" ? (
-            <b>발동 {r.firePrice?.toLocaleString() ?? "-"}</b>
+            <>
+              <i className="ord-wlbl">발동가</i>
+              <b>{r.firePrice?.toLocaleString() ?? "-"}</b>
+            </>
           ) : r.status === "filled" && r.fillPrice ? (
-            <b>체결 {r.fillPrice.toLocaleString()}</b>
+            <>
+              <i className="ord-wlbl">체결가</i>
+              <b>{r.fillPrice.toLocaleString()}</b>
+            </>
           ) : (
             <span>{r.msg?.slice(0, 22) ?? ""}</span>
           )}
           <span className="ord-wsep">·</span>
-          {t.qty.toLocaleString()}주 {execShort}
+          <i className="ord-wlbl">{t.side === "buy" ? "살 양" : "팔 양"}</i>
+          {t.qty.toLocaleString()}주
+          <i className="ord-wlbl">낼 때</i>
+          {execShort}
           <span className="ord-wsep">·</span>
+          <i className="ord-wlbl">감시 마감</i>
           {s.validUntil.slice(5).replace("-", "/")}
           {s.then && s.then.length > 0 && (
             <>
@@ -2593,6 +2623,24 @@ function WatchCard({
       </button>
       {open && (
         <div className="ord-wcard-body">
+          {/*
+            **이 카드가 뭔지 한 문장으로.** 격자 넷(기준·닿으면·지금 값·걸어 둔 때)은 값을
+            나눠 적을 뿐이라, 처음 보는 사람은 그걸 다 읽고도 「그래서 뭘 한다는 건가」를
+            스스로 조립해야 했다. 조립한 결과를 먼저 적는다.
+          */}
+          <p className="ord-wcard-say">
+            <b>{t.name || t.code}</b>가 <b>{s.trigger.toLocaleString()}원 {s.dir === "le" ? "이하로 내려가면" : "이상으로 올라가면"}</b>{" "}
+            {t.qty.toLocaleString()}주를{" "}
+            {s.exec === "market"
+              ? "시장가로"
+              : s.exec === "limit_trigger"
+                ? "발동가에 지정가로"
+                : s.exec === "limit_now"
+                  ? "그때 현재가에 지정가로"
+                  : `${(s.limitPrice ?? 0).toLocaleString()}원 지정가로`}{" "}
+            <b>{sideKo}</b>합니다. {s.validUntil} 까지 정규장에 지켜보다 닿으면 <b>한 번만</b> 냅니다.
+            {r.parentId && " 앞 주문이 체결돼서 자동으로 걸린 감시입니다."}
+          </p>
           <div className="ord-wcard-grid">
             <div className="ord-wcard-cell">
               <dt>기준</dt>
@@ -2773,11 +2821,11 @@ function OpenTab({ status, onDone }: { status: OrderStatus; onDone: () => void }
             <tbody>
               {rows.map((r) => (
                 <tr key={`${r.ordNo}-${r.time}`}>
-                  <td data-l="시각">{r.time || "-"}</td>
+                  <td data-l="시각" className="ord-when">{hms(r.time)}</td>
                   <td className="ord-name">
                     <SideChip side={r.side} /> {r.name || r.code} <span className="ord-code">{r.code}</span>
                     <span className="ord-name-sub">
-                      {r.time || ""} · {r.status || "접수"}
+                      {hms(r.time)} · {r.status || "접수"}
                     </span>
                   </td>
                   <td data-l="구분">{r.side || "-"}</td>
@@ -2834,7 +2882,8 @@ function FillsTab() {
                 <th>시각</th>
                 <th>종목</th>
                 <th>구분</th>
-                <th className="r">체결</th>
+                {/* 낸 양과 체결된 양을 갈라 적는다 — 부분체결이 표에서 안 보였다 (2026-09-08) */}
+                <th className="r">주문 / 체결</th>
                 <th className="r">체결가</th>
                 <th className="r">체결 금액</th>
                 <th>주문번호</th>
@@ -2844,17 +2893,30 @@ function FillsTab() {
             <tbody>
               {rows.map((r, i) => (
                 <tr key={`${r.ordNo}-${i}`}>
-                  <td data-l="시각">{r.time || "-"}</td>
+                  <td data-l="시각" className="ord-when">{hms(r.time)}</td>
                   <td className="ord-name">
                     <SideChip side={r.side} /> {r.name || r.code} <span className="ord-code">{r.code}</span>
                     <span className="ord-name-sub">
-                      {r.time || ""} · {r.status || "체결"} · #{r.ordNo}
+                      {hms(r.time)} · {r.status || "체결"} · #{r.ordNo}
                     </span>
                   </td>
                   <td data-l="구분">{r.side || "-"}</td>
-                  <td className="r" data-l="체결">{fmtNum(r.filled || r.qty)}주</td>
+                  {/* 부분체결이면 두 수가 다르다 — 같으면 앞의 흐린 숫자가 눈에 안 밟힌다 */}
+                  <td className="r" data-l="주문 / 체결">
+                    {r.qty > 0 && r.qty !== (r.filled || r.qty) && <span className="ord-dim">{fmtNum(r.qty)} / </span>}
+                    <b>{fmtNum(r.filled || r.qty)}</b>주
+                  </td>
                   <td className="r" data-l="체결가">{r.price ? `${r.price.toLocaleString()}원` : "-"}</td>
-                  <td className="r" data-l="체결 금액">{r.price ? manwon(r.price * (r.filled || r.qty)) : "-"}</td>
+                  <td className="r" data-l="체결 금액">
+                    {r.price ? (
+                      <>
+                        <b>{manwon(r.price * (r.filled || r.qty))}</b>
+                        <small className="ord-dim2">{Math.round(r.price * (r.filled || r.qty)).toLocaleString()}원</small>
+                      </>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
                   <td data-l="주문번호">{r.ordNo}</td>
                   <td data-l="상태">{r.status || "-"}</td>
                 </tr>
@@ -3079,6 +3141,13 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
             <span className="kb-c">
               보유수량{twoLine && <small>가능수량</small>}
             </span>
+            {/*
+              **접힌 줄에서도 돈이 보여야 한다** (2026-09-08 — 벤티지: "접혔을 때 매수총액
+              손익 이렇게 보여줘야지"). 단가와 수량만 있으면 곱셈은 사람 몫이었다.
+            */}
+            <span className="kb-c">
+              매수금액{twoLine && <small>평가금액</small>}
+            </span>
             <span className="kb-c">
               평가손익{twoLine && <small>수익률</small>}
             </span>
@@ -3096,7 +3165,16 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
                     <small>
                       {pos.creditType ? `${pos.creditType} · ` : ""}
                       {pos.noExit ? <i className="ord-bad">출구 없음</i> : <i>손절 {pos.stopLine ? fmtNum(pos.stopLine) : "-"}</i>}
-                      {pos.watchQty > 0 ? ` · 👁${pos.watchQty}` : ""}
+                      {/*
+                        「👁17」이 뭔지 아무도 모른다 (2026-09-08 벤티지). **감시 주문이 걸린
+                        수량**이다 — 보유 74주 중 74주에 매도 감시가 걸려 있으면 「감시 74주」.
+                        그림쇠 하나로 줄이지 말고 말로 적는다.
+                      */}
+                      {pos.watchQty > 0 && (
+                        <i className="kb-watch" title={`매도 감시가 걸린 수량입니다 — 보유 ${fmtNum(pos.qty)}주 중 ${fmtNum(pos.watchQty)}주`}>
+                          · 👁 감시 {fmtNum(pos.watchQty)}주
+                        </i>
+                      )}
                     </small>
                   </span>
                   <span className="kb-c">
@@ -3106,6 +3184,10 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
                   <span className="kb-c">
                     <b>{fmtNum(pos.qty)}</b>
                     {twoLine && <small>{fmtNum(pos.ableQty)}</small>}
+                  </span>
+                  <span className="kb-c">
+                    <b>{Math.round(pos.avg * pos.qty).toLocaleString()}</b>
+                    {twoLine && <small>{Math.round(price * pos.qty).toLocaleString()}</small>}
                   </span>
                   <span className={`kb-c ${signClass(pnl)}`}>
                     <b>{Math.round(pnl).toLocaleString()}</b>
