@@ -1,5 +1,5 @@
 import type { UsQuoteRow } from "../api";
-import { sideQuote, usFeActive } from "../usSession";
+import { sideQuote, usFeActive, usSideSession } from "../usSession";
 import { flagOfSymbol } from "../yahooFlag";
 import { useDragOrder } from "../useDragOrder";
 import { fid, useRealtime } from "../useRealtime";
@@ -175,8 +175,21 @@ export function UsWatchTable({
    *
    * 15초로 좁힌다 — 초당 몇 틱씩 오는 창구라 15초를 넘겼으면 그건 이미 실시간이 아니다.
    * 그 뒤로는 spark(3초)가 받는다.
+   *
+   * ## ⚠️ 다만 **프리·애프터장은 예외** (2026-09-09 — 벤티지 "해외주식 왜 일부만 실시간
+   * 연결이 되지?", 애프터장 06:50 KST 화면에서 절반만 초록 점)
+   *
+   * 그 시간대에는 거래가 뜸해서 **15초 안에 체결이 없는 종목이 수두룩하다.** 애프터에
+   * AMAT·TSM 이 조용한 것은 고장이 아니라 원래 그렇다. 그런데 창을 좁게 잡으면 그런 종목이
+   * 「실시간 아님」으로 꺼져 버린다.
+   *
+   * 좁게 잡은 이유는 **묵은 값이 3초 spark 을 막는 것**이었는데, 프리·애프터에는 그 spark 이
+   * 애초에 값을 안 준다(야후가 그 시간대 봉을 안 준다 — 실측). 막을 것이 없으니 좁힐 이유도
+   * 없다. 그 시간대만 2분으로 연다.
    */
-  const LIVE_FRESH_MS = 15_000;
+  const LIVE_FRESH_MS = usSideSession() ? 120_000 : 15_000;
+  /** 지금이 실시간이 흐를 수 있는 시간대인가 — 점이 꺼진 이유를 가르는 데 쓴다 */
+  const rtOn = feOn;
   const live = (symbol: string): { price: number; rate: number | null; at: number } | null => {
     const v = rt.values[`FE:${symbol.toUpperCase()}`];
     if (!v || Date.now() - v.at > LIVE_FRESH_MS) return null;
@@ -366,10 +379,24 @@ export function UsWatchTable({
                                 : (s.currency ?? "")
                           }
                         >
+                          {/*
+                            점이 **왜** 켜졌는지·꺼졌는지를 말한다 (2026-09-09). 「일부만 초록」이
+                            고장으로 보였는데, 애프터장에 그 종목 체결이 없었을 뿐인 경우가 많다.
+                          */}
                           {lv && (
                             <span
                               className={`uw-live-dot${live(s.symbol) ? " rt" : ""}`}
-                              title={live(s.symbol) ? "실시간 체결 — 한투 소켓" : "빠른 시세 — 3초마다 갱신"}
+                              title={live(s.symbol) ? "실시간 체결 — 한투 소켓으로 방금 들어왔습니다" : "빠른 시세 — 3초마다 갱신"}
+                            />
+                          )}
+                          {!lv && (
+                            <span
+                              className="uw-live-dot off"
+                              title={
+                                rtOn
+                                  ? "실시간은 붙어 있는데 이 종목은 최근 체결이 없습니다 — 값은 조회로 채웁니다"
+                                  : "실시간 시간대가 아닙니다 (프리 04:00 ~ 애프터 20:00 ET) — 값은 조회로 채웁니다"
+                              }
                             />
                           )}
                           {price(shownPrice, s.currency)}

@@ -17978,3 +17978,5 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .memo-stock-at { display: inline-flex; align-items: center; gap: 0.25rem; margin-left: 0.3rem; font-style: normal; font-size: 0.68rem; color: var(--muted); cursor: help; }
 .memo-stock-at b { color: var(--accent, #e6a23c); font-weight: 700; }
 .memo-stock-super { font-size: 0.72rem; }
+/* 실시간이 아닌 줄 — 자리는 지키되 꺼진 것으로 (2026-09-09). 자리가 없으면 줄마다 값이 흔들린다 */
+.uw-live-dot.off { background: transparent; box-shadow: inset 0 0 0 1px var(--border); cursor: help; }
