@@ -28,7 +28,7 @@ import { setPref } from "./prefs";
  * 소리가 안 날 수 있는데, 그건 브라우저 규칙이라 우회할 방법이 없다 — 토스트는 뜬다.
  */
 
-export type SoundKey = "ding" | "dingdong" | "chime" | "tick" | "alarm";
+export type SoundKey = "ding" | "dingdong" | "chime" | "tick" | "alarm" | "bell3" | "down" | "coin";
 
 export const SOUNDS: { key: SoundKey; label: string; hint: string }[] = [
   { key: "ding", label: "딩", hint: "종 한 번 — 가장 짧다" },
@@ -36,6 +36,9 @@ export const SOUNDS: { key: SoundKey; label: string; hint: string }[] = [
   { key: "chime", label: "차임", hint: "세 음이 올라간다 — 체결에 어울린다" },
   { key: "tick", label: "틱", hint: "아주 짧은 딱 소리 — 조용한 곳에서" },
   { key: "alarm", label: "경고", hint: "두 번 반복 — 놓치면 안 될 때" },
+  { key: "bell3", label: "종 세 번", hint: "같은 높이 세 번 — 또렷하다" },
+  { key: "down", label: "하강", hint: "세 음이 내려간다 — 매도 체결에" },
+  { key: "coin", label: "동전", hint: "짧고 높은 두 음 — 게임의 그 소리" },
 ];
 
 /** 한 음 = [주파수(Hz), 시작(초), 길이(초), 세기] */
@@ -55,6 +58,20 @@ const SCORE: Record<SoundKey, [number, number, number, number][]> = {
     [988, 0, 0.14, 0.5],
     [988, 0.22, 0.14, 0.5],
     [988, 0.44, 0.2, 0.5],
+  ],
+  bell3: [
+    [1319, 0, 0.3, 0.45],
+    [1319, 0.35, 0.3, 0.45],
+    [1319, 0.7, 0.45, 0.45],
+  ],
+  down: [
+    [1047, 0, 0.18, 0.42],
+    [784, 0.14, 0.18, 0.42],
+    [659, 0.28, 0.5, 0.45],
+  ],
+  coin: [
+    [1975, 0, 0.08, 0.4],
+    [2637, 0.09, 0.3, 0.4],
   ],
 };
 

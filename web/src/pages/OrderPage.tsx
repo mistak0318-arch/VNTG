@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { setPref } from "../prefs";
+import { NotifySoundPanel } from "../components/NotifySoundPanel";
 import { NumPad, PatternPad } from "../components/EntryPads";
 import {
   api,
@@ -4359,6 +4360,12 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
     <div className="ord-tab ord-cfg">
       {msg && <p className="ord-ok">{msg}</p>}
       {error && <p className="ord-err">{error}</p>}
+
+      {/* 체결 알림음 — 발행·알림 설정과 같은 판 (2026-09-08 벤티지 "주문의 설정 메뉴에서 알림음 선택·미리듣기") */}
+      <section className={cfgSecClass(fold.open("notify"))}>
+        <CfgH4 id="notify">체결 알림 — 화면·소리·진동 (이 기기)</CfgH4>
+        <NotifySoundPanel />
+      </section>
 
       <section className={cfgSecClass(fold.open("tabs"))}>
         <CfgH4 id="tabs">탭 차례</CfgH4>
