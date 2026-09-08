@@ -426,6 +426,7 @@ export async function runAfterClose(
           }`,
       ),
     ].join("\n"),
+    "log",
   ).catch(() => undefined);
 
   /*

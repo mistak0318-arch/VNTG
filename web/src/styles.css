@@ -9831,7 +9831,15 @@ td .ov-g-sig { display: inline-block; vertical-align: middle; }
   border: 1px solid var(--border); color: var(--muted);
 }
 .cs-list { max-height: 26rem; overflow: auto; }
-.cs-item { padding: 0.45rem 0; border-bottom: 1px solid var(--border); }
+/*
+ * 채널 글 — **줄 길이를 잡고 채널을 갈라 놓는다** (2026-09-08 — 벤티지 "옆으로 너무 길어져서 읽기가
+ * 힘들다. 각 채널별 구분선 좀 제대로"). 한 줄이 화면을 가로지르면 눈이 다음 줄 첫머리를 못 찾는다.
+ * 글줄은 사람이 읽는 폭(72자쯤)까지만, 사이는 실선 한 줄로 확실히.
+ */
+.cs-item { padding: 0.7rem 0 0.75rem; border-bottom: 1px solid var(--border); }
+.cs-item + .cs-item { border-top: 0; }
+.cs-item .cs-text { max-width: 78ch; }
+.cs-item .cs-head { padding-bottom: 0.15rem; }
 .cs-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem; font-size: 0.74rem; }
 .cs-hit {
   font-size: 0.64rem; padding: 0 0.25rem; border-radius: 3px;
@@ -15210,7 +15218,14 @@ tr:hover .sd-del { opacity: 0.75; }
 .ord-venue button.on { border-color: var(--blue); }
 
 .ord-pick { position: relative; display: flex; flex-direction: column; gap: 0.3rem; }
-.ord-picked { display: flex; align-items: baseline; gap: 0.4rem; font-size: 0.95rem; }
+/*
+ * ⚠️ **min-width: 0 이 없으면 종목명이 세로로 쪼개진다** (2026-09-08 폰 실측 — 「삼/성/전/자」).
+ * flex 자식의 기본 min-width 는 auto 라 안 줄어드는데, 옆의 현재가·신용 표·고저 줄이 폭을 다
+ * 먹으면 이름 칸이 0 으로 눌리고 글자가 한 자씩 접힌다. 줄바꿈도 막는다.
+ */
+.ord-picked { display: flex; align-items: center; gap: 0.4rem; font-size: 0.95rem; flex-wrap: wrap; min-width: 0; }
+.ord-picked > * { min-width: 0; }
+.ord-picked .peek-wrap, .ord-picked .peek-btn { white-space: nowrap; flex: none; min-width: 0; }
 .ord-code { color: var(--muted); font-size: 0.76rem; font-variant-numeric: tabular-nums; }
 .ord-pick-list {
   position: absolute;
@@ -15396,7 +15411,15 @@ tr:hover .sd-del { opacity: 0.75; }
    */
   .ord-head { flex-direction: column; gap: 0.4rem; align-items: stretch; }
   .ord-head .ord-pick,
-  .ord-head .ord-side { flex: none; width: 100%; }
+  .ord-head .ord-side { flex: none; width: 100%; min-width: 0; }
+  /* 폰 — 이름 줄은 두 줄까지 접히게, 현재가는 오른쪽 끝으로 (2026-09-08 「삼/성/전/자」) */
+  .ord-picked { row-gap: 0.15rem; }
+  .ord-picked .ord-quote { margin-left: auto; font-size: 1.2rem; }
+  .ord-hl { font-size: 0.72rem; gap: 0.1rem 0.5rem; }
+  .ord-hl em { font-size: 0.66rem; }
+  /* 정정/취소까지 셋이면 폰에서 글자가 눌린다 — 한 줄에 셋, 글자 작게 */
+  .ord-side.three { grid-template-columns: 1fr 1fr 1.3fr; }
+  .ord-side.three button { font-size: 0.9rem; padding: 0.4rem 0.2rem; }
 
   /* 호가창을 가격·잔량 두 줄로 — 곁가지는 접는다 */
   .ord-book .ob-head,
@@ -17686,7 +17709,12 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ov-g-edit-mv { display: inline-flex; gap: 0.2rem; flex: none; }
 /* 글로벌 줄의 심볼 자리에 온 「MM/DD 종가」 — 오늘 값이 아니라는 표 */
 .ov-g-as { color: #e6a23c; opacity: 0.9; }
-.ov-g-row:disabled { cursor: default; }
+/*
+ * 차트가 없는 줄(한투 금리)은 안 눌린다 — 그런데 브라우저 기본 disabled 가 회색 상자에 흐린 글씨로
+ * 만들어서 「이상하게 표시」됐다 (2026-09-08 벤티지, 일본 10년). 못 누를 뿐 값은 또렷해야 한다.
+ */
+.ov-g-row:disabled { cursor: default; opacity: 1; background: transparent; color: inherit; }
+.ov-g-row:disabled:hover { background: transparent; }
 /* 종목명 옆 신용 표 — 키움 앱의 「신용A」 (2026-09-08) */
 .ord-crd { font-style: normal; font-size: 0.66rem; font-weight: 700; padding: 0.05rem 0.4rem; border-radius: 0.3rem; margin-left: 0.35rem; vertical-align: 1px; }
 .ord-crd.ok { color: #e6a23c; border: 1px solid rgba(230, 162, 60, 0.55); background: rgba(230, 162, 60, 0.12); }
@@ -17775,3 +17803,8 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .ord-amend-go { display: grid; grid-template-columns: 2fr 1fr; gap: 0.4rem; }
 .ord-go.amend { background: rgba(230, 162, 60, 0.18); border-color: var(--accent, #e6a23c); color: var(--accent, #e6a23c); }
 .ord-go.cancel { background: var(--panel-2); border-color: var(--border); color: var(--muted); }
+/* 가격 줄 손잡이 — 시장가·가격 자동·잔량전부 (2026-09-08, 키움 배치 참고) */
+.ord-price-tools { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.2rem; }
+.ord-price-tools .filter-btn { padding: 0.15rem 0.6rem; font-size: 0.78rem; }
+.ord-auto-chk { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.76rem; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.ord-auto-chk.off { opacity: 0.45; cursor: default; }

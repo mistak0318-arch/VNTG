@@ -437,6 +437,12 @@ export function ChannelSearchPanel({ code, name }: { code?: string; name?: strin
           placeholder="키워드 더 넣기 — 쉼표로 구분 (예: 수주, 증설)"
           value={extra}
           onChange={(e) => setExtra(e.target.value)}
+          /* 엔터로 바로 찾는다 (2026-09-08 — 벤티지 "엔터가 안 먹는다"). 한글 조합 중 엔터는 글자 확정이다 */
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+            e.preventDefault();
+            run();
+          }}
         />
       </div>
 

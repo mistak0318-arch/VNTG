@@ -1341,6 +1341,8 @@ function OrderForm({
   const autoPricedFor = useRef<string>("");
   /* 자동으로 채운 값은 자동이라고 말한다 — 채운 시각을 들고 있다가 사람이 칸을 만지면 지운다 */
   const [autoPriceAt, setAutoPriceAt] = useState<number | null>(null);
+  /** 「가격 자동」 — 켜 두면 현재가(정정이면 원주문가)를 계속 따라간다 */
+  const [autoPrice, setAutoPrice] = useState(false);
   useEffect(() => {
     if (!code || !quote || !(quote.price > 0)) return;
     if (autoPricedFor.current === code) return;
@@ -1375,6 +1377,19 @@ function OrderForm({
   /* 「값을 안 쓰는 구분」이면 가격 칸을 잠근다 — 넣어 봐야 서버가 거절한다 */
   const usesPrice = tt ? tt.price !== "no" : true;
   const needsPrice = tt?.price === "req";
+  /* 가격 자동이 켜져 있으면 시세를 따라간다 — 정정 중이면 원주문가를 지킨다(키움과 같다) */
+  useEffect(() => {
+    if (!autoPrice || !usesPrice) return;
+    if (amend && amend.ordNo) {
+      if (amend.price > 0) setPrice(String(amend.price));
+      return;
+    }
+    if (quote && quote.price > 0) {
+      setPrice(String(Math.round(quote.price)));
+      setAutoPriceAt(Date.now());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPrice, usesPrice, quote?.price, amend?.price]);
   const usesCond = tt?.cond === true;
   /* 시간외 구분은 정규장 밖에 내는 것이 정상이라 「시간 아님」 경고를 띄우지 않는다 */
   const open = tt?.late ? true : status.open[venue];
@@ -1791,17 +1806,26 @@ function OrderForm({
           <div className="ord-venue">
             {VENUES.map((v) => {
               const can = (status.venueAllowed ?? VENUES.map((x) => x.key)).includes(v.key);
+              /*
+               * **이 종목이 NXT 에서 도는가** (2026-09-08 — 벤티지 "NXT 거래 불가 종목인데 NXT 가
+               * 열려 있네"). 거래소가 열린 것과 그 종목이 거기서 거래되는 것은 다르다. NXT 는 상장
+               * 전 종목이 아니라 정해진 종목만 받는다. 키움이 종목별 NXT 가능 여부를 따로 주지 않아
+               * **오늘 NXT 고가가 왔는지**로 본다 — 값이 오면 확실히 되는 것이고, 안 오면 장 초반이라
+               * 아직 체결이 없을 수도 있으니 막지는 않고 「거래 없음」이라 적는다.
+               */
+              const noNxt = v.key === "NXT" && Boolean(code) && quote !== null && !quote.nxtHigh;
+              const shut = !can || !status.open[v.key] || noNxt;
               return (
                 <button
                   key={v.key}
                   type="button"
                   disabled={!can}
-                  title={can ? v.hint : "모의투자에서는 못 냅니다 — 실전 계좌에서만"}
-                  className={`${venue === v.key ? "on" : ""}${!can || !status.open[v.key] ? " shut" : ""}`}
+                  title={!can ? "모의투자에서는 못 냅니다 — 실전 계좌에서만" : noNxt ? "이 종목은 오늘 NXT 체결이 없습니다 — NXT 미지원 종목이거나 아직 거래 전입니다" : v.hint}
+                  className={`${venue === v.key ? "on" : ""}${shut ? " shut" : ""}`}
                   onClick={() => setVenue(v.key)}
                 >
                   {v.label}
-                  <i>{!can ? "모의 불가" : status.open[v.key] ? "열림" : "닫힘"}</i>
+                  <i>{!can ? "모의 불가" : noNxt ? "거래 없음" : status.open[v.key] ? "열림" : "닫힘"}</i>
                 </button>
               );
             })}
@@ -2037,12 +2061,57 @@ function OrderForm({
               onChange={(e) => {
                 setPrice(e.target.value.replace(/\D/g, ""));
                 setAutoPriceAt(null);
+                setAutoPrice(false);
               }}
               placeholder={usesPrice ? "원" : "값 없음"}
             />
             <button type="button" disabled={!usesPrice} onClick={() => setPrice((v) => String((Number(v) || 0) + 100))}>
               ＋
             </button>
+          </div>
+          {/*
+            키움 주문 화면의 손잡이 둘 (2026-09-08 — 벤티지가 MTS 캡처를 보내며 "각각의 소메뉴 구성
+            참고해서 우리도 저렇게. 접근성도 좋고"):
+              · **시장가** — 매매구분을 고르러 안 가고 한 번에. 다시 누르면 지정가로 돌아온다
+              · **가격 자동** — 켜 두면 값이 현재가를 계속 따라간다. 호가를 누르거나 손으로 고치면 꺼진다
+          */}
+          <div className="ord-price-tools">
+            <button
+              type="button"
+              className={`filter-btn${tradeType === "3" ? " active" : ""}`}
+              onClick={() => {
+                setTradeType((t) => (t === "3" ? "0" : "3"));
+                setAutoPrice(false);
+              }}
+              title="시장가 — 값을 안 정하고 지금 시세로 낸다"
+            >
+              시장가
+            </button>
+            <label className={`ord-auto-chk${!usesPrice ? " off" : ""}`} title="현재가를 계속 따라간다 — 호가를 누르거나 손으로 고치면 꺼진다">
+              <input
+                type="checkbox"
+                checked={autoPrice && usesPrice}
+                disabled={!usesPrice}
+                onChange={(e) => {
+                  setAutoPrice(e.target.checked);
+                  if (e.target.checked && quote && quote.price > 0) {
+                    setPrice(String(Math.round(quote.price)));
+                    setAutoPriceAt(Date.now());
+                  }
+                }}
+              />
+              가격 자동{amend ? " (원주문가)" : " (현재가)"}
+            </label>
+            {amend && amend.ordNo > "" && (
+              <label className="ord-auto-chk" title="남은 수량 전부로 정정한다">
+                <input
+                  type="checkbox"
+                  checked={Number(qty) === amend.remain}
+                  onChange={(e) => setQty(e.target.checked ? String(amend.remain) : "")}
+                />
+                잔량전부
+              </label>
+            )}
           </div>
           {/* 자동으로 들어온 값은 자동이라고 말한다 (2차 검진 🟠C-3) — 묵으면 「묵은 값」 */}
           {autoPriceAt !== null && usesPrice && price !== "" && (
