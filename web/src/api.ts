@@ -7169,6 +7169,8 @@ export interface LedgerPeriodRow {
 }
 
 export interface PositionsView {
+  /** 계좌 조회 실패 이유 — null 이면 정상 (2026-09-08) */
+  accountError?: string | null;
   deposit: number;
   equity: number;
   investTotal: number;

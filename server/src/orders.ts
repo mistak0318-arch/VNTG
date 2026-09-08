@@ -1395,6 +1395,8 @@ function realizedLossToday(rows: AutoWatch[]): number {
   const { date } = kstParts();
   let sum = 0;
   for (const r of rows) {
+    /* 모의 때 체결된 것은 실전 손익이 아니다 (2026-09-08 — 실전 전환 직후 「오늘 감시 실현 21.1만」이 모의 것이었다) */
+    if ((r.mock ?? true) !== orderIsMock()) continue;
     if (r.ticket.side !== "sell" || r.status !== "filled" || !r.fillPrice || !r.fillQty || !r.avgAtFire) continue;
     if (!r.firedAt || kstParts(new Date(r.firedAt)).date !== date) continue;
     sum += (r.fillPrice - r.avgAtFire) * r.fillQty;
@@ -1784,13 +1786,40 @@ export async function orderAccount(): Promise<{
   return memo("account", 2_500, orderAccountRaw);
 }
 
+/**
+ * **조회 실패는 이유를 남긴다** (2026-09-08 — 실전 전환 직후 「못 받음: 증거금 조회, 신용가능여부,
+ * 신용 수량」만 뜨고 왜인지 아무 데도 없었다). `.catch(() => null)` 로 삼키면 화면은 「못 받음」
+ * 한 마디뿐이라 사람이 고칠 수가 없다. TR 마다 마지막 실패 사유를 들고 있고(`lastTrError`),
+ * 같은 사유는 한 시간에 한 번만 기록에 남긴다.
+ */
+const lastTrError = new Map<string, string>();
+const trErrorLoggedAt = new Map<string, number>();
+function noteTrError(tr: string, e: unknown): null {
+  const msg = e instanceof KiwoomApiError ? `${e.returnCode} ${e.message}` : e instanceof Error ? e.message : String(e);
+  lastTrError.set(tr, msg);
+  const key = `${tr}:${msg}`;
+  const at = trErrorLoggedAt.get(key) ?? 0;
+  if (Date.now() - at > 3_600_000) {
+    trErrorLoggedAt.set(key, Date.now());
+    void appendLog({ kind: "error", msg: `계좌 조회 실패 ${tr} — ${msg}` }).catch(() => undefined);
+  }
+  return null;
+}
+/** 화면에 적을 한 마디 — 「증거금 조회 (RC4010 계좌비밀번호 오류)」 */
+function trFail(label: string, tr: string): string {
+  const m = lastTrError.get(tr);
+  return m ? `${label} (${m})` : label;
+}
+
 async function orderAccountRaw(): Promise<{ deposit: number; creditLoan: number; holdings: Holding[] }> {
   const oc = orderClient();
   if (!oc) return { deposit: 0, creditLoan: 0, holdings: [] };
   const [dep, bal] = await Promise.all([
-    oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00001", { qry_tp: "3" }).catch(() => null),
-    oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00018", { qry_tp: "2", dmst_stex_tp: "KRX" }).catch(() => null),
+    oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00001", { qry_tp: "3" }).catch((e) => noteTrError("kt00001", e)),
+    oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00018", { qry_tp: "2", dmst_stex_tp: "KRX" }).catch((e) => noteTrError("kt00018", e)),
   ]);
+  if (dep) lastTrError.delete("kt00001");
+  if (bal) lastTrError.delete("kt00018");
   const deposit = dep ? num(pick(dep.data, ["100stk_ord_alow_amt", "ord_alow_amt", "entr"])) : 0;
   /*
    * qry_tp "2"(개별) — 현금 줄과 신용 줄을 **따로** 준다. "1"(합산)이면 융자로 산 것이 현금과
@@ -1873,19 +1902,19 @@ export async function buyPower(code: string, price: number): Promise<BuyPower> {
   const missing: string[] = [];
 
   const [m, c, y] = await Promise.all([
-    oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00011", { stk_cd: code, uv }).catch(() => null),
+    oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00011", { stk_cd: code, uv }).catch((e) => noteTrError("kt00011", e)),
     g.allowCredit
-      ? oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00012", { stk_cd: code, uv }).catch(() => null)
+      ? oc.request<Record<string, unknown>>(ACNT_RESOURCE, "kt00012", { stk_cd: code, uv }).catch((e) => noteTrError("kt00012", e))
       : Promise.resolve(null),
     g.allowCredit
-      ? oc.request<Record<string, unknown>>("/api/dostk/stkinfo", "kt20017", { stk_cd: code }).catch(() => null)
+      ? oc.request<Record<string, unknown>>("/api/dostk/stkinfo", "kt20017", { stk_cd: code }).catch((e) => noteTrError("kt20017", e))
       : Promise.resolve(null),
   ]);
   if (m) void noteRaw("kt00011", m.data);
   if (c) void noteRaw("kt00012", c.data);
 
   const md = m?.data ?? {};
-  if (!m) missing.push("증거금 조회");
+  if (!m) missing.push(trFail("증거금 조회", "kt00011"));
   const cashOnly = { amt: num(md.min_ord_alow_amt), qty: num(md.min_ord_alowq) };
   const rate = num(md.aplc_rt) || num(md.stk_profa_rt) || 100;
   /* 적용률에 맞는 칸 — 없으면 바로 위 칸. 20→30→40→50→60→100 */
@@ -1906,8 +1935,8 @@ export async function buyPower(code: string, price: number): Promise<BuyPower> {
      * 안 받아서 둘 다 실패하는데, 그걸 false 로 눌러 「불가 종목」이라고 거짓말했다.
      */
     const allowed: boolean | null = y ? String(y.data.crd_alow_yn ?? "").toUpperCase() === "Y" : null;
-    if (!y) missing.push("신용가능여부");
-    if (!c) missing.push("신용 수량");
+    if (!y) missing.push(trFail("신용가능여부", "kt20017"));
+    if (!c) missing.push(trFail("신용 수량", "kt00012"));
     const cd = c?.data ?? {};
     const crRate = num(cd.stk_assr_rt) || null;
     const ctiers = [30, 40, 50, 60];
@@ -2612,6 +2641,8 @@ export interface Position {
 }
 
 export async function positions(main: KiwoomClient): Promise<{
+  /** 계좌 조회 실패 이유 — null 이면 정상 */
+  accountError: string | null;
   deposit: number;
   equity: number;
   /** 총 매입금액 · 총 평가금액 · 총 평가손익(원, %) — 벤티지: "총액과 등락률은 보여줘야지. 그게 제일 중요하잖아" */
@@ -2705,6 +2736,8 @@ export async function positions(main: KiwoomClient): Promise<{
     orphanOpen: open.filter((x) => !held.has(x.code)),
     prices,
     todayLoss,
+    /* 계좌 조회가 실패했으면 그 이유 — 예수금 0 이 「없다」인지 「못 읽었다」인지 화면이 말해야 한다 (2026-09-08) */
+    accountError: [lastTrError.has("kt00001") ? `예수금(kt00001): ${lastTrError.get("kt00001")}` : "", lastTrError.has("kt00018") ? `잔고(kt00018): ${lastTrError.get("kt00018")}` : ""].filter(Boolean).join(" · ") || null,
     buyLocked,
   };
 }

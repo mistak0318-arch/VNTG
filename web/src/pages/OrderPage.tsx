@@ -3076,6 +3076,7 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
           <span className="kb-arrow">{kbOpen ? "︿" : "﹀"}</span>
         </button>
         {kbOpen && (
+          <>
           <div className="kb-grid">
             <div className="kb-cell">
               <span>총 매입</span>
@@ -3096,12 +3097,19 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
             <div className="kb-cell">
               <span>예수금</span>
               <b>{Math.round(view.deposit).toLocaleString()}</b>
+              {view.accountError && <small className="ord-bad">못 읽음</small>}
             </div>
             <div className="kb-cell">
               <span>오늘 감시 실현</span>
               <b className={signClass(view.todayLoss)}>{view.todayLoss !== 0 ? Math.round(view.todayLoss).toLocaleString() : "0"}</b>
             </div>
           </div>
+          {view.accountError && (
+            <p className="ord-bad" style={{ margin: "0.3rem 0 0", fontSize: "0.8rem" }}>
+              ⚠️ 계좌 조회 실패 — {view.accountError}. 위 예수금·보유는 「없다」가 아니라 <b>못 읽은 것</b>이다.
+            </p>
+          )}
+          </>
         )}
       </div>
       <div className="ord-acct">
