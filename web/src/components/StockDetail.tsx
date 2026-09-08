@@ -8,6 +8,7 @@ import { StockSummaryPanel } from "./StockSummaryPanel";
 import { StockTabsSection } from "./StockTabsSection";
 import { useLive } from "../useLive";
 import { useWatchedCodes } from "../useWatchedCodes";
+import { CreditChip, useStockCredit } from "./CreditChip";
 
 /**
  * 종목 상세 시트.
@@ -76,6 +77,8 @@ export function StockDetail({
     sheetRef.current?.scrollTo({ top: 0 });
   }, [code]);
 
+  /* 신용 칩 — 개별종목분석과 **같은 것** (2026-09-08, 벤티지 "클릭하고 나오는 창에는 안 뜨는구나") */
+  const credit = useStockCredit(code);
   const watchedCodes = useWatchedCodes();
   const watched = watchedCodes.isWatched(code);
 
@@ -117,6 +120,7 @@ export function StockDetail({
                 {String(info._market).includes("코스닥") ? "코스닥" : "코스피"}
               </span>
             )}
+            <CreditChip credit={credit} />
             {name} ({code})
           </h2>
           {/*

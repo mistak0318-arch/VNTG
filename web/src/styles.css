@@ -1247,14 +1247,21 @@ body {
 }
 
 /* 코스피/코스닥 배지 — 종목명 앞, 작게. 같은 +5%라도 판이 다르다 */
+/*
+ * ⚠️ **신용 칩(.ord-crd)과 크기·기준선을 맞춘다** (2026-09-08 — 벤티지 "코스피 박스 저거랑
+ * 신용박스랑 오와열 좀 맞춰줘봐라"). 둘이 나란히 서는데 글자 크기(0.62 vs 0.66)도 안쪽 여백도
+ * 세로 기준(vertical-align 2px vs 1px)도 달라서 한 칸씩 어긋나 보였다. 같은 줄에 서는 칩은
+ * 같은 자를 쓴다 — 아래 `.ord-crd` 와 이 블록의 숫자는 **같이** 고칠 것.
+ */
 .mkt-badge {
   display: inline-block;
-  font-size: 0.62rem;
+  font-size: 0.64rem;
   font-weight: 700;
-  padding: 0.1rem 0.35rem;
+  line-height: 1.5;
+  padding: 0.08rem 0.4rem;
   border-radius: 4px;
-  margin-right: 0.4rem;
-  vertical-align: 2px;
+  margin-right: 0.35rem;
+  vertical-align: middle;
   border: 1px solid var(--border);
   color: var(--muted);
 }
@@ -17832,7 +17839,11 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 }
 .ov-g-row:disabled:hover { background: transparent; }
 /* 종목명 옆 신용 표 — 키움 앱의 「신용A」 (2026-09-08) */
-.ord-crd { font-style: normal; font-size: 0.66rem; font-weight: 700; padding: 0.05rem 0.4rem; border-radius: 0.3rem; margin-left: 0.35rem; vertical-align: 1px; }
+/* 시장 배지(.mkt-badge)와 같은 자 — 나란히 설 때 오와열이 맞아야 한다 (2026-09-08) */
+.ord-crd { display: inline-block; font-style: normal; font-size: 0.64rem; font-weight: 700; line-height: 1.5; padding: 0.08rem 0.4rem; border-radius: 4px; vertical-align: middle; }
+/* 제목줄에서는 시장 배지와 같은 간격으로 (그 밖의 자리는 부모의 gap 이 정한다) */
+.analysis-title .ord-crd,
+.sheet-header .ord-crd { margin-right: 0.35rem; }
 .ord-crd.ok { color: #e6a23c; border: 1px solid rgba(230, 162, 60, 0.55); background: rgba(230, 162, 60, 0.12); }
 .ord-crd.no { color: var(--muted); border: 1px solid var(--border); }
 /* 잠금 풀기 카드 (2026-09-08) */

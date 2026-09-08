@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CreditChip, useStockCredit } from "../components/CreditChip";
 import { api, normalizeStockCode, stockNameOf, type RawRecord, type StockSearchResult } from "../api";
 import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
@@ -41,26 +42,8 @@ export function StockAnalysisPage({
    * 목록 단추들이 `onMouseDown` 에서 기본 동작을 막는 것도 같은 이유다.
    */
   const [focused, setFocused] = useState(false);
-  /*
-   * **신용으로 살 수 있는 종목인가** (2026-09-08 — 벤티지 "종목상세에 코스피 써놨잖아 그 옆에
-   * 주문메뉴처럼 신용 관련 아이콘도 하나"). 주문 화면과 같은 칩(`ord-crd`)을 쓴다 — 같은 뜻이면
-   * 같은 모양이어야 한다. 서버가 한 시간 캐시라 종목을 옮겨 다녀도 조회가 늘지 않고,
-   * 주문 앱키가 없으면 `allowed: null` 로 와서 아무것도 안 단다.
-   */
-  const [credit, setCredit] = useState<{ allowed: boolean | null; grade: string | null; text: string | null; why?: string | null } | null>(null);
-  useEffect(() => {
-    setCredit(null);
-    if (!stock?.code) return;
-    let alive = true;
-    void api
-      .stockCredit(stock.code)
-      .then((c) => alive && setCredit(c))
-      /* 길 자체가 막힌 것(옛 서버·401)도 「못 읽었다」로 — 조용히 사라지면 원인을 못 찾는다 */
-      .catch((e) => alive && setCredit({ allowed: null, grade: null, text: null, why: e instanceof Error ? e.message : "조회 실패" }));
-    return () => {
-      alive = false;
-    };
-  }, [stock?.code]);
+  /* 신용 칩 — 값도 그림도 `CreditChip` 한 곳에 (클릭 시트와 같은 것을 쓴다) */
+  const credit = useStockCredit(stock?.code);
 
   useEffect(() => {
     const q = query.trim();
@@ -234,23 +217,7 @@ export function StockAnalysisPage({
                   {String(info._market).includes("코스닥") ? "코스닥" : "코스피"}
                 </span>
               )}
-              {credit && credit.allowed !== null && (
-                <em className={`ord-crd${credit.allowed ? " ok" : " no"}`} title={credit.text ?? (credit.allowed ? "신용 가능" : "신용 불가")}>
-                  {credit.allowed ? `신용${credit.grade ?? ""}` : "신용불가"}
-                </em>
-              )}
-              {/*
-                **못 읽었으면 못 읽었다고 말한다** (2026-09-08 — 벤티지 "신용정보는 안 읽는데?").
-                조용히 아무것도 안 달면 「신용 불가」인지 「조회가 안 된 것」인지 구별이 안 되고,
-                고칠 실마리도 없다. 눌러서 이유를 편다.
-              */}
-              {credit && credit.allowed === null && credit.why && (
-                <em className="ord-crd dim" title={credit.why} onClick={() => window.alert(`신용가능여부를 못 읽었다
-
-${credit.why}`)}>
-                  신용 ?
-                </em>
-              )}
+              <CreditChip credit={credit} />
               {watched.isWatched(stock.code) ? "★ " : ""}
               {shownName} <span className="analysis-code">{stock.code}</span>
             </h2>
