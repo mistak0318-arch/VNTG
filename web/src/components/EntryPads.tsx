@@ -161,10 +161,15 @@ export function PatternPad({
     const y = (clientY - r.top) / r.height;
     if (x < 0 || x >= 1 || y < 0 || y >= 1) return -1;
     const c = Math.floor(x * N), rr = Math.floor(y * N);
-    /* 칸 한가운데 근처만 점으로 친다 — 칸 전체를 잡으면 스치기만 해도 이어진다 */
+    /*
+     * 칸 한가운데 근처만 점으로 친다 — 칸 전체를 잡으면 스치기만 해도 이어진다.
+     * 0.14 → 0.16 (2026-09-08). 칸 반지름이 1/6≈0.167 이라 아직 옆 칸과 안 겹치는데,
+     * 점을 키운 만큼 **눈에 보이는 동그라미 안이면 잡히게** 맞췄다. 예전엔 동그라미를
+     * 밟았는데도 안 잡히는 자리가 테두리 쪽에 있었다.
+     */
     const cx = (c + 0.5) / N, cy = (rr + 0.5) / N;
     const d = Math.hypot(x - cx, y - cy);
-    return d < 0.14 ? rr * N + c : -1;
+    return d < 0.16 ? rr * N + c : -1;
   }, []);
 
   const add = useCallback(
@@ -181,6 +186,16 @@ export function PatternPad({
       next += String(i);
       cur.current = next;
       onChange(next);
+      /*
+       * **점을 지날 때마다 짧게 떤다** (2026-09-08). 폰에서 패턴은 손가락이 화면을 가려서
+       * 「몇 개째 지났나」가 눈으로 안 보인다 — 안드로이드 잠금화면이 진동을 주는 이유가
+       * 그거다. 12ms 는 소리 없이 손끝에만 닿는 길이. 아이폰은 vibrate 가 없어 그냥 없다.
+       */
+      try {
+        navigator.vibrate?.(12);
+      } catch {
+        /* 진동은 있으면 좋은 것 — 막혀 있어도 입력은 그대로 간다 */
+      }
     },
     [onChange],
   );
@@ -228,30 +243,58 @@ export function PatternPad({
   const path = value.split("").map((ch) => center(Number(ch)));
   const tail = drawing && cursor && box ? { x: cursor.x - box.left, y: cursor.y - box.top } : null;
 
+  /*
+   * **패드는 크게, 상태는 말로** (2026-09-08 — 벤티지 "이거 패턴 화면 너무 작잖아").
+   *
+   * 폰에서 점 아홉 개가 13.5rem 안에 있어 손가락 하나가 두 점을 덮었다. 이제 카드 폭을
+   * 다 쓰고(최대 22rem) 점도 키운다. 그리고 **지금 몇 개를 그렸는지는 안 적는다** —
+   * 길이가 새면 비밀번호가 그만큼 약해진다. 대신 「그렸다/못 그렸다」만 말하고,
+   * 잘못 그렸을 때 **다시 그리기**로 지울 수 있게 둔다(예전엔 눈치껏 다시 긋는 수밖에).
+   */
+  const enough = value.length >= minLength;
   return (
-    <div
-      ref={ref}
-      className={`ppad${disabled ? " off" : ""}${drawing ? " drawing" : ""}`}
-      onPointerDown={(e) => {
-        e.preventDefault();
-        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-        start(e.clientX, e.clientY);
-      }}
-      onPointerMove={(e) => move(e.clientX, e.clientY)}
-      onPointerUp={end}
-      aria-label="패턴 입력"
-    >
-      {box && (
-        <svg className="ppad-lines" width={box.width} height={box.height}>
-          {path.length > 1 && <polyline points={path.map((p) => `${p.x},${p.y}`).join(" ")} />}
-          {tail && path.length > 0 && <line x1={path[path.length - 1].x} y1={path[path.length - 1].y} x2={tail.x} y2={tail.y} />}
-        </svg>
-      )}
-      {Array.from({ length: N * N }, (_, i) => (
-        <span key={i} className={`ppad-dot${value.includes(String(i)) ? " on" : ""}`}>
-          <i />
+    <div className="ppad-wrap">
+      <div
+        ref={ref}
+        className={`ppad${disabled ? " off" : ""}${drawing ? " drawing" : ""}${enough ? " done" : ""}`}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+          start(e.clientX, e.clientY);
+        }}
+        onPointerMove={(e) => move(e.clientX, e.clientY)}
+        onPointerUp={end}
+        aria-label="패턴 입력"
+      >
+        {box && (
+          <svg className="ppad-lines" width={box.width} height={box.height}>
+            {path.length > 1 && <polyline points={path.map((p) => `${p.x},${p.y}`).join(" ")} />}
+            {tail && path.length > 0 && <line x1={path[path.length - 1].x} y1={path[path.length - 1].y} x2={tail.x} y2={tail.y} />}
+          </svg>
+        )}
+        {Array.from({ length: N * N }, (_, i) => (
+          <span key={i} className={`ppad-dot${value.includes(String(i)) ? " on" : ""}`}>
+            <i />
+          </span>
+        ))}
+      </div>
+      <div className="ppad-foot">
+        <span className={`ppad-say${enough ? " ok" : ""}`}>
+          {drawing ? "그리는 중…" : enough ? "✓ 패턴을 그렸습니다" : value.length > 0 ? `점 ${minLength}개 이상을 이어야 합니다` : "점을 짚어 끌어서 그립니다"}
         </span>
-      ))}
+        {value.length > 0 && !disabled && (
+          <button
+            type="button"
+            className="ppad-clear"
+            onClick={() => {
+              cur.current = "";
+              onChange("");
+            }}
+          >
+            다시 그리기
+          </button>
+        )}
+      </div>
     </div>
   );
 }

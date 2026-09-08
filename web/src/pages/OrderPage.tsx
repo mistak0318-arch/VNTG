@@ -4869,9 +4869,6 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
           ) : (
             <NumPad value={pinA} onChange={setPinA} disabled={busy} />
           )}
-          {padMode === "pattern" && pinA.length > 0 && (
-            <small className="ord-note">{pinA.length}점 이음{pinA.length < 4 ? " — 네 점 이상" : ""}</small>
-          )}
         </div>
         <button
           type="submit"
@@ -4929,7 +4926,6 @@ function ConfigTab({ status, onDone, subOrder, onSubOrder }: { status: OrderStat
           <div className="ord-cfg-pad">
             <span className="ord-note">새 패턴을 그리세요</span>
             <PatternPad value={pwA} onChange={setPwA} disabled={busy} />
-            {pwA.length > 0 && <small className="ord-note">{pwA.length}점 이음{pwA.length < 4 ? " — 네 점 이상" : ""}</small>}
           </div>
         ) : (
           <>

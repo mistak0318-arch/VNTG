@@ -2632,6 +2632,8 @@ async function livePrices(main: KiwoomClient, codes: string[]): Promise<Map<stri
  */
 let lastWatchTick = 0;
 let lastDualDay = "";
+/** 판 종목의 매도 감시 청소를 마지막으로 돈 때 — 1분에 한 번 (2026-09-08) */
+let lastHoldSweep = 0;
 
 async function runAutoWatch(main: KiwoomClient): Promise<void> {
   if (watchFiring || watchBusy) return; // 누가 파일을 만지는 중이면 이번 틱은 쉰다 — 3초 뒤 다시
@@ -2644,7 +2646,11 @@ async function runAutoWatchLocked(main: KiwoomClient): Promise<void> {
   /* 심장박동은 **파일을 읽은 뒤**에 — 읽기가 매 틱 실패하는데 「살아 있음」이면 거짓말이다 (2차 검진 🔴A-3) */
   lastWatchTick = Date.now();
   const waiting = rows.filter((r) => r.status === "waiting");
-  if (waiting.length === 0) return;
+  /*
+   * 살아 있는 줄이 하나도 없으면 볼 것이 없다. **`fired` 도 살아 있는 것으로 친다** —
+   * 예전엔 `waiting` 만 보고 물러서서, 체결을 기다리다 멈춘 줄이 영영 청소되지 않았다.
+   */
+  if (waiting.length === 0 && !rows.some((r) => r.status === "fired")) return;
   const { date, minute } = kstParts();
   const tag = orderIsMock() ? "[모의]" : "[실전]";
   watchFiring = true;
@@ -2664,6 +2670,40 @@ async function runAutoWatchLocked(main: KiwoomClient): Promise<void> {
         changed = true;
         if (r.dualOrdNo) await cancelDualStop(r); // 화면에서 사라진 감시의 스톱이 키움에 살아 팔면 안 된다
         await appendLog({ kind: "watch", side: r.ticket.side, code: r.ticket.code, name: r.ticket.name, qty: r.ticket.qty, msg: `감시 만료 (${r.id}) — ${r.msg}` });
+      }
+    }
+    /*
+     * **판 종목의 매도 감시는 접는다** (2026-09-08 — 벤티지 "나 지금 아무 포지션도 없는데
+     * 포지션에 1이라고 뜨네").
+     *
+     * 매도 감시는 지금까지 **발동할 때에야** 「보유가 없다」를 알았다. 그 전까지는 판 종목의
+     * 손절이 `waiting` 으로 남아 있는데, 포지션 탭은 **보유 카드 밑에** 감시를 그리므로
+     * 보유가 없으면 화면에서 사라진다 — 그래서 눈에 안 보이는 줄이 배지에만 숫자로 남았다.
+     * 나중에 값이 닿으면 거절 기록까지 쌓는다.
+     *
+     * 잔고 조회는 2.5초 캐시라 공짜가 아니다. **1분에 한 번**만 쓸고, 갓 만든 줄(2분 미만)은
+     * 건드리지 않는다 — 매수 체결 직후 잔고에 아직 안 잡힌 순간이 있다. kt00018 이 실패했으면
+     * 「보유 0」이 아니라 「모른다」이므로 아무것도 안 한다.
+     */
+    if (Date.now() - lastHoldSweep > 60_000) {
+      const liveSells = rows.filter((r) => (r.status === "waiting" || r.status === "fired") && r.ticket.side === "sell" && Date.now() - Date.parse(r.at) > 120_000);
+      if (liveSells.length > 0) {
+        lastHoldSweep = Date.now();
+        const acct = await orderAccount().catch(() => null);
+        if (acct && !lastTrError.has("kt00018")) {
+          for (const r of liveSells) {
+            const t = r.ticket;
+            const mine = acct.holdings.filter((x) => x.code === t.code && (t.credit ? Boolean(x.creditType) : !x.creditType));
+            if (mine.reduce((a, x) => a + x.qty, 0) > 0) continue;
+            r.status = "expired";
+            r.firedAt = new Date().toISOString();
+            r.msg = "보유가 없어졌다 — 이미 다 팔린 종목의 감시";
+            changed = true;
+            if (r.dualOrdNo) await cancelDualStop(r);
+            await appendLog({ kind: "watch", side: "sell", code: t.code, name: t.name, qty: t.qty, msg: `감시 접음 (${r.id}) — 보유가 없어졌다` });
+            void sendTelegram(`👁 ${tag} 감시 접음 — ${esc(t.name)} 매도 ${t.qty}주\n판 종목이라 지켜볼 것이 없다`, "order").catch(() => undefined);
+          }
+        }
       }
     }
     /* 만료 — 유효한 마지막 날의 장이 끝났거나 날이 지났다 */
@@ -3412,7 +3452,9 @@ export function startOrderHeartbeat(main: KiwoomClient): void {
 }
 
 export async function autoWatchSummary(): Promise<{ allowed: boolean; waiting: number; fired: number }> {
-  const [g, rows] = await Promise.all([getGuard(), readWatches()]);
+  const [g, all] = await Promise.all([getGuard(), readWatches()]);
+  /* 지금 모드(모의/실전)의 감시만 센다 — 포지션 탭이 그렇게 거른다. 배지와 화면이 다르면 안 된다 (2026-09-08) */
+  const rows = all.filter((r) => (r.mock ?? true) === orderIsMock());
   return { allowed: g.allowAutoWatch, waiting: rows.filter((r) => r.status === "waiting").length, fired: rows.filter((r) => r.status === "fired").length };
 }
 

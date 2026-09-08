@@ -16142,23 +16142,54 @@ select.ord-in { appearance: auto; cursor: pointer; }
 .npad-key.ghost { background: transparent; font-size: 0.95rem; color: var(--muted); }
 .npad-key:disabled { opacity: 0.35; cursor: default; }
 
+/*
+ * 패턴 패드 (2026-09-08 개편 — 벤티지 "이거 패턴 화면 너무 작잖아").
+ *
+ * 13.5rem 고정이라 폰에서 손가락 하나가 두 점을 덮었다. 이제 **부모 폭을 다 쓴다**
+ * (최대 22rem, 정사각). 점도 1rem → 1.5rem, 선도 굵게. 잡히는 범위는 `EntryPads.tsx`
+ * 의 0.16 — 눈에 보이는 동그라미와 맞물린다.
+ */
+.ppad-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; width: 100%; }
 .ppad {
-  position: relative; width: 13.5rem; height: 13.5rem; margin: 0.3rem auto;
+  position: relative; width: min(100%, 22rem); aspect-ratio: 1 / 1; margin: 0.2rem auto;
   display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+  /*
+   * ⚠️ **테두리·안쪽 여백을 쓰지 않는다.** 점의 자리는 `EntryPads.tsx` 가
+   * `getBoundingClientRect()` 를 3등분해 계산한다 — 테두리나 padding 이 있으면 그 상자와
+   * 격자 칸이 어긋나 **보이는 동그라미와 잡히는 자리가 따로 논다.** 액자는 layout 에
+   * 영향이 없는 inset 그림자로 그린다.
+   */
+  border-radius: 16px; background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--border);
   touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer;
+  transition: box-shadow 0.15s;
 }
+.ppad.drawing { box-shadow: inset 0 0 0 2px var(--accent, #e6a23c); }
+.ppad.done { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent, #e6a23c) 55%, var(--border)); }
 .ppad.off { opacity: 0.4; pointer-events: none; }
 .ppad-dot { display: flex; align-items: center; justify-content: center; }
 .ppad-dot i {
-  width: 1rem; height: 1rem; border-radius: 50%;
-  border: 2px solid var(--muted); background: var(--panel);
-  transition: transform 0.1s, background 0.1s, border-color 0.1s;
+  width: 1.5rem; height: 1.5rem; border-radius: 50%;
+  border: 2px solid var(--muted); background: var(--panel-2);
+  transition: transform 0.1s, background 0.1s, border-color 0.1s, box-shadow 0.1s;
 }
-.ppad-dot.on i { background: var(--accent, #e6a23c); border-color: var(--accent, #e6a23c); transform: scale(1.35); }
+.ppad-dot.on i {
+  background: var(--accent, #e6a23c); border-color: var(--accent, #e6a23c); transform: scale(1.3);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent, #e6a23c) 22%, transparent);
+}
 .ppad-lines { position: absolute; inset: 0; pointer-events: none; }
 .ppad-lines polyline, .ppad-lines line {
-  fill: none; stroke: var(--accent, #e6a23c); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85;
+  fill: none; stroke: var(--accent, #e6a23c); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85;
 }
+/* 아래 한 줄 — 길이는 안 적는다(새면 그만큼 약해진다). 그렸는가만 말한다 */
+.ppad-foot { display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap; }
+.ppad-say { font-size: 0.78rem; color: var(--muted); }
+.ppad-say.ok { color: var(--accent, #e6a23c); font-weight: 700; }
+.ppad-clear {
+  border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); color: var(--muted);
+  font: inherit; font-size: 0.76rem; padding: 0.2rem 0.6rem; cursor: pointer;
+}
+.ppad-clear:hover { border-color: var(--muted); color: var(--text); }
 .ord-cfg-pad { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; margin: 0.4rem 0; }
 
 /* 채널 검색 — 최근 찾기 (2026-09-04). 무거운 조회라 받아 둔 것을 되살린다 */
@@ -17645,16 +17676,44 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
   display: flex; flex-direction: column; gap: 8px;
   width: min(360px, calc(100vw - 28px)); pointer-events: none;
 }
+/*
+ * **바탕이 등급을 말한다** (2026-09-08 — 벤티지 "체결 알림창 지금 구조 좋은데 바탕 색을 좀
+ * 다르게 가져갈 수 있나? 눈에 좀 안 띄네").
+ *
+ * 예전엔 바탕이 `--panel-2` 하나라 뒤 화면과 같은 색이었고, 등급은 왼쪽 4px 띠에만 있었다.
+ * 폰에서 위에 잠깐 떴다 사라지는 것을 그 띠 하나로 알아채라는 건 무리다. 이제 **바탕을
+ * 등급색으로 물들이고** 테두리·그림자도 같이 물들인다. 글자색은 그대로 두고 섞는 비율만
+ * 낮게(14~18%) 잡아 밝은 테마에서도 글이 읽힌다.
+ */
 .nt-toast {
   display: flex; align-items: stretch; gap: 0; pointer-events: auto;
-  border: 1px solid var(--border); border-left: 4px solid var(--muted);
+  border: 1px solid var(--border); border-left: 5px solid var(--muted);
   border-radius: 10px; background: var(--panel-2);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   animation: nt-in 0.22s ease-out;
 }
-.nt-toast.info { border-left-color: var(--blue); }
-.nt-toast.warn { border-left-color: #e6a23c; }
-.nt-toast.urgent { border-left-color: var(--red); }
+.nt-toast.info {
+  border-left-color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 40%, var(--border));
+  background: color-mix(in srgb, var(--blue) 15%, var(--panel-2));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 0 1px color-mix(in srgb, var(--blue) 22%, transparent);
+}
+.nt-toast.warn {
+  border-left-color: #e6a23c;
+  border-color: color-mix(in srgb, #e6a23c 40%, var(--border));
+  background: color-mix(in srgb, #e6a23c 16%, var(--panel-2));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 0 1px color-mix(in srgb, #e6a23c 24%, transparent);
+}
+.nt-toast.urgent {
+  border-left-color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 45%, var(--border));
+  background: color-mix(in srgb, var(--red) 18%, var(--panel-2));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4), 0 0 0 2px color-mix(in srgb, var(--red) 30%, transparent);
+}
+/* 물든 바탕 위에서는 본문이 한 톤 더 진해야 읽힌다 */
+.nt-toast.info .nt-body,
+.nt-toast.warn .nt-body,
+.nt-toast.urgent .nt-body { color: color-mix(in srgb, var(--text) 72%, var(--muted)); }
 .nt-toast.out { animation: nt-out 0.2s ease-in forwards; }
 .nt-main {
   flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;
