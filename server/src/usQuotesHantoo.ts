@@ -142,8 +142,39 @@ async function multRaw(pairs: { excd: string; symbol: string }[]): Promise<Recor
  * 유럽 종목은 야후 방식대로 `RHM.DE`(라인메탈)·`BA.L`(BAE)처럼 **점 붙은 티커**로 담기니,
  * 점이 보이면 한투를 건너뛰고 야후로 넘긴다. 아홉 거래소를 헛되이 훑지 않는다.
  */
+/**
+ * ⚠️ **점이 있다고 다 유럽은 아니다** (2026-09-08 — 벤티지 "얘네는 왜 일봉 이런 거 못
+ * 가져오는 거지", 키옥시아 `285A.T` 에서 「거래소를 찾지 못했습니다」).
+ *
+ * 야후는 미국 밖을 `285A.T`(도쿄) `0700.HK`(홍콩)처럼 **꼬리**로 구별한다. 그런데 여기서
+ * 점만 보고 통째로 걸러 냈다 — 유럽을 거르려던 규칙이 **한투가 멀쩡히 주는 일본·홍콩·중국까지**
+ * 같이 잘라 버렸다. 실측(2026-09-08): `EXCD=TSE, SYMB=285A` 로 일봉 100개가 정상으로 온다.
+ *
+ * 꼬리를 한투 거래소로 옮기고, 옮길 수 없는 것(유럽 등)만 야후로 보낸다.
+ */
+const YAHOO_SUFFIX_TO_EXCD: Record<string, string> = {
+  T: "TSE", // 도쿄
+  HK: "HKS", // 홍콩
+  SS: "SHS", // 상하이
+  SZ: "SZS", // 선전
+};
+
+/** 우리 심볼 → 한투가 아는 {거래소, 심볼}. 한투가 못 다루면 null */
+export function hantooPair(symbol: string): { excd: string; symb: string } | null {
+  const sym = symbol.trim().toUpperCase();
+  const i = sym.lastIndexOf(".");
+  if (i < 0) return null; // 미국 — 거래소는 아홉을 훑어 찾는다(아래 resolveExcd)
+  const excd = YAHOO_SUFFIX_TO_EXCD[sym.slice(i + 1)];
+  return excd ? { excd, symb: sym.slice(0, i) } : null;
+}
+
+/** 한투에 물어볼 때 쓰는 심볼 — 꼬리를 뗀다. 미국은 그대로 */
+export function hantooSymb(symbol: string): string {
+  return hantooPair(symbol)?.symb ?? symbol;
+}
+
 function hantooCanHave(symbol: string): boolean {
-  return !symbol.includes(".");
+  return !symbol.includes(".") || hantooPair(symbol) !== null;
 }
 
 async function resolveExcd(symbols: string[]): Promise<void> {
@@ -177,6 +208,9 @@ async function resolveExcd(symbols: string[]): Promise<void> {
  * 조회 자체가 안 된다.
  */
 export async function excdOf(symbol: string): Promise<string | null> {
+  /* 꼬리로 알 수 있는 것(일본·홍콩·중국)은 아홉 거래소를 훑을 이유가 없다 */
+  const known = hantooPair(symbol);
+  if (known) return known.excd;
   const map = await loadExcd();
   if (map[symbol]) return map[symbol];
   if (!hantooCanHave(symbol)) return null;

@@ -1,5 +1,5 @@
 import { hantooGet, hantooReady } from "./hantooClient.js";
-import { excdOf } from "./usQuotesHantoo.js";
+import { excdOf, hantooSymb } from "./usQuotesHantoo.js";
 
 /**
  * 해외주식 상세 — **한투가 주는 것으로 꾸린다.**
@@ -108,7 +108,8 @@ export async function usDetail(symbol: string): Promise<UsDetail> {
     const body = await hantooGet<{ output?: Record<string, unknown> }>(
       DETAIL,
       DETAIL_TR,
-      { AUTH: "", EXCD: excd, SYMB: symbol },
+      /* 상세도 같은 규칙 — 꼬리를 뗀 심볼 (2026-09-08) */
+      { AUTH: "", EXCD: excd, SYMB: hantooSymb(symbol) },
       "해외종목 상세",
     );
     const o = body.output ?? {};
@@ -179,7 +180,8 @@ export async function usCandles(
     const body = await hantooGet<{ output2?: Record<string, unknown>[] }>(
       DAILY,
       DAILY_TR,
-      { AUTH: "", EXCD: excd, SYMB: symbol, GUBN: gubn, BYMD: "", MODP: "1" },
+      /* 한투에는 꼬리를 뗀 심볼로 — `285A.T` 는 `TSE`/`285A` 다 (2026-09-08) */
+      { AUTH: "", EXCD: excd, SYMB: hantooSymb(symbol), GUBN: gubn, BYMD: "", MODP: "1" },
       "해외종목 차트",
     );
     const rows = Array.isArray(body.output2) ? body.output2 : [];

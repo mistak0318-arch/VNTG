@@ -70,8 +70,10 @@ export interface HantooRtStatus {
   subscribed: string[];
   max: number;
   frames: number;
-  /** 거절 사유 — 상한 초과 같은 것 */
+  /** 거절 사유 — 상한 초과 같은 것. 붙는 순간 비운다(옛 기록이 지금 문제로 보이면 안 된다) */
   rejects: string[];
+  /** 붙은 지 몇 초 — null 이면 아직 */
+  connectedForSec: number | null;
 }
 
 let ws: WebSocket | null = null;
@@ -87,6 +89,8 @@ let wanted: string[] = [];
 let store: RealtimeStore | null = null;
 let retryAt = 0;
 let retryMs = 3_000;
+/** 언제 붙었나 — 「방금 붙었는데 값이 없다」와 「오래 붙었는데 값이 없다」는 다른 이야기다 */
+let connectedAt = 0;
 
 /**
  * ⚠️ **앱키당 세션이 하나다.** 그래서 개발 PC 와 미니PC 가 같이 켜면 **먼저 붙은 쪽이 이기고
@@ -260,6 +264,13 @@ function connect(): void {
       sock.onopen = () => {
         state = "연결됨";
         retryMs = 3_000;
+        /*
+         * 붙었으면 **옛 거절 기록을 지운다** (2026-09-08). 스무 줄이 그대로 남아 있어서
+         * 벤티지가 상태를 봤을 때 「연결됨」인데 거절이 스무 개라 지금 문제처럼 보였다.
+         * 이력은 로그가 아니라 **지금 무엇이 막고 있나**를 말하는 자리다.
+         */
+        rejects.length = 0;
+        connectedAt = Date.now();
         void recordApiCall("hantoo", "ws:HDFSCNT0", "ok");
         resync();
       };
@@ -358,5 +369,6 @@ export function hantooRealtimeStatus(): HantooRtStatus {
     max: MAX_SUBS,
     frames,
     rejects: [...rejects],
+    connectedForSec: connectedAt ? Math.round((Date.now() - connectedAt) / 1000) : null,
   };
 }
