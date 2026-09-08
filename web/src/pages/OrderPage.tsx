@@ -1211,12 +1211,36 @@ function OrderForm({
    * 폼을 열 때 한 번만 받는다 — 잔고 탭처럼 10초마다 부르면 주문 앱키에 조회가 계속 나간다.
    */
   const [acct, setAcct] = useState<OrderAccount | null>(null);
-  useEffect(() => {
+  const [acctAt, setAcctAt] = useState(0);
+  const [holdOpen, setHoldOpen] = useState(false);
+  const pullAcct = useCallback(() => {
     void api
       .orderAccount()
-      .then(setAcct)
+      .then((a) => {
+        setAcct(a);
+        setAcctAt(Date.now());
+      })
       .catch(() => setAcct(null));
   }, []);
+  /*
+   * 폼을 열 때 한 번 + **매도로 바꾸거나 종목이 바뀌면 다시** + 매도 중엔 5초마다 (2026-09-08 —
+   * 벤티지 "방금 매수하고 매도 갔는데 계좌에 없는 종목이라고 뜨네"). 한 번만 읽던 잔고가 묵어서
+   * 방금 체결된 종목이 안 보였다. 키움 쪽도 체결 뒤 몇 초는 잔고에 안 잡힌다 — 그래서 폴링.
+   */
+  useEffect(() => {
+    pullAcct();
+  }, [pullAcct, side, code]);
+  useEffect(() => {
+    if (side !== "sell") return;
+    const t = setInterval(pullAcct, 5_000);
+    return () => clearInterval(t);
+  }, [side, pullAcct]);
+  /* 체결 알림이 오면 즉시 — 토스트 폴러가 vntg:fill 을 쏜다 */
+  useEffect(() => {
+    const f = () => pullAcct();
+    window.addEventListener("vntg:fill", f);
+    return () => window.removeEventListener("vntg:fill", f);
+  }, [pullAcct]);
   /**
    * 수량과 금액은 서로를 고친다 — **누가 마지막에 손댔는지**를 알아야 무한히 되돌지 않는다.
    * 수량을 고쳤으면 금액이 따라오고, 금액을 고쳤으면 수량이 따라온다.
@@ -1316,6 +1340,21 @@ function OrderForm({
     rows[0] ??
     null;
   const held = heldRow?.ableQty ?? 0;
+  /*
+   * 보유가 **신용 줄뿐**이면 매도도 신용 매도여야 한다 (2026-09-08 — 벤티지 "보유가 없다 라고. 매도수량은
+   * 잡히는데"). 폼은 현금 매도였고 잔고는 융자 줄이라 서버가 「현금 보유가 없다」로 막았다. 현금 줄이
+   * 없고 신용 줄이 있으면 신용 매도로 알아서 바꾼다(대출일 포함). 현금 줄이 있으면 손대지 않는다.
+   */
+  useEffect(() => {
+    if (side !== "sell" || !code || !acct) return;
+    const cash = acct.holdings.find((h) => h.code === code && !h.creditType);
+    const cr = acct.holdings.find((h) => h.code === code && h.creditType);
+    if (!cash && cr && !sellCredit) {
+      setSellCredit(true);
+      setLoanDate(cr.loanDate ?? null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [side, code, acct]);
 
   /*
    * **매수 가능 수량** — 종목·가격이 서면 서버에 묻는다(kt00011·12·kt20017). 0.6초 뒤에 한 번.
@@ -1439,15 +1478,49 @@ function OrderForm({
       */}
       <div className="ord-head">
         <div className="ord-pick">
-          <StockSearchBox
-            placeholder="종목명 또는 6자리 코드"
-            clearOnPick={false}
-            onPick={(c, n) => {
-              setCode(c);
-              setName(n);
-              setQuote(null);
-            }}
-          />
+          <div className="ord-pick-row">
+            <StockSearchBox
+              placeholder="종목명 또는 6자리 코드"
+              clearOnPick={false}
+              onPick={(c, n) => {
+                setCode(c);
+                setName(n);
+                setQuote(null);
+              }}
+            />
+            {/* 잔고에서 고르기 (2026-09-08 — 벤티지 "잔고 버튼 만들어서 내 계좌에서 매수한 종목 리스트에서 매도할 거 선택") */}
+            <button type="button" className={`ord-hold-btn${holdOpen ? " on" : ""}`} onClick={() => { setHoldOpen((v) => !v); pullAcct(); }} title="내 계좌 보유 종목에서 고른다">
+              잔고{acct ? ` ${acct.holdings.length}` : ""}
+            </button>
+          </div>
+          {holdOpen && (
+            <div className="ord-hold-list" role="listbox">
+              {!acct && <div className="ord-caps">잔고를 읽는 중…</div>}
+              {acct && acct.holdings.length === 0 && <div className="ord-caps">보유 종목이 없다</div>}
+              {acct?.holdings.map((h) => (
+                <button
+                  key={`${h.code}-${h.creditType ?? ""}-${h.loanDate ?? ""}`}
+                  type="button"
+                  className="ord-hold-row"
+                  onClick={() => {
+                    setCode(h.code);
+                    setName(h.name);
+                    setQuote(null);
+                    setSide("sell");
+                    setSellCredit(Boolean(h.creditType));
+                    setLoanDate(h.creditType ? h.loanDate ?? null : null);
+                    setQty(String(h.ableQty > 0 ? h.ableQty : h.qty));
+                    setHoldOpen(false);
+                  }}
+                >
+                  <b>{h.name}</b>
+                  {h.creditType && <i className="ord-crd ok">신용</i>}
+                  <span className="num">{h.qty.toLocaleString()}주</span>
+                  <span className={`num ${signClass(h.pnl)}`}>{h.pnlRate > 0 ? "+" : ""}{h.pnlRate.toFixed(2)}%</span>
+                </button>
+              ))}
+            </div>
+          )}
           {code && (
             <div className="ord-picked">
               {/*
@@ -1779,8 +1852,13 @@ function OrderForm({
               {heldRow
                 ? `${sellCredit && heldRow.creditType ? `🔴 신용 매도(융자 상환 · 대출일 ${loanDate ?? "?"}) · ` : ""}매매가능 ${held.toLocaleString()}주 (보유 ${heldRow.qty.toLocaleString()}주 · 평단 ${heldRow.avg.toLocaleString()})`
                 : code
-                  ? "이 계좌에 없는 종목입니다"
+                  ? "잔고에 아직 없다 — 방금 산 것이면 몇 초 뒤 잡힌다 (5초마다 다시 본다)"
                   : "종목을 고르면 보유 수량이 나옵니다"}
+              {code && !heldRow && (
+                <button type="button" className="ord-mk" onClick={pullAcct} title={acctAt ? `마지막 조회 ${new Date(acctAt).toLocaleTimeString("ko-KR", { hour12: false })}` : ""}>
+                  다시 보기
+                </button>
+              )}
             </div>
           )}
 
@@ -3228,6 +3306,12 @@ function PositionsTab({ status, prefill, onDone, onSelectStock }: { status: Orde
       inflight.current = false;
     }
   }, []);
+  /* 체결 알림이 오면 즉시 — 5초 폴링을 기다리지 않는다 (2026-09-08 벤티지 "동기화 바로바로") */
+  useEffect(() => {
+    const f = () => void load();
+    window.addEventListener("vntg:fill", f);
+    return () => window.removeEventListener("vntg:fill", f);
+  }, [load]);
   useEffect(() => {
     void load();
     const t = setInterval(() => void load(), 5_000);

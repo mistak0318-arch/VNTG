@@ -1420,7 +1420,17 @@ export async function prepareOrder(
     if (acct) {
       const mine = acct.holdings.filter((x) => x.code === input.code && (credit ? Boolean(x.creditType) && (!loanDate || x.loanDate === loanDate) : !x.creditType));
       const able = mine.reduce((a, x) => a + (x.ableQty > 0 ? x.ableQty : x.qty), 0);
-      if (mine.length === 0) reject(`${input.name || input.code} ${credit ? "신용 " : ""}보유가 없다`, input, ip);
+      if (mine.length === 0) {
+        const other = acct.holdings.filter((x) => x.code === input.code && (credit ? !x.creditType : Boolean(x.creditType)));
+        const otherQty = other.reduce((a, x) => a + x.qty, 0);
+        reject(
+          other.length > 0
+            ? `${input.name || input.code} ${credit ? "신용" : "현금"} 보유가 없다 — ${credit ? "현금" : "신용(융자)"} 보유 ${otherQty}주는 ${credit ? "현금 매도" : "신용 매도"}로 내야 한다`
+            : `${input.name || input.code} ${credit ? "신용 " : ""}보유가 없다`,
+          input,
+          ip,
+        );
+      }
       if (input.qty > able) reject(`매도 수량 ${input.qty}주가 매매가능수량 ${able}주를 넘는다`, input, ip);
     }
   }
@@ -1721,6 +1731,7 @@ export async function executePrepared(
   }
   try {
     const r = await placeOrder(t);
+    dropAccountCache();
     if (t.kind === "cancel") {
       await appendLog({ kind: "cancel", ip, code: t.code, name: t.name, qty: t.qty, venue: t.venue, origOrdNo: t.ordNo, ordNo: r.ordNo, msg: r.msg, raw: r.raw });
       /*
@@ -1883,6 +1894,13 @@ function normOpen(r: Record<string, unknown>): OpenRow {
  * 벤티지: "체결/미체결은 클릭하면 반응도 느리고." 2.5초 안의 같은 조회는 한 번만 나간다.
  */
 const shortCache = new Map<string, { at: number; p: Promise<unknown> }>();
+/**
+ * **뭔가 바뀐 순간 캐시를 버린다** (2026-09-08 — 벤티지 "방금 매도했는데 카드가 보이네. 동기화
+ * 바로바로"). 주문이 나가거나 체결이 잡히면 잔고·미체결·체결·자산 캐시는 이미 틀린 값이다.
+ */
+export function dropAccountCache(): void {
+  for (const k of ["account", "open", "fills", "asset", "rlzToday"]) shortCache.delete(k);
+}
 function memo<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   const hit = shortCache.get(key);
   if (hit && Date.now() - hit.at < ttlMs) return hit.p as Promise<T>;
@@ -3395,6 +3413,7 @@ async function tick(): Promise<void> {
         const title = `${full ? "✅ 체결" : "🟡 일부 체결"} · ${w.t.name} ${sideKo} ${filled}/${w.t.qty}주${px ? ` @ ${px.toLocaleString()}` : ""}`;
         const tag = orderIsMock() ? "[모의]" : "[실전]";
         await appendLog({ kind: "fill", side: w.t.side, code: w.t.code, name: w.t.name, qty: filled, price: px || null, venue: w.t.venue, ordNo, msg: status });
+        dropAccountCache();
         await pushNotice({
           kind: "stock",
           source: "order",

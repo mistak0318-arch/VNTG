@@ -26,7 +26,8 @@ import { playSound, readNotifyPrefs, onNotifyPrefs, vibrate, type NotifyPrefs } 
  * 한꺼번에 튀어나온다. 새로고침도 마찬가지다.
  */
 
-const POLL_MS = 12_000;
+/* 6초 — 체결 뒤 화면 동기화의 방아쇠도 이 폴링이라 더 짧게 (2026-09-08) */
+const POLL_MS = 6_000;
 /** 한 번에 이만큼까지만 — 서버가 밀린 걸 한꺼번에 뱉어도 화면이 안 막힌다 */
 const MAX_AT_ONCE = 3;
 const LIVE_MS = 7000;
@@ -79,6 +80,8 @@ export function NotifyToasts() {
           if (!n.read && wanted(n, p)) fresh.push(n);
         }
         if (fresh.length === 0) return;
+        /* 체결·주문 알림이면 주문 화면들에게 「지금 다시 읽어라」 (2026-09-08 — 잔고가 바로 안 따라왔다) */
+        if (fresh.some((n) => /체결|주문|정정|취소/.test(n.title))) window.dispatchEvent(new CustomEvent("vntg:fill"));
         /* 서버는 최신이 위다 — 오래된 것부터 쌓아야 새 것이 맨 위에 온다 */
         const take = fresh.slice(0, MAX_AT_ONCE).reverse();
         if (p.toast) {
