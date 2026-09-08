@@ -28,6 +28,18 @@ import { afterCloseStatus } from "./afterClose.js";
 const FILE = "health.json";
 const EVERY_MS = 30_000;
 
+/**
+ * **왜 안 써졌나** (2026-09-09). 처음 붙였을 때 파일이 안 생겼는데 이유를 볼 길이 없었다 —
+ * 실패를 조용히 삼키고 있었기 때문이다. 배포 로그에 찍히는 `/api/health` 에 이걸 실어
+ * 밖에서 원인을 읽을 수 있게 한다. 경로만 적고 **값은 안 적는다**(경로는 비밀이 아니다).
+ */
+export const healthFileState: { dir: string | null; wrote: number; lastOk: string | null; lastError: string | null } = {
+  dir: null,
+  wrote: 0,
+  lastOk: null,
+  lastError: null,
+};
+
 function outDir(): string {
   return (process.env.HEALTH_OUT_DIR ?? "").trim();
 }
@@ -76,12 +88,17 @@ async function writeOnce(): Promise<void> {
     const tmp = join(dir, `${FILE}.tmp`);
     await writeFile(tmp, JSON.stringify(body, null, 2), "utf8");
     await rename(tmp, join(dir, FILE));
-  } catch {
-    /* 공유가 잠깐 끊겨도 서버는 계속 돈다 — 진단 파일은 곁가지다 */
+    healthFileState.wrote += 1;
+    healthFileState.lastOk = new Date().toISOString();
+    healthFileState.lastError = null;
+  } catch (e) {
+    /* 공유가 잠깐 끊겨도 서버는 계속 돈다 — 다만 **왜 안 됐는지는 남긴다** */
+    healthFileState.lastError = e instanceof Error ? `${e.name}: ${e.message}`.slice(0, 200) : String(e).slice(0, 200);
   }
 }
 
 export function startHealthFile(): void {
+  healthFileState.dir = outDir() || null;
   if (!outDir()) {
     console.log("[상태파일] HEALTH_OUT_DIR 이 없어 꺼짐");
     return;

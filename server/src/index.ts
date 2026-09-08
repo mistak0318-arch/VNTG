@@ -73,7 +73,7 @@ import { createCalendarVisionRouter } from "./routes/calendarVision.js";
 import { createFocusRouter } from "./routes/focus.js";
 import { createRealtimeRouter } from "./routes/realtime.js";
 import { startRealtimeScheduler } from "./realtimeHub.js";
-import { startHealthFile } from "./healthFile.js";
+import { healthFileState, startHealthFile } from "./healthFile.js";
 import { startBrokerAuto } from "./brokerAuto.js";
 import { startAfterCloseScheduler } from "./afterClose.js";
 import { syncScoreBands } from "./scoreBandSync.js";
@@ -160,6 +160,8 @@ app.get("/api/health", async (req, res) => {
     startedAt: new Date(startedAt).toISOString(),
     uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
     ...(authed ? { addresses: localIPv4() } : {}),
+    /* 상태 파일이 써지고 있나 — 배포 로그로 원인을 읽는다 (2026-09-09) */
+    healthOut: healthFileState,
     keysConfigured: {
       kiwoom: Boolean(process.env.KIWOOM_APP_KEY && process.env.KIWOOM_APP_SECRET),
       dart: Boolean(process.env.DART_API_KEY),
