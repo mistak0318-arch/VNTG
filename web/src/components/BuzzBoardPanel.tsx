@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type BuzzBoard, type BuzzBoardRow, type BuzzKind, type BuzzTermDetail } from "../api";
+import { api, type BuzzBoard, type BuzzBoardRow, type BuzzKind, type BuzzTermDetail, fmtKst } from "../api";
 import { useSheetBack } from "../useSheetBack";
 import { useStockNames } from "../useStockNames";
 
@@ -563,7 +563,7 @@ function BuzzTermSheet({
                   <li key={`${s.link}-${i}`}>
                     <div className="buzz-msg-head">
                       <b>{s.channel}</b>
-                      <span>{s.at.slice(5, 16).replace("T", " ")}</span>
+                      <span>{fmtKst(s.at)}</span>
                     </div>
                     <p>{s.text}</p>
                     {s.link && (

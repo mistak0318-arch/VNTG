@@ -31,6 +31,7 @@ import {
   type OrderTicket,
   type OrderVenue,
   type TradeType,
+  fmtKst,
 } from "../api";
 import { OrderBookPanel } from "../components/OrderBookPanel";
 import { StockSearchBox } from "../components/StockSearchBox";
@@ -5328,7 +5329,7 @@ function DeviceSection({
                     {d.name} {d.current && <span className="ord-code">지금 이 기기</span>}
                   </td>
                   <td data-l="등록">{d.addedAt.slice(0, 10)}</td>
-                  <td data-l="마지막">{d.lastAt.slice(5, 16).replace("T", " ")}</td>
+                  <td data-l="마지막">{fmtKst(d.lastAt)}</td>
                   <td data-l="주소">{d.lastIp}</td>
                   <td className="r" data-l="주문">
                     {d.orders}

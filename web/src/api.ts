@@ -4522,6 +4522,19 @@ export interface ViRow {
 }
 
 /** 콤마 포함 숫자 포맷. 값이 숫자가 아니면 "-" */
+/**
+ * ISO 시각 → 「MM-DD HH:mm」 **한국시각** (2026-09-10).
+ *
+ * 벤티지: "세 시간 동안 떠들어댔다고 나왔는데 막상 들어가 보니 오후 아홉 시가 가장 최신".
+ * 서버는 UTC ISO 로 주는데 화면 몇 곳이 `at.slice(5, 16)` 으로 글자만 잘라 찍어서 **UTC 그대로**
+ * 보였다 — 06:30 KST 글이 「09-09 21:30」으로. 시각을 글자로 자르지 말고 이걸 쓴다.
+ */
+export function fmtKst(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(5, 16).replace("T", " ");
+  return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(5, 16).replace("T", " ");
+}
+
 export function fmtNum(v: unknown): string {
   const n = Number(v);
   if (!Number.isFinite(n)) return "-";

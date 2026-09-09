@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type ScopeDetail, type ScopeFlow, type ScopeRow } from "../api";
+import { api, type ScopeDetail, type ScopeFlow, type ScopeRow, fmtKst } from "../api";
 import { MiniLine } from "../components/MiniLine";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useWatchedCodes } from "../useWatchedCodes";
@@ -455,7 +455,7 @@ function Detail({
               {d.news.map((n) => (
                 <li key={n.link}>
                   <a href={n.link} target="_blank" rel="noreferrer">{n.title}</a>
-                  <span className="pt-n"> {n.press} · {n.publishedAt.slice(5, 16).replace("T", " ")}</span>
+                  <span className="pt-n"> {n.press} · {fmtKst(n.publishedAt)}</span>
                 </li>
               ))}
             </ul>
@@ -477,7 +477,7 @@ function Detail({
                   ) : (
                     <span>{m.text.slice(0, 140)}</span>
                   )}
-                  <span className="pt-n"> {m.channelName} · {m.at.slice(5, 16).replace("T", " ")}</span>
+                  <span className="pt-n"> {m.channelName} · {fmtKst(m.at)}</span>
                 </li>
               ))}
             </ul>
