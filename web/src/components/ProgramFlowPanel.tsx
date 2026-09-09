@@ -53,12 +53,23 @@ function toEok(v: number): number {
  *
  * 증감(`213`)은 안 쓴다. 앞 줄과의 차이로 화면에서 직접 내는데, 그래야 1분·5분으로
  * 묶었을 때도 **묶은 구간의 증감**이 나온다(213 은 30초 구간 증감이라 묶으면 틀린다).
+ *
+ * ## 거래원 화면도 이걸 쓴다 (2026-09-09)
+ *
+ * 벤티지: "거래원의 프로그램이랑 일반 프로그램 탭이랑 같은 거 아니냐고."
+ *
+ * 같다. 그런데 거래원 화면은 **자기 점을 따로 찍고 있었다** — 거래원을 조회할 때
+ * 곁다리로 하나씩. 그래서 같은 종목·같은 값인데 한쪽은 08:00 부터 그려지고 한쪽은
+ * 「점이 1개뿐입니다」였다. 여기 하나를 두 화면이 같이 쓴다.
+ *
+ * `enabled` 는 **접혀 있을 때 안 부르려고** 있다 — 거래원 화면은 프로그램 칩을 눌러야
+ * 그림이 열리는데, 훅은 조건부로 못 부르므로 안에서 끈다.
  */
-function useProgramSeries(code: string): FlowSeriesData {
+export function useProgramSeries(code: string, enabled = true): FlowSeriesData {
   const [s, setS] = useState<FlowSeriesData>({ pts: [], day: "", stale: false });
 
   useEffect(() => {
-    if (!code) {
+    if (!code || !enabled) {
       setS({ pts: [], day: "", stale: false });
       return;
     }
@@ -114,7 +125,7 @@ function useProgramSeries(code: string): FlowSeriesData {
       alive = false;
       clearInterval(t);
     };
-  }, [code]);
+  }, [code, enabled]);
 
   return s;
 }

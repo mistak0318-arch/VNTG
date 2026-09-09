@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FlowSeries, useMinutePrices, type FlowSample, type FlowSeriesData } from "./FlowSeries";
 import { api, fmtNum, signClass, type BrokerFlow } from "../api";
 import { useLive } from "../useLive";
+import { useProgramSeries } from "./ProgramFlowPanel";
 
 /**
  * 거래원 — **누가 사고 누가 파나.**
@@ -147,27 +148,61 @@ export function BrokerFlowPanel({ code }: { code: string }) {
    * 창구는 실시간(0F)이 하루 종일 쌓이지만 이 둘은 REST 에만 있어서, 서버가 거래원을 조회할
    * 때(화면이 열려 있는 동안 30초마다) 시계열에 같이 찍어 둔 것을 읽는다. 그래서 창구 그래프보다
    * 점이 성글고, 화면을 안 본 시간은 빈다 — 밑에 그렇게 적는다.
+   *
+   * ⚠️ **프로그램은 예외다** (2026-09-09 고침 — 벤티지: "거래원의 프로그램이랑 일반 프로그램
+   * 탭이랑 같은 거 아니냐고").
+   *
+   * 같은 값이다. 그런데 이 화면은 위 문단대로 **자기 점을 새로 찍고 있었고**, 프로그램 탭은
+   * 서버가 `0w` 로 08:00 부터 쌓아 둔 것을 읽는다. 그래서 한 종목의 같은 수치가 한쪽은 온종일
+   * 그려지고 한쪽은 「점이 1개뿐입니다」였다 — 없는 이유가 아니라 **안 읽은 이유**다.
+   * 프로그램 탭이 쓰는 훅을 그대로 가져다 쓴다.
    */
-  const special: FlowSeriesData | null =
-    picked === "__fx" || picked === "__prog"
-      ? {
-          pts: (data?.series ?? [])
-            .map((p): FlowSample | null => {
-              if (picked === "__fx") {
-                if (!p.fx) return null;
-                return { t: p.t, buy: p.fx.buy, sell: p.fx.sell, net: p.fx.buy - p.fx.sell };
-              }
-              if (p.prog === undefined) return null;
-              /* 프로그램은 순매수만 있다 — 백만원을 억으로 접어 넣는다 */
-              const eok = Math.round(p.prog / 100);
-              return { t: p.t, buy: Math.max(0, eok), sell: Math.max(0, -eok), net: eok };
-            })
-            .filter((x): x is FlowSample => x !== null),
-          day: "",
-          stale: false,
-          live: true,
-        }
-      : null;
+  const progSeries = useProgramSeries(code, picked === "__prog");
+  const special: FlowSeriesData | null = (() => {
+    if (picked === "__prog") {
+      /* 서버가 쌓아 둔 것이 먼저. 그 종목을 아직 안 물었으면 예전처럼 우리가 찍은 성근 점으로 */
+      if (progSeries.pts.length >= 2) {
+        return {
+          ...progSeries,
+          /* 이 화면의 단위는 억이다 — 백만으로 온 것을 접는다 */
+          pts: progSeries.pts.map((p) => ({
+            t: p.t,
+            buy: Math.round(p.buy / 100),
+            sell: Math.round(p.sell / 100),
+            net: Math.round(p.net / 100),
+          })),
+        };
+      }
+      return {
+        pts: (data?.series ?? [])
+          .map((p): FlowSample | null => {
+            if (p.prog === undefined) return null;
+            /* 프로그램은 순매수만 있다 — 백만원을 억으로 접어 넣는다 */
+            const eok = Math.round(p.prog / 100);
+            return { t: p.t, buy: Math.max(0, eok), sell: Math.max(0, -eok), net: eok };
+          })
+          .filter((x): x is FlowSample => x !== null),
+        day: "",
+        stale: false,
+        live: true,
+      };
+    }
+    if (picked === "__fx") {
+      return {
+        pts: (data?.series ?? [])
+          .map((p): FlowSample | null =>
+            p.fx ? { t: p.t, buy: p.fx.buy, sell: p.fx.sell, net: p.fx.buy - p.fx.sell } : null,
+          )
+          .filter((x): x is FlowSample => x !== null),
+        day: "",
+        stale: false,
+        live: true,
+      };
+    }
+    return null;
+  })();
+  /* 프로그램이 서버 시계열로 그려지는가 — 밑에 적는 말이 달라진다 */
+  const progFromServer = picked === "__prog" && progSeries.pts.length >= 2;
 
   if (loading && !data) return <div className="empty">거래원 불러오는 중…</div>;
   if (error && !data) return <div className="error-banner">{error}</div>;
@@ -276,9 +311,15 @@ export function BrokerFlowPanel({ code }: { code: string }) {
               {shown.pts.length < 2 ? (
                 <div className="page-note">
                   아직 점이 <b>{shown.pts.length}개</b>뿐입니다.{" "}
-                  {isSpecial ? (
+                  {picked === "__prog" ? (
                     <>
-                      외국계·프로그램은 키움이 REST 로만 주어서 <b>이 화면이 열려 있는 동안</b> 30초마다
+                      프로그램은 서버가 실시간(<code>0w</code>)으로 쌓습니다 — 여기가 비었다는 건
+                      <b> 이 종목을 아직 안 물고 있다</b>는 뜻입니다. 화면을 연 종목은 그 자리에서
+                      구독하므로 30초쯤 뒤부터 채워집니다.
+                    </>
+                  ) : isSpecial ? (
+                    <>
+                      외국계는 키움이 REST 로만 주어서 <b>이 화면이 열려 있는 동안</b> 30초마다
                       쌓입니다 — 열어 두고 조금 기다리면 채워집니다.
                     </>
                   ) : (
@@ -300,8 +341,22 @@ export function BrokerFlowPanel({ code }: { code: string }) {
                   />
                   {isSpecial && (
                     <p className="table-note">
-                      외국계·프로그램은 이 화면이 열려 있는 동안만 쌓입니다 — 안 본 시간은 빕니다.
-                      {picked === "__prog" && " 프로그램은 순매수 한 줄이라 매수·매도 막대는 부호만 가릅니다."}
+                      {picked === "__prog" ? (
+                        progFromServer ? (
+                          <>
+                            <b>프로그램 탭의 그 값과 같은 것</b>입니다 — 서버가 실시간으로 쌓은 하루치를
+                            그대로 읽습니다(단위만 억). 화면을 안 보고 있어도 늘어납니다.
+                          </>
+                        ) : (
+                          <>
+                            서버가 이 종목을 아직 안 물어서, 이 화면이 열려 있는 동안 찍은 점으로 그립니다 —
+                            안 본 시간은 빕니다. 프로그램 탭과 같은 값입니다.
+                          </>
+                        )
+                      ) : (
+                        <>외국계는 이 화면이 열려 있는 동안만 쌓입니다 — 안 본 시간은 빕니다.</>
+                      )}
+                      {picked === "__prog" && " 순매수 한 줄이라 매수·매도 막대는 부호만 가릅니다."}
                     </p>
                   )}
                 </>
