@@ -938,11 +938,20 @@ export default function App() {
 
   if (route.tab === "mini") {
     return (
-      <MiniPage
-        stock={route.stock}
-        onSelect={(code, name) => navigate({ stock: { code, name } })}
-        onClear={() => navigate({ stock: null })}
-      />
+      <>
+        {/*
+          **미니창도 잠근다** (2026-09-09 — 벤티지 "미니창도 ctrl + q 누르면 잠기게 해줘").
+          `useScreenLock` 은 위에서 이미 돌고 있어 단축키는 미니창에서도 들렸다 —
+          그런데 덮개(`ScreenLock`)가 본창 갈래에만 있어서 **잠겼는데 아무 일도 안 났다.**
+          미니창이야말로 곁에 띄워 두는 창이라 자리를 뜰 때 가려져야 하는 쪽이다.
+        */}
+        {lock.locked && <ScreenLock onUnlock={lock.unlock} />}
+        <MiniPage
+          stock={route.stock}
+          onSelect={(code, name) => navigate({ stock: { code, name } })}
+          onClear={() => navigate({ stock: null })}
+        />
+      </>
     );
   }
 
