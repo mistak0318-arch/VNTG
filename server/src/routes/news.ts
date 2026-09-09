@@ -6,7 +6,7 @@ import { quarterFinance } from "../quarterFinance.js";
 import { peekSnapshot } from "../marketSnapshot.js";
 import { breakingNews, getDisclosures, newsCounts, searchNews, sectorNews } from "../newsDisclosure.js";
 import { mainNews, naverNews, type NaverCat } from "../naverMainNews.js";
-import { newsLeads } from "../newsLead.js";
+import { newsBody, newsLeads } from "../newsLead.js";
 import { listWatchlist } from "../watchlist.js";
 import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -163,6 +163,20 @@ export function createNewsRouter(client: KiwoomClient): Router {
    * world 해외증시 · estate 부동산. 한 쪽 20건, page 로 넘긴다.
    */
   /** 뉴스 카드 채우기 — 본문 앞 400자 + 관련 종목 (2026-09-08). 한 쪽치 링크를 한 번에 */
+  /** 기사 전문 — 시세분석 조회순위 팝업이 창 안에서 읽는다 (2026-09-09) */
+  router.get("/news/body", async (req, res, next) => {
+    try {
+      const link = String(req.query.link ?? "");
+      if (!/^https:\/\/n\.news\.naver\.com\//.test(link)) {
+        res.json({ text: "", reason: "네이버 뉴스 링크만 본문을 읽습니다" });
+        return;
+      }
+      res.json({ text: await newsBody(link) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.post("/news/naver/leads", async (req, res, next) => {
     try {
       const items = Array.isArray(req.body?.items) ? (req.body.items as { link: string; title: string; summary: string }[]) : [];

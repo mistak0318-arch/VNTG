@@ -18108,3 +18108,59 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 
 /* 「위/아래」 — 숫자를 읽는 말이라 숫자보다 작고 흐리게 (2026-09-09) */
 .sc-gap-w { font-size: 0.72em; color: var(--muted); font-weight: 500; }
+
+/* ── 시세분석 조회순위 — 새로 진입 · 버즈 · 팝업 (2026-09-09) ───────────────── */
+.scr-new {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: var(--red);
+  vertical-align: 1px;
+}
+.scr-buzz {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scr-buzz:hover { color: var(--text); border-color: var(--muted); }
+
+.buzz-sheet .sheet-header h2 { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.buzz-back { background: transparent; border: 0; color: var(--text); font-size: 0.95rem; cursor: pointer; padding: 0; }
+.buzz-tabs { margin: 8px 0; flex-wrap: wrap; }
+.buzz-words { font-size: 0.75rem; }
+.buzz-empty { padding: 20px 4px; text-align: center; }
+.buzz-list { list-style: none; margin: 0; padding: 0; }
+.buzz-item { padding: 9px 4px; border-top: 1px solid var(--border); cursor: pointer; }
+.buzz-item:hover { background: var(--panel-2); }
+.buzz-title { font-size: 0.88rem; line-height: 1.35; }
+.buzz-major { color: var(--red); font-style: normal; font-size: 0.5rem; margin-right: 4px; vertical-align: 2px; }
+.buzz-meta { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; margin-top: 2px; }
+.buzz-ext {
+  margin-left: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  padding: 0 6px;
+  cursor: pointer;
+}
+.buzz-ext:hover { color: var(--text); }
+.buzz-tg-text { white-space: pre-wrap; font-size: 0.82rem; line-height: 1.4; margin-top: 4px; word-break: break-word; }
+.buzz-tg-text.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.buzz-read-title { font-size: 1rem; line-height: 1.35; margin: 6px 0 4px; }
+.buzz-read-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.75rem; margin-bottom: 10px; }
+.buzz-body p { font-size: 0.9rem; line-height: 1.6; margin: 0 0 10px; word-break: break-word; }

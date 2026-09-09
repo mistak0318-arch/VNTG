@@ -6,6 +6,7 @@ import { getMarketSnapshot } from "../marketSnapshot.js";
 import { bare, extras, toNum } from "../rankExtras.js";
 import { getStockIndex } from "../stockListCache.js";
 import { flowRank, flowSums, SUBJECT_LABEL, type FlowSubject } from "../dailyStore.js";
+import { buzzDetail, buzzMany, markEntered } from "../inquiryBuzz.js";
 
 /**
  * 시세분석 — 레지스트리에 등록된 순위 조회를 하나의 라우트로 처리한다.
@@ -402,6 +403,47 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
     }
   });
 
+  /**
+   * **조회순위 버즈** (2026-09-09) — 줄마다 뉴스 N회 · 텔레그램 N회. `codes` 는 쉼표로,
+   * 이름은 종목 목록에서 찾는다(화면이 보내는 이름을 믿지 않는다 — 검색어가 된다).
+   */
+  router.get("/buzz", async (req, res, next) => {
+    try {
+      const codes = String(req.query.codes ?? "")
+        .split(",")
+        .map((c) => c.trim())
+        .filter((c) => /^\d{6}$/.test(c))
+        .slice(0, 40);
+      const index = await getStockIndex(client).catch(() => new Map());
+      const stocks = codes
+        .map((code) => ({ code, name: String(index.get(code)?.name ?? "").trim() }))
+        .filter((s) => s.name);
+      res.json({ items: await buzzMany(stocks), windowMin: 24 * 60 });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 눌렀을 때 — 그 종목의 24시간 뉴스·텔레그램 목록 */
+  router.get("/buzz/:code", async (req, res, next) => {
+    try {
+      const code = String(req.params.code);
+      if (!/^\d{6}$/.test(code)) {
+        res.status(400).json({ error: "종목코드가 아닙니다." });
+        return;
+      }
+      const index = await getStockIndex(client).catch(() => new Map());
+      const name = String(index.get(code)?.name ?? "").trim();
+      if (!name) {
+        res.status(404).json({ error: "없는 종목입니다." });
+        return;
+      }
+      res.json(await buzzDetail(code, name));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /*
    * ⚠️ **`/:key` 는 반드시 맨 아래.**
    * 무엇이든 받으므로 위에 두면 `/cumulative` 같은 이름난 경로를 **스펙 이름으로 먹는다** —
@@ -599,6 +641,17 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
             ? true
             : x.mkt === (market === "001" ? "코스피" : "코스닥"),
         );
+      /*
+       * 조회순위 — **새로 진입**을 찍는다. 시장을 거르기 전의 스무 종목이 기준이다
+       * (코스닥만 보다가 전체로 돌아왔을 때 코스피 종목이 전부 「새로」면 안 된다).
+       */
+      if (spec.key === "inquiry-rank") {
+        const entered = markEntered(
+          chosen.qry_tp ?? "1",
+          rows.slice(0, limit).map((r) => bare(r.stk_cd)),
+        );
+        for (const x of drawn) (x as Record<string, unknown>).enteredAt = entered.get(x.code) ?? null;
+      }
       res.json({
         spec: {
           key: spec.key,

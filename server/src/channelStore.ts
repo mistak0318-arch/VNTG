@@ -191,6 +191,57 @@ export async function search(words: string[], minutes: number): Promise<StoreSea
   return { hits, scanned, oldest, newest };
 }
 
+/**
+ * **여러 낱말 묶음을 한 번에 센다** (2026-09-09 — 시세분석 조회순위의 「텔레그램 N회」).
+ *
+ * 20종목을 `search()` 로 따로 부르면 같은 하루치 파일을 스무 번 읽는다. 여기서는 창고를
+ * **한 번만 훑고** 줄마다 어느 묶음에 걸리는지 센다. 판정은 `search()` 와 같다 —
+ * 날것으로 거르고, 정규화한 본문으로 확정한다. 같은 글이 두 종목에 걸리면 둘 다 센다.
+ */
+export async function countMany(
+  sets: { key: string; words: string[] }[],
+  minutes: number,
+): Promise<Map<string, number>> {
+  const cutoff = Date.now() - minutes * 60_000;
+  const cutDay = new Date(cutoff).toISOString().slice(0, 10);
+  const out = new Map<string, number>(sets.map((s) => [s.key, 0]));
+  const prepared = sets.map((s) => ({
+    key: s.key,
+    forms: needles(s.words).flat(),
+    words: s.words.map((w) => w.normalize("NFC").toLowerCase()),
+  }));
+  if (prepared.length === 0) return out;
+
+  for (const day of recentDays(KEEP_DAYS)) {
+    if (day < cutDay) break;
+    let raw: string;
+    try {
+      raw = await readFile(fileOf(day), "utf8");
+    } catch {
+      continue;
+    }
+    for (const line of raw.split("\n")) {
+      if (!line) continue;
+      const low = line.toLowerCase();
+      const cand = prepared.filter((p) => p.forms.some((f) => low.includes(f)));
+      if (cand.length === 0) continue;
+      let m: ChannelMessage;
+      try {
+        m = JSON.parse(line) as ChannelMessage;
+      } catch {
+        continue;
+      }
+      if (!m || !m.at || typeof m.text !== "string") continue;
+      if (new Date(m.at).getTime() < cutoff) continue;
+      const text = m.text.normalize("NFC").toLowerCase();
+      for (const p of cand) {
+        if (p.words.some((w) => text.includes(w))) out.set(p.key, (out.get(p.key) ?? 0) + 1);
+      }
+    }
+  }
+  return out;
+}
+
 /** 창고가 실제로 어디까지 닿나 — 검색이 「이만큼 봤다」를 말할 때 쓴다 */
 export async function coverage(): Promise<{ oldest: string | null; newest: string | null; lines: number }> {
   let oldest: string | null = null;

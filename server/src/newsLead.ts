@@ -34,6 +34,53 @@ function unescapeHtml(s: string): string {
     .replace(/&#39;|&apos;/g, "'");
 }
 
+/**
+ * **기사 전문** (2026-09-09 — 벤티지: "클릭하면 그 창 안에서 볼 수 있는 게 더 빠르게
+ * 확인할 수 있는 방법인 것 같아").
+ *
+ * 리드(앞 420자)와 같은 자리(`#dic_area`)를 읽되 자르지 않는다. 시세분석 조회순위에서
+ * 뉴스를 누르면 팝업 안에서 읽는 용도다 — 저장하지 않고(짧은 캐시뿐) 원문 링크를
+ * 늘 같이 단다. 문단은 `<br>`·`</p>` 자리에서 줄을 바꿔 둔다 — 한 덩어리면 못 읽는다.
+ */
+const fullCache = new Map<string, { at: number; text: string }>();
+
+export async function newsBody(link: string): Promise<string> {
+  /* 검색 API 는 `/mnews/article/` 링크를 준다 — 둘 다 같은 `#dic_area` 다 (2026-09-09 실측) */
+  if (!/n\.news\.naver\.com\/(mnews\/)?article\//.test(link)) return "";
+  const hit = fullCache.get(link);
+  if (hit && Date.now() - hit.at < TTL) return hit.text;
+  let text = "";
+  try {
+    const res = await fetch(link, { headers: { "user-agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) });
+    if (res.ok) {
+      const html = await res.text();
+      const m = html.match(/id="dic_area"[^>]*>([\s\S]*?)<\/article>/);
+      if (m) {
+        let t = m[1]
+          .replace(/<script[\s\S]*?<\/script>/g, " ")
+          .replace(/<style[\s\S]*?<\/style>/g, " ")
+          .replace(/<br\s*\/?>/g, "\n")
+          .replace(/<\/p>|<\/div>/g, "\n")
+          .replace(/<[^>]+>/g, " ");
+        t = unescapeHtml(t)
+          .split("\n")
+          .map((l) => l.replace(/\s+/g, " ").trim())
+          .filter(Boolean)
+          .join("\n");
+        text = t;
+      }
+    }
+  } catch {
+    /* 못 받으면 빈 채로 — 화면이 원문 링크를 안내한다 */
+  }
+  fullCache.set(link, { at: Date.now(), text });
+  if (fullCache.size > 200) {
+    const first = fullCache.keys().next().value;
+    if (first) fullCache.delete(first);
+  }
+  return text;
+}
+
 async function fetchLead(link: string): Promise<string> {
   const hit = cache.get(link);
   if (hit && Date.now() - hit.at < TTL) return hit.lead;
@@ -110,7 +157,7 @@ export async function newsLeads(items: { link: string; title: string; summary: s
     while (i < rows.length) {
       const k = i++;
       const it = rows[k];
-      const lead = /n\.news\.naver\.com\/article\//.test(it.link) ? await fetchLead(it.link) : "";
+      const lead = /n\.news\.naver\.com\/(mnews\/)?article\//.test(it.link) ? await fetchLead(it.link) : "";
       out[k] = { link: it.link, lead, stocks: matchStocks(`${it.title} ${lead || it.summary}`) };
     }
   };

@@ -1188,6 +1188,14 @@ export const api = {
    * main 주요 · flash 속보 · market 시황·전망 · company 기업·종목 · world 해외증시 · estate 부동산
    */
   /** 뉴스 카드 채우기 — 본문 앞 400자 + 관련 종목 (2026-09-08) */
+  /** 기사 전문 — 조회순위 팝업이 창 안에서 읽는다 (네이버 뉴스 링크만) */
+  newsBody: (link: string) => getJson<{ text: string; reason?: string }>(`/api/feed/news/body?link=${encodeURIComponent(link)}`),
+  /** 조회순위 줄의 뉴스·텔레그램 24시간 수 */
+  rankBuzz: (codes: string[]) =>
+    getJson<{ items: { code: string; news: number | null; tg: number | null }[]; windowMin: number }>(
+      `/api/rank/buzz?codes=${codes.join(",")}`,
+    ),
+  rankBuzzDetail: (code: string) => getJson<BuzzDetail>(`/api/rank/buzz/${code}`),
   newsLeads: (items: { link: string; title: string; summary: string }[]) =>
     postJson<{ leads: { link: string; lead: string; stocks: { code: string; name: string }[] }[] }>("/api/feed/news/naver/leads", { items }),
   newsNaver: (cat: NaverNewsCat, page = 1) =>
@@ -3592,6 +3600,8 @@ export interface RankResult {
     f_samo?: number | null;
     f_smart?: number | null;
     f_days?: number;
+    /** 조회순위 — 직전 응답에 없던 종목이면 들어온 시각, 아니면 null */
+    enteredAt?: string | null;
   })[];
 }
 
@@ -4413,6 +4423,16 @@ export interface NewsItem {
   publishedAt: string;
   major: boolean;
   summary: string;
+}
+
+/** 조회순위 「뉴스 N회 · 텔레그램 N회」를 눌렀을 때 — 24시간 안의 목록 (2026-09-09) */
+export interface BuzzDetail {
+  code: string;
+  name: string;
+  news: NewsItem[];
+  tg: { channelId: string; channelName: string; messageId: number; at: string; text: string; link: string; matched: string[] }[];
+  /** 텔레그램에서 찾은 낱말 — 종목명과 앞 네 글자 */
+  words: string[];
 }
 
 /** 섹터 뉴스는 점수·보도량 정보가 더 붙는다 */
