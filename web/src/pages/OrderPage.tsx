@@ -257,8 +257,6 @@ interface Prefill {
  * 모듈 변수에 둔다. 화면은 그걸 꺼내 쓰고 비운다 — 한 번 쓰고 버리는 쪽지다.
  */
 let pendingPrefill: Prefill | null = null;
-/** 주소에 `preview=1` 이 있었나 — 비워지기 전에 집어 둔다 */
-const PREVIEW_FLAG = typeof window !== "undefined" && /[?&]preview=1/.test(window.location.hash);
 
 function grabPrefill(): void {
   const p = readPrefill();
@@ -537,12 +535,7 @@ function orderLink(h: { code: string; name: string; ableQty: number; creditType:
 const devPreview = () =>
   window.location.port === "5173" &&
   /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname) &&
-  PREVIEW_FLAG;
-
-/*
- * ⚠️ **불러올 때 한 번 본다** (2026-09-09). 주소를 `#/` 로 비우게 되면서, 늦게 읽으면
- * 이미 지워진 뒤라 미리보기가 안 켜졌다. 쪽지(`grabPrefill`)와 같은 시점에 집어 둔다.
- */
+  /[?&]preview=1/.test(window.location.hash);
 
 export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
   const [status, setStatus] = useState<OrderStatus | null>(null);

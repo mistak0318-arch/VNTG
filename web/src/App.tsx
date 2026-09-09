@@ -561,18 +561,10 @@ export default function App() {
   const [listUD, setListUD] = useState<{ up: number; down: number } | null>(null);
   const superRunRef = useRef<string | null>(null);
   const reportRef = useRef<string | null>(null);
-  /* 지금 보고 있는 화면 — 폴링 콜백이 옛 값을 보지 않게 ref 로 든다 */
-  const tabRef = useRef(route.tab);
-  tabRef.current = route.tab;
   const refreshNavN = useCallback(() => {
     /* 보고 있는 화면의 새 소식은 이미 확인한 것 — 배지를 켜는 대신 본 것으로 적는다 */
     const seeing = (key: string, val: string): boolean => {
-      /*
-       * ⚠️ 예전엔 `location.hash` 를 봤다 (2026-09-09 고침). 주소를 `#/` 로 비우면서
-       * 늘 어긋나 **보고 있는 화면인데도 배지가 계속 켜졌다.** 지금 화면이 무엇인지는
-       * 라우트가 알고 있으므로 그걸 본다 — 주소가 아니라 상태가 답할 일이었다.
-       */
-      if (tabRef.current !== key) return false;
+      if (location.hash.slice(1) !== key) return false;
       try {
         localStorage.setItem(`vntg.seen.${key}`, val);
       } catch {
