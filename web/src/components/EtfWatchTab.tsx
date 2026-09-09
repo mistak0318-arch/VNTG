@@ -47,22 +47,22 @@ function heldLabel(iso: string): string {
 export function EtfWatchTab({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const [rows, setRows] = useState<EtfListRow[] | null>(null);
   const [items, setItems] = useState<WatchItem[] | null>(null);
-  const [groups, setGroups] = useState<string[]>([]);
-  const [group, setGroup] = useState<string>("");
+  /*
+   * 기본은 **ETF 그룹** (2026-09-09 — 벤티지: "etf 담기만 놔두고 다른건 안보여줘도 될듯").
+   * 「＋ ETF 담기」로 담은 것은 늘 이 그룹에 들어가므로 여기가 이 화면의 본 자리다.
+   * 칩을 한 번 더 누르면 관심종목의 ETF 전부(빈 그룹) — 다른 데서 담아 이 그룹 밖에 있는
+   * ETF 를 잃지 않게 한 길이다.
+   */
+  const [group, setGroup] = useState<string>(ETF_GROUP);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
-  /* 그룹 편집 (2026-08-27) — 켜면 그룹 줄에 ✎·✕ 가 붙고, 표에서 그룹을 넣고 뺀다 */
-  const [editing, setEditing] = useState(false);
-  const [newGroup, setNewGroup] = useState("");
-
   const load = useCallback(async () => {
     try {
-      const [etf, w, g] = await Promise.all([api.etfList(), api.watchlist(), api.watchGroups()]);
+      const [etf, w] = await Promise.all([api.etfList(), api.watchlist()]);
       setRows(etf.rows);
       setItems(w.items);
-      setGroups(g.groups);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오기 실패");
@@ -159,58 +159,10 @@ export function EtfWatchTab({ onSelectStock }: { onSelectStock: (code: string, n
 
   const candKeys = useListKeys(candidates, (r) => void addEtf(r), { itemClass: "" });
 
-  /* ── 그룹 편집 (2026-08-27) — 저장소가 관심종목과 같으니 그룹도 그쪽 API 를 그대로 쓴다 ── */
-  async function addGroup() {
-    const name = newGroup.trim();
-    if (!name) return;
-    setBusy(true);
-    try {
-      const r = await api.watchGroupAdd(name);
-      setGroups(r.groups);
-      setNewGroup("");
-      setGroup(name); // 만들자마자 그 그룹을 보고 있게 — 담으러 온 것이다
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "그룹 추가 실패");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function renameGroup(from: string) {
-    const next = window.prompt(`「${from}」의 새 이름`, from)?.trim();
-    if (!next || next === from) return;
-    try {
-      const r = await api.watchGroupRename(from, next);
-      setGroups(r.groups);
-      if (group === from) setGroup(next);
-      await load(); // 종목이 물고 있는 그룹 이름도 바뀐다
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "이름 변경 실패");
-    }
-  }
-
-  async function removeGroup(name: string) {
-    if (!window.confirm(`「${name}」 그룹을 지웁니다. 담긴 종목은 남고 그룹만 빠집니다.`)) return;
-    try {
-      const r = await api.watchGroupRemove(name);
-      setGroups(r.groups);
-      if (group === name) setGroup("");
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "그룹 삭제 실패");
-    }
-  }
-
-  /** 이 ETF 를 그 그룹에 넣거나 뺀다 — 한 종목이 여러 그룹에 들 수 있다 */
-  async function toggleGroup(code: string, g: string) {
-    try {
-      const r = await api.watchGroupToggle(code, g);
-      setItems(r.items);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "그룹 변경 실패");
-    }
-  }
-
+  /*
+   * 그룹 만들기·이름 바꾸기·지우기는 이 화면에서 뺐다 (2026-09-09 — 벤티지: "etf 담기만 놔두고
+   * 다른건 안보여줘도 될듯"). 저장소가 관심종목과 같으니 그 일은 관심종목 화면이 한다.
+   */
   async function removeEtf(code: string, name: string) {
     if (!window.confirm(`「${name}」을(를) 관심종목에서 뺍니다.`)) return;
     try {
@@ -246,72 +198,35 @@ export function EtfWatchTab({ onSelectStock }: { onSelectStock: (code: string, n
 
   return (
     <div>
+      {/*
+        그룹 줄은 **ETF 칩 하나 + 담기** 뿐이다 (2026-09-09 — 벤티지: "etf 메뉴에서 etf · etf 담기만
+        놔두고 다른건 안보여줘도 될듯").
+
+        예전엔 관심종목의 그룹 칩(전체·현미경·기본·점수대·매수직전…)과 「그룹 편집」이 통째로
+        여기 떴다. 저장소가 관심종목과 같아서 그대로 물려받은 것인데, 이 화면에서 볼 건 ETF 뿐이라
+        나머지 칩은 전부 0 이었다 — 열 개가 넘는 빈 단추가 화면 반을 차지했다. 그룹을 만들고
+        이름을 바꾸는 일은 관심종목 화면이 하면 된다.
+      */}
       <div className="filter-row">
         <button
-          className={`filter-btn ${!group ? "active" : ""}`}
-          onClick={() => setGroup("")}
+          className={`filter-btn ${group === ETF_GROUP ? "active" : ""}`}
+          onClick={() => setGroup(group === ETF_GROUP ? "" : ETF_GROUP)}
+          title={group === ETF_GROUP ? "ETF 그룹만 — 다시 누르면 관심종목의 ETF 전부" : "관심종목의 ETF 전부 — 다시 누르면 ETF 그룹만"}
         >
-          전체 {mine.length > 0 && <span className="pt-n">{mine.length}</span>}
+          {ETF_GROUP}
+          <span className="pt-n">
+            {" "}
+            {group === ETF_GROUP
+              ? (items ?? []).filter((it) => !it.divider && etfByCode.has(it.code) && (it.groups ?? []).includes(ETF_GROUP)).length
+              : mine.length}
+          </span>
         </button>
-        {groups.map((g) => (
-          <span className="etfw-gchip" key={g}>
-            <button
-              className={`filter-btn ${group === g ? "active" : ""}`}
-              onClick={() => setGroup(group === g ? "" : g)}
-            >
-              {g}
-              {/* 그 그룹에 담긴 ETF 수 — 비어 있는 그룹이 바로 보인다 */}
-              <span className="pt-n">
-                {" "}
-                {
-                  (items ?? []).filter((it) => !it.divider && etfByCode.has(it.code) && (it.groups ?? []).includes(g))
-                    .length
-                }
-              </span>
-            </button>
-            {editing && (
-              <>
-                <button className="etfw-gedit" onClick={() => void renameGroup(g)} title="이름 바꾸기">
-                  ✎
-                </button>
-                <button className="etfw-gedit" onClick={() => void removeGroup(g)} title="그룹 삭제">
-                  ✕
-                </button>
-              </>
-            )}
-          </span>
-        ))}
-        {editing ? (
-          <span className="etfw-gchip">
-            <input
-              className="ma-input uw-newgroup"
-              autoFocus
-              placeholder="새 그룹 이름"
-              value={newGroup}
-              onChange={(e) => setNewGroup(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void addGroup();
-                if (e.key === "Escape") setNewGroup("");
-              }}
-            />
-            <button className="filter-btn active" onClick={() => void addGroup()} disabled={busy || !newGroup.trim()}>
-              추가
-            </button>
-          </span>
-        ) : null}
         <button
           className={`filter-btn ${adding ? "active" : ""}`}
           onClick={() => setAdding((v) => !v)}
           title="ETF 이름·추적지수로 찾아 담습니다"
         >
           ＋ ETF 담기
-        </button>
-        <button
-          className={`filter-btn ${editing ? "active" : ""}`}
-          onClick={() => setEditing((v) => !v)}
-          title="그룹을 만들고 이름을 바꾸고 지웁니다 — 켜면 표에서 그룹을 넣고 뺄 수 있습니다"
-        >
-          {editing ? "편집 끝" : "✏ 그룹 편집"}
         </button>
       </div>
 
@@ -417,27 +332,8 @@ export function EtfWatchTab({ onSelectStock }: { onSelectStock: (code: string, n
                     <tr key={item.code} className="clickable" onClick={() => onSelectStock(item.code, item.name)}>
                       <td className="sticky-col">
                         <b>{etf.name}</b> <span className="pt-n">{item.code}</span>
-                        {/* 편집 중이면 그룹을 칩으로 눌러 넣고 뺀다 — 한 ETF 가 여러 그룹에 들 수 있다 */}
-                        {editing ? (
-                          <span className="etfw-gpick" onClick={(e) => e.stopPropagation()}>
-                            {groups.map((g) => {
-                              const on = (item.groups ?? []).includes(g);
-                              return (
-                                <button
-                                  key={g}
-                                  className={`jn-tag ${on ? "on" : ""}`}
-                                  onClick={() => void toggleGroup(item.code, g)}
-                                  title={on ? `「${g}」에서 빼기` : `「${g}」에 넣기`}
-                                >
-                                  {g}
-                                </button>
-                              );
-                            })}
-                          </span>
-                        ) : (
-                          (item.groups ?? []).length > 0 && (
-                            <i className="etfw-groups">{(item.groups ?? []).join(" · ")}</i>
-                          )
+                        {(item.groups ?? []).length > 0 && (
+                          <i className="etfw-groups">{(item.groups ?? []).join(" · ")}</i>
                         )}
                       </td>
                       <td className="num">{fmtNum(etf.price)}</td>
