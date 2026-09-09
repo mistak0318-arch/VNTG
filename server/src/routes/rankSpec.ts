@@ -51,6 +51,30 @@ function mapRow(row: Record<string, unknown>, spec: RankSpec): Record<string, un
   return out;
 }
 
+/**
+ * **기간 선택지는 한 벌뿐이다** (2026-09-09).
+ *
+ * 벤티지: "5일 10일 20일 이렇게 표현해줘 다른 부분(주포 순매수, 외국인 순매수 등)도
+ * 점검해서 동일한 기준으로 해주고."
+ *
+ * 점검해 보니 표기(「N일」)는 이미 같았는데 **목록이 갈려 있었다** — 누적등락률은
+ * `3·5·10·20·60`, 순매수 계열은 `1·5·10·20·60`. 같은 화면에서 조회를 옮기면 첫 단추가
+ * 3일이었다 1일이었다 했다. 곳마다 목록을 적어 두면 이렇게 갈린다.
+ *
+ * 합집합으로 세운다 — 쓰던 기간이 하나도 안 사라진다. 기본값은 둘 다 5일로 같았다.
+ */
+const SPAN_OPTIONS = [
+  { value: "1", label: "1일" },
+  { value: "3", label: "3일" },
+  { value: "5", label: "5일" },
+  { value: "10", label: "10일" },
+  { value: "20", label: "20일" },
+  { value: "60", label: "60일" },
+];
+
+/** 화면이 고르는 기간 — 그 밖의 값은 안 받는다 */
+const SPAN_VALUES = SPAN_OPTIONS.map((o) => Number(o.value));
+
 export function createRankSpecRouter(client: KiwoomClient): Router {
   const router = Router();
 
@@ -72,7 +96,13 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
   router.get("/cumulative", async (req, res, next) => {
     try {
       const market = typeof req.query.market === "string" ? req.query.market : "000";
-      const days = Math.min(Math.max(Number(req.query.days) || 5, 2), 60);
+      /*
+       * ⚠️ 바닥이 2 였다 (2026-09-09). 기간 선택지를 한 벌로 합치면서 1일이 생겼는데,
+       * 그대로 두면 **단추는 「1일」이라 적고 속으로는 2일을 재는** 꼴이 된다. 화면이
+       * 말하는 것과 서버가 세는 것이 다르면 그건 조용한 거짓말이다.
+       * 하루 누적은 곧 전일 대비라 계산도 멀쩡하다(`cs[len-1-days]`, 봉 두 개면 된다).
+       */
+      const days = Math.min(Math.max(Number(req.query.days) || 5, 1), 60);
       /*
        * **모집단을 500까지 연다** (2026-09-02). 예전 상한이 200 이었던 것은
        * 종목마다 일봉을 받아 260ms 씩 쉬어야 했기 때문이다 — 200종목이면 52초.
@@ -118,13 +148,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
               param: "days",
               label: "기간",
               def: "5",
-              options: [
-                { value: "3", label: "3일" },
-                { value: "5", label: "5일" },
-                { value: "10", label: "10일" },
-                { value: "20", label: "20일" },
-                { value: "60", label: "60일" },
-              ],
+              options: SPAN_OPTIONS,
             },
           ],
           note: r.note,
@@ -258,9 +282,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         return;
       }
       /* 화면이 고르는 기간 — 그 밖의 값은 안 받는다 */
-      const span = [1, 5, 10, 20, 60].includes(Number(req.query.span))
-        ? Number(req.query.span)
-        : 5;
+      const span = SPAN_VALUES.includes(Number(req.query.span)) ? Number(req.query.span) : 5;
       const limit = Math.min(Math.max(Number(req.query.limit) || 100, 20), 500);
       const market = ["000", "001", "101"].includes(String(req.query.market))
         ? String(req.query.market)
@@ -315,13 +337,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
               param: "span",
               label: "기간",
               def: "5",
-              options: [
-                { value: "1", label: "1일" },
-                { value: "5", label: "5일" },
-                { value: "10", label: "10일" },
-                { value: "20", label: "20일" },
-                { value: "60", label: "60일" },
-              ],
+              options: SPAN_OPTIONS,
             },
           ],
           note:
