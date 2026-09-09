@@ -81,3 +81,60 @@ export function scrubHash(): boolean {
   if (next !== window.location.hash) window.history.replaceState(null, "", next);
   return true;
 }
+
+/* ── 주소를 통째로 비운다 (2026-09-09) ──────────────────────────────────────
+ *
+ * 벤티지: "가릴수있다면 다 가려줘."
+ *
+ * 종목 신원을 걷어내고 나니 `#/screener`·`#/order` 같은 **화면 이름**이 남았다. 영어라
+ * 종목명만큼 티가 나지는 않지만 「order」 하나로도 짐작할 사람은 짐작한다. 주소창에는
+ * `vntgts.com/#/` 만 남긴다.
+ *
+ * ## 그런데 주소는 세 가지 일을 하고 있었다
+ *
+ *   ① **새로고침해도 그 화면** — 세션에 적어 두고 그리기 전에 되돌린다
+ *   ② **뒤로/앞으로** — 히스토리 **상태**에 실어 둔다. 주소가 같아도 칸은 쌓인다
+ *   ③ **링크**(`#/order?stk=…`) — 그대로 둔다. 읽힌 뒤에 비운다
+ *
+ * 셋 다 주소 없이 된다. 화면들(주문·보드 단독창)은 여전히 첫 렌더에서 해시를 읽으므로,
+ * **그리기 전에 되돌리고**(`restoreHash`) 다 읽은 뒤에 비운다(`blankHash`).
+ *
+ * ⚠️ 새로고침 순간에는 되돌린 주소가 **아주 잠깐** 보인다(첫 그림 전까지). 그 한 순간을
+ * 없애려면 화면들이 해시를 안 읽게 다 뜯어야 해서, 거기까지는 안 갔다.
+ */
+
+const HASH_KEY = "vntg.route.hash";
+
+/** 지금 주소를 창 세션에 적어 둔다 — 비운 뒤에도 새로고침에서 되살릴 수 있게 */
+export function saveHash(): void {
+  try {
+    const h = window.location.hash;
+    if (h && h !== "#/" && h !== "#") sessionStorage.setItem(HASH_KEY, h);
+  } catch {
+    /* 세션이 막혀 있으면 새로고침에서 기본 화면으로 — 동작은 그대로다 */
+  }
+}
+
+/**
+ * **그리기 전에** 부른다 — 적어 둔 주소를 되돌려 놓는다.
+ *
+ * 주문 화면은 모듈이 불러올 때, 보드 단독창은 첫 렌더에 해시를 읽는다. 그 둘이 읽을
+ * 것이 있어야 새로고침에서 보던 자리가 살아난다. 되돌리기는 `replaceState` 라
+ * 뒤로가기 기록을 안 늘린다.
+ */
+export function restoreHash(): void {
+  try {
+    const now = window.location.hash;
+    if (now && now !== "#/" && now !== "#") return; // 주소가 이미 뭔가 들고 있다(링크로 들어옴)
+    const saved = sessionStorage.getItem(HASH_KEY);
+    if (saved) window.history.replaceState(window.history.state, "", saved);
+  } catch {
+    /* 못 되돌리면 기본 화면으로 뜬다 */
+  }
+}
+
+/** 주소를 `#/` 로 비운다. 지금 칸의 히스토리 상태는 그대로 둔다(뒤로가기가 그걸 본다) */
+export function blankHash(): void {
+  if (window.location.hash === "#/" ) return;
+  window.history.replaceState(window.history.state, "", "#/");
+}

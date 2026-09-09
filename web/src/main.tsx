@@ -6,6 +6,7 @@ import { AppearanceProvider } from "./useAppearance";
 import { WatchedCodesProvider } from "./useWatchedCodes";
 import { SuperMarksProvider } from "./useSuperMarks";
 import { applyPushedPrefs, loadPrefs } from "./prefs";
+import { restoreHash } from "./urlPrivacy";
 import "./styles.css";
 import "./overview.css";
 /* 엑셀 모드는 색뿐 아니라 모양까지 바꿔서 규칙이 많다 — 파일을 따로 둔다 */
@@ -22,6 +23,15 @@ import "./keywordFlow.css";
  * 그래서 받아서 채운 다음에 그린다. 서버를 못 읽어도 `loadPrefs` 는 그냥 돌아오므로
  * 이 기기 값으로 평소처럼 뜬다.
  */
+/*
+ * **적어 둔 주소를 그리기 전에 되돌린다** (2026-09-09 — 벤티지 "가릴수있다면 다 가려줘").
+ *
+ * 주소는 `#/` 로 비워 두므로 새로고침하면 「어느 화면이었나」가 주소에 없다. 그 값은
+ * 창 세션에 있고, **여기서** 되돌려야 한다 — 주문 화면은 모듈이 불러올 때, 보드 단독창은
+ * 첫 렌더에 해시를 읽기 때문이다. 그린 뒤에 되돌리면 이미 늦다.
+ */
+restoreHash();
+
 void loadPrefs().then(() => {
   // 다른 기기가 배포한 기기별 설정(화면설정 등)이 있으면 렌더 전에 적용 — 도장이 중복을 막는다
   applyPushedPrefs();

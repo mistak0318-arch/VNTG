@@ -21,7 +21,14 @@ import { api, type BuzzTermDetail } from "../api";
  * 표시**한다 — 잘린 것을 원문이라고 보여 주면 안 된다.
  */
 export function BuzzSourcePage() {
-  const term = decodeURIComponent(new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("term") ?? "");
+  /*
+   * ⚠️ **첫 렌더에 한 번만 읽는다** (2026-09-09). 예전엔 렌더마다 주소를 읽었는데,
+   * 주소를 `#/` 로 비우면서 두 번째 렌더에 낱말이 빈 문자열이 되어 **화면이 통째로
+   * 비었다.** 주소는 이제 지나가는 값이라, 들어올 때 받아 두고 그걸 쓴다.
+   */
+  const [term] = useState(() =>
+    decodeURIComponent(new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("term") ?? ""),
+  );
   const [d, setD] = useState<BuzzTermDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [onlyFull, setOnlyFull] = useState(false);
