@@ -1,5 +1,6 @@
 import { OVERVIEW_CARDS, type OverviewSub } from "../overviewCards";
 import { useCardOrder } from "../useCardOrder";
+import { CardOrderList } from "./CardOrderList";
 
 /**
  * 시황 대시보드 카드 순서 — **설정에 둔다.**
@@ -35,9 +36,6 @@ function SubList({ sub }: { sub: OverviewSub }) {
   const keys = defs.map((d) => d.key);
   const cards = useCardOrder(`overview.${sub}`, keys);
 
-  // 화면에 보이는 차례대로 세운다 — 설정 목록이 실제 배치와 다르면 볼 이유가 없다
-  const ordered = [...defs].sort((a, b) => cards.orderOf(a.key) - cards.orderOf(b.key));
-
   return (
     <section className="cop-sub">
       <h3>
@@ -48,49 +46,8 @@ function SubList({ sub }: { sub: OverviewSub }) {
           </button>
         )}
       </h3>
-      {defs.length < 2 ? (
-        <div className="page-note">카드가 하나뿐이라 바꿀 것이 없습니다.</div>
-      ) : (
-        <ol className="cop-list">
-          {ordered.map((d) => (
-            /* 끌어서도 옮긴다 — 화살표와 같은 저장. 폰은 화살표 그대로 */
-            <li
-              className={`cop-row${cards.drag.cls(d.key)}`}
-              key={d.key}
-              {...cards.drag.props(d.key)}
-            >
-              <span className="cop-nm">{d.label}</span>
-              <span className="cop-move">
-                <button
-                  className="gt-move"
-                  onClick={() => cards.move(d.key, -1)}
-                  disabled={cards.isFirst(d.key)}
-                  title="앞으로"
-                >
-                  ▲
-                </button>
-                <button
-                  className="gt-move"
-                  onClick={() => cards.move(d.key, 1)}
-                  disabled={cards.isLast(d.key)}
-                  title="뒤로"
-                >
-                  ▼
-                </button>
-                {/* 여덟 번 누르게 만들지 않으려고 둔다 — 실제로 하려는 건 「맨 위에 두기」다 */}
-                <button
-                  className="gt-move"
-                  onClick={() => cards.toFront(d.key)}
-                  disabled={cards.isFirst(d.key)}
-                  title="맨 앞으로"
-                >
-                  ⤒
-                </button>
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
+      {/* 목록은 `CardOrderList` 한 벌 — 종목 시트의 톱니바퀴도 같은 것을 쓴다 (2026-09-09) */}
+      <CardOrderList items={defs.map((d) => ({ key: d.key, label: d.label }))} cards={cards} />
     </section>
   );
 }

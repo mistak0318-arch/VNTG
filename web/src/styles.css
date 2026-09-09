@@ -18028,3 +18028,15 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
  * 들어가 「수수료·세금 전」의 끝이 가렸다 — 그 단서야말로 안 가려야 하는 말이다.
  */
 .ord-pnl em { font-style: normal; font-size: 0.72rem; color: var(--muted); flex: 1 0 100%; }
+
+/* ── 종목 시트의 차례 바꾸기 (2026-09-09) ──────────────────────────────────
+ * 벤티지: "최상단에 톱니바퀴 설정 모양 하나 넣고, 아래 나오는 것들 순서 좀 변경하게."
+ *
+ * `order` 는 flex 자식에만 먹으므로 덩어리들을 감싸는 상자를 세로 flex 로 세운다.
+ * 칸 사이 여백은 여태 각 덩어리가 제 margin 으로 벌리고 있었다 — flex 로 바꿔도
+ * 그 값이 그대로 살아 있게 gap 을 안 준다(주면 두 겹이 되어 시트가 길어진다).
+ */
+.sheet-body { display: flex; flex-direction: column; }
+/* 감싼 한 겹이 자식의 폭·여백을 먹지 않게 — 상자는 자리만 정한다 */
+.sd-blk { min-width: 0; display: flex; flex-direction: column; }
+.sheet-order { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }

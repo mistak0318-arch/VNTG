@@ -9,6 +9,8 @@ import { StockTabsSection } from "./StockTabsSection";
 import { useLive } from "../useLive";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { CreditChip, useStockCredit } from "./CreditChip";
+import { useCardOrder } from "../useCardOrder";
+import { CardOrderList } from "./CardOrderList";
 
 /**
  * 종목 상세 시트.
@@ -33,6 +35,29 @@ import { CreditChip, useStockCredit } from "./CreditChip";
  */
 
 const CUR_PRICE_KEYS = ["cur_prc"];
+
+/**
+ * 시트 안의 **자리를 바꿀 수 있는 덩어리들** (2026-09-09).
+ *
+ * 벤티지: "최상단에 톱니바퀴 설정 모양 하나 넣고, 아래 나오는 것들 순서 좀 변경하게 할 수
+ * 있겠어? 현재가 나오고 당일흐름 나오게 하고 이런식으로. 중간에 서브메뉴 나오는 부분도
+ * 위치 조정하고 싶고."
+ *
+ * 무엇을 먼저 보는지는 사람마다·날마다 다르다. 여태 이 차례는 코드에 박혀 있어서 바꾸려면
+ * 나를 불러야 했다 — 그런 값은 설정이어야 한다.
+ *
+ * **탭 줄은 탭 내용과 한 덩어리다.** 「서브메뉴만」 위로 올리면 무엇을 고르는 줄인지 알 수
+ * 없어진다 — 고르는 것과 보이는 것은 붙어 있어야 한다. 그래서 통째로 옮긴다.
+ *
+ * 순서는 `useCardOrder` 가 **서버에 저장**하므로 폰에서 바꾸면 미니PC 에서도 그 차례다.
+ */
+const SHEET_CARDS: { key: string; label: string }[] = [
+  { key: "price", label: "현재가 (시·고·저·거래대금)" },
+  { key: "levels", label: "당일 흐름 (VWAP·시가갭·전일고저)" },
+  { key: "summary", label: "한 장 요약 (수급 흐름)" },
+  { key: "analysis", label: "넓은 화면으로 보기" },
+  { key: "tabs", label: "탭 (호가·거래원·종목토론…)" },
+];
 
 export function StockDetail({
   code,
@@ -80,6 +105,9 @@ export function StockDetail({
   /* 신용 칩 — 개별종목분석과 **같은 것** (2026-09-08, 벤티지 "클릭하고 나오는 창에는 안 뜨는구나") */
   const credit = useStockCredit(code);
   const watchedCodes = useWatchedCodes();
+  /* 시트 안 덩어리들의 차례 — 서버에 저장된다(`stockSheet` 이름표로) */
+  const cards = useCardOrder("stockSheet", SHEET_CARDS.map((c) => c.key));
+  const [orderOpen, setOrderOpen] = useState(false);
   const watched = watchedCodes.isWatched(code);
 
   /**
@@ -148,6 +176,17 @@ export function StockDetail({
           >
             {watched ? "★" : "☆"}
           </button>
+          {/*
+            차례 고치기 (2026-09-09) — 별·새로고침과 같은 손이다. 켜 두면 남지 않는다:
+            차례는 한 번 정하면 끝나는 값이라 늘 펼쳐 둘 이유가 없다.
+          */}
+          <button
+            className={`watch-btn${orderOpen ? " on" : ""}`}
+            onClick={() => setOrderOpen((v) => !v)}
+            title="이 시트에 나오는 것들의 차례 바꾸기"
+          >
+            ⚙
+          </button>
           <button
             className="watch-btn"
             onClick={() => live.refresh()}
@@ -166,19 +205,56 @@ export function StockDetail({
 
         {error && <div className="error-banner">{error}</div>}
 
-        <PriceHeader info={info} code={code} />
-        <IntradayLevelsBar code={code} />
-        {/* 한 장 요약 — 탭을 고르기 전에 「지금 어떤가」가 먼저 보여야 한다 */}
-        <StockSummaryPanel code={code} />
-
-        {onOpenAnalysis && (
-          <button className="analysis-link" onClick={() => onOpenAnalysis(code, name)}>
-            검색·최근 목록까지 있는 넓은 화면으로 보기 (개별종목분석) →
-          </button>
+        {/* 톱니바퀴를 누르면 여기서 바로 차례를 고친다 — 설정 화면까지 갈 일이 아니다 */}
+        {orderOpen && (
+          <section className="sheet-order">
+            <h3 className="section-heading">
+              이 시트의 차례
+              {cards.customized && (
+                <button className="filter-btn cop-reset" onClick={cards.reset}>
+                  원래대로
+                </button>
+              )}
+            </h3>
+            <CardOrderList items={SHEET_CARDS} cards={cards} />
+            <p className="table-note">
+              위에 있을수록 시트에서도 앞에 옵니다. <b>서버에 저장</b>되어 폰에서 바꾸면
+              미니PC 에서도 같은 차례입니다.
+            </p>
+          </section>
         )}
 
-        {/* 탭 안쪽은 개별종목분석과 같은 모듈이다 */}
-        <StockTabsSection code={code} name={name} info={info} onSelectStock={onSelectStock} />
+        {/*
+          자리를 바꿀 수 있게 **감싸는 상자 하나**를 둔다 (2026-09-09).
+          CSS `order` 는 flex 자식에만 먹으므로 이 상자가 있어야 하고, 각 덩어리를 한 겹
+          싸야 그 값을 줄 수 있다. JSX 를 재배열하지 않으므로 차례를 바꿔도 차트·스크롤
+          자리가 살아 있다(카드가 다시 만들어지지 않는다).
+        */}
+        <div className="sheet-body">
+          <div className="sd-blk" style={{ order: cards.orderOf("price") }}>
+            <PriceHeader info={info} code={code} />
+          </div>
+          <div className="sd-blk" style={{ order: cards.orderOf("levels") }}>
+            <IntradayLevelsBar code={code} />
+          </div>
+          {/* 한 장 요약 — 탭을 고르기 전에 「지금 어떤가」가 먼저 보여야 한다 */}
+          <div className="sd-blk" style={{ order: cards.orderOf("summary") }}>
+            <StockSummaryPanel code={code} />
+          </div>
+
+          {onOpenAnalysis && (
+            <div className="sd-blk" style={{ order: cards.orderOf("analysis") }}>
+              <button className="analysis-link" onClick={() => onOpenAnalysis(code, name)}>
+                검색·최근 목록까지 있는 넓은 화면으로 보기 (개별종목분석) →
+              </button>
+            </div>
+          )}
+
+          {/* 탭 안쪽은 개별종목분석과 같은 모듈이다 */}
+          <div className="sd-blk" style={{ order: cards.orderOf("tabs") }}>
+            <StockTabsSection code={code} name={name} info={info} onSelectStock={onSelectStock} />
+          </div>
+        </div>
       </div>
 
       {/* 그룹을 고르고 담는다. 담기 전엔 별이 안 켜진다 */}
