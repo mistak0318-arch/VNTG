@@ -38,9 +38,16 @@ export function buzzWords(name: string): string[] {
   return words;
 }
 
-/** 뉴스 수 캐시 — 검색 자체가 5분 캐시라 여기서는 계산만 아낀다 */
+/**
+ * 뉴스 수 캐시 — **15분** (2026-09-09 밤 — 벤티지 "시세분석 전 메뉴에 적용해줘").
+ *
+ * 조회순위 스무 줄일 땐 검색 캐시(5분)에 얹혀 갔는데, 이제 거래대금 상위 100줄에도
+ * 붙는다. 한 쪽 100종목 × 5분이면 시간당 1,200번 — 네이버 하루 한도(25,000)를 쓰기엔
+ * 아깝다. 수는 15분에 한 번이면 충분하다 — 「몇 건」은 분 단위로 바뀌는 값이 아니다.
+ * 검색 캐시(5분)에 아직 있으면 네이버에 안 가고 그걸 센다.
+ */
 const newsCountCache = new Map<string, { at: number; n: number }>();
-const NEWS_TTL = 5 * 60_000;
+const NEWS_TTL = 15 * 60_000;
 
 async function newsCount24h(name: string): Promise<number | null> {
   const hit = newsCountCache.get(name);
@@ -56,20 +63,34 @@ async function newsCount24h(name: string): Promise<number | null> {
   }
 }
 
-/** 텔레그램 수 — 종목 묶음 단위 캐시. 같은 20종목을 10초마다 물어도 창고는 5분에 한 번 */
-let tgCache: { key: string; at: number; counts: Map<string, number> } | null = null;
+/**
+ * 텔레그램 수 — **종목 단위** 캐시 (5분). 쪽을 넘기면 묶음이 달라지므로 묶음 단위로
+ * 두면 매번 창고를 다시 훑는다. 모르는 종목만 모아 한 번 훑고, 아는 것은 그대로 쓴다.
+ */
+const tgCountCache = new Map<string, { at: number; n: number }>();
 const TG_TTL = 5 * 60_000;
 
 async function tgCounts(stocks: { code: string; name: string }[]): Promise<Map<string, number> | null> {
-  const key = stocks.map((s) => s.code).sort().join(",");
-  if (tgCache && tgCache.key === key && Date.now() - tgCache.at < TG_TTL) return tgCache.counts;
+  const out = new Map<string, number>();
+  const missing: { code: string; name: string }[] = [];
+  for (const s of stocks) {
+    const hit = tgCountCache.get(s.code);
+    if (hit && Date.now() - hit.at < TG_TTL) out.set(s.code, hit.n);
+    else missing.push(s);
+  }
+  if (missing.length === 0) return out;
   try {
     const counts = await countMany(
-      stocks.map((s) => ({ key: s.code, words: buzzWords(s.name) })),
+      missing.map((s) => ({ key: s.code, words: buzzWords(s.name) })),
       WINDOW_MIN,
     );
-    tgCache = { key, at: Date.now(), counts };
-    return counts;
+    for (const s of missing) {
+      const n = counts.get(s.code) ?? 0;
+      tgCountCache.set(s.code, { at: Date.now(), n });
+      out.set(s.code, n);
+    }
+    if (tgCountCache.size > 3000) tgCountCache.clear();
+    return out;
   } catch {
     return null;
   }
@@ -80,7 +101,8 @@ async function tgCounts(stocks: { code: string; name: string }[]): Promise<Map<s
  * 뉴스 검색은 동시에 5개씩 — 네이버 검색 API 를 스무 개 한꺼번에 때리지 않는다.
  */
 export async function buzzMany(stocks: { code: string; name: string }[]): Promise<Buzz[]> {
-  const rows = stocks.slice(0, 40);
+  /* 한 쪽이 최대 100줄 — 그 이상은 화면이 나눠 묻는다 */
+  const rows = stocks.slice(0, 100);
   const news: (number | null)[] = new Array(rows.length).fill(null);
   let i = 0;
   const worker = async () => {
@@ -89,7 +111,7 @@ export async function buzzMany(stocks: { code: string; name: string }[]): Promis
       news[k] = await newsCount24h(rows[k].name);
     }
   };
-  const [tg] = await Promise.all([tgCounts(rows), ...Array.from({ length: 5 }, worker)]);
+  const [tg] = await Promise.all([tgCounts(rows), ...Array.from({ length: 6 }, worker)]);
   return rows.map((s, k) => ({
     code: s.code,
     news: news[k],

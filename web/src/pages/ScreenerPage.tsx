@@ -8,7 +8,7 @@ import { TopTradersTable } from "../components/TopTradersTable";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { fid, krxOverlayLive, krxRegularSession, useRealtime } from "../useRealtime";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
-import { BuzzSheet } from "../components/BuzzSheet";
+import { useBuzz } from "../components/BuzzBadge";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { useCardOrder } from "../useCardOrder";
 import { useAutoRefresh } from "../useAutoRefresh";
@@ -341,14 +341,6 @@ export function ScreenerPage({
    * 칸이면 폰에서도 들어가고, 셋을 펼치면 표가 다섯 칸 넓어진다.
    */
   const [flowDetail, setFlowDetail] = useState<boolean>(() => localStorage.getItem("vntg.screener.flowDetail") === "1");
-  /**
-   * **조회순위 버즈** (2026-09-09) — 줄마다 뉴스 N회 · 텔레그램 N회(24시간). 조회순위
-   * 스무 줄에만 붙는다 — 다른 순위는 100~500줄이라 종목마다 뉴스 검색을 부를 수 없다.
-   * 서버가 5분 캐시라 10초 갱신이 부하를 더하진 않는다.
-   */
-  const [buzz, setBuzz] = useState<Record<string, { news: number | null; tg: number | null }>>({});
-  /** 눌러서 연 종목 — 팝업 */
-  const [buzzOpen, setBuzzOpen] = useState<{ code: string; name: string } | null>(null);
   /* 신호등은 **켤 때만** — 목록을 여는 것만으로 백 종목을 평가하면 안 된다 */
   const [sigOn, setSigOn] = useState(false);
   const [editTabs, setEditTabs] = useState(false);
@@ -431,27 +423,6 @@ export function ScreenerPage({
     storeKey: "vntg.auto.screener",
     intervalMs: 10_000,
   });
-
-  /* 조회순위의 스무 종목이 정해지면 버즈를 묻는다 — 코드 묶음이 같으면 다시 안 묻는다 */
-  const buzzKey = rankKey === "inquiry-rank" ? (data?.rows ?? []).map((r) => r.code).join(",") : "";
-  useEffect(() => {
-    if (!buzzKey) return;
-    let alive = true;
-    api
-      .rankBuzz(buzzKey.split(","))
-      .then((r) => {
-        if (!alive) return;
-        const next: Record<string, { news: number | null; tg: number | null }> = {};
-        for (const it of r.items) next[it.code] = { news: it.news, tg: it.tg };
-        setBuzz(next);
-      })
-      .catch(() => {
-        /* 버즈는 곁가지 — 못 받아도 순위는 그대로 */
-      });
-    return () => {
-      alive = false;
-    };
-  }, [buzzKey]);
 
   /* 조회가 바뀌면 첫 장으로 — 3쪽을 보다가 다른 순위로 갔는데 3쪽이면 빈 화면이 뜬다 */
   useEffect(() => {
@@ -590,6 +561,11 @@ export function ScreenerPage({
   const shown = sort.sorted.slice(pageAt * pageSize, (pageAt + 1) * pageSize);
   /* 지금 쪽만 평가한다 — 안 볼 것을 미리 계산할 이유가 없다 */
   const signals = useSignalColumn(shown.map((r) => r.code), sigOn);
+  /*
+   * 뉴스·텔레그램 24시간 수 — **모든 순위**, 지금 보이는 쪽만 (2026-09-09 밤 — 벤티지
+   * "시세분석 전 메뉴에 적용해줘"). 처음엔 조회순위 스무 줄에만 붙였다.
+   */
+  const buzz = useBuzz(shown.map((r) => r.code));
 
   /*
    * 실시간 오버레이 (2026-08-25) — **이 쪽 줄들의 현재가·등락률을 1.5초로.**
@@ -1420,19 +1396,7 @@ export function ScreenerPage({
                           </i>
                         )}
                         {/* 뉴스·텔레그램 24시간 수 — 누르면 팝업에서 읽는다 */}
-                        {rankKey === "inquiry-rank" && buzz[r.code] && (
-                          <button
-                            className="scr-buzz"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setBuzzOpen({ code: r.code, name: r.name });
-                            }}
-                            title="24시간 안 뉴스·텔레그램 — 눌러서 읽기"
-                          >
-                            📰{buzz[r.code].news === null ? "?" : buzz[r.code].news! >= 100 ? "99+" : buzz[r.code].news}
-                            {" "}✈{buzz[r.code].tg === null ? "?" : buzz[r.code].tg}
-                          </button>
-                        )}
+                        {buzz.badge(r.code, r.name)}
                       </td>
                       {shownCols.map((c) => {
                           const v = cell(r[c.key], c.type);
@@ -1633,21 +1597,7 @@ export function ScreenerPage({
           </div>
         </div>
       )}
-      {buzzOpen && (
-        <BuzzSheet
-          code={buzzOpen.code}
-          name={buzzOpen.name}
-          onClose={() => setBuzzOpen(null)}
-          onSelectStock={
-            onSelectStock
-              ? (c, n) => {
-                  setBuzzOpen(null);
-                  onSelectStock(c, n);
-                }
-              : undefined
-          }
-        />
-      )}
+      {buzz.sheet(onSelectStock)}
     </div>
   );
 }

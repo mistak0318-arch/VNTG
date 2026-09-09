@@ -411,7 +411,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         .split(",")
         .map((c) => c.trim())
         .filter((c) => /^\d{6}$/.test(c))
-        .slice(0, 40);
+        .slice(0, 100);
       const index = await getStockIndex(client).catch(() => new Map());
       const stocks = codes
         .map((code) => ({ code, name: String(index.get(code)?.name ?? "").trim() }))

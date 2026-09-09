@@ -8,6 +8,7 @@ import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
+import { useBuzz } from "../components/BuzzBadge";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 
 // ka10131(기관외국인연속매매현황요청) 공식 문서 기준 확인된 필드명
@@ -74,6 +75,8 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
    */
   const [sigOn, setSigOn] = useState(false);
   const drawn = pager.slice(sort.sorted);
+  /* 뉴스·텔레그램 24시간 수 — 시세분석 표 넷이 같은 훅 (2026-09-09) */
+  const buzz = useBuzz(drawn.map((r) => String(r.stk_cd ?? "").replace(/_(AL|NX)$/, "")));
   const signals = useSignalColumn(
     drawn.map((r) => normalizeStockCode(String(r.stk_cd ?? ""))),
     sigOn,
@@ -159,6 +162,7 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
                       <WatchStar code={code} />
 <SuperMark code={code} />
                       {name}
+                      {buzz.badge(code, name)}
                     </td>
                     <td className={signClass(r.prid_stkpc_flu_rt)}>{fmtNum(r.prid_stkpc_flu_rt)}%</td>
                     <td className={signClass(r.orgn_cont_netprps_dys)}>{fmtNum(r.orgn_cont_netprps_dys)}</td>
@@ -182,6 +186,7 @@ export function ContinuousTradePage({ onSelectStock }: { onSelectStock: (code: s
         </div>
       )}
       <Pager pager={pager} total={sort.sorted.length} />
+      {buzz.sheet(onSelectStock)}
       <div className="table-note">HTS 0763(기관외국인연속매매현황) 참고 · ka10131 · 순매수 연속일 기준</div>
     </div>
   );

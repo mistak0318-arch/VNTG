@@ -2,6 +2,7 @@ import { Pager, usePager } from "./Pager";
 import { fmtNum, normalizeStockCode, signClass, type TopTraderRow } from "../api";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useSection } from "../useSection";
+import { useBuzz } from "./BuzzBadge";
 
 /**
  * 수익률 상위 고객 매매동향 (`ka04196`).
@@ -28,6 +29,8 @@ export function TopTradersTable({
   const pager = usePager(rows.length, "vntg.toptraders.pageSize", rows.length);
   // 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26). 정렬은 쪽 나누기 전에 건다
   const sort = useSortableTable<TopTraderRow>(rows);
+  /* 뉴스·텔레그램 24시간 수 — 시세분석 표 넷이 같은 훅 (2026-09-09) */
+  const buzz = useBuzz(pager.slice(sort.sorted).map((r) => normalizeStockCode(r.code)));
 
   if (loading && !data) return <div className="empty">불러오는 중…</div>;
   if (error && !data) return <div className="error-banner">{error}</div>;
@@ -56,7 +59,10 @@ export function TopTradersTable({
                 className={onSelectStock ? "clickable-row" : ""}
                 onClick={() => onSelectStock?.(normalizeStockCode(r.code), r.name)}
               >
-                <td className="sticky-col">{r.name}</td>
+                <td className="sticky-col">
+                  {r.name}
+                  {buzz.badge(normalizeStockCode(r.code), r.name)}
+                </td>
                 <td className="num">{fmtNum(r.price)}</td>
                 <td className={`num ${signClass(r.changeRate)}`}>
                   {r.changeRate > 0 ? "+" : ""}
@@ -77,6 +83,7 @@ export function TopTradersTable({
         </table>
       </div>
       <Pager pager={pager} total={rows.length} unit="번째" />
+      {buzz.sheet(onSelectStock)}
       {/*
         **열이 무슨 뜻인지 적는다** (2026-09-08 — 벤티지 "표에 순매수가 의미하는 게 뭐야?
         수익률 상위고객의 계좌에서 순매수 된 금액인가?"). 맞다. 그런데 화면에 그 말이 없어서

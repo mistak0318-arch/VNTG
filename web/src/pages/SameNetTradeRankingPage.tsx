@@ -9,6 +9,7 @@ import { SortableTh, useSortableTable } from "../useSortableTable";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
+import { useBuzz } from "../components/BuzzBadge";
 
 // ka10062(동일순매매순위요청) 공식 문서 기준 확인된 필드명
 const LIST_KEYS = ["eql_nettrde_rank"];
@@ -71,6 +72,8 @@ export function SameNetTradeRankingPage({
   /* 신호등 — 지금 쪽만, 켤 때만. 시세분석·거래상위·연속매매와 같은 규칙이다 */
   const [sigOn, setSigOn] = useState(false);
   const drawn = pager.slice(sort.sorted);
+  /* 뉴스·텔레그램 24시간 수 — 시세분석 표 넷이 같은 훅 (2026-09-09) */
+  const buzz = useBuzz(drawn.map((r) => String(r.stk_cd ?? "").replace(/_(AL|NX)$/, "")));
   const signals = useSignalColumn(
     drawn.map((r) => normalizeStockCode(String(r.stk_cd ?? ""))),
     sigOn,
@@ -155,6 +158,7 @@ export function SameNetTradeRankingPage({
                       <WatchStar code={code} />
 <SuperMark code={code} />
                       {name}
+                      {buzz.badge(code, name)}
                     </td>
                     <td className={signClass(r.pred_pre)}>{fmtAbsNum(r.cur_prc)}</td>
                     <td className={signClass(r.flu_rt)}>{fmtNum(r.flu_rt)}%</td>
@@ -176,6 +180,7 @@ export function SameNetTradeRankingPage({
         </div>
       )}
       <Pager pager={pager} total={sort.sorted.length} />
+      {buzz.sheet(onSelectStock)}
       <div className="table-note">HTS 0798(동일순매매순위) 참고 · ka10062 · 당일 기준</div>
     </div>
   );
