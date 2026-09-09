@@ -246,6 +246,9 @@ export async function refreshChannels(): Promise<ChannelEntry[]> {
  * @param maxPerChannel 채널당 최대 건수. 오래 안 돌렸다고 수천 건을 한 번에 끌어오면
  *                      AI 비용이 터지므로 상한을 둔다.
  */
+/** 텔레그램이 FLOOD_WAIT 로 시킨 휴식이 끝나는 시각(ms). 모든 루프가 함께 본다 */
+let floodUntil = 0;
+
 export async function fetchNewMessages(
   opts: {
     maxPerChannel?: number;
@@ -270,9 +273,20 @@ export async function fetchNewMessages(
      * 그것과 상관없이 읽어야 한다.
      */
     onlyIds?: string[];
+    /** 받은 글을 창고에 넣지 않는다 — 수집기처럼 직접 넣는 쪽이 켠다 */
+    noStore?: boolean;
   } = {},
 ): Promise<{ messages: ChannelMessage[]; channels: number; fetched: number; skipped: string[] }> {
-  const { maxPerChannel = 40, sinceMinutes = 60, useOffsets = true, onProgress, onlyIds } = opts;
+  const { maxPerChannel = 40, sinceMinutes = 60, useOffsets = true, onProgress, onlyIds, noStore = false } = opts;
+  /*
+   * **FLOOD_WAIT 를 기억한다** (2026-09-09 밤 — 전수 조사 P1). 예전엔 걸린 루프만 멈추고
+   * 초를 안 남겨서, 다른 루프(수집기·주요 채널·키워드)가 곧바로 또 때렸다. 텔레그램이
+   * 「N초 기다려라」고 했으면 그때까지는 누가 불러도 빈손으로 돌아간다.
+   */
+  if (Date.now() < floodUntil) {
+    const left = Math.ceil((floodUntil - Date.now()) / 1000);
+    return { messages: [], channels: 0, fetched: 0, skipped: [`FLOOD_WAIT ${left}초 남음 — 이번 회차 건너뜀`] };
+  }
   const c = await getClient();
 
   const only = onlyIds && onlyIds.length > 0 ? new Set(onlyIds) : null;
@@ -363,7 +377,12 @@ export async function fetchNewMessages(
       const msg = err instanceof Error ? err.message : String(err);
       void recordApiCall("telegram", "getMessages", "failed");
       skipped.push(`${ch.name}: ${msg.slice(0, 60)}`);
-      if (/FLOOD_WAIT/i.test(msg)) break; // 한 번 걸리면 더 밀어붙이지 않는다
+      if (/FLOOD_WAIT/i.test(msg)) {
+        /* 「FLOOD_WAIT_37」 — 초를 적어 두면 다른 루프도 그때까지 쉰다 */
+        const sec = Number(/FLOOD_WAIT_?(\d+)/i.exec(msg)?.[1] ?? 60);
+        floodUntil = Date.now() + Math.min(Math.max(sec, 10), 3600) * 1000;
+        break; // 한 번 걸리면 더 밀어붙이지 않는다
+      }
     }
 
     // 채널 사이 간격 — 몰아치면 계정 제한이 걸린다
@@ -376,6 +395,16 @@ export async function fetchNewMessages(
   void import("./buzzRadar.js")
     .then((m) => m.recordBuzz(forCount))
     .catch(() => undefined);
+  /*
+   * **창고에도 넣는다** (2026-09-09 밤). 창고를 채우는 게 수집기 하나뿐이라 주요 채널·
+   * 키워드·리포트가 받아 온 글은 버려졌다 — 같은 채널을 또 읽어야 검색에 잡혔다.
+   * 어느 루프가 받든 한 번 본 글은 창고에 있다. 중복은 저쪽이 키로 거른다.
+   */
+  if (!noStore) {
+    void import("./channelStore.js")
+      .then((m) => m.record(forCount))
+      .catch(() => undefined);
+  }
   // 최신 메시지가 위로 오게 — 화면에서도 요약에서도 "지금"이 먼저다
   messages.sort((a, b) => b.at.localeCompare(a.at));
   // channels 는 "대상 채널 수"라 켜둔 전체를 알려주는 게 맞다 (조회한 수는 fetched)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { notifyJobStarted } from "./RunningJobsBar";
 import { api, type ChannelReport, type PublishJob } from "../api";
 import { ProgressSteps } from "./ProgressSteps";
@@ -67,6 +67,22 @@ export function ChannelDigestPanel() {
 
   useEffect(load, []);
 
+  /*
+   * 폴링 타이머를 **손에 쥔다** (2026-09-09 밤 — 텔레그램 전수 조사 P0).
+   * 예전엔 지역 변수라 탭을 옮기면 내려간 컴포넌트에 계속 setState 했고, 서버 작업이
+   * `running` 인 채 멎으면(예: MTProto 가 굳음) 「가져오는 중…」이 영원했다 — 3회
+   * 실패 가드는 fetch 가 **던질 때**만 동작해서 200+running 은 못 끊었다.
+   */
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    },
+    [],
+  );
+  /** 이보다 오래 돌면 끊는다 — 창고에서 읽으면 몇 초, 직접 훑어도 2분이면 끝난다 */
+  const JOB_TIMEOUT_MS = 10 * 60_000;
+
   async function run(send: boolean) {
     const ai = mode === "ai";
     setBusy(send ? "send" : "view");
@@ -79,7 +95,15 @@ export function ChannelDigestPanel() {
       notifyJobStarted();
       // 리포트 발행과 같은 방식 — 곧바로 jobId 를 받고 2초마다 단계를 물어본다
       let misses = 0;
+      const startedAt = Date.now();
+      if (timerRef.current) clearInterval(timerRef.current);
       const timer = setInterval(async () => {
+        if (Date.now() - startedAt > JOB_TIMEOUT_MS) {
+          clearInterval(timer);
+          setBusy(null);
+          setNote("10분이 지나도 안 끝났습니다 — 서버 로그를 확인하세요. 새로고침 뒤 다시 시도.");
+          return;
+        }
         try {
           const j = await api.channelsReportStatus(jobId);
           misses = 0;
@@ -117,13 +141,19 @@ export function ChannelDigestPanel() {
           }
         }
       }, 2000);
+      timerRef.current = timer;
     } catch (err) {
       setNote(err instanceof Error ? err.message : "실패");
       setBusy(null);
     }
   }
 
-  const current = reports[open];
+  /*
+   * 방금 돌린 결과가 있으면 **그것**을 그린다. 「선별 원문」(AI 미호출)은 서버가 저장하지
+   * 않아 목록에 안 들어오는데, 예전엔 `reports[open]`(옛 저장본)을 그려서 「선별 23건」
+   * 이라 적어 놓고 아래엔 지난 AI 정리본이 그대로 있었다.
+   */
+  const current = fresh ?? reports[open];
 
   // 보고 있는 정리본이 오늘 것이 아니면 분명히 알린다.
   // 이걸 안 보여주면 어제 리포트를 오늘 상황으로 착각하게 된다.
@@ -219,8 +249,8 @@ export function ChannelDigestPanel() {
 
       {reports.length === 0 ? (
         <div className="page-note">
-          아직 정리된 기록이 없습니다. <b>채널 관리</b> 탭에서 읽을 채널을 먼저 켜주세요. 정기
-          발행은 07 / 12 / 18시입니다.
+          아직 정리된 기록이 없습니다. <b>설정 → 텔레그램 채널</b>에서 읽을 채널을 먼저 켜주세요.
+          정기 발행은 07 / 12 / 18시입니다.
         </div>
       ) : (
         <>

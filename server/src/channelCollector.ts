@@ -57,6 +57,8 @@ export async function collectOnce(): Promise<number> {
       sinceMinutes: WINDOW_MIN,
       useOffsets: false,
       maxPerChannel: PER_CHANNEL,
+      /* 창고 적재는 여기서 직접 한다 — 안의 훅까지 넣으면 `added` 가 0 으로 찍힌다 */
+      noStore: true,
     });
     const added = await record(messages);
     last = { at: new Date().toISOString(), got: messages.length, added, error: null };

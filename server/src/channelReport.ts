@@ -3,7 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { summarize } from "./summarize.js";
 import { sendTelegram } from "./telegram.js";
-import { fetchNewMessages, isReaderConfigured } from "./telegramReader.js";
+import { fetchNewMessages, isReaderConfigured, listChannels } from "./telegramReader.js";
+import * as store from "./channelStore.js";
 import {
   buildTagIndex,
   hhmmKst,
@@ -54,7 +55,12 @@ const SYSTEM_RULES = `당신은 한국 주식시장 정보를 정리하는 애�
 사용자 관심종목이 언급된 내용만. 없으면 "언급 없음".
 
 ## 눈에 띄는 단발 정보
-채널 하나에만 나왔지만 사실이라면 중요한 것. 반드시 미확인임을 밝힐 것.`;
+채널 하나에만 나왔지만 사실이라면 중요한 것. 반드시 미확인임을 밝힐 것.
+
+출력은 반드시 "## 오늘 돌고 있는 이야기" 로 시작합니다. 계획·검산·초안·영어 메모를 쓰지 마십시오 — 완성된 정리만 씁니다.`;
+
+/** 답이 시작해야 하는 머리글 — 이 앞에 붙은 것은 모델의 낙서다 */
+const ANSWER_ANCHOR = "## 오늘 돌고 있는 이야기";
 
 /** 60분 → "1시간", 90분 → "1시간 30분". 프롬프트와 화면이 같은 말을 쓰게 한다 */
 export function describeWindow(minutes: number): string {
@@ -175,8 +181,34 @@ export async function buildChannelReport(
   }
 
   progress.start("read");
-  const { messages, channels, skipped } = await fetchNewMessages({ sinceMinutes, useOffsets });
-  progress.done("read", `채널 ${channels}개 · 원본 ${messages.length}건`);
+  /*
+   * **창고부터 읽는다** (2026-09-09 밤 — 벤티지 "텔레그램 동향 부분은 우리 텔레그램
+   * 저장하는 로직을 아직 반영 안 한 거 같네?"). 맞았다 — 여기만 텔레그램을 직접
+   * 훑고 있었다. 71채널 × 350ms 라 몇 분씩 걸렸고(「가져오는 중…」이 그것), 채널당
+   * 40건 상한이라 12시간을 골라도 활발한 채널은 최근 40건뿐이었다.
+   *
+   * 수집기가 10분마다 30분 창으로 채우므로 창고의 최신 글이 **15분 안**이면 창고가
+   * 살아 있는 것이다 — 그때는 창고만 본다. 창고가 비었거나 낡았으면(수집기가 죽었거나
+   * 막 켜졌거나) 예전처럼 직접 훑되, 상한을 검색과 같은 규칙으로 넉넉히 준다.
+   *
+   * `useOffsets`(정기 발행의 「지난번 이후」)는 창고 경로에선 뜻이 없다 — 스케줄러가
+   * 이미 고정 구간을 준다. 라이브 폴백에서만 그대로 쓴다.
+   */
+  const enabledIds = new Set((await listChannels().catch(() => [])).filter((c) => c.enabled).map((c) => c.id));
+  const st = await store.recent(sinceMinutes, enabledIds).catch(() => null);
+  const storeFresh =
+    !!st && st.newest !== null && st.newest > new Date(Date.now() - 15 * 60_000).toISOString();
+  const { messages, channels, skipped } = storeFresh
+    ? { messages: st.messages, channels: new Set(st.messages.map((m) => m.channelId)).size, skipped: [] as string[] }
+    : await fetchNewMessages({
+        sinceMinutes,
+        useOffsets,
+        maxPerChannel: Math.max(40, Math.min(300, Math.round(sinceMinutes / 6))),
+      });
+  progress.done(
+    "read",
+    `${storeFresh ? "창고" : "텔레그램 직접"} · 채널 ${channels}개 · 원본 ${messages.length}건`,
+  );
   progress.start("tag");
   const watchNames = (await listWatchlist().catch(() => [])).map((w) => w.name);
 
@@ -277,7 +309,7 @@ export async function buildChannelReport(
   const prompt = `${SYSTEM_RULES}\n\n---\n지금 시각: ${now.toLocaleString("ko-KR")}\n수집 구간: 최근 ${describeWindow(sinceMinutes)} (${span})\n대상 채널 ${channels}개 · 원본 ${messages.length}건 중 ${items.length}건 선별\n\n${toDigestText(items)}`;
 
   progress.start("ai");
-  const res = await summarize(prompt, 2500, "channel");
+  const res = await summarize(prompt, 2500, "channel", { anchor: ANSWER_ANCHOR });
   if (res.error) progress.fail("ai", res.error);
   else progress.done("ai", `${res.outputTokens.toLocaleString("ko-KR")} 토큰`);
   report.summary = res.text;

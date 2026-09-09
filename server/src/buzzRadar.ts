@@ -269,6 +269,11 @@ let recording = false;
 const queued: ChannelMessage[] = [];
 
 export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
+  /*
+   * 누가 받아 왔든 글이 들어오면 「최근에 쌓였다」다 (2026-09-09 밤). 예전엔 자체 훑기만
+   * 이 시각을 올려서, 수집기가 10분마다 멀쩡히 돌아도 매시간 71채널을 또 훑었다.
+   */
+  if (messages.length > 0) lastCollectAt = Date.now();
   if (messages.length > 0) queued.push(...messages);
   if (queued.length === 0 || recording) return;
   recording = true;

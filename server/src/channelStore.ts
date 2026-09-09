@@ -192,6 +192,58 @@ export async function search(words: string[], minutes: number): Promise<StoreSea
 }
 
 /**
+ * **최근 `minutes` 분의 글 전부** (2026-09-09 밤 — 텔레그램 전수 조사 P0).
+ *
+ * 동향(채널 리포트)이 여태 텔레그램을 직접 훑었다 — 71채널 × 350ms 에 채널당 40건
+ * 상한이라, 몇 분씩 걸리고 12시간을 골라도 활발한 채널은 최근 40건뿐이었다. 창고는
+ * 수집기가 10분마다 30분 창으로 채우므로, 최근 글은 **여기 다 있다.** 파일 한두 개를
+ * 읽어 `at` 로 거르면 끝이다. `onlyIds` 를 주면 그 채널만(수집 대상에서 뺀 채널의
+ * 글이 다른 루프를 통해 들어와 있을 수 있다).
+ *
+ * 날것 줄에서 `"at":"…"` 를 먼저 뽑아 구간 밖이면 파싱하지 않는다. 같은 글이 두 번
+ * 적혀 있어도(재시작 뒤 첫 회차의 겹침) 키로 한 번만 센다. 최신순.
+ */
+export async function recent(
+  minutes: number,
+  onlyIds?: Set<string>,
+): Promise<{ messages: ChannelMessage[]; scanned: number; newest: string | null }> {
+  const cutoff = Date.now() - minutes * 60_000;
+  const cutIso = new Date(cutoff).toISOString();
+  const cutDay = cutIso.slice(0, 10);
+  const byKey = new Map<string, ChannelMessage>();
+  let scanned = 0;
+  let newest: string | null = null;
+  for (const day of recentDays(KEEP_DAYS)) {
+    if (day < cutDay) break;
+    let raw: string;
+    try {
+      raw = await readFile(fileOf(day), "utf8");
+    } catch {
+      continue;
+    }
+    for (const line of raw.split("\n")) {
+      if (!line) continue;
+      scanned += 1;
+      const atM = /"at":"([^"]+)"/.exec(line);
+      if (atM && atM[1] < cutIso) continue; // ISO 는 사전순이 곧 시간순이다
+      let m: ChannelMessage;
+      try {
+        m = JSON.parse(line) as ChannelMessage;
+      } catch {
+        continue;
+      }
+      if (!m || !m.at || typeof m.text !== "string") continue;
+      if (new Date(m.at).getTime() < cutoff) continue;
+      if (onlyIds && !onlyIds.has(m.channelId)) continue;
+      byKey.set(`${m.channelId}:${m.messageId}`, m);
+      if (!newest || m.at > newest) newest = m.at;
+    }
+  }
+  const messages = [...byKey.values()].sort((a, b) => b.at.localeCompare(a.at));
+  return { messages, scanned, newest };
+}
+
+/**
  * **여러 낱말 묶음을 한 번에 센다** (2026-09-09 — 시세분석 조회순위의 「텔레그램 N회」).
  *
  * 20종목을 `search()` 로 따로 부르면 같은 하루치 파일을 스무 번 읽는다. 여기서는 창고를
@@ -211,6 +263,8 @@ export async function countMany(
     words: s.words.map((w) => w.normalize("NFC").toLowerCase()),
   }));
   if (prepared.length === 0) return out;
+  /* 같은 글이 두 번 적혀 있을 수 있다(재시작 뒤 첫 회차의 겹침) — 한 번만 센다 */
+  const counted = new Set<string>();
 
   for (const day of recentDays(KEEP_DAYS)) {
     if (day < cutDay) break;
@@ -233,6 +287,9 @@ export async function countMany(
       }
       if (!m || !m.at || typeof m.text !== "string") continue;
       if (new Date(m.at).getTime() < cutoff) continue;
+      const key = `${m.channelId}:${m.messageId}`;
+      if (counted.has(key)) continue;
+      counted.add(key);
       const text = m.text.normalize("NFC").toLowerCase();
       for (const p of cand) {
         if (p.words.some((w) => text.includes(w))) out.set(p.key, (out.get(p.key) ?? 0) + 1);
