@@ -22,6 +22,8 @@ export interface Candle {
   low: number;
   close: number;
   volume: number;
+  /** 거래대금(백만원) — 있으면 말풍선에 억 단위로 (벤티지 2026-09-09 "거래량 밑에 거래대금 정보도") */
+  value?: number;
 }
 
 /*
@@ -848,6 +850,17 @@ export function CandleChart({
         `<div class="ct-row"><span>${label}</span><b class="${rateCls(value, base)}">${won(value)}</b>` +
         `<i class="${rateCls(value, base)}">${rate(value, base)}</i></div>`;
 
+      /* 백만원 → 억 (1조 넘으면 조). 전일 대비 %는 거래량과 같은 문법 */
+      const valueEok = (mw: number): string => {
+        const eok = mw / 100;
+        return eok >= 10000 ? `${(eok / 10000).toFixed(1)}조` : `${Math.round(eok).toLocaleString("ko-KR")}억`;
+      };
+      const valueRate = (): string => {
+        const pv = prev?.value;
+        if (!pv || cur.value === undefined) return "";
+        const r = ((cur.value - pv) / pv) * 100;
+        return `${r > 0 ? "+" : ""}${r.toFixed(2)}%`;
+      };
       const volRate =
         prev && prev.volume > 0
           ? `${cur.volume >= prev.volume ? "+" : ""}${(((cur.volume - prev.volume) / prev.volume) * 100).toFixed(2)}%`
@@ -881,7 +894,10 @@ export function CandleChart({
         // 종가는 늘 보인다. 이것까지 끄면 말풍선을 띄울 이유가 없다
         row("종가", cur.close) +
         (pf.tip.includes("volume")
-          ? `<div class="ct-row"><span>거래량</span><b>${won(cur.volume)}</b><i>${volRate}</i></div>`
+          ? `<div class="ct-row"><span>거래량</span><b>${won(cur.volume)}</b><i>${volRate}</i></div>` +
+            (cur.value !== undefined && cur.value > 0
+              ? `<div class="ct-row"><span>거래대금</span><b>${valueEok(cur.value)}</b><i>${valueRate()}</i></div>`
+              : "")
           : "") +
         (maRows ? `<div class="ct-sub">가격 이동평균</div>${maRows}` : "");
 

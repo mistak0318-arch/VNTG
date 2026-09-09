@@ -125,6 +125,82 @@ export function SupplyMiniCharts({ code }: { code: string }) {
   );
 }
 
+/**
+ * **거래량 흐름** (2026-09-09 밤 — 벤티지 "프로그램 수급 밑에 외국인 지분율 나오기 전에 거래량
+ * 그래프도 한 번 보여줄래? … 거래량이 많아지고 있는지 적어지고 있는지. 시장의 관심이 어떤지").
+ *
+ * 일봉(`dailyChart`, 이미 다른 자리에서도 받는 조회)에서 최근 90일 거래량을 막대로, 그 위에
+ * **20일 평균 거래량**을 선으로 얹는다 — 막대가 평균선 위로 올라오면 관심이 붙는 중이고
+ * 아래로 가라앉으면 식는 중이다. 주가는 왼쪽 축에 얇게 같이 둔다(지분율 그래프와 같은 문법).
+ */
+export function VolumeFlowChart({ code }: { code: string }) {
+  const [rows, setRows] = useState<RawRecord[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setRows(null);
+    api
+      .dailyChart(code)
+      .then((d) => {
+        if (!alive) return;
+        const list = ((d as RawRecord).stk_dt_pole_chart_qry as RawRecord[] | undefined) ?? [];
+        setRows(list);
+      })
+      .catch(() => alive && setRows([]));
+    return () => {
+      alive = false;
+    };
+  }, [code]);
+  if (rows === null) return <div className="empty">거래량 불러오는 중...</div>;
+  if (rows.length === 0) return null;
+
+  /* 최신순 → 과거순. 20일 평균은 뒤(과거)에서부터 굴린다 */
+  const asc = [...rows].reverse();
+  const vol = asc.map((r) => Math.abs(num(r.trde_qty)));
+  const avg20: (number | null)[] = vol.map((_, i) =>
+    i >= 19 ? vol.slice(i - 19, i + 1).reduce((a, b) => a + b, 0) / 20 : null,
+  );
+  const last = asc.length;
+  const from = Math.max(0, last - 90);
+  const bars: TrendSeries["data"] = [];
+  const avgLine: TrendSeries["data"] = [];
+  const price: TrendSeries["data"] = [];
+  for (let i = from; i < last; i += 1) {
+    const time = toBusinessDay(String(asc[i].dt ?? ""));
+    if (!time) continue;
+    bars.push({ time, value: vol[i] });
+    if (avg20[i] !== null) avgLine.push({ time, value: avg20[i] as number });
+    price.push({ time, value: Math.abs(num(asc[i].cur_prc)) });
+  }
+  const todayV = vol[last - 1] ?? 0;
+  const a20 = avg20[last - 1];
+  const ratio = a20 ? todayV / a20 : null;
+  return (
+    <>
+      <h3 className="section-heading">
+        거래량 흐름
+        {ratio !== null && (
+          <span className={`pt-n ${ratio >= 1.5 ? "positive" : ratio < 0.7 ? "negative" : ""}`} style={{ marginLeft: 8, fontWeight: 400, fontSize: "0.8rem" }}>
+            오늘 = 20일 평균의 <b>{ratio.toFixed(1)}배</b>
+          </span>
+        )}
+      </h3>
+      <div className="chart-wrap">
+        <TrendLineChart
+          height={180}
+          series={[
+            { label: "주가", color: "#8b96a5", axis: "left", data: price },
+            { label: "거래량", color: "rgba(96, 165, 250, 0.55)", axis: "right", type: "histogram", data: bars },
+            { label: "20일 평균 거래량", color: "#f59e0b", axis: "right", data: avgLine },
+          ]}
+        />
+      </div>
+      <div className="table-note">
+        최근 90일 · 막대가 주황 선(20일 평균) 위면 관심이 붙는 중, 아래면 식는 중입니다. 1.5배 넘으면 붉게, 0.7배 아래면 파랗게 적습니다.
+      </div>
+    </>
+  );
+}
+
 type SubTab = "foreign" | "short" | "lending";
 
 const SUB_TABS: { key: SubTab; label: string }[] = [

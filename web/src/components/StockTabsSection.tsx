@@ -14,7 +14,7 @@ import { StockBoardPanel } from "./StockBoardPanel";
 import { SectorMoodPanel } from "./SectorMoodPanel";
 import { SignalPanel } from "./SignalLight";
 import { StockNotes } from "./StockNotes";
-import { SupplyDetailPanel, SupplyMiniCharts } from "./SupplyDetailPanel";
+import { SupplyDetailPanel, SupplyMiniCharts, VolumeFlowChart } from "./SupplyDetailPanel";
 import { TabScroller } from "./TabScroller";
 import { TradeSizePanel } from "./TradeSizePanel";
 import { OrderBookPanel } from "./OrderBookPanel";
@@ -332,6 +332,8 @@ export function StockTabsSection({
             <InvestorTrendTable rows={investorRows} onNeedDays={setInvestorDays} />
             <h3 className="section-heading">프로그램 수급</h3>
             <ProgramFlowBars code={code} />
+            {/* 거래량 흐름 — 프로그램 수급 다음, 외국인 지분율 앞 (2026-09-09 벤티지 요청) */}
+            <VolumeFlowChart code={code} />
             <SupplyMiniCharts code={code} />
           </>
         )}

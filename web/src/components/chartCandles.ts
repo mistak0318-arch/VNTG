@@ -75,6 +75,8 @@ export function toCandles(chart: RawRecord | null, period: Period): Candle[] {
       low: Math.abs(Number(c.low_pric)),
       close: Math.abs(Number(c.cur_prc)),
       volume: Math.abs(Number(c.trde_qty)),
+      /* 거래대금(백만원) — 일·주·월봉만 준다. 분봉은 없어 undefined (2026-09-09) */
+      value: Number.isFinite(Number(c.trde_prica)) && c.trde_prica !== undefined ? Math.abs(Number(c.trde_prica)) : undefined,
     };
     if (![candle.open, candle.high, candle.low, candle.close].every(Number.isFinite)) continue;
     out.push(candle);
