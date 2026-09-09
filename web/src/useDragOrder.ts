@@ -23,7 +23,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
  *   · 그 전에 **8px** 넘게 움직이면 넘기기로 보고 놓아 준다
  *   · 잡힌 뒤에는 `touchmove` 를 막아 화면이 안 밀린다(수동 리스너로 등록해야 막힌다)
  *
- * 마우스는 그 기다림이 필요 없다 — 마우스로는 화면을 밀지 않으므로 **바로** 잡는다.
+ * 마우스는 기다리지 않되 **누르는 것만으로는 안 잡는다** — 8px 넘게 움직여야 끌기다.
+ * 누르는 순간 잡았더니 그냥 클릭까지 끌기로 보아 삼켰다(아래 `onMove` 의 경위).
  *
  * ## 부르는 쪽은 안 바뀐다
  *
@@ -102,6 +103,7 @@ export function useDragOrder(current: string[], commit: (next: string[]) => void
     /* 왼쪽 단추(또는 터치)만. 오른쪽 단추로 끌지는 않는다 */
     if (e.button !== 0) return;
     const touch = e.pointerType !== "mouse";
+    const pointerId = e.pointerId;
     const x0 = e.clientX;
     const y0 = e.clientY;
     let armed = false;
@@ -128,19 +130,39 @@ export function useDragOrder(current: string[], commit: (next: string[]) => void
       if (armed) ev.preventDefault();
     };
     const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return; // 두 번째 손가락은 첫 손가락의 끌기를 건드리지 않는다
       if (!armed) {
-        /* 아직 안 잡혔는데 많이 움직였다 → 넘기기다. 물러난다 */
-        if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > SLOP_PX) end(null);
+        const moved = Math.hypot(ev.clientX - x0, ev.clientY - y0) > SLOP_PX;
+        if (!moved) return;
+        /*
+         * ⚠️ **마우스는 움직여야 잡힌다** (2026-09-09 재검토에서 잡힘 — 치명).
+         *
+         * 처음엔 마우스를 누르는 순간 잡았다. 그러면 **그냥 클릭**도 잡혀서 `.drag-src`
+         * (`pointer-events:none`)가 붙고, 놓을 때 `elementFromPoint` 가 자기 자신을 못
+         * 찾아 대상이 `null` — 그런데 잡힌 상태라 「끌고 난 클릭」으로 보고 삼켰다.
+         * 결과: **PC 에서 탭·표 머리 정렬·탭 닫기 ✕ 가 전부 안 눌렸다.** 폰은 탭이
+         * 300ms 안이라 안 잡혀서 멀쩡했고, 그래서 폰으로만 확인한 날 못 본 것이다.
+         *
+         * 터치는 8px 넘게 움직이면 넘기기라 놓아 주고, 마우스는 8px 넘게 움직여야 비로소
+         * 끌기다. 같은 문턱을 반대로 읽는다 — 마우스로는 화면을 밀 일이 없으니.
+         */
+        if (touch) end(null);
+        else arm();
         return;
       }
       const k = keyAt(ev.clientX, ev.clientY);
       setOver((prev) => (prev === k ? prev : k));
     };
     const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
       const k = armed ? keyAt(ev.clientX, ev.clientY) : null;
       end(k);
     };
     const onCancel = () => end(null);
+    /* 안드로이드는 ~500ms 누르면 글자 선택·메뉴가 뜬다 — 잡힌 동안엔 그걸 막는다 */
+    const onCtx = (ev: Event) => {
+      if (armed) ev.preventDefault();
+    };
 
     function end(target: string | null) {
       if (holdTimer) clearTimeout(holdTimer);
@@ -149,6 +171,7 @@ export function useDragOrder(current: string[], commit: (next: string[]) => void
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
       window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("contextmenu", onCtx);
       cleanup.current = null;
       if (armed) {
         /*
@@ -173,10 +196,10 @@ export function useDragOrder(current: string[], commit: (next: string[]) => void
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
     window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("contextmenu", onCtx);
 
-    /* 마우스는 기다릴 이유가 없다 — 마우스로는 화면을 밀지 않는다 */
+    /* 터치는 길게 눌러 잡고, 마우스는 움직여야 잡는다(`onMove`) — 누르는 것만으로는 아무 일도 없다 */
     if (touch) holdTimer = setTimeout(arm, HOLD_MS);
-    else arm();
   };
 
   return {

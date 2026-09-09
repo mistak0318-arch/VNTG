@@ -100,7 +100,18 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
       res.write(": hi\n\n");
 
       const want = new Set(keys);
+      /*
+       * 장부에 올린다 — 닫힐 때 내린다(`req.on("close")`).
+       *
+       * ⚠️ 2026-09-09 재검토에서 잡힘: 처음 붙일 때 **이 증가 코드가 빠진 채** 커밋됐다.
+       * 닫힐 때 빼는 코드만 있어서 장부가 영영 0 이었고, 그걸 보고 「아직 아무 화면도 안
+       * 붙었다」고 읽었다 — 스트림은 붙고 있었다. 장부가 못 센 것이다.
+       */
+      streamStats.open += 1;
+      streamStats.opened += 1;
+      streamStats.keyCounts.push(keys.length);
       const send = (key: string, at: number, values: Record<string, string>) => {
+        streamStats.lastSentAt = new Date().toISOString();
         res.write(`data: ${JSON.stringify({ key, at, values })}\n\n`);
       };
 

@@ -106,10 +106,19 @@ function plain(html: string): string {
 
 const cache = new Map<string, { at: number; page: BoardPage }>();
 
+/** 캐시가 커지지 않게 — 넣을 때마다 묵은 것을 턴다 (2026-09-09 재검토에서 잡힘: 무한히 자라고 있었다) */
+function prune(): void {
+  const now = Date.now();
+  for (const [k, v] of cache) if (now - v.at >= TTL_MS) cache.delete(k);
+}
+
 export async function naverBoard(code: string, offset?: string): Promise<BoardPage> {
+  /* 코드가 비면 네이버까지 안 간다 — `itemCode=` 로 나가던 헛호출 (재검토에서 잡힘) */
+  if (!/^\d{6}$/.test(code)) return { posts: [], next: null, error: "종목코드가 아닙니다" };
   const key = `${code}|${offset ?? ""}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.page;
+  prune();
 
   const url =
     `${BASE}?discussionType=domesticStock&itemCode=${encodeURIComponent(code)}&size=20` +
@@ -127,7 +136,10 @@ export async function naverBoard(code: string, offset?: string): Promise<BoardPa
     });
     if (!res.ok) {
       void recordApiCall("naver", "discussion", "failed");
-      return { posts: [], next: null, error: `네이버 응답 ${res.status}` };
+      /* 실패도 30초 기억한다 — 막힌 네이버를 탭 누를 때마다 다시 때리면 그게 곧 예의 없음이다 */
+      const page: BoardPage = { posts: [], next: null, error: `네이버 응답 ${res.status}` };
+      cache.set(key, { at: Date.now(), page });
+      return page;
     }
     const j = (await res.json()) as {
       isSuccess?: boolean;

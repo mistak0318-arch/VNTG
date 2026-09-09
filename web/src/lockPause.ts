@@ -71,3 +71,45 @@ export function useLockPaused(): boolean {
     () => false,
   );
 }
+
+/* ── 잠긴 동안은 서버로 아무것도 안 나간다 (2026-09-09 재검토) ──────────────
+ *
+ * `useRealtime`·`useLive`·시계열 폴링에 하나씩 게이트를 달았는데, 실측하니 잠근 뒤에도
+ * 20초에 28건이 나갔다 — 알림 종·나가는 작업·신호등 배지·헤더 티커처럼 **저마다 `setInterval`
+ * 을 도는 폴러가 열넷**이었다. 하나씩 쫓으면 새 폴러가 생길 때마다 또 샌다(이 앱에서 그런
+ * 목록은 늘 샜다). 프록시 로그엔 경로가 뭐든 vntgts.com 한 줄이라, 하나만 남아도 「잠갔는데
+ * 접속 중」으로 찍힌다.
+ *
+ * 그래서 **한 곳에서** 막는다: 잠긴 동안 `/api/` 로 가는 fetch 를 가로채 곧바로 거절한다.
+ * 폴러들은 전부 `.catch(() => …)` 로 실패를 삼키므로 화면이 깨지지 않고, 풀리면 다음
+ * 주기에 저절로 이어진다. 응답을 안 주고 매달아 두면 약속이 쌓이므로 **거절**이다.
+ *
+ * 예외 둘.
+ *   · `/api/settings/ui` — 잠금 표식 자체를 서버에 올리는 길. 막으면 다른 기기가 잠긴 줄 모른다.
+ *   · `/api/auth/` — 로그인 문. ⚠️ 잠긴 채 새로고침하면 `LoginGate` 가 `/api/auth/state` 를
+ *     받기 전까지 **아무것도 안 그린다**. 이걸 막으면 잠금 화면조차 못 뜨고 빈 화면에 갇힌다
+ *     (교착). 로그인 상태·로그인은 종목 데이터가 아니다.
+ * 잠금 해제는 서버 없이 PIN 을 로컬에서 견주므로 그쪽은 예외가 필요 없다.
+ */
+const LOCK_PASS = ["/api/settings/ui", "/api/auth/"];
+
+export class LockedError extends Error {
+  constructor() {
+    super("잠겨 있어 서버에 안 보냅니다");
+    this.name = "LockedError";
+  }
+}
+
+if (typeof window !== "undefined" && typeof window.fetch === "function") {
+  const realFetch = window.fetch.bind(window);
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    if (locked) {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url;
+      const path = url.startsWith("http") ? new URL(url).pathname : url.split("?")[0];
+      if (path.startsWith("/api/") && !LOCK_PASS.some((p) => path.startsWith(p))) {
+        return Promise.reject(new LockedError());
+      }
+    }
+    return realFetch(input, init);
+  }) as typeof window.fetch;
+}

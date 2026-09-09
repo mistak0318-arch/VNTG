@@ -155,13 +155,18 @@ function localIPv4(): string[] {
  */
 app.get("/api/health", async (req, res) => {
   const { authed } = await authState(req);
+  /* 배포 스크립트는 미니PC 자신(localhost)에서 이 길을 읽는다 — 로그인 없이도 진단은 준다 */
+  const local = /^(localhost|127\.0\.0\.1|::1)$/.test(String(req.hostname ?? ""));
   res.json({
     ok: true,
     startedAt: new Date(startedAt).toISOString(),
     uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
     ...(authed ? { addresses: localIPv4() } : {}),
-    /* 상태 파일이 써지고 있나 — 배포 로그로 원인을 읽는다 (2026-09-09) */
-    healthOut: healthFileState,
+    /*
+     * 상태 파일이 써지고 있나 — 배포 로그로 원인을 읽는다 (2026-09-09).
+     * 경로·오류문이 실리므로 **로그인했거나 localhost** 일 때만 (재검토에서 잡힘).
+     */
+    ...(authed || local ? { healthOut: healthFileState } : {}),
     keysConfigured: {
       kiwoom: Boolean(process.env.KIWOOM_APP_KEY && process.env.KIWOOM_APP_SECRET),
       dart: Boolean(process.env.DART_API_KEY),

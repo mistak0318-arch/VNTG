@@ -518,10 +518,15 @@
  * **고른 상태(`.on`·`.active`·`.sel`)는 건드리지 않는다** — 「지금 고른 것」은 색으로만
  * 구별되므로, 눌러 두면 이미 테마가 따로 칠해 놓은 규칙(예: `.jn-tag.on`)을 덮어 버린다.
  */
-:root[data-theme="note"] [class*="-tag"]:not(.keep-color):not(.on):not(.active):not(.sel),
-:root[data-theme="note"] [class*="-chip"]:not(.keep-color):not(.on):not(.active):not(.sel),
-:root[data-theme="note"] [class*="-badge"]:not(.keep-color):not(.on):not(.active):not(.sel),
-:root[data-theme="note"] [class*="-pill"]:not(.keep-color):not(.on):not(.active):not(.sel) {
+/*
+ * ⚠️ **묶음(복수형)은 뺀다** (2026-09-09 재검토에서 잡힘). `[class*="-tag"]` 는 `.sig-tags`·
+ * `.jn-tags`·`.watch-chips` 같은 **칩을 담는 줄**에도 걸려서, 줄 전체 뒤에 판이 깔리고
+ * 안의 글자(`.sc-tags-label`)가 흐려졌다. 칩 하나를 잡으려던 규칙이 칩 줄을 잡은 것이다.
+ */
+:root[data-theme="note"] [class*="-tag"]:not([class*="-tags"]):not([class*="-chips"]):not([class*="-chip-"]):not([class*="-badges"]):not([class*="-pills"]):not(.keep-color):not(.on):not(.active):not(.sel),
+:root[data-theme="note"] [class*="-chip"]:not([class*="-tags"]):not([class*="-chips"]):not([class*="-chip-"]):not([class*="-badges"]):not([class*="-pills"]):not(.keep-color):not(.on):not(.active):not(.sel),
+:root[data-theme="note"] [class*="-badge"]:not([class*="-tags"]):not([class*="-chips"]):not([class*="-chip-"]):not([class*="-badges"]):not([class*="-pills"]):not(.keep-color):not(.on):not(.active):not(.sel),
+:root[data-theme="note"] [class*="-pill"]:not([class*="-tags"]):not([class*="-chips"]):not([class*="-chip-"]):not([class*="-badges"]):not([class*="-pills"]):not(.keep-color):not(.on):not(.active):not(.sel) {
   background: var(--panel-2) !important;
   border-color: var(--border) !important;
   color: var(--muted) !important;

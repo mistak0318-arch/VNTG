@@ -109,7 +109,8 @@ async function writeOnce(): Promise<void> {
       frames: us.frames,
       lastFrameAgoSec: us.lastFrameAgoSec,
       connectedForSec: us.connectedForSec,
-      rejects: us.rejects.slice(0, 3),
+      /* 첫 토큰이 심볼(tr_key)이라 뗀다 — 오류코드·메시지만 남긴다. 이 파일엔 종목이 안 실린다 */
+      rejects: us.rejects.slice(0, 3).map((l) => l.split(" ").slice(1).join(" ")),
     },
     저장소: health,
     /* 화면이 실시간을 실제로 받아 가고 있나 — 미니창이 따로 여는 스트림이 여기 잡힌다 */

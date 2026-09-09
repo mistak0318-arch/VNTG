@@ -172,5 +172,25 @@ export function useScreenLock() {
     return () => window.removeEventListener("keydown", onKey);
   }, [config.hotkey, locked, lock]);
 
+  /*
+   * **다른 창이 잠그면 이 창도 잠긴다** (2026-09-09 재검토에서 잡힘).
+   *
+   * 실시간 정지(`lockPause`)는 `storage` 로 창끼리 따라가는데 **잠금 화면 자체는** 안
+   * 따라갔다. 미니창에서 Ctrl+Q → 본창은 시세만 멎고 덮개는 없었다 — 회색 점에 값은
+   * 그대로인 채로. 미니창을 닫아 버리면 본창은 풀 길이 없어 새로고침해야 했다(그러면
+   * 그때 잠긴다). 잠금 표식은 하나(`LOCKED_KEY`)이므로 그걸 보는 창은 모두 같이 잠기고,
+   * 어느 창에서 풀든 표식이 지워져 모두 풀린다.
+   */
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== LOCKED_KEY) return;
+      const next = e.newValue === "1";
+      setLocked(next);
+      setLockPaused(next); // 이 창의 실시간도 같이 (storage 는 다른 창에서만 오므로 여기서 직접)
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   return { config, save, locked, lock, unlock };
 }

@@ -94,9 +94,12 @@ export function StockBoardPanel({ code }: { code: string }) {
   const [rootOnly, setRootOnly] = useState(false);
   /* 종목을 빠르게 바꾸면 늦게 온 응답이 나중에 덮어쓴다 — 마지막 것만 받는다 */
   const want = useRef(code);
+  /* 새로고침마다 세대가 오른다 — 그 전에 떠난 「더 불러오기」 응답은 버린다 */
+  const gen = useRef(0);
 
   const load = useCallback(async () => {
     want.current = code;
+    gen.current += 1;
     setLoading(true);
     setError(null);
     const r = await api.stockBoard(code).catch((e: unknown) => ({
@@ -121,11 +124,20 @@ export function StockBoardPanel({ code }: { code: string }) {
   async function loadMore() {
     if (!next || more) return;
     setMore(true);
+    const myGen = gen.current;
     const r = await api.stockBoard(code, next).catch(() => null);
-    if (r && want.current === code) {
-      /* 같은 글이 두 번 오는 일이 있다(그 사이 새 글이 올라오면 자리가 밀린다) */
-      const seen = new Set(posts.map((p) => p.id));
-      setPosts([...posts, ...r.posts.filter((p) => !seen.has(p.id))]);
+    /* 그 사이 새로고침이 지나갔으면 이 쪽은 옛 목록의 뒷장이다 — 버린다 */
+    if (r && want.current === code && gen.current === myGen) {
+      /*
+       * 같은 글이 두 번 오는 일이 있다(그 사이 새 글이 올라오면 자리가 밀린다).
+       * ⚠️ **지금 상태를 기준으로** 붙인다 (2026-09-09 재검토에서 잡힘). 렌더 때 닫힌 `posts`
+       * 를 쓰면, 더 불러오는 사이에 「새로고침」이 끝났을 때 **옛 목록 + 2쪽**이 새 목록을
+       * 덮어썼다. 함수형으로 받으면 늘 최신 목록에 이어 붙는다.
+       */
+      setPosts((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        return [...prev, ...r.posts.filter((p) => !seen.has(p.id))];
+      });
       setNext(r.next);
     }
     setMore(false);

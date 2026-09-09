@@ -531,7 +531,7 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
       }
 
       /*
-       * 국면별 정원. 합이 MAX_CODES(190)를 넘지 않아야 한다 — 나머지 10 은 화면 몫.
+       * 국면별 정원. 합이 MAX_CODES(175)를 넘지 않아야 한다 — 나머지 25 는 자동감시·화면 몫.
        *
        *   낮    국내 190 (관심 + 95/95)
        *   저녁  국내 190 (관심 + 50/50)   ← 예전엔 60 을 미국에 떼주고 130 만 썼다
@@ -549,6 +549,16 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
         const codes = await targets(kiwoom, perMarket, MAX_CODES);
         for (const code of codes) {
           if (subscribed.has(code)) continue;
+          /*
+           * ⚠️ **합집합에 상한을 건다** (2026-09-09 재검토에서 잡힘).
+           *
+           * `targets()` 는 매 틱 「지금」 상위 175 를 주는데, 순위에서 밀려난 종목은 이 집합에서
+           * 안 빠진다. 국면 안에서 순위가 5분마다 바뀌면 합집합이 175 를 넘어 200 까지 자라고,
+           * 그 순간 화면 몫(자동감시 15 + 화면 10)이 다시 0 이 된다 — 아침에 실제로 그랬다.
+           * 밀려난 것을 끊는 대신 **더 안 건다**: 이미 쌓이던 시계열은 그대로 두고, 자리를
+           * 넘기지도 않는다. 정원은 이렇게 하루 종일 지켜진다.
+           */
+          if (subscribed.size - (subscribed.has("__vi__") ? 1 : 0) >= MAX_CODES) break;
           subscribed.add(code);
           /*
             `subscribeKeep` — **밀려나면 안 되는 쪽**이다.

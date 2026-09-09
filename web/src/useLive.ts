@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { useTabActive } from "./tabActive";
+import { useLockPaused } from "./lockPause";
 
 /**
  * 조용한 백그라운드 갱신.
@@ -91,6 +92,8 @@ export function useLive<T>(
 
   const marketOpen = useMarketOpen();
   const tabActive = useTabActive(); // 숨은 인앱 탭에서는 주기 갱신을 통째로 놓는다
+  /* 잠겨 있으면(Ctrl+Q) 폴링도 놓는다 (2026-09-09 재검토) — 「잠그면 트래픽이 멎는다」가 실시간에만 걸려 있었다 */
+  const lockPaused = useLockPaused();
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
   /** 요청이 겹치지 않게 — 응답이 느린 날 순서가 뒤집히는 걸 막는다 */
@@ -132,7 +135,7 @@ export function useLive<T>(
 
   // 장중 + 탭이 보일 때만 주기 갱신 (숨은 인앱 탭도 제외 — 돌아오면 즉시 한 번 받는다)
   useEffect(() => {
-    if (!marketOpen || intervalMs <= 0 || !tabActive) return;
+    if (!marketOpen || intervalMs <= 0 || !tabActive || lockPaused) return;
 
     let timer: ReturnType<typeof setInterval> | null = null;
     const start = () => {
@@ -159,7 +162,7 @@ export function useLive<T>(
       stop();
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [marketOpen, intervalMs, tabActive]);
+  }, [marketOpen, intervalMs, tabActive, lockPaused]);
 
   return { data, loading, error, updatedAt, refresh: () => void run.current(false) };
 }

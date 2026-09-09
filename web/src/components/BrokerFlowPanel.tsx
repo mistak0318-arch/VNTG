@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FlowSeries, useMinutePrices, type FlowSample, type FlowSeriesData } from "./FlowSeries";
 import { api, fmtNum, signClass, type BrokerFlow } from "../api";
 import { useLive } from "../useLive";
+import { useLockPaused } from "../lockPause";
 import { useProgramSeries } from "./ProgramFlowPanel";
 
 /**
@@ -48,9 +49,11 @@ function Bar({ v, mx, cls }: { v: number; mx: number; cls: string }) {
  */
 function useBrokerSeries(code: string, broker: string | null): FlowSeriesData {
   const [s, setS] = useState<FlowSeriesData>({ pts: [], day: "", stale: false });
+  /* 잠겨 있으면(Ctrl+Q) 15초 폴링도 놓는다 (2026-09-09 재검토) — 잠금이 실시간에만 걸려 있었다 */
+  const lockPaused = useLockPaused();
 
   useEffect(() => {
-    if (!code || !broker) {
+    if (!code || !broker || lockPaused) {
       setS({ pts: [], day: "", stale: false });
       return;
     }
@@ -110,7 +113,7 @@ function useBrokerSeries(code: string, broker: string | null): FlowSeriesData {
       alive = false;
       clearInterval(t);
     };
-  }, [code, broker]);
+  }, [code, broker, lockPaused]);
 
   return s;
 }

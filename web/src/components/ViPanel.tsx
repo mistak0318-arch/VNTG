@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLockPaused } from "../lockPause";
 import { fmtNum } from "../api";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 
@@ -44,8 +45,11 @@ export function ViPanel({ onSelectStock }: { onSelectStock?: (c: string, n: stri
   const [healthy, setHealthy] = useState(false);
   /** 걸린 것만 볼지 — 해제까지 섞이면 줄이 두 배가 된다 */
   const [firedOnly, setFiredOnly] = useState(true);
+  /* 잠겨 있으면(Ctrl+Q) 5초 폴링을 놓는다 (2026-09-09 재검토) */
+  const lockPaused = useLockPaused();
 
   useEffect(() => {
+    if (lockPaused) return;
     let alive = true;
     const load = async () => {
       try {
@@ -64,7 +68,7 @@ export function ViPanel({ onSelectStock }: { onSelectStock?: (c: string, n: stri
       alive = false;
       clearInterval(t);
     };
-  }, []);
+  }, [lockPaused]);
 
   // 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26). 훅이라 조기 return 앞에 둔다
   const rows = firedOnly ? (events ?? []).filter((e) => !e.clearedAt) : events ?? [];

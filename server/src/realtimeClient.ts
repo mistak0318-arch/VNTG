@@ -352,7 +352,8 @@ export class RealtimeClient {
         /* 1분에 한 번만 — 초과가 나면 수십 종목이 한꺼번에 들어와 로그가 넘친다 */
         const now = Date.now();
         this.seatRefusals += 1;
-        this.lastRefused = `${item} (${new Date().toISOString().slice(11, 19)})`;
+        /* 시각만 적는다 — 상태 파일(health.json)에 실리는 값이라 종목코드는 안 남긴다 (2026-09-09) */
+        this.lastRefused = new Date().toISOString().slice(11, 19);
         if (now - this.lastSeatWarn > 60_000) {
           this.lastSeatWarn = now;
           console.warn(
@@ -396,7 +397,16 @@ export class RealtimeClient {
         }
       }
       /* 고정만으로 이미 꽉 찼으면 화면 종목은 포기한다 — 관심종목을 밀어낼 수는 없다 */
-      if (this.codeCount() >= RealtimeClient.MAX_ITEMS) return;
+      if (this.codeCount() >= RealtimeClient.MAX_ITEMS) {
+        /*
+         * 여기도 센다 (2026-09-09 재검토에서 잡힘). 거절 카운터가 keep 쪽에만 있어서,
+         * 정작 「눌렀는데 실시간이 안 뜨는」 이 경우는 0 으로 남았다 — 안전장치가 안 보이는
+         * 자리에서 조용히 실패하고 있었다.
+         */
+        this.seatRefusals += 1;
+        this.lastRefused = new Date().toISOString().slice(11, 19);
+        return;
+      }
       this.transient.push(item);
     }
     this.subscribe(type, item);
