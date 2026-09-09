@@ -1069,7 +1069,20 @@
    그 순간 색이 돌아오지만, 그 위에 뜬 창을 보고 있는 때다.
 */
 :root[data-theme="excel"] .main:not(:has(.ord-modal-back, .chart-full, .board-solo-close, .board-x, .tgr-fab, .tgr-jump, .ht-pop)),
-:root[data-theme="excel"] .overlay {
+:root[data-theme="excel"] .overlay,
+/*
+   ⚠️ **미니창·보드창은 `.main` 안이 아니다** (2026-09-09 — 벤티지: "미니창에 아까
+   무채색 넣으란거 안햇네").
+
+   앞줄이 `.main` 에 걸려 있는데, 미니창은 `.layout` 대신 `.mini-root` 를 통째로
+   돌려주므로 그 안에 영영 안 들어온다. 그래서 본창은 무채색인데 **같은 컴포넌트가
+   미니창에서만 색이 그대로**였다 — 텔레그램 키워드 거품이 특히 눈에 띄었다.
+
+   09-08 에 칩·태그 규칙을 덮어 봤지만 그건 애초에 이 필터가 대신하기로 한 일이다
+   (윗 주석: "클래스를 하나씩 쫓는 것은 끝이 없다"). 쫓을 곳이 하나 빠져 있었을 뿐이다.
+   여기 한 줄이면 미니창의 인라인 색·캔버스·SVG 까지 한 번에 따라온다.
+*/
+:root[data-theme="excel"] .mini-root {
   filter: grayscale(1);
 }
 

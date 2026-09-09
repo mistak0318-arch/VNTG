@@ -3,6 +3,7 @@ import { useSheetBack } from "../useSheetBack";
 import { api, pick, stockNameOf, type RawRecord } from "../api";
 import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
 import { IntradayLevelsBar } from "./IntradayLevelsBar";
+import { IntradayFlow } from "./IntradayPanels";
 import { PriceHeader } from "./PriceHeader";
 import { StockSummaryPanel } from "./StockSummaryPanel";
 import { StockTabsSection } from "./StockTabsSection";
@@ -53,7 +54,15 @@ const CUR_PRICE_KEYS = ["cur_prc"];
  */
 const SHEET_CARDS: { key: string; label: string }[] = [
   { key: "price", label: "현재가 (시·고·저·거래대금)" },
-  { key: "levels", label: "당일 흐름 (VWAP·시가갭·전일고저)" },
+  /*
+   * 당일 흐름 그래프 (2026-09-09 — 벤티지 "저 빨간색 친 부분에 당일흐름 그래프 좀 넣어줄래?").
+   *
+   * 종합 탭에만 있던 것이다. 그런데 시트를 여는 이유가 대개 「지금 어떻게 가고 있나」라,
+   * 그걸 보려고 탭을 한 번 더 눌러야 했다. 아래 기준선 줄(VWAP·시가갭)과 짝이라 붙여 둔다 —
+   * 그림이 모양을 보여 주고 그 줄이 숫자를 보여 준다.
+   */
+  { key: "intraday", label: "당일 흐름 그래프" },
+  { key: "levels", label: "기준선 (VWAP·시가갭·전일고저)" },
   { key: "summary", label: "한 장 요약 (수급 흐름)" },
   { key: "analysis", label: "넓은 화면으로 보기" },
   { key: "tabs", label: "탭 (호가·거래원·종목토론…)" },
@@ -108,6 +117,8 @@ export function StockDetail({
   /* 시트 안 덩어리들의 차례 — 서버에 저장된다(`stockSheet` 이름표로) */
   const cards = useCardOrder("stockSheet", SHEET_CARDS.map((c) => c.key));
   const [orderOpen, setOrderOpen] = useState(false);
+  /* 당일 흐름 그래프의 기준선 — 종합 탭이 쓰는 것과 같은 값(전일 종가) */
+  const basePrice = Math.abs(Number(info?.base_pric)) || 0;
   const watched = watchedCodes.isWatched(code);
 
   /**
@@ -234,6 +245,12 @@ export function StockDetail({
           <div className="sd-blk" style={{ order: cards.orderOf("price") }}>
             <PriceHeader info={info} code={code} />
           </div>
+          {/* 값이 있어야 그린다 — 기준가가 0 이면 등락률 축이 안 선다 */}
+          {basePrice > 0 && (
+            <div className="sd-blk" style={{ order: cards.orderOf("intraday") }}>
+              <IntradayFlow code={code} basePrice={basePrice} />
+            </div>
+          )}
           <div className="sd-blk" style={{ order: cards.orderOf("levels") }}>
             <IntradayLevelsBar code={code} />
           </div>
