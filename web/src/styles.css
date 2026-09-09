@@ -18178,3 +18178,6 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .buzz-read-title { font-size: 1rem; line-height: 1.35; margin: 6px 0 4px; }
 .buzz-read-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 0.75rem; margin-bottom: 10px; }
 .buzz-body p { font-size: 0.9rem; line-height: 1.6; margin: 0 0 10px; word-break: break-word; }
+
+/* 좁은 화면의 수급 — 5·10·20일 부호 셋 「+ + −」 (2026-09-09) */
+.scr-tri b { display: inline-block; width: 0.9em; text-align: center; font-weight: 700; }

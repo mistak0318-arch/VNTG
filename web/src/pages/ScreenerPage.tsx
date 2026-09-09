@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { removePref, setPref } from "../prefs";
 import { api, fmtNum, type FlowSum, type RankResult, type RankSpecGroup } from "../api";
 import { SuperMark } from "../useSuperMarks";
@@ -161,10 +161,26 @@ function isTwin(flow: Record<string, FlowSum> | undefined): boolean {
   return true;
 }
 
+/**
+ * 수량을 짧게 — 「5,880,190」은 「588만」 (2026-09-09 — 벤티지 "거래량도 좀 줄여도 되고").
+ * 1억 넘으면 억, 1만 넘으면 만, 그 아래는 그대로. 정확한 수는 툴팁에.
+ */
+function shortQty(n: number): string {
+  const a = Math.abs(n);
+  const sign = n < 0 ? "−" : "";
+  if (a >= 1e8) return `${sign}${(a / 1e8).toFixed(a >= 1e9 ? 0 : 1)}억`;
+  if (a >= 1e4) return `${sign}${Math.round(a / 1e4).toLocaleString("ko-KR")}만`;
+  return `${sign}${fmtNum(a)}`;
+}
+
 /** 억원을 짧게 — 1조가 넘으면 조로 */
 function eok(v: number | null): string {
   if (v === null) return "-";
-  if (Math.abs(v) >= 10000) return `${(v / 10000).toFixed(v >= 100000 ? 0 : 1)}조`;
+  /* 100조 아래는 소수 하나 — 「10.9조」와 「11조」는 다르다. 「.0」은 뗀다 */
+  if (Math.abs(v) >= 10000) {
+    const jo = v / 10000;
+    return `${Math.abs(jo) >= 100 ? Math.round(jo).toLocaleString("ko-KR") : jo.toFixed(1).replace(/\.0$/, "")}조`;
+  }
   return `${fmtNum(v)}억`;
 }
 
@@ -374,7 +390,12 @@ export function ScreenerPage({
    * 칸 너비 — **조회마다 따로** 기억한다. 조회를 바꾸면 열 구성이 통째로 달라지므로
    * 하나로 묶으면 「거래대금 상위에서 넓힌 칸」이 「연속매매」의 엉뚱한 칸을 넓힌다.
    */
-  const cw = useColumnWidths(`rank.${tab}`);
+  /*
+   * 저장 키를 `rank2.` 로 옮겼다 (2026-09-09 밤). `table-layout: fixed` 가 width 없이는
+   * 안 먹던 것을 고치자, **여태 무시되던 옛 너비**(등락률 50px 같은 — NXT 두 줄이 생기기
+   * 전에 끌어 둔 것)가 그대로 살아나 PC 에서 칸이 잘렸다. 옛 저장은 버리고 새로 시작한다.
+   */
+  const cw = useColumnWidths(`rank2.${tab}`);
   const tabOrder = useCardOrder(
     "screener.tabs",
     SCREENER_TABS.map((t) => t.key),
@@ -553,6 +574,70 @@ export function ScreenerPage({
     const f = r.flow?.[String(span)];
     return { v: f ? f[sub] : null, days: f?.days ?? 0 };
   };
+
+  /*
+   * **좁으면 접는다** (2026-09-09 밤 — 벤티지 "다이나믹 구조로 만들어서 어느 창에서도
+   * 잘 보이게 할 순 없을까? 화면이 좁으면 외국인 5/10/20 합쳐가지고 +/- 표시하고 …
+   * 한 화면에 모두 들어오게끔. 잘리는 정보 없이").
+   *
+   * 표를 담는 칸의 폭을 재서(ResizeObserver), 칸을 다 펼치면 넘칠 때는 수급을 **주체당
+   * 한 칸**으로 접는다 — 「외국인 + + −」처럼 5·10·20일 부호 셋. 값은 툴팁에. 접힌
+   * 모드에선 손으로 정한 폭(`col-fixed`)도 끈다 — 잘리는 것보다 자동이 낫다.
+   */
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [wrapW, setWrapW] = useState(0);
+  useEffect(() => {
+    /*
+     * ⚠️ 감싸개가 아니라 **그 부모**를 잰다. 넓은 화면의 `.data-table-wrap` 은
+     * `width: max-content` 라 표 자신의 폭이다 — 그걸 재면 접은 표는 늘 「좁다」가 된다.
+     */
+    const el = wrapRef.current?.parentElement;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((ents) => {
+      for (const e of ents) setWrapW(Math.round(e.contentRect.width));
+    });
+    ro.observe(el);
+    setWrapW(Math.round(el.getBoundingClientRect().width));
+    return () => ro.disconnect();
+    /* 탭이 바뀌면 표가 다시 만들어진다 — 그때 다시 잰다 */
+  }, [rankKey, data]);
+  /* 다 펼쳤을 때 필요한 폭 — 기본 칸 너비의 합(대략) */
+  const fullNeed =
+    190 +
+    (sigOn ? 40 : 0) +
+    cols.filter((c) => c.key !== "stk_nm").length * 84 +
+    (hasTvExtra ? 84 : 0) +
+    (hasTurn ? 60 : 0) +
+    (hasCap ? 84 : 0) +
+    (hasFlow ? FLOW_COLS.length * 84 + 52 : 0);
+  const flowCompact = hasFlow && wrapW > 0 && wrapW < fullNeed;
+  /**
+   * 접힌 칸을 **누르면 그 주체만 펼친다** (벤티지 "+- 표시는 누르면 상세히 보이는 구조로,
+   * 다시 누르면 작아지고"). 펼친 주체는 5·10·20일 세 칸이 되고, 다시 누르면 부호 셋으로.
+   */
+  const [openSubs, setOpenSubs] = useState<Set<string>>(() => new Set());
+  const toggleSub = (k: string) =>
+    setOpenSubs((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  /** 접힌 모드에서 실제로 그릴 수급 칸들 — 주체마다 「부호 셋 한 칸」 또는 「기간 세 칸」 */
+  type FlowView = { kind: "tri"; sub: (typeof FLOW_SUBJECTS)[number] } | { kind: "col"; col: (typeof FLOW_COLS)[number] };
+  const FLOW_VIEW: FlowView[] = flowCompact
+    ? FLOW_SUBJECTS.flatMap((sub): FlowView[] =>
+        openSubs.has(sub.key)
+          ? FLOW_COLS.filter((c) => c.sub === sub.key).map((col): FlowView => ({ kind: "col", col }))
+          : [{ kind: "tri", sub }],
+      )
+    : FLOW_COLS.map((col): FlowView => ({ kind: "col", col }));
+  /** 5·10·20일 부호 셋 — 「+ + −」. 모르면 「·」 */
+  const signTriple = (r: { flow?: Record<string, FlowSum> }, sub: keyof Omit<FlowSum, "days">) =>
+    [5, 10, 20].map((span) => {
+      const { v } = flowOf(r, sub, span);
+      return { span, v, s: v == null ? "·" : v > 0 ? "+" : v < 0 ? "−" : "0" };
+    });
   /** 억원 — 부호를 앞에 단다. 순매수(+)·순매도(−)가 곧 정보다 */
   const eokSigned = (v: number | null | undefined): string => {
     if (v == null) return "-";
@@ -1229,18 +1314,32 @@ export function ScreenerPage({
                 머리 칸 오른쪽 가장자리를 끌면 바뀌고, 서버에 저장되어 기기가 달라도 같다.
                 조회를 바꾸면 열 구성이 통째로 달라지므로 **조회마다 따로** 기억한다.
               */}
-              <table className={`data-table${cw.customized ? " col-fixed" : ""}`}>
+              <table className={`data-table${cw.customized && !flowCompact ? " col-fixed" : ""}`}>
                 <colgroup>
                   {sigOn && <col style={{ width: "2.4rem" }} />}
                   {/* 종목명은 넓게, 순위 칸은 좁게 — 폭을 정한 표에서 안 정한 칸의 기본값 */}
-                  <col style={cw.styleOf("stk_nm", 170)} />
+                  <col style={cw.styleOf("stk_nm", 190)} />
                   {shownCols.map((c) => (
-                    <col key={c.key} style={cw.styleOf(c.key, RANK_COLS.has(c.key) ? 48 : 84)} />
+                    <col
+                      key={c.key}
+                      style={cw.styleOf(
+                        c.key,
+                        /* 순위는 좁게, 현재가·등락률은 NXT 두 줄이 들어가게, 나머지 84 */
+                        RANK_COLS.has(c.key) ? 48 : c.key === "cur_prc" || c.key === "flu_rt" ? 96 : 84,
+                      )}
+                    />
                   ))}
                   {hasTvExtra && <col style={cw.styleOf("tv")} />}
                   {hasTurn && <col style={cw.styleOf("turn")} />}
                   {hasCap && <col style={cw.styleOf("cap")} />}
-                  {hasFlow && FLOW_COLS.map((f) => <col key={f.key} style={cw.styleOf(f.key)} />)}
+                  {hasFlow &&
+                    FLOW_VIEW.map((v) =>
+                      v.kind === "tri" ? (
+                        <col key={`c_${v.sub.key}`} style={{ width: "4.6rem" }} />
+                      ) : (
+                        <col key={v.col.key} style={flowCompact ? {} : cw.styleOf(v.col.key)} />
+                      ),
+                    )}
                   {hasFlow && <col style={cw.styleOf("twin", 52)} />}
                 </colgroup>
                 <thead>
@@ -1351,16 +1450,62 @@ export function ScreenerPage({
                       「외국인 +120억」만 있으면 하루치인지 한 달치인지 알 길이 없다.
                     */}
                     {hasFlow &&
-                      FLOW_COLS.map((f) => (
-                        <SortableTh
-                          key={f.key}
-                          columnKey={f.key}
-                          label={f.label}
-                          accessor={(r: (typeof rows)[number]) => flowOf(r, f.sub, f.span).v ?? -Infinity}
-                          sort={sort}
-                          extra={<ColumnGrip cw={cw} k={f.key} />}
-                        />
-                      ))}
+                      FLOW_VIEW.map((v) =>
+                        v.kind === "tri" ? (
+                          <SortableTh
+                            key={`c_${v.sub.key}`}
+                            columnKey={`c_${v.sub.key}`}
+                            label={v.sub.label}
+                            /* 순매수인 기간 수 — 셋 다 + 인 종목이 위로 */
+                            accessor={(r: (typeof rows)[number]) =>
+                              signTriple(r, v.sub.key).filter((x) => x.s === "+").length
+                            }
+                            sort={sort}
+                            className="num-narrow"
+                            extra={
+                              <span
+                                className="dt-move"
+                                role="button"
+                                title="5·10·20일 세 칸으로 펼치기"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSub(v.sub.key);
+                                }}
+                              >
+                                ▸
+                              </span>
+                            }
+                          />
+                        ) : (
+                          <SortableTh
+                            key={v.col.key}
+                            columnKey={v.col.key}
+                            label={v.col.label}
+                            accessor={(r: (typeof rows)[number]) => flowOf(r, v.col.sub, v.col.span).v ?? -Infinity}
+                            sort={sort}
+                            extra={
+                              flowCompact ? (
+                                /* 펼친 주체의 마지막 칸에 「접기」 */
+                                v.col.span === flowSpans[flowSpans.length - 1] ? (
+                                  <span
+                                    className="dt-move"
+                                    role="button"
+                                    title="부호 셋으로 접기"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleSub(v.col.sub);
+                                    }}
+                                  >
+                                    ◂
+                                  </span>
+                                ) : undefined
+                              ) : (
+                                <ColumnGrip cw={cw} k={v.col.key} />
+                              )
+                            }
+                          />
+                        ),
+                      )}
                     {/* 쌍끌이 — 여섯 칸을 눈으로 훑지 않아도 되게 끝에 한 칸 */}
                     {hasFlow && (
                       <SortableTh
@@ -1470,7 +1615,8 @@ export function ScreenerPage({
                                     : undefined
                                 }
                               >
-                                <b>{fmtNum(r.tv)}억</b>
+                                {/* 1조 넘으면 「10.9조」 — 「108,531억」은 자리만 먹는다 (벤티지 2026-09-09) */}
+                                <b>{eok(r.tv)}</b>
                               </td>
                             );
                           }
@@ -1512,12 +1658,16 @@ export function ScreenerPage({
                               </td>
                             );
                           }
+                          /* 거래량·잔량 같은 수량은 만·억으로 줄인다 — 정확한 수는 툴팁 */
+                          const qtyLike = c.type === "num" && /qty|_req$/.test(c.key);
+                          const qn = qtyLike ? Number(r[c.key]) : NaN;
                           return (
                             <td
                               key={c.key}
                               className={`num ${v.cls}${RANK_COLS.has(c.key) ? " num-narrow" : ""}`}
+                              title={qtyLike && Number.isFinite(qn) ? fmtNum(qn) : undefined}
                             >
-                              {v.text}
+                              {qtyLike && Number.isFinite(qn) ? shortQty(qn) : v.text}
                             </td>
                           );
                         })}
@@ -1533,23 +1683,52 @@ export function ScreenerPage({
                       )}
                       {hasCap && <td className="num pt-n">{eok(r.cap)}</td>}
                       {hasFlow &&
-                        FLOW_COLS.map((f) => {
-                          const { v, days } = flowOf(r, f.sub, f.span);
+                        FLOW_VIEW.map((v) => {
+                          if (v.kind === "tri") {
+                            const tri = signTriple(r, v.sub.key);
+                            return (
+                              <td
+                                key={`c_${v.sub.key}`}
+                                className="num num-narrow scr-tri"
+                                title={`${tri.map((x) => `${x.span}일 ${eokSigned(x.v)}`).join(" · ")} — 눌러서 펼치기`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSub(v.sub.key);
+                                }}
+                              >
+                                {tri.map((x) => (
+                                  <b key={x.span} className={x.s === "+" ? "positive" : x.s === "−" ? "negative" : "pt-n"}>
+                                    {x.s}
+                                  </b>
+                                ))}
+                              </td>
+                            );
+                          }
+                          const f = v.col;
+                          const { v: val, days } = flowOf(r, f.sub, f.span);
                           return (
                             <td
                               key={f.key}
-                              className={`num ${v == null ? "pt-n" : v > 0 ? "positive" : v < 0 ? "negative" : ""}`}
+                              className={`num ${val == null ? "pt-n" : val > 0 ? "positive" : val < 0 ? "negative" : ""}`}
                               /* 원장이 얕으면 그만큼만 더한 것 — 「20일」이라 적고 12일을 재면 거짓말이다 */
                               title={
-                                v == null
+                                val == null
                                   ? "원장에 없는 종목입니다"
                                   : days < f.span
                                     ? `원장이 ${days}일치라 ${days}일 합입니다`
-                                    : `${f.label} 순매수 합 (억원)`
+                                    : `${f.label} 순매수 합 (억원)${flowCompact ? " — 눌러서 접기" : ""}`
+                              }
+                              onClick={
+                                flowCompact
+                                  ? (e) => {
+                                      e.stopPropagation();
+                                      toggleSub(f.sub);
+                                    }
+                                  : undefined
                               }
                             >
-                              {eokSigned(v)}
-                              {v != null && days < f.span && <i className="scr-split">{days}일</i>}
+                              {eokSigned(val)}
+                              {val != null && days < f.span && <i className="scr-split">{days}일</i>}
                             </td>
                           );
                         })}
@@ -1570,7 +1749,7 @@ export function ScreenerPage({
               return (
                 <div className={splitTwo ? "scr-two" : undefined}>
                   {parts.map((p, k) => (
-                    <div className="data-table-wrap" key={k}>
+                    <div className="data-table-wrap" key={k} ref={k === 0 ? wrapRef : undefined}>
                       {tableOf(p, k === 0 ? 0 : parts[0].length)}
                     </div>
                   ))}
