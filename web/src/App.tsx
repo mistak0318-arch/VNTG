@@ -985,7 +985,29 @@ export default function App() {
       )}
       <aside className={`sidebar${navOpen ? " open" : ""}${navOpen && navFrom ? ` from-${navFrom}` : ""}`}>
         {/* 회사에서도 열기 때문에 이름을 중립적으로 둔다 */}
-        <div className="sidebar-brand">VNTG</div>
+        <div className="sidebar-brand">
+          VNTG
+          {/*
+            미니창 — **이름 옆** (2026-09-09, 벤티지: "저기 빨간색 친 부분에 미니창 열기
+            버튼 하나 만들자. 어디서든 열수있게").
+
+            같은 것이 맨 아래 「도구」에도 있다. 그런데 미니창은 **보던 화면을 떠나지 않고**
+            곁에 띄우는 창이라, 쓰고 싶어지는 순간은 늘 다른 일을 하던 중이다. 그때마다
+            메뉴를 끝까지 내려야 했다 — 항목이 마흔 줄이 넘는다.
+
+            아래 것을 옮기지 않고 **둘 다 둔다.** 아래는 「도구 목록에서 찾는 길」이고
+            여기는 「손이 먼저 가는 길」이다. 여는 함수(`openMini`)는 하나라 갈릴 것이 없다.
+          */}
+          <button
+            type="button"
+            className="brand-mini"
+            onClick={() => openMini()}
+            title="미니창 열기 — 보던 화면은 그대로 두고 곁창으로 종목을 봅니다"
+            aria-label="미니창 열기"
+          >
+            🪟
+          </button>
+        </div>
         <nav className="sidebar-nav">
           {favorites.length > 0 && (
             <div className="nav-group nav-fav">
