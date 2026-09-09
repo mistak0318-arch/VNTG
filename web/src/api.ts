@@ -1451,6 +1451,11 @@ export const api = {
   journal: () => getJson<JournalData>("/api/journal"),
   /** 내 판단 추적 — 종목마다 일봉을 받아 몇 십 초 걸릴 수 있다 */
   journalTrack: () => getJson<TradeTrackResult>("/api/journal/track"),
+  /** 11번 오늘의 주문·체결 — 로그에서 바로 (2026-09-10) */
+  journalOrders: (date?: string) =>
+    getJson<{ date: string; rows: JournalOrder[]; summary: OrderSummary }>(`/api/journal/orders${date ? `?date=${date}` : ""}`),
+  journalOrdersSync: (date?: string) =>
+    postJson<{ date: string; count: number; summary: OrderSummary }>("/api/journal/orders/sync", { date }),
   journalSave: (e: Partial<JournalEntry> & { date: string }) =>
     putJson<{ entries: JournalEntry[]; stats: JournalStats }>("/api/journal", e),
   paperTrades: () => getJson<PaperResult>("/api/paper"),
@@ -5203,7 +5208,34 @@ export interface JournalEntry {
   tomorrow: string;
   /** 오늘의 예측 */
   picks?: JournalPick[];
+  /** 11번 — 주문 메뉴에서 오간 것(자동) */
+  orders?: JournalOrder[];
   context: DayContext | null;
+}
+
+/** 11번 한 줄 — 서버 journalOrders.ts 와 같은 모양 */
+export interface JournalOrder {
+  at: string;
+  kind: "order" | "modify" | "cancel" | "fill" | "reject";
+  side: "buy" | "sell" | null;
+  code: string;
+  name: string;
+  qty: number | null;
+  price: number | null;
+  amount: number | null;
+  ordNo: string | null;
+  msg: string;
+  mock: boolean;
+  src: "log" | "kiwoom";
+}
+export interface OrderSummary {
+  buyCount: number;
+  buyAmount: number;
+  sellCount: number;
+  sellAmount: number;
+  fillCount: number;
+  rejectCount: number;
+  cancelCount: number;
 }
 
 export interface JournalStats {

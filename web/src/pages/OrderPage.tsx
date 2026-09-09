@@ -5460,6 +5460,17 @@ const KIND_KO: Record<OrderLogRow["kind"], string> = {
 function LogTab() {
   const [rows, setRows] = useState<OrderLogRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /* 복기 노트 11번에 오늘 것을 박아 둔다 (2026-09-10) — 저널이 열릴 때도 자동으로 읽지만, 여기서 바로 */
+  const [syncNote, setSyncNote] = useState<string | null>(null);
+  const sync = async () => {
+    setSyncNote("담는 중…");
+    try {
+      const r = await api.journalOrdersSync();
+      setSyncNote(`복기 노트 ${r.date} 에 ${r.count}건 담음 — 매수 ${r.summary.buyCount} · 매도 ${r.summary.sellCount} · 체결 ${r.summary.fillCount}`);
+    } catch (e) {
+      setSyncNote(e instanceof Error ? e.message : "실패");
+    }
+  };
 
   useEffect(() => {
     void api
@@ -5479,6 +5490,10 @@ function LogTab() {
     <div className="ord-tab">
       <p className="ord-note">
         주문 <b>시도</b>가 전부 남는다 — 거절과 실패까지. 이 목록에 없는 체결이 계좌에 있으면 우리가 낸 주문이 아니다.
+        <button type="button" className="filter-btn" style={{ marginLeft: 8 }} onClick={() => void sync()}>
+          📓 복기 노트에 담기
+        </button>
+        {syncNote && <span className="pt-n" style={{ marginLeft: 8 }}>{syncNote}</span>}
       </p>
       {rows.length === 0 ? (
         <p className="empty">아직 기록이 없다</p>

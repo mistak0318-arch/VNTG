@@ -10,6 +10,8 @@ import {
   type PickStats,
   type StockSearchResult,
   type EdgeRow,
+  type JournalOrder,
+  type OrderSummary,
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { TradeTrackPanel } from "../components/TradeTrackPanel";
@@ -365,6 +367,26 @@ export function JournalPage({
 
   // 편집 중인 값
   const [form, setForm] = useState<Partial<JournalEntry>>({});
+  /* 11번 — 그날 주문·체결. 오늘이면 로그에서 바로, 옛 날짜는 저장본 우선 */
+  const [orders, setOrders] = useState<JournalOrder[]>([]);
+  const [ordersSummary, setOrdersSummary] = useState<OrderSummary | null>(null);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const loadOrders = async () => {
+    setOrdersLoading(true);
+    try {
+      const r = await api.journalOrders(date);
+      setOrders(r.rows);
+      setOrdersSummary(r.summary);
+    } catch {
+      /* 못 읽으면 저장본이라도 */
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+  useEffect(() => {
+    void loadOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   /* 예측 종목 검색 — 매매 검색과 칸을 나눈다(같이 쓰면 어느 쪽에 담을지 헷갈린다) */
@@ -1093,6 +1115,22 @@ export function JournalPage({
           </div>
         </div>
 
+        {/*
+          11 — 오늘의 주문·체결 (2026-09-10 — 벤티지 "복기 노트 11번에 오늘의 매매 적어두고 주문
+          메뉴에서 주문 오간 거 추적하고 기록하는 거 하나 만들자"). 사람이 안 적는다 — 주문 로그와
+          키움 체결에서 그날 것을 읽어 온다. 저장하면 저널에도 박힌다(옛 날짜는 저장본).
+        */}
+        <div className="jn-field">
+          <span className="jn-label">
+            오늘의 주문·체결{" "}
+            <em className="jn-hint">주문 메뉴에서 오간 것 — 자동. 2번(오늘의 매매)은 내가 적는 것, 이건 실제로 나간 것</em>
+            <button className="filter-btn jn-orders-reload" onClick={() => void loadOrders()} disabled={ordersLoading}>
+              {ordersLoading ? "읽는 중…" : "다시 읽기"}
+            </button>
+          </span>
+          <JournalOrdersTable rows={orders} summary={ordersSummary} />
+        </div>
+
         {/* 저장은 **맨 아래** (2026-08-27) — 다 적고 나서 손이 가는 자리가 여기다 */}
         <div className="jn-save-bar">
           <div className="jn-save-state">
@@ -1393,5 +1431,64 @@ export function JournalPage({
         </>
       )}
     </div>
+  );
+}
+
+
+/** 11번 표 — 시각·종류·매수/매도·종목·수량·가격·금액·내용. 거절·취소는 흐리게 */
+function JournalOrdersTable({ rows, summary }: { rows: JournalOrder[]; summary: OrderSummary | null }) {
+  const KIND: Record<JournalOrder["kind"], string> = { order: "주문", modify: "정정", cancel: "취소", fill: "체결", reject: "거절" };
+  const won = (n: number | null) => (n == null ? "" : n >= 1e8 ? `${(n / 1e8).toFixed(1)}억` : `${Math.round(n / 1e4).toLocaleString("ko-KR")}만`);
+  const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (rows.length === 0) return <div className="empty jn-orders-empty">이날 주문 메뉴에서 나간 것이 없습니다.</div>;
+  return (
+    <>
+      {summary && (
+        <div className="jn-orders-sum">
+          <b className="positive">매수 {summary.buyCount}건 {won(summary.buyAmount)}</b>
+          <b className="negative">매도 {summary.sellCount}건 {won(summary.sellAmount)}</b>
+          <span>체결 {summary.fillCount}</span>
+          {summary.cancelCount > 0 && <span>취소 {summary.cancelCount}</span>}
+          {summary.rejectCount > 0 && <span className="negative">거절 {summary.rejectCount}</span>}
+        </div>
+      )}
+      <div className="data-table-wrap">
+        <table className="data-table jn-orders">
+          <thead>
+            <tr>
+              <th>시각</th>
+              <th>종류</th>
+              <th>종목</th>
+              <th className="num">수량</th>
+              <th className="num">가격</th>
+              <th className="num">금액</th>
+              <th>내용</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={`${r.at}-${i}`} className={r.kind === "reject" || r.kind === "cancel" ? "pt-n" : ""}>
+                <td>{hhmm(r.at)}</td>
+                <td>
+                  <span className={r.side === "buy" ? "positive" : r.side === "sell" ? "negative" : ""}>
+                    {r.side === "buy" ? "매수" : r.side === "sell" ? "매도" : ""}
+                  </span>{" "}
+                  {KIND[r.kind]}
+                  {r.mock && <i className="scr-mkt">모의</i>}
+                  {r.src === "kiwoom" && <i className="scr-mkt" title="우리 로그에 없고 키움 체결 조회에만 있는 것 — HTS 에서 낸 주문">키움</i>}
+                </td>
+                <td>
+                  {r.name} <span className="pt-n">{r.code}</span>
+                </td>
+                <td className="num">{r.qty == null ? "" : `${r.qty.toLocaleString("ko-KR")}주`}</td>
+                <td className="num">{r.price == null ? "" : r.price.toLocaleString("ko-KR")}</td>
+                <td className="num">{won(r.amount)}</td>
+                <td className="pt-n">{r.msg}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

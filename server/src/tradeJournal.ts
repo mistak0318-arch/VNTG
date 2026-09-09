@@ -9,6 +9,7 @@ import { listThemes } from "./customThemes.js";
 import { evaluateSignal } from "./signalLight.js";
 import { investorDailySeries } from "./superSignal.js";
 import { futuresFlow, type FuturesFlowDay } from "./naverFuturesFlow.js";
+import { ordersOfDay, type JournalOrder } from "./journalOrders.js";
 
 /**
  * 복기 노트 — 하루를 적고, 쌓아서 나를 고친다.
@@ -259,6 +260,11 @@ export interface JournalEntry {
 
   /** 그날 실제로 한 매매 */
   trades: JournalTrade[];
+  /**
+   * 11번 — 주문 메뉴에서 오간 것 (2026-09-10, 자동). 저장 때마다 주문 로그·키움 체결에서
+   * 다시 잡는다. 사람이 적는 2번(오늘의 매매)과 별개 — 이건 **실제로 나간 것**이다.
+   */
+  orders?: JournalOrder[];
 
   mistakes: string[];
   mood: string;
@@ -521,6 +527,8 @@ export async function saveEntry(
     followedRules: input.followedRules ?? prev?.followedRules ?? null,
     brokenRule: (input.brokenRule ?? prev?.brokenRule ?? "").slice(0, 300),
     trades: await withSignals(client, input.trades ?? prev?.trades ?? [], prev?.trades ?? []),
+    /* 자동 — 그날 로그에서 다시 잡는다. 못 잡으면 지난 저장본 */
+    orders: await ordersOfDay(date).catch(() => prev?.orders ?? []),
     mistakes: input.mistakes ?? prev?.mistakes ?? [],
     mood: input.mood ?? prev?.mood ?? "",
     lesson: (input.lesson ?? prev?.lesson ?? "").slice(0, 500),

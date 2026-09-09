@@ -18228,3 +18228,9 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .krx-kind.ok { color: var(--green); border-color: rgba(53, 196, 106, 0.5); }
 .feed-sub-h { font-size: 0.78rem; color: var(--muted); margin: 10px 0 4px; font-weight: 700; }
 .sheet-header h2 .krx-kind { font-size: 0.66rem; }
+
+/* 복기 노트 11번 — 오늘의 주문·체결 (2026-09-10) */
+.jn-orders-reload { margin-left: 8px; font-weight: 400; }
+.jn-orders-sum { display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.82rem; margin: 6px 0; }
+.jn-orders td, .jn-orders th { font-size: 0.78rem; }
+.jn-orders-empty { padding: 10px 4px; }

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { trackTrades } from "../tradeTrack.js";
+import { ordersOfDay, summarize } from "../journalOrders.js";
 import {
   MISTAKE_TAGS,
   MOOD_TAGS,
@@ -47,6 +48,37 @@ export function createJournalRouter(client: KiwoomClient): Router {
    * 아래 delete 는 `:date` 를 쓰지만 get 이 하나라도 `/:something` 이 되면
    * 「track」이 날짜로 읽힌다. 신호등 라우터에서 그걸로 한 번 당했다.
    */
+  /**
+   * 11번 「오늘의 주문·체결」 — 지금 로그에서 바로 (2026-09-10). 저장본과 별개로, 화면이
+   * 열릴 때 그날 것을 다시 본다. `POST /orders/sync` 는 그날 저널에 박아 둔다(주문 메뉴의
+   * 「복기 노트에 담기」).
+   */
+  router.get("/orders", async (req, res, next) => {
+    try {
+      const date =
+        typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
+          ? req.query.date
+          : new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+      const rows = await ordersOfDay(date);
+      res.json({ date, rows, summary: summarize(rows) });
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.post("/orders/sync", async (req, res, next) => {
+    try {
+      const date =
+        typeof req.body?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.body.date)
+          ? req.body.date
+          : new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+      const entries = await saveEntry(client, { date });
+      const e = entries.find((x) => x.date === date);
+      res.json({ date, count: e?.orders?.length ?? 0, summary: summarize(e?.orders ?? []) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/track", async (req, res, next) => {
     try {
       const days = Number(req.query.days) || undefined;
