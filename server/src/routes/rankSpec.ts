@@ -5,7 +5,7 @@ import { COMMON_PARAMS, findSpec, specGroups, type RankSpec } from "../rankSpecs
 import { getMarketSnapshot } from "../marketSnapshot.js";
 import { bare, extras, toNum } from "../rankExtras.js";
 import { getStockIndex } from "../stockListCache.js";
-import { flowRank, SUBJECT_LABEL, type FlowSubject } from "../dailyStore.js";
+import { flowRank, flowSums, SUBJECT_LABEL, type FlowSubject } from "../dailyStore.js";
 
 /**
  * 시세분석 — 레지스트리에 등록된 순위 조회를 하나의 라우트로 처리한다.
@@ -35,7 +35,9 @@ function mapRow(row: Record<string, unknown>, spec: RankSpec): Record<string, un
   for (const c of spec.columns) {
     // 이름은 위에서 이미 넣었고, 나머지는 형에 맞춰 변환한다
     if (c.key === "stk_nm") continue;
-    const n = toNum(row[c.key]);
+    /* 응답 이름이 다르면(`src`) 거기서 읽어 우리 이름으로 낸다 */
+    const raw = row[c.src ?? c.key];
+    const n = toNum(raw);
     /*
      * ⚠️ **가격은 부호를 떼서 내보낸다.**
      *
@@ -46,7 +48,7 @@ function mapRow(row: Record<string, unknown>, spec: RankSpec): Record<string, un
      *
      * 여기서 부호를 떼도 잃는 게 없다 — 오르내림은 `flu_rt` 가 말한다.
      */
-    out[c.key] = c.type === "text" ? String(row[c.key] ?? "") : c.type === "price" && n !== null ? Math.abs(n) : n;
+    out[c.key] = c.type === "text" ? String(raw ?? "") : c.type === "price" && n !== null ? Math.abs(n) : n;
   }
   return out;
 }
@@ -74,6 +76,43 @@ const SPAN_OPTIONS = [
 
 /** 화면이 고르는 기간 — 그 밖의 값은 안 받는다 */
 const SPAN_VALUES = SPAN_OPTIONS.map((o) => Number(o.value));
+
+/**
+ * **어느 순위에나 수급을 얹는다** (2026-09-09).
+ *
+ * 벤티지: "수급 5일, 10일, 20일 외국인 기관 주포 이런 애들 수급, 그리고 거래대금,
+ * 시가총액 이런 것도 적용해서 넣어줘. 현재 시세 분석에 이거 안 붙어 있는 애들도 있잖아."
+ *
+ * 시가총액·거래대금은 `extras()` 가 이미 모든 줄에 붙이고 있었다. 수급은 없었다 —
+ * 순위 TR 이 안 주니까. 원장에서 더한다(조회 0회). 화면이 `flow=5|10|20` 으로 기간을
+ * 고르고, 줄마다 `f_fgn·f_trust·f_pen·f_samo·f_smart`(억원)·`f_days`(실제 더한 날)가 붙는다.
+ * 원장이 없는 종목(신규 상장·ETF 등)은 `null` — 「모른다」를 0 으로 적지 않는다.
+ */
+const FLOW_SPANS = [5, 10, 20];
+
+function flowSpanOf(q: unknown): number {
+  const n = Number(q);
+  return FLOW_SPANS.includes(n) ? n : 5;
+}
+
+async function withFlow<T extends { code: string }>(rows: T[], span: number): Promise<T[]> {
+  const sums = await flowSums(
+    rows.map((r) => r.code),
+    span,
+  ).catch(() => new Map());
+  return rows.map((r) => {
+    const f = sums.get(r.code);
+    return {
+      ...r,
+      f_fgn: f?.fgn ?? null,
+      f_trust: f?.trust ?? null,
+      f_pen: f?.pen ?? null,
+      f_samo: f?.samo ?? null,
+      f_smart: f?.smart ?? null,
+      f_days: f?.days ?? 0,
+    };
+  });
+}
 
 export function createRankSpecRouter(client: KiwoomClient): Router {
   const router = Router();
@@ -163,9 +202,10 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
          * 값이다. 다른 순위 경로는 전부 `extras()` 를 붙이고 있었고 여기만
          * 안 붙어 있었다 — 이 조회가 원래 다른 화면으로 그려졌기 때문이다.
          */
+        flowSpan: flowSpanOf(req.query.flow),
         rows: await (async () => {
           const index = await getStockIndex(client).catch(() => new Map());
-          return r.rows.map((x, i) => {
+          return withFlow(r.rows.map((x, i) => {
             const ex = extras(
               { cur_prc: String(x.price), now_trde_qty: "0", stk_cd: x.code },
               index.get(x.code),
@@ -178,7 +218,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
               flu_rt: x.todayRate,
               trde_prica: x.tradeValue,
             };
-          });
+          }), flowSpanOf(req.query.flow));
         })(),
       });
     } catch (err) {
@@ -226,6 +266,9 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
             ...ex,
             /* 스냅샷 쪽 시총이 더 믿을 만하다 — 키움이 직접 준 값이다 */
             cap: s.marketCap,
+            /* 거래대금도 스냅샷의 어림값으로 — 이 순위엔 거래량이 없어 `extras` 가 못 낸다 (2026-09-09) */
+            tv: s.tradeValue ?? null,
+            tvEst: true,
           };
         });
 
@@ -245,7 +288,8 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         },
         market,
         exchange: "3",
-        rows,
+        flowSpan: flowSpanOf(req.query.flow),
+        rows: await withFlow(rows, flowSpanOf(req.query.flow)),
       });
     } catch (err) {
       next(err);
@@ -350,7 +394,8 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         exchange: "3",
         span,
         covered,
-        rows,
+        flowSpan: flowSpanOf(req.query.flow),
+        rows: await withFlow(rows as (Record<string, unknown> & { code: string })[], flowSpanOf(req.query.flow)),
       });
     } catch (err) {
       next(err);
@@ -413,7 +458,10 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
           const res = await client.request<Record<string, unknown>>(
             `/api/dostk/${spec.uri}`,
             spec.apiId,
-            { ...COMMON_PARAMS, ...(spec.params ?? {}), ...chosen, mrkt_tp: market, stex_tp: stex },
+            /* 시장을 안 받는 조회(조회순위)에는 제 파라미터만 보낸다 — 실측한 그대로 */
+            spec.noMarket
+              ? { ...(spec.params ?? {}), ...chosen }
+              : { ...COMMON_PARAMS, ...(spec.params ?? {}), ...chosen, mrkt_tp: market, stex_tp: stex },
             page === 0 ? {} : { contYn, nextKey },
           );
           last = res;
@@ -492,21 +540,13 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
        * 목록을 못 받아도 순위 자체는 나와야 하므로 실패하면 빈 맵으로 간다.
        */
       const index = await getStockIndex(client).catch(() => new Map());
-      res.json({
-        spec: {
-          key: spec.key,
-          label: spec.label,
-          columns: spec.columns,
-          exchange: Boolean(spec.exchange),
-          /* 화면이 버튼을 그리려면 무엇을 고를 수 있는지 알아야 한다 */
-          choices: spec.choices ?? [],
-          note: spec.note ?? "",
-        },
-        market,
-        exchange,
-        /* 지금 무엇으로 골라 부른 것인가 — 화면이 눌린 버튼을 표시한다 */
-        chosen,
-        rows: rows.slice(0, limit).map((r) => {
+      const flowSpan = flowSpanOf(req.query.flow);
+      /*
+       * 거래량도 안 주는 조회(조회순위)는 거래대금을 못 낸다 — 시황 스냅샷의 어림값
+       * (거래량 × 현재가, 40초 캐시)으로 메운다. 어림값이므로 `tvEst` 그대로 참이다.
+       */
+      const snap = spec.noMarket ? await getMarketSnapshot(client).catch(() => null) : null;
+      const drawn = rows.slice(0, limit).map((r) => {
           const code = bare(r.stk_cd);
           const k = krxOf.get(code);
           const mapped = mapRow(r, spec);
@@ -538,14 +578,43 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
             mapped.cur_prc = Math.abs(k.price);
           }
           if (k?.rate != null) mapped.flu_rt = k.rate;
+          /*
+           * `extras` 는 `cur_prc` 로 시가총액을 낸다 — 이름을 바꿔 읽는 조회(`src`)는
+           * 원 응답에 `cur_prc` 가 없으므로 우리 이름으로 맞춘 값을 같이 넘긴다.
+           */
+          const ex = extras({ ...r, cur_prc: mapped.cur_prc ?? r.cur_prc }, index.get(code));
+          if (ex.tv === null && snap) ex.tv = snap.byCode.get(code)?.tradeValue ?? null;
           return {
             ...mapped,
-            ...extras(r, index.get(code)),
+            code,
+            ...ex,
             tvKrx: k?.tv ?? null,
             nxtPrice,
             nxtRate,
           };
-        }),
+        })
+        /* 시장을 안 받는 조회는 여기서 시장을 거른다 — 종목 목록이 말하는 시장으로 */
+        .filter((x) =>
+          !spec.noMarket || market === "000"
+            ? true
+            : x.mkt === (market === "001" ? "코스피" : "코스닥"),
+        );
+      res.json({
+        spec: {
+          key: spec.key,
+          label: spec.label,
+          columns: spec.columns,
+          exchange: Boolean(spec.exchange),
+          /* 화면이 버튼을 그리려면 무엇을 고를 수 있는지 알아야 한다 */
+          choices: spec.choices ?? [],
+          note: spec.note ?? "",
+        },
+        market,
+        exchange,
+        /* 지금 무엇으로 골라 부른 것인가 — 화면이 눌린 버튼을 표시한다 */
+        chosen,
+        flowSpan,
+        rows: await withFlow(drawn, flowSpan),
       });
     } catch (err) {
       next(err);

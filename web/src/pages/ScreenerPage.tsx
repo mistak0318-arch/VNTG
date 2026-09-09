@@ -202,6 +202,11 @@ const RANK_COLS = new Set(["now_rank", "pred_rank", "rank", "prev_rank"]);
  */
 export const SCREENER_TABS = [
   { key: "trade-value", label: "거래대금 상위", kind: "rank" as const },
+  /*
+   * 실시간 조회순위 (2026-09-09 — 벤티지 "나도 시세 분석에 넣어달라고 하려고 했어").
+   * 키움 고객의 눈이 지금 어디 몰리는지 — 거래로 터지기 한 박자 앞의 신호일 때가 있다.
+   */
+  { key: "inquiry-rank", label: "실시간 조회순위", kind: "rank" as const },
   /* 키움 순위에는 없어서 시황 스냅샷으로 우리가 세운다 */
   { key: "market-cap", label: "시가총액 상위", kind: "rank" as const },
   /* `rank` 로 옮겼다 (2026-09-02) — 그래야 필터·신호등·열순서가 같이 붙는다 */
@@ -308,6 +313,24 @@ export function ScreenerPage({
   };
   const [pageSize, setPageSize] = useState<number>(() => Number(localStorage.getItem("vntg.screener.pageSize")) || 100);
   const [page, setPage] = useState(0);
+  /**
+   * **줄마다 얹는 수급의 기간** (2026-09-09 — 벤티지 "수급 5일, 10일, 20일 외국인 기관
+   * 주포 이런 애들 수급, 그리고 거래대금, 시가총액 이런 것도 적용해서 넣어줘").
+   *
+   * 어느 순위를 보든 「이 종목을 요 며칠 누가 샀나」가 옆에 붙는다. 서버가 원장에서
+   * 더하므로 조회는 0회다. 기간은 어느 조회로 옮겨도 그대로다 — 기간을 바꿔 가며
+   * 비교하는 게 쓰는 방식이라 조회마다 따로 두면 매번 다시 누르게 된다.
+   */
+  const [flowSpan, setFlowSpan] = useState<number>(() => {
+    const n = Number(localStorage.getItem("vntg.screener.flow"));
+    return [5, 10, 20].includes(n) ? n : 5;
+  });
+  /**
+   * 주포를 **셋으로 펼쳐 보나** — 투신·연기금·사모 (벤티지 "기관은 주포순이니까 연기금,
+   * 투신, 사모펀드 걔네들 수급 있는지 또 보여주면"). 기본은 접힘 — 외국인·주포 두
+   * 칸이면 폰에서도 들어가고, 셋을 펼치면 표가 다섯 칸 넓어진다.
+   */
+  const [flowDetail, setFlowDetail] = useState<boolean>(() => localStorage.getItem("vntg.screener.flowDetail") === "1");
   /* 신호등은 **켤 때만** — 목록을 여는 것만으로 백 종목을 평가하면 안 된다 */
   const [sigOn, setSigOn] = useState(false);
   const [editTabs, setEditTabs] = useState(false);
@@ -369,12 +392,12 @@ export function ScreenerPage({
       if (!quiet) setLoading(true);
       setError(null);
       api
-        .rank(rankKey, market, exchange, fetchLimit, chosen)
+        .rank(rankKey, market, exchange, fetchLimit, chosen, flowSpan)
         .then((r) => setData(r))
         .catch((e: Error) => setError(e.message))
         .finally(() => setLoading(false));
     },
-    [rankKey, market, exchange, fetchLimit, chosen],
+    [rankKey, market, exchange, fetchLimit, chosen, flowSpan],
   );
 
   useEffect(() => {
@@ -461,6 +484,33 @@ export function ScreenerPage({
 
   const hasCap = hasCapCol;
   const hasTurn = hasTurnCol;
+  /*
+   * **거래대금은 어느 조회에나 붙는다** — 명세가 `trde_prica` 칸을 이미 그리는 조회
+   * (거래대금 상위·누적등락률)는 빼고. 거래량만 주는 조회는 어림값(거래량 × 현재가)이라
+   * 표 아래 「어림값」 줄이 그걸 말한다.
+   */
+  const hasTvExtra = hasTvCol && !cols.some((c) => c.key === "trde_prica");
+  /* 원장이 있는 줄이 하나라도 있어야 수급 칸을 그린다 — 전부 null 이면 빈 칸 다섯이다 */
+  const hasFlow = all.some((r) => (r.f_days ?? 0) > 0);
+  /** 수급 칸 정의 — 접힘이면 외국인·주포 둘, 펼치면 사이에 투신·연기금·사모 */
+  const FLOW_COLS: { key: "f_fgn" | "f_trust" | "f_pen" | "f_samo" | "f_smart"; label: string }[] = flowDetail
+    ? [
+        { key: "f_fgn", label: "외국인" },
+        { key: "f_trust", label: "투신" },
+        { key: "f_pen", label: "연기금" },
+        { key: "f_samo", label: "사모" },
+        { key: "f_smart", label: "주포" },
+      ]
+    : [
+        { key: "f_fgn", label: "외국인" },
+        { key: "f_smart", label: "주포" },
+      ];
+  /** 억원 — 부호를 앞에 단다. 순매수(+)·순매도(−)가 곧 정보다 */
+  const eokSigned = (v: number | null | undefined): string => {
+    if (v == null) return "-";
+    if (v === 0) return "0";
+    return `${v > 0 ? "+" : "−"}${eok(Math.abs(v))}`;
+  };
   /*
    * 정렬.
    *
@@ -829,6 +879,42 @@ export function ScreenerPage({
             title="상위 몇 위까지 받을지 — 20~500, Enter 로 확정"
           />
           <span className="pt-n">위까지</span>
+          {/* 수급 기간 — 줄마다 붙는 외국인·주포 순매수의 합산 기간. 어느 조회에서나 같다 */}
+          <span className="news-scope-sep" />
+          <span className="scr-page-k" title="줄마다 붙는 외국인·주포 순매수를 며칠 더할지 — 전종목 원장에서, 조회 0회">
+            수급
+          </span>
+          {[5, 10, 20].map((n) => (
+            <button
+              key={n}
+              className={`filter-btn ${flowSpan === n ? "active" : ""}`}
+              onClick={() => {
+                setFlowSpan(n);
+                try {
+                  localStorage.setItem("vntg.screener.flow", String(n));
+                } catch {
+                  /* 저장 못 해도 이번 세션에는 바뀐다 */
+                }
+              }}
+            >
+              {n}일
+            </button>
+          ))}
+          <button
+            className={`filter-btn ${flowDetail ? "active" : ""}`}
+            onClick={() => {
+              const next = !flowDetail;
+              setFlowDetail(next);
+              try {
+                localStorage.setItem("vntg.screener.flowDetail", next ? "1" : "0");
+              } catch {
+                /* 저장 못 해도 이번 세션에는 바뀐다 */
+              }
+            }}
+            title="주포(투신+연기금+사모)를 셋으로 펼쳐 봅니다"
+          >
+            {flowDetail ? "주포 접기" : "주포 펼치기"}
+          </button>
           {/* 필터는 접어 둔다 — 늘 펴 두면 표가 화면 밖으로 밀린다 */}
           <button
             className={`filter-btn ${on ? "active" : ""}`}
@@ -1082,8 +1168,10 @@ export function ScreenerPage({
                   {shownCols.map((c) => (
                     <col key={c.key} style={cw.styleOf(c.key)} />
                   ))}
+                  {hasTvExtra && <col style={cw.styleOf("tv")} />}
                   {hasTurn && <col style={cw.styleOf("turn")} />}
                   {hasCap && <col style={cw.styleOf("cap")} />}
+                  {hasFlow && FLOW_COLS.map((f) => <col key={f.key} style={cw.styleOf(f.key)} />)}
                 </colgroup>
                 <thead>
                   <tr>
@@ -1161,6 +1249,15 @@ export function ScreenerPage({
                       />
                     ))}
                     {/* 걸러 보는 기준이면 표에도 있어야 한다 */}
+                    {hasTvExtra && (
+                      <SortableTh
+                        columnKey="tv"
+                        label="거래대금"
+                        accessor={(r: (typeof rows)[number]) => r.tv ?? -Infinity}
+                        sort={sort}
+                        extra={<ColumnGrip cw={cw} k="tv" />}
+                      />
+                    )}
                     {hasTurn && (
                       <SortableTh
                         columnKey="turn"
@@ -1179,6 +1276,21 @@ export function ScreenerPage({
                         extra={<ColumnGrip cw={cw} k="cap" />}
                       />
                     )}
+                    {/*
+                      수급 — `flowSpan` 거래일 순매수 합(억). 머리에 기간을 적어 둔다 —
+                      「외국인 +120억」만 있으면 하루치인지 한 달치인지 알 길이 없다.
+                    */}
+                    {hasFlow &&
+                      FLOW_COLS.map((f) => (
+                        <SortableTh
+                          key={f.key}
+                          columnKey={f.key}
+                          label={`${f.label} ${flowSpan}일`}
+                          accessor={(r: (typeof rows)[number]) => r[f.key] ?? -Infinity}
+                          sort={sort}
+                          extra={<ColumnGrip cw={cw} k={f.key} />}
+                        />
+                      ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -1314,12 +1426,39 @@ export function ScreenerPage({
                             </td>
                           );
                         })}
+                      {hasTvExtra && (
+                        <td className="num" title={r.tvEst ? "어림값 — 거래량 × 현재가" : undefined}>
+                          {r.tv === null ? "-" : `${r.tvEst ? "≈" : ""}${eok(r.tv)}`}
+                        </td>
+                      )}
                       {hasTurn && (
                         <td className={`num ${r.turn !== null && r.turn >= 5 ? "positive" : "pt-n"}`}>
                           {r.turn === null ? "-" : `${r.turn.toFixed(r.turn >= 10 ? 0 : 1)}%`}
                         </td>
                       )}
                       {hasCap && <td className="num pt-n">{eok(r.cap)}</td>}
+                      {hasFlow &&
+                        FLOW_COLS.map((f) => {
+                          const v = r[f.key] ?? null;
+                          const days = r.f_days ?? 0;
+                          return (
+                            <td
+                              key={f.key}
+                              className={`num ${v == null ? "pt-n" : v > 0 ? "positive" : v < 0 ? "negative" : ""}`}
+                              /* 원장이 얕으면 그만큼만 더한 것 — 「20일」이라 적고 12일을 재면 거짓말이다 */
+                              title={
+                                v == null
+                                  ? "원장에 없는 종목입니다"
+                                  : days < flowSpan
+                                    ? `원장이 ${days}일치라 ${days}일 합입니다`
+                                    : `${flowSpan}거래일 순매수 합 (억원)`
+                              }
+                            >
+                              {eokSigned(v)}
+                              {v != null && days < flowSpan && <i className="scr-split">{days}일</i>}
+                            </td>
+                          );
+                        })}
                     </tr>
                   ))}
                 </tbody>

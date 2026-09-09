@@ -447,6 +447,72 @@ export async function flowRank(
   return { rows: rows.slice(0, limit), covered };
 }
 
+/**
+ * **한 줄의 수급** — 시세분석 표의 어느 순위에나 얹는 값 (2026-09-09).
+ *
+ * 벤티지: "최근 기관 외국인 수급인데, 기관은 주포순이니까 연기금, 투신, 사모펀드
+ * 걔네들 수급 있는지 또 보여주면 좋겠거든 … 수급 5일, 10일, 20일 외국인 기관 주포
+ * 이런 애들 수급 … 현재 시세 분석에 이거 안 붙어 있는 애들도 있잖아."
+ *
+ * 순위 TR 은 그날 등락과 거래만 준다. 「이 종목을 요 며칠 누가 샀나」는 원장이
+ * 답한다 — 조회 0회. 단위는 **억원**(원장은 백만원이라 100 으로 나눈다).
+ */
+export interface FlowSums {
+  fgn: number | null;
+  trust: number | null;
+  pen: number | null;
+  samo: number | null;
+  /** 투신+연기금+사모 */
+  smart: number | null;
+  /** 실제로 더한 날 수 — 원장이 얕으면 요청보다 적다 */
+  days: number;
+}
+
+/**
+ * 종목 하나의 원장을 읽어 두는 캐시 — 순위 100줄에 파일 100개를 매번 열지 않게.
+ * 원장은 하루 한 번 바뀌므로 10분이면 넉넉하다.
+ */
+const flowCache = new Map<string, { at: number; flow: FlowRow[] }>();
+const FLOW_TTL_MS = 10 * 60_000;
+
+async function flowOf(code: string): Promise<FlowRow[]> {
+  const hit = flowCache.get(code);
+  if (hit && Date.now() - hit.at < FLOW_TTL_MS) return hit.flow;
+  let flow: FlowRow[] = [];
+  try {
+    flow = (await loadLedger(code)).flow ?? [];
+  } catch {
+    /* 원장이 없으면 빈 것 — 「모른다」로 나간다 */
+  }
+  flowCache.set(code, { at: Date.now(), flow });
+  return flow;
+}
+
+/** 여러 종목의 최근 `days` 거래일 순매수 합. 원장이 없는 종목은 빠진다 */
+export async function flowSums(codes: string[], days: number): Promise<Map<string, FlowSums>> {
+  const out = new Map<string, FlowSums>();
+  const sum = (win: FlowRow[], s: FlowSubject): number | null => {
+    const v = win.map((r) => subjectOf(r, s)).filter((x): x is number => x !== null);
+    return v.length === 0 ? null : Math.round(v.reduce((a, b) => a + b, 0) / 100);
+  };
+  await Promise.all(
+    [...new Set(codes)].map(async (code) => {
+      const flow = await flowOf(code);
+      if (flow.length === 0) return;
+      const win = flow.slice(-days);
+      out.set(code, {
+        fgn: sum(win, "fgn"),
+        trust: sum(win, "trust"),
+        pen: sum(win, "pen"),
+        samo: sum(win, "samo"),
+        smart: sum(win, "smart"),
+        days: win.length,
+      });
+    }),
+  );
+  return out;
+}
+
 /* ------------------------------------------------------------------ */
 /* 수집 이력 — 언제 성공했고 언제 실패했나                                */
 /* ------------------------------------------------------------------ */

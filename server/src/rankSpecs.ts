@@ -20,6 +20,14 @@ export interface RankColumn {
   key: string;
   label: string;
   type?: ColType;
+  /**
+   * 응답에서 읽을 이름이 `key` 와 다를 때 (2026-09-09).
+   *
+   * 조회순위(`ka00198`)는 현재가를 `past_curr_prc`, 등락률을 `base_comp_chgr` 로 준다.
+   * 화면은 `cur_prc`·`flu_rt` 라는 이름으로 실시간을 덧씌우고 색을 칠하므로, 응답 이름을
+   * 그대로 흘리면 그 줄만 실시간 점이 안 붙는다. 여기서 이름을 맞춘다.
+   */
+  src?: string;
 }
 
 export interface RankSpec {
@@ -41,6 +49,11 @@ export interface RankSpec {
    * 그래서 NXT에서만 급등한 종목은 기본 조회에 아예 안 나온다 — 따로 볼 수 있어야 한다.
    */
   exchange?: boolean;
+  /**
+   * 시장(mrkt_tp)을 **안 받는 조회** (2026-09-09) — 조회순위는 전체 시장 한 덩어리다.
+   * 화면이 코스피/코스닥을 고르면 서버가 종목 목록의 시장으로 걸러 준다.
+   */
+  noMarket?: boolean;
   columns: RankColumn[];
   /**
    * **화면에서 고를 수 있는 파라미터** (2026-09-01).
@@ -86,6 +99,54 @@ const STOCK: RankColumn[] = [
 ];
 
 export const RANK_SPECS: RankSpec[] = [
+  // ── 관심 ────────────────────────────────────────────────
+  {
+    /*
+     * **실시간 종목조회순위** (2026-09-09 — 벤티지: "키움증권 API 중에 실시간 조회순이
+     * 가져오는 API 있는지 확인해 줘봐" → "시세 분석에 넣어달라고 하려고 했어").
+     *
+     * 키움 고객이 **지금 어떤 종목을 들여다보는가**의 순위다. 등락·거래 순위는 이미
+     * 일어난 일이고, 이건 사람들의 눈이 어디에 몰리는지다 — 거래로 터지기 한 박자
+     * 앞의 신호일 때가 있다. 네이버 검색상위와 비슷하지만 매매하는 사람 쪽에 더 가깝다.
+     *
+     * 실측(2026-09-09 21:35): 20줄 고정, 연속조회 없음, 시장 구분 입력 없음.
+     * 순위는 `bigd_rank`(키움 이름은 「빅데이터 순위」), 현재가는 `past_curr_prc`,
+     * 등락률은 `base_comp_chgr`. 집계 시각 `tm` 은 1분 기준도 5~10분 단위로 갱신되더라.
+     */
+    key: "inquiry-rank",
+    label: "실시간 조회순위",
+    group: "관심",
+    uri: "stkinfo",
+    apiId: "ka00198",
+    listKey: "item_inq_rank",
+    noMarket: true,
+    choices: [
+      {
+        param: "qry_tp",
+        label: "기준",
+        def: "1",
+        options: [
+          { value: "5", label: "30초" },
+          { value: "1", label: "1분" },
+          { value: "2", label: "10분" },
+          { value: "3", label: "1시간" },
+          { value: "4", label: "당일" },
+        ],
+      },
+    ],
+    columns: [
+      { key: "rank", src: "bigd_rank", label: "순위", type: "num" },
+      { key: "rank_chg", label: "변동", type: "signed" },
+      { key: "stk_nm", label: "종목명", type: "text" },
+      { key: "cur_prc", src: "past_curr_prc", label: "현재가", type: "price" },
+      { key: "flu_rt", src: "base_comp_chgr", label: "등락률", type: "pct" },
+    ],
+    note:
+      "키움 고객이 지금 어떤 종목을 많이 조회하는지의 순위입니다 — 20종목, 전체 시장 한 덩어리. " +
+      "「변동」은 직전 집계 대비 순위가 몇 계단 올랐나(+)·내렸나(−)입니다. " +
+      "거래로 터지기 전에 눈이 먼저 몰리는 종목을 찾을 때 봅니다.",
+  },
+
   // ── 등락 ────────────────────────────────────────────────
   {
     key: "flu-rate",
