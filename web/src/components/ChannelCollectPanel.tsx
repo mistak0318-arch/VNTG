@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type ChannelEntry, type ChannelReport } from "../api";
+import { api, type ChannelEntry, type ChannelReport, kstYmd } from "../api";
 
 /**
  * 구독 채널 수집 설정.
@@ -18,7 +18,7 @@ function fmtWhen(iso: string | null): string {
   if (days === 0) return "오늘";
   if (days === 1) return "어제";
   if (days < 30) return `${days}일 전`;
-  return d.toISOString().slice(0, 10);
+  return kstYmd(iso);
 }
 
 type SortKey = "members" | "recent" | "name";

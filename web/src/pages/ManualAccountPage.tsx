@@ -7,7 +7,7 @@ import {
   type EvaluatedAccount,
   type EvaluatedHolding,
   type StockSearchResult,
-} from "../api";
+  kstYmd } from "../api";
 import { useListKeys } from "../useListKeys";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { CollapsibleCard } from "../components/CollapsibleCard";
@@ -534,7 +534,7 @@ export function ManualAccountPage({
             {a.stockRatio !== null && (
               <span className="ma-cash-note">
                 주식 {a.stockRatio.toFixed(0)}% · 현금 {(100 - a.stockRatio).toFixed(0)}%
-                {a.cashUpdatedAt && ` · ${a.cashUpdatedAt.slice(5, 10)} 입력`}
+                {a.cashUpdatedAt && ` · ${kstYmd(a.cashUpdatedAt).slice(5)} 입력`}
                 {a.anchor === "total" && " · 총자산 기준 — 예수금은 알아서"}
                 {a.anchor === "total" && a.totalAnchor !== undefined && a.totalValue > a.totalAnchor && (
                   <b className="negative"> · 주식이 총자산보다 큽니다 — 총자산을 고쳐 주세요</b>

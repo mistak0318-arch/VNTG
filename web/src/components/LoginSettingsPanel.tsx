@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type AuthConfigView, type DoorState, type OtpMethod } from "../api";
+import { api, type AuthConfigView, type DoorState, type OtpMethod, kstYmd } from "../api";
 
 /**
  * 로그인 설정 (2026-08-29 요청).
@@ -463,7 +463,7 @@ export function LoginSettingsPanel() {
                 <span className="login-set-hint">
                   {d.ua.slice(0, 60)}
                   <br />
-                  추가 {d.addedAt.slice(0, 10)} · 마지막 {d.lastSeenAt.slice(0, 10)}
+                  추가 {kstYmd(d.addedAt)} · 마지막 {kstYmd(d.lastSeenAt)}
                 </span>
               </div>
               <button

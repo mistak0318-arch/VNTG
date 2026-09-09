@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type BuzzBoard, type KeywordFlow, type KeywordHit, type KeywordKind } from "../api";
+import { api, type BuzzBoard, type KeywordFlow, type KeywordHit, type KeywordKind, fmtKstHm } from "../api";
 import { useSheetBack } from "../useSheetBack";
 import { useStockNames } from "../useStockNames";
 
@@ -664,7 +664,7 @@ function KeywordSheet({
                   {s.title}
                 </a>
                 <span className="muted">
-                  {s.press} · {s.at.slice(11, 16)}
+                  {s.press} · {fmtKstHm(s.at)}
                   {/*
                     제목에 그 낱말이 없으면 **왜 여기 있는지 말해 준다** (2026-08-31).
                     사전 매칭은 제목 + 요약을 보는데 화면은 제목만 보여 주므로,

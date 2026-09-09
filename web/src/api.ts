@@ -4535,6 +4535,23 @@ export function fmtKst(iso: string): string {
   return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(5, 16).replace("T", " ");
 }
 
+/** ISO → 「YYYY-MM-DD」 한국 날짜. 밤 0~9시엔 UTC 날짜가 하루 전이라 글자를 자르면 틀린다 */
+export function kstYmd(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+}
+/** ISO → 「HH:mm」 한국시각 */
+export function fmtKstHm(iso: string): string {
+  return fmtKst(iso).slice(6);
+}
+/** ISO → 「HH:mm:ss」 한국시각 */
+export function fmtKstHms(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(11, 19);
+  return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(11, 19);
+}
+
 export function fmtNum(v: unknown): string {
   const n = Number(v);
   if (!Number.isFinite(n)) return "-";

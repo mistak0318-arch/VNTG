@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type BuzzTermDetail } from "../api";
+import { api, type BuzzTermDetail, fmtKst } from "../api";
 
 /**
  * 버즈 원문 창 (2026-08-31 요청 —
@@ -68,7 +68,7 @@ export function BuzzSourcePage() {
             <article className="bsrc-item" key={`${s.link}|${i}`}>
               <div className="bsrc-meta">
                 <b>{s.channel}</b>
-                <span className="pt-n">{s.at.replace("T", " ").slice(0, 16)}</span>
+                <span className="pt-n">{fmtKst(s.at)}</span>
                 {s.full ? (
                   <span className="bsrc-badge full">전문</span>
                 ) : (

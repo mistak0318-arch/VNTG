@@ -7,7 +7,7 @@ import {
   type SignalSweepResult,
   type BacktestSummary,
   type LedgerSampleProgress,
-} from "../api";
+  fmtKst } from "../api";
 
 /**
  * 신호등 시뮬레이터 (2026-08-31 — "신호등이 적절한지는 어떻게 봐야해.
@@ -166,7 +166,7 @@ export function SignalSimPanel({ config }: { config: SignalConfig | null }) {
       {meta?.has && (
         <p className="pt-n sim-meta">
           표본 {meta.obs?.toLocaleString("ko-KR")}건 · {meta.codeCount?.toLocaleString("ko-KR")}종목 ·
-          되짚기 {meta.days}거래일 · {meta.builtAt?.slice(0, 16).replace("T", " ")} 만듦
+          되짚기 {meta.days}거래일 · {meta.builtAt ? fmtKst(meta.builtAt) : ""} 만듦
         </p>
       )}
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type ScopeDetail, type ScopeFlow, type ScopeRow, fmtKst } from "../api";
+import { api, type ScopeDetail, type ScopeFlow, type ScopeRow, fmtKst, kstYmd } from "../api";
 import { MiniLine } from "../components/MiniLine";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useWatchedCodes } from "../useWatchedCodes";
@@ -466,7 +466,7 @@ function Detail({
           {d.telegram.length === 0 ? (
             <p className="pt-n">
               채널 글 창고에 언급이 없습니다
-              {d.telegramOldest ? ` (창고는 ${d.telegramOldest.slice(5, 10)} 부터)` : ""}
+              {d.telegramOldest ? ` (창고는 ${kstYmd(d.telegramOldest).slice(5)} 부터)` : ""}
             </p>
           ) : (
             <ul className="sc-list">

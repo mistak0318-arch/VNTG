@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { api, type RegimeConfig, type RegimeResult, type RegimeSnap } from "../api";
+import { api, type RegimeConfig, type RegimeResult, type RegimeSnap, fmtKst } from "../api";
 
 /**
  * 장세 점검 (2026-08-31 벤티지 요청).
@@ -202,7 +202,7 @@ export function RegimePanel() {
           </div>
           <p className="pt-n">
             종목 {res.today.n.toLocaleString("ko-KR")}개 기준 · 캐시{" "}
-            {res.cacheBuiltAt.slice(0, 16).replace("T", " ")}
+            {fmtKst(res.cacheBuiltAt)}
             {res.pastFrom === "cache" && (
               <>
                 {" "}

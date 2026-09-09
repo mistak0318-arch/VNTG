@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useSheetBack } from "../useSheetBack";
-import { api, type TgMsg, type TgRoom, type TgStar } from "../api";
+import { api, type TgMsg, type TgRoom, type TgStar, fmtKst } from "../api";
 import { useCardOrder } from "../useCardOrder";
 import { OrderResetButton } from "./OrderResetButton";
 
@@ -440,7 +440,7 @@ export function TelegramStarsPanel() {
           <div className="tgr-star-head">
             <em className="tgr-star-room">{s.channel}</em>
             <span className="pt-n">
-              {s.at.slice(5, 10)} {hm(s.at)}
+              {fmtKst(s.at)}
             </span>
             <button
               className="row-del-btn"

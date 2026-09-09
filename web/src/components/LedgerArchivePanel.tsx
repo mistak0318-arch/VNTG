@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, fmtNum, type ArchiveGroupStat, type ArchiveHorizon, type ArchiveMeta, type ArchiveReport, type ArchiveRow } from "../api";
+import { api, fmtNum, type ArchiveGroupStat, type ArchiveHorizon, type ArchiveMeta, type ArchiveReport, type ArchiveRow, kstYmd } from "../api";
 import { AlertTags } from "./AlertTags";
 
 /**
@@ -119,7 +119,7 @@ export function LedgerArchivePanel() {
       {report && (
         <>
           <div className="arch-meta pt-n">
-            지문: {Object.entries(report.meta.fingerprints).map(([k, n]) => `${k}(${n})`).join(" · ")} · 일봉 {report.closesBuiltAt.slice(0, 10)} 까지
+            지문: {Object.entries(report.meta.fingerprints).map(([k, n]) => `${k}(${n})`).join(" · ")} · 일봉 {kstYmd(report.closesBuiltAt)} 까지
           </div>
 
           {/* 그때의 옵션값 */}

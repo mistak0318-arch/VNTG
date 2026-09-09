@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type RealtimeStatus, type RealtimeStoreInfo } from "../api";
+import { api, type RealtimeStatus, type RealtimeStoreInfo, fmtKstHms } from "../api";
 
 /**
  * 실시간 상태 (2026-08-31).
@@ -77,7 +77,7 @@ export function RealtimeStatusPanel() {
         <div className="rts-errs">
           {errs.slice(-5).map((e, i) => (
             <div key={i}>
-              <span className="pt-n">{e.at.slice(11, 19)}</span> <b>{e.code}</b> {e.msg}
+              <span className="pt-n">{fmtKstHms(e.at)}</span> <b>{e.code}</b> {e.msg}
             </div>
           ))}
         </div>

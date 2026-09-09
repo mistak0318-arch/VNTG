@@ -5,7 +5,7 @@ import {
   type BacktestRuleDef,
   type BacktestRuleKey,
   type BacktestStat,
-} from "../api";
+  kstYmd } from "../api";
 
 /**
  * 조건 백테스트 — **「이 조건으로 들어갔으면 과거에 어땠나」**.
@@ -342,7 +342,7 @@ export function BacktestPanel() {
                       <td className="pt-n">{pct(x.base.avg)}</td>
                       <td>{x.hit.winRate.toFixed(0)}%</td>
                       <td>{x.hit.count.toLocaleString("ko-KR")}</td>
-                      <td className="pt-n">{x.at.slice(5, 10)}</td>
+                      <td className="pt-n">{kstYmd(x.at).slice(5)}</td>
                     </tr>
                   ))}
               </tbody>

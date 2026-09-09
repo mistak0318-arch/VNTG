@@ -1,3 +1,11 @@
+/*
+ * **서버 시각은 한국시각으로 고정한다** (2026-09-10 — 벤티지 "시스템 내의 모든 시간 포맷을
+ * 확인하고 KST 기준으로 맞춰"). 텔레그램 문구·리포트의 `toLocaleString("ko-KR")` 50여 곳이
+ * 프로세스 시간대를 따른다 — 미니PC 가 어느 시간대로 켜지든 같은 시각을 말하게 한다.
+ * Node 는 process.env.TZ 를 바꾸는 순간 시간대를 다시 읽는다.
+ */
+process.env.TZ = "Asia/Seoul";
+
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";

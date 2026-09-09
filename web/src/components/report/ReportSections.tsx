@@ -20,7 +20,7 @@ import {
   type UsMajorResult,
   type EvaluatedTheme,
   type MarketPulse,
-} from "../../api";
+  fmtKst } from "../../api";
 import { CandleChart } from "../CandleChart";
 import { TradeChart, type TradeMonth } from "../TradePanel";
 import { SectorStocks } from "../SectorFlowPanel";
@@ -681,7 +681,7 @@ export function FeaturedSection({
         <div className="rp-flow-h">
           신호등 80점 이상
           {scanAt && (
-            <span className="pt-n"> · {new Date(scanAt).toLocaleString("ko-KR").slice(5, 16)} 스캔</span>
+            <span className="pt-n"> · {fmtKst(scanAt)} 스캔</span>
           )}
         </div>
         {hits === null && <div className="page-note">불러오는 중…</div>}
@@ -746,7 +746,7 @@ export function ChannelDigestSection() {
   return (
     <>
       <div className="pt-n" style={{ marginBottom: 6 }}>
-        {new Date(report.generatedAt).toLocaleString("ko-KR").slice(5, 16)} 기준 · 채널{" "}
+        {fmtKst(report.generatedAt)} 기준 · 채널{" "}
         {report.channels}개 · 원문 {report.rawCount}건 중 {report.usedCount}건 선별
       </div>
 
