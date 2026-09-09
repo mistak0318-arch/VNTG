@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { JudgeChips, JudgeLegend } from "../components/JudgeChips";
 import {
   api,
   fmtNum,
@@ -1178,26 +1179,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                   </td>
                   {/* 판정 — 여섯 항목을 점으로. 초록 = 좋은 쪽 */}
                   <td className="wl-flow-cell" onClick={(e) => { e.stopPropagation(); setExpanded(expanded === r.code ? null : r.code); }}>
-                    <span className="wl-judge">
-                      {([
-                        ["정", r.trendPass, "정배열"],
-                        ["캔", r.above5 === null && r.above20 === null ? null : Boolean(r.above5 || r.above20), "종가가 5·20일선 위인가"],
-                        ["공", r.shortTrend == null ? null : r.shortTrend < 0, "공매도 — 줄어야 좋다"],
-                        ["대", r.lendingTrend == null ? null : r.lendingTrend < 0, "대차잔고 — 줄어야 좋다"],
-                        /*
-                         * 영업이익·업종 강세는 뺐다 (2026-09-09 밤 — 벤티지 "판정 로직 잘 돌아가는지
-                         * 체크 좀"). 실측 68종목 전부 「모름」 — 신호등에서 그 두 기준이 꺼져 있어
-                         * (profitGrowth 기본 꺼짐, sectorStrength 강제 꺼짐) 값이 영영 안 온다.
-                         * 늘 회색인 칸은 정보가 아니다. 대신 이미 충족수에 들어가는 목표가·의견을 보인다.
-                         */
-                        ["목", r.upside == null ? null : r.upside >= 10, "증권사 목표가까지 10% 이상 남았나"],
-                        ["의", r.opinionMove == null ? null : r.opinionMove >= 0, "최근 60일 투자의견 하향 없음(상향이면 가점)"],
-                      ] as const).map(([l, ok, hint]) => (
-                        <em key={l} className={ok === null || ok === undefined ? "na" : ok ? "ok" : "bad"} title={hint}>
-                          {l}
-                        </em>
-                      ))}
-                    </span>
+                    <JudgeChips r={r} />
                   </td>
                   {/* 목표가는 금액이 아니라 남은 폭으로 — 금액은 종목마다 자릿수가 달라 못 견준다 */}
                   <td className={r.upside == null ? "" : r.upside > 0 ? "positive" : "negative"}>
@@ -1297,11 +1279,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
           <div className="table-note">
             수익률은 편입가 대비 · 순매매 단위는 백만원 · 충족은 판단 가능한 항목만 셉니다(데이터가 없으면 분모에서도 뺍니다)
             <br />
-            <b>판정 칸</b> — <em className="wl-judge-legend ok">초록</em> 조건 충족 ·{" "}
-            <em className="wl-judge-legend bad">파랑</em> 미달 · <em className="wl-judge-legend na">회색</em> 판단 불가(데이터 없음).
-            {" "}<b>정</b> 정배열(현재가≥5일≥20일≥60일≥120일선) · <b>캔</b> 종가가 5일선 또는 20일선 위 ·{" "}
-            <b>공</b> 공매도 수량 3일 감소 · <b>대</b> 대차잔고 3일 감소 (둘 다 <b>줄어야</b> 초록) ·{" "}
-            <b>목</b> 목표가까지 10% 이상 남음 · <b>의</b> 최근 60일 투자의견 하향 없음
+            <JudgeLegend />
           </div>
         </div>
       )}

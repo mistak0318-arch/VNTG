@@ -6,6 +6,8 @@ import { useWatchedCodes } from "../useWatchedCodes";
 import { fid, useRealtime } from "../useRealtime";
 import { SuperMark } from "../useSuperMarks";
 import { useBuzz } from "../components/BuzzBadge";
+import { JudgeChips, JudgeLegend } from "../components/JudgeChips";
+import type { TrackedStock } from "../api";
 
 /**
  * **매수직전** — 현미경 그룹의 관리 화면 (2026-09-07).
@@ -518,6 +520,26 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
    * 표시가 안 되어 있네 표시하자고"). 시세분석 표와 같은 훅·같은 팝업이다.
    */
   const buzz = useBuzz(rows.map((r) => r.code));
+  /*
+   * 판정 칩 (2026-09-09 밤 — 벤티지 "이거 판정카드 현미경 표 메모 앞에 붙여줘"). 관심종목
+   * 추적(서버 캐시)에서 코드로 찾는다 — 현미경 종목은 전부 관심종목이라 거기 있다.
+   */
+  const [judge, setJudge] = useState<Record<string, TrackedStock>>({});
+  useEffect(() => {
+    let alive = true;
+    api
+      .watchlistTracking()
+      .then((r) => {
+        if (!alive) return;
+        const m: Record<string, TrackedStock> = {};
+        for (const it of r.items) m[it.code] = it;
+        setJudge(m);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [rows.length]);
   /** 실시간이 준 현재가·등락률 — 없으면 null 이고, 그때는 폴링 값을 쓴다 */
   const liveOf = (code: string): { price: number; rate: number | null } | null => {
     const v = rt.values[`0B:${code}`];
@@ -628,6 +650,7 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
                 <SortableTh columnKey="ma" label={<>20일선<br />이격</>} accessor={(r) => low(r.chart.ma20Gap)} sort={sort} className="num" />
                 <SortableTh columnKey="hi" label={<>20일<br />고점</>} accessor={(r) => low(r.chart.hi20Gap)} sort={sort} className="num" />
                 <th className="sc-spark-col">60일</th>
+                <th title="정배열·캔들·공매도·대차·목표가·의견 — 초록 = 충족, 파랑 = 미달, 회색 = 판단 불가">판정</th>
                 <th>메모</th>
               </tr>
             </thead>
@@ -696,6 +719,7 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
                   <td className={`num ${cls(r.chart.ma20Gap)}`}>{pct(r.chart.ma20Gap)}</td>
                   <td className={`num ${cls(r.chart.hi20Gap)}`}>{pct(r.chart.hi20Gap)}</td>
                   <td className="sc-spark-col"><Spark closes={r.chart.closes} /></td>
+                  <td>{judge[r.code] ? <JudgeChips r={judge[r.code]} /> : <span className="pt-n">—</span>}</td>
                   <td className="sc-memo" title={r.note}>{r.note ? r.note.slice(0, 40) : <span className="pt-n">—</span>}</td>
                 </tr>
               ))}
@@ -720,6 +744,8 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
       <p className="table-note">
         수급은 억원(순매수). 5일·20일은 원장의 마지막 날 기준이며 장중에는 어제까지입니다 — 「오늘」 칸만 지금 값입니다.
         공매도 비중이 20일 평균의 1.5배를 넘으면 빨갛게, 대차잔고는 <b>줄어야</b> 빨갛게 적습니다.
+        <br />
+        <JudgeLegend />
       </p>
       {buzz.sheet(onSelectStock)}
     </div>
