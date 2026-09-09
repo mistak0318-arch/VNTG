@@ -1022,7 +1022,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                 />
                 <SortableTh columnKey="pass" label="충족" accessor={(r: TrackedStock) => r.passCount} sort={sort} />
                 <th title="외인 5·10·20일 / 기관 5·20·60일 순매수 방향 — 빨강이 순매수. 값은 ▼ 를 펴면 나옵니다">수급</th>
-                <th title="정배열·캔들·공매도·대차·영익·섹터 — 초록이 좋은 쪽. 자세한 건 ▼">판정</th>
+                <th title="정배열·캔들·공매도·대차·목표가·의견 — 초록 = 충족, 파랑 = 미달, 회색 = 판단 불가. 자세한 건 ▼">판정</th>
                 <SortableTh
                   columnKey="upside"
                   label="목표가"
@@ -1184,8 +1184,14 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
                         ["캔", r.above5 === null && r.above20 === null ? null : Boolean(r.above5 || r.above20), "종가가 5·20일선 위인가"],
                         ["공", r.shortTrend == null ? null : r.shortTrend < 0, "공매도 — 줄어야 좋다"],
                         ["대", r.lendingTrend == null ? null : r.lendingTrend < 0, "대차잔고 — 줄어야 좋다"],
-                        ["영", r.profitUp, "최근 분기 영업이익 증가"],
-                        ["섹", r.sectorStrong, "업종이 시장 대비 강한가"],
+                        /*
+                         * 영업이익·업종 강세는 뺐다 (2026-09-09 밤 — 벤티지 "판정 로직 잘 돌아가는지
+                         * 체크 좀"). 실측 68종목 전부 「모름」 — 신호등에서 그 두 기준이 꺼져 있어
+                         * (profitGrowth 기본 꺼짐, sectorStrength 강제 꺼짐) 값이 영영 안 온다.
+                         * 늘 회색인 칸은 정보가 아니다. 대신 이미 충족수에 들어가는 목표가·의견을 보인다.
+                         */
+                        ["목", r.upside == null ? null : r.upside >= 10, "증권사 목표가까지 10% 이상 남았나"],
+                        ["의", r.opinionMove == null ? null : r.opinionMove >= 0, "최근 60일 투자의견 하향 없음(상향이면 가점)"],
                       ] as const).map(([l, ok, hint]) => (
                         <em key={l} className={ok === null || ok === undefined ? "na" : ok ? "ok" : "bad"} title={hint}>
                           {l}
@@ -1289,9 +1295,13 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
             </tbody>
           </table>
           <div className="table-note">
-            수익률은 편입가 대비 · 순매매 단위는 백만원 · 정배열은 현재가≥5일≥20일≥60일≥120일선 ·
-            캔들은 종가가 어느 선 위인지 · <b>공매도·대차는 줄어야(▼) 좋습니다</b> ·
-            충족은 판단 가능한 항목만 셉니다(데이터가 없으면 분모에서도 뺍니다)
+            수익률은 편입가 대비 · 순매매 단위는 백만원 · 충족은 판단 가능한 항목만 셉니다(데이터가 없으면 분모에서도 뺍니다)
+            <br />
+            <b>판정 칸</b> — <em className="wl-judge-legend ok">초록</em> 조건 충족 ·{" "}
+            <em className="wl-judge-legend bad">파랑</em> 미달 · <em className="wl-judge-legend na">회색</em> 판단 불가(데이터 없음).
+            {" "}<b>정</b> 정배열(현재가≥5일≥20일≥60일≥120일선) · <b>캔</b> 종가가 5일선 또는 20일선 위 ·{" "}
+            <b>공</b> 공매도 수량 3일 감소 · <b>대</b> 대차잔고 3일 감소 (둘 다 <b>줄어야</b> 초록) ·{" "}
+            <b>목</b> 목표가까지 10% 이상 남음 · <b>의</b> 최근 60일 투자의견 하향 없음
           </div>
         </div>
       )}

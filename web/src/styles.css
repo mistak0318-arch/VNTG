@@ -1377,7 +1377,18 @@ body {
   font-size: 1.0rem;
   line-height: 1;
   margin-left: auto;
+  /* 글자·이모지를 동그라미 한가운데에 (2026-09-09 밤 — 벤티지 "이 아이콘들 중앙정렬 좀") */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
+/* 머리줄의 단추들은 별 다음부터 붙는다 — 별만 auto 로 밀고 나머지는 같은 간격 */
+.sheet-header .watch-btn + .watch-btn { margin-left: 0; }
+.wl-judge-legend { font-style: normal; font-weight: 700; padding: 0 3px; border-radius: 3px; border: 1px solid var(--border); }
+.wl-judge-legend.ok { color: var(--green); border-color: rgba(53, 196, 106, 0.5); }
+.wl-judge-legend.bad { color: var(--blue); border-color: rgba(76, 141, 255, 0.4); }
+.wl-judge-legend.na { color: var(--muted); }
 
 .watch-btn.on {
   color: #f5c542;
