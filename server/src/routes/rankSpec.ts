@@ -7,6 +7,7 @@ import { bare, extras, toNum } from "../rankExtras.js";
 import { getStockIndex } from "../stockListCache.js";
 import { flowRank, flowSums, SUBJECT_LABEL, type FlowSubject } from "../dailyStore.js";
 import { buzzDetail, buzzMany, markEntered } from "../inquiryBuzz.js";
+import { cumulative, noteLiveSample, samplerStatus } from "../inquirySampler.js";
 
 /**
  * 시세분석 — 레지스트리에 등록된 순위 조회를 하나의 라우트로 처리한다.
@@ -402,6 +403,81 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
   });
 
   /**
+   * **조회순위 누적** (2026-09-09 밤) — 키움이 20줄만 주므로 시간을 쌓는다 (inquirySampler).
+   * `win` 30·60·180 분. 등장 횟수 → 최고 순위 순. 시세분석 표의 다른 순위와 같은 모양.
+   */
+  router.get("/inquiry-cum", async (req, res, next) => {
+    try {
+      const WINS = [30, 60, 180];
+      const win = WINS.includes(Number(req.query.win)) ? Number(req.query.win) : 30;
+      const limit = Math.min(Math.max(Number(req.query.limit) || 100, 20), 500);
+      const market = ["000", "001", "101"].includes(String(req.query.market)) ? String(req.query.market) : "000";
+      const { rows: cum, samples, oldestAt } = cumulative(win);
+      const index = await getStockIndex(client).catch(() => new Map());
+      const snap = await getMarketSnapshot(client).catch(() => null);
+      const want = market === "001" ? "코스피" : market === "101" ? "코스닥" : null;
+      const drawn = cum
+        .map((r, i) => {
+          const ex = extras({ cur_prc: String(r.price ?? 0), now_trde_qty: "0", stk_cd: r.code }, index.get(r.code));
+          if (ex.tv === null && snap) ex.tv = snap.byCode.get(r.code)?.tradeValue ?? null;
+          return {
+            code: r.code,
+            name: r.name,
+            rank: i + 1,
+            cur_prc: r.price,
+            flu_rt: r.rate,
+            hits: r.hits,
+            share: samples > 0 ? Math.round((r.hits / samples) * 100) : null,
+            bestRank: r.bestRank,
+            lastRank: r.lastRank,
+            firstAt: new Date(r.firstAt).toISOString(),
+            ...ex,
+          };
+        })
+        .filter((x) => !want || x.mkt === want)
+        .slice(0, limit);
+      const st = samplerStatus();
+      res.json({
+        spec: {
+          key: "inquiry-cum",
+          label: `조회순위 누적 (${win}분)`,
+          columns: [
+            { key: "rank", label: "순위", type: "num" },
+            { key: "cur_prc", label: "현재가", type: "price" },
+            { key: "flu_rt", label: "등락률", type: "pct" },
+            { key: "hits", label: "등장", type: "num" },
+            { key: "share", label: "점유", type: "num" },
+            { key: "bestRank", label: "최고", type: "num" },
+            { key: "lastRank", label: "지금", type: "num" },
+          ],
+          exchange: false,
+          choices: [
+            {
+              param: "win",
+              label: "기간",
+              def: "30",
+              options: WINS.map((m) => ({ value: String(m), label: m >= 60 ? `${m / 60}시간` : `${m}분` })),
+            },
+          ],
+          note:
+            `1분마다 받아 둔 조회순위(1분 기준) ${samples}장을 겹친 것입니다 — 키움은 한 번에 20종목만 주므로 ` +
+            `시간을 쌓아야 그 밖이 보입니다. 「등장」은 창 안에서 목록에 오른 횟수, 「점유」는 표본 대비 %, ` +
+            `「최고」는 그동안의 최고 순위, 「지금」은 마지막 장의 순위(없으면 지금은 빠진 것).` +
+            (oldestAt ? ` 표본 시작 ${new Date(oldestAt + 9 * 3600_000).toISOString().slice(11, 16)} KST.` : "") +
+            (st.lastError ? ` ⚠️ 마지막 수집 실패: ${st.lastError}` : "") +
+            (samples === 0 ? " 아직 표본이 없습니다 — 서버가 켜진 뒤 1분마다 쌓입니다." : ""),
+        },
+        market,
+        exchange: "3",
+        chosen: { win: String(win) },
+        rows: await withFlow(drawn),
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
    * **조회순위 버즈** (2026-09-09) — 줄마다 뉴스 N회 · 텔레그램 N회. `codes` 는 쉼표로,
    * 이름은 종목 목록에서 찾는다(화면이 보내는 이름을 믿지 않는다 — 검색어가 된다).
    */
@@ -648,6 +724,18 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
           rows.slice(0, limit).map((r) => bare(r.stk_cd)),
         );
         for (const x of drawn) (x as Record<string, unknown>).enteredAt = entered.get(x.code) ?? null;
+        /* 1분 기준 응답은 누적 표본으로도 쓴다 — 사람이 보고 있으면 그만큼 촘촘해진다 */
+        if ((chosen.qry_tp ?? "1") === "1") {
+          noteLiveSample(
+            rows.slice(0, limit).map((r, i) => ({
+              code: bare(r.stk_cd),
+              name: String(r.stk_nm ?? "").trim(),
+              rank: toNum(r.bigd_rank) ?? i + 1,
+              price: toNum(r.past_curr_prc) === null ? null : Math.abs(toNum(r.past_curr_prc) as number),
+              rate: toNum(r.base_comp_chgr),
+            })),
+          );
+        }
       }
       res.json({
         spec: {

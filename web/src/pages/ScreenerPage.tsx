@@ -245,6 +245,8 @@ export const SCREENER_TABS = [
    * 키움 고객의 눈이 지금 어디 몰리는지 — 거래로 터지기 한 박자 앞의 신호일 때가 있다.
    */
   { key: "inquiry-rank", label: "실시간 조회순위", kind: "rank" as const },
+  /* 키움이 20줄만 주므로 시간을 쌓아 그 밖을 본다 (2026-09-09 밤 — 벤티지 "한 50개 나오면") */
+  { key: "inquiry-cum", label: "조회순위 누적", kind: "rank" as const },
   /* 키움 순위에는 없어서 시황 스냅샷으로 우리가 세운다 */
   { key: "market-cap", label: "시가총액 상위", kind: "rank" as const },
   /* `rank` 로 옮겼다 (2026-09-02) — 그래야 필터·신호등·열순서가 같이 붙는다 */

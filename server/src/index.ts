@@ -43,6 +43,7 @@ import { startChannelScheduler } from "./channelScheduler.js";
 import { startChannelCollector } from "./channelCollector.js";
 import { startMajorFeedLoop } from "./majorFeed.js";
 import { startBuzzScheduler } from "./buzzRadar.js";
+import { startInquirySampler } from "./inquirySampler.js";
 import { startNewsKeywordScheduler } from "./newsKeywords.js";
 import { startCalendarSyncScheduler } from "./calendarSync.js";
 import { startEtfHoldersScheduler } from "./etfHolders.js";
@@ -293,6 +294,8 @@ startChannelCollector();
 startMajorFeedLoop();
 /* 버즈 레이더 — 채널 언급 급증을 30분마다 판정, 강한 것은 시그널 방으로 */
 startBuzzScheduler(client);
+/* 조회순위 누적 표본 — 1분에 조회 1회, 07~24시 KST (2026-09-09) */
+startInquirySampler(client);
 /* 뉴스 키워드 흐름 (2026-08-30) — 버즈 레이더의 「뉴스판 귀」. 사전을 공유한다 */
 startNewsKeywordScheduler();
 /* 구독 캘린더 자동 동기화 (2026-08-30) — 예전엔 단추를 눌러야만 들어왔다 */
