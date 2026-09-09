@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TopScrollTable } from "./TopScrollTable";
 import { removePref, setPref } from "../prefs";
 import { fmtAbsNum, fmtNum, signClass, type RawRecord } from "../api";
 
@@ -217,7 +218,15 @@ export function InvestorTrendTable({
         </div>
       )}
 
-      <div className="data-table-wrap">
+      {/*
+        표 **위에도** 가로 스크롤 바 (2026-09-09 — 벤티지: "종목상세의 투자자수급 이부분도
+        윗부분에 좌우 스크롤 달리게 해줘. PC로는 옆으로 가는게 불편해서").
+
+        열이 열한 칸이라 기타법인까지 보려면 옆으로 밀어야 하는데, 브라우저 스크롤 바는
+        표 **바닥**에만 붙는다 — 스무 줄짜리 표에서는 바닥까지 내려가야 잡을 수 있었다.
+        시황 대시보드의 지수 상세가 같은 이유로 쓰는 `TopScrollTable` 을 그대로 쓴다.
+      */}
+      <TopScrollTable>
         <table className="data-table itr">
           <thead>
             {/* 묶음 이름을 한 줄 위에 — 어디부터가 수급인지 보이게 */}
@@ -279,10 +288,11 @@ export function InvestorTrendTable({
             })}
           </tbody>
         </table>
-        <div className="table-note">
-          단위: 백만원 · 순매수(+, 빨강) · 순매도(−, 파랑) · <b>외국인·기관계</b>가 가장 굵고
-          기관 속살(금융투자·투신·연기금·사모펀드)이 그다음입니다.
-        </div>
+      </TopScrollTable>
+      {/* 설명줄은 상자 **밖**이다 — 안에 두면 표를 옆으로 밀 때 같이 밀려 안 읽힌다 */}
+      <div className="table-note">
+        단위: 백만원 · 순매수(+, 빨강) · 순매도(−, 파랑) · <b>외국인·기관계</b>가 가장 굵고
+        기관 속살(금융투자·투신·연기금·사모펀드)이 그다음입니다.
       </div>
     </div>
   );
