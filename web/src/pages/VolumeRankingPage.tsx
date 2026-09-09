@@ -8,6 +8,7 @@ import { SortableTh, useSortableTable } from "../useSortableTable";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
+import { fid, useRealtime } from "../useRealtime";
 
 // ka10030(당일거래량상위요청) 공식 문서 기준 확인된 필드명
 const LIST_KEYS = ["tdy_trde_qty_upper"];
@@ -72,6 +73,35 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
    */
   const pager = usePager(sort.sorted.length, "vntg.volume.pageSize", rows.length);
   const shown = pager.slice(sort.sorted);
+
+  /*
+   * **실시간 현재가** (2026-09-09 — 벤티지 "거래상위를 미니창에 띄워보니 실시간 소켓이
+   * 안 붙네. 초록색 불도 앞에 안들어오고").
+   *
+   * 미니창 탓이 아니었다 — 이 화면에는 **어느 창에서든 실시간이 없었다.** 조회(폴링)
+   * 값만 그리고 있었다.
+   *
+   * ⚠️ **`readOnly` 다.** 자리(소켓 구독)는 200 개뿐이고 지금 176 개가 차 있다. 이 표는
+   * 한 쪽에 수십 줄이라 구독을 걸면 그 순간 정원을 넘겨 **다른 화면의 실시간을 밀어낸다.**
+   * `readOnly` 는 서버가 이미 물고 있는 값만 읽는다 — 자리를 한 개도 안 쓴다. 거래상위에
+   * 오르는 종목은 대개 서버가 이미 보고 있어서(거래대금 상위로 고른다) 실제로 많이 켜진다.
+   * 안 물고 있는 줄은 점이 꺼지고 조회 값이 그대로 남는다 — 값이 사라지지는 않는다.
+   *
+   * 보이는 쪽(`shown`)만 건다. 안 보는 쪽까지 걸면 SSE 로 오는 양만 늘고 볼 사람이 없다.
+   */
+  const rt = useRealtime(
+    shown.map((r) => `0B:${normalizeStockCode(String(r.stk_cd ?? ""))}`),
+    2000,
+    { readOnly: true },
+  );
+  /** 실시간이 준 현재가·등락률 — 없으면 null 이고, 그때는 조회 값을 쓴다 */
+  const liveOf = (code: string): { price: number; rate: number | null } | null => {
+    const v = rt.values[`0B:${code}`];
+    if (!v) return null;
+    const price = fid(v, "10");
+    if (price === null || price === 0) return null;
+    return { price: Math.abs(price), rate: fid(v, "12") };
+  };
   /*
    * **보이는 쪽만** 평가한다. 예전엔 앞의 50 종목만 켜서 그 뒤로 넘어가면 신호등이
    * 아예 안 붙었다 — 쪽을 나누면 어느 쪽을 보든 그 쪽이 켜진다.
@@ -193,6 +223,7 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
               {shown.map((r, i) => {
                 const code = normalizeStockCode(String(r.stk_cd ?? ""));
                 const name = String(r.stk_nm ?? "");
+                const live = liveOf(code);
                 return (
                   <tr key={`${code}-${i}`} onClick={() => onSelectStock(code, name)} className="clickable-row">
                     {sigOn && (
@@ -212,8 +243,17 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
 <SuperMark code={code} />
                       {name}
                     </td>
-                    <td className={signClass(r.pred_pre)}>{fmtAbsNum(r.cur_prc)}</td>
-                    <td className={signClass(r.flu_rt)}>{fmtNum(r.flu_rt)}%</td>
+                    {/* 실시간이 있으면 그 값으로, 없으면 조회 값 그대로. 점이 어느 쪽인지 말한다 */}
+                    <td className={signClass(live ? live.rate : r.flu_rt)}>
+                      <span
+                        className={`uw-live-dot${live ? " rt" : " off"}`}
+                        title={live ? "실시간 체결 — 값이 오는 대로 갱신됩니다" : "이 종목은 서버가 실시간으로 안 물고 있습니다 — 조회 값입니다"}
+                      />
+                      {live ? fmtNum(live.price) : fmtAbsNum(r.cur_prc)}
+                    </td>
+                    <td className={signClass(live ? live.rate : r.flu_rt)}>
+                      {live && live.rate !== null ? fmtNum(live.rate) : fmtNum(r.flu_rt)}%
+                    </td>
                     {/* 백만원으로 오므로 100 으로 나눠 억원으로 — 검산해서 확인했다 */}
                     <td className="num">
                       {fmtNum(Math.round((Number(r.trde_amt) || 0) / 100))}
