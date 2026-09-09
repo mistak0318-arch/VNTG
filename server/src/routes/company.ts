@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { cachedBrief, companyBrief, companyFacts } from "../companyInfo.js";
 import { creditInfo } from "../orders.js";
+import { naverBoard } from "../naverBoard.js";
 
 /**
  * 6자리만 남긴다.
@@ -50,6 +51,22 @@ export function createCompanyRouter(): Router {
   router.get("/:code/credit", async (req, res, next) => {
     try {
       res.json(await creditInfo(code6(req.params.code)));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * **네이버 종목토론실** (2026-09-09 — 벤티지 "종목상세 마지막 탭에 네이버 종목토론실
+   * 연결해서 보여줄 수 있나?").
+   *
+   * 화면이 열려 있을 때만 부른다 — 배경 수집기는 두지 않는다(종목이 3,900개다).
+   * `offset` 은 앞 쪽 응답의 `next` 를 그대로 돌려주는 자리다.
+   */
+  router.get("/:code/board", async (req, res, next) => {
+    try {
+      const offset = typeof req.query.offset === "string" ? req.query.offset : undefined;
+      res.json(await naverBoard(code6(req.params.code), offset));
     } catch (err) {
       next(err);
     }

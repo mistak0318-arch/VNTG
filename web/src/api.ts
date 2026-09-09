@@ -1334,6 +1334,12 @@ export const api = {
   /** 이 종목이 신용으로 살 수 있나 — 계좌와 무관한 종목 성질 (2026-09-08). allowed:null = 못 받았다 */
   stockCredit: (code: string) =>
     getJson<{ allowed: boolean | null; grade: string | null; text: string | null; why?: string | null }>(`/api/company/${code}/credit`),
+  /**
+   * 네이버 종목토론실 (2026-09-09). `offset` 은 앞 쪽 응답의 `next` 를 그대로 넘긴다.
+   * 화면이 열려 있을 때만 나간다 — 서버에 배경 수집기가 없다.
+   */
+  stockBoard: (code: string, offset?: string) =>
+    getJson<BoardPage>(`/api/company/${code}/board${offset ? `?offset=${encodeURIComponent(offset)}` : ""}`),
   /** 이미 엮어 둔 것만 본다. 없으면 null — 화면은 그때 버튼을 보인다 */
   companyBrief: (code: string) => getJson<{ brief: CompanyBrief | null }>(`/api/company/${code}/brief`),
   /** ⚠️ 실제로 AI 를 부른다. 버튼에서만 */
@@ -5215,6 +5221,34 @@ export interface CompanyFacts {
   /** 표준산업분류 이름 — "반도체 제조업" */
   industry: string | null;
   fetchedAt: string;
+}
+
+/** 네이버 종목토론실 글 한 건 (2026-09-09) */
+export interface BoardPost {
+  id: string;
+  title: string;
+  /** 본문 — 태그를 턴 글자. 제목만 쓴 글은 빈 문자열 */
+  body: string;
+  writer: string;
+  /** 주주 인증 — 실제로 이 종목을 들고 있는 계정 */
+  holder: boolean;
+  at: string;
+  views: number;
+  good: number;
+  bad: number;
+  /** 답글이면 1 이상 */
+  depth: number;
+  /** 네이버 클린봇이 거른 글 */
+  filtered: boolean;
+  images: number;
+  link: string;
+}
+
+export interface BoardPage {
+  posts: BoardPost[];
+  /** 다음 쪽을 부를 자리. null 이면 끝 */
+  next: string | null;
+  error?: string;
 }
 
 /** AI 가 엮은 서술. **날짜를 달고 산다** — 같은 날이면 다시 안 엮는다 */

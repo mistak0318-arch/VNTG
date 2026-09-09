@@ -1291,7 +1291,37 @@ function OrderForm({
         setAcct(a);
         setAcctAt(Date.now());
       })
-      .catch(() => setAcct(null));
+      /*
+       * 미리보기에서는 **가짜 잔고 한 줄**을 세운다 (2026-09-09). 매도 화면의 폭·배치를
+       * (예상 손익 줄이 그렇다) 눈으로 보려면 보유가 있어야 하는데, 개발 서버에는 주문 세션이
+       * 없어 잔고가 늘 비어 있다 — 그래서 「매도 화면은 배포한 뒤에야 보인다」가 됐다.
+       * `devPreview()` 안이라 배포본에서는 이 길이 아예 안 열린다(위 주석).
+       */
+      .catch(() =>
+        setAcct(
+          devPreview()
+            ? {
+                deposit: 1_000_000,
+                creditLoan: 0,
+                stops: {},
+                holdings: [
+                  {
+                    code: "000660",
+                    name: "SK하이닉스",
+                    qty: 3,
+                    ableQty: 3,
+                    avg: 1_800_000,
+                    cur: 1_850_000,
+                    pnl: 150_000,
+                    pnlRate: 2.78,
+                    creditType: null,
+                    loanDate: null,
+                  },
+                ],
+              }
+            : null,
+        ),
+      );
   }, []);
   /*
    * 폼을 열 때 한 번 + **매도로 바꾸거나 종목이 바뀌면 다시** + 매도 중엔 5초마다 (2026-09-08 —
@@ -2223,6 +2253,43 @@ function OrderForm({
             />
             <span>원</span>
           </div>
+
+          {/*
+            **이 값에 팔면 얼마 남나** (2026-09-09).
+
+            벤티지: "매도할 때 예상 매도금액 밑에 수익금액이랑 수익률 좀 같이 적어줘.
+            해당 호가에서 팔면 얼마나 이득인지 손해인지 바로 알 수 있게."
+
+            여태 평단은 위에 「평단 2,465」로 적혀 있었고 매도가는 아래 칸에 있었다 —
+            두 숫자를 놓고 **사람이 뺄셈을 하고 있었다.** 호가를 눌러 값을 갈아 볼 때마다
+            그 뺄셈을 다시 하게 되는데, 그것이야말로 기계가 할 일이다.
+
+            ⚠️ **수수료·세금은 안 뺀다.** 증권거래세와 수수료는 채널·계좌마다 다른데,
+            여기서 어림으로 깎으면 「그만큼은 확실히 남는다」로 읽힌다. 실제로는 이 값보다
+            조금 덜 남으므로 **밑에 그렇게 적는다** — 없는 정확도를 흉내 내지 않는다.
+          */}
+          {side === "sell" && heldRow && heldRow.avg > 0 && unit > 0 && Number(qty) > 0 && (() => {
+            const q = Number(qty);
+            const gain = (unit - heldRow.avg) * q;
+            const rate = ((unit - heldRow.avg) / heldRow.avg) * 100;
+            const cls = gain > 0 ? "positive" : gain < 0 ? "negative" : "";
+            return (
+              <div className="ord-pnl" title={`(${fmtNum(unit)} − 평단 ${fmtNum(heldRow.avg)}) × ${fmtNum(q)}주`}>
+                <span className="ord-pnl-lab">{gain >= 0 ? "예상 수익" : "예상 손실"}</span>
+                <b className={cls}>
+                  {gain > 0 ? "+" : ""}
+                  {fmtNum(Math.round(gain))}원
+                </b>
+                <b className={cls}>
+                  {rate > 0 ? "+" : ""}
+                  {rate.toFixed(2)}%
+                </b>
+                {/* 평단은 바로 위 「매매가능 …(평단 …)」에 이미 있다 — 두 번 적으면 줄만 길어진다 */}
+                <em>수수료·세금 전</em>
+              </div>
+            );
+          })()}
+
           <div className="ord-caps ord-caps-row">
             <span>한 건 <b>{manwon(status.guard.maxOrderKrw)}</b></span>
             <span>지정가 현재가 <b>±{status.guard.priceCollarPct}%</b></span>

@@ -10,6 +10,7 @@ import { InvestorTrendTable } from "./InvestorTrendTable";
 import { NewsDisclosurePanel } from "./NewsDisclosurePanel";
 import { OpinionPanel } from "./OpinionPanel";
 import { RawJson } from "./RawJson";
+import { StockBoardPanel } from "./StockBoardPanel";
 import { SectorMoodPanel } from "./SectorMoodPanel";
 import { SignalPanel } from "./SignalLight";
 import { StockNotes } from "./StockNotes";
@@ -59,6 +60,8 @@ export type StockTab =
   | "feed"
   | "finance"
   | "raw"
+  /** 네이버 종목토론실 (2026-09-09) — 우리 값이 아니라 남의 말이라 맨 끝이다 */
+  | "board"
   /** ETF 일 때만 나타난다 — 저장되는 순서 배열에는 안 낀다 */
   | "etf";
 
@@ -90,6 +93,12 @@ export const STOCK_TABS: { key: StockTab; label: string }[] = [
   { key: "etfHolders", label: "담은 ETF" },
   { key: "feed", label: "뉴스·공시" },
   { key: "finance", label: "기업·재무" },
+  /*
+    종목토론 — **맨 끝** (2026-09-09, 벤티지 "종목상세 마지막 탭에 네이버 종목토론실").
+    앞의 탭은 전부 우리가 받아 온 값이고 이건 검증 안 된 남의 말이라, 순서가 곧
+    「어느 것을 먼저 믿나」다. 원본 데이터보다도 뒤에 둔다.
+  */
+  { key: "board", label: "종목토론" },
   { key: "raw", label: "원본 데이터" },
 ];
 
@@ -337,6 +346,7 @@ export function StockTabsSection({
         {tab === "feed" && <NewsDisclosurePanel code={code} name={name} />}
         {tab === "finance" && <CompanyPanel code={code} name={name} info={info} returns={returns} />}
         {tab === "etf" && <EtfPanel code={code} onSelectStock={onSelectStock} />}
+        {tab === "board" && <StockBoardPanel code={code} />}
         {tab === "raw" && <RawJson data={{ info, investorChart, daily }} />}
       </div>
     </div>
