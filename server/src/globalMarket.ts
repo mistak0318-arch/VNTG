@@ -50,6 +50,8 @@ export interface GlobalQuote {
   kind: "선물" | "현물" | "";
   /** Yahoo 가 알려준 체결 시각(ms) — "언제 값인가"의 답 */
   quotedAt: number | null;
+  /** 어디서 받았나 — 야후 / 업비트 / 한투 (2026-09-10) */
+  source?: "yahoo" | "upbit" | "hantoo";
   /**
    * 줄 단위 경고. 미장 주요지수와 같은 방식이다 —
    * 색만 칠하면 왜 빨간지 모르므로 **이유를 문장으로** 같이 낸다.
@@ -248,8 +250,13 @@ const TARGETS: {
   { key: "lithium", label: "리튬(LIT)", group: "원자재", symbol: "LIT" },
 
   // ── 암호화폐
-  { key: "btc", label: "비트코인", group: "암호화폐", symbol: "BTC-USD" },
-  { key: "eth", label: "이더리움", group: "암호화폐", symbol: "ETH-USD" },
+  /*
+   * 암호화폐는 **업비트 원화**로 (2026-09-10 — 벤티지 "비트코인은 그 업비트 API"). 공개 시세라
+   * 키가 없고 실시간이다. 심볼은 차트(야후) 몫이라 그대로 두고, 값·시각만 업비트가 덮는다
+   * (`fastTier`). 업비트가 죽으면 야후 달러 값이 남는다.
+   */
+  { key: "btc", label: "비트코인 (원)", group: "암호화폐", symbol: "BTC-USD" },
+  { key: "eth", label: "이더리움 (원)", group: "암호화폐", symbol: "ETH-USD" },
 
 
   /*
@@ -268,6 +275,74 @@ const YAHOO_BASE = "https://query1.finance.yahoo.com/v8/finance/chart";
 
 let cache: { data: GlobalQuote[]; at: number } | null = null;
 const TTL_MS = 60_000; // 외부 API 호출 제한을 고려해 1분 캐싱
+
+/**
+ * **빠른 층** (2026-09-10 — 벤티지 "미국 지수 선물, 환율, 코스피 야간 선물 … 딜레이가 있잖아").
+ *
+ * 실측: 환율·암호화폐는 야후가 이미 실시간(0.2분)이고 야간선물은 한투 실시간이다 — 늦은 건
+ * **우리 60초 캐시**였다. 이 셋은 10초마다 다시 받아 캐시에 덮어 쓴다(다른 스무 줄은 그대로
+ * 60초). 미국 지수선물·원자재는 야후가 CME 10분 지연으로만 주므로 여기서 못 고친다 —
+ * 한투 해외선물옵션 계좌가 생기면 그쪽으로 옮긴다.
+ */
+const FAST_TTL_MS = 10_000;
+const FAST_FX_KEYS = new Set(["usdkrw", "jpyusd", "jpykrw"]);
+let fastAt = 0;
+let fastInflight: Promise<void> | null = null;
+
+/** 업비트 공개 시세 — 키 없음, 실시간. 원화 가격·전일 대비 */
+async function upbitTicker(): Promise<Map<string, { price: number; change: number; changeRate: number; at: number }>> {
+  const out = new Map<string, { price: number; change: number; changeRate: number; at: number }>();
+  try {
+    const res = await fetch("https://api.upbit.com/v1/ticker?markets=KRW-BTC,KRW-ETH", {
+      headers: { accept: "application/json", "user-agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) {
+      void recordApiCall("upbit", "ticker", res.status === 429 ? "rateLimited" : "failed");
+      return out;
+    }
+    void recordApiCall("upbit", "ticker", "ok");
+    const rows = (await res.json()) as Record<string, unknown>[];
+    for (const r of rows) {
+      const key = r.market === "KRW-BTC" ? "btc" : r.market === "KRW-ETH" ? "eth" : null;
+      if (!key) continue;
+      out.set(key, {
+        price: Number(r.trade_price),
+        change: Number(r.signed_change_price),
+        changeRate: Number(r.signed_change_rate) * 100,
+        at: Number(r.trade_timestamp) || Date.now(),
+      });
+    }
+  } catch {
+    /* 업비트가 죽으면 야후 값이 남는다 */
+  }
+  return out;
+}
+
+/** 빠른 층만 다시 받아 캐시의 그 줄들을 갈아 끼운다 */
+async function refreshFastTier(): Promise<void> {
+  if (!cache) return;
+  const fxTargets = TARGETS.filter((t) => FAST_FX_KEYS.has(t.key));
+  const [fx, crypto, night] = await Promise.all([
+    Promise.all(fxTargets.map((t) => fetchOne(t))),
+    upbitTicker(),
+    import("./usMajor.js").then((m) => m.nightFutures()).catch(() => null),
+  ]);
+  const byKey = new Map(cache.data.map((q) => [q.key, q]));
+  for (const q of fx) {
+    const cur = byKey.get(q.key);
+    if (cur && q.price !== null) Object.assign(cur, q, { source: "yahoo" as const });
+  }
+  for (const [key, v] of crypto) {
+    const cur = byKey.get(key);
+    if (cur) Object.assign(cur, { price: v.price, change: v.change, changeRate: v.changeRate, quotedAt: v.at, source: "upbit" as const, error: null });
+  }
+  if (night && night.price !== null) {
+    const cur = byKey.get("krNightFut");
+    if (cur) Object.assign(cur, { price: night.price, change: night.change, changeRate: night.changeRate, quotedAt: night.quotedAt ?? Date.now(), source: "hantoo" as const });
+  }
+  fastAt = Date.now();
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -309,6 +384,7 @@ async function fetchOne(target: {
     // 묶음에 없는 이름이면 회색 — 색이 없다고 줄이 사라지면 안 된다
     color: GROUP_COLOR[target.group] ?? "#8b98a5",
     quotedAt: null,
+    source: "yahoo",
     signal: null,
     error: null,
   };
@@ -409,7 +485,17 @@ async function fetchAll(): Promise<GlobalQuote[]> {
 }
 
 export async function getGlobalMarket(force = false): Promise<GlobalQuote[]> {
-  if (!force && cache && Date.now() - cache.at < TTL_MS) return cache.data;
+  if (!force && cache && Date.now() - cache.at < TTL_MS) {
+    /* 60초 안이라도 빠른 층(환율·암호화폐·야간선물)은 10초마다 — 기다리지 않고 뒤에서 */
+    if (Date.now() - fastAt > FAST_TTL_MS && !fastInflight) {
+      fastInflight = refreshFastTier()
+        .catch(() => undefined)
+        .finally(() => {
+          fastInflight = null;
+        });
+    }
+    return cache.data;
+  }
   if (inflight) return inflight;
 
   inflight = (async () => {
@@ -439,7 +525,8 @@ export async function getGlobalMarket(force = false): Promise<GlobalQuote[]> {
             changeRate: nf.changeRate ?? null,
             isRate: false,
             kind: "선물",
-            quotedAt: nf.quotedAt ?? null,
+            quotedAt: nf.quotedAt ?? Date.now(),
+            source: "hantoo",
             signal: nf.signal ?? null,
             error: null,
           });
@@ -448,6 +535,8 @@ export async function getGlobalMarket(force = false): Promise<GlobalQuote[]> {
         /* 야간선물 없이도 글로벌은 나간다 */
       }
       cache = { data: results, at: Date.now() };
+      /* 처음부터 원화 암호화폐·최신 야간선물로 — 첫 화면이 야후 달러 값으로 뜨지 않게 */
+      await refreshFastTier().catch(() => undefined);
       return results;
     } finally {
       inflight = null;

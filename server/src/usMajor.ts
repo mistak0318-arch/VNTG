@@ -115,7 +115,7 @@ export interface UsMajorResult {
  * 그래서 월물코드는 주간 전광판에서 받아 `CM` 으로 시세만 다시 묻는다.
  * 미국장이 열려 있는 동안 **한국 지수가 어디로 가는지**를 현물 개장 전에 보여 준다.
  */
-async function nightFutures(): Promise<UsMajorRow | null> {
+export async function nightFutures(): Promise<UsMajorRow | null> {
   if (!hantooReady()) return null;
   try {
     const front = await kospi200Futures(null);
@@ -139,7 +139,8 @@ async function nightFutures(): Promise<UsMajorRow | null> {
       changeRate: Number(o.futs_prdy_ctrt) || 0,
       isRate: false,
       digits: 2,
-      quotedAt: null,
+      /* 한투 REST 는 받은 순간이 곧 시세 시각 — 실시간 조회라 지연이 없다 */
+      quotedAt: Date.now(),
       source: "hantoo",
       signal: null,
       error: null,

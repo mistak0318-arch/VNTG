@@ -74,6 +74,19 @@ function signCls(v: number): string {
 /** 글로벌 줄 + 금리 줄이 같이 쓰는 모양 — asOf 는 한투 금리에만 있다 */
 type GRow = GlobalQuote & { asOf?: string | null };
 
+/** 시세 기준 시각이 3분~24시간 묵었으면 「n분 전」 */
+function lagBadge(quotedAt: number | null | undefined) {
+  if (!quotedAt) return null;
+  const min = Math.round((Date.now() - quotedAt) / 60_000);
+  if (min < 3 || min >= 24 * 60) return null;
+  const txt = min < 60 ? `${min}분 전` : `${Math.floor(min / 60)}시간 전`;
+  return (
+    <span className="ov-g-lag" title="시세의 기준 시각 — 야후가 거래소 규정대로 지연해서 주는 만큼입니다">
+      {txt}
+    </span>
+  );
+}
+
 const US_YIELD_KEYS = ["irx", "fvx", "tnx", "tyx"] as const;
 /** 야후에 심볼이 없어 한투에서만 오는 것 — 기준금리·일본 10년 (404 실측) */
 const HANTOO_ONLY_RATES = ["Y0204", "Y0207"];
@@ -494,6 +507,12 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
                     {g.label}
                     {/* 금리(한투)는 심볼이 없다 — 그 자리에 「MM/DD 종가」. 오늘 값이면 비운다 */}
                     <span className={`ov-g-tk${g.asOf && pastBadge(g.asOf) ? " ov-g-as" : ""}`}>{g.symbol || (g.asOf ? pastBadge(g.asOf) : "")}</span>
+                    {/*
+                      「n분 전」 (2026-09-10) — 야후는 CME 선물·원자재를 10분, 채권·아시아 지수를
+                      15~20분 지연으로 준다. 3분 넘게 묵은 값이면 몇 분 전 값인지 적어 둔다.
+                      하루 넘게 묵은 건(장 마감) 안 적는다 — 그건 지연이 아니라 휴장이다.
+                    */}
+                    {lagBadge(g.quotedAt)}
                   </span>
                   {g.error ? (
                     <span className="ov-g-pct" style={{ color: "var(--flat)" }}>

@@ -18234,3 +18234,6 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .jn-orders-sum { display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.82rem; margin: 6px 0; }
 .jn-orders td, .jn-orders th { font-size: 0.78rem; }
 .jn-orders-empty { padding: 10px 4px; }
+
+/* 글로벌 줄의 「n분 전」 — 야후 지연 표시 (2026-09-10) */
+.ov-g-lag { margin-left: 4px; font-size: 0.62rem; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 3px; }

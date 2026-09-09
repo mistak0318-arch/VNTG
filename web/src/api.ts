@@ -4266,6 +4266,9 @@ export interface GlobalQuote {
   color: string;
   /** 줄 단위 경고. 색만 있으면 왜 빨간지 모르므로 why 를 같이 준다 */
   signal: RowSignal | null;
+  /** 시세의 기준 시각(ms) — 야후는 거래소 지연이 실려 있다. 화면이 「n분 전」을 단다 */
+  quotedAt?: number | null;
+  source?: "yahoo" | "upbit" | "hantoo";
 }
 
 export interface ProviderUsage {

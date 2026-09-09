@@ -23,6 +23,7 @@ export type ApiProvider =
   | "dataGoKr"
   | "telegram"
   | "krx"
+  | "upbit"
   | "mail";
 
 /**
@@ -168,6 +169,11 @@ export const DAILY_LIMITS: Record<ApiProvider, { label: string; limit: number | 
     label: "DART OpenAPI",
     limit: 20000,
     note: "인증키당 하루 20,000건 (금융감독원 공식)",
+  },
+  upbit: {
+    label: "업비트 공개 시세",
+    limit: null,
+    note: "키 없는 공개 시세(초당 10회 한도). 비트코인·이더리움 원화 값을 10초마다 받습니다",
   },
   krx: {
     label: "KRX KIND 공시",
