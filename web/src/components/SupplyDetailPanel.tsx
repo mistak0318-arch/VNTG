@@ -134,22 +134,62 @@ export function SupplyMiniCharts({ code }: { code: string }) {
  * 아래로 가라앉으면 식는 중이다. 주가는 왼쪽 축에 얇게 같이 둔다(지분율 그래프와 같은 문법).
  */
 export function VolumeFlowChart({ code }: { code: string }) {
+  /*
+   * 일별 / 주별 (2026-09-10 — 벤티지 "일별 주별 선택할 수 있게 … 지금은 확대해야 일별
+   * 나오잖아. 차트 설정하는 거랑 비슷하게"). 주별은 주봉(ka10082)의 거래량 — 창은 60주,
+   * 평균선은 20주. 마지막 고른 것을 기억한다.
+   */
+  const [unit, setUnit] = useState<"day" | "week">(() => {
+    try {
+      return localStorage.getItem("vntg.volflow.unit") === "week" ? "week" : "day";
+    } catch {
+      return "day";
+    }
+  });
+  const pickUnit = (u: "day" | "week") => {
+    setUnit(u);
+    try {
+      localStorage.setItem("vntg.volflow.unit", u);
+    } catch {
+      /* 저장 못 해도 이번 화면에서는 바뀐다 */
+    }
+  };
+  /* 기간 — 일별 60·90·120·240일, 주별 26·52·104주 (벤티지 "기간도 선택할 수 있도록") */
+  const SPANS = { day: [60, 90, 120, 240], week: [26, 52, 104] } as const;
+  const [spans, setSpans] = useState<{ day: number; week: number }>(() => {
+    try {
+      const d = Number(localStorage.getItem("vntg.volflow.span.day"));
+      const w = Number(localStorage.getItem("vntg.volflow.span.week"));
+      return { day: SPANS.day.includes(d as 60) ? d : 90, week: SPANS.week.includes(w as 26) ? w : 52 };
+    } catch {
+      return { day: 90, week: 52 };
+    }
+  });
+  const span = spans[unit];
+  const pickSpan = (n: number) => {
+    setSpans((p) => ({ ...p, [unit]: n }));
+    try {
+      localStorage.setItem(`vntg.volflow.span.${unit}`, String(n));
+    } catch {
+      /* 저장 못 해도 이번 화면에서는 바뀐다 */
+    }
+  };
   const [rows, setRows] = useState<RawRecord[] | null>(null);
   useEffect(() => {
     let alive = true;
     setRows(null);
-    api
-      .dailyChart(code)
+    (unit === "week" ? api.weeklyChart(code) : api.dailyChart(code))
       .then((d) => {
         if (!alive) return;
-        const list = ((d as RawRecord).stk_dt_pole_chart_qry as RawRecord[] | undefined) ?? [];
+        const raw = d as RawRecord;
+        const list = ((unit === "week" ? raw.stk_stk_pole_chart_qry : raw.stk_dt_pole_chart_qry) as RawRecord[] | undefined) ?? [];
         setRows(list);
       })
       .catch(() => alive && setRows([]));
     return () => {
       alive = false;
     };
-  }, [code]);
+  }, [code, unit]);
   if (rows === null) return <div className="empty">거래량 불러오는 중...</div>;
   if (rows.length === 0) return null;
 
@@ -160,14 +200,17 @@ export function VolumeFlowChart({ code }: { code: string }) {
     i >= 19 ? vol.slice(i - 19, i + 1).reduce((a, b) => a + b, 0) / 20 : null,
   );
   const last = asc.length;
-  const from = Math.max(0, last - 90);
+  const from = Math.max(0, last - span);
   const bars: TrendSeries["data"] = [];
   const avgLine: TrendSeries["data"] = [];
   const price: TrendSeries["data"] = [];
   for (let i = from; i < last; i += 1) {
     const time = toBusinessDay(String(asc[i].dt ?? ""));
     if (!time) continue;
-    bars.push({ time, value: vol[i] });
+    /* 오른 날 붉게, 내린 날 파랗게 — 캔들 차트의 거래량과 같은 색 (벤티지 "막대그래프 색깔이 안 변하는데") */
+    const c = Math.abs(num(asc[i].cur_prc));
+    const pc = i > 0 ? Math.abs(num(asc[i - 1].cur_prc)) : c;
+    bars.push({ time, value: vol[i], color: c > pc ? "rgba(239, 68, 68, 0.6)" : c < pc ? "rgba(76, 141, 255, 0.6)" : "rgba(139, 150, 165, 0.5)" });
     if (avg20[i] !== null) avgLine.push({ time, value: avg20[i] as number });
     price.push({ time, value: Math.abs(num(asc[i].cur_prc)) });
   }
@@ -180,22 +223,36 @@ export function VolumeFlowChart({ code }: { code: string }) {
         거래량 흐름
         {ratio !== null && (
           <span className={`pt-n ${ratio >= 1.5 ? "positive" : ratio < 0.7 ? "negative" : ""}`} style={{ marginLeft: 8, fontWeight: 400, fontSize: "0.8rem" }}>
-            오늘 = 20일 평균의 <b>{ratio.toFixed(1)}배</b>
+            {unit === "week" ? "이번 주 = 20주" : "오늘 = 20일"} 평균의 <b>{ratio.toFixed(1)}배</b>
           </span>
         )}
+        <span className="filter-row" style={{ display: "inline-flex", marginLeft: 10, gap: 4, flexWrap: "wrap" }}>
+          {(["day", "week"] as const).map((u) => (
+            <button key={u} className={`filter-btn ${unit === u ? "active" : ""}`} onClick={() => pickUnit(u)} style={{ fontWeight: 400 }}>
+              {u === "day" ? "일" : "주"}
+            </button>
+          ))}
+          <span className="news-scope-sep" />
+          {SPANS[unit].map((n) => (
+            <button key={n} className={`filter-btn ${span === n ? "active" : ""}`} onClick={() => pickSpan(n)} style={{ fontWeight: 400 }}>
+              {n}
+              {unit === "week" ? "주" : "일"}
+            </button>
+          ))}
+        </span>
       </h3>
       <div className="chart-wrap">
         <TrendLineChart
           height={180}
           series={[
             { label: "주가", color: "#8b96a5", axis: "left", data: price },
-            { label: "거래량", color: "rgba(96, 165, 250, 0.55)", axis: "right", type: "histogram", data: bars },
-            { label: "20일 평균 거래량", color: "#f59e0b", axis: "right", data: avgLine },
+            { label: "거래량", color: "rgba(139, 150, 165, 0.5)", axis: "right", type: "histogram", data: bars },
+            { label: unit === "week" ? "20주 평균 거래량" : "20일 평균 거래량", color: "#f59e0b", axis: "right", data: avgLine },
           ]}
         />
       </div>
       <div className="table-note">
-        최근 90일 · 막대가 주황 선(20일 평균) 위면 관심이 붙는 중, 아래면 식는 중입니다. 1.5배 넘으면 붉게, 0.7배 아래면 파랗게 적습니다.
+        최근 {span}{unit === "week" ? "주" : "일"} · 붉은 막대는 오른 {unit === "week" ? "주" : "날"}, 파란 막대는 내린 {unit === "week" ? "주" : "날"} · 막대가 주황 선({unit === "week" ? "20주" : "20일"} 평균) 위면 관심이 붙는 중, 아래면 식는 중입니다. 머리의 배수는 1.5배 넘으면 붉게, 0.7배 아래면 파랗게 적습니다.
       </div>
     </>
   );

@@ -5,8 +5,8 @@ import { chartColors, useAppearance } from "../useAppearance";
 export interface TrendSeries {
   label: string;
   color: string;
-  /** 오름차순(과거→현재) 정렬된 데이터 */
-  data: { time: BusinessDay; value: number }[];
+  /** 오름차순(과거→현재) 정렬된 데이터. 히스토그램은 점마다 `color` 를 줄 수 있다(오른 날 붉게) */
+  data: { time: BusinessDay; value: number; color?: string }[];
   /** 별도 축을 쓸지 (예: 주가와 지분율처럼 단위가 다를 때) */
   axis?: "left" | "right";
   type?: "line" | "histogram";
