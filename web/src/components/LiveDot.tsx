@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime } from "../useRealtime";
+import { useLockPaused } from "../lockPause";
 
 /**
  * **지금 이 값이 실시간인가** — 어느 화면에서든 한 자리에서 (2026-09-04).
@@ -58,6 +59,8 @@ export function LiveDot({ code, name }: { code?: string | null; name?: string | 
 
   const [open, setOpen] = useState(false);
   const [st, setSt] = useState<Status | null>(null);
+  /* 잠금 중엔 상태 창구도 안 두드린다 (2026-09-09) — vntgts.com 으로 트래픽을 아예 끊는다 */
+  const lockPaused = useLockPaused();
   const boxRef = useRef<HTMLDivElement>(null);
 
   /*
@@ -73,11 +76,12 @@ export function LiveDot({ code, name }: { code?: string | null; name?: string | 
   }, []);
 
   useEffect(() => {
+    if (lockPaused) return; // 잠겨 있으면 아무것도 안 보낸다
     if (code && !open) return;
     poll();
     const t = setInterval(poll, open ? 4000 : 10_000);
     return () => clearInterval(t);
-  }, [code, open, poll]);
+  }, [code, open, poll, lockPaused]);
 
   useEffect(() => {
     if (!open) return;

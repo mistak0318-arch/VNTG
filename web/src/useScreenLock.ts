@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createHotkeyMatcher, LOCK_HOTKEYS, type Hotkey as SharedHotkey } from "./hotkey";
+import { setLockPaused } from "./lockPause";
 import { removePref, setPref } from "./prefs";
 
 /**
@@ -97,6 +98,8 @@ export function useScreenLock() {
 
   const lock = useCallback(() => {
     setLocked(true);
+    /* 실시간(SSE)도 멈춘다 — 잠긴 동안 vntgts.com 으로 트래픽이 안 나가게 (2026-09-09) */
+    setLockPaused(true);
     try {
       setPref(LOCKED_KEY, "1");
     } catch {
@@ -106,6 +109,7 @@ export function useScreenLock() {
 
   const unlock = useCallback(() => {
     setLocked(false);
+    setLockPaused(false); // 풀면 실시간이 다시 붙는다
     try {
       removePref(LOCKED_KEY);
     } catch {

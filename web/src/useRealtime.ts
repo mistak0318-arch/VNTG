@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTabActive } from "./tabActive";
+import { useLockPaused } from "./lockPause";
 
 /**
  * 실시간 값을 읽는다 — **화면이 달라고 하면 서버가 알아서 구독한다.**
@@ -110,6 +111,12 @@ export function useRealtime(
    */
   const tabActive = useTabActive();
   /*
+   * 잠겨 있으면(Ctrl+Q) 실시간을 통째로 놓는다 (2026-09-09). 회사망에서 자리를 뜰 때
+   * 화면만 가리는 게 아니라 vntgts.com 으로 가는 SSE 도 끊어 프록시 로그를 안 남긴다.
+   * `tabActive` 와 같은 자리에서 걸러 낸다 — 둘 중 하나라도 꺼지면 `joined` 가 빈다.
+   */
+  const lockPaused = useLockPaused();
+  /*
    * 배열은 매 렌더 새 객체라 그대로 의존성에 넣으면 타이머가 계속 다시 걸린다.
    *
    * ⚠️ **정렬해서 잇는다** (2026-08-28). 여기서 중요한 건 「어떤 종목을 보는가」이지
@@ -121,7 +128,7 @@ export function useRealtime(
    * 끊길 때마다 모아 둔 값(values)이 통째로 날아가고 재연결 동안 값이 안 온다.
    * 「시세 갱신이 느려졌다」의 정체가 이것이다.
    */
-  const joined = tabActive ? [...keys].sort().join(",") : "";
+  const joined = tabActive && !lockPaused ? [...keys].sort().join(",") : "";
   const readOnly = opts?.readOnly === true;
   /*
    * 끊겼다 다시 열릴 때 **직전 값에서 이어 그린다.** 종목 구성이 진짜로 바뀌어
