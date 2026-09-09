@@ -355,7 +355,7 @@ export async function ledgerStatus(): Promise<LedgerStatus> {
  */
 
 /** 합산할 주체 */
-export type FlowSubject = "fgn" | "org" | "trust" | "pen" | "samo" | "ins" | "bank" | "smart";
+export type FlowSubject = "fgn" | "org" | "trust" | "pen" | "samo" | "ins" | "bank" | "smart" | "smartFgn";
 
 export const SUBJECT_LABEL: Record<FlowSubject, string> = {
   fgn: "외국인",
@@ -366,13 +366,21 @@ export const SUBJECT_LABEL: Record<FlowSubject, string> = {
   ins: "보험",
   bank: "은행",
   smart: "주포 (투신+연기금+사모)",
+  /*
+   * 주포 + 외국인 (2026-09-09 — 벤티지 "주포순매수 + 외국인순매수 상위 이렇게 해주고").
+   *
+   * 둘을 따로 보면 「주포가 사는데 외국인이 파는」 종목이 양쪽 상위에 다 오른다.
+   * 합으로 세우면 **두 손이 같은 쪽으로 미는** 종목만 위로 온다 — 그게 이 줄의 뜻이다.
+   */
+  smartFgn: "주포+외국인 (투신+연기금+사모+외국인)",
 };
 
-/** 한 줄에서 그 주체의 값 — 「주포」는 셋의 합이다 */
+/** 한 줄에서 그 주체의 값 — 「주포」는 셋의 합, 「주포+외국인」은 넷의 합이다 */
 function subjectOf(r: FlowRow, s: FlowSubject): number | null {
-  if (s === "smart") {
-    const v = [r.trust, r.pen, r.samo].filter((x): x is number => x !== null);
-    /* 셋 다 없으면 「모른다」 — 하나라도 있으면 있는 것만 더한다 */
+  if (s === "smart" || s === "smartFgn") {
+    const parts = s === "smart" ? [r.trust, r.pen, r.samo] : [r.trust, r.pen, r.samo, r.fgn];
+    const v = parts.filter((x): x is number => x !== null);
+    /* 전부 없으면 「모른다」 — 하나라도 있으면 있는 것만 더한다 */
     return v.length === 0 ? null : v.reduce((a, b) => a + b, 0);
   }
   return r[s] ?? null;

@@ -209,6 +209,12 @@ export const SCREENER_TABS = [
   /* 아래 둘은 전종목 원장에서 세운다 — 조회 0회, 기간을 마음대로 잡는다 */
   { key: "flow/fgn", label: "외국인 순매수 상위", kind: "rank" as const },
   { key: "flow/smart", label: "주포 순매수 상위", kind: "rank" as const },
+  /*
+   * 주포+외국인 (2026-09-09 — 벤티지 "주포순매수 + 외국인순매수 상위 이렇게 해주고").
+   * 따로 보면 「주포가 사는데 외국인이 파는」 종목이 양쪽 상위에 다 오른다. 합으로 세우면
+   * **두 손이 같은 쪽으로 미는** 종목만 위로 온다. 앞의 둘 바로 뒤가 제자리다.
+   */
+  { key: "flow/smartFgn", label: "주포+외국인 순매수 상위", kind: "rank" as const },
   { key: "top-traders", label: "수익률 상위고객", kind: "page" as const },
   { key: "same-net", label: "기관/외국인 동일 순매매", kind: "page" as const },
   { key: "cont", label: "기관/외국인 연속매매", kind: "page" as const },
@@ -644,7 +650,7 @@ export function ScreenerPage({
       </div>
       {editTabs && (
         <div className="table-note">
-          탭 이름 옆 <b>◀ ▶</b> 로 옮깁니다. 서버에 저장되어 <b>다른 기기에서도 같은 순서</b>입니다.
+          <b>길게 눌러 끌거나</b> 이름 옆 <b>◀ ▶</b> 로 옮깁니다. 서버에 저장되어 <b>다른 기기에서도 같은 순서</b>입니다.
           {tabOrder.customized && (
             <button className="filter-btn dt-reset" onClick={tabOrder.reset}>
               원래대로

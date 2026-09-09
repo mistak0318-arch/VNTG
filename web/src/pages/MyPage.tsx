@@ -964,7 +964,7 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
       </div>
       {arranging && (
         <div className="table-note">
-          줄을 <b>끌어서</b> 옮기거나(PC) <b>▲▼</b> 로 옮깁니다(폰) — 지금 보고 있는 <b>«{activeGroup === ALL ? DEFAULT_GROUP : activeGroup}»</b>
+          줄을 <b>길게 눌러 끌거나</b> <b>▲▼</b> 로 옮깁니다 — 지금 보고 있는 <b>«{activeGroup === ALL ? DEFAULT_GROUP : activeGroup}»</b>
           안에서의 자리이고, 같은 종목이 다른 그룹에서는 그 그룹의 자리를 따로 갖습니다.
           <b> 구분선</b>은 그룹을 새로 만들 만큼은 아닌데 눈으로는 갈라 보고 싶을 때 씁니다.
           {sort.sortKey && (

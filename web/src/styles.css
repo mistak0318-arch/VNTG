@@ -4621,7 +4621,16 @@ button:active:not(:disabled) {
 /* ── 끌어서 순서 바꾸기 (useDragOrder) — 모든 순서 UI 공통 ── */
 /* 손바닥(grab)이 아니라 손가락(pointer) — 버튼 위 커서가 갑자기 바뀌면 이상하다는 지적 */
 [draggable="true"] { cursor: pointer; }
-.drag-src { opacity: 0.4; cursor: grabbing; }
+/*
+ * 끌리는 중 (2026-09-09 터치 지원) — 포인터 이벤트로 바뀌면서 두 가지가 필요해졌다.
+ *   · `user-select: none` — 마우스로 끌 때 글자가 파랗게 잡히는 것을 막는다
+ *     (HTML5 drag 는 브라우저가 알아서 해 주던 일이다)
+ *   · 잡힌 항목은 **떨어뜨릴 대상이 아니다** — 손가락 밑을 찾을 때 자기 자신이 잡히면
+ *     늘 제자리다. `pointer-events: none` 으로 자신을 비워 밑에 있는 것이 잡히게 한다.
+ */
+.drag-src { opacity: 0.4; cursor: grabbing; pointer-events: none; }
+/* 끄는 동안 화면 전체에서 글자 선택을 막는다 — 잡힌 항목 하나만으로는 부족하다 */
+body:has(.drag-src) { user-select: none; -webkit-user-select: none; }
 .drag-over { outline: 2px dashed var(--blue); outline-offset: -2px; border-radius: 6px; }
 /* 표 줄에는 outline 이 안 보이는 브라우저가 있어 배경도 준다 */
 tr.drag-over td { background: rgba(76, 141, 255, 0.12); }

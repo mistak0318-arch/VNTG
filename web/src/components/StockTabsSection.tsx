@@ -304,7 +304,7 @@ export function StockTabsSection({
 
       {editTabs && (
         <div className="table-note">
-          탭 이름 옆 <b>◀ ▶</b> 로 옮깁니다. 서버에 저장되어 <b>다른 기기에서도 같은 순서</b>
+          <b>길게 눌러 끌거나</b> 이름 옆 <b>◀ ▶</b> 로 옮깁니다. 서버에 저장되어 <b>다른 기기에서도 같은 순서</b>
           입니다 — 종목 상세와 개별종목분석이 같은 순서를 씁니다.
           {tabOrder.customized && (
             <button className="filter-btn dt-reset" onClick={tabOrder.reset}>
