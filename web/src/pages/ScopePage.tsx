@@ -638,14 +638,21 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
                   className={`sc-row${open === r.code ? " on" : ""}`}
                   onClick={() => setOpen(open === r.code ? null : r.code)}
                 >
+                  {/*
+                    세 줄 (2026-09-09 밤 — 벤티지 "3줄이니까 무지개 이런 마크들도 밑에 내리고"):
+                    ① 이름·코드 ② 시장·업종 ③ 마크·뉴스·텔레그램. 오른쪽 정렬을 지킨다.
+                  */}
                   <td className="sc-name">
                     <b>{r.name}</b>
                     <span className="pt-n"> {r.code}</span>
-                    {/* 슈퍼신호등·교차·무지개 — 어느 화면에서든 같은 종목에 같은 표시 */}
-                    <SuperMark code={r.code} />
-                    {r.sector && <div className="pt-n">{r.sector}</div>}
-                    {/* 24시간 뉴스·텔레그램 수 — 누르면 팝업 */}
-                    {buzz.badge(r.code, r.name)}
+                    <div className="pt-n">
+                      {r.market && <i className="scr-mkt">{r.market}</i>}
+                      {r.sector}
+                    </div>
+                    <div className="sc-name-marks">
+                      <SuperMark code={r.code} />
+                      {buzz.badge(r.code, r.name)}
+                    </div>
                   </td>
                   {/*
                     **실시간으로 오는 값인지 점으로 말한다** (2026-09-09 — 벤티지 "실시간 표시가

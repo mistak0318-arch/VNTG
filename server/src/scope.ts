@@ -146,6 +146,8 @@ export interface ScopeFlow {
 export interface ScopeRow {
   code: string;
   name: string;
+  /** 코스피 / 코스닥 (2026-09-09 밤 — 벤티지 "코스피/코스닥 정보가 안 들어가 있네") */
+  market: "코스피" | "코스닥" | null;
   sector: string | null;
   /** 억원 */
   marketCap: number | null;
@@ -412,6 +414,7 @@ export async function scopeList(client: KiwoomClient): Promise<{ rows: ScopeRow[
     rows.push({
       code,
       name: it.name,
+      market: s?.market === "kospi" ? "코스피" : s?.market === "kosdaq" ? "코스닥" : null,
       sector: s?.sector ?? null,
       marketCap: s?.marketCap ?? null,
       price,

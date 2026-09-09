@@ -40,18 +40,23 @@ export function createUsWatchRouter(): Router {
    */
   router.get("/fast", async (req, res, next) => {
     try {
+      /*
+       * `sub=0` (2026-09-09 밤) — 타일·칩이 **전 종목**을 물을 때. 소켓 구독은 안 건드리고
+       * 상한만 200 으로 연다. 소켓 자리는 「지금 보는 그룹」이 3초 폴링으로 계속 잡고 있다.
+       */
+      const sub = req.query.sub !== "0";
       const symbols = String(req.query.symbols ?? "")
         .split(",")
         .map((s) => s.trim().toUpperCase())
         .filter(Boolean)
-        .slice(0, 60);
+        .slice(0, sub ? 60 : 200);
       /*
        * **보고 있는 종목을 실시간 소켓에도 물린다** (2026-09-08). 화면이 이 자리에서 이미
        * 「지금 보는 그룹」을 넘겨 주므로 새 호출을 만들지 않는다 — 그룹을 옮기면 여기로
        * 새 목록이 오고 옛 구독은 풀린다. 한투 실시간은 41종목이 상한이라(실측) 화면이
        * 보고 있는 만큼만 거는 이 방식이 맞다.
        */
-      setUsRealtimeSymbols(symbols);
+      if (sub) setUsRealtimeSymbols(symbols);
       const got = await usFastQuotes(symbols);
       res.json({ quotes: Object.fromEntries(got) });
     } catch (err) {

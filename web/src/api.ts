@@ -1306,9 +1306,10 @@ export const api = {
     return usWatchInFlight;
   },
   /** 빠른 시세(야후 spark 배치) — 현재가·등락률만, 4초 캐시. 표 오버레이용 */
-  usWatchFast: (symbols: string[]) =>
+  /** `sub=false` 면 소켓 구독을 안 건드린다 — 타일·칩이 전 종목을 물을 때 */
+  usWatchFast: (symbols: string[], sub = true) =>
     getJson<{ quotes: Record<string, { price: number; changeRate: number | null; at: number }> }>(
-      `/api/us-watch/fast?symbols=${encodeURIComponent(symbols.join(","))}`,
+      `/api/us-watch/fast?symbols=${encodeURIComponent(symbols.join(","))}${sub ? "" : "&sub=0"}`,
     ),
   usWatchSearch: (q: string) =>
     getJson<{ results: UsSearchResult[] }>(`/api/us-watch/search?q=${encodeURIComponent(q)}`),
@@ -4745,6 +4746,8 @@ export interface ScopeFlow {
 export interface ScopeRow {
   code: string;
   name: string;
+  /** 코스피 / 코스닥 */
+  market?: "코스피" | "코스닥" | null;
   sector: string | null;
   marketCap: number | null;
   price: number | null;

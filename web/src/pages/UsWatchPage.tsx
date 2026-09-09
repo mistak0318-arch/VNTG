@@ -6,6 +6,8 @@ import { UsWatchTable } from "../components/UsWatchTable";
 import { useDragOrder } from "../useDragOrder";
 import { YahooChartSheet, type ChartTarget } from "../components/overview/YahooChartSheet";
 import { useListKeys } from "../useListKeys";
+import { liveMean, useUsAllFast } from "../useUsAllFast";
+import { TableFontButtons, useTableFont } from "../components/TableFont";
 
 /**
  * 관심종목 (해외).
@@ -182,6 +184,18 @@ export function UsWatchPage() {
   const fastSymbols = (groups.find((g) => g.id === openGroup) ?? groups[0])?.stocks
     .map((s) => s.symbol)
     .join(",");
+  /*
+   * 그룹 칩의 등락률도 **지금 값**으로 (2026-09-09 밤 — 벤티지 "빨간색 친 부분들은 실시간
+   * 업데이트 안 되는 거 같은데"). 전 종목 빠른 시세(소켓 안 건드림, 장중 15초)로 단순평균.
+   */
+  const allFast = useUsAllFast(
+    openMarket ? groups.flatMap((g) => g.stocks.map((s) => s.symbol)) : [],
+    openMarket,
+  );
+  const chipRate = (g: UsWatchGroup): number | null =>
+    openMarket ? (liveMean(g.stocks, allFast) ?? g.changeRate) : g.changeRate;
+  /* 표 글자 크기 — 시세분석과 같은 단추 (벤티지 "얘도 +/- 달아주고") */
+  const font = useTableFont("vntg.uswatch.font");
   useEffect(() => {
     if (!fastSymbols) return;
     let alive = true;
@@ -358,7 +372,7 @@ export function UsWatchPage() {
   const current = groups.find((g) => g.id === openGroup) ?? groups[0] ?? null;
 
   return (
-    <div>
+    <div className={font.className} style={font.style}>
       <div className="uw-bar">
         <RefreshBar onRefresh={() => load(true)} loading={loading} />
         {SORTS.map((o) => (
@@ -371,6 +385,7 @@ export function UsWatchPage() {
           </button>
         ))}
         {/* 자동 갱신 토글은 없앴다(2026-08-26) — 가격은 3초 빠른 시세, 나머지는 30초 조용히 */}
+        <TableFontButtons font={font} />
       </div>
       {error && <div className="error-banner">{error}</div>}
 
@@ -415,7 +430,7 @@ export function UsWatchPage() {
           >
             {groups.map((g) => (
               <option value={g.id} key={g.id}>
-                {g.name} ({g.stocks.length}) {pct(g.changeRate)}
+                {g.name} ({g.stocks.length}) {pct(chipRate(g))}
               </option>
             ))}
           </select>
@@ -442,7 +457,7 @@ export function UsWatchPage() {
               {...(editing ? groupDrag.props(g.id) : {})}
             >
               {g.name}
-              <span className={`uw-grate ${cls(g.changeRate)}`}> {pct(g.changeRate)}</span>
+              <span className={`uw-grate ${cls(chipRate(g))}`}> {pct(chipRate(g))}</span>
             </button>
             {editing && (
               <button
@@ -596,7 +611,7 @@ export function UsWatchPage() {
           <div className="uw-head">
             <b>{current.name}</b>
             {current.memo && <span className="pt-n"> {current.memo}</span>}
-            <span className={`uw-grate big ${cls(current.changeRate)}`}>{pct(current.changeRate)}</span>
+            <span className={`uw-grate big ${cls(chipRate(current))}`}>{pct(chipRate(current))}</span>
             <span className="pt-n">
               ▲{current.rising} / ▼{current.falling} · {current.stocks.length}종목
             </span>

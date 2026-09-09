@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { liveQuote } from "./usSession";
 import { api, type StockRow } from "./api";
+import { useUsAllFast } from "./useUsAllFast";
 
 /**
  * 관심종목 그룹을 MAP 타일로.
@@ -63,7 +64,35 @@ const REFRESH_MS: Record<GroupSource, number> = {
 };
 
 export function useWatchGroupTiles(source: GroupSource | null) {
-  const [tiles, setTiles] = useState<GroupTile[]>([]);
+  const [base, setTiles] = useState<GroupTile[]>([]);
+  /*
+   * 해외 타일은 **빠른 시세로 덮는다** (2026-09-09 밤). `usWatch()` 는 서버 1분 캐시라
+   * 타일이 표보다 한참 늦었다. 정규장(「실시간」 상태)일 때만 — 프리·애프터의 값은
+   * `liveQuote` 가 세션에 맞게 이미 골라 두었고 spark 는 정규장 값이다.
+   */
+  const [usOpen, setUsOpen] = useState(false);
+  const fast = useUsAllFast(
+    source === "watchUs" && usOpen ? base.flatMap((g) => g.stocks.map((s) => s.code)) : [],
+    true,
+  );
+  const tiles =
+    source === "watchUs" && usOpen
+      ? base
+          .map((g) =>
+            toTile(
+              g.id,
+              g.name,
+              g.stocks.map((s) => {
+                const f = fast[s.code];
+                if (!f || f.changeRate === null) return s;
+                const rate = f.changeRate;
+                const b = 1 + rate / 100;
+                return { ...s, price: f.price, changeRate: rate, change: b !== 0 ? f.price - f.price / b : 0 };
+              }),
+            ),
+          )
+          .sort((a, b) => b.changeRate - a.changeRate)
+      : base;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,6 +105,7 @@ export function useWatchGroupTiles(source: GroupSource | null) {
     const run = async (): Promise<GroupTile[]> => {
       if (source === "watchUs") {
         const r = await api.usWatch();
+        setUsOpen(r.groups.some((g) => g.stocks.some((s) => (s.state ?? "").includes("실시간"))));
         return r.groups.map((g) =>
           toTile(
             g.id,

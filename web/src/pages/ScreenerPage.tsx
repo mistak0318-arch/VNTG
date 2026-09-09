@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type React from "react";
 import { removePref, setPref } from "../prefs";
 import { api, fmtNum, type FlowSum, type RankResult, type RankSpecGroup } from "../api";
 import { SuperMark } from "../useSuperMarks";
@@ -10,6 +9,7 @@ import { SortableTh, useSortableTable } from "../useSortableTable";
 import { fid, krxOverlayLive, krxRegularSession, useRealtime } from "../useRealtime";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { useBuzz } from "../components/BuzzBadge";
+import { TableFontButtons, useTableFont } from "../components/TableFont";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { useCardOrder } from "../useCardOrder";
 import { useAutoRefresh } from "../useAutoRefresh";
@@ -379,28 +379,8 @@ export function ScreenerPage({
    * 칸이면 폰에서도 들어가고, 셋을 펼치면 표가 다섯 칸 넓어진다.
    */
   const [flowDetail, setFlowDetail] = useState<boolean>(() => localStorage.getItem("vntg.screener.flowDetail") === "1");
-  /**
-   * **표 글자 크기** (2026-09-09 밤 — 벤티지 "숫자 좀 키울 수 있나? 기본 폰트 크기가 너무
-   * 작은 거 같아서 … 표 위에 +/- 넣어서 글자 크기 좀 조절할 수 있게 … 전역변수로 해서
-   * 모든 표에 적용되게 … 현미경 메뉴에 있는 폰트 크기가 딱 좋은데").
-   *
-   * 값 하나가 시세분석의 **모든 표**(순위 표·동일순매매·연속매매·수익률 상위)에 걸린다 —
-   * 루트에 CSS 변수로 얹고 `.scr-root .data-table` 이 읽는다. 기본은 현미경 표와 같은
-   * 0.78rem(원래 시세분석은 0.7333). 0.62~1.0 사이 0.04 걸음. 기기마다 다른 값이라 로컬.
-   */
-  const [fontRem, setFontRem] = useState<number>(() => {
-    const n = Number(localStorage.getItem("vntg.screener.font"));
-    return n >= 0.62 && n <= 1.0 ? n : 0.78;
-  });
-  const bumpFont = (d: number) => {
-    const next = Math.round(Math.min(1.0, Math.max(0.62, fontRem + d)) * 100) / 100;
-    setFontRem(next);
-    try {
-      localStorage.setItem("vntg.screener.font", String(next));
-    } catch {
-      /* 저장 못 해도 이번 세션에는 바뀐다 */
-    }
-  };
+  /* 표 글자 크기 — 화면 하나에 값 하나, 모든 표에 (components/TableFont) */
+  const font = useTableFont("vntg.screener.font");
   /* 신호등은 **켤 때만** — 목록을 여는 것만으로 백 종목을 평가하면 안 된다 */
   const [sigOn, setSigOn] = useState(false);
   const [editTabs, setEditTabs] = useState(false);
@@ -801,7 +781,7 @@ export function ScreenerPage({
   const on = filterOn;
 
   return (
-    <div {...swipe} className="scr-root" style={{ "--scr-font": `${fontRem}rem` } as React.CSSProperties}>
+    <div {...swipe} className={`scr-root ${font.className}`} style={font.style}>
       {/* 실제로 보는 다섯이 앞이다 — 트리를 매번 훑지 않게 */}
       {/* 폰에서는 한 줄로 세우고 옆으로 넘긴다 — 컨트롤이 표를 밀어내지 않게 */}
       <div className="filter-row scr-tabs ctl-ribbon">
@@ -851,13 +831,8 @@ export function ScreenerPage({
           </button>
         ))}
         {/* 글자 크기 — 시세분석의 모든 표에 한 값 */}
-        <span className="scr-font" style={{ order: 998 }} title={`표 글자 크기 ${fontRem}rem — 모든 표에 같이 걸립니다`}>
-          <button className="filter-btn" onClick={() => bumpFont(-0.04)} disabled={fontRem <= 0.62} title="글자 작게">
-            가−
-          </button>
-          <button className="filter-btn" onClick={() => bumpFont(0.04)} disabled={fontRem >= 1.0} title="글자 크게">
-            가＋
-          </button>
+        <span style={{ order: 998, display: "inline-flex" }}>
+          <TableFontButtons font={font} />
         </span>
         <button
           className={`filter-btn dt-edit${editTabs ? " active" : ""}`}
