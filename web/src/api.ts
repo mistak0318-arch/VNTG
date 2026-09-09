@@ -1806,14 +1806,12 @@ export const api = {
     limit = 100,
     /** 명세가 고를 수 있게 열어 둔 파라미터 (`RankResult.spec.choices`) */
     chosen?: Record<string, string>,
-    /** 줄마다 얹는 수급의 기간(거래일) — 5·10·20 (2026-09-09) */
-    flow = 5,
   ) => {
     const extra = Object.entries(chosen ?? {})
       .map(([k, v]) => `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
       .join("");
     return getJson<RankResult>(
-      `/api/rank/${key}?market=${market}&exchange=${exchange}&limit=${limit}&flow=${flow}${extra}`,
+      `/api/rank/${key}?market=${market}&exchange=${exchange}&limit=${limit}${extra}`,
     );
   },
   sectorFlow: (subject = "foreign", window = 5) =>
@@ -3558,8 +3556,6 @@ export interface RankResult {
   chosen?: Record<string, string>;
   market: string;
   exchange: string;
-  /** 줄마다 얹은 수급의 기간(거래일) */
-  flowSpan?: number;
   /**
    * code·name 은 항상 있고, 나머지는 명세의 컬럼 키로 들어온다.
    *
@@ -3590,16 +3586,11 @@ export interface RankResult {
     /** ETF 인가 — 「ETF만」 필터가 쓴다 */
     etf: boolean;
     /**
-     * **원장에서 더한 수급(억원)** — `flowSpan` 거래일 합 (2026-09-09). 순위 TR 은
-     * 안 주는 값이라 서버가 원장에서 얹는다. 원장이 없는 종목은 null, `f_days` 는
-     * 실제로 더한 날 수(원장이 얕으면 요청보다 적다).
+     * **원장에서 더한 수급(억원)** — 5·10·20거래일 합을 한꺼번에 (2026-09-09). 순위 TR 은
+     * 안 주는 값이라 서버가 원장에서 얹는다. 원장이 없는 종목은 값이 null, `days` 는
+     * 실제로 더한 날 수(원장이 얕으면 기간보다 적다).
      */
-    f_fgn?: number | null;
-    f_trust?: number | null;
-    f_pen?: number | null;
-    f_samo?: number | null;
-    f_smart?: number | null;
-    f_days?: number;
+    flow?: Record<string, FlowSum>;
     /** 조회순위 — 직전 응답에 없던 종목이면 들어온 시각, 아니면 null */
     enteredAt?: string | null;
   })[];
@@ -4423,6 +4414,16 @@ export interface NewsItem {
   publishedAt: string;
   major: boolean;
   summary: string;
+}
+
+/** 한 종목의 N거래일 순매수 합(억원) — 시세분석 줄마다 붙는다 */
+export interface FlowSum {
+  fgn: number | null;
+  trust: number | null;
+  pen: number | null;
+  samo: number | null;
+  smart: number | null;
+  days: number;
 }
 
 /** 조회순위 「뉴스 N회 · 텔레그램 N회」를 눌렀을 때 — 24시간 안의 목록 (2026-09-09) */

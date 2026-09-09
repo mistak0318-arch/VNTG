@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { removePref, setPref } from "../prefs";
-import { api, fmtNum, type RankResult, type RankSpecGroup } from "../api";
+import { api, fmtNum, type FlowSum, type RankResult, type RankSpecGroup } from "../api";
 import { SuperMark } from "../useSuperMarks";
 import { SameNetTradeRankingPage } from "./SameNetTradeRankingPage";
 import { ContinuousTradePage } from "./ContinuousTradePage";
@@ -315,16 +315,25 @@ export function ScreenerPage({
   const [pageSize, setPageSize] = useState<number>(() => Number(localStorage.getItem("vntg.screener.pageSize")) || 100);
   const [page, setPage] = useState(0);
   /**
-   * **줄마다 얹는 수급의 기간** (2026-09-09 — 벤티지 "수급 5일, 10일, 20일 외국인 기관
-   * 주포 이런 애들 수급, 그리고 거래대금, 시가총액 이런 것도 적용해서 넣어줘").
+   * **줄마다 얹는 수급의 기간들** (2026-09-09 — 벤티지 "수급 5일, 10일, 20일 외국인 기관
+   * 주포 이런 애들 수급" → 저녁에 "외국인 주포 10일 20일도 추가하자").
    *
    * 어느 순위를 보든 「이 종목을 요 며칠 누가 샀나」가 옆에 붙는다. 서버가 원장에서
-   * 더하므로 조회는 0회다. 기간은 어느 조회로 옮겨도 그대로다 — 기간을 바꿔 가며
-   * 비교하는 게 쓰는 방식이라 조회마다 따로 두면 매번 다시 누르게 된다.
+   * 더하므로 조회는 0회다. 처음엔 기간 하나를 골라 보게 했는데, 5·10·20일을 **나란히**
+   * 놓고 견주는 게 쓰는 방식이었다 — 그래서 단추가 **켜고 끄는 것**이 됐고 기본은 셋 다다.
+   * 폰에서 좁으면 끄면 된다. 어느 조회로 옮겨도 그대로다.
    */
-  const [flowSpan, setFlowSpan] = useState<number>(() => {
-    const n = Number(localStorage.getItem("vntg.screener.flow"));
-    return [5, 10, 20].includes(n) ? n : 5;
+  const [flowSpans, setFlowSpans] = useState<number[]>(() => {
+    try {
+      const got = JSON.parse(localStorage.getItem("vntg.screener.flows") ?? "null") as unknown;
+      if (Array.isArray(got)) {
+        const ok = got.filter((n): n is number => [5, 10, 20].includes(n as number));
+        if (ok.length > 0) return ok.sort((a, b) => a - b);
+      }
+    } catch {
+      /* 저장된 게 깨졌으면 기본 */
+    }
+    return [5, 10, 20];
   });
   /**
    * 주포를 **셋으로 펼쳐 보나** — 투신·연기금·사모 (벤티지 "기관은 주포순이니까 연기금,
@@ -401,12 +410,12 @@ export function ScreenerPage({
       if (!quiet) setLoading(true);
       setError(null);
       api
-        .rank(rankKey, market, exchange, fetchLimit, chosen, flowSpan)
+        .rank(rankKey, market, exchange, fetchLimit, chosen)
         .then((r) => setData(r))
         .catch((e: Error) => setError(e.message))
         .finally(() => setLoading(false));
     },
-    [rankKey, market, exchange, fetchLimit, chosen, flowSpan],
+    [rankKey, market, exchange, fetchLimit, chosen],
   );
 
   useEffect(() => {
@@ -520,21 +529,37 @@ export function ScreenerPage({
    * 표 아래 「어림값」 줄이 그걸 말한다.
    */
   const hasTvExtra = hasTvCol && !cols.some((c) => c.key === "trde_prica");
-  /* 원장이 있는 줄이 하나라도 있어야 수급 칸을 그린다 — 전부 null 이면 빈 칸 다섯이다 */
-  const hasFlow = all.some((r) => (r.f_days ?? 0) > 0);
-  /** 수급 칸 정의 — 접힘이면 외국인·주포 둘, 펼치면 사이에 투신·연기금·사모 */
-  const FLOW_COLS: { key: "f_fgn" | "f_trust" | "f_pen" | "f_samo" | "f_smart"; label: string }[] = flowDetail
+  /* 원장이 있는 줄이 하나라도 있어야 수급 칸을 그린다 — 전부 null 이면 빈 칸만 늘어난다 */
+  const hasFlow = all.some((r) => Object.values(r.flow ?? {}).some((f) => (f?.days ?? 0) > 0));
+  /** 수급 주체 — 접힘이면 외국인·주포 둘, 펼치면 사이에 투신·연기금·사모 */
+  const FLOW_SUBJECTS: { key: keyof Omit<FlowSum, "days">; label: string }[] = flowDetail
     ? [
-        { key: "f_fgn", label: "외국인" },
-        { key: "f_trust", label: "투신" },
-        { key: "f_pen", label: "연기금" },
-        { key: "f_samo", label: "사모" },
-        { key: "f_smart", label: "주포" },
+        { key: "fgn", label: "외국인" },
+        { key: "trust", label: "투신" },
+        { key: "pen", label: "연기금" },
+        { key: "samo", label: "사모" },
+        { key: "smart", label: "주포" },
       ]
     : [
-        { key: "f_fgn", label: "외국인" },
-        { key: "f_smart", label: "주포" },
+        { key: "fgn", label: "외국인" },
+        { key: "smart", label: "주포" },
       ];
+  /**
+   * 실제 칸 = 주체 × 켜 둔 기간. 주체별로 기간이 붙어 있어야 「외국인 5·10·20」을
+   * 한눈에 견준다 — 기간별로 주체를 묶으면 눈이 표를 가로질러야 한다.
+   */
+  const FLOW_COLS = FLOW_SUBJECTS.flatMap((sub) =>
+    flowSpans.map((span) => ({
+      key: `f_${sub.key}_${span}`,
+      sub: sub.key,
+      span,
+      label: `${sub.label} ${span}일`,
+    })),
+  );
+  const flowOf = (r: { flow?: Record<string, FlowSum> }, sub: keyof Omit<FlowSum, "days">, span: number) => {
+    const f = r.flow?.[String(span)];
+    return { v: f ? f[sub] : null, days: f?.days ?? 0 };
+  };
   /** 억원 — 부호를 앞에 단다. 순매수(+)·순매도(−)가 곧 정보다 */
   const eokSigned = (v: number | null | undefined): string => {
     if (v == null) return "-";
@@ -917,15 +942,22 @@ export function ScreenerPage({
           {[5, 10, 20].map((n) => (
             <button
               key={n}
-              className={`filter-btn ${flowSpan === n ? "active" : ""}`}
+              className={`filter-btn ${flowSpans.includes(n) ? "active" : ""}`}
               onClick={() => {
-                setFlowSpan(n);
+                /* 켜고 끈다 — 마지막 하나는 못 끈다(수급 칸이 통째로 사라지면 뭘 눌러야 돌아오는지 모른다) */
+                const next = flowSpans.includes(n)
+                  ? flowSpans.length > 1
+                    ? flowSpans.filter((x) => x !== n)
+                    : flowSpans
+                  : [...flowSpans, n].sort((a, b) => a - b);
+                setFlowSpans(next);
                 try {
-                  localStorage.setItem("vntg.screener.flow", String(n));
+                  localStorage.setItem("vntg.screener.flows", JSON.stringify(next));
                 } catch {
                   /* 저장 못 해도 이번 세션에는 바뀐다 */
                 }
               }}
+              title="켜고 끕니다 — 주체마다 이 기간 칸이 붙습니다"
             >
               {n}일
             </button>
@@ -1307,7 +1339,7 @@ export function ScreenerPage({
                       />
                     )}
                     {/*
-                      수급 — `flowSpan` 거래일 순매수 합(억). 머리에 기간을 적어 둔다 —
+                      수급 — N거래일 순매수 합(억). 머리에 기간을 적어 둔다 —
                       「외국인 +120억」만 있으면 하루치인지 한 달치인지 알 길이 없다.
                     */}
                     {hasFlow &&
@@ -1315,8 +1347,8 @@ export function ScreenerPage({
                         <SortableTh
                           key={f.key}
                           columnKey={f.key}
-                          label={`${f.label} ${flowSpan}일`}
-                          accessor={(r: (typeof rows)[number]) => r[f.key] ?? -Infinity}
+                          label={f.label}
+                          accessor={(r: (typeof rows)[number]) => flowOf(r, f.sub, f.span).v ?? -Infinity}
                           sort={sort}
                           extra={<ColumnGrip cw={cw} k={f.key} />}
                         />
@@ -1495,8 +1527,7 @@ export function ScreenerPage({
                       {hasCap && <td className="num pt-n">{eok(r.cap)}</td>}
                       {hasFlow &&
                         FLOW_COLS.map((f) => {
-                          const v = r[f.key] ?? null;
-                          const days = r.f_days ?? 0;
+                          const { v, days } = flowOf(r, f.sub, f.span);
                           return (
                             <td
                               key={f.key}
@@ -1505,13 +1536,13 @@ export function ScreenerPage({
                               title={
                                 v == null
                                   ? "원장에 없는 종목입니다"
-                                  : days < flowSpan
+                                  : days < f.span
                                     ? `원장이 ${days}일치라 ${days}일 합입니다`
-                                    : `${flowSpan}거래일 순매수 합 (억원)`
+                                    : `${f.label} 순매수 합 (억원)`
                               }
                             >
                               {eokSigned(v)}
-                              {v != null && days < flowSpan && <i className="scr-split">{days}일</i>}
+                              {v != null && days < f.span && <i className="scr-split">{days}일</i>}
                             </td>
                           );
                         })}

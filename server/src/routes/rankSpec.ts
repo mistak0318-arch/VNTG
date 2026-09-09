@@ -85,33 +85,34 @@ const SPAN_VALUES = SPAN_OPTIONS.map((o) => Number(o.value));
  * 시가총액 이런 것도 적용해서 넣어줘. 현재 시세 분석에 이거 안 붙어 있는 애들도 있잖아."
  *
  * 시가총액·거래대금은 `extras()` 가 이미 모든 줄에 붙이고 있었다. 수급은 없었다 —
- * 순위 TR 이 안 주니까. 원장에서 더한다(조회 0회). 화면이 `flow=5|10|20` 으로 기간을
- * 고르고, 줄마다 `f_fgn·f_trust·f_pen·f_samo·f_smart`(억원)·`f_days`(실제 더한 날)가 붙는다.
- * 원장이 없는 종목(신규 상장·ETF 등)은 `null` — 「모른다」를 0 으로 적지 않는다.
+ * 순위 TR 이 안 주니까. 원장에서 더한다(조회 0회).
+ *
+ * **세 기간을 한꺼번에 준다** (2026-09-09 저녁 — 벤티지 "외국인 주포 10일 20일도
+ * 추가하자"). 처음엔 화면이 기간 하나를 골라 `flow=` 로 보냈는데, 5·10·20일을 나란히
+ * 놓고 견주는 게 쓰는 방식이었다. 원장은 종목당 한 번 읽고(캐시) 창만 셋을 자르므로
+ * 세 번이 한 번과 값이 같다. 줄마다 `flow: { "5": {...}, "10": {...}, "20": {...} }` —
+ * 각각 `fgn·trust·pen·samo·smart`(억원)와 `days`(실제 더한 날). 원장이 없는 종목은
+ * 값이 `null` — 「모른다」를 0 으로 적지 않는다.
  */
-const FLOW_SPANS = [5, 10, 20];
+const FLOW_SPANS = [5, 10, 20] as const;
 
-function flowSpanOf(q: unknown): number {
-  const n = Number(q);
-  return FLOW_SPANS.includes(n) ? n : 5;
-}
-
-async function withFlow<T extends { code: string }>(rows: T[], span: number): Promise<T[]> {
-  const sums = await flowSums(
-    rows.map((r) => r.code),
-    span,
-  ).catch(() => new Map());
+async function withFlow<T extends { code: string }>(rows: T[]): Promise<T[]> {
+  const codes = rows.map((r) => r.code);
+  const sums = await Promise.all(FLOW_SPANS.map((span) => flowSums(codes, span).catch(() => new Map())));
   return rows.map((r) => {
-    const f = sums.get(r.code);
-    return {
-      ...r,
-      f_fgn: f?.fgn ?? null,
-      f_trust: f?.trust ?? null,
-      f_pen: f?.pen ?? null,
-      f_samo: f?.samo ?? null,
-      f_smart: f?.smart ?? null,
-      f_days: f?.days ?? 0,
-    };
+    const flow: Record<string, unknown> = {};
+    FLOW_SPANS.forEach((span, i) => {
+      const f = sums[i].get(r.code);
+      flow[String(span)] = {
+        fgn: f?.fgn ?? null,
+        trust: f?.trust ?? null,
+        pen: f?.pen ?? null,
+        samo: f?.samo ?? null,
+        smart: f?.smart ?? null,
+        days: f?.days ?? 0,
+      };
+    });
+    return { ...r, flow };
   });
 }
 
@@ -203,7 +204,6 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
          * 값이다. 다른 순위 경로는 전부 `extras()` 를 붙이고 있었고 여기만
          * 안 붙어 있었다 — 이 조회가 원래 다른 화면으로 그려졌기 때문이다.
          */
-        flowSpan: flowSpanOf(req.query.flow),
         rows: await (async () => {
           const index = await getStockIndex(client).catch(() => new Map());
           return withFlow(r.rows.map((x, i) => {
@@ -219,7 +219,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
               flu_rt: x.todayRate,
               trde_prica: x.tradeValue,
             };
-          }), flowSpanOf(req.query.flow));
+          }));
         })(),
       });
     } catch (err) {
@@ -289,8 +289,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         },
         market,
         exchange: "3",
-        flowSpan: flowSpanOf(req.query.flow),
-        rows: await withFlow(rows, flowSpanOf(req.query.flow)),
+        rows: await withFlow(rows),
       });
     } catch (err) {
       next(err);
@@ -395,8 +394,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         exchange: "3",
         span,
         covered,
-        flowSpan: flowSpanOf(req.query.flow),
-        rows: await withFlow(rows as (Record<string, unknown> & { code: string })[], flowSpanOf(req.query.flow)),
+        rows: await withFlow(rows as (Record<string, unknown> & { code: string })[]),
       });
     } catch (err) {
       next(err);
@@ -582,7 +580,6 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
        * 목록을 못 받아도 순위 자체는 나와야 하므로 실패하면 빈 맵으로 간다.
        */
       const index = await getStockIndex(client).catch(() => new Map());
-      const flowSpan = flowSpanOf(req.query.flow);
       /*
        * 거래량도 안 주는 조회(조회순위)는 거래대금을 못 낸다 — 시황 스냅샷의 어림값
        * (거래량 × 현재가, 40초 캐시)으로 메운다. 어림값이므로 `tvEst` 그대로 참이다.
@@ -666,8 +663,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         exchange,
         /* 지금 무엇으로 골라 부른 것인가 — 화면이 눌린 버튼을 표시한다 */
         chosen,
-        flowSpan,
-        rows: await withFlow(drawn, flowSpan),
+        rows: await withFlow(drawn),
       });
     } catch (err) {
       next(err);
