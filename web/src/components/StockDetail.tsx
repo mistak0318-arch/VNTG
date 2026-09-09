@@ -198,6 +198,27 @@ export function StockDetail({
           >
             ⚙
           </button>
+          {/*
+            **독립창으로** (2026-09-09 밤 — 벤티지 "종목 클릭하면 나오는 이 부분에서 저 위치에
+            독립창으로 띄우는 아이콘 버튼 하나 만들자 … 클릭하면 미니창 뜨고 해당 종목 상세
+            화면으로 넘어가게끔"). 미니창(vntg-mini)을 종목검색 화면으로 열고 이 종목을
+            넘긴다 — 이미 떠 있으면 그 창의 종목만 바뀐다. 미니창 안에서는 뜻이 없어 숨긴다.
+          */}
+          {!window.location.hash.startsWith("#/mini") && (
+            <button
+              className="watch-btn"
+              onClick={() =>
+                window.open(
+                  `${window.location.pathname}#/mini?screen=stock&${new URLSearchParams({ code, name }).toString()}`,
+                  "vntg-mini",
+                  "width=560,height=880,resizable=yes,scrollbars=yes",
+                )
+              }
+              title="이 종목을 미니창(독립창)으로 띄우기"
+            >
+              🪟
+            </button>
+          )}
           <button
             className="watch-btn"
             onClick={() => live.refresh()}

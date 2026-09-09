@@ -4,6 +4,8 @@ import { MiniLine } from "../components/MiniLine";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { fid, useRealtime } from "../useRealtime";
+import { SuperMark } from "../useSuperMarks";
+import { useBuzz } from "../components/BuzzBadge";
 
 /**
  * **매수직전** — 현미경 그룹의 관리 화면 (2026-09-07).
@@ -511,6 +513,11 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
     2000,
     { readOnly: true },
   );
+  /*
+   * 마크·뉴스·텔레그램 (2026-09-09 밤 — 벤티지 "현미경에는 텔레그램/뉴스, 그리고 각종 마크
+   * 표시가 안 되어 있네 표시하자고"). 시세분석 표와 같은 훅·같은 팝업이다.
+   */
+  const buzz = useBuzz(rows.map((r) => r.code));
   /** 실시간이 준 현재가·등락률 — 없으면 null 이고, 그때는 폴링 값을 쓴다 */
   const liveOf = (code: string): { price: number; rate: number | null } | null => {
     const v = rt.values[`0B:${code}`];
@@ -634,7 +641,11 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
                   <td className="sc-name">
                     <b>{r.name}</b>
                     <span className="pt-n"> {r.code}</span>
+                    {/* 슈퍼신호등·교차·무지개 — 어느 화면에서든 같은 종목에 같은 표시 */}
+                    <SuperMark code={r.code} />
                     {r.sector && <div className="pt-n">{r.sector}</div>}
+                    {/* 24시간 뉴스·텔레그램 수 — 누르면 팝업 */}
+                    {buzz.badge(r.code, r.name)}
                   </td>
                   {/*
                     **실시간으로 오는 값인지 점으로 말한다** (2026-09-09 — 벤티지 "실시간 표시가
@@ -703,6 +714,7 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
         수급은 억원(순매수). 5일·20일은 원장의 마지막 날 기준이며 장중에는 어제까지입니다 — 「오늘」 칸만 지금 값입니다.
         공매도 비중이 20일 평균의 1.5배를 넘으면 빨갛게, 대차잔고는 <b>줄어야</b> 빨갛게 적습니다.
       </p>
+      {buzz.sheet(onSelectStock)}
     </div>
   );
 }
