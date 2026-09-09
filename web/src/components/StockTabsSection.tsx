@@ -318,9 +318,15 @@ export function StockTabsSection({
         {/* 종합 — 「오늘 이 종목이 어땠나」를 위에서 아래로 훑는다 */}
         {tab === "chart" && (
           <>
-            <SignalPanel code={code} onSelectStock={onSelectStock} />
+            <SignalPanel code={code} onSelectStock={onSelectStock} collapsible />
             <QuoteSummary code={code} />
-            <IntradayFlow code={code} basePrice={basePrice} />
+            {/*
+              당일 흐름 그래프는 **위로 올라갔다** (2026-09-09 — 벤티지 "종합에 당일흐름
+              부분은 이미 윗부분에 있으니 종합에서는 빼는게 나을듯").
+
+              시트·개별종목분석·종목발굴 셋 다 이제 탭 위에 그린다. 여기 두면 한 화면에
+              같은 그림이 두 번 나온다.
+            */}
             <ChartPanel code={code} name={name} />
             <h3 className="section-heading">투자자 수급</h3>
             <InvestorTrendTable rows={investorRows} onNeedDays={setInvestorDays} />

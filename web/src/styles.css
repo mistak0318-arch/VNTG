@@ -18040,3 +18040,28 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 /* 감싼 한 겹이 자식의 폭·여백을 먹지 않게 — 상자는 자리만 정한다 */
 .sd-blk { min-width: 0; display: flex; flex-direction: column; }
 .sheet-order { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
+
+/*
+ * 종목 신호등 접기 (2026-09-09 — 벤티지 "종목 강세에 점수 나오는 부분 기본 접힘 메뉴로").
+ *
+ * **CSS 로만 감춘다.** 언마운트하면 펼칠 때마다 다시 평가를 부르게 되는데, 그 값은
+ * 방금 받아 둔 것이라 부를 이유가 없다. 접힌 줄에는 등급·점수가 남는다(`.sig-head`) —
+ * 접힌 판이 아무 말도 안 하면 펼쳐 보기 전엔 볼 값이 있는지조차 모른다.
+ */
+/*
+ * ⚠️ **감출 것을 세지 않고, 남길 것만 센다.**
+ *
+ * 처음엔 `.sig-tags`·`.sig-axes`·`.sig-checks`·`.table-note` 를 하나씩 적었는데 바로
+ * `.verdict`(「앞뒤 모두 통하는 점수대가 없습니다」)가 접힌 판에 남았다. 이 앱에서
+ * 목록을 세는 방식은 늘 이렇게 샌다 — 판에 블록이 하나 늘 때마다 여기도 고쳐야 한다.
+ * 그래서 **머리줄만 남기고 나머지는 전부** 감춘다. 새 블록이 생겨도 저절로 접힌다.
+ *
+ * `.overlay` 는 빼 둔다 — 테마·ETF 고르개가 이 판의 자식으로 뜬다(화면 전체를 덮는
+ * 시트라 접힘과 무관하다).
+ */
+.sig-folded > *:not(.sig-head):not(.overlay) { display: none; }
+/* 접었으면 판이 한 줄이다 — 펼쳤을 때의 아래 여백을 그대로 두면 빈 칸이 남는다 */
+.sig-folded { padding-bottom: 6px; }
+
+/* 「위/아래」 — 숫자를 읽는 말이라 숫자보다 작고 흐리게 (2026-09-09) */
+.sc-gap-w { font-size: 0.72em; color: var(--muted); font-weight: 500; }

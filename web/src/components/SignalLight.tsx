@@ -110,20 +110,57 @@ export function SignalDot({ signal }: { signal?: SignalResult }) {
   return <span className={`sig-dot ${signal.level}`} title={tip} />;
 }
 
+/**
+ * 접힘 기억 — 기기마다 (2026-09-09).
+ *
+ * 벤티지: "종목 강세에 점수 나오는 부분 기본 접힘 메뉴로 해주고 접었다 펼칠수있게 해줘."
+ *
+ * 시황 신호등이 같은 이유로 이미 접힌다(`MarketSignalPanel`). 이 판은 칩·축·기준이
+ * 스무 줄이라 **종합 탭을 열면 차트가 화면 밖으로 밀린다** — 매번 스크롤해서 지나치는
+ * 것이 기본값이면 안 된다. 접었을 때도 **등급·점수는 남긴다**: 그 두 값이 이 판의 요지고,
+ * 접힌 줄이 아무 말도 안 하면 펼쳐 보기 전엔 볼 이유가 있는지조차 모른다.
+ */
+const SIG_COLLAPSE_KEY = "vntg.sig.collapsed";
+function readSigCollapsed(): boolean {
+  try {
+    const v = localStorage.getItem(SIG_COLLAPSE_KEY);
+    /* 저장된 것이 없으면 **접음** — 벤티지가 정한 기본값이다 */
+    return v === null ? true : v === "1";
+  } catch {
+    return true;
+  }
+}
+
 /** 상세용 — 기준별 통과 여부를 펼쳐서 */
 export function SignalPanel({
   code,
   onSelectStock,
+  collapsible = false,
 }: {
   code: string;
   /** 섹터 구성종목에서 다른 종목으로 갈아타기 */
   onSelectStock?: (code: string, name: string) => void;
+  /**
+   * 접을 수 있는 자리인가 (2026-09-09). 종합 탭에서만 켠다 —
+   * 신호등 찾기처럼 **판 자체가 목적인 화면**에서 접으면 빈 화면이 된다.
+   */
+  collapsible?: boolean;
 }) {
   const [data, setData] = useState<SignalResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [target, setTarget] = useState<ConstituentTarget | null>(null);
   /** 네이버 테마 고르기 — 한 종목이 여럿에 얽혀 있어 먼저 고르게 한다 */
   const [themePick, setThemePick] = useState(false);
+  const [collapsed, setCollapsed] = useState<boolean>(() => (collapsible ? readSigCollapsed() : false));
+  const toggleFold = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try {
+      localStorage.setItem(SIG_COLLAPSE_KEY, next ? "1" : "0");
+    } catch {
+      /* 저장 못 해도 이번 화면은 동작한다 */
+    }
+  };
   /** ETF 뒷배 고르기 — 상위 셋 중 어느 ETF 를 열지 */
   const [etfPick, setEtfPick] = useState(false);
   /* 뒤로가기로 고르개를 닫는다 (2026-08-28). 둘이 같이 열리진 않는다 */
@@ -150,7 +187,7 @@ export function SignalPanel({
   if (!data) return null;
 
   return (
-    <div className="sig-panel">
+    <div className={`sig-panel${collapsed ? " sig-folded" : ""}`}>
       {/*
         **두 줄로 나눈다** (2026-09-08 — 벤티지 "종목상세에서 모바일로 볼때 줄이 난리다").
 
@@ -161,6 +198,17 @@ export function SignalPanel({
         윗줄은 「무슨 등급 몇 점」과 단추, 아랫줄은 칩들 — 칩은 넘치면 다음 줄로 흐른다.
       */}
       <div className="sig-head">
+        {collapsible && (
+          <button
+            className="msig-fold"
+            onClick={toggleFold}
+            title={collapsed ? "펼치기 — 칩·축·기준 전부" : "접기 — 등급과 점수만"}
+            aria-label={collapsed ? "펼치기" : "접기"}
+            aria-expanded={!collapsed}
+          >
+            {collapsed ? "▸" : "▾"}
+          </button>
+        )}
         <span className={`sig-dot big ${data.level}`} />
         <span className="sig-level">{LEVEL_LABEL[data.level]}</span>
         <span className="sig-score">{data.score}점</span>

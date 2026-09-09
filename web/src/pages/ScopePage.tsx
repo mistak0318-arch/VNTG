@@ -45,6 +45,18 @@ const 억크기 = (v: number | null | undefined): string =>
   v === null || v === undefined ? "-" : v >= 10_000 ? `${(v / 10_000).toFixed(2)}조` : `${Math.round(v).toLocaleString("ko-KR")}억`;
 const pct = (v: number | null | undefined, d = 1, sign = true): string =>
   v === null || v === undefined ? "-" : `${sign && v > 0 ? "+" : ""}${v.toFixed(d)}%`;
+/**
+ * **이동평균·고점은 「몇 %」만으로는 못 읽는다** (2026-09-09).
+ *
+ * 벤티지: "이게 5일선 아래라는거야 위라는거야? 헷갈려."
+ *
+ * 「5일선 −1.8%」는 종가가 5일선보다 1.8% **아래**라는 뜻인데, 라벨이 그걸 안 말한다.
+ * 부호만 놓고 「5일선이 −1.8%」로 읽으면 정반대로 이해된다 — 실제로 그렇게 읽혔다.
+ * 툴팁을 달아 뒀던 자리도 있지만 폰에서는 손이 닿지 않는다. **글자로 적는다.**
+ */
+const gapWord = (v: number | null | undefined): string =>
+  v === null || v === undefined ? "" : v > 0 ? "위" : v < 0 ? "아래" : "일치";
+
 const cls = (v: number | null | undefined): string =>
   v === null || v === undefined || v === 0 ? "" : v > 0 ? "positive" : "negative";
 const won = (v: number | null | undefined) =>
@@ -238,10 +250,16 @@ function Detail({
             markXLabel="담은 날"
           />
           <dl className="sc-kv">
-            <div><dt>5일선</dt><dd className={cls(r.chart.ma5Gap)}>{pct(r.chart.ma5Gap)}</dd></div>
-            <div><dt>20일선</dt><dd className={cls(r.chart.ma20Gap)}>{pct(r.chart.ma20Gap)}</dd></div>
-            <div><dt>60일선</dt><dd className={cls(r.chart.ma60Gap)}>{pct(r.chart.ma60Gap)}</dd></div>
-            <div><dt>20일 고점</dt><dd className={cls(r.chart.hi20Gap)}>{pct(r.chart.hi20Gap)}</dd></div>
+            {/* 「5일선 대비」로 적어야 무엇과 견준 값인지 라벨만 보고 안다 */}
+            <div title="종가가 5일 이동평균보다 위인가 아래인가"><dt>5일선 대비</dt>
+              <dd className={cls(r.chart.ma5Gap)}>{pct(r.chart.ma5Gap)} <span className="sc-gap-w">{gapWord(r.chart.ma5Gap)}</span></dd></div>
+            <div title="종가가 20일 이동평균보다 위인가 아래인가"><dt>20일선 대비</dt>
+              <dd className={cls(r.chart.ma20Gap)}>{pct(r.chart.ma20Gap)} <span className="sc-gap-w">{gapWord(r.chart.ma20Gap)}</span></dd></div>
+            <div title="종가가 60일 이동평균보다 위인가 아래인가"><dt>60일선 대비</dt>
+              <dd className={cls(r.chart.ma60Gap)}>{pct(r.chart.ma60Gap)} <span className="sc-gap-w">{gapWord(r.chart.ma60Gap)}</span></dd></div>
+            {/* 고점은 위로 갈 수 없다 — 0 이면 신고가고, 음수면 그만큼 내려와 있다 */}
+            <div title="최근 20일 종가 고점에서 얼마나 내려와 있나. 0 이면 신고가 자리"><dt>20일 고점 대비</dt>
+              <dd className={cls(r.chart.hi20Gap)}>{pct(r.chart.hi20Gap)} <span className="sc-gap-w">{r.chart.hi20Gap === 0 ? "신고가" : gapWord(r.chart.hi20Gap)}</span></dd></div>
             <div><dt>5일</dt><dd className={cls(r.chart.ret5)}>{pct(r.chart.ret5)}</dd></div>
             <div><dt>20일</dt><dd className={cls(r.chart.ret20)}>{pct(r.chart.ret20)}</dd></div>
             <div><dt>거래량</dt><dd>{r.chart.volRatio === null ? "-" : `${r.chart.volRatio}배`}</dd></div>

@@ -3,6 +3,7 @@ import { CreditChip, useStockCredit } from "../components/CreditChip";
 import { WatchToggleButton } from "../components/WatchToggleButton";
 import { api, normalizeStockCode, stockNameOf, type RawRecord, type StockSearchResult } from "../api";
 import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
+import { IntradayFlow } from "../components/IntradayPanels";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
 import { StockTabsSection } from "../components/StockTabsSection";
 import { PriceHeader } from "../components/PriceHeader";
@@ -245,6 +246,14 @@ export function StockAnalysisPage({
             가격 바로 아래다 — **견줄 선은 견줄 값 옆에 있어야** 한다.
             탭 안에 넣으면 눌러야 보이는데, 이건 늘 보면서 판단하는 값이다.
           */}
+          {/*
+            당일 흐름 그래프 — **탭 위**로 (2026-09-09, 벤티지 "종합에 당일흐름 부분은 이미
+            윗부분에 있으니 종합에서는 빼는게 나을듯"). 시트가 먼저 이 자리로 옮겼고,
+            여기도 같은 자리라야 세 화면이 같아진다. 기준가가 0 이면 등락률 축이 안 선다.
+          */}
+          {Math.abs(Number(info?.base_pric)) > 0 && (
+            <IntradayFlow code={stock.code} basePrice={Math.abs(Number(info?.base_pric))} />
+          )}
           <IntradayLevelsBar code={stock.code} key={`idl-${stock.code}-${reloadKey}`} />
           {/* 한 장 요약 — 시트와 같은 자리, 같은 컴포넌트 */}
           <StockSummaryPanel code={stock.code} />

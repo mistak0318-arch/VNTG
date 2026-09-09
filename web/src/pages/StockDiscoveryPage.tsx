@@ -11,6 +11,7 @@ import {
   type StockSearchResult,
 } from "../api";
 import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
+import { IntradayFlow } from "../components/IntradayPanels";
 import { PriceHeader } from "../components/PriceHeader";
 import { useSignals, SignalDot } from "../components/SignalLight";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
@@ -486,6 +487,14 @@ export function StockDiscoveryPage({
             아래는 늘 보던 그 화면이다. 넘겨도 `code` 만 갈리므로 보고 있던 탭이 유지된다 —
             「수급만 훑는다」가 그대로 된다.
           */}
+          {/*
+            당일 흐름 그래프 — **탭 위**로 (2026-09-09, 벤티지 "종합에 당일흐름 부분은 이미
+            윗부분에 있으니 종합에서는 빼는게 나을듯"). 시트가 먼저 이 자리로 옮겼고,
+            여기도 같은 자리라야 세 화면이 같아진다. 기준가가 0 이면 등락률 축이 안 선다.
+          */}
+          {Math.abs(Number(info?.base_pric)) > 0 && (
+            <IntradayFlow code={code} basePrice={Math.abs(Number(info?.base_pric))} />
+          )}
           <IntradayLevelsBar code={code} />
           <StockSummaryPanel code={code} />
           <StockTabsSection
