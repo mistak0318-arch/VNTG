@@ -636,6 +636,20 @@ export function createSignalRouter(client: KiwoomClient): Router {
     }
   });
 
+  /**
+   * 진단 (2026-09-10) — 벤티지: "세 시간 동안 떠들어댔다고 나왔는데 들어가 보니 오후 아홉 시가
+   * 가장 최신". 카운트(byHour)와 표본(samples)·방(channels)이 같은 줄에서 같이 적히는데
+   * 화면에선 갈렸다. 오늘·어제 파일에서 그 낱말의 네 가지를 날것으로 보여 준다.
+   */
+  router.get("/buzz/raw/:term", async (req, res, next) => {
+    try {
+      const { buzzRaw } = await import("../buzzRadar.js");
+      res.json(await buzzRaw(decodeURIComponent(req.params.term)));
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /** 낱말 하나의 속사정 — 언제 터졌나·어느 방이 말했나·실제 문장 */
   router.get("/buzz/term/:term", async (req, res, next) => {
     try {

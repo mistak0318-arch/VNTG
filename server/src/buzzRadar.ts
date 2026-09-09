@@ -962,6 +962,25 @@ export async function buzzTerm(term: string): Promise<BuzzTermDetail> {
   };
 }
 
+/** 진단 — 오늘·어제 파일에서 그 낱말의 날것 (카운트·시간대·방·표본의 시각) */
+export async function buzzRaw(term: string): Promise<Record<string, unknown>> {
+  const now = kstNow();
+  const out: Record<string, unknown> = { term, serverNowKst: now.toISOString(), dir: DIR };
+  for (let i = 0; i < 2; i += 1) {
+    const day = dayStr(new Date(now.getTime() - i * 86400_000));
+    const f = await readDay(day);
+    out[day] = {
+      total: f.total[term] ?? 0,
+      byHour: f.byHour[term] ?? {},
+      channels: f.channels?.[term] ?? {},
+      sampleCount: (f.samples[term] ?? []).length,
+      sampleAts: (f.samples[term] ?? []).map((s) => `${s.at} ${s.channel}`).slice(0, 50),
+      termsInFile: Object.keys(f.total).length,
+    };
+  }
+  return out;
+}
+
 export function startBuzzScheduler(client: KiwoomClient): void {
   if (timer) return;
   boundClient = client;

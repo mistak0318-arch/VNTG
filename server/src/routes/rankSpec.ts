@@ -8,6 +8,58 @@ import { getStockIndex } from "../stockListCache.js";
 import { flowRank, flowSums, SUBJECT_LABEL, type FlowSubject } from "../dailyStore.js";
 import { buzzDetail, buzzMany, markEntered } from "../inquiryBuzz.js";
 import { cumulative, noteLiveSample, samplerStatus } from "../inquirySampler.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/**
+ * **새벽에 0 으로 초기화된 순위 대신 어제 마감 값** (2026-09-10 — 벤티지 "어제 그 전날
+ * 데이터들 … 오늘 오전 일곱 시까지는 들고 있어줘라 … 지금 여섯 시 사십육 분인데 모든
+ * 데이터가 초기화돼 있는 것 같네").
+ *
+ * 키움 순위 TR 은 날이 바뀌면(대략 06시) 거래대금·거래량·등락률을 **0 으로** 준다 —
+ * 종목 순서만 어제 것이고 값은 빈 껍데기다. 그 화면은 아무 말도 안 한다.
+ *
+ * 마지막으로 **값이 있던 응답**을 조회 키(명세·시장·거래소·선택·건수)마다 파일에 남겨 두고,
+ * 응답이 빈 껍데기(줄의 대부분이 거래대금 0·등락률 0)면 그것을 대신 준다. 언제까지가
+ * 아니라 **값이 다시 생길 때까지** — 08시 NXT 프리마켓이 열리면 거래대금이 붙기 시작하고
+ * 그때부터 다시 새 값이다. 파일이라 배포·재시작에도 남는다.
+ */
+const here = dirname(fileURLToPath(import.meta.url));
+const LAST_DIR = join(here, "..", "..", "data", "rankLast");
+
+function lastFile(key: string): string {
+  return join(LAST_DIR, `${key.replace(/[^A-Za-z0-9_.-]/g, "_")}.json`);
+}
+
+/** 줄의 대부분이 거래대금 0·등락률 0 — 새 날의 빈 껍데기 */
+function looksReset(rows: { tv: number | null; flu_rt?: unknown }[]): boolean {
+  if (rows.length < 5) return false;
+  const dead = rows.filter((r) => !(r.tv && r.tv > 0) && !(Number(r.flu_rt) !== 0 && Number.isFinite(Number(r.flu_rt)))).length;
+  return dead >= rows.length * 0.8;
+}
+
+async function saveLast(key: string, rows: unknown[]): Promise<void> {
+  try {
+    await mkdir(LAST_DIR, { recursive: true });
+    await writeFile(lastFile(key), JSON.stringify({ at: new Date().toISOString(), rows }), "utf8");
+  } catch {
+    /* 못 남겨도 지금 응답은 그대로 나간다 */
+  }
+}
+
+async function loadLast(key: string): Promise<{ at: string; rows: unknown[] } | null> {
+  try {
+    return JSON.parse(await readFile(lastFile(key), "utf8")) as { at: string; rows: unknown[] };
+  } catch {
+    return null;
+  }
+}
+
+function kstStamp(iso: string): string {
+  const d = new Date(new Date(iso).getTime() + 9 * 3600_000);
+  return `${d.toISOString().slice(5, 10).replace("-", "/")} ${d.toISOString().slice(11, 16)}`;
+}
 
 /**
  * 시세분석 — 레지스트리에 등록된 순위 조회를 하나의 라우트로 처리한다.
@@ -737,6 +789,19 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
           );
         }
       }
+      /* 빈 껍데기면 어제 마감 값으로 — 값이 있으면 그걸 다음을 위해 남긴다 */
+      const lastKey = `${spec.key}.${market}.${exchange}.${limit}.${Object.entries(chosen).map(([k, v]) => `${k}=${v}`).join(",")}`;
+      let outRows: Record<string, unknown>[] = await withFlow(drawn);
+      let staleNote = "";
+      if (!spec.noMarket && looksReset(outRows as { tv: number | null; flu_rt?: unknown }[])) {
+        const last = await loadLast(lastKey);
+        if (last && last.rows.length > 0) {
+          outRows = last.rows as Record<string, unknown>[];
+          staleNote = `⚠️ 키움이 새 날 값을 아직 안 줍니다(거래대금·등락률 0). ${kstStamp(last.at)} 기준 마지막 값을 보여 줍니다 — 08시 프리마켓이 열리면 새 값으로 바뀝니다. `;
+        }
+      } else if (!spec.noMarket && outRows.length >= 5) {
+        void saveLast(lastKey, outRows);
+      }
       res.json({
         spec: {
           key: spec.key,
@@ -745,13 +810,14 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
           exchange: Boolean(spec.exchange),
           /* 화면이 버튼을 그리려면 무엇을 고를 수 있는지 알아야 한다 */
           choices: spec.choices ?? [],
-          note: spec.note ?? "",
+          note: staleNote + (spec.note ?? ""),
         },
         market,
         exchange,
         /* 지금 무엇으로 골라 부른 것인가 — 화면이 눌린 버튼을 표시한다 */
         chosen,
-        rows: await withFlow(drawn),
+        stale: staleNote ? true : false,
+        rows: outRows,
       });
     } catch (err) {
       next(err);
