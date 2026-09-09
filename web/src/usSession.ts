@@ -116,9 +116,10 @@ export interface SideQuote {
  * 100개 필드를 훑어 0건이었다(장구분은 키움 실시간 `FE` 의 `290` 에만 있다).
  * 그래서 시계로 셀 수밖에 없고, **그 계산이 맞아야 한다.**
  */
-type UsSession = "pre" | "regular" | "after" | "day";
+export type UsSession = "pre" | "regular" | "after" | "day";
 
-function sessionAt(now = new Date()): UsSession {
+/** 지금 어느 판인가 — 관심종목 표가 소켓 틱을 앞자리에 넣을지 괄호에 넣을지 이걸로 가른다 (2026-09-09) */
+export function sessionAt(now = new Date()): UsSession {
   const { day, mins } = etNow(now);
   // 주말엔 어느 세션도 안 돈다. 화면에는 「직전」 값이 남으므로 주간거래 자리로 본다
   if (day === 0 || day === 6) return "day";

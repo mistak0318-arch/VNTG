@@ -1,5 +1,5 @@
 import type { UsQuoteRow } from "../api";
-import { sideQuote, usFeActive, usSideSession } from "../usSession";
+import { sessionAt, sideQuote, usFeActive, usSideSession } from "../usSession";
 import { flagOfSymbol } from "../yahooFlag";
 import { useDragOrder } from "../useDragOrder";
 import { fid, useRealtime } from "../useRealtime";
@@ -309,16 +309,41 @@ export function UsWatchTable({
         </thead>
         <tbody>
           {rows.map((s, i, arr) => {
-            const side = sideQuote(s);
+            /*
+             * ⚠️ **프리·애프터장의 소켓 틱은 괄호로 간다** (2026-09-09 — 벤티지: "프리장 부분이
+             * 괄호부분이잖아? 그 부분의 등락률이 움직여야 되는데 앞부분이 움직이네. 앞 부분은
+             * 미국 정규장 종가로 고정시키고 뒤에 괄호가 움직여야지").
+             *
+             * 어제 한투 소켓을 붙이면서 생긴 회귀다. 소켓은 세션을 안 가리고 틱을 주는데,
+             * 화면은 「실시간이 오면 앞자리」로만 알고 있었다. 프리장에 온 틱은 **프리장 값**이라
+             * 앞자리(정규장 종가)를 덮으면 안 된다 — 그 자리는 종가로 고정이고 괄호가 움직인다.
+             *
+             * 소켓의 등락률(전일 대비)은 괄호에 못 쓴다 — 괄호는 **정규장 종가 대비**다. 그래서
+             * 소켓의 **가격만** 받아 `(틱 − 종가) / 종가` 로 새로 잰다. 정규장 중에는 예전처럼
+             * 앞자리를 소켓이 맡는다(그때는 괄호가 없다).
+             */
+            const session = sessionAt();
+            const sideNow = session === "pre" || session === "after";
+            const sock = live(s.symbol);
             /* FE 실시간 → spark 3초 → 본 시세(1분 캐시) 순 — 점(●)이 그 표시다 */
             /*
              * 실시간이 살아 있으면 그것, 아니면 3초 겹. **둘 중 새 것**이 아니라 이 순서다 —
              * spark 의 `at` 은 1분봉의 시각이라 갓 받아도 최대 1분 뒤처져 보여서, 시각으로
              * 견주면 늘 소켓이 이긴다. 대신 위에서 소켓 값의 나이를 15초로 조였다.
              */
-            const lv = live(s.symbol) ?? fastOf(s.symbol);
+            const lv = sideNow ? null : (sock ?? fastOf(s.symbol));
             const shownPrice = lv ? lv.price : s.price;
             const shownRate = lv && lv.rate !== null ? lv.rate : s.changeRate;
+            const side0 = sideQuote(s);
+            const close = s.price; // 정규장 종가 — 없으면(신규 상장 등) 괄호를 새로 잴 기준이 없다
+            const side =
+              sideNow && sock && close !== null && close > 0
+                ? {
+                    label: side0?.label ?? (session === "pre" ? "프리장" : "애프터장"),
+                    price: sock.price,
+                    changeRate: ((sock.price - close) / close) * 100,
+                  }
+                : side0;
             return (
               /*
                 줄 아무 데나 눌러도 상세가 열린다 (2026-08-25) — 종목명만 버튼이라
