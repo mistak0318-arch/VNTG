@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
 import { afterCloseStatus } from "./afterClose.js";
+import { streamStats } from "./routes/realtime.js";
 
 /**
  * **상태를 파일로 떨군다** (2026-09-09).
@@ -111,6 +112,14 @@ async function writeOnce(): Promise<void> {
       rejects: us.rejects.slice(0, 3),
     },
     저장소: health,
+    /* 화면이 실시간을 실제로 받아 가고 있나 — 미니창이 따로 여는 스트림이 여기 잡힌다 */
+    화면스트림: {
+      open: streamStats.open,
+      opened: streamStats.opened,
+      keyCounts: streamStats.keyCounts,
+      lastSentAt: streamStats.lastSentAt,
+      refused: streamStats.refused,
+    },
     마감뒤정리: ac
       ? { day: ac.day, running: ac.running, at: ac.at, step: `${ac.stepNo ?? 0}/${ac.stepTotal ?? 0}`, 실패: ac.steps.filter((s) => !s.ok).map((s) => s.label) }
       : null,

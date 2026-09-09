@@ -13,6 +13,31 @@ import { currentPhase, phaseSummary, readPhaseLog } from "../marketPhase.js";
  *
  * 확인이 끝나면 이 라우터는 저장소를 읽는 자리로 바뀐다.
  */
+/**
+ * **열려 있는 SSE 스트림 장부** (2026-09-09).
+ *
+ * 벤티지: "미니창만 그런거 같은데."
+ *
+ * 미니창은 본창과 **다른 창**이라 스트림을 따로 연다. 그런데 화면 쪽에서는 「안 붙었다」와
+ * 「붙었는데 값이 안 온다」가 똑같이 보인다 — 점이 안 켜지는 것뿐이다. 그 둘을 가르려면
+ * **서버가 무엇을 받았는지**를 봐야 한다.
+ *
+ * 진단용 숫자만 남긴다 — 연결 수와 키 개수, 마지막으로 보낸 시각. 종목코드도 계좌도
+ * 안 적는다(상태 파일에 실려 나가는 값이다).
+ */
+export const streamStats: {
+  /** 지금 열려 있는 스트림 */
+  open: number;
+  /** 서버가 뜬 뒤 열린 총 횟수 */
+  opened: number;
+  /** 열려 있는 것들의 키 개수 — 창마다 몇 종목을 보고 있나 */
+  keyCounts: number[];
+  /** 마지막으로 이벤트를 내보낸 시각 */
+  lastSentAt: string | null;
+  /** 서버가 스트림을 거절한 횟수(키가 없거나 실시간이 꺼짐) */
+  refused: number;
+} = { open: 0, opened: 0, keyCounts: [], lastSentAt: null, refused: 0 };
+
 export function createRealtimeRouter(client: KiwoomClient): Router {
   const router = Router();
   /* 만드는 자리는 `realtimeHub` 하나다 — 여기서 또 만들면 연결이 둘이 된다 */
@@ -54,6 +79,7 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
         .filter(Boolean)
         .slice(0, wantSub ? 40 : 120);
       if (keys.length === 0 || !RealtimeClient.enabled) {
+        streamStats.refused += 1;
         res.status(400).json({ error: "keys 가 없거나 실시간이 꺼져 있습니다" });
         return;
       }
@@ -122,6 +148,9 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
         clearInterval(beat);
         offExt?.();
         off();
+        streamStats.open = Math.max(0, streamStats.open - 1);
+        const i = streamStats.keyCounts.indexOf(keys.length);
+        if (i >= 0) streamStats.keyCounts.splice(i, 1);
       });
     } catch (err) {
       next(err);
