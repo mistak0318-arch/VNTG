@@ -93,6 +93,11 @@ interface Filter {
   commonOnly: boolean;
   /** ETF 만 본다 (2026-08-27) — 보통주만과는 상호배타다 */
   etfOnly: boolean;
+  /**
+   * **쌍끌이만** (2026-09-09 밤 — 벤티지 "외국인 5/10/20 주포 5/10/20 모두 매수우위인거
+   * 추려볼 수 있게"). 여섯 값이 전부 순매수인 종목 — 두 손이 세 기간 내내 같은 쪽이다.
+   */
+  twinOnly: boolean;
 }
 
 const NO_FILTER: Filter = {
@@ -102,6 +107,7 @@ const NO_FILTER: Filter = {
   minTurn: null,
   commonOnly: false,
   etfOnly: false,
+  twinOnly: false,
 };
 const FILTER_KEY = "vntg.screener.filter";
 
@@ -139,6 +145,20 @@ function loadFilter(): Filter {
     /* 저장된 게 깨졌으면 그냥 안 건 상태로 */
   }
   return NO_FILTER;
+}
+
+/**
+ * **쌍끌이** — 외국인·주포가 5·10·20일 **여섯 칸 전부** 순매수인가 (2026-09-09).
+ * 하나라도 모르면(원장 없음) 아니다 — 「모른다」를 「샀다」로 치지 않는다.
+ */
+function isTwin(flow: Record<string, FlowSum> | undefined): boolean {
+  if (!flow) return false;
+  for (const span of ["5", "10", "20"]) {
+    const f = flow[span];
+    if (!f || f.fgn === null || f.smart === null) return false;
+    if (f.fgn <= 0 || f.smart <= 0) return false;
+  }
+  return true;
 }
 
 /** 억원을 짧게 — 1조가 넘으면 조로 */
@@ -270,7 +290,8 @@ export function ScreenerPage({
     filter.minRate !== null ||
     filter.minTurn !== null ||
     filter.commonOnly ||
-    filter.etfOnly;
+    filter.etfOnly ||
+    filter.twinOnly;
   const [openFilter, setOpenFilter] = useState(false);
 
   const set = (patch: Partial<Filter>) => {
@@ -469,6 +490,7 @@ export function ScreenerPage({
   const rows = all.filter((r) => {
     if (filter.commonOnly && !r.common) return false;
     if (filter.etfOnly && !r.etf) return false;
+    if (filter.twinOnly && !isTwin(r.flow)) return false;
     if (hasTvCol && filter.minTv > 0 && (r.tv === null || r.tv < filter.minTv)) return false;
     if (hasCapCol && !capOk(r.cap, filter.caps)) return false;
     if (filter.minRate !== null) {
@@ -1087,6 +1109,14 @@ export function ScreenerPage({
               >
                 ETF만
               </button>
+              <span className="news-scope-sep" />
+              <button
+                className={`filter-btn ${filter.twinOnly ? "active" : ""}`}
+                onClick={() => set({ twinOnly: !filter.twinOnly })}
+                title="외국인 5·10·20일 + 주포 5·10·20일 여섯 칸이 전부 순매수인 종목만"
+              >
+                🔥 쌍끌이만
+              </button>
               {on && (
                 <button className="filter-btn" onClick={() => set(NO_FILTER)}>
                   초기화
@@ -1202,14 +1232,16 @@ export function ScreenerPage({
               <table className={`data-table${cw.customized ? " col-fixed" : ""}`}>
                 <colgroup>
                   {sigOn && <col style={{ width: "2.4rem" }} />}
-                  <col style={cw.styleOf("stk_nm")} />
+                  {/* 종목명은 넓게, 순위 칸은 좁게 — 폭을 정한 표에서 안 정한 칸의 기본값 */}
+                  <col style={cw.styleOf("stk_nm", 170)} />
                   {shownCols.map((c) => (
-                    <col key={c.key} style={cw.styleOf(c.key)} />
+                    <col key={c.key} style={cw.styleOf(c.key, RANK_COLS.has(c.key) ? 48 : 84)} />
                   ))}
                   {hasTvExtra && <col style={cw.styleOf("tv")} />}
                   {hasTurn && <col style={cw.styleOf("turn")} />}
                   {hasCap && <col style={cw.styleOf("cap")} />}
                   {hasFlow && FLOW_COLS.map((f) => <col key={f.key} style={cw.styleOf(f.key)} />)}
+                  {hasFlow && <col style={cw.styleOf("twin", 52)} />}
                 </colgroup>
                 <thead>
                   <tr>
@@ -1329,6 +1361,17 @@ export function ScreenerPage({
                           extra={<ColumnGrip cw={cw} k={f.key} />}
                         />
                       ))}
+                    {/* 쌍끌이 — 여섯 칸을 눈으로 훑지 않아도 되게 끝에 한 칸 */}
+                    {hasFlow && (
+                      <SortableTh
+                        columnKey="twin"
+                        label="쌍끌이"
+                        accessor={(r: (typeof rows)[number]) => (isTwin(r.flow) ? 1 : 0)}
+                        sort={sort}
+                        className="num-narrow"
+                        extra={<ColumnGrip cw={cw} k="twin" />}
+                      />
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -1510,6 +1553,14 @@ export function ScreenerPage({
                             </td>
                           );
                         })}
+                      {hasFlow && (
+                        <td
+                          className="num num-narrow scr-twin"
+                          title={isTwin(r.flow) ? "외국인·주포가 5·10·20일 내내 순매수" : undefined}
+                        >
+                          {isTwin(r.flow) ? "🔥" : ""}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

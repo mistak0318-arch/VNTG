@@ -37,8 +37,16 @@ import { api } from "../api";
  */
 
 export interface ColumnWidthsApi {
-  /** `<col>` 에 넘길 스타일 — 정한 적 없으면 빈 객체(기본 너비) */
-  styleOf: (key: string) => { width?: string };
+  /**
+   * `<col>` 에 넘길 스타일 — 정한 적 없으면 빈 객체(기본 너비).
+   *
+   * ⚠️ **하나라도 정한 표에서는 안 정한 칸에도 폭을 준다** (2026-09-09 밤 — 벤티지
+   * "주포 10일째 칸이 이상하게 나오게 수정해주고"). 폭을 정하면 표가 `table-layout: fixed`
+   * 가 되는데, 그 규칙에서 **폭이 없는 칸 하나가 남는 폭을 통째로 먹는다.** 수급 칸을
+   * 새로 붙이자 그중 하나(주포 10일)가 화면 절반을 차지했다. 정한 적 없는 칸은
+   * `fallbackPx`(기본 84) 로 두면 남는 폭이 모든 칸에 고루 퍼진다.
+   */
+  styleOf: (key: string, fallbackPx?: number) => { width?: string };
   /** 끌기 시작 */
   begin: (key: string, startX: number, startWidth: number) => void;
   /** 이 칸만 원래대로 — 손잡이 두 번 누르기 */
@@ -161,7 +169,13 @@ export function useColumnWidths(scope: string): ColumnWidthsApi {
   );
 
   return {
-    styleOf: (key: string) => (mine[key] ? { width: `${mine[key]}px` } : {}),
+    styleOf: (key: string, fallbackPx?: number) =>
+      mine[key]
+        ? { width: `${mine[key]}px` }
+        : Object.keys(mine).length > 0
+          ? /* 이름 칸은 어느 표든 넓어야 한다 — 부르는 쪽이 안 정했을 때의 기본 */
+            { width: `${fallbackPx ?? (key === "name" || key === "stk_nm" ? 170 : 84)}px` }
+          : {},
     begin,
     clear,
     customized: Object.keys(mine).length > 0,

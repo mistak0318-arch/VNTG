@@ -2638,7 +2638,14 @@ body.col-resizing { user-select: none; cursor: col-resize; }
   늘어나서 `<col>` 의 width 를 **참고만** 한다. 대신 fixed 는 내용이 넘치면 잘리므로
   줄바꿈을 허용하고 넘치는 건 가로 스크롤(`data-table-wrap`)이 받는다.
 */
-.data-table.col-fixed { table-layout: fixed; }
+/*
+ * ⚠️ `width` 가 auto 면 브라우저는 `table-layout: fixed` 를 **무시하고 auto 로 짠다**
+ * (2026-09-09 밤 실측 — 칸 폭을 170·84… 로 줬는데 205·51… 로 그려졌고, `width:100%` 를
+ * 넣자 그대로 맞았다). 그 auto 짜기에서 폭이 없는 칸 하나가 남는 폭을 통째로 먹어
+ * 「주포 10일」이 화면 절반이 됐다. 폭을 정한 표는 진짜 fixed 로 — 정한 폭을 그대로 쓰고,
+ * 합이 화면보다 넓으면 가로 스크롤, 좁으면 모든 칸에 고루 나눈다.
+ */
+.data-table.col-fixed { table-layout: fixed; width: 100%; }
 .data-table.col-fixed td, .data-table.col-fixed th { overflow: hidden; text-overflow: ellipsis; }
 
 /* 지수 칸의 거래대금 — 지수값 옆에 작게. 「오른 날」과 「돈이 들어온 날」은 다르다 */
@@ -18123,8 +18130,15 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
   background: var(--red);
   vertical-align: 1px;
 }
+/*
+ * 이름 **아래 줄**에 (2026-09-09 밤 — 벤티지 "뒤에 점점점 표시되는건 뭐야"). 이름 옆에
+ * 붙였더니 종목명 칸이 한 줄 고정(넘치면 …)이라 이름이 조금만 길어도 배지가 통째로
+ * 「…」로 눌렸다. 현재가 칸이 이미 NXT 두 줄이라 아래 줄로 내려도 높이는 안 는다.
+ */
 .scr-buzz {
-  margin-left: 6px;
+  display: block;
+  width: max-content;
+  margin: 2px 0 0;
   padding: 0 5px;
   border: 1px solid var(--border);
   border-radius: 9px;
