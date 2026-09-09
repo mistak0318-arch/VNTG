@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type BuzzBoard, type BuzzBoardRow, type BuzzKind, type BuzzTermDetail } from "../api";
 import { useSheetBack } from "../useSheetBack";
+import { useStockNames } from "../useStockNames";
 
 /**
  * 🌋 버즈 — 채널이 지금 무슨 얘기를 하는가 (2026-08-30 요청).
@@ -461,6 +462,8 @@ function BuzzTermSheet({
   useSheetBack(true, onClose);
   const [d, setD] = useState<BuzzTermDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  /* 관련 종목은 이름으로 보여 준다 — 코드로는 무슨 종목인지 모른다 (2026-09-09) */
+  const names = useStockNames(d?.codes ?? []);
 
   useEffect(() => {
     let alive = true;
@@ -491,11 +494,12 @@ function BuzzTermSheet({
 
         {d && (
           <>
+            {/* 이름으로 (2026-09-09). 누를 때 넘기는 이름도 **낱말**이 아니라 종목명이어야 한다 */}
             {d.codes.length > 0 && (
               <div className="kwf-codes">
                 {d.codes.map((c) => (
-                  <button key={c} onClick={() => onSelectStock(c, term)}>
-                    {c}
+                  <button key={c} onClick={() => onSelectStock(c, names[c] ?? c)} title={names[c] ? `${names[c]} (${c})` : c}>
+                    {names[c] ?? c}
                   </button>
                 ))}
               </div>

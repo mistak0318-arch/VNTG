@@ -610,7 +610,8 @@ export function createSignalRouter(client: KiwoomClient): Router {
     try {
       const { topicPulse } = await import("../topicPulse.js");
       const w = String(req.query.window ?? "now");
-      res.json(await topicPulse(w === "overnight" || w === "today" ? w : "now"));
+      /* 종목명을 붙이려면 전종목 캐시가 필요하다 — 캐시라 조회는 안 는다 (2026-09-09) */
+      res.json(await topicPulse(w === "overnight" || w === "today" ? w : "now", client));
     } catch (err) {
       next(err);
     }

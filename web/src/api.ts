@@ -251,6 +251,11 @@ export interface PulseItem {
 }
 
 export interface TopicPulse {
+  /**
+   * 코드 → 종목명 (2026-09-09). 여태 코드만 왔고 화면이 그걸 그대로 찍었다 —
+   * 「227950」 으로는 무슨 종목인지 알 수가 없다. 서버가 전종목 캐시에서 붙여 준다.
+   */
+  names?: Record<string, string>;
   window: PulseWindow;
   hours: number;
   /** 「지금 무슨 일인가」 한 문장 */

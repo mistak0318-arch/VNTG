@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type BuzzBoard, type KeywordFlow, type KeywordHit, type KeywordKind } from "../api";
 import { useSheetBack } from "../useSheetBack";
+import { useStockNames } from "../useStockNames";
 
 /**
  * 키워드 흐름 (2026-08-30 요청 — 「뉴스에서 트렌드·키워드를 자동으로 잡자」).
@@ -624,6 +625,8 @@ function KeywordSheet({
   onSelectStock: (code: string, name: string) => void;
 }) {
   useSheetBack(true, onClose);
+  /* 관련 종목은 이름으로 보여 준다 — 코드로는 무슨 종목인지 모른다 (2026-09-09) */
+  const names = useStockNames(hit.codes ?? []);
   return (
     <div className="overlay" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
@@ -640,11 +643,12 @@ function KeywordSheet({
           </button>
         </div>
 
+        {/* 이름으로 (2026-09-09). 누를 때 넘기는 이름도 **낱말**이 아니라 종목명이어야 한다 */}
         {hit.codes.length > 0 && (
           <div className="kwf-codes">
             {hit.codes.map((c) => (
-              <button key={c} onClick={() => onSelectStock(c, hit.term)}>
-                {c}
+              <button key={c} onClick={() => onSelectStock(c, names[c] ?? c)} title={names[c] ? `${names[c]} (${c})` : c}>
+                {names[c] ?? c}
               </button>
             ))}
           </div>

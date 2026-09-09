@@ -1,6 +1,8 @@
 import { buzzBoard, type BuzzBoardRow } from "./buzzRadar.js";
 import { keywordFlow, type KeywordHit } from "./newsKeywords.js";
 import { getBuzzConfig } from "./buzzScore.js";
+import type { KiwoomClient } from "./kiwoomClient.js";
+import { getStockIndex } from "./stockListCache.js";
 
 /**
  * 지금 시장의 화제 — **네 화면이 같은 말을 하게** (2026-08-30 요청).
@@ -54,6 +56,16 @@ export interface PulseItem {
 }
 
 export interface TopicPulse {
+  /**
+   * 코드 → 종목명 (2026-09-09 — 벤티지 "종목코드가 보이네. 종목명이 보여야지.
+   * 코드로는 무슨 종목인지 모르잖어").
+   *
+   * 여태 코드만 보냈다. 화면은 그걸 그대로 찍었고, 누를 때 종목명 자리에 **낱말**(term)을
+   * 넘겨서 「관세」 같은 게 종목 이름으로 들어가기도 했다. 이름은 서버가 이미 전종목
+   * 캐시로 알고 있으므로(`getStockIndex`) 여기서 붙여 보낸다 — 화면이 종목마다 따로
+   * 물어보면 카드 하나에 조회가 여덟 번 난다.
+   */
+  names?: Record<string, string>;
   window: PulseWindow;
   /** 창 길이(시간) */
   hours: number;
@@ -100,7 +112,28 @@ function combine(buzzZ: number, newsZ: number): number {
   return (Math.max(buzzZ, 0) + Math.max(newsZ, 0)) * (both ? 1.35 : 1);
 }
 
-export async function topicPulse(window: PulseWindow = "now"): Promise<TopicPulse> {
+/**
+ * 화면에 실을 **코드 → 종목명**. 조회는 안 는다 — 전종목 캐시를 읽을 뿐이다.
+ * 못 읽으면 빈 지도다(화면이 코드를 그대로 보여 준다 — 없는 것보다 낫다).
+ */
+async function nameMapOf(items: PulseItem[], client?: KiwoomClient): Promise<Record<string, string>> {
+  const codes = new Set<string>();
+  for (const it of items) for (const c of it.codes) codes.add(c);
+  if (codes.size === 0 || !client) return {};
+  try {
+    const idx = await getStockIndex(client);
+    const out: Record<string, string> = {};
+    for (const c of codes) {
+      const hit = idx.get(c);
+      if (hit?.name) out[c] = hit.name;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export async function topicPulse(window: PulseWindow = "now", client?: KiwoomClient): Promise<TopicPulse> {
   const hours = HOURS[window];
   const cfg = await getBuzzConfig();
 
@@ -190,6 +223,7 @@ export async function topicPulse(window: PulseWindow = "now"): Promise<TopicPuls
         `며칠 쌓이면 이 자리에서 알려 드립니다.`,
       hot: false,
       items,
+      names: await nameMapOf(items, client),
       health,
       at: new Date().toISOString(),
     };
@@ -206,6 +240,7 @@ export async function topicPulse(window: PulseWindow = "now"): Promise<TopicPuls
         : "채널도 뉴스도 조용합니다.",
       hot: false,
       items,
+      names: await nameMapOf(items, client),
       health,
       at: new Date().toISOString(),
     };
@@ -237,6 +272,7 @@ export async function topicPulse(window: PulseWindow = "now"): Promise<TopicPuls
     detail: bits.join(" · "),
     hot: true,
     items,
+    names: await nameMapOf(items, client),
     health,
     at: new Date().toISOString(),
   };

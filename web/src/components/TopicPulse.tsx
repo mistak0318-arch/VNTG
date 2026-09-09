@@ -84,7 +84,7 @@ export function TopicPulseBlock({
             (() => {
               const it = p.items.find((x) => x.term === open);
               return it ? (
-                <TermEvidence item={it} onSelectStock={onSelectStock} />
+                <TermEvidence item={it} names={p.names} onSelectStock={onSelectStock} />
               ) : null;
             })()}
         </>
@@ -168,9 +168,12 @@ function TermChip({
  */
 function TermEvidence({
   item,
+  names,
   onSelectStock,
 }: {
   item: PulseItem;
+  /** 코드 → 종목명. 서버가 전종목 캐시에서 붙여 준다 (2026-09-09) */
+  names?: Record<string, string>;
   onSelectStock?: (code: string, name: string) => void;
 }) {
   const [news, setNews] = useState<{ title: string; press: string; link: string }[] | null>(null);
@@ -208,11 +211,25 @@ function TermEvidence({
 
       {item.codes.length > 0 && onSelectStock && (
         <div className="pulse-ev-codes">
-          {item.codes.slice(0, 8).map((c) => (
-            <button key={c} className="filter-btn" onClick={() => onSelectStock(c, item.term)}>
-              {c}
-            </button>
-          ))}
+          {/*
+            **이름으로 보여 준다** (2026-09-09 — 벤티지 "종목코드가 보이네. 종목명이
+            보여야지. 코드로는 무슨 종목인지 모르잖어"). 이름을 못 받았으면 그때만 코드다.
+            누를 때 넘기는 이름도 고쳤다 — 예전엔 **낱말**(term)을 넘겨서 「관세」 같은 게
+            종목 이름 자리에 들어갔다.
+          */}
+          {item.codes.slice(0, 8).map((c) => {
+            const nm = names?.[c];
+            return (
+              <button
+                key={c}
+                className="filter-btn"
+                onClick={() => onSelectStock(c, nm ?? c)}
+                title={nm ? `${nm} (${c})` : c}
+              >
+                {nm ?? c}
+              </button>
+            );
+          })}
           <span className="pt-n">눌러서 종목 화면으로</span>
         </div>
       )}
