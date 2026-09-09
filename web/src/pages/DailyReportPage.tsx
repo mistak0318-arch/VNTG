@@ -724,8 +724,8 @@ export function DailyReportPage({
       crossSignal: <CrossSignalSection onSelectStock={onSelectStock} />,
       featured: <FeaturedSection onSelectStock={onSelectStock} />,
       /* 콤팩트판 — 분야 이름 + 제목만. 본문·검색은 뉴스·공시 메뉴 몫 */
-      news: <NewsClippingCompact onFetched={setNewsAt} />,
-      channel: <ChannelDigestSection />,
+      news: <NewsClippingCompact onFetched={setNewsAt}  onSelectStock={onSelectStock} />,
+      channel: <ChannelDigestSection onSelectStock={onSelectStock} />,
       /* 실물 마감 — 관세청 월별. 크게 움직인 품목만 그래프로 */
       trade: <TradeTrendSection />,
     };

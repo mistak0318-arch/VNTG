@@ -720,7 +720,7 @@ export function FeaturedSection({
  * AI 정리에 이미 이 내용이 녹아 있지만 **원문도 같이** 둔다 — 요약이 무엇을 보고
  * 그렇게 말했는지 확인할 데가 있어야 요약을 믿거나 의심할 수 있다.
  */
-export function ChannelDigestSection() {
+export function ChannelDigestSection({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void } = {}) {
   const [report, setReport] = useState<ChannelReport | null | undefined>(undefined);
 
   useEffect(() => {
@@ -756,7 +756,58 @@ export function ChannelDigestSection() {
         제목은 제목답게 세우고, 불릿은 줄마다 끊고, 등락률 숫자에 색을 입힌다 —
         글자는 하나도 안 바꾼다.
       */}
-      {report.summary && <div className="rp-digest">{renderDigest(report.summary)}</div>}
+      {/*
+        핵심 종목·테마 (2026-09-10 — 벤티지 "텔레그램도 주요 키워드나 관련 주요 내용을 좀 압축해서").
+        선별된 원문에서 찾은 종목·내 테마를 언급 횟수순으로 — 정리본을 읽기 전에 「오늘 무엇이 돌았나」.
+      */}
+      {(() => {
+        const cnt = new Map<string, number>();
+        const th = new Map<string, number>();
+        for (const it of report.items) {
+          for (const s of it.stocks ?? []) cnt.set(s, (cnt.get(s) ?? 0) + 1);
+          for (const t of it.themes ?? []) th.set(t, (th.get(t) ?? 0) + 1);
+        }
+        const codeOf = new Map((report.digestStocks ?? []).map((s) => [s.name, s.code]));
+        const top = [...cnt.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+        const topTh = [...th.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+        if (top.length === 0 && topTh.length === 0) return null;
+        return (
+          <div className="rp-digest-keys">
+            {top.length > 0 && (
+              <div className="rp-digest-keyrow">
+                <span className="rp-digest-keyk">핵심 종목</span>
+                {top.map(([name, n]) => (
+                  <button
+                    type="button"
+                    key={name}
+                    className="rp-nc-stock"
+                    onClick={() => {
+                      const code = codeOf.get(name);
+                      if (code) onSelectStock?.(code, name);
+                    }}
+                    title={`${n}건에서 언급`}
+                  >
+                    {name} <b>{n}</b>
+                  </button>
+                ))}
+              </div>
+            )}
+            {topTh.length > 0 && (
+              <div className="rp-digest-keyrow">
+                <span className="rp-digest-keyk">테마</span>
+                {topTh.map(([name, n]) => (
+                  <em className="rp-nc-impact" key={name} title={`${n}건`}>
+                    {name} {n}
+                  </em>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+      {report.summary && (
+        <div className="rp-digest">{renderDigest(report.summary, report.digestStocks ?? [], onSelectStock)}</div>
+      )}
 
       {report.items.length > 0 && (
         <details className="ov-help">
@@ -776,8 +827,30 @@ export function ChannelDigestSection() {
   );
 }
 
-/** 채널 요약 본문 — ## 제목 / 불릿 / 숫자 색까지. 글자는 그대로 */
-function renderDigest(text: string) {
+/** 채널 요약 본문 — ## 제목 / 불릿 / 숫자 색까지. 글자는 그대로. 종목 이름은 눌리는 칩으로 */
+function renderDigest(
+  text: string,
+  stocks: { code: string; name: string }[] = [],
+  onSelectStock?: (code: string, name: string) => void,
+) {
+  /* 긴 이름부터 — 「삼성전자우」가 「삼성전자」보다 먼저 걸려야 한다 */
+  const names = [...stocks].sort((a, b) => b.name.length - a.name.length);
+  const codeOf = new Map(names.map((s) => [s.name, s.code]));
+  const re = names.length > 0 ? new RegExp(`(${names.map((s) => s.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "g") : null;
+  const withStocks = (line: string) => {
+    if (!re) return emphasize(line);
+    return line.split(re).map((part, i) => {
+      const code = codeOf.get(part);
+      if (code) {
+        return (
+          <button type="button" className="rp-digest-stock" key={i} onClick={() => onSelectStock?.(code, part)} title="종목 상세">
+            {part}
+          </button>
+        );
+      }
+      return <span key={i}>{emphasize(part)}</span>;
+    });
+  };
   return text
     .split(/\r?\n/)
     .map((raw, i) => {
@@ -794,7 +867,7 @@ function renderDigest(text: string) {
       const body = line.replace(/^[-•·*▶]\s*/, "").replace(/\*\*([^*]+)\*\*/g, "$1");
       return (
         <div className={isBullet ? "rp-digest-li" : "rp-digest-p"} key={i}>
-          {isBullet && <i>·</i>} {emphasize(body)}
+          {isBullet && <i>·</i>} {withStocks(body)}
         </div>
       );
     })
@@ -1189,7 +1262,18 @@ export function TradeTrendSection() {
  * **분야 이름 + 제목 줄**만 늘어놓는다. 눌러 볼 기사만 링크로 나간다.
  * 중요한 것만 — 분야당 다섯 줄, 보도 매체 수가 붙은(=여러 곳이 다룬) 순서다.
  */
-export function NewsClippingCompact({ onFetched }: { onFetched?: (iso: string) => void }) {
+/** 점수 → 별 (2026-09-10). 12 미만 ★, 20 미만 ★★, 그 위 ★★★ — 실측 분포에서 상위 1/4 이 ★★★ 쯤 */
+function tierOf(score: number): 1 | 2 | 3 {
+  return score >= 20 ? 3 : score >= 12 ? 2 : 1;
+}
+
+export function NewsClippingCompact({
+  onFetched,
+  onSelectStock,
+}: {
+  onFetched?: (iso: string) => void;
+  onSelectStock?: (code: string, name: string) => void;
+}) {
   const [sectors, setSectors] = useState<
     { key: string; label: string; items: ScoredNews[] }[] | null
   >(null);
@@ -1220,23 +1304,42 @@ export function NewsClippingCompact({ onFetched }: { onFetched?: (iso: string) =
           <span className="rp-nc-label">{s.label}</span>
           <div className="rp-nc-list">
             {s.items.slice(0, 5).map((n) => (
-              <a
-                className="rp-nc-line"
-                key={n.link}
-                href={n.link}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {n.title}
-                {n.coverage > 1 && <i className="rp-nc-cov">{n.coverage}곳</i>}
-              </a>
+              <div className="rp-nc-item" key={n.link}>
+                {/* 중요도 — 별 셋이 「장 열리면 바로 반응할」 것. 마우스를 올리면 점수 */}
+                <i className={`rp-nc-tier t${tierOf(n.score)}`} title={`중요도 ${n.score}점 · 보도 ${n.coverage}곳${n.impact?.length ? ` · ${n.impact.join("·")}` : ""}`}>
+                  {"★".repeat(tierOf(n.score))}
+                </i>
+                <a className="rp-nc-line" href={n.link} target="_blank" rel="noreferrer">
+                  {n.title}
+                  {n.coverage > 1 && <i className="rp-nc-cov">{n.coverage}곳</i>}
+                </a>
+                {((n.impact?.length ?? 0) > 0 || (n.stocks?.length ?? 0) > 0) && (
+                  <div className="rp-nc-tags">
+                    {(n.impact ?? []).map((t) => (
+                      <em className="rp-nc-impact" key={t}>{t}</em>
+                    ))}
+                    {(n.stocks ?? []).map((st) => (
+                      <button
+                        type="button"
+                        className="rp-nc-stock"
+                        key={st.code}
+                        onClick={() => onSelectStock?.(st.code, st.name)}
+                        title={`${st.name} 종목 상세`}
+                      >
+                        {st.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </div>
       ))}
       <div className="table-note">
-        분야마다 <b>여러 매체가 같이 다룬 순서</b>로 다섯 건 — 제목을 누르면 기사로 갑니다.
-        본문 미리보기·검색은 뉴스·공시 메뉴에서.
+        분야마다 <b>여러 매체가 같이 다룬 순서</b>로 다섯 건 — 제목을 누르면 기사로 갑니다. ★ 는 중요도(보도 매체 수·제목의
+        사건성·관심종목 언급·최신성), 꼬리표는 왜 중요한가, 종목 칩을 누르면 상세가 열립니다. 본문 미리보기·검색은
+        뉴스·공시 메뉴에서.
       </div>
     </div>
   );

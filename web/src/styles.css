@@ -18255,3 +18255,19 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .sd-flag.info { border-color: rgba(76, 141, 255, 0.4); background: rgba(76, 141, 255, 0.08); }
 .sd-flag.info b { color: var(--blue); }
 .feed-cats { margin: 4px 0 8px; flex-wrap: wrap; }
+
+/* 리포트 뉴스 클리핑 — 중요도 별·꼬리표·종목 칩 (2026-09-10) */
+.rp-nc-item { display: grid; grid-template-columns: auto 1fr; gap: 2px 6px; align-items: start; padding: 3px 0; }
+.rp-nc-tier { font-style: normal; font-size: 0.68rem; letter-spacing: -1px; white-space: nowrap; padding-top: 2px; color: var(--muted); }
+.rp-nc-tier.t2 { color: #f59e0b; }
+.rp-nc-tier.t3 { color: var(--red); }
+.rp-nc-tags { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px; }
+.rp-nc-impact { font-style: normal; font-size: 0.66rem; color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.45); border-radius: 4px; padding: 0 5px; line-height: 1.5; }
+.rp-nc-stock { font-size: 0.68rem; color: var(--blue); background: rgba(76, 141, 255, 0.1); border: 1px solid rgba(76, 141, 255, 0.35); border-radius: 4px; padding: 0 6px; line-height: 1.6; cursor: pointer; }
+.rp-nc-stock b { font-weight: 700; margin-left: 2px; }
+.rp-nc-stock:hover { background: rgba(76, 141, 255, 0.2); }
+/* 텔레그램 요약 — 핵심 종목·테마 줄, 본문 속 종목 칩 */
+.rp-digest-keys { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 10px; }
+.rp-digest-keyrow { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.rp-digest-keyk { font-size: 0.7rem; color: var(--muted); margin-right: 4px; white-space: nowrap; }
+.rp-digest-stock { font: inherit; font-weight: 700; color: var(--blue); background: transparent; border: 0; border-bottom: 1px dotted var(--blue); padding: 0; cursor: pointer; }

@@ -1,6 +1,7 @@
 import AdmZip from "adm-zip";
 import { XMLParser } from "fast-xml-parser";
 import { recordApiCall } from "./apiUsage.js";
+import { matchStocks } from "./newsLead.js";
 
 /**
  * 뉴스(네이버 검색 API)와 공시(DART OpenAPI).
@@ -423,26 +424,38 @@ export const NEWS_SECTORS: NewsSector[] = [
  * 제목에 등장하면 주가에 직접 영향이 큰 단어들.
  * 값이 클수록 "장 열리면 바로 반응할" 사건에 가깝다.
  */
-const IMPACT_WEIGHTS: [RegExp, number][] = [
-  [/상한가|하한가|급등|급락|폭등|폭락/, 6],
-  [/신고가|신저가|52주/, 5],
-  [/어닝\s*서프라이즈|호실적|실적\s*(개선|쇼크)|영업이익.*(증가|감소|흑자|적자)/, 5],
-  [/수주|공급\s*계약|대규모\s*계약|납품/, 5],
-  [/유상증자|무상증자|자사주|배당|액면분할|주식병합/, 4],
-  [/인수|합병|매각|지분\s*(취득|매입)/, 4],
-  [/목표주가|투자의견|상향|하향/, 4],
-  [/기준금리|금리\s*(인상|인하|동결)/, 4],
-  [/FOMC|CPI|고용지표|물가/, 3],
-  [/외국인.*순매수|기관.*순매수|프로그램.*순매수/, 3],
-  [/공매도|대차잔고/, 3],
-  [/상장|IPO|공모/, 2],
-  [/실적\s*발표|컨센서스/, 2],
+/*
+ * 세 번째 칸은 **화면에 붙는 꼬리표** (2026-09-10 — 벤티지 "해당 뉴스가 얼마나 중요한지,
+ * 중요도 표시 같은 게 있었으면"). 점수만 있으면 「왜 중요한가」가 안 보인다.
+ */
+const IMPACT_WEIGHTS: [RegExp, number, string][] = [
+  [/상한가|하한가|급등|급락|폭등|폭락/, 6, "급등락"],
+  [/신고가|신저가|52주/, 5, "신고가"],
+  [/어닝\s*서프라이즈|호실적|실적\s*(개선|쇼크)|영업이익.*(증가|감소|흑자|적자)/, 5, "실적"],
+  [/수주|공급\s*계약|대규모\s*계약|납품/, 5, "수주"],
+  [/유상증자|무상증자|자사주|배당|액면분할|주식병합/, 4, "증자·배당"],
+  [/인수|합병|매각|지분\s*(취득|매입)/, 4, "M&A"],
+  [/목표주가|투자의견|상향|하향/, 4, "목표주가"],
+  [/기준금리|금리\s*(인상|인하|동결)/, 4, "금리"],
+  [/FOMC|CPI|고용지표|물가/, 3, "지표"],
+  [/외국인.*순매수|기관.*순매수|프로그램.*순매수/, 3, "수급"],
+  [/공매도|대차잔고/, 3, "공매도"],
+  /* 「美상장」「상장 후 최고가」가 IPO 로 잡혔다 — 신규 상장·공모만 (2026-09-10) */
+  [/신규\s*상장|IPO|공모주|공모가|상장\s*(예정|첫날|첫\s*거래)/, 2, "IPO"],
+  [/실적\s*발표|컨센서스/, 2, "실적"],
 ];
 
 function impactScore(title: string): number {
   let score = 0;
   for (const [re, w] of IMPACT_WEIGHTS) if (re.test(title)) score += w;
   return score;
+}
+
+/** 제목에 걸린 꼬리표 — 같은 이름은 한 번 */
+function impactTags(title: string): string[] {
+  const out: string[] = [];
+  for (const [re, , tag] of IMPACT_WEIGHTS) if (re.test(title) && !out.includes(tag)) out.push(tag);
+  return out;
 }
 
 /**
@@ -496,6 +509,10 @@ export interface ScoredNews extends NewsItem {
   /** 내 관심종목 중 이 기사에 언급된 것 */
   mentions: string[];
   score: number;
+  /** 제목·요약에서 찾은 상장사 (2026-09-10) — 눌러서 종목 상세로 */
+  stocks: { code: string; name: string }[];
+  /** 왜 중요한가 — 급등락·실적·수주… */
+  impact: string[];
 }
 
 export interface SectorNews {
@@ -581,6 +598,8 @@ function scoreGroups(
       alsoPress: presses.filter((p) => p !== g.rep.press).slice(0, 4),
       mentions,
       score: Math.round(score * 10) / 10,
+      stocks: matchStocks(`${g.rep.title} ${g.rep.summary}`, 4),
+      impact: impactTags(g.rep.title),
     };
   });
 

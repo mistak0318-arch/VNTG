@@ -2867,6 +2867,8 @@ export interface ScoredChannelItem {
 export interface ChannelReport {
   date: string;
   generatedAt: string;
+  /** 정리본에서 찾은 상장사 — 이름을 칩으로 */
+  digestStocks?: { code: string; name: string }[];
   channels: number;
   rawCount: number;
   usedCount: number;
@@ -4458,6 +4460,10 @@ export interface ScoredNews extends NewsItem {
   alsoPress: string[];
   mentions: string[];
   score: number;
+  /** 제목·요약에서 찾은 상장사 — 눌러서 종목 상세 */
+  stocks?: { code: string; name: string }[];
+  /** 왜 중요한가 — 급등락·실적·수주… */
+  impact?: string[];
 }
 
 /** KRX(KIND) 공시 한 줄 — 서버 krxNotices.ts 와 같은 모양 */

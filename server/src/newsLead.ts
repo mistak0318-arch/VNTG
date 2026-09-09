@@ -131,7 +131,33 @@ function wordHit(text: string, name: string): boolean {
   return false;
 }
 
-function matchStocks(text: string): { code: string; name: string }[] {
+/**
+ * 기사·채널 글의 별칭 → 정식 종목명 (2026-09-10). 「SK하닉 ADR 7% 폭등」이 SK하이닉스로
+ * 안 잡혔다. sysAssist 의 ALIAS_PUBLIC 과 같은 결 — 긴 것부터 바꿔야 「두산에너」가 「두산」에
+ * 먼저 안 걸린다.
+ */
+const ALIASES: [RegExp, string][] = [
+  /* 「SK하닉ADR」처럼 붙어 오면 뒤에 공백을 두어 낱말 경계를 만든다. 이미 「SK하이닉스」인 건 건드리지 않는다 */
+  [/SK\s*하닉(?!스)/g, "SK하이닉스 "],
+  [/(?<!SK)하이닉스(?!스)/g, "SK하이닉스"],
+  [/삼전(?=[^자])|삼전$/g, "삼성전자"],
+  [/현차/g, "현대차"],
+  [/두산에너(?!빌)/g, "두산에너빌리티"],
+  [/한화에어로(?!스)/g, "한화에어로스페이스"],
+  [/셀트(?=[^리])/g, "셀트리온"],
+  [/카뱅/g, "카카오뱅크"],
+  [/네이버/g, "NAVER"],
+  [/엔씨(?!소)/g, "엔씨소프트"],
+  [/포스코(?=\s|$|[^홀케퓨인])/g, "POSCO홀딩스"],
+];
+function expandAliases(text: string): string {
+  let t = text;
+  for (const [re, name] of ALIASES) t = t.replace(re, name);
+  return t;
+}
+
+export function matchStocks(raw: string, max = 5): { code: string; name: string }[] {
+  const text = expandAliases(raw);
   const snap = peekSnapshot();
   if (!snap) return [];
   const out: { code: string; name: string }[] = [];
@@ -143,7 +169,7 @@ function matchStocks(text: string): { code: string; name: string }[] {
     if (seen.has(name)) continue;
     seen.add(name);
     out.push({ code: s.code, name });
-    if (out.length >= 5) break;
+    if (out.length >= max) break;
   }
   /* 긴 이름이 짧은 이름을 품는 경우(「삼성전자우」는 위에서 뺐고, 「현대차」와 「현대차증권」) — 긴 쪽만 남긴다 */
   return out.filter((a) => !out.some((b) => b !== a && b.name.includes(a.name)));

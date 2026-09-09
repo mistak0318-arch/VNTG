@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { summarize } from "./summarize.js";
+import { matchStocks } from "./newsLead.js";
 import { sendTelegram } from "./telegram.js";
 import { fetchNewMessages, isReaderConfigured, listChannels } from "./telegramReader.js";
 import * as store from "./channelStore.js";
@@ -57,6 +58,7 @@ const SYSTEM_RULES = `당신은 한국 주식시장 정보를 정리하는 애�
 ## 눈에 띄는 단발 정보
 채널 하나에만 나왔지만 사실이라면 중요한 것. 반드시 미확인임을 밝힐 것.
 
+각 항목에는 관련 종목을 **정식 종목명**(예: SK하이닉스, 삼성전자)으로 적으십시오 — 별명·약칭 말고.
 출력은 반드시 "## 오늘 돌고 있는 이야기" 로 시작합니다. 계획·검산·초안·영어 메모를 쓰지 마십시오 — 완성된 정리만 씁니다.`;
 
 /** 답이 시작해야 하는 머리글 — 이 앞에 붙은 것은 모델의 낙서다 */
@@ -82,6 +84,8 @@ export interface ChannelReport {
   usedCount: number;
   items: ScoredChannelItem[];
   summary: string | null;
+  /** 정리본 문장에서 찾은 상장사 (2026-09-10) — 화면이 이름을 눌리는 칩으로 바꾼다 */
+  digestStocks?: { code: string; name: string }[];
   /** 어떤 모델로 정리했는지 */
   model?: string | null;
   inputTokens: number;
@@ -313,6 +317,12 @@ export async function buildChannelReport(
   if (res.error) progress.fail("ai", res.error);
   else progress.done("ai", `${res.outputTokens.toLocaleString("ko-KR")} 토큰`);
   report.summary = res.text;
+  if (res.text) {
+    /* 줄마다 찾아 합친다 — 한 번에 찾으면 다섯 개에서 끊긴다 */
+    const seen = new Map<string, { code: string; name: string }>();
+    for (const line of res.text.split(/\r?\n/)) for (const st of matchStocks(line, 6)) seen.set(st.code, st);
+    report.digestStocks = [...seen.values()].slice(0, 30);
+  }
   report.model = res.usedModel ?? null;
   report.inputTokens = res.inputTokens;
   report.outputTokens = res.outputTokens;
