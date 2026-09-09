@@ -185,19 +185,31 @@ export function NotifyBell() {
     };
   }, [open]);
 
-  /* 바깥을 누르면 닫는다 — 드롭다운의 기본 예의다 */
+  /*
+   * 바깥을 누르면 닫는다 — 드롭다운의 기본 예의다.
+   *
+   * ⚠️ `mousedown` 이 아니라 **`pointerdown`** 이다 (2026-09-09 — 벤티지: "내가 메뉴 열면
+   * 얘는 닫혀야되지 않을까"). 폰에서 서랍은 가장자리 **스와이프**로 여는데, 그 손짓은
+   * mousedown 을 안 만든다(탭만 만든다). 그래서 서랍과 알림판이 겹쳐 떴다. pointerdown 은
+   * 마우스·터치·펜이 다 같은 이름으로 오고 손짓의 **시작**에 온다.
+   *
+   * 서랍이 코드로 열릴 때(단축키 등)도 있으니 `vntg:nav-open` 신호도 같이 듣는다.
+   */
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: PointerEvent) => {
       if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onDown);
+    const onNav = () => setOpen(false);
+    document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("vntg:nav-open", onNav);
     return () => {
-      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("vntg:nav-open", onNav);
+      document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);

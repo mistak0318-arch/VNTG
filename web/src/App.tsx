@@ -871,6 +871,8 @@ export default function App() {
   // 드로어가 열려 있을 때 배경 스크롤 방지
   useEffect(() => {
     document.body.style.overflow = navOpen ? "hidden" : "";
+    /* 서랍이 열리면 떠 있던 판(알림 등)은 닫힌다 — 둘이 겹쳐 뜰 이유가 없다 (2026-09-09) */
+    if (navOpen) window.dispatchEvent(new CustomEvent("vntg:nav-open"));
     return () => {
       document.body.style.overflow = "";
     };
