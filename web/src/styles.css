@@ -10965,7 +10965,13 @@ button.tpb-row:hover { background: var(--panel-2); }
 .lens-mid { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0.6; }
 
 /* 로테이션 판 — 세 기둥. 폰에서는 세로로 쌓인다 */
-.lens-buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+/*
+ * 기둥 최소폭 240 → 300 (2026-09-09 — 벤티지: "테마로테이션 해상도 체크 좀 해봐. 핸드폰은 한줄이라
+ * 잘 나오는데 태블릿이 문제네"). 768px 태블릿에서 240 짜리 기둥이 **셋** 서면 줄폭이 222px 인데
+ * 오른쪽 서브(월간·연속·10일 중 7)가 133px 을 먹어 「반도체 대표주(생산)」 이름 폭이 **24px** 로
+ * 남았다 — 실측. 300 이면 폰 1 · 태블릿 2 · 넓은 화면 3 기둥이다.
+ */
+.lens-buckets { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .lens-bucket { border: 1px solid var(--border); border-radius: 10px; padding: 8px; background: var(--panel); }
 .lens-bucket.lead  { border-top: 3px solid var(--green); }
 .lens-bucket.fresh { border-top: 3px solid var(--blue); }
@@ -10975,7 +10981,9 @@ button.tpb-row:hover { background: var(--panel-2); }
 .lens-theme {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  /* 좁으면 서브가 다음 줄로 접힌다 — 이름이 눌려 사라지는 것보다 두 줄이 낫다 (2026-09-09) */
+  flex-wrap: wrap;
+  gap: 2px 8px;
   width: 100%;
   padding: 5px 6px;
   background: none;
@@ -10989,7 +10997,8 @@ button.tpb-row:hover { background: var(--panel-2); }
 }
 .lens-theme:last-child { border-bottom: none; }
 .lens-theme:hover { background: var(--row-hover); }
-.lens-theme-name { font-weight: 600; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 이름은 최소 8자는 지킨다 — 그 밑으로 눌리면 서브가 접히는 쪽이 맞다 */
+.lens-theme-name { font-weight: 600; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 8ch; }
 .lens-theme > b { font-size: 0.82rem; }
 .lens-theme-sub { margin-left: auto; font-size: 0.68rem; color: var(--muted); white-space: nowrap; }
 .lens-theme-sub i { font-style: normal; }
