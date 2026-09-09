@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
-import { api, pick, stockNameOf, type RawRecord } from "../api";
+import { api, pick, stockNameOf, KRX_KIND_LABEL, krxViewerUrl, type KrxNotice, type RawRecord } from "../api";
 import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
 import { IntradayLevelsBar } from "./IntradayLevelsBar";
 import { IntradayFlow } from "./IntradayPanels";
@@ -113,6 +113,19 @@ export function StockDetail({
 
   /* 신용 칩 — 개별종목분석과 **같은 것** (2026-09-08, 벤티지 "클릭하고 나오는 창에는 안 뜨는구나") */
   const credit = useStockCredit(code);
+  /* 지금 걸려 있는 KRX 시장조치 — 최근 30일 KIND 에서 (2026-09-10) */
+  const [measures, setMeasures] = useState<KrxNotice[]>([]);
+  useEffect(() => {
+    let alive = true;
+    setMeasures([]);
+    api
+      .krxMeasures(code)
+      .then((r) => alive && setMeasures(r.items))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [code]);
   const watchedCodes = useWatchedCodes();
   /* 시트 안 덩어리들의 차례 — 서버에 저장된다(`stockSheet` 이름표로) */
   const cards = useCardOrder("stockSheet", SHEET_CARDS.map((c) => c.key));
@@ -160,6 +173,20 @@ export function StockDetail({
               </span>
             )}
             <CreditChip credit={credit} />
+            {/* KRX 시장조치 — 공매도 과열·투자경고… 걸려 있으면 이름 앞에 (2026-09-10) */}
+            {measures.map((m) => (
+              <a
+                key={m.kind}
+                className={`krx-kind hot${m.kind.endsWith("Notice") ? " notice" : ""}`}
+                href={m.acptNo ? krxViewerUrl(m.acptNo) : undefined}
+                target="_blank"
+                rel="noreferrer noopener"
+                title={`${m.date} ${m.time} · ${m.title}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {KRX_KIND_LABEL[m.kind]}
+              </a>
+            ))}
             {name} ({code})
           </h2>
           {/*

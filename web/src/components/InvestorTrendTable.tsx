@@ -112,7 +112,15 @@ export function InvestorTrendTable({
   onNeedDays?: (days: number) => void;
 }) {
   /** 일별 목록을 몇 줄까지 볼지. 합계는 아래에서 네 기간을 한꺼번에 보여준다 */
-  const [period, setPeriod] = useState(20);
+  /* 기본 10일 (2026-09-10 — 벤티지 "수급 표시 기본 10일로 해줘"). 바꾸면 기억한다 */
+  const [period, setPeriod] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem("vntg.investor.period"));
+      return PERIOD_OPTIONS.includes(n) ? n : 10;
+    } catch {
+      return 10;
+    }
+  });
   const [picked, setPicked] = useState<string[]>(readPick);
   const [gear, setGear] = useState(false);
   const visible = rows.slice(0, period);
@@ -165,6 +173,11 @@ export function InvestorTrendTable({
           onChange={(e) => {
             const p = Number(e.target.value);
             setPeriod(p);
+            try {
+              localStorage.setItem("vntg.investor.period", String(p));
+            } catch {
+              /* 저장 못 해도 이번 화면에서는 바뀐다 */
+            }
             /* 갖고 있는 것보다 길면 더 받아 달라고 한다 — 없으면 있는 만큼만 보여준다 */
             if (p > rows.length) onNeedDays?.(p);
           }}

@@ -155,14 +155,15 @@ export function VolumeFlowChart({ code }: { code: string }) {
     }
   };
   /* 기간 — 일별 60·90·120·240일, 주별 26·52·104주 (벤티지 "기간도 선택할 수 있도록") */
-  const SPANS = { day: [60, 90, 120, 240], week: [26, 52, 104] } as const;
+  /* 일별 30일 추가·기본 30 (벤티지 2026-09-10 "거래량도 일별 30일 추가해서 기본 30일 체크") */
+  const SPANS = { day: [30, 60, 90, 120, 240], week: [26, 52, 104] } as const;
   const [spans, setSpans] = useState<{ day: number; week: number }>(() => {
     try {
       const d = Number(localStorage.getItem("vntg.volflow.span.day"));
       const w = Number(localStorage.getItem("vntg.volflow.span.week"));
-      return { day: SPANS.day.includes(d as 60) ? d : 90, week: SPANS.week.includes(w as 26) ? w : 52 };
+      return { day: SPANS.day.includes(d as 30) ? d : 30, week: SPANS.week.includes(w as 26) ? w : 52 };
     } catch {
-      return { day: 90, week: 52 };
+      return { day: 30, week: 52 };
     }
   });
   const span = spans[unit];

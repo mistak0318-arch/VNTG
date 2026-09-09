@@ -6,7 +6,7 @@ import { getMarketSnapshot } from "../marketSnapshot.js";
 import { peekRealtime } from "../realtimeHub.js";
 import { viDirText } from "../realtimeStore.js";
 import { latestEdition, loadReport } from "../reportStore.js";
-import { listGroups, listWatchlist, SUPER_GROUP } from "../watchlist.js";
+import { listGroups, listWatchlist, SCOPE_GROUP, SUPER_GROUP } from "../watchlist.js";
 
 /**
  * 마켓 브리핑 — **열자마자 3초 안에 「오늘 시장이 어떤가」.**
@@ -201,11 +201,14 @@ export function createBriefingRouter(client: KiwoomClient): Router {
        * 슈퍼신호등이 있으면 그걸, 아니면 그룹 순서가 앞선 것을 대표로 삼는다.
        */
       const groupRank = new Map<string, number>();
-      groupRank.set(SUPER_GROUP, -1); // 슈퍼신호등이 늘 맨 앞
+      /* 현미경이 맨 앞 (2026-09-10 — 벤티지 "마켓브리핑 관심종목 위에 현미경 종목도 표시해줘"), 그다음 슈퍼신호등 */
+      groupRank.set(SCOPE_GROUP, -2);
+      groupRank.set(SUPER_GROUP, -1); // 슈퍼신호등이 그다음
       groups.forEach((g, i) => {
         if (!groupRank.has(g)) groupRank.set(g, i);
       });
       const primaryGroup = (gs: string[]): string => {
+        if (gs.includes(SCOPE_GROUP)) return SCOPE_GROUP;
         if (gs.includes(SUPER_GROUP)) return SUPER_GROUP;
         let best = gs[0] ?? "";
         for (const g of gs) {

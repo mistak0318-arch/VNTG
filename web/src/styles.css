@@ -18216,3 +18216,15 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .tbl-font-root .data-table .uw-sub { font-size: calc(var(--tbl-font) - 0.14rem); }
 .scr-font { display: inline-flex; gap: 2px; }
 .scr-font .filter-btn { padding-left: 6px; padding-right: 6px; }
+
+/* KRX(KIND) 공시 종류 꼬리표 — 시장조치는 붉게, 예고는 테두리만, 해제는 초록 (2026-09-10) */
+.krx-kind {
+  display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: 4px;
+  font-size: 0.68rem; font-style: normal; font-weight: 700; line-height: 1.5; vertical-align: middle;
+  color: var(--muted); border: 1px solid var(--border); text-decoration: none; white-space: nowrap;
+}
+.krx-kind.hot { color: #fff; background: var(--red); border-color: var(--red); }
+.krx-kind.hot.notice { color: var(--red); background: transparent; }
+.krx-kind.ok { color: var(--green); border-color: rgba(53, 196, 106, 0.5); }
+.feed-sub-h { font-size: 0.78rem; color: var(--muted); margin: 10px 0 4px; font-weight: 700; }
+.sheet-header h2 .krx-kind { font-size: 0.66rem; }

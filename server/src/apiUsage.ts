@@ -22,6 +22,7 @@ export type ApiProvider =
   | "openai"
   | "dataGoKr"
   | "telegram"
+  | "krx"
   | "mail";
 
 /**
@@ -167,6 +168,11 @@ export const DAILY_LIMITS: Record<ApiProvider, { label: string; limit: number | 
     label: "DART OpenAPI",
     limit: 20000,
     note: "인증키당 하루 20,000건 (금융감독원 공식)",
+  },
+  krx: {
+    label: "KRX KIND 공시",
+    limit: null,
+    note: "공식 API 가 없어 「오늘의 공시」 화면을 10분마다 읽습니다 — 시장조치(공매도 과열·투자경고 등)는 여기만 있습니다",
   },
   naver: {
     label: "네이버 검색 API",

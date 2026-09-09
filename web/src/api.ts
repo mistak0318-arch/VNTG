@@ -2181,6 +2181,13 @@ export const api = {
       fetchedAt: string;
     }>("/api/feed/news/breaking"),
   finance: (code: string) => getJson<FinanceResult>(`/api/feed/finance/${code}`),
+  /** KRX(KIND) 공시 — 시장조치 포함 (2026-09-10) */
+  krxNotices: (code: string, days = 30) => getJson<{ items: KrxNotice[] }>(`/api/feed/krx/${code}?days=${days}`),
+  krxMeasures: (code: string) => getJson<{ items: KrxNotice[] }>(`/api/feed/krx/measures/${code}`),
+  krxDay: (date?: string, measures = false) =>
+    getJson<{ date: string; items: KrxNotice[]; collector: { at: string; count: number; error: string | null } | null }>(
+      `/api/feed/krx/day?${date ? `date=${date}&` : ""}${measures ? "measures=1" : ""}`,
+    ),
   disclosures: (code: string, days = 180) =>
     getJson<{ items: DisclosureItem[] }>(`/api/feed/disclosures/${code}?days=${days}`),
   programTrades: (market: string, scope: string) =>
@@ -4443,6 +4450,40 @@ export interface ScoredNews extends NewsItem {
   alsoPress: string[];
   mentions: string[];
   score: number;
+}
+
+/** KRX(KIND) 공시 한 줄 — 서버 krxNotices.ts 와 같은 모양 */
+export type KrxNoticeKind =
+  | "shortOverheat" | "overheat" | "overheatNotice" | "warning" | "warningNotice" | "danger"
+  | "caution" | "managed" | "halt" | "release" | "market" | "company";
+export interface KrxNotice {
+  date: string;
+  time: string;
+  code: string | null;
+  name: string;
+  title: string;
+  by: string;
+  kind: KrxNoticeKind;
+  acptNo: string | null;
+  market: string | null;
+}
+export const KRX_KIND_LABEL: Record<KrxNoticeKind, string> = {
+  shortOverheat: "공매도 과열",
+  overheat: "단기과열",
+  overheatNotice: "단기과열 예고",
+  warning: "투자경고",
+  warningNotice: "투자경고 예고",
+  danger: "투자위험",
+  caution: "투자주의",
+  managed: "관리종목",
+  halt: "거래정지",
+  release: "해제",
+  market: "거래소",
+  company: "공시",
+};
+/** KIND 뷰어 링크 */
+export function krxViewerUrl(acptNo: string): string {
+  return `https://kind.krx.co.kr/common/disclsviewer.do?method=search&acptno=${acptNo}`;
 }
 
 export interface DisclosureItem {

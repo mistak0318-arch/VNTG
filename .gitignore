@@ -72,3 +72,4 @@ server/data/usWatchCache.json
 server/data/askHistory.json
 server/data/flowIntraday.json
 server/data/afterCloseHistory.json
+server/data/krxNotices/

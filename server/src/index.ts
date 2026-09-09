@@ -44,6 +44,7 @@ import { startChannelCollector } from "./channelCollector.js";
 import { startMajorFeedLoop } from "./majorFeed.js";
 import { startBuzzScheduler } from "./buzzRadar.js";
 import { startInquirySampler } from "./inquirySampler.js";
+import { startKrxNoticeCollector } from "./krxNotices.js";
 import { startNewsKeywordScheduler } from "./newsKeywords.js";
 import { startCalendarSyncScheduler } from "./calendarSync.js";
 import { startEtfHoldersScheduler } from "./etfHolders.js";
@@ -296,6 +297,8 @@ startMajorFeedLoop();
 startBuzzScheduler(client);
 /* 조회순위 누적 표본 — 1분에 조회 1회, 07~24시 KST (2026-09-09) */
 startInquirySampler(client);
+/* KRX(KIND) 공시 — 07~22시 10분마다 오늘치 (2026-09-10) */
+startKrxNoticeCollector(client);
 /* 뉴스 키워드 흐름 (2026-08-30) — 버즈 레이더의 「뉴스판 귀」. 사전을 공유한다 */
 startNewsKeywordScheduler();
 /* 구독 캘린더 자동 동기화 (2026-08-30) — 예전엔 단추를 눌러야만 들어왔다 */

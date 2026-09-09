@@ -7,6 +7,7 @@ import { peekSnapshot } from "../marketSnapshot.js";
 import { breakingNews, getDisclosures, newsCounts, searchNews, sectorNews } from "../newsDisclosure.js";
 import { mainNews, naverNews, type NaverCat } from "../naverMainNews.js";
 import { newsBody, newsLeads } from "../newsLead.js";
+import { activeMeasures, collectorStatus, kstDate, recentNotices } from "../krxNotices.js";
 import { listWatchlist } from "../watchlist.js";
 import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -201,6 +202,36 @@ export function createNewsRouter(client: KiwoomClient): Router {
   });
 
   // 종목 공시 (DART)
+  /**
+   * KRX(KIND) 공시 (2026-09-10) — 시장조치 포함, 그날 KIND 에 오른 것 전부. `days` 최근 며칠.
+   * `/krx/measures/:code` 는 지금 걸려 있는 조치(공매도 과열·투자경고…)만.
+   */
+  router.get("/krx/measures/:code", async (req, res, next) => {
+    try {
+      res.json({ items: await activeMeasures(req.params.code) });
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/krx/day", async (req, res, next) => {
+    try {
+      const date = typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : kstDate(0);
+      const measures = req.query.measures === "1";
+      const all = await recentNotices(60, undefined, measures);
+      res.json({ date, items: all.filter((x) => x.date === date), collector: collectorStatus() });
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/krx/:code", async (req, res, next) => {
+    try {
+      const days = Math.min(Number(req.query.days) || 30, 60);
+      res.json({ items: await recentNotices(days, req.params.code), collector: collectorStatus() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/disclosures/:code", async (req, res, next) => {
     try {
       const days = Math.min(Number(req.query.days) || 180, 365);
