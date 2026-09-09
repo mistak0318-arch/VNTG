@@ -262,10 +262,28 @@ export async function recentNotices(days = 30, code?: string, measuresOnly = fal
  * 종목의 **지금 걸려 있는** 조치 — 최근 30일에서 종류별 마지막 공시가 「해제」로 안 지워진 것.
  * 예고는 예고대로 남긴다(예고가 곧 지정은 아니지만 알아야 한다).
  */
+/**
+ * 종류마다 **얼마나 가나** (2026-09-10). 투자주의·공매도 과열·예고는 다음 거래일 하루짜리라
+ * 해제 공시가 따로 안 나온다 — 30일 동안 걸린 척하면 안 된다. 경고·위험·관리·정지는 해제 공시가
+ * 올 때까지(30일 창 안에서).
+ */
+const VALID_DAYS: Partial<Record<NoticeKind, number>> = {
+  caution: 2,
+  shortOverheat: 2,
+  overheatNotice: 2,
+  warningNotice: 2,
+  overheat: 5,
+};
+
 export async function activeMeasures(code: string): Promise<KrxNotice[]> {
   const rows = await recentNotices(30, code, true);
   const latest = new Map<NoticeKind, KrxNotice>();
+  const today = kstDate(0);
+  const ageDays = (d: string) => Math.round((new Date(`${today}T00:00:00Z`).getTime() - new Date(`${d}T00:00:00Z`).getTime()) / 86400_000);
   for (const r of [...rows].reverse()) {
+    const limit = VALID_DAYS[r.kind];
+    /* 주말을 건너뛰도록 하루 여유 — 금요일 지정은 월요일까지 */
+    if (limit !== undefined && ageDays(r.date) > limit + (new Date(`${today}T00:00:00+09:00`).getUTCDay() === 1 ? 2 : 0)) continue;
     if (r.kind === "release") {
       /* 「투자경고종목 지정해제」처럼 제목이 말하는 종류를 지운다 */
       const t = r.title.replace(/\s+/g, "");
@@ -284,6 +302,27 @@ export function collectorStatus() {
   return last;
 }
 
+/**
+ * **과거 30일 백필** (2026-09-10 — 벤티지 "우리기술 08-21·08-27·09-01 공시가 안 보여"). 수집을
+ * 어젯밤에 시작해 그 전 날짜 파일이 없었다. 없는 날만 하루씩(주말 건너뜀, 0.8초 간격) 받는다.
+ * 켜질 때 한 번, 뒤에서.
+ */
+async function backfill(client: KiwoomClient, days = 30): Promise<void> {
+  for (let i = 2; i <= days; i += 1) {
+    const day = kstDate(i);
+    const dow = new Date(`${day}T00:00:00+09:00`).getUTCDay();
+    if (dow === 0 || dow === 6) continue;
+    try {
+      await readFile(fileOf(day), "utf8");
+      continue; // 이미 있다
+    } catch {
+      /* 없으면 받는다 */
+    }
+    await collectDay(client, day).catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 800));
+  }
+}
+
 export function startKrxNoticeCollector(client: KiwoomClient): void {
   if (timer) return;
   const run = async (alsoYesterday = false) => {
@@ -298,6 +337,6 @@ export function startKrxNoticeCollector(client: KiwoomClient): void {
       last = { at: new Date().toISOString(), count: 0, error: e instanceof Error ? e.message : String(e) };
     }
   };
-  setTimeout(() => void run(true), 45_000);
+  setTimeout(() => void run(true).then(() => backfill(client)), 45_000);
   timer = setInterval(() => void run(false), 10 * 60_000);
 }

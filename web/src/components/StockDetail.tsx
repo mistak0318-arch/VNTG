@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
-import { api, pick, stockNameOf, KRX_KIND_LABEL, krxViewerUrl, type KrxNotice, type RawRecord } from "../api";
+import { api, pick, stockNameOf, krxViewerUrl, type StatusFlag, type RawRecord } from "../api";
 import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
 import { IntradayLevelsBar } from "./IntradayLevelsBar";
 import { IntradayFlow } from "./IntradayPanels";
@@ -113,14 +113,17 @@ export function StockDetail({
 
   /* 신용 칩 — 개별종목분석과 **같은 것** (2026-09-08, 벤티지 "클릭하고 나오는 창에는 안 뜨는구나") */
   const credit = useStockCredit(code);
-  /* 지금 걸려 있는 KRX 시장조치 — 최근 30일 KIND 에서 (2026-09-10) */
-  const [measures, setMeasures] = useState<KrxNotice[]>([]);
+  /*
+   * 종목 상태 배너 (2026-09-10 — 벤티지 "종목 열면 종목 상단에 표시를 해주거나 … 증권플러스에서
+   * 하고 있는 거 보이지?"). 한투 시세2(당일 낮 반영) + 키움 auditInfo + KIND 공시를 서버가 합친다.
+   */
+  const [flags, setFlags] = useState<StatusFlag[]>([]);
   useEffect(() => {
     let alive = true;
-    setMeasures([]);
+    setFlags([]);
     api
       .krxMeasures(code)
-      .then((r) => alive && setMeasures(r.items))
+      .then((r) => alive && setFlags(r.flags ?? []))
       .catch(() => undefined);
     return () => {
       alive = false;
@@ -173,20 +176,6 @@ export function StockDetail({
               </span>
             )}
             <CreditChip credit={credit} />
-            {/* KRX 시장조치 — 공매도 과열·투자경고… 걸려 있으면 이름 앞에 (2026-09-10) */}
-            {measures.map((m) => (
-              <a
-                key={m.kind}
-                className={`krx-kind hot${m.kind.endsWith("Notice") ? " notice" : ""}`}
-                href={m.acptNo ? krxViewerUrl(m.acptNo) : undefined}
-                target="_blank"
-                rel="noreferrer noopener"
-                title={`${m.date} ${m.time} · ${m.title}`}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {KRX_KIND_LABEL[m.kind]}
-              </a>
-            ))}
             {name} ({code})
           </h2>
           {/*
@@ -291,6 +280,25 @@ export function StockDetail({
         */}
         <div className="sheet-body">
           <div className="sd-blk" style={{ order: cards.orderOf("price") }}>
+            {/* 상태 배너 — 위험한 것부터. 누르면 KIND 원문(있을 때) */}
+            {flags.length > 0 && (
+              <div className="sd-flags">
+                {flags.map((f) => (
+                  <a
+                    key={f.kind}
+                    className={`sd-flag ${f.level}`}
+                    href={f.acptNo ? krxViewerUrl(f.acptNo) : undefined}
+                    target={f.acptNo ? "_blank" : undefined}
+                    rel="noreferrer noopener"
+                    title={`출처: ${f.source.map((s) => (s === "hantoo" ? "한투 시세" : s === "kiwoom" ? "키움 종목정보" : "KIND 공시")).join(" · ")}${f.since ? ` · 공시 ${f.since}` : ""}`}
+                  >
+                    <b>{f.label}</b>
+                    <span>{f.desc}</span>
+                    {f.since && <i>{f.since.slice(5).replace("-", "/")} 공시</i>}
+                  </a>
+                ))}
+              </div>
+            )}
             <PriceHeader info={info} code={code} />
           </div>
           {/* 값이 있어야 그린다 — 기준가가 0 이면 등락률 축이 안 선다 */}

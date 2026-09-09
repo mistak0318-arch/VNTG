@@ -2188,7 +2188,7 @@ export const api = {
   finance: (code: string) => getJson<FinanceResult>(`/api/feed/finance/${code}`),
   /** KRX(KIND) 공시 — 시장조치 포함 (2026-09-10) */
   krxNotices: (code: string, days = 30) => getJson<{ items: KrxNotice[] }>(`/api/feed/krx/${code}?days=${days}`),
-  krxMeasures: (code: string) => getJson<{ items: KrxNotice[] }>(`/api/feed/krx/measures/${code}`),
+  krxMeasures: (code: string) => getJson<{ items: KrxNotice[]; flags: StatusFlag[] }>(`/api/feed/krx/measures/${code}`),
   krxDay: (date?: string, measures = false) =>
     getJson<{ date: string; items: KrxNotice[]; collector: { at: string; count: number; error: string | null } | null }>(
       `/api/feed/krx/day?${date ? `date=${date}&` : ""}${measures ? "measures=1" : ""}`,
@@ -4489,6 +4489,38 @@ export const KRX_KIND_LABEL: Record<KrxNoticeKind, string> = {
   market: "거래소",
   company: "공시",
 };
+/** 종목 상태 플래그 — 서버 stockStatus.ts (한투 시세2 + 키움 auditInfo + KIND) */
+export interface StatusFlag {
+  kind: string;
+  label: string;
+  desc: string;
+  level: "danger" | "warn" | "info";
+  source: ("hantoo" | "kiwoom" | "kind")[];
+  since?: string;
+  acptNo?: string | null;
+}
+
+/** 공시 분류 — 제목·제출인으로 (증권플러스의 칩과 같은 결) */
+export type NoticeCategory = "measure" | "earnings" | "bond" | "contract" | "equity" | "other";
+export const NOTICE_CATEGORY_LABEL: Record<NoticeCategory, string> = {
+  measure: "시장조치",
+  earnings: "실적",
+  bond: "사채",
+  contract: "판매·계약",
+  equity: "지분·증자",
+  other: "기타",
+};
+export function noticeCategory(title: string, by = ""): NoticeCategory {
+  const t = title.replace(/\s+/g, "");
+  if (/시장본부|시장감시위원회|한국거래소/.test(by) || /공매도과열|단기과열|투자경고|투자주의|투자위험|관리종목|매매거래정지|거래정지|정리매매|상장폐지|불성실공시/.test(t))
+    return "measure";
+  if (/영업\(?잠정\)?실적|잠정실적|매출액또는손익|손익구조|실적|결산|영업실적|매출액/.test(t)) return "earnings";
+  if (/전환사채|신주인수권부사채|교환사채|사채|CB|BW|채권/.test(t)) return "bond";
+  if (/공급계약|판매|수주|계약|납품/.test(t)) return "contract";
+  if (/주식등의대량보유|임원ㆍ주요주주|임원·주요주주|자기주식|유상증자|무상증자|감자|주식분할|합병|분할|최대주주|지분|증자|배당|주주총회/.test(t)) return "equity";
+  return "other";
+}
+
 /** KIND 뷰어 링크 */
 export function krxViewerUrl(acptNo: string): string {
   return `https://kind.krx.co.kr/common/disclsviewer.do?method=search&acptno=${acptNo}`;

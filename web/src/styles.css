@@ -18237,3 +18237,21 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 
 /* 글로벌 줄의 「n분 전」 — 야후 지연 표시 (2026-09-10) */
 .ov-g-lag { margin-left: 4px; font-size: 0.62rem; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 3px; }
+
+/* 종목 상태 배너 — 증권플러스의 「공매도 과열종목: 오늘 공매도 금지 종목이에요」 (2026-09-10) */
+.sd-flags { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; }
+.sd-flag {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; border-radius: 10px; text-decoration: none; font-size: 0.82rem; line-height: 1.35;
+  border: 1px solid var(--border); color: var(--text); background: var(--panel-2);
+}
+.sd-flag b { white-space: nowrap; }
+.sd-flag span { color: var(--muted); }
+.sd-flag i { margin-left: auto; font-style: normal; font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+.sd-flag.danger { border-color: rgba(239, 68, 68, 0.6); background: rgba(239, 68, 68, 0.12); }
+.sd-flag.danger b { color: var(--red); }
+.sd-flag.warn { border-color: rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.1); }
+.sd-flag.warn b { color: #f59e0b; }
+.sd-flag.info { border-color: rgba(76, 141, 255, 0.4); background: rgba(76, 141, 255, 0.08); }
+.sd-flag.info b { color: var(--blue); }
+.feed-cats { margin: 4px 0 8px; flex-wrap: wrap; }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type DisclosureItem, type NewsItem, type KrxNotice, type KrxNoticeKind, KRX_KIND_LABEL, krxViewerUrl } from "../api";
+import { api, type DisclosureItem, type NewsItem, type KrxNotice, type KrxNoticeKind, KRX_KIND_LABEL, krxViewerUrl, type NoticeCategory, NOTICE_CATEGORY_LABEL, noticeCategory } from "../api";
 
 /**
  * 뉴스 + 공시 패널.
@@ -141,7 +141,7 @@ export function NewsList({ query }: { query: string }) {
  * KRX(KIND) 공시 — DART 위에 (2026-09-10 — 벤티지 "우리 KRX 공시는 안 받아오나?"). 시장조치
  * (공매도 과열·투자경고…)는 여기만 있다. 종류 꼬리표를 달고, 시장조치는 붉게.
  */
-function KrxList({ code }: { code: string }) {
+function KrxList({ code, cat }: { code: string; cat: NoticeCategory | "all" }) {
   const [items, setItems] = useState<KrxNotice[] | null>(null);
   useEffect(() => {
     let alive = true;
@@ -156,11 +156,13 @@ function KrxList({ code }: { code: string }) {
   }, [code]);
   if (!items || items.length === 0) return null;
   const measure = (k: KrxNoticeKind) => !["company", "market", "release"].includes(k);
+  const shown = items.filter((n) => cat === "all" || noticeCategory(n.title, n.by) === cat);
+  if (shown.length === 0) return null;
   return (
     <>
       <div className="feed-sub-h">KRX 공시 (KIND) · 최근 30일</div>
       <div className="feed-list">
-        {items.map((n, i) => (
+        {shown.map((n, i) => (
           <a
             key={`${n.acptNo ?? i}`}
             className="feed-item"
@@ -187,6 +189,9 @@ function KrxList({ code }: { code: string }) {
 
 export function DisclosureList({ code }: { code: string }) {
   const [items, setItems] = useState<DisclosureItem[]>([]);
+  /* 분류 칩 (2026-09-10 — 벤티지 "종류별로 나와 있는 카테고리 … 실적이랑 시장조치랑") */
+  const [cat, setCat] = useState<NoticeCategory | "all">("all");
+  const CATS: (NoticeCategory | "all")[] = ["all", "measure", "earnings", "bond", "contract", "equity", "other"];
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -218,13 +223,21 @@ export function DisclosureList({ code }: { code: string }) {
   if (loading) return <div className="empty">공시 불러오는 중...</div>;
   if (error) return <div className="error-banner">{error}</div>;
 
+  const dartShown = items.filter((d) => cat === "all" || noticeCategory(d.reportName, d.filerName) === cat);
   return (
     <>
-    <KrxList code={code} />
+    <div className="filter-row feed-cats">
+      {CATS.map((c) => (
+        <button key={c} className={`filter-btn ${cat === c ? "active" : ""}`} onClick={() => setCat(c)}>
+          {c === "all" ? "전체" : NOTICE_CATEGORY_LABEL[c]}
+        </button>
+      ))}
+    </div>
+    <KrxList code={code} cat={cat} />
     {items.length === 0 && <div className="empty">최근 DART 공시가 없습니다. (ETF·ETN 등은 DART 대상이 아닙니다)</div>}
-    {items.length > 0 && <div className="feed-sub-h">DART 공시</div>}
+    {dartShown.length > 0 && <div className="feed-sub-h">DART 공시</div>}
     <div className="feed-list">
-      {items.map((d) => (
+      {dartShown.map((d) => (
         <a key={d.receiptNo} className="feed-item" href={d.url} target="_blank" rel="noreferrer noopener">
           <div className="feed-title">{d.reportName}</div>
           <div className="feed-meta">

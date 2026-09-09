@@ -8,6 +8,7 @@ import { breakingNews, getDisclosures, newsCounts, searchNews, sectorNews } from
 import { mainNews, naverNews, type NaverCat } from "../naverMainNews.js";
 import { newsBody, newsLeads } from "../newsLead.js";
 import { activeMeasures, collectorStatus, kstDate, recentNotices } from "../krxNotices.js";
+import { stockStatus } from "../stockStatus.js";
 import { listWatchlist } from "../watchlist.js";
 import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -208,7 +209,8 @@ export function createNewsRouter(client: KiwoomClient): Router {
    */
   router.get("/krx/measures/:code", async (req, res, next) => {
     try {
-      res.json({ items: await activeMeasures(req.params.code) });
+      const [items, flags] = await Promise.all([activeMeasures(req.params.code), stockStatus(client, req.params.code)]);
+      res.json({ items, flags });
     } catch (err) {
       next(err);
     }
