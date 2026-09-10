@@ -366,7 +366,20 @@ function QuarterTable({ quarters }: { quarters: QuarterRow[] }) {
           <tbody>
             {quarters.map((q) => (
               <tr key={q.period}>
-                <td>{q.label}</td>
+                <td>
+                  {q.label}
+                  {/*
+                    (2026-09-11 숫자 점검) 직전 분기 자료가 빠져 **누적을 되돌리지 못한** 줄이다.
+                    여태는 그래도 되돌린 척해서 두 분기 합이 한 분기로 적혔다. 이제 서버가
+                    누적인 채로 두고, 여기서 그렇다고 밝힌다.
+                  */}
+                  {q.cumulative && (
+                    <em className="pt-n" title="직전 분기 자료가 없어 되돌리지 못했습니다 — 연초부터의 누적값입니다">
+                      {" "}
+                      누적
+                    </em>
+                  )}
+                </td>
                 <td className="num">{q.revenue === null ? "-" : fmtNum(Math.round(q.revenue))}</td>
                 <td className={`num ${signClass(q.operatingProfit ?? 0)}`}>
                   {q.operatingProfit === null ? "-" : fmtNum(Math.round(q.operatingProfit))}
@@ -395,7 +408,8 @@ function QuarterTable({ quarters }: { quarters: QuarterRow[] }) {
       <div className="table-note">
         단위 <b>억원</b> · 한국투자증권. 한투는 분기를 <b>연초부터 누적</b>해서 주므로
         직전 분기를 빼 <b>그 분기만의 값</b>으로 되돌렸습니다 — 되돌리지 않으면 실적이 꺾인
-        회사도 매 분기 오르는 그래프가 됩니다.
+        회사도 매 분기 오르는 그래프가 됩니다. 직전 분기 자료가 빠져 되돌리지 못한 줄에는{" "}
+        <b>누적</b>이라 적었고, 그 줄의 QoQ·YoY 는 견줄 대상이 달라 비워 둡니다.
       </div>
     </section>
   );

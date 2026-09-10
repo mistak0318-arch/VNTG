@@ -59,13 +59,30 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? Math.abs(n) : 0;
 }
 
+/*
+ * 부호를 살리는 파서 (2026-09-11 숫자 점검).
+ *
+ * `num()` 은 절대값을 쓴다 — 누적 수량(`qty`)·외국계 추정 합계(`frgn_*_prsm_sum`)는
+ * 부호가 붙어 와도 크기만 쓰므로 그게 맞다. 그런데 **증감(`irds`)은 다르다.**
+ * 직전 조회 대비 줄어든 창구는 음수로 오는데, 절대값을 씌우면 「10,000주 빠졌다」가
+ * 「+10,000」이 되어 화면에서 **가장 많이 빠진 창구가 「지금 붙는 중」으로** 강조됐다.
+ * 증감만 이걸 쓴다.
+ */
+function signed(v: unknown): number {
+  const n = Number(String(v ?? "").replace(/[+,\s]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
 export interface BrokerSide {
   rank: number;
   code: string;
   name: string;
   /** 누적 수량 */
   qty: number;
-  /** 직전 조회 대비 증감 — **지금 붙고 있는 창구**를 가른다 */
+  /**
+   * 직전 조회 대비 증감 — **지금 붙고 있는 창구**를 가른다.
+   * 음수면 그 창구가 **빠지고 있다**는 뜻이다 (2026-09-11 숫자 점검 — 여태 절대값이었다).
+   */
   delta: number;
   foreign: boolean;
 }
@@ -215,8 +232,14 @@ export async function brokerFlow(client: KiwoomClient, code: string): Promise<Br
       ? (progRes!.data.stk_daly_prm_trde_trnsn as Record<string, unknown>[])
       : [];
     if (progRows.length > 0) {
-      const p = progRows.find((r) => String(r.dt ?? "") === today) ?? progRows[0];
-      const raw = String(p.prm_netprps_amt ?? "").replace(/[+,\s]/g, "");
+      /*
+       * (2026-09-11 숫자 점검) 여태 `?? progRows[0]` 폴백이 있었다. 오늘 줄이 아직 없으면
+       * **다른 날 프로그램 순매수가 오늘 값으로** 실렸고, 시계열의 오늘 점(`point.prog`)에도
+       * 그대로 찍혔다. 없으면 없는 것이다 — `program` 은 이미 `number | null` 이고,
+       * `prog` 가 null 이면 점에 아예 안 넣는다(아래 참조).
+       */
+      const p = progRows.find((r) => String(r.dt ?? "") === today);
+      const raw = String(p?.prm_netprps_amt ?? "").replace(/[+,\s]/g, "");
       const n = Number(raw);
       if (raw !== "" && Number.isFinite(n)) prog = n;
     }
@@ -231,7 +254,8 @@ export async function brokerFlow(client: KiwoomClient, code: string): Promise<Br
           code: String(data[`${kind}_trde_ori_cd_${i}`] ?? "").trim(),
           name,
           qty: num(data[`${kind}_trde_ori_qty_${i}`]),
-          delta: num(data[`${kind}_trde_ori_irds_${i}`]),
+          // 증감은 음수(빠지는 창구)가 사실이다 — 절대값을 씌우지 않는다 (2026-09-11 숫자 점검)
+          delta: signed(data[`${kind}_trde_ori_irds_${i}`]),
           foreign: isForeign(name),
         });
       }

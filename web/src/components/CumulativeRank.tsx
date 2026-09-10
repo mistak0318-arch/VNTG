@@ -71,6 +71,8 @@ export function CumulativeRank({
   const pager = usePager(rows?.length ?? 0, "vntg.cum.pageSize", rows?.length);
   // 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26). 기본은 누적등락률순(서버 순서)
   const sort = useSortableTable<Row>(rows ?? []);
+  /* 머리글을 눌러 다시 정렬했나 — 그러면 줄 앞 번호가 순위가 아니다 (2026-09-11 숫자 점검) */
+  const resorted = sort.sortKey !== null && sort.sortDir !== null;
 
   useEffect(() => {
     let alive = true;
@@ -178,7 +180,12 @@ export function CumulativeRank({
                   onClick={() => onSelectStock?.(r.code, r.name)}
                 >
                   <td className="sticky-col">
-                    <span className="pt-n">{i + 1}. </span>
+                    {/*
+                      (2026-09-11 숫자 점검) `i + 1` 은 **쪽 안 자리**다 — 「101~200위」 쪽에서도
+                      1,2,3 이 찍혔다. 쪽의 첫 자리(`pager.from`)를 더한다. 머리글을 눌러 다시
+                      정렬하면 그 번호는 순위가 아니므로 안 적는다.
+                    */}
+                    {!resorted && <span className="pt-n">{pager.from + i}. </span>}
                     {r.name}
                   </td>
                   <td>{fmtNum(r.price)}</td>

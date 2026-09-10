@@ -41,13 +41,24 @@ interface Status {
   regErrors?: { at: string; code: number; msg: string }[];
 }
 
-function agoText(iso?: string | null): string {
-  if (!iso) return "-";
-  const sec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+function agoOf(ms: number): string {
+  const sec = Math.max(0, Math.floor((Date.now() - ms) / 1000));
   if (sec < 60) return `${sec}초 전`;
   if (sec < 3600) return `${Math.floor(sec / 60)}분 전`;
   return `${Math.floor(sec / 3600)}시간 전`;
 }
+
+function agoText(iso?: string | null): string {
+  return iso ? agoOf(new Date(iso).getTime()) : "-";
+}
+
+/**
+ * 값이 「지금 것」으로 쳐 주는 나이 (2026-09-11 숫자 점검).
+ *
+ * 같은 저장소의 다른 화면들(`ScopePage`·`ScreenerPage`·`VolumeRankingPage`)이 이미
+ * 30초를 쓴다. 안전장치가 화면마다 다른 잣대를 쓰면 안전장치가 아니다.
+ */
+const FRESH_MS = 30_000;
 
 export function LiveDot({ code, name }: { code?: string | null; name?: string | null }) {
   /*
@@ -93,7 +104,14 @@ export function LiveDot({ code, name }: { code?: string | null; name?: string | 
   }, [open]);
 
   const socket = code ? rt.enabled && rt.healthy : Boolean(st?.enabled && st?.healthy);
-  const tick = Boolean(key && rt.values[key]);
+  /*
+   * ⚠️ (2026-09-11 숫자 점검) 여태 값이 **있느냐**만 봤다 — `Boolean(rt.values[key])`.
+   * 그런데 값은 끊겨도 마지막 것이 그대로 남는다(`useRealtime` 이 일부러 안 지운다).
+   * 그래서 **멈춘 값 위에 초록불 「실시간」**이 떴다 — 이 점의 존재 이유를 정면으로 뒤집는다.
+   * 값의 **나이**를 본다. 30초 넘으면 없는 것으로 — 다른 화면들이 이미 쓰는 잣대 그대로.
+   */
+  const last = key ? rt.values[key] : null;
+  const tick = Boolean(last && Date.now() - last.at <= FRESH_MS);
   const level = !socket ? "off" : code ? (tick ? "on" : "wait") : "on";
 
   const label = level === "on" ? "실시간" : level === "wait" ? "대기" : "조회";
@@ -135,12 +153,19 @@ export function LiveDot({ code, name }: { code?: string | null; name?: string | 
             </div>
             <div>
               <dt>마지막 수신</dt>
-              <dd>{agoText(st?.lastSeen)}</dd>
+              {/*
+                (2026-09-11 숫자 점검) 이 종목 값의 시각이 있으면 **그걸** 적는다.
+                서버의 `lastSeen` 은 소켓 전체의 마지막 수신이라 다른 종목 것일 수 있다 —
+                이 종목은 5분째 멈췄는데 「2초 전」으로 보이면 그게 제일 위험하다.
+              */}
+              <dd>{last ? agoOf(last.at) : agoText(st?.lastSeen)}</dd>
             </div>
             {code && (
               <div>
                 <dt>이 종목</dt>
-                <dd>{tick ? "들어오는 중" : "아직 안 물림"}</dd>
+                <dd>
+                  {tick ? "들어오는 중" : last ? `${agoOf(last.at)}에 멈춤` : "아직 안 물림"}
+                </dd>
               </div>
             )}
             {seats && (
@@ -158,7 +183,10 @@ export function LiveDot({ code, name }: { code?: string | null; name?: string | 
               : level === "wait"
                 ? full
                   ? "구독 자리가 다 찼습니다 — 이 종목은 3초 조회로 채웁니다. 탭을 좀 닫으면 자리가 납니다."
-                  : "방금 열어 아직 안 물렸습니다 — 잠시 뒤 초록으로 바뀝니다. 그때까지는 3초 조회입니다."
+                  : last
+                    ? /* (2026-09-11 숫자 점검) 한 번 들어왔다가 멎은 경우 — 「방금 열었다」와 다른 상황이다 */
+                      "체결이 30초 넘게 안 들어옵니다 — 거래가 뜸하거나 스트림이 멎은 것입니다. 값은 3초 조회로 채웁니다."
+                    : "방금 열어 아직 안 물렸습니다 — 잠시 뒤 초록으로 바뀝니다. 그때까지는 3초 조회입니다."
                 : "실시간이 끊겨 3초 조회로 채웁니다. 값이 멈춰 보이면 새로고침하세요."}
           </p>
           {/*

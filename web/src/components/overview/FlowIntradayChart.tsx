@@ -37,6 +37,24 @@ function path(rows: FlowSample[], key: (typeof SERIES)[number]["key"], min: numb
     .join(" ");
 }
 
+/** 오늘(한국시간) — 꼬리표에 날짜를 적을지 가른다 */
+function todayKst(): string {
+  const d = new Date(Date.now() + 9 * 3600_000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+/**
+ * 「9/10 장 · 」 — 오늘 것이면 빈 글자 (2026-09-11 숫자 점검).
+ *
+ * 서버가 오늘 줄이 없을 때 지난 장 곡선을 대신 주던 폴백을 걷어냈지만, 그래도 **어느 날
+ * 것인지는 그림에 적혀 있어야** 한다. 날짜 없는 곡선은 늘 오늘로 읽힌다.
+ */
+function dayLabel(date?: string | null): string {
+  if (!date || date === todayKst()) return "";
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(date);
+  return m ? `${Number(m[1])}/${Number(m[2])} 장 · ` : "";
+}
+
 export function FlowIntradayChart({ market }: { market: "kospi" | "kosdaq" }) {
   const [day, setDay] = useState<FlowIntradayDay | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -69,8 +87,13 @@ export function FlowIntradayChart({ market }: { market: "kospi" | "kosdaq" }) {
   if (rows.length < 2) {
     return (
       <div className="table-note">
-        장중 수급 변화는 <b>서버가 켜져 있는 동안</b> 1분마다 쌓입니다. 아직 표본이 모자랍니다
-        — 장이 열리면 그려집니다.
+        {/*
+          (2026-09-11 숫자 점검) 서버가 오늘 줄이 없을 때 **지난 장 곡선을 오늘 것처럼**
+          내주던 폴백을 걷어냈다. 그래서 여기는 이제 진짜로 비어 있는 자리다 — 카드가
+          깨지지 않고 「오늘 아직 없음」으로 앉는다.
+        */}
+        <b>오늘 장중 수급은 아직 없습니다.</b> 이 그림은 <b>서버가 켜져 있는 동안</b> 1분마다
+        쌓입니다 — 장이 열리면 그려집니다.
       </div>
     );
   }
@@ -104,7 +127,9 @@ export function FlowIntradayChart({ market }: { market: "kospi" | "kosdaq" }) {
             </span>
           );
         })}
+        {/* 어느 날 장인지 먼저 — 지난 날 것이면 「9/10 장」이 붙는다 (2026-09-11 숫자 점검) */}
         <span className="pt-n">
+          {dayLabel(day?.date)}
           {rows[0].t.slice(0, 2)}:{rows[0].t.slice(2)} ~ {rows[rows.length - 1].t.slice(0, 2)}:
           {rows[rows.length - 1].t.slice(2)} · 억원 누적
         </span>

@@ -377,7 +377,14 @@ export function SectorFlowPanel({
                 {data.consensusSubjects.map((x) => (
                   <span key={x.key}>{x.label}</span>
                 ))}
-                <span>합계</span>
+                {/*
+                  (2026-09-11 숫자 점검) 여태 「합계」라고 적었는데 옆 숫자들을 다 더한 값이
+                  아니다 — 서버(sectorFlowStore)는 **합의 방향과 같은 부호인 주체만** 더한다.
+                  정렬이 이 값을 쓰므로 값은 그대로 두고 **이름만** 뜻에 맞게 고친다.
+                */}
+                <span title="합의 방향(매수/매도)과 같은 쪽 주체만 더한 값입니다 — 옆 숫자 전부의 합이 아닙니다">
+                  합의 합계
+                </span>
               </div>
               {[...data.consensusBuy, ...data.consensusSell].map((c) => (
                 <ConsensusRow
@@ -392,7 +399,8 @@ export function SectorFlowPanel({
                 무게가 다릅니다 — 하나는 하루아침에 방향을 바꿀 수 있지만, 셋 이상이 같은 곳을
                 보고 있다면 개별 판단이 아니라 흐름에 가깝습니다. <b>개인은 제외</b>했습니다
                 (기관·외국인이 사면 개인은 자동으로 반대편이 되어 합의라는 말이 성립하지 않습니다).
-                업종을 누르면 구성종목이 펼쳐집니다.
+                맨 오른쪽 <b>합의 합계</b>는 <b>방향이 일치한 주체만 더한 값</b>입니다 — 옆 숫자
+                전부를 더한 값이 아닙니다. 업종을 누르면 구성종목이 펼쳐집니다.
               </div>
             </>
           )}

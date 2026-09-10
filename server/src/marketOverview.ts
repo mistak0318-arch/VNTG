@@ -304,6 +304,9 @@ export interface StockRow {
   tradeValue?: number | null;
 }
 
+/** ka10016 이 연속조회 없이 한 번에 주는 최대 줄 수 — 이만큼 오면 「그 이상」이라는 뜻이다 */
+const PAGE_FULL = 100;
+
 function mapStockRows(rows: Row[], limit = 30): StockRow[] {
   return rows.slice(0, limit).map((r) => ({
     code: String(r.stk_cd ?? ""),
@@ -421,6 +424,17 @@ async function fetchThemes(client: KiwoomClient): Promise<Themes> {
 export interface HighLow {
   high: StockRow[];
   low: StockRow[];
+  /**
+   * 신고가·신저가 **종목 수** (2026-09-11 숫자 점검).
+   *
+   * `high`/`low` 는 화면에 뿌릴 30줄만 담는다. 예전엔 세는 쪽도 그 길이를 썼는데,
+   * 그러면 「신저가 30」이 「정확히 서른 종목」이 아니라 「서른 이상」이라는 뜻이 된다 —
+   * 실제로 breadth.json 의 9/07·9/09·9/10 이 셋 다 `newLow: 30` 으로 포화돼 있었다.
+   * 원 응답 줄 수로 센다. `capped` 가 참이면 그 값도 조회 상한에 닿은 것이라 「이상」이다.
+   */
+  highCount: number;
+  lowCount: number;
+  capped: boolean;
 }
 
 async function fetchHighLow(client: KiwoomClient): Promise<HighLow> {
@@ -439,9 +453,16 @@ async function fetchHighLow(client: KiwoomClient): Promise<HighLow> {
     client.request<Row>(STKINFO_RESOURCE, "ka10016", { ...common, ntl_tp: "1" }),
     client.request<Row>(STKINFO_RESOURCE, "ka10016", { ...common, ntl_tp: "2" }),
   ]);
+  const highRows = Array.isArray(high.data.ntl_pric) ? (high.data.ntl_pric as Row[]) : [];
+  const lowRows = Array.isArray(low.data.ntl_pric) ? (low.data.ntl_pric as Row[]) : [];
   return {
-    high: mapStockRows(Array.isArray(high.data.ntl_pric) ? (high.data.ntl_pric as Row[]) : []),
-    low: mapStockRows(Array.isArray(low.data.ntl_pric) ? (low.data.ntl_pric as Row[]) : []),
+    high: mapStockRows(highRows),
+    low: mapStockRows(lowRows),
+    /* (2026-09-11 숫자 점검) 세는 것과 뿌리는 것을 나눈다 — 위 HighLow 주석 참고 */
+    highCount: highRows.length,
+    lowCount: lowRows.length,
+    /* 연속조회를 안 하므로 한 쪽이라도 한 장을 꽉 채웠으면 그 값은 「이상」이다 */
+    capped: highRows.length >= PAGE_FULL || lowRows.length >= PAGE_FULL,
   };
 }
 

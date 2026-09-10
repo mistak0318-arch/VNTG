@@ -112,7 +112,15 @@ function maxQty(book: OrderBook): number {
  */
 function useLiveBook(code: string, base: OrderBook | null) {
   const rt = useRealtime(code ? [`0D:${code}`] : [], 1000);
-  const v = rt.values[`0D:${code}`] ?? null;
+  /*
+   * ⚠️ (2026-09-11 숫자 점검) 여태 값이 **있느냐**만 봤다. 값은 끊겨도 마지막 것이 그대로
+   * 남으므로(`useRealtime` 이 일부러 안 지운다) 스트림이 멎으면 **멈춘 호가 위에 「● 실시간」**이
+   * 떴다. 멈춘 값으로 주문을 내는 게 이 도구에서 가장 비싼 실수다.
+   * 값의 **나이**를 본다 — 30초 넘으면 없는 것으로. ScopePage·ScreenerPage·VolumeRankingPage 와
+   * 같은 잣대다. 그러면 아래에서 `live:false` 가 되어 「○ 조회」로 내려간다.
+   */
+  const fresh = rt.values[`0D:${code}`] ?? null;
+  const v = fresh && Date.now() - fresh.at <= 30_000 ? fresh : null;
   if (!base) return { book: base, live: false, delta: null as Record<string, number> | null };
   if (!rt.healthy || !v) return { book: base, live: false, delta: null };
 
@@ -363,7 +371,11 @@ export function OrderBookPanel({
     <div className="ob">
       <div className="ob-head">
         {/* 지금 값이 어디서 온 것인지 — 실시간이 죽으면 폴링으로 돌아간 것을 알아야 한다 */}
-        <span className={`ob-live ${live ? "on" : ""}`} title={live ? "실시간 호가" : "3초 조회"}>
+        {/* (2026-09-11 숫자 점검) 30초 넘은 실시간 값은 없는 것으로 쳐서 여기가 「○ 조회」로 내려간다 */}
+        <span
+          className={`ob-live ${live ? "on" : ""}`}
+          title={live ? "실시간 호가 (30초 안에 들어온 값)" : "실시간 값이 없거나 30초 넘게 멈춰 3초 조회로 채웁니다"}
+        >
           {live ? "● 실시간" : "○ 조회"}
         </span>
         <b className={`ob-now ${signClass(book.changeRate)}`}>{fmtNum(book.price)}</b>
@@ -517,12 +529,17 @@ export function OrderBookPanel({
             <span>기준가</span>
             <b>{fmtNum(book.basePrice)}</b>
           </div>
-          <div className="ob-kv" title="오늘 누적 거래대금">
+          <div className="ob-kv" title="오늘 누적 거래대금 — KRX + NXT 통합(ka10003)">
             <span>거래대금</span>
             <b>{book.tradeValue > 0 ? `${fmtNum(Math.round(book.tradeValue / 1e8))}억` : "-"}</b>
           </div>
-          <div className="ob-kv" title="거래량 ÷ 상장주식수. 오늘 주식이 몇 바퀴 돌았나">
-            <span>회전율</span>
+          {/*
+            (2026-09-11 숫자 점검) 거래량·회전율은 **KRX 단독**(ka10001 을 noAl 로 부른다)이고
+            바로 위 거래대금은 통합이다. 삼성전자는 NXT 몫이 38% 나 된다 — 이름에 거래소를 박아
+            둘을 나눠 놓는다. 위아래를 나눠 「거래대금 ÷ 거래량」으로 평균단가를 내면 안 맞는다.
+          */}
+          <div className="ob-kv" title="KRX 거래량 ÷ 상장주식수. 오늘 주식이 몇 바퀴 돌았나 (NXT 몫은 빠져 있다)">
+            <span>회전율<i className="ob-venue">KRX</i></span>
             <b>{book.turnover === null ? "-" : `${book.turnover.toFixed(2)}%`}</b>
           </div>
           <div className="ob-kv" title="실제 체결 기준. 100 초과면 매수 체결이 우세하다">
@@ -573,8 +590,8 @@ export function OrderBookPanel({
             {book.ratio === null ? "-" : book.ratio.toFixed(2)}
           </b>
         </div>
-        <div className="ob-kv">
-          <span>거래량</span>
+        <div className="ob-kv" title="KRX 단독 거래량 — NXT 몫은 빠져 있다 (거래대금은 통합이다)">
+          <span>거래량<i className="ob-venue">KRX</i></span>
           <b>{fmtNum(book.volume)}</b>
         </div>
         <div className="ob-kv">

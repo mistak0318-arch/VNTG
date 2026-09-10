@@ -36,6 +36,13 @@ export interface QuarterRow {
   qoq: number | null;
   /** 1년 전 같은 분기 대비 영업이익 증감률 (%) */
   yoy: number | null;
+  /**
+   * 이 줄이 **누적인 채**인가 (2026-09-11 숫자 점검).
+   *
+   * 직전 분기 줄이 빠져 되돌리지 못한 줄이다 — 「그 분기만의 값」이 아니라 **연초부터의
+   * 누적**이다. 되돌린 척하는 것보다 그렇다고 적는 편이 낫다.
+   */
+  cumulative?: boolean;
 }
 
 interface Raw {
@@ -95,21 +102,32 @@ export async function quarterFinance(code: string, limit = 8): Promise<QuarterRo
     .filter((r) => /^\d{6}$/.test(r.period))
     .sort((a, b) => a.period.localeCompare(b.period));
 
-  /** 같은 회계연도의 직전 분기를 찾아 뺀다 */
+  /**
+   * 같은 회계연도의 **직전 분기**를 찾아 뺀다.
+   *
+   * ⚠️ (2026-09-11 숫자 점검) 여태 「같은 해인가」만 봤다. 한투 응답에서 한 분기가 빠지면
+   * 바로 앞 줄이 **두 분기 전**일 수 있는데(예: 1Q 다음 줄이 3Q), 그걸 그대로 빼면
+   * 2·3분기를 합친 값이 「3분기 실적」으로 적힌다. 직전 분기(q−1)가 맞을 때만 되돌리고,
+   * 아니면 누적인 채로 두고 `cumulative` 로 표시한다.
+   */
   const single = asc.map((cur, i) => {
     const q = quarterOf(cur.period);
-    // 1분기는 누적이 곧 그 분기다. 분기를 못 읽으면 건드리지 않는다
-    if (q === null || q === 1) return { ...cur };
+    // 몇 분기인지 못 읽으면 되돌릴 수 없다 — 누적인 채다
+    if (q === null) return { ...cur, cumulative: true };
+    // 1분기는 누적이 곧 그 분기다
+    if (q === 1) return { ...cur, cumulative: false };
     const prev = asc[i - 1];
     const sameYear = prev && prev.period.slice(0, 4) === cur.period.slice(0, 4);
-    // 직전 줄이 같은 해가 아니면(자료가 빠진 것) 되돌릴 수 없다 — 건드리지 않고 그대로 둔다
-    if (!sameYear) return { ...cur };
+    // 같은 해이면서 **바로 앞 분기**여야 뺄 수 있다. 아니면 자료가 빠진 것이다
+    const consecutive = Boolean(sameYear) && quarterOf(prev.period) === q - 1;
+    if (!consecutive) return { ...cur, cumulative: true };
     const back = (a: number | null, b: number | null) => (a === null || b === null ? null : a - b);
     return {
       period: cur.period,
       revenue: back(cur.revenue, prev.revenue),
       operatingProfit: back(cur.operatingProfit, prev.operatingProfit),
       netIncome: back(cur.netIncome, prev.netIncome),
+      cumulative: false,
     };
   });
 
@@ -128,8 +146,13 @@ export async function quarterFinance(code: string, limit = 8): Promise<QuarterRo
         r.revenue !== null && r.revenue !== 0 && r.operatingProfit !== null
           ? (r.operatingProfit / r.revenue) * 100
           : null,
-      qoq: pctChange(r.operatingProfit, prev?.operatingProfit ?? null),
-      yoy: pctChange(r.operatingProfit, yearAgo?.operatingProfit ?? null),
+      /*
+       * 누적인 줄이 한쪽에 끼면 증감률은 뜻이 없다 (2026-09-11 숫자 점검) —
+       * 「두 분기 합」과 「한 분기」를 견주는 셈이라 늘 부풀려진다. 그럴 땐 안 적는다.
+       */
+      qoq: r.cumulative || prev?.cumulative ? null : pctChange(r.operatingProfit, prev?.operatingProfit ?? null),
+      yoy: r.cumulative || yearAgo?.cumulative ? null : pctChange(r.operatingProfit, yearAgo?.operatingProfit ?? null),
+      cumulative: r.cumulative,
     };
   });
 

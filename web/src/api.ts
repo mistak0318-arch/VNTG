@@ -4379,6 +4379,11 @@ export interface QuarterRow {
   qoq: number | null;
   /** 1년 전 같은 분기 대비 (%) */
   yoy: number | null;
+  /**
+   * 이 줄이 **누적인 채**인가 (2026-09-11 숫자 점검) — 직전 분기 자료가 빠져 되돌리지
+   * 못한 줄이다. 「그 분기만의 값」이 아니라 연초부터의 누적이므로 표에 그렇게 적는다.
+   */
+  cumulative?: boolean;
 }
 
 export interface EstimateColumn {

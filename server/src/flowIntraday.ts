@@ -128,7 +128,13 @@ export async function recordFlow(kospi: Flow, kosdaq: Flow): Promise<void> {
 export async function listFlowIntraday(date?: string): Promise<FlowIntradayDay | null> {
   const rows = await read();
   if (rows.length === 0) return null;
-  return rows.find((r) => r.date === (date ?? today())) ?? rows[0];
+  /*
+   * (2026-09-11 숫자 점검) 여태 `?? rows[0]` 폴백이 있었다. 오늘 줄이 아직 없는
+   * 아침(또는 휴장일)엔 **지난 장 곡선이 오늘 것으로** 그려졌다 — 화면은 날짜를 안 적으니
+   * 어제 흐름을 오늘로 읽게 된다. 없으면 없다고 내고, 화면이 「오늘 아직 없음」을 그린다.
+   * (응답의 `date` 로 어느 날 것인지 늘 확인할 수 있다)
+   */
+  return rows.find((r) => r.date === (date ?? today())) ?? null;
 }
 
 /** 어느 날짜가 쌓여 있는지 — 화면에서 날짜를 고를 수 있게 */

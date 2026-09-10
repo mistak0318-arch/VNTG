@@ -79,6 +79,22 @@ export function SameNetTradeRankingPage({
     sigOn,
   );
 
+  /*
+   * 순위 번호 (2026-09-11 숫자 점검).
+   *
+   * 여태 `r.rank ?? i + 1` 이었는데 `i` 는 **쪽 안 자리**다 — 「51~100위」라고 적힌 쪽에서도
+   * 1,2,3 이 찍혔다. 시세분석(ScreenerPage)이 하듯 쪽의 첫 자리(`pager.from`)를 더한다.
+   * 머리글을 눌러 다시 정렬한 뒤엔 그 자리가 순위가 아니므로 **아예 안 적는다** —
+   * 서버가 준 `rank` 는 정렬과 무관한 진짜 순위라 그대로 둔다.
+   */
+  const resorted = sort.sortKey !== null && sort.sortDir !== null;
+  const rankCell = (r: RawRecord, i: number) => {
+    const given = Number(r.rank);
+    if (Number.isFinite(given) && given > 0) return <span className="rank-cell">{given}. </span>;
+    if (resorted) return null;
+    return <span className="rank-cell">{pager.from + i}. </span>;
+  };
+
   return (
     <div>
       <RefreshBar onRefresh={load} loading={loading} updatedAt={updatedAt} auto={auto} />
@@ -154,7 +170,7 @@ export function SameNetTradeRankingPage({
                       </td>
                     )}
                     <td className="sticky-col">
-                      <span className="rank-cell">{String(r.rank ?? i + 1)}. </span>
+                      {rankCell(r, i)}
                       <WatchStar code={code} />
 <SuperMark code={code} />
                       {name}

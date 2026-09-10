@@ -1633,8 +1633,13 @@ export function ScreenerPage({
                            * 종목까지 「KRX 27,238」을 달아 주니 통합인데 KRX 만 줄줄이
                            * 보였다 — 합계가 곧 KRX 인 종목은 굵은 값 하나면 끝난 얘기다.
                            */
-                          if (c.key === "trde_prica" && r.tvKrx !== null && r.tv !== null) {
-                            const nxt = r.tv - r.tvKrx;
+                          /*
+                           * (2026-09-11 숫자 점검) 예전엔 `tvKrx` 가 있을 때만 이 가지를 탔다 — 09시 전이나
+                           * 거래소를 KRX·NXT 로 고르면 `tvKrx` 가 없어 **키움 원값(백만원)** 이 그대로 찍혔다.
+                           * 같은 칸이 아침엔 12,818,335, 장중엔 12.8조 였다. 이제 `tv`(억)만 있으면 늘 억·조로 적는다.
+                           */
+                          if (c.key === "trde_prica" && r.tv !== null) {
+                            const nxt = r.tvKrx !== null ? r.tv - r.tvKrx : 0;
                             /*
                              * 통합만 (2026-08-26 — 「서브줄까지 적으니 표가 굵어진다」).
                              * KRX/NXT 분해는 툴팁으로 내리고, 자세한 건 종목 상세 몫이다.
@@ -1644,7 +1649,7 @@ export function ScreenerPage({
                                 key={c.key}
                                 className="num"
                                 title={
-                                  nxt > 0
+                                  nxt > 0 && r.tvKrx !== null
                                     ? `KRX ${fmtNum(r.tvKrx)}억 · NXT ${fmtNum(nxt)}억`
                                     : undefined
                                 }

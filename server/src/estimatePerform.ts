@@ -24,6 +24,13 @@ import { hantooGet, hantooReady } from "./hantooClient.js";
  * 매출 2,796,048 → 3,022,314 은 **+8.09%** 인데 증감율 칸은 `81.0` 이었다.
  * **10 을 곱해서 주는 것**이 맞다. 그래서 10 으로 나눈다.
  * ROE·부채비율도 같은 표기라 똑같이 나눈다.
+ *
+ * ## EPS 도 10 배다 (2026-09-11 숫자 점검)
+ *
+ * PER 만 나누고 EPS 는 그대로 뒀더니 둘이 서로 안 맞았다. 삼성전자 2024.12 실응답이
+ * EPS `49500` · PER `10.7` 인데 곱하면 529,650 원이다 — 그해 종가는 53,200 원이었다.
+ * EPS 를 10 으로 나누면 4,950 × 10.7 = 52,965 로 종가와 맞는다. 2023.12 도 같다
+ * (EPS 21,310 → 2,131 · PER 36.8 · 종가 78,500). **EPS 도 0.1 원 단위로 온다.**
  */
 
 const PATH = "/uapi/domestic-stock/v1/quotations/estimate-perform";
@@ -121,7 +128,8 @@ export async function estimatePerform(code: string): Promise<EstimateResult | nu
         netIncome: num(col(o2, 4, k)),
         netGrowth: tenth(col(o2, 5, k)),
         // output3: EBITDA, EPS, EPS증감율, PER, EV/EBITDA, ROE, 부채비율, 이자보상배율
-        eps: num(col(o3, 1, k)),
+        /* (2026-09-11 숫자 점검) EPS 도 10 배로 온다 — PER × EPS 가 그해 종가와 맞는지로 검산했다. 머리말 참고 */
+        eps: tenth(col(o3, 1, k)),
         per: tenth(col(o3, 3, k)),
         roe: tenth(col(o3, 5, k)),
         debtRatio: tenth(col(o3, 6, k)),

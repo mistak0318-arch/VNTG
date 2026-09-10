@@ -292,7 +292,8 @@ export function BrokerFlowPanel({ code }: { code: string }) {
   if (data.error) return <div className="error-banner">{data.error}</div>;
 
   const mx = Math.max(...[...data.buy, ...data.sell].map((b) => b.qty), 1);
-  const mxDelta = Math.max(...[...data.buy, ...data.sell].map((b) => b.delta), 1);
+  /* 증감이 이제 부호를 갖고 온다 — 크기 비교는 절대값으로 (2026-09-11 숫자 점검) */
+  const mxDelta = Math.max(...[...data.buy, ...data.sell].map((b) => Math.abs(b.delta)), 1);
 
   /* 고른 창구의 시간대별 순매수 — 서버가 실시간으로 쌓은 것 */
   const picks = series;
@@ -323,8 +324,18 @@ export function BrokerFlowPanel({ code }: { code: string }) {
           </span>
           <span className="bf-num">
             <b>{fmtNum(b.qty)}</b>
-            {/* 증감 — 지금 붙고 있는 창구를 가른다. 0 이면 안 적는다 */}
-            {b.delta > 0 && <small className={b.delta >= mxDelta * 0.5 ? "hot" : ""}>+{fmtNum(b.delta)}</small>}
+            {/*
+              증감 — 지금 붙고 있는 창구를 가른다. 0 이면 안 적는다.
+              (2026-09-11 숫자 점검) 음수는 **빠지고 있는** 창구다. 여태 서버가 절대값을
+              씌워 그런 창구가 「+큰수」로 와서 오히려 hot 으로 강조됐다. 이제 부호대로 적고
+              hot(붙는 중)은 **늘어난 쪽에만** 붙인다.
+            */}
+            {b.delta !== 0 && (
+              <small className={b.delta > 0 && b.delta >= mxDelta * 0.5 ? "hot" : ""}>
+                {b.delta > 0 ? "+" : "−"}
+                {fmtNum(Math.abs(b.delta))}
+              </small>
+            )}
           </span>
         </button>
       ))}

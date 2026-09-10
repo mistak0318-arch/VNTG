@@ -173,8 +173,13 @@ export async function captureBreadth(
     afterClose,
     kospi: toMarketBreadth(pickIndex(cards, "KOSPI"), flow?.kospi),
     kosdaq: toMarketBreadth(pickIndex(cards, "KOSDAQ"), flow?.kosdaq),
-    newHigh: hl?.high.length ?? 0,
-    newLow: hl?.low.length ?? 0,
+    /*
+     * (2026-09-11 숫자 점검) 예전엔 `hl.high.length` — 화면용 30줄로 잘린 길이였다. 하락장이면
+     * 신저가가 늘 정확히 30 으로 포화돼 「신고−신저」가 0 근처에 붙어 있었다(9/07·9/09·9/10 실측).
+     * 이제 원 응답 줄 수를 쓴다. **2026-09-11 앞 줄들은 30 에서 잘린 값**이라 그 경계에서 값이 뛴다.
+     */
+    newHigh: hl?.highCount ?? hl?.high.length ?? 0,
+    newLow: hl?.lowCount ?? hl?.low.length ?? 0,
   };
 
   // 지수를 하나도 못 받았으면 빈 줄을 남기지 않는다 — 나중에 0이 진짜 0인 줄 알면 곤란하다
