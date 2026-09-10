@@ -50,6 +50,40 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let lastPickAt = 0;
 let pickBusy = false;
 
+/*
+ * (2026-09-10 전수 점검) **선별 자동 발송의 「이미 보냈다」 장부** — data/channelPickSent.json.
+ *
+ * `useOffsets: true` 로 「지난번 이후」만 보내려 했지만, 리포트가 창고를 읽는 경로(창고가
+ * 15분 안이면 늘 그렇다)에선 오프셋을 안 보고 **windowHours 전체**를 다시 고른다. 그러면
+ * 점수 상위 같은 글이 intervalMin 마다 「channel」 방에 또 갔다. 보낸 글의 키를 사흘 남기고
+ * 이미 보낸 것은 뺀다. 키는 원문 링크(채널+글번호가 들어 있다), 링크가 없으면 방·시각·앞글자.
+ */
+const PICK_SENT_FILE = join(DATA_DIR, "channelPickSent.json");
+const PICK_SENT_KEEP_MS = 3 * 86400_000;
+
+type PickSent = Record<string, string>; // key → 보낸 시각 ISO
+
+function pickKey(it: { link: string; channelName: string; at: string; text: string }): string {
+  return it.link || `${it.channelName}|${it.at}|${it.text.slice(0, 40)}`;
+}
+
+async function readPickSent(): Promise<PickSent> {
+  try {
+    const j = JSON.parse(await readFile(PICK_SENT_FILE, "utf-8")) as PickSent;
+    return j && typeof j === "object" ? j : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writePickSent(s: PickSent): Promise<void> {
+  const cutoff = new Date(Date.now() - PICK_SENT_KEEP_MS).toISOString();
+  const kept: PickSent = {};
+  for (const [k, v] of Object.entries(s)) if (v >= cutoff) kept[k] = v;
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(PICK_SENT_FILE, JSON.stringify(kept), "utf-8");
+}
+
 /**
  * 선별 자동 발송.
  *
@@ -68,7 +102,7 @@ async function tickPickAuto(): Promise<void> {
 
   pickBusy = true;
   try {
-    const report = await buildChannelReport({
+    const full = await buildChannelReport({
       useAi: false,
       send: false, // 발송은 아래에서 설정대로 나눠 보낸다
       sinceMinutes: cfg.windowHours * 60,
@@ -76,8 +110,19 @@ async function tickPickAuto(): Promise<void> {
     });
     lastPickAt = Date.now();
 
+    /* (2026-09-10 전수 점검) 이미 보낸 글은 뺀다 — 창고 경로에선 오프셋이 안 먹는다 (위 장부 설명) */
+    const sentBook = await readPickSent();
+    const freshItems = full.items.filter((it) => !sentBook[pickKey(it)]);
+    const report = { ...full, items: freshItems, usedCount: freshItems.length };
+
     // 새로 걸린 게 없으면 조용히 넘어간다 — 빈 알림이 오면 그때부터 안 보게 된다
-    if (report.items.length === 0) return;
+    if (report.items.length === 0) {
+      if (full.items.length > 0) console.log(`[channel] 선별 ${full.items.length}건 전부 이미 보낸 글 — 발송 없음`);
+      return;
+    }
+    const nowIso = new Date().toISOString();
+    for (const it of freshItems) sentBook[pickKey(it)] = nowIso;
+    await writePickSent(sentBook).catch(() => undefined);
 
     /*
      * 텔레그램은 **건별로** 보낸다. 25건을 한 덩어리로 붙이면 벽이 되어 읽히지 않고,
@@ -97,7 +142,9 @@ async function tickPickAuto(): Promise<void> {
       const mailHtml = html.replace(/\n/g, "<br/>");
       await sendMail(`[VNTG] 채널 선별 ${report.usedCount}건`, mailHtml).catch(() => undefined);
     }
-    console.log(`[channel] 선별 자동 발송 ${report.usedCount}건 (원본 ${report.rawCount})`);
+    console.log(
+      `[channel] 선별 자동 발송 — 새 글 ${report.usedCount}건 / 선별 ${full.usedCount}건 (원본 ${report.rawCount})`,
+    );
   } catch (err) {
     console.error("[channel] 선별 자동 발송 실패:", err instanceof Error ? err.message : err);
   } finally {
@@ -105,6 +152,13 @@ async function tickPickAuto(): Promise<void> {
   }
 }
 let running = false;
+/*
+ * (2026-09-10 전수 점검) 발행이 **던져서** 실패하면(텔레그램 접속·AI 호출 예외) `published` 에
+ * 안 적히므로 1분마다 다시 시도했다 — 그때마다 채널을 읽고 AI 를 불렀다. 실패한 판은
+ * 10분 뒤에 다시 한다. 메모리에만 둔다(재시작하면 바로 다시 시도해도 된다).
+ */
+const RETRY_AFTER_MS = 10 * 60_000;
+const failedAt = new Map<string, number>();
 
 async function readState(): Promise<ScheduleState> {
   try {
@@ -189,6 +243,7 @@ async function tick(): Promise<void> {
     if (hour < e.hour) continue;
     const key = `${date}|${e.key}`;
     if (state.published[key]) continue;
+    if (Date.now() - (failedAt.get(key) ?? 0) < RETRY_AFTER_MS) continue; // (2026-09-10 전수 점검)
 
     running = true;
     try {
@@ -212,7 +267,8 @@ async function tick(): Promise<void> {
       state.lastRunAt = new Date().toISOString();
       await writeState(state);
     } catch (err) {
-      console.error("[channel] 발행 실패:", err instanceof Error ? err.message : err);
+      failedAt.set(key, Date.now()); // (2026-09-10 전수 점검) 10분 뒤에 다시
+      console.error("[channel] 발행 실패 (10분 뒤 재시도):", err instanceof Error ? err.message : err);
     } finally {
       running = false;
     }
@@ -220,16 +276,18 @@ async function tick(): Promise<void> {
   }
 }
 
+/* (2026-09-10 전수 점검) 발행이 끝난 뒤에 선별 발송 — 둘이 동시에 채널을 읽지 않게 */
+function tickBoth(): void {
+  void tick()
+    .catch(() => undefined)
+    .then(() => tickPickAuto())
+    .catch(() => undefined);
+}
+
 export function startChannelScheduler(): void {
   if (timer) return;
   // 서버가 막 뜬 직후엔 텔레그램 연결이 아직이므로 조금 기다린다
-  setTimeout(() => {
-    void tick();
-    void tickPickAuto();
-  }, 45_000);
-  timer = setInterval(() => {
-    void tick();
-    void tickPickAuto();
-  }, TICK_MS);
+  setTimeout(tickBoth, 45_000);
+  timer = setInterval(tickBoth, TICK_MS);
   console.log("[channel] 구독 채널 스케줄러 시작 (AI 정리 07/12/18시 · 선별 자동발송은 설정에 따름)");
 }

@@ -108,7 +108,15 @@ export async function archiveMajor(messages: ChannelMessage[]): Promise<number> 
    */
   const KEEP_DAYS = 45;
   const HARD_MAX = 40_000; // 방이 아주 많을 때의 안전판
-  if (known.size > 4000) {
+  /*
+   * (2026-09-10 전수 점검) 4천 건을 넘긴 뒤로는 **5분마다 파일 전체를 다시 썼다** — 45일치를
+   * 지워도 4천 아래로 안 내려가니 매 회차가 통째 재작성이었다. 한 시간에 한 번만 하고,
+   * 그 사이엔 붙이기만 한다. 다만 6천을 넘고 지난 정리 뒤 2천 건 넘게 불었으면 시간을 안 본다.
+   */
+  const due =
+    Date.now() - lastCompactAt >= 3600_000 ||
+    known.size > Math.max(6000, sizeAfterCompact + 2000);
+  if (known.size > 4000 && due) {
     const cutoff = new Date(Date.now() - KEEP_DAYS * 86400_000).toISOString();
     const all = (await readFeed())
       .filter((m) => m.at >= cutoff)
@@ -116,9 +124,15 @@ export async function archiveMajor(messages: ChannelMessage[]): Promise<number> 
       .slice(-HARD_MAX);
     await writeFile(FEED_FILE, `${all.map((r) => JSON.stringify(r)).join("\n")}\n`, "utf-8");
     knownIds = new Set(all.map((m) => m.id));
+    lastCompactAt = Date.now();
+    sizeAfterCompact = all.length;
   }
   return fresh.length;
 }
+
+/** (2026-09-10 전수 점검) 마지막 통째 재작성 시각과 그때 남긴 건수 */
+let lastCompactAt = 0;
+let sizeAfterCompact = 0;
 
 // ---------------------------------------------------------------- 읽음 (채널별)
 

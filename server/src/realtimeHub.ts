@@ -482,6 +482,7 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
         if (rt.state !== "끊김") {
           rt.close();
           rt.resetSubscriptions();
+          ensured.clear(); // (2026-09-10 전수 점검) 백지가 됐으니 자동감시 종목도 다시 걸 수 있게
           subscribed = new Set();
         }
         dropSecond();
@@ -497,13 +498,34 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
       if (next !== phase) {
         if (rt.state !== "끊김") rt.close();
         rt.resetSubscriptions();
+        /*
+         * (2026-09-10 전수 점검) `ensured` 도 비운다. 안 비우면 국면이 바뀐 뒤 `ensureLiveCode` 가
+         * 「이미 걸었다」고 믿고 자동감시 종목의 0B 를 다시 안 건다 — 백지가 된 구독에는 없는데.
+         */
+        ensured.clear();
         subscribed = new Set();
         dropSecond();
         console.log(`실시간: 국면 전환 → ${next}`);
         phase = next;
       }
 
-      await rt.connect();
+      /*
+       * (2026-09-10 전수 점검) **조용한 소켓은 끊고 다시 붙는다.** `healthy` 는 90초 침묵이면 거짓이
+       * 되지만 아무도 그걸 보고 재접속하지 않았다 — `connect()` 는 `this.ws` 가 있으면 그냥 돌아간다.
+       * TCP 는 살아 있는데 키움이 조용해진 좀비 소켓이 그대로 남던 자리다(한투 쪽엔 이미 있던 감시).
+       * PING 이 10초마다 오므로 장중이든 밤이든 90초 침묵은 죽은 것이다.
+       */
+      if (rt.state === "연결됨" && !rt.healthy && rt.lastSeen) {
+        console.log(`실시간: ${rt.lastSeen} 이후 조용해 다시 붙는다`);
+        rt.close();
+      }
+
+      /*
+       * (2026-09-10 전수 점검) 밤엔 국내 구독이 없다 — 걸린 것이 하나도 없으면 붙지 않는다.
+       * 화면·자동감시가 걸면(`/latest`·`/stream`·ensureLiveCode) 그쪽이 스스로 붙인다.
+       */
+      const idleNight = phase === "밤" && rt.seats.total === 0;
+      if (!idleNight) await rt.connect();
 
       /*
        * VI 는 **한 번만** 건다. 종목을 지정해도 전체 종목이 오므로(문서 명시)
@@ -600,6 +622,8 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
       if (phase !== "밤" && dualEnabled()) {
         try {
           const rt2 = await getSecond(kiwoom);
+          /* (2026-09-10 전수 점검) 1번과 같은 좀비 감시 */
+          if (rt2.state === "연결됨" && !rt2.healthy && rt2.lastSeen) rt2.close();
           await rt2.connect();
           const perMarket = phase === "저녁" ? PER_MARKET_EVENING : PER_MARKET;
           const slice = await hotCodesSlice(kiwoom, perMarket, perMarket + DUAL_PER_MARKET);

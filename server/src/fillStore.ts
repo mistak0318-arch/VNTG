@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { orderClient, orderIsMock } from "./orders.js";
+import { isTradingDate, isTradingDay } from "./tradingDay.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DIR = join(here, "..", "data", "fills");
@@ -140,8 +141,7 @@ export function startFillStore(client: KiwoomClient): void {
       const have = new Set((await readdir(DIR).catch(() => [] as string[])).map((n) => n.slice(0, 10)));
       for (let i = 90; i >= 0; i -= 1) {
         const day = kstYmd(i);
-        const dow = new Date(`${day}T00:00:00+09:00`).getDay();
-        if (dow === 0 || dow === 6) continue;
+        if (!isTradingDate(day)) continue; // (2026-09-10 전수 점검) 주말만 걸렀다 — 휴장일도 건너뛴다
         if (i > 0 && have.has(day)) continue;
         try {
           const n = await syncDay(client, day);
@@ -159,6 +159,7 @@ export function startFillStore(client: KiwoomClient): void {
   const tickToday = async () => {
     const h = Number(new Date(Date.now() + 9 * 3600_000).toISOString().slice(11, 13));
     if (h < 8 || h > 20) return;
+    if (!isTradingDay()) return; // (2026-09-10 전수 점검) 휴장일엔 오늘치 체결이 없다
     try {
       const n = await syncDay(client, kstYmd(0));
       lastSync = { at: new Date().toISOString(), day: kstYmd(0), count: n };

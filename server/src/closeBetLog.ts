@@ -3,6 +3,7 @@ import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { isTradingDay } from "./tradingDay.js";
 import { marketGauge, type GaugeDay } from "./closeBet.js";
 import { indexDetail } from "./indexDetail.js";
 
@@ -351,7 +352,7 @@ export function startCloseBetScheduler(client: KiwoomClient): void {
   const tick = async () => {
     if (running) return;
     const now = new Date();
-    const weekday = now.getDay() !== 0 && now.getDay() !== 6;
+    const weekday = isTradingDay(now); // (2026-09-10 전수 점검) 휴장일엔 어제 값이 오늘로 적힌다
     const mins = now.getHours() * 60 + now.getMinutes();
     // 15:35~16:05. 주도주 탐색기와 같은 창이지만 부르는 TR 이 달라 겹쳐도 된다
     if (!weekday || mins < 15 * 60 + 35 || mins > 16 * 60 + 5) return;

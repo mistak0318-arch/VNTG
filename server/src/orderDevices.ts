@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Request, Response } from "express";
+import { peerIp } from "./auth.js";
 import { isMailConfigured, sendMail } from "./mailer.js";
 import { sendTelegram } from "./telegram.js";
 
@@ -153,10 +154,9 @@ export async function noteDeviceUse(req: Request, counted: boolean): Promise<voi
   await save(s);
 }
 
+/* (2026-09-10 전수 점검) cf-connecting-ip 를 무조건 믿었다 — LAN·테일스케일로 직접 오면 헤더를 마음대로 적는다. auth.ts peerIp 와 같은 규칙(루프백에서 온 것만 믿는다) */
 function ipOf(req: Request): string {
-  const cf = req.headers["cf-connecting-ip"];
-  if (typeof cf === "string" && cf.trim()) return cf.trim();
-  return req.socket.remoteAddress ?? "?";
+  return peerIp(req);
 }
 
 function esc(s: string): string {

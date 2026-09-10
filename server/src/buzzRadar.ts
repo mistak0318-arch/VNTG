@@ -91,6 +91,8 @@ interface DayFile {
   kinds?: Record<string, BuzzTerm["kind"]>;
   /** term → 관련 종목코드. 갈래와 같은 이유로 같이 적어 둔다 */
   codes?: Record<string, string[]>;
+  /** (2026-09-10 전수 점검) 이 날 파일에 센 글의 `channelId_messageId` — 재시작 뒤 중복 셈 방지. 2만 개 상한 */
+  ids?: string[];
   /**
    * term → 방 이름 → 건수 (2026-08-30).
    *
@@ -247,11 +249,15 @@ async function readDay(day: string): Promise<DayFile> {
       codes: j.codes ?? {},
       channels: j.channels ?? {},
       channelMsgs: j.channelMsgs ?? {},
+      ids: Array.isArray(j.ids) ? j.ids : [],
     };
   } catch {
-    return { total: {}, byHour: {}, samples: {}, kinds: {}, codes: {}, channels: {}, channelMsgs: {} };
+    return { total: {}, byHour: {}, samples: {}, kinds: {}, codes: {}, channels: {}, channelMsgs: {}, ids: [] };
   }
 }
+
+/** (2026-09-10 전수 점검) 날 파일에 남기는 「센 글 id」 상한 — 하루 2만 건이면 71채널이 다 떠들어도 남는다 */
+const IDS_CAP = 20_000;
 
 let recording = false;
 
@@ -285,7 +291,13 @@ export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
     const today = dayStr(kstNow());
     let ids = seenIds.get(today);
     if (!ids) {
-      ids = new Set();
+      /*
+       * (2026-09-10 전수 점검) **파일에서 되살린다.** 메모리 셋뿐이라 재시작하면 비었고, 첫 회차가
+       * 20분~12시간을 겹쳐 읽으면서 이미 센 글을 **또 셌다** — 배포 직후마다 버즈가 부풀었다.
+       * 오늘과 어제 파일의 ids 를 합쳐 시작한다(자정 걸친 겹침까지 막으려면 어제 몫도 필요하다).
+       */
+      const yesterday = dayStr(new Date(kstNow().getTime() - 86400_000));
+      ids = new Set<string>([...(await readDay(yesterday)).ids ?? [], ...(await readDay(today)).ids ?? []]);
       seenIds.set(today, ids);
       // 어제 셋은 버린다 — 메모리를 하루치만 쓴다
       for (const k of seenIds.keys()) if (k !== today) seenIds.delete(k);
@@ -333,6 +345,10 @@ export async function recordBuzz(messages: ChannelMessage[]): Promise<void> {
       /* 그 메시지가 속한 날 파일 — 자정을 걸친 수집에서 이게 갈린다 */
       const file = files.get(dayStr(kst));
       if (!file) continue;
+      /* (2026-09-10 전수 점검) 센 글의 id 를 그 날 파일에 남긴다 — 재시작 뒤 되살려 두 번 안 세게 */
+      const fileIds = (file.ids ??= []);
+      fileIds.push(`${m.channelId}_${m.messageId}`);
+      if (fileIds.length > IDS_CAP) fileIds.splice(0, fileIds.length - IDS_CAP);
       /* 상투어 판정의 분모 — 낱말이 걸리든 말든 그 방의 글 수는 센다 */
       (file.channelMsgs ??= {})[m.channelName] = (file.channelMsgs?.[m.channelName] ?? 0) + 1;
       for (const t of d) {

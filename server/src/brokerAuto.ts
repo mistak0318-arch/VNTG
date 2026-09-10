@@ -1,5 +1,6 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
-import { brokerFlow } from "./brokerFlow.js";
+import { isTradingDay } from "./tradingDay.js";
+import { brokerFlow, flushBrokerFlow } from "./brokerFlow.js";
 import { listWatchlist } from "./watchlist.js";
 import { getScreenRun, listScreenRuns } from "./signalScreen.js";
 
@@ -54,8 +55,7 @@ const REFRESH_MS = 5 * 60_000;
 function inSession(at = Date.now()): boolean {
   const d = new Date(at);
   const kst = new Date(d.getTime() + (9 * 60 + d.getTimezoneOffset()) * 60_000);
-  const day = kst.getDay();
-  if (day === 0 || day === 6) return false;
+  if (!isTradingDay(kst)) return false; // (2026-09-10 전수 점검) 휴장일 1초 루프 차단
   const m = kst.getHours() * 60 + kst.getMinutes();
   return m >= 9 * 60 && m <= 15 * 60 + 30;
 }
@@ -125,22 +125,42 @@ async function buildCodes(): Promise<void> {
  */
 export function startBrokerAuto(client: KiwoomClient): void {
   if (timer) return;
+  /*
+   * (2026-09-10 전수 점검) **겹치지 않는다.** 429 물러섬으로 한 호출이 몇 초 걸리면 1초 타이머가
+   * 그 위에 또 얹혀 동시 요청이 쌓였다. 도는 중이면 이번 초는 건너뛴다. 장이 끝나는 첫 tick 에
+   * 미뤄 둔 파일 쓰기를 마무리한다.
+   */
+  let running = false;
+  let wasInSession = false;
   timer = setInterval(() => {
     void (async () => {
-      if (!inSession()) return;
-      if (codes.length === 0 || Date.now() - codesAt > REFRESH_MS) await buildCodes();
-      if (codes.length === 0) return;
-
-      const code = codes[at % codes.length];
-      if (at % codes.length === 0) stat.rounds += 1;
-      at += 1;
+      if (running) return;
+      if (!inSession()) {
+        if (wasInSession) {
+          wasInSession = false;
+          await flushBrokerFlow().catch(() => undefined);
+        }
+        return;
+      }
+      wasInSession = true;
+      running = true;
       try {
-        /* 부르는 것만으로 시계열에 한 점이 찍힌다 — 그게 이 TR 을 쌓는 유일한 길이다 */
-        await brokerFlow(client, code);
-        stat.points += 1;
-        stat.lastAt = new Date().toISOString();
-      } catch {
-        stat.fails += 1;
+        if (codes.length === 0 || Date.now() - codesAt > REFRESH_MS) await buildCodes();
+        if (codes.length === 0) return;
+
+        const code = codes[at % codes.length];
+        if (at % codes.length === 0) stat.rounds += 1;
+        at += 1;
+        try {
+          /* 부르는 것만으로 시계열에 한 점이 찍힌다 — 그게 이 TR 을 쌓는 유일한 길이다 */
+          await brokerFlow(client, code);
+          stat.points += 1;
+          stat.lastAt = new Date().toISOString();
+        } catch {
+          stat.fails += 1;
+        }
+      } finally {
+        running = false;
       }
     })();
   }, STEP_MS);

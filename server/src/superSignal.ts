@@ -3,6 +3,7 @@ import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { isTradingDay } from "./tradingDay.js";
 import { getMarketSnapshot, peekSnapshot } from "./marketSnapshot.js";
 import { evaluateMarket } from "./marketSignal.js";
 import { getSectorMood } from "./sectorMood.js";
@@ -1824,8 +1825,7 @@ export function startSuperSignalScheduler(client: KiwoomClient): void {
   const tick = async () => {
     const now = new Date();
     const k = new Date(now.getTime() + 9 * 3600_000);
-    const day = k.getUTCDay();
-    if (day === 0 || day === 6) return;
+    if (!isTradingDay(now)) return; // (2026-09-10 전수 점검) 휴장일엔 「오늘 없음」 헛줄도 보내지 않는다
     const mins = k.getUTCHours() * 60 + k.getUTCMinutes();
     if (mins < 15 * 60 + 45 || mins > 23 * 60) return;
     await runSuperSignal(client).catch(() => undefined);

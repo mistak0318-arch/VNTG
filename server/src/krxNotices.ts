@@ -25,6 +25,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recordApiCall } from "./apiUsage.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { isTradingDate, isTradingDay, tradingDaysBetween } from "./tradingDay.js";
 import { getStockIndex } from "./stockListCache.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -279,11 +280,10 @@ export async function activeMeasures(code: string): Promise<KrxNotice[]> {
   const rows = await recentNotices(30, code, true);
   const latest = new Map<NoticeKind, KrxNotice>();
   const today = kstDate(0);
-  const ageDays = (d: string) => Math.round((new Date(`${today}T00:00:00Z`).getTime() - new Date(`${d}T00:00:00Z`).getTime()) / 86400_000);
   for (const r of [...rows].reverse()) {
     const limit = VALID_DAYS[r.kind];
-    /* 주말을 건너뛰도록 하루 여유 — 금요일 지정은 월요일까지 */
-    if (limit !== undefined && ageDays(r.date) > limit + (new Date(`${today}T00:00:00+09:00`).getUTCDay() === 1 ? 2 : 0)) continue;
+    /* (2026-09-10 전수 점검) 달력일이 아니라 **거래일**로 센다 — 옛 코드는 getUTCDay 라 전날 요일을 봤고(B), 월요일에만 +2 였다 */
+    if (limit !== undefined && tradingDaysBetween(r.date, today) > limit) continue;
     if (r.kind === "release") {
       /* 「투자경고종목 지정해제」처럼 제목이 말하는 종류를 지운다 */
       const t = r.title.replace(/\s+/g, "");
@@ -310,8 +310,7 @@ export function collectorStatus() {
 async function backfill(client: KiwoomClient, days = 30): Promise<void> {
   for (let i = 2; i <= days; i += 1) {
     const day = kstDate(i);
-    const dow = new Date(`${day}T00:00:00+09:00`).getUTCDay();
-    if (dow === 0 || dow === 6) continue;
+    if (!isTradingDate(day)) continue; // (2026-09-10 전수 점검) getUTCDay 는 전날 요일이었다(B) · 휴장일도 건너뛴다(A)
     try {
       await readFile(fileOf(day), "utf8");
       continue; // 이미 있다
@@ -329,6 +328,7 @@ export function startKrxNoticeCollector(client: KiwoomClient): void {
     const h = new Date(Date.now() + 9 * 3600_000).getUTCHours();
     /* 켜질 때는 시각과 무관하게 한 번 — 밤에 켜져도 어제 20시 시장조치는 있어야 한다 */
     if (!alsoYesterday && (h < 7 || h >= 22)) return;
+    if (!alsoYesterday && !isTradingDay()) return; // (2026-09-10 전수 점검) 휴장일엔 10분마다 헛수집하지 않는다
     try {
       if (alsoYesterday) await collectDay(client, kstDate(1)).catch(() => undefined);
       const rows = await collectDay(client, kstDate(0));

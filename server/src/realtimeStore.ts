@@ -1,4 +1,5 @@
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { gunzipSync } from "node:zlib";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RealtimeClient, RealtimeFrame } from "./realtimeClient.js";
@@ -213,6 +214,21 @@ function hhmmss(now = new Date()): string {
  * 한 줄이라도 깨져 있으면 **그 줄만 버린다.** 덧붙이기 방식은 쓰다가 전원이 나가면
  * 마지막 줄이 잘릴 수 있는데, 그것 때문에 하루치를 통째로 못 읽으면 말이 안 된다.
  */
+/**
+ * (2026-09-10 전수 점검) 그 이름으로 읽고, 없으면 `.gz` 를 풀어 읽는다.
+ * 이틀 지난 실시간 파일은 dataRetention 이 gz 로 누르는데 되짚기(`readDay`)가 그걸 못 읽어
+ * 「지난 장」이 하루 뒤부터 통째로 비었다. 하루 15MB 짜리라 동기로 풀어도 된다.
+ */
+async function readMaybeGz(path: string): Promise<string> {
+  try {
+    return await readFile(path, "utf-8");
+  } catch (e) {
+    const gz = await readFile(`${path}.gz`).catch(() => null);
+    if (!gz) throw e;
+    return gunzipSync(gz).toString("utf-8");
+  }
+}
+
 function parseJsonl(text: string): { series: SeriesMap; vi: ViEvent[] } {
   const series: SeriesMap = {};
   const vi: ViEvent[] = [];
@@ -360,9 +376,15 @@ export class RealtimeStore {
     if (this.pending.length === 0) return;
     const chunk = this.pending;
     this.pending = [];
+    /*
+     * (2026-09-10 전수 점검) 파일 이름은 **await 전에** 잡는다. 날짜 넘김에서 `take()` 가 `save()` 를
+     * 부른 직후 `this.day` 를 바꾸는데, mkdir 을 기다리는 사이 그게 바뀌면 어제 마지막 덩어리가
+     * 오늘 파일 머리에 적혔다.
+     */
+    const file = this.file();
     try {
       await mkdir(DATA_DIR, { recursive: true });
-      await appendFile(this.file(), chunk.join(""), "utf-8");
+      await appendFile(file, chunk.join(""), "utf-8");
     } catch {
       this.pending = chunk.concat(this.pending);
     }
@@ -599,9 +621,10 @@ export class RealtimeStore {
       const names = await readdir(DATA_DIR);
       return names
         // 새 형식(.jsonl)과 예전 형식(.json)을 다 본다 — 바꾼 날은 섞여 있다
-        .filter((n) => /^\d{4}-\d{2}-\d{2}\.jsonl?$/.test(n))
+        // (2026-09-10 전수 점검) 이틀 지나면 `.gz` 로 눌린다(dataRetention) — 그것도 같은 날짜 파일이다
+        .filter((n) => /^\d{4}-\d{2}-\d{2}\.jsonl?(\.gz)?$/.test(n))
         .map((n) => n.slice(0, 10))
-        .filter((d) => d < this.day)
+        .filter((d, i, arr) => d < this.day && arr.indexOf(d) === i)
         .sort((a, b) => b.localeCompare(a))
         .slice(0, 10);
     } catch {
@@ -614,7 +637,7 @@ export class RealtimeStore {
     if (hit && Date.now() - hit.at < DAY_CACHE_MS) return hit.series;
     /* 새 형식 먼저 */
     try {
-      const series = parseJsonl(await readFile(this.file(day), "utf-8")).series;
+      const series = parseJsonl(await readMaybeGz(this.file(day))).series;
       if (this.dayCache.size > 3) this.dayCache.clear();
       this.dayCache.set(day, { at: Date.now(), series });
       return series;
@@ -622,7 +645,7 @@ export class RealtimeStore {
       /* 없으면 예전 형식 */
     }
     try {
-      const raw = JSON.parse(await readFile(this.legacyFile(day), "utf-8")) as {
+      const raw = JSON.parse(await readMaybeGz(this.legacyFile(day))) as {
         series?: SeriesMap;
       };
       const series = raw.series ?? (raw as unknown as SeriesMap);

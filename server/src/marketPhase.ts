@@ -102,10 +102,19 @@ export function notePhaseFrame(f: RealtimeFrame): void {
   }
 }
 
+/* (2026-09-10 전수 점검) 붙인 횟수 — 50번에 한 번만 줄 수를 센다 */
+let appends = 0;
+
 async function append(row: PhaseObservation): Promise<void> {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
     await fs.appendFile(FILE, JSON.stringify(row) + "\n", "utf8");
+    /* (2026-09-10 전수 점검) 관측 노트가 무한히 컸다. 4천 줄을 넘기면 최근 2천 줄만 남긴다 */
+    appends += 1;
+    if (appends % 50 === 1) {
+      const lines = (await fs.readFile(FILE, "utf8")).split("\n").filter(Boolean);
+      if (lines.length > 4000) await fs.writeFile(FILE, lines.slice(-2000).join("\n") + "\n", "utf8");
+    }
   } catch {
     /* 기록에 실패해도 서비스는 돈다 — 이건 관측 노트지 동작에 쓰이는 값이 아니다 */
   }

@@ -1548,7 +1548,21 @@ async function remember(pack: SysPack): Promise<void> {
   const row: MemoryRow = { at: pack.at, q: pack.question, topics: pack.intent.topics, stocks };
   await mkdir(DATA_DIR, { recursive: true });
   await appendFile(MEMORY_FILE, `${JSON.stringify(row)}\n`, "utf-8");
+  /*
+   * (2026-09-10 전수 점검) 붙이기만 하고 자르지 않아 무한히 컸다. 4천 줄을 넘기면 최근 2천 줄만
+   * 남긴다 — 되짚기는 「오늘」만 읽으니 하루치면 충분하다. 매번 세면 비싸므로 50번에 한 번만.
+   */
+  memoryAppends += 1;
+  if (memoryAppends % 50 === 1) {
+    try {
+      const lines = (await readFile(MEMORY_FILE, "utf-8")).split("\n").filter(Boolean);
+      if (lines.length > 4000) await writeFile(MEMORY_FILE, `${lines.slice(-2000).join("\n")}\n`, "utf-8");
+    } catch {
+      /* 자르기에 실패해도 기록은 남았다 */
+    }
+  }
 }
+let memoryAppends = 0;
 
 async function readMemory(day: string): Promise<MemoryRow[]> {
   try {

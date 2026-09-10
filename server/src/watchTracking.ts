@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { isTradingDay } from "./tradingDay.js";
 import { dropPhantomToday } from "./candleGuard.js";
 import { alCode } from "./alCode.js";
 import { opinionBrief } from "./analystOpinion.js";
@@ -427,13 +428,13 @@ function expiryOf(at: number): number {
   const d = new Date(at);
   const kst = new Date(d.getTime() + (9 * 60 + d.getTimezoneOffset()) * 60_000);
   const minutes = kst.getHours() * 60 + kst.getMinutes();
-  const weekday = kst.getDay() !== 0 && kst.getDay() !== 6;
+  const weekday = isTradingDay(); // (2026-09-10 전수 점검) 휴장일엔 10분마다 관심종목을 헛조회하지 않는다
   if (weekday && minutes >= 9 * 60 && minutes < 15 * 60 + 40) return at + INTRADAY_TTL_MS;
 
   const next = new Date(kst);
   next.setHours(9, 0, 0, 0);
   if (next.getTime() <= kst.getTime()) next.setDate(next.getDate() + 1);
-  while (next.getDay() === 0 || next.getDay() === 6) next.setDate(next.getDate() + 1);
+  while (!isTradingDay(next)) next.setDate(next.getDate() + 1); // (2026-09-10 전수 점검)
   return at + (next.getTime() - kst.getTime());
 }
 

@@ -97,7 +97,8 @@ export function VolumeRankingPage({ onSelectStock }: { onSelectStock: (code: str
   /** 실시간이 준 현재가·등락률 — 없으면 null 이고, 그때는 조회 값을 쓴다 */
   const liveOf = (code: string): { price: number; rate: number | null } | null => {
     const v = rt.values[`0B:${code}`];
-    if (!v) return null;
+    /* (2026-09-10 전수 점검) 30초 넘은 값은 안 쓴다 — 스트림이 죽어도 옛 값이 실시간처럼 남지 않게 */
+    if (!v || Date.now() - v.at > 30_000) return null;
     const price = fid(v, "10");
     if (price === null || price === 0) return null;
     return { price: Math.abs(price), rate: fid(v, "12") };

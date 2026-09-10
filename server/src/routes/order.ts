@@ -16,6 +16,7 @@ import {
   prepareModify,
   prepareOrder,
   readLog,
+  peekSession,
   sessionOf,
   setOrderPassword,
   setUiLock,
@@ -266,7 +267,7 @@ export function createOrderRouter(main: KiwoomClient): Router {
     await openSession(req, res);
     await noteDeviceUse(req, false);
     /* 처음 보는 주소면 그 자리에서 알린다 — 기록만 남기면 사고 뒤에야 안다 */
-    void noteAccess(ip, "주문 메뉴를 열었습니다");
+    void noteAccess(ip, "주문 메뉴를 열었습니다").catch(() => undefined); // (2026-09-10 전수 점검) unhandled rejection 방지
     /*
      * 메뉴를 연 것은 **기록에만** 남긴다 (2026-09-04). 하루에도 여러 번 여는 일이라
      * 텔레그램에 실으면 방이 그것으로 찬다 — 그 방은 「돈이 움직였다」를 보는 곳이다.
@@ -336,7 +337,8 @@ export function createOrderRouter(main: KiwoomClient): Router {
 
   /* ── 여기부터 주문 세션 필수 ── */
   router.use((req: Request, res: Response, next: NextFunction) => {
-    if (!ordersEnabled() || sessionOf(req) === null) {
+    /* (2026-09-10 전수 점검) GET(조회·폴링)은 유휴 시한을 안 민다 — 화면을 켜 둔 것은 「쓰는 중」이 아니다. 상태 바꾸는 POST 만 민다 */
+    if (!ordersEnabled() || (req.method === "GET" ? peekSession(req) : sessionOf(req)) === null) {
       res.status(404).json({ error: "not found" });
       return;
     }
@@ -580,7 +582,8 @@ export function createOrderRouter(main: KiwoomClient): Router {
         session: sessionOf(req),
         remember: Boolean(remember),
       });
-      await noteDeviceUse(req, r.ticket.kind === "order");
+      /* (2026-09-10 전수 점검) 주문은 이미 나갔다 — 기기 명단 기록이 실패해도 400 「실패」로 돌려주면 사람이 다시 누른다 */
+      await noteDeviceUse(req, r.ticket.kind === "order").catch(() => undefined);
       res.json({ ok: true, ordNo: r.ordNo, msg: r.msg, kind: r.ticket.kind, remembered: r.remembered });
     } catch (e) {
       res.status(400).json({ error: e instanceof Error ? e.message : "실패" });

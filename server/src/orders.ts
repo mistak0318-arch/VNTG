@@ -709,6 +709,23 @@ export function sessionOf(req: Request): OrderSession | null {
   return s;
 }
 
+/**
+ * (2026-09-10 전수 점검) 유휴 시한을 **안 미는** 조회 — /status(30초 폴링)와 GET 조회가 sessionOf 를 지나면
+ * 화면을 켜 둔 것만으로 「10분 놀면 닫힘」이 영영 안 온다. 살았는지만 본다.
+ */
+export function peekSession(req: Request): OrderSession | null {
+  const token = cookieOf(req, ORDER_COOKIE);
+  if (!token) return null;
+  const s = sessions.get(token);
+  if (!s) return null;
+  const now = Date.now();
+  if (now > s.idle || now > s.hard) {
+    sessions.delete(token);
+    return null;
+  }
+  return s;
+}
+
 /** 남은 「기억」 시간(초). 0 이면 다음 주문에 비밀번호를 묻는다 */
 export function passwordLeftSec(req: Request): number {
   const token = cookieOf(req, ORDER_COOKIE);
@@ -1056,9 +1073,18 @@ const NONCE_MS = 30_000;
  * 성질은 코드로 못 박아 둔다 — 세션이 하나 새면 그 세션이 만든 것만 나간다.
  */
 const pending = new Map<string, { exp: number; ticket: Ticket; owner: OrderSession | null }>();
+/*
+ * (2026-09-10 전수 점검) 실행에 들어간·끝난 주문서 — 5분 기억. 예전엔 nonce 를 `pending.get` 한 뒤
+ * 비밀번호 검사(scrypt)·기록을 기다리고 나서야 지웠다. 그 사이 같은 nonce 가 한 번 더 오면 둘 다
+ * 통과해 **한 주문서로 두 번** 나갔다. 이제 get 즉시 지우고(선점), 비밀번호가 틀렸을 때만 되돌린다.
+ * ordNo null = 아직 실행 중.
+ */
+const executed = new Map<string, { at: number; ordNo: string | null }>();
+const EXECUTED_KEEP_MS = 5 * 60_000;
 
 function issueNonce(ticket: Ticket, owner: OrderSession | null): { nonce: string; expiresAt: number } {
   for (const [k, v] of pending) if (v.exp < Date.now()) pending.delete(k);
+  for (const [k, v] of executed) if (v.at + EXECUTED_KEEP_MS < Date.now()) executed.delete(k);
   const nonce = randomBytes(16).toString("hex");
   const expiresAt = Date.now() + NONCE_MS;
   pending.set(nonce, { exp: expiresAt, ticket, owner });
@@ -1142,7 +1168,7 @@ function legsSay(legs: WatchLeg[]): string {
 
 function reject(msg: string, input: Partial<PrepareInput>, ip: string): never {
   noteReject();
-  void appendLog({ kind: "reject", ip, side: input.side, code: input.code, name: input.name, qty: input.qty, price: input.price, venue: input.venue, tradeType: input.tradeType, msg });
+  void appendLog({ kind: "reject", ip, side: input.side, code: input.code, name: input.name, qty: input.qty, price: input.price, venue: input.venue, tradeType: input.tradeType, msg }).catch(() => undefined); // (2026-09-10 전수 점검)
   throw new Error(msg);
 }
 
@@ -1644,6 +1670,13 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/**
+ * (2026-09-10 전수 점검) 「접수됐을 수 있다」로 볼 오류 — 예전엔 20초 타임아웃(응답하지 않았다)만 봤다.
+ * kiwoomClient 의 「키움 연결 실패 (…): ECONNRESET / socket hang up」·HTTP 5xx 도 요청이 키움에
+ * 닿은 뒤 끊겼을 수 있다. 이걸 「거절」로 말하면 사람이 다시 눌러 이중 주문이 된다.
+ */
+const MAYBE_SENT_RE = /응답하지 않았다|연결 실패|ECONNRESET|ETIMEDOUT|socket hang up|HTTP 5\d\d|\b50[234]\b/;
+
 function won(n: number): string {
   return `${Math.round(n).toLocaleString()}원`;
 }
@@ -1658,11 +1691,22 @@ export async function executePrepared(
   const p = pending.get(nonce);
   if (!p || p.exp < Date.now()) {
     pending.delete(nonce);
+    /* (2026-09-10 전수 점검) 같은 주문서를 다시 쏜 것이면 「만료」가 아니라 「이미 실행」이라고 말한다 — 만료라면 사람은 새로 만들어 또 낸다 */
+    const done = executed.get(nonce);
+    if (done && done.at + EXECUTED_KEEP_MS > Date.now()) {
+      throw new Error(done.ordNo === null ? "이미 실행 중인 주문서입니다 — 잠시 뒤 미체결·체결 탭을 확인하세요" : `이미 실행된 주문서입니다 (주문번호 ${done.ordNo || "?"})`);
+    }
     throw new Error("주문서가 만료됐다(30초) — 다시 만드세요");
   }
+  /* (2026-09-10 전수 점검) **선점** — 아래 await(설정·scrypt·기록) 사이에 같은 nonce 가 또 오면 위에서 「실행 중」으로 막힌다 */
+  pending.delete(nonce);
+  executed.set(nonce, { at: Date.now(), ordNo: null });
+  const unclaim = (): void => {
+    executed.delete(nonce);
+  };
   /* 다른 세션이 만든 주문서는 실행하지 않는다 — 그리고 그 주문서는 태운다 */
   if (p.owner !== (opts.session ?? null)) {
-    pending.delete(nonce);
+    unclaim();
     await appendLog({ kind: "reject", ip, msg: "다른 세션의 주문서를 실행하려 했다 — 주문서 폐기" });
     throw new Error("이 주문서는 이 세션의 것이 아니다 — 다시 만드세요");
   }
@@ -1684,29 +1728,47 @@ export async function executePrepared(
    * 패드를 그대로 띄우는데, 서버가 그 값을 안 보니 아무 패턴이나 통과했다 — 틀린 걸 쳤는데
    * 나가는 것은 「묻지 않는 것」과 다르다. 빈 값만 기억으로 통과시킨다.
    */
+  /* (2026-09-10 전수 점검) 비밀번호가 틀리면 주문서를 되돌린다 — 같은 주문서로 다시 시도할 수 있게(30초 안이면) */
+  const pwFail = (err: string): never => {
+    unclaim();
+    if (p.exp > Date.now()) pending.set(nonce, p);
+    throw new Error(err);
+  };
   if (graced && password) {
     const pw = await checkPassword(password);
-    if (!pw.ok) throw new Error(pw.error);
+    if (!pw.ok) pwFail(pw.error);
   }
   if (!graced) {
     const pw = await checkPassword(password);
-    if (!pw.ok) throw new Error(pw.error);
+    if (!pw.ok) pwFail(pw.error);
     if (sess && cfg.rememberPassword && opts.remember) {
       sess.pwUntil = Math.min(Date.now() + cfg.rememberMinutes * 60_000, sess.hard);
       remembered = true;
       await appendLog({ kind: "password", ip, msg: `비밀번호 기억 시작 — ${cfg.rememberMinutes}분` });
     }
   }
-  pending.delete(nonce);
-  if (await uiLocked()) throw new Error("화면 잠금 중");
-  if (!ordersEnabled()) throw new Error("주문 기능이 꺼져 있다");
+  /* 여기서부터 주문서는 소모됐다 — 아래 거절은 「실행됨」이 아니므로 기억에서 뺀다(다시 오면 「만료」) */
+  if (await uiLocked()) {
+    unclaim();
+    throw new Error("화면 잠금 중");
+  }
+  if (!ordersEnabled()) {
+    unclaim();
+    throw new Error("주문 기능이 꺼져 있다");
+  }
   const t = p.ticket;
   /* 매수 한도를 실행 직전에 한 번 더 — 30초 안에 주문서 둘을 각각 통과시켜 합으로 넘던 길 (2차 검진 🟠B-11) */
   if (t.kind === "order" && t.side === "buy" && !t.watch) {
     const g = await getGuard();
     const used = await todayUsage();
-    if (used.krw + t.amount > g.maxDailyKrw) throw new Error(`그 사이 오늘 한도를 넘었다 — 이미 ${used.krw.toLocaleString()}원 + 이번 ${t.amount.toLocaleString()}원 > ${g.maxDailyKrw.toLocaleString()}원`);
-    if (used.count + 1 > g.maxDailyCount) throw new Error(`그 사이 오늘 건수 한도를 넘었다 — ${used.count}/${g.maxDailyCount}`);
+    if (used.krw + t.amount > g.maxDailyKrw) {
+      unclaim();
+      throw new Error(`그 사이 오늘 한도를 넘었다 — 이미 ${used.krw.toLocaleString()}원 + 이번 ${t.amount.toLocaleString()}원 > ${g.maxDailyKrw.toLocaleString()}원`);
+    }
+    if (used.count + 1 > g.maxDailyCount) {
+      unclaim();
+      throw new Error(`그 사이 오늘 건수 한도를 넘었다 — ${used.count}/${g.maxDailyCount}`);
+    }
   }
   const mock = orderIsMock();
   const tag = mock ? "[모의]" : "[실전]";
@@ -1749,6 +1811,7 @@ export async function executePrepared(
       `👁 ${tag} <b>단계 매도 감시 등록</b> ${esc(t.name)} ${t.qty}주를 ${legs.length}단계로\n${esc(legsSay(legs))}\n${t.watch.validUntil} 까지 · 주문 › 자동감시 탭`,
       "order",
     ).catch(() => undefined);
+    executed.set(nonce, { at: Date.now(), ordNo: "" }); // (2026-09-10 전수 점검) 실행 끝
     return { ordNo: "", msg: `단계 매도 감시 ${legs.length}건 등록 — ${legsSay(legs)}`, ticket: t, remembered };
   }
   if (t.kind === "order" && t.watch) {
@@ -1760,6 +1823,7 @@ export async function executePrepared(
       `👁 ${tag} <b>자동감시 ${sideKo} ${replaced ? "수정" : "등록"}</b> ${esc(t.name)} ${t.qty}주\n${esc(watchSay(t.watch))}\n${t.watch.validUntil} 까지 · 주문 › 자동감시 탭에서 취소`,
       "order",
     ).catch(() => undefined);
+    executed.set(nonce, { at: Date.now(), ordNo: "" }); // (2026-09-10 전수 점검) 실행 끝
     return { ordNo: "", msg: `감시 ${replaced ? "수정" : "등록"} — ${watchSay(t.watch)}`, ticket: t, remembered };
   }
   /*
@@ -1778,7 +1842,10 @@ export async function executePrepared(
     const msg = e instanceof KiwoomApiError ? `${e.returnCode} ${e.message}` : e instanceof Error ? e.message : String(e);
     await appendLog({ kind: "error", ip, code: t.code, name: t.name, qty: t.qty, venue: t.venue, msg, raw: e instanceof KiwoomApiError ? e.raw : undefined });
     /* 응답 없음은 거절이 아니다 — 「거절」이라 하면 사람은 다시 누르고, 그게 이중 주문이다 (2차 검진 🟠A-8) */
-    const maybeSent = /응답하지 않았다/.test(msg);
+    const maybeSent = MAYBE_SENT_RE.test(msg); // (2026-09-10 전수 점검) 타임아웃뿐 아니라 연결 끊김·5xx 도 「접수됐을 수 있다」
+    /* (2026-09-10 전수 점검) 접수됐을 수 있으면 주문서는 「실행됨」으로 남긴다(같은 nonce 재시도 차단). 확실한 거절이면 기억에서 뺀다 */
+    if (maybeSent) executed.set(nonce, { at: Date.now(), ordNo: "" });
+    else unclaim();
     void sendTelegram(`⚠️ ${tag} ${maybeSent ? "주문 응답 없음 — 접수됐을 수 있다" : "주문 실패"} ${esc(t.name)}\n${esc(msg)}`, "order").catch(() => undefined);
     throw new Error(maybeSent ? `키움이 응답하지 않았다 — 주문이 접수됐을 수 있다. 다시 누르지 말고 미체결·체결 탭을 먼저 확인하라 (${msg})` : `키움이 거절했다: ${msg}`);
   }
@@ -1792,10 +1859,11 @@ export async function executePrepared(
        * 갈고리에 「끝났다」를 알린 뒤 지운다 (2026-09-08 정밀검진 🟠8). 예전엔 watching 만 지워서
        * 감시 발동으로 나간 주문을 사람이 취소하면 감시가 fired 에 영영 머물고 카드가 「체결 대기」였다.
        */
-      const w = watching.get(t.ordNo);
-      fillHooks.get(t.ordNo)?.({ filled: w?.filled ?? 0, price: 0, full: false, done: true, status: "사람이 취소" });
-      fillHooks.delete(t.ordNo);
-      unwatch(t.ordNo);
+      /*
+       * (2026-09-10 전수 점검) 취소 「접수」는 취소 「확인」이 아니다 — 접수와 확인 사이에 체결될 수 있다.
+       * 예전엔 여기서 바로 갈고리에 done 을 주고 감시를 끊어 그 체결을 놓쳤다. 감시를 그대로 두면
+       * tick() 이 취소확인이나 체결을 보고 갈고리를 부른다(안 보이면 5시간 시한이 닫는다).
+       */
       void sendTelegram(`🧾 ${tag} <b>취소</b> ${esc(t.name)} ${t.qty}주 (원주문 ${esc(t.ordNo)})\n${esc(r.msg)}`, "order").catch(() => undefined);
     } else if (t.kind === "modify") {
       await appendLog({ kind: "modify", ip, side: t.side, code: t.code, name: t.name, qty: t.qty, price: t.price, condPrice: t.condPrice, venue: t.venue, origOrdNo: t.ordNo, ordNo: r.ordNo, amount: t.amount, msg: graced ? `${r.msg} · 비밀번호 기억으로` : r.msg, raw: r.raw });
@@ -1813,12 +1881,26 @@ export async function executePrepared(
         /* 자동감시 줄의 주문번호도 새 것으로 — 15:40 정합성이 우리 기록으로 알아본다 */
         await withWatches(async () => {
           const rows = await readWatches();
+          let changed = false;
           const row = rows.find((x) => x.ordNo === t.ordNo);
           if (row) {
             row.ordNo = r.ordNo;
             row.msg = `정정 → ${r.ordNo}`;
-            await writeWatches(rows);
+            changed = true;
           }
+          /*
+           * (2026-09-10 전수 점검) 이중 손절 스톱(dualOrdNo)을 미체결 탭에서 정정하면 번호가 바뀐다 — 옛 번호를
+           * 들고 있으면 fireAutoWatch 가 「미체결에 없다」로 읽어 스톱 취소 없이 서버 매도를 내고, syncDualStops 가
+           * 스톱 체결을 못 본다. 새 번호로 옮긴다(dualDate 는 그대로).
+           */
+          for (const x of rows) {
+            if (x.dualOrdNo === t.ordNo) {
+              x.dualOrdNo = r.ordNo;
+              x.dualMsg = `정정 → ${r.ordNo}`;
+              changed = true;
+            }
+          }
+          if (changed) await writeWatches(rows);
         }).catch(() => undefined);
       }
       void sendTelegram(`🧾 ${tag} <b>정정</b> ${esc(t.name)} ${t.side === "buy" ? "매수" : "매도"} ${t.qty}주 @ ${t.price.toLocaleString()}원 (원주문 ${esc(t.ordNo)} → ${esc(r.ordNo || "?")})\n${esc(r.msg)}`, "order").catch(() => undefined);
@@ -1832,7 +1914,7 @@ export async function executePrepared(
         "order",
       ).catch(() => undefined);
       if (r.ordNo) watch(r.ordNo, t);
-      void noteUsage();
+      void noteUsage().catch(() => undefined); // (2026-09-10 전수 점검) 한도 조회 실패가 주문 길을 흔들지 않게
       /*
        * 출구 계획 (개편 ①) — 지금 낸 매수가 체결되면 단계마다 매도 감시가 걸리도록, 「발동된 감시」 모양의
        * 줄을 하나 적어 두고 체결 감시에 갈고리를 건다. 자동감시 매수와 같은 길(onAutoWatchFill)이라
@@ -1865,6 +1947,7 @@ export async function executePrepared(
       "order",
     ).catch(() => undefined);
   }
+  executed.set(nonce, { at: Date.now(), ordNo: r.ordNo }); // (2026-09-10 전수 점검) 같은 주문서가 다시 오면 「이미 실행된 주문서 (주문번호 X)」
   return { ordNo: r.ordNo, msg: r.msg + after, ticket: t, remembered };
 }
 
@@ -1929,7 +2012,8 @@ function normOpen(r: Record<string, unknown>): OpenRow {
     name: str(pick(r, ["stk_nm"])),
     side: str(pick(r, ["io_tp_nm", "sell_tp", "trde_tp"])),
     qty: num(pick(r, ["ord_qty"])),
-    price: num(pick(r, ["ord_pric", "ord_uv"])),
+    /* (2026-09-10 전수 점검) 키움은 값에 부호를 붙여 준다(-, +) — num 은 + 만 벗긴다. 음수 단가가 손익·금액에 섞이지 않게 절댓값 */
+    price: Math.abs(num(pick(r, ["ord_pric", "ord_uv"]))),
     remain: num(pick(r, ["oso_qty", "unfilled_qty"])),
     filled: num(pick(r, ["cntr_qty"])),
     /* 공식 명세: stex_tp 는 코드(0 통합·1 KRX·2 NXT), stex_tp_txt 가 사람이 읽는 이름 */
@@ -1938,7 +2022,7 @@ function normOpen(r: Record<string, unknown>): OpenRow {
     time: str(pick(r, ["tm", "ord_tm"])),
     status: str(pick(r, ["ord_stt"])),
     /** 스톱지정가로 낸 주문이면 발동가가 돌아온다 (2026-09-04) */
-    stopPrice: num(pick(r, ["stop_pric"])),
+    stopPrice: Math.abs(num(pick(r, ["stop_pric"]))), // (2026-09-10 전수 점검) 부호 제거
     raw: r,
   };
 }
@@ -1983,7 +2067,7 @@ async function openOrdersRaw(): Promise<OpenRow[]> {
     stk_cd: "",
     stex_tp: "0",
   });
-  void noteRaw("ka10075", data);
+  void noteRaw("ka10075", data).catch(() => undefined); // (2026-09-10 전수 점검) 기록 실패가 unhandled rejection 이 되지 않게
   return listOf(data, ["oso"]).map(normOpen);
 }
 
@@ -1997,11 +2081,11 @@ async function fillsRaw(): Promise<OpenRow[]> {
     ord_no: "",
     stex_tp: "0",
   });
-  void noteRaw("ka10076", data);
+  void noteRaw("ka10076", data).catch(() => undefined); // (2026-09-10 전수 점검)
   return listOf(data, ["cntr"]).map((r) => {
     const o = normOpen(r);
     // 체결 조회는 체결가·체결량이 따로 온다
-    o.price = num(pick(r, ["cntr_pric"])) || o.price;
+    o.price = Math.abs(num(pick(r, ["cntr_pric"]))) || o.price; // (2026-09-10 전수 점검) 부호 제거
     return o;
   });
 }
@@ -2986,13 +3070,14 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
           r.msg = `키움 스톱이 먼저 팔았다 (주문번호 ${r.dualOrdNo})`;
           await appendLog({ kind: "fill", side: "sell", code: base.code, name: base.name, qty: dualFilled, price: f?.price ?? null, ordNo: r.dualOrdNo, msg: `이중 스톱 체결 — 서버 감시 ${r.id} 는 낼 것 없음` });
         } else {
-          r.status = "failed";
-          r.msg = "낼 수량이 없다 — 매매가능 0";
-          await appendLog({ kind: "watch", side: "sell", code: base.code, name: base.name, qty: base.qty, msg: `감시 접음 (${r.id}) — 매매가능 0` });
+          /* (2026-09-10 전수 점검) 보유는 있는데 매매가능이 0 — 미체결 매도가 물고 있다. 실패로 접으면 손절이 사라진다. 보류하고 다음 틱 */
+          return holdOff("매도 가능 수량 0 — 미체결 매도가 잡고 있음");
         }
         return;
       }
     }
+    /* (2026-09-10 전수 점검) 이중 스톱이 없어도 같다 — 예전엔 dualOrdNo 있을 때만 0 을 봐서, 없으면 0주 주문이 키움에 나가 거절로 failed 가 됐다 */
+    if (qty <= 0) return holdOff("매도 가능 수량 0 — 미체결 매도가 잡고 있음");
     if (qty !== base.qty) {
       await appendLog({ kind: "watch", side: "sell", code: base.code, name: base.name, qty, msg: `감시 수량 조정 (${r.id}) — ${base.qty}주 → ${qty}주 (매매가능·이중 스톱 체결분 반영)` });
     }
@@ -3018,7 +3103,7 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
       `👁🧾 ${tag} <b>감시 발동 — ${sideKo} 나감</b> ${esc(t.name)} ${t.qty}주 @ ${priceKo}\n${esc(watchSay(s))}\n그때 값 ${cur.toLocaleString()}(${from}) · 금액 ${won(t.amount)} · 주문번호 ${esc(res.ordNo || "?")}\n${esc(res.msg)}`,
       "order",
     ).catch(() => undefined);
-    void noteUsage();
+    void noteUsage().catch(() => undefined); // (2026-09-10 전수 점검) 한도 조회 실패가 주문 길을 흔들지 않게
     void pushNotice({ kind: "stock", source: "autoWatch", level: "urgent", title: `${tag} 👁 감시 발동 — ${sideKo} 나감 · ${t.name} ${t.qty}주`, body: `${watchSay(s)} · 그때 값 ${cur.toLocaleString()}(${from}) · 주문번호 ${res.ordNo || "?"}`, code: t.code, name: t.name, link: "#/order", dedupeKey: `watch:fire:${r.id}`, dedupeHours: 24 }).catch(() => undefined);
     if (res.ordNo) {
       watch(res.ordNo, t);
@@ -3032,7 +3117,7 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
      * 없고, waiting 으로 되돌리면 두 번 낸다. fired 로 두고 사람에게 미체결·체결 탭을 보라고 한다.
      * 15:40 정합성이 우리 기록에 없는 체결을 잡는다.
      */
-    const maybeSent = /응답하지 않았다/.test(msg);
+    const maybeSent = MAYBE_SENT_RE.test(msg); // (2026-09-10 전수 점검) 연결 끊김·5xx 도 접수됐을 수 있다 — fired 로 둔다(타임아웃과 같은 길)
     r.status = maybeSent ? "fired" : "failed";
     r.msg = maybeSent ? `응답 없음 — 접수됐을 수 있다. 미체결·체결 탭 확인 (${msg})` : msg;
     await appendLog({ kind: "error", code: t.code, name: t.name, qty: t.qty, venue: t.venue, msg: `감시 발동 ${maybeSent ? "응답 없음" : "실패"} (${r.id}) — ${msg}`, raw: e instanceof KiwoomApiError ? e.raw : undefined });
@@ -3159,16 +3244,20 @@ async function placeDualStops(rows: AutoWatch[], date: string): Promise<boolean>
     if (r.status !== "waiting" || r.ticket.side !== "sell" || r.spec.dir !== "le" || r.spec.dual === false) continue;
     if (r.dualDate === date) continue; // 오늘 이미 걸었거나 시도했다 — 실패는 내일 다시(3초마다 두드리지 않는다)
     if (r.ticket.credit) continue;
+    /* (2026-09-10 전수 점검) 어제 스톱이 일부 팔았으면(dualFilled) 남은 만큼만 — 전량으로 걸면 보유보다 많이 팔려 하거나 거절된다 */
+    const stopQty = r.ticket.qty - (r.dualFilled ?? 0);
+    if (stopQty <= 0) continue;
     const trigger = r.spec.trigger;
     const limit = toTick(trigger * 0.985);
     const t: OrderTicket = {
       ...r.ticket,
+      qty: stopQty,
       price: limit,
       condPrice: trigger,
       tradeType: "28",
       tradeLabel: "스톱지정가",
       refPrice: trigger,
-      amount: limit * r.ticket.qty,
+      amount: limit * stopQty,
       watch: null,
       exit: null,
     };
@@ -3187,6 +3276,8 @@ async function placeDualStops(rows: AutoWatch[], date: string): Promise<boolean>
       changed = true;
       await appendLog({ kind: "error", code: t.code, name: t.name, qty: t.qty, msg: `이중 손절 스톱 실패 (${r.id}) — ${msg}. 서버 감시만으로 간다` });
     }
+    /* (2026-09-10 전수 점검) 한 건 걸 때마다 바로 적는다 — 루프 끝에 한 번 쓰면 그 사이 재시작에 같은 스톱이 또 걸린다 (withWatches 안이다) */
+    await writeWatches(rows).catch(() => undefined);
     await new Promise((ok) => setTimeout(ok, 350));
   }
   if (changed) {
@@ -3213,7 +3304,19 @@ async function syncDualStops(rows: AutoWatch[], date: string, minute: number): P
   const targets = rows.filter((r) => r.status === "waiting" && r.dualOrdNo);
   if (targets.length === 0) return false;
   if (minute > WATCH_TO || !isTradingDate(date) || targets.some((r) => r.dualDate !== date)) {
+    /*
+     * (2026-09-10 전수 점검) 장이 끝나 오늘 스톱 번호를 비우기 **전에** 체결을 한 번 본다 — 15:20~15:30 동시호가에
+     * 스톱이 팔린 것을 예전엔 번호만 지워 놓쳤다(감시는 waiting 으로 남고 손실·쿨다운도 안 잡혔다).
+     * 조회가 실패하면 이번 틱은 비우지 않는다(다음 틱에 다시 — 날이 바뀌면 그냥 비운다).
+     */
+    let fl: OpenRow[] | null | undefined;
     for (const r of targets) {
+      if (r.dualDate === date && minute > WATCH_TO) {
+        if (fl === undefined) fl = await fills().catch(() => null);
+        if (fl === null) continue;
+        if (await applyDualFill(r, fl)) changed = true;
+        if (r.status !== "waiting") continue; // 체결로 접힘 — 번호는 기록으로 남긴다
+      }
       if (r.dualDate !== date || minute > WATCH_TO) {
         r.dualOrdNo = undefined;
         changed = true;
@@ -3225,37 +3328,45 @@ async function syncDualStops(rows: AutoWatch[], date: string, minute: number): P
   const fl = await fills().catch(() => null);
   if (!fl) return false;
   for (const r of targets) {
-    const filledQty = filledOf(fl, r.dualOrdNo!);
-    if (filledQty <= 0) continue;
-    const f = { ...fl.find((x) => x.ordNo === r.dualOrdNo && x.filled > 0)!, filled: filledQty };
-    /*
-     * **일부만 팔렸으면 접지 않는다** (2026-09-08 정밀검진 🟠14). 100주 감시에 30주 체결을
-     * 「체결」로 접으면 남은 70주가 무방비다. 누적 체결을 적어 두고, 다 팔렸을 때만 접는다.
-     */
-    if (f.filled < r.ticket.qty) {
-      if ((r.dualFilled ?? 0) !== f.filled) {
-        r.dualFilled = f.filled;
-        r.msg = `키움 스톱 부분체결 ${f.filled}/${r.ticket.qty}주 — 남은 ${r.ticket.qty - f.filled}주는 계속 본다`;
-        changed = true;
-        await appendLog({ kind: "fill", side: "sell", code: r.ticket.code, name: r.ticket.name, qty: f.filled, price: f.price, ordNo: r.dualOrdNo, msg: `이중 손절 스톱 부분체결 (${r.id}) — ${f.filled}/${r.ticket.qty}` });
-      }
-      continue;
-    }
-    const acct = await orderAccount().catch(() => null);
-    const h = acct?.holdings.find((x) => x.code === r.ticket.code && !x.creditType);
-    r.status = "filled";
-    r.firedAt = new Date().toISOString();
-    r.firePrice = f.price;
-    r.fillQty = f.filled;
-    r.fillPrice = f.price;
-    r.avgAtFire = h?.avg ?? r.spec.basisPrice ?? undefined;
-    r.msg = `키움 스톱이 팔았다 (주문번호 ${r.dualOrdNo})`;
-    changed = true;
-    await appendLog({ kind: "fill", side: "sell", code: r.ticket.code, name: r.ticket.name, qty: f.filled, price: f.price, ordNo: r.dualOrdNo, msg: `이중 손절 스톱 체결 (${r.id})` });
-    void sendTelegram(`🛡🧾 ${orderIsMock() ? "[모의]" : "[실전]"} <b>이중 손절 체결</b> ${esc(r.ticket.name)} ${f.filled}주 @ ${f.price.toLocaleString()} — 키움 스톱이 팔았다`, "order").catch(() => undefined);
-    void pushNotice({ kind: "stock", source: "autoWatch", level: "urgent", title: `${orderIsMock() ? "[모의]" : "[실전]"} 🛡 이중 손절 체결 · ${r.ticket.name} ${f.filled}주 @ ${f.price.toLocaleString()}`, body: "키움 스톱지정가가 팔았다", code: r.ticket.code, name: r.ticket.name, link: "#/order", dedupeKey: `watch:dualfill:${r.id}`, dedupeHours: 24 }).catch(() => undefined);
+    if (await applyDualFill(r, fl)) changed = true;
   }
   return changed;
+}
+
+/**
+ * (2026-09-10 전수 점검) 이중 스톱 체결을 감시 줄에 반영한다 — 장중 틱과 장 마감 정리가 **같은 길**을 쓰도록
+ * syncDualStops 의 루프 몸통을 그대로 옮긴 것(부분체결 누적 · 전량이면 filled + 기록 + 텔레그램 + 손실·쿨다운 재료).
+ */
+async function applyDualFill(r: AutoWatch, fl: OpenRow[]): Promise<boolean> {
+  const filledQty = filledOf(fl, r.dualOrdNo!);
+  if (filledQty <= 0) return false;
+  const f = { ...fl.find((x) => x.ordNo === r.dualOrdNo && x.filled > 0)!, filled: filledQty };
+  /*
+   * **일부만 팔렸으면 접지 않는다** (2026-09-08 정밀검진 🟠14). 100주 감시에 30주 체결을
+   * 「체결」로 접으면 남은 70주가 무방비다. 누적 체결을 적어 두고, 다 팔렸을 때만 접는다.
+   */
+  if (f.filled < r.ticket.qty) {
+    if ((r.dualFilled ?? 0) !== f.filled) {
+      r.dualFilled = f.filled;
+      r.msg = `키움 스톱 부분체결 ${f.filled}/${r.ticket.qty}주 — 남은 ${r.ticket.qty - f.filled}주는 계속 본다`;
+      await appendLog({ kind: "fill", side: "sell", code: r.ticket.code, name: r.ticket.name, qty: f.filled, price: f.price, ordNo: r.dualOrdNo, msg: `이중 손절 스톱 부분체결 (${r.id}) — ${f.filled}/${r.ticket.qty}` });
+      return true;
+    }
+    return false;
+  }
+  const acct = await orderAccount().catch(() => null);
+  const h = acct?.holdings.find((x) => x.code === r.ticket.code && !x.creditType);
+  r.status = "filled";
+  r.firedAt = new Date().toISOString();
+  r.firePrice = f.price;
+  r.fillQty = f.filled;
+  r.fillPrice = f.price;
+  r.avgAtFire = h?.avg ?? r.spec.basisPrice ?? undefined;
+  r.msg = `키움 스톱이 팔았다 (주문번호 ${r.dualOrdNo})`;
+  await appendLog({ kind: "fill", side: "sell", code: r.ticket.code, name: r.ticket.name, qty: f.filled, price: f.price, ordNo: r.dualOrdNo, msg: `이중 손절 스톱 체결 (${r.id})` });
+  void sendTelegram(`🛡🧾 ${orderIsMock() ? "[모의]" : "[실전]"} <b>이중 손절 체결</b> ${esc(r.ticket.name)} ${f.filled}주 @ ${f.price.toLocaleString()} — 키움 스톱이 팔았다`, "order").catch(() => undefined);
+  void pushNotice({ kind: "stock", source: "autoWatch", level: "urgent", title: `${orderIsMock() ? "[모의]" : "[실전]"} 🛡 이중 손절 체결 · ${r.ticket.name} ${f.filled}주 @ ${f.price.toLocaleString()}`, body: "키움 스톱지정가가 팔았다", code: r.ticket.code, name: r.ticket.name, link: "#/order", dedupeKey: `watch:dualfill:${r.id}`, dedupeHours: 24 }).catch(() => undefined);
+  return true;
 }
 
 /** 감시를 취소할 때 오늘 걸린 이중 스톱도 거둔다 */
@@ -3509,17 +3620,55 @@ export function startAutoWatch(main: KiwoomClient): void {
   void (async () => {
     try {
       const rows = await readWatches();
+      const { date: today } = kstParts();
       let n = 0;
+      /*
+       * (2026-09-10 전수 점검) 키움 주문번호는 **날마다 다시 센다** — 지난 날 발동한 줄을 오늘 번호로 감시하면
+       * 남의 체결을 제 것으로 읽는다. 오늘(KST) 발동한 것만 걸고, 지난 것은 그 자리에서 닫는다(예전엔 5시간
+       * 시한이 닫았다). 이미 적힌 체결량(fillQty)에서 시작해 같은 체결을 다시 알리지 않는다.
+       */
+      const stale: AutoWatch[] = [];
       for (const r of rows) {
         if (r.status !== "fired" || !r.ordNo) continue;
         if ((r.mock ?? true) !== orderIsMock()) continue;
+        if (!r.firedAt || kstParts(new Date(r.firedAt)).date !== today) {
+          stale.push(r);
+          continue;
+        }
         const t: OrderTicket = { ...r.ticket, watch: null };
         watch(r.ordNo, t);
+        const w = watching.get(r.ordNo);
+        if (w) w.filled = r.fillQty ?? 0;
         const id = r.id;
         fillHooks.set(r.ordNo, (ev) => void onAutoWatchFill(id, ev).catch(() => undefined));
         n += 1;
       }
       if (n > 0) console.log(`[order] 재시작 — 발동된 감시 ${n}건의 체결 갈고리를 다시 걸었다`);
+      for (const r of stale) {
+        await onAutoWatchFill(r.id, { filled: r.fillQty ?? 0, price: 0, full: false, done: true, status: "지난 날 발동 — 재시작 정리" }).catch(() => undefined);
+      }
+      if (stale.length > 0) console.log(`[order] 재시작 — 지난 날 발동한 감시 ${stale.length}건을 닫았다`);
+      /*
+       * (2026-09-10 전수 점검) **고아 스톱** — 감시는 waiting 이 아닌데(발동·실패·취소·만료) 오늘 건 키움 스톱 번호가 남아 있다.
+       * 발동 도중 서버가 죽었으면 그 스톱이 키움에 살아 값이 닿으면 판다. 한 번만 거둬 본다 — cancelDualStop 이 미체결에
+       * 있는지 먼저 보고, 없으면 번호만 비우고, 취소가 실패하면 기록 + 텔레그램(order 방)으로 알린다.
+       */
+      const orphans = rows.filter((r) => r.status !== "waiting" && r.dualOrdNo && r.dualDate === today && (r.mock ?? true) === orderIsMock());
+      if (orphans.length > 0 && orderClient()) {
+        await withWatches(async () => {
+          const cur = await readWatches();
+          let changed = false;
+          for (const o of orphans) {
+            const r = cur.find((x) => x.id === o.id);
+            if (!r || r.status === "waiting" || !r.dualOrdNo) continue;
+            const before = r.dualOrdNo;
+            await cancelDualStop(r);
+            await appendLog({ kind: "watch", code: r.ticket.code, name: r.ticket.name, msg: `재시작 — 고아 스톱 정리 (${r.id}, 스톱 ${before}) → ${r.dualOrdNo ? "취소 실패, 키움에 살아 있다" : "취소했거나 이미 없음"}` });
+            changed = true;
+          }
+          if (changed) await writeWatches(cur);
+        });
+      }
     } catch (e) {
       console.warn("[order] 재시작 갈고리 복구 실패", e instanceof Error ? e.message : e);
     }
@@ -3581,7 +3730,12 @@ async function tick(): Promise<void> {
       if (mine.length === 0) continue;
       const filled = Math.max(...mine.map((r) => r.filled));
       const status = mine[0].status;
-      const done = /취소|거부|확인/.test(status);
+      /*
+       * (2026-09-10 전수 점검) /확인/ 은 「접수확인」·「정정접수확인」에도 걸려 살아 있는 주문의 감시를 끊었다.
+       * 끝난 상태(취소확인·정정확인·거부)만 — 또는 남은 것도 체결도 0 이면 끝(oso_qty 칸이 실제로 있을 때만 믿는다).
+       */
+      const hasRemainField = mine.every((x) => x.raw && (x.raw as Record<string, unknown>).oso_qty !== undefined);
+      const done = /취소확인|정정확인|거부/.test(status) || (hasRemainField && mine.every((x) => x.remain === 0 && x.filled === 0));
       if (filled > w.filled) {
         const px = mine[0].price;
         w.filled = filled;
@@ -3898,7 +4052,7 @@ export async function orderStatus(req: Request): Promise<Record<string, unknown>
     todayUsage().catch(() => ({ krw: 0, count: 0 })),
     getSettings(),
   ]);
-  const s = sessionOf(req);
+  const s = peekSession(req); // (2026-09-10 전수 점검) 상태 조회는 유휴 시한을 안 민다
   return {
     enabled,
     configured,

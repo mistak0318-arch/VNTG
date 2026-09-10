@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getSection, getSectorStocks, type Sectors, type StockRow } from "./marketOverview.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { isTradingDay } from "./tradingDay.js";
 
 /**
  * 전종목 시세 스냅샷.
@@ -137,7 +138,7 @@ function expiryOf(at: number): number {
   const d = new Date(at);
   const kst = new Date(d.getTime() + (9 * 60 + d.getTimezoneOffset()) * 60_000);
   const minutes = kst.getHours() * 60 + kst.getMinutes();
-  const weekday = kst.getDay() !== 0 && kst.getDay() !== 6;
+  const weekday = isTradingDay(); // (2026-09-10 전수 점검) 주말만 보던 것 — 추석엔 5분마다 65업종을 헛불렀다
   const duringSession = weekday && minutes >= 9 * 60 && minutes < 15 * 60 + 40;
 
   if (duringSession) return at + INTRADAY_TTL_MS;
@@ -147,7 +148,7 @@ function expiryOf(at: number): number {
   next.setHours(9, 0, 0, 0);
   if (next.getTime() <= kst.getTime()) next.setDate(next.getDate() + 1);
   // 주말을 건너뛴다. 안 그러면 토·일 아침마다 같은 종가를 받으려고 65회를 다시 부른다
-  while (next.getDay() === 0 || next.getDay() === 6) next.setDate(next.getDate() + 1);
+  while (!isTradingDay(next)) next.setDate(next.getDate() + 1); // (2026-09-10 전수 점검) 휴장일도 건너뛴다
   return at + (next.getTime() - kst.getTime());
 }
 

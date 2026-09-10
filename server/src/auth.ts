@@ -456,6 +456,7 @@ export async function login(
         `🔐 VNTG 로그인 실패 ${n}회\n주소: ${esc(ip)}\n기기: ${esc(
           String(req.headers["user-agent"] ?? "?").slice(0, 80),
         )}`,
+        "syslog", // (2026-09-10 전수 점검) 같은 부류 — 함께 syslog 로
       ).catch(() => undefined);
     }
     return { ok: false, error: "아이디 또는 비밀번호가 다릅니다" };
@@ -633,6 +634,7 @@ export async function verifyOtp(
   issue(req, res, cfg, id);
   void sendTelegram(
     `🔓 VNTG 새 기기 등록\n이름: ${esc(deviceName || "이름 없는 기기")}\n주소: ${esc(who(req))}`,
+    "syslog", // (2026-09-10 전수 점검)
   ).catch(() => undefined);
   return { ok: true };
 }
@@ -687,7 +689,8 @@ export async function forgot(
     return { ok: false, error: `메일을 보내지 못했습니다 (${sent.error ?? "발송 실패"})` };
   }
   lastResetMailAt = Date.now();
-  void sendTelegram(`🔑 VNTG 비밀번호 재설정 요청\n주소: ${esc(ip)}`).catch(() => undefined);
+  /* (2026-09-10 전수 점검) 보안 알림은 syslog 방으로 — 채널 없이 보내 리포트 방에 섞였다 */
+  void sendTelegram(`🔑 VNTG 비밀번호 재설정 요청\n주소: ${esc(ip)}`, "syslog").catch(() => undefined);
   return { ok: true, ticket, sentTo: maskMail((process.env.MAIL_TO ?? "").trim()) };
 }
 
@@ -726,7 +729,8 @@ export async function resetPassword(
   cfg.secret = randomBytes(32).toString("hex");
   cfg.devices = [];
   await save(cfg);
-  void sendTelegram(`🔑 VNTG 비밀번호가 새로 정해졌습니다\n모든 기기가 로그아웃됐습니다`).catch(
+  /* (2026-09-10 전수 점검) syslog 방으로 */
+  void sendTelegram(`🔑 VNTG 비밀번호가 새로 정해졌습니다\n모든 기기가 로그아웃됐습니다`, "syslog").catch(
     () => undefined,
   );
   return { ok: true };
@@ -853,7 +857,8 @@ export async function setEnabled(on: boolean): Promise<{ ok: boolean; error?: st
   if (on && !cfg.passHash) return { ok: false, error: "먼저 비밀번호를 정해 주세요" };
   cfg.enabled = on;
   await save(cfg);
-  void sendTelegram(`🔐 VNTG 로그인 잠금 ${on ? "켜짐" : "꺼짐"}`).catch(() => undefined);
+  /* (2026-09-10 전수 점검) syslog 방으로 */
+  void sendTelegram(`🔐 VNTG 로그인 잠금 ${on ? "켜짐" : "꺼짐"}`, "syslog").catch(() => undefined);
   return { ok: true };
 }
 

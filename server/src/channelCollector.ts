@@ -49,19 +49,49 @@ export function collectorState(): typeof last {
   return last;
 }
 
+/*
+ * (2026-09-10 전수 점검) 겹침 방지·시간 상한·연속 실패 셈.
+ * - `running`: 한 바퀴가 10분을 넘기면(FLOOD_WAIT·느린 회선) 다음 타이머가 또 시작해 두 줄기가
+ *   같은 채널을 읽었다. 도는 중이면 이번 회차는 건너뛴다.
+ * - 60초 상한: 71채널 × 350ms ≈ 25초가 정상. 접속이 멎어 영영 안 돌아오면 `running` 이 안 풀려
+ *   수집이 죽은 채로 남았다. 상한을 넘기면 실패로 적되, **늦게라도 답이 오면 창고에는 넣는다**
+ *   (다음 회차가 30분 창으로 겹쳐 받으니 어차피 빠지진 않지만, 받은 걸 버릴 이유가 없다).
+ * - 연속 실패 3회에 한 번만 로그 — 매 회차 찍으면 로그가 벽이 된다.
+ */
+const BATCH_TIMEOUT_MS = 60_000;
+let running = false;
+let failStreak = 0;
+
 /** 한 바퀴 — 실패해도 다음 회차가 있다 */
 export async function collectOnce(): Promise<number> {
   if (!isReaderConfigured()) return 0;
+  if (running) return 0;
+  running = true;
   try {
-    const { messages } = await fetchNewMessages({
+    const fetching = fetchNewMessages({
       sinceMinutes: WINDOW_MIN,
       useOffsets: false,
       maxPerChannel: PER_CHANNEL,
       /* 창고 적재는 여기서 직접 한다 — 안의 훅까지 넣으면 `added` 가 0 으로 찍힌다 */
       noStore: true,
     });
+    let timer: NodeJS.Timeout | null = null;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`수집 ${BATCH_TIMEOUT_MS / 1000}초 초과`)), BATCH_TIMEOUT_MS);
+    });
+    let messages;
+    try {
+      ({ messages } = await Promise.race([fetching, timeout]));
+    } catch (e) {
+      /* 늦게라도 오면 창고에 넣는다 — 실패로 적는 것과 별개 */
+      void fetching.then((r) => record(r.messages)).catch(() => undefined);
+      throw e;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
     const added = await record(messages);
     last = { at: new Date().toISOString(), got: messages.length, added, error: null };
+    failStreak = 0;
     return added;
   } catch (e) {
     last = {
@@ -70,7 +100,11 @@ export async function collectOnce(): Promise<number> {
       added: 0,
       error: e instanceof Error ? e.message : "수집 실패",
     };
+    failStreak += 1;
+    if (failStreak === 3) console.error(`[channels] 창고 수집 3회 연속 실패 — ${last.error}`);
     return 0;
+  } finally {
+    running = false;
   }
 }
 

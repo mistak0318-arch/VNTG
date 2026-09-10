@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { isTradingDay } from "./tradingDay.js";
 import { getCisConfig } from "./cisConfig.js";
 import { runSlot } from "./cisRun.js";
 import { loadDay } from "./cisJournal.js";
@@ -77,9 +78,7 @@ function nowHm(): string {
 }
 
 function isWeekend(): boolean {
-  const d = new Date(Date.now() + 9 * 3600_000);
-  const w = d.getUTCDay();
-  return w === 0 || w === 6;
+  return !isTradingDay(); // (2026-09-10 전수 점검) 휴장일에도 일지 슬롯이 돌아 어제 값으로 문장을 썼다
 }
 
 function weekday(): number {

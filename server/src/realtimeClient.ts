@@ -135,12 +135,28 @@ export class RealtimeClient {
     return this.lastFrameAt ? new Date(this.lastFrameAt).toISOString() : null;
   }
 
+  /**
+   * (2026-09-10 전수 점검) 진행 중인 접속 시도 — 동시에 `connect()` 가 여럿 불려도(스케줄러 틱 +
+   * SSE 라우트 + 재시도 타이머) 한 번의 시도를 같이 기다린다. 토큰을 기다리는 사이 `this.ws` 가
+   * 아직 null 이라 두 번째 호출이 소켓을 하나 더 만들던 자리다.
+   */
+  private connecting: Promise<void> | null = null;
+
   async connect(): Promise<void> {
     if (!RealtimeClient.enabled) throw new Error("실시간이 꺼져 있습니다 (REALTIME_ENABLED=0)");
     this.closed = false;
     if (this.ws) return;
+    if (this.connecting) return this.connecting;
+    this.connecting = this.open().finally(() => {
+      this.connecting = null;
+    });
+    return this.connecting;
+  }
 
+  private async open(): Promise<void> {
     const token = await this.kiwoom.accessToken();
+    /* (2026-09-10 전수 점검) 토큰을 기다리는 사이 close() 가 불렸으면 새 소켓을 만들지 않는다 */
+    if (this.closed) return;
     const ws = new WebSocket(WS_URL);
     this.ws = ws;
 
@@ -167,12 +183,26 @@ export class RealtimeClient {
 
       // 살아 있는지 묻는 프레임은 **그대로 돌려준다**. 안 돌려주면 끊긴다
       if (frame.trnm === "PING") {
-        this.send(frame);
+        /* (2026-09-10 전수 점검) 받은 그 소켓으로 돌려준다 — 재연결 직후 `this.ws` 는 다른 소켓일 수 있다 */
+        this.send(frame, ws);
         return;
       }
 
       // 로그인이 끝나면 걸어 둔 구독을 올린다
       if (frame.trnm === "LOGIN" && frame.return_code === 0) this.resubscribe();
+      /*
+       * (2026-09-10 전수 점검) 로그인 거절(토큰 만료 등)이면 소켓을 닫는다. 열어 두면 「연결됨」인데
+       * REG 는 전부 거절되는 상태로 영영 남는다. 닫으면 onclose → 재시도 → 토큰을 다시 받는다.
+       */
+      if (frame.trnm === "LOGIN" && frame.return_code !== undefined && frame.return_code !== 0) {
+        console.log(`실시간: LOGIN 거절 ${frame.return_code} — ${frame.return_msg ?? ""}`);
+        try {
+          ws.close();
+        } catch {
+          /* 이미 닫히는 중일 수 있다 */
+        }
+        return;
+      }
 
       /*
        * ⚠️ **REG 실패를 붙잡아 둔다.**
@@ -198,12 +228,15 @@ export class RealtimeClient {
     };
 
     ws.onclose = () => {
+      /* (2026-09-10 전수 점검) 옛 소켓의 onclose 가 새 소켓을 지우면 안 된다 — 내 소켓일 때만 */
+      if (this.ws !== ws) return;
       this.note("←", "(끊김)");
       this.ws = null;
       this.scheduleRetry();
     };
 
     ws.onerror = () => {
+      if (this.ws !== ws) return; // (2026-09-10 전수 점검) 옛 소켓의 오류는 기록하지 않는다
       this.note("←", "(오류)");
     };
   }
@@ -220,6 +253,9 @@ export class RealtimeClient {
      * 그대로 걸린다** — 아래 `flush` 가 200개씩 그룹을 나누는데 이 길만 그걸 안 거쳤다.
      * 나눠 보내는 규칙은 한 곳에만 있어야 한다.
      */
+    /* (2026-09-10 전수 점검) 새 소켓엔 등록된 것이 없다 — 옛 소켓용 REMOVE·그룹 기록은 버린다 */
+    this.pendingRemove.clear();
+    this.groupOf.clear();
     for (const [type, items] of this.subs) {
       for (const item of items) {
         const p = this.pending.get(type) ?? new Set<string>();
@@ -388,7 +424,16 @@ export class RealtimeClient {
    * 서버는 그대로 물고 있어서 상한이 안 풀린다.
    */
   subscribeTransient(type: string, item: string): void {
-    if (!this.keep.has(item) && !this.transient.includes(item)) {
+    /*
+     * (2026-09-10 전수 점검) 이미 걸린 화면 종목이면 **맨 뒤로 옮긴다**(LRU). 예전엔 들어온 순서
+     * 그대로라, 계속 보고 있는 종목이 「오래된 것」으로 먼저 밀려났다.
+     */
+    const seen = this.transient.indexOf(item);
+    if (seen >= 0) {
+      this.transient.splice(seen, 1);
+      this.transient.push(item);
+    }
+    if (!this.keep.has(item) && seen < 0) {
       while (this.codeCount() >= RealtimeClient.MAX_ITEMS && this.transient.length > 0) {
         const old = this.transient.shift();
         if (!old) break;
@@ -498,6 +543,16 @@ export class RealtimeClient {
     }
     if (cur.length > 0) groups.push(cur);
     this.pending.clear();
+
+    /*
+     * (2026-09-10 전수 점검) 모아 둔 REMOVE 를 **그룹당 한 번**으로 먼저 보낸다. 예전엔 unsubscribe 마다
+     * 바로 나가서, 정원이 차서 화면 종목 여럿이 한꺼번에 밀려날 때 REMOVE 가 연달아 터졌다(105110).
+     */
+    for (const [grp, data] of this.pendingRemove) {
+      this.send({ trnm: "REMOVE", grp_no: grp, data: [...data.values()] });
+    }
+    this.pendingRemove.clear();
+
     if (groups.length === 0) return;
 
     /*
@@ -527,8 +582,13 @@ export class RealtimeClient {
     });
   }
 
+  /** (2026-09-10 전수 점검) 보낼 REMOVE 를 모아 둔다 — grp_no → (type → {item[], type[]}) */
+  private readonly pendingRemove = new Map<string, Map<string, { item: string[]; type: string[] }>>();
+
   unsubscribe(type: string, item: string): void {
     this.subs.get(type)?.delete(item);
+    /* 아직 REG 로 안 나간 것이면 대기열에서만 빼면 된다 — REMOVE 를 보낼 이유가 없다 */
+    this.pending.get(type)?.delete(item);
     if (this.ws && this.ws.readyState === 1) {
       /*
        * **등록했던 그 그룹에만** 보낸다 (2026-08-31).
@@ -536,14 +596,29 @@ export class RealtimeClient {
        * 전 그룹에 뿌리면 REG 와 같은 `105110`(요청 건수 초과)에 걸린다. 어느 그룹에
        * 넣었는지는 `flush` 가 적어 뒀다. 기록이 없으면(아직 안 나간 구독) 1번으로
        * 보낸다 — 다음 `flush` 가 `refresh:"1"` 로 전체를 다시 짜므로 해가 없다.
+       *
+       * (2026-09-10 전수 점검) 바로 보내지 않고 REG 와 같은 300ms 대기열(`flush`)에 태운다.
        */
       const key = `${type}:${item}`;
-      this.send({
-        trnm: "REMOVE",
-        grp_no: this.groupOf.get(key) ?? "1",
-        data: [{ item: [item], type: [type] }],
-      });
+      const grp = this.groupOf.get(key) ?? "1";
+      let byType = this.pendingRemove.get(grp);
+      if (!byType) {
+        byType = new Map();
+        this.pendingRemove.set(grp, byType);
+      }
+      let d = byType.get(type);
+      if (!d) {
+        d = { item: [], type: [type] };
+        byType.set(type, d);
+      }
+      if (!d.item.includes(item)) d.item.push(item);
       this.groupOf.delete(key);
+      if (!this.flushTimer) {
+        this.flushTimer = setTimeout(() => {
+          this.flushTimer = null;
+          this.flush();
+        }, 300);
+      }
     }
   }
 
@@ -568,6 +643,8 @@ export class RealtimeClient {
     this.keep.clear();
     this.transient.length = 0;
     this.pending.clear();
+    this.pendingRemove.clear(); // (2026-09-10 전수 점검) 끊긴 소켓에 보낼 REMOVE 는 없다
+    this.groupOf.clear();
   }
 
   /** REG 가 거절된 기록 — 여기 뭐가 있으면 「연결은 됐는데 안 온다」의 원인이다 */

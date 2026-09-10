@@ -3,6 +3,7 @@ import { pushNotice } from "./notifyCenter.js";
 import { warmResearch } from "./webResearch.js";
 import { buildAiSummary } from "./aiSummary.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { isTradingDay } from "./tradingDay.js";
 import { captureBreadth } from "./breadthStore.js";
 import { captureSectorFlow } from "./sectorFlowStore.js";
 import { deliverReport } from "./reportDelivery.js";
@@ -30,10 +31,9 @@ const CHECK_INTERVAL_MS = 60_000;
 let timer: ReturnType<typeof setInterval> | null = null;
 let publishing = false;
 
-/** 주말은 장이 없으므로 발행하지 않는다 (공휴일은 데이터가 비어 판단이 어려워 그대로 발행) */
+/** 주말·휴장일은 장이 없다 — (2026-09-10 전수 점검) 시장 폭·업종 수급 저장은 거래일에만 (리포트 요일은 설정이 정한다) */
 function isWeekend(d: Date): boolean {
-  const day = d.getDay();
-  return day === 0 || day === 6;
+  return !isTradingDay(d);
 }
 
 export async function publishEdition(

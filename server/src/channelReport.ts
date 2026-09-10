@@ -197,6 +197,10 @@ export async function buildChannelReport(
    *
    * `useOffsets`(정기 발행의 「지난번 이후」)는 창고 경로에선 뜻이 없다 — 스케줄러가
    * 이미 고정 구간을 준다. 라이브 폴백에서만 그대로 쓴다.
+   *
+   * (2026-09-10 전수 점검) ⚠️ 그래서 **선별 자동 발송(5분 주기)은 여기서 중복을 못 거른다** —
+   * 창고가 살아 있으면 windowHours 전체를 매번 다시 고르므로 같은 상위 글이 계속 뽑힌다.
+   * 「이미 보낸 글」은 channelScheduler 의 channelPickSent.json 장부가 걸러 낸다.
    */
   const enabledIds = new Set((await listChannels().catch(() => [])).filter((c) => c.enabled).map((c) => c.id));
   const st = await store.recent(sinceMinutes, enabledIds).catch(() => null);

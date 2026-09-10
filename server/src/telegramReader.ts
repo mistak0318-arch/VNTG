@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { recordApiCall } from "./apiUsage.js";
+import { readRooms } from "./telegramRooms.js";
 
 /**
  * 구독 중인 텔레그램 채널 읽기 (MTProto).
@@ -124,6 +125,13 @@ async function writeOffsets(o: Offsets): Promise<void> {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let client: any = null;
+/*
+ * (2026-09-10 전수 점검) 접속 중인 약속을 하나로 — 기동 직후 수집기·주요 채널·키워드·
+ * 스케줄러가 45~60초에 거의 동시에 깨어나 getClient 를 부르는데, `client` 가 아직
+ * null 이라 **TelegramClient 를 여럿 만들어 각각 connect** 했다. 세션 하나로 접속을
+ * 여러 개 열면 텔레그램이 AUTH_KEY 충돌·FLOOD 로 답한다. 첫 호출의 약속을 나눠 갖는다.
+ */
+let clientPromise: Promise<any> | null = null;
 
 /**
  * GramJS를 동적 import 한다.
@@ -133,18 +141,29 @@ let client: any = null;
 async function getClient(): Promise<any> {
   if (client) return client;
   if (!isReaderConfigured()) throw new Error("텔레그램 세션이 설정되지 않았습니다");
+  if (clientPromise) return clientPromise;
 
-  const { TelegramClient } = await import("telegram");
-  const { StringSession } = await import("telegram/sessions/index.js");
+  clientPromise = (async () => {
+    const { TelegramClient } = await import("telegram");
+    const { StringSession } = await import("telegram/sessions/index.js");
 
-  client = new TelegramClient(
-    new StringSession(process.env.TELEGRAM_SESSION!.trim()),
-    Number(process.env.TELEGRAM_API_ID),
-    process.env.TELEGRAM_API_HASH!.trim(),
-    { connectionRetries: 2, baseLogger: undefined },
-  );
-  await client.connect();
-  return client;
+    const c = new TelegramClient(
+      new StringSession(process.env.TELEGRAM_SESSION!.trim()),
+      Number(process.env.TELEGRAM_API_ID),
+      process.env.TELEGRAM_API_HASH!.trim(),
+      { connectionRetries: 2, baseLogger: undefined },
+    );
+    await c.connect();
+    client = c;
+    return c;
+  })();
+  try {
+    return await clientPromise;
+  } catch (err) {
+    /* (2026-09-10 전수 점검) 실패한 약속을 붙들고 있으면 영영 못 붙는다 — 비워서 다음 호출이 다시 시도하게 */
+    clientPromise = null;
+    throw err;
+  }
 }
 
 /**
@@ -172,6 +191,7 @@ export async function disconnectReader(): Promise<void> {
     await client.disconnect().catch(() => undefined);
     client = null;
   }
+  clientPromise = null; // (2026-09-10 전수 점검) 끊은 뒤 다시 부르면 새로 접속하게
 }
 
 /**
@@ -182,17 +202,26 @@ export async function disconnectReader(): Promise<void> {
  * 텔레그램 id는 앞에 -100 이 붙는 형태가 섞여 있어 숫자 부분만 비교한다.
  */
 function ownChatIds(): Set<string> {
-  const keys = [
-    "TELEGRAM_CHAT_ID",
-    "TELEGRAM_CHAT_ID_REPORT",
-    "TELEGRAM_CHAT_ID_SIGNAL",
-    "TELEGRAM_CHAT_ID_LOG",
-    "TELEGRAM_CHAT_ID_CHANNEL",
-  ];
   const out = new Set<string>();
-  for (const k of keys) {
-    const v = process.env[k]?.trim();
-    if (v) out.add(v.replace(/^-100/, "").replace(/^-/, ""));
+  const add = (v: string | undefined) => {
+    const t = v?.trim();
+    if (t) out.add(t.replace(/^-100/, "").replace(/^-/, ""));
+  };
+  /*
+   * (2026-09-10 전수 점검) 다섯 개만 적어 두고 있었다 — 그 뒤에 판 방(DISCLOSURE·KEYWORD·
+   * SUPER·SUPERSIGNAL·ORDER·SYSTEM_LOG)과 화면에서 등록한 방(telegramRooms.json)은
+   * 빠져서, 봇이 쓴 글이 수집 대상에 다시 들어왔다. `TELEGRAM_CHAT_ID` 로 시작하는
+   * 환경변수 전부 + 방 저장소의 배정·직접 등록 방을 모두 뺀다 (telegram.ts CHANNEL_ENV 참고).
+   */
+  for (const [k, v] of Object.entries(process.env)) {
+    if (k.startsWith("TELEGRAM_CHAT_ID")) add(v);
+  }
+  try {
+    const rooms = readRooms();
+    for (const v of Object.values(rooms.assign)) add(v);
+    for (const r of rooms.custom) add(r.chatId);
+  } catch {
+    /* 방 저장소를 못 읽어도 .env 몫은 뺐다 */
   }
   return out;
 }
@@ -249,7 +278,31 @@ export async function refreshChannels(): Promise<ChannelEntry[]> {
 /** 텔레그램이 FLOOD_WAIT 로 시킨 휴식이 끝나는 시각(ms). 모든 루프가 함께 본다 */
 let floodUntil = 0;
 
+/*
+ * (2026-09-10 전수 점검) **한 번에 하나만 읽는다.** 수집기·주요 채널·키워드·선별 발송이
+ * 각자 타이머로 돌아 겹치면, 채널 사이 350ms 간격은 루프마다 따로라 실제로는 텔레그램에
+ * 동시에 서너 줄기가 꽂혔다 — FLOOD_WAIT 의 주범. 약속 사슬로 직렬화한다.
+ * 앞 호출이 끝나야 다음이 시작하므로 간격은 루프를 합쳐도 350ms 가 지켜진다.
+ */
+let fetchChain: Promise<unknown> = Promise.resolve();
+
 export async function fetchNewMessages(
+  opts: Parameters<typeof fetchNewMessagesUnlocked>[0] = {},
+): ReturnType<typeof fetchNewMessagesUnlocked> {
+  const prev = fetchChain;
+  let release: () => void = () => undefined;
+  fetchChain = new Promise<void>((r) => {
+    release = r;
+  });
+  await prev.catch(() => undefined);
+  try {
+    return await fetchNewMessagesUnlocked(opts);
+  } finally {
+    release();
+  }
+}
+
+async function fetchNewMessagesUnlocked(
   opts: {
     maxPerChannel?: number;
     sinceMinutes?: number;

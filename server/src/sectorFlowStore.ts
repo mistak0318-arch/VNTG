@@ -415,7 +415,19 @@ export async function backfillSectorFlow(
  * 조회가 늘고, 한 번 채우면 끝나는 일이다. 손으로 「과거분 채우기」를 부르거나 마감 뒤
  * 정리가 한 번 돌리면 된다(`/api/overview/sector-flow/backfill`).
  */
+/*
+ * (2026-09-10 전수 점검) 리포트 스케줄러가 1분마다 부르고, 위 백필은 「오늘은 있어도 다시 받는다」라
+ * 15:40~24:00 사이 **매분** 오늘치 ka10051 두 장을 다시 받았다(하루 1,000회). 오늘 성공한 시각을
+ * 기억해 30분 안이면 건너뛴다 — 정정분은 30분 간격이면 충분히 따라간다.
+ */
+const CAPTURE_GAP_MS = 30 * 60_000;
+let lastCapture: { day: string; at: number } | null = null;
+
 export async function captureSectorFlow(client: KiwoomClient): Promise<{ saved: boolean; reason?: string }> {
+  const todayKey = dashed(ymd(new Date()));
+  if (lastCapture?.day === todayKey && Date.now() - lastCapture.at < CAPTURE_GAP_MS) {
+    return { saved: false, reason: "30분 안에 받았음" };
+  }
   /*
    * 칸이 모자란 옛 날짜가 남아 있으면 **이번 한 번만** 70일을 훑어 되채운다 — 미니PC 는
    * 데이터 파일이 따로라 개발PC 에서 돌린 되채우기가 안 닿는다. 다 채워지면 다시 3일로.
@@ -425,6 +437,7 @@ export async function captureSectorFlow(client: KiwoomClient): Promise<{ saved: 
     [...d.kospi, ...d.kosdaq].some((r) => (r.v?.length ?? 0) < SUBJECTS.length),
   );
   const res = await backfillSectorFlow(client, hasShort ? 70 : 3);
+  lastCapture = { day: todayKey, at: Date.now() }; // (2026-09-10 전수 점검) 성공 시각 — 실패는 던져서 여기 안 온다
   return res.added > 0 || res.refilled > 0
     ? { saved: true }
     : { saved: false, reason: "새로 채울 거래일 없음" };

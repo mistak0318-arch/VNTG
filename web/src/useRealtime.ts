@@ -146,6 +146,14 @@ export function useRealtime(
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let es: EventSource | null = null;
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    /*
+     * (2026-09-10 전수 점검) SSE 모드의 `healthy` 는 **마지막 이벤트가 언제 왔나**로 정한다.
+     * 예전엔 한 번 붙으면 영영 `true` 라, 서버 소켓이 죽어도(스트림은 살아 있으니) 화면은
+     * 옛 값을 실시간 ●로 계속 보여 줬다. 60초 넘게 아무 이벤트가 없으면 거짓이 된다.
+     */
+    let lastEventAt = 0;
+    let ageTimer: ReturnType<typeof setInterval> | null = null;
+    const fresh = () => lastEventAt > 0 && Date.now() - lastEventAt < 60_000;
 
     const tick = async () => {
       try {
@@ -176,12 +184,17 @@ export function useRealtime(
       const values: Record<string, RealtimeValue | null> = { ...lastValues.current };
       const flush = () => {
         flushTimer = null;
-        if (alive) setState({ enabled: true, healthy: true, values: { ...values } });
+        if (alive) setState({ enabled: true, healthy: fresh(), values: { ...values } });
       };
       es = new EventSource(`/api/realtime/stream?keys=${encodeURIComponent(joined)}`);
+      /* 이벤트가 끊기면 아무도 flush 를 안 부른다 — 10초마다 나이만 다시 본다 */
+      ageTimer = setInterval(() => {
+        if (alive && !fresh()) setState((s) => (s.healthy ? { ...s, healthy: false } : s));
+      }, 10_000);
       es.onmessage = (e) => {
         try {
           const d = JSON.parse(e.data) as { key: string; at: number; values: Record<string, string> };
+          lastEventAt = Date.now();
           values[d.key] = { at: d.at, values: d.values };
           if (!flushTimer) flushTimer = setTimeout(flush, 200);
         } catch {
@@ -202,6 +215,7 @@ export function useRealtime(
       alive = false;
       if (pollTimer) clearInterval(pollTimer);
       if (flushTimer) clearTimeout(flushTimer);
+      if (ageTimer) clearInterval(ageTimer);
       es?.close();
     };
   }, [joined, ms, readOnly]);

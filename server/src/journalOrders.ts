@@ -91,7 +91,8 @@ async function fromKiwoom(date: string, have: Set<string>): Promise<JournalOrder
       amount: f.price ? f.filled * f.price : null,
       ordNo: f.ordNo || null,
       msg: `키움 체결 조회 — ${f.status || "체결"}`,
-      mock: orderIsMock(),
+      /* (2026-09-10 전수 점검) 실제로 쓴 클라이언트의 모의 여부 — 주문 키가 없으면 조회 키(KIWOOM_IS_MOCK)의 것 */
+      mock: orderClient() ? orderIsMock() : process.env.KIWOOM_IS_MOCK === "true",
       src: "kiwoom",
     });
   }

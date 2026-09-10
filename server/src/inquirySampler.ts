@@ -12,6 +12,7 @@
  * 개발 PC(`REALTIME_ENABLED=0`)에선 안 돈다 — 같은 앱키로 두 곳이 받을 이유가 없다.
  */
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { isTradingDay } from "./tradingDay.js";
 import { bare, toNum } from "./rankExtras.js";
 
 export interface InquirySample {
@@ -32,6 +33,7 @@ function kstHour(now = Date.now()): number {
 async function takeSample(client: KiwoomClient): Promise<void> {
   const h = kstHour();
   if (h < 7) return; // 00~07시는 쉰다
+  if (!isTradingDay()) return; // (2026-09-10 전수 점검) 휴장일엔 조회순위가 안 움직인다 — 1분마다 1,020회를 아낀다
   try {
     const res = await client.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka00198", { qry_tp: "1" });
     const list = Array.isArray(res.data.item_inq_rank) ? (res.data.item_inq_rank as Record<string, unknown>[]) : [];

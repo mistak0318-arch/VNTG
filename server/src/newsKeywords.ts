@@ -283,7 +283,8 @@ export async function collectNewsKeywords(): Promise<{ articles: number; terms: 
          * 링크와 「제목+매체」 둘 다로 거른다. 제목만 쓰면 연재물(「[표] 코스피」)이
          * 매일 하나로 뭉개지므로 **날짜 파일 안에서만** 견준다 — 지금 구조가 그렇다.
          */
-        const titleKey = `T|${it.press}|${it.title.replace(/s+/g, "")}`;
+        /* (2026-09-10 전수 점검) `/s+/` 는 글자 s 를 지우는 것이었다 — 공백을 지우려던 `\s+` 로 */
+        const titleKey = `T|${it.press}|${it.title.replace(/\s+/g, "")}`;
         if (seen.has(it.link) || seen.has(titleKey)) continue;
         seen.add(it.link);
         seen.add(titleKey);
@@ -596,8 +597,9 @@ export async function keywordFlow(windowMin = 60): Promise<KeywordFlow> {
      */
     if (/^[A-Z]{2,6}$/.test(term) && (kinds.get(term) ?? "new") === "new") {
       const ss = samples.get(term) ?? [];
+      /* (2026-09-10 전수 점검) 템플릿 문자열의 `\b` 는 백스페이스 문자다 — 낱말 경계는 `\\b` 로 써야 한다 */
       const standalone = ss.some((x) =>
-        new RegExp(`\b${term}\b(?![가-힣一-龥])`).test(x.title),
+        new RegExp(`\\b${term}\\b(?![가-힣一-龥])`).test(x.title),
       );
       if (ss.length > 0 && !standalone) continue;
     }
@@ -718,16 +720,24 @@ export function startNewsKeywordScheduler(): void {
   if (timer) return;
   let last = 0;
   const tick = async () => {
-    /* 설정에서 끌 수 있다 (2026-08-30) — 「지금 실행」은 꺼도 되니 여기서만 막는다 */
-    if (!(await isEnabled("newsKeywords"))) return;
-    const period = (await periodOverrideMs("newsKeywords")) ?? periodMs();
-    if (Date.now() - last < period) return;
-    last = Date.now();
-    const r = await collectNewsKeywords().catch((e) => {
-      void markRun("newsKeywords", false, e instanceof Error ? e.message : "실패");
-      return null;
-    });
-    if (r) await markRun("newsKeywords", true, `기사 ${r.articles}건 · 낱말 ${r.terms}개`);
+    /*
+     * (2026-09-10 전수 점검) 몸통 전체를 감싼다 — isEnabled·periodOverrideMs·markRun 이 던지면
+     * `void tick()` 이라 처리되지 않은 거부로 남았다(설정 파일이 깨진 날 프로세스가 죽는 경로).
+     */
+    try {
+      /* 설정에서 끌 수 있다 (2026-08-30) — 「지금 실행」은 꺼도 되니 여기서만 막는다 */
+      if (!(await isEnabled("newsKeywords"))) return;
+      const period = (await periodOverrideMs("newsKeywords")) ?? periodMs();
+      if (Date.now() - last < period) return;
+      last = Date.now();
+      const r = await collectNewsKeywords().catch((e) => {
+        void markRun("newsKeywords", false, e instanceof Error ? e.message : "실패").catch(() => undefined);
+        return null;
+      });
+      if (r) await markRun("newsKeywords", true, `기사 ${r.articles}건 · 낱말 ${r.terms}개`);
+    } catch (e) {
+      console.error("[newsKeywords] 회차 실패:", e instanceof Error ? e.message : e);
+    }
   };
   void tick();
   /* 1분마다 깨어나 「지금 긁을 때인가」만 본다 — 시간대별 주기를 갈아 끼우지 않아도 된다 */

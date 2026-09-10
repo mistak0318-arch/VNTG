@@ -3,7 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { logEvent } from "./eventLog.js";
 import { stripSignature } from "./buzzRadar.js";
-import { fetchNewMessages, isReaderConfigured, type ChannelMessage } from "./telegramReader.js";
+import { fetchNewMessages, isReaderConfigured, listChannels, type ChannelMessage } from "./telegramReader.js";
+import { recent as storeRecent } from "./channelStore.js";
 import { listWatchlist } from "./watchlist.js";
 import { listThemes } from "./customThemes.js";
 import { hasDedicatedChannel, sendTelegram } from "./telegram.js";
@@ -239,7 +240,19 @@ export async function runKeywordScan(
    * 놓친다. 중복은 sent 키로 막으므로 겹쳐 보는 게 안전하다.
    */
   const sinceMinutes = opts.sinceMinutes ?? cfg.intervalMin * 2;
-  const { messages } = await fetchNewMessages({ sinceMinutes, useOffsets: false });
+  /*
+   * (2026-09-10 전수 점검) **창고부터 읽는다.** 수집기가 10분마다 30분 창으로 채우는데
+   * 여기만 3~5분마다 71채널을 또 훑고 있었다 — 텔레그램 호출의 절반이 이 루프였다.
+   * 창고가 비었고 최신 글이 30분보다 낡았을 때(수집기가 죽었거나 막 켜졌을 때)만
+   * 예전처럼 직접 훑는다. 켜 둔 채널만 보는 것은 직접 훑을 때와 같다.
+   */
+  const enabledIds = new Set((await listChannels().catch(() => [])).filter((c) => c.enabled).map((c) => c.id));
+  const st = await storeRecent(sinceMinutes, enabledIds).catch(() => null);
+  const staleIso = new Date(Date.now() - 30 * 60_000).toISOString();
+  const storeDead = !st || (st.messages.length === 0 && (st.newest === null || st.newest < staleIso));
+  const { messages } = storeDead
+    ? await fetchNewMessages({ sinceMinutes, useOffsets: false })
+    : { messages: st.messages };
 
   const sent = new Set(store.sent);
   const hits: KeywordHit[] = [];

@@ -217,6 +217,12 @@ function onText(text: string): void {
         if (/OPSP0008/.test(j.body?.msg_cd ?? "") && j.header?.tr_key) {
           subs.delete(j.header.tr_key);
           refused.add(j.header.tr_key);
+        } else if (j.header?.tr_key) {
+          /*
+           * (2026-09-10 전수 점검) 그 밖의 거절은 `subs` 에서만 뺀다 — 「걸렸다」로 남아 있으면
+           * 다음 `resync` 가 건너뛰어 영영 안 건다. 빼 두면 다음 목록 갱신 때 다시 시도한다.
+           */
+          subs.delete(j.header.tr_key);
         }
         /*
          * ⚠️ **앱키당 세션 하나다** (2026-09-08 실측 `OPSP8996 ALREADY IN USE appkey`).
@@ -256,6 +262,14 @@ function onText(text: string): void {
     frames += 1;
     lastFrameAt = Date.now();
     /*
+     * (2026-09-10 전수 점검) 등락률 부호. 한투 HDFSCNT0 은 [12] SIGN(1 상한·2 상승·3 보합·4 하한·5 하락) ·
+     * [13] DIFF · [14] RATE 다. RATE 가 부호 없이 오면 하락 종목이 +로 보인다. 부호 칸이 1~5 로
+     * 읽히고 RATE 가 음수가 아닐 때만 부호를 입힌다 — 이미 음수로 오면 그대로 둔다(방어적).
+     */
+    const sign = String(cells[off + 12] ?? "").trim();
+    let rate = Number(cells[off + 14]) || 0;
+    if (/^[45]$/.test(sign) && rate > 0) rate = -rate;
+    /*
      * 국내 체결(0B)과 같은 FID 자리에 넣는다 — 화면은 10(현재가)·12(등락률)만 읽는다.
      * 13(누적거래량)·228(체결강도)도 같이 넣어 둔다(FE 필드표에 이미 있는 자리다).
      */
@@ -266,7 +280,7 @@ function onText(text: string): void {
     try {
       store?.takeExternal("FE", sym, {
         "10": String(last),
-        "12": String(Number(cells[off + 14]) || 0),
+        "12": String(rate),
         "13": String(Number(cells[off + 20]) || 0),
         "228": String(Number(cells[off + 24]) || 0),
       });
@@ -302,16 +316,20 @@ function connect(): void {
       };
       sock.onmessage = (e) => onText(String(e.data));
       sock.onerror = () => {
-        /* onclose 가 뒤따른다 — 여기서는 상태만 */
-        state = "끊김";
+        /* onclose 가 뒤따른다 — 여기서는 상태만. (2026-09-10 전수 점검) 「다른 곳이 쓰는 중」은 덮지 않는다 */
+        if (state !== "다른 곳이 쓰는 중") state = "끊김";
       };
       sock.onclose = () => {
-        state = "끊김";
+        /*
+         * (2026-09-10 전수 점검) OPSP8996 이 잡아 둔 45초 대기와 상태 글자를 여기서 짧게·「끊김」으로
+         * 덮어쓰고 있었다 — 닫힌 직후 3초 만에 다시 붙어 거절 로그만 쌓였다. 더 긴 쪽을 쓴다.
+         */
+        if (state !== "다른 곳이 쓰는 중") state = "끊김";
         ws = null;
         subs.clear();
         /* 열쇠는 끊김과 함께 버린다 — 재발급이 싸고, 만료된 열쇠로 붙으면 조용히 실패한다 */
         approvalKey = "";
-        retryAt = Date.now() + retryMs;
+        retryAt = Math.max(retryAt, Date.now() + retryMs);
         retryMs = Math.min(60_000, retryMs * 2);
       };
     } catch (e) {
@@ -366,10 +384,13 @@ export function setUsRealtimeSymbols(symbols: string[]): void {
       if (!merged.includes(sym)) merged.push(sym);
     }
   }
-  const same = merged.length === wanted.length && merged.every((s, i) => s === wanted[i]);
   wanted = merged;
   connect();
-  if (!same) resync();
+  /*
+   * (2026-09-10 전수 점검) 목록이 그대로여도 `resync` 를 부른다 — 멱등이라 걸린 것과 같으면 아무것도
+   * 안 보낸다. 거절돼서 `subs` 에서 빠진 자리는 이 호출이 다시 건다. 예전엔 목록이 안 바뀌면 영영 안 걸었다.
+   */
+  resync();
 }
 
 export function startHantooRealtime(s: RealtimeStore): void {

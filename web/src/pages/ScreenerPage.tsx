@@ -712,7 +712,8 @@ export function ScreenerPage({
     if (!liveOn) return null;
     if (!rt.healthy) return null;
     const v = rt.values[`0B:${code}`];
-    if (!v || Date.now() - v.at > 90_000) return null;
+    /* (2026-09-10 전수 점검) 30초 넘은 값은 안 쓴다 — 조회 값(REST)으로 돌아간다. 90초는 너무 길었다 */
+    if (!v || Date.now() - v.at > 30_000) return null;
     const p = fid(v, "10");
     if (p === null || p === 0) return null;
     return { price: Math.abs(p), rate: fid(v, "12") };

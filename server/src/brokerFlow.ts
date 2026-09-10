@@ -125,6 +125,8 @@ export interface BrokerFlow {
 type Store = Record<string, { date: string; points: BrokerPoint[]; names: Record<string, string> }>;
 
 async function load(): Promise<Store> {
+  /* (2026-09-10 전수 점검) 아직 안 쓴 것이 있으면 그게 최신이다 — 파일을 읽으면 30초치 점을 잃는다 */
+  if (pending) return pending;
   try {
     return JSON.parse(await readFile(FILE, "utf-8")) as Store;
   } catch {
@@ -132,9 +134,42 @@ async function load(): Promise<Store> {
   }
 }
 
-async function save(s: Store): Promise<void> {
+async function writeNow(s: Store): Promise<void> {
   await mkdir(dirname(FILE), { recursive: true });
   await writeFile(FILE, JSON.stringify(s), "utf-8");
+}
+
+/*
+ * (2026-09-10 전수 점검) **30초에 한 번만 쓴다.** brokerAuto 가 장중 1초마다 부르니 파일 전체를
+ * 초당 한 번 다시 쓰고 있었다. 마지막 상태를 들고 있다가 30초 지나면 쓰고, 장이 끝나면
+ * `flushBrokerFlow()` 로 남은 것을 쓴다. 메모리의 `store` 는 매번 최신이라 화면은 그대로다.
+ */
+const WRITE_GAP_MS = 30_000;
+let pending: Store | null = null;
+let lastWriteAt = 0;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function save(s: Store): Promise<void> {
+  pending = s;
+  const wait = lastWriteAt + WRITE_GAP_MS - Date.now();
+  if (wait <= 0) return flushBrokerFlow();
+  if (!flushTimer) {
+    flushTimer = setTimeout(() => void flushBrokerFlow().catch(() => undefined), wait);
+    flushTimer.unref?.();
+  }
+}
+
+/** 미뤄 둔 것을 지금 쓴다 — 장 끝·종료 직전 */
+export async function flushBrokerFlow(): Promise<void> {
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  const s = pending;
+  pending = null;
+  if (!s) return;
+  lastWriteAt = Date.now();
+  await writeNow(s);
 }
 
 function kstNow(): { date: string; hm: string } {

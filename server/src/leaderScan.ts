@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { isTradingDay } from "./tradingDay.js";
 import { tradeValueTop } from "./signalScreen.js";
 import { getMarketSnapshot, isRealSector } from "./marketSnapshot.js";
 import { searchNews, type NewsItem } from "./newsDisclosure.js";
@@ -695,8 +696,7 @@ export async function leaderScan(
    * 지속성은 이 기능의 핵심 물음이라(「그 강함이 유지되는가」) 여기가 부풀면
    * 기능 전체가 거짓말이 된다.
    */
-  const dow = kst.getUTCDay();
-  const tradingDay = dow >= 1 && dow <= 5;
+  const tradingDay = isTradingDay(); // (2026-09-10 전수 점검) 휴장일도 「어제 종목 유지율」을 부풀렸다
   if (!noTrade && afterClose && tradingDay) {
     const idx = store.days.findIndex((d) => d.date === date);
     if (idx >= 0) store.days[idx] = today;
@@ -811,7 +811,7 @@ export function startLeaderScanScheduler(client: KiwoomClient): void {
   const tick = async () => {
     if (running) return;
     const now = new Date();
-    const weekday = now.getDay() !== 0 && now.getDay() !== 6;
+    const weekday = isTradingDay(now); // (2026-09-10 전수 점검)
     const mins = now.getHours() * 60 + now.getMinutes();
     // 15:35 ~ 16:05 사이에 한 번 걸리면 된다
     if (!weekday || mins < 15 * 60 + 35 || mins > 16 * 60 + 5) return;

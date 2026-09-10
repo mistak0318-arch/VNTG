@@ -245,20 +245,31 @@ async function load(): Promise<UsageData> {
   return cache;
 }
 
-/** 잦은 디스크 쓰기를 막기 위해 잠시 모았다가 저장 */
+async function flushUsage(): Promise<void> {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  if (!cache) return;
+  try {
+    await mkdir(dirname(DATA_FILE), { recursive: true });
+    await writeFile(DATA_FILE, JSON.stringify(cache, null, 2), "utf-8");
+  } catch {
+    // 사용량 기록 실패가 본 기능을 막으면 안 되므로 조용히 무시
+  }
+}
+
+/**
+ * 잦은 디스크 쓰기를 막기 위해 잠시 모았다가 저장.
+ * (2026-09-10 전수 점검) 5초 → **60초.** 장중엔 초당 몇 건씩 들어와 5초마다 파일 전체를 다시 썼다.
+ * 꺼질 때는 `beforeExit` 에서 남은 것을 쓴다.
+ */
 function scheduleSave(): void {
   if (saveTimer) return;
-  saveTimer = setTimeout(async () => {
-    saveTimer = null;
-    if (!cache) return;
-    try {
-      await mkdir(dirname(DATA_FILE), { recursive: true });
-      await writeFile(DATA_FILE, JSON.stringify(cache, null, 2), "utf-8");
-    } catch {
-      // 사용량 기록 실패가 본 기능을 막으면 안 되므로 조용히 무시
-    }
-  }, 5000);
+  saveTimer = setTimeout(() => void flushUsage(), 60_000);
+  saveTimer.unref?.();
 }
+process.once("beforeExit", () => void flushUsage());
 
 /** 어느 기능이 부른 호출인지. 모르면 "기타"로 담긴다 */
 export type UsageFeature =

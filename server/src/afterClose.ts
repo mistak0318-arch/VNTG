@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { isTradingDay } from "./tradingDay.js";
 import { buildCloses } from "./dailyCloses.js";
 import { collectProgress, startCollectDaily } from "./collectDaily.js";
 import { ledgerStatus } from "./dailyStore.js";
@@ -202,6 +203,50 @@ async function saveHistory(): Promise<void> {
   await rename(tmp, HISTORY_FILE);
 }
 
+/* ── 실행 상태 (2026-09-10 전수 점검 F) ─────────────────────────────────
+ *
+ * `alreadyDone` 은 원장(collectHistory)의 `done` 만 본다 — 원장이 성공했으면 다른 단계가 깨졌어도
+ * 「오늘 끝났다」였고, 재시도 시계(`retry`)는 메모리라 재시작하면 잊었다. 그래서 저녁에 배포하면
+ * 실패 단계를 다시 돌리지 못했다. 회차의 요약을 작은 파일 하나로 남긴다:
+ *   { day, startedAt, finishedAt, failedSteps, retryTried }
+ * 켤 때: 오늘 끝났고 실패 없음 → 안 돈다 · 실패 단계 있음 → 그것만 · 「시작」 알림은 재시도엔 안 보낸다.
+ */
+const STATE_FILE = join(DATA_DIR, "afterCloseState.json");
+interface AfterCloseState {
+  day: string;
+  startedAt: string;
+  finishedAt: string | null;
+  failedSteps: string[];
+  retryTried: number;
+}
+let state: AfterCloseState | null = null;
+
+async function loadState(): Promise<AfterCloseState | null> {
+  if (state) return state;
+  try {
+    const v = JSON.parse(await readFile(STATE_FILE, "utf8")) as Partial<AfterCloseState>;
+    if (typeof v.day === "string" && typeof v.startedAt === "string") {
+      state = {
+        day: v.day,
+        startedAt: v.startedAt,
+        finishedAt: typeof v.finishedAt === "string" ? v.finishedAt : null,
+        failedSteps: Array.isArray(v.failedSteps) ? v.failedSteps.filter((s): s is string => typeof s === "string") : [],
+        retryTried: typeof v.retryTried === "number" ? v.retryTried : 0,
+      };
+    }
+  } catch {
+    state = null;
+  }
+  return state;
+}
+
+async function saveState(next: AfterCloseState): Promise<void> {
+  state = next;
+  const tmp = `${STATE_FILE}.tmp`;
+  await writeFile(tmp, JSON.stringify(next, null, 2), "utf8");
+  await rename(tmp, STATE_FILE);
+}
+
 /** 최근 회차들 — 새 것부터 */
 export async function afterCloseHistory(): Promise<AfterCloseRun[]> {
   await loadHistory();
@@ -235,8 +280,7 @@ function dayKey(at = Date.now()): string {
 
 function shouldStart(at = Date.now()): boolean {
   const k = kst(at);
-  const day = k.getDay();
-  if (day === 0 || day === 6) return false;
+  if (!isTradingDay(k)) return false; // (2026-09-10 전수 점검) 휴장일에 두 시간짜리를 헛돌리지 않는다
   return k.getHours() * 60 + k.getMinutes() >= START_HHMM;
 }
 
@@ -313,6 +357,12 @@ export async function runAfterClose(
   if (!force && (await alreadyDone(day))) {
     return run ?? { day, startedAt: "", running: false, steps: [] };
   }
+  /* (2026-09-10 전수 점검 F) 상태 파일이 「오늘 끝났고 실패 없음」이면 force 아닌 정규 회차는 안 돈다 */
+  const prevState = await loadState().catch(() => null);
+  if (!force && prevState?.day === day && prevState.finishedAt && prevState.failedSteps.length === 0) {
+    return run ?? { day, startedAt: prevState.startedAt, finishedAt: prevState.finishedAt, running: false, steps: [] };
+  }
+  const isRetry = /^재시도/.test(reason ?? "");
 
   const want = (k: string) => !only || only.length === 0 || only.includes(k);
   run = {
@@ -325,6 +375,14 @@ export async function runAfterClose(
     stepTotal: STEPS.filter((s) => want(s.key)).length,
   };
   await saveHistory().catch(() => undefined);
+  /* (2026-09-10 전수 점검 F) 재시도면 오늘 상태(실패 목록·횟수)를 이어 쓰고, 새 회차면 새로 시작한다 */
+  await saveState({
+    day,
+    startedAt: run.startedAt,
+    finishedAt: null,
+    failedSteps: isRetry && prevState?.day === day ? prevState.failedSteps : [],
+    retryTried: isRetry && prevState?.day === day ? prevState.retryTried : 0,
+  }).catch(() => undefined);
 
   /*
    * ## **시작할 때도 알린다** (2026-09-02)
@@ -343,7 +401,8 @@ export async function runAfterClose(
   const planned = STEPS.filter((s) => want(s.key));
   const scope = !only || only.length === 0 ? "전체 9단계" : `${planned.length}단계만`;
   const why = reason ?? "정규 회차";
-  const startTitle = `마감 뒤 정리 시작 — ${scope} (${why})`;
+  /* (2026-09-10 전수 점검 F) 재시도는 「시작」이 아니라 「재시도」로 — 같은 날 시작 줄이 두 번 오지 않는다 */
+  const startTitle = isRetry ? `마감 뒤 정리 재시도 — ${scope} (${why})` : `마감 뒤 정리 시작 — ${scope} (${why})`;
   const startBody =
     planned.map((s, i) => `${i + 1}. ${s.label}`).join(" → ") +
     (planned.length >= 8 ? "\n\n두 시간 남짓 걸립니다. 끝나면 다시 알립니다." : "\n\n끝나면 다시 알립니다.");
@@ -540,6 +599,19 @@ export async function runAfterClose(
   run.at = undefined;
   run.atKey = undefined;
   await saveHistory().catch(() => undefined);
+  /* (2026-09-10 전수 점검 F) 끝난 시각과 실패 단계를 파일에 — 재시작 뒤 이것만 다시 돈다 */
+  {
+    const failedNow = run.steps.filter((s) => !s.ok).map((s) => s.key);
+    /* 부분 회차(only)면 안 돌린 단계의 옛 실패는 그대로 남긴다 */
+    const carried = (state?.day === day ? state.failedSteps : []).filter((k) => !want(k));
+    await saveState({
+      day,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      failedSteps: [...new Set([...carried, ...failedNow])],
+      retryTried: state?.day === day ? state.retryTried : 0,
+    }).catch(() => undefined);
+  }
 
   /*
    * ## **끝나면 알린다** — 텔레그램과 알림 센터 둘 다 (2026-09-01). 시작 알림은 위에.
@@ -628,11 +700,33 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
 
     const day = dayKey();
 
+    /*
+     * (2026-09-10 전수 점검 F) **재시작 뒤** — 메모리(run·retry)가 비어 있으면 상태 파일에서 되살린다.
+     * 오늘 끝났고 실패 없음 → 아무것도 안 한다. 실패 단계 있음 → 아래 ①이 그것만 다시 돌린다.
+     */
+    if (!run && !retry) {
+      const st = await loadState().catch(() => null);
+      if (st?.day === day && st.finishedAt) {
+        if (st.failedSteps.length === 0) return;
+        retry = { day, tried: st.retryTried, at: new Date(st.finishedAt).getTime() };
+        run = {
+          day,
+          startedAt: st.startedAt,
+          finishedAt: st.finishedAt,
+          running: false,
+          steps: st.failedSteps.map((k) => ({ key: k, label: STEPS.find((s) => s.key === k)?.label ?? k, ok: false, ms: 0 })),
+          reason: "재시작 뒤 되살림",
+        };
+      }
+    }
+
     /* ① 실패한 단계가 있으면 그것만 다시 — 성공한 것은 안 건드린다 */
     if (run?.day === day && !run.running && retry?.day === day) {
       const failed = run.steps.filter((s) => !s.ok).map((s) => s.key);
       if (failed.length > 0 && retry.tried < RETRY_MAX && Date.now() - retry.at >= RETRY_GAP_MS) {
         retry = { day, tried: retry.tried + 1, at: Date.now() };
+        /* (2026-09-10 전수 점검 F) 횟수를 파일에도 — 재시작해도 두 번 넘게 안 돈다 */
+        if (state?.day === day) await saveState({ ...state, retryTried: retry.tried }).catch(() => undefined);
         console.log(`[afterClose] 실패 단계 재시도 ${retry.tried}/${RETRY_MAX} — ${failed.join(", ")}`);
         const r = await runAfterClose(client, true, failed, `재시도 ${retry.tried}/${RETRY_MAX}`).catch(
           () => null,

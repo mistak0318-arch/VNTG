@@ -275,7 +275,8 @@ export function MyPage({ onSelectStock }: { onSelectStock: (code: string, name: 
     // KRX 정규장 밖엔 0B 오버레이를 안 믿는다 — 프리장 KRX 0% 가 통합 값을 덮었다
     if (krxOverlayLive() && rtWatch.healthy) {
       const v = rtWatch.values[`0B:${code}`];
-      if (v && Date.now() - v.at <= 90_000) {
+      /* (2026-09-10 전수 점검) 30초 넘은 값은 안 쓴다 — 아래 조회 값으로 돌아간다 */
+      if (v && Date.now() - v.at <= 30_000) {
         const p = fid(v, "10");
         if (p !== null && p !== 0) return { price: Math.abs(p), rate: fid(v, "12") };
       }

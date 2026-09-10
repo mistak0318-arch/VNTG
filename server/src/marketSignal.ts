@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { isTradingDay } from "./tradingDay.js";
 import { dropPhantomToday } from "./candleGuard.js";
 import { indexDetail } from "./indexDetail.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
@@ -657,8 +658,7 @@ async function recordIfClose(client: KiwoomClient, data: MarketSignal): Promise<
   const k = new Date(Date.now() + 9 * 3600_000);
   const date = k.toISOString().slice(0, 10);
   const hm = k.getUTCHours() * 60 + k.getUTCMinutes();
-  const wd = k.getUTCDay();
-  if (wd === 0 || wd === 6 || hm < 935 || hm > 990 || recordedDay === date) return;
+  if (!isTradingDay() || hm < 935 || hm > 990 || recordedDay === date) return; // (2026-09-10 전수 점검) 휴장일 기록 차단
   const hist = await readHistory();
   const dup = hist.findIndex((h) => h.date === date);
   if (dup >= 0 && !hist[dup].backfilled) {
@@ -739,6 +739,9 @@ export function startMarketSignalRecorder(client: KiwoomClient): void {
   setInterval(() => {
     const k = new Date(Date.now() + 9 * 3600_000);
     const hm = k.getUTCHours() * 60 + k.getUTCMinutes();
+    if (!isTradingDay()) return; // (2026-09-10 전수 점검)
+    /* (2026-09-10 전수 점검) (I) 오늘 기록이 이미 남았으면 강제 재평가를 멈춘다 — 5분마다 지수·수급을 다시 부를 이유가 없다 */
+    if (recordedDay === k.toISOString().slice(0, 10)) return;
     if (hm >= 935 && hm <= 990) void evaluateMarket(client, true).catch(() => undefined);
   }, 5 * 60_000);
 }

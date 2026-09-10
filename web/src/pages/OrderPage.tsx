@@ -2445,6 +2445,8 @@ function Confirm({
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* (2026-09-10 전수 점검) 응답 없이 끝난 주문서 — 실행 단추를 다시 살리지 않는다 */
+  const [maybeSent, setMaybeSent] = useState(false);
   const [sec, setSec] = useState(Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)));
   const pwRef = useRef<HTMLInputElement>(null);
 
@@ -2478,7 +2480,19 @@ function Confirm({
       setOkMsg(isWatch ? r.msg : `${sideKo} 접수 — 주문번호 ${r.ordNo || "?"} ${r.msg}`);
       setTimeout(onDone, 1200);
     } catch (e2) {
-      setError(e2 instanceof Error ? e2.message : "실패");
+      const msg = e2 instanceof Error ? e2.message : "실패";
+      /*
+       * (2026-09-10 전수 점검) **응답을 못 받은 것은 「안 나간 것」이 아니다.** fetch 자체가 죽었거나(TypeError)
+       * 답이 JSON 이 아니면(SyntaxError — 터널의 5xx 페이지) 서버는 이미 냈을 수 있다. 실행 단추를 되살리면
+       * 사람은 다시 누르고, 그게 이중 주문이다. 이 주문서는 여기서 닫고 새로 만들게만 둔다.
+       * 서버가 「접수됐을 수 있다」「이미 실행」이라고 말한 것도 같다.
+       */
+      if (e2 instanceof TypeError || e2 instanceof SyntaxError || /접수됐을 수 있|이미 실행/.test(msg)) {
+        setMaybeSent(true);
+        setError(`접수됐을 수 있습니다 — 미체결·체결 탭에서 확인하세요. 이 주문서로는 다시 보내지 않습니다 (${msg})`);
+      } else {
+        setError(msg);
+      }
     } finally {
       setBusy(false);
     }
@@ -2640,8 +2654,8 @@ function Confirm({
           <button type="button" className="ord-cancel" onClick={onClose}>
             그만
           </button>
-          <button type="submit" className={`ord-go ${isCancel ? "" : ticket.side}`} disabled={busy || dead || (!graced && !pw)}>
-            {busy ? "보내는 중…" : dead ? "만료됨 — 다시" : `${sideKo} 실행`}
+          <button type="submit" className={`ord-go ${isCancel ? "" : ticket.side}`} disabled={busy || dead || maybeSent || (!graced && !pw)}>
+            {busy ? "보내는 중…" : maybeSent ? "확인 필요 — 새 주문서로" : dead ? "만료됨 — 다시" : `${sideKo} 실행`}
           </button>
         </div>
       </form>

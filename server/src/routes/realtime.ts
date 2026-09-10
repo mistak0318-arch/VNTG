@@ -111,6 +111,11 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
       streamStats.opened += 1;
       streamStats.keyCounts.push(keys.length);
       const send = (key: string, at: number, values: Record<string, string>) => {
+        /*
+         * (2026-09-10 전수 점검) 브라우저가 못 받아 가는 사이(절전·느린 회선)엔 건너뛴다. 소켓 버퍼가
+         * 찼는데 계속 write 하면 서버 메모리에 쌓인다. 누적값이라 다음 틱이 대신하므로 잃는 게 없다.
+         */
+        if (res.writableNeedDrain) return;
         streamStats.lastSentAt = new Date().toISOString();
         res.write(`data: ${JSON.stringify({ key, at, values })}\n\n`);
       };
@@ -154,7 +159,10 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
       });
 
       // 끊김 감지용 심장박동 — 프록시가 조용한 연결을 자르는 걸 막는 겸
-      const beat = setInterval(() => res.write(`: beat ${rt.healthy ? 1 : 0}\n\n`), 15_000);
+      const beat = setInterval(() => {
+        if (res.writableNeedDrain) return; // (2026-09-10 전수 점검) 막힌 연결엔 심장박동도 안 쌓는다
+        res.write(`: beat ${rt.healthy ? 1 : 0}\n\n`);
+      }, 15_000);
       req.on("close", () => {
         clearInterval(beat);
         offExt?.();

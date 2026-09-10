@@ -333,23 +333,32 @@ export async function buildCloses(client: KiwoomClient): Promise<Store> {
       cache = { ...s, closes: derived };
     };
 
+    /*
+     * (2026-09-10 전수 점검) 50 → **500종목마다.** 파일이 수십 MB 라 50마다 쓰면 한 바퀴에 80번,
+     * 그 쓰기 시간이 수집 시간의 한 몫이었다. 500이면 잃어도 2분치다. 중간에 던져도 그때까지는 남긴다.
+     */
     let since = 0;
-    for (const code of codes) {
-      progress = { done: progress.done + 1, total: codes.length };
-      if (doneToday.has(code)) continue;
-      try {
-        const got = await fetchOne(client, code);
-        /* **이어 붙인다.** 갈아치우면 보관 일수를 늘려도 과거가 안 자란다 */
-        if (got.length > 0) bars[code] = mergeBars(bars[code] ?? [], got, keep);
-      } catch {
-        /* 이 종목만 건너뛴다 — 지난번 값이 있으면 그대로 남는다 */
+    try {
+      for (const code of codes) {
+        progress = { done: progress.done + 1, total: codes.length };
+        if (doneToday.has(code)) continue;
+        try {
+          const got = await fetchOne(client, code);
+          /* **이어 붙인다.** 갈아치우면 보관 일수를 늘려도 과거가 안 자란다 */
+          if (got.length > 0) bars[code] = mergeBars(bars[code] ?? [], got, keep);
+        } catch {
+          /* 이 종목만 건너뛴다 — 지난번 값이 있으면 그대로 남는다 */
+        }
+        if (++since >= 500) {
+          since = 0;
+          await flush();
+        }
+        /* 초당 5건 제한 — 한 건에 220ms 면 안전하다 */
+        await new Promise((r) => setTimeout(r, 220));
       }
-      if (++since >= 50) {
-        since = 0;
-        await flush();
-      }
-      /* 초당 5건 제한 — 한 건에 220ms 면 안전하다 */
-      await new Promise((r) => setTimeout(r, 220));
+    } catch (e) {
+      if (since > 0) await flush().catch(() => undefined);
+      throw e;
     }
 
     await flush();
