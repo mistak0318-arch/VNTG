@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, normalizeStockCode, type NaverNewsCat, type StockSearchResult } from "../api";
 import { BreakingNews } from "../components/BreakingNews";
+import { HantooNewsPanel } from "../components/HantooNewsPanel";
 import { MainNewsPanel } from "../components/MainNewsPanel";
 import { MineNewsPanel } from "../components/MineNewsPanel";
 import { DisclosureList, NewsList } from "../components/NewsDisclosurePanel";
@@ -17,11 +18,12 @@ import { useListKeys } from "../useListKeys";
  * 해외증시 → ⭐관심종목 → 부동산 → 분야별 → 맨 끝 네이버 증권 바로가기.
  * **탭을 끌면 순서가 바뀌고 이 기기에 저장된다** (useDragOrder — 다른 순서 UI 와 동일).
  */
-type SrcTab = NaverNewsCat | "mine" | "sector" | "naver" | "flow";
+type SrcTab = NaverNewsCat | "mine" | "sector" | "naver" | "flow" | "hantoo";
 const TAB_LABEL: Record<SrcTab, string> = {
   flow: "🔮 키워드 흐름",
   main: "🏠 주요뉴스",
   flash: "⚡ 속보",
+  hantoo: "🏦 한투 속보",
   market: "시황·전망",
   company: "기업·종목",
   world: "해외증시",
@@ -31,7 +33,7 @@ const TAB_LABEL: Record<SrcTab, string> = {
   naver: "네이버 증권",
 };
 const TAB_DEFAULT: SrcTab[] = [
-  "flow", "main", "flash", "market", "company", "world", "mine", "estate", "sector", "naver",
+  "flow", "main", "flash", "hantoo", "market", "company", "world", "mine", "estate", "sector", "naver",
 ];
 const TAB_ORDER_KEY = "vntg.newsTabOrder.v2";
 
@@ -266,6 +268,9 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
              * 골라낸 것 — 네이버 증권의 flashnews 목록으로 바꿨다가 되돌렸다.
              */
             <BreakingNews />
+          ) : srcTab === "hantoo" ? (
+            /* 한투 뉴스창 — 종목코드가 달린 속보 (2026-09-10). 네이버 속보와 다른 통로 */
+            <HantooNewsPanel onSelectStock={onSelectStock} />
           ) : srcTab === "sector" ? (
             <SectorNews perSector={50} defaultSort="recent" />
           ) : srcTab === "naver" ? (

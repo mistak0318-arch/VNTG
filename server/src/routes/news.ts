@@ -10,6 +10,7 @@ import { newsBody, newsLeads, newsThumbs } from "../newsLead.js";
 import { activeMeasures, collectorStatus, kstDate, recentNotices } from "../krxNotices.js";
 import { stockStatus } from "../stockStatus.js";
 import { stockEvents } from "../hantooSchedule.js";
+import { hantooNews } from "../hantooNews.js";
 import { listWatchlist } from "../watchlist.js";
 import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -114,6 +115,16 @@ export function createNewsRouter(client: KiwoomClient): Router {
   });
 
   /** 섹터별 뉴스 — 데일리 리포트용. 증시/글로벌/정책/산업/부동산으로 나눠서 준다 */
+  /** 한투 뉴스창 제목 — 종목코드 달린 속보 (FHKST01011800, 2026-09-10). srno 로 다음 장, code 로 종목 */
+  router.get("/hantoo-news", async (req, res, next) => {
+    try {
+      const srno = typeof req.query.srno === "string" && /^\d{6,24}$/.test(req.query.srno) ? req.query.srno : undefined;
+      const code = typeof req.query.code === "string" && /^\d{6}$/.test(req.query.code) ? req.query.code : undefined;
+      res.json(await hantooNews({ srno, code }));
+    } catch (err) {
+      next(err);
+    }
+  });
   router.get("/news/sectors", async (req, res, next) => {
     try {
       const majorOnly = req.query.scope !== "all";

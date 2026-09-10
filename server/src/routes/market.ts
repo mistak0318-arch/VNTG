@@ -294,6 +294,55 @@ export function createMarketRouter(client: KiwoomClient): Router {
    * 장중 외인·기관 **추정** 순매수 (한투 `HHPTJ04160200`, 2026-09-10). 09:30·10:00·11:20·13:20·14:30
    * 다섯 번 나오는 잠정치 — 확정 수급보다 몇 시간 먼저 방향을 말한다. 단위 주.
    */
+  /**
+   * 거래원 **일별 매매** `ka10043` (2026-09-10) — 한 창구가 이 종목을 며칠째 사고 있나.
+   * 거래원 탭의 상위 5 는 「오늘 누적」뿐이라, 아침에 크게 산 창구와 며칠째 붙는 창구를 못 가른다.
+   */
+  router.get("/broker-days/:code", async (req, res, next) => {
+    try {
+      const code = String(req.params.code).replace(/_(AL|NX)$/, "");
+      const mmcm = String(req.query.mmcm ?? "").trim();
+      if (!/^\d{3}$/.test(mmcm)) {
+        res.status(400).json({ error: "창구 코드(3자리)가 필요합니다." });
+        return;
+      }
+      const days = Math.min(Math.max(Number(req.query.days) || 10, 5), 60);
+      const kst = (o: number) => new Date(Date.now() + 9 * 3600_000 - o * 86400_000).toISOString().slice(0, 10).replace(/-/g, "");
+      const { data } = await client.request<Record<string, unknown>>("/api/dostk/stkinfo", "ka10043", {
+        stk_cd: code,
+        strt_dt: kst(Math.round(days * 1.6) + 3),
+        end_dt: kst(0),
+        qry_dt_tp: "0",
+        pot_tp: "0",
+        dt: String(days),
+        sort_base: "1",
+        mmcm_cd: mmcm,
+        stex_tp: "3",
+      });
+      const list = Array.isArray(data.trde_ori_prps_anly) ? (data.trde_ori_prps_anly as Record<string, unknown>[]) : [];
+      const n = (v: unknown) => {
+        const x = Number(String(v ?? "").replace(/[,+]/g, ""));
+        return Number.isFinite(x) ? x : 0;
+      };
+      const rows = list
+        .map((r) => ({
+          date: String(r.dt ?? ""),
+          close: Math.abs(n(r.close_pric)),
+          change: n(r.pred_pre),
+          sell: Math.abs(n(r.sel_qty)),
+          buy: Math.abs(n(r.buy_qty)),
+          net: n(r.netprps_qty),
+          total: Math.abs(n(r.trde_qty_sum)),
+          weight: n(r.trde_wght),
+        }))
+        .filter((r) => /^\d{8}$/.test(r.date))
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, days);
+      res.json({ code, mmcm, rows });
+    } catch (err) {
+      next(err);
+    }
+  });
   router.get("/investor-estimate/:code", async (req, res, next) => {
     try {
       res.json({ rows: await investorEstimate(req.params.code), ready: hantooReady() });

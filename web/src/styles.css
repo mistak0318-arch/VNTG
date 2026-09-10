@@ -18385,3 +18385,24 @@ a.watch-btn { text-decoration: none; }
 .sc-strip.compact { gap: 8px 12px; margin: 0 0 6px; padding: 4px 8px; font-size: 0.74rem; }
 .sc-strip.compact b { font-size: 0.8rem; }
 .sc-strip.compact .refresh-btn { padding: 1px 7px; font-size: 0.8rem; }
+
+/* 한투 속보 (2026-09-10) */
+.hn-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
+.hn-item { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; padding: 5px 0; border-top: 1px solid var(--border); align-items: start; }
+.hn-item:first-child { border-top: none; }
+.hn-item.auto { opacity: 0.75; }
+.hn-tm { font-size: 0.72rem; color: var(--muted); padding-top: 2px; white-space: nowrap; }
+.hn-body { min-width: 0; line-height: 1.5; font-size: 0.86rem; }
+.hn-title { color: var(--text); text-decoration: none; }
+.hn-title:hover { text-decoration: underline; }
+.hn-org { font-style: normal; font-size: 0.68rem; color: var(--muted); margin-left: 6px; white-space: nowrap; }
+.hn-stocks { display: inline; margin-left: 4px; }
+.hn-stocks > * { display: inline-block; vertical-align: baseline; margin: 0 3px 2px 0; }
+.hn-more { margin-top: 8px; }
+
+/* 거래원 일별 매매 (2026-09-10) */
+.bf-days { margin-top: 10px; }
+.bf-days-h { display: flex; align-items: baseline; gap: 6px; font-size: 0.82rem; margin-bottom: 4px; }
+.bf-days-h i { font-style: normal; font-size: 0.76rem; }
+.bf-days-sum { margin-left: auto; font-weight: 700; font-size: 0.8rem; }
+.bf-days-t td, .bf-days-t th { font-size: 0.76rem; }

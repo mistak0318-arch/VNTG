@@ -1191,6 +1191,14 @@ export const api = {
   /** 뉴스 카드 채우기 — 본문 앞 400자 + 관련 종목 (2026-09-08) */
   /** 기사 전문 — 조회순위 팝업이 창 안에서 읽는다 (네이버 뉴스 링크만) */
   newsBody: (link: string) => getJson<{ text: string; reason?: string }>(`/api/feed/news/body?link=${encodeURIComponent(link)}`),
+  /** 한투 뉴스창 제목 — 종목코드 달린 속보. srno 로 다음 장 */
+  hantooNews: (srno?: string, code?: string) =>
+    getJson<{ items: HantooNewsItem[]; next: string | null; ready: boolean }>(
+      `/api/feed/hantoo-news?${new URLSearchParams({ ...(srno ? { srno } : {}), ...(code ? { code } : {}) }).toString()}`,
+    ),
+  /** 거래원 일별 매매 (ka10043) — 한 창구가 며칠째 사고 있나 */
+  brokerDays: (code: string, mmcm: string, days = 10) =>
+    getJson<{ code: string; mmcm: string; rows: BrokerDayRow[] }>(`/api/market/broker-days/${code}?mmcm=${mmcm}&days=${days}`),
   /** 기사 썸네일(og:image) — 네이버 기사만. 없으면 null */
   newsThumbs: (links: string[]) => postJson<{ thumbs: Record<string, string | null> }>("/api/feed/news/thumbs", { links }),
   /** 조회순위 줄의 뉴스·텔레그램 24시간 수 */
@@ -4535,6 +4543,27 @@ export interface MarketLeaders {
   renew: PulseStock[];
   program: { kospi: PulseStock[]; kosdaq: PulseStock[]; kospiSell: PulseStock[]; kosdaqSell: PulseStock[] };
   errors: string[];
+}
+/** 한투 뉴스창 한 줄 — 서버 hantooNews.ts */
+export interface HantooNewsItem {
+  id: string;
+  at: string;
+  title: string;
+  org: string;
+  cat: string;
+  stocks: { code: string; name: string }[];
+  auto: boolean;
+}
+/** 거래원 일별 매매 한 줄 (ka10043) — 주 단위 */
+export interface BrokerDayRow {
+  date: string;
+  close: number;
+  change: number;
+  sell: number;
+  buy: number;
+  net: number;
+  total: number;
+  weight: number;
 }
 export interface StatusFlag {
   kind: string;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FlowSeries, useMinutePrices, type FlowSample, type FlowSeriesData } from "./FlowSeries";
-import { api, fmtNum, signClass, type BrokerFlow } from "../api";
+import { api, fmtNum, signClass, type BrokerFlow, type BrokerDayRow } from "../api";
 import { useLive } from "../useLive";
 import { useLockPaused } from "../lockPause";
 import { useProgramSeries } from "./ProgramFlowPanel";
@@ -118,6 +118,84 @@ function useBrokerSeries(code: string, broker: string | null): FlowSeriesData {
   return s;
 }
 
+/**
+ * 창구 하나의 **일별 매매** (ka10043, 2026-09-10) — 며칠째 사고 있나. 창구를 골랐을 때만 묻는다.
+ */
+function useBrokerDays(code: string, broker: string | null): { rows: BrokerDayRow[]; loading: boolean } {
+  const [rows, setRows] = useState<BrokerDayRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    setRows([]);
+    if (!broker || !/^\d{3}$/.test(broker)) return;
+    let alive = true;
+    setLoading(true);
+    api
+      .brokerDays(code, broker, 10)
+      .then((r) => alive && setRows(r.rows))
+      .catch(() => undefined)
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [code, broker]);
+  return { rows, loading };
+}
+
+function BrokerDaysTable({ rows, loading, name }: { rows: BrokerDayRow[]; loading: boolean; name: string }) {
+  if (loading) return <div className="page-note">일별 매매 불러오는 중…</div>;
+  if (rows.length === 0) return null;
+  const streak = (() => {
+    let n = 0;
+    for (const r of rows) {
+      if (r.net > 0) n += 1;
+      else break;
+    }
+    return n;
+  })();
+  const sum = rows.reduce((a, r) => a + r.net, 0);
+  return (
+    <div className="bf-days">
+      <div className="bf-days-h">
+        <b>{name}</b> 최근 {rows.length}일
+        {streak >= 2 && <i className="positive"> · {streak}일째 순매수</i>}
+        <span className={`bf-days-sum ${signClass(sum)}`}>
+          합 {sum > 0 ? "+" : ""}
+          {fmtNum(sum)}주
+        </span>
+      </div>
+      <div className="data-table-wrap">
+        <table className="data-table bf-days-t">
+          <thead>
+            <tr>
+              <th>날짜</th>
+              <th className="num">종가</th>
+              <th className="num">매수</th>
+              <th className="num">매도</th>
+              <th className="num">순매수</th>
+              <th className="num" title="그날 거래량 중 이 창구 몫">비중</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.date}>
+                <td>{`${r.date.slice(4, 6)}/${r.date.slice(6, 8)}`}</td>
+                <td className={`num ${signClass(r.change)}`}>{fmtNum(r.close)}</td>
+                <td className="num">{fmtNum(r.buy)}</td>
+                <td className="num">{fmtNum(r.sell)}</td>
+                <td className={`num ${signClass(r.net)}`}>
+                  {r.net > 0 ? "+" : ""}
+                  {fmtNum(r.net)}
+                </td>
+                <td className="num pt-n">{r.weight ? `${r.weight.toFixed(1)}%` : ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function BrokerFlowPanel({ code }: { code: string }) {
   // 30초면 충분하다 — 창구 순위는 초 단위로 안 바뀐다
   const { data, loading, error } = useLive<BrokerFlow>(
@@ -132,6 +210,7 @@ export function BrokerFlowPanel({ code }: { code: string }) {
    * 달라져 React 가 터진다.
    */
   const series = useBrokerSeries(code, picked && !picked.startsWith("__") ? picked : null);
+  const brokerDays = useBrokerDays(code, picked && !picked.startsWith("__") ? picked : null);
   /* 추정가격 칸과 주가 선 — 창구가 산 자리가 어느 가격이었나 */
   const prices = useMinutePrices(code, series.day || undefined);
   /*
@@ -364,6 +443,8 @@ export function BrokerFlowPanel({ code }: { code: string }) {
                   )}
                 </>
               )}
+              {/* 일별 매매 — 시간별 점이 없어도(장 초반·장 마감 뒤) 보인다 */}
+              {!isSpecial && <BrokerDaysTable rows={brokerDays.rows} loading={brokerDays.loading} name={label} />}
             </section>
           );
         })()}
