@@ -170,11 +170,12 @@ export function ChartPanel({
    * (시=고=저=종, 거래량 0)이 오늘 자리에 붙어 있었다. 실측 09-11 08:07 SK하이닉스 —
    * KRX 코드는 1,853,000·거래량 0, `_NX` 는 시 1,800,000 저 1,769,000 현재 1,793,000·거래량 180,837.
    *
-   * 그래서 셀렉터가 일봉에도 먹게 하되 **기본은 KRX** 로 둔다 — 9/3 에 「통합으로 넣으니 종가가
-   * KRX 에도 NXT 에도 안 맞아(셀트리온)」로 KRX 로 고정했던 그 사정이 그대로 살아 있다.
-   * 골라서 보는 것과 기본으로 그렇게 되는 것은 다르다.
+   * 기본은 **통합** (2026-09-11 저녁 — 벤티지: "차트 나올때는 기본 통합으로 나오게 해주고").
+   * 하루의 전부는 KRX 정규장 + NXT 프리·애프터다. 9/3 에 KRX 로 고정했던 것은 「통합 종가가
+   * 공식 종가와 다르다」는 사정이었는데, 그건 **판독 줄이 KRX 일봉을 따로 받아** 푼다
+   * (아래 `curVenue === "krx"` 가드). 보는 눈은 통합이 맞다.
    */
-  const [dailyVenue, setDailyVenue] = useState<Venue>(() => saved().venueDaily ?? "krx");
+  const [dailyVenue, setDailyVenue] = useState<Venue>(() => saved().venueDaily ?? "all");
   /**
    * 지금 보고 있는 구간(거래일 수).
    *
@@ -334,9 +335,9 @@ export function ChartPanel({
    * 평소엔 빈 약속을 돌려주므로 조회가 늘지 않는다(시트 쪽은 이미 제 값을 받고 있다).
    */
   const { data: liveInfo } = useLive<RawRecord | null>(
-    () => (full ? api.stockInfo(code) : Promise.resolve(null)),
-    [code, full],
-    3000,
+    () => (full || !isIntraday ? api.stockInfo(code) : Promise.resolve(null)),
+    [code, full, isIntraday],
+    5000,
   );
   const livePrice = Math.abs(Number(liveInfo?.cur_prc ?? NaN));
   const liveRate = Number(liveInfo?.flu_rt ?? NaN);
@@ -353,7 +354,45 @@ export function ChartPanel({
       </span>
     ) : null;
 
-  const all = toCandles(chart, period);
+  /*
+   * **마지막 봉은 살아 있어야 한다** (2026-09-11 저녁 — 벤티지: "차트에 표시되는 현재가 가격이
+   * 변동이 안되네? 위에는 계속 가격 업데이트 되는데 차트는 고정되어있더라").
+   *
+   * 일·주·월봉은 600줄짜리 응답이라 60초에 한 번만 받는다. 그래서 오른쪽 가격표가 머리의
+   * 현재가보다 최대 1분 늦었다 — 머리가 초마다 뛰는 옆에서 그건 「멈춘 것」으로 보인다.
+   * 무거운 봉 조회는 그대로 두고, **가벼운 시세(5초)로 마지막 봉만 고쳐 그린다.** 고가·저가도
+   * 지금 값이 넘어서면 같이 넓힌다 — HTS 가 하는 그것이다.
+   *
+   * 오늘 봉이 아직 없으면(장 전 KRX) 없는 봉을 만들어 붙이지는 않는다 — 그건 어제 종가를
+   * 오늘로 그리는 짓이고, 방금 걷어낸 그 빈 봉이다.
+   */
+  const all = (() => {
+    const rows = toCandles(chart, period);
+    const px = Math.abs(Number(liveInfo?.cur_prc ?? NaN));
+    const last = rows[rows.length - 1];
+    if (!last || !Number.isFinite(px) || px <= 0 || isIntraday) return rows;
+    const t = last.time as { year: number; month: number; day: number } | number;
+    if (typeof t === "number") return rows;
+    const kst = new Date(Date.now() + 9 * 3600_000);
+    const y = kst.getUTCFullYear();
+    const mo = kst.getUTCMonth() + 1;
+    const d = kst.getUTCDate();
+    /*
+     * 주봉·월봉의 마지막 봉은 날짜가 오늘이 아니다(그 주·그 달의 시작일이다). 그렇다고 아무
+     * 봉이나 고치면 안 된다 — 이번 주 봉이 아직 없을 때(월요일 장 전, 빈 봉을 걷어낸 뒤)
+     * **지난주 봉에 오늘 값을 칠하게** 된다. 지금 구간 안에 있는 봉일 때만 고친다.
+     */
+    const days = Math.round((Date.UTC(y, mo - 1, d) - Date.UTC(t.year, t.month - 1, t.day)) / 86400_000);
+    const inNow =
+      period === "day"
+        ? days === 0
+        : period === "week"
+          ? days >= 0 && days < 7
+          : t.year === y && t.month === mo;
+    if (!inNow) return rows;
+    rows[rows.length - 1] = { ...last, close: px, high: Math.max(last.high, px), low: Math.min(last.low, px) };
+    return rows;
+  })();
   /*
    * 분봉만 자른다. 자를 때도 **받은 것을 버리지 않는다** — 구간을 바꾸면 다시 안 받고
    * 바로 넓어진다(같은 응답을 다시 부르면 초당 제한만 먹는다).
