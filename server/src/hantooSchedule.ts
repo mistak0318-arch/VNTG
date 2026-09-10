@@ -288,7 +288,9 @@ export async function investorEstimate(code: string): Promise<InvestorEstimate[]
         orgn: num(row.orgn_fake_ntby_qty),
         sum: num(row.sum_fake_ntby_qty),
       }))
-      .filter((x) => x.time);
+      .filter((x) => x.time)
+      /* 한투는 최신이 앞이다(실측 11:20·10:00·09:30) — 화면은 왼→오 시간순으로 읽는다 */
+      .sort((a, b) => a.time.localeCompare(b.time));
     estCache.set(code, { at: Date.now(), rows });
     if (estCache.size > 500) estCache.clear();
     return rows;

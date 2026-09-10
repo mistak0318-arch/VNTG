@@ -35,7 +35,8 @@ export function InvestorEstimate({ code }: { code: string }) {
         <b>장중 외인·기관 추정</b>
         <span className="pt-n">한투 잠정치 · 주 · {last.time} 기준</span>
       </div>
-      <div className="ie-grid">
+      {/* 열 수 = 집계 횟수 — auto-fit 은 이름 열과 섞이면 한 열로 무너진다 (실측 2026-09-10) */}
+      <div className="ie-grid" style={{ gridTemplateColumns: `auto repeat(${rows.length}, minmax(52px, 1fr))` }}>
         <span className="ie-k" />
         {rows.map((r) => (
           <span className="ie-t" key={r.time}>

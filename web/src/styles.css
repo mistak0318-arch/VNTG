@@ -18314,7 +18314,7 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 /* 장중 외인·기관 추정 (한투) — 종목 상세 요약 위 (2026-09-10) */
 .ie-box { margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
 .ie-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 0.8rem; margin-bottom: 4px; }
-.ie-grid { display: grid; grid-template-columns: auto repeat(auto-fit, minmax(52px, 1fr)); gap: 2px 6px; font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+.ie-grid { display: grid; gap: 2px 6px; font-size: 0.76rem; font-variant-numeric: tabular-nums; }
 .ie-k { color: var(--muted); white-space: nowrap; }
 .ie-t { color: var(--muted); text-align: right; font-size: 0.68rem; }
 .ie-v { text-align: right; }
