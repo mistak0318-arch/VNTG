@@ -11,7 +11,8 @@
  *
  * 저널 저장 때마다 다시 잡는다(매매 내역과 같은 원칙 — 아침에 노트를 쓰고 오후에 사고파니까).
  */
-import { fills, orderIsMock, readLog, type OrderLogRow } from "./orders.js";
+import { fills, orderClient, orderIsMock, readLog, type OrderLogRow } from "./orders.js";
+import type { KiwoomClient } from "./kiwoomClient.js";
 
 export interface JournalOrder {
   at: string; // ISO
@@ -103,6 +104,74 @@ export async function ordersOfDay(date: string): Promise<JournalOrder[]> {
   const have = new Set(log.filter((r) => r.kind === "fill" && r.ordNo).map((r) => r.ordNo as string));
   const kw = await fromKiwoom(date, have);
   return [...log, ...kw].sort((a, b) => a.at.localeCompare(b.at));
+}
+
+/**
+ * 키움 **당일매매일지** `ka10170` (2026-09-10) — 종목별 매수평균·매도평균·수수료·손익·수익률을 키움이
+ * 계산해 준다. 우리 로그는 「무엇을 냈나」고, 이건 「그래서 얼마 남았나」다. 11번의 결산 줄.
+ * `base_dt` 로 지난 날도 되므로 복기 노트 날짜를 옮겨도 그날 결산이 나온다.
+ */
+export interface DiaryRow {
+  code: string;
+  name: string;
+  buyQty: number;
+  buyAvg: number;
+  buyAmt: number;
+  sellQty: number;
+  sellAvg: number;
+  sellAmt: number;
+  fee: number;
+  pl: number;
+  plRate: number;
+}
+export interface Diary {
+  rows: DiaryRow[];
+  total: { buyAmt: number; sellAmt: number; fee: number; pl: number; plRate: number };
+}
+
+const n = (v: unknown) => {
+  const x = Number(String(v ?? "").replace(/[,+]/g, ""));
+  return Number.isFinite(x) ? x : 0;
+};
+
+export async function diaryOfDay(date: string, fallback?: KiwoomClient): Promise<Diary | null> {
+  /* 주문 키가 따로 없으면(개발 PC) 조회 클라이언트로 — 계좌 조회라 같은 키면 된다 */
+  const oc = orderClient() ?? fallback ?? null;
+  if (!oc) return null;
+  try {
+    const { data } = await oc.request<Record<string, unknown>>("/api/dostk/acnt", "ka10170", {
+      base_dt: date.replace(/-/g, ""),
+      ottks_tp: "1",
+      ch_crd_tp: "0",
+    });
+    const list = Array.isArray(data.tdy_trde_diary) ? (data.tdy_trde_diary as Record<string, unknown>[]) : [];
+    const rows: DiaryRow[] = list
+      .map((r) => ({
+        code: String(r.stk_cd ?? "").replace(/^A/, "").replace(/_AL$/, ""),
+        name: String(r.stk_nm ?? ""),
+        buyQty: n(r.buy_qty),
+        buyAvg: n(r.buy_avg_pric),
+        buyAmt: n(r.buy_amt),
+        sellQty: n(r.sell_qty),
+        sellAvg: n(r.sel_avg_pric),
+        sellAmt: n(r.sell_amt),
+        fee: n(r.cmsn_alm_tax),
+        pl: n(r.pl_amt),
+        plRate: n(r.prft_rt),
+      }))
+      .filter((r) => r.code && (r.buyQty > 0 || r.sellQty > 0));
+    if (rows.length === 0) return null;
+    const total = {
+      buyAmt: n(data.tot_buy_amt) || rows.reduce((a, r) => a + r.buyAmt, 0),
+      sellAmt: n(data.tot_sell_amt) || rows.reduce((a, r) => a + r.sellAmt, 0),
+      fee: n(data.tot_cmsn_tax) || rows.reduce((a, r) => a + r.fee, 0),
+      pl: n(data.tot_pl_amt) || rows.reduce((a, r) => a + r.pl, 0),
+      plRate: n(data.tot_prft_rt),
+    };
+    return { rows, total };
+  } catch {
+    return null;
+  }
 }
 
 export interface OrderSummary {

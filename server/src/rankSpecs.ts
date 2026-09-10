@@ -54,6 +54,11 @@ export interface RankSpec {
    * 화면이 코스피/코스닥을 고르면 서버가 종목 목록의 시장으로 걸러 준다.
    */
   noMarket?: boolean;
+  /**
+   * 시장 코드를 **다른 글자로 받는 조회** (2026-09-10). 프로그램 순매수(`ka90003`)는
+   * `P00101`(코스피)·`P10102`(코스닥) 이고 「전체」가 없다. 화면의 000/001/101 을 여기로 바꾼다.
+   */
+  marketMap?: Record<string, string>;
   columns: RankColumn[];
   /**
    * **화면에서 고를 수 있는 파라미터** (2026-09-01).
@@ -143,7 +148,7 @@ export const RANK_SPECS: RankSpec[] = [
     ],
     note:
       "키움 고객이 지금 어떤 종목을 많이 조회하는지의 순위입니다 — 20종목, 전체 시장 한 덩어리. " +
-      "「변동」은 직전 집계 대비 순위가 몇 계단 올랐나(+)·내렸나(−)입니다. " +
+      "이름 앞 「3 전5」는 지금 3위, 직전 집계 5위 — 거래대금 상위와 같은 표기입니다. " +
       "거래로 터지기 전에 눈이 먼저 몰리는 종목을 찾을 때 봅니다.",
   },
 
@@ -214,6 +219,100 @@ export const RANK_SPECS: RankSpec[] = [
     note: "장 시작 전·마감 동시호가에서만 의미가 있습니다.",
   },
 
+  /*
+   * ── 2026-09-10 증권사 API 전수 조사에서 건진 순위들 ──
+   *
+   * 벤티지: "네가 위에 말한 증권사 분석해서 열두 개에 추가할 수 있는 기능들 있잖아. 그거 추가하고".
+   * 키움 [0194] 순위분석에 있지만 우리 표에 없던 것 중 **시장의 흐름을 읽는 데 쓰이는 것**만
+   * 골랐다. 목록 자체보다 「어느 파라미터가 무슨 뜻인가」가 중요해서 화면에서 고르게 했다.
+   * 응답 필드는 장중(2026-09-10 09시 이후)에 실측해 맞춘다 — 장전엔 전부 빈 배열이었다.
+   */
+  {
+    key: "updown",
+    label: "상·하한가 / 연속",
+    group: "등락",
+    uri: "stkinfo",
+    apiId: "ka10017",
+    listKey: "updown_pric",
+    exchange: true,
+    params: { trde_gold_tp: "0" },
+    choices: [
+      {
+        param: "updown_tp",
+        label: "구분",
+        def: "1",
+        options: [
+          { value: "1", label: "상한가" },
+          { value: "6", label: "전일 상한가" },
+          { value: "2", label: "상승" },
+          { value: "4", label: "하한가" },
+          { value: "7", label: "전일 하한가" },
+          { value: "5", label: "하락" },
+        ],
+      },
+      {
+        param: "sort_tp",
+        label: "정렬",
+        def: "3",
+        options: [
+          { value: "3", label: "등락률순" },
+          { value: "2", label: "연속횟수순" },
+          { value: "1", label: "종목코드순" },
+        ],
+      },
+    ],
+    columns: [
+      ...STOCK,
+      { key: "trde_qty", label: "거래량", type: "num" },
+      { key: "pred_trde_qty", label: "전일거래량", type: "num" },
+      { key: "buy_req", label: "매수잔량", type: "num" },
+      { key: "sel_req", label: "매도잔량", type: "num" },
+      { key: "cnt", label: "연속", type: "num" },
+    ],
+    note:
+      "상한가에 붙은 종목과 그 잔량입니다. 「연속」은 며칠째 상한가인지 — 연속횟수순으로 보면 " +
+      "지금 시장의 주도주가 몇 개인지 한눈에 셉니다. 「전일 상한가」는 어제 상한가였던 종목이 오늘 어떻게 됐나입니다.",
+  },
+  {
+    key: "open-vs",
+    label: "시가대비 등락률",
+    group: "등락",
+    uri: "stkinfo",
+    apiId: "ka10028",
+    listKey: "open_pric_pre_flu_rt",
+    exchange: true,
+    choices: [
+      {
+        param: "sort_tp",
+        label: "기준",
+        def: "1",
+        options: [
+          { value: "1", label: "시가 대비" },
+          { value: "2", label: "고가 대비" },
+          { value: "3", label: "저가 대비" },
+        ],
+      },
+      {
+        param: "flu_cnd",
+        label: "방향",
+        def: "1",
+        options: [
+          { value: "1", label: "상위" },
+          { value: "2", label: "하위" },
+        ],
+      },
+    ],
+    columns: [
+      ...STOCK,
+      { key: "open_pric_pre", label: "시가대비", type: "signed" },
+      { key: "now_trde_qty", label: "거래량", type: "num" },
+      { key: "cntr_str", label: "체결강도", type: "pct" },
+    ],
+    note:
+      "전일 종가가 아니라 **오늘 시가**를 기준으로 얼마나 움직였는지입니다. 갭 뜨고 밀리는 종목(시가 대비 하위)과 " +
+      "장중에 힘이 붙는 종목(시가 대비 상위)을 가릅니다. 「고가 대비」 하위는 고점에서 많이 밀린 종목입니다.",
+  },
+
   // ── 거래 ────────────────────────────────────────────────
   {
     key: "trade-value",
@@ -252,6 +351,184 @@ export const RANK_SPECS: RankSpec[] = [
       { key: "netprps_req", label: "순잔량", type: "signed" },
       { key: "buy_rt", label: "매수비율", type: "pct" },
     ],
+  },
+
+  {
+    key: "vol-surge",
+    label: "거래량 급증",
+    group: "거래",
+    uri: "rkinfo",
+    apiId: "ka10023",
+    listKey: "trde_qty_sdnin",
+    exchange: true,
+    params: { tm: "5", pric_tp: "0" },
+    choices: [
+      {
+        param: "tm_tp",
+        label: "기준",
+        def: "2",
+        options: [
+          { value: "2", label: "전일 대비" },
+          { value: "1", label: "5분 전 대비" },
+        ],
+      },
+      {
+        param: "sort_tp",
+        label: "정렬",
+        def: "2",
+        options: [
+          { value: "2", label: "급증률" },
+          { value: "1", label: "급증량" },
+          { value: "4", label: "급감률" },
+        ],
+      },
+      {
+        param: "trde_qty_tp",
+        label: "최소 거래량",
+        def: "5",
+        options: [
+          { value: "5", label: "5천주" },
+          { value: "50", label: "5만주" },
+          { value: "100", label: "10만주" },
+          { value: "500", label: "50만주" },
+        ],
+      },
+    ],
+    columns: [
+      ...STOCK,
+      { key: "prev_trde_qty", label: "이전거래량", type: "num" },
+      { key: "now_trde_qty", label: "현재거래량", type: "num" },
+      { key: "sdnin_qty", label: "급증량", type: "signed" },
+      { key: "sdnin_rt", label: "급증률", type: "pct" },
+    ],
+    note:
+      "거래가 갑자기 붙은 종목입니다. 「전일 대비」는 어제 하루치와 오늘 지금까지를, 「5분 전 대비」는 방금 5분을 견줍니다 — " +
+      "뒤쪽이 장중 급소를 찾는 용도입니다. 조용하던 종목이 급증률 상위에 오르면 그때부터 눈이 몰립니다.",
+  },
+  {
+    key: "vol-renew",
+    label: "거래량 갱신 (N일 최대)",
+    group: "거래",
+    uri: "stkinfo",
+    apiId: "ka10024",
+    listKey: "trde_qty_updt",
+    exchange: true,
+    choices: [
+      {
+        param: "cycle_tp",
+        label: "기간",
+        def: "20",
+        options: [
+          { value: "5", label: "5일" },
+          { value: "10", label: "10일" },
+          { value: "20", label: "20일" },
+          { value: "60", label: "60일" },
+          { value: "250", label: "250일" },
+        ],
+      },
+      {
+        param: "trde_qty_tp",
+        label: "최소 거래량",
+        def: "5",
+        options: [
+          { value: "5", label: "5천주" },
+          { value: "50", label: "5만주" },
+          { value: "100", label: "10만주" },
+          { value: "500", label: "50만주" },
+        ],
+      },
+    ],
+    columns: [
+      ...STOCK,
+      { key: "prev_trde_qty", label: "기간 최대", type: "num" },
+      { key: "now_trde_qty", label: "오늘 거래량", type: "num" },
+    ],
+    note:
+      "오늘 거래량이 지난 N일 중 최대를 넘어선 종목입니다. 250일 갱신은 1년 만의 거래 — 큰 손이 들어왔거나 나갔다는 뜻이라 " +
+      "방향(등락률)과 같이 봅니다.",
+  },
+  {
+    key: "supply-zone",
+    label: "매물대 집중",
+    group: "거래",
+    uri: "stkinfo",
+    apiId: "ka10025",
+    listKey: "prps_cnctr",
+    exchange: true,
+    params: { prpscnt: "10", cycle_tp: "50" },
+    choices: [
+      {
+        param: "prps_cnctr_rt",
+        label: "집중률",
+        def: "50",
+        options: [
+          { value: "30", label: "30% 이상" },
+          { value: "50", label: "50% 이상" },
+          { value: "70", label: "70% 이상" },
+        ],
+      },
+      {
+        param: "cur_prc_entry",
+        label: "현재가",
+        def: "1",
+        options: [
+          { value: "1", label: "매물대 안" },
+          { value: "0", label: "무관" },
+        ],
+      },
+    ],
+    columns: [
+      ...STOCK,
+      { key: "now_trde_qty", label: "거래량", type: "num" },
+      { key: "pric_strt", label: "매물대 시작", type: "price" },
+      { key: "pric_end", label: "매물대 끝", type: "price" },
+      { key: "prps_qty", label: "매물량", type: "num" },
+      { key: "prps_rt", label: "집중률", type: "pct" },
+    ],
+    note:
+      "최근 50일 거래를 10구간으로 나눴을 때 한 구간에 거래의 N% 이상이 몰린 종목입니다. 현재가가 그 구간 안이면 " +
+      "「매물대 안에서 싸우는 중」 — 뚫으면 위가 비고, 밀리면 그 매물이 저항이 됩니다.",
+  },
+  {
+    key: "bid-surge",
+    label: "호가잔량 급증",
+    group: "거래",
+    uri: "rkinfo",
+    apiId: "ka10021",
+    listKey: "bid_req_sdnin",
+    exchange: true,
+    params: { tm_tp: "30", trde_qty_tp: "1" },
+    choices: [
+      {
+        param: "trde_tp",
+        label: "잔량",
+        def: "1",
+        options: [
+          { value: "1", label: "매수잔량" },
+          { value: "2", label: "매도잔량" },
+        ],
+      },
+      {
+        param: "sort_tp",
+        label: "정렬",
+        def: "2",
+        options: [
+          { value: "2", label: "급증률" },
+          { value: "1", label: "급증량" },
+        ],
+      },
+    ],
+    columns: [
+      ...STOCK,
+      { key: "int", label: "30분 전 잔량", type: "num" },
+      { key: "now", label: "현재 잔량", type: "num" },
+      { key: "sdnin_qty", label: "급증량", type: "signed" },
+      { key: "sdnin_rt", label: "급증률", type: "pct" },
+      { key: "tot_buy_qty", label: "총매수잔량", type: "num" },
+    ],
+    note:
+      "30분 전과 견줘 호가창에 주문이 갑자기 쌓인 종목입니다. 매수잔량 급증은 받치려는 손이 붙었다는 뜻이지만 " +
+      "허수(체결 안 되는 벽)일 수 있어 체결과 같이 봐야 합니다.",
   },
 
   // ── 수급 ────────────────────────────────────────────────
@@ -386,6 +663,48 @@ export const RANK_SPECS: RankSpec[] = [
       "투자자 구분은 2026-09-01 장중에 실측해 확정한 것입니다 — 각 코드의 1위 종목을 " +
       "종목별 일별 투자자 데이터와 대조해 수량이 정확히 맞는 투자자를 찾았습니다. " +
       "사모펀드·금융투자는 이 조회에 따로 없습니다.",
+  },
+
+  {
+    key: "program-net",
+    label: "프로그램 순매수 상위 50",
+    group: "수급",
+    uri: "stkinfo",
+    apiId: "ka90003",
+    listKey: "prm_netprps_upper_50",
+    exchange: true,
+    marketMap: { "000": "P00101", "001": "P00101", "101": "P10102" },
+    choices: [
+      {
+        param: "trde_upper_tp",
+        label: "방향",
+        def: "2",
+        options: [
+          { value: "2", label: "순매수" },
+          { value: "1", label: "순매도" },
+        ],
+      },
+      {
+        param: "amt_qty_tp",
+        label: "기준",
+        def: "1",
+        options: [
+          { value: "1", label: "금액" },
+          { value: "2", label: "수량" },
+        ],
+      },
+    ],
+    columns: [
+      { key: "rank", label: "순위", type: "num" },
+      ...STOCK,
+      { key: "acc_trde_qty", label: "거래량", type: "num" },
+      { key: "prm_buy_amt", label: "프로그램 매수", type: "num" },
+      { key: "prm_sell_amt", label: "프로그램 매도", type: "num" },
+      { key: "prm_netprps_amt", label: "순매수", type: "signed" },
+    ],
+    note:
+      "프로그램(차익·비차익) 매매가 몰린 종목입니다. 외국인·기관의 바스켓 매매가 대부분이라 **장중 수급의 방향**을 " +
+      "가장 빨리 보여 줍니다. 시장은 코스피/코스닥 중 하나만 — 「전체」는 코스피로 봅니다.",
   },
 
   // ── 신용·위험 ───────────────────────────────────────────

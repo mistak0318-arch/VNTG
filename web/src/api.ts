@@ -823,6 +823,7 @@ export const api = {
     postJson<{ jobId: string; config: AlgoConfig }>("/api/algo/scan/start", config),
   algoScanStatus: (jobId: string) => getJson<AlgoJob>(`/api/algo/scan/status/${jobId}`),
   marketStatus: () => getJson<MarketStatus>("/api/overview/status"),
+  marketLeaders: () => getJson<MarketLeaders>("/api/overview/leaders"),
   overviewSection: <T>(name: string) => getJson<SectionResult<T>>(`/api/overview/section/${name}`),
   indexDetail: (code: string, range: IndexRange) =>
     getJson<IndexDetailData>(`/api/overview/index/${code}?range=${range}`),
@@ -1190,12 +1191,14 @@ export const api = {
   /** 뉴스 카드 채우기 — 본문 앞 400자 + 관련 종목 (2026-09-08) */
   /** 기사 전문 — 조회순위 팝업이 창 안에서 읽는다 (네이버 뉴스 링크만) */
   newsBody: (link: string) => getJson<{ text: string; reason?: string }>(`/api/feed/news/body?link=${encodeURIComponent(link)}`),
+  /** 기사 썸네일(og:image) — 네이버 기사만. 없으면 null */
+  newsThumbs: (links: string[]) => postJson<{ thumbs: Record<string, string | null> }>("/api/feed/news/thumbs", { links }),
   /** 조회순위 줄의 뉴스·텔레그램 24시간 수 */
-  rankBuzz: (codes: string[]) =>
-    getJson<{ items: { code: string; news: number | null; tg: number | null }[]; windowMin: number }>(
-      `/api/rank/buzz?codes=${codes.join(",")}`,
+  rankBuzz: (codes: string[], days = 1) =>
+    getJson<{ items: { code: string; news: number | null; tg: number | null }[]; windowMin: number; days: number }>(
+      `/api/rank/buzz?codes=${codes.join(",")}&days=${days}`,
     ),
-  rankBuzzDetail: (code: string) => getJson<BuzzDetail>(`/api/rank/buzz/${code}`),
+  rankBuzzDetail: (code: string, days = 1) => getJson<BuzzDetail>(`/api/rank/buzz/${code}?days=${days}`),
   newsLeads: (items: { link: string; title: string; summary: string }[]) =>
     postJson<{ leads: { link: string; lead: string; stocks: { code: string; name: string }[] }[] }>("/api/feed/news/naver/leads", { items }),
   newsNaver: (cat: NaverNewsCat, page = 1) =>
@@ -1453,7 +1456,7 @@ export const api = {
   journalTrack: () => getJson<TradeTrackResult>("/api/journal/track"),
   /** 11번 오늘의 주문·체결 — 로그에서 바로 (2026-09-10) */
   journalOrders: (date?: string) =>
-    getJson<{ date: string; rows: JournalOrder[]; summary: OrderSummary }>(`/api/journal/orders${date ? `?date=${date}` : ""}`),
+    getJson<{ date: string; rows: JournalOrder[]; summary: OrderSummary; diary: Diary | null }>(`/api/journal/orders${date ? `?date=${date}` : ""}`),
   journalOrdersSync: (date?: string) =>
     postJson<{ date: string; count: number; summary: OrderSummary }>("/api/journal/orders/sync", { date }),
   journalSave: (e: Partial<JournalEntry> & { date: string }) =>
@@ -2188,7 +2191,10 @@ export const api = {
   finance: (code: string) => getJson<FinanceResult>(`/api/feed/finance/${code}`),
   /** KRX(KIND) 공시 — 시장조치 포함 (2026-09-10) */
   krxNotices: (code: string, days = 30) => getJson<{ items: KrxNotice[] }>(`/api/feed/krx/${code}?days=${days}`),
-  krxMeasures: (code: string) => getJson<{ items: KrxNotice[]; flags: StatusFlag[] }>(`/api/feed/krx/measures/${code}`),
+  krxMeasures: (code: string) =>
+    getJson<{ items: KrxNotice[]; flags: StatusFlag[]; events?: StockEvent[] }>(`/api/feed/krx/measures/${code}`),
+  investorEstimate: (code: string) =>
+    getJson<{ rows: InvestorEstimateRow[]; ready: boolean }>(`/api/market/investor-estimate/${code}`),
   krxDay: (date?: string, measures = false) =>
     getJson<{ date: string; items: KrxNotice[]; collector: { at: string; count: number; error: string | null } | null }>(
       `/api/feed/krx/day?${date ? `date=${date}&` : ""}${measures ? "measures=1" : ""}`,
@@ -4448,6 +4454,8 @@ export interface FlowSum {
 export interface BuzzDetail {
   code: string;
   name: string;
+  /** 며칠 안 */
+  days?: number;
   news: NewsItem[];
   tg: { channelId: string; channelName: string; messageId: number; at: string; text: string; link: string; matched: string[] }[];
   /** 텔레그램에서 찾은 낱말 — 종목명과 앞 네 글자 */
@@ -4496,6 +4504,38 @@ export const KRX_KIND_LABEL: Record<KrxNoticeKind, string> = {
   company: "공시",
 };
 /** 종목 상태 플래그 — 서버 stockStatus.ts (한투 시세2 + 키움 auditInfo + KIND) */
+/** 한투 예탁원 일정 — 주총·합병분할·신주 상장·배당 (종목 머리 배너) */
+export interface StockEvent {
+  date: string;
+  kind: "meeting" | "merger" | "listing" | "dividend";
+  label: string;
+  desc: string;
+}
+/** 장중 외인·기관 추정 (한투) — 주 단위 */
+export interface InvestorEstimateRow {
+  time: string;
+  fgn: number;
+  orgn: number;
+  sum: number;
+}
+/** 주도주·급소 (시황 카드) — 서버 marketPulse.ts 와 같은 모양 */
+export interface PulseStock {
+  code: string;
+  name: string;
+  price: number;
+  rate: number;
+  v: number;
+  v2?: number;
+}
+export interface MarketLeaders {
+  at: string;
+  upper: PulseStock[];
+  lower: PulseStock[];
+  surge: PulseStock[];
+  renew: PulseStock[];
+  program: { kospi: PulseStock[]; kosdaq: PulseStock[]; kospiSell: PulseStock[]; kosdaqSell: PulseStock[] };
+  errors: string[];
+}
 export interface StatusFlag {
   kind: string;
   label: string;
@@ -5298,6 +5338,24 @@ export interface JournalOrder {
   msg: string;
   mock: boolean;
   src: "log" | "kiwoom";
+}
+/** 키움 당일매매일지(ka10170) — 11번 결산 */
+export interface DiaryRow {
+  code: string;
+  name: string;
+  buyQty: number;
+  buyAvg: number;
+  buyAmt: number;
+  sellQty: number;
+  sellAvg: number;
+  sellAmt: number;
+  fee: number;
+  pl: number;
+  plRate: number;
+}
+export interface Diary {
+  rows: DiaryRow[];
+  total: { buyAmt: number; sellAmt: number; fee: number; pl: number; plRate: number };
 }
 export interface OrderSummary {
   buyCount: number;

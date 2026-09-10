@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { flowIntradayDates, listFlowIntraday } from "../flowIntraday.js";
 import { indexDetail } from "../indexDetail.js";
+import { marketLeaders } from "../marketLeaders.js";
 import {
   getProgramTrades,
   getSection,
@@ -86,6 +87,14 @@ export function createOverviewRouter(client: KiwoomClient): Router {
    * 장중 수급 변화. 하루 누적 숫자만 보면 오전에 팔다 오후에 산 날과
    * 하루 종일 판 날이 똑같이 생긴다.
    */
+  /** 주도주·급소 — 상한가·거래 급증·250일 갱신·프로그램 (2026-09-10). 60초 캐시 */
+  router.get("/leaders", async (_req, res, next) => {
+    try {
+      res.json(await marketLeaders(client));
+    } catch (err) {
+      next(err);
+    }
+  });
   router.get("/flow-intraday", async (req, res, next) => {
     try {
       const date = typeof req.query.date === "string" ? req.query.date : undefined;

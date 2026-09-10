@@ -13,6 +13,7 @@ import {
   type CalendarAlertConfig,
 } from "../calendarAlert.js";
 import { syncStatus, syncSubscriptions } from "../calendarSync.js";
+import { scheduleSyncStatus, syncSchedules } from "../hantooSchedule.js";
 import { fetchIcs, parseCsv, parseIcs } from "../calendarImport.js";
 import {
   addEvent,
@@ -31,6 +32,17 @@ import {
 export function createCalendarRouter(): Router {
   const router = Router();
 
+  /** 한투 휴장일·공모주 동기화 — 상태 보기 / 지금 돌리기 (2026-09-10) */
+  router.get("/hantoo-sync", (_req, res) => {
+    res.json({ last: scheduleSyncStatus() });
+  });
+  router.post("/hantoo-sync", async (_req, res, next) => {
+    try {
+      res.json({ last: await syncSchedules() });
+    } catch (err) {
+      next(err);
+    }
+  });
   router.get("/kinds", (_req, res) => {
     res.json({ kinds: EVENT_KINDS });
   });

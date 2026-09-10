@@ -20,6 +20,11 @@ import { useEffect, useState } from "react";
  * ```
  */
 
+/** 한 쪽에 몇 줄 — 모든 표가 같은 선택지를 쓴다 */
+export const PAGE_SIZES = [50, 100, 200];
+/** 처음 여는 값 — 회사 PC 처럼 좁은 회선에서도 무겁지 않은 100 */
+export const PAGE_SIZE_DEFAULT = 100;
+
 export interface PagerState {
   size: number;
   setSize: (n: number) => void;
@@ -38,7 +43,14 @@ export interface PagerState {
  * @param resetKey 이 값이 바뀌면 첫 장으로 — 조회를 바꿨는데 3쪽이면 빈 화면이 뜬다
  */
 export function usePager(total: number, storeKey: string, resetKey?: unknown): PagerState {
-  const [size, setSizeRaw] = useState<number>(() => Number(localStorage.getItem(storeKey)) || 50);
+  /*
+   * 선택지 50·100·200, 기본 100 (2026-09-10 — 벤티지: "100 200 요 단위로" → "아니다 50 100 200
+   * 이렇게 하자. 트래픽 때문에서도 그게 낫겠다. 회사 PC 에서 잡히는 거"). 저장된 값이 선택지에 없으면 기본으로.
+   */
+  const [size, setSizeRaw] = useState<number>(() => {
+    const n = Number(localStorage.getItem(storeKey));
+    return PAGE_SIZES.includes(n) ? n : PAGE_SIZE_DEFAULT;
+  });
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -73,7 +85,7 @@ export function usePager(total: number, storeKey: string, resetKey?: unknown): P
 export function Pager({
   pager,
   total,
-  sizes = [50, 100],
+  sizes = PAGE_SIZES,
   unit = "위",
 }: {
   pager: PagerState;

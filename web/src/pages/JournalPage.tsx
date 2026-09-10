@@ -12,6 +12,7 @@ import {
   type EdgeRow,
   type JournalOrder,
   type OrderSummary,
+  type Diary,
 } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
 import { TradeTrackPanel } from "../components/TradeTrackPanel";
@@ -370,6 +371,7 @@ export function JournalPage({
   /* 11번 — 그날 주문·체결. 오늘이면 로그에서 바로, 옛 날짜는 저장본 우선 */
   const [orders, setOrders] = useState<JournalOrder[]>([]);
   const [ordersSummary, setOrdersSummary] = useState<OrderSummary | null>(null);
+  const [diary, setDiary] = useState<Diary | null>(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const loadOrders = async () => {
     setOrdersLoading(true);
@@ -377,6 +379,7 @@ export function JournalPage({
       const r = await api.journalOrders(date);
       setOrders(r.rows);
       setOrdersSummary(r.summary);
+      setDiary(r.diary ?? null);
     } catch {
       /* 못 읽으면 저장본이라도 */
     } finally {
@@ -1128,7 +1131,7 @@ export function JournalPage({
               {ordersLoading ? "읽는 중…" : "다시 읽기"}
             </button>
           </span>
-          <JournalOrdersTable rows={orders} summary={ordersSummary} />
+          <JournalOrdersTable rows={orders} summary={ordersSummary} diary={diary} />
         </div>
 
         {/* 저장은 **맨 아래** (2026-08-27) — 다 적고 나서 손이 가는 자리가 여기다 */}
@@ -1436,13 +1439,75 @@ export function JournalPage({
 
 
 /** 11번 표 — 시각·종류·매수/매도·종목·수량·가격·금액·내용. 거절·취소는 흐리게 */
-function JournalOrdersTable({ rows, summary }: { rows: JournalOrder[]; summary: OrderSummary | null }) {
+function JournalOrdersTable({ rows, summary, diary }: { rows: JournalOrder[]; summary: OrderSummary | null; diary: Diary | null }) {
   const KIND: Record<JournalOrder["kind"], string> = { order: "주문", modify: "정정", cancel: "취소", fill: "체결", reject: "거절" };
   const won = (n: number | null) => (n == null ? "" : n >= 1e8 ? `${(n / 1e8).toFixed(1)}억` : `${Math.round(n / 1e4).toLocaleString("ko-KR")}만`);
   const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
-  if (rows.length === 0) return <div className="empty jn-orders-empty">이날 주문 메뉴에서 나간 것이 없습니다.</div>;
+  /*
+   * 결산 — 키움 당일매매일지(ka10170). 우리 로그가 비어도(HTS 에서 직접 매매) 키움 결산은 있을 수 있다 (2026-09-10).
+   */
+  const diaryBlock = diary && diary.rows.length > 0 && (
+    <div className="jn-diary">
+      <div className="jn-orders-sum">
+        <b>결산(키움)</b>
+        <span>매수 {won(diary.total.buyAmt)}</span>
+        <span>매도 {won(diary.total.sellAmt)}</span>
+        <span>수수료·세금 {diary.total.fee.toLocaleString("ko-KR")}원</span>
+        <b className={diary.total.pl > 0 ? "positive" : diary.total.pl < 0 ? "negative" : ""}>
+          손익 {diary.total.pl > 0 ? "+" : ""}
+          {diary.total.pl.toLocaleString("ko-KR")}원{diary.total.plRate ? ` (${diary.total.plRate > 0 ? "+" : ""}${diary.total.plRate}%)` : ""}
+        </b>
+      </div>
+      <div className="data-table-wrap">
+        <table className="data-table jn-orders">
+          <thead>
+            <tr>
+              <th>종목</th>
+              <th className="num">매수</th>
+              <th className="num">평균가</th>
+              <th className="num">매도</th>
+              <th className="num">평균가</th>
+              <th className="num">수수료</th>
+              <th className="num">손익</th>
+              <th className="num">수익률</th>
+            </tr>
+          </thead>
+          <tbody>
+            {diary.rows.map((d) => (
+              <tr key={d.code}>
+                <td>
+                  {d.name} <span className="pt-n">{d.code}</span>
+                </td>
+                <td className="num">{d.buyQty ? `${d.buyQty.toLocaleString("ko-KR")}주` : ""}</td>
+                <td className="num">{d.buyAvg ? d.buyAvg.toLocaleString("ko-KR") : ""}</td>
+                <td className="num">{d.sellQty ? `${d.sellQty.toLocaleString("ko-KR")}주` : ""}</td>
+                <td className="num">{d.sellAvg ? d.sellAvg.toLocaleString("ko-KR") : ""}</td>
+                <td className="num pt-n">{d.fee.toLocaleString("ko-KR")}</td>
+                <td className={`num ${d.pl > 0 ? "positive" : d.pl < 0 ? "negative" : ""}`}>
+                  {d.pl > 0 ? "+" : ""}
+                  {d.pl.toLocaleString("ko-KR")}
+                </td>
+                <td className={`num ${d.plRate > 0 ? "positive" : d.plRate < 0 ? "negative" : ""}`}>
+                  {d.sellQty ? `${d.plRate > 0 ? "+" : ""}${d.plRate}%` : ""}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+  if (rows.length === 0) {
+    return (
+      <>
+        {diaryBlock}
+        <div className="empty jn-orders-empty">{diaryBlock ? "주문 메뉴에서 나간 것은 없습니다 — 위 결산은 키움 계좌 기준입니다." : "이날 주문 메뉴에서 나간 것이 없습니다."}</div>
+      </>
+    );
+  }
   return (
     <>
+      {diaryBlock}
       {summary && (
         <div className="jn-orders-sum">
           <b className="positive">매수 {summary.buyCount}건 {won(summary.buyAmount)}</b>

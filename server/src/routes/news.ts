@@ -6,9 +6,10 @@ import { quarterFinance } from "../quarterFinance.js";
 import { peekSnapshot } from "../marketSnapshot.js";
 import { breakingNews, getDisclosures, newsCounts, searchNews, sectorNews } from "../newsDisclosure.js";
 import { mainNews, naverNews, type NaverCat } from "../naverMainNews.js";
-import { newsBody, newsLeads } from "../newsLead.js";
+import { newsBody, newsLeads, newsThumbs } from "../newsLead.js";
 import { activeMeasures, collectorStatus, kstDate, recentNotices } from "../krxNotices.js";
 import { stockStatus } from "../stockStatus.js";
+import { stockEvents } from "../hantooSchedule.js";
 import { listWatchlist } from "../watchlist.js";
 import { getKiwoomGroupStocks, listKiwoomGroups } from "../kiwoomWatchlist.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -166,6 +167,17 @@ export function createNewsRouter(client: KiwoomClient): Router {
    */
   /** 뉴스 카드 채우기 — 본문 앞 400자 + 관련 종목 (2026-09-08). 한 쪽치 링크를 한 번에 */
   /** 기사 전문 — 시세분석 조회순위 팝업이 창 안에서 읽는다 (2026-09-09) */
+  /** 기사 썸네일(og:image) — 네이버 기사만, 한 번에 60개까지 (2026-09-10) */
+  router.post("/news/thumbs", async (req, res, next) => {
+    try {
+      const links = Array.isArray(req.body?.links)
+        ? (req.body.links as unknown[]).map((l) => String(l)).filter((l) => /^https:\/\//.test(l)).slice(0, 60)
+        : [];
+      res.json({ thumbs: await newsThumbs(links) });
+    } catch (err) {
+      next(err);
+    }
+  });
   router.get("/news/body", async (req, res, next) => {
     try {
       const link = String(req.query.link ?? "");
@@ -209,8 +221,13 @@ export function createNewsRouter(client: KiwoomClient): Router {
    */
   router.get("/krx/measures/:code", async (req, res, next) => {
     try {
-      const [items, flags] = await Promise.all([activeMeasures(req.params.code), stockStatus(client, req.params.code)]);
-      res.json({ items, flags });
+      const [items, flags, events] = await Promise.all([
+        activeMeasures(req.params.code),
+        stockStatus(client, req.params.code),
+        /* 한투 예탁원 일정 — 주총·합병분할·신주 상장·배당 (2026-09-10) */
+        stockEvents(req.params.code).catch(() => []),
+      ]);
+      res.json({ items, flags, events });
     } catch (err) {
       next(err);
     }

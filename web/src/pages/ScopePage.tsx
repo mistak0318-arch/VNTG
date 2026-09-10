@@ -5,7 +5,7 @@ import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { fid, useRealtime } from "../useRealtime";
 import { SuperMark } from "../useSuperMarks";
-import { useBuzz } from "../components/BuzzBadge";
+import { BuzzDaysButtons, useBuzz } from "../components/BuzzBadge";
 import { JudgeChips, JudgeLegend } from "../components/JudgeChips";
 import type { TrackedStock } from "../api";
 
@@ -614,6 +614,8 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
           <span>외국인 3일↑ 연속 매수 <b>{fgnBuying}</b>종목</span>
           <span className="pt-n sc-at">{at ? `${at.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 기준` : ""}</span>
           <button className="refresh-btn" onClick={() => void load()}>새로고침</button>
+          {/* 뉴스·텔레 며칠 안 — 시세분석과 한 값 (2026-09-10) */}
+          <BuzzDaysButtons />
         </div>
       )}
 

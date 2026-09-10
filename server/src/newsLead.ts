@@ -9,6 +9,9 @@
  * 종목: 전종목 스냅샷 이름을 그대로 찾는다(조회 0회). 두 글자 이름·흔한 낱말은 뺀다 — 「한국」「대한」이 종목으로 잡히면 안 된다.
  */
 import { peekSnapshot } from "./marketSnapshot.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface NewsLead {
   link: string;
@@ -188,5 +191,110 @@ export async function newsLeads(items: { link: string; title: string; summary: s
     }
   };
   await Promise.all(Array.from({ length: 5 }, worker));
+  return out;
+}
+
+
+/* ------------------------------------------------------------------ */
+/* 썸네일 — 기사 페이지의 og:image (2026-09-10)                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 벤티지: "이거 화면 개편하면서 썸네일도 불러올 수 있으면 썸네일도 붙여줘".
+ *
+ * 네이버 뉴스 검색 API 는 이미지를 안 준다. 기사 페이지(`n.news.naver.com`)의 `og:image` 가
+ * 곧 썸네일이라 그걸 뽑는다 — 본문을 긁는 것과 같은 페이지, 같은 예의(UA·8초). 한 번 뽑은
+ * 것은 **파일에 남긴다**(newsThumbs.json, 7일) — 리포트를 열 때마다 서른 장을 다시 긁지 않는다.
+ * 네이버 밖 링크는 null — 남의 사이트를 이미지 하나 때문에 긁지 않는다.
+ */
+
+const THUMB_FILE = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "newsThumbs.json");
+const THUMB_TTL = 7 * 86400_000;
+let thumbs: Map<string, { at: number; url: string | null }> | null = null;
+let thumbSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function loadThumbs(): Promise<Map<string, { at: number; url: string | null }>> {
+  if (thumbs) return thumbs;
+  thumbs = new Map();
+  try {
+    const raw = JSON.parse(await readFile(THUMB_FILE, "utf-8")) as Record<string, { at: number; url: string | null }>;
+    const now = Date.now();
+    for (const [k, v] of Object.entries(raw)) if (now - v.at < THUMB_TTL) thumbs.set(k, v);
+  } catch {
+    /* 처음이면 빈 채로 */
+  }
+  return thumbs;
+}
+
+function saveThumbsSoon(): void {
+  if (thumbSaveTimer) return;
+  thumbSaveTimer = setTimeout(() => {
+    thumbSaveTimer = null;
+    void (async () => {
+      try {
+        await mkdir(dirname(THUMB_FILE), { recursive: true });
+        await writeFile(THUMB_FILE, JSON.stringify(Object.fromEntries(thumbs ?? [])), "utf-8");
+      } catch {
+        /* 못 남겨도 메모리엔 있다 */
+      }
+    })();
+  }, 3000);
+}
+
+async function fetchThumb(link: string): Promise<string | null> {
+  try {
+    const res = await fetch(link, { headers: { "user-agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const html = (await res.text()).slice(0, 60_000); // og 태그는 머리에 있다
+    const m =
+      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ??
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+    /* `?type&#x3D;w800` 처럼 숫자 엔티티로 오는 = 도 풀어야 그림이 뜬다 (실측 2026-09-10) */
+    const url = m
+      ? unescapeHtml(m[1])
+          .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
+          .replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d)))
+          .trim()
+      : "";
+    /* 네이버 기본 로고(기사에 사진이 없을 때)는 썸네일이 아니다 */
+    if (!url || /\/static\/|logo|default/i.test(url)) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+/** 여러 링크의 썸네일 — 아는 것은 바로, 모르는 것은 넷씩 긁는다. 없으면 null */
+export async function newsThumbs(links: string[]): Promise<Record<string, string | null>> {
+  const store = await loadThumbs();
+  const out: Record<string, string | null> = {};
+  const todo: string[] = [];
+  const now = Date.now();
+  for (const link of links) {
+    if (!/^https:\/\/n\.news\.naver\.com\/(mnews\/)?article\//.test(link)) {
+      out[link] = null;
+      continue;
+    }
+    const hit = store.get(link);
+    if (hit && now - hit.at < THUMB_TTL) out[link] = hit.url;
+    else todo.push(link);
+  }
+  let i = 0;
+  const worker = async () => {
+    while (i < todo.length) {
+      const link = todo[i++];
+      const url = await fetchThumb(link);
+      store.set(link, { at: Date.now(), url });
+      out[link] = url;
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
+  if (todo.length > 0) {
+    if (store.size > 3000) {
+      const oldest = [...store.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, 1000);
+      for (const [k] of oldest) store.delete(k);
+    }
+    saveThumbsSoon();
+  }
   return out;
 }

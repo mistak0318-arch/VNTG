@@ -1278,6 +1278,8 @@ export function NewsClippingCompact({
     { key: string; label: string; items: ScoredNews[] }[] | null
   >(null);
   const [error, setError] = useState<string | null>(null);
+  /* 썸네일 — 기사 페이지의 og:image. 목록이 온 뒤 따로 묻는다(느려도 글은 먼저) (2026-09-10) */
+  const [thumbs, setThumbs] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     api
@@ -1285,6 +1287,13 @@ export function NewsClippingCompact({
       .then((r) => {
         setSectors(r.sectors);
         if (r.fetchedAt) onFetched?.(r.fetchedAt);
+        const links = r.sectors.flatMap((s) => s.items.slice(0, 5).map((n) => n.link)).filter(Boolean);
+        if (links.length > 0) {
+          api
+            .newsThumbs([...new Set(links)].slice(0, 60))
+            .then((t) => setThumbs(t.thumbs))
+            .catch(() => undefined);
+        }
       })
       .catch((e: Error) => setError(e.message || "불러오지 못했습니다"));
     // onFetched 는 부모의 setState 라 참조가 바뀌어도 다시 부를 이유가 없다
@@ -1304,33 +1313,45 @@ export function NewsClippingCompact({
           <span className="rp-nc-label">{s.label}</span>
           <div className="rp-nc-list">
             {s.items.slice(0, 5).map((n) => (
-              <div className="rp-nc-item" key={n.link}>
+              <div className={`rp-nc-item${thumbs[n.link] ? " has-thumb" : ""}`} key={n.link}>
+                {thumbs[n.link] && (
+                  <a className="rp-nc-thumb" href={n.link} target="_blank" rel="noreferrer" tabIndex={-1}>
+                    <img src={thumbs[n.link] ?? undefined} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                  </a>
+                )}
                 {/* 중요도 — 별 셋이 「장 열리면 바로 반응할」 것. 마우스를 올리면 점수 */}
                 <i className={`rp-nc-tier t${tierOf(n.score)}`} title={`중요도 ${n.score}점 · 보도 ${n.coverage}곳${n.impact?.length ? ` · ${n.impact.join("·")}` : ""}`}>
                   {"★".repeat(tierOf(n.score))}
                 </i>
-                <a className="rp-nc-line" href={n.link} target="_blank" rel="noreferrer">
-                  {n.title}
+                {/*
+                  제목과 꼬리표·종목 칩을 **한 흐름**으로 (2026-09-10 — 벤티지: "표시한 건 좋은데 UI 개편 좀
+                  해야겠다 보기 불편하네"). 칩을 제 줄에 두면 폰에서 기사 하나가 네 줄을 먹었다. 제목 뒤
+                  남는 자리에 칩이 이어 붙고, 「n곳」은 줄이 갈리지 않게 한 덩어리로.
+                */}
+                <span className="rp-nc-body">
+                  <a className="rp-nc-line" href={n.link} target="_blank" rel="noreferrer">
+                    {n.title}
+                  </a>
                   {n.coverage > 1 && <i className="rp-nc-cov">{n.coverage}곳</i>}
-                </a>
-                {((n.impact?.length ?? 0) > 0 || (n.stocks?.length ?? 0) > 0) && (
-                  <div className="rp-nc-tags">
-                    {(n.impact ?? []).map((t) => (
-                      <em className="rp-nc-impact" key={t}>{t}</em>
-                    ))}
-                    {(n.stocks ?? []).map((st) => (
-                      <button
-                        type="button"
-                        className="rp-nc-stock"
-                        key={st.code}
-                        onClick={() => onSelectStock?.(st.code, st.name)}
-                        title={`${st.name} 종목 상세`}
-                      >
-                        {st.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                  {((n.impact?.length ?? 0) > 0 || (n.stocks?.length ?? 0) > 0) && (
+                    <span className="rp-nc-tags">
+                      {(n.impact ?? []).map((t) => (
+                        <em className="rp-nc-impact" key={t}>{t}</em>
+                      ))}
+                      {(n.stocks ?? []).map((st) => (
+                        <button
+                          type="button"
+                          className="rp-nc-stock"
+                          key={st.code}
+                          onClick={() => onSelectStock?.(st.code, st.name)}
+                          title={`${st.name} 종목 상세`}
+                        >
+                          {st.name}
+                        </button>
+                      ))}
+                    </span>
+                  )}
+                </span>
               </div>
             ))}
           </div>

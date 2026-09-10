@@ -1,3 +1,4 @@
+import { PAGE_SIZES, PAGE_SIZE_DEFAULT } from "../components/Pager";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { removePref, setPref } from "../prefs";
 import { api, fmtNum, type FlowSum, type RankResult, type RankSpecGroup } from "../api";
@@ -8,7 +9,7 @@ import { TopTradersTable } from "../components/TopTradersTable";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { fid, krxOverlayLive, krxRegularSession, useRealtime } from "../useRealtime";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
-import { useBuzz } from "../components/BuzzBadge";
+import { BuzzDaysButtons, useBuzz } from "../components/BuzzBadge";
 import { TableFontButtons, useTableFont } from "../components/TableFont";
 import { ColumnGrip, useColumnWidths } from "../components/ColumnWidths";
 import { useCardOrder } from "../useCardOrder";
@@ -212,7 +213,7 @@ function cell(value: unknown, type?: string): { text: string; cls: string } {
  * 한쪽만 고쳐지는 날이 온다.
  */
 /** 순위 칸들 — 숫자 서너 자리라 좁게 둔다 */
-const RANK_COLS = new Set(["now_rank", "pred_rank", "rank", "prev_rank"]);
+const RANK_COLS = new Set(["now_rank", "pred_rank", "rank", "prev_rank", "rank_chg"]);
 
 /**
  * 시세분석 탭 (2026-09-02 개편).
@@ -352,7 +353,10 @@ export function ScreenerPage({
       /* 저장 못 해도 이번 세션에는 바뀐다 */
     }
   };
-  const [pageSize, setPageSize] = useState<number>(() => Number(localStorage.getItem("vntg.screener.pageSize")) || 100);
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const n = Number(localStorage.getItem("vntg.screener.pageSize"));
+    return PAGE_SIZES.includes(n) ? n : PAGE_SIZE_DEFAULT;
+  });
   const [page, setPage] = useState(0);
   /**
    * **줄마다 얹는 수급의 기간들** (2026-09-09 — 벤티지 "수급 5일, 10일, 20일 외국인 기관
@@ -832,6 +836,10 @@ export function ScreenerPage({
             )}
           </button>
         ))}
+        {/* 뉴스·텔레 며칠 안 — 시세분석·현미경의 모든 표에 한 값 (2026-09-10) */}
+        <span style={{ order: 997, display: "inline-flex" }}>
+          <BuzzDaysButtons />
+        </span>
         {/* 글자 크기 — 시세분석의 모든 표에 한 값 */}
         <span style={{ order: 998, display: "inline-flex" }}>
           <TableFontButtons font={font} />
@@ -918,8 +926,12 @@ export function ScreenerPage({
             **명세가 열어 둔 선택** (2026-09-01) — 조회마다 다르다.
             지금은 「장중 투자자별」의 방향(순매수/순매도)과 투자자(투신·연기금…)다.
           */}
+          {/*
+            선택이 둘 이상이면 **제 줄**을 준다 (2026-09-10). 새 순위(상하한가·거래량 급증·매물대…)는
+            선택이 두세 개라 시장·거래소 단추 사이에 끼면 이름표가 줄 끝에 홀로 남았다.
+          */}
           {(data?.spec.choices ?? []).map((ch) => (
-            <span key={ch.param} className="filter-row">
+            <span key={ch.param} className={`filter-row${(data?.spec.choices?.length ?? 0) >= 2 ? " scr-choice-line" : ""}`}>
               <span className="news-scope-sep" />
               <span className="pt-n">{ch.label}</span>
               {ch.options.map((o) => (
@@ -1306,7 +1318,13 @@ export function ScreenerPage({
                * 순위·전일순위 칸을 표에서 빼서 이름 앞 접두로, 시가총액 상위는 줄
                * 번호(쪽·단 오프셋 반영)로 센다. 칸 두 개가 줄어 표가 홀쭉해진다.
                */
-              const inlineRank = tab === "trade-value" || tab === "market-cap";
+              /*
+               * 조회순위도 같은 방식 (2026-09-10 — 벤티지: "실시간 조회순위 순위 나타내는 거 거래대금
+               * 상위랑 같은 방식으로 바꿔줘 그래야 옆에 정보를 더 보지"). 순위·변동 두 칸을 빼고
+               * 「3 전5」— 변동(+2)은 직전 집계 순위로 되돌려 적는다.
+               */
+              /* → 08:30 "순위 있는 애들 앞에 얘기한대로 표시해주고": 명세 표 전부다. 순위 칸이 없으면 줄 번호 */
+              const inlineRank = true;
               const pageBase = pageAt * pageSize;
               const shownCols = inlineRank
                 ? orderedCols.filter((c) => !RANK_COLS.has(c.key))
@@ -1563,7 +1581,13 @@ export function ScreenerPage({
                             const rec = r as Record<string, unknown>;
                             const now = Number(rec.now_rank ?? rec.rank);
                             const rankNo = Number.isFinite(now) && now > 0 ? now : pageBase + rankOff + i + 1;
-                            const prevN = Number(rec.pred_rank ?? rec.prev_rank);
+                            const chg = Number(rec.rank_chg);
+                            const prevN =
+                              rec.pred_rank != null || rec.prev_rank != null
+                                ? Number(rec.pred_rank ?? rec.prev_rank)
+                                : Number.isFinite(chg) && Number.isFinite(now)
+                                  ? now + chg
+                                  : NaN;
                             return (
                               <span
                                 className="scr-rank-pre num"
@@ -1774,7 +1798,7 @@ export function ScreenerPage({
             {sort.sorted.length > 0 && (
               <div className="filter-row scr-pager">
                 <span className="scr-page-k">한 쪽에</span>
-                {[50, 100].map((n) => (
+                {PAGE_SIZES.map((n) => (
                   <button
                     key={n}
                     className={`filter-btn ${pageSize === n ? "active" : ""}`}

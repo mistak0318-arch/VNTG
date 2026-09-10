@@ -22,6 +22,20 @@ import { countMany, search, type StoreHit } from "./channelStore.js";
 
 const WINDOW_MIN = 24 * 60;
 
+/**
+ * **기간을 고를 수 있다** (2026-09-10 — 벤티지: "뉴스랑 텔레그램 안 붙어있는 애들은 24시간 기준이라
+ * 그런가? 필터에 뉴스랑 텔레 기준 넣어서 시간별 일자별 쌓인 거 볼 수 있게 해줘. 1일 3일 5일
+ * 10일 20일 이런 식이거나 아니면 내가 설정할 수 있거나").
+ *
+ * 기본은 여전히 하루다(위 문단의 이유). 창고가 31일치라 상한 30일. 캐시는 「이름|일수」로 따로.
+ */
+export const MAX_DAYS = 30;
+export function clampDays(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return 1;
+  return Math.min(MAX_DAYS, Math.max(0.25, Math.round(n * 4) / 4));
+}
+
 export interface Buzz {
   code: string;
   /** 24시간 안 뉴스 수 (중복 제목·광고 제외). 못 세면 null */
@@ -49,14 +63,17 @@ export function buzzWords(name: string): string[] {
 const newsCountCache = new Map<string, { at: number; n: number }>();
 const NEWS_TTL = 15 * 60_000;
 
-async function newsCount24h(name: string): Promise<number | null> {
-  const hit = newsCountCache.get(name);
+async function newsCount24h(name: string, days = 1): Promise<number | null> {
+  const key = `${name}|${days}`;
+  const hit = newsCountCache.get(key);
   if (hit && Date.now() - hit.at < NEWS_TTL) return hit.n;
   try {
     const items = await searchNews(name, { majorOnly: false, limit: 100 });
-    const cutoff = Date.now() - WINDOW_MIN * 60_000;
+    const cutoff = Date.now() - days * WINDOW_MIN * 60_000;
+    /* 네이버가 100건까지만 주므로 긴 기간은 100 에서 막힌다 — 화면이 99+ 로 적는다 */
     const n = items.filter((i) => i.publishedAt && new Date(i.publishedAt).getTime() >= cutoff).length;
-    newsCountCache.set(name, { at: Date.now(), n });
+    newsCountCache.set(key, { at: Date.now(), n });
+    if (newsCountCache.size > 5000) newsCountCache.clear();
     return n;
   } catch {
     return null;
@@ -70,11 +87,11 @@ async function newsCount24h(name: string): Promise<number | null> {
 const tgCountCache = new Map<string, { at: number; n: number }>();
 const TG_TTL = 5 * 60_000;
 
-async function tgCounts(stocks: { code: string; name: string }[]): Promise<Map<string, number> | null> {
+async function tgCounts(stocks: { code: string; name: string }[], days = 1): Promise<Map<string, number> | null> {
   const out = new Map<string, number>();
   const missing: { code: string; name: string }[] = [];
   for (const s of stocks) {
-    const hit = tgCountCache.get(s.code);
+    const hit = tgCountCache.get(`${s.code}|${days}`);
     if (hit && Date.now() - hit.at < TG_TTL) out.set(s.code, hit.n);
     else missing.push(s);
   }
@@ -82,11 +99,11 @@ async function tgCounts(stocks: { code: string; name: string }[]): Promise<Map<s
   try {
     const counts = await countMany(
       missing.map((s) => ({ key: s.code, words: buzzWords(s.name) })),
-      WINDOW_MIN,
+      Math.round(days * WINDOW_MIN),
     );
     for (const s of missing) {
       const n = counts.get(s.code) ?? 0;
-      tgCountCache.set(s.code, { at: Date.now(), n });
+      tgCountCache.set(`${s.code}|${days}`, { at: Date.now(), n });
       out.set(s.code, n);
     }
     if (tgCountCache.size > 3000) tgCountCache.clear();
@@ -100,7 +117,7 @@ async function tgCounts(stocks: { code: string; name: string }[]): Promise<Map<s
  * 여러 종목의 버즈. 뉴스는 종목마다(캐시가 종목 단위), 텔레그램은 한 번에.
  * 뉴스 검색은 동시에 5개씩 — 네이버 검색 API 를 스무 개 한꺼번에 때리지 않는다.
  */
-export async function buzzMany(stocks: { code: string; name: string }[]): Promise<Buzz[]> {
+export async function buzzMany(stocks: { code: string; name: string }[], days = 1): Promise<Buzz[]> {
   /* 한 쪽이 최대 100줄 — 그 이상은 화면이 나눠 묻는다 */
   const rows = stocks.slice(0, 100);
   const news: (number | null)[] = new Array(rows.length).fill(null);
@@ -108,10 +125,10 @@ export async function buzzMany(stocks: { code: string; name: string }[]): Promis
   const worker = async () => {
     while (i < rows.length) {
       const k = i++;
-      news[k] = await newsCount24h(rows[k].name);
+      news[k] = await newsCount24h(rows[k].name, days);
     }
   };
-  const [tg] = await Promise.all([tgCounts(rows), ...Array.from({ length: 6 }, worker)]);
+  const [tg] = await Promise.all([tgCounts(rows, days), ...Array.from({ length: 6 }, worker)]);
   return rows.map((s, k) => ({
     code: s.code,
     news: news[k],
@@ -122,6 +139,8 @@ export async function buzzMany(stocks: { code: string; name: string }[]): Promis
 export interface BuzzDetail {
   code: string;
   name: string;
+  /** 며칠 안 (기본 1) */
+  days: number;
   /** 24시간 안 뉴스 — 최신순, 주요 언론사 여부는 항목의 `major` */
   news: NewsItem[];
   /** 24시간 안 텔레그램 글 — 최신순 */
@@ -130,18 +149,19 @@ export interface BuzzDetail {
 }
 
 /** 눌렀을 때 펼칠 목록 */
-export async function buzzDetail(code: string, name: string): Promise<BuzzDetail> {
-  const cutoff = Date.now() - WINDOW_MIN * 60_000;
+export async function buzzDetail(code: string, name: string, days = 1): Promise<BuzzDetail> {
+  const cutoff = Date.now() - days * WINDOW_MIN * 60_000;
   const words = buzzWords(name);
   const [newsAll, tgRes] = await Promise.all([
     searchNews(name, { majorOnly: false, limit: 100 }).catch(() => [] as NewsItem[]),
-    search(words, WINDOW_MIN).catch(() => null),
+    search(words, Math.round(days * WINDOW_MIN)).catch(() => null),
   ]);
   return {
     code,
     name,
-    news: newsAll.filter((i) => i.publishedAt && new Date(i.publishedAt).getTime() >= cutoff).slice(0, 40),
-    tg: (tgRes?.hits ?? []).slice(0, 60),
+    days,
+    news: newsAll.filter((i) => i.publishedAt && new Date(i.publishedAt).getTime() >= cutoff).slice(0, days > 1 ? 100 : 40),
+    tg: (tgRes?.hits ?? []).slice(0, days > 1 ? 150 : 60),
     words,
   };
 }

@@ -21,6 +21,8 @@ export const OVERVIEW_CARDS: Record<OverviewSub, CardDef[]> = {
   summary: [
     { key: "indices", label: "국내 지수" },
     { key: "updown", label: "종목등락현황" },
+    /* 수 다음은 얼굴 — 상한가가 누구고 며칠째인지, 거래가 어디에 붙는지, 프로그램이 어디로 가는지 (2026-09-10) */
+    { key: "pulse", label: "주도주·급소" },
     /* 폭(몇 종목이 올랐나) 다음 물음이 유동성(돈이 얼마나 돌았나)이다 */
     { key: "turnover", label: "거래대금 현황" },
     { key: "global", label: "글로벌" },

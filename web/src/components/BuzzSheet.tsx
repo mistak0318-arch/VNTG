@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useBuzzDays } from "./BuzzBadge";
 import { api, type BuzzDetail, type NewsItem } from "../api";
 import { useSheetBack } from "../useSheetBack";
 
@@ -26,6 +27,7 @@ export function BuzzSheet({
   onClose: () => void;
   onSelectStock?: (code: string, name: string) => void;
 }) {
+  const days = useBuzzDays();
   const [data, setData] = useState<BuzzDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"news" | "tg">("news");
@@ -42,7 +44,7 @@ export function BuzzSheet({
   useEffect(() => {
     let alive = true;
     api
-      .rankBuzzDetail(code)
+      .rankBuzzDetail(code, days)
       .then((d) => {
         if (!alive) return;
         setData(d);
@@ -53,7 +55,7 @@ export function BuzzSheet({
     return () => {
       alive = false;
     };
-  }, [code]);
+  }, [code, days]);
 
   useEffect(() => {
     if (!reading) return;
@@ -100,7 +102,7 @@ export function BuzzSheet({
                 >
                   {name}
                 </button>
-                <span className="pt-n"> ({code}) · 24시간</span>
+                <span className="pt-n"> ({code}) · {days === 1 ? "24시간" : `${days}일`}</span>
               </>
             )}
           </h2>
@@ -169,7 +171,7 @@ export function BuzzSheet({
 
             {tab === "news" &&
               (data.news.length === 0 ? (
-                <div className="pt-n buzz-empty">24시간 안에 나온 기사가 없습니다.</div>
+                <div className="pt-n buzz-empty">{days === 1 ? "24시간" : `${days}일`} 안에 나온 기사가 없습니다.</div>
               ) : (
                 <ul className="buzz-list">
                   {data.news.map((n) => (
@@ -198,7 +200,7 @@ export function BuzzSheet({
 
             {tab === "tg" &&
               (data.tg.length === 0 ? (
-                <div className="pt-n buzz-empty">24시간 안에 이 종목을 말한 채널 글이 없습니다.</div>
+                <div className="pt-n buzz-empty">{days === 1 ? "24시간" : `${days}일`} 안에 이 종목을 말한 채널 글이 없습니다.</div>
               ) : (
                 <ul className="buzz-list">
                   {data.tg.map((h) => {

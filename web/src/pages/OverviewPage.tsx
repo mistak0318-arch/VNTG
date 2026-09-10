@@ -38,6 +38,7 @@ import { kindOfGroup } from "../marketSession";
 import { useCardOrder } from "../useCardOrder";
 import { useSwipeTabs } from "../useSwipeTabs";
 import { OVERVIEW_CARDS, type OverviewSub } from "../overviewCards";
+import { PulsePanel } from "../components/overview/PulsePanel";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
 
@@ -397,6 +398,18 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           >
             {/* 표 본체도 보드 지수판과 공용 */}
             <UpDownTable cards={[kospiCard, kosdaqCard]} />
+          </OverviewCard>
+        )}
+
+        {/*
+          주도주·급소 (2026-09-10) — 종목등락현황의 「상한가 12개」 다음 물음은 「누구냐」다.
+          상한가 얼굴(며칠째) → 거래가 붙는 곳(급증·1년 최대) → 큰돈의 방향(프로그램).
+        */}
+        {show("summary") && (
+          <OverviewCard order={cards.orderOf("pulse")} title="주도주·급소">
+            <div className="ov-card-b">
+              <PulsePanel onSelectStock={(code, name) => onSelectStock(normalizeStockCode(code), name)} />
+            </div>
           </OverviewCard>
         )}
 

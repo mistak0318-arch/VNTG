@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { trackTrades } from "../tradeTrack.js";
-import { ordersOfDay, summarize } from "../journalOrders.js";
+import { diaryOfDay, ordersOfDay, summarize } from "../journalOrders.js";
 import {
   MISTAKE_TAGS,
   MOOD_TAGS,
@@ -59,8 +59,8 @@ export function createJournalRouter(client: KiwoomClient): Router {
         typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
           ? req.query.date
           : new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
-      const rows = await ordersOfDay(date);
-      res.json({ date, rows, summary: summarize(rows) });
+      const [rows, diary] = await Promise.all([ordersOfDay(date), diaryOfDay(date, client)]);
+      res.json({ date, rows, summary: summarize(rows), diary });
     } catch (err) {
       next(err);
     }

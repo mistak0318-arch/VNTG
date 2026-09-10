@@ -10,6 +10,7 @@ import { getSectorMood } from "../sectorMood.js";
 import { findStock, searchStocks } from "../stockListCache.js";
 import { analystOpinion } from "../analystOpinion.js";
 import { hantooReady } from "../hantooClient.js";
+import { investorEstimate } from "../hantooSchedule.js";
 import { stockProfile } from "../stockProfile.js";
 import { tradeSizeMix } from "../tradeSizeMix.js";
 import { CHART_RANGES, yahooChart } from "../yahooChart.js";
@@ -289,6 +290,17 @@ export function createMarketRouter(client: KiwoomClient): Router {
   });
 
   // 외국인 보유 추이 (ka10008) - 일자별 보유주식수·지분율
+  /**
+   * 장중 외인·기관 **추정** 순매수 (한투 `HHPTJ04160200`, 2026-09-10). 09:30·10:00·11:20·13:20·14:30
+   * 다섯 번 나오는 잠정치 — 확정 수급보다 몇 시간 먼저 방향을 말한다. 단위 주.
+   */
+  router.get("/investor-estimate/:code", async (req, res, next) => {
+    try {
+      res.json({ rows: await investorEstimate(req.params.code), ready: hantooReady() });
+    } catch (err) {
+      next(err);
+    }
+  });
   router.get("/foreign/:code", async (req, res, next) => {
     try {
       const { data } = await client.request(FRGNISTT_RESOURCE, "ka10008", {

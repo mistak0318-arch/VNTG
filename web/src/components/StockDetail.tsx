@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
-import { api, pick, stockNameOf, krxViewerUrl, type StatusFlag, type RawRecord } from "../api";
+import { api, pick, stockNameOf, krxViewerUrl, type StatusFlag, type StockEvent, type RawRecord } from "../api";
+import { InvestorEstimate } from "./InvestorEstimate";
 import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
 import { IntradayLevelsBar } from "./IntradayLevelsBar";
 import { IntradayFlow } from "./IntradayPanels";
@@ -118,12 +119,19 @@ export function StockDetail({
    * 하고 있는 거 보이지?"). 한투 시세2(당일 낮 반영) + 키움 auditInfo + KIND 공시를 서버가 합친다.
    */
   const [flags, setFlags] = useState<StatusFlag[]>([]);
+  /* 한투 예탁원 일정 — 주총·합병분할·신주 상장·배당. 배너 밑에 작은 칩으로 (2026-09-10) */
+  const [events, setEvents] = useState<StockEvent[]>([]);
   useEffect(() => {
     let alive = true;
     setFlags([]);
+    setEvents([]);
     api
       .krxMeasures(code)
-      .then((r) => alive && setFlags(r.flags ?? []))
+      .then((r) => {
+        if (!alive) return;
+        setFlags(r.flags ?? []);
+        setEvents(r.events ?? []);
+      })
       .catch(() => undefined);
     return () => {
       alive = false;
@@ -204,16 +212,18 @@ export function StockDetail({
             {watched ? "★" : "☆"}
           </button>
           {/*
-            차례 고치기 (2026-09-09) — 별·새로고침과 같은 손이다. 켜 두면 남지 않는다:
-            차례는 한 번 정하면 끝나는 값이라 늘 펼쳐 둘 이유가 없다.
+            **주문하기** (2026-09-10 — 벤티지: "종목 클릭하면 나오는 여기에 주문하기 아이콘도 넣어서
+            연결해줘"). 현미경 표의 「🛒 주문으로」와 같은 길 — 주문 화면에 종목만 채워 간다.
+            차례도 그때 정해졌다: 관심종목 · 주문 · 미니창 · 새로고침 · 톱니(차례) · 닫기.
           */}
-          <button
-            className={`watch-btn${orderOpen ? " on" : ""}`}
-            onClick={() => setOrderOpen((v) => !v)}
-            title="이 시트에 나오는 것들의 차례 바꾸기"
+          <a
+            className="watch-btn"
+            href={`#/order?stk=${code}&name=${encodeURIComponent(name)}&side=buy`}
+            onClick={() => onClose()}
+            title="주문 화면으로 — 종목이 채워져 갑니다. 주문은 거기서 냅니다"
           >
-            ⚙
-          </button>
+            🛒
+          </a>
           {/*
             **독립창으로** (2026-09-09 밤 — 벤티지 "종목 클릭하면 나오는 이 부분에서 저 위치에
             독립창으로 띄우는 아이콘 버튼 하나 만들자 … 클릭하면 미니창 뜨고 해당 종목 상세
@@ -245,6 +255,17 @@ export function StockDetail({
             }
           >
             ↻
+          </button>
+          {/*
+            차례 고치기 (2026-09-09) — 닫기 바로 앞 (2026-09-10 "톱니바퀴가 x 앞에 와야겠다").
+            켜 두면 남지 않는다: 차례는 한 번 정하면 끝나는 값이라 늘 펼쳐 둘 이유가 없다.
+          */}
+          <button
+            className={`watch-btn${orderOpen ? " on" : ""}`}
+            onClick={() => setOrderOpen((v) => !v)}
+            title="이 시트에 나오는 것들의 차례 바꾸기"
+          >
+            ⚙
           </button>
           <button className="close-btn" onClick={onClose}>
             ✕
@@ -299,6 +320,16 @@ export function StockDetail({
                 ))}
               </div>
             )}
+            {events.length > 0 && (
+              <div className="sd-events">
+                {events.map((e) => (
+                  <span className={`sd-event ${e.kind}`} key={`${e.kind}${e.date}${e.label}`} title={e.desc}>
+                    <b>{e.label}</b>
+                    <span>{e.desc}</span>
+                  </span>
+                ))}
+              </div>
+            )}
             <PriceHeader info={info} code={code} />
           </div>
           {/* 값이 있어야 그린다 — 기준가가 0 이면 등락률 축이 안 선다 */}
@@ -312,6 +343,7 @@ export function StockDetail({
           </div>
           {/* 한 장 요약 — 탭을 고르기 전에 「지금 어떤가」가 먼저 보여야 한다 */}
           <div className="sd-blk" style={{ order: cards.orderOf("summary") }}>
+            <InvestorEstimate code={code} />
             <StockSummaryPanel code={code} />
           </div>
 

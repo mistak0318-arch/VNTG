@@ -6,7 +6,7 @@ import { getMarketSnapshot } from "../marketSnapshot.js";
 import { bare, extras, toNum } from "../rankExtras.js";
 import { getStockIndex } from "../stockListCache.js";
 import { flowRank, flowSums, SUBJECT_LABEL, type FlowSubject } from "../dailyStore.js";
-import { buzzDetail, buzzMany, markEntered } from "../inquiryBuzz.js";
+import { buzzDetail, buzzMany, markEntered, clampDays } from "../inquiryBuzz.js";
 import { cumulative, noteLiveSample, samplerStatus } from "../inquirySampler.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -544,7 +544,8 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
       const stocks = codes
         .map((code) => ({ code, name: String(index.get(code)?.name ?? "").trim() }))
         .filter((s) => s.name);
-      res.json({ items: await buzzMany(stocks), windowMin: 24 * 60 });
+      const days = clampDays(req.query.days ?? 1);
+      res.json({ items: await buzzMany(stocks, days), windowMin: Math.round(days * 24 * 60), days });
     } catch (err) {
       next(err);
     }
@@ -564,7 +565,7 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         res.status(404).json({ error: "없는 종목입니다." });
         return;
       }
-      res.json(await buzzDetail(code, name));
+      res.json(await buzzDetail(code, name, clampDays(req.query.days ?? 1)));
     } catch (err) {
       next(err);
     }
@@ -629,7 +630,13 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
             /* 시장을 안 받는 조회(조회순위)에는 제 파라미터만 보낸다 — 실측한 그대로 */
             spec.noMarket
               ? { ...(spec.params ?? {}), ...chosen }
-              : { ...COMMON_PARAMS, ...(spec.params ?? {}), ...chosen, mrkt_tp: market, stex_tp: stex },
+              : {
+                  ...COMMON_PARAMS,
+                  ...(spec.params ?? {}),
+                  ...chosen,
+                  mrkt_tp: spec.marketMap ? (spec.marketMap[market] ?? spec.marketMap["000"] ?? market) : market,
+                  stex_tp: stex,
+                },
             page === 0 ? {} : { contYn, nextKey },
           );
           last = res;
@@ -745,6 +752,17 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
             mapped.cur_prc = Math.abs(k.price);
           }
           if (k?.rate != null) mapped.flu_rt = k.rate;
+          /*
+           * 등락률을 안 주는 조회(호가잔량 급증 ka10021 — 실측 2026-09-10)는 전일대비로 낸다:
+           * 전일 종가 = 현재가 − 전일대비. 화면이 색을 칠하고 실시간을 덧씌우는 칸이라 비워 두면 안 된다.
+           */
+          if (toNum(mapped.flu_rt) === null) {
+            const cur = toNum(mapped.cur_prc);
+            const pre = toNum(r.pred_pre);
+            if (cur !== null && pre !== null && Math.abs(cur) - pre !== 0) {
+              mapped.flu_rt = Math.round((pre / (Math.abs(cur) - pre)) * 10000) / 100;
+            }
+          }
           /*
            * `extras` 는 `cur_prc` 로 시가총액을 낸다 — 이름을 바꿔 읽는 조회(`src`)는
            * 원 응답에 `cur_prc` 가 없으므로 우리 이름으로 맞춘 값을 같이 넘긴다.
