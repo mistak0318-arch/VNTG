@@ -86,6 +86,29 @@ function num(v: unknown): number | null {
  * 그리고 배열 키가 `output1` 이 아니라 **`output`** 이다 — 문서에 적힌 것과 달랐다.
  * 다른 선물옵션 TR 은 output1 을 쓰므로 둘 다 본다.
  */
+/**
+ * 전광판의 월물 코드 **차례대로** (2026-09-10) — 맨 앞이 최근월물이지만 **만기일 저녁엔 그게 이미 죽은 월물**이다.
+ * 9/10(둘째 목요일) 저녁 야간장은 12월물(A01612)로 넘어갔는데 주간 전광판은 A01609 를 앞에 두고 있었다.
+ * 야간선물은 이 목록을 앞에서부터 시도해 값이 있는 첫 월물을 쓴다.
+ */
+export async function kospi200FuturesCodes(): Promise<string[]> {
+  if (!hantooReady()) return [];
+  try {
+    const body = await hantooGet<{ output?: Record<string, unknown>[]; output1?: Record<string, unknown>[] }>(
+      BOARD,
+      BOARD_TR,
+      { FID_COND_MRKT_DIV_CODE: "F", FID_COND_SCR_DIV_CODE: "20503", FID_COND_MRKT_CLS_CODE: "" },
+      "코스피200 선물",
+    );
+    return (body.output ?? body.output1 ?? [])
+      .map((o) => String(o.futs_shrn_iscd ?? "").trim())
+      .filter((c) => /^A01\d{3}$/.test(c))
+      .slice(0, 4);
+  } catch {
+    return [];
+  }
+}
+
 export async function kospi200Futures(spot?: number | null): Promise<FuturesQuote | null> {
   if (!hantooReady()) return null;
   try {

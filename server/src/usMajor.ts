@@ -1,6 +1,6 @@
 import { fetchQuotes } from "./globalMarket.js";
 import { hantooGet, hantooReady } from "./hantooClient.js";
-import { kospi200Futures } from "./kospiFutures.js";
+import { kospi200Futures, kospi200FuturesCodes } from "./kospiFutures.js";
 
 /**
  * 미장 주요지수 — 아침에 "밤사이 무슨 일이 있었나"를 한 표로.
@@ -120,31 +120,102 @@ export async function nightFutures(): Promise<UsMajorRow | null> {
   try {
     const front = await kospi200Futures(null);
     if (!front) return null;
-
-    const body = await hantooGet<{ output1?: Record<string, unknown> }>(
-      "/uapi/domestic-futureoption/v1/quotations/inquire-price",
-      "FHMIF10000000",
-      { FID_COND_MRKT_DIV_CODE: "CM", FID_INPUT_ISCD: front.code },
-      "미장 주요지수",
-    );
-    const o = body.output1 ?? {};
-    const price = Math.abs(Number(o.futs_prpr));
-    if (!Number.isFinite(price) || price === 0) return null;
-    return {
-      key: "kospiNight",
-      label: "코스피 야간선물",
-      symbol: front.code,
-      price,
-      change: Number(o.futs_prdy_vrss) || 0,
-      changeRate: Number(o.futs_prdy_ctrt) || 0,
-      isRate: false,
-      digits: 2,
-      /* 한투 REST 는 받은 순간이 곧 시세 시각 — 실시간 조회라 지연이 없다 */
-      quotedAt: Date.now(),
-      source: "hantoo",
-      signal: null,
-      error: null,
-    };
+    /*
+     * 만기일 저녁엔 전광판 맨 앞(front)이 **죽은 월물**이다 (2026-09-10 실측 — 9월물 만기일 19시, `CM` 이 빈 응답).
+     * 목록을 앞에서부터 돌며 야간 값이 있는 첫 월물을 쓴다. 값은 두 길로 찾는다:
+     *   ① `CM` 현재가 — 예전부터 쓰던 길
+     *   ② `CM` 분 차트의 마지막 봉 — ①이 비면. 야간장은 영업일 기준 18:00~30:00(익일 06:00)으로 적힌다
+     */
+    const codes = [...new Set([front.code, ...(await kospi200FuturesCodes())])];
+    const kstNow = new Date(Date.now() + 9 * 3600_000);
+    const hh = kstNow.getUTCHours();
+    /* 06시 전이면 어젯밤 세션 — 영업일이 어제다 */
+    const bizDate = new Date(kstNow.getTime() - (hh < 6 ? 86400_000 : 0)).toISOString().slice(0, 10).replace(/-/g, "");
+    for (const code of codes.slice(0, 3)) {
+      const body = await hantooGet<{ output1?: Record<string, unknown> }>(
+        "/uapi/domestic-futureoption/v1/quotations/inquire-price",
+        "FHMIF10000000",
+        { FID_COND_MRKT_DIV_CODE: "CM", FID_INPUT_ISCD: code },
+        "미장 주요지수",
+      );
+      const o = body.output1 ?? {};
+      const price = Math.abs(Number(o.futs_prpr));
+      if (Number.isFinite(price) && price > 0) {
+        return {
+          key: "kospiNight",
+          label: "코스피 야간선물",
+          symbol: code,
+          price,
+          change: Number(o.futs_prdy_vrss) || 0,
+          changeRate: Number(o.futs_prdy_ctrt) || 0,
+          isRate: false,
+          digits: 2,
+          quotedAt: Date.now(),
+          source: "hantoo",
+          signal: null,
+          error: null,
+        };
+      }
+      /* ② 분 차트 마지막 봉 */
+      try {
+        const ch = await hantooGet<{ output2?: Record<string, unknown>[] }>(
+          "/uapi/domestic-futureoption/v1/quotations/inquire-time-fuopchartprice",
+          "FHKIF03020200",
+          {
+            FID_COND_MRKT_DIV_CODE: "CM",
+            FID_INPUT_ISCD: code,
+            FID_HOUR_CLS_CODE: "60",
+            FID_PW_DATA_INCU_YN: "Y",
+            FID_FAKE_TICK_INCU_YN: "N",
+            FID_INPUT_DATE_1: bizDate,
+            FID_INPUT_HOUR_1: "300000",
+          },
+          "미장 주요지수",
+        );
+        const rows = ch.output2 ?? [];
+        const r0 = rows[0];
+        if (r0 && String(r0.stck_bsop_date) === bizDate) {
+          const p2 = Math.abs(Number(r0.futs_prpr));
+          if (Number.isFinite(p2) && p2 > 0) {
+            /* 대비는 주간 종가(같은 월물의 F 종가) 기준 — 없으면 front 값 */
+            let base = 0;
+            try {
+              const f = await hantooGet<{ output1?: Record<string, unknown> }>(
+                "/uapi/domestic-futureoption/v1/quotations/inquire-price",
+                "FHMIF10000000",
+                { FID_COND_MRKT_DIV_CODE: "F", FID_INPUT_ISCD: code },
+                "미장 주요지수",
+              );
+              base = Math.abs(Number(f.output1?.futs_prpr)) || 0;
+            } catch {
+              base = 0;
+            }
+            if (!base && code === front.code) base = front.price ?? 0;
+            const hhmmss = String(r0.stck_cntg_hour ?? "").padStart(6, "0");
+            const hNum = Number(hhmmss.slice(0, 2));
+            const dayMs = Date.parse(`${bizDate.slice(0, 4)}-${bizDate.slice(4, 6)}-${bizDate.slice(6, 8)}T00:00:00+09:00`);
+            const quotedAt = dayMs + hNum * 3600_000 + Number(hhmmss.slice(2, 4)) * 60_000 + Number(hhmmss.slice(4, 6)) * 1000;
+            return {
+              key: "kospiNight",
+              label: "코스피 야간선물",
+              symbol: code,
+              price: p2,
+              change: base ? Math.round((p2 - base) * 100) / 100 : 0,
+              changeRate: base ? Math.round(((p2 - base) / base) * 10000) / 100 : 0,
+              isRate: false,
+              digits: 2,
+              quotedAt,
+              source: "hantoo",
+              signal: null,
+              error: null,
+            };
+          }
+        }
+      } catch {
+        /* 다음 월물로 */
+      }
+    }
+    return null;
   } catch {
     return null;
   }
