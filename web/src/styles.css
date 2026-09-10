@@ -18406,3 +18406,24 @@ a.watch-btn { text-decoration: none; }
 .bf-days-h i { font-style: normal; font-size: 0.76rem; }
 .bf-days-sum { margin-left: auto; font-weight: 700; font-size: 0.8rem; }
 .bf-days-t td, .bf-days-t th { font-size: 0.76rem; }
+
+/* ── 맨 윗줄 하나 — 아이콘 줄 + 시계 (2026-09-10) ── */
+.top-strip { display: flex; align-items: center; gap: 8px; padding: 12px 20px 0; max-width: var(--main-max, 1400px); }
+.top-strip .qss-row { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+/* 머리글은 이제 시계만 — 어느 폭에서든 보인다. 제목은 탭 줄이 말한다 */
+.top-strip .mobile-header {
+  display: flex; align-items: center; position: static; border: 0; padding: 0; background: none; gap: 6px; flex: none; z-index: auto;
+}
+.top-strip .mobile-title { display: none; }
+.top-strip .mobile-clock { font-size: 0.8rem; font-weight: 700; padding: 1px 7px; margin-left: 0; }
+@media (max-width: 899px) {
+  .top-strip {
+    position: sticky; top: 0; z-index: 20; background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 6px 10px 6px 3.6rem; gap: 6px; max-width: none;
+  }
+  :root[data-nav="right"] .top-strip { padding-left: 10px; padding-right: 3.6rem; }
+  :root[data-nav="right"] .top-strip .mobile-header { flex-direction: row; }
+  .top-strip .mobile-clock { font-size: 0.74rem; padding: 1px 5px; letter-spacing: 0; }
+  .top-strip .qss-row { --hdr-h: 28px; }
+  .main-inner { padding-top: 8px; }
+}

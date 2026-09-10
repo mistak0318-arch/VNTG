@@ -1202,18 +1202,14 @@ export default function App() {
       )}
 
       <div className="main">
-        <header className="mobile-header">
-          <span className="mobile-title">{TAB_LABELS[tab]}</span>
-          {/* 시각 — 맨 위에 강조 (2026-09-10 벤티지: "시간을 맨 위에 써줘 강조표시로"). 멈춘 화면을 보고 있는지 바로 안다 */}
-          <MobileClock />
-        </header>
-
-        <div className="main-inner">
-          {/* 인증이 끊기면 앱 전체가 값을 못 받는다 — 화면을 옮겨도 계속 보여야 한다 */}
-          <AuthExpiredBar />
-
-          {/* 어느 화면에서든 종목으로 바로 — 접혀 있으면 한 줄이다.
-              우측엔 탭 모두 닫기(탭이 쌓였을 때만) — 상한을 없애면서 치우는 손도 같이 준다 */}
+        {/*
+          맨 윗줄 하나 (2026-09-10 — 벤티지: "시계를 좀 줄이고 내가 체크한 저것들을 위로 올리면 어때?
+          모바일 모드에서만 pc모드도 되면 좋고"). 폰에서 머리(제목·시계)와 아이콘 줄(🔍🔔●●🧹)이 두 줄이던 걸
+          **한 줄**로 — 아이콘이 앞, 시계는 작게 오른쪽 끝. 제목은 탭 줄이 이미 말해 주므로 뺀다.
+          PC 도 같은 줄이다(머리글은 원래 안 보였고, 시계만 오른쪽 끝에 작게 얹힌다).
+          어느 화면에서든 종목으로 바로 — 접혀 있으면 한 줄이다. 우측엔 탭 모두 닫기(탭이 쌓였을 때만).
+        */}
+        <div className="top-strip">
           <div className="qss-row">
             <QuickStockSearch onPick={openAnalysis} />
             {/*
@@ -1240,6 +1236,16 @@ export default function App() {
               </button>
             )}
           </div>
+          <header className="mobile-header">
+            <span className="mobile-title">{TAB_LABELS[tab]}</span>
+            {/* 시각 — 작게, 오른쪽 끝 (2026-09-10 벤티지: "시간을 맨 위에 써줘 강조표시로" → "시계를 좀 줄이고") */}
+            <MobileClock />
+          </header>
+        </div>
+
+        <div className="main-inner">
+          {/* 인증이 끊기면 앱 전체가 값을 못 받는다 — 화면을 옮겨도 계속 보여야 한다 */}
+          <AuthExpiredBar />
 
           {/* 돌고 있는 작업 — 어느 화면에 있든 뜬다 */}
           <RunningJobsBar />
