@@ -251,6 +251,30 @@ export function ChartPanel({
     const sum = (a: TradeFill[]) => a.reduce((x, t) => x + t.qty, 0);
     return { buys: buys.length, sells: sells.length, buyQty: sum(buys), sellQty: sum(sells) };
   })();
+  /* 복기 목록 — 「월일 시각 B/S 수량 @가격」 줄줄이 (2026-09-10 저녁 — 벤티지 "언제 팔고 샀는지도 적어줘 월일시간") */
+  const [reviewList, setReviewList] = useState(false);
+  const reviewRows = (() => {
+    if (!review || !reviewList || trades.length === 0) return null;
+    const fmtAt = (iso: string) => {
+      const d = new Date(new Date(iso).getTime() + 9 * 3600_000);
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+    };
+    const rows = [...trades].sort((a, b) => b.at.localeCompare(a.at));
+    return (
+      <div className="chart-review-list">
+        {rows.map((t, i) => (
+          <div className="chart-review-row" key={`${t.ordNo}-${i}`}>
+            <span className="num">{fmtAt(t.at)}</span>
+            <b className={t.side === "buy" ? "rv-b" : "rv-s"}>{t.side === "buy" ? "B 매수" : "S 매도"}</b>
+            <span className="num">{t.qty.toLocaleString("ko-KR")}주</span>
+            <span className="num">@{t.price.toLocaleString("ko-KR")}</span>
+            <i className="pt-n">{t.mock ? "모의" : ""}</i>
+          </div>
+        ))}
+      </div>
+    );
+  })();
   const [full, setFull] = useState(false);
   /** 전체화면에서는 판독 줄을 접어 둔다 — 크게 보려고 들어온 자리다 */
   const [fullInsights, setFullInsights] = useState(false);
@@ -497,6 +521,15 @@ export function ChartPanel({
       >
         📝 복기
       </button>
+      {tradeSummary && trades.length > 0 && (
+        <button
+          className={`period-btn review-list${reviewList ? " active" : ""}`}
+          onClick={() => setReviewList((v) => !v)}
+          title="언제 사고 팔았는지 줄줄이"
+        >
+          {reviewList ? "▴ 목록" : "▾ 목록"}
+        </button>
+      )}
       {tradeSummary && (
         <span className="chart-review-sum pt-n" title={tradeInfo?.from ? `체결 창고 ${tradeInfo.from}부터 ${tradeInfo.days}일치` : undefined}>
           {trades.length === 0 ? (
@@ -581,6 +614,7 @@ export function ChartPanel({
         「고르고 → 읽고 → 그림」 순서가 되는데, 실제로 보는 것도 그 순서다.
       */}
       {!fold && insightsRow}
+      {reviewRows}
       {loading && <div className="empty">차트 불러오는 중...</div>}
       {error && <div className="error-banner">{error}</div>}
       {!loading && !error && (

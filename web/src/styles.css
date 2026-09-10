@@ -18507,3 +18507,12 @@ a.watch-btn { text-decoration: none; }
 .chart-review-sum b { font-weight: 700; }
 .chart-review-sum b.positive { color: #ff9f1c; }
 .chart-review-sum b.negative { color: #22d3ee; }
+
+/* 복기 목록 — 월일 시각 · B/S · 수량 · 가격 (2026-09-10) */
+.chart-review-list { display: flex; flex-direction: column; gap: 1px; max-height: 180px; overflow-y: auto; margin: 4px 0 6px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); font-size: 0.76rem; }
+.chart-review-row { display: grid; grid-template-columns: 6.5em 4.5em 4.5em 6em 1fr; gap: 6px; align-items: baseline; }
+.chart-review-row .num { font-variant-numeric: tabular-nums; text-align: right; }
+.chart-review-row .num:first-child { text-align: left; color: var(--muted); }
+.chart-review-row .rv-b { color: #ff9f1c; }
+.chart-review-row .rv-s { color: #22d3ee; }
+.period-btn.review-list.active { color: var(--text); }

@@ -873,7 +873,8 @@ export function CandleChart({
       wickUpColor: c.up,
       wickDownColor: c.down,
     });
-    candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.3 } });
+    /* 위 여백 5→12% (2026-09-10 — 「고」·S 마커가 위에서 잘렸다). 마커 두 단(고 + S)이 들어갈 자리 */
+    candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.12, bottom: 0.3 } });
     candleRef.current = candleSeries;
 
     maRefs.current = maLines.map(({ color }) =>
