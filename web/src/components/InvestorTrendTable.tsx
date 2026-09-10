@@ -21,8 +21,9 @@ import { fmtAbsNum, fmtNum, signClass, type RawRecord } from "../api";
  *
  * ## 무엇을 기본으로 켜 두나
  *
- * 개인·외국인·기관계에 **금융투자·투신·연기금·사모펀드**까지. 이게 실제로 보는 것들이다.
- * 보험·은행·기타금융·국가·기타법인·내외국인은 꺼 둔다 — 필요하면 톱니바퀴에서 켠다.
+ * **열세 칸 전부** (2026-09-10 — 벤티지: "투자자 수급 왜 이것밖에 안 나오니. 보험이랑 은행이랑 기타법인이랑
+ * 다 어디갔어"). 예전엔 보험·은행·기타금융·국가·기타법인·내외국인을 꺼 두고 톱니에서 켜게 했는데, 꺼져 있는
+ * 줄 모르니 「없어졌다」로 읽혔다. 다 켜 두고 안 보는 사람이 끈다. 저장 키를 v2 로 올려 예전 7칸 저장본은 버린다.
  * 고른 것은 **이 기기에** 남고, 상세와 보드가 같은 설정을 쓴다(같은 표니까).
  */
 
@@ -56,13 +57,13 @@ const COLUMNS: Col[] = [
   { key: "invtrt", label: "투신", group: "orgn", weight: "mid", on: true },
   { key: "penfnd_etc", label: "연기금등", group: "orgn", weight: "mid", on: true },
   { key: "samo_fund", label: "사모펀드", group: "orgn", weight: "mid", on: true },
-  { key: "insrnc", label: "보험", group: "orgn", weight: "dim", on: false },
-  { key: "bank", label: "은행", group: "orgn", weight: "dim", on: false },
-  { key: "etc_fnnc", label: "기타금융", group: "orgn", weight: "dim", on: false },
+  { key: "insrnc", label: "보험", group: "orgn", weight: "dim", on: true },
+  { key: "bank", label: "은행", group: "orgn", weight: "dim", on: true },
+  { key: "etc_fnnc", label: "기타금융", group: "orgn", weight: "dim", on: true },
 
-  { key: "natn", label: "국가", group: "etc", weight: "dim", on: false },
-  { key: "etc_corp", label: "기타법인", group: "etc", weight: "dim", on: false },
-  { key: "natfor", label: "내외국인", group: "etc", weight: "dim", on: false },
+  { key: "natn", label: "국가", group: "etc", weight: "dim", on: true },
+  { key: "etc_corp", label: "기타법인", group: "etc", weight: "dim", on: true },
+  { key: "natfor", label: "내외국인", group: "etc", weight: "dim", on: true },
 ];
 
 const GROUP_LABEL: Record<Col["group"], string> = {
@@ -71,7 +72,7 @@ const GROUP_LABEL: Record<Col["group"], string> = {
   etc: "나머지",
 };
 
-const PICK_KEY = "vntg.investor.cols";
+const PICK_KEY = "vntg.investor.cols.v2";
 
 function readPick(): string[] {
   try {
