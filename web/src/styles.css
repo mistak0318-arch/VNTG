@@ -18487,3 +18487,16 @@ a.watch-btn { text-decoration: none; }
   .dret-table td:first-child > .pt-n:first-of-type { display: none; }
   .dret-kpi { flex-basis: 45%; min-width: 0; }
 }
+
+/* 상태 한 글자 표 — 시트 머리 이름 옆 (2026-09-10) */
+.sd-mark {
+  display: inline-block; font-style: normal; font-size: 0.64rem; font-weight: 700; line-height: 1.5;
+  padding: 0.08rem 0.4rem; border-radius: 4px; margin-right: 0.35rem; vertical-align: middle; white-space: nowrap;
+  border: 1px solid var(--border); color: var(--muted);
+}
+.sd-mark b { font-weight: 400; margin-left: 2px; }
+.sd-mark.danger { color: var(--red); border-color: rgba(239, 68, 68, 0.6); background: rgba(239, 68, 68, 0.12); }
+.sd-mark.warn { color: #f59e0b; border-color: rgba(245, 158, 11, 0.55); background: rgba(245, 158, 11, 0.1); }
+.sd-mark.info { color: var(--blue); border-color: rgba(76, 141, 255, 0.45); background: rgba(76, 141, 255, 0.1); }
+/* 보드·종목발굴처럼 좁은 자리는 배너를 얇게 */
+.sd-flags.compact .sd-flag { padding: 4px 10px; font-size: 0.76rem; }

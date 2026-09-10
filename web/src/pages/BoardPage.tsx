@@ -30,6 +30,7 @@ import { ChannelSearchPanel } from "../components/ChannelSearchPanel";
 import { SupplyMini } from "../components/SupplyMini";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
 import { PriceHeader } from "../components/PriceHeader";
+import { StockStatusBanner } from "../components/StockStatusBanner";
 import { WatchToggleButton } from "../components/WatchToggleButton";
 import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
 import { useLive } from "../useLive";
@@ -467,6 +468,7 @@ function PriceSummaryCell({ code, name }: { code: string; name?: string }) {
       <div className="bd-star">
         <WatchToggleButton code={code} name={name ?? code} price={Math.abs(Number(info?.cur_prc ?? 0))} />
       </div>
+      <StockStatusBanner code={code} compact />
       <PriceHeader info={info} code={code} />
       <IntradayLevelsBar code={code} />
       <StockSummaryPanel code={code} />

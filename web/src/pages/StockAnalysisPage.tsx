@@ -7,6 +7,7 @@ import { IntradayFlow } from "../components/IntradayPanels";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
 import { StockTabsSection } from "../components/StockTabsSection";
 import { PriceHeader } from "../components/PriceHeader";
+import { StockStatusBanner } from "../components/StockStatusBanner";
 import { RefreshBar } from "../components/RefreshBar";
 import { useWatchedCodes } from "../useWatchedCodes";
 import { useLive } from "../useLive";
@@ -241,6 +242,8 @@ export function StockAnalysisPage({
             )}
           </div>
 
+          {/* 투자주의·경고·공매도 과열… 상태 배너 — 시트와 같은 것 (2026-09-10 벤티지 "표시가 안 되어 있네") */}
+          <StockStatusBanner code={stock.code} />
           <PriceHeader info={info} code={stock.code} />
           {/*
             가격 바로 아래다 — **견줄 선은 견줄 값 옆에 있어야** 한다.

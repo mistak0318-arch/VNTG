@@ -13,6 +13,7 @@ import {
 import { IntradayLevelsBar } from "../components/IntradayLevelsBar";
 import { IntradayFlow } from "../components/IntradayPanels";
 import { PriceHeader } from "../components/PriceHeader";
+import { StockStatusBanner } from "../components/StockStatusBanner";
 import { useSignals, SignalDot } from "../components/SignalLight";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
 import { StockTabsSection } from "../components/StockTabsSection";
@@ -451,6 +452,7 @@ export function StockDiscoveryPage({
             <div className="sd-head-top">
               <WatchStar code={code} />
 <SuperMark code={code} />
+              <StockStatusBanner code={code} compact />
               <PriceHeader info={info} code={code} />
               <div className="sd-head-actions">
                 {signal && (

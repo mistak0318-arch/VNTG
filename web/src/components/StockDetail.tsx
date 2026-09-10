@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
-import { api, pick, stockNameOf, krxViewerUrl, type StatusFlag, type StockEvent, type RawRecord } from "../api";
+import { api, pick, stockNameOf, type RawRecord } from "../api";
+import { StatusMark, StockStatusBanner, useStockStatus } from "./StockStatusBanner";
 import { InvestorEstimate } from "./InvestorEstimate";
 import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
 import { IntradayLevelsBar } from "./IntradayLevelsBar";
@@ -118,25 +119,7 @@ export function StockDetail({
    * 종목 상태 배너 (2026-09-10 — 벤티지 "종목 열면 종목 상단에 표시를 해주거나 … 증권플러스에서
    * 하고 있는 거 보이지?"). 한투 시세2(당일 낮 반영) + 키움 auditInfo + KIND 공시를 서버가 합친다.
    */
-  const [flags, setFlags] = useState<StatusFlag[]>([]);
-  /* 한투 예탁원 일정 — 주총·합병분할·신주 상장·배당. 배너 밑에 작은 칩으로 (2026-09-10) */
-  const [events, setEvents] = useState<StockEvent[]>([]);
-  useEffect(() => {
-    let alive = true;
-    setFlags([]);
-    setEvents([]);
-    api
-      .krxMeasures(code)
-      .then((r) => {
-        if (!alive) return;
-        setFlags(r.flags ?? []);
-        setEvents(r.events ?? []);
-      })
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [code]);
+  const { flags } = useStockStatus(code);
   const watchedCodes = useWatchedCodes();
   /* 시트 안 덩어리들의 차례 — 서버에 저장된다(`stockSheet` 이름표로) */
   const cards = useCardOrder("stockSheet", SHEET_CARDS.map((c) => c.key));
@@ -184,6 +167,8 @@ export function StockDetail({
               </span>
             )}
             <CreditChip credit={credit} />
+            {/* 상태 한 글자 — 배너까지 안 내려가도 이름 옆에서 「주의」가 보인다 (2026-09-10) */}
+            <StatusMark flags={flags} />
             {name} ({code})
           </h2>
           {/*
@@ -301,35 +286,8 @@ export function StockDetail({
         */}
         <div className="sheet-body">
           <div className="sd-blk" style={{ order: cards.orderOf("price") }}>
-            {/* 상태 배너 — 위험한 것부터. 누르면 KIND 원문(있을 때) */}
-            {flags.length > 0 && (
-              <div className="sd-flags">
-                {flags.map((f) => (
-                  <a
-                    key={f.kind}
-                    className={`sd-flag ${f.level}`}
-                    href={f.acptNo ? krxViewerUrl(f.acptNo) : undefined}
-                    target={f.acptNo ? "_blank" : undefined}
-                    rel="noreferrer noopener"
-                    title={`출처: ${f.source.map((s) => (s === "hantoo" ? "한투 시세" : s === "kiwoom" ? "키움 종목정보" : "KIND 공시")).join(" · ")}${f.since ? ` · 공시 ${f.since}` : ""}`}
-                  >
-                    <b>{f.label}</b>
-                    <span>{f.desc}</span>
-                    {f.since && <i>{f.since.slice(5).replace("-", "/")} 공시</i>}
-                  </a>
-                ))}
-              </div>
-            )}
-            {events.length > 0 && (
-              <div className="sd-events">
-                {events.map((e) => (
-                  <span className={`sd-event ${e.kind}`} key={`${e.kind}${e.date}${e.label}`} title={e.desc}>
-                    <b>{e.label}</b>
-                    <span>{e.desc}</span>
-                  </span>
-                ))}
-              </div>
-            )}
+            {/* 상태 배너 + 예탁원 이벤트 — 개별종목분석·보드·종목발굴과 같은 컴포넌트 (2026-09-10) */}
+            <StockStatusBanner code={code} />
             <PriceHeader info={info} code={code} />
           </div>
           {/* 값이 있어야 그린다 — 기준가가 0 이면 등락률 축이 안 선다 */}
