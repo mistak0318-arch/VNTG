@@ -1248,9 +1248,18 @@ body {
  * (가격 왼쪽 · 버튼 오른쪽).
  */
 @media (max-width: 700px) {
-  .sheet-header { flex-wrap: wrap; row-gap: 2px; }
-  .sheet-header h2 { flex: 1 1 100%; min-width: 0; }
-  .sheet-header .sheet-live { margin-right: auto; }
+  /*
+   * 폰 두 줄 (2026-09-10 — 벤티지 S25: "닫기 버튼이 밀려서 누르기가 불편하네 위에 버튼들이 많아져서").
+   * 1줄: 배지·이름 … ✕ (닫기는 늘 오른쪽 위 한자리)  /  2줄: 현재가 … ★🛒🪟↻⚙ (조금 작게).
+   * 단추가 여섯이 되면서 ✕ 가 셋째 줄로 떨어졌었다.
+   */
+  .sheet-header { flex-wrap: wrap; row-gap: 4px; }
+  /* 이름은 첫 줄을 ✕ 와 둘이서 — basis 를 0 으로 두면 min-content 로 쪼그라들어 한 글자씩 세로로 선다 */
+  .sheet-header h2 { flex: 1 1 calc(100% - 44px); min-width: 0; order: 0; }
+  .sheet-header .close-btn { order: 1; margin-left: auto; flex: none; }
+  .sheet-header .sheet-live { order: 2; margin-right: auto; }
+  .sheet-header .watch-btn { order: 3; width: 28px; height: 28px; font-size: 0.92rem; }
+  .sheet-header .watch-btn:first-of-type { margin-left: auto; }
 }
 .sheet-live b { font-size: 0.95rem; font-variant-numeric: tabular-nums; }
 .sheet-live i { font-style: normal; font-size: 0.75rem; }
