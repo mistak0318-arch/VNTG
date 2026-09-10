@@ -18323,10 +18323,12 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 /* 장중 외인·기관 추정 (한투) — 종목 상세 요약 위 (2026-09-10) */
 .ie-box { margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
 .ie-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 0.8rem; margin-bottom: 4px; }
-.ie-grid { display: grid; gap: 2px 6px; font-size: 0.76rem; font-variant-numeric: tabular-nums; }
-.ie-k { color: var(--muted); white-space: nowrap; }
-.ie-t { color: var(--muted); text-align: right; font-size: 0.68rem; }
-.ie-v { text-align: right; }
+.ie-t { width: 100%; border-collapse: collapse; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.ie-t th { font-weight: 400; color: var(--muted); font-size: 0.7rem; text-align: right; padding: 0 4px 3px; }
+.ie-t th:first-child { text-align: left; }
+.ie-t td { padding: 2px 4px; text-align: right; }
+.ie-t td.ie-k { color: var(--muted); text-align: left; white-space: nowrap; }
+.ie-t .ie-last td { font-weight: 700; border-top: 1px solid var(--border); }
 .ie-sum { font-weight: 700; }
 
 /* 복기 11번 결산 — 키움 당일매매일지 (2026-09-10) */

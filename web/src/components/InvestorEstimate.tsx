@@ -27,41 +27,42 @@ export function InvestorEstimate({ code }: { code: string }) {
   }, [code]);
   if (rows.length === 0) return null;
   const last = rows[rows.length - 1];
-  const fmt = (n: number) => `${n > 0 ? "+" : ""}${(n / 1000).toFixed(n >= 100000 || n <= -100000 ? 0 : 1)}천`;
+  /* 만 주 — 「-48.0천」보다 「-4.8만」이 한국 눈에 익다. 10만 위는 소수 없이 */
+  const fmt = (n: number) => {
+    const m = n / 10000;
+    return `${n > 0 ? "+" : ""}${Math.abs(m) >= 10 ? Math.round(m).toLocaleString("ko-KR") : m.toFixed(1)}만`;
+  };
   const cls = (n: number) => (n > 0 ? "positive" : n < 0 ? "negative" : "");
+  /*
+   * 시각을 **줄**로 (2026-09-10 — 벤티지: "표가 옆으로 밀리네"). 시각을 열로 두면 다섯 번째 집계부터
+   * 폰 폭을 넘었다. 줄로 세우면 다섯 줄 × 네 칸이라 어느 폭에서든 들어간다. 마지막 줄이 지금.
+   */
   return (
     <div className="ie-box">
       <div className="ie-head">
         <b>장중 외인·기관 추정</b>
-        <span className="pt-n">한투 잠정치 · 주 · {last.time} 기준</span>
+        <span className="pt-n">한투 잠정치 · 만 주 · {last.time} 기준</span>
       </div>
-      {/* 열 수 = 집계 횟수 — auto-fit 은 이름 열과 섞이면 한 열로 무너진다 (실측 2026-09-10) */}
-      <div className="ie-grid" style={{ gridTemplateColumns: `auto repeat(${rows.length}, minmax(52px, 1fr))` }}>
-        <span className="ie-k" />
-        {rows.map((r) => (
-          <span className="ie-t" key={r.time}>
-            {r.time}
-          </span>
-        ))}
-        <span className="ie-k">외국인</span>
-        {rows.map((r) => (
-          <span className={`ie-v ${cls(r.fgn)}`} key={`f${r.time}`}>
-            {fmt(r.fgn)}
-          </span>
-        ))}
-        <span className="ie-k">기관</span>
-        {rows.map((r) => (
-          <span className={`ie-v ${cls(r.orgn)}`} key={`o${r.time}`}>
-            {fmt(r.orgn)}
-          </span>
-        ))}
-        <span className="ie-k">합</span>
-        {rows.map((r) => (
-          <span className={`ie-v ie-sum ${cls(r.sum)}`} key={`s${r.time}`}>
-            {fmt(r.sum)}
-          </span>
-        ))}
-      </div>
+      <table className="ie-t">
+        <thead>
+          <tr>
+            <th>시각</th>
+            <th>외국인</th>
+            <th>기관</th>
+            <th>합</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.time} className={r === last ? "ie-last" : ""}>
+              <td className="ie-k">{r.time}</td>
+              <td className={`num ${cls(r.fgn)}`}>{fmt(r.fgn)}</td>
+              <td className={`num ${cls(r.orgn)}`}>{fmt(r.orgn)}</td>
+              <td className={`num ie-sum ${cls(r.sum)}`}>{fmt(r.sum)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
