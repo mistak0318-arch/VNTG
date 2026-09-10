@@ -521,11 +521,11 @@ export function startRealtimeScheduler(kiwoom: KiwoomClient): void {
       }
 
       /*
-       * (2026-09-10 전수 점검) 밤엔 국내 구독이 없다 — 걸린 것이 하나도 없으면 붙지 않는다.
-       * 화면·자동감시가 걸면(`/latest`·`/stream`·ensureLiveCode) 그쪽이 스스로 붙인다.
+       * (2026-09-11) **밤에도 붙는다.** 전수 점검이 「밤엔 구독이 없으니 붙지 말자」를 넣었다가 되돌렸다 —
+       * health.json 의 `국내실시간.healthy` 는 배포가 성공했는지 보는 신호이고, 밤새 「끊김」이면
+       * 배포도 화면도 「소켓 죽었다」로 읽는다. 아끼는 것보다 늘 붙어 있는 편이 맞다.
        */
-      const idleNight = phase === "밤" && rt.seats.total === 0;
-      if (!idleNight) await rt.connect();
+      await rt.connect();
 
       /*
        * VI 는 **한 번만** 건다. 종목을 지정해도 전체 종목이 오므로(문서 명시)
