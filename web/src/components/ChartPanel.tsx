@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLive } from "../useLive";
 import type { RawRecord } from "../api";
 import { api, type TradeFill } from "../api";
-import { CandleChart } from "./CandleChart";
+import { CandleChart, type Candle } from "./CandleChart";
 import { setPref } from "../prefs";
 import { useChartPrefs } from "../useChartPrefs";
 import { ChartInsights } from "./ChartInsights";
@@ -334,11 +334,7 @@ export function ChartPanel({
    * 접히니 무슨 종목인지도 안 보였다. **크게 볼 때만** 시세를 따로 받아 도구줄과 머리줄에 적는다 —
    * 평소엔 빈 약속을 돌려주므로 조회가 늘지 않는다(시트 쪽은 이미 제 값을 받고 있다).
    */
-  const { data: liveInfo } = useLive<RawRecord | null>(
-    () => (full || !isIntraday ? api.stockInfo(code) : Promise.resolve(null)),
-    [code, full, isIntraday],
-    5000,
-  );
+  const { data: liveInfo } = useLive<RawRecord>(() => api.stockInfo(code), [code], 5000);
   const livePrice = Math.abs(Number(liveInfo?.cur_prc ?? NaN));
   const liveRate = Number(liveInfo?.flu_rt ?? NaN);
   const priceTag =
@@ -363,6 +359,10 @@ export function ChartPanel({
    * 무거운 봉 조회는 그대로 두고, **가벼운 시세(5초)로 마지막 봉만 고쳐 그린다.** 고가·저가도
    * 지금 값이 넘어서면 같이 넓힌다 — HTS 가 하는 그것이다.
    *
+   * **분봉도 같다** (2026-09-11 저녁 — 벤티지: "분봉 이런데도 다 적용되는거지?"). 처음엔 분봉을
+   * 뺐다 — 10초마다 받으니 충분하다고 봤는데, 10초도 멈춘 것으로 보이는 건 마찬가지고 무엇보다
+   * 「어느 봉은 살아 있고 어느 봉은 아니다」가 사람이 외울 규칙이 아니다.
+   *
    * 오늘 봉이 아직 없으면(장 전 KRX) 없는 봉을 만들어 붙이지는 않는다 — 그건 어제 종가를
    * 오늘로 그리는 짓이고, 방금 걷어낸 그 빈 봉이다.
    */
@@ -370,9 +370,21 @@ export function ChartPanel({
     const rows = toCandles(chart, period);
     const px = Math.abs(Number(liveInfo?.cur_prc ?? NaN));
     const last = rows[rows.length - 1];
-    if (!last || !Number.isFinite(px) || px <= 0 || isIntraday) return rows;
+    if (!last || !Number.isFinite(px) || px <= 0) return rows;
+    const paint = (): Candle => ({ ...last, close: px, high: Math.max(last.high, px), low: Math.min(last.low, px) });
     const t = last.time as { year: number; month: number; day: number } | number;
-    if (typeof t === "number") return rows;
+    if (typeof t === "number") {
+      /*
+       * 분봉의 시각은 **한국시간을 UTC 인 척** 넣어 둔 초 단위 값이다(`parseMinuteTime`).
+       * 마지막 봉이 **지금 구간**일 때만 고친다 — 몇 분째 체결이 없어 봉이 뒤처져 있으면
+       * 그 옛 봉에 지금 값을 칠하는 게 된다. 봉 시각이 구간의 시작인지 끝인지가 응답마다
+       * 흔들려서 앞뒤 한 구간씩 허용한다.
+       */
+      const mins = Number(period.slice(1)) || 1;
+      const nowSec = (Date.now() + 9 * 3600_000) / 1000;
+      const diff = nowSec - t;
+      return Math.abs(diff) < mins * 60 ? [...rows.slice(0, -1), paint()] : rows;
+    }
     const kst = new Date(Date.now() + 9 * 3600_000);
     const y = kst.getUTCFullYear();
     const mo = kst.getUTCMonth() + 1;
@@ -390,8 +402,7 @@ export function ChartPanel({
           ? days >= 0 && days < 7
           : t.year === y && t.month === mo;
     if (!inNow) return rows;
-    rows[rows.length - 1] = { ...last, close: px, high: Math.max(last.high, px), low: Math.min(last.low, px) };
-    return rows;
+    return [...rows.slice(0, -1), paint()];
   })();
   /*
    * 분봉만 자른다. 자를 때도 **받은 것을 버리지 않는다** — 구간을 바꾸면 다시 안 받고
