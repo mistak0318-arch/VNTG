@@ -27,6 +27,7 @@ export function OverviewCard({
   loading,
   error,
   span2,
+  tall,
   order,
   move,
   children,
@@ -39,6 +40,13 @@ export function OverviewCard({
   loading?: boolean;
   error?: string | null;
   span2?: boolean;
+  /**
+   * **세로로 긴 카드** (2026-09-10 — 벤티지: "PC에서 볼 때 이 구조 너무 이상한 거 아니야?").
+   * 글로벌처럼 스무 줄짜리가 한 칸을 차지하면 그 줄의 다른 카드 밑이 통째로 비고, 다음 카드는
+   * 다음 줄로 밀려 혼자 남았다. 세로로 여러 줄을 걸치게 해 두면(grid-row span) 옆 칸에 다음 카드들이
+   * 채워 올라온다 — 격자에 `dense` 를 같이 준다.
+   */
+  tall?: boolean;
   /** 배치 순서. JSX 를 재배열하지 않고 CSS 로만 자리를 바꾼다 */
   order?: number;
   /** 배치 모드일 때만 넘어온다 */
@@ -46,7 +54,7 @@ export function OverviewCard({
   children: ReactNode;
 }) {
   return (
-    <div className={`ov-card${span2 ? " ov-span2" : ""}`} style={order === undefined ? undefined : { order }}>
+    <div className={`ov-card${span2 ? " ov-span2" : ""}${tall ? " ov-tall" : ""}`} style={order === undefined ? undefined : { order }}>
       <div className="ov-card-h">
         <span className="ov-card-t">{title}</span>
         {badge}

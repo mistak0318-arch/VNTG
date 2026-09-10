@@ -474,6 +474,14 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
   .ov-grid { grid-template-columns: repeat(3, 1fr); align-items: start; }
   .ov-span2 { grid-column: span 2; }
 }
+/*
+ * 벽돌 쌓기 (2026-09-10 — useMasonryGrid). 줄을 8px 잔줄로 두고 카드마다 제 높이만큼 span 을 준다.
+ * 긴 카드(글로벌) 옆 빈자리에 다음 카드가 올라온다. `align-items: start` 가 아니면 카드가 span 높이로
+ * 늘어나 재는 값이 계속 커진다.
+ */
+@media (min-width: 700px) {
+  .ov-grid.masonry { grid-auto-rows: 8px; align-items: start; }
+}
 
 /*
  * ===== 엑셀 모드: 시황 카드 =====

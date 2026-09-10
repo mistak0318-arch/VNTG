@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RotationStrip, ThermoPanel, useMarketLens } from "../components/MarketLensPanel";
 import {
   api,
@@ -36,6 +36,7 @@ import { useSection } from "../useSection";
 import { SessionBadge } from "../components/SessionBadge";
 import { kindOfGroup } from "../marketSession";
 import { useCardOrder } from "../useCardOrder";
+import { useMasonryGrid } from "../useMasonryGrid";
 import { useSwipeTabs } from "../useSwipeTabs";
 import { OVERVIEW_CARDS, type OverviewSub } from "../overviewCards";
 import { PulsePanel } from "../components/overview/PulsePanel";
@@ -273,6 +274,9 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const keysHere =
     sub === "us" ? [] : (OVERVIEW_CARDS[sub as OverviewSub] ?? []).map((c) => c.key);
   const cards = useCardOrder(`overview.${sub}`, keysHere);
+  /* 벽돌 쌓기 — 긴 카드 옆이 비지 않게 (2026-09-10) */
+  const gridRef = useRef<HTMLDivElement>(null);
+  useMasonryGrid(gridRef);
 
   const [wide, setWide] = useState(() => window.matchMedia("(min-width:700px)").matches);
   useEffect(() => {
@@ -355,7 +359,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         ))}
       </div>
 
-      <div className="ov-grid">
+      <div className="ov-grid" ref={gridRef}>
         {/* ---------------- 요약 ---------------- */}
         {/*
           미국 전광판. 다른 탭과 달리 **넓은 화면에서도 따로 둔다**(`show` 를 안 쓴다) —
