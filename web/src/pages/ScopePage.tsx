@@ -594,26 +594,34 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
 
   return (
     <div className="scope-page">
-      <div className="page-header">
-        <h2>🔎 매수직전</h2>
-        <p className="page-sub">
-          관심종목 <b className="gt-scope-inline">🧨 현미경</b> 그룹의 종목을 같은 잣대로 나란히 놓습니다 — 이 중에서 무엇을 사나.
-          담는 것은 관심종목 담기 시트에서 「현미경」에 체크하면 됩니다. <b>여기서 주문은 안 나갑니다.</b>
-        </p>
+      {/*
+        머리는 한 줄, 설명은 접어 둔다 (2026-09-10 — 벤티지: "현미경 위에 설명은 접을 수 있게 하고 기본 접힘으로
+        그리고 밑에 현황은 좀 작고 컴팩트하게 표시해서. 메뉴 진입해서 바로 현미경에 담긴 종목 볼 수 있게").
+      */}
+      <div className="page-header sc-head">
+        <h2>
+          🔎 매수직전
+          <details className="sc-about">
+            <summary title="이 화면이 무엇인지">?</summary>
+            <p className="page-sub">
+              관심종목 <b className="gt-scope-inline">🧨 현미경</b> 그룹의 종목을 같은 잣대로 나란히 놓습니다 — 이 중에서 무엇을 사나.
+              담는 것은 관심종목 담기 시트에서 「현미경」에 체크하면 됩니다. <b>여기서 주문은 안 나갑니다.</b>
+              {ledgerNote && <><br />⏱ {ledgerNote}</>}
+            </p>
+          </details>
+        </h2>
       </div>
 
       {error && <div className="error-banner">{error}</div>}
 
-      {ledgerNote && <p className="sc-ledger-note">⏱ {ledgerNote}</p>}
-
       {rows.length > 0 && (
-        <div className="sc-strip">
+        <div className="sc-strip compact">
           <span><b>{rows.length}</b>종목</span>
-          <span>오늘 외국인 <b className={cls(sumToday("fgn"))}>{억(sumToday("fgn"))}</b></span>
-          <span>오늘 기관 <b className={cls(sumToday("org"))}>{억(sumToday("org"))}</b></span>
-          <span>외국인 3일↑ 연속 매수 <b>{fgnBuying}</b>종목</span>
-          <span className="pt-n sc-at">{at ? `${at.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 기준` : ""}</span>
-          <button className="refresh-btn" onClick={() => void load()}>새로고침</button>
+          <span>외인 <b className={cls(sumToday("fgn"))}>{억(sumToday("fgn"))}</b></span>
+          <span>기관 <b className={cls(sumToday("org"))}>{억(sumToday("org"))}</b></span>
+          <span title="외국인 3일 이상 연속 순매수">외인 3일↑ <b>{fgnBuying}</b></span>
+          <span className="pt-n sc-at" title={ledgerNote ? `⏱ ${ledgerNote}` : undefined}>{at ? `${at.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}` : ""}</span>
+          <button className="refresh-btn" onClick={() => void load()} title="새로고침">↻</button>
           {/* 뉴스·텔레 며칠 안 — 시세분석과 한 값 (2026-09-10) */}
           <BuzzDaysButtons />
         </div>

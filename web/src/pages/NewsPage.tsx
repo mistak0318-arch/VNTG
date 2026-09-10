@@ -50,7 +50,19 @@ export function NewsPage({ onSelectStock }: { onSelectStock: (code: string, name
   const recent = useRecentStocks();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
-  const [picked, setPicked] = useState<{ code: string; name: string } | null>(null);
+  /*
+   * 알림 바로가기 `#/news?pick=코드&name=이름` — 그 종목이 골라진 채로 연다 (2026-09-10).
+   * ⚠️ 첫 렌더에서 읽어야 한다 — 라우터가 곧 해시를 `#/news` 로 다시 쓴다(주문 화면과 같은 사정).
+   */
+  const [picked, setPicked] = useState<{ code: string; name: string } | null>(() => {
+    try {
+      const q = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+      const pick = q.get("pick");
+      return pick && /^\d{6}$/.test(pick) ? { code: pick, name: q.get("name") ?? pick } : null;
+    } catch {
+      return null;
+    }
+  });
   /** 종목이 아니라 **키워드**로 검색한 상태 — 「2차전지」「금리 인하」 같은 것 */
   const [keyword, setKeyword] = useState<string | null>(null);
   const [srcTab, setSrcTab] = useState<SrcTab>("main");

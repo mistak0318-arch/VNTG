@@ -256,22 +256,37 @@
   border-top: none;
 }
 
+/*
+ * 이름 칸은 **접히는 흐름**이다 (2026-09-10 — 벤티지: "글로벌 부분에 글귀를 추가해서 그런가 PC 모드에서
+ * 브라우저 작아지면 글씨가 겹치네"). 「n분 전」 꼬리표가 붙으면서 이름+심볼+꼬리표가 한 줄에 안 들어가면
+ * 값 칸 위로 넘쳤다. 이름은 줄바꿈되고 심볼·꼬리표는 다음 줄로 내려간다. 값·등락은 절대 줄지 않는다.
+ */
 .ov-g-nm {
-  flex: 1;
+  flex: 1 1 0;
   font-size: 0.8333rem;
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 5px;
+  row-gap: 0;
+  line-height: 1.25;
+  overflow: hidden;
 }
 
 .ov-g-tk {
   font-size: 0.6333rem;
   color: var(--ov-txt-3);
-  margin-left: 5px;
+  white-space: nowrap;
 }
+.ov-g-nm .ov-g-lag { white-space: nowrap; margin-left: 0; }
 
 .ov-g-px {
   font-size: 0.8333rem;
   font-weight: 600;
   text-align: right;
+  flex: none;
+  white-space: nowrap;
 }
 
 .ov-g-pct {
@@ -279,6 +294,12 @@
   width: 110px;
   text-align: right;
   flex: none;
+  white-space: nowrap;
+}
+/* 카드가 좁으면 등락 칸도 줄인다 — 숫자는 안 줄이고 폭만 */
+@media (max-width: 1100px) {
+  .ov-g-pct { width: auto; min-width: 88px; font-size: 0.72rem; }
+  .ov-g-px { font-size: 0.8rem; }
 }
 
 /* ---------- 수급 바 ---------- */

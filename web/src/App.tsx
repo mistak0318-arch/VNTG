@@ -4,6 +4,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { RunningJobsBar } from "./components/RunningJobsBar";
 import { QuickStockSearch } from "./components/QuickStockSearch";
 import { NotifyBell } from "./components/NotifyBell";
+import { MobileClock } from "./components/MobileClock";
 import { SysAssist } from "./components/SysAssist";
 import { useBuildWatch } from "./useBuildWatch";
 import { TabScroller } from "./components/TabScroller";
@@ -1203,6 +1204,8 @@ export default function App() {
       <div className="main">
         <header className="mobile-header">
           <span className="mobile-title">{TAB_LABELS[tab]}</span>
+          {/* 시각 — 맨 위에 강조 (2026-09-10 벤티지: "시간을 맨 위에 써줘 강조표시로"). 멈춘 화면을 보고 있는지 바로 안다 */}
+          <MobileClock />
         </header>
 
         <div className="main-inner">

@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { todayDartEvents, type DartEvent } from "./dartEvents.js";
 import { sendTelegram, stockNameHtml } from "./telegram.js";
-import { pushNotice, stockLink } from "./notifyCenter.js";
+import { pushNotice } from "./notifyCenter.js";
 import { superRoute } from "./superSignal.js";
 
 /**
@@ -254,8 +254,17 @@ export async function runDisclosureScan(
         ...(() => {
           const codes = [...new Set(picked.map((h) => h.event.stockCode).filter(Boolean))];
           const one = codes.length === 1 ? picked.find((h) => h.event.stockCode)! : null;
+          /*
+           * → 2026-09-10 벤티지: "알림 타입에 따라 누르면 해당 메뉴로 가야 하지 않아? 공시 누르면 공시
+           * 메뉴까지는 가줘야지". 종목 상세가 아니라 **뉴스·공시 메뉴**에 그 종목이 골라진 채로 간다
+           * (`pick=` — `code=` 를 쓰면 라우터가 종목 상세 시트를 위에 띄운다).
+           */
           return one
-            ? { link: stockLink(one.event.stockCode!, one.event.corpName), code: one.event.stockCode!, name: one.event.corpName }
+            ? {
+                link: `#/news?${new URLSearchParams({ pick: one.event.stockCode!, name: one.event.corpName }).toString()}`,
+                code: one.event.stockCode!,
+                name: one.event.corpName,
+              }
             : { link: "#/news" };
         })(),
         dedupeKey: `disclosure:${picked.map((h) => h.event.url).sort().join(",").slice(0, 200)}`,

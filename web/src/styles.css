@@ -18358,3 +18358,30 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 
 /* 머리 단추가 링크(주문하기)여도 같은 모양 (2026-09-10) */
 a.watch-btn { text-decoration: none; }
+
+/* 모바일 머리 시각 — 강조 (2026-09-10) */
+.mobile-clock {
+  margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 800; font-size: 1.02rem; letter-spacing: 0.02em;
+  color: var(--accent, #e6a23c); background: color-mix(in srgb, var(--accent, #e6a23c) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #e6a23c) 45%, transparent); border-radius: 8px; padding: 2px 8px;
+}
+/* 모바일에서 알림 단추는 작게 (2026-09-10 — "모바일에서는 알람 크기 좀 줄여도 될 거 같고") */
+@media (max-width: 700px) {
+  .qss-row { --hdr-h: 28px; }
+  .qss-row .nb-bell { padding: 3px 7px; font-size: 13px; }
+  .nb-badge { min-width: 14px; height: 14px; line-height: 14px; font-size: 9.5px; top: -5px; right: -5px; }
+}
+
+/* 현미경 머리 — 설명은 「?」 안에 접힘, 현황은 컴팩트 (2026-09-10) */
+.sc-head h2 { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.sc-about { display: inline; font-size: 0.8rem; font-weight: 400; position: relative; }
+.sc-about summary {
+  list-style: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border); color: var(--muted); font-size: 0.72rem; font-weight: 700;
+}
+.sc-about summary::-webkit-details-marker { display: none; }
+.sc-about[open] summary { color: var(--text); border-color: var(--text); }
+.sc-about .page-sub { position: absolute; left: 0; top: 24px; z-index: 5; width: min(520px, 86vw); margin: 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: 0.8rem; line-height: 1.55; }
+.sc-strip.compact { gap: 8px 12px; margin: 0 0 6px; padding: 4px 8px; font-size: 0.74rem; }
+.sc-strip.compact b { font-size: 0.8rem; }
+.sc-strip.compact .refresh-btn { padding: 1px 7px; font-size: 0.8rem; }
