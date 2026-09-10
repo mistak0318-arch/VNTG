@@ -255,12 +255,27 @@ export interface TradeMark {
  * 분봉은 그 시각이 든 봉. 같은 봉에 같은 방향이 여럿이면 수량을 합쳐 하나로.
  * 분봉의 time 은 KST 시·분을 UTC 처럼 넣은 초(chartCandles.parseMinuteTime)라 같은 방식으로 맞춘다.
  */
-function tradeMarkers(candles: Candle[], trades: TradeMark[], intraday: boolean, c: { up: string; down: string }): SeriesMarker<Time>[] {
-  if (candles.length === 0 || trades.length === 0) return [];
+export interface TradeAtBar {
+  buy: number;
+  sell: number;
+  buyAmt: number;
+  sellAmt: number;
+  buyN: number;
+  sellN: number;
+}
+
+function tradeMarkers(
+  candles: Candle[],
+  trades: TradeMark[],
+  intraday: boolean,
+  c: { up: string; down: string },
+): { markers: SeriesMarker<Time>[]; byTime: Map<number, TradeAtBar> } {
+  const byTime = new Map<number, TradeAtBar>();
+  if (candles.length === 0 || trades.length === 0) return { markers: [], byTime };
   const keyOf = (t: Time): number =>
     typeof t === "number" ? t : typeof t === "string" ? Date.parse(t) / 1000 : Date.UTC(t.year, t.month - 1, t.day) / 1000;
   const keys = candles.map((k) => keyOf(k.time));
-  const bucket = new Map<number, { time: Time; buy: number; sell: number; buyAmt: number; sellAmt: number }>();
+  const bucket = new Map<number, { time: Time; buy: number; sell: number; buyAmt: number; sellAmt: number; buyN: number; sellN: number }>();
   for (const tr of trades) {
     const d = new Date(new Date(tr.at).getTime() + 9 * 3600_000); // KST
     const sec = intraday
@@ -274,24 +289,33 @@ function tradeMarkers(candles: Candle[], trades: TradeMark[], intraday: boolean,
     }
     if (idx < 0) continue;
     /* 봉 하나가 며칠(주·월봉)이거나 몇 분(분봉)인데 다음 봉 전이면 그 봉 */
-    const b = bucket.get(idx) ?? { time: candles[idx].time, buy: 0, sell: 0, buyAmt: 0, sellAmt: 0 };
+    const b = bucket.get(idx) ?? { time: candles[idx].time, buy: 0, sell: 0, buyAmt: 0, sellAmt: 0, buyN: 0, sellN: 0 };
     if (tr.side === "buy") {
       b.buy += tr.qty;
       b.buyAmt += tr.qty * tr.price;
+      b.buyN += 1;
     } else {
       b.sell += tr.qty;
       b.sellAmt += tr.qty * tr.price;
+      b.sellN += 1;
     }
     bucket.set(idx, b);
   }
+  /*
+   * 키움처럼 **B / S 동그라미**만 (2026-09-10 저녁 — 벤티지: "이렇게 되서 잘 식별이 안 되는데 … 키움은 B S
+   * 아이콘으로 하더라"). 글자를 봉 옆에 쓰면 겹쳐서 못 읽는다. 수량·평균가는 그 봉의 말풍선에 넣는다(byTime).
+   */
   const out: SeriesMarker<Time>[] = [];
-  const fmtQ = (q: number) => (q >= 10000 ? `${(q / 10000).toFixed(1)}만` : q.toLocaleString("ko-KR"));
-  const fmtP = (amt: number, q: number) => (q > 0 ? Math.round(amt / q).toLocaleString("ko-KR") : "");
   for (const b of bucket.values()) {
-    if (b.buy > 0) out.push({ time: b.time, position: "belowBar", color: c.up, shape: "arrowUp", text: `매수 ${fmtQ(b.buy)} @${fmtP(b.buyAmt, b.buy)}` });
-    if (b.sell > 0) out.push({ time: b.time, position: "aboveBar", color: c.down, shape: "arrowDown", text: `매도 ${fmtQ(b.sell)} @${fmtP(b.sellAmt, b.sell)}` });
+    byTime.set(keyOf(b.time), { buy: b.buy, sell: b.sell, buyAmt: b.buyAmt, sellAmt: b.sellAmt, buyN: b.buyN, sellN: b.sellN });
+    if (b.buy > 0) out.push({ time: b.time, position: "belowBar", color: c.up, shape: "circle", text: "B", size: 1.6 });
+    if (b.sell > 0) out.push({ time: b.time, position: "aboveBar", color: c.down, shape: "circle", text: "S", size: 1.6 });
   }
-  return out;
+  return { markers: out, byTime };
+}
+/** 말풍선이 쓰는 키 — tradeMarkers 의 keyOf 와 같은 셈 */
+function tradeKey(t: Time): number {
+  return typeof t === "number" ? t : typeof t === "string" ? Date.parse(t) / 1000 : Date.UTC(t.year, t.month - 1, t.day) / 1000;
 }
 
 export function CandleChart({
@@ -373,6 +397,8 @@ export function CandleChart({
   const volRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   /** 최신 캔들 — 크로스헤어 핸들러가 항상 최신 배열을 보게 한다 */
   const dataRef = useRef<Candle[]>(candles);
+  /** 봉별 내 매매 — 말풍선용 (복기) */
+  const tradeInfoRef = useRef<Map<number, TradeAtBar>>(new Map());
   dataRef.current = candles;
   /**
    * 최신 높이.
@@ -948,6 +974,17 @@ export function CandleChart({
           : "") +
         // 종가는 늘 보인다. 이것까지 끄면 말풍선을 띄울 이유가 없다
         row("종가", cur.close) +
+        /* 복기 — 이 봉에서 내가 산 것·판 것 (B/S 동그라미의 속뜻) */
+        (() => {
+          const t = tradeInfoRef.current.get(tradeKey(cur.time));
+          if (!t) return "";
+          const avg = (amt: number, q: number) => (q > 0 ? Math.round(amt / q).toLocaleString("ko-KR") : "");
+          return (
+            `<div class="ct-sub">내 매매</div>` +
+            (t.buy > 0 ? `<div class="ct-row"><span class="up">B 매수</span><b class="up">${t.buy.toLocaleString("ko-KR")}주</b><i>@${avg(t.buyAmt, t.buy)}${t.buyN > 1 ? ` · ${t.buyN}건` : ""}</i></div>` : "") +
+            (t.sell > 0 ? `<div class="ct-row"><span class="down">S 매도</span><b class="down">${t.sell.toLocaleString("ko-KR")}주</b><i>@${avg(t.sellAmt, t.sell)}${t.sellN > 1 ? ` · ${t.sellN}건` : ""}</i></div>` : "")
+          );
+        })() +
         (pf.tip.includes("volume")
           ? `<div class="ct-row"><span>거래량</span><b>${won(cur.volume)}</b><i>${volRate}</i></div>` +
             (cur.value !== undefined && cur.value > 0
@@ -1423,8 +1460,9 @@ export function CandleChart({
       ];
       const hiLo = timeValue(hi.time) === timeValue(lo.time) ? [markers[0]] : markers;
       /* 복기 — 내 체결 화살표를 고·저와 같이 (setMarkers 는 시간 오름차순) */
-      const mine = trades && trades.length > 0 ? tradeMarkers(candles, trades, intraday, c) : [];
-      candleSeries.setMarkers([...hiLo, ...mine].sort((a, b) => timeValue(a.time) - timeValue(b.time)));
+      const tm = trades && trades.length > 0 ? tradeMarkers(candles, trades, intraday, c) : { markers: [], byTime: new Map<number, TradeAtBar>() };
+      tradeInfoRef.current = tm.byTime;
+      candleSeries.setMarkers([...hiLo, ...tm.markers].sort((a, b) => timeValue(a.time) - timeValue(b.time)));
 
       /* 판독 줄에 쓸 값 — 점선·화살표와 **같은 구간, 같은 고저**에서 낸다 */
       setGap(
