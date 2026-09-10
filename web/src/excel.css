@@ -1077,7 +1077,7 @@
    단추·텔레그램 fab 처럼 본문 안에서 화면에 붙는 것이 있는 동안은 필터를 잠깐 내린다(:has).
    그 순간 색이 돌아오지만, 그 위에 뜬 창을 보고 있는 때다.
 */
-:root[data-theme="excel"] .main:not(:has(.ord-modal-back, .chart-full, .board-solo-close, .board-x, .tgr-fab, .tgr-jump, .ht-pop)),
+:root[data-theme="excel"] .main:not(:has(.ord-modal-back, .chart-full, .board-solo-close, .board-x, .tgr-fab, .tgr-jump, .ht-pop, .overlay, .sys-fab)),
 :root[data-theme="excel"] .overlay,
 /*
    ⚠️ **미니창·보드창은 `.main` 안이 아니다** (2026-09-09 — 벤티지: "미니창에 아까

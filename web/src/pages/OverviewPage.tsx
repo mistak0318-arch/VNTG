@@ -281,7 +281,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
   const cards = useCardOrder(`overview2.${sub}`, keysHere);
   /* 벽돌 쌓기 — 긴 카드 옆이 비지 않게 (2026-09-10) */
   const gridRef = useRef<HTMLDivElement>(null);
-  useMasonryGrid(gridRef);
+  useMasonryGrid(gridRef, 700, 4, 12);
 
   const [wide, setWide] = useState(() => window.matchMedia("(min-width:700px)").matches);
   useEffect(() => {

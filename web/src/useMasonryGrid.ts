@@ -12,7 +12,12 @@ import { useEffect, type RefObject } from "react";
  * 벽돌 쌓기가 된다. 카드 차례(`order`)는 그대로 먹는다. 높이는 내용이 오면 바뀌므로 ResizeObserver 로 따라간다.
  * 한 열(폰)에서는 잔줄이 뜻이 없어 끈다.
  */
-export function useMasonryGrid(ref: RefObject<HTMLElement | null>, minWidth = 700, row = 8, gap = 10): void {
+/**
+ * row 는 잔줄 높이, gap 은 카드 사이 세로 여백(카드의 margin-bottom 으로 준다 — 격자 row-gap 은 0).
+ * 예전엔 row-gap 12 를 격자에 두고 (h+gap)/(row+gap) 로 셌는데 한 칸이 20px 이라 카드 밑에 최대 20px 이 남았다
+ * (2026-09-10 실측 13~28px). 4px 잔줄 + margin 이면 오차가 4px 안이다.
+ */
+export function useMasonryGrid(ref: RefObject<HTMLElement | null>, minWidth = 700, row = 4, gap = 12): void {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -29,7 +34,7 @@ export function useMasonryGrid(ref: RefObject<HTMLElement | null>, minWidth = 70
         const box = child.getBoundingClientRect();
         const inner = child.firstElementChild ? (child.firstElementChild as HTMLElement).getBoundingClientRect() : null;
         const h = child.classList.contains("ov-card") ? child.scrollHeight : (inner ? inner.height : box.height);
-        const span = Math.max(1, Math.ceil((h + gap) / (row + gap)));
+        const span = Math.max(1, Math.ceil((h + gap) / row));
         child.style.gridRowEnd = `span ${span}`;
       }
     };

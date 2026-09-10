@@ -255,7 +255,7 @@ export function SettingsPage() {
           id="afterClose"
           scope="global"
           title="마감 뒤 정리"
-          hint="일봉 → 원장 → 장세 → 추적기 → 슈퍼신호등 → 신호등 분석 · 손으로도 돌린다"
+          hint="일봉 → 원장 → 장세 → 추적기 → 신호등 분석 → 슈퍼신호등 → 교차 → 수출입 → 실적 캐시 → 표본 (9단계) · 손으로도 돌린다"
         >
           <AfterClosePanel />
           <LedgerResetPanel />

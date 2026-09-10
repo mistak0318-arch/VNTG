@@ -480,7 +480,8 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
  * 늘어나 재는 값이 계속 커진다.
  */
 @media (min-width: 700px) {
-  .ov-grid.masonry { grid-auto-rows: 8px; align-items: start; }
+  .ov-grid.masonry { grid-auto-rows: 4px; row-gap: 0; align-items: start; }
+  .ov-grid.masonry > * { margin-bottom: 12px; }
 }
 
 /*

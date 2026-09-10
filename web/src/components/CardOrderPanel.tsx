@@ -34,7 +34,8 @@ const SUB_LABEL: Record<OverviewSub, string> = {
 function SubList({ sub }: { sub: OverviewSub }) {
   const defs = OVERVIEW_CARDS[sub];
   const keys = defs.map((d) => d.key);
-  const cards = useCardOrder(`overview.${sub}`, keys);
+  /* 대시보드와 같은 저장 자리 — overview2 (2026-09-10 기본 차례 개편 때 올림). 다르면 설정에서 바꾼 게 화면에 안 먹는다 */
+  const cards = useCardOrder(`overview2.${sub}`, keys);
 
   return (
     <section className="cop-sub">

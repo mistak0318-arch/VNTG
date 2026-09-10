@@ -4,6 +4,10 @@
 
 :root {
   color-scheme: dark;
+  /* (2026-09-10 전수 점검) 강조색 변수 — 새 컴포넌트들이 hex 를 박아 라이트 테마에서 안 보였다 */
+  --warn: #f59e0b;
+  --cyan: #22d3ee;
+  --accent: #e6a23c;
   /* useAppearance.tsx가 <html>에 직접 써넣는 값. 없으면 아래 기본값 */
   --app-font:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
@@ -44,6 +48,10 @@
 /* ===== 라이트 테마 ===== */
 :root[data-theme="light"] {
   color-scheme: light;
+  /* (2026-09-10 전수 점검) 강조색 — 흰 바탕에서 대비가 나오게 어둡게 */
+  --warn: #b45309;
+  --cyan: #0e7490;
+  --accent: #b7791f;
   --bg: #f5f7fa;
   --panel: #ffffff;
   --panel-2: #eef2f7;
@@ -2642,7 +2650,7 @@ body {
   실제로 폰에서 끌어 봤고 안 됐다). 터치 기기에는 hover 가 없어 opacity:0 이면
   영영 안 보인다. coarse pointer 에선 늘 반투명하게 보이고 잡는 폭도 넓힌다.
 */
-.data-table th { position: relative; }
+/* (2026-09-10 전수 점검) `position: relative` 가 1627 의 sticky 를 같은 특이도로 덮어 스크롤 상자에서 머리줄이 사라졌다. sticky 도 absolute 자식(.col-grip)의 기준이 된다 */
 .col-grip {
   position: absolute; top: 0; right: 0; width: 8px; height: 100%;
   cursor: col-resize; opacity: 0; touch-action: none;
@@ -6270,6 +6278,11 @@ button.nav-group-toggle {
    (2) 와이드(1500px+)에서 읽는 화면의 글줄이 1,300px 로 퍼져 줄을 잃는다.
        표 화면은 넓을수록 좋지만 **글은 한 줄이 눈 폭 안에** 있어야 한다 */
 @media (pointer: coarse) {
+  /* (2026-09-10 전수 점검) 32px 미만이던 손가락 표적들도 같이 */
+  .period-btn { min-height: 32px; }
+  .app-tab-x { min-width: 30px; min-height: 30px; }
+  .sheet-header .watch-btn { min-width: 32px; min-height: 32px; }
+  .sc-about summary { width: 26px; height: 26px; }
   .filter-btn,
   .detail-tab,
   .algo-run-btn,
@@ -18294,16 +18307,16 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .rp-nc-thumb { grid-row: 1 / span 2; width: 56px; height: 56px; border-radius: 6px; overflow: hidden; background: var(--panel-2); display: block; }
 .rp-nc-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 @media (max-width: 640px) {
-  .rp-nc-item.has-thumb { grid-template-columns: 64px auto 1fr; }
-  .rp-nc-thumb { width: 64px; height: 64px; }
+  .rp-nc-item.has-thumb { grid-template-columns: 56px auto 1fr; }
+  .rp-nc-thumb { width: 56px; height: 56px; }
 }
 .rp-nc-tier { font-style: normal; font-size: 0.68rem; letter-spacing: -1px; white-space: nowrap; padding-top: 2px; color: var(--muted); }
-.rp-nc-tier.t2 { color: #f59e0b; }
+.rp-nc-tier.t2 { color: var(--warn); }
 .rp-nc-tier.t3 { color: var(--red); }
 /* 칩은 제목 뒤에 이어 붙는다 — 한 줄 흐름 (2026-09-10) */
 .rp-nc-tags { display: inline; margin-left: 4px; }
 .rp-nc-tags > * { display: inline-block; vertical-align: baseline; margin: 0 3px 2px 0; }
-.rp-nc-impact { font-style: normal; font-size: 0.66rem; color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.45); border-radius: 4px; padding: 0 5px; line-height: 1.5; }
+.rp-nc-impact { font-style: normal; font-size: 0.66rem; color: var(--warn); border: 1px solid rgba(245, 158, 11, 0.45); border-radius: 4px; padding: 0 5px; line-height: 1.5; }
 .rp-nc-stock { font-size: 0.68rem; color: var(--blue); background: rgba(76, 141, 255, 0.1); border: 1px solid rgba(76, 141, 255, 0.35); border-radius: 4px; padding: 0 6px; line-height: 1.6; cursor: pointer; }
 .rp-nc-stock b { font-weight: 700; margin-left: 2px; }
 .rp-nc-stock:hover { background: rgba(76, 141, 255, 0.2); }
@@ -18323,7 +18336,7 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .sd-event b { white-space: nowrap; }
 .sd-event > span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46ch; }
 .sd-event.listing { border-color: rgba(245, 158, 11, 0.5); }
-.sd-event.listing b { color: #f59e0b; }
+.sd-event.listing b { color: var(--warn); }
 .sd-event.merger b { color: var(--blue); }
 .sd-event.dividend b { color: var(--green, #22c55e); }
 @media (max-width: 640px) {
@@ -18510,25 +18523,25 @@ a.watch-btn { text-decoration: none; }
 }
 .sd-mark b { font-weight: 400; margin-left: 2px; }
 .sd-mark.danger { color: var(--red); border-color: rgba(239, 68, 68, 0.6); background: rgba(239, 68, 68, 0.12); }
-.sd-mark.warn { color: #f59e0b; border-color: rgba(245, 158, 11, 0.55); background: rgba(245, 158, 11, 0.1); }
+.sd-mark.warn { color: var(--warn); border-color: rgba(245, 158, 11, 0.55); background: rgba(245, 158, 11, 0.1); }
 .sd-mark.info { color: var(--blue); border-color: rgba(76, 141, 255, 0.45); background: rgba(76, 141, 255, 0.1); }
 /* 보드·종목발굴처럼 좁은 자리는 배너를 얇게 */
 .sd-flags.compact .sd-flag { padding: 4px 10px; font-size: 0.76rem; }
 
 /* 차트 복기 단추·요약 (2026-09-10) */
-.period-btn.review.active { border-color: #ff9f1c; color: #ff9f1c; background: rgba(255, 159, 28, 0.12); }
+.period-btn.review.active { border-color: var(--accent); color: var(--accent); background: rgba(255, 159, 28, 0.12); }
 .chart-review-sum { font-size: 0.72rem; margin-left: 6px; white-space: nowrap; }
 .chart-review-sum b { font-weight: 700; }
-.chart-review-sum b.positive { color: #ff9f1c; }
-.chart-review-sum b.negative { color: #22d3ee; }
+.chart-review-sum b.positive { color: var(--accent); }
+.chart-review-sum b.negative { color: var(--cyan); }
 
 /* 복기 목록 — 월일 시각 · B/S · 수량 · 가격 (2026-09-10) */
 .chart-review-list { display: flex; flex-direction: column; gap: 1px; max-height: 180px; overflow-y: auto; margin: 4px 0 6px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); font-size: 0.76rem; }
 .chart-review-row { display: grid; grid-template-columns: 6.5em 4.5em 4.5em 6em 1fr; gap: 6px; align-items: baseline; }
 .chart-review-row .num { font-variant-numeric: tabular-nums; text-align: right; }
 .chart-review-row .num:first-child { text-align: left; color: var(--muted); }
-.chart-review-row .rv-b { color: #ff9f1c; }
-.chart-review-row .rv-s { color: #22d3ee; }
+.chart-review-row .rv-b { color: var(--accent); }
+.chart-review-row .rv-s { color: var(--cyan); }
 .period-btn.review-list.active { color: var(--text); }
 
 /* 실시간 조회순위 카드 (2026-09-10) */
@@ -18546,4 +18559,19 @@ a.watch-btn { text-decoration: none; }
 /* 태블릿(700~899) — 바닥 시트가 480px 로 좁아 이름이 글자 중간에서 접혔다. 폭을 좀 더 준다 (2026-09-10) */
 @media (min-width: 700px) and (max-width: 899px) {
   .sheet { max-width: 660px; }
+}
+
+/* ── 2026-09-10 전수 점검 UI 고침 ── */
+/* 시트: 끝까지 밀어도 뒤 페이지가 안 따라 밀림 */
+.sheet { overscroll-behavior: contain; }
+/* 시트가 떠 있으면 시스 단추는 잠깐 숨김 — 폰에서 시트 우하단을 가렸다 */
+.main:has(.overlay) .sys-fab { display: none; }
+@media (max-width: 899px) {
+  /* 맨 윗줄(sticky, z20) 밑에 깔리던 머리줄들 — 윗줄 높이만큼 내림 */
+  .analysis-title, .sbt-panel { top: 2.85rem; }
+}
+@media (max-width: 640px) {
+  /* 폰에서 2열 고정 격자는 1열 */
+  .bf-body, .jn-edge-two, .kb-grid, .peek-kv, .bd-watch, .ma-hint-split2 { grid-template-columns: 1fr; }
+  .chart-review-row { grid-template-columns: 5.6em 4em 3.4em 5.2em 1fr; font-size: 0.72rem; gap: 4px; }
 }
