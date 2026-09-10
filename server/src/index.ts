@@ -5,6 +5,18 @@
  * Node 는 process.env.TZ 를 바꾸는 순간 시간대를 다시 읽는다.
  */
 process.env.TZ = "Asia/Seoul";
+/*
+ * **잡히지 않은 거부·예외에 죽지 않는다** (2026-09-10 저녁 전수 점검). Node 24 는 unhandledRejection 하나로
+ * 프로세스를 끝낸다. `void fn()` 으로 던져 둔 곳이 서버에 110곳이 넘고, 그중 하나가 디스크 잠금 같은 이유로
+ * 거부되면 소켓·스케줄러가 통째로 끊긴다(감시자가 다시 켜 주기까지 30초). 로그에 남기고 계속 간다 —
+ * 매매 도구는 「죽어서 깨끗한 것」보다 「살아서 시세를 주는 것」이 낫다.
+ */
+process.on("unhandledRejection", (reason) => {
+  console.error("[process] unhandledRejection:", reason instanceof Error ? reason.stack ?? reason.message : reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[process] uncaughtException:", err.stack ?? err.message);
+});
 
 import cors from "cors";
 import dotenv from "dotenv";

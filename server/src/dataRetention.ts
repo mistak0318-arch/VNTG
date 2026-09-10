@@ -94,7 +94,7 @@ export const CATS: DataCat[] = [
     what: "네이버 금융 뉴스 제목에서 뽑은 낱말과 시각",
     kind: "daily",
     path: "newsKeywords",
-    datePattern: /^(\d{4}-\d{2}-\d{2})\.json$/,
+    datePattern: /^(\d{4}-\d{2}-\d{2})\.json(\.gz)?$/,
     /* 60 → 365 (2026-09-10 벤티지: "텔레그램이랑 뉴스 계속해서 일년치 수집하기로 했잖아") */
     defaultKeep: 365,
     rebuildable: false,
@@ -110,7 +110,7 @@ export const CATS: DataCat[] = [
     what: "채널 글 원문(날짜별). 시세분석 📰✈ 수 · 동향 · 검색 · 버즈 상세가 여기서 나온다",
     kind: "daily",
     path: "channelStore",
-    datePattern: /^(\d{4}-\d{2}-\d{2})\.jsonl$/,
+    datePattern: /^(\d{4}-\d{2}-\d{2})\.jsonl(\.gz)?$/,
     defaultKeep: 365,
     rebuildable: false,
   },
@@ -120,7 +120,7 @@ export const CATS: DataCat[] = [
     what: "거래소 공시 목록 날짜별 — 공매도 과열·투자경고·단기과열 배너와 공시 탭이 읽는다",
     kind: "daily",
     path: "krxNotices",
-    datePattern: /^(\d{4}-\d{2}-\d{2})\.json$/,
+    datePattern: /^(\d{4}-\d{2}-\d{2})\.json(\.gz)?$/,
     defaultKeep: 365,
     rebuildable: true,
   },
@@ -130,7 +130,7 @@ export const CATS: DataCat[] = [
     what: "채널 언급 횟수와 원문 조각. 텍스트만이라 아주 작다",
     kind: "daily",
     path: "buzz",
-    datePattern: /^(\d{4}-\d{2}-\d{2})\.json$/,
+    datePattern: /^(\d{4}-\d{2}-\d{2})\.json(\.gz)?$/,
     defaultKeep: 365,
     rebuildable: false,
   },
@@ -140,7 +140,7 @@ export const CATS: DataCat[] = [
     what: "시그널·키워드·손절 판정이 일어난 자리에서 한 줄씩 적어 둔 것",
     kind: "daily",
     path: "events",
-    datePattern: /^(\d{4}-\d{2}-\d{2})\.jsonl$/,
+    datePattern: /^(\d{4}-\d{2}-\d{2})\.jsonl(\.gz)?$/,
     defaultKeep: 365,
     rebuildable: false,
   },
@@ -150,7 +150,7 @@ export const CATS: DataCat[] = [
     what: "그날의 신호등 점수. 지나간 날은 다시 계산할 수 없다",
     kind: "daily",
     path: "signalHistory",
-    datePattern: /^(\d{4}-\d{2}-\d{2})\.jsonl$/,
+    datePattern: /^(\d{4}-\d{2}-\d{2})\.jsonl(\.gz)?$/,
     defaultKeep: null,
     rebuildable: false,
   },
@@ -514,6 +514,12 @@ export async function compressOldLogs(): Promise<{ done: number; saved: number }
 
   for (const cat of CATS) {
     if (cat.kind !== "daily" || !cat.datePattern) continue;
+    /*
+     * ⚠️ **실시간 로그만 누른다** (2026-09-10 저녁 전수 점검 P0). 창고(channelStore)·뉴스 키워드는 읽는 쪽이
+     * `${day}.jsonl` 이름을 그대로 열어서 .gz 로 바꾸면 그날치가 통째로 안 보인다 — 실제로 newsKeywords/2026-09-08
+     * 이 gz 로 눌려 안 읽히고 있었고, 오늘 창고를 표에 넣으면서 창고까지 눌릴 뻔했다.
+     */
+    if (cat.key !== "realtime") continue;
     const dir = join(DATA_DIR, cat.path);
     for (const f of await dirFiles(dir)) {
       if (f.name.endsWith(".gz")) continue;
@@ -546,6 +552,43 @@ export async function compressOldLogs(): Promise<{ done: number; saved: number }
   return { done, saved };
 }
 
+/**
+ * 잘못 눌린 파일 되돌리기 (2026-09-10) — 실시간 로그가 아닌 갈래에 남은 `.gz` 를 원래 이름으로 풀어 둔다.
+ * 원본이 이미 있으면(그 뒤에 새로 적힌 것) 이어 붙이지 않고 gz 는 `.gz.bak` 로 옆에 둔다 — 지우지 않는다.
+ */
+export async function restoreCompressed(): Promise<{ restored: number; kept: number }> {
+  const { createReadStream, createWriteStream } = await import("node:fs");
+  const { createGunzip } = await import("node:zlib");
+  const { pipeline } = await import("node:stream/promises");
+  const { rename } = await import("node:fs/promises");
+  let restored = 0;
+  let kept = 0;
+  for (const cat of CATS) {
+    if (cat.kind !== "daily" || cat.key === "realtime") continue;
+    const dir = join(DATA_DIR, cat.path);
+    for (const f of await dirFiles(dir)) {
+      if (!f.name.endsWith(".gz")) continue;
+      const src = join(dir, f.name);
+      const dst = src.slice(0, -3);
+      const exists = await stat(dst).then(() => true).catch(() => false);
+      if (exists) {
+        await rename(src, `${src}.bak`).catch(() => undefined);
+        kept += 1;
+        continue;
+      }
+      try {
+        await pipeline(createReadStream(src), createGunzip(), createWriteStream(dst));
+        await unlink(src);
+        restored += 1;
+      } catch {
+        await unlink(dst).catch(() => undefined);
+      }
+    }
+  }
+  if (restored + kept > 0) console.log(`[data] 잘못 눌린 파일 되돌림 ${restored}개 (원본 있어 둔 것 ${kept}개)`);
+  return { restored, kept };
+}
+
 let timer: NodeJS.Timeout | null = null;
 
 /** 하루 한 번 정리. 기동 직후에도 한 번 — 이미 넘쳐 있을 수 있다 */
@@ -557,6 +600,7 @@ export function startRetentionScheduler(): void {
        * **압축이 먼저다.** 지우기 전에 줄일 수 있으면 줄인다 — 이 데이터는 다시
        * 못 받으므로 「작게 오래 두기」가 「크게 짧게 두기」보다 낫다.
        */
+      await restoreCompressed();
       const z = await compressOldLogs();
       if (z.done > 0) {
         console.log(`[data] 지난 로그 ${z.done}개 압축 — ${(z.saved / 1048576).toFixed(1)}MB 절약`);

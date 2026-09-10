@@ -328,7 +328,14 @@ export async function coverage(): Promise<{ oldest: string | null; newest: strin
   let oldest: string | null = null;
   let newest: string | null = null;
   let lines = 0;
-  for (const day of recentDays(await keepDays())) {
+  /* 1년치를 줄마다 읽지 않는다 (2026-09-10 저녁 감사 P1) — 최근 31일만 세고, 가장 오래된 날은 파일 이름으로 */
+  try {
+    const names = (await readdir(DIR)).filter((n) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(n)).sort();
+    if (names[0]) oldest = names[0].slice(0, 10);
+  } catch {
+    /* 폴더가 없으면 아래도 빈다 */
+  }
+  for (const day of recentDays(Math.min(await keepDays(), 31))) {
     let raw: string;
     try {
       raw = await readFile(fileOf(day), "utf8");
@@ -401,10 +408,11 @@ export async function status(): Promise<{
   keepDays: number;
 }> {
   const keepNow = await keepDays();
+  /* 표는 최근 31일치 줄 수만 센다 — 그 너머는 파일 크기만 (1년치 전량 읽기 방지, 2026-09-10) */
   const days: { day: string; bytes: number; lines: number }[] = [];
   let oldest: string | null = null;
   let newest: string | null = null;
-  for (const day of recentDays(await keepDays())) {
+  for (const day of recentDays(Math.min(keepNow, 31))) {
     try {
       const raw = await readFile(fileOf(day), "utf8");
       const lines = raw.split("\n").filter(Boolean);

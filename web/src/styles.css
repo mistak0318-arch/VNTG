@@ -1205,6 +1205,8 @@ body {
   border-radius: 18px 18px 0 0;
   width: 100%;
   max-width: 480px;
+  /* 머리줄 두 줄 규칙을 **시트 폭**으로 건다 (2026-09-10) — 태블릿에서 시트가 480px 일 때, 미니창에서도 같은 사정 */
+  container-type: inline-size;
   max-height: 85vh;
   overflow-y: auto;
   padding: 16px;
@@ -1255,6 +1257,15 @@ body {
    */
   .sheet-header { flex-wrap: wrap; row-gap: 4px; }
   /* 이름은 첫 줄을 ✕ 와 둘이서 — basis 를 0 으로 두면 min-content 로 쪼그라들어 한 글자씩 세로로 선다 */
+  .sheet-header h2 { flex: 1 1 calc(100% - 44px); min-width: 0; order: 0; }
+  .sheet-header .close-btn { order: 1; margin-left: auto; flex: none; }
+  .sheet-header .sheet-live { order: 2; margin-right: auto; }
+  .sheet-header .watch-btn { order: 3; width: 28px; height: 28px; font-size: 0.92rem; }
+  .sheet-header .watch-btn:first-of-type { margin-left: auto; }
+}
+/* 같은 두 줄 — 화면이 넓어도 시트가 좁으면 (태블릿 480px 시트 · 미니창) */
+@container (max-width: 600px) {
+  .sheet-header { flex-wrap: wrap; row-gap: 4px; }
   .sheet-header h2 { flex: 1 1 calc(100% - 44px); min-width: 0; order: 0; }
   .sheet-header .close-btn { order: 1; margin-left: auto; flex: none; }
   .sheet-header .sheet-live { order: 2; margin-right: auto; }
@@ -18392,7 +18403,10 @@ a.watch-btn { text-decoration: none; }
 }
 .sc-about summary::-webkit-details-marker { display: none; }
 .sc-about[open] summary { color: var(--text); border-color: var(--text); }
-.sc-about .page-sub { position: absolute; left: 0; top: 24px; z-index: 5; width: min(520px, 86vw); margin: 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: 0.8rem; line-height: 1.55; }
+.sc-head { position: relative; }
+.sc-about { position: static; }
+/* 말풍선은 머리줄 폭 기준 — details 기준으로 두면 폰에서 오른쪽으로 넘쳤다 (2026-09-10 실측 470px/375) */
+.sc-about .page-sub { position: absolute; left: 0; right: 0; top: 34px; z-index: 5; width: auto; max-width: 560px; margin: 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); font-size: 0.8rem; line-height: 1.55; }
 .sc-strip.compact { gap: 8px 12px; margin: 0 0 6px; padding: 4px 8px; font-size: 0.74rem; }
 .sc-strip.compact b { font-size: 0.8rem; }
 .sc-strip.compact .refresh-btn { padding: 1px 7px; font-size: 0.8rem; }
@@ -18529,3 +18543,7 @@ a.watch-btn { text-decoration: none; }
 .iq-name .scr-new { margin-left: 4px; }
 .iq-chg { font-size: 0.7rem; text-align: right; }
 .iq-rate { text-align: right; font-variant-numeric: tabular-nums; }
+/* 태블릿(700~899) — 바닥 시트가 480px 로 좁아 이름이 글자 중간에서 접혔다. 폭을 좀 더 준다 (2026-09-10) */
+@media (min-width: 700px) and (max-width: 899px) {
+  .sheet { max-width: 660px; }
+}
