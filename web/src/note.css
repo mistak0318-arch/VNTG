@@ -85,8 +85,13 @@
 }
 
 /* 본문 — 위아래 껍데기만큼 비운다. 옆 여백은 메모처럼 넉넉히 */
-:root[data-theme="note"] .main-inner {
+/* 맨 윗줄(검색·알림·시계)이 머리줄 밑 여백을 갖는다 — 본문에 두면 윗줄이 껍데기 아래로 들어가 안 보였다 (2026-09-10) */
+:root[data-theme="note"] .top-strip {
   padding-top: calc(var(--nt-top-h) + var(--nt-head-h) + 8px);
+  background: var(--bg);
+}
+:root[data-theme="note"] .main-inner {
+  padding-top: 8px;
   padding-bottom: calc(var(--nt-foot-h) + 20px);
 }
 
@@ -258,7 +263,16 @@
     background: var(--bg);
     border-bottom: 1px solid var(--border);
   }
-  :root[data-theme="note"] .mobile-header {
+  /* 폰: 본문 전체가 껍데기 머리줄만큼 내려오고(엑셀과 같은 문법), 윗줄은 그 바로 밑에 붙박이. 시계는 메모 앱에 없는 물건이라 뺀다 */
+  :root[data-theme="note"] .main {
+    padding-top: calc(var(--nt-top-h) + var(--nt-head-h));
+  }
+  :root[data-theme="note"] .top-strip {
+    top: calc(var(--nt-top-h) + var(--nt-head-h));
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  :root[data-theme="note"] .top-strip .mobile-header {
     display: none;
   }
   :root[data-theme="note"] .main-inner {

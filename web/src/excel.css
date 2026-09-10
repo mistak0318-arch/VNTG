@@ -98,9 +98,16 @@
   z-index: 1;
 }
 
+/*
+ * 맨 윗줄(검색·알림·시계, .top-strip)이 본문 위로 나가면서 (2026-09-10 — 벤티지: "엑셀이랑 메모 모드에서는
+ * 저 상단바가 안 보인다") 리본 밑 여백을 **윗줄이** 갖는다. 본문에 두면 윗줄이 리본 아래로 들어가 안 보였다.
+ */
+:root[data-theme="excel"] .top-strip {
+  padding: calc(var(--xl-head-h) + 10px) 16px 0 calc(var(--xl-gutter) + 12px);
+  max-width: none;
+}
 :root[data-theme="excel"] .main-inner {
-  padding: calc(var(--xl-head-h) + 10px) 16px calc(var(--xl-foot-h) + 24px)
-    calc(var(--xl-gutter) + 12px);
+  padding: 10px 16px calc(var(--xl-foot-h) + 24px) calc(var(--xl-gutter) + 12px);
   max-width: none;
 }
 
@@ -652,10 +659,12 @@
   :root[data-theme="excel"] .xl-colhead {
     top: 50px;
   }
-  /* 모바일 머리(☰)가 리본에 가리지 않게 아래로 민다 */
-  :root[data-theme="excel"] .mobile-header {
+  /* 맨 윗줄(검색·알림·시계)이 리본에 가리지 않게 — 리본 바로 밑에 붙박이 */
+  :root[data-theme="excel"] .top-strip {
     top: var(--xl-head-h);
     z-index: 29;
+    padding: 6px 10px 6px calc(var(--xl-gutter) + 8px);
+    background: var(--bg);
   }
   :root[data-theme="excel"] .main-inner {
     padding: 10px 10px calc(var(--xl-foot-h) + 20px) calc(var(--xl-gutter) + 8px);
