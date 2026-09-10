@@ -18436,3 +18436,20 @@ a.watch-btn { text-decoration: none; }
   .top-strip .qss-row { --hdr-h: 28px; }
   .main-inner { padding-top: 8px; }
 }
+
+/*
+ * 폰에서 검색을 펼치면 **줄 전체가 검색창** (2026-09-10 — 벤티지: "모바일에서 종목 검색하기 상단 누르면 이렇게
+ * 짜부라진다. 선택하면 옆으로 길어져서 글자 입력할 수 있게는 못하나?"). 알림·점·빗자루·시계는 그동안 숨긴다 —
+ * 접으면 다시 나온다. 목록도 줄 폭 그대로.
+ */
+@media (max-width: 899px) {
+  .top-strip:has(.qss-box) .nb,
+  .top-strip:has(.qss-box) .hdr-tick,
+  .top-strip:has(.qss-box) .live-wrap,
+  .top-strip:has(.qss-box) .qss-close-tabs,
+  .top-strip:has(.qss-box) .mobile-header { display: none; }
+  .top-strip .qss-row .qss:has(.qss-box) { flex: 1 1 100%; min-width: 0; }
+  .top-strip .qss-box { width: 100%; }
+  .top-strip .qss-box .search-input { min-width: 0; width: 100%; }
+  .top-strip .qss-box .search-dropdown { left: 0; right: 0; width: auto; min-width: 0; max-width: none; }
+}
