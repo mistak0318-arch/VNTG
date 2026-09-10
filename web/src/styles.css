@@ -18516,3 +18516,16 @@ a.watch-btn { text-decoration: none; }
 .chart-review-row .rv-b { color: #ff9f1c; }
 .chart-review-row .rv-s { color: #22d3ee; }
 .period-btn.review-list.active { color: var(--text); }
+
+/* 실시간 조회순위 카드 (2026-09-10) */
+.iq-list { display: flex; flex-direction: column; gap: 2px; }
+.iq-row {
+  display: grid; grid-template-columns: 1.6em 1fr auto 4.6em; gap: 6px; align-items: center;
+  font: inherit; font-size: 0.8rem; padding: 3px 6px; border-radius: 6px; border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer;
+}
+.iq-row:hover { background: var(--panel-2); }
+.iq-rank { color: var(--muted); font-size: 0.72rem; text-align: right; }
+.iq-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.iq-name .scr-new { margin-left: 4px; }
+.iq-chg { font-size: 0.7rem; text-align: right; }
+.iq-rate { text-align: right; font-variant-numeric: tabular-nums; }

@@ -40,6 +40,7 @@ import { useMasonryGrid } from "../useMasonryGrid";
 import { useSwipeTabs } from "../useSwipeTabs";
 import { OVERVIEW_CARDS, type OverviewSub } from "../overviewCards";
 import { PulsePanel } from "../components/overview/PulsePanel";
+import { InquiryRankPanel } from "../components/overview/InquiryRankPanel";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
 
@@ -273,7 +274,11 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
    */
   const keysHere =
     sub === "us" ? [] : (OVERVIEW_CARDS[sub as OverviewSub] ?? []).map((c) => c.key);
-  const cards = useCardOrder(`overview.${sub}`, keysHere);
+  /*
+   * 저장 자리를 `overview2` 로 올림 (2026-09-10 저녁) — 기본 차례를 바꿨다(주도주·조회순위가 앞, 테마 흐름이 뒤).
+   * 예전 저장본을 그대로 쓰면 새 카드가 맨 뒤에 붙고 옛 차례가 남는다.
+   */
+  const cards = useCardOrder(`overview2.${sub}`, keysHere);
   /* 벽돌 쌓기 — 긴 카드 옆이 비지 않게 (2026-09-10) */
   const gridRef = useRef<HTMLDivElement>(null);
   useMasonryGrid(gridRef);
@@ -413,6 +418,14 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           <OverviewCard order={cards.orderOf("pulse")} title="주도주·급소">
             <div className="ov-card-b">
               <PulsePanel onSelectStock={(code, name) => onSelectStock(normalizeStockCode(code), name)} />
+            </div>
+          </OverviewCard>
+        )}
+        {/* 실시간 조회순위 — 눈이 몰리는 종목 열 (2026-09-10 저녁). 시세분석 표와 같은 응답 */}
+        {show("summary") && (
+          <OverviewCard order={cards.orderOf("inquiry")} title="실시간 조회순위">
+            <div className="ov-card-b">
+              <InquiryRankPanel onSelectStock={(code, name) => onSelectStock(normalizeStockCode(code), name)} />
             </div>
           </OverviewCard>
         )}

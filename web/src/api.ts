@@ -3573,6 +3573,8 @@ export interface RankSpecGroup {
 }
 
 export interface RankResult {
+  /** 서버가 덧붙이는 사정 — 새 날 값이 아직 없어 어제 마감 값을 주는 중 등 (rankLast) */
+  note?: string;
   spec: {
     key: string;
     label: string;
