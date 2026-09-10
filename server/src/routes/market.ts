@@ -11,6 +11,7 @@ import { findStock, searchStocks } from "../stockListCache.js";
 import { analystOpinion } from "../analystOpinion.js";
 import { hantooReady } from "../hantooClient.js";
 import { investorEstimate } from "../hantooSchedule.js";
+import { fillSyncStatus, syncRecent, tradesOf } from "../fillStore.js";
 import { stockProfile } from "../stockProfile.js";
 import { tradeSizeMix } from "../tradeSizeMix.js";
 import { CHART_RANGES, yahooChart } from "../yahooChart.js";
@@ -339,6 +340,24 @@ export function createMarketRouter(client: KiwoomClient): Router {
         .sort((a, b) => b.date.localeCompare(a.date))
         .slice(0, days);
       res.json({ code, mmcm, rows });
+    } catch (err) {
+      next(err);
+    }
+  });
+  /** 내 체결 — 차트 「복기」 (2026-09-10). 체결 창고(fillStore, kt00007 날짜별)에서 그 종목만 */
+  router.get("/trades/:code", async (req, res, next) => {
+    try {
+      const code = String(req.params.code).replace(/_(AL|NX)$/, "");
+      const days = Math.min(Math.max(Number(req.query.days) || 365, 7), 1300);
+      res.json({ ...(await tradesOf(code, days)), sync: fillSyncStatus() });
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.post("/trades/sync", async (req, res, next) => {
+    try {
+      const days = Math.min(Math.max(Number(req.body?.days) || 3, 0), 30);
+      res.json({ count: await syncRecent(client, days), sync: fillSyncStatus() });
     } catch (err) {
       next(err);
     }

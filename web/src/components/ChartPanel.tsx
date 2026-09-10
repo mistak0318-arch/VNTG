@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLive } from "../useLive";
 import type { RawRecord } from "../api";
+import { api, type TradeFill } from "../api";
 import { CandleChart } from "./CandleChart";
 import { setPref } from "../prefs";
 import { useChartPrefs } from "../useChartPrefs";
@@ -211,6 +212,45 @@ export function ChartPanel({
     if (!viewKey) return;
     setPref(viewKey, JSON.stringify({ period, venue, span, fold: foldOwn }));
   }, [viewKey, period, venue, span, foldOwn]);
+  /*
+   * **복기** (2026-09-10 — 벤티지: "차트에 복기라는 버튼 … 내가 이 종목을 언제 팔았고 언제 샀고 … 일봉, 주봉,
+   * 분봉 이런 데서 모두"). 켜면 체결 창고에서 이 종목의 내 체결을 받아 봉에 매수▲·매도▼ 를 붙인다.
+   * 켜 둔 건 기기에 남는다 — 복기하러 들어온 사람은 다음 종목도 복기한다.
+   */
+  const [review, setReview] = useState<boolean>(() => localStorage.getItem("vntg.chart.review") === "1");
+  const [trades, setTrades] = useState<TradeFill[]>([]);
+  const [tradeInfo, setTradeInfo] = useState<{ days: number; from: string | null } | null>(null);
+  useEffect(() => {
+    if (!review) {
+      setTrades([]);
+      return;
+    }
+    let alive = true;
+    api
+      .myTrades(code, 400)
+      .then((r) => {
+        if (!alive) return;
+        setTrades(r.trades);
+        setTradeInfo({ days: r.days, from: r.from });
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [review, code]);
+  const toggleReview = () => {
+    setReview((v) => {
+      localStorage.setItem("vntg.chart.review", v ? "0" : "1");
+      return !v;
+    });
+  };
+  const tradeSummary = (() => {
+    if (!review) return null;
+    const buys = trades.filter((t) => t.side === "buy");
+    const sells = trades.filter((t) => t.side === "sell");
+    const sum = (a: TradeFill[]) => a.reduce((x, t) => x + t.qty, 0);
+    return { buys: buys.length, sells: sells.length, buyQty: sum(buys), sellQty: sum(sells) };
+  })();
   const [full, setFull] = useState(false);
   /** 전체화면에서는 판독 줄을 접어 둔다 — 크게 보려고 들어온 자리다 */
   const [fullInsights, setFullInsights] = useState(false);
@@ -449,6 +489,27 @@ export function ChartPanel({
           </button>
         </>
       )}
+      {/* 복기 — 내 매수▲·매도▼ 를 봉에. 「크게」 옆 (2026-09-10) */}
+      <button
+        className={`period-btn review${review ? " active" : ""}`}
+        onClick={toggleReview}
+        title={review ? "내 체결 표시 끄기" : "내가 언제 사고 팔았는지 봉에 표시 (체결 창고, 최근 400일)"}
+      >
+        📝 복기
+      </button>
+      {tradeSummary && (
+        <span className="chart-review-sum pt-n" title={tradeInfo?.from ? `체결 창고 ${tradeInfo.from}부터 ${tradeInfo.days}일치` : undefined}>
+          {trades.length === 0 ? (
+            tradeInfo && tradeInfo.days === 0 ? "체결 창고가 아직 비었어요" : "이 종목 체결 없음"
+          ) : (
+            <>
+              <b className="positive">매수 {tradeSummary.buys}회 {tradeSummary.buyQty.toLocaleString("ko-KR")}주</b>
+              {" · "}
+              <b className="negative">매도 {tradeSummary.sells}회 {tradeSummary.sellQty.toLocaleString("ko-KR")}주</b>
+            </>
+          )}
+        </span>
+      )}
       {full && (
         <>
           <span className="period-sep" />
@@ -529,6 +590,7 @@ export function ChartPanel({
             fitKey={`${period}:${span}:${venue}`}
             candles={candles}
             intraday={isIntraday}
+            trades={review ? trades : undefined}
             height={chartHeight}
             name={name ? `${name} · ${VENUES.find((v) => v.key === venue)?.label}` : undefined}
             code={code}

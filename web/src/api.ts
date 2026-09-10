@@ -793,6 +793,12 @@ export const api = {
   orderBook: (code: string) => getJson<OrderBook>(`/api/market/orderbook/${code}`),
   stockInfo: (code: string) => getJson(`/api/market/info/${code}`),
   quote: (code: string) => getJson(`/api/market/quote/${code}`),
+  /** 내 체결 — 차트 복기 (2026-09-10). 최근 days 일 */
+  myTrades: (code: string, days = 365) =>
+    getJson<{ trades: TradeFill[]; from: string | null; to: string | null; days: number; sync: { at: string; day: string; count: number; error?: string } | null }>(
+      `/api/market/trades/${code}?days=${days}`,
+    ),
+  myTradesSync: (days = 3) => postJson<{ count: number }>("/api/market/trades/sync", { days }),
   dailyChart: (code: string) => getJson(`/api/market/chart/daily/${code}`),
   /** 체결금액대별 매매비중 — 소액이 사고 고액이 팔면 개인이 받는 중이다 */
   tradeSize: (code: string) =>
@@ -4570,6 +4576,18 @@ export interface BrokerDayRow {
   net: number;
   total: number;
   weight: number;
+}
+/** 내 체결 한 건 — 서버 fillStore.ts */
+export interface TradeFill {
+  at: string;
+  code: string;
+  name: string;
+  side: "buy" | "sell";
+  price: number;
+  qty: number;
+  ordNo: string;
+  mock: boolean;
+  kind: string;
 }
 export interface StatusFlag {
   kind: string;

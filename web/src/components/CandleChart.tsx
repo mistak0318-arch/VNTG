@@ -242,6 +242,58 @@ function labelDate(time: Time): string {
  * 매번 초기화된다 — 보고 있던 자리가 사라지므로 갱신이 방해가 된다.
  * 그래서 차트는 한 번만 만들고, 새 데이터는 series 에 setData 로 갈아끼운다.
  */
+export interface TradeMark {
+  /** ISO */
+  at: string;
+  side: "buy" | "sell";
+  price: number;
+  qty: number;
+}
+
+/**
+ * 체결을 **봉에 붙인다** (2026-09-10 — 「복기」). 일·주·월봉은 그 날이 든 봉(주봉이면 그 주의 봉),
+ * 분봉은 그 시각이 든 봉. 같은 봉에 같은 방향이 여럿이면 수량을 합쳐 하나로.
+ * 분봉의 time 은 KST 시·분을 UTC 처럼 넣은 초(chartCandles.parseMinuteTime)라 같은 방식으로 맞춘다.
+ */
+function tradeMarkers(candles: Candle[], trades: TradeMark[], intraday: boolean, c: { up: string; down: string }): SeriesMarker<Time>[] {
+  if (candles.length === 0 || trades.length === 0) return [];
+  const keyOf = (t: Time): number =>
+    typeof t === "number" ? t : typeof t === "string" ? Date.parse(t) / 1000 : Date.UTC(t.year, t.month - 1, t.day) / 1000;
+  const keys = candles.map((k) => keyOf(k.time));
+  const bucket = new Map<number, { time: Time; buy: number; sell: number; buyAmt: number; sellAmt: number }>();
+  for (const tr of trades) {
+    const d = new Date(new Date(tr.at).getTime() + 9 * 3600_000); // KST
+    const sec = intraday
+      ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes()) / 1000
+      : Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 1000;
+    /* 그 시각이 든 봉 = time ≤ sec 인 마지막 봉. 첫 봉보다 앞이면 그린 구간 밖 */
+    let idx = -1;
+    for (let i = 0; i < keys.length; i += 1) {
+      if (keys[i] <= sec) idx = i;
+      else break;
+    }
+    if (idx < 0) continue;
+    /* 봉 하나가 며칠(주·월봉)이거나 몇 분(분봉)인데 다음 봉 전이면 그 봉 */
+    const b = bucket.get(idx) ?? { time: candles[idx].time, buy: 0, sell: 0, buyAmt: 0, sellAmt: 0 };
+    if (tr.side === "buy") {
+      b.buy += tr.qty;
+      b.buyAmt += tr.qty * tr.price;
+    } else {
+      b.sell += tr.qty;
+      b.sellAmt += tr.qty * tr.price;
+    }
+    bucket.set(idx, b);
+  }
+  const out: SeriesMarker<Time>[] = [];
+  const fmtQ = (q: number) => (q >= 10000 ? `${(q / 10000).toFixed(1)}만` : q.toLocaleString("ko-KR"));
+  const fmtP = (amt: number, q: number) => (q > 0 ? Math.round(amt / q).toLocaleString("ko-KR") : "");
+  for (const b of bucket.values()) {
+    if (b.buy > 0) out.push({ time: b.time, position: "belowBar", color: c.up, shape: "arrowUp", text: `매수 ${fmtQ(b.buy)} @${fmtP(b.buyAmt, b.buy)}` });
+    if (b.sell > 0) out.push({ time: b.time, position: "aboveBar", color: c.down, shape: "arrowDown", text: `매도 ${fmtQ(b.sell)} @${fmtP(b.sellAmt, b.sell)}` });
+  }
+  return out;
+}
+
 export function CandleChart({
   candles,
   intraday = false,
@@ -252,9 +304,12 @@ export function CandleChart({
   sizeTick = 0,
   fitKey = "",
   lockScope,
+  trades,
 }: {
   candles: Candle[];
   intraday?: boolean;
+  /** 내 체결 — 있으면 봉에 매수▲·매도▼ 를 붙인다 (복기) */
+  trades?: TradeMark[];
   /** 자물쇠를 이 차트만의 것으로 — 보드 카드가 인스턴스 id 를 준다. 없으면 전역 */
   lockScope?: string;
   /** 차트 높이(px). 전체화면에서 화면 높이만큼 키운다 */
@@ -1366,12 +1421,10 @@ export function CandleChart({
         { time: hi.time, position: "aboveBar", color: c.up, shape: "arrowDown", text: "고" },
         { time: lo.time, position: "belowBar", color: c.down, shape: "arrowUp", text: "저" },
       ];
-      // setMarkers는 시간 오름차순을 요구한다. 같은 봉이면 겹치므로 하나만.
-      candleSeries.setMarkers(
-        timeValue(hi.time) === timeValue(lo.time)
-          ? [markers[0]]
-          : [...markers].sort((a, b) => timeValue(a.time) - timeValue(b.time)),
-      );
+      const hiLo = timeValue(hi.time) === timeValue(lo.time) ? [markers[0]] : markers;
+      /* 복기 — 내 체결 화살표를 고·저와 같이 (setMarkers 는 시간 오름차순) */
+      const mine = trades && trades.length > 0 ? tradeMarkers(candles, trades, intraday, c) : [];
+      candleSeries.setMarkers([...hiLo, ...mine].sort((a, b) => timeValue(a.time) - timeValue(b.time)));
 
       /* 판독 줄에 쓸 값 — 점선·화살표와 **같은 구간, 같은 고저**에서 낸다 */
       setGap(
@@ -1396,7 +1449,7 @@ export function CandleChart({
      * 새로 만든 이평선·볼린저 시리즈가 빈 채로 남아 선이 사라진 것처럼 보인다.
      * 그래서 차트를 다시 만드는 조건을 여기에도 그대로 적는다.
      */
-  }, [candles, fitKey, showExtremes, maKey, prefs.bbOn, prefs.bbPeriod, prefs.bbStdDev]);
+  }, [candles, fitKey, showExtremes, maKey, prefs.bbOn, prefs.bbPeriod, prefs.bbStdDev, trades, intraday]);
 
   if (candles.length === 0) {
     return <div className="empty">차트 데이터 없음</div>;

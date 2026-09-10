@@ -56,6 +56,7 @@ import { startKrxNoticeCollector } from "./krxNotices.js";
 import { startNewsKeywordScheduler } from "./newsKeywords.js";
 import { startCalendarSyncScheduler } from "./calendarSync.js";
 import { startHantooScheduleSync } from "./hantooSchedule.js";
+import { startFillStore } from "./fillStore.js";
 import { startEtfHoldersScheduler } from "./etfHolders.js";
 import { startThemeScheduler } from "./naverThemes.js";
 import { startClosesScheduler } from "./dailyCloses.js";
@@ -313,6 +314,8 @@ startNewsKeywordScheduler();
 /* 구독 캘린더 자동 동기화 (2026-08-30) — 예전엔 단추를 눌러야만 들어왔다 */
 startCalendarSyncScheduler();
 startHantooScheduleSync();
+/* 체결 창고 — 차트 「복기」가 읽는다. 지난 90일 채우고 장중 30분마다 오늘치 (2026-09-10) */
+startFillStore(client);
 /* 데이터 보관 기간 정리 (2026-08-31) — 실시간 로그가 무한히 쌓고 있었다 */
 startRetentionScheduler();
 /* 「이 종목을 담은 ETF」 역인덱스 — 하루 1회(16시 이후). 화면은 파일만 읽는다 */
