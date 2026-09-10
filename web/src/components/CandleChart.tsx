@@ -255,6 +255,9 @@ export interface TradeMark {
  * 분봉은 그 시각이 든 봉. 같은 봉에 같은 방향이 여럿이면 수량을 합쳐 하나로.
  * 분봉의 time 은 KST 시·분을 UTC 처럼 넣은 초(chartCandles.parseMinuteTime)라 같은 방식으로 맞춘다.
  */
+/** 복기 표식 색 — 봉의 빨강·파랑과 겹치지 않게 (B 주황 · S 청록) */
+export const TRADE_COLOR = { buy: "#ff9f1c", sell: "#22d3ee" };
+
 export interface TradeAtBar {
   buy: number;
   sell: number;
@@ -305,11 +308,17 @@ function tradeMarkers(
    * 키움처럼 **B / S 동그라미**만 (2026-09-10 저녁 — 벤티지: "이렇게 되서 잘 식별이 안 되는데 … 키움은 B S
    * 아이콘으로 하더라"). 글자를 봉 옆에 쓰면 겹쳐서 못 읽는다. 수량·평균가는 그 봉의 말풍선에 넣는다(byTime).
    */
+  /*
+   * → 같은 날 밤 다시: "뾰족한 아이콘으로 얇게, 양봉 음봉 색깔보다는 다르게, B S 옆에 얼마에 샀고 팔았는지".
+   * 얇은 화살표 + 봉 색과 다른 색(B 주황 · S 청록) + 「B 2,461」 평균가만. 건수·수량은 말풍선에.
+   */
+  void c;
   const out: SeriesMarker<Time>[] = [];
+  const avg = (amt: number, q: number) => (q > 0 ? Math.round(amt / q).toLocaleString("ko-KR") : "");
   for (const b of bucket.values()) {
     byTime.set(keyOf(b.time), { buy: b.buy, sell: b.sell, buyAmt: b.buyAmt, sellAmt: b.sellAmt, buyN: b.buyN, sellN: b.sellN });
-    if (b.buy > 0) out.push({ time: b.time, position: "belowBar", color: c.up, shape: "circle", text: "B", size: 1.6 });
-    if (b.sell > 0) out.push({ time: b.time, position: "aboveBar", color: c.down, shape: "circle", text: "S", size: 1.6 });
+    if (b.buy > 0) out.push({ time: b.time, position: "belowBar", color: TRADE_COLOR.buy, shape: "arrowUp", text: `B ${avg(b.buyAmt, b.buy)}`, size: 0.8 });
+    if (b.sell > 0) out.push({ time: b.time, position: "aboveBar", color: TRADE_COLOR.sell, shape: "arrowDown", text: `S ${avg(b.sellAmt, b.sell)}`, size: 0.8 });
   }
   return { markers: out, byTime };
 }
@@ -981,8 +990,8 @@ export function CandleChart({
           const avg = (amt: number, q: number) => (q > 0 ? Math.round(amt / q).toLocaleString("ko-KR") : "");
           return (
             `<div class="ct-sub">내 매매</div>` +
-            (t.buy > 0 ? `<div class="ct-row"><span class="up">B 매수</span><b class="up">${t.buy.toLocaleString("ko-KR")}주</b><i>@${avg(t.buyAmt, t.buy)}${t.buyN > 1 ? ` · ${t.buyN}건` : ""}</i></div>` : "") +
-            (t.sell > 0 ? `<div class="ct-row"><span class="down">S 매도</span><b class="down">${t.sell.toLocaleString("ko-KR")}주</b><i>@${avg(t.sellAmt, t.sell)}${t.sellN > 1 ? ` · ${t.sellN}건` : ""}</i></div>` : "")
+            (t.buy > 0 ? `<div class="ct-row"><span style="color:${TRADE_COLOR.buy}">B 매수</span><b style="color:${TRADE_COLOR.buy}">${t.buy.toLocaleString("ko-KR")}주</b><i>@${avg(t.buyAmt, t.buy)}${t.buyN > 1 ? ` · ${t.buyN}건` : ""}</i></div>` : "") +
+            (t.sell > 0 ? `<div class="ct-row"><span style="color:${TRADE_COLOR.sell}">S 매도</span><b style="color:${TRADE_COLOR.sell}">${t.sell.toLocaleString("ko-KR")}주</b><i>@${avg(t.sellAmt, t.sell)}${t.sellN > 1 ? ` · ${t.sellN}건` : ""}</i></div>` : "")
           );
         })() +
         (pf.tip.includes("volume")

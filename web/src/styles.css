@@ -18502,6 +18502,8 @@ a.watch-btn { text-decoration: none; }
 .sd-flags.compact .sd-flag { padding: 4px 10px; font-size: 0.76rem; }
 
 /* 차트 복기 단추·요약 (2026-09-10) */
-.period-btn.review.active { border-color: #f59e0b; color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+.period-btn.review.active { border-color: #ff9f1c; color: #ff9f1c; background: rgba(255, 159, 28, 0.12); }
 .chart-review-sum { font-size: 0.72rem; margin-left: 6px; white-space: nowrap; }
 .chart-review-sum b { font-weight: 700; }
+.chart-review-sum b.positive { color: #ff9f1c; }
+.chart-review-sum b.negative { color: #22d3ee; }
