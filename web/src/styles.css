@@ -8211,6 +8211,14 @@ th.est-col { color: var(--blue); }
 }
 .chart-full-name { font-size: 0.8667rem; font-weight: 700; }
 .chart-full-hint { font-size: 0.6667rem; }
+/*
+ * 크게 볼 때의 종목명·현재가 (2026-09-11 — 「크게 보기 하면 종목 정보가 아예 안 보인다」).
+ * 낮은 화면(폰 가로)에서는 머리줄이 접히므로 도구줄 맨 앞의 `chart-full-tag` 가 그 몫을 한다.
+ */
+.chart-full-price { margin-left: 0.4rem; font-weight: 700; white-space: nowrap; }
+.chart-full-price i { font-style: normal; font-size: 0.75em; margin-left: 0.22rem; }
+.chart-full-tag { display: inline-flex; align-items: center; gap: 0.1rem; font-size: 0.8rem; white-space: nowrap; }
+.chart-full-tag > b { max-width: 8.5rem; overflow: hidden; text-overflow: ellipsis; }
 
 /* 도구줄이 길어 폰에서 두 줄이 되면 차트가 밀린다. 가로로 굴린다 */
 .chart-full .period-toggle { flex-wrap: nowrap; overflow-x: auto; }

@@ -142,7 +142,7 @@ export function ChartPanel({
    * 채워진다). 쓰기는 `setPref` 라 서버에도 올라간다.
    */
   const viewKey = viewId ? `vntg.chart.view.${viewId}` : "";
-  const saved = (): { period?: Period; venue?: Venue; span?: number; fold?: boolean } => {
+  const saved = (): { period?: Period; venue?: Venue; venueDaily?: Venue; span?: number; fold?: boolean } => {
     if (!viewKey) return {};
     try {
       return JSON.parse(localStorage.getItem(viewKey) ?? "{}") as Record<string, never>;
@@ -161,6 +161,20 @@ export function ChartPanel({
    * KRX/NXT 만 보고 싶으면 셀렉터로 고른다(칸마다 기억).
    */
   const [venue, setVenue] = useState<Venue>(() => saved().venue ?? "all");
+  /**
+   * **일·주·월봉의 거래소는 따로 기억한다** (2026-09-11 — 벤티지: "NXT로 설정을 넣고 해도
+   * NXT 시세가 나타나지 않습니다").
+   *
+   * 예전엔 일봉이 거래소 선택을 **통째로 무시하고** 늘 KRX 코드로 받았다. 셀렉터는 보이는데
+   * 아무 일도 안 일어났고, 08~09시 프리마켓에는 KRX 가 안 열려 **어제 종가로 된 빈 봉**
+   * (시=고=저=종, 거래량 0)이 오늘 자리에 붙어 있었다. 실측 09-11 08:07 SK하이닉스 —
+   * KRX 코드는 1,853,000·거래량 0, `_NX` 는 시 1,800,000 저 1,769,000 현재 1,793,000·거래량 180,837.
+   *
+   * 그래서 셀렉터가 일봉에도 먹게 하되 **기본은 KRX** 로 둔다 — 9/3 에 「통합으로 넣으니 종가가
+   * KRX 에도 NXT 에도 안 맞아(셀트리온)」로 KRX 로 고정했던 그 사정이 그대로 살아 있다.
+   * 골라서 보는 것과 기본으로 그렇게 되는 것은 다르다.
+   */
+  const [dailyVenue, setDailyVenue] = useState<Venue>(() => saved().venueDaily ?? "krx");
   /**
    * 지금 보고 있는 구간(거래일 수).
    *
@@ -210,8 +224,8 @@ export function ChartPanel({
    */
   useEffect(() => {
     if (!viewKey) return;
-    setPref(viewKey, JSON.stringify({ period, venue, span, fold: foldOwn }));
-  }, [viewKey, period, venue, span, foldOwn]);
+    setPref(viewKey, JSON.stringify({ period, venue, venueDaily: dailyVenue, span, fold: foldOwn }));
+  }, [viewKey, period, venue, dailyVenue, span, foldOwn]);
   /*
    * **복기** (2026-09-10 — 벤티지: "차트에 복기라는 버튼 … 내가 이 종목을 언제 팔았고 언제 샀고 … 일봉, 주봉,
    * 분봉 이런 데서 모두"). 켜면 체결 창고에서 이 종목의 내 체결을 받아 봉에 매수▲·매도▼ 를 붙인다.
@@ -288,12 +302,16 @@ export function ChartPanel({
    * 봉이 튄다. 그래서 **기본은 KRX**로 두고 필요할 때만 바꿔 보게 한다.
    */
   /*
-   * ⚠️ **일·주·월봉은 늘 KRX** (2026-09-03 — 벤티지: "통합으로 넣으니깐 종가 기준으로 KRX도 안 맞고
+   * ⚠️ **일·주·월봉의 기본은 KRX** (2026-09-03 — 벤티지: "통합으로 넣으니깐 종가 기준으로 KRX도 안 맞고
    * NXT에도 안 맞아. 셀트리온"). 통합(_AL) 일봉의 종가는 NXT 애프터마켓(20:00) 마지막 체결이고 시가는
    * 프리마켓(08:00) 첫 체결이라, 공식 종가(KRX 15:30)로 그리는 이동평균·눌림목·신호등과 어긋난다.
-   * 실측 셀트리온 9/2: KRX 종가 186,300 · 통합 185,000 · NXT 185,000. 거래소 선택은 **분봉에만** 뜻이 있다.
+   * 실측 셀트리온 9/2: KRX 종가 186,300 · 통합 185,000 · NXT 185,000.
+   *
+   * (2026-09-11) 그렇다고 **고른 것을 무시하지는 않는다** — 기본만 KRX 고 셀렉터는 일봉에도 먹는다.
+   * 위 `dailyVenue` 주석 참고.
    */
-  const chartCode = !isIntraday || venue === "krx" ? code : `${code}_${venue === "nxt" ? "NX" : "AL"}`;
+  const curVenue = isIntraday ? venue : dailyVenue;
+  const chartCode = curVenue === "krx" ? code : `${code}_${curVenue === "nxt" ? "NX" : "AL"}`;
 
   /*
    * 장중에는 조용히 갱신된다. 주기는 봉 단위에 맞춘다 —
@@ -306,6 +324,34 @@ export function ChartPanel({
     [chartCode, period],
     isIntraday ? 10_000 : 60_000,
   );
+
+  /*
+   * **크게 볼 때 종목명·현재가** (2026-09-11 — 벤티지: "차트를 크게 보기 하면 해당 종목에 대한
+   * 정보가 아예 보이지 않네요").
+   *
+   * 전체화면은 시트 머리(종목명·현재가)를 덮어 버린다. 낮은 화면(폰 가로)에서는 머리줄까지
+   * 접히니 무슨 종목인지도 안 보였다. **크게 볼 때만** 시세를 따로 받아 도구줄과 머리줄에 적는다 —
+   * 평소엔 빈 약속을 돌려주므로 조회가 늘지 않는다(시트 쪽은 이미 제 값을 받고 있다).
+   */
+  const { data: liveInfo } = useLive<RawRecord | null>(
+    () => (full ? api.stockInfo(code) : Promise.resolve(null)),
+    [code, full],
+    3000,
+  );
+  const livePrice = Math.abs(Number(liveInfo?.cur_prc ?? NaN));
+  const liveRate = Number(liveInfo?.flu_rt ?? NaN);
+  const priceTag =
+    Number.isFinite(livePrice) && livePrice > 0 ? (
+      <span className={`chart-full-price num ${liveRate > 0 ? "positive" : liveRate < 0 ? "negative" : ""}`}>
+        <b>{livePrice.toLocaleString("ko-KR")}</b>
+        {Number.isFinite(liveRate) && (
+          <i>
+            {liveRate > 0 ? "+" : ""}
+            {liveRate.toFixed(2)}%
+          </i>
+        )}
+      </span>
+    ) : null;
 
   const all = toCandles(chart, period);
   /*
@@ -444,6 +490,14 @@ export function ChartPanel({
 
   const toolbar = (
     <div className="period-toggle">
+      {/* 크게 보는 중이고 머리줄이 접혔으면(폰 가로) 여기가 종목을 알 수 있는 유일한 자리다 (2026-09-11) */}
+      {full && compact && (
+        <span className="chart-full-tag">
+          <b>{name ?? code}</b>
+          {priceTag}
+          <span className="period-sep" />
+        </span>
+      )}
       {/*
         거래소는 **드롭박스로 접는다.** 버튼 셋을 늘어놓으면 도구줄이 길어져서
         정작 자주 누르는 기간 버튼이 화면 밖으로 밀린다 — 거래소는 한 번 정해 두고
@@ -451,9 +505,10 @@ export function ChartPanel({
       */}
       <select
         className="period-select"
-        value={venue}
-        onChange={(e) => setVenue(e.target.value as Venue)}
-        title={VENUES.find((v) => v.key === venue)?.hint}
+        value={curVenue}
+        /* (2026-09-11) 분봉과 일·주·월봉의 거래소를 따로 기억한다 — 위 dailyVenue 주석 */
+        onChange={(e) => (isIntraday ? setVenue : setDailyVenue)(e.target.value as Venue)}
+        title={VENUES.find((v) => v.key === curVenue)?.hint}
       >
         {VENUES.map((v) => (
           <option key={v.key} value={v.key}>
@@ -586,7 +641,7 @@ export function ChartPanel({
     */
     <ChartInsights
       code={code}
-      candles={period === "day" && venue === "krx" && !loading ? candles : undefined}
+      candles={period === "day" && curVenue === "krx" && !loading ? candles : undefined}
     />
   );
 
@@ -621,12 +676,12 @@ export function ChartPanel({
         <div className="chart-wrap" ref={wrapRef}>
           {/* 「크게」 버튼은 도구줄(전체 옆)로 이사했다 — 모서리 붙박이는 보드 자물쇠를 가렸다 */}
           <CandleChart
-            fitKey={`${period}:${span}:${venue}`}
+            fitKey={`${period}:${span}:${curVenue}`}
             candles={candles}
             intraday={isIntraday}
             trades={review ? trades : undefined}
             height={chartHeight}
-            name={name ? `${name} · ${VENUES.find((v) => v.key === venue)?.label}` : undefined}
+            name={name ? `${name} · ${VENUES.find((v) => v.key === curVenue)?.label}` : undefined}
             code={code}
             sizeTick={sizeTick}
             lockScope={viewId}
@@ -660,6 +715,8 @@ export function ChartPanel({
             <span className="chart-full-name">
               {name ?? code}
               <span className="pt-n"> {code}</span>
+              {/* 현재가도 같이 — 크게 보면 시트 머리가 가려진다 (2026-09-11) */}
+              {priceTag}
             </span>
             <span className="pt-n chart-full-hint">가로로 돌리면 더 넓게 봅니다 · ESC 로 닫기</span>
           </div>

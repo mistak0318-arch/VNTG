@@ -82,7 +82,23 @@ export function toCandles(chart: RawRecord | null, period: Period): Candle[] {
     out.push(candle);
   }
   // API는 최신순으로 내려오므로 시간순(오름차순)으로 뒤집기
-  return out.reverse();
+  out.reverse();
+  /*
+   * **아직 안 열린 오늘은 봉이 아니다** (2026-09-11 — 벤티지: "차트에 NXT 시세가 안 나오네요").
+   *
+   * 키움은 장이 열리기 전에도 오늘 자리를 채워서 준다 — 시=고=저=종이 전부 **어제 종가**이고
+   * 거래량만 0 이다. 실측 09-11 08:07 SK하이닉스 KRX: `20260911 · 1,853,000 × 4 · 거래량 0`.
+   * 그대로 그리면 값이 안 움직이는 납작한 봉이 오늘 자리에 붙고, 말풍선은 「종가 1,853,000 ·
+   * 거래량 0 (-100%)」이라고 **어제 값을 오늘 것처럼** 말한다.
+   *
+   * 거래가 한 건이라도 있으면 거래량이 0 이 아니므로, 맨 뒤 한 개만 이 모양일 때 덜어낸다.
+   * (거래정지 종목도 같은 모양인데, 그 경우에도 「오늘 거래 없음」이 맞다.)
+   */
+  const last = out[out.length - 1];
+  if (last && last.volume === 0 && last.open === last.high && last.high === last.low && last.low === last.close) {
+    out.pop();
+  }
+  return out;
 }
 
 /**
