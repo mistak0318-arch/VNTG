@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { keepDaysOr } from "./dataRetention.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import {
   fetchNewMessages,
@@ -751,9 +752,10 @@ async function tick(): Promise<void> {
     await mkdir(DIR, { recursive: true });
     await writeFile(SENT_FILE, JSON.stringify(sent, null, 2), "utf-8");
 
-    /* 버즈 일별 파일도 30일 지나면 정리 */
+    /* 버즈 일별 파일은 설정 > 데이터 보관의 「텔레그램 버즈」(기본 1년)만큼 (2026-09-10 — 여기서 30일에 지우고 있었다) */
+    const fileCutoff = dayStr(new Date(Date.now() - (await keepDaysOr("buzz", 365)) * 86400_000 + 9 * 3600_000));
     for (const f of await readdir(DIR).catch(() => [] as string[])) {
-      if (/^\d{4}-\d{2}-\d{2}\.json$/.test(f) && f.slice(0, 10) < cutoff) {
+      if (/^\d{4}-\d{2}-\d{2}\.json$/.test(f) && f.slice(0, 10) < fileCutoff) {
         await unlink(join(DIR, f)).catch(() => undefined);
       }
     }

@@ -54,7 +54,7 @@ const DIR = join(here, "..", "data", "newsKeywords");
 const CATS: NaverCat[] = ["main", "flash", "market", "company", "world", "estate"];
 
 /** 며칠치를 남기나. 기준선은 7일이면 충분하고, 그 이상은 디스크만 먹는다 */
-const KEEP_DAYS = 14;
+/* 보관일은 설정 > 데이터 보관이 정한다 (2026-09-10) */
 
 export type TermKind = BuzzTerm["kind"] | "new";
 
@@ -339,8 +339,11 @@ export async function collectNewsKeywords(): Promise<{ articles: number; terms: 
 
 async function prune(): Promise<void> {
   try {
+    /* 14 → 설정 > 데이터 보관의 「뉴스 키워드」(기본 1년) (2026-09-10) — 여기가 14일에 지워 표가 헛돌았다 */
+    const { keepDaysOr } = await import("./dataRetention.js");
+    const keep = await keepDaysOr("newsKeywords", 365);
     const files = (await readdir(DIR)).filter((f) => f.endsWith(".json")).sort();
-    for (const f of files.slice(0, Math.max(0, files.length - KEEP_DAYS))) {
+    for (const f of files.slice(0, Math.max(0, files.length - keep))) {
       await unlink(join(DIR, f)).catch(() => undefined);
     }
   } catch {

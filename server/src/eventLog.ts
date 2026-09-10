@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile, readdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { keepDaysOr } from "./dataRetention.js";
 
 /**
  * 오늘의 이벤트 로그 — **알림이 지나간 자리를 남긴다.**
@@ -65,7 +66,8 @@ function dayOf(now = new Date()): string {
  * 오래된 날짜 파일 정리 (2026-08-27 전수 점검) — 파일이 무기한 쌓이기만 했다.
  * 타임라인·복기는 최근을 보므로 90일이면 넉넉하다. 하루 한 번, 첫 기록길에 지나간다.
  */
-const KEEP_DAYS = 90;
+/* 90 → 설정 > 데이터 보관의 「이벤트 로그」(기본 365) (2026-09-10) — 표에서 1년으로 둬도 여기가 90일에 지웠다 */
+const KEEP_DAYS_FALLBACK = 365;
 let cleanedDay = "";
 
 async function cleanupOldDays(): Promise<void> {
@@ -73,7 +75,7 @@ async function cleanupOldDays(): Promise<void> {
   if (cleanedDay === today) return;
   cleanedDay = today;
   try {
-    const cutoff = new Date(Date.now() - KEEP_DAYS * 86400_000).toISOString().slice(0, 10);
+    const cutoff = new Date(Date.now() - (await keepDaysOr("events", KEEP_DAYS_FALLBACK)) * 86400_000).toISOString().slice(0, 10);
     for (const f of await readdir(DIR)) {
       if (f.endsWith(".jsonl") && f.replace(/\.jsonl$/, "") < cutoff) {
         await unlink(join(DIR, f)).catch(() => undefined);

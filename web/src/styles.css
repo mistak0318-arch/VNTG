@@ -18455,3 +18455,35 @@ a.watch-btn { text-decoration: none; }
   .top-strip .qss-box .search-input { min-width: 0; width: 100%; }
   .top-strip .qss-box .search-dropdown { left: 0; right: 0; width: auto; min-width: 0; max-width: none; }
 }
+
+/* 데이터 보관 — 한눈에 (2026-09-10) */
+.dret-kpis { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-bottom: 10px; }
+.dret-kpi {
+  flex: 1 1 140px; min-width: 130px; display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2);
+}
+.dret-kpi span { font-size: 0.7rem; color: var(--muted); }
+.dret-kpi b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.dret-kpi i { font-style: normal; font-size: 0.68rem; color: var(--muted); }
+.dret-kpi.hi { border-color: color-mix(in srgb, var(--blue) 50%, transparent); }
+.dret-kpi.hi b { color: var(--blue); }
+.dret-kpi.warn { border-color: rgba(239, 68, 68, 0.6); }
+.dret-kpi.warn b { color: var(--red); }
+.dret-acts { flex: 1 1 100%; display: flex; gap: 6px; flex-wrap: wrap; }
+.dret-group { margin: 10px 0 4px; }
+.dret-group-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; font-size: 0.86rem; }
+.dret-group-sum { margin-left: auto; font-weight: 700; font-size: 0.8rem; }
+.dret-tag { font-style: normal; font-size: 0.62rem; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 6px; vertical-align: middle; white-space: nowrap; }
+@media (min-width: 900px) { .dret-acts { flex: 0 0 auto; align-items: center; } }
+/* 데이터 보관 표 — 갈래 칸은 왼쪽 정렬, 기간 단추는 한 줄 (2026-09-10) */
+.dret-table td:first-child, .dret-table th:first-child { text-align: left; }
+.dret-table th.num, .dret-table td.num { text-align: right; }
+.dret-table .dret-bands { flex-wrap: nowrap; }
+.dret-table .dret-band { min-width: 3.2rem; padding: 2px 5px; }
+@media (max-width: 700px) { .dret-table .dret-bands { flex-wrap: wrap; } }
+/* 폰: 갈래 칸이 표를 다 먹지 않게 — 설명은 숨기고 이름·기간만 (2026-09-10) */
+@media (max-width: 700px) {
+  .dret-table td:first-child { max-width: 42vw; }
+  .dret-table td:first-child > .pt-n:first-of-type { display: none; }
+  .dret-kpi { flex-basis: 45%; min-width: 0; }
+}

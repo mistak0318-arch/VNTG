@@ -310,6 +310,9 @@ export interface DataCatStat {
   /** 지금 설정대로 자르면 빠질 용량 */
   prunable: number;
   perDay: number;
+  perDayEstimated?: boolean;
+  afterYear?: number;
+  rebuildable?: boolean;
 }
 /**
  * 일별 원장 현황 (2026-09-01).
@@ -409,6 +412,9 @@ export interface DataReport {
   otherBytes: number;
   totalBytes: number;
   prunableBytes: number;
+  /** 하루 증가 합 · 1년 뒤 예상 합 */
+  perDayBytes: number;
+  afterYearBytes: number;
   disk: { free: number; total: number } | null;
 }
 

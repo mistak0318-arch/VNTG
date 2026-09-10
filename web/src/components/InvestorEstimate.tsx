@@ -34,33 +34,43 @@ export function InvestorEstimate({ code }: { code: string }) {
   };
   const cls = (n: number) => (n > 0 ? "positive" : n < 0 ? "negative" : "");
   /*
-   * 시각을 **줄**로 (2026-09-10 — 벤티지: "표가 옆으로 밀리네"). 시각을 열로 두면 다섯 번째 집계부터
-   * 폰 폭을 넘었다. 줄로 세우면 다섯 줄 × 네 칸이라 어느 폭에서든 들어간다. 마지막 줄이 지금.
+   * 시각을 **줄**로 (2026-09-10 — 벤티지: "표가 옆으로 밀리네"). 그리고 **줄은 구간별 증감, 맨 아래가 합계**
+   * (같은 날 저녁 — "저 밑에 합계를 표시해줘야 오늘 하루 외국인·기관이 팔아냈는지 알 수 있겠지? 외국인+기관
+   * 합계는 중요해 보이진 않아. 각각의 주체별 합계가 중요한 거지"). 한투 값은 그 시각까지의 **누적**이라
+   * 그대로 더하면 두 번 세는 셈이다 — 앞 줄과의 차이를 줄에 적고, 마지막 누적을 합계로 둔다.
    */
+  const deltas = rows.map((r, i) => ({
+    time: r.time,
+    fgn: i === 0 ? r.fgn : r.fgn - rows[i - 1].fgn,
+    orgn: i === 0 ? r.orgn : r.orgn - rows[i - 1].orgn,
+  }));
   return (
     <div className="ie-box">
       <div className="ie-head">
         <b>장중 외인·기관 추정</b>
-        <span className="pt-n">한투 잠정치 · 만 주 · {last.time} 기준</span>
+        <span className="pt-n">한투 잠정치 · 만 주 · 구간별 · {last.time} 기준</span>
       </div>
       <table className="ie-t">
         <thead>
           <tr>
-            <th>시각</th>
+            <th>구간</th>
             <th>외국인</th>
             <th>기관</th>
-            <th>합</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.time} className={r === last ? "ie-last" : ""}>
-              <td className="ie-k">{r.time}</td>
-              <td className={`num ${cls(r.fgn)}`}>{fmt(r.fgn)}</td>
-              <td className={`num ${cls(r.orgn)}`}>{fmt(r.orgn)}</td>
-              <td className={`num ie-sum ${cls(r.sum)}`}>{fmt(r.sum)}</td>
+          {deltas.map((d, i) => (
+            <tr key={d.time}>
+              <td className="ie-k">{i === 0 ? `~${d.time}` : `${deltas[i - 1].time}~${d.time}`}</td>
+              <td className={`num ${cls(d.fgn)}`}>{fmt(d.fgn)}</td>
+              <td className={`num ${cls(d.orgn)}`}>{fmt(d.orgn)}</td>
             </tr>
           ))}
+          <tr className="ie-last">
+            <td className="ie-k">합계 (누적)</td>
+            <td className={`num ie-sum ${cls(last.fgn)}`}>{fmt(last.fgn)}</td>
+            <td className={`num ie-sum ${cls(last.orgn)}`}>{fmt(last.orgn)}</td>
+          </tr>
         </tbody>
       </table>
     </div>

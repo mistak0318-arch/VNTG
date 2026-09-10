@@ -49,8 +49,31 @@ import type { ChannelMessage } from "./telegramReader.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const DIR = join(here, "..", "data", "channelStore");
 
-/** 며칠치를 들고 있나 — 검색의 최대 구간이 한 달이라 하루를 더 얹는다 */
-export const KEEP_DAYS = 31;
+/**
+ * 며칠치를 들고 있나 — **설정 > 데이터 보관**의 「텔레그램 채널 창고」가 정한다 (2026-09-10, 기본 1년).
+ * 여태 31 로 박혀 있어 「일년치 수집」인데 한 달만 남았다. 읽을 때는 물어본 구간만큼만 연다
+ * (`daysFor`) — 1년치가 있어도 하루 검색이 파일 365개를 열지 않는다.
+ */
+export const KEEP_DAYS_DEFAULT = 365;
+let keepCache: { at: number; days: number } | null = null;
+export async function keepDays(): Promise<number> {
+  if (keepCache && Date.now() - keepCache.at < 60_000) return keepCache.days;
+  let days = KEEP_DAYS_DEFAULT;
+  try {
+    const { keepDaysOf } = await import("./dataRetention.js");
+    const k = await keepDaysOf("channelStore");
+    if (k !== null && Number.isFinite(k) && k > 0) days = k;
+    else if (k === null) days = 3650; // 「안 지움」
+  } catch {
+    /* 설정을 못 읽으면 기본 */
+  }
+  keepCache = { at: Date.now(), days };
+  return days;
+}
+/** 구간(분)을 덮는 날 수 — 하루 더 얹어 자정 경계를 넘긴다 */
+function daysFor(minutes: number, keep: number): number {
+  return Math.min(keep, Math.ceil(minutes / 1440) + 1);
+}
 
 /**
  * 창고 전체 상한(바이트). 넘으면 **오래된 날부터** 지운다.
@@ -58,7 +81,8 @@ export const KEEP_DAYS = 31;
  * 날 수로만 자르면 채널이 늘거나 어느 채널이 폭주한 달에 디스크가 조용히 커진다.
  * 250MB 는 예상(108MB)의 두 배 남짓이라, 평소엔 안 걸리고 이상할 때만 걸린다.
  */
-const MAX_TOTAL_BYTES = 250 * 1024 * 1024;
+/* 250MB → 1.5GB (2026-09-10) — 1년치를 두기로 했다. 하루 2~4MB 면 1년 1~1.5GB */
+const MAX_TOTAL_BYTES = 1536 * 1024 * 1024;
 
 /**
  * **이번 프로세스에서 이미 넣은 것** — 같은 글을 두 번 안 적는다.
@@ -151,7 +175,7 @@ export async function search(words: string[], minutes: number): Promise<StoreSea
   let oldest: string | null = null;
   let newest: string | null = null;
 
-  for (const day of recentDays(KEEP_DAYS)) {
+  for (const day of recentDays(daysFor(minutes, await keepDays()))) {
     /* 구간 밖의 날은 파일을 열지도 않는다 — 하루 검색이 한 달 창고를 다 읽으면 안 된다 */
     if (day < cutDay) break;
     let raw: string;
@@ -213,7 +237,7 @@ export async function recent(
   const byKey = new Map<string, ChannelMessage>();
   let scanned = 0;
   let newest: string | null = null;
-  for (const day of recentDays(KEEP_DAYS)) {
+  for (const day of recentDays(daysFor(minutes, await keepDays()))) {
     if (day < cutDay) break;
     let raw: string;
     try {
@@ -266,7 +290,7 @@ export async function countMany(
   /* 같은 글이 두 번 적혀 있을 수 있다(재시작 뒤 첫 회차의 겹침) — 한 번만 센다 */
   const counted = new Set<string>();
 
-  for (const day of recentDays(KEEP_DAYS)) {
+  for (const day of recentDays(daysFor(minutes, await keepDays()))) {
     if (day < cutDay) break;
     let raw: string;
     try {
@@ -304,7 +328,7 @@ export async function coverage(): Promise<{ oldest: string | null; newest: strin
   let oldest: string | null = null;
   let newest: string | null = null;
   let lines = 0;
-  for (const day of recentDays(KEEP_DAYS)) {
+  for (const day of recentDays(await keepDays())) {
     let raw: string;
     try {
       raw = await readFile(fileOf(day), "utf8");
@@ -332,7 +356,7 @@ export async function coverage(): Promise<{ oldest: string | null; newest: strin
  * 크기로도 자르는 이유는 위 `MAX_TOTAL_BYTES` 주석에.
  */
 export async function prune(): Promise<{ byDays: number; bySize: number }> {
-  const keep = new Set(recentDays(KEEP_DAYS));
+  const keep = new Set(recentDays(await keepDays()));
   let byDays = 0;
   let bySize = 0;
   let files: string[] = [];
@@ -376,10 +400,11 @@ export async function status(): Promise<{
   newest: string | null;
   keepDays: number;
 }> {
+  const keepNow = await keepDays();
   const days: { day: string; bytes: number; lines: number }[] = [];
   let oldest: string | null = null;
   let newest: string | null = null;
-  for (const day of recentDays(KEEP_DAYS)) {
+  for (const day of recentDays(await keepDays())) {
     try {
       const raw = await readFile(fileOf(day), "utf8");
       const lines = raw.split("\n").filter(Boolean);
@@ -400,6 +425,6 @@ export async function status(): Promise<{
     totalBytes: days.reduce((s, d) => s + d.bytes, 0),
     oldest,
     newest,
-    keepDays: KEEP_DAYS,
+    keepDays: keepNow,
   };
 }

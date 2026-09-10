@@ -95,8 +95,34 @@ export const CATS: DataCat[] = [
     kind: "daily",
     path: "newsKeywords",
     datePattern: /^(\d{4}-\d{2}-\d{2})\.json$/,
-    defaultKeep: 60,
+    /* 60 → 365 (2026-09-10 벤티지: "텔레그램이랑 뉴스 계속해서 일년치 수집하기로 했잖아") */
+    defaultKeep: 365,
     rebuildable: false,
+  },
+  {
+    /*
+     * **텔레그램 창고** (2026-09-10) — 채널 글 원문(날짜별 JSONL). 시세분석의 📰✈ 수, 동향·검색,
+     * 버즈 상세가 전부 여기서 나온다. 여태 channelStore.ts 안의 상수(31일)로만 잘려 이 표에
+     * 없었다 — 「일년치 수집」인데 한 달만 남는 상태였다. 이제 여기 기간이 창고를 다스린다.
+     */
+    key: "channelStore",
+    label: "텔레그램 채널 창고",
+    what: "채널 글 원문(날짜별). 시세분석 📰✈ 수 · 동향 · 검색 · 버즈 상세가 여기서 나온다",
+    kind: "daily",
+    path: "channelStore",
+    datePattern: /^(\d{4}-\d{2}-\d{2})\.jsonl$/,
+    defaultKeep: 365,
+    rebuildable: false,
+  },
+  {
+    key: "krxNotices",
+    label: "KIND 공시 (시장조치 포함)",
+    what: "거래소 공시 목록 날짜별 — 공매도 과열·투자경고·단기과열 배너와 공시 탭이 읽는다",
+    kind: "daily",
+    path: "krxNotices",
+    datePattern: /^(\d{4}-\d{2}-\d{2})\.json$/,
+    defaultKeep: 365,
+    rebuildable: true,
   },
   {
     key: "buzz",
@@ -105,7 +131,7 @@ export const CATS: DataCat[] = [
     kind: "daily",
     path: "buzz",
     datePattern: /^(\d{4}-\d{2}-\d{2})\.json$/,
-    defaultKeep: 180,
+    defaultKeep: 365,
     rebuildable: false,
   },
   {
@@ -147,6 +173,37 @@ export const CATS: DataCat[] = [
     defaultKeep: null,
     rebuildable: false,
   },
+  /*
+   * **덮어쓰는 큰 파일들** (2026-09-10) — 여태 「그 밖」 한 줄에 뭉쳐 160MB 로만 보였다.
+   * 무엇이 큰지 보여야 「지울 수 있나」를 판단한다. 전부 매번 다시 만드는 것이라 자를 건 없다.
+   */
+  {
+    key: "dailyCloses",
+    label: "일봉 캐시 (전종목)",
+    what: "마감 뒤 정리 ①이 만드는 전종목 일봉. 매일 통째로 다시 쓴다 — 지워도 다음 마감에 다시 생긴다",
+    kind: "single",
+    path: "dailyCloses.json",
+    defaultKeep: null,
+    rebuildable: true,
+  },
+  {
+    key: "signalSamples",
+    label: "신호등 검증 표본",
+    what: "과거 시세로 만든 검증 표본. 마감 뒤 정리 ⑨가 덧쓴다",
+    kind: "single",
+    path: "signalSamples.json",
+    defaultKeep: null,
+    rebuildable: true,
+  },
+  {
+    key: "companyBriefs",
+    label: "회사설명 3,900",
+    what: "전 종목 회사설명(seed·본문·백업). 세션이 쓴 글이라 지우면 다시 못 만든다",
+    kind: "single",
+    path: "companyBriefs.json",
+    defaultKeep: null,
+    rebuildable: false,
+  },
 ];
 
 interface Cfg {
@@ -172,6 +229,20 @@ async function persist(): Promise<void> {
 }
 
 /** 그 갈래의 지금 보관일. 사람이 안 정했으면 기본값 */
+/**
+ * 다른 모듈의 자체 정리가 **이 표를 따르게** (2026-09-10). 이벤트 로그(90)·버즈(30)·뉴스 키워드(14)가
+ * 저마다 상수를 갖고 있어, 표에서 1년으로 둬도 그쪽이 먼저 지웠다. 「안 지움」이면 아주 크게.
+ */
+export async function keepDaysOr(key: string, fallback: number): Promise<number> {
+  try {
+    const k = await keepDaysOf(key);
+    if (k === null) return 3650;
+    return Number.isFinite(k) && k > 0 ? k : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function keepDaysOf(key: string): Promise<number | null> {
   const c = await load();
   if (Object.prototype.hasOwnProperty.call(c.keep, key)) return c.keep[key];
@@ -199,27 +270,35 @@ export interface CatStat {
   byAge: { d7: number; d30: number; d90: number; d365: number; older: number };
   /** 지금 설정대로 자르면 지워질 용량 */
   prunable: number;
-  /** 하루에 얼마나 느는가 (날짜 파일 평균) */
+  /** 하루에 얼마나 느는가 (날짜 파일 평균 · 덧붙는 갈래는 나이로 어림) */
   perDay: number;
+  perDayEstimated: boolean;
+  /** 이 속도·이 보관 기간이면 1년 뒤 얼마인가 */
+  afterYear: number;
+  rebuildable: boolean;
 }
 
 function ymd(t: number): string {
   return new Date(t + 9 * 3600_000).toISOString().slice(0, 10);
 }
 
-async function dirFiles(dir: string): Promise<{ name: string; bytes: number; mtime: number }[]> {
+async function dirFiles(dir: string): Promise<{ name: string; bytes: number; mtime: number; birth: number }[]> {
   const names = await readdir(dir).catch(() => [] as string[]);
-  const out: { name: string; bytes: number; mtime: number }[] = [];
+  const out: { name: string; bytes: number; mtime: number; birth: number }[] = [];
   for (const name of names) {
     const s = await stat(join(dir, name)).catch(() => null);
-    if (s?.isFile()) out.push({ name, bytes: s.size, mtime: s.mtimeMs });
+    if (s?.isFile()) out.push({ name, bytes: s.size, mtime: s.mtimeMs, birth: s.birthtimeMs });
   }
   return out;
 }
 
 export async function scanCat(cat: DataCat): Promise<CatStat> {
   const dir = join(DATA_DIR, cat.path);
-  const files = await dirFiles(dir);
+  /* single 은 파일 하나(같은 이름의 백업·seed 도 같이) — 폴더가 아니라 dirFiles 가 못 본다 */
+  const files =
+    cat.kind === "single"
+      ? (await dirFiles(DATA_DIR)).filter((f) => f.name === cat.path || f.name.startsWith(cat.path.replace(/\.json$/, "") + "."))
+      : await dirFiles(dir);
   const keepDays = await keepDaysOf(cat.key);
   const today = ymd(Date.now());
 
@@ -266,6 +345,38 @@ export async function scanCat(cat: DataCat): Promise<CatStat> {
     newest = today;
   }
 
+  /*
+   * 하루치와 **1년 뒤** (2026-09-10 — 벤티지: "지금 680메가로 되어 있거든. 이 상태로 일년치일 때 어떨지").
+   * - daily: 날짜 파일 평균 × (보관일 ≤ 365 면 보관일, 아니면 지금 + 365일치)
+   * - append: 파일 나이(가장 오래된 만든 날)로 하루치를 어림한다 — 정확하진 않아 「≈」
+   * - single: 안 자란다(덮어쓴다)
+   */
+  let perDay = datedDays.size > 0 ? Math.round(datedBytes / datedDays.size) : 0;
+  let perDayEstimated = false;
+  if (cat.kind === "append" && files.length > 0) {
+    if (cat.key === "daily") {
+      /* 원장은 첫날 100거래일치를 한꺼번에 받으므로 파일 나이로 재면 열 배 부풀린다 — 담긴 거래일 수로 */
+      try {
+        const { ledgerStatus } = await import("./dailyStore.js");
+        const st = await ledgerStatus();
+        perDay = st.maxDays > 0 ? Math.round(bytes / st.maxDays) : 0;
+      } catch {
+        perDay = 0;
+      }
+    } else {
+      const first = Math.min(...files.map((f) => f.birth || f.mtime));
+      const age = Math.max(1, (Date.now() - first) / 86400_000);
+      perDay = Math.round(bytes / age);
+    }
+    perDayEstimated = true;
+  }
+  const afterYear =
+    cat.kind === "single"
+      ? bytes
+      : cat.kind === "daily" && keepDays !== null && keepDays <= 365
+        ? perDay * keepDays
+        : bytes + perDay * 365;
+
   return {
     key: cat.key,
     label: cat.label,
@@ -277,9 +388,12 @@ export async function scanCat(cat: DataCat): Promise<CatStat> {
     newest,
     keepDays,
     defaultKeep: cat.defaultKeep,
+    rebuildable: cat.rebuildable,
     byAge,
     prunable,
-    perDay: datedDays.size > 0 ? Math.round(datedBytes / datedDays.size) : 0,
+    perDay,
+    perDayEstimated,
+    afterYear,
   };
 }
 
@@ -291,6 +405,9 @@ export interface DataReport {
   totalBytes: number;
   /** 지금 설정대로 「지금 정리」를 누르면 빠질 용량 */
   prunableBytes: number;
+  /** 하루 증가 합 · 1년 뒤 예상 합 (갈래 합 + 그 밖) */
+  perDayBytes: number;
+  afterYearBytes: number;
   disk: { free: number; total: number } | null;
 }
 
@@ -300,9 +417,10 @@ export async function dataReport(): Promise<DataReport> {
 
   /* 갈래에 안 잡힌 나머지 — 매번 덮어쓰는 단일 파일들 */
   const known = new Set(CATS.map((c) => c.path));
+  const singleStems = CATS.filter((c) => c.kind === "single").map((c) => c.path.replace(/\.json$/, "") + ".");
   let otherBytes = 0;
   for (const name of await readdir(DATA_DIR).catch(() => [] as string[])) {
-    if (known.has(name)) continue;
+    if (known.has(name) || singleStems.some((st) => name.startsWith(st))) continue;
     const s = await stat(join(DATA_DIR, name)).catch(() => null);
     if (!s) continue;
     if (s.isFile()) otherBytes += s.size;
@@ -323,6 +441,8 @@ export async function dataReport(): Promise<DataReport> {
     otherBytes,
     totalBytes: cats.reduce((a, c) => a + c.bytes, 0) + otherBytes,
     prunableBytes: cats.reduce((a, c) => a + c.prunable, 0),
+    perDayBytes: cats.reduce((a, c) => a + c.perDay, 0),
+    afterYearBytes: cats.reduce((a, c) => a + c.afterYear, 0) + otherBytes,
     disk,
   };
 }
