@@ -347,7 +347,8 @@ export async function runAfterClose(
   const startBody =
     planned.map((s, i) => `${i + 1}. ${s.label}`).join(" → ") +
     (planned.length >= 8 ? "\n\n두 시간 남짓 걸립니다. 끝나면 다시 알립니다." : "\n\n끝나면 다시 알립니다.");
-  await sendTelegram(`🌙 <b>${startTitle}</b>\n${planned.map((s) => s.label).join(" → ")}`).catch(
+  /* 로그 방으로 — 끝 알림과 같은 방 (2026-09-10 벤티지: "이 알림 로그쪽 텔레그램 방으로 보내라니깐 계속 리포트 방에 보내") */
+  await sendTelegram(`🌙 <b>${startTitle}</b>\n${planned.map((s) => s.label).join(" → ")}`, "log").catch(
     () => undefined,
   );
   await pushNotice({
