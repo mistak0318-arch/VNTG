@@ -131,6 +131,9 @@ export function SignalDot({ signal }: { signal?: SignalResult }) {
  * 말의 뜻이고, 펼치는 데 드는 건 단추 한 번이다.
  */
 
+/** 접힌 줄에서 쓰는 축 이름 — 「실적·가치」는 한 줄에 넷을 담기엔 길다 (2026-09-11) */
+const AXIS_SHORT: Record<string, string> = { trend: "추세", flow: "수급", value: "실적", risk: "위험" };
+
 /** 상세용 — 기준별 통과 여부를 펼쳐서 */
 export function SignalPanel({
   code,
@@ -179,6 +182,14 @@ export function SignalPanel({
   if (loading && !data) return <div className="empty">신호등 평가 중…</div>;
   if (!data) return null;
 
+  /* 초록이 막힌 이유들 — 접힌 줄에서 한 칩으로 묶어 보여 준다 (2026-09-11) */
+  const blockedWhy = [
+    data.riskCapped ? "위험 축이 빨강" : null,
+    data.lowCoverage ? `${Math.round((data.coverage ?? 0) * 100)}% 만 쟀음` : null,
+    data.overHeated ? "상한 초과" : null,
+    data.tooThin ? `거래대금 ${data.tradeEok?.toLocaleString("ko-KR")}억` : null,
+  ].filter((x): x is string => x !== null);
+
   return (
     <div className={`sig-panel${collapsed ? " sig-folded" : ""}`}>
       {/*
@@ -208,6 +219,44 @@ export function SignalPanel({
         <button className="filter-btn" onClick={() => load(true)} disabled={loading}>
           {loading ? "평가 중…" : "↻ 다시 평가"}
         </button>
+        {/*
+          **접혔을 때의 한 줄 요약** (2026-09-11 — 벤티지: "접힌 상태에서 설명 간략히 나와서
+          한눈에 알 수 있게").
+
+          접으면 등급과 점수만 남았는데, 그 둘만으로는 **왜 그 등급인지**를 모른다 — 60점이
+          탈락 때문인지 축이 고루 낮아서인지가 판을 펼치는 유일한 이유였다. 그래서 접힌 줄에
+          그 답만 짧게 적는다: 탈락 사유 · 지금 장세 · 네 축 점수 · 초록이 막혔나.
+          자세한 것(칩의 툴팁·기준 목록·근거 구간)은 펼쳐야 나온다.
+
+          `.sig-head` 안에 둔다 — 접힘 CSS 가 「머리줄만 남기고 나머지는 전부 감춘다」라서
+          형제로 두면 같이 숨는다.
+        */}
+        {collapsed && (
+          <div className="sig-brief">
+            {data.vetoedBy && data.vetoedBy.length > 0 && (
+              <span className="sig-brief-veto" title="이 기준이 탈락선을 넘어 다른 점수와 무관하게 빨강입니다">
+                ✕ {data.vetoedBy.join(" · ")}
+              </span>
+            )}
+            {data.regime && (
+              <span className={`sig-brief-reg ${data.regime.kind}`} title={`전종목의 ${data.regime.breadth}% 가 20일선 위입니다`}>
+                {data.regime.kind === "bull" ? "▲" : "▼"} {data.regime.label}
+              </span>
+            )}
+            {blockedWhy.length > 0 && (
+              <span className="sig-brief-block" title={`초록이 막힌 이유 — ${blockedWhy.join(" · ")}`}>
+                ⊘ 초록 차단
+              </span>
+            )}
+            <span className="sig-brief-axes">
+              {(data.axes ?? []).map((a) => (
+                <i key={a.key} className={a.level} title={`${a.label}${a.key === "risk" ? " (높을수록 위험)" : ""}`}>
+                  {AXIS_SHORT[a.key] ?? a.label} {a.score === null ? "-" : a.score}
+                </i>
+              ))}
+            </span>
+          </div>
+        )}
       </div>
       <div className="sig-tags">
         {data.riskCapped && (
