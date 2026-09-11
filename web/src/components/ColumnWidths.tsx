@@ -201,6 +201,20 @@ export function ColumnGrip({ cw, k }: { cw: ColumnWidthsApi; k: string }) {
    * 그래서 React 를 거치지 않고 ref 로 직접, `{ passive: false }` 로 붙인다.
    */
   const ref = useRef<HTMLSpanElement>(null);
+  /**
+   * **누른 자리와 시각** — 끈 것과 그냥 누른 것을 가른다 (2026-09-11).
+   *
+   * 벤티지: "표에서 쌍끌이 누르면 쌍끌이애들이 위로 와야되는데 … 표가 작동을 안하는듯".
+   *
+   * 손잡이는 머리 칸을 덮고 앉아 `pointerdown` 에서 `preventDefault` + `stopPropagation`
+   * 을 해서 **머리 칸의 정렬 클릭을 통째로 먹는다.** 폰(coarse)에서는 손잡이가 22px 에
+   * 오른쪽으로 6px 더 나와 있어서, 「쌍끌이」처럼 **좁은 칸은 누를 수 있는 자리가 거의 다
+   * 손잡이**다 — 아무리 눌러도 정렬이 안 걸린다.
+   *
+   * 끌기는 그대로 두고, **안 움직인 누름은 정렬로 넘긴다.** 5px 안·400ms 안이면 머리 칸을
+   * 대신 눌러 준다. 좁은 칸 전부가 같이 풀린다.
+   */
+  const down = useRef<{ x: number; y: number; t: number } | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -247,7 +261,21 @@ export function ColumnGrip({ cw, k }: { cw: ColumnWidthsApi; k: string }) {
           /* capture 실패 — 데스크톱 마우스는 capture 없이도 잘 끌린다 */
         }
         const th = (e.target as HTMLElement).closest("th");
+        down.current = { x: e.clientX, y: e.clientY, t: Date.now() };
         cw.begin(k, e.clientX, th?.getBoundingClientRect().width ?? 100);
+      }}
+      onPointerUp={(e) => {
+        const d = down.current;
+        down.current = null;
+        if (!d) return;
+        const moved = Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y);
+        /* 안 움직였으면 끈 게 아니라 **누른** 것이다 — 머리 칸의 정렬로 넘긴다 (위 주석) */
+        if (moved < 5 && Date.now() - d.t < 400) {
+          (e.currentTarget as HTMLElement).closest("th")?.click();
+        }
+      }}
+      onPointerCancel={() => {
+        down.current = null;
       }}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => {

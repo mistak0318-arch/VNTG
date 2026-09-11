@@ -100,6 +100,8 @@ interface Filter {
    * 추려볼 수 있게"). 여섯 값이 전부 순매수인 종목 — 두 손이 세 기간 내내 같은 쪽이다.
    */
   twinOnly: boolean;
+  /** 외국인 세 칸만 (2026-09-11) — 실측에서 쌍끌이보다 넓고 성적은 같다 */
+  fgn3Only: boolean;
 }
 
 const NO_FILTER: Filter = {
@@ -110,6 +112,7 @@ const NO_FILTER: Filter = {
   commonOnly: false,
   etfOnly: false,
   twinOnly: false,
+  fgn3Only: false,
 };
 const FILTER_KEY = "vntg.screener.filter";
 
@@ -153,6 +156,22 @@ function loadFilter(): Filter {
  * **쌍끌이** — 외국인·주포가 5·10·20일 **여섯 칸 전부** 순매수인가 (2026-09-09).
  * 하나라도 모르면(원장 없음) 아니다 — 「모른다」를 「샀다」로 치지 않는다.
  */
+/**
+ * **외국인 세 칸** — 외국인이 5·10·20일 전부 순매수 (2026-09-11).
+ *
+ * 실측 29,570관측에서 **가르는 것은 이쪽**이었다. 신호등 초록과 겹칠 때 20일 초과수익
+ * +3.2%p·승률 59%(하루 17.3개). 쌍끌이(주포까지 여섯 칸)는 +3.1 인데 하루 6.2개뿐이고
+ * 5일은 음수다. 주포는 단독으로 −0.2 라 얹을수록 좁아지기만 한다.
+ */
+function isFgn3(flow: Record<string, FlowSum> | undefined): boolean {
+  if (!flow) return false;
+  for (const span of ["5", "10", "20"]) {
+    const f = flow[span];
+    if (!f || f.fgn === null || f.fgn <= 0) return false;
+  }
+  return true;
+}
+
 function isTwin(flow: Record<string, FlowSum> | undefined): boolean {
   if (!flow) return false;
   for (const span of ["5", "10", "20"]) {
@@ -311,7 +330,8 @@ export function ScreenerPage({
     filter.minTurn !== null ||
     filter.commonOnly ||
     filter.etfOnly ||
-    filter.twinOnly;
+    filter.twinOnly ||
+    filter.fgn3Only;
   const [openFilter, setOpenFilter] = useState(false);
 
   const set = (patch: Partial<Filter>) => {
@@ -521,6 +541,7 @@ export function ScreenerPage({
     if (filter.commonOnly && !r.common) return false;
     if (filter.etfOnly && !r.etf) return false;
     if (filter.twinOnly && !isTwin(r.flow)) return false;
+    if (filter.fgn3Only && !isFgn3(r.flow)) return false;
     if (hasTvCol && filter.minTv > 0 && (r.tv === null || r.tv < filter.minTv)) return false;
     if (hasCapCol && !capOk(r.cap, filter.caps)) return false;
     if (filter.minRate !== null) {
@@ -1218,12 +1239,29 @@ export function ScreenerPage({
                 ETF만
               </button>
               <span className="news-scope-sep" />
+              {/*
+                **외인 세 칸**을 먼저 둔다 (2026-09-11 실측). 표본 29,570관측에서 신호등 초록과
+                겹칠 때 20일 초과수익 +3.2%p·승률 59%(하루 17.3개)로, 쌍끌이(+3.1·하루 6.2개)와
+                성적은 같은데 후보가 세 배다. 5일도 외인3 은 +0.7 인데 쌍끌이는 −0.1 이다.
+                쌍끌이 단추는 그대로 둔다 — 더 좁게 보고 싶을 때가 있다.
+              */}
+              <button
+                className={`filter-btn ${filter.fgn3Only ? "active" : ""}`}
+                onClick={() => set({ fgn3Only: !filter.fgn3Only, twinOnly: false })}
+                title={[
+                  "외국인이 5·10·20일 세 칸 전부 순매수인 종목만 남깁니다.",
+                  "실측(29,570관측): 신호등 초록과 겹칠 때 20일 초과수익 +3.2%p·승률 59%. 쌍끌이(여섯 칸)와 성적은 같은데 후보가 세 배입니다.",
+                  "단독 신호는 아닙니다 — 신호등 빨강과 겹치면 힘이 없습니다.",
+                ].join("\n\n")}
+              >
+                🧲 외인 3칸만
+              </button>
               <button
                 className={`filter-btn ${filter.twinOnly ? "active" : ""}`}
-                onClick={() => set({ twinOnly: !filter.twinOnly })}
-                title="외국인 5·10·20일 + 주포 5·10·20일 여섯 칸이 전부 순매수인 종목만"
+                onClick={() => set({ twinOnly: !filter.twinOnly, fgn3Only: false })}
+                title="외국인 5·10·20일 + 주포 5·10·20일 여섯 칸이 전부 순매수인 종목만 — 더 좁게 봅니다"
               >
-                🔥 쌍끌이만
+                🧲🧲 쌍끌이만
               </button>
               {on && (
                 <button className="filter-btn" onClick={() => set(NO_FILTER)}>
@@ -1539,8 +1577,9 @@ export function ScreenerPage({
                     {hasFlow && (
                       <SortableTh
                         columnKey="twin"
-                        label="쌍끌이"
-                        accessor={(r: (typeof rows)[number]) => (isTwin(r.flow) ? 1 : 0)}
+                        label="🧲"
+                        thProps={{ title: "🧲 외국인 5·10·20일 세 칸 전부 순매수 · 🧲🧲 거기에 주포까지(쌍끌이). 눌러서 위로 모읍니다" }}
+                        accessor={(r: (typeof rows)[number]) => (isTwin(r.flow) ? 2 : isFgn3(r.flow) ? 1 : 0)}
                         sort={sort}
                         className="num-narrow"
                         extra={<ColumnGrip cw={cw} k="twin" />}
@@ -1604,6 +1643,23 @@ export function ScreenerPage({
                         <span className="link-btn">{r.name}</span>
                         {/* 슈퍼신호등 표식 — 어느 화면에서든 같은 종목에 같은 표시 */}
                         <SuperMark code={r.code} />
+                        {/*
+                          🧲 **이름 옆에도** (2026-09-11 — 벤티지 "쌍끌이 마크가 밖에서도 보여야지?").
+                          끝 칸은 가로로 밀려 안 보인다 — 표식은 이름 옆에 있어야 표식이다.
+                          🧲 외국인 세 칸 · 🧲🧲 거기에 주포까지(쌍끌이).
+                        */}
+                        {isFgn3(r.flow) && (
+                          <i
+                            className={`scr-fgn3${isTwin(r.flow) ? " twin" : ""}`}
+                            title={
+                              isTwin(r.flow)
+                                ? "쌍끌이 — 외국인·주포가 5·10·20일 여섯 칸 전부 순매수"
+                                : "외국인이 5·10·20일 세 칸 전부 순매수 — 실측에서 신호등 초록과 겹칠 때 20일 +3.2%p·승률 59%"
+                            }
+                          >
+                            {isTwin(r.flow) ? "🧲🧲" : "🧲"}
+                          </i>
+                        )}
                         {/* 시장이 「전체」면 어느 시장인지가 정보다 */}
                         {market === "000" && r.mkt && <i className="scr-mkt">{r.mkt}</i>}
                         {/*
@@ -1775,9 +1831,16 @@ export function ScreenerPage({
                       {hasFlow && (
                         <td
                           className="num num-narrow scr-twin"
-                          title={isTwin(r.flow) ? "외국인·주포가 5·10·20일 내내 순매수" : undefined}
+                          title={
+                            isTwin(r.flow)
+                              ? "쌍끌이 — 외국인·주포가 5·10·20일 여섯 칸 전부 순매수"
+                              : isFgn3(r.flow)
+                                ? "외국인이 5·10·20일 세 칸 전부 순매수"
+                                : undefined
+                          }
                         >
-                          {isTwin(r.flow) ? "🔥" : ""}
+                          {/* 🔥 는 쏠림 경보가 이미 쓰는 글자다 — 표식을 🧲 로 통일했다 (2026-09-11) */}
+                          {isTwin(r.flow) ? "🧲🧲" : isFgn3(r.flow) ? "🧲" : ""}
                         </td>
                       )}
                     </tr>

@@ -177,7 +177,27 @@ export function useRealtime(
         /* 끊겨도 화면은 그대로 둔다 — 마지막 값이 없는 것보다 낫다 */
       }
     };
+    /*
+     * ⚠️ **폴링으로 내려가면 나이 시계를 반드시 끈다** (2026-09-11 저녁 — 벤티지: "소켓 연결상태
+     * 다시 한 번 확인해봐 뭔가불안정해 붙엇다 뗏다 하는 느낌이야").
+     *
+     * 어제 넣은 `ageTimer` 는 「마지막 이벤트가 언제 왔나」로 `healthy` 를 끄는 시계다. 그런데
+     * 스트림이 못 열려 폴링으로 내려간 뒤에도 **그대로 돌고 있었다.** 폴링에는 이벤트가 없으니
+     * `fresh()` 는 영원히 거짓이고, 그래서
+     *   폴링 응답 도착 → healthy true  →  10초 뒤 ageTimer → healthy false  →  다음 응답 → true …
+     * 가 **10초 주기로 반복**됐다. 서버 소켓은 멀쩡한데 화면만 붙었다 뗐다 한 것이다
+     * (실측 09-11 12:05: 서버 `국내실시간` 연결됨·175구독·재접속 0 인데 열린 스트림은 0 이었다 —
+     * 즉 그 화면은 폴링이었다).
+     *
+     * 폴링의 `healthy` 는 서버가 `/latest` 응답에 실어 준다. 그게 맞는 답이고, 나이 시계는
+     * 스트림을 쓸 때만 뜻이 있다.
+     */
+    const stopAge = () => {
+      if (ageTimer) clearInterval(ageTimer);
+      ageTimer = null;
+    };
     const startPolling = () => {
+      stopAge();
       if (pollTimer) return;
       void tick();
       pollTimer = setInterval(() => void tick(), ms);
@@ -232,6 +252,7 @@ export function useRealtime(
         // 한 번 끊기면 이 마운트에서는 폴링으로 산다 — 재연결 곡예는 폴링이 이미 한다
         es?.close();
         es = null;
+        stopAge(); // 나이 시계는 스트림의 것이다 — 폴링에 남겨 두면 10초마다 healthy 를 거짓으로 뒤집는다
         if (alive) startPolling();
       };
     } else {

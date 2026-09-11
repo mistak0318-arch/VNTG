@@ -17716,6 +17716,9 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
  * 쌍끌이만 바탕을 준다 (2026-09-11) — 외국인·주포가 여섯 칸 전부 산 자리는 드물어서,
  * 있을 때 눈에 걸려야 뜻이 있다. 다른 표식은 늘 붙어 있어 다 칠하면 아무것도 안 보인다.
  */
+/* 목록 이름 옆 🧲 — 드물게 붙는 표식이라 초록으로 (2026-09-11) */
+.scr-fgn3 { font-style: normal; margin-left: 3px; font-size: 0.78em; vertical-align: 1px; }
+.scr-fgn3.twin { filter: saturate(1.2); }
 .ph-mark.k-twin { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); background: color-mix(in srgb, var(--green) 12%, transparent); font-weight: 700; }
 .ph-mark.k-exited { border-style: dashed; }
 /* 근거 말풍선 — 겹쳐 뜬다. 레이아웃을 안 건드린다 */

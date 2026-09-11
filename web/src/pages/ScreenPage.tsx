@@ -111,7 +111,19 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
     universes.find((u) => u.key === (k ?? universe))?.label ?? "거래대금 상위";
   const [job, setJob] = useState<ScreenJob | null>(null);
   /* 결과표 컬럼 정렬 — 모든 표 공통 규칙(2026-08-26). 기본은 서버가 준 점수순 */
-  const resSort = useSortableTable<ScreenHit>(job?.results ?? []);
+  /**
+   * **외국인 세 칸만** (2026-09-11 — 실측 뒤 벤티지 "좋아보이는 방향으로 우선해봐").
+   *
+   * 외국인이 5·10·20일 세 칸 전부 순매수인 줄만 남긴다. 표본 29,570관측에서 초록 전체가
+   * 20일 초과수익 +1.8%p·승률 55% 인데 **초록 ∩ 외인 세 칸은 +3.2%p·59%** 였다. 대신 하루
+   * 후보가 32.8 → 17.3개로 준다. 쌍끌이(주포까지 여섯 칸)는 +3.1 에 6.2개뿐이라 더 좁기만 하다.
+   *
+   * ⚠️ **점수·문턱·무게는 안 건드린다.** 채점은 그대로 두고 **본 뒤에 거르는** 것이다 —
+   * 신호등 문턱은 12월까지 동결이고, 이건 그 바깥의 일이다.
+   */
+  const [fgnOnly, setFgnOnly] = useState<boolean>(() => localStorage.getItem("vntg.screen.fgn3") === "1");
+  const shown = (job?.results ?? []).filter((r) => !fgnOnly || r.fgn3);
+  const resSort = useSortableTable<ScreenHit>(shown);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -300,6 +312,27 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
             {l.label}
           </button>
         ))}
+        <button
+          className={`filter-btn ${fgnOnly ? "active" : ""}`}
+          onClick={() => {
+            const next = !fgnOnly;
+            setFgnOnly(next);
+            try {
+              localStorage.setItem("vntg.screen.fgn3", next ? "1" : "0");
+            } catch {
+              /* 저장 못 해도 이번 화면은 동작한다 */
+            }
+          }}
+          title={
+            [
+              "외국인이 5·10·20일 세 칸 전부 순매수인 종목만 남깁니다.",
+              "실측(29,570관측): 초록 전체는 20일 초과수익 +1.8%p·승률 55% 인데, 그중 외국인 세 칸은 +3.2%p·59% 였습니다. 대신 하루 후보가 32.8 → 17.3개로 줍니다.",
+              "점수는 그대로입니다 — 채점한 뒤에 거르는 것뿐입니다.",
+            ].join("\n\n")
+          }
+        >
+          🧲 외인 3칸만
+        </button>
         <button className="algo-run-btn" onClick={() => void start()} disabled={running}>
           {running ? `검사 중 ${job?.done}/${job?.total}` : "찾기"}
         </button>
@@ -489,6 +522,15 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
                     sort={resSort}
                     thProps={{ title: "테마로 담은 상위 3 ETF 의 오늘 평균" }}
                   />
+                  {/* 🧲 — 초록과 겹칠 때만 값이 있다(실측). 쌍끌이는 그 안의 더 좁은 갈래 */}
+                  <SortableTh
+                    columnKey="fgn3"
+                    label="🧲"
+                    accessor={(r: ScreenHit) => (r.twin ? 2 : r.fgn3 ? 1 : 0)}
+                    sort={resSort}
+                    className="num-narrow"
+                    thProps={{ title: "🧲 외국인 5·10·20일 세 칸 전부 순매수 · 🧲🧲 거기에 주포까지 여섯 칸(쌍끌이)" }}
+                  />
                   <th>통과 항목</th>
                   <th>담기</th>
                 </tr>
@@ -562,6 +604,19 @@ export function ScreenPage({ onSelectStock }: { onSelectStock: (code: string, na
                       title={r.etfBack ? `대표 ${r.etfBack.top}` : "테마로 담은 ETF 가 없다"}
                     >
                       {r.etfBack ? pct(r.etfBack.rate) : "-"}
+                    </td>
+                    {/* 🧲 — 초록과 겹칠 때만 값이 있다(실측). 쌍끌이는 그 안의 더 좁은 갈래 (2026-09-11) */}
+                    <td
+                      className="num twin-cell"
+                      title={
+                        r.twin
+                          ? "쌍끌이 — 외국인·주포가 5·10·20일 여섯 칸 전부 순매수"
+                          : r.fgn3
+                            ? "외국인이 5·10·20일 세 칸 전부 순매수 — 실측에서 초록과 겹칠 때 20일 +3.2%p·승률 59%"
+                            : undefined
+                      }
+                    >
+                      {r.twin ? "🧲🧲" : r.fgn3 ? "🧲" : ""}
                     </td>
                     <td className="scr-passed">
                       <AlertTags alerts={r.alerts} />

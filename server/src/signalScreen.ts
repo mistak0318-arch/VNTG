@@ -3,6 +3,7 @@ import { allStocksUniverse } from "./allStocks.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cumulativeRank } from "./cumulativeRank.js";
+import { flowTwinOf } from "./dailyStore.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
 import { COMMON_PARAMS, findSpec } from "./rankSpecs.js";
@@ -45,6 +46,15 @@ export interface ScreenHit {
   failed: string[];
   /** 경보 태그 (2026-09-02) — 쏠림·늦음. 초록은 그대로, 눈으로 거르라고 */
   alerts?: SignalResult["alerts"];
+  /**
+   * **외국인 세 칸 · 쌍끌이** (2026-09-11) — 점수에는 안 들어간다. 거르개·표식용.
+   *
+   * 실측 29,570관측: 초록 전체가 20일 +1.8%p/55% 인데 **초록 ∩ 외국인 세 칸은 +3.2%p/59%**
+   * 이고 하루 후보가 32.8 → 17.3개로 준다. 쌍끌이(여섯 칸)는 +3.1 인데 6.2개뿐이다.
+   * 그래서 **거르개의 기본은 외국인 세 칸**이고 쌍끌이는 그 안의 더 좁은 갈래로 표시만 한다.
+   */
+  fgn3?: boolean;
+  twin?: boolean;
   /** 렌즈 (2026-08-28) — 이 종목의 무리(가장 강한 사업 테마)와 ETF 뒷배. 조회 0회 */
   theme?: { key: string; name: string; changeRate: number; streak: number } | null;
   etfBack?: { rate: number; top: string } | null;
@@ -925,6 +935,8 @@ export function startScreen(
           const sig: SignalResult = await evaluateSignal(client, u.code);
           if (LEVEL_RANK[sig.level] >= LEVEL_RANK[minLevel]) {
             const lens = await stockLens(u.code, themeMap).catch(() => ({ theme: null, etfBack: null }));
+            /* 원장 한 번 더 읽는 것뿐 — 조회(TR)는 안 는다 (2026-09-11) */
+            const flow = await flowTwinOf(u.code).catch(() => ({ fgn3: false, twin: false }));
             job.results.push({
               ...u,
               level: sig.level,
@@ -932,6 +944,8 @@ export function startScreen(
               passed: sig.checks.filter((c) => c.pass === true).map((c) => c.label),
               failed: sig.checks.filter((c) => c.pass === false).map((c) => c.label),
               alerts: sig.alerts,
+              fgn3: flow.fgn3,
+              twin: flow.twin,
               ...lens,
             });
             // 점수 높은 순 — 진행 중에도 화면에서 바로 볼 수 있게 매번 정렬한다

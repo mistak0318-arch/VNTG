@@ -514,6 +514,35 @@ export async function flowSpans(code: string, spans: number[]): Promise<Map<numb
   return out;
 }
 
+/**
+ * **외국인 세 칸 · 쌍끌이** — 한 곳에서 판정한다 (2026-09-11).
+ *
+ * `fgn3` 외국인이 5·10·20일 **세 칸 전부** 순매수 · `twin` 거기에 주포(투신+연기금+사모)까지
+ * 여섯 칸 전부. 시세분석 표의 `isTwin` 과 같은 정의다 — 화면마다 다른 뜻이면 표식이 아니다.
+ * 하나라도 모르면(원장이 얕음) 아니다. 「모른다」를 「샀다」로 치지 않는다.
+ *
+ * ## 왜 셋이 아니라 둘을 다 내나 (2026-09-11 실측)
+ *
+ * 표본 29,570관측에서 **가르는 것은 외국인 세 칸**이었다. 초록 안에서 20일 초과수익이
+ * 외인3 +3.2(하루 17.3개) 대 쌍끌이 +3.1(하루 6.2개) — 성적은 같은데 후보가 세 배고,
+ * 5일도 외인3 은 +0.7 인데 쌍끌이는 −0.1 이다. 주포는 단독으로 −0.2 라 얹을수록 손해다.
+ * 그래도 쌍끌이를 같이 내는 것은 **벤티지가 그 이름으로 쓰던 칸**이기 때문이다.
+ */
+export async function flowTwinOf(code: string): Promise<{
+  fgn3: boolean;
+  twin: boolean;
+  rows: { d: number; fgn: number | null; smart: number | null }[];
+}> {
+  const spans = await flowSpans(code, [5, 10, 20]);
+  const rows = [5, 10, 20].map((d) => {
+    const f = spans.get(d) ?? null;
+    return { d, fgn: f?.fgn ?? null, smart: f?.smart ?? null };
+  });
+  const fgn3 = rows.every((r) => r.fgn !== null && r.fgn > 0);
+  const twin = fgn3 && rows.every((r) => r.smart !== null && r.smart > 0);
+  return { fgn3, twin, rows };
+}
+
 /** 여러 종목의 최근 `days` 거래일 순매수 합. 원장이 없는 종목은 빠진다 */
 export async function flowSums(codes: string[], days: number): Promise<Map<string, FlowSums>> {
   const out = new Map<string, FlowSums>();

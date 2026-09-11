@@ -15,7 +15,7 @@ import { superEntryOf } from "./superSignal.js";
 import { AUTO_GROUPS, CROSS_GROUP, listWatchlist } from "./watchlist.js";
 import { evaluateSignal } from "./signalLight.js";
 import { universeLabel } from "./signalScreen.js";
-import { flowSpans } from "./dailyStore.js";
+import { flowTwinOf } from "./dailyStore.js";
 
 export interface MarkWhy {
   key: "super" | "cross" | "rainbow" | "signal" | "twin" | "hot" | "late" | "watch" | "exited";
@@ -125,20 +125,26 @@ export async function markWhy(client: KiwoomClient, code: string): Promise<{ cod
    * 하나라도 모르면(원장이 얕음) 아니다. 「모른다」를 「샀다」로 치지 않는다.
    */
   try {
-    const spans = await flowSpans(code, [5, 10, 20]);
-    const eok = (v: number) => `${v > 0 ? "+" : ""}${v.toLocaleString("ko-KR")}억`;
-    const rows = [5, 10, 20].map((d) => ({ d, f: spans.get(d) ?? null }));
-    const known = rows.every((r) => r.f && r.f.fgn !== null && r.f.smart !== null);
-    const twin = known && rows.every((r) => (r.f!.fgn ?? 0) > 0 && (r.f!.smart ?? 0) > 0);
-    if (twin) {
+    const { fgn3, twin, rows } = await flowTwinOf(code);
+    const eok = (v: number | null) => (v === null ? "?" : `${v > 0 ? "+" : ""}${v.toLocaleString("ko-KR")}억`);
+    if (fgn3) {
+      /*
+       * (2026-09-11 실측) 표본 29,570관측에서 **초록 ∩ 외국인 세 칸**이 20일 +3.2%p/59% 로
+       * 가장 크고 넓었다(하루 17.3개). 쌍끌이(여섯 칸)는 +3.1 인데 하루 6.2개뿐이고 5일은 음수다.
+       * 그래서 **외국인 세 칸이 본체**이고 쌍끌이는 그중 더 좁은 갈래로 적는다.
+       * 빨강 안에서는 −0.1 이라 단독 신호가 아니다 — 그 말도 근거에 적는다.
+       */
       marks.push({
         key: "twin",
         icon: "🧲",
-        label: "쌍끌이",
+        label: twin ? "쌍끌이" : "외인 3칸",
         why:
-          `외국인·주포가 5·10·20일 여섯 칸 전부 순매수 — ` +
-          rows.map((r) => `${r.d}일 외인 ${eok(r.f!.fgn!)}·주포 ${eok(r.f!.smart!)}`).join(" · ") +
-          ` (주포 = 투신+연기금+사모). 점수에는 안 들어간다 — 표식만`,
+          (twin
+            ? "외국인·주포가 5·10·20일 여섯 칸 전부 순매수 — "
+            : "외국인이 5·10·20일 세 칸 전부 순매수 — ") +
+          rows.map((r) => `${r.d}일 외인 ${eok(r.fgn)}${twin ? `·주포 ${eok(r.smart)}` : ""}`).join(" · ") +
+          (twin ? " (주포 = 투신+연기금+사모)" : "") +
+          " · 실측(29,570관측): 신호등 초록과 겹칠 때만 값이 있다(20일 +3.2%p·승률 59%). 빨강이면 −0.1 로 힘이 없다. 점수에는 안 들어간다 — 표식만",
       });
     }
   } catch {
