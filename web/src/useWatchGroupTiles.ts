@@ -71,12 +71,26 @@ export function useWatchGroupTiles(source: GroupSource | null) {
    * `liveQuote` 가 세션에 맞게 이미 골라 두었고 spark 는 정규장 값이다.
    */
   const [usOpen, setUsOpen] = useState(false);
+  /*
+   * ⚠️ **정규장일 때만 덮던 것을 늘 덮는 것으로** (2026-09-11 밤 — 벤티지: "시황대시보드의 해외
+   * 관심그룹 박스들이 대부분 지연이 있는듯 그룹내 속한 종목들의 합과 다르네").
+   *
+   * 가두리가 `usOpen` 이었다 — 그 값은 **1분 캐시된 `usWatch()` 의 `state` 글자**로 정해진다.
+   * 그래서 미국 개장 직후에는 아직 「프리장」이라 덮개가 안 열렸고, `liveQuote` 는 `ext` 칸이
+   * 비면 정규장 값으로 떨어지는데 그 정규장 값이 **어제 것**이라 타일이 어제 등락률에 멈췄다.
+   * 실측 09-11 22:36(개장 6분 뒤): 타일 「반도체 −4.37%」인데 그 안의 NVDA +0.52 · SKHY +0.45 ·
+   * MU +0.14 였다 — 어제 정규장이 그만큼 빠진 날이었다.
+   *
+   * `fast` 는 아래 관심종목 표가 쓰는 바로 그 값이다. 늘 덮으면 **한 화면의 두 숫자가 같은
+   * 기준**이 된다 — 그게 이 파일이 처음부터 지키려던 규칙이다(아래 REFRESH_MS 주석).
+   * 조회 주기는 그대로 `usOpen` 을 따른다(장중 15초·그 밖 60초).
+   */
   const fast = useUsAllFast(
-    source === "watchUs" && usOpen ? base.flatMap((g) => g.stocks.map((s) => s.code)) : [],
-    true,
+    source === "watchUs" ? base.flatMap((g) => g.stocks.map((s) => s.code)) : [],
+    usOpen,
   );
   const tiles =
-    source === "watchUs" && usOpen
+    source === "watchUs"
       ? base
           .map((g) =>
             toTile(
