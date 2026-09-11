@@ -120,16 +120,16 @@ export function SignalDot({ signal }: { signal?: SignalResult }) {
  * 것이 기본값이면 안 된다. 접었을 때도 **등급·점수는 남긴다**: 그 두 값이 이 판의 요지고,
  * 접힌 줄이 아무 말도 안 하면 펼쳐 보기 전엔 볼 이유가 있는지조차 모른다.
  */
-const SIG_COLLAPSE_KEY = "vntg.sig.collapsed";
-function readSigCollapsed(): boolean {
-  try {
-    const v = localStorage.getItem(SIG_COLLAPSE_KEY);
-    /* 저장된 것이 없으면 **접음** — 벤티지가 정한 기본값이다 */
-    return v === null ? true : v === "1";
-  } catch {
-    return true;
-  }
-}
+/*
+ * ⚠️ **펼친 것을 기억하지 않는다** (2026-09-11 — 벤티지: "종목 상세에 저 박스 기본 접힘으로 해줘").
+ *
+ * 예전엔 접힘 여부를 기기에 적어 뒀다(`vntg.sig.collapsed`). 그래서 한 번 펼치면 그 뒤로 **늘
+ * 펼친 채로** 열렸고, 「기본 접힘」이라는 말이 사실상 없어졌다 — 위 주석의 이유(종합 탭을 열면
+ * 차트가 화면 밖으로 밀린다)는 그대로인데.
+ *
+ * 이제 **열 때마다 접힌 채로** 시작한다. 펼친 것은 그 화면을 보는 동안만 간다. 그게 「기본」이라는
+ * 말의 뜻이고, 펼치는 데 드는 건 단추 한 번이다.
+ */
 
 /** 상세용 — 기준별 통과 여부를 펼쳐서 */
 export function SignalPanel({
@@ -151,16 +151,9 @@ export function SignalPanel({
   const [target, setTarget] = useState<ConstituentTarget | null>(null);
   /** 네이버 테마 고르기 — 한 종목이 여럿에 얽혀 있어 먼저 고르게 한다 */
   const [themePick, setThemePick] = useState(false);
-  const [collapsed, setCollapsed] = useState<boolean>(() => (collapsible ? readSigCollapsed() : false));
-  const toggleFold = () => {
-    const next = !collapsed;
-    setCollapsed(next);
-    try {
-      localStorage.setItem(SIG_COLLAPSE_KEY, next ? "1" : "0");
-    } catch {
-      /* 저장 못 해도 이번 화면은 동작한다 */
-    }
-  };
+  /* 접을 수 있는 자리면 **늘 접힌 채로 시작** — 위 주석 참고 */
+  const [collapsed, setCollapsed] = useState<boolean>(collapsible);
+  const toggleFold = () => setCollapsed((v) => !v);
   /** ETF 뒷배 고르기 — 상위 셋 중 어느 ETF 를 열지 */
   const [etfPick, setEtfPick] = useState(false);
   /* 뒤로가기로 고르개를 닫는다 (2026-08-28). 둘이 같이 열리진 않는다 */
