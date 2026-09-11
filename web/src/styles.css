@@ -18215,6 +18215,10 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .sig-brief-reg.bull { color: var(--red); }
 .sig-brief-reg.bear { color: var(--blue); }
 .sig-brief-block { color: var(--warn); }
+.sig-brief-pass { color: var(--muted); }
+/* 근거 구간 — 「앞뒤 모두 이긴 구간」이면 초록, 아니면 흐리게. 색으로 결론을 말한다 */
+.sig-brief-band.ok { color: var(--green); }
+.sig-brief-band.no { color: var(--muted); }
 /* 축 넷 — 가운뎃점으로 잇고 색은 그 축의 신호등 색을 그대로 */
 .sig-brief-axes { display: inline-flex; flex-wrap: wrap; gap: 0 6px; }
 /* 넓은 화면에서만 축을 오른쪽 끝으로 — 폰에서는 칩 뒤에 바로 붙는 편이 읽기 쉽다 */

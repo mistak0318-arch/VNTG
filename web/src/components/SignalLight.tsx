@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
-import { VerdictBar } from "./VerdictBar";
+import { VerdictBar, useVerdictBand } from "./VerdictBar";
 import { AlertTags } from "./AlertTags";
 import { api, type SignalResult, type ThemeStrength } from "../api";
 import { useMarketOpen } from "../useLive";
@@ -134,6 +134,9 @@ export function SignalDot({ signal }: { signal?: SignalResult }) {
 /** 접힌 줄에서 쓰는 축 이름 — 「실적·가치」는 한 줄에 넷을 담기엔 길다 (2026-09-11) */
 const AXIS_SHORT: Record<string, string> = { trend: "추세", flow: "수급", value: "실적", risk: "위험" };
 
+/** 접힌 줄의 장세 이름 — 서버 label 은 「약세장 (직접 고름)」처럼 괄호가 붙어 길다 */
+const REGIME_SHORT: Record<string, string> = { bull: "강세장", bear: "약세장" };
+
 /** 상세용 — 기준별 통과 여부를 펼쳐서 */
 export function SignalPanel({
   code,
@@ -157,6 +160,8 @@ export function SignalPanel({
   /* 접을 수 있는 자리면 **늘 접힌 채로 시작** — 위 주석 참고 */
   const [collapsed, setCollapsed] = useState<boolean>(collapsible);
   const toggleFold = () => setCollapsed((v) => !v);
+  /* 접힌 줄의 「75~79점 — 앞뒤 모두 이긴 구간」 — 펼쳤을 때의 VerdictBar 와 같은 검증표를 쓴다(한 번만 받는다) */
+  const band = useVerdictBand(data?.score ?? null);
   /** ETF 뒷배 고르기 — 상위 셋 중 어느 ETF 를 열지 */
   const [etfPick, setEtfPick] = useState(false);
   /* 뒤로가기로 고르개를 닫는다 (2026-08-28). 둘이 같이 열리진 않는다 */
@@ -181,6 +186,10 @@ export function SignalPanel({
 
   if (loading && !data) return <div className="empty">신호등 평가 중…</div>;
   if (!data) return null;
+
+  /* 기준 통과 수 — 못 잰 것(grade null)은 분모에서도 뺀다 (2026-09-11) */
+  const graded = data.checks.filter((c) => c.pass !== null).length;
+  const passed = data.checks.filter((c) => c.pass === true).length;
 
   /* 초록이 막힌 이유들 — 접힌 줄에서 한 칩으로 묶어 보여 준다 (2026-09-11) */
   const blockedWhy = [
@@ -238,9 +247,39 @@ export function SignalPanel({
                 ✕ {data.vetoedBy.join(" · ")}
               </span>
             )}
+            {/*
+              **장세** — 「(직접 고름)」이 무슨 말인지 벤티지가 물었다(2026-09-11). 말이 짧아서
+              설정 이야기인지 판정 결과인지 안 보였다. 「내가 고정」으로 바꾸고, 자동이면 판정
+              근거(20일선 위 비율)를 숫자로 붙인다. 빠진 기준 수는 「왜 이 점수인가」의 절반이다.
+            */}
             {data.regime && (
-              <span className={`sig-brief-reg ${data.regime.kind}`} title={`전종목의 ${data.regime.breadth}% 가 20일선 위입니다`}>
-                {data.regime.kind === "bull" ? "▲" : "▼"} {data.regime.label}
+              <span
+                className={`sig-brief-reg ${data.regime.kind}`}
+                title={[
+                  data.regime.breadth === null
+                    ? "설정 > 신호등에서 장세를 손으로 고정해 뒀습니다(자동 판정을 안 씁니다)."
+                    : `자동 판정 — 전종목의 ${data.regime.breadth}% 가 20일선 위입니다(50% 이상이면 강세장).`,
+                  data.regime.skipped.length > 0
+                    ? `이 장세에서 안 맞는 기준은 점수에서 뺐습니다 — ${data.regime.skipped.join(" · ")}`
+                    : "빠진 기준 없음",
+                  "같은 기준도 장세에 따라 방향이 뒤집힙니다 — 60일 신고가는 강세장 승률 +1.4%p, 약세장 -3.9%p 입니다.",
+                ].join("\n\n")}
+              >
+                {data.regime.kind === "bull" ? "▲" : "▼"} {REGIME_SHORT[data.regime.kind]}
+                {data.regime.breadth === null ? " · 내가 고정" : ` ${data.regime.breadth}%`}
+                {data.regime.skipped.length > 0 && ` · 기준 ${data.regime.skipped.length}개 뺌`}
+              </span>
+            )}
+            {/* 기준 몇 개를 통과했나 — 점수 하나로는 「아슬아슬한 75」와 「여유 있는 75」가 같아 보인다 */}
+            {graded > 0 && (
+              <span className="sig-brief-pass" title={`켜 놓은 기준 중 잴 수 있었던 ${graded}개 가운데 ${passed}개가 통과했습니다. 못 잰 기준은 세지 않습니다.`}>
+                기준 {passed}/{graded} 통과
+              </span>
+            )}
+            {/* 이 점수대가 실측에서 값을 했나 — 펼치면 표까지 나온다(VerdictBar) */}
+            {band && (
+              <span className={`sig-brief-band ${band.good ? "ok" : "no"}`} title="실측 검증표에서 이 점수 구간이 앞쪽·뒤쪽 표본 모두 시장을 이겼는지입니다. 펼치면 구간표 전체를 봅니다.">
+                {band.lo}~{band.hi}점 — {band.good ? "앞뒤 모두 이긴 구간" : "근거가 약한 구간"}
               </span>
             )}
             {blockedWhy.length > 0 && (

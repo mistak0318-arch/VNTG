@@ -25,6 +25,43 @@ import { api, type SignalVerdict } from "../api";
 const f2 = (v: number | null | undefined): string =>
   v === null || v === undefined ? "-" : `${v > 0 ? "+" : ""}${v.toFixed(2)}`;
 
+/*
+ * **한 번만 받는다** (2026-09-11). 검증표는 종목과 무관한 한 벌이고, 접힌 신호등 줄도 같은 값을
+ * 쓴다(`useVerdictBand`). 컴포넌트마다 따로 받으면 종목을 열 때마다 두 번씩 나간다.
+ */
+let verdictCache: Promise<SignalVerdict | null> | null = null;
+function loadVerdict(): Promise<SignalVerdict | null> {
+  if (!verdictCache) {
+    verdictCache = api
+      .signalVerdict()
+      .then((r) => r.verdict ?? null)
+      .catch(() => null);
+  }
+  return verdictCache;
+}
+
+/**
+ * 이 점수가 **어느 구간**이고 그 구간이 앞뒤 모두 이겼나 (2026-09-11).
+ *
+ * 접힌 신호등 줄이 「75점 (75~79) — 앞뒤 모두 이긴 구간」을 적는 데 쓴다. 펼치면 같은 값을
+ * 표까지 같이 보여 주는 것이 `VerdictBar` 다.
+ */
+export function useVerdictBand(score: number | null | undefined): { lo: number; hi: number; good: boolean } | null {
+  const [band, setBand] = useState<{ lo: number; hi: number; good: boolean } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void loadVerdict().then((v) => {
+      if (!alive || !v || score === null || score === undefined) return;
+      const b = v.bands.find((x) => score >= x.lo && score <= x.hi);
+      setBand(b ? { lo: b.lo, hi: b.hi, good: b.good } : null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [score]);
+  return band;
+}
+
 export function VerdictBar({
   /** 이 종목의 점수 — 주면 「지금 여기」를 짚어 준다 */
   score,
@@ -38,9 +75,8 @@ export function VerdictBar({
   const [open, setOpen] = useState(openInit);
 
   useEffect(() => {
-    void api
-      .signalVerdict()
-      .then((r) => setV(r.verdict))
+    void loadVerdict()
+      .then((r) => setV(r))
       .catch(() => undefined);
   }, []);
 
