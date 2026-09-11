@@ -488,6 +488,32 @@ async function flowOf(code: string): Promise<FlowRow[]> {
   return flow;
 }
 
+/**
+ * **한 종목의 여러 기간 합을 한 번에** (2026-09-11) — 쌍끌이(5·10·20일 전부 순매수)처럼
+ * 세 창을 같이 보는 자리가 있다. `flowSums` 를 세 번 부르면 원장 파일을 세 번 읽는다.
+ */
+export async function flowSpans(code: string, spans: number[]): Promise<Map<number, FlowSums>> {
+  const out = new Map<number, FlowSums>();
+  const flow = await flowOf(code);
+  if (flow.length === 0) return out;
+  const sum = (win: FlowRow[], s: FlowSubject): number | null => {
+    const v = win.map((r) => subjectOf(r, s)).filter((x): x is number => x !== null);
+    return v.length === 0 ? null : Math.round(v.reduce((a, b) => a + b, 0) / 100);
+  };
+  for (const d of spans) {
+    const win = flow.slice(-d);
+    out.set(d, {
+      fgn: sum(win, "fgn"),
+      trust: sum(win, "trust"),
+      pen: sum(win, "pen"),
+      samo: sum(win, "samo"),
+      smart: sum(win, "smart"),
+      days: win.length,
+    });
+  }
+  return out;
+}
+
 /** 여러 종목의 최근 `days` 거래일 순매수 합. 원장이 없는 종목은 빠진다 */
 export async function flowSums(codes: string[], days: number): Promise<Map<string, FlowSums>> {
   const out = new Map<string, FlowSums>();

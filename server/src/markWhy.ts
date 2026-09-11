@@ -15,9 +15,10 @@ import { superEntryOf } from "./superSignal.js";
 import { AUTO_GROUPS, CROSS_GROUP, listWatchlist } from "./watchlist.js";
 import { evaluateSignal } from "./signalLight.js";
 import { universeLabel } from "./signalScreen.js";
+import { flowSpans } from "./dailyStore.js";
 
 export interface MarkWhy {
-  key: "super" | "cross" | "rainbow" | "signal" | "hot" | "late" | "watch" | "exited";
+  key: "super" | "cross" | "rainbow" | "signal" | "twin" | "hot" | "late" | "watch" | "exited";
   icon: string;
   label: string;
   /** 한 줄 근거 — 툴팁·칩 펼침에 그대로 */
@@ -110,6 +111,38 @@ export async function markWhy(client: KiwoomClient, code: string): Promise<{ cod
     if (late.length > 0) marks.push({ key: "late", icon: "⏳", label: "늦음", why: `${late.map((a) => a.label).join(" · ")} — 이미 많이 온 자리` });
   } catch {
     /* 신호등을 못 읽으면 그 칸만 빈다 */
+  }
+
+  /*
+   * **쌍끌이** (2026-09-11 — 벤티지: "마크도 종목 무지개 마크 옆에 넣어주면 좋지 않을까?").
+   *
+   * 외국인과 주포(투신+연기금+사모)가 **5·10·20일 여섯 칸 전부** 순매수. 시세분석 표의 그
+   * 칸(`isTwin`)과 같은 정의다 — 화면마다 다른 뜻이면 표식이 아니다.
+   *
+   * ⚠️ **점수는 안 건드린다.** 신호등의 문턱·무게는 동결이고, 이게 값을 하는지는 아직 실측
+   * 중이다. 지금은 「보이게만」 한다 — 표식과 채점은 다른 얘기다.
+   *
+   * 하나라도 모르면(원장이 얕음) 아니다. 「모른다」를 「샀다」로 치지 않는다.
+   */
+  try {
+    const spans = await flowSpans(code, [5, 10, 20]);
+    const eok = (v: number) => `${v > 0 ? "+" : ""}${v.toLocaleString("ko-KR")}억`;
+    const rows = [5, 10, 20].map((d) => ({ d, f: spans.get(d) ?? null }));
+    const known = rows.every((r) => r.f && r.f.fgn !== null && r.f.smart !== null);
+    const twin = known && rows.every((r) => (r.f!.fgn ?? 0) > 0 && (r.f!.smart ?? 0) > 0);
+    if (twin) {
+      marks.push({
+        key: "twin",
+        icon: "🧲",
+        label: "쌍끌이",
+        why:
+          `외국인·주포가 5·10·20일 여섯 칸 전부 순매수 — ` +
+          rows.map((r) => `${r.d}일 외인 ${eok(r.f!.fgn!)}·주포 ${eok(r.f!.smart!)}`).join(" · ") +
+          ` (주포 = 투신+연기금+사모). 점수에는 안 들어간다 — 표식만`,
+      });
+    }
+  } catch {
+    /* 원장을 못 읽으면 이 칸만 빈다 */
   }
 
   if (w) {

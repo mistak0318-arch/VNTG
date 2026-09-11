@@ -2951,7 +2951,8 @@ export interface SuperExit {
 }
 
 export interface MarkWhy {
-  key: "super" | "cross" | "rainbow" | "signal" | "hot" | "late" | "watch" | "exited";
+  /** twin = 쌍끌이(외인·주포 5·10·20일 전부 순매수) — 표식만, 점수에는 안 들어간다 (2026-09-11) */
+  key: "super" | "cross" | "rainbow" | "signal" | "twin" | "hot" | "late" | "watch" | "exited";
   icon: string;
   label: string;
   why: string;
