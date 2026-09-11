@@ -147,13 +147,24 @@ export function useRealtime(
     let es: EventSource | null = null;
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
     /*
-     * (2026-09-10 전수 점검) SSE 모드의 `healthy` 는 **마지막 이벤트가 언제 왔나**로 정한다.
-     * 예전엔 한 번 붙으면 영영 `true` 라, 서버 소켓이 죽어도(스트림은 살아 있으니) 화면은
-     * 옛 값을 실시간 ●로 계속 보여 줬다. 60초 넘게 아무 이벤트가 없으면 거짓이 된다.
+     * SSE 모드의 `healthy` 는 **스트림이 살아 있고 서버 소켓도 건강한가**다.
+     *
+     * (2026-09-10) 예전엔 한 번 붙으면 영영 `true` 라, 서버 소켓이 죽어도 화면은 옛 값을
+     * 실시간 ●로 계속 보여 줬다. 그래서 「마지막 이벤트가 60초 안」으로 바꿨는데 —
+     *
+     * ⚠️ (2026-09-11) 그게 **조용한 종목을 끊긴 것으로 읽었다.** 한 종목만 보는 화면(종목 상세·
+     * 호가창)은 그 종목이 60초 안 팔리면 이벤트가 없다. 서버 소켓은 멀쩡한데 ●↔○ 로 깜빡였다
+     * (벤티지: "연결이 자꾸 끊겼다가 하는 것 같아").
+     *
+     * 서버가 10초마다 `beat` 이벤트로 제 소켓 건강을 실어 보낸다 — **그걸로 판정한다.**
+     * 체결이 없어도 beat 는 오므로 조용한 종목이 「끊김」이 되지 않고, 스트림이나 서버 소켓이
+     * 진짜로 죽으면 35초 안에 거짓이 된다. 종목별 값의 나이는 이것과 **다른 얘기**이고
+     * 화면이 글로 적는다(`LiveDot`).
      */
     let lastEventAt = 0;
+    let serverHealthy = true;
     let ageTimer: ReturnType<typeof setInterval> | null = null;
-    const fresh = () => lastEventAt > 0 && Date.now() - lastEventAt < 60_000;
+    const fresh = () => lastEventAt > 0 && Date.now() - lastEventAt < 35_000 && serverHealthy;
 
     const tick = async () => {
       try {
@@ -187,6 +198,22 @@ export function useRealtime(
         if (alive) setState({ enabled: true, healthy: fresh(), values: { ...values } });
       };
       es = new EventSource(`/api/realtime/stream?keys=${encodeURIComponent(joined)}`);
+      /* 붙은 그 순간부터 살아 있는 것으로 — 첫 beat 까지 10초를 「끊김」으로 보이면 안 된다 */
+      es.onopen = () => {
+        lastEventAt = Date.now();
+        if (alive) setState((st) => (st.healthy ? st : { ...st, enabled: true, healthy: true }));
+      };
+      /* 서버의 심장박동 — 체결이 없어도 10초마다 온다. 소켓 건강을 싣고 있다 (2026-09-11) */
+      es.addEventListener("beat", (e) => {
+        lastEventAt = Date.now();
+        try {
+          serverHealthy = (JSON.parse((e as MessageEvent).data) as { healthy?: boolean }).healthy !== false;
+        } catch {
+          serverHealthy = true;
+        }
+        const ok = fresh();
+        if (alive) setState((st) => (st.healthy === ok ? st : { ...st, healthy: ok }));
+      });
       /* 이벤트가 끊기면 아무도 flush 를 안 부른다 — 10초마다 나이만 다시 본다 */
       ageTimer = setInterval(() => {
         if (alive && !fresh()) setState((s) => (s.healthy ? { ...s, healthy: false } : s));

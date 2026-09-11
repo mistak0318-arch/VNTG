@@ -113,14 +113,18 @@ function maxQty(book: OrderBook): number {
 function useLiveBook(code: string, base: OrderBook | null) {
   const rt = useRealtime(code ? [`0D:${code}`] : [], 1000);
   /*
-   * ⚠️ (2026-09-11 숫자 점검) 여태 값이 **있느냐**만 봤다. 값은 끊겨도 마지막 것이 그대로
-   * 남으므로(`useRealtime` 이 일부러 안 지운다) 스트림이 멎으면 **멈춘 호가 위에 「● 실시간」**이
-   * 떴다. 멈춘 값으로 주문을 내는 게 이 도구에서 가장 비싼 실수다.
-   * 값의 **나이**를 본다 — 30초 넘으면 없는 것으로. ScopePage·ScreenerPage·VolumeRankingPage 와
-   * 같은 잣대다. 그러면 아래에서 `live:false` 가 되어 「○ 조회」로 내려간다.
+   * **멈춘 호가로 주문을 내는 것**이 이 도구에서 가장 비싼 실수다. 그래서 값이 살아 있는지를 본다.
+   *
+   * (2026-09-11 아침) 「30초 넘으면 없는 것으로」를 넣었는데 — 호가가 30초 안 움직이는 종목이
+   * 수두룩하다. ●↔○ 가 수시로 뒤집히고 그때마다 잔량 증감 표시가 사라졌다(벤티지: "오다 말다").
+   *
+   * (2026-09-11 저녁) 판정을 **스트림 쪽으로 옮겼다.** `rt.healthy` 가 이제 서버가 10초마다 보내는
+   * `beat`(제 소켓 건강을 싣고 온다)로 정해지므로, 조용한 종목이 「끊김」이 되지 않고 스트림이나
+   * 서버 소켓이 진짜 죽으면 35초 안에 거짓이 된다. 여기서는 **아주 오래된 값만** 버린다 —
+   * 스트림이 살아 있는데도 3분째 그대로면 그건 이 종목이 안 물린 것이다.
    */
-  const fresh = rt.values[`0D:${code}`] ?? null;
-  const v = fresh && Date.now() - fresh.at <= 30_000 ? fresh : null;
+  const got = rt.values[`0D:${code}`] ?? null;
+  const v = got && Date.now() - got.at <= 180_000 ? got : null;
   if (!base) return { book: base, live: false, delta: null as Record<string, number> | null };
   if (!rt.healthy || !v) return { book: base, live: false, delta: null };
 
@@ -371,10 +375,10 @@ export function OrderBookPanel({
     <div className="ob">
       <div className="ob-head">
         {/* 지금 값이 어디서 온 것인지 — 실시간이 죽으면 폴링으로 돌아간 것을 알아야 한다 */}
-        {/* (2026-09-11 숫자 점검) 30초 넘은 실시간 값은 없는 것으로 쳐서 여기가 「○ 조회」로 내려간다 */}
+        {/* (2026-09-11 저녁) 스트림이 살아 있으면 ● — 호가가 잠시 조용한 것과 끊긴 것은 다르다 */}
         <span
           className={`ob-live ${live ? "on" : ""}`}
-          title={live ? "실시간 호가 (30초 안에 들어온 값)" : "실시간 값이 없거나 30초 넘게 멈춰 3초 조회로 채웁니다"}
+          title={live ? "실시간 호가 — 스트림이 살아 있습니다" : "실시간이 끊겼거나 이 종목이 안 물려 3초 조회로 채웁니다"}
         >
           {live ? "● 실시간" : "○ 조회"}
         </span>

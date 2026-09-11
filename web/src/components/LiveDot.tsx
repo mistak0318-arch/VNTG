@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtime } from "../useRealtime";
 import { useLockPaused } from "../lockPause";
+import { useMarketOpen } from "../useLive";
 
 /**
  * **지금 이 값이 실시간인가** — 어느 화면에서든 한 자리에서 (2026-09-04).
@@ -105,24 +106,34 @@ export function LiveDot({ code, name }: { code?: string | null; name?: string | 
 
   const socket = code ? rt.enabled && rt.healthy : Boolean(st?.enabled && st?.healthy);
   /*
-   * ⚠️ (2026-09-11 숫자 점검) 여태 값이 **있느냐**만 봤다 — `Boolean(rt.values[key])`.
-   * 그런데 값은 끊겨도 마지막 것이 그대로 남는다(`useRealtime` 이 일부러 안 지운다).
-   * 그래서 **멈춘 값 위에 초록불 「실시간」**이 떴다 — 이 점의 존재 이유를 정면으로 뒤집는다.
-   * 값의 **나이**를 본다. 30초 넘으면 없는 것으로 — 다른 화면들이 이미 쓰는 잣대 그대로.
+   * **연결과 「이 종목이 방금 팔렸나」는 다른 얘기다** (2026-09-11 저녁).
+   *
+   * 어제 「값이 30초 넘으면 없는 것으로」를 넣었다. 멈춘 값 위에 초록불이 뜨던 것은 맞게 고쳤는데,
+   * 30초에 한 번도 안 팔리는 종목이 훨씬 많다 — 그런 종목은 이 점이 실시간↔대기로 **수시로
+   * 깜빡였다**(벤티지: "오다 말다 오다 말다 … 연결이 자꾸 끊겼다가"). 서버 소켓은 멀쩡했다.
+   *
+   * 점은 **연결**만 말한다: 스트림이 살아 있고(서버 `beat` 가 제 소켓 건강을 실어 온다)
+   * 지금이 장중인가. 값의 나이는 아래 풍선에 **글로** 적는다 — 「12초 전」·「5분째 조용」.
+   * 장이 닫히면 값은 어차피 안 움직이므로 초록으로 두지 않는다.
    */
+  const marketLive = useMarketOpen();
   const last = key ? rt.values[key] : null;
-  const tick = Boolean(last && Date.now() - last.at <= FRESH_MS);
-  const level = !socket ? "off" : code ? (tick ? "on" : "wait") : "on";
+  const fresh = Boolean(last && Date.now() - last.at <= FRESH_MS);
+  const level = !socket || !marketLive ? "off" : code ? (last ? "on" : "wait") : "on";
+  const tick = level === "on";
 
   const label = level === "on" ? "실시간" : level === "wait" ? "대기" : "조회";
   const title =
     level === "on"
       ? code
-        ? `${name ?? code} 체결이 실시간으로 들어오는 중입니다`
+        ? /* (2026-09-11 저녁) 점은 연결을 말한다 — 「지금 체결이 오는 중」은 값의 나이가 말한다 */
+          `${name ?? code} 실시간 연결이 살아 있습니다${last ? ` · 마지막 체결 ${agoOf(last.at)}` : ""}`
         : "실시간 연결이 살아 있습니다"
       : level === "wait"
         ? `실시간은 살아 있지만 ${name ?? code} 는 아직 안 물렸습니다 — 값은 3초 조회로 채웁니다`
-        : "실시간이 꺼졌거나 끊겼습니다 — 지금 보는 값은 조회로 받은 것입니다";
+        : !marketLive
+          ? "장 시간이 아닙니다 — 지금 보는 값은 마지막 체결이고 조회로 채웁니다"
+          : "실시간이 꺼졌거나 끊겼습니다 — 지금 보는 값은 조회로 받은 것입니다";
 
   const seats = st?.seats;
   const full = seats ? seats.total >= seats.max : false;
@@ -163,8 +174,16 @@ export function LiveDot({ code, name }: { code?: string | null; name?: string | 
             {code && (
               <div>
                 <dt>이 종목</dt>
+                {/*
+                  (2026-09-11 저녁) 「들어오는 중」 하나로 뭉치지 않는다 — 붙어 있으면서 조용한 것과
+                  아직 안 물린 것은 다른 상황이다. 값이 있으면 언제 것인지 그대로 적는다.
+                */}
                 <dd>
-                  {tick ? "들어오는 중" : last ? `${agoOf(last.at)}에 멈춤` : "아직 안 물림"}
+                  {!last
+                    ? "아직 안 물림"
+                    : fresh
+                      ? `들어오는 중 (${agoOf(last.at)})`
+                      : `${agoOf(last.at)} 체결 — 그 뒤로 조용`}
                 </dd>
               </div>
             )}
@@ -183,11 +202,10 @@ export function LiveDot({ code, name }: { code?: string | null; name?: string | 
               : level === "wait"
                 ? full
                   ? "구독 자리가 다 찼습니다 — 이 종목은 3초 조회로 채웁니다. 탭을 좀 닫으면 자리가 납니다."
-                  : last
-                    ? /* (2026-09-11 숫자 점검) 한 번 들어왔다가 멎은 경우 — 「방금 열었다」와 다른 상황이다 */
-                      "체결이 30초 넘게 안 들어옵니다 — 거래가 뜸하거나 스트림이 멎은 것입니다. 값은 3초 조회로 채웁니다."
-                    : "방금 열어 아직 안 물렸습니다 — 잠시 뒤 초록으로 바뀝니다. 그때까지는 3초 조회입니다."
-                : "실시간이 끊겨 3초 조회로 채웁니다. 값이 멈춰 보이면 새로고침하세요."}
+                  : "방금 열어 아직 안 물렸습니다 — 잠시 뒤 초록으로 바뀝니다. 그때까지는 3초 조회입니다."
+                : !marketLive
+                  ? "장 시간이 아닙니다(NXT 포함 08:00~20:10 밖). 값은 마지막 체결 그대로이고 3초 조회로 채웁니다."
+                  : "실시간이 끊겨 3초 조회로 채웁니다. 값이 멈춰 보이면 새로고침하세요."}
           </p>
           {/*
             거절 기록은 **참고**다 — 지금 이 종목이 초록이면 그건 지나간 일이다. 마지막 것만,

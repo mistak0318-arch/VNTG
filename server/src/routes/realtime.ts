@@ -161,8 +161,18 @@ export function createRealtimeRouter(client: KiwoomClient): Router {
       // 끊김 감지용 심장박동 — 프록시가 조용한 연결을 자르는 걸 막는 겸
       const beat = setInterval(() => {
         if (res.writableNeedDrain) return; // (2026-09-10 전수 점검) 막힌 연결엔 심장박동도 안 쌓는다
-        res.write(`: beat ${rt.healthy ? 1 : 0}\n\n`);
-      }, 15_000);
+        /*
+         * ⚠️ **주석이 아니라 진짜 이벤트로 보낸다** (2026-09-11 — 벤티지: "실시간 시세가 오다 말다
+         * 하는 것 같은데 … 연결이 자꾸 끊겼다가"). `: beat` 는 SSE 주석이라 브라우저의 `onmessage`
+         * 가 **안 깨어난다.** 어제 화면 쪽 `healthy` 를 「마지막 이벤트가 60초 안」으로 바꾸면서,
+         * 한 종목만 보는 화면은 그 종목이 60초 조용하면 **연결이 끊긴 것으로 읽었다** — 서버
+         * 소켓은 멀쩡한데 화면만 ●↔○ 로 깜빡였다.
+         *
+         * 이제 이름 붙은 `beat` 이벤트로 **서버 소켓의 건강까지 실어** 보낸다. 화면은 이걸로
+         * 「연결」을 판정하고, 종목별 값의 나이는 따로 글로 적는다 — 둘은 다른 얘기다.
+         */
+        res.write(`event: beat\ndata: ${JSON.stringify({ healthy: rt.healthy, at: Date.now() })}\n\n`);
+      }, 10_000);
       req.on("close", () => {
         clearInterval(beat);
         offExt?.();

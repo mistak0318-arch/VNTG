@@ -712,8 +712,9 @@ export function ScreenerPage({
     if (!liveOn) return null;
     if (!rt.healthy) return null;
     const v = rt.values[`0B:${code}`];
-    /* (2026-09-10 전수 점검) 30초 넘은 값은 안 쓴다 — 조회 값(REST)으로 돌아간다. 90초는 너무 길었다 */
-    if (!v || Date.now() - v.at > 30_000) return null;
+    /* (2026-09-11 저녁) 90 → 30 으로 줄였다가 되돌렸다. 조용한 종목이 30초마다 실시간↔조회로 깜빡였다.
+     * 스트림이 죽는 것은 이제 `rt.healthy` 가 서버 `beat` 로 35초 안에 잡는다 — 그게 진짜 안전장치다 */
+    if (!v || Date.now() - v.at > 90_000) return null;
     const p = fid(v, "10");
     if (p === null || p === 0) return null;
     return { price: Math.abs(p), rate: fid(v, "12") };
