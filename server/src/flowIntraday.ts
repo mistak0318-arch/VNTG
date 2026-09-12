@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { MIN, afterMarketEra, krxAfterMarket } from "./marketHours.js";
 
 /**
  * 장중 수급 변화.
@@ -59,13 +60,28 @@ function hhmm(): string {
   return `${String(d.getUTCHours()).padStart(2, "0")}${String(d.getUTCMinutes()).padStart(2, "0")}`;
 }
 
-/** 장중에만 쌓는다 — 장 끝난 뒤 같은 값을 반복해 적으면 그래프가 평평한 꼬리를 문다 */
+/**
+ * 장중에만 쌓는다 — 장 끝난 뒤 같은 값을 반복해 적으면 그래프가 평평한 꼬리를 문다.
+ *
+ * ## 09/14 부터 **애프터마켓까지** (2026-09-12, KRX 애프터마켓 개편)
+ *
+ * 16:00~20:00 이 실거래가 된다. 그 네 시간의 수급을 안 쌓으면 **나중에 되살릴 방법이 없다**
+ * — `ka10051` 은 누적만 주고 시각별 시계열이 없다(이 파일 머리 주석). 그래서 창을 20:00
+ * 까지 넓힌다. 다만 15:40~16:00 은 **어느 시장도 안 열어** 값이 안 변하므로 뺀다 — 그때
+ * 찍으면 평평한 꼬리만 는다.
+ *
+ * ⚠️ 09/13 까지는 09:00~15:40 그대로다.
+ */
 function withinSession(): boolean {
   const d = kstNow();
   const day = d.getUTCDay();
   if (day === 0 || day === 6) return false;
   const m = d.getUTCHours() * 60 + d.getUTCMinutes();
-  return m >= 9 * 60 && m <= 15 * 60 + 40;
+  if (m < MIN.regularOpen) return false;
+  const date = today();
+  /* 정규장 + 집계 여유 10분 */
+  if (m <= MIN.regularClose + 10) return true;
+  return afterMarketEra(date) ? krxAfterMarket(date, m) : false;
 }
 
 async function read(): Promise<FlowIntradayDay[]> {

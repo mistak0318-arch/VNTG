@@ -16,6 +16,7 @@ import { ensureFinance } from "./financeCache.js";
 import { closesProgress } from "./dailyCloses.js";
 import { listTrackJob } from "./listTrack.js";
 import { ledgerSamplesProgress } from "./samplesFromLedger.js";
+import { cleanupStartMinute } from "./marketHours.js";
 import { readdir, readFile, writeFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,14 +63,22 @@ const HISTORY_FILE = join(DATA_DIR, "afterCloseHistory.json");
  * 단계는 **기록에 남기고 다음으로 간다** — 다만 「①이 실패했으니 뒤의 것들은
  * 낡은 일봉으로 돈 것」임을 알 수 있어야 하므로 요약에 적는다.
  *
- * ## 시작 시각
+ * ## 시작 시각 — **날짜로 갈린다** (2026-09-12, KRX 애프터마켓 개편)
  *
- * **15:40** — 장 마감(15:30) 10분 뒤. 종가가 확정됐고, 전체가 2시간 남짓이라
- * 18시 전후에 끝난다.
+ *   09/13 까지   **15:40** — 장 마감(15:30) 10분 뒤. 종가가 확정됐고, 전체가 2시간
+ *                남짓이라 18시 전후에 끝난다.
+ *   09/14 부터   **20:10** — 애프터마켓(16:00~20:00)이 끝나고 10분 뒤.
+ *
+ * 벤티지 (2026-09-10): "마감정리를 차라리 8시 10분에 진행하는 건 어때?"
+ *
+ * 15:40 에 그대로 두면 **일봉 단계(위 표의 30~40분)의 꼬리가 16:00 을 넘는다.** 앞쪽
+ * 종목은 정규장 종가만 있고 뒤쪽 종목은 애프터가 섞인 값이 된다 — 같은 날 일봉에
+ * 기준이 둘인 것이 제일 나쁘다. 판정은 전부 `marketHours.cleanupStartMinute` 이 한다.
+ *
+ * ⚠️ 오늘(9/12) 배포해도 9/13 까지는 15:40 그대로다.
  */
 
 const TICK_MS = 5 * 60_000;
-const START_HHMM = 15 * 60 + 40;
 
 /**
  * 단계의 차례와 이름 — **시작 알림이 「무엇을 돌릴 것인가」를 적을 때** 쓴다.
@@ -281,7 +290,8 @@ function dayKey(at = Date.now()): string {
 function shouldStart(at = Date.now()): boolean {
   const k = kst(at);
   if (!isTradingDay(k)) return false; // (2026-09-10 전수 점검) 휴장일에 두 시간짜리를 헛돌리지 않는다
-  return k.getHours() * 60 + k.getMinutes() >= START_HHMM;
+  /* 09/13 까지 15:40 · 09/14 부터 20:10 — 시각 판정은 `marketHours` 한 곳에서만 (2026-09-12) */
+  return k.getHours() * 60 + k.getMinutes() >= cleanupStartMinute(dayKey(at));
 }
 
 /**
@@ -348,7 +358,7 @@ export async function runAfterClose(
    * 그것만 있으면 신호등 분석은 내일 자동으로 돌아도 제 값이 난다.
    */
   only?: string[],
-  /** 왜 도는가 — 시작 알림에 적는다. 안 주면 정규 회차(15:40) */
+  /** 왜 도는가 — 시작 알림에 적는다. 안 주면 정규 회차(09/13 까지 15:40 · 09/14 부터 20:10) */
   reason?: string,
 ): Promise<AfterCloseRun> {
   if (run?.running) return run;

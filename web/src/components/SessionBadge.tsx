@@ -49,9 +49,30 @@ function krSession(s: MarketStatus | null): Session {
   if (!s) return { state: "closed", label: "…", hint: "국내장 상태를 받는 중" };
   if (s.state === "holiday") return { state: "closed", label: "휴장", hint: "오늘은 국내 증시 휴장일입니다" };
   if (s.state === "open") return { state: "open", label: "정규장", hint: "국내 정규장 09:00~15:30 — 지금 체결이 돕니다" };
-  /* 서버의 live 는 NXT 시간외(08:00~09:00 · 15:30~20:00)를 포함한다 */
+  /*
+   * 15:30~16:00 **거래 공백** (2026-09-14 개편, 2026-09-12에 미리 넣음).
+   *
+   * 9/14 부터 정규장이 끝나고 애프터마켓이 열리기까지 30분이 빈다 — 어느 시장도 안 연다.
+   * 「마감」이라고만 적으면 20:00 뒤와 생김새가 같아서, 잠깐 쉬는 건지 오늘이 끝난 건지를
+   * 모른다. 9/13 까지는 서버가 이 국면을 아예 안 주므로 표가 예전 그대로다.
+   */
+  if (s.session === "공백") {
+    return { state: "closed", label: "휴식", hint: "정규장은 끝났고 애프터마켓(16:00)은 아직입니다 — 지금은 어느 시장도 안 엽니다" };
+  }
+  /* 서버의 live 는 시간외(프리 08:00~09:00 · 애프터)를 포함한다 */
   if (s.live) {
-    return { state: s.state === "pre" ? "pre" : "after", label: s.state === "pre" ? "프리 (NXT)" : "애프터 (NXT)", hint: "NXT 시간외 거래 중입니다 — 정규장은 아닙니다" };
+    if (s.state === "pre") {
+      return { state: "pre", label: "프리 (NXT)", hint: "NXT 시간외 거래 중입니다 — 정규장은 아닙니다" };
+    }
+    /* 9/14 부터 애프터엔 KRX 도 있다 — `venue` 가 그걸 말한다(그 전엔 "nxt") */
+    const both = s.venue === "krx+nxt";
+    return {
+      state: "after",
+      label: both ? "애프터 (KRX·NXT)" : "애프터 (NXT)",
+      hint: both
+        ? "KRX 애프터마켓 16:00~20:00 (NXT 도 함께) 거래 중입니다 — 정규장은 아닙니다"
+        : "NXT 시간외 거래 중입니다 — 정규장은 아닙니다",
+    };
   }
   if (s.state === "pre") return { state: "closed", label: "장 전", hint: "아직 안 열렸습니다 — 지금 값은 어제 종가입니다" };
   return { state: "closed", label: "마감", hint: "국내장이 닫혔습니다 — 지금 값은 종가입니다" };

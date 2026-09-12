@@ -1820,6 +1820,15 @@ export async function removeSuperEntry(code: string): Promise<void> {
 /**
  * 평일 15:45 에 알아서 돈다 — 추적기(15:40)가 신호등 캐시를 데운 5분 뒤.
  * 그 시각을 지나 서버를 켠 날도 그날 안이면 한 번 돈다 (lastRunDate 가 막는다).
+ *
+ * ## ⚠️ 이 스케줄러는 **꺼져 있다** — 아래 창은 안 쓰인다 (2026-09-12 확인)
+ *
+ * `index.ts` 에서 호출이 주석 처리돼 있고, `afterClose` 파이프라인이 ⑥번 차례로
+ * `runSuperSignal` 을 부른다(⑤ 신호등 분석이 받아 둔 목록을 그대로 쓴다). 그래서
+ * KRX 애프터마켓 개편(9/14)으로 파이프라인이 20:10 으로 옮겨 가도 여기는 안 고쳤다.
+ *
+ * 다시 켤 일이 생기면 아래 15:45~23:00 창을 `marketHours.cleanupStartMinute` 기준으로
+ * 옮겨야 한다 — 9/14 부터 15:45 는 일봉이 아직 안 온 시각이다.
  */
 export function startSuperSignalScheduler(client: KiwoomClient): void {
   const tick = async () => {

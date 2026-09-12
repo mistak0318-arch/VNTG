@@ -2340,9 +2340,18 @@ export interface TrackedStock extends WatchItem {
 export interface MarketStatus {
   state: "pre" | "open" | "closed" | "holiday";
   label: string;
-  /** 지금 체결이 도는가 — NXT 시간외(08:00~09:00, 15:30~20:00)를 포함한다 */
+  /**
+   * 지금 체결이 도는가 — 시간외를 포함한다.
+   *
+   * 프리 08:00~09:00 · 애프터는 **9/13 까지 15:30~20:00(NXT)**, **9/14 부터 16:00~20:00
+   * (KRX 애프터마켓 + NXT)** 이다. 개편 뒤 **15:30~16:00 은 `false`** — 어느 시장도
+   * 안 연다 (2026-09-12).
+   */
   live?: boolean;
-  venue?: "none" | "nxt" | "krx";
+  /** 어느 판인가 — `"krx+nxt"` 는 9/14~ 애프터마켓(둘 다 연다) */
+  venue?: "none" | "nxt" | "krx" | "krx+nxt";
+  /** 국면 이름 그대로 — 「공백」(15:30~16:00)을 「마감」과 구별하려면 이게 필요하다 */
+  session?: "장전" | "프리" | "정규장" | "공백" | "애프터" | "마감";
 }
 
 export interface SectionResult<T> {

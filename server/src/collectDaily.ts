@@ -18,6 +18,7 @@ import {
   putCollectRun,
 } from "./dailyStore.js";
 import { alCode } from "./alCode.js";
+import { afterMarketEra, cleanupStartMinute, dayFullySettled } from "./marketHours.js";
 
 /**
  * **전종목 일별 수집** (2026-09-01).
@@ -80,19 +81,63 @@ function todayYmd(): string {
   return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10).replace(/-/g, "");
 }
 
+/** YYYY-MM-DD (KST) — `marketHours` 가 쓰는 모양 */
+function todayDash(at = Date.now()): string {
+  return new Date(at + 9 * 3600_000).toISOString().slice(0, 10);
+}
+
+/** 지금 KST 로 몇 분인가 (09:00 = 540) */
+function kstMinute(at = Date.now()): number {
+  const k = new Date(at + 9 * 3600_000);
+  return k.getUTCHours() * 60 + k.getUTCMinutes();
+}
+
 /**
- * **장 마감(15:40 KST) 이 지났나** — 오늘 줄을 담을지 정한다.
+ * **마감 뒤 정리 시각이 지났나** — 오늘 줄을 담을지 정한다.
  *
  * 장중에 받으면 그날 값이 **미집계 0** 으로 온다. 실측: 삼성전자 대차잔고가
  * 20260831 까지 8,830만주인데 20260901(장중)만 0 이었다. 그걸 그대로 담으면
  * 「아직 안 나왔다」가 **「0 이다」로 굳는다** — 이 도구에서 계속 피해 온 실수다.
  *
  * 그래서 마감 전에는 **오늘 줄을 버린다.** 어제까지는 확정값이라 그대로 담는다.
+ *
+ * 09/13 까지 15:40 · 09/14 부터 **20:10** (2026-09-12, KRX 애프터마켓 개편). 애프터마켓
+ * (16:00~20:00)이 실거래라 그 전에 받은 수급·공매도는 **하루의 반쪽**이다 — 마감 뒤 정리와
+ * 같은 시각을 쓴다(`marketHours.cleanupStartMinute`).
  */
 function closedForToday(at = Date.now()): boolean {
-  const d = new Date(at);
-  const kst = new Date(d.getTime() + (9 * 60 + d.getTimezoneOffset()) * 60_000);
-  return kst.getHours() * 60 + kst.getMinutes() >= 15 * 60 + 40;
+  return kstMinute(at) >= cleanupStartMinute(todayDash(at));
+}
+
+/**
+ * **오늘 몫을 이미 받았나** — 한 종목·한 종류 기준.
+ *
+ * 41분짜리 작업이라 그 사이 재시작이 있으면 처음부터 다시 도는데, 이 가드가 없으면
+ * 영영 못 끝낸다.
+ *
+ * ## 09/14 부터는 **하루 두 번까지** (2026-09-12)
+ *
+ * 애프터마켓이 실거래가 되면서, 정규장 뒤에 받은 줄은 아직 반쪽이다. 그런데 이 가드가
+ * 「오늘 날짜면 건너뜀」이라 **애프터 확정값을 그날 안에 못 받는다** — 다음 날 바퀴는 이미
+ * 있는 날짜를 안 덮으므로 그 하루는 영영 반쪽으로 남는다.
+ *
+ * 그래서 「받은 시각이 애프터 마감 뒤인가」로 따진다:
+ *   · 애프터 마감 뒤에 받았다      → 확정값이다. 건너뛴다
+ *   · 정규장 뒤에 받았고 지금도 애프터 전 → 한 번이면 족하다. 건너뛴다
+ *   · 정규장 뒤에 받았는데 지금은 애프터 뒤 → **한 번 더 받는다**
+ *
+ * 09/13 까지는 `afterMarketEra` 가 거짓이라 예전처럼 「오늘 날짜면 건너뜀」 그대로다.
+ */
+function alreadyGotToday(fetchedAt: string | undefined, at = Date.now()): boolean {
+  const t = String(fetchedAt ?? "");
+  const date = todayDash(at);
+  /* ⚠️ 09/13 까지는 **예전 비교 그대로** — 저장된 ISO(UTC) 앞 10글자 == KST 오늘 */
+  if (!afterMarketEra(date)) return t.slice(0, 10) === date;
+  const fetchedMs = Date.parse(t);
+  if (!Number.isFinite(fetchedMs)) return t.slice(0, 10) === date;
+  if (todayDash(fetchedMs) !== date) return false;
+  if (dayFullySettled(date, kstMinute(fetchedMs))) return true; // 애프터 뒤에 받은 확정값
+  return !dayFullySettled(date, kstMinute(at)); // 아직 애프터 전이면 한 번으로 족하다
 }
 
 function daysAgoYmd(days: number): string {
@@ -301,12 +346,10 @@ export function startCollectDaily(
 
       for (const kind of kinds) {
         /*
-         * **오늘 이미 받았으면 건너뛴다.** 41분짜리 작업이라 그 사이 재시작이
-         * 있으면 처음부터 다시 도는데, 그러면 영영 못 끝낸다.
+         * **오늘 몫을 이미 받았으면 건너뛴다** — 판정은 `alreadyGotToday` 에.
+         * 09/14 부터는 「정규장 뒤 한 번 + 애프터 뒤 한 번」까지 허용한다 (2026-09-12).
          */
-        if (String(led.fetchedAt[kind] ?? "").slice(0, 10) === new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)) {
-          continue;
-        }
+        if (alreadyGotToday(led.fetchedAt[kind])) continue;
         try {
           let got: { d: string }[] = [];
           if (kind === "flow") got = await fetchFlow(client, code);

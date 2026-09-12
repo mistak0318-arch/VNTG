@@ -53,8 +53,15 @@ export interface BarRow {
   o: number;
   h: number;
   l: number;
+  /**
+   * **정규장 종가** — 뜻이 고정돼 있다 (2026-09-12, KRX 애프터마켓 개편). 9/14 부터
+   * 16:00~20:00 이 실거래가 돼도 이 칸 뜻은 안 바꾼다. 신호등 표본·검증표·백테스트가
+   * 전부 정규장 종가로 쌓여 있어서, 바꾸면 9/14 를 경계로 과거와 안 맞는다.
+   */
   c: number;
   v: number;
+  /** **애프터마켓 종가** (9/14~). 옵션이라 옛 줄은 그대로 읽힌다 — 없으면 「안 쟀다」다 */
+  ca?: number;
 }
 
 /**
@@ -216,6 +223,18 @@ export async function saveLedger(l: DailyLedger): Promise<void> {
  * 다시 계산돼 오는데, 옛 값을 남기면 그 종목만 눈금이 어긋난다.
  *
  * `keep` 이 0 이면 안 자른다 — 자동 삭제가 꺼져 있을 때 쓴다.
+ *
+ * ## 애프터마켓이 여기서는 종가를 안 덮는다 (2026-09-12)
+ *
+ * 9/14 부터 하루를 두 번 받을 수 있게 됐다(정규장 뒤 · 애프터 뒤 — `collectDaily`
+ * `alreadyGotToday`). 그러면 나중 줄이 먼저 줄을 덮는데, **여기를 지나는 것은 수급·공매도·
+ * 대차·지분율·프로그램뿐이다.** 그 다섯은 애프터까지 포함한 나중 값이 그날의 전부라
+ * 덮는 게 맞다.
+ *
+ * 종가가 걸린 `bars` 는 이 길로 안 온다 — `collectDaily` 의 종류 분기가 `bars` 를 그냥
+ * 건너뛴다(일봉은 `dailyCloses` 몫이고, 거기서 `mergeBars` 가 정규장 종가 `c` 와 애프터
+ * 종가 `ca` 를 갈라 둔다). 만약 나중에 여기로 일봉을 태우게 되면 `BarRow.c` 가 조용히
+ * 애프터 값으로 덮인다 — 그때는 `mergeBars` 처럼 그날 하루만 예외를 둬야 한다.
  */
 export function mergeRows<T extends { d: string }>(oldRows: T[], got: T[], keep: number): T[] {
   const by = new Map<string, T>();

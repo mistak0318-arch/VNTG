@@ -653,7 +653,20 @@ async function readHistory(): Promise<MarketSignalDay[]> {
   }
 }
 
-/** 15:35~16:30 사이에 하루 한 번 — 그날 판정과 코스피 종가를 남긴다 */
+/**
+ * 15:35~16:30 사이에 하루 한 번 — 그날 판정과 코스피 종가를 남긴다.
+ *
+ * ## 9/14 뒤에도 **15:35 그대로다** (2026-09-12, KRX 애프터마켓 개편)
+ *
+ * 마감 뒤 정리는 20:10 으로 옮겼지만, 이 줄은 **검증 표의 재료**다 — `kospi` 칸이 정규장
+ * 종가로 400일 가까이 쌓여 있고, 「초록이었던 날의 5·20거래일 뒤 수익률」이 그 값으로
+ * 계산된다. 20:10 로 옮겨 애프터가 섞인 값이 들어오면 9/14 를 경계로 **같은 표 안에서
+ * 자가 갈린다.** 지수 자체도 정규장 종가로 확정된다(애프터마켓은 지수 산출 밖).
+ *
+ * `recordedDay` 가드가 있어 하루 한 줄이고, 5분 주기라 사실상 15:35~15:40 에 걸린다.
+ * 창의 끝(16:30)이 애프터 개장 뒤까지 물려 있지만 그건 「그날 한 번도 못 찍었을 때의
+ * 마지막 기회」다 — 안 남기는 것보다 낫다.
+ */
 async function recordIfClose(client: KiwoomClient, data: MarketSignal): Promise<void> {
   const k = new Date(Date.now() + 9 * 3600_000);
   const date = k.toISOString().slice(0, 10);
@@ -733,7 +746,11 @@ async function backfillHistory(client: KiwoomClient): Promise<void> {
   await fs.writeFile(HIST_FILE, JSON.stringify(out), "utf8");
 }
 
-/** 장 마감 뒤 판정을 스스로 남긴다 — 화면이 안 열린 날도 기록이 쌓여야 검증이 된다 */
+/**
+ * 장 마감 뒤 판정을 스스로 남긴다 — 화면이 안 열린 날도 기록이 쌓여야 검증이 된다.
+ *
+ * 창(15:35~16:30)은 9/14 KRX 애프터마켓 개편 뒤에도 그대로다 — 이유는 `recordIfClose` 주석에.
+ */
 export function startMarketSignalRecorder(client: KiwoomClient): void {
   setTimeout(() => void backfillHistory(client).catch(() => undefined), 60_000);
   setInterval(() => {

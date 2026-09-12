@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { orderClient, orderIsMock } from "./orders.js";
 import { isTradingDate, isTradingDay } from "./tradingDay.js";
+import { afterMarketEra } from "./marketHours.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DIR = join(here, "..", "data", "fills");
@@ -34,6 +35,13 @@ export interface Fill {
   mock: boolean;
   /** 신용·현금 등 — io_tp_nm 그대로 */
   kind: string;
+  /**
+   * **체결 시각을 못 받았다** (2026-09-12). 옵션이라 옛 파일은 그대로 읽힌다.
+   *
+   * 참이면 `at` 의 **시·분·초는 뜻이 없다**(날짜만 믿을 수 있다). 차트 복기가 이 줄을
+   * 분봉 위에 점으로 찍으면 안 된다 — 없던 자리에 있던 일로 그려진다.
+   */
+  timeUnknown?: boolean;
 }
 
 interface DayFile {
@@ -68,10 +76,27 @@ async function fetchDay(client: KiwoomClient, day: string): Promise<Fill[]> {
       const io = String(x.io_tp_nm ?? "");
       const side: Fill["side"] | null = /매수/.test(io) ? "buy" : /매도/.test(io) ? "sell" : null;
       if (!side) continue;
-      const tm = String(x.ord_tm ?? "").trim() || String(x.cnfm_tm ?? "").trim() || "15:30:00";
-      const hhmmss = /^\d{2}:\d{2}:\d{2}$/.test(tm) ? tm : "15:30:00";
+      /*
+       * ## **시각이 없으면 지어내지 않는다** (2026-09-12, KRX 애프터마켓 개편)
+       *
+       * 여태 `ord_tm`·`cnfm_tm` 이 둘 다 비면 **"15:30:00"(정규장 마감)으로 박았다.**
+       * 9/13 까지는 체결이 사실상 정규장 안에서만 났으니 틀려도 그날 안이었다.
+       *
+       * 9/14 부터 16:00~20:00 이 실거래가 된다. 그러면 애프터 체결이 차트 복기에서
+       * **네 시간 반 앞**인 15:30 자리에 찍힌다 — 「그 자리에서 내가 샀나」를 보려고 만든
+       * 화면인데 거기에 없던 일이 그려진다. 그 체결이 어느 세션이었는지 응답만으로는 알
+       * 방법이 없으므로 **박지 않고 표시한다**(`timeUnknown`). 줄 자체는 남긴다 — 날짜와
+       * 가격·수량은 진짜라 일봉 복기에는 그대로 쓸모가 있다.
+       *
+       * ⚠️ 09/13 까지는 예전 그대로 15:30 이다. 옛 파일과 눈금이 갈리면 안 된다.
+       */
+      const raw = String(x.ord_tm ?? "").trim() || String(x.cnfm_tm ?? "").trim();
+      const known = /^\d{2}:\d{2}:\d{2}$/.test(raw);
+      const unknownAfterEra = !known && afterMarketEra(day);
+      const hhmmss = known ? raw : unknownAfterEra ? "00:00:00" : "15:30:00";
       out.push({
         at: new Date(`${day}T${hhmmss}+09:00`).toISOString(),
+        ...(unknownAfterEra ? { timeUnknown: true as const } : {}),
         code: String(x.stk_cd ?? "").replace(/^\*?A/, "").slice(0, 6),
         name: String(x.stk_nm ?? "").trim(),
         side,

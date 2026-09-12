@@ -1629,7 +1629,15 @@ export async function recapToday(client: KiwoomClient): Promise<SysRecap> {
 
 let recapTimer: ReturnType<typeof setInterval> | null = null;
 let recapSentDay = "";
-/** 마감 뒤 15:50 KST 평일에 한 번 — 오늘 물어본 종목이 있을 때만 알림함으로 */
+/**
+ * 마감 뒤 15:50 KST 평일에 한 번 — 오늘 물어본 종목이 있을 때만 알림함으로.
+ *
+ * ## 9/14 뒤에도 **15:50 그대로다** (2026-09-12, KRX 애프터마켓 개편)
+ *
+ * 「오늘 물어본 종목이 **장 끝나고** 어떻게 됐나」를 그날 안에 알려 주는 것이 이 알림의 값어치다.
+ * 20:10 로 밀면 저녁에야 오는데, 그때는 이미 마감 뒤 정리 알림이 줄줄이 온다. 15:30~16:00 은
+ * 어느 시장도 안 열어 15:50 값이 곧 정규장 종가다 — 새 시간표에서도 옳다.
+ */
 export function startSysScheduler(client: KiwoomClient): void {
   if (recapTimer) return;
   recapTimer = setInterval(async () => {

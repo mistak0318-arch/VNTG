@@ -44,6 +44,68 @@ function zoned(tz: string, now: Date): { day: number; mins: number } {
 const at = (h: number, m = 0): number => h * 60 + m;
 
 /**
+ * **국내장 시간표 — 이 날부터 새 규칙** (2026-09-12).
+ *
+ * 서버의 [marketHours.ts](../../server/src/marketHours.ts) `AFTER_MARKET_FROM` 과 **같은 날**이다.
+ * 웹은 서버 모듈을 못 가져오므로 한 벌을 여기 둔다 — 화면에서 시간표를 세는 곳은
+ * 여기 하나뿐이고, 날짜 상수도 이 줄이 전부다. 컴포넌트마다 시각을 다시 박지 말 것.
+ */
+export const AFTER_MARKET_FROM = "2026-09-14";
+
+/** 한국 날짜 `YYYY-MM-DD` — 개편일을 넘겼는지 보는 데만 쓴다 */
+function krDate(now: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+/**
+ * 국내장 국면 — 화면이 「지금 무슨 값을 보고 있나」를 정하는 데 쓴다.
+ *
+ *   07:50 전      closed   아직 어제다(전날 값으로 메워도 되는 시간)
+ *   07:50~09:00   pre      NXT 프리마켓
+ *   09:00~15:30   regular  KRX 정규장
+ *   15:30~16:00   gap      **9/14 부터만** — 어느 시장도 안 연다
+ *   ~20:00        after    9/13 까지 NXT 애프터 · 9/14 부터 KRX 애프터마켓 + NXT
+ *   20:00 뒤      closed
+ *
+ * ⚠️ **날짜로 가른다.** 9/13 까지는 15:30 직후부터 곧바로 `after` 라 예전과 똑같이 돈다.
+ * `gap` 은 9/14 이후에만 나온다 — 그 30분을 「거래 중」이라고 적으면 화면이 없는 시장을
+ * 있다고 말한다.
+ *
+ * 하루의 경계가 **07:50** 인 것은 예전 그대로다 (2026-08-26 — 「전날 값이 NXT 새 값과
+ * 섞인다」). 07:50 부터는 새 거래일로 보고 어제 값으로 메우지 않는다.
+ *
+ * ⚠️ 시계로만 센다 — 휴장일은 모른다. 서버 판정이 필요하면 `/api/overview/status` 의
+ * `session` 을 쓴다([SessionBadge](./components/SessionBadge.tsx)).
+ */
+export type KrPhase = "closed" | "pre" | "regular" | "gap" | "after";
+
+/**
+ * 오늘이 새 시간표인가 — **글자를 고르는 데만** 쓴다.
+ *
+ * 9/13 까지 애프터는 NXT 뿐이라 화면이 「NXT 애프터마켓」이라고 적었다. 9/14 부터는
+ * KRX 도 같이 열리므로 그 글자가 틀린 말이 된다.
+ */
+export function afterMarketEra(now: Date = new Date()): boolean {
+  return krDate(now) >= AFTER_MARKET_FROM;
+}
+
+export function krPhase(now: Date = new Date()): KrPhase {
+  const { day, mins } = zoned("Asia/Seoul", now);
+  if (day === 0 || day === 6) return "closed";
+  if (mins < at(7, 50)) return "closed";
+  if (mins < at(9)) return "pre";
+  if (mins <= at(15, 30)) return "regular";
+  if (mins >= at(20)) return "closed";
+  if (krDate(now) >= AFTER_MARKET_FROM && mins < at(16)) return "gap";
+  return "after";
+}
+
+/**
  * 시장 갈래.
  *
  * `kr` 은 서버 판정을 쓰므로 여기서 안 센다 — [SessionBadge](./components/SessionBadge.tsx) 가 가른다.

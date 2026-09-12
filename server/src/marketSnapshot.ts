@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { getSection, getSectorStocks, type Sectors, type StockRow } from "./marketOverview.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { isTradingDay } from "./tradingDay.js";
+import { MIN, afterMarketEra, tradingNow } from "./marketHours.js";
 
 /**
  * 전종목 시세 스냅샷.
@@ -133,13 +134,26 @@ let rejectedAt = 0;
  * 그래서 장중에만 5분을 쓰고, 그 밖에는 **다음 개장(09:00 KST)까지** 유지한다.
  * 주말이면 자연히 월요일 09시까지 간다. 공휴일 달력은 없지만, 휴장일에 만료돼 봐야
  * 직전 거래일 종가를 다시 받아올 뿐이라 손해가 없다.
+ *
+ * ## 09/14 부터 애프터마켓도 「장중」이다 (2026-09-12)
+ *
+ * 16:00~20:00 이 실거래가 되면 그동안 값이 계속 움직인다. 그때 만료를 다음 날 09시로
+ * 두면 화면이 **네 시간 낡은 값**을 붙들고 있게 된다. 판정은 `marketHours.tradingNow`
+ * 한 곳에서 한다 — 15:30~16:00 「공백」은 거짓이라 그 30분은 헛조회가 안 난다.
+ *
+ * ⚠️ 09/13 까지는 09:00~15:40 그대로다(그날까지는 `tradingNow` 를 안 쓴다 — 그 함수는
+ * 08:00 프리와 15:30 뒤 NXT 애프터까지 참이라 옛 창과 다르다).
  */
 function expiryOf(at: number): number {
   const d = new Date(at);
   const kst = new Date(d.getTime() + (9 * 60 + d.getTimezoneOffset()) * 60_000);
   const minutes = kst.getHours() * 60 + kst.getMinutes();
+  const date = new Date(at + 9 * 3600_000).toISOString().slice(0, 10);
   const weekday = isTradingDay(); // (2026-09-10 전수 점검) 주말만 보던 것 — 추석엔 5분마다 65업종을 헛불렀다
-  const duringSession = weekday && minutes >= 9 * 60 && minutes < 15 * 60 + 40;
+  const duringSession =
+    weekday &&
+    minutes >= MIN.regularOpen &&
+    (afterMarketEra(date) ? tradingNow(date, minutes) : minutes < 15 * 60 + 40);
 
   if (duringSession) return at + INTRADAY_TTL_MS;
 
@@ -278,7 +292,17 @@ async function build(client: KiwoomClient): Promise<MarketSnapshot> {
     at: Date.now(),
     failedSectors: failed,
     totalSectors: targets.length,
-    // 소수 종목만 0이 아닌 건 시간외 단일가 같은 잡음이라 거래로 보지 않는다
+    /*
+     * 소수 종목만 0이 아닌 건 시간외 단일가 같은 잡음이라 거래로 보지 않는다.
+     *
+     * ⚠️ 9/14 부터 시간외단일가는 **없다.** 그 자리(16:00~20:00)는 KRX 애프터마켓이고
+     * 그건 **실거래**다 — 「잡음」이라는 이 주석의 근거가 그날부터 반만 맞는다 (2026-09-12).
+     *
+     * 그래도 **문턱 10% 는 안 건드린다.** 애프터마켓에서 실제로 몇 %의 종목이 움직이는지는
+     * 9/14 에 관측해 봐야 안다. 지금 바꾸면 근거 없이 바꾸는 것이고, 이 값이 참이 되면
+     * 마감 뒤에도 「거래 중」으로 읽혀 종가 스냅샷이 장중 값으로 덮일 수 있다. 관측이 쌓인
+     * 뒤에 정한다.
+     */
     traded: byCode.size > 0 && moved > byCode.size * 0.1,
   };
 }

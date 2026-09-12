@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { MIN, afterMarketEra, krxAfterMarket } from "./marketHours.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FILE = resolve(__dirname, "..", "data", "stockFlowIntraday.json");
@@ -91,14 +92,26 @@ async function load(): Promise<Store> {
  * 장중인가 — 이 시간 밖에서는 안 쌓는다.
  *
  * 장이 끝나면 `ka10059` 의 오늘 줄은 안 변한다. 그때도 찍으면 **평평한 꼬리**가
- * 몇 시간씩 붙어 곡선의 가로축을 다 먹는다. 08:50 은 장 전 동시호가, 16:00 은
- * 시간외 단일가 전까지다.
+ * 몇 시간씩 붙어 곡선의 가로축을 다 먹는다. 08:50 은 장 전 동시호가다.
+ *
+ * ## 09/13 까지 ~16:00 · 09/14 부터 ~20:00 (2026-09-12, KRX 애프터마켓 개편)
+ *
+ * 16:00 은 **시간외 단일가 전까지**라는 뜻이었다. 9/14 부터 시간외단일가가 폐지되고
+ * 그 자리(16:00~20:00)가 KRX 애프터마켓 — **실거래**가 된다. 그 네 시간을 안 쌓으면
+ * 나중에 되살릴 방법이 없다(이 파일은 화면이 부를 때 한 점씩 찍는 구조다).
+ *
+ * 15:30~16:00 은 어느 시장도 안 열어 값이 안 변하므로 뺀다 — 평평한 꼬리를 안 만든다.
  */
 function inSession(): boolean {
-  const hm = nowHm();
-  const d = new Date(Date.now() + 9 * 3600_000).getUTCDay();
+  const now = new Date(Date.now() + 9 * 3600_000);
+  const d = now.getUTCDay();
   if (d === 0 || d === 6) return false;
-  return hm >= "08:50" && hm <= "16:00";
+  const m = now.getUTCHours() * 60 + now.getUTCMinutes();
+  if (m < 8 * 60 + 50) return false;
+  const date = todayKst();
+  /* 09/13 까지 그대로 — 08:50 ~ 16:00 */
+  if (!afterMarketEra(date)) return m <= MIN.afterOpen;
+  return m <= MIN.regularClose || krxAfterMarket(date, m);
 }
 
 function num(v: unknown): number {

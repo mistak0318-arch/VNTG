@@ -2,6 +2,7 @@ import { Router } from "express";
 import { clearHidden, listHidden, setHidden } from "../hiddenThemes.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { alCode } from "../alCode.js";
+import { krxAfterMarket, sessionOf } from "../marketHours.js";
 import { peekRealtime } from "../realtimeHub.js";
 import { viDirText } from "../realtimeStore.js";
 import { intradayLevels } from "../intraday.js";
@@ -136,19 +137,38 @@ export function createMarketRouter(client: KiwoomClient): Router {
 
   /**
    * 지금 이 현재가가 **어느 시장 값인가** (2026-08-26 — 「NXT 값일 땐 NXT 라고
-   * 표기해 달라」). ka10001 응답엔 없어서 시각으로 라벨을 정한다 — NXT 운영시간
-   * (프리 08:00~08:50 · 정규 09:00~15:30 KRX 와 병행 · 애프터 15:30~20:00).
+   * 표기해 달라」). ka10001 응답엔 없어서 시각으로 라벨을 정한다.
+   *
+   * 시간표는 [marketHours](../marketHours.ts) 하나만 본다 (2026-09-12) — 여기에 시각을
+   * 또 박아 두면 9/14 개편 때 한쪽만 고쳐지고, 「상세 머리엔 애프터인데 배지는 마감」
+   * 같은 어긋남이 생긴다. **날짜로 갈리므로 9/13 까지는 지금 글자 그대로다.**
+   *
+   *   · 9/13 까지  15:30~20:00 → 「NXT 애프터마켓」
+   *   · 9/14 부터  15:30~16:00 → 「거래 없음」(어느 시장도 안 연다)
+   *                16:00~20:00 → 「애프터마켓 (KRX·NXT)」
+   *
+   * 프리 안의 08:50 경계(장전 시간외)는 NXT 쪽 사정이라 marketHours 가 안 나눈다 —
+   * 여기서만 한 번 더 가른다.
    */
   function venueNow(): string {
     const kst = new Date(Date.now() + 9 * 3600_000);
     const day = kst.getUTCDay();
     if (day === 0 || day === 6) return "마감";
     const m = kst.getUTCHours() * 60 + kst.getUTCMinutes();
-    if (m >= 8 * 60 && m < 8 * 60 + 50) return "NXT 프리마켓";
-    if (m >= 8 * 60 + 50 && m < 9 * 60) return "장전 시간외";
-    if (m >= 9 * 60 && m < 15 * 60 + 30) return "정규장";
-    if (m >= 15 * 60 + 30 && m < 20 * 60) return "NXT 애프터마켓";
-    return "마감";
+    const date = kst.toISOString().slice(0, 10);
+    switch (sessionOf(date, m)) {
+      case "프리":
+        return m < 8 * 60 + 50 ? "NXT 프리마켓" : "장전 시간외";
+      case "정규장":
+        return "정규장";
+      case "공백":
+        return "거래 없음";
+      case "애프터":
+        return krxAfterMarket(date, m) ? "애프터마켓 (KRX·NXT)" : "NXT 애프터마켓";
+      default:
+        // 「장전」(08:00 전)·「마감」(20:00 뒤) — 예전처럼 둘 다 마감으로 적는다
+        return "마감";
+    }
   }
 
   // 종목 기본정보 (ka10001) - 종목명, 현재가, 등락률 등

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Request, Response } from "express";
 import { peerIp, sameHex, scryptHex } from "./auth.js";
+import { MIN, afterMarketEra, cleanupStartMinute, krxAfterMarket, tradeTypeAllowed } from "./marketHours.js";
 import { priceMap } from "./cisRun.js";
 import { ensureLiveCode, peekRealtime } from "./realtimeHub.js";
 import { createKiwoomClientFromEnv, KiwoomApiError, KiwoomClient } from "./kiwoomClient.js";
@@ -453,10 +454,13 @@ function kstParts(now = new Date()): { date: string; weekday: number; minute: nu
 }
 
 /**
- * 거래소별 주문 접수 창(분). 🔴 2026-09-14 KRX 애프터시장 신설로 바뀐다 — docs/다음작업_TODO.md.
- *   KRX 08:30~15:30 (동시호가 접수 포함)
- *   NXT 프리 08:00~08:50 · 메인 09:00~15:20 · 애프터 15:30~20:00
- *   SOR 둘의 합집합
+ * 거래소별 주문 접수 창(분).
+ *
+ *   09/13 까지   KRX 08:30~15:30 · NXT 프리 08:00~08:50 · 메인 09:00~15:20 · 애프터 15:30~20:00
+ *   09/14 부터   KRX 08:30~15:30 **+ 애프터 16:00~20:00** (시간표는 `marketHours.ts`)
+ *
+ * 날짜로 가른다 — 오늘 배포해도 9/13 까지는 예전 창 그대로다. 개편 당일 아침에 배포하는 것이
+ * 제일 위험하다(장이 열린 뒤에 틀린 걸 알게 된다).
  */
 const WINDOWS: Record<OrderVenue, Array<[number, number]>> = {
   KRX: [[510, 930]],
@@ -468,11 +472,22 @@ const WINDOWS: Record<OrderVenue, Array<[number, number]>> = {
   SOR: [[480, 1200]],
 };
 
+/** 9/14 부터의 KRX 창 — 정규장 + 애프터마켓. 그 사이 15:30~16:00 은 비어 있다 */
+const WINDOWS_AFTER: Record<OrderVenue, Array<[number, number]>> = {
+  KRX: [
+    [510, 930],
+    [MIN.afterOpen, MIN.afterClose],
+  ],
+  NXT: WINDOWS.NXT,
+  SOR: WINDOWS.SOR,
+};
+
 export function venueOpen(venue: OrderVenue, now = new Date()): boolean {
   const { weekday, minute, date } = kstParts(now);
   if (weekday === 0 || weekday === 6) return false;
   if (KRX_HOLIDAYS.has(date)) return false; // 추석에 낸 주문이 키움까지 갔다가 거절되던 것
-  return WINDOWS[venue].some(([a, b]) => minute >= a && minute <= b);
+  const table = afterMarketEra(date) ? WINDOWS_AFTER : WINDOWS;
+  return table[venue].some(([a, b]) => minute >= a && minute <= b);
 }
 
 /* ── 파일 ─────────────────────────────────────────────────────────────── */
@@ -1358,6 +1373,23 @@ export async function prepareOrder(
   }
   if (!watchSpec && g.marketHoursOnly && !tt.late && !venueOpen(input.venue)) {
     reject(`${input.venue} 가 주문을 받는 시간이 아니다`, input, ip);
+  }
+  /*
+   * **매매구분 × 시간대** (2026-09-12) — 여태 이 검사가 코드 어디에도 없었다. 아무 때나 아무
+   * 구분이나 키움까지 나갔고, 키움이 거절하면 그때 알았다.
+   *
+   * 9/14 부터 애프터마켓(16:00~20:00)은 **지정가·최우선지정가·최유리지정가만** 받는다.
+   * 시장가·조건부지정가·스톱지정가·IOC/FOK 는 없다. 여기서 안 막으면 손절을 시장가로 걸어 둔
+   * 사람이 **애프터에 거절당한 뒤에야** 안다 — 그건 손절이 없는 것과 같다.
+   *
+   * 감시는 제외한다 — 감시의 구분은 낼 때가 아니라 **발동할 때** 정해지고, 그 자리
+   * (`fireAutoWatch`)가 애프터면 발동가 지정가로 바꿔 낸다.
+   */
+  if (!watchSpec) {
+    const { date: nowDate, minute: nowMin } = kstParts();
+    if (!tradeTypeAllowed(String(input.tradeType), nowDate, nowMin)) {
+      reject(`애프터마켓(16:00~20:00)은 ${tt.label} 를 안 받는다 — 지정가·최우선지정가·최유리지정가만 된다`, input, ip);
+    }
   }
   let exit: WatchLeg[] | null = null;
   if (input.exit && input.exit.length > 0) {
@@ -2427,7 +2459,22 @@ const WATCH_FILE = join(DATA_DIR, "orderWatch.json");
 const WATCH_MAX = 20;
 /** 발동 창 — 정규장. 동시호가(08:30~09:00)의 예상체결가로는 발동하지 않는다 */
 const WATCH_FROM = 540;
-const WATCH_TO = 930;
+/**
+ * 감시 발동 창의 **끝**. 09/13 까지 15:30, 09/14 부터 **20:00**.
+ *
+ * 벤티지 (2026-09-12, 선택지 셋 중 ①): 애프터마켓 16:00~20:00 에 손절이 통째로 비는 것을
+ * 막는다. 키움에 걸어 두는 이중 스톱은 **정규장 미체결이라 애프터로 이전되지 않고**, 애프터마켓은
+ * 조건부·스톱 주문 자체를 안 받는다 — 그래서 「스톱을 다시 건다」는 길이 제도상 없다.
+ * 남은 길은 **서버 감시를 늘리는 것**뿐이다.
+ *
+ * 15:30~16:00 은 어느 시장도 안 열지만 창에서 굳이 파내지 않는다 — 그 30분에는 체결이 없어
+ * 값이 안 움직이고, 발동해도 `venueOpen` 이 주문을 막는다. 창을 두 토막으로 나누면 만료
+ * 판정(`validUntil`)까지 갈라져 얻는 것보다 잃는 게 크다.
+ */
+const WATCH_TO_OLD = 930;
+function watchTo(date: string): number {
+  return afterMarketEra(date) ? MIN.afterClose : WATCH_TO_OLD;
+}
 
 /** 호가 단위 (KRX 2023-01) */
 function tickOf(p: number): number {
@@ -2834,7 +2881,7 @@ async function runAutoWatchLocked(main: KiwoomClient): Promise<void> {
     /* 만료 — 유효한 마지막 날의 장이 끝났거나 날이 지났다 */
     for (const r of waiting) {
       if (r.status !== "waiting") continue;
-      if (r.spec.validUntil < date || (r.spec.validUntil === date && minute > WATCH_TO)) {
+      if (r.spec.validUntil < date || (r.spec.validUntil === date && minute > watchTo(date))) {
         r.status = "expired";
         r.firedAt = new Date().toISOString();
         r.msg = "유효기간이 지났다 — 닿지 않았다";
@@ -2863,7 +2910,7 @@ async function runAutoWatchLocked(main: KiwoomClient): Promise<void> {
     if (live.some((r) => r.dualOrdNo)) {
       if (await syncDualStops(rows, date, minute)) changed = true;
     }
-    if (live.length > 0 && isTradingDate(date) && minute >= WATCH_FROM && minute <= WATCH_TO) {
+    if (live.length > 0 && isTradingDate(date) && minute >= WATCH_FROM && minute <= watchTo(date)) {
       for (const r of live) void ensureLiveCode(r.ticket.code);
       const prices = await livePrices(main, [...new Set(live.map((r) => r.ticket.code))]);
       for (const r of live) {
@@ -2931,13 +2978,24 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
    * 마감 동시호가(15:20~15:30)엔 시장가가 단일가 접수다 (2차 검진 🟠B-19). 손절은 나가야 하니
    * 막지 않고 **발동가 지정가**로 바꿔 낸다 — 종가 하나로 뭉개지는 것보다 값이 잡히는 쪽이 낫다.
    */
-  const { minute: nowMin } = kstParts();
-  if (s.exec === "market" && nowMin > 920) {
+  const { minute: nowMin, date: nowDate } = kstParts();
+  /*
+   * ⚠️ **상한이 없었다.** 예전엔 `WATCH_TO = 930` 이 막아 15:21~15:30 만 여기 들어왔는데, 감시 창을
+   * 20:00 까지 넓히는 순간 **16:00~20:00 애프터마켓 전부를 「마감 동시호가」로 오판**한다.
+   * 마감 동시호가는 15:20~15:30 뿐이다 (2026-09-12).
+   */
+  const inCloseAuction = nowMin > MIN.closeAuction && nowMin <= MIN.regularClose;
+  /*
+   * **애프터마켓은 시장가를 안 받는다** — 지정가·최우선·최유리 셋뿐이다(키움 공지 2026-09-11).
+   * 손절은 나가야 하니 막지 않고 마감 동시호가와 **같은 수를 쓴다**: 발동가 지정가로 바꿔 낸다.
+   */
+  const inAfter = krxAfterMarket(nowDate, nowMin);
+  if (s.exec === "market" && (inCloseAuction || inAfter)) {
     tradeType = "0";
     price = s.trigger;
     /* 값이 바뀌었으면 금액도 바뀐다 — 한도 판정과 알림이 옛 값으로 남았다 (2026-09-08 검진 17) */
     amount = price * base.qty;
-    await appendLog({ kind: "watch", side: base.side, code: base.code, name: base.name, qty: base.qty, msg: `마감 동시호가 — 시장가 대신 발동가 ${s.trigger.toLocaleString()} 지정가로 (${r.id})` });
+    await appendLog({ kind: "watch", side: base.side, code: base.code, name: base.name, qty: base.qty, msg: `${inAfter ? "애프터마켓(시장가 불가)" : "마감 동시호가"} — 시장가 대신 발동가 ${s.trigger.toLocaleString()} 지정가로 (${r.id})` });
     /*
      * 이 바꿔치기는 **안 나갈 수도 있다** (2026-09-08 검진 16) — 갭으로 발동가 아래에서 놀면
      * 지정가에 안 닿고 그대로 종가를 맞는다. 조용히 두면 손절이 안 된 줄도 모른다. 알린다.
@@ -3298,12 +3356,19 @@ function filledOf(fl: OpenRow[], ordNo: string): number {
   return n;
 }
 
-/** 이중 스톱이 먼저 팔았으면 감시를 「체결」로 접는다. 장이 끝나면 당일 스톱 번호를 비운다 */
+/**
+ * 이중 스톱이 먼저 팔았으면 감시를 「체결」로 접는다. 장이 끝나면 당일 스톱 번호를 비운다.
+ *
+ * ⚠️ 여기 경계는 **정규장 마감(15:30) 그대로**다 — 감시 창(`watchTo`)이 9/14 부터 20:00 로
+ * 늘어나도 이건 안 따라간다. 키움 스톱은 **정규장 미체결 주문**이고, 개편 뒤 정규장 미체결은
+ * 애프터마켓으로 **이전되지 않는다**(키움 공지 2026-09-11). 즉 15:30 이 지나면 그 스톱은 실제로
+ * 없는 것이고, 번호를 들고 있으면 「미체결에 있나」를 헛물켠다.
+ */
 async function syncDualStops(rows: AutoWatch[], date: string, minute: number): Promise<boolean> {
   let changed = false;
   const targets = rows.filter((r) => r.status === "waiting" && r.dualOrdNo);
   if (targets.length === 0) return false;
-  if (minute > WATCH_TO || !isTradingDate(date) || targets.some((r) => r.dualDate !== date)) {
+  if (minute > WATCH_TO_OLD || !isTradingDate(date) || targets.some((r) => r.dualDate !== date)) {
     /*
      * (2026-09-10 전수 점검) 장이 끝나 오늘 스톱 번호를 비우기 **전에** 체결을 한 번 본다 — 15:20~15:30 동시호가에
      * 스톱이 팔린 것을 예전엔 번호만 지워 놓쳤다(감시는 waiting 으로 남고 손실·쿨다운도 안 잡혔다).
@@ -3311,13 +3376,13 @@ async function syncDualStops(rows: AutoWatch[], date: string, minute: number): P
      */
     let fl: OpenRow[] | null | undefined;
     for (const r of targets) {
-      if (r.dualDate === date && minute > WATCH_TO) {
+      if (r.dualDate === date && minute > WATCH_TO_OLD) {
         if (fl === undefined) fl = await fills().catch(() => null);
         if (fl === null) continue;
         if (await applyDualFill(r, fl)) changed = true;
         if (r.status !== "waiting") continue; // 체결로 접힘 — 번호는 기록으로 남긴다
       }
-      if (r.dualDate !== date || minute > WATCH_TO) {
+      if (r.dualDate !== date || minute > WATCH_TO_OLD) {
         r.dualOrdNo = undefined;
         changed = true;
       }
@@ -3555,7 +3620,7 @@ export function startOrderHeartbeat(main: KiwoomClient): void {
     const { date, minute } = kstParts();
     const trading = isTradingDate(date);
     /* ① 감시 루프가 멎었나 — 정규장에 90초 넘게 안 돌았고 기다리는 감시가 있으면 10분에 한 번 알린다 */
-    if (trading && minute >= WATCH_FROM && minute <= WATCH_TO && lastWatchTick > 0 && Date.now() - lastWatchTick > 90_000) {
+    if (trading && minute >= WATCH_FROM && minute <= watchTo(date) && lastWatchTick > 0 && Date.now() - lastWatchTick > 90_000) {
       const rows = await readWatches().catch(() => [] as AutoWatch[]);
       if (rows.some((r) => r.status === "waiting") && Date.now() - lastDeadAlert > 600_000) {
         lastDeadAlert = Date.now();
@@ -3576,8 +3641,13 @@ export function startOrderHeartbeat(main: KiwoomClient): void {
         "order",
       ).catch(() => undefined);
     }
-    /* ③ 15:40 정합성 — 키움 체결 중 우리 기록에 없는 주문번호 */
-    if (trading && minute === 940 && reconciledDay !== date) {
+    /*
+     * ③ 정합성 — 키움 체결 중 우리 기록에 없는 주문번호. 09/13 까지 15:40, 09/14 부터 **20:10**.
+     *
+     * 애프터마켓(16:00~20:00)이 실거래가 되면서 15:40 에 대조하면 그 뒤 4시간의 체결이 매일
+     * 「우리 기록에 없는 체결」로 잡힌다 — 경보가 늘 울리면 아무도 안 본다. 장이 다 끝난 뒤에 센다.
+     */
+    if (trading && minute === cleanupStartMinute(date) && reconciledDay !== date) {
       reconciledDay = date;
       try {
         const [fl, log] = await Promise.all([fills(), readLog(3000)]);

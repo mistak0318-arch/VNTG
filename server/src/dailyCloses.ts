@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { loadThemes } from "./naverThemes.js";
 import { getCommonStockCodes } from "./stockListCache.js";
+import { MIN, afterMarketEra, dayFullySettled } from "./marketHours.js";
+import { getMarketSnapshot } from "./marketSnapshot.js";
 
 /**
  * 전종목 일봉 종가 캐시 — **누적 수익률의 바탕.**
@@ -24,8 +26,9 @@ import { getCommonStockCodes } from "./stockListCache.js";
  *
  * ## 언제 받나
  *
- * **장 마감 뒤(16시 이후) 하루 한 번.** 장중에 받으면 그날 종가가 아직 아니라서,
- * 다음 날 다시 받을 때까지 어제와 오늘이 섞인 값을 쓰게 된다.
+ * **장 마감 뒤 하루 한 번** — 09/13 까지 16시 이후, 09/14 부터는 애프터마켓이 끝난 **20시 뒤**
+ * (2026-09-12 KRX 애프터마켓 개편. 판정은 `marketHours.dayFullySettled`). 장중에 받으면 그날
+ * 종가가 아직 아니라서, 다음 날 다시 받을 때까지 어제와 오늘이 섞인 값을 쓰게 된다.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -81,9 +84,22 @@ export interface DayBar {
   o: number;
   h: number;
   l: number;
+  /**
+   * **정규장 종가** — 뜻이 고정돼 있다 (2026-09-12, KRX 애프터마켓 개편).
+   *
+   * 신호등 표본·검증표·백테스트가 전부 이 칸을 「정규장 종가」로 알고 쌓여 있다. 9/14 부터
+   * 16:00~20:00 이 실거래가 돼도 **여기 뜻은 안 바꾼다** — 바꾸면 9/14 를 경계로 과거와 안 맞는다.
+   * 애프터 종가는 아래 `ca` 로 따로 쌓고, 무엇을 쓸지는 나중에 정한다(벤티지 2026-09-12:
+   * "둘 다 쌓고 나중에 정한다"). 화면·신호등은 당분간 `c` 다.
+   */
   c: number;
   /** 거래량(주) */
   v: number;
+  /**
+   * **애프터마켓 종가** (9/14~). 옵션이라 **옛 줄은 그대로 읽힌다** — 없으면 「안 쟀다」이지
+   * 「0 이다」가 아니다. 같은 날을 두 번 받았고 두 값이 달랐을 때만 채워진다(`mergeBars`).
+   */
+  ca?: number;
 }
 
 interface Store {
@@ -241,13 +257,98 @@ async function fetchOne(client: KiwoomClient, code: string): Promise<DayBar[]> {
  * ⚠️ 다만 **분할 전후가 섞인 구간**은 남는다. 응답이 닿지 않는 오래된 날은 옛
  * 눈금 그대로다. 그 종목의 아주 오래된 값은 그만큼 못 믿는다 — 5년을 쌓기로 한
  * 이상 피할 수 없는 대가이고, 숨기지 않는다.
+ *
+ * ## ⚠️ **딱 하루만 예외** — 애프터 값이 정규장 종가를 덮지 않게 (2026-09-12)
+ *
+ * 9/14 부터 16:00~20:00 이 KRX 애프터마켓(실거래)이다. 같은 날을 두 번 받으면
+ * (정규장 뒤 한 번 · 애프터 뒤 한 번) 나중 응답의 종가가 먼저 받은 정규장 종가를
+ * **조용히 덮는다.** `c` 는 정규장 종가라는 뜻으로 표본·검증표·백테스트가 쌓여 있으니
+ * 뜻이 바뀌면 9/14 를 경계로 과거와 안 맞는다.
+ *
+ * 그래서 `opts.afterEraDay` 로 **그날 하루만** 먼저 받은 종가를 `c` 에 남기고 새 종가를
+ * `ca` 에 따로 적는다. 시·고·저·거래량은 애프터까지 포함한 쪽이 그날의 전부라 새 값을 쓴다.
+ * 나머지 날짜는 예전 그대로 **새 값이 이긴다**(수정주가 때문에 반드시 그래야 한다).
  */
-export function mergeBars(oldBars: DayBar[], got: DayBar[], keep: number): DayBar[] {
+export function mergeBars(
+  oldBars: DayBar[],
+  got: DayBar[],
+  keep: number,
+  /**
+   * 그날(YYYYMMDD)만 정규장 종가를 지킨다. 9/13 까지는 안 준다 — 주면 안 된다.
+   *
+   * `regularClose` 는 **15:40 에 따로 찍어 둔 그 종목의 정규장 종가**다(`captureRegularCloses`).
+   * 이게 있으면 먼저 받은 줄이 있든 없든 `c` 가 정규장 종가로 고정된다 — 일봉을 하루 한 번만
+   * 받아도(20:10) 두 값이 다 남는다. 없으면 예전처럼 「먼저 받은 값이 정규장」으로 본다.
+   */
+  opts?: { afterEraDay?: string; regularClose?: number },
+): DayBar[] {
   if (got.length === 0) return oldBars.slice(-keep);
   const by = new Map<string, DayBar>();
   for (const b of oldBars) by.set(b.d, b);
-  for (const b of got) by.set(b.d, b); // 새 값이 이긴다
+  for (const b of got) {
+    const prev = by.get(b.d);
+    if (opts?.afterEraDay && b.d === opts.afterEraDay) {
+      /* 15:40 에 찍어 둔 정규장 종가가 있으면 그것이 `c` 다 — 없으면 먼저 받은 값 */
+      const reg = opts.regularClose && opts.regularClose > 0 ? opts.regularClose : prev && prev.c > 0 ? prev.c : 0;
+      if (reg > 0 && reg !== b.c) {
+        by.set(b.d, { ...b, c: reg, ca: b.c });
+        continue;
+      }
+    }
+    by.set(b.d, b); // 새 값이 이긴다
+  }
   return [...by.values()].sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0)).slice(-keep);
+}
+
+/* ------------------------------------------------------------------ */
+/* 정규장 종가 찍어 두기 (9/14~)                                         */
+/* ------------------------------------------------------------------ */
+
+const RC_DIR = join(DIR, "regularCloses");
+
+/**
+ * **15:40 에 전종목 정규장 종가를 찍어 둔다** (2026-09-12).
+ *
+ * ## 왜 필요한가
+ *
+ * 9/14 부터 일봉 한 바퀴는 20:10 에 돈다(애프터마켓이 20:00 에 끝나야 그날이 굳는다).
+ * 그런데 그 응답의 종가는 **애프터까지 포함한 값**이다 — 그대로 쓰면 `c`(정규장 종가라는 뜻으로
+ * 표본·검증표·백테스트가 쌓여 있는 칸)가 9/14 를 경계로 조용히 뜻이 바뀐다.
+ *
+ * 일봉을 하루 두 번 받으면 되지만 3,900종목 × 220ms 짜리 한 바퀴를 두 번 도는 값이다.
+ * **전종목 스냅샷**(`getMarketSnapshot`, 업종별 조회 몇 십 번)이면 같은 것을 훨씬 싸게 얻는다 —
+ * 필요한 건 그 시각의 현재가 하나뿐이다.
+ *
+ * 날짜별 파일로 남긴다. 20:10 에 일봉을 받을 때 `mergeBars` 가 이 값을 `c` 로 박고 응답 종가를
+ * `ca` 로 옮긴다. 파일이 없으면(서버가 꺼져 있었다면) 예전 규칙으로 떨어진다 — 그때는 `c` 가
+ * 애프터 종가가 되므로, 그날 줄은 `ca` 가 비어 「둘을 못 갈랐다」가 드러난다.
+ */
+export async function captureRegularCloses(client: KiwoomClient): Promise<number> {
+  const date = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  if (!afterMarketEra(date)) return 0; // 9/13 까지는 일봉 한 바퀴가 곧 정규장 종가다
+  const snap = await getMarketSnapshot(client);
+  const out: Record<string, number> = {};
+  for (const [code, st] of snap.byCode) {
+    const p = Math.abs(Number(st.price));
+    if (Number.isFinite(p) && p > 0) out[code] = p;
+  }
+  const n = Object.keys(out).length;
+  if (n === 0) return 0;
+  await mkdir(RC_DIR, { recursive: true });
+  await writeFile(join(RC_DIR, `${date}.json`), JSON.stringify({ at: new Date().toISOString(), closes: out }), "utf-8");
+  console.log(`[일봉] 정규장 종가 ${n}종목 찍음 (${date})`);
+  return n;
+}
+
+/** 그날 찍어 둔 정규장 종가 — 없으면 빈 map */
+export async function loadRegularCloses(date: string): Promise<Map<string, number>> {
+  try {
+    const raw = await readFile(join(RC_DIR, `${date}.json`), "utf-8");
+    const j = JSON.parse(raw) as { closes?: Record<string, number> };
+    return new Map(Object.entries(j.closes ?? {}));
+  } catch {
+    return new Map();
+  }
 }
 
 /**
@@ -319,6 +420,15 @@ export async function buildCloses(client: KiwoomClient): Promise<Store> {
     const doneToday = new Set(
       prev.builtAt.slice(0, 10) === todayKey ? Object.keys(prev.bars ?? {}) : [],
     );
+    /*
+     * 9/14 부터는 **오늘 줄만** 정규장 종가를 지킨다 (2026-09-12) — `mergeBars` 머리 주석 참고.
+     * 9/13 까지는 안 준다(`undefined`). 그래야 그날까지 병합이 한 글자도 안 달라진다.
+     */
+    /* 15:40 에 찍어 둔 정규장 종가 — 있으면 `c` 가 그것으로 고정된다 (2026-09-12) */
+    const regClose = afterMarketEra(todayKey) ? await loadRegularCloses(todayKey) : new Map<string, number>();
+    const mergeOpts = afterMarketEra(todayKey)
+      ? { afterEraDay: todayKey.replace(/-/g, "") }
+      : undefined;
 
     const flush = async () => {
       /*
@@ -345,7 +455,10 @@ export async function buildCloses(client: KiwoomClient): Promise<Store> {
         try {
           const got = await fetchOne(client, code);
           /* **이어 붙인다.** 갈아치우면 보관 일수를 늘려도 과거가 안 자란다 */
-          if (got.length > 0) bars[code] = mergeBars(bars[code] ?? [], got, keep);
+          if (got.length > 0) {
+            const opts = mergeOpts ? { ...mergeOpts, regularClose: regClose.get(code) } : undefined;
+            bars[code] = mergeBars(bars[code] ?? [], got, keep, opts);
+          }
         } catch {
           /* 이 종목만 건너뛴다 — 지난번 값이 있으면 그대로 남는다 */
         }
@@ -378,7 +491,15 @@ let timer: NodeJS.Timeout | null = null;
 /**
  * 장 마감 뒤 하루 한 번.
  *
- * 16시 이후에만 돈다 — 장중에 받으면 그날 종가가 아직 아니다.
+ * 09/13 까지는 **16시 이후**에만 돈다 — 장중에 받으면 그날 종가가 아직 아니다.
+ *
+ * ## 09/14 부터는 **20시 뒤** (2026-09-12, KRX 애프터마켓 개편)
+ *
+ * 16:00 은 하필 **애프터마켓 개장 시각과 정확히 겹친다.** 그대로 두면 16시 첫 틱에
+ * 한 바퀴가 시작되고, 아래 `builtAt === today` 가드 때문에 **애프터 한복판(16~17시) 값이
+ * 그날 종가로 굳은 뒤 다시는 안 받는다.** 애프터가 끝나야(20:00) 그날이 확정된다 —
+ * 판정은 `marketHours.dayFullySettled` 한 곳에서 한다.
+ *
  * 테마 분류가 아직 없으면 아무것도 안 한다(받을 대상이 없다).
  */
 export function startClosesScheduler(client: KiwoomClient): void {
@@ -398,7 +519,23 @@ export function startClosesScheduler(client: KiwoomClient): void {
      * 첫 한 바퀴는 언제든 돈다 — 빈 화면으로 두는 것보다 낫다.
      * (그날 종가가 아직 아닐 수는 있지만, 다음 마감 뒤에 어차피 다시 받는다)
      */
-    if (kst.getUTCHours() < 16 && Object.keys(store.closes).length > 0) return;
+    /*
+     * 09/13 까지: 16시 전이면 안 돈다 (예전 그대로).
+     * 09/14 부터: 애프터마켓이 끝난 **20:00 뒤**에만. 16:00 은 애프터 개장 시각이라 그때 받으면
+     *             장중 값이 그날 종가로 굳는다 (2026-09-12).
+     */
+    const nowMin = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+    /*
+     * **정규장 종가를 먼저 찍는다** (2026-09-12) — 15:40~16:00 사이 한 번. 9/14 부터 일봉 한 바퀴는
+     * 20:10 에 도는데 그 응답의 종가는 애프터까지 포함한 값이다. 그대로 쓰면 `c` 의 뜻이 바뀐다.
+     * 전종목 스냅샷이라 값싸다 — 자세한 사정은 `captureRegularCloses` 머리 주석.
+     * 30분 틱이라 15:40~16:00 창 안에 한 번은 들어온다. 이미 찍었으면 그 함수가 파일을 덮을 뿐이다.
+     */
+    if (afterMarketEra(today) && nowMin > MIN.regularClose && nowMin < MIN.afterOpen) {
+      await captureRegularCloses(client).catch((e) => console.warn("[일봉] 정규장 종가 못 찍음", e instanceof Error ? e.message : e));
+    }
+    const settled = afterMarketEra(today) ? dayFullySettled(today, nowMin) : kst.getUTCHours() >= 16;
+    if (!settled && Object.keys(store.closes).length > 0) return;
     const themes = await loadThemes();
     if (themes.themes.length === 0) return;
     try {
@@ -410,5 +547,5 @@ export function startClosesScheduler(client: KiwoomClient): void {
   };
   setTimeout(() => void tick(), 150_000); // 기동 직후는 다른 초기화에 자리를 내준다
   timer = setInterval(() => void tick(), 30 * 60_000);
-  console.log("[dailyCloses] 일봉 캐시 스케줄러 시작 (하루 1회, 16시 이후)");
+  console.log("[dailyCloses] 일봉 캐시 스케줄러 시작 (하루 1회 — 09/13 까지 16시 이후, 09/14 부터 20시 뒤)");
 }

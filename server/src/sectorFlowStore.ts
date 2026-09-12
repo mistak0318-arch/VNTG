@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { cleanupStartMinute } from "./marketHours.js";
 
 /**
  * 업종별 투자자 순매수 누적.
@@ -249,12 +250,19 @@ function hasNoTrading(day: SectorFlowDay): boolean {
  * **장이 끝나기 전에 오늘을 저장하면 안 된다.** 진행 중인 값이 그날의 최종값으로
  * 굳어 버리고, 다음날 다시 받지도 않는다(이미 있는 날짜는 건너뛰므로).
  * 실측에서 8/20 자리에 8/19 값이 들어가 있던 게 이것이다.
+ *
+ * ## 09/13 까지 15:40 · 09/14 부터 20:10 (2026-09-12, KRX 애프터마켓 개편)
+ *
+ * 16:00~20:00 KRX 애프터마켓은 **실거래**라 그 체결이 그날 투자자별 수급에 들어간다.
+ * 15:40 에 굳히면 그 네 시간이 통째로 빠진 값이 그날 수급으로 남는다 — 신호등의 5일
+ * 누적까지 그만큼 틀어진다. 마감 뒤 정리와 같은 시각을 쓴다(`marketHours.cleanupStartMinute`).
  */
 function todaySettled(): boolean {
   const now = new Date();
   const mins = now.getHours() * 60 + now.getMinutes();
-  // 15:30 장 마감 + 집계 여유 10분
-  return mins >= 15 * 60 + 40;
+  const date = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+  // 09/13 까지 15:30 장 마감 + 집계 여유 10분 · 09/14 부터 애프터 마감(20:00) + 10분
+  return mins >= cleanupStartMinute(date);
 }
 
 function ymd(d: Date): string {
@@ -326,7 +334,8 @@ export async function backfillSectorFlow(
     /*
      * ⚠️ **오늘은 이미 있어도 다시 받는다** (2026-08-31).
      *
-     * 저장은 15:40(마감 + 집계 여유 10분)에 한 번 하고, 이미 있는 날짜는 건너뛴다.
+     * 저장은 마감 뒤 한 번 하고(09/13 까지 15:40 · 09/14 부터 20:10 — `todaySettled`), 이미 있는
+     * 날짜는 건너뛴다.
      * 그런데 **거래소가 그 뒤에 집계를 정정한다.** 실측(8/28 코스피 외국인):
      *
      *   15:40 저장분   -20,556억

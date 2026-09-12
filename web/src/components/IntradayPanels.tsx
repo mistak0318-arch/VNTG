@@ -120,7 +120,12 @@ export function IntradayFlow({ code, basePrice }: { code: string; basePrice: num
 
   const rate = base > 0 ? ((last - base) / base) * 100 : 0;
 
-  // 정규장 시작(09:00)·종료(15:30) 지점을 찾아 세 구간으로 나눈다
+  /*
+   * 정규장 시작(09:00)·종료(15:30) 지점을 찾아 세 구간으로 나눈다.
+   * 앞뒤 어두운 구간은 **정규장 밖**이다 — 9/13 까지는 NXT 시간외뿐이고,
+   * 9/14 부터는 16:00~20:00 KRX 애프터마켓도 여기 들어온다 (2026-09-12).
+   * 봉이 실제로 있는 자리를 보고 가르므로 시각을 다시 셀 일은 없다.
+   */
   const openIdx = points.findIndex((p) => p.time >= "0900");
   const closeIdx = points.findIndex((p) => p.time > "1530");
 
@@ -246,7 +251,7 @@ export function IntradayFlow({ code, basePrice }: { code: string; basePrice: num
         </span>
       </div>
       <div className="table-note">
-        3분봉 종가 기준 · 점선은 전일종가 · 어두운 구간은 NXT(넥스트레이드) 시간외
+        3분봉 종가 기준 · 점선은 전일종가 · 어두운 구간은 정규장 밖(프리·애프터)
       </div>
     </div>
   );

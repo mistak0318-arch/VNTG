@@ -641,6 +641,16 @@ export async function trackSummary(): Promise<TrackSummary> {
  *
  * 15:40 에 돈다 — 15:30 마감 직후는 종가가 아직 안 굳은 종목이 있다.
  * 평일만, 하루 한 번만. 결과 갱신은 편입 뒤에 이어서 한다(같은 일봉을 쓰므로).
+ *
+ * ## ⚠️ 이 스케줄러는 **꺼져 있다** — 아래 창은 안 쓰인다 (2026-09-12 확인)
+ *
+ * `index.ts` 에서 `startSignalTrackScheduler` 호출이 주석 처리돼 있고, 실제로는
+ * `afterClose` 파이프라인이 ④번 차례로 `startEnroll(client, true)` 를 부른다. 그래서
+ * **KRX 애프터마켓 개편(9/14)으로 파이프라인이 20:10 으로 옮겨 가도 여기는 안 고쳤다** —
+ * 시각이 아니라 차례로 도는 쪽이 이미 맞는 순서다.
+ *
+ * 다시 켤 일이 생기면 아래 15:40~16:10 창을 `marketHours.cleanupStartMinute` 기준으로
+ * 옮겨야 한다. 9/14 부터 그 시각은 **일봉보다 네 시간 반 앞**이다.
  */
 export function startSignalTrackScheduler(client: KiwoomClient): void {
   const CHECK_MS = 5 * 60_000;

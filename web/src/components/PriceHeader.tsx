@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, fmtAbsNum, fmtNum, type ExchangeQuote, type MarkWhy, type RawRecord } from "../api";
 import { PeriodReturns, type LastSession } from "./PeriodReturns";
+import { afterMarketEra, krPhase, type KrPhase } from "../marketSession";
 
 /**
  * 종목 상세 맨 위에 항상 붙는 시세 요약.
@@ -193,38 +194,36 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
    * 부르는 건 맞지만, **큰 숫자까지 종가라고 하면 안 된다** — 그 시간대에 실제로
    * 움직이는 값은 NXT 쪽이기 때문이다.
    * 그래서 큰 숫자는 언제나 "지금 값"으로 두고, 어디가 만든 값인지를 옆에 적는다.
-   * (정규장 09:00~15:30 · NXT 프리 08:00~ · NXT 애프터 ~20:00 — 당일 흐름 차트와 같은 기준)
+   * (정규장 09:00~15:30 · NXT 프리 08:00~ · 애프터 ~20:00 — 당일 흐름 차트와 같은 기준)
+   *
+   * ⚠️ 시간표를 여기서 세지 않는다 (2026-09-12) — [marketSession](../marketSession.ts) 의
+   * `krPhase()` 가 **날짜로 갈라서** 준다. 이 컴포넌트는 서버 상태(`/api/overview/status`)를
+   * 안 받으므로 웹 쪽 한 벌을 쓴다. 9/14 부터 **15:30~16:00 이 `gap`** 으로 새로 생긴다 —
+   * 정규장은 끝났고 애프터마켓은 아직인 30분이라, 그때 「거래 중」이라고 적으면 거짓말이다.
+   * 9/13 까지는 `gap` 이 아예 안 나오므로 화면이 예전 그대로다.
    */
-  const kst = new Date(Date.now() + 9 * 3600_000);
-  const mins = kst.getUTCHours() * 60 + kst.getUTCMinutes();
-  const weekday = kst.getUTCDay() !== 0 && kst.getUTCDay() !== 6;
-  /*
-   * 하루의 경계는 **07:50** 이다 (2026-08-26 — 「전날 값이 NXT 새 값과 섞인다」).
-   * 07:50 부터는 새 거래일로 보고 어제 값으로 메우지 않는다 — 증권 앱들이 그 시각에
-   * 표시를 리셋하는 것과 같은 규칙. 전날 시세는 마감 국면(20:00~다음날 07:50)에 보인다.
-   */
-  const phase: "pre" | "regular" | "after" | "closed" = !weekday
-    ? "closed"
-    : mins < 7 * 60 + 50
-      ? "closed"
-      : mins < 9 * 60
-        ? "pre"
-        : mins <= 15 * 60 + 30
-          ? "regular"
-          : mins < 20 * 60
-            ? "after"
-            : "closed";
+  const phase = krPhase();
   const closed = phase === "closed";
   /** 어제 값으로 메워도 되는가 — 마감 국면에만. 새 거래일엔 빈 칸이 정직하다 */
   const fillOk = closed;
-  const PHASE_LABEL: Record<typeof phase, string> = {
+  /** 9/14~ 애프터엔 KRX 도 있다. 그 전엔 NXT 혼자라 글자가 달라야 한다 */
+  const krxInAfter = afterMarketEra();
+  const PHASE_LABEL: Record<KrPhase, string> = {
     pre: "NXT 프리마켓",
     regular: "정규장",
-    after: "NXT 애프터마켓",
+    gap: "거래 없음 (16:00 애프터 개장)",
+    after: krxInAfter ? "애프터마켓 (KRX·NXT)" : "NXT 애프터마켓",
     closed: "장 마감",
   };
-  /** KRX 는 정규장 끝나면 그 값이 종가다 */
-  const krxDone = phase === "after" || phase === "closed";
+  /** KRX 는 정규장 끝나면 그 값이 종가다 — 공백(15:30~16:00)도 이미 끝난 뒤다 */
+  const krxDone = phase === "after" || phase === "gap" || phase === "closed";
+  /**
+   * NXT 줄 옆에 적는 한마디.
+   *
+   * 공백 구간에는 NXT 도 쉰다(9/14~ 15:30~16:00) — 마지막 값이 그대로 떠 있는데
+   * 「거래 중」이라고 적혀 있으면 멈춘 화면을 고장으로 본다.
+   */
+  const nxtWhen = phase === "closed" ? "20:00 마감" : phase === "gap" ? "16:00 재개" : "거래 중";
 
   const sig = String(info.pre_sig ?? "");
   const sign = sigClass(sig);
@@ -267,7 +266,10 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
         ? "NXT 시세"
         : "전날 종가"
       : phase === "after"
-        ? "NXT 시세"
+        ? /* 9/14~ 이 시간엔 KRX 도 체결이 난다 — 통합(_AL) 값을 「NXT 시세」라고만 하면 틀린다 */
+          krxInAfter
+          ? "애프터 시세"
+          : "NXT 시세"
         : krxDone
           ? "종가"
           : "현재가";
@@ -349,7 +351,7 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
               {nxt.changeRate > 0 ? "+" : ""}
               {nxt.changeRate.toFixed(2)}%
             </span>
-            <span className="ph-when">{phase === "closed" ? "20:00 마감" : "거래 중"}</span>
+            <span className="ph-when">{nxtWhen}</span>
           </div>
         )}
       </div>
@@ -447,7 +449,7 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
                 {nxt.changeRate > 0 ? "+" : ""}
                 {nxt.changeRate.toFixed(2)}%
               </em>
-              <em className="ph-when">{phase === "closed" ? "20:00 마감" : "거래 중"}</em>
+              <em className="ph-when">{nxtWhen}</em>
             </span>
           )}
         </div>
