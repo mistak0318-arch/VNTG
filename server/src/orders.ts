@@ -4,7 +4,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Request, Response } from "express";
 import { peerIp, sameHex, scryptHex } from "./auth.js";
-import { MIN, afterMarketEra, cleanupStartMinute, krxAfterMarket, tradeTypeAllowed } from "./marketHours.js";
+import { MIN, afterMarketEra, afterMarketTradable, cleanupStartMinute, krxAfterMarket, tradeTypeAllowed } from "./marketHours.js";
+import { getStockIndex } from "./stockListCache.js";
 import { priceMap } from "./cisRun.js";
 import { ensureLiveCode, peekRealtime } from "./realtimeHub.js";
 import { createKiwoomClientFromEnv, KiwoomApiError, KiwoomClient } from "./kiwoomClient.js";
@@ -1389,6 +1390,18 @@ export async function prepareOrder(
     const { date: nowDate, minute: nowMin } = kstParts();
     if (!tradeTypeAllowed(String(input.tradeType), nowDate, nowMin)) {
       reject(`애프터마켓(16:00~20:00)은 ${tt.label} 를 안 받는다 — 지정가·최우선지정가·최유리지정가만 된다`, input, ip);
+    }
+    /*
+     * **ETF·ETN 은 애프터마켓 거래 대상이 아니다** (2026-09-12 — 뉴시스 09-12 기사).
+     * 여기서 막지 않으면 키움 거절 메시지로 알게 된다 — 우리가 먼저 이유를 말하는 편이 낫다.
+     * 관리·투자경고·초저유동성도 제외인데 그건 목록으로 못 가린다(상태 조회가 따로 필요하다).
+     */
+    if (krxAfterMarket(nowDate, nowMin)) {
+      const oc = orderClient();
+      const entry = oc ? await getStockIndex(oc).then((m) => m.get(input.code ?? "")).catch(() => undefined) : undefined;
+      if (entry && !afterMarketTradable(entry.marketName)) {
+        reject(`애프터마켓은 ${entry.marketName || "이 종목"} 을 안 받는다 — ETF·ETN·코넥스·관리·투자경고 종목은 제외다`, input, ip);
+      }
     }
   }
   let exit: WatchLeg[] | null = null;
@@ -2979,6 +2992,23 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
    * 막지 않고 **발동가 지정가**로 바꿔 낸다 — 종가 하나로 뭉개지는 것보다 값이 잡히는 쪽이 낫다.
    */
   const { minute: nowMin, date: nowDate } = kstParts();
+  /*
+   * **애프터마켓에 못 나가는 종목은 발동시키지 않는다** (2026-09-12 — 뉴시스 09-12 기사).
+   *
+   * 애프터마켓(9/14~ 16:00~20:00)은 **ETF·ETN 을 안 받는다**(자산운용사·LP 부담). 모르고 내면
+   * 키움이 거절하고, 거절은 `failed` 라 **감시가 그 자리에서 죽는다** — 손절이 사라진다는 뜻이다.
+   * 보류해 두면 다음 거래일 정규장에 그대로 살아난다.
+   *
+   * 종목 목록은 캐시라 조회가 안 는다. 관리·투자경고·초저유동성도 제외인데 그건 여기서 못
+   * 가린다(상태 조회가 따로 필요하다) — 거절로 알게 되고, 매도 감시는 거절을 만나도 버틴다.
+   */
+  if (krxAfterMarket(nowDate, nowMin)) {
+    const oc = orderClient();
+    const entry = oc ? await getStockIndex(oc).then((m) => m.get(base.code)).catch(() => undefined) : undefined;
+    if (entry && !afterMarketTradable(entry.marketName)) {
+      return holdOff(`애프터마켓 거래 대상이 아니다 (${entry.marketName || "?"} — ETF·ETN 제외) · 다음 정규장에 다시 본다`);
+    }
+  }
   /*
    * ⚠️ **상한이 없었다.** 예전엔 `WATCH_TO = 930` 이 막아 15:21~15:30 만 여기 들어왔는데, 감시 창을
    * 20:00 까지 넓히는 순간 **16:00~20:00 애프터마켓 전부를 「마감 동시호가」로 오판**한다.
