@@ -18611,6 +18611,19 @@ a.watch-btn { text-decoration: none; }
 }
 .top-strip .mobile-title { display: none; }
 .top-strip .mobile-clock { font-size: 0.8rem; font-weight: 700; padding: 1px 7px; margin-left: 0; }
+/*
+ * 시각 뒤의 날짜 (2026-09-14). **시각보다 작고 흐리게** — 날짜는 하루에 한 번 바뀌는 값이라
+ * 시각과 같은 무게로 두면 초마다 뛰는 쪽이 안 보인다. 「오늘이 며칠이더라」에만 답하면 된다.
+ */
+.mc-date {
+  font-style: normal;
+  font-size: 0.78em;
+  font-weight: 700;
+  margin-left: 5px;
+  padding-left: 5px;
+  border-left: 1px solid color-mix(in srgb, var(--accent, #e6a23c) 40%, transparent);
+  opacity: 0.75;
+}
 @media (max-width: 899px) {
   .top-strip {
     position: sticky; top: 0; z-index: 20; background: var(--bg); border-bottom: 1px solid var(--border);
