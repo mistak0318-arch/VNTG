@@ -17521,11 +17521,27 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 .usr-bars { border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); padding: 0.6rem 0.6rem 0.4rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(3rem, 1fr)); gap: 0.25rem; }
 .usr-bars.n8 { grid-template-columns: repeat(8, 1fr); }
 .usr-bar { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; font-size: 0.7rem; }
-.usr-bar-stack { height: 90px; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
-.usr-bar-stack i { display: block; width: 40%; border-radius: 3px 3px 0 0; min-height: 1px; }
-.usr-bar-stack i.rev { background: var(--accent, #e6a23c); }
-.usr-bar-stack i.ni { background: var(--red); }
+/*
+ * 막대는 **0선을 기준으로 위아래** (2026-09-13). 예전엔 flex 로 바닥에 붙여 쌓았는데,
+ * 그러면 적자를 아래로 내릴 방법이 없어 절대값을 위로 그렸다 — 손실이 클수록 높이 솟았다.
+ * 절대 배치로 바꾸고 `--zero`(위에서 0선까지의 %)를 컴포넌트가 준다.
+ */
+.usr-bar-stack { position: relative; height: 90px; width: 100%; }
+/* 0선 — 위아래가 갈리는 자리. 전부 흑자면 바닥에 붙어 안 보인다 */
+.usr-bar-stack::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--zero, 100%);
+  border-top: 1px dashed var(--border);
+}
+.usr-bar-stack i { position: absolute; display: block; width: 26%; border-radius: 3px 3px 0 0; min-height: 1px; }
+.usr-bar-stack i.rev { left: 20%; background: var(--accent, #e6a23c); }
+.usr-bar-stack i.ni { left: 54%; background: var(--red); }
 .usr-bar-stack i.ni.neg { background: var(--blue); }
+/* 0선 아래로 내려간 막대는 둥근 모서리도 아래쪽으로 */
+.usr-bar-stack i.below { border-radius: 0 0 3px 3px; }
 .usr-bar-l { color: var(--muted); white-space: nowrap; }
 .usr-bar small { font-size: 0.68rem; }
 .usr-bar em { font-style: normal; font-size: 0.68rem; font-weight: 700; }

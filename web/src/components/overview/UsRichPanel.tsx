@@ -146,19 +146,51 @@ function FinTab({ data, Missing }: { data: UsRich; Missing: MissingC }) {
   );
 }
 
+/**
+ * 매출·순이익 막대.
+ *
+ * ## ⚠️ 예전엔 **적자가 클수록 막대가 높이 솟았다** (2026-09-13 — 벤티지: "이 그래프 수정 좀
+ * 해야겠다")
+ *
+ * 눈금(`max`)을 `Math.max(revenue, netIncome)` 로 잡았는데 적자 기업은 `netIncome` 이 음수라
+ * 이 값이 늘 매출이었다. 그런데 막대 높이는 `Math.abs(netIncome)` — **분자는 절대값, 분모는
+ * 매출**이었다. 뉴스케일 파워(SMR) 25년 3분기는 매출 $8.2M · 순이익 −$273.3M 이라
+ * 막대가 **2,040%** 로 통을 뚫고 나갔다. 손실이 클수록 위로 치솟는 그림이었다.
+ *
+ * 두 가지를 고친다.
+ *   ① 눈금을 **절대값 기준**으로 잡는다 — 매출과 순이익의 절대값 중 가장 큰 것.
+ *   ② 적자는 **0선 아래로** 그린다. 위로 그리면 색이 다르더라도 「크다」로 먼저 읽힌다.
+ *
+ * 0선은 위아래 몫에 따라 움직인다. 전부 흑자면 예전처럼 바닥에 붙는다.
+ */
 function FinBars({ rows }: { rows: FinPeriod[] }) {
   if (rows.length === 0) return <div className="page-note">기간 값이 없다</div>;
-  const max = Math.max(1, ...rows.map((r) => Math.max(r.revenue ?? 0, r.netIncome ?? 0)));
+  const up = Math.max(0, ...rows.map((r) => Math.max(r.revenue ?? 0, r.netIncome ?? 0)));
+  const down = Math.max(0, ...rows.map((r) => -Math.min(r.revenue ?? 0, r.netIncome ?? 0)));
+  const span = Math.max(1, up + down);
+  /* 0선의 자리(위에서 몇 %) — 아래 몫이 없으면 바닥이다 */
+  const zero = (up / span) * 100;
+  const h = (v: number) => `${(Math.abs(v) / span) * 100}%`;
   return (
     <div className={`usr-bars${rows.length === 8 ? " n8" : ""}`}>
       {rows.map((r, i) => {
         const prev = rows[i - 1];
         const yoy = mode4(rows, i);
+        const rev = r.revenue ?? 0;
+        const ni = r.netIncome ?? 0;
         return (
           <div key={r.frame} className="usr-bar">
-            <div className="usr-bar-stack">
-              <i className="rev" style={{ height: `${((r.revenue ?? 0) / max) * 100}%` }} title={`매출 ${usd(r.revenue)}`} />
-              <i className={`ni${(r.netIncome ?? 0) < 0 ? " neg" : ""}`} style={{ height: `${(Math.abs(r.netIncome ?? 0) / max) * 100}%` }} title={`순이익 ${usd(r.netIncome)}`} />
+            <div className="usr-bar-stack" style={{ ["--zero" as string]: `${zero}%` }}>
+              <i
+                className={`rev${rev < 0 ? " below" : ""}`}
+                style={{ height: h(rev), bottom: rev < 0 ? `calc(100% - ${zero}% - ${h(rev)})` : `calc(100% - ${zero}%)` }}
+                title={`매출 ${usd(r.revenue)}`}
+              />
+              <i
+                className={`ni${ni < 0 ? " neg below" : ""}`}
+                style={{ height: h(ni), bottom: ni < 0 ? `calc(100% - ${zero}% - ${h(ni)})` : `calc(100% - ${zero}%)` }}
+                title={`순이익 ${usd(r.netIncome)}${ni < 0 ? " (적자 — 0선 아래)" : ""}`}
+              />
             </div>
             <span className="usr-bar-l">{qKo(r.frame)}</span>
             <small>{usd(r.revenue, 0)}</small>
@@ -168,7 +200,7 @@ function FinBars({ rows }: { rows: FinPeriod[] }) {
         );
       })}
       <div className="usr-bars-legend">
-        <i className="rev" /> 매출 <i className="ni" /> 순이익 · 숫자는 매출, %는 전년동기(분기)·전년(연간) 대비
+        <i className="rev" /> 매출 <i className="ni" /> 순이익 · <b>적자는 0선 아래</b> · 숫자는 매출, %는 전년동기(분기)·전년(연간) 대비
       </div>
     </div>
   );
