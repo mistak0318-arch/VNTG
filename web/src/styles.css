@@ -18612,11 +18612,13 @@ a.watch-btn { text-decoration: none; }
 .top-strip .mobile-title { display: none; }
 .top-strip .mobile-clock { font-size: 0.8rem; font-weight: 700; padding: 1px 7px; margin-left: 0; }
 /*
- * 시각 뒤의 날짜 (2026-09-14) — **괄호로만, 크기는 시각과 같게** (벤티지 지정).
- * 처음엔 작고 흐리게 나눠 뒀는데 「간략하게」는 글자 수 얘기였다. 괄호가 이미 「덧붙인 것」을
- * 말하므로 크기·색으로 또 낮출 이유가 없다.
+ * 시각 뒤의 날짜 (2026-09-14) — **괄호로, 시각보다 조금 작게.**
+ *
+ * 세 번 고친 자리다. ① 작게+세로선 → ② 괄호+같은 크기 → ③ 괄호+작게(지금).
+ * 벤티지가 눈으로 보고 고른 조합이다 — 구분선은 없애고 괄호로, 크기는 0.78em.
+ * 초마다 뛰는 시각이 주인공이고 날짜는 「오늘이 며칠이더라」에만 답하면 된다.
  */
-.mc-date { font-style: normal; font-weight: inherit; margin-left: 5px; }
+.mc-date { font-style: normal; font-size: 0.78em; font-weight: 700; margin-left: 4px; }
 @media (max-width: 899px) {
   .top-strip {
     position: sticky; top: 0; z-index: 20; background: var(--bg); border-bottom: 1px solid var(--border);
