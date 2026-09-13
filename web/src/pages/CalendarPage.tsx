@@ -355,6 +355,8 @@ export function CalendarPage() {
   /** 종류를 손으로 골랐나 — 골랐으면 제목을 봐도 넘겨짚지 않는다 */
   const [kindTouched, setKindTouched] = useState(false);
   const [memo, setMemo] = useState("");
+  /** 중요도 — 빈 문자열이 「안 정함」 (2026-09-13) */
+  const [importance, setImportance] = useState<"" | "high" | "mid" | "low">("");
   const [repeat, setRepeat] = useState<"none" | "weekly" | "monthly" | "yearly">("none");
   const [isTodo, setIsTodo] = useState(false);
   /* 국가·대표 — 표로 올린 일정에만 있던 값이라 손으로도 고칠 수 있어야 한다 (2026-08-30) */
@@ -498,7 +500,18 @@ export function CalendarPage() {
    * 정렬은 **안정 정렬**이라 같은 무리 안에서는 서버가 준 차례(날짜·등록순)가 그대로다.
    */
   const byDate = useMemo(() => {
-    const rank = (e: CalendarEvent) => (e.todo ? (e.done ? 2 : 0) : 1);
+    /*
+     * **중요도 먼저, 그 다음 할 일** (2026-09-13 — 벤티지: "중요도 순에 따라 정렬할 수 있게").
+     *
+     * 안 정한 것을 「중」과 「하」 사이에 둔다. 가운데로 치면 **일부러 「하」로 내린 것이 안 정한
+     * 것보다 아래**에 놓여, 등급을 매길수록 목록이 이상해진다. 「중」은 사람이 한 번 본 것이고
+     * 「안 정함」은 아직 안 본 것이라 본 것을 앞에 둔다.
+     *
+     * 끝낸 할 일은 중요도와 무관하게 맨 아래다 — 끝난 것이 「상」이라고 위에 있을 이유가 없다.
+     */
+    const impRank = (e: CalendarEvent) =>
+      e.importance === "high" ? 0 : e.importance === "mid" ? 1 : e.importance === "low" ? 3 : 2;
+    const rank = (e: CalendarEvent) => (e.todo && e.done ? 100 : impRank(e) * 2 + (e.todo ? 0 : 1));
     const m = new Map<string, CalendarEvent[]>();
     const put = (key: string, e: CalendarEvent) => {
       const list = m.get(key) ?? [];
@@ -557,6 +570,7 @@ export function CalendarPage() {
     setEndTime("");
     setEndDate("");
     setMemo("");
+    setImportance("");
     setRepeat("none");
     setIsTodo(false);
     setCountry("");
@@ -593,6 +607,8 @@ export function CalendarPage() {
         /* 끝날이 시작일보다 뒤일 때만 싣는다. 비우면 null 로 보내야 기간이 풀린다 */
         endDate: endDate && endDate > formDate ? endDate : null,
         memo: memo || undefined,
+        /* 중요도 — 비우면 null 을 보내 「안 정함」으로 되돌린다(undefined 는 JSON 에서 사라진다) */
+        importance: importance || null,
         /* 반복과 할 일은 상호 배타. 수정에서 해제하려면 값이 실려 가야 해서 null 을 보낸다
            (undefined 는 JSON 에서 사라져 기존 값이 남는다) */
         repeat: !isTodo && repeat !== "none" ? repeat : null,
@@ -621,10 +637,27 @@ export function CalendarPage() {
     setEndTime(e.endTime ?? "");
     setEndDate(e.endDate ?? "");
     setMemo(e.memo ?? "");
+    setImportance(e.importance ?? "");
     setRepeat(e.repeat ?? "none");
     setIsTodo(Boolean(e.todo));
     setCountry(e.country ?? "");
     setHeadline(Boolean(e.headline));
+  }
+
+  /**
+   * 목록에서 바로 올리고 내린다 — 안 정함 → 상 → 중 → 하 → 안 정함 (2026-09-13).
+   *
+   * 수정 폼을 열지 않고 그 자리에서 누르는 것이 요점이다. 한 주에 서른 건이 들어오는데
+   * 폼을 열었다 닫았다 하면 아무도 안 매긴다.
+   */
+  async function cycleImportance(e: CalendarEvent) {
+    const next = e.importance === "high" ? "mid" : e.importance === "mid" ? "low" : e.importance === "low" ? null : "high";
+    try {
+      await api.calendarUpdate(e.id, { importance: next } as Partial<Omit<CalendarEvent, "id">>);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "중요도 바꾸기 실패");
+    }
   }
 
   async function removeEvent(e: CalendarEvent) {
@@ -946,6 +979,26 @@ export function CalendarPage() {
                         title={e.done ? "다시 할 일로" : "완료"}
                       />
                     )}
+                    {/*
+                      **중요도 표식** (2026-09-13). 목록이 이미 중요도순이라 「왜 이 순서인가」가
+                      보여야 한다 — 순서만 바꾸고 이유를 안 적으면 뒤죽박죽으로 보인다.
+                      눌러서 그 자리에서 올리고 내린다(상 → 중 → 하 → 안 정함 → 상…).
+                    */}
+                    <button
+                      className={`cal-imp ${e.importance ?? "none"}`}
+                      title={
+                        e.importance === "high"
+                          ? "중요도 상 — 눌러서 중으로"
+                          : e.importance === "mid"
+                            ? "중요도 중 — 눌러서 하로"
+                            : e.importance === "low"
+                              ? "중요도 하 — 눌러서 해제"
+                              : "중요도 안 정함 — 눌러서 상으로"
+                      }
+                      onClick={() => void cycleImportance(e)}
+                    >
+                      {e.importance === "high" ? "‼" : e.importance === "mid" ? "!" : e.importance === "low" ? "·" : "○"}
+                    </button>
                     <span className={`cal-badge ${e.kind}`}>
                       {kindMeta(e.kind).icon} {kindMeta(e.kind).label}
                     </span>
@@ -1034,6 +1087,28 @@ export function CalendarPage() {
                   </option>
                 ))}
               </select>
+              {/*
+                **중요도** (2026-09-13 — 벤티지: "일정 중에서 주목해야 할 것들 체크하게").
+                단추 셋 — 누른 걸 다시 누르면 「안 정함」으로 돌아간다. 드롭다운으로 두면
+                한 주에 서른 건을 매길 때 손이 너무 많이 간다.
+              */}
+              <span className="cal-imp-pick">
+                {([
+                  ["high", "‼", "상 — 그날 꼭 볼 것"],
+                  ["mid", "!", "중 — 눈에 두기"],
+                  ["low", "·", "하 — 뒤로 미룸"],
+                ] as const).map(([k, mark, hint]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className={`cal-imp-btn ${k}${importance === k ? " on" : ""}`}
+                    title={`${hint} (다시 누르면 해제)`}
+                    onClick={() => setImportance(importance === k ? "" : k)}
+                  >
+                    {mark}
+                  </button>
+                ))}
+              </span>
             </div>
             {/*
               시각 (2026-08-28) — **시작과 끝**. 전에는 시작만 있어서 「몇 시부터

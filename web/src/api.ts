@@ -4215,6 +4215,11 @@ export interface CalendarEvent {
   /** 반복 — date 가 첫 회. 조회 시 인스턴스(id 에 @날짜)로 전개돼 온다 */
   repeat?: "weekly" | "monthly" | "yearly";
   /** 할 일 — 체크로 끝내는 것 */
+  /**
+   * **중요도** (2026-09-13). 없으면 「안 정함」이다 — 「보통」이 아니다.
+   * 정렬은 상 → 중 → 안 정함 → 하. 「중」은 한 번 본 것이고 「안 정함」은 아직 안 본 것이다.
+   */
+  importance?: "high" | "mid" | "low";
   todo?: boolean;
   done?: boolean;
   /** (전개 인스턴스에만) 원본 날짜 */

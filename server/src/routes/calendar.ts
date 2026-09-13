@@ -73,7 +73,7 @@ export function createCalendarRouter(): Router {
 
   router.post("/", async (req, res, next) => {
     try {
-      const { date, time, endTime, title, kind, memo, repeat, todo } = req.body ?? {};
+      const { date, time, endTime, title, kind, memo, repeat, todo, importance } = req.body ?? {};
       const events = await addEvent({
         date: String(date ?? ""),
         time: time ? String(time) : undefined,
@@ -85,6 +85,8 @@ export function createCalendarRouter(): Router {
         /* 반복과 할 일은 함께 못 쓴다 — 반복 할 일의 「완료」는 인스턴스별이어야 해서 다른 문제다 */
         repeat: ["weekly", "monthly", "yearly"].includes(String(repeat)) && !todo ? (repeat as "weekly") : undefined,
         todo: todo === true || todo === "true" ? true : undefined,
+        /* 중요도 — 안 주면 「안 정함」이다. 모르는 값은 버린다 (2026-09-13) */
+        importance: ["high", "mid", "low"].includes(String(importance)) ? (importance as "high") : undefined,
       });
       res.json({ events });
     } catch (err) {
@@ -94,7 +96,16 @@ export function createCalendarRouter(): Router {
 
   router.patch("/:id", async (req, res, next) => {
     try {
-      res.json({ events: await updateEvent(req.params.id, req.body ?? {}) });
+      const body = { ...(req.body ?? {}) } as Record<string, unknown>;
+      /*
+       * 중요도는 **지울 수 있어야 한다** (2026-09-13). `null` 로 오면 「안 정함」으로 되돌린다 —
+       * 한 번 「하」로 내린 일정을 다시 안 정한 상태로 못 돌리면 등급이 늘 붙어 있게 된다.
+       */
+      if ("importance" in body) {
+        const v = String(body.importance);
+        body.importance = ["high", "mid", "low"].includes(v) ? v : undefined;
+      }
+      res.json({ events: await updateEvent(req.params.id, body) });
     } catch (err) {
       next(err);
     }
