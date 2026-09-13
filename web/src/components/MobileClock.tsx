@@ -20,6 +20,9 @@ export function MobileClock() {
    * 「9/16」처럼 월/일만. 연도는 안 적는다 — 지금 이 화면을 보는 사람에게 연도는 정보가 아니고,
    * 자리만 먹으면 시각이 밀린다(폰 머리는 한 줄이다).
    *
+   * 괄호로 묶고 **시각과 같은 크기**로 둔다 (2026-09-14 벤티지 지정) — 처음엔 작고 흐리게 했는데
+   * 「날짜만 간략하게」는 **글자 수를 줄이라는 말**이지 작게 하라는 말이 아니었다.
+   *
    * 시계와 **같은 KST 기준**으로 뽑는다. `getMonth()` 로 하면 기기 표준시가 KST 가 아닐 때
    * 시각은 한국인데 날짜는 현지가 되어 자정 언저리에 하루가 어긋난다.
    */
@@ -27,7 +30,7 @@ export function MobileClock() {
   return (
     <time className="mobile-clock" dateTime={now.toISOString()} title="기기 시계 (KST)">
       {hh}
-      <i className="mc-date">{md}</i>
+      <i className="mc-date">({md})</i>
     </time>
   );
 }
