@@ -1,3 +1,4 @@
+import { GroupTiles } from "../components/GroupTiles";
 import { useEffect, useRef, useState } from "react";
 import { api, type UsSearchResult, type UsWatchGroup , type UsQuoteRow } from "../api";
 import { RefreshBar } from "../components/RefreshBar";
@@ -420,24 +421,28 @@ export function UsWatchPage() {
         좁은 화면에서는 고르개 하나로 (관심종목 VNTG 와 같은 문법).
         편집 중에는 칩을 남긴다 — 순서 옮기기·이름 바꾸기가 칩에만 있다.
       */}
+      {/*
+        **그룹은 타일 격자로** (2026-09-15 — 벤티지: "저렇게 목록형 말고 한눈에 다 볼 수 있게 해줘").
+        폰의 고르개는 펼치기 전엔 어느 판이 도는지 안 보였다. 타일은 이름·등락률·▲▼ 가 한눈에 보이고
+        바탕색이 등락 폭을 말한다(`GroupTiles`). 편집 중에는 순서를 옮기는 칩 줄로 바뀐다.
+      */}
       {!editing && (
-        <div className="my-group-pick">
-          <select
-            className="group-select"
-            value={current?.id ?? ""}
-            onChange={(e) => setOpenGroup(e.target.value)}
-            aria-label="그룹 고르기"
-          >
-            {groups.map((g) => (
-              <option value={g.id} key={g.id}>
-                {g.name} ({g.stocks.length}) {pct(chipRate(g))}
-              </option>
-            ))}
-          </select>
-        </div>
+        <GroupTiles
+          groups={groups.map((g) => ({
+            id: g.id,
+            name: g.name,
+            rate: chipRate(g),
+            count: g.stocks.length,
+            rising: g.rising,
+            falling: g.falling,
+            title: g.memo || undefined,
+          }))}
+          activeId={current?.id}
+          onPick={setOpenGroup}
+        />
       )}
 
-      <div className="filter-row group-tabs">
+      {editing && <div className="filter-row group-tabs">
         {groups.map((g, i) => (
           <span className="gt-item" key={g.id}>
             {editing && (
@@ -471,7 +476,7 @@ export function UsWatchPage() {
             )}
           </span>
         ))}
-      </div>
+      </div>}
 
       {/*
         **그룹·종목 단추는 칩 줄 밖에** (2026-09-15 — 벤티지: "해외관심종목 메뉴에서 종목 그룹 추가하기 기능이

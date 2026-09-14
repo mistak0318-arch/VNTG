@@ -1,3 +1,4 @@
+import { GroupTiles } from "../GroupTiles";
 import { useCallback, useEffect, useState } from "react";
 import { removePref, setPref } from "../../prefs";
 import {
@@ -807,22 +808,29 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
       <div className="ov-card-b">
         {error && <div className="error-banner">{error}</div>}
 
-        <div className="filter-row">
-          {groups.map((g) => (
-            <button
-              key={g.id}
-              className={`filter-btn ${current?.id === g.id ? "active" : ""}`}
-              onClick={() => pickGroup(g.id)}
-            >
-              {g.name}
-              <span className={`uw-grate ${cls(g.changeRate)}`}> {pct(g.changeRate)}</span>
-            </button>
-          ))}
+        {/*
+          그룹 타일 (2026-09-15 — 벤티지: "시황 대시보드 포도알처럼 되어 있는데 한눈에 보이는데 좀 이쁘게 할 순 없을까").
+          길이가 제각각인 칩을 흘려 놓아 포도송이처럼 엉겼다. 해외 관심종목과 같은 타일 격자를 쓴다.
+        */}
+        <GroupTiles
+          groups={groups.map((g) => ({
+            id: g.id,
+            name: g.name,
+            rate: g.changeRate,
+            count: g.stocks.length,
+            rising: g.rising,
+            falling: g.falling,
+            title: g.memo || undefined,
+          }))}
+          activeId={current?.id}
+          onPick={pickGroup}
+        />
+        <div className="filter-row usb-edit-row">
           <button
             className={`filter-btn ${editing ? "active" : ""}`}
             onClick={() => setEditing((v) => !v)}
           >
-            {editing ? "편집 끝" : "✏ 편집"}
+            {editing ? "편집 끝" : "✏ 종목 담기·빼기"}
           </button>
         </div>
 
@@ -866,7 +874,7 @@ function UsBoardWatch({ onOpen }: { onOpen: (symbol: string, label: string) => v
           </div>
         ) : current.stocks.length === 0 ? (
           <div className="page-note">
-            담긴 종목이 없습니다. <b>✏ 편집</b>을 켜고 검색해서 넣으세요.
+            담긴 종목이 없습니다. <b>✏ 종목 담기·빼기</b>를 눌러 검색해서 넣으세요.
           </div>
         ) : (
           /*
