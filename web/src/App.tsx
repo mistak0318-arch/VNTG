@@ -22,6 +22,7 @@ import { LiveDot } from "./components/LiveDot";
 import { createHotkeyMatcher } from "./hotkey";
 import { onMiniConfigChange, readMiniConfig } from "./miniConfig";
 import { TabActiveContext } from "./tabActive";
+import { TabTitleContext } from "./tabTitle";
 import { SuperDashboardPage } from "./pages/SuperDashboardPage";
 import { ListTrackPage } from "./pages/ListTrackPage";
 import { UsWatchPage } from "./pages/UsWatchPage";
@@ -1309,9 +1310,12 @@ export default function App() {
           {(openTabs.includes(tab) ? openTabs : [...openTabs, tab]).map((t) => (
             <div key={t} className="app-tabpane" hidden={t !== tab}>
               <TabActiveContext.Provider value={t === tab}>
-                <ErrorBoundary where={tabLabel(t)} resetKey={t}>
-                  {renderPage(t)}
-                </ErrorBoundary>
+                {/* 화면 안의 큰 제목도 바꾼 이름을 따른다 — 아이콘은 화면이 제 것을 쓴다 */}
+                <TabTitleContext.Provider value={TAB_PARTS[t] ? label(t, TAB_PARTS[t].label) : null}>
+                  <ErrorBoundary where={tabLabel(t)} resetKey={t}>
+                    {renderPage(t)}
+                  </ErrorBoundary>
+                </TabTitleContext.Provider>
               </TabActiveContext.Provider>
             </div>
           ))}

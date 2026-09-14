@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTabTitle } from "../tabTitle";
 import { api, type AskResult, type AskTurn } from "../api";
 
 /**
@@ -29,6 +30,8 @@ interface Message {
 }
 
 export function AskPage() {
+  /* 설정에서 바꾼 메뉴 이름을 제목에도 (2026-09-14) */
+  const pageTitle = useTabTitle("시황 질문하기");
   const [ready, setReady] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -99,7 +102,7 @@ export function AskPage() {
   return (
     <div className="ask">
       <div className="ask-head">
-        <h2>시황 질문하기</h2>
+        <h2>{pageTitle}</h2>
         <div className="filter-row" style={{ margin: 0 }}>
           <button
             className={`filter-btn ${useMarketData ? "active" : ""}`}

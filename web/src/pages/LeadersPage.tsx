@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTabTitle } from "../tabTitle";
 import { api, fmtNum, signClass, type LeaderFlow, type LeaderScan } from "../api";
 import { LeaderScanPanel, LeaderTrackSection, MarkRow } from "../components/LeaderScanPanel";
 import { SortableTh, useSortableTable } from "../useSortableTable";
@@ -25,6 +26,8 @@ const TABS: { key: Tab; label: string; hint: string }[] = [
 const pct = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
 
 export function LeadersPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
+  /* 설정에서 바꾼 메뉴 이름을 제목에도 (2026-09-14) */
+  const pageTitle = useTabTitle("주도주");
   const [tab, setTab] = useState<Tab>(() => {
     try {
       const t = sessionStorage.getItem("vntg.leaders.tab");
@@ -44,7 +47,7 @@ export function LeadersPage({ onSelectStock }: { onSelectStock?: (code: string, 
   return (
     <div className="page leaders-page">
       <div className="page-head">
-        <h1>🏁 주도주</h1>
+        <h1>🏁 {pageTitle}</h1>
         <p className="page-sub">오늘 시장이 어디에 반응하는가 — 판(섹터)의 폭과 연속성. 뜨거운 것과 아직 조용한 것을 나란히.</p>
       </div>
       <div className="cis-tabs">

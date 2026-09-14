@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTabTitle } from "../tabTitle";
 import { TopicPulseBlock } from "../components/TopicPulse";
 import {
   api,
@@ -38,6 +39,8 @@ function kstToday(offsetDays = 0): string {
 }
 
 export function MorningPage() {
+  /* 설정에서 바꾼 메뉴 이름을 제목에도 (2026-09-14) */
+  const pageTitle = useTabTitle("장전 브리핑룸");
   /* 테마 흐름 카드 — 국내 로테이션(어제 마감 기준)과 미국 밤사이가 한 렌즈에서 온다 */
   const { lens, reload: reloadLens } = useMarketLens();
   const [cal, setCal] = useState<CalendarEvent[] | null>(null);
@@ -98,7 +101,7 @@ export function MorningPage() {
   return (
     <div>
       <div className="mrn-head">
-        <h2>🌅 장전 브리핑룸</h2>
+        <h2>🌅 {pageTitle}</h2>
         <span className="pt-n">
           아침에 볼 것들을 한 화면에 — 카드 제목을 누르면 그 메뉴로 갑니다
         </span>

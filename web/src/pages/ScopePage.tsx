@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTabTitle } from "../tabTitle";
 import { api, type ScopeDetail, type ScopeFlow, type ScopeRow, fmtKst, kstYmd } from "../api";
 import { MiniLine } from "../components/MiniLine";
 import { SortableTh, useSortableTable } from "../useSortableTable";
@@ -491,6 +492,8 @@ function Detail({
 /* ── 페이지 ──────────────────────────────────────────────────────── */
 
 export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
+  /* 설정에서 바꾼 메뉴 이름을 제목에도 (2026-09-14) */
+  const pageTitle = useTabTitle("매수직전");
   const [rows, setRows] = useState<ScopeRow[]>([]);
   const [ledgerNote, setLedgerNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -602,7 +605,7 @@ export function ScopePage({ onSelectStock }: { onSelectStock: (code: string, nam
       */}
       <div className="page-header sc-head">
         <h2>
-          🔎 매수직전
+          🔎 {pageTitle}
           <details className="sc-about">
             <summary title="이 화면이 무엇인지">?</summary>
             <p className="page-sub">

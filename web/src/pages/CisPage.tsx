@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTabTitle } from "../tabTitle";
 import {
   api,
   type CisAccountView,
@@ -323,6 +324,8 @@ function DeskStrip({
 }
 
 export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
+  /* 설정에서 바꾼 메뉴 이름을 제목에도 (2026-09-14) */
+  const pageTitle = useTabTitle("항해일지");
   const [account, setAccount] = useState<string>(
     () => localStorage.getItem("vntg.cis.account") || "trade",
   );
@@ -364,7 +367,7 @@ export function CisPage({ onSelectStock }: { onSelectStock?: (code: string, name
   return (
     <div className="cis-page">
       <h2 className="page-title">
-        🧭 항해일지
+        🧭 {pageTitle}
         <span className="cis-sub">시스가 굴리는 모의 계좌 넷 — 실제 주문은 나가지 않습니다</span>
       </h2>
 

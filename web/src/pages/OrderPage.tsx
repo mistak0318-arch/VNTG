@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useTabTitle } from "../tabTitle";
 import { setPref } from "../prefs";
 import { NotifySoundPanel } from "../components/NotifySoundPanel";
 import { NumPad, PatternPad } from "../components/EntryPads";
@@ -539,6 +540,8 @@ const devPreview = () =>
   /[?&]preview=1/.test(window.location.hash);
 
 export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
+  /* 설정에서 바꾼 메뉴 이름을 제목에도 (2026-09-14) */
+  const pageTitle = useTabTitle("주문");
   const [status, setStatus] = useState<OrderStatus | null>(null);
   const [subOrder, setSubOrder] = useState<Sub[]>(readSubOrder);
   const [err, setErr] = useState<string | null>(null);
@@ -612,7 +615,7 @@ export function OrderPage({ onSelectStock }: { onSelectStock?: (code: string, na
   if (!status.enabled || !status.configured) {
     return (
       <div className="page ord">
-        <h2 className="page-title">주문</h2>
+        <h2 className="page-title">{pageTitle}</h2>
         <div className="ord-off">
           <div className="ord-off-mark">🔒</div>
           <b>주문 기능이 꺼져 있다</b>

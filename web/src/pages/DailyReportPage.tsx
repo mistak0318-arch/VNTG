@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { useTabTitle } from "../tabTitle";
 import { TopicPulseBlock } from "../components/TopicPulse";
 import { useCardOrder } from "../useCardOrder";
 import {
@@ -210,6 +211,8 @@ export function DailyReportPage({
 }: {
   onSelectStock: (code: string, name: string) => void;
 }) {
+  /* 설정에서 바꾼 메뉴 이름을 제목에도 (2026-09-14) */
+  const pageTitle = useTabTitle("데일리 리포트");
   const [edition, setEdition] = useState<Edition>(() => currentEdition(new Date()));
   const [newsAt, setNewsAt] = useState<string>("");
   const [drivers, setDrivers] = useState<MarketDriverReport | null>(null);
@@ -451,7 +454,7 @@ export function DailyReportPage({
       )}
 
       <header className="report-header">
-        <h2>VNTG 데일리 리포트</h2>
+        <h2>VNTG {pageTitle}</h2>
         <div className="report-sub">
           {editionMeta.label} — {editionMeta.desc}
         </div>
