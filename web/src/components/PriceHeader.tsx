@@ -215,8 +215,43 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
     after: krxInAfter ? "애프터마켓 (KRX·NXT)" : "NXT 애프터마켓",
     closed: "장 마감",
   };
-  /** KRX 는 정규장 끝나면 그 값이 종가다 — 공백(15:30~16:00)도 이미 끝난 뒤다 */
-  const krxDone = phase === "after" || phase === "gap" || phase === "closed";
+  /*
+   * **KRX 가 지금 도는가** (2026-09-14 고침).
+   *
+   * 옛 시간표에선 15:30 뒤 KRX 는 끝이었다(시간외단일가 10분 묶음뿐). 그래서 16:00~20:00 도 「KRX 종가」라고
+   * 적었는데, 9/14 부터 그 시간 KRX 는 **애프터마켓으로 연속 거래 중**이다 — 애프터 체결가 옆에 「15:30 마감」이
+   * 붙어 정규장 종가처럼 읽혔다(벤티지: "계속 애프터장 시세가 최신 시세로만 보이니까 정규장에서 어땠는지를 모르네").
+   * 애프터에 안 들어가는 종목(ETF·ETN 등 — 서버가 `_afterTradable` 로 준다)만 진짜 15:30 에 멈춘다.
+   */
+  const afterTradable = info?._afterTradable !== false;
+  const krxLive = phase === "regular" || (phase === "after" && krxInAfter && afterTradable);
+  const krxDone = !krxLive && (phase === "after" || phase === "gap" || phase === "closed");
+  const krxWhen =
+    phase === "gap"
+      ? "15:30 마감"
+      : phase === "after"
+        ? krxLive
+          ? "애프터 거래 중"
+          : krxInAfter
+            ? "15:30 마감 · 애프터 제외"
+            : "15:30 마감"
+        : phase === "closed"
+          ? krxInAfter && afterTradable
+            ? "20:00 애프터 마감"
+            : "15:30 마감"
+          : "거래 중";
+  /*
+   * 정규장 종가 — 서버가 15:40 에 KRX 로 찍은 값(`_regular`). 장외 시간에 KRX 값이 애프터 체결가로 바뀌면
+   * 정규장 결과가 사라지므로 **따로 한 줄** 둔다. 정규장 중이거나 아직 못 찍었으면 서버가 안 준다.
+   */
+  const regular = (info?._regular ?? null) as { date: string; close: number; prevClose: number | null } | null;
+  const regularRate = (() => {
+    if (!regular || !(regular.close > 0)) return null;
+    const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+    const base = Math.abs(Number(info?.base_pric)) || 0;
+    const prev = regular.prevClose && regular.prevClose > 0 ? regular.prevClose : regular.date === todayKst && base > 0 ? base : null;
+    return prev ? ((regular.close - prev) / prev) * 100 : null;
+  })();
   /**
    * NXT 줄 옆에 적는 한마디.
    *
@@ -416,6 +451,21 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
         */}
         <div className="ph-cell">
           <span className="ph-label">{krxDone ? "종가" : "현재가"} · 거래소별</span>
+          {regular && regular.close > 0 && (
+            <span className="ph-row" title={`${regular.date} 정규장(09:00~15:30) 종가 — 15:40 에 KRX 로 찍은 값`}>
+              <em className="ph-ex">정규장</em>
+              <b className={`ph-value ${regularRate === null ? "" : regularRate > 0 ? "positive" : regularRate < 0 ? "negative" : ""}`}>
+                {fmtNum(regular.close)}
+              </b>
+              {regularRate !== null && (
+                <em className={`ph-pct ${regularRate > 0 ? "positive" : regularRate < 0 ? "negative" : ""}`}>
+                  {regularRate > 0 ? "+" : ""}
+                  {regularRate.toFixed(2)}%
+                </em>
+              )}
+              <em className="ph-when">15:30 종가</em>
+            </span>
+          )}
           {/*
             ⚠️ KRX 줄에 info.cur_prc 를 쓰고 있었다 (2026-08-27 수리) — info 는 통합(_AL)이라
             마감 후에는 **NXT 최종가**가 「KRX 종가」 자리에 떴다. 진짜 KRX 값(거래소별 조회)과
@@ -434,7 +484,7 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
                 {krx.changeRate.toFixed(2)}%
               </em>
             )}
-            <em className="ph-when">{krxDone ? "15:30 마감" : "거래 중"}</em>
+            <em className="ph-when">{krxWhen}</em>
           </span>
           {/* 위 큰 숫자와 같은 규칙 — 정규장 중에는 NXT 를 띄우지 않는다 */}
           {showNxtLine && nxt && (

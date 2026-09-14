@@ -18895,3 +18895,18 @@ a.watch-btn { text-decoration: none; }
 /* 수동 계좌 · 산 날 입력 (2026-09-14) — 당일 손익의 기준선을 정하는 칸이다 */
 .ma-input.ma-date { min-width: 8.2rem; }
 .ma-add-date { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78rem; color: var(--muted); }
+
+/*
+ * 종목 상세 머리 — 정규장 / 장외 두 칸 (2026-09-14).
+ * 16:00 뒤 현재가가 애프터 값이라 「정규장에서 어땠나」가 사라지던 것. 앞 칸이 정규장 종가(전일 대비),
+ * 뒤 칸이 지금 값(정규장 대비). 작은 이름표가 어느 장의 값인지 말한다.
+ * 폰 규칙이 가격 칸에 `margin-right:auto` 를 줘서 두 칸이면 사이가 벌어진다 — 앞 칸만 붙여 둔다.
+ */
+.sheet-live em { font-style: normal; font-size: 0.66rem; font-weight: 700; color: var(--muted); margin-right: 1px; }
+.sheet-live.sheet-reg { padding-right: 8px; margin-right: 4px; border-right: 1px solid var(--border); }
+@media (max-width: 700px) {
+  .sheet-header .sheet-live.sheet-reg { margin-right: 4px; }
+}
+@container (max-width: 600px) {
+  .sheet-header .sheet-live.sheet-reg { margin-right: 4px; }
+}

@@ -2,7 +2,8 @@ import { Router } from "express";
 import { clearHidden, listHidden, setHidden } from "../hiddenThemes.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { alCode } from "../alCode.js";
-import { krxAfterMarket, sessionOf } from "../marketHours.js";
+import { afterMarketTradable, krxAfterMarket, sessionOf } from "../marketHours.js";
+import { isTradingDay } from "../tradingDay.js";
 import { peekRealtime } from "../realtimeHub.js";
 import { viDirText } from "../realtimeStore.js";
 import { intradayLevels } from "../intraday.js";
@@ -19,7 +20,7 @@ import { CHART_RANGES, yahooChart } from "../yahooChart.js";
 import { usEtfHoldings } from "../usEtfHoldings.js";
 import { themeStrength } from "../themeStrength.js";
 import { marketThermo, themeRotation, usOvernight } from "../marketLens.js";
-import { buildCloses, closesProgress, loadCloses } from "../dailyCloses.js";
+import { buildCloses, closesProgress, loadCloses, regularCloseOf } from "../dailyCloses.js";
 import { themeLinks } from "../themeLinks.js";
 import {
   fetchAllThemes,
@@ -203,7 +204,31 @@ export function createMarketRouter(client: KiwoomClient): Router {
             dirText: viDirText(myVi),
           }
         : null;
-      res.json({ ...data, _market: entry?.marketName ?? "", _venue: venueNow(), _vi });
+      /*
+       * **정규장 종가를 따로 얹는다** (2026-09-14). 16:00 뒤로 `cur_prc` 는 애프터 체결가라 「정규장에서 어땠나」가
+       * 사라진다. 15:40 에 KRX 로 찍어 두는 파일에서 이 종목 값을 꺼내 준다.
+       *
+       * 언제 보여 주나 — 정규장 중엔 안 보인다(그땐 현재가가 곧 정규장 값). 평일 15:30 뒤인데 오늘 파일이 아직이면
+       * (15:30~15:40) 앞 장 값으로 떨어지면 틀리므로 안 보인다. 아침(08:00~09:00 NXT 프리)은 앞 장 종가가 기준이다.
+       */
+      const k = new Date(Date.now() + 9 * 3600_000);
+      const today = k.toISOString().slice(0, 10);
+      const minute = k.getUTCHours() * 60 + k.getUTCMinutes();
+      const session = sessionOf(today, minute);
+      const rc = await regularCloseOf(bareCode, today).catch(() => null);
+      const trading = isTradingDay(new Date(`${today}T12:00:00+09:00`));
+      const _regular =
+        rc && session !== "정규장" && !(trading && minute >= 930 && rc.date !== today)
+          ? {
+              ...rc,
+              /* 지금 값이 어느 장의 것인가 — 머리에 붙일 짧은 이름 */
+              liveLabel:
+                session === "애프터" ? (krxAfterMarket(today, minute) ? "애프터" : "NXT") : session === "공백" ? "NXT" : session === "프리" ? "프리" : "장외 마감",
+            }
+          : null;
+      /* KRX 애프터에 들어가는 종목인가 — ETF·ETN 은 16:00~20:00 에도 KRX 값이 15:30 에 멈춰 있다 */
+      const _afterTradable = entry ? afterMarketTradable(entry.marketName ?? "") : null;
+      res.json({ ...data, _market: entry?.marketName ?? "", _venue: venueNow(), _vi, _regular, _afterTradable });
     } catch (err) {
       next(err);
     }

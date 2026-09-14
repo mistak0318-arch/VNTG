@@ -175,19 +175,61 @@ export function StockDetail({
             헤더에 현재가 상시 — 값은 **새로 받는 게 아니다.** 위 `useLive`(1초)가 이미
             들고 있는 `info` 를 sticky 헤더에도 그릴 뿐이다.
           */}
-          {info && Math.abs(Number(info.cur_prc)) > 0 && (
-            <span
-              className={`sheet-live num ${
-                Number(info.flu_rt) > 0 ? "positive" : Number(info.flu_rt) < 0 ? "negative" : ""
-              }`}
-            >
-              <b>{Math.abs(Number(info.cur_prc)).toLocaleString("ko-KR")}</b>
-              <i>
-                {Number(info.flu_rt) > 0 ? "+" : ""}
-                {Number(info.flu_rt).toFixed(2)}%
-              </i>
-            </span>
-          )}
+          {info && Math.abs(Number(info.cur_prc)) > 0 && (() => {
+            /*
+             * **정규장과 장외를 나눠 적는다** (2026-09-14 — 벤티지: "종목상세에 정규장 종가 애프터장 종가를 구분해서
+             * 표시해야겠다. 지금 계속 애프터장 시세가 최신 시세로만 보이니까 얘가 정규장에서 어땠는지를 모르네").
+             *
+             * 16:00 뒤로 현재가는 애프터 체결가다. 그것 하나만 보이면 「정규장에서 +3% 로 마감하고 장 뒤에 밀린 것」과
+             * 「정규장부터 약했던 것」이 구별이 안 된다. 서버가 15:40 에 KRX 로 찍은 정규장 종가를 `_regular` 로 주면
+             * 두 칸으로 그린다 — **정규장 종가(전일 대비)** 와 **지금 값(정규장 대비)**. 둘을 합치면 하루 전체다.
+             * 정규장 중이거나 종가를 아직 못 찍었으면 서버가 안 준다 — 그땐 예전처럼 한 칸.
+             */
+            const cur = Math.abs(Number(info.cur_prc));
+            const sign = (v: number | null) => (v === null ? "" : v > 0 ? "positive" : v < 0 ? "negative" : "");
+            const pct = (v: number | null) => (v === null ? "" : `${v > 0 ? "+" : ""}${v.toFixed(2)}%`);
+            const reg = (info._regular ?? null) as {
+              date: string;
+              close: number;
+              prevClose: number | null;
+              liveLabel: string;
+            } | null;
+            if (!reg || !(reg.close > 0)) {
+              return (
+                <span className={`sheet-live num ${sign(Number(info.flu_rt))}`}>
+                  <b>{cur.toLocaleString("ko-KR")}</b>
+                  <i>{pct(Number(info.flu_rt))}</i>
+                </span>
+              );
+            }
+            const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+            /* 정규장이 전일보다 몇 % — 앞 장 파일이 있으면 그것, 오늘 장이면 키움 기준가(전일 종가)로 */
+            const base = Math.abs(Number(info.base_pric)) || 0;
+            const prev = reg.prevClose && reg.prevClose > 0 ? reg.prevClose : reg.date === todayKst && base > 0 ? base : null;
+            const regRate = prev ? ((reg.close - prev) / prev) * 100 : null;
+            const liveRate = ((cur - reg.close) / reg.close) * 100;
+            const md = `${Number(reg.date.slice(5, 7))}/${Number(reg.date.slice(8, 10))}`;
+            return (
+              <>
+                <span
+                  className={`sheet-live sheet-reg num ${sign(regRate)}`}
+                  title={`${reg.date} 정규장(09:00~15:30) 종가 — 15:40 에 KRX 로 찍은 값${regRate === null ? "" : ` · 전일 대비 ${pct(regRate)}`}`}
+                >
+                  <em>{reg.date === todayKst ? "정규장" : `${md} 정규장`}</em>
+                  <b>{reg.close.toLocaleString("ko-KR")}</b>
+                  {regRate !== null && <i>{pct(regRate)}</i>}
+                </span>
+                <span
+                  className={`sheet-live num ${sign(liveRate)}`}
+                  title={`지금 ${reg.liveLabel} 값 — 정규장 종가 대비 ${pct(liveRate)} · 전일 대비 ${pct(Number(info.flu_rt))}`}
+                >
+                  <em>{reg.liveLabel}</em>
+                  <b>{cur.toLocaleString("ko-KR")}</b>
+                  <i>{pct(liveRate)}</i>
+                </span>
+              </>
+            );
+          })()}
           <button
             className={`watch-btn${watched ? " on" : ""}`}
             onClick={toggleWatch}

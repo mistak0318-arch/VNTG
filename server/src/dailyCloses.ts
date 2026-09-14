@@ -360,6 +360,39 @@ export async function captureRegularCloses(client: KiwoomClient): Promise<number
 
 /** 그날 찍어 둔 정규장 종가 — 없으면 빈 map */
 /**
+ * **종목 하나의 정규장 종가와 그 앞 장 것** (2026-09-14 — 벤티지: "종목상세에 정규장 종가 애프터장 종가를
+ * 구분해서 표시해야겠다. 지금 계속 애프터장 시세가 최신 시세로만 보이니까 얘가 정규장에서 어땠는지를 모르네").
+ *
+ * 종목 상세가 **1초마다** 부르는 자리라 파일을 매번 읽지 않는다 — 1분 들고 있는다(파일은 하루 한 번 바뀐다).
+ * 앞 장 것은 「정규장에서 몇 % 로 마감했나」를 내는 데 쓴다. 파일이 9/14 부터라 그 전 날짜는 없다 — 없으면 null.
+ */
+let rcMem: { at: number; key: string; cur: { date: string; closes: Map<string, number> } | null; prev: { date: string; closes: Map<string, number> } | null } | null = null;
+
+export async function regularCloseOf(
+  code: string,
+  today: string,
+): Promise<{ date: string; close: number; prevDate: string | null; prevClose: number | null } | null> {
+  if (!rcMem || rcMem.key !== today || Date.now() - rcMem.at > 60_000) {
+    const cur = await latestRegularCloses(today);
+    let prev: typeof cur = null;
+    if (cur) {
+      const d = new Date(`${cur.date}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() - 1);
+      prev = await latestRegularCloses(d.toISOString().slice(0, 10));
+    }
+    rcMem = { at: Date.now(), key: today, cur, prev };
+  }
+  const close = rcMem.cur?.closes.get(code);
+  if (!rcMem.cur || !close) return null;
+  return {
+    date: rcMem.cur.date,
+    close,
+    prevDate: rcMem.prev?.date ?? null,
+    prevClose: rcMem.prev?.closes.get(code) ?? null,
+  };
+}
+
+/**
  * **그 날짜까지 중 가장 최근의 정규장 종가** (2026-09-14).
  *
  * 「정규장 종가 대비 장외 괴리율」이 기준으로 쓴다. 아침(08:00~09:00 NXT 프리)에는 오늘 파일이
