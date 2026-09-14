@@ -18667,9 +18667,18 @@ a.watch-btn { text-decoration: none; }
 @media (max-width: 899px) {
   .top-strip {
     position: sticky; top: 0; z-index: 20; background: var(--bg); border-bottom: 1px solid var(--border);
-    padding: 6px 10px 6px 3.6rem; gap: 10px; max-width: none;
+    padding: 6px 10px; gap: 10px; max-width: none;
   }
-  :root[data-nav="right"] .top-strip { padding-left: 10px; padding-right: 3.6rem; }
+  /*
+   * ☰ 자리는 **☰ 가 실제로 그 위쪽 모서리에 있을 때만** 비운다 (2026-09-14).
+   *
+   * 예전엔 `data-nav` 로 정했는데 그건 **사이드바가 어느 쪽에서 나오느냐**일 뿐이고,
+   * ☰ 단추는 네 모서리 아무 데나 끌어다 놓을 수 있다(`vntg.navcorner`).
+   * 벤티지는 ☰ 를 **오른쪽 아래**에 두고 있는데 오른쪽 **위**를 3.6rem 비워 둔다.
+   * 그 58px 때문에 아이콘 줄이 꽉 차서 빗자루가 시계에 붙었다 — 빈칸을 돌려준다.
+   */
+  html:has(.corner-toggle.tl) .top-strip { padding-left: 3.6rem; }
+  html:has(.corner-toggle.tr) .top-strip { padding-right: 3.6rem; }
   :root[data-nav="right"] .top-strip .mobile-header { flex-direction: row; }
   .top-strip .mobile-clock { font-size: 0.74rem; padding: 1px 5px; letter-spacing: 0; }
   .top-strip .qss-row { --hdr-h: 28px; }
