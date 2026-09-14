@@ -18833,3 +18833,8 @@ a.watch-btn { text-decoration: none; }
 .ma-trend-tbl .r { text-align: right; }
 .ma-trend-note { margin: 8px 0 0; font-size: 0.74rem; color: var(--muted); line-height: 1.5; }
 .ma-trend-empty { margin: 10px 0 14px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 10px; font-size: 0.78rem; color: var(--muted); }
+
+/* 수동 계좌 · 입금·출금 줄 (2026-09-14) — 예수금 칸과 같은 모양, 한 줄 아래 */
+.ma-move { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
+.ma-move-t { font-size: 0.8rem; color: var(--muted); font-weight: 700; }
+.ma-move .search-input { max-width: 9rem; }

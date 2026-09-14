@@ -153,6 +153,42 @@ export async function removeAccount(id: string): Promise<ManualAccount[]> {
   return next;
 }
 
+/**
+ * **종목을 담고 빼면 예수금이 따라 움직인다** (2026-09-14 — 벤티지: "종목 빼고 더하고 사거나
+ * 하면 예수금에서 차감이 되야지 … 그래야 내가 종목만 교체해도 전체 잔고가 알아서 조정이 되겠지").
+ *
+ * 규칙은 하나다 — **예수금은 매입금액이 변한 만큼 반대로 움직인다.**
+ *
+ *   예수금 += (이전 매입금액 − 새 매입금액)
+ *
+ * 담으면 그만큼 현금이 나가고, 빼면 그만큼 들어온다. 수량만 고쳐도, 평단만 고쳐도 같은 규칙
+ * 하나로 맞는다. 계좌 안에서 현금이 주식으로 바뀌었을 뿐이니 **원가 기준 총액은 그대로다** —
+ * 그게 「종목만 교체해도 잔고가 알아서 조정된다」의 뜻이다.
+ *
+ * ## 왜 평가액이 아니라 매입금액인가
+ *
+ * 팔면 실제로는 그날 시세만큼 현금이 들어온다. 그런데 우리는 **얼마에 팔았는지 모른다** —
+ * 수량만 고쳐 적을 뿐이다. 현재가로 치면 오타를 고칠 때도 현금이 엉뚱하게 늘어난다.
+ * 매입금액으로 움직이면 **적은 대로만** 움직인다. 판 값과의 차이는 평단을 고쳐 적을 때 맞춘다.
+ *
+ * ## 총자산 기준 계좌는 건드리지 않는다
+ *
+ * `anchor: "total"` 은 예수금을 「총자산 − 주식평가액」으로 매번 다시 내므로 여기서 손댈 것이 없다.
+ *
+ * 현금이 모자라면 **음수로 둔다.** 0 으로 깎으면 없던 돈이 생겨 총액이 안 맞는다 —
+ * 화면이 음수를 보여 주고 사람이 고치는 편이 낫다.
+ */
+function costOf(h: ManualHolding): number {
+  return Math.round((Number(h.avgPrice) || 0) * (Number(h.qty) || 0));
+}
+
+function withCashShift(a: ManualAccount, before: number, after: number): ManualAccount {
+  if ((a.anchor ?? "cash") === "total") return a;
+  const shift = before - after;
+  if (shift === 0) return a;
+  return { ...a, cash: Math.round((a.cash ?? 0) + shift), cashUpdatedAt: new Date().toISOString() };
+}
+
 export async function upsertHolding(
   id: string,
   h: ManualHolding,
@@ -162,11 +198,12 @@ export async function upsertHolding(
   const items = await load();
   const next = items.map((a) => {
     if (a.id !== id) return a;
-    const exists = a.holdings.some((x) => x.code === h.code);
+    const old = a.holdings.find((x) => x.code === h.code);
+    const moved = withCashShift(a, old ? costOf(old) : 0, costOf(h));
     return {
-      ...a,
+      ...moved,
       // 같은 종목이면 덮어쓴다 (추가 매수 시 평단만 다시 적으면 되도록)
-      holdings: exists ? a.holdings.map((x) => (x.code === h.code ? h : x)) : [...a.holdings, h],
+      holdings: old ? a.holdings.map((x) => (x.code === h.code ? h : x)) : [...a.holdings, h],
     };
   });
   await persist(next);
@@ -175,9 +212,38 @@ export async function upsertHolding(
 
 export async function removeHolding(id: string, code: string): Promise<ManualAccount[]> {
   const items = await load();
-  const next = items.map((a) =>
-    a.id === id ? { ...a, holdings: a.holdings.filter((x) => x.code !== code) } : a,
-  );
+  const next = items.map((a) => {
+    if (a.id !== id) return a;
+    const old = a.holdings.find((x) => x.code === code);
+    const moved = withCashShift(a, old ? costOf(old) : 0, 0);
+    return { ...moved, holdings: a.holdings.filter((x) => x.code !== code) };
+  });
+  await persist(next);
+  return next;
+}
+
+/**
+ * **입금·출금** (2026-09-14 — 벤티지: "예수금 내가 추가로 넣었을 때에는 예수금 추가 버튼으로
+ * 추가되게 하고").
+ *
+ * 종목을 담고 빼는 것은 계좌 **안에서** 현금과 주식이 자리를 바꾸는 일이라 총액이 그대로다.
+ * 밖에서 돈이 들어오고 나가는 것은 **다른 일**이라 단추를 따로 둔다 — 그래야 「잔고가 왜 늘었지」를
+ * 되짚을 수 있다. 총자산 기준 계좌는 총자산을, 예수금 기준 계좌는 예수금을 그만큼 올린다.
+ */
+export async function depositCash(id: string, delta: number): Promise<ManualAccount[]> {
+  const amount = Math.round(Number(delta));
+  if (!Number.isFinite(amount) || amount === 0) throw new Error("입금·출금할 금액을 적으세요.");
+  const items = await load();
+  const target = items.find((a) => a.id === id);
+  if (!target) throw new Error("계좌를 찾을 수 없습니다.");
+  const next = items.map((a) => {
+    if (a.id !== id) return a;
+    const at = new Date().toISOString();
+    if ((a.anchor ?? "cash") === "total") {
+      return { ...a, totalAnchor: Math.round((a.totalAnchor ?? 0) + amount), cashUpdatedAt: at };
+    }
+    return { ...a, cash: Math.round((a.cash ?? 0) + amount), cashUpdatedAt: at };
+  });
   await persist(next);
   return next;
 }

@@ -331,6 +331,23 @@ export function ManualAccountPage({
   const [newName, setNewName] = useState("");
   /** 계좌 id → 총 잔액 흐름. 펼쳤을 때만 그린다 (2026-09-14) */
   const [history, setHistory] = useState<Record<string, ManualPoint[]>>({});
+  /** 입금·출금 입력칸 — 계좌마다 따로 (2026-09-14) */
+  const [moveDraft, setMoveDraft] = useState<Record<string, string>>({});
+  const [moveBusy, setMoveBusy] = useState<string | null>(null);
+  async function moveCash(id: string, sign: 1 | -1) {
+    const raw = Number(moveDraft[id]);
+    if (!Number.isFinite(raw) || raw === 0) return;
+    setMoveBusy(id);
+    try {
+      const res = await api.manualDeposit(id, Math.abs(Math.round(raw)) * sign);
+      setAccounts(res.accounts);
+      setMoveDraft((p) => ({ ...p, [id]: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "입금·출금 실패");
+    } finally {
+      setMoveBusy(null);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -671,6 +688,45 @@ export function ManualAccountPage({
                 )}
               </span>
             )}
+          </div>
+
+          {/*
+            **입금·출금은 따로** (2026-09-14 — 벤티지: "예수금 내가 추가로 넣었을 때에는 예수금 추가
+            버튼으로 추가되게 하고").
+
+            종목을 담고 빼는 것은 계좌 **안에서** 현금과 주식이 자리를 바꾸는 일이라 총액이 그대로고,
+            그건 이제 알아서 된다. 밖에서 돈이 드나드는 것만 여기서 적는다 — 그래야 나중에
+            「잔고가 왜 늘었지」를 되짚을 수 있다.
+          */}
+          <div className="ma-move">
+            <span className="ma-move-t">입금·출금</span>
+            <input
+              className="search-input"
+              type="number"
+              min={0}
+              step={10000}
+              placeholder="금액"
+              value={moveDraft[a.id] ?? ""}
+              onChange={(e) => setMoveDraft((p) => ({ ...p, [a.id]: e.target.value }))}
+              onKeyDown={(e) => e.key === "Enter" && void moveCash(a.id, 1)}
+            />
+            <button
+              className="filter-btn"
+              disabled={moveBusy === a.id || !moveDraft[a.id]}
+              title="계좌에 돈을 넣었다 — 그만큼 늘린다"
+              onClick={() => void moveCash(a.id, 1)}
+            >
+              + 입금
+            </button>
+            <button
+              className="filter-btn"
+              disabled={moveBusy === a.id || !moveDraft[a.id]}
+              title="계좌에서 돈을 뺐다 — 그만큼 줄인다"
+              onClick={() => void moveCash(a.id, -1)}
+            >
+              − 출금
+            </button>
+            <span className="ma-cash-note">종목을 담고 빼면 예수금은 알아서 움직인다 — 여기는 계좌 밖으로 드나든 돈만</span>
           </div>
 
           {a.holdings.length > 0 && (

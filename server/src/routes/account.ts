@@ -7,6 +7,7 @@ import {
   removeAccount,
   removeHolding,
   setCash,
+  depositCash,
   upsertHolding,
 } from "../manualAccounts.js";
 import { allHistory, dropHistory, recordSnapshot } from "../manualHistory.js";
@@ -197,6 +198,16 @@ export function createAccountRouter(client: KiwoomClient): Router {
       /* anchor: "total" 이면 총자산을 붙박이로 — 예수금은 주식평가액을 빼서 낸다 (2026-09-08) */
       const anchor = req.body?.anchor === "total" ? "total" : "cash";
       await setCash(req.params.id, Number(req.body?.cash), anchor);
+      res.json({ accounts: await evaluate() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /** 입금·출금 — 계좌 밖에서 돈이 드나든 것만. 종목을 담고 빼는 것은 여기가 아니다 */
+  router.post("/manual/:id/deposit", async (req, res, next) => {
+    try {
+      await depositCash(req.params.id, Number(req.body?.delta));
       res.json({ accounts: await evaluate() });
     } catch (err) {
       next(err);

@@ -699,6 +699,9 @@ export const api = {
   /** anchor "total" 이면 총자산을 붙박이로 둔다 — 예수금이 주식평가액을 따라 저절로 (2026-09-08) */
   manualAccountCash: (id: string, cash: number, anchor: "cash" | "total" = "cash") =>
     putJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/cash`, { cash, anchor }),
+  /** 입금·출금 — 양수면 들어온 돈, 음수면 뺀 돈 (2026-09-14) */
+  manualDeposit: (id: string, delta: number) =>
+    postJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/deposit`, { delta }),
   manualHoldingAdd: (id: string, h: { code: string; name: string; avgPrice: number; qty: number }) =>
     postJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings`, h),
   manualHoldingRemove: (id: string, code: string) =>
