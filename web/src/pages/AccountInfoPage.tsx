@@ -150,6 +150,30 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
       return ((Number(x) || 0) - (Number(y) || 0)) * sort.dir;
     });
   }, [rows, sort]);
+  /*
+   * **폰에서는 카드로** (2026-09-14 — 벤티지: "핸드폰 모드에서 계좌 보는데 넘 불편한데 옆으로
+   * 넘겨야 되서. 카드로 보여주고 누르면 상세 나오게 하는 게 어때? 카드에서는 한눈에 들어오게").
+   *
+   * 여덟 칸짜리 표를 폰 폭에 넣을 방법은 없다 — 지금은 가로로 밀어야 수익률이 보인다.
+   * 넓은 화면에서는 표가 낫다(여러 종목을 한 눈에 견준다). 그래서 **폭으로 갈라** 그린다.
+   * 둘 다 그려 놓고 CSS 로 숨기지 않는다 — 종목이 많으면 DOM 이 두 배가 된다.
+   */
+  const [narrow, setNarrow] = useState(() => (typeof window !== "undefined" ? window.matchMedia("(max-width: 900px)").matches : false));
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 900px)");
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener("change", on);
+    /*
+     * `resize` 도 같이 듣는다 — 미리보기에서 창을 바꿨을 때 `change` 가 안 울리는 것을 봤다.
+     * 화면 회전처럼 진짜 기기에서 같은 일이 나면 표가 폰 폭에 남는다. 한 줄로 막는다.
+     */
+    window.addEventListener("resize", on);
+    return () => {
+      mq.removeEventListener("change", on);
+      window.removeEventListener("resize", on);
+    };
+  }, []);
+
   const th = (key: SortKey, label: string, right = true) => (
     <th className={`${right ? "r" : ""}${sort.key === key ? " on" : ""}`} onClick={() => setSort((s) => ({ key, dir: s.key === key ? ((s.dir * -1) as 1 | -1) : -1 }))} title="눌러서 정렬">
       {label}
@@ -248,11 +272,82 @@ export function AccountInfoPage({ onSelectStock }: { onSelectStock: (code: strin
       <section className="card acct2-hold">
         <div className="acct2-hold-h">
           <b>보유종목 {rows.length}</b>
-          <small>열을 누르면 정렬 · 줄을 누르면 종목 상세 · 매수·매도는 주문 메뉴로</small>
+          <small>{narrow ? "카드를 누르면 종목 상세 · 위 단추로 정렬" : "열을 누르면 정렬 · 줄을 누르면 종목 상세"} · 매수·매도는 주문 메뉴로</small>
           <RawJson data={holdings} />
         </div>
         {rows.length === 0 && !loading && <div className="empty">보유종목이 없습니다.</div>}
-        {rows.length > 0 && (
+        {rows.length > 0 && narrow && (
+          <>
+            {/* 정렬은 카드에서도 살린다 — 표에서 열을 누르던 것과 같은 값들 */}
+            <div className="acct2-sortbar">
+              {([["evalAmt", "평가금액"], ["pnl", "손익"], ["rate", "수익률"], ["weight", "비중"], ["name", "이름"]] as [SortKey, string][]).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={`filter-btn${sort.key === k ? " active" : ""}`}
+                  onClick={() => setSort((v) => ({ key: k, dir: v.key === k ? ((v.dir * -1) as 1 | -1) : -1 }))}
+                >
+                  {label}
+                  {sort.key === k ? (sort.dir < 0 ? " ▼" : " ▲") : ""}
+                </button>
+              ))}
+            </div>
+            <div className="acct2-cards">
+              {sorted.map((r) => (
+                <button
+                  type="button"
+                  key={`${r.code}-${r.credit}-${r.loanDate ?? ""}`}
+                  className="acct2-card"
+                  onClick={() => onSelectStock(r.code, r.name)}
+                >
+                  <div className="ac-top">
+                    <b className="ac-name">{r.name}</b>
+                    {r.credit && r.credit !== "현금" && (
+                      <i className="ord-crd ok" title={r.loanDate ? `대출일 ${r.loanDate}` : undefined}>
+                        {r.credit}
+                      </i>
+                    )}
+                    <span className={`ac-rate ${signOf(r.rate)}`}>{pctKo(r.rate)}</span>
+                  </div>
+                  <div className="ac-mid">
+                    <span className="ac-eval">{fmt(r.evalAmt)}원</span>
+                    <span className={`ac-pnl ${signOf(r.pnl)}`}>
+                      {r.pnl > 0 ? "+" : ""}
+                      {fmt(r.pnl)}
+                    </span>
+                  </div>
+                  <div className="ac-sub">
+                    {fmt(r.qty)}주{r.able !== r.qty ? ` (가능 ${fmt(r.able)})` : ""} · 매입 {fmt(r.buy)} → 현재 {fmt(r.cur)}
+                    {(r.todayBuy > 0 || r.todaySell > 0) && (
+                      <em className="acct2-today">
+                        {" "}오늘 {r.todayBuy > 0 ? `+${fmt(r.todayBuy)}` : ""}
+                        {r.todaySell > 0 ? ` −${fmt(r.todaySell)}` : ""}
+                      </em>
+                    )}
+                  </div>
+                  <div className="ac-foot">
+                    <span className="acct2-w" aria-hidden="true">
+                      <i style={{ width: `${Math.min(100, r.weight)}%` }} />
+                    </span>
+                    <span className="ac-weight">{r.weight.toFixed(1)}%</span>
+                    <span className="ac-acts" onClick={(e) => e.stopPropagation()}>
+                      <a className="ord-x buy" href={`#/order?stk=${r.code}&name=${encodeURIComponent(r.name)}&side=buy`}>
+                        매수
+                      </a>
+                      <a
+                        className="ord-x sell"
+                        href={`#/order?stk=${r.code}&name=${encodeURIComponent(r.name)}&side=sell&qty=${r.able || r.qty}${r.credit && r.credit !== "현금" ? `&credit=1&loan=${r.loanDate}` : ""}`}
+                      >
+                        매도
+                      </a>
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {rows.length > 0 && !narrow && (
           <div className="ord-scroll">
             <table className="ord-table acct2-table">
               <thead>

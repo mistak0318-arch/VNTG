@@ -18838,3 +18838,34 @@ a.watch-btn { text-decoration: none; }
 .ma-move { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
 .ma-move-t { font-size: 0.8rem; color: var(--muted); font-weight: 700; }
 .ma-move .search-input { max-width: 9rem; }
+
+/* ── 연동 계좌 · 폰에서는 카드 (2026-09-14) ────────────────────────────
+ * 벤티지: "핸드폰 모드에서 계좌 보는데 넘 불편한데 옆으로 넘겨야 되서. 카드로 보여주고
+ * 누르면 상세 나오게 … 카드에서는 한눈에 들어오게."
+ *
+ * 한 장에 네 줄이다 — ①이름과 수익률 ②평가금액과 손익 ③수량·매입→현재 ④비중과 단추.
+ * **제일 크게 적는 것은 수익률과 손익**이다. 그게 표에서 가로로 밀어야 보이던 값이다.
+ * 카드 전체가 단추라 아무 데나 눌러도 종목 상세가 열린다 — 매수·매도만 눌림을 가로챈다.
+ */
+.acct2-sortbar { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 10px; }
+.acct2-cards { display: flex; flex-direction: column; gap: 8px; }
+.acct2-card {
+  display: block; width: 100%; text-align: left; font: inherit; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: inherit;
+}
+.acct2-card:active { border-color: var(--accent, #e6a23c); }
+.ac-top { display: flex; align-items: baseline; gap: 6px; }
+.ac-name { font-size: 0.98rem; font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-rate { margin-left: auto; font-size: 1.05rem; font-weight: 800; white-space: nowrap; }
+.ac-mid { display: flex; align-items: baseline; gap: 8px; margin-top: 3px; }
+.ac-eval { font-size: 1.02rem; font-weight: 700; }
+.ac-pnl { margin-left: auto; font-size: 0.92rem; font-weight: 800; white-space: nowrap; }
+.ac-sub { margin-top: 4px; font-size: 0.78rem; color: var(--muted); line-height: 1.45; }
+.ac-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+/*
+ * 표에서는 좁은 폭에서 비중 막대를 숨긴다(18155 줄). 카드에서는 **막대가 주인공 자리**라
+ * 다시 켠다 — 숫자 100.0% 보다 막대가 먼저 눈에 들어온다.
+ */
+.ac-foot .acct2-w { display: block !important; flex: 1 1 auto; min-width: 0; width: auto; margin-right: 0; }
+.ac-weight { font-size: 0.76rem; color: var(--muted); white-space: nowrap; }
+.ac-acts { display: flex; gap: 5px; margin-left: auto; }
