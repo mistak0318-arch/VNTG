@@ -126,11 +126,11 @@ export interface LedgerView {
     holdings: number;
     /** 키움이 준 평가손익 합 — 위 `pnlTotal`(평가금액−매입금액)과 다를 수 있다 */
     pnlKiwoom: number;
-    /** 지금 전부 팔면 나갈 비용(수수료+세금). 요율을 못 재면 null */
+    /** 사고팔며 나가는 비용 전부(수수료+거래세). 못 재면 null */
     sellCostNow: number | null;
-    /** 아직 안 뺀 매수 수수료 — 키움 평가손익에 이미 들어 있으면 0 */
-    buyFeeLeft: number | null;
-    /** 지금 다 팔았다 치면 남는 것. 요율을 못 재면 null */
+    /** 그 비용을 어디서 얻었나 — 키움 평가손익에서 되짚었나, 내 실적 요율로 냈나 */
+    costFrom: "kiwoom" | "measured" | null;
+    /** 비용까지 뺀 손익. 못 재면 null */
     netPnlNow: number | null;
   };
   /** 기간 수익률 (kt00016) — 입출금을 뺀 순자산 기준 */
@@ -232,7 +232,7 @@ async function build(days: number): Promise<LedgerView> {
     /* 아래 「매매 비용」 절에서 채운다 — daily 를 만든 뒤라야 요율을 잴 수 있다 */
     pnlKiwoom: acct.holdings.reduce((t, h) => t + h.pnl, 0),
     sellCostNow: null,
-    buyFeeLeft: null,
+    costFrom: null,
     netPnlNow: null,
   };
 
@@ -314,11 +314,16 @@ async function build(days: number): Promise<LedgerView> {
 
   /*
    * ── 매매 비용 ────────────────────────────────────────────────────────
-   * **잰다, 믿지 않는다.** 키움이 실제로 뗀 수수료·세금을 같은 기간의 매매금액으로 나눈다.
+   * **잰다, 믿지 않는다.** 키움이 실제로 뗀 수수료·세금을 같은 기간 매매금액으로 나눈다.
    *
-   * 매수 수수료를 두 번 빼지 않으려고 한 가지를 더 본다 — 키움이 준 평가손익(`evltv_prft`)이
-   * 「평가금액 − 매입금액」보다 **작으면** 키움이 이미 매수 수수료를 뺀 것이다. 문서를 읽어
-   * 정하지 않고 **두 숫자의 차이로** 정한다. 차이가 매수 수수료의 절반도 안 되면 안 뺀 것으로 본다.
+   * ⚠️ **키움 평가손익에는 제비용이 이미 들어 있다** (2026-09-14 실측). 벤티지 화면에서
+   * 매입 1,707,000 · 평가 1,697,000 인데 평가손익이 −13,893 이었다. 단순 차이는 −10,000 이니
+   * 키움이 3,893 원을 미리 뺀 것이다(매수 수수료 + 팔 때 낼 수수료·거래세의 어림).
+   * 그래서 우리가 또 빼면 **두 번 빠진다** — 처음 낸 판이 그랬다.
+   *
+   * 문서로 정하지 않는다. 「평가금액 − 매입금액」과 키움 평가손익의 **차이가 곧 키움이 뺀 비용**이다.
+   * 그 값과 우리가 잰 요율로 낸 값 중 **큰 쪽**을 쓴다 — 덜 빼서 「이만큼은 남는다」로 읽히는
+   * 쪽이 더 비싼 실수다.
    */
   const tradeBase = daily.reduce((t, r) => t + r.buyAmt + r.sellAmt, 0);
   const sellBase = daily.reduce((t, r) => t + r.sellAmt, 0);
@@ -336,12 +341,17 @@ async function build(days: number): Promise<LedgerView> {
           days: daily.filter((r) => r.buyAmt + r.sellAmt > 0).length,
         }
       : null;
-  if (cost && valueTotal > 0) {
-    const buyFeeFull = investTotal * cost.feeRate;
-    const kiwoomTookBuyFee = now.pnlTotal - now.pnlKiwoom > buyFeeFull * 0.5;
-    now.sellCostNow = Math.round(valueTotal * (cost.feeRate + cost.taxRate));
-    now.buyFeeLeft = kiwoomTookBuyFee ? 0 : Math.round(buyFeeFull);
-    now.netPnlNow = Math.round(now.pnlKiwoom - now.sellCostNow - now.buyFeeLeft);
+  if (valueTotal > 0) {
+    const rawGross = valueTotal - investTotal;
+    /* 키움이 이미 뺀 비용 — 음수(평가손익이 더 큼)면 안 뺀 것으로 본다 */
+    const kiwoomCost = Math.max(0, rawGross - now.pnlKiwoom);
+    const ourCost = cost ? investTotal * cost.feeRate + valueTotal * (cost.feeRate + cost.taxRate) : 0;
+    const use = Math.max(kiwoomCost, ourCost);
+    if (use > 0) {
+      now.sellCostNow = Math.round(use);
+      now.costFrom = kiwoomCost >= ourCost ? "kiwoom" : "measured";
+      now.netPnlNow = Math.round(rawGross - use);
+    }
   }
 
   return {

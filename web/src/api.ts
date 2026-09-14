@@ -7582,11 +7582,11 @@ export interface LedgerView {
     holdings: number;
     /** 키움이 준 평가손익 합 */
     pnlKiwoom: number;
-    /** 지금 전부 팔면 나갈 수수료+세금. 요율을 못 재면 null */
+    /** 사고팔며 나가는 비용 전부(수수료+거래세). 못 재면 null */
     sellCostNow: number | null;
-    /** 아직 안 뺀 매수 수수료 — 키움 평가손익에 이미 들어 있으면 0 */
-    buyFeeLeft: number | null;
-    /** 지금 다 팔았다 치면 남는 것 */
+    /** 그 비용의 출처 — 키움 평가손익에서 되짚었나, 내 실적 요율로 냈나 */
+    costFrom: "kiwoom" | "measured" | null;
+    /** 비용까지 뺀 손익 */
     netPnlNow: number | null;
   };
   period: { netStart: number; netEnd: number; deposits: number; withdrawals: number; evalPnl: number; rate: number } | null;

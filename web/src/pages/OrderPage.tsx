@@ -1832,11 +1832,21 @@ function OrderForm({
             <b>정정/취소</b>
             <small>미체결을 고르면 원주문가·남은 수량이 채워진다. 값을 고쳐 「정정」, 그대로 두고 「취소」.</small>
           </div>
+          {/*
+            **남은 수량이 0 인 줄은 거른다** (2026-09-14 — 벤티지: "이미 체결이 되었는데도 정정 버튼
+            누르면 얘가 나오고 있네").
+
+            키움 미체결 조회는 막 체결된 주문을 한동안 **남은 수량 0 으로 함께 준다.** 여기서
+            거르지 않으면 이미 끝난 주문이 고를 수 있는 것처럼 보인다. 게다가 화면이 `remain || qty`
+            로 적고 있어서 **0 일 때 원주문 수량이 대신 떴다** — 1주 다 체결된 주문이 「1주 남음」으로
+            보였다는 뜻이다. 그걸 골라 「취소」를 누르면 이미 없는 수량으로 취소가 나간다.
+            폴링 주기(5초)가 아니라 **거르지 않은 것**이 원인이었다.
+          */}
           {openRows === null && <div className="ord-caps">미체결을 읽는 중…</div>}
-          {openRows?.length === 0 && <div className="ord-caps">미체결 주문이 없다</div>}
-          {openRows && openRows.length > 0 && (
+          {openRows?.filter((r) => r.remain > 0).length === 0 && <div className="ord-caps">미체결 주문이 없다</div>}
+          {openRows && openRows.filter((r) => r.remain > 0).length > 0 && (
             <div className="ord-amend-list" role="listbox">
-              {openRows.map((r) => {
+              {openRows.filter((r) => r.remain > 0).map((r) => {
                 const on = amend.ordNo === r.ordNo;
                 return (
                   <button
@@ -1845,16 +1855,17 @@ function OrderForm({
                     className={`ord-amend-row${on ? " on" : ""}`}
                     onClick={() => {
                       const sd: "buy" | "sell" = /매도/.test(r.side) ? "sell" : "buy";
-                      setAmend({ ordNo: r.ordNo, side: sd, qty: r.remain || r.qty, price: r.price, name: r.name, code: r.code, venue: r.venue || "KRX", remain: r.remain || r.qty });
+                      /* 남은 수량이 곧 고칠 수량이다 — 0 이면 위에서 이미 걸렀다 */
+                      setAmend({ ordNo: r.ordNo, side: sd, qty: r.remain, price: r.price, name: r.name, code: r.code, venue: r.venue || "KRX", remain: r.remain });
                       takeCode(r.code, r.name);
                       setSide(sd);
-                      setQty(String(r.remain || r.qty));
+                      setQty(String(r.remain));
                       setPrice(r.price ? String(r.price) : "");
                     }}
                   >
                     <SideChip side={r.side} />
                     <b>{r.name || r.code}</b>
-                    <span className="num">{fmtNum(r.remain || r.qty)}주</span>
+                    <span className="num">{fmtNum(r.remain)}주</span>
                     <span className="num">{r.price ? `${fmtNum(r.price)}원` : "시장가"}</span>
                     <span className="ord-caps">{hms(r.time)}</span>
                   </button>
@@ -4440,24 +4451,28 @@ function LedgerTab() {
           **지금 다 팔면 얼마 남나.** 보유분 평가손익에서 팔 때 나갈 비용을 뺀다.
           요율은 표에서 가져오지 않고 **내 계좌가 실제로 낸 금액**으로 잰다 — 못 재면 안 적는다.
         */}
-        {view.now.netPnlNow !== null && view.cost && (
+        {view.now.netPnlNow !== null && (
           <div
             className={`ord-lstat ${signClass(view.now.netPnlNow)}`}
             title={[
-              `평가손익(키움) ${signedWon(view.now.pnlKiwoom)}`,
-              `− 팔 때 수수료·세금 ${manwon(view.now.sellCostNow ?? 0)}`,
-              view.now.buyFeeLeft ? `− 아직 안 뺀 매수 수수료 ${manwon(view.now.buyFeeLeft)}` : "매수 수수료는 키움 평가손익에 이미 들어 있다",
+              `평가금액 − 매입금액 ${signedWon(view.now.pnlTotal)}  (비용 전)`,
+              `− 사고팔며 나가는 비용 ${manwon(view.now.sellCostNow ?? 0)}`,
               `= ${signedWon(view.now.netPnlNow)}`,
               "",
-              `요율은 내 계좌 실적으로 쟀다 — 최근 ${view.cost.days}일 매매에서`,
-              `수수료 ${(view.cost.feeRate * 100).toFixed(4)}% · 거래세 ${(view.cost.taxRate * 100).toFixed(4)}%`,
-              "ETF 처럼 거래세가 없는 것이 섞이면 평균이 조금 낮게 잡힌다",
+              view.now.costFrom === "kiwoom"
+                ? "비용은 키움 평가손익에서 되짚었다 — 키움이 매수 수수료와 팔 때 낼 수수료·거래세를 미리 빼서 준다"
+                : "비용은 내 계좌 실적으로 잰 요율로 냈다",
+              view.cost
+                ? `내 실적 요율 — 최근 ${view.cost.days}일 매매에서 수수료 ${(view.cost.feeRate * 100).toFixed(4)}% · 거래세 ${(view.cost.taxRate * 100).toFixed(4)}%`
+                : "아직 매매 기록이 없어 요율은 못 쟀다",
+              `참고 — 키움 평가손익 합 ${signedWon(view.now.pnlKiwoom)}`,
             ].join(String.fromCharCode(10))}
           >
             <i>지금 다 팔면 (비용 뺀)</i>
             <b>{signedWon(view.now.netPnlNow)}</b>
             <small>
-              평가손익 {signedWon(view.now.pnlKiwoom)} − 비용 {manwon((view.now.sellCostNow ?? 0) + (view.now.buyFeeLeft ?? 0))}
+              비용 전 {signedWon(view.now.pnlTotal)} − 비용 {manwon(view.now.sellCostNow ?? 0)}
+              {view.now.costFrom === "kiwoom" ? " (키움이 뺀 값)" : " (내 실적 요율)"}
             </small>
           </div>
         )}
