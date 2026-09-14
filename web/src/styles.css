@@ -18641,6 +18641,15 @@ a.watch-btn { text-decoration: none; }
 /* ── 맨 윗줄 하나 — 아이콘 줄 + 시계 (2026-09-10) ── */
 .top-strip { display: flex; align-items: center; gap: 8px; padding: 12px 20px 0; max-width: var(--main-max, 1400px); }
 .top-strip .qss-row { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+/*
+ * 빗자루를 시계에 붙이지 않는다 (2026-09-14 — 벤티지: "시계 ui 가 좀 겹치네").
+ *
+ * 폰 규칙이 `.qss-close-tabs` 를 `margin-left: auto` 로 **줄 오른쪽 끝까지** 밀어 둔다.
+ * 그 끝이 바로 시계 왼쪽이라 둘이 6px 밖에 안 떨어졌고, 둘 다 테두리 상자라
+ * 붙어 보인다. 아이콘 옆에 그대로 두면 시계와의 사이가 저절로 빈다 —
+ * **아무것도 옮기지 않고 한 줄 그대로다.**
+ */
+.top-strip .qss-row .qss-close-tabs { margin-left: 0; }
 /* 머리글은 이제 시계만 — 어느 폭에서든 보인다. 제목은 탭 줄이 말한다 */
 .top-strip .mobile-header {
   display: flex; align-items: center; position: static; border: 0; padding: 0; background: none; gap: 6px; flex: none; z-index: auto;
@@ -18658,7 +18667,7 @@ a.watch-btn { text-decoration: none; }
 @media (max-width: 899px) {
   .top-strip {
     position: sticky; top: 0; z-index: 20; background: var(--bg); border-bottom: 1px solid var(--border);
-    padding: 6px 10px 6px 3.6rem; gap: 6px; max-width: none;
+    padding: 6px 10px 6px 3.6rem; gap: 10px; max-width: none;
   }
   :root[data-nav="right"] .top-strip { padding-left: 10px; padding-right: 3.6rem; }
   :root[data-nav="right"] .top-strip .mobile-header { flex-direction: row; }
