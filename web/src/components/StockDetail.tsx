@@ -7,6 +7,8 @@ import { WatchAddSheet, type WatchAddTarget } from "./WatchAddSheet";
 import { IntradayLevelsBar } from "./IntradayLevelsBar";
 import { IntradayFlow } from "./IntradayPanels";
 import { PriceHeader } from "./PriceHeader";
+import type { LastSession } from "./PeriodReturns";
+import { krPhase } from "../marketSession";
 import { StockSummaryPanel } from "./StockSummaryPanel";
 import { StockTabsSection } from "./StockTabsSection";
 import { useLive } from "../useLive";
@@ -101,6 +103,8 @@ export function StockDetail({
   /* 넘어온 이름이 비었거나 코드면 서버가 준 `stk_nm` 으로 (2026-09-03) — `stockNameOf` 주석 참고 */
   const name = stockNameOf(info, code, givenName);
   const [watchBusy, setWatchBusy] = useState(false);
+  /** 마지막 거래일 일봉 한 줄 — 새벽(키움이 날짜를 넘긴 뒤) 머리가 어제 값을 쓰려고 (2026-09-15) */
+  const [lastSession, setLastSession] = useState<LastSession | null>(null);
   const [addTarget, setAddTarget] = useState<WatchAddTarget | null>(null);
 
   /*
@@ -185,7 +189,16 @@ export function StockDetail({
              * 두 칸으로 그린다 — **정규장 종가(전일 대비)** 와 **지금 값(정규장 대비)**. 둘을 합치면 하루 전체다.
              * 정규장 중이거나 종가를 아직 못 찍었으면 서버가 안 준다 — 그땐 예전처럼 한 칸.
              */
-            const cur = Math.abs(Number(info.cur_prc));
+            /*
+             * 새벽엔 키움이 이미 새 날이라 현재가 = 어제 정규장 종가, 등락률 0 이다(2026-09-15 06:17 실측).
+             * 07:50 전이고 오늘 거래가 0 이면 **어제 일봉의 마지막 값**을 쓴다 — 가격 칸(PriceHeader)과 같은 판정.
+             */
+            const rolled =
+              krPhase() === "closed" &&
+              Math.abs(Number(info.open_pric)) === 0 &&
+              !(Math.abs(Number(info.trde_qty)) > 0) &&
+              (lastSession?.close ?? 0) > 0;
+            const cur = rolled ? lastSession!.close! : Math.abs(Number(info.cur_prc));
             const sign = (v: number | null) => (v === null ? "" : v > 0 ? "positive" : v < 0 ? "negative" : "");
             const pct = (v: number | null) => (v === null ? "" : `${v > 0 ? "+" : ""}${v.toFixed(2)}%`);
             const reg = (info._regular ?? null) as {
@@ -195,17 +208,27 @@ export function StockDetail({
               liveLabel: string;
             } | null;
             if (!reg || !(reg.close > 0)) {
+              const r0 = rolled && lastSession?.base ? ((cur - lastSession.base) / lastSession.base) * 100 : Number(info.flu_rt);
               return (
-                <span className={`sheet-live num ${sign(Number(info.flu_rt))}`}>
+                <span className={`sheet-live num ${sign(r0)}`}>
                   <b>{cur.toLocaleString("ko-KR")}</b>
-                  <i>{pct(Number(info.flu_rt))}</i>
+                  <i>{pct(r0)}</i>
                 </span>
               );
             }
             const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
             /* 정규장이 전일보다 몇 % — 앞 장 파일이 있으면 그것, 오늘 장이면 키움 기준가(전일 종가)로 */
             const base = Math.abs(Number(info.base_pric)) || 0;
-            const prev = reg.prevClose && reg.prevClose > 0 ? reg.prevClose : reg.date === todayKst && base > 0 ? base : null;
+            /* 일봉 날짜는 YYYYMMDD — 정규장 파일 날짜(YYYY-MM-DD)와 같은 날이면 그날의 전일종가를 기준으로 */
+            const lastSameDay = lastSession && lastSession.date === reg.date.replace(/-/g, "") ? lastSession.base : null;
+            const prev =
+              reg.prevClose && reg.prevClose > 0
+                ? reg.prevClose
+                : lastSameDay && lastSameDay > 0
+                  ? lastSameDay
+                  : reg.date === todayKst && base > 0
+                    ? base
+                    : null;
             const regRate = prev ? ((reg.close - prev) / prev) * 100 : null;
             const liveRate = ((cur - reg.close) / reg.close) * 100;
             const md = `${Number(reg.date.slice(5, 7))}/${Number(reg.date.slice(8, 10))}`;
@@ -330,7 +353,7 @@ export function StockDetail({
           <div className="sd-blk" style={{ order: cards.orderOf("price") }}>
             {/* 상태 배너 + 예탁원 이벤트 — 개별종목분석·보드·종목발굴과 같은 컴포넌트 (2026-09-10) */}
             <StockStatusBanner code={code} />
-            <PriceHeader info={info} code={code} />
+            <PriceHeader info={info} code={code} onLastSession={setLastSession} />
           </div>
           {/* 값이 있어야 그린다 — 기준가가 0 이면 등락률 축이 안 선다 */}
           {basePrice > 0 && (

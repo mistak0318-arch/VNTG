@@ -7,6 +7,8 @@ import { IntradayFlow } from "../components/IntradayPanels";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
 import { StockTabsSection } from "../components/StockTabsSection";
 import { PriceHeader } from "../components/PriceHeader";
+import { dawnPrice, type LastSession } from "../components/PeriodReturns";
+import { krPhase } from "../marketSession";
 import { StockStatusBanner } from "../components/StockStatusBanner";
 import { RefreshBar } from "../components/RefreshBar";
 import { useWatchedCodes } from "../useWatchedCodes";
@@ -32,6 +34,8 @@ export function StockAnalysisPage({
   stock: { code: string; name: string } | null;
   onSelectStock: (code: string, name: string) => void;
 }) {
+  /** 마지막 거래일 일봉 한 줄 — 새벽에 제목줄이 어제 값을 쓰려고 (2026-09-15) */
+  const [lastSession, setLastSession] = useState<LastSession | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
@@ -227,24 +231,26 @@ export function StockAnalysisPage({
               {shownName} <span className="analysis-code">{stock.code}</span>
             </h2>
             {/* 제목줄에도 현재가 — 이미 5초 폴링 중인 info 를 그릴 뿐이다 */}
-            {info && Math.abs(Number(info.cur_prc)) > 0 && (
-              <span
-                className={`sheet-live num ${
-                  Number(info.flu_rt) > 0 ? "positive" : Number(info.flu_rt) < 0 ? "negative" : ""
-                }`}
-              >
-                <b>{Math.abs(Number(info.cur_prc)).toLocaleString("ko-KR")}</b>
-                <i>
-                  {Number(info.flu_rt) > 0 ? "+" : ""}
-                  {Number(info.flu_rt).toFixed(2)}%
-                </i>
-              </span>
-            )}
+            {info && Math.abs(Number(info.cur_prc)) > 0 && (() => {
+              /* 새벽(키움이 날짜를 넘긴 뒤)엔 어제 마지막 값 — 아래 가격 칸과 같은 판정 (2026-09-15) */
+              const dawn = dawnPrice(info, lastSession, krPhase() === "closed");
+              const px = dawn ? dawn.price : Math.abs(Number(info.cur_prc));
+              const rt = dawn ? dawn.rate : Number(info.flu_rt);
+              const cls = rt === null ? "" : rt > 0 ? "positive" : rt < 0 ? "negative" : "";
+              return (
+                <span className={`sheet-live num ${cls}`}>
+                  <b>{px.toLocaleString("ko-KR")}</b>
+                  <i>
+                    {rt === null ? "" : `${rt > 0 ? "+" : ""}${rt.toFixed(2)}%`}
+                  </i>
+                </span>
+              );
+            })()}
           </div>
 
           {/* 투자주의·경고·공매도 과열… 상태 배너 — 시트와 같은 것 (2026-09-10 벤티지 "표시가 안 되어 있네") */}
           <StockStatusBanner code={stock.code} />
-          <PriceHeader info={info} code={stock.code} />
+          <PriceHeader info={info} code={stock.code} onLastSession={setLastSession} />
           {/*
             가격 바로 아래다 — **견줄 선은 견줄 값 옆에 있어야** 한다.
             탭 안에 넣으면 눌러야 보이는데, 이건 늘 보면서 판단하는 값이다.

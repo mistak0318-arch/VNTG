@@ -101,7 +101,16 @@ function MarkChips({ code }: { code: string }) {
   );
 }
 
-export function PriceHeader({ info, code }: { info: RawRecord | null; code?: string }) {
+export function PriceHeader({
+  info,
+  code,
+  onLastSession,
+}: {
+  info: RawRecord | null;
+  code?: string;
+  /** 마지막 거래일 값을 위(종목 상세 머리)로도 올린다 — 새벽에 머리가 어제 값을 쓰려고 (2026-09-15) */
+  onLastSession?: (l: LastSession | null) => void;
+}) {
   /*
    * 거래가 있었던 마지막 날의 값. 아래 「기간 상승률」이 받는 일봉에서 올려 준다.
    * ka10001 이 개장 전에 0 을 주는 자리를 이걸로 메운다 — 새벽에 "거래량 0" 이 뜨던 문제.
@@ -249,7 +258,16 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
     if (!regular || !(regular.close > 0)) return null;
     const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
     const base = Math.abs(Number(info?.base_pric)) || 0;
-    const prev = regular.prevClose && regular.prevClose > 0 ? regular.prevClose : regular.date === todayKst && base > 0 ? base : null;
+    /* 앞 장 파일이 없으면 그날 일봉의 전일종가 — 새벽엔 키움 기준가가 이미 새 날 것이라 못 쓴다 */
+    const lastSameDay = last && last.date === regular.date.replace(/-/g, "") ? last.base : null;
+    const prev =
+      regular.prevClose && regular.prevClose > 0
+        ? regular.prevClose
+        : lastSameDay && lastSameDay > 0
+          ? lastSameDay
+          : regular.date === todayKst && base > 0
+            ? base
+            : null;
     return prev ? ((regular.close - prev) / prev) * 100 : null;
   })();
   /**
@@ -271,7 +289,22 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
    */
   const filled = fillOk && Math.abs(Number(info.open_pric)) === 0 && last?.base != null;
   const base = filled ? last!.base! : Math.abs(Number(info.base_pric));
-  const fluRt = Number(String(info.flu_rt ?? "").replace(/\+/g, ""));
+  /*
+   * **새벽에 키움이 날짜를 넘긴 상태** (2026-09-15 06:17 실측 — 벤티지: "전날 종가 흐름 다음날 7시 50분까지
+   * 들고 있는 거 아니었어? … 종목상세 들어가니 값이 모두 비어 있네").
+   *
+   * 그 시각 ka10001 은 이미 새 날이다 — 현재가 = 전일종가(=어제 **정규장** 종가), 등락률 0, 시·고·저·거래량 0.
+   * 거래소별 조회도 0 을 준다. 예전 메우기(`fill`)는 시·고·저만 메웠고, 그마저 거래소별 KRX 값이 0 으로 와서
+   * `krx?.open ?? …` 가 0 을 그대로 썼다(0 은 null 이 아니라 `??` 를 안 넘는다) — 그래서 칸이 전부 「-」였다.
+   * 07:50 전(마감 국면)이고 오늘 거래가 아직 0 이면 **어제 일봉 한 줄**로 화면 전체를 그린다 — 큰 숫자(어제
+   * 마지막 값)·등락률(그날 전일종가 대비)·시·고·저·거래대금·전일종가까지.
+   */
+  const rolled =
+    fillOk && Math.abs(Number(info.open_pric)) === 0 && !(Math.abs(Number(info.trde_qty)) > 0) && (last?.close ?? 0) > 0;
+  const fluRt =
+    rolled && last?.base
+      ? ((last.close! - last.base) / last.base) * 100
+      : Number(String(info.flu_rt ?? "").replace(/\+/g, ""));
 
   /*
    * 큰 숫자는 **언제나 정규장(KRX) 값**이다.
@@ -294,7 +327,7 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
    */
   const preOpen = phase === "pre";
   const hasCur = Math.abs(Number(info.cur_prc)) > 0;
-  const mainPrice = preOpen && !hasCur ? info.base_pric : info.cur_prc;
+  const mainPrice = rolled ? last!.close : preOpen && !hasCur ? info.base_pric : info.cur_prc;
   const mainLabel =
     phase === "pre"
       ? hasCur
@@ -365,20 +398,30 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           })()}
           {code && <MarkChips code={code} />}
         </div>
-        <div className={`ph-price ${preOpen && !hasCur ? "" : sign}`}>{fmtAbsNum(mainPrice)}</div>
+        <div className={`ph-price ${rolled ? (fluRt > 0 ? "positive" : fluRt < 0 ? "negative" : "") : preOpen && !hasCur ? "" : sign}`}>
+          {fmtAbsNum(mainPrice)}
+        </div>
         {/* 통합 값이 있으면 프리장에도 등락을 적는다(NXT 체결 기준). 없을 때만 생략 */}
         {!(preOpen && !hasCur) && (
-          <div className={`ph-change ${sign}`}>
-            {Number(info.pred_pre) > 0 ? "▲" : Number(info.pred_pre) < 0 ? "▼" : ""}
-            {fmtAbsNum(info.pred_pre)}
+          <div className={`ph-change ${rolled ? (fluRt > 0 ? "positive" : fluRt < 0 ? "negative" : "") : sign}`}>
+            {/* 넘어간 새벽엔 키움 전일대비가 0 이다 — 어제 마지막 값 − 그날의 전일종가로 (위 `rolled`) */}
+            {(() => {
+              const diff = rolled && last?.base ? last.close! - last.base : Number(info.pred_pre);
+              return (
+                <>
+                  {diff > 0 ? "▲" : diff < 0 ? "▼" : ""}
+                  {fmtAbsNum(diff)}
+                </>
+              );
+            })()}
             <span className="ph-rate">
               {Number.isFinite(fluRt) && fluRt > 0 ? "+" : ""}
               {Number.isFinite(fluRt) ? fluRt.toFixed(2) : "-"}%
             </span>
           </div>
         )}
-        {showNxtLine && nxt && (
-          /* 「= KRX」 접기 폐지(2026-08-26) — 견주라고 있는 줄이니 늘 숫자로 */
+        {!rolled && showNxtLine && nxt && (
+          /* 「= KRX」 접기 폐지(2026-08-26) — 견주라고 있는 줄이니 늘 숫자로. 넘어간 새벽엔 새 날의 0 이라 감춘다 */
           <div className={`ph-nxt ${nxtCls}`}>
             <em className="ph-ex nxt">NXT</em>
             <b>{fmtNum(nxt.price)}</b>
@@ -397,9 +440,10 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
            * 이라 여기 쓰면 NXT 와 늘 같아 보였다. krx 조회가 아직이면 info(통합)로
            * 임시. 마감 국면에만 마지막 거래일 값으로 메운다 — 07:50 부터는 오늘 값만.
            */
-          { label: "시가", value: krx?.open ?? (fillOk ? fill(info.open_pric, last?.open) : info.open_pric), nxtValue: nxt?.open ?? null },
-          { label: "고가", value: krx?.high ?? (fillOk ? fill(info.high_pric, last?.high) : info.high_pric), nxtValue: nxt?.high ?? null },
-          { label: "저가", value: krx?.low ?? (fillOk ? fill(info.low_pric, last?.low) : info.low_pric), nxtValue: nxt?.low ?? null },
+          /* 넘어간 새벽엔 거래소별 조회가 0 을 준다 — 그 0 을 쓰지 않고 어제 일봉으로 (위 `rolled` 주석) */
+          { label: "시가", value: rolled ? last!.open : krx?.open || (fillOk ? fill(info.open_pric, last?.open) : info.open_pric), nxtValue: rolled ? null : nxt?.open ?? null },
+          { label: "고가", value: rolled ? last!.high : krx?.high || (fillOk ? fill(info.high_pric, last?.high) : info.high_pric), nxtValue: rolled ? null : nxt?.high ?? null },
+          { label: "저가", value: rolled ? last!.low : krx?.low || (fillOk ? fill(info.low_pric, last?.low) : info.low_pric), nxtValue: rolled ? null : nxt?.low ?? null },
         ].map((it) => {
           const v = vsBase(it.value, base);
           const nv = vsBase(it.nxtValue, base);
@@ -463,13 +507,14 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
           const md = `${Number(regular.date.slice(5, 7))}/${Number(regular.date.slice(8, 10))}`;
           /* 큰 숫자 — 애프터에 KRX 가 돌면 KRX, 아니면 NXT(없으면 통합 현재가) */
-          const main: { venue: string; price: number } =
-            krxLive && krx?.price != null
+          const main: { venue: string; price: number } = rolled
+            ? { venue: "", price: last!.close! }
+            : krxLive && krx?.price != null
               ? { venue: "KRX", price: krx.price }
               : nxt?.price != null
                 ? { venue: "NXT", price: nxt.price }
                 : { venue: "", price: Math.abs(Number(info.cur_prc)) || 0 };
-          const other = main.venue === "KRX" && showNxtLine && nxt ? { venue: "NXT", price: nxt.price } : main.venue === "NXT" && krx?.price != null ? { venue: "KRX", price: krx.price } : null;
+          const other = rolled ? null : main.venue === "KRX" && showNxtLine && nxt ? { venue: "NXT", price: nxt.price } : main.venue === "NXT" && krx?.price != null ? { venue: "KRX", price: krx.price } : null;
           const liveRate = main.price > 0 ? ((main.price - regular.close) / regular.close) * 100 : null;
           const liveTitle =
             phase === "pre" ? "NXT 프리" : phase === "gap" ? "NXT · 16:00 애프터 개장" : phase === "closed" ? (krxInAfter && afterTradable ? "애프터 종가" : "NXT 마감") : krxLive ? "애프터" : "NXT 애프터";
@@ -542,7 +587,7 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           {/* 전일종가는 두 거래소가 같다 — 정규장 종가를 기준값으로 쓰기 때문 */}
           <span className="ph-label">전일종가</span>
           <span className="ph-row">
-            <span className="ph-value">{fmtAbsNum(info.base_pric)}</span>
+            <span className="ph-value">{fmtAbsNum(rolled && last?.base ? last.base : info.base_pric)}</span>
           </span>
         </div>
         {/*
@@ -589,11 +634,12 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
             거래소별 몫과 비중(%) — 어느 판에서 돈이 돌았는지 참고용이다.
           */}
           {(() => {
-            const total =
-              allValue ??
-              (krxValue !== null || nxt?.tradeValue != null
-                ? (krxValue ?? 0) + (nxt?.tradeValue ?? 0)
-                : null);
+            const total = rolled
+              ? last?.value ?? null
+              : allValue ??
+                (krxValue !== null || nxt?.tradeValue != null
+                  ? (krxValue ?? 0) + (nxt?.tradeValue ?? 0)
+                  : null);
             const eok = (v: number) => `${Math.round(v / 100).toLocaleString("ko-KR")}억`;
             const share = (v: number | null | undefined) =>
               v != null && total ? ` (${Math.round((v / total) * 100)}%)` : "";
@@ -683,7 +729,15 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
         </div>
       </div>
       {/* 오늘 하루만 보면 흐름을 못 읽는다 — 아래에 기간별 상승률을 붙인다 */}
-      {code && <PeriodReturns code={code} onTradeValue={setLast} />}
+      {code && (
+        <PeriodReturns
+          code={code}
+          onTradeValue={(l) => {
+            setLast(l);
+            onLastSession?.(l);
+          }}
+        />
+      )}
     </div>
   );
 }

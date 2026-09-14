@@ -32,8 +32,30 @@ const PERIODS = [
  *
  * 일봉에서 **실제로 거래가 있었던 마지막 날**을 골라 그 값으로 메운다.
  */
+/**
+ * **새벽에 키움이 날짜를 넘겼으면 어제 마지막 값을** (2026-09-15 06:17 실측).
+ *
+ * 그 시각 ka10001 은 이미 새 날이다 — 현재가 = 전일종가(어제 정규장 종가), 등락률 0, 시·고·저·거래량 0.
+ * 07:50 전(`krPhase()==="closed"`)이고 오늘 거래가 0 이면 어제 일봉 한 줄(`last`)의 마지막 값과 그날
+ * 전일종가 대비 등락률을 돌려준다. 아니면 null — 부르는 쪽이 평소 값을 쓴다.
+ * 종목 상세 머리 · 개별종목분석 제목줄 · 가격 칸이 **같은 판정**을 쓰게 한 곳에 둔다.
+ */
+export function dawnPrice(
+  info: { open_pric?: unknown; trde_qty?: unknown } | null,
+  last: LastSession | null,
+  closedPhase: boolean,
+): { price: number; rate: number | null } | null {
+  if (!info || !last || !closedPhase) return null;
+  if (Math.abs(Number(info.open_pric)) !== 0 || Math.abs(Number(info.trde_qty)) > 0) return null;
+  const price = last.close ?? 0;
+  if (!(price > 0)) return null;
+  return { price, rate: last.base ? ((price - last.base) / last.base) * 100 : null };
+}
+
 export interface LastSession {
   date: string;
+  /** 그날 마지막 값(키움 일봉 종가 — 9/14 부터는 애프터까지 포함한 값) */
+  close: number | null;
   open: number | null;
   high: number | null;
   low: number | null;
@@ -96,6 +118,7 @@ export function PeriodReturns({
           withTrade
             ? {
                 date: String(withTrade.dt ?? ""),
+                close: Math.abs(Number(withTrade.cur_prc)) || null,
                 open: Math.abs(Number(withTrade.open_pric)) || null,
                 high: Math.abs(Number(withTrade.high_pric)) || null,
                 low: Math.abs(Number(withTrade.low_pric)) || null,
