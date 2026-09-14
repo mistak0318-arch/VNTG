@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -87,10 +87,15 @@ export function noteFrame(type: string, values: Record<string, string>): void {
 /** health.json 에 실을 한 덩어리 */
 export async function afterProbeSnapshot(): Promise<Record<string, unknown>> {
   const today = kst().date;
-  let rc: { 있음: boolean; 크기?: number; 시각?: string } = { 있음: false };
+  let rc: { 있음: boolean; 크기?: number; 시각?: string; 출처?: string } = { 있음: false };
   try {
-    const st = await stat(join(RC_DIR, `${today}.json`));
+    const f = join(RC_DIR, `${today}.json`);
+    const st = await stat(f);
     rc = { 있음: true, 크기: st.size, 시각: new Date(st.mtimeMs + 9 * 3600_000).toISOString().slice(11, 16) };
+    /* 파일 머리에 적힌 출처 — KRX 인가, 통합으로 대신 찍었나. 옛 파일엔 없다(= 통합으로 찍던 시절) */
+    const head = (await readFile(f, "utf-8")).slice(0, 120);
+    const m = head.match(/"source":"([^"]+)"/);
+    rc.출처 = m ? m[1] : "적힌 것 없음(통합으로 찍던 판)";
   } catch {
     /* 없으면 없는 것이다 */
   }

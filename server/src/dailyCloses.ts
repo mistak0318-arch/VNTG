@@ -6,7 +6,7 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { loadThemes } from "./naverThemes.js";
 import { getCommonStockCodes } from "./stockListCache.js";
 import { MIN, afterMarketEra, dayFullySettled } from "./marketHours.js";
-import { getMarketSnapshot } from "./marketSnapshot.js";
+import { getKrxPrices, getMarketSnapshot } from "./marketSnapshot.js";
 
 /**
  * 전종목 일봉 종가 캐시 — **누적 수익률의 바탕.**
@@ -326,17 +326,35 @@ const RC_DIR = join(DIR, "regularCloses");
 export async function captureRegularCloses(client: KiwoomClient): Promise<number> {
   const date = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
   if (!afterMarketEra(date)) return 0; // 9/13 까지는 일봉 한 바퀴가 곧 정규장 종가다
-  const snap = await getMarketSnapshot(client);
+  /*
+   * ⚠️ **KRX 가격으로 찍는다** (2026-09-14 고침). 처음엔 시황 스냅샷(통합 KRX+NXT)을 썼는데,
+   * 15:30~16:00 엔 KRX 가 닫히고 NXT 만 돌아서 **통합 가격이 곧 NXT 의 그 시각 값**이었다.
+   * 「정규장 종가」라고 적은 파일에 NXT 15시 40~50분 값이 들어간 셈이다. KRX 로만 받으면
+   * 그 시간 KRX 가격이 곧 정규장 종가다.
+   */
+  const krx = await getKrxPrices(client).catch(() => new Map<string, number>());
   const out: Record<string, number> = {};
-  for (const [code, st] of snap.byCode) {
-    const p = Math.abs(Number(st.price));
-    if (Number.isFinite(p) && p > 0) out[code] = p;
+  for (const [code, p] of krx) out[code] = p;
+  /*
+   * KRX 조회가 통째로 비면 **예전 방식(통합 스냅샷)으로라도** 찍는다. 아예 안 찍으면 20:10 일봉의 `c` 가
+   * 애프터 종가로 덮여 더 크게 틀린다 — 조금 섞인 값이 없는 값보다 낫다. 대신 파일에 그렇게 적는다.
+   * 8/26 전에는 이 TR 이 `stex_tp: "1"` 을 썼고 그 주석이 「통합은 마감 후 NXT 값을 준다」였다 — 경고는 있었다.
+   */
+  let source: "KRX" | "통합(대체)" = "KRX";
+  if (Object.keys(out).length === 0) {
+    source = "통합(대체)";
+    const snap = await getMarketSnapshot(client);
+    for (const [code, st] of snap.byCode) {
+      const p = Math.abs(Number(st.price));
+      if (Number.isFinite(p) && p > 0) out[code] = p;
+    }
+    console.warn("[일봉] KRX 조회가 비어 정규장 종가를 통합 스냅샷으로 대신 찍음 — NXT 값이 섞일 수 있다");
   }
   const n = Object.keys(out).length;
   if (n === 0) return 0;
   await mkdir(RC_DIR, { recursive: true });
-  await writeFile(join(RC_DIR, `${date}.json`), JSON.stringify({ at: new Date().toISOString(), closes: out }), "utf-8");
-  console.log(`[일봉] 정규장 종가 ${n}종목 찍음 (${date})`);
+  await writeFile(join(RC_DIR, `${date}.json`), JSON.stringify({ at: new Date().toISOString(), source, closes: out }), "utf-8");
+  console.log(`[일봉] 정규장 종가 ${n}종목 찍음 (${date}, ${source})`);
   return n;
 }
 
@@ -571,5 +589,31 @@ export function startClosesScheduler(client: KiwoomClient): void {
   };
   setTimeout(() => void tick(), 150_000); // 기동 직후는 다른 초기화에 자리를 내준다
   timer = setInterval(() => void tick(), 30 * 60_000);
+  /*
+   * **정규장 종가 찍기는 따로 1분마다 본다** (2026-09-14 고침).
+   *
+   * 위 30분 틱은 **서버가 뜬 시각이 박자를 정한다.** 창(15:31~15:59)이 29분이라, 박자가 정각·30분에
+   * 걸리면(15:30:30 · 16:00:30) **한 번도 안 들어온다** — 그러면 20:10 일봉의 `c` 가 애프터 종가로
+   * 덮인다. 배포(재시작) 시각이 날마다 달라서 **날마다 운에 맡겨진 셈**이었다.
+   * 1분 틱으로 15:40~15:59 안에서 **하루 한 번** 찍는다. 실패하면 다음 분에 다시 한다.
+   */
+  let rcDoneFor = "";
+  let rcBusy = false;
+  setInterval(() => {
+    const k = new Date(Date.now() + 9 * 3600_000);
+    const day = k.toISOString().slice(0, 10);
+    const m = k.getUTCHours() * 60 + k.getUTCMinutes();
+    if (!afterMarketEra(day) || m < MIN.regularClose + 10 || m >= MIN.afterOpen) return;
+    if (rcDoneFor === day || rcBusy) return;
+    rcBusy = true;
+    captureRegularCloses(client)
+      .then((n) => {
+        if (n > 0) rcDoneFor = day;
+      })
+      .catch((e) => console.warn("[일봉] 정규장 종가 못 찍음 — 다음 분에 다시", e instanceof Error ? e.message : e))
+      .finally(() => {
+        rcBusy = false;
+      });
+  }, 60_000);
   console.log("[dailyCloses] 일봉 캐시 스케줄러 시작 (하루 1회 — 09/13 까지 16시 이후, 09/14 부터 20시 뒤)");
 }

@@ -731,8 +731,14 @@ export async function getSectorStocks(
   client: KiwoomClient,
   market: "kospi" | "kosdaq",
   sectorCode: string,
+  /**
+   * 거래소 (2026-09-14). 기본 `"3"`(통합)은 예전 그대로다. **정규장 종가를 찍을 때만 `"1"`(KRX)** 을 쓴다 —
+   * 15:30~16:00 엔 KRX 는 닫혀 있고 NXT 만 돌아서, 통합으로 찍으면 KRX 종가가 아니라 NXT 의 그 시각
+   * 값이 들어간다. 캐시 열쇠에 거래소를 넣어 둘이 섞이지 않게 한다.
+   */
+  venue: "1" | "3" = "3",
 ): Promise<StockRow[]> {
-  const key = `sector:${market}:${sectorCode}`;
+  const key = `sector:${market}:${sectorCode}:${venue}`;
   const hit = constituentCache.get(key);
   if (hit && Date.now() - hit.at < CONSTITUENT_TTL_MS) return hit.data;
 
@@ -746,7 +752,7 @@ export async function getSectorStocks(
       {
         mrkt_tp: market === "kospi" ? "0" : "1",
         inds_cd: sectorCode,
-        stex_tp: "3", // 통합(KRX+NXT) — 상세(/info, _AL)와 기준을 맞춘다 (2026-08-26 전환)
+        stex_tp: venue, // 기본 통합(KRX+NXT) — 상세(/info, _AL)와 기준을 맞춘다 (2026-08-26 전환). 정규장 종가는 KRX
       },
       page === 0 ? {} : { contYn, nextKey },
     );

@@ -221,6 +221,39 @@ export function bareCode(code: string): string {
   return code.replace(/_AL$/, "").trim();
 }
 
+/**
+ * **KRX 가격만** 전종목으로 (2026-09-14) — 정규장 종가를 찍는 데만 쓴다.
+ *
+ * 스냅샷은 통합(KRX+NXT) 가격이다. 평소엔 그게 맞지만 **15:30~16:00 엔 KRX 가 닫혀 있고 NXT 만
+ * 돈다** — 그때 통합으로 찍으면 「정규장 종가」 자리에 NXT 의 15시 40~50분 값이 들어간다. KRX 로만
+ * 받으면 그 시간 KRX 가격은 곧 정규장 종가다. 스냅샷과 같은 업종 목록을 돈다(캐시는 따로).
+ */
+export async function getKrxPrices(client: KiwoomClient): Promise<Map<string, number>> {
+  const section = await getSection("sectors", client).catch(() => null);
+  const sectors = (section?.data ?? null) as Sectors | null;
+  const targets: { market: "kospi" | "kosdaq"; code: string }[] = [];
+  for (const market of ["kospi", "kosdaq"] as const) {
+    for (const s of (market === "kospi" ? sectors?.kospi : sectors?.kosdaq) ?? []) {
+      if (s.code && isRealSectorCode(s.code)) targets.push({ market, code: s.code });
+    }
+  }
+  const out = new Map<string, number>();
+  for (let i = 0; i < targets.length; i += 5) {
+    const chunk = targets.slice(i, i + 5);
+    const results = await Promise.all(
+      chunk.map((t) => getSectorStocks(client, t.market, t.code, "1").catch(() => [] as StockRow[])),
+    );
+    for (const rows of results) {
+      for (const r of rows) {
+        const code = bareCode(r.code);
+        const p = Math.abs(Number(r.price));
+        if (code && Number.isFinite(p) && p > 0 && !out.has(code)) out.set(code, p);
+      }
+    }
+  }
+  return out;
+}
+
 async function build(client: KiwoomClient): Promise<MarketSnapshot> {
   const section = await getSection("sectors", client).catch(() => null);
   const sectors = (section?.data ?? null) as Sectors | null;
