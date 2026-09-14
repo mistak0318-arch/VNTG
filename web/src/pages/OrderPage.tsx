@@ -1224,6 +1224,15 @@ function OrderForm({
    */
   const [amend, setAmend] = useState<{ ordNo: string; side: "buy" | "sell"; qty: number; price: number; name: string; code: string; venue: string; remain: number } | null>(null);
   const [openRows, setOpenRows] = useState<OrderRow[] | null>(null);
+  /*
+   * **왜 안 눌리는지**를 적는다 (2026-09-14 — 벤티지: "정정주문에 들어가서
+   * 주문 넣은거 단가 바꾸고 하려니까 버튼이 활성화가 안되네").
+   *
+   * 「정정」과 「취소」는 **고른 미체결이 있어야** 눌린다. 그런데 안 눌릴 때 화면은
+   * 아무 말도 안 했다 — 눈으로는 「값을 다 넣었는데 왜 죽었지」로만 보인다.
+   * 값을 고치는 손은 아래에 있고 고를 목록은 위에 있어서, 목록을 지나치면 끝까지 모른다.
+   * **주문 동작은 그대로다** — 이유만 적는다.
+   */
   /* 링크(#/order?amend=…)로 들어오면 정정 갈래를 켠다 */
   useEffect(() => {
     if (!prefill.amend) return;
@@ -1265,6 +1274,12 @@ function OrderForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRows, prefill.amend]);
   const [price, setPrice] = useState(prefill.price);
+  const amendWhy =
+    !amend ? null
+    : !amend.ordNo ? "위 목록에서 고칠 미체결 주문을 먼저 누른다 — 고르기 전에는 「정정」·「취소」가 안 켜진다"
+    : Number(qty) <= 0 ? "수량이 비어 있다 — 정정할 수량을 넣는다"
+    : Number(price) <= 0 ? "가격이 비어 있다 — 정정할 단가를 넣는다"
+    : null;
   const [cond, setCond] = useState(prefill.cond);
   /*
    * 호가를 누르면 **어느 칸**에 넣나 (2026-09-04). 보통은 가격 칸 하나뿐이라 고민이 없는데,
@@ -2336,6 +2351,7 @@ function OrderForm({
               <button
                 type="button"
                 className="ord-go amend"
+                title={amendWhy ?? "고친 값으로 정정 주문서를 만든다"}
                 disabled={busy || !amend.ordNo || Number(qty) <= 0 || Number(price) <= 0}
                 onClick={async () => {
                   setBusy(true);
@@ -2365,6 +2381,7 @@ function OrderForm({
               <button
                 type="button"
                 className="ord-go cancel"
+                title={amend.ordNo ? "이 미체결을 통째로 취소한다" : "위에서 미체결 주문을 먼저 고른다"}
                 disabled={busy || !amend.ordNo}
                 onClick={async () => {
                   setBusy(true);
@@ -2381,6 +2398,7 @@ function OrderForm({
               >
                 취소
               </button>
+              {amendWhy && <p className="ord-amend-why">{amendWhy}</p>}
             </div>
           ) : (
             <button type="submit" className={`ord-go ${side}`} disabled={busy || !ready}>

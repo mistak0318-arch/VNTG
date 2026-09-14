@@ -18174,6 +18174,11 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 }
 .ord-amend-cur { margin-top: 0.4rem; font-size: 0.84rem; }
 .ord-amend-go { display: grid; grid-template-columns: 2fr 1fr; gap: 0.4rem; }
+/*
+ * 왜 안 눌리는지 한 줄 (2026-09-14). 주문 화면에서 죽은 단추는 제일 비싼 침묵이다 —
+ * 눈으로는 값을 다 넣은 것처럼 보이니 고칠 곳을 못 찾는다.
+ */
+.ord-amend-why { grid-column: 1 / -1; margin: 2px 0 0; font-size: 0.78rem; color: var(--muted); line-height: 1.45; }
 .ord-go.amend { background: rgba(230, 162, 60, 0.18); border-color: var(--accent, #e6a23c); color: var(--accent, #e6a23c); }
 .ord-go.cancel { background: var(--panel-2); border-color: var(--border); color: var(--muted); }
 /* 가격 줄 손잡이 — 시장가·가격 자동·잔량전부 (2026-09-08, 키움 배치 참고) */
