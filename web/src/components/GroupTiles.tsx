@@ -58,17 +58,22 @@ export function GroupTiles({
             className={`gt-tile${on ? " on" : ""}`}
             style={tint(r)}
             onClick={() => onPick(g.id)}
-            title={g.title || `${g.name} · ${g.count}종목`}
+            title={`${g.name} · ${g.count}종목${(g.rising ?? 0) + (g.falling ?? 0) > 0 ? ` · ▲${g.rising ?? 0} ▼${g.falling ?? 0}` : ""}${g.title ? `
+${g.title}` : ""}`}
           >
+            {/*
+              **두 줄로 얇게** (2026-09-15 — 벤티지: "박스 만든 거 좀 슬림하게 만들어 줘 봐 작게. 밑에 종목들 리스트
+              보기가 힘들잖아"). 처음 판은 세 줄(이름·등락률·N종목 ▲▼)에 두 칸씩이라 그룹 열셋이 일곱 줄을 먹어
+              정작 종목 표가 화면 밖으로 밀렸다. 윗줄 이름, 아랫줄 등락률과 ▲▼. 종목 수는 말풍선으로.
+            */}
             <span className="gt-tile-name">{g.name}</span>
-            <span className={`gt-tile-rate ${dir}`}>{r === null ? "–" : `${r > 0 ? "+" : ""}${r.toFixed(2)}%`}</span>
-            <span className="gt-tile-meta">
-              {g.count}종목
+            <span className="gt-tile-line">
+              <b className={`gt-tile-rate ${dir}`}>{r === null ? "–" : `${r > 0 ? "+" : ""}${r.toFixed(2)}%`}</b>
               {(g.rising ?? 0) + (g.falling ?? 0) > 0 && (
-                <>
-                  {" "}
-                  <i className="positive">▲{g.rising ?? 0}</i> <i className="negative">▼{g.falling ?? 0}</i>
-                </>
+                <span className="gt-tile-meta">
+                  <i className="positive">▲{g.rising ?? 0}</i>
+                  <i className="negative">▼{g.falling ?? 0}</i>
+                </span>
               )}
             </span>
           </button>
