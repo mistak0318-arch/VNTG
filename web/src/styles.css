@@ -73,18 +73,6 @@ body,
   height: 100%;
   margin: 0;
 }
-/*
- * **맨 위 흰 줄** (2026-09-14 — 벤티지: "맨위에 흰색 선이 생겼어").
- *
- * 폰 브라우저는 주소창이 접히거나 스크롤이 끝까지 당겨질 때 **캔버스**를 칠한다. 그 색은
- * `body` 배경이 `html` 로 전파돼야 어두운데, 그 전파는 타이밍에 따라 한 프레임 비는 일이 있다 —
- * 그 순간 기본 흰색이 띠로 보인다. `html` 에 직접 칠하면 그럴 일이 없다.
- * 당겨서 튕기는 것도 막는다 — 그 자리가 바로 흰 줄이 보이던 곳이다.
- */
-html {
-  background: var(--bg);
-  overscroll-behavior-y: none;
-}
 
 html {
   /*
@@ -4493,16 +4481,9 @@ html[data-tabs="sticky"] .main-inner > .tabscroll {
   z-index: 15;
   background: var(--bg);
 }
-/*
- * 모바일은 맨 윗줄(`.top-strip`, sticky z-20)이 있다 — 그 **아래**에 붙어야 한다.
- *
- * ⚠️ 예전엔 `2.85rem` 으로 박혀 있었다 (2026-09-14 — 벤티지: "시계가 겹쳤고"). 기본 글자
- * 크기에서는 맞았지만 **설정에서 글자를 키우면 맨 윗줄이 같이 커지고 탭 줄은 그대로라 둘이
- * 겹쳤다** — 시계 위에 탭이 올라탔다. 이제 App 이 그 줄을 재서 `--top-strip-h` 로 넘긴다.
- * 변수가 아직 없을 때(첫 프레임)만 2.85rem 으로 떨어진다.
- */
+/* 모바일은 상단 헤더(sticky z-20)가 있다 — 그 아래에 붙는다 (bf-top-slim 과 같은 값) */
 @media (max-width: 899px) {
-  html[data-tabs="sticky"] .main-inner > .tabscroll { top: var(--top-strip-h, 2.85rem); }
+  html[data-tabs="sticky"] .main-inner > .tabscroll { top: 2.85rem; }
 }
 /* 인앱 탭바의 좌우 버튼 — 탭바 배경은 --bg 라 그라데이션도 --bg 로 (종목상세는 --panel) */
 .main-inner > .tabscroll > .tabscroll-btn.left {
@@ -18658,38 +18639,14 @@ a.watch-btn { text-decoration: none; }
 .bf-days-t td, .bf-days-t th { font-size: 0.76rem; }
 
 /* ── 맨 윗줄 하나 — 아이콘 줄 + 시계 (2026-09-10) ── */
-/*
- * ⚠️ **한 줄이다 — 줄을 바꾸지 않는다.**
- *
- * 2026-09-14 에 `flex-wrap: wrap` 을 넣었다가 바로 되돌렸다 (벤티지: "더 이상해졌어
- * 두줄이 되어버렸어"). 줄바꿈을 허용하면 flex 는 칸을 **줄이기 전에** 넘긴다 —
- * `.qss-row` 의 기본 폭이 max-content 라 폰에서는 항상 시계가 둘째 줄로 내려갔다.
- *
- * 시계가 겹치던 진짜 원인은 따로 있었다 — **붙은 탭 줄이 `top: 2.85rem` 로 굳어 있었다.**
- * 이젠 App 이 이 줄을 재서 `--top-strip-h` 로 넘긴다. 줄바꿈은 그 문제의 답이 아니었다.
- */
-.top-strip { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; padding: 12px 20px 0; max-width: var(--main-max, 1400px); }
+.top-strip { display: flex; align-items: center; gap: 8px; padding: 12px 20px 0; max-width: var(--main-max, 1400px); }
 .top-strip .qss-row { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
-/*
- * 글자를 아주 키우면(배율 130% 급) 아이콘 줄이 제 칸을 넘친다. 그때 **빗자루가 시계 밑으로
- * 파고드는 대신 줄어든다** — 개수 괄호가 잘리는 편이 겹치는 것보다 낫다.
- * `overflow` 를 `.qss-row` 에 걸면 상태 팝업(`.live-pop`)과 검색 목록이 잘리므로
- * **단추 자기 안에만** 건다.
- */
-.top-strip .qss-row .qss-close-tabs { flex: 0 1 auto; overflow: hidden; }
 /* 머리글은 이제 시계만 — 어느 폭에서든 보인다. 제목은 탭 줄이 말한다 */
 .top-strip .mobile-header {
   display: flex; align-items: center; position: static; border: 0; padding: 0; background: none; gap: 6px; flex: none; z-index: auto;
-  /* 시계 묶음 자체를 오른쪽 끝으로 — 아이콘 줄이 안 늘어나는 경우에도 (2026-09-14) */
-  margin-left: auto;
 }
 .top-strip .mobile-title { display: none; }
-/*
- * 시계는 **오른쪽 끝** (2026-09-14 — 벤티지: "시계 UI 좀 오른쪽 끝으로 배치해 줘").
- * 기본 규칙(`.mobile-clock`)이 `margin-left:auto` 로 밀어 두는데 여기서 0 으로 덮고 있었다 —
- * 그래서 시계 뒤에 빈 자리가 남았다. 다시 auto 로 둔다.
- */
-.top-strip .mobile-clock { font-size: 0.8rem; font-weight: 700; padding: 1px 7px; margin-left: auto; }
+.top-strip .mobile-clock { font-size: 0.8rem; font-weight: 700; padding: 1px 7px; margin-left: 0; }
 /*
  * 시각 뒤의 날짜 (2026-09-14) — **괄호로, 시각보다 조금 작게.**
  *
