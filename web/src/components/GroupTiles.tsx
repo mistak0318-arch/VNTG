@@ -17,6 +17,8 @@ import type { CSSProperties } from "react";
 export interface TileGroup {
   id: string;
   name: string;
+  /** 이름 앞 점 색 — 내 태그처럼 그룹마다 제 색이 있을 때 */
+  color?: string;
   /** 그룹 평균 등락률(%). 모르면 null */
   rate: number | null;
   count: number;
@@ -66,7 +68,10 @@ ${g.title}` : ""}`}
               보기가 힘들잖아"). 처음 판은 세 줄(이름·등락률·N종목 ▲▼)에 두 칸씩이라 그룹 열셋이 일곱 줄을 먹어
               정작 종목 표가 화면 밖으로 밀렸다. 윗줄 이름, 아랫줄 등락률과 ▲▼. 종목 수는 말풍선으로.
             */}
-            <span className="gt-tile-name">{g.name}</span>
+            <span className="gt-tile-name">
+              {g.color && <i className="gt-dot" style={{ background: g.color }} />}
+              {g.name}
+            </span>
             <span className="gt-tile-line">
               <b className={`gt-tile-rate ${dir}`}>{r === null ? "–" : `${r > 0 ? "+" : ""}${r.toFixed(2)}%`}</b>
               {(g.rising ?? 0) + (g.falling ?? 0) > 0 && (

@@ -18948,4 +18948,5 @@ a.watch-btn { text-decoration: none; }
 .gt-tile-rate:not(.positive):not(.negative) { color: var(--muted); }
 .gt-tile-meta { margin-left: auto; display: inline-flex; gap: 2px; font-size: 0.6rem; white-space: nowrap; opacity: 0.85; }
 .gt-tile-meta i { font-style: normal; }
+.gt-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
 .usb-edit-row { margin-top: -2px; }

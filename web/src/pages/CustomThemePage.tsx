@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSheetBack } from "../useSheetBack";
 import { api, normalizeStockCode, type EvaluatedTheme, type StockSearchResult } from "../api";
-import { tileHeat, useAppearance } from "../useAppearance";
+import { GroupTiles } from "../components/GroupTiles";
 import { useListKeys } from "../useListKeys";
 
 /**
@@ -64,7 +64,6 @@ export function CustomThemePage({
   const [themeQ, setThemeQ] = useState("");
   /** 타일 정렬 — 등락률(기본)·이름·종목수 */
   const [sortBy, setSortBy] = useState<"rate" | "name" | "count">("rate");
-  const { theme: uiTheme } = useAppearance();
 
   // 새 테마
   const [newName, setNewName] = useState("");
@@ -262,28 +261,25 @@ export function CustomThemePage({
       )}
 
       {/*
-        타일 격자 — 관심종목 히트맵과 같은 문법. 등락률이 곧 색이라 어느 테마가
-        도는지 훑어서 보이고, 큰 카드 나열보다 화면에 열 배가 들어간다.
+        **타일 격자 — 해외 관심종목과 같은 얇은 칸** (2026-09-15 — 벤티지: "내 태그도 보기 좋게 좀 만들어 줘.
+        어제 해외관심종목 만든 것처럼"). 옛 판은 두 칸씩 네 줄짜리 큰 타일이라 태그 스물여섯 개가 폰에서
+        세 화면을 먹었다. `GroupTiles` 를 그대로 써서 한 줄에 셋, 칸마다 두 줄(이름 / 등락률 ▲▼).
+        태그 색은 이름 앞 점으로 남기고, 종목 수·메모는 말풍선으로 옮겼다.
       */}
-      <div className="ct-grid">
-        {visible.map((t) => (
-          <button
-            key={t.id}
-            className="ct-tile"
-            style={tileHeat(t.changeRate, uiTheme)}
-            onClick={() => setOpen(t.id)}
-            title={`${t.name} ${pct(t.changeRate)} · ▲${t.risingCount} ▼${t.fallingCount} · ${t.stocks.length}종목${t.memo ? `\n${t.memo}` : ""}`}
-          >
-            <span className="ct-tile-top">
-              <i className="ct-dot" style={{ background: t.color }} />
-              {t.source === "infostock" && <em className="ct-tile-src">인</em>}
-            </span>
-            <b>{t.name}</b>
-            <span className={`num ct-tile-rate ${cls(t.changeRate)}`}>{pct(t.changeRate)}</span>
-            <span className="ct-tile-n">{t.stocks.length}종목</span>
-          </button>
-        ))}
-      </div>
+      <GroupTiles
+        groups={visible.map((t) => ({
+          id: t.id,
+          name: t.name,
+          color: t.color,
+          rate: Number.isFinite(t.changeRate) ? t.changeRate : null,
+          count: t.stocks.length,
+          rising: t.risingCount,
+          falling: t.fallingCount,
+          title: [t.source === "infostock" ? "인포스탁에서 옮겨 온 태그" : "", t.memo ?? ""].filter(Boolean).join("\n") || undefined,
+        }))}
+        activeId={open}
+        onPick={setOpen}
+      />
 
       {/* 새 테마 — 매일 쓰는 게 아니라 접어 둔다 */}
       <details className="cal-fold">
