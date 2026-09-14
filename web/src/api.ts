@@ -690,6 +690,8 @@ export const api = {
     }>("/api/account/concentration"),
   manualBrokers: () => getJson<{ brokers: string[] }>("/api/account/manual/brokers"),
   manualAccounts: () => getJson<{ accounts: EvaluatedAccount[] }>("/api/account/manual"),
+  /** 수동 계좌의 총 잔액 흐름 — 계좌 id 마다 하루 한 점 (2026-09-14) */
+  manualHistory: () => getJson<{ history: Record<string, ManualPoint[]> }>("/api/account/manual/history"),
   manualAccountAdd: (broker: string, name: string) =>
     postJson<{ accounts: EvaluatedAccount[] }>("/api/account/manual", { broker, name }),
   manualAccountRemove: (id: string) =>
@@ -2674,6 +2676,16 @@ export interface EvaluatedHolding {
   cost: number;
   profit: number;
   returnRate: number | null;
+}
+
+/** 수동 계좌 잔액 흐름의 한 점 (2026-09-14) */
+export interface ManualPoint {
+  /** YYYY-MM-DD (KST) */
+  date: string;
+  total: number;
+  stock: number;
+  cash: number;
+  cost: number;
 }
 
 export interface EvaluatedAccount {

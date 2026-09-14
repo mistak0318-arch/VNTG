@@ -7,7 +7,7 @@ import {
   type EvaluatedAccount,
   type EvaluatedHolding,
   type StockSearchResult,
-  kstYmd } from "../api";
+  kstYmd, type ManualPoint } from "../api";
 import { useListKeys } from "../useListKeys";
 import { SortableTh, useSortableTable } from "../useSortableTable";
 import { CollapsibleCard } from "../components/CollapsibleCard";
@@ -187,6 +187,129 @@ function AddHoldingForm({ accountId, onDone }: { accountId: string; onDone: (a: 
  * 예수금이 총자산에서 차지하는 비율(%).
  * 총자산이 0 이면 낼 수 없다 — 0 으로 나누느니 없다고 말하는 게 맞다.
  */
+/* ── 총 잔액 흐름 (2026-09-14) ────────────────────────────────────────────
+ * 벤티지: "수동계좌에 계좌 총 잔액 흐름 볼 수 있게 그래프로 표현해 줄 수 있나? 펼쳤을 때 말야.
+ *          일별·주별·월별로 수익률 현황 볼 수 있게."
+ *
+ * 점은 **오늘부터** 쌓인다. 과거 주가로 되짚어 그리지 않는다 — 그건 지금 보유분을 그때도
+ * 들고 있었다는 가정이라 사실이 아니고, 사고판 것과 입출금이 전부 지워진 그림이다.
+ * 그래서 점이 하나뿐인 날은 **그렇게 적는다.** 빈 그래프에 선을 그어 흉내 내지 않는다.
+ *
+ * 기간 표의 「변화」는 **입출금이 섞인다.** 수동 계좌는 돈을 넣고 뺀 기록이 없어서 가려낼
+ * 방법이 없다 — 그래서 「수익률」이라 부르지 않고 「잔액 변화」라고 적고, 옆에 종목 수익률을
+ * 따로 둔다. 그쪽은 매입금액 대비라 입출금과 무관하다.
+ */
+type TrendSpan = "day" | "week" | "month";
+
+function spanKey(date: string, span: TrendSpan): string {
+  if (span === "day") return date;
+  if (span === "month") return date.slice(0, 7);
+  const d = new Date(date + "T00:00:00Z");
+  const wd = (d.getUTCDay() + 6) % 7; // 월요일 = 0
+  return new Date(d.getTime() - wd * 86400_000).toISOString().slice(0, 10);
+}
+
+function spanLabel(key: string, span: TrendSpan): string {
+  if (span === "month") return `${Number(key.slice(5, 7))}월`;
+  const [, m, d] = key.split("-");
+  return span === "week" ? `${Number(m)}/${Number(d)} 주` : `${Number(m)}/${Number(d)}`;
+}
+
+function AccountTrend({ points }: { points: ManualPoint[] }) {
+  const [span, setSpan] = useState<TrendSpan>("day");
+
+  if (points.length === 0) {
+    return <p className="ma-trend-empty">아직 쌓인 잔액 기록이 없다 — 이 화면을 여는 날마다 한 점씩 쌓인다.</p>;
+  }
+
+  /* 구간마다 마지막 점을 그 구간의 값으로 — 첫 점과 견줘 변화를 낸다 */
+  const buckets = new Map<string, { first: ManualPoint; last: ManualPoint }>();
+  for (const p of points) {
+    const k = spanKey(p.date, span);
+    const hit = buckets.get(k);
+    if (hit) hit.last = p;
+    else buckets.set(k, { first: p, last: p });
+  }
+  const rows = [...buckets.entries()].map(([k, v]) => ({
+    key: k,
+    label: spanLabel(k, span),
+    total: v.last.total,
+    change: v.last.total - v.first.total,
+    profit: v.last.cost > 0 ? v.last.stock - v.last.cost : null,
+    rate: v.last.cost > 0 ? ((v.last.stock - v.last.cost) / v.last.cost) * 100 : null,
+  }));
+
+  /* 그래프 — 점이 둘 미만이면 선이 안 그려지므로 점만 찍는다 */
+  const W = 300;
+  const H = 84;
+  const vals = points.map((p) => p.total);
+  const lo = Math.min(...vals);
+  const hi = Math.max(...vals);
+  const pad = (hi - lo) * 0.12 || Math.max(1, hi * 0.02);
+  const top = hi + pad;
+  const bot = lo - pad;
+  const x = (i: number) => (points.length <= 1 ? W / 2 : (i / (points.length - 1)) * W);
+  const y = (v: number) => H - ((v - bot) / (top - bot || 1)) * H;
+  const line = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.total).toFixed(1)}`).join(" ");
+  const up = points[points.length - 1].total >= points[0].total;
+
+  return (
+    <div className="ma-trend">
+      <div className="ma-trend-h">
+        <b>총 잔액 흐름</b>
+        <span className="ma-trend-n">{points.length}일치</span>
+        <div className="ma-trend-tabs">
+          {(["day", "week", "month"] as TrendSpan[]).map((k) => (
+            <button key={k} type="button" className={span === k ? "on" : ""} onClick={() => setSpan(k)}>
+              {k === "day" ? "일별" : k === "week" ? "주별" : "월별"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <svg className="ma-trend-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="총 잔액 흐름">
+        {points.length > 1 && <path d={line} className={up ? "up" : "down"} fill="none" />}
+        {points.map((p, i) => (
+          <circle key={p.date} cx={x(i)} cy={y(p.total)} r={points.length > 40 ? 1.2 : 2.2} className={up ? "up" : "down"}>
+            <title>{`${p.date} · ${fmtNum(p.total)}원`}</title>
+          </circle>
+        ))}
+      </svg>
+      <div className="ma-trend-ends">
+        <span>{points[0].date} {fmtNum(points[0].total)}</span>
+        <span>{points[points.length - 1].date} {fmtNum(points[points.length - 1].total)}</span>
+      </div>
+
+      <table className="ma-trend-tbl">
+        <thead>
+          <tr>
+            <th>구간</th>
+            <th className="r">총자산</th>
+            <th className="r">잔액 변화</th>
+            <th className="r">종목 손익</th>
+            <th className="r">수익률</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...rows].reverse().slice(0, 24).map((r) => (
+            <tr key={r.key}>
+              <td>{r.label}</td>
+              <td className="r">{fmtNum(r.total)}</td>
+              <td className={`r ${signClass(r.change)}`}>{r.change > 0 ? "+" : ""}{fmtNum(r.change)}</td>
+              <td className={`r ${signClass(r.profit)}`}>{r.profit === null ? "-" : `${r.profit > 0 ? "+" : ""}${fmtNum(Math.round(r.profit))}`}</td>
+              <td className={`r ${signClass(r.rate)}`}>{pct(r.rate)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="ma-trend-note">
+        <b>잔액 변화</b>는 돈을 넣고 뺀 것도 섞인다 — 수동 계좌는 입출금 기록이 없어 가려낼 수가 없다.
+        입출금과 무관한 값은 <b>수익률</b>(매입금액 대비)이다.
+      </p>
+    </div>
+  );
+}
+
 function cashPct(a: { totalAssets: number; cash: number }): number | null {
   if (!Number.isFinite(a.totalAssets) || a.totalAssets <= 0) return null;
   return Math.round((a.cash / a.totalAssets) * 100);
@@ -206,6 +329,8 @@ export function ManualAccountPage({
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [newBroker, setNewBroker] = useState("");
   const [newName, setNewName] = useState("");
+  /** 계좌 id → 총 잔액 흐름. 펼쳤을 때만 그린다 (2026-09-14) */
+  const [history, setHistory] = useState<Record<string, ManualPoint[]>>({});
 
   async function load() {
     setLoading(true);
@@ -214,6 +339,8 @@ export function ManualAccountPage({
       const res = await api.manualAccounts();
       setAccounts(res.accounts);
       setUpdatedAt(new Date());
+      /* 흐름은 곁가지다 — 실패해도 계좌는 보여야 한다 */
+      api.manualHistory().then((h) => setHistory(h.history)).catch(() => undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "불러오기 실패");
     } finally {
@@ -485,6 +612,9 @@ export function ManualAccountPage({
               <div className="value">{fmtNum(Math.round(a.totalAssets))}</div>
             </div>
           </div>
+
+          {/* 총 잔액 흐름 — 펼쳤을 때만 (2026-09-14) */}
+          <AccountTrend points={history[a.id] ?? []} />
 
           {/*
             예수금은 받아올 수가 없어 직접 적는다.

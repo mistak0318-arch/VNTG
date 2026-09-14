@@ -9,6 +9,7 @@ import {
   setCash,
   upsertHolding,
 } from "../manualAccounts.js";
+import { allHistory, dropHistory, recordSnapshot } from "../manualHistory.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { peekSnapshot } from "../marketSnapshot.js";
 import { listThemes } from "../customThemes.js";
@@ -139,10 +140,32 @@ export function createAccountRouter(client: KiwoomClient): Router {
     res.json({ brokers: BROKERS });
   });
 
+  /*
+   * **볼 때마다 오늘 한 점을 남긴다** (2026-09-14). 수동 계좌는 잔액 흐름을 줄 사람이 없어서
+   * 우리가 쌓는 수밖에 없다 — 따로 스케줄러를 두는 대신 화면을 열 때 남긴다. 계좌를 안 보는
+   * 날은 점이 빈다. 그날 값을 지어내느니 비는 편이 낫다.
+   *
+   * 기록 실패가 화면을 막지 않게 기다리지 않는다.
+   */
+  const evaluate = async () => {
+    const accounts = await evaluateAccounts(client);
+    void recordSnapshot(accounts).catch(() => undefined);
+    return accounts;
+  };
+
+  /** 계좌별 총 잔액 흐름 — 그래프와 일·주·월 표가 이걸 본다 */
+  router.get("/manual/history", async (_req, res, next) => {
+    try {
+      res.json({ history: await allHistory() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /** 평가금액·수익률은 저장값이 아니라 조회 시점에 계산한다 */
   router.get("/manual", async (_req, res, next) => {
     try {
-      res.json({ accounts: await evaluateAccounts(client) });
+      res.json({ accounts: await evaluate() });
     } catch (err) {
       next(err);
     }
@@ -152,7 +175,7 @@ export function createAccountRouter(client: KiwoomClient): Router {
     try {
       const { broker, name } = req.body ?? {};
       await addAccount(String(broker ?? ""), String(name ?? ""));
-      res.json({ accounts: await evaluateAccounts(client) });
+      res.json({ accounts: await evaluate() });
     } catch (err) {
       next(err);
     }
@@ -161,7 +184,8 @@ export function createAccountRouter(client: KiwoomClient): Router {
   router.delete("/manual/:id", async (req, res, next) => {
     try {
       await removeAccount(req.params.id);
-      res.json({ accounts: await evaluateAccounts(client) });
+      await dropHistory(req.params.id);
+      res.json({ accounts: await evaluate() });
     } catch (err) {
       next(err);
     }
@@ -173,7 +197,7 @@ export function createAccountRouter(client: KiwoomClient): Router {
       /* anchor: "total" 이면 총자산을 붙박이로 — 예수금은 주식평가액을 빼서 낸다 (2026-09-08) */
       const anchor = req.body?.anchor === "total" ? "total" : "cash";
       await setCash(req.params.id, Number(req.body?.cash), anchor);
-      res.json({ accounts: await evaluateAccounts(client) });
+      res.json({ accounts: await evaluate() });
     } catch (err) {
       next(err);
     }
@@ -188,7 +212,7 @@ export function createAccountRouter(client: KiwoomClient): Router {
         avgPrice: Number(avgPrice) || 0,
         qty: Number(qty) || 0,
       });
-      res.json({ accounts: await evaluateAccounts(client) });
+      res.json({ accounts: await evaluate() });
     } catch (err) {
       next(err);
     }
@@ -197,7 +221,7 @@ export function createAccountRouter(client: KiwoomClient): Router {
   router.delete("/manual/:id/holdings/:code", async (req, res, next) => {
     try {
       await removeHolding(req.params.id, req.params.code);
-      res.json({ accounts: await evaluateAccounts(client) });
+      res.json({ accounts: await evaluate() });
     } catch (err) {
       next(err);
     }
