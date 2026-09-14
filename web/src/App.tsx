@@ -268,9 +268,16 @@ export const MENU_ITEMS = MENU.flatMap((g) =>
   g.items.map((i) => ({ key: i.key as string, label: i.label, icon: i.icon, group: g.group })),
 );
 
-const TAB_LABELS = Object.fromEntries(
-  MENU.flatMap((g) => g.items).map((i) => [i.key, `${i.icon} ${i.label}`]),
-) as Record<Tab, string>;
+/**
+ * 탭 이름의 재료 — **아이콘과 이름을 따로** 든다 (2026-09-14).
+ *
+ * 예전엔 둘을 미리 붙인 문자열만 가지고 있어서 **설정에서 바꿌 메뉴 이름을
+ * 탭이 모르고** 원래 이름을 그렸다 — 사이드바는 「현미경」인데 탭은 「매수직전」.
+ * 이름만 갈아끼우려면 재료가 나뉘어 있어야 한다.
+ */
+const TAB_PARTS = Object.fromEntries(
+  MENU.flatMap((g) => g.items).map((i) => [i.key, { icon: i.icon, label: i.label }]),
+) as Record<Tab, { icon: string; label: string }>;
 
 /**
  * 메뉴에 실제로 있는 탭들. **알림의 「바로가기」도 이걸 본다** (2026-09-04) —
@@ -350,6 +357,18 @@ export default function App() {
    * 숨긴 항목은 사이드바에서만 빠지고 주소로는 여전히 열린다 — 숨겼다고 기능을 막을 이유는 없다.
    */
   const label = (key: string, fallback: string) => prefs.labels[key]?.trim() || fallback;
+
+  /*
+   * 탭 줄도 **내가 바꾸어 놓은 이름**을 따른다 (2026-09-14 — 벤티지: "메뉴명
+   * 변경했는데 탭에는 이전 이름 그대로 나오네"). 사이드바만 `prefs.labels` 를 보고
+   * 탭은 코드에 박힌 이름을 그려서 둘이 따로 놀았다. 아이콘은 원래 것을 그대로 둔다 —
+   * 바꿔 놓는 것은 이름뿐이고, 그림까지 바뀌면 눈이 찾던 표식을 잃는다.
+   */
+  const tabLabel = (key: string) => {
+    const part = TAB_PARTS[key as Tab];
+    if (!part) return key;
+    return `${part.icon} ${label(key, part.label)}`;
+  };
 
   /*
    * 항목을 내가 지정한 영역으로 옮기고, 영역·이름도 내가 정한 것으로 갈아끼운다.
@@ -1237,7 +1256,7 @@ export default function App() {
             )}
           </div>
           <header className="mobile-header">
-            <span className="mobile-title">{TAB_LABELS[tab]}</span>
+            <span className="mobile-title">{tabLabel(tab)}</span>
             {/* 시각 — 작게, 오른쪽 끝 (2026-09-10 벤티지: "시간을 맨 위에 써줘 강조표시로" → "시계를 좀 줄이고") */}
             <MobileClock />
           </header>
@@ -1264,8 +1283,8 @@ export default function App() {
                   className={`app-tab${t === tab ? " active" : ""}${tabDrag.cls(t)}`}
                   {...tabDrag.props(t)}
                 >
-                  <button className="app-tab-go" onClick={() => go(t)} title={TAB_LABELS[t] ?? t}>
-                    {TAB_LABELS[t] ?? t}
+                  <button className="app-tab-go" onClick={() => go(t)} title={tabLabel(t)}>
+                    {tabLabel(t)}
                   </button>
                   <button
                     className="app-tab-x"
@@ -1290,7 +1309,7 @@ export default function App() {
           {(openTabs.includes(tab) ? openTabs : [...openTabs, tab]).map((t) => (
             <div key={t} className="app-tabpane" hidden={t !== tab}>
               <TabActiveContext.Provider value={t === tab}>
-                <ErrorBoundary where={TAB_LABELS[t] ?? t} resetKey={t}>
+                <ErrorBoundary where={tabLabel(t)} resetKey={t}>
                   {renderPage(t)}
                 </ErrorBoundary>
               </TabActiveContext.Provider>
