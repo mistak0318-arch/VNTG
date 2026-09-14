@@ -1,4 +1,5 @@
 import { afterProbeSnapshot } from "./afterProbe.js";
+import { closeBetScanHealth } from "./closeBetScan.js";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
@@ -131,6 +132,11 @@ async function writeOnce(): Promise<void> {
      * 서버가 다시 뜬 뒤부터 센다 — 그 전 시간대 칸은 비어 있는 것이 맞다.
      */
     애프터관측: await afterProbeSnapshot().catch(() => null),
+    /*
+     * 종배 스캔 (2026-09-15) — 15:40 회차가 돌았나를 밖에서 보려고. **개수와 시각뿐** — 종목 이름·코드는
+     * 안 싣는다(초록 목록 자체는 서버 파일에만 있다).
+     */
+    종배스캔: await closeBetScanHealth().catch(() => null),
   };
 
   try {

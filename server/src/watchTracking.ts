@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { isTradingDay } from "./tradingDay.js";
+import { MIN, afterMarketEra } from "./marketHours.js";
 import { dropPhantomToday } from "./candleGuard.js";
 import { alCode } from "./alCode.js";
 import { opinionBrief } from "./analystOpinion.js";
@@ -429,7 +430,15 @@ function expiryOf(at: number): number {
   const kst = new Date(d.getTime() + (9 * 60 + d.getTimezoneOffset()) * 60_000);
   const minutes = kst.getHours() * 60 + kst.getMinutes();
   const weekday = isTradingDay(); // (2026-09-10 전수 점검) 휴장일엔 10분마다 관심종목을 헛조회하지 않는다
-  if (weekday && minutes >= 9 * 60 && minutes < 15 * 60 + 40) return at + INTRADAY_TTL_MS;
+  /*
+   * 9/14 부터 20:00 까지 — KRX 애프터마켓(16:00~20:00)이 실거래라 값이 움직인다 (2026-09-15).
+   * 예전 창(09:00~15:40)대로면 15:40 에 찍은 값이 다음 날 09:00 까지 굳어, 애프터 네 시간 동안
+   * 관심종목 등락·수급이 멈춰 있었다. 끝은 마감 뒤 10분 — 마감 값을 한 번은 담는다.
+   */
+  /* `kst` 는 로컬 시계로 읽게 옮긴 날짜라 toISOString 을 쓰면 새벽에 하루가 밀린다 — 필드로 짠다 */
+  const dayKey = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, "0")}-${String(kst.getDate()).padStart(2, "0")}`;
+  const end = afterMarketEra(dayKey) ? MIN.afterClose + 10 : MIN.regularClose + 10;
+  if (weekday && minutes >= MIN.regularOpen && minutes < end) return at + INTRADAY_TTL_MS;
 
   const next = new Date(kst);
   next.setHours(9, 0, 0, 0);

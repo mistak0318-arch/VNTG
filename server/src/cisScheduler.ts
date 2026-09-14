@@ -8,6 +8,7 @@ import type { Slot } from "./cisJournal.js";
 import { ACCOUNT_IDS, profileOf, styleOf } from "./cisAccounts.js";
 import { runPension } from "./cisPensionRun.js";
 import { listTrackLastRunDate } from "./listTrack.js";
+import { closeBetScanDate } from "./closeBetScan.js";
 import { auditAndTell } from "./cisVerify.js";
 
 /**
@@ -161,7 +162,12 @@ async function tick(client: KiwoomClient): Promise<void> {
          * 그 전(19:30)까지 원장이 안 쌓이면 그냥 돌린다 — `closeBetRound` 가 원장 날짜를
          * 보고 「오늘 원장이 없어 종배 안 함」이라고 **일지에 적는다.**
          */
-        if (last !== date && hm < CLOSEBET_DEADLINE) continue;
+        /*
+         * 9/14 부터 원장은 20:10 뒤에 쌓인다(애프터가 20:00 에 닫힌 뒤) — 원장만 기다리면 매일 마감선에서
+         * 「원장 없음」으로 끝난다. 15:40 종배 스캔(`closeBetScan.ts`)이 오늘 것이면 그걸로 산다 (2026-09-15).
+         */
+        const scanned = last === date ? null : await closeBetScanDate().catch(() => null);
+        if (last !== date && scanned !== date && hm < CLOSEBET_DEADLINE) continue;
       }
 
       const key = `${date}:${id}:${slot}`;

@@ -5,6 +5,7 @@ import { ACCOUNTS, ACCOUNT_IDS, profileOf, type AccountId } from "../cisAccounts
 import { getCisConfig, goalProgress, rulesFor, saveCisConfig, RULE_LABEL } from "../cisConfig.js";
 import { clearJournal, listDays, loadDay } from "../cisJournal.js";
 import { listTrackLastRunDate } from "../listTrack.js";
+import { closeBetScanJob, loadCloseBetScan, runCloseBetScan } from "../closeBetScan.js";
 import { CIS_CREED, readState } from "../cisPersona.js";
 import { priceMap, runSlot } from "../cisRun.js";
 import { cisStats, cisUsage } from "../cisStats.js";
@@ -425,6 +426,27 @@ export function createCisRouter(client: KiwoomClient): Router {
     } catch (err) {
       next(err);
     }
+  });
+
+  /**
+   * 종배 스캔 (2026-09-15) — 15:40 에 저절로 돈다. 손으로 다시 돌리거나 어디까지 왔는지 볼 때.
+   * 원장엔 안 쓰므로 여러 번 눌러도 원장이 흐려지지 않는다.
+   */
+  router.get("/closebet-scan", async (_req, res, next) => {
+    try {
+      const s = await loadCloseBetScan();
+      res.json({ job: closeBetScanJob(), scan: s ? { ...s, green: s.green.slice(0, 50), greenCount: s.green.length } : null });
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.post("/closebet-scan", (_req, res) => {
+    if (closeBetScanJob().status === "running") {
+      res.status(409).json({ error: "이미 도는 중입니다.", job: closeBetScanJob() });
+      return;
+    }
+    void runCloseBetScan(client).catch((e: Error) => console.warn(`[종배 스캔] 손으로 돌린 것 실패: ${e.message}`));
+    res.json({ started: true });
   });
 
   router.get("/watch", (req, res) => {

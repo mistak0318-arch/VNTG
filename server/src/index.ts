@@ -57,6 +57,7 @@ import { startTrackingRefresher } from "./watchTracking.js";
 import { createSettingsRouter } from "./routes/settings.js";
 import { startAlertScheduler } from "./alertScheduler.js";
 import { startCisScheduler } from "./cisScheduler.js";
+import { startCloseBetScanScheduler } from "./closeBetScan.js";
 import { syncSuperGroup } from "./superSignal.js";
 import { startCisWatch } from "./cisWatch.js";
 import { startChannelScheduler } from "./channelScheduler.js";
@@ -294,6 +295,8 @@ startAlertScheduler(client);
 startRegimeScheduler(client);
 /* CIS 일지 — 설정에서 켜야 실제로 돈다(기본 꺼짐) */
 startCisScheduler(client);
+/* 종배 스캔 (2026-09-15) — 원장이 20:10 뒤라 애프터 안에 못 온다. 15:40 에 오늘 초록만 따로 잰다 */
+startCloseBetScanScheduler(client);
 /* 시뮬레이터 실전 진행 (2026-09-04) — 시각이 아니라 일봉이 왔는지를 본다 */
 startSimScheduler(client);
 /*

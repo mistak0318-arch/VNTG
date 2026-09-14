@@ -10,6 +10,7 @@ import { SortableTh, useSortableTable } from "../useSortableTable";
 import { useViNow } from "../useViNow";
 import { ViMark } from "../components/ViMark";
 import { fid, krxOverlayLive, krxRegularSession, useRealtime } from "../useRealtime";
+import { afterMarketEra, krPhase } from "../marketSession";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { BuzzDaysButtons, useBuzz } from "../components/BuzzBadge";
 import { TableFontButtons, useTableFont } from "../components/TableFont";
@@ -741,6 +742,14 @@ export function ScreenerPage({
    * 시세로 바뀌지?" — 말과 코드가 정반대였던 것이다.
    */
   const showNxtSub = !krxRegularSession();
+  /*
+   * 그 줄의 이름 (2026-09-15). 서버가 싣는 값은 **통합 최종가**다. 9/13 까지 저녁의 통합은 곧 NXT 였지만
+   * 9/14 부터 16:00~20:00 은 KRX 애프터도 같이 돌아 **두 시장 중 마지막 체결**이 된다 — 「NXT」라고
+   * 적으면 KRX 애프터 값을 NXT 라고 부르는 셈이다. 아침 프리(08:00~09:00)는 여전히 NXT 뿐이다.
+   */
+  const evening = afterMarketEra() && krPhase() !== "pre";
+  const subLabel = evening ? "장외" : "NXT";
+  const subTitle = evening ? "장외 최종가 — KRX 애프터·NXT 중 마지막 체결" : "NXT 최종가 — 프리장 포함";
   /*
    * **지금 VI 걸린 종목** (2026-09-14 — 벤티지: "전체를 나타내는 표 … 거기서도 VI 기간 동안
    * VI 다라고 표시를 좀 해 놨으면"). 종목과 무관한 시장 전체 정보라 훅 하나가 받아 나눠 준다
@@ -1754,8 +1763,8 @@ export function ScreenerPage({
                                 {lv && <span className="uw-live-dot" title="키움 실시간 (1.5초)" />}
                                 {lv ? fmtNum(lv.price) : v.text}
                                 {showNxtSub && r.nxtPrice != null && !lv && (
-                                  <i className="scr-split" title="NXT 최종가 — 프리·애프터장 포함">
-                                    NXT {fmtNum(r.nxtPrice)}
+                                  <i className="scr-split" title={subTitle}>
+                                    {subLabel} {fmtNum(r.nxtPrice)}
                                   </i>
                                 )}
                               </td>
@@ -1771,9 +1780,9 @@ export function ScreenerPage({
                                 {showNxtSub && r.nxtRate != null && lv?.rate == null && (
                                   <i
                                     className={`scr-split ${Number(r.nxtRate) > 0 ? "positive" : Number(r.nxtRate) < 0 ? "negative" : ""}`}
-                                    title="NXT 최종 등락률 — 프리·애프터장 포함"
+                                    title={subTitle.replace("최종가", "최종 등락률")}
                                   >
-                                    NXT {Number(r.nxtRate) > 0 ? "+" : ""}
+                                    {subLabel} {Number(r.nxtRate) > 0 ? "+" : ""}
                                     {Number(r.nxtRate).toFixed(2)}%
                                   </i>
                                 )}

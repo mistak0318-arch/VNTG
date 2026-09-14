@@ -1,6 +1,7 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { marketGauge, type GaugeVerdict } from "./closeBet.js";
-import { listTrackSummary, type ListTrackRow } from "./listTrack.js";
+import { listTrackSummary } from "./listTrack.js";
+import { loadCloseBetScan } from "./closeBetScan.js";
 import { evaluateSignal } from "./signalLight.js";
 import { getMarketSnapshot } from "./marketSnapshot.js";
 import { marketGate, planBuys, type Candidate, type CisRules, type ExitCall, type MarketGate } from "./cisTrader.js";
@@ -184,11 +185,19 @@ export async function closeBetRound(
    * 걸면 그건 다른 전략이고, 성적이 섞여 무엇을 시험한 것인지 알 수 없게 된다.
    * 그래서 **판단하는 자리**로 검사를 옮긴다 — 어느 길로 들어오든 같은 문을 지난다.
    */
-  if (lt.lastRunDate !== date && !dry.ignoreGates) {
+  /*
+   * **오늘 원장이 없으면 15:40 종배 스캔** (2026-09-15). 9/14 부터 원장은 20:10 뒤에야 쌓여
+   * 애프터(~20:00) 안에 못 온다. 스캔은 같은 목록·같은 신호등으로 오늘 초록만 잰 것이다
+   * (`closeBetScan.ts` 머리 주석). 둘 다 오늘 것이 아니면 예전처럼 안 산다.
+   */
+  const scan = lt.lastRunDate === date ? null : await loadCloseBetScan().catch(() => null);
+  const fromScan = scan !== null && scan.date === date;
+  if (lt.lastRunDate !== date && !fromScan && !dry.ignoreGates) {
     const why =
-      lt.lastRunDate === null
-        ? "신호등 분석 원장이 아직 한 번도 안 돌았다"
-        : `신호등 분석 원장이 ${lt.lastRunDate} 것이다 (오늘 ${date} 것이 아니다)`;
+      (lt.lastRunDate === null
+        ? "신호등 분석 원장이 아직 한 번도 안 돌았고"
+        : `신호등 분석 원장이 ${lt.lastRunDate} 것이고`) +
+      (scan ? ` 종배 스캔도 ${scan.date} 것이다` : " 오늘 종배 스캔(15:40)도 없다");
     progress.done("scan", why);
     progress.skip("signal");
     return {
@@ -197,7 +206,7 @@ export async function closeBetRound(
         ok: false,
         reason:
           `${why} — 종배는 **오늘 초록**에 거는 계좌라 어제 원장으로는 사지 않는다. ` +
-          "마감 뒤 파이프라인(신호등 분석)이 끝나면 그때 산다.",
+          "15:40 종배 스캔이 끝나면 그때 산다.",
       },
       macro,
       candidates,
@@ -208,29 +217,70 @@ export async function closeBetRound(
       screenNotes,
     };
   }
-  type Pooled = ListTrackRow & { lists: number };
+  /** 후보 한 줄 — 원장에서 왔든 스캔에서 왔든 같은 모양 */
+  type Pooled = {
+    code: string;
+    name: string;
+    score: number;
+    lists: number;
+    /** 원장에 이어 걸린 날 수 — 원장에 없는(오늘 처음 초록인) 종목은 null */
+    seenCount: number | null;
+    price: number | null;
+    addedPrice: number;
+    changeRate: number | null;
+  };
   const pool: Pooled[] = [];
   const best = new Map<string, Pooled>();
+  const seen = new Map<string, number>();
   for (const e of lt.entries) {
     if (e.active === false) continue;
+    seen.set(e.code, Math.max(seen.get(e.code) ?? 0, e.seenCount));
+    if (fromScan) continue; // 스캔에서 뽑는 날엔 원장은 「며칠째」만 빌려 준다
     const prev = best.get(e.code);
-    if (!prev) best.set(e.code, { ...e, lists: 1 });
+    const row: Pooled = {
+      code: e.code,
+      name: e.name,
+      score: e.score,
+      lists: 1,
+      seenCount: e.seenCount,
+      price: e.price,
+      addedPrice: e.addedPrice,
+      changeRate: e.changeRate,
+    };
+    if (!prev) best.set(e.code, row);
     else {
       prev.lists += 1;
-      if (e.score > prev.score) Object.assign(prev, e, { lists: prev.lists });
+      if (e.score > prev.score) Object.assign(prev, row, { lists: prev.lists });
     }
   }
   /* 잡주 거르개 — 스냅샷은 이미 받아 둔 것이라 조회가 안 는다. 못 받으면 안 거른다 */
   const capOf = new Map<string, number | null>();
   const valOf = new Map<string, number | null>();
+  const quoteOf = new Map<string, { price: number; changeRate: number }>();
   try {
     const snap = await getMarketSnapshot(client);
     for (const [code, r] of snap.byCode) {
       capOf.set(code, r.marketCap ?? null);
       valOf.set(code, r.tradeValue ?? null);
+      quoteOf.set(code, { price: r.price, changeRate: r.changeRate });
     }
   } catch {
     /* 시총·대금 문턱만 못 건다 */
+  }
+  if (fromScan && scan) {
+    for (const g of scan.green) {
+      const q = quoteOf.get(g.code);
+      best.set(g.code, {
+        code: g.code,
+        name: g.name,
+        score: g.score,
+        lists: g.lists,
+        seenCount: seen.get(g.code) ?? null,
+        price: q && q.price > 0 ? q.price : null,
+        addedPrice: g.price,
+        changeRate: q ? q.changeRate : null,
+      });
+    }
   }
 
   /*
@@ -260,7 +310,7 @@ export async function closeBetRound(
     liquid.push(e);
   }
   pool.push(...liquid.slice(0, POOL));
-  progress.done("scan", `원장 초록 ${best.size} → 잡주 거르고 ${liquid.length} → 상위 ${pool.length}`);
+  progress.done("scan", `${fromScan ? "종배 스캔(15:40)" : "원장"} 초록 ${best.size} → 잡주 거르고 ${liquid.length} → 상위 ${pool.length}`);
 
   /* ④ 종목 문 — 신호등 다시 잼 → 수급 축 */
   progress.start("signal");
@@ -334,9 +384,9 @@ export async function closeBetRound(
       leaderScore: 0,
       /* 순위는 신호등 점수 — 이 계좌의 물음이 「신호등 상위에 종배하면」이다 */
       score: sig.score,
-      used: ["신호등 분석 원장", `신호등:green(${sig.score})`, `수급축:${flow}`, ...(volX !== null ? [`대금배수:${volX}`] : []), "미국장 분위기", "시장 신호등"],
+      used: [fromScan ? "종배 스캔(15:40)" : "신호등 분석 원장", `신호등:green(${sig.score})`, `수급축:${flow}`, ...(volX !== null ? [`대금배수:${volX}`] : []), "미국장 분위기", "시장 신호등"],
       why:
-        `원장 ${e.lists}목록 ${e.seenCount}일째 · 신호등 ${sig.score}점 · 수급 축 ${flow} · ` +
+        `${fromScan ? "스캔" : "원장"} ${e.lists}목록 ${e.seenCount !== null ? `${e.seenCount}일째` : "오늘 첫 초록"} · 신호등 ${sig.score}점 · 수급 축 ${flow} · ` +
         (volX !== null ? `대금 ${volX.toFixed(1)}배 · ` : "대금 배수 못 잼 · ") +
         `오늘 ${chg > 0 ? "+" : ""}${chg.toFixed(1)}%`,
       mode: "close",
