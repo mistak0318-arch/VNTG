@@ -58,6 +58,7 @@ import { createSettingsRouter } from "./routes/settings.js";
 import { startAlertScheduler } from "./alertScheduler.js";
 import { startCisScheduler } from "./cisScheduler.js";
 import { startCloseBetScanScheduler } from "./closeBetScan.js";
+import { startFlowAfterProbe } from "./flowAfterProbe.js";
 import { syncSuperGroup } from "./superSignal.js";
 import { startCisWatch } from "./cisWatch.js";
 import { startChannelScheduler } from "./channelScheduler.js";
@@ -297,6 +298,8 @@ startRegimeScheduler(client);
 startCisScheduler(client);
 /* 종배 스캔 (2026-09-15) — 원장이 20:10 뒤라 애프터 안에 못 온다. 15:40 에 오늘 초록만 따로 잰다 */
 startCloseBetScanScheduler(client);
+/* 수급에 애프터가 들어가나 — 15:45·17:00·18:30·20:05 대형주 셋 (2026-09-15, 개수만 health.json 에) */
+startFlowAfterProbe(client);
 /* 시뮬레이터 실전 진행 (2026-09-04) — 시각이 아니라 일봉이 왔는지를 본다 */
 startSimScheduler(client);
 /*

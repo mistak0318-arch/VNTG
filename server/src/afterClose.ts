@@ -256,6 +256,16 @@ async function saveState(next: AfterCloseState): Promise<void> {
   await rename(tmp, STATE_FILE);
 }
 
+/**
+ * **오늘 마감 뒤 정리가 끝났나** (2026-09-15) — 뒤에 줄 선 작업(백테스트 밤 그리드)이 묻는다.
+ * 실패 단계가 있어도 끝난 것은 끝난 것이다(재시도는 그 단계만 다시 돈다).
+ */
+export async function afterCloseDoneToday(): Promise<boolean> {
+  if (run?.running) return false;
+  const st = await loadState().catch(() => null);
+  return st?.day === dayKey() && !!st.finishedAt;
+}
+
 /** 최근 회차들 — 새 것부터 */
 export async function afterCloseHistory(): Promise<AfterCloseRun[]> {
   await loadHistory();

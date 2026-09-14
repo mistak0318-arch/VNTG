@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { signalScoreMap } from "./signalHistory.js";
 import { tradeValueTop } from "./signalScreen.js";
+import { afterMarketEra } from "./marketHours.js";
+import { afterCloseDoneToday } from "./afterClose.js";
 
 /**
  * 조건 백테스트 — **「이 조건으로 들어갔으면 과거에 어땠나」**.
@@ -541,19 +543,29 @@ export async function runBacktestGrid(client: KiwoomClient, force = false): Prom
   }
 }
 
-/** 평일 17:10 — 장 마감 뒤 조회가 한가한 시간. 그 시각을 지나 켠 날도 하루 한 번 돈다 */
+/**
+ * 평일 하루 한 번. 그 시각을 지나 켠 날도 돈다.
+ *
+ * 9/13 까지는 17:10 — 장 마감 뒤 조회가 한가한 시간. **9/14 부터는 마감 뒤 정리가 끝난 뒤**
+ * (2026-09-15 — 벤티지가 선택지에서 고름). 17:10 은 KRX 애프터(16:00~20:00) 한가운데라 오늘 일봉이
+ * 반쯤 찬 채로 잡혔고, 신호등 점수(`signalScoreMap`)는 20:10 정리 전이라 어제 것이었다.
+ * 정리가 끝나면 둘 다 오늘 것이다. 정리가 자정을 넘기면 그날은 건너뛴다 — 날짜가 바뀐 뒤 돌면
+ * 「오늘」이 어긋난다.
+ */
 export function startBacktestGridScheduler(client: KiwoomClient): void {
   const tick = async () => {
     const k = new Date(Date.now() + 9 * 3600_000);
     const day = k.getUTCDay();
     if (day === 0 || day === 6) return;
     const mins = k.getUTCHours() * 60 + k.getUTCMinutes();
-    if (mins < 17 * 60 + 10 || mins > 23 * 60) return;
+    if (afterMarketEra(k.toISOString().slice(0, 10))) {
+      if (!(await afterCloseDoneToday())) return;
+    } else if (mins < 17 * 60 + 10 || mins > 23 * 60) return;
     await runBacktestGrid(client).catch((e) => console.error("[backtest] 그리드 실패", e));
   };
   void tick();
   setInterval(() => void tick(), 60_000);
-  console.log("[backtest] 밤 그리드 시작 — 평일 17:10 조건 조합 자동 실행");
+  console.log("[backtest] 밤 그리드 시작 — 평일, 마감 뒤 정리가 끝난 뒤(9/13 까지는 17:10) 조건 조합 자동 실행");
 }
 
 const jobs = new Map<string, BacktestJob>();

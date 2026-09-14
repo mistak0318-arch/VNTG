@@ -1,5 +1,6 @@
 import { afterProbeSnapshot } from "./afterProbe.js";
 import { closeBetScanHealth } from "./closeBetScan.js";
+import { flowAfterSnapshot } from "./flowAfterProbe.js";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
@@ -137,6 +138,8 @@ async function writeOnce(): Promise<void> {
      * 안 싣는다(초록 목록 자체는 서버 파일에만 있다).
      */
     종배스캔: await closeBetScanHealth().catch(() => null),
+    /* 수급에 애프터가 들어가나 (2026-09-15) — 회차마다 달라진 종목 **수**만 */
+    수급애프터: flowAfterSnapshot(),
   };
 
   try {

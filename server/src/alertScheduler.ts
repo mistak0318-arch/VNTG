@@ -1,4 +1,5 @@
 import { formatAlerts, getAlertConfig, scanAlerts, type FiredAlert } from "./alertRules.js";
+import { MIN, afterMarketEra } from "./marketHours.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { logEvents } from "./eventLog.js";
 import { pruneLiveAlerts, runLiveAlerts } from "./liveAlerts.js";
@@ -44,13 +45,21 @@ export async function alertTargets(): Promise<{ code: string; name: string; adde
     .map((w) => ({ code: w.code, name: w.name, addedPrice: w.addedPrice }));
 }
 
-/** 한국 시각 기준 장중인가 — 09:00~15:30 평일 */
+/**
+ * 한국 시각 기준 알림을 도는 시간인가 — 평일 09:00~15:30, **9/14 부터는 20:00 까지**.
+ *
+ * KRX 애프터마켓(16:00~20:00)도 실거래라 보유·관심 종목이 거기서 급변하면 알아야 한다
+ * (2026-09-15 — 벤티지가 선택지에서 고름). 종목당 규칙당 하루 1회라 정규장에 이미 울린 건 또 안 운다.
+ * 15:30~16:00 공백엔 값이 안 바뀌어 새로 울 것이 없다.
+ */
 function isMarketHours(now = new Date()): boolean {
   const kst = new Date(now.getTime() + (9 * 60 + now.getTimezoneOffset()) * 60_000);
   const day = kst.getDay();
   if (day === 0 || day === 6) return false;
   const minutes = kst.getHours() * 60 + kst.getMinutes();
-  return minutes >= 9 * 60 && minutes <= 15 * 60 + 30;
+  const date = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, "0")}-${String(kst.getDate()).padStart(2, "0")}`;
+  const end = afterMarketEra(date) ? MIN.afterClose : MIN.regularClose;
+  return minutes >= MIN.regularOpen && minutes <= end;
 }
 
 /**

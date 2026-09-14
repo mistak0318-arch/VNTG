@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { MIN, afterMarketEra } from "./marketHours.js";
 import { isTradingDay } from "./tradingDay.js";
 import { brokerFlow, flushBrokerFlow } from "./brokerFlow.js";
 import { listWatchlist } from "./watchlist.js";
@@ -51,13 +52,18 @@ const STEP_MS = 1000;
 /** 대상 목록을 다시 세우는 주기 */
 const REFRESH_MS = 5 * 60_000;
 
-/** 장중인가 — 평일 09:00~15:30 KST */
+/**
+ * 도는 시간인가 — 평일 09:00~15:30 KST, **9/14 부터는 20:00 까지** (2026-09-15 — 벤티지가 선택지에서 고름:
+ * KRX 애프터마켓의 창구 이동까지). 15:30~16:00 공백엔 체결이 없어 헛조회가 되므로 뺀다.
+ */
 function inSession(at = Date.now()): boolean {
   const d = new Date(at);
   const kst = new Date(d.getTime() + (9 * 60 + d.getTimezoneOffset()) * 60_000);
   if (!isTradingDay(kst)) return false; // (2026-09-10 전수 점검) 휴장일 1초 루프 차단
   const m = kst.getHours() * 60 + kst.getMinutes();
-  return m >= 9 * 60 && m <= 15 * 60 + 30;
+  if (m >= MIN.regularOpen && m <= MIN.regularClose) return true;
+  const date = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, "0")}-${String(kst.getDate()).padStart(2, "0")}`;
+  return afterMarketEra(date) && m >= MIN.afterOpen && m <= MIN.afterClose;
 }
 
 let codes: string[] = [];
