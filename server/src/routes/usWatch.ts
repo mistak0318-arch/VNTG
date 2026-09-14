@@ -110,6 +110,11 @@ export function createUsWatchRouter(): Router {
       if (!ok) invalidateUsCache();
       res.json(await evaluateGroups());
     } catch (err) {
+      /* 같은 이름 · 빈 이름은 사람이 고칠 일이다 — 500 이 아니라 그 말 그대로 돌려준다 (2026-09-15) */
+      if (err instanceof Error && /이미 있습니다|이름을 적으세요/.test(err.message)) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
       next(err);
     }
   });

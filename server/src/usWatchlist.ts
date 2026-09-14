@@ -82,7 +82,16 @@ function newId(): string {
 
 export async function addGroup(name: string, memo = ""): Promise<UsGroup[]> {
   const rows = await readAll();
-  rows.push({ id: newId(), name: name.slice(0, 60), memo: memo.slice(0, 200), stocks: [] });
+  const clean = name.trim().slice(0, 60);
+  if (!clean) throw new Error("그룹 이름을 적으세요.");
+  /*
+   * **같은 이름은 안 받는다** (2026-09-15). 「글로벌_반도체」가 두 개 생겼다 — 하나엔 종목이 있고 하나는 비었다.
+   * 칩에 이름만 보이니 어느 쪽에 담기는지 알 수 없고, 비어 있는 쪽을 누르면 담았던 종목이 사라진 것처럼 보인다.
+   * 앞뒤 공백·대소문자는 같은 이름으로 친다.
+   */
+  const key = clean.toLowerCase();
+  if (rows.some((g) => g.name.trim().toLowerCase() === key)) throw new Error(`「${clean}」 그룹이 이미 있습니다.`);
+  rows.push({ id: newId(), name: clean, memo: memo.slice(0, 200), stocks: [] });
   await writeAll(rows);
   return rows;
 }
