@@ -1,4 +1,6 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useViNow } from "../useViNow";
+import { ViMark } from "./ViMark";
 import { api, fmtNum, signClass, type OrderBook } from "../api";
 import { useLive } from "../useLive";
 import { fid, useRealtime } from "../useRealtime";
@@ -215,6 +217,8 @@ export function OrderBookPanel({
    */
   const { data: base, loading, error } = useLive<OrderBook>(() => api.orderBook(code), [code], 3000);
   const { book, live, delta } = useLiveBook(code, base ?? null);
+  /* 지금 이 종목이 VI 인가 — 시세분석 표와 **같은 훅**이라 두 화면이 안 갈린다 (2026-09-14) */
+  const vi = useViNow().get(code) ?? null;
   /* 값이 **바뀔 때만** 올린다 — 매 렌더마다 부르면 부모가 계속 다시 그린다 */
   const price = book?.price ?? 0;
   const nowRate = book && book.basePrice > 0 && book.price > 0 ? ((book.price - book.basePrice) / book.basePrice) * 100 : null;
@@ -375,6 +379,13 @@ export function OrderBookPanel({
     <div className="ob">
       <div className="ob-head">
         {/* 지금 값이 어디서 온 것인지 — 실시간이 죽으면 폴링으로 돌아간 것을 알아야 한다 */}
+        {/*
+          **VI 딱지** (2026-09-14 — 벤티지: "각 종목에 호가창 들어가면은 얘가 vi다 아니다라고
+          표시해 줬으면"). 호가창은 주문을 내는 자리다 — VI 중에는 2분간 단일가로만 체결되므로
+          지정가를 걸어도 그 시간엔 안 나간다. **여기서 모르면 제일 비싸다.**
+          시세분석 표와 같은 훅·같은 모양이다.
+        */}
+        {vi && <ViMark vi={vi} />}
         {/* (2026-09-11 저녁) 스트림이 살아 있으면 ● — 호가가 잠시 조용한 것과 끊긴 것은 다르다 */}
         <span
           className={`ob-live ${live ? "on" : ""}`}

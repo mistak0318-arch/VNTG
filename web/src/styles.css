@@ -3168,6 +3168,42 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 .cal-imp-btn.on.mid { border-color: var(--warn); color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }
 .cal-imp-btn.on.low { border-color: var(--muted); color: var(--fg); background: color-mix(in srgb, var(--muted) 14%, transparent); }
 
+/*
+ * **VI 딱지** (2026-09-14) — 시세분석 표·호가창이 같은 모양을 쓴다.
+ * 색은 방향(빨강 급등·파랑 급락), 회색은 방향을 모를 때. 색만으로 말하지 않게 ▲▼ 도 같이 둔다.
+ * 표 안에서는 이름을 밀지 않게 작게(`compact`), 호가창에서는 남은 시간까지.
+ */
+.vi-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid var(--muted);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  vertical-align: 1px;
+  /* 눈에 걸려야 한다 — 걸린 동안만 뜨는 표식이라 늘 보이는 것이 아니다 */
+  animation: vi-pulse 1.6s ease-in-out infinite;
+}
+.vi-mark.up { border-color: var(--red); color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
+.vi-mark.down { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, transparent); }
+.vi-mark i { font-style: normal; font-weight: 700; opacity: 0.85; font-variant-numeric: tabular-nums; }
+.vi-mark.compact { margin-left: 3px; padding: 0 4px; font-size: 0.62rem; }
+@keyframes vi-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+/* 움직임을 싫어하는 기기에서는 깜빡이지 않는다 */
+@media (prefers-reduced-motion: reduce) {
+  .vi-mark { animation: none; }
+}
+
 .cal-badge {
   font-size: 0.7rem;
   padding: 2px 6px;
@@ -18610,7 +18646,12 @@ a.watch-btn { text-decoration: none; }
   display: flex; align-items: center; position: static; border: 0; padding: 0; background: none; gap: 6px; flex: none; z-index: auto;
 }
 .top-strip .mobile-title { display: none; }
-.top-strip .mobile-clock { font-size: 0.8rem; font-weight: 700; padding: 1px 7px; margin-left: 0; }
+/*
+ * 시계는 **오른쪽 끝** (2026-09-14 — 벤티지: "시계 UI 좀 오른쪽 끝으로 배치해 줘").
+ * 기본 규칙(`.mobile-clock`)이 `margin-left:auto` 로 밀어 두는데 여기서 0 으로 덮고 있었다 —
+ * 그래서 시계 뒤에 빈 자리가 남았다. 다시 auto 로 둔다.
+ */
+.top-strip .mobile-clock { font-size: 0.8rem; font-weight: 700; padding: 1px 7px; margin-left: auto; }
 /*
  * 시각 뒤의 날짜 (2026-09-14) — **괄호로, 시각보다 조금 작게.**
  *

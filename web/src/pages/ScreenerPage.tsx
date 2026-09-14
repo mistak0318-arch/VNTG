@@ -7,6 +7,8 @@ import { SameNetTradeRankingPage } from "./SameNetTradeRankingPage";
 import { ContinuousTradePage } from "./ContinuousTradePage";
 import { TopTradersTable } from "../components/TopTradersTable";
 import { SortableTh, useSortableTable } from "../useSortableTable";
+import { useViNow } from "../useViNow";
+import { ViMark } from "../components/ViMark";
 import { fid, krxOverlayLive, krxRegularSession, useRealtime } from "../useRealtime";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
 import { BuzzDaysButtons, useBuzz } from "../components/BuzzBadge";
@@ -732,6 +734,12 @@ export function ScreenerPage({
    * 시세로 바뀌지?" — 말과 코드가 정반대였던 것이다.
    */
   const showNxtSub = !krxRegularSession();
+  /*
+   * **지금 VI 걸린 종목** (2026-09-14 — 벤티지: "전체를 나타내는 표 … 거기서도 VI 기간 동안
+   * VI 다라고 표시를 좀 해 놨으면"). 종목과 무관한 시장 전체 정보라 훅 하나가 받아 나눠 준다
+   * (`useViNow`) — 호가창과 **같은 값**을 본다.
+   */
+  const viNow = useViNow(liveOn);
   const rt = useRealtime(liveOn ? shown.map((r) => `0B:${r.code}`) : [], 1500, { readOnly: true });
   const liveOf = (code: string): { price: number; rate: number | null } | null => {
     if (!liveOn) return null;
@@ -1652,6 +1660,8 @@ export function ScreenerPage({
                           끝 칸은 가로로 밀려 안 보인다 — 표식은 이름 옆에 있어야 표식이다.
                           🧲 외국인 세 칸 · 🧲🧲 거기에 주포까지(쌍끌이).
                         */}
+                        {/* VI — 걸려 있는 동안만. 왜 체결이 안 되는지를 표가 말해야 한다 (2026-09-14) */}
+                        {viNow.get(r.code) && <ViMark vi={viNow.get(r.code)!} compact />}
                         {isFgn3(r.flow) && (
                           <i
                             className={`scr-fgn3${isTwin(r.flow) ? " twin" : ""}`}
