@@ -422,15 +422,28 @@ async function fetchOne(target: {
     }
 
     const price = Number(meta.regularMarketPrice);
-    /* 오늘 세션(regularMarketTime)보다 12시간 넘게 앞선 마지막 일봉 종가 = 전일 종가. 없으면 meta 값 */
+    /*
+     * 전일 종가 = **지금 값이 들어 있는 일봉의 바로 앞 일봉** 종가. 없으면 meta 값.
+     *
+     * ⚠️ 예전엔 「체결 시각보다 12시간 넘게 앞선 마지막 일봉」을 전일로 집었다 (2026-09-15 — 벤티지:
+     * "7시 26분 글로벌 카드 원자재 등락률이 모두 0.00"). 주식 일봉은 개장(09:30 ET)에 찍혀 마감까지
+     * 6시간 반이라 맞았지만, **선물·VIX·코인 일봉은 뉴욕 자정(한국 13:00)에 찍혀 24시간을 간다.**
+     * 한국 새벽 1시를 넘기면 지금 도는 일봉이 「12시간 전」이 되어 그걸 전일로 집었고, 현재가와
+     * 같은 값이라 0.00% — 한국 오전 내내(01:00~13:00) WTI·금·구리·미국 선물·VIX 가 0 이었다.
+     * 「지금 봉」은 체결 시각을 품은 마지막 봉(시작이 24시간 안)으로 정한다. 새 봉이 아직 안 섰으면
+     * 마지막 봉이 곧 전일이다.
+     */
     const mt = Number(meta.regularMarketTime) || 0;
     let prev = NaN;
     const ts = r0?.timestamp ?? [];
     const closes = r0?.indicators?.quote?.[0]?.close ?? [];
-    for (let i = ts.length - 1; i >= 0; i--) {
-      const c = closes[i];
-      if (c === null || c === undefined || !Number.isFinite(c)) continue;
-      if (mt && ts[i] < mt - 12 * 3600) {
+    if (mt) {
+      let cur = ts.length - 1;
+      while (cur >= 0 && ts[cur] > mt + 60) cur--;
+      const from = cur >= 0 && mt - ts[cur] < 24 * 3600 ? cur - 1 : cur;
+      for (let i = from; i >= 0; i--) {
+        const c = closes[i];
+        if (c === null || c === undefined || !Number.isFinite(c)) continue;
         prev = c;
         break;
       }
