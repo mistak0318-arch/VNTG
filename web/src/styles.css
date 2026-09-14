@@ -18659,15 +18659,24 @@ a.watch-btn { text-decoration: none; }
 
 /* ── 맨 윗줄 하나 — 아이콘 줄 + 시계 (2026-09-10) ── */
 /*
- * ⚠️ **안 맞으면 줄을 바꾼다** (2026-09-14 — 벤티지: "시계가 겹쳤고").
+ * ⚠️ **한 줄이다 — 줄을 바꾸지 않는다.**
  *
- * 예전엔 `nowrap` 이라 좁은 폰에서 아이콘 줄이 제 칸을 넘어 **시계 밑으로 파고들었다**
- * (실측 390px: 아이콘 줄 칸은 68~270 인데 마지막 단추가 297 까지 뻗고 시계가 276 에서 시작).
- * 줄을 바꾸면 아무것도 안 가려지고 아무것도 안 잘린다. 맨 윗줄 높이는 App 이 재서
- * `--top-strip-h` 로 넘기므로 두 줄이 되어도 탭 줄이 그만큼 내려온다.
+ * 2026-09-14 에 `flex-wrap: wrap` 을 넣었다가 바로 되돌렸다 (벤티지: "더 이상해졌어
+ * 두줄이 되어버렸어"). 줄바꿈을 허용하면 flex 는 칸을 **줄이기 전에** 넘긴다 —
+ * `.qss-row` 의 기본 폭이 max-content 라 폰에서는 항상 시계가 둘째 줄로 내려갔다.
+ *
+ * 시계가 겹치던 진짜 원인은 따로 있었다 — **붙은 탭 줄이 `top: 2.85rem` 로 굳어 있었다.**
+ * 이젠 App 이 이 줄을 재서 `--top-strip-h` 로 넘긴다. 줄바꿈은 그 문제의 답이 아니었다.
  */
-.top-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 20px 0; max-width: var(--main-max, 1400px); }
+.top-strip { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; padding: 12px 20px 0; max-width: var(--main-max, 1400px); }
 .top-strip .qss-row { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+/*
+ * 글자를 아주 키우면(배율 130% 급) 아이콘 줄이 제 칸을 넘친다. 그때 **빗자루가 시계 밑으로
+ * 파고드는 대신 줄어든다** — 개수 괄호가 잘리는 편이 겹치는 것보다 낫다.
+ * `overflow` 를 `.qss-row` 에 걸면 상태 팝업(`.live-pop`)과 검색 목록이 잘리므로
+ * **단추 자기 안에만** 건다.
+ */
+.top-strip .qss-row .qss-close-tabs { flex: 0 1 auto; overflow: hidden; }
 /* 머리글은 이제 시계만 — 어느 폭에서든 보인다. 제목은 탭 줄이 말한다 */
 .top-strip .mobile-header {
   display: flex; align-items: center; position: static; border: 0; padding: 0; background: none; gap: 6px; flex: none; z-index: auto;
