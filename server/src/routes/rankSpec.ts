@@ -293,6 +293,122 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
    * 일부 업종의 구성종목을 안 주고 ETF·리츠는 업종에 안 잡힌다. 시총 상위는 대형주라
    * 거의 다 들어오지만, 「전 종목을 다 본 순위」는 아니라는 걸 화면에 적어 둔다.
    */
+  /**
+   * **KRX/NXT 괴리율** (2026-09-14 — 벤티지: "괴리율도 나오는지 확인해 보고 있으면 시세분석에
+   * 분류 하나 추가해줘").
+   *
+   * 키움 MTS 「순위검색 › KRX/NXT 괴리율 순위」와 같은 것이다. 우리 순위 명세에는 그 TR 이 없어서,
+   * **거래대금 상위(`ka10032`)를 KRX(1)·NXT(2)로 따로 불러 종목코드로 맞댄다.**
+   *
+   * ## ⚠️ 줄에 붙은 `nxtPrice` 를 쓰지 않는다 (2026-09-14 16:09 실측)
+   *
+   * `/:key` 가 내려 주는 `nxtPrice` 는 **통합 가격**이다. 옛 시간표에서는 15:30 뒤 통합이 곧
+   * NXT 였지만, 애프터마켓이 생긴 뒤로는 16:00~20:00 에 KRX 도 돌아서 **통합이 KRX 체결일 수
+   * 있다.** 맞대 보니 39종목 중 30종목에서 `nxtPrice` 가 KRX 가격과 같았다 — 그걸로 괴리율을
+   * 내면 가짜 0 이 된다. 그래서 두 거래소를 **각각** 부른다.
+   *
+   * ## 뜻이 두 가지로 갈린다
+   *
+   * KRX 애프터마켓은 **ETF·ETN 을 안 받는다**(관리·투자경고도). 그 종목들은 16:00~20:00 에도
+   * 「KRX 종가(멈춤) vs NXT 실시간」이라 괴리율의 뜻이 다르다 — 한 표에 섞으면 안 된다.
+   * `frozen` 으로 표시해 화면이 가를 수 있게 한다.
+   *
+   * ## 실측 (2026-09-14 16:09, 애프터마켓 첫날)
+   * 겹친 39종목 괴리율 중앙값 0%, 최대 0.25%(NAVER), 0.5% 넘는 종목 0개. 둘 다 실시간이라
+   * 차익거래가 누른다 — 예전 「멈춘 값 대 살아 있는 값」 시절의 큰 괴리율은 이제 안 나온다.
+   * 괴리율이 의미 있는 시간은 **08:00~09:00(NXT 프리 vs KRX 전일종가)** 와 **15:30~16:00(공백)** 이다.
+   *
+   * `/:key` 보다 **위에** 있어야 한다.
+   */
+  router.get("/nxt-gap", async (req, res, next) => {
+    try {
+      const market = ["000", "001", "101"].includes(String(req.query.market)) ? String(req.query.market) : "000";
+      const limit = Math.min(Math.max(Number(req.query.limit) || 100, 20), 300);
+      const LIST = "trde_prica_upper";
+      /* 거래소 하나를 여러 장 받는다 — 겹치는 종목이 많아야 괴리율을 낼 수 있다 */
+      const pull = async (stex: string, pages: number) => {
+        const out: Record<string, unknown>[] = [];
+        let contYn = "N";
+        let nextKey = "";
+        for (let page = 0; page < pages; page += 1) {
+          const r = await client.request<Record<string, unknown>>(
+            "/api/dostk/rkinfo",
+            "ka10032",
+            { ...COMMON_PARAMS, mrkt_tp: market, stex_tp: stex },
+            page === 0 ? {} : { contYn, nextKey },
+          );
+          const got = Array.isArray(r.data[LIST]) ? (r.data[LIST] as Record<string, unknown>[]) : [];
+          if (got.length === 0) break;
+          out.push(...got);
+          contYn = r.contYn;
+          nextKey = r.nextKey;
+          if (contYn !== "Y" || !nextKey) break;
+        }
+        return out;
+      };
+      /* NXT 는 거래되는 종목이 적어 두 장이면 된다. KRX 는 넉넉히 받아 겹침을 늘린다 */
+      const [nxtRows, krxRows] = await Promise.all([pull("2", 2), pull("1", 4)]);
+      const krxPrice = new Map<string, number>();
+      for (const r of krxRows) {
+        const qty = toNum(r.now_trde_qty) ?? 0;
+        const px = toNum(r.cur_prc);
+        /* KRX 에서 오늘 안 돈 종목은 가격이 전일 종가라 괴리율이 아니다 — 뺀다 */
+        if (px !== null && qty > 0) krxPrice.set(bare(r.stk_cd), Math.abs(px));
+      }
+      const index = await getStockIndex(client).catch(() => new Map());
+      const rows = nxtRows
+        .map((r) => {
+          const code = bare(r.stk_cd);
+          const nxt = toNum(r.cur_prc);
+          const krx = krxPrice.get(code);
+          if (nxt === null || !krx) return null;
+          const nx = Math.abs(nxt);
+          const gap = Math.round(((nx - krx) / krx) * 10000) / 100;
+          const ex = extras({ ...r, cur_prc: String(krx) }, index.get(code));
+          return {
+            code,
+            name: String(r.stk_nm ?? "").trim(),
+            cur_prc: krx,
+            nxt_prc: nx,
+            gap,
+            absGap: Math.abs(gap),
+            flu_rt: toNum(r.flu_rt),
+            ...ex,
+            /* KRX 애프터에 안 들어가는 종목 — 이 시간 괴리율은 「멈춘 KRX 대 살아 있는 NXT」다 */
+            frozen: Boolean(ex.etf),
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null)
+        .sort((a, b) => b.absGap - a.absGap)
+        .slice(0, limit)
+        .map((x, i) => ({ ...x, rank: i + 1 }));
+
+      res.json({
+        spec: {
+          key: "nxt-gap",
+          label: "KRX/NXT 괴리율",
+          columns: [
+            { key: "rank", label: "순위", type: "num" },
+            { key: "cur_prc", label: "KRX", type: "price" },
+            { key: "nxt_prc", label: "NXT", type: "price" },
+            /* 부호가 뜻이다 — 양수면 NXT 가 비싸다. 색을 칠하는 형으로 */
+            { key: "gap", label: "괴리율", type: "pct" },
+          ],
+          exchange: false,
+          note:
+            "NXT 가격이 KRX 보다 몇 % 위·아래인가입니다(양수면 NXT 가 비쌈). 거래대금 상위를 두 거래소에서 " +
+            "따로 받아 맞댔습니다. 16:00~20:00 은 KRX 애프터마켓과 NXT 가 둘 다 돌아 괴리율이 작습니다 — " +
+            "크게 벌어지는 건 08:00~09:00 과 15:30~16:00 입니다. ETF 는 KRX 애프터에 안 들어가 그 시간 KRX 값이 멈춰 있습니다.",
+        },
+        market,
+        exchange: "3",
+        rows: await withFlow(rows),
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/market-cap", async (req, res, next) => {
     try {
       const market = ["000", "001", "101"].includes(String(req.query.market))

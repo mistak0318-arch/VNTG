@@ -272,6 +272,12 @@ export const SCREENER_TABS = [
   { key: "inquiry-cum", label: "조회순위 누적", kind: "rank" as const },
   /* 키움 순위에는 없어서 시황 스냅샷으로 우리가 세운다 */
   { key: "market-cap", label: "시가총액 상위", kind: "rank" as const },
+  /*
+   * KRX/NXT 괴리율 (2026-09-14 — 벤티지: "괴리율도 나오는지 확인해 보고 있으면 시세분석에 분류 하나
+   * 추가해줘"). 키움 MTS 「KRX/NXT 괴리율 순위」와 같은 것 — 우리 순위 명세엔 그 TR 이 없어서 거래대금
+   * 상위를 두 거래소에서 따로 받아 맞댄다. 16:00~20:00 은 둘 다 돌아 작고, 벌어지는 건 아침·15:30~16:00.
+   */
+  { key: "nxt-gap", label: "KRX/NXT 괴리율", kind: "rank" as const },
   /* `rank` 로 옮겼다 (2026-09-02) — 그래야 필터·신호등·열순서가 같이 붙는다 */
   { key: "cumulative", label: "누적등락률 상위", kind: "rank" as const },
   /* 아래 둘은 전종목 원장에서 세운다 — 조회 0회, 기간을 마음대로 잡는다 */
