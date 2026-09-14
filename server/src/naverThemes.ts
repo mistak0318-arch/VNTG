@@ -35,8 +35,19 @@ const here = dirname(fileURLToPath(import.meta.url));
 const DIR = join(here, "..", "data");
 const FILE = join(DIR, "naverThemes.json");
 
-const LIST_URL = "https://finance.naver.com/sise/theme.naver";
-const DETAIL_URL = "https://finance.naver.com/sise/sise_group_detail.naver?type=theme&no=";
+/*
+ * ⚠️ **네이버가 증권을 옮겼다** (2026-09-15 실측). 옛 주소 `finance.naver.com/sise/theme.naver` 는 이제
+ * `stock.naver.com/market/stock/kr/theme`(「Npay 증권」, 화면을 스크립트로 그리는 새 사이트)로 **302 로 넘긴다.**
+ * 넘겨받은 페이지엔 옛 규칙(`sise_group_detail…no=`)으로 찾을 테마 링크가 하나도 없어서 **0개를 받았고,
+ * 그 0개로 목록을 덮어썼다** — 테마 MAP·테마 DB·종목의 테마가 통째로 비었다.
+ *
+ * 모바일 증권의 JSON 창구가 같은 것을 준다 — 테마 번호도 옛 사이트와 같다(양자 426 등).
+ *   목록  /api/stocks/theme?page=N&pageSize=100          → groups[{no,name,totalCount,…}] · totalCount 266
+ *   상세  /api/stocks/theme/{no}?page=1&pageSize=100     → stocks[{itemCode,stockName,…}] · themeItemInfoMap{코드: 편입 사유}
+ * 옛 HTML 을 긁을 때보다 오히려 낫다 — 편입 사유가 표 안 툴팁이 아니라 칸으로 온다.
+ */
+const LIST_API = "https://m.stock.naver.com/api/stocks/theme";
+const DETAIL_API = "https://m.stock.naver.com/api/stocks/theme/";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36";
 
 /** 페이지 사이 쉬는 시간 — 서둘러야 할 이유가 없는 작업이다 */
@@ -214,6 +225,22 @@ export async function themesOfStock(code: string): Promise<{ no: number; name: s
  * `res.text()` 를 그대로 쓰면 한글이 통째로 깨진다 — meta 에는 utf-8 이라 적혀 있는데
  * 실제 바이트는 EUC-KR 이라 그 말을 믿으면 안 된다(실측 2026-08-28).
  */
+async function getJson<T>(url: string): Promise<T> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 20_000);
+  try {
+    const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" }, signal: ctl.signal });
+    if (!res.ok) {
+      void recordApiCall("naver", "theme", res.status === 429 ? "rateLimited" : "failed");
+      throw new Error(`네이버 응답 ${res.status}`);
+    }
+    void recordApiCall("naver", "theme", "ok");
+    return (await res.json()) as T;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function getHtml(url: string): Promise<string> {
   const res = await fetch(url, { headers: { "User-Agent": UA } });
   if (!res.ok) {
@@ -290,15 +317,22 @@ export function themeFetchProgress() {
 export async function fetchAllThemes(opts: { limit?: number } = {}): Promise<NaverThemeStore> {
   if (running) return running;
   running = (async () => {
-    const first = await getHtml(LIST_URL);
-    const last = lastPage(first);
-    const list = parseList(first);
+    type ListResp = { groups?: { no: number; name: string; totalCount?: number }[]; totalCount?: number };
+    type DetailResp = {
+      stocks?: { itemCode?: string; stockName?: string; stockType?: string }[];
+      themeItemInfoMap?: Record<string, string>;
+      totalCount?: number;
+    };
 
-    for (let p = 2; p <= last; p++) {
+    /* 목록 — 100개씩. 전체 개수는 첫 장이 알려 준다 */
+    const first = await getJson<ListResp>(`${LIST_API}?page=1&pageSize=100`);
+    const list: { no: number; name: string }[] = (first.groups ?? []).map((g) => ({ no: g.no, name: g.name }));
+    const pages = Math.ceil((first.totalCount ?? list.length) / 100);
+    for (let p = 2; p <= pages; p++) {
       await sleep(GAP_MS);
       try {
-        const html = await getHtml(`${LIST_URL}?&page=${p}`);
-        for (const t of parseList(html)) if (!list.some((x) => x.no === t.no)) list.push(t);
+        const r = await getJson<ListResp>(`${LIST_API}?page=${p}&pageSize=100`);
+        for (const g of r.groups ?? []) if (!list.some((x) => x.no === g.no)) list.push({ no: g.no, name: g.name });
       } catch {
         /* 목록 한 장을 놓쳐도 나머지는 받는다 */
       }
@@ -311,8 +345,11 @@ export async function fetchAllThemes(opts: { limit?: number } = {}): Promise<Nav
     for (const t of targets) {
       await sleep(GAP_MS);
       try {
-        const html = await getHtml(DETAIL_URL + t.no);
-        const stocks = parseDetail(html);
+        const r = await getJson<DetailResp>(`${DETAIL_API}${t.no}?page=1&pageSize=100`);
+        const why = r.themeItemInfoMap ?? {};
+        const stocks: ThemeStock[] = (r.stocks ?? [])
+          .filter((x) => (x.stockType ?? "domestic") === "domestic" && /^\d{6}$/.test(String(x.itemCode ?? "")))
+          .map((x) => ({ code: String(x.itemCode), name: String(x.stockName ?? "").trim(), desc: String(why[String(x.itemCode)] ?? "").trim() }));
         // 종목이 하나도 없으면 받다 만 것이다 — 빈 테마로 굳히지 않는다
         if (stocks.length > 0) themes.push({ no: t.no, name: t.name, stocks });
       } catch {
@@ -321,8 +358,21 @@ export async function fetchAllThemes(opts: { limit?: number } = {}): Promise<Nav
       progress = { done: progress.done + 1, total: targets.length, at: t.name };
     }
 
-    /* 미국 쪽은 **건드리지 않는다** — 국내만 다시 받는 일이 흔하다 */
+    /*
+     * ⚠️ **모자라게 받았으면 덮어쓰지 않는다** (2026-09-15). 네이버가 주소를 옮긴 날 0개를 받아 목록을 통째로
+     * 지웠다. 받은 게 0개이거나 **예전의 절반도 안 되면** 예전 것을 그대로 두고 실패로 남긴다 — 빈 목록은
+     * 낡은 목록보다 훨씬 나쁘다(테마 MAP·DB·종목의 테마·주도주 강도가 한꺼번에 빈다). `limit` 으로 일부만
+     * 받는 시험 호출은 이 검사를 건너뛴다.
+     */
     const prev = await loadThemes();
+    if (!opts.limit) {
+      const floor = Math.max(1, Math.floor(prev.themes.length * 0.5));
+      if (themes.length === 0 || (prev.themes.length > 0 && themes.length < floor)) {
+        throw new Error(`네이버 테마를 ${themes.length}개밖에 못 받았다(예전 ${prev.themes.length}개) — 예전 목록을 그대로 둔다`);
+      }
+    }
+
+    /* 미국 쪽은 **건드리지 않는다** — 국내만 다시 받는 일이 흔하다 */
     const store: NaverThemeStore = {
       ...prev,
       fetchedAt: new Date().toISOString(),
