@@ -3,6 +3,7 @@ import { cumulativeRank } from "../cumulativeRank.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { COMMON_PARAMS, findSpec, specGroups, type RankSpec } from "../rankSpecs.js";
 import { getMarketSnapshot } from "../marketSnapshot.js";
+import { latestRegularCloses } from "../dailyCloses.js";
 import { bare, extras, toNum } from "../rankExtras.js";
 import { getStockIndex } from "../stockListCache.js";
 import { flowRank, flowSums, SUBJECT_LABEL, type FlowSubject } from "../dailyStore.js";
@@ -294,38 +295,107 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
    * 거의 다 들어오지만, 「전 종목을 다 본 순위」는 아니라는 걸 화면에 적어 둔다.
    */
   /**
-   * **KRX/NXT 괴리율** (2026-09-14 — 벤티지: "괴리율도 나오는지 확인해 보고 있으면 시세분석에
-   * 분류 하나 추가해줘").
+   * **정규장 종가 대비 장외 괴리율** (2026-09-14 — 벤티지: "이제 괴리율 계산을 KRX 나 NXT 기준에서
+   * 정규장·애프터장으로 해야 되지 않니? 지금 저건 의미가 없어 보이는데").
    *
-   * 키움 MTS 「순위검색 › KRX/NXT 괴리율 순위」와 같은 것이다. 우리 순위 명세에는 그 TR 이 없어서,
-   * **거래대금 상위(`ka10032`)를 KRX(1)·NXT(2)로 따로 불러 종목코드로 맞댄다.**
+   * ## 왜 KRX 대 NXT 가 아닌가
    *
-   * ## ⚠️ 줄에 붙은 `nxtPrice` 를 쓰지 않는다 (2026-09-14 16:09 실측)
+   * 처음엔 키움 MTS 「KRX/NXT 괴리율 순위」를 그대로 따라 두 거래소 가격을 맞댔다. 그런데 애프터마켓이
+   * 생긴 오늘부터 16:00~20:00 은 **KRX 도 NXT 도 둘 다 살아 있다.** 16:09 에 재 보니 겹친 39종목의
+   * 중앙값 0%, 최대 0.25% — 차익거래가 눌러서 **아무것도 안 보인다.** 벤티지 말이 맞다.
    *
-   * `/:key` 가 내려 주는 `nxtPrice` 는 **통합 가격**이다. 옛 시간표에서는 15:30 뒤 통합이 곧
-   * NXT 였지만, 애프터마켓이 생긴 뒤로는 16:00~20:00 에 KRX 도 돌아서 **통합이 KRX 체결일 수
-   * 있다.** 맞대 보니 39종목 중 30종목에서 `nxtPrice` 가 KRX 가격과 같았다 — 그걸로 괴리율을
-   * 내면 가짜 0 이 된다. 그래서 두 거래소를 **각각** 부른다.
+   * 트레이더가 장외에서 보고 싶은 것은 **「정규장이 끝난 뒤 얼마나 움직였나」**다. 공시·뉴스가 장 뒤에
+   * 나오면 그게 여기서 먼저 드러난다. 그래서 기준을 거래소가 아니라 **시간**으로 바꾼다.
    *
-   * ## 뜻이 두 가지로 갈린다
+   * ## 기준선 하나로 아침과 저녁을 같이 본다
    *
-   * KRX 애프터마켓은 **ETF·ETN 을 안 받는다**(관리·투자경고도). 그 종목들은 16:00~20:00 에도
-   * 「KRX 종가(멈춤) vs NXT 실시간」이라 괴리율의 뜻이 다르다 — 한 표에 섞으면 안 된다.
-   * `frozen` 으로 표시해 화면이 가를 수 있게 한다.
+   *   08:00~09:00  NXT 프리마켓   vs **앞 장의 정규장 종가**
+   *   15:30~16:00  NXT (KRX 공백) vs **오늘 정규장 종가**
+   *   16:00~20:00  KRX 애프터     vs **오늘 정규장 종가**
+   *   20:00~ 다음날 08:00  장외 마감값 vs 오늘 정규장 종가 — 「오늘 장 뒤에 얼마나 갔나」 정리
+   *   09:00~15:30  정규장 중 — 이 순위는 뜻이 없다. 등락률 순위를 보면 된다
    *
-   * ## 실측 (2026-09-14 16:09, 애프터마켓 첫날)
-   * 겹친 39종목 괴리율 중앙값 0%, 최대 0.25%(NAVER), 0.5% 넘는 종목 0개. 둘 다 실시간이라
-   * 차익거래가 누른다 — 예전 「멈춘 값 대 살아 있는 값」 시절의 큰 괴리율은 이제 안 나온다.
-   * 괴리율이 의미 있는 시간은 **08:00~09:00(NXT 프리 vs KRX 전일종가)** 와 **15:30~16:00(공백)** 이다.
+   * 기준선은 15:40 에 찍어 두는 **정규장 종가 파일**(`data/regularCloses`)이다. 키움 등락률은 전일 종가
+   * 대비라 오늘 정규장 종가를 모른다 — 우리가 찍은 값이 유일한 기준이다. 파일이 없으면 지어내지 않고
+   * 빈 목록과 이유를 돌려준다.
+   *
+   * ## 어느 거래소 가격을 쓰나
+   *
+   * 16:00~20:00 은 KRX 애프터가 본 시장이라 KRX 를 먼저 보고, KRX 에서 안 돈 종목(ETF·관리 등 애프터
+   * 제외)은 NXT 로 채운다. 그 밖의 시간은 NXT 만 돈다. 줄마다 어느 쪽 값인지 `src` 로 적는다.
+   * 줄에 붙어 오는 `nxtPrice` 는 **통합 가격**이라 16시 뒤엔 KRX 체결이 섞인다 — 안 쓴다.
    *
    * `/:key` 보다 **위에** 있어야 한다.
    */
-  router.get("/nxt-gap", async (req, res, next) => {
+  router.get("/after-gap", async (req, res, next) => {
     try {
       const market = ["000", "001", "101"].includes(String(req.query.market)) ? String(req.query.market) : "000";
       const limit = Math.min(Math.max(Number(req.query.limit) || 100, 20), 300);
+      const d = new Date(Date.now() + 9 * 3600_000);
+      const today = d.toISOString().slice(0, 10);
+      const min = d.getUTCHours() * 60 + d.getUTCMinutes();
+      const wd = d.getUTCDay();
+      const weekend = wd === 0 || wd === 6;
+
+      type Phase = "pre" | "regular" | "gap" | "after" | "closed";
+      const phase: Phase = weekend
+        ? "closed"
+        : min >= 480 && min < 540
+          ? "pre"
+          : min >= 540 && min < 930
+            ? "regular"
+            : min >= 930 && min < 960
+              ? "gap"
+              : min >= 960 && min < 1200
+                ? "after"
+                : "closed";
+      const PHASE_LABEL: Record<Phase, string> = {
+        pre: "NXT 프리마켓 — 앞 장 정규장 종가 대비",
+        regular: "정규장 중",
+        gap: "15:30~16:00 공백 — NXT 가 오늘 정규장 종가 대비",
+        after: "애프터마켓 — 오늘 정규장 종가 대비",
+        closed: "장 뒤 — 오늘 정규장 종가 대비 마감값",
+      };
+
+      const spec = {
+        key: "after-gap",
+        label: "정규장 대비 장외",
+        columns: [
+          { key: "rank", label: "순위", type: "num" },
+          { key: "base", label: "정규장 종가", type: "price" },
+          { key: "cur_prc", label: "지금", type: "price" },
+          /* 부호가 뜻이다 — 양수면 장 뒤에 올랐다 */
+          { key: "gap", label: "장외 괴리", type: "pct" },
+        ],
+        exchange: false,
+        note:
+          "정규장이 끝난 뒤(또는 장 전) 얼마나 움직였나입니다. 기준은 정규장 종가 — 저녁엔 오늘, 아침엔 앞 장. " +
+          "16:00~20:00 은 KRX 애프터 값, 그 밖의 시간과 애프터 제외 종목(ETF·관리 등)은 NXT 값을 씁니다. " +
+          "정규장 중(09:00~15:30)에는 뜻이 없어 비워 둡니다 — 등락률 순위를 보세요.",
+      };
+
+      if (phase === "regular") {
+        res.json({ spec, market, exchange: "3", phase, phaseLabel: PHASE_LABEL[phase], rows: [], empty: "정규장 중에는 장외 괴리가 없습니다 — 15:30 뒤에 다시 여세요." });
+        return;
+      }
+      /* 아침은 앞 장, 그 밖엔 오늘. 15:30~15:40 은 오늘 파일이 아직 없다 — 앞 장으로 떨어지면 틀린 기준이다 */
+      const wantToday = phase !== "pre";
+      const found = await latestRegularCloses(today);
+      if (!found || (wantToday && found.date !== today)) {
+        res.json({
+          spec,
+          market,
+          exchange: "3",
+          phase,
+          phaseLabel: PHASE_LABEL[phase],
+          rows: [],
+          empty: wantToday ? "오늘 정규장 종가를 아직 못 찍었습니다 — 15:40 에 찍힙니다." : "기준이 될 정규장 종가 파일이 없습니다.",
+        });
+        return;
+      }
+      const base = found.closes;
+
       const LIST = "trde_prica_upper";
-      /* 거래소 하나를 여러 장 받는다 — 겹치는 종목이 많아야 괴리율을 낼 수 있다 */
       const pull = async (stex: string, pages: number) => {
         const out: Record<string, unknown>[] = [];
         let contYn = "N";
@@ -346,36 +416,57 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         }
         return out;
       };
-      /* NXT 는 거래되는 종목이 적어 두 장이면 된다. KRX 는 넉넉히 받아 겹침을 늘린다 */
-      const [nxtRows, krxRows] = await Promise.all([pull("2", 2), pull("1", 4)]);
-      const krxPrice = new Map<string, number>();
-      for (const r of krxRows) {
-        const qty = toNum(r.now_trde_qty) ?? 0;
+      const [nxtRows, krxRows] = await Promise.all([pull("2", 2), phase === "after" || phase === "closed" ? pull("1", 3) : Promise.resolve([])]);
+
+      type Px = { price: number; row: Record<string, unknown> };
+      const nxtOf = new Map<string, Px>();
+      const krxOf = new Map<string, Px>();
+      for (const r of nxtRows) {
         const px = toNum(r.cur_prc);
-        /* KRX 에서 오늘 안 돈 종목은 가격이 전일 종가라 괴리율이 아니다 — 뺀다 */
-        if (px !== null && qty > 0) krxPrice.set(bare(r.stk_cd), Math.abs(px));
+        if (px !== null && px !== 0) nxtOf.set(bare(r.stk_cd), { price: Math.abs(px), row: r });
       }
+      for (const r of krxRows) {
+        const px = toNum(r.cur_prc);
+        if (px !== null && px !== 0) krxOf.set(bare(r.stk_cd), { price: Math.abs(px), row: r });
+      }
+      /*
+       * **어느 값을 쓰나** — KRX 가 장 뒤에 **움직였으면** KRX(본 시장), 아니면 NXT.
+       *
+       * KRX 값이 정규장 종가와 같다는 건 애프터에서 안 돌았다는 뜻이다. 관리·투자경고처럼 KRX 애프터에
+       * 안 들어가는 종목이 여기 걸리는데, 그 종목도 NXT 에선 움직일 수 있다. KRX 를 무조건 먼저 쓰면
+       * 그 움직임이 **0 으로 가려진다.** 16:31 에 재 보니 KRX·NXT 가 둘 다 돈 종목은 차이가 0.25% 안쪽이라
+       * 어느 쪽을 써도 뜻이 같다 — 갈리는 건 한쪽이 멈춘 종목뿐이고, 그땐 움직인 쪽이 사실이다.
+       */
+      const pick = new Map<string, { price: number; src: "KRX" | "NXT"; row: Record<string, unknown> }>();
+      for (const code of new Set([...nxtOf.keys(), ...krxOf.keys()])) {
+        const b = base.get(code);
+        const k = krxOf.get(code);
+        const n = nxtOf.get(code);
+        if (k && (!n || (b !== undefined && k.price !== b))) pick.set(code, { price: k.price, src: "KRX", row: k.row });
+        else if (n) pick.set(code, { price: n.price, src: "NXT", row: n.row });
+      }
+
       const index = await getStockIndex(client).catch(() => new Map());
-      const rows = nxtRows
-        .map((r) => {
-          const code = bare(r.stk_cd);
-          const nxt = toNum(r.cur_prc);
-          const krx = krxPrice.get(code);
-          if (nxt === null || !krx) return null;
-          const nx = Math.abs(nxt);
-          const gap = Math.round(((nx - krx) / krx) * 10000) / 100;
-          const ex = extras({ ...r, cur_prc: String(krx) }, index.get(code));
+      const rows = [...pick.entries()]
+        .map(([code, p]) => {
+          const b = base.get(code);
+          if (!b || b <= 0) return null;
+          const gap = Math.round(((p.price - b) / b) * 10000) / 100;
+          const ex = extras({ ...p.row, cur_prc: String(p.price) }, index.get(code));
           return {
             code,
-            name: String(r.stk_nm ?? "").trim(),
-            cur_prc: krx,
-            nxt_prc: nx,
+            name: String(p.row.stk_nm ?? "").trim(),
+            base: b,
+            cur_prc: p.price,
             gap,
             absGap: Math.abs(gap),
-            flu_rt: toNum(r.flu_rt),
+            /*
+             * 등락률은 **키움이 준 전일 대비 값 그대로**다. 괴리로 덮지 않는다 — 화면이 이 칸에 실시간
+             * 등락률을 덧씌우므로 덮으면 한 칸에 두 뜻이 섞인다. 장외 괴리는 `gap` 칸 하나가 말한다.
+             */
+            flu_rt: toNum(p.row.flu_rt),
+            src: p.src,
             ...ex,
-            /* KRX 애프터에 안 들어가는 종목 — 이 시간 괴리율은 「멈춘 KRX 대 살아 있는 NXT」다 */
-            frozen: Boolean(ex.etf),
           };
         })
         .filter((x): x is NonNullable<typeof x> => x !== null)
@@ -384,24 +475,12 @@ export function createRankSpecRouter(client: KiwoomClient): Router {
         .map((x, i) => ({ ...x, rank: i + 1 }));
 
       res.json({
-        spec: {
-          key: "nxt-gap",
-          label: "KRX/NXT 괴리율",
-          columns: [
-            { key: "rank", label: "순위", type: "num" },
-            { key: "cur_prc", label: "KRX", type: "price" },
-            { key: "nxt_prc", label: "NXT", type: "price" },
-            /* 부호가 뜻이다 — 양수면 NXT 가 비싸다. 색을 칠하는 형으로 */
-            { key: "gap", label: "괴리율", type: "pct" },
-          ],
-          exchange: false,
-          note:
-            "NXT 가격이 KRX 보다 몇 % 위·아래인가입니다(양수면 NXT 가 비쌈). 거래대금 상위를 두 거래소에서 " +
-            "따로 받아 맞댔습니다. 16:00~20:00 은 KRX 애프터마켓과 NXT 가 둘 다 돌아 괴리율이 작습니다 — " +
-            "크게 벌어지는 건 08:00~09:00 과 15:30~16:00 입니다. ETF 는 KRX 애프터에 안 들어가 그 시간 KRX 값이 멈춰 있습니다.",
-        },
+        spec: { ...spec, note: `${PHASE_LABEL[phase]} · 기준 ${found.date} 정규장 종가. ` + spec.note },
         market,
         exchange: "3",
+        phase,
+        phaseLabel: PHASE_LABEL[phase],
+        baseDate: found.date,
         rows: await withFlow(rows),
       });
     } catch (err) {

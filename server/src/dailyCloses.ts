@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -341,6 +341,30 @@ export async function captureRegularCloses(client: KiwoomClient): Promise<number
 }
 
 /** 그날 찍어 둔 정규장 종가 — 없으면 빈 map */
+/**
+ * **그 날짜까지 중 가장 최근의 정규장 종가** (2026-09-14).
+ *
+ * 「정규장 종가 대비 장외 괴리율」이 기준으로 쓴다. 아침(08:00~09:00 NXT 프리)에는 오늘 파일이
+ * 아직 없으므로 **앞 장**의 파일이 잡힌다 — 그게 맞는 기준이다. 저녁엔 15:40 에 찍힌 오늘 파일이다.
+ * 파일이 있는 날이 곧 장이 선 날이라 영업일 계산을 따로 안 한다. 없으면 `null`.
+ */
+export async function latestRegularCloses(onOrBefore: string): Promise<{ date: string; closes: Map<string, number> } | null> {
+  let names: string[] = [];
+  try {
+    names = await readdir(RC_DIR);
+  } catch {
+    return null;
+  }
+  const dates = names
+    .map((n) => n.replace(/\.json$/, ""))
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= onOrBefore)
+    .sort();
+  const date = dates[dates.length - 1];
+  if (!date) return null;
+  const closes = await loadRegularCloses(date);
+  return closes.size > 0 ? { date, closes } : null;
+}
+
 export async function loadRegularCloses(date: string): Promise<Map<string, number>> {
   try {
     const raw = await readFile(join(RC_DIR, `${date}.json`), "utf-8");
