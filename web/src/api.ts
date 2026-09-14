@@ -7568,6 +7568,14 @@ export interface LedgerView {
     pnlTotal: number;
     pnlRateTotal: number;
     holdings: number;
+    /** 키움이 준 평가손익 합 */
+    pnlKiwoom: number;
+    /** 지금 전부 팔면 나갈 수수료+세금. 요율을 못 재면 null */
+    sellCostNow: number | null;
+    /** 아직 안 뺀 매수 수수료 — 키움 평가손익에 이미 들어 있으면 0 */
+    buyFeeLeft: number | null;
+    /** 지금 다 팔았다 치면 남는 것 */
+    netPnlNow: number | null;
   };
   period: { netStart: number; netEnd: number; deposits: number; withdrawals: number; evalPnl: number; rate: number } | null;
   assets: { date: string; asset: number; deposit: number }[];
@@ -7577,6 +7585,16 @@ export interface LedgerView {
   byStock: { code: string; name: string; trades: number; qty: number; pnl: number; wins: number; avgRate: number; bestRate: number; worstRate: number; lastDate: string }[];
   trades: { date: string; code: string; name: string; qty: number; buyPrice: number; sellPrice: number; pnl: number; pnlRate: number; fee: number; tax: number }[];
   realized: { pnl: number; buyAmt: number; sellAmt: number; fee: number; tax: number; wins: number; losses: number; winRate: number };
+  /** 내 계좌에서 실제로 나간 비용으로 잰 요율 — 매매가 없으면 null */
+  cost: {
+    feeRate: number;
+    taxRate: number;
+    buyAmt: number;
+    sellAmt: number;
+    fee: number;
+    tax: number;
+    days: number;
+  } | null;
   missing: string[];
 }
 export interface LedgerPeriodRow {

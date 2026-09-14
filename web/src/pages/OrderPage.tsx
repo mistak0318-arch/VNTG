@@ -4420,13 +4420,47 @@ function LedgerTab() {
             </div>
           </>
         )}
-        <div className={`ord-lstat ${signClass(view.realized.pnl)}`}>
-          <i>실현손익 (매도로 확정)</i>
-          <b>{signedWon(view.realized.pnl)}</b>
+        {/*
+          **실현손익은 두 줄이다** (2026-09-14 — 벤티지: "수수료까지 포함해서 실손 얼마인지 …
+          나중에 수수료랑 다 해서 얼마 나갔고 손익인지 알 수 있게").
+
+          키움 `ka10074` 는 매도손익과 수수료·세금을 **따로** 준다. 여태 위 줄만 적어서
+          「+50만 벌었네」로 읽혔는데 비용을 빼면 그보다 적다. 뺀 값을 같은 칸에 크게 적는다 —
+          작게 적으면 못 본다.
+        */}
+        <div className={`ord-lstat ${signClass(view.realized.pnl - view.realized.fee - view.realized.tax)}`}>
+          <i>실현손익 (비용까지 뺀 실수령)</i>
+          <b>{signedWon(view.realized.pnl - view.realized.fee - view.realized.tax)}</b>
           <small>
-            {view.realized.wins + view.realized.losses}번 매매 · 승률 {view.realized.winRate.toFixed(0)}% · 수수료+세금 {manwon(view.realized.fee + view.realized.tax)}
+            매도손익 {signedWon(view.realized.pnl)} − 수수료·세금 {manwon(view.realized.fee + view.realized.tax)} · {view.realized.wins + view.realized.losses}번 · 승률{" "}
+            {view.realized.winRate.toFixed(0)}%
           </small>
         </div>
+        {/*
+          **지금 다 팔면 얼마 남나.** 보유분 평가손익에서 팔 때 나갈 비용을 뺀다.
+          요율은 표에서 가져오지 않고 **내 계좌가 실제로 낸 금액**으로 잰다 — 못 재면 안 적는다.
+        */}
+        {view.now.netPnlNow !== null && view.cost && (
+          <div
+            className={`ord-lstat ${signClass(view.now.netPnlNow)}`}
+            title={[
+              `평가손익(키움) ${signedWon(view.now.pnlKiwoom)}`,
+              `− 팔 때 수수료·세금 ${manwon(view.now.sellCostNow ?? 0)}`,
+              view.now.buyFeeLeft ? `− 아직 안 뺀 매수 수수료 ${manwon(view.now.buyFeeLeft)}` : "매수 수수료는 키움 평가손익에 이미 들어 있다",
+              `= ${signedWon(view.now.netPnlNow)}`,
+              "",
+              `요율은 내 계좌 실적으로 쟀다 — 최근 ${view.cost.days}일 매매에서`,
+              `수수료 ${(view.cost.feeRate * 100).toFixed(4)}% · 거래세 ${(view.cost.taxRate * 100).toFixed(4)}%`,
+              "ETF 처럼 거래세가 없는 것이 섞이면 평균이 조금 낮게 잡힌다",
+            ].join(String.fromCharCode(10))}
+          >
+            <i>지금 다 팔면 (비용 뺀)</i>
+            <b>{signedWon(view.now.netPnlNow)}</b>
+            <small>
+              평가손익 {signedWon(view.now.pnlKiwoom)} − 비용 {manwon((view.now.sellCostNow ?? 0) + (view.now.buyFeeLeft ?? 0))}
+            </small>
+          </div>
+        )}
         <div className="ord-lstat">
           <i>매매 규모</i>
           <b>
@@ -4561,7 +4595,7 @@ function LedgerTab() {
         </p>
       )}
       <p className="ord-note">
-        <b>총 잔액</b>은 키움의 추정예탁자산(예수금 + 보유 평가 − 미수·융자), <b>기간 손익</b>은 키움이 입출금을 뺀 순자산으로 잰 값, <b>실현손익</b>은 매도로 확정된 것만(수수료·세금 별도).
+        <b>총 잔액</b>은 키움의 추정예탁자산(예수금 + 보유 평가 − 미수·융자), <b>기간 손익</b>은 키움이 입출금을 뺀 순자산으로 잰 값, <b>실현손익</b>은 매도로 확정된 것에서 수수료·세금까지 뺀 실수령. <b>지금 다 팔면</b>은 보유분 평가손익에서 팔 때 나갈 비용을 뺀 값이고, 그 요율은 내 계좌가 실제로 낸 수수료·세금으로 쟀다 — 올려 보면 셈을 다 적어 뒀다.
         보유 중인 종목의 평가손익은 실현손익에 안 들어간다. 60초마다 새로 읽는다.
       </p>
     </div>

@@ -124,6 +124,14 @@ export interface LedgerView {
     pnlTotal: number;
     pnlRateTotal: number;
     holdings: number;
+    /** 키움이 준 평가손익 합 — 위 `pnlTotal`(평가금액−매입금액)과 다를 수 있다 */
+    pnlKiwoom: number;
+    /** 지금 전부 팔면 나갈 비용(수수료+세금). 요율을 못 재면 null */
+    sellCostNow: number | null;
+    /** 아직 안 뺀 매수 수수료 — 키움 평가손익에 이미 들어 있으면 0 */
+    buyFeeLeft: number | null;
+    /** 지금 다 팔았다 치면 남는 것. 요율을 못 재면 null */
+    netPnlNow: number | null;
   };
   /** 기간 수익률 (kt00016) — 입출금을 뺀 순자산 기준 */
   period: {
@@ -141,6 +149,27 @@ export interface LedgerView {
   byStock: StockPnl[];
   trades: StockTrade[];
   realized: { pnl: number; buyAmt: number; sellAmt: number; fee: number; tax: number; wins: number; losses: number; winRate: number };
+  /**
+   * **매매 비용을 내 계좌 실적으로 잰 것** (2026-09-14 — 벤티지: "키움증권 기준으로 수수료까지
+   * 포함해서 실손 얼마인지 봐야 하지 않을까").
+   *
+   * 요율을 표에서 가져오지 않는다. 채널·계좌마다 다르고 우대도 제각각이라 「0.015%」로 적어 두면
+   * 그게 맞는지 아무도 확인하지 못한다. 대신 **키움이 실제로 뗀 금액**(ka10074 의 수수료·세금)을
+   * 같은 기간의 매매금액으로 나눈다 — 이건 재는 값이지 믿는 값이 아니다.
+   *
+   * 세금은 **매도에만** 붙으므로 매도금액으로 나눈다. ETF 처럼 거래세가 없는 것이 섞이면
+   * 평균이 조금 낮게 나온다 — 그래서 화면에 「내 실적으로 잰 값」이라고 적는다.
+   * 기간에 매매가 없으면 null 이다. 그때는 **아무 숫자도 지어내지 않는다.**
+   */
+  cost: {
+    feeRate: number;
+    taxRate: number;
+    buyAmt: number;
+    sellAmt: number;
+    fee: number;
+    tax: number;
+    days: number;
+  } | null;
   missing: string[];
 }
 
@@ -200,6 +229,11 @@ async function build(days: number): Promise<LedgerView> {
     pnlTotal: valueTotal - investTotal,
     pnlRateTotal: investTotal > 0 ? ((valueTotal - investTotal) / investTotal) * 100 : 0,
     holdings: acct.holdings.length,
+    /* 아래 「매매 비용」 절에서 채운다 — daily 를 만든 뒤라야 요율을 잴 수 있다 */
+    pnlKiwoom: acct.holdings.reduce((t, h) => t + h.pnl, 0),
+    sellCostNow: null,
+    buyFeeLeft: null,
+    netPnlNow: null,
   };
 
   const assets: AssetPoint[] = (trend?.rows ?? [])
@@ -278,6 +312,38 @@ async function build(days: number): Promise<LedgerView> {
       }
     : null;
 
+  /*
+   * ── 매매 비용 ────────────────────────────────────────────────────────
+   * **잰다, 믿지 않는다.** 키움이 실제로 뗀 수수료·세금을 같은 기간의 매매금액으로 나눈다.
+   *
+   * 매수 수수료를 두 번 빼지 않으려고 한 가지를 더 본다 — 키움이 준 평가손익(`evltv_prft`)이
+   * 「평가금액 − 매입금액」보다 **작으면** 키움이 이미 매수 수수료를 뺀 것이다. 문서를 읽어
+   * 정하지 않고 **두 숫자의 차이로** 정한다. 차이가 매수 수수료의 절반도 안 되면 안 뺀 것으로 본다.
+   */
+  const tradeBase = daily.reduce((t, r) => t + r.buyAmt + r.sellAmt, 0);
+  const sellBase = daily.reduce((t, r) => t + r.sellAmt, 0);
+  const feeSum = daily.reduce((t, r) => t + r.fee, 0);
+  const taxSum = daily.reduce((t, r) => t + r.tax, 0);
+  const cost: LedgerView["cost"] =
+    tradeBase > 0 && feeSum + taxSum > 0
+      ? {
+          feeRate: feeSum / tradeBase,
+          taxRate: sellBase > 0 ? taxSum / sellBase : 0,
+          buyAmt: daily.reduce((t, r) => t + r.buyAmt, 0),
+          sellAmt: sellBase,
+          fee: feeSum,
+          tax: taxSum,
+          days: daily.filter((r) => r.buyAmt + r.sellAmt > 0).length,
+        }
+      : null;
+  if (cost && valueTotal > 0) {
+    const buyFeeFull = investTotal * cost.feeRate;
+    const kiwoomTookBuyFee = now.pnlTotal - now.pnlKiwoom > buyFeeFull * 0.5;
+    now.sellCostNow = Math.round(valueTotal * (cost.feeRate + cost.taxRate));
+    now.buyFeeLeft = kiwoomTookBuyFee ? 0 : Math.round(buyFeeFull);
+    now.netPnlNow = Math.round(now.pnlKiwoom - now.sellCostNow - now.buyFeeLeft);
+  }
+
   return {
     asOf: new Date().toISOString(),
     range: { from, to, days },
@@ -290,6 +356,7 @@ async function build(days: number): Promise<LedgerView> {
     byStock,
     trades: trades.slice(0, 300),
     realized,
+    cost,
     missing,
   };
 }
