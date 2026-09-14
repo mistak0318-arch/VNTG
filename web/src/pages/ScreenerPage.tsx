@@ -1410,8 +1410,13 @@ export function ScreenerPage({
                       key={c.key}
                       style={cw.styleOf(
                         c.key,
-                        /* 순위는 좁게, 현재가·등락률은 NXT 두 줄이 들어가게, 나머지 84 */
-                        RANK_COLS.has(c.key) ? 48 : c.key === "cur_prc" || c.key === "flu_rt" ? 96 : 84,
+                        /*
+                         * 순위는 좁게, 현재가·등락률은 NXT 두 줄이 들어가게, 나머지 84.
+                         * **가격 칸은 다 96** (2026-09-14) — 「정규장 대비 장외」의 정규장 종가(`base`)가 84 에 갇혀
+                         * 206,000 이 「06,000」 으로 앞자리가 종목명 칸 밑에 먹혔다(벤티지 폰). 값이 오른쪽 정렬이라
+                         * 넘치면 왼쪽으로 새고 붙박이 종목명 칸이 덮는다. 형이 price 인 칸은 현재가와 같은 폭을 준다.
+                         */
+                        RANK_COLS.has(c.key) ? 48 : c.key === "cur_prc" || c.key === "flu_rt" || c.type === "price" ? 96 : 84,
                       )}
                     />
                   ))}

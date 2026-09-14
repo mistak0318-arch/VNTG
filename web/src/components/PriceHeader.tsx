@@ -449,60 +449,95 @@ export function PriceHeader({ info, code }: { info: RawRecord | null; code?: str
           거래소별 지금 값. KRX 는 15:30 이후면 그게 종가이고, NXT 는 20:00 까지 움직인다.
           같은 칸에 나란히 둬야 "어느 쪽 숫자를 보고 있는지"가 헷갈리지 않는다.
         */}
-        <div className="ph-cell">
-          <span className="ph-label">{krxDone ? "종가" : "현재가"} · 거래소별</span>
-          {regular && regular.close > 0 && (
-            <span className="ph-row" title={`${regular.date} 정규장(09:00~15:30) 종가 — 15:40 에 KRX 로 찍은 값`}>
-              <em className="ph-ex">정규장</em>
-              <b className={`ph-value ${regularRate === null ? "" : regularRate > 0 ? "positive" : regularRate < 0 ? "negative" : ""}`}>
-                {fmtNum(regular.close)}
+        {/*
+          **장외 시간엔 두 칸으로 나눈다** (2026-09-14 — 벤티지: "차라리 종가랑 애프터장 분리해서 칸을 나누는 게 어때?
+          너무 복잡하다"). 처음엔 한 칸에 정규장·KRX·NXT 세 줄을 쌓았는데, 폰 폭에서 줄마다 값과 % 가 꺾여
+          읽을 수가 없었다. 한 칸에 **숫자 하나**만 크게 둔다.
+            ① 정규장 종가 — 전일 대비        ② 지금(애프터·프리) — 정규장 종가 대비
+          ②의 % 는 머리 칸과 같은 기준이다. 둘을 더하면 하루 전체다. 16시 뒤 KRX·NXT 는 0.25% 안쪽이라
+          큰 숫자는 본 시장 하나만 두고, 다른 거래소는 작게 한 줄.
+        */}
+        {regular && regular.close > 0 ? (() => {
+          const tone = (v: number | null) => (v === null ? "" : v > 0 ? "positive" : v < 0 ? "negative" : "");
+          const pctTxt = (v: number | null) => (v === null ? "" : `${v > 0 ? "+" : ""}${v.toFixed(2)}%`);
+          const todayKst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+          const md = `${Number(regular.date.slice(5, 7))}/${Number(regular.date.slice(8, 10))}`;
+          /* 큰 숫자 — 애프터에 KRX 가 돌면 KRX, 아니면 NXT(없으면 통합 현재가) */
+          const main: { venue: string; price: number } =
+            krxLive && krx?.price != null
+              ? { venue: "KRX", price: krx.price }
+              : nxt?.price != null
+                ? { venue: "NXT", price: nxt.price }
+                : { venue: "", price: Math.abs(Number(info.cur_prc)) || 0 };
+          const other = main.venue === "KRX" && showNxtLine && nxt ? { venue: "NXT", price: nxt.price } : main.venue === "NXT" && krx?.price != null ? { venue: "KRX", price: krx.price } : null;
+          const liveRate = main.price > 0 ? ((main.price - regular.close) / regular.close) * 100 : null;
+          const liveTitle =
+            phase === "pre" ? "NXT 프리" : phase === "gap" ? "NXT · 16:00 애프터 개장" : phase === "closed" ? (krxInAfter && afterTradable ? "애프터 종가" : "NXT 마감") : krxLive ? "애프터" : "NXT 애프터";
+          const otherWhen = other ? (other.venue === "KRX" ? krxWhen : nxtWhen) : "";
+          return (
+            <>
+              <div className="ph-cell ph-split" title={`${regular.date} 정규장(09:00~15:30) 종가 — 15:40 에 KRX 로 찍은 값`}>
+                <span className="ph-label">{regular.date === todayKst ? "정규장 종가" : `${md} 정규장 종가`}</span>
+                <b className={`ph-big ${tone(regularRate)}`}>{fmtNum(regular.close)}</b>
+                <span className={`ph-sub ${tone(regularRate)}`}>
+                  {regularRate === null ? "15:30" : <>{pctTxt(regularRate)} <small>전일 대비</small></>}
+                </span>
+              </div>
+              <div className="ph-cell ph-split" title={`지금 ${liveTitle} 값 — 정규장 종가 ${fmtNum(regular.close)} 대비`}>
+                <span className="ph-label">{liveTitle}</span>
+                <b className={`ph-big ${tone(liveRate)}`}>{fmtNum(main.price)}</b>
+                <span className={`ph-sub ${tone(liveRate)}`}>
+                  {pctTxt(liveRate)} <small>정규장 대비</small>
+                </span>
+                {other && (
+                  <span className="ph-other">
+                    {other.venue} {fmtNum(other.price)} · {otherWhen}
+                  </span>
+                )}
+              </div>
+            </>
+          );
+        })() : (
+          <div className="ph-cell">
+            <span className="ph-label">{krxDone ? "종가" : "현재가"} · 거래소별</span>
+            {/*
+              ⚠️ KRX 줄에 info.cur_prc 를 쓰고 있었다 (2026-08-27 수리) — info 는 통합(_AL)이라
+              마감 후에는 **NXT 최종가**가 「KRX 종가」 자리에 떴다. 진짜 KRX 값(거래소별 조회)과
+              등락률을 쓴다 — 마감 후 통합(큰 숫자)과 견주라고 있는 줄이다.
+            */}
+            <span className="ph-row">
+              <em className="ph-ex">KRX</em>
+              <b
+                className={`ph-value ${krx ? (krx.changeRate > 0 ? "positive" : krx.changeRate < 0 ? "negative" : "") : sign}`}
+              >
+                {krx?.price != null ? fmtNum(krx.price) : fmtAbsNum(info.cur_prc)}
               </b>
-              {regularRate !== null && (
-                <em className={`ph-pct ${regularRate > 0 ? "positive" : regularRate < 0 ? "negative" : ""}`}>
-                  {regularRate > 0 ? "+" : ""}
-                  {regularRate.toFixed(2)}%
+              {krx && (
+                <em className={`ph-pct ${krx.changeRate > 0 ? "positive" : krx.changeRate < 0 ? "negative" : ""}`}>
+                  {krx.changeRate > 0 ? "+" : ""}
+                  {krx.changeRate.toFixed(2)}%
                 </em>
               )}
-              <em className="ph-when">15:30 종가</em>
+              <em className="ph-when">{krxWhen}</em>
             </span>
-          )}
-          {/*
-            ⚠️ KRX 줄에 info.cur_prc 를 쓰고 있었다 (2026-08-27 수리) — info 는 통합(_AL)이라
-            마감 후에는 **NXT 최종가**가 「KRX 종가」 자리에 떴다. 진짜 KRX 값(거래소별 조회)과
-            등락률을 쓴다 — 마감 후 통합(큰 숫자)과 견주라고 있는 줄이다.
-          */}
-          <span className="ph-row">
-            <em className="ph-ex">KRX</em>
-            <b
-              className={`ph-value ${krx ? (krx.changeRate > 0 ? "positive" : krx.changeRate < 0 ? "negative" : "") : sign}`}
-            >
-              {krx?.price != null ? fmtNum(krx.price) : fmtAbsNum(info.cur_prc)}
-            </b>
-            {krx && (
-              <em className={`ph-pct ${krx.changeRate > 0 ? "positive" : krx.changeRate < 0 ? "negative" : ""}`}>
-                {krx.changeRate > 0 ? "+" : ""}
-                {krx.changeRate.toFixed(2)}%
-              </em>
+            {/* 위 큰 숫자와 같은 규칙 — 정규장 중에는 NXT 를 띄우지 않는다 */}
+            {showNxtLine && nxt && (
+              <span className="ph-row">
+                <em className="ph-ex nxt">NXT</em>
+                <b
+                  className={`ph-value ${nxt.changeRate > 0 ? "positive" : nxt.changeRate < 0 ? "negative" : ""}`}
+                >
+                  {fmtNum(nxt.price)}
+                </b>
+                <em className={`ph-pct ${nxt.changeRate > 0 ? "positive" : nxt.changeRate < 0 ? "negative" : ""}`}>
+                  {nxt.changeRate > 0 ? "+" : ""}
+                  {nxt.changeRate.toFixed(2)}%
+                </em>
+                <em className="ph-when">{nxtWhen}</em>
+              </span>
             )}
-            <em className="ph-when">{krxWhen}</em>
-          </span>
-          {/* 위 큰 숫자와 같은 규칙 — 정규장 중에는 NXT 를 띄우지 않는다 */}
-          {showNxtLine && nxt && (
-            <span className="ph-row">
-              <em className="ph-ex nxt">NXT</em>
-              <b
-                className={`ph-value ${nxt.changeRate > 0 ? "positive" : nxt.changeRate < 0 ? "negative" : ""}`}
-              >
-                {fmtNum(nxt.price)}
-              </b>
-              <em className={`ph-pct ${nxt.changeRate > 0 ? "positive" : nxt.changeRate < 0 ? "negative" : ""}`}>
-                {nxt.changeRate > 0 ? "+" : ""}
-                {nxt.changeRate.toFixed(2)}%
-              </em>
-              <em className="ph-when">{nxtWhen}</em>
-            </span>
-          )}
-        </div>
+          </div>
+        )}
         <div className="ph-cell">
           {/* 전일종가는 두 거래소가 같다 — 정규장 종가를 기준값으로 쓰기 때문 */}
           <span className="ph-label">전일종가</span>
