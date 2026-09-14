@@ -49,6 +49,19 @@ export interface ManualHolding {
    * 그 값이 내가 아는 가장 최근의 「내 가격」이기 때문이다. ISO 시각을 남긴다.
    */
   pricedAt?: string;
+  /**
+   * **산 날** (2026-09-14 — 벤티지: "내가 산 종목의 매수날짜랑 다 있잖아 … 누적도 오늘 입력한
+   * 거니깐 당일과 똑같아야겠지?").
+   *
+   * 당일 손익의 기준선을 이 날짜가 정한다.
+   *   오늘 샀으면  → 기준선은 **내가 적은 평단** (당일 = 누적이 된다. 맞는 말이다)
+   *   전에 샀으면  → 기준선은 **어제 종가** (하루치만 잰다)
+   *
+   * 담을 때 오늘로 채워 두고 손으로 고칠 수 있게 한다. **없으면 없는 대로 둔다** —
+   * 예전에 적어 둔 종목은 산 날을 알 길이 없어서 지어내지 않고 예전 방식(어제 종가)을 쓴다.
+   * 화면이 「산 날을 적으면 더 맞는다」고 말한다.
+   */
+  boughtAt?: string;
 }
 
 export interface ManualAccount {
@@ -106,6 +119,10 @@ async function persist(items: ManualAccount[]): Promise<void> {
   cache = items;
   await mkdir(dirname(DATA_FILE), { recursive: true });
   await writeFile(DATA_FILE, JSON.stringify(items, null, 2), "utf-8");
+}
+
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 }
 
 function newId(): string {
@@ -215,6 +232,8 @@ export async function upsertHolding(
     /* 평단이 새로 적혔으면 그 시각을 남긴다 — 수량만 고친 것은 값을 새로 낸 것이 아니다 */
     const priced: ManualHolding =
       !old || old.avgPrice !== h.avgPrice ? { ...h, pricedAt: new Date().toISOString() } : { ...h, pricedAt: old.pricedAt };
+    /* 산 날 — 적어 보냈으면 그대로, 아니면 옛 값을 지키고, 처음 담는 것이면 오늘로 */
+    priced.boughtAt = h.boughtAt ?? old?.boughtAt ?? (old ? undefined : kstToday());
     return {
       ...moved,
       // 같은 종목이면 덮어쓴다 (추가 매수 시 평단만 다시 적으면 되도록)

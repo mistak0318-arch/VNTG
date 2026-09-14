@@ -216,12 +216,14 @@ export function createAccountRouter(client: KiwoomClient): Router {
 
   router.post("/manual/:id/holdings", async (req, res, next) => {
     try {
-      const { code, name, avgPrice, qty } = req.body ?? {};
+      const { code, name, avgPrice, qty, boughtAt } = req.body ?? {};
       await upsertHolding(req.params.id, {
         code: String(code ?? ""),
         name: String(name ?? code ?? ""),
         avgPrice: Number(avgPrice) || 0,
         qty: Number(qty) || 0,
+        /* 「YYYY-MM-DD」만 받는다 — 빈 값이면 안 보낸 것으로 본다 */
+        boughtAt: /^\d{4}-\d{2}-\d{2}$/.test(String(boughtAt ?? "")) ? String(boughtAt) : undefined,
       });
       res.json({ accounts: await evaluate() });
     } catch (err) {

@@ -702,7 +702,7 @@ export const api = {
   /** 입금·출금 — 양수면 들어온 돈, 음수면 뺀 돈 (2026-09-14) */
   manualDeposit: (id: string, delta: number) =>
     postJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/deposit`, { delta }),
-  manualHoldingAdd: (id: string, h: { code: string; name: string; avgPrice: number; qty: number }) =>
+  manualHoldingAdd: (id: string, h: { code: string; name: string; avgPrice: number; qty: number; boughtAt?: string }) =>
     postJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings`, h),
   manualHoldingRemove: (id: string, code: string) =>
     deleteJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}/holdings/${code}`),
@@ -2675,6 +2675,8 @@ export interface EvaluatedHolding {
   qty: number;
   /** 평단을 적은 시각 (ISO). 오늘이면 당일 손익을 어제 종가가 아니라 평단부터 잰다 */
   pricedAt?: string;
+  /** 산 날 (YYYY-MM-DD). 오늘이면 당일 손익을 내가 적은 평단부터 잰다 */
+  boughtAt?: string;
   price: number;
   changeRate: number;
   value: number;

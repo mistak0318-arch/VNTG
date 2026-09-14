@@ -18891,3 +18891,7 @@ a.watch-btn { text-decoration: none; }
 /* 당일 손익을 무엇부터 쟀는지 — 칸을 통째로 쓰고 글자는 작게 (2026-09-14) */
 .summary-item.ma-today-note { grid-column: 1 / -1; }
 .summary-item.ma-today-note .value { font-size: 0.78rem; font-weight: 500; color: var(--muted); line-height: 1.45; }
+
+/* 수동 계좌 · 산 날 입력 (2026-09-14) — 당일 손익의 기준선을 정하는 칸이다 */
+.ma-input.ma-date { min-width: 8.2rem; }
+.ma-add-date { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78rem; color: var(--muted); }

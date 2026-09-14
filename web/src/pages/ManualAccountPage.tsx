@@ -68,14 +68,19 @@ function isTodayKst(iso: string | undefined): boolean {
 }
 
 function todayPnl(
-  holdings: { qty: number; price: number; changeRate: number | null; avgPrice?: number; pricedAt?: string }[],
-): { profit: number; rate: number | null; fromAvg: number } {
+  holdings: { qty: number; price: number; changeRate: number | null; avgPrice?: number; pricedAt?: string; boughtAt?: string }[],
+): { profit: number; rate: number | null; fromAvg: number; noDate: number } {
   let profit = 0;
   let base = 0;
   let fromAvg = 0;
+  let noDate = 0;
+  const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
   for (const h of holdings) {
+    if (!h.boughtAt) noDate += 1;
+    /* 산 날이 적혀 있으면 그것이 먼저다 — 없으면 평단을 적은 시각으로 갈음한다 */
+    const boughtToday = h.boughtAt ? h.boughtAt === today : isTodayKst(h.pricedAt);
     let prev: number;
-    if (isTodayKst(h.pricedAt) && Number.isFinite(h.avgPrice) && (h.avgPrice ?? 0) > 0) {
+    if (boughtToday && Number.isFinite(h.avgPrice) && (h.avgPrice ?? 0) > 0) {
       prev = h.avgPrice as number;
       fromAvg += 1;
     } else {
@@ -87,7 +92,7 @@ function todayPnl(
     profit += h.qty * (h.price - prev);
     base += h.qty * prev;
   }
-  return { profit, rate: base > 0 ? (profit / base) * 100 : null, fromAvg };
+  return { profit, rate: base > 0 ? (profit / base) * 100 : null, fromAvg, noDate };
 }
 
 /** 종목 검색 + 평단/수량 입력 폼 */
@@ -97,6 +102,8 @@ function AddHoldingForm({ accountId, onDone }: { accountId: string; onDone: (a: 
   const [picked, setPicked] = useState<{ code: string; name: string } | null>(null);
   const [avgPrice, setAvgPrice] = useState("");
   const [qty, setQty] = useState("");
+  /* 산 날 — 기본은 오늘. 예전에 산 것이면 고쳐 적는다 (2026-09-14) */
+  const [bought, setBought] = useState(() => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -131,6 +138,7 @@ function AddHoldingForm({ accountId, onDone }: { accountId: string; onDone: (a: 
         name: picked.name,
         avgPrice: Number(avgPrice) || 0,
         qty: Number(qty) || 0,
+        boughtAt: bought || undefined,
       });
       onDone(res.accounts);
       setPicked(null);
@@ -170,6 +178,20 @@ function AddHoldingForm({ accountId, onDone }: { accountId: string; onDone: (a: 
             onChange={(e) => setQty(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !busy && submit()}
           />
+          {/*
+            **산 날** (2026-09-14). 당일 손익을 어디서부터 잴지 이 날짜가 정한다 —
+            오늘이면 내가 적은 평단부터, 전이면 어제 종가부터. 기본은 오늘이다.
+          */}
+          <label className="ma-add-date">
+            <span>산 날</span>
+            <input
+              className="ma-input ma-date"
+              type="date"
+              value={bought}
+              onChange={(e) => setBought(e.target.value)}
+              title="오늘 산 것이면 그대로 둔다 — 당일 손익을 내가 적은 평단부터 잰다"
+            />
+          </label>
           <button className="filter-btn active" onClick={submit} disabled={busy}>
             {busy ? "저장 중" : "추가"}
           </button>
@@ -646,12 +668,22 @@ export function ManualAccountPage({
               <div className={`value ${signClass(today.rate)}`}>{pct(today.rate)}</div>
             </div>
             {/* 어느 기준으로 쟀는지 적는다 — 같은 칸이 종목마다 다른 기준일 수 있다 */}
-            {today.fromAvg > 0 && (
+            {(today.fromAvg > 0 || today.noDate > 0) && (
               <div className="summary-item ma-today-note">
                 <div className="label">당일 기준</div>
                 <div className="value">
-                  {today.fromAvg}종목은 <b>내가 오늘 적은 평단</b>부터
-                  {today.fromAvg < a.holdings.length ? ` · 나머지 ${a.holdings.length - today.fromAvg}종목은 어제 종가부터` : ""}
+                  {today.fromAvg > 0 && (
+                    <>
+                      {today.fromAvg}종목은 <b>오늘 산 것</b>이라 내가 적은 평단부터
+                      {today.fromAvg < a.holdings.length ? ` · 나머지 ${a.holdings.length - today.fromAvg}종목은 어제 종가부터` : ""}
+                    </>
+                  )}
+                  {today.noDate > 0 && (
+                    <>
+                      {today.fromAvg > 0 ? " · " : ""}
+                      산 날이 없는 {today.noDate}종목은 어제 종가부터 잽니다 — <b>✎ 로 산 날을 적으면</b> 그날부터 잽니다
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -802,15 +834,17 @@ function HoldingEditor({
 }: {
   h: EvaluatedHolding;
   onCancel: () => void;
-  onSave: (next: { avgPrice: number; qty: number }) => Promise<void>;
+  onSave: (next: { avgPrice: number; qty: number; boughtAt?: string }) => Promise<void>;
 }) {
   const [qty, setQty] = useState(String(h.qty));
   const [avg, setAvg] = useState(String(h.avgPrice));
+  /* 산 날 — 당일 손익의 기준선을 정한다. 비어 있으면 예전 방식(어제 종가) (2026-09-14) */
+  const [bought, setBought] = useState(h.boughtAt ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const n = (v: string) => Number(String(v).replace(/[^\d.]/g, "")) || 0;
   const nextQty = n(qty), nextAvg = n(avg);
-  const changed = nextQty !== h.qty || nextAvg !== h.avgPrice;
+  const changed = nextQty !== h.qty || nextAvg !== h.avgPrice || bought !== (h.boughtAt ?? "");
   const valid = nextQty >= 0 && (nextQty === 0 || nextAvg > 0);
   const note =
     nextQty === 0
@@ -824,7 +858,7 @@ function HoldingEditor({
     setBusy(true);
     setErr(null);
     try {
-      await onSave({ avgPrice: nextAvg, qty: nextQty });
+      await onSave({ avgPrice: nextAvg, qty: nextQty, boughtAt: bought || undefined });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "저장 실패");
     } finally {
@@ -854,6 +888,14 @@ function HoldingEditor({
           <span>평단가</span>
           <input className="ma-input" type="number" inputMode="numeric" value={avg} onChange={(e) => setAvg(e.target.value)} onFocus={(e) => e.target.select()} onKeyDown={onKey} />
         </label>
+        {/*
+          **산 날** (2026-09-14). 이 날짜가 당일 손익의 기준선을 정한다 — 오늘 샀으면 내가 적은
+          평단부터, 전에 샀으면 어제 종가부터. 비워 두면 예전처럼 어제 종가부터 잰다.
+        */}
+        <label className="ma-editor-field">
+          <span>산 날</span>
+          <input className="ma-input ma-date" type="date" value={bought} onChange={(e) => setBought(e.target.value)} onKeyDown={onKey} title="당일 손익을 어디서부터 잴지 정한다 — 오늘이면 평단부터" />
+        </label>
         <button type="button" className="filter-btn active" disabled={!valid || !changed || busy} onClick={() => void save()}>
           {busy ? "저장 중" : nextQty === 0 ? "지우기" : "저장"}
         </button>
@@ -880,7 +922,7 @@ function HoldingsTable({
   holdings: EvaluatedHolding[];
   onRow: (code: string, name: string) => void;
   onDelete: (code: string) => void;
-  onSave: (h: { code: string; name: string; avgPrice: number; qty: number }) => Promise<void>;
+  onSave: (h: { code: string; name: string; avgPrice: number; qty: number; boughtAt?: string }) => Promise<void>;
 }) {
   const sort = useSortableTable<EvaluatedHolding>(holdings);
   /** 지금 고치는 중인 종목 — 한 번에 하나 */
