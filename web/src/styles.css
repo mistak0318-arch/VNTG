@@ -18834,10 +18834,28 @@ a.watch-btn { text-decoration: none; }
 .ma-trend-note { margin: 8px 0 0; font-size: 0.74rem; color: var(--muted); line-height: 1.5; }
 .ma-trend-empty { margin: 10px 0 14px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 10px; font-size: 0.78rem; color: var(--muted); }
 
-/* 수동 계좌 · 입금·출금 줄 (2026-09-14) — 예수금 칸과 같은 모양, 한 줄 아래 */
-.ma-move { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
-.ma-move-t { font-size: 0.8rem; color: var(--muted); font-weight: 700; }
-.ma-move .search-input { max-width: 9rem; }
+/*
+ * 수동 계좌 · 입금·출금 줄 (2026-09-14).
+ *
+ * 처음엔 한 줄에 다 넣었더니 폰에서 「− 출금」만 다음 줄로 떨어져 깨져 보였다
+ * (벤티지: "글자가 옆으로 샌다"). **격자로 자리를 정한다** — 금액 칸은 남는 폭을 다 쓰고
+ * 두 단추는 그 아래 나란히. 어느 폭에서도 모양이 같다.
+ */
+.ma-move { display: grid; grid-template-columns: auto 1fr; gap: 6px 8px; align-items: center; margin: 0 0 10px; }
+.ma-move-t { font-size: 0.8rem; color: var(--muted); font-weight: 700; white-space: nowrap; }
+.ma-move .search-input { min-width: 0; width: 100%; }
+.ma-move-btns { grid-column: 1 / -1; display: flex; gap: 6px; }
+.ma-move-btns .filter-btn { flex: 1 1 0; }
+.ma-move .ma-cash-note { grid-column: 1 / -1; }
+
+/*
+ * 수동 계좌 종목도 폰에서는 카드 (2026-09-14) — 연동 계좌와 같은 모양을 쓴다.
+ * 다른 점은 아래 단추 둘(고치기·삭제)뿐이라 그 자리만 더 준다.
+ */
+.ma-cards-wrap { margin-top: 8px; }
+.acct2-card.ma-card { cursor: pointer; }
+.ma-card-acts { display: flex; gap: 6px; width: 100%; }
+.ma-card-acts .filter-btn { flex: 1 1 0; }
 
 /* ── 연동 계좌 · 폰에서는 카드 (2026-09-14) ────────────────────────────
  * 벤티지: "핸드폰 모드에서 계좌 보는데 넘 불편한데 옆으로 넘겨야 되서. 카드로 보여주고
@@ -18869,3 +18887,7 @@ a.watch-btn { text-decoration: none; }
 .ac-foot .acct2-w { display: block !important; flex: 1 1 auto; min-width: 0; width: auto; margin-right: 0; }
 .ac-weight { font-size: 0.76rem; color: var(--muted); white-space: nowrap; }
 .ac-acts { display: flex; gap: 5px; margin-left: auto; }
+
+/* 당일 손익을 무엇부터 쟀는지 — 칸을 통째로 쓰고 글자는 작게 (2026-09-14) */
+.summary-item.ma-today-note { grid-column: 1 / -1; }
+.summary-item.ma-today-note .value { font-size: 0.78rem; font-weight: 500; color: var(--muted); line-height: 1.45; }

@@ -42,27 +42,52 @@ function pct(v: number | null): string {
  * 현금 비중이 큰 계좌일수록 등락률이 작아 보여서, 같은 종목을 같은 수량 들고 있어도
  * 계좌마다 다른 숫자가 나온다 — 오늘 주식이 얼마나 움직였나를 묻는 값이 아니게 된다.
  *
- * ## 못 하는 것
+ * ## 오늘 적은 평단은 평단부터 잰다 (2026-09-14)
  *
- * **오늘 사고판 것은 반영이 안 된다.** 지금 들고 있는 것만 보므로, 오늘 산 종목은
- * 매수가가 아니라 어제 종가부터 잰 값이 잡히고 오늘 판 것은 아예 안 잡힌다.
- * 체결 내역을 적는 자리가 없으니 여기까지가 정직한 한계다.
+ * 벤티지: "내가 오늘 사서 넣었는데 당일 수익률을 해당 종목의 오늘 총 마이너스를 반영해서
+ * 넣으면 어떡하니. 매수단가랑 내가 넣었잖아."
+ *
+ * 맞는 말이다. 어제 종가부터 재는 것은 **어제도 들고 있었다**는 뜻인데, 오늘 사서 오늘 적은
+ * 종목은 그게 아니다. 그 종목이 오늘 −5% 였다면 사지도 않은 −5% 가 내 손익으로 잡힌다.
+ * 그래서 **평단을 오늘 적었으면 기준선을 평단으로 바꾼다** — 그 값이 내가 실제로 낸 값이다.
+ *
+ *   어제 적은 종목: 기준선 = 어제 종가 = 현재가 ÷ (1 + 등락률/100)
+ *   오늘 적은 종목: 기준선 = 내가 적은 평단
+ *
+ * ## 아직 못 하는 것
+ *
+ * **오늘 판 것은 안 잡힌다.** 지금 들고 있는 것만 보기 때문이다. 체결 내역을 적는 자리가
+ * 없으니 여기까지가 정직한 한계다.
  */
-function todayPnl(holdings: { qty: number; price: number; changeRate: number | null }[]): {
-  profit: number;
-  rate: number | null;
-} {
+function isTodayKst(iso: string | undefined): boolean {
+  if (!iso) return false;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return false;
+  const day = (ms: number) => new Date(ms + 9 * 3600_000).toISOString().slice(0, 10);
+  return day(t) === day(Date.now());
+}
+
+function todayPnl(
+  holdings: { qty: number; price: number; changeRate: number | null; avgPrice?: number; pricedAt?: string }[],
+): { profit: number; rate: number | null; fromAvg: number } {
   let profit = 0;
   let base = 0;
+  let fromAvg = 0;
   for (const h of holdings) {
-    const rate = h.changeRate;
-    if (rate === null || !Number.isFinite(rate) || !Number.isFinite(h.price)) continue;
-    const prev = h.price / (1 + rate / 100);
+    let prev: number;
+    if (isTodayKst(h.pricedAt) && Number.isFinite(h.avgPrice) && (h.avgPrice ?? 0) > 0) {
+      prev = h.avgPrice as number;
+      fromAvg += 1;
+    } else {
+      const rate = h.changeRate;
+      if (rate === null || !Number.isFinite(rate) || !Number.isFinite(h.price)) continue;
+      prev = h.price / (1 + rate / 100);
+    }
     if (!Number.isFinite(prev) || prev <= 0) continue;
     profit += h.qty * (h.price - prev);
     base += h.qty * prev;
   }
-  return { profit, rate: base > 0 ? (profit / base) * 100 : null };
+  return { profit, rate: base > 0 ? (profit / base) * 100 : null, fromAvg };
 }
 
 /** 종목 검색 + 평단/수량 입력 폼 */
@@ -620,6 +645,16 @@ export function ManualAccountPage({
               <div className="label">당일 등락률</div>
               <div className={`value ${signClass(today.rate)}`}>{pct(today.rate)}</div>
             </div>
+            {/* 어느 기준으로 쟀는지 적는다 — 같은 칸이 종목마다 다른 기준일 수 있다 */}
+            {today.fromAvg > 0 && (
+              <div className="summary-item ma-today-note">
+                <div className="label">당일 기준</div>
+                <div className="value">
+                  {today.fromAvg}종목은 <b>내가 오늘 적은 평단</b>부터
+                  {today.fromAvg < a.holdings.length ? ` · 나머지 ${a.holdings.length - today.fromAvg}종목은 어제 종가부터` : ""}
+                </div>
+              </div>
+            )}
             <div className="summary-item">
               <div className="label">예수금</div>
               <div className="value">{fmtNum(Math.round(a.cash))}</div>
@@ -710,22 +745,24 @@ export function ManualAccountPage({
               onChange={(e) => setMoveDraft((p) => ({ ...p, [a.id]: e.target.value }))}
               onKeyDown={(e) => e.key === "Enter" && void moveCash(a.id, 1)}
             />
-            <button
-              className="filter-btn"
-              disabled={moveBusy === a.id || !moveDraft[a.id]}
-              title="계좌에 돈을 넣었다 — 그만큼 늘린다"
-              onClick={() => void moveCash(a.id, 1)}
-            >
-              + 입금
-            </button>
-            <button
-              className="filter-btn"
-              disabled={moveBusy === a.id || !moveDraft[a.id]}
-              title="계좌에서 돈을 뺐다 — 그만큼 줄인다"
-              onClick={() => void moveCash(a.id, -1)}
-            >
-              − 출금
-            </button>
+            <span className="ma-move-btns">
+              <button
+                className="filter-btn"
+                disabled={moveBusy === a.id || !moveDraft[a.id]}
+                title="계좌에 돈을 넣었다 — 그만큼 늘린다"
+                onClick={() => void moveCash(a.id, 1)}
+              >
+                + 입금
+              </button>
+              <button
+                className="filter-btn"
+                disabled={moveBusy === a.id || !moveDraft[a.id]}
+                title="계좌에서 돈을 뺐다 — 그만큼 줄인다"
+                onClick={() => void moveCash(a.id, -1)}
+              >
+                − 출금
+              </button>
+            </span>
             <span className="ma-cash-note">종목을 담고 빼면 예수금은 알아서 움직인다 — 여기는 계좌 밖으로 드나든 돈만</span>
           </div>
 
@@ -848,6 +885,110 @@ function HoldingsTable({
   const sort = useSortableTable<EvaluatedHolding>(holdings);
   /** 지금 고치는 중인 종목 — 한 번에 하나 */
   const [editing, setEditing] = useState<string | null>(null);
+  /*
+   * **폰에서는 카드** (2026-09-14 — 벤티지: "수동계좌에 종목 정보 있잖아 이것도 옆으로 너무 길어서
+   * 보기 힘드네. 수동 계좌처럼 표현할 수 있겠어? 얘는 수정도 가능해야 하니깐 구현할 때 참고하고").
+   *
+   * 아홉 칸짜리 표라 폰에서는 가로로 밀어야 수익률이 보였다. 연동 계좌와 **같은 모양**으로 맞춘다 —
+   * 두 화면에서 같은 것을 다르게 그리면 견줄 때마다 헷갈린다.
+   *
+   * 다른 점 하나: 여기는 **고칠 수 있어야 한다.** ✎ 와 ✕ 를 카드 안에 두되 카드 눌림을 가로채고,
+   * 편집기는 예전처럼 목록 **밖**에 그린다 — 카드 안에 넣으면 좁은 칸에서 또 눌린다.
+   */
+  const [narrow, setNarrow] = useState(() => (typeof window !== "undefined" ? window.matchMedia("(max-width: 900px)").matches : false));
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 900px)");
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener("change", on);
+    window.addEventListener("resize", on);
+    return () => {
+      mq.removeEventListener("change", on);
+      window.removeEventListener("resize", on);
+    };
+  }, []);
+
+  const editor =
+    editing &&
+    (() => {
+      const h = holdings.find((x) => x.code === editing);
+      return h ? (
+        <HoldingEditor
+          key={h.code}
+          h={h}
+          onCancel={() => setEditing(null)}
+          onSave={async (next) => {
+            await onSave({ code: h.code, name: h.name, ...next });
+            setEditing(null);
+          }}
+        />
+      ) : null;
+    })();
+
+  if (narrow) {
+    return (
+      <div className="ma-cards-wrap">
+        <div className="acct2-sortbar">
+          {(
+            [
+              ["value", "평가금액", (h: EvaluatedHolding) => h.value],
+              ["profit", "손익", (h: EvaluatedHolding) => h.profit],
+              ["rr", "수익률", (h: EvaluatedHolding) => h.returnRate ?? -9999],
+              ["day", "당일", (h: EvaluatedHolding) => h.changeRate],
+              ["name", "이름", (h: EvaluatedHolding) => h.name],
+            ] as [string, string, (h: EvaluatedHolding) => string | number][]
+          ).map(([k, label, acc]) => (
+            <button
+              key={k}
+              type="button"
+              className={`filter-btn${sort.sortKey === k ? " active" : ""}`}
+              onClick={() => sort.toggle(k, acc)}
+            >
+              {label}
+              {sort.sortKey === k ? (sort.sortDir === "desc" ? " ▼" : " ▲") : ""}
+            </button>
+          ))}
+        </div>
+        <div className="acct2-cards">
+          {sort.sorted.map((h) => (
+            <div key={h.code} className="acct2-card ma-card" role="button" tabIndex={0} onClick={() => onRow(h.code, h.name)}>
+              <div className="ac-top">
+                <b className="ac-name">{h.name}</b>
+                <span className={`ac-rate ${signClass(h.returnRate)}`}>{pct(h.returnRate)}</span>
+              </div>
+              <div className="ac-mid">
+                <span className="ac-eval">{fmtNum(Math.round(h.value))}원</span>
+                <span className={`ac-pnl ${signClass(h.profit)}`}>
+                  {h.profit > 0 ? "+" : ""}
+                  {fmtNum(Math.round(h.profit))}
+                </span>
+              </div>
+              <div className="ac-sub">
+                {fmtNum(h.qty)}주 · 평단 {fmtNum(h.avgPrice)} → 현재 {fmtNum(h.price)} · 당일{" "}
+                <em className={signClass(h.changeRate)}>{pct(h.changeRate)}</em>
+              </div>
+              <div className="ac-foot">
+                <span className="ma-card-acts" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className={`filter-btn${editing === h.code ? " active" : ""}`}
+                    onClick={() => setEditing(editing === h.code ? null : h.code)}
+                    title="수량·평단 고치기 (매도·추가 매수)"
+                  >
+                    ✎ 고치기
+                  </button>
+                  <button type="button" className="filter-btn" onClick={() => onDelete(h.code)} title="이 종목 삭제">
+                    ✕ 삭제
+                  </button>
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+        {editor}
+      </div>
+    );
+  }
+
   return (
     <div className="data-table-wrap">
       <table className="data-table">
@@ -910,21 +1051,7 @@ function HoldingsTable({
         편집기는 **표 밖에** 둔다. 표는 폰에서 가로 스크롤인데, 표 안 줄에 넣으면 편집기도
         같이 스크롤되어 저장 단추가 화면 오른쪽으로 잘린다(2026-09-08 확인).
       */}
-      {editing &&
-        (() => {
-          const h = holdings.find((x) => x.code === editing);
-          return h ? (
-            <HoldingEditor
-              key={h.code}
-              h={h}
-              onCancel={() => setEditing(null)}
-              onSave={async (next) => {
-                await onSave({ code: h.code, name: h.name, ...next });
-                setEditing(null);
-              }}
-            />
-          ) : null;
-        })()}
+      {editor}
     </div>
   );
 }

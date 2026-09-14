@@ -2673,6 +2673,8 @@ export interface EvaluatedHolding {
   name: string;
   avgPrice: number;
   qty: number;
+  /** 평단을 적은 시각 (ISO). 오늘이면 당일 손익을 어제 종가가 아니라 평단부터 잰다 */
+  pricedAt?: string;
   price: number;
   changeRate: number;
   value: number;

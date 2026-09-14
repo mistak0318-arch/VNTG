@@ -37,6 +37,18 @@ export interface ManualHolding {
   /** 평균 매입단가 */
   avgPrice: number;
   qty: number;
+  /**
+   * **평단을 적은 날** (2026-09-14 — 벤티지: "내가 오늘 사서 넣었는데 당일 수익률을 해당 종목의
+   * 오늘 총 마이너스를 반영해서 넣으면 어떡하니. 매수단가랑 내가 넣었잖아").
+   *
+   * 수동 계좌의 당일 손익은 어제 종가부터 잰다 — 어제도 들고 있었다는 뜻이다. 그런데 **오늘
+   * 사서 오늘 적은 종목**은 그게 아니다. 내가 낸 값은 평단이지 어제 종가가 아니라서, 그 종목이
+   * 오늘 −5% 였다면 사지도 않은 −5% 가 내 손익으로 잡힌다.
+   *
+   * 평단을 **오늘 적었으면 당일 손익도 평단부터** 잰다. 옛 종목의 평단을 오늘 고쳐 적어도 마찬가지다 —
+   * 그 값이 내가 아는 가장 최근의 「내 가격」이기 때문이다. ISO 시각을 남긴다.
+   */
+  pricedAt?: string;
 }
 
 export interface ManualAccount {
@@ -200,10 +212,13 @@ export async function upsertHolding(
     if (a.id !== id) return a;
     const old = a.holdings.find((x) => x.code === h.code);
     const moved = withCashShift(a, old ? costOf(old) : 0, costOf(h));
+    /* 평단이 새로 적혔으면 그 시각을 남긴다 — 수량만 고친 것은 값을 새로 낸 것이 아니다 */
+    const priced: ManualHolding =
+      !old || old.avgPrice !== h.avgPrice ? { ...h, pricedAt: new Date().toISOString() } : { ...h, pricedAt: old.pricedAt };
     return {
       ...moved,
       // 같은 종목이면 덮어쓴다 (추가 매수 시 평단만 다시 적으면 되도록)
-      holdings: old ? a.holdings.map((x) => (x.code === h.code ? h : x)) : [...a.holdings, h],
+      holdings: old ? a.holdings.map((x) => (x.code === h.code ? priced : x)) : [...a.holdings, priced],
     };
   });
   await persist(next);
