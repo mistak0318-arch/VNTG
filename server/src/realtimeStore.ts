@@ -1,3 +1,4 @@
+import { noteFrame } from "./afterProbe.js";
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
 import { dirname, join } from "node:path";
@@ -470,6 +471,15 @@ export class RealtimeStore {
 
       const key = `${type}:${item}`;
       this.latest.set(key, { at: Date.now(), values });
+      /*
+       * 애프터마켓 관측창 (2026-09-14) — 거래소·장구분 **분류 값과 개수만** 센다. 종목코드는 안 넘긴다.
+       * 셈이 터져도 시세 수신이 멈추면 안 되므로 감싼다.
+       */
+      try {
+        noteFrame(type, values);
+      } catch {
+        /* 관측은 곁가지다 */
+      }
 
       if (type === VI_TYPE) {
         this.takeVi(values);
