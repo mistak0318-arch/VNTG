@@ -73,6 +73,18 @@ body,
   height: 100%;
   margin: 0;
 }
+/*
+ * **맨 위 흰 줄** (2026-09-14 — 벤티지: "맨위에 흰색 선이 생겼어").
+ *
+ * 폰 브라우저는 주소창이 접히거나 스크롤이 끝까지 당겨질 때 **캔버스**를 칠한다. 그 색은
+ * `body` 배경이 `html` 로 전파돼야 어두운데, 그 전파는 타이밍에 따라 한 프레임 비는 일이 있다 —
+ * 그 순간 기본 흰색이 띠로 보인다. `html` 에 직접 칠하면 그럴 일이 없다.
+ * 당겨서 튕기는 것도 막는다 — 그 자리가 바로 흰 줄이 보이던 곳이다.
+ */
+html {
+  background: var(--bg);
+  overscroll-behavior-y: none;
+}
 
 html {
   /*
@@ -4481,9 +4493,16 @@ html[data-tabs="sticky"] .main-inner > .tabscroll {
   z-index: 15;
   background: var(--bg);
 }
-/* 모바일은 상단 헤더(sticky z-20)가 있다 — 그 아래에 붙는다 (bf-top-slim 과 같은 값) */
+/*
+ * 모바일은 맨 윗줄(`.top-strip`, sticky z-20)이 있다 — 그 **아래**에 붙어야 한다.
+ *
+ * ⚠️ 예전엔 `2.85rem` 으로 박혀 있었다 (2026-09-14 — 벤티지: "시계가 겹쳤고"). 기본 글자
+ * 크기에서는 맞았지만 **설정에서 글자를 키우면 맨 윗줄이 같이 커지고 탭 줄은 그대로라 둘이
+ * 겹쳤다** — 시계 위에 탭이 올라탔다. 이제 App 이 그 줄을 재서 `--top-strip-h` 로 넘긴다.
+ * 변수가 아직 없을 때(첫 프레임)만 2.85rem 으로 떨어진다.
+ */
 @media (max-width: 899px) {
-  html[data-tabs="sticky"] .main-inner > .tabscroll { top: 2.85rem; }
+  html[data-tabs="sticky"] .main-inner > .tabscroll { top: var(--top-strip-h, 2.85rem); }
 }
 /* 인앱 탭바의 좌우 버튼 — 탭바 배경은 --bg 라 그라데이션도 --bg 로 (종목상세는 --panel) */
 .main-inner > .tabscroll > .tabscroll-btn.left {
@@ -18639,11 +18658,21 @@ a.watch-btn { text-decoration: none; }
 .bf-days-t td, .bf-days-t th { font-size: 0.76rem; }
 
 /* ── 맨 윗줄 하나 — 아이콘 줄 + 시계 (2026-09-10) ── */
-.top-strip { display: flex; align-items: center; gap: 8px; padding: 12px 20px 0; max-width: var(--main-max, 1400px); }
+/*
+ * ⚠️ **안 맞으면 줄을 바꾼다** (2026-09-14 — 벤티지: "시계가 겹쳤고").
+ *
+ * 예전엔 `nowrap` 이라 좁은 폰에서 아이콘 줄이 제 칸을 넘어 **시계 밑으로 파고들었다**
+ * (실측 390px: 아이콘 줄 칸은 68~270 인데 마지막 단추가 297 까지 뻗고 시계가 276 에서 시작).
+ * 줄을 바꾸면 아무것도 안 가려지고 아무것도 안 잘린다. 맨 윗줄 높이는 App 이 재서
+ * `--top-strip-h` 로 넘기므로 두 줄이 되어도 탭 줄이 그만큼 내려온다.
+ */
+.top-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 20px 0; max-width: var(--main-max, 1400px); }
 .top-strip .qss-row { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
 /* 머리글은 이제 시계만 — 어느 폭에서든 보인다. 제목은 탭 줄이 말한다 */
 .top-strip .mobile-header {
   display: flex; align-items: center; position: static; border: 0; padding: 0; background: none; gap: 6px; flex: none; z-index: auto;
+  /* 시계 묶음 자체를 오른쪽 끝으로 — 아이콘 줄이 안 늘어나는 경우에도 (2026-09-14) */
+  margin-left: auto;
 }
 .top-strip .mobile-title { display: none; }
 /*

@@ -285,6 +285,14 @@ export const VALID_TABS: ReadonlySet<string> = new Set<string>(
 export default function App() {
   /* 홈 = 브리핑. 앱을 열면 「오늘 시장이 어떤가」부터 — 파고들기는 대시보드로 */
   const { route, navigate } = useHashRoute("briefing");
+  /**
+   * **맨 윗줄의 실제 높이를 재서 알려 준다** (2026-09-14 — 벤티지: "시계가 겹쳤고").
+   *
+   * 탭 줄은 스크롤해도 따라오도록 `top` 에 붙는데, 그 값이 `2.85rem` 으로 **박혀 있었다.**
+   * 기본 글자 크기에서는 맞았지만 설정에서 글자를 키우면 맨 윗줄이 같이 커지고, 탭 줄은
+   * 그대로라 **둘이 겹쳤다.** 재서 `--top-strip-h` 로 넘기면 어느 글자 크기에서도 맞는다.
+   */
+  const stripRef = useRef<HTMLDivElement>(null);
   /* 새 번들이 올라왔는데 이 탭이 옛것인지 — 폰 PWA 탭이 아침에 연 채 남는다 (2026-09-03) */
   const build = useBuildWatch();
   /*
@@ -313,6 +321,38 @@ export default function App() {
   /* 자리를 비웠을 때 화면을 가린다 — 기기마다 따로 켠다 */
   const lock = useScreenLock();
   const appearance = useAppearance();
+  /**
+   * **맨 윗줄의 실제 높이를 재서 알려 준다** (2026-09-14 — 벤티지: "시계가 겹쳤고").
+   *
+   * 탭 줄은 스크롤해도 따라오도록 `top` 에 붙는데 그 값이 `2.85rem` 으로 **박혀 있었다.**
+   * 기본 글자 크기에서만 맞고, 글자를 줄이면 탭 줄이 맨 윗줄 위로 올라타 시계를 덮었다
+   * (실측 rem 12px 에서 7px 겹침).
+   *
+   * ⚠️ ResizeObserver 만으로는 모자란다 — 글자 크기는 CSS 변수라, 그걸 바꿔도 옵저버가 안
+   * 깨어나는 브라우저가 있다(이 저장소의 미리보기에서 실측). 그래서 **설정이 바뀔 때마다**
+   * 다시 잰다. 한 프레임 뒤에 한 번 더 재는 것은 글꼴이 바뀌고 줄이 다시 짜이는 데
+   * 시간이 걸리기 때문이다.
+   */
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const put = () => {
+      const h = Math.round(el.getBoundingClientRect().height);
+      if (h > 0) document.documentElement.style.setProperty("--top-strip-h", `${h}px`);
+    };
+    put();
+    const t1 = setTimeout(put, 60);
+    const t2 = setTimeout(put, 400);
+    const ro = new ResizeObserver(put);
+    ro.observe(el);
+    window.addEventListener("resize", put);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      ro.disconnect();
+      window.removeEventListener("resize", put);
+    };
+  }, [appearance.fontScale, appearance.font, appearance.theme]);
   /* 키 리스너가 늘 최신 설정을 보게 — 리스너를 다시 걸지 않으려고 ref 로 든다 (2026-09-04) */
   const appearanceRef = useRef(appearance);
   appearanceRef.current = appearance;
@@ -1209,7 +1249,7 @@ export default function App() {
           PC 도 같은 줄이다(머리글은 원래 안 보였고, 시계만 오른쪽 끝에 작게 얹힌다).
           어느 화면에서든 종목으로 바로 — 접혀 있으면 한 줄이다. 우측엔 탭 모두 닫기(탭이 쌓였을 때만).
         */}
-        <div className="top-strip">
+        <div className="top-strip" ref={stripRef}>
           <div className="qss-row">
             <QuickStockSearch onPick={openAnalysis} />
             {/*
