@@ -46,11 +46,23 @@ export const OVERVIEW_CARDS: Record<OverviewSub, CardDef[]> = {
      */
     { key: "topicPulse", label: "지금의 화제" },
     { key: "breadth", label: "시장 체온계" },
+    /*
+     * 증시자금동향 (2026-09-16) — 체온계 바로 밑. 체온계가 「얼마나 넓게 오르나」이고
+     * 이건 「살 돈이 얼마나 들어와 있나」다. 오래 「공공데이터 키가 있어야 된다」로 닫아
+     * 뒀는데, 네이버가 로그인 없이 준다(naverMarket.depositTrend).
+     */
+    { key: "deposit", label: "증시자금동향" },
     { key: "sectors", label: "테마 흐름" },
+    /*
+     * 「수익률 상위 고객 매매동향」을 순위 탭에서 요약으로 옮겼다 (2026-09-16).
+     * 순위 탭은 2026-08-27 에 숨겼는데 이 카드만 거기 남아 **아무도 볼 수 없는 자리**에
+     * 있었다. 네이버페이 이용자 랭킹까지 덧대면서 요약으로 꺼낸다.
+     */
+    { key: "topTraders", label: "수익률 상위 고객 · 네이버페이 랭킹" },
   ],
   flow: [{ key: "flow", label: "투자자별 수급" }],
   rank: [
-    { key: "topTraders", label: "수익률 상위 고객 매매동향" },
+    /* topTraders 는 요약으로 옮겼다 (2026-09-16) — 위 summary 주석 참고 */
     { key: "movers", label: "등락률 순위" },
     { key: "themes", label: "테마" },
     { key: "highLow", label: "250일 신고가 / 신저가" },

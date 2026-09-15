@@ -1691,6 +1691,23 @@ export const api = {
   themeLinks: () => getJson<{ pairs: ThemeLink[]; note: string }>("/api/market/theme-links"),
   /** 국내 테마 하나의 미국 짝 — 업종(회사 언급·낱말)과 편입 사유에 나온 미국 회사 (2026-09-15) */
   themeBridge: (no: number) => getJson<{ bridge: ThemeBridge | null }>(`/api/market/theme-bridge/${no}`),
+  /* ── 네이버 증권(개편판) 에서 받는 것들 (2026-09-16, server/naverMarket.ts) ── */
+  /** 증시자금동향 — 고객예탁금·신용잔고·펀드(억원), 하루 한 번 바뀐다 */
+  naverDeposit: (days = 60) => getJson<{ days: DepositDay[]; at: number; stale: boolean }>(`/api/market/naver/deposit-trend?days=${days}`),
+  /** 시장 캘린더 — 경제지표·만기·배당·공모주 */
+  naverCalendar: (from?: string, to?: string) =>
+    getJson<{ events: CalEvent[]; more: Record<string, number>; at: number; stale: boolean }>(
+      `/api/market/naver/calendar${from ? `?from=${from}${to ? `&to=${to}` : ""}` : ""}`,
+    ),
+  /** 리서치 — 목표주가 변화·애널리스트 집중 산업·요즘 많이 보는·최신 */
+  naverResearch: () => getJson<ResearchBoard>("/api/market/naver/research"),
+  /** 네이버 AI 시황 브리핑 — 한 시간마다. 우리 리포트와 견주는 「다른 눈」 */
+  naverBriefing: () => getJson<{ latest: NaverBriefing | null; recent: NaverBriefing[]; at: number; stale: boolean }>("/api/market/naver/briefing"),
+  /** 종목토론 랭킹 — 개인 투자자 관심이 몰린 곳 */
+  naverDiscussion: () => getJson<{ rankTime: string; items: DiscussionRank[]; at: number; stale: boolean }>("/api/market/naver/discussion"),
+  /** 네이버페이 이용자 랭킹 — 수익률 상위가 담은 종목 · 보유금액 상위 */
+  naverNpayRank: (kind: "earningRate" | "assetAmount", age = "all") =>
+    getJson<{ day: string; rows: NpayRankRow[]; at: number; stale: boolean }>(`/api/market/naver/npay-rank?kind=${kind}&age=${age}`),
   /** 시세분석(해외) — 미국 순위판(거래대금·거래량·시가총액·상승·하락). 네이버 실시간, 거래소 합침 (2026-09-16) */
   usRank: (kind: UsRankKind, ex: "all" | "NASDAQ" | "NYSE" | "AMEX" = "all", minValue = 0) =>
     getJson<UsRankResult>(`/api/market/us-rank?kind=${kind}&ex=${ex}&minValue=${minValue}&limit=50`),
@@ -6077,7 +6094,86 @@ export interface ThemeBridge {
     by: { code: string; name: string }[];
   }[];
 }
-export type UsRankKind = "value" | "volume" | "cap" | "up" | "down";
+export type UsRankKind = "value" | "volume" | "cap" | "up" | "down" | "popular";
+
+/* ── 네이버 증권(개편판) 자료 모양 (2026-09-16) ── */
+export interface DepositDay {
+  date: string;
+  deposit: number | null;
+  depositDiff: number | null;
+  credit: number | null;
+  creditDiff: number | null;
+  fundStock: number | null;
+  fundBond: number | null;
+  fundMixed: number | null;
+}
+export type CalCategory = "economicIndicators" | "expiration" | "dividends" | "ipo";
+export interface CalEvent {
+  date: string;
+  category: CalCategory;
+  nation: string | null;
+  title: string;
+  time: string | null;
+  impact: string | null;
+  info: { label: string; value: string; badge: string | null }[];
+  code: string | null;
+}
+export interface GoalChange {
+  code: string;
+  name: string;
+  broker: string;
+  title: string;
+  goal: number | null;
+  prevGoal: number | null;
+  diffRate: number | null;
+  date: string;
+}
+export interface ResearchItem {
+  nid: string;
+  type: string;
+  title: string;
+  broker: string;
+  date: string;
+  reads: number | null;
+  code: string | null;
+  name: string | null;
+  industry: string | null;
+  body: string;
+}
+export interface ResearchBoard {
+  goalUp: GoalChange[];
+  goalDown: GoalChange[];
+  industries: { name: string; count: number; latest: string }[];
+  hot: ResearchItem[];
+  latest: Record<string, ResearchItem[]>;
+  at: number;
+  stale: boolean;
+}
+export interface NaverBriefing {
+  id: number;
+  title: string;
+  summary: string;
+  when: string;
+}
+export interface DiscussionRank {
+  code: string;
+  name: string | null;
+  rank: number;
+  prevRank: number | null;
+  score: number | null;
+  price: number | null;
+  rate: number | null;
+  posts: string[];
+}
+export interface NpayRankRow {
+  code: string;
+  name: string;
+  rank: number;
+  prevRank: number | null;
+  price: number | null;
+  rate: number | null;
+  value: number | null;
+}
 export interface UsRankRow {
   symbol: string;
   reuters: string;

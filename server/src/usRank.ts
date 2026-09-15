@@ -1,4 +1,5 @@
 import { recordApiCall } from "./apiUsage.js";
+import { usPopular } from "./naverMarket.js";
 
 /**
  * **시세분석(해외) — 미국 순위판** (2026-09-16).
@@ -30,9 +31,9 @@ const API = "https://api.stock.naver.com/stock/exchange/";
 const UA = "Mozilla/5.0";
 const EXCHANGES = ["NASDAQ", "NYSE", "AMEX"] as const;
 export type UsExchange = (typeof EXCHANGES)[number];
-export type UsRankKind = "value" | "volume" | "cap" | "up" | "down";
+export type UsRankKind = "value" | "volume" | "cap" | "up" | "down" | "popular";
 
-const PATH: Record<UsRankKind, string> = {
+const PATH: Record<Exclude<UsRankKind, "popular">, string> = {
   value: "priceTop",
   volume: "top",
   cap: "marketValue",
@@ -116,7 +117,7 @@ function parseRow(s: Record<string, unknown>, ex: UsExchange): UsRankRow | null 
   };
 }
 
-async function fetchOne(ex: UsExchange, kind: UsRankKind): Promise<{ rows: UsRankRow[]; status: string }> {
+async function fetchOne(ex: UsExchange, kind: Exclude<UsRankKind, "popular">): Promise<{ rows: UsRankRow[]; status: string }> {
   const url = `${API}${ex}/${PATH[kind]}?page=1&pageSize=100`;
   const res = await fetch(url, { headers: { "User-Agent": UA } });
   if (!res.ok) {
@@ -132,7 +133,7 @@ async function fetchOne(ex: UsExchange, kind: UsRankKind): Promise<{ rows: UsRan
 }
 
 /** 정렬 기준값 — 합친 뒤 다시 줄 세운다 */
-function metric(kind: UsRankKind, r: UsRankRow): number {
+function metric(kind: Exclude<UsRankKind, "popular">, r: UsRankRow): number {
   switch (kind) {
     case "value":
       return r.value ?? -Infinity;
@@ -156,7 +157,7 @@ function fresh(status: string, at: number): boolean {
   return Date.now() - at < ttl;
 }
 
-async function getEx(ex: UsExchange, kind: UsRankKind): Promise<{ rows: UsRankRow[]; status: string }> {
+async function getEx(ex: UsExchange, kind: Exclude<UsRankKind, "popular">): Promise<{ rows: UsRankRow[]; status: string }> {
   const key = `${ex}:${kind}`;
   const c = cache.get(key);
   if (c && fresh(c.status, c.at)) return c;
@@ -184,16 +185,49 @@ export async function usRank(opts: {
   minValue?: number;
   limit?: number;
 }): Promise<UsRankResult> {
+  /*
+   * 「인기」 — 네이버 사용자가 많이 본 미국 종목 (2026-09-16, naverMarket.usPopular). 국내판 「실시간 조회순위」에
+   * 가장 가까운 것이다. 거래소를 따로 안 주는 목록이라 거래소 거르기만 한다.
+   */
+  if (opts.kind === "popular") {
+    const p = await usPopular(60);
+    const rows: UsRankRow[] = p.rows
+      .filter((r) => !opts.ex || opts.ex === "all" || r.exchange === opts.ex)
+      .map((r) => ({
+        symbol: r.symbol,
+        reuters: r.reuters,
+        name: r.name,
+        nameEng: "",
+        exchange: (r.exchange as UsExchange) ?? "NASDAQ",
+        kind: r.kind,
+        price: r.price,
+        change: r.change,
+        rate: r.rate,
+        open: null,
+        high: null,
+        low: null,
+        volume: r.volume,
+        value: r.value,
+        cap: r.cap,
+        industry: r.industry,
+        over: r.over,
+        tradedAt: null,
+      }))
+      .slice(0, Math.min(Math.max(opts.limit ?? 50, 10), 100));
+    const st = await getEx("NASDAQ", "value").catch(() => ({ rows: [], status: "" }));
+    return { kind: "popular", at: p.at, marketStatus: st.status, rows };
+  }
+  const kind = opts.kind;
   const exs = !opts.ex || opts.ex === "all" ? [...EXCHANGES] : [opts.ex];
-  const got = await Promise.all(exs.map((ex) => getEx(ex, opts.kind).catch(() => ({ rows: [], status: "" }))));
+  const got = await Promise.all(exs.map((ex) => getEx(ex, kind).catch(() => ({ rows: [], status: "" }))));
   const minValue = opts.minValue ?? 0;
   const rows = got
     .flatMap((g) => g.rows)
     .filter((r) => minValue <= 0 || (r.value ?? 0) >= minValue)
-    .sort((a, b) => metric(opts.kind, b) - metric(opts.kind, a))
+    .sort((a, b) => metric(kind, b) - metric(kind, a))
     .slice(0, Math.min(Math.max(opts.limit ?? 50, 10), 100));
   return {
-    kind: opts.kind,
+    kind,
     at: Date.now(),
     marketStatus: got.find((g) => g.status)?.status ?? "",
     rows,

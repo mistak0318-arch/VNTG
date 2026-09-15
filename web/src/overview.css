@@ -609,3 +609,90 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
  * 맞고, 안에서 넘치는 것은 각자 자기 자리에서 처리한다(표는 가로로 구르고 글은 접힌다).
  */
 .ov-grid > * { min-width: 0; }
+
+/* ===================================================================
+   네이버 증권(개편판) 에서 온 카드들 (2026-09-16)
+   증시자금동향 · 개미 토론 · 네이버페이 랭킹.
+   ⚠️ 색은 전부 `.ov` 토큰으로 — hex 를 박으면 라이트·엑셀 테마에서 안 보인다.
+   =================================================================== */
+
+/* ---------- 증시자금동향 ---------- */
+.dep-row { display: flex; gap: 10px; }
+.dep-cell {
+  flex: 1 1 0;
+  min-width: 0;                      /* 격자 칸과 같은 이유 — 안 주면 조가 길어질 때 카드가 넘친다 */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--ov-line-soft);
+  border-radius: 8px;
+  background: var(--ov-panel-2);
+}
+.dep-k { font-size: 0.7rem; color: var(--ov-txt-2); }
+.dep-cell b.num { font-size: 1.25rem; font-weight: 700; line-height: 1.15; }
+.dep-d { font-size: 0.72rem; font-weight: 600; }
+.dep-cell .ov-spark { height: 22px; margin-top: 2px; }
+.dep-t { font-size: 0.66rem; color: var(--ov-txt-3); }
+.dep-funds { margin-top: 8px; font-size: 0.72rem; color: var(--ov-txt-2); }
+
+/* ---------- 개미 토론 ---------- */
+.dsc { margin-top: 10px; border-top: 1px solid var(--ov-line-soft); padding-top: 8px; }
+.dsc-head { display: flex; align-items: baseline; gap: 6px; font-size: 0.78rem; font-weight: 700; margin-bottom: 6px; }
+.dsc-head span { font-size: 0.66rem; font-weight: 400; color: var(--ov-txt-3); }
+.dsc-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.dsc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--ov-line);
+  background: var(--ov-panel-2);
+  color: var(--ov-txt);
+  font-size: 0.72rem;
+}
+.dsc-chip b { font-size: 0.64rem; color: var(--ov-txt-3); font-weight: 700; }
+.dsc-chip em { font-size: 0.68rem; font-style: normal; font-weight: 600; }
+.dsc-chip i { font-size: 0.62rem; font-style: normal; color: var(--ov-txt-3); }
+/* 새로 불붙은 곳만 티가 나야 한다 — 전부 칠하면 아무것도 안 보인다 */
+.dsc-chip.hot { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.dsc-chip i.up { color: var(--accent); font-weight: 700; }
+.dsc-posts { margin-top: 6px; font-size: 0.7rem; color: var(--ov-txt-2); line-height: 1.6; }
+.dsc-more { display: block; margin-top: 3px; font-size: 0.64rem; color: var(--ov-txt-3); }
+
+/* ---------- 네이버페이 랭킹 ---------- */
+.npr { margin-top: 10px; border-top: 1px solid var(--ov-line-soft); padding-top: 4px; }
+.npr .ov-seg { padding: 4px 0 0; }
+.npr-ages { display: flex; flex-wrap: wrap; gap: 3px; margin: 6px 0; }
+.npr-age {
+  padding: 2px 8px;
+  font-size: 0.68rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: var(--ov-panel-2);
+  color: var(--ov-txt-3);
+}
+.npr-age.on { color: var(--ov-txt); border-color: var(--ov-line); font-weight: 600; }
+.npr-list { display: flex; flex-direction: column; }
+.npr-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px 2px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--ov-line-soft);
+  color: var(--ov-txt);
+  font-size: 0.76rem;
+  text-align: left;
+}
+.npr-rk { flex: none; width: 1.3rem; font-size: 0.68rem; color: var(--ov-txt-3); }
+.npr-nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.npr-rt { flex: none; font-size: 0.72rem; font-weight: 600; }
+.npr-jp { flex: none; width: 2.2rem; text-align: right; font-size: 0.64rem; font-style: normal; color: var(--ov-txt-3); }
+.npr-jp.up { color: var(--up); }
+.npr-jp.down { color: var(--down); }
+.npr-jp.new { color: var(--accent); font-weight: 700; }

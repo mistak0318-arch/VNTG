@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTabTitle } from "../tabTitle";
 import { TopicPulseBlock } from "../components/TopicPulse";
+import { EconEventsPanel } from "../components/EconEventsPanel";
+import { NaverBriefingBlock } from "../components/NaverBriefingBlock";
 import {
   api,
   type CalendarEvent,
@@ -231,6 +233,12 @@ export function MorningPage() {
               ))}
             </div>
           )}
+          {/*
+            경제지표 (2026-09-16) — 위는 **내가 넣은 일정**이고 이건 **시장 일정**이다.
+            영향력 높은 지표와 만기만, 오늘·내일치. 21:30 발표 같은 건 아침에 알아야
+            그 시각에 주문을 안 걸어 둔다. 전체는 캘린더 > 경제지표 탭.
+          */}
+          <EconEventsPanel compact />
         </section>
 
         {/* ── 데일리 리포트 (최신 판) ── */}
@@ -263,6 +271,12 @@ export function MorningPage() {
               )}
             </>
           )}
+          {/*
+            다른 눈 (2026-09-16) — **우리 요약 바로 밑**이다. 순서가 중요하다:
+            우리 판단을 먼저 읽고, 그 다음 네이버 AI 가 같은 장을 어떻게 읽었는지 본다.
+            접혀 있는 것도 같은 이유 — 먼저 펴 보면 우리 글을 그 눈으로 읽게 된다.
+          */}
+          <NaverBriefingBlock />
         </section>
 
         {/* ── 슈퍼신호등 밤사이 ── */}

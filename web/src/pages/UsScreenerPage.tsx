@@ -16,6 +16,8 @@ import { useTabActive } from "../tabActive";
  * 국내판의 「실시간 조회순위」는 미국판 자료가 없어 **거래량 순위**로 대신한다(usRank.ts 머리 주석).
  */
 const KINDS: { key: UsRankKind; label: string }[] = [
+  /* 인기 = 네이버 사용자가 많이 본 종목. 국내 「실시간 조회순위」 자리 (2026-09-16) */
+  { key: "popular", label: "인기" },
   { key: "value", label: "거래대금" },
   { key: "volume", label: "거래량" },
   { key: "cap", label: "시가총액" },
@@ -126,6 +128,9 @@ export function UsScreenerPage() {
           </span>
         )}
       </div>
+      {kind === "popular" && (
+        <div className="table-note usr-pop-note">네이버 사용자가 많이 본 미국 종목 — 국내 시세분석의 「실시간 조회순위」에 해당합니다.</div>
+      )}
       <div className="usr-status">
         <span className={`usr-dot${data?.marketStatus === "OPEN" ? " on" : ""}`} />
         {data ? STATUS[data.marketStatus] ?? data.marketStatus ?? "" : ""}

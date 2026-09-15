@@ -41,6 +41,11 @@ import { useMasonryGrid } from "../useMasonryGrid";
 import { useSwipeTabs } from "../useSwipeTabs";
 import { OVERVIEW_CARDS, type OverviewSub } from "../overviewCards";
 import { PulsePanel } from "../components/overview/PulsePanel";
+/* 네이버 증권(개편판) 에서 온 셋 — 증시자금동향 · 개미 토론 · 네이버페이 랭킹 (2026-09-16) */
+import { DepositTrendPanel } from "../components/overview/DepositTrendPanel";
+import { DiscussionRankPanel } from "../components/overview/DiscussionRankPanel";
+import { NpayRankPanel } from "../components/overview/NpayRankPanel";
+import { TopicPulseBlock } from "../components/TopicPulse";
 import { InquiryRankPanel } from "../components/overview/InquiryRankPanel";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
@@ -600,6 +605,25 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           40일치를 소급해 낸다. 같은 물음(장이 넓게 사는가)에 더 긴 답이다.
           key 는 "breadth" 그대로 — 저장된 배치가 자리를 기억한다.
         */}
+        {/*
+          지금의 화제 (2026-09-16) — 카드 **목록에는 있는데 화면에 없었다.** 카드 배치 설정에는
+          「지금의 화제」가 뜨는데 대시보드에는 안 그려서, 자리를 아무리 옮겨도 안 나오는
+          상태였다. 되살리면서 **개미 토론**을 같이 붙인다(벤티지: "융합해서 업그레이드"):
+
+            · 위 — 뉴스·텔레그램이 무엇을 말하나 (우리 topicPulse)
+            · 아래 — 개인 투자자가 어디에 몰렸나 (네이버 종목토론 랭킹)
+
+          둘이 같은 종목을 가리키면 그날의 중심이고, 토론만 뜨거우면 쏠림 쪽이다.
+        */}
+        {show("summary") && (
+          <OverviewCard title="지금의 화제" order={cards.orderOf("topicPulse")}>
+            <div className="ov-card-b">
+              <TopicPulseBlock window="now" onSelectStock={(code, name) => onSelectStock(normalizeStockCode(code), name)} />
+              <DiscussionRankPanel onSelectStock={(code, name) => onSelectStock(normalizeStockCode(code), name)} />
+            </div>
+          </OverviewCard>
+        )}
+
         {show("summary") && (
           <OverviewCard title="시장 체온계" order={cards.orderOf("breadth")}>
             <div className="ov-card-b">
@@ -609,9 +633,17 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
         {/*
-          여기가 ⑤ 증시주변자금 동향 자리다 — 고객예탁금·미수금·신용잔고·선물예수금.
-          키움에도 한투에도 없어서 공공데이터포털 키가 생겨야 붙는다. 그때 여기 끼운다.
+          ⑤ 증시주변자금 동향 — **오래 비워 둔 자리를 채웠다** (2026-09-16).
+
+          「키움에도 한투에도 없어서 공공데이터포털 키가 생겨야 붙는다」고 적어 두고 한 달을
+          비워 뒀는데, 네이버 증권 개편판을 훑다가 로그인 없이 되는 걸 찾았다(`trendDeposit`).
+          체온계(얼마나 넓게 오르나) 바로 밑에 둔다 — 다음 물음이 「살 돈은 있나」다.
         */}
+        {show("summary") && (
+          <OverviewCard title="증시자금동향" order={cards.orderOf("deposit")}>
+            <DepositTrendPanel />
+          </OverviewCard>
+        )}
 
         {/*
           테마 흐름 (2026-08-28) — 「업종」을 갈아끼웠다. 거래소 업종 분류는 이 앱의
@@ -659,15 +691,22 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           </OverviewCard>
         )}
 
-        {/* ---------------- 순위 ---------------- */}
         {/*
-          순위 탭의 맨 위. 상위 계좌들이 무엇을 사는지가 다른 순위표보다 먼저 온다 —
-          거래대금·등락률 순위는 "무엇이 움직였나"이고 이건 "누가 움직였나"다.
+          누가 움직였나 (2026-09-16 요약으로 이사).
+
+          원래 순위 탭 맨 위였는데, 순위 탭은 2026-08-27 에 숨겼다 — 그 뒤로 이 카드는
+          **아무도 볼 수 없는 자리**에 있었다(설정에는 뜨는데 화면에는 없는 상태).
+          네이버페이 이용자 랭킹을 아래에 덧대면서 요약으로 꺼냈다:
+
+            · 위 — **키움 수익률 상위 고객**. 잘하는 소수가 순매수한 것
+            · 아래 — **네이버페이 이용자**. 대중이 담은 것 (연령대별)
+
+          겹치면 힘이 실리고, 대중 쪽에만 있으면 쏠림을 의심한다.
         */}
-        {show("rank") && (
+        {show("summary") && (
           <OverviewCard
             order={cards.orderOf("topTraders")}
-            title="수익률 상위 고객 매매동향"
+            title="수익률 상위 고객 · 네이버페이 랭킹"
           updatedAt={topTraders.updatedAt}
           loading={topTraders.loading}
           error={topTraders.error}
@@ -717,9 +756,13 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
               <b>계좌 수</b>를 같이 보세요 — 한 계좌가 크게 담은 것과 여럿이 함께 담은 것은
               뜻이 다릅니다. <b>참고 자료</b>이지 매매 근거가 아닙니다.
             </div>
+            {/* 대중은 무엇을 담았나 — 같은 물음에 다른 표본 (네이버페이 이용자) */}
+            <NpayRankPanel onSelectStock={(code, name) => onSelectStock(normalizeStockCode(code), name)} />
           </div>
         </OverviewCard>
       )}
+
+        {/* ---------------- 순위 ---------------- */}
 
         {show("rank") && (
           <OverviewCard title="등락률 순위" order={cards.orderOf("movers")} updatedAt={movers.updatedAt} loading={movers.loading} error={movers.error}>

@@ -13,6 +13,8 @@ import type { IndexCard, MarketFlow, StockRow, HighLow } from "./marketOverview.
 import type { GlobalQuote } from "./globalMarket.js";
 import { sectorNews } from "./newsDisclosure.js";
 import { upcomingEvents } from "./calendar.js";
+import { discussionRanking, marketCalendar, naverBriefings } from "./naverMarket.js";
+import { getStockIndex } from "./stockListCache.js";
 import { todayDartEvents, toDartDigest } from "./dartEvents.js";
 import { getTrackedWatchlist } from "./watchTracking.js";
 import { buildMarketDrivers } from "./reportBuilder.js";
@@ -92,6 +94,19 @@ function hasTradedToday(indices: IndexCard[]): boolean {
 }
 
 /** 시황 질문하기(askMarket)도 같은 다이제스트를 쓴다 */
+/**
+ * 네이버 블록을 어떻게 쓰나 (2026-09-16) — 모든 판(평일·조간·주말)에 붙는다.
+ * 네이버 AI 브리핑은 **베끼지 않고 견준다.** 같은 재료를 다르게 읽었으면 그게 사용자가 알아야 할 것이다.
+ */
+const NAVER_RULE = `
+<네이버 참고 블록>
+- [경제지표·만기]가 있으면 확인할 것/체크포인트에서 **시각과 함께** 짚어라(예: "오늘 21:30 미국 소매판매 — 영향력 매우 높음").
+- [개인 투자자 토론 급증]은 과열 신호다. 관심종목·슈퍼신호등·강한 테마와 겹치는 종목이 있으면 한 줄로 짚어라
+  ("개인 관심이 몰린 곳 — 쏠림 주의"). 겹치는 게 없으면 언급하지 마라.
+- [네이버 AI 시황 브리핑]이 있으면 **맨 끝에 「다른 눈」 한 줄**만 쓴다: 네이버 AI 가 무엇을 핵심으로 봤는지,
+  우리 판단과 같은지 다른지. 그 문장을 옮겨 적지 말고, 다른 점이 없으면 "네이버 AI 도 같은 흐름으로 봤다" 한 줄.
+</네이버 참고 블록>`;
+
 export async function buildDigest(
   client: KiwoomClient,
   progress: ProgressReporter = noopProgress,
@@ -357,6 +372,58 @@ export async function buildDigest(
   }
 
   /*
+   * **네이버 증권(개편판) 셋을 녹인다** (2026-09-16 — 벤티지: "비슷한 거 있다고 제끼지 말고 융합해서 업그레이드").
+   * 못 받으면 조용히 빠진다 — 이 블록들이 없어도 리포트는 나온다.
+   *
+   * ① 경제지표·만기 — 사람이 적어 넣던 「FOMC 03시」 같은 것을 네이버 캘린더가 영향력·이전값과 함께 준다.
+   * ② 네이버 AI 브리핑 — 우리 요약과 **견줄 거리**다(`NAVER_RULE`). 베끼게 두면 안 된다.
+   * ③ 종목토론 급증 — 개인 투자자 관심이 몰리는 곳. 과열 경고의 재료(신호등 점수에는 안 들어간다).
+   */
+  try {
+    const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+    const to = new Date(Date.now() + 9 * 3600_000 + 3 * 86_400_000).toISOString().slice(0, 10);
+    const cal = await marketCalendar(today, to);
+    const key = cal.events.filter(
+      (e) => (e.category === "economicIndicators" && /높음/.test(e.impact ?? "")) || e.category === "expiration",
+    );
+    if (key.length > 0) {
+      lines.push("\n[경제지표·만기 — 앞으로 3일, 한국 시각, 네이버 캘린더]");
+      for (const e of key.slice(0, 10)) {
+        const nat = e.nation === "USA" ? "미국" : e.nation === "KOR" ? "한국" : e.nation ?? "";
+        const info = e.info.filter((i) => i.value && i.value !== "-").map((i) => `${i.label} ${i.value}`).join(" · ");
+        lines.push(`${e.date} ${e.time ?? ""} ${nat} ${e.title}${e.impact ? ` (영향력 ${e.impact})` : ""}${info ? ` — ${info}` : ""}`.replace(/\s+/g, " "));
+      }
+    }
+  } catch {
+    /* 네이버 캘린더를 못 받으면 빠진다 */
+  }
+  try {
+    const b = await naverBriefings();
+    if (b.latest) {
+      lines.push("\n[네이버 AI 시황 브리핑 — 다른 눈, 참고용]");
+      lines.push(`${b.latest.when} ${b.latest.title}`);
+      lines.push(b.latest.summary.slice(0, 600));
+    }
+  } catch {
+    /* 빠진다 */
+  }
+  try {
+    const d = await discussionRanking();
+    if (d.items.length > 0) {
+      const idx = await getStockIndex(client).catch(() => null);
+      lines.push("\n[개인 투자자 토론 급증 — 네이버 종목토론 TOP10, 순위(직전 순위)]");
+      lines.push(
+        d.items
+          .slice(0, 10)
+          .map((x) => `${x.rank}. ${x.name ?? idx?.get(x.code)?.name ?? x.code}${x.prevRank ? `(${x.prevRank})` : "(신규)"}`)
+          .join(", "),
+      );
+    }
+  } catch {
+    /* 빠진다 */
+  }
+
+  /*
    * 네이버 금융 첫 화면의 주요 뉴스 (2026-08-26 개편) — 뉴스 수집이 커지면서
    * 「지금 시장이 크게 보고 있는 기사」를 따로 받게 됐다. 분야별 헤드라인과 성격이
    * 다르다: 이건 편집자가 고른 오늘의 핵심이다.
@@ -452,7 +519,8 @@ const SYSTEM_RULES = `너는 한국 주식시장 데이터를 정리해 주는 �
 (사용자 관심종목이 있으면 그 종목들의 오늘 움직임과 수급을 먼저 정리한다.
 이어서 확인 사항 3~4개. **"무엇을 보면 무엇을 알 수 있는가"** 형태로 구체적으로 써라.
 슈퍼신호등 종목에 대한 확인 사항이 있으면 우선한다)
-${CHECKPOINT_RULE}`;
+${CHECKPOINT_RULE}
+${NAVER_RULE}`;
 
 
 /**
@@ -506,7 +574,8 @@ const MORNING_RULES = `너는 한국 주식시장 개장 전 브리핑을 쓰는
 (다가오는 일정과 뉴스에서 나오는 확인 사항 3~4개.
 "무엇을 보면 무엇을 알 수 있는가" 형태로 구체적으로 써라.
 예: "개장 후 외국인이 전기전자에서 순매수를 이어가는지 — 끊기면 전일 급등이 일회성")
-${CHECKPOINT_RULE}`;
+${CHECKPOINT_RULE}
+${NAVER_RULE}`;
 
 /**
  * 주말판 규칙.
@@ -535,7 +604,8 @@ const WEEKEND_RULES = `너는 한국 주식시장 뉴스를 정리해 주는 애
 
 ## 다음 주 확인할 것
 (다가오는 일정과 뉴스에서 읽히는 체크포인트 2~3개)
-${CHECKPOINT_RULE}`;
+${CHECKPOINT_RULE}
+${NAVER_RULE}`;
 
 /**
  * AI 요약을 새로 만든다. **발행 시각에만 호출된다** (reportScheduler).

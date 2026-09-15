@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { getStockIndex } from "../stockListCache.js";
+import { depositTrend, discussionRanking, marketCalendar, naverBriefings, npayRanking, researchBoard, type NpayAge } from "../naverMarket.js";
 import { usRank, type UsExchange, type UsRankKind } from "../usRank.js";
 import { bridgeForTheme, bridgePairs, overnightBridge, usIndustryTop } from "../themeBridge.js";
 import { clearHidden, listHidden, setHidden } from "../hiddenThemes.js";
@@ -1108,13 +1110,77 @@ export function createMarketRouter(client: KiwoomClient): Router {
    */
   router.get("/us-rank", async (req, res, next) => {
     try {
-      const kinds = ["value", "volume", "cap", "up", "down"] as const;
+      const kinds = ["value", "volume", "cap", "up", "down", "popular"] as const;
       const kind = (kinds as readonly string[]).includes(String(req.query.kind)) ? (String(req.query.kind) as UsRankKind) : "value";
       const exRaw = String(req.query.ex ?? "all").toUpperCase();
       const ex = (["NASDAQ", "NYSE", "AMEX"].includes(exRaw) ? exRaw : "all") as UsExchange | "all";
       const minValue = Number(req.query.minValue ?? 0) || 0;
       const limit = Number(req.query.limit ?? 50) || 50;
       res.json(await usRank({ kind, ex, minValue, limit }));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /*
+   * 네이버 증권(개편판) 넷 (2026-09-16, naverMarket.ts) — 증시자금동향 · 시장 캘린더 · 리서치 보드.
+   * (해외 인기 종목은 /us-rank?kind=popular)
+   */
+  router.get("/naver/deposit-trend", async (req, res, next) => {
+    try {
+      res.json(await depositTrend(Math.min(Math.max(Number(req.query.days ?? 60) || 60, 5), 120)));
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/naver/calendar", async (req, res, next) => {
+    try {
+      const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+      const ok = (s: unknown) => (typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
+      const from = ok(req.query.from) ?? today;
+      const to = ok(req.query.to) ?? new Date(Date.parse(from) + 13 * 86_400_000).toISOString().slice(0, 10);
+      res.json(await marketCalendar(from, to));
+    } catch (err) {
+      next(err);
+    }
+  });
+  /* 융합 셋 — AI 브리핑 · 종목토론 랭킹 · 네이버페이 이용자 랭킹 (2026-09-16) */
+  router.get("/naver/briefing", async (_req, res, next) => {
+    try {
+      res.json(await naverBriefings());
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/naver/discussion", async (_req, res, next) => {
+    try {
+      const d = await discussionRanking();
+      const idx = await getStockIndex(client).catch(() => null);
+      for (const it of d.items) it.name ??= idx?.get(it.code)?.name ?? null;
+      res.json(d);
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/naver/npay-rank", async (req, res, next) => {
+    try {
+      const kind = req.query.kind === "assetAmount" ? "assetAmount" : "earningRate";
+      const age = (["all", "20", "30", "40", "50", "60"].includes(String(req.query.age)) ? String(req.query.age) : "all") as NpayAge;
+      res.json(await npayRanking(kind, age, 20));
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/naver/research", async (_req, res, next) => {
+    try {
+      const board = await researchBoard();
+      /* 네이버 리서치는 종목코드만 주는 줄이 있다 — 키움 종목 목록으로 이름을 채운다(조회 0회, 캐시) */
+      const idx = await getStockIndex(client).catch(() => null);
+      const nm = (code: string | null) => (code && idx ? idx.get(code)?.name ?? null : null);
+      for (const h of board.hot) h.name ??= nm(h.code);
+      for (const arr of Object.values(board.latest)) for (const h of arr) h.name ??= nm(h.code);
+      for (const g of [...board.goalUp, ...board.goalDown]) if (!g.name || g.name === g.code) g.name = nm(g.code) ?? g.name;
+      res.json(board);
     } catch (err) {
       next(err);
     }

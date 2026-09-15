@@ -6,6 +6,7 @@ import { guessKind, kindMeta, KIND_ORDER, span, timeText, toHhmm, toMin } from "
 import { DartTodayPanel } from "../components/DartTodayPanel";
 import { CalendarImageImport } from "../components/CalendarImageImport";
 import { EconomicCalendarCard } from "../components/EconomicCalendarCard";
+import { EconEventsPanel } from "../components/EconEventsPanel";
 import { RefreshBar } from "../components/RefreshBar";
 import { useSwipeTabs } from "../useSwipeTabs";
 
@@ -252,10 +253,16 @@ function WeekGrid({
 }
 
 /** 서브탭 (2026-08-27 전면 개편) — 달력은 달력답게, 공시·가져오기는 제 방으로 */
-type CalTab = "cal" | "plan" | "dart" | "import";
+type CalTab = "cal" | "plan" | "econ" | "dart" | "import";
 const CAL_TABS: { key: CalTab; label: string }[] = [
   { key: "cal", label: "📅 달력" },
   { key: "plan", label: "🗓 다가오는·할 일" },
+  /*
+   * 경제지표 (2026-09-16) — 「가져오기」 안의 경제 캘린더 시드가 **연간 뼈대**라면 이건 **살**이다.
+   * 발표 시각(한국 시각) · 시장 영향력 · 이전값까지 네이버 시장 캘린더에서 살아 있는 값으로 온다.
+   * 시드를 걷어내지 않는 이유는 EconEventsPanel 머리 주석에 적었다.
+   */
+  { key: "econ", label: "📊 경제지표" },
   { key: "dart", label: "📄 오늘 공시" },
   { key: "import", label: "⬇ 가져오기" },
 ];
@@ -1319,6 +1326,18 @@ export function CalendarPage() {
             })()
           )}
         </div>
+      )}
+
+      {/* ── 경제지표·만기 (네이버 시장 캘린더) ── */}
+      {tab === "econ" && (
+        <>
+          <p className="page-note">
+            앞으로 <b>2주</b>의 경제지표·만기·배당·공모 일정입니다. 시각은 <b>한국 시각</b>이고,
+            영향력은 네이버가 매긴 것입니다. 달력 탭에 넣어 둔 <b>경제 캘린더 시드</b>(FOMC·CPI·금통위)는
+            연간 뼈대라 그대로 두고, 여기서는 <b>살아 있는 값</b>을 봅니다.
+          </p>
+          <EconEventsPanel />
+        </>
       )}
 
       {/* ── 오늘 공시 — 맨 앞에 슈퍼신호등 종목 것부터 선다 ── */}

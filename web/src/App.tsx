@@ -27,6 +27,7 @@ import { SuperDashboardPage } from "./pages/SuperDashboardPage";
 import { ListTrackPage } from "./pages/ListTrackPage";
 import { UsWatchPage } from "./pages/UsWatchPage";
 import { UsScreenerPage } from "./pages/UsScreenerPage";
+import { ResearchPage } from "./pages/ResearchPage";
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
 import { AccountInfoPage } from "./pages/AccountInfoPage";
@@ -107,6 +108,7 @@ type Tab =
   | "stockAnalysis"
   | "screener"
   | "usScreener"
+  | "research"
   | "volume"
   | "sameNet"
   | "continuous"
@@ -162,6 +164,11 @@ const MENU: {
       { key: "themedb", label: "테마 DB", icon: "🧭" },
       { key: "program", label: "프로그램 매매", icon: "🤖" },
       { key: "news", label: "뉴스·공시", icon: "📢" },
+      /*
+       * 리서치 (2026-09-16) — 뉴스 바로 아래. 뉴스가 「무슨 일이 있었나」이고
+       * 이건 「전문가들이 그걸 어떻게 고쳐 잡았나」다(목표주가 변화·보고서가 몰린 산업).
+       */
+      { key: "research", label: "리서치", icon: "📑" },
       { key: "ask", label: "시황 질문하기", icon: "💬" },
     ],
   },
@@ -741,6 +748,7 @@ export default function App() {
       case "telegram": return <TelegramPage onSelectStock={onSelectStock} />;
       case "screener": return <ScreenerPage onSelectStock={onSelectStock} />;
       case "usScreener": return <UsScreenerPage />;
+      case "research": return <ResearchPage onSelectStock={onSelectStock} />;
       case "stockAnalysis": return <StockAnalysisPage stock={selected} onSelectStock={openAnalysis} />;
       case "volume": return <VolumeRankingPage onSelectStock={onSelectStock} />;
       case "sameNet": return <SameNetTradeRankingPage onSelectStock={onSelectStock} />;
