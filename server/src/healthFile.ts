@@ -1,6 +1,7 @@
 import { afterProbeSnapshot } from "./afterProbe.js";
 import { closeBetScanHealth } from "./closeBetScan.js";
 import { flowAfterSnapshot } from "./flowAfterProbe.js";
+import { hantooFutProbeSnapshot } from "./hantooFutProbe.js";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
@@ -140,6 +141,8 @@ async function writeOnce(): Promise<void> {
     종배스캔: await closeBetScanHealth().catch(() => null),
     /* 수급에 애프터가 들어가나 (2026-09-15) — 회차마다 달라진 종목 **수**만 */
     수급애프터: flowAfterSnapshot(),
+    /* 해외선물 키2 시험 (2026-09-15) — 된다/사유 문장뿐. 키·계좌·값은 없다 */
+    해외선물시험: hantooFutProbeSnapshot(),
   };
 
   try {

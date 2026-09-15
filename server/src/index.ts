@@ -60,6 +60,7 @@ import { startCisScheduler } from "./cisScheduler.js";
 import { startCloseBetScanScheduler } from "./closeBetScan.js";
 import { startFlowAfterProbe } from "./flowAfterProbe.js";
 import { startThemeBridgeLog } from "./themeBridge.js";
+import { startHantooFutProbe } from "./hantooFutProbe.js";
 import { syncSuperGroup } from "./superSignal.js";
 import { startCisWatch } from "./cisWatch.js";
 import { startChannelScheduler } from "./channelScheduler.js";
@@ -303,6 +304,8 @@ startCloseBetScanScheduler(client);
 startFlowAfterProbe(client);
 /* 국내 테마 ↔ 미국 업종 다리 — 거래일 15:40 에 짝별 등락을 한 줄씩 (2026-09-15) */
 startThemeBridgeLog(client);
+/* 해외선물 계좌 키(_2)로 미국 선물 시세가 열리나 — 결과만 health.json 에 (2026-09-15) */
+startHantooFutProbe();
 /* 시뮬레이터 실전 진행 (2026-09-04) — 시각이 아니라 일봉이 왔는지를 본다 */
 startSimScheduler(client);
 /*
