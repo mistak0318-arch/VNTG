@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { UsBridgePanel } from "../components/overview/UsBridgePanel";
 import { RotationStrip, ThermoPanel, useMarketLens } from "../components/MarketLensPanel";
 import {
   api,
@@ -419,6 +420,12 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
             <div className="ov-card-b">
               <PulsePanel onSelectStock={(code, name) => onSelectStock(normalizeStockCode(code), name)} />
             </div>
+          </OverviewCard>
+        )}
+        {/* 어젯밤 미국 → 국내 테마 (2026-09-15) — 글로벌 밑. 짝이 미국을 따라가는지는 기록이 쌓이면 가린다 */}
+        {show("summary") && (
+          <OverviewCard order={cards.orderOf("usBridge")} title="어젯밤 미국 → 국내 테마">
+            <UsBridgePanel />
           </OverviewCard>
         )}
         {/* 실시간 조회순위 — 눈이 몰리는 종목 열 (2026-09-10 저녁). 시세분석 표와 같은 응답 */}

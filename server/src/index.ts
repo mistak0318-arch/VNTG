@@ -59,6 +59,7 @@ import { startAlertScheduler } from "./alertScheduler.js";
 import { startCisScheduler } from "./cisScheduler.js";
 import { startCloseBetScanScheduler } from "./closeBetScan.js";
 import { startFlowAfterProbe } from "./flowAfterProbe.js";
+import { startThemeBridgeLog } from "./themeBridge.js";
 import { syncSuperGroup } from "./superSignal.js";
 import { startCisWatch } from "./cisWatch.js";
 import { startChannelScheduler } from "./channelScheduler.js";
@@ -300,6 +301,8 @@ startCisScheduler(client);
 startCloseBetScanScheduler(client);
 /* 수급에 애프터가 들어가나 — 15:45·17:00·18:30·20:05 대형주 셋 (2026-09-15, 개수만 health.json 에) */
 startFlowAfterProbe(client);
+/* 국내 테마 ↔ 미국 업종 다리 — 거래일 15:40 에 짝별 등락을 한 줄씩 (2026-09-15) */
+startThemeBridgeLog(client);
 /* 시뮬레이터 실전 진행 (2026-09-04) — 시각이 아니라 일봉이 왔는지를 본다 */
 startSimScheduler(client);
 /*

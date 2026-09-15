@@ -18971,3 +18971,39 @@ a.watch-btn { text-decoration: none; }
 .gt-tile-meta i { font-style: normal; }
 .gt-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
 .usb-edit-row { margin-top: -2px; }
+
+/* ══ 국내 테마 ↔ 미국 업종 다리 (2026-09-15, themeBridge) ══════════════════════
+   테마 DB 상세의 「미국 짝」(tub-)과 시황 카드 「어젯밤 미국 → 국내 테마」(ubp-).
+   근거(편입 사유에 미국 회사가 나옴)는 진하게, 어림(테마 이름으로 이음)은 흐리게. */
+.tub { margin: 0.2rem 0 0.7rem; padding: 0.5rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.tub-h { font-size: 0.8rem; font-weight: 700; margin-bottom: 0.35rem; }
+.tub-at { font-weight: 400; font-size: 0.7rem; color: var(--muted); margin-left: 4px; }
+.tub-inds { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 0.35rem; }
+.tub-ind { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 0.74rem; background: var(--panel); }
+.tub-ind em { font-style: normal; font-weight: 700; }
+.tub-ind i { font-style: normal; font-size: 0.62rem; color: var(--muted); }
+.tub-ind.guess { opacity: 0.72; border-style: dashed; }
+.tub-cos { display: flex; flex-direction: column; gap: 4px; }
+.tub-co { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 0.76rem; }
+.tub-co-h em { font-style: normal; font-weight: 700; }
+.tub-sym { font-size: 0.66rem; color: var(--muted); }
+.tub-by { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+.tub-by-chip { padding: 0 6px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text); font: inherit; font-size: 0.68rem; cursor: pointer; }
+.tub-by-chip:hover { border-color: var(--blue); }
+.tub-more { font-size: 0.66rem; color: var(--muted); }
+.tub-note { margin-top: 0.35rem; font-size: 0.66rem; color: var(--muted); line-height: 1.4; }
+
+.ubp { display: flex; flex-direction: column; gap: 6px; }
+.ubp-at { font-size: 0.68rem; color: var(--muted); }
+.ubp-row { display: flex; flex-direction: column; gap: 3px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.ubp-row:last-of-type { border-bottom: 0; }
+.ubp-us { display: flex; align-items: baseline; gap: 6px; font-size: 0.82rem; }
+.ubp-flag { font-size: 0.72rem; }
+.ubp-ind { font-weight: 700; }
+.ubp-us em { font-style: normal; font-weight: 800; margin-left: auto; }
+.ubp-kr { display: flex; flex-wrap: wrap; gap: 4px; }
+.ubp-chip { display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 0.72rem; background: var(--panel-2); max-width: 100%; }
+.ubp-chip em { font-style: normal; font-weight: 700; }
+.ubp-chip.guess { opacity: 0.7; border-style: dashed; }
+.ubp-more { padding: 1px 8px; border: 0; background: transparent; color: var(--blue); font: inherit; font-size: 0.7rem; cursor: pointer; }
+.ubp-note { font-size: 0.66rem; color: var(--muted); line-height: 1.4; }

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { bridgeForTheme, overnightBridge } from "../themeBridge.js";
 import { clearHidden, listHidden, setHidden } from "../hiddenThemes.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { alCode } from "../alCode.js";
@@ -1061,6 +1062,30 @@ export function createMarketRouter(client: KiwoomClient): Router {
   });
 
   /** 테마 브리핑 — 국내·미국이 같은 이야기를 하는 짝과 「누가 앞서나」 */
+  /*
+   * 국내 테마 ↔ 미국 업종 다리 (2026-09-15, themeBridge.ts). **한 칸짜리 `/:no` 는 맨 뒤** — `/overnight` 이
+   * 먹히지 않게(밟으면 안 되는 것 목록의 첫 줄).
+   */
+  router.get("/theme-bridge/overnight", async (_req, res, next) => {
+    try {
+      res.json(await overnightBridge());
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/theme-bridge/:no", async (req, res, next) => {
+    try {
+      const no = Number(req.params.no);
+      if (!Number.isInteger(no)) {
+        res.status(400).json({ error: "테마 번호가 아닙니다" });
+        return;
+      }
+      res.json({ bridge: await bridgeForTheme(no) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/theme-links", async (_req, res, next) => {
     try {
       res.json(await themeLinks());

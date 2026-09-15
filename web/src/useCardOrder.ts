@@ -31,10 +31,26 @@ import { useDragOrder } from "./useDragOrder";
 export function orderMap(known: string[], saved: string[]): Map<string, number> {
   const rank = new Map<string, number>();
   /*
-   * 저장된 것 먼저, **모르는 것은 원래 자리대로 뒤에.**
+   * 저장된 것 먼저, **모르는 것은 코드 목록에서 바로 앞 카드 뒤에 끼운다.**
    * 코드에 카드가 새로 생기면 저장분에 없다 — 빠뜨리면 새 기능이 화면에서 사라진다.
+   *
+   * (2026-09-15) 예전엔 모르는 것을 **맨 뒤**에 붙였다. 배치를 한 번이라도 저장한 사람에겐 새 카드가 늘
+   * 맨 밑에 떨어져, 「글로벌 바로 밑」에 둔 카드(어젯밤 미국 → 국내 테마)가 한참 아래에 나왔다.
+   * 코드가 정한 이웃 뒤에 두면 새 카드가 뜻한 자리에 온다. 앞 이웃이 하나도 없으면 맨 앞이다.
    */
-  const ordered = [...saved.filter((k) => known.includes(k)), ...known.filter((k) => !saved.includes(k))];
+  const ordered = saved.filter((k) => known.includes(k));
+  known.forEach((k, i) => {
+    if (ordered.includes(k)) return;
+    let at = 0;
+    for (let j = i - 1; j >= 0; j--) {
+      const p = ordered.indexOf(known[j]);
+      if (p >= 0) {
+        at = p + 1;
+        break;
+      }
+    }
+    ordered.splice(at, 0, k);
+  });
   ordered.forEach((k, i) => rank.set(k, i));
   return rank;
 }

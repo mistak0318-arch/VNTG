@@ -1689,6 +1689,10 @@ export const api = {
     getJson<{ builtAt: string; total: number }>("/api/market/daily-closes/summary"),
   /** 테마 브리핑 — 국내·미국이 같은 이야기를 하는 짝과 「누가 앞서나」 */
   themeLinks: () => getJson<{ pairs: ThemeLink[]; note: string }>("/api/market/theme-links"),
+  /** 국내 테마 하나의 미국 짝 — 업종(회사 언급·낱말)과 편입 사유에 나온 미국 회사 (2026-09-15) */
+  themeBridge: (no: number) => getJson<{ bridge: ThemeBridge | null }>(`/api/market/theme-bridge/${no}`),
+  /** 어젯밤 크게 움직인 미국 업종 → 붙은 국내 테마와 오늘 등락 (2026-09-15) */
+  themeBridgeOvernight: () => getJson<{ usAt: string; rows: OvernightBridgeRow[] }>("/api/market/theme-bridge/overnight"),
   /** 미국 ETF 구성종목 — 섹터 MAP 타일을 눌렀을 때. 하루 캐시라 여닫아도 조회가 안 는다 */
   usEtfHoldings: (symbol: string) =>
     getJson<UsEtfHoldings>(`/api/market/us-etf-holdings?symbol=${encodeURIComponent(symbol)}`),
@@ -6044,6 +6048,29 @@ export interface MarketLens {
     top: { key: string; name: string; changeRate: number; streak: number }[];
     bottom: { key: string; name: string; changeRate: number; streak: number }[];
   };
+}
+
+/** 국내 테마 ↔ 미국 업종 다리 (2026-09-15, server/src/themeBridge.ts) */
+export interface ThemeBridge {
+  no: number;
+  name: string;
+  /** 어젯밤 기준 — 미국 쪽을 받은 시각 */
+  usAt: string;
+  industries: { code: string; name: string; via: "회사" | "낱말" | "둘 다"; changeRate: number | null }[];
+  companies: {
+    symbol: string;
+    name: string;
+    industry: string;
+    industryCode: string;
+    changeRate: number | null;
+    by: { code: string; name: string }[];
+  }[];
+}
+export interface OvernightBridgeRow {
+  code: string;
+  name: string;
+  changeRate: number;
+  themes: { no: number; name: string; via: "회사" | "낱말" | "둘 다"; changeRate: number | null }[];
 }
 
 export interface ThemeLink {
