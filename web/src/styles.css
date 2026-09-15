@@ -19007,3 +19007,33 @@ a.watch-btn { text-decoration: none; }
 .ubp-chip.guess { opacity: 0.7; border-style: dashed; }
 .ubp-more { padding: 1px 8px; border: 0; background: transparent; color: var(--blue); font: inherit; font-size: 0.7rem; cursor: pointer; }
 .ubp-note { font-size: 0.66rem; color: var(--muted); line-height: 1.4; }
+
+/* 구성종목 시트 「＋ 내 태그」 — 닫기 옆 (2026-09-15) */
+.cs-addtag {
+  flex: none; margin-left: auto; margin-right: 6px; padding: 4px 10px;
+  border: 1px solid var(--blue); border-radius: 999px; background: transparent; color: var(--blue);
+  font: inherit; font-size: 0.76rem; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.cs-addtag.done { border-color: var(--border); color: var(--muted); cursor: default; }
+.cs-addtag.err { border-color: var(--red); color: var(--red); }
+
+/* 한미 짝 — 네모 반반 (2026-09-15, PairTiles) */
+.pt-bar { flex-wrap: wrap; }
+.pt-legend { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; margin: 2px 0 8px; font-size: 0.7rem; color: var(--muted); }
+.pt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.pt-tile { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.pt-name { font-size: 0.76rem; font-weight: 700; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 2px; }
+.pt-box { display: grid; grid-template-columns: 1fr 1fr; aspect-ratio: 1 / 0.8; border: 1.5px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel-2); }
+.pt-tile:hover .pt-box { border-color: var(--blue); }
+.pt-tile.guess .pt-box { border-style: dashed; }
+.pt-half { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; border: 0; }
+.pt-half + .pt-half { border-left: 1.5px solid var(--border); }
+.pt-half i { font-style: normal; font-size: 0.62rem; color: var(--muted); }
+.pt-half b { font-size: 0.82rem; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pt-us { font-size: 0.64rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 2px; }
+.pt-more { margin: 10px auto 0; display: block; }
+/* 폰에서 시트 머리는 두 줄로 접힌다(제목+✕ 첫 줄). 「＋ 내 태그」가 있으면 제목 폭을 그만큼 덜어 첫 줄 ✕ 옆에 둔다 */
+@media (max-width: 720px) {
+  .sheet-header:has(.cs-addtag) h2 { flex-basis: calc(100% - 140px); }
+  .sheet-header .cs-addtag { order: 1; margin-right: 0; }
+}

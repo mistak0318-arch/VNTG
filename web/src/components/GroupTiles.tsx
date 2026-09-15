@@ -28,7 +28,8 @@ export interface TileGroup {
   title?: string;
 }
 
-function tint(rate: number | null): CSSProperties {
+/** 등락 방향으로 칠하고 3% 에서 가장 진하다 — 한미 짝 타일도 같은 자로 칠한다 */
+export function tint(rate: number | null): CSSProperties {
   if (rate === null || !Number.isFinite(rate) || rate === 0) return {};
   const k = Math.min(1, Math.abs(rate) / 3);
   const alpha = 0.08 + k * 0.32;

@@ -1691,6 +1691,8 @@ export const api = {
   themeLinks: () => getJson<{ pairs: ThemeLink[]; note: string }>("/api/market/theme-links"),
   /** 국내 테마 하나의 미국 짝 — 업종(회사 언급·낱말)과 편입 사유에 나온 미국 회사 (2026-09-15) */
   themeBridge: (no: number) => getJson<{ bridge: ThemeBridge | null }>(`/api/market/theme-bridge/${no}`),
+  /** 한미 짝 타일 — 국내 테마마다 대표 미국 업종 하나 (2026-09-15). 국내 등락은 themeStrength 로 붙인다 */
+  themeBridgePairs: () => getJson<{ usAt: string; pairs: BridgePairRow[] }>("/api/market/theme-bridge/pairs"),
   /** 어젯밤 크게 움직인 미국 업종 → 붙은 국내 테마와 오늘 등락 (2026-09-15) */
   themeBridgeOvernight: () => getJson<{ usAt: string; rows: OvernightBridgeRow[] }>("/api/market/theme-bridge/overnight"),
   /** 미국 ETF 구성종목 — 섹터 MAP 타일을 눌렀을 때. 하루 캐시라 여닫아도 조회가 안 는다 */
@@ -6065,6 +6067,13 @@ export interface ThemeBridge {
     changeRate: number | null;
     by: { code: string; name: string }[];
   }[];
+}
+export interface BridgePairRow {
+  no: number;
+  name: string;
+  us: { code: string; name: string; via: "회사" | "낱말" | "둘 다"; changeRate: number | null };
+  usCount: number;
+  companies: number;
 }
 export interface OvernightBridgeRow {
   code: string;

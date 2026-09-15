@@ -318,6 +318,32 @@ export async function overnightBridge(limit = 8): Promise<{ usAt: string; rows: 
   return { usAt: b.usAt, rows: rows.slice(0, limit) };
 }
 
+export interface BridgePair {
+  no: number;
+  name: string;
+  /** 대표 짝 — 근거(둘 다·회사)가 있는 업종이 먼저, 없으면 낱말 사전의 첫 업종 */
+  us: BridgeIndustry;
+  /** 이 테마에 이어진 미국 업종 수(대표 포함) */
+  usCount: number;
+  /** 편입 사유에 나온 미국 회사 수 */
+  companies: number;
+}
+
+/**
+ * 테마 DB 「한미 짝」 타일 — 국내 테마마다 **대표 미국 업종 하나** (2026-09-15 — 벤티지: "미국 짝 한국 짝 지은 거
+ * 테마 MAP 에 따로 메뉴 만들어서 보여 줘. 네모 반반으로").
+ * 국내 쪽 등락은 화면이 테마 DB 와 같은 값(`themeStrength`)을 붙인다 — 두 화면 숫자가 어긋나지 않게.
+ */
+export async function bridgePairs(): Promise<{ usAt: string; pairs: BridgePair[] }> {
+  const { b } = await bridge();
+  const pairs: BridgePair[] = [];
+  for (const t of b.byNo.values()) {
+    if (t.industries.length === 0) continue;
+    pairs.push({ no: t.no, name: t.name, us: t.industries[0], usCount: t.industries.length, companies: t.companies.length });
+  }
+  return { usAt: b.usAt, pairs };
+}
+
 /* ------------------------------------------------------------------ */
 /* 기록 — 거래일 15:40, 하루 한 줄                                       */
 /* ------------------------------------------------------------------ */

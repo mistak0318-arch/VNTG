@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { bridgeForTheme, overnightBridge } from "../themeBridge.js";
+import { bridgeForTheme, bridgePairs, overnightBridge } from "../themeBridge.js";
 import { clearHidden, listHidden, setHidden } from "../hiddenThemes.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { alCode } from "../alCode.js";
@@ -1069,6 +1069,13 @@ export function createMarketRouter(client: KiwoomClient): Router {
   router.get("/theme-bridge/overnight", async (_req, res, next) => {
     try {
       res.json(await overnightBridge());
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/theme-bridge/pairs", async (_req, res, next) => {
+    try {
+      res.json(await bridgePairs());
     } catch (err) {
       next(err);
     }

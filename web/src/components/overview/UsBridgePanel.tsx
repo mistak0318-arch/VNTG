@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, signClass, type OvernightBridgeRow } from "../../api";
+import { openThemePair } from "../../pairNav";
 
 /**
  * **어젯밤 미국 → 오늘 볼 국내 테마** (2026-09-15 — 벤티지: "두 개 매칭해서 엮어 볼래?" → 「지금 화면에도 붙이기」).
@@ -57,9 +58,16 @@ export function UsBridgePanel() {
             </div>
             <div className="ubp-kr">
               {shown.map((t) => (
-                <span key={t.no} className={`ubp-chip${t.via === "낱말" ? " guess" : ""}`} title={t.via === "낱말" ? "테마 이름으로 이은 짝 — 어림" : "편입 사유에 이 업종 미국 회사가 나온다"}>
+                <button
+                  type="button"
+                  key={t.no}
+                  className={`ubp-chip${t.via === "낱말" ? " guess" : ""}`}
+                  title={t.via === "낱말" ? "테마 이름으로 이은 짝 — 어림. 누르면 테마/업종 MAP 「한미 짝」에서 열린다" : "편입 사유에 이 업종 미국 회사가 나온다. 누르면 테마/업종 MAP 「한미 짝」에서 열린다"}
+                  /* 누르면 테마/업종 MAP 「한미 짝」에서 그 테마 구성종목이 열린다 (2026-09-15 — "누르면 아무 변화도 없는데?") */
+                  onClick={() => openThemePair(t.no, t.name)}
+                >
                   {t.name.replace(/\(.*?\)/g, "").trim()} <em className={`num ${signClass(t.changeRate ?? 0)}`}>{pct(t.changeRate)}</em>
-                </span>
+                </button>
               ))}
               {r.themes.length > THEMES_SHOWN && (
                 <button type="button" className="ubp-more" onClick={() => setOpen(all ? null : r.code)}>

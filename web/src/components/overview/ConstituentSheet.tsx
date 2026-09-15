@@ -4,6 +4,7 @@ import { api, fmtNum, normalizeStockCode, signClass, type StockRow } from "../..
 import { SortableTh, useSortableTable } from "../../useSortableTable";
 import { WatchStar } from "../../useWatchedCodes";
 import { SuperMark } from "../../useSuperMarks";
+import { UsBridgeBlock } from "../UsBridgeBlock";
 
 export interface ConstituentTarget {
   kind: "theme" | "sector" | "custom";
@@ -130,10 +131,23 @@ export function ConstituentSheet({
               구성종목
             </span>
           </h2>
+          {/*
+            **＋ 내 태그** (2026-09-15 — 벤티지: "테마 누르면 테마 종목 나오잖아? 네이버 테마 이런 데에서 거기에
+            내 태그 추가 버튼 만들어서 내 태그에 바로 추가될 수 있도록 해 줘" · "여기 창에서 오른쪽 위에").
+            내 태그를 보고 있을 땐 필요 없고, 미국·ETF 는 국내 종목이 아니라 태그에 못 담는다.
+          */}
+          {target.kind !== "custom" && !/^(us|etf):/.test(target.code) && items.length > 0 && (
+            <AddToMyTag name={target.name} codes={items.map((s) => normalizeStockCode(s.code))} />
+          )}
           <button className="close-btn" onClick={onClose}>
             ✕
           </button>
         </div>
+
+        {/* 네이버 국내 테마면 미국 짝 — 테마 DB 상세와 같은 칸 (2026-09-15, themeBridge) */}
+        {target.kind === "theme" && target.code.startsWith("kr:") && (
+          <UsBridgeBlock no={Number(target.code.slice(3))} onSelectStock={onSelectStock} />
+        )}
 
         {loading && <div className="empty">불러오는 중...</div>}
         {error && <div className="error-banner">{error}</div>}
@@ -195,5 +209,60 @@ export function ConstituentSheet({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * 이 테마의 구성종목을 **내 태그로 담는다** (2026-09-15).
+ *
+ * 누르면 곧바로 담긴다 — 벤티지가 「바로 추가」를 원했다. 이름은 테마 이름 그대로. 같은 이름의 태그가
+ * 이미 있으면 새로 만들지 않고 **빠진 종목만 더한다**(서버가 같은 이름을 거절하므로 그 경우를 받아 합친다).
+ * 태그는 종목 상세 메모 위 #태그와 같은 것이라, 담는 즉시 「내 태그」 MAP 에 뜬다.
+ */
+function AddToMyTag({ name, codes }: { name: string; codes: string[] }) {
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [msg, setMsg] = useState("");
+
+  const add = async () => {
+    setState("busy");
+    const uniq = [...new Set(codes)];
+    try {
+      await api.customThemeCreate({ name, codes: uniq, memo: "테마/업종 MAP 에서 담음" });
+      setState("done");
+      setMsg(`내 태그 「${name}」 · ${uniq.length}종목`);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      if (!/같은 이름/.test(m)) {
+        setState("error");
+        setMsg(m);
+        return;
+      }
+      /* 이미 있는 태그 — 빠진 종목만 더한다 */
+      try {
+        const r = await api.customThemes();
+        const t = r.themes.find((x) => x.name === name);
+        if (!t) throw new Error("같은 이름의 태그를 못 찾았습니다");
+        const have = new Set(t.stocks.map((s) => normalizeStockCode(s.code)));
+        const more = uniq.filter((c) => !have.has(c));
+        if (more.length > 0) await api.customThemeUpdate(t.id, { codes: [...have, ...more] });
+        setState("done");
+        setMsg(more.length > 0 ? `「${name}」에 ${more.length}종목 더함` : `「${name}」에 이미 다 있음`);
+      } catch (e2) {
+        setState("error");
+        setMsg(e2 instanceof Error ? e2.message : String(e2));
+      }
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className={`cs-addtag${state === "done" ? " done" : ""}${state === "error" ? " err" : ""}`}
+      disabled={state === "busy" || state === "done"}
+      onClick={() => void add()}
+      title={msg || "이 테마의 구성종목을 내 태그로 담습니다 — 같은 이름이 있으면 빠진 종목만 더합니다"}
+    >
+      {state === "busy" ? "담는 중…" : state === "done" ? "✓ 내 태그" : state === "error" ? "다시 시도" : "＋ 내 태그"}
+    </button>
   );
 }
