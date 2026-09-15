@@ -164,6 +164,29 @@ let cache: NaverThemeStore | null = null;
 /* 읽기                                                                */
 /* ------------------------------------------------------------------ */
 
+/**
+ * 미국 업종 안의 **같은 종목 겹침**을 걷어 낸다 (2026-09-15).
+ *
+ * 옛 수집(`industry` 목록)은 쪽을 넘길 때 정렬이 흔들려 **같은 종목이 여러 쪽에 다시 나왔다** —
+ * 6,950줄 중 서로 다른 종목은 3,713 이었다(반도체 245줄 = 52종목, 퀄컴 31번·엔비디아 30번). 시총 가중
+ * 등락이 겹친 종목 쪽으로 쏠렸고(반도체 −3.63% ↔ 겹침 걷으면 −4.48%) 종목 수·상승 비율도 틀렸다.
+ * 수집은 고쳤지만(`marketValue`) 이미 받아 둔 파일에도 걸리게 읽을 때 한 번 더 거른다. 한 종목은
+ * 한 업종에만 둔다(먼저 나온 쪽).
+ */
+function dedupeUs(us: UsTheme[]): UsTheme[] {
+  const seen = new Set<string>();
+  return us
+    .map((t) => ({
+      ...t,
+      stocks: t.stocks.filter((st) => {
+        if (seen.has(st.symbol)) return false;
+        seen.add(st.symbol);
+        return true;
+      }),
+    }))
+    .filter((t) => t.stocks.length >= 2);
+}
+
 export async function loadThemes(): Promise<NaverThemeStore> {
   if (cache) return cache;
   try {
@@ -171,7 +194,7 @@ export async function loadThemes(): Promise<NaverThemeStore> {
     cache = {
       fetchedAt: String(raw.fetchedAt ?? ""),
       themes: Array.isArray(raw.themes) ? raw.themes : [],
-      us: Array.isArray(raw.us) ? raw.us : [],
+      us: Array.isArray(raw.us) ? dedupeUs(raw.us) : [],
       usFetchedAt: String(raw.usFetchedAt ?? ""),
       etf: Array.isArray(raw.etf) ? raw.etf : [],
       etfFetchedAt: String(raw.etfFetchedAt ?? ""),
@@ -422,12 +445,19 @@ function toNum(v: unknown): number | null {
  */
 export async function fetchUsThemes(): Promise<UsTheme[]> {
   const byCode = new Map<string, UsTheme>();
+  /* 한 종목은 한 번만 — 쪽이 겹쳐도 두 번 세지 않는다 */
+  const seenSymbols = new Set<string>();
 
   for (const ex of US_EXCHANGES) {
     let page = 1;
     let total = Infinity;
     while ((page - 1) * US_PAGE < total) {
-      const url = `${US_API}${ex}/industry?page=${page}&pageSize=${US_PAGE}`;
+      /*
+       * **`marketValue`(시총 순)로 넘긴다** (2026-09-15). 예전 `industry` 목록은 정렬이 흔들려 쪽마다 같은 종목이
+       * 다시 나오고 절반쯤은 한 번도 안 나왔다(6,950줄 중 3,713종목). 시총 순은 쪽이 겹치지 않는다(실측 6쪽 0건).
+       * 응답 모양(업종·등락률·시총)은 같다.
+       */
+      const url = `${US_API}${ex}/marketValue?page=${page}&pageSize=${US_PAGE}`;
       try {
         const res = await fetch(url, { headers: { "User-Agent": UA } });
         if (!res.ok) {
@@ -440,7 +470,8 @@ export async function fetchUsThemes(): Promise<UsTheme[]> {
         for (const s of j.stocks ?? []) {
           const g = s.industryCodeType;
           const symbol = String(s.symbolCode ?? "").trim();
-          if (!g?.industryGroupKor || !symbol) continue;
+          if (!g?.industryGroupKor || !symbol || seenSymbols.has(symbol)) continue;
+          seenSymbols.add(symbol);
           const code = String(g.code ?? g.industryGroupKor);
           const t = byCode.get(code) ?? { code, name: g.industryGroupKor, stocks: [] };
           t.stocks.push({
@@ -470,6 +501,18 @@ export async function fetchUsThemes(): Promise<UsTheme[]> {
 export async function refreshUsThemes(): Promise<{ themes: number; stocks: number }> {
   const us = await fetchUsThemes();
   const prev = await loadThemes();
+  /*
+   * **프리마켓 전후엔 네이버가 등락률을 0.00 으로 되돌린다** (2026-09-15 실측, 한국 16:50 무렵 `PREOPEN`).
+   * 정규 회차(한국 07시대, 미국 마감 뒤)는 괜찮지만 손으로 누르면 그 시각일 수 있다. 등락률이 거의 다 0 이면
+   * 종목·업종 분류만 새로 받고 **등락률은 지난 값을 이어 쓴다** — 0 을 오늘 값으로 적지 않는다.
+   */
+  const all = us.flatMap((t) => t.stocks);
+  const zeros = all.filter((st) => !st.changeRate).length;
+  if (all.length > 0 && zeros / all.length > 0.8) {
+    const old = new Map(prev.us.flatMap((t) => t.stocks).map((st) => [st.symbol, st.changeRate]));
+    for (const st of all) st.changeRate = old.get(st.symbol) ?? null;
+    console.warn(`[naverThemes] 미국 등락률이 ${Math.round((zeros / all.length) * 100)}% 가 0 — 프리마켓 전후라 지난 값을 이어 쓴다`);
+  }
   const store: NaverThemeStore = { ...prev, us, usFetchedAt: new Date().toISOString() };
   await mkdir(DIR, { recursive: true });
   await writeFile(FILE, JSON.stringify(store), "utf-8");

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useMyTagsChanged } from "../myTagsBus";
 import { useSheetBack } from "../useSheetBack";
 import { api, normalizeStockCode, type EvaluatedTheme, type StockSearchResult } from "../api";
 import { GroupTiles } from "../components/GroupTiles";
@@ -94,6 +95,8 @@ export function CustomThemePage({
   }
 
   useEffect(() => load(), []);
+  /* 구성종목 시트 「＋ 내 태그」·종목 상세 #태그 에서 바꾸면 다시 읽는다 (2026-09-15) */
+  useMyTagsChanged(() => load());
 
   useEffect(() => {
     const q = query.trim();

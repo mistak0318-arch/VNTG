@@ -1693,6 +1693,9 @@ export const api = {
   themeBridge: (no: number) => getJson<{ bridge: ThemeBridge | null }>(`/api/market/theme-bridge/${no}`),
   /** 한미 짝 타일 — 국내 테마마다 대표 미국 업종 하나 (2026-09-15). 국내 등락은 themeStrength 로 붙인다 */
   themeBridgePairs: () => getJson<{ usAt: string; pairs: BridgePairRow[] }>("/api/market/theme-bridge/pairs"),
+  /** 미국 업종 하나의 대표 종목(시총 순) — 미국 짝 칸에서 업종을 누르면 (2026-09-15) */
+  themeBridgeUsIndustry: (code: string) =>
+    getJson<{ industry: UsIndustryTop | null }>(`/api/market/theme-bridge/us-industry/${encodeURIComponent(code)}`),
   /** 어젯밤 크게 움직인 미국 업종 → 붙은 국내 테마와 오늘 등락 (2026-09-15) */
   themeBridgeOvernight: () => getJson<{ usAt: string; rows: OvernightBridgeRow[] }>("/api/market/theme-bridge/overnight"),
   /** 미국 ETF 구성종목 — 섹터 MAP 타일을 눌렀을 때. 하루 캐시라 여닫아도 조회가 안 는다 */
@@ -1866,6 +1869,9 @@ export const api = {
     postJson<{ added: number; skipped: number; total: number }>(
       `/api/sector-flow/backfill?days=${days}`,
     ),
+  /** 내 태그 원본 — 이름·종목만, 계산 없이 빠르게 (같은 이름 확인용, 2026-09-15) */
+  customThemesRaw: () =>
+    getJson<{ themes: { id: string; name: string; codes: string[] }[] }>("/api/custom-themes/raw"),
   customThemeCreate: (t: {
     name: string;
     memo?: string;
@@ -6067,6 +6073,13 @@ export interface ThemeBridge {
     changeRate: number | null;
     by: { code: string; name: string }[];
   }[];
+}
+export interface UsIndustryTop {
+  code: string;
+  name: string;
+  changeRate: number | null;
+  total: number;
+  stocks: { symbol: string; name: string; changeRate: number | null; marketCap: number | null }[];
 }
 export interface BridgePairRow {
   no: number;

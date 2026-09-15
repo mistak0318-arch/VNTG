@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { notifyMyTagsChanged } from "../myTagsBus";
 import { api, type StockTag } from "../api";
 import { useListKeys } from "../useListKeys";
 
@@ -100,6 +101,7 @@ export function StockTags({ code, name }: { code: string; name: string }) {
       await api.tagAdd(code, clean);
       setQ("");
       load();
+      notifyMyTagsChanged(); // 떠 있는 「내 태그」 판·MAP 도 다시 읽게 (2026-09-15)
     } catch (e) {
       setErr(e instanceof Error ? e.message : "붙이기 실패");
     } finally {

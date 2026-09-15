@@ -5,6 +5,7 @@ import { api, type EvaluatedTheme, type SectorRow, type ThemeRow, type ThemeStre
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { PairTiles } from "../components/PairTiles";
 import { PAIR_OPEN_EVENT, takePendingPair } from "../pairNav";
+import { useMyTagsChanged } from "../myTagsBus";
 import { RefreshBar } from "../components/RefreshBar";
 import { useSection } from "../useSection";
 import { useCardOrder } from "../useCardOrder";
@@ -176,6 +177,8 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
   useEffect(() => {
     void loadMine();
   }, []);
+  /* 다른 자리에서 태그를 바꾸면 다시 읽는다 — 탭이 떠 있는 채로 남아 처음 한 번만 받던 것 (2026-09-15) */
+  useMyTagsChanged(() => void loadMine());
 
   const themes = useSection<{ top: ThemeRow[]; bottom: ThemeRow[] }>("themes", 180_000);
   const sectors = useSection<{ kospi: SectorRow[]; kosdaq: SectorRow[] }>("sectors", 180_000);

@@ -19037,3 +19037,37 @@ a.watch-btn { text-decoration: none; }
   .sheet-header:has(.cs-addtag) h2 { flex-basis: calc(100% - 140px); }
   .sheet-header .cs-addtag { order: 1; margin-right: 0; }
 }
+
+/* 「＋ 내 태그」 같은 이름 물음 창 (2026-09-15) */
+.cs-addtag-wrap { position: relative; display: inline-flex; flex: none; margin-left: auto; order: 1; }
+.cs-addtag-wrap .cs-addtag { margin-left: 0; }
+.cs-addtag-pop {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; width: min(270px, 78vw);
+  display: flex; flex-direction: column; gap: 6px; padding: 10px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.cs-addtag-q { font-size: 0.78rem; font-weight: 700; line-height: 1.35; }
+.cs-addtag-opt {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2);
+  color: var(--text); font: inherit; font-size: 0.76rem; text-align: left; cursor: pointer;
+}
+.cs-addtag-opt:hover:not(:disabled) { border-color: var(--blue); }
+.cs-addtag-opt:disabled { opacity: 0.55; cursor: default; }
+.cs-addtag-opt.cancel { background: transparent; color: var(--muted); text-align: center; }
+.cs-addtag-msg { position: absolute; right: 0; top: calc(100% + 4px); white-space: nowrap; font-size: 0.66rem; color: var(--muted); }
+@media (max-width: 720px) {
+  .sheet-header:has(.cs-addtag-wrap) h2 { flex-basis: calc(100% - 140px); }
+}
+
+/* 미국 짝 — 업종 누르면 종목 (2026-09-15) */
+button.tub-ind { font: inherit; font-size: 0.74rem; color: var(--text); cursor: pointer; }
+button.tub-ind:hover, button.tub-ind.on { border-color: var(--blue); }
+.tub-caret { font-size: 0.6rem; color: var(--muted); }
+.tub-us { margin: 0 0 0.4rem; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.tub-us-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 8px; }
+.tub-us-row { display: flex; align-items: baseline; gap: 5px; min-width: 0; padding: 3px 4px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 0.74rem; text-align: left; cursor: pointer; }
+.tub-us-row:hover { background: var(--panel-2); }
+.tub-us-row b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tub-us-row em { font-style: normal; font-weight: 700; margin-left: auto; white-space: nowrap; }
+button.tub-co-h { padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: 0.76rem; cursor: pointer; text-align: left; }
+button.tub-co-h:hover b { text-decoration: underline; }

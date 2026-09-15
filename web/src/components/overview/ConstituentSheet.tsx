@@ -5,6 +5,7 @@ import { SortableTh, useSortableTable } from "../../useSortableTable";
 import { WatchStar } from "../../useWatchedCodes";
 import { SuperMark } from "../../useSuperMarks";
 import { UsBridgeBlock } from "../UsBridgeBlock";
+import { notifyMyTagsChanged } from "../../myTagsBus";
 
 export interface ConstituentTarget {
   kind: "theme" | "sector" | "custom";
@@ -215,54 +216,111 @@ export function ConstituentSheet({
 /**
  * 이 테마의 구성종목을 **내 태그로 담는다** (2026-09-15).
  *
- * 누르면 곧바로 담긴다 — 벤티지가 「바로 추가」를 원했다. 이름은 테마 이름 그대로. 같은 이름의 태그가
- * 이미 있으면 새로 만들지 않고 **빠진 종목만 더한다**(서버가 같은 이름을 거절하므로 그 경우를 받아 합친다).
- * 태그는 종목 상세 메모 위 #태그와 같은 것이라, 담는 즉시 「내 태그」 MAP 에 뜬다.
+ * 누르면 곧바로 담긴다 — 벤티지가 「바로 추가」를 원했다. 이름은 테마 이름 그대로.
+ *
+ * **같은 이름이 이미 있으면 묻는다** (벤티지: "똑같은 이름이 겹치는 경우에 대해서도 처리 좀 해 줘").
+ * 조용히 합치면 내가 만든 태그에 남의 분류 종목이 섞여 들어가도 모른다. 그래서 작은 창을 띄워
+ * 「기존 태그에 빠진 N종목 더하기 · 새 이름(○○ 2)으로 만들기 · 그만두기」 중에 고르게 한다.
+ * 이름 확인은 계산 없는 원본 목록(`/custom-themes/raw`)으로 — 등락 계산이 붙은 목록은 첫 조회가 20초다.
+ *
+ * 담고 나면 `notifyMyTagsChanged` — 떠 있는 「내 태그」 판·MAP 이 다시 읽는다.
  */
 function AddToMyTag({ name, codes }: { name: string; codes: string[] }) {
-  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [state, setState] = useState<"idle" | "busy" | "ask" | "done" | "error">("idle");
   const [msg, setMsg] = useState("");
+  const [dup, setDup] = useState<{ id: string; have: string[]; more: string[]; freeName: string } | null>(null);
+  const uniq = [...new Set(codes)];
 
-  const add = async () => {
+  const finish = (m: string) => {
+    setState("done");
+    setMsg(m);
+    setDup(null);
+    notifyMyTagsChanged();
+  };
+  const fail = (e: unknown) => {
+    setState("error");
+    setMsg(e instanceof Error ? e.message : String(e));
+  };
+
+  const start = async () => {
     setState("busy");
-    const uniq = [...new Set(codes)];
     try {
-      await api.customThemeCreate({ name, codes: uniq, memo: "테마/업종 MAP 에서 담음" });
-      setState("done");
-      setMsg(`내 태그 「${name}」 · ${uniq.length}종목`);
-    } catch (e) {
-      const m = e instanceof Error ? e.message : String(e);
-      if (!/같은 이름/.test(m)) {
-        setState("error");
-        setMsg(m);
+      const r = await api.customThemesRaw();
+      const same = r.themes.find((t) => t.name === name);
+      if (!same) {
+        await api.customThemeCreate({ name, codes: uniq, memo: "테마/업종 MAP 에서 담음" });
+        finish(`내 태그 「${name}」 · ${uniq.length}종목`);
         return;
       }
-      /* 이미 있는 태그 — 빠진 종목만 더한다 */
-      try {
-        const r = await api.customThemes();
-        const t = r.themes.find((x) => x.name === name);
-        if (!t) throw new Error("같은 이름의 태그를 못 찾았습니다");
-        const have = new Set(t.stocks.map((s) => normalizeStockCode(s.code)));
-        const more = uniq.filter((c) => !have.has(c));
-        if (more.length > 0) await api.customThemeUpdate(t.id, { codes: [...have, ...more] });
-        setState("done");
-        setMsg(more.length > 0 ? `「${name}」에 ${more.length}종목 더함` : `「${name}」에 이미 다 있음`);
-      } catch (e2) {
-        setState("error");
-        setMsg(e2 instanceof Error ? e2.message : String(e2));
-      }
+      const have = same.codes.map((c) => normalizeStockCode(c));
+      const hs = new Set(have);
+      const names = new Set(r.themes.map((t) => t.name));
+      let n = 2;
+      while (names.has(`${name} ${n}`)) n += 1;
+      setDup({ id: same.id, have, more: uniq.filter((c) => !hs.has(c)), freeName: `${name} ${n}` });
+      setState("ask");
+    } catch (e) {
+      fail(e);
+    }
+  };
+
+  const merge = async () => {
+    if (!dup) return;
+    setState("busy");
+    try {
+      if (dup.more.length > 0) await api.customThemeUpdate(dup.id, { codes: [...dup.have, ...dup.more] });
+      finish(dup.more.length > 0 ? `「${name}」에 ${dup.more.length}종목 더함` : `「${name}」에 이미 다 있음`);
+    } catch (e) {
+      fail(e);
+    }
+  };
+
+  const makeNew = async () => {
+    if (!dup) return;
+    setState("busy");
+    try {
+      await api.customThemeCreate({ name: dup.freeName, codes: uniq, memo: "테마/업종 MAP 에서 담음" });
+      finish(`내 태그 「${dup.freeName}」 · ${uniq.length}종목`);
+    } catch (e) {
+      fail(e);
     }
   };
 
   return (
-    <button
-      type="button"
-      className={`cs-addtag${state === "done" ? " done" : ""}${state === "error" ? " err" : ""}`}
-      disabled={state === "busy" || state === "done"}
-      onClick={() => void add()}
-      title={msg || "이 테마의 구성종목을 내 태그로 담습니다 — 같은 이름이 있으면 빠진 종목만 더합니다"}
-    >
-      {state === "busy" ? "담는 중…" : state === "done" ? "✓ 내 태그" : state === "error" ? "다시 시도" : "＋ 내 태그"}
-    </button>
+    <span className="cs-addtag-wrap">
+      <button
+        type="button"
+        className={`cs-addtag${state === "done" ? " done" : ""}${state === "error" ? " err" : ""}`}
+        disabled={state === "busy" || state === "done" || state === "ask"}
+        onClick={() => void start()}
+        title={msg || "이 테마의 구성종목을 내 태그로 담습니다"}
+      >
+        {state === "busy" ? "담는 중…" : state === "done" ? "✓ 내 태그" : state === "error" ? "다시 시도" : "＋ 내 태그"}
+      </button>
+      {state === "ask" && dup && (
+        <span className="cs-addtag-pop" role="dialog" aria-label="같은 이름의 태그가 있습니다">
+          <span className="cs-addtag-q">
+            「{name}」 태그가 이미 있어요 ({dup.have.length}종목)
+          </span>
+          <button type="button" className="cs-addtag-opt" onClick={() => void merge()} disabled={dup.more.length === 0}>
+            {dup.more.length > 0 ? `기존 태그에 ${dup.more.length}종목 더하기` : "이미 다 들어 있어요"}
+          </button>
+          <button type="button" className="cs-addtag-opt" onClick={() => void makeNew()}>
+            새로 만들기 「{dup.freeName}」
+          </button>
+          <button
+            type="button"
+            className="cs-addtag-opt cancel"
+            onClick={() => {
+              setDup(null);
+              setState("idle");
+            }}
+          >
+            그만두기
+          </button>
+        </span>
+      )}
+      {state === "done" && <span className="cs-addtag-msg">{msg}</span>}
+    </span>
   );
 }

@@ -318,6 +318,24 @@ export async function overnightBridge(limit = 8): Promise<{ usAt: string; rows: 
   return { usAt: b.usAt, rows: rows.slice(0, limit) };
 }
 
+/**
+ * 미국 업종 하나의 대표 종목 — 시총 큰 차례 (2026-09-15 — 벤티지: 미국 짝 칸에서 "미국 종목도 나와 줘야 하는
+ * 거 아녀? 누르면?"). 네이버 미국 업종 파일에 이미 있는 값이라 조회가 없다.
+ */
+export async function usIndustryTop(
+  code: string,
+  n = 12,
+): Promise<{ code: string; name: string; changeRate: number | null; total: number; stocks: { symbol: string; name: string; changeRate: number | null; marketCap: number | null }[] } | null> {
+  const { b, store } = await bridge();
+  const ind = store.us.find((u) => u.code === code);
+  if (!ind) return null;
+  const stocks = [...ind.stocks]
+    .sort((x, y) => (y.marketCap ?? 0) - (x.marketCap ?? 0))
+    .slice(0, n)
+    .map((st) => ({ symbol: st.symbol, name: st.name, changeRate: st.changeRate, marketCap: st.marketCap }));
+  return { code, name: ind.name, changeRate: b.usRate.get(code) ?? null, total: ind.stocks.length, stocks };
+}
+
 export interface BridgePair {
   no: number;
   name: string;
