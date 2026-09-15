@@ -69,7 +69,7 @@ function marketStatus(): {
       /* 9/14~ 15:30~16:00 — 정규장은 끝났고 애프터마켓은 아직이다 */
       return {
         state: "closed",
-        label: "거래 없음 (장 마감~애프터 전)",
+        label: "KRX 휴장 · NXT 애프터 (KRX 16:00 재개)",
         live: false,
         venue: "none",
         session,

@@ -220,7 +220,8 @@ export function PriceHeader({
   const PHASE_LABEL: Record<KrPhase, string> = {
     pre: "NXT 프리마켓",
     regular: "정규장",
-    gap: "거래 없음 (16:00 애프터 개장)",
+    /* KRX 만 쉰다 — NXT 는 15:30 단일가·15:40 연속 (2026-09-16 키움 시간표) */
+    gap: "KRX 휴장 · NXT 애프터 (KRX 16:00)",
     after: krxInAfter ? "애프터마켓 (KRX·NXT)" : "NXT 애프터마켓",
     closed: "장 마감",
   };
@@ -276,7 +277,7 @@ export function PriceHeader({
    * 공백 구간에는 NXT 도 쉰다(9/14~ 15:30~16:00) — 마지막 값이 그대로 떠 있는데
    * 「거래 중」이라고 적혀 있으면 멈춘 화면을 고장으로 본다.
    */
-  const nxtWhen = phase === "closed" ? "20:00 마감" : phase === "gap" ? "16:00 재개" : "거래 중";
+  const nxtWhen = phase === "closed" ? "20:00 마감" : phase === "gap" ? "애프터 단일가·거래 중" : "거래 중";
 
   const sig = String(info.pre_sig ?? "");
   const sign = sigClass(sig);
@@ -517,7 +518,7 @@ export function PriceHeader({
           const other = rolled ? null : main.venue === "KRX" && showNxtLine && nxt ? { venue: "NXT", price: nxt.price } : main.venue === "NXT" && krx?.price != null ? { venue: "KRX", price: krx.price } : null;
           const liveRate = main.price > 0 ? ((main.price - regular.close) / regular.close) * 100 : null;
           const liveTitle =
-            phase === "pre" ? "NXT 프리" : phase === "gap" ? "NXT · 16:00 애프터 개장" : phase === "closed" ? (krxInAfter && afterTradable ? "애프터 종가" : "NXT 마감") : krxLive ? "애프터" : "NXT 애프터";
+            phase === "pre" ? "NXT 프리" : phase === "gap" ? "NXT 애프터" : phase === "closed" ? (krxInAfter && afterTradable ? "애프터 종가" : "NXT 마감") : krxLive ? "애프터" : "NXT 애프터";
           const otherWhen = other ? (other.venue === "KRX" ? krxWhen : nxtWhen) : "";
           return (
             <>

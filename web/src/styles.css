@@ -18950,12 +18950,23 @@ a.watch-btn { text-decoration: none; }
 .gt-tiles {
   display: grid;
   /* 얇게 — 한 줄에 셋(폰), 칸 높이 두 줄 (2026-09-15 「슬림하게」) */
-  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  /*
+   * 칸 폭은 rem (2026-09-16 — 벤티지: 태블릿에서 「▲1 ▼10」이 칸 밖으로 튀어나왔다). 92px 로 박혀 있어서
+   * 설정의 글자 크기를 키우면 글자만 커지고 칸은 그대로였다. 기본 글자(15px)에서 6.2rem = 예전 92px.
+   */
+  grid-template-columns: repeat(auto-fill, minmax(6.2rem, 1fr));
   gap: 5px;
   margin: 0 0 8px;
 }
+/*
+ * 넓은 화면은 칸을 넓게 — 좁은 칸이 일곱으로 서면 등락률과 ▲▼ 가 한 줄에 안 들어간다. 그룹 열다섯이면
+ * 일곱 칸이든 다섯 칸이든 세 줄이라 넓혀도 높이는 그대로다. 폰은 한 줄에 셋을 지키려고 좁은 칸 그대로.
+ */
+@media (min-width: 600px) {
+  .gt-tiles { grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); }
+}
 .gt-tile {
-  display: flex; flex-direction: column; align-items: stretch; gap: 0;
+  display: flex; flex-direction: column; align-items: stretch; gap: 0; overflow: hidden;
   min-width: 0; padding: 3px 7px 3px; text-align: left; cursor: pointer; font: inherit; color: var(--text);
   background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px;
   transition: transform 0.08s ease, border-color 0.12s ease;
@@ -18964,7 +18975,8 @@ a.watch-btn { text-decoration: none; }
 .gt-tile:active { transform: scale(0.98); }
 .gt-tile.on { border: 2px solid var(--accent, #e6a23c); padding: 2px 6px 2px; }
 .gt-tile-name { font-size: 0.72rem; font-weight: 700; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gt-tile-line { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
+/* 그래도 안 들어가는 칸(폰·큰 글씨)은 ▲▼ 만 아랫줄 오른쪽으로 내려간다 — 칸 밖으로는 안 나간다 */
+.gt-tile-line { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 4px; row-gap: 0; min-width: 0; }
 .gt-tile-rate { font-size: 0.86rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.25; white-space: nowrap; }
 .gt-tile-rate:not(.positive):not(.negative) { color: var(--muted); }
 .gt-tile-meta { margin-left: auto; display: inline-flex; gap: 2px; font-size: 0.6rem; white-space: nowrap; opacity: 0.85; }

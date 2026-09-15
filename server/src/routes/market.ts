@@ -164,7 +164,8 @@ export function createMarketRouter(client: KiwoomClient): Router {
       case "정규장":
         return "정규장";
       case "공백":
-        return "거래 없음";
+        /* KRX 만 쉰다 — NXT 애프터는 15:30 단일가·15:40 연속으로 돈다 (2026-09-16 키움 시간표) */
+        return "KRX 휴장 · NXT 애프터";
       case "애프터":
         return krxAfterMarket(date, m) ? "애프터마켓 (KRX·NXT)" : "NXT 애프터마켓";
       default:
