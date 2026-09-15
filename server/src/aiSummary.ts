@@ -337,10 +337,17 @@ export async function buildDigest(
 
   // 사용자 자신의 포지션 — 가장 중요한 맥락
   if (tracked.length > 0) {
-    lines.push("\n[사용자 관심종목 현황]");
+    /*
+     * ⚠️ **단위를 숫자마다 붙인다** (2026-09-16 — 벤티지: 데일리 리포트 AI 요약 "단위가 이상하게 표시되네").
+     * `foreign5`·`inst5` 는 키움 ka10060 금액이라 **백만원**이다. 예전엔 단위 없이 넘겼는데 바로 위 블록 제목이
+     * 「[투자자 순매수, 억원]」이라 AI 가 이것도 억으로 읽었다 — 한미반도체 외인 5일 약 −4,300억이
+     * 「−434,168억원」(43조, 시총보다 크다)으로 나갔다. 억으로 바꿔서(÷100) 「억」을 붙인다.
+     */
+    const eok = (millionWon: number) => `${fmt(Math.round(millionWon / 100))}억`;
+    lines.push("\n[사용자 관심종목 현황 — 외인·기관 5일 순매수는 억원]");
     for (const t of tracked.slice(0, 12)) {
       const ret = t.returnRate === null ? "-" : pct(t.returnRate);
-      lines.push(`${t.name} ${pct(t.changeRate)} (편입가 대비 ${ret}) 외인5일 ${fmt(t.foreign5)} / 기관5일 ${fmt(t.inst5)}${t.trendPass ? " 정배열" : ""}`);
+      lines.push(`${t.name} ${pct(t.changeRate)} (편입가 대비 ${ret}) 외인5일 ${eok(t.foreign5)} / 기관5일 ${eok(t.inst5)}${t.trendPass ? " 정배열" : ""}`);
     }
   }
 
