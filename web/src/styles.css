@@ -17978,9 +17978,30 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
 @keyframes nt-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
 @keyframes nt-out { to { opacity: 0; transform: translateX(20px); } }
 @media (prefers-reduced-motion: reduce) { .nt-toast, .nt-toast.out { animation: none; } }
-/* 폰에선 위로 — 아래는 엄지와 하단 바가 차지한다 */
+/* 옆으로 밀어 닫기 — 세로 스크롤은 브라우저 몫, 가로만 카드가 받는다 (2026-09-15) */
+.nt-toast { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.nt-more {
+  pointer-events: auto; align-self: flex-end;
+  padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--panel-2); color: var(--muted); font: inherit; font-size: 0.72rem; cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+/*
+ * 폰에선 위로 — 아래는 엄지와 하단 바가 차지한다.
+ *
+ * **얇게** (2026-09-15 — 벤티지: "알림 오는 거 모바일에서는 화면이 너무 커서 화면을 덮는다").
+ * 카드 하나가 제목 두 줄 + 본문 두 줄 + 「눌러서 보기」로 90px 가까이 됐고 다섯 장까지 쌓여
+ * 화면 윗부분을 통째로 덮었다. 제목·본문 한 줄씩, 「눌러서 보기」는 뺀다(카드 전체가 누르는 자리다).
+ * 장 수는 둘까지 — 나머지는 「N건 더」 한 줄(`NotifyToasts`).
+ */
 @media (max-width: 720px) {
-  .nt-host { right: 8px; left: 8px; bottom: auto; top: 8px; width: auto; }
+  .nt-host { right: 8px; left: 8px; bottom: auto; top: 6px; width: auto; gap: 4px; }
+  .nt-toast { border-left-width: 4px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
+  .nt-main { padding: 0.32rem 0.1rem 0.32rem 0.55rem; gap: 0; }
+  .nt-title { font-size: 0.8rem; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nt-body { font-size: 0.72rem; line-height: 1.3; -webkit-line-clamp: 1; }
+  .nt-go { display: none; }
+  .nt-x { width: 1.8rem; font-size: 0.72rem; }
   @keyframes nt-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
 }
 

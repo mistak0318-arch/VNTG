@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type React from "react";
 import { api, type Notice } from "../api";
 import { playSound, readNotifyPrefs, onNotifyPrefs, vibrate, type NotifyPrefs } from "../notifySound";
 
@@ -52,8 +53,20 @@ function wanted(n: Notice, p: NotifyPrefs): boolean {
   return true;
 }
 
+/** 폰 폭에서 한 번에 보이는 카드 수 */
+const NARROW_MAX = 2;
+const NARROW_Q = "(max-width: 720px)";
+
 export function NotifyToasts() {
   const [items, setItems] = useState<ToastItem[]>([]);
+  const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && window.matchMedia?.(NARROW_Q).matches);
+  useEffect(() => {
+    const mq = window.matchMedia?.(NARROW_Q);
+    if (!mq) return;
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, []);
   const seen = useRef<Set<string> | null>(null);
   const prefs = useRef<NotifyPrefs>(readNotifyPrefs());
 
@@ -122,28 +135,123 @@ export function NotifyToasts() {
   }, [items.map((t) => `${t.id}${t.out ? "x" : ""}`).join(",")]);
 
   if (items.length === 0) return null;
+  /* 폰에선 둘까지만 — 나머지는 「N건 더」 한 줄로 (2026-09-15) */
+  const shown = narrow ? items.slice(0, NARROW_MAX) : items;
+  const hidden = items.length - shown.length;
   return (
     <div className="nt-host" role="status" aria-live="polite">
-      {items.map((t) => (
-        <div key={t.id} className={`nt-toast ${t.level}${t.out ? " out" : ""}`}>
-          <button
-            type="button"
-            className="nt-main"
-            onClick={() => {
-              if (t.link) window.location.hash = t.link;
-              void api.noticesRead([t.id]).catch(() => undefined);
-              close(t.id);
-            }}
-          >
-            <b className="nt-title">{t.title}</b>
-            {t.body && <span className="nt-body">{t.body}</span>}
-            {t.link && <span className="nt-go">눌러서 보기 ›</span>}
-          </button>
-          <button type="button" className="nt-x" onClick={() => close(t.id)} aria-label="닫기">
-            ✕
-          </button>
-        </div>
+      {shown.map((t) => (
+        <ToastCard
+          key={t.id}
+          t={t}
+          onOpen={() => {
+            if (t.link) window.location.hash = t.link;
+            void api.noticesRead([t.id]).catch(() => undefined);
+            close(t.id);
+          }}
+          onClose={() => close(t.id)}
+        />
       ))}
+      {hidden > 0 && (
+        <button type="button" className="nt-more" onClick={() => items.forEach((t) => close(t.id))}>
+          알림 {hidden}건 더 · 모두 닫기
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** 이만큼 밀면 닫힌다(px) — 손가락이 조금 흔들린 것과 가르는 선 */
+const SWIPE_CLOSE = 70;
+/** 이만큼 넘게 움직였으면 누른 것이 아니라 민 것이다 — 놓을 때 「눌러서 보기」가 안 열리게 */
+const DRAG_SLOP = 8;
+
+/**
+ * **옆으로 밀면 사라진다** (2026-09-15 — 벤티지: "모바일에서는 화면이 너무 커서 화면을 덮는다
+ * 개선해 주고 옆으로 밀면 없어지게 해 줘").
+ *
+ * 포인터 이벤트 하나로 손가락·마우스를 같이 받는다. 세로 스크롤은 브라우저에 맡기고
+ * (`touch-action: pan-y`) 가로 움직임만 카드가 따라간다. 70px 넘게 밀고 놓으면 그 방향으로
+ * 날아가며 닫히고, 덜 밀었으면 제자리로 돌아온다. 민 뒤에 손을 떼면 클릭이 따라오는데,
+ * 그걸 「눌러서 보기」로 읽으면 알림을 치우려다 다른 화면으로 끌려간다 — 그래서 막는다.
+ */
+function ToastCard({ t, onOpen, onClose }: { t: ToastItem; onOpen: () => void; onClose: () => void }) {
+  const [dx, setDx] = useState(0);
+  const [flying, setFlying] = useState<0 | 1 | -1>(0);
+  const start = useRef<{ x: number; y: number; id: number } | null>(null);
+  const moved = useRef(false);
+
+  const onDown = (e: React.PointerEvent) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    start.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    moved.current = false;
+  };
+  const onMove = (e: React.PointerEvent) => {
+    const s = start.current;
+    if (!s || s.id !== e.pointerId) return;
+    const mx = e.clientX - s.x;
+    const my = e.clientY - s.y;
+    if (!moved.current) {
+      if (Math.abs(mx) < DRAG_SLOP) return;
+      /* 세로로 더 움직였으면 스크롤이다 — 카드는 가만히 */
+      if (Math.abs(my) > Math.abs(mx)) {
+        start.current = null;
+        return;
+      }
+      moved.current = true;
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    }
+    setDx(mx);
+  };
+  const onUp = () => {
+    if (!start.current) return;
+    start.current = null;
+    if (!moved.current) return;
+    if (Math.abs(dx) >= SWIPE_CLOSE) {
+      setFlying(dx > 0 ? 1 : -1);
+      window.setTimeout(onClose, 160);
+    } else {
+      setDx(0);
+    }
+  };
+
+  const style: React.CSSProperties = flying
+    ? { transform: `translateX(${flying * 110}%)`, opacity: 0, transition: "transform 0.16s ease-in, opacity 0.16s ease-in" }
+    : dx !== 0
+      ? { transform: `translateX(${dx}px)`, opacity: Math.max(0.25, 1 - Math.abs(dx) / 260), transition: "none" }
+      : { transition: "transform 0.18s ease-out, opacity 0.18s ease-out" };
+
+  return (
+    <div
+      className={`nt-toast ${t.level}${t.out ? " out" : ""}`}
+      style={style}
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerCancel={() => {
+        start.current = null;
+        setDx(0);
+      }}
+    >
+      <button
+        type="button"
+        className="nt-main"
+        onClick={(e) => {
+          if (moved.current) {
+            e.preventDefault();
+            moved.current = false;
+            return;
+          }
+          onOpen();
+        }}
+      >
+        <b className="nt-title">{t.title}</b>
+        {t.body && <span className="nt-body">{t.body}</span>}
+        {t.link && <span className="nt-go">눌러서 보기 ›</span>}
+      </button>
+      <button type="button" className="nt-x" onClick={onClose} aria-label="닫기">
+        ✕
+      </button>
     </div>
   );
 }
