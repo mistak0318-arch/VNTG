@@ -8,6 +8,7 @@ import { enabledUniverses } from "./universeConfig.js";
 import { MIN, afterMarketEra } from "./marketHours.js";
 import { isTradingDay } from "./tradingDay.js";
 import { getCisConfig } from "./cisConfig.js";
+import { loadDay } from "./cisJournal.js";
 
 /**
  * **종배 스캔 — 15:40 에 오늘 초록을 따로 잰다** (2026-09-15).
@@ -33,8 +34,9 @@ import { getCisConfig } from "./cisConfig.js";
  *
  * ## 왜 15:40 인가
  *
- * 15:30~16:00 은 어느 시장도 안 연다. 이 사이에 재면 오늘 일봉이 **정규장만으로** 굳어 있다 —
- * 신호등 표본·원장이 쓰는 「정규장 종가」와 같은 자다. 한 바퀴 15분 안팎이라 16:00 전후에 끝나고,
+ * 15:30~16:00 은 **KRX 가** 안 연다(애프터는 16:00 부터 — NXT 는 이때도 돌 수 있다). 신호등이 보는 일봉은
+ * KRX 것이라, 이 사이에 재면 오늘 일봉이 **정규장만으로** 굳어 있다 — 신호등 표본·원장이 쓰는
+ * 「정규장 종가」와 같은 자다. (2026-09-15 점검에서 「어느 시장도 안 연다」를 바로잡음) 한 바퀴 15분 안팎이라 16:00 전후에 끝나고,
  * 종배는 17:00(`eveningAt`)에 애프터 값으로 산다. 옛 흐름(15:40 원장 → 17:00 종배)과 같은 박자다.
  *
  * 수급 칸(`flow-*` 목록)은 원장 파일을 읽으므로 **어제까지의 수급**이다 — 그 목록들은 여러 날
@@ -89,14 +91,30 @@ export async function loadCloseBetScan(): Promise<CloseBetScan | null> {
   }
 }
 
-/** health.json 한 칸 — 개수와 시각뿐. 종목은 싣지 않는다 */
+/**
+ * health.json 한 칸 — 개수와 시각뿐. 종목은 싣지 않는다.
+ *
+ * **종배 저녁 일지도 같이** (2026-09-15 점검 — 17:00 종배가 스캔으로 샀는지를 밖에서 볼 길이 없었다).
+ * 썼는지·시장 문·후보 수·한 일 수만. 모의 장부라 계좌 값은 아니지만 종목 이름은 여기서도 안 싣는다.
+ */
 export async function closeBetScanHealth(): Promise<Record<string, unknown>> {
   const s = await loadCloseBetScan();
   const hm = (iso: string) => new Date(new Date(iso).getTime() + 9 * 3600_000).toISOString().slice(11, 16);
+  const today = kstNow().date;
+  const ev = (await loadDay(today, "close").catch(() => null))?.evening ?? null;
   return {
     진행: job.status === "running" ? `${job.done}/${job.total}` : job.status,
     ...(job.error ? { 오류: job.error } : {}),
     마지막: s ? { day: s.date, 시작: hm(s.startedAt), 끝: hm(s.finishedAt), 목록: s.lists, 합집합: s.universe, 초록: s.green.length } : null,
+    종배저녁: ev
+      ? {
+          썼다: hm(ev.at),
+          시장문: ev.market ? (ev.market.ok ? "열림" : "닫힘") : "모름",
+          사유: String(ev.market?.reason ?? "").slice(0, 90),
+          후보: ev.candidates.length,
+          한일: ev.actions.length,
+        }
+      : "아직 안 씀",
   };
 }
 

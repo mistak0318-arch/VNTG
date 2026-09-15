@@ -1,3 +1,6 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { afterMarketEra } from "./marketHours.js";
 import { isTradingDay } from "./tradingDay.js";
@@ -17,7 +20,13 @@ import { isTradingDay } from "./tradingDay.js";
  *   · 한 번도 안 바뀌면 → 정규장 수급, 잠정치도 없다
  *
  * 대형주 셋(거래가 늘 있다)만. 조회 열두 번. health.json 에는 **개수만** — 종목·금액은 싣지 않는다.
+ *
+ * ⚠️ **찍은 값은 파일에 둔다** (2026-09-15 점검). 처음엔 메모리에만 두었는데 그날 17:04 배포로 서버가 다시 뜨면서
+ * 15:45 기준값이 날아갔다 — 기준이 없으면 「한 번 뛰었나 계속 바뀌나」를 못 가른다. `data/flowAfterProbe.json`
+ * (그날 것만).
  */
+const here = dirname(fileURLToPath(import.meta.url));
+const FILE = join(here, "..", "data", "flowAfterProbe.json");
 
 const CODES = ["005930", "000660", "005380"];
 const SLOTS = ["15:45", "17:00", "18:30", "20:05"] as const;
@@ -32,6 +41,27 @@ interface Snap {
 let day = "";
 const taken = new Map<Slot, Map<string, Snap>>();
 const errors: string[] = [];
+let restored = false;
+
+async function restore(): Promise<void> {
+  if (restored) return;
+  restored = true;
+  try {
+    const raw = JSON.parse(await readFile(FILE, "utf-8")) as { day: string; taken: Record<string, Record<string, Snap>> };
+    if (raw.day !== kst().date) return;
+    day = raw.day;
+    for (const [slot, m] of Object.entries(raw.taken ?? {})) taken.set(slot as Slot, new Map(Object.entries(m)));
+  } catch {
+    /* 없으면 처음이다 */
+  }
+}
+
+async function persist(): Promise<void> {
+  const obj: Record<string, Record<string, Snap>> = {};
+  for (const [slot, m] of taken) obj[slot] = Object.fromEntries(m);
+  await mkdir(dirname(FILE), { recursive: true });
+  await writeFile(FILE, JSON.stringify({ day, taken: obj }), "utf-8");
+}
 
 function kst(): { date: string; hm: string } {
   const iso = new Date(Date.now() + 9 * 3600_000).toISOString();
@@ -57,6 +87,7 @@ async function snapOne(client: KiwoomClient, code: string, ymd: string): Promise
 }
 
 async function tick(client: KiwoomClient): Promise<void> {
+  await restore();
   const t = kst();
   if (!afterMarketEra(t.date) || !isTradingDay()) return;
   if (t.date !== day) {
@@ -79,6 +110,7 @@ async function tick(client: KiwoomClient): Promise<void> {
     await new Promise((r) => setTimeout(r, 300));
   }
   taken.set(due, got);
+  await persist().catch(() => undefined);
 }
 
 /** health.json 한 칸 — 회차마다 앞 회차와 달라진 종목 수. 종목·금액은 없다 */
@@ -113,6 +145,7 @@ export function flowAfterSnapshot(): Record<string, unknown> {
 let timer: ReturnType<typeof setInterval> | null = null;
 export function startFlowAfterProbe(client: KiwoomClient): void {
   if (timer) return;
+  void restore(); // health.json 이 다음 틱 전에도 되살린 값을 보이게
   timer = setInterval(() => void tick(client).catch(() => undefined), 60_000);
   timer.unref?.();
 }
