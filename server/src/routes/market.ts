@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { usRank, type UsExchange, type UsRankKind } from "../usRank.js";
 import { bridgeForTheme, bridgePairs, overnightBridge, usIndustryTop } from "../themeBridge.js";
 import { clearHidden, listHidden, setHidden } from "../hiddenThemes.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -1096,6 +1097,24 @@ export function createMarketRouter(client: KiwoomClient): Router {
         return;
       }
       res.json({ bridge: await bridgeForTheme(no) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * 시세분석(해외) — 미국 순위판 (2026-09-16, usRank.ts). 네이버 해외주식 거래소 목록을 합쳐 다시 줄 세운다.
+   * kind: value(거래대금) · volume(거래량) · cap(시가총액) · up · down, ex: all · NASDAQ · NYSE · AMEX, minValue: 달러
+   */
+  router.get("/us-rank", async (req, res, next) => {
+    try {
+      const kinds = ["value", "volume", "cap", "up", "down"] as const;
+      const kind = (kinds as readonly string[]).includes(String(req.query.kind)) ? (String(req.query.kind) as UsRankKind) : "value";
+      const exRaw = String(req.query.ex ?? "all").toUpperCase();
+      const ex = (["NASDAQ", "NYSE", "AMEX"].includes(exRaw) ? exRaw : "all") as UsExchange | "all";
+      const minValue = Number(req.query.minValue ?? 0) || 0;
+      const limit = Number(req.query.limit ?? 50) || 50;
+      res.json(await usRank({ kind, ex, minValue, limit }));
     } catch (err) {
       next(err);
     }

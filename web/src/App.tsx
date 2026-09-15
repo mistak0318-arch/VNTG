@@ -26,6 +26,7 @@ import { TabTitleContext } from "./tabTitle";
 import { SuperDashboardPage } from "./pages/SuperDashboardPage";
 import { ListTrackPage } from "./pages/ListTrackPage";
 import { UsWatchPage } from "./pages/UsWatchPage";
+import { UsScreenerPage } from "./pages/UsScreenerPage";
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
 import { AccountInfoPage } from "./pages/AccountInfoPage";
@@ -105,6 +106,7 @@ type Tab =
   | "telegram"
   | "stockAnalysis"
   | "screener"
+  | "usScreener"
   | "volume"
   | "sameNet"
   | "continuous"
@@ -177,6 +179,8 @@ const MENU: {
        */
       { key: "boardWin", label: "보드 새창 열기", icon: "🗔" },
       { key: "screener", label: "시세분석", icon: "🔬" },
+      /* 미국 순위판 — 거래대금·거래량·시가총액·상승·하락 (2026-09-16, usRank · 네이버 실시간) */
+      { key: "usScreener", label: "시세분석(해외)", icon: "🌎" },
       /*
        * 조건 검색 (2026-09-01) — 증권사 조건검색식처럼 신호등 기준을 통과/미달로 쓴다.
        *
@@ -736,6 +740,7 @@ export default function App() {
       case "calendar": return <CalendarPage />;
       case "telegram": return <TelegramPage onSelectStock={onSelectStock} />;
       case "screener": return <ScreenerPage onSelectStock={onSelectStock} />;
+      case "usScreener": return <UsScreenerPage />;
       case "stockAnalysis": return <StockAnalysisPage stock={selected} onSelectStock={openAnalysis} />;
       case "volume": return <VolumeRankingPage onSelectStock={onSelectStock} />;
       case "sameNet": return <SameNetTradeRankingPage onSelectStock={onSelectStock} />;

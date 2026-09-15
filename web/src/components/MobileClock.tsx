@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MarketHoursPopover } from "./MarketHoursPopover";
 
 /**
  * 모바일 머리의 **시각** (2026-09-10 — 벤티지: "시간을 맨 위에 써줘 강조표시로").
@@ -27,10 +28,17 @@ export function MobileClock() {
    * 시각은 한국인데 날짜는 현지가 되어 자정 언저리에 하루가 어긋난다.
    */
   const md = now.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric", timeZone: "Asia/Seoul" }).replace(/\.\s*/g, "/").replace(/\/$/, "");
+  /* 누르면 장 시간표 (2026-09-16 — 벤티지: "시간 누르면 국내·미국 장 구분 시간 … 썸머타임 … 미니 팝업") */
+  const [open, setOpen] = useState(false);
   return (
-    <time className="mobile-clock" dateTime={now.toISOString()} title="기기 시계 (KST)">
-      {hh}
-      <i className="mc-date">({md})</i>
-    </time>
+    <>
+      <button type="button" className="mobile-clock mc-btn" onClick={() => setOpen((v) => !v)} title="기기 시계 (KST) · 누르면 장 시간표">
+        <time dateTime={now.toISOString()}>
+          {hh}
+          <i className="mc-date">({md})</i>
+        </time>
+      </button>
+      {open && <MarketHoursPopover onClose={() => setOpen(false)} />}
+    </>
   );
 }

@@ -1691,6 +1691,9 @@ export const api = {
   themeLinks: () => getJson<{ pairs: ThemeLink[]; note: string }>("/api/market/theme-links"),
   /** 국내 테마 하나의 미국 짝 — 업종(회사 언급·낱말)과 편입 사유에 나온 미국 회사 (2026-09-15) */
   themeBridge: (no: number) => getJson<{ bridge: ThemeBridge | null }>(`/api/market/theme-bridge/${no}`),
+  /** 시세분석(해외) — 미국 순위판(거래대금·거래량·시가총액·상승·하락). 네이버 실시간, 거래소 합침 (2026-09-16) */
+  usRank: (kind: UsRankKind, ex: "all" | "NASDAQ" | "NYSE" | "AMEX" = "all", minValue = 0) =>
+    getJson<UsRankResult>(`/api/market/us-rank?kind=${kind}&ex=${ex}&minValue=${minValue}&limit=50`),
   /** 한미 짝 타일 — 국내 테마마다 대표 미국 업종 하나 (2026-09-15). 국내 등락은 themeStrength 로 붙인다 */
   themeBridgePairs: () => getJson<{ usAt: string; pairs: BridgePairRow[] }>("/api/market/theme-bridge/pairs"),
   /** 미국 업종 하나의 대표 종목(시총 순) — 미국 짝 칸에서 업종을 누르면 (2026-09-15) */
@@ -6073,6 +6076,35 @@ export interface ThemeBridge {
     changeRate: number | null;
     by: { code: string; name: string }[];
   }[];
+}
+export type UsRankKind = "value" | "volume" | "cap" | "up" | "down";
+export interface UsRankRow {
+  symbol: string;
+  reuters: string;
+  name: string;
+  nameEng: string;
+  exchange: "NASDAQ" | "NYSE" | "AMEX";
+  kind: string;
+  price: number | null;
+  change: number | null;
+  rate: number | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+  /** 거래대금(달러) */
+  value: number | null;
+  /** 시가총액(달러) */
+  cap: number | null;
+  industry: string | null;
+  over: { session: "pre" | "after"; price: number | null; rate: number | null } | null;
+  tradedAt: string | null;
+}
+export interface UsRankResult {
+  kind: UsRankKind;
+  at: number;
+  marketStatus: string;
+  rows: UsRankRow[];
 }
 export interface UsIndustryTop {
   code: string;
