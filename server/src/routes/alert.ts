@@ -32,6 +32,8 @@ export function createAlertRouter(client: KiwoomClient): Router {
 
   router.get("/telegram-rooms", (_req, res) => {
     res.json({
+      /* 개발 PC 는 TELEGRAM_ENABLED=0 으로 꺼 둔다 — 화면이 「이 서버는 안 보냄」을 알 수 있게 (2026-09-16) */
+      sendingEnabled: process.env.TELEGRAM_ENABLED !== "0",
       channels: telegramChannelStatus(),
       envRooms: telegramEnvRooms(),
       store: readRooms(),
