@@ -46,16 +46,44 @@ async function naver<T>(path: string, feature: string, init?: { body: unknown })
 
 /** 캐시 — 신선하면 그대로, 낡았으면 새로 받고, 못 받으면 옛 값에 stale 을 붙인다 */
 const store = new Map<string, { at: number; data: unknown }>();
+/** 「비어 있다」 — 배열이 비었거나, 물건인데 배열 칸이 전부 비었거나(리서치처럼 칸이 여럿인 것) */
+function isEmptyPayload(v: unknown): boolean {
+  if (Array.isArray(v)) return v.length === 0;
+  if (v && typeof v === "object") {
+    const arrs = Object.values(v as Record<string, unknown>).filter(Array.isArray);
+    if (arrs.length > 0) return arrs.every((a) => (a as unknown[]).length === 0);
+    const objs = Object.values(v as Record<string, unknown>).filter((x) => x && typeof x === "object");
+    if (objs.length > 0) return objs.every(isEmptyPayload);
+  }
+  return v === null || v === undefined;
+}
+
+/**
+ * 캐시 + 옛 값 버티기.
+ *
+ * ⚠️ **빈 성공 응답도 옛 값을 못 덮는다** (2026-09-16 점검). 예외만 막고 있었는데, 네이버는 잠깐 빈 배열을
+ * 200 으로 주는 일이 있다(9/15 테마가 그렇게 지워졌다). 옛 값이 있으면 그것을 `stale` 로 돌려주고, 처음부터
+ * 비었으면 빈 값을 그대로 준다 — 「없다」와 「못 받았다」는 다르지만 첫 응답이 빈 건 가릴 방법이 없다.
+ */
 async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<{ data: T; at: number; stale: boolean }> {
-  const c = store.get(key);
-  if (c && Date.now() - c.at < ttlMs) return { data: c.data as T, at: c.at, stale: false };
+  const hit = store.get(key) as { data: T; at: number } | undefined;
+  if (hit && Date.now() - hit.at < ttlMs) return { data: hit.data, at: hit.at, stale: false };
   try {
     const data = await fn();
-    store.set(key, { at: Date.now(), data });
+    if (hit && isEmptyPayload(data) && !isEmptyPayload(hit.data)) {
+      console.warn(`[naver] ${key} — 빈 응답이라 옛 값을 지킨다`);
+      return { data: hit.data, at: hit.at, stale: true };
+    }
+    store.set(key, { data, at: Date.now() });
+    /* 날짜가 든 열쇠(cal:…, npay:…)가 끝없이 쌓이지 않게 */
+    if (store.size > 200) {
+      const oldest = [...store.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, 50);
+      for (const [k] of oldest) store.delete(k);
+    }
     return { data, at: Date.now(), stale: false };
-  } catch (e) {
-    if (c) return { data: c.data as T, at: c.at, stale: true };
-    throw e;
+  } catch (err) {
+    if (hit) return { data: hit.data, at: hit.at, stale: true };
+    throw err;
   }
 }
 

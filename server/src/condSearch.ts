@@ -164,8 +164,10 @@ export function linesOf(q: CondQuery): CondLine[] {
 export interface CondHit {
   code: string;
   name: string;
-  price: number;
-  changeRate: number;
+  /** 시세를 모르면 null — 마크 모집단은 스냅샷을 새로 안 만들어 장 뒤엔 비어 있을 수 있다 (2026-09-16) */
+  price: number | null;
+  changeRate: number | null;
+  /** 백만원 — `Candidate.tradeValue` 와 같은 단위 */
   tradeValue: number;
   /** 시가총액(억원) — 못 내면 null */
   marketCap: number | null;
@@ -343,12 +345,17 @@ async function markUniverse(client: KiwoomClient, market: string): Promise<Candi
     if (want && s && s.market !== want) continue;
     /* 스냅샷이 없으면 시장을 못 가린다 — 전체(000)일 때만 그대로 담는다 */
     if (want && !s) continue;
+    /*
+     * 시세를 모르면 **모른다고 둔다** — 0원·0.00% 로 찍으면 07:26 에 났던 그 화면이다. `Candidate` 형은
+     * 숫자라 여기서는 NaN 으로 두고 결과(`CondHit`)를 만들 때 null 로 바꾼다.
+     * 거래대금은 `Candidate` 약속대로 **백만원**(마크는 억이라 ×100).
+     */
     out.push({
       code,
       name: e?.name ?? s?.name ?? code,
-      price: s?.price ?? 0,
-      changeRate: s?.changeRate ?? 0,
-      tradeValue: m.volEok ?? s?.tradeValue ?? 0,
+      price: s?.price ?? NaN,
+      changeRate: s?.changeRate ?? NaN,
+      tradeValue: m.volEok !== null ? m.volEok * 100 : s?.tradeValue !== undefined && s.tradeValue !== null ? s.tradeValue * 100 : 0,
     });
   }
   return out;
@@ -495,8 +502,8 @@ async function run(client: KiwoomClient, q: CondQuery, job: CondJob): Promise<vo
         job.results.push({
           code: c.code,
           name: c.name,
-          price: c.price,
-          changeRate: c.changeRate,
+          price: Number.isFinite(c.price) ? c.price : null,
+          changeRate: Number.isFinite(c.changeRate) ? c.changeRate : null,
           tradeValue: c.tradeValue,
           marketCap: capOf(c),
           matched,

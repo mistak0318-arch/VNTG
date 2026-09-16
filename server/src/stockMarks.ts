@@ -87,18 +87,18 @@ export interface StockMark {
   prog5: number | null;
   /** 외국인 지분율 변화(20일, %p) */
   fgnRatioChg: number | null;
-  /** 🌟 슈퍼신호등 (활성) */
-  super: boolean;
+  /** 🌟 슈퍼신호등 (활성). 슈퍼 원장을 못 읽었으면 null — 「없다」로 굳히지 않는다 */
+  super: boolean | null;
   /** 🌈 무지개 — 문턱 일수 이상 계속 걸린다 */
-  rainbow: boolean;
+  rainbow: boolean | null;
   /** ⚡ 교차 — 주도주 태그를 달았던 슈퍼신호등 */
-  cross: boolean;
-  /** 🔥 쏠림 경보 열쇠들 — `turnover`·`range`·`volRatio`·`gap`·`volat` */
-  hot: string[];
-  /** ⏳ 늦음 경보 열쇠들 — `rs20`·`rs60`·`lo60`. **약세장에서만** 찬다 */
-  late: string[];
-  /** 그중 **탈락(veto)** 짜리가 하나라도 있나 — σ20 7%↑·진폭 12%↑·약세장 RS60·저점 +50% */
-  kill: boolean;
+  cross: boolean | null;
+  /** 🔥 쏠림 경보 열쇠들 — `turnover`·`range`·`volRatio`·`gap`·`volat`. 일봉이 21봉 미만이면 null(못 잼) */
+  hot: string[] | null;
+  /** ⏳ 늦음 경보 열쇠들 — `rs20`·`rs60`·`lo60`. **약세장에서만** 찬다. 일봉 61봉 미만이면 null */
+  late: string[] | null;
+  /** 그중 **탈락(veto)** 짜리가 하나라도 있나 — σ20 7%↑·진폭 12%↑·약세장 RS60·저점 +50%. 못 쟀으면 null */
+  kill: boolean | null;
   /** 시가총액(억) */
   capEok: number | null;
 }
@@ -116,8 +116,8 @@ export interface MarksFile {
 /* 세는 법                                                             */
 /* ------------------------------------------------------------------ */
 
-/** 백만원 → 억. 원장의 수급·프로그램은 백만원 단위다 */
-const eok = (v: number) => Math.round(v / 100);
+/** 백만원 → 억. 원장의 수급·프로그램은 백만원 단위다. `-0` 은 0 으로 — `-0 >= 0` 이 참이라 「순매수」 조건이 소액 순매도를 통과시켰다 */
+const eok = (v: number) => Math.round(v / 100) || 0;
 
 /** 한 칸이라도 값이 있어야 합을 낸다 — 전부 null 이면 「모른다」 */
 function sum(rows: FlowRow[], pick: (r: FlowRow) => number | null): number | null {
@@ -137,6 +137,8 @@ const smartOf = (r: FlowRow): number | null => {
  */
 function streak(rows: FlowRow[], pick: (r: FlowRow) => number | null): number | null {
   if (rows.length === 0) return null;
+  /* 마지막 날을 못 받았으면 **모른다** — 0 을 돌려주면 「연속 ≤ 2」 조건이 모르는 종목을 통과시킨다 */
+  if (pick(rows[rows.length - 1]) === null) return null;
   let n = 0;
   for (let i = rows.length - 1; i >= 0; i--) {
     const v = pick(rows[i]);
@@ -194,7 +196,8 @@ export async function buildStockMarks(client: KiwoomClient): Promise<{ day: stri
      * 🌟🌈⚡ 는 **이미 있는 색인을 그대로 쓴다** (`superMarkIndex`) — 화면의 SuperMark 가 보는 그것이다.
      * 여기서 원장을 다시 읽어 판정하면 「목록에서는 무지개인데 조건 검색에서는 아닌」 일이 생긴다.
      */
-    const superOf = await superMarkIndex().catch(() => new Map());
+    /* 못 읽으면 null — 2,600종목에 「슈퍼 아님」을 사실처럼 적으면 `mkSuper fail` 이 전 종목을 통과시킨다 */
+    const superOf = await superMarkIndex().catch(() => null);
 
     /* 경보에 쓸 것 — **전부 한 번씩만** 구한다. 종목마다 구하면 2,600번이다 */
     const sharesOf = await getSharesMap(client).catch(() => null);
@@ -298,7 +301,7 @@ export async function buildStockMarks(client: KiwoomClient): Promise<{ day: stri
       const capEok = shares > 0 && todayBar && todayBar.c > 0 ? Math.round((shares * todayBar.c) / 1e8) : 0;
       const al = computeAlerts({ chartRows, tradeEok: volEok ?? 0, capEok, regime, market: mktRet });
 
-      const sup = superOf.get(code);
+      const sup = superOf?.get(code);
       marks[code] = {
         twin,
         fgn3,
@@ -316,13 +319,14 @@ export async function buildStockMarks(client: KiwoomClient): Promise<{ day: stri
         shortCooling,
         prog5,
         fgnRatioChg: fgnRatioChg === null ? null : Math.round(fgnRatioChg * 100) / 100,
-        hot: al.hot.map((a) => a.key),
-        late: al.late.map((a) => a.key),
-        kill: killAlerts(al).length > 0,
+        /* 봉이 모자라면 경보를 「못 잰 것」으로 — computeAlerts 는 조용히 빈 결과를 주므로 여기서 가른다 */
+        hot: bs.length >= 21 ? al.hot.map((a) => a.key) : null,
+        late: bs.length >= 61 ? al.late.map((a) => a.key) : null,
+        kill: bs.length >= 21 ? killAlerts(al).length > 0 : null,
         capEok: capEok > 0 ? capEok : null,
-        super: sup?.super === true,
-        rainbow: sup?.rainbow === true,
-        cross: sup?.cross === true,
+        super: superOf ? sup?.super === true : null,
+        rainbow: superOf ? sup?.rainbow === true : null,
+        cross: superOf ? sup?.cross === true : null,
       };
       progress.marked += 1;
     }

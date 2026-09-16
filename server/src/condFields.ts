@@ -892,8 +892,8 @@ export async function ownValues(code: string, keys: Set<string>): Promise<OwnVal
       setFlag("mkSuper", m.super);
       setFlag("mkRainbow", m.rainbow);
       setFlag("mkCross", m.cross);
-      setFlag("mkHot", m.hot.length > 0);
-      setFlag("mkLate", m.late.length > 0);
+      setFlag("mkHot", m.hot === null ? null : m.hot.length > 0);
+      setFlag("mkLate", m.late === null ? null : m.late.length > 0);
       setFlag("mkKill", m.kill);
     }
   }

@@ -559,7 +559,7 @@ ${f.cost ?? ""}`}
               {job.status === "running" ? "찾는 중" : "결과"} — {job.results.length}종목
             </b>
             <span className="pt-n">
-              {job.query.limit}개 중 {job.prefiltered}개를 검사
+              {Math.max(job.query.limit, job.prefiltered)}개 중 {job.prefiltered}개를 검사
               {job.prefiltered < job.query.limit && " (시총·시장으로 미리 걸렀습니다)"}
             </span>
             {job.results.length > 0 && (
@@ -603,10 +603,9 @@ ${f.cost ?? ""}`}
                           <SuperMark code={r.code} />
                         </td>
                         <td>{r.name}</td>
-                        <td className="num">{fmtNum(r.price)}</td>
-                        <td className={`num ${signClass(r.changeRate)}`}>
-                          {r.changeRate > 0 ? "+" : ""}
-                          {r.changeRate.toFixed(2)}%
+                        <td className="num">{r.price === null ? "-" : fmtNum(r.price)}</td>
+                        <td className={`num ${r.changeRate === null ? "" : signClass(r.changeRate)}`}>
+                          {r.changeRate === null ? "-" : `${r.changeRate > 0 ? "+" : ""}${r.changeRate.toFixed(2)}%`}
                           {r.stale && <i className="scr-stale">전일</i>}
                         </td>
                         <td className="num">

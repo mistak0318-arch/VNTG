@@ -432,7 +432,13 @@ export async function loadRegularCloses(date: string): Promise<Map<string, numbe
  * 실패한 종목은 건너뛰고 계속한다 — 하나 때문에 열 분짜리 작업이 없던 일이 되면
  * 그게 더 나쁘다. 이미 받아 둔 종목의 값은 실패해도 지우지 않는다.
  */
-export async function buildCloses(client: KiwoomClient): Promise<Store> {
+/**
+ * @param opts.force **오늘 이미 받은 종목도 다시 받는다** (2026-09-16 점검에서 추가).
+ *   아래 `doneToday` 는 재시작 이어받기용 가드인데, 15:55 회차가 `builtAt` 을 오늘로 박아 두면
+ *   20:10 「일봉 마무리」가 **전 종목을 건너뛰고 즉시 끝났다** — 애프터 시·고·저·거래량이 영영 안 들어오고
+ *   `ca`(애프터 종가)도 한 번도 안 채워지는데 「✅ 2,8xx종목」으로 성공처럼 남았다. 마무리 회차는 force 다.
+ */
+export async function buildCloses(client: KiwoomClient, opts: { force?: boolean } = {}): Promise<Store> {
   if (running) return running;
   running = (async () => {
     const themes = await loadThemes();
@@ -493,7 +499,7 @@ export async function buildCloses(client: KiwoomClient): Promise<Store> {
      */
     const todayKey = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
     const doneToday = new Set(
-      prev.builtAt.slice(0, 10) === todayKey ? Object.keys(prev.bars ?? {}) : [],
+      !opts.force && prev.builtAt.slice(0, 10) === todayKey ? Object.keys(prev.bars ?? {}) : [],
     );
     /*
      * 9/14 부터는 **오늘 줄만** 정규장 종가를 지킨다 (2026-09-12) — `mergeBars` 머리 주석 참고.

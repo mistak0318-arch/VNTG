@@ -439,6 +439,15 @@ export async function runAfterClose(
     return run ?? { day, startedAt: "", running: false, steps: [] };
   }
   const isRetry = /^재시도/.test(reason ?? "");
+  /*
+   * **마무리 회차인가** (2026-09-16 점검). 정규 회차의 상태(끝난 시각·실패 단계)를 **덮으면 안 된다**:
+   * 처음 만든 판은 시작할 때 `finishedAt: null`·`failedSteps: []` 로 새로 써서, 20:10 뒤엔 ①일봉·②원장이
+   * 실패했어도 `실패: []` 로 보이고 재시작 복구도 그냥 지나갔다. 그리고 마무리가 도는 동안·죽은 뒤엔
+   * `afterCloseDoneToday()` 가 거짓이 돼 **밤 그리드와 21:30 표본 그물이 그날 안 돌았다.**
+   * 마무리는 정규 회차의 finishedAt 을 그대로 두고, 실패 목록만 제 것을 덧댄다.
+   */
+  const isWrap = !!only && only.length > 0 && only.every((k) => WRAP_KEYS.has(k));
+  const partial = !!only && only.length > 0;
 
   /* `only` 를 안 주면 **마무리 단계를 뺀** 전부 — 그 둘은 20:10 에 따로 돈다 */
   const want = (k: string) => (!only || only.length === 0 ? !WRAP_KEYS.has(k) : only.includes(k));
@@ -453,13 +462,16 @@ export async function runAfterClose(
   };
   await saveHistory().catch(() => undefined);
   /* (2026-09-10 전수 점검 F) 재시도면 오늘 상태(실패 목록·횟수)를 이어 쓰고, 새 회차면 새로 시작한다 */
+  const sameDay = prevState?.day === day;
   await saveState({
     day,
-    startedAt: run.startedAt,
-    finishedAt: null,
-    failedSteps: isRetry && prevState?.day === day ? prevState.failedSteps : [],
-    retryTried: isRetry && prevState?.day === day ? prevState.retryTried : 0,
-  }).catch(() => undefined);
+    startedAt: isWrap && sameDay && prevState ? prevState.startedAt : run.startedAt,
+    /* 마무리 회차는 정규 회차의 「끝났다」를 지우지 않는다 */
+    finishedAt: isWrap && sameDay && prevState ? prevState.finishedAt : null,
+    /* 부분 회차(재시도·마무리·손으로 고른 것)는 오늘 실패 목록을 이어 쓴다 — 새 회차만 비운다 */
+    failedSteps: partial && sameDay && prevState ? prevState.failedSteps : [],
+    retryTried: partial && sameDay && prevState ? prevState.retryTried : 0,
+  }).catch((e) => console.error("[afterClose] 상태 파일 못 씀 —", e instanceof Error ? e.message : e));
 
   /*
    * ## **시작할 때도 알린다** (2026-09-02)
@@ -722,7 +734,8 @@ export async function runAfterClose(
       "barsFinal",
       "일봉 마무리 (애프터 포함)",
       async () => {
-        const s2 = await buildCloses(client);
+        /* force — 15:55 회차가 오늘 것을 박아 둔 뒤라 안 주면 전 종목을 건너뛰고 즉시 끝난다 */
+        const s2 = await buildCloses(client, { force: true });
         return `${Object.keys(s2.bars ?? {}).length}종목 · 종가는 정규장 값으로 지킴`;
       },
       () => {
@@ -758,11 +771,12 @@ export async function runAfterClose(
     const carried = (state?.day === day ? state.failedSteps : []).filter((k) => !want(k));
     await saveState({
       day,
-      startedAt: run.startedAt,
-      finishedAt: run.finishedAt,
+      startedAt: isWrap && state?.day === day ? state.startedAt : run.startedAt,
+      /* 마무리 회차가 끝나도 「끝난 시각」은 정규 회차 것 — 그날이 끝났는지는 정규 회차가 말한다 */
+      finishedAt: isWrap && state?.day === day && state.finishedAt ? state.finishedAt : run.finishedAt,
       failedSteps: [...new Set([...carried, ...failedNow])],
       retryTried: state?.day === day ? state.retryTried : 0,
-    }).catch(() => undefined);
+    }).catch((e) => console.error("[afterClose] 상태 파일 못 씀 —", e instanceof Error ? e.message : e));
   }
 
   /*
@@ -843,6 +857,8 @@ export async function runAfterClose(
 const RETRY_GAP_MS = 30 * 60_000;
 const RETRY_MAX = 2;
 let retry: { day: string; tried: number; at: number } | null = null;
+/** 마무리 회차 시도 — 하루 세 번, 30분 간격 (재시작하면 이력 파일이 「이미 끝났나」를 말해 준다) */
+let wrapTry: { day: string; n: number; at: number } = { day: "", n: 0, at: 0 };
 
 export function startAfterCloseScheduler(client: KiwoomClient): void {
   if (timer) return;
@@ -862,12 +878,18 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
     if (shouldWrap()) {
       const last = await afterCloseLastByStep().catch(() => ({}) as Record<string, StepResult & { day: string }>);
       const done = ["barsFinal", "ledgerFinal"].every((k) => last[k]?.day === day && last[k]?.ok);
-      if (!done) {
+      /*
+       * 실패했으면 **30분 뒤에 한 번 더, 두 번까지** (2026-09-16 점검). 그냥 두면 5분 틱마다 다시 들어와
+       * 시작 텔레그램이 자정까지 열두 번 간다 — 예컨대 ②원장이 아직 도는 중이라 ledgerFinal 이 던지는 날.
+       */
+      if (!done && (wrapTry.day !== day || (wrapTry.n < 3 && Date.now() - wrapTry.at >= RETRY_GAP_MS))) {
+        wrapTry = { day, n: wrapTry.day === day ? wrapTry.n + 1 : 1, at: Date.now() };
         await runAfterClose(client, true, ["barsFinal", "ledgerFinal"], "마무리 회차 (일봉·공매도·대차 확정값)").catch(
-          () => null,
+          (e) => console.error("[afterClose] 마무리 회차 실패 —", e instanceof Error ? e.message : e),
         );
         return;
       }
+      if (!done) return; // 시도 횟수를 다 썼다 — 실패는 요약 알림에 이미 적혔다
     }
 
     /*
@@ -924,7 +946,10 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
     }
 
     /* ② 오늘 첫 실행 — `runAfterClose` 안에서 이력을 보고 판단한다 */
-    const r = await runAfterClose(client).catch(() => null);
+    const r = await runAfterClose(client).catch((e) => {
+      console.error("[afterClose] 정규 회차 실패 —", e instanceof Error ? e.message : e);
+      return null;
+    });
     /* 실패가 있으면 재시도 시계를 건다. 다 됐으면 걸 필요가 없다 */
     if (r && !r.running && r.steps.some((s) => !s.ok)) {
       retry = { day, tried: 0, at: Date.now() };

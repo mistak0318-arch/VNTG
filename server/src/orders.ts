@@ -1,3 +1,4 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { dirname, join } from "node:path";
@@ -3641,12 +3642,39 @@ export async function positions(main: KiwoomClient): Promise<{
 /* ── 살아 있다는 신호 · 아침 인사 · 저녁 정합성 (개편 ②) ──────────────────── */
 
 let lastDeadAlert = 0;
+/*
+ * 하루 한 번 표시를 **파일에** (2026-09-16 점검). 메모리뿐이면 20:10 뒤에 서버가 뜰 때마다 저녁 정합성이
+ * 다시 돌고 텔레그램이 또 갔다(20:10 은 배포·재시작이 잦은 시각이다). 아침 인사는 반대로 08:55 정각에
+ * 서버가 없으면 그날 통째로 빠졌다 — 창을 08:55~09:05 로 넓힌다.
+ */
+const HEARTBEAT_FILE = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "orderHeartbeat.json");
 let greetedDay = "";
 let reconciledDay = "";
+let heartbeatLoaded = false;
+async function loadHeartbeat(): Promise<void> {
+  if (heartbeatLoaded) return;
+  heartbeatLoaded = true;
+  try {
+    const j = JSON.parse(await readFile(HEARTBEAT_FILE, "utf-8")) as { greetedDay?: string; reconciledDay?: string };
+    greetedDay = j.greetedDay ?? "";
+    reconciledDay = j.reconciledDay ?? "";
+  } catch {
+    /* 처음이면 빈 채로 */
+  }
+}
+async function saveHeartbeat(): Promise<void> {
+  try {
+    await mkdir(dirname(HEARTBEAT_FILE), { recursive: true });
+    await writeFile(HEARTBEAT_FILE, JSON.stringify({ greetedDay, reconciledDay }), "utf-8");
+  } catch (e) {
+    console.error("[orders] 하루 한 번 표시 못 씀 —", e instanceof Error ? e.message : e);
+  }
+}
 
 export function startOrderHeartbeat(main: KiwoomClient): void {
   const run = async () => {
     if (!ordersEnabled() || !orderClient()) return;
+    await loadHeartbeat();
     const { date, minute } = kstParts();
     const trading = isTradingDate(date);
     /* ① 감시 루프가 멎었나 — 정규장에 90초 넘게 안 돌았고 기다리는 감시가 있으면 10분에 한 번 알린다 */
@@ -3658,8 +3686,9 @@ export function startOrderHeartbeat(main: KiwoomClient): void {
       }
     }
     /* ② 08:55 아침 인사 — 오늘 살아 있는 것들 */
-    if (trading && minute === 535 && greetedDay !== date) {
+    if (trading && minute >= 535 && minute <= 545 && greetedDay !== date) {
       greetedDay = date;
+      void saveHeartbeat();
       const rows = await readWatches().catch(() => [] as AutoWatch[]);
       const waiting = rows.filter((r) => r.status === "waiting");
       const dual = waiting.filter((r) => r.dualDate === date && r.dualOrdNo).length;
@@ -3684,6 +3713,7 @@ export function startOrderHeartbeat(main: KiwoomClient): void {
      */
     if (trading && minute >= cleanupStartMinute(date) && reconciledDay !== date) {
       reconciledDay = date;
+      void saveHeartbeat();
       try {
         const [fl, log] = await Promise.all([fills(), readLog(3000)]);
         const ours = new Set(log.filter((r) => r.kind === "order" && r.ordNo).map((r) => r.ordNo));

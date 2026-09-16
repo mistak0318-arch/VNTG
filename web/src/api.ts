@@ -3934,8 +3934,10 @@ export interface CondQuery {
 export interface CondHit {
   code: string;
   name: string;
-  price: number;
-  changeRate: number;
+  /** 시세를 모르면 null — 마크 모집단은 장 뒤에 스냅샷이 없다 (2026-09-16) */
+  price: number | null;
+  changeRate: number | null;
+  /** 백만원 */
   tradeValue: number;
   marketCap: number | null;
   /** 어느 조건에 걸렸나 — 「왜 나왔는지」를 화면이 말할 수 있게 */
