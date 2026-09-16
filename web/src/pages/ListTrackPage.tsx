@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { SuperDetailSheet } from "../components/SuperDetailSheet";
 import { GradeDetailRow } from "../components/GradeDetailRow";
+import { GradeVerdict, verdictOf } from "../components/GradeVerdict";
 /** 속을 잰 지평과 **같은 칸**의 평균 — 다른 지평끼리 견주면 뜻이 없다 */
 function sameAvg(
   d: { horizon: 1 | 5 | 20 | null },
@@ -185,6 +186,13 @@ const low = (v: number | null | undefined) => (v === null || v === undefined ? -
    * `data` 가 아직 없으면 빈 배열로 시작한다.
    */
   const gSort = useSortableTable(data?.grade ?? []);
+  /* 표 줄 강조 — 결론 카드와 같은 규칙(표본 30 미만 흐리게 · 전체 대비 +1%p 굵게) */
+  const gradeEmphasis = (() => {
+    const rows = data?.grade ?? [];
+    if (rows.length === 0) return {} as Record<string, "thin" | "strong" | "">;
+    const hKey: "d1" | "d5" | "d20" = rows.some((r) => r.d20.n > 0) ? "d20" : rows.some((r) => r.d5.n > 0) ? "d5" : "d1";
+    return verdictOf(rows.map((r) => ({ label: r.label, base: r.label === "전체", n: r[hKey].n, avg: r[hKey].avg })), hKey).emphasis;
+  })();
 
   if (!data) return <div className="empty">불러오는 중…</div>;
   const counts = data.counts[tab];
@@ -341,6 +349,16 @@ const low = (v: number | null | undefined) => (v === null || v === undefined ? -
           </button>
           {openGrade && (
           <>
+          {(() => {
+            /* 결론 카드 — 슈퍼신호등 채점표와 같은 부품·같은 규칙 (2026-09-16 밤) */
+            const rows = data.grade;
+            const hKey: "d1" | "d5" | "d20" = rows.some((r) => r.d20.n > 0) ? "d20" : rows.some((r) => r.d5.n > 0) ? "d5" : "d1";
+            const v = verdictOf(
+              rows.map((r) => ({ label: r.label, base: r.label === "전체", n: r[hKey].n, avg: r[hKey].avg, win: hKey === "d20" ? r.win20 : hKey === "d1" ? r.win1 : null })),
+              hKey === "d20" ? "20일 뒤" : hKey === "d5" ? "5일 뒤" : "1일 뒤",
+            );
+            return <GradeVerdict v={v} hasExcess={rows.some((r) => r.ex20.n > 0)} what="신호등 분석" />;
+          })()}
           <p className="pt-n">
             <b>슈퍼신호등 채점표와 같은 자</b>로 잽니다(편입일 종가 대비) — 그래야 두
             원장을 나란히 놓고 「교집합이 값을 하나」에 답할 수 있습니다.
@@ -403,7 +421,7 @@ const low = (v: number | null | undefined) => (v === null || v === undefined ? -
                   */}
                   <tr
                     /* 정렬하면 첫 줄이 바뀐다 — 「전체」는 **자리가 아니라 이름**으로 가린다 */
-                    className={`${g.label === "전체" ? "gb-base" : g.n < 5 ? "sim-thin" : ""} gd-click${openGrade2 === g.label ? " on" : ""}`}
+                    className={`${g.label === "전체" ? "gb-base" : g.n < 5 ? "sim-thin" : ""}${gradeEmphasis[g.label] ? ` gv-${gradeEmphasis[g.label]}` : ""} gd-click${openGrade2 === g.label ? " on" : ""}`}
                     onClick={() => setOpenGrade2((v) => (v === g.label ? null : g.label))}
                     title="눌러서 이 구간의 속을 봅니다 — 분포·중앙값·손익비"
                   >

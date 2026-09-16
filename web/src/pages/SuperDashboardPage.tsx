@@ -6,6 +6,7 @@ import {
   type SuperStats,
 } from "../api";
 import { SuperDetailSheet } from "../components/SuperDetailSheet";
+import { GradeVerdict, verdictOf } from "../components/GradeVerdict";
 import { GradeDetailRow } from "../components/GradeDetailRow";
 /** 속을 잰 지평과 **같은 칸**의 평균 — 다른 지평끼리 견주면 뜻이 없다 */
 function sameAvg(
@@ -147,6 +148,24 @@ function GradeBoard({ rows, hidden }: { rows: SuperGradeRow[]; hidden: number })
 
   const base = rows.find((r) => r.group === "base");
   /*
+   * 결론 카드 (2026-09-16 밤) — 표본이 찬 가장 긴 구간으로 견준다: 20일이 있으면 20일, 없으면 5일, 그것도 없으면 1일.
+   * 「전체보다 나은 줄」과 「읽어도 되나」를 표 위에 세 줄로. 표는 표본 30 미만 흐리게 · +1%p 굵게만 한다.
+   */
+  const hKey: "d1" | "d5" | "d20" = rows.some((r) => r.d20.n > 0) ? "d20" : rows.some((r) => r.d5.n > 0) ? "d5" : "d1";
+  const verdict = verdictOf(
+    rows
+      .filter((r) => r.group !== "score" && r.group !== "regime")
+      .map((r) => ({
+        label: r.label,
+        base: r.group === "base",
+        n: r[hKey].n,
+        avg: r[hKey].avg,
+        win: hKey === "d20" ? (r.win20?.rate ?? null) : hKey === "d1" ? (r.win1?.rate ?? null) : null,
+      })),
+    hKey === "d20" ? "20일 뒤" : hKey === "d5" ? "5일 뒤" : "1일 뒤",
+  );
+  const hasExcess = rows.some((r) => (r.ex20?.n ?? 0) > 0);
+  /*
    * **아직 안 찬 열은 안 그린다.** 5일·20일이 전부 0건이면 「- (0)」 이 스물여덟 칸
    * 생기고, 그 사이에서 실제 값을 찾아야 한다. 없는 건 없다고 아래 한 줄로 적는다.
    */
@@ -176,6 +195,7 @@ function GradeBoard({ rows, hidden }: { rows: SuperGradeRow[]; hidden: number })
 
       {open && (
         <>
+          <GradeVerdict v={verdict} hasExcess={hasExcess} what="슈퍼신호등" />
           <div className="data-table-wrap">
             <table className="data-table gb-table">
               <thead>
@@ -201,7 +221,7 @@ function GradeBoard({ rows, hidden }: { rows: SuperGradeRow[]; hidden: number })
                       <tr
                         className={`${r.group === "base" ? "gb-base" : ""}${
                           r.d1.n > 0 && r.d1.n < 5 ? " gb-thin" : ""
-                        } gd-click${openRow === r.label ? " on" : ""}`}
+                        }${verdict.emphasis[r.label] ? ` gv-${verdict.emphasis[r.label]}` : ""} gd-click${openRow === r.label ? " on" : ""}`}
                         onClick={() => setOpenRow((v) => (v === r.label ? null : r.label))}
                         title="눌러서 이 구간의 속을 봅니다 — 분포·중앙값·손익비"
                       >
@@ -258,7 +278,7 @@ function GradeBoard({ rows, hidden }: { rows: SuperGradeRow[]; hidden: number })
                           className={`${r.group === "base" ? "gb-base" : ""}${
                             /* 표본이 적은 줄은 흐리게 — 숨기지는 않는다 */
                             r.d1.n > 0 && r.d1.n < 5 ? " gb-thin" : ""
-                          } gd-click${openRow === r.label ? " on" : ""}`}
+                          }${verdict.emphasis[r.label] ? ` gv-${verdict.emphasis[r.label]}` : ""} gd-click${openRow === r.label ? " on" : ""}`}
                           onClick={() => setOpenRow((v) => (v === r.label ? null : r.label))}
                           title="눌러서 이 구간의 속을 봅니다 — 분포·중앙값·손익비"
                         >

@@ -19277,3 +19277,17 @@ th.usr-key { color: var(--text); }
 /* 월 달력 칩 — 「1/2」 같은 며칠짜리 표시가 아래 칩에 살짝 물리던 것 (2026-09-16 전수 점검) */
 .cal-events .cal-chip { line-height: 1.35; }
 .cal-chip-span { vertical-align: baseline; }
+
+/* 성적표 결론 카드 (2026-09-16) */
+.gv { margin: 6px 0 10px; padding: 10px 12px; border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: 8px; background: var(--panel-2); font-size: 0.82rem; line-height: 1.55; }
+.gv.gv-ok { border-left-color: var(--green); }
+.gv-l1 b { margin-right: 6px; }
+.gv-l2 { margin-top: 3px; }
+.gv-worse { color: var(--muted); }
+.gv-warn { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; color: var(--warn); font-size: 0.78rem; }
+.gv-warn .gv-rule { color: var(--text); font-weight: 600; }
+.gv-key { margin-top: 6px; font-size: 0.7rem; color: var(--muted); }
+/* 표 강조 — 흐리게/굵게 둘뿐 */
+tr.gv-thin td { opacity: 0.45; }
+tr.gv-strong td { font-weight: 700; }
+tr.gv-strong td:first-child { color: var(--text); }
