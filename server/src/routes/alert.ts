@@ -88,7 +88,7 @@ export function createAlertRouter(client: KiwoomClient): Router {
        * 「지금 검사」를 눌렀는데 절반만 나오면 나머지가 꺼진 줄 안다.
        * `send:false` 라 상태를 안 남기므로 진짜 알림을 잡아먹지 않는다.
        */
-      const live = await runLiveAlerts({ send: false }).catch(() => null);
+      const live = await runLiveAlerts(client, { send: false }).catch(() => null);
       res.json({
         ...result,
         live: live ? { count: live.alerts.length, connected: live.live } : null,

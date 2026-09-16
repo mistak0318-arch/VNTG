@@ -204,7 +204,7 @@ async function tick(client: KiwoomClient): Promise<void> {
    * VI 는 몇 초 뒤에 알면 이미 풀려 있으므로 10분 간격을 기다릴 수 없다.
    */
   try {
-    const live = await runLiveAlerts();
+    const live = await runLiveAlerts(client);
     if (live.alerts.length > 0) {
       console.log(`[alert] 실시간 ${live.alerts.length}건 — ${live.alerts.map((a) => a.name).join(", ")}`);
       /*

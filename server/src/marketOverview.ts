@@ -507,6 +507,41 @@ async function fetchVi(client: KiwoomClient): Promise<ViRow[]> {
   }));
 }
 
+/**
+ * **오늘 VI 가 걸린 종목 집합** — 실시간 알림의 대조용 (2026-09-16 — 벤티지: "vi 오는 건 api 가 없어?").
+ *
+ * 있다. 위 `ka10054` 그대로다. 실시간 `1h` 프레임은 애프터 개장 단일가 예고 같은 걸 발동처럼 흘리는데
+ * (포스코 +13% 사건), 이 목록은 **실제로 걸린 것만** 준다. 그래서 알림은 이 목록에 있는 것만 보낸다.
+ * 화면 카드는 위에서 30줄로 자르지만 여기는 **전부** 본다 — 대조에 상한이 있으면 안 된다. 60초 캐시.
+ */
+let viTodayCache: { at: number; codes: Set<string> } | null = null;
+export async function viCodesToday(client: KiwoomClient): Promise<Set<string> | null> {
+  if (viTodayCache && Date.now() - viTodayCache.at < 60_000) return viTodayCache.codes;
+  try {
+    const { data } = await client.request<Row>(STKINFO_RESOURCE, "ka10054", {
+      mrkt_tp: "000",
+      bf_mkrt_tp: "0",
+      stk_cd: "",
+      motn_tp: "0",
+      skip_stk: "000000000",
+      trde_qty_tp: "0",
+      min_trde_qty: "0",
+      max_trde_qty: "0",
+      trde_prica_tp: "0",
+      min_trde_prica: "0",
+      max_trde_prica: "0",
+      motn_drc: "0",
+      stex_tp: "3",
+    });
+    const rows = Array.isArray(data.motn_stk) ? (data.motn_stk as Row[]) : [];
+    const codes = new Set(rows.map((r) => String(r.stk_cd ?? "").replace(/_(AL|NX)$/i, "")).filter(Boolean));
+    viTodayCache = { at: Date.now(), codes };
+    return codes;
+  } catch {
+    return null; // 못 받았으면 「모른다」 — 대조를 못 하는 것이지 「없다」가 아니다
+  }
+}
+
 // ---------------------------------------------------------------- 캐시 제어
 
 const FETCHERS: Record<SectionName, (client: KiwoomClient) => Promise<unknown>> = {

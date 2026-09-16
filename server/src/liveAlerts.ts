@@ -2,6 +2,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAlertConfig } from "./alertRules.js";
+import type { KiwoomClient } from "./kiwoomClient.js";
+import { viCodesToday } from "./marketOverview.js";
 import { peekRealtime } from "./realtimeHub.js";
 import { viDirText } from "./realtimeStore.js";
 import { getActiveSuper } from "./superSignal.js";
@@ -107,6 +109,7 @@ export interface LiveAlert {
  *   미리보기가 진짜 알림을 잡아먹으면 안 된다.
  */
 export async function runLiveAlerts(
+  client: KiwoomClient,
   opts: { send?: boolean } = {},
 ): Promise<{ alerts: LiveAlert[]; sent: boolean; live: boolean }> {
   const { store } = peekRealtime();
@@ -130,6 +133,8 @@ export async function runLiveAlerts(
 
   /* ── VI 발동 ─────────────────────────────────────────────── */
   if (rules.has("viHit")) {
+    /* 관심종목 것이 하나라도 있을 때만 REST 를 부른다 — 1분마다 헛콜을 안 낸다 */
+    const viToday = store.getVi(200).some((v) => mine.has(v.code) && !v.clearedAt) ? await viCodesToday(client) : null;
     for (const v of store.getVi(200)) {
       const name = mine.get(v.code);
       if (!name) continue; // 관심종목이 아니면 안 본다 (하루 483건이 걸린다)
@@ -180,6 +185,16 @@ export async function runLiveAlerts(
           sent.add(key);
           dirty = true;
         }
+        continue;
+      }
+      /*
+       * **REST 목록과 대조한다** (2026-09-16 — 벤티지: "vi 오는 건 api 가 없어?"). `ka10054` 는 실제로 걸린 것만
+       * 준다. 아직 거기 없으면 **보낸 셈 치지 않고 다음 1분에 다시 본다** — 방금 걸린 진짜 VI 가 목록에
+       * 오르는 데 몇 초 걸릴 수 있다. 끝내 안 오르면 위 15분 문턱이 닫는다. 목록을 못 받았으면(null)
+       * 대조 없이 보낸다 — 「못 받음」이 「안 걸림」은 아니다.
+       */
+      if (viToday && !viToday.has(v.code)) {
+        console.log(`[liveAlerts] VI 보류 — ${v.code} 실시간엔 왔는데 ka10054 목록엔 아직 없음 (발동 ${v.firedAt || v.at})`);
         continue;
       }
       if (!preview) {
