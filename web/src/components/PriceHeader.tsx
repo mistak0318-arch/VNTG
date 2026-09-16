@@ -516,7 +516,15 @@ export function PriceHeader({
                 ? { venue: "NXT", price: nxt.price }
                 : { venue: "", price: Math.abs(Number(info.cur_prc)) || 0 };
           const other = rolled ? null : main.venue === "KRX" && showNxtLine && nxt ? { venue: "NXT", price: nxt.price } : main.venue === "NXT" && krx?.price != null ? { venue: "KRX", price: krx.price } : null;
-          const liveRate = main.price > 0 ? ((main.price - regular.close) / regular.close) * 100 : null;
+          /*
+           * **권리락·배당락 날**엔 거래소 기준가(base_pric)가 어제 정규장 종가와 다르다 (2026-09-17 퓨쳐켐 — 분할 권리락으로
+           * 기준가 8,100 → 6,750. 거래소는 +23.56%, 우리는 어제 종가로 나눠 +2.96%). 새 날의 장외 값은 **기준가로** 나눈다 —
+           * 어제 종가는 그날 기준이 아니다. 같은 날 애프터(regular.date === 오늘)는 정규장 종가 대비 그대로.
+           */
+          const rawBase = Math.abs(Number(info.base_pric)) || 0;
+          const exBase = regular.date !== todayKst && rawBase > 0 && Math.abs(rawBase - regular.close) / regular.close > 0.001 ? rawBase : null;
+          const liveDenom = exBase ?? regular.close;
+          const liveRate = main.price > 0 ? ((main.price - liveDenom) / liveDenom) * 100 : null;
           const liveTitle =
             phase === "pre" ? "NXT 프리" : phase === "gap" ? "NXT 애프터" : phase === "closed" ? (krxInAfter && afterTradable ? "애프터 종가" : "NXT 마감") : krxLive ? "애프터" : "NXT 애프터";
           const otherWhen = other ? (other.venue === "KRX" ? krxWhen : nxtWhen) : "";
@@ -529,11 +537,18 @@ export function PriceHeader({
                   {regularRate === null ? "15:30" : <>{pctTxt(regularRate)} <small>전일 대비</small></>}
                 </span>
               </div>
-              <div className="ph-cell ph-split" title={`지금 ${liveTitle} 값 — 정규장 종가 ${fmtNum(regular.close)} 대비`}>
+              <div
+                className="ph-cell ph-split"
+                title={
+                  exBase
+                    ? `지금 ${liveTitle} 값 — 기준가 ${fmtNum(exBase)} 대비 (권리락·배당락 등으로 기준가가 어제 종가 ${fmtNum(regular.close)} 와 다릅니다. 거래소 등락률과 같은 기준)`
+                    : `지금 ${liveTitle} 값 — 정규장 종가 ${fmtNum(regular.close)} 대비`
+                }
+              >
                 <span className="ph-label">{liveTitle}</span>
                 <b className={`ph-big ${tone(liveRate)}`}>{fmtNum(main.price)}</b>
                 <span className={`ph-sub ${tone(liveRate)}`}>
-                  {pctTxt(liveRate)} <small>정규장 대비</small>
+                  {pctTxt(liveRate)} <small>{exBase ? "기준가 대비 (락)" : "정규장 대비"}</small>
                 </span>
                 {other && (
                   <span className="ph-other">

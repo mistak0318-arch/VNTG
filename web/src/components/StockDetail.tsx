@@ -230,7 +230,13 @@ export function StockDetail({
                     ? base
                     : null;
             const regRate = prev ? ((reg.close - prev) / prev) * 100 : null;
-            const liveRate = ((cur - reg.close) / reg.close) * 100;
+            /*
+             * 권리락·배당락 날엔 거래소 기준가가 어제 종가와 다르다 (2026-09-17 퓨쳐켐 — 기준가 8,100 → 6,750, 거래소 +23.56%
+             * 인데 우리는 +2.96%). 새 날의 장외 값은 **기준가로** 나눈다 — PriceHeader 와 같은 판정.
+             */
+            const exBase = reg.date !== todayKst && base > 0 && Math.abs(base - reg.close) / reg.close > 0.001 ? base : null;
+            const liveDenom = exBase ?? reg.close;
+            const liveRate = ((cur - liveDenom) / liveDenom) * 100;
             const md = `${Number(reg.date.slice(5, 7))}/${Number(reg.date.slice(8, 10))}`;
             return (
               <>
@@ -244,9 +250,13 @@ export function StockDetail({
                 </span>
                 <span
                   className={`sheet-live num ${sign(liveRate)}`}
-                  title={`지금 ${reg.liveLabel} 값 — 정규장 종가 대비 ${pct(liveRate)} · 전일 대비 ${pct(Number(info.flu_rt))}`}
+                  title={
+                    exBase
+                      ? `지금 ${reg.liveLabel} 값 — 기준가 ${exBase.toLocaleString("ko-KR")} 대비 ${pct(liveRate)} (권리락·배당락 등으로 기준가가 어제 종가와 다릅니다 — 거래소 등락률과 같은 기준)`
+                      : `지금 ${reg.liveLabel} 값 — 정규장 종가 대비 ${pct(liveRate)} · 전일 대비 ${pct(Number(info.flu_rt))}`
+                  }
                 >
-                  <em>{reg.liveLabel}</em>
+                  <em>{reg.liveLabel}{exBase ? "·락" : ""}</em>
                   <b>{cur.toLocaleString("ko-KR")}</b>
                   <i>{pct(liveRate)}</i>
                 </span>
