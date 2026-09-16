@@ -146,6 +146,33 @@ export async function runLiveAlerts(
        */
       const key = `${day}:vi:${v.code}:${v.firedAt || v.at}`;
       if (sent.has(key)) continue;
+      /*
+       * **걸릴 수 없는 값은 VI 가 아니다** (2026-09-16 — 벤티지: "포스코홀딩스 13프로 상방 VI 걸리지도 않았는데").
+       *
+       * 실측: 9/16 16:00·16:02 두 번, 「▲상방 +13.0% · 동적+정적 · 발동가 369,000」. 정규장 종가 326,500 의
+       * 딱 +13.0% 였고 그날 포스코는 −1.7% 로 끝났다. 16:00 은 **KRX 애프터마켓 개장 시각**이다 — 개장
+       * 단일가(예상체결) 때 키움이 흘린 예고성 `1h` 프레임을 발동으로 읽은 것. 9/14 제도 변경 뒤 생긴 모양.
+       *
+       * 가격 산수로 거른다 — 코드표(9068)는 추측이지만 이 둘은 사실이다:
+       *   ① 정적 VI 는 기준가 ±10% 에서 걸린다. 기준가 대비 10.5% 를 넘는 「발동가」는 있을 수 없다
+       *      (애프터 가격제한도 ±10% 라 그 값에선 체결 자체가 안 된다)
+       *   ② 진짜 VI 는 체결이 그 값을 쳐서 걸린다. 그 순간 KRX 체결가에서 5% 넘게 떨어진 「발동가」는
+       *      체결이 아니라 호가·예상가다
+       * 기준가 없이 등락률(1489)만 있을 땐 ①을 안 쓴다 — 그건 전일 대비라 15% 도 정상이다.
+       */
+      {
+        const gapOk = !(v.price > 0 && v.base > 0 && Math.abs((v.price - v.base) / v.base) > 0.105);
+        const lastPx = num(store.getLatestKrx("0B", v.code)?.values?.["10"]);
+        const nearTrade = !(v.price > 0 && Number.isFinite(lastPx) && lastPx > 0 && Math.abs(v.price - lastPx) / lastPx > 0.05);
+        if (!gapOk || !nearTrade) {
+          console.log(`[liveAlerts] VI 거름 — ${v.code} 발동가 ${v.price} 기준가 ${v.base} 체결가 ${Number.isFinite(lastPx) ? lastPx : "?"} (${!gapOk ? "기준가 대비 10.5% 초과" : "체결가에서 5% 초과"})`);
+          if (!preview) {
+            sent.add(key);
+            dirty = true;
+          }
+          continue;
+        }
+      }
       /* 발동한 지 오래된 것은 「지금」이 아니다 — 보내지 않고 보낸 셈 친다 */
       const firedMs = kstTimeMs(v.firedAt) ?? kstTimeMs(v.at);
       if (firedMs !== null && Date.now() - firedMs > VI_STALE_MS) {
