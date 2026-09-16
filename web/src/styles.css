@@ -19253,3 +19253,5 @@ th.usr-key { color: var(--text); }
 .nvb > summary::-webkit-details-marker { display: none; }
 .nvb > summary::before { content: "▸"; font-size: 0.7rem; color: var(--muted); }
 .nvb[open] > summary::before { content: "▾"; }
+/* 뉴스·텔레그램을 아직 세는 중 — 흐리게 자리만 (2026-09-16). 안 보이면 「없다」로 읽힌다 */
+.scr-buzz.scr-buzz-wait { opacity: 0.45; cursor: default; pointer-events: none; }

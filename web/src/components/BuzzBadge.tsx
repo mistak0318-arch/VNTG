@@ -106,7 +106,29 @@ export function useBuzz(codes: string[], enabled = true) {
     daysRef.current = days;
     askedAt.current = {};
   }
-  const key = enabled ? codes.filter((c) => /^\d{6}$/.test(c)).join(",") : "";
+  /*
+   * **순서를 지운 열쇠** (2026-09-16 — 벤티지: "뉴스랑 텔레그램 카드 붙다가 안 붙다가 하는데 이유가 뭐야").
+   *
+   * 예전엔 보이는 순서 그대로 이어 붙였다. 표는 10초마다 새로 받아 순위가 조금씩 바뀌므로 **같은
+   * 종목들인데 열쇠가 매번 달랐다** — 그때마다 아래 효과가 다시 돌면서 진행 중이던 응답을 버렸다
+   * (옛 `alive` 깃발). 그런데 「물었다」는 도장(`askedAt`)은 이미 찍혀 있어서 그 종목들은 **5분 동안
+   * 다시 안 묻는다** → 배지가 빈 채로 5분. 처음 묻는 100종목은 네이버 뉴스 검색 100번이라 5~15초가
+   * 걸리니 10초 폴링 한 바퀴 안에 끝나기 어려웠고, 캐시가 데워진 뒤에야 붙었다. 그래서 붙다가 안 붙다가.
+   *
+   * 정렬해 잇는다 — 순서가 바뀌어도 같은 집합이면 같은 열쇠다. 그리고 **응답은 절대 버리지 않는다**
+   * (종목별 값이라 늦게 와도 그대로 맞다). 화면을 떠났을 때만 안 그린다(`mounted`).
+   */
+  const key = enabled ? [...new Set(codes.filter((c) => /^\d{6}$/.test(c)))].sort().join(",") : "";
+  const mounted = useRef(true);
+  useEffect(() => {
+    /* ⚠️ 본문에서 다시 켠다 — 개발 모드(StrictMode)는 효과를 붙였다 뗐다 다시 붙이므로, 정리만 두면 첫 정리에서 영영 꺼진다 */
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  /* 지금 묻는 중인 것 — 「아직 세는 중」과 「없음」을 화면에서 가르기 위해 */
+  const [pending, setPending] = useState<Record<string, true>>({});
 
   useEffect(() => {
     if (!key) return;
@@ -114,7 +136,19 @@ export function useBuzz(codes: string[], enabled = true) {
     const want = key.split(",").filter((c) => now - (askedAt.current[c] ?? 0) > FRESH_MS);
     if (want.length === 0) return;
     for (const c of want) askedAt.current[c] = now;
-    let alive = true;
+    setPending((prev) => {
+      const next = { ...prev };
+      for (const c of want) next[c] = true;
+      return next;
+    });
+    const settle = (chunk: string[]) => {
+      if (!mounted.current) return;
+      setPending((prev) => {
+        const next = { ...prev };
+        for (const c of chunk) delete next[c];
+        return next;
+      });
+    };
     /* 100 개씩 — 서버가 한 번에 받는 상한 */
     const chunks: string[][] = [];
     for (let i = 0; i < want.length; i += 100) chunks.push(want.slice(i, i + 100));
@@ -122,26 +156,29 @@ export function useBuzz(codes: string[], enabled = true) {
       api
         .rankBuzz(chunk, days)
         .then((r) => {
-          if (!alive) return;
+          if (!mounted.current) return;
           setCounts((prev) => {
             const next = { ...prev };
             for (const it of r.items) next[it.code] = { news: it.news, tg: it.tg };
             return next;
           });
+          settle(chunk);
         })
         .catch(() => {
-          /* 곁가지 — 못 받아도 표는 그대로. 다음 5분에 다시 묻는다 */
+          /* 곁가지 — 못 받아도 표는 그대로. 도장을 지워 다음 그리기 때 바로 다시 묻는다 */
           for (const c of chunk) delete askedAt.current[c];
+          settle(chunk);
         });
     }
-    return () => {
-      alive = false;
-    };
   }, [key, days]);
 
   const badge = (code: string, name: string): ReactNode => {
     const b = counts[code];
-    if (!b) return null;
+    if (!b) {
+      /* 세는 중이면 흐리게 자리만 — 안 보이면 「없다」로 읽힌다 */
+      if (pending[code]) return <span className="scr-buzz scr-buzz-wait" title="뉴스·텔레그램 세는 중…">📰… ✈…</span>;
+      return null;
+    }
     return (
       <button
         className="scr-buzz"
