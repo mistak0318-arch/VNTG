@@ -19255,3 +19255,8 @@ th.usr-key { color: var(--text); }
 .nvb[open] > summary::before { content: "▾"; }
 /* 뉴스·텔레그램을 아직 세는 중 — 흐리게 자리만 (2026-09-16). 안 보이면 「없다」로 읽힌다 */
 .scr-buzz.scr-buzz-wait { opacity: 0.45; cursor: default; pointer-events: none; }
+
+/* 수동 계좌 — 차례·삭제 줄 (2026-09-16). 삭제는 오른쪽 끝으로 */
+.ma-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.ma-head .ma-del { margin-left: auto; }
+.ma-head .filter-btn:disabled { opacity: 0.35; cursor: default; }

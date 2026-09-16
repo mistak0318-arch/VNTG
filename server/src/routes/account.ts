@@ -9,6 +9,7 @@ import {
   setCash,
   depositCash,
   upsertHolding,
+  reorderAccounts,
 } from "../manualAccounts.js";
 import { allHistory, dropHistory, recordSnapshot } from "../manualHistory.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
@@ -176,6 +177,17 @@ export function createAccountRouter(client: KiwoomClient): Router {
     try {
       const { broker, name } = req.body ?? {};
       await addAccount(String(broker ?? ""), String(name ?? ""));
+      res.json({ accounts: await evaluate() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* 계좌 차례 (2026-09-16). ⚠️ `/manual/:id` 류보다 앞 — 뒤에 두면 "order" 를 id 로 먹는다 */
+  router.put("/manual/order", async (req, res, next) => {
+    try {
+      const ids = Array.isArray((req.body as { ids?: unknown }).ids) ? ((req.body as { ids: unknown[] }).ids as unknown[]).map(String) : [];
+      await reorderAccounts(ids);
       res.json({ accounts: await evaluate() });
     } catch (err) {
       next(err);

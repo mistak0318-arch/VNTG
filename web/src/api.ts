@@ -694,6 +694,8 @@ export const api = {
   manualHistory: () => getJson<{ history: Record<string, ManualPoint[]> }>("/api/account/manual/history"),
   manualAccountAdd: (broker: string, name: string) =>
     postJson<{ accounts: EvaluatedAccount[] }>("/api/account/manual", { broker, name }),
+  /** 계좌 차례 — id 를 보이고 싶은 순서대로 (2026-09-16) */
+  manualAccountOrder: (ids: string[]) => putJson<{ accounts: EvaluatedAccount[] }>("/api/account/manual/order", { ids }),
   manualAccountRemove: (id: string) =>
     deleteJson<{ accounts: EvaluatedAccount[] }>(`/api/account/manual/${id}`),
   /** anchor "total" 이면 총자산을 붙박이로 둔다 — 예수금이 주식평가액을 따라 저절로 (2026-09-08) */

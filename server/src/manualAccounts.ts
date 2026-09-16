@@ -175,6 +175,24 @@ export async function setCash(
   return next;
 }
 
+/**
+ * **계좌 차례를 바꾼다** (2026-09-16 — 벤티지: "수동계좌 순서 바꿀 수 있게 좀 해줘").
+ * 화면이 보낸 id 차례대로 늘어놓는다. 목록에 없는 id 는 무시하고, 안 보낸 계좌는 뒤에 그대로 붙인다 —
+ * 화면이 옛 목록으로 보내도 계좌가 사라지지 않는다.
+ */
+export async function reorderAccounts(ids: string[]): Promise<ManualAccount[]> {
+  const items = await load();
+  const by = new Map(items.map((a) => [a.id, a]));
+  const next: ManualAccount[] = [];
+  for (const id of ids) {
+    const a = by.get(id);
+    if (a && !next.includes(a)) next.push(a);
+  }
+  for (const a of items) if (!next.includes(a)) next.push(a);
+  await persist(next);
+  return next;
+}
+
 export async function removeAccount(id: string): Promise<ManualAccount[]> {
   const items = await load();
   const next = items.filter((a) => a.id !== id);

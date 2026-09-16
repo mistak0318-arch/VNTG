@@ -462,8 +462,29 @@ export function ManualAccountPage({
     }
   }
 
+  /**
+   * 계좌 차례 (2026-09-16 — 벤티지: "수동계좌 순서 바꿀 수 있게 좀 해줘"). 화면에서 먼저 옮기고 서버에 차례를
+   * 보낸다 — 응답이 오기 전에 눌린 대로 움직여야 손에 붙는다. 실패하면 서버 것으로 되돌린다.
+   */
+  async function moveAccount(id: string, dir: -1 | 1) {
+    const i = accounts.findIndex((a) => a.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= accounts.length) return;
+    const next = [...accounts];
+    [next[i], next[j]] = [next[j], next[i]];
+    setAccounts(next);
+    try {
+      setAccounts((await api.manualAccountOrder(next.map((a) => a.id))).accounts);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "차례 저장 실패");
+      void load();
+    }
+  }
+
   async function deleteAccount(id: string, label: string) {
-    if (!window.confirm(`'${label}' 계좌를 삭제할까요? 입력한 종목도 함께 사라집니다.`)) return;
+    /* 되돌릴 수 없는 일이라 한 번 묻는다 (벤티지: "삭제할 때는 정말 삭제하시겠습니까? 라고 한 번 물어보고") */
+    if (!window.confirm(`'${label}' 계좌를 정말 삭제하시겠습니까?
+입력한 종목·예수금·잔액 흐름이 함께 사라지고 되돌릴 수 없습니다.`)) return;
     try {
       setAccounts((await api.manualAccountRemove(id)).accounts);
     } catch (err) {
@@ -533,7 +554,7 @@ export function ManualAccountPage({
         <div className="page-note">등록된 수동 계좌가 없습니다. 위에서 증권사를 골라 추가하세요.</div>
       )}
 
-      {accounts.map((a) => {
+      {accounts.map((a, idx) => {
         const today = todayPnl(a.holdings);
         return (
         <CollapsibleCard
@@ -626,9 +647,29 @@ export function ManualAccountPage({
             </span>
           }
         >
+          {/* 차례·삭제 (2026-09-16). 삭제는 맨 오른쪽에 떨어뜨려 둔다 — 화살표 옆에 붙이면 잘못 누른다 */}
           <div className="ma-head">
-            <button className="row-del-btn" onClick={() => deleteAccount(a.id, `${a.broker} ${a.name}`)}>
-              계좌 삭제
+            <button
+              type="button"
+              className="filter-btn"
+              disabled={idx === 0}
+              onClick={() => moveAccount(a.id, -1)}
+              title="위로"
+            >
+              ▲ 위로
+            </button>
+            <button
+              type="button"
+              className="filter-btn"
+              disabled={idx === accounts.length - 1}
+              onClick={() => moveAccount(a.id, 1)}
+              title="아래로"
+            >
+              ▼ 아래로
+            </button>
+            <span className="pt-n">{idx + 1} / {accounts.length}</span>
+            <button className="row-del-btn ma-del" onClick={() => deleteAccount(a.id, `${a.broker} ${a.name}`)}>
+              🗑 계좌 삭제
             </button>
           </div>
 
