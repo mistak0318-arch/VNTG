@@ -167,7 +167,13 @@ function loadFilter(): Filter {
  * +3.2%p·승률 59%(하루 17.3개). 쌍끌이(주포까지 여섯 칸)는 +3.1 인데 하루 6.2개뿐이고
  * 5일은 음수다. 주포는 단독으로 −0.2 라 얹을수록 좁아지기만 한다.
  */
-function isFgn3(flow: Record<string, FlowSum> | undefined): boolean {
+
+/**
+ * 🧲 판정은 **서버 값**을 쓴다 (2026-09-16 점검 — 정의가 서버·웹 두 곳이었다). `dailyStore.twinFromSpans` 가
+ * 붙여 보내는 `fgn3`/`twin` 이 있으면 그것, 없으면(옛 응답) 예전 계산으로 떨어진다.
+ */
+type TwinRow = { flow?: Record<string, FlowSum>; fgn3?: boolean; twin?: boolean };
+function calcFgn3(flow: Record<string, FlowSum> | undefined): boolean {
   if (!flow) return false;
   for (const span of ["5", "10", "20"]) {
     const f = flow[span];
@@ -175,13 +181,15 @@ function isFgn3(flow: Record<string, FlowSum> | undefined): boolean {
   }
   return true;
 }
-
-function isTwin(flow: Record<string, FlowSum> | undefined): boolean {
-  if (!flow) return false;
+function isFgn3(r: TwinRow): boolean {
+  return typeof r.fgn3 === "boolean" ? r.fgn3 : calcFgn3(r.flow);
+}
+function isTwin(r: TwinRow): boolean {
+  if (typeof r.twin === "boolean") return r.twin;
+  if (!calcFgn3(r.flow)) return false;
   for (const span of ["5", "10", "20"]) {
-    const f = flow[span];
-    if (!f || f.fgn === null || f.smart === null) return false;
-    if (f.fgn <= 0 || f.smart <= 0) return false;
+    const f = r.flow?.[span];
+    if (!f || f.smart === null || f.smart <= 0) return false;
   }
   return true;
 }
@@ -554,8 +562,8 @@ export function ScreenerPage({
   const rows = all.filter((r) => {
     if (filter.commonOnly && !r.common) return false;
     if (filter.etfOnly && !r.etf) return false;
-    if (filter.twinOnly && !isTwin(r.flow)) return false;
-    if (filter.fgn3Only && !isFgn3(r.flow)) return false;
+    if (filter.twinOnly && !isTwin(r)) return false;
+    if (filter.fgn3Only && !isFgn3(r)) return false;
     if (hasTvCol && filter.minTv > 0 && (r.tv === null || r.tv < filter.minTv)) return false;
     if (hasCapCol && !capOk(r.cap, filter.caps)) return false;
     if (filter.minRate !== null) {
@@ -1612,7 +1620,7 @@ export function ScreenerPage({
                         columnKey="twin"
                         label="🧲"
                         thProps={{ title: "🧲 외국인 5·10·20일 세 칸 전부 순매수 · 🧲🧲 거기에 주포까지(쌍끌이). 눌러서 위로 모읍니다" }}
-                        accessor={(r: (typeof rows)[number]) => (isTwin(r.flow) ? 2 : isFgn3(r.flow) ? 1 : 0)}
+                        accessor={(r: (typeof rows)[number]) => (isTwin(r) ? 2 : isFgn3(r) ? 1 : 0)}
                         sort={sort}
                         className="num-narrow"
                         extra={<ColumnGrip cw={cw} k="twin" />}
@@ -1683,16 +1691,16 @@ export function ScreenerPage({
                         */}
                         {/* VI — 걸려 있는 동안만. 왜 체결이 안 되는지를 표가 말해야 한다 (2026-09-14) */}
                         {viNow.get(r.code) && <ViMark vi={viNow.get(r.code)!} compact />}
-                        {isFgn3(r.flow) && (
+                        {isFgn3(r) && (
                           <i
-                            className={`scr-fgn3${isTwin(r.flow) ? " twin" : ""}`}
+                            className={`scr-fgn3${isTwin(r) ? " twin" : ""}`}
                             title={
-                              isTwin(r.flow)
+                              isTwin(r)
                                 ? "쌍끌이 — 외국인·주포가 5·10·20일 여섯 칸 전부 순매수"
                                 : "외국인이 5·10·20일 세 칸 전부 순매수 — 실측에서 신호등 초록과 겹칠 때 20일 +3.2%p·승률 59%"
                             }
                           >
-                            {isTwin(r.flow) ? "🧲🧲" : "🧲"}
+                            {isTwin(r) ? "🧲🧲" : "🧲"}
                           </i>
                         )}
                         {/* 시장이 「전체」면 어느 시장인지가 정보다 */}
@@ -1867,15 +1875,15 @@ export function ScreenerPage({
                         <td
                           className="num num-narrow scr-twin"
                           title={
-                            isTwin(r.flow)
+                            isTwin(r)
                               ? "쌍끌이 — 외국인·주포가 5·10·20일 여섯 칸 전부 순매수"
-                              : isFgn3(r.flow)
+                              : isFgn3(r)
                                 ? "외국인이 5·10·20일 세 칸 전부 순매수"
                                 : undefined
                           }
                         >
                           {/* 🔥 는 쏠림 경보가 이미 쓰는 글자다 — 표식을 🧲 로 통일했다 (2026-09-11) */}
-                          {isTwin(r.flow) ? "🧲🧲" : isFgn3(r.flow) ? "🧲" : ""}
+                          {isTwin(r) ? "🧲🧲" : isFgn3(r) ? "🧲" : ""}
                         </td>
                       )}
                     </tr>

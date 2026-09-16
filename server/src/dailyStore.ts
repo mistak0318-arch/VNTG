@@ -547,6 +547,17 @@ export async function flowSpans(code: string, spans: number[]): Promise<Map<numb
  * 5일도 외인3 은 +0.7 인데 쌍끌이는 −0.1 이다. 주포는 단독으로 −0.2 라 얹을수록 손해다.
  * 그래도 쌍끌이를 같이 내는 것은 **벤티지가 그 이름으로 쓰던 칸**이기 때문이다.
  */
+/**
+ * 🧲 **정의는 여기 하나다** (2026-09-16 점검 — 서버 `flowTwinOf` 와 웹 `ScreenerPage.isTwin` 두 곳에 있었다).
+ * 시세분석 표는 서버가 이 함수로 `fgn3`·`twin` 을 붙여 보내고, 웹은 그 값을 그대로 쓴다.
+ * 하나라도 모르면(원장이 얕음) **아니다** — 「모른다」를 「샀다」로 치지 않는다.
+ */
+export function twinFromSpans(rows: { fgn: number | null; smart: number | null }[]): { fgn3: boolean; twin: boolean } {
+  const fgn3 = rows.length === 3 && rows.every((r) => r.fgn !== null && r.fgn > 0);
+  const twin = fgn3 && rows.every((r) => r.smart !== null && r.smart > 0);
+  return { fgn3, twin };
+}
+
 export async function flowTwinOf(code: string): Promise<{
   fgn3: boolean;
   twin: boolean;
@@ -557,9 +568,7 @@ export async function flowTwinOf(code: string): Promise<{
     const f = spans.get(d) ?? null;
     return { d, fgn: f?.fgn ?? null, smart: f?.smart ?? null };
   });
-  const fgn3 = rows.every((r) => r.fgn !== null && r.fgn > 0);
-  const twin = fgn3 && rows.every((r) => r.smart !== null && r.smart > 0);
-  return { fgn3, twin, rows };
+  return { ...twinFromSpans(rows), rows };
 }
 
 /** 여러 종목의 최근 `days` 거래일 순매수 합. 원장이 없는 종목은 빠진다 */

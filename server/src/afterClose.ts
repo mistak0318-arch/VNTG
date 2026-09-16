@@ -224,10 +224,25 @@ async function saveHistory(): Promise<void> {
   if (i >= 0) history[i] = snap;
   else history.unshift(snap);
   history = history.slice(0, HISTORY_KEEP);
-  /* 임시 파일 → 이름 바꾸기. 쓰는 도중에 죽어도 반쪽 파일이 안 남는다 */
-  const tmp = `${HISTORY_FILE}.tmp`;
-  await writeFile(tmp, JSON.stringify({ runs: history }, null, 2), "utf8");
-  await rename(tmp, HISTORY_FILE);
+  /*
+   * 임시 파일 → 이름 바꾸기. 쓰는 도중에 죽어도 반쪽 파일이 안 남는다.
+   * ⚠️ **한 줄로 세운다** (2026-09-16 점검) — 단계마다 `void saveHistory()` 로 안 기다리고 부르는데 tmp 이름이
+   * 하나라, 앞 쓰기가 덜 끝난 tmp 를 뒤 쓰기가 덮고 rename 이 남의 내용을 옮겼다(로컬 이력 파일이 그렇게
+   * 깨져 있었다). 쓰기를 직렬 체인에 걸고 tmp 이름도 매번 다르게.
+   */
+  await serial(async () => {
+    const tmp = `${HISTORY_FILE}.${process.pid}.${Date.now()}.tmp`;
+    await writeFile(tmp, JSON.stringify({ runs: history }, null, 2), "utf8");
+    await rename(tmp, HISTORY_FILE);
+  });
+}
+
+/** 저장 직렬 체인 — 이력·상태 파일이 같은 자물쇠를 쓴다 */
+let writeChain: Promise<void> = Promise.resolve();
+function serial(fn: () => Promise<void>): Promise<void> {
+  const next = writeChain.then(fn, fn);
+  writeChain = next.catch(() => undefined);
+  return next;
 }
 
 /* ── 실행 상태 (2026-09-10 전수 점검 F) ─────────────────────────────────
@@ -269,9 +284,11 @@ async function loadState(): Promise<AfterCloseState | null> {
 
 async function saveState(next: AfterCloseState): Promise<void> {
   state = next;
-  const tmp = `${STATE_FILE}.tmp`;
-  await writeFile(tmp, JSON.stringify(next, null, 2), "utf8");
-  await rename(tmp, STATE_FILE);
+  await serial(async () => {
+    const tmp = `${STATE_FILE}.${process.pid}.${Date.now()}.tmp`;
+    await writeFile(tmp, JSON.stringify(next, null, 2), "utf8");
+    await rename(tmp, STATE_FILE);
+  });
 }
 
 /**

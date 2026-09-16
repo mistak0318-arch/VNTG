@@ -6,7 +6,7 @@ import { getMarketSnapshot } from "../marketSnapshot.js";
 import { latestRegularCloses } from "../dailyCloses.js";
 import { bare, extras, toNum } from "../rankExtras.js";
 import { getStockIndex } from "../stockListCache.js";
-import { flowRank, flowSums, SUBJECT_LABEL, type FlowSubject } from "../dailyStore.js";
+import { flowRank, flowSums, SUBJECT_LABEL, type FlowSubject, twinFromSpans } from "../dailyStore.js";
 import { buzzDetail, buzzMany, markEntered, clampDays } from "../inquiryBuzz.js";
 import { cumulative, noteLiveSample, samplerStatus } from "../inquirySampler.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -166,7 +166,9 @@ async function withFlow<T extends { code: string }>(rows: T[]): Promise<T[]> {
         days: f?.days ?? 0,
       };
     });
-    return { ...r, flow };
+    /* 🧲 판정을 서버에서 붙인다 — 웹이 따로 셀 필요가 없다(정의 두 곳 문제, 2026-09-16) */
+    const spans = FLOW_SPANS.map((span, i) => ({ fgn: sums[i].get(r.code)?.fgn ?? null, smart: sums[i].get(r.code)?.smart ?? null }));
+    return { ...r, flow, ...twinFromSpans(spans) };
   });
 }
 

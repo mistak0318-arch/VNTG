@@ -83,7 +83,18 @@ async function outDir(): Promise<string> {
   return resolved ?? "";
 }
 
+let writing = false;
 async function writeOnce(): Promise<void> {
+  /* 공유 폴더가 30초보다 느리면 두 틱이 같은 tmp 를 쓴다 (2026-09-16 점검) — 앞 것이 끝나기 전엔 안 쓴다 */
+  if (writing) return;
+  writing = true;
+  try {
+    await writeOnceInner();
+  } finally {
+    writing = false;
+  }
+}
+async function writeOnceInner(): Promise<void> {
   const dir = await outDir();
   if (!dir) return;
 
