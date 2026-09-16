@@ -27,6 +27,11 @@ import { SuperDashboardPage } from "./pages/SuperDashboardPage";
 import { ListTrackPage } from "./pages/ListTrackPage";
 import { UsWatchPage } from "./pages/UsWatchPage";
 import { UsScreenerPage } from "./pages/UsScreenerPage";
+import { UsStockPage } from "./pages/UsStockPage";
+import { UsSectorMapPage } from "./pages/UsSectorMapPage";
+import { UsEventsPage } from "./pages/UsEventsPage";
+import { UsEtfFlowPage } from "./pages/UsEtfFlowPage";
+import { UsBuzzPage } from "./pages/UsBuzzPage";
 import { ResearchPage } from "./pages/ResearchPage";
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
@@ -108,6 +113,11 @@ type Tab =
   | "stockAnalysis"
   | "screener"
   | "usScreener"
+  | "usStock"
+  | "usSectorMap"
+  | "usEvents"
+  | "usEtfFlow"
+  | "usBuzz"
   | "research"
   | "volume"
   | "sameNet"
@@ -186,8 +196,6 @@ const MENU: {
        */
       { key: "boardWin", label: "보드 새창 열기", icon: "🗔" },
       { key: "screener", label: "시세분석", icon: "🔬" },
-      /* 미국 순위판 — 거래대금·거래량·시가총액·상승·하락 (2026-09-16, usRank · 네이버 실시간) */
-      { key: "usScreener", label: "시세분석(해외)", icon: "🌎" },
       /*
        * 조건 검색 (2026-09-01) — 증권사 조건검색식처럼 신호등 기준을 통과/미달로 쓴다.
        *
@@ -202,6 +210,25 @@ const MENU: {
       /* ETF (2026-08-27) — 퇴직연금 판. 시세·NAV·괴리율 + ETF 만 골라낸 수급·연속 */
       { key: "etf", label: "ETF", icon: "🧺" },
       { key: "algo", label: "내 알고리즘", icon: "🧮" },
+    ],
+  },
+  /*
+   * 종목분석(해외) (2026-09-17 — 벤티지: "종목분석(해외) 메뉴를 하나 만들고 그 아래에 시세분석(해외),
+   * 그리고 추가하면 좋을 것들… 네이버·야후에서 뽑아 구성"). 국내 「종목 분석」의 미국판 — 순서도 국내와 짝:
+   * 개별종목 → 순위판 → 업종 지도 → 일정 → 자금흐름 → 화제. 재료는 한투(업종)·야후(ETF·트렌딩·일정)·
+   * 네이버(순위·인기·종목토론 USA). 신호등 점수엔 아무것도 안 들어간다 — 보는 자리다.
+   */
+  {
+    group: "종목분석(해외)",
+    accent: "#4f9cf5",
+    items: [
+      { key: "usStock", label: "개별종목분석(해외)", icon: "🧭" },
+      /* 미국 순위판 — 거래대금·거래량·시가총액·상승·하락 (2026-09-16, usRank · 네이버 실시간) */
+      { key: "usScreener", label: "시세분석(해외)", icon: "🌎" },
+      { key: "usSectorMap", label: "업종 MAP(해외)", icon: "🗺️" },
+      { key: "usEvents", label: "실적·일정(해외)", icon: "📅" },
+      { key: "usEtfFlow", label: "ETF 자금흐름(해외)", icon: "💧" },
+      { key: "usBuzz", label: "인기·화제(해외)", icon: "🗣️" },
     ],
   },
   {
@@ -748,6 +775,11 @@ export default function App() {
       case "telegram": return <TelegramPage onSelectStock={onSelectStock} />;
       case "screener": return <ScreenerPage onSelectStock={onSelectStock} />;
       case "usScreener": return <UsScreenerPage />;
+      case "usStock": return <UsStockPage />;
+      case "usSectorMap": return <UsSectorMapPage />;
+      case "usEvents": return <UsEventsPage />;
+      case "usEtfFlow": return <UsEtfFlowPage />;
+      case "usBuzz": return <UsBuzzPage />;
       case "research": return <ResearchPage onSelectStock={onSelectStock} />;
       case "stockAnalysis": return <StockAnalysisPage stock={selected} onSelectStock={openAnalysis} />;
       case "volume": return <VolumeRankingPage onSelectStock={onSelectStock} />;

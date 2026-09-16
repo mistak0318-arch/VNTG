@@ -1713,6 +1713,16 @@ export const api = {
   /** 시세분석(해외) — 미국 순위판(거래대금·거래량·시가총액·상승·하락). 네이버 실시간, 거래소 합침 (2026-09-16) */
   usRank: (kind: UsRankKind, ex: "all" | "NASDAQ" | "NYSE" | "AMEX" = "all", minValue = 0) =>
     getJson<UsRankResult>(`/api/market/us-rank?kind=${kind}&ex=${ex}&minValue=${minValue}&limit=50`),
+  /* ── 종목분석(해외) 묶음 (2026-09-17) — usMarket.ts. 한투 42업종 · 야후 ETF/트렌딩/일정 · 네이버 인기/종목토론(USA) ── */
+  /** 업종 MAP(해외) — 한투 42업종 × 나스닥·뉴욕. 15분 캐시, 첫 로딩은 30초쯤 */
+  usSectors: () => getJson<UsSectorMap>("/api/market/us/sectors"),
+  /** ETF 자금흐름(해외) — 지수·섹터·채권/금/달러 ETF 스물의 1·5·20일 등락과 거래대금 배수 */
+  usEtfFlow: () => getJson<{ at: number; rows: UsEtfRow[]; stale: boolean }>("/api/market/us/etf-flow"),
+  /** 인기·화제(해외) — 네이버 인기 + 야후 trending + 네이버 미국 종목토론(글 제목) */
+  usBuzz: () => getJson<UsBuzz>("/api/market/us/buzz"),
+  /** 실적·일정(해외) — 심볼들의 다음 실적 발표일·예상 EPS·배당락 (야후, 심볼별 6시간 캐시) */
+  usEvents: (symbols: string[]) =>
+    getJson<{ at: number; events: UsEvent[] }>(`/api/market/us/events?symbols=${encodeURIComponent(symbols.join(","))}`),
   /** 한미 짝 타일 — 국내 테마마다 대표 미국 업종 하나 (2026-09-15). 국내 등락은 themeStrength 로 붙인다 */
   themeBridgePairs: () => getJson<{ usAt: string; pairs: BridgePairRow[] }>("/api/market/theme-bridge/pairs"),
   /** 미국 업종 하나의 대표 종목(시총 순) — 미국 짝 칸에서 업종을 누르면 (2026-09-15) */
@@ -6215,6 +6225,96 @@ export interface UsRankRow {
   over: { session: "pre" | "after"; price: number | null; rate: number | null } | null;
   tradedAt: string | null;
 }
+/* ── 종목분석(해외) 묶음 (2026-09-17) — server/src/usMarket.ts 의 모양 그대로 ── */
+export interface UsSectorStock {
+  symbol: string;
+  name: string;
+  exchange: string;
+  price: number | null;
+  rate: number | null;
+  volume: number | null;
+}
+export interface UsSector {
+  code: string;
+  name: string;
+  /** 거래대금 가중 등락률(%) */
+  rate: number | null;
+  count: number;
+  up: number;
+  down: number;
+  /** 거래대금 합($) — 칸 크기 */
+  turnover: number;
+  stocks: UsSectorStock[];
+}
+export interface UsSectorMap {
+  at: number;
+  stale: boolean;
+  exchanges: string[];
+  sectors: UsSector[];
+  error?: string;
+}
+export interface UsEtfRow {
+  symbol: string;
+  name: string;
+  group: "지수" | "섹터" | "채권·금·달러";
+  price: number | null;
+  d1: number | null;
+  d5: number | null;
+  d20: number | null;
+  /** 최근 5일 평균 거래대금 ÷ 그 앞 20일 — 1.5 면 돈이 몰리는 중 */
+  volRatio: number | null;
+  dollar5: number | null;
+}
+export interface UsTrending {
+  symbol: string;
+  name: string | null;
+  price: number | null;
+  rate: number | null;
+}
+export interface UsDiscussionRow {
+  rank: number;
+  prevRank: number | null;
+  symbol: string;
+  reuters: string;
+  name: string | null;
+  price: number | null;
+  rate: number | null;
+  posts: string[];
+}
+export interface UsPopularRow {
+  rank: number;
+  prevRank: number | null;
+  hits: number | null;
+  symbol: string;
+  reuters: string;
+  name: string;
+  exchange: string;
+  kind: string;
+  price: number | null;
+  change: number | null;
+  rate: number | null;
+  volume: number | null;
+  value: number | null;
+  cap: number | null;
+  industry: string | null;
+}
+export interface UsBuzz {
+  at: number;
+  popular: { rows: UsPopularRow[]; stale: boolean } | null;
+  trending: UsTrending[] | null;
+  discussion: { rankTime: string; items: UsDiscussionRow[]; stale: boolean } | null;
+}
+export interface UsEvent {
+  symbol: string;
+  /** 다음 실적 발표일(들) — 야후는 범위로 줄 때가 있다 */
+  earnings: string[];
+  epsEstimate: number | null;
+  revenueEstimate: number | null;
+  exDividend: string | null;
+  dividendDate: string | null;
+  error?: string;
+}
+
 export interface UsRankResult {
   kind: UsRankKind;
   at: number;

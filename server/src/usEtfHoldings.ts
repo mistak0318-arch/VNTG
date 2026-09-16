@@ -43,6 +43,11 @@ const UA =
 
 let auth: { cookie: string; crumb: string } | null = null;
 
+/** 다른 야후 quoteSummary 호출(실적 일정 등)이 같은 crumb 을 쓴다 (2026-09-17) */
+export async function yahooAuth(force = false): Promise<{ cookie: string; crumb: string } | null> {
+  return getAuth(force);
+}
+
 async function getAuth(force = false): Promise<{ cookie: string; crumb: string } | null> {
   if (auth && !force) return auth;
   try {

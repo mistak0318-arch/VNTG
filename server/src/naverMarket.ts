@@ -447,11 +447,13 @@ export interface DiscussionRank {
  * 몰리는 곳이다. 화제 레이더(뉴스·텔레그램)에 「개미 토론」 갈래로, 종목 상세에 순위 칩으로, 데일리 리포트에
  * 과열 재료로 쓴다. **신호등 점수에는 안 넣는다**(문턱·무게 12월까지 동결).
  */
-export async function discussionRanking(): Promise<{ rankTime: string; items: DiscussionRank[]; at: number; stale: boolean }> {
-  const r = await cached("discussion", 10 * 60_000, async () => {
-    const j = await naver<{ rankTime?: string; contents?: Record<string, unknown>[] }>("community/discussion/rankings?nationType=KOR&page=1&size=100", "discussionRank");
+export async function discussionRanking(nation: "KOR" | "USA" = "KOR"): Promise<{ rankTime: string; items: DiscussionRank[]; at: number; stale: boolean }> {
+  const r = await cached(`discussion:${nation}`, 10 * 60_000, async () => {
+    const j = await naver<{ rankTime?: string; contents?: Record<string, unknown>[] }>(`community/discussion/rankings?nationType=${nation}&page=1&size=100`, `discussionRank:${nation}`);
+    /* 미국은 discussionType 이 "foreignStock" 이고 stockPrices 가 없다(이름·시세는 usBuzz 가 채운다) — 9/17 실측 */
+    const wantType = nation === "USA" ? "foreignStock" : "domesticStock";
     const items = (j.contents ?? [])
-      .filter((c) => String(c.discussionType ?? "domesticStock") === "domesticStock")
+      .filter((c) => String(c.discussionType ?? "domesticStock") === wantType)
       .map((c): DiscussionRank => {
         const sp = (c.stockPrices ?? {}) as Record<string, unknown>;
         const posts = ((c.posts as { title?: string }[] | undefined) ?? []).map((p) => String(p.title ?? "").trim()).filter(Boolean).slice(0, 3);
@@ -466,7 +468,8 @@ export async function discussionRanking(): Promise<{ rankTime: string; items: Di
           posts,
         };
       })
-      .filter((x) => /^\d{6}$/.test(x.code));
+      /* 국내는 여섯 자리 코드만, 미국은 「ZTG.O」 꼴이라 그대로 (2026-09-17) */
+      .filter((x) => nation === "USA" || /^\d{6}$/.test(x.code));
     return { rankTime: String(j.rankTime ?? ""), items };
   });
   return { ...r.data, at: r.at, stale: r.stale };

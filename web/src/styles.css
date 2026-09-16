@@ -19291,3 +19291,43 @@ th.usr-key { color: var(--text); }
 tr.gv-thin td { opacity: 0.45; }
 tr.gv-strong td { font-weight: 700; }
 tr.gv-strong td:first-child { color: var(--text); }
+
+/* ═══ 종목분석(해외) 묶음 (2026-09-17) — 업종 MAP(usm-) · 인기·화제(ubz-) · 개별종목 검색(uss-) ═══ */
+.usm-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+.usm-cell {
+  flex: 1 1 auto; min-height: 58px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 2px; font: inherit;
+}
+.usm-cell.on { outline: 2px solid var(--accent); }
+.usm-name { font-size: 0.72rem; line-height: 1.2; }
+.usm-rate { font-size: 0.95rem; }
+.usm-ud { font-size: 0.64rem; color: var(--muted); font-style: normal; }
+.usm-sub { font-size: 0.72rem; font-weight: 400; color: var(--muted); margin-left: 6px; }
+
+.ubz-cols { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 900px) { .ubz-cols { grid-template-columns: 1fr 1fr 1fr; align-items: start; } }
+.ubz-list { display: flex; flex-direction: column; gap: 2px; }
+.ubz-row {
+  display: grid; grid-template-columns: 1.6rem 1fr auto auto; gap: 6px; align-items: center; width: 100%;
+  padding: 5px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.ubz-row:hover { background: var(--panel-2); }
+.ubz-row > b { color: var(--muted); font-size: 0.72rem; }
+.ubz-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ubz-nm i { font-style: normal; color: var(--muted); font-size: 0.7rem; margin-left: 4px; }
+.ubz-row em { font-style: normal; font-size: 0.8rem; }
+.ubz-jp { font-style: normal; font-size: 0.66rem; color: var(--muted); min-width: 2.2em; text-align: right; }
+.ubz-jp.up { color: var(--red); }
+.ubz-row.hot .ubz-nm, .ubz-dis.hot .ubz-nm { font-weight: 700; }
+.ubz-dis.open { background: var(--panel-2); border-radius: 6px; }
+.ubz-posts { padding: 4px 8px 8px 2.4rem; font-size: 0.74rem; color: var(--muted); line-height: 1.45; }
+.ubz-posts .link-btn { margin-top: 4px; }
+
+.uss-list { display: flex; flex-direction: column; gap: 2px; }
+.uss-row {
+  display: grid; grid-template-columns: 5.5rem 1fr auto; gap: 8px; align-items: center; width: 100%;
+  padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.uss-row:hover { background: var(--panel-2); }
+.uss-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uss-row > i { font-style: normal; font-size: 0.68rem; color: var(--muted); }

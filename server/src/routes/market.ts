@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getStockIndex } from "../stockListCache.js";
 import { depositTrend, discussionRanking, marketCalendar, naverBriefings, npayRanking, researchBoard, type NpayAge } from "../naverMarket.js";
+import { usBuzz, usEtfFlow, usEvents, usSectorMap } from "../usMarket.js";
 import { usRank, type UsExchange, type UsRankKind } from "../usRank.js";
 import { bridgeForTheme, bridgePairs, overnightBridge, usIndustryTop } from "../themeBridge.js";
 import { clearHidden, listHidden, setHidden } from "../hiddenThemes.js";
@@ -1117,6 +1118,37 @@ export function createMarketRouter(client: KiwoomClient): Router {
       const minValue = Number(req.query.minValue ?? 0) || 0;
       const limit = Number(req.query.limit ?? 50) || 50;
       res.json(await usRank({ kind, ex, minValue, limit }));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* 종목분석(해외) 묶음 (2026-09-17, usMarket.ts) — 업종 MAP(한투) · ETF 자금흐름(야후) · 인기·화제 · 실적·일정 */
+  router.get("/us/sectors", async (_req, res, next) => {
+    try {
+      res.json(await usSectorMap());
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/us/etf-flow", async (_req, res, next) => {
+    try {
+      res.json(await usEtfFlow());
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/us/buzz", async (_req, res, next) => {
+    try {
+      res.json(await usBuzz());
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/us/events", async (req, res, next) => {
+    try {
+      const symbols = String(req.query.symbols ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      res.json(await usEvents(symbols));
     } catch (err) {
       next(err);
     }
