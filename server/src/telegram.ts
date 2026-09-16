@@ -129,7 +129,7 @@ export function telegramChannelStatus(): {
     chatId: chatIdFor(channel),
     dedicated: hasDedicatedChannel(channel),
     overridden: Boolean(assignedChatId(channel)),
-    envChatId: process.env[CHANNEL_ENV[channel]]?.trim() ?? "",
+    envChatId: envChatId(channel),
   }));
 }
 
@@ -151,7 +151,7 @@ export function telegramEnvRooms(): { key: string; label: string; chatId: string
   const base = process.env.TELEGRAM_CHAT_ID?.trim();
   if (base) out.push({ key: "base", label: "기본 방", chatId: base });
   for (const ch of Object.keys(CHANNEL_ENV) as TelegramChannel[]) {
-    const id = process.env[CHANNEL_ENV[ch]]?.trim();
+    const id = envChatId(ch);
     // 같은 chat_id 가 여러 키에 걸려 있으면 한 번만
     if (id && !out.some((r) => r.chatId === id)) out.push({ key: ch, label: LABEL[ch], chatId: id });
   }
