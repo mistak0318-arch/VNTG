@@ -27,7 +27,7 @@ const CANDIDATES: Candidate[] = [
     label: "거래량순위",
     path: "/uapi/overseas-stock/v1/ranking/trade-vol",
     trId: "HHDFS76310010",
-    params: { AUTH: "", EXCD, NDAY: "0", VOL_RANG: "0", KEYB: "" },
+    params: { AUTH: "", EXCD, NDAY: "0", PRC1: "0", PRC2: "0", VOL_RANG: "0", KEYB: "" },
     listKeys: ["output2"],
   },
   {
@@ -41,7 +41,7 @@ const CANDIDATES: Candidate[] = [
     label: "시가총액순위",
     path: "/uapi/overseas-stock/v1/ranking/market-cap",
     trId: "HHDFS76350100",
-    params: { AUTH: "", EXCD, VOL_RANG: "0", KEYB: "" },
+    params: { AUTH: "", EXCD, CURR_GB: "0", VOL_RANG: "0", KEYB: "" },
     listKeys: ["output2"],
   },
   {
@@ -52,14 +52,14 @@ const CANDIDATES: Candidate[] = [
     listKeys: ["output2"],
   },
   {
-    label: "업종별코드",
+    label: "업종별종목",
     path: "/uapi/overseas-price/v1/quotations/industry-theme",
     trId: "HHDFS76370000",
     params: { AUTH: "", EXCD, ICOD: "", VOL_RANG: "0", KEYB: "" },
     listKeys: ["output2", "output1"],
   },
   {
-    label: "업종별시세",
+    label: "업종목록(42)",
     path: "/uapi/overseas-price/v1/quotations/industry-price",
     trId: "HHDFS76370100",
     params: { AUTH: "", EXCD, ICOD: "", VOL_RANG: "0", KEYB: "" },

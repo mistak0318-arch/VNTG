@@ -168,3 +168,16 @@ HANTOO_APP_SECRET=…   (180자)
 - 해외선물옵션(20종) — 야후 선물로 충분한지 먼저 볼 것
 - 장내채권(18종) — 금리를 볼 때 쓸 수 있으나 지금은 급하지 않다
 - 웹소켓 실시간 — 세션이 한 대에서만 살 수 있는 텔레그램과 같은 제약이 있는지 확인 필요
+
+## 해외주식 순위·업종 (2026-09-16 밤 실측 — `hantooUsRankProbe.ts`, health.json 「한투해외순위시험」)
+
+| 무엇 | tr_id | 경로 | 파라미터 | 실측 |
+|---|---|---|---|---|
+| 거래대금순위 | `HHDFS76320010` | `/uapi/overseas-stock/v1/ranking/trade-pbmn` | AUTH,EXCD,NDAY,PRC1,PRC2,VOL_RANG,KEYB | ✅ 100줄 — rsym·excd·symb·name·last·sign·diff·rate·pask·pbid·tvol·tamt |
+| 등락률순위 | `HHDFS76290000` | `/uapi/overseas-stock/v1/ranking/updown-rate` | AUTH,EXCD,NDAY,GUBN(1 상승),VOL_RANG,KEYB | ✅ 100줄 (+n_base) |
+| 업종별 종목 시세 | `HHDFS76370000` | `/uapi/overseas-price/v1/quotations/industry-theme` | AUTH,EXCD,ICOD,VOL_RANG,KEYB | ✅ 100줄 — ICOD 빈 값이면 전체 |
+| 업종 목록 | `HHDFS76370100` | `/uapi/overseas-price/v1/quotations/industry-price` | AUTH,EXCD,ICOD,VOL_RANG,KEYB | ✅ **42업종** (icod·name) |
+| 거래량순위 | `HHDFS76310010` | `/uapi/overseas-stock/v1/ranking/trade-vol` | + **PRC1** 필요 | ❌ `INPUT FIELD NOT FOUND [PRC1]` — 다음 시험 |
+| 시가총액순위 | `HHDFS76350100` | `/uapi/overseas-stock/v1/ranking/market-cap` | + **CURR_GB** 필요 | ❌ `INPUT FIELD NOT FOUND [CURR_GB]` — 다음 시험 |
+
+EXCD: NAS 나스닥 · NYS 뉴욕 · AMS 아멕스. 지연 여부는 아직 안 쟀다(네이버 목록은 delayTime 0).
