@@ -6,7 +6,7 @@ import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
 import { hantooRealtimeStatus } from "./hantooRealtime.js";
-import { afterCloseStatus } from "./afterClose.js";
+import { afterCloseStatus, afterCloseStateSummary } from "./afterClose.js";
 import { streamStats } from "./routes/realtime.js";
 
 /**
@@ -128,6 +128,8 @@ async function writeOnce(): Promise<void> {
     마감뒤정리: ac
       ? { day: ac.day, running: ac.running, at: ac.at, step: `${ac.stepNo ?? 0}/${ac.stepTotal ?? 0}`, 실패: ac.steps.filter((s) => !s.ok).map((s) => s.label) }
       : null,
+    /* 도는 중이 아닐 때도 「오늘 돌았나·언제 끝났나·무엇이 실패했나」 — 날짜·단계 이름뿐 (2026-09-16) */
+    마감뒤정리_상태: await afterCloseStateSummary().catch(() => null),
     /*
      * 애프터마켓 관측창 (2026-09-14) — 첫날 실측 넷을 밖에서 보려고. **분류 값과 개수뿐**이다 —
      * 종목·계좌·키는 한 글자도 안 실린다(`afterProbe.ts` 가 애초에 코드를 안 받는다).

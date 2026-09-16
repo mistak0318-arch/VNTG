@@ -281,6 +281,32 @@ export async function afterCloseDoneToday(): Promise<boolean> {
 }
 
 /** 최근 회차들 — 새 것부터 */
+/**
+ * **밖에서 보는 요약** (2026-09-16) — health.json 에 싣는다. 도는 중이 아니면 `run` 이 비어 있어 「오늘 돌았나」를
+ * 밖에서 알 길이 없었다(16:45 배포 뒤 health 가 null 이라 끝난 건지 안 돈 건지 못 가렸다). **날짜·시각·단계 이름·
+ * 성공 여부뿐** — 종목·계좌·키는 없다.
+ */
+export async function afterCloseStateSummary(): Promise<{
+  day: string;
+  startedAt: string;
+  finishedAt: string | null;
+  실패: string[];
+  마지막단계: Record<string, { day: string; ok: boolean; ms: number; note?: string }>;
+} | null> {
+  const st = await loadState().catch(() => null);
+  if (!st) return null;
+  const last = await afterCloseLastByStep().catch(() => ({}) as Record<string, StepResult & { day: string }>);
+  const 마지막단계: Record<string, { day: string; ok: boolean; ms: number; note?: string }> = {};
+  for (const [k, v] of Object.entries(last)) 마지막단계[k] = { day: v.day, ok: v.ok, ms: v.ms, note: v.note };
+  return {
+    day: st.day,
+    startedAt: st.startedAt,
+    finishedAt: st.finishedAt,
+    실패: st.failedSteps.map((k) => STEPS.find((s) => s.key === k)?.label ?? k),
+    마지막단계,
+  };
+}
+
 export async function afterCloseHistory(): Promise<AfterCloseRun[]> {
   await loadHistory();
   return history.map((r) => ({ ...r, steps: [...r.steps] }));
