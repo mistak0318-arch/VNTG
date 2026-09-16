@@ -1,3 +1,6 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getAlertConfig } from "./alertRules.js";
 import { peekRealtime } from "./realtimeHub.js";
 import { viDirText } from "./realtimeStore.js";
@@ -32,10 +35,52 @@ import { alertTargets } from "./alertScheduler.js";
 /** 체결강도 FID */
 const FID_STRENGTH = "228";
 
-/** 오늘 이미 보낸 것 — `날짜:종류:종목:키` */
+/**
+ * 오늘 이미 보낸 것 — `날짜:종류:종목:키`. **파일에도 남긴다** (2026-09-16).
+ *
+ * 벤티지: "알림 오는 게 이상한데 데이터가?? 포스코홀딩스 13프로 상방 VI 걸리지도 않았는데."
+ *
+ * 여태 이 집합은 메모리뿐이었다. 그런데 실시간 저장소는 켤 때 **오늘 파일에서 VI 목록을 되살린다**
+ * (`realtimeStore.load`). 그래서 서버가 재시작될 때마다(배포 한 번마다) 아침에 걸렸던 VI 가 전부
+ * 「새 발동」으로 다시 나갔다 — 알림함은 2시간 중복 막이가 있어 덜했지만 **텔레그램은 그대로 갔다.**
+ * 오늘 하루 배포가 세 번이었으니 세 번씩.
+ */
 const sent = new Set<string>();
+const SENT_FILE = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "liveAlertsSent.json");
+let sentLoaded = false;
+async function loadSent(): Promise<void> {
+  if (sentLoaded) return;
+  sentLoaded = true;
+  try {
+    const raw = JSON.parse(await readFile(SENT_FILE, "utf-8")) as { keys?: string[] };
+    for (const k of raw.keys ?? []) sent.add(k);
+  } catch {
+    /* 처음이거나 못 읽으면 빈 채로 — 오래된 발동은 아래 시각 문턱이 막는다 */
+  }
+}
+async function saveSent(): Promise<void> {
+  try {
+    await mkdir(dirname(SENT_FILE), { recursive: true });
+    await writeFile(SENT_FILE, JSON.stringify({ keys: [...sent] }), "utf-8");
+  } catch {
+    /* 못 남겨도 이번 세션엔 산다 */
+  }
+}
+/**
+ * **발동한 지 이만큼 지난 VI 는 안 보낸다.** 파일이 없어졌든 새로 깐 서버든, 아침 9시 발동을
+ * 오후에 「지금 걸렸다」고 보내면 안 된다 — VI 는 몇 분 뒤면 이미 풀려 있다.
+ */
+const VI_STALE_MS = 15 * 60_000;
 /** 종목별 직전 체결강도 — 「뛰었나」를 보려면 이전 값이 있어야 한다 */
 const lastStrength = new Map<string, number>();
+
+/** HHmmss(KST) → 오늘 그 시각의 ms. 모양이 아니면 null */
+function kstTimeMs(hhmmss: string, now = new Date()): number | null {
+  if (!/^\d{6}$/.test(hhmmss)) return null;
+  const k = new Date(now.getTime() + 9 * 3600_000);
+  const base = Date.UTC(k.getUTCFullYear(), k.getUTCMonth(), k.getUTCDate()) - 9 * 3600_000;
+  return base + (Number(hhmmss.slice(0, 2)) * 3600 + Number(hhmmss.slice(2, 4)) * 60 + Number(hhmmss.slice(4, 6))) * 1000;
+}
 
 function kstDay(now = new Date()): string {
   return new Date(now.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -80,6 +125,8 @@ export async function runLiveAlerts(
   const day = kstDay();
   const preview = opts.send === false;
   const out: LiveAlert[] = [];
+  await loadSent();
+  let dirty = false;
 
   /* ── VI 발동 ─────────────────────────────────────────────── */
   if (rules.has("viHit")) {
@@ -87,12 +134,31 @@ export async function runLiveAlerts(
       const name = mine.get(v.code);
       if (!name) continue; // 관심종목이 아니면 안 본다 (하루 483건이 걸린다)
       /*
-       * 같은 종목이 하루에 여러 번 걸릴 수 있다. **발동 시각까지 키에 넣어** 같은
-       * 발동을 두 번 안 보내되, 새 발동은 새로 보낸다.
+       * **해제는 발동이 아니다** (2026-09-16). 발동과 해제가 같은 TR 로 오고(`realtimeStore.takeVi`),
+       * 해제 줄은 `clearedAt` 이 차 있다. 여태 그 줄도 「VI 발동」으로 나갔다 — 한 VI 가 두 번 울린 셈.
        */
-      const key = `${day}:vi:${v.code}:${v.at}`;
+      if (v.clearedAt) continue;
+      /*
+       * 같은 종목이 하루에 여러 번 걸릴 수 있다. **발동 시각(거래소 시각)까지 키에 넣어** 같은
+       * 발동을 두 번 안 보내되, 새 발동은 새로 보낸다.
+       * ⚠️ 받은 시각(`v.at`)이 아니라 **발동 시각(`v.firedAt`)** 이다 — 받은 시각은 재시작해 되살리면
+       * 달라지고, 같은 VI 가 KRX·NXT 두 줄로 와도 달라진다. 발동 시각은 그 VI 의 것이라 안 변한다.
+       */
+      const key = `${day}:vi:${v.code}:${v.firedAt || v.at}`;
       if (sent.has(key)) continue;
-      if (!preview) sent.add(key);
+      /* 발동한 지 오래된 것은 「지금」이 아니다 — 보내지 않고 보낸 셈 친다 */
+      const firedMs = kstTimeMs(v.firedAt) ?? kstTimeMs(v.at);
+      if (firedMs !== null && Date.now() - firedMs > VI_STALE_MS) {
+        if (!preview) {
+          sent.add(key);
+          dirty = true;
+        }
+        continue;
+      }
+      if (!preview) {
+        sent.add(key);
+        dirty = true;
+      }
       /*
        * 「VI 발동」 넉 자로는 폰에서 판단이 안 된다 — 언제·어느 가격에서 걸렸는지가
        * 있어야 지나간 것인지 지금 것인지 안다. 전부 이미 받은 이벤트에 있는 값이다.
@@ -147,7 +213,10 @@ export async function runLiveAlerts(
       // 한 번 뛰면 그 근처에서 오르내린다. 종목당 하루 한 번이면 충분하다
       const key = `${day}:str:${code}`;
       if (sent.has(key)) continue;
-      if (!preview) sent.add(key);
+      if (!preview) {
+        sent.add(key);
+        dirty = true;
+      }
       /* 지금 등락률도 같이 — 체결강도만으로는 오르는 중인지 모른다 */
       const rate = num(store.getLatestKrx("0B", code)?.values?.["12"]);
       const ratePart = Number.isFinite(rate) && rate !== 0 ? ` · 주가 ${rate > 0 ? "+" : ""}${rate.toFixed(1)}%` : "";
@@ -161,6 +230,7 @@ export async function runLiveAlerts(
     }
   }
 
+  if (dirty) await saveSent();
   if (out.length === 0 || preview) return { alerts: out, sent: false, live: true };
 
   /* 슈퍼신호등 전용 방이 있으면 슈퍼 종목 건은 그 방으로 — 시그널 스캔과 같은 규칙 */
@@ -220,7 +290,12 @@ export function formatLiveAlerts(alerts: LiveAlert[]): string {
 /** 날짜가 바뀌면 어제 것은 잊는다 */
 export function pruneLiveAlerts(now = new Date()): void {
   const day = kstDay(now);
+  let changed = false;
   for (const k of sent) {
-    if (!k.startsWith(`${day}:`)) sent.delete(k);
+    if (!k.startsWith(`${day}:`)) {
+      sent.delete(k);
+      changed = true;
+    }
   }
+  if (changed) void saveSent();
 }
