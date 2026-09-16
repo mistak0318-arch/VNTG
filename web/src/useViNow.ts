@@ -111,6 +111,59 @@ async function pull(): Promise<void> {
 }
 
 /**
+ * **오늘 VI 걸렸던 종목** — 풀렸어도 하루 남는 표식 (2026-09-17, 벤티지: "VI 걸렸는데 시세분석 표에 안 보인다").
+ * 위 `useViNow` 는 걸린 2분 동안만이라, 보고 있을 때 마침 걸려 있지 않으면 표에 아무것도 없었다.
+ * 재료는 키움 ka10054(서버 60초 캐시) — 실시간과 무관하니 실시간을 꺼도 뜬다. 1분에 한 번.
+ */
+export interface ViToday {
+  code: string;
+  name: string;
+  count: number;
+  releaseTime: string;
+  openChangeRate: number;
+  motionPrice: number;
+}
+let todaySubs = new Set<(m: Map<string, ViToday>) => void>();
+let todayTimer: ReturnType<typeof setInterval> | null = null;
+let todayCache = new Map<string, ViToday>();
+async function pullToday(): Promise<void> {
+  try {
+    const r = await fetch("/api/market/vi-today");
+    const j = (await r.json()) as { ok?: boolean; rows?: Record<string, ViToday> };
+    if (!j.ok) return; // 못 받았으면 직전 값 — 「없다」가 아니다
+    todayCache = new Map(Object.entries(j.rows ?? {}));
+    for (const fn of todaySubs) fn(todayCache);
+  } catch {
+    /* 직전 값 유지 */
+  }
+}
+export function useViToday(): Map<string, ViToday> {
+  const [map, setMap] = useState<Map<string, ViToday>>(todayCache);
+  const tabActive = useTabActive();
+  const lockPaused = useLockPaused();
+  const run = tabActive && !lockPaused;
+  const ref = useRef<(m: Map<string, ViToday>) => void>(setMap);
+  ref.current = setMap;
+  useEffect(() => {
+    if (!run) return;
+    const fn = (m: Map<string, ViToday>) => ref.current(new Map(m));
+    todaySubs.add(fn);
+    if (!todayTimer) {
+      void pullToday();
+      todayTimer = setInterval(() => void pullToday(), 60_000);
+    }
+    return () => {
+      todaySubs.delete(fn);
+      if (todaySubs.size === 0 && todayTimer) {
+        clearInterval(todayTimer);
+        todayTimer = null;
+      }
+    };
+  }, [run]);
+  return map;
+}
+
+/**
  * @param on 꺼 두면 구독하지 않는다 — 화면이 실시간을 끈 상태면 조회할 이유가 없다.
  */
 export function useViNow(on = true): Map<string, ViNow> {

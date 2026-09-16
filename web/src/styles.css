@@ -3193,6 +3193,9 @@ body.col-resizing { user-select: none; cursor: col-resize; }
 }
 .vi-mark.up { border-color: var(--red); color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
 .vi-mark.down { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, transparent); }
+/* 오늘 걸렸던 것 — 풀렸으니 깜빡이지 않고 흐리게. 방향 색은 남긴다 (2026-09-17) */
+.vi-mark.today { animation: none; opacity: 0.6; font-weight: 700; padding: 0 4px; font-size: 0.62rem; margin-left: 3px; }
+.vi-mark.today i { font-weight: 600; }
 .vi-mark i { font-style: normal; font-weight: 700; opacity: 0.85; font-variant-numeric: tabular-nums; }
 .vi-mark.compact { margin-left: 3px; padding: 0 4px; font-size: 0.62rem; }
 @keyframes vi-pulse {

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getStockIndex } from "../stockListCache.js";
 import { depositTrend, discussionRanking, marketCalendar, naverBriefings, npayRanking, researchBoard, type NpayAge } from "../naverMarket.js";
 import { usBuzz, usEtfFlow, usEvents, usSectorMap } from "../usMarket.js";
+import { viTodayMap } from "../marketOverview.js";
 import { usRank, type UsExchange, type UsRankKind } from "../usRank.js";
 import { bridgeForTheme, bridgePairs, overnightBridge, usIndustryTop } from "../themeBridge.js";
 import { clearHidden, listHidden, setHidden } from "../hiddenThemes.js";
@@ -1124,6 +1125,16 @@ export function createMarketRouter(client: KiwoomClient): Router {
   });
 
   /* 종목분석(해외) 묶음 (2026-09-17, usMarket.ts) — 업종 MAP(한투) · ETF 자금흐름(야후) · 인기·화제 · 실적·일정 */
+  /* 오늘 VI 걸린 종목 전부 (ka10054, 60초 캐시) — 시세분석 표의 「오늘 VI」 표식 (2026-09-17) */
+  router.get("/vi-today", async (_req, res, next) => {
+    try {
+      const m = await viTodayMap(client);
+      res.json({ at: Date.now(), ok: m !== null, rows: m ? Object.fromEntries(m) : {} });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/us/sectors", async (_req, res, next) => {
     try {
       res.json(await usSectorMap());

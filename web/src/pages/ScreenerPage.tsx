@@ -7,8 +7,8 @@ import { SameNetTradeRankingPage } from "./SameNetTradeRankingPage";
 import { ContinuousTradePage } from "./ContinuousTradePage";
 import { TopTradersTable } from "../components/TopTradersTable";
 import { SortableTh, useSortableTable } from "../useSortableTable";
-import { useViNow } from "../useViNow";
-import { ViMark } from "../components/ViMark";
+import { useViNow, useViToday } from "../useViNow";
+import { ViMark, ViTodayMark } from "../components/ViMark";
 import { fid, krxOverlayLive, krxRegularSession, useRealtime } from "../useRealtime";
 import { afterMarketEra, krPhase } from "../marketSession";
 import { SignalCell, useSignalColumn } from "../components/SignalColumn";
@@ -764,6 +764,7 @@ export function ScreenerPage({
    * (`useViNow`) — 호가창과 **같은 값**을 본다.
    */
   const viNow = useViNow(liveOn);
+  const viToday = useViToday();
   const rt = useRealtime(liveOn ? shown.map((r) => `0B:${r.code}`) : [], 1500, { readOnly: true });
   const liveOf = (code: string): { price: number; rate: number | null } | null => {
     if (!liveOn) return null;
@@ -1691,6 +1692,8 @@ export function ScreenerPage({
                         */}
                         {/* VI — 걸려 있는 동안만. 왜 체결이 안 되는지를 표가 말해야 한다 (2026-09-14) */}
                         {viNow.get(r.code) && <ViMark vi={viNow.get(r.code)!} compact />}
+                        {/* 풀렸어도 오늘 걸렸으면 흐린 표 — 표를 볼 때 마침 걸려 있는 일은 드물다 (2026-09-17) */}
+                        {!viNow.get(r.code) && viToday.get(r.code) && <ViTodayMark v={viToday.get(r.code)!} />}
                         {isFgn3(r) && (
                           <i
                             className={`scr-fgn3${isTwin(r) ? " twin" : ""}`}

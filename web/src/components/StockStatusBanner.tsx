@@ -96,6 +96,7 @@ export function StatusMark({ flags }: { flags: StatusFlag[] }) {
     unfaithful: "불성실",
     lowLiquidity: "저유동",
     vi: "VI",
+    viToday: "VI",
   };
   return (
     <i className={`sd-mark ${top.level}`} title={`${top.label} — ${top.desc}`}>

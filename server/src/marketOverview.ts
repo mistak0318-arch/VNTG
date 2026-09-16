@@ -514,7 +514,26 @@ async function fetchVi(client: KiwoomClient): Promise<ViRow[]> {
  * (포스코 +13% 사건), 이 목록은 **실제로 걸린 것만** 준다. 그래서 알림은 이 목록에 있는 것만 보낸다.
  * 화면 카드는 위에서 30줄로 자르지만 여기는 **전부** 본다 — 대조에 상한이 있으면 안 된다. 60초 캐시.
  */
-let viTodayCache: { at: number; codes: Set<string> } | null = null;
+export interface ViToday {
+  code: string;
+  name: string;
+  /** VI 발동 횟수(오늘) */
+  count: number;
+  /** 마지막 해제 시각 HHmmss */
+  releaseTime: string;
+  /** 시가대비 등락률(%) — 방향 */
+  openChangeRate: number;
+  motionPrice: number;
+}
+let viTodayCache: { at: number; codes: Set<string>; rows: Map<string, ViToday> } | null = null;
+/**
+ * 오늘 VI 걸린 종목 **전부** — 코드 → 횟수·해제 시각 (2026-09-17, 벤티지: "VI 걸렸는데 시세분석 표에도 종목 위에도
+ * 안 보인다"). 실시간 표식은 2분 단일가 동안만 뜨고 풀리면 흔적이 없었다. 이건 하루 남는다. 60초 캐시.
+ */
+export async function viTodayMap(client: KiwoomClient): Promise<Map<string, ViToday> | null> {
+  const codes = await viCodesToday(client);
+  return codes && viTodayCache ? viTodayCache.rows : null;
+}
 export async function viCodesToday(client: KiwoomClient): Promise<Set<string> | null> {
   if (viTodayCache && Date.now() - viTodayCache.at < 60_000) return viTodayCache.codes;
   try {
@@ -534,8 +553,25 @@ export async function viCodesToday(client: KiwoomClient): Promise<Set<string> | 
       stex_tp: "3",
     });
     const rows = Array.isArray(data.motn_stk) ? (data.motn_stk as Row[]) : [];
-    const codes = new Set(rows.map((r) => String(r.stk_cd ?? "").replace(/_(AL|NX)$/i, "")).filter(Boolean));
-    viTodayCache = { at: Date.now(), codes };
+    const map = new Map<string, ViToday>();
+    for (const r of rows) {
+      const code = String(r.stk_cd ?? "").replace(/_(AL|NX)$/i, "");
+      if (!code) continue;
+      const cur = map.get(code);
+      const row: ViToday = {
+        code,
+        name: String(r.stk_nm ?? ""),
+        count: Math.max(toNum(r.vimotn_cnt), 1),
+        releaseTime: String(r.virelis_time ?? ""),
+        openChangeRate: toNum(r.open_pric_pre_flu_rt),
+        motionPrice: toAbsNum(r.motn_pric),
+      };
+      /* 같은 종목이 여러 줄이면(발동마다 한 줄) 가장 늦은 해제 시각·큰 횟수를 남긴다 */
+      if (!cur) map.set(code, row);
+      else map.set(code, { ...row, count: Math.max(cur.count, row.count, 1), releaseTime: row.releaseTime > cur.releaseTime ? row.releaseTime : cur.releaseTime });
+    }
+    const codes = new Set(map.keys());
+    viTodayCache = { at: Date.now(), codes, rows: map };
     return codes;
   } catch {
     return null; // 못 받았으면 「모른다」 — 대조를 못 하는 것이지 「없다」가 아니다

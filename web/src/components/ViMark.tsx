@@ -1,4 +1,4 @@
-import { VI_HOLD_SEC, type ViNow } from "../useViNow";
+import { VI_HOLD_SEC, type ViNow, type ViToday } from "../useViNow";
 
 /**
  * **VI 딱지** — 「지금 이 종목 단일가다」 (2026-09-14).
@@ -38,6 +38,27 @@ export function ViMark({ vi, compact = false }: { vi: ViNow; compact?: boolean }
     <span className={`vi-mark ${cls}${compact ? " compact" : ""}`} title={title}>
       VI{arrow}
       {!compact && left > 0 && <i>{mmss}</i>}
+    </span>
+  );
+}
+
+/**
+ * **오늘 VI 걸렸던** 표 — 풀린 뒤에도 하루 남는다 (2026-09-17). 걸려 있는 동안은 위 `ViMark` 가 대신 뜬다.
+ * 방향은 시가대비 등락(ka10054)으로 — 급등에 걸린 건지 급락에 걸린 건지.
+ */
+export function ViTodayMark({ v }: { v: ViToday }) {
+  const dir = v.openChangeRate > 0 ? "up" : v.openChangeRate < 0 ? "down" : "";
+  const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "";
+  const hm = v.releaseTime.length >= 4 ? `${v.releaseTime.slice(0, 2)}:${v.releaseTime.slice(2, 4)}` : "";
+  const title =
+    `오늘 VI 발동 ${v.count}회 — 시가대비 ${v.openChangeRate > 0 ? "+" : ""}${v.openChangeRate.toFixed(2)}%` +
+    (v.motionPrice > 0 ? ` · 발동가 ${v.motionPrice.toLocaleString("ko-KR")}` : "") +
+    (hm ? ` · 마지막 해제 ${hm}` : "") +
+    "\n\n지금은 풀려 있습니다. 급하게 움직인 종목이라 추격은 조심.";
+  return (
+    <span className={`vi-mark today ${dir}`} title={title}>
+      VI{arrow}
+      {v.count > 1 && <i>×{v.count}</i>}
     </span>
   );
 }

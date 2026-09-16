@@ -18,6 +18,7 @@ import { hantooGet, hantooReady } from "./hantooClient.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { getStockIndex } from "./stockListCache.js";
 import { activeMeasures, KIND_LABEL, type NoticeKind } from "./krxNotices.js";
+import { viTodayMap } from "./marketOverview.js";
 
 export type FlagKind =
   | NoticeKind
@@ -25,7 +26,8 @@ export type FlagKind =
   | "lowLiquidity" // 저유동성
   | "unfaithful" // 불성실공시
   | "liquidation" // 정리매매
-  | "vi"; // VI 발동 중
+  | "vi" // VI 발동 중
+  | "viToday"; // 오늘 VI 걸린 적 있음 (풀렸어도 하루 남는다)
 
 export interface StatusFlag {
   kind: FlagKind;
@@ -58,6 +60,7 @@ const DESC: Record<FlagKind, { label: string; desc: string; level: StatusFlag["l
   unfaithful: { label: "불성실공시법인", desc: "공시 위반 이력 — 관리종목 지정 사유가 될 수 있어요", level: "warn" },
   liquidation: { label: "정리매매", desc: "상장폐지 전 정리매매 중 — 가격제한폭 없음", level: "danger" },
   vi: { label: "VI 발동 중", desc: "변동성완화장치 — 2분 단일가", level: "info" },
+  viToday: { label: "오늘 VI 발동", desc: "오늘 변동성완화장치가 걸렸던 종목 — 급하게 움직인 자리", level: "info" },
 };
 
 interface HantooFlags {
@@ -118,10 +121,11 @@ function kiwoomFlags(audit: string | undefined): Set<FlagKind> {
 
 /** 종목의 지금 상태 — 위험한 것부터 */
 export async function stockStatus(client: KiwoomClient, code: string): Promise<StatusFlag[]> {
-  const [ht, index, kind] = await Promise.all([
+  const [ht, index, kind, viToday] = await Promise.all([
     hantooFlags(code),
     getStockIndex(client).catch(() => new Map()),
     activeMeasures(code).catch(() => []),
+    viTodayMap(client).catch(() => null),
   ]);
   const entry = index.get(code) as { auditInfo?: string } | undefined;
   const kw = kiwoomFlags(entry?.auditInfo);
@@ -146,6 +150,22 @@ export async function stockStatus(client: KiwoomClient, code: string): Promise<S
       cur.since = n.date;
       cur.acptNo = n.acptNo;
     }
+  }
+  /*
+   * 오늘 VI 걸렸던 종목 (2026-09-17 — 벤티지: "VI 걸렸는데 종목 들어가도 위에 안 보인다. 투자주의 알림 자리에").
+   * 「발동 중」(한투 vi_cls_code)은 2분뿐이라 풀리면 흔적이 없었다 — ka10054 목록은 하루 남는다. 발동 중이면 그것만.
+   */
+  const v = viToday?.get(code);
+  if (v && !out.has("vi")) {
+    const hm = v.releaseTime.length >= 4 ? `${v.releaseTime.slice(0, 2)}:${v.releaseTime.slice(2, 4)}` : "";
+    const dir = v.openChangeRate > 0 ? "▲" : v.openChangeRate < 0 ? "▼" : "";
+    out.set("viToday", {
+      kind: "viToday",
+      label: `오늘 VI 발동 ${v.count}회`,
+      desc: `${dir}${v.openChangeRate > 0 ? "+" : ""}${v.openChangeRate.toFixed(2)}% (시가대비)${hm ? ` · 마지막 해제 ${hm}` : ""} — 급하게 움직인 자리, 추격은 조심`,
+      level: "info",
+      source: ["kiwoom"],
+    });
   }
   /* 예고가 있는데 본지정이 있으면 예고는 뺀다 — 이미 지정됐다 */
   if (out.has("warning")) out.delete("warningNotice");
