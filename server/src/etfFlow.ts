@@ -9,6 +9,9 @@
  * 거래대금 제일 큰 것을 고른다(레버리지·인버스·커버드콜·혼합은 뺀다). 그래서 「KODEX 반도체」가 「TIGER 반도체TOP10」
  * 으로 바뀌어도 화면은 산다. 신호등 점수에는 안 들어간다 — 보는 자리다.
  */
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { loadCloses, type DayBar } from "./dailyCloses.js";
 import { etfAll, type EtfListRow } from "./routes/etf.js";
@@ -82,12 +85,44 @@ const PICKS: Pick[] = [
 /** 대표에서 빼는 것 — 방향·구조가 다른 상품. 환헤지(H)는 구조가 아니라 안 뺀다(원유·은은 전부 (H)다) */
 const NOT_PLAIN = /레버리지|인버스|2X|곱|커버드콜|혼합|채권혼합|월배당/;
 
-function pickOne(rows: EtfListRow[], p: Pick): EtfListRow | null {
+/**
+ * 대표 고르기 — 거래대금 제일 큰 것. **장 전엔 오늘 거래대금이 전부 0** 이라 동률이 나서 엉뚱한 게 뽑혔다
+ * (9/17 07시: 반도체 → IBK K-AI반도체코어테크). 그래서 오늘·어제 중 큰 쪽으로 잰다 — 어제는 일봉 캐시(c×v).
+ */
+function pickOne(rows: EtfListRow[], p: Pick, lastValue: (code: string) => number, saved: string | undefined): EtfListRow | null {
   const m = rows.filter((r) => p.re.test(r.name));
   if (m.length === 0) return null;
   const plain = m.filter((r) => !NOT_PLAIN.test(r.name));
   const pool = plain.length > 0 ? plain : m;
-  return pool.sort((a, b) => b.tradeValue - a.tradeValue)[0];
+  /* 장 전(거래대금 전부 0)이면 **장중에 저장해 둔 어제의 대표**를 그대로 — 일봉 캐시에 없는 ETF 는 어제 값도 모르니까 */
+  if (pool.every((r) => r.tradeValue === 0) && saved) {
+    const hit = pool.find((r) => r.code === saved);
+    if (hit) return hit;
+  }
+  const size = (r: EtfListRow) => Math.max(r.tradeValue, lastValue(r.code));
+  return pool.sort((a, b) => size(b) - size(a))[0];
+}
+
+/* 장중에 고른 대표를 파일에 남긴다 — 다음 날 장 전에 쓴다 */
+const PICKS_FILE = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "etfFlowPicks.json");
+let savedPicks: Record<string, string> | null = null;
+async function loadSavedPicks(): Promise<Record<string, string>> {
+  if (savedPicks) return savedPicks;
+  try {
+    savedPicks = JSON.parse(await readFile(PICKS_FILE, "utf-8")) as Record<string, string>;
+  } catch {
+    savedPicks = {};
+  }
+  return savedPicks;
+}
+async function savePicks(picks: Record<string, string>): Promise<void> {
+  savedPicks = picks;
+  try {
+    await mkdir(dirname(PICKS_FILE), { recursive: true });
+    await writeFile(PICKS_FILE, JSON.stringify(picks), "utf-8");
+  } catch {
+    /* 못 남겨도 화면은 산다 */
+  }
 }
 
 /* ── 일봉 — 캐시 먼저, 없으면 하루 한 번 받는다 ── */
@@ -146,18 +181,29 @@ function valueStats(bars: DayBar[]): { volRatio: number | null; value5: number |
 let flowCache: { at: number; rows: EtfFlowRow[] } | null = null;
 let flowJob: Promise<{ at: number; rows: EtfFlowRow[] }> | null = null;
 
-export async function etfFlow(client: KiwoomClient): Promise<{ at: number; rows: EtfFlowRow[]; note: string }> {
-  const NOTE = "대표 ETF 는 이름 규칙으로 그때그때 거래대금 제일 큰 것을 고릅니다(레버리지·인버스·커버드콜 제외). 배수는 어제까지의 일봉, 오늘 등락·거래대금은 전체시세.";
-  if (flowCache && Date.now() - flowCache.at < 5 * 60_000) return { ...flowCache, note: NOTE };
-  if (flowJob) return { ...(await flowJob), note: NOTE };
+export async function etfFlow(client: KiwoomClient): Promise<{ at: number; rows: EtfFlowRow[]; note: string; asOf: "오늘" | "어제" }> {
+  const NOTE = "대표 ETF 는 이름 규칙으로 그때그때 거래대금 제일 큰 것을 고릅니다(레버리지·인버스·커버드콜 제외). 배수는 어제까지의 일봉, 오늘 등락·거래대금은 전체시세. 장 전에는 어제 등락.";
+  /* 장 전(09:00 전·주말)에는 전체시세 등락이 전부 0 이라 「어제」를 보인다 — 0% 스물은 정보가 아니다 */
+  const asOf: "오늘" | "어제" = marketOpened() ? "오늘" : "어제";
+  if (flowCache && Date.now() - flowCache.at < 5 * 60_000) return { ...flowCache, note: NOTE, asOf };
+  if (flowJob) return { ...(await flowJob), note: NOTE, asOf };
   flowJob = (async () => {
     const all = await etfAll(client);
+    const barsCache = (await loadCloses()).bars ?? {};
+    const lastValue = (code: string): number => {
+      const b = barsCache[code];
+      const x = b && b.length > 0 ? b[b.length - 1] : null;
+      return x ? Math.round((x.c * x.v) / 1e8) : 0;
+    };
     const rows: EtfFlowRow[] = [];
     const used = new Set<string>();
+    const saved = await loadSavedPicks();
+    const picked: Record<string, string> = {};
     for (const p of PICKS) {
-      const r = pickOne(all.filter((x) => !used.has(x.code)), p);
+      const r = pickOne(all.filter((x) => !used.has(x.code)), p, lastValue, saved[p.label]);
       if (!r) continue;
       used.add(r.code);
+      picked[p.label] = r.code;
       let bars: DayBar[] = [];
       try {
         bars = await barsOf(client, r.code);
@@ -168,13 +214,15 @@ export async function etfFlow(client: KiwoomClient): Promise<{ at: number; rows:
       if (marketOpened() && bars.length > 0 && bars[bars.length - 1].d !== kstDay() && r.price > 0) cs.push(r.price);
       const last = cs.length > 0 ? cs[cs.length - 1] : r.price;
       const { volRatio, value5 } = valueStats(bars);
+      const settledBars = settled(bars);
+      const yday = settledBars.length >= 2 ? ratePct(settledBars[settledBars.length - 1].c, settledBars[settledBars.length - 2].c) : null;
       rows.push({
         code: r.code,
         name: r.name,
         label: p.label,
         group: p.group,
         price: r.price,
-        d1: r.changeRate,
+        d1: asOf === "오늘" ? r.changeRate : yday,
         d5: cs.length >= 6 ? ratePct(last, cs[cs.length - 6]) : null,
         d20: cs.length >= 21 ? ratePct(last, cs[cs.length - 21]) : null,
         volRatio,
@@ -182,12 +230,14 @@ export async function etfFlow(client: KiwoomClient): Promise<{ at: number; rows:
         todayValue: r.tradeValue,
       });
     }
+    /* 장중 거래대금으로 고른 것만 남긴다 — 장 전의 동률 추첨을 저장하면 그게 다음 날 「어제」가 된다 */
+    if (asOf === "오늘" && rows.some((r) => r.todayValue > 0)) await savePicks(picked);
     flowCache = { at: Date.now(), rows };
     return flowCache;
   })().finally(() => {
     flowJob = null;
   });
-  return { ...(await flowJob), note: NOTE };
+  return { ...(await flowJob), note: NOTE, asOf };
 }
 
 /* ── ② 레버리지·인버스 심리 ── */

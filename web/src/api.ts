@@ -734,7 +734,7 @@ export const api = {
   etfList: () => getJson<{ rows: EtfListRow[]; at: number }>("/api/etf/list"),
   /* ETF 분석 묶음 (2026-09-17, etfFlow.ts) — 일봉 캐시라 조회는 거의 0 */
   /** 국내 ETF 자금흐름 — 대표 ETF 30여 개의 1·5·20일 등락과 거래대금 배수 */
-  etfFlow: () => getJson<{ at: number; rows: EtfFlowRow[]; note: string }>("/api/etf/flow"),
+  etfFlow: () => getJson<{ at: number; rows: EtfFlowRow[]; note: string; asOf: "오늘" | "어제" }>("/api/etf/flow"),
   /** 레버리지·인버스 심리 — 인버스(+곱버스) ÷ 레버리지 거래대금, 20일 */
   etfSentiment: () => getJson<{ at: number; sides: EtfSentimentSide[]; note: string }>("/api/etf/sentiment"),
   /** 이 종목을 담은 ETF — 서버 역인덱스(파일)를 읽는다. 조회 0회 */

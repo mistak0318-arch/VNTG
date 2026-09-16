@@ -18,6 +18,7 @@ import { MemoPage } from "./pages/MemoPage";
 import { MiniPage } from "./pages/MiniPage";
 import { BuzzSourcePage } from "./pages/BuzzSourcePage";
 import { HeaderTicker } from "./components/HeaderTicker";
+import { NaverBriefingBell } from "./components/NaverBriefingBell";
 import { LiveDot } from "./components/LiveDot";
 import { createHotkeyMatcher } from "./hotkey";
 import { onMiniConfigChange, readMiniConfig } from "./miniConfig";
@@ -1312,6 +1313,8 @@ export default function App() {
             <NotifyBell />
             {/* 코스피·코스닥 + 상승/하락 종목수 + 시장 신호등 — 종 옆 빈자리 (2026-09-02). 누르면 시황 */}
             <HeaderTicker onGo={() => go("overview")} />
+            {/* 네이버 AI 시황 🤖 (2026-09-17) — 지수 단추 옆. 어느 화면에서든 한 번 눌러 최근 여섯 개, 새 글이면 NEW */}
+            <NaverBriefingBell />
             {/*
               실시간 표시 (2026-09-04) — **어느 화면에서든 같은 자리**에 둔다.
               멈춘 값으로 주문을 내는 것이 이 도구에서 가장 비싼 실수라, 값이 아니라

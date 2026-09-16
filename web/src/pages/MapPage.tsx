@@ -3,8 +3,6 @@ import { tileHeat, useAppearance } from "../useAppearance";
 import { useWatchGroupTiles, type GroupSource } from "../useWatchGroupTiles";
 import { api, type EvaluatedTheme, type SectorRow, type ThemeRow, type ThemeStrength } from "../api";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
-import { PairTiles } from "../components/PairTiles";
-import { PAIR_OPEN_EVENT, takePendingPair } from "../pairNav";
 import { useMyTagsChanged } from "../myTagsBus";
 import { RefreshBar } from "../components/RefreshBar";
 import { useSection } from "../useSection";
@@ -29,7 +27,7 @@ import { SizeByPicker, TreemapGrid, type MapTile, type SizeMode } from "../compo
  * 「내가 만든 것만 / 옮겨온 것 포함」 토글은 그대로 둔다 — 인포스탁 테마를 「내 테마」
  * 안에 그대로 두기로 했으니, 그걸 걸러 볼 수단이 없으면 지도가 인포스탁으로 뒤덮인다.
  */
-type Mode = "mine" | "naver" | "watchAi" | "watchKiwoom" | "watchUs" | "pairs" | "theme" | "sector";
+type Mode = "mine" | "naver" | "watchAi" | "watchKiwoom" | "watchUs" | "theme" | "sector";
 
 const WATCH_MODES: { key: Mode; label: string; source: GroupSource }[] = [
   { key: "watchAi", label: "관심종목 (VNTG)", source: "watchAi" },
@@ -70,11 +68,10 @@ export const MAP_MODES: { key: Mode; label: string }[] = [
   { key: "watchUs", label: "관심종목 (해외)" },
   { key: "watchKiwoom", label: "관심종목 (키움연동)" },
   /*
-   * 한미 짝 (2026-09-15 — 벤티지: "미국 짝 한국 짝 지은 거 테마 MAP 에 따로 메뉴 만들어서 보여 줘. 네모 반반으로" ·
-   * "여기 창에서 오른쪽 위에 두면 될 듯"). 맨 끝 = 버튼 줄의 오른쪽. 저장된 순서가 있어도 새 키는 앞 이웃
-   * (키움연동) 뒤에 끼워진다(`orderMap`).
+   * 「🇺🇸 한미 짝」(pairs, 2026-09-15 PairTiles)은 걷어냈다 (2026-09-17 — 벤티지: "짝이 안 맞고 효용이 없다").
+   * 이름으로 잇던 다리라 얇았다. 대신 시황 「돈의 방향」 카드가 미국 섹터 ETF ↔ 국내 대표 ETF 로 본다.
+   * PairTiles.tsx·서버 themeBridge 는 남겨 둔다(되살릴 수 있게). 저장된 모드 순서에 pairs 가 남아도 무시된다.
    */
-  { key: "pairs", label: "🇺🇸 한미 짝" },
 ];
 
 
@@ -98,28 +95,14 @@ function sumValue(stocks: { tradeValue?: number | null }[]): number | null {
 
 export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const { theme } = useAppearance();
-  /* 시황 「어젯밤 미국 → 국내 테마」 칩에서 넘어오면 한미 짝에서 그 테마 구성종목을 연다 (pairNav) */
-  const [pendingPair] = useState(() => takePendingPair());
-  const [mode, setMode] = useState<Mode>(pendingPair ? "pairs" : "mine");
+  const [mode, setMode] = useState<Mode>("mine");
   /* 모드 버튼 순서 — 서브탭들과 같은 저장(서버) */
   const modeOrder = useCardOrder(
     "map.modes",
     MAP_MODES.map((m) => m.key),
   );
   const [sectorMarket, setSectorMarket] = useState<"kospi" | "kosdaq">("kospi");
-  const [constituent, setConstituent] = useState<ConstituentTarget | null>(() =>
-    pendingPair ? { kind: "theme", code: pendingPair.key, name: pendingPair.name } : null,
-  );
-  useEffect(() => {
-    const on = () => {
-      const p = takePendingPair();
-      if (!p) return;
-      setMode("pairs");
-      setConstituent({ kind: "theme", code: p.key, name: p.name });
-    };
-    window.addEventListener(PAIR_OPEN_EVENT, on);
-    return () => window.removeEventListener(PAIR_OPEN_EVENT, on);
-  }, []);
+  const [constituent, setConstituent] = useState<ConstituentTarget | null>(null);
   /** 옮겨온(인포스탁) 테마를 섞을지. 기본은 내가 만든 것만 */
   const [includeImported, setIncludeImported] = useState(false);
   /** 타일 크기를 무엇으로 — 시총이 기본. 균등은 예전 배치 */
@@ -280,9 +263,7 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
                   market: sectorMarket,
                 }),
             }));
-  const loading = mode === "pairs"
-    ? false
-    : watchSource
+  const loading = watchSource
     ? watch.loading
     : mode === "mine"
       ? mineLoading
@@ -291,9 +272,7 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
         : mode === "theme"
           ? themes.loading
           : sectors.loading;
-  const error = mode === "pairs"
-    ? null
-    : watchSource
+  const error = watchSource
     ? watch.error
     : mode === "mine"
       ? mineError
@@ -372,11 +351,7 @@ export function MapPage({ onSelectStock }: { onSelectStock: (code: string, name:
       {error && <div className="error-banner">{error}</div>}
       {loading && <div className="empty">불러오는 중...</div>}
 
-      {mode === "pairs" && (
-        <PairTiles onOpen={(key, name) => setConstituent({ kind: "theme", code: key, name })} />
-      )}
-
-      {!loading && !error && mode !== "pairs" && (
+      {!loading && !error && (
         <>
           {/*
             크기가 뜻을 갖는 지도 (2026-08-30) — 크기=규모, 색=오늘 등락.

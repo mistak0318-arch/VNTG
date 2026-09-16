@@ -28,8 +28,12 @@ export const OVERVIEW_CARDS: Record<OverviewSub, CardDef[]> = {
     /* 폭(몇 종목이 올랐나) 다음 물음이 유동성(돈이 얼마나 돌았나)이다 */
     { key: "turnover", label: "거래대금 현황" },
     { key: "global", label: "글로벌" },
-    /* 글로벌 바로 밑 — 어젯밤 미국 업종이 크게 움직인 곳과 이어진 국내 테마 (2026-09-15, themeBridge) */
-    { key: "usBridge", label: "어젯밤 미국 → 국내 테마" },
+    /*
+     * 글로벌 바로 밑 — 돈의 방향 (2026-09-17). 「어젯밤 미국 → 국내 테마」(usBridge, themeBridge)를 갈아끼웠다 —
+     * 벤티지: "짝이 안 맞고 효용이 없다". 이름으로 잇던 다리 대신 미국 섹터 ETF ↔ 국내 대표 ETF 를 거래대금 배수와
+     * 같이 본다(MoneyFlowPanel). 저장된 배치에 usBridge 가 남아 있어도 무시된다. 서버 themeBridge 는 그대로 둔다.
+     */
+    { key: "moneyFlow", label: "돈의 방향 (한미 ETF)" },
     /* 미장 주요지수 카드는 숨김 (2026-08-25) — 야간선물·VIX·유가는 글로벌로 옮겼다 */
     /* 금리 카드도 글로벌 안 「금리」 묶음으로 (2026-09-08) — 저장된 배치에 rates 가 남아 있어도 무시된다 */
     /*

@@ -19,6 +19,7 @@ function eok(v: number | null): string {
 export function EtfFlowPage({ onSelectStock }: { onSelectStock: (code: string, name: string) => void }) {
   const [rows, setRows] = useState<EtfFlowRow[] | null>(null);
   const [note, setNote] = useState("");
+  const [asOf, setAsOf] = useState<"오늘" | "어제">("오늘");
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<"d1" | "d5" | "d20" | "volRatio">("d1");
 
@@ -31,6 +32,7 @@ export function EtfFlowPage({ onSelectStock }: { onSelectStock: (code: string, n
           if (!alive) return;
           setRows(r.rows);
           setNote(r.note);
+          setAsOf(r.asOf);
         })
         .catch((e: Error) => alive && setError(e.message));
     void pull();
@@ -64,7 +66,7 @@ export function EtfFlowPage({ onSelectStock }: { onSelectStock: (code: string, n
       <div className="ov-seg" style={{ padding: 0, marginBottom: 8, maxWidth: 360 }}>
         {(["d1", "d5", "d20", "volRatio"] as const).map((k) => (
           <button key={k} type="button" className={sortKey === k ? "on" : ""} onClick={() => setSortKey(k)}>
-            {k === "d1" ? "1일" : k === "d5" ? "5일" : k === "d20" ? "20일" : "거래대금 배수"}
+            {k === "d1" ? (asOf === "오늘" ? "1일" : "어제") : k === "d5" ? "5일" : k === "d20" ? "20일" : "거래대금 배수"}
           </button>
         ))}
       </div>
@@ -78,7 +80,7 @@ export function EtfFlowPage({ onSelectStock }: { onSelectStock: (code: string, n
                   <th className="sticky-col">대표</th>
                   <th>ETF</th>
                   <th>가격</th>
-                  <th>1일</th>
+                  <th>{asOf === "오늘" ? "1일" : "어제"}</th>
                   <th>5일</th>
                   <th>20일</th>
                   <th title="최근 5일 평균 거래대금 ÷ 그 앞 20일 평균 (어제까지)">배수</th>
