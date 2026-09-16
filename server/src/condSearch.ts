@@ -4,9 +4,10 @@ import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { evaluateSignal, getConfig, type CheckKey } from "./signalLight.js";
 import { fetchUniverse, type Candidate } from "./signalScreen.js";
-import { getSharesMap } from "./stockListCache.js";
-import { getMarketSnapshot } from "./marketSnapshot.js";
+import { getSharesMap, getStockIndex } from "./stockListCache.js";
+import { getMarketSnapshot, peekSnapshot } from "./marketSnapshot.js";
 import { condField, isOwnField, ownValues } from "./condFields.js";
+import { loadStockMarks } from "./stockMarks.js";
 
 /**
  * 조건 검색 — **증권사 조건검색식처럼.**
@@ -316,9 +317,60 @@ export function startCondSearch(client: KiwoomClient, q: CondQuery): string {
   return id;
 }
 
+/**
+ * **마크 파일을 모집단으로** (2026-09-16) — 조회 0회로 진짜 전 종목.
+ *
+ * 벤티지: "모든 종목에 대해서 우리가 알 수 있는 거잖아 … 조건 검색에도 그거를 활용할 수 있을 거 같거든."
+ *
+ * 기존 「전종목(all)」 모집단은 **장중 스냅샷**에 잡히는 종목만 세고 거래대금 10억 하한을 건다.
+ * 그래서 마크가 2,625종목에 다 있어도 실제로 훑는 건 300개 남짓이었다. 마크만 쓰는 조건식은
+ * 종목당 조회가 0 이라 그렇게 자를 이유가 없다 — **마크 파일에 있는 종목 전부**를 후보로 세운다.
+ *
+ * 이름은 종목 목록 캐시에서(조회 0회), 시세는 **이미 만들어져 있는 스냅샷이 있으면** 거기서 채운다
+ * (`peekSnapshot` — 없다고 새로 만들지 않는다. 만들면 조회 0회가 깨진다). 시세를 못 채운 줄은
+ * 화면에 값이 비지만, 거래대금은 마크가 잰 **그날 확정값**이 있어 `mkVolEok` 조건이 그대로 먹는다.
+ */
+async function markUniverse(client: KiwoomClient, market: string): Promise<Candidate[]> {
+  const f = await loadStockMarks();
+  if (!f) return [];
+  const idx = await getStockIndex(client).catch(() => null);
+  const snap = peekSnapshot();
+  const want = market === "001" ? "kospi" : market === "101" ? "kosdaq" : null;
+  const out: Candidate[] = [];
+  for (const [code, m] of Object.entries(f.marks)) {
+    const e = idx?.get(code);
+    const s = snap?.byCode.get(code);
+    if (want && s && s.market !== want) continue;
+    /* 스냅샷이 없으면 시장을 못 가린다 — 전체(000)일 때만 그대로 담는다 */
+    if (want && !s) continue;
+    out.push({
+      code,
+      name: e?.name ?? s?.name ?? code,
+      price: s?.price ?? 0,
+      changeRate: s?.changeRate ?? 0,
+      tradeValue: m.volEok ?? s?.tradeValue ?? 0,
+    });
+  }
+  return out;
+}
+
 async function run(client: KiwoomClient, q: CondQuery, job: CondJob): Promise<void> {
+  const keys = usedKeys(q);
+  /*
+   * **신호등을 아예 안 부르는 길** (2026-09-16).
+   *
+   * 조건식이 전부 「마크」(마감 뒤 정리가 전 종목에 미리 세어 둔 것)면 종목마다 `evaluateSignal` 을
+   * 부를 이유가 없다 — 파일 하나만 읽으면 답이 나온다. 그러면 **모집단을 자를 이유도 없다.**
+   * 여태 조건 검색이 200~500종목에서 멈춰 있던 건 종목당 조회 때문이었는데, 마크만 쓰면 그게 0 이다.
+   */
+  const needSignal = keys.size > 0;
+  const limit = needSignal ? q.limit : Math.max(q.limit, 3000);
+
   /* ① 모집단 */
-  const uni: Candidate[] = await fetchUniverse(client, q.universe, q.market, q.limit, q.span);
+  const uni: Candidate[] =
+    !needSignal && q.universe === "all"
+      ? await markUniverse(client, q.market)
+      : await fetchUniverse(client, q.universe, q.market, limit, q.span);
 
   /*
    * ② **사전 필터 — 조회 0회.**
@@ -355,7 +407,6 @@ async function run(client: KiwoomClient, q: CondQuery, job: CondJob): Promise<vo
    * 것만으로 조회가 줄어든다.
    */
   const base = await getConfig();
-  const keys = usedKeys(q);
   const cfg = {
     ...base,
     checks: base.checks.map((c) => ({ ...c, enabled: keys.has(c.key) })),
@@ -366,7 +417,7 @@ async function run(client: KiwoomClient, q: CondQuery, job: CondJob): Promise<vo
 
   for (const c of pool) {
     try {
-      const sig = await evaluateSignal(client, c.code, { config: cfg });
+      const sig = needSignal ? await evaluateSignal(client, c.code, { config: cfg }) : null;
       /* 분기 실적 등 — 한 번 부르고 그 응답으로 다섯 필드를 다 낸다 */
       const own = await ownValues(c.code, ownKeys);
       /**
@@ -391,7 +442,7 @@ async function run(client: KiwoomClient, q: CondQuery, job: CondJob): Promise<vo
           if (v === undefined || !Number.isFinite(v) || l.value === undefined) return false;
           return l.op === "gte" ? v >= l.value : v <= l.value;
         }
-        const hit = sig.checks.find((x) => x.key === l.key);
+        const hit = sig?.checks.find((x) => x.key === l.key);
         if (!hit) return false;
         if (l.op === "pass") return hit.pass === true;
         if (l.op === "fail") return hit.pass === false;
@@ -411,7 +462,7 @@ async function run(client: KiwoomClient, q: CondQuery, job: CondJob): Promise<vo
        */
       const labelOf = (l: CondLine): string => {
         const fd = condField(l.key);
-        const nm = fd?.label ?? sig.checks.find((x) => x.key === l.key)?.label ?? l.key;
+        const nm = fd?.label ?? sig?.checks.find((x) => x.key === l.key)?.label ?? l.key;
         if (l.op === "pass") return nm;
         if (l.op === "fail") return `${nm} 미달`;
         const unit = fd?.unit ? fd.unit : "";
@@ -456,8 +507,8 @@ async function run(client: KiwoomClient, q: CondQuery, job: CondJob): Promise<vo
       /* 한 종목 실패가 전체를 막지 않게 */
     }
     job.done += 1;
-    /* 신호등 하나가 여러 TR 을 부르므로 간격을 둔다 — 초당 5회 제한 */
-    await new Promise((r) => setTimeout(r, 240));
+    /* 신호등 하나가 여러 TR 을 부르므로 간격을 둔다 — 초당 5회 제한. 마크만 쓰면 조회가 없어 안 쉰다 */
+    if (needSignal) await new Promise((r) => setTimeout(r, 240));
   }
 
   job.status = "done";

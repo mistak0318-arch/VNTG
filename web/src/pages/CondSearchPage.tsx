@@ -471,7 +471,8 @@ export function CondSearchPage({
               쏟아져 원하는 것을 눈으로 찾을 수가 없었다. 그리고 이름이 신호등
               라벨이라 「덩치」·「고점 근접 (신고가와 중복)」 같은 게 섞여 있었다.
             */}
-            {(["규모", "가격·추세", "수급", "실적", "위험"] as const).map((g) => {
+            {/* 「마크」가 맨 앞이다 (2026-09-16) — 조회 0회로 전종목을 훑는 유일한 묶음이라 */}
+            {(["마크", "규모", "가격·추세", "수급", "실적", "위험"] as const).map((g) => {
               const list = fields.filter((f) => f.group === g);
               if (list.length === 0) return null;
               return (

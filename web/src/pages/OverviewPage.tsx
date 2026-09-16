@@ -46,6 +46,7 @@ import { DepositTrendPanel } from "../components/overview/DepositTrendPanel";
 import { DiscussionRankPanel } from "../components/overview/DiscussionRankPanel";
 import { NpayRankPanel } from "../components/overview/NpayRankPanel";
 import { TopicPulseBlock } from "../components/TopicPulse";
+import { NaverBriefingBlock } from "../components/NaverBriefingBlock";
 import { InquiryRankPanel } from "../components/overview/InquiryRankPanel";
 import { WatchStar } from "../useWatchedCodes";
 import { SuperMark } from "../useSuperMarks";
@@ -387,6 +388,12 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           <div className="ov-span-all">
             {/* 시황 대시보드에서는 접을 수 있고 기본이 접음 (2026-09-03 — "화면차지가 너무 큰데") */}
             <MarketSignalPanel collapsible />
+            {/*
+              신호등 바로 밑 — 네이버 AI 시황 (2026-09-16, 벤티지 요청).
+              "1시간마다 나오는 구조라면 신호등 밑에 접힌 메뉴로, 새로 나올 때마다 NEW 보여지게."
+              여기는 **접힌 채**가 기본이다. 데일리 리포트에서는 우리 요약 밑에 펴 둔다.
+            */}
+            <NaverBriefingBlock />
           </div>
         )}
 

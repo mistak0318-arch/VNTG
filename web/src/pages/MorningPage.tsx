@@ -276,7 +276,7 @@ export function MorningPage() {
             우리 판단을 먼저 읽고, 그 다음 네이버 AI 가 같은 장을 어떻게 읽었는지 본다.
             접혀 있는 것도 같은 이유 — 먼저 펴 보면 우리 글을 그 눈으로 읽게 된다.
           */}
-          <NaverBriefingBlock />
+          <NaverBriefingBlock open />
         </section>
 
         {/* ── 슈퍼신호등 밤사이 ── */}

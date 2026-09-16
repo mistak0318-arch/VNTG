@@ -268,8 +268,15 @@ function findTurn(flow: PulseFlow): PulseTurn {
 const CROSS_TTL_MS = 5 * 60_000;
 let crossCache: { at: number; data: PulseCross | null } | null = null;
 
-async function findCross(client: KiwoomClient): Promise<PulseCross | null> {
-  if (crossCache && Date.now() - crossCache.at < CROSS_TTL_MS) return crossCache.data;
+async function findCross(client: KiwoomClient, force = false): Promise<PulseCross | null> {
+  /*
+   * `force` 를 여기까지 내려보낸다 (2026-09-16 점검).
+   *
+   * 마감 뒤 정리 ⑦은 `marketPulse(client, true)` 로 부르는데, 그 force 는 **바깥 60초 캐시만**
+   * 풀고 있었다. 이 안쪽 5분 캐시는 그대로라, 20:05~20:10 사이에 누가 시장 흐름 화면을 열었거나
+   * 시스 도우미가 불렀으면 **⑦이 캐시를 되돌려 주고 아무것도 안 한 채 성공으로 기록**됐다.
+   */
+  if (!force && crossCache && Date.now() - crossCache.at < CROSS_TTL_MS) return crossCache.data;
   try {
     const [scan, superList, flowDays] = await Promise.all([
       leaderScan(client),
@@ -515,7 +522,7 @@ export async function marketPulse(client: KiwoomClient, force = false): Promise<
   }
 
   /* 교차 신호 (재검토 #2) — 주도주 ∩ 슈퍼신호등 */
-  const cross = await findCross(client);
+  const cross = await findCross(client, force);
   // 미장 쪽 경고는 이미 usMajor 가 줄 단위로 판정해 둔 것을 그대로 쓴다
   for (const row of usMajor?.rows ?? []) {
     if (row.signal?.level === "danger") {

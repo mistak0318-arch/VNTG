@@ -1,3 +1,4 @@
+import { afterCloseDoneToday } from "./afterClose.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { regimeCheck, regimeConfig } from "./regimeWatch.js";
 import { pushNotice } from "./notifyCenter.js";
@@ -228,8 +229,18 @@ async function tick(client: KiwoomClient): Promise<void> {
      * 이제 `afterClose` 가 일봉 → 원장 → 장세 → 추적기 → 슈퍼신호등 → 신호등 분석
      * → 표본 순으로 **차례로** 부른다.
      */
-    /* ③ 18:30 — 표본이 오래됐으면 알아서 다시 모은다 */
-    if (t >= "18:30" && t < "18:40" && doneRebuild !== today) {
+    /*
+     * ③ **표본이 오래됐으면 알아서 다시 모은다** — 마감 뒤 정리가 끝난 다음이다.
+     *
+     * ⚠️ 여긴 **18:30** 이었다 (2026-09-16 점검에서 고침). 파이프라인이 15:40→20:10 을 거쳐 15:55 로
+     * 옮겨 다니는 동안 이 시각만 그대로였다. 그 사이 ⑨표본 단계가 생겨 **매일** 표본을 다시 만들기
+     * 때문에 나이가 늘 0 이라 이 가지는 사실상 안 탔고(죽은 코드), 어쩌다 타면 **파이프라인보다 먼저**
+     * 어제 원장으로 표본을 만들어 놓는 꼴이었다.
+     *
+     * 그래서 「마감 뒤 정리가 오늘 끝났나」를 보고 그 뒤에만 본다. 파이프라인이 제 일을 했으면
+     * 표본은 이미 오늘 것이라 아무 일도 안 일어난다 — **파이프라인이 실패한 날의 그물**이다.
+     */
+    if (t >= "21:30" && t < "21:40" && doneRebuild !== today && (await afterCloseDoneToday().catch(() => false))) {
       doneRebuild = today;
       const meta = await samplesMeta();
       if (!meta.has) {

@@ -3677,7 +3677,12 @@ export function startOrderHeartbeat(main: KiwoomClient): void {
      * 애프터마켓(16:00~20:00)이 실거래가 되면서 15:40 에 대조하면 그 뒤 4시간의 체결이 매일
      * 「우리 기록에 없는 체결」로 잡힌다 — 경보가 늘 울리면 아무도 안 본다. 장이 다 끝난 뒤에 센다.
      */
-    if (trading && minute === cleanupStartMinute(date) && reconciledDay !== date) {
+    /*
+     * `===` 가 아니라 `>=` 다 (2026-09-16 점검). 30초 틱인데 **정확히 그 분**만 봤다 — 하필 그때
+     * 41분짜리 원장 수집이 이벤트 루프를 물고 있으면 그 분을 통째로 놓치고 저녁 정합성이 조용히
+     * 안 돌았다. `reconciledDay` 가 하루 한 번을 이미 막고 있어 `>=` 로 넓혀도 두 번 돌지 않는다.
+     */
+    if (trading && minute >= cleanupStartMinute(date) && reconciledDay !== date) {
       reconciledDay = date;
       try {
         const [fl, log] = await Promise.all([fills(), readLog(3000)]);

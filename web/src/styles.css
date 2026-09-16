@@ -19237,3 +19237,19 @@ th.usr-key { color: var(--text); }
 .nvb-h i { flex: none; font-style: normal; font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .nvb-sum { margin: 0 0 8px; font-size: 0.76rem; line-height: 1.65; color: var(--muted); white-space: pre-wrap; }
 .econ-nat { font-style: normal; font-size: 0.66rem; margin-right: 5px; padding: 1px 5px; border-radius: 4px; background: var(--panel-2); color: var(--muted); }
+/* 새 브리핑 표시 — 눈에 띄어야 뜻이 있다. 펼치면 사라진다 */
+.nvb-new {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  vertical-align: 1px;
+}
+.nvb > summary { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.nvb > summary::-webkit-details-marker { display: none; }
+.nvb > summary::before { content: "▸"; font-size: 0.7rem; color: var(--muted); }
+.nvb[open] > summary::before { content: "▾"; }

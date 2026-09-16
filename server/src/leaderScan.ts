@@ -699,8 +699,23 @@ export async function leaderScan(
   const tradingDay = isTradingDay(); // (2026-09-10 전수 점검) 휴장일도 「어제 종목 유지율」을 부풀렸다
   if (!noTrade && afterClose && tradingDay) {
     const idx = store.days.findIndex((d) => d.date === date);
-    if (idx >= 0) store.days[idx] = today;
-    else store.days.push(today);
+    if (idx < 0) store.days.push(today);
+    else if ((store.days[idx].picks?.length ?? 0) === 0) store.days[idx] = today;
+    /*
+     * ⚠️ **이미 오늘 결론이 있으면 덮지 않는다** (2026-09-16 점검에서 발견).
+     *
+     * 여긴 `afterClose`(15:30 지남)면 무조건 오늘 줄을 갈아 끼우고 있었다. 그런데 KRX 애프터마켓
+     * 개편(9/14)으로 **마감 뒤 정리가 20:10** 으로 옮겨졌고, 그 파이프라인의 ⑦교차 단계가
+     * `marketPulse → findCross → leaderScan` 으로 여기까지 온다. 그래서 15:35 스케줄러가 남긴
+     * **정규장 결론이 매일 20:10 에 「애프터 네 시간이 섞인 값」으로 교체되고 있었다.**
+     *
+     * 바로 위 스케줄러 주석이 「20:10 로 옮기면 9/14 를 경계로 연속 계산이 다른 자로 재진다」고
+     * 적어 둔 그 일이, 시각을 안 옮겼는데도 **다른 경로로** 일어나고 있었던 것이다.
+     * 지속성(며칠 연속 상위)이 이 기능의 핵심 물음이라 여기가 섞이면 기능 전체가 거짓말이 된다.
+     *
+     * 그래서 **먼저 적은 것이 이긴다** — 빈 줄일 때만 채운다. 장중 화면에서 보는 값은 그대로다
+     * (반환값은 늘 지금 모습이고, 저장만 안 한다).
+     */
     await save(store).catch(() => undefined);
   }
 

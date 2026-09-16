@@ -1,4 +1,5 @@
 import { quarterFinance, type QuarterRow } from "./quarterFinance.js";
+import { markOf } from "./stockMarks.js";
 
 /**
  * 조건 검색의 **필드 사전** (2026-09-01).
@@ -32,7 +33,14 @@ import { quarterFinance, type QuarterRow } from "./quarterFinance.js";
  */
 
 /** 어느 묶음에 놓나 — 화면이 이걸로 목록을 나눈다 */
-export type CondGroup = "가격·추세" | "수급" | "실적" | "규모" | "위험";
+/**
+ * 「마크」가 하나 늘었다 (2026-09-16) — **조회 0회로 재는 것들**.
+ *
+ * 나머지 묶음은 종목마다 신호등을 평가해야 답이 나온다(종목당 조회가 는다). 마크는 마감 뒤
+ * 정리 ⑧이 전 종목을 미리 세어 파일 하나에 굳혀 둔 것이라(`stockMarks.ts`) **파일만 읽는다** —
+ * 마크만으로 짠 조건식은 2,600종목을 몇 초에 훑는다.
+ */
+export type CondGroup = "가격·추세" | "수급" | "실적" | "규모" | "위험" | "마크";
 
 export type CondOp = "gte" | "lte" | "pass" | "fail";
 
@@ -507,6 +515,295 @@ export const COND_FIELDS: CondField[] = [
     ],
     cost: "DART 1콜 (캐시)",
   },
+
+  /* ── 마크 (조회 0회 — 마감 뒤 정리가 전 종목에 미리 붙여 둔 것) ───────── */
+  {
+    key: "mkTwin",
+    label: "🧲 쌍끌이 (외인·주포 6칸)",
+    group: "마크",
+    unit: "",
+    hint: "외국인과 주포(투신+연기금+사모)가 5·10·20일 여섯 칸 전부 순매수. 실측에서는 신호등 초록과 겹칠 때만 값이 있었습니다(20일 +3.2%p·승률 59%) — 빨강 안에서는 힘이 없습니다",
+    ops: ["pass", "fail"],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkFgn3",
+    label: "외국인 3칸 (5·10·20일)",
+    group: "마크",
+    unit: "",
+    hint: "외국인만 세 칸 전부 순매수. 쌍끌이보다 넓은데 실측 성적은 같았습니다 (하루 17개 vs 6개)",
+    ops: ["pass", "fail"],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkFgnDays",
+    label: "외국인 연속 순매수 일수",
+    group: "마크",
+    unit: "일",
+    hint: "오늘부터 거슬러 며칠째 연속으로 샀나. 3 이면 사흘 연속",
+    ops: ["gte", "lte"],
+    def: 3,
+    presets: [
+      { v: 2, label: "2일" },
+      { v: 3, label: "3일" },
+      { v: 5, label: "5일" },
+      { v: 10, label: "10일" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkOrgDays",
+    label: "기관 연속 순매수 일수",
+    group: "마크",
+    unit: "일",
+    hint: "기관계 기준. 외국인 연속과 같이 걸면 「둘 다 며칠째」가 됩니다",
+    ops: ["gte", "lte"],
+    def: 3,
+    presets: [
+      { v: 2, label: "2일" },
+      { v: 3, label: "3일" },
+      { v: 5, label: "5일" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkFgn20",
+    label: "외국인 20일 순매수",
+    group: "마크",
+    unit: "억",
+    hint: "최근 20거래일 합계. 100 이면 100억어치 더 샀다는 뜻입니다",
+    ops: ["gte", "lte"],
+    def: 100,
+    presets: [
+      { v: 0, label: "순매수" },
+      { v: 100, label: "100억" },
+      { v: 500, label: "500억" },
+      { v: 1000, label: "1천억" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkSmart20",
+    label: "주포 20일 순매수 (투신+연기금+사모)",
+    group: "마크",
+    unit: "억",
+    hint: "「주포」는 실측으로 고른 셋입니다 — 투신·연기금·사모",
+    ops: ["gte", "lte"],
+    def: 50,
+    presets: [
+      { v: 0, label: "순매수" },
+      { v: 50, label: "50억" },
+      { v: 200, label: "200억" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkTrend",
+    label: "정배열 (종가 > 5 > 20 > 60일선)",
+    group: "마크",
+    unit: "",
+    hint: "같은 판정을 신호등 기준(「정배열」)으로도 물을 수 있지만, 이쪽은 조회가 안 나갑니다",
+    ops: ["pass", "fail"],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkHigh60",
+    label: "60일 고점 대비 위치",
+    group: "마크",
+    unit: "%",
+    hint: "100 이면 60일 신고가. 97 이면 고점에서 3% 아래",
+    ops: ["gte", "lte"],
+    def: 95,
+    presets: [
+      { v: 100, label: "신고가" },
+      { v: 97, label: "3% 이내" },
+      { v: 90, label: "10% 이내" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkNewHigh250",
+    label: "250일 신고가",
+    group: "마크",
+    unit: "",
+    hint: "1년 최고가를 오늘 다시 썼나. 주도주 태그의 「신고가」와 같은 뜻입니다",
+    ops: ["pass", "fail"],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkGapMa20",
+    label: "20일선 이격도",
+    group: "마크",
+    unit: "%",
+    hint: "양수면 20일선 위. 너무 크면 이미 멀리 온 자리입니다",
+    ops: ["gte", "lte"],
+    def: 0,
+    presets: [
+      { v: 0, label: "20일선 위" },
+      { v: 5, label: "+5%" },
+      { v: 15, label: "+15%" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkVolEok",
+    label: "거래대금 (그날 확정값)",
+    group: "마크",
+    unit: "억",
+    hint: "마감 뒤 정리가 잰 값이라 장중 값이 아닙니다 — 오늘 정규장(또는 어제) 확정 거래대금입니다",
+    ops: ["gte", "lte"],
+    def: 100,
+    presets: [
+      { v: 100, label: "100억" },
+      { v: 500, label: "500억" },
+      { v: 1000, label: "1천억" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkVolRatio",
+    label: "거래량 배수 (20일 평균 대비)",
+    group: "마크",
+    unit: "배",
+    hint: "2.5 면 평소의 두 배 반. 경보 🔥「거래량」과 같은 문턱입니다",
+    ops: ["gte", "lte"],
+    def: 2,
+    presets: [
+      { v: 1.5, label: "1.5배" },
+      { v: 2.5, label: "2.5배" },
+      { v: 5, label: "5배" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkShortRatio",
+    label: "공매도 비중 (5일 평균)",
+    group: "마크",
+    unit: "%",
+    hint: "거래대금 대비. 낮은 쪽을 고르려면 ≤ 로 거세요",
+    ops: ["gte", "lte"],
+    def: 5,
+    presets: [
+      { v: 2, label: "2%" },
+      { v: 5, label: "5%" },
+      { v: 10, label: "10%" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkShortCooling",
+    label: "공매도 식는 중",
+    group: "마크",
+    unit: "",
+    hint: "최근 5일 평균 비중이 그 앞 20일보다 낮다",
+    ops: ["pass", "fail"],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkProg5",
+    label: "프로그램 5일 순매수",
+    group: "마크",
+    unit: "억",
+    hint: "프로그램 매매 최근 5거래일 합계",
+    ops: ["gte", "lte"],
+    def: 0,
+    presets: [
+      { v: 0, label: "순매수" },
+      { v: 50, label: "50억" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkFgnRatioChg",
+    label: "외국인 지분율 변화 (20일)",
+    group: "마크",
+    unit: "%p",
+    hint: "지분율이 20거래일 동안 얼마나 늘었나. 금액과 달리 비중이라 시총이 큰 종목에서도 뜻이 있습니다",
+    ops: ["gte", "lte"],
+    def: 0.5,
+    presets: [
+      { v: 0, label: "늘었다" },
+      { v: 0.5, label: "+0.5%p" },
+      { v: 2, label: "+2%p" },
+    ],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkSuper",
+    label: "🌟 슈퍼신호등",
+    group: "마크",
+    unit: "",
+    hint: "여러 목록에 동시에 걸린 초록 — 지금 활성인 것",
+    ops: ["pass", "fail"],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkRainbow",
+    label: "🌈 무지개 (이틀 이상 계속)",
+    group: "마크",
+    unit: "",
+    hint: "슈퍼신호등에 이틀 넘게 계속 걸린다 — 지속성이 성적을 가른 축입니다",
+    ops: ["pass", "fail"],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkCross",
+    label: "⚡ 교차 (주도주 ∩ 슈퍼)",
+    group: "마크",
+    unit: "",
+    hint: "주도주 태그를 달았던 슈퍼신호등",
+    ops: ["pass", "fail"],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkHot",
+    label: "🔥 쏠림 경보",
+    group: "마크",
+    unit: "",
+    hint: "회전율·진폭·거래량·갭·변동성 중 하나라도 문턱을 넘었다. 몰린 자리는 고점이었던 계절이라, 거르려면 미달(fail)로 거세요",
+    ops: ["pass", "fail"],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkLate",
+    label: "⏳ 늦음 경보",
+    group: "마크",
+    unit: "",
+    hint: "이미 많이 온 자리(RS20·RS60·저점 대비). 약세장에서만 붙습니다 — 강세장에는 늘 비어 있습니다",
+    ops: ["pass", "fail"],
+    own: true,
+    cost: "조회 0회",
+  },
+  {
+    key: "mkKill",
+    label: "탈락 경보 (σ·진폭·과열)",
+    group: "마크",
+    unit: "",
+    hint: "신호등이 초록을 막는 넷 — σ20 7%↑ · 진폭 12%↑ · 약세장 RS60 · 저점 +50%↑. 「없는 것만」을 고르려면 미달(fail)로 거세요",
+    ops: ["pass", "fail"],
+    own: true,
+    cost: "조회 0회",
+  },
 ];
 
 const BY_KEY = new Map(COND_FIELDS.map((f) => [f.key, f]));
@@ -562,7 +859,48 @@ export async function ownValues(code: string, keys: Set<string>): Promise<OwnVal
   const num = new Map<string, number>();
   const flag = new Map<string, boolean>();
 
-  const wantsQuarter = [...keys].some((k) => k.startsWith("q"));
+  /*
+   * **마크** (2026-09-16) — 파일 하나를 읽는다(5분 캐시). 조회가 0회라 종목이 몇천이어도 괜찮다.
+   * 못 잰 칸은 **담지 않는다** — 담기지 않은 키는 `condSearch` 가 통과시키지 않는다.
+   */
+  const wantsMark = [...keys].some((k) => k.startsWith("mk"));
+  if (wantsMark) {
+    const m = await markOf(code).catch(() => null);
+    if (m) {
+      const setNum = (k: string, v: number | null) => {
+        if (v !== null && Number.isFinite(v)) num.set(k, v);
+      };
+      const setFlag = (k: string, v: boolean | null) => {
+        if (v !== null) flag.set(k, v);
+      };
+      setFlag("mkTwin", m.twin);
+      setFlag("mkFgn3", m.fgn3);
+      setNum("mkFgnDays", m.fgnDays);
+      setNum("mkOrgDays", m.orgDays);
+      setNum("mkFgn20", m.fgn20);
+      setNum("mkSmart20", m.smart20);
+      setFlag("mkTrend", m.trend);
+      setNum("mkHigh60", m.high60);
+      setFlag("mkNewHigh250", m.newHigh250);
+      setNum("mkGapMa20", m.gapMa20);
+      setNum("mkVolEok", m.volEok);
+      setNum("mkVolRatio", m.volRatio);
+      setNum("mkShortRatio", m.shortRatio);
+      setFlag("mkShortCooling", m.shortCooling);
+      setNum("mkProg5", m.prog5);
+      setNum("mkFgnRatioChg", m.fgnRatioChg);
+      setFlag("mkSuper", m.super);
+      setFlag("mkRainbow", m.rainbow);
+      setFlag("mkCross", m.cross);
+      setFlag("mkHot", m.hot.length > 0);
+      setFlag("mkLate", m.late.length > 0);
+      setFlag("mkKill", m.kill);
+    }
+  }
+
+  /* 분기 실적 — 이 다섯만 DART·한투를 부른다. ⚠️ 「q 로 시작」으로 보면 마크(mk…)까지 걸린다 */
+  const QUARTER = ["qProfitStreak", "qProfitYoY", "qProfitQoQ", "qMargin", "qTurnaround"];
+  const wantsQuarter = [...keys].some((k) => QUARTER.includes(k));
   if (!wantsQuarter) return { num, flag };
 
   const rows = await quarterFinance(code, 8).catch(() => [] as QuarterRow[]);

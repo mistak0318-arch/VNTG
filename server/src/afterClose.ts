@@ -5,6 +5,7 @@ import { collectProgress, startCollectDaily } from "./collectDaily.js";
 import { ledgerStatus } from "./dailyStore.js";
 import { regimeCheck } from "./regimeWatch.js";
 import { startEnroll } from "./signalTrack.js";
+import { buildStockMarks, marksProgress } from "./stockMarks.js";
 import { runSuperSignal } from "./superSignal.js";
 import { runListTrack } from "./listTrack.js";
 import { marketPulse } from "./marketPulse.js";
@@ -16,7 +17,7 @@ import { ensureFinance } from "./financeCache.js";
 import { closesProgress } from "./dailyCloses.js";
 import { listTrackJob } from "./listTrack.js";
 import { ledgerSamplesProgress } from "./samplesFromLedger.js";
-import { cleanupStartMinute } from "./marketHours.js";
+import { cleanupStartMinute, pipelineStartMinute, pipelineWrapMinute } from "./marketHours.js";
 import { readdir, readFile, writeFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -92,10 +93,23 @@ const STEPS: { key: string; label: string }[] = [
   { key: "listTrack", label: "신호등 분석" },
   { key: "super", label: "슈퍼신호등" },
   { key: "cross", label: "교차" },
+  { key: "marks", label: "전종목 마크" },
   { key: "trade", label: "수출입" },
   { key: "finance", label: "실적 캐시" },
   { key: "samples", label: "표본" },
+  /*
+   * **마무리 회차** (2026-09-16) — 정규 회차(15:40)에는 안 돈다. 20:10 에 따로 돈다.
+   *
+   * 15:40 에 만드는 것은 **정규장 기준 판정**이고(애프터장에서 쓰라고), 이 둘은 **그날의 최종값**이다:
+   *   · 일봉 — 애프터까지 포함한 시·고·저·거래량. 종가 `c` 는 `mergeBars` 가 정규장 값으로 지킨다
+   *   · 공매도·대차 — 공표가 저녁이라 15:40 엔 미집계다. 그래서 정규 회차에서는 아예 안 받는다
+   */
+  { key: "barsFinal", label: "일봉 마무리" },
+  { key: "ledgerFinal", label: "공매도·대차 확정" },
 ];
+
+/** 마무리 회차에서만 도는 단계 — 정규 회차(`only` 없이 부를 때)에서는 빠진다 */
+const WRAP_KEYS = new Set(["barsFinal", "ledgerFinal"]);
 
 export interface StepResult {
   key: string;
@@ -300,8 +314,16 @@ function dayKey(at = Date.now()): string {
 function shouldStart(at = Date.now()): boolean {
   const k = kst(at);
   if (!isTradingDay(k)) return false; // (2026-09-10 전수 점검) 휴장일에 두 시간짜리를 헛돌리지 않는다
-  /* 09/13 까지 15:40 · 09/14 부터 20:10 — 시각 판정은 `marketHours` 한 곳에서만 (2026-09-12) */
-  return k.getHours() * 60 + k.getMinutes() >= cleanupStartMinute(dayKey(at));
+  /* 시각 판정은 `marketHours` 한 곳에서만. 09/16 부터 정규 회차는 15:40 (아래 주석) */
+  return k.getHours() * 60 + k.getMinutes() >= pipelineStartMinute(dayKey(at));
+}
+
+/** 마무리 회차(일봉·공매도·대차 확정값) 시각이 됐나 — 애프터마켓 시대에만 있다 */
+function shouldWrap(at = Date.now()): boolean {
+  const k = kst(at);
+  if (!isTradingDay(k)) return false;
+  const m = pipelineWrapMinute(dayKey(at));
+  return m >= 0 && k.getHours() * 60 + k.getMinutes() >= m;
 }
 
 /**
@@ -373,18 +395,27 @@ export async function runAfterClose(
 ): Promise<AfterCloseRun> {
   if (run?.running) return run;
   const day = dayKey();
-  /* 재시작해도 오늘 몫은 한 번이다 — 메모리가 아니라 이력을 본다 */
-  if (!force && (await alreadyDone(day))) {
-    return run ?? { day, startedAt: "", running: false, steps: [] };
-  }
   /* (2026-09-10 전수 점검 F) 상태 파일이 「오늘 끝났고 실패 없음」이면 force 아닌 정규 회차는 안 돈다 */
   const prevState = await loadState().catch(() => null);
   if (!force && prevState?.day === day && prevState.finishedAt && prevState.failedSteps.length === 0) {
     return run ?? { day, startedAt: prevState.startedAt, finishedAt: prevState.finishedAt, running: false, steps: [] };
   }
+  /*
+   * 재시작해도 오늘 몫은 한 번이다 — 메모리가 아니라 이력을 본다.
+   *
+   * ⚠️ **상태 파일 판정 뒤로 옮겼다** (2026-09-16 점검). 이게 앞에 있어서, 원장이 파이프라인
+   * 바깥에서 한 번 돌기만 하면(설정 화면에서 「②번만」 누른 날 — 파이프라인이 그러라고 만든
+   * 기능이다) **그날 정규 회차가 통째로 조용히 건너뛰어졌다.** 원장 이력은 「원장이 돌았나」이지
+   * 「파이프라인이 돌았나」가 아니다. 그래서 **오늘 회차 기록이 아예 없을 때만** 이력으로 본다
+   * (파이프라인 도중 재시작을 막는 것이 원래 목적이었고, 그건 이걸로도 된다).
+   */
+  if (!force && prevState?.day !== day && (await alreadyDone(day))) {
+    return run ?? { day, startedAt: "", running: false, steps: [] };
+  }
   const isRetry = /^재시도/.test(reason ?? "");
 
-  const want = (k: string) => !only || only.length === 0 || only.includes(k);
+  /* `only` 를 안 주면 **마무리 단계를 뺀** 전부 — 그 둘은 20:10 에 따로 돈다 */
+  const want = (k: string) => (!only || only.length === 0 ? !WRAP_KEYS.has(k) : only.includes(k));
   run = {
     day,
     startedAt: new Date().toISOString(),
@@ -419,7 +450,8 @@ export async function runAfterClose(
    * 재실행 같은) 줄이 하나다 — 시각과 횟수만 올라간다.
    */
   const planned = STEPS.filter((s) => want(s.key));
-  const scope = !only || only.length === 0 ? "전체 9단계" : `${planned.length}단계만`;
+  /* 단계 수를 적을 때 **세어서** 적는다 — 「9단계」라고 박아 둬서 열 개가 된 뒤로 틀려 있었다 */
+  const scope = !only || only.length === 0 ? `전체 ${STEPS.length - WRAP_KEYS.size}단계` : `${planned.length}단계만`;
   const why = reason ?? "정규 회차";
   /* (2026-09-10 전수 점검 F) 재시도는 「시작」이 아니라 「재시도」로 — 같은 날 시작 줄이 두 번 오지 않는다 */
   const startTitle = isRetry ? `마감 뒤 정리 재시도 — ${scope} (${why})` : `마감 뒤 정리 시작 — ${scope} (${why})`;
@@ -463,8 +495,17 @@ export async function runAfterClose(
       "ledger",
       "일별 원장 전종목",
       async () => {
-        if (collectProgress().running) return "이미 도는 중이라 건너뜀";
-        const p = await startCollectDaily(client);
+        /*
+         * 「이미 도는 중」은 **성공이 아니다** (2026-09-16 점검). 20:00~20:10 에 다른 경로가 먼저
+         * 걸려 있으면 원장이 그날 통째로 빠지는데 ✅ 로 남아 아무도 모른다. 던져서 밤 재시도에 건다
+         * — 그때는 앞의 수집이 끝나 있다.
+         */
+        if (collectProgress().running) throw new Error("다른 곳에서 이미 수집 중이라 건너뜀 — 재시도에 맡긴다");
+        /*
+         * **공매도·대차는 여기서 안 받는다** (2026-09-16). 공표가 저녁이라 15:40 엔 미집계로 온다 —
+         * 받아 봐야 오늘 줄은 버려지므로 종목당 2콜 × 2,600 이 그냥 낭비다. 20:10 마무리가 받는다.
+         */
+        const p = await startCollectDaily(client, ["flow", "fgnRatio", "prog"]);
         const st = await ledgerStatus().catch(() => null);
         return `${p.done}/${p.total} · 실패 ${p.fails}${st ? ` · ${st.codes}종목` : ""}`;
       },
@@ -494,7 +535,16 @@ export async function runAfterClose(
      */
     const j = startEnroll(client, true);
     while (j.status === "running") await new Promise((r) => setTimeout(r, 2000));
-    return j.status === "error" ? `실패: ${j.error ?? ""}` : `${j.added ?? 0}건 담음`;
+    /*
+     * ⚠️ **실패는 던져야 한다** (2026-09-16 점검).
+     *
+     * 여긴 ``실패: …`` 이라는 **문자열을 돌려주고** 있었다. `step()` 은 예외가 나야만
+     * `ok:false` 로 적으므로, 실제로는 ✅ 로 기록되고 `failedSteps` 에도 안 들어갔다 —
+     * 밤 재시도(RETRY_MAX)가 **걸릴 수가 없었다.** 「편입 원장은 소급이 안 된다」는 경고가
+     * 바로 이 단계 얘기인데, 실패한 날은 조용히 지나가고 있었다.
+     */
+    if (j.status === "error") throw new Error(j.error || "추적기 편입 실패");
+    return `${j.added ?? 0}건 담음`;
   });
 
   /*
@@ -548,6 +598,26 @@ export async function runAfterClose(
     });
 
   /*
+   * ⑦-2 **전종목 마크** (2026-09-16) — 조회 0회.
+   *
+   * 벤티지: "쌍끌이나 자석이나 이런 거 많이 했잖아 … 그러면 모든 종목에 대해서 우리가 알 수 있는
+   * 거잖아 … 조건 검색에도 그거를 활용할 수 있을 거 같거든."
+   *
+   * ①일봉·②원장이 방금 채워졌고 ⑥⑦이 슈퍼·교차를 오늘 것으로 만들어 놨다. 그 셋을 맞대면
+   * 2,600종목의 마크가 **파일만 읽고** 나온다(`stockMarks.ts`). 여기 두는 이유가 그것이다 —
+   * 앞이면 슈퍼·교차가 어제 것이고, 뒤로 더 가면 표본 만드는 시간에 밀린다.
+   */
+  if (want("marks"))
+    await step("marks", "전종목 마크 (조회 0회)", async () => {
+      const m = await buildStockMarks(client);
+      if (m.error) return `실패: ${m.error}`;
+      return `${m.count.toLocaleString()}종목 · ${(m.ms / 1000).toFixed(1)}초`;
+    }, () => {
+      const p = marksProgress();
+      return p.running ? { done: p.done, total: p.total, note: "종목" } : null;
+    });
+
+  /*
    * ⑧ **수출입 동향** — 관세청 발표를 받아 둔다.
    *
    * ⚠️ 여태 **자동으로 안 받았다** (2026-09-01 발견). `getTradeStats` 를 부르는
@@ -564,7 +634,9 @@ export async function runAfterClose(
     await step("trade", "수출입 동향", async () => {
       const r = await getTradeStats(true);
       const n = r.items?.length ?? 0;
-      return n > 0 ? `${n}품목${r.error ? ` · ${r.error}` : ""}` : (r.error ?? "받은 것 없음");
+      /* 한 품목도 못 받았으면 실패다 — 문자열로 돌려주면 ✅ 로 남아 재시도가 안 걸린다 (위 ④ 주석) */
+      if (n === 0) throw new Error(r.error || "관세청에서 받은 것이 없다");
+      return `${n}품목${r.error ? ` · ${r.error}` : ""}`;
     });
 
   /*
@@ -605,7 +677,8 @@ export async function runAfterClose(
   if (want("samples"))
     await step("samples", "검증 표본 (원장으로)", async () => {
       const p = await buildSamplesFromLedger(client);
-      if (p.error) return `실패: ${p.error}`;
+      /* 실패는 던진다 — 문자열로 돌려주면 ✅ 로 남는다 (위 ④ 주석) */
+      if (p.error) throw new Error(p.error);
       const note = `${p.obs.toLocaleString()}관측 · ${(p.total - p.skipped).toLocaleString()}종목`;
       /* ①②가 깨졌으면 표본도 그만큼 낡은 것으로 만들어진 것이다 */
       return bars.ok ? note : `${note} · ⚠️ 일봉이 실패해 어제까지로 만들어짐`;
@@ -613,6 +686,39 @@ export async function runAfterClose(
       const p = ledgerSamplesProgress();
       return p.total > 0 && p.done < p.total ? { done: p.done, total: p.total, note: `${p.obs.toLocaleString()}관측` } : null;
     });
+
+  /*
+   * ⑪ **마무리 회차** (2026-09-16) — 20:10 에만. 애프터까지 끝난 뒤의 **그날 최종값**이다.
+   * 판정(신호등·마크)은 이미 15:40 에 정규장 기준으로 냈다 — 여기서 다시 세지 않는다.
+   */
+  if (want("barsFinal"))
+    await step(
+      "barsFinal",
+      "일봉 마무리 (애프터 포함)",
+      async () => {
+        const s2 = await buildCloses(client);
+        return `${Object.keys(s2.bars ?? {}).length}종목 · 종가는 정규장 값으로 지킴`;
+      },
+      () => {
+        const p = closesProgress();
+        return p.running ? { done: p.done, total: p.total, note: "종목" } : null;
+      },
+    );
+
+  if (want("ledgerFinal"))
+    await step(
+      "ledgerFinal",
+      "공매도·대차 확정값",
+      async () => {
+        if (collectProgress().running) throw new Error("다른 곳에서 이미 수집 중이라 건너뜀 — 재시도에 맡긴다");
+        const p = await startCollectDaily(client, ["short", "loan"]);
+        return `${p.done}/${p.total} · 실패 ${p.fails}`;
+      },
+      () => {
+        const p = collectProgress();
+        return p.running ? { done: p.done, total: p.total, note: p.fails ? `실패 ${p.fails}` : "종목" } : null;
+      },
+    );
 
   run.running = false;
   run.finishedAt = new Date().toISOString();
@@ -719,6 +825,24 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
     if (run?.running) return;
 
     const day = dayKey();
+
+    /*
+     * ⓪ **마무리 회차** (2026-09-16) — 20:10. 정규 회차(15:40)가 판정을 냈고, 여기서는 **그날
+     * 최종값**만 받는다(일봉 애프터 포함 · 공매도·대차 공표값).
+     *
+     * 재시도보다 **앞에** 둔다 — 정규 회차에 실패한 단계가 남아 있어도 최종값 받는 일은 따로다.
+     * 하루 한 번인지는 **이력 파일**로 본다(메모리 변수로 두면 재시작할 때마다 또 돈다).
+     */
+    if (shouldWrap()) {
+      const last = await afterCloseLastByStep().catch(() => ({}) as Record<string, StepResult & { day: string }>);
+      const done = ["barsFinal", "ledgerFinal"].every((k) => last[k]?.day === day && last[k]?.ok);
+      if (!done) {
+        await runAfterClose(client, true, ["barsFinal", "ledgerFinal"], "마무리 회차 (일봉·공매도·대차 확정값)").catch(
+          () => null,
+        );
+        return;
+      }
+    }
 
     /*
      * (2026-09-10 전수 점검 F) **재시작 뒤** — 메모리(run·retry)가 비어 있으면 상태 파일에서 되살린다.

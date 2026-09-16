@@ -56,6 +56,7 @@ import {
   startCondSearch,
   type CondQuery,
 } from "../condSearch.js";
+import { buildStockMarks, loadStockMarks, marksProgress } from "../stockMarks.js";
 import { COND_FIELDS } from "../condFields.js";
 import { allStocksUniverse } from "../allStocks.js";
 import { afterCloseHistory, afterCloseLastByStep, afterCloseStatus, runAfterClose } from "../afterClose.js";
@@ -681,6 +682,42 @@ export function createSignalRouter(client: KiwoomClient): Router {
   });
 
   /** 지금 돌리기 — 하루 한 번 자동(15:45)이지만 눈으로 확인하고 싶을 때 */
+  /*
+   * **전종목 마크** (2026-09-16) — 마감 뒤 정리 ⑦-2 가 만든 파일을 읽는다.
+   *
+   * `rebuild` 는 손으로 다시 세는 자리다(조회 0회라 아무 때나 눌러도 된다). 다만 **원장이 오늘 것이
+   * 아니면 마크도 어제 것**이다 — 응답의 `day` 로 그것을 알 수 있게 한다.
+   */
+  router.get("/marks", async (req, res, next) => {
+    try {
+      const f = await loadStockMarks();
+      if (!f) {
+        res.json({ day: "", builtAt: "", count: 0, marks: {} });
+        return;
+      }
+      const only = String(req.query.codes ?? "").trim();
+      if (!only) {
+        res.json(f);
+        return;
+      }
+      const want = new Set(only.split(",").map((c) => c.trim()).filter(Boolean));
+      const marks: Record<string, unknown> = {};
+      for (const c of want) if (f.marks[c]) marks[c] = f.marks[c];
+      res.json({ day: f.day, builtAt: f.builtAt, count: Object.keys(marks).length, marks });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post("/marks/rebuild", (_req, res) => {
+    void buildStockMarks(client).catch(() => undefined);
+    res.json(marksProgress());
+  });
+
+  router.get("/marks/progress", (_req, res) => {
+    res.json(marksProgress());
+  });
+
   router.post("/super/run", (_req, res) => {
     void runSuperSignal(client, true).catch(() => undefined);
     res.json(superJob());

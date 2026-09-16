@@ -18,7 +18,7 @@ import {
   putCollectRun,
 } from "./dailyStore.js";
 import { alCode } from "./alCode.js";
-import { afterMarketEra, cleanupStartMinute, dayFullySettled } from "./marketHours.js";
+import { afterMarketEra, cleanupStartMinute, dayFullySettled, pipelineStartMinute } from "./marketHours.js";
 
 /**
  * **전종목 일별 수집** (2026-09-01).
@@ -104,9 +104,23 @@ function kstMinute(at = Date.now()): number {
  * 09/13 까지 15:40 · 09/14 부터 **20:10** (2026-09-12, KRX 애프터마켓 개편). 애프터마켓
  * (16:00~20:00)이 실거래라 그 전에 받은 수급·공매도는 **하루의 반쪽**이다 — 마감 뒤 정리와
  * 같은 시각을 쓴다(`marketHours.cleanupStartMinute`).
+ *
+ * ## 09/16 부터 **종류마다 다르다** (벤티지: 마감 정리를 15:40 으로)
+ *
+ * 파이프라인이 15:40 으로 앞당겨졌다 — 애프터장(16:00~20:00)에서 쓸 신호를 만들려는 것이다.
+ * 그러려면 **오늘 수급이 15:40 에 담겨야** 한다. 실측으로 그건 된다: 9/15 에 15:45·17:00·18:30·
+ * 20:05 네 번 잰 결과 대형주 수급이 **한 번도 안 바뀌었다**(`flowAfterProbe`) — 정규장이 끝나면
+ * 그날 투자자별 수급은 이미 굳는다.
+ *
+ * 그런데 **공매도·대차는 다르다.** 공표가 저녁이라 장 직후에는 미집계로 온다(실측: 9/1 장중
+ * 삼성전자 대차잔고가 0). 그래서 그 둘만 예전 시각(20:10)을 그대로 쓰고, **20:10 마무리 회차**가
+ * 확정값을 받아 채운다. 「아직 안 나왔다」를 「0 이다」로 굳히지 않는다 — 이 도구가 계속 피해 온 실수다.
  */
-function closedForToday(at = Date.now()): boolean {
-  return kstMinute(at) >= cleanupStartMinute(todayDash(at));
+function closedForToday(kind: LedgerKind, at = Date.now()): boolean {
+  const date = todayDash(at);
+  const m = kstMinute(at);
+  if (kind === "short" || kind === "loan") return m >= cleanupStartMinute(date);
+  return m >= pipelineStartMinute(date);
 }
 
 /**
@@ -363,7 +377,7 @@ export function startCollectDaily(
            * 마감 전이면 **오늘 줄을 버린다.** 미집계 0 을 값으로 굳히지 않는다.
            * 이어 붙이는 구조라 마감 뒤 바퀴에서 확정값으로 들어온다.
            */
-          if (!closedForToday()) got = got.filter((r) => r.d !== todayYmd());
+          if (!closedForToday(kind)) got = got.filter((r) => r.d !== todayYmd());
 
           if (got.length > 0) {
             const before = (led[kind] as { d: string }[] | undefined)?.length ?? 0;

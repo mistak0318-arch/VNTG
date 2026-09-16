@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dayFullySettled } from "./marketHours.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
@@ -224,10 +225,16 @@ export function startEtfHoldersScheduler(client: KiwoomClient): void {
     const today = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
     const built = s.builtAt.slice(0, 10);
     const kst = new Date(Date.now() + 9 * 3600_000);
-    const hour = kst.getUTCHours();
-    /* 16시 이후 하루 한 번. 인덱스가 통째로 없으면 시간과 무관하게 한 번 만든다 */
+    /*
+     * 하루 한 번. 인덱스가 통째로 없으면 시간과 무관하게 한 번 만든다.
+     *
+     * ⚠️ **16시가 아니라 애프터 마감 뒤다** (2026-09-16 점검). 9/14 부터 **16:00 은 애프터마켓
+     * 개장 시각**이라, 16시 첫 틱에 만들면 애프터 한복판 값으로 인덱스가 굳고 `built === today`
+     * 가드 때문에 그날은 다시 안 만든다. 일봉 캐시에서 똑같은 이유로 이미 고친 자리인데
+     * (`dailyCloses` 스케줄러 주석) 여기만 안 고쳤다. 판정은 `marketHours` 한 곳에서 한다.
+     */
     if (built === today) return;
-    if (s.builtAt && hour < 16) return;
+    if (s.builtAt && !dayFullySettled(today, kst.getUTCHours() * 60 + kst.getUTCMinutes())) return;
     if (!(await isEnabled("etfHolders"))) return;
     running = true;
     try {

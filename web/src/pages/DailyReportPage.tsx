@@ -33,6 +33,7 @@ import {
   type ThemeRow,
 } from "../api";
 import { AiSummaryCard } from "../components/AiSummaryCard";
+import { NaverBriefingBlock } from "../components/NaverBriefingBlock";
 import { ReportTts } from "../components/ReportTts";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
 import { FlowBars } from "../components/overview/FlowBars";
@@ -482,6 +483,18 @@ export function DailyReportPage({
       {/* 읽어주기 — 출근길에 AI 정리를 귀로. 브라우저 내장 음성이라 키·비용이 없다 */}
       <ReportTts edition={edition} />
       <AiSummaryCard edition={edition} />
+      {/*
+        **다른 눈** (2026-09-16) — 우리 요약 바로 밑, **펼친 채로**.
+
+        벤티지: "네이버가 AI를 요약한 게 더 비싼 AI 를 쓸 것 같거든. 네이버 먼저 보여 주고
+        내 AI 융합 보여 주는 구조 어때."
+
+        순서는 **우리가 먼저**로 뒀다. 네이버 브리핑은 한 시간마다 자동으로 나오는 일반 시황이라
+        벤티지 계좌·관심종목·신호등·종배를 모른다. 그리고 남의 결론을 먼저 읽으면 우리 글을 그
+        눈으로 읽게 된다 — AI 요약 프롬프트에 「베끼지 말고 견주라」(NAVER_RULE)고 박아 둔 것과
+        같은 이유다. 대신 지적이 맞는 부분을 고쳤다: **접혀 있어서 아무도 안 읽던 것**을 펴 뒀다.
+      */}
+      <NaverBriefingBlock open />
 
       {/*
         섹션 순서는 설정이 정한다 (2026-08-26 — 「일일이 얘기하고 바꾸려니 불편하다」).
