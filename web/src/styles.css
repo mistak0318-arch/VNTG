@@ -19396,7 +19396,9 @@ tr.gv-strong td:first-child { color: var(--text); }
 .nvbb .ht-btn.dim { opacity: 0.45; }
 .nvbb-ico { font-size: 16px; line-height: 1; }
 .nvbb-new { font-size: 0.6rem; font-weight: 700; color: #fff; background: var(--red); border-radius: 999px; padding: 1px 5px; line-height: 1.2; }
-.nvbb-pop { width: 460px; gap: 0; }
+/* 폰에서 460px 고정폭이 화면을 넘어 오른쪽이 잘렸다 (2026-09-17 벤티지 캡처) — 화면 안으로, 길면 안에서 스크롤 */
+.nvbb-pop { width: 460px; max-width: calc(100vw - 20px); max-height: 72vh; overflow-y: auto; gap: 0; box-sizing: border-box; }
+.nvbb-pop .nvb-h { align-items: flex-start; line-height: 1.4; word-break: keep-all; overflow-wrap: anywhere; }
 .nvbb-h { font-size: 0.78rem; font-weight: 600; padding: 2px 4px 6px; }
 .nvbb-h i { font-style: normal; font-weight: 400; color: var(--muted); font-size: 0.7rem; margin-left: 4px; }
 .nvbb-pop .nvb-item:first-of-type { border-top: 0; }
