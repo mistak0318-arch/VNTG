@@ -3,6 +3,7 @@ import { closeBetScanHealth } from "./closeBetScan.js";
 import { KiwoomClient } from "./kiwoomClient.js";
 import { flowAfterSnapshot } from "./flowAfterProbe.js";
 import { hantooFutProbeSnapshot } from "./hantooFutProbe.js";
+import { hantooUsRankProbeSnapshot } from "./hantooUsRankProbe.js";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { peekRealtime, subscribedCount } from "./realtimeHub.js";
@@ -159,6 +160,7 @@ async function writeOnceInner(): Promise<void> {
     수급애프터: flowAfterSnapshot(),
     /* 해외선물 키2 시험 (2026-09-15) — 된다/사유 문장뿐. 키·계좌·값은 없다 */
     해외선물시험: hantooFutProbeSnapshot(),
+    한투해외순위시험: hantooUsRankProbeSnapshot(),
   };
 
   try {

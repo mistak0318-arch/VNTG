@@ -61,6 +61,7 @@ import { startCloseBetScanScheduler } from "./closeBetScan.js";
 import { startFlowAfterProbe } from "./flowAfterProbe.js";
 import { startThemeBridgeLog } from "./themeBridge.js";
 import { startHantooFutProbe } from "./hantooFutProbe.js";
+import { startHantooUsRankProbe } from "./hantooUsRankProbe.js";
 import { syncSuperGroup } from "./superSignal.js";
 import { startCisWatch } from "./cisWatch.js";
 import { startChannelScheduler } from "./channelScheduler.js";
@@ -306,6 +307,8 @@ startFlowAfterProbe(client);
 startThemeBridgeLog(client);
 /* 해외선물 계좌 키(_2)로 미국 선물 시세가 열리나 — 결과만 health.json 에 (2026-09-15) */
 startHantooFutProbe();
+/* 한투 해외 순위·업종 TR 시험 (2026-09-16 밤) — 되는 것만 네이버의 두 번째 출처로 연다. health.json 「한투해외순위시험」 */
+startHantooUsRankProbe();
 /* 시뮬레이터 실전 진행 (2026-09-04) — 시각이 아니라 일봉이 왔는지를 본다 */
 startSimScheduler(client);
 /*
