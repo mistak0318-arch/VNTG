@@ -50,8 +50,12 @@ const CHANNEL_ENV: Record<TelegramChannel, string> = {
   disclosure: "TELEGRAM_CHAT_ID_DISCLOSURE",
   keyword: "TELEGRAM_CHAT_ID_KEYWORD",
   super: "TELEGRAM_CHAT_ID_SUPER",
-  // 사용자가 판 방의 .env 키 이름이 SUPERSIGNAL 이다 — 갈래 이름(buzz)과 키 이름이 다름에 주의
-  buzz: "TELEGRAM_CHAT_ID_SUPERSIGNAL",
+  /*
+   * 버즈 방 키를 **BUZZ** 로 바로잡았다 (2026-09-16 밤). 예전 키 이름이 `SUPERSIGNAL` 이라 벤티지가 「_SUPER 가
+   * 이거 아냐?」 하고 헷갈렸다 — 실제 슈퍼신호등 방은 `_SUPER` 고 이건 밤사이 버즈다. 옛 키는 아래 `legacyEnv`
+   * 가 그대로 받아 준다(안 바꿔도 안 깨진다).
+   */
+  buzz: "TELEGRAM_CHAT_ID_BUZZ",
   order: "TELEGRAM_CHAT_ID_ORDER",
   syslog: "TELEGRAM_CHAT_ID_SYSTEM_LOG",
 };
@@ -64,13 +68,15 @@ const CHANNEL_ENV: Record<TelegramChannel, string> = {
  * 순서다. 화면 배정이 .env 를 이기는 이유: .env 는 재시작이 필요해서,
  * 「이 갈래만 잠깐 저 방으로」 같은 조정을 화면이 담당한다.
  */
+/** 옛 키 이름 — 새 이름이 비어 있으면 이걸 본다 */
+const LEGACY_ENV: Partial<Record<TelegramChannel, string>> = { buzz: "TELEGRAM_CHAT_ID_SUPERSIGNAL" };
+function envChatId(channel: TelegramChannel): string {
+  const legacy = LEGACY_ENV[channel];
+  return process.env[CHANNEL_ENV[channel]]?.trim() || (legacy ? process.env[legacy]?.trim() : "") || "";
+}
+
 export function chatIdFor(channel: TelegramChannel): string {
-  return (
-    assignedChatId(channel) ||
-    process.env[CHANNEL_ENV[channel]]?.trim() ||
-    process.env.TELEGRAM_CHAT_ID?.trim() ||
-    ""
-  );
+  return assignedChatId(channel) || envChatId(channel) || process.env.TELEGRAM_CHAT_ID?.trim() || "";
 }
 
 export function isTelegramConfigured(channel: TelegramChannel = "report"): boolean {
@@ -85,7 +91,7 @@ export function isTelegramConfigured(channel: TelegramChannel = "report"): boole
  * 그걸로 판단하면 방을 안 판 사람의 알림이 기본 방에 섞여 버린다.
  */
 export function hasDedicatedChannel(channel: TelegramChannel): boolean {
-  return Boolean(assignedChatId(channel) || process.env[CHANNEL_ENV[channel]]?.trim());
+  return Boolean(assignedChatId(channel) || envChatId(channel));
 }
 
 /**
