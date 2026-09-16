@@ -732,6 +732,11 @@ export const api = {
     }>(`/api/market/etf/${code}`),
   /** ETF 전체 시세 — ka40004, 서버 3분 캐시. 괴리율은 서버가 (현재가−NAV)/NAV 로 계산 */
   etfList: () => getJson<{ rows: EtfListRow[]; at: number }>("/api/etf/list"),
+  /* ETF 분석 묶음 (2026-09-17, etfFlow.ts) — 일봉 캐시라 조회는 거의 0 */
+  /** 국내 ETF 자금흐름 — 대표 ETF 30여 개의 1·5·20일 등락과 거래대금 배수 */
+  etfFlow: () => getJson<{ at: number; rows: EtfFlowRow[]; note: string }>("/api/etf/flow"),
+  /** 레버리지·인버스 심리 — 인버스(+곱버스) ÷ 레버리지 거래대금, 20일 */
+  etfSentiment: () => getJson<{ at: number; sides: EtfSentimentSide[]; note: string }>("/api/etf/sentiment"),
   /** 이 종목을 담은 ETF — 서버 역인덱스(파일)를 읽는다. 조회 0회 */
   etfHolders: (code: string) =>
     getJson<{ holders: EtfHolder[]; builtAt: string; scanned: number }>(`/api/etf/holders/${code}`),
@@ -2576,6 +2581,39 @@ export interface EtfListRow {
   deviation: number | null;
   traceErr: number | null;
   index: string;
+}
+
+/* ── ETF 분석 묶음 (2026-09-17) — server/src/etfFlow.ts 의 모양 그대로 ── */
+export type EtfFlowGroup = "지수" | "테마·업종" | "미국(국내상장)" | "자산·채권";
+export interface EtfFlowRow {
+  code: string;
+  name: string;
+  /** 무엇을 대표하나 — 「반도체」「금」 */
+  label: string;
+  group: EtfFlowGroup;
+  price: number;
+  d1: number | null;
+  d5: number | null;
+  d20: number | null;
+  /** 최근 5일 평균 거래대금 ÷ 그 앞 20일 (어제까지) — 1.5 면 돈이 몰리는 중 */
+  volRatio: number | null;
+  /** 최근 5일 평균 거래대금(억) */
+  value5: number | null;
+  /** 오늘 거래대금(억) */
+  todayValue: number;
+}
+export interface EtfSentimentDay {
+  d: string;
+  lev: number;
+  inv: number;
+  ratio: number | null;
+}
+export interface EtfSentimentSide {
+  market: "코스피" | "코스닥";
+  names: { lev: string; inv: string[] };
+  days: EtfSentimentDay[];
+  today: EtfSentimentDay | null;
+  avg20: number | null;
 }
 
 export interface IndexFlowRow {

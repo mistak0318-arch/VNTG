@@ -3,6 +3,7 @@ import { analyzeEtfs } from "../etfAnalysis.js";
 import { analyzeHoldings } from "../etfHoldingsScore.js";
 import type { KiwoomClient } from "../kiwoomClient.js";
 import { buildEtfHolders, etfHoldersOf } from "../etfHolders.js";
+import { etfFlow, etfSentiment } from "../etfFlow.js";
 
 /**
  * ETF 메뉴 (2026-08-27 — "퇴직연금에서 ETF도 투자하거든").
@@ -216,6 +217,22 @@ export function createEtfRouter(client: KiwoomClient): Router {
     try {
       const rows = await fetchAll(client);
       res.json({ rows, at: listCache?.at ?? Date.now() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* ETF 분석 묶음 (2026-09-17, etfFlow.ts) — 국내 ETF 자금흐름 · 레버리지/인버스 심리. 일봉 캐시라 조회는 거의 0 */
+  router.get("/flow", async (_req, res, next) => {
+    try {
+      res.json(await etfFlow(client));
+    } catch (err) {
+      next(err);
+    }
+  });
+  router.get("/sentiment", async (_req, res, next) => {
+    try {
+      res.json(await etfSentiment(client));
     } catch (err) {
       next(err);
     }

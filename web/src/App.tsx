@@ -32,6 +32,10 @@ import { UsSectorMapPage } from "./pages/UsSectorMapPage";
 import { UsEventsPage } from "./pages/UsEventsPage";
 import { UsEtfFlowPage } from "./pages/UsEtfFlowPage";
 import { UsBuzzPage } from "./pages/UsBuzzPage";
+import { EtfFlowPage } from "./pages/EtfFlowPage";
+import { EtfSentimentPage } from "./pages/EtfSentimentPage";
+import { EtfRankPage } from "./pages/EtfRankPage";
+import { UsEtfHoldingsPage } from "./pages/UsEtfHoldingsPage";
 import { ResearchPage } from "./pages/ResearchPage";
 import { AskPage } from "./pages/AskPage";
 import { MarketFlowPage } from "./pages/MarketFlowPage";
@@ -118,6 +122,10 @@ type Tab =
   | "usEvents"
   | "usEtfFlow"
   | "usBuzz"
+  | "etfFlow"
+  | "etfSentiment"
+  | "etfRank"
+  | "usEtfHoldings"
   | "research"
   | "volume"
   | "sameNet"
@@ -207,9 +215,24 @@ const MENU: {
       { key: "volume", label: "거래상위", icon: "🔥" },
       { key: "sameNet", label: "동일순매매순위", icon: "🤝" },
       { key: "continuous", label: "연속매매현황", icon: "📈" },
-      /* ETF (2026-08-27) — 퇴직연금 판. 시세·NAV·괴리율 + ETF 만 골라낸 수급·연속 */
-      { key: "etf", label: "ETF", icon: "🧺" },
       { key: "algo", label: "내 알고리즘", icon: "🧮" },
+    ],
+  },
+  /*
+   * ETF 분석 (2026-09-17 — 벤티지: "etf 분석 메뉴도 따로 만들자. 기존 것도 얘 하위로 넣고 메뉴 구성할 만한 거
+   * 최대한 뽑아서"). 퇴직연금 판(기존 ETF)이 첫째, 나머지 넷은 재료가 이미 있던 것들 — 자금흐름·심리는 일봉
+   * 캐시, 순위는 전체시세, 미국 구성종목은 야후 하루 캐시. 조회가 거의 안 는다. ETF 자금흐름(해외)는 해외 묶음에 둔다.
+   */
+  {
+    group: "ETF 분석",
+    accent: "#5ac48a",
+    items: [
+      /* ETF (2026-08-27) — 퇴직연금 판. 시세·NAV·괴리율 + ETF 만 골라낸 수급·연속 */
+      { key: "etf", label: "ETF (퇴직연금 판)", icon: "🧺" },
+      { key: "etfFlow", label: "ETF 자금흐름", icon: "💧" },
+      { key: "etfSentiment", label: "레버리지·인버스 심리", icon: "⚖️" },
+      { key: "etfRank", label: "ETF 순위 (괴리율·거래대금)", icon: "🏁" },
+      { key: "usEtfHoldings", label: "미국 ETF 구성종목", icon: "🔎" },
     ],
   },
   /*
@@ -785,6 +808,10 @@ export default function App() {
       case "volume": return <VolumeRankingPage onSelectStock={onSelectStock} />;
       case "sameNet": return <SameNetTradeRankingPage onSelectStock={onSelectStock} />;
       case "etf": return <EtfPage onSelectStock={onSelectStock} />;
+      case "etfFlow": return <EtfFlowPage onSelectStock={onSelectStock} />;
+      case "etfSentiment": return <EtfSentimentPage />;
+      case "etfRank": return <EtfRankPage onSelectStock={onSelectStock} />;
+      case "usEtfHoldings": return <UsEtfHoldingsPage />;
       case "continuous": return <ContinuousTradePage onSelectStock={onSelectStock} />;
       case "algo": return <AlgoPicksPage onSelectStock={onSelectStock} />;
       case "paper": return <PaperTradePage onSelectStock={onSelectStock} />;
