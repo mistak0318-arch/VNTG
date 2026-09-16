@@ -89,7 +89,38 @@ export class KiwoomClient {
    * 걸리게 만들었다(실사용 체감 즉시 악화). 키움의 초당 제한은 아래 429/return_code 5
    * 반응형 백오프가 이미 감당하고 있고, 그쪽이 실측으로 검증된 균형이다.
    * 선제 제한을 다시 시도하려면 **버스트를 통과시키는 토큰버킷**이어야 한다.
+   *
+   * → **토큰버킷으로 넣었다** (2026-09-16 전체 점검). 통 8개, 초당 4.5개 채움. 상세 화면의 15~20건
+   *   버스트는 통에 든 8개 + 2초 안에 다 나가고, 15:40~16:10 처럼 일봉(220ms)·종배 스캔·주도주·수급
+   *   관측이 **각자 자기만 세며** 합산이 초당 5를 넘던 구간이 여기서 한 줄로 선다. 그 구간의 429 는
+   *   여태 종목당 `catch {}` 로 「빠진 종목」이 되어 조용히 사라졌다.
+   *   주문 TR 은 기다리지 않는다 — 손절 주문이 통 때문에 늦으면 안 된다(초당 한도에 걸리면 429 로
+   *   「이번엔 못 냈다」가 된다, 그건 예전과 같다).
    */
+  private bucket = { tokens: 8, at: Date.now() };
+  private static readonly BUCKET_CAP = 8;
+  private static readonly BUCKET_PER_SEC = 4.5;
+  private static waited = { calls: 0, waitedMs: 0, maxWaitMs: 0 };
+  /** health.json 용 — 통에서 얼마나 기다렸나 (개수·ms 뿐) */
+  static rateLimitStats(): { calls: number; waitedMs: number; maxWaitMs: number } {
+    return { ...KiwoomClient.waited };
+  }
+  private async takeToken(): Promise<void> {
+    const now = Date.now();
+    this.bucket.tokens = Math.min(KiwoomClient.BUCKET_CAP, this.bucket.tokens + ((now - this.bucket.at) / 1000) * KiwoomClient.BUCKET_PER_SEC);
+    this.bucket.at = now;
+    if (this.bucket.tokens >= 1) {
+      this.bucket.tokens -= 1;
+      return;
+    }
+    const waitMs = Math.ceil(((1 - this.bucket.tokens) / KiwoomClient.BUCKET_PER_SEC) * 1000);
+    KiwoomClient.waited.calls += 1;
+    KiwoomClient.waited.waitedMs += waitMs;
+    if (waitMs > KiwoomClient.waited.maxWaitMs) KiwoomClient.waited.maxWaitMs = waitMs;
+    await sleep(waitMs);
+    this.bucket.tokens = Math.max(0, this.bucket.tokens + (waitMs / 1000) * KiwoomClient.BUCKET_PER_SEC - 1);
+    this.bucket.at = Date.now();
+  }
 
   /**
    * 웹소켓이 쓸 토큰.
@@ -165,6 +196,8 @@ export class KiwoomClient {
     }
     let token = await this.getToken();
     const maxRetries = 6;
+    /* 주문(kt100xx)은 통을 안 거친다 — 아래 주석 */
+    if (!/^kt100\d\d$/.test(apiId)) await this.takeToken();
     /*
      * 토큰을 다시 받아 본 횟수.
      *

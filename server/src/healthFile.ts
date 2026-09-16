@@ -1,5 +1,6 @@
 import { afterProbeSnapshot } from "./afterProbe.js";
 import { closeBetScanHealth } from "./closeBetScan.js";
+import { KiwoomClient } from "./kiwoomClient.js";
 import { flowAfterSnapshot } from "./flowAfterProbe.js";
 import { hantooFutProbeSnapshot } from "./hantooFutProbe.js";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
@@ -117,6 +118,8 @@ async function writeOnce(): Promise<void> {
       rejects: us.rejects.slice(0, 3).map((l) => l.split(" ").slice(1).join(" ")),
     },
     저장소: health,
+    /* 키움 REST 토큰버킷에서 기다린 것 — 개수·ms 뿐 (2026-09-16). 크면 15:40~16:10 겹침이 그만큼이다 */
+    키움조회대기: KiwoomClient.rateLimitStats(),
     /* 화면이 실시간을 실제로 받아 가고 있나 — 미니창이 따로 여는 스트림이 여기 잡힌다 */
     화면스트림: {
       open: streamStats.open,

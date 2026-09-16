@@ -253,5 +253,5 @@ export function startEtfHoldersScheduler(client: KiwoomClient): void {
   };
   setTimeout(() => void tick(), 90_000); // 기동 직후는 다른 초기화에 자리를 내준다
   timer = setInterval(() => void tick(), 30 * 60_000);
-  console.log("[etfHolders] ETF 보유 인덱스 스케줄러 시작 (하루 1회, 16시 이후)");
+  console.log("[etfHolders] ETF 보유 인덱스 스케줄러 시작 (하루 1회, 애프터 마감 20:00 뒤)");
 }

@@ -19260,3 +19260,17 @@ th.usr-key { color: var(--text); }
 .ma-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .ma-head .ma-del { margin-left: auto; }
 .ma-head .filter-btn:disabled { opacity: 0.35; cursor: default; }
+
+/* ⏰ 조건식 자동 실행 토글 (2026-09-16) */
+.cond-auto { margin-left: 2px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 0.78rem; cursor: pointer; }
+.cond-auto.on { color: var(--text); border-color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, transparent); }
+.cond-auto i { font-style: normal; font-size: 0.66rem; margin-left: 2px; color: var(--red); font-weight: 700; }
+
+/* 전종목 마크 집계 (데일리 리포트) */
+.mks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 6px 0; }
+.mks-cell { display: flex; align-items: baseline; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.mks-k { flex: 1 1 auto; font-size: 0.78rem; color: var(--muted); }
+.mks-cell b { font-size: 1.05rem; }
+.mks-cell i { font-style: normal; font-size: 0.7rem; color: var(--muted); }
+.mks-cell i.up { color: var(--red); }
+.mks-cell i.down { color: var(--blue); }

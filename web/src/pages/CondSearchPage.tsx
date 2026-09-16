@@ -229,6 +229,20 @@ export function CondSearchPage({
                 {p.name}
                 {typeof p.lastHits === "number" && <i className="cond-hits">{p.lastHits}</i>}
               </button>
+              {/*
+                ⏰ 마감 뒤 자동 실행 (2026-09-16). 마크(조회 0회) 전용 식만 실제로 돈다 — 신호등 기준이 든 식은
+                켜 둬도 「손으로」라고 적히고 밤에 조회를 안 쓴다. 새로 걸린 종목만 텔레그램·알림함으로.
+              */}
+              <button
+                className={`cond-auto${p.auto ? " on" : ""}`}
+                onClick={() => void api.condPresetAuto(p.id, !p.auto).then((r) => setPresets(r.presets))}
+                title={
+                  (p.auto ? "마감 뒤 자동 실행 켜짐 — 누르면 끕니다" : "마감 뒤 자동 실행 — 누르면 켭니다 (마크 전용 식만 돕니다)") +
+                  (p.lastAutoAt ? ` · 마지막 ${new Date(p.lastAutoAt).toLocaleDateString("ko-KR")} ${p.lastAutoHits ?? 0}개, 새로 ${p.lastAutoNew ?? 0}` : "")
+                }
+              >
+                ⏰{p.auto && typeof p.lastAutoNew === "number" && p.lastAutoNew > 0 ? <i>+{p.lastAutoNew}</i> : null}
+              </button>
               <button
                 className="cond-x"
                 onClick={() => {

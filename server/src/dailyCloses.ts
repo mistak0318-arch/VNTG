@@ -3,6 +3,7 @@ import { dropPhantomToday } from "./candleGuard.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { doneToday, markToday } from "./dayMark.js";
 import { loadThemes } from "./naverThemes.js";
 import { getCommonStockCodes } from "./stockListCache.js";
 import { MIN, afterMarketEra, dayFullySettled } from "./marketHours.js";
@@ -311,7 +312,7 @@ const RC_DIR = join(DIR, "regularCloses");
  *
  * ## 왜 필요한가
  *
- * 9/14 부터 일봉 한 바퀴는 20:10 에 돈다(애프터마켓이 20:00 에 끝나야 그날이 굳는다).
+ * 9/14 부터 일봉은 두 번 돈다 — 15:55 정규 회차(정규장 기준)와 20:10 마무리(애프터 포함, 9/16 부터).
  * 그런데 그 응답의 종가는 **애프터까지 포함한 값**이다 — 그대로 쓰면 `c`(정규장 종가라는 뜻으로
  * 표본·검증표·백테스트가 쌓여 있는 칸)가 9/14 를 경계로 조용히 뜻이 바뀐다.
  *
@@ -645,9 +646,18 @@ export function startClosesScheduler(client: KiwoomClient): void {
     if (!afterMarketEra(day) || m < MIN.regularClose + 10 || m >= MIN.afterOpen) return;
     if (rcDoneFor === day || rcBusy) return;
     rcBusy = true;
-    captureRegularCloses(client)
-      .then((n) => {
-        if (n > 0) rcDoneFor = day;
+    /* 파일에도 — 재시작하면 전종목 KRX 조회를 한 번 더 했다 (2026-09-16 점검) */
+    doneToday("regularClose")
+      .then(async (done) => {
+        if (done) {
+          rcDoneFor = day;
+          return;
+        }
+        const n = await captureRegularCloses(client);
+        if (n > 0) {
+          rcDoneFor = day;
+          await markToday("regularClose");
+        }
       })
       .catch((e) => console.warn("[일봉] 정규장 종가 못 찍음 — 다음 분에 다시", e instanceof Error ? e.message : e))
       .finally(() => {

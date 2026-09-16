@@ -3735,7 +3735,7 @@ export function startOrderHeartbeat(main: KiwoomClient): void {
     void main;
   };
   setInterval(() => void run().catch(() => undefined), 30_000);
-  console.log("[order] 심장 박동 — 루프 멎음 알림 · 08:55 아침 점검 · 15:40 저녁 정합성");
+  console.log("[order] 심장 박동 — 루프 멎음 알림 · 08:55 아침 점검 · 저녁 정합성(애프터 마감 뒤 20:10)");
 }
 
 export async function autoWatchSummary(): Promise<{ allowed: boolean; waiting: number; fired: number }> {

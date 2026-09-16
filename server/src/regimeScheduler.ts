@@ -1,4 +1,5 @@
 import { afterCloseDoneToday } from "./afterClose.js";
+import { doneToday, markToday } from "./dayMark.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { regimeCheck, regimeConfig } from "./regimeWatch.js";
 import { pushNotice } from "./notifyCenter.js";
@@ -240,8 +241,9 @@ async function tick(client: KiwoomClient): Promise<void> {
      * 그래서 「마감 뒤 정리가 오늘 끝났나」를 보고 그 뒤에만 본다. 파이프라인이 제 일을 했으면
      * 표본은 이미 오늘 것이라 아무 일도 안 일어난다 — **파이프라인이 실패한 날의 그물**이다.
      */
-    if (t >= "21:30" && t < "21:40" && doneRebuild !== today && (await afterCloseDoneToday().catch(() => false))) {
+    if (t >= "21:30" && t < "21:40" && doneRebuild !== today && !(await doneToday("regimeNet")) && (await afterCloseDoneToday().catch(() => false))) {
       doneRebuild = today;
+      await markToday("regimeNet");
       const meta = await samplesMeta();
       if (!meta.has) {
         await rebuildAndReport(client, "검증 표본이 아직 없어서 처음 모읍니다.");
@@ -269,5 +271,5 @@ export function startRegimeScheduler(client: KiwoomClient): void {
    * 이라고 찍고 있었는데 그 둘은 파이프라인으로 옮긴 뒤였다. 로그가 코드와
    * 어긋나면 「그 시각에 돌겠거니」하고 아무도 안 본다.
    */
-  console.log("[regime] 스케줄러 시작 (18:30 표본 다시 만들기 — 장세·신호등 분석은 afterClose 담당)");
+  console.log("[regime] 스케줄러 시작 (21:30 표본 그물 — 마감 뒤 정리가 실패한 날만 · 장세·신호등 분석은 afterClose 담당)");
 }

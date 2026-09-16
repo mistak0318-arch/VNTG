@@ -2034,6 +2034,9 @@ export const api = {
   condPresets: () => getJson<{ presets: CondPreset[] }>("/api/signal/cond/presets"),
   condPresetSave: (name: string, query: CondQuery) =>
     postJson<{ presets: CondPreset[] }>("/api/signal/cond/presets", { name, query }),
+  condPresetAuto: (id: string, on: boolean) => putJson<{ presets: CondPreset[] }>(`/api/signal/cond/presets/${id}/auto`, { on }),
+  /** 전종목 마크 집계 — 수뿐 (데일리 리포트) */
+  marksStats: () => getJson<MarksStats>("/api/signal/marks/stats"),
   condPresetRemove: (id: string) =>
     deleteJson<{ presets: CondPreset[] }>(`/api/signal/cond/presets/${id}`),
   /**
@@ -3991,6 +3994,18 @@ export interface CondPreset {
   savedAt: string;
   lastRunAt?: string;
   lastHits?: number;
+  /** ⏰ 마감 뒤 자동 실행 (2026-09-16) — 마크 전용 식만 실제로 돈다 */
+  auto?: boolean;
+  lastAutoAt?: string;
+  lastAutoHits?: number;
+  lastAutoNew?: number;
+}
+
+export interface MarksStats {
+  day: string;
+  total: number;
+  counts: { twin: number; fgn3: number; trend: number; newHigh250: number; hot: number; kill: number; super: number };
+  prev: { day: string; counts: MarksStats["counts"] } | null;
 }
 
 /* ── 판정 요약 (2026-09-01) — 「이 점수가 무슨 뜻인가」 ──────────────

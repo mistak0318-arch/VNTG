@@ -59,6 +59,11 @@ const STEPS: { key: string; label: string; why: string; heavy?: string }[] = [
     why: "쌍끌이·정배열·신고가·쏠림·슈퍼·교차를 2,600종목 전부에 붙입니다 — 조회 0회(파일만 읽습니다). 조건 검색의 「마크」 묶음이 이걸 씁니다",
   },
   {
+    key: "condAuto",
+    label: "⑧-2 조건식 자동 실행",
+    why: "⏰ 켜 둔 조건식을 방금 만든 마크로 돌려 새로 걸린 종목만 알립니다 — 마크 전용 식은 조회 0회",
+  },
+  {
     key: "trade",
     label: "⑨ 수출입 동향",
     why: "관세청 발표(월 1일·15일 언저리)를 받아 둡니다. 여태 「수출 동향」 화면을 열어야만 받았습니다",
@@ -89,6 +94,11 @@ const STEPS: { key: string; label: string; why: string; heavy?: string }[] = [
     label: "⑬ 공매도·대차 확정값 (20:10)",
     why: "공표가 저녁이라 15:40 에는 미집계입니다. 그래서 정규 회차에서는 아예 안 받고 여기서 받습니다",
     heavy: "약 16분",
+  },
+  {
+    key: "afterReaction",
+    label: "⑭ 애프터 반응 기록 (20:10)",
+    why: "오늘 편입된 초록이 애프터(16:00~20:00)에서 어떻게 갔나 — 정규장 종가 대비 애프터 종가. 12월 검증 재료, 조회 0회",
   },
 ];
 
@@ -163,7 +173,7 @@ export function AfterClosePanel() {
       ? STEPS.filter((s) => steps.includes(s.key))
           .map((s) => s.label)
           .join(" · ")
-      : "전체 (①~⑨)";
+      : "전체 (①~⑪ · 마무리 ⑫~⑭는 20:10 에 따로)";
     if (!window.confirm(`${names} 을(를) 지금 돌립니다.\n\n장중에는 다른 화면이 느려집니다. 진행할까요?`)) {
       return;
     }
@@ -287,7 +297,7 @@ export function AfterClosePanel() {
           onClick={() => void run()}
           disabled={busy || st?.running}
         >
-          전체 돌리기 (①~⑨)
+          전체 돌리기 (①~⑪)
         </button>
         {msg && <span className="table-note">{msg}</span>}
       </div>

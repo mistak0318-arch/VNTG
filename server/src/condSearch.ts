@@ -200,6 +200,14 @@ export interface CondPreset {
   /** 마지막으로 돌린 때 · 그때 몇 개 걸렸나 — 「이 식이 요즘 쓸모 있나」가 보인다 */
   lastRunAt?: string;
   lastHits?: number;
+  /**
+   * **마감 뒤 자동 실행** (2026-09-16, `condAuto.ts`). 마크 전용 식만 실제로 돈다 — 신호등 기준이 들어 있으면
+   * 켜 둬도 「손으로」라고 적히고 안 돈다(밤에 조회를 몰래 쓰지 않는다).
+   */
+  auto?: boolean;
+  lastAutoAt?: string;
+  lastAutoHits?: number;
+  lastAutoNew?: number;
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -229,6 +237,19 @@ async function savePresets(list: CondPreset[]): Promise<void> {
  * 증권사 조건검색이 그렇게 동작하고, 무엇보다 「조금 고쳐서 다시 저장」이 이
  * 기능을 쓰는 방식이다. 그때마다 같은 이름이 둘씩 쌓이면 목록이 곧 못 쓰게 된다.
  */
+/** ⏰ 자동 실행 켜기/끄기 */
+export async function setPresetAuto(id: string, on: boolean): Promise<CondPreset[]> {
+  const list = (await listPresets()).map((p) => (p.id === id ? { ...p, auto: on } : p));
+  await savePresets(list);
+  return list;
+}
+
+/** 자동 실행이 돈 흔적 — 화면이 「어젯밤 N개, 새로 M개」를 적는다 */
+export async function touchPresetAuto(id: string, hits: number, added: number): Promise<void> {
+  const list = (await listPresets()).map((p) => (p.id === id ? { ...p, lastAutoAt: new Date().toISOString(), lastAutoHits: hits, lastAutoNew: added } : p));
+  await savePresets(list);
+}
+
 export async function savePreset(name: string, query: CondQuery): Promise<CondPreset[]> {
   const trimmed = name.trim().slice(0, 40);
   if (!trimmed) throw new Error("이름을 넣어야 합니다");

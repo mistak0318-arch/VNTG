@@ -777,6 +777,21 @@ export async function activeListEntries(): Promise<
   return [...out.values()];
 }
 
+/** 오늘 새로 편입된 종목 — 애프터 반응 기록(`afterReaction.ts`)이 쓴다. 같은 종목이 여러 목록이면 한 줄로 */
+export async function todayListEntries(day: string): Promise<{ code: string; name: string; lists: string[]; score: number }[]> {
+  const store = await load();
+  const by = new Map<string, { code: string; name: string; lists: string[]; score: number }>();
+  for (const e of store.entries) {
+    if (e.addedDate !== day) continue;
+    const had = by.get(e.code);
+    if (had) {
+      if (!had.lists.includes(e.list)) had.lists.push(e.list);
+      had.score = Math.max(had.score, e.score);
+    } else by.set(e.code, { code: e.code, name: e.name, lists: [e.list], score: e.score });
+  }
+  return [...by.values()];
+}
+
 export async function listTrackSummary(): Promise<ListTrackSummary> {
   const store = await load();
   const byList = SCREEN_UNIVERSES.map((u) => {

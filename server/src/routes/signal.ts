@@ -55,8 +55,9 @@ import {
   savePreset,
   startCondSearch,
   type CondQuery,
+  setPresetAuto,
 } from "../condSearch.js";
-import { buildStockMarks, loadStockMarks, marksProgress } from "../stockMarks.js";
+import { buildStockMarks, loadStockMarks, marksProgress, marksStats } from "../stockMarks.js";
 import { COND_FIELDS } from "../condFields.js";
 import { allStocksUniverse } from "../allStocks.js";
 import { afterCloseHistory, afterCloseLastByStep, afterCloseStatus, runAfterClose } from "../afterClose.js";
@@ -453,6 +454,16 @@ export function createSignalRouter(client: KiwoomClient): Router {
     }
   });
 
+  /* ⏰ 마감 뒤 자동 실행 켜기/끄기 (2026-09-16) */
+  router.put("/cond/presets/:id/auto", async (req, res, next) => {
+    try {
+      const on = !!(req.body as { on?: unknown })?.on;
+      res.json({ presets: await setPresetAuto(req.params.id, on) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.delete("/cond/presets/:id", async (req, res, next) => {
     try {
       res.json({ presets: await removePreset(req.params.id) });
@@ -704,6 +715,15 @@ export function createSignalRouter(client: KiwoomClient): Router {
       const marks: Record<string, unknown> = {};
       for (const c of want) if (f.marks[c]) marks[c] = f.marks[c];
       res.json({ day: f.day, builtAt: f.builtAt, count: Object.keys(marks).length, marks });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /* 전종목 마크 집계 — 수뿐, 종목 없음 (리포트 「마크 집계」) */
+  router.get("/marks/stats", async (_req, res, next) => {
+    try {
+      res.json(await marksStats());
     } catch (err) {
       next(err);
     }

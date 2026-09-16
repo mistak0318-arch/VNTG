@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
+import { readdir, readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadCloses } from "./dailyCloses.js";
@@ -183,7 +183,17 @@ export function marksProgress(): MarksProgress {
  * 전 종목 마크를 다시 센다. **마감 뒤 정리 ②원장 다음**에 부른다 — 원장이 오늘 것이어야
  * 마크도 오늘 것이다. 조회가 0회라 몇 초 안에 끝난다(파일 2,600개 읽기).
  */
+let building: Promise<{ day: string; count: number; ms: number; error?: string }> | null = null;
 export async function buildStockMarks(client: KiwoomClient): Promise<{ day: string; count: number; ms: number; error?: string }> {
+  /* 재진입 잠금 — 「다시 세기」를 두 번 누르거나 15:55 회차와 겹치면 같은 파일을 둘이 쓴다 */
+  if (building) return building;
+  building = buildStockMarksOnce(client).finally(() => {
+    building = null;
+  });
+  return building;
+}
+
+async function buildStockMarksOnce(client: KiwoomClient): Promise<{ day: string; count: number; ms: number; error?: string }> {
   const t0 = Date.now();
   progress = { running: true, done: 0, total: 0, marked: 0, startedAt: new Date().toISOString() };
   try {
@@ -338,9 +348,14 @@ export async function buildStockMarks(client: KiwoomClient): Promise<{ day: stri
       marks,
     };
     await mkdir(DATA_DIR, { recursive: true });
-    await writeFile(FILE, JSON.stringify(out), "utf-8");
+    /* 임시 파일 → 이름 바꾸기. 1.5MB 를 바로 덮어쓰다 죽으면 반쪽 파일이 남고 조건 검색이 통째로 빈다 */
+    const tmp = `${FILE}.${process.pid}.${Date.now()}.tmp`;
+    await writeFile(tmp, JSON.stringify(out), "utf-8");
+    await rename(tmp, FILE);
     cache = out;
     cacheAt = Date.now();
+    /* 하루 한 줄 집계 이력 — 리포트가 「어제보다 늘었나」를 적는다 */
+    await appendStats(out).catch((e) => console.warn("[marks] 집계 이력 못 씀 —", e instanceof Error ? e.message : e));
     progress.running = false;
     progress.finishedAt = new Date().toISOString();
     return { day: out.day, count: out.count, ms: Date.now() - t0 };
@@ -371,6 +386,74 @@ export async function loadStockMarks(): Promise<MarksFile | null> {
   } catch {
     return null;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* 집계 — 「오늘 시장에 쌍끌이가 몇 종목인가」                             */
+/* ------------------------------------------------------------------ */
+
+const STATS_FILE = join(DATA_DIR, "marksStats.jsonl");
+
+export interface MarksCounts {
+  twin: number;
+  fgn3: number;
+  trend: number;
+  newHigh250: number;
+  hot: number;
+  kill: number;
+  super: number;
+}
+export interface MarksStats {
+  day: string;
+  total: number;
+  counts: MarksCounts;
+  /** 전 거래일 집계 — 이력에서. 없으면 null */
+  prev: { day: string; counts: MarksCounts } | null;
+}
+
+function countOf(f: MarksFile): MarksCounts {
+  const c: MarksCounts = { twin: 0, fgn3: 0, trend: 0, newHigh250: 0, hot: 0, kill: 0, super: 0 };
+  for (const m of Object.values(f.marks)) {
+    if (m.twin) c.twin += 1;
+    if (m.fgn3) c.fgn3 += 1;
+    if (m.trend) c.trend += 1;
+    if (m.newHigh250) c.newHigh250 += 1;
+    if (m.hot && m.hot.length > 0) c.hot += 1;
+    if (m.kill) c.kill += 1;
+    if (m.super) c.super += 1;
+  }
+  return c;
+}
+
+async function appendStats(f: MarksFile): Promise<void> {
+  const row = { day: f.day, total: f.count, counts: countOf(f) };
+  /* 같은 날 두 번 세면 마지막 줄만 남긴다 */
+  let lines: string[] = [];
+  try {
+    lines = (await readFile(STATS_FILE, "utf-8")).split("\n").filter((l) => l.trim() && !l.includes(`"day":"${f.day}"`));
+  } catch {
+    /* 처음 */
+  }
+  lines.push(JSON.stringify(row));
+  await writeFile(STATS_FILE, lines.slice(-400).join("\n") + "\n", "utf-8");
+}
+
+/** 오늘 집계 + 전 거래일 집계. 종목 코드는 안 싣는다 — 수뿐이다 */
+export async function marksStats(): Promise<MarksStats> {
+  const f = await loadStockMarks();
+  if (!f) return { day: "", total: 0, counts: { twin: 0, fgn3: 0, trend: 0, newHigh250: 0, hot: 0, kill: 0, super: 0 }, prev: null };
+  let prev: { day: string; counts: MarksCounts } | null = null;
+  try {
+    const rows = (await readFile(STATS_FILE, "utf-8"))
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as { day: string; counts: MarksCounts });
+    const before = rows.filter((r) => r.day < f.day);
+    if (before.length > 0) prev = before[before.length - 1];
+  } catch {
+    /* 이력이 없으면 어제 없음 */
+  }
+  return { day: f.day, total: f.count, counts: countOf(f), prev };
 }
 
 /** 한 종목의 마크 — 없으면 null */

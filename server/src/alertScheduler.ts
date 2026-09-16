@@ -3,6 +3,7 @@ import { MIN, afterMarketEra } from "./marketHours.js";
 import type { KiwoomClient } from "./kiwoomClient.js";
 import { logEvents } from "./eventLog.js";
 import { pruneLiveAlerts, runLiveAlerts } from "./liveAlerts.js";
+import { runNaverAlerts } from "./naverAlerts.js";
 import { pruneStopWatch, runStopWatch } from "./stopWatch.js";
 import { getActiveSuper } from "./superSignal.js";
 import { hasDedicatedChannel, sendTelegram } from "./telegram.js";
@@ -50,7 +51,7 @@ export async function alertTargets(): Promise<{ code: string; name: string; adde
  *
  * KRX 애프터마켓(16:00~20:00)도 실거래라 보유·관심 종목이 거기서 급변하면 알아야 한다
  * (2026-09-15 — 벤티지가 선택지에서 고름). 종목당 규칙당 하루 1회라 정규장에 이미 울린 건 또 안 운다.
- * 15:30~16:00 공백엔 값이 안 바뀌어 새로 울 것이 없다.
+ * 15:30~16:00 은 KRX 가 쉬어(NXT 는 돈다) KRX 값이 안 바뀌니 새로 울 것이 없다.
  */
 function isMarketHours(now = new Date()): boolean {
   const kst = new Date(now.getTime() + (9 * 60 + now.getTimezoneOffset()) * 60_000);
@@ -166,6 +167,8 @@ export async function runAlertScan(
 }
 
 async function tick(client: KiwoomClient): Promise<void> {
+  /* 경제지표 30분 전 · 목표주가 변경 ∩ 내 종목 — 이미 받는 자료라 조회가 없다 (2026-09-16) */
+  void runNaverAlerts().catch((e) => console.warn("[alert] 네이버 알림 실패 —", e instanceof Error ? e.message : e));
   if (!isMarketHours()) return;
 
   /*
@@ -262,5 +265,5 @@ async function tick(client: KiwoomClient): Promise<void> {
 export function startAlertScheduler(client: KiwoomClient): void {
   if (timer) return;
   timer = setInterval(() => void tick(client), TICK_MS);
-  console.log("[alert] 관심종목 시그널 · 손절 감시 스케줄러 시작 (장중 09:00~15:30)");
+  console.log("[alert] 관심종목 시그널 · 손절 감시 · 네이버 지표/목표주가 알림 스케줄러 시작 (09:00~20:00, 애프터 포함)");
 }

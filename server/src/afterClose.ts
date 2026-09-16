@@ -5,7 +5,9 @@ import { collectProgress, startCollectDaily } from "./collectDaily.js";
 import { ledgerStatus } from "./dailyStore.js";
 import { regimeCheck } from "./regimeWatch.js";
 import { startEnroll } from "./signalTrack.js";
-import { buildStockMarks, marksProgress } from "./stockMarks.js";
+import { buildStockMarks, loadStockMarks, marksProgress } from "./stockMarks.js";
+import { runAutoPresets } from "./condAuto.js";
+import { recordAfterReaction } from "./afterReaction.js";
 import { runSuperSignal } from "./superSignal.js";
 import { runListTrack } from "./listTrack.js";
 import { marketPulse } from "./marketPulse.js";
@@ -94,6 +96,7 @@ const STEPS: { key: string; label: string }[] = [
   { key: "super", label: "슈퍼신호등" },
   { key: "cross", label: "교차" },
   { key: "marks", label: "전종목 마크" },
+  { key: "condAuto", label: "조건식 자동" },
   { key: "trade", label: "수출입" },
   { key: "finance", label: "실적 캐시" },
   { key: "samples", label: "표본" },
@@ -106,10 +109,11 @@ const STEPS: { key: string; label: string }[] = [
    */
   { key: "barsFinal", label: "일봉 마무리" },
   { key: "ledgerFinal", label: "공매도·대차 확정" },
+  { key: "afterReaction", label: "애프터 반응 기록" },
 ];
 
 /** 마무리 회차에서만 도는 단계 — 정규 회차(`only` 없이 부를 때)에서는 빠진다 */
-const WRAP_KEYS = new Set(["barsFinal", "ledgerFinal"]);
+const WRAP_KEYS = new Set(["barsFinal", "ledgerFinal", "afterReaction"]);
 
 export interface StepResult {
   key: string;
@@ -340,7 +344,7 @@ function dayKey(at = Date.now()): string {
 function shouldStart(at = Date.now()): boolean {
   const k = kst(at);
   if (!isTradingDay(k)) return false; // (2026-09-10 전수 점검) 휴장일에 두 시간짜리를 헛돌리지 않는다
-  /* 시각 판정은 `marketHours` 한 곳에서만. 09/16 부터 정규 회차는 15:40 (아래 주석) */
+  /* 시각 판정은 `marketHours` 한 곳에서만. 09/16 부터 정규 회차는 15:55 (`pipelineStartMinute` 주석) */
   return k.getHours() * 60 + k.getMinutes() >= pipelineStartMinute(dayKey(at));
 }
 
@@ -416,7 +420,7 @@ export async function runAfterClose(
    * 그것만 있으면 신호등 분석은 내일 자동으로 돌아도 제 값이 난다.
    */
   only?: string[],
-  /** 왜 도는가 — 시작 알림에 적는다. 안 주면 정규 회차(09/13 까지 15:40 · 09/14 부터 20:10) */
+  /** 왜 도는가 — 시작 알림에 적는다. 안 주면 정규 회차(09/13 까지 15:40 · 09/14~15 는 20:10 · 09/16 부터 15:55) */
   reason?: string,
 ): Promise<AfterCloseRun> {
   if (run?.running) return run;
@@ -656,6 +660,21 @@ export async function runAfterClose(
     });
 
   /*
+   * ⑧-3 **조건식 자동 실행** (2026-09-16) — 방금 만든 마크로, ⏰ 켜 둔 식만. 마크 전용 식은 조회 0회다.
+   * 새로 걸린 종목만 텔레그램·알림함으로. 마크가 오늘 것이 아니면 안 돈다.
+   */
+  if (want("condAuto"))
+    await step("condAuto", "조건식 자동 실행 (조회 0회)", async () => {
+      const f = await loadStockMarks();
+      const r = await runAutoPresets(client, f?.day ?? "");
+      const parts = [`${r.ran}식 돌림`];
+      const fresh = r.newHits.filter((h) => h.added.length > 0);
+      if (fresh.length > 0) parts.push(`새로 ${fresh.map((h) => `${h.preset} ${h.added.length}`).join(" · ")}`);
+      if (r.skipped.length > 0) parts.push(`건너뜀 ${r.skipped.length}`);
+      return parts.join(" · ");
+    });
+
+  /*
    * ⑧ **수출입 동향** — 관세청 발표를 받아 둔다.
    *
    * ⚠️ 여태 **자동으로 안 받았다** (2026-09-01 발견). `getTradeStats` 를 부르는
@@ -758,6 +777,16 @@ export async function runAfterClose(
         return p.running ? { done: p.done, total: p.total, note: p.fails ? `실패 ${p.fails}` : "종목" } : null;
       },
     );
+
+  /*
+   * ⑬-2 **애프터 반응 기록** (2026-09-16) — 마무리 회차 끝. 오늘 편입된 초록이 애프터에서 어떻게 갔나를
+   * `c`(정규장 종가) 와 `ca`(애프터 종가)로 한 줄씩. 조회 0회. 12월 검증 재료다.
+   */
+  if (want("afterReaction"))
+    await step("afterReaction", "애프터 반응 기록", async () => {
+      const r = await recordAfterReaction();
+      return r.rows === 0 ? "오늘 편입 없음" : `${r.rows}종목 · 애프터 값 ${r.withAfter}${r.avgAfterPct !== null ? ` · 평균 ${r.avgAfterPct > 0 ? "+" : ""}${r.avgAfterPct}%` : ""}`;
+    });
 
   run.running = false;
   run.finishedAt = new Date().toISOString();
@@ -869,7 +898,7 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
     const day = dayKey();
 
     /*
-     * ⓪ **마무리 회차** (2026-09-16) — 20:10. 정규 회차(15:40)가 판정을 냈고, 여기서는 **그날
+     * ⓪ **마무리 회차** (2026-09-16) — 20:10. 정규 회차(15:55)가 판정을 냈고, 여기서는 **그날
      * 최종값**만 받는다(일봉 애프터 포함 · 공매도·대차 공표값).
      *
      * 재시도보다 **앞에** 둔다 — 정규 회차에 실패한 단계가 남아 있어도 최종값 받는 일은 따로다.
@@ -877,14 +906,14 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
      */
     if (shouldWrap()) {
       const last = await afterCloseLastByStep().catch(() => ({}) as Record<string, StepResult & { day: string }>);
-      const done = ["barsFinal", "ledgerFinal"].every((k) => last[k]?.day === day && last[k]?.ok);
+      const done = ["barsFinal", "ledgerFinal", "afterReaction"].every((k) => last[k]?.day === day && last[k]?.ok);
       /*
        * 실패했으면 **30분 뒤에 한 번 더, 두 번까지** (2026-09-16 점검). 그냥 두면 5분 틱마다 다시 들어와
        * 시작 텔레그램이 자정까지 열두 번 간다 — 예컨대 ②원장이 아직 도는 중이라 ledgerFinal 이 던지는 날.
        */
       if (!done && (wrapTry.day !== day || (wrapTry.n < 3 && Date.now() - wrapTry.at >= RETRY_GAP_MS))) {
         wrapTry = { day, n: wrapTry.day === day ? wrapTry.n + 1 : 1, at: Date.now() };
-        await runAfterClose(client, true, ["barsFinal", "ledgerFinal"], "마무리 회차 (일봉·공매도·대차 확정값)").catch(
+        await runAfterClose(client, true, ["barsFinal", "ledgerFinal", "afterReaction"], "마무리 회차 (일봉·공매도·대차 확정값)").catch(
           (e) => console.error("[afterClose] 마무리 회차 실패 —", e instanceof Error ? e.message : e),
         );
         return;

@@ -1,4 +1,5 @@
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { doneToday, markToday } from "./dayMark.js";
 import { getStockIndex, searchStocks } from "./stockListCache.js";
 import { stockSummary } from "./stockSummary.js";
 import { evaluateSignal, isNotTheme } from "./signalLight.js";
@@ -1636,7 +1637,7 @@ let recapSentDay = "";
  *
  * 「오늘 물어본 종목이 **장 끝나고** 어떻게 됐나」를 그날 안에 알려 주는 것이 이 알림의 값어치다.
  * 20:10 로 밀면 저녁에야 오는데, 그때는 이미 마감 뒤 정리 알림이 줄줄이 온다. 15:30~16:00 은
- * 어느 시장도 안 열어 15:50 값이 곧 정규장 종가다 — 새 시간표에서도 옳다.
+ * KRX 가 쉬어(NXT 는 돈다) 15:50 의 KRX 값이 곧 정규장 종가다 — 새 시간표에서도 옳다.
  */
 export function startSysScheduler(client: KiwoomClient): void {
   if (recapTimer) return;
@@ -1647,9 +1648,15 @@ export function startSysScheduler(client: KiwoomClient): void {
     if (k.getUTCDay() === 0 || k.getUTCDay() === 6) return;
     const hm = k.getUTCHours() * 60 + k.getUTCMinutes();
     if (hm < 15 * 60 + 50 || hm > 16 * 60 + 30) return;
-    recapSentDay = day;
+    /* 파일에도 본다 — 재시작하면 또 보냈다. 도장은 **성공한 뒤에** 찍는다 — 실패 전에 찍으면 그날은 영영 안 한다 */
+    if (await doneToday("sysRecap")) {
+      recapSentDay = day;
+      return;
+    }
     try {
       const r = await recapToday(client);
+      recapSentDay = day;
+      await markToday("sysRecap");
       if (r.stocks.length === 0) return;
       await pushNotice({
         source: "sys",

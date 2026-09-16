@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { KiwoomClient } from "./kiwoomClient.js";
+import { listTrackLastRunDate } from "./listTrack.js";
 import { evaluateSignal } from "./signalLight.js";
 import { fetchUniverse } from "./signalScreen.js";
 import { enabledUniverses } from "./universeConfig.js";
@@ -20,7 +21,8 @@ import { loadDay } from "./cisJournal.js";
  * 종배 계좌는 **오늘 신호등 분석 원장의 초록**에서 후보를 뽑는다(`cisCloseBet` ③). 9/13 까지는
  * 마감 뒤 정리가 15:40 에 돌아 원장이 16:30 무렵 쌓였고, 종배는 17:00 에 NXT 애프터에서 샀다.
  *
- * 9/14 부터 마감 뒤 정리가 **20:10** 으로 옮겨갔다(벤티지 09-10 "마감정리를 차라리 8시 10분에") —
+ * (9/14~15 이틀은 마감 뒤 정리가 **20:10** 이었다 — 벤티지 09-10 "마감정리를 차라리 8시 10분에". 9/16 부터 15:55 로 당겨져
+ * 이 스캔은 **예비 경로**가 됐다: 아래 스케줄러 주석) —
  * 애프터마켓이 20:00 에 끝나야 그날 일봉이 굳기 때문이다. 그런데 애프터도 20:00 에 닫힌다.
  * **원장이 쌓일 때는 살 시장이 없다.** 스케줄러는 19:30 마감선에서 「오늘 원장이 없어 종배 안 함」을
  * 적고 끝났다 — 9/14 부터 종배는 **한 주도 안 샀다.**
@@ -194,8 +196,16 @@ let fails: { date: string; n: number; at: number } = { date: "", n: 0, at: 0 };
 async function tick(client: KiwoomClient): Promise<void> {
   const { date, min } = kstNow();
   if (!afterMarketEra(date) || !isTradingDay()) return;
-  /* 15:40 부터 — 정규장 종가가 굳고 10분. 20:00 을 넘기면 살 시장이 없으니 잴 이유도 없다 */
-  if (min < MIN.regularClose + 10 || min >= MIN.afterClose) return;
+  /*
+   * **예비 경로가 됐다** (2026-09-16 전체 점검 — 벤티지가 「종배 스캔 중복 정리」를 고름).
+   *
+   * 이 스캔은 마감 뒤 정리가 20:10 이던 이틀(9/14~15) 동안 종배가 굶지 않게 만든 것이다. 파이프라인이
+   * 15:55 로 당겨져 ⑤신호등 분석이 16:40 전후에 오늘 원장을 만들고, 종배 저녁(17:00)은 그것을 쓴다 —
+   * 같은 13목록·1,565종목을 하루 두 번 재던 조회가 사라진다. 다만 **파이프라인이 실패한 날**을 위해
+   * 18:30 뒤 「분석 원장이 오늘 것이 아니면」 한 번 돈다. 20:00 을 넘기면 살 시장이 없으니 잴 이유도 없다.
+   */
+  if (min < 18 * 60 + 30 || min >= MIN.afterClose) return;
+  if ((await listTrackLastRunDate().catch(() => null)) === date) return; // 파이프라인이 제 일을 했다
   if (job.status === "running") return;
   const cfg = await getCisConfig();
   if (!cfg.enabled || !cfg.auto) return; // 종배를 안 돌리는 날 15분치 조회를 태우지 않는다

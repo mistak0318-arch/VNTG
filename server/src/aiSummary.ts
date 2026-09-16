@@ -14,6 +14,7 @@ import type { GlobalQuote } from "./globalMarket.js";
 import { sectorNews } from "./newsDisclosure.js";
 import { upcomingEvents } from "./calendar.js";
 import { discussionRanking, marketCalendar, naverBriefings } from "./naverMarket.js";
+import { marksStats } from "./stockMarks.js";
 import { getStockIndex } from "./stockListCache.js";
 import { todayDartEvents, toDartDigest } from "./dartEvents.js";
 import { getTrackedWatchlist } from "./watchTracking.js";
@@ -283,6 +284,20 @@ export async function buildDigest(
     progress.done("super", `추적 ${act.length}종목`);
   } catch {
     progress.skip("super", "없음");
+  }
+
+  /* 전종목 마크 집계 (2026-09-16) — 「오늘 시장에 쌍끌이가 몇 종목인가」. 수뿐이라 짧다. 못 받으면 빠진다 */
+  try {
+    const ms = await marksStats();
+    if (ms.day) {
+      const d = (k: keyof typeof ms.counts) => (ms.prev ? ` (전일 ${ms.prev.counts[k]})` : "");
+      lines.push(`\n[전종목 마크 집계 — ${ms.total}종목, ${ms.day} 마감 기준. 신호등 점수와 무관한 폭 지표]`);
+      lines.push(
+        `쌍끌이 ${ms.counts.twin}${d("twin")} · 외국인3칸 ${ms.counts.fgn3}${d("fgn3")} · 정배열 ${ms.counts.trend}${d("trend")} · 250일 신고가 ${ms.counts.newHigh250}${d("newHigh250")} · 쏠림 경보 ${ms.counts.hot}${d("hot")} · 탈락 경보 ${ms.counts.kill}${d("kill")}`,
+      );
+    }
+  } catch {
+    /* 빠진다 */
   }
 
   /*
