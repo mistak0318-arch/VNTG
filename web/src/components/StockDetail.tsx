@@ -382,8 +382,9 @@ export function StockDetail({
 
           {onOpenAnalysis && (
             <div className="sd-blk" style={{ order: cards.orderOf("analysis") }}>
-              <button className="analysis-link" onClick={() => onOpenAnalysis(code, name)}>
-                검색·최근 목록까지 있는 넓은 화면으로 보기 (개별종목분석) →
+              {/* 폰에서 긴 문구가 두 줄이 되며 앞 줄이 잘려 「종목분석) →」만 보였다 (2026-09-17 캡처) — 한 줄로 */}
+              <button className="analysis-link" onClick={() => onOpenAnalysis(code, name)} title="검색·최근 목록까지 있는 넓은 화면(개별종목분석)으로 갑니다">
+                넓은 화면으로 보기 (개별종목분석) →
               </button>
             </div>
           )}

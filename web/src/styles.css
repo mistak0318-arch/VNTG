@@ -1951,6 +1951,10 @@ body {
   border-radius: 8px;
   font-size: 0.9333rem;
   cursor: pointer;
+  /* 테마·기기가 단추 높이를 한 줄로 잠가도 글이 잘리지 않게 (2026-09-17) */
+  white-space: normal;
+  height: auto;
+  line-height: 1.4;
 }
 .analysis-link:hover {
   border-color: var(--blue);
@@ -18362,6 +18366,19 @@ td.stk-cell:hover b { text-decoration: underline solid; text-decoration-color: c
   border: 1px solid transparent;
   font-weight: 600;
   white-space: nowrap;
+}
+/*
+ * 탈락·근거 구간 칩은 긴 글이다 — nowrap 이면 폰에서 카드 밖으로 잘렸다 (2026-09-17 벤티지 캡처: 「✕ 외인+기관 순매도 (체) ·
+ * 분기 영업이익률 · 분기 이익률 개선 (」에서 끊김). 이 둘만 칩 안에서 줄을 꺾는다. 나머지 짧은 칩은 그대로.
+ */
+.sig-brief > .sig-brief-veto,
+.sig-brief > .sig-brief-band {
+  display: inline-block;
+  white-space: normal;
+  max-width: 100%;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 .sig-brief-veto {
   color: var(--red);
