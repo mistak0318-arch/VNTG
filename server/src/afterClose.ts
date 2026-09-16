@@ -7,6 +7,7 @@ import { regimeCheck } from "./regimeWatch.js";
 import { startEnroll } from "./signalTrack.js";
 import { buildStockMarks, loadStockMarks, marksProgress } from "./stockMarks.js";
 import { runAutoPresets } from "./condAuto.js";
+import { doneToday, markToday } from "./dayMark.js";
 import { recordAfterReaction } from "./afterReaction.js";
 import { runSuperSignal } from "./superSignal.js";
 import { runListTrack } from "./listTrack.js";
@@ -922,17 +923,30 @@ export function startAfterCloseScheduler(client: KiwoomClient): void {
      * 하루 한 번인지는 **이력 파일**로 본다(메모리 변수로 두면 재시작할 때마다 또 돈다).
      */
     if (shouldWrap()) {
+      /*
+       * 「오늘 마무리가 끝났나」는 **파일 도장**으로 본다 (2026-09-16 밤). 이력 파일로 보다가 그 파일이 깨진 로컬에서
+       * 다 성공한 뒤에도 30분마다 또 돌았다(시작 텔레그램이 세 번). 도장은 세 단계가 다 ✅ 일 때만 찍는다.
+       */
+      if (await doneToday("wrapDone")) return;
       const last = await afterCloseLastByStep().catch(() => ({}) as Record<string, StepResult & { day: string }>);
       const done = ["barsFinal", "ledgerFinal", "afterReaction"].every((k) => last[k]?.day === day && last[k]?.ok);
+      if (done) {
+        await markToday("wrapDone");
+        return;
+      }
       /*
        * 실패했으면 **30분 뒤에 한 번 더, 두 번까지** (2026-09-16 점검). 그냥 두면 5분 틱마다 다시 들어와
        * 시작 텔레그램이 자정까지 열두 번 간다 — 예컨대 ②원장이 아직 도는 중이라 ledgerFinal 이 던지는 날.
        */
       if (!done && (wrapTry.day !== day || (wrapTry.n < 3 && Date.now() - wrapTry.at >= RETRY_GAP_MS))) {
         wrapTry = { day, n: wrapTry.day === day ? wrapTry.n + 1 : 1, at: Date.now() };
-        await runAfterClose(client, true, ["barsFinal", "ledgerFinal", "afterReaction"], "마무리 회차 (일봉·공매도·대차 확정값)").catch(
-          (e) => console.error("[afterClose] 마무리 회차 실패 —", e instanceof Error ? e.message : e),
+        const r = await runAfterClose(client, true, ["barsFinal", "ledgerFinal", "afterReaction"], "마무리 회차 (일봉·공매도·대차 확정값)").catch(
+          (e) => {
+            console.error("[afterClose] 마무리 회차 실패 —", e instanceof Error ? e.message : e);
+            return null;
+          },
         );
+        if (r && !r.running && r.steps.length > 0 && r.steps.every((s) => s.ok)) await markToday("wrapDone");
         return;
       }
       if (!done) return; // 시도 횟수를 다 썼다 — 실패는 요약 알림에 이미 적혔다

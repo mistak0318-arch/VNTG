@@ -218,6 +218,15 @@ export async function sendTelegram(
   html: string,
   channel: TelegramChannel = "report",
 ): Promise<{ ok: boolean; error?: string }> {
+  /*
+   * **개발 PC 는 안 보낸다** (2026-09-16 밤). 로컬 서버가 미니PC 와 같은 .env 를 들고 있어서, 로컬에서 도는
+   * 마감 뒤 정리·알림이 **진짜 방에** 갔다(벤티지: "슈퍼신호등 채널에 왜 이런 메시지가 와"). 개발 .env 에
+   * `TELEGRAM_ENABLED=0` 을 두면 여기서 막힌다 — 보낸 셈 치고(ok) 로그에만 남긴다.
+   */
+  if (process.env.TELEGRAM_ENABLED === "0") {
+    console.log(`[telegram:꺼짐] (${channel}) ${html.replace(/<[^>]+>/g, "").slice(0, 80)}`);
+    return { ok: true };
+  }
   if (!isTelegramConfigured(channel)) return { ok: false, error: "텔레그램 키 미설정" };
   warnIfShared(channel);
 
