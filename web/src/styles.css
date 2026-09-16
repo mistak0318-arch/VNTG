@@ -19368,14 +19368,15 @@ tr.gv-strong td:first-child { color: var(--text); }
 .mfp-sent-item i { font-style: normal; font-size: 0.72rem; color: var(--muted); }
 .mfp-sent-item i.up { color: var(--red); font-weight: 700; }
 .mfp-sent-item i.down { color: var(--blue); font-weight: 700; }
-.mfp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-@media (max-width: 480px) { .mfp-cols { grid-template-columns: 1fr; } }
+/* 두 열은 칸이 넉넉할 때만 — 태블릿에서 카드 한 칸이 400px 쯤이라 반으로 가르면 이름이 잘렸다 (2026-09-17 벤티지) */
+.mfp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 10px; }
 .mfp-h { font-size: 0.74rem; font-weight: 700; margin-bottom: 3px; }
 .mfp-h i { font-style: normal; font-weight: 400; color: var(--muted); margin-left: 4px; }
 .mfp-row { display: grid; grid-template-columns: 1fr auto 3em; gap: 6px; align-items: center; width: 100%; padding: 3px 4px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font: inherit; font-size: 0.8rem; text-align: left; cursor: pointer; }
 .mfp-row:hover { background: var(--panel-2); }
-.mfp-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mfp-nm i { font-style: normal; color: var(--muted); font-size: 0.68rem; margin-left: 3px; }
+/* 이름은 잘라도 대표(반도체·금)는 남게 — 긴 ETF 이름 꼬리(i)만 줄임표 */
+.mfp-nm { min-width: 0; display: flex; align-items: baseline; gap: 3px; white-space: nowrap; }
+.mfp-nm i { font-style: normal; color: var(--muted); font-size: 0.68rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .mfp-row em { font-style: normal; }
 .mfp-mult { font-style: normal; font-size: 0.68rem; color: var(--muted); text-align: right; }
 .mfp-mult.hot { color: var(--red); font-weight: 700; }
@@ -19397,3 +19398,7 @@ tr.gv-strong td:first-child { color: var(--text); }
 .nvbb-h i { font-style: normal; font-weight: 400; color: var(--muted); font-size: 0.7rem; margin-left: 4px; }
 .nvbb-pop .nvb-item:first-of-type { border-top: 0; }
 .nvbb-pop .nvb-sum { max-height: 40vh; overflow-y: auto; padding: 0 4px; }
+
+/* 데일리 리포트 안의 돈의 방향 — 카드 몸통(ov-card-b) 여백을 리포트 결에 맞춘다 (2026-09-17) */
+.report-mfp .ov-card-b { padding: 6px 0; }
+.report-mfp .mfp-cols { max-width: 900px; }

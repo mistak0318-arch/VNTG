@@ -34,6 +34,7 @@ import {
 } from "../api";
 import { AiSummaryCard } from "../components/AiSummaryCard";
 import { MarksStatsSection } from "../components/MarksStatsSection";
+import { MoneyFlowPanel } from "../components/overview/MoneyFlowPanel";
 import { NaverBriefingBlock } from "../components/NaverBriefingBlock";
 import { ReportTts } from "../components/ReportTts";
 import { ConstituentSheet, type ConstituentTarget } from "../components/overview/ConstituentSheet";
@@ -194,6 +195,8 @@ export const REPORT_SECTION_DEFS: { key: string; label: string }[] = [
   { key: "indexTrend", label: "코스피 · 코스닥 추이 (60거래일)" },
   { key: "investors", label: "투자자별 매매 동향" },
   { key: "moneyFlow", label: "시장 자금 흐름 (업종별 5일 누적)" },
+  /* 돈의 방향 (2026-09-17 — 벤티지: "데일리 리포트에도 녹여 줘") — 시황 카드와 같은 부품. 업종별 자금 흐름 바로 밑, 미국 테마 MAP 앞 */
+  { key: "etfFlow", label: "돈의 방향 (한미 ETF)" },
   { key: "usThemeMap", label: "미국 테마 MAP" },
   { key: "krThemeMap", label: "국내 테마 MAP" },
   { key: "themes", label: "특징 테마 (상승 이유 포함)" },
@@ -741,6 +744,12 @@ export function DailyReportPage({
       /* 시스템이 기계적으로 골라 따라가는 목록 — 리포트 본문에도 (2026-08-26) */
       superSignal: <SuperSignalSection onSelectStock={onSelectStock} />,
       marks: <MarksStatsSection />,
+      /* 시황 「돈의 방향」 카드 그대로 — 미국 섹터 ETF ↔ 국내 대표 ETF, 심리 한 줄 (2026-09-17) */
+      etfFlow: (
+        <div className="report-mfp">
+          <MoneyFlowPanel onSelectStock={onSelectStock} />
+        </div>
+      ),
       crossSignal: <CrossSignalSection onSelectStock={onSelectStock} />,
       featured: <FeaturedSection onSelectStock={onSelectStock} />,
       /* 콤팩트판 — 분야 이름 + 제목만. 본문·검색은 뉴스·공시 메뉴 몫 */
