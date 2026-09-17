@@ -19485,3 +19485,14 @@ tr.gv-strong td:first-child { color: var(--text); }
 .mnw-rot.휴식 { color: var(--muted); }
 .mnw-plan-list { margin: 4px 0 0; padding-left: 1.3em; font-size: 0.82rem; line-height: 1.55; }
 .mnw-plan-list li + li { margin-top: 3px; }
+
+/* 내 계좌 렌즈 — 계좌별 묶음 머리줄 (2026-09-17 저녁) */
+.mnw-acc-group + .mnw-acc-group { margin-top: 10px; }
+.mnw-acc-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 6px 8px; border-radius: 8px; background: var(--panel-2); font-size: 0.78rem; }
+.mnw-acc-h > b { font-size: 0.86rem; }
+.mnw-acc-h > span { color: var(--muted); }
+.mnw-acc-h em { font-style: normal; font-weight: 700; }
+.mnw-acc-cnt { margin-left: auto; display: inline-flex; gap: 6px; }
+.mnw-acc-cnt i { font-style: normal; font-size: 0.7rem; padding: 1px 6px; border-radius: 999px; background: var(--panel); color: var(--muted); }
+.mnw-acc-cnt i.in { color: var(--red); }
+.mnw-acc-cnt i.out { color: var(--blue); }

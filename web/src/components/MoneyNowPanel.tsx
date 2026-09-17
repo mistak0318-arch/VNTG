@@ -81,8 +81,8 @@ function AccountLine({ r, onSelectStock }: { r: MoneyAccountRow; onSelectStock?:
       <em className={`num ${cls(r.rate)}`}>{pct(r.rate)}</em>
       <em className={`num mnw-pnl ${cls(r.pnlRate)}`} title="보유 수익률">{r.pnlRate === null ? "" : pct(r.pnlRate)}</em>
       <span className="mnw-sub">
-        <i className="mnw-theme-tag">{r.account}{r.isEtf ? " · ETF" : ""}</i>
-        {r.rotation && <i className={`mnw-rot ${r.rotation}`}>{r.rotation}{r.theme ? ` · ${r.theme}` : ""}</i>}
+        {r.isEtf && <i className="mnw-theme-tag">ETF</i>}
+        {r.rotation &&<i className={`mnw-rot ${r.rotation}`}>{r.rotation}{r.theme ? ` · ${r.theme}` : ""}</i>}
         {r.est && (
           <i className={r.est.fgn + r.est.orgn > 0 ? "hot" : r.est.fgn + r.est.orgn < 0 ? "cold" : ""}>
             {r.est.time} 외인 {r.est.fgn > 0 ? "+" : ""}
@@ -134,6 +134,18 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
   const at = new Date(data.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
   const inRows = data.account.rows.filter((r) => r.verdict === "in");
   const outRows = data.account.rows.filter((r) => r.verdict === "out");
+  /* 계좌별 묶음 — 들어온 순서(키움 → 수동 계좌 차례)를 지키고, 묶음 요약은 평가금액 가중 등락 */
+  const groups = (() => {
+    const m = new Map<string, MoneyAccountRow[]>();
+    for (const r of data.account.rows) m.set(r.account, [...(m.get(r.account) ?? []), r]);
+    return [...m.entries()].map(([name, rows]) => {
+      const valueMan = rows.reduce((s, r) => s + (r.valueMan ?? 0), 0);
+      const w = rows.filter((r) => r.rate !== null && (r.valueMan ?? 0) > 0);
+      const wsum = w.reduce((s, r) => s + (r.valueMan ?? 0), 0);
+      const rate = wsum > 0 ? w.reduce((s, r) => s + (r.rate ?? 0) * (r.valueMan ?? 0), 0) / wsum : null;
+      return { name, rows, valueMan, rate, in: rows.filter((r) => r.verdict === "in").length, out: rows.filter((r) => r.verdict === "out").length };
+    });
+  })();
 
   return (
     <div className="mnw">
@@ -241,11 +253,30 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
           </span>
         </h3>
         {data.account.rows.length === 0 && <div className="pt-n">{data.account.note}</div>}
-        <div className="mnw-list">
-          {data.account.rows.map((r) => (
-            <AccountLine key={`${r.account}:${r.code}`} r={r} onSelectStock={onSelectStock} />
-          ))}
-        </div>
+        {/* 계좌별 묶음 (2026-09-17 저녁 — 벤티지: "수동 계좌에 여러 종목이 같이 들어 있으면 같이 보이네"). 키움이 먼저, 묶음마다 요약 줄 */}
+        {groups.map((g) => (
+          <div className="mnw-acc-group" key={g.name}>
+            <div className="mnw-acc-h">
+              <b>{g.name}</b>
+              <span>
+                {g.rows.length}종목
+                {g.valueMan > 0 ? ` · 평가 ${g.valueMan >= 10000 ? `${(g.valueMan / 10000).toFixed(1)}억` : `${g.valueMan.toLocaleString("ko-KR")}만`}` : ""}
+                {g.rate !== null ? ` · 오늘 ` : ""}
+                {g.rate !== null && <em className={cls(g.rate)}>{pct(g.rate, 2)}</em>}
+              </span>
+              <span className="mnw-acc-cnt">
+                {g.in > 0 && <i className="in">들어옴 {g.in}</i>}
+                {g.out > 0 && <i className="out">빠짐 {g.out}</i>}
+                {g.in === 0 && g.out === 0 && <i>조용</i>}
+              </span>
+            </div>
+            <div className="mnw-list">
+              {g.rows.map((r) => (
+                <AccountLine key={`${r.account}:${r.code}`} r={r} onSelectStock={onSelectStock} />
+              ))}
+            </div>
+          </div>
+        ))}
         {data.account.rows.length > 0 && <div className="table-note">{data.account.note}. 「들어옴」 = 잠정 순매수이거나 30분 배수 1.3↑에 오르는 중 · 「빠짐」 = 잠정 순매도에 내리는 중. 보는 자리이지 매매 지시가 아닙니다.</div>}
       </section>
 
