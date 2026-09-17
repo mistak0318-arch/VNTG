@@ -2207,12 +2207,19 @@ async function orderAccountRaw(): Promise<{ deposit: number; creditLoan: number;
         const crdTp = str(pick(r, ["crd_tp"])).trim();
         const isCredit = Boolean(crd) && crdTp !== "" && crdTp !== "00" && !/현금/.test(crd);
         const qty = num(pick(r, ["rmnd_qty"]));
-        const able = num(pick(r, ["trde_able_qty"]));
+        /*
+         * (2026-09-18 전수검증 🔴B1) 예전엔 `able > 0 ? able : qty` — 키움이 **정직하게 0** 을 준 경우
+         * (전량 미체결 매도 걸림·대주 상환 중·권리 정지)까지 보유 수량으로 부풀려, 아래 3119 의
+         * `Math.min(ableQty+dualLocked, qty)` 와 1517 의 `restingSell` 되돌림이 헛돌았다.
+         * 필드가 **없을 때만** qty 로 본다(모른다 = 다 팔 수 있다고 가정, 예전 동작). 있으면 0 도 0 이다.
+         */
+        const ableRaw = pick(r, ["trde_able_qty"]);
+        const ableKnown = ableRaw !== undefined && ableRaw !== null && String(ableRaw).trim() !== "";
         return {
           code: str(pick(r, ["stk_cd"])).replace(/^A/, "").replace(/_.*$/, ""),
           name: str(pick(r, ["stk_nm"])),
           qty,
-          ableQty: able > 0 ? able : qty,
+          ableQty: ableKnown ? num(ableRaw) : qty,
           avg: num(pick(r, ["pur_pric"])),
           cur: num(pick(r, ["cur_prc"])),
           pnl: num(pick(r, ["evltv_prft"])),
@@ -2994,6 +3001,14 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
    */
   const { minute: nowMin, date: nowDate } = kstParts();
   /*
+   * **장이 닫혀 있으면 보류** (2026-09-18 전수검증 🔴B2). `venueOpen` 은 주문서(prepareOrder)만
+   * 지켰고 감시 발동은 안 거쳤다 — 15:30~16:00 공백·휴장·창 밖에서 발동하면 키움 거절 → `failed`
+   * 로 **감시가 죽어** 손절이 사라졌다. 보류해 두면 다음 열릴 때 그대로 다시 본다.
+   */
+  if (!venueOpen(base.venue ?? "KRX")) {
+    return holdOff("장 시간 밖(15:30~16:00 공백·휴장) — 열리면 다시 본다");
+  }
+  /*
    * **애프터마켓에 못 나가는 종목은 발동시키지 않는다** (2026-09-12 — 뉴시스 09-12 기사).
    *
    * 애프터마켓(9/14~ 16:00~20:00)은 **ETF·ETN 을 안 받는다**(자산운용사·LP 부담). 모르고 내면
@@ -3015,7 +3030,7 @@ async function fireAutoWatch(r: AutoWatch, cur: number, from: string, rows: Auto
    * 20:00 까지 넓히는 순간 **16:00~20:00 애프터마켓 전부를 「마감 동시호가」로 오판**한다.
    * 마감 동시호가는 15:20~15:30 뿐이다 (2026-09-12).
    */
-  const inCloseAuction = nowMin > MIN.closeAuction && nowMin <= MIN.regularClose;
+  const inCloseAuction = nowMin >= MIN.closeAuction && nowMin <= MIN.regularClose; // (09-18 B16) 15:20 정각도 동시호가다 — `>` 였다
   /*
    * **애프터마켓은 시장가를 안 받는다** — 지정가·최우선·최유리 셋뿐이다(키움 공지 2026-09-11).
    * 손절은 나가야 하니 막지 않고 마감 동시호가와 **같은 수를 쓴다**: 발동가 지정가로 바꿔 낸다.
