@@ -20,7 +20,7 @@ const KIND: Record<MoneyNow["verdict"]["kind"], { label: string; cls: string; ic
 
 function ThemeChip({ t, onSelectStock }: { t: MoneyWhereTheme; onSelectStock?: (code: string, name: string) => void }) {
   return (
-    <div className="mn-theme">
+    <div className="mnw-theme">
       <b className={cls(t.changeRate)}>
         {t.name} {pct(t.changeRate)}
       </b>
@@ -28,7 +28,7 @@ function ThemeChip({ t, onSelectStock }: { t: MoneyWhereTheme; onSelectStock?: (
         {t.m1 !== null ? `한 달 ${pct(t.m1, 0)} · ` : ""}
         {Math.round(t.tradeValue).toLocaleString("ko-KR")}억
       </span>
-      <span className="mn-theme-stocks">
+      <span className="mnw-theme-stocks">
         {t.stocks.map((s) => (
           <button key={s.code} type="button" className="link-btn" onClick={() => onSelectStock?.(s.code, s.name)}>
             {s.name} <em className={cls(s.changeRate)}>{pct(s.changeRate)}</em>
@@ -41,22 +41,22 @@ function ThemeChip({ t, onSelectStock }: { t: MoneyWhereTheme; onSelectStock?: (
 
 function BuyerLine({ b, i, onSelectStock }: { b: MoneyBuyerRow; i: number; onSelectStock?: (code: string, name: string) => void }) {
   return (
-    <button type="button" className="mn-row" onClick={() => onSelectStock?.(b.code, b.name)}>
-      <b className="mn-rank">{i + 1}</b>
-      <span className="mn-nm">
+    <button type="button" className="mnw-row" onClick={() => onSelectStock?.(b.code, b.name)}>
+      <b className="mnw-rank">{i + 1}</b>
+      <span className="mnw-nm">
         {b.name}
-        {b.theme && <i className="mn-theme-tag">{b.theme}</i>}
       </span>
       <em className={`num ${cls(b.rate)}`}>{pct(b.rate)}</em>
-      <span className="mn-boost" title={b.boostKind === "30분" ? "최근 30분 거래대금 ÷ 오늘 평균 30분 거래대금" : "오늘 거래대금 ÷ (20일 평균 × 시각별 진행률)"}>
+      <span className="mnw-boost" title={b.boostKind === "30분" ? "최근 30분 거래대금 ÷ 오늘 평균 30분 거래대금" : "오늘 거래대금 ÷ (20일 평균 × 시각별 진행률)"}>
         ×{b.boost?.toFixed(1)} <i>{b.boostKind}</i>
       </span>
-      <span className="mn-sub">
+      <span className="mnw-sub">
+        {b.theme && <i className="mnw-theme-tag">{b.theme}</i>}
         {b.strength !== null && <i className={b.strength >= 120 ? "hot" : ""}>강도 {Math.round(b.strength)}</i>}
         {b.value30 !== null && <i>30분 {b.value30.toLocaleString("ko-KR")}억</i>}
         {b.todayValue !== null && <i>오늘 {b.todayValue.toLocaleString("ko-KR")}억</i>}
         {b.tags.map((t) => (
-          <i key={t} className="mn-tag">
+          <i key={t} className="mnw-tag">
             {t}
           </i>
         ))}
@@ -73,16 +73,16 @@ const V: Record<MoneyAccountRow["verdict"], { label: string; cls: string }> = {
 
 function AccountLine({ r, onSelectStock }: { r: MoneyAccountRow; onSelectStock?: (code: string, name: string) => void }) {
   return (
-    <button type="button" className="mn-row mn-acc" onClick={() => onSelectStock?.(r.code, r.name)} title={r.why}>
-      <b className={`mn-verdict ${V[r.verdict].cls}`}>{V[r.verdict].label}</b>
-      <span className="mn-nm">
+    <button type="button" className="mnw-row mnw-acc" onClick={() => onSelectStock?.(r.code, r.name)} title={r.why}>
+      <b className={`mnw-verdict ${V[r.verdict].cls}`}>{V[r.verdict].label}</b>
+      <span className="mnw-nm">
         {r.name}
-        <i className="mn-theme-tag">{r.account}{r.isEtf ? " · ETF" : ""}</i>
       </span>
       <em className={`num ${cls(r.rate)}`}>{pct(r.rate)}</em>
-      <em className={`num mn-pnl ${cls(r.pnlRate)}`} title="보유 수익률">{r.pnlRate === null ? "" : pct(r.pnlRate)}</em>
-      <span className="mn-sub">
-        {r.rotation && <i className={`mn-rot ${r.rotation}`}>{r.rotation}{r.theme ? ` · ${r.theme}` : ""}</i>}
+      <em className={`num mnw-pnl ${cls(r.pnlRate)}`} title="보유 수익률">{r.pnlRate === null ? "" : pct(r.pnlRate)}</em>
+      <span className="mnw-sub">
+        <i className="mnw-theme-tag">{r.account}{r.isEtf ? " · ETF" : ""}</i>
+        {r.rotation && <i className={`mnw-rot ${r.rotation}`}>{r.rotation}{r.theme ? ` · ${r.theme}` : ""}</i>}
         {r.est && (
           <i className={r.est.fgn + r.est.orgn > 0 ? "hot" : r.est.fgn + r.est.orgn < 0 ? "cold" : ""}>
             {r.est.time} 외인 {r.est.fgn > 0 ? "+" : ""}
@@ -93,7 +93,7 @@ function AccountLine({ r, onSelectStock }: { r: MoneyAccountRow; onSelectStock?:
         {r.boost !== null && <i>{r.isEtf ? "배수" : "30분"} ×{r.boost.toFixed(1)}</i>}
         {r.strength !== null && <i>강도 {Math.round(r.strength)}</i>}
         {r.tags.map((t) => (
-          <i key={t} className="mn-tag">
+          <i key={t} className="mnw-tag">
             {t}
           </i>
         ))}
@@ -136,15 +136,15 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
   const outRows = data.account.rows.filter((r) => r.verdict === "out");
 
   return (
-    <div className="mn">
+    <div className="mnw">
       {/* ① 판정 띠 */}
-      <section className={`mn-verdict-card ${k.cls}`}>
-        <div className="mn-vhead">
-          <span className="mn-slot">{data.slot.label}</span>
-          <b className="mn-kind">
+      <section className={`mnw-verdict-card ${k.cls}`}>
+        <div className="mnw-vhead">
+          <span className="mnw-slot">{data.slot.label}</span>
+          <b className="mnw-kind">
             {k.icon} {k.label}
           </b>
-          <span className="mn-at">
+          <span className="mnw-at">
             {at}
             {data.stale ? " · 갱신 중" : ""}
             <button type="button" className={`ov-refresh${busy ? " busy" : ""}`} onClick={() => load(true)} title="지금 다시 재기">
@@ -152,48 +152,48 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
             </button>
           </span>
         </div>
-        <div className="mn-line">{data.verdict.line}</div>
-        <div className="mn-parts">
+        <div className="mnw-line">{data.verdict.line}</div>
+        <div className="mnw-parts">
           {data.verdict.parts.map((p) => (
-            <span key={p.key} className={`mn-part ${p.sign === 1 ? "up" : p.sign === -1 ? "down" : p.sign === 0 ? "flat" : "na"}`} title={p.text}>
+            <span key={p.key} className={`mnw-part ${p.sign === 1 ? "up" : p.sign === -1 ? "down" : p.sign === 0 ? "flat" : "na"}`} title={p.text}>
               <i>{p.sign === 1 ? "▲" : p.sign === -1 ? "▼" : p.sign === 0 ? "–" : "?"}</i> {p.label}
               <small>{p.text}</small>
             </span>
           ))}
         </div>
-        <div className="mn-advice">🕒 {data.slot.advice}</div>
+        <div className="mnw-advice">🕒 {data.slot.advice}</div>
       </section>
 
       {/* ② 돈이 가는 곳 */}
-      <section className="card mn-card">
+      <section className="card mnw-card">
         <h3>
           돈이 가는 곳 <span className="usm-sub">테마 로테이션 · 국내 ETF · 어젯밤 미국</span>
         </h3>
         {!data.where.ready && <div className="pt-n">월간 누적이 아직 없어 로테이션 분류가 비어 있습니다 (마감 뒤 정리가 돌면 채워집니다)</div>}
-        <div className="mn-where">
-          <div className="mn-where-col">
-            <div className="mn-h">🚀 신규 부상 <i>한 달 조용했는데 오늘 튐 — 자리바꿈의 입구</i></div>
+        <div className="mnw-where">
+          <div className="mnw-where-col">
+            <div className="mnw-h">🚀 신규 부상 <i>한 달 조용했는데 오늘 튐 — 자리바꿈의 입구</i></div>
             {data.where.fresh.length === 0 && <div className="pt-n">없음</div>}
             {data.where.fresh.map((t) => (
               <ThemeChip key={t.key} t={t} onSelectStock={onSelectStock} />
             ))}
           </div>
-          <div className="mn-where-col">
-            <div className="mn-h">🏁 주도 지속 <i>한 달을 끌어 왔고 오늘도</i></div>
+          <div className="mnw-where-col">
+            <div className="mnw-h">🏁 주도 지속 <i>한 달을 끌어 왔고 오늘도</i></div>
             {data.where.lead.length === 0 && <div className="pt-n">없음</div>}
             {data.where.lead.map((t) => (
               <ThemeChip key={t.key} t={t} onSelectStock={onSelectStock} />
             ))}
           </div>
-          <div className="mn-where-col">
-            <div className="mn-h">😴 주도 휴식 <i>끌어 왔는데 오늘 쉼 — 눌림인지 이탈인지</i></div>
+          <div className="mnw-where-col">
+            <div className="mnw-h">😴 주도 휴식 <i>끌어 왔는데 오늘 쉼 — 눌림인지 이탈인지</i></div>
             {data.where.rest.length === 0 && <div className="pt-n">없음</div>}
             {data.where.rest.map((t) => (
               <ThemeChip key={t.key} t={t} onSelectStock={onSelectStock} />
             ))}
           </div>
         </div>
-        <div className="mn-etfline">
+        <div className="mnw-etfline">
           {data.where.krEtf.length > 0 && (
             <span>
               🇰🇷 ETF{" "}
@@ -219,12 +219,12 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
       </section>
 
       {/* ③ 지금 사는 손 */}
-      <section className="card mn-card">
+      <section className="card mnw-card">
         <h3>
           지금 사는 손 TOP {data.buyers.length} <span className="usm-sub">30분 거래대금 배수 × 체결강도 — 실시간 175 + 거래대금 상위 100</span>
         </h3>
         {data.buyers.length === 0 && <div className="pt-n">배수 1.3 을 넘는 종목이 없습니다 — 장 밖이거나 조용한 장</div>}
-        <div className="mn-list">
+        <div className="mnw-list">
           {data.buyers.map((b, i) => (
             <BuyerLine key={b.code} b={b} i={i} onSelectStock={onSelectStock} />
           ))}
@@ -233,7 +233,7 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
       </section>
 
       {/* ④ 내 계좌 렌즈 */}
-      <section className="card mn-card">
+      <section className="card mnw-card">
         <h3>
           내 계좌 렌즈{" "}
           <span className="usm-sub">
@@ -241,7 +241,7 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
           </span>
         </h3>
         {data.account.rows.length === 0 && <div className="pt-n">{data.account.note}</div>}
-        <div className="mn-list">
+        <div className="mnw-list">
           {data.account.rows.map((r) => (
             <AccountLine key={`${r.account}:${r.code}`} r={r} onSelectStock={onSelectStock} />
           ))}
@@ -250,12 +250,12 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
       </section>
 
       {/* ⑤ 시간대 플랜 */}
-      <section className="card mn-card mn-plan">
+      <section className="card mnw-card mnw-plan">
         <h3>
           {data.plan.title} <span className="usm-sub">지금 할 일만</span>
         </h3>
         {data.plan.items.length === 0 && <div className="pt-n">지금 시각엔 볼 것이 없습니다</div>}
-        <ol className="mn-plan-list">
+        <ol className="mnw-plan-list">
           {data.plan.items.map((it, i) => (
             <li key={`${it.code ?? it.name}-${i}`}>
               {it.code ? (

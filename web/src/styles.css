@@ -19429,58 +19429,58 @@ tr.gv-strong td:first-child { color: var(--text); }
 .live-mark { display: inline-block; margin-right: 4px; font-size: 0.55rem; color: var(--green); vertical-align: 2px; }
 
 /* ═══ 돈의 흐름 「지금」 (2026-09-17, MoneyNowPanel) — 폰 먼저: 세로 쌓기, 한 줄 표 ═══ */
-.mn { display: flex; flex-direction: column; gap: 10px; }
-.mn-verdict-card { border: 1px solid var(--border); border-left: 5px solid var(--muted); border-radius: 10px; padding: 10px 12px; background: var(--panel); }
-.mn-verdict-card.in { border-left-color: var(--red); }
-.mn-verdict-card.out { border-left-color: var(--blue); }
-.mn-verdict-card.rotate { border-left-color: var(--warn); }
-.mn-vhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mn-slot { font-size: 0.72rem; padding: 2px 7px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
-.mn-kind { font-size: 1.05rem; }
-.mn-at { margin-left: auto; font-size: 0.72rem; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
-.mn-line { margin-top: 6px; font-size: 0.88rem; line-height: 1.5; }
-.mn-parts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.mn-part { display: inline-flex; flex-direction: column; gap: 1px; padding: 4px 8px; border-radius: 8px; background: var(--panel-2); font-size: 0.74rem; max-width: 100%; }
-.mn-part i { font-style: normal; font-weight: 800; margin-right: 2px; }
-.mn-part.up i { color: var(--red); }
-.mn-part.down i { color: var(--blue); }
-.mn-part.na { opacity: 0.55; }
-.mn-part small { font-size: 0.66rem; color: var(--muted); white-space: normal; }
-.mn-advice { margin-top: 8px; font-size: 0.8rem; color: var(--text); padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
-.mn-card h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
-.mn-where { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
-.mn-h { font-size: 0.78rem; font-weight: 700; margin-bottom: 4px; }
-.mn-h i { font-style: normal; font-weight: 400; color: var(--muted); font-size: 0.68rem; margin-left: 4px; }
-.mn-theme { display: flex; flex-direction: column; gap: 2px; padding: 5px 0; border-top: 1px solid var(--border); font-size: 0.8rem; }
-.mn-theme > b { font-weight: 700; }
-.mn-theme-stocks { display: flex; flex-wrap: wrap; gap: 8px; }
-.mn-theme-stocks .link-btn { font-size: 0.76rem; }
-.mn-theme-stocks em { font-style: normal; margin-left: 2px; }
-.mn-etfline { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 0.76rem; align-items: center; }
-.mn-etfline .mfp-chip { margin-left: 4px; }
-.mn-etfline em.hot { color: var(--red); font-style: normal; }
-.mn-list { display: flex; flex-direction: column; }
-.mn-row { display: grid; grid-template-columns: auto 1fr auto auto; grid-template-areas: "rank nm rate boost" "rank sub sub sub"; gap: 2px 8px; align-items: center; width: 100%; padding: 6px 4px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
-.mn-row:hover { background: var(--panel-2); }
-.mn-rank { grid-area: rank; color: var(--muted); font-size: 0.72rem; min-width: 1.4em; }
-.mn-nm { grid-area: nm; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mn-theme-tag { font-style: normal; font-weight: 400; font-size: 0.66rem; color: var(--muted); margin-left: 6px; }
-.mn-row > em.num { grid-area: rate; font-style: normal; font-size: 0.86rem; }
-.mn-boost { grid-area: boost; font-weight: 800; font-size: 0.86rem; white-space: nowrap; }
-.mn-boost i { font-style: normal; font-weight: 400; font-size: 0.62rem; color: var(--muted); margin-left: 2px; }
-.mn-sub { grid-area: sub; display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 0.68rem; color: var(--muted); }
-.mn-sub i { font-style: normal; }
-.mn-sub i.hot { color: var(--red); font-weight: 700; }
-.mn-sub i.cold { color: var(--blue); font-weight: 700; }
-.mn-tag { padding: 0 5px; border-radius: 999px; background: var(--panel-2); }
-.mn-acc { grid-template-columns: auto 1fr auto auto; grid-template-areas: "v nm rate pnl" "v sub sub sub"; }
-.mn-verdict { grid-area: v; font-size: 0.7rem; padding: 2px 6px; border-radius: 6px; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
-.mn-verdict.in { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
-.mn-verdict.out { background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); }
-.mn-pnl { grid-area: pnl; font-size: 0.72rem !important; opacity: 0.8; }
-.mn-rot { padding: 0 5px; border-radius: 999px; background: var(--panel-2); }
-.mn-rot.부상 { color: var(--red); }
-.mn-rot.주도 { color: var(--accent); }
-.mn-rot.휴식 { color: var(--muted); }
-.mn-plan-list { margin: 4px 0 0; padding-left: 1.3em; font-size: 0.82rem; line-height: 1.55; }
-.mn-plan-list li + li { margin-top: 3px; }
+.mnw { display: flex; flex-direction: column; gap: 10px; }
+.mnw-verdict-card { border: 1px solid var(--border); border-left: 5px solid var(--muted); border-radius: 10px; padding: 10px 12px; background: var(--panel); }
+.mnw-verdict-card.in { border-left-color: var(--red); }
+.mnw-verdict-card.out { border-left-color: var(--blue); }
+.mnw-verdict-card.rotate { border-left-color: var(--warn); }
+.mnw-vhead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mnw-slot { font-size: 0.72rem; padding: 2px 7px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+.mnw-kind { font-size: 1.05rem; }
+.mnw-at { margin-left: auto; font-size: 0.72rem; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.mnw-line { margin-top: 6px; font-size: 0.88rem; line-height: 1.5; }
+.mnw-parts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mnw-part { display: inline-flex; flex-direction: column; gap: 1px; padding: 4px 8px; border-radius: 8px; background: var(--panel-2); font-size: 0.74rem; max-width: 100%; }
+.mnw-part i { font-style: normal; font-weight: 800; margin-right: 2px; }
+.mnw-part.up i { color: var(--red); }
+.mnw-part.down i { color: var(--blue); }
+.mnw-part.na { opacity: 0.55; }
+.mnw-part small { font-size: 0.66rem; color: var(--muted); white-space: normal; }
+.mnw-advice { margin-top: 8px; font-size: 0.8rem; color: var(--text); padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.mnw-card h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.mnw-where { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.mnw-h { font-size: 0.78rem; font-weight: 700; margin-bottom: 4px; }
+.mnw-h i { font-style: normal; font-weight: 400; color: var(--muted); font-size: 0.68rem; margin-left: 4px; }
+.mnw-theme { display: flex; flex-direction: column; gap: 2px; padding: 5px 0; border-top: 1px solid var(--border); font-size: 0.8rem; }
+.mnw-theme > b { font-weight: 700; }
+.mnw-theme-stocks { display: flex; flex-wrap: wrap; gap: 8px; }
+.mnw-theme-stocks .link-btn { font-size: 0.76rem; }
+.mnw-theme-stocks em { font-style: normal; margin-left: 2px; }
+.mnw-etfline { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 0.76rem; align-items: center; }
+.mnw-etfline .mfp-chip { margin-left: 4px; }
+.mnw-etfline em.hot { color: var(--red); font-style: normal; }
+.mnw-list { display: flex; flex-direction: column; }
+.mnw-row { display: grid; grid-template-columns: auto 1fr auto auto; grid-template-areas: "rank nm rate boost" "rank sub sub sub"; gap: 2px 8px; align-items: center; width: 100%; padding: 6px 4px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.mnw-row:hover { background: var(--panel-2); }
+.mnw-rank { grid-area: rank; color: var(--muted); font-size: 0.72rem; min-width: 1.4em; }
+.mnw-nm { grid-area: nm; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mnw-theme-tag { font-style: normal; font-weight: 600; font-size: 0.66rem; color: var(--accent); padding: 0 5px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.mnw-row > em.num { grid-area: rate; font-style: normal; font-size: 0.86rem; }
+.mnw-boost { grid-area: boost; font-weight: 800; font-size: 0.86rem; white-space: nowrap; }
+.mnw-boost i { font-style: normal; font-weight: 400; font-size: 0.62rem; color: var(--muted); margin-left: 2px; }
+.mnw-sub { grid-area: sub; display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 0.68rem; color: var(--muted); }
+.mnw-sub i { font-style: normal; }
+.mnw-sub i.hot { color: var(--red); font-weight: 700; }
+.mnw-sub i.cold { color: var(--blue); font-weight: 700; }
+.mnw-tag { padding: 0 5px; border-radius: 999px; background: var(--panel-2); }
+.mnw-acc { grid-template-columns: auto 1fr auto auto; grid-template-areas: "v nm rate pnl" "v sub sub sub"; }
+.mnw-verdict { grid-area: v; font-size: 0.7rem; padding: 2px 6px; border-radius: 6px; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+.mnw-verdict.in { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
+.mnw-verdict.out { background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); }
+.mnw-pnl { grid-area: pnl; font-size: 0.72rem !important; opacity: 0.8; }
+.mnw-rot { padding: 0 5px; border-radius: 999px; background: var(--panel-2); }
+.mnw-rot.부상 { color: var(--red); }
+.mnw-rot.주도 { color: var(--accent); }
+.mnw-rot.휴식 { color: var(--muted); }
+.mnw-plan-list { margin: 4px 0 0; padding-left: 1.3em; font-size: 0.82rem; line-height: 1.55; }
+.mnw-plan-list li + li { margin-top: 3px; }
