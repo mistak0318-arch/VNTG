@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { createContext, Fragment, useContext, useState, type ReactNode } from "react";
 
 function fmtTime(ts: number | null): string {
   if (!ts) return "";
@@ -19,6 +19,19 @@ export interface CardMove {
   last: boolean;
 }
 
+/**
+ * **카드 ↻ 세대** (2026-09-17 — 벤티지: "시황 대시보드 각 카드에 새로고침 버튼. ETF 나 조회순위 갱신이 안 돼 불편하다").
+ *
+ * 카드마다 값을 받는 길이 다르다 — 섹션 훅(useSection)은 부모가 들고 있고, 돈의 방향·조회순위·거래대금 같은
+ * 판은 제 안에서 받는다. 한 단추로 둘 다 되게: ① `onRefresh` 가 있으면 부른다(섹션 훅의 refresh — 서버 캐시도 건너뜀)
+ * ② 세대 번호를 올려 **본문을 다시 마운트**한다 — 제 안에서 받는 판은 마운트 때 다시 받는다.
+ * 세대 번호는 컨텍스트로도 내려보낸다 — 판이 「↻ 로 다시 마운트됐다」를 알고 서버 캐시를 건너뛰게(fresh=1).
+ */
+export const CardRefreshContext = createContext(0);
+export function useCardRefresh(): number {
+  return useContext(CardRefreshContext);
+}
+
 export function OverviewCard({
   title,
   badge,
@@ -30,6 +43,7 @@ export function OverviewCard({
   tall,
   order,
   move,
+  onRefresh,
   children,
 }: {
   title: string;
@@ -51,8 +65,23 @@ export function OverviewCard({
   order?: number;
   /** 배치 모드일 때만 넘어온다 */
   move?: CardMove;
+  /** 섹션 훅의 refresh — 없으면 본문 다시 마운트만으로 새로 받는다 */
+  onRefresh?: () => void | Promise<void>;
   children: ReactNode;
 }) {
+  const [gen, setGen] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const doRefresh = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await onRefresh?.();
+    } catch {
+      /* 실패해도 본문은 다시 마운트한다 */
+    }
+    setGen((g) => g + 1);
+    window.setTimeout(() => setBusy(false), 700);
+  };
   return (
     <div className={`ov-card${span2 ? " ov-span2" : ""}${tall ? " ov-tall" : ""}`} style={order === undefined ? undefined : { order }}>
       <div className="ov-card-h">
@@ -72,7 +101,12 @@ export function OverviewCard({
             </button>
           </span>
         ) : (
-          <span className="ov-card-sub">{subtitle ?? fmtTime(updatedAt ?? null)}</span>
+          <>
+            <span className="ov-card-sub">{subtitle ?? fmtTime(updatedAt ?? null)}</span>
+            <button type="button" className={`ov-refresh${busy ? " busy" : ""}`} onClick={() => void doRefresh()} title="이 카드만 지금 새로 받기" aria-label="새로고침">
+              ↻
+            </button>
+          </>
         )}
       </div>
       {error ? (
@@ -84,7 +118,9 @@ export function OverviewCard({
           <div className="ov-skel" />
         </div>
       ) : (
-        children
+        <CardRefreshContext.Provider value={gen}>
+          <Fragment key={gen}>{children}</Fragment>
+        </CardRefreshContext.Provider>
       )}
     </div>
   );

@@ -187,8 +187,10 @@ const ETFS: { symbol: string; name: string; group: UsEtfRow["group"] }[] = [
 let etfCache: { at: number; rows: UsEtfRow[] } | null = null;
 const ETF_TTL = 5 * 60_000;
 
-export async function usEtfFlow(): Promise<{ at: number; rows: UsEtfRow[]; stale: boolean }> {
-  if (etfCache && Date.now() - etfCache.at < ETF_TTL) return { ...etfCache, stale: false };
+export async function usEtfFlow(opts: { fresh?: boolean } = {}): Promise<{ at: number; rows: UsEtfRow[]; stale: boolean }> {
+  /* 카드 ↻ — 30초 지난 캐시만 버린다(야후 스무 번) */
+  const fresh = Boolean(opts.fresh) && (!etfCache || Date.now() - etfCache.at > 30_000);
+  if (!fresh && etfCache && Date.now() - etfCache.at < ETF_TTL) return { ...etfCache, stale: false };
   try {
     const rows: UsEtfRow[] = [];
     for (const e of ETFS) {

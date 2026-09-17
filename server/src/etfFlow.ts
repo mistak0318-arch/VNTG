@@ -181,14 +181,16 @@ function valueStats(bars: DayBar[]): { volRatio: number | null; value5: number |
 let flowCache: { at: number; rows: EtfFlowRow[] } | null = null;
 let flowJob: Promise<{ at: number; rows: EtfFlowRow[] }> | null = null;
 
-export async function etfFlow(client: KiwoomClient): Promise<{ at: number; rows: EtfFlowRow[]; note: string; asOf: "오늘" | "어제" }> {
+export async function etfFlow(client: KiwoomClient, opts: { fresh?: boolean } = {}): Promise<{ at: number; rows: EtfFlowRow[]; note: string; asOf: "오늘" | "어제" }> {
   const NOTE = "대표 ETF 는 이름 규칙으로 그때그때 거래대금 제일 큰 것을 고릅니다(레버리지·인버스·커버드콜 제외). 배수는 어제까지의 일봉, 오늘 등락·거래대금은 전체시세. 장 전에는 어제 등락.";
   /* 장 전(09:00 전·주말)에는 전체시세 등락이 전부 0 이라 「어제」를 보인다 — 0% 스물은 정보가 아니다 */
   const asOf: "오늘" | "어제" = marketOpened() ? "오늘" : "어제";
-  if (flowCache && Date.now() - flowCache.at < 5 * 60_000) return { ...flowCache, note: NOTE, asOf };
+  /* 카드 ↻ 는 30초 지난 캐시만 버린다 — 연타로 전체시세(15쪽)를 되받지 않게 */
+  const fresh = Boolean(opts.fresh) && (!flowCache || Date.now() - flowCache.at > 30_000);
+  if (!fresh && flowCache && Date.now() - flowCache.at < 5 * 60_000) return { ...flowCache, note: NOTE, asOf };
   if (flowJob) return { ...(await flowJob), note: NOTE, asOf };
   flowJob = (async () => {
-    const all = await etfAll(client);
+    const all = await etfAll(client, { fresh });
     const barsCache = (await loadCloses()).bars ?? {};
     const lastValue = (code: string): number => {
       const b = barsCache[code];
@@ -266,11 +268,12 @@ const SENT_PICKS = {
 
 let sentCache: { at: number; sides: SentimentSide[] } | null = null;
 
-export async function etfSentiment(client: KiwoomClient): Promise<{ at: number; sides: SentimentSide[]; note: string }> {
+export async function etfSentiment(client: KiwoomClient, opts: { fresh?: boolean } = {}): Promise<{ at: number; sides: SentimentSide[]; note: string }> {
   const NOTE =
     "개인이 방향에 거는 돈 — 인버스·곱버스 거래대금을 레버리지 거래대금으로 나눈 것. 비율이 20일 평균을 크게 넘으면 하락 베팅이 몰린 것이라 역발상 재료, 반대로 레버리지만 뜨거우면 상승 추격 과열. 어제까지는 일봉, 오늘은 전체시세 어림.";
-  if (sentCache && Date.now() - sentCache.at < 5 * 60_000) return { ...sentCache, note: NOTE };
-  const all = await etfAll(client);
+  const fresh = Boolean(opts.fresh) && (!sentCache || Date.now() - sentCache.at > 30_000);
+  if (!fresh && sentCache && Date.now() - sentCache.at < 5 * 60_000) return { ...sentCache, note: NOTE };
+  const all = await etfAll(client, { fresh });
   const sides: SentimentSide[] = [];
   for (const market of ["코스피", "코스닥"] as const) {
     const p = SENT_PICKS[market];

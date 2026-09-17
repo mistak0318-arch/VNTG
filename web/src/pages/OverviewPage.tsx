@@ -407,7 +407,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
         {show("summary") && (
-          <OverviewCard title="국내 지수" badge={<SessionBadge kind="kr" />} order={cards.orderOf("indices")} updatedAt={indices.updatedAt} loading={indices.loading} error={indices.error}>
+          <OverviewCard title="국내 지수" badge={<SessionBadge kind="kr" />} order={cards.orderOf("indices")} updatedAt={indices.updatedAt} onRefresh={indices.refresh} loading={indices.loading} error={indices.error}>
             {/* 본문은 보드 지수판과 공용 (DomesticIndexGrid) — 두 번 그리면 갈라진다 */}
             <DomesticIndexGrid
               idx={idx}
@@ -423,7 +423,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           <OverviewCard
             order={cards.orderOf("updown")}
             title="종목등락현황"
-            updatedAt={indices.updatedAt}
+            updatedAt={indices.updatedAt} onRefresh={indices.refresh}
             loading={indices.loading}
             error={indices.error}
           >
@@ -481,7 +481,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
               </button>
             }
             order={cards.orderOf("global")}
-            updatedAt={global.updatedAt}
+            updatedAt={global.updatedAt} onRefresh={global.refresh}
             loading={global.loading}
             error={global.error}
           >
@@ -723,7 +723,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           <OverviewCard
             order={cards.orderOf("topTraders")}
             title="수익률 상위 고객 · 네이버페이 랭킹"
-          updatedAt={topTraders.updatedAt}
+          updatedAt={topTraders.updatedAt} onRefresh={topTraders.refresh}
           loading={topTraders.loading}
           error={topTraders.error}
         >
@@ -781,7 +781,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         {/* ---------------- 순위 ---------------- */}
 
         {show("rank") && (
-          <OverviewCard title="등락률 순위" order={cards.orderOf("movers")} updatedAt={movers.updatedAt} loading={movers.loading} error={movers.error}>
+          <OverviewCard title="등락률 순위" order={cards.orderOf("movers")} updatedAt={movers.updatedAt} onRefresh={movers.refresh} loading={movers.loading} error={movers.error}>
             <SegmentToggle
               options={[
                 { key: "rising" as const, label: "상승" },
@@ -795,7 +795,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
         {show("rank") && (
-          <OverviewCard title="테마" order={cards.orderOf("themes")} updatedAt={themes.updatedAt} loading={themes.loading} error={themes.error}>
+          <OverviewCard title="테마" order={cards.orderOf("themes")} updatedAt={themes.updatedAt} onRefresh={themes.refresh} loading={themes.loading} error={themes.error}>
             <SegmentToggle
               options={[
                 { key: "top" as const, label: "상위" },
@@ -834,7 +834,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
           <OverviewCard
             order={cards.orderOf("highLow")}
             title="250일 신고가 / 신저가"
-            updatedAt={highLow.updatedAt}
+            updatedAt={highLow.updatedAt} onRefresh={highLow.refresh}
             loading={highLow.loading}
             error={highLow.error}
           >
@@ -851,7 +851,7 @@ export function OverviewPage({ onSelectStock }: { onSelectStock: (code: string, 
         )}
 
         {show("rank") && (
-          <OverviewCard title="변동성 완화 (VI)" order={cards.orderOf("vi")} updatedAt={vi.updatedAt} loading={vi.loading} error={vi.error}>
+          <OverviewCard title="변동성 완화 (VI)" order={cards.orderOf("vi")} updatedAt={vi.updatedAt} onRefresh={vi.refresh} loading={vi.loading} error={vi.error}>
             <RankList
               items={vi.data ?? []}
               emptyText="발동 종목 없음"

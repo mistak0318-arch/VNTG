@@ -632,12 +632,13 @@ export interface SectionResult {
  * 캐시가 유효하면 즉시 반환하고, 만료됐으면 갱신을 기다린다.
  * 단, 기존 데이터가 있으면 백그라운드로만 갱신하고 이전 값을 즉시 돌려준다.
  */
-export async function getSection(section: SectionName, client: KiwoomClient): Promise<SectionResult> {
+export async function getSection(section: SectionName, client: KiwoomClient, opts: { force?: boolean } = {}): Promise<SectionResult> {
   const entry = getEntry(section);
   const age = Date.now() - entry.updatedAt;
   const expired = age > SECTION_TTL_MS[section];
 
-  if (entry.data === null) {
+  /* 카드 ↻ (2026-09-17) — 주기를 기다리지 않고 지금 받는다. 3초 안에 또 누르면 그냥 있는 값(연타 방지) */
+  if (entry.data === null || (opts.force && age > 3_000)) {
     // 첫 조회는 결과를 기다린다
     await refresh(section, client);
   } else if (expired) {

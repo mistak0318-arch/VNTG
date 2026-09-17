@@ -102,7 +102,7 @@ export function createOverviewRouter(client: KiwoomClient): Router {
       return;
     }
     try {
-      const result = await getSection(name, client);
+      const result = await getSection(name, client, { force: req.query.fresh === "1" });
       res.json(result);
     } catch (err) {
       res.status(502).json({ error: err instanceof Error ? err.message : "알 수 없는 오류" });

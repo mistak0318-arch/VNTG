@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, signClass, type EtfFlowRow, type EtfListRow, type EtfSentimentSide, type UsEtfRow } from "../../api";
 import { YahooChartSheet, type ChartTarget } from "./YahooChartSheet";
+import { useCardRefresh } from "./OverviewCard";
 
 /**
  * **돈의 방향 — 한미 ETF** (2026-09-17, 벤티지: "어젯밤 미국 ↔ 국내 테마 짝이 안 맞는다, 효용이 없다.
@@ -53,15 +54,20 @@ export function MoneyFlowPanel({ onSelectStock }: { onSelectStock: (code: string
   const [errors, setErrors] = useState<string[]>([]);
   const [chart, setChart] = useState<ChartTarget | null>(null);
 
+  /* 카드 ↻ 로 다시 마운트됐으면(세대 > 0) 첫 조회는 서버 캐시를 건너뛴다 — 주기 갱신은 캐시 그대로 */
+  const gen = useCardRefresh();
   useEffect(() => {
     let alive = true;
+    let first = true;
     const pull = () => {
+      const fresh = gen > 0 && first;
+      first = false;
       const errs: string[] = [];
       void Promise.all([
-        api.usEtfFlow().then((r) => alive && setUs(r.rows)).catch(() => errs.push("미국 ETF")),
-        api.etfFlow().then((r) => alive && (setKr(r.rows), setKrAsOf(r.asOf))).catch(() => errs.push("국내 ETF")),
-        api.etfSentiment().then((r) => alive && setSides(r.sides)).catch(() => errs.push("심리")),
-        api.etfList().then((r) => alive && setList(r.rows)).catch(() => errs.push("ETF 순위")),
+        api.usEtfFlow(fresh).then((r) => alive && setUs(r.rows)).catch(() => errs.push("미국 ETF")),
+        api.etfFlow(fresh).then((r) => alive && (setKr(r.rows), setKrAsOf(r.asOf))).catch(() => errs.push("국내 ETF")),
+        api.etfSentiment(fresh).then((r) => alive && setSides(r.sides)).catch(() => errs.push("심리")),
+        api.etfList(fresh).then((r) => alive && setList(r.rows)).catch(() => errs.push("ETF 순위")),
       ]).then(() => alive && setErrors(errs));
     };
     pull();
@@ -70,7 +76,7 @@ export function MoneyFlowPanel({ onSelectStock }: { onSelectStock: (code: string
       alive = false;
       window.clearInterval(t);
     };
-  }, []);
+  }, [gen]);
 
   if (!us && !kr && !sides && errors.length === 0) return <div className="ov-card-b empty">불러오는 중…</div>;
 

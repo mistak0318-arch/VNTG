@@ -49,13 +49,13 @@ export function useSection<T>(name: string, intervalMs: number) {
 
   /** @param silent 로딩 표시를 건드리지 않는다 (주기 갱신) */
   const load = useCallback(
-    async (silent = false) => {
+    async (silent = false, fresh = false) => {
       if (inFlight.current) return;
       inFlight.current = true;
       // 값이 이미 있으면 조용히 — 있는 걸 지우고 스켈레톤을 띄울 이유가 없다
       if (!silent && !hasData.current) setLoading(true);
       try {
-        const res = await api.overviewSection<T>(name);
+        const res = await api.overviewSection<T>(name, fresh);
         if (cancelledRef.current) return;
         setResult(res);
         if (typeof res.ttlMs === "number" && res.ttlMs > 0) setServerTtl(res.ttlMs);
@@ -118,7 +118,7 @@ export function useSection<T>(name: string, intervalMs: number) {
     updatedAt: result?.updatedAt ?? null,
     loading,
     error,
-    /** 수동 새로고침 — 페이지의 새로고침 버튼에서 호출 */
-    refresh: () => void load(),
+    /** 수동 새로고침 — 카드 ↻. 서버 캐시도 건너뛰고 지금 받는다 (2026-09-17) */
+    refresh: () => load(true, true),
   };
 }

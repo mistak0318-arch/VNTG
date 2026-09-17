@@ -51,8 +51,10 @@ let listCache: { at: number; rows: EtfListRow[] } | null = null;
 const LIST_TTL = 3 * 60_000;
 
 /** ETF 전체 시세 — 연금 계좌 엔진(cisPension)이 모집단으로 쓴다 */
-export async function fetchAll(client: KiwoomClient): Promise<EtfListRow[]> {
-  if (listCache && Date.now() - listCache.at < LIST_TTL) return listCache.rows;
+export async function fetchAll(client: KiwoomClient, opts: { fresh?: boolean } = {}): Promise<EtfListRow[]> {
+  /* 카드 ↻ (2026-09-17) — 30초 지난 캐시만 버린다. 15쪽짜리 조회라 연타는 막는다 */
+  const fresh = Boolean(opts.fresh) && (!listCache || Date.now() - listCache.at > 30_000);
+  if (!fresh && listCache && Date.now() - listCache.at < LIST_TTL) return listCache.rows;
   const body = {
     txon_type: "0",
     navpre: "0",
@@ -143,8 +145,8 @@ export async function etfTaxInfo(client: KiwoomClient, code: string): Promise<Et
 }
 
 /** 전체 ETF — 누적등락률(기간 등락률) 계산의 모집단으로도 쓴다 */
-export async function etfAll(client: KiwoomClient): Promise<EtfListRow[]> {
-  return fetchAll(client);
+export async function etfAll(client: KiwoomClient, opts: { fresh?: boolean } = {}): Promise<EtfListRow[]> {
+  return fetchAll(client, opts);
 }
 
 /**
@@ -213,26 +215,26 @@ export function createEtfRouter(client: KiwoomClient): Router {
     }
   });
 
-  router.get("/list", async (_req, res, next) => {
+  router.get("/list", async (req, res, next) => {
     try {
-      const rows = await fetchAll(client);
+      const rows = await fetchAll(client, { fresh: req.query.fresh === "1" });
       res.json({ rows, at: listCache?.at ?? Date.now() });
     } catch (err) {
       next(err);
     }
   });
 
-  /* ETF 분석 묶음 (2026-09-17, etfFlow.ts) — 국내 ETF 자금흐름 · 레버리지/인버스 심리. 일봉 캐시라 조회는 거의 0 */
-  router.get("/flow", async (_req, res, next) => {
+  /* ETF 분석 묶음 (2026-09-17, etfFlow.ts) — 국내 ETF 자금흐름 · 레버리지/인버스 심리. 일봉 캐시라 조회는 거의 0. ?fresh=1 은 카드 ↻ */
+  router.get("/flow", async (req, res, next) => {
     try {
-      res.json(await etfFlow(client));
+      res.json(await etfFlow(client, { fresh: req.query.fresh === "1" }));
     } catch (err) {
       next(err);
     }
   });
-  router.get("/sentiment", async (_req, res, next) => {
+  router.get("/sentiment", async (req, res, next) => {
     try {
-      res.json(await etfSentiment(client));
+      res.json(await etfSentiment(client, { fresh: req.query.fresh === "1" }));
     } catch (err) {
       next(err);
     }

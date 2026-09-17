@@ -696,3 +696,10 @@ button.ov-li:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 .npr-jp.up { color: var(--up); }
 .npr-jp.down { color: var(--down); }
 .npr-jp.new { color: var(--accent); font-weight: 700; }
+
+/* 카드 ↻ (2026-09-17) — 머리줄 오른쪽 끝, 시각 옆. 누르면 잠깐 돈다 */
+.ov-refresh { border: 0; background: none; color: var(--ov-txt-3); cursor: pointer; font: inherit; font-size: 0.95rem; line-height: 1; padding: 0 0 0 4px; }
+.ov-refresh:hover { color: var(--text); }
+.ov-refresh.busy { animation: ov-spin 0.7s linear infinite; }
+@keyframes ov-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ov-refresh.busy { animation: none; opacity: 0.5; } }

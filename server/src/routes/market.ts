@@ -1142,9 +1142,9 @@ export function createMarketRouter(client: KiwoomClient): Router {
       next(err);
     }
   });
-  router.get("/us/etf-flow", async (_req, res, next) => {
+  router.get("/us/etf-flow", async (req, res, next) => {
     try {
-      res.json(await usEtfFlow());
+      res.json(await usEtfFlow({ fresh: req.query.fresh === "1" }));
     } catch (err) {
       next(err);
     }

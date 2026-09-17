@@ -731,12 +731,12 @@ export const api = {
       sectors?: { name: string; weight: number }[];
     }>(`/api/market/etf/${code}`),
   /** ETF 전체 시세 — ka40004, 서버 3분 캐시. 괴리율은 서버가 (현재가−NAV)/NAV 로 계산 */
-  etfList: () => getJson<{ rows: EtfListRow[]; at: number }>("/api/etf/list"),
-  /* ETF 분석 묶음 (2026-09-17, etfFlow.ts) — 일봉 캐시라 조회는 거의 0 */
+  etfList: (fresh = false) => getJson<{ rows: EtfListRow[]; at: number }>(`/api/etf/list${fresh ? "?fresh=1" : ""}`),
+  /* ETF 분석 묶음 (2026-09-17, etfFlow.ts) — 일봉 캐시라 조회는 거의 0. fresh 는 카드 ↻(30초 지난 캐시만 버림) */
   /** 국내 ETF 자금흐름 — 대표 ETF 30여 개의 1·5·20일 등락과 거래대금 배수 */
-  etfFlow: () => getJson<{ at: number; rows: EtfFlowRow[]; note: string; asOf: "오늘" | "어제" }>("/api/etf/flow"),
+  etfFlow: (fresh = false) => getJson<{ at: number; rows: EtfFlowRow[]; note: string; asOf: "오늘" | "어제" }>(`/api/etf/flow${fresh ? "?fresh=1" : ""}`),
   /** 레버리지·인버스 심리 — 인버스(+곱버스) ÷ 레버리지 거래대금, 20일 */
-  etfSentiment: () => getJson<{ at: number; sides: EtfSentimentSide[]; note: string }>("/api/etf/sentiment"),
+  etfSentiment: (fresh = false) => getJson<{ at: number; sides: EtfSentimentSide[]; note: string }>(`/api/etf/sentiment${fresh ? "?fresh=1" : ""}`),
   /** 이 종목을 담은 ETF — 서버 역인덱스(파일)를 읽는다. 조회 0회 */
   etfHolders: (code: string) =>
     getJson<{ holders: EtfHolder[]; builtAt: string; scanned: number }>(`/api/etf/holders/${code}`),
@@ -848,7 +848,8 @@ export const api = {
   algoScanStatus: (jobId: string) => getJson<AlgoJob>(`/api/algo/scan/status/${jobId}`),
   marketStatus: () => getJson<MarketStatus>("/api/overview/status"),
   marketLeaders: () => getJson<MarketLeaders>("/api/overview/leaders"),
-  overviewSection: <T>(name: string) => getJson<SectionResult<T>>(`/api/overview/section/${name}`),
+  /** fresh=1 은 카드 ↻ — 서버 주기를 기다리지 않고 지금 받는다 (2026-09-17) */
+  overviewSection: <T>(name: string, fresh = false) => getJson<SectionResult<T>>(`/api/overview/section/${name}${fresh ? "?fresh=1" : ""}`),
   indexDetail: (code: string, range: IndexRange) =>
     getJson<IndexDetailData>(`/api/overview/index/${code}?range=${range}`),
   flowIntraday: (date?: string) =>
@@ -1722,7 +1723,7 @@ export const api = {
   /** 업종 MAP(해외) — 한투 42업종 × 나스닥·뉴욕. 15분 캐시, 첫 로딩은 30초쯤 */
   usSectors: () => getJson<UsSectorMap>("/api/market/us/sectors"),
   /** ETF 자금흐름(해외) — 지수·섹터·채권/금/달러 ETF 스물의 1·5·20일 등락과 거래대금 배수 */
-  usEtfFlow: () => getJson<{ at: number; rows: UsEtfRow[]; stale: boolean }>("/api/market/us/etf-flow"),
+  usEtfFlow: (fresh = false) => getJson<{ at: number; rows: UsEtfRow[]; stale: boolean }>(`/api/market/us/etf-flow${fresh ? "?fresh=1" : ""}`),
   /** 인기·화제(해외) — 네이버 인기 + 야후 trending + 네이버 미국 종목토론(글 제목) */
   usBuzz: () => getJson<UsBuzz>("/api/market/us/buzz"),
   /** 실적·일정(해외) — 심볼들의 다음 실적 발표일·예상 EPS·배당락 (야후, 심볼별 6시간 캐시) */
