@@ -1719,6 +1719,8 @@ export const api = {
   /** 시세분석(해외) — 미국 순위판(거래대금·거래량·시가총액·상승·하락). 네이버 실시간, 거래소 합침 (2026-09-16) */
   usRank: (kind: UsRankKind, ex: "all" | "NASDAQ" | "NYSE" | "AMEX" = "all", minValue = 0) =>
     getJson<UsRankResult>(`/api/market/us-rank?kind=${kind}&ex=${ex}&minValue=${minValue}&limit=50`),
+  /** 돈의 흐름 「지금」 (2026-09-17, moneyNow.ts) — 판정 띠·돈이 가는 곳·사는 손·내 계좌·시간대 플랜. 60초 캐시, fresh 는 ↻ */
+  moneyNow: (fresh = false) => getJson<MoneyNow>(`/api/market/money-now${fresh ? "?fresh=1" : ""}`),
   /* ── 종목분석(해외) 묶음 (2026-09-17) — usMarket.ts. 한투 42업종 · 야후 ETF/트렌딩/일정 · 네이버 인기/종목토론(USA) ── */
   /** 업종 MAP(해외) — 한투 42업종 × 나스닥·뉴욕. 15분 캐시, 첫 로딩은 30초쯤 */
   usSectors: () => getJson<UsSectorMap>("/api/market/us/sectors"),
@@ -6264,6 +6266,73 @@ export interface UsRankRow {
   over: { session: "pre" | "after"; price: number | null; rate: number | null } | null;
   tradedAt: string | null;
 }
+/* ── 돈의 흐름 「지금」 (2026-09-17) — server/src/moneyNow.ts 의 모양 그대로 ── */
+export type MoneySlotKey = "night" | "pre" | "open" | "morning" | "lunch" | "afternoon" | "closing" | "auction" | "gap" | "after";
+export interface MoneyVerdictPart {
+  key: "flow" | "program" | "sentiment" | "turnover" | "thermo";
+  label: string;
+  sign: 1 | -1 | 0 | null;
+  text: string;
+}
+export interface MoneyWhereTheme {
+  key: string;
+  name: string;
+  changeRate: number;
+  m1: number | null;
+  tradeValue: number;
+  stocks: { code: string; name: string; changeRate: number | null }[];
+}
+export interface MoneyBuyerRow {
+  code: string;
+  name: string;
+  price: number;
+  rate: number | null;
+  value30: number | null;
+  boost: number | null;
+  boostKind: "30분" | "오늘";
+  strength: number | null;
+  todayValue: number | null;
+  tags: string[];
+  theme: string | null;
+}
+export interface MoneyAccountRow {
+  code: string;
+  name: string;
+  account: string;
+  isEtf: boolean;
+  qty: number;
+  price: number;
+  rate: number | null;
+  pnlRate: number | null;
+  valueMan: number | null;
+  rotation: "주도" | "부상" | "휴식" | null;
+  theme: string | null;
+  est: { time: string; fgn: number; orgn: number } | null;
+  boost: number | null;
+  strength: number | null;
+  tags: string[];
+  verdict: "in" | "out" | "quiet";
+  why: string;
+}
+export interface MoneyNow {
+  at: number;
+  stale: boolean;
+  slot: { key: MoneySlotKey; label: string; advice: string };
+  verdict: { kind: "in" | "out" | "rotate" | "unknown"; line: string; parts: MoneyVerdictPart[] };
+  where: {
+    fresh: MoneyWhereTheme[];
+    lead: MoneyWhereTheme[];
+    rest: MoneyWhereTheme[];
+    krEtf: { label: string; name: string; code: string; d1: number | null; volRatio: number | null }[];
+    usEtf: { symbol: string; name: string; d1: number | null; volRatio: number | null }[];
+    ready: boolean;
+  };
+  buyers: MoneyBuyerRow[];
+  account: { rows: MoneyAccountRow[]; kiwoomOk: boolean; manualOk: boolean; note: string };
+  plan: { slot: MoneySlotKey; title: string; items: { code?: string; name: string; text: string }[]; note: string };
+  errors: string[];
+}
+
 /* ── 종목분석(해외) 묶음 (2026-09-17) — server/src/usMarket.ts 의 모양 그대로 ── */
 export interface UsSectorStock {
   symbol: string;

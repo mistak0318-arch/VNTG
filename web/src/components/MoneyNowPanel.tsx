@@ -1,0 +1,277 @@
+import { useEffect, useState } from "react";
+import { api, type MoneyAccountRow, type MoneyBuyerRow, type MoneyNow, type MoneyWhereTheme } from "../api";
+
+/**
+ * **돈의 흐름 — 「지금」 탭** (2026-09-17, 벤티지: "직장인·단타·스윙·종배 트레이더에게 가장 귀중한 정보를 가장 효율적으로").
+ *
+ * 한 화면, 위에서 아래로 30초. 계산은 전부 서버(moneyNow.ts) — 여기는 그리기만.
+ *   ① 판정 띠  ② 돈이 가는 곳  ③ 지금 사는 손  ④ 내 계좌 렌즈  ⑤ 시간대 플랜
+ * 폰이 먼저다 — 칸을 세로로 쌓고, 표는 최소 열. 종목을 누르면 상세.
+ */
+const pct = (v: number | null | undefined, d = 1) => (v === null || v === undefined ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(d)}%`);
+const cls = (v: number | null | undefined) => (v === null || v === undefined || v === 0 ? "" : v > 0 ? "positive" : "negative");
+
+const KIND: Record<MoneyNow["verdict"]["kind"], { label: string; cls: string; icon: string }> = {
+  in: { label: "돈이 들어오는 장", cls: "in", icon: "🟢" },
+  out: { label: "돈이 빠지는 장", cls: "out", icon: "🔴" },
+  rotate: { label: "회전만 도는 장", cls: "rotate", icon: "🟡" },
+  unknown: { label: "판정 보류", cls: "", icon: "⚪" },
+};
+
+function ThemeChip({ t, onSelectStock }: { t: MoneyWhereTheme; onSelectStock?: (code: string, name: string) => void }) {
+  return (
+    <div className="mn-theme">
+      <b className={cls(t.changeRate)}>
+        {t.name} {pct(t.changeRate)}
+      </b>
+      <span className="pt-n">
+        {t.m1 !== null ? `한 달 ${pct(t.m1, 0)} · ` : ""}
+        {Math.round(t.tradeValue).toLocaleString("ko-KR")}억
+      </span>
+      <span className="mn-theme-stocks">
+        {t.stocks.map((s) => (
+          <button key={s.code} type="button" className="link-btn" onClick={() => onSelectStock?.(s.code, s.name)}>
+            {s.name} <em className={cls(s.changeRate)}>{pct(s.changeRate)}</em>
+          </button>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+function BuyerLine({ b, i, onSelectStock }: { b: MoneyBuyerRow; i: number; onSelectStock?: (code: string, name: string) => void }) {
+  return (
+    <button type="button" className="mn-row" onClick={() => onSelectStock?.(b.code, b.name)}>
+      <b className="mn-rank">{i + 1}</b>
+      <span className="mn-nm">
+        {b.name}
+        {b.theme && <i className="mn-theme-tag">{b.theme}</i>}
+      </span>
+      <em className={`num ${cls(b.rate)}`}>{pct(b.rate)}</em>
+      <span className="mn-boost" title={b.boostKind === "30분" ? "최근 30분 거래대금 ÷ 오늘 평균 30분 거래대금" : "오늘 거래대금 ÷ (20일 평균 × 시각별 진행률)"}>
+        ×{b.boost?.toFixed(1)} <i>{b.boostKind}</i>
+      </span>
+      <span className="mn-sub">
+        {b.strength !== null && <i className={b.strength >= 120 ? "hot" : ""}>강도 {Math.round(b.strength)}</i>}
+        {b.value30 !== null && <i>30분 {b.value30.toLocaleString("ko-KR")}억</i>}
+        {b.todayValue !== null && <i>오늘 {b.todayValue.toLocaleString("ko-KR")}억</i>}
+        {b.tags.map((t) => (
+          <i key={t} className="mn-tag">
+            {t}
+          </i>
+        ))}
+      </span>
+    </button>
+  );
+}
+
+const V: Record<MoneyAccountRow["verdict"], { label: string; cls: string }> = {
+  in: { label: "들어옴", cls: "in" },
+  out: { label: "빠짐", cls: "out" },
+  quiet: { label: "조용", cls: "" },
+};
+
+function AccountLine({ r, onSelectStock }: { r: MoneyAccountRow; onSelectStock?: (code: string, name: string) => void }) {
+  return (
+    <button type="button" className="mn-row mn-acc" onClick={() => onSelectStock?.(r.code, r.name)} title={r.why}>
+      <b className={`mn-verdict ${V[r.verdict].cls}`}>{V[r.verdict].label}</b>
+      <span className="mn-nm">
+        {r.name}
+        <i className="mn-theme-tag">{r.account}{r.isEtf ? " · ETF" : ""}</i>
+      </span>
+      <em className={`num ${cls(r.rate)}`}>{pct(r.rate)}</em>
+      <em className={`num mn-pnl ${cls(r.pnlRate)}`} title="보유 수익률">{r.pnlRate === null ? "" : pct(r.pnlRate)}</em>
+      <span className="mn-sub">
+        {r.rotation && <i className={`mn-rot ${r.rotation}`}>{r.rotation}{r.theme ? ` · ${r.theme}` : ""}</i>}
+        {r.est && (
+          <i className={r.est.fgn + r.est.orgn > 0 ? "hot" : r.est.fgn + r.est.orgn < 0 ? "cold" : ""}>
+            {r.est.time} 외인 {r.est.fgn > 0 ? "+" : ""}
+            {(r.est.fgn / 1000).toFixed(1)}천주 · 기관 {r.est.orgn > 0 ? "+" : ""}
+            {(r.est.orgn / 1000).toFixed(1)}천주
+          </i>
+        )}
+        {r.boost !== null && <i>{r.isEtf ? "배수" : "30분"} ×{r.boost.toFixed(1)}</i>}
+        {r.strength !== null && <i>강도 {Math.round(r.strength)}</i>}
+        {r.tags.map((t) => (
+          <i key={t} className="mn-tag">
+            {t}
+          </i>
+        ))}
+      </span>
+    </button>
+  );
+}
+
+export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
+  const [data, setData] = useState<MoneyNow | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = (fresh = false) => {
+    setBusy(true);
+    api
+      .moneyNow(fresh)
+      .then((r) => {
+        setData(r);
+        setError(null);
+      })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setBusy(false));
+  };
+  useEffect(() => {
+    load();
+    /* 서버가 60초 캐시라 60초면 충분하다 — 보이지 않을 땐 쉰다 */
+    const t = window.setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 60_000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  if (error && !data) return <div className="error-banner">{error}</div>;
+  if (!data) return <div className="empty">돈의 흐름을 재는 중… (처음엔 잔고·잠정치까지 10초쯤)</div>;
+
+  const k = KIND[data.verdict.kind];
+  const at = new Date(data.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+  const inRows = data.account.rows.filter((r) => r.verdict === "in");
+  const outRows = data.account.rows.filter((r) => r.verdict === "out");
+
+  return (
+    <div className="mn">
+      {/* ① 판정 띠 */}
+      <section className={`mn-verdict-card ${k.cls}`}>
+        <div className="mn-vhead">
+          <span className="mn-slot">{data.slot.label}</span>
+          <b className="mn-kind">
+            {k.icon} {k.label}
+          </b>
+          <span className="mn-at">
+            {at}
+            {data.stale ? " · 갱신 중" : ""}
+            <button type="button" className={`ov-refresh${busy ? " busy" : ""}`} onClick={() => load(true)} title="지금 다시 재기">
+              ↻
+            </button>
+          </span>
+        </div>
+        <div className="mn-line">{data.verdict.line}</div>
+        <div className="mn-parts">
+          {data.verdict.parts.map((p) => (
+            <span key={p.key} className={`mn-part ${p.sign === 1 ? "up" : p.sign === -1 ? "down" : p.sign === 0 ? "flat" : "na"}`} title={p.text}>
+              <i>{p.sign === 1 ? "▲" : p.sign === -1 ? "▼" : p.sign === 0 ? "–" : "?"}</i> {p.label}
+              <small>{p.text}</small>
+            </span>
+          ))}
+        </div>
+        <div className="mn-advice">🕒 {data.slot.advice}</div>
+      </section>
+
+      {/* ② 돈이 가는 곳 */}
+      <section className="card mn-card">
+        <h3>
+          돈이 가는 곳 <span className="usm-sub">테마 로테이션 · 국내 ETF · 어젯밤 미국</span>
+        </h3>
+        {!data.where.ready && <div className="pt-n">월간 누적이 아직 없어 로테이션 분류가 비어 있습니다 (마감 뒤 정리가 돌면 채워집니다)</div>}
+        <div className="mn-where">
+          <div className="mn-where-col">
+            <div className="mn-h">🚀 신규 부상 <i>한 달 조용했는데 오늘 튐 — 자리바꿈의 입구</i></div>
+            {data.where.fresh.length === 0 && <div className="pt-n">없음</div>}
+            {data.where.fresh.map((t) => (
+              <ThemeChip key={t.key} t={t} onSelectStock={onSelectStock} />
+            ))}
+          </div>
+          <div className="mn-where-col">
+            <div className="mn-h">🏁 주도 지속 <i>한 달을 끌어 왔고 오늘도</i></div>
+            {data.where.lead.length === 0 && <div className="pt-n">없음</div>}
+            {data.where.lead.map((t) => (
+              <ThemeChip key={t.key} t={t} onSelectStock={onSelectStock} />
+            ))}
+          </div>
+          <div className="mn-where-col">
+            <div className="mn-h">😴 주도 휴식 <i>끌어 왔는데 오늘 쉼 — 눌림인지 이탈인지</i></div>
+            {data.where.rest.length === 0 && <div className="pt-n">없음</div>}
+            {data.where.rest.map((t) => (
+              <ThemeChip key={t.key} t={t} onSelectStock={onSelectStock} />
+            ))}
+          </div>
+        </div>
+        <div className="mn-etfline">
+          {data.where.krEtf.length > 0 && (
+            <span>
+              🇰🇷 ETF{" "}
+              {data.where.krEtf.map((e) => (
+                <button key={e.code} type="button" className="mfp-chip" onClick={() => onSelectStock?.(e.code, e.name)} title={e.name}>
+                  {e.label} <em className={`num ${cls(e.d1)}`}>{pct(e.d1)}</em>
+                  {e.volRatio !== null && e.volRatio >= 1.5 && <em className="hot"> ×{e.volRatio.toFixed(1)}</em>}
+                </button>
+              ))}
+            </span>
+          )}
+          {data.where.usEtf.length > 0 && (
+            <span>
+              🇺🇸 어젯밤{" "}
+              {data.where.usEtf.map((e) => (
+                <span key={e.symbol} className="mfp-chip" title={e.symbol}>
+                  {e.name} <em className={`num ${cls(e.d1)}`}>{pct(e.d1)}</em>
+                </span>
+              ))}
+            </span>
+          )}
+        </div>
+      </section>
+
+      {/* ③ 지금 사는 손 */}
+      <section className="card mn-card">
+        <h3>
+          지금 사는 손 TOP {data.buyers.length} <span className="usm-sub">30분 거래대금 배수 × 체결강도 — 실시간 175 + 거래대금 상위 100</span>
+        </h3>
+        {data.buyers.length === 0 && <div className="pt-n">배수 1.3 을 넘는 종목이 없습니다 — 장 밖이거나 조용한 장</div>}
+        <div className="mn-list">
+          {data.buyers.map((b, i) => (
+            <BuyerLine key={b.code} b={b} i={i} onSelectStock={onSelectStock} />
+          ))}
+        </div>
+        <div className="table-note">배수 = 최근 30분 거래대금 ÷ 오늘 평균 30분 거래대금(실시간 종목) 또는 오늘 거래대금 ÷ (20일 평균 × 시각별 진행률)(순위판 종목). 체결강도 120↑ 는 사는 쪽이 세다. 오늘 30억 미만은 뺀다. 신호등 점수엔 안 들어갑니다.</div>
+      </section>
+
+      {/* ④ 내 계좌 렌즈 */}
+      <section className="card mn-card">
+        <h3>
+          내 계좌 렌즈{" "}
+          <span className="usm-sub">
+            {data.account.rows.length}종목 · 들어옴 {inRows.length} · 빠짐 {outRows.length}
+          </span>
+        </h3>
+        {data.account.rows.length === 0 && <div className="pt-n">{data.account.note}</div>}
+        <div className="mn-list">
+          {data.account.rows.map((r) => (
+            <AccountLine key={`${r.account}:${r.code}`} r={r} onSelectStock={onSelectStock} />
+          ))}
+        </div>
+        {data.account.rows.length > 0 && <div className="table-note">{data.account.note}. 「들어옴」 = 잠정 순매수이거나 30분 배수 1.3↑에 오르는 중 · 「빠짐」 = 잠정 순매도에 내리는 중. 보는 자리이지 매매 지시가 아닙니다.</div>}
+      </section>
+
+      {/* ⑤ 시간대 플랜 */}
+      <section className="card mn-card mn-plan">
+        <h3>
+          {data.plan.title} <span className="usm-sub">지금 할 일만</span>
+        </h3>
+        {data.plan.items.length === 0 && <div className="pt-n">지금 시각엔 볼 것이 없습니다</div>}
+        <ol className="mn-plan-list">
+          {data.plan.items.map((it, i) => (
+            <li key={`${it.code ?? it.name}-${i}`}>
+              {it.code ? (
+                <button type="button" className="link-btn" onClick={() => onSelectStock?.(it.code!, it.name)}>
+                  {it.name}
+                </button>
+              ) : (
+                <b>{it.name}</b>
+              )}{" "}
+              <span className="pt-n">{it.text}</span>
+            </li>
+          ))}
+        </ol>
+        {data.plan.note && <div className="table-note">{data.plan.note}</div>}
+      </section>
+      {data.errors.length > 0 && <div className="pt-n">못 받은 재료: {data.errors.join(" · ")}</div>}
+    </div>
+  );
+}

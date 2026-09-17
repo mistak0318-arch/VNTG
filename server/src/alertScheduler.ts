@@ -4,6 +4,7 @@ import type { KiwoomClient } from "./kiwoomClient.js";
 import { logEvents } from "./eventLog.js";
 import { pruneLiveAlerts, runLiveAlerts } from "./liveAlerts.js";
 import { runNaverAlerts } from "./naverAlerts.js";
+import { runMoneyNowBriefing } from "./moneyNowBriefing.js";
 import { pruneStopWatch, runStopWatch } from "./stopWatch.js";
 import { getActiveSuper } from "./superSignal.js";
 import { hasDedicatedChannel, sendTelegram } from "./telegram.js";
@@ -169,6 +170,8 @@ export async function runAlertScan(
 async function tick(client: KiwoomClient): Promise<void> {
   /* 경제지표 30분 전 · 목표주가 변경 ∩ 내 종목 — 이미 받는 자료라 조회가 없다 (2026-09-16) */
   void runNaverAlerts().catch((e) => console.warn("[alert] 네이버 알림 실패 —", e instanceof Error ? e.message : e));
+  /* 돈의 흐름 브리핑 — 09:35·11:30·13:30·15:05 하루 네 번, 리포트 방 (2026-09-17) */
+  void runMoneyNowBriefing(client).catch((e) => console.warn("[alert] 돈의 흐름 브리핑 실패 —", e instanceof Error ? e.message : e));
   if (!isMarketHours()) return;
 
   /*

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { MarketPulsePanel } from "../components/MarketPulsePanel";
+import { MoneyNowPanel } from "../components/MoneyNowPanel";
 import { BriefingPage } from "./BriefingPage";
 import { LeaderScanPanel } from "../components/LeaderScanPanel";
 import { EventPlayPanel } from "../components/EventPlayPanel";
@@ -30,6 +31,7 @@ import { useSwipeTabs, visualOrder } from "../useSwipeTabs";
  */
 
 type FlowTab =
+  | "now"
   | "briefing"
   | "pulse"
   | "rotation"
@@ -41,6 +43,12 @@ type FlowTab =
   | "trade";
 
 export const FLOW_TABS: { key: FlowTab; label: string }[] = [
+  /*
+   * **「지금」이 첫 탭** (2026-09-17 — 벤티지: "진짜 돈의 흐름을 추적하는 기능으로, 직장인·단타·스윙·종배 트레이더에게").
+   * 메뉴 이름도 「돈의 흐름」으로. 판정 띠 · 돈이 가는 곳 · 사는 손 · 내 계좌 · 시간대 플랜 — 30초에 「지금 돈이
+   * 어디로 가고 나는 뭘 하나」. 나머지 탭은 파고드는 근거로 뒤에 남는다(브리핑·맥박·로테이션·자금흐름·수출).
+   */
+  { key: "now", label: "지금" },
   /*
    * 마켓 브리핑과 합쳤다 (2026-08-28 — 「시황분석하는 메뉴가 너무 많아」).
    * 브리핑(훑고 끝내는 결론)이 첫 탭, 나머지(파고드는 근거)가 뒤를 잇는다.
@@ -217,8 +225,8 @@ function MoneyFlowTab({ onSelectStock }: { onSelectStock?: (code: string, name: 
 }
 
 export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: string, name: string) => void }) {
-  /* 브리핑이 기본이다 — 이 메뉴가 홈이고, 열자마자 3초 안에 「오늘 어떤가」가 목적이다 */
-  const [tab, setTab] = useState<FlowTab>("briefing");
+  /* 「지금」이 기본이다 (2026-09-17) — 열자마자 30초 안에 「지금 돈이 어디로 가고 나는 뭘 하나」 */
+  const [tab, setTab] = useState<FlowTab>("now");
   const [reloadKey, setReloadKey] = useState(0);
   /* 탭 순서 — 설정 > 서브탭 순서에서 바꾼다(서버 저장) */
   const tabOrder = useCardOrder(
@@ -234,14 +242,14 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
 
   return (
     <div {...swipe}>
-      {/* 브리핑 탭은 제 새로고침 막대를 갖고 있다 — 겹쳐 그리면 두 줄이 된다 */}
-      {tab !== "briefing" && <RefreshBar onRefresh={() => setReloadKey((k) => k + 1)} />}
+      {/* 브리핑·지금 탭은 제 새로고침을 갖고 있다 — 겹쳐 그리면 두 줄이 된다 */}
+      {tab !== "briefing" && tab !== "now" && <RefreshBar onRefresh={() => setReloadKey((k) => k + 1)} />}
 
       {/*
         신호등은 맥박 탭 안에 들어갔다(위험 카드). 여기서 또 띄우면 같은 값이 두 번 보인다.
-        브리핑도 제 온도계가 있다. 다른 탭에서는 「지금 시장이 어떤 상태인가」가 먼저다.
+        브리핑도 제 온도계가 있고, 「지금」은 판정 띠가 그 자리다. 다른 탭에서는 「지금 시장이 어떤 상태인가」가 먼저다.
       */}
-      {tab !== "pulse" && tab !== "briefing" && <MarketSignalPanel />}
+      {tab !== "pulse" && tab !== "briefing" && tab !== "now" && <MarketSignalPanel />}
 
       <nav className="detail-tabs">
         {FLOW_TABS.map((t) => (
@@ -257,6 +265,7 @@ export function MarketFlowPage({ onSelectStock }: { onSelectStock?: (code: strin
       </nav>
 
       <div key={`${tab}-${reloadKey}`}>
+        {tab === "now" && <MoneyNowPanel onSelectStock={onSelectStock} />}
         {tab === "briefing" && <BriefingPage onSelectStock={onSelectStock ?? (() => {})} />}
         {tab === "pulse" && <MarketPulsePanel onSelectStock={onSelectStock} />}
         {tab === "rotation" && (
