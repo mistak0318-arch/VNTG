@@ -19477,7 +19477,8 @@ tr.gv-strong td:first-child { color: var(--text); }
 .mnw-verdict { grid-area: v; font-size: 0.7rem; padding: 2px 6px; border-radius: 6px; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
 .mnw-verdict.in { background: color-mix(in srgb, var(--red) 16%, transparent); color: var(--red); }
 .mnw-verdict.out { background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); }
-.mnw-pnl { grid-area: pnl; font-size: 0.72rem !important; opacity: 0.8; }
+/* 계좌 줄엔 em.num 이 둘(등락·수익률)이라 위 `.mnw-row > em.num { grid-area: rate }` 가 둘 다 잡아 겹쳤다 (2026-09-17 캡처) */
+.mnw-row > em.mnw-pnl { grid-area: pnl; font-size: 0.72rem; opacity: 0.8; }
 .mnw-rot { padding: 0 5px; border-radius: 999px; background: var(--panel-2); }
 .mnw-rot.부상 { color: var(--red); }
 .mnw-rot.주도 { color: var(--accent); }
