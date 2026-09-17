@@ -19424,3 +19424,6 @@ tr.gv-strong td:first-child { color: var(--text); }
 /* 데일리 리포트 안의 돈의 방향 — 카드 몸통(ov-card-b) 여백을 리포트 결에 맞춘다 (2026-09-17) */
 .report-mfp .ov-card-b { padding: 6px 0; }
 .report-mfp .mfp-cols { max-width: 900px; }
+
+/* 구성종목 시트 — 실시간으로 덮인 줄의 점 (2026-09-17) */
+.live-mark { display: inline-block; margin-right: 4px; font-size: 0.55rem; color: var(--green); vertical-align: 2px; }

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSheetBack } from "../../useSheetBack";
 import { api, fmtNum, normalizeStockCode, signClass, type StockRow } from "../../api";
+import { fid, krxOverlayLive, useRealtime } from "../../useRealtime";
 import { SortableTh, useSortableTable } from "../../useSortableTable";
 import { WatchStar } from "../../useWatchedCodes";
 import { SuperMark } from "../../useSuperMarks";
@@ -41,7 +42,47 @@ export function ConstituentSheet({
   const [items, setItems] = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const sort = useSortableTable(items);
+  /*
+   * **실시간으로 덮는다** (2026-09-17 — 벤티지: "태그 구성종목 시세랑 종목분석 시세가 안 맞는다").
+   *
+   * 내 태그는 전종목 스냅샷(장중 10분 캐시)에서, 테마·업종은 키움 구성종목 캐시에서 온 값이라 열 때 이미
+   * 몇 분 묵은 시세였다 — 아모센스가 VI 로 +10% 인데 여기는 +2.95% 였다. 시세분석·관심종목과 같은 길로
+   * 실시간(0B) 값을 덮는다. 국내 여섯 자리 코드만, 위 40종목까지(임시 구독 정원). 실시간이 안 오는 종목은 그대로.
+   */
+  const liveKeys = useMemo(
+    () =>
+      krxOverlayLive()
+        ? items
+            .map((s) => normalizeStockCode(s.code))
+            .filter((c) => /^\d{6}$/.test(c))
+            .slice(0, 40)
+            .map((c) => `0B:${c}`)
+        : [],
+    [items],
+  );
+  const rt = useRealtime(liveKeys, 1500);
+  const { liveItems, liveCodes } = useMemo(() => {
+    const codes = new Set<string>();
+    const rows = items.map((s) => {
+      const code = normalizeStockCode(s.code);
+      const v = rt.healthy ? rt.values[`0B:${code}`] : null;
+      if (!v || Date.now() - v.at > 90_000) return s;
+      const p = fid(v, "10");
+      if (p === null || p === 0) return s;
+      const price = Math.abs(p);
+      codes.add(code);
+      return {
+        ...s,
+        price,
+        change: fid(v, "11") ?? s.change,
+        changeRate: fid(v, "12") ?? s.changeRate,
+        /* 시총은 상장주식수 × 현재가 — 가격이 바뀐 만큼만 같이 민다 */
+        marketCap: s.marketCap && s.price ? Math.round((s.marketCap * price) / s.price) : s.marketCap,
+      };
+    });
+    return { liveItems: rows, liveCodes: codes };
+  }, [items, rt]);
+  const sort = useSortableTable(liveItems);
 
   useEffect(() => {
     let cancelled = false;
@@ -190,7 +231,10 @@ export function ConstituentSheet({
                         등락률만 쓴다). 그때 0 을 찍으면 **값이 0원인 것처럼 보인다** —
                         모르는 것은 「-」로 둔다.
                       */}
-                      <td>{s.price ? fmtNum(s.price) : "-"}</td>
+                      <td>
+                        {liveCodes.has(code) && <span className="live-mark" title="실시간 체결값">●</span>}
+                        {s.price ? fmtNum(s.price) : "-"}
+                      </td>
                       <td className={signClass(s.change)}>{s.price ? fmtNum(s.change) : "-"}</td>
                       <td className={signClass(s.changeRate)}>
                         {s.changeRate > 0 ? "+" : ""}
@@ -205,6 +249,11 @@ export function ConstituentSheet({
             <div className="table-note">
               {items.length}개 종목 · 시가총액 큰 순 · 시가총액 = 상장주식수 × 현재가 (억원) · 종목을 누르면 상세로
               이동합니다
+              {liveCodes.size > 0
+                ? ` · ● ${liveCodes.size}종목은 실시간 체결값, 나머지는 받아 둔 시세`
+                : liveKeys.length > 0
+                  ? " · 받아 둔 시세(몇 분 전) — 실시간이 붙으면 ● 로 바뀝니다"
+                  : ""}
             </div>
           </div>
         )}
