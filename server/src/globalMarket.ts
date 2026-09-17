@@ -396,7 +396,17 @@ async function fetchOne(target: {
      * 됐다(미국 노동절 연휴 뒤 금리 넷이 전부 0.000%p). 5일 일봉을 받아 「오늘 세션 전 마지막 종가」를
      * 직접 집는다 — 장중이든 마감 뒤든 같은 답이 나온다. 호출 수는 같다(한 번).
      */
-    const url = `${YAHOO_BASE}/${encodeURIComponent(target.symbol)}?range=5d&interval=1d`;
+    /*
+     * **24시간 도는 것(선물·달러지수)은 시간봉으로 받는다** (2026-09-18 — 벤티지: "7시 지나 장중인데 인베스팅은
+     * 마이너스, 우리는 플러스. 어제 장중 기준으로 보이는 것 같다").
+     *
+     * 맞았다. 야후 선물 일봉은 **뉴욕 자정(한국 13:00)** 에 넘어가는데 CME 새 세션은 **ET 18:00(한국 07:00)** 에
+     * 시작한다. 그 사이(한국 07:00~13:00)엔 「지금 값이 든 봉」이 아직 어제 봉이라, 그 앞 봉(그제 종가)과 견줘
+     * 어제 세션의 등락을 통째로 오늘 것처럼 보였다(ES 실측: 그제 7556.5 → 지금 7697.75 = +1.87%, 인베스팅은
+     * 어제 정산가 대비 −). 일봉으로는 「ET 17:00 마감 종가」를 집을 수 없어 시간봉에서 직접 집는다.
+     */
+    const is24h = /=F$/i.test(target.symbol) || /^DX-Y\.NYB$/i.test(target.symbol);
+    const url = `${YAHOO_BASE}/${encodeURIComponent(target.symbol)}?range=5d&interval=${is24h ? "60m" : "1d"}`;
     const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     if (!res.ok) {
       void recordApiCall("yahoo", target.symbol, res.status === 429 ? "rateLimited" : "failed");
@@ -437,7 +447,27 @@ async function fetchOne(target: {
     let prev = NaN;
     const ts = r0?.timestamp ?? [];
     const closes = r0?.indicators?.quote?.[0]?.close ?? [];
-    if (mt) {
+    if (mt && is24h) {
+      /*
+       * 세션 시작 = 체결 시각 이전의 가장 가까운 **ET 18:00** (서머타임은 Intl 이 안다). 그 앞 마지막 시간봉의
+       * 종가가 직전 세션 종가다(ET 16:00 봉 = 16~17시). 주말엔 체결 시각이 금요일 마감이라 목요일 종가가 잡힌다.
+       */
+      const p = Object.fromEntries(
+        new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+          .formatToParts(new Date(mt * 1000))
+          .map((x) => [x.type, x.value]),
+      );
+      const h = Number(p.hour) % 24;
+      const since18 = ((h - 18 + 24) % 24) * 3600 + Number(p.minute) * 60 + Number(p.second);
+      const sessionStart = mt - since18;
+      for (let i = ts.length - 1; i >= 0; i--) {
+        if (ts[i] >= sessionStart) continue;
+        const c = closes[i];
+        if (c === null || c === undefined || !Number.isFinite(c)) continue;
+        prev = c;
+        break;
+      }
+    } else if (mt) {
       let cur = ts.length - 1;
       while (cur >= 0 && ts[cur] > mt + 60) cur--;
       const from = cur >= 0 && mt - ts[cur] < 24 * 3600 ? cur - 1 : cur;
