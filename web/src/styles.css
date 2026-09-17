@@ -19496,3 +19496,19 @@ tr.gv-strong td:first-child { color: var(--text); }
 .mnw-acc-cnt i { font-style: normal; font-size: 0.7rem; padding: 1px 6px; border-radius: 999px; background: var(--panel); color: var(--muted); }
 .mnw-acc-cnt i.in { color: var(--red); }
 .mnw-acc-cnt i.out { color: var(--blue); }
+
+/* 「지금」 — 추세·성적표 줄, 사는 손 세 갈래, 교차 (2026-09-17 저녁) */
+.mnw-trend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 8px; font-size: 0.74rem; }
+.mnw-trend-line { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.mnw-trend-line em { font-style: normal; font-weight: 600; }
+.mnw-trend-line em i { font-style: normal; color: var(--muted); margin: 0 4px; }
+.mnw-trend-line em.k-in { color: var(--red); }
+.mnw-trend-line em.k-out { color: var(--blue); }
+.mnw-trend-line em.k-rotate { color: var(--warn); }
+.mnw-record { color: var(--muted); }
+.mnw-bucket + .mnw-bucket { margin-top: 10px; }
+.mnw-bucket .mnw-h { padding: 4px 8px; border-radius: 8px; background: var(--panel-2); }
+.mnw-bucket.quiet .mnw-h { color: var(--accent); }
+.mnw-bucket.hot .mnw-h { color: var(--muted); }
+.mnw-bucket.hot .mnw-row { opacity: 0.75; }
+.mnw-cross { margin-bottom: 10px; padding: 6px 8px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); }

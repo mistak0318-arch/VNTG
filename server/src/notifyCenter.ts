@@ -109,7 +109,9 @@ export type NoticeSource =
   /* 2026-09-16 — 조건식 자동 실행 · 경제지표 30분 전 · 목표주가 변경 */
   | "condAuto"
   | "econ"
-  | "research";
+  | "research"
+  /* 2026-09-17 저녁 — 돈의 흐름: 보유 종목이 들어옴↔빠짐으로 뒤집힐 때 */
+  | "moneyFlow";
 
 /**
  * 화면이 그리는 목록 — **하드코딩하면 서버와 갈린다.**
@@ -230,6 +232,13 @@ export const NOTICE_SOURCES: {
     group: "order",
     label: "손절선 감시",
     hint: "적어 둔 손절선이 깨졌을 때",
+    def: true,
+  },
+  {
+    key: "moneyFlow",
+    group: "mine",
+    label: "돈의 흐름 — 내 종목 뒤집힘",
+    hint: "보유 종목(키움·수동 계좌)에 돈이 들어옴↔빠짐으로 바뀔 때 — 장중 5분마다 재고 종목당 하루 2번까지. ETF 는 자금흐름 배수 1.5↑ 일 때만 (2026-09-17)",
     def: true,
   },
   {

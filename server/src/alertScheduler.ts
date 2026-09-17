@@ -5,6 +5,7 @@ import { logEvents } from "./eventLog.js";
 import { pruneLiveAlerts, runLiveAlerts } from "./liveAlerts.js";
 import { runNaverAlerts } from "./naverAlerts.js";
 import { runMoneyNowBriefing } from "./moneyNowBriefing.js";
+import { moneyNow } from "./moneyNow.js";
 import { pruneStopWatch, runStopWatch } from "./stopWatch.js";
 import { getActiveSuper } from "./superSignal.js";
 import { hasDedicatedChannel, sendTelegram } from "./telegram.js";
@@ -173,6 +174,14 @@ async function tick(client: KiwoomClient): Promise<void> {
   /* 돈의 흐름 브리핑 — 09:35·11:30·13:30·15:05 하루 네 번, 리포트 방 (2026-09-17) */
   void runMoneyNowBriefing(client).catch((e) => console.warn("[alert] 돈의 흐름 브리핑 실패 —", e instanceof Error ? e.message : e));
   if (!isMarketHours()) return;
+
+  /*
+   * 돈의 흐름 뒤집힘 감시 (2026-09-17 저녁) — 5분마다 「지금」을 다시 재면 보유 종목 판정이 바뀐 것을 moneyNow 가
+   * 알림종·시그널 방으로 보낸다. 화면을 안 열어도 돌아야 하는 것이라 여기서 부른다. 60초 캐시라 화면과 겹쳐도 한 번만 잰다.
+   */
+  if (new Date(Date.now() + 9 * 3600_000).getUTCMinutes() % 5 === 0) {
+    void moneyNow(client).catch((e) => console.warn("[alert] 돈의 흐름 감시 실패 —", e instanceof Error ? e.message : e));
+  }
 
   /*
    * **손절 감시는 시그널 간격을 안 따른다.**

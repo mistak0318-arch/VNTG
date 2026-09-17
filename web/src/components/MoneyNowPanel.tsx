@@ -173,6 +173,26 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
             </span>
           ))}
         </div>
+        {/* 추세 + 성적표 (2026-09-17 저녁 — "판정을 믿을 근거가 없다") */}
+        {(data.trend.length > 1 || data.record.days > 0) && (
+          <div className="mnw-trend">
+            {data.trend.length > 1 && (
+              <span className="mnw-trend-line" title="오늘 판정이 10분마다 어떻게 바뀌었나">
+                {data.trend.slice(-6).map((t, i) => (
+                  <em key={t.hhmm} className={`k-${t.kind}`}>
+                    {i > 0 && <i>→</i>}
+                    {t.hhmm} {t.kind === "in" ? "들어옴" : t.kind === "out" ? "빠짐" : t.kind === "rotate" ? "회전" : "?"}
+                  </em>
+                ))}
+              </span>
+            )}
+            <span className="mnw-record" title={data.record.note}>
+              {data.record.days > 0
+                ? `📋 판정 성적 ${data.record.days}일 — 10:00 ${data.record.n1000 > 0 ? `${Math.round((data.record.hit1000 / data.record.n1000) * 100)}%` : "–"} · 13:30 ${data.record.n1330 > 0 ? `${Math.round((data.record.hit1330 / data.record.n1330) * 100)}%` : "–"}`
+                : "📋 판정 성적표는 오늘부터 쌓입니다"}
+            </span>
+          </div>
+        )}
         <div className="mnw-advice">🕒 {data.slot.advice}</div>
       </section>
 
@@ -230,17 +250,32 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
         </div>
       </section>
 
-      {/* ③ 지금 사는 손 */}
+      {/* ③ 지금 사는 손 — 세 갈래 (2026-09-17 저녁: 이미 튄 종목이 1위면 매수 목록이 아니라 추격 금지 목록이다) */}
       <section className="card mnw-card">
         <h3>
-          지금 사는 손 TOP {data.buyers.length} <span className="usm-sub">30분 거래대금 배수 × 체결강도 — 실시간 175 + 거래대금 상위 100</span>
+          지금 사는 손 <span className="usm-sub">30분 거래대금 배수 × 체결강도 — 실시간 175 + 거래대금 상위 100</span>
         </h3>
-        {data.buyers.length === 0 && <div className="pt-n">배수 1.3 을 넘는 종목이 없습니다 — 장 밖이거나 조용한 장</div>}
-        <div className="mnw-list">
-          {data.buyers.map((b, i) => (
-            <BuyerLine key={b.code} b={b} i={i} onSelectStock={onSelectStock} />
-          ))}
-        </div>
+        {data.buckets.quiet.length + data.buckets.breakout.length + data.buckets.hot.length === 0 && <div className="pt-n">배수 1.2 를 넘는 종목이 없습니다 — 장 밖이거나 조용한 장</div>}
+        {(
+          [
+            { key: "quiet", icon: "🧲", title: "조용히 담는 중", hint: "등락 −1~+3% 인데 돈이 붙는다 — 단타·스윙이 볼 자리", rows: data.buckets.quiet },
+            { key: "breakout", icon: "🚪", title: "돌파 임박", hint: "60일 고가 −3% 안, 아직 +5% 전", rows: data.buckets.breakout },
+            { key: "hot", icon: "🔥", title: "이미 튐 — 추격 금지", hint: "+5% 이상이거나 VI", rows: data.buckets.hot },
+          ] as const
+        ).map((b) =>
+          b.rows.length === 0 ? null : (
+            <div key={b.key} className={`mnw-bucket ${b.key}`}>
+              <div className="mnw-h">
+                {b.icon} {b.title} <i>{b.hint}</i>
+              </div>
+              <div className="mnw-list">
+                {b.rows.map((r, i) => (
+                  <BuyerLine key={r.code} b={r} i={i} onSelectStock={onSelectStock} />
+                ))}
+              </div>
+            </div>
+          ),
+        )}
         <div className="table-note">배수 = 최근 30분 거래대금 ÷ 오늘 평균 30분 거래대금(실시간 종목) 또는 오늘 거래대금 ÷ (20일 평균 × 시각별 진행률)(순위판 종목). 체결강도 120↑ 는 사는 쪽이 세다. 오늘 30억 미만은 뺀다. 신호등 점수엔 안 들어갑니다.</div>
       </section>
 
@@ -285,6 +320,24 @@ export function MoneyNowPanel({ onSelectStock }: { onSelectStock?: (code: string
         <h3>
           {data.plan.title} <span className="usm-sub">지금 할 일만</span>
         </h3>
+        {data.plan.cross && (
+          <div className="mnw-cross">
+            <div className="mnw-h">
+              ⚡ 교차 <i>종배 후보 ∩ 사는 손 ∩ 마크(슈퍼·쌍끌이·외인3칸) — 세 눈이 겹치는 것만</i>
+            </div>
+            {data.plan.cross.length === 0 && <div className="pt-n">지금은 겹치는 종목이 없습니다</div>}
+            <ol className="mnw-plan-list">
+              {data.plan.cross.map((it) => (
+                <li key={`x-${it.code ?? it.name}`}>
+                  <button type="button" className="link-btn" onClick={() => it.code && onSelectStock?.(it.code, it.name)}>
+                    {it.name}
+                  </button>{" "}
+                  <span className="pt-n">{it.text}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
         {data.plan.items.length === 0 && <div className="pt-n">지금 시각엔 볼 것이 없습니다</div>}
         <ol className="mnw-plan-list">
           {data.plan.items.map((it, i) => (

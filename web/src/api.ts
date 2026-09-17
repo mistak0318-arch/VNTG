@@ -6294,6 +6294,26 @@ export interface MoneyBuyerRow {
   todayValue: number | null;
   tags: string[];
   theme: string | null;
+  high60: number | null;
+}
+export interface MoneyBuyerBuckets {
+  quiet: MoneyBuyerRow[];
+  breakout: MoneyBuyerRow[];
+  hot: MoneyBuyerRow[];
+}
+export interface MoneyVerdictPoint {
+  hhmm: string;
+  kind: "in" | "out" | "rotate" | "unknown";
+  score: number;
+}
+export interface MoneyVerdictRecord {
+  days: number;
+  hit1000: number;
+  hit1330: number;
+  n1000: number;
+  n1330: number;
+  today: { t1000: "in" | "out" | "rotate" | "unknown" | null; t1330: "in" | "out" | "rotate" | "unknown" | null };
+  note: string;
 }
 export interface MoneyAccountRow {
   code: string;
@@ -6319,6 +6339,9 @@ export interface MoneyNow {
   stale: boolean;
   slot: { key: MoneySlotKey; label: string; advice: string };
   verdict: { kind: "in" | "out" | "rotate" | "unknown"; line: string; parts: MoneyVerdictPart[] };
+  trend: MoneyVerdictPoint[];
+  record: MoneyVerdictRecord;
+  buckets: MoneyBuyerBuckets;
   where: {
     fresh: MoneyWhereTheme[];
     lead: MoneyWhereTheme[];
@@ -6329,7 +6352,7 @@ export interface MoneyNow {
   };
   buyers: MoneyBuyerRow[];
   account: { rows: MoneyAccountRow[]; kiwoomOk: boolean; manualOk: boolean; note: string };
-  plan: { slot: MoneySlotKey; title: string; items: { code?: string; name: string; text: string }[]; note: string };
+  plan: { slot: MoneySlotKey; title: string; items: { code?: string; name: string; text: string }[]; note: string; cross?: { code?: string; name: string; text: string }[] };
   errors: string[];
 }
 

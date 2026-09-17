@@ -28,6 +28,13 @@ import { loadCloseBetScan } from "./closeBetScan.js";
 import { indexDetail } from "./indexDetail.js";
 import { getStockIndex } from "./stockListCache.js";
 import { etfAll } from "./routes/etf.js";
+import { readFile, writeFile, appendFile, mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { pushNotice, stockLink } from "./notifyCenter.js";
+import { sendTelegram } from "./telegram.js";
+
+const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "data");
 
 /* ═══════════════ 모양 ═══════════════ */
 
@@ -79,6 +86,20 @@ export interface BuyerRow {
   tags: string[];
   /** 속한 로테이션 테마 (있으면) */
   theme: string | null;
+  /** 60일 고가 대비 위치(%) — 마크 파일(어제 마감) */
+  high60: number | null;
+}
+
+/**
+ * 사는 손 세 갈래 (2026-09-17 저녁 — "이미 튄 종목이 1위면 추격 금지 목록이지 매수 목록이 아니다").
+ *   quiet    — 🧲 조용히 담는 중: 등락 −1~+3% 인데 배수 1.3↑·체결강도 105↑ — 단타·스윙이 볼 자리
+ *   breakout — 🚪 돌파 임박: 60일 고가 −3% 안, 아직 +5% 전
+ *   hot      — 🔥 이미 튐: +5% 이상이거나 VI — 추격 금지
+ */
+export interface BuyerBuckets {
+  quiet: BuyerRow[];
+  breakout: BuyerRow[];
+  hot: BuyerRow[];
 }
 
 export type FlowVerdict = "in" | "out" | "quiet";
@@ -117,6 +138,26 @@ export interface Plan {
   title: string;
   items: PlanItem[];
   note: string;
+  /** 14:30 교차 — 종배 후보 ∩ 사는 손 ∩ 마크(슈퍼·쌍끌이·외인3칸). 마감 전에만 */
+  cross?: PlanItem[];
+}
+
+/** 오늘 판정 추세 한 점 */
+export interface VerdictPoint {
+  hhmm: string;
+  kind: Verdict["kind"];
+  score: number;
+}
+/** 판정 성적표 — 10:00·13:30 판정 vs 그날 코스피 마감 */
+export interface VerdictRecord {
+  /** 채점한 날 수 */
+  days: number;
+  hit1000: number;
+  hit1330: number;
+  n1000: number;
+  n1330: number;
+  today: { t1000: Verdict["kind"] | null; t1330: Verdict["kind"] | null };
+  note: string;
 }
 
 export interface MoneyNow {
@@ -124,6 +165,9 @@ export interface MoneyNow {
   stale: boolean;
   slot: Slot;
   verdict: Verdict;
+  trend: VerdictPoint[];
+  record: VerdictRecord;
+  buckets: BuyerBuckets;
   where: {
     fresh: WhereTheme[];
     lead: WhereTheme[];
@@ -203,6 +247,111 @@ function signed(v: number): string {
 }
 
 /* ═══════════════ ① 판정 ═══════════════ */
+
+let lastScore = 0;
+
+/* ── 판정 기록 · 추세 · 성적표 (2026-09-17 저녁 — "판정을 믿을 근거가 없다") ── */
+const VERDICT_FILE = join(DATA_DIR, "moneyNowVerdicts.jsonl");
+interface VerdictLine {
+  day: string;
+  hhmm: string;
+  kind: Verdict["kind"];
+  score: number;
+}
+let verdictLines: VerdictLine[] | null = null;
+let lastRecordedMin = -1;
+
+async function loadVerdictLines(): Promise<VerdictLine[]> {
+  if (verdictLines) return verdictLines;
+  try {
+    verdictLines = (await readFile(VERDICT_FILE, "utf-8"))
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => {
+        try {
+          return JSON.parse(l) as VerdictLine;
+        } catch {
+          return null;
+        }
+      })
+      .filter((x): x is VerdictLine => x !== null);
+  } catch {
+    verdictLines = [];
+  }
+  return verdictLines;
+}
+
+/** 장중 10분에 한 점 — 하루 40점쯤. 판정이 「아까보다 좋아지나」를 그리는 재료 */
+async function recordVerdict(day: string, minute: number, hhmm: string, v: Verdict): Promise<void> {
+  if (minute < 9 * 60 || minute > 15 * 60 + 30 || v.kind === "unknown") return;
+  if (lastRecordedMin >= 0 && minute - lastRecordedMin < 10) return;
+  const lines = await loadVerdictLines();
+  const last = lines[lines.length - 1];
+  if (last && last.day === day && minute - (Number(last.hhmm.slice(0, 2)) * 60 + Number(last.hhmm.slice(3, 5))) < 10) return;
+  const line: VerdictLine = { day, hhmm, kind: v.kind, score: lastScore };
+  lines.push(line);
+  lastRecordedMin = minute;
+  try {
+    await mkdir(DATA_DIR, { recursive: true });
+    await appendFile(VERDICT_FILE, JSON.stringify(line) + "\n", "utf-8");
+  } catch {
+    /* 못 적어도 화면은 산다 */
+  }
+}
+
+/** 그날 10:00·13:30 직후의 첫 판정 */
+function pickAt(lines: VerdictLine[], hhmm: string, until: string): Verdict["kind"] | null {
+  const hit = lines.find((l) => l.hhmm >= hhmm && l.hhmm <= until);
+  return hit?.kind ?? null;
+}
+
+async function buildRecord(client: KiwoomClient, day: string): Promise<{ trend: VerdictPoint[]; record: VerdictRecord }> {
+  const lines = await loadVerdictLines();
+  const today = lines.filter((l) => l.day === day);
+  const trend = today.map((l) => ({ hhmm: l.hhmm, kind: l.kind, score: l.score })).slice(-12);
+  const byDay = new Map<string, VerdictLine[]>();
+  for (const l of lines) if (l.day !== day) byDay.set(l.day, [...(byDay.get(l.day) ?? []), l]);
+  let n1000 = 0;
+  let hit1000 = 0;
+  let n1330 = 0;
+  let hit1330 = 0;
+  let days = 0;
+  try {
+    const c = (await indexDetail(client, "001", "day")).candles;
+    const chgOf = new Map<string, number>();
+    for (let i = 1; i < c.length; i += 1) if (c[i - 1].close > 0) chgOf.set(c[i].dt, ((c[i].close - c[i - 1].close) / c[i - 1].close) * 100);
+    const hit = (k: Verdict["kind"], chg: number) => (k === "in" ? chg >= 0.3 : k === "out" ? chg <= -0.3 : k === "rotate" ? Math.abs(chg) < 0.5 : false);
+    for (const [d, ls] of [...byDay.entries()].slice(-20)) {
+      const chg = chgOf.get(d.replace(/-/g, ""));
+      if (chg === undefined) continue;
+      days += 1;
+      const a = pickAt(ls, "10:00", "10:40");
+      const b = pickAt(ls, "13:30", "14:10");
+      if (a && a !== "unknown") {
+        n1000 += 1;
+        if (hit(a, chg)) hit1000 += 1;
+      }
+      if (b && b !== "unknown") {
+        n1330 += 1;
+        if (hit(b, chg)) hit1330 += 1;
+      }
+    }
+  } catch {
+    /* 지수 일봉을 못 받으면 성적표는 비운다 */
+  }
+  return {
+    trend,
+    record: {
+      days,
+      hit1000,
+      hit1330,
+      n1000,
+      n1330,
+      today: { t1000: pickAt(today, "10:00", "10:40"), t1330: pickAt(today, "13:30", "14:10") },
+      note: days === 0 ? "판정을 오늘부터 쌓습니다 — 며칠 지나면 10:00·13:30 판정이 마감과 맞았는지 적중률이 붙습니다" : `최근 ${days}거래일 — 「들어옴」은 코스피 +0.3%↑, 「빠짐」은 −0.3%↓, 「회전」은 ±0.5% 안이면 적중`,
+    },
+  };
+}
 
 async function buildVerdict(client: KiwoomClient, minute: number, errors: string[]): Promise<Verdict> {
   const parts: VerdictPart[] = [];
@@ -296,6 +445,7 @@ async function buildVerdict(client: KiwoomClient, minute: number, errors: string
   const score = known.reduce((s, p) => s + (p.sign ?? 0), 0);
   let kind: Verdict["kind"] = "unknown";
   if (known.length >= 2) kind = score >= 2 ? "in" : score <= -2 ? "out" : "rotate";
+  lastScore = score;
   const line =
     kind === "in"
       ? "돈이 들어오는 장 — 사는 손이 이어진다. 주도·부상 테마의 대표 종목이 자리"
@@ -416,7 +566,7 @@ async function buildBuyers(
   marks: Record<string, StockMark> | null,
   vi: Map<string, ViToday> | null,
   errors: string[],
-): Promise<{ buyers: BuyerRow[]; liveOf: Map<string, LiveStat> }> {
+): Promise<{ buyers: BuyerRow[]; buckets: BuyerBuckets; pool: BuyerRow[]; liveOf: Map<string, LiveStat> }> {
   const liveOf = new Map<string, LiveStat>();
   const store = peekRealtime().store;
   const names = await getStockIndex(client).catch(() => new Map<string, { name: string }>());
@@ -447,6 +597,7 @@ async function buildBuyers(
         todayValue: st.todayValue,
         tags: markTags(marks?.[code], vi?.get(code)),
         theme: themeOf.get(code)?.name ?? null,
+        high60: marks?.[code]?.high60 ?? null,
       });
     }
   }
@@ -476,6 +627,7 @@ async function buildBuyers(
         todayValue: Math.round(todayEok),
         tags: markTags(m, vi?.get(c.code)),
         theme: themeOf.get(c.code)?.name ?? null,
+        high60: m?.high60 ?? null,
       });
     }
   } catch {
@@ -484,11 +636,15 @@ async function buildBuyers(
 
   /* 점수 — 배수가 첫째, 체결강도·오늘 거래대금이 보조. 얇은 것(오늘 30억 미만)은 뺀다 */
   const score = (r: BuyerRow) => (r.boost ?? 0) * (r.strength !== null && r.strength >= 120 ? 1.2 : r.strength !== null && r.strength < 80 ? 0.8 : 1) * (r.boostKind === "30분" ? 1 : 0.9);
-  const buyers = rows
-    .filter((r) => (r.todayValue ?? 0) >= 30 && (r.boost ?? 0) >= 1.3)
-    .sort((a, b) => score(b) - score(a))
-    .slice(0, 10);
-  return { buyers, liveOf };
+  const pool = rows.filter((r) => (r.todayValue ?? 0) >= 30 && (r.boost ?? 0) >= 1.2).sort((a, b) => score(b) - score(a));
+  const buyers = pool.filter((r) => (r.boost ?? 0) >= 1.3).slice(0, 10);
+  const isHot = (r: BuyerRow) => (r.rate ?? 0) >= 5 || r.tags.some((t) => t.startsWith("VI"));
+  const buckets: BuyerBuckets = {
+    quiet: pool.filter((r) => !isHot(r) && r.rate !== null && r.rate >= -1 && r.rate <= 3 && (r.boost ?? 0) >= 1.3 && (r.strength === null || r.strength >= 105)).slice(0, 8),
+    breakout: pool.filter((r) => !isHot(r) && r.high60 !== null && r.high60 >= 97).slice(0, 8),
+    hot: pool.filter(isHot).slice(0, 8),
+  };
+  return { buyers, buckets, pool, liveOf };
 }
 
 /* ═══════════════ ④ 내 계좌 ═══════════════ */
@@ -641,6 +797,7 @@ async function buildAccount(
   }
 
   rows.sort((a, b) => (b.valueMan ?? 0) - (a.valueMan ?? 0));
+  if (inSession) await flipAlerts(rows).catch(() => undefined);
   return {
     rows,
     kiwoomOk,
@@ -649,12 +806,77 @@ async function buildAccount(
   };
 }
 
+/* ── 뒤집힘 알림 (2026-09-17 저녁 — "폰을 열어야만 안다") ── */
+const FLIP_FILE = join(DATA_DIR, "moneyNowFlip.json");
+interface FlipState {
+  day: string;
+  last: Record<string, FlowVerdict>;
+  count: Record<string, number>;
+}
+let flip: FlipState | null = null;
+
+async function loadFlip(day: string): Promise<FlipState> {
+  if (flip && flip.day === day) return flip;
+  try {
+    const f = JSON.parse(await readFile(FLIP_FILE, "utf-8")) as FlipState;
+    flip = f.day === day ? f : { day, last: {}, count: {} };
+  } catch {
+    flip = { day, last: {}, count: {} };
+  }
+  return flip;
+}
+
+/**
+ * 보유 종목의 판정이 **바뀐 순간만** — 알림종 + 시그널 방. 종목당 하루 2번, 조용→들어옴/빠짐 또는 서로 뒤집힘.
+ * 첫 판정(이전 값 없음)은 안 보낸다 — 아침에 열 종목이 한꺼번에 울리면 소음이다. ETF 는 배수 1.5↑ 일 때만.
+ */
+async function flipAlerts(rows: AccountRow[]): Promise<void> {
+  const { date, hhmm } = kst();
+  const st = await loadFlip(date);
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (seen.has(r.code)) continue;
+    seen.add(r.code);
+    const prev = st.last[r.code];
+    st.last[r.code] = r.verdict;
+    if (prev === undefined || prev === r.verdict || r.verdict === "quiet") continue;
+    if (r.isEtf && (r.boost ?? 0) < 1.5) continue;
+    const n = st.count[r.code] ?? 0;
+    if (n >= 2) continue;
+    st.count[r.code] = n + 1;
+    const label = r.verdict === "in" ? "돈 들어옴" : "돈 빠짐";
+    const title = `💧 ${r.name} ${label} (${r.account})`;
+    const body = `${hhmm} · ${r.rate === null ? "" : `${r.rate > 0 ? "+" : ""}${r.rate.toFixed(2)}% · `}${r.why || (prev === "quiet" ? "조용하다가 바뀜" : "반대로 뒤집힘")}`;
+    await pushNotice({
+      source: "moneyFlow",
+      kind: "stock",
+      level: r.verdict === "out" ? "warn" : "info",
+      title,
+      body,
+      code: r.code,
+      name: r.name,
+      link: stockLink(r.code, r.name),
+      dedupeKey: `moneyFlow:${r.code}:${r.verdict}:${date}`,
+      dedupeHours: 3,
+    }).catch(() => undefined);
+    await sendTelegram(`<b>${title}</b>\n${body.replace(/&/g, "&amp;").replace(/</g, "&lt;")}`, "signal").catch(() => undefined);
+  }
+  try {
+    await mkdir(DATA_DIR, { recursive: true });
+    await writeFile(FLIP_FILE, JSON.stringify(st), "utf-8");
+  } catch {
+    /* 못 남겨도 다음 5분에 다시 잰다 */
+  }
+}
+
 /* ═══════════════ ⑤ 시간대 플랜 ═══════════════ */
 
 async function buildPlan(
   slot: Slot,
   where: MoneyNow["where"],
   buyers: BuyerRow[],
+  pool: BuyerRow[],
+  marks: Record<string, StockMark> | null,
   account: MoneyNow["account"],
   vi: Map<string, ViToday> | null,
   date: string,
@@ -689,11 +911,20 @@ async function buildPlan(
     case "closing":
     case "auction": {
       const scan = await loadCloseBetScan().catch(() => null);
+      /* 교차 — 종배 후보 ∩ 사는 손(배수 1.2↑) ∩ 마크(슈퍼·쌍끌이·외인3칸). 세 눈이 겹치는 것만 (2026-09-17 저녁) */
+      const cross: PlanItem[] = [];
       if (scan && scan.date === date) {
+        const poolOf = new Map(pool.map((b) => [b.code, b]));
+        for (const g of scan.green) {
+          const b = poolOf.get(g.code);
+          const m = marks?.[g.code];
+          const markHit = m ? m.super || m.twin || m.fgn3 : false;
+          if (b && markHit) cross.push({ code: g.code, name: g.name, text: `종배 ${g.score}점 · ${b.boostKind} 배수 ${b.boost?.toFixed(1)}${b.strength !== null ? ` · 강도 ${Math.round(b.strength)}` : ""} · ${m?.super ? "🌟 슈퍼" : m?.twin ? "🧲🧲 쌍끌이" : "🧲 외인3칸"}` });
+        }
         for (const g of scan.green.slice(0, 8)) items.push({ code: g.code, name: g.name, text: `종배 점수 ${g.score} · 목록 ${g.lists}개` });
       } else items.push({ name: "종배 후보", text: "오늘 스캔이 아직 없습니다 — 종가배팅 탭에서 돌리기" });
       items.push(...top(3));
-      return { slot: slot.key, title: "마감 전 — 종가배팅", items, note: "14:30 잠정치·프로그램이 마지막 30분을 정한다. 15:20 전에 주문 정리" };
+      return { slot: slot.key, title: "마감 전 — 종가배팅", items, note: "14:30 잠정치·프로그램이 마지막 30분을 정한다. 15:20 전에 주문 정리", cross };
     }
     case "gap":
     case "after": {
@@ -712,16 +943,18 @@ let job: Promise<MoneyNow> | null = null;
 const TTL = 60_000;
 
 async function compute(client: KiwoomClient): Promise<MoneyNow> {
-  const { date, minute, day } = kst();
+  const { date, minute, day, hhmm } = kst();
   const slot = slotOf(minute, day === 0 || day === 6);
   const errors: string[] = [];
   const [marksFile, vi] = await Promise.all([loadStockMarks().catch(() => null), viTodayMap(client).catch(() => null)]);
   const marks = marksFile?.marks ?? null;
   const [verdict, w] = await Promise.all([buildVerdict(client, minute, errors), buildWhere(client, errors)]);
-  const { buyers, liveOf } = await buildBuyers(client, minute, w.themeOf, marks, vi, errors);
+  await recordVerdict(date, minute, hhmm, verdict);
+  const { trend, record } = await buildRecord(client, date);
+  const { buyers, buckets, pool, liveOf } = await buildBuyers(client, minute, w.themeOf, marks, vi, errors);
   const account = await buildAccount(client, minute, w.themeOf, marks, vi, liveOf, errors);
-  const plan = await buildPlan(slot, w.where, buyers, account, vi, date);
-  return { at: Date.now(), stale: false, slot, verdict, where: w.where, buyers, account, plan, errors };
+  const plan = await buildPlan(slot, w.where, buyers, pool, marks, account, vi, date);
+  return { at: Date.now(), stale: false, slot, verdict, trend, record, buckets, where: w.where, buyers, account, plan, errors };
 }
 
 /** 60초 캐시 — 있으면 옛 값을 바로 주고 뒤에서 갱신한다. `fresh` 는 카드 ↻(10초 지난 값만 다시) */
@@ -754,8 +987,12 @@ export function moneyNowText(m: MoneyNow): string {
   const lines: string[] = [];
   lines.push(`<b>💧 돈의 흐름 ${m.slot.label}</b> — ${kindLabel}`);
   lines.push(esc(m.verdict.parts.filter((p) => p.sign !== null).map((p) => `${p.label} ${p.sign === 1 ? "▲" : p.sign === -1 ? "▼" : "–"}`).join(" · ")));
+  if (m.trend.length >= 2) lines.push(`추세: ${m.trend.slice(-4).map((t) => `${t.hhmm} ${t.kind === "in" ? "들어옴" : t.kind === "out" ? "빠짐" : "회전"}`).join(" → ")}`);
   if (m.where.fresh.length > 0) lines.push(`부상: ${esc(m.where.fresh.map((t) => `${t.name} ${t.changeRate > 0 ? "+" : ""}${t.changeRate.toFixed(1)}%`).join(" · "))}`);
-  if (m.buyers.length > 0) lines.push(`사는 손: ${esc(m.buyers.slice(0, 5).map((b) => `${b.name} ×${b.boost?.toFixed(1)}`).join(" · "))}`);
+  if (m.buckets.quiet.length > 0) lines.push(`🧲 조용히 담는 중: ${esc(m.buckets.quiet.slice(0, 4).map((b) => `${b.name} ×${b.boost?.toFixed(1)}`).join(" · "))}`);
+  if (m.buckets.breakout.length > 0) lines.push(`🚪 돌파 임박: ${esc(m.buckets.breakout.slice(0, 3).map((b) => b.name).join(" · "))}`);
+  if (m.buckets.hot.length > 0) lines.push(`🔥 이미 튐(추격 금지): ${esc(m.buckets.hot.slice(0, 3).map((b) => `${b.name} ${b.rate === null ? "" : `${b.rate > 0 ? "+" : ""}${b.rate.toFixed(0)}%`}`).join(" · "))}`);
+  if (m.plan.cross && m.plan.cross.length > 0) lines.push(`⚡ 교차(종배∩사는 손∩마크): ${esc(m.plan.cross.map((c) => c.name).join(" · "))}`);
   const mine = m.account.rows.filter((r) => r.verdict !== "quiet").slice(0, 5);
   if (mine.length > 0) lines.push(`내 계좌: ${esc(mine.map((r) => `${r.name} ${r.verdict === "in" ? "들어옴" : "빠짐"}`).join(" · "))}`);
   lines.push(`<i>${esc(m.slot.advice)}</i>`);
