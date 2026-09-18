@@ -283,7 +283,7 @@ function PickReview({
         <div className="jn-stat-block">
           <div className="cost-sub">선물 외국인 수급별 — 그날 국장 선물</div>
           {band(picks.byFutures, (i) => `선물 ${picks.byFutures[i].band}`)}
-          <div className="jn-stat-note">±2,000계약 기준 (시장 신호등의 선물 체크와 같은 문턱)</div>
+          <div className="jn-stat-note">±5,000억 기준 (시장 신호등의 선물 체크와 같은 문턱 · 9/17 까지의 기록은 계약 단위라 ±2,000)</div>
         </div>
 
         {picks.byStock.length > 0 && (

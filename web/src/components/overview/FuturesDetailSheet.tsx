@@ -131,9 +131,8 @@ export function FuturesDetailSheet({
         return { date: f.date, changeRate, individual: f.individual, foreign: f.foreign, institution: f.institution };
       });
   })();
-  /** 계약 → 억원 환산 (지수 × 25만원). 평균 체결가가 아니라 현재가라 추정치다 */
-  const eok = (n: number) =>
-    target.price > 0 ? `${n > 0 ? "+" : ""}${fmtNum(Math.round((n * target.price) / 400))}` : "-";
+  /* 2026-09-18 부터 수급은 네이버 새 API 의 **억원 그대로** — 옛 「계약 × 지수 × 25만원」 환산은 뺐다(키움 앱과 같은 단위) */
+  const eok = (n: number) => `${n > 0 ? "+" : ""}${fmtNum(n)}`;
   const sum = (k: "individual" | "foreign" | "institution", n: number) =>
     (flow ?? []).slice(-n).reduce((a, d) => a + d[k], 0);
   /*
@@ -142,11 +141,8 @@ export function FuturesDetailSheet({
    * 지수값을 못 받았으면(환산 불가) 계약만 적는다.
    */
   const amtCell = (v: number) =>
-    target.price > 0 ? (
-      <>
-        {eok(v)}
-        <i className="fut-ct">({fmtNum(v)})</i>
-      </>
+    true ? (
+      <>{eok(v)}</>
     ) : (
       <>{fmtNum(v)}</>
     );
@@ -197,7 +193,7 @@ export function FuturesDetailSheet({
           anaDaily === null ? (
             <div className="page-note">분석할 일봉을 받는 중…</div>
           ) : (
-            <IndexAnalysis name="코스피200 선물" daily={anaDaily} flows={anaFlows} unit="" flowUnit="계약" fewSubjects />
+            <IndexAnalysis name="코스피200 선물" daily={anaDaily} flows={anaFlows} unit="" flowUnit="억원" fewSubjects />
           )
         )}
 
@@ -252,16 +248,16 @@ export function FuturesDetailSheet({
           />
         )}
 
-        {/* 장중 수급 변화 — 지수 시트와 같은 자리·같은 그림. 선물은 계약 단위 */}
-        <IntradayFlowChart market="03" unit="계약" />
+        {/* 장중 수급 변화 — 지수 시트와 같은 자리·같은 그림. 선물도 억원(네이버 새 API) */}
+        <IntradayFlowChart market="03" unit="억원" />
 
         {/* 오늘 투자자별 수급 — 지수 시트의 콤팩트 한 덩이와 같은 모양 */}
         {last && (
           <>
             <h3 className="idx-h3">
               {last.date.slice(5).replace("-", "/")} 투자자별 순매수{" "}
-              <span className="pt-n" title="큰 값은 억원 환산(계약 × 지수 × 25만원, 추정) · 작은 값이 원본 계약">
-                억원 환산 · 아래 계약
+              <span className="pt-n" title="네이버 투자자별 매매동향 — 키움 앱 선물 수급과 같은 억원">
+                억원
               </span>
             </h3>
             <div className="ifc num">
@@ -276,10 +272,6 @@ export function FuturesDetailSheet({
                   <div className="ifc-cell" key={m.label}>
                     <span className="ifc-lbl">{m.label}</span>
                     <b className={sign(m.v)}>{eok(m.v)}</b>
-                    <span className="ifc-sub-line">
-                      {m.v > 0 ? "+" : ""}
-                      {fmtNum(m.v)}계약
-                    </span>
                   </div>
                 ))}
               </div>
@@ -290,8 +282,8 @@ export function FuturesDetailSheet({
         {/* 수급 합산 — 지수 시트의 5/10/20/60일과 같은 문법. 자료가 30일치라 30까지 */}
         <h3 className="idx-h3">
           수급 합산{" "}
-          <span className="pt-n" title="큰 값은 억원 환산(계약 × 지수 × 25만원, 추정) · 괄호가 원본 계약">
-            억원 환산 · (계약)
+          <span className="pt-n" title="억원 — 9/18 부터 쌓인 날만">
+            억원
           </span>
         </h3>
         {flow && flow.length > 0 && (
@@ -332,8 +324,8 @@ export function FuturesDetailSheet({
 
         <h3 className="idx-h3">
           일별 수급{" "}
-          <span className="pt-n" title="큰 값은 억원 환산(계약 × 지수 × 25만원, 추정) · 괄호가 원본 계약">
-            억원 환산 · (계약)
+          <span className="pt-n" title="억원 — 네이버 새 API 는 오늘 값만 주므로 9/18 부터 우리가 날마다 쌓는다">
+            억원 · 9/18 부터
           </span>
         </h3>
         {flow === null && <div className="empty">수급 불러오는 중…</div>}
@@ -366,8 +358,8 @@ export function FuturesDetailSheet({
         )}
 
         <div className="table-note">
-          차트는 한투 기간별시세(주간 선물), 수급은 네이버 투자자별 매매동향(계약, ±10분
-          지연)입니다. <b>베이시스</b> = 선물 − 현물: 양수(콘탱고)면 프로그램 매수,
+          차트는 한투 기간별시세(주간 선물), 수급은 네이버 투자자별 매매동향(억원, ±10분
+          지연 — 9/18 부터 날마다 쌓임)입니다. <b>베이시스</b> = 선물 − 현물: 양수(콘탱고)면 프로그램 매수,
           음수(백워데이션)면 프로그램 매도가 붙기 쉽습니다. <b>미결제약정</b>은 살아 있는
           계약 수 — 오르며 늘면 새 돈이 들어오는 추세, 오르며 줄면 숏 청산 반등입니다.
         </div>

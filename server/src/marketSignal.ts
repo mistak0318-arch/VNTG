@@ -445,14 +445,15 @@ async function checkEnergy(client: KiwoomClient): Promise<MarketCheck> {
 }
 
 /**
- * 외국인 선물 — 최근일 K200 지수선물 순매수 (2026-08-27 추가, 네이버 계약).
+ * 외국인 선물 — 최근일 K200 지수선물 순매수 (2026-08-27 추가, 네이버). 2026-09-18 부터 단위 **억원**(새 API, 키움 앱과 같음) —
+ * 옛 문턱 ±2,000계약 ≈ 지수 1,090 × 25만원 × 2,000 = ±5,450억 → ±5,000억으로 옮겼다.
  *
  * 현물 수급은 마감 후에만 쌓여 장중엔 어제 것이지만, 선물은 외국인이 **방향을 거는
  * 자리**라 시장 판단에 한 발 앞선다. 크게 팔면(수천 계약) 현물이 버텨도 곧 눌린다.
  */
 async function checkFutForeign(): Promise<MarketCheck> {
   const why =
-    "외국인의 K200 지수선물 순매수(계약, 네이버 ±10분). 선물은 방향을 거는 자리라 현물 수급보다 앞선다. ±2,000계약 안쪽은 중립.";
+    "외국인의 K200 지수선물 순매수(억원, 네이버 ±10분). 선물은 방향을 거는 자리라 현물 수급보다 앞선다. ±5,000억 안쪽은 중립.";
   try {
     const days = await futuresFlow(5);
     const last = days[days.length - 1];
@@ -463,9 +464,9 @@ async function checkFutForeign(): Promise<MarketCheck> {
     return {
       key: "futForeign",
       label: "외인 선물",
-      pass: v > 2000 ? true : v < -2000 ? false : null,
-      neutral: v >= -2000 && v <= 2000,
-      value: `${last.date.slice(5)} ${v > 0 ? "+" : ""}${Math.round(v).toLocaleString("ko-KR")}계약`,
+      pass: v > 5000 ? true : v < -5000 ? false : null,
+      neutral: v >= -5000 && v <= 5000,
+      value: `${last.date.slice(5)} ${v > 0 ? "+" : ""}${Math.round(v).toLocaleString("ko-KR")}억`,
       why,
       weight: 10,
     };

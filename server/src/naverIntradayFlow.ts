@@ -38,7 +38,7 @@ let goneUntil = 0; // (2026-09-18 E1-b) 410 을 만난 뒤 한 시간은 안 두
  *
  * 네이버가 Time 표를 닫아(410) 곡선이 사라졌다. 같은 그림을 남의 표 없이 그린다 — 시황 「국내 지수」 카드가 이미
  * 받는 오늘 누적 수급(ka10051, flow 섹션·억원)을 **2분마다 한 점씩** 파일에 적어 두면 하루가 곧 누적 곡선이다.
- * 코스피(01)·코스닥(02)은 키움 flow 섹션, K200 선물(03)은 네이버 새 API(m.stock.naver.com/api/index/FUT/trend, 계약).
+ * 코스피(01)·코스닥(02)은 키움 flow 섹션, K200 선물(03)은 네이버 새 API(m.stock.naver.com/api/index/FUT/trend) — 셋 다 억원.
  * 파일은 data/intradayFlow/YYYY-MM-DD.json 하나에 두 시장. 재시작해도 이어 붙는다.
  */
 const SAMPLE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "intradayFlow");
@@ -69,7 +69,7 @@ export async function sampleIntradayFlow(client: KiwoomClient): Promise<void> {
   const t = `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
   const f = await loadSamples(date);
   let changed = false;
-  /* K200 선물(03)은 네이버 새 API(오늘 누적, 계약) — 같은 박자로 한 점 */
+  /* K200 선물(03)은 네이버 새 API(오늘 누적, 억원) — 같은 박자로 한 점 */
   const fut = await futuresFlow(1).catch(() => []);
   const futToday = fut.length > 0 && fut[fut.length - 1].date.replace(/-/g, "") === date ? fut[fut.length - 1] : null;
   const srcs: [FlowMarket, { individual: number; foreign: number; institution: number }][] = [["01", flow.kospi], ["02", flow.kosdaq]];

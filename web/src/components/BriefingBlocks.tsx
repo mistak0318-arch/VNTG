@@ -63,14 +63,9 @@ export function FlowBars({
    * 지수 카드 선물 타일과 같은 식이다. 원본 계약 수는 툴팁으로 남긴다 —
    * 평균 체결가가 아니라 현재가 기준이라 추정치다.
    */
-  const conv =
-    futures && futPrice && futPrice > 0
-      ? {
-          individual: Math.round((futures.individual * futPrice) / 400),
-          foreign: Math.round((futures.foreign * futPrice) / 400),
-          institution: Math.round((futures.institution * futPrice) / 400),
-        }
-      : null;
+  /* 2026-09-18 — 네이버 새 API 는 선물 수급을 **억원 그대로** 준다(키움 앱과 같은 단위, 벤티지 실측). 환산은 뺐다 */
+  void futPrice;
+  const conv: { individual: number; foreign: number; institution: number } | null = null;
   type FutRaw = { individual: number; foreign: number; institution: number } | null;
   const rows = [
     { label: "코스피", f: flow.kospi, unit: "억", raw: null as FutRaw, open: () => onOpenIndex?.("001") },
@@ -79,7 +74,7 @@ export function FlowBars({
       ? [
           conv
             ? { label: "선물", f: conv, unit: "억", raw: futures as FutRaw, open: () => onOpenFutures?.() }
-            : { label: "선물", f: futures, unit: "계약", raw: null as FutRaw, open: () => onOpenFutures?.() },
+            : { label: "선물", f: futures, unit: "억", raw: null as FutRaw, open: () => onOpenFutures?.() },
         ]
       : []),
   ];
@@ -147,7 +142,7 @@ export function FlowBars({
         })}
       </div>
       <div className="bf-note">
-        {twin} · 선물은 K200 지수선물{conv ? " — 계약을 억원으로 환산(≈, 원본은 툴팁)" : "(계약)"} · 기관
+        {twin} · 선물은 K200 지수선물{conv ? " — 계약을 억원으로 환산(≈, 원본은 툴팁)" : "(억원, 네이버)"} · 기관
         세부는 종목 화면에서 봅니다
       </div>
     </>

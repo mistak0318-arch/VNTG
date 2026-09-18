@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 export interface FuturesFlowDay {
   /** YYYY-MM-DD */
   date: string;
-  /** 순매수 계약 */
+  /** 순매수 **억원** — 2026-09-18 부터. 옛 표는 계약이었는데 새 API 는 키움 앱과 같은 억원(실측: 외국인 15,451 vs 키움 15,789) */
   individual: number;
   foreign: number;
   institution: number;
@@ -34,7 +34,9 @@ export interface FuturesFlowDay {
  * 다시 검색해봐" → 맞았다. 새 모바일 API 가 **오늘 값**을 준다(과거 표는 없다):
  *
  *   https://m.stock.naver.com/api/index/FUT/trend
- *   → {"bizdate":"20260918","personalValue":"+411","foreignValue":"+14,006","institutionalValue":"-14,343"}   (계약, 순매수)
+ *   → {"bizdate":"20260918","personalValue":"+411","foreignValue":"+14,006","institutionalValue":"-14,343"}
+ *   단위는 **억원**이다 — 벤티지가 13:35 키움 앱과 나란히 찍어 줬다: 키움 외국인 15,789·기관 15,706 억원, 네이버 15,451·15,423.
+ *   처음엔 옛 표처럼 계약으로 읽어 「계약 × 지수 × 25만원」 환산이 붙어 4만 2천억으로 부풀었다.
  *
  * 하루치만 오니 **우리가 날마다 적어 둔다** (data/futuresFlowDays.json). 30일 그래프는 오늘부터 쌓이는 만큼만 보인다.
  * 같은 API 가 KOSPI·KOSDAQ·KPI200 도 준다(억원) — 그쪽은 키움 ka10051 이 있어 안 쓴다.

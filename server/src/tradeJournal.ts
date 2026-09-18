@@ -631,7 +631,7 @@ export interface PickStats {
   byMarket: { level: string; n: number; hitRate: number; avgEdge: number }[];
   /**
    * **국내 선물 외국인 수급별** 적중률 (2026-08-27 요청) — 「선물을 산 날의
-   * 다음날 예측이 실제로 맞나」. ±2,000계약을 경계로 셋으로 가른다
+   * 다음날 예측이 실제로 맞나」. ±2,000계약(9/17 까지)·±5,000억(9/18 부터)을 경계로 셋으로 가른다
    * (시장 신호등의 선물 체크와 같은 문턱이라 두 화면이 같은 말을 한다).
    */
   byFutures: { band: "매수" | "중립" | "매도"; n: number; hitRate: number; avgEdge: number }[];
@@ -941,7 +941,9 @@ function pickStats(rows: JournalEntry[]): PickStats {
   const byFutures = agg((x) => {
     const f = x.p.futForeign;
     if (typeof f !== "number") return null;
-    return (f >= 2000 ? "매수" : f <= -2000 ? "매도" : "중립") as "매수" | "중립" | "매도";
+    /* 9/17 까지 박제된 값은 계약(±2,000), 9/18 부터는 네이버 새 API 의 억원(±5,000 — 시장 신호등과 같은 문턱) */
+    const th = x.date >= "2026-09-18" ? 5000 : 2000;
+    return (f >= th ? "매수" : f <= -th ? "매도" : "중립") as "매수" | "중립" | "매도";
   })
     .map((r) => ({ band: r.key, n: r.n, hitRate: r.hitRate, avgEdge: r.avgEdge }))
     .sort((a, b) => {

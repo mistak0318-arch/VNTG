@@ -880,7 +880,7 @@ export function YahooChartSheet({
                 )}
               </div>
             )}
-            {futures && <IntradayFlowChart market="03" unit="계약" />}
+            {futures && <IntradayFlowChart market="03" unit="억원" />}
             {/* 일별 투자자별 수급 — 외국인이 파나 기관이 사나 (PDF #13) */}
             {futures && <FuturesFlowBars />}
             {/* 용어 설명 (2026-08-26 요청) — 볼 때마다 검색하게 만들면 안 본다 */}
@@ -990,7 +990,7 @@ function FuturesFlowBars() {
               >
                 <title>
                   {d.date.slice(5)} {s.label} {v > 0 ? "+" : ""}
-                  {v.toLocaleString("ko-KR")}계약
+                  {v.toLocaleString("ko-KR")}억
                 </title>
               </rect>
             );
@@ -1005,8 +1005,8 @@ function FuturesFlowBars() {
         )}
       </svg>
       <div className="table-note">
-        최근 {days.length}거래일 · 단위 <b>계약</b>(코스피200 선물, 일별 순매수) · 범례 숫자는
-        마지막 날입니다. 네이버 투자자별 매매동향 — 키움 REST 엔 없는 값이라 여기서 받습니다.
+        최근 {days.length}거래일 · 단위 <b>억원</b>(코스피200 선물, 일별 순매수) · 범례 숫자는
+        마지막 날입니다. 네이버 투자자별 매매동향 — 키움 REST 엔 없는 값이라 여기서 받습니다. 새 API 는 오늘 값만 주므로 9/18 부터 날마다 쌓입니다.
       </div>
     </div>
   );

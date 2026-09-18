@@ -32,7 +32,7 @@ export interface FutFlowDay {
 }
 
 /**
- * 선물 투자자별 수급 (네이버, 계약 단위) — 선물 타일의 「받을 데가 없다」 자리.
+ * 선물 투자자별 수급 (네이버 새 API, **억원**) — 선물 타일의 「받을 데가 없다」 자리.
  * 서버가 10분 캐시라 5분마다 물으면 충분하다. 마지막 날(장중이면 오늘 누적)만 쓴다.
  */
 export function useFutFlow(): { futFlow: FutFlowDay | null; futEmpty: boolean } {
@@ -141,26 +141,20 @@ export function DomesticIndexGrid({
               </div>
             )}
             {/*
-              선물 수급 — 계약 → ≈억원 환산. 키움 앱은 선물 수급을 억원으로 보여줘서
-              「값이 다르다」 소리가 나왔다 — 같은 데이터, 단위 차이.
-              K200 선물 승수 25만원/pt: 억원 = 계약 × 지수 / 400 (현재가 기준 ≈).
-              **금액이 위(크게), 계약이 아래(작게)** — 지수 수급(억원)과 같은 눈으로.
+              선물 수급 — 네이버 새 API 값이 **억원 그대로**다 (2026-09-18 벤티지가 키움 앱과 나란히 찍음:
+              키움 외국인 15,789 · 기관 15,706 vs 우리 15,451 · 15,423). 옛 표(계약)에 붙어 있던
+              「계약 × 지수 / 400」 환산이 새 값에 걸려 4만 2천억으로 부풀었었다 — 환산 없이 지수 수급과 같은 눈으로.
             */}
             {c.code === "F" &&
               futFlow &&
               (() => {
                 // 「억」 글자는 뺀다 — 이 카드의 수급은 다 억원이라 접미가 소음이다
-                const eok = (n: number) =>
-                  `${n > 0 ? "+" : ""}${fmtNum(Math.round((n * c.price) / 400))}`;
                 const row = (lbl: string, n: number) => (
                   <div>
                     <span className="lbl">{lbl}</span>
-                    <span className={`ff-two ${signCls(n)}`}>
-                      {c.price > 0 ? eok(n) : `${n > 0 ? "+" : ""}${fmtNum(n)}`}
-                      <em className="ff-eok">
-                        {n > 0 ? "+" : ""}
-                        {fmtNum(n)}계약
-                      </em>
+                    <span className={signCls(n)}>
+                      {n > 0 ? "+" : ""}
+                      {fmtNum(n)}
                     </span>
                   </div>
                 );
@@ -175,7 +169,7 @@ export function DomesticIndexGrid({
             {c.code === "F" && (
               <div
                 className="ov-idx-note ov-idx-note-1"
-                title="큰 값은 ≈억원 환산(계약 × 지수 × 25만원), 아래 작은 값이 원본 계약 수 · 네이버 투자자별 매매동향(±10분 지연)"
+                title="억원 순매수 · 네이버 투자자별 매매동향(±10분 지연) — 키움 앱 선물 수급과 같은 단위"
               >
                 {futFlow
                   ? `${futFlow.date.slice(5).replace("-", "/")} 순매수 · 네이버 ±10분`
